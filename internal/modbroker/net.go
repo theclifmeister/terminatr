@@ -204,18 +204,27 @@ type FetchResult struct {
 	Body    string            `json:"body"`
 }
 
-// http.fetch {url, method, headers, body, timeout_ms}: HTTPS to the
-// mod's net hosts, redirects only to them.
+// FetchOptions are http.fetch's options.
+type FetchOptions struct {
+	Method    string            `json:"method"`
+	Headers   map[string]string `json:"headers"`
+	Body      string            `json:"body"`
+	TimeoutMS int               `json:"timeout_ms"`
+}
+
+// http.fetch {url, options: {method, headers, body, timeout_ms}} (or the
+// options flat): HTTPS to the mod's net hosts, redirects only to them.
 func (b *Broker) fetch(ctx context.Context, c *Call) (any, error) {
 	var a struct {
-		URL       string            `json:"url"`
-		Method    string            `json:"method"`
-		Headers   map[string]string `json:"headers"`
-		Body      string            `json:"body"`
-		TimeoutMS int               `json:"timeout_ms"`
+		URL string `json:"url"`
+		FetchOptions
+		Options *FetchOptions `json:"options"`
 	}
 	if err := c.Decode(&a); err != nil {
 		return nil, err
+	}
+	if a.Options != nil {
+		a.FetchOptions = *a.Options
 	}
 	var hosts []string
 	if c.Mod.Manifest != nil {

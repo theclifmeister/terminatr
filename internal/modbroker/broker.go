@@ -168,6 +168,15 @@ func (b *Broker) Handle(name, needs string, fn Handler) {
 	b.methods[name] = method{needs: needs, fn: fn}
 }
 
+// Needs is the grant method name needs ("" for none), and whether the
+// broker has it.
+func (b *Broker) Needs(name string) (string, bool) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	m, ok := b.methods[name]
+	return m.needs, ok
+}
+
 // Methods lists the method names, sorted.
 func (b *Broker) Methods() []string {
 	b.mu.RLock()

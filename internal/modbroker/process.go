@@ -73,19 +73,29 @@ func (c *capped) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// process.run {argv, cwd, stdin, timeout_ms}: argv[0] is a program the
+// RunOptions are process.run's options.
+type RunOptions struct {
+	Cwd       string `json:"cwd"`
+	Stdin     string `json:"stdin"`
+	TimeoutMS int    `json:"timeout_ms"`
+}
+
+// process.run {argv, options: {cwd, stdin, timeout_ms}} (or the options
+// flat): argv[0] is a program the
 // mod's commands grant names, by name only; it runs with no shell, the
 // scrubbed environment, in the mod's own folder or a folder its files
 // grant may read, and is killed (with what it started) at the timeout.
 func run(ctx context.Context, c *Call) (any, error) {
 	var a struct {
-		Argv      []string `json:"argv"`
-		Cwd       string   `json:"cwd"`
-		Stdin     string   `json:"stdin"`
-		TimeoutMS int      `json:"timeout_ms"`
+		Argv []string `json:"argv"`
+		RunOptions
+		Options *RunOptions `json:"options"`
 	}
 	if err := c.Decode(&a); err != nil {
 		return nil, err
+	}
+	if a.Options != nil {
+		a.RunOptions = *a.Options
 	}
 	if len(a.Argv) == 0 || len(a.Argv) > MaxArgs {
 		return nil, BadParams("process.run: argv has 1 to %d strings", MaxArgs)

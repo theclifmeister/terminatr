@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/modbroker"
-	"github.com/theclifmeister/terminatr/internal/modbus"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
@@ -65,27 +64,33 @@ func TestModBroker(t *testing.T) {
 	}
 
 	got, err := call("projects.list", nil)
-	if err != nil || strings.Join(got.([]string), ",") != "demo" {
+	if ps, _ := got.([]ModProject); err != nil || len(ps) != 1 || ps[0].Slug != "demo" {
 		t.Fatalf("projects.list = %v, %v", got, err)
 	}
-	got, err = call("tasks.list", map[string]string{"project": "demo"})
+	got, err = call("tasks.list", map[string]string{"slug": "demo"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ts := got.([]modbus.Task); len(ts) != 2 || ts[0].ID != "T1" || ts[0].To != "started" {
+	if ts := got.([]ModTask); len(ts) != 2 || ts[0].ID != "T1" || ts[0].Status != "started" {
 		t.Fatalf("tasks.list = %+v", ts)
 	}
-	if _, err := call("tasks.list", map[string]string{"project": "other"}); code(err) != modbroker.CodeDenied {
+	if _, err := call("tasks.list", map[string]string{"slug": "other"}); code(err) != modbroker.CodeDenied {
 		t.Fatalf("a project it doesn't run for: %v", err)
+	}
+	if _, err := call("project.get", map[string]string{"slug": "demo"}); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := call("project.get", map[string]string{"project": "demo"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := call("thread.get", map[string]string{"project": "demo", "thread": "t-0009"}); code(err) != modbroker.CodeNotFound {
-		t.Fatalf("a missing thread: %v", err)
+	if got, err := call("thread.get", map[string]string{"project": "demo", "thread": "t-0009"}); err != nil || got != nil {
+		t.Fatalf("a missing thread = %v, %v; want null", got, err)
+	}
+	if got, err := call("report.get", map[string]string{"project": "demo", "thread": "t-0009"}); err != nil || got != nil {
+		t.Fatalf("a missing thread's report = %v, %v; want null", got, err)
 	}
 
-	got, err = call("inbox.raise", map[string]string{"project": "demo", "subject": "label\x1b[31m T1\nnow", "summary": "T1 looks like a bug"})
+	got, err = call("inbox.raise", map[string]any{"project": "demo", "item": map[string]string{"subject": "label\x1b[31m T1\nnow", "summary": "T1 looks like a bug"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +119,28 @@ func TestModBroker(t *testing.T) {
 	s.modBr.mu.Lock()
 	s.modBr.reg = nil
 	s.modBr.mu.Unlock()
-	if _, err := call("inbox.raise", map[string]string{"project": "demo", "subject": "again"}); code(err) != modbroker.CodeDenied {
+	if _, err := call("inbox.raise", map[string]any{"project": "demo", "item": map[string]string{"subject": "again"}}); code(err) != modbroker.CodeDenied {
 		t.Fatalf("raise without the grant: %v", err)
+	}
+}
+
+// apiV1 are mod API v1's broker methods this broker answers, by their
+// wire names, with the grant each needs: the schema the $ bindings are
+// built from (internal/modapi's Methods, T251). Keep the two the same.
+var apiV1 = map[string]string{
+	"projects.list": "project_read", "project.get": "project_read", "tasks.list": "project_read",
+	"thread.get": "project_read", "report.get": "project_read",
+	"store.get": "", "store.set": "", "store.del": "", "fs.read": "", "fs.write": "",
+	"inbox.raise": "inbox", "http.fetch": "net", "process.run": "commands",
+}
+
+func TestModBrokerAPI(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	s := &Server{log: log.New(os.Stderr, "", 0), modEv: newModEvents()}
+	b := s.broker()
+	for name, want := range apiV1 {
+		if got, ok := b.Needs(name); !ok || got != want {
+			t.Errorf("%s: needs %q (%v), want %q", name, got, ok, want)
+		}
 	}
 }

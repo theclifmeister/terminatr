@@ -199,8 +199,8 @@ func TestFetch(t *testing.T) {
 		TLS:     tls,
 		Dial:    l.dial,
 	})
-	got, err := tb.call(t, "http.fetch", map[string]any{"url": "https://example.com/hello", "method": "post",
-		"headers": map[string]string{"X-Token": "t1"}, "body": "x"})
+	got, err := tb.call(t, "http.fetch", map[string]any{"url": "https://example.com/hello", "options": map[string]any{
+		"method": "post", "headers": map[string]string{"X-Token": "t1"}, "body": "x"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,10 +255,13 @@ func TestRun(t *testing.T) {
 	if _, err := tb.call(t, "process.run", map[string]any{"argv": []string{"/usr/bin/env"}}); code(err) != CodeDenied {
 		t.Errorf("a path for a granted name: %v", err)
 	}
-	if _, err := tb.call(t, "process.run", map[string]any{"argv": []string{"env"}, "cwd": "~/notes"}); code(err) != CodeDenied {
+	if _, err := tb.call(t, "process.run", map[string]any{"argv": []string{"env"}, "options": map[string]any{"cwd": "~/notes"}}); code(err) != CodeDenied {
 		t.Errorf("a cwd outside its folder without files: %v", err)
 	}
-	got, err = tb.call(t, "process.run", map[string]any{"argv": []string{"sleep", "5"}, "timeout_ms": 100})
+	if _, err := tb.call(t, "process.run", map[string]any{"argv": []string{"env"}, "cwd": "~/notes"}); code(err) != CodeDenied {
+		t.Errorf("a flat cwd outside its folder without files: %v", err)
+	}
+	got, err = tb.call(t, "process.run", map[string]any{"argv": []string{"sleep", "5"}, "options": map[string]any{"timeout_ms": 100}})
 	if err != nil || !got.(RunResult).TimedOut {
 		t.Errorf("a timeout = %+v, %v", got, err)
 	}

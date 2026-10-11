@@ -7,13 +7,12 @@ package server
 // and gives the broker the registry as it is now and the mod's log.
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -25,10 +24,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modbroker"
-	"github.com/theclifmeister/terminatr/internal/modbus"
 	"github.com/theclifmeister/terminatr/internal/project"
-	"github.com/theclifmeister/terminatr/internal/thread"
-	"github.com/theclifmeister/terminatr/internal/ticker"
 )
 
 // modRegistryAge is how long the broker trusts the registry it read: a
@@ -122,22 +118,25 @@ func (s *Server) modLog(id, line string) {
 	fmt.Fprintf(f, "%s %s\n", time.Now().UTC().Format(time.RFC3339), line)
 }
 
-// modProject reads the project params of a call and opens the project,
+// modProject reads the project params of a call, the project's slug as
+// "slug" (project.get, tasks.list) or "project", and opens the project,
 // which the mod must run for.
 func modProject(c *modbroker.Call, args any) (*project.Project, error) {
 	if err := c.Decode(args); err != nil {
 		return nil, err
 	}
 	var a struct {
+		Slug    string `json:"slug"`
 		Project string `json:"project"`
 	}
 	_ = json.Unmarshal(orEmpty(c.Params), &a)
-	if err := c.Project(a.Project); err != nil {
+	slug := cmp.Or(a.Slug, a.Project)
+	if err := c.Project(slug); err != nil {
 		return nil, err
 	}
-	p, err := project.Open(a.Project)
+	p, err := project.Open(slug)
 	if err != nil {
-		return nil, modbroker.NotFound("no project %s", a.Project)
+		return nil, modbroker.NotFound("no project %s", slug)
 	}
 	return p, nil
 }
@@ -149,30 +148,34 @@ func orEmpty(p json.RawMessage) json.RawMessage {
 	return p
 }
 
-// ModThread is thread.get's answer: a thread as the events show it.
-type ModThread struct {
-	modbus.ThreadLife
-	State    string     `json:"state"`
-	Reason   string     `json:"reason,omitempty"`
-	NeedsYou string     `json:"needs_you,omitempty"`
-	Reports  int        `json:"reports"`
-	PR       *modbus.PR `json:"pr,omitempty"`
-}
+// The answers' shapes are mod API v1's (the mods design §5; the schema
+// the $ bindings are built from): a project by its slug, and a task of a
+// board.
+type (
+	ModProject struct {
+		Slug string `json:"slug"`
+	}
+	ModTask struct {
+		ID         string `json:"id"` // "T12"
+		Title      string `json:"title"`
+		Status     string `json:"status"`
+		StepsDone  int    `json:"steps_done"`
+		StepsTotal int    `json:"steps_total"`
+		Thread     string `json:"thread,omitempty"`
+	}
+)
 
 // modMethods adds the server's methods to b.
 func (s *Server) modMethods(b *modbroker.Broker) {
-	state := func(p *project.Project) *modbus.ProjectState {
-		return projectState(p, s.list().Sessions, ticker.StatePath(s.opts.Paths.Sessions))
-	}
 	b.Handle("projects.list", mod.PermProjectRead, func(_ context.Context, c *modbroker.Call) (any, error) {
 		list, err := project.List()
 		if err != nil {
 			return nil, err
 		}
-		out := []string{}
+		out := []ModProject{}
 		for _, sum := range list {
 			if sum.Error == "" && c.Mod.Runs(sum.Slug) {
-				out = append(out, sum.Slug)
+				out = append(out, ModProject{Slug: sum.Slug})
 			}
 		}
 		return out, nil
@@ -189,10 +192,14 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 		if err != nil {
 			return nil, err
 		}
-		st := state(p)
-		out := []modbus.Task{}
-		for _, id := range slices.SortedFunc(maps.Keys(st.Tasks), byTaskRef) {
-			out = append(out, st.Tasks[id])
+		out := []ModTask{}
+		board, err := p.Tasks().Load()
+		if err != nil {
+			return nil, err
+		}
+		for _, t := range board.Tasks {
+			out = append(out, ModTask{ID: t.Ref(), Title: t.Title, Status: string(t.Status),
+				StepsDone: t.StepsDone(), StepsTotal: len(t.Steps), Thread: t.Thread})
 		}
 		return out, nil
 	})
@@ -204,16 +211,18 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 		if err != nil {
 			return nil, err
 		}
-		st := state(p)
-		t, ok := st.Threads[a.Thread]
-		if !ok {
-			return nil, modbroker.NotFound("%s has no thread %q", p.Slug, a.Thread)
+		// An unresolved thread as the project's watch shows it; null
+		// for none.
+		w, err := s.projectWatchState(p.Slug)
+		if err != nil {
+			return nil, err
 		}
-		out := ModThread{ThreadLife: t.Life, State: t.State.State, Reason: t.State.Reason, NeedsYou: t.State.NeedsYou, Reports: t.Reports}
-		if pr, ok := st.PRs[a.Thread]; ok {
-			out.PR = &pr
+		for _, t := range w.Threads {
+			if t.ID == a.Thread {
+				return t, nil
+			}
 		}
-		return out, nil
+		return nil, nil
 	})
 	b.Handle("report.get", mod.PermProjectRead, func(_ context.Context, c *modbroker.Call) (any, error) {
 		var a struct {
@@ -223,9 +232,6 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 		if err != nil {
 			return nil, err
 		}
-		if _, err := thread.Load(p, a.Thread); err != nil {
-			return nil, modbroker.NotFound("%s has no thread %q", p.Slug, a.Thread)
-		}
 		if r := modReport(p.Slug, a.Thread); r != nil {
 			return r, nil
 		}
@@ -234,25 +240,25 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 	b.Handle("inbox.raise", mod.PermInbox, s.modRaise)
 }
 
-// byTaskRef orders "T2" before "T10".
-func byTaskRef(a, b string) int {
-	if len(a) != len(b) {
-		return len(a) - len(b)
-	}
-	return strings.Compare(a, b)
-}
-
-// inbox.raise {project, subject, summary}: an item of kind mod for the
+// inbox.raise {project, item: {subject, summary}} (or the two flat): an
+// item of kind mod for the
 // coordinator, its subject led by the mod's id. Data only: a nudge names
 // no mod's words (ticker.NudgeText). Journaled as mod:<id>.
 func (s *Server) modRaise(_ context.Context, c *modbroker.Call) (any, error) {
-	var a struct {
+	type text struct {
 		Subject string `json:"subject"`
 		Summary string `json:"summary"`
+	}
+	var a struct {
+		text
+		Item *text `json:"item"`
 	}
 	p, err := modProject(c, &a)
 	if err != nil {
 		return nil, err
+	}
+	if a.Item != nil {
+		a.text = *a.Item
 	}
 	subject, summary := modLine(a.Subject, modSubjectMax), modLine(a.Summary, modSummaryMax)
 	if subject == "" {
