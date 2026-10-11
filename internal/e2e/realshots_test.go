@@ -34,7 +34,7 @@ func TestRealModShots(t *testing.T) {
 	env.Setenv("TERMINATR_TICK_PR", "1s")
 	state := fakeGH(t, env)
 	os.MkdirAll(env.Home, 0o700)
-	if err := os.WriteFile(filepath.Join(env.Home, "config.toml"), []byte("[mods]\nenabled = true\nband = true\npane = true\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(env.Home, "config.toml"), []byte("[agent_mod]\nenabled = true\nband = true\npane = true\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

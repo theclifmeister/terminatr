@@ -19,7 +19,7 @@
 // session.start, leaves the loop running (T82).
 //
 // It also follows the session's `tm watch --json` feed for the session's
-// life and keeps the latest line in $.state. From it, unless [mods] band
+// life and keeps the latest line in $.state. From it, unless [agent_mod] band
 // is off (TERMINATR_BAND=off), it draws the band above the prompt and
 // keeps a status entry under it: the thread's task, steps, current item,
 // PR and what waits for the user; and it toasts when the PR's CI run

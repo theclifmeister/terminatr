@@ -35,10 +35,10 @@ type Data struct {
 	// Defaults are the all-projects settings, which a project follows
 	// for each one it doesn't set; nil when they can't be read.
 	Defaults *config.Safety
-	// Mods, ModsBand and ModsPane are the settings popup's Mods, Mods
-	// band and Mods pane (docs/SPEC.md §8.6); the band is on unless set
+	// AgentMod, AgentModBand and AgentModPane are the settings popup's Agent mod, Agent mod
+	// band and Agent mod pane (docs/SPEC.md §8.6); the band is on unless set
 	// off, the pane off unless set on.
-	Mods, ModsBand, ModsPane bool
+	AgentMod, AgentModBand, AgentModPane bool
 	// ContextHint is [ui] context_hint: the percent of its context window
 	// from which a coordinator is told to consider /clear; 0 for never.
 	ContextHint int
@@ -133,7 +133,7 @@ type Source interface {
 	SetRepo(slug, path string, add bool) error
 	// Agents lists the installed agents: the ones tm can run.
 	Agents() []string
-	// ModsNote names the agents the Mods setting is for and the version
+	// ModsNote names the agents the Agent mod setting is for and the version
 	// each needs ("Claude Code 2.1.289").
 	ModsNote() string
 	// Catalogs are the installed agents' models: what each agent said,
@@ -254,7 +254,7 @@ func (s *ServerSource) Close() {
 }
 
 func (s *ServerSource) Load() Data {
-	d := Data{ModsBand: true, UpdateCheck: true, ContextHint: config.DefaultContextHint}
+	d := Data{AgentModBand: true, UpdateCheck: true, ContextHint: config.DefaultContextHint}
 	var res proto.SessionListResult
 	if err := s.call(proto.MethodSessionList, nil, &res); err != nil {
 		d.Err = err.Error()
@@ -263,7 +263,7 @@ func (s *ServerSource) Load() Data {
 		d.Server = ServerInfo{Version: res.Version, Build: res.Build, Latest: res.Latest, Upgrade: res.Upgrade}
 	}
 	if cfg, err := config.Load(); err == nil {
-		d.Mods, d.ModsBand, d.ModsPane, d.ContextHint, d.UpdateCheck = cfg.Mods, cfg.ModsBand, cfg.ModsPane, cfg.ContextHint, cfg.UpdateCheck
+		d.AgentMod, d.AgentModBand, d.AgentModPane, d.ContextHint, d.UpdateCheck = cfg.AgentMod, cfg.AgentModBand, cfg.AgentModPane, cfg.ContextHint, cfg.UpdateCheck
 		d.NeedsFirst = cfg.NeedsFirst
 		if all, err := cfg.AllProjects(); err == nil {
 			d.Defaults = &all

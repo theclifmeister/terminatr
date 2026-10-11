@@ -153,7 +153,7 @@ test('a toast when the CI run finishes, once', async ($, on) => {
   expect(ciToast(null, thread({ pr: '#12 open, checks pass' }))).toBeUndefined()
 })
 
-test('[mods] band = false: no band, no status entry, no toast', async ($, on) => {
+test('[agent_mod] band = false: no band, no status entry, no toast', async ($, on) => {
   const { statuses, toasts } = await start($, on, [thread(), thread({ pr: '#12 open, checks pass' })], { TERMINATR_BAND: 'off' })
   expect(statuses).toEqual([])
   expect(toasts).toEqual([])
@@ -216,7 +216,7 @@ test('no questions for a thread, an ended coordinator, or none open', async () =
   expect(answeredText(3, '')).toBe('Not asked: tm ask open exited 3')
 })
 
-test('[mods] band = false: no questions entry or /answer either', async ($, on) => {
+test('[agent_mod] band = false: no questions entry or /answer either', async ($, on) => {
   const { statuses } = await start($, on, [{ ...coordinator(0, 0), questions: 1 }], { TERMINATR_BAND: 'off', TERMINATR_ROLE: 'coordinator' })
   expect(statuses).toEqual([])
   const ui = await $.ui.mount({ plugin: 'terminatr', surface: 'terminal', ...band(120) })
