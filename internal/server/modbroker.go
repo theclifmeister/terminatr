@@ -295,6 +295,8 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 		return nil, nil
 	})
 	b.Handle("inbox.raise", mod.PermInbox, s.modRaise)
+	b.Handle("ui.cell.set", "", s.modCellSet)
+	b.Handle("ui.status.set", "", s.modStatusSet)
 	b.Handle("ui.notify", mod.PermNotify, s.modNotify)
 	b.Handle("annotate", mod.PermProjectRead, s.modAnnotate)
 }

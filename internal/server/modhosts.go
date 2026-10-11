@@ -75,6 +75,7 @@ func (s *Server) modSpecs() ([]modsup.Spec, bool) {
 	if err != nil {
 		return nil, false
 	}
+	s.noteMods(reg)
 	var specs []modsup.Spec
 	for _, m := range reg.Mods {
 		if m.State != mod.Enabled || m.Manifest == nil || !m.Manifest.IsCode() {

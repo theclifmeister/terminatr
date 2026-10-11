@@ -203,6 +203,16 @@ func (w *Widget) Check() error {
 	return errors.Join(c.errs...)
 }
 
+// CheckSpans checks spans that stand alone, a cell or a status segment
+// (mods design §6, Spans), as Check checks a tree's: at most MaxSpans,
+// roles and icons by name, each text cleaned in place, newlines become
+// spaces, wide glyphs refused. The error names the span, as spans[2].
+func CheckSpans(ss []Span) error {
+	c := checker{ids: map[string]bool{}}
+	c.spans(ss, "spans")
+	return errors.Join(c.errs...)
+}
+
 type checker struct {
 	errs          []error
 	ids           map[string]bool

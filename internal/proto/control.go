@@ -259,6 +259,9 @@ type SessionInfo struct {
 	// before the first turn.
 	Context       int64 `json:"context,omitempty"`
 	ContextWindow int64 `json:"context_window,omitempty"`
+	// Cells are the mods' cells for this session (a target of Session
+	// alone), since protocol 13.
+	Cells []ModCell `json:"cells,omitempty"`
 }
 
 // ContextPercent is the share of the context window the session uses, in
@@ -339,6 +342,9 @@ type SessionListResult struct {
 	// daily check (docs/SPEC.md §10.1); Upgrade is how to install it.
 	Latest  string `json:"latest,omitempty"`
 	Upgrade string `json:"upgrade,omitempty"`
+	// Mods are the mods' columns, cells and status segments (since
+	// protocol 13); nil when no mod publishes any.
+	Mods *ModCells `json:"mods,omitempty"`
 }
 
 // SessionIDParams name one session.
