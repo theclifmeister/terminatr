@@ -19,6 +19,7 @@ package modsup
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -247,6 +248,20 @@ func (s *Supervisor) Restart(id string) bool {
 	r.stop()
 	s.start(r.spec, true, r.done)
 	return true
+}
+
+// CallTool runs agent tool call.Tool of mod id in its host, starting an
+// idle host first, and returns the text the mod's handler gave, or why
+// it didn't: the mod isn't supervised, failed, is restarting, its host
+// ended, ctx ended, or the handler's error (a *modproto.Error).
+func (s *Supervisor) CallTool(ctx context.Context, id string, call modproto.ToolCall) (modproto.ToolResult, error) {
+	s.mu.Lock()
+	r, ok := s.mods[id]
+	s.mu.Unlock()
+	if !ok {
+		return modproto.ToolResult{}, fmt.Errorf("mod %s doesn't run: only an enabled code mod has a host", id)
+	}
+	return r.callTool(ctx, call)
 }
 
 // Status lists the supervised mods, by id.
