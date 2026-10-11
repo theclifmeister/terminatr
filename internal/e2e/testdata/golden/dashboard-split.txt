@@ -1,30 +1,30 @@
- PROJECTS                    1 │ tm dashboard                                                                                                        ● server ok · 1 session
- ■ demo                  1     │ demo · active ────────────────────────────────────────────────────────────────────────────│ T1 Fix the login
- └─ coordinator              · │  coordinator                         —           not running; enter starts it  1 inbox    │ ○ idle
-    └─ T1 Fix the login  50% ○ │  T1 Fix the login                    ○ idle      report new  50% 1/2 ▸ Fix  <duration>  PR #7  t-…│ ──────────────────────────────────────────────
-                               │  tasks: 0 need you · 1 in motion · 0 on deck                                              │ project   demo
-                               │ OTHER SESSIONS ───────────────────────────────────────────────────────────────────────────│ thread    t-0001
-                               │  none outside the projects (1 in them)                                                    │ session   <session>
-                               │                                                                                           │ progress  ▰▰▰▱▱ 50% 1/2
-                               │                                                                                           │ now       ▸ Fix
-                               │                                                                                           │ updated   <duration> ago
-                               │                                                                                           │ PR        https://github.com/o/r/pull/7
-                               │                                                                                           │ report    1, new · for the coordinator
-                               │                                                                                           │
-                               │                                                                                           │ steps 1/2
-                               │                                                                                           │   ✓ 1 Reproduce
-                               │                                                                                           │   ○ 2 Fix
-                               │                                                                                           │
-                               │                                                                                           │ enter attach
-                               │                                                                                           │
-                               │                                                                                           │
-                               │                                                                                           │
-                               │                                                                                           │
-                               │                                                                                           │
-                               │                                                                                           │
-                               │                                                                                           │
-                               │                                                                                           │
-                               │                                                                                           │
-                               │────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-                               │ ≡ menu · enter attach · space deactivate · a project · t tasks · i inbox · , settings · ? help · prefix+q quit
- dev                           │
+ PROJECTS                      1   │ tm dashboard                                                                                                        ● server ok · 1 session
+ ■ demo             1              │ demo · active ────────────────────────────────────────────────────────────────────────────│ T1 Fix the login
+ └─ coordinator         ·          │  coordinator                         —           not running; enter starts it  1 inbox    │ ○ idle
+    └─ T1 Fix t…  50%   ○          │  T1 Fix the login                    ○ idle      report new  50% 1/2 ▸ Fix  <duration>  PR #7  t-…│ ──────────────────────────────────────────────
+                                   │  tasks: 0 need you · 1 in motion · 0 on deck                                              │ project   demo
+                                   │ OTHER SESSIONS ───────────────────────────────────────────────────────────────────────────│ thread    t-0001
+                                   │  none outside the projects (1 in them)                                                    │ session   <session>
+                                   │                                                                                           │ progress  ▰▰▰▱▱ 50% 1/2
+                                   │                                                                                           │ now       ▸ Fix
+                                   │                                                                                           │ updated   <duration> ago
+                                   │                                                                                           │ PR        https://github.com/o/r/pull/7
+                                   │                                                                                           │ report    1, new · for the coordinator
+                                   │                                                                                           │
+                                   │                                                                                           │ steps 1/2
+                                   │                                                                                           │   ✓ 1 Reproduce
+                                   │                                                                                           │   ○ 2 Fix
+                                   │                                                                                           │
+                                   │                                                                                           │ enter attach
+                                   │                                                                                           │
+                                   │                                                                                           │
+                                   │                                                                                           │
+                                   │                                                                                           │
+                                   │                                                                                           │
+                                   │                                                                                           │
+                                   │                                                                                           │
+                                   │                                                                                           │
+                                   │                                                                                           │
+                                   │────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                   │ ≡ menu · enter attach · space deactivate · a project · t tasks · i inbox · , settings · ? help · prefix+q quit
+ dev                               │

@@ -1,12 +1,12 @@
- PROJECTS                    2 │
-  beta                  0     │
- └╴󰚩 coordinator             · │
-  demo                  1     │
- └╴󰚩 coordinator             · │
-   └╴ t-0001 Small fix       │
-                               │
-                               │
-                               │
-                               │
-                               │
- dev                           │
+ PROJECTS                      2   │
+   beta            0              │
+ └╴󰚩  coordinat…        ·          │
+   demo            1              │
+ └╴󰚩  coordinat…        ·          │
+    └╴  t-0001                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+ dev                               │

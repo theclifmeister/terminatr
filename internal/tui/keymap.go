@@ -131,6 +131,7 @@ func symbolLines(w int) []string {
 		{i.remote, "remote control is on for this coordinator"},
 		{i.paused, "the project is paused"},
 		{i.inactive, "the project is inactive: its coordinator and threads don't run"},
+		{i.ciPass + " " + i.ciFail + " " + i.ciRun, "a thread's PR checks: pass, fail, running"},
 		{i.todoDone + " " + i.todoNow + " " + i.todoOpen, "a step done, under way, to do"},
 		{i.current, "the step under way"},
 		{strings.Repeat(i.barOn, 2) + strings.Repeat(i.barOff, 3), "progress, always beside its count (2/5)"},

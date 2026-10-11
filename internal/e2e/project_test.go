@@ -46,8 +46,7 @@ func TestSmokeProjectOpenAndSwitch(t *testing.T) {
 		a, b := projectRow(sc, alpha), projectRow(sc, beta)
 		lines := strings.Split(sc, "\n")
 		coord := func(l, glyph string) bool {
-			l = sideCut(l, 100)
-			return strings.HasPrefix(l, " └─ coordinator ") && strings.HasSuffix(l, glyph+" │")
+			return strings.HasPrefix(sideCut(l, 100), " └─ coordinator ") && sideGrid(l, gridState) == glyph
 		}
 		return a >= 0 && b == a+2 && coord(lines[a+1], "○") && coord(lines[b+1], "·")
 	})
@@ -107,7 +106,7 @@ func TestSmokeSidebar(t *testing.T) {
 	w.WaitFor(" ■ "+beta, wait)
 	w.WaitUntil("demo's thread", wait, func(sc string) bool {
 		d := projectRow(sc, demo)
-		return d >= 0 && strings.HasSuffix(sideCut(strings.Split(sc, "\n")[d], 120), " 1     │") &&
+		return d >= 0 && sideGrid(strings.Split(sc, "\n")[d], gridCount) == "1" &&
 			treeRow(sc, demo, "coordinator") >= 0 && strings.Contains(sc, "    └─ t-0001 ")
 	})
 	w2 := env.Window(100, 26)
@@ -172,12 +171,12 @@ func TestSmokeSidebar(t *testing.T) {
 		t.Fatalf("ui.json after the drag: %s", readFile(env.Home, "ui.json"))
 	}
 
-	// A narrow window: the slim strip of projects, 10 columns, never
+	// A narrow window: the slim strip of projects, 11 columns, never
 	// nothing; beta, the focused pane's, in the accent colour.
 	w.Resize(70, 30)
 	waitPaneSize(t, env, b, besidePanel(70, SideCols(70)), 28)
-	w.WaitFor(" ○ beta  │", wait)
-	w.WaitFor(" · demo  │", wait)
+	w.WaitFor(" ○ beta   │", wait)
+	w.WaitFor(" · demo   │", wait)
 	w.Resize(120, 30)
 	w.Detach()
 	for _, x := range both {
@@ -208,6 +207,34 @@ func TestSmokeSidebar(t *testing.T) {
 func sideCut(l string, cols int) string {
 	r := []rune(l)
 	return string(r[:min(len(r), SideCols(cols))])
+}
+
+// The columns of the sidebar's grid (docs/SPEC.md §4), counted from
+// the right: the needs-you column is the last.
+const (
+	gridNeeds = iota
+	gridInactive
+	gridPaused
+	gridRemote
+	gridState
+	gridCI
+	gridCount
+)
+
+// sideGrid is column col of the grid at the right of screen line l's
+// row of a full sidebar at the default width, trimmed: the count/%
+// column (5 cells), or a glyph column (2 cells).
+func sideGrid(l string, col int) string {
+	r := []rune(l)
+	end := min(len(r), sideDefault) - 2 // the blank column and the border
+	at, w := end-2*(col+1), 2
+	if col == gridCount {
+		at, w = end-17, 5
+	}
+	if at < 0 {
+		return ""
+	}
+	return strings.TrimSpace(string(r[at : at+w]))
 }
 
 // sideRow is the screen row where the sidebar lists slug.

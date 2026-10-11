@@ -267,9 +267,8 @@ func TestProjectLifecycleRows(t *testing.T) {
 		t.Fatal("not paused")
 	}
 	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{})
-	full, slim := ansi.Strip(treeCells(rows[0], 30, false, false)), ansi.Strip(treeCells(rows[0], 12, true, false))
-	if !rows[0].paused || !strings.HasSuffix(full, " "+ic().paused+" ⚑") ||
-		!strings.HasSuffix(slim, ic().paused) {
+	full := treeCells(rows[0], 30, false, false)
+	if !rows[0].paused || gridCol(full, gridPaused) != ic().paused || gridCol(full, gridNeeds) != "⚑" {
 		t.Fatalf("sidebar lacks the paused mark: %+v %q", rows[0], treeCells(rows[0], 30, false, false))
 	}
 	act(m, src, "enter")

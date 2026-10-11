@@ -88,7 +88,8 @@ func TestSmokePrefixQuit(t *testing.T) {
 		{"the menu", func(w *Window) { w.ClickText("≡", 29) }, "send the prefix key"},
 		{"the question", func(w *Window) { w.Prefix("r") }, "Turn remote control"},
 	} {
-		w := env.Window(100, 30)
+		// Room for the status bar's whole sidebar hint.
+		w := env.Window(104, 30)
 		attached(w) // the view kept the session
 		c.open(w)
 		w.WaitFor(c.shows, wait)

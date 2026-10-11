@@ -34,13 +34,13 @@ func TestDashboardSidebar(t *testing.T) {
 	m := newDash(DashOptions{Source: src, Width: 120, Height: 30, UIFile: ui, State: DashState{Current: "beta"}})
 	m.setData(src.data)
 	want := []string{
-		" PROJECTS                    2 │ tm dashboard",
-		" ■ alpha                 0   ⚑ │", // a task needs you; a blank column before the border
-		" └─ coordinator              ▲ │",
-		" ■ beta                  2   ⚑ │", // t-0005 waits on a question
-		" └─ coordinator              · │",
-		"    ├─ T4 Write docs     60% ● │", // threads hang under the coordinator, task id and title
-		"    └─ t-0006 Old work       · │", // a thread without a task: its own id
+		" PROJECTS                      2   │ tm dashboard",
+		" ■ alpha            0           ⚑  │", // a task needs you; a blank column before the border
+		" └─ coordinator         ▲          │", // the project's state is on its coordinator's row
+		" ■ beta             2           ⚑  │",
+		" └─ coordinator         ·          │",
+		"    ├─ T4 Write…  60%   ●       ⚑  │", // threads hang under the coordinator, task id and title; t-0005 waits on a question
+		"    └─ t-0006 O…        ·          │", // a thread without a task: its own id
 	}
 	lines := strings.Split(whole(m), "\n")
 	for i, w := range want {
@@ -98,10 +98,10 @@ func TestDashboardSidebar(t *testing.T) {
 	}
 	press(m, "b")
 
-	// A narrow window: the slim strip of projects, never nothing. alpha
-	// is current; beta's glyph is the hint.
+	// A narrow window: the slim strip of projects, never nothing: the
+	// state, the name, the needs-you column.
 	m.Update(tea.WindowSizeMsg{Width: 70, Height: 30})
-	if out := whole(m); m.sideW() != sideSlim || !strings.Contains(out, " ▲ alpha │") || !strings.Contains(out, " ⚑ beta  │") || !strings.HasPrefix(strings.Split(out, "\n")[3], "         │") {
+	if out := whole(m); m.sideW() != sideSlim || !strings.Contains(out, " ▲ alpha⚑ │") || !strings.Contains(out, " · beta ⚑ │") || !strings.HasPrefix(strings.Split(out, "\n")[3], "          │") {
 		t.Fatalf("narrow window, sidebar %d:\n%s", m.sideW(), out)
 	}
 	// A click on a project in the strip shows its dashboard.
@@ -146,17 +146,17 @@ func TestTreeThreadRows(t *testing.T) {
 		{kind: treeThread, thread: "t-0002", name: "T7", title: "Rewrite the README", state: "done", pct: 100},
 		{kind: treeThread, thread: "t-0001", name: "t-0001", title: "Fix the login session expiry", state: "working", pct: -1},
 	} {
-		l := ansi.Strip(treeLine(r, 24, false, false))
+		l := ansi.Strip(treeLine(r, sideDefault-1, false, false))
 		if strings.Contains(l, " …") {
 			t.Errorf("row %q", l)
 		}
-		if w := ansi.StringWidth(l); w != 24 {
+		if w := ansi.StringWidth(l); w != sideDefault-1 {
 			t.Errorf("row %q is %d cells", l, w)
 		}
 		// The label column is the same on every row: 7 cells in (a level
 		// under the coordinator), 9 wide, the name, a space and what
-		// fits of the title; then the percent's 5, the state glyph and
-		// the blank column before the border.
+		// fits of the title; then a blank, the grid and the blank column
+		// before the border.
 		label := string([]rune(l)[7:16])
 		if !strings.HasPrefix(label, r.name+" ") || strings.TrimSpace(label[len(r.name):]) == "" {
 			t.Errorf("row %q: label %q", l, label)
@@ -168,13 +168,41 @@ func TestTreeThreadRows(t *testing.T) {
 // maximum, so well past the old 48.
 const sideWidest = 160
 
+// The grid's columns (treeCells), by their index in it.
+const (
+	gridCount = iota
+	gridCI
+	gridState
+	gridRemote
+	gridPaused
+	gridInactive
+	gridNeeds
+)
+
+// gridCol is column c of the grid of a full sidebar's row as treeCells
+// draws it (treeLine's: its last, blank column left off), trimmed;
+// counted from the right, so a narrow row's (without the count/% and
+// PR/CI columns) reads alike from the state column on.
+func gridCol(row string, c int) string {
+	r := []rune(ansi.Strip(row))
+	at := len(r) - sideGrid + pctCol + (c-1)*2
+	w := 2
+	if c == gridCount {
+		at, w = len(r)-sideGrid, pctCol
+	}
+	if at < 0 {
+		return ""
+	}
+	return strings.TrimSpace(string(r[at : at+w]))
+}
+
 // TestTreeThreadIDNeverCut: at every sidebar width and in every icon set
-// a thread row is as wide as the sidebar, ends in its state glyph and a
-// blank column, and shows its whole name (a task id, or the thread id of
-// a thread without a task) or none of it: none only at the narrowest
-// widths, where it doesn't fit beside the state glyph. From 25 columns
-// the title shows too, and a wide sidebar (there is no maximum width)
-// shows a long one whole.
+// a thread row is as wide as the sidebar, has its state glyph in the
+// grid and a blank column at its end, and shows its whole name (a task
+// id, or the thread id of a thread without a task) or none of it: none
+// only at the narrowest widths, where it doesn't fit beside the grid.
+// From 38 columns the title shows too, and a wide sidebar (there is no
+// maximum width) shows a long one whole.
 func TestTreeThreadIDNeverCut(t *testing.T) {
 	defer setIcons(IconsUnicode)
 	const title = "Prefix each thread row with its id, and keep the title whole when the sidebar is wide"
@@ -196,17 +224,17 @@ func testTreeNameNeverCut(t *testing.T, r treeRow) {
 			if got := ansi.StringWidth(l); got != w-1 {
 				t.Errorf("%s width %d: row %q is %d cells", set, w, l, got)
 			}
-			if r := []rune(l); r[len(r)-1] != ' ' || r[len(r)-2] == ' ' {
-				t.Errorf("%s width %d: row %q: no glyph and gap at its end", set, w, l)
+			if r := []rune(l); r[len(r)-1] != ' ' || gridCol(string(r[:len(r)-1]), gridState) == "" {
+				t.Errorf("%s width %d: row %q: no state glyph and gap at its end", set, w, l)
 			}
 			whole := strings.Contains(l, name)
-			if !whole && (w >= view.SideMin+2 || strings.Contains(l, name[:2])) {
+			if !whole && (w >= 28 || strings.Contains(l, name[:2])) {
 				t.Errorf("%s width %d: row %q lacks the whole name", set, w, l)
 			}
-			if w >= 25 && !strings.Contains(l, name+" P") {
+			if w >= 38 && !strings.Contains(l, name+" P") {
 				t.Errorf("%s width %d: row %q lacks the title", set, w, l)
 			}
-			if w >= 120 && (!strings.Contains(l, title) || strings.Contains(l, "…")) {
+			if w >= 124 && (!strings.Contains(l, title) || strings.Contains(l, "…")) {
 				t.Errorf("%s width %d: row %q cuts the title", set, w, l)
 			}
 		}
@@ -367,11 +395,11 @@ func TestEverySidebarClickHasKey(t *testing.T) {
 	}
 }
 
-// TestSidebarDefaultKeepsSavedWidth: the default width is 32, room for a
-// thread's id and a few words of its title; a width ui.json already
+// TestSidebarDefaultKeepsSavedWidth: the default width is 36, room for a
+// thread's id and a few words of its title beside the grid; a width ui.json already
 // keeps stays, and one without a width starts at the default.
 func TestSidebarDefaultKeepsSavedWidth(t *testing.T) {
-	if sideDefault != 32 {
+	if sideDefault != 36 {
 		t.Fatalf("default width %d", sideDefault)
 	}
 	dir := t.TempDir()
@@ -463,10 +491,11 @@ func TestTreeHighlightRunsToBorder(t *testing.T) {
 			}
 		}
 	}
-	// The bell is the project row's last glyph, right before the blank.
+	// The bell is the project row's last glyph: its column's two cells,
+	// then the blank.
 	setIcons(IconsNerd)
 	l := []rune(ansi.Strip(treeLine(treeRow{kind: treeProject, slug: "terminatr", hint: true, threads: 1, here: true}, sideDefault-1, false, false)))
-	if string(l[len(l)-2:]) != nerdIcons.hint+" " {
+	if string(l[len(l)-3:]) != nerdIcons.hint+"  " {
 		t.Errorf("project row %q doesn't end in the bell and the blank", string(l))
 	}
 }
@@ -637,8 +666,8 @@ func TestThreadNames(t *testing.T) {
 	}
 }
 
-// TestCoordinatorContext: a coordinator row shows its context use after
-// its name, coloured from the threshold, with the hint past it.
+// TestCoordinatorContext: a coordinator row shows its context use in the
+// grid's count/% column, coloured from the threshold (red from 80%).
 func TestCoordinatorContext(t *testing.T) {
 	sessions := []proto.SessionInfo{{ID: "s-1", Role: proto.RoleCoordinator, Project: "demo", State: "idle", Context: 84_000, ContextWindow: 200_000}}
 	rows := buildTree([]ProjectData{{Slug: "demo"}}, sessions, treeIn{current: "demo", ctxHint: 40})
@@ -646,15 +675,22 @@ func TestCoordinatorContext(t *testing.T) {
 	if c.ctx != 42 || !c.ctxHint {
 		t.Fatalf("row %+v", c)
 	}
-	line := ansi.Strip(treeLine(c, sideDefault-1, false, false))
-	if !strings.Contains(line, "coordinator 42% /clear?") {
+	line := treeCells(c, sideDefault-2, false, false)
+	if gridCol(line, gridCount) != "42%" || !strings.Contains(line, styleWarn.Render(" 42% ")) {
 		t.Fatalf("line %q", line)
 	}
-	// Below the threshold: the percent only; never: no hint.
+	// Below the threshold: faint.
 	rows = buildTree([]ProjectData{{Slug: "demo"}}, sessions, treeIn{current: "demo", ctxHint: 60})
-	if line := ansi.Strip(treeLine(rows[1], sideDefault-1, false, false)); !strings.Contains(line, "coordinator 42%") || strings.Contains(line, "/clear") {
+	if line := treeCells(rows[1], sideDefault-2, false, false); gridCol(line, gridCount) != "42%" || !strings.Contains(line, styleFaint.Render(" 42% ")) {
 		t.Fatalf("below: %q", line)
 	}
+	// From 80%: red.
+	sessions[0].Context = 170_000
+	rows = buildTree([]ProjectData{{Slug: "demo"}}, sessions, treeIn{current: "demo", ctxHint: 40})
+	if line := treeCells(rows[1], sideDefault-2, false, false); !strings.Contains(line, styleBad.Render(" 85% ")) {
+		t.Fatalf("80%%: %q", line)
+	}
+	sessions[0].Context = 84_000
 	rows = buildTree([]ProjectData{{Slug: "demo"}}, sessions, treeIn{current: "demo"})
 	if rows[1].ctxHint {
 		t.Fatal("hint with the setting off")

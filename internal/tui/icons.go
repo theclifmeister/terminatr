@@ -15,7 +15,10 @@ import (
 // look at: Nerd Font icons in Ghostty, which bundles the Nerd Font
 // symbols, plain Unicode elsewhere. Every glyph is one cell wide (two for
 // a connector), so columns line up in each set (TestIconWidths); none is
-// an emoji, whose width differs between terminals.
+// an emoji, whose width differs between terminals. A Nerd Font icon is
+// one cell to the terminal's count but draws over the blank after it, so
+// the sidebar gives every glyph a column two cells wide: a Unicode glyph
+// sits in its left cell, a Nerd Font icon fills both.
 
 // The values of the icons setting.
 const (
@@ -32,6 +35,9 @@ var IconChoices = []string{IconsAuto, IconsNerd, IconsUnicode, IconsASCII}
 // iconSet is one set of glyphs.
 type iconSet struct {
 	name string
+	// wide: the icons draw two cells wide (a Nerd Font's), so the tree's
+	// folder, coordinator and thread marks take a blank after them.
+	wide bool
 	// The tree: a project's folder (open: the current one), the
 	// connectors of the rows under it (two cells), and the marks before
 	// the coordinator's and a thread's label ("" for none).
@@ -47,6 +53,8 @@ type iconSet struct {
 	// The states (stateLook): none is a coordinator that doesn't run,
 	// other a stopped, exited or resolved one.
 	working, blocked, idle, starting, running, review, done, other, none string
+	// A thread's pull request checks: passing, failing, running.
+	ciPass, ciFail, ciRun string
 	// Todos and steps (todoGlyph), and the progress bar's cells (bar).
 	todoDone, todoNow, todoOpen string
 	barOn, barOff               string
@@ -58,6 +66,7 @@ var unicodeIcons = iconSet{
 	mid: "├─", end: "└─",
 	hint: "⚑", current: "▸", remote: "⌁", paused: "∥", inactive: "⊘",
 	working: "●", blocked: "▲", idle: "○", starting: "◌", running: "▷", review: "◆", done: "✓", other: "·", none: "·",
+	ciPass: "☑", ciFail: "☒", ciRun: "☐",
 	todoDone: "✓", todoNow: "◐", todoOpen: "○",
 	barOn: "▰", barOff: "▱",
 }
@@ -66,12 +75,14 @@ var unicodeIcons = iconSet{
 // a plain shape reads as well.
 var nerdIcons = iconSet{
 	name:   IconsNerd,
+	wide:   true,
 	folder: "", folderOpen: "", // nf-fa-folder, folder_open
 	mid: "├╴", end: "└╴",
 	coord: "\U000f06a9", thread: "", // nf-md-robot, nf-oct-git_branch
 	hint: "", current: "", remote: "", paused: "\uf04c", inactive: "\uf011", // bell, chevron_right, wifi, pause, power_off
 	working: "", blocked: "", idle: "", starting: "", running: "",
 	review: "", done: "", other: "", none: "·", // circle, warning, circle_o, spinner, eye, check, stop_circle
+	ciPass: "\uf058", ciFail: "\uf057", ciRun: "\uf1ce", // check_circle, times_circle, circle_o_notch
 	todoDone: "", todoNow: "", todoOpen: "", // check, dot_circle_o, circle_o
 	barOn: "▰", barOff: "▱",
 }
@@ -82,6 +93,7 @@ var asciiIcons = iconSet{
 	mid: "|-", end: "`-",
 	hint: "?", current: ">", remote: "@", paused: "=", inactive: "/",
 	working: "*", blocked: "!", idle: "o", starting: "~", running: ":", review: "#", done: "v", other: "-", none: ".",
+	ciPass: "+", ciFail: "x", ciRun: "~",
 	todoDone: "x", todoNow: "~", todoOpen: "o",
 	barOn: "#", barOff: "-",
 }
