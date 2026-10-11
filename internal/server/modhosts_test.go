@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"os"
 	"path/filepath"
@@ -10,6 +11,8 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/modapi"
+	"github.com/theclifmeister/terminatr/internal/modproto"
 	"github.com/theclifmeister/terminatr/internal/modsup"
 	"github.com/theclifmeister/terminatr/internal/session"
 )
@@ -119,9 +122,11 @@ func TestModRestartHumanOnly(t *testing.T) {
 	}
 }
 
-// TestModHostReachesBroker: a supervised host's $ request goes through
-// the supervisor's Broker hook (Server.ModRequest) to the broker, and
-// the answer comes back to the mod.
+// TestModHostReachesBroker: a TypeScript mod's $ calls go from its
+// supervised host through the supervisor's Broker hook
+// (Server.ModRequest) to the broker, and the answers come back to it:
+// its store, a project it runs for, and a fetch it has no grant for,
+// refused with the broker's code and audited in its log.
 func TestModHostReachesBroker(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("TERMINATR_HOME", home)
@@ -130,25 +135,38 @@ func TestModHostReachesBroker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	newWatchProject(t)
 	dir := filepath.Join(home, "mods", "probe")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "types"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	files := map[string]string{
-		"mod.toml": "id = \"probe\"\nname = \"P\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nmain = \"main.js\"\n",
-		"main.js": `$.on("mod.ready", async () => {
-  await $.call("store.set", {key: "k", value: 42});
-  const v = await $.call("store.get", {key: "k"});
-  try { await $.call("http.fetch", {url: "https://example.com/"}); } catch (e) { $.log("refused", e.code); }
-  await $.call("store.set", {key: "seen", value: v});
-});`,
+		"mod.toml": "id = \"probe\"\nname = \"P\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nmain = \"main.ts\"\n" +
+			"[permissions]\nproject_read = true\n",
+		"types/tm.d.ts": modapi.TS(),
+		"main.ts": `import type { TM } from "./types/tm";
+
+$.on("mod.ready", async () => {
+  await $.store.set("k", 42);
+  const v = (await $.store.get("k")) as number;
+  const w: TM.ProjectWatch = await $.project.get("demo");
+  let refused = 0;
+  try {
+    await $.http.fetch("https://example.com/");
+  } catch (e) {
+    refused = (e as { code: number }).code;
+  }
+  await $.store.set("seen", { v, project: w.project, refused });
+});
+`,
 	}
 	for name, text := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte("[mods.probe]\nenabled = true\n"), 0o600); err != nil {
+	cfg := "[mods.probe]\nenabled = true\ngrants = [\"project_read\"]\nprojects = [\"demo\"]\n"
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	s := &Server{opts: Options{Paths: p, Bin: os.Args[0]}, log: log.New(&testWriter{t: t}, "server: ", 0),
@@ -166,10 +184,22 @@ func TestModHostReachesBroker(t *testing.T) {
 		<-done
 	}()
 	store := filepath.Join(home, "state", "mods", "probe", "store.json")
-	deadline := time.Now().Add(10 * time.Second)
+	type seen struct {
+		V       int    `json:"v"`
+		Project string `json:"project"`
+		Refused int    `json:"refused"`
+	}
+	want := seen{V: 42, Project: "demo", Refused: modproto.CodeDenied}
+	deadline := time.Now().Add(20 * time.Second)
 	for {
 		b, _ := os.ReadFile(store)
-		if strings.Contains(string(b), `"seen":42`) {
+		var m struct {
+			Seen *seen `json:"seen"`
+		}
+		if json.Unmarshal(b, &m) == nil && m.Seen != nil {
+			if *m.Seen != want {
+				t.Fatalf("seen %+v, want %+v", *m.Seen, want)
+			}
 			break
 		}
 		if time.Now().After(deadline) {
@@ -179,7 +209,7 @@ func TestModHostReachesBroker(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	logText, _ := os.ReadFile(filepath.Join(home, "logs", "mods", "probe.log"))
-	if !strings.Contains(string(logText), "refused -32010") || !strings.Contains(string(logText), "broker: denied http.fetch") {
+	if !strings.Contains(string(logText), "broker: denied http.fetch") {
 		t.Fatalf("log:\n%s", logText)
 	}
 }

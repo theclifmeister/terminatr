@@ -6,16 +6,13 @@ import (
 	"os"
 	"testing"
 
-	"github.com/dop251/goja"
-
+	"github.com/theclifmeister/terminatr/internal/modapi"
 	"github.com/theclifmeister/terminatr/internal/modhost"
 	"github.com/theclifmeister/terminatr/internal/modproto"
 )
 
 // The test binary is the supervisor's tm too: run as `mod host …` it is
-// a mod host, as cmd/tm's is, with one test binding, $.call(method,
-// params), a raw broker request (the $ API's own bindings come with
-// internal/modapi).
+// a mod host, as cmd/tm's is, with the $ API's bindings (modapi.Bind).
 func TestMain(m *testing.M) {
 	if len(os.Args) > 2 && os.Args[1] == "mod" && os.Args[2] == "host" {
 		os.Exit(testHostMain(os.Args[3:]))
@@ -36,10 +33,5 @@ func testHostMain(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return modproto.ExitLoad
 	}
-	bind := func(h *modhost.Host) error {
-		return h.Dollar().Set("call", func(c goja.FunctionCall) goja.Value {
-			return h.VM().ToValue(h.Call(c.Argument(0).String(), c.Argument(1)))
-		})
-	}
-	return modhost.Run(modhost.Options{Name: fs.Arg(0), Script: script, Budget: *budget, In: os.Stdin, Out: out, Bind: bind})
+	return modhost.Run(modhost.Options{Name: fs.Arg(0), Script: script, Budget: *budget, In: os.Stdin, Out: out, Bind: modapi.Bind})
 }

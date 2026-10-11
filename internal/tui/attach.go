@@ -141,7 +141,9 @@ func Attach(opts Options) (res Result, err error) {
 	if !term.IsTerminal(opts.In) {
 		return res, ErrNotTTY
 	}
-	loadIcons()
+	if n := lookNews(loadLook()); n != "" {
+		fmt.Fprintf(os.Stderr, "tm attach: %s\n", n)
+	}
 	prefix, kerr := prefixKey()
 	if kerr != nil {
 		fmt.Fprintf(os.Stderr, "tm attach: %v; using %s\n", kerr, DefaultPrefixKey)
@@ -1006,6 +1008,7 @@ func (c *client) handle(ev uv.Event) {
 		if _, ok := e.(uv.LightColorSchemeEvent); ok {
 			scheme = emu.SchemeLight
 		}
+		setScheme(scheme == emu.SchemeDark)
 		if !c.lock() {
 			return
 		}

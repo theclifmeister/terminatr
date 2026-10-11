@@ -25,6 +25,10 @@ type Mod struct {
 	// decoded (int64, bool, string, …); internal/mod checks them against
 	// the manifest.
 	Settings map[string]any
+	// Order is the table's place among the [mods.<id>] tables, from 0:
+	// the order they were enabled in, as each enable appends its table.
+	// Where two mods want one thing (a key), the first wins.
+	Order int
 	// Err says why the table couldn't be read (a key of the wrong type);
 	// such a mod doesn't run, and nothing else in tm minds.
 	Err error
@@ -48,6 +52,14 @@ var oldModsKeys = []string{"enabled", "band", "pane"}
 // keys directly under [mods] ("mods.sidebar").
 func readMods(md toml.MetaData, prims map[string]toml.Primitive) (old rawAgentMod, mods map[string]Mod, unknown []string, err error) {
 	mods = map[string]Mod{}
+	order := map[string]int{}
+	for _, k := range md.Keys() {
+		if len(k) == 2 && k[0] == "mods" {
+			if _, ok := order[k[1]]; !ok {
+				order[k[1]] = len(order)
+			}
+		}
+	}
 	for id, p := range prims {
 		if slices.Contains(oldModsKeys, id) {
 			var b bool
@@ -74,10 +86,10 @@ func readMods(md toml.MetaData, prims map[string]toml.Primitive) (old rawAgentMo
 			// Mark the table read, so its keys aren't also listed as
 			// unknown: the error says what is wrong.
 			md.PrimitiveDecode(p, new(map[string]any))
-			mods[id] = Mod{Err: fmt.Errorf("mods.%s: %w", id, err)}
+			mods[id] = Mod{Order: order[id], Err: fmt.Errorf("mods.%s: %w", id, err)}
 			continue
 		}
-		mods[id] = Mod{Enabled: r.Enabled != nil && *r.Enabled, Grants: r.Grants, Projects: r.Projects, Settings: r.Settings}
+		mods[id] = Mod{Enabled: r.Enabled != nil && *r.Enabled, Grants: r.Grants, Projects: r.Projects, Settings: r.Settings, Order: order[id]}
 	}
 	return old, mods, unknown, nil
 }
