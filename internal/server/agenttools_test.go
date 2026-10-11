@@ -37,6 +37,9 @@ type = "integer"
 [[provides.tools]]
 id = "ping"
 description = "Never answers pong."
+
+[permissions]
+tools = true
 `
 
 const lintToolMain = `
@@ -64,7 +67,7 @@ func TestModAgentTools(t *testing.T) {
 	}
 	write("mods/lint/mod.toml", lintToolManifest)
 	write("mods/lint/main.ts", lintToolMain)
-	write("config.toml", "[mods.lint]\nenabled = true\nprojects = [\"proj\"]\n")
+	write("config.toml", "[mods.lint]\nenabled = true\ngrants = [\"tools\"]\nprojects = [\"proj\"]\n")
 
 	rt, err := os.MkdirTemp(ipc.ShortDir(), "tmmod")
 	if err != nil {
@@ -186,6 +189,31 @@ func TestModAgentTools(t *testing.T) {
 	if rr, _ := res.(proto.ToolRunResult); perr != nil || rr.IsError || !strings.HasPrefix(rr.Text, "3 chars") {
 		t.Fatalf("tool.run: %+v %v", res, perr)
 	}
+
+	// The human revokes the tools grant: the tools go from the list, and
+	// a call is refused, over the socket and over tool.run alike.
+	write("config.toml", "[mods.lint]\nenabled = true\ngrants = []\nprojects = [\"proj\"]\n")
+	s.modBr.mu.Lock()
+	s.modBr.reg = nil // what modRegistryAge does within a second
+	s.modBr.mu.Unlock()
+	if got := toolNames(s.sessionTools(thr)); got != "report,status,steps,done" {
+		t.Fatalf("after the revoke: %s", got)
+	}
+	if code, _ := call("lint_lint_report", `{"text":"x"}`); code != http.StatusNotFound {
+		t.Fatalf("a call after the revoke: %d", code)
+	}
+	res, perr = s.toolListRPC(sess.PID())
+	if perr != nil || toolNames(res.(proto.ToolListResult).Tools) != "report,status,steps,done" {
+		t.Fatalf("tool.list after the revoke: %+v %v", res, perr)
+	}
+	res, _ = s.toolRunRPC(proto.ToolRunParams{Name: "lint_lint_report", Input: json.RawMessage(`{"text":"abc"}`)}, sess.PID())
+	if rr := res.(proto.ToolRunResult); !rr.IsError || !strings.Contains(rr.Text, "tools grant") {
+		t.Fatalf("tool.run after the revoke: %+v", rr)
+	}
+	write("config.toml", "[mods.lint]\nenabled = true\ngrants = [\"tools\"]\nprojects = [\"proj\"]\n")
+	s.modBr.mu.Lock()
+	s.modBr.reg = nil
+	s.modBr.mu.Unlock()
 
 	// A coordinator gets the mod tools for its role, and not a thread's.
 	s.mu.Lock()

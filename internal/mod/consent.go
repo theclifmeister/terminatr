@@ -55,6 +55,8 @@ func (p Permissions) PermWords(perm string) string {
 		return "shows notifications"
 	case PermInbox:
 		return "tells the coordinator"
+	case PermTools:
+		return "offers tools to agents"
 	case PermNet:
 		return "talks to " + strings.Join(p.Net, ", ")
 	case PermCommands:

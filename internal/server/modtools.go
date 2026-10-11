@@ -176,7 +176,9 @@ func (s *Server) sessionTools(rec SessionRecord) []proto.ToolDef {
 }
 
 // modToolsFor are the tools of the enabled code mods that run for rec's
-// project, for its role, sorted by name; none while no mod hosts run.
+// project and hold the tools grant, for its role, sorted by name; none
+// while no mod hosts run. The registry is read anew within a second, so
+// a call made after the human revokes the grant is refused.
 func (s *Server) modToolsFor(rec SessionRecord) []modToolRef {
 	if rec.Project == "" || (rec.Role != proto.RoleThread && rec.Role != proto.RoleCoordinator) || s.modSup.Load() == nil {
 		return nil
@@ -187,7 +189,7 @@ func (s *Server) modToolsFor(rec SessionRecord) []modToolRef {
 	}
 	var out []modToolRef
 	for _, m := range reg.Mods {
-		if m.Manifest == nil || !m.Manifest.IsCode() || !m.Runs(rec.Project) {
+		if m.Manifest == nil || !m.Manifest.IsCode() || !m.Runs(rec.Project) || !m.Granted(mod.PermTools) {
 			continue
 		}
 		for _, t := range m.Manifest.Provides.Tools {
@@ -289,7 +291,7 @@ func (s *Server) runModTool(rec SessionRecord, name string, b []byte) (int, ModT
 	tools := s.modToolsFor(rec)
 	i := slices.IndexFunc(tools, func(t modToolRef) bool { return t.def.Name == name })
 	if i < 0 {
-		return http.StatusNotFound, ModToolResult{Error: fmt.Sprintf("no tool %q for this session: its mod isn't enabled for %s, or doesn't offer it to a %s", name, rec.Project, rec.Role)}
+		return http.StatusNotFound, ModToolResult{Error: fmt.Sprintf("no tool %q for this session: its mod isn't enabled for %s or lacks the tools grant, or doesn't offer it to a %s", name, rec.Project, rec.Role)}
 	}
 	t := tools[i]
 	input, err := checkToolInput(t.tool, b)

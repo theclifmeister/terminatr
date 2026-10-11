@@ -169,6 +169,8 @@ type Permissions struct {
 	Views       bool     `toml:"views"`
 	Notify      bool     `toml:"notify"`
 	Inbox       bool     `toml:"inbox"`
+	// Tools: offer agents the tools in [provides].tools.
+	Tools bool `toml:"tools"`
 	Net         []string `toml:"net"`
 	Commands    []string `toml:"commands"`
 	Files       Files    `toml:"files"`
@@ -187,18 +189,19 @@ const (
 	PermViews       = "views"
 	PermNotify      = "notify"
 	PermInbox       = "inbox"
+	PermTools       = "tools"
 	PermFiles       = "files"
 	PermNet         = "net"
 	PermCommands    = "commands"
 )
 
 // Perms are all the permission names, in the consent screen's order.
-var Perms = []string{PermProjectRead, PermViews, PermNotify, PermInbox, PermFiles, PermNet, PermCommands}
+var Perms = []string{PermProjectRead, PermViews, PermNotify, PermInbox, PermTools, PermFiles, PermNet, PermCommands}
 
 // Requested lists the permissions the manifest asks for, in Perms order.
 func (p Permissions) Requested() []string {
 	asks := map[string]bool{
-		PermProjectRead: p.ProjectRead, PermViews: p.Views, PermNotify: p.Notify, PermInbox: p.Inbox,
+		PermProjectRead: p.ProjectRead, PermViews: p.Views, PermNotify: p.Notify, PermInbox: p.Inbox, PermTools: p.Tools,
 		PermFiles: len(p.Files.Read)+len(p.Files.Write) > 0, PermNet: len(p.Net) > 0, PermCommands: len(p.Commands) > 0,
 	}
 	var out []string
@@ -468,6 +471,12 @@ func (m *Manifest) check(dir string) error {
 				bad("%s: required %q isn't an input property", at, k)
 			}
 		}
+	}
+	if len(p.Tools) > 0 && !m.Permissions.Tools {
+		bad("provides.tools needs permissions.tools")
+	}
+	if m.Permissions.Tools && len(p.Tools) == 0 {
+		bad("permissions.tools offers no tool: list them in provides.tools")
 	}
 	if len(p.Views) > 0 && !m.Permissions.Views {
 		bad("provides.views needs permissions.views")

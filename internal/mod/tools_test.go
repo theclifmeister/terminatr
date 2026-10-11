@@ -30,6 +30,9 @@ type = "boolean"
 [[provides.tools]]
 id = "ping"
 description = "Answers pong."
+
+[permissions]
+tools = true
 `
 
 func TestManifestTools(t *testing.T) {
@@ -47,6 +50,9 @@ func TestManifestTools(t *testing.T) {
 	}
 	if b, _ := json.Marshal(ping.Schema()); string(b) != `{"additionalProperties":false,"properties":{},"type":"object"}` {
 		t.Fatalf("empty schema %s", b)
+	}
+	if got := m.Permissions.Requested(); strings.Join(got, ",") != "tools" {
+		t.Fatalf("requested %v", got)
 	}
 	if got := m.Kinds(); strings.Join(got, ",") != "code,tools" {
 		t.Fatalf("kinds %v", got)
@@ -80,6 +86,8 @@ func TestManifestToolErrors(t *testing.T) {
 		{"bad role", head + "[[provides.tools]]\nid = \"x\"\ndescription = \"d\"\nroles = [\"human\"]\n", "role \"human\""},
 		{"untyped", head + "[[provides.tools]]\nid = \"x\"\ndescription = \"d\"\n[provides.tools.input.properties.a]\ndescription = \"a\"\n", "needs a type"},
 		{"bad property", head + "[[provides.tools]]\nid = \"x\"\ndescription = \"d\"\n[provides.tools.input.properties.A]\ntype = \"string\"\n", "input property \"A\""},
+		{"no permission", head + "[[provides.tools]]\nid = \"x\"\ndescription = \"d\"\n", "provides.tools needs permissions.tools"},
+		{"permission, no tool", head + "[permissions]\ntools = true\n", "permissions.tools offers no tool"},
 		{"required unknown", head + "[[provides.tools]]\nid = \"x\"\ndescription = \"d\"\n[provides.tools.input]\nrequired = [\"b\"]\n", "required \"b\""},
 	} {
 		_, err := ParseManifest([]byte(tc.toml), "")
@@ -99,6 +107,7 @@ func TestConsentTools(t *testing.T) {
 	c := Consent(m, "")
 	for _, want := range []string{
 		"Provides: code · tools",
+		"  - offers tools to agents",
 		"Tool it offers your threads (they read its description), lint_lint_report, in full:",
 		"Lints a report draft before you hand it in.",
 		`  text (required): {"description":"The draft.","type":"string"}`,
