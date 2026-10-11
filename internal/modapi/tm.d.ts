@@ -27,6 +27,12 @@ export interface TM {
     /** A thread's latest report; null when it has none. Needs the project_read grant. */
     get(project: string, thread: string): Promise<TM.Report | null>;
   };
+  memory: {
+    /** A project's memory files: CONTEXT.md, MEMORY.md and the notes in memory/, by title. Needs the project_read grant. */
+    list(slug: string): Promise<TM.MemoryFile[]>;
+    /** The text of one of a project's memory files, by the path memory.list gives (1 MB at most). Needs the project_read grant. */
+    read(slug: string, path: string): Promise<string>;
+  };
   store: {
     /** A value the mod stored; null when there is none. */
     get(key: string): Promise<TM.Value>;
@@ -207,6 +213,12 @@ export declare namespace TM {
   }
 
   type Level = "info" | "warn" | "error";
+
+  interface MemoryFile {
+    path: string;
+    title: string;
+    bytes: number;
+  }
 
   interface ModCell {
     mod: string;

@@ -29,6 +29,7 @@ import (
 // General settings, or an enabled keymap or policy mod). The templates
 // can.
 
+//go:generate go run ./bundlegen/cmd
 //go:embed all:bundled
 var bundledFS embed.FS
 
@@ -39,7 +40,14 @@ const (
 	BundledLayout    = "default-layout"
 	BundledPolicy    = "default-policy"
 	BundledTemplates = "default-templates"
+	// BundledMemory is the project popup's Memory tab, a code mod (proof
+	// 2 of the mod API, design §11); its source is examples/mods/memory-tab.
+	BundledMemory = "memory-tab"
 )
+
+// MemoryView is the Memory tab mod's project tab: the popup draws it in
+// the core Memory tab's place while the mod runs.
+const MemoryView = "memory"
 
 // BundledIcons is the bundled icon set mod for a built-in set's name
 // (unicode, nerd, ascii): "<name>-icons".
@@ -116,7 +124,13 @@ func Bundled(id string, t config.Mod) Mod {
 			man.Version = v
 		}
 	}
+	// It is part of tm: it runs with what it asks for, as tm does,
+	// without a consent screen, and with its settings' defaults.
+	m.Grants = man.Permissions.Requested()
 	m.Settings = map[string]any{}
+	for _, k := range sortedKeys(man.Settings) {
+		m.Settings[k], _ = man.Settings[k].Check(man.Settings[k].Default)
+	}
 	m.State = Enabled
 	if t.EnabledSet && !t.Enabled && !m.Required {
 		m.State = Disabled

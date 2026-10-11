@@ -1,7 +1,9 @@
 package mod
 
 import (
+	"bytes"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -9,18 +11,22 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/mod/bundlegen"
 )
 
 // TestBundled: the bundled mods (mods design §11) load from the binary,
 // valid, enabled and built in, after the installed ones; every data
-// file of theirs loads; the defaults tm needs are required, the
+// file of the data mods loads; the defaults tm needs are required, the
 // templates aren't.
 func TestBundled(t *testing.T) {
-	want := []string{"ascii-icons", "default-keymap", "default-layout", "default-policy", "default-templates", "default-theme", "nerd-icons", "unicode-icons"}
+	want := []string{"ascii-icons", "default-keymap", "default-layout", "default-policy", "default-templates", "default-theme", "memory-tab", "nerd-icons", "unicode-icons"}
 	if got := BundledIDs(); !slices.Equal(got, want) {
 		t.Fatalf("bundled %q", got)
 	}
 	for _, id := range want {
+		if slices.Contains(bundlegen.Code, id) {
+			continue // TestBundledCodeMod
+		}
 		m := Bundled(id, config.Mod{})
 		if m.State != Enabled || !m.Builtin || m.FS == nil || m.Dir != "" || m.Err != nil {
 			t.Errorf("%s: %+v", id, m)
@@ -151,5 +157,44 @@ func TestCheckData(t *testing.T) {
 		if !strings.HasPrefix(got[i], want[i]) {
 			t.Errorf("got %q, want %q…", got[i], want[i])
 		}
+	}
+}
+
+// TestBundledCodeCurrent: each bundled code mod's embedded files are what
+// go generate makes of its source in examples/mods.
+func TestBundledCodeCurrent(t *testing.T) {
+	for _, id := range bundlegen.Code {
+		want, err := bundlegen.Files(filepath.Join("..", "..", "examples", "mods", id), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for name, b := range want {
+			got, err := fs.ReadFile(bundledFS, "bundled/"+id+"/"+name)
+			if err != nil || !bytes.Equal(got, b) {
+				t.Errorf("bundled/%s/%s is stale: run go generate ./internal/mod", id, name)
+			}
+		}
+	}
+}
+
+// TestBundledMemoryTab: the Memory tab is a built-in code mod, on by
+// default, with what it asks for granted, its bundle embedded, and one
+// project tab; a table turns it off.
+func TestBundledMemoryTab(t *testing.T) {
+	m := Bundled(BundledMemory, config.Mod{})
+	if m.State != Enabled || !m.Builtin || m.Required || m.Manifest == nil || !m.Manifest.IsCode() {
+		t.Fatalf("memory-tab: %+v", m)
+	}
+	if !slices.Equal(m.Grants, []string{PermProjectRead, PermViews}) {
+		t.Errorf("grants %v", m.Grants)
+	}
+	if b, err := m.ReadFile(m.Manifest.Provides.Main); err != nil || len(b) == 0 {
+		t.Errorf("its bundle: %v", err)
+	}
+	if v := m.Manifest.Provides.Views; len(v) != 1 || v[0].Slot != SlotProjectTab || v[0].ID != MemoryView {
+		t.Errorf("views %+v", v)
+	}
+	if m := Bundled(BundledMemory, config.Mod{EnabledSet: true}); m.State != Disabled {
+		t.Errorf("turned off: %s", m.State)
 	}
 }

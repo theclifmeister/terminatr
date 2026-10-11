@@ -10,7 +10,9 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -303,6 +305,31 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 			return r, nil
 		}
 		return nil, nil
+	})
+	b.Handle("memory.list", mod.PermProjectRead, func(_ context.Context, c *modbroker.Call) (any, error) {
+		p, err := modProject(c, &struct{}{})
+		if err != nil {
+			return nil, err
+		}
+		files, err := p.MemoryFiles()
+		if files == nil {
+			files = []project.MemoryFile{}
+		}
+		return files, err
+	})
+	b.Handle("memory.read", mod.PermProjectRead, func(_ context.Context, c *modbroker.Call) (any, error) {
+		var a struct {
+			Path string `json:"path"`
+		}
+		p, err := modProject(c, &a)
+		if err != nil {
+			return nil, err
+		}
+		text, err := p.ReadMemoryFile(a.Path)
+		if errors.Is(err, project.ErrNotMemory) || errors.Is(err, fs.ErrNotExist) {
+			return nil, modbroker.NotFound("%s has no memory file %q", p.Slug, a.Path)
+		}
+		return text, err
 	})
 	b.Handle("inbox.raise", mod.PermInbox, s.modRaise)
 	b.Handle("ui.view.set", mod.PermViews, s.modViewSet)

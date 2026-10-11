@@ -13,6 +13,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/modapi"
 	"github.com/theclifmeister/terminatr/internal/modproto"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modsup"
 	"github.com/theclifmeister/terminatr/internal/session"
 )
@@ -46,11 +47,22 @@ func TestModHostsFollowConfig(t *testing.T) {
 	write("mods/off/main.js", "")
 	write("mods/theme/mod.toml", "id = \"theme\"\n"+head+"[provides]\ntheme = \"t.toml\"\n")
 	write("mods/theme/t.toml", "")
-	write("config.toml", "[mods.code]\nenabled = true\ngrants = [\"project_read\"]\nprojects = [\"demo\"]\n[mods.theme]\nenabled = true\n")
+	cfg := "[mods.code]\nenabled = true\ngrants = [\"project_read\"]\nprojects = [\"demo\"]\n[mods.theme]\nenabled = true\n"
+	write("config.toml", cfg)
 
 	s := &Server{opts: Options{Paths: p, Bin: "/nonexistent/tm"}, log: log.New(&testWriter{t: t}, "server: ", 0),
 		sessions: map[string]*session.Session{}, modEv: newModEvents()}
+	// The built-in Memory tab runs its precompiled bundle, with what it
+	// asks for, lazily: it draws no column.
 	specs, ok := s.modSpecs()
+	if !ok || len(specs) != 2 || specs[1].ID != mod.BundledMemory {
+		t.Fatalf("specs with the built-in %+v %v", specs, ok)
+	}
+	if sp := specs[1]; sp.Entry != "" || len(sp.Bundle) == 0 || sp.Eager || len(sp.Grants) != 2 {
+		t.Fatalf("built-in spec %s %d bytes eager %v grants %v", sp.Entry, len(sp.Bundle), sp.Eager, sp.Grants)
+	}
+	write("config.toml", cfg+"[mods.memory-tab]\nenabled = false\n")
+	specs, ok = s.modSpecs()
 	if !ok || len(specs) != 1 {
 		t.Fatalf("specs %+v %v", specs, ok)
 	}
@@ -84,7 +96,7 @@ func TestModHostsFollowConfig(t *testing.T) {
 	wait("code backing off", func(st []modsup.Status) bool {
 		return len(st) == 1 && st[0].ID == "code" && st[0].State == modsup.Backoff
 	})
-	write("config.toml", "[mods.code]\nenabled = false\n")
+	write("config.toml", "[mods.code]\nenabled = false\n[mods.memory-tab]\nenabled = false\n")
 	wait("code stopped", func(st []modsup.Status) bool { return len(st) == 0 })
 }
 

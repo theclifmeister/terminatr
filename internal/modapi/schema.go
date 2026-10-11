@@ -118,6 +118,15 @@ type Project struct {
 	Slug string `json:"slug"`
 }
 
+// MemoryFile is one of a project's memory files: its path in the project
+// folder (CONTEXT.md, MEMORY.md or memory/<name>.md), its title (a
+// note's first heading) and its size.
+type MemoryFile struct {
+	Path  string `json:"path"`
+	Title string `json:"title"`
+	Bytes int64  `json:"bytes"`
+}
+
 // Task is one task of a project's board.
 type Task struct {
 	ID         string `json:"id"` // "T12"
@@ -222,6 +231,10 @@ var Methods = []Method{
 		Doc: "A thread of a project; null when there is none."},
 	{Name: "report.get", Params: []Param{{Name: "project", Type: typ[string]()}, {Name: "thread", Type: typ[string]()}}, Result: typ[*modbus.Report](), Needs: GrantProjectRead,
 		Doc: "A thread's latest report; null when it has none."},
+	{Name: "memory.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]MemoryFile](), Needs: GrantProjectRead,
+		Doc: "A project's memory files: CONTEXT.md, MEMORY.md and the notes in memory/, by title."},
+	{Name: "memory.read", Params: []Param{{Name: "slug", Type: typ[string]()}, {Name: "path", Type: typ[string]()}}, Result: typ[string](), Needs: GrantProjectRead,
+		Doc: "The text of one of a project's memory files, by the path memory.list gives (1 MB at most)."},
 	// Own state.
 	{Name: "store.get", Params: []Param{{Name: "key", Type: typ[string]()}}, Result: typ[Value](),
 		Doc: "A value the mod stored; null when there is none."},
