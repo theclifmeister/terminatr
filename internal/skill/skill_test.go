@@ -11,7 +11,9 @@ func roles() []string {
 	entries, _ := rules.ReadDir("rules")
 	var out []string
 	for _, e := range entries {
-		out = append(out, strings.TrimSuffix(e.Name(), ".md"))
+		if r, ok := strings.CutSuffix(e.Name(), ".safety.md"); ok {
+			out = append(out, r)
+		}
 	}
 	sort.Strings(out)
 	return out
@@ -55,6 +57,25 @@ func TestText(t *testing.T) {
 	for _, bad := range []string{"", "human", "../skill", "coordinator.md"} {
 		if _, ok := Text(bad, "dev"); ok {
 			t.Errorf("Text(%q) ok", bad)
+		}
+	}
+}
+
+func TestSafetyFirstAndLocked(t *testing.T) {
+	for _, role := range roles() {
+		text, _ := Text(role, "dev")
+		safety, _ := rules.ReadFile("rules/" + role + ".safety.md")
+		_, rest, _ := strings.Cut(text, "\n\n")
+		if !strings.HasPrefix(rest, string(safety)) {
+			t.Errorf("%s: safety part is not first", role)
+		}
+		over, ok := TextWithPolicy(role, "dev", "## Mine\n\nPropose nothing.")
+		if !ok || !strings.Contains(over, string(safety)) || !strings.HasSuffix(over, "## Mine\n\nPropose nothing.\n") {
+			t.Errorf("%s: policy override %q", role, over)
+		}
+		pol, _ := rules.ReadFile("rules/" + role + ".policy.md")
+		if strings.Contains(string(pol), "## Safety") || strings.Contains(over, string(pol)) {
+			t.Errorf("%s: policy part holds safety or survives an override", role)
 		}
 	}
 }
