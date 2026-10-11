@@ -246,8 +246,7 @@ func TestHookGuard(t *testing.T) {
 	}
 }
 
-// TestAccessMergeCommands: coordinator_merges (off by default) allows the
-// coordinator's PR merge commands, only while merge = coordinator, and a
+// TestAccessMergeCommands: coordinator_merges (off by default) // coordinator tm thread merge, only while merge = coordinator, and a
 // thread never gets them.
 func TestAccessMergeCommands(t *testing.T) {
 	testPaths(t)
@@ -263,7 +262,7 @@ func TestAccessMergeCommands(t *testing.T) {
 	if got := cmds(proto.RoleCoordinator); got != nil {
 		t.Errorf("default: coordinator commands %q", got)
 	}
-	want := []string{"gh pr merge", "az repos pr update"}
+	want := []string{"tm thread merge"}
 	for _, body := range []string{
 		"[projects." + p.Slug + "]\ncoordinator_merges = true\n",
 		"[defaults]\ncoordinator_merges = true\n",
