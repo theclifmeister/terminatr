@@ -397,11 +397,12 @@ func (c *client) infoScroll(d int) {
 	ip.top = min(max(ip.top+d, 0), max(len(ip.lines)-c.infoRows(), 0))
 }
 
-// infoRows is the panel's height: the window less the status bar, which
-// runs across the window. c.mu held.
+// infoRows is the panel's height: the window less the status bar and the
+// rule over it, which run across the window, as under the sidebar.
+// c.mu held.
 func (c *client) infoRows() int {
 	if c.statusBar {
-		return max(c.rows-1, 1)
+		return max(c.rows-2, 1)
 	}
 	return c.rows
 }

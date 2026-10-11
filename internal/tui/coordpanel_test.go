@@ -207,7 +207,7 @@ func TestCoordPanelLayout(t *testing.T) {
 // over to a full tm), on a task it opens the task view.
 func TestCoordPanelMouse(t *testing.T) {
 	c := coordClient(t, 200)
-	c.rows = 60
+	c.rows, c.paneRows = 60, 58
 	c.mu.Lock()
 	c.infoLayout()
 	hits := c.info.hits
@@ -243,7 +243,7 @@ func TestCoordPanelMouse(t *testing.T) {
 	}
 
 	c = coordClient(t, 200)
-	c.rows = 60
+	c.rows, c.paneRows = 60, 58
 	c.mu.Lock()
 	c.infoLayout()
 	hits = c.info.hits

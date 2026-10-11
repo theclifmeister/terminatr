@@ -43,15 +43,17 @@ func TestSmokeCoordinatorPanel(t *testing.T) {
 		// The ticker's section (ages, so never the same twice), the
 		// blank row before it included, is left out, from its heading to
 		// the blank row that ends it; the unit tests cover it.
-		skip, dropped := false, 0
+		skip, dropped, at := false, 0, 0
 		for _, l := range strings.Split(w.Screen(), "\n") {
 			r := []rune(l)
 			cut := strings.TrimSpace(string(r[min(cols-panel, len(r)):]))
 			cut = strings.TrimPrefix(cut, "│ ")
 			if strings.HasPrefix(cut, "TICKER") {
 				skip = true
+				at = len(out)
 				if n := len(out); n > 0 && strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(out[n-1]), "│")) == "" {
 					out = out[:n-1]
+					at--
 					dropped++
 				}
 			}
@@ -63,10 +65,14 @@ func TestSmokeCoordinatorPanel(t *testing.T) {
 			out = append(out, string(r[min(cols-panel, len(r)):]))
 		}
 		// Its rows (its wrapping depends on the ages) are given back as
-		// empty ones above the last line, so the screen keeps its height.
-		if n := len(out); dropped > 0 && n > 0 {
-			pad := strings.Repeat("│\n", dropped)
-			return strings.Join(out[:n-1], "\n") + "\n" + pad + out[n-1]
+		// empty ones where it was, so the rule and the status bar stay
+		// on their rows.
+		if dropped > 0 {
+			pad := make([]string, dropped)
+			for i := range pad {
+				pad[i] = "│"
+			}
+			out = append(out[:at], append(pad, out[at:]...)...)
 		}
 		return strings.Join(out, "\n")
 	}
