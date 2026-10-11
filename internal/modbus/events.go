@@ -162,9 +162,11 @@ type Target struct {
 // Input is ui.click and ui.key: the human clicked, or pressed Key on, one
 // of the mod's own columns, views or widgets.
 type Input struct {
-	Column string  `json:"column,omitempty"`
-	View   string  `json:"view,omitempty"`
-	Widget string  `json:"widget,omitempty"`
+	Column string `json:"column,omitempty"`
+	View   string `json:"view,omitempty"`
+	Widget string `json:"widget,omitempty"`
+	// Row is the id of the row under the widget's cursor, or clicked.
+	Row    string  `json:"row,omitempty"`
 	Key    string  `json:"key,omitempty"` // ui.key only
 	Target *Target `json:"target,omitempty"`
 }

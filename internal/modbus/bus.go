@@ -116,6 +116,24 @@ func (b *Bus) Publish(name, project string, data any) {
 	}
 }
 
+// PublishTo queues an event for mod alone (an input on one of its
+// views, a view it shows), if it is subscribed and the event is for it.
+// It never blocks.
+func (b *Bus) PublishTo(mod, name, project string, data any) {
+	b.mu.Lock()
+	s := b.subs[mod]
+	if s == nil {
+		b.mu.Unlock()
+		return
+	}
+	b.seq++
+	ev := Event{Name: name, Project: project, Seq: b.seq, Time: b.now(), Data: data}
+	b.mu.Unlock()
+	if s.wants(ev) {
+		s.push(ev)
+	}
+}
+
 // Sub is one mod's queue.
 type Sub struct {
 	mod    string

@@ -130,6 +130,16 @@ func (s *Server) broker() *modbroker.Broker {
 // modNamed is installed mod id as the registry has it, read anew when
 // older than modRegistryAge.
 func (s *Server) modNamed(id string) (mod.Mod, bool) {
+	r := s.modRegistry()
+	if r == nil {
+		return mod.Mod{}, false
+	}
+	return r.Get(id)
+}
+
+// modRegistry is the installed mods, read anew when older than
+// modRegistryAge; nil when they can't be read.
+func (s *Server) modRegistry() *mod.Registry {
 	mb := &s.modBr
 	mb.mu.Lock()
 	defer mb.mu.Unlock()
@@ -141,11 +151,11 @@ func (s *Server) modNamed(id string) (mod.Mod, bool) {
 		r, err := mod.Load(c)
 		if err != nil {
 			s.log.Printf("mods: %v", err)
-			return mod.Mod{}, false
+			return nil
 		}
 		mb.reg, mb.at = r, time.Now()
 	}
-	return mb.reg.Get(id)
+	return mb.reg
 }
 
 // modLog appends line to mod id's log, ~/.terminatr/logs/mods/<id>.log,
@@ -291,6 +301,8 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 		return nil, nil
 	})
 	b.Handle("inbox.raise", mod.PermInbox, s.modRaise)
+	b.Handle("ui.view.set", mod.PermViews, s.modViewSet)
+	b.Handle("ui.view.open", mod.PermViews, s.modViewOpen)
 }
 
 // inbox.raise {project, item: {subject, summary}} (or the two flat): an
