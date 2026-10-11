@@ -170,7 +170,7 @@ func TestEveryPrefixCommandListed(t *testing.T) {
 		t.Fatalf("prefix commands %q", cmds)
 	}
 	var help []string
-	for _, k := range sessionKeys {
+	for _, k := range sessionKeys() {
 		f := strings.Fields(k.keys)
 		f[0] = strings.TrimPrefix(f[0], "prefix+")
 		help = append(help, f...)
@@ -184,7 +184,7 @@ func TestEveryPrefixCommandListed(t *testing.T) {
 	for _, h := range hs {
 		bar = append(bar, h.key)
 	}
-	hint := strings.Fields(prefixHint)
+	hint := strings.Fields(prefixHint())
 	for _, k := range prefixKeysAll() {
 		if !slices.Contains(cmds, k) {
 			t.Errorf("prefix+%s works on the dashboard but not in a session", k)
@@ -206,7 +206,7 @@ func TestEveryPrefixCommandListed(t *testing.T) {
 	}
 	// No plain key quits the dashboard: quitting is prefix+q's.
 	for _, a := range actions {
-		if a.menu != nil && a.menu[0] == "quit" && !slices.Equal(a.keys, []string{"prefix+q"}) {
+		if a.menu == "quit" && !slices.Equal(a.keys, []string{"prefix+q"}) {
 			t.Errorf("quit's keys %q, want prefix+q only", a.keys)
 		}
 	}

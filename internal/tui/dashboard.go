@@ -788,7 +788,7 @@ func (m *dash) sideKeyboard(key string) (tea.Cmd, bool) {
 	}
 	if st.help {
 		// A plain key that is a prefix command does what it does.
-		return m.prefixCommand(key), true
+		return m.prefixCommand(boundKey("?")), true
 	}
 	if st.back {
 		m.focus = areaMain
@@ -996,7 +996,7 @@ func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 			return cmd
 		}
 	}
-	return m.listKey(k.String())
+	return m.listKey(binds.list.canon(k.String()))
 }
 
 // sendSideSel tells the view where the sidebar's keyboard row is, when
@@ -1403,7 +1403,7 @@ func (m *dash) frame(title string, body []string, sel int, keys string) string {
 	foot := []string{m.rule("")}
 	switch {
 	case m.prefixed:
-		keys = prefixHint
+		keys = prefixHint()
 	case m.focus == areaSide && m.top() == nil:
 		// The sidebar's own keys are in its key bar.
 		keys = "esc back to the list · tab next area"

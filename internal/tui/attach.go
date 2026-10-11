@@ -1131,6 +1131,10 @@ func keyName(k uv.Key) string {
 // else cancels.
 func prefixStep(prefix chord, pending bool, k uv.Key, dashboard bool) prefixDo {
 	name := keyName(k)
+	if pending && !prefix.match(k) {
+		// A bound key runs as its action's default (keybind.go).
+		name = binds.list.canon(name)
+	}
 	switch {
 	case !pending && prefix.match(k):
 		return prefixDo{arm: true}

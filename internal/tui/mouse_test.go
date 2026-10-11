@@ -104,21 +104,17 @@ func TestEveryKeyHasMousePath(t *testing.T) {
 		if a.mouse != "" {
 			continue
 		}
-		if !slices.ContainsFunc(a.menu, func(s string) bool { return s != "" }) {
-			t.Errorf("action %v has no mouse path: no menu entry, no mouse note", a.keys)
+		if a.menu == "" {
+			t.Errorf("action %s has no mouse path: no menu entry, no mouse note", a.id)
+			continue
 		}
-		for i, word := range a.menu {
-			if word == "" {
-				continue
-			}
-			key := a.keys[i]
-			if !slices.ContainsFunc(items, func(it menuItem) bool { return it.label == word && it.key == key }) {
-				t.Errorf("the ≡ menu lacks %q (%s)", word, key)
-			}
-			// The item presses exactly the key.
-			if got := keyMsg(key).String(); got != key {
-				t.Errorf("the menu's %s presses %q", key, got)
-			}
+		word, key := a.menu, a.keys[0]
+		if !slices.ContainsFunc(items, func(it menuItem) bool { return it.label == word && it.key == key }) {
+			t.Errorf("the ≡ menu lacks %q (%s)", word, key)
+		}
+		// The item presses exactly the key.
+		if got := keyMsg(key).String(); got != key {
+			t.Errorf("the menu's %s presses %q", key, got)
 		}
 	}
 	session := map[string]bool{"d": true, "r": true}

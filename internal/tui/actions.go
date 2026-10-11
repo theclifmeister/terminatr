@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -14,14 +15,22 @@ import (
 
 // An action is a key on the list and what it does.
 type action struct {
-	keys []string
+	// id is its stable name (keybind.go): what a keymap binds and the
+	// action binding names. One id is one behaviour, whatever its keys.
+	id string
+	// keys are its default keys; the first is the one it runs with, as
+	// the remap layer hands it the default key whichever key was typed
+	// (keybind.go). fixed actions can't be rebound.
+	keys  []string
+	fixed bool
 	// label and help are its line in the help; an empty label leaves it
-	// out.
+	// out, or joins its keys to the line above when help is "" too
+	// (keyLabel).
 	label, help string
-	// menu are its entries in the ≡ menu, one per key ("" for none): the
-	// mouse's way to every action. mouse is its mouse path instead, for
-	// those that aren't in the menu.
-	menu  []string
+	// menu is its entry in the ≡ menu ("" for none): the mouse's way to
+	// every action. mouse is its mouse path instead, for those that
+	// aren't in the menu.
+	menu  string
 	mouse string
 	// foot is its word in the footer for the selected row (ok is false
 	// without one), "" to leave it out there.
@@ -51,20 +60,17 @@ var actions []action
 
 func init() {
 	actions = []action{
-		{keys: []string{"up", "k"}, mouse: "the wheel, or a click on a row", run: func(m *dash, _ string) tea.Cmd { m.move(-1); return nil }},
-		{keys: []string{"down", "j"}, mouse: "the wheel, or a click on a row", run: func(m *dash, _ string) tea.Cmd { m.move(1); return nil }},
-		{keys: []string{"pgup", "pgdown"}, mouse: "the wheel", run: func(m *dash, k string) tea.Cmd {
-			for range 10 {
-				m.move(scrollKeys[k] / 10)
-			}
-			return nil
-		}},
-		{keys: []string{"tab", "shift+tab"}, label: "tab shift+tab", help: "the keyboard to the next / previous area: the list, the details panel, the projects sidebar (its keys below); esc back to the list",
+		{id: "list.up", keys: []string{"up", "k"}, mouse: "the wheel, or a click on a row", run: func(m *dash, _ string) tea.Cmd { m.move(-1); return nil }},
+		{id: "list.down", keys: []string{"down", "j"}, mouse: "the wheel, or a click on a row", run: func(m *dash, _ string) tea.Cmd { m.move(1); return nil }},
+		{id: "list.page-up", keys: []string{"pgup"}, mouse: "the wheel", run: (*dash).page},
+		{id: "list.page-down", keys: []string{"pgdown"}, mouse: "the wheel", run: (*dash).page},
+		{id: "focus.next", keys: []string{"tab"}, fixed: true, label: "tab shift+tab", help: "the keyboard to the next / previous area: the list, the details panel, the projects sidebar (its keys below); esc back to the list",
 			mouse: "a click on the area", run: (*dash).cycleFocus},
-		{keys: []string{";"}, label: ";", help: "back to the last place: the area, sidebar row or session the keyboard was in before (prefix+; anywhere)",
-			menu: []string{"back to the last place"}, run: (*dash).goLastPlace},
-		{keys: []string{"enter"}, label: "enter", help: "attach to the selected session; on a project, open its coordinator; a task in NEEDS YOU shows in the project popup; questions waiting there open in the coordinator's question dialog",
-			menu: []string{"open the selected row"},
+		{id: "focus.prev", keys: []string{"shift+tab"}, fixed: true, mouse: "a click on the area", run: (*dash).cycleFocus},
+		{id: "place.last", keys: []string{";"}, label: ";", help: "back to the last place: the area, sidebar row or session the keyboard was in before (prefix+; anywhere)",
+			menu: "back to the last place", run: (*dash).goLastPlace},
+		{id: "row.open", keys: []string{"enter"}, label: "enter", help: "attach to the selected session; on a project, open its coordinator; a task in NEEDS YOU shows in the project popup; questions waiting there open in the coordinator's question dialog",
+			menu: "open the selected row",
 			foot: func(_ *dash, r row, ok bool) string {
 				switch {
 				case !ok:
@@ -81,8 +87,8 @@ func init() {
 				return ""
 			},
 			run: (*dash).enter},
-		{keys: []string{"T"}, label: "T", help: "on an agent session outside the projects (one you started yourself): ask the current project's coordinator to adopt it as a thread (asks first)",
-			menu: []string{"adopt as a thread"},
+		{id: "session.adopt", keys: []string{"T"}, label: "T", help: "on an agent session outside the projects (one you started yourself): ask the current project's coordinator to adopt it as a thread (asks first)",
+			menu: "adopt as a thread",
 			foot: func(m *dash, r row, ok bool) string {
 				if _, why := m.adoptable(r, ok); why == "" {
 					return "adopt"
@@ -90,8 +96,8 @@ func init() {
 				return ""
 			},
 			run: (*dash).adopt},
-		{keys: []string{"space"}, label: "space", help: "activate the project shown (named in the header of its section, its state at the right), or deactivate it: its coordinator and threads stop, to resume when you activate it; asks first while they run",
-			menu: []string{"activate / deactivate the project"},
+		{id: "project.activate", keys: []string{"space"}, label: "space", help: "activate the project shown (named in the header of its section, its state at the right), or deactivate it: its coordinator and threads stop, to resume when you activate it; asks first while they run",
+			menu: "activate / deactivate the project",
 			foot: func(m *dash, _ row, _ bool) string {
 				if p := m.projectData(m.projectHere()); p != nil && p.Safety != nil {
 					return activeWord(!p.inactive())
@@ -99,7 +105,7 @@ func init() {
 				return ""
 			},
 			run: (*dash).toggleHere},
-		{keys: []string{"n"}, label: "n", help: "new project", menu: []string{"new project"},
+		{id: "project.new", keys: []string{"n"}, label: "n", help: "new project", menu: "new project",
 			foot: func(m *dash, _ row, _ bool) string {
 				if len(m.data.Projects) == 0 {
 					return "new project"
@@ -107,43 +113,54 @@ func init() {
 				return ""
 			},
 			run: (*dash).newProject},
-		{keys: []string{"a"}, label: "a", help: "the project popup: overview, inbox, tasks, settings and keys", menu: []string{"project popup"},
+		{id: "project.popup", keys: []string{"a"}, label: "a", help: "the project popup: overview, inbox, tasks, settings and keys", menu: "project popup",
 			foot: withProject("project"), run: (*dash).projectPopup},
-		{keys: []string{"t"}, label: "t", help: "the project popup on its Tasks tab; enter shows a task; D delegates, A accepts, x sends back (asking the coordinator); c opens it", menu: []string{"tasks"},
+		{id: "project.tasks", keys: []string{"t"}, label: "t", help: "the project popup on its Tasks tab; enter shows a task; D delegates, A accepts, x sends back (asking the coordinator); c opens it", menu: "tasks",
 			foot: withProject("tasks"), run: (*dash).taskTab},
-		{keys: []string{"i"}, label: "i", help: "the Inbox tab of the project popup: what the coordinator is told about", menu: []string{"inbox"},
+		{id: "project.inbox", keys: []string{"i"}, label: "i", help: "the Inbox tab of the project popup: what the coordinator is told about", menu: "inbox",
 			foot: withProject("inbox"), run: (*dash).inbox},
-		{keys: []string{"]", "["}, label: "] [", help: "next / previous project's coordinator", menu: []string{"next project", "previous project"},
-			run: func(m *dash, key string) tea.Cmd { return m.cycleProject(key == "]") }},
-		{keys: []string{"<", ">"}, label: "< >", help: "narrow / widen the list beside the details panel (or drag the divider)", menu: []string{"narrower list", "wider list"},
+		{id: "project.next", keys: []string{"]"}, label: "] [", help: "next / previous project's coordinator", menu: "next project",
+			run: func(m *dash, _ string) tea.Cmd { return m.cycleProject(true) }},
+		{id: "project.prev", keys: []string{"["}, menu: "previous project",
+			run: func(m *dash, _ string) tea.Cmd { return m.cycleProject(false) }},
+		{id: "list.narrower", keys: []string{"<"}, label: "< >", help: "narrow / widen the list beside the details panel (or drag the divider)", menu: "narrower list",
 			run: (*dash).resize},
-		{keys: []string{"{", "}"}, label: "{ }", help: "narrow / widen the projects sidebar (or drag its border)", menu: []string{"narrower sidebar", "wider sidebar"},
+		{id: "list.wider", keys: []string{">"}, menu: "wider list", run: (*dash).resize},
+		{id: "sidebar.narrower", keys: []string{"{"}, label: "{ }", help: "narrow / widen the projects sidebar (or drag its border)", menu: "narrower sidebar",
 			run: (*dash).sideKey},
-		{keys: []string{"b"}, label: "b", help: "the sidebar as a slim strip (glyphs and short names), and back", menu: []string{"slim sidebar on / off"},
+		{id: "sidebar.wider", keys: []string{"}"}, menu: "wider sidebar", run: (*dash).sideKey},
+		{id: "sidebar.slim", keys: []string{"b"}, label: "b", help: "the sidebar as a slim strip (glyphs and short names), and back", menu: "slim sidebar on / off",
 			run: (*dash).sideKey},
-		{keys: []string{"|"}, label: "|", help: "show or hide the details panel (windows 120 columns or wider)", menu: []string{"details panel on / off"},
+		{id: "details.toggle", keys: []string{"|"}, label: "|", help: "show or hide the details panel (windows 120 columns or wider)", menu: "details panel on / off",
 			run: func(m *dash, _ string) tea.Cmd {
 				l := m.layout
 				l.Details = !l.Details
 				m.setLayout(l)
 				return nil
 			}},
-		{keys: []string{","}, label: ",", help: "settings for every project: the prefix key, the default agent, the layout (a project's own are under a)", menu: []string{"settings"},
+		{id: "settings.open", keys: []string{","}, label: ",", help: "settings for every project: the prefix key, the default agent, the layout (a project's own are under a)", menu: "settings",
 			foot: always("settings"), run: func(m *dash, _ string) tea.Cmd { m.openSettings(); return nil }},
-		{keys: []string{"?"}, label: "?", help: "help", menu: []string{"help: keys and mouse"},
+		{id: "help.open", keys: []string{"?"}, label: "?", help: "help", menu: "help: keys and mouse",
 			foot: always("help"), run: func(m *dash, _ string) tea.Cmd { m.push(&helpView{}); return nil }},
-		{keys: []string{"prefix+q"}, label: "prefix+q", help: "quit this console, from anywhere (the server, the sessions and other consoles keep running)", menu: []string{"quit"},
+		{id: "console.quit", keys: []string{"prefix+q"}, fixed: true, label: "prefix+q", help: "quit this console, from anywhere (the server, the sessions and other consoles keep running)", menu: "quit",
 			foot: always("quit"), run: func(m *dash, _ string) tea.Cmd { m.quitting = true; return tea.Quit }},
 	}
 }
 
-// listKey runs the list's action for key, if it has one.
+// page moves the selection ten rows up (pgup) or down.
+func (m *dash) page(key string) tea.Cmd {
+	for range 10 {
+		m.move(scrollKeys[key] / 10)
+	}
+	return nil
+}
+
+// listKey runs the list's action for key, a default key (keyLayer.canon
+// turns a typed key into one), if it has one.
 func (m *dash) listKey(key string) tea.Cmd {
 	for _, a := range actions {
-		for _, k := range a.keys {
-			if k == key {
-				return a.run(m, key)
-			}
+		if slices.Contains(a.keys, key) {
+			return a.run(m, a.keys[0])
 		}
 	}
 	return nil
@@ -159,7 +176,7 @@ func (m *dash) footKeys() string {
 			continue
 		}
 		if word := a.foot(m, r, ok); word != "" {
-			out = append(out, a.label+" "+word)
+			out = append(out, footLabel(a)+" "+word)
 		}
 	}
 	return strings.Join(out, " · ")
