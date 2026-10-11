@@ -95,6 +95,13 @@ func TestBinding(t *testing.T) {
 			t.Errorf("%s %v: %q, done %v", c.id, c.target, m.msg, src.done)
 		}
 	}
+	// A project the mod doesn't run for: refused before anything runs,
+	// and the mod hears nothing.
+	src.done = nil
+	runAll(m, pressed(m, boundPress("project.activate", map[string]string{"project": "beta"}, true)))
+	if _, ok := m.top().(*confirmView); ok || !strings.Contains(m.msg, "doesn't run for project beta") || len(src.done) != 0 {
+		t.Errorf("out of reach: %T %q %v", m.top(), m.msg, src.done)
+	}
 	src.done = nil
 	runAll(m, pressed(m, boundPress("settings.open", nil, true)))
 	if !strings.Contains(m.msg, "not an action a mod may bind") || len(src.done) != 0 {
@@ -117,14 +124,14 @@ func TestBinding(t *testing.T) {
 // labels and the console's keys.
 func TestBoundHints(t *testing.T) {
 	w, err := widget.Decode([]byte(`{"kind":"list","id":"tasks","rows":[{"id":"T2","spans":[{"text":"T2"}],
-		"actions":[{"id":"task.delegate","target":{"project":"alpha","task":"T2"}},{"id":"task.show","target":{"project":"alpha","task":"T2"}}]}]}`))
+		"actions":[{"id":"task.delegate","target":{"project":"alpha","task":"T2"}},{"id":"task.show","target":{"project":"alpha","task":"T2"}},{"id":"project.activate","target":{"project":"alpha"}}]}]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	v := widget.NewView()
 	v.SetBindKeys(BindKeys)
 	v.Set(w)
-	if got := boundHints(v); got != "D delegate · enter show" {
+	if got := boundHints(v); got != "D delegate · enter show · space activate / deactivate" {
 		t.Errorf("hints %q", got)
 	}
 }

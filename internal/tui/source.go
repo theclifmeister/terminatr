@@ -209,6 +209,9 @@ type Source interface {
 	// ModActionDone tells the server a human ran (ok) or was refused an
 	// action mod's row or button bound, for the mod's action.done.
 	ModActionDone(mod, action string, target map[string]string, ok bool) error
+	// ModActionCheck refuses a binding outside its mod's reach (its
+	// projects, project_read), asked before the console runs one.
+	ModActionCheck(mod, action string, target map[string]string) error
 	// ModAct enables, disables or removes installed mod id (verb
 	// "enable", "disable", "remove"), on the human's answer in the Mods
 	// tab (mods design §9). Enabling grants every permission the mod
@@ -548,7 +551,11 @@ func (s *ServerSource) Ask(slug string, id int, kind, note string) (bool, error)
 }
 
 func (s *ServerSource) ModActionDone(mod, action string, target map[string]string, ok bool) error {
-	return s.call(proto.MethodModActionDone, proto.ModActionDoneParams{Mod: mod, Action: action, Target: target, OK: ok}, nil)
+	return s.call(proto.MethodModActionDone, proto.ModActionDoneParams{ModActionParams: proto.ModActionParams{Mod: mod, Action: action, Target: target}, OK: ok}, nil)
+}
+
+func (s *ServerSource) ModActionCheck(mod, action string, target map[string]string) error {
+	return s.call(proto.MethodModActionCheck, proto.ModActionParams{Mod: mod, Action: action, Target: target}, nil)
 }
 
 func (s *ServerSource) OpenQuestions(slug string) (proto.QuestionsOpenResult, error) {

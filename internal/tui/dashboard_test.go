@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -987,5 +988,12 @@ func TestVersionPlaces(t *testing.T) {
 
 func (f *fakeSource) ModActionDone(mod, action string, target map[string]string, ok bool) error {
 	f.done = append(f.done, fmt.Sprintf("%s %s %s/%s%s %v", mod, action, target["project"], target["task"], target["session"], ok))
+	return nil
+}
+
+func (f *fakeSource) ModActionCheck(mod, action string, target map[string]string) error {
+	if target["project"] == "beta" {
+		return errors.New(mod + " doesn't run for project beta")
+	}
 	return nil
 }

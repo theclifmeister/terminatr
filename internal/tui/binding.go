@@ -17,6 +17,7 @@ import (
 // or notification button names a core action and a target; the human's
 // key or click runs it here, never the mod. The press counts only once
 // the row's bindings had been still for 300 ms (widget.View); then the
+// server checks the binding is in the mod's reach (its projects), the
 // console loads the live board, re-checks the action's precondition
 // with modaction.Why (the check the server's $.actions.available runs),
 // asks with the core's own confirmation, which names the target from
@@ -38,6 +39,9 @@ type bindingMsg struct {
 	b     binding
 	board *tasks.Board
 	err   error
+	// refused: the server refused the binding as outside its mod's
+	// reach; the mod is told nothing.
+	refused bool
 }
 
 // pressBinding handles ev, an EventAction from mod's view (or a
@@ -54,6 +58,10 @@ func (m *dash) pressBinding(mod string, ev *widget.Event) tea.Cmd {
 	t, src := b.target(), m.src
 	return func() tea.Msg {
 		msg := bindingMsg{b: b}
+		if err := src.ModActionCheck(b.mod, b.action.ID, b.action.Target); err != nil {
+			msg.err, msg.refused = err, true
+			return msg
+		}
 		if t.Project != "" && t.Task != "" {
 			msg.board, msg.err = src.Board(t.Project)
 		}
@@ -73,6 +81,9 @@ func (m *dash) runBinding(msg bindingMsg) tea.Cmd {
 	}
 	if msg.err != nil {
 		m.msg = "not available: " + msg.err.Error()
+		if msg.refused {
+			return nil
+		}
 		return m.bindingDone(&b, false)
 	}
 	st := dashActions{m: m, board: msg.board}

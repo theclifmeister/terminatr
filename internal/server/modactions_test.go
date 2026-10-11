@@ -102,15 +102,15 @@ func TestModActions(t *testing.T) {
 	}
 }
 
-// TestModActionsNeedRead: without project_read, available on a task is
-// refused; on a session it isn't.
+// TestModActionsNeedRead: without project_read, available is refused,
+// on a task and on a session alike.
 func TestModActionsNeedRead(t *testing.T) {
 	s := modActionsSetup(t, "")
 	if _, err := callLab(s, "actions.available", map[string]any{"id": "task.accept", "target": map[string]string{"project": "demo", "task": "T2"}}); brokerCode(err) != modbroker.CodeDenied {
 		t.Errorf("available without project_read: %v", err)
 	}
-	if _, err := callLab(s, "actions.available", map[string]any{"id": "session.attach", "target": map[string]string{"session": "s-1"}}); err != nil {
-		t.Errorf("available on a session: %v", err)
+	if _, err := callLab(s, "actions.available", map[string]any{"id": "session.attach", "target": map[string]string{"session": "s-1"}}); brokerCode(err) != modbroker.CodeDenied {
+		t.Errorf("available on a session without project_read: %v", err)
 	}
 	if _, err := callLab(s, "actions.list", nil); err != nil {
 		t.Errorf("actions.list: %v", err)
@@ -131,7 +131,7 @@ func TestModActionDone(t *testing.T) {
 	}
 	pid := os.Getpid()
 	target := map[string]string{"project": "demo", "task": "T2"}
-	if _, perr := s.modActionDone(proto.ModActionDoneParams{Mod: "lab", Action: "task.accept", Target: target, OK: true}, pid); perr != nil {
+	if _, perr := s.modActionDone(proto.ModActionDoneParams{ModActionParams: proto.ModActionParams{Mod: "lab", Action: "task.accept", Target: target}, OK: true}, pid); perr != nil {
 		t.Fatal(perr)
 	}
 	ev, err := sub.Next(ctx)
@@ -143,13 +143,21 @@ func TestModActionDone(t *testing.T) {
 		t.Error("another mod heard of lab's action")
 	}
 	for _, p := range []proto.ModActionDoneParams{
-		{Mod: "nope", Action: "task.accept", Target: target},
-		{Mod: "lab", Action: "thread.merge", Target: target},
-		{Mod: "lab", Action: "task.accept", Target: map[string]string{"project": "demo"}},
-		{Mod: "lab", Action: "task.accept", Target: map[string]string{"project": "other", "task": "T1"}},
+		{ModActionParams: proto.ModActionParams{Mod: "nope", Action: "task.accept", Target: target}},
+		{ModActionParams: proto.ModActionParams{Mod: "lab", Action: "thread.merge", Target: target}},
+		{ModActionParams: proto.ModActionParams{Mod: "lab", Action: "task.accept", Target: map[string]string{"project": "demo"}}},
+		{ModActionParams: proto.ModActionParams{Mod: "lab", Action: "task.accept", Target: map[string]string{"project": "other", "task": "T1"}}},
+		{ModActionParams: proto.ModActionParams{Mod: "lab", Action: "session.attach", Target: map[string]string{"session": "s-none"}}},
 	} {
 		if _, perr := s.modActionDone(p, pid); perr == nil {
 			t.Errorf("%+v accepted", p)
 		}
+		// The console's check before it runs a binding refuses the same.
+		if _, perr := s.modActionCheck(p.ModActionParams, pid); perr == nil {
+			t.Errorf("check %+v accepted", p)
+		}
+	}
+	if _, perr := s.modActionCheck(proto.ModActionParams{Mod: "lab", Action: "task.accept", Target: target}, pid); perr != nil {
+		t.Errorf("check of a binding in reach: %v", perr)
 	}
 }

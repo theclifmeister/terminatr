@@ -140,6 +140,22 @@ func TestStable(t *testing.T) {
 	if _, ev := v.Key("D"); !ev.Stable {
 		t.Error("D 300 ms later didn't count")
 	}
+	// T2 keeps its binding but says something else: it waits again.
+	tree := strings.Replace(bindTree, `{"id":"T1","spans":[{"text":"T1 one"}],"actions":[{"id":"task.accept","target":{"project":"p","task":"T1"}},{"id":"task.show","target":{"project":"p","task":"T1"}}]},`, "", 1)
+	v.Set(mustDecode(t, strings.Replace(tree, `"T2 two"`, `"T2 harmless"`, 1)))
+	if _, ev := v.Key("D"); ev.Stable {
+		t.Error("D right after T2's text changed counted")
+	}
+	*now = now.Add(time.Second)
+	// T2 moves down a place, the cursor with it: it waits again.
+	v.Set(mustDecode(t, strings.Replace(strings.Replace(tree, `"T2 two"`, `"T2 harmless"`, 1), `"tasks","rows":[`, `"tasks","rows":[{"id":"T0","spans":[{"text":"T0"}]},`, 1)))
+	if v.Cursor("tasks") != "T2" {
+		t.Fatalf("cursor %q", v.Cursor("tasks"))
+	}
+	if _, ev := v.Key("D"); ev.Stable {
+		t.Error("D right after T2 moved under the cursor counted")
+	}
+	*now = now.Add(time.Second)
 	// The human moving the cursor is no switch.
 	v.Key("down")
 	v.Key("up")

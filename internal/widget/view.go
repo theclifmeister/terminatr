@@ -35,9 +35,10 @@ type View struct {
 	height   int // and how many lines it had
 
 	// The action binding (mods design §11). bindKeys are the console's
-	// keys for a bindable action; since is when each row's bindings,
-	// by list and row id, last changed; shifted is when a publish last
-	// moved the focus or the cursor to another row (not the human).
+	// keys for a bindable action; since is when each row's bindings or
+	// text, by list and row id, last changed; shifted is when a publish
+	// last moved the focus, the cursor to another row, or the cursor's
+	// row to another place (not the human).
 	bindKeys func(id string) []string
 	since    map[rowKey]bound
 	shifted  time.Time
@@ -120,7 +121,7 @@ func (v *View) Tree() *Widget { return v.tree }
 // first one.
 func (v *View) Set(t *Widget) {
 	old := v.lists
-	focus, cursor := v.focus, v.Cursor(v.focus)
+	focus, cursor, place := v.focus, v.Cursor(v.focus), v.place()
 	now := v.now()
 	since := map[rowKey]bound{}
 	v.tree, v.lists, v.order, v.keys = t, map[string]*list{}, nil, nil
@@ -139,7 +140,7 @@ func (v *View) Set(t *Widget) {
 				if len(r.Actions) == 0 {
 					continue
 				}
-				k, sig := rowKey{w.ID, r.ID}, bindSig(r.Actions)
+				k, sig := rowKey{w.ID, r.ID}, bindSig(w, r)
 				if b, ok := v.since[k]; ok && b.sig == sig {
 					since[k] = b
 				} else {
@@ -157,16 +158,28 @@ func (v *View) Set(t *Widget) {
 		}
 	}
 	v.since = since
-	if v.focus != focus || v.Cursor(v.focus) != cursor {
+	if v.focus != focus || v.Cursor(v.focus) != cursor || v.place() != place {
 		v.shifted = now
 	}
 	v.layValid = false
 }
 
-// bindSig is a row's bindings as one string, to tell when they change.
-func bindSig(as []Action) string {
+// place is the cursor's place among its list's shown rows, -1 for none.
+func (v *View) place() int {
+	if l := v.lists[v.focus]; l != nil && l.cursor != "" {
+		return l.idx
+	}
+	return -1
+}
+
+// bindSig is a row's bindings and its text as one string, to tell when
+// they change: a row that keeps its binding but says something else
+// waits again too.
+func bindSig(w *Widget, r *Row) string {
 	var b strings.Builder
-	for _, a := range as {
+	b.WriteString(rowText(w, r))
+	b.WriteByte(0)
+	for _, a := range r.Actions {
 		t := ActionTarget(a)
 		for _, s := range []string{a.ID, t.Project, t.Task, t.Thread, t.Session} {
 			b.WriteString(s)

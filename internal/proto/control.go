@@ -592,8 +592,20 @@ const MethodModActionDone = "mod.action.done"
 // ModActionDoneParams are the params of mod.action.done: the mod whose
 // binding was pressed, the action and its target, and whether it ran.
 type ModActionDoneParams struct {
+	ModActionParams
+	OK bool `json:"ok"`
+}
+
+// MethodModActionCheck asks the server, before the console runs a
+// pressed binding, whether it is in its mod's reach: project_read, and
+// a target in a project the mod runs for (a session's own project).
+// Human-only.
+const MethodModActionCheck = "mod.action.check"
+
+// ModActionParams name a mod's binding: the mod, the action and its
+// target.
+type ModActionParams struct {
 	Mod    string            `json:"mod"`
 	Action string            `json:"action"`
 	Target map[string]string `json:"target,omitempty"`
-	OK     bool              `json:"ok"`
 }

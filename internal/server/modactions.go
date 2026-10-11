@@ -20,9 +20,10 @@ import (
 )
 
 // modActionMethods adds actions.list and actions.available to b. Neither
-// needs a grant to call, but available reads a project's board: a task
-// or project target needs project_read and a project the mod runs for,
-// so a mod can't learn a task's status by probing.
+// needs a grant to call, but available reads live state: it needs
+// project_read and a target in a project the mod runs for
+// (modActionScope), so a mod can't learn a task's status, or which
+// sessions run, by probing.
 func (s *Server) modActionMethods(b *modbroker.Broker) {
 	b.Handle("actions.list", "", func(context.Context, *modbroker.Call) (any, error) {
 		out := make([]modapi.Action, len(modaction.Actions))
@@ -46,16 +47,43 @@ func (s *Server) modActionMethods(b *modbroker.Broker) {
 		if why := modaction.TargetWhy(spec, a.Target); why != "" {
 			return nil, modbroker.BadParams("actions.available: %s", why)
 		}
-		if spec.On != modaction.OnSession {
-			if !c.Mod.Granted(mod.PermProjectRead) {
-				return nil, modbroker.Denied("actions.available on a project needs the %s permission, which %s doesn't have", mod.PermProjectRead, c.Mod.ID)
+		if err := s.modActionScope(c.Mod, spec, a.Target); err != nil {
+			if spec.On == modaction.OnSession && !modbroker.IsDenied(err) {
+				// A session that isn't running, or not in a project the
+				// mod runs for, answers alike: no probing for sessions.
+				return false, nil
 			}
-			if err := c.Project(a.Target.Project); err != nil {
-				return nil, err
-			}
+			return nil, err
 		}
 		return modaction.Why(a.ID, s.actionState(), a.Target) == "", nil
 	})
+}
+
+// modActionScope refuses a binding of action a on target t outside mod
+// m's reach: it needs project_read, and the target's project (a
+// session's own project) must be one m runs for. A session outside the
+// projects, or not running, is not found. The console asks it before it
+// runs a pressed binding (mod.action.check), and action.done and
+// $.actions.available check it, so a mod enabled for one project can't
+// have the human act on, or attach to, another.
+func (s *Server) modActionScope(m mod.Mod, a modaction.Action, t modaction.Target) error {
+	if !m.Granted(mod.PermProjectRead) {
+		return modbroker.Denied("binding %s needs the %s permission, which %s doesn't have", a.ID, mod.PermProjectRead, m.ID)
+	}
+	slug := t.Project
+	if a.On == modaction.OnSession {
+		sess, perr := s.session(t.Session)
+		if perr != nil {
+			return modbroker.NotFound("no session %s", t.Session)
+		}
+		if slug = sess.Info().Project; slug == "" {
+			return modbroker.NotFound("session %s is not in a project", t.Session)
+		}
+	}
+	if !m.Runs(slug) {
+		return modbroker.Denied("%s doesn't run for project %s", m.ID, slug)
+	}
+	return nil
 }
 
 // actionState is the server's live state for a precondition: the
@@ -115,29 +143,48 @@ func (l *liveActions) Session(id string) bool {
 	}
 }
 
+// modBinding checks, for a console, that enabled mod id may bind action
+// on target: the action is bindable, the target of its shape and in the
+// mod's reach (modActionScope). Human-only: only a human's console asks.
+func (s *Server) modBinding(id, action string, target map[string]string, peerPID int) (modaction.Target, *proto.Error) {
+	t := modaction.Target{Project: target["project"], Task: target["task"], Thread: target["thread"], Session: target["session"]}
+	if s.callerOf(peerPID).IsAgent() {
+		return t, proto.Errorf("human-only", "only a human's console presses a mod's binding")
+	}
+	m, ok := s.modNamed(id)
+	if !ok || m.State != mod.Enabled {
+		return t, proto.Errorf(proto.ErrBadParams, "no enabled mod %q", id)
+	}
+	spec, ok := modaction.Lookup(action)
+	if !ok {
+		return t, proto.Errorf(proto.ErrBadParams, "%q is not an action a mod may bind", action)
+	}
+	if why := modaction.TargetWhy(spec, t); why != "" {
+		return t, proto.Errorf(proto.ErrBadParams, "%s", why)
+	}
+	if err := s.modActionScope(m, spec, t); err != nil {
+		return t, proto.Errorf("refused", "%s", err.Error())
+	}
+	return t, nil
+}
+
+// modActionCheck is mod.action.check: whether a pressed binding is in
+// its mod's reach, asked before the console runs it.
+func (s *Server) modActionCheck(p proto.ModActionParams, peerPID int) (any, *proto.Error) {
+	if _, perr := s.modBinding(p.Mod, p.Action, p.Target, peerPID); perr != nil {
+		return nil, perr
+	}
+	return struct{}{}, nil
+}
+
 // modActionDone is mod.action.done from a console: the human ran (ok)
 // or was refused an action mod p.Mod's row bound. Human-only: an agent
-// can't make a mod believe the human acted. The mod must be enabled, and
-// the action one a mod may bind, on a target of its shape; the event
-// goes to that mod alone, and only for a project it runs for.
+// can't make a mod believe the human acted. The binding must be in the
+// mod's reach (modBinding); the event goes to that mod alone.
 func (s *Server) modActionDone(p proto.ModActionDoneParams, peerPID int) (any, *proto.Error) {
-	if s.callerOf(peerPID).IsAgent() {
-		return nil, proto.Errorf("human-only", "only a human's console reports a bound action")
-	}
-	m, ok := s.modNamed(p.Mod)
-	if !ok || m.State != mod.Enabled {
-		return nil, proto.Errorf(proto.ErrBadParams, "no enabled mod %q", p.Mod)
-	}
-	spec, ok := modaction.Lookup(p.Action)
-	if !ok {
-		return nil, proto.Errorf(proto.ErrBadParams, "%q is not an action a mod may bind", p.Action)
-	}
-	t := modaction.Target{Project: p.Target["project"], Task: p.Target["task"], Thread: p.Target["thread"], Session: p.Target["session"]}
-	if why := modaction.TargetWhy(spec, t); why != "" {
-		return nil, proto.Errorf(proto.ErrBadParams, "%s", why)
-	}
-	if t.Project != "" && !m.Runs(t.Project) {
-		return nil, proto.Errorf(proto.ErrBadParams, "%s doesn't run for project %s", p.Mod, t.Project)
+	t, perr := s.modBinding(p.Mod, p.Action, p.Target, peerPID)
+	if perr != nil {
+		return nil, perr
 	}
 	if s.modEv != nil {
 		s.modEv.bus.PublishTo(p.Mod, modbus.ActionDone, t.Project, modbus.Done{Action: p.Action, Target: t, OK: p.OK})
