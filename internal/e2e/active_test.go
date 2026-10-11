@@ -137,10 +137,12 @@ func TestSmokeProjectActive(t *testing.T) {
 	}
 }
 
-// TestSmokeSidebarInactive: an inactive project is one row in the
-// sidebar, marked ⊘, with no coordinator or thread rows; space on it
-// activates it and it expands; space on an active project with a running
-// thread asks first, n keeps it, and y deactivates it, collapsing it.
+// TestSmokeSidebarInactive: an inactive project hangs under the
+// "inactive (1)" divider, folded by default; unfolded (→ on the
+// divider), it is one row, marked ⊘, with no coordinator or thread rows;
+// space on it activates it and it expands, among the active projects;
+// space on an active project with a running thread asks first, n keeps
+// it, and y deactivates it, collapsing it under the divider.
 func TestSmokeSidebarInactive(t *testing.T) {
 	env, projDir, _ := threadEnv(t)
 	startThread(t, env, projDir)
@@ -148,15 +150,22 @@ func TestSmokeSidebarInactive(t *testing.T) {
 	env.Trust(betaDir)
 	env.MustCLI("project", "deactivate", beta)
 
-	// beta, the first project, is current: the sidebar's cursor starts
-	// on its row.
+	// beta is under the folded divider; the sidebar's cursor starts on
+	// the first row, demo's.
 	w := env.Window(120, 30)
-	w.WaitUntil("beta collapsed", wait, func(sc string) bool {
-		return inactiveRow(sc, beta) && treeRow(sc, beta, "coordinator") < 0 &&
+	w.WaitUntil("beta folded away", wait, func(sc string) bool {
+		return strings.Contains(sc, "▸ inactive (1)") && projectRow(sc, beta) < 0 &&
 			treeRow(sc, "demo", "t-0001 ") >= 0
 	})
 	w.Type("\t")
 	w.WaitFor("esc back to the list", wait)
+	// Down past demo's coordinator and thread to the divider; → unfolds it.
+	w.Type("jjj")
+	w.Key(keyRight)
+	w.WaitUntil("beta collapsed", wait, func(sc string) bool {
+		return inactiveRow(sc, beta) && treeRow(sc, beta, "coordinator") < 0
+	})
+	w.Type("j")
 	w.Type(" ")
 	w.WaitUntil("beta expanded", agentWait, func(sc string) bool {
 		return treeRow(sc, beta, "coordinator") >= 0 && !inactiveRow(sc, beta)
@@ -232,15 +241,20 @@ func TestSmokeSidebarExpandInactive(t *testing.T) {
 		}
 		return strings.Join(lines, "\n")
 	}
-	w.WaitUntil("demo collapsed", wait, func(sc string) bool {
-		return inactiveRow(sc, "demo") && treeRow(sc, beta, "coordinator") >= 0
+	w.WaitUntil("demo folded away", wait, func(sc string) bool {
+		return strings.Contains(sc, "▸ inactive (1)") && projectRow(sc, "demo") < 0 && treeRow(sc, beta, "coordinator") >= 0
 	})
 	WaitGolden(t, DefaultTimeout, sidebar, "sidebar-inactive.txt")
 
-	// beta is current: ↓ ↓ past its coordinator to demo, → expands it.
+	// beta is current: ↓ ↓ past its coordinator to the divider, → unfolds
+	// it; ↓ to demo, → expands it.
 	w.Key(keyTab)
 	w.WaitFor("esc back to the list", wait)
 	for _, k := range []emu.Key{keyDown, keyDown, keyRight} {
+		w.Key(k)
+	}
+	w.WaitUntil("demo collapsed", wait, func(sc string) bool { return inactiveRow(sc, "demo") && treeRow(sc, "demo", "coordinator") < 0 })
+	for _, k := range []emu.Key{keyDown, keyRight} {
 		w.Key(k)
 	}
 	w.WaitUntil("demo expanded", wait, func(sc string) bool {
@@ -254,8 +268,9 @@ func TestSmokeSidebarExpandInactive(t *testing.T) {
 		t.Fatalf("expanding activated demo:\n%s", out)
 	}
 
-	// enter on the dormant coordinator (the cursor is on it) activates
+	// enter on the dormant coordinator (↓ from demo's row) activates
 	// demo: both resume, and the coordinator attaches.
+	w.Key(keyDown)
 	w.Key(keyEnter)
 	w.WaitUntil("on demo's coordinator", agentWait, func(sc string) bool { return lastLine(sc, "demo › coordinator") })
 	if got := env.WaitState(coord, "idle", agentWait).AgentSID; got != coordSID {

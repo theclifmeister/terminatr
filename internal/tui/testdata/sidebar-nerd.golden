@@ -9,8 +9,8 @@ width 36
    herdr           1             │
  └╴󰚩  coordinat…  12%             │
     └╴  T12 Bu…  20%            │
-   website         0             │
- └╴󰚩  coordinat…  84%            │
+   website         0            │
+ ── ▾ inactive (2) ─────────────── │
    dotfiles        0             │
    notes-app       0             │
  └╴󰚩  coordinat…        ·         │
@@ -27,8 +27,8 @@ width 24
    herdr             │
  └╴󰚩  coor…           │
     └╴               │
-   webs…             │
- └╴󰚩  coor…          │
+   webs…            │
+ ── ▾ inactive (2) ─── │
    dotf…             │
    note…             │
  └╴󰚩  coor… ·         │
@@ -39,9 +39,9 @@ width 11
   term… │
   herdr  │
   webs… │
+ ─▾2───── │
   dotf…  │
   note…  │
-          │
           │
           │
           │

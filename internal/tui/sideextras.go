@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/view"
 )
 
 // The sidebar's extra keys (docs/SPEC.md §4): the filter (/), the rows
@@ -116,18 +117,24 @@ func sideFilterLine(cw int) (string, bool) {
 	return styleAccent.Render(fit(s, cw)), true
 }
 
-// sideExpanded are the inactive projects to expand: all of them while a
-// filter narrows the tree, so what matches in one shows; else those the
-// user expanded.
-func sideExpanded(ps []ProjectData, expanded []string) []string {
+// sideTree is what the tree folds: while a filter narrows the tree
+// nothing, every project unfolded and the inactive ones expanded, so
+// what matches anywhere shows; else what the user folded (t).
+func sideTree(ps []ProjectData, t view.Tree) view.Tree {
 	if sideFilterNow().text == "" {
-		return expanded
+		return t
 	}
-	out := make([]string, 0, len(ps))
+	return unfoldedTree(ps)
+}
+
+// unfoldedTree folds nothing: the divider open, every inactive project
+// expanded.
+func unfoldedTree(ps []ProjectData) view.Tree {
+	t := view.Tree{InactiveOpen: true}
 	for _, p := range ps {
-		out = append(out, p.Slug)
+		t.Expanded = append(t.Expanded, p.Slug)
 	}
-	return out
+	return t
 }
 
 // sideRows are the tree's rows as this console shows them: the projects
@@ -184,19 +191,25 @@ func filterTree(rows []treeRow, q string) []treeRow {
 }
 
 // needsFirstOrder moves the projects where something needs you (⚑) to
-// the top of their group, each with its rows under it: the active
-// projects and the inactive ones are each a group, and a row of another
-// kind (a divider) stays where it is. Otherwise the order holds.
+// the top of their group, each with its rows under it, below the pinned
+// ones, which keep the top: the active projects and the inactive ones
+// are each a group, and a row of another kind (a divider) stays where it
+// is. Otherwise the order holds.
 func needsFirstOrder(rows []treeRow) []treeRow {
 	type block struct {
-		rows []treeRow
-		hint bool
+		rows         []treeRow
+		pinned, hint bool
 	}
 	var out []treeRow
 	var run []block // a group's projects, in order
 	flush := func() {
 		slices.SortStableFunc(run, func(a, b block) int {
 			switch {
+			case a.pinned != b.pinned:
+				if a.pinned {
+					return -1
+				}
+				return 1
 			case a.hint == b.hint:
 				return 0
 			case a.hint:
@@ -215,7 +228,7 @@ func needsFirstOrder(rows []treeRow) []treeRow {
 			if len(run) > 0 && run[0].rows[0].inactive != r.inactive {
 				flush()
 			}
-			run = append(run, block{rows: []treeRow{r}, hint: r.hint})
+			run = append(run, block{rows: []treeRow{r}, pinned: r.pinned && !r.inactive, hint: r.hint})
 		case treeCoordinator, treeThread:
 			if len(run) > 0 {
 				b := &run[len(run)-1]
@@ -357,7 +370,8 @@ func sideExtraStep(in sideKeysIn, op int, key string) sideStep {
 // needs you (⚑), or the previous (back), round the end of the tree: a
 // coordinator with questions or a thread waiting on you. In the slim
 // strip, a project with something that needs you. What hides the row
-// goes: the filter is cleared, a folded project expanded.
+// goes: the filter is cleared, its project unfolded (an inactive one's
+// divider opened and the project expanded).
 func sideNeedStep(in sideKeysIn, at treeRow, back bool) sideStep {
 	slim := in.w <= sideSlim
 	needs := func(r treeRow) bool {
@@ -396,7 +410,15 @@ func sideNeedStep(in sideKeysIn, at treeRow, back bool) sideStep {
 		setSideFilter(sideFilterState{})
 	}
 	if !shown() {
-		st.expand, st.expandOn = to.slug, true
+		slug, inactive := to.slug, to.inactive || to.dormant
+		st.refold = func(t *view.Tree) {
+			if inactive {
+				t.InactiveOpen = true
+				t.Expand(slug, true)
+			} else {
+				t.Fold(slug, false)
+			}
+		}
 	}
 	return st
 }

@@ -158,6 +158,9 @@ type Safety struct {
 	// Archived hides the project from the sidebar and
 	// stops all ticker work for it (§5.1).
 	Archived bool `json:"archived"`
+	// Pinned puts the project at the top of the sidebar's active
+	// projects; it changes their order only (§4).
+	Pinned bool `json:"pinned"`
 	// Merge is who merges a thread's PR: MergeCoordinator or MergeThread.
 	Merge string `json:"merge"`
 	// Guard turns the mod's guard on (docs/SPEC.md §8.6, Guard): it
@@ -241,6 +244,7 @@ type rawSafety struct {
 	Active         *bool     `toml:"active"`
 	Paused         *bool     `toml:"paused"`
 	Archived       *bool     `toml:"archived"`
+	Pinned         *bool     `toml:"pinned"`
 	Merge          *string   `toml:"merge"`
 	Guard          *bool     `toml:"guard"`
 	GuardOff       *[]string `toml:"guard_off"`
@@ -451,10 +455,10 @@ func (c *Config) AllProjects() (Safety, error) {
 	if c.agent != "" {
 		s.CoordinatorAgent = c.agent
 	}
-	// Activating, pausing or archiving is a project's own state: in
-	// [defaults] it would stop or hide every project.
-	if c.defaults.Active != nil || c.defaults.Paused != nil || c.defaults.Archived != nil {
-		return s, fmt.Errorf("%s: defaults can't set active, paused or archived; they are each project's own", c.Path)
+	// Activating, pausing, archiving or pinning is a project's own
+	// state: in [defaults] it would stop, hide or pin every project.
+	if c.defaults.Active != nil || c.defaults.Paused != nil || c.defaults.Archived != nil || c.defaults.Pinned != nil {
+		return s, fmt.Errorf("%s: defaults can't set active, paused, archived or pinned; they are each project's own", c.Path)
 	}
 	return s, c.defaults.apply(&s, c.Path, "defaults")
 }
@@ -593,6 +597,9 @@ func (r rawSafety) apply(s *Safety, path, table string) error {
 	}
 	if r.Archived != nil {
 		s.Archived = *r.Archived
+	}
+	if r.Pinned != nil {
+		s.Pinned = *r.Pinned
 	}
 	if r.Merge != nil {
 		switch *r.Merge {

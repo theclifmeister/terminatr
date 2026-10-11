@@ -9,8 +9,8 @@ width 36
  ■ herdr            1       ∥      │
  └─ coordinator   12%   ○          │
     └─ T12 Bump…  20% ☐ ●          │
- ■ website          0           ⚑  │
- └─ coordinator   84%   ▲       ⚑  │
+ ■ website          0   ▲       ⚑  │
+ ── ▾ inactive (2) ─────────────── │
  ■ dotfiles         0         ⊘    │
  ■ notes-app        0         ⊘    │
  └─ coordinator         ·     ⊘    │
@@ -27,8 +27,8 @@ width 24
  ■ herdr        ∥      │
  └─ coor…   ○          │
     └─ T12  ●          │
- ■ websi…           ⚑  │
- └─ coor…   ▲       ⚑  │
+ ■ websi…   ▲       ⚑  │
+ ── ▾ inactive (2) ─── │
  ■ dotfi…         ⊘    │
  ■ notes…         ⊘    │
  └─ coor…   ·     ⊘    │
@@ -39,9 +39,9 @@ width 11
  ● term…⚑ │
  ○ herdr  │
  ▲ webs…⚑ │
+ ─▾2───── │
  ⊘ dotf…  │
  ⊘ note…  │
-          │
           │
           │
           │

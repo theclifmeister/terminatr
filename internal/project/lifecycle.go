@@ -17,9 +17,10 @@ import (
 	"github.com/theclifmeister/terminatr/internal/home"
 )
 
-// SetFlag sets the project's "active", "paused" or "archived" setting
-// and journals the change (project.activate, project.deactivate,
-// project.pause, project.resume, project.archive, project.unarchive).
+// SetFlag sets the project's "active", "paused", "archived" or "pinned"
+// setting and journals the change (project.activate,
+// project.deactivate, project.pause, project.resume, project.archive,
+// project.unarchive, project.pin, project.unpin).
 // changed is false when it was already so.
 func (p *Project) SetFlag(c caller.Caller, key string, on bool) (changed bool, err error) {
 	cfg, err := config.Load()
@@ -47,6 +48,11 @@ func (p *Project) SetFlag(c caller.Caller, key string, on bool) (changed bool, e
 			return false, nil
 		}
 		action = map[bool]string{true: "project.archive", false: "project.unarchive"}[on]
+	case "pinned":
+		if s.Pinned == on {
+			return false, nil
+		}
+		action = map[bool]string{true: "project.pin", false: "project.unpin"}[on]
 	default:
 		return false, fmt.Errorf("unknown project flag %q", key)
 	}
@@ -58,8 +64,8 @@ func (p *Project) SetFlag(c caller.Caller, key string, on bool) (changed bool, e
 
 // Trash moves the project's folder to <home>/.trash/<slug>-<UTC time>
 // and returns where it went. Its threads' worktrees stay where they are
-// (tm doctor lists them as leftovers), and its active, archived and
-// paused settings are dropped, so a new project of the slug starts without them.
+// (tm doctor lists them as leftovers), and its active, archived,
+// paused and pinned settings are dropped, so a new project of the slug starts without them.
 func (p *Project) Trash(c caller.Caller, now time.Time) (string, error) {
 	trash, err := home.TrashDir()
 	if err != nil {
@@ -83,7 +89,7 @@ func (p *Project) Trash(c caller.Caller, now time.Time) (string, error) {
 	if err := os.Rename(p.Dir, dst); err != nil {
 		return "", err
 	}
-	if err := config.ClearProject(p.Slug, "active", "archived", "paused"); err != nil {
+	if err := config.ClearProject(p.Slug, "active", "archived", "paused", "pinned"); err != nil {
 		return dst, fmt.Errorf("moved to %s, but its settings stay: %w", dst, err)
 	}
 	return dst, nil

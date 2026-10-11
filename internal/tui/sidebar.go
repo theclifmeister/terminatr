@@ -28,11 +28,14 @@ import (
 // screen, the dashboard and the attach view alike, holding the project
 // tree. Each project row has its coordinator's state glyph, a hint when
 // one of its threads is blocked or waiting or one of its tasks needs
-// you (review or blocked), and its count of open threads. Every active
-// project is always expanded (an inactive one is collapsed, its row
-// alone, docs/SPEC.md §5.1): its coordinator hangs under it and its open
-// threads under the coordinator, on tree connectors (├─ └─), with their
-// state glyphs and progress in columns of their own. The current project is in
+// you (review or blocked), and its count of open threads. The active
+// projects come first, the pinned ones at the top, then a divider,
+// "inactive (n)", the inactive projects under it (docs/SPEC.md §5.1),
+// folded by default. An active project unfolded, as it starts, has its
+// coordinator under it and its open threads under the coordinator, on
+// tree connectors (├─ └─), with their state glyphs and progress in
+// columns of their own; an inactive one is folded, its row alone. The
+// view keeps what is folded (view.Tree). The current project is in
 // the accent colour, and the row you are on is highlighted. A click on a project shows its dashboard, on the
 // coordinator attaches to it, on a thread attaches its session. Its border column
 // can be dragged, and { } b change it from the keys.
@@ -56,7 +59,11 @@ const (
 	treeProject = iota
 	treeCoordinator
 	treeThread
+	treeDivider // "inactive (n)": the inactive projects hang under it
 )
+
+// dividerKey is the inactive divider's row key.
+const dividerKey = "d:inactive"
 
 // treeRow is one row of the sidebar's tree.
 type treeRow struct {
@@ -84,30 +91,39 @@ type treeRow struct {
 	ctx     int    // a coordinator row: its context window's use in percent, -1 for unknown
 	ctxHint bool   // a coordinator row: ctx reached [ui] context_hint
 	paused  bool   // a project: paused (no nudges, follow-up or new threads)
+	pinned  bool   // a project: pinned to the top of the active ones
 	// inactive: a project the user deactivated, shown collapsed: its row
 	// alone, no coordinator or thread rows (§5.1), unless the user
 	// expanded it; then its coordinator and threads are dormant rows.
 	inactive bool
 	expanded bool // an inactive project: the user expanded it
-	dormant  bool // a coordinator or thread row of an inactive project
-	threads  int  // a project: its open threads
-	here     bool // the row you are on
+	// fold: a project or the divider hides the rows under it.
+	fold    bool
+	dormant bool // a coordinator or thread row of an inactive project
+	// threads: a project's open threads; the divider's inactive projects.
+	threads int
+	// slugs: the divider's inactive projects, shown or not.
+	slugs []string
+	here  bool // the row you are on
 	// cursor is the keyboard's row, set while the sidebar has this
 	// console's keyboard focus (markCursor).
 	cursor bool
 }
 
-// folded says a project row hides its coordinator and threads.
-func (r treeRow) folded() bool { return r.kind == treeProject && r.inactive && !r.expanded }
+// folded says a project row hides its coordinator and threads, or the
+// divider the inactive projects.
+func (r treeRow) folded() bool { return r.fold }
 
-// key names r as View.SideSel does: "p:<project>", "c:<project>" or
-// "t:<project>/<thread>".
+// key names r as View.SideSel does: "p:<project>", "c:<project>",
+// "t:<project>/<thread>" or the divider's "d:inactive".
 func (r treeRow) key() string {
 	switch r.kind {
 	case treeCoordinator:
 		return "c:" + r.slug
 	case treeThread:
 		return "t:" + r.slug + "/" + r.thread
+	case treeDivider:
+		return dividerKey
 	}
 	return "p:" + r.slug
 }
@@ -165,66 +181,45 @@ type treeIn struct {
 	// ctxHint is [ui] context_hint: the percent from which a coordinator
 	// row says to consider /clear; 0 for never.
 	ctxHint int
-	// expanded are the inactive projects the user expanded (the view's).
-	expanded []string
+	// tree is what the user folded (the view's).
+	tree view.Tree
 }
 
-// buildTree lays out the tree: every project, under each its
-// coordinator, and under that its open threads (ordered as the dashboard
-// orders them). The row of the focused session is the one you are on, else the
-// current project's.
+// buildTree lays out the tree: the active projects, pinned ones first,
+// then the divider and under it the inactive ones; under each project
+// its coordinator, and under that its open threads (ordered as the
+// dashboard orders them). The row of the focused session is the one you
+// are on, else the current project's.
 func buildTree(ps []ProjectData, sessions []proto.SessionInfo, in treeIn) []treeRow {
 	byID := map[string]proto.SessionInfo{}
 	for _, s := range sessions {
 		byID[s.ID] = s
 	}
-	var out []treeRow
+	var active, inactive []ProjectData
 	for _, p := range ps {
-		pr := treeRow{kind: treeProject, slug: p.Slug, pct: -1, threads: len(p.Threads), current: p.Slug == in.current,
-			hint: p.Counts["needs_you"] > 0 || p.Questions > 0, paused: p.Safety != nil && p.Safety.Paused, inactive: p.inactive()}
-		if pr.inactive && !slices.Contains(in.expanded, p.Slug) {
-			out = append(out, pr)
-			continue
+		if p.inactive() {
+			inactive = append(inactive, p)
+		} else {
+			active = append(active, p)
 		}
-		pr.expanded = pr.inactive
-		remote, ctx := false, -1
-		for _, s := range sessions {
-			if s.Role == proto.RoleCoordinator && s.Project == p.Slug {
-				pr.session, pr.state, remote, ctx = s.ID, stateWord(s), s.RemoteControl, s.ContextPercent()
-				break
+	}
+	// Pinned changes the order only.
+	sort.SliceStable(active, func(i, j int) bool { return active[i].pinned() && !active[j].pinned() })
+	var out []treeRow
+	for _, p := range active {
+		out = append(out, projectRows(p, sessions, byID, in)...)
+	}
+	if len(inactive) > 0 {
+		div := treeRow{kind: treeDivider, pct: -1, threads: len(inactive), fold: !in.tree.InactiveOpen}
+		for _, p := range inactive {
+			div.slugs = append(div.slugs, p.Slug)
+		}
+		out = append(out, div)
+		if !div.fold {
+			for _, p := range inactive {
+				out = append(out, projectRows(p, sessions, byID, in)...)
 			}
 		}
-		threads := append([]ThreadRow(nil), p.Threads...)
-		sort.SliceStable(threads, func(i, j int) bool {
-			return threadGroup(threads[i], byID) < threadGroup(threads[j], byID)
-		})
-		var kids []treeRow
-		for i := range threads {
-			t := &threads[i]
-			tr := treeRow{kind: treeThread, slug: p.Slug, thread: t.ID, name: threadName(t.Task, t.ID), title: oneLine(t.Title), pct: -1}
-			tr.state, _, tr.session = threadState(t, byID)
-			tr.pct = t.Status.Progress().Percent
-			tr.ci, tr.pr = t.Checks, t.PR
-			tr.hint = tr.state == "blocked" || tr.state == "review" || t.Status != nil && t.Status.NeedsYou != ""
-			pr.hint = pr.hint || tr.hint
-			kids = append(kids, tr)
-		}
-		// The threads hang under the coordinator, the project's only child.
-		coord := treeRow{kind: treeCoordinator, slug: p.Slug, session: pr.session, state: pr.state, remote: remote, pct: -1, last: true,
-			hint: p.Questions > 0, asks: p.Questions, ctx: ctx, ctxHint: ctx >= 0 && in.ctxHint > 0 && ctx >= in.ctxHint}
-		if len(kids) > 0 {
-			kids[len(kids)-1].last = true
-		}
-		if pr.inactive {
-			// Expanded but inactive: nothing of it runs (§5.1).
-			coord = treeRow{kind: treeCoordinator, slug: p.Slug, pct: -1, last: true, ctx: -1, dormant: true}
-			for i := range kids {
-				kids[i].dormant, kids[i].session, kids[i].state, kids[i].hint = true, "", "", false
-			}
-		}
-		kids = append([]treeRow{coord}, kids...)
-		out = append(out, pr)
-		out = append(out, kids...)
 	}
 	here := -1
 	for i, r := range out {
@@ -242,11 +237,67 @@ func buildTree(ps []ProjectData, sessions []proto.SessionInfo, in treeIn) []tree
 	return out
 }
 
-// slimRows are the rows the slim strip shows: the projects alone.
+// projectRows are a project's rows in the tree: its own, and unless it
+// is folded its coordinator's and its threads'.
+func projectRows(p ProjectData, sessions []proto.SessionInfo, byID map[string]proto.SessionInfo, in treeIn) []treeRow {
+	pr := treeRow{kind: treeProject, slug: p.Slug, pct: -1, threads: len(p.Threads), current: p.Slug == in.current,
+		hint: p.Counts["needs_you"] > 0 || p.Questions > 0, paused: p.Safety != nil && p.Safety.Paused,
+		pinned: p.pinned(), inactive: p.inactive()}
+	if pr.inactive && !in.tree.IsExpanded(p.Slug) {
+		pr.fold = true
+		return []treeRow{pr}
+	}
+	pr.expanded = pr.inactive
+	remote, ctx := false, -1
+	for _, s := range sessions {
+		if s.Role == proto.RoleCoordinator && s.Project == p.Slug {
+			pr.session, pr.state, remote, ctx = s.ID, stateWord(s), s.RemoteControl, s.ContextPercent()
+			break
+		}
+	}
+	threads := append([]ThreadRow(nil), p.Threads...)
+	sort.SliceStable(threads, func(i, j int) bool {
+		return threadGroup(threads[i], byID) < threadGroup(threads[j], byID)
+	})
+	var kids []treeRow
+	for i := range threads {
+		t := &threads[i]
+		tr := treeRow{kind: treeThread, slug: p.Slug, thread: t.ID, name: threadName(t.Task, t.ID), title: oneLine(t.Title), pct: -1}
+		tr.state, _, tr.session = threadState(t, byID)
+		tr.pct = t.Status.Progress().Percent
+		tr.ci, tr.pr = t.Checks, t.PR
+		tr.hint = tr.state == "blocked" || tr.state == "review" || t.Status != nil && t.Status.NeedsYou != ""
+		pr.hint = pr.hint || tr.hint
+		kids = append(kids, tr)
+	}
+	// The threads hang under the coordinator, the project's only child.
+	coord := treeRow{kind: treeCoordinator, slug: p.Slug, session: pr.session, state: pr.state, remote: remote, pct: -1, last: true,
+		hint: p.Questions > 0, asks: p.Questions, ctx: ctx, ctxHint: ctx >= 0 && in.ctxHint > 0 && ctx >= in.ctxHint}
+	if len(kids) > 0 {
+		kids[len(kids)-1].last = true
+	}
+	if pr.inactive {
+		// Expanded but inactive: nothing of it runs (§5.1).
+		coord = treeRow{kind: treeCoordinator, slug: p.Slug, pct: -1, last: true, ctx: -1, dormant: true}
+		for i := range kids {
+			kids[i].dormant, kids[i].session, kids[i].state, kids[i].hint = true, "", "", false
+		}
+	}
+	if !pr.inactive && in.tree.IsFolded(p.Slug) {
+		// Folded: its row alone, with its coordinator's state and
+		// whatever under it needs you.
+		pr.fold = true
+		return []treeRow{pr}
+	}
+	return append([]treeRow{pr, coord}, kids...)
+}
+
+// slimRows are the rows the slim strip shows: the projects and the
+// divider.
 func slimRows(rows []treeRow) []treeRow {
 	var out []treeRow
 	for _, r := range rows {
-		if r.kind == treeProject {
+		if r.kind == treeProject || r.kind == treeDivider {
 			r.here = r.current
 			out = append(out, r)
 		}
@@ -304,10 +355,13 @@ func sidebarLines(all []treeRow, w, h int, foot []string) []string {
 		border = styleAccent.Render("│")
 	}
 	out := make([]string, 0, h)
-	n := 0
+	n := 0 // every project, those under a folded divider too
 	for _, r := range all {
-		if r.kind == treeProject {
+		switch {
+		case r.kind == treeProject && !r.inactive:
 			n++
+		case r.kind == treeDivider:
+			n += r.threads
 		}
 	}
 	out = append(out, sideHead(n, cw-gap, slim)+strings.Repeat(" ", gap)+reset+border)
@@ -441,6 +495,9 @@ func treeSel(r treeRow, focused bool) (bool, lipgloss.Style) {
 func treeCells(r treeRow, cw int, slim, focused bool) string {
 	var sel lipgloss.Style
 	r.here, sel = treeSel(r, focused)
+	if r.kind == treeDivider {
+		return dividerCells(r, cw, slim, sel)
+	}
 	if slim {
 		return slimCells(r, cw, sel)
 	}
@@ -603,6 +660,28 @@ func treeGrid(r treeRow) []cellRun {
 		col(r.hint, i.hint, styleWarn))
 }
 
+// dividerCells is the inactive divider's row cw cells wide, faint:
+// " ── ▸ inactive (3) ───", ▾ while unfolded; in the slim strip " ─▸3──"
+// and a blank.
+func dividerCells(r treeRow, cw int, slim bool, sel lipgloss.Style) string {
+	i := ic()
+	mark := i.fold
+	if !r.fold {
+		mark = i.unfold
+	}
+	line := fmt.Sprintf("── %s inactive (%d) ", mark, r.threads)
+	w := max(cw-1, 0) // less the margin
+	if slim {
+		// The strip has no gap before the border: the rule leaves one.
+		line, w = fmt.Sprintf("─%s%d", mark, r.threads), max(cw-2, 0)
+	}
+	line = fit(line+strings.Repeat("─", max(w-ansi.StringWidth(line), 0)), w)
+	if r.here {
+		return fit(" "+sel.Render(line), cw)
+	}
+	return fit(" "+styleFaint.Render(line), cw)
+}
+
 // slimCells is a project's row in the slim strip, cw cells wide: its
 // state column, its name, its needs-you column.
 func slimCells(r treeRow, cw int, sel lipgloss.Style) string {
@@ -711,6 +790,8 @@ func (r treeRow) target() (t Target, ok bool, why string) {
 	switch r.kind {
 	case treeCoordinator:
 		t.Coordinator, t.Activate = true, r.dormant
+	case treeDivider:
+		return t, false, "enter on the divider folds or unfolds it"
 	case treeThread:
 		if r.dormant {
 			return t, false, r.thread + " is dormant: start " + r.slug + "'s coordinator, or activate " + r.slug
@@ -732,9 +813,10 @@ const previewDelay = 200 * time.Millisecond
 // a project's dashboard, a coordinator's or a thread's live session. A
 // row with no session running (an inactive project's, a coordinator not
 // started) shows its project's dashboard: a preview never starts
-// anything. ok is false on the row you are on, which already shows.
+// anything. ok is false on the row you are on, which already shows, and
+// on the inactive divider, which shows nothing.
 func (r treeRow) preview() (t Target, ok bool) {
-	if r.here {
+	if r.here || r.kind == treeDivider {
 		return t, false
 	}
 	t.Project = r.slug
@@ -843,7 +925,7 @@ func (c *client) sideTree() []treeRow {
 		focus = c.focus.info.ID
 	}
 	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), focus: focus, ctxHint: c.side.ctxHint,
-		expanded: sideExpanded(c.side.projects, c.v.Expanded)})
+		tree: sideTree(c.side.projects, c.v.Tree)})
 	rows = sideRows(rows, c.side.needsFirst)
 	if c.kb == areaSide {
 		markCursor(rows, c.sideW, c.v.SideSel)
@@ -851,14 +933,10 @@ func (c *client) sideTree() []treeRow {
 	return rows
 }
 
-// sideFullTree is the attach view's whole tree, every project expanded
-// and no filter (w W). c.mu held.
+// sideFullTree is the attach view's whole tree, nothing folded and no
+// filter (w W). c.mu held.
 func (c *client) sideFullTree() []treeRow {
-	var all []string
-	for _, p := range c.side.projects {
-		all = append(all, p.Slug)
-	}
-	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), ctxHint: c.side.ctxHint, expanded: all})
+	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), ctxHint: c.side.ctxHint, tree: unfoldedTree(c.side.projects)})
 	if c.side.needsFirst {
 		rows = needsFirstOrder(rows)
 	}
@@ -959,8 +1037,11 @@ func (c *client) sideKeyboard(k uv.Key) {
 	if st.toggle != "" {
 		c.askActive(st.toggle, st.activate)
 	}
-	if st.expand != "" {
-		c.act(proto.MethodViewExpand, proto.ViewParams{Project: st.expand, On: st.expandOn})
+	if st.refold != nil {
+		c.refold(st.refold)
+	}
+	if st.pin != "" {
+		c.setPinned(st.pin, st.pinOn)
 	}
 	c.poke()
 }
@@ -1008,6 +1089,66 @@ func (c *client) previewNow(seq uint64, sel string) {
 	}
 }
 
+// refold changes what the tree folds: here at once, in the view, and
+// in ui.json, as the tree new views start with.
+func (c *client) refold(fn func(*view.Tree)) {
+	if !c.lock() {
+		return
+	}
+	t := c.v.Tree
+	fn(&t)
+	c.v.Tree = t
+	path := ""
+	if c.side != nil {
+		path = c.side.uiFile
+	}
+	c.mu.Unlock()
+	c.poke()
+	c.act(proto.MethodViewTree, proto.ViewParams{Tree: &t})
+	if path == "" {
+		return
+	}
+	if err := SaveTree(path, t); err != nil && c.lock() {
+		c.flash = "ui.json: " + err.Error()
+		c.status()
+		c.mu.Unlock()
+		c.poke()
+	}
+}
+
+// setPinned pins a project to the top of the sidebar, or unpins it
+// (its setting), and says what came of it in the status bar.
+func (c *client) setPinned(slug string, on bool) {
+	go func() {
+		msg, err := PinProject(caller.FromEnv(), slug, on)
+		if err != nil {
+			msg = errMessage(err)
+		}
+		if !c.lock() {
+			return
+		}
+		if err == nil && c.side != nil {
+			pinIn(c.side.projects, slug, on)
+		}
+		c.flash = msg
+		c.status()
+		c.mu.Unlock()
+		c.poke()
+	}()
+}
+
+// pinIn marks project slug of ps pinned (on) or not, until the next
+// poll reads its setting.
+func pinIn(ps []ProjectData, slug string, on bool) {
+	for i := range ps {
+		if ps[i].Slug == slug && ps[i].Safety != nil {
+			s := *ps[i].Safety
+			s.Pinned = on
+			ps[i].Safety = &s
+		}
+	}
+}
+
 // expandLabel is an inactive project row's menu item that expands or
 // collapses it, and its key.
 func expandLabel(r treeRow) (label, key string) {
@@ -1015,6 +1156,23 @@ func expandLabel(r treeRow) (label, key string) {
 		return "collapse", "←"
 	}
 	return "expand", "→"
+}
+
+// foldLabel is the menu item of an active project or the divider that
+// folds or unfolds it, and its key.
+func foldLabel(r treeRow) (label, key string) {
+	if r.fold {
+		return "unfold", "→"
+	}
+	return "fold", "←"
+}
+
+// pinLabel is a project row's menu item that p does.
+func pinLabel(r treeRow) string {
+	if r.pinned {
+		return "unpin"
+	}
+	return "pin to the top"
 }
 
 // coordLabel is a coordinator row's menu item that opens it: starting a
@@ -1207,11 +1365,13 @@ func (c *client) sideMouse(m emu.Mouse) {
 		c.flash = ""
 		c.status()
 	}
-	open := false
+	open, fold := false, false
 	switch {
 	case border:
 		sd.drag = true
 	case !ok:
+	case r.kind == treeDivider:
+		fold = true
 	case !can:
 		c.flash = why
 		c.status()
@@ -1228,7 +1388,16 @@ func (c *client) sideMouse(m emu.Mouse) {
 	if open {
 		c.sideGo(t)
 	}
+	if fold {
+		c.refold(foldDivider(r))
+	}
 	c.poke()
+}
+
+// foldDivider is a click on the inactive divider: it folds or unfolds.
+func foldDivider(r treeRow) func(*view.Tree) {
+	open := r.fold
+	return func(t *view.Tree) { t.InactiveOpen = open }
 }
 
 // sideGo opens a clicked sidebar row. A full view opens it in place, on
@@ -1276,6 +1445,9 @@ const (
 	sideBack   // the focus goes back to the list or the pane
 	sideActive // on a project, activate or deactivate it
 	sideHelp   // the help, as prefix+?
+	sideFoldAll
+	sideUnfoldAll
+	sidePin // on a project, pin it to the top or unpin it
 )
 
 // sideAction is a sidebar key: its keys, what it does, its help line and
@@ -1289,11 +1461,14 @@ type sideAction struct {
 var sideActions = []sideAction{
 	{[]string{"up", "k"}, sideUp, "↑ ↓ k j", "move through the tree; the pane shows what the cursor rests on (a project its dashboard, a coordinator or a thread its session, live), the keyboard stays in the sidebar, and nothing starts"},
 	{[]string{"down", "j"}, sideDown, "", ""},
-	{[]string{"enter"}, sideEnter, "enter", "into the pane: a project's dashboard or a session gets the keyboard; a coordinator not running starts, and an inactive project's starts activating the project"},
-	{[]string{"right", "l"}, sideIn, "→ ←", "→ unfolds a folded project, else goes into the pane as enter; ← folds an unfolded one, or from a row under a project goes up to it. Unfolding an inactive project never activates it"},
+	{[]string{"enter"}, sideEnter, "enter", "into the pane: a project's dashboard or a session gets the keyboard; a coordinator not running starts, and an inactive project's starts activating the project; on the inactive divider it folds or unfolds"},
+	{[]string{"right", "l"}, sideIn, "→ ←", "→ unfolds a folded project or the inactive divider, else goes into the pane as enter; ← folds an unfolded one, or from a row under a project goes up to it. Folding never activates or deactivates"},
 	{[]string{"left", "h"}, sideOut, "", ""},
 	{[]string{"esc"}, sideBack, "esc", "back to the list (in a session: to the pane)"},
 	{[]string{"space"}, sideActive, "space", "on a project: activate it, or deactivate it (its coordinator and threads stop, to resume when you activate it; asks first while they run)"},
+	{[]string{"z"}, sideFoldAll, "z Z", "z folds every project and the inactive divider, Z unfolds them all"},
+	{[]string{"Z"}, sideUnfoldAll, "", ""},
+	{[]string{"p"}, sidePin, "p", "on a project: pin it to the top of the active projects, or unpin it (its order only)"},
 	{[]string{"home"}, sideFirst, "home end", "the first / last row"},
 	{[]string{"end"}, sideLast, "", ""},
 	{[]string{"pgup"}, sidePageUp, "pgup pgdown", "a page up / down"},
@@ -1330,9 +1505,62 @@ type sideStep struct {
 	// toggle is the project to activate (activate) or deactivate.
 	toggle   string
 	activate bool
-	// expand is the inactive project to expand (expandOn) or collapse.
-	expand   string
-	expandOn bool
+	// refold changes what the tree folds (the view's, and ui.json's).
+	refold func(*view.Tree)
+	// pin is the project to pin (pinOn) or unpin.
+	pin   string
+	pinOn bool
+}
+
+// foldStep is what → (sideIn), ← (sideOut) and enter (sideEnter) do to
+// the tree's folds with the cursor on rows[i]: → unfolds a folded
+// project or the divider, ← folds an unfolded one (on a folded inactive
+// project, it goes up to the divider), enter folds or unfolds the
+// divider. ok is false where the key does something else. The slim
+// strip shows no rows under a project: there only the divider folds.
+func foldStep(rows []treeRow, i, op int, slim bool) (st sideStep, ok bool) {
+	r := rows[i]
+	switch {
+	case r.kind == treeDivider && (op == sideIn && r.fold || op == sideOut && !r.fold || op == sideEnter):
+		return sideStep{refold: foldDivider(r)}, true
+	case r.kind != treeProject || slim:
+	case op == sideIn && r.fold, op == sideOut && !r.fold:
+		return sideStep{refold: foldProject(r, !r.fold)}, true
+	case op == sideOut && r.inactive:
+		return sideStep{sel: dividerKey}, true
+	}
+	return sideStep{}, false
+}
+
+// foldProject folds (fold) or unfolds project row r: an active project
+// is folded in the view's tree, an inactive one expanded. Neither
+// activates or deactivates it (§5.1).
+func foldProject(r treeRow, fold bool) func(*view.Tree) {
+	slug := r.slug
+	if r.inactive {
+		return func(t *view.Tree) { t.Expand(slug, !fold) }
+	}
+	return func(t *view.Tree) { t.Fold(slug, fold) }
+}
+
+// foldAll is z (fold) and Z: z folds every active project and the
+// divider, and collapses the inactive projects; Z unfolds them all,
+// the inactive projects expanded under the open divider.
+func foldAll(all []treeRow, fold bool) func(*view.Tree) {
+	var active, inactive []string
+	for _, r := range all {
+		switch {
+		case r.kind == treeProject && !r.inactive:
+			active = append(active, r.slug)
+		case r.kind == treeDivider:
+			inactive = r.slugs
+		}
+	}
+	active, inactive = active[:min(len(active), view.MaxExpanded)], inactive[:min(len(inactive), view.MaxExpanded)]
+	if fold {
+		return func(t *view.Tree) { *t = view.Tree{Folded: active} }
+	}
+	return func(t *view.Tree) { *t = view.Tree{Expanded: inactive, InactiveOpen: true} }
 }
 
 // sideKeyStep decides what sidebar key op does with the cursor at sel in
@@ -1350,6 +1578,9 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 		return sideStep{msg: "no projects"}
 	}
 	r := rows[i]
+	if st, ok := foldStep(rows, i, op, w <= sideSlim); ok {
+		return st
+	}
 	moveTo := func(j int) sideStep {
 		if j < 0 || j >= len(rows) || j == i {
 			return sideStep{}
@@ -1363,25 +1594,41 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 	case sideDown:
 		return moveTo((i + 1) % len(rows))
 	case sideIn:
-		if r.folded() && w > sideSlim {
-			// Expanding never activates (§5.1).
-			return sideStep{expand: r.slug, expandOn: true, sel: "c:" + r.slug}
+		if r.kind == treeDivider {
+			return sideStep{}
 		}
 		return enterStep(r)
 	case sideOut:
-		if r.kind == treeProject && r.expanded {
-			return sideStep{expand: r.slug}
-		}
-		for j := i - 1; j >= 0 && r.kind != treeProject; j-- {
+		for j := i - 1; j >= 0 && (r.kind == treeCoordinator || r.kind == treeThread); j-- {
 			if rows[j].kind == treeProject {
 				return moveTo(j)
 			}
 		}
 	case sideActive:
-		if r.kind != treeProject {
-			return sideStep{msg: "space on a project activates or deactivates it"}
+		switch r.kind {
+		case treeProject:
+			return sideStep{toggle: r.slug, activate: r.inactive}
+		case treeDivider: // space keeps one meaning
+			return sideStep{}
 		}
-		return sideStep{toggle: r.slug, activate: r.inactive}
+		return sideStep{msg: "space on a project activates or deactivates it"}
+	case sidePin:
+		if r.kind != treeProject {
+			return sideStep{msg: "p on a project pins it to the top"}
+		}
+		return sideStep{pin: r.slug, pinOn: !r.pinned}
+	case sideFoldAll, sideUnfoldAll:
+		st := sideStep{refold: foldAll(all, op == sideFoldAll)}
+		// The cursor moves onto what still shows: its project's row, or
+		// the divider.
+		switch {
+		case op == sideUnfoldAll:
+		case r.inactive || r.dormant:
+			st.sel = dividerKey
+		case r.kind != treeProject && r.kind != treeDivider:
+			st.sel = "p:" + r.slug
+		}
+		return st
 	case sideEnter:
 		return enterStep(r)
 	}
@@ -1450,6 +1697,8 @@ func sideFooter(all []treeRow, w int, s ServerInfo, session bool) []string {
 func (r treeRow) details() (string, string) {
 	running := func(state string) string { return cmp.Or(state, "not running") }
 	switch r.kind {
+	case treeDivider:
+		return counted(r.threads, "inactive project"), "nothing of them runs; folded by default"
 	case treeProject:
 		bits := []string{r.slug, "active"}
 		if r.inactive {
@@ -1457,6 +1706,9 @@ func (r treeRow) details() (string, string) {
 		}
 		if r.paused {
 			bits = append(bits, "paused")
+		}
+		if r.pinned {
+			bits = append(bits, "pinned")
 		}
 		if r.inactive {
 			return strings.Join(bits, " · "), "previewing it starts nothing"
@@ -1526,14 +1778,30 @@ func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 	case !focused:
 		keys = []string{"tab sidebar", "? help"}
 	case r == nil:
-	case r.kind == treeProject && r.inactive:
-		in := "→ unfold"
-		if !r.folded() {
-			in = "← fold"
-		}
-		keys = []string{"⏎ open", in, "␣ activate"}
+	case r.kind == treeDivider && r.fold:
+		keys = []string{"⏎ unfold"}
+	case r.kind == treeDivider:
+		keys = []string{"⏎ fold"}
 	case r.kind == treeProject:
-		keys = []string{"⏎ open", "␣ deactivate"}
+		fold := "← fold"
+		if r.fold {
+			fold = "→ unfold"
+		}
+		act, pin := "␣ deactivate", "p pin"
+		if r.inactive {
+			act = "␣ activate"
+		}
+		if r.pinned {
+			pin = "p unpin"
+		}
+		keys = []string{"⏎ open"}
+		if r.fold || r.inactive {
+			keys = append(keys, fold)
+		}
+		keys = append(keys, act)
+		if !r.inactive {
+			keys = append(keys, pin)
+		}
 	case r.kind == treeCoordinator && r.dormant:
 		keys = []string{"⏎ start", "← project"}
 	case r.kind == treeCoordinator && r.state == "":

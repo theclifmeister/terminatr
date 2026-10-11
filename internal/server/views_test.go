@@ -331,7 +331,27 @@ func TestViewsTree(t *testing.T) {
 	if v, _ := vs.get(view.Main); v.IsExpanded("p") || !woken(b) {
 		t.Fatalf("collapse: %+v", v)
 	}
-	own, name := join(t, vs, proto.ViewSubscribeParams{Own: true, Cols: 120, Rows: 30})
+	// view.tree sets what the tree folds, on every console; a broken
+	// tree is refused.
+	tree := view.Tree{Folded: []string{"a"}, InactiveOpen: true}
+	if v = mustDo(t, vs, proto.MethodViewTree, proto.ViewParams{Client: a.id, Tree: &tree}); !v.IsFolded("a") || !v.InactiveOpen || !woken(b) {
+		t.Fatalf("tree: %+v", v)
+	}
+	if _, err := vs.do(proto.MethodViewTree, proto.ViewParams{Client: a.id}); err == nil {
+		t.Fatal("view.tree without a tree")
+	}
+	if _, err := vs.do(proto.MethodViewTree, proto.ViewParams{Client: a.id, Tree: &view.Tree{Folded: []string{""}}}); err == nil {
+		t.Fatal("view.tree took an empty project")
+	}
+	// A renamed project keeps its fold.
+	vs.renameProject("a", "b")
+	if v, _ := vs.get(view.Main); v.IsFolded("a") || !v.IsFolded("b") {
+		t.Fatalf("rename: %+v", v.Tree)
+	}
+	own, name := join(t, vs, proto.ViewSubscribeParams{Own: true, Cols: 120, Rows: 30, Tree: &view.Tree{Folded: []string{"x"}}})
+	if v, _ := vs.get(name); !v.IsFolded("x") {
+		t.Fatalf("a new view didn't start with its client's tree: %+v", v.Tree)
+	}
 	mustDo(t, vs, proto.MethodViewSideSel, proto.ViewParams{Client: own.id, Key: "p:z"})
 	if v, _ := vs.get(view.Main); v.SideSel == "p:z" {
 		t.Fatalf("main took an own view's tree: %+v", v)

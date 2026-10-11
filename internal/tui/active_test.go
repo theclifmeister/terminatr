@@ -8,9 +8,11 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/view"
 )
 
-// TestInactiveProjectCollapsed: an inactive project is its sidebar row
+// TestInactiveProjectCollapsed: an inactive project hangs under the
+// "inactive (n)" divider, folded by default; unfolded, it is its row
 // alone, marked; ] skips it; space on it activates it, and on an active
 // project with running sessions asks first (docs/SPEC.md §4, §5.1).
 func TestInactiveProjectCollapsed(t *testing.T) {
@@ -18,18 +20,25 @@ func TestInactiveProjectCollapsed(t *testing.T) {
 	off := config.Defaults
 	off.Active = false
 	d.Projects[1].Safety = &off // beta: a thread runs, a coordinator doesn't
-	var keys []string
-	for _, r := range buildTree(d.Projects, d.Sessions, treeIn{}) {
-		keys = append(keys, r.key())
-		if r.slug == "beta" && !r.inactive {
-			t.Errorf("%s isn't marked inactive", r.key())
+	keys := func(in treeIn) []string {
+		var out []string
+		for _, r := range buildTree(d.Projects, d.Sessions, in) {
+			out = append(out, r.key())
+			if r.slug == "beta" && !r.inactive {
+				t.Errorf("%s isn't marked inactive", r.key())
+			}
 		}
+		return out
 	}
-	if want := []string{"p:alpha", "c:alpha", "p:beta"}; !slices.Equal(keys, want) {
-		t.Errorf("tree %v, want beta collapsed: %v", keys, want)
+	if got, want := keys(treeIn{}), []string{"p:alpha", "c:alpha", dividerKey}; !slices.Equal(got, want) {
+		t.Errorf("tree %v, want beta under the folded divider: %v", got, want)
+	}
+	open := treeIn{tree: view.Tree{InactiveOpen: true}}
+	if got, want := keys(open), []string{"p:alpha", "c:alpha", dividerKey, "p:beta"}; !slices.Equal(got, want) {
+		t.Errorf("tree %v, want beta collapsed: %v", got, want)
 	}
 	// Its row says so in every icon set's glyph.
-	for _, r := range buildTree(d.Projects, d.Sessions, treeIn{}) {
+	for _, r := range buildTree(d.Projects, d.Sessions, open) {
 		if r.slug == "beta" {
 			// In the grid's inactive column, after the paused one, before
 			// the needs-you one.
@@ -41,6 +50,7 @@ func TestInactiveProjectCollapsed(t *testing.T) {
 
 	src := &fakeSource{data: d}
 	m := newDash(DashOptions{Source: src, Width: 120, Height: 30, State: DashState{Current: "alpha"}})
+	m.folds.InactiveOpen = true
 	m.setData(src.data)
 	run(m, keyPress(m, "]"))
 	if !slices.Equal(src.opened, []string{"alpha"}) {
@@ -82,6 +92,9 @@ func TestExpandInactiveProject(t *testing.T) {
 	m := newDash(DashOptions{Source: src, Width: 120, Height: 30, State: DashState{Current: "alpha"}})
 	m.setData(src.data)
 	keyPress(m, "tab")
+	// → on the divider unfolds it, then on beta expands beta.
+	m.sideSel = dividerKey
+	run(m, keyPress(m, "right"))
 	m.sideSel = "p:beta"
 	run(m, keyPress(m, "right"))
 	var keys []string
@@ -91,11 +104,11 @@ func TestExpandInactiveProject(t *testing.T) {
 			t.Errorf("%s isn't dormant", r.key())
 		}
 	}
-	if want := []string{"p:alpha", "c:alpha", "p:beta", "c:beta", "t:beta/t-0005", "t:beta/t-0006"}; !slices.Equal(keys, want) {
+	if want := []string{"p:alpha", "c:alpha", dividerKey, "p:beta", "c:beta", "t:beta/t-0005", "t:beta/t-0006"}; !slices.Equal(keys, want) {
 		t.Fatalf("expanded tree %v, want %v", keys, want)
 	}
-	if m.sideSel != "c:beta" || len(src.lifecycle) != 0 {
-		t.Fatalf("cursor %q, lifecycle %v: expanding moves onto the coordinator and activates nothing", m.sideSel, src.lifecycle)
+	if m.sideSel != "p:beta" || len(src.lifecycle) != 0 {
+		t.Fatalf("cursor %q, lifecycle %v: expanding keeps the cursor and activates nothing", m.sideSel, src.lifecycle)
 	}
 	if !strings.Contains(whole(m), "coordinator") || !strings.Contains(whole(m), "T4 ") {
 		t.Fatalf("expanded beta:\n%s", whole(m))
@@ -112,8 +125,15 @@ func TestExpandInactiveProject(t *testing.T) {
 	if slices.ContainsFunc(m.tree(), func(r treeRow) bool { return r.key() == "c:beta" }) {
 		t.Fatal("← didn't fold beta")
 	}
+	// ← on it folded goes up to the divider.
+	run(m, keyPress(m, "left"))
+	if m.sideSel != dividerKey {
+		t.Fatalf("← on folded beta: cursor %q, want the divider", m.sideSel)
+	}
 	// Expanded again, enter on its coordinator activates it and opens it.
+	m.sideSel = "p:beta"
 	run(m, keyPress(m, "right"))
+	m.sideSel = "c:beta"
 	run(m, keyPress(m, "enter"))
 	if !slices.Equal(src.lifecycle, []string{"beta activate"}) || !slices.Contains(src.opened, "beta") {
 		t.Fatalf("lifecycle %v, opened %v: want beta activated and its coordinator opened", src.lifecycle, src.opened)

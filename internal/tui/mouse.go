@@ -447,7 +447,7 @@ func (m *dash) sideMenu(mo tea.Mouse) tea.Cmd {
 		return nil
 	}
 	t, can, why := r.target()
-	if !can {
+	if !can && r.kind != treeDivider {
 		m.msg = why
 		return nil
 	}
@@ -463,14 +463,22 @@ func (m *dash) sideMenu(mo tea.Mouse) tea.Cmd {
 	switch r.kind {
 	case treeProject:
 		items = append(items, menuItem{label: "show its dashboard", run: func(m *dash) tea.Cmd { return m.showProject(r.slug) }})
+		fold := func(m *dash) tea.Cmd { return m.refold(foldProject(r, !r.fold)) }
 		if r.inactive {
 			label, key := expandLabel(r)
-			items = append(items, menuItem{label: label, key: key, run: func(m *dash) tea.Cmd { return m.expand(r.slug, !r.expanded) }})
+			items = append(items, menuItem{label: label, key: key, run: fold})
 		} else {
-			items = append(items, menuItem{label: "open its coordinator", run: func(m *dash) tea.Cmd { return m.openProject(r.slug) }})
+			label, key := foldLabel(r)
+			items = append(items, menuItem{label: "open its coordinator", run: func(m *dash) tea.Cmd { return m.openProject(r.slug) }},
+				menuItem{label: label, key: key, run: fold})
 		}
 		items = append(items, show("project popup", "a"), show("tasks", "t"), show("inbox", "i"),
-			menuItem{label: activeLabel(r), key: "space", run: func(m *dash) tea.Cmd { return m.toggleActive(r.slug, r.inactive) }})
+			menuItem{label: activeLabel(r), key: "space", run: func(m *dash) tea.Cmd { return m.toggleActive(r.slug, r.inactive) }},
+			menuItem{label: pinLabel(r), key: "p", run: func(m *dash) tea.Cmd { return m.setPinned(r.slug, !r.pinned) }})
+	case treeDivider:
+		title = "inactive projects"
+		label, key := foldLabel(r)
+		items = append(items, menuItem{label: label, key: key, run: func(m *dash) tea.Cmd { return m.refold(foldDivider(r)) }})
 	case treeCoordinator:
 		title += " coordinator"
 		items = append(items, menuItem{label: coordLabel(r), key: "enter", run: func(m *dash) tea.Cmd { return m.openTarget(t) }},

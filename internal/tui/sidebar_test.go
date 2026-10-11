@@ -242,7 +242,8 @@ func testTreeNameNeverCut(t *testing.T, r treeRow) {
 }
 
 // TestDashboardSidebarKeys: tab gives the sidebar the keyboard; ↑ ↓
-// move its cursor and ← on a row under a project goes up to it; the
+// move its cursor and ← on a row under a project goes up to it, ← on
+// a project folds it and → unfolds it; the
 // cursor's row previews once it rests there, the keyboard staying in
 // the sidebar; enter and → go into the row, the keyboard following; ?
 // is the help, as prefix+?; esc goes back to the list. Keys that aren't
@@ -269,8 +270,10 @@ func TestDashboardSidebarKeys(t *testing.T) {
 	}
 	steps := []struct{ key, cursor string }{
 		// ↑ on the first row wraps round to the last, ↓ there back.
-		{"up", "c:alpha"}, {"up", "p:alpha"}, {"up", "t:beta/t-0006"}, {"down", "p:alpha"}, {"left", "p:alpha"}, {"j", "c:alpha"},
-		{"left", "p:alpha"}, {"j", "c:alpha"}, {"down", "p:beta"}, {"down", "c:beta"}, {"down", "t:beta/t-0005"},
+		{"up", "c:alpha"}, {"up", "p:alpha"}, {"up", "t:beta/t-0006"}, {"down", "p:alpha"},
+		// ← on the project folds it, → unfolds it again.
+		{"left", "p:alpha"}, {"left", "p:alpha"}, {"j", "p:beta"}, {"k", "p:alpha"}, {"right", "p:alpha"},
+		{"j", "c:alpha"}, {"left", "p:alpha"}, {"j", "c:alpha"}, {"down", "p:beta"}, {"down", "c:beta"}, {"down", "t:beta/t-0005"},
 	}
 	for i, s := range steps {
 		keyPress(m, s.key)
@@ -407,6 +410,8 @@ func TestEverySidebarClickHasKey(t *testing.T) {
 		"open the coordinator": "enter", "attach": "enter",
 		"activate": "space on the project", "deactivate": "space on the project",
 		"expand": "→ on the project", "collapse": "← on the project", "start the coordinator": "enter",
+		"fold": "← on the project or the divider", "unfold": "→ on the project or the divider",
+		"pin to the top": "p on the project", "unpin": "p on the project",
 	}
 	m, _ := fresh()
 	for i := range m.tree() {
@@ -749,17 +754,17 @@ func TestSideKeyRules(t *testing.T) {
 		{kind: treeCoordinator, slug: "a", session: "s-1"},
 		{kind: treeThread, slug: "a", thread: "t-0001", session: "s-2"},
 		{kind: treeThread, slug: "a", thread: "t-0002"},
-		{kind: treeProject, slug: "z", inactive: true},
+		{kind: treeProject, slug: "z", inactive: true, fold: true},
 	}
 	w := sideDefault
-	if st := sideKeyStep(rows, w, "p:z", sideIn); st.expand != "z" || !st.expandOn || st.sel != "c:z" || st.into {
+	if st := sideKeyStep(rows, w, "p:z", sideIn); st.refold == nil || st.into {
 		t.Errorf("→ on a folded project: %+v", st)
 	}
 	st := sideKeyStep(rows, w, "c:a", sideIn)
 	if !st.into || st.target == nil || !st.target.Coordinator {
 		t.Errorf("→ on a coordinator: %+v", st)
 	}
-	if st := sideKeyStep(rows, w, "p:a", sideIn); !st.into || !st.here || st.target == nil || st.target.Project != "a" {
+	if st := sideKeyStep(rows, w, "p:a", sideIn); st.refold != nil || !st.into || !st.here || st.target == nil || st.target.Project != "a" {
 		t.Errorf("→ on the project shown: %+v", st)
 	}
 	if st := sideKeyStep(rows, w, "t:a/t-0002", sideEnter); st.into || st.msg == "" {
@@ -768,12 +773,22 @@ func TestSideKeyRules(t *testing.T) {
 	if st := sideKeyStep(rows, w, "t:a/t-0001", sideOut); st.sel != "p:a" {
 		t.Errorf("← on a thread: %+v", st)
 	}
-	open := append(slices.Clone(rows[:4]), treeRow{kind: treeProject, slug: "z", inactive: true, expanded: true})
-	if st := sideKeyStep(open, w, "p:z", sideOut); st.expand != "z" || st.expandOn {
+	open := append(slices.Clone(rows[:4]), treeRow{kind: treeProject, slug: "z", inactive: true})
+	if st := sideKeyStep(open, w, "p:z", sideOut); st.refold == nil {
 		t.Errorf("← on an unfolded project: %+v", st)
 	}
 	if st := sideKeyStep(rows, w, "p:a", sideHelp); !st.help {
 		t.Errorf("?: %+v", st)
+	}
+	div := treeRow{kind: treeDivider, threads: 3, fold: true}
+	if _, ok := div.preview(); ok {
+		t.Error("the divider previews")
+	}
+	if d1, _ := div.details(); d1 != "3 inactive projects" {
+		t.Errorf("divider details %q", d1)
+	}
+	if kb := ansi.Strip(sideKeyBar(&div, true, false, 34)); !strings.Contains(kb, "⏎ unfold") {
+		t.Errorf("divider key bar %q", kb)
 	}
 	for i, want := range []Target{{}, {Project: "a", Session: "s-1"}, {Project: "a", Session: "s-2"}, {Project: "a"}, {Project: "z"}} {
 		got, ok := rows[i].preview()
