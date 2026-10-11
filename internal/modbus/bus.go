@@ -116,6 +116,24 @@ func (b *Bus) Publish(name, project string, data any) {
 	}
 }
 
+// PublishTo queues an event for mod alone, if it is subscribed and the
+// event is for it (action.done: only the mod whose row was pressed
+// hears of it). It never blocks.
+func (b *Bus) PublishTo(mod, name, project string, data any) {
+	b.mu.Lock()
+	s := b.subs[mod]
+	if s == nil {
+		b.mu.Unlock()
+		return
+	}
+	b.seq++
+	ev := Event{Name: name, Project: project, Seq: b.seq, Time: b.now(), Data: data}
+	b.mu.Unlock()
+	if s.wants(ev) {
+		s.push(ev)
+	}
+}
+
 // Sub is one mod's queue.
 type Sub struct {
 	mod    string

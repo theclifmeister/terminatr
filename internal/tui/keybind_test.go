@@ -8,6 +8,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/theclifmeister/terminatr/internal/modaction"
 )
 
 // keymap applies km for the test and puts the defaults back after it.
@@ -30,7 +32,7 @@ var wantIDs = []string{
 	"side.nth", "side.needs-next", "side.needs-prev", "side.filter", "side.help",
 	"popup.close", "repo.add", "repo.remove", "task.show", "task.delegate", "task.accept", "task.send-back",
 	"task.coordinator", "tasks.done", "library.read", "library.delete", "library.delete-thread",
-	"session.dashboard", "session.remote", "prefix.send",
+	"session.attach", "session.dashboard", "session.remote", "prefix.send",
 }
 
 // TestActionIDs: every action has one stable id, unique and well formed,
@@ -191,5 +193,21 @@ func TestKeymapRemaps(t *testing.T) {
 	}
 	if bar := ansi.Strip(sideKeyBar(&treeRow{kind: treeProject}, true, false, 200)); !strings.Contains(bar, "P pin") {
 		t.Errorf("the key bar doesn't say P: %q", bar)
+	}
+}
+
+// TestBindableActions: every action a mod may bind (modaction) is one
+// of the console's, under the same id and default key, so the key a
+// row's hint shows is the key that runs it.
+func TestBindableActions(t *testing.T) {
+	for _, b := range modaction.Actions {
+		i := slices.IndexFunc(KeyActions(), func(a KeyAction) bool { return a.ID == b.ID })
+		if i < 0 {
+			t.Errorf("%s is bindable but no console action", b.ID)
+			continue
+		}
+		if a := KeyActions()[i]; !slices.Contains(a.Keys, b.Key) {
+			t.Errorf("%s: bindable with key %q, the console's keys are %q", b.ID, b.Key, a.Keys)
+		}
 	}
 }

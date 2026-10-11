@@ -581,3 +581,19 @@ type QuestionsOpenResult struct {
 	Via     string `json:"via"`
 	Open    int    `json:"open"`
 }
+
+// MethodModActionDone tells the server a human ran a core action that a
+// mod's row, view or notification bound (the mods design §11; docs/SPEC.md
+// §5.3, Action binding), so the mod gets action.done and can redraw. The
+// console calls it after the core ran the action, or refused it as not
+// available; human-only, refused for an agent.
+const MethodModActionDone = "mod.action.done"
+
+// ModActionDoneParams are the params of mod.action.done: the mod whose
+// binding was pressed, the action and its target, and whether it ran.
+type ModActionDoneParams struct {
+	Mod    string            `json:"mod"`
+	Action string            `json:"action"`
+	Target map[string]string `json:"target,omitempty"`
+	OK     bool              `json:"ok"`
+}

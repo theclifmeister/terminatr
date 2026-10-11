@@ -132,11 +132,15 @@ type NotifyButton struct {
 	Target modbus.Target `json:"target"`
 }
 
-// Action is a core action a mod's row may name.
+// Action is a core action a mod's row may name: its label, default key
+// and when it is available are the core's (modaction). On is the target
+// it takes (task, project or session); Confirm says the core asks first.
 type Action struct {
 	ID           string `json:"id"`
 	Label        string `json:"label"`
 	Key          string `json:"key,omitempty"`
+	On           string `json:"on"`
+	Confirm      bool   `json:"confirm"`
 	Precondition string `json:"precondition,omitempty"`
 }
 

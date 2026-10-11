@@ -589,6 +589,8 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.setData(msg.data)
 	case tickMsg:
 		return m, tea.Batch(m.load(), m.reloadBoards())
+	case bindingMsg:
+		return m, m.runBinding(msg)
 	case boardMsg:
 		if pv := m.projectPopupView(); pv != nil && pv.slug == msg.slug {
 			if msg.err == nil {

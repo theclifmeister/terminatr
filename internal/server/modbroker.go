@@ -291,6 +291,7 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 		return nil, nil
 	})
 	b.Handle("inbox.raise", mod.PermInbox, s.modRaise)
+	s.modActionMethods(b)
 }
 
 // inbox.raise {project, item: {subject, summary}} (or the two flat): an

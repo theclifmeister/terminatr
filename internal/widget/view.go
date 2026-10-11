@@ -3,6 +3,9 @@ package widget
 import (
 	"slices"
 	"strings"
+	"time"
+
+	"github.com/theclifmeister/terminatr/internal/modaction"
 )
 
 // View is one widget tree on screen with the core's state: which list
@@ -30,6 +33,24 @@ type View struct {
 	layValid bool
 	shown    int // first laid-out line the last Render showed
 	height   int // and how many lines it had
+
+	// The action binding (mods design §11). bindKeys are the console's
+	// keys for a bindable action; since is when each row's bindings,
+	// by list and row id, last changed; shifted is when a publish last
+	// moved the focus or the cursor to another row (not the human).
+	bindKeys func(id string) []string
+	since    map[rowKey]bound
+	shifted  time.Time
+	now      func() time.Time
+}
+
+// rowKey is a row of a list.
+type rowKey struct{ list, row string }
+
+// bound is a row's bindings as last published, and since when.
+type bound struct {
+	sig string
+	at  time.Time
 }
 
 // list is a list's or table's state.
@@ -44,21 +65,51 @@ type list struct {
 // Event is what reaches the mod: a declared key pressed, or a click on a
 // row or a key hint. Widget and Row are the focused (or clicked) list and
 // the row under its cursor, if any.
+//
+// An EventAction never reaches the mod: it is a core action the row
+// binds, pressed, for the console to re-check against live state, ask
+// and run (the mods design §11). The mod hears of it only as action.done.
 type Event struct {
 	Kind   string `json:"kind"` // EventKey or EventClick
 	Widget string `json:"widget,omitempty"`
 	Row    string `json:"row,omitempty"`
 	Key    string `json:"key,omitempty"`
+	// Action is the bound action pressed (EventAction), and Stable
+	// whether the row's bindings and the cursor's place had been
+	// unchanged for modaction.Stable: a press that isn't counts for
+	// nothing.
+	Action *Action `json:"-"`
+	Stable bool    `json:"-"`
 }
 
 // Event kinds.
 const (
-	EventKey   = "key"
-	EventClick = "click"
+	EventKey    = "key"
+	EventClick  = "click"
+	EventAction = "action"
 )
 
 // NewView is a view with no tree yet.
-func NewView() *View { return &View{lists: map[string]*list{}} }
+func NewView() *View {
+	return &View{lists: map[string]*list{}, since: map[rowKey]bound{}, now: time.Now, bindKeys: defaultKeys}
+}
+
+// defaultKeys are a bindable action's default keys.
+func defaultKeys(id string) []string {
+	if a, ok := modaction.Lookup(id); ok {
+		return []string{a.Key}
+	}
+	return nil
+}
+
+// SetBindKeys gives the view the console's keys for each bindable
+// action, its keymap's (the default key without one).
+func (v *View) SetBindKeys(keys func(id string) []string) {
+	if keys == nil {
+		keys = defaultKeys
+	}
+	v.bindKeys, v.layValid = keys, false
+}
 
 // Tree is the tree on show, nil before Set.
 func (v *View) Tree() *Widget { return v.tree }
@@ -69,6 +120,9 @@ func (v *View) Tree() *Widget { return v.tree }
 // first one.
 func (v *View) Set(t *Widget) {
 	old := v.lists
+	focus, cursor := v.focus, v.Cursor(v.focus)
+	now := v.now()
+	since := map[rowKey]bound{}
 	v.tree, v.lists, v.order, v.keys = t, map[string]*list{}, nil, nil
 	walk(t, func(w *Widget) {
 		switch w.Kind {
@@ -80,6 +134,18 @@ func (v *View) Set(t *Widget) {
 			l.refilter()
 			v.lists[w.ID] = l
 			v.order = append(v.order, w.ID)
+			for i := range w.Rows {
+				r := &w.Rows[i]
+				if len(r.Actions) == 0 {
+					continue
+				}
+				k, sig := rowKey{w.ID, r.ID}, bindSig(r.Actions)
+				if b, ok := v.since[k]; ok && b.sig == sig {
+					since[k] = b
+				} else {
+					since[k] = bound{sig, now}
+				}
+			}
 		case KindKeys:
 			v.keys = append(v.keys, w.Keys...)
 		}
@@ -90,7 +156,24 @@ func (v *View) Set(t *Widget) {
 			v.focus = v.order[0]
 		}
 	}
+	v.since = since
+	if v.focus != focus || v.Cursor(v.focus) != cursor {
+		v.shifted = now
+	}
 	v.layValid = false
+}
+
+// bindSig is a row's bindings as one string, to tell when they change.
+func bindSig(as []Action) string {
+	var b strings.Builder
+	for _, a := range as {
+		t := ActionTarget(a)
+		for _, s := range []string{a.ID, t.Project, t.Task, t.Thread, t.Session} {
+			b.WriteString(s)
+			b.WriteByte(0)
+		}
+	}
+	return b.String()
 }
 
 func walk(w *Widget, f func(*Widget)) {
@@ -213,10 +296,113 @@ func (v *View) Key(k string) (bool, *Event) {
 		v.setFilter(l, "")
 		return true, nil
 	}
+	// A bound action's key is the core's: it runs the action the row
+	// under the cursor binds, and never reaches the mod; the key of one
+	// that changes state never does, even where the row binds none.
+	if a := v.boundKey(k); a != nil {
+		return true, v.press(a)
+	}
+	if v.coreKey(k) {
+		return false, nil
+	}
 	if slices.ContainsFunc(v.keys, func(d Key) bool { return d.Key == k }) {
 		return true, v.event(EventKey, k)
 	}
 	return false, nil
+}
+
+// Bound is a bound action on the row under the cursor, with the key
+// that runs it.
+type Bound struct {
+	Key    string
+	Action Action
+}
+
+// Bound are the actions the focused list's cursor row binds, each with
+// the console's key for it, for the frame to show as hints in the
+// core's words (modaction's labels). Where two share a key, the first
+// is the one the key runs; the other isn't listed.
+func (v *View) Bound() []Bound {
+	r := v.cursorRow()
+	if r == nil {
+		return nil
+	}
+	var out []Bound
+	for _, a := range r.Actions {
+		for _, k := range v.bindKeys(a.ID) {
+			if !slices.ContainsFunc(out, func(b Bound) bool { return b.Key == k }) {
+				out = append(out, Bound{k, a})
+				break
+			}
+		}
+	}
+	return out
+}
+
+// Press presses bound action id on the row under the cursor, as a click
+// on its hint does: nil when the row doesn't bind it.
+func (v *View) Press(id string) *Event {
+	r := v.cursorRow()
+	if r == nil {
+		return nil
+	}
+	for i := range r.Actions {
+		if r.Actions[i].ID == id {
+			return v.press(&r.Actions[i])
+		}
+	}
+	return nil
+}
+
+// boundKey is the action key k runs on the row under the cursor, nil for
+// none.
+func (v *View) boundKey(k string) *Action {
+	for _, b := range v.Bound() {
+		if b.Key == k {
+			return &b.Action
+		}
+	}
+	return nil
+}
+
+// coreKey says whether k is a key of a bindable action that changes
+// state (one that asks first): the core's in a view, on every row, so a
+// mod's keys widget can't put its own label on D, A or x. A navigation's
+// key (enter) stays the mod's on a row that binds none.
+func (v *View) coreKey(k string) bool {
+	for _, a := range modaction.Actions {
+		if a.Confirm && slices.Contains(v.bindKeys(a.ID), k) {
+			return true
+		}
+	}
+	return false
+}
+
+// cursorRow is the focused list's row under its cursor, nil for none.
+func (v *View) cursorRow() *Row {
+	l := v.lists[v.focus]
+	if l == nil || l.cursor == "" {
+		return nil
+	}
+	for i := range l.w.Rows {
+		if l.w.Rows[i].ID == l.cursor {
+			return &l.w.Rows[i]
+		}
+	}
+	return nil
+}
+
+// press is the event of bound action a pressed on the cursor's row: it
+// counts only once the row's bindings, and the row the cursor is on,
+// had stayed as they are for modaction.Stable.
+func (v *View) press(a *Action) *Event {
+	e := v.event(EventAction, "")
+	cp := *a
+	e.Action = &cp
+	b, ok := v.since[rowKey{e.Widget, e.Row}]
+	now := v.now()
+	e.Stable = ok && now.Sub(b.at) >= modaction.Stable && now.Sub(v.shifted) >= modaction.Stable
+	return e
 }
 
 // edit types into the filter: enter keeps it, esc drops it, the arrows

@@ -1060,7 +1060,11 @@ func joinNotes(a, b func(m *dash) []string) func(m *dash) []string {
 // toggleActive activates or deactivates a project (the sidebar's space,
 // the Active row): deactivating asks first while its coordinator or
 // threads run, which it stops, to resume at its activation (§5.1).
-func (m *dash) toggleActive(slug string, on bool) tea.Cmd {
+func (m *dash) toggleActive(slug string, on bool) tea.Cmd { return m.toggleActiveVia(slug, on, nil) }
+
+// toggleActiveVia is toggleActive for binding b (nil for the core's own
+// key); a mod's bound project.activate always asks first, naming which.
+func (m *dash) toggleActiveVia(slug string, on bool, b *binding) tea.Cmd {
 	set := func() tea.Cmd {
 		if p := m.projectData(slug); p != nil && p.Safety != nil {
 			s := *p.Safety
@@ -1068,20 +1072,30 @@ func (m *dash) toggleActive(slug string, on bool) tea.Cmd {
 			p.Safety = &s
 			m.rebuild()
 		}
-		return m.lifecycle(slug, map[bool]string{true: "activate", false: "deactivate"}[on])
+		return m.lifecycleVia(slug, map[bool]string{true: "activate", false: "deactivate"}[on], b)
 	}
-	if busy := runningIn(m.data.Sessions, slug); !on && len(busy) > 0 {
+	busy := runningIn(m.data.Sessions, slug)
+	switch {
+	case !on && len(busy) > 0:
 		m.confirmNo("Deactivate "+slug, DeactivateQuestion(slug, busy), slug+" stays active", set)
+		return nil
+	case b != nil && on:
+		m.confirmNo("Activate "+slug, "Activate "+slug+"? Its coordinator starts, and its threads resume.", slug+" stays inactive", set)
+		return nil
+	case b != nil:
+		m.confirmNo("Deactivate "+slug, "Deactivate "+slug+"? Nothing of it runs now; it stays inactive until you activate it.", slug+" stays active", set)
 		return nil
 	}
 	return set()
 }
 
-func (m *dash) lifecycle(slug, verb string) tea.Cmd {
+func (m *dash) lifecycle(slug, verb string) tea.Cmd { return m.lifecycleVia(slug, verb, nil) }
+
+func (m *dash) lifecycleVia(slug, verb string, b *binding) tea.Cmd {
 	src := m.src
-	return m.act(func() actionMsg {
+	return m.actVia(b, func() (actionMsg, bool) {
 		msg, err := src.Lifecycle(slug, verb)
-		return actionMsg{msg: msg, err: err}
+		return actionMsg{msg: msg, err: err}, err == nil
 	})
 }
 

@@ -206,6 +206,9 @@ type Source interface {
 	Library(slug string) ([]thread.LibFile, error)
 	LibraryRead(slug, id, name string, max int64) (data []byte, truncated bool, err error)
 	LibraryRemove(slug, id, name string) (int, error)
+	// ModActionDone tells the server a human ran (ok) or was refused an
+	// action mod's row or button bound, for the mod's action.done.
+	ModActionDone(mod, action string, target map[string]string, ok bool) error
 	// ModAct enables, disables or removes installed mod id (verb
 	// "enable", "disable", "remove"), on the human's answer in the Mods
 	// tab (mods design §9). Enabling grants every permission the mod
@@ -542,6 +545,10 @@ func (s *ServerSource) Ask(slug string, id int, kind, note string) (bool, error)
 		return p.AskSendBack(s.Caller, t.Ref(), note)
 	}
 	return p.AskDelegate(s.Caller, t.Ref())
+}
+
+func (s *ServerSource) ModActionDone(mod, action string, target map[string]string, ok bool) error {
+	return s.call(proto.MethodModActionDone, proto.ModActionDoneParams{Mod: mod, Action: action, Target: target, OK: ok}, nil)
 }
 
 func (s *ServerSource) OpenQuestions(slug string) (proto.QuestionsOpenResult, error) {
