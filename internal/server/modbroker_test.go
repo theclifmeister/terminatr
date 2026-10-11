@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/modbroker"
+	"github.com/theclifmeister/terminatr/internal/modproto"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
@@ -143,4 +145,24 @@ func TestModBrokerAPI(t *testing.T) {
 			t.Errorf("%s: needs %q (%v), want %q", name, got, ok, want)
 		}
 	}
+}
+
+// TestModRequest: the supervisor's hook answers a host's request on its
+// connection, a result or the broker's error code.
+func TestModRequest(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	s := &Server{log: log.New(os.Stderr, "", 0), modEv: newModEvents()}
+	inR, inW := io.Pipe()
+	conn := modproto.NewConn(strings.NewReader(""), inW)
+	read := modproto.NewConn(inR, io.Discard)
+	id := int64(7)
+	s.ModRequest("ghost", conn, &modproto.Message{ID: &id, Method: "store.get", Params: json.RawMessage(`{"key":"k"}`)})
+	m, err := read.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.ID == nil || *m.ID != 7 || m.Error == nil || m.Error.Code != modproto.CodeDenied {
+		t.Fatalf("reply %+v", m)
+	}
+	s.ModRequest("ghost", conn, &modproto.Message{Method: "log"}) // a notification: no answer
 }

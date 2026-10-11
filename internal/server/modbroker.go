@@ -24,12 +24,17 @@ import (
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modbroker"
+	"github.com/theclifmeister/terminatr/internal/modproto"
 	"github.com/theclifmeister/terminatr/internal/project"
 )
 
 // modRegistryAge is how long the broker trusts the registry it read: a
 // grant the human takes back applies within it.
 const modRegistryAge = time.Second
+
+// modCallsAtOnce is how many of one mod's calls the broker works on at
+// once; the rest wait their turn.
+const modCallsAtOnce = 8
 
 // Inbox limits for a mod: an item's subject and summary are clipped, and
 // a mod with this many unhandled items in a project raises no more.
@@ -49,6 +54,8 @@ type modBroker struct {
 	at  time.Time
 	// logMu serialises writes to the mods' logs.
 	logMu sync.Mutex
+	// busy holds a slot per call each mod has running (modCallsAtOnce).
+	busy map[string]chan struct{}
 }
 
 // CallMod answers mod id's call of method from its host (the supervisor
@@ -56,6 +63,50 @@ type modBroker struct {
 // error is a *modbroker.Error with its code.
 func (s *Server) CallMod(ctx context.Context, id, method string, params json.RawMessage) (any, error) {
 	return s.broker().Call(ctx, id, method, params)
+}
+
+// ModRequest answers request m from mod id's host on conn: the
+// supervisor's Broker hook (modsup.Options.Broker). It returns at once;
+// the call runs on its own goroutine, at most modCallsAtOnce of a mod's
+// at a time, so a slow fetch never holds up the host's events. A
+// notification (no id) is ignored.
+func (s *Server) ModRequest(id string, conn *modproto.Conn, m *modproto.Message) {
+	if m == nil || m.ID == nil {
+		return
+	}
+	reqID, method, params := *m.ID, m.Method, m.Params
+	slot := s.modSlot(id)
+	go func() {
+		slot <- struct{}{}
+		defer func() { <-slot }()
+		res, err := s.CallMod(context.Background(), id, method, params)
+		if err == nil {
+			err = conn.Reply(reqID, res)
+			if err != nil {
+				s.log.Printf("mods: %s: reply to %s: %v", id, method, err)
+			}
+			return
+		}
+		code := modproto.CodeFailed
+		if e, ok := err.(*modbroker.Error); ok {
+			code = e.Code
+		}
+		_ = conn.ReplyError(reqID, code, err.Error())
+	}()
+}
+
+// modSlot is mod id's semaphore of modCallsAtOnce slots.
+func (s *Server) modSlot(id string) chan struct{} {
+	mb := &s.modBr
+	mb.mu.Lock()
+	defer mb.mu.Unlock()
+	if mb.busy == nil {
+		mb.busy = map[string]chan struct{}{}
+	}
+	if mb.busy[id] == nil {
+		mb.busy[id] = make(chan struct{}, modCallsAtOnce)
+	}
+	return mb.busy[id]
 }
 
 func (s *Server) broker() *modbroker.Broker {
