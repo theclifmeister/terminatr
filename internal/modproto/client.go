@@ -153,3 +153,15 @@ func (c *Client) Shutdown(ctx context.Context) error {
 	_, err := c.Call(ctx, MethodShutdown, nil)
 	return err
 }
+
+// ToolCall runs one of the mod's agent tools and returns the text its
+// handler gave, or its error (an *Error with CodeNoTool or
+// CodeToolFailed), ctx's end or ErrClosed.
+func (c *Client) ToolCall(ctx context.Context, call ToolCall) (ToolResult, error) {
+	var r ToolResult
+	raw, err := c.Call(ctx, MethodToolCall, call)
+	if err == nil {
+		err = json.Unmarshal(raw, &r)
+	}
+	return r, err
+}
