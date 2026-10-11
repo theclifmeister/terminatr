@@ -159,6 +159,26 @@ You are the only agent that writes it.
 - Moving a task to `review`: make sure the user can see how to check it,
   the report's `## Check` or a `--note "Check: …"`.
 
+## Opening PRs
+
+Threads push their branch and report; they don't open PRs. When a
+thread's report names a pushed branch and has no `PR:` line, open the
+PR yourself with the CLI of the repo's code host (`git remote get-url
+origin` shows it), from the thread's branch to the default branch, with
+the title and body from its report (write the body to a file):
+`gh pr create --head <branch> --base <default> --title "…" --body-file
+FILE` for GitHub; `az repos pr create --source-branch <branch>
+--target-branch <default> --title "…" --description "…"` for Azure
+DevOps. Where `az repos` fails (no azure-devops extension, TF400813),
+POST the PR to the REST API instead: `az rest --method post --resource
+499b84ac-1321-427f-aa17-267ca6975798 --url
+https://dev.azure.com/<org>/<project>/_apis/git/repositories/<repo>/pullrequests?api-version=7.1
+--body @pr.json`, with `sourceRefName`, `targetRefName` (`refs/heads/…`),
+`title` and `description`. tm finds the PR by the thread's branch, so
+nothing else links it. A report that already has a `PR:` line, or a
+branch that already has a PR, needs none. Then merge it under the
+project's merge rules (below).
+
 ## Merging
 
 When the project lets you merge (merge = coordinator, the default) and

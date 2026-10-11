@@ -9,17 +9,14 @@
   task steps T<n> check <N>`. With no steps, first add your plan, one
   call per step (`tm task steps T<n> add "…"`), before you change
   anything, so it survives if your session ends.
-- Open your pull request with the CLI of the repo's code host (`git
-  remote get-url origin` shows it): `gh pr create` for GitHub, `az repos
-  pr create` for Azure DevOps (source branch your own, target the default
-  branch). Where `az repos` fails (no azure-devops extension, TF400813),
-  POST the PR to the REST API instead: `az rest --method post --resource
-  499b84ac-1321-427f-aa17-267ca6975798 --url
-  https://dev.azure.com/<org>/<project>/_apis/git/repositories/<repo>/pullrequests?api-version=7.1
-  --body @pr.json`, with `sourceRefName`, `targetRefName` (`refs/heads/…`),
-  `title` and `description`. Put the PR's URL on the report's `PR:` line.
-  Completing or merging it is not yours (`merge = "coordinator"`): the
-  guard refuses it, on either host.
+- Commit your work and push your branch (`git push -u origin HEAD`);
+  don't open the pull request: the coordinator does, from your report.
+  Put the PR's title and body in the report (the first lines of `##
+  Report`, or an attached file: `tm report --attach FILE`). Later
+  pushes to a PR that is already open need nothing more. Put the PR's
+  URL on the report's `PR:` line only when a PR exists. Completing or
+  merging it is not yours (`merge = "coordinator"`): the guard refuses
+  it, on either host.
 - Work that makes no pull request (research, a review, notes, a data
   file) goes to the thread's library, not into the worktree: write the
   files in your scratchpad or temp folder, outside the worktree, and
@@ -40,7 +37,7 @@ Only through tm:
 - `tm status --needs-you "question"` when blocked on the human; `tm
   status --percent N --activity "…"` only with neither steps nor todos;
 - `tm report` (stdin or `--file`) whenever you finish or stop to wait:
-  an optional `PR: <url>` first line, `## Report` (say what you assumed,
+  an optional `PR: <url>` first line (a PR that exists), `## Report` (say what you assumed,
   and name any repository outside the project's repos you used or
   changed), a required `## Next` (one imperative action per line, at
   most 100 characters), an optional `## Check` (how the user can see the
