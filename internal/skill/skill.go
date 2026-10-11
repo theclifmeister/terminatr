@@ -16,10 +16,12 @@ import (
 //go:embed rules/*.md
 var rules embed.FS
 
-// Each role's rules are two files: <role>.safety.md, locked and always
-// first, and <role>.policy.md, which a mod may replace (docs/SPEC.md §7.7,
-// mods design §7 "Tighten only"). Nothing a policy says can loosen the
-// safety part, because it comes before and is never replaced.
+// Each role's rules are two parts: rules/<role>.safety.md, locked and
+// always first, and the policy, which a mod may replace (docs/SPEC.md
+// §7.7, mods design §7 "Tighten only"). The built-in policy ships as the
+// bundled default-policy mod (internal/mod/bundled/default-policy, mods
+// design §11). Nothing a policy says can loosen the safety part, because
+// it comes before and is never replaced.
 
 // Text returns the rules of a role. The first line is
 // "tm skill <role> v<version>".
@@ -38,11 +40,11 @@ func TextWithPolicy(role, version, policy string) (string, bool) {
 		return "", false
 	}
 	if policy == "" {
-		body, err := rules.ReadFile("rules/" + role + ".policy.md")
-		if err != nil {
+		body, ok := mod.BundledPolicyText(role)
+		if !ok {
 			return "", false
 		}
-		policy = string(body)
+		policy = body
 	}
 	return fmt.Sprintf("tm skill %s v%s\n\n%s\n%s\n", role, strings.TrimPrefix(version, "v"), safety, strings.TrimRight(policy, "\n")), true
 }
@@ -84,7 +86,7 @@ func ForProject(role, version, slug string) (string, bool) {
 	}
 	var policy Addendum
 	p, add, _ := r.Rules(role, slug)
-	if p != nil {
+	if p != nil && !p.Builtin {
 		policy = Addendum{Mod: p.Mod, Text: p.Text}
 	}
 	addenda := make([]Addendum, len(add))

@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"sync/atomic"
 
@@ -35,13 +37,16 @@ func loadMods(cfg *config.Config) *mod.Registry {
 	return r
 }
 
-// modChoices are the built-in choices, then the enabled mods that
-// provide kind, in the order they were enabled.
+// modChoices are the built-in choices (the bundled mods', by their
+// names: default, unicode…), then the enabled user mods that provide
+// kind, in the order they were enabled.
 func modChoices(builtin []string, kind string) []string {
 	cfg, _ := config.Load()
 	out := append([]string(nil), builtin...)
 	for _, m := range loadMods(cfg).Providers(kind) {
-		out = append(out, m.ID)
+		if !m.Builtin {
+			out = append(out, m.ID)
+		}
 	}
 	return out
 }
@@ -149,25 +154,31 @@ func modIcons(r *mod.Registry, id string) (*iconSet, error) {
 
 // Layout
 
-// modLayout is the sidebar's column order layout names ("default" or a
-// mod id): nil for the built-in order.
+// modLayout is the sidebar's column order layout names ("default", the
+// bundled default-layout mod's, or a mod id): nil for the built-in
+// order, view.DefaultColumns, which the view keeps as nil.
 func modLayout(r *mod.Registry, value string) ([]string, error) {
+	var data []byte
 	if value == "" || value == ThemeDefault {
-		return nil, nil
-	}
-	m, err := r.Provider(mod.KindLayout, value)
-	if err != nil {
-		return nil, err
-	}
-	data, err := m.Data(mod.KindLayout)
-	if err != nil {
-		return nil, err
+		value, data = mod.BundledLayout, mod.BundledData(mod.BundledLayout, mod.KindLayout)
+	} else {
+		m, err := r.Provider(mod.KindLayout, value)
+		if err != nil {
+			return nil, err
+		}
+		if data, err = m.Data(mod.KindLayout); err != nil {
+			return nil, err
+		}
 	}
 	l, err := mod.ParseLayout(data)
 	if err != nil {
 		return nil, fmt.Errorf("%s layout: %w", value, err)
 	}
-	return view.Columns(l.Sidebar), nil
+	cols := view.Columns(l.Sidebar)
+	if slices.Equal(cols, view.DefaultColumns) {
+		return nil, nil
+	}
+	return cols, nil
 }
 
 // layoutVal is the layout setting's value this console uses.
@@ -231,12 +242,19 @@ func lookNote(err error) string {
 
 // Keymaps
 
-// loadKeymap applies the enabled keymap mods (mod.Registry.Keymap) to
-// this console: a key two mods bind goes to the one enabled first, and
-// what ApplyKeymap refuses (an escape hatch, a fixed action, a clash
-// with a built-in key) keeps its default. The errors name each mod.
+// loadKeymap applies the keymaps to this console: the bundled
+// default-keymap's (DefaultKeymap), with the enabled keymap mods'
+// (mod.Registry.Keymap) over it. An action a mod binds takes the mod's
+// keys; a key two mods bind goes to the one enabled first, and what
+// ApplyKeymap refuses (an escape hatch, a fixed action, a clash with a
+// built-in key) keeps its default. The errors name each mod.
 func loadKeymap(r *mod.Registry) error {
 	km, from, errs := r.Keymap()
+	for id, keys := range DefaultKeymap() {
+		if _, ok := km[id]; !ok && !slices.Equal(keys, defaultKeys(id)) {
+			km[id], from[id] = keys, mod.BundledKeymap
+		}
+	}
 	err := ApplyKeymap(km, ConfigPrefix())
 	if j, ok := err.(interface{ Unwrap() []error }); ok {
 		for _, e := range j.Unwrap() {
@@ -261,4 +279,66 @@ func lookNews(err error) string {
 		return ""
 	}
 	return n
+}
+
+// DefaultKeymap is the bundled default-keymap mod's keymap.toml (mods
+// design §11): the keys of every action that can be rebound, which the
+// action tables' own keys match (TestDefaultKeymap). Keymap mods apply
+// over it.
+func DefaultKeymap() map[string][]string {
+	km, err := mod.ParseKeymap(mod.BundledData(mod.BundledKeymap, mod.KindKeymap))
+	if err != nil {
+		panic("bundled keymap: " + err.Error())
+	}
+	return km
+}
+
+// defaultKeys are action id's keys in its table; nil for no such id.
+func defaultKeys(id string) []string {
+	for _, b := range append(listBindables(), sideBindables()...) {
+		if b.id == id {
+			return b.keys
+		}
+	}
+	return nil
+}
+
+// Load checks
+
+// The console's checks of mods' data files (mod.DataChecks), for tm
+// doctor and the Mods tab: what useTheme, setIcons and loadKeymap would
+// refuse.
+func init() {
+	mod.DataChecks[mod.KindTheme] = func(data []byte) error {
+		tt, err := parseTheme(data)
+		for _, dark := range []bool{false, true} {
+			if err == nil {
+				_, err = themeFor(tt, dark, true)
+			}
+		}
+		return err
+	}
+	mod.DataChecks[mod.KindIcons] = func(data []byte) error {
+		_, err := parseIcons(data)
+		return err
+	}
+	mod.DataChecks[mod.KindKeymap] = func(data []byte) error {
+		km, err := mod.ParseKeymap(data)
+		if err != nil {
+			return err
+		}
+		rows := append(listBindables(), sideBindables()...)
+		var errs []error
+		for _, id := range slices.Sorted(maps.Keys(km)) {
+			i := slices.IndexFunc(rows, func(b bindable) bool { return b.id == id })
+			var row *bindable
+			if i >= 0 {
+				row = &rows[i]
+			}
+			if err := checkBinding(row, id, km[id], ConfigPrefix()); err != nil {
+				errs = append(errs, err)
+			}
+		}
+		return errors.Join(errs...)
+	}
 }

@@ -379,6 +379,7 @@ var coreActions = []struct {
 	{"popup", bindable{id: "popup.close", keys: []string{"esc"}, fixed: true, help: "close the popup"}},
 	{"popup", bindable{id: "repo.add", keys: []string{"+"}, fixed: true, help: "add a repository (the overview)"}},
 	{"popup", bindable{id: "repo.remove", keys: []string{"x"}, fixed: true, help: "remove the selected repository (the overview; asks first)"}},
+	{"popup", bindable{id: "task.new", keys: []string{"+"}, fixed: true, help: "a new task (the tasks), from a task template or none"}},
 	{"popup", bindable{id: "task.show", keys: []string{"enter"}, fixed: true, help: "show the task"}},
 	{"popup", bindable{id: "task.delegate", keys: []string{"D"}, fixed: true, help: "delegate the task; the coordinator starts a thread for it (asks first)"}},
 	{"popup", bindable{id: "task.accept", keys: []string{"A"}, fixed: true, help: "accept the task in review; the coordinator marks it done (asks first)"}},

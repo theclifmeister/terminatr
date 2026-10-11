@@ -499,6 +499,8 @@ type menuView struct {
 	items []menuItem
 	sel   int
 	at    [2]int
+	// centred: it opens in the middle (a menu opened by a key), not at.
+	centred bool
 }
 
 // openMenu opens a menu with its top left corner at body cell (x, y).
@@ -567,5 +569,9 @@ func (mv *menuView) box() box {
 	if title == "" {
 		title = "Menu"
 	}
-	return box{title: title, body: lines, sel: mv.sel, hits: hits, at: &mv.at, keys: keys, width: w + 4}
+	at := &mv.at
+	if mv.centred {
+		at = nil
+	}
+	return box{title: title, body: lines, sel: mv.sel, hits: hits, at: at, keys: keys, width: w + 4}
 }

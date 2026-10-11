@@ -1,0 +1,13 @@
+# Built into tm (mods design §11): the nerd icon set, [ui] icons = "nerd".
+# Copy this folder, change its id and name, and tm mod install it to
+# start your own set (or write one with base = "nerd" and only the glyphs
+# you change).
+id          = "nerd-icons"
+name        = "Nerd Font icons"
+version     = "1.0.0"
+api         = "1.0"
+description = "Nerd Font glyphs, for a terminal with the Nerd Font symbols (Ghostty bundles them)."
+authors     = ["terminatr"]
+
+[provides]
+icons = "icons.toml"
