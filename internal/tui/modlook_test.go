@@ -1,0 +1,227 @@
+package tui
+
+import (
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/mod"
+)
+
+// nord is the design's example A (mods design §10): a theme and an icon
+// set.
+var nord = map[string]string{
+	"mod.toml": "id = \"nord\"\nname = \"Nord\"\nversion = \"0.4.0\"\napi = \"1.0\"\n[provides]\ntheme = \"theme.toml\"\nicons = \"icons.toml\"\n",
+	"theme.toml": `[dark]
+accent = { fg = ["cyan", "#88c0d0"] }
+bad    = { fg = ["red", "#bf616a"], bold = true }
+[light]
+accent = { fg = ["cyan", "#5e81ac"] }
+`,
+	"icons.toml": "base = \"unicode\"\nworking = \"◉\"\nreview = \"◇\"\n",
+}
+
+// installMod writes mod id's files under TERMINATR_HOME's mods folder.
+func installMod(t *testing.T, id string, files map[string]string) {
+	t.Helper()
+	mods, _ := home.ModsDir()
+	for name, body := range files {
+		p := filepath.Join(mods, id, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// writeConfig writes config.toml.
+func writeConfig(t *testing.T, body string) {
+	t.Helper()
+	path, _ := config.Path()
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// resetLook puts the built-in theme, icons and keys back after a test.
+func resetLook(t *testing.T) {
+	t.Cleanup(func() {
+		useTheme(&mod.Registry{}, ThemeDefault)
+		setScheme(true)
+		setIcons(IconsUnicode)
+		ApplyKeymap(nil, DefaultPrefixKey)
+		layoutVal.Store(ThemeDefault)
+	})
+}
+
+// TestThemeMod: [ui] theme names an enabled mod: the console takes its
+// roles for its scheme, the others stay built in; light follows the
+// terminal; a theme that doesn't resolve, or a mod that is off, leaves
+// the built-in look and says why.
+func TestThemeMod(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	t.Setenv("COLORTERM", "truecolor")
+	resetLook(t)
+	installMod(t, "nord", nord)
+	writeConfig(t, "[ui]\ntheme = \"nord\"\n[mods.nord]\nenabled = true\n")
+	if err := loadLook(); err != nil {
+		t.Fatal(err)
+	}
+	if !themed() || themeSetting() != "nord" || !th().Bad.GetBold() || th().Warn.GetBold() {
+		t.Fatalf("nord dark: %v %v", themeSetting(), th().Bad.GetBold())
+	}
+	if !strings.Contains(th().Accent.Render("x"), "136;192;208") {
+		t.Fatalf("accent isn't nord's: %q", th().Accent.Render("x"))
+	}
+	setScheme(false)
+	if th().Bad.GetBold() || !strings.Contains(th().Accent.Render("x"), "94;129;172") {
+		t.Fatalf("nord light: %q", th().Accent.Render("x"))
+	}
+
+	installMod(t, "nord", map[string]string{"theme.toml": "[dark]\nbad = { fg = [\"#zzz\"] }\n"})
+	err := loadLook()
+	if err == nil || !strings.Contains(err.Error(), "nord theme: bad") || themed() {
+		t.Fatalf("bad colour: %v, themed %v", err, themed())
+	}
+	writeConfig(t, "[ui]\ntheme = \"nord\"\n[mods.nord]\nenabled = false\n")
+	if err := loadLook(); err == nil || !strings.Contains(err.Error(), "nord is disabled") || themed() {
+		t.Fatalf("off: %v", err)
+	}
+}
+
+// TestIconsMod: [ui] icons names a mod's set: its glyphs, the base's for
+// the rest; a set that breaks the width rules leaves auto's.
+func TestIconsMod(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	t.Setenv("TERM_PROGRAM", "Apple_Terminal")
+	resetLook(t)
+	installMod(t, "nord", nord)
+	writeConfig(t, "[ui]\nicons = \"nord\"\n[mods.nord]\nenabled = true\n")
+	if err := loadLook(); err != nil {
+		t.Fatal(err)
+	}
+	if ic().name != "nord" || ic().working != "◉" || ic().done != unicodeIcons.done || iconsSetting() != "nord" {
+		t.Fatalf("icons %+v", *ic())
+	}
+	installMod(t, "nord", map[string]string{"icons.toml": "working = \"ab\"\n"})
+	if err := loadLook(); err == nil || !strings.Contains(err.Error(), "nord icons: working") || ic().name != IconsUnicode {
+		t.Fatalf("two cells: %v %s", err, ic().name)
+	}
+}
+
+// TestKeymapMods: every enabled keymap applies, the first enabled
+// winning a key; a refused binding keeps its default and names its mod.
+func TestKeymapMods(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	resetLook(t)
+	keys := func(id, body string) map[string]string {
+		return map[string]string{"mod.toml": "id = \"" + id + "\"\nname = \"K\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nkeymap = \"keys.toml\"\n", "keys.toml": body}
+	}
+	installMod(t, "first", keys("first", "project.next = [\"L\"]\n"))
+	installMod(t, "second", keys("second", "project.prev = [\"L\"]\nlist.up = [\"esc\"]\n"))
+	writeConfig(t, "[mods.second]\nenabled = true\n[mods.first]\nenabled = true\n")
+	err := loadLook()
+	if binds.list.canon("L") != "[" || binds.list.rebound("project.next") {
+		t.Fatalf("L: %q", binds.list.canon("L"))
+	}
+	msg := ""
+	if err != nil {
+		msg = err.Error()
+	}
+	for _, want := range []string{"first keymap: key conflict: L is second's project.prev", "second keymap: list.up: esc is locked"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("errors lack %q:\n%s", want, msg)
+		}
+	}
+	if n := lookNews(err); !strings.HasPrefix(n, "mods: ") || lookNews(err) != "" {
+		t.Fatalf("said again: %q", n)
+	}
+}
+
+// TestLayoutMod: [ui] layout names a mod's layout: the console asks for
+// its column order, the safety columns kept; a broken one is the
+// built-in order.
+func TestLayoutMod(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	resetLook(t)
+	installMod(t, "wide", map[string]string{
+		"mod.toml":    "id = \"wide\"\nname = \"Wide\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nlayout = \"layout.toml\"\n",
+		"layout.toml": "sidebar = [\"needs\", \"review-age.age\", \"count\"]\n",
+	})
+	writeConfig(t, "[ui]\nlayout = \"wide\"\n[mods.wide]\nenabled = true\n")
+	cols, err := configLayout()
+	if err != nil || !slices.Equal(cols, []string{"needs", "review-age.age", "count", "state", "paused", "inactive"}) || layoutValue() != "wide" {
+		t.Fatalf("%v %v", cols, err)
+	}
+	installMod(t, "wide", map[string]string{"layout.toml": "sidebar = [\"bogus\"]\n"})
+	if cols, err := configLayout(); cols != nil || err == nil || !strings.Contains(err.Error(), "wide layout") {
+		t.Fatalf("broken: %v %v", cols, err)
+	}
+}
+
+// TestLookPickers: General settings' Theme, Icons and Layout rows offer
+// the built-in choices, then the enabled mods' (a mod that is off is not
+// offered); a pick applies to this console and is saved, the built-in
+// one as unset.
+func TestLookPickers(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	t.Setenv("TERM_PROGRAM", "Apple_Terminal")
+	resetLook(t)
+	installMod(t, "nord", nord)
+	installMod(t, "off", nord)
+	installMod(t, "off", map[string]string{"mod.toml": strings.Replace(nord["mod.toml"], "\"nord\"", "\"off\"", 1)})
+	installMod(t, "wide", map[string]string{
+		"mod.toml":    "id = \"wide\"\nname = \"Wide\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nlayout = \"layout.toml\"\n",
+		"layout.toml": "sidebar = [\"needs\"]\n",
+	})
+	writeConfig(t, "[mods.nord]\nenabled = true\n[mods.wide]\nenabled = true\n")
+	src := &fakeSource{data: testData()}
+	m := newDash(DashOptions{Source: src, Width: 120, Height: 80, State: DashState{Current: "beta"}})
+	m.setData(src.data)
+	press(m, ",")
+	file := func() *config.Config {
+		cfg, err := config.Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg
+	}
+
+	modsRow(t, m, "Theme")
+	act(m, src, "enter")
+	if themeSetting() != "nord" || !themed() || file().Theme != "nord" {
+		t.Fatalf("theme nord: %s %q", themeSetting(), file().Theme)
+	}
+	act(m, src, "enter")
+	if themeSetting() != ThemeDefault || themed() || file().Theme != "" {
+		t.Fatalf("theme back: %s %q", themeSetting(), file().Theme)
+	}
+
+	modsRow(t, m, "Icons")
+	setIcons(IconsAuto)
+	for _, want := range []string{IconsNerd, IconsUnicode, IconsASCII, "nord", IconsAuto} {
+		act(m, src, "enter")
+		if iconsSetting() != want || file().Icons != want {
+			t.Fatalf("icons: %s, file %q, want %s", iconsSetting(), file().Icons, want)
+		}
+	}
+
+	modsRow(t, m, "Layout")
+	act(m, src, "enter")
+	if layoutValue() != "wide" || file().Layout != "wide" {
+		t.Fatalf("layout: %s %q", layoutValue(), file().Layout)
+	}
+	act(m, src, "enter")
+	if layoutValue() != ThemeDefault || file().Layout != "" {
+		t.Fatalf("layout back: %s %q", layoutValue(), file().Layout)
+	}
+	if out := screen(m); strings.Contains(out, "[ui]") || strings.Contains(out, "theme =") {
+		t.Fatalf("the popup names the file's keys:\n%s", out)
+	}
+}

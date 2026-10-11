@@ -106,6 +106,9 @@ func (f *fakeSource) SetSetting(table, key string, value any) error {
 		}
 		return config.SetProject(slug, key, value)
 	}
+	if value == nil {
+		return config.Unset(table, key)
+	}
 	return config.Set(table, key, value)
 }
 func (f *fakeSource) SetRepo(slug, path string, add bool) error {
