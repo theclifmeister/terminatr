@@ -313,6 +313,9 @@ type Config struct {
 	// context window at which a coordinator is told to consider /clear
 	// (DefaultContextHint when unset, 0 for never).
 	ContextHint int
+	// NeedsFirst is [ui] needs_first: the sidebar lists the projects
+	// where something needs you first. Off unless set true.
+	NeedsFirst bool
 	// UpdateCheck is [ui] update_check: the server looks once a day for a
 	// newer release and the dashboard says so. On unless set false.
 	UpdateCheck bool
@@ -358,6 +361,7 @@ func Load() (*Config, error) {
 			Icons       string `toml:"icons"`
 			ContextHint *int   `toml:"context_hint"`
 			UpdateCheck *bool  `toml:"update_check"`
+			NeedsFirst  bool   `toml:"needs_first"`
 		} `toml:"ui"`
 		Mods struct {
 			Enabled bool  `toml:"enabled"`
@@ -375,7 +379,7 @@ func Load() (*Config, error) {
 	c := &Config{Path: path, projects: raw.Projects, defaults: raw.Defaults, agent: raw.DefaultAgent, agents: raw.Agents,
 		Prefix: cmp.Or(raw.Keys.Prefix, raw.Keys.Detach), Icons: raw.UI.Icons, Mods: raw.Mods.Enabled,
 		ModsBand: raw.Mods.Band == nil || *raw.Mods.Band, ModsPane: raw.Mods.Pane != nil && *raw.Mods.Pane,
-		ContextHint: DefaultContextHint, UpdateCheck: raw.UI.UpdateCheck == nil || *raw.UI.UpdateCheck}
+		ContextHint: DefaultContextHint, UpdateCheck: raw.UI.UpdateCheck == nil || *raw.UI.UpdateCheck, NeedsFirst: raw.UI.NeedsFirst}
 	if h := raw.UI.ContextHint; h != nil {
 		if *h < 0 || *h > 100 {
 			return c, fmt.Errorf("%s: ui.context_hint is a percent from 0 (never) to 100", path)
