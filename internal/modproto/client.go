@@ -118,6 +118,17 @@ func (c *Client) Call(ctx context.Context, method string, params any) (json.RawM
 		forget()
 		return nil, ctx.Err()
 	case <-c.done:
+		// A host that answers, then exits (shutdown) closes done just
+		// after the answer is in ch: select may pick either, so the
+		// answer counts when it is there.
+		select {
+		case m := <-ch:
+			if m.Error != nil {
+				return nil, m.Error
+			}
+			return m.Result, nil
+		default:
+		}
 		return nil, ErrClosed
 	}
 }

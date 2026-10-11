@@ -2,6 +2,7 @@ package widget
 
 import (
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -409,6 +410,10 @@ func (lo *layer) keys(ks []Key) {
 	var hits []keyHit
 	x := 0
 	sep := " · "
+	ks = slices.DeleteFunc(slices.Clone(ks), func(k Key) bool { return lo.v.coreKey(k.Key) })
+	if len(ks) == 0 {
+		return
+	}
 	for i, k := range ks {
 		if i > 0 {
 			b.WriteString(lo.look.Style("faint", sep))

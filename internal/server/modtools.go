@@ -177,7 +177,7 @@ func (s *Server) sessionTools(rec SessionRecord) []proto.ToolDef {
 
 // modToolsFor are the tools of the enabled code mods that run for rec's
 // project and hold the tools grant, for its role, sorted by name; none
-// while no mod hosts run. The registry is read anew within a second, so
+// while no mod hosts run, and only bundled mods' in safe mode. The registry is read anew within a second, so
 // a call made after the human revokes the grant is refused.
 func (s *Server) modToolsFor(rec SessionRecord) []modToolRef {
 	if rec.Project == "" || (rec.Role != proto.RoleThread && rec.Role != proto.RoleCoordinator) || s.modSup.Load() == nil {
@@ -189,7 +189,7 @@ func (s *Server) modToolsFor(rec SessionRecord) []modToolRef {
 	}
 	var out []modToolRef
 	for _, m := range reg.Mods {
-		if m.Manifest == nil || !m.Manifest.IsCode() || !m.Runs(rec.Project) || !m.Granted(mod.PermTools) {
+		if m.Manifest == nil || !m.Manifest.IsCode() || !m.Runs(rec.Project) || !m.Granted(mod.PermTools) || s.noMods && !m.Builtin {
 			continue
 		}
 		for _, t := range m.Manifest.Provides.Tools {

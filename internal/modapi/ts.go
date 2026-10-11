@@ -9,6 +9,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modbus"
+	"github.com/theclifmeister/terminatr/internal/widget"
 )
 
 // tsNames rename Go types whose names would be unclear, or clash, in the
@@ -24,9 +25,17 @@ var tsNames = map[reflect.Type]string{
 	typ[modbus.ThreadLife](): "ThreadLife",
 }
 
+// tsSame are Go types drawn as another with the same JSON: the spans
+// the server sends (widget.Span, in a ProjectWatch's cells) are the
+// spans a mod publishes.
+var tsSame = map[reflect.Type]reflect.Type{
+	typ[widget.Span](): typ[Span](),
+}
+
 // tsUnions are the string types that are unions in TypeScript.
 var tsUnions = map[reflect.Type][]string{
 	typ[Role]():  Roles,
+	typ[Icon]():  Icons,
 	typ[Level](): Levels,
 }
 
@@ -176,6 +185,9 @@ var timeType = typ[time.Time]()
 // ref is how t is written where it's used; ns prefixes the namespace's
 // types outside it ("TM.").
 func (g *tsGen) ref(t reflect.Type, ns string) string {
+	if same, ok := tsSame[t]; ok {
+		t = same
+	}
 	switch {
 	case t == timeType:
 		return "string"

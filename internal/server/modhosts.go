@@ -5,7 +5,8 @@ package server
 // supervisor (package modsup), and follows config.toml and
 // ~/.terminatr/mods as they change: a mod enabled, disabled, regranted,
 // limited to other projects, reset or updated takes effect without a
-// server restart.
+// server restart. In safe mode (tm --no-mods, mod.EnvNoMods) no user
+// mod runs; bundled ones still do.
 
 import (
 	"cmp"
@@ -31,6 +32,9 @@ const defaultModsPoll = 3 * time.Second
 // newModHosts makes the supervisor; nil when the home folders can't be
 // named (no mods then).
 func (s *Server) newModHosts() *modsup.Supervisor {
+	if s.noMods {
+		s.log.Printf("mods: safe mode (%s): no user mod runs", mod.EnvNoMods)
+	}
 	cache, err1 := home.ModCacheDir()
 	state, err2 := home.ModStateDir()
 	logs, err3 := home.ModLogsDir()
@@ -56,6 +60,7 @@ func (s *Server) runModHosts(ctx context.Context, sup *modsup.Supervisor) {
 		if specs, ok := s.modSpecs(); ok {
 			sup.Set(specs)
 		}
+		s.expireModViews()
 		select {
 		case <-ctx.Done():
 			return
@@ -65,7 +70,8 @@ func (s *Server) runModHosts(ctx context.Context, sup *modsup.Supervisor) {
 }
 
 // modSpecs are the code mods that run: installed, valid, compatible and
-// enabled. A config.toml that doesn't load changes nothing (ok false).
+// enabled, and bundled in safe mode. A config.toml that doesn't load
+// changes nothing (ok false).
 func (s *Server) modSpecs() ([]modsup.Spec, bool) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -75,9 +81,10 @@ func (s *Server) modSpecs() ([]modsup.Spec, bool) {
 	if err != nil {
 		return nil, false
 	}
+	s.noteMods(reg)
 	var specs []modsup.Spec
 	for _, m := range reg.Mods {
-		if m.State != mod.Enabled || m.Manifest == nil || !m.Manifest.IsCode() {
+		if m.State != mod.Enabled || m.Manifest == nil || !m.Manifest.IsCode() || s.noMods && !m.Builtin {
 			continue
 		}
 		specs = append(specs, modsup.Spec{ID: m.ID, Entry: filepath.Join(m.Dir, filepath.FromSlash(m.Manifest.Provides.Main)),
@@ -95,9 +102,9 @@ func (s *Server) ModHosts() []modsup.Status {
 	return nil
 }
 
-// modHosts is mod.hosts: ModHosts for the Mods tab.
+// modHosts is mod.hosts: ModHosts, and safe mode.
 func (s *Server) modHosts() proto.ModHostsResult {
-	res := proto.ModHostsResult{Hosts: []proto.ModHost{}}
+	res := proto.ModHostsResult{NoMods: s.noMods, Hosts: []proto.ModHost{}}
 	for _, st := range s.ModHosts() {
 		res.Hosts = append(res.Hosts, proto.ModHost{ID: st.ID, State: string(st.State), Since: st.Since,
 			PID: st.PID, RSS: st.RSS, Restarts: st.Restarts, Next: st.Next, Err: st.Err})
@@ -105,16 +112,28 @@ func (s *Server) modHosts() proto.ModHostsResult {
 	return res
 }
 
-// restartMod is mod.restart: the human starts mod id's host again; an
-// agent is refused.
+// restartMod is mod.restart: the human starts mod id's host again, with
+// the mods as they are now, so a mod just enabled runs (tm mod dev); an
+// agent is refused, and so is any in safe mode.
 func (s *Server) restartMod(id string, c caller.Caller) (any, *proto.Error) {
 	if c.IsAgent() {
 		return nil, proto.Errorf("human-only", "the user restarts mods")
 	}
+	if err := mod.CheckID(id); err != nil {
+		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
+	}
+	if s.noMods {
+		return nil, proto.Errorf(proto.ErrRefused, "the server runs in safe mode (%s): no user mod runs; restart it without", mod.EnvNoMods)
+	}
 	sup := s.modSup.Load()
+	if sup != nil {
+		if specs, ok := s.modSpecs(); ok {
+			sup.Set(specs)
+		}
+	}
 	if sup == nil || !sup.Restart(id) {
 		return nil, proto.Errorf(proto.ErrBadParams, "mod %q doesn't run: only an enabled code mod has a host", id)
 	}
 	s.log.Printf("mod.restart %s", id)
-	return struct{}{}, nil
+	return s.modHosts(), nil
 }

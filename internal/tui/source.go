@@ -23,6 +23,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modannot"
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/modnotify"
+	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -75,6 +76,12 @@ type Data struct {
 	Mods     []mod.Mod
 	ModsErr  string
 	ModHosts map[string]proto.ModHost
+	// NoMods: the server runs in safe mode (tm --no-mods): no user mod
+	// runs (mod.hosts).
+	NoMods bool
+	// Cells are the mods' cells and status segments (session.list's
+	// Mods and the sessions' Cells); nil for none.
+	Cells *modCells
 }
 
 // ServerInfo is the running server's identity, from session.list.
@@ -215,6 +222,12 @@ type Source interface {
 	Library(slug string) ([]thread.LibFile, error)
 	LibraryRead(slug, id, name string, max int64) (data []byte, truncated bool, err error)
 	LibraryRemove(slug, id, name string) (int, error)
+	// ModActionDone tells the server a human ran (ok) or was refused an
+	// action mod's row or button bound, for the mod's action.done.
+	ModActionDone(mod, action string, target map[string]string, ok bool) error
+	// ModActionCheck refuses a binding outside its mod's reach (its
+	// projects, project_read), asked before the console runs one.
+	ModActionCheck(mod, action string, target map[string]string) error
 	// ModAct enables, disables or removes installed mod id (verb
 	// "enable", "disable", "remove"), on the human's answer in the Mods
 	// tab (mods design §9). Enabling grants every permission the mod
@@ -238,6 +251,12 @@ type Source interface {
 	// failed mod gets a fresh count. It is refused when tm runs inside
 	// an agent.
 	RestartMod(id string) error
+	// ModViews are the views user mods draw, with their trees and the
+	// mods' requests to open one here; shown are the views this console
+	// shows now (mod.views). ModViewInput sends a key or a click in a
+	// mod's view to the mod (mod.view.input).
+	ModViews(shown []modview.Shown) (proto.ModViewsResult, error)
+	ModViewInput(p proto.ModViewInputParams) error
 }
 
 // Review is what the user needs to review a task: how to check it (the
@@ -307,6 +326,7 @@ func (s *ServerSource) Load() Data {
 		d.Err = err.Error()
 	} else {
 		d.ServerOK, d.Sessions, d.Alerts, d.ModNotices = true, res.Sessions, res.Alerts, res.ModNotices
+		d.Cells = newModCells(res.Mods, res.Sessions)
 		d.Server = ServerInfo{Version: res.Version, Build: res.Build, Latest: res.Latest, Upgrade: res.Upgrade}
 	}
 	cfg, err := config.Load()
@@ -321,6 +341,7 @@ func (s *ServerSource) Load() Data {
 	if d.ServerOK {
 		var hosts proto.ModHostsResult
 		if err := s.call(proto.MethodModHosts, nil, &hosts); err == nil {
+			d.NoMods = hosts.NoMods
 			d.ModHosts = make(map[string]proto.ModHost, len(hosts.Hosts))
 			for _, h := range hosts.Hosts {
 				d.ModHosts[h.ID] = h
@@ -606,6 +627,14 @@ func (s *ServerSource) Ask(slug string, id int, kind, note string) (bool, error)
 	return p.AskDelegate(s.Caller, t.Ref())
 }
 
+func (s *ServerSource) ModActionDone(mod, action string, target map[string]string, ok bool) error {
+	return s.call(proto.MethodModActionDone, proto.ModActionDoneParams{ModActionParams: proto.ModActionParams{Mod: mod, Action: action, Target: target}, OK: ok}, nil)
+}
+
+func (s *ServerSource) ModActionCheck(mod, action string, target map[string]string) error {
+	return s.call(proto.MethodModActionCheck, proto.ModActionParams{Mod: mod, Action: action, Target: target}, nil)
+}
+
 func (s *ServerSource) OpenQuestions(slug string) (proto.QuestionsOpenResult, error) {
 	var res proto.QuestionsOpenResult
 	err := s.call(proto.MethodQuestionsOpen, proto.QuestionsOpenParams{Project: slug}, &res)
@@ -758,6 +787,16 @@ func (s *ServerSource) ModLog(id string, max int64) (string, bool, error) {
 		return "", false, err
 	}
 	return tail(filepath.Join(dir, id+".log"), max)
+}
+
+func (s *ServerSource) ModViews(shown []modview.Shown) (proto.ModViewsResult, error) {
+	var res proto.ModViewsResult
+	err := s.call(proto.MethodModViews, proto.ModViewsParams{Shown: shown}, &res)
+	return res, err
+}
+
+func (s *ServerSource) ModViewInput(p proto.ModViewInputParams) error {
+	return s.call(proto.MethodModViewInput, p, nil)
 }
 
 func (s *ServerSource) RestartMod(id string) error {

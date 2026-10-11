@@ -67,6 +67,7 @@ func (s *Server) SubscribeMod(id string, grants []string, projects func(slug str
 	}
 	sub := s.modEv.bus.Subscribe(id, modbus.Options{Grants: grants, Project: projects,
 		Ready: func() any { return s.modReady(read, projects) }})
+	s.modViewsRestarted(id)
 	s.modEv.wake()
 	return sub
 }

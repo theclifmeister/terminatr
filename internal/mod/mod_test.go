@@ -68,6 +68,11 @@ func TestManifestExample(t *testing.T) {
 	if got := m.Permissions.Requested(); !slices.Equal(got, []string{PermProjectRead, PermViews, PermNet}) {
 		t.Fatalf("requested %v", got)
 	}
+	// The consent names the panels it draws and how they are marked.
+	if c := Consent(m, dir); !strings.Contains(c, `Panels it draws (marked mod: review-age): a project-popup tab "Review queue"`) ||
+		!strings.Contains(c, "draws its own panels") {
+		t.Fatalf("consent:\n%s", c)
+	}
 }
 
 // TestManifestErrors: each broken manifest is refused, saying why.

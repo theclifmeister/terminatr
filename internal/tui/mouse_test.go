@@ -377,7 +377,7 @@ func TestHints(t *testing.T) {
 		t.Fatalf("hints %v, want %v", hs, want)
 	}
 	info := proto.SessionInfo{ID: "s-4", Role: proto.RoleThread, Project: "p", Thread: "t-1"}
-	line, hits := statusBar(info, nil, "", false, 100, "")
+	line, hits := statusBar(info, nil, "", false, 100, "", nil)
 	plain := []rune(ansi.Strip(line))
 	got := map[string]string{}
 	for _, h := range hits {
@@ -389,7 +389,7 @@ func TestHints(t *testing.T) {
 		}
 	}
 	// After the prefix, each command is a button.
-	line, hits = statusBar(info, nil, "", true, 300, "")
+	line, hits = statusBar(info, nil, "", true, 300, "", nil)
 	plain = []rune(ansi.Strip(line))
 	for _, h := range hits {
 		if h.key == "tab" && !strings.HasPrefix(string(plain[h.x0:]), "tab sidebar keys") {

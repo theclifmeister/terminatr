@@ -725,7 +725,7 @@ func (s *Session) agentChanged(rt *agentRT) {
 func (s *Session) runAgent(rt *agentRT) {
 	tick := time.NewTicker(sourceTick)
 	defer tick.Stop()
-	var lastEval time.Time
+	var screen screenClock
 	for {
 		select {
 		case <-rt.stop:
@@ -748,16 +748,46 @@ func (s *Session) runAgent(rt *agentRT) {
 					rt.cfg.OnRefused(s, msg)
 				}
 			}
-			dirty := s.output.Swap(false)
-			if (dirty && now.Sub(lastEval) >= screenInterval) || now.Sub(lastEval) >= screenIdleEval {
+			if screen.due(now, &s.output, rt.pasteWaits()) {
 				s.evalScreen(rt)
-				lastEval = now
 			}
 			s.agentChanged(rt)
 			s.deliverPrompts(rt, now)
 			s.checkHookSilence(rt, now)
 		}
 	}
+}
+
+// screenClock decides when the screen rules run (runAgent).
+type screenClock struct{ last time.Time }
+
+// due reports whether the screen rules run now, taking the output flag
+// when they do: on output, at most once per screenInterval, but at once
+// while a prompt waits to be pasted, which must go by the box as it is,
+// not as it was (T283: a nudge was pasted onto text typed 0.1s after the
+// last reading of an empty box); and once per screenIdleEval without.
+// Output that comes between readings is kept for the next one: taken
+// then dropped, it left the empty box read for up to screenIdleEval.
+func (c *screenClock) due(now time.Time, output *atomic.Bool, paste bool) bool {
+	since := now.Sub(c.last)
+	dirty := output.Load()
+	if since < screenIdleEval && !(dirty && (since >= screenInterval || paste)) {
+		return false
+	}
+	output.Store(false)
+	c.last = now
+	return true
+}
+
+// pasteWaits reports whether a queued prompt waits for the paste
+// injector: the agent idle, so deliverPrompts may paste it this tick.
+func (rt *agentRT) pasteWaits() bool {
+	if rt.tr.State().State != agent.StateIdle {
+		return false
+	}
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return len(rt.prompts) > 0
 }
 
 // Prompt delivers a follow-up prompt (docs/SPEC.md §8.1, §8.6). A

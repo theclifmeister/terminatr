@@ -133,11 +133,11 @@ func (s *Server) broker() *modbroker.Broker {
 
 // modNamed is installed mod id as the registry has it (modRegistry).
 func (s *Server) modNamed(id string) (mod.Mod, bool) {
-	reg := s.modRegistry()
-	if reg == nil {
+	r := s.modRegistry()
+	if r == nil {
 		return mod.Mod{}, false
 	}
-	return reg.Get(id)
+	return r.Get(id)
 }
 
 // modRegistry is the installed mods, read anew when older than
@@ -304,6 +304,11 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 		return nil, nil
 	})
 	b.Handle("inbox.raise", mod.PermInbox, s.modRaise)
+	s.modActionMethods(b)
+	b.Handle("ui.view.set", mod.PermViews, s.modViewSet)
+	b.Handle("ui.view.open", mod.PermViews, s.modViewOpen)
+	b.Handle("ui.cell.set", "", s.modCellSet)
+	b.Handle("ui.status.set", "", s.modStatusSet)
 	b.Handle("ui.notify", mod.PermNotify, s.modNotify)
 	b.Handle("annotate", mod.PermProjectRead, s.modAnnotate)
 }

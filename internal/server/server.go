@@ -24,8 +24,10 @@ import (
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/keychain"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modnotify"
 	"github.com/theclifmeister/terminatr/internal/modsup"
+	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/plat/shell"
@@ -148,8 +150,15 @@ type Server struct {
 	// modSup runs the code mods' hosts (modhosts.go); set before Run
 	// serves, nil in a test's bare Server.
 	modSup atomic.Pointer[modsup.Supervisor]
+	// noMods is safe mode (mod.EnvNoMods): no user mod runs.
+	noMods bool
 	// modBr is the user mods' broker (modbroker.go).
 	modBr modBroker
+	// modViews are the views user mods draw (modviews.go).
+	modViewSt  *modview.Store
+	modViewsMu sync.Mutex
+	// modCl are the mods' cells (modcells.go).
+	modCl modCells
 	// notices are the mods' notifications (modnotify.go).
 	notices *modnotify.Hub
 	// versions caches agent versions for the mod guard (mods.go).
@@ -235,6 +244,7 @@ func Run(ctx context.Context, opts Options) error {
 		log:      logger,
 		build:    version.BuildID(),
 		started:  time.Now(),
+		noMods:   mod.NoMods(os.Getenv),
 		stopReq:  make(chan struct{}),
 		sessions: map[string]*session.Session{},
 		records:  map[string]SessionRecord{},
@@ -322,6 +332,10 @@ func Run(ctx context.Context, opts Options) error {
 	// The mod hosts go first: nothing waits on them.
 	stopEvents()
 	<-hostsDone
+	// The cells they published last show again after a restart.
+	if err := s.cells().Flush(); err != nil {
+		logger.Printf("mods: cells: %v", err)
+	}
 	// Let a sweep in progress finish while the socket still answers.
 	stopTicker()
 	select {
@@ -623,6 +637,18 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 		return res, perr
 	case proto.MethodModHosts:
 		return s.modHosts(), nil
+	case proto.MethodModViews:
+		var p proto.ModViewsParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.modViews(p, peerPID, s.callerOf(peerPID))
+	case proto.MethodModViewInput:
+		var p proto.ModViewInputParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.modViewInput(p, peerPID, s.callerOf(peerPID))
 	case proto.MethodModRestart:
 		var p proto.ModRestartParams
 		if err := decodeParams(req.Params, &p); err != nil {
@@ -644,7 +670,7 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 		}
 		return s.stop(p)
 	case proto.MethodSessionList:
-		return s.list(), nil
+		return s.sessionList(), nil
 	case proto.MethodNotifyClaim, proto.MethodNotifyDismiss:
 		var p proto.NoticeParams
 		if err := decodeParams(req.Params, &p); err != nil {
@@ -720,6 +746,18 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 		s.watch.wake()
 		s.modEv.wake()
 		return res, perr
+	case proto.MethodModActionDone:
+		var p proto.ModActionDoneParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.modActionDone(p, peerPID)
+	case proto.MethodModActionCheck:
+		var p proto.ModActionParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.modActionCheck(p, peerPID)
 	case proto.MethodQuestionsOpen:
 		var p proto.QuestionsOpenParams
 		if err := decodeParams(req.Params, &p); err != nil {
@@ -810,6 +848,16 @@ func (s *Server) list() proto.SessionListResult {
 		res.Sessions = append(res.Sessions, s.info(sess))
 	}
 	sort.Slice(res.Sessions, func(i, j int) bool { return res.Sessions[i].Created.Before(res.Sessions[j].Created) })
+	return res
+}
+
+// sessionList is session.list's answer: list's, with the mods' cells.
+func (s *Server) sessionList() proto.SessionListResult {
+	res := s.list()
+	res.Mods = s.modCellsView()
+	for i := range res.Sessions {
+		res.Sessions[i].Cells = s.sessionCells(res.Sessions[i].ID)
+	}
 	return res
 }
 

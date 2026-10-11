@@ -122,12 +122,15 @@ jobs:
   #            build. Not main: a release tag runs it (release.yml).
   #   mod      the Claude mod check: every push, and pull requests that
   #            touch the mod or the Claude adapter.
+  #   modapi   the user mods' types check: every push, and pull requests
+  #            that touch the mod API, its scaffolds or this file.
   changes:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.code.outputs.code }}
       release: ${{ steps.release.outputs.release }}
       mod: ${{ steps.mod.outputs.mod }}
+      modapi: ${{ steps.modapi.outputs.modapi }}
     steps:
       # A pull request checks out its merge commit, whose first parent is
       # the base: depth 2 is enough to diff the two.
@@ -170,6 +173,44 @@ jobs:
           hits=$(git diff --name-only HEAD^1 HEAD | grep -E '^(internal/agent/claude/|internal/agent/manifests/claude\.toml$|\.github/workflows/ci\.yml$)' || true)
           echo "mod-related: ${hits:-none}"
           echo "mod=$([ -n "$hits" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Mod API files
+        id: modapi
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
+            echo "modapi=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          hits=$(git diff --name-only HEAD^1 HEAD | grep -E '^(internal/modapi/|internal/moddev/|\.github/workflows/ci\.yml$)' || true)
+          echo "modapi-related: ${hits:-none}"
+          echo "modapi=$([ -n "$hits" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  # The user mods' types (docs/SPEC.md §5.3, Mod dev tools): tsc --strict
+  # on tm mod new's code scaffolds and internal/modapi/testdata's
+  # examples against the generated tm.d.ts. Needs Go and a pinned
+  # TypeScript, not libghostty.
+  mod-types:
+    needs: changes
+    if: needs.changes.outputs.modapi == 'true'
+    runs-on: ubuntu-latest
+    env:
+      TYPESCRIPT_VERSION: 5.9.3
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Install TypeScript
+        run: |
+          npm install -g "typescript@${TYPESCRIPT_VERSION}"
+          tsc --version
+
+      - name: tsc --strict
+        run: go test -count=1 -run '^TestTypesCompileStrict$' -v ./internal/moddev
+        env:
+          TERMINATR_TSC_CHECK: "1"
 
   # terminatr's mod for Claude (docs/SPEC.md §8.6, Mods): claude plugin
   # validate and claude plugin test on the plugin exactly as a session

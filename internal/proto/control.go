@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/modnotify"
+	"github.com/theclifmeister/terminatr/internal/modview"
 )
 
 // Error codes of control responses. Clients match on these, never on
@@ -259,6 +260,9 @@ type SessionInfo struct {
 	// before the first turn.
 	Context       int64 `json:"context,omitempty"`
 	ContextWindow int64 `json:"context_window,omitempty"`
+	// Cells are the mods' cells for this session (a target of Session
+	// alone), since protocol 13.
+	Cells []ModCell `json:"cells,omitempty"`
 }
 
 // ContextPercent is the share of the context window the session uses, in
@@ -339,6 +343,9 @@ type SessionListResult struct {
 	// daily check (docs/SPEC.md §10.1); Upgrade is how to install it.
 	Latest  string `json:"latest,omitempty"`
 	Upgrade string `json:"upgrade,omitempty"`
+	// Mods are the mods' columns, cells and status segments (since
+	// protocol 13); nil when no mod publishes any.
+	Mods *ModCells `json:"mods,omitempty"`
 }
 
 // SessionIDParams name one session.
@@ -607,6 +614,34 @@ type QuestionsOpenResult struct {
 	Open    int    `json:"open"`
 }
 
+// MethodModActionDone tells the server a human ran a core action that a
+// mod's row, view or notification bound (the mods design §11; docs/SPEC.md
+// §5.3, Action binding), so the mod gets action.done and can redraw. The
+// console calls it after the core ran the action, or refused it as not
+// available; human-only, refused for an agent.
+const MethodModActionDone = "mod.action.done"
+
+// ModActionDoneParams are the params of mod.action.done: the mod whose
+// binding was pressed, the action and its target, and whether it ran.
+type ModActionDoneParams struct {
+	ModActionParams
+	OK bool `json:"ok"`
+}
+
+// MethodModActionCheck asks the server, before the console runs a
+// pressed binding, whether it is in its mod's reach: project_read, and
+// a target in a project the mod runs for (a session's own project).
+// Human-only.
+const MethodModActionCheck = "mod.action.check"
+
+// ModActionParams name a mod's binding: the mod, the action and its
+// target.
+type ModActionParams struct {
+	Mod    string            `json:"mod"`
+	Action string            `json:"action"`
+	Target map[string]string `json:"target,omitempty"`
+}
+
 // MethodNotifyClaim says a console draws mod notification id as an OS
 // notification: the first caller gets OK, the others none, so that one
 // console rings it. MethodNotifyDismiss takes it out of the tray (a
@@ -627,12 +662,15 @@ type NoticeResult struct {
 }
 
 // MethodModHosts lists the supervised code mods' hosts and where each
-// stands (mods design §8), for the Mods tab.
+// stands (mods design §8), for the Mods tab, tm doctor and tm mod dev.
 const MethodModHosts = "mod.hosts"
 
-// ModHostsResult is the answer of mod.hosts, by id.
+// ModHostsResult is the answer of mod.hosts, by id. NoMods: the server
+// runs in safe mode (tm --no-mods, TERMINATR_NO_MODS=1): no user mod
+// runs.
 type ModHostsResult struct {
-	Hosts []ModHost `json:"hosts"`
+	NoMods bool      `json:"no_mods,omitempty"`
+	Hosts  []ModHost `json:"hosts"`
 }
 
 // ModHost is one code mod's host: State is idle, starting, running,
@@ -650,11 +688,77 @@ type ModHost struct {
 	Err      string    `json:"err,omitempty"`
 }
 
-// MethodModRestart starts a code mod's host again now (the Mods tab's
-// r): a failed mod gets a fresh count, an idle one starts. The human's.
+// MethodModRestart reads the installed mods and config.toml again, then
+// starts a code mod's host again now (the Mods tab's r, tm mod dev after
+// each save): a failed mod gets a fresh count, an idle one starts, a mod
+// just enabled runs. It answers as mod.hosts. The human's; refused in
+// safe mode.
 const MethodModRestart = "mod.restart"
 
 // ModRestartParams are the params of mod.restart.
 type ModRestartParams struct {
 	ID string `json:"id"`
+}
+
+// MethodModViews is a console's poll of the views user mods draw (mods
+// design §6): it says which views the console shows now (the server
+// sends the mods view.opened and view.closed from that), and gets every
+// view it may show, with the trees the mods published, and the views a
+// mod asked this console to open after a human input. The human's.
+const MethodModViews = "mod.views"
+
+// ModViewsParams are the params of mod.views: the views the console
+// shows now (none: it shows none).
+type ModViewsParams struct {
+	Shown []modview.Shown `json:"shown"`
+}
+
+// ModViewsResult is the answer of mod.views.
+type ModViewsResult struct {
+	Views []ModView `json:"views"`
+	// Open are the mods' requests to open a view on this console, each
+	// to act on once, by its seq.
+	Open []modview.Open `json:"open,omitempty"`
+}
+
+// ModView is one view of an enabled code mod with the views grant.
+type ModView struct {
+	Mod string `json:"mod"`
+	// Name is the mod's name, for a card's header.
+	Name  string `json:"name"`
+	View  string `json:"view"`
+	Title string `json:"title"`
+	Slot  string `json:"slot"` // project.tab, dashboard.card, full
+	// State is "" while the mod's host runs, else "failed" (it failed or
+	// waits to restart: Err says why, Log names its log): a failed
+	// view shows that, never stale trees.
+	State string `json:"state,omitempty"`
+	Err   string `json:"err,omitempty"`
+	Log   string `json:"log,omitempty"`
+	// Projects are the projects the mod runs for; nil for all.
+	Projects []string `json:"projects,omitempty"`
+	// Trees are what the mod published: for one project, or for all.
+	Trees []modview.Tree `json:"trees,omitempty"`
+}
+
+// The view states of ModView.
+const ModViewFailed = "failed"
+
+// MethodModViewInput sends a human's key or click in a mod's view to
+// the mod, as ui.key or ui.click (mods design §6): only the keys the mod
+// declared, and clicks on its rows and key hints. The human's: an
+// agent is refused.
+const MethodModViewInput = "mod.view.input"
+
+// ModViewInputParams are the params of mod.view.input: Kind is
+// widget.EventKey or widget.EventClick, Widget the focused (or clicked)
+// list or keys widget, Row the row under its cursor.
+type ModViewInputParams struct {
+	Mod     string `json:"mod"`
+	View    string `json:"view"`
+	Project string `json:"project,omitempty"`
+	Kind    string `json:"kind"`
+	Widget  string `json:"widget,omitempty"`
+	Row     string `json:"row,omitempty"`
+	Key     string `json:"key,omitempty"`
 }

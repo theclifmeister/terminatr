@@ -11,15 +11,15 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modnotify"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
-	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/widget"
 )
 
 // Mod notifications (mods design §7, notify): the server keeps what user
 // mods sent with $.ui.notify (session.list's ModNotices). The console
 // draws each as an OS notification, once over all consoles (notify.claim),
 // marked "terminatr · mod: id", and N lists them. A button is a core
-// action id on a task: pressing it runs the core's own key for it on the
-// task as the board has it now, so the core's precondition check and
+// action id on a task, pressed as an action binding (pressNotice): the
+// core's reach check, precondition check on the live board and
 // confirmation come first. The mod hears of nothing, and its words never
 // name an action or a label.
 
@@ -107,54 +107,14 @@ func (m *dash) drawNotices() []tea.Cmd {
 	return cmds
 }
 
-// noticeBoardMsg is the board of the project a notification button names,
-// loaded to run its action on the task.
-type noticeBoardMsg struct {
-	b     modnotify.Button
-	board *tasks.Board
-	err   error
-}
-
-// press runs button b: it loads the project's board, then (noticeBoard)
-// runs the core's key for b.ID on the task.
-func (m *dash) pressNotice(b modnotify.Button) tea.Cmd {
-	src := m.src
-	return func() tea.Msg {
-		board, err := src.Board(b.Project)
-		return noticeBoardMsg{b: b, board: board, err: err}
-	}
-}
-
-func (m *dash) noticeBoard(msg noticeBoardMsg) tea.Cmd {
-	if msg.err != nil || msg.board == nil {
-		m.msg = "can't read " + msg.b.Project + "'s tasks"
-		return nil
-	}
-	var t *tasks.Task
-	for _, x := range msg.board.Tasks {
-		if x.ID == msg.b.Task {
-			t = x
-		}
-	}
-	if t == nil {
-		m.msg = fmt.Sprintf("%s has no task T%d", msg.b.Project, msg.b.Task)
-		return nil
-	}
-	slug := msg.b.Project
-	switch msg.b.ID {
-	case "task.show":
-		return m.showTask(slug, t.ID)
-	case "task.delegate":
-		return m.taskKey(slug, t, "D")
-	case "task.accept":
-		return m.taskKey(slug, t, "A")
-	case "task.send-back":
-		return m.taskKey(slug, t, "x")
-	case "task.coordinator":
-		return m.taskKey(slug, t, "c")
-	}
-	m.msg = msg.b.ID + " isn't an action a notification runs"
-	return nil
+// pressNotice presses button b of mod's notification: a binding like a
+// mod's row's (binding.go), so the server checks it is in the mod's reach,
+// the console re-checks it on the live board, the core asks, and the mod
+// hears action.done. The notices view has kept the press waiting
+// noticeStable already.
+func (m *dash) pressNotice(mod string, b modnotify.Button) tea.Cmd {
+	target := map[string]string{"project": b.Project, "task": fmt.Sprintf("T%d", b.Task)}
+	return m.pressBinding(mod, &widget.Event{Kind: widget.EventAction, Action: &widget.Action{ID: b.ID, Target: target}, Stable: true})
 }
 
 // noticesView lists the notifications of mods.
@@ -215,7 +175,7 @@ func (nv *noticesView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		}
 		m.pop()
 		cmd := m.dismissNotice(n)
-		return tea.Batch(cmd, m.pressNotice(n.Buttons[i]))
+		return tea.Batch(cmd, m.pressNotice(n.Mod, n.Buttons[i]))
 	}
 	return nil
 }
