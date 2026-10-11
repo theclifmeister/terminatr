@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"slices"
 	"strings"
 	"unicode"
@@ -109,7 +109,25 @@ func (m *Manifest) Headline() string {
 // Consent is the consent screen for the mod m in folder dir, without
 // the question: what it is and provides, what each permission it asks
 // for lets it do, and every rules addendum and agent manifest in full.
-func Consent(m *Manifest, dir string) string {
+func Consent(m *Manifest, dir string) string { return consent(m, os.DirFS(dir)) }
+
+// Consent is the installed mod's consent screen (Consent), its files
+// read from its folder, or from tm for a built-in one.
+func (m Mod) Consent() string { return consent(m.Manifest, m.files()) }
+
+// Shown is the installed mod's rules addenda and agent manifests in
+// full (Manifest.Shown).
+func (m Mod) Shown() string { return m.Manifest.shown(m.files()) }
+
+// files are the mod's files: its folder's, or a built-in mod's.
+func (m Mod) files() fs.FS {
+	if m.FS != nil {
+		return m.FS
+	}
+	return os.DirFS(m.Dir)
+}
+
+func consent(m *Manifest, fsys fs.FS) string {
 	var b strings.Builder
 	fmt.Fprintln(&b, m.Headline())
 	if d := strings.TrimSpace(Clean(m.Description, false)); d != "" {
@@ -128,15 +146,17 @@ func Consent(m *Manifest, dir string) string {
 			fmt.Fprintf(&b, "  - %s\n", w)
 		}
 	}
-	b.WriteString(m.Shown(dir))
+	b.WriteString(m.shown(fsys))
 	return b.String()
 }
 
 // Shown is every rules addendum and agent manifest of m, in folder dir,
 // in full, as the consent screen shows them; "" when it has none.
-func (m *Manifest) Shown(dir string) string {
+func (m *Manifest) Shown(dir string) string { return m.shown(os.DirFS(dir)) }
+
+func (m *Manifest) shown(fsys fs.FS) string {
 	var b strings.Builder
-	for _, f := range m.agentText(dir) {
+	for _, f := range m.agentText(fsys) {
 		writeFile(&b, f)
 	}
 	return b.String()
@@ -149,29 +169,29 @@ type shownFile struct {
 
 // agentText lists the files of m that agents obey or tm runs: its rules
 // addenda by role, then its agent manifests, each with its text.
-func (m *Manifest) agentText(dir string) []shownFile {
+func (m *Manifest) agentText(fsys fs.FS) []shownFile {
 	var out []shownFile
 	for _, role := range sortedKeys(m.Provides.Rules) {
 		rel := m.Provides.Rules[role]
-		out = append(out, shownFile{"Rules it adds for every " + role, rel, readText(dir, rel)})
+		out = append(out, shownFile{"Rules it adds for every " + role, rel, readText(fsys, rel)})
 	}
-	if a := m.Provides.Agents; a != "" {
-		root := filepath.Join(dir, filepath.FromSlash(a))
-		filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	if a := path.Clean(m.Provides.Agents); m.Provides.Agents != "" && fs.ValidPath(a) {
+		fs.WalkDir(fsys, a, func(rel string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return nil
 			}
-			rel, _ := filepath.Rel(dir, p)
-			rel = filepath.ToSlash(rel)
-			out = append(out, shownFile{"Agent manifest (tm runs what it says)", rel, readText(dir, rel)})
+			out = append(out, shownFile{"Agent manifest (tm runs what it says)", rel, readText(fsys, rel)})
 			return nil
 		})
 	}
 	return out
 }
 
-func readText(dir, rel string) string {
-	data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
+func readText(fsys fs.FS, rel string) string {
+	if rel = path.Clean(rel); !fs.ValidPath(rel) {
+		return "(can't be read: " + rel + " isn't a path inside the mod)"
+	}
+	data, err := fs.ReadFile(fsys, rel)
 	if err != nil {
 		return "(can't be read: " + err.Error() + ")"
 	}
@@ -221,9 +241,9 @@ func Diff(old *Manifest, oldDir string, new *Manifest, newDir string) Changes {
 	}
 	var before []shownFile
 	if old != nil {
-		before = old.agentText(oldDir)
+		before = old.agentText(os.DirFS(oldDir))
 	}
-	for _, f := range new.agentText(newDir) {
+	for _, f := range new.agentText(os.DirFS(newDir)) {
 		if !slices.ContainsFunc(before, func(o shownFile) bool { return o.Title == f.Title && o.Rel == f.Rel && o.Text == f.Text }) {
 			c.Text = append(c.Text, f)
 		}

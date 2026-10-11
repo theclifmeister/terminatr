@@ -8,6 +8,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/theclifmeister/terminatr/internal/mod"
 )
 
 // Icon sets from TOML (docs/SPEC.md §4, mods design §2 tier 1): a file
@@ -103,6 +105,33 @@ func parseIcons(data []byte) (*iconSet, error) {
 	}
 	set := *builtinIcons(base)
 	set.name = base
+	return iconsOver(raw, set, base)
+}
+
+// bundledIcons is built-in set name from its bundled mod's icons.toml
+// (name-icons): a whole set, every glyph given, over no set, its base
+// itself (so a copy of it keeps its rules). tm built without a whole one
+// is a bug.
+func bundledIcons(name string) iconSet {
+	var raw map[string]any
+	data := mod.BundledData(mod.BundledIcons(name), mod.KindIcons)
+	if _, err := toml.Decode(string(data), &raw); err != nil {
+		panic("bundled " + name + " icons: " + err.Error())
+	}
+	if raw["base"] != name {
+		panic("bundled " + name + " icons: base isn't " + name)
+	}
+	set, err := iconsOver(raw, iconSet{name: name}, name)
+	if err != nil {
+		panic("bundled " + name + " icons: " + err.Error())
+	}
+	return *set
+}
+
+// iconsOver lays raw, an icon set's keys, over set; base names the
+// built-in set whose glyph rules it keeps (nerd may use the Private Use
+// Area, ascii must stay ASCII).
+func iconsOver(raw map[string]any, set iconSet, base string) (*iconSet, error) {
 	fields := set.glyphs()
 	var errs []string
 	keys := make([]string, 0, len(raw))

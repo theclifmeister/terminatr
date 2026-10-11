@@ -150,6 +150,9 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 				return m.taskKey(pv.slug, t, k.String())
 			}
 		}
+		if k.String() == "+" {
+			return m.newTask(pv.slug)
+		}
 		if k.String() == "b" && (pv.doneAll || doneCount(pv.board) > 0) {
 			pv.doneAll = !pv.doneAll
 			pv.sel[tabTasks] = min(pv.sel[tabTasks], max(len(pv.tasks())-1, 0))
@@ -667,7 +670,10 @@ func (pv *projectView) taskLines(m *dash, w int) ([]string, int, []int) {
 	if pv.board == nil {
 		return []string{th().Faint.Render("loading…")}, -1, nil
 	}
-	return taskList(m, pv.slug, pv.board, pv.tasks(), pv.sel[tabTasks], pv.doneAll, w)
+	// + is said under the list: the task keys fill the footer
+	// (taskKeys).
+	out, sel, hits := taskList(m, pv.slug, pv.board, pv.tasks(), pv.sel[tabTasks], pv.doneAll, w)
+	return append(out, "", th().Faint.Render(fit("+ adds a task, from a template or none", w))), sel, append(hits, noHit, noHit)
 }
 
 // taskList is how the project popup's Tasks tab draws a project's tasks:

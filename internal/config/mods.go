@@ -15,6 +15,9 @@ type Mod struct {
 	// Enabled is enabled: the mod runs. Off unless set true; a mod is
 	// installed disabled.
 	Enabled bool
+	// EnabledSet: the table sets enabled, true or false. A built-in mod
+	// is on unless its table sets enabled = false.
+	EnabledSet bool
 	// Grants are the permissions the human accepted, by name; the mod
 	// runs with these ∩ those its manifest asks for.
 	Grants []string
@@ -89,7 +92,7 @@ func readMods(md toml.MetaData, prims map[string]toml.Primitive) (old rawAgentMo
 			mods[id] = Mod{Order: order[id], Err: fmt.Errorf("mods.%s: %w", id, err)}
 			continue
 		}
-		mods[id] = Mod{Enabled: r.Enabled != nil && *r.Enabled, Grants: r.Grants, Projects: r.Projects, Settings: r.Settings, Order: order[id]}
+		mods[id] = Mod{Enabled: r.Enabled != nil && *r.Enabled, EnabledSet: r.Enabled != nil, Grants: r.Grants, Projects: r.Projects, Settings: r.Settings, Order: order[id]}
 	}
 	return old, mods, unknown, nil
 }

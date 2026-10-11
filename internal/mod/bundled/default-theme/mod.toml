@@ -1,0 +1,12 @@
+# Built into tm (mods design §11): the dashboard's built-in look. Copy
+# this folder, change its id and name, and tm mod install it to start
+# your own theme.
+id          = "default-theme"
+name        = "Default theme"
+version     = "1.0.0"
+api         = "1.0"
+description = "tm's own look: the terminal's 16 ANSI colours, so it follows your terminal's theme."
+authors     = ["terminatr"]
+
+[provides]
+theme = "theme.toml"

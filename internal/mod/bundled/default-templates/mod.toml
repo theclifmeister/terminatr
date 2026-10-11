@@ -1,0 +1,12 @@
+# Built into tm (mods design §11): task templates for tm task add
+# --template and the dashboard's new-task prompt. Copy this folder,
+# change its id and name, and tm mod install it to add your own.
+id          = "default-templates"
+name        = "Default templates"
+version     = "1.0.0"
+api         = "1.0"
+description = "Task templates: bug, spike and chore."
+authors     = ["terminatr"]
+
+[provides]
+templates = "templates"
