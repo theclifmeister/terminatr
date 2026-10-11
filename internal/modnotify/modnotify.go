@@ -1,0 +1,306 @@
+// Package modnotify holds the OS notifications user mods send with
+// $.ui.notify (mods design §5 and §7, the notify grant). The server keeps
+// them in a Hub; every console shows them, one console draws the OS
+// notification, and a button on one is a core action id on a task: pressing
+// it makes the console run the core's own key for it, with the core's own
+// confirmation. The mod never acts, and what it writes is data: its text is
+// clipped to one line and stripped of control characters (an escape
+// sequence would reach the terminal), and its title is marked with the
+// mod's id by the console, never by the mod.
+package modnotify
+
+import (
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+	"unicode"
+	"unicode/utf8"
+)
+
+// Limits on what a mod sends.
+const (
+	MaxTitle   = 60
+	MaxText    = 240
+	MaxButtons = 3
+	// PerMinute is how many notifications one mod may send a minute, and
+	// MaxKept how many of one mod's stay in the tray (older ones go).
+	PerMinute = 6
+	MaxKept   = 5
+	// MaxAll bounds the tray over all mods.
+	MaxAll = 20
+	// TTL is how long a notification stays in the tray.
+	TTL = 30 * time.Minute
+)
+
+// Levels are the levels a notification has; "" is info.
+var Levels = []string{"info", "warn", "error"}
+
+// CoreAction is an action a notification button may name: an id of the
+// console's popup actions (tui coreActions), with the label the core gives
+// it. A mod can't word a button: Label is the core's.
+type CoreAction struct {
+	ID    string
+	Label string
+	// Confirms says the core asks before it acts; the others only show.
+	Confirms bool
+}
+
+// Actions are the core actions a button may name, all on a task. They are
+// the ones a notification about a task is for (example 5): to look at it,
+// and to ask the coordinator to delegate, accept or send it back, or to
+// answer what it waits on.
+var Actions = []CoreAction{
+	{ID: "task.show", Label: "Show"},
+	{ID: "task.delegate", Label: "Delegate", Confirms: true},
+	{ID: "task.accept", Label: "Accept", Confirms: true},
+	{ID: "task.send-back", Label: "Send back", Confirms: true},
+	{ID: "task.coordinator", Label: "Answer"},
+}
+
+// Action returns the core action named id.
+func Action(id string) (CoreAction, bool) {
+	for _, a := range Actions {
+		if a.ID == id {
+			return a, true
+		}
+	}
+	return CoreAction{}, false
+}
+
+// Button is a notification's button as the consoles get it: the core
+// action, its label (the core's), and the task it is about.
+type Button struct {
+	ID      string `json:"id"`
+	Label   string `json:"label"`
+	Project string `json:"project"`
+	Task    int    `json:"task"`
+}
+
+// Notice is a notification in the tray.
+type Notice struct {
+	ID    string    `json:"id"`
+	Mod   string    `json:"mod"`
+	Title string    `json:"title"`
+	Text  string    `json:"text,omitempty"`
+	Level string    `json:"level"`
+	At    time.Time `json:"at"`
+	// Buttons are in the order the mod gave them.
+	Buttons []Button `json:"buttons,omitempty"`
+	// Drawn is set once a console has drawn the OS notification.
+	Drawn bool `json:"drawn,omitempty"`
+}
+
+// Request is what a mod sent, checked by Hub.Post. Its buttons come with
+// the project and the task as numbers, which the caller has parsed from the
+// mod's target.
+type Request struct {
+	Title, Text, Level string
+	Buttons            []Button
+}
+
+// Line makes s one line of at most n runes: control characters (escape
+// sequences included) become spaces, runs of spaces one, and a cut ends in
+// an ellipsis.
+func Line(s string, n int) string {
+	s = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || r == utf8.RuneError || unicode.Is(unicode.Cf, r) {
+			return ' '
+		}
+		return r
+	}, s)
+	s = strings.Join(strings.Fields(s), " ")
+	if r := []rune(s); len(r) > n {
+		s = strings.TrimSpace(string(r[:n-1])) + "…"
+	}
+	return s
+}
+
+// Errors Post answers with.
+var (
+	ErrRate = errors.New("notifications are limited to " + fmt.Sprint(PerMinute) + " a minute")
+)
+
+// Hub is the tray: the notifications mods sent that are neither dismissed
+// nor old.
+type Hub struct {
+	now func() time.Time
+
+	mu   sync.Mutex
+	next int
+	list []*Notice
+	sent map[string][]time.Time // per mod: when it sent, within the minute
+}
+
+// New makes a Hub; now is time.Now when nil.
+func New(now func() time.Time) *Hub {
+	if now == nil {
+		now = time.Now
+	}
+	return &Hub{now: now, sent: map[string][]time.Time{}}
+}
+
+// Post checks req from mod and puts it in the tray. A mod over its rate is
+// refused; one over its share loses its oldest.
+func (h *Hub) Post(mod string, req Request) (Notice, error) {
+	title := Line(req.Title, MaxTitle)
+	if title == "" {
+		return Notice{}, errors.New("a notification needs a title")
+	}
+	level := req.Level
+	if level == "" {
+		level = "info"
+	}
+	ok := false
+	for _, l := range Levels {
+		ok = ok || l == level
+	}
+	if !ok {
+		return Notice{}, fmt.Errorf("level must be one of %s", strings.Join(Levels, ", "))
+	}
+	if len(req.Buttons) > MaxButtons {
+		return Notice{}, fmt.Errorf("a notification has at most %d buttons", MaxButtons)
+	}
+	n := Notice{Mod: mod, Title: title, Text: Line(req.Text, MaxText), Level: level}
+	for _, b := range req.Buttons {
+		a, ok := Action(b.ID)
+		if !ok {
+			return Notice{}, fmt.Errorf("%q is not an action a notification can name (%s)", b.ID, ActionIDs())
+		}
+		if b.Project == "" || b.Task <= 0 {
+			return Notice{}, fmt.Errorf("%s needs a target with a project and a task", b.ID)
+		}
+		n.Buttons = append(n.Buttons, Button{ID: a.ID, Label: a.Label, Project: b.Project, Task: b.Task})
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	now := h.now()
+	h.expire(now)
+	recent := h.sent[mod][:0:0]
+	for _, t := range h.sent[mod] {
+		if now.Sub(t) < time.Minute {
+			recent = append(recent, t)
+		}
+	}
+	if len(recent) >= PerMinute {
+		h.sent[mod] = recent
+		return Notice{}, ErrRate
+	}
+	h.sent[mod] = append(recent, now)
+	h.next++
+	n.ID = fmt.Sprintf("n%d", h.next)
+	n.At = now
+	h.list = append(h.list, &n)
+	h.trim(mod)
+	return n, nil
+}
+
+// ActionIDs lists the action ids a button may name.
+func ActionIDs() string {
+	ids := make([]string, len(Actions))
+	for i, a := range Actions {
+		ids[i] = a.ID
+	}
+	return strings.Join(ids, ", ")
+}
+
+// trim drops mod's oldest beyond MaxKept and the oldest of all beyond
+// MaxAll; h.mu held.
+func (h *Hub) trim(mod string) {
+	n := 0
+	for _, x := range h.list {
+		if x.Mod == mod {
+			n++
+		}
+	}
+	for i := 0; i < len(h.list) && n > MaxKept; {
+		if h.list[i].Mod == mod {
+			h.list = append(h.list[:i], h.list[i+1:]...)
+			n--
+			continue
+		}
+		i++
+	}
+	if len(h.list) > MaxAll {
+		h.list = h.list[len(h.list)-MaxAll:]
+	}
+}
+
+// expire drops the notifications older than TTL; h.mu held.
+func (h *Hub) expire(now time.Time) {
+	keep := h.list[:0]
+	for _, x := range h.list {
+		if now.Sub(x.At) < TTL {
+			keep = append(keep, x)
+		}
+	}
+	h.list = keep
+}
+
+// List is the tray, oldest first.
+func (h *Hub) List() []Notice {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.expire(h.now())
+	out := make([]Notice, len(h.list))
+	for i, x := range h.list {
+		out[i] = *x
+	}
+	return out
+}
+
+// Claim marks notification id as drawn by the caller's console, and says
+// whether this call was the first: only that console draws the OS
+// notification, so several consoles don't ring it several times.
+func (h *Hub) Claim(id string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, x := range h.list {
+		if x.ID == id && !x.Drawn {
+			x.Drawn = true
+			return true
+		}
+	}
+	return false
+}
+
+// Dismiss takes notification id out of the tray, and says whether it was
+// there.
+func (h *Hub) Dismiss(id string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for i, x := range h.list {
+		if x.ID == id {
+			h.list = append(h.list[:i], h.list[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
+// DropMod takes all of mod's notifications out: it was disabled or removed.
+func (h *Hub) DropMod(mod string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	keep := h.list[:0]
+	for _, x := range h.list {
+		if x.Mod != mod {
+			keep = append(keep, x)
+		}
+	}
+	h.list = keep
+	delete(h.sent, mod)
+}
+
+// TaskNumber is the number of a task ref, "T12" or "12"; 0 when it isn't
+// one.
+func TaskNumber(ref string) int {
+	n, err := strconv.Atoi(strings.TrimPrefix(strings.ToUpper(ref), "T"))
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
+}

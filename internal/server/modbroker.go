@@ -291,6 +291,7 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 		return nil, nil
 	})
 	b.Handle("inbox.raise", mod.PermInbox, s.modRaise)
+	b.Handle("ui.notify", mod.PermNotify, s.modNotify)
 }
 
 // inbox.raise {project, item: {subject, summary}} (or the two flat): an

@@ -21,6 +21,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/models"
+	"github.com/theclifmeister/terminatr/internal/modnotify"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -36,6 +37,9 @@ import (
 type Data struct {
 	ServerOK bool
 	Sessions []proto.SessionInfo
+	// ModNotices are the notifications of user mods in the server's tray
+	// (modnotice.go).
+	ModNotices []modnotify.Notice
 	// Alerts is the server's notification count; the bell rings when it
 	// goes up (docs/SPEC.md §4).
 	Alerts   uint64
@@ -293,7 +297,7 @@ func (s *ServerSource) Load() Data {
 	if err := s.call(proto.MethodSessionList, nil, &res); err != nil {
 		d.Err = err.Error()
 	} else {
-		d.ServerOK, d.Sessions, d.Alerts = true, res.Sessions, res.Alerts
+		d.ServerOK, d.Sessions, d.Alerts, d.ModNotices = true, res.Sessions, res.Alerts, res.ModNotices
 		d.Server = ServerInfo{Version: res.Version, Build: res.Build, Latest: res.Latest, Upgrade: res.Upgrade}
 	}
 	cfg, err := config.Load()
