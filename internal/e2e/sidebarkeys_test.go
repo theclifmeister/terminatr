@@ -85,7 +85,7 @@ func TestSmokeSidebarKeys(t *testing.T) {
 
 // sideThread is demo's thread row in the sidebar: its id, then its
 // state glyph and a blank column before the border.
-var sideThread = regexp.MustCompile(`t-0001 [^│]*\S │`)
+var sideThread = regexp.MustCompile(`t-0001 [^│]*│`)
 
 // TestSmokeSidebarIcons: the sidebar's tree in the unicode, ascii and nerd
 // icon sets (docs/SPEC.md §4), as the settings file picks them; every

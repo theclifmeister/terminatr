@@ -18,6 +18,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/thread"
+	"github.com/theclifmeister/terminatr/internal/ticker"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
 
@@ -69,11 +70,16 @@ type treeRow struct {
 	pct     int  // a thread's percent, -1 for none
 	last    bool // a coordinator or thread: the last row under its parent
 	current bool // a project: the current one
-	hint    bool // a project: one of its threads is blocked or waiting, or a task needs you
-	remote  bool // a coordinator row: its remote control is on
-	ctx     int  // a coordinator row: its context window's use in percent, -1 for unknown
-	ctxHint bool // a coordinator row: ctx reached [ui] context_hint
-	paused  bool // a project: paused (no nudges, follow-up or new threads)
+	// hint: something here needs you. A project: one of its threads is
+	// blocked or waiting, a task needs you or its coordinator has
+	// questions; a coordinator: it has questions waiting; a thread: it is
+	// blocked or waits on you.
+	hint    bool
+	ci      string // a thread: its PR's checks, pass, fail or pending; "" for none
+	remote  bool   // a coordinator row: its remote control is on
+	ctx     int    // a coordinator row: its context window's use in percent, -1 for unknown
+	ctxHint bool   // a coordinator row: ctx reached [ui] context_hint
+	paused  bool   // a project: paused (no nudges, follow-up or new threads)
 	// inactive: a project the user deactivated, shown collapsed: its row
 	// alone, no coordinator or thread rows (§5.1), unless the user
 	// expanded it; then its coordinator and threads are dormant rows.
@@ -86,6 +92,9 @@ type treeRow struct {
 	// console's keyboard focus (markCursor).
 	cursor bool
 }
+
+// folded says a project row hides its coordinator and threads.
+func (r treeRow) folded() bool { return r.kind == treeProject && r.inactive && !r.expanded }
 
 // key names r as View.SideSel does: "p:<project>", "c:<project>" or
 // "t:<project>/<thread>".
@@ -191,12 +200,14 @@ func buildTree(ps []ProjectData, sessions []proto.SessionInfo, in treeIn) []tree
 			tr := treeRow{kind: treeThread, slug: p.Slug, thread: t.ID, name: threadName(t.Task, t.ID), title: oneLine(t.Title), pct: -1}
 			tr.state, _, tr.session = threadState(t, byID)
 			tr.pct = t.Status.Progress().Percent
-			pr.hint = pr.hint || tr.state == "blocked" || t.Status != nil && t.Status.NeedsYou != ""
+			tr.ci = t.Checks
+			tr.hint = tr.state == "blocked" || tr.state == "review" || t.Status != nil && t.Status.NeedsYou != ""
+			pr.hint = pr.hint || tr.hint
 			kids = append(kids, tr)
 		}
 		// The threads hang under the coordinator, the project's only child.
 		coord := treeRow{kind: treeCoordinator, slug: p.Slug, session: pr.session, state: pr.state, remote: remote, pct: -1, last: true,
-			ctx: ctx, ctxHint: ctx >= 0 && in.ctxHint > 0 && ctx >= in.ctxHint}
+			hint: p.Questions > 0, ctx: ctx, ctxHint: ctx >= 0 && in.ctxHint > 0 && ctx >= in.ctxHint}
 		if len(kids) > 0 {
 			kids[len(kids)-1].last = true
 		}
@@ -204,7 +215,7 @@ func buildTree(ps []ProjectData, sessions []proto.SessionInfo, in treeIn) []tree
 			// Expanded but inactive: nothing of it runs (§5.1).
 			coord = treeRow{kind: treeCoordinator, slug: p.Slug, pct: -1, last: true, ctx: -1, dormant: true}
 			for i := range kids {
-				kids[i].dormant, kids[i].session, kids[i].state = true, "", ""
+				kids[i].dormant, kids[i].session, kids[i].state, kids[i].hint = true, "", "", false
 			}
 		}
 		kids = append([]treeRow{coord}, kids...)
@@ -271,6 +282,12 @@ func sideTop(rows []treeRow, h int) int {
 func sidebarLines(all []treeRow, w, h int, foot []string) []string {
 	cw := max(w-1, 0) // less the border
 	slim := w <= sideSlim
+	// Every full row leaves a column before the border (sideGap); in the
+	// slim strip the needs-you column's blank cell does.
+	gap := sideGap
+	if slim {
+		gap = 0
+	}
 	rows := shownRows(all, w)
 	if len(foot) > 0 && h < len(foot)+4 {
 		foot = nil // no room: the tree comes first
@@ -288,8 +305,7 @@ func sidebarLines(all []treeRow, w, h int, foot []string) []string {
 			n++
 		}
 	}
-	// Every row leaves a column before the border (sideGap).
-	out = append(out, sideHead(n, cw-sideGap, slim)+strings.Repeat(" ", sideGap)+reset+border)
+	out = append(out, sideHead(n, cw-gap, slim)+strings.Repeat(" ", gap)+reset+border)
 	if n == 0 {
 		note := " no projects"
 		if slim {
@@ -308,14 +324,14 @@ func sidebarLines(all []treeRow, w, h int, foot []string) []string {
 	}
 	out = out[:h]
 	for _, f := range foot {
-		out = append(out, styleFaint.Render(fit(" "+f, cw-sideGap))+strings.Repeat(" ", sideGap)+reset+border)
+		out = append(out, styleFaint.Render(fit(" "+f, cw-gap))+strings.Repeat(" ", gap)+reset+border)
 	}
 	return out
 }
 
 // sideHead is the sidebar's header, cw cells wide: " PROJECTS", its
-// count of projects in the state column on the right; in the slim strip
-// the word alone, cut with "…".
+// count of projects on the right, just before the needs-you column; in
+// the slim strip the word alone, cut with "…".
 func sideHead(n, cw int, slim bool) string {
 	if slim {
 		return styleTitle.Render(fit(" PROJECTS", cw))
@@ -324,11 +340,11 @@ func sideHead(n, cw int, slim bool) string {
 	if n > 0 {
 		count = fmt.Sprint(n)
 	}
-	gap := cw - ansi.StringWidth(" PROJECTS") - len(count)
+	gap := cw - ansi.StringWidth(" PROJECTS") - len(count) - 2
 	if gap < 1 {
 		return styleTitle.Render(fit(countLabel(" PROJECTS", n), cw))
 	}
-	return styleTitle.Render(" PROJECTS") + strings.Repeat(" ", gap) + styleFaint.Render(count)
+	return styleTitle.Render(" PROJECTS") + strings.Repeat(" ", gap) + styleFaint.Render(count) + "  "
 }
 
 // coordLook is a coordinator's glyph and style: "·" when none runs.
@@ -344,12 +360,15 @@ func coordLook(state string) (string, lipgloss.Style) {
 const sideGap = 1
 
 // treeLine is one tree row cw cells wide, its last sideGap blank: the
-// glyphs keep off the border, and the title (the slug in the slim strip)
-// gives up the room. On the highlighted row the blank is highlighted
+// glyphs keep off the border, and the title gives up the room (the slim
+// strip has no gap: its needs-you column ends in a blank). On the highlighted row the blank is highlighted
 // too: a Nerd Font icon in the last column draws wider than its cell,
 // and its overflow, in the highlight's foreground, would vanish on the
 // plain background.
 func treeLine(r treeRow, cw int, slim, focused bool) string {
+	if slim {
+		return treeCells(r, cw, true, focused)
+	}
 	gap := strings.Repeat(" ", min(sideGap, cw))
 	if hl, sel := treeSel(r, focused); hl {
 		gap = sel.Render(gap)
@@ -368,73 +387,105 @@ func treeSel(r treeRow, focused bool) (bool, lipgloss.Style) {
 }
 
 // treeCells is one tree row cw cells wide, in this console's icon set
-// (icons.go). In a sidebar 25 columns wide, in the unicode set:
+// (icons.go). Its right-hand side is a fixed grid, the same on every row
+// so its columns line up down the tree: the count or percent (pctCol
+// cells), then six glyph columns two cells wide each, blank where they
+// don't apply. A Unicode glyph sits in a column's left cell, a Nerd Font
+// icon fills both. In a sidebar 36 columns wide, in the unicode set:
 //
-//	" ■ terminatr       2 ◆"  a project: its name, its open threads,
-//	                           the hint that one of them is blocked or
-//	                           waiting, that a task needs you, or that
-//	                           the coordinator has questions waiting
-//	" └─ coordinator     ⌁ ○"  its coordinator, ⌁ while its remote
-//	                           control is on
-//	"    ├─ T12 Bump…  40% ●"  a thread's task id and title (an ad hoc
-//	                           or adopted thread's own id, t-0002), its
-//	                           progress, its state, one level under the
-//	                           coordinator
-//	"    └─ T14 Sort…      ▲"  the coordinator's last thread
+//	" ■ terminatr          3         ⚑"  a project: its open threads (faint
+//	                                      at 0; 0 while inactive), ∥ while
+//	                                      paused, ⊘ while inactive, and ⚑
+//	                                      when something under it needs you
+//	" └─ coordinator     38%   ● ⌁     "  its coordinator: its context use
+//	                                      (yellow from [ui] context_hint, red
+//	                                      from 80%), its state, ⌁ while its
+//	                                      remote control is on, ⚑ while it
+//	                                      has questions waiting
+//	"    ├─ T229 Acti…  100% ☑ ◆       ⚑"  a thread: its task id and title
+//	                                      (an ad hoc or adopted thread's own
+//	                                      id, t-0002), its progress, its PR's
+//	                                      checks (☑ pass, ☒ fail, ☐ running),
+//	                                      its state, ⚑ while it waits on you
 //
-// The nerd set opens the current project's folder and marks the
-// coordinator and threads with an icon of their own after the connector.
-// The counts and percents share one column, the state glyphs the last
-// one, so they line up down the tree; a long name or title is cut with
-// "…", but a thread's name (its task id) never is: its title gives way. Project rows are
-// bold, the current one in the accent colour; the
-// connectors are faint.
+// The columns are count/%, PR/CI, state, remote, paused, inactive and
+// needs you (sideGrid cells). A project row's state column is its
+// coordinator's state, only while the project is folded: unfolded, the
+// coordinator's row shows it. The rows of an inactive project the user
+// unfolded are dormant: faint, "·" for their state and ⊘. The nerd set
+// opens the current project's folder and marks the coordinator and
+// threads with an icon of their own after the connector. A long name or
+// title is cut with "…", but a thread's name (its task id) never is: its
+// title gives way. Project rows are bold, the current one in the accent
+// colour; the connectors are faint. A sidebar too narrow for the grid
+// and a label drops the count/% column, then the PR/CI one.
 //
-// The slim strip shows projects alone, "● term…": its coordinator's
-// glyph (or the hint), then its name, cut with "…"; the current one's
-// name in the accent colour, as in the full sidebar.
-// A coordinator with remote control on gets "⌁" right after its name and
-// context use ("coordinator 40% ⌁"), one blank between (and, in the Nerd
-// set, whose icon draws wide, two after it); never on the project's row,
-// so not in the slim strip either.
-// A paused project gets "∥" at the far right of its row (the name gives
-// way, never the icons), in either width, then an inactive one "⊘" and, in
-// the full sidebar, the hint "⚑", each in a fixed slot; an inactive
-// project's name is faint: it is collapsed, its row alone,
-// unless the user expanded it; then its coordinator and threads are
-// faint, with "⊘" for their state: dormant.
-// The row you are on is in reverse video (and, in the slim strip, marked),
-// so colour is never the only signal. While the sidebar has the keyboard
-// focus, the keyboard's row is instead, in the accent colour.
+// The slim strip (sideSlim) shows projects alone, "● term…⚑": its
+// coordinator's state (⊘ while inactive), its name cut to 5 cells, and
+// the needs-you column; the current one's name in the accent colour, as
+// in the full sidebar.
+// The row you are on is in reverse video, so colour is never the only
+// signal. While the sidebar has the keyboard focus, the keyboard's row
+// is instead, in the accent colour.
 func treeCells(r treeRow, cw int, slim, focused bool) string {
-	i := ic()
 	var sel lipgloss.Style
 	r.here, sel = treeSel(r, focused)
-	// A project row's state icons sit at its far right in a fixed order,
-	// each in a slot of its own (blank when it doesn't apply): paused,
-	// inactive, then (full width) the needs-you hint.
-	slot := func(on bool, g string) string {
-		if on {
-			return g
-		}
-		return " "
-	}
-	proj := r.kind == treeProject
-	pz := slot(r.paused && proj, i.paused) + slot(r.inactive && proj, i.inactive)
 	if slim {
-		g, st := coordLook(r.state)
-		if r.hint && r.state != "blocked" {
-			g, st = i.hint, styleWarn
+		return slimCells(r, cw, sel)
+	}
+	i := ic()
+	wide := ""
+	if i.wide {
+		wide = " " // a Nerd Font icon draws over the blank after it
+	}
+	grid := treeGrid(r)
+	// The lead stays out of the highlight: the margin, and on a row under
+	// a project the connector and its icon.
+	var lead, label []cellRun
+	if r.kind == treeProject {
+		folder, fst := i.folder, styleFaint
+		if r.current {
+			folder, fst = i.folderOpen, styleAccent
 		}
-		// No blank slots in the strip: it has no columns to line up.
-		pz = strings.TrimSpace(pz)
-		if !proj {
-			pz = ""
+		lead = []cellRun{{" ", stylePlain}}
+		label = []cellRun{{folder + wide + " ", fst}}
+	} else {
+		conn, node := i.mid, i.thread
+		if r.last {
+			conn = i.end
 		}
-		name := fit(ansi.Truncate(r.slug, max(cw-3-ansi.StringWidth(pz), 0), "…"), max(cw-3-ansi.StringWidth(pz), 0)) + pz
-		if r.here {
-			return " " + sel.Render(fit(g+" "+name, cw-1))
+		if r.kind == treeCoordinator {
+			node = i.coord
 		}
+		if node != "" {
+			node += wide
+		}
+		// A thread sits one level down, under the coordinator's label.
+		// The coordinator is the project's last row, so no │ runs down
+		// beside its threads.
+		indent := ""
+		if r.kind == treeThread {
+			indent = "   "
+		}
+		lead = []cellRun{{" " + indent, stylePlain}, {conn + node, styleFaint}, {" ", stylePlain}}
+	}
+	// Narrow: the count/% column gives way, then the PR/CI one, before
+	// the label is cut below a thread's whole name (5 cells for the
+	// others); narrower still, the label goes, then the lead is cut.
+	least := 5
+	if r.kind == treeThread {
+		least = ansi.StringWidth(r.name)
+	}
+	need := runsWidth(lead) + runsWidth(label) + least + 1
+	for len(grid) > 5 && cw-runsWidth(grid) < need {
+		grid = grid[1:]
+	}
+	room := max(cw-runsWidth(grid), 0) // the lead's and the label's
+	lead = cutRuns(lead, room)
+	label = cutRuns(label, room-runsWidth(lead))
+	lw := max(room-runsWidth(lead)-runsWidth(label)-1, 0) // a blank parts it from the grid
+	switch r.kind {
+	case treeProject:
 		look := styleHead
 		switch {
 		case r.current:
@@ -442,141 +493,176 @@ func treeCells(r treeRow, cw int, slim, focused bool) string {
 		case r.inactive:
 			look = styleFaint
 		}
-		return fit(" "+st.Render(g)+" "+look.Render(name), cw)
-	}
-	// The right-hand columns: a count or percent, then a glyph.
-	right := func(num string, g string, st lipgloss.Style, hl bool) string {
-		if hl {
-			return num + " " + g
-		}
-		return styleFaint.Render(num) + " " + st.Render(g)
-	}
-	const rw = pctCol + 2
-	switch r.kind {
-	case treeProject:
-		count := fmt.Sprintf("%*d", pctCol, r.threads)
-		hint, hst := " ", stylePlain
-		if r.hint {
-			hint, hst = i.hint, styleWarn
-		}
-		folder := i.folder
-		if r.current {
-			folder = i.folderOpen
-		}
-		nw := max(cw-3-rw-ansi.StringWidth(pz), 1)
-		name := fit(ansi.Truncate(r.slug, nw, "…"), nw)
-		if r.here {
-			return " " + sel.Render(fit(folder+" "+name+count+" "+pz+hint, cw-1))
-		}
-		look, mark := styleHead, styleFaint.Render(folder)
-		switch {
-		case r.current:
-			look, mark = styleTitle, styleAccent.Render(folder)
-		case r.inactive:
+		label = append(label, cellRun{fitLabel(r.slug, lw), look})
+	case treeCoordinator:
+		look := stylePlain
+		if r.state == "" || r.dormant {
 			look = styleFaint
 		}
-		cnt := styleFaint.Render(count) // no threads: faint
-		if r.threads > 0 {
-			cnt = count
-		}
-		return fit(" "+mark+" "+look.Render(name)+cnt+" "+pz+hst.Render(hint), cw)
-	}
-	conn, node := i.mid, i.thread
-	if r.last {
-		conn = i.end
-	}
-	if r.kind == treeCoordinator {
-		node = i.coord
-	}
-	// A thread sits one level down, under the coordinator's label (its
-	// icon in the nerd set). The coordinator is the project's last row,
-	// so no │ runs down beside its threads.
-	indent := ""
-	if r.kind == treeThread {
-		indent = strings.Repeat(" ", ansi.StringWidth(i.end))
-		if i.coord == "" {
-			indent += " "
-		}
-	}
-	lead := " " + indent + styleFaint.Render(conn) + " "
-	if node != "" {
-		lead = " " + indent + styleFaint.Render(conn+node) + " "
-	}
-	ld := ansi.StringWidth(lead)
-	lw := max(cw-ld-rw, 1)
-	if r.kind == treeCoordinator {
-		g, st := coordLook(r.state)
+		label = append(label, cellRun{fitLabel("coordinator", lw), look})
+	default:
+		look := stylePlain
 		if r.dormant {
-			g = i.inactive
+			look = styleFaint
 		}
-		// "⌁" follows the name and the context use, one blank between;
-		// "coordinator" may take the rest of the label column.
-		lw := max(cw-ld-2, 0) // the label column and the count's
-		// A Nerd Font's remote icon draws two cells wide, over the blank
-		// after it, so that set keeps a second one: a blank always shows
-		// after the icon, and the label gives way.
-		name, rc, tail := "coordinator", "", ""
-		if r.remote {
-			rc, tail = i.remote, " "
-			if i.name == IconsNerd {
-				tail = "  "
+		label = append(label, cellRun{threadLabel(r.name, r.title, lw), look})
+	}
+	label = append(label, cellRun{strings.Repeat(" ", room-runsWidth(lead)-runsWidth(label)), stylePlain})
+	rest := append(label, grid...)
+	if r.here {
+		return fit(runsRender(lead)+sel.Render(fit(runsPlain(rest), cw-runsWidth(lead))), cw)
+	}
+	return fit(runsRender(lead)+runsRender(rest), cw)
+}
+
+// fitLabel is fit, blank where not even a letter and "…" fit.
+func fitLabel(s string, w int) string {
+	if w < 2 && ansi.StringWidth(s) > w {
+		return strings.Repeat(" ", max(w, 0))
+	}
+	return fit(s, w)
+}
+
+// treeGrid is the grid on the right of a full sidebar's row: count/%,
+// PR/CI, state, remote, paused, inactive, needs you (treeCells).
+func treeGrid(r treeRow) []cellRun {
+	i := ic()
+	col := func(on bool, g string, st lipgloss.Style) cellRun {
+		if !on || g == "" {
+			return cellRun{"  ", stylePlain}
+		}
+		return cellRun{g + " ", st}
+	}
+	num, nst := "", styleFaint
+	switch r.kind {
+	case treeProject:
+		n := r.threads
+		if r.inactive {
+			n = 0 // nothing of it runs
+		}
+		num = fmt.Sprint(n)
+		if n > 0 {
+			nst = stylePlain
+		}
+	case treeCoordinator:
+		if r.ctx >= 0 && !r.dormant {
+			num = fmt.Sprintf("%d%%", r.ctx)
+			switch {
+			case r.ctx >= 80:
+				nst = styleBad
+			case r.ctxHint:
+				nst = styleWarn
 			}
-			lw = max(lw-1-ansi.StringWidth(rc)-ansi.StringWidth(tail), 0)
 		}
-		// The context use follows the name where there is room, coloured
-		// (warn from the threshold, red from 80%), with "/clear?" past it.
-		name = strings.TrimRight(fit(name, max(lw, 0)), " ")
-		note, nst := ctxNote(r, lw-ansi.StringWidth(name))
-		used := ansi.StringWidth(name) + len(note)
-		icon, plainIcon := "", ""
-		if r.remote {
-			icon, plainIcon = " "+styleAccent.Render(rc)+tail, " "+rc+tail
-			used += ansi.StringWidth(plainIcon)
+	default:
+		if r.pct >= 0 {
+			num = fmt.Sprintf("%d%%", r.pct)
 		}
-		pad := strings.Repeat(" ", max(cw-ld-2-used, 0))
-		if r.here {
-			return lead + sel.Render(fit(name+note+plainIcon+pad+" "+g, cw-ld))
-		}
-		if r.state == "" {
-			name = styleFaint.Render(name)
-		}
-		return fit(lead+name+nst.Render(note)+icon+pad+" "+st.Render(g), cw)
 	}
-	g, st := stateLook(r.state)
-	if g == "" {
+	out := []cellRun{{fmt.Sprintf("%*s ", pctCol-1, num), nst}}
+	thread, proj := r.kind == treeThread, r.kind == treeProject
+	switch {
+	case thread && r.ci == "pass":
+		out = append(out, col(true, i.ciPass, styleGood))
+	case thread && r.ci == "fail":
+		out = append(out, col(true, i.ciFail, styleBad))
+	case thread && r.ci == "pending":
+		out = append(out, col(true, i.ciRun, styleFaint))
+	default:
+		out = append(out, col(false, "", stylePlain))
+	}
+	var g string
+	var st lipgloss.Style
+	switch {
+	case proj && (!r.folded() || r.inactive):
+	case r.dormant:
 		g, st = i.none, styleFaint
+	case thread:
+		if g, st = stateLook(r.state); g == "" {
+			g, st = i.none, styleFaint
+		}
+	default:
+		g, st = coordLook(r.state)
 	}
-	if r.dormant {
+	return append(out,
+		col(g != "", g, st),
+		col(r.kind == treeCoordinator && r.remote && !r.dormant, i.remote, styleAccent),
+		col(proj && r.paused, i.paused, styleWarn),
+		col(proj && r.inactive || r.dormant, i.inactive, styleFaint),
+		col(r.hint, i.hint, styleWarn))
+}
+
+// slimCells is a project's row in the slim strip, cw cells wide: its
+// state column, its name, its needs-you column.
+func slimCells(r treeRow, cw int, sel lipgloss.Style) string {
+	i := ic()
+	g, st := coordLook(r.state)
+	if r.inactive {
 		g, st = i.inactive, styleFaint
 	}
-	// The percent has a column of its own, the same width on every row,
-	// so titles are cut at the same place. The name leads and is never
-	// cut: the title gives way; where even the name doesn't fit the label
-	// column it takes the percent's too, then the space before the
-	// glyph, and where it still doesn't fit it is left out.
-	pct := strings.Repeat(" ", pctCol)
-	if r.pct >= 0 {
-		pct = fmt.Sprintf("%*d%%", pctCol-1, r.pct)
+	hint := cellRun{"  ", stylePlain}
+	if r.hint {
+		hint = cellRun{i.hint + " ", styleWarn}
 	}
-	label := threadLabel(r.name, r.title, lw)
-	if iw := ansi.StringWidth(r.name); iw > cw-ld-rw {
-		pct = ""
-		label = threadLabel(r.name, "", max(cw-ld-2, 0))
-		if iw == cw-ld-1 {
-			// The name fits only right up against the glyph.
-			if r.here {
-				return lead + sel.Render(r.name+g)
+	look := styleHead
+	switch {
+	case r.current:
+		look = styleTitle
+	case r.inactive:
+		look = styleFaint
+	}
+	rest := []cellRun{{g + " ", st}, {fit(r.slug, max(cw-5, 0)), look}, hint}
+	if r.here {
+		return fit(" "+sel.Render(runsPlain(rest)), cw)
+	}
+	return fit(" "+runsRender(rest), cw)
+}
+
+// cellRun is a run of cells of a tree row in one style.
+type cellRun struct {
+	s  string
+	st lipgloss.Style
+}
+
+// cutRuns cuts rs to at most w cells; a cut run ends in a blank, so a
+// Nerd Font icon never draws over what follows.
+func cutRuns(rs []cellRun, w int) []cellRun {
+	var out []cellRun
+	for _, r := range rs {
+		if n := ansi.StringWidth(r.s); n > w {
+			r.s = ansi.Truncate(r.s, max(w-1, 0), "")
+			if w > 0 {
+				r.s += " "
 			}
-			return lead + r.name + st.Render(g)
+		}
+		w -= ansi.StringWidth(r.s)
+		if r.s != "" {
+			out = append(out, r)
 		}
 	}
-	if r.here {
-		return lead + sel.Render(fit(label+right(pct, g, st, true), cw-ld))
+	return out
+}
+
+func runsWidth(rs []cellRun) int { return ansi.StringWidth(runsPlain(rs)) }
+
+func runsPlain(rs []cellRun) string {
+	var b strings.Builder
+	for _, r := range rs {
+		b.WriteString(r.s)
 	}
-	if r.dormant {
-		label = styleFaint.Render(label)
+	return b.String()
+}
+
+func runsRender(rs []cellRun) string {
+	var b strings.Builder
+	for _, r := range rs {
+		if strings.TrimSpace(r.s) == "" {
+			b.WriteString(r.s)
+			continue
+		}
+		b.WriteString(r.st.Render(r.s))
 	}
-	return fit(lead+label+right(pct, g, st, false), cw)
+	return b.String()
 }
 
 // sideHitAt is what column x, row y of a sidebar w×h holds: the border,
@@ -665,9 +751,10 @@ func OpenTarget(p server.Paths, vc *ViewConn, t Target) error {
 }
 
 // loadSideProjects reads the projects and their open threads, with their
-// STATUS.md, from the project folders: what the attach client polls for
+// STATUS.md and their PRs' checks (the ticker's), from the project folders:
+// what the attach client polls for
 // its sidebar.
-func loadSideProjects() []ProjectData {
+func loadSideProjects(paths server.Paths) []ProjectData {
 	list, _ := project.List()
 	out := make([]ProjectData, 0, len(list))
 	for _, sum := range list {
@@ -677,11 +764,12 @@ func loadSideProjects() []ProjectData {
 		pd := ProjectData{Slug: sum.Slug, Safety: sum.Safety}
 		if p, err := project.Open(sum.Slug); err == nil {
 			recs, _ := thread.List(p)
+			prs := ticker.PRs(ticker.StatePath(paths.Sessions), sum.Slug)
 			for _, r := range recs {
 				if r.State == thread.Resolved {
 					continue
 				}
-				tr := ThreadRow{Record: r}
+				tr := ThreadRow{Record: r, Checks: prs[r.ID].Checks}
 				tr.Status, _ = thread.ReadStatus(p, r.ID)
 				pd.Threads = append(pd.Threads, tr)
 			}
@@ -1167,8 +1255,13 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 // sideHint is the hint while the sidebar has the keyboard focus.
 const sideHint = "sidebar: ↑ ↓ move · → ← in/out · enter open · esc back"
 
-// pctCol is the width of a thread row's percent column: " 100%".
+// pctCol is the width of the grid's count/% column: "100% ".
 const pctCol = 5
+
+// sideGrid is the width of the grid on the right of every row of the
+// full sidebar: the count/% column, then six glyph columns two cells
+// wide (treeCells).
+const sideGrid = pctCol + 6*2
 
 // threadLabel is a thread row's label w cells wide: "T12 Title" (a
 // thread without a task: "t-0001 Title"), the title cut to fit (or left
@@ -1193,27 +1286,4 @@ func clipWord(s string, w int) string {
 	}
 	cut := strings.TrimRight(ansi.Truncate(s, max(w-1, 0), ""), " ")
 	return fit(cut+"…", w)
-}
-
-// ctxNote is a coordinator row's context use, " 42%" or " 42% /clear?"
-// past the threshold, within room cells, and its style; "" when unknown
-// or when it doesn't fit.
-func ctxNote(r treeRow, room int) (string, lipgloss.Style) {
-	if r.ctx < 0 {
-		return "", stylePlain
-	}
-	note := fmt.Sprintf(" %d%%", r.ctx)
-	if r.ctxHint && room >= len(note)+len(" /clear?") {
-		note += " /clear?"
-	}
-	if len(note) > room {
-		return "", stylePlain
-	}
-	switch {
-	case r.ctx >= 80:
-		return note, styleBad
-	case r.ctxHint:
-		return note, styleWarn
-	}
-	return note, styleFaint
 }

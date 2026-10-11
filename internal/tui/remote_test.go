@@ -41,22 +41,22 @@ func TestRemoteMarkers(t *testing.T) {
 				t.Errorf("%s slim %v: project row %q", set.name, slim, c)
 			}
 		}
-		// On the coordinator's row, right after its name, one blank
-		// between, in every width the sidebar takes.
+		// On the coordinator's row, in the grid's remote column, after
+		// its state, in every width the sidebar takes; with the context
+		// use in the count/% column where it has room.
 		g, _ := coordLook("idle")
 		for w := view.SideMin - 1; w <= 60; w++ {
 			for _, here := range []bool{false, true} {
 				r := rows[1]
 				r.here = here
 				c := ansi.Strip(treeLine(r, w, false, false))
-				// A Nerd Font icon draws two cells wide, so that set keeps
-				// a second blank after it.
-				if !strings.Contains(c, " "+set.remote+" ") || !strings.HasSuffix(c, g+" ") || strings.Index(c, set.remote) > strings.LastIndex(c, g) {
+				row := c[:len(c)-1]
+				if gridCol(row, gridRemote) != set.remote || gridCol(row, gridState) != g {
 					t.Errorf("%s w %d here %v: coordinator row %q", set.name, w, here, c)
 				}
-				if w >= 40 {
+				if w >= 36 {
 					r.ctx = 40
-					if c := ansi.Strip(treeLine(r, w, false, false)); !strings.Contains(c, "coordinator 40% "+set.remote+" ") {
+					if c := ansi.Strip(treeCells(r, w-1, false, false)); gridCol(c, gridCount) != "40%" || !strings.Contains(c, "coordinator") {
 						t.Errorf("%s w %d here %v: with a percent %q", set.name, w, here, c)
 					}
 				}
@@ -65,7 +65,7 @@ func TestRemoteMarkers(t *testing.T) {
 				}
 				off := rows[1]
 				off.remote, off.here = false, here
-				if c := ansi.Strip(treeLine(off, w, false, false)); strings.Contains(c, set.remote) || !strings.HasSuffix(c, " "+g+" ") {
+				if c := ansi.Strip(treeCells(off, w-1, false, false)); strings.Contains(c, set.remote) || gridCol(c, gridState) != g {
 					t.Errorf("%s w %d: coordinator row without remote control %q", set.name, w, c)
 				}
 			}

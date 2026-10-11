@@ -165,7 +165,7 @@ func Attach(opts Options) (res Result, err error) {
 	if so == nil {
 		so = &SidebarOptions{}
 	}
-	c.side = &sidebar{uiFile: so.UIFile, projects: loadSideProjects()}
+	c.side = &sidebar{uiFile: so.UIFile, projects: loadSideProjects(c.paths)}
 	c.info = &infoPanel{}
 	c.setWindow(cols, rows)
 	if so.Focus && c.sideW > 0 {
@@ -1748,7 +1748,7 @@ func (c *client) pollState(ctx context.Context) {
 		var projects []ProjectData
 		ctxHint := config.DefaultContextHint
 		if c.side != nil {
-			projects = loadSideProjects()
+			projects = loadSideProjects(c.paths)
 			if cfg, err := config.Load(); err == nil {
 				ctxHint = cfg.ContextHint
 			}

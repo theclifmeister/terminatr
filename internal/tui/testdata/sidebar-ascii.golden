@@ -1,0 +1,54 @@
+width 36
+ PROJECTS                      5   │
+ + terminatr        4           ?  │
+ `- coordinator   38%   * @        │
+    |- T232 Sid…  40%   *          │
+    |- T229 Act… 100% + #       ?  │
+    |- T231 Win…  60% x !       ?  │
+    `- t-0217           o          │
+ + herdr            1       =      │
+ `- coordinator   12%   o          │
+    `- T12 Bump…  20% ~ *          │
+ + website          0           ?  │
+ `- coordinator   84%   !       ?  │
+ + dotfiles         0         /    │
+ + notes-app        0         /    │
+ `- coordinator         .     /    │
+    `- T7 Zsh p…  30%   .     /    │
+
+width 24
+ PROJECTS          5   │
+ + termi…           ?  │
+ `- coor…   * @        │
+    |- T232 *          │
+    |- T229 #       ?  │
+    |- T231 !       ?  │
+    `-      o          │
+ + herdr        =      │
+ `- coor…   o          │
+    `- T12  *          │
+ + websi…           ?  │
+ `- coor…   !       ?  │
+ + dotfi…         /    │
+ + notes…         /    │
+ `- coor…   .     /    │
+    `- T7   .     /    │
+
+width 11
+ PROJECTS │
+ * term…? │
+ o herdr  │
+ ! webs…? │
+ / dotf…  │
+ / note…  │
+          │
+          │
+          │
+          │
+          │
+          │
+          │
+          │
+          │
+          │
+

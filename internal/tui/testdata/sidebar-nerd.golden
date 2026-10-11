@@ -1,0 +1,54 @@
+width 36
+ PROJECTS                      5   │
+   terminatr       4             │
+ └╴󰚩  coordinat…  38%            │
+    ├╴  T232 S…  40%             │
+    ├╴  T229 A… 100%           │
+    ├╴  T231 W…  60%           │
+    └╴  t-0217                   │
+   herdr           1             │
+ └╴󰚩  coordinat…  12%             │
+    └╴  T12 Bu…  20%            │
+   website         0             │
+ └╴󰚩  coordinat…  84%            │
+   dotfiles        0             │
+   notes-app       0             │
+ └╴󰚩  coordinat…        ·         │
+    └╴  T7 Zsh…  30%   ·         │
+
+width 24
+ PROJECTS          5   │
+   term…             │
+ └╴󰚩  coor…          │
+    ├╴               │
+    ├╴              │
+    ├╴              │
+    └╴               │
+   herdr             │
+ └╴󰚩  coor…           │
+    └╴               │
+   webs…             │
+ └╴󰚩  coor…          │
+   dotf…             │
+   note…             │
+ └╴󰚩  coor… ·         │
+    └╴  T7 ·         │
+
+width 11
+ PROJECTS │
+  term… │
+  herdr  │
+  webs… │
+  dotf…  │
+  note…  │
+          │
+          │
+          │
+          │
+          │
+          │
+          │
+          │
+          │
+          │
+

@@ -33,7 +33,9 @@ func TestSmokeInfoPanel(t *testing.T) {
 	panel := view.InfoDefault
 	w := env.Window(cols, 30)
 	w.WaitFor("SESSIONS", wait)
-	w.ClickText("T1 Fix the login", 2) // the sidebar row (row 1 has the details' title)
+	y := -1
+	w.WaitUntil("the sidebar's thread row", wait, func(sc string) bool { y = treeRow(sc, "demo", "T1 "); return y >= 0 })
+	w.Click(8, y)
 	w.WaitUntil("the panel", wait, func(sc string) bool {
 		return strings.Contains(sc, "│ T1 Fix the login") && strings.Contains(sc, "◐ Fix it")
 	})

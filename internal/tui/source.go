@@ -102,6 +102,9 @@ type ThreadRow struct {
 	// without one; TaskRec is the linked task, for its steps.
 	Report  *thread.Report
 	TaskRec *tasks.Task
+	// Checks are its pull request's checks as the ticker last saw them:
+	// pass, fail or pending; "" without a PR or checks.
+	Checks string
 }
 
 // Source is the dashboard's view of the world; tests use a fake. It
@@ -287,6 +290,7 @@ func (s *ServerSource) Load() Data {
 			}
 			recs, _ := thread.List(p)
 			pd.TaskUsage, pd.Usage = thread.TaskUsage(recs)
+			prs := ticker.PRs(ticker.StatePath(s.Paths.Sessions), sum.Slug)
 			for _, r := range recs {
 				if r.State == thread.Resolved {
 					continue
@@ -294,6 +298,7 @@ func (s *ServerSource) Load() Data {
 				tr := ThreadRow{Record: r}
 				tr.Status, _ = thread.ReadStatus(p, r.ID)
 				tr.Report, _ = thread.ReadReport(p, r.ID)
+				tr.Checks = prs[r.ID].Checks
 				if b != nil && r.TaskID() > 0 {
 					tr.TaskRec = b.Find(r.TaskID())
 				}

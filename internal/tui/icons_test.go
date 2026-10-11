@@ -18,6 +18,9 @@ func TestIconWidths(t *testing.T) {
 		v := reflect.ValueOf(set)
 		for i := 0; i < v.NumField(); i++ {
 			name := v.Type().Field(i).Name
+			if v.Field(i).Kind() != reflect.String {
+				continue
+			}
 			g := v.Field(i).String()
 			if name == "name" || g == "" && (name == "coord" || name == "thread") {
 				continue
@@ -45,7 +48,8 @@ func TestIconWidths(t *testing.T) {
 }
 
 // TestIconsTree: in every set, each row of the tree is as wide as the
-// sidebar and the percent and state columns line up.
+// sidebar and the grid's columns line up: every coordinator and thread
+// row has its state glyph in the state column.
 func TestIconsTree(t *testing.T) {
 	defer setIcons(IconsUnicode)
 	d := testData()
@@ -57,9 +61,12 @@ func TestIconsTree(t *testing.T) {
 			if w := ansi.StringWidth(l); w != sideDefault {
 				t.Errorf("%s row %d %q is %d cells", set, i, l, w)
 			}
-			// The state column is the last but one before the border, which
-			// a blank column keeps it off.
-			if r := []rune(l); i > 0 && i < 7 && (r[len(r)-3] == ' ' || r[len(r)-2] != ' ') && !strings.Contains(l, "alpha") {
+			r := []rune(l)
+			if i > 0 && r[len(r)-2] != ' ' {
+				t.Errorf("%s row %d %q: no blank column before the border", set, i, l)
+			}
+			row := string(r[:len(r)-2])
+			if i > 0 && (strings.Contains(l, ic().end) || strings.Contains(l, ic().mid)) && gridCol(row, gridState) == "" {
 				t.Errorf("%s row %d %q: no state glyph", set, i, l)
 			}
 		}

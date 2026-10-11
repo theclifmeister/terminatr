@@ -58,24 +58,15 @@ func remoteIs(t *testing.T, env *Env, s *Session, on bool, pid int) {
 }
 
 // remoteMarked reports whether the sidebar on screen sc shows "⌁" on
-// the coordinator's row only, right after its name and context use, and
-// not after the project's name.
+// slug's coordinator's row only, in the grid's remote column, and not on
+// the project's row.
 func remoteMarked(sc, slug string) bool {
-	marked := false
-	for _, l := range strings.Split(sc, "\n") {
-		side := []rune(l)
-		side = side[:min(len(side), sideDefault)]
-		row := strings.TrimRight(string(side[:max(len(side)-1, 0)]), " ")
-		if strings.Contains(row, slug+"⌁") || strings.Contains(row, slug+" ⌁") {
-			return false
-		}
-		// "coordinator 40% ⌁ ○": right after the name or the percent.
-		f := strings.Fields(row)
-		if c := slices.Index(f, "coordinator"); c >= 0 && len(f) > c+2 && (f[c+1] == "⌁" || strings.HasSuffix(f[c+1], "%") && f[c+2] == "⌁") {
-			marked = true
-		}
+	lines := strings.Split(sc, "\n")
+	p, c := projectRow(sc, slug), treeRow(sc, slug, "coordinator")
+	if p < 0 || c < 0 || strings.Contains(sideCut(lines[p], 120), "⌁") {
+		return false
 	}
-	return marked
+	return sideGrid(lines[c], gridRemote) == "⌁"
 }
 
 // remoteProject is a project whose setting starts its coordinator with
@@ -195,8 +186,9 @@ func TestSmokeRemoteControlRestart(t *testing.T) {
 	env.track(info.PID, "relaunched coordinator")
 	env.WaitState(coord, "idle", agentWait)
 
-	// On from the attached pane, which reattaches across the restart.
-	w := env.Window(120, 30)
+	// On from the attached pane, which reattaches across the restart;
+	// wide enough for the status bar's whole note.
+	w := env.Window(124, 30)
 	w.WaitFor("SESSIONS", wait)
 	clickCoordinator(t, w, alpha)
 	w.WaitUntil("attached", agentWait, func(sc string) bool { return lastLine(sc, alpha+" coordinator") })
