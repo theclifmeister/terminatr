@@ -213,6 +213,7 @@ type dash struct {
 	// view from before one would fold back what was just unfolded.
 	view        *ViewConn
 	viewSeq     uint64
+	viewTurn    chan struct{} // closed once the last view call is answered (inTurn)
 	viewSide    SidebarLayout // the view's sidebar, as last sent or seen
 	sideCols    []string      // the view's sidebar columns (view.View.Columns)
 	watch       <-chan struct{}
@@ -451,9 +452,31 @@ func (m *dash) call(method string, p proto.ViewParams) tea.Cmd {
 	if side {
 		m.sideBusy, m.sideSent = true, p.Key
 	}
-	return func() tea.Msg {
+	return m.inTurn(func() tea.Msg {
 		_, err := vc.Do(method, p)
 		return viewDoneMsg{sel: sel, side: side, tree: tree, err: err}
+	})
+}
+
+// inTurn runs call, a view call, once the calls this console made before
+// it are answered. Each runs in a command of its own, and those run
+// concurrently: without turns a click on a project then one on its
+// coordinator could reach the server as view.attach, then view.project,
+// which takes the view back to the dashboard and ends the attach just
+// begun (T283). Made in update, in the order of the keys and clicks.
+func (m *dash) inTurn(call func() tea.Msg) tea.Cmd {
+	prev, mine, done := m.viewTurn, make(chan struct{}), m.done
+	m.viewTurn = mine
+	return func() tea.Msg {
+		defer close(mine)
+		if prev != nil {
+			select {
+			case <-prev:
+			case <-done:
+				return nil
+			}
+		}
+		return call()
 	}
 }
 
@@ -644,10 +667,10 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				id, project := msg.attach, msg.current
 				vc := m.view
 				m.busy, m.leaving = true, m.over != nil
-				return m, func() tea.Msg {
+				return m, m.inTurn(func() tea.Msg {
 					_, err := vc.Do(proto.MethodViewAttach, proto.ViewParams{Session: id, Project: project})
 					return actionMsg{err: err}
-				}
+				})
 			}
 			m.result.Attach = msg.attach
 			return m, tea.Quit
@@ -723,6 +746,10 @@ func (m *dash) openTarget(t Target) tea.Cmd {
 	return m.showProject(t.Project)
 }
 
+// targetActs reports whether openTarget runs t as an action (m.act): a
+// session or a coordinator; a project's dashboard only moves the view.
+func targetActs(t Target) bool { return t.Session != "" || t.Coordinator }
+
 // showProject shows project's dashboard: it becomes current, with its
 // coordinator's row selected, on every console of the view.
 func (m *dash) showProject(slug string) tea.Cmd {
@@ -735,10 +762,11 @@ func (m *dash) showProject(slug string) tea.Cmd {
 		return nil
 	}
 	m.selPending++ // the view's selection follows with the answer
-	return func() tea.Msg {
-		_, err := m.view.Do(proto.MethodViewProject, proto.ViewParams{Project: slug})
+	vc := m.view
+	return m.inTurn(func() tea.Msg {
+		_, err := vc.Do(proto.MethodViewProject, proto.ViewParams{Project: slug})
 		return viewDoneMsg{sel: true, err: err}
-	}
+	})
 }
 
 // tree is the sidebar's tree, from the last poll: the listed project is
@@ -812,21 +840,40 @@ func (m *dash) sideKeyboard(key string) (tea.Cmd, bool) {
 		m.sideSel = st.sel
 		cmds = append(cmds, m.sendSideSel(), m.previewSoon())
 	}
+	if st.refold != nil {
+		cmds = append(cmds, m.refold(st.refold))
+	}
+	var target *Target
 	if t := st.target; t != nil {
 		// Into the pane: the list, or the session attached.
 		m.focus = areaMain
 		if !st.here {
-			cmds = append(cmds, m.openTarget(*t))
+			target = t
 		}
 	}
-	if st.toggle != "" {
-		cmds = append(cmds, m.toggleActive(st.toggle, st.activate))
+	if target != nil && !targetActs(*target) {
+		cmds = append(cmds, m.openTarget(*target))
+		target = nil
 	}
-	if st.refold != nil {
-		cmds = append(cmds, m.refold(st.refold))
+	if target == nil && st.toggle == "" && st.pin == "" {
+		return tea.Batch(cmds...), true
 	}
-	if st.pin != "" {
-		cmds = append(cmds, m.setPinned(st.pin, st.pinOn))
+	// What the key starts is an action: while one runs, it waits its
+	// turn, on the row it was pressed on, as the settings keys do; the
+	// moves above are this console's alone and happen at once.
+	run := func(m *dash) tea.Cmd {
+		switch {
+		case target != nil:
+			return m.openTarget(*target)
+		case st.toggle != "":
+			return m.toggleActive(st.toggle, st.activate)
+		}
+		return m.setPinned(st.pin, st.pinOn)
+	}
+	if m.busy {
+		m.queued = append(m.queued, run)
+	} else {
+		cmds = append(cmds, run(m))
 	}
 	return tea.Batch(cmds...), true
 }
@@ -998,14 +1045,17 @@ func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 	if o := m.top(); o != nil {
 		return o.key(m, k)
 	}
+	if m.area() == areaSide {
+		// The sidebar's keys go on while an action runs: its moves at
+		// once, what they start after it (sideKeyboard).
+		if cmd, ok := m.sideKeyboard(k.String()); ok {
+			return cmd
+		}
+	}
 	if m.busy {
 		return nil
 	}
 	switch m.area() {
-	case areaSide:
-		if cmd, ok := m.sideKeyboard(k.String()); ok {
-			return cmd
-		}
 	case areaDetails:
 		if cmd, ok := m.detailsKey(k.String()); ok {
 			return cmd
