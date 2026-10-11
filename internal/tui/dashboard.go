@@ -211,6 +211,9 @@ type dash struct {
 
 	alerts uint64
 	seen   bool // the first poll arrived (no bell for old alerts)
+	// modsFailed are the mods whose failure the footer has said
+	// (noteModFailures).
+	modsFailed map[string]bool
 
 	// The view (nil without one). viewSeq is its version when the
 	// dashboard opened; selPending counts this console's selections on
@@ -333,6 +336,9 @@ type actionMsg struct {
 	catalogs bool
 	// pick: the project that waits for the user to choose an agent.
 	pick string
+	// then runs on the dashboard once the action is done, before the
+	// reload (a mod's update that asks first opens its question).
+	then func(m *dash)
 }
 
 func (m *dash) load() tea.Cmd {
@@ -648,6 +654,9 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.fail(msg.err)
 			return m, m.load()
 		}
+		if msg.then != nil {
+			msg.then(m)
+		}
 		if cmd := m.runQueued(); cmd != nil {
 			// Keys waited for this save: they build on it, and one
 			// reload follows the last.
@@ -920,6 +929,7 @@ func (m *dash) setData(d Data) tea.Cmd {
 	first := !m.loaded
 	m.data, m.loaded = d, true
 	m.rebuild()
+	m.noteModFailures()
 	ring := false
 	if d.ServerOK {
 		ring = m.seen && d.Alerts > m.alerts

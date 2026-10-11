@@ -76,7 +76,8 @@ func readMods(md toml.MetaData, prims map[string]toml.Primitive) (old rawAgentMo
 			}
 			continue
 		}
-		if md.Type("mods", id) != "Hash" {
+		// A table, or one only its [mods.<id>.settings] defines (no type).
+		if t := md.Type("mods", id); t != "Hash" && t != "" {
 			unknown = append(unknown, "mods."+id)
 			continue
 		}

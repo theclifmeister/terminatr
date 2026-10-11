@@ -55,5 +55,9 @@ func ModsDir() (string, error) { return sub("mods") }
 // ModStateDir is <home>/state/mods, each mod's own data and store.
 func ModStateDir() (string, error) { return sub(filepath.Join("state", "mods")) }
 
+// ModCacheDir is <home>/cache/mods, each code mod's bundle and what its
+// last host said (the mod supervisor's, never the mod's).
+func ModCacheDir() (string, error) { return sub(filepath.Join("cache", "mods")) }
+
 // ModLogsDir is <home>/logs/mods, each mod's <id>.log.
 func ModLogsDir() (string, error) { return sub(filepath.Join("logs", "mods")) }

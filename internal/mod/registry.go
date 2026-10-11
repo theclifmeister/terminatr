@@ -55,6 +55,10 @@ type Mod struct {
 	// Order is its [mods.<id>] table's place in config.toml: the order
 	// mods were enabled in (config.Mod.Order).
 	Order int
+	// Builtin: the mod ships inside tm (a bundled mod, mods design §11).
+	// It can be turned off, never removed or updated on its own: it
+	// updates with tm.
+	Builtin bool
 }
 
 // Runs reports whether the mod runs for project slug: valid, compatible,

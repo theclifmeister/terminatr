@@ -2,13 +2,11 @@ package tui
 
 import (
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/config"
-	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
 )
 
@@ -23,21 +21,6 @@ bad    = { fg = ["red", "#bf616a"], bold = true }
 accent = { fg = ["cyan", "#5e81ac"] }
 `,
 	"icons.toml": "base = \"unicode\"\nworking = \"◉\"\nreview = \"◇\"\n",
-}
-
-// installMod writes mod id's files under TERMINATR_HOME's mods folder.
-func installMod(t *testing.T, id string, files map[string]string) {
-	t.Helper()
-	mods, _ := home.ModsDir()
-	for name, body := range files {
-		p := filepath.Join(mods, id, filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
 }
 
 // writeConfig writes config.toml.
