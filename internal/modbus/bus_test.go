@@ -186,3 +186,33 @@ func TestDeliverEndsWithContext(t *testing.T) {
 		t.Fatal("deliver kept running")
 	}
 }
+
+func TestWaitAndSetEvents(t *testing.T) {
+	b := New()
+	s := b.Subscribe("m", Options{Grants: all, Events: []string{ClockMinute}})
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	if err := s.Wait(ctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Wait with only mod.ready pending = %v, want the deadline", err)
+	}
+	cancel()
+	b.Publish(TaskChanged, "p", 1) // filtered out
+	s.SetEvents([]string{TaskChanged})
+	b.Publish(ClockMinute, "", 2) // filtered out now
+	done := make(chan error, 1)
+	go func() { done <- s.Wait(context.Background()) }()
+	b.Publish(TaskChanged, "p", 3)
+	if err := <-done; err != nil {
+		t.Fatalf("Wait: %v", err)
+	}
+	if ev := next(t, s); ev.Name != ModReady {
+		t.Fatalf("first %s, want mod.ready", ev.Name)
+	}
+	if ev := next(t, s); ev.Name != TaskChanged || ev.Data != 3 {
+		t.Fatalf("got %s %v, want task.changed 3", ev.Name, ev.Data)
+	}
+	empty(t, s)
+	s.Close()
+	if err := s.Wait(context.Background()); !errors.Is(err, ErrClosed) {
+		t.Fatalf("Wait on a closed queue = %v", err)
+	}
+}
