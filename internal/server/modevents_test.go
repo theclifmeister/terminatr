@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,6 +32,22 @@ func TestModEvents(t *testing.T) {
 	}
 	s := &Server{opts: Options{Paths: p}, log: log.New(&testWriter{t: t}, "server: ", 0),
 		sessions: map[string]*session.Session{}, modEv: newModEvents()}
+	// The changes below must land in one look, whose events have a set
+	// order: a look between two of them (the poll, a wake, the minute)
+	// splits them, and the order with them (T283). The test holds the
+	// looks off while it makes them, and learns when one has run.
+	var looking sync.RWMutex
+	looks := make(chan struct{}, 1)
+	s.modEv.hold = func() func() {
+		looking.RLock()
+		return func() {
+			looking.RUnlock()
+			select {
+			case looks <- struct{}{}:
+			default:
+			}
+		}
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go s.runModEvents(ctx)
@@ -57,9 +74,11 @@ func TestModEvents(t *testing.T) {
 	if r := next(blind).Data.(modbus.Ready); r.Projects != nil {
 		t.Fatalf("blind ready has projects: %+v", r)
 	}
-	// Let the first look take its baseline.
-	time.Sleep(200 * time.Millisecond)
+	// Let a look take its baseline: hold runs only while a mod is
+	// subscribed, so any look it signals has one.
+	<-looks
 
+	looking.Lock()
 	if _, err := pr.Tasks().StepCheck(human, 1, 1, true); err != nil {
 		t.Fatal(err)
 	}
@@ -76,6 +95,7 @@ func TestModEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.modEv.wake()
+	looking.Unlock()
 
 	var names []string
 	var task modbus.Task
