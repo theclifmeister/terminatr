@@ -56,6 +56,10 @@ type View struct {
 	// count from.
 	Current string  `json:"current,omitempty"`
 	Sidebar Sidebar `json:"sidebar"`
+	// Columns is the order of the grid on the right of the sidebar's
+	// rows (Columns): built-in column ids and mods' ("<mod>.<column>");
+	// empty for the default order.
+	Columns []string `json:"columns,omitempty"`
 	// SideSel is the tree row the keyboard is on in the sidebar (its key:
 	// "p:<project>", "c:<project>" or "t:<project>/<thread>"); a key no
 	// longer in the tree, or "", means the row you are on (Here).
@@ -111,6 +115,9 @@ func (v *View) Valid() error {
 	if err := v.Tree.Valid(); err != nil {
 		return fmt.Errorf("view %s: %w", v.Name, err)
 	}
+	if err := validColumns(v.Columns); err != nil {
+		return fmt.Errorf("view %s: %w", v.Name, err)
+	}
 	return nil
 }
 
@@ -121,6 +128,7 @@ func (v *View) Valid() error {
 func (v *View) Normalize() {
 	v.Sidebar = v.Sidebar.Clamp()
 	v.Info = v.Info.Clamp()
+	v.Columns = normColumns(v.Columns)
 	if v.Focus == "" {
 		v.Panel = false
 	}

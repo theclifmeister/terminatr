@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"cmp"
 	"slices"
 	"strings"
 	"sync"
@@ -549,7 +550,9 @@ func sideTip(all []treeRow, w, h, x, y int) string {
 		return ""
 	}
 	end := w - 1 - sideGap // the grid's right edge
-	grid, tips := treeGrid(r), gridTips(r)
+	lead, label := treeLead(r)
+	cols := rowCols(r, end, lead, label)
+	grid := treeGrid(r, cols)
 	line := ansi.Strip(treeCells(r, end, false, false))
 	for j := len(grid) - 1; j >= 0; j-- {
 		gw := ansi.StringWidth(grid[j].s)
@@ -561,47 +564,65 @@ func sideTip(all []treeRow, w, h, x, y int) string {
 		if strings.TrimSpace(grid[j].s) == "" || ansi.Cut(line, end, end+gw) != grid[j].s {
 			return ""
 		}
-		return tips[j]
+		return gridTip(r, cols[j])
 	}
 	return ""
 }
 
-// gridTips are the meanings of treeGrid's columns on r: count/%, PR/CI,
-// state, remote, paused, inactive, needs you.
-func gridTips(r treeRow) [7]string {
-	var t [7]string
-	switch r.kind {
-	case treeProject:
-		t[0] = "open threads"
-		t[2] = "its coordinator: " + stateMeaning(r.state)
-		t[6] = "needs you: something here waits on you"
-	case treeCoordinator:
-		t[0] = "context use"
-		if r.ctxHint {
-			t[0] += ": consider /clear, the context lives in files"
+// gridTip is the meaning of r's cell in column c (treeGrid).
+func gridTip(r treeRow, c sideCol) string {
+	switch c.id {
+	case view.ColCount:
+		switch r.kind {
+		case treeProject:
+			return "open threads"
+		case treeCoordinator:
+			if r.ctxHint {
+				return "context use: consider /clear, the context lives in files"
+			}
+			return "context use"
 		}
-		t[2] = "coordinator: " + stateMeaning(r.state)
-		t[6] = "needs you: its questions wait"
-	default:
-		t[0] = "progress"
-		t[2] = stateMeaning(r.state)
-		t[6] = "needs you: it waits on you"
+		return "progress"
+	case view.ColCI:
+		switch r.ci {
+		case "pass":
+			return "PR checks pass"
+		case "fail":
+			return "PR checks fail"
+		case "pending":
+			return "PR checks running"
+		}
+		return ""
+	case view.ColState:
+		switch {
+		case r.dormant:
+			return "dormant: its project is inactive"
+		case r.kind == treeProject:
+			return "its coordinator: " + stateMeaning(r.state)
+		case r.kind == treeCoordinator:
+			return "coordinator: " + stateMeaning(r.state)
+		}
+		return stateMeaning(r.state)
+	case view.ColRemote:
+		return "remote control is on for this coordinator"
+	case view.ColPaused:
+		return "the project is paused"
+	case view.ColInactive:
+		return "inactive: its coordinator and threads don't run"
+	case view.ColNeeds:
+		switch r.kind {
+		case treeProject:
+			return "needs you: something here waits on you"
+		case treeCoordinator:
+			return "needs you: its questions wait"
+		}
+		return "needs you: it waits on you"
 	}
-	switch r.ci {
-	case "pass":
-		t[1] = "PR checks pass"
-	case "fail":
-		t[1] = "PR checks fail"
-	case "pending":
-		t[1] = "PR checks running"
+	if c.mod != nil {
+		mod, _, _ := strings.Cut(c.id, ".")
+		return cmp.Or(c.mod.title, c.id) + " (mod: " + mod + ")"
 	}
-	if r.dormant {
-		t[2] = "dormant: its project is inactive"
-	}
-	t[3] = "remote control is on for this coordinator"
-	t[4] = "the project is paused"
-	t[5] = "inactive: its coordinator and threads don't run"
-	return t
+	return ""
 }
 
 // stateMeaning is a state word in the help's words (symbolLines).
