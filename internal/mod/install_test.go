@@ -196,11 +196,16 @@ func TestRemoveKeepsData(t *testing.T) {
 	Enable(human, "nord", "")
 	data := filepath.Join(h, "state", "mods", "nord")
 	os.MkdirAll(data, 0o755)
+	cache := filepath.Join(h, "cache", "mods", "nord")
+	os.MkdirAll(cache, 0o755)
 	if err := Remove(coord, "nord", false); !errors.Is(err, ErrHumanOnly) {
 		t.Fatalf("agent remove: %v", err)
 	}
 	if err := Remove(human, "nord", false); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := os.Stat(cache); err == nil {
+		t.Error("remove kept the cache folder")
 	}
 	r := registryOf(t)
 	if _, ok := r.Get("nord"); ok || len(r.Orphans) != 0 {
@@ -225,11 +230,15 @@ func TestRemoveKeepsData(t *testing.T) {
 	}
 	installFrom(t, Source{Path: src})
 	os.MkdirAll(data, 0o755)
+	os.MkdirAll(cache, 0o755)
 	if err := Remove(human, "nord", true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(data); err == nil {
 		t.Error("--purge kept the data")
+	}
+	if _, err := os.Stat(cache); err == nil {
+		t.Error("--purge kept the cache folder")
 	}
 }
 

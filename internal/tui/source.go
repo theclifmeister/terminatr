@@ -64,12 +64,13 @@ type Data struct {
 	// the header says so (docs/SPEC.md §8.2).
 	NoAgent bool
 	// Mods are the installed mods, by id, for the settings popup's Mods
-	// tab; ModsErr says why they can't be listed. ModFailures are the
-	// last error of each enabled mod whose host failed (mods design §8:
-	// ▲ failed), by id, from the mod supervisor.
-	Mods        []mod.Mod
-	ModsErr     string
-	ModFailures map[string]string
+	// tab; ModsErr says why they can't be listed. ModHosts are the
+	// enabled code mods' hosts as the mod supervisor has them (mods
+	// design §8: idle, starting, running, backoff, failed), by id; nil
+	// when the server doesn't say (mod.hosts).
+	Mods     []mod.Mod
+	ModsErr  string
+	ModHosts map[string]proto.ModHost
 }
 
 // ServerInfo is the running server's identity, from session.list.
@@ -229,6 +230,10 @@ type Source interface {
 	// ModLog is the end of mod id's log, at most max bytes (cut says it
 	// was longer); "" when it has none.
 	ModLog(id string, max int64) (text string, cut bool, err error)
+	// RestartMod starts code mod id's host again now (mod.restart): a
+	// failed mod gets a fresh count. It is refused when tm runs inside
+	// an agent.
+	RestartMod(id string) error
 }
 
 // Review is what the user needs to review a task: how to check it (the
@@ -308,6 +313,15 @@ func (s *ServerSource) Load() Data {
 		d.ModsErr = err.Error()
 	} else {
 		d.Mods = reg.Mods
+	}
+	if d.ServerOK {
+		var hosts proto.ModHostsResult
+		if err := s.call(proto.MethodModHosts, nil, &hosts); err == nil {
+			d.ModHosts = make(map[string]proto.ModHost, len(hosts.Hosts))
+			for _, h := range hosts.Hosts {
+				d.ModHosts[h.ID] = h
+			}
+		}
 	}
 	if cfg != nil {
 		d.AgentMod, d.AgentModBand, d.AgentModPane, d.ContextHint, d.UpdateCheck = cfg.AgentMod, cfg.AgentModBand, cfg.AgentModPane, cfg.ContextHint, cfg.UpdateCheck
@@ -737,6 +751,13 @@ func (s *ServerSource) ModLog(id string, max int64) (string, bool, error) {
 		return "", false, err
 	}
 	return tail(filepath.Join(dir, id+".log"), max)
+}
+
+func (s *ServerSource) RestartMod(id string) error {
+	if s.Caller.IsAgent() {
+		return mod.ErrHumanOnly
+	}
+	return s.call(proto.MethodModRestart, proto.ModRestartParams{ID: id}, nil)
 }
 
 // tail reads the last max bytes of file path, from its first whole

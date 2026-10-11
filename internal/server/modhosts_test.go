@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/modsup"
 	"github.com/theclifmeister/terminatr/internal/session"
 )
@@ -82,6 +83,40 @@ func TestModHostsFollowConfig(t *testing.T) {
 	})
 	write("config.toml", "[mods.code]\nenabled = false\n")
 	wait("code stopped", func(st []modsup.Status) bool { return len(st) == 0 })
+}
+
+// TestModRestartHumanOnly: mod.hosts lists the hosts as the Mods tab
+// reads them; mod.restart is refused for an agent, and for a mod that
+// has no host, and restarts one for the human.
+func TestModRestartHumanOnly(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("TERMINATR_HOME", home)
+	s := &Server{opts: Options{Bin: "/nonexistent/tm"}, log: log.New(&testWriter{t: t}, "server: ", 0),
+		sessions: map[string]*session.Session{}, modEv: newModEvents()}
+	if res := s.modHosts(); res.Hosts == nil || len(res.Hosts) != 0 {
+		t.Fatalf("no supervisor: %+v", res)
+	}
+	if _, perr := s.restartMod("code", caller.Caller{Kind: caller.Human}); perr == nil {
+		t.Fatal("restarted a mod without a supervisor")
+	}
+	sup := s.newModHosts()
+	defer sup.Close()
+	s.modSup.Store(sup)
+	sup.Set([]modsup.Spec{{ID: "code", Entry: filepath.Join(home, "main.js")}})
+	if res := s.modHosts(); len(res.Hosts) != 1 || res.Hosts[0].ID != "code" || res.Hosts[0].State == "" {
+		t.Fatalf("hosts: %+v", res)
+	}
+	for _, c := range []caller.Caller{{Kind: caller.Coordinator, Project: "p"}, {Kind: caller.Thread, Project: "p", Thread: "t-0001"}} {
+		if _, perr := s.restartMod("code", c); perr == nil || perr.Code != "human-only" {
+			t.Errorf("%v restarted it: %v", c.Kind, perr)
+		}
+	}
+	if _, perr := s.restartMod("other", caller.Caller{Kind: caller.Human}); perr == nil {
+		t.Error("restarted a mod that has no host")
+	}
+	if _, perr := s.restartMod("code", caller.Caller{Kind: caller.Human}); perr != nil {
+		t.Errorf("the human's restart: %v", perr)
+	}
 }
 
 // TestModHostReachesBroker: a supervised host's $ request goes through

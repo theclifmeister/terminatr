@@ -13,10 +13,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modsup"
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
 
@@ -91,4 +93,28 @@ func (s *Server) ModHosts() []modsup.Status {
 		return sup.Status()
 	}
 	return nil
+}
+
+// modHosts is mod.hosts: ModHosts for the Mods tab.
+func (s *Server) modHosts() proto.ModHostsResult {
+	res := proto.ModHostsResult{Hosts: []proto.ModHost{}}
+	for _, st := range s.ModHosts() {
+		res.Hosts = append(res.Hosts, proto.ModHost{ID: st.ID, State: string(st.State), Since: st.Since,
+			PID: st.PID, RSS: st.RSS, Restarts: st.Restarts, Next: st.Next, Err: st.Err})
+	}
+	return res
+}
+
+// restartMod is mod.restart: the human starts mod id's host again; an
+// agent is refused.
+func (s *Server) restartMod(id string, c caller.Caller) (any, *proto.Error) {
+	if c.IsAgent() {
+		return nil, proto.Errorf("human-only", "the user restarts mods")
+	}
+	sup := s.modSup.Load()
+	if sup == nil || !sup.Restart(id) {
+		return nil, proto.Errorf(proto.ErrBadParams, "mod %q doesn't run: only an enabled code mod has a host", id)
+	}
+	s.log.Printf("mod.restart %s", id)
+	return struct{}{}, nil
 }
