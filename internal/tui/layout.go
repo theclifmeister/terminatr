@@ -28,6 +28,8 @@ type Layout struct {
 	Sidebar SidebarLayout `json:"sidebar"`
 	// Info is the info panel's beside a thread's pane, while attached.
 	Info view.Info `json:"info"`
+	// Tree is what the sidebar's tree folds: new views start with it.
+	Tree view.Tree `json:"tree"`
 }
 
 const (
@@ -54,6 +56,9 @@ func LoadLayout(path string) Layout {
 	l.Split = clampSplit(l.Split)
 	l.Sidebar = l.Sidebar.Clamp()
 	l.Info = l.Info.Clamp()
+	if l.Tree.Valid() != nil {
+		l.Tree = view.Tree{}
+	}
 	return l
 }
 
@@ -87,7 +92,7 @@ func (m *dash) split() (bool, int) {
 func (m *dash) setLayout(l Layout) {
 	l.Split = clampSplit(l.Split)
 	l.Sidebar = l.Sidebar.Clamp()
-	if l != m.layout {
+	if !sameLayout(l, m.layout) {
 		side := l.Sidebar != m.layout.Sidebar
 		m.layout = l
 		if side {
@@ -95,6 +100,12 @@ func (m *dash) setLayout(l Layout) {
 		}
 		m.saveLayout()
 	}
+}
+
+// sameLayout says whether a and b lay the screen out alike: the tree's
+// folds aside (refold saves them).
+func sameLayout(a, b Layout) bool {
+	return a.Details == b.Details && a.Split == b.Split && a.Sidebar == b.Sidebar && a.Info == b.Info
 }
 
 // saveLayout writes ui.json; a failed save only costs the preference,
@@ -113,6 +124,14 @@ func (m *dash) saveLayout() {
 func SaveSidebar(path string, s SidebarLayout) error {
 	l := LoadLayout(path)
 	l.Sidebar = s.Clamp()
+	return SaveLayout(path, l)
+}
+
+// SaveTree writes what the sidebar's tree folds to path and keeps the
+// rest of the file, as SaveSidebar.
+func SaveTree(path string, t view.Tree) error {
+	l := LoadLayout(path)
+	l.Tree = t
 	return SaveLayout(path, l)
 }
 

@@ -55,6 +55,8 @@ type iconSet struct {
 	working, blocked, idle, starting, running, review, done, other, none string
 	// A thread's pull request checks: passing, failing, running.
 	ciPass, ciFail, ciRun string
+	// The inactive divider's mark: folded, unfolded.
+	fold, unfold string
 	// Todos and steps (todoGlyph), and the progress bar's cells (bar).
 	todoDone, todoNow, todoOpen string
 	barOn, barOff               string
@@ -67,6 +69,7 @@ var unicodeIcons = iconSet{
 	hint: "⚑", current: "▸", remote: "⌁", paused: "∥", inactive: "⊘",
 	working: "●", blocked: "▲", idle: "○", starting: "◌", running: "▷", review: "◆", done: "✓", other: "·", none: "·",
 	ciPass: "☑", ciFail: "☒", ciRun: "☐",
+	fold: "▸", unfold: "▾",
 	todoDone: "✓", todoNow: "◐", todoOpen: "○",
 	barOn: "▰", barOff: "▱",
 }
@@ -83,6 +86,7 @@ var nerdIcons = iconSet{
 	working: "", blocked: "", idle: "", starting: "", running: "",
 	review: "", done: "", other: "", none: "·", // circle, warning, circle_o, spinner, eye, check, stop_circle
 	ciPass: "\uf058", ciFail: "\uf057", ciRun: "\uf1ce", // check_circle, times_circle, circle_o_notch
+	fold: "▸", unfold: "▾",
 	todoDone: "", todoNow: "", todoOpen: "", // check, dot_circle_o, circle_o
 	barOn: "▰", barOff: "▱",
 }
@@ -94,6 +98,7 @@ var asciiIcons = iconSet{
 	hint: "?", current: ">", remote: "@", paused: "=", inactive: "/",
 	working: "*", blocked: "!", idle: "o", starting: "~", running: ":", review: "#", done: "v", other: "-", none: ".",
 	ciPass: "+", ciFail: "x", ciRun: "~",
+	fold: ">", unfold: "v",
 	todoDone: "x", todoNow: "~", todoOpen: "o",
 	barOn: "#", barOff: "-",
 }

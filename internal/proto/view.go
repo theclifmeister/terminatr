@@ -27,6 +27,10 @@ const (
 	// MethodViewExpand expands (On) or collapses an inactive Project in
 	// the sidebar's tree, without activating it (since protocol 10).
 	MethodViewExpand = "view.expand"
+	// MethodViewTree sets what the sidebar's tree folds (Tree): the
+	// active projects folded, the inactive ones expanded, the inactive
+	// divider open (since protocol 11).
+	MethodViewTree = "view.tree"
 	// MethodViewSidebar sets the projects sidebar (Sidebar).
 	MethodViewSidebar = "view.sidebar"
 	// MethodViewInfo sets the info panel beside a thread's pane (Info).
@@ -78,6 +82,9 @@ type ViewSubscribeParams struct {
 	// Info is the info panel of a view created by this call (from the
 	// client's ui.json), as Sidebar.
 	Info *view.Info `json:"info,omitempty"`
+	// Tree is the tree's folds of a view created by this call (from the
+	// client's ui.json), as Sidebar.
+	Tree *view.Tree `json:"tree,omitempty"`
 }
 
 // ViewSubscribeResult is the answer to view.subscribe: the client's id in
@@ -110,6 +117,7 @@ type ViewParams struct {
 	Key     string        `json:"key,omitempty"`
 	Sidebar *view.Sidebar `json:"sidebar,omitempty"`
 	Info    *view.Info    `json:"info,omitempty"`
+	Tree    *view.Tree    `json:"tree,omitempty"`
 	Cols    uint16        `json:"cols,omitempty"`
 	Rows    uint16        `json:"rows,omitempty"`
 	Resize  bool          `json:"resize,omitempty"`

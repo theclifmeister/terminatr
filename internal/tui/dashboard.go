@@ -169,9 +169,9 @@ type dash struct {
 	sideSel  string
 	sideSent string
 	sideBusy bool
-	// expanded are the inactive projects expanded in the sidebar's
-	// tree: the view's, changed here at once (expand).
-	expanded []string
+	// folds are what the sidebar's tree folds: the view's, changed here
+	// at once (refold).
+	folds    view.Tree
 	msg      string
 	errMsg   string                  // msg when it reports a failure, drawn as one
 	busy     bool                    // an action is running
@@ -240,13 +240,14 @@ func newDash(o DashOptions) *dash {
 	if o.State.SideFocus {
 		m.focus = areaSide
 	}
+	m.folds = m.layout.Tree
 	if vc := o.View; vc != nil {
 		v := vc.View()
 		m.view, m.viewSeq = vc, v.Seq
 		m.sel = cmp.Or(v.Selected, m.sel)
 		m.current = v.Current
 		m.sideSel, m.sideSent = v.SideSel, v.SideSel
-		m.expanded = v.Expanded
+		m.folds, m.layout.Tree = v.Tree, v.Tree
 		m.layout.Sidebar, m.viewSide = v.Sidebar, v.Sidebar
 		m.layout.Info = v.Info
 		m.watch, m.stopWatch = vc.Watch()
@@ -464,7 +465,8 @@ func (m *dash) fromView() tea.Cmd {
 	if !m.sideBusy && m.sideSel == m.sideSent {
 		m.sideSel, m.sideSent = v.SideSel, v.SideSel
 	}
-	m.expanded = v.Expanded
+	// Kept in the layout too, so that saving it keeps the view's.
+	m.folds, m.layout.Tree = v.Tree, v.Tree
 	if !m.sideDrag && v.Sidebar != m.viewSide {
 		m.layout.Sidebar, m.viewSide = v.Sidebar, v.Sidebar
 		m.setWidth(m.winW)
@@ -645,6 +647,8 @@ func (m *dash) sideClick(mo tea.Mouse) tea.Cmd {
 	case border:
 		m.sideDrag = true
 	case !ok || m.busy:
+	case r.kind == treeDivider:
+		return tea.Batch(cmd, m.refold(foldDivider(r)))
 	case !can:
 		m.msg = why
 	default:
@@ -701,7 +705,7 @@ func (m *dash) showProject(slug string) tea.Cmd {
 // current, and its row the one you are on; the keyboard's row is marked
 // while the sidebar has the focus.
 func (m *dash) tree() []treeRow {
-	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint, expanded: m.expanded})
+	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint, tree: m.folds})
 	if m.focus == areaSide {
 		markCursor(rows, m.sideW(), m.sideSel)
 	}
@@ -763,22 +767,34 @@ func (m *dash) sideKeyboard(key string) (tea.Cmd, bool) {
 	if st.toggle != "" {
 		cmds = append(cmds, m.toggleActive(st.toggle, st.activate))
 	}
-	if st.expand != "" {
-		cmds = append(cmds, m.expand(st.expand, st.expandOn))
+	if st.refold != nil {
+		cmds = append(cmds, m.refold(st.refold))
+	}
+	if st.pin != "" {
+		cmds = append(cmds, m.setPinned(st.pin, st.pinOn))
 	}
 	return tea.Batch(cmds...), true
 }
 
-// expand expands or collapses an inactive project in the sidebar's
-// tree, here at once and in the view; it never activates it (§5.1).
-func (m *dash) expand(slug string, on bool) tea.Cmd {
-	v := view.View{Expanded: m.expanded}
-	v.Expand(slug, on)
-	m.expanded = v.Expanded
+// refold changes what the sidebar's tree folds: here at once, in the
+// view, and in ui.json, as the tree new views start with. Folding never
+// activates or deactivates a project (§5.1).
+func (m *dash) refold(fn func(*view.Tree)) tea.Cmd {
+	t := m.folds
+	fn(&t)
+	m.folds, m.layout.Tree = t, t
+	m.saveLayout()
 	if m.view == nil {
 		return nil
 	}
-	return m.call(proto.MethodViewExpand, proto.ViewParams{Project: slug, On: on})
+	return m.call(proto.MethodViewTree, proto.ViewParams{Tree: &t})
+}
+
+// setPinned pins a project to the top of the sidebar, or unpins it:
+// here at once, and in its setting.
+func (m *dash) setPinned(slug string, on bool) tea.Cmd {
+	pinIn(m.data.Projects, slug, on)
+	return m.lifecycle(slug, map[bool]string{true: "pin", false: "unpin"}[on])
 }
 
 // setData takes a poll's result, rebuilds the rows and rings the bell

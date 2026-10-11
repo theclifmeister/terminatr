@@ -17,8 +17,9 @@ import (
 // view.expand, no expanded projects in the view). 8: view.info, the info
 // panel beside a thread's pane. 9: no FrameSetSize, FrameClaimSize or
 // FrameState; a view's geometry has one pane. 10: view.expand again, for
-// inactive projects only (expanded in the view).
-const Protocol = 10
+// inactive projects only (expanded in the view). 11: view.tree, the
+// tree's folds (active projects folded, the inactive divider open).
+const Protocol = 11
 
 // Kind is what a connection is for.
 type Kind string

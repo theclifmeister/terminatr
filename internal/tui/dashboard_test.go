@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -598,12 +599,12 @@ func TestDashboardSplit(t *testing.T) {
 
 func TestLayoutFile(t *testing.T) {
 	dir := t.TempDir()
-	if l := LoadLayout(filepath.Join(dir, "none.json")); l != DefaultLayout {
+	if l := LoadLayout(filepath.Join(dir, "none.json")); !reflect.DeepEqual(l, DefaultLayout) {
 		t.Fatalf("missing file: %+v", l)
 	}
 	bad := filepath.Join(dir, "bad.json")
 	os.WriteFile(bad, []byte("{"), 0o644)
-	if l := LoadLayout(bad); l != DefaultLayout {
+	if l := LoadLayout(bad); !reflect.DeepEqual(l, DefaultLayout) {
 		t.Fatalf("bad file: %+v", l)
 	}
 	far := filepath.Join(dir, "far.json")

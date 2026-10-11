@@ -95,6 +95,28 @@ func PauseProject(c caller.Caller, slug string, on bool) (string, error) {
 	return "resumed " + slug, nil
 }
 
+// PinProject pins a project to the top of the sidebar's active
+// projects, or unpins it: its order only, kept in its settings.
+func PinProject(c caller.Caller, slug string, on bool) (string, error) {
+	if err := humanOnly(c, "pins and unpins projects"); err != nil {
+		return "", err
+	}
+	p, err := project.Open(slug)
+	if err != nil {
+		return "", err
+	}
+	changed, err := p.SetFlag(c, "pinned", on)
+	switch {
+	case err != nil:
+		return "", err
+	case !changed:
+		return slug + " is already " + map[bool]string{true: "pinned", false: "not pinned"}[on], nil
+	case on:
+		return "pinned " + slug + " to the top of the sidebar", nil
+	}
+	return "unpinned " + slug, nil
+}
+
 // DeactivateQuestion is the confirmation deactivating a project asks
 // while busy (its Running) run.
 func DeactivateQuestion(slug string, busy []string) string {
