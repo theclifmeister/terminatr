@@ -187,3 +187,31 @@ func TestDashboardActiveToggle(t *testing.T) {
 		t.Errorf("lifecycle %v", src.lifecycle)
 	}
 }
+
+// TestRefoldNotUndoneByOlderView: a version of the view from before
+// this console's refold, arriving while the refold is on its way, doesn't
+// fold back what was just unfolded; once the view has the change, the
+// view's folds are taken again, another console's too.
+func TestRefoldNotUndoneByOlderView(t *testing.T) {
+	src := &fakeSource{data: testData()}
+	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 30, State: DashState{Current: "beta"}})
+	m.setData(src.data)
+	vc := &ViewConn{v: view.View{Name: "v", Seq: 1}, up: true, watch: map[chan struct{}]bool{}}
+	m.view = vc
+	m.refold(func(t *view.Tree) { t.InactiveOpen = true })
+	vc.set(view.View{Name: "v", Seq: 2}) // e.g. a sidebar move's, sent before
+	m.fromView()
+	if !m.folds.InactiveOpen {
+		t.Fatal("an older view folded the divider back while the refold was on its way")
+	}
+	vc.set(view.View{Name: "v", Seq: 3, Tree: view.Tree{InactiveOpen: true}})
+	m.update(viewDoneMsg{tree: true})
+	if !m.folds.InactiveOpen || m.treePending != 0 {
+		t.Fatalf("after the refold landed: folds %+v, %d pending", m.folds, m.treePending)
+	}
+	vc.set(view.View{Name: "v", Seq: 4}) // another console folds it
+	m.fromView()
+	if m.folds.InactiveOpen {
+		t.Fatal("the view's own folds aren't taken once nothing is on its way")
+	}
+}
