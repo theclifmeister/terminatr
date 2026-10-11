@@ -256,6 +256,9 @@ type pane struct {
 // client is the attached window: its panes and everything they share.
 type client struct {
 	paths server.Paths
+	// cells are the mods' cells and status segments from the last poll
+	// (pollState). Guarded by mu.
+	cells *modCells
 	log   *log.Logger
 	enc   *emu.Encoder
 	vc    *ViewConn
@@ -1323,7 +1326,7 @@ func (c *client) status() {
 	if c.flash != "" {
 		where = c.flash // a note in passing
 	}
-	line, hits := statusBar(c.focus.info, c.focus.status, c.paneTitle(), c.pending, c.cols, where)
+	line, hits := statusBar(c.focus.info, c.focus.status, c.paneTitle(), c.pending, c.cols, where, c.cells)
 	if c.single {
 		c.focus.r.SetStatus(line)
 	}
@@ -1829,6 +1832,7 @@ func (c *client) pollState(ctx context.Context) {
 					}
 				}
 			}
+			c.cells = newModCells(res.Mods, res.Sessions)
 			c.status()
 			c.bell = c.bell || ring
 			c.osc = append(c.osc, osc...)

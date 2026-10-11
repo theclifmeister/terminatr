@@ -193,3 +193,47 @@ func TestNeedYouUnfoldsActive(t *testing.T) {
 		t.Fatalf("w: cursor %q, folds %+v", got, m.folds)
 	}
 }
+
+// TestSideKeysWhileActing: the sidebar's keys go on while an action
+// runs. Activating a project shows it expanded at once, before the
+// server answers; the cursor's moves then happen at once, and space
+// waits for the activation, then acts on the row it was pressed on
+// (T283: the keys were dropped, so space never asked about alpha).
+func TestSideKeysWhileActing(t *testing.T) {
+	m, src, _ := foldDash(t)
+	m.sideSel = dividerKey
+	run(m, keyPress(m, "right")) // unfolds it
+	run(m, keyPress(m, "j"))
+	if m.sideSel != "p:beta" {
+		t.Fatalf("cursor %q under the divider", m.sideSel)
+	}
+	activate := keyPress(m, "space")
+	if !m.busy || activate == nil {
+		t.Fatal("space on beta started no activation")
+	}
+	if !slices.Contains(rowKeys(m.tree()), "c:beta") {
+		t.Fatalf("beta not expanded at once: %v", rowKeys(m.tree()))
+	}
+	for m.sideSel != "p:alpha" {
+		before := m.sideSel
+		run(m, keyPress(m, "k"))
+		if m.sideSel == before {
+			t.Fatalf("k while activating left the cursor on %q", before)
+		}
+	}
+	run(m, keyPress(m, "space"))
+	if m.top() != nil || len(m.queued) != 1 {
+		t.Fatalf("space while activating: popup %T, queued %d", m.top(), len(m.queued))
+	}
+	run(m, activate)
+	if !slices.Equal(src.lifecycle, []string{"beta activate"}) {
+		t.Fatalf("lifecycle %v", src.lifecycle)
+	}
+	if _, ok := m.top().(*confirmView); !ok || !strings.Contains(whole(m), "Deactivate alpha?") {
+		t.Fatalf("after the activation: popup %T, no question about alpha:\n%s", m.top(), whole(m))
+	}
+	run(m, keyPress(m, "y"))
+	if !slices.Equal(src.lifecycle, []string{"beta activate", "alpha deactivate"}) {
+		t.Fatalf("lifecycle after y %v", src.lifecycle)
+	}
+}

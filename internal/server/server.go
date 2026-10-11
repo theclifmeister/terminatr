@@ -150,6 +150,8 @@ type Server struct {
 	modSup atomic.Pointer[modsup.Supervisor]
 	// modBr is the user mods' broker (modbroker.go).
 	modBr modBroker
+	// modCl are the mods' cells (modcells.go).
+	modCl modCells
 	// notices are the mods' notifications (modnotify.go).
 	notices *modnotify.Hub
 	// versions caches agent versions for the mod guard (mods.go).
@@ -322,6 +324,10 @@ func Run(ctx context.Context, opts Options) error {
 	// The mod hosts go first: nothing waits on them.
 	stopEvents()
 	<-hostsDone
+	// The cells they published last show again after a restart.
+	if err := s.cells().Flush(); err != nil {
+		logger.Printf("mods: cells: %v", err)
+	}
 	// Let a sweep in progress finish while the socket still answers.
 	stopTicker()
 	select {
@@ -642,7 +648,7 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 		}
 		return s.stop(p)
 	case proto.MethodSessionList:
-		return s.list(), nil
+		return s.sessionList(), nil
 	case proto.MethodNotifyClaim, proto.MethodNotifyDismiss:
 		var p proto.NoticeParams
 		if err := decodeParams(req.Params, &p); err != nil {
@@ -820,6 +826,16 @@ func (s *Server) list() proto.SessionListResult {
 		res.Sessions = append(res.Sessions, s.info(sess))
 	}
 	sort.Slice(res.Sessions, func(i, j int) bool { return res.Sessions[i].Created.Before(res.Sessions[j].Created) })
+	return res
+}
+
+// sessionList is session.list's answer: list's, with the mods' cells.
+func (s *Server) sessionList() proto.SessionListResult {
+	res := s.list()
+	res.Mods = s.modCellsView()
+	for i := range res.Sessions {
+		res.Sessions[i].Cells = s.sessionCells(res.Sessions[i].ID)
+	}
 	return res
 }
 

@@ -2,6 +2,7 @@ package modproto
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -51,4 +52,42 @@ func TestSendRefusesAnOverlongLine(t *testing.T) {
 	if err := c.Notify(MethodLog, Log{Text: strings.Repeat("x", MaxLine)}); err == nil {
 		t.Fatal("sent a line over MaxLine")
 	}
+}
+
+// TestCallAnswerBeforeExit: a host that answers a call and exits at once
+// (shutdown) could give the call ErrClosed: when the caller came to wait
+// only after the answer and the end of the host's stdout were both in,
+// select picked either (TestClientEventLimit in internal/modhost, T283).
+// The writer holds the caller after its request until the end is in.
+func TestCallAnswerBeforeExit(t *testing.T) {
+	for i := 0; i < 50; i++ {
+		inR, inW := io.Pipe()
+		outR, outW := io.Pipe()
+		ended := make(chan struct{})
+		go func() {
+			host := NewConn(inR, outW)
+			if m, err := host.Read(); err == nil {
+				_ = host.Reply(*m.ID, nil)
+			}
+			outW.Close()
+		}()
+		c := NewClient(outR, heldWriter{inW, ended}, nil, nil)
+		go func() { <-c.Done(); close(ended) }()
+		if err := c.Shutdown(context.Background()); err != nil {
+			t.Fatalf("try %d: %v", i, err)
+		}
+		inW.Close()
+	}
+}
+
+// heldWriter returns from each write only once ended is closed.
+type heldWriter struct {
+	w     io.Writer
+	ended chan struct{}
+}
+
+func (h heldWriter) Write(p []byte) (int, error) {
+	n, err := h.w.Write(p)
+	<-h.ended
+	return n, err
 }
