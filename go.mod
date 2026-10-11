@@ -10,7 +10,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/creack/pty v1.1.24
 	go.mitchellh.com/libghostty v0.0.0-20261001181910-76867c77a212
-	golang.org/x/sys v0.48.0
+	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.46.0
 )
 
