@@ -1164,6 +1164,44 @@ func TestSettingsKeysQueueDuringSave(t *testing.T) {
 	}
 }
 
+// TestSettingsQueueOutlivesStalePoll: a poll that began before a save
+// landed and answers while it runs carries the old value; the keys
+// waiting for the save still build on the new one, so none is lost
+// (T278: one + of three, under -race).
+func TestSettingsQueueOutlivesStalePoll(t *testing.T) {
+	src, m := popupData(t)
+	keyPress(m, "a")
+	keyPress(m, "4")
+	for range 3 {
+		keyPress(m, "down")
+	}
+	run(m, keyPress(m, "enter")) // 10 → 15, saved
+	m.setData(src.Load())
+	poll := m.load()() // a tick's poll: it reads 15
+	d := poll.(dataMsg)
+	d.data.Projects = slices.Clone(d.data.Projects) // the server's answer is its own copy
+	cmd := keyPress(m, "+")                         // 16, in flight
+	for range 2 {
+		keyPress(m, "+") // they wait for the save
+	}
+	m.Update(d) // the poll answers during the save, with 15
+	for i := 0; cmd != nil && i < 10; i++ {
+		msg := cmd()
+		if _, ok := msg.(actionMsg); !ok {
+			break
+		}
+		_, cmd = m.Update(msg)
+	}
+	m.setData(src.Load())
+	if out := screen(m); !strings.Contains(out, "18 · 1 working now") {
+		t.Fatalf("parallel threads:\n%s", out)
+	}
+	cfg, _ := config.Load()
+	if s := must(cfg.Safety("alpha")); s.ParallelThreads != 18 {
+		t.Fatalf("saved %+v", s)
+	}
+}
+
 // TestModelsSetting: the Thread models row opens a list; leaving a model
 // out saves the rest, the last one can't go, and all projects drops the
 // line once every model is allowed again.
