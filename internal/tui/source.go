@@ -79,6 +79,9 @@ type Data struct {
 	// (mod.CheckData), one per line.
 	ModData  map[string]string
 	ModHosts map[string]proto.ModHost
+	// NoMods: the server runs in safe mode (tm --no-mods): no user mod
+	// runs (mod.hosts).
+	NoMods bool
 	// Cells are the mods' cells and status segments (session.list's
 	// Mods and the sessions' Cells); nil for none.
 	Cells *modCells
@@ -229,6 +232,12 @@ type Source interface {
 	Library(slug string) ([]thread.LibFile, error)
 	LibraryRead(slug, id, name string, max int64) (data []byte, truncated bool, err error)
 	LibraryRemove(slug, id, name string) (int, error)
+	// ModActionDone tells the server a human ran (ok) or was refused an
+	// action mod's row or button bound, for the mod's action.done.
+	ModActionDone(mod, action string, target map[string]string, ok bool) error
+	// ModActionCheck refuses a binding outside its mod's reach (its
+	// projects, project_read), asked before the console runs one.
+	ModActionCheck(mod, action string, target map[string]string) error
 	// ModAct enables, disables or removes installed mod id (verb
 	// "enable", "disable", "remove"), on the human's answer in the Mods
 	// tab (mods design §9). Enabling grants every permission the mod
@@ -342,6 +351,7 @@ func (s *ServerSource) Load() Data {
 	if d.ServerOK {
 		var hosts proto.ModHostsResult
 		if err := s.call(proto.MethodModHosts, nil, &hosts); err == nil {
+			d.NoMods = hosts.NoMods
 			d.ModHosts = make(map[string]proto.ModHost, len(hosts.Hosts))
 			for _, h := range hosts.Hosts {
 				d.ModHosts[h.ID] = h
@@ -664,6 +674,14 @@ func (s *ServerSource) Ask(slug string, id int, kind, note string) (bool, error)
 		return p.AskSendBack(s.Caller, t.Ref(), note)
 	}
 	return p.AskDelegate(s.Caller, t.Ref())
+}
+
+func (s *ServerSource) ModActionDone(mod, action string, target map[string]string, ok bool) error {
+	return s.call(proto.MethodModActionDone, proto.ModActionDoneParams{ModActionParams: proto.ModActionParams{Mod: mod, Action: action, Target: target}, OK: ok}, nil)
+}
+
+func (s *ServerSource) ModActionCheck(mod, action string, target map[string]string) error {
+	return s.call(proto.MethodModActionCheck, proto.ModActionParams{Mod: mod, Action: action, Target: target}, nil)
 }
 
 func (s *ServerSource) OpenQuestions(slug string) (proto.QuestionsOpenResult, error) {

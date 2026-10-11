@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/theclifmeister/terminatr/internal/modaction"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -20,52 +21,10 @@ import (
 // note (a done one too, which the coordinator reopens); c opens the
 // coordinator, to answer what a task is blocked on.
 
-// notDelegable is why task t can't be delegated, "" when it can: an
-// open, ready or blocked task can.
-func notDelegable(t *tasks.Task) string {
-	switch t.Status {
-	case tasks.Open, tasks.Ready, tasks.Blocked:
-		return ""
-	case tasks.Started:
-		return t.Ref() + " is started: a thread already works on it"
-	case tasks.Review:
-		return t.Ref() + " is in review: A accepts it, x sends it back"
-	case tasks.Done:
-		return t.Ref() + " is done"
-	}
-	return t.Ref() + " is " + string(t.Status)
-}
-
-// notInReview is why task t can't be accepted, "" when it can: only a
-// task in review can.
-func notInReview(t *tasks.Task) string {
-	if t.Status == tasks.Review {
-		return ""
-	}
-	return t.Ref() + " is " + string(t.Status) + ", not in review"
-}
-
-// notSendable is why task t can't be sent back, "" when it can: a task
-// in review, or a done one (the coordinator reopens it), can.
-func notSendable(t *tasks.Task) string {
-	if t.Status == tasks.Review || t.Status == tasks.Done {
-		return ""
-	}
-	return t.Ref() + " is " + string(t.Status) + ", not in review or done"
-}
-
-// notAskable is why kind can't be asked for task t, "" when it can.
-func notAskable(t *tasks.Task, kind string) string {
-	switch kind {
-	case project.KindDelegate:
-		return notDelegable(t)
-	case project.KindAccept:
-		return notInReview(t)
-	case project.KindSendBack:
-		return notSendable(t)
-	}
-	return "unknown ask " + kind
-}
+// notAskable is why kind can't be asked for task t, "" when it can: the
+// action binding's check (modaction), so a mod's bound D, A or x and the
+// Tasks tab's agree.
+func notAskable(t *tasks.Task, kind string) string { return modaction.NotAskable(t, kind) }
 
 // delegateWaiting is what a task's row says while an item asks the
 // coordinator something about it.
@@ -117,57 +76,59 @@ func (m *dash) canAsk(slug string, t *tasks.Task, kind, hint string) bool {
 }
 
 // askCoordinator drops kind's item for slug's task t; the footer says
-// done.
-func (m *dash) askCoordinator(slug string, t *tasks.Task, kind, note, done string) tea.Cmd {
+// done. b is the mod binding pressed, nil for the core's own key.
+func (m *dash) askCoordinator(slug string, t *tasks.Task, kind, note, done string, b *binding) tea.Cmd {
 	src, ref, id := m.src, t.Ref(), t.ID
-	return m.act(func() actionMsg {
+	return m.actVia(b, func() (actionMsg, bool) {
 		asked, err := src.Ask(slug, id, kind, note)
 		if err != nil {
-			return actionMsg{err: err}
+			return actionMsg{err: err}, false
 		}
 		if !asked {
-			return actionMsg{msg: ref + " is already " + delegateWaiting}
+			return actionMsg{msg: ref + " is already " + delegateWaiting}, false
 		}
-		return actionMsg{msg: done}
+		return actionMsg{msg: done}, true
 	})
 }
 
-// delegate asks, then has the coordinator delegate slug's task t.
-func (m *dash) delegate(slug string, t *tasks.Task) tea.Cmd {
+// delegate asks, then has the coordinator delegate slug's task t. b is
+// the mod binding pressed, nil for the core's own D (and so for accept
+// and sendBack).
+func (m *dash) delegate(slug string, t *tasks.Task, b *binding) tea.Cmd {
 	if !m.canAsk(slug, t, project.KindDelegate, "D delegates open, ready and blocked tasks") {
 		return nil
 	}
 	ref := t.Ref()
 	question := "Delegate " + ref + " to the coordinator? It starts a thread for " + ref + " " + oneLine(t.Title) + "."
 	m.confirmNo("Delegate "+ref, question, ref+" not delegated", func() tea.Cmd {
-		return m.askCoordinator(slug, t, project.KindDelegate, "", "asked the coordinator to delegate "+ref+"; it starts a thread for it")
+		return m.askCoordinator(slug, t, project.KindDelegate, "", "asked the coordinator to delegate "+ref+"; it starts a thread for it", b)
 	})
 	return nil
 }
 
 // accept asks, then tells the coordinator the user accepts slug's task
 // t in review: it marks the task done.
-func (m *dash) accept(slug string, t *tasks.Task) tea.Cmd {
+func (m *dash) accept(slug string, t *tasks.Task, b *binding) tea.Cmd {
 	if !m.canAsk(slug, t, project.KindAccept, "A accepts tasks in review") {
 		return nil
 	}
 	ref := t.Ref()
 	question := "Accept " + ref + "? The coordinator marks " + ref + " " + oneLine(t.Title) + " done."
 	m.confirmNo("Accept "+ref, question, ref+" not accepted", func() tea.Cmd {
-		return m.askCoordinator(slug, t, project.KindAccept, "", "told the coordinator you accept "+ref+"; it marks it done")
+		return m.askCoordinator(slug, t, project.KindAccept, "", "told the coordinator you accept "+ref+"; it marks it done", b)
 	})
 	return nil
 }
 
 // sendBack asks for a note, then has the coordinator send slug's task t
 // back to work with it: one in review, or a done one, which it reopens.
-func (m *dash) sendBack(slug string, t *tasks.Task) tea.Cmd {
+func (m *dash) sendBack(slug string, t *tasks.Task, b *binding) tea.Cmd {
 	if !m.canAsk(slug, t, project.KindSendBack, "x sends back tasks in review or done") {
 		return nil
 	}
 	ref := t.Ref()
 	m.promptNo("Send "+ref+" back", "What should change? The coordinator passes your note on.", ref+" not sent back", project.MaxSendBackNote, func(note string) tea.Cmd {
-		return m.askCoordinator(slug, t, project.KindSendBack, note, "sent "+ref+" back with your note; the coordinator passes it on")
+		return m.askCoordinator(slug, t, project.KindSendBack, note, "sent "+ref+" back with your note; the coordinator passes it on", b)
 	})
 	return nil
 }
@@ -177,11 +138,11 @@ func (m *dash) sendBack(slug string, t *tasks.Task) tea.Cmd {
 func (m *dash) taskKey(slug string, t *tasks.Task, key string) tea.Cmd {
 	switch key {
 	case "D":
-		return m.delegate(slug, t)
+		return m.delegate(slug, t, nil)
 	case "A":
-		return m.accept(slug, t)
+		return m.accept(slug, t, nil)
 	case "x":
-		return m.sendBack(slug, t)
+		return m.sendBack(slug, t, nil)
 	case "c":
 		return m.openProject(slug)
 	}

@@ -1,0 +1,28 @@
+{
+  "name": "the tab, shown, lists the memory files",
+  "answers": [
+    { "method": "memory.list", "params": { "slug": "demo" },
+      "result": [{ "path": "CONTEXT.md", "title": "Context", "bytes": 2048 },
+                 { "path": "memory/decisions.md", "title": "Decisions", "bytes": 300 }] }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "memory", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "memory.list", "params": { "slug": "demo" } },
+      { "method": "ui.view.set",
+        "params": { "view": "memory", "options": { "project": "demo" },
+          "widget": { "kind": "stack", "children": [
+            { "kind": "list", "id": "files", "rows": [
+              { "id": "CONTEXT.md", "spans": [{ "text": "Context" }, { "text": "  CONTEXT.md · 2 KB", "role": "faint" }] },
+              { "id": "memory/decisions.md", "spans": [{ "text": "Decisions" }, { "text": "  memory/decisions.md · 300 B", "role": "faint" }] }
+            ] },
+            { "kind": "text", "role": "faint" },
+            { "kind": "keys", "keys": [{ "key": "enter", "label": "read" }] }
+          ] } } }
+    ],
+    "no_calls": ["memory.read"]
+  }
+}

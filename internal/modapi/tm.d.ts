@@ -149,6 +149,8 @@ export declare namespace TM {
     id: string;
     label: string;
     key?: string;
+    on: string;
+    confirm: boolean;
     precondition?: string;
   }
 

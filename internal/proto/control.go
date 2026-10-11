@@ -594,6 +594,34 @@ type QuestionsOpenResult struct {
 	Open    int    `json:"open"`
 }
 
+// MethodModActionDone tells the server a human ran a core action that a
+// mod's row, view or notification bound (the mods design §11; docs/SPEC.md
+// §5.3, Action binding), so the mod gets action.done and can redraw. The
+// console calls it after the core ran the action, or refused it as not
+// available; human-only, refused for an agent.
+const MethodModActionDone = "mod.action.done"
+
+// ModActionDoneParams are the params of mod.action.done: the mod whose
+// binding was pressed, the action and its target, and whether it ran.
+type ModActionDoneParams struct {
+	ModActionParams
+	OK bool `json:"ok"`
+}
+
+// MethodModActionCheck asks the server, before the console runs a
+// pressed binding, whether it is in its mod's reach: project_read, and
+// a target in a project the mod runs for (a session's own project).
+// Human-only.
+const MethodModActionCheck = "mod.action.check"
+
+// ModActionParams name a mod's binding: the mod, the action and its
+// target.
+type ModActionParams struct {
+	Mod    string            `json:"mod"`
+	Action string            `json:"action"`
+	Target map[string]string `json:"target,omitempty"`
+}
+
 // MethodNotifyClaim says a console draws mod notification id as an OS
 // notification: the first caller gets OK, the others none, so that one
 // console rings it. MethodNotifyDismiss takes it out of the tray (a
@@ -614,12 +642,15 @@ type NoticeResult struct {
 }
 
 // MethodModHosts lists the supervised code mods' hosts and where each
-// stands (mods design §8), for the Mods tab.
+// stands (mods design §8), for the Mods tab, tm doctor and tm mod dev.
 const MethodModHosts = "mod.hosts"
 
-// ModHostsResult is the answer of mod.hosts, by id.
+// ModHostsResult is the answer of mod.hosts, by id. NoMods: the server
+// runs in safe mode (tm --no-mods, TERMINATR_NO_MODS=1): no user mod
+// runs.
 type ModHostsResult struct {
-	Hosts []ModHost `json:"hosts"`
+	NoMods bool      `json:"no_mods,omitempty"`
+	Hosts  []ModHost `json:"hosts"`
 }
 
 // ModHost is one code mod's host: State is idle, starting, running,
@@ -637,8 +668,11 @@ type ModHost struct {
 	Err      string    `json:"err,omitempty"`
 }
 
-// MethodModRestart starts a code mod's host again now (the Mods tab's
-// r): a failed mod gets a fresh count, an idle one starts. The human's.
+// MethodModRestart reads the installed mods and config.toml again, then
+// starts a code mod's host again now (the Mods tab's r, tm mod dev after
+// each save): a failed mod gets a fresh count, an idle one starts, a mod
+// just enabled runs. It answers as mod.hosts. The human's; refused in
+// safe mode.
 const MethodModRestart = "mod.restart"
 
 // ModRestartParams are the params of mod.restart.

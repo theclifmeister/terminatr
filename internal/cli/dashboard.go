@@ -8,8 +8,10 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tui"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
@@ -47,6 +49,7 @@ func (e *Env) fullConsole(own bool, goTo *tui.Target) int {
 	if err != nil {
 		return e.srvFail("dashboard", err)
 	}
+	e.warnModsRun(c)
 	c.Close()
 	who := e.Caller
 	if e.Identify != nil {
@@ -166,4 +169,17 @@ func (e *Env) openCmd(slug, agentName string) error {
 	}
 	fmt.Fprintf(e.Stdout, "[%s: %s]\n", id, res.Reason)
 	return nil
+}
+
+// warnModsRun warns when tm --no-mods found a server already running
+// with user mods: safe mode is the server's, set when it starts.
+func (e *Env) warnModsRun(c *server.Client) {
+	if !mod.NoMods(e.Getenv) || c.Started {
+		return
+	}
+	var res proto.ModHostsResult
+	if err := c.Call(proto.MethodModHosts, nil, &res); err != nil || res.NoMods {
+		return
+	}
+	fmt.Fprintln(e.Stderr, "tm: --no-mods: the server was already running with user mods; tm --no-mods server restart restarts it without them")
 }

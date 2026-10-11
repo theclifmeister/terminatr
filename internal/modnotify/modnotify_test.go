@@ -26,7 +26,7 @@ func TestPostChecks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n.Level != "info" || n.Buttons[0].Label != "Accept" {
+	if n.Level != "info" || n.Buttons[0].Label != "accept" {
 		t.Fatalf("notice = %+v", n)
 	}
 	for name, req := range map[string]Request{
@@ -47,7 +47,7 @@ func TestPostChecks(t *testing.T) {
 func TestButtonLabelIsTheCores(t *testing.T) {
 	h := New(nil)
 	n, _ := h.Post("m", Request{Title: "x", Buttons: []Button{{ID: "task.accept", Label: "View", Project: "p", Task: 1}}})
-	if n.Buttons[0].Label != "Accept" {
+	if n.Buttons[0].Label != "accept" {
 		t.Fatalf("a mod worded a button: %q", n.Buttons[0].Label)
 	}
 }

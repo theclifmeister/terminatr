@@ -3,6 +3,10 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/theclifmeister/terminatr/internal/modaction"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modview"
@@ -220,5 +224,36 @@ func TestMemoryTabMod(t *testing.T) {
 	m.projectPopupView().memory = &src.memory
 	if out := screen(m); !strings.Contains(out, "The core tab's text.") || strings.Contains(out, "mod: memory-tab") {
 		t.Errorf("memory mod off:\n%s", out)
+	}
+}
+
+// TestModTabBinding: a row of a mod's tab that binds task.delegate shows
+// the core's hint; D there (once the row has been still for 300 ms)
+// never reaches the mod: the core re-checks the live board and asks.
+func TestModTabBinding(t *testing.T) {
+	src, m := panelDash(t)
+	src.board = &tasks.Board{Tasks: []*tasks.Task{{ID: 2, Title: "Write docs", Status: tasks.Ready}}}
+	v := &src.modViews.Views[0]
+	q := &v.Trees[0].Tree.Children[0]
+	q.Rows[1].Actions = []widget.Action{{ID: "task.delegate", Target: map[string]string{"project": "alpha", "task": "T2"}}}
+	m.setModViews(modViewsMsg{res: src.modViews})
+	m.openTab("alpha", tabOverview, 0)
+	press(m, "8")
+	press(m, "down")
+	if out := screen(m); !strings.Contains(out, "D delegate") {
+		t.Fatalf("no core hint for the bound row:\n%s", out)
+	}
+	time.Sleep(modaction.Stable + 20*time.Millisecond)
+	cmd := press(m, "D")
+	if cmd == nil {
+		t.Fatal("D on the bound row did nothing")
+	}
+	runAll(m, cmd)
+	if len(src.inputs) != 0 {
+		t.Fatalf("the press reached the mod: %+v", src.inputs)
+	}
+	cv, ok := m.top().(*confirmView)
+	if !ok || cv.question != "Delegate T2 to the coordinator? It starts a thread for T2 Write docs." {
+		t.Fatalf("D opened %T %+v", m.top(), m.top())
 	}
 }

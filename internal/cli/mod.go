@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -21,6 +22,10 @@ const modUsage = `usage: tm mod list [--outdated] [--json]
        tm mod remove <id> [--purge] [--yes]
        tm mod update [<id>] [--yes]
        tm mod validate [<dir>…] [--json]
+       tm mod new <id> [--kind column|hook|theme|icons|keymap|rules] [--dir <dir>]
+       tm mod dev <dir> [--yes]
+       tm mod test [<dir>…] [--json]
+       tm mod logs <id> [--follow|-f] [--lines|-n N]
 
 User mods (docs/SPEC.md §5.3), installed in ~/.terminatr/mods. install
 takes a folder or a git URL (https://, ssh://, file://, user@host:path)
@@ -31,8 +36,18 @@ one). enable grants what it asks for, after the same question; with
 off). update fetches each mod's source again and asks again only for new
 permissions or changed rules. remove keeps the mod's data 30 days unless
 --purge. validate checks mod folders (the installed mods when none is
-named) and exits 1 if any is invalid. All but list and validate are the
-human's: an agent is refused.`
+named) and exits 1 if any is invalid.
+
+For authors: new scaffolds a mod in ./<id> (a hook unless --kind),
+with the mod API's types from this tm and, for code, a fixture. dev
+links a folder in as an installed mod, enables it (after the same
+question), restarts its host on every save and tails its log until
+interrupted; it then disables it, leaving the link (tm mod remove
+unlinks it). test replays each code mod's tests/*.json fixtures with a
+fake broker (the current folder when none is named) and exits 1 if
+any fails. logs prints the end of a mod's log, and follows it with -f.
+All but list, validate, new, test and logs are the human's: an agent
+is refused.`
 
 func init() { commands["mod"] = runMod }
 
@@ -50,6 +65,9 @@ func runMod(e *Env, args []string) error {
 	f := newFlags()
 	asJSON, outdated, yes, purge := f.Bool("json"), f.Bool("outdated"), f.Bool("yes"), f.Bool("purge")
 	slug := f.String("project")
+	kind, dir := f.String("kind"), f.String("dir")
+	follow, followF := f.Bool("follow"), f.Bool("f")
+	lines, linesN := f.String("lines"), f.String("n")
 	pos, err := f.Parse(args[1:])
 	if err != nil {
 		return err
@@ -57,17 +75,18 @@ func runMod(e *Env, args []string) error {
 	allowed := map[string][]string{
 		"list": {"json", "outdated"}, "install": {"yes"}, "enable": {"project", "yes"}, "disable": {"project"},
 		"remove": {"purge", "yes"}, "update": {"yes"}, "validate": {"json"},
+		"new": {"kind", "dir"}, "dev": {"yes"}, "test": {"json"}, "logs": {"follow", "f", "lines", "n"},
 	}
 	ok, known := allowed[args[0]]
 	if !known {
 		return usagef("unknown subcommand %q\n%s", args[0], modUsage)
 	}
-	for _, n := range []string{"json", "outdated", "yes", "purge", "project"} {
+	for _, n := range []string{"json", "outdated", "yes", "purge", "project", "kind", "dir", "follow", "f", "lines", "n"} {
 		if f.IsSet(n) && !slices.Contains(ok, n) {
 			return usagef("tm mod %s takes no --%s\n%s", args[0], n, modUsage)
 		}
 	}
-	if args[0] != "list" && args[0] != "validate" && e.Caller.IsAgent() {
+	if !agentMod[args[0]] && e.Caller.IsAgent() {
 		return humanOnly()
 	}
 	one := func() (string, error) {
@@ -84,6 +103,26 @@ func runMod(e *Env, args []string) error {
 		return e.modList(*outdated, *asJSON)
 	case "validate":
 		return e.modValidate(pos, *asJSON)
+	case "new":
+		id, err := one()
+		if err != nil {
+			return err
+		}
+		return e.modNew(id, *kind, *dir)
+	case "test":
+		return e.modTest(pos, *asJSON)
+	case "logs":
+		id, err := one()
+		if err != nil {
+			return err
+		}
+		return e.modLogs(id, *follow || *followF, cmp.Or(*lines, *linesN))
+	case "dev":
+		d, err := one()
+		if err != nil {
+			return err
+		}
+		return e.modDev(d, *yes)
 	case "install":
 		src, err := one()
 		if err != nil {
@@ -129,6 +168,10 @@ func runMod(e *Env, args []string) error {
 	}
 	return nil
 }
+
+// agentMod are the tm mod subcommands an agent may run: they read, or
+// write only in the folder given.
+var agentMod = map[string]bool{"list": true, "validate": true, "new": true, "test": true, "logs": true}
 
 func humanOnly() error {
 	return &project.Error{Code: "human-only", Msg: "mods are installed, enabled, updated and removed by the human"}
