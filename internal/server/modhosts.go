@@ -38,7 +38,7 @@ func (s *Server) newModHosts() *modsup.Supervisor {
 	}
 	return modsup.New(modsup.Options{
 		Bin: s.opts.Bin, CacheDir: cache, StateDir: state, LogDir: logs,
-		Subscribe: s.SubscribeMod, Logf: s.log.Printf,
+		Subscribe: s.SubscribeMod, Broker: s.ModRequest, Logf: s.log.Printf,
 		TMVersion: version.Version, API: mod.APIVersion(),
 	})
 }

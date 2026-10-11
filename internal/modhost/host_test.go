@@ -372,6 +372,35 @@ func TestNoAmbientIO(t *testing.T) {
 	}
 }
 
+// TestNoCodeFromStrings: eval is gone and every way to the function
+// constructors throws; functions are still functions. (This goja has no
+// async generators to try.)
+func TestNoCodeFromStrings(t *testing.T) {
+	s := startHost(t, `
+const tries = {
+  eval: () => eval("1"),
+  indirect: () => (0, globalThis["ev" + "al"])("1"),
+  Function: () => Function("return 1")(),
+  newFunction: () => new Function("return 1"),
+  ctor: () => (() => 0).constructor("return 1")(),
+  proto: () => Object.getPrototypeOf(Object).constructor("return 1")(),
+  async: () => (async () => 0).constructor("return 1"),
+  gen: () => (function*(){}).constructor("yield 1"),
+  restore: () => { Function.prototype.constructor = 1; return (() => 0).constructor === 1 ? "restored" : null; },
+};
+const out = [];
+for (const [k, f] of Object.entries(tries)) {
+  try { out.push(k + "=" + f()); } catch (e) { out.push(k + ":" + (e instanceof TypeError || e instanceof ReferenceError ? "refused" : String(e))); }
+}
+out.push(typeof eval, (() => 0) instanceof Function, typeof Function);
+$.log(out.join(" "));`, time.Second)
+	s.hello()
+	want := "eval:refused indirect:refused Function:refused newFunction:refused ctor:refused proto:refused async:refused gen:refused restore=null undefined true function"
+	if got := logText(s.method(modproto.MethodLog)); got != want {
+		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+}
+
 // The budget: every slice, and the host exits 3 after any interrupt.
 
 func TestSpinInAHandlerExits3(t *testing.T) {
