@@ -1052,6 +1052,9 @@ func (m *dash) View() tea.View {
 	v := tea.NewView(m.render())
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
+	if m.sideW() > sideSlim {
+		v.MouseMode = tea.MouseModeAllMotion // the sidebar's tooltip
+	}
 	v.WindowTitle = "terminatr"
 	return v
 }
@@ -1345,5 +1348,5 @@ func (m *dash) sideFoot() []string {
 	if !m.loaded || !m.data.ServerOK {
 		return nil
 	}
-	return sideFoot(m.data.Server, m.sideW()-1)
+	return hoverFoot(sideFoot(m.data.Server, m.sideW()-1))
 }

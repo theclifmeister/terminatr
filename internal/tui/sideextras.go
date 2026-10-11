@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -42,8 +43,9 @@ var thisConsole struct {
 	sync.Mutex
 	filter    sideFilterState
 	now, last place
-	known     bool // now was noted
-	lastKnown bool // last was
+	known     bool   // now was noted
+	lastKnown bool   // last was
+	hover     string // the tooltip (sideHoverTip)
 }
 
 // resetConsole forgets the filter and the places (tests).
@@ -51,7 +53,7 @@ func resetConsole() {
 	thisConsole.Lock()
 	defer thisConsole.Unlock()
 	thisConsole.filter, thisConsole.now, thisConsole.last = sideFilterState{}, place{}, place{}
-	thisConsole.known, thisConsole.lastKnown = false, false
+	thisConsole.known, thisConsole.lastKnown, thisConsole.hover = false, false, ""
 }
 
 func sideFilterNow() sideFilterState {
@@ -489,4 +491,133 @@ func (m *dash) goLastPlace(string) tea.Cmd {
 		cmds = append(cmds, m.showProject(to.project))
 	}
 	return tea.Batch(cmds...)
+}
+
+// The hover tooltip (docs/SPEC.md §4): while the mouse is over one of a
+// row's glyphs, the sidebar says what it means, in the details line, so
+// there is nothing to close. The outer terminal reports every motion
+// (1003) while the full sidebar shows; the pane's program still gets only
+// the motion it asked for.
+
+// sideHoverTip is what the glyph under the mouse means, "" while the
+// mouse is on none: the details line shows it instead of the row's.
+func sideHoverTip() string {
+	thisConsole.Lock()
+	defer thisConsole.Unlock()
+	return thisConsole.hover
+}
+
+// setSideHover sets the tooltip; changed says it differs from before.
+func setSideHover(tip string) (changed bool) {
+	thisConsole.Lock()
+	defer thisConsole.Unlock()
+	changed = thisConsole.hover != tip
+	thisConsole.hover = tip
+	return changed
+}
+
+// hoverFoot is the sidebar's foot with the tooltip in its first line
+// while there is one (until the details line shows it).
+func hoverFoot(foot []string) []string {
+	tip := sideHoverTip()
+	if tip == "" || len(foot) == 0 {
+		return foot
+	}
+	return append([]string{tip}, foot[1:]...)
+}
+
+// sideTip is what the glyph at column x, row y of a sidebar w×h means;
+// "" off the glyphs, and in the slim strip, which has no details line.
+func sideTip(all []treeRow, w, h, x, y int) string {
+	if w <= sideSlim {
+		return ""
+	}
+	r, ok, _ := sideHitAt(all, w, h, x, y)
+	if !ok {
+		return ""
+	}
+	end := w - 1 - sideGap // the grid's right edge
+	grid, tips := treeGrid(r), gridTips(r)
+	line := ansi.Strip(treeCells(r, end, false, false))
+	for j := len(grid) - 1; j >= 0; j-- {
+		gw := ansi.StringWidth(grid[j].s)
+		end -= gw
+		if x < end || x >= end+gw {
+			continue
+		}
+		// A column a narrow row gave up holds the label instead.
+		if strings.TrimSpace(grid[j].s) == "" || ansi.Cut(line, end, end+gw) != grid[j].s {
+			return ""
+		}
+		return tips[j]
+	}
+	return ""
+}
+
+// gridTips are the meanings of treeGrid's columns on r: count/%, PR/CI,
+// state, remote, paused, inactive, needs you.
+func gridTips(r treeRow) [7]string {
+	var t [7]string
+	switch r.kind {
+	case treeProject:
+		t[0] = "open threads"
+		t[2] = "its coordinator: " + stateMeaning(r.state)
+		t[6] = "needs you: something here waits on you"
+	case treeCoordinator:
+		t[0] = "context use"
+		if r.ctxHint {
+			t[0] += ": consider /clear, the context lives in files"
+		}
+		t[2] = "coordinator: " + stateMeaning(r.state)
+		t[6] = "needs you: its questions wait"
+	default:
+		t[0] = "progress"
+		t[2] = stateMeaning(r.state)
+		t[6] = "needs you: it waits on you"
+	}
+	switch r.ci {
+	case "pass":
+		t[1] = "PR checks pass"
+	case "fail":
+		t[1] = "PR checks fail"
+	case "pending":
+		t[1] = "PR checks running"
+	}
+	if r.dormant {
+		t[2] = "dormant: its project is inactive"
+	}
+	t[3] = "remote control is on for this coordinator"
+	t[4] = "the project is paused"
+	t[5] = "inactive: its coordinator and threads don't run"
+	return t
+}
+
+// stateMeaning is a state word in the help's words (symbolLines).
+func stateMeaning(state string) string {
+	word, _, _ := strings.Cut(state, " ")
+	switch word {
+	case "working", "started":
+		return "working"
+	case "blocked":
+		return "blocked: waits on a permission prompt, a question or a task"
+	case "idle", "open", "ready":
+		return "idle: waiting for a prompt"
+	case "starting", "running", "done":
+		return word
+	case "review":
+		return "in review: waits for you to accept it"
+	case "", "—":
+		return "not running"
+	}
+	return "stopped, exited or resolved"
+}
+
+// hover follows the mouse over the dashboard: on a sidebar glyph, its
+// tooltip.
+func (m *dash) hover(mo tea.Mouse) {
+	tip := ""
+	if mo.X < m.sideW() && m.top() == nil {
+		tip = sideTip(m.tree(), m.sideW(), m.h, mo.X, mo.Y)
+	}
+	setSideHover(tip)
 }

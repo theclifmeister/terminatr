@@ -1013,7 +1013,7 @@ func (c *client) setActive(slug string, on bool) {
 
 // appendSidebar draws the sidebar's changed lines. c.mu held.
 func (c *client) appendSidebar(b []byte, wrote bool) ([]byte, bool) {
-	lines := sidebarLines(c.sideTree(), c.sideW, c.rows, sideFoot(c.side.server, c.sideW-1))
+	lines := sidebarLines(c.sideTree(), c.sideW, c.rows, hoverFoot(sideFoot(c.side.server, c.sideW-1)))
 	for y, l := range lines {
 		if y < len(c.side.drawn) && c.side.drawn[y] == l {
 			continue
@@ -1091,6 +1091,13 @@ func (c *client) sideMouse(m emu.Mouse) {
 			c.setSidebar(l, false)
 		}
 		c.poke()
+		return
+	case !sd.drag && m.Action == emu.MouseMotion && m.Button == emu.MouseNone:
+		changed := setSideHover(sideTip(c.sideTree(), c.sideW, c.rows, m.X, m.Y))
+		c.mu.Unlock()
+		if changed {
+			c.poke()
+		}
 		return
 	case sd.drag && m.Action == emu.MouseRelease:
 		sd.drag = false

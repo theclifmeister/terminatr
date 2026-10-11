@@ -75,6 +75,7 @@ var mouseKeys = []keyHelp{
 	{"status bar", menuButton + " menu, prefix+d dashboard, y yes"},
 	{"sidebar", "a row takes the keyboard, its cursor on it, and a project shows its dashboard, its coordinator or a thread attaches; a click on the pane gives the keyboard back"},
 	{"info panel", "beside a thread's pane: its task opens in the Tasks tab, its PR the browser; a click elsewhere gives it the keyboard"},
+	{"hover", "a glyph in the full sidebar: what it means, at the sidebar's foot"},
 	{"wheel", "moves through a list; scrolls the details panel and long popups"},
 	{"drag", "the divider beside the details panel, the sidebar's border, the info panel's border"},
 	{"drag in a pane", "a pane whose program doesn't take the mouse (a shell): select text, copied on release to this terminal's clipboard (OSC 52, over SSH too); Claude Code selects and copies itself"},
@@ -132,7 +133,7 @@ func symbolLines(w int) []string {
 		{i.remote, "remote control is on for this coordinator"},
 		{i.paused, "the project is paused"},
 		{i.inactive, "the project is inactive: its coordinator and threads don't run"},
-		{i.ciPass + " " + i.ciFail + " " + i.ciRun, "a thread's PR checks: pass, fail, running"},
+		{i.ciPass + " " + i.ciFail + " " + i.ciRun, "a thread's PR checks, in the sidebar's PR column: pass, fail, running; blank without a PR"},
 		{i.todoDone + " " + i.todoNow + " " + i.todoOpen, "a step done, under way, to do"},
 		{i.current, "the step under way"},
 		{strings.Repeat(i.barOn, 2) + strings.Repeat(i.barOff, 3), "progress, always beside its count (2/5)"},
@@ -141,7 +142,7 @@ func symbolLines(w int) []string {
 	for _, s := range syms {
 		out = append(out, keyLine(s, w)...)
 	}
-	return out
+	return append(out, faintLines("The sidebar's columns, on the right of each row: the count or percent, the PR checks, the state, remote control, paused, inactive and needs you. Hover a glyph there and the sidebar says what it means.", w)...)
 }
 
 // keyCol is the width of the keys column.

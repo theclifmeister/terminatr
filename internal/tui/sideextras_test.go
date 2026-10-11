@@ -312,3 +312,60 @@ func TestSessionLastPlace(t *testing.T) {
 		t.Fatalf("/old: %v sel %q", keys, c.v.SideSel)
 	}
 }
+
+// TestSidebarTooltip: the mouse over a row's glyph says what it means,
+// in the sidebar's foot (the details line's hook, sideHoverTip); off
+// the glyphs, and off the sidebar, it goes. The dashboard then asks for
+// every motion.
+func TestSidebarTooltip(t *testing.T) {
+	m, src := sideDash(t)
+	src.data.Server = ServerInfo{Version: "1.2.3"}
+	m.setData(src.data)
+	if m.View().MouseMode != tea.MouseModeAllMotion {
+		t.Fatal("no motion for the tooltip")
+	}
+	end := m.sideW() - 1 - sideGap // the grid's right edge
+	for _, s := range []struct {
+		x, y int
+		want string
+	}{
+		{end - 2, 5, "needs you: it waits on you"}, // t-0005
+		{end - 10, 5, "working"},
+		{end - 15, 5, "progress"},
+		{end - 6, 5, ""}, // paused: blank on a thread
+		{3, 5, ""},       // the label
+		{end - 10, 2, "coordinator: blocked: waits on a permission prompt, a question or a task"},
+		{end - 2, 1, "needs you: something here waits on you"},
+		{m.sideW() + 3, 5, ""},
+	} {
+		m.Update(tea.MouseMotionMsg{X: s.x, Y: s.y})
+		if got := sideHoverTip(); got != s.want {
+			t.Errorf("at %d,%d: %q, want %q", s.x, s.y, got, s.want)
+		}
+		if s.want != "" && !strings.Contains(whole(m), s.want[:min(len(s.want), 20)]) {
+			t.Errorf("at %d,%d: the tip doesn't show:\n%s", s.x, s.y, whole(m))
+		}
+	}
+	m.layout.Sidebar.Slim = true
+	m.setWidth(m.winW)
+	if m.View().MouseMode != tea.MouseModeCellMotion {
+		t.Fatal("the slim strip has no tooltip")
+	}
+}
+
+// TestSidebarTooltipIconSets: the tooltip finds its glyph in every icon
+// set.
+func TestSidebarTooltipIconSets(t *testing.T) {
+	defer setIcons(IconsUnicode)
+	for _, set := range []string{IconsNerd, IconsUnicode, IconsASCII} {
+		setIcons(set)
+		m, _ := sideDash(t)
+		end := m.sideW() - 1 - sideGap
+		if got := sideTip(m.tree(), m.sideW(), m.h, end-10, 5); got != "working" {
+			t.Errorf("%s: %q", set, got)
+		}
+		if got := sideTip(m.tree(), m.sideW(), m.h, end-1, 5); got != "needs you: it waits on you" {
+			t.Errorf("%s, the glyph's second cell: %q", set, got)
+		}
+	}
+}

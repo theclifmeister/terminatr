@@ -1377,6 +1377,9 @@ func (c *client) mouse(ev uv.Event) {
 	press := m.Action == emu.MousePress && (m.Button == emu.MouseLeft || m.Button == emu.MouseRight || m.Button == emu.MouseMiddle)
 	// The status bar runs under the pane and the info panel.
 	status := c.statusBar && m.X >= c.sideW && (m.Y >= c.rows-1 || m.Y >= c.paneRows && m.X < c.cols-c.infoW)
+	if m.X >= c.sideW && setSideHover("") {
+		c.poke() // off the sidebar: its tooltip goes
+	}
 	switch {
 	case c.menu != nil:
 		c.menuMouse(m)
@@ -1528,6 +1531,11 @@ func (c *client) outerModes() []byte {
 		// The sidebar takes clicks and drags whatever the program wants;
 		// selecting text in a pane then needs Shift.
 		track = 1002
+	}
+	if c.side != nil && c.sideW > sideSlim {
+		// Every motion, for the sidebar's tooltip; the program still
+		// gets only what it asked for (emu's encoder).
+		track = 1003
 	}
 	var b []byte
 	set := func(n int, on bool) {
