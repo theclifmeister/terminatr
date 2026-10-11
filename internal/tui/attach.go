@@ -1409,9 +1409,8 @@ func (c *client) mouse(ev uv.Event) {
 		return
 	}
 	press := m.Action == emu.MousePress && (m.Button == emu.MouseLeft || m.Button == emu.MouseRight || m.Button == emu.MouseMiddle)
-	// The status bar runs across the window, the rule above it under
-	// the sidebar and the pane.
-	status := c.statusBar && (m.Y >= c.rows-1 || m.Y >= c.paneRows && m.X < c.cols-c.infoW)
+	// The status bar runs across the window, the rule above it too.
+	status := c.statusBar && (m.Y >= c.paneRows)
 	if (m.X >= c.sideW || m.Y >= c.sideRows()) && setSideHover("") {
 		c.poke() // off the sidebar: its tooltip goes
 	}
@@ -1705,11 +1704,11 @@ func (c *client) frameSplit(vis []*pane) ([]byte, error) {
 		}
 	}
 	if c.statusBar && c.statusText != c.statusDrawn {
-		// A faint rule under the sidebar and the pane, then the bar
-		// across the window.
+		// A faint rule across the window under the sidebar, the pane
+		// and the info panel, then the bar.
 		if c.rows > 1 {
 			b = append(b, fmt.Sprintf("\x1b[%d;1H\x1b[0m", c.rows-1)...)
-			b = append(b, th().Faint.Render(strings.Repeat("─", max(c.cols-c.infoW, 0)))...)
+			b = append(b, th().Faint.Render(strings.Repeat("─", max(c.cols, 0)))...)
 		}
 		b = append(b, fmt.Sprintf("\x1b[%d;1H\x1b[0m", c.rows)...)
 		b = append(b, c.statusText...)

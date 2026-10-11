@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -438,5 +440,39 @@ func TestShortHome(t *testing.T) {
 		if got := shortHome(c.p, c.home); got != c.want {
 			t.Errorf("shortHome(%q, %q) = %q, want %q", c.p, c.home, got, c.want)
 		}
+	}
+}
+
+// TestInfoPanelEndsOnRule: with the status bar, the panel's border ends
+// on the same row as the sidebar's, and the rule over the bar runs the
+// whole window, under the panel too.
+func TestInfoPanelEndsOnRule(t *testing.T) {
+	c := infoClient(t, 200)
+	if !c.statusBar || c.infoW == 0 {
+		t.Fatalf("no status bar or panel: %v, %d", c.statusBar, c.infoW)
+	}
+	if c.infoRows() != c.sideRows() {
+		t.Errorf("panel %d rows, sidebar %d", c.infoRows(), c.sideRows())
+	}
+	c.infoLayout()
+	b, _ := c.appendInfo(nil, false)
+	last := fmt.Sprintf("\x1b[%d;%dH", c.rows-2, c.infoX()+1)
+	over := fmt.Sprintf("\x1b[%d;%dH", c.rows-1, c.infoX()+1)
+	if !strings.Contains(string(b), last) || strings.Contains(string(b), over) {
+		t.Errorf("the panel doesn't end on row %d: %q", c.rows-2, string(b))
+	}
+	mirror, err := emu.New(80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.statusText, c.focus = "bar", &pane{mirror: mirror}
+	out, err := c.frameSplit(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rule := fmt.Sprintf("\x1b[%d;1H", c.rows-1)
+	_, after, ok := strings.Cut(string(out), rule)
+	if !ok || strings.Count(ansi.Strip(after), "─") < c.cols {
+		t.Errorf("the rule doesn't run %d columns: %q", c.cols, ansi.Strip(after))
 	}
 }
