@@ -1,6 +1,10 @@
 # The unicode icon set: every glyph of iconSet (icons.go), one cell wide (the
 # connectors mid and end two), no emoji. coord and thread may be "".
 
+# base names the rules the glyphs keep (nerd may use the Private Use
+# Area, ascii stays ASCII); here every glyph is given, so a copy keeps
+# them all.
+base = "unicode"
 name = "unicode"
 wide = false
 

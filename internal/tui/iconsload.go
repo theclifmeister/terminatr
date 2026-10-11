@@ -109,16 +109,17 @@ func parseIcons(data []byte) (*iconSet, error) {
 }
 
 // bundledIcons is built-in set name from its bundled mod's icons.toml
-// (name-icons): a whole set, every glyph given, over no base. tm built
-// without a whole one is a bug.
+// (name-icons): a whole set, every glyph given, over no set, its base
+// itself (so a copy of it keeps its rules). tm built without a whole one
+// is a bug.
 func bundledIcons(name string) iconSet {
 	var raw map[string]any
 	data := mod.BundledData(mod.BundledIcons(name), mod.KindIcons)
 	if _, err := toml.Decode(string(data), &raw); err != nil {
 		panic("bundled " + name + " icons: " + err.Error())
 	}
-	if _, ok := raw["base"]; ok {
-		panic("bundled " + name + " icons: a built-in set has no base")
+	if raw["base"] != name {
+		panic("bundled " + name + " icons: base isn't " + name)
 	}
 	set, err := iconsOver(raw, iconSet{name: name}, name)
 	if err != nil {

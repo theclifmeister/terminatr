@@ -388,7 +388,7 @@ func (e *Env) modEnable(id, slug string, yes bool) error {
 	// Turning it on, or granting what it wants more, is consent; running
 	// it for one more project grants nothing new.
 	if m.State != mod.Enabled || len(m.WantsMore) > 0 {
-		fmt.Fprint(e.Stdout, mod.Consent(m.Manifest, m.Dir))
+		fmt.Fprint(e.Stdout, m.Consent())
 		if err := e.confirm(yes, "tm mod enable "+id, "Enable "+mod.Clean(m.Manifest.Name, false)+"?"); err != nil {
 			return err
 		}

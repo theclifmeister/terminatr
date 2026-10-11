@@ -431,7 +431,7 @@ func (cv *consentView) lines(m *dash, md mod.Mod, w int) []string {
 			out = append(out, ansi.Truncate(l, w, "…"))
 		}
 	}
-	if shown := man.Shown(md.Dir); shown != "" {
+	if shown := md.Shown(); shown != "" {
 		out = append(out, "")
 		for _, l := range strings.Split(strings.TrimRight(shown, "\n"), "\n") {
 			out = append(out, strings.Split(ansi.Hardwrap(strings.ReplaceAll(l, "\t", "    "), max(w, 10), true), "\n")...)

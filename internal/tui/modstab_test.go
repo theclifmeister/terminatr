@@ -50,7 +50,7 @@ func (f *fakeSource) loadMods() {
 		cfg = nil
 	}
 	if reg, err := mod.Load(cfg); err == nil {
-		f.data.Mods = reg.Mods
+		f.data.Mods, f.data.ModData = reg.Mods, modData(reg.Mods)
 	}
 }
 
@@ -502,5 +502,43 @@ func TestModsProjectLine(t *testing.T) {
 		if got := rows[i].value(m); got != want {
 			t.Errorf("%s: Mods %q, want %q", slug, got, want)
 		}
+	}
+}
+
+// TestModsDataAndBuiltin: an enabled data mod whose file doesn't load
+// is ▲ with what doesn't load; a built-in mod says it is built in, and
+// one tm can't do without isn't turned off.
+func TestModsDataAndBuiltin(t *testing.T) {
+	src, m := modsDash(t)
+	installMod(t, "askew", map[string]string{"mod.toml": "id = \"askew\"\nname = \"Askew\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nlayout = \"l.toml\"\n", "l.toml": "sidebar = [\"bogus\"]\n"})
+	os.WriteFile(filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml"), []byte("[mods.askew]\nenabled = true\n"), 0o600)
+	src.loadMods()
+	m.setData(src.data)
+	selectMod(t, m, "askew")
+	out := screen(m)
+	for _, want := range []string{"▲ Askew", "doesn't load its layout", `Doesn't load its layout: sidebar: no column "bogus"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("askew lacks %q:\n%s", want, out)
+		}
+	}
+	selectMod(t, m, mod.BundledTheme)
+	out = screen(m)
+	for _, want := range []string{"● Default theme", "theme · built in", "Built into tm", "It can't be turned off; pick another theme in General settings."} {
+		if !strings.Contains(out, want) {
+			t.Errorf("default-theme lacks %q:\n%s", want, out)
+		}
+	}
+	modAct(m, src, "enter")
+	if !strings.Contains(m.msg, "can't be turned off") || modState(t, src, mod.BundledTheme).State != mod.Enabled {
+		t.Errorf("enter on default-theme: %q", m.msg)
+	}
+	press(m, "x")
+	if !strings.Contains(m.msg, "Default theme is built in: tm can't do without it") {
+		t.Errorf("x on default-theme: %q", m.msg)
+	}
+	selectMod(t, m, mod.BundledTemplates)
+	modAct(m, src, "enter")
+	if modState(t, src, mod.BundledTemplates).State != mod.Disabled {
+		t.Errorf("enter on default-templates: %q", m.msg)
 	}
 }
