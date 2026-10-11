@@ -195,7 +195,7 @@ func contextFor(role, slug, threadID, brief, tickerState string) func() ([]byte,
 	return func() ([]byte, error) {
 		switch role {
 		case proto.RoleCoordinator:
-			rules, _ := skill.Text("coordinator", version.Version)
+			rules, _ := skill.ForProject("coordinator", version.Version, slug)
 			p, err := project.Open(slug)
 			if err != nil {
 				return []byte(rules), nil
@@ -206,7 +206,7 @@ func contextFor(role, slug, threadID, brief, tickerState string) func() ([]byte,
 			}
 			return []byte(rules + "\n\n" + coordinatorEssentials(secs)), nil
 		case proto.RoleThread:
-			rules, _ := skill.Text("thread", version.Version)
+			rules, _ := skill.ForProject("thread", version.Version, slug)
 			if p, err := project.Open(slug); err == nil && threadID != "" {
 				pr := ticker.PRs(tickerState, slug)[threadID]
 				line := pr.Summary()

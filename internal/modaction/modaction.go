@@ -17,14 +17,27 @@ import (
 	"strings"
 	"time"
 
-	"github.com/theclifmeister/terminatr/internal/modbus"
-	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
 // Target is what a bound action acts on: a task or a project, or a
-// session. Its fields are mod API v1's (modbus.Target).
-type Target = modbus.Target
+// session. Its fields are mod API v1's (modbus.Target, which converts to
+// it); the package keeps its own so that proto, which carries the
+// notification buttons, can depend on it.
+type Target struct {
+	Project string `json:"project,omitempty"`
+	Task    string `json:"task,omitempty"`
+	Thread  string `json:"thread,omitempty"`
+	Session string `json:"session,omitempty"`
+}
+
+// The kinds of inbox item a task action drops: KindDelegate,
+// KindAccept and KindSendBack (a test keeps them equal).
+const (
+	KindDelegate = "delegate"
+	KindAccept   = "accept"
+	KindSendBack = "send-back"
+)
 
 // Stable is how long a row's bindings must be unchanged before a press
 // on them counts (the design's 300 ms rule): a widget that changes
@@ -178,11 +191,11 @@ func TaskRef(s string) bool {
 func askKind(id string) string {
 	switch id {
 	case "task.delegate":
-		return project.KindDelegate
+		return KindDelegate
 	case "task.accept":
-		return project.KindAccept
+		return KindAccept
 	case "task.send-back":
-		return project.KindSendBack
+		return KindSendBack
 	}
 	return ""
 }
@@ -224,11 +237,11 @@ func NotSendable(t *tasks.Task) string {
 // NotAskable is why kind can't be asked for task t, "" when it can.
 func NotAskable(t *tasks.Task, kind string) string {
 	switch kind {
-	case project.KindDelegate:
+	case KindDelegate:
 		return NotDelegable(t)
-	case project.KindAccept:
+	case KindAccept:
 		return NotInReview(t)
-	case project.KindSendBack:
+	case KindSendBack:
 		return NotSendable(t)
 	}
 	return "unknown ask " + kind

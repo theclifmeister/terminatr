@@ -187,7 +187,7 @@ func (s *Server) modActionDone(p proto.ModActionDoneParams, peerPID int) (any, *
 		return nil, perr
 	}
 	if s.modEv != nil {
-		s.modEv.bus.PublishTo(p.Mod, modbus.ActionDone, t.Project, modbus.Done{Action: p.Action, Target: t, OK: p.OK})
+		s.modEv.bus.PublishTo(p.Mod, modbus.ActionDone, t.Project, modbus.Done{Action: p.Action, Target: modbus.Target(t), OK: p.OK})
 	}
 	return struct{}{}, nil
 }

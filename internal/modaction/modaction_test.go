@@ -119,6 +119,13 @@ func TestTable(t *testing.T) {
 	}
 }
 
+// TestKinds: the ask kinds are the inbox's.
+func TestKinds(t *testing.T) {
+	if KindDelegate != project.KindDelegate || KindAccept != project.KindAccept || KindSendBack != project.KindSendBack {
+		t.Error("the ask kinds differ from the inbox's")
+	}
+}
+
 func TestTaskRef(t *testing.T) {
 	for s, want := range map[string]bool{"T1": true, "T260": true, "T": false, "t1": false, "T01": false, "T1a": false, "T-1": false, "T+1": false, "T1234567890": false} {
 		if TaskRef(s) != want {

@@ -582,3 +582,24 @@ func TestViewsAskDigest(t *testing.T) {
 		t.Fatalf("askDigest(300) = %d, want 0", n)
 	}
 }
+
+// TestViewsColumns: view.columns sets the sidebar's column order (a
+// layout mod's) on every console of the view, keeping the safety
+// columns; none goes back to the built-in order; an overlong list is
+// refused.
+func TestViewsColumns(t *testing.T) {
+	vs := newViews(newFakeHost(), "", nil)
+	a, _ := join(t, vs, proto.ViewSubscribeParams{Cols: 120, Rows: 30})
+	b, _ := join(t, vs, proto.ViewSubscribeParams{Cols: 120, Rows: 30})
+	v := mustDo(t, vs, proto.MethodViewColumns, proto.ViewParams{Client: a.id, Columns: []string{"needs", "review-age.age", "count"}})
+	want := []string{"needs", "review-age.age", "count", "state", "paused", "inactive"}
+	if !slices.Equal(v.Columns, want) || !woken(b) {
+		t.Fatalf("columns: %v", v.Columns)
+	}
+	if v = mustDo(t, vs, proto.MethodViewColumns, proto.ViewParams{Client: b.id}); v.Columns != nil || !woken(a) {
+		t.Fatalf("back to the built-in order: %v", v.Columns)
+	}
+	if _, err := vs.do(proto.MethodViewColumns, proto.ViewParams{Client: a.id, Columns: make([]string, view.MaxColumns+1)}); err == nil {
+		t.Fatal("view.columns took an overlong list")
+	}
+}
