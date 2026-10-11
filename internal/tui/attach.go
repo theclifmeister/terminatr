@@ -141,7 +141,9 @@ func Attach(opts Options) (res Result, err error) {
 	if !term.IsTerminal(opts.In) {
 		return res, ErrNotTTY
 	}
-	loadIcons()
+	if n := lookNews(loadLook()); n != "" {
+		fmt.Fprintf(os.Stderr, "tm attach: %s\n", n)
+	}
 	prefix, kerr := prefixKey()
 	if kerr != nil {
 		fmt.Fprintf(os.Stderr, "tm attach: %v; using %s\n", kerr, DefaultPrefixKey)
@@ -332,6 +334,7 @@ type client struct {
 	outer       map[int]bool // focus reports and SGR set on the outer terminal
 	outerTrack  int          // the mouse tracking mode set there: 1000, 1002, 1003 or 0
 	bell        bool         // ring the outer terminal's bell with the next frame
+	osc         []byte       // OS notifications of mods to draw with the next frame (modnotice.go)
 	buf         []byte
 
 	// detaching is set before DETACH is written. The server may hang up
@@ -1005,6 +1008,7 @@ func (c *client) handle(ev uv.Event) {
 		if _, ok := e.(uv.LightColorSchemeEvent); ok {
 			scheme = emu.SchemeLight
 		}
+		setScheme(scheme == emu.SchemeDark)
 		if !c.lock() {
 			return
 		}
@@ -1648,6 +1652,8 @@ func (c *client) renderLoop(out io.Writer) Result {
 				b = append(b, '\a')
 				c.bell = false
 			}
+			b = append(b, c.osc...)
+			c.osc = nil
 			b = append(b, c.clip...)
 			c.clip = nil
 		}
@@ -1778,6 +1784,7 @@ func (c *client) pollState(ctx context.Context) {
 	}()
 	var alerts uint64
 	first := true
+	noticed := map[string]bool{}
 	tick := time.NewTicker(statePoll)
 	defer tick.Stop()
 	for {
@@ -1792,9 +1799,11 @@ func (c *client) pollState(ctx context.Context) {
 			}
 		}
 		ring := false
+		var osc []byte
 		if ctl != nil {
 			ring = !first && res.Alerts > alerts
 			alerts, first = res.Alerts, false
+			osc = claimNotices(ctl, res.ModNotices, noticed)
 		}
 		var projects []ProjectData
 		ctxHint, needsFirst := config.DefaultContextHint, false
@@ -1822,6 +1831,7 @@ func (c *client) pollState(ctx context.Context) {
 			}
 			c.status()
 			c.bell = c.bell || ring
+			c.osc = append(c.osc, osc...)
 			c.mu.Unlock()
 			c.poke()
 		}

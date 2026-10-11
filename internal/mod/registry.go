@@ -52,6 +52,13 @@ type Mod struct {
 	// the manifest doesn't have.
 	Settings    map[string]any
 	BadSettings []string
+	// Order is its [mods.<id>] table's place in config.toml: the order
+	// mods were enabled in (config.Mod.Order).
+	Order int
+	// Builtin: the mod ships inside tm (a bundled mod, mods design §11).
+	// It can be turned off, never removed or updated on its own: it
+	// updates with tm.
+	Builtin bool
 }
 
 // Runs reports whether the mod runs for project slug: valid, compatible,
@@ -140,7 +147,7 @@ func LoadDir(dir string, tables map[string]config.Mod) (*Registry, error) {
 
 // load reads the mod in folder dir, named id, with its table t.
 func load(id, dir string, t config.Mod) Mod {
-	m := Mod{ID: id, Dir: dir, State: Invalid, Projects: t.Projects}
+	m := Mod{ID: id, Dir: dir, State: Invalid, Projects: t.Projects, Order: t.Order}
 	if err := CheckID(id); err != nil {
 		m.Err = fmt.Errorf("folder %q: %w", id, err)
 		return m

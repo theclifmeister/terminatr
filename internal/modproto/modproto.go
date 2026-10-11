@@ -62,6 +62,10 @@ const (
 	CodeInternal       = -32603
 	CodeNotReady       = -32000 // an event before hello, or a second hello
 	CodeLoad           = -32001 // hello: the script threw while loading
+	// The broker's answers to a $ call (internal/modbroker).
+	CodeDenied   = -32010 // the mod may not: a grant, a path, a host, a program, a project
+	CodeNotFound = -32011 // the project, thread, file or key isn't there
+	CodeFailed   = -32012 // allowed, and it failed: I/O, a timeout, the network
 )
 
 // Message is one JSON-RPC 2.0 message in either direction: a request

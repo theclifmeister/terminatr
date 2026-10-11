@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/version"
@@ -225,19 +226,23 @@ func settingsErr(err error) error {
 	return err
 }
 
-// settingsView is the , popup: the settings of every project, in two
-// tabs: General, and All projects (the project settings every project
-// follows unless it sets its own).
+// settingsView is the , popup: the settings of every project, in three
+// tabs: General, All projects (the project settings every project
+// follows unless it sets its own) and Mods (modstab.go).
 type settingsView struct {
 	tab  int
 	tabs [2]settingsList
+	mods modsTab
 	// top is each tab's first line shown; shown the selection's line
 	// (plus one) it last scrolled to (projectView.scroll).
-	top, shown [2]int
+	top, shown [len(settingsTabs)]int
 }
 
 // settingsTabs are the , popup's tabs.
-var settingsTabs = [2]string{"General", "All projects"}
+var settingsTabs = [3]string{"General", "All projects", "Mods"}
+
+// tabMods is the Mods tab's index.
+const tabMods = 2
 
 func (m *dash) openSettings() {
 	m.catalogs = m.src.Catalogs()
@@ -274,19 +279,40 @@ func globalSettings(note string) []setting {
 				return "full"
 			},
 			change: func(m *dash) tea.Cmd { return m.sideKey("b") }},
-		{label: "Icons", help: "The glyphs of the sidebar's tree, states and progress: Nerd Font icons, Unicode shapes, or ASCII for any font. Auto picks Nerd Font icons in Ghostty, Unicode elsewhere. Each console decides auto for itself.",
+		{label: "Theme", help: "The colours of every part of tm: the built-in one, on your terminal's own 16 colours, or a theme from a mod that is on, which may differ light and dark. Each console follows its terminal's light or dark scheme.",
+			value: func(m *dash) string { return themeSetting() },
+			change: func(m *dash) tea.Cmd {
+				choices := modChoices([]string{ThemeDefault}, mod.KindTheme)
+				next := choices[(slices.Index(choices, themeSetting())+1)%len(choices)]
+				cfg, _ := config.Load()
+				return m.pickMod("theme", next, useTheme(loadMods(cfg), next))
+			}},
+		{label: "Icons", help: "The glyphs of the sidebar's tree, states and progress: Nerd Font icons, Unicode shapes, ASCII for any font, or a set from a mod that is on. Auto picks Nerd Font icons in Ghostty, Unicode elsewhere. Each console decides auto for itself.",
 			value: func(m *dash) string {
 				v := iconsSetting()
-				if v == IconsAuto {
+				if v == IconsAuto || ic().name != v {
 					return v + " (" + ic().name + ")"
 				}
 				return v
 			},
 			change: func(m *dash) tea.Cmd {
-				cur := iconsSetting()
-				next := IconChoices[(slices.Index(IconChoices, cur)+1)%len(IconChoices)]
-				setIcons(next)
-				return m.setSetting("ui", "icons", next, "icons: "+next+"; consoles started earlier pick them up when they next open")
+				choices := modChoices(IconChoices, mod.KindIcons)
+				next := choices[(slices.Index(choices, iconsSetting())+1)%len(choices)]
+				return m.pickMod("icons", next, setIcons(next))
+			}},
+		{label: "Layout", help: "The order of the sidebar's columns: the built-in one, or a layout from a mod that is on, which may place a mod's columns. The state, paused, inactive and needs-you columns always show. Every console of this view follows.",
+			value: func(m *dash) string { return layoutValue() },
+			change: func(m *dash) tea.Cmd {
+				choices := modChoices([]string{ThemeDefault}, mod.KindLayout)
+				next := choices[(slices.Index(choices, layoutValue())+1)%len(choices)]
+				cfg, _ := config.Load()
+				cols, err := modLayout(loadMods(cfg), next)
+				layoutVal.Store(next)
+				cmd := m.pickMod("layout", next, err)
+				if m.view == nil {
+					return cmd
+				}
+				return tea.Batch(cmd, m.call(proto.MethodViewColumns, proto.ViewParams{Columns: cols}))
 			}},
 		{label: "Context hint", help: "Tell a coordinator to consider /clear once its context window is this full: a toast in its pane, a bell and a yellow percent on its sidebar row (red from 80%). Its context lives in files, so a clear loses nothing. Off never says it.",
 			value: func(m *dash) string {
@@ -350,6 +376,25 @@ func globalSettings(note string) []setting {
 	}
 }
 
+// pickMod saves a [ui] pick of a built-in or a mod's theme, icons or
+// layout (key), which this console has just applied: "default" as
+// unset. err says why a mod's didn't load, and so the built-in
+// one is in use.
+func (m *dash) pickMod(key, value string, err error) tea.Cmd {
+	msg := key + ": " + value + "; consoles started earlier pick it up when they next open"
+	if key == "layout" {
+		msg = key + ": " + value
+	}
+	if err != nil {
+		msg = key + ": " + value + " doesn't load (" + oneLine(err.Error()) + "); the built-in one is used"
+	}
+	var v any = value
+	if value == ThemeDefault {
+		v = nil
+	}
+	return m.setSetting("ui", key, v, msg)
+}
+
 // splitSteps are the list widths enter steps through.
 var splitSteps = []float64{0.5, 0.65, 0.8}
 
@@ -363,29 +408,56 @@ func nextSplit(cur float64) float64 {
 }
 
 func (sv *settingsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
-	switch s := k.String(); s {
+	s := k.String()
+	if sv.tab == tabMods && s != "h" && s != "left" && s != "right" {
+		// Its own keys first: l is its log.
+		if cmd, ok := sv.mods.key(m, k); ok {
+			return cmd
+		}
+	}
+	n := len(settingsTabs)
+	switch s {
 	case "esc":
 		m.pop()
 		return nil
-	case "right", "l", "left", "h":
-		sv.tab = 1 - sv.tab
+	case "right", "l":
+		sv.tab = (sv.tab + 1) % n
 		return nil
-	case "1", "2":
+	case "left", "h":
+		sv.tab = (sv.tab + n - 1) % n
+		return nil
+	case "1", "2", "3":
 		sv.tab = int(s[0] - '1')
+		return nil
+	}
+	if sv.tab == tabMods {
 		return nil
 	}
 	cmd, _ := sv.tabs[sv.tab].key(m, k)
 	return cmd
 }
 
+// tabLines are tab i's lines, its selected line and what a click on
+// each line picks.
+func (sv *settingsView) tabLines(m *dash, i, w int) ([]string, int, []int) {
+	if i == tabMods {
+		return sv.mods.lines(m, w)
+	}
+	return sv.tabs[i].lines(m, w)
+}
+
 func (sv *settingsView) render(m *dash) string {
 	w := m.inner(viewWidth)
-	lines, sel, hits := sv.tabs[sv.tab].lines(m, w)
+	lines, sel, hits := sv.tabLines(m, sv.tab, w)
 	lines = append(lines, "")
 	keys := "enter change · ↑ ↓ move · ← → tabs · esc close"
-	if sv.tab == 0 {
+	switch sv.tab {
+	case 0:
 		lines = append(lines, faintLines("A project's own settings (starting threads, yolo mode, remote control, …) are in its popup: a on the dashboard, prefix+a in a session.", w)...)
-	} else {
+	case tabMods:
+		lines = append(lines, faintLines("Mods extend terminatr: themes, keys, columns, panels. They never change the safety settings, and no agent can turn one on. tm mod install adds one.", w)...)
+		keys = modsKeys
+	default:
 		lines = append(lines, faintLines("Every project follows these, a new one too, unless it sets its own in its popup (a on the dashboard, prefix+a in a session); x there makes it follow these again.", w)...)
 		keys = "enter change · + - number · ↑ ↓ move · ← → tabs · esc close"
 	}
@@ -399,12 +471,6 @@ func (sv *settingsView) render(m *dash) string {
 	all = append(all, hits...)
 	for len(all) < len(head)+len(lines) {
 		all = append(all, noHit)
-	}
-	// As tall as the longer tab, so switching tabs doesn't resize it.
-	height := 0
-	for i := range sv.tabs {
-		l, _, _ := sv.tabs[i].lines(m, w)
-		height = max(height, len(head)+len(l)+3)
 	}
 	b := box{title: "Settings", head: head, body: lines, sel: -1, hits: all, keys: keys}
 	b.scroll = sv.scroll(m.boxRows(b)-len(head), sel, len(lines))
@@ -466,10 +532,22 @@ func (sv *settingsView) click(m *dash, item, col int, _ bool) tea.Cmd {
 		}
 		return nil
 	}
+	if sv.tab == tabMods {
+		if item >= 0 {
+			sv.mods.sel = item
+		}
+		return nil
+	}
 	return sv.tabs[sv.tab].click(m, item, col)
 }
 
-func (sv *settingsView) wheel(m *dash, d int) { sv.tabs[sv.tab].key(m, arrow(d)) }
+func (sv *settingsView) wheel(m *dash, d int) {
+	if sv.tab == tabMods {
+		sv.mods.key(m, arrow(d))
+		return
+	}
+	sv.tabs[sv.tab].key(m, arrow(d))
+}
 
 // captureView takes the next ctrl+<key> as the new prefix key.
 type captureView struct{ err string }

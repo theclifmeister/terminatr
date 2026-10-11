@@ -2,10 +2,13 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -14,6 +17,7 @@ import (
 const taskUsage = `usage: tm task <command> [--project <slug>] [--json]
 
   add "title" [--notes "…" | --notes-file F] [--step "…"]... [--status S] [--owner O]
+      [--template NAME]         a mod's task template: its title around "title", its notes, its steps first
   add --json < plan.json        bulk: [{"title","notes","steps":[…],"status","owner"}]
   list [--status a,b] [--needs-you] [--archived]
   show T12
@@ -45,8 +49,20 @@ func runTask(e *Env, args []string) error {
 	case "add":
 		notes, notesFile := f.String("notes"), f.String("notes-file")
 		steps, status, owner := f.List("step"), f.String("status"), f.String("owner")
+		template := f.String("template")
 		run = func(p *project.Project, s *tasks.Store, pos []string) error {
-			return taskAdd(e, s, pos, *asJSON, f, *notes, *notesFile, *steps, *status, *owner)
+			var tpl *mod.Template
+			if *template != "" {
+				if *asJSON && len(pos) == 0 {
+					return usagef("a JSON plan carries its own fields; --template goes with one title")
+				}
+				t, err := findTemplate(p.Slug, *template)
+				if err != nil {
+					return &tasks.Error{Code: "unknown-template", Msg: err.Error()}
+				}
+				tpl = &t
+			}
+			return taskAdd(e, s, pos, *asJSON, f, *notes, *notesFile, *steps, *status, *owner, tpl)
 		}
 	case "list", "ls":
 		status, needsYou, archived := f.String("status"), f.Bool("needs-you"), f.Bool("archived")
@@ -210,7 +226,26 @@ func (e *Env) done(res tasks.Result, err error, asJSON bool, what string) error 
 	return nil
 }
 
-func taskAdd(e *Env, s *tasks.Store, pos []string, asJSON bool, f *flagSet, notes, notesFile string, steps []string, status, owner string) error {
+// findTemplate is the task template ref names (<mod>:<name>, or a name
+// one mod has) among the enabled mods that run in project slug.
+func findTemplate(slug, ref string) (mod.Template, error) {
+	cfg, _ := config.Load()
+	r, err := mod.Load(cfg)
+	if err != nil {
+		return mod.Template{}, err
+	}
+	ts, errs := r.Templates(slug)
+	t, err := mod.FindTemplate(ts, ref)
+	if err != nil && len(errs) > 0 {
+		err = fmt.Errorf("%w (%v)", err, errors.Join(errs...))
+	}
+	return t, err
+}
+
+// taskAdd adds the tasks: one from the title and flags, laid on tpl when
+// given (its title around the title; the notes flag's, else its notes;
+// its steps, then the step flags'), or a JSON plan's.
+func taskAdd(e *Env, s *tasks.Store, pos []string, asJSON bool, f *flagSet, notes, notesFile string, steps []string, status, owner string, tpl *mod.Template) error {
 	var items []tasks.NewTask
 	switch {
 	case len(pos) == 0 && asJSON:
@@ -227,6 +262,10 @@ func taskAdd(e *Env, s *tasks.Store, pos []string, asJSON bool, f *flagSet, note
 		}
 	case len(pos) == 1:
 		it := tasks.NewTask{Title: pos[0], Steps: steps, Status: status, Owner: owner}
+		if tpl != nil {
+			title, tnotes, tsteps := tpl.Apply(pos[0])
+			it.Title, it.Notes, it.Steps = title, tnotes, append(tsteps, steps...)
+		}
 		np, err := e.notesArg(f, &notes, &notesFile)
 		if err != nil {
 			return err

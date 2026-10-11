@@ -24,6 +24,8 @@ import (
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/keychain"
+	"github.com/theclifmeister/terminatr/internal/modnotify"
+	"github.com/theclifmeister/terminatr/internal/modsup"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/plat/shell"
@@ -143,6 +145,13 @@ type Server struct {
 	watch watchers
 	// modEv is the user mods' event bus (modevents.go).
 	modEv *modEvents
+	// modSup runs the code mods' hosts (modhosts.go); set before Run
+	// serves, nil in a test's bare Server.
+	modSup atomic.Pointer[modsup.Supervisor]
+	// modBr is the user mods' broker (modbroker.go).
+	modBr modBroker
+	// notices are the mods' notifications (modnotify.go).
+	notices *modnotify.Hub
 	// versions caches agent versions for the mod guard (mods.go).
 	versions versions
 	// asks are the sessions' open questions (ask.go).
@@ -239,6 +248,7 @@ func Run(ctx context.Context, opts Options) error {
 		prevProject: map[string]string{},
 		protocol:    proto.Protocol,
 		modEv:       newModEvents(),
+		notices:     modnotify.New(nil),
 	}
 	if n, deaf := testHello(); n > 0 || deaf {
 		s.deaf = deaf
@@ -291,6 +301,16 @@ func Run(ctx context.Context, opts Options) error {
 	ectx, stopEvents := context.WithCancel(context.Background())
 	defer stopEvents()
 	go s.runModEvents(ectx)
+	hostsDone := make(chan struct{})
+	if sup := s.newModHosts(); sup != nil {
+		s.modSup.Store(sup)
+		go func() {
+			defer close(hostsDone)
+			s.runModHosts(ectx, sup)
+		}()
+	} else {
+		close(hostsDone)
+	}
 
 	select {
 	case <-ctx.Done():
@@ -299,6 +319,9 @@ func Run(ctx context.Context, opts Options) error {
 		logger.Printf("stopping: requested by a client")
 	}
 	s.modelsStop()
+	// The mod hosts go first: nothing waits on them.
+	stopEvents()
+	<-hostsDone
 	// Let a sweep in progress finish while the socket still answers.
 	stopTicker()
 	select {
@@ -596,6 +619,14 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 		res, perr := s.setActive(p, s.callerOf(peerPID))
 		s.kick()
 		return res, perr
+	case proto.MethodModHosts:
+		return s.modHosts(), nil
+	case proto.MethodModRestart:
+		var p proto.ModRestartParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.restartMod(p.ID, s.callerOf(peerPID))
 	case proto.MethodPing:
 		return map[string]bool{"pong": true}, nil
 	case proto.MethodServerStatus:
@@ -612,6 +643,12 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 		return s.stop(p)
 	case proto.MethodSessionList:
 		return s.list(), nil
+	case proto.MethodNotifyClaim, proto.MethodNotifyDismiss:
+		var p proto.NoticeParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.noticeCall(req.Method, p, s.callerOf(peerPID))
 	case proto.MethodSessionStart:
 		var p proto.SessionStartParams
 		if err := decodeParams(req.Params, &p); err != nil {
@@ -765,6 +802,7 @@ func (s *Server) list() proto.SessionListResult {
 	if l := s.latest.Load(); l != nil {
 		res.Latest, res.Upgrade = l.Tag, l.Upgrade
 	}
+	res.ModNotices = s.modNotices()
 	s.checkForUpdate()
 	for _, sess := range sessions {
 		res.Sessions = append(res.Sessions, s.info(sess))

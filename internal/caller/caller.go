@@ -1,5 +1,6 @@
 // Package caller says who is calling tm: the human, a project's
-// coordinator, or one of its threads (docs/SPEC.md §11.1).
+// coordinator, one of its threads (docs/SPEC.md §11.1), or a user mod
+// through the server's broker (§5.3).
 //
 // The server decides this from the peer pid of the socket connection.
 // Until the server serves project calls, FromEnv reads the session
@@ -21,6 +22,11 @@ const (
 	// e.g. resolving a thread after its PR merged (docs/SPEC.md §9). It
 	// has a human's rights and is journaled as "ticker".
 	Ticker Kind = "ticker"
+	// Mod is a user mod calling through the server's broker (the mods
+	// design §7). It never comes from the environment: the broker names
+	// it. It has fewer rights than any agent, and is journaled as
+	// "mod:<id>".
+	Mod Kind = "mod"
 )
 
 // Caller is one tm invocation's identity.
@@ -28,16 +34,24 @@ type Caller struct {
 	Kind    Kind
 	Project string // the agent's project slug; empty for the human
 	Thread  string // the thread id, e.g. "t-0003", for Kind == Thread
+	Mod     string // the mod's id, e.g. "auto-labeller", for Kind == Mod
 }
 
-// IsAgent reports whether the caller is a coordinator or thread agent.
-func (c Caller) IsAgent() bool { return c.Kind == Coordinator || c.Kind == Thread }
+// ForMod is the caller for mod id's brokered calls.
+func ForMod(id string) Caller { return Caller{Kind: Mod, Mod: id} }
 
-// String is the name used in the journal: "human", "coordinator" or the
-// thread id.
+// IsAgent reports whether the caller is not the human: a coordinator or
+// thread agent, or a mod. Every human-only check refuses all three.
+func (c Caller) IsAgent() bool { return c.Kind == Coordinator || c.Kind == Thread || c.Kind == Mod }
+
+// String is the name used in the journal: "human", "coordinator", the
+// thread id or "mod:<id>".
 func (c Caller) String() string {
-	if c.Kind == Thread && c.Thread != "" {
+	switch {
+	case c.Kind == Thread && c.Thread != "":
 		return c.Thread
+	case c.Kind == Mod:
+		return "mod:" + c.Mod
 	}
 	return string(c.Kind)
 }
@@ -77,6 +91,8 @@ func FromLookup(getenv func(string) string) Caller {
 // rank orders kinds by how much they may do: the narrower, the higher.
 func rank(k Kind) int {
 	switch k {
+	case Mod:
+		return 3
 	case Thread:
 		return 2
 	case Coordinator:

@@ -413,6 +413,12 @@ func TestModsTables(t *testing.T) {
 	if n := c.Mods["nord"]; n.Enabled || n.Err == nil || len(c.Unknown) != 0 {
 		t.Fatalf("nord %+v, unknown %v", n, c.Unknown)
 	}
+	// A mod's settings set before anything else of it: its table is
+	// there, implied.
+	write(t, "[mods.nord.settings]\ndark = true\n")
+	if c, err := Load(); err != nil || c.Mods["nord"].Settings["dark"] != true || len(c.Unknown) != 0 {
+		t.Fatalf("implied table: %v %+v %v", err, c.Mods, c.Unknown)
+	}
 	write(t, "[mods]\nenabled = \"yes\"\n")
 	if _, err := Load(); err == nil {
 		t.Fatal("a bad older [mods] enabled passed")

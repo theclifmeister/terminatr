@@ -13,9 +13,11 @@ import (
 )
 
 // setupVM gives the VM its globals: $ with on and log, the timers, and
-// nothing else (no require, console, fetch or process).
+// nothing else (no require, console, fetch or process). Code can't be
+// made from strings (noCodeFromStrings).
 func (h *Host) setupVM() {
 	vm := h.vm
+	noCodeFromStrings(vm)
 	j := vm.Get("JSON").ToObject(vm)
 	h.parse, _ = goja.AssertFunction(j.Get("parse"))
 	h.strfy, _ = goja.AssertFunction(j.Get("stringify"))
@@ -38,6 +40,38 @@ func (h *Host) setupVM() {
 	_ = vm.Set("setInterval", func(c goja.FunctionCall) goja.Value { return h.jsTimer(c, true) })
 	_ = vm.Set("clearTimeout", h.jsClearTimer)
 	_ = vm.Set("clearInterval", h.jsClearTimer)
+}
+
+// ErrCodeFromStrings is what eval's stand-ins throw.
+const ErrCodeFromStrings = "code from strings is off in mods: no eval, no Function constructor"
+
+// noCodeFromStrings takes eval away and makes every function constructor
+// (Function, and those of async, generator and async generator
+// functions, as reached through their prototypes' constructor) throw.
+// None of them reaches anything outside the VM; what they would let a
+// mod do is run text it was given as code, with its grants: a report's
+// words, a fetched page. That is the confused deputy the broker's checks
+// can't see, and no mod needs it (a bundle has its code ahead of time).
+// instanceof Function still works: each stand-in keeps the prototype.
+func noCodeFromStrings(vm *goja.Runtime) {
+	_ = vm.GlobalObject().Delete("eval")
+	refuse := func(goja.FunctionCall) goja.Value { panic(vm.NewTypeError(ErrCodeFromStrings)) }
+	for i, src := range []string{"(function(){})", "(async function(){})", "(function*(){})", "(async function*(){})"} {
+		v, err := vm.RunString(src)
+		if err != nil {
+			continue // a kind this goja doesn't have
+		}
+		proto := v.ToObject(vm).Prototype()
+		if proto == nil {
+			continue
+		}
+		stand := vm.ToValue(refuse).ToObject(vm)
+		_ = stand.DefineDataProperty("prototype", proto, goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_FALSE)
+		_ = proto.DefineDataProperty("constructor", stand, goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_FALSE)
+		if i == 0 {
+			_ = vm.GlobalObject().DefineDataProperty("Function", stand, goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_FALSE)
+		}
+	}
 }
 
 // $.on(name, fn) adds a handler for an event.

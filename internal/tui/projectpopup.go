@@ -14,6 +14,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/modannot"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -77,7 +78,7 @@ func (m *dash) projectPopup(string) tea.Cmd {
 	if slug == "" {
 		return nil
 	}
-	pv := &projectView{slug: slug, settings: settingsList{rows: projectSettings(slug)}}
+	pv := &projectView{slug: slug, settings: settingsList{rows: m.projectRows(slug)}}
 	m.push(pv)
 	return m.loadPopup(slug)
 }
@@ -93,7 +94,7 @@ func (m *dash) showTask(slug string, id int) tea.Cmd {
 func (m *dash) showTab(slug string, tab int) tea.Cmd { return m.openTab(slug, tab, 0) }
 
 func (m *dash) openTab(slug string, tab, pick int) tea.Cmd {
-	pv := &projectView{slug: slug, tab: tab, pick: pick, settings: settingsList{rows: projectSettings(slug)}}
+	pv := &projectView{slug: slug, tab: tab, pick: pick, settings: settingsList{rows: m.projectRows(slug)}}
 	m.push(pv)
 	return m.loadPopup(slug)
 }
@@ -257,7 +258,7 @@ func (tv *taskView) render(m *dash) string {
 	if r, ok := tv.pv.reviews[t.ID]; ok {
 		rv = &r
 	}
-	taskPanelWith(d, t, rv, m.asked(tv.pv.slug, t), m.taskUsage(tv.pv.slug, t.ID))
+	taskPanelWith(d, t, rv, m.asked(tv.pv.slug, t), m.taskUsage(tv.pv.slug, t.ID), m.badges(tv.pv.slug, modannot.Task(t.Ref())))
 	for i, l := range d.lines {
 		// The box has its own gutters.
 		d.lines[i] = strings.TrimRight(strings.TrimSuffix(strings.TrimPrefix(l, " "), reset), " ") + reset

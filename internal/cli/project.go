@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -472,18 +473,26 @@ func runInbox(e *Env, args []string) error {
 	return usagef("unknown subcommand %q\n%s", args[0], inboxUsage)
 }
 
-const skillUsage = `usage: tm skill coordinator|thread`
+const skillUsage = `usage: tm skill coordinator|thread [--project <slug>]`
 
-// runSkill prints a role's standing rules (§7.7), for any caller.
+// runSkill prints a role's standing rules (§7.7), for any caller, with
+// the rules of the mods that run for its project (the caller's, or
+// --project; every enabled mod's without either, §5.3).
 func runSkill(e *Env, args []string) error {
-	if len(args) != 1 {
+	f := newFlags()
+	slug := f.String("project")
+	pos, err := f.Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(pos) != 1 {
 		return usagef("%s", skillUsage)
 	}
-	text, ok := skill.Text(args[0], version.Version)
+	text, ok := skill.ForProject(pos[0], version.Version, cmp.Or(*slug, e.Caller.Project))
 	if !ok {
-		return usagef("no rules for role %q\n%s", args[0], skillUsage)
+		return usagef("no rules for role %q\n%s", pos[0], skillUsage)
 	}
-	_, err := fmt.Fprint(e.Stdout, text)
+	_, err = fmt.Fprint(e.Stdout, text)
 	return err
 }
 
