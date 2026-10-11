@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -23,9 +24,12 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/modannot"
 	"github.com/theclifmeister/terminatr/internal/modbroker"
 	"github.com/theclifmeister/terminatr/internal/modproto"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
 // modRegistryAge is how long the broker trusts the registry it read: a
@@ -293,6 +297,80 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 	b.Handle("inbox.raise", mod.PermInbox, s.modRaise)
 	b.Handle("ui.cell.set", "", s.modCellSet)
 	b.Handle("ui.status.set", "", s.modStatusSet)
+	b.Handle("ui.notify", mod.PermNotify, s.modNotify)
+	b.Handle("annotate", mod.PermProjectRead, s.modAnnotate)
+}
+
+// annotate {target: {project, task | thread}, key, spans}: shows spans as
+// a badge by the task or thread, in the mod's own annotation store (never
+// TASKS.md); null or no spans removes it. The target must exist and the
+// mod must run for its project. Journaled as mod:<id> when it changes
+// something.
+func (s *Server) modAnnotate(_ context.Context, c *modbroker.Call) (any, error) {
+	var a struct {
+		Target struct {
+			Project string `json:"project"`
+			Task    string `json:"task"`
+			Thread  string `json:"thread"`
+		} `json:"target"`
+		Key   string          `json:"key"`
+		Spans []modannot.Span `json:"spans"`
+	}
+	if err := c.Decode(&a); err != nil {
+		return nil, err
+	}
+	if err := c.Project(a.Target.Project); err != nil {
+		return nil, err
+	}
+	if (a.Target.Task == "") == (a.Target.Thread == "") {
+		return nil, modbroker.BadParams("annotate: the target is a task or a thread")
+	}
+	if err := modannot.CheckKey(a.Key); err != nil {
+		return nil, modbroker.BadParams("annotate: %v", err)
+	}
+	spans, err := modannot.Clean(a.Spans)
+	if err != nil {
+		return nil, modbroker.BadParams("annotate: %v", err)
+	}
+	p, err := project.Open(a.Target.Project)
+	if err != nil {
+		return nil, modbroker.NotFound("no project %s", a.Target.Project)
+	}
+	var target string
+	if a.Target.Task != "" {
+		n, ok := tasks.ParseRef(a.Target.Task)
+		if !ok {
+			return nil, modbroker.BadParams("annotate: %q is not a task id", a.Target.Task)
+		}
+		b, err := p.Tasks().Load()
+		if err != nil {
+			return nil, err
+		}
+		t := b.Find(n)
+		if t == nil {
+			return nil, modbroker.NotFound("no task %s in %s", a.Target.Task, p.Slug)
+		}
+		target = modannot.Task(t.Ref())
+	} else {
+		recs, err := thread.List(p)
+		if err != nil {
+			return nil, err
+		}
+		if !slices.ContainsFunc(recs, func(r *thread.Record) bool { return r.ID == a.Target.Thread }) {
+			return nil, modbroker.NotFound("no thread %s in %s", a.Target.Thread, p.Slug)
+		}
+		target = modannot.Thread(a.Target.Thread)
+	}
+	changed, err := modannot.Set(s.broker().OwnDir(c.Mod.ID), p.Slug, target, a.Key, spans)
+	if err != nil {
+		return nil, modbroker.Denied("annotate: %v", err)
+	}
+	if changed {
+		if err := p.Journal(c.Caller, "annotate", target, a.Key); err != nil {
+			s.log.Printf("mods: %s: journal: %v", p.Slug, err)
+		}
+	}
+	return nil, nil
 }
 
 // inbox.raise {project, item: {subject, summary}} (or the two flat): an

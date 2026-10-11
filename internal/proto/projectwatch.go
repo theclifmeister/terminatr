@@ -49,7 +49,7 @@ type ProjectWatch struct {
 	// synced its repos; nil when it hasn't yet.
 	Ticker *WatchTicker `json:"ticker,omitempty"`
 	// Cells are the mods' cells for the project, its tasks and its
-	// threads (since protocol 12).
+	// threads (since protocol 13).
 	Cells []ModCell `json:"cells,omitempty"`
 }
 

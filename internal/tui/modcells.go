@@ -4,7 +4,6 @@ import (
 	"slices"
 	"strings"
 
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -136,30 +135,6 @@ func (mc *modCells) sideOrder(order []string) []string {
 		i = len(order)
 	}
 	return slices.Concat(order[:i:i], add, order[i:])
-}
-
-// roleStyle is a span role's style in this console's theme.
-func roleStyle(role string) lipgloss.Style {
-	t := th()
-	switch role {
-	case "accent":
-		return t.Accent
-	case "good":
-		return t.Good
-	case "warn":
-		return t.Warn
-	case "bad":
-		return t.Bad
-	case "info":
-		return t.Info
-	case "faint":
-		return t.Faint
-	case "head":
-		return t.Head
-	case "sel":
-		return t.Sel
-	}
-	return t.Plain
 }
 
 // spansCell is spans as a cell w cells wide: plain and styled, cut to w

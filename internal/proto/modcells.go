@@ -5,7 +5,7 @@ import "github.com/theclifmeister/terminatr/internal/widget"
 // Mod cells (docs/SPEC.md §5.3, Cells; mods design §4 and §6): what code
 // mods publish into their columns and the status bar. The server keeps
 // the latest cell per mod, column and target and sends them with the rows
-// it already sends, since protocol 12: session.list's Mods (the columns,
+// it already sends, since protocol 13: session.list's Mods (the columns,
 // the cells of projects, tasks and threads, the status segments), a
 // session's own cells on its SessionInfo, and a project's on its
 // ProjectWatch. Consoles draw them with their own theme, icons and

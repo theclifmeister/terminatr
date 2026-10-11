@@ -296,6 +296,10 @@ type Config struct {
 	// Prefix is [keys] prefix, or the older [keys] detach that named the
 	// same key; Icons is [ui] icons. "" when unset.
 	Prefix, Icons string
+	// Theme and Layout are [ui] theme and [ui] layout: the id of the
+	// enabled mod whose theme, or sidebar layout, every console uses. ""
+	// (unset) is the built-in one.
+	Theme, Layout string
 	// Unknown are the keys under [keys], [ui], [agent_mod] (or [mods]), [mods.<id>] and [agents.<name>] that tm doesn't know
 	// (e.g. "ui.icon"), sorted. tm doctor reports them; unlike a
 	// project's, they don't fail Load, so a typo there never stops tm.
@@ -380,6 +384,8 @@ func Load() (*Config, error) {
 		} `toml:"keys"`
 		UI struct {
 			Icons       string `toml:"icons"`
+			Theme       string `toml:"theme"`
+			Layout      string `toml:"layout"`
 			ContextHint *int   `toml:"context_hint"`
 			UpdateCheck *bool  `toml:"update_check"`
 			NeedsFirst  bool   `toml:"needs_first"`
@@ -403,7 +409,7 @@ func Load() (*Config, error) {
 	}
 	am := raw.AgentMod.over(old)
 	c := &Config{Mods: mods, Path: path, projects: raw.Projects, defaults: raw.Defaults, agent: raw.DefaultAgent, agents: raw.Agents,
-		Prefix: cmp.Or(raw.Keys.Prefix, raw.Keys.Detach), Icons: raw.UI.Icons, AgentMod: am.Enabled != nil && *am.Enabled,
+		Prefix: cmp.Or(raw.Keys.Prefix, raw.Keys.Detach), Icons: raw.UI.Icons, Theme: raw.UI.Theme, Layout: raw.UI.Layout, AgentMod: am.Enabled != nil && *am.Enabled,
 		AgentModBand: am.Band == nil || *am.Band, AgentModPane: am.Pane != nil && *am.Pane,
 		ContextHint: DefaultContextHint, UpdateCheck: raw.UI.UpdateCheck == nil || *raw.UI.UpdateCheck, NeedsFirst: raw.UI.NeedsFirst}
 	if h := raw.UI.ContextHint; h != nil {
