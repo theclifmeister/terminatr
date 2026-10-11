@@ -1709,7 +1709,7 @@ func (c *client) frameSplit(vis []*pane) ([]byte, error) {
 		// across the window.
 		if c.rows > 1 {
 			b = append(b, fmt.Sprintf("\x1b[%d;1H\x1b[0m", c.rows-1)...)
-			b = append(b, styleFaint.Render(strings.Repeat("─", max(c.cols-c.infoW, 0)))...)
+			b = append(b, th().Faint.Render(strings.Repeat("─", max(c.cols-c.infoW, 0)))...)
 		}
 		b = append(b, fmt.Sprintf("\x1b[%d;1H\x1b[0m", c.rows)...)
 		b = append(b, c.statusText...)

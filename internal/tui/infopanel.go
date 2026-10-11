@@ -145,7 +145,7 @@ func infoLines(d *infoData, w int, now time.Time) ([]string, []infoHit) {
 		}
 	}
 	if d == nil {
-		pl.add(styleFaint.Render("no thread here"))
+		pl.add(th().Faint.Render("no thread here"))
 		return pl.lines, nil
 	}
 	if d.watch != nil {
@@ -156,9 +156,9 @@ func infoLines(d *infoData, w int, now time.Time) ([]string, []infoHit) {
 	// The task, with its steps; the one under way marked.
 	switch t := d.task; {
 	case t != nil:
-		pl.wrap(styleTitle.Render(oneLine(t.Ref() + " " + t.Title)))
+		pl.wrap(th().Title.Render(oneLine(t.Ref() + " " + t.Title)))
 		g, st := stateLook(string(t.Status))
-		pl.add(st.Render(strings.TrimSpace(g+" "+string(t.Status))) + styleFaint.Render(" · click to open"))
+		pl.add(st.Render(strings.TrimSpace(g+" "+string(t.Status))) + th().Faint.Render(" · click to open"))
 		hit(0, infoHit{kind: hitTask, task: t.ID})
 		if len(t.Steps) > 0 {
 			pl.section("STEPS", "")
@@ -169,16 +169,16 @@ func infoLines(d *infoData, w int, now time.Time) ([]string, []infoHit) {
 				switch {
 				case step.Done:
 					glyph = todoGlyph("done")
-					text = styleFaint.Render(text)
+					text = th().Faint.Render(text)
 				case cur:
-					glyph, text, cur = todoGlyph("in_progress"), styleAccent.Render(text), false
+					glyph, text, cur = todoGlyph("in_progress"), th().Accent.Render(text), false
 				}
 				hang(pl, glyph+" ", text)
 			}
 		}
 	case d.rec != nil:
-		pl.wrap(styleTitle.Render(oneLine(d.rec.Title)))
-		pl.add(styleFaint.Render("no task"))
+		pl.wrap(th().Title.Render(oneLine(d.rec.Title)))
+		pl.add(th().Faint.Render("no task"))
 	}
 	// The thread: its state, progress, what it does now, what it waits on.
 	pl.section("THREAD", "")
@@ -206,7 +206,7 @@ func infoLines(d *infoData, w int, now time.Time) ([]string, []infoHit) {
 			pl.field("now", `"`+oneLine(ts.Activity)+`"`)
 		}
 		if ts.NeedsYou != "" {
-			hang(pl, styleFaint.Render(fmt.Sprintf("%-9s", "needs you"))+" ", styleWarn.Render(oneLine(ts.NeedsYou)))
+			hang(pl, th().Faint.Render(fmt.Sprintf("%-9s", "needs you"))+" ", th().Warn.Render(oneLine(ts.NeedsYou)))
 		}
 	}
 	if q := s.Question; q != nil {
@@ -218,15 +218,15 @@ func infoLines(d *infoData, w int, now time.Time) ([]string, []infoHit) {
 	}
 	// The PR and its checks.
 	if l := d.prLine(); l != "" {
-		look := styleAccent
+		look := th().Accent
 		switch {
 		case d.pr.Checks == "fail" || d.pr.Mergeable == "CONFLICTING":
-			look = styleBad
+			look = th().Bad
 		case d.pr.State == "MERGED":
-			look = styleGood
+			look = th().Good
 		}
 		from := len(pl.lines)
-		hang(pl, styleFaint.Render(fmt.Sprintf("%-9s", "PR"))+" ", look.Render(l))
+		hang(pl, th().Faint.Render(fmt.Sprintf("%-9s", "PR"))+" ", look.Render(l))
 		if d.prURL() != "" {
 			hit(from, infoHit{kind: hitPR, url: d.prURL()})
 		}
@@ -248,14 +248,14 @@ func infoLines(d *infoData, w int, now time.Time) ([]string, []infoHit) {
 		for i, n := range d.attached {
 			names[i] = oneLine(n)
 		}
-		hang(pl, styleFaint.Render(fmt.Sprintf("%-9s", "attached"))+" ", strings.Join(names, ", "))
+		hang(pl, th().Faint.Render(fmt.Sprintf("%-9s", "attached"))+" ", strings.Join(names, ", "))
 	}
 	// What the guard refused: journaled, not sent to the inbox.
 	if len(d.refused) > 0 {
 		pl.gap()
-		pl.add(styleHead.Render("Guard refused"))
+		pl.add(th().Head.Render("Guard refused"))
 		for _, r := range d.refused {
-			hang(pl, styleFaint.Render(age(now.Sub(r.at))+" ago")+" ", styleWarn.Render(oneLine(r.what)))
+			hang(pl, th().Faint.Render(age(now.Sub(r.at))+" ago")+" ", th().Warn.Render(oneLine(r.what)))
 		}
 	}
 	// Where it works.
@@ -410,9 +410,9 @@ func (c *client) infoRows() int {
 // content from top. c.mu held.
 func (c *client) appendInfo(b []byte, wrote bool) ([]byte, bool) {
 	ip := c.info
-	border := styleFaint.Render("│")
+	border := th().Faint.Render("│")
 	if c.kb == areaInfo {
-		border = styleAccent.Render("│")
+		border = th().Accent.Render("│")
 	}
 	x, w := c.infoX(), c.infoW-1
 	lines := make([]string, c.infoRows())

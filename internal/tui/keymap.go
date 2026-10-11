@@ -140,7 +140,7 @@ func symbolLines(w int) []string {
 		{i.current, "the step under way"},
 		{strings.Repeat(i.barOn, 2) + strings.Repeat(i.barOff, 3), "progress, always beside its count (2/5)"},
 	}
-	out := []string{styleHead.Render("Symbols")}
+	out := []string{th().Head.Render("Symbols")}
 	for _, s := range syms {
 		out = append(out, keyLine(s, w)...)
 	}
@@ -158,7 +158,7 @@ func keyLines(w int) []string {
 		if i > 0 {
 			out = append(out, "")
 		}
-		out = append(out, styleHead.Render(g.title))
+		out = append(out, th().Head.Render(g.title))
 		for _, k := range g.keys {
 			out = append(out, keyLine(k, w)...)
 		}
@@ -179,7 +179,7 @@ func keyLine(k keyHelp, w int) []string {
 		if i == 0 {
 			key = k.keys
 		}
-		out = append(out, styleAccent.Render(fit(key, keyCol))+" "+h)
+		out = append(out, th().Accent.Render(fit(key, keyCol))+" "+h)
 	}
 	return out
 }
@@ -193,7 +193,7 @@ func wrapLines(text string, w int) []string {
 func faintLines(text string, w int) []string {
 	lines := wrapLines(text, w)
 	for i, l := range lines {
-		lines[i] = styleFaint.Render(l)
+		lines[i] = th().Faint.Render(l)
 	}
 	return lines
 }

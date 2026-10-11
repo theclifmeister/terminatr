@@ -218,20 +218,20 @@ func statusBar(s proto.SessionInfo, ts *thread.Status, title string, pending boo
 	if pending {
 		right := "prefix again sends it "
 		w := cols - ansi.StringWidth(right) - 1
-		left := styleFaint.Render(pendingHead) + keysLine(pendingList())
+		left := th().Faint.Render(pendingHead) + keysLine(pendingList())
 		if w < 1 {
 			return fit(left, cols), nil
 		}
 		hs := hints(pendingList(), ansi.StringWidth(pendingHead))
 		hs = slices.DeleteFunc(hs, func(h hint) bool { return h.x1 > w-1 })
 		hs = append(hs, hint{w + 1, w + 1 + 21, "prefix"})
-		return fit(left, w) + reset + " " + styleFaint.Render(right), hs
+		return fit(left, w) + reset + " " + th().Faint.Render(right), hs
 	}
 	right := keysLine(strings.TrimSuffix(statusRight(), " ")) + " "
 	rw := ansi.StringWidth(statusRight())
 	g, gst := stateLook(stateWord(s))
 	if g == "" {
-		g, gst = ic().none, styleFaint
+		g, gst = ic().none, th().Faint
 	}
 	path := s.ID + " › " + sessionName(s)
 	if s.Project != "" {
@@ -328,9 +328,9 @@ func statusBar(s proto.SessionInfo, ts *thread.Status, title string, pending boo
 		path = strings.TrimRight(fit(path, max(min(pw, room), 0)), " ")
 		t = strings.TrimRight(fit(t, max(room-2-ansi.StringWidth(path), 0)), " ")
 	}
-	left := " " + gst.Render(g) + " " + styleHead.Render(path)
+	left := " " + gst.Render(g) + " " + th().Head.Render(path)
 	if t != "" {
-		left += "  " + styleFaint.Render(t)
+		left += "  " + th().Faint.Render(t)
 	}
 	w := cols - rw
 	if w < 1 {

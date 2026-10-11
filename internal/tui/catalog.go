@@ -326,9 +326,9 @@ func (v *catalogView) lines(w int) (out []string, hits []int) {
 			info = fmt.Sprintf("%d models · %s · default %s", len(c.Models), info, def)
 		}
 		if idx == v.sel {
-			out = append(out, styleSel.Render(fit(c.Agent+"  "+info, w)))
+			out = append(out, th().Sel.Render(fit(c.Agent+"  "+info, w)))
 		} else {
-			out = append(out, styleHead.Render(c.Agent)+"  "+styleFaint.Render(fit(info, max(w-len(c.Agent)-2, 1))))
+			out = append(out, th().Head.Render(c.Agent)+"  "+th().Faint.Render(fit(info, max(w-len(c.Agent)-2, 1))))
 		}
 		hits = append(hits, idx)
 		idx++
@@ -355,25 +355,25 @@ func (v *catalogView) lines(w int) (out []string, hits []int) {
 			}
 			l := "  " + mark + fit(x.Name, nw) + "  " + note
 			if idx == v.sel {
-				out = append(out, styleSel.Render(fit(l, w)))
+				out = append(out, th().Sel.Render(fit(l, w)))
 			} else {
-				name := styleAccent.Render(fit("  "+mark+fit(x.Name, nw), nw+4))
+				name := th().Accent.Render(fit("  "+mark+fit(x.Name, nw), nw+4))
 				if x.Refusal != nil || mark == "- " {
-					name = styleFaint.Render(fit("  "+mark+fit(x.Name, nw), nw+4))
+					name = th().Faint.Render(fit("  "+mark+fit(x.Name, nw), nw+4))
 				}
-				out = append(out, name+"  "+styleFaint.Render(fit(note, max(w-nw-6, 1))))
+				out = append(out, name+"  "+th().Faint.Render(fit(note, max(w-nw-6, 1))))
 			}
 			hits = append(hits, idx)
 			idx++
 		}
 		if !c.Known {
-			out, hits = append(out, styleFaint.Render(fit("    threads run "+c.Agent+"'s own default; --model is refused (R asks again)", w))), append(hits, noHit)
+			out, hits = append(out, th().Faint.Render(fit("    threads run "+c.Agent+"'s own default; --model is refused (R asks again)", w))), append(hits, noHit)
 		} else if len(rows) == 0 {
-			out, hits = append(out, styleFaint.Render("    "+c.Agent+" lists no models")), append(hits, noHit)
+			out, hits = append(out, th().Faint.Render("    "+c.Agent+" lists no models")), append(hits, noHit)
 		}
 	}
 	if len(v.cats) == 0 {
-		out, hits = append(out, styleWarn.Render("no agent installed: tm can't run coordinators or threads (tm doctor)")), append(hits, noHit)
+		out, hits = append(out, th().Warn.Render("no agent installed: tm can't run coordinators or threads (tm doctor)")), append(hits, noHit)
 	}
 	return out, hits
 }
@@ -391,7 +391,7 @@ func (v *catalogView) render(m *dash) string {
 	}
 	all = append(all, hits...)
 	if v.err != "" {
-		lines = append(lines, "", styleBad.Render(v.err))
+		lines = append(lines, "", th().Bad.Render(v.err))
 	}
 	sel := -1
 	if i := slices.Index(hits, v.sel); i >= 0 {

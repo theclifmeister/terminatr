@@ -137,9 +137,9 @@ func (l *settingsList) lines(m *dash, w int) (out []string, sel int, hits []int)
 		}
 		text := fit(r.label, lw) + "  " + value + btns + from
 		if i == l.sel {
-			out = append(out, styleSel.Render(fit(text, w)))
+			out = append(out, th().Sel.Render(fit(text, w)))
 		} else {
-			out = append(out, styleHead.Render(fit(r.label, lw))+"  "+styleAccent.Render(value)+styleHead.Render(btns)+styleFaint.Render(from))
+			out = append(out, th().Head.Render(fit(r.label, lw))+"  "+th().Accent.Render(value)+th().Head.Render(btns)+th().Faint.Render(from))
 		}
 		out = append(out, faintLines(r.help, w)...)
 		if r.note != nil {
@@ -446,9 +446,9 @@ func (sv *settingsView) tabBar() string {
 	for i, name := range settingsTabs {
 		label := fmt.Sprintf(" %d %s ", i+1, name)
 		if i == sv.tab {
-			parts = append(parts, styleSel.Render(label))
+			parts = append(parts, th().Sel.Render(label))
 		} else {
-			parts = append(parts, styleFaint.Render(label))
+			parts = append(parts, th().Faint.Render(label))
 		}
 	}
 	return strings.Join(parts, " ")
@@ -491,9 +491,9 @@ func (cv *captureView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 }
 
 func (cv *captureView) render(m *dash) string {
-	lines := []string{"Press the new prefix key: ctrl and a key, e.g. ctrl+a.", styleFaint.Render("Now " + m.prefix + ".")}
+	lines := []string{"Press the new prefix key: ctrl and a key, e.g. ctrl+a.", th().Faint.Render("Now " + m.prefix + ".")}
 	if cv.err != "" {
-		lines = append(lines, styleBad.Render(cv.err))
+		lines = append(lines, th().Bad.Render(cv.err))
 	}
 	return m.popup(box{title: "Prefix key", body: lines, sel: -1, keys: "esc cancel", dialog: true})
 }
@@ -654,7 +654,7 @@ func safetySettings(slug string) []setting {
 			},
 			note: func(m *dash) []string {
 				if cur, names := get(safety(m)), m.src.Agents(); cur != "" && !slices.Contains(names, cur) {
-					return []string{styleWarn.Render(cur + " isn't installed: nothing starts with it; enter picks an installed agent")}
+					return []string{th().Warn.Render(cur + " isn't installed: nothing starts with it; enter picks an installed agent")}
 				}
 				return nil
 			}}
@@ -846,7 +846,7 @@ func safetySettings(slug string) []setting {
 				if !all {
 					for _, s := range m.data.Sessions {
 						if s.Role == proto.RoleCoordinator && s.Project == slug && s.ModelPending {
-							return []string{styleWarn.Render("the running coordinator runs " + modelWord(s.Model) + "; " + modelWord(s.ModelNext) + " on its next start (" + s.Agent + " can't switch models live)")}
+							return []string{th().Warn.Render("the running coordinator runs " + modelWord(s.Model) + "; " + modelWord(s.ModelNext) + " on its next start (" + s.Agent + " can't switch models live)")}
 						}
 					}
 				}
@@ -857,9 +857,9 @@ func safetySettings(slug string) []setting {
 				name, list, why := coordModels(m)
 				switch {
 				case why != "":
-					return []string{styleWarn.Render(why + ": the coordinator runs its agent's default")}
+					return []string{th().Warn.Render(why + ": the coordinator runs its agent's default")}
 				case !slices.Contains(list, cur):
-					return []string{styleWarn.Render(name + " doesn't offer " + cur + " in this project's models now: the coordinator runs " + name + "'s default")}
+					return []string{th().Warn.Render(name + " doesn't offer " + cur + " in this project's models now: the coordinator runs " + name + "'s default")}
 				}
 				return nil
 			}},
@@ -982,9 +982,9 @@ func ownNote(m *dash, keys []string) []string {
 	case 0:
 		return nil
 	case 1:
-		return []string{styleFaint.Render(slugs[0] + " sets its own")}
+		return []string{th().Faint.Render(slugs[0] + " sets its own")}
 	}
-	return []string{styleFaint.Render(joinAnd(slugs) + " set their own")}
+	return []string{th().Faint.Render(joinAnd(slugs) + " set their own")}
 }
 
 // followers names the projects that follow all projects in keys, for
@@ -1162,27 +1162,27 @@ func (v *modelsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 }
 
 func (v *modelsView) render(m *dash) string {
-	lines := []string{styleFaint.Render("The models the coordinator may pick for a thread.")}
+	lines := []string{th().Faint.Render("The models the coordinator may pick for a thread.")}
 	w := m.inner(dialogWidth)
 	for i, n := range v.rows() {
 		mark, word := ic().todoOpen, "left out"
 		if v.allowed(n) {
 			mark, word = ic().todoDone, "allowed"
 		}
-		l := fit(mark+" "+n, 16) + "  " + styleFaint.Render(word)
+		l := fit(mark+" "+n, 16) + "  " + th().Faint.Render(word)
 		if v.stale(n) {
-			l = fit(mark+" "+n, 16) + "  " + styleBad.Render("stale: no agent lists it")
+			l = fit(mark+" "+n, 16) + "  " + th().Bad.Render("stale: no agent lists it")
 		}
 		if i == v.sel {
-			l = styleSel.Render(fit(ansi.Strip(l), w))
+			l = th().Sel.Render(fit(ansi.Strip(l), w))
 		}
 		lines = append(lines, l)
 	}
 	if len(v.all) == 0 {
-		lines = append(lines, styleFaint.Render("no agent lists models"))
+		lines = append(lines, th().Faint.Render("no agent lists models"))
 	}
 	if v.err != "" {
-		lines = append(lines, "", styleBad.Render(v.err))
+		lines = append(lines, "", th().Bad.Render(v.err))
 	}
 	return m.popup(box{title: "Thread models", body: lines, sel: -1, keys: "enter allow or leave out · ↑ ↓ move · esc back", dialog: true})
 }
@@ -1290,9 +1290,9 @@ func remoteNote(setting bool, sessions []proto.SessionInfo, slug string) []strin
 	for _, s := range sessions {
 		if s.Role == proto.RoleCoordinator && s.Project == slug && s.RemoteControl != setting {
 			if setting && !s.RemoteHeld {
-				return []string{styleWarn.Render("the running coordinator has it off; tm turns it on once the coordinator is idle")}
+				return []string{th().Warn.Render("the running coordinator has it off; tm turns it on once the coordinator is idle")}
 			}
-			return []string{styleWarn.Render("the running coordinator has it " + onOff(s.RemoteControl) + " (prefix+r), until it is started anew")}
+			return []string{th().Warn.Render("the running coordinator has it " + onOff(s.RemoteControl) + " (prefix+r), until it is started anew")}
 		}
 	}
 	return nil
