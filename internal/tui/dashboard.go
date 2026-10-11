@@ -785,7 +785,7 @@ func (m *dash) showProject(slug string) tea.Cmd {
 // while the sidebar has the focus.
 func (m *dash) tree() []treeRow {
 	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint,
-		tree: sideTree(m.data.Projects, m.folds), cols: m.sideCols})
+		tree: sideTree(m.data.Projects, m.folds), cols: m.sideCols, cells: m.data.Cells})
 	rows = sideRows(rows, m.data.NeedsFirst)
 	if m.focus == areaSide {
 		markCursor(rows, m.sideW(), m.sideSel)
@@ -795,7 +795,7 @@ func (m *dash) tree() []treeRow {
 
 // fullTree is the sidebar's whole tree: nothing folded, no filter (w W).
 func (m *dash) fullTree() []treeRow {
-	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint, tree: unfoldedTree(m.data.Projects), cols: m.sideCols})
+	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint, tree: unfoldedTree(m.data.Projects), cols: m.sideCols, cells: m.data.Cells})
 	if m.data.NeedsFirst {
 		rows = needsFirstOrder(rows)
 	}

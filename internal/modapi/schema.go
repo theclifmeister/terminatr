@@ -17,6 +17,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/modbus"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/widget"
 )
 
 // Grants a method may need ([permissions] in mod.toml).
@@ -74,8 +75,15 @@ type Settings map[string]Value
 // Role is a theme role (internal/tui theme.go) that colours a span.
 type Role string
 
-// Roles are the theme roles a span may name.
-var Roles = []string{"head", "sel", "faint", "accent", "title", "bad", "warn", "good", "info", "plain"}
+// Roles are the theme roles a span may name (widget.Roles: the mods
+// design §6, Spans).
+var Roles = widget.Roles
+
+// Icon is an icon name, drawn from the console's icon set.
+type Icon string
+
+// Icons are the icon names a span may name (widget.Icons).
+var Icons = widget.Icons
 
 // Level is a toast's or notification's level.
 type Level string
@@ -83,11 +91,12 @@ type Level string
 // Levels are the levels.
 var Levels = []string{"info", "warn", "error"}
 
-// Span is a run of text in one theme role: what a cell, status segment
-// or badge is made of.
+// Span is a run of text in one theme role, or an icon: what a cell,
+// status segment or badge is made of (widget.Span).
 type Span struct {
-	Text string `json:"text"`
+	Text string `json:"text,omitempty"`
 	Role Role   `json:"role,omitempty"`
+	Icon Icon   `json:"icon,omitempty"`
 }
 
 // Widget is a view's widget tree (the widget set: text, list, table, kv,

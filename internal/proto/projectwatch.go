@@ -48,6 +48,9 @@ type ProjectWatch struct {
 	// Ticker is when the ticker last polled the project's PRs and
 	// synced its repos; nil when it hasn't yet.
 	Ticker *WatchTicker `json:"ticker,omitempty"`
+	// Cells are the mods' cells for the project, its tasks and its
+	// threads (since protocol 13).
+	Cells []ModCell `json:"cells,omitempty"`
 }
 
 // WatchTicker is the ticker's slow timers for a project. Times, not

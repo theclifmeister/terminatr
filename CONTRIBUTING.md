@@ -56,6 +56,8 @@ make vet
 ./bin/tm selftest
 ```
 
+`make vet` runs `go vet` on your Go and staticcheck under the Go version in `go.mod` (`GOTOOLCHAIN=go<version>`), because the pinned staticcheck can't read a newer Go's export data. The first run downloads that toolchain (cached afterwards, so it works offline then). Without network or a module proxy (a sandbox with `GOPROXY=off`) and without that toolchain cached, the staticcheck step fails with a message saying so; run `GOTOOLCHAIN=local make vet` on a matching Go instead. CI sets `GOTOOLCHAIN=local` and gets no override.
+
 The first build fetches Ghostty and compiles libghostty-vt, which takes about 30–60 s. Later builds reuse `.build/`. Nothing is installed system-wide. `tm` links libghostty-vt statically and needs only libc at runtime.
 
 - **Plain `go` commands or gopls:** run `eval "$(make env)"` first, so pkg-config finds the library. In a linked worktree without a `.build/` of its own, `make` and `make env` use the main checkout's.

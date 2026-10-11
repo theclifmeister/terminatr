@@ -78,6 +78,9 @@ type Data struct {
 	// NoMods: the server runs in safe mode (tm --no-mods): no user mod
 	// runs (mod.hosts).
 	NoMods bool
+	// Cells are the mods' cells and status segments (session.list's
+	// Mods and the sessions' Cells); nil for none.
+	Cells *modCells
 }
 
 // ServerInfo is the running server's identity, from session.list.
@@ -310,6 +313,7 @@ func (s *ServerSource) Load() Data {
 		d.Err = err.Error()
 	} else {
 		d.ServerOK, d.Sessions, d.Alerts, d.ModNotices = true, res.Sessions, res.Alerts, res.ModNotices
+		d.Cells = newModCells(res.Mods, res.Sessions)
 		d.Server = ServerInfo{Version: res.Version, Build: res.Build, Latest: res.Latest, Upgrade: res.Upgrade}
 	}
 	cfg, err := config.Load()

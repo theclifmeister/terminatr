@@ -20,7 +20,9 @@ import (
 // inactive projects only (expanded in the view). 11: view.tree, the
 // tree's folds (active projects folded, the inactive divider open).
 // 12: view.columns, the sidebar's column order from a layout mod.
-const Protocol = 12
+// 13: mods' cells (ModCells on session.list, Cells on SessionInfo and
+// ProjectWatch), added fields only.
+const Protocol = 13
 
 // Kind is what a connection is for.
 type Kind string
