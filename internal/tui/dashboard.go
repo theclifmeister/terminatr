@@ -178,6 +178,7 @@ type dash struct {
 	msg      string
 	errMsg   string                  // msg when it reports a failure, drawn as one
 	busy     bool                    // an action is running
+	acts     int                     // actions started, so a poll knows whether one began since it did
 	queued   []func(m *dash) tea.Cmd // settings keys pressed while it runs, in order
 	catalogs []Catalog               // the agents' models, read when the , popup opens (catalog.go)
 	stack    []overlay               // views open on top of the list, topmost last
@@ -272,7 +273,14 @@ func (m *dash) setWidth(w int) {
 // sideW is the sidebar's width in this window.
 func (m *dash) sideW() int { return m.layout.Sidebar.Cols(m.winW) }
 
-type dataMsg Data
+// dataMsg is a poll's result. acts is m.acts when the poll began, and
+// busy whether an action ran then: a poll that began before an action or
+// during one may have read the settings before its save landed.
+type dataMsg struct {
+	data Data
+	acts int
+	busy bool
+}
 type tickMsg struct{}
 
 // viewMsg: the view has a new version. viewDoneMsg: a call on it
@@ -317,8 +325,8 @@ type actionMsg struct {
 }
 
 func (m *dash) load() tea.Cmd {
-	src := m.src
-	return func() tea.Msg { return dataMsg(src.Load()) }
+	src, acts, busy := m.src, m.acts, m.busy
+	return func() tea.Msg { return dataMsg{data: src.Load(), acts: acts, busy: busy} }
 }
 
 func (m *dash) loadBoard(slug string) tea.Cmd {
@@ -562,7 +570,14 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case dataMsg:
-		return m, m.setData(Data(msg))
+		if msg.busy || msg.acts != m.acts {
+			// It may be older than what the settings show, which they
+			// set before its save lands: taken, it would undo a change
+			// that keys waiting for the save then build on. The action's
+			// end loads again; till then the polls go on.
+			return m, tea.Tick(refresh, func(time.Time) tea.Msg { return tickMsg{} })
+		}
+		return m, m.setData(msg.data)
 	case tickMsg:
 		return m, tea.Batch(m.load(), m.reloadBoards())
 	case boardMsg:
@@ -1026,6 +1041,7 @@ func (m *dash) fail(err error) { m.msg = err.Error(); m.errMsg = m.msg }
 // act runs an action in the background; one at a time.
 func (m *dash) act(fn func() actionMsg) tea.Cmd {
 	m.busy = true
+	m.acts++
 	return func() tea.Msg { return fn() }
 }
 
