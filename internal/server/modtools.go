@@ -1,26 +1,40 @@
 package server
 
-// The mod's tools (docs/SPEC.md §8.6, Mods): in a thread session the mod
-// gives the model typed tools for what a thread otherwise does through
-// the shell (tm report, tm status, tm task steps, tm done), and serves
-// each call with POST /v1/tools/{name} on the session's mod socket. The
-// socket says which session calls, so the call runs as that session's
-// thread, with no permission rule and no pid walk; the input is checked
-// here and turned into the command it stands for, which runs in this
-// server as `tm` would through cli.run. A mods-off session, and any other
-// agent, keeps the shell commands.
+// The agent tools (docs/SPEC.md §8.6, Mods; mods design §1 and §2, tier
+// 5). A session's agent is offered typed tools: a thread its own four,
+// for what it otherwise does through the shell (tm report, tm status,
+// tm task steps, tm done), and both threads and coordinators the tools
+// enabled user mods declare ([[provides.tools]]) for its role and
+// project. The agent mod lists them with GET /v1/tools on the session's
+// mod socket and serves each call with POST /v1/tools/{name}; tm mcp,
+// for agents without a mod, does the same over tool.list and tool.run.
+// The socket (or the caller's pid) says which session calls, so a call
+// runs as that session, with no permission rule. A thread tool's input
+// is checked here and turned into the command it stands for, which runs
+// in this server as `tm` would through cli.run. A mod tool's input is
+// checked against its schema and the call goes to the mod's host (the
+// supervisor starts an idle one), whose handler answers it under the
+// mod's grants. A mods-off session, and any other agent, keeps the shell
+// commands.
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"math"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/codehost"
+	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/modproto"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
@@ -73,6 +87,138 @@ func toolErr(format string, a ...any) error {
 	return fmt.Errorf("%w: %s", errModTool, fmt.Sprintf(format, a...))
 }
 
+// modToolTimeout bounds a mod tool's call, its host's start included.
+const modToolTimeout = 60 * time.Second
+
+func toolLine(description string, maxLen int) map[string]any {
+	m := map[string]any{"type": "string", "minLength": 1, "description": description}
+	if maxLen > 0 {
+		m["maxLength"] = maxLen
+	}
+	return m
+}
+
+func toolLines(description string, maxLen int) map[string]any {
+	return map[string]any{"type": "array", "items": toolLine("One line.", maxLen), "description": description}
+}
+
+func toolObject(props map[string]any, required ...string) map[string]any {
+	m := map[string]any{"type": "object", "properties": props, "additionalProperties": false}
+	if len(required) > 0 {
+		m["required"] = required
+	}
+	return m
+}
+
+// ThreadTools are a thread's own tools, as the agent mod registers them
+// (mod/hooks/tools.ts) and tm mcp lists them.
+var ThreadTools = []proto.ToolDef{
+	{
+		Name: "report",
+		Description: "Hand in your report to the coordinator (what `tm report` does): whenever you finish or stop to wait. " +
+			"Each field is a section of the report; the server checks the format and answers with the report number, or why it refused.",
+		InputSchema: toolObject(map[string]any{
+			"pr":       map[string]any{"type": "string", "pattern": "^https://", "description": "The PR URL, if you opened one: https://github.com/<owner>/<repo>/pull/<n> or https://dev.azure.com/<org>/<project>/_git/<repo>/pullrequest/<n>."},
+			"report":   map[string]any{"type": "string", "minLength": 1, "description": "The report itself, in Markdown: what you did, what you assumed, any repository outside the project you used. Subheadings are ### (## is reserved for the sections)."},
+			"next":     toolLines("What happens next: one imperative action per item, at most 100 characters each.", 100),
+			"check":    toolLines("Optional: how the user can see the change working (what to run, where to look), a few lines.", 0),
+			"remember": toolLines("Optional: lessons for the project, one per item.", 0),
+			"attach":   toolLines("Optional: files meant for the user, by path (relative to your worktree, or absolute).", 0),
+		}, "report", "next"),
+	},
+	{
+		Name: "status",
+		Description: "Set your thread status (what `tm status` does). Use needs_you when you are blocked on the human; " +
+			"percent and activity only when you have neither task steps nor a todo list.",
+		InputSchema: toolObject(map[string]any{
+			"needs_you": toolLine("The question or decision you are blocked on, for the human; one line, at most 300 characters.", 300),
+			"percent":   map[string]any{"type": "integer", "minimum": 0, "maximum": 100, "description": "How far along you are, 0-100."},
+			"activity":  toolLine("What you are doing now, one line, at most 100 characters.", 100),
+		}),
+	},
+	{
+		Name: "steps",
+		Description: "Work your task's steps (what `tm task steps` does): check the ones you finished, uncheck one done too early, " +
+			"or add your plan as steps when the task has none. Steps are numbered from 1; the server answers what changed.",
+		InputSchema: toolObject(map[string]any{
+			"check":   map[string]any{"type": "array", "items": map[string]any{"type": "integer", "minimum": 1}, "description": "Step numbers to check, in order."},
+			"uncheck": map[string]any{"type": "array", "items": map[string]any{"type": "integer", "minimum": 1}, "description": "Step numbers to uncheck."},
+			"add":     toolLines("Steps to add at the end, one per item, in order.", 0),
+		}),
+	},
+	{
+		Name:        "done",
+		Description: "Mark your task finished (what `tm done` does), once your report is in. It refuses when no report came since your last prompt.",
+		InputSchema: toolObject(map[string]any{
+			"summary": toolLine("Optional: a one-line summary, at most 80 characters.", 80),
+		}),
+	},
+}
+
+// modToolRef is a mod tool a session is offered.
+type modToolRef struct {
+	mod  string
+	tool mod.Tool
+	def  proto.ToolDef
+}
+
+// sessionTools are the tools session rec's agent is offered: a thread's
+// own, then the mod tools for its role and project, by name.
+func (s *Server) sessionTools(rec SessionRecord) []proto.ToolDef {
+	out := []proto.ToolDef{}
+	if rec.Role == proto.RoleThread && thread.ValidID(rec.Thread) {
+		out = append(out, ThreadTools...)
+	}
+	for _, t := range s.modToolsFor(rec) {
+		out = append(out, t.def)
+	}
+	return out
+}
+
+// modToolsFor are the tools of the enabled code mods that run for rec's
+// project, for its role, sorted by name; none while no mod hosts run.
+func (s *Server) modToolsFor(rec SessionRecord) []modToolRef {
+	if rec.Project == "" || (rec.Role != proto.RoleThread && rec.Role != proto.RoleCoordinator) || s.modSup.Load() == nil {
+		return nil
+	}
+	reg := s.modRegistry()
+	if reg == nil {
+		return nil
+	}
+	var out []modToolRef
+	for _, m := range reg.Mods {
+		if m.Manifest == nil || !m.Manifest.IsCode() || !m.Runs(rec.Project) {
+			continue
+		}
+		for _, t := range m.Manifest.Provides.Tools {
+			if !t.For(rec.Role) {
+				continue
+			}
+			out = append(out, modToolRef{mod: m.ID, tool: t, def: proto.ToolDef{
+				Name:        mod.ToolName(m.ID, t.ID),
+				Description: fmt.Sprintf("[mod: %s] %s", m.ID, strings.TrimSpace(mod.Clean(t.Description, true))),
+				InputSchema: t.Schema(),
+			}})
+		}
+	}
+	slices.SortFunc(out, func(a, b modToolRef) int { return strings.Compare(a.def.Name, b.def.Name) })
+	return out
+}
+
+// modToolList serves GET /v1/tools for session id.
+func (s *Server) modToolList(w http.ResponseWriter, id string) {
+	s.mu.Lock()
+	rec, ok := s.records[id]
+	_, live := s.sessions[id]
+	s.mu.Unlock()
+	if !ok || !live {
+		http.Error(w, "session "+id+" is gone", http.StatusGone)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(proto.ToolListResult{Tools: s.sessionTools(rec)})
+}
+
 // modTool serves POST /v1/tools/{name} for session id.
 func (s *Server) modTool(w http.ResponseWriter, r *http.Request, id string) {
 	b, err := io.ReadAll(io.LimitReader(r.Body, maxModTool+1))
@@ -95,9 +241,12 @@ func (s *Server) modTool(w http.ResponseWriter, r *http.Request, id string) {
 	toolReply(w, code, res)
 }
 
-// runTool runs tool name with input b as the thread of session record
-// rec, and answers with the HTTP status the mod socket sends.
+// runTool runs tool name with input b as session record rec, and
+// answers with the HTTP status the mod socket sends.
 func (s *Server) runTool(rec SessionRecord, name string, b []byte) (int, ModToolResult) {
+	if _, _, ok := mod.ParseToolName(name); ok {
+		return s.runModTool(rec, name, b)
+	}
 	if rec.Role != proto.RoleThread || !thread.ValidID(rec.Thread) {
 		return http.StatusForbidden, ModToolResult{Error: "these tools are a thread's"}
 	}
@@ -133,28 +282,151 @@ func (s *Server) runTool(rec SessionRecord, name string, b []byte) (int, ModTool
 	return http.StatusOK, ModToolResult{Text: strings.TrimSpace(out.String())}
 }
 
-// toolRunRPC serves tool.run: the thread is the caller's, found from the
-// peer pid, and its live session gives the cwd.
-func (s *Server) toolRunRPC(p proto.ToolRunParams, peerPID int) (any, *proto.Error) {
-	c := s.callerOf(peerPID)
-	if c.Kind != caller.Thread {
-		return nil, proto.Errorf(proto.ErrRefused, "these tools are a thread's")
+// runModTool runs mod tool name (<mod>_<tool>) for session rec: the
+// tool must be one rec is offered, its input must fit its schema, and
+// the mod's host answers.
+func (s *Server) runModTool(rec SessionRecord, name string, b []byte) (int, ModToolResult) {
+	tools := s.modToolsFor(rec)
+	i := slices.IndexFunc(tools, func(t modToolRef) bool { return t.def.Name == name })
+	if i < 0 {
+		return http.StatusNotFound, ModToolResult{Error: fmt.Sprintf("no tool %q for this session: its mod isn't enabled for %s, or doesn't offer it to a %s", name, rec.Project, rec.Role)}
 	}
-	s.mu.Lock()
-	var rec SessionRecord
-	found := false
-	for id, r := range s.records {
-		if _, live := s.sessions[id]; live && r.Role == proto.RoleThread && r.Project == c.Project && r.Thread == c.Thread {
-			rec, found = r, true
-			break
+	t := tools[i]
+	input, err := checkToolInput(t.tool, b)
+	if err != nil {
+		return http.StatusBadRequest, ModToolResult{Error: err.Error()}
+	}
+	sup := s.modSup.Load()
+	if sup == nil {
+		return http.StatusServiceUnavailable, ModToolResult{Error: "this server runs no mods"}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), modToolTimeout)
+	defer cancel()
+	start := time.Now()
+	res, err := sup.CallTool(ctx, t.mod, modproto.ToolCall{Tool: t.tool.ID, Input: input,
+		Project: rec.Project, Role: rec.Role, Thread: rec.Thread, Session: rec.ID})
+	who := rec.Role + " of " + rec.Project
+	if rec.Thread != "" {
+		who = "thread " + rec.Thread + " of " + rec.Project
+	}
+	outcome := "ok"
+	if err != nil {
+		outcome = "error: " + err.Error()
+	}
+	s.modLog(t.mod, fmt.Sprintf("tool %s for %s (%s) in %s: %s", t.tool.ID, who, rec.ID, time.Since(start).Round(time.Millisecond), firstLine(outcome)))
+	var perr *modproto.Error
+	switch {
+	case err == nil:
+		return http.StatusOK, ModToolResult{Text: res.Text}
+	case errors.As(err, &perr) && perr.Code == modproto.CodeToolFailed:
+		return http.StatusUnprocessableEntity, ModToolResult{Error: perr.Message}
+	case errors.As(err, &perr):
+		return http.StatusBadGateway, ModToolResult{Error: fmt.Sprintf("mod %s: %s", t.mod, perr.Message)}
+	}
+	return http.StatusServiceUnavailable, ModToolResult{Error: err.Error()}
+}
+
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(s, "\n")
+	return line
+}
+
+// checkToolInput checks body against tool t's input schema: a JSON object
+// (empty is {}) with only its properties, each of its type, and the
+// required ones there. It returns the object as the mod gets it.
+func checkToolInput(t mod.Tool, body []byte) (json.RawMessage, error) {
+	if len(strings.TrimSpace(string(body))) == 0 {
+		body = []byte("{}")
+	}
+	var in map[string]json.RawMessage
+	if err := json.Unmarshal(body, &in); err != nil || in == nil {
+		return nil, toolErr("the input is not a JSON object")
+	}
+	for _, k := range slices.Sorted(maps.Keys(in)) {
+		spec, ok := t.Input.Properties[k]
+		if !ok {
+			return nil, toolErr("%s is not one of the tool's inputs", k)
+		}
+		want, _ := spec["type"].(string)
+		if got := jsonType(in[k]); got != want && !(want == "number" && got == "integer") {
+			return nil, toolErr("%s: want %s, not %s", k, want, got)
 		}
 	}
-	s.mu.Unlock()
-	if !found {
-		return nil, proto.Errorf(proto.ErrRefused, "thread %s has no live session", c.Thread)
+	for _, k := range t.Input.Required {
+		if _, ok := in[k]; !ok {
+			return nil, toolErr("%s is required", k)
+		}
+	}
+	return json.RawMessage(body), nil
+}
+
+// jsonType is JSON schema's name for raw's type: string, integer,
+// number, boolean, array, object or null.
+func jsonType(raw json.RawMessage) string {
+	var v any
+	if json.Unmarshal(raw, &v) != nil {
+		return "invalid"
+	}
+	switch x := v.(type) {
+	case string:
+		return "string"
+	case float64:
+		if x == math.Trunc(x) && !math.IsInf(x, 0) {
+			return "integer"
+		}
+		return "number"
+	case bool:
+		return "boolean"
+	case []any:
+		return "array"
+	case map[string]any:
+		return "object"
+	}
+	return "null"
+}
+
+// callerSession is the live session of the caller with peer pid: a
+// thread's or a coordinator's.
+func (s *Server) callerSession(peerPID int) (SessionRecord, *proto.Error) {
+	c := s.callerOf(peerPID)
+	if c.Kind != caller.Thread && c.Kind != caller.Coordinator {
+		return SessionRecord{}, proto.Errorf(proto.ErrRefused, "these tools are a thread's or a coordinator's")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, r := range s.records {
+		if _, live := s.sessions[id]; !live || r.Project != c.Project {
+			continue
+		}
+		if c.Kind == caller.Thread && r.Role == proto.RoleThread && r.Thread == c.Thread ||
+			c.Kind == caller.Coordinator && r.Role == proto.RoleCoordinator {
+			return r, nil
+		}
+	}
+	if c.Kind == caller.Thread {
+		return SessionRecord{}, proto.Errorf(proto.ErrRefused, "thread %s has no live session", c.Thread)
+	}
+	return SessionRecord{}, proto.Errorf(proto.ErrRefused, "%s's coordinator has no live session", c.Project)
+}
+
+// toolRunRPC serves tool.run: the session is the caller's, found from
+// the peer pid, and gives the cwd.
+func (s *Server) toolRunRPC(p proto.ToolRunParams, peerPID int) (any, *proto.Error) {
+	rec, perr := s.callerSession(peerPID)
+	if perr != nil {
+		return nil, perr
 	}
 	_, res := s.runTool(rec, p.Name, p.Input)
 	return proto.ToolRunResult{Text: firstNonEmpty(res.Error, res.Text), IsError: res.Error != ""}, nil
+}
+
+// toolListRPC serves tool.list: the caller's session's tools.
+func (s *Server) toolListRPC(peerPID int) (any, *proto.Error) {
+	rec, perr := s.callerSession(peerPID)
+	if perr != nil {
+		return nil, perr
+	}
+	return proto.ToolListResult{Tools: s.sessionTools(rec)}, nil
 }
 
 func firstNonEmpty(a, b string) string {

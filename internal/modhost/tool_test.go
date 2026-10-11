@@ -66,7 +66,7 @@ func TestToolCalls(t *testing.T) {
 
 	for tool, want := range map[string]string{"throws": "no draft", "rejects": "later no"} {
 		m := s.toolCall(tool, `{}`)
-		if m.Error == nil || m.Error.Code != modproto.CodeToolFailed || !strings.Contains(m.Error.Message, want) {
+		if m.Error == nil || m.Error.Code != modproto.CodeToolFailed || m.Error.Message != want {
 			t.Fatalf("%s: %+v", tool, m.Error)
 		}
 		if f := s.failed(); f.Where != "tool:"+tool || !strings.Contains(f.Error, want) {

@@ -329,7 +329,7 @@ func (h *Host) callTool(id int64, call modproto.ToolCall) {
 		onBad := h.vm.ToValue(func(c goja.FunctionCall) goja.Value {
 			msg, stack := describeValue(c.Argument(0))
 			h.failed(where, modproto.KindRejected, msg, stack, 0)
-			bad(msg)
+			bad(message(c.Argument(0), msg))
 			return goja.Undefined()
 		})
 		_, err = then(h.vm.ToValue(p), onOK, onBad)
@@ -340,8 +340,22 @@ func (h *Host) callTool(id int64, call modproto.ToolCall) {
 	}
 	if err != nil {
 		msg, _ := describe(err)
+		var ex *goja.Exception
+		if errors.As(err, &ex) {
+			msg = message(ex.Value(), msg)
+		}
 		bad(msg)
 	}
+}
+
+// message is a thrown Error's message, what the agent reads; else def.
+func message(v goja.Value, def string) string {
+	if o, ok := v.(*goja.Object); ok {
+		if m := o.Get("message"); m != nil && !goja.IsUndefined(m) && m.String() != "" {
+			return m.String()
+		}
+	}
+	return def
 }
 
 // toolText is a tool handler's answer as the agent's text.

@@ -127,9 +127,18 @@ func (s *Server) broker() *modbroker.Broker {
 	return mb.b
 }
 
-// modNamed is installed mod id as the registry has it, read anew when
-// older than modRegistryAge.
+// modNamed is installed mod id as the registry has it (modRegistry).
 func (s *Server) modNamed(id string) (mod.Mod, bool) {
+	reg := s.modRegistry()
+	if reg == nil {
+		return mod.Mod{}, false
+	}
+	return reg.Get(id)
+}
+
+// modRegistry is the installed mods, read anew when older than
+// modRegistryAge; nil when they can't be read.
+func (s *Server) modRegistry() *mod.Registry {
 	mb := &s.modBr
 	mb.mu.Lock()
 	defer mb.mu.Unlock()
@@ -141,11 +150,11 @@ func (s *Server) modNamed(id string) (mod.Mod, bool) {
 		r, err := mod.Load(c)
 		if err != nil {
 			s.log.Printf("mods: %v", err)
-			return mod.Mod{}, false
+			return nil
 		}
 		mb.reg, mb.at = r, time.Now()
 	}
-	return mb.reg.Get(id)
+	return mb.reg
 }
 
 // modLog appends line to mod id's log, ~/.terminatr/logs/mods/<id>.log,
