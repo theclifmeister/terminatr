@@ -143,6 +143,8 @@ type Server struct {
 	watch watchers
 	// modEv is the user mods' event bus (modevents.go).
 	modEv *modEvents
+	// modBr is the user mods' broker (modbroker.go).
+	modBr modBroker
 	// versions caches agent versions for the mod guard (mods.go).
 	versions versions
 	// asks are the sessions' open questions (ask.go).
