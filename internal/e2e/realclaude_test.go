@@ -203,7 +203,7 @@ func TestRealFirstLocalRun(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 	w.Key(Enter)
 	env.WaitState(s, "blocked/permission", realWait)
-	w.WaitUntil("blocked in the status bar", wait, func(sc string) bool { return lastLine(sc, "blocked permission") })
+	w.WaitUntil("blocked in the status bar", wait, func(sc string) bool { return lastLine(sc, "permission") })
 
 	w.Detach()
 	w.WaitFor("NEEDS YOU", wait)

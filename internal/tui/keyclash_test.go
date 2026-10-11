@@ -62,9 +62,9 @@ var popupStates = map[string]func(m *dash){
 
 // TestNoPlainKeyIsAPrefixCommand: a plain key that is also a prefix
 // command means the same as it, on every screen. On the list it is the
-// same dashboard key (prefix then a dashboard key runs it); the sidebar's
-// own keys are none of them; and in a popup or the menu such a key does
-// nothing at all: popups close with esc only, and their own keys (the
+// same dashboard key (prefix then a dashboard key runs it); in the
+// sidebar the same prefix command (? the help); and in a popup or the
+// menu such a key does nothing at all: popups close with esc only, and their own keys (the
 // tasks' D A x c) are not prefix commands.
 func TestNoPlainKeyIsAPrefixCommand(t *testing.T) {
 	// The list: a plain key that is a prefix command is the dashboard
@@ -76,10 +76,23 @@ func TestNoPlainKeyIsAPrefixCommand(t *testing.T) {
 			}
 		}
 	}
+	// The sidebar: a key that is a prefix command does what the prefix
+	// command does (? is the help there, as prefix+?).
 	for _, a := range sideActions {
 		for _, k := range a.keys {
-			if isPrefixCommand(k) {
-				t.Errorf("sidebar key %q is a prefix command", k)
+			if !isPrefixCommand(k) {
+				continue
+			}
+			_, plain := needsYouData(t, 86+sideDefault)
+			_, prefixed := needsYouData(t, 86+sideDefault)
+			for _, m := range []*dash{plain, prefixed} {
+				m.focus, m.sideSel = areaSide, hereKey(m.tree())
+			}
+			keyPress(plain, k)
+			prefixed.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
+			keyPress(prefixed, k)
+			if a, b := whole(plain), whole(prefixed); a != b || fmt.Sprintf("%T", plain.top()) != fmt.Sprintf("%T", prefixed.top()) {
+				t.Errorf("in the sidebar, %s and prefix+%s differ:\n%s\n---\n%s", k, k, a, b)
 			}
 		}
 	}

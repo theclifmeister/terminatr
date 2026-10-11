@@ -158,7 +158,7 @@ func TestSmokeSidebarInactive(t *testing.T) {
 			treeRow(sc, "demo", "t-0001 ") >= 0
 	})
 	w.Type("\t")
-	w.WaitFor("sidebar: ↑ ↓ move", wait)
+	w.WaitFor("esc back to the list", wait)
 	// Down past demo's coordinator and thread to the divider; → unfolds it.
 	w.Type("jjj")
 	w.Key(keyRight)
@@ -249,7 +249,7 @@ func TestSmokeSidebarExpandInactive(t *testing.T) {
 	// beta is current: ↓ ↓ past its coordinator to the divider, → unfolds
 	// it; ↓ to demo, → expands it.
 	w.Key(keyTab)
-	w.WaitFor("sidebar: ↑ ↓ move", wait)
+	w.WaitFor("esc back to the list", wait)
 	for _, k := range []emu.Key{keyDown, keyDown, keyRight} {
 		w.Key(k)
 	}
@@ -272,7 +272,7 @@ func TestSmokeSidebarExpandInactive(t *testing.T) {
 	// demo: both resume, and the coordinator attaches.
 	w.Key(keyDown)
 	w.Key(keyEnter)
-	w.WaitUntil("on demo's coordinator", agentWait, func(sc string) bool { return lastLine(sc, "demo coordinator") })
+	w.WaitUntil("on demo's coordinator", agentWait, func(sc string) bool { return lastLine(sc, "demo › coordinator") })
 	if got := env.WaitState(coord, "idle", agentWait).AgentSID; got != coordSID {
 		t.Errorf("coordinator came back with %q, want %q", got, coordSID)
 	}

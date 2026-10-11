@@ -168,9 +168,6 @@ func Attach(opts Options) (res Result, err error) {
 	c.side = &sidebar{uiFile: so.UIFile, projects: loadSideProjects(c.paths)}
 	c.info = &infoPanel{}
 	c.setWindow(cols, rows)
-	if so.Focus && c.sideW > 0 {
-		c.kb = areaSide
-	}
 	watch, stopWatch := vc.Watch()
 	defer stopWatch()
 	if err := c.sync(v); err != nil {
@@ -178,6 +175,12 @@ func Attach(opts Options) (res Result, err error) {
 	}
 	if c.empty() {
 		return Result{Reason: "no session to show", Detached: true}, nil
+	}
+	if so.Focus && c.sideW > 0 {
+		// The sidebar keeps the keyboard it had on the dashboard; its
+		// width is known once the view is laid out (sync).
+		c.kb = areaSide
+		c.status()
 	}
 
 	unraw, err := term.MakeRaw(opts.In)
@@ -310,13 +313,18 @@ type client struct {
 	// the sidebar or the info panel. While another area has it the pane
 	// gets no keys, paste or prefix-twice.
 	kb area
+	// previewSeq counts the sidebar cursor's moves, so a preview only
+	// shows the row it last rested on; previewing: one is pending
+	// (previewSoon).
+	previewSeq uint64
+	previewing bool
 	// The info panel right of a thread's pane (infopanel.go), nil for
 	// none; infoW is its width, 0 while it doesn't show.
 	info        *infoPanel
 	infoW       int
 	cols, rows  int // the window
 	paneCols    int // the columns between the sidebar and the info panel
-	paneRows    int // the rows above the status bar and the empty row over it
+	paneRows    int // the rows above the status bar and the rule over it
 	statusText  string
 	statusDrawn string
 	lastCursor  string
@@ -774,7 +782,7 @@ func (c *client) relayout() {
 	c.focus = c.panes[c.v.Focus]
 	vis := c.visible()
 	// The pane draws alone, unless it shares the window with the sidebar,
-	// the info panel or the status bar (which has an empty row above it).
+	// the info panel or the status bar (which has a rule above it).
 	c.single = len(vis) == 1 && c.side == nil && c.infoW == 0 && !c.statusBar
 	for _, p := range vis {
 		if c.single {
@@ -1297,19 +1305,41 @@ func (c *client) status() {
 	}
 	where := ""
 	switch {
+	case c.kb == areaSide && c.previewing:
+		where = previewWait
 	case c.kb == areaSide:
-		where = sideHint
+		where = previewNote
 	case c.kb == areaInfo:
 		where = c.infoHintNow()
 	}
 	if c.flash != "" {
-		where = strings.TrimPrefix(where+" · "+c.flash, " · ")
+		where = c.flash // a note in passing
 	}
-	line, hits := statusBar(c.focus.info, c.focus.status, c.pending, c.cols-c.sideW, where)
+	line, hits := statusBar(c.focus.info, c.focus.status, c.paneTitle(), c.pending, c.cols, where)
 	if c.single {
 		c.focus.r.SetStatus(line)
 	}
 	c.statusText, c.statusHits = line, hits
+}
+
+// paneTitle is the title of the focused pane's thread, from the
+// sidebar's projects; "" for none. c.mu held.
+func (c *client) paneTitle() string {
+	in := c.focus.info
+	if c.side == nil || in.Thread == "" {
+		return ""
+	}
+	for _, p := range c.side.projects {
+		if p.Slug != in.Project {
+			continue
+		}
+		for _, t := range p.Threads {
+			if t.Record != nil && t.ID == in.Thread {
+				return t.Title
+			}
+		}
+	}
+	return ""
 }
 
 // input sends a key to the focused program.
@@ -1375,9 +1405,10 @@ func (c *client) mouse(ev uv.Event) {
 		return
 	}
 	press := m.Action == emu.MousePress && (m.Button == emu.MouseLeft || m.Button == emu.MouseRight || m.Button == emu.MouseMiddle)
-	// The status bar runs under the pane and the info panel.
-	status := c.statusBar && m.X >= c.sideW && (m.Y >= c.rows-1 || m.Y >= c.paneRows && m.X < c.cols-c.infoW)
-	if m.X >= c.sideW && setSideHover("") {
+	// The status bar runs across the window, the rule above it under
+	// the sidebar and the pane.
+	status := c.statusBar && (m.Y >= c.rows-1 || m.Y >= c.paneRows && m.X < c.cols-c.infoW)
+	if (m.X >= c.sideW || m.Y >= c.sideRows()) && setSideHover("") {
 		c.poke() // off the sidebar: its tooltip goes
 	}
 	switch {
@@ -1410,7 +1441,7 @@ func (c *client) mouse(ev uv.Event) {
 			c.mu.Unlock()
 		}
 		return
-	case c.side != nil && (m.X < c.sideW || c.side.drag):
+	case c.side != nil && (m.X < c.sideW && m.Y < c.sideRows() || c.side.drag):
 		if press && m.Button == emu.MouseRight && !c.side.drag {
 			c.sideMenu(m)
 			return
@@ -1430,7 +1461,7 @@ func (c *client) mouse(ev uv.Event) {
 			p = q
 		}
 	}
-	if p == nil { // padding, or the empty row above the status bar
+	if p == nil { // padding, or the rule above the status bar
 		c.mu.Unlock()
 		return
 	}
@@ -1445,7 +1476,7 @@ func (c *client) mouse(ev uv.Event) {
 		// tm's: the program doesn't take the mouse. A left drag selects.
 		switch {
 		case press && m.Button == emu.MouseRight:
-			c.openMenu("", c.sessionItems(), m.X, m.Y, false)
+			c.openMenu(c.menuTitle(), c.sessionItems(), m.X, m.Y, false)
 		case m.Button == emu.MouseLeft:
 			c.selMouse(p, m)
 		}
@@ -1670,7 +1701,13 @@ func (c *client) frameSplit(vis []*pane) ([]byte, error) {
 		}
 	}
 	if c.statusBar && c.statusText != c.statusDrawn {
-		b = append(b, fmt.Sprintf("\x1b[%d;%dH\x1b[0m", c.rows, c.sideW+1)...)
+		// A faint rule under the sidebar and the pane, then the bar
+		// across the window.
+		if c.rows > 1 {
+			b = append(b, fmt.Sprintf("\x1b[%d;1H\x1b[0m", c.rows-1)...)
+			b = append(b, styleFaint.Render(strings.Repeat("─", max(c.cols-c.infoW, 0)))...)
+		}
+		b = append(b, fmt.Sprintf("\x1b[%d;1H\x1b[0m", c.rows)...)
 		b = append(b, c.statusText...)
 		b = append(b, "\x1b[0m"...)
 		c.statusDrawn, wrote = c.statusText, true

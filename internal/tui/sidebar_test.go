@@ -72,7 +72,7 @@ func TestDashboardSidebar(t *testing.T) {
 	// listed, nothing is attached.
 	m.Update(tea.MouseClickMsg{X: 5, Y: 1, Button: tea.MouseLeft})
 	if m.current != "alpha" || m.sel != "p:alpha" || len(src.opened) != 0 || m.result.Attach != "" ||
-		!strings.Contains(screen(m), " alpha · active ─") {
+		!strings.Contains(screen(m), " alpha ─") {
 		t.Fatalf("project click: current %q sel %q opened %v:\n%s", m.current, m.sel, src.opened, whole(m))
 	}
 	// Its coordinator row opens the coordinator.
@@ -241,11 +241,13 @@ func testTreeNameNeverCut(t *testing.T, r treeRow) {
 	}
 }
 
-// TestDashboardSidebarKeys: tab gives the sidebar the keyboard; ↑ ↓ move
-// its cursor, → goes into a project and ← on a row under a project up
-// to it, ← on a project folds it and → unfolds it, enter does what a
-// click does and esc goes back to the
-// list. Keys that aren't the sidebar's still run the list's actions.
+// TestDashboardSidebarKeys: tab gives the sidebar the keyboard; ↑ ↓
+// move its cursor and ← on a row under a project goes up to it, ← on
+// a project folds it and → unfolds it; the
+// cursor's row previews once it rests there, the keyboard staying in
+// the sidebar; enter and → go into the row, the keyboard following; ?
+// is the help, as prefix+?; esc goes back to the list. Keys that aren't
+// the sidebar's still run the list's actions.
 func TestDashboardSidebarKeys(t *testing.T) {
 	src := &fakeSource{data: testData()}
 	m := newDash(DashOptions{Source: src, Width: 120, Height: 30, State: DashState{Current: "beta"}})
@@ -263,15 +265,15 @@ func TestDashboardSidebarKeys(t *testing.T) {
 		t.Fatal("a cursor without the focus")
 	}
 	keyPress(m, "tab")
-	if m.focus != areaSide || cursor() != "p:beta" || !strings.Contains(whole(m), "sidebar: ↑ ↓ move") {
+	if m.focus != areaSide || cursor() != "p:beta" {
 		t.Fatalf("tab: focus %d cursor %q:\n%s", m.focus, cursor(), whole(m))
 	}
 	steps := []struct{ key, cursor string }{
 		// ↑ on the first row wraps round to the last, ↓ there back.
-		{"up", "c:alpha"}, {"up", "p:alpha"}, {"up", "t:beta/t-0006"}, {"down", "p:alpha"}, {"right", "c:alpha"}, {"right", "c:alpha"},
+		{"up", "c:alpha"}, {"up", "p:alpha"}, {"up", "t:beta/t-0006"}, {"down", "p:alpha"},
 		// ← on the project folds it, → unfolds it again.
 		{"left", "p:alpha"}, {"left", "p:alpha"}, {"j", "p:beta"}, {"k", "p:alpha"}, {"right", "p:alpha"},
-		{"j", "c:alpha"}, {"down", "p:beta"}, {"down", "c:beta"}, {"down", "t:beta/t-0005"},
+		{"j", "c:alpha"}, {"left", "p:alpha"}, {"j", "c:alpha"}, {"down", "p:beta"}, {"down", "c:beta"}, {"down", "t:beta/t-0005"},
 	}
 	for i, s := range steps {
 		keyPress(m, s.key)
@@ -283,7 +285,7 @@ func TestDashboardSidebarKeys(t *testing.T) {
 	if l := strings.Split(whole(m), "\n")[5]; !strings.Contains(l, "T4 ") {
 		t.Fatalf("row 5 %q", l)
 	}
-	// Not a sidebar key: the list's ? opens the help.
+	// ? is the help, as prefix+?.
 	keyPress(m, "?")
 	if _, ok := m.top().(*helpView); !ok {
 		t.Fatal("? with the sidebar focused")
@@ -292,20 +294,46 @@ func TestDashboardSidebarKeys(t *testing.T) {
 	if m.focus != areaSide {
 		t.Fatal("esc closing the help left the sidebar")
 	}
-	// enter on a thread attaches it.
-	run(m, keyPress(m, "enter"))
-	if m.result.Attach != "s-5" {
-		t.Fatalf("enter on t-0005: attach %q", m.result.Attach)
+	// A preview the cursor moved on from shows nothing; the last one
+	// shows the thread's session, the keyboard still in the sidebar.
+	run(m, m.preview(m.previewSeq-1))
+	if m.result.Attach != "" {
+		t.Fatalf("a stale preview attached %q", m.result.Attach)
 	}
-	// esc goes back to the list; shift+tab from the list to the sidebar.
+	run(m, m.preview(m.previewSeq))
+	if m.result.Attach != "s-5" || m.focus != areaSide {
+		t.Fatalf("preview of t-0005: attach %q, focus %d", m.result.Attach, m.focus)
+	}
+	// enter on a thread attaches it, and the keyboard goes with it.
+	m.result, m.busy = DashResult{}, false
+	run(m, keyPress(m, "enter"))
+	if m.result.Attach != "s-5" || m.focus != areaMain {
+		t.Fatalf("enter on t-0005: attach %q, focus %d", m.result.Attach, m.focus)
+	}
+	// shift+tab from the list to the sidebar, esc back to the list.
 	m.result = DashResult{}
+	keyPress(m, "shift+tab")
+	if m.focus != areaSide {
+		t.Fatalf("shift+tab: focus %d", m.focus)
+	}
 	keyPress(m, "esc")
 	if m.focus != areaMain || cursor() != "" {
 		t.Fatalf("esc: focus %d", m.focus)
 	}
-	keyPress(m, "shift+tab")
-	if m.focus != areaSide {
-		t.Fatalf("shift+tab: focus %d", m.focus)
+	// A project previews its dashboard; → on it goes into the list.
+	keyPress(m, "tab")
+	keyPress(m, "up")
+	keyPress(m, "up")
+	if cursor() != "p:alpha" {
+		t.Fatalf("cursor %q", cursor())
+	}
+	run(m, m.preview(m.previewSeq))
+	if m.current != "alpha" || m.focus != areaSide {
+		t.Fatalf("preview of alpha: current %q, focus %d", m.current, m.focus)
+	}
+	keyPress(m, "right")
+	if m.focus != areaMain || m.current != "alpha" {
+		t.Fatalf("→ on alpha: focus %d, current %q", m.focus, m.current)
 	}
 }
 
@@ -712,6 +740,60 @@ func TestCoordinatorContext(t *testing.T) {
 	for w := 12; w < 60; w++ {
 		if line := ansi.Strip(treeLine(rows[1], w, false, false)); ansi.StringWidth(line) != w {
 			t.Fatalf("width %d: %q is %d wide", w, line, ansi.StringWidth(line))
+		}
+	}
+}
+
+// TestSideKeyRules: → unfolds a folded project and otherwise goes into
+// the row as enter; ← folds an unfolded one or goes up to the project;
+// a preview shows a session when one runs, else the project's dashboard,
+// and nothing for the row you are on.
+func TestSideKeyRules(t *testing.T) {
+	rows := []treeRow{
+		{kind: treeProject, slug: "a", here: true},
+		{kind: treeCoordinator, slug: "a", session: "s-1"},
+		{kind: treeThread, slug: "a", thread: "t-0001", session: "s-2"},
+		{kind: treeThread, slug: "a", thread: "t-0002"},
+		{kind: treeProject, slug: "z", inactive: true, fold: true},
+	}
+	w := sideDefault
+	if st := sideKeyStep(rows, w, "p:z", sideIn); st.refold == nil || st.into {
+		t.Errorf("→ on a folded project: %+v", st)
+	}
+	st := sideKeyStep(rows, w, "c:a", sideIn)
+	if !st.into || st.target == nil || !st.target.Coordinator {
+		t.Errorf("→ on a coordinator: %+v", st)
+	}
+	if st := sideKeyStep(rows, w, "p:a", sideIn); st.refold != nil || !st.into || !st.here || st.target == nil || st.target.Project != "a" {
+		t.Errorf("→ on the project shown: %+v", st)
+	}
+	if st := sideKeyStep(rows, w, "t:a/t-0002", sideEnter); st.into || st.msg == "" {
+		t.Errorf("enter on a thread without a session: %+v", st)
+	}
+	if st := sideKeyStep(rows, w, "t:a/t-0001", sideOut); st.sel != "p:a" {
+		t.Errorf("← on a thread: %+v", st)
+	}
+	open := append(slices.Clone(rows[:4]), treeRow{kind: treeProject, slug: "z", inactive: true})
+	if st := sideKeyStep(open, w, "p:z", sideOut); st.refold == nil {
+		t.Errorf("← on an unfolded project: %+v", st)
+	}
+	if st := sideKeyStep(rows, w, "p:a", sideHelp); !st.help {
+		t.Errorf("?: %+v", st)
+	}
+	div := treeRow{kind: treeDivider, threads: 3, fold: true}
+	if _, ok := div.preview(); ok {
+		t.Error("the divider previews")
+	}
+	if d1, _ := div.details(); d1 != "3 inactive projects" {
+		t.Errorf("divider details %q", d1)
+	}
+	if kb := ansi.Strip(sideKeyBar(&div, true, false, 34)); !strings.Contains(kb, "⏎ unfold") {
+		t.Errorf("divider key bar %q", kb)
+	}
+	for i, want := range []Target{{}, {Project: "a", Session: "s-1"}, {Project: "a", Session: "s-2"}, {Project: "a"}, {Project: "z"}} {
+		got, ok := rows[i].preview()
+		if ok != (i > 0) || got != want {
+			t.Errorf("preview of %s: %+v %v, want %+v", rows[i].key(), got, ok, want)
 		}
 	}
 }

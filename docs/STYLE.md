@@ -95,7 +95,8 @@ shots.html` (a page with a dark and a light palette).
 - **C3.** Warn text is bold and never faint (yellow is weak on light
   backgrounds).
 - **C4.** Under a popup the whole scene dims, the sidebar too.
-- **C5.** The status bar is one reverse row with no other colour.
+- **C5.** The status bar has no fill: a faint rule above it, muted text,
+  the state glyph in its colour and the keys in the accent colour.
 
 ## Glyphs: one meaning each
 

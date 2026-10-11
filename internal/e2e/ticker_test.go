@@ -340,7 +340,7 @@ cmd = 'printf "PR: https://github.com/o/r/pull/7\n\n## Report\nDone.\n\n## Next\
 
 	// enter on the thread: attached, with nothing to take over.
 	w.Key(Enter)
-	w.WaitUntil("attached", wait, func(sc string) bool { return lastLine(sc, "demo T1") })
+	w.WaitUntil("attached", wait, func(sc string) bool { return lastLine(sc, "demo › T1") })
 	if cols, rows := paneSize(env, th); cols == threadCols(110+sideDefault) && rows == 28 {
 		t.Fatalf("the thread's pane already fits the window: the size check below proves nothing")
 	}
@@ -489,7 +489,7 @@ func TestSmokeAcceptSendBack(t *testing.T) {
 		}
 	}
 	w.Type("c")
-	w.WaitUntil("attached to the coordinator", agentWait, func(sc string) bool { return lastLine(sc, "demo coordinator") })
+	w.WaitUntil("attached to the coordinator", agentWait, func(sc string) bool { return lastLine(sc, "demo › coordinator") })
 	w.Prefix("d")
 	w.WaitFor("NEEDS YOU", wait)
 	w.Quit()

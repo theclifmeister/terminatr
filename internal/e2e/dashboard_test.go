@@ -112,14 +112,14 @@ func TestSmokeFirstLocalRun(t *testing.T) {
 	w.Key(Enter)
 	// Attached, with the status bar on the last row.
 	w.WaitFor("Fake Claude Code", agentWait)
-	w.WaitFor(s.ID+" · claude · ", wait)
+	w.WaitFor(s.ID+" › claude", wait)
 	env.WaitState(s, "idle", agentWait)
-	w.WaitUntil("idle in the status bar", wait, func(sc string) bool { return lastLine(sc, "idle") })
+	w.WaitUntil("idle in the status bar", wait, func(sc string) bool { return lastLine(sc, "○ "+s.ID+" › claude") })
 
 	w.Type("run permission")
 	w.Key(Enter)
 	env.WaitState(s, "blocked/permission", agentWait)
-	w.WaitUntil("blocked in the status bar", wait, func(sc string) bool { return lastLine(sc, "blocked permission") })
+	w.WaitUntil("blocked in the status bar", wait, func(sc string) bool { return lastLine(sc, "▲ "+s.ID+" › claude  permission") })
 
 	// Back to the dashboard: the session needs you.
 	w.Detach()

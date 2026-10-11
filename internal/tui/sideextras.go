@@ -538,16 +538,6 @@ func setSideHover(tip string) (changed bool) {
 	return changed
 }
 
-// hoverFoot is the sidebar's foot with the tooltip in its first line
-// while there is one (until the details line shows it).
-func hoverFoot(foot []string) []string {
-	tip := sideHoverTip()
-	if tip == "" || len(foot) == 0 {
-		return foot
-	}
-	return append([]string{tip}, foot[1:]...)
-}
-
 // sideTip is what the glyph at column x, row y of a sidebar w×h means;
 // "" off the glyphs, and in the slim strip, which has no details line.
 func sideTip(all []treeRow, w, h, x, y int) string {

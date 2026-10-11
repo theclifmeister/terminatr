@@ -91,7 +91,7 @@ func TestSmokeCoordinatorPanel(t *testing.T) {
 	// panel.
 	w.ClickText("t-0001 T1", 0)
 	w.WaitUntil("on t-0001", wait, func(sc string) bool {
-		return lastLine(sc, "demo T1 ·") && strings.Contains(sc, "│ T1 Fix the login")
+		return lastLine(sc, "demo › T1 ") && strings.Contains(sc, "│ T1 Fix the login")
 	})
 	// Back on the coordinator, a click on a task on deck opens the task
 	// view over the session; esc goes back to the Tasks tab, and esc

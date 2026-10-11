@@ -241,7 +241,7 @@ func TestSidebarFocusNoLeak(t *testing.T) {
 
 	c.key(pk)
 	c.key(tab)
-	if c.kb != areaSide || !strings.Contains(c.statusText, "sidebar: ↑ ↓ move") {
+	if c.kb != areaSide || !strings.Contains(c.statusText, previewNote) {
 		t.Fatalf("prefix+tab: focus %d status %q", c.kb, c.statusText)
 	}
 	for _, k := range []uv.Key{{Code: 'x', Text: "x"}, {Code: uv.KeyF5}, {Code: 'c', Mod: uv.ModCtrl}} {
@@ -254,7 +254,7 @@ func TestSidebarFocusNoLeak(t *testing.T) {
 		t.Fatal("lost the focus")
 	}
 	c.key(uv.Key{Code: uv.KeyEscape})
-	if c.kb == areaSide || strings.Contains(c.statusText, "sidebar:") {
+	if c.kb == areaSide || strings.Contains(c.statusText, "preview") {
 		t.Fatalf("esc: focus %d status %q", c.kb, c.statusText)
 	}
 	c.key(pk)

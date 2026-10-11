@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -83,6 +85,8 @@ type treeRow struct {
 	// blocked or waits on you.
 	hint    bool
 	ci      string // a thread: its PR's checks, pass, fail or pending; "" for none
+	pr      int    // a thread: its PR's number, 0 for none
+	asks    int    // a coordinator row: its questions waiting
 	remote  bool   // a coordinator row: its remote control is on
 	ctx     int    // a coordinator row: its context window's use in percent, -1 for unknown
 	ctxHint bool   // a coordinator row: ctx reached [ui] context_hint
@@ -261,14 +265,14 @@ func projectRows(p ProjectData, sessions []proto.SessionInfo, byID map[string]pr
 		tr := treeRow{kind: treeThread, slug: p.Slug, thread: t.ID, name: threadName(t.Task, t.ID), title: oneLine(t.Title), pct: -1}
 		tr.state, _, tr.session = threadState(t, byID)
 		tr.pct = t.Status.Progress().Percent
-		tr.ci = t.Checks
+		tr.ci, tr.pr = t.Checks, t.PR
 		tr.hint = tr.state == "blocked" || tr.state == "review" || t.Status != nil && t.Status.NeedsYou != ""
 		pr.hint = pr.hint || tr.hint
 		kids = append(kids, tr)
 	}
 	// The threads hang under the coordinator, the project's only child.
 	coord := treeRow{kind: treeCoordinator, slug: p.Slug, session: pr.session, state: pr.state, remote: remote, pct: -1, last: true,
-		hint: p.Questions > 0, ctx: ctx, ctxHint: ctx >= 0 && in.ctxHint > 0 && ctx >= in.ctxHint}
+		hint: p.Questions > 0, asks: p.Questions, ctx: ctx, ctxHint: ctx >= 0 && in.ctxHint > 0 && ctx >= in.ctxHint}
 	if len(kids) > 0 {
 		kids[len(kids)-1].last = true
 	}
@@ -326,7 +330,8 @@ func sideTop(rows []treeRow, h int) int {
 }
 
 // sidebarLines draws the sidebar w columns wide (its border included) and
-// h rows tall: a header with the count of projects, then the tree. While
+// h rows tall: a header with the count of projects, then the tree, then
+// the footer's lines (sideFooter) at the bottom. While
 // it has the keyboard focus (a row is the cursor) its border is in the
 // accent colour and the cursor's row is highlighted instead of the one
 // you are on.
@@ -384,7 +389,7 @@ func sidebarLines(all []treeRow, w, h int, foot []string) []string {
 	}
 	out = out[:h]
 	for _, f := range foot {
-		out = append(out, styleFaint.Render(fit(" "+f, cw-gap))+strings.Repeat(" ", gap)+reset+border)
+		out = append(out, fit(f, cw-gap)+reset+strings.Repeat(" ", gap)+border)
 	}
 	return out
 }
@@ -799,6 +804,28 @@ func (r treeRow) target() (t Target, ok bool, why string) {
 	return t, true, ""
 }
 
+// previewDelay is how long the sidebar's cursor rests on a row before
+// the view shows what is under it, so moving through the tree doesn't
+// open every row on its way.
+const previewDelay = 200 * time.Millisecond
+
+// preview is what the view shows while the sidebar's cursor rests on r:
+// a project's dashboard, a coordinator's or a thread's live session. A
+// row with no session running (an inactive project's, a coordinator not
+// started) shows its project's dashboard: a preview never starts
+// anything. ok is false on the row you are on, which already shows, and
+// on the inactive divider, which shows nothing.
+func (r treeRow) preview() (t Target, ok bool) {
+	if r.here || r.kind == treeDivider {
+		return t, false
+	}
+	t.Project = r.slug
+	if r.kind != treeProject && r.session != "" {
+		t.Session = r.session
+	}
+	return t, true
+}
+
 // OpenTarget opens t in the view vc: shows the project's dashboard, or
 // attaches the coordinator (started first, by the project's
 // coordinator_agent, when none runs)
@@ -857,7 +884,7 @@ func loadSideProjects(paths server.Paths) []ProjectData {
 				if r.State == thread.Resolved {
 					continue
 				}
-				tr := ThreadRow{Record: r, Checks: prs[r.ID].Checks}
+				tr := ThreadRow{Record: r, Checks: prs[r.ID].Checks, PR: prs[r.ID].Number}
 				tr.Status, _ = thread.ReadStatus(p, r.ID)
 				pd.Threads = append(pd.Threads, tr)
 			}
@@ -956,12 +983,13 @@ func (c *client) nextArea() {
 }
 
 // sideKeyboard runs a key while the sidebar has the keyboard: a sidebar
-// key (sideActions) moves its cursor or opens the row; tab moves on to
-// the next area, as prefix+tab; any other key is dropped, so nothing
-// reaches the pane. c.mu held; released here.
+// key (sideActions) moves its cursor, and the view previews the row it
+// rests on (previewSoon), or goes into the pane; tab moves on to the
+// next area, as prefix+tab; ? is the help, as prefix+?; any other key is
+// dropped, so nothing reaches the pane. c.mu held; released here.
 func (c *client) sideKeyboard(k uv.Key) {
 	name := keyName(k)
-	in := sideKeysIn{tree: c.sideTree, full: c.sideFullTree, w: c.sideW, h: c.rows, sel: c.v.SideSel}
+	in := sideKeysIn{tree: c.sideTree, full: c.sideFullTree, w: c.sideW, h: c.sideRows(), sel: c.v.SideSel}
 	if name == "tab" {
 		c.flash = ""
 		c.mu.Unlock()
@@ -981,14 +1009,21 @@ func (c *client) sideKeyboard(k uv.Key) {
 		return
 	}
 	c.flash = st.msg
-	if st.back || st.target != nil && !st.here {
-		c.kb = areaMain
+	if st.help {
+		// A plain key that is a prefix command does what it does.
+		do := prefixStep(c.prefix, true, k, c.dashboard)
+		c.status()
+		c.mu.Unlock()
+		c.run(do)
+		return
 	}
-	if st.target != nil && st.here {
-		c.flash = "you are on it"
+	if st.back || st.into {
+		// Into the pane: the session's, or the dashboard's list.
+		c.kb = areaMain
 	}
 	if st.sel != "" {
 		c.v.SideSel = st.sel // at once here; the view follows
+		c.previewSoon(st.sel)
 	}
 	c.status()
 	c.mu.Unlock()
@@ -1009,6 +1044,49 @@ func (c *client) sideKeyboard(k uv.Key) {
 		c.setPinned(st.pin, st.pinOn)
 	}
 	c.poke()
+}
+
+// previewSoon shows the row sel in the view once the sidebar's cursor
+// has rested on it for previewDelay, the keyboard still in the sidebar
+// (preview). A bare view has nothing to preview in: it would hand this
+// console over to view main. c.mu held.
+func (c *client) previewSoon(sel string) {
+	if c.bare {
+		return
+	}
+	c.previewSeq++
+	seq := c.previewSeq
+	c.previewing = true
+	time.AfterFunc(previewDelay, func() { c.previewNow(seq, sel) })
+}
+
+// previewNow shows the row sel, unless the cursor moved on or left the
+// sidebar meanwhile.
+func (c *client) previewNow(seq uint64, sel string) {
+	if !c.lock() {
+		return
+	}
+	if seq != c.previewSeq {
+		c.mu.Unlock()
+		return
+	}
+	c.previewing = false
+	var t Target
+	ok := false
+	if c.kb == areaSide && c.side != nil && c.v.SideSel == sel {
+		for _, r := range shownRows(c.sideTree(), c.sideW) {
+			if r.key() == sel {
+				t, ok = r.preview()
+				break
+			}
+		}
+	}
+	c.status()
+	c.mu.Unlock()
+	c.poke()
+	if ok {
+		c.sideGo(t)
+	}
 }
 
 // refold changes what the tree folds: here at once, in the view, and
@@ -1170,7 +1248,8 @@ func (c *client) setActive(slug string, on bool) {
 
 // appendSidebar draws the sidebar's changed lines. c.mu held.
 func (c *client) appendSidebar(b []byte, wrote bool) ([]byte, bool) {
-	lines := sidebarLines(c.sideTree(), c.sideW, c.rows, hoverFoot(sideFoot(c.side.server, c.sideW-1)))
+	rows := c.sideTree()
+	lines := sidebarLines(rows, c.sideW, c.sideRows(), sideFooter(rows, c.sideW, c.side.server, true))
 	for y, l := range lines {
 		if y < len(c.side.drawn) && c.side.drawn[y] == l {
 			continue
@@ -1181,6 +1260,15 @@ func (c *client) appendSidebar(b []byte, wrote bool) ([]byte, bool) {
 	}
 	c.side.drawn = lines
 	return b, wrote
+}
+
+// sideRows is the sidebar's height in a session: the window less the
+// status bar and the rule above it, which run under it too. c.mu held.
+func (c *client) sideRows() int {
+	if c.statusBar {
+		return max(c.rows-2, 1)
+	}
+	return c.rows
 }
 
 // viewCols is the width the view is laid out at. c.mu held.
@@ -1250,7 +1338,7 @@ func (c *client) sideMouse(m emu.Mouse) {
 		c.poke()
 		return
 	case !sd.drag && m.Action == emu.MouseMotion && m.Button == emu.MouseNone:
-		changed := setSideHover(sideTip(c.sideTree(), c.sideW, c.rows, m.X, m.Y))
+		changed := setSideHover(sideTip(c.sideTree(), c.sideW, c.sideRows(), m.X, m.Y))
 		c.mu.Unlock()
 		if changed {
 			c.poke()
@@ -1266,7 +1354,7 @@ func (c *client) sideMouse(m emu.Mouse) {
 		c.mu.Unlock()
 		return
 	}
-	r, ok, border := sideHitAt(c.sideTree(), c.sideW, c.rows, m.X, m.Y)
+	r, ok, border := sideHitAt(c.sideTree(), c.sideW, c.sideRows(), m.X, m.Y)
 	t, can, why := r.target()
 	sel := ""
 	if ok && !border {
@@ -1343,18 +1431,20 @@ func (c *client) sideGo(t Target) {
 
 // The sidebar's keyboard (docs/SPEC.md §4): tab on the dashboard, or
 // prefix+tab in a session, gives it the focus; these keys then move its
-// cursor (the view's SideSel) and open what it is on. One table drives
-// the keys and the help.
+// cursor (the view's SideSel), and the view previews what the cursor
+// rests on (previewDelay) while the keyboard stays here; enter or →
+// takes it into the pane. One table drives the keys and the help.
 
 // Sidebar key operations.
 const (
 	sideUp = iota
 	sideDown
-	sideIn     // on a project, down to its first row
-	sideOut    // on a row under a project, up to it
-	sideEnter  // what a click does
+	sideIn     // a folded row unfolds; any other goes in, as sideEnter
+	sideOut    // an unfolded row folds; a row under a project goes up to it
+	sideEnter  // into the pane: the keyboard follows
 	sideBack   // the focus goes back to the list or the pane
 	sideActive // on a project, activate or deactivate it
+	sideHelp   // the help, as prefix+?
 	sideFoldAll
 	sideUnfoldAll
 	sidePin // on a project, pin it to the top or unpin it
@@ -1369,11 +1459,11 @@ type sideAction struct {
 }
 
 var sideActions = []sideAction{
-	{[]string{"up", "k"}, sideUp, "↑ ↓ k j", "move through the tree"},
+	{[]string{"up", "k"}, sideUp, "↑ ↓ k j", "move through the tree; the pane shows what the cursor rests on (a project its dashboard, a coordinator or a thread its session, live), the keyboard stays in the sidebar, and nothing starts"},
 	{[]string{"down", "j"}, sideDown, "", ""},
-	{[]string{"right", "l"}, sideIn, "→ ←", "→ unfolds a folded project or the inactive divider, else goes down into a project; ← folds an unfolded one, or on a row under a project goes up to it. Folding never activates or deactivates"},
+	{[]string{"enter"}, sideEnter, "enter", "into the pane: a project's dashboard or a session gets the keyboard; a coordinator not running starts, and an inactive project's starts activating the project; on the inactive divider it folds or unfolds"},
+	{[]string{"right", "l"}, sideIn, "→ ←", "→ unfolds a folded project or the inactive divider, else goes into the pane as enter; ← folds an unfolded one, or from a row under a project goes up to it. Folding never activates or deactivates"},
 	{[]string{"left", "h"}, sideOut, "", ""},
-	{[]string{"enter"}, sideEnter, "enter", "what a click does: a project shows its dashboard, its coordinator or a thread attaches; an inactive project's coordinator starts, activating the project; the inactive divider folds or unfolds"},
 	{[]string{"esc"}, sideBack, "esc", "back to the list (in a session: to the pane)"},
 	{[]string{"space"}, sideActive, "space", "on a project: activate it, or deactivate it (its coordinator and threads stop, to resume when you activate it; asks first while they run)"},
 	{[]string{"z"}, sideFoldAll, "z Z", "z folds every project and the inactive divider, Z unfolds them all"},
@@ -1387,6 +1477,7 @@ var sideActions = []sideAction{
 	{[]string{"w"}, sideNeedNext, "w W", "the next / previous row that needs you, round the ends; it unfolds what hides the row, and clears a filter that does"},
 	{[]string{"W"}, sideNeedPrev, "", ""},
 	{[]string{"/"}, sideFilter, "/", "filter: type to narrow the tree to what matches (a project's name, a thread's task, title or id) and the projects over it; enter keeps the filter, esc clears it"},
+	{[]string{"?"}, sideHelp, "?", "help, as prefix+?"},
 }
 
 // sideOp is the sidebar operation of key; ok is false for none.
@@ -1405,8 +1496,12 @@ type sideStep struct {
 	sel    string
 	target *Target
 	here   bool // target is the row you are on
-	msg    string
-	back   bool
+	// into: the keyboard goes into the pane (enter, →), to the target
+	// once it shows.
+	into bool
+	msg  string
+	back bool
+	help bool
 	// toggle is the project to activate (activate) or deactivate.
 	toggle   string
 	activate bool
@@ -1471,8 +1566,11 @@ func foldAll(all []treeRow, fold bool) func(*view.Tree) {
 // sideKeyStep decides what sidebar key op does with the cursor at sel in
 // the tree all, drawn w columns wide.
 func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
-	if op == sideBack {
+	switch op {
+	case sideBack:
 		return sideStep{back: true}
+	case sideHelp:
+		return sideStep{help: true}
 	}
 	rows := shownRows(all, w)
 	i := sideCursor(rows, sel)
@@ -1496,9 +1594,10 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 	case sideDown:
 		return moveTo((i + 1) % len(rows))
 	case sideIn:
-		if r.kind == treeProject && w > sideSlim {
-			return moveTo(i + 1)
+		if r.kind == treeDivider {
+			return sideStep{}
 		}
+		return enterStep(r)
 	case sideOut:
 		for j := i - 1; j >= 0 && (r.kind == treeCoordinator || r.kind == treeThread); j-- {
 			if rows[j].kind == treeProject {
@@ -1531,17 +1630,198 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 		}
 		return st
 	case sideEnter:
-		t, can, why := r.target()
-		if !can {
-			return sideStep{msg: why}
-		}
-		return sideStep{target: &t, here: r.here && r.kind != treeProject}
+		return enterStep(r)
 	}
 	return sideStep{}
 }
 
-// sideHint is the hint while the sidebar has the keyboard focus.
-const sideHint = "sidebar: ↑ ↓ move · → ← in/out · enter open · esc back"
+// enterStep is enter on r: into the pane, opening r's target first
+// unless it already shows.
+func enterStep(r treeRow) sideStep {
+	t, can, why := r.target()
+	if !can {
+		return sideStep{msg: why}
+	}
+	return sideStep{target: &t, here: r.here, into: true}
+}
+
+// sideFooter is the full sidebar's footer, below its tree (docs/SPEC.md
+// §4): a faint rule, two lines about the highlighted row (the cursor's
+// while the sidebar has the keyboard, else the one you are on; details),
+// its key bar (sideKeyBar), and the hint that an update is out when
+// there is one. session: drawn beside a session, where prefix+tab gives
+// the sidebar the keyboard (tab on the dashboard). None in the slim
+// strip. Each line is w-1-sideGap cells wide, styled.
+func sideFooter(all []treeRow, w int, s ServerInfo, session bool) []string {
+	cw := w - 1 - sideGap
+	if w <= sideSlim || cw < 4 {
+		return nil
+	}
+	var r *treeRow
+	focused := false
+	for i := range all {
+		if all[i].cursor {
+			r, focused = &all[i], true
+			break
+		}
+		if all[i].here && r == nil {
+			r = &all[i]
+		}
+	}
+	d1, d2 := "", ""
+	switch tip := sideHoverTip(); {
+	case tip != "":
+		// The glyph under the mouse, instead of the row (sideTip).
+		d1, d2 = tip, "(hover)"
+	case r != nil:
+		d1, d2 = r.details()
+	}
+	out := []string{
+		styleFaint.Render(" " + strings.Repeat("─", cw-1)),
+		styleHead.Render(fit(" "+d1, cw)),
+		styleFaint.Render(fit(" "+d2, cw)),
+		sideKeyBar(r, focused, session, cw),
+	}
+	if h := versionHint(s); h != "" {
+		if ansi.StringWidth(h) > cw-1 {
+			h = versionHintShort(s)
+		}
+		out = append(out, styleFaint.Render(fit(" "+h, cw)))
+	}
+	return out
+}
+
+// details are the footer's two lines about r: its full name and state,
+// then what goes with it (the coordinator's context, a thread's
+// progress, its PR's number and checks).
+func (r treeRow) details() (string, string) {
+	running := func(state string) string { return cmp.Or(state, "not running") }
+	switch r.kind {
+	case treeDivider:
+		return counted(r.threads, "inactive project"), "nothing of them runs; folded by default"
+	case treeProject:
+		bits := []string{r.slug, "active"}
+		if r.inactive {
+			bits[1] = "inactive"
+		}
+		if r.paused {
+			bits = append(bits, "paused")
+		}
+		if r.pinned {
+			bits = append(bits, "pinned")
+		}
+		if r.inactive {
+			return strings.Join(bits, " · "), "previewing it starts nothing"
+		}
+		return strings.Join(bits, " · "), fmt.Sprintf("%s · coordinator %s", counted(r.threads, "thread"), running(r.state))
+	case treeCoordinator:
+		if r.dormant {
+			return r.slug + " coordinator · dormant", "enter starts it and activates " + r.slug
+		}
+		var bits []string
+		if r.ctx >= 0 {
+			bits = append(bits, fmt.Sprintf("context %d%%", r.ctx))
+		}
+		if r.remote {
+			bits = append(bits, "remote control on")
+		}
+		if r.asks > 0 {
+			bits = append(bits, counted(r.asks, "question")+" waiting")
+		}
+		if r.state == "" {
+			bits = append(bits, "enter starts it")
+		}
+		return r.slug + " coordinator · " + running(r.state), strings.Join(bits, " · ")
+	}
+	l1 := r.thread + " · ad hoc"
+	switch {
+	case r.name != r.thread:
+		l1 = strings.TrimSpace(r.name+" "+r.title) + " (" + r.thread + ")"
+	case r.title != "":
+		l1 = r.thread + " " + r.title
+	}
+	bits := []string{running(r.state)}
+	if r.dormant {
+		bits[0] = "dormant"
+	}
+	if r.pct >= 0 {
+		bits = append(bits, fmt.Sprintf("%d%%", r.pct))
+	}
+	if r.pr > 0 {
+		bits = append(bits, fmt.Sprintf("PR #%d", r.pr))
+		if w := map[string]string{"pass": "passes", "fail": "fails", "pending": "running"}[r.ci]; w != "" {
+			bits = append(bits, "CI "+w)
+		}
+	}
+	return l1, strings.Join(bits, " · ")
+}
+
+// counted is "1 thread", "2 threads".
+func counted(n int, word string) string {
+	if n == 1 {
+		return "1 " + word
+	}
+	return fmt.Sprintf("%d %ss", n, word)
+}
+
+// sideKeyBar is the footer's key bar, cw cells wide: the keys that do
+// something on r while the sidebar has the keyboard (focused), else the
+// way to give it the keyboard. "? help" gives way first when they don't
+// fit.
+func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
+	var keys []string
+	switch {
+	case focused && sideFilterNow().typing:
+		keys = []string{"type filter", "⏎ keep", "esc clear"}
+	case !focused && session:
+		keys = []string{"prefix+tab sidebar", "prefix+? help"}
+	case !focused:
+		keys = []string{"tab sidebar", "? help"}
+	case r == nil:
+	case r.kind == treeDivider && r.fold:
+		keys = []string{"⏎ unfold"}
+	case r.kind == treeDivider:
+		keys = []string{"⏎ fold"}
+	case r.kind == treeProject:
+		fold := "← fold"
+		if r.fold {
+			fold = "→ unfold"
+		}
+		act, pin := "␣ deactivate", "p pin"
+		if r.inactive {
+			act = "␣ activate"
+		}
+		if r.pinned {
+			pin = "p unpin"
+		}
+		keys = []string{"⏎ open"}
+		if r.fold || r.inactive {
+			keys = append(keys, fold)
+		}
+		keys = append(keys, act)
+		if !r.inactive {
+			keys = append(keys, pin)
+		}
+	case r.kind == treeCoordinator && r.dormant:
+		keys = []string{"⏎ start", "← project"}
+	case r.kind == treeCoordinator && r.state == "":
+		keys = []string{"⏎ start", "← project"}
+	case r.kind == treeCoordinator, r.session != "":
+		keys = []string{"⏎ attach", "← project"}
+		if r.hint {
+			keys = append(keys, "w next "+ic().hint)
+		}
+	default:
+		keys = []string{"← project"}
+	}
+	if focused && !sideFilterNow().typing {
+		keys = append(keys, "? help")
+	}
+	for len(keys) > 1 && ansi.StringWidth(" "+strings.Join(keys, " · ")) > cw {
+		keys = keys[:len(keys)-1]
+	}
+	return fit(" "+keysLine(strings.Join(keys, " · ")), cw)
+}
 
 // pctCol is the width of the grid's count/% column: "100% ".
 const pctCol = 5

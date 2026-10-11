@@ -138,7 +138,7 @@ func TestSmokeCoordinatorRemoteControl(t *testing.T) {
 	w.Type("y")
 	w.WaitFor("Remote Control disconnected.", agentWait)
 	w.WaitUntil("marker gone", wait, func(sc string) bool {
-		return lastLine(sc, alpha+" coordinator") && !strings.Contains(sc, "remote control on") && !strings.Contains(sc, "⌁")
+		return lastLine(sc, alpha+" › coordinator") && !strings.Contains(sc, "remote control on") && !strings.Contains(sc, "⌁")
 	})
 	remoteIs(t, env, coord, false, info.PID)
 	w.Detach()
@@ -149,7 +149,7 @@ func TestSmokeCoordinatorRemoteControl(t *testing.T) {
 	// tm attach on the coordinator has the status bar too: its state
 	// and remote control show there.
 	a := env.Attach(120, 30, coord.ID)
-	a.WaitUntil("tm attach status bar", agentWait, func(sc string) bool { return lastLine(sc, alpha+" coordinator") && lastLine(sc, " · "+coord.ID+" ") })
+	a.WaitUntil("tm attach status bar", agentWait, func(sc string) bool { return lastLine(sc, alpha+" › coordinator") })
 	a.Detach()
 	a.WaitExit(wait)
 
@@ -191,7 +191,7 @@ func TestSmokeRemoteControlRestart(t *testing.T) {
 	w := env.Window(124, 30)
 	w.WaitFor("SESSIONS", wait)
 	clickCoordinator(t, w, alpha)
-	w.WaitUntil("attached", agentWait, func(sc string) bool { return lastLine(sc, alpha+" coordinator") })
+	w.WaitUntil("attached", agentWait, func(sc string) bool { return lastLine(sc, alpha+" › coordinator") })
 	w.Prefix("r")
 	w.WaitFor("Turn remote control on for "+alpha, wait)
 	w.Type("y")
@@ -213,6 +213,7 @@ func TestSmokeRemoteControlRestart(t *testing.T) {
 	for _, s := range env.Sessions() {
 		env.track(s.PID, "session "+s.ID)
 	}
+	w.Key(keyEsc) // the sidebar kept the keyboard from the click
 	w.Type("hello")
 	w.Key(Enter)
 	env.WaitFake("prompt", agentWait, func(r FakeRecord) bool { return r.Str("text") == "hello" })

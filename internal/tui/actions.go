@@ -90,7 +90,7 @@ func init() {
 				return ""
 			},
 			run: (*dash).adopt},
-		{keys: []string{"space"}, label: "space", help: "activate the project shown (named in the header of its section), or deactivate it: its coordinator and threads stop, to resume when you activate it; asks first while they run",
+		{keys: []string{"space"}, label: "space", help: "activate the project shown (named in the header of its section, its state at the right), or deactivate it: its coordinator and threads stop, to resume when you activate it; asks first while they run",
 			menu: []string{"activate / deactivate the project"},
 			foot: func(m *dash, _ row, _ bool) string {
 				if p := m.projectData(m.projectHere()); p != nil && p.Safety != nil {

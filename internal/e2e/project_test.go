@@ -53,15 +53,15 @@ func TestSmokeProjectOpenAndSwitch(t *testing.T) {
 
 	// ]: beta's coordinator starts and is attached.
 	w.Type("]")
-	w.WaitUntil("attached to beta", agentWait, func(sc string) bool { return lastLine(sc, beta+" coordinator") })
+	w.WaitUntil("attached to beta", agentWait, func(sc string) bool { return lastLine(sc, beta+" › coordinator") })
 	w.WaitFor("Fake Claude Code", agentWait)
 
 	// Prefix then [: the previous project, alpha, straight from the
 	// session; then prefix ]: beta again.
 	w.Prefix("[")
-	w.WaitUntil("attached to alpha", wait, func(sc string) bool { return lastLine(sc, alpha+" coordinator") && lastLine(sc, " · "+id+" ") })
+	w.WaitUntil("attached to alpha", wait, func(sc string) bool { return lastLine(sc, alpha+" › coordinator") })
 	w.Prefix("]")
-	w.WaitUntil("attached to beta", wait, func(sc string) bool { return lastLine(sc, beta+" coordinator") })
+	w.WaitUntil("attached to beta", wait, func(sc string) bool { return lastLine(sc, beta+" › coordinator") })
 	w.Quit()
 	w.WaitExit(wait)
 
@@ -78,7 +78,7 @@ func TestSmokeProjectOpenAndSwitch(t *testing.T) {
 
 	// tm project open on a terminal attaches, with the status bar.
 	w2 := env.Window(100, 30, "project", "open", beta)
-	w2.WaitUntil("attached to beta", wait, func(sc string) bool { return lastLine(sc, beta+" coordinator") })
+	w2.WaitUntil("attached to beta", wait, func(sc string) bool { return lastLine(sc, beta+" › coordinator") })
 	w2.Detach()
 	w2.WaitExit(wait)
 }
@@ -117,14 +117,14 @@ func TestSmokeSidebar(t *testing.T) {
 	w.Click(4, sideRow(t, w.Screen(), demo))
 	for _, x := range both {
 		x.WaitUntil("demo's dashboard", wait, func(sc string) bool {
-			return strings.Contains(sc, " "+demo+" · active ─") && strings.Contains(sc, "t-0001 Small fix") && treeRow(sc, demo, "coordinator") >= 0
+			return strings.Contains(sc, " "+demo+" ─") && strings.Contains(sc, "t-0001 Small fix") && treeRow(sc, demo, "coordinator") >= 0
 		})
 	}
 	// beta's row, then its coordinator's row, starts and attaches the
 	// coordinator; the panes get the window less the sidebar and the
 	// coordinator's info panel.
 	clickCoordinator(t, w, beta)
-	w.WaitUntil("attached to beta", agentWait, func(sc string) bool { return lastLine(sc, beta+" coordinator") })
+	w.WaitUntil("attached to beta", agentWait, func(sc string) bool { return lastLine(sc, beta+" › coordinator") })
 	w.WaitFor("Fake Claude Code", agentWait)
 	b := coordinatorOf(t, env, beta)
 	waitPaneSize(t, env, b, threadCols(120), 28)
@@ -137,10 +137,12 @@ func TestSmokeSidebar(t *testing.T) {
 
 	// From the session: demo's thread's row attaches the thread, still in
 	// the attach view.
-	w.WaitUntil("demo's thread", wait, func(sc string) bool { return treeRow(sc, demo, "t-0001 ") >= 0 && lastLine(sc, beta+" coordinator") })
+	w.WaitUntil("demo's thread", wait, func(sc string) bool {
+		return treeRow(sc, demo, "t-0001 ") >= 0 && lastLine(sc, beta+" › coordinator")
+	})
 	w.Click(5, treeRow(w.Screen(), demo, "t-0001 "))
 	for _, x := range both {
-		x.WaitUntil("on t-0001", wait, func(sc string) bool { return lastLine(sc, demo+" t-0001") })
+		x.WaitUntil("on t-0001", wait, func(sc string) bool { return lastLine(sc, demo+" › t-0001") })
 	}
 	// No console sized the thread yet: the first to show it fills it.
 	waitPaneSize(t, env, th, threadCols(120), 28)
@@ -148,10 +150,10 @@ func TestSmokeSidebar(t *testing.T) {
 	// its coordinator's row attaches the coordinator again.
 	w.Click(4, sideRow(t, w.Screen(), beta))
 	for _, x := range both {
-		x.WaitUntil("beta's dashboard", wait, func(sc string) bool { return strings.Contains(sc, " "+beta+" · active ─") })
+		x.WaitUntil("beta's dashboard", wait, func(sc string) bool { return strings.Contains(sc, " "+beta+" ─") })
 	}
 	clickCoordinator(t, w, beta)
-	w.WaitUntil("attached to beta", wait, func(sc string) bool { return lastLine(sc, beta+" coordinator") })
+	w.WaitUntil("attached to beta", wait, func(sc string) bool { return lastLine(sc, beta+" › coordinator") })
 
 	// Prefix } widens the sidebar: a layout change, so the pane follows,
 	// and ui.json keeps the width.
@@ -187,11 +189,11 @@ func TestSmokeSidebar(t *testing.T) {
 	// demo's coordinator hands the console over to view main, which
 	// starts and shows the coordinator, on every console of the view.
 	w3 := env.Attach(120, 30, th.ID)
-	w3.WaitUntil("tm attach on t-0001", wait, func(sc string) bool { return lastLine(sc, demo+" t-0001") })
+	w3.WaitUntil("tm attach on t-0001", wait, func(sc string) bool { return lastLine(sc, demo+" › t-0001") })
 	w3.WaitUntil("the sidebar", wait, func(sc string) bool { return treeRow(sc, demo, "coordinator") >= 0 })
 	w3.Click(4, treeRow(w3.Screen(), demo, "coordinator"))
 	for _, x := range []*Window{w3, w, w2} {
-		x.WaitUntil("on demo's coordinator", agentWait, func(sc string) bool { return lastLine(sc, demo+" coordinator") })
+		x.WaitUntil("on demo's coordinator", agentWait, func(sc string) bool { return lastLine(sc, demo+" › coordinator") })
 	}
 	coordinatorOf(t, env, demo)
 	w3.Detach() // a full console now: back to the dashboard, everywhere

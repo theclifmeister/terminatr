@@ -398,7 +398,7 @@ func (c *client) infoScroll(d int) {
 }
 
 // infoRows is the panel's height: the window less the status bar, which
-// runs under the pane and the panel. c.mu held.
+// runs across the window. c.mu held.
 func (c *client) infoRows() int {
 	if c.statusBar {
 		return max(c.rows-1, 1)
@@ -649,7 +649,7 @@ func (c *client) infoMouse(m emu.Mouse) {
 		c.mu.Unlock()
 		return
 	case m.Button == emu.MouseRight:
-		c.openMenu("", c.sessionItems(), m.X, m.Y, false)
+		c.openMenu(c.menuTitle(), c.sessionItems(), m.X, m.Y, false)
 		c.mu.Unlock()
 		c.poke()
 		return

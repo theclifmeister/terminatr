@@ -169,6 +169,9 @@ type dash struct {
 	sideSel  string
 	sideSent string
 	sideBusy bool
+	// previewSeq counts the sidebar cursor's moves: only the last one's
+	// preview shows (previewSoon).
+	previewSeq uint64
 	// folds are what the sidebar's tree folds: the view's, changed here
 	// at once (refold).
 	folds    view.Tree
@@ -528,6 +531,8 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.fromView()
 	case feedMsg:
 		return m, m.fromFeed()
+	case previewMsg:
+		return m, m.preview(msg.seq)
 	case viewDoneMsg:
 		if msg.sel {
 			m.selPending--
@@ -749,8 +754,10 @@ func (m *dash) cycleFocus(key string) tea.Cmd {
 	return nil
 }
 
-// sideKey runs a key while the sidebar has the focus; ok is false for a
-// key that isn't the sidebar's, which goes to the list's actions.
+// sideKeyboard runs a key while the sidebar has the focus; ok is false
+// for a key that isn't the sidebar's, which goes to the list's actions.
+// A move previews the row the cursor rests on (previewSoon); enter or →
+// goes into it, and the keyboard follows.
 func (m *dash) sideKeyboard(key string) (tea.Cmd, bool) {
 	st, ok := sideKeyFor(sideKeysIn{tree: m.tree, full: m.fullTree, w: m.sideW(), h: m.h, sel: m.sideSel}, key)
 	if !ok {
@@ -760,20 +767,23 @@ func (m *dash) sideKeyboard(key string) (tea.Cmd, bool) {
 	if st.msg != "" {
 		m.msg = st.msg
 	}
+	if st.help {
+		// A plain key that is a prefix command does what it does.
+		return m.prefixCommand(key), true
+	}
 	if st.back {
 		m.focus = areaMain
 	}
 	if st.sel != "" && st.sel != m.sideSel {
 		m.sideSel = st.sel
-		cmds = append(cmds, m.sendSideSel())
+		cmds = append(cmds, m.sendSideSel(), m.previewSoon())
 	}
 	if t := st.target; t != nil {
-		if t.Session != "" || t.Coordinator {
-			// enter, unlike a click, gives the session it attaches the
-			// keyboard, as in a session.
-			m.focus = areaMain
+		// Into the pane: the list, or the session attached.
+		m.focus = areaMain
+		if !st.here {
+			cmds = append(cmds, m.openTarget(*t))
 		}
-		cmds = append(cmds, m.openTarget(*t))
 	}
 	if st.toggle != "" {
 		cmds = append(cmds, m.toggleActive(st.toggle, st.activate))
@@ -785,6 +795,42 @@ func (m *dash) sideKeyboard(key string) (tea.Cmd, bool) {
 		cmds = append(cmds, m.setPinned(st.pin, st.pinOn))
 	}
 	return tea.Batch(cmds...), true
+}
+
+// previewMsg: the sidebar's cursor may have rested on its row for
+// previewDelay.
+type previewMsg struct{ seq uint64 }
+
+// previewSoon previews the sidebar's row once its cursor has rested on
+// it for previewDelay.
+func (m *dash) previewSoon() tea.Cmd {
+	m.previewSeq++
+	seq := m.previewSeq
+	return tea.Tick(previewDelay, func(time.Time) tea.Msg { return previewMsg{seq} })
+}
+
+// preview shows what the sidebar's cursor rests on, the keyboard staying
+// in the sidebar: a project's dashboard, or a session, which ends the
+// dashboard (the session keeps the sidebar's keyboard, Result.SideFocus).
+func (m *dash) preview(seq uint64) tea.Cmd {
+	if seq != m.previewSeq || m.focus != areaSide || m.top() != nil || m.busy {
+		return nil
+	}
+	for _, r := range shownRows(m.tree(), m.sideW()) {
+		if r.key() != m.sideSel {
+			continue
+		}
+		t, ok := r.preview()
+		switch {
+		case !ok:
+		case t.Session != "":
+			return m.openTarget(t)
+		case t.Project != m.current:
+			return m.showProject(t.Project)
+		}
+		return nil
+	}
+	return nil
 }
 
 // refold changes what the sidebar's tree folds: here at once, in the
@@ -887,7 +933,7 @@ func (m *dash) move(d int) {
 }
 
 // paneSize is the size new sessions get: the window less the status bar
-// and the empty row above it.
+// and the rule above it.
 func (m *dash) paneSize() (int, int) { return m.w, max(m.h-2, 1) }
 
 // key sends a key to the topmost overlay, else to the list's actions.
@@ -1088,7 +1134,8 @@ func (m *dash) render() string {
 // withSide puts the sidebar beside the dashboard's lines s.
 func (m *dash) withSide(s string) string {
 	lines := strings.Split(s, "\n")
-	side := sidebarLines(m.tree(), m.sideW(), m.h, m.sideFoot())
+	rows := m.tree()
+	side := sidebarLines(rows, m.sideW(), m.h, sideFooter(rows, m.sideW(), m.data.Server, m.over != nil))
 	for i := range side {
 		var l string
 		if i < len(lines) {
@@ -1194,12 +1241,9 @@ func (m *dash) listLines(w int, inline bool) (lines, keys []string, sel int) {
 		case r.head == "NEEDS YOU" || r.head == "OTHER SESSIONS":
 			add(m.ruleIn(countLabel(r.head, r.count), sectionStyle(r.head), w), "")
 		case r.head != "":
-			// A project's own section is headed by its name.
-			title := countLabel(r.head, r.count)
-			if r.headNote != "" {
-				title += " · " + r.headNote
-			}
-			add(m.ruleIn(title, styleTitle, w), "")
+			// A project's own section is headed by its name, its state
+			// label at the right, which a click toggles (stateAt).
+			add(projectHead(r, w), stateKey+r.head)
 		case r.key != "" && r.key == m.sel:
 			sel = len(lines)
 			st := styleSel
@@ -1217,6 +1261,80 @@ func (m *dash) listLines(w int, inline bool) (lines, keys []string, sel int) {
 		}
 	}
 	return lines, keys, sel
+}
+
+// stateKey marks the project header's line among listLines' keys: no
+// row to select, but its state label takes a click.
+const stateKey = "state:"
+
+// stateLabel is a project header's state label: "● active — space to
+// deactivate", or "⊘ inactive — space to activate"; short leaves the
+// hint out.
+func stateLabel(active, short bool) (string, lipgloss.Style) {
+	label, st := ic().working+" active — space to deactivate", styleGood
+	if !active {
+		label, st = ic().inactive+" inactive — space to activate", styleFaint
+	}
+	if short {
+		label, _, _ = strings.Cut(label, " — ")
+	}
+	return label, st
+}
+
+// projectHead is the project section's header w cells wide: its name,
+// ∥ paused while paused, a faint rule, and at the right its state label
+// (docs/SPEC.md §4), shortened, then left out, when narrow.
+func projectHead(r row, w int) string {
+	left := " " + styleTitle.Render(countLabel(r.head, r.count))
+	if r.paused {
+		left += "  " + styleWarn.Render(ic().paused+" paused")
+	}
+	lw := ansi.StringWidth(left)
+	if r.headNote == "" {
+		return left + " " + styleFaint.Render(strings.Repeat("─", max(w-lw-1, 0)))
+	}
+	for _, short := range []bool{false, true} {
+		label, st := stateLabel(r.headNote == "active", short)
+		if fill := w - lw - ansi.StringWidth(label) - 3; fill >= 3 {
+			return left + " " + styleFaint.Render(strings.Repeat("─", fill)) + " " + st.Render(label) + " "
+		}
+	}
+	return fit(left, w)
+}
+
+// stateAt is the project whose state label is at body cell (x, y) of the
+// list, "" for none.
+func (m *dash) stateAt(x, y int) string {
+	split, lw := m.split()
+	if split && x >= lw {
+		return ""
+	}
+	lines, keys, sel := m.listLines(lw, !split)
+	i := scrollTop(sel, m.bodyRows(), len(keys)) + y - 1
+	if y < 1 || y > m.bodyRows() || i >= len(keys) {
+		return ""
+	}
+	slug, ok := strings.CutPrefix(keys[i], stateKey)
+	if !ok {
+		return ""
+	}
+	// The label is at the line's right end, before its last blank.
+	for _, short := range []bool{false, true} {
+		label, _ := stateLabel(m.projectActive(slug), short)
+		if l := ansi.Strip(lines[i]); strings.HasSuffix(l, " "+label+" ") {
+			if x >= ansi.StringWidth(l)-ansi.StringWidth(label)-1 && x < ansi.StringWidth(l)-1 {
+				return slug
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
+// projectActive says whether slug is active.
+func (m *dash) projectActive(slug string) bool {
+	p := m.projectData(slug)
+	return p != nil && !p.inactive()
 }
 
 // footRows is the footer's height: a rule, the keys, the message.
@@ -1268,7 +1386,8 @@ func (m *dash) frame(title string, body []string, sel int, keys string) string {
 	case m.prefixed:
 		keys = prefixHint
 	case m.focus == areaSide && m.top() == nil:
-		keys = sideHint + " · tab next"
+		// The sidebar's own keys are in its key bar.
+		keys = "esc back to the list · tab next area"
 	case m.area() == areaDetails && m.top() == nil:
 		keys = "details: ↑ ↓ scroll · esc back · tab next"
 	}
@@ -1295,7 +1414,16 @@ func (m *dash) frame(title string, body []string, sel int, keys string) string {
 	return strings.Join(out, "\n")
 }
 
-// serverVersion is the sidebar footer's "v0.15.0": the server's version,
+// versionTitle names the server's version, "terminatr v0.15.0", in the
+// help and as the ≡ menu's title; "" from a server too old to say.
+func versionTitle(s ServerInfo) string {
+	if v := serverVersion(s); v != "" {
+		return "terminatr " + v
+	}
+	return ""
+}
+
+// serverVersion is the help's and the ≡ menu's "v0.15.0": the server's version,
 // and this tm's too when it differs (docs/SPEC.md §4). Empty from a
 // server too old to say.
 func serverVersion(s ServerInfo) string {
@@ -1335,29 +1463,4 @@ func versionHintShort(s ServerInfo) string {
 		return s.Latest + " is out: " + s.Upgrade
 	}
 	return ""
-}
-
-// sideFoot is the sidebar's faint last lines, cw cells wide: the server's
-// version and, when there is one, the hint (short when the full one
-// doesn't fit). None in the slim strip, nor from a server too old to say.
-func sideFoot(s ServerInfo, cw int) []string {
-	if s.Version == "" || cw <= sideSlim {
-		return nil
-	}
-	foot := []string{serverVersion(s)}
-	if h := versionHint(s); h != "" {
-		if ansi.StringWidth(h) > cw-sideGap-1 {
-			h = versionHintShort(s)
-		}
-		foot = append(foot, h)
-	}
-	return foot
-}
-
-// sideFoot is the sidebar's footer once the server has answered.
-func (m *dash) sideFoot() []string {
-	if !m.loaded || !m.data.ServerOK {
-		return nil
-	}
-	return hoverFoot(sideFoot(m.data.Server, m.sideW()-1))
 }

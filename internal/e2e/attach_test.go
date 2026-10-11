@@ -48,13 +48,13 @@ func TestSmokeAttachDetachReattach(t *testing.T) {
 	// resize.
 	w1 := env.Attach(80+uint16(SideCols(87)), 24+statusRows, s.ID)
 	w1.WaitFor("line ", wait)
-	// A plain session has the status bar too, with an empty row above
-	// it: its id, no project or role, and the way back.
+	// A plain session has the status bar too, with a rule above it: its
+	// id and program, no project or role, and the way back.
 	w1.WaitUntil("the status bar", wait, func(sc string) bool {
-		return lastLine(sc, " "+s.ID+" · ") && lastLine(sc, "prefix+d dashboard")
+		return lastLine(sc, " "+s.ID+" › ") && lastLine(sc, "prefix+d dashboard")
 	})
-	if rows := strings.Split(w1.Screen(), "\n"); len(rows) != 26 || len([]rune(rows[24])) > SideCols(87) && strings.TrimSpace(string([]rune(rows[24])[SideCols(87):])) != "" {
-		t.Fatalf("the row above the status bar isn't empty:\n%s", w1.Screen())
+	if rows := strings.Split(w1.Screen(), "\n"); len(rows) != 26 || strings.Trim(rows[24], "─ ") != "" {
+		t.Fatalf("the row above the status bar isn't a rule:\n%s", w1.Screen())
 	}
 	env.AssertMirrorsServer(w1) // mid-stream
 	w1.Detach()
@@ -358,12 +358,12 @@ func TestSmokeAttachPane(t *testing.T) {
 	w.WaitUntil("attached", wait, func(sc string) bool { return lastLine(sc, `prefix+d dashboard`) })
 	w.Type("echo pane-$((2*3))\r")
 	w.WaitFor("pane-6", wait)
-	// The columns beside the sidebar, 28 rows above the empty row and
-	// the status bar.
+	// The columns beside the sidebar, 28 rows above the rule and the
+	// status bar.
 	waitPaneSize(t, env, s1, paneCols(120), 28)
 	rows := strings.Split(w.Screen(), "\n")
-	if r, side := []rune(rows[28]), SideCols(120); len(r) < side || strings.TrimSpace(string(r[side:])) != "" {
-		t.Fatalf("the row above the status bar isn't empty:\n%s", w.Screen())
+	if strings.Trim(rows[28], "─ ") != "" {
+		t.Fatalf("the row above the status bar isn't a rule:\n%s", w.Screen())
 	}
 	if !strings.Contains(rows[29], "prefix+d dashboard") {
 		t.Fatalf("no status bar on the last row:\n%s", w.Screen())

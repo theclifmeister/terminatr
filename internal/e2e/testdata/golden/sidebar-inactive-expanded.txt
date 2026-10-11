@@ -6,7 +6,7 @@
  └─ coordinator         ·     ⊘    │
     └─ t-0001 S…        ·     ⊘    │
                                    │
-                                   │
-                                   │
-                                   │
- dev                               │
+ ───────────────────────────────── │
+ demo · inactive                   │
+ previewing it starts nothing      │
+ ⏎ open · ← fold · ␣ activate      │

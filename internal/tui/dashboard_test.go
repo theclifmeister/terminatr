@@ -25,7 +25,7 @@ import (
 
 // statusLine is statusBar's line, without its buttons.
 func statusLine(s proto.SessionInfo, ts *thread.Status, pending bool, cols int, where string) string {
-	line, _ := statusBar(s, ts, pending, cols, where)
+	line, _ := statusBar(s, ts, "", pending, cols, where)
 	return line
 }
 
@@ -287,12 +287,12 @@ func TestDashboardRows(t *testing.T) {
 	m.setData(src.data)
 	out := screen(m)
 	needs := strings.Index(out, "NEEDS YOU")
-	proj := strings.Index(out, " beta · active ─")
+	proj := strings.Index(out, " beta ─")
 	sess := strings.Index(out, "SESSIONS")
 	if needs < 0 || !(needs < proj && proj < sess) {
 		t.Fatalf("sections out of order:\n%s", out)
 	}
-	if strings.Contains(out, "s-5 ") || strings.Contains(out, "PROJECTS") || strings.Contains(out[needs:], " alpha · active ─") {
+	if strings.Contains(out, "s-5 ") || strings.Contains(out, "PROJECTS") || strings.Contains(out[needs:], " alpha ─") {
 		t.Errorf("a thread's session, a PROJECTS section or another project listed:\n%s", out)
 	}
 	// NEEDS YOU: the blocked coordinator and the user's own blocked
@@ -326,7 +326,7 @@ func TestDashboardRows(t *testing.T) {
 	// Without a current project, the first is listed.
 	m = newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 30})
 	m.setData(src.data)
-	if out := screen(m); !strings.Contains(out, " alpha · active ─") || strings.Contains(out, "t-0005") {
+	if out := screen(m); !strings.Contains(out, " alpha ─") || strings.Contains(out, "t-0005") {
 		t.Errorf("no current project:\n%s", out)
 	}
 }
@@ -452,25 +452,48 @@ func hasBell(cmd tea.Cmd) bool {
 	return false
 }
 
+// TestStatusLine: bar B, unfilled. Left the state glyph, project ›
+// pane, the progress and the note; right the global keys. As it
+// narrows, the step gives way, then the bar, then the preview note
+// shrinks; the percent stays. After the prefix: the commands.
 func TestStatusLine(t *testing.T) {
-	info := proto.SessionInfo{ID: "s-4", Role: proto.RoleCoordinator, Project: "terminatr", Agent: "claude",
+	info := proto.SessionInfo{ID: "s-4", Role: proto.RoleThread, Project: "terminatr", Agent: "claude", Thread: "t-0216", Task: "T232",
 		State: "working", TodosDone: 2, TodosTotal: 5, Current: "Write §8"}
-	got := statusLine(info, nil, false, 100, "")
-	want := "\x1b[7m terminatr coordinator · working 40% 2/5 ▸ Write §8 · s-4"
-	if !strings.HasPrefix(got, want) || !strings.HasSuffix(got, ` ≡ menu · prefix+d dashboard `+"\x1b[27m") {
+	line, _ := statusBar(info, nil, "Sidebar rework", false, 140, previewNote)
+	got := ansi.Strip(line)
+	want := " " + ic().working + " terminatr › T232 Sidebar rework  40% " + bar(40) + " 2/5 ▸ Write §8 · " + previewNote
+	if !strings.HasPrefix(got, want) || !strings.HasSuffix(got, " prefix+? help · prefix+d dashboard · ≡ menu ") {
 		t.Fatalf("status line %q", got)
 	}
-	if w := len([]rune(strings.TrimSuffix(strings.TrimPrefix(got, "\x1b[7m"), "\x1b[27m"))); w != 100 {
-		t.Fatalf("status line is %d cells, want 100", w)
+	if strings.Contains(line, "\x1b[7m") {
+		t.Fatalf("status line in reverse video: %q", line)
 	}
-	// No window buttons: split panes and zoom are gone.
-	for _, b := range []string{"│", "─", "⤢", "×"} {
-		if strings.Contains(got, b) {
-			t.Fatalf("status line has %q: %q", b, got)
+	if w := ansi.StringWidth(line); w != 140 {
+		t.Fatalf("status line is %d cells, want 140", w)
+	}
+	for cols, tail := range map[int]string{
+		120: "40% " + bar(40) + " · " + previewNote,
+		112: "40% · " + previewNote,
+		105: "40% " + bar(40) + " · preview",
+		95:  "40% · preview",
+	} {
+		line, _ := statusBar(info, nil, "Sidebar rework", false, cols, previewNote)
+		if got := ansi.Strip(line); !strings.Contains(got, "T232 Sidebar rework  "+tail+" ") {
+			t.Errorf("%d columns: %q, want …%q", cols, got, tail)
 		}
 	}
+	line, _ = statusBar(info, nil, "Sidebar rework", false, 85, previewNote)
+	if got := ansi.Strip(line); !strings.Contains(got, " terminatr › T232 Sid…  40% · preview ") {
+		t.Errorf("85 columns: %q", got)
+	}
+	// A long note in passing is cut before the path is.
+	coord := proto.SessionInfo{ID: "s-1", Role: proto.RoleCoordinator, Project: "alpha", Agent: "claude", State: "idle"}
+	line, _ = statusBar(coord, nil, "", false, 120, "remote control off for alpha; it stays off until the coordinator is started anew")
+	if got := ansi.Strip(line); !strings.Contains(got, " alpha › coordinator  remote control off") || ansi.StringWidth(line) != 120 {
+		t.Errorf("long note: %q", got)
+	}
 	// After the prefix: the commands.
-	got = statusLine(info, nil, true, 160, "")
+	got = ansi.Strip(statusLine(info, nil, true, 160, ""))
 	if !strings.Contains(got, `d dashboard · q quit · a project · n new · p ] [ projects · i t , ? · { } b sidebar · | info · tab sidebar keys`) || !strings.Contains(got, `prefix again sends it`) {
 		t.Fatalf("pending status line %q", got)
 	}
@@ -908,22 +931,29 @@ func TestVersionHint(t *testing.T) {
 	if v := serverVersion(own); strings.Contains(v, "(tm") {
 		t.Errorf("footer for the same version: %q", v)
 	}
-	if f := sideFoot(other, 31); len(f) != 2 || f[1] != versionHintShort(other) {
+	last := func(w int, s ServerInfo) string {
+		f := sideFooter(nil, w, s, false)
+		if len(f) == 0 {
+			return ""
+		}
+		return strings.TrimSpace(ansi.Strip(f[len(f)-1]))
+	}
+	if f := last(32, other); f != versionHintShort(other) {
 		t.Errorf("narrow footer %q", f)
 	}
-	if f := sideFoot(other, 120); len(f) != 2 || f[1] != versionHint(other) {
+	if f := last(130, other); f != versionHint(other) {
 		t.Errorf("wide footer %q", f)
 	}
-	if f := sideFoot(other, sideSlim); f != nil {
+	if f := sideFooter(nil, sideSlim, other, false); f != nil {
 		t.Errorf("slim footer %q", f)
 	}
-	if f := sideFoot(ServerInfo{}, 31); f != nil {
-		t.Errorf("old server footer %q", f)
+	if f := sideFooter(nil, 32, ServerInfo{}, false); len(f) != 4 {
+		t.Errorf("footer without a hint %q", f)
 	}
 }
 
-// The version is in the sidebar's last lines, not the header; settings
-// say it in an About line.
+// The version is in the help and the ≡ menu's title, not the header or
+// the sidebar; settings say it in an About line.
 func TestVersionPlaces(t *testing.T) {
 	src := &fakeSource{data: testData()}
 	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 30, State: DashState{Current: "beta"}})
@@ -935,9 +965,19 @@ func TestVersionPlaces(t *testing.T) {
 	if strings.Contains(lines[0], "v9.9.9") || !strings.Contains(lines[0], "server ok") {
 		t.Errorf("header %q", lines[0])
 	}
-	if last := lines[len(lines)-1]; !strings.Contains(last, "v9.9.9") {
-		t.Errorf("sidebar footer %q", last)
+	if strings.Contains(whole(m), "v9.9.9") {
+		t.Errorf("the version shows:\n%s", whole(m))
 	}
+	keyPress(m, "?")
+	if s := whole(m); !strings.Contains(s, "terminatr v9.9.9") {
+		t.Errorf("help:\n%s", s)
+	}
+	keyPress(m, "esc")
+	m.openMenu(versionTitle(m.data.Server), m.dashItems(), 0, m.bodyRows())
+	if s := whole(m); !strings.Contains(s, "terminatr v9.9.9") {
+		t.Errorf("menu:\n%s", s)
+	}
+	m.stack = nil
 	m.openSettings()
 	if s := ansi.Strip(whole(m)); !strings.Contains(s, "About: tm "+version.Version+" · server v9.9.9 · update check on") {
 		t.Errorf("settings:\n%s", s)

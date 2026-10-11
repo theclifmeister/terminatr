@@ -31,7 +31,7 @@ func TestSmokeViewsShared(t *testing.T) {
 	// w1 opens alpha's coordinator: both consoles show it.
 	clickCoordinator(t, w1, alpha)
 	for _, w := range []*Window{w1, w2} {
-		w.WaitUntil("attached to alpha", agentWait, func(sc string) bool { return lastLine(sc, alpha+" coordinator") })
+		w.WaitUntil("attached to alpha", agentWait, func(sc string) bool { return lastLine(sc, alpha+" › coordinator") })
 		w.WaitFor("Fake Claude Code", agentWait)
 	}
 	a := coordinatorOf(t, env, alpha)
@@ -52,9 +52,11 @@ func TestSmokeViewsShared(t *testing.T) {
 				return false
 			}
 		}
-		return lastLine(sc, alpha+" coordinator")
+		return lastLine(sc, alpha+" › coordinator")
 	})
-	// And typing in w1 claims it back.
+	// And typing in w1 claims it back; its sidebar kept the keyboard
+	// from the click, so esc gives it to the pane first.
+	w1.Key(keyEsc)
 	w1.Type("y")
 	waitPaneSize(t, env, a, threadCols(120), 28)
 
@@ -82,15 +84,15 @@ func TestSmokeViewsShared(t *testing.T) {
 	w3 := env.Window(100, 26, "--own")
 	w3.WaitFor("SESSIONS", wait)
 	clickCoordinator(t, w3, beta)
-	w3.WaitUntil("w3 on beta", agentWait, func(sc string) bool { return lastLine(sc, beta+" coordinator") })
+	w3.WaitUntil("w3 on beta", agentWait, func(sc string) bool { return lastLine(sc, beta+" › coordinator") })
 	for _, w := range []*Window{w1, w2} {
-		if sc := w.Screen(); !lastLine(sc, alpha+" coordinator") {
+		if sc := w.Screen(); !lastLine(sc, alpha+" › coordinator") {
 			t.Fatalf("an own view's attach reached main:\n%s", sc)
 		}
 	}
 	w3.Detach()
 	w3.WaitFor("SESSIONS", wait)
-	if sc := w1.Screen(); !lastLine(sc, alpha+" coordinator") {
+	if sc := w1.Screen(); !lastLine(sc, alpha+" › coordinator") {
 		t.Fatalf("an own view's detach reached main:\n%s", sc)
 	}
 	w3.Quit()
@@ -102,7 +104,7 @@ func TestSmokeViewsShared(t *testing.T) {
 	w2.WaitFor("SESSIONS", wait)
 	// Opening beta's coordinator with ] from w2 shows it in w1.
 	w2.Type("]")
-	w1.WaitUntil("w1 on beta", agentWait, func(sc string) bool { return lastLine(sc, beta+" coordinator") })
+	w1.WaitUntil("w1 on beta", agentWait, func(sc string) bool { return lastLine(sc, beta+" › coordinator") })
 	w2.Detach()
 	w1.WaitFor("SESSIONS", wait)
 	w1.Quit()
@@ -123,7 +125,7 @@ func TestSmokeViewSurvivesRestart(t *testing.T) {
 	w := env.Window(120, 30)
 	w.WaitFor(" ■ "+alpha, wait)
 	clickCoordinator(t, w, alpha)
-	w.WaitUntil("attached to alpha", agentWait, func(sc string) bool { return lastLine(sc, alpha+" coordinator") })
+	w.WaitUntil("attached to alpha", agentWait, func(sc string) bool { return lastLine(sc, alpha+" › coordinator") })
 	a := coordinatorOf(t, env, alpha)
 	env.WaitState(a, "idle", agentWait)
 	w.Prefix("}")
@@ -144,7 +146,7 @@ func TestSmokeViewSurvivesRestart(t *testing.T) {
 	w2 := env.Window(120, 30)
 	w2.WaitUntil("the coordinator again", agentWait, func(sc string) bool {
 		r := []rune(strings.Split(sc, "\n")[0])
-		return lastLine(sc, alpha+" coordinator") && len(r) > wider && r[wider] == '│'
+		return lastLine(sc, alpha+" › coordinator") && len(r) > wider && r[wider] == '│'
 	})
 	w2.Detach()
 	w2.WaitFor("SESSIONS", wait)
@@ -173,7 +175,7 @@ func TestSmokeFirstViewFills(t *testing.T) {
 	w1 := env.Window(136, 40)
 	w1.WaitFor(" ■ "+alpha, wait)
 	clickCoordinator(t, w1, alpha)
-	w1.WaitUntil("attached to alpha", agentWait, func(sc string) bool { return lastLine(sc, alpha+" coordinator") })
+	w1.WaitUntil("attached to alpha", agentWait, func(sc string) bool { return lastLine(sc, alpha+" › coordinator") })
 	waitPaneSize(t, env, co, threadCols(136), 38)
 
 	// A second console showing it later resizes nothing.
@@ -184,7 +186,8 @@ func TestSmokeFirstViewFills(t *testing.T) {
 
 	// Typing claims as before: w2's rectangle, then w1's again.
 	w2.Type("x")
-	waitPaneSize(t, env, co, threadCols(100), 24) // less the status bar and the row above it
+	waitPaneSize(t, env, co, threadCols(100), 24) // less the status bar and the rule above it
+	w1.Key(keyEsc)                                // the sidebar kept the keyboard from the click
 	w1.Type("y")
 	waitPaneSize(t, env, co, threadCols(136), 38)
 
