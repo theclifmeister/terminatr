@@ -6,7 +6,7 @@
     └─ t-0001 S…        ·     ⊘    │
                                    │
                                    │
-                                   │
-                                   │
-                                   │
- dev                               │
+ ───────────────────────────────── │
+ demo coordinator · dormant        │
+ enter starts it and activates de… │
+ ⏎ start · ← project · ? help      │

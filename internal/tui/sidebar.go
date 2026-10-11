@@ -1061,7 +1061,7 @@ func (c *client) setActive(slug string, on bool) {
 // appendSidebar draws the sidebar's changed lines. c.mu held.
 func (c *client) appendSidebar(b []byte, wrote bool) ([]byte, bool) {
 	rows := c.sideTree()
-	lines := sidebarLines(rows, c.sideW, c.rows, sideFooter(rows, c.sideW, c.side.server, true))
+	lines := sidebarLines(rows, c.sideW, c.sideRows(), sideFooter(rows, c.sideW, c.side.server, true))
 	for y, l := range lines {
 		if y < len(c.side.drawn) && c.side.drawn[y] == l {
 			continue
@@ -1072,6 +1072,15 @@ func (c *client) appendSidebar(b []byte, wrote bool) ([]byte, bool) {
 	}
 	c.side.drawn = lines
 	return b, wrote
+}
+
+// sideRows is the sidebar's height in a session: the window less the
+// status bar and the rule above it, which run under it too. c.mu held.
+func (c *client) sideRows() int {
+	if c.statusBar {
+		return max(c.rows-2, 1)
+	}
+	return c.rows
 }
 
 // viewCols is the width the view is laid out at. c.mu held.
@@ -1150,7 +1159,7 @@ func (c *client) sideMouse(m emu.Mouse) {
 		c.mu.Unlock()
 		return
 	}
-	r, ok, border := sideHitAt(c.sideTree(), c.sideW, c.rows, m.X, m.Y)
+	r, ok, border := sideHitAt(c.sideTree(), c.sideW, c.sideRows(), m.X, m.Y)
 	t, can, why := r.target()
 	sel := ""
 	if ok && !border {

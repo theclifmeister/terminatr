@@ -906,7 +906,7 @@ func (m *dash) move(d int) {
 }
 
 // paneSize is the size new sessions get: the window less the status bar
-// and the empty row above it.
+// and the rule above it.
 func (m *dash) paneSize() (int, int) { return m.w, max(m.h-2, 1) }
 
 // key sends a key to the topmost overlay, else to the list's actions.

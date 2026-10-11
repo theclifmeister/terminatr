@@ -55,7 +55,7 @@ func TestSmokeMouseDashboard(t *testing.T) {
 	w.DoubleClick(x, y)
 	w.WaitUntil("attached by a double-click", wait, func(sc string) bool { return lastLine(sc, "prefix+d dashboard") })
 
-	w.ClickText("≡ menu · prefix+d", 29)
+	w.ClickText("≡ menu", 29)
 	w.WaitFor("keyboard to the sidebar", wait)
 	w.ClickText("dashboard", 1) // the menu's first item, above the status bar
 	w.WaitFor("OTHER SESSIONS", wait)
@@ -63,8 +63,8 @@ func TestSmokeMouseDashboard(t *testing.T) {
 	w.WaitExit(wait)
 }
 
-// TestSmokeMouseStatusBar: the status bar has the ≡ menu and prefix+d
-// dashboard, no window buttons; a double-click on a shell's pane (which
+// TestSmokeMouseStatusBar: the status bar has prefix+? help, prefix+d
+// dashboard and the ≡ menu, no window buttons; a double-click on a shell's pane (which
 // doesn't take the mouse) does nothing (zoom is gone); a right-click
 // there opens the session's menu, esc closes it; the menu's "keyboard to
 // the sidebar" gives the sidebar the keyboard, and a click on the pane
@@ -75,7 +75,7 @@ func TestSmokeMouseStatusBar(t *testing.T) {
 	w := env.Window(120, 30)
 	w.WaitFor(s1.ID+" ", wait)
 	w.Key(Enter)
-	w.WaitUntil("attached", wait, func(sc string) bool { return lastLine(sc, "≡ menu · prefix+d dashboard") })
+	w.WaitUntil("attached", wait, func(sc string) bool { return lastLine(sc, "prefix+d dashboard · ≡ menu") })
 	waitPaneSize(t, env, s1, paneCols(120), 28)
 
 	w.DoubleClick(40, 5)
@@ -95,12 +95,12 @@ func TestSmokeMouseStatusBar(t *testing.T) {
 	w.WaitUntil("the menu closed", wait, func(sc string) bool { return !strings.Contains(sc, "narrower sidebar") })
 
 	// ≡, then "keyboard to the sidebar"; a click on the pane takes it back.
-	w.ClickText("≡ menu · prefix+d", 29)
+	w.ClickText("≡ menu", 29)
 	w.WaitFor("keyboard to the sidebar", wait)
 	w.ClickText("keyboard to the sidebar", 1)
-	w.WaitUntil("sidebar focused", wait, func(sc string) bool { return lastLine(sc, "sidebar: ↑ ↓ move") })
+	w.WaitUntil("sidebar focused", wait, func(sc string) bool { return lastLine(sc, "preview") })
 	w.Click(60, 5)
-	w.WaitUntil("pane focused", wait, func(sc string) bool { return !lastLine(sc, "sidebar:") })
+	w.WaitUntil("pane focused", wait, func(sc string) bool { return !lastLine(sc, "preview") })
 
 	w.ClickText("prefix+d dashboard", 29)
 	w.WaitFor("SESSIONS 1", wait)
@@ -125,7 +125,7 @@ func TestSmokeMousePopupsAndAttach(t *testing.T) {
 	w.WaitFor("show its dashboard", wait)
 	w.ClickText("show its dashboard", 1)
 	w.WaitUntil("demo's dashboard", wait, func(sc string) bool {
-		return strings.Contains(sc, " demo · active ─") && !strings.Contains(sc, "show its dashboard")
+		return strings.Contains(sc, " demo ─") && !strings.Contains(sc, "show its dashboard")
 	})
 
 	w.ClickText("a project", 28)
@@ -147,7 +147,7 @@ func TestSmokeMousePopupsAndAttach(t *testing.T) {
 		t.Fatalf("the thread's menu has take over:\n%s", w.Screen())
 	}
 	w.ClickText("attach", y)
-	w.WaitUntil("attached", wait, func(sc string) bool { return lastLine(sc, "demo t-0001") })
+	w.WaitUntil("attached", wait, func(sc string) bool { return lastLine(sc, "demo › t-0001") })
 	w.Type("x")
 	waitInbox(t, env, "takeover")
 
@@ -156,7 +156,7 @@ func TestSmokeMousePopupsAndAttach(t *testing.T) {
 	w.RightClick(4, treeRow(w.Screen(), "demo", "coordinator"))
 	w.WaitFor("open the coordinator", wait)
 	w.ClickText("open the coordinator", 1)
-	w.WaitUntil("on demo's coordinator", agentWait, func(sc string) bool { return lastLine(sc, "demo coordinator") })
+	w.WaitUntil("on demo's coordinator", agentWait, func(sc string) bool { return lastLine(sc, "demo › coordinator") })
 	coordinatorOf(t, env, "demo")
 
 	w.ClickText("prefix+d dashboard", 29)
@@ -177,7 +177,7 @@ func TestSmokeDragCopies(t *testing.T) {
 	w := env.Window(120, 30)
 	w.WaitFor(s1.ID+" ", wait)
 	w.Key(Enter)
-	w.WaitUntil("attached", wait, func(sc string) bool { return lastLine(sc, "≡ menu · prefix+d dashboard") })
+	w.WaitUntil("attached", wait, func(sc string) bool { return lastLine(sc, "prefix+d dashboard · ≡ menu") })
 	waitPaneSize(t, env, s1, paneCols(120), 28)
 
 	env.Keys(s1, "printf 'mark%s\\n' er\r")

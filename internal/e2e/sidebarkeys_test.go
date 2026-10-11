@@ -18,9 +18,11 @@ var (
 )
 
 // TestSmokeSidebarKeys: the sidebar from the keyboard (docs/SPEC.md §4).
-// On the dashboard tab gives it the keyboard; ↓ moves, → goes into a
-// project and ← back up to it, enter on a thread attaches it. In the session prefix+tab
-// gives it the keyboard, esc gives it back, enter on a coordinator
+// On the dashboard tab gives it the keyboard; ↓ moves, and the row the
+// cursor rests on shows: a project its dashboard, a thread its session,
+// the keyboard staying in the sidebar; ← goes up to the project; enter
+// goes into the session. In the session prefix+tab gives the sidebar the
+// keyboard, esc gives it back, enter on a coordinator starts and
 // attaches it. Meanwhile no key reaches the pane.
 func TestSmokeSidebarKeys(t *testing.T) {
 	env, projDir, _ := threadEnv(t)
@@ -35,28 +37,45 @@ func TestSmokeSidebarKeys(t *testing.T) {
 	w.WaitFor(" ■ "+beta, wait)
 	w.WaitUntil("demo's thread", wait, func(sc string) bool { return treeRow(sc, demo, "t-0001 ") >= 0 })
 	w.Key(keyTab)
-	w.WaitFor("sidebar: ↑ ↓ move", wait)
+	w.WaitFor("esc back to the list", wait)
 
-	// ↓ ↓ past beta's coordinator to demo, → into it (its coordinator),
-	// ← back up to demo, → again, ↓ to its thread; enter attaches it.
-	for _, k := range []emu.Key{keyDown, keyDown, keyRight, keyLeft, keyRight, keyDown} {
+	// ↓ ↓ past beta's coordinator to demo: its dashboard shows.
+	w.Key(keyDown)
+	w.Key(keyDown)
+	w.WaitUntil("demo's dashboard", wait, func(sc string) bool {
+		return strings.Contains(sc, " "+demo+" ─") && strings.Contains(sc, "esc back to the list")
+	})
+	// ↓ to its coordinator, ← back up to demo, ↓ ↓ to its thread: its
+	// session shows, the keyboard still in the sidebar; enter goes in.
+	for _, k := range []emu.Key{keyDown, keyLeft, keyDown, keyDown} {
 		w.Key(k)
 	}
+	w.WaitUntil("t-0001 previewed", wait, func(sc string) bool {
+		return lastLine(sc, demo+" › t-0001") && lastLine(sc, "preview · ⏎ to type here")
+	})
 	w.Key(keyEnter)
-	w.WaitUntil("on t-0001", wait, func(sc string) bool { return lastLine(sc, demo+" t-0001") })
+	w.WaitUntil("in t-0001", wait, func(sc string) bool { return lastLine(sc, demo+" › t-0001") && !lastLine(sc, "preview") })
 
 	// prefix+tab: the sidebar has the keyboard; esc gives it back.
 	w.Prefix("\t")
-	w.WaitUntil("sidebar focused", wait, func(sc string) bool { return lastLine(sc, "sidebar: ↑ ↓ move") })
+	w.WaitUntil("sidebar focused", wait, func(sc string) bool { return lastLine(sc, "preview") })
 	w.Key(keyEsc)
-	w.WaitUntil("pane focused", wait, func(sc string) bool { return lastLine(sc, demo+" t-0001") && !lastLine(sc, "sidebar: ↑ ↓ move") })
+	w.WaitUntil("pane focused", wait, func(sc string) bool { return lastLine(sc, demo+" › t-0001") && !lastLine(sc, "preview") })
 
-	// prefix+tab, ↑ to demo's coordinator, enter attaches it.
+	// prefix+tab, ↑ to demo's coordinator, which doesn't run: its
+	// project's dashboard shows; enter starts the coordinator and
+	// attaches it.
 	w.Prefix("\t")
-	w.WaitUntil("sidebar focused", wait, func(sc string) bool { return lastLine(sc, "sidebar: ↑ ↓ move") })
+	w.WaitUntil("sidebar focused", wait, func(sc string) bool { return lastLine(sc, "preview") })
 	w.Key(keyUp)
+	w.WaitUntil("demo's dashboard", wait, func(sc string) bool {
+		return strings.Contains(sc, " "+demo+" ─") && strings.Contains(sc, "esc back to the list")
+	})
+	if got := projectSessions(env, demo); len(got) != 1 {
+		t.Fatalf("previewing demo's coordinator started %v", got)
+	}
 	w.Key(keyEnter)
-	w.WaitUntil("on demo's coordinator", agentWait, func(sc string) bool { return lastLine(sc, demo+" coordinator") })
+	w.WaitUntil("on demo's coordinator", agentWait, func(sc string) bool { return lastLine(sc, demo+" › coordinator") })
 	coordinatorOf(t, env, demo)
 
 	// A shell: what is typed while the sidebar has the keyboard never
@@ -67,11 +86,11 @@ func TestSmokeSidebarKeys(t *testing.T) {
 	w.OpenSession(id)
 	w.WaitUntil("attached", wait, func(sc string) bool { return lastLine(sc, "prefix+d dashboard") && strings.Contains(sc, "$") })
 	w.Prefix("\t")
-	w.WaitUntil("sidebar focused", wait, func(sc string) bool { return lastLine(sc, "sidebar: ↑ ↓ move") })
+	w.WaitUntil("sidebar focused", wait, func(sc string) bool { return lastLine(sc, "preview") })
 	w.Type("echoLEAK") // no space: on a project row it activates or deactivates it
 	w.Paste("echo PASTED")
 	w.Key(keyEsc)
-	w.WaitUntil("pane focused", wait, func(sc string) bool { return !lastLine(sc, "sidebar:") })
+	w.WaitUntil("pane focused", wait, func(sc string) bool { return !lastLine(sc, "preview") })
 	w.Type("echo done-$((6*7))\r")
 	w.WaitFor("done-42", wait)
 	if sc := w.PaneScreen(); strings.Contains(sc, "LEAK") || strings.Contains(sc, "PASTED") || strings.Contains(sc, "kecho") {
@@ -123,7 +142,8 @@ func TestSmokeSidebarIcons(t *testing.T) {
 // (docs/SPEC.md §4). A click on a project row in the dashboard's sidebar
 // puts its cursor there, so ↓ moves it at once; a click on a sidebar row
 // that attaches a session keeps the keyboard in the sidebar, where keys
-// don't reach the pane; a click on the pane gives the program the keys.
+// don't reach the pane (↓ previews the next row, enter goes into it); a
+// click on the pane gives the program the keys.
 func TestSmokeSidebarClickFocus(t *testing.T) {
 	env, projDir, _ := threadEnv(t)
 	demo := "demo"
@@ -137,11 +157,11 @@ func TestSmokeSidebarClickFocus(t *testing.T) {
 
 	// The dashboard: a click on demo, then ↓ ↓ to its thread, enter.
 	w.Click(5, projectRow(w.Screen(), demo))
-	w.WaitFor("sidebar: ↑ ↓ move", wait)
+	w.WaitFor("esc back to the list", wait)
 	w.Key(keyDown)
 	w.Key(keyDown)
 	w.Key(keyEnter)
-	w.WaitUntil("on t-0001", wait, func(sc string) bool { return lastLine(sc, demo+" t-0001") })
+	w.WaitUntil("on t-0001", wait, func(sc string) bool { return lastLine(sc, demo+" › t-0001") })
 
 	// In the session: a click on demo's coordinator attaches it, and the
 	// sidebar keeps the keyboard: typing doesn't reach the pane, ↓ moves
@@ -149,7 +169,7 @@ func TestSmokeSidebarClickFocus(t *testing.T) {
 	coordinator := func() {
 		w.Click(5, treeRow(w.Screen(), demo, "coordinator"))
 		w.WaitUntil("on demo's coordinator, the sidebar focused", agentWait, func(sc string) bool {
-			return lastLine(sc, demo+" coordinator") && lastLine(sc, "sidebar: ↑ ↓ move")
+			return lastLine(sc, demo+" › coordinator") && lastLine(sc, "preview")
 		})
 	}
 	coordinator()
@@ -157,13 +177,13 @@ func TestSmokeSidebarClickFocus(t *testing.T) {
 	w.Type("zqzq")
 	w.Key(keyDown)
 	w.Key(keyEnter)
-	w.WaitUntil("on t-0001 again", wait, func(sc string) bool { return lastLine(sc, demo+" t-0001") })
+	w.WaitUntil("on t-0001 again", wait, func(sc string) bool { return lastLine(sc, demo+" › t-0001") })
 
 	// Back on the coordinator by a click; a click on its pane gives it
 	// the keys.
 	coordinator()
 	w.Click(80, 10)
-	w.WaitUntil("pane focused", wait, func(sc string) bool { return !lastLine(sc, "sidebar:") })
+	w.WaitUntil("pane focused", wait, func(sc string) bool { return !lastLine(sc, "preview") })
 	w.Type("hello-click")
 	w.WaitFor("hello-click", wait)
 	if sc := w.PaneScreen(); strings.Contains(sc, "zqzq") {

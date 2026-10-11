@@ -184,6 +184,10 @@ const (
 	previewShort = "preview"
 )
 
+// pathMin is what the status bar keeps of project › pane before it cuts
+// the note after it.
+const pathMin = 20
+
 // statusRight is the status bar's right end: the global keys.
 const statusRight = "prefix+? help · prefix+d dashboard · " + menuButton + " menu "
 
@@ -311,9 +315,12 @@ func statusBar(s proto.SessionInfo, ts *thread.Status, title string, pending boo
 		}
 	}
 	if !fits {
-		// The title gives way, down to nothing; then the tail is cut.
+		// The title gives way, down to pathMin cells; then the tail is
+		// cut (a long note in passing).
 		t = tail(pct, wheres[len(wheres)-1])
-		path = strings.TrimRight(fit(path, max(room-2-ansi.StringWidth(t), 0)), " ")
+		pw := max(room-2-ansi.StringWidth(t), min(ansi.StringWidth(path), pathMin))
+		path = strings.TrimRight(fit(path, max(min(pw, room), 0)), " ")
+		t = strings.TrimRight(fit(t, max(room-2-ansi.StringWidth(path), 0)), " ")
 	}
 	left := " " + gst.Render(g) + " " + styleHead.Render(path)
 	if t != "" {

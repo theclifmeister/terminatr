@@ -485,6 +485,12 @@ func TestStatusLine(t *testing.T) {
 	if got := ansi.Strip(line); !strings.Contains(got, " terminatr › T232 Sid…  40% · preview ") {
 		t.Errorf("85 columns: %q", got)
 	}
+	// A long note in passing is cut before the path is.
+	coord := proto.SessionInfo{ID: "s-1", Role: proto.RoleCoordinator, Project: "alpha", Agent: "claude", State: "idle"}
+	line, _ = statusBar(coord, nil, "", false, 120, "remote control off for alpha; it stays off until the coordinator is started anew")
+	if got := ansi.Strip(line); !strings.Contains(got, " alpha › coordinator  remote control off") || ansi.StringWidth(line) != 120 {
+		t.Errorf("long note: %q", got)
+	}
 	// After the prefix: the commands.
 	got = ansi.Strip(statusLine(info, nil, true, 160, ""))
 	if !strings.Contains(got, `d dashboard · q quit · a project · n new · p ] [ projects · i t , ? · { } b sidebar · | info · tab sidebar keys`) || !strings.Contains(got, `prefix again sends it`) {

@@ -6,7 +6,7 @@
     `- t-0001 S…        o          │
                                    │
                                    │
-                                   │
-                                   │
-                                   │
- dev                               │
+ ───────────────────────────────── │
+ beta · active                     │
+ 0 threads · coordinator not runn… │
+ tab sidebar · ? help              │

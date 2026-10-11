@@ -62,7 +62,7 @@ func (c *client) command(name string) {
 		return
 	case "menu":
 		if c.lock() {
-			c.openMenu(c.menuTitle(), c.sessionItems(), c.sideW, c.rows-1, true)
+			c.openMenu(c.menuTitle(), c.sessionItems(), c.cols, c.rows-1, true) // under ≡, at the right
 			c.mu.Unlock()
 			c.poke()
 		}
@@ -315,7 +315,7 @@ func (c *client) sessionItems() []aitem {
 // project's dashboard, open its coordinator,
 // its popup, tasks and inbox; attach a thread. c.mu held; released here.
 func (c *client) sideMenu(m emu.Mouse) {
-	r, ok, _ := sideHitAt(c.sideTree(), c.sideW, c.rows, m.X, m.Y)
+	r, ok, _ := sideHitAt(c.sideTree(), c.sideW, c.sideRows(), m.X, m.Y)
 	t, can, why := r.target()
 	switch {
 	case !ok:
@@ -401,7 +401,7 @@ func (c *client) statusMouse(m emu.Mouse) {
 	case emu.MouseRight:
 		c.openMenu(c.menuTitle(), c.sessionItems(), m.X, c.rows-1, true)
 	case emu.MouseLeft:
-		if key := hintAt(c.statusHits, m.X-c.sideW); key != "" {
+		if key := hintAt(c.statusHits, m.X); key != "" {
 			c.mu.Unlock()
 			c.command(key)
 			c.poke()

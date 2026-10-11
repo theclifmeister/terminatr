@@ -398,7 +398,7 @@ func (c *client) infoScroll(d int) {
 }
 
 // infoRows is the panel's height: the window less the status bar, which
-// runs under the pane and the panel. c.mu held.
+// runs across the window. c.mu held.
 func (c *client) infoRows() int {
 	if c.statusBar {
 		return max(c.rows-1, 1)
