@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"unicode"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -14,35 +13,65 @@ import (
 // emoji. The unicode set has no Private Use Area glyph (those need a
 // Nerd Font), the ascii set nothing beyond ASCII.
 func TestIconWidths(t *testing.T) {
-	for _, set := range []iconSet{unicodeIcons, nerdIcons, asciiIcons} {
-		v := reflect.ValueOf(set)
-		for i := 0; i < v.NumField(); i++ {
-			name := v.Type().Field(i).Name
-			if v.Field(i).Kind() != reflect.String {
-				continue
-			}
-			g := v.Field(i).String()
-			if name == "name" || g == "" && (name == "coord" || name == "thread") {
-				continue
-			}
-			want := 1
-			if name == "mid" || name == "end" {
-				want = 2
-			}
-			if w := ansi.StringWidth(g); w != want || len([]rune(g)) != want {
-				t.Errorf("%s.%s %q is %d cells, want %d", set.name, name, g, w, want)
-			}
-			for _, r := range g {
-				pua := unicode.In(r, unicode.Co)
-				switch {
-				case r >= 0x1F000 && r < 0xF0000:
-					t.Errorf("%s.%s %q looks like an emoji", set.name, name, g)
-				case set.name == IconsUnicode && pua:
-					t.Errorf("unicode.%s %q is in the Private Use Area", name, g)
-				case set.name == IconsASCII && r >= 0x80:
-					t.Errorf("ascii.%s %q isn't ASCII", name, g)
-				}
-			}
+	for _, set := range []*iconSet{&unicodeIcons, &nerdIcons, &asciiIcons} {
+		for _, e := range validateIcons(set, set.name == IconsNerd, set.name == IconsASCII) {
+			t.Errorf("%s.%s", set.name, e)
+		}
+	}
+}
+
+// TestIconGlyphsComplete: glyphs() lists every string field of iconSet,
+// so a field added later can't escape loading and validation.
+func TestIconGlyphsComplete(t *testing.T) {
+	v := reflect.TypeOf(iconSet{})
+	g := unicodeIcons.glyphs()
+	for i := 0; i < v.NumField(); i++ {
+		n := v.Field(i).Name
+		if v.Field(i).Type.Kind() != reflect.String || n == "name" {
+			continue
+		}
+		if _, ok := g[n]; !ok {
+			t.Errorf("glyphs() lacks %s", n)
+		}
+	}
+	if len(g) != v.NumField()-2 { // name, wide
+		t.Errorf("glyphs() has %d entries, iconSet %d fields", len(g), v.NumField())
+	}
+}
+
+// TestParseIcons: a set loads from TOML over its base, missing fields
+// fall back, and bad widths, emoji, Private Use Area glyphs in a unicode
+// set, unknown keys and wrong types are errors.
+func TestParseIcons(t *testing.T) {
+	s, err := parseIcons([]byte("name = \"nord\"\nworking = \"◉\"\nreview = \"◇\"\nbarOn = \"━\"\nbarOff = \"─\"\nmid = \"├╴\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.name != "nord" || s.working != "◉" || s.barOff != "─" || s.mid != "├╴" || s.blocked != unicodeIcons.blocked || s.wide {
+		t.Errorf("loaded %+v", s)
+	}
+	n, err := parseIcons([]byte("base = \"nerd\"\ndone = \"v\"\nthread = \"\"\n"))
+	if err != nil || n.wide != true || n.done != "v" || n.thread != "" || n.folder != nerdIcons.folder {
+		t.Errorf("nerd base: %+v %v", n, err)
+	}
+	if e, err := parseIcons(nil); err != nil || *e != func() iconSet { u := unicodeIcons; u.name = IconsUnicode; return u }() {
+		t.Errorf("empty file: %v", err)
+	}
+	for body, want := range map[string]string{
+		"working = \"ab\"":               "2 cells",
+		"working = \"日\"":                "2 cells",
+		"mid = \"-\"":                    "1 cells, want 2",
+		"review = \"🔥\"":                 "emoji",
+		"done = \"\uf00c\"":              "Private Use Area",
+		"base = \"ascii\"\ndone = \"✓\"": "isn't ASCII",
+		"base = \"nope\"":                "base",
+		"colour = \"x\"":                 "unknown key",
+		"working = 3":                    "want a string",
+		"wide = \"yes\"":                 "wide",
+		"working = ":                     "",
+	} {
+		if _, err := parseIcons([]byte(body)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v, want error with %q", body, err, want)
 		}
 	}
 }
