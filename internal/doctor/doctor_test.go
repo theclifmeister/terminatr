@@ -592,6 +592,35 @@ func TestSettingsUnknownKeys(t *testing.T) {
 	}
 }
 
+// TestMods: a broken mod, one needing a newer mod API, one asking for
+// more than granted and a table naming no mod are warnings.
+func TestMods(t *testing.T) {
+	d := testDeps(t)
+	mods := filepath.Join(d.Paths.Home, "mods")
+	for id, man := range map[string]string{
+		"broken": "id = \"broken\"\n",
+		"future": "id = \"future\"\nname = \"F\"\nversion = \"1.0.0\"\napi = \"9.0\"\n",
+		"greedy": "id = \"greedy\"\nname = \"G\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nmain = \"m.js\"\n[permissions]\ninbox = true\n",
+	} {
+		os.MkdirAll(filepath.Join(mods, id), 0o755)
+		os.WriteFile(filepath.Join(mods, id, "mod.toml"), []byte(man), 0o644)
+		os.WriteFile(filepath.Join(mods, id, "m.js"), nil, 0o644)
+	}
+	os.WriteFile(filepath.Join(d.Paths.Home, "config.toml"), []byte("[mods.greedy]\nenabled = true\n[mods.gone]\nenabled = true\n"), 0o600)
+	var got []string
+	for _, c := range Mods(d) {
+		if c.Status != Warn {
+			t.Fatalf("%+v", c)
+		}
+		got = append(got, c.Name+": "+c.Detail)
+	}
+	want := []string{"broken: doesn't load: has no name", "future: future needs mod API 9.0; this tm has 1.0: run tm update",
+		"greedy: asks for inbox, not granted: it runs without", "config.toml: [mods.gone] names no installed mod, ignored"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("got\n%s", strings.Join(got, "\n"))
+	}
+}
+
 // TestQueueChecks: a prompt held while its agent is idle shows once it
 // has been held for proto.QueueNotice (T43); a fresh hold, or a queue
 // waiting on a working agent, doesn't.

@@ -251,8 +251,9 @@ func TestAgentMod(t *testing.T) {
 }
 
 // TestAgentModAlias: the older [mods] enabled, band and pane still count
-// for each key [agent_mod] doesn't set; [mods.<id>] tables are reserved
-// and not unknown, a stray scalar under [mods] still is.
+// for each key [agent_mod] doesn't set; [mods.<id>] tables are user
+// mods', read into Mods, with their unknown keys listed, and a stray
+// scalar under [mods] is unknown too.
 func TestAgentModAlias(t *testing.T) {
 	write(t, "[mods]\nenabled = true\nband = false\npane = true\n")
 	if c, err := Load(); err != nil || !c.AgentMod || c.AgentModBand || !c.AgentModPane || len(c.Unknown) != 0 {
@@ -263,8 +264,8 @@ func TestAgentModAlias(t *testing.T) {
 		t.Fatalf("agent_mod wins per key: %v, %+v", err, c)
 	}
 	write(t, "[mods.nord]\nenabled = true\ntheme = \"x\"\n\n[mods]\nsidebar = 1\n")
-	if c, err := Load(); err != nil || c.AgentMod || strings.Join(c.Unknown, ",") != "mods.sidebar" {
-		t.Fatalf("reserved [mods.<id>]: %v, %+v", err, c)
+	if c, err := Load(); err != nil || c.AgentMod || !c.Mods["nord"].Enabled || strings.Join(c.Unknown, ",") != "mods.nord.theme,mods.sidebar" {
+		t.Fatalf("[mods.<id>]: %v, %+v", err, c)
 	}
 }
 
@@ -393,5 +394,27 @@ func TestUpdateCheck(t *testing.T) {
 	write(t, "[ui]\nupdate_check = false\n")
 	if c, err := Load(); err != nil || c.UpdateCheck || len(c.Unknown) != 0 {
 		t.Fatalf("false: %v %+v", err, c)
+	}
+}
+
+// TestModsTables: [mods.<id>] reads enabled, grants, projects and
+// settings; a table with a key of the wrong type is that mod's Err and
+// doesn't fail Load; an older [mods] key of the wrong type still does.
+func TestModsTables(t *testing.T) {
+	write(t, "[mods.review-age]\nenabled = true\ngrants = [\"project_read\"]\nprojects = [\"demo\"]\n[mods.review-age.settings]\nwarn_after_hours = 48\n\n[mods.nord]\nenabled = \"yes\"\n")
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ra := c.Mods["review-age"]
+	if !ra.Enabled || strings.Join(ra.Grants, ",") != "project_read" || strings.Join(ra.Projects, ",") != "demo" || ra.Settings["warn_after_hours"] != int64(48) || ra.Err != nil {
+		t.Fatalf("review-age %+v", ra)
+	}
+	if n := c.Mods["nord"]; n.Enabled || n.Err == nil || len(c.Unknown) != 0 {
+		t.Fatalf("nord %+v, unknown %v", n, c.Unknown)
+	}
+	write(t, "[mods]\nenabled = \"yes\"\n")
+	if _, err := Load(); err == nil {
+		t.Fatal("a bad older [mods] enabled passed")
 	}
 }
