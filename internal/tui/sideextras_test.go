@@ -1,11 +1,18 @@
 package tui
 
 import (
+	"io"
+	"log"
 	"slices"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
+
+	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/server"
+	"github.com/theclifmeister/terminatr/internal/view"
 )
 
 // sideDash is a dashboard on testData with the sidebar holding the
@@ -18,6 +25,7 @@ func sideDash(t *testing.T) (*dash, *fakeSource) {
 	m := newDash(DashOptions{Source: src, Width: 120, Height: 30, State: DashState{Current: "beta"}})
 	m.layout.Details = false
 	m.setData(src.data)
+	m.notePlace() // as the first frame does
 	keyPress(m, "tab")
 	return m, src
 }
@@ -212,5 +220,95 @@ func TestNeedsFirstSetting(t *testing.T) {
 	m.setData(src.data)
 	if got := treeKeys(m)[0]; got != "p:beta" {
 		t.Fatalf("on: first %q", got)
+	}
+}
+
+// TestDashLastPlace: ; (as prefix+;) goes back to where the keyboard
+// was before, and again back to where it came from; to a session, it
+// attaches it.
+func TestDashLastPlace(t *testing.T) {
+	m, _ := sideDash(t)
+	keyPress(m, ";")
+	if m.msg != "back to the last place" || m.focus != areaMain {
+		t.Fatalf("; after tab: %q, focus %d", m.msg, m.focus)
+	}
+	keyPress(m, ";")
+	if m.focus != areaSide || sideCursorKey(m) != "p:beta" {
+		t.Fatalf("; again: focus %d cursor %q", m.focus, sideCursorKey(m))
+	}
+	keyPress(m, "1")
+	m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
+	keyPress(m, ";")
+	if m.focus != areaSide || sideCursorKey(m) != "p:beta" {
+		t.Fatalf("prefix+; after 1: focus %d cursor %q", m.focus, sideCursorKey(m))
+	}
+
+	// The last place a session: ; attaches it, the sidebar keeping the
+	// keyboard.
+	notePlace(place{session: "s-5", project: "beta", area: areaSide, sel: "t:beta/t-0005"})
+	m.notePlace()
+	run(m, keyPress(m, ";"))
+	if m.result.Attach != "s-5" || m.focus != areaSide {
+		t.Fatalf("; to s-5: attach %q focus %d", m.result.Attach, m.focus)
+	}
+}
+
+// TestSessionLastPlace: in a session, prefix+; takes the keyboard back
+// to the sidebar row it was on, or to the pane; the filter types there
+// as on the dashboard.
+func TestSessionLastPlace(t *testing.T) {
+	resetConsole()
+	t.Cleanup(resetConsole)
+	c, err := newClient(server.Paths{}, log.New(io.Discard, "", 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.enc.Close()
+	d := testData()
+	c.prefix, c.statusBar = chord{'\\'}, true
+	c.setWindow(160, 40)
+	p := &pane{info: proto.SessionInfo{ID: "s-5", Role: proto.RoleThread, Project: "beta", Thread: "t-0005"}}
+	c.v = view.View{Mode: view.ModeLayout, Focus: "s-5"}
+	c.panes["s-5"], c.focus = p, p
+	c.side, c.sideW = &sidebar{projects: d.Projects, sessions: d.Sessions}, sideDefault
+	c.vc = &ViewConn{} // down: the cursor moves here alone
+	pk := uv.Key{Code: '\\', Mod: uv.ModCtrl}
+	last := func() {
+		c.key(pk)
+		c.key(uv.Key{Code: ';', Text: ";"})
+	}
+	c.key(pk)
+	c.key(uv.Key{Code: uv.KeyTab})
+	c.key(uv.Key{Code: 'j', Text: "j"})
+	if c.kb != areaSide || c.v.SideSel != "t:beta/t-0006" {
+		t.Fatalf("prefix+tab, j: focus %d sel %q", c.kb, c.v.SideSel)
+	}
+	last()
+	if c.kb != areaSide || c.v.SideSel != "t:beta/t-0005" {
+		t.Fatalf("prefix+;: focus %d sel %q", c.kb, c.v.SideSel)
+	}
+	c.key(uv.Key{Code: uv.KeyEscape})
+	last()
+	if c.kb != areaSide || c.v.SideSel != "t:beta/t-0005" {
+		t.Fatalf("esc, prefix+;: focus %d sel %q", c.kb, c.v.SideSel)
+	}
+	last()
+	if c.kb != areaMain {
+		t.Fatalf("prefix+; again: focus %d", c.kb)
+	}
+
+	// The filter in a session.
+	c.key(pk)
+	c.key(uv.Key{Code: uv.KeyTab})
+	for _, k := range "/old" {
+		c.key(uv.Key{Code: k, Text: string(k)})
+	}
+	c.key(uv.Key{Code: uv.KeyEnter})
+	var keys []string
+	for _, r := range c.sideTree() {
+		keys = append(keys, r.key())
+	}
+	if want := []string{"p:beta", "t:beta/t-0006"}; !slices.Equal(keys, want) || c.v.SideSel != "p:beta" {
+		t.Fatalf("/old: %v sel %q", keys, c.v.SideSel)
 	}
 }

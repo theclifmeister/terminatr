@@ -1099,8 +1099,8 @@ type prefixDo struct {
 
 // paneCommands are the keys that, after the prefix, act on the window
 // itself: the sidebar's width ({ }), its slim strip (b), the keyboard
-// (tab) and the info panel (|).
-var paneCommands = map[string]bool{"{": true, "}": true, "b": true, "tab": true, "|": true}
+// (tab), the info panel (|) and the last place (;).
+var paneCommands = map[string]bool{"{": true, "}": true, "b": true, "tab": true, "|": true, ";": true}
 
 // keyName names k as paneCommands does.
 func keyName(k uv.Key) string {
@@ -1257,6 +1257,8 @@ func (c *client) paneCommand(cmd string) {
 		c.nextArea()
 	case "|":
 		c.infoToggle()
+	case ";":
+		c.goLastPlace()
 	}
 	c.poke()
 }
@@ -1289,6 +1291,7 @@ func paneName(s proto.SessionInfo) string {
 
 // status redraws the status bar. c.mu held.
 func (c *client) status() {
+	c.notePlace()
 	if !c.statusBar || c.focus == nil {
 		return
 	}

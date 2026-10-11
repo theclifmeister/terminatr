@@ -5,6 +5,10 @@ import (
 	"strings"
 	"sync"
 	"unicode/utf8"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // The sidebar's extra keys (docs/SPEC.md §4): the filter (/), the rows
@@ -393,4 +397,96 @@ func sideNeedStep(in sideKeysIn, at treeRow, back bool) sideStep {
 		st.expand, st.expandOn = to.slug, true
 	}
 	return st
+}
+
+// notePlace notes where this console's keyboard is in the session.
+// c.mu held.
+func (c *client) notePlace() {
+	if c.focus == nil {
+		return
+	}
+	notePlace(place{session: c.focus.info.ID, project: c.focus.info.Project, area: c.kb, sel: c.v.SideSel})
+}
+
+// goLastPlace takes the keyboard back to the last place (prefix+;): an
+// area and sidebar row of this session, another session (attached), or
+// the dashboard (left for).
+func (c *client) goLastPlace() {
+	if !c.lock() {
+		return
+	}
+	to, ok := lastPlace()
+	cur := ""
+	if c.focus != nil {
+		cur = c.focus.info.ID
+	}
+	switch {
+	case !ok:
+		c.flash = "no last place yet"
+	case to.session == "" && c.bare:
+		c.flash = "no dashboard here"
+		ok = false
+	}
+	if !ok {
+		c.status()
+		c.mu.Unlock()
+		c.poke()
+		return
+	}
+	area := to.area
+	if !slices.Contains(c.areas(), area) {
+		area = areaMain
+	}
+	c.kb = area
+	if area == areaSide {
+		c.v.SideSel = to.sel
+	}
+	c.flash = "back to the last place"
+	c.status()
+	c.mu.Unlock()
+	c.poke()
+	if area == areaSide && c.vc != nil {
+		c.act(proto.MethodViewSideSel, proto.ViewParams{Key: to.sel})
+	}
+	switch {
+	case to.session == "":
+		c.detachThen("")
+	case to.session != cur:
+		c.sideGo(Target{Project: to.project, Session: to.session})
+	}
+}
+
+// notePlace notes where this console's keyboard is on the dashboard;
+// not while it is a popup over a session, which is the session's place.
+func (m *dash) notePlace() {
+	if m.over != nil || m.quitting {
+		return
+	}
+	notePlace(place{project: m.current, area: m.focus, sel: m.sideSel})
+}
+
+// goLastPlace takes the keyboard back to the last place (; and
+// prefix+;): an area and sidebar row of the dashboard, or a session,
+// attached.
+func (m *dash) goLastPlace(string) tea.Cmd {
+	to, ok := lastPlace()
+	if !ok {
+		m.msg = "no last place yet"
+		return nil
+	}
+	m.stack = nil
+	m.focus = to.area
+	var cmds []tea.Cmd
+	if to.area == areaSide {
+		m.sideSel = to.sel
+		cmds = append(cmds, m.sendSideSel())
+	}
+	m.msg = "back to the last place"
+	switch {
+	case to.session != "":
+		cmds = append(cmds, m.openTarget(Target{Project: to.project, Session: to.session}))
+	case to.project != "" && to.project != m.current:
+		cmds = append(cmds, m.showProject(to.project))
+	}
+	return tea.Batch(cmds...)
 }

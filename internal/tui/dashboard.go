@@ -489,6 +489,7 @@ func (m *dash) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.result.Attach, m.result.Message = cmp.Or(m.over.Session, "view"), m.msg
 		return m, tea.Quit
 	}
+	m.notePlace()
 	if m.view == nil {
 		return m, cmd
 	}
