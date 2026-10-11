@@ -3,7 +3,8 @@
 # The project popup's Memory tab as a code mod (mods design §11, proof 2;
 # §13 example 8). terminatr ships this mod built in: this folder is its
 # source, and `go generate ./internal/mod` precompiles main.ts into the
-# binary. Install a copy by path to change it.
+# binary. To change it, copy the folder, give the copy another id and
+# install it by path (tm mod install refuses a built-in mod's id).
 id = "memory-tab"
 name = "Memory tab"
 version = "1.0.0"
