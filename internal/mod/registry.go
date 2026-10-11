@@ -52,6 +52,10 @@ type Mod struct {
 	// the manifest doesn't have.
 	Settings    map[string]any
 	BadSettings []string
+	// Builtin: the mod ships inside tm (a bundled mod, mods design §11).
+	// It can be turned off, never removed or updated on its own: it
+	// updates with tm.
+	Builtin bool
 }
 
 // Runs reports whether the mod runs for project slug: valid, compatible,

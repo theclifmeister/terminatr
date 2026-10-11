@@ -77,7 +77,7 @@ func (m *dash) projectPopup(string) tea.Cmd {
 	if slug == "" {
 		return nil
 	}
-	pv := &projectView{slug: slug, settings: settingsList{rows: projectSettings(slug)}}
+	pv := &projectView{slug: slug, settings: settingsList{rows: m.projectRows(slug)}}
 	m.push(pv)
 	return m.loadPopup(slug)
 }
@@ -93,7 +93,7 @@ func (m *dash) showTask(slug string, id int) tea.Cmd {
 func (m *dash) showTab(slug string, tab int) tea.Cmd { return m.openTab(slug, tab, 0) }
 
 func (m *dash) openTab(slug string, tab, pick int) tea.Cmd {
-	pv := &projectView{slug: slug, tab: tab, pick: pick, settings: settingsList{rows: projectSettings(slug)}}
+	pv := &projectView{slug: slug, tab: tab, pick: pick, settings: settingsList{rows: m.projectRows(slug)}}
 	m.push(pv)
 	return m.loadPopup(slug)
 }
