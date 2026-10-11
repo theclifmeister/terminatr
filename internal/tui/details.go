@@ -68,24 +68,24 @@ func (d *panel) section(title, meta string) {
 		return
 	}
 	t := title + " " + meta + " "
-	d.add(st.Render(title) + " " + styleFaint.Render(meta+" "+strings.Repeat("─", max(w-ansi.StringWidth(t), 0))))
+	d.add(st.Render(title) + " " + th().Faint.Render(meta+" "+strings.Repeat("─", max(w-ansi.StringWidth(t), 0))))
 }
 
 // title is the panel's first line, bold in the accent colour, and the
 // state under it.
 func (d *panel) title(text, state string) {
-	d.add(styleTitle.Render(oneLine(text)))
+	d.add(th().Title.Render(oneLine(text)))
 	if state != "" && state != "—" {
 		g, st := stateLook(state)
 		d.add(st.Render(strings.TrimSpace(g + " " + state)))
 	}
-	d.add(styleFaint.Render(strings.Repeat("─", max(d.w-2, 0))))
+	d.add(th().Faint.Render(strings.Repeat("─", max(d.w-2, 0))))
 }
 
 // field is a "label  value" line.
 func (d *panel) field(label, value string) {
 	if value != "" {
-		d.add(styleFaint.Render(fmt.Sprintf("%-9s", label)) + " " + value)
+		d.add(th().Faint.Render(fmt.Sprintf("%-9s", label)) + " " + value)
 	}
 }
 
@@ -103,7 +103,7 @@ func progressLine(pr thread.Progress) string {
 		return ""
 	}
 	n := strings.Count(bar(pct), "▰")
-	s := styleGood.Render(strings.Repeat("▰", n)) + styleFaint.Render(strings.Repeat("▱", 5-n)) + fmt.Sprintf(" %d%%", pct)
+	s := th().Good.Render(strings.Repeat("▰", n)) + th().Faint.Render(strings.Repeat("▱", 5-n)) + fmt.Sprintf(" %d%%", pct)
 	if total > 0 {
 		s += fmt.Sprintf(" %d/%d", done, total)
 	}
@@ -137,7 +137,7 @@ func (m *dash) threadPanel(d *panel, r row) {
 			d.field("updated", age(time.Since(st.Updated))+" ago")
 		}
 		if st.NeedsYou != "" {
-			d.field("waiting", styleWarn.Render(oneLine(st.NeedsYou)))
+			d.field("waiting", th().Warn.Render(oneLine(st.NeedsYou)))
 		}
 	}
 	if t.Report != nil && t.Report.PR != "" {
@@ -182,15 +182,15 @@ func taskPanelWith(d *panel, t *tasks.Task, rv *Review, asked string, usage thre
 	d.field("usage", usage.String())
 	if asked != "" {
 		d.gap()
-		d.wrap(styleWarn.Render(waitingFor(asked)))
+		d.wrap(th().Warn.Render(waitingFor(asked)))
 	}
 	if t.Status == tasks.Blocked {
 		d.gap()
 		on := blockedOn(t)
 		if on == "" {
-			on = styleFaint.Render("no note says; c opens the coordinator to ask")
+			on = th().Faint.Render("no note says; c opens the coordinator to ask")
 		}
-		d.wrap(styleWarn.Render("Blocked on: ") + on)
+		d.wrap(th().Warn.Render("Blocked on: ") + on)
 	}
 	if rv != nil && t.Status == tasks.Review {
 		reviewLines(d, t, *rv)
@@ -228,18 +228,18 @@ func (m *dash) projectPanel(d *panel, r row) {
 			d.field("now", "▸ "+oneLine(s.Current))
 		}
 	} else {
-		d.field("session", styleFaint.Render("not running; enter starts it"))
+		d.field("session", th().Faint.Render("not running; enter starts it"))
 	}
 	c := p.Counts
 	d.field("tasks", taskCounts(c))
 	d.field("threads", fmt.Sprint(len(p.Threads)))
 	d.field("usage", p.Usage.String())
 	if p.Unread > 0 {
-		d.field("inbox", styleWarn.Render(fmt.Sprintf("%d unhandled", p.Unread))+styleFaint.Render(" · i shows them"))
+		d.field("inbox", th().Warn.Render(fmt.Sprintf("%d unhandled", p.Unread))+th().Faint.Render(" · i shows them"))
 	}
 	if p.Err != "" {
 		d.gap()
-		d.wrap(styleBad.Render("error: " + oneLine(p.Err)))
+		d.wrap(th().Bad.Render("error: " + oneLine(p.Err)))
 	}
 	d.gap()
 	d.add(keysLine("enter open the coordinator · t tasks · i inbox"))
@@ -295,7 +295,7 @@ func reviewLines(d *panel, t *tasks.Task, rv Review) {
 	checks := append(append([]string(nil), rv.Check...), noteChecks(t)...)
 	d.section("HOW TO CHECK", "")
 	if len(checks) == 0 {
-		d.wrap(styleFaint.Render("The report doesn't say; c opens the coordinator to ask."))
+		d.wrap(th().Faint.Render("The report doesn't say; c opens the coordinator to ask."))
 		return
 	}
 	for _, c := range checks {
@@ -316,7 +316,7 @@ func shipLine(rv Review) string {
 	case ShipOpen:
 		return pr + " open, not merged yet"
 	case ShipClosed:
-		return styleBad.Render(pr + " closed without merging")
+		return th().Bad.Render(pr + " closed without merging")
 	}
 	return pr
 }

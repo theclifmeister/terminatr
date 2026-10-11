@@ -560,10 +560,10 @@ func (mv *menuView) box() box {
 		// teaches.
 		key := fmt.Sprintf("%*s", kw, it.key)
 		if i == mv.sel {
-			lines[i] = styleSel.Render(fit(fit(it.label, w-kw)+key, w))
+			lines[i] = th().Sel.Render(fit(fit(it.label, w-kw)+key, w))
 			continue
 		}
-		lines[i] = fit(it.label, w-kw) + styleAccent.Render(key)
+		lines[i] = fit(it.label, w-kw) + th().Accent.Render(key)
 	}
 	title := mv.title
 	if title == "" {

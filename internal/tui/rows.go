@@ -120,7 +120,7 @@ func (r row) hasBar(w int) bool {
 // styled is text in the theme's colours, w cells wide.
 func (r row) styled(w int) string {
 	if r.note != "" {
-		return styleFaint.Render(fit(r.note, w))
+		return th().Faint.Render(fit(r.note, w))
 	}
 	_, st := stateLook(r.state)
 	line := r.line(w, r.hasBar(w), func(col int, s string) string {
@@ -129,18 +129,18 @@ func (r row) styled(w int) string {
 			return markStyle(r.mark).Render(s)
 		case 1:
 			if strings.HasPrefix(r.key, "p:") {
-				return styleHead.Render(s)
+				return th().Head.Render(s)
 			}
 		case 3:
 			return st.Render(s)
 		case 4:
 			if r.leadBad {
-				return styleBad.Render(s)
+				return th().Bad.Render(s)
 			}
-			return styleWarn.Render(s)
+			return th().Warn.Render(s)
 		case 5:
 			n := strings.Count(s, "▰")
-			return styleGood.Render(strings.Repeat("▰", n)) + styleFaint.Render(strings.Repeat("▱", 5-n))
+			return th().Good.Render(strings.Repeat("▰", n)) + th().Faint.Render(strings.Repeat("▱", 5-n))
 		}
 		return s
 	})
@@ -439,22 +439,22 @@ func prRef(url string) string {
 func threadDetail(t *ThreadRow, ind string, report bool) []string {
 	var out []string
 	if t.Status != nil && len(t.Status.Todos) > 0 {
-		out = append(out, ind+styleFaint.Render("todos"))
+		out = append(out, ind+th().Faint.Render("todos"))
 		for _, td := range t.Status.Todos {
 			out = append(out, ind+"  "+todoGlyph(string(td.Status))+" "+oneLine(td.Text))
 		}
 	}
 	if t.TaskRec != nil && len(t.TaskRec.Steps) > 0 {
-		out = append(out, ind+styleFaint.Render(fmt.Sprintf("steps %d/%d", t.TaskRec.StepsDone(), len(t.TaskRec.Steps))))
+		out = append(out, ind+th().Faint.Render(fmt.Sprintf("steps %d/%d", t.TaskRec.StepsDone(), len(t.TaskRec.Steps))))
 		for _, st := range t.TaskRec.Steps {
 			out = append(out, fmt.Sprintf("%s  %s %d %s", ind, todoGlyph(map[bool]string{true: "done"}[st.Done]), st.N, oneLine(st.Text)))
 		}
 	}
 	if report && t.Reports > 0 {
-		out = append(out, ind+styleFaint.Render("report ")+reportState(t, false))
+		out = append(out, ind+th().Faint.Render("report ")+reportState(t, false))
 	}
 	if len(out) == 0 {
-		out = append(out, ind+styleFaint.Render("no todos, steps or report yet"))
+		out = append(out, ind+th().Faint.Render("no todos, steps or report yet"))
 	}
 	return out
 }
@@ -471,7 +471,7 @@ func reportState(t *ThreadRow, count bool) string {
 		rs = fmt.Sprintf("%d, %s", t.Reports, rs)
 	}
 	if t.ReportState() == "new" {
-		return styleWarn.Render(rs) + styleFaint.Render(" · for the coordinator")
+		return th().Warn.Render(rs) + th().Faint.Render(" · for the coordinator")
 	}
 	return rs
 }

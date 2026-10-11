@@ -1097,13 +1097,13 @@ func (m *dash) cycleProject(next bool) tea.Cmd {
 // View.
 
 // rule is a section header drawn across the width: "NEEDS YOU ───…".
-func (m *dash) rule(title string) string { return m.ruleIn(title, styleTitle, m.w) }
+func (m *dash) rule(title string) string { return m.ruleIn(title, th().Title, m.w) }
 
 // ruleIn is a rule w cells wide with the title in st, a cell in: the
 // dashboard's gutter.
 func (m *dash) ruleIn(title string, st lipgloss.Style, w int) string {
 	if title == "" {
-		return styleFaint.Render(strings.Repeat("─", w))
+		return th().Faint.Render(strings.Repeat("─", w))
 	}
 	return " " + sectionRule(title, st, w-1)
 }
@@ -1112,16 +1112,16 @@ func (m *dash) ruleIn(title string, st lipgloss.Style, w int) string {
 // a faint rule to the edge (docs/STYLE.md, Section).
 func sectionRule(title string, st lipgloss.Style, w int) string {
 	t := title + " "
-	return st.Render(title) + " " + styleFaint.Render(strings.Repeat("─", max(w-len([]rune(t)), 0)))
+	return st.Render(title) + " " + th().Faint.Render(strings.Repeat("─", max(w-len([]rune(t)), 0)))
 }
 
 // sectionStyle is how a section heading is drawn: bold, in the warn
 // colour for NEEDS YOU, else uncoloured (docs/STYLE.md C2).
 func sectionStyle(title string) lipgloss.Style {
 	if strings.HasPrefix(title, "NEEDS YOU") {
-		return styleWarn.Bold(true)
+		return th().Warn.Bold(true)
 	}
-	return styleHead
+	return th().Head
 }
 
 func (m *dash) View() tea.View {
@@ -1228,9 +1228,9 @@ func (m *dash) listBody() []string {
 	}
 	// The details panel's divider is in the accent colour while the
 	// panel has the keyboard.
-	div := styleFaint.Render("│")
+	div := th().Faint.Render("│")
 	if m.focus == areaDetails {
-		div = styleAccent.Render("│")
+		div = th().Accent.Render("│")
 	}
 	body := make([]string, room)
 	for i := range body {
@@ -1265,7 +1265,7 @@ func (m *dash) listLines(w int, inline bool) (lines, keys []string, sel int) {
 			add(projectHead(r, w), stateKey+r.head)
 		case r.key != "" && r.key == m.sel:
 			sel = len(lines)
-			st := styleSel
+			st := th().Sel
 			if m.area() != areaMain {
 				st = st.Faint(true) // the keyboard is elsewhere
 			}
@@ -1290,9 +1290,9 @@ const stateKey = "state:"
 // deactivate", or "⊘ inactive — space to activate"; short leaves the
 // hint out.
 func stateLabel(active, short bool) (string, lipgloss.Style) {
-	label, st := ic().working+" active — space to deactivate", styleGood
+	label, st := ic().working+" active — space to deactivate", th().Good
 	if !active {
-		label, st = ic().inactive+" inactive — space to activate", styleFaint
+		label, st = ic().inactive+" inactive — space to activate", th().Faint
 	}
 	if short {
 		label, _, _ = strings.Cut(label, " — ")
@@ -1304,18 +1304,18 @@ func stateLabel(active, short bool) (string, lipgloss.Style) {
 // ∥ paused while paused, a faint rule, and at the right its state label
 // (docs/SPEC.md §4), shortened, then left out, when narrow.
 func projectHead(r row, w int) string {
-	left := " " + styleTitle.Render(countLabel(r.head, r.count))
+	left := " " + th().Title.Render(countLabel(r.head, r.count))
 	if r.paused {
-		left += "  " + styleWarn.Render(ic().paused+" paused")
+		left += "  " + th().Warn.Render(ic().paused+" paused")
 	}
 	lw := ansi.StringWidth(left)
 	if r.headNote == "" {
-		return left + " " + styleFaint.Render(strings.Repeat("─", max(w-lw-1, 0)))
+		return left + " " + th().Faint.Render(strings.Repeat("─", max(w-lw-1, 0)))
 	}
 	for _, short := range []bool{false, true} {
 		label, st := stateLabel(r.headNote == "active", short)
 		if fill := w - lw - ansi.StringWidth(label) - 3; fill >= 3 {
-			return left + " " + styleFaint.Render(strings.Repeat("─", fill)) + " " + st.Render(label) + " "
+			return left + " " + th().Faint.Render(strings.Repeat("─", fill)) + " " + st.Render(label) + " "
 		}
 	}
 	return fit(left, w)
@@ -1381,23 +1381,23 @@ func (m *dash) frame(title string, body []string, sel int, keys string) string {
 	var right string
 	switch {
 	case !m.loaded:
-		right = styleFaint.Render("◌ loading…")
+		right = th().Faint.Render("◌ loading…")
 	case !m.data.ServerOK:
-		right = styleBad.Render("▲ server down: " + oneLine(m.data.Err))
+		right = th().Bad.Render("▲ server down: " + oneLine(m.data.Err))
 	case m.data.NoAgent:
-		right = styleBad.Render("▲ no agent installed: nothing can start (tm doctor)")
+		right = th().Bad.Render("▲ no agent installed: nothing can start (tm doctor)")
 	default:
 		n := len(m.data.Sessions)
-		right = styleGood.Render(ic().working) + " server ok" + styleFaint.Render(fmt.Sprintf(" · %d session%s", n, map[bool]string{true: "s"}[n != 1]))
+		right = th().Good.Render(ic().working) + " server ok" + th().Faint.Render(fmt.Sprintf(" · %d session%s", n, map[bool]string{true: "s"}[n != 1]))
 	}
 	// The app, not a project: the project's own section is headed by its
 	// slug, which may well be "terminatr".
-	left := styleTitle.Render(" tm dashboard")
+	left := th().Title.Render(" tm dashboard")
 	if m.over != nil {
-		left = styleTitle.Render(" tm") + styleFaint.Render(" "+oneLine(m.over.Title))
+		left = th().Title.Render(" tm") + th().Faint.Render(" "+oneLine(m.over.Title))
 	}
 	if title != "" {
-		left += styleFaint.Render(" · ") + styleHead.Render(title)
+		left += th().Faint.Render(" · ") + th().Head.Render(title)
 	}
 	head := fit(left, max(m.w-ansi.StringWidth(right)-1, 1)) + reset + " " + right
 	foot := []string{m.rule("")}
@@ -1415,9 +1415,9 @@ func (m *dash) frame(title string, body []string, sel int, keys string) string {
 	msg := " " + oneLine(m.msg)
 	switch {
 	case m.busy:
-		msg = styleFaint.Render(" working…")
+		msg = th().Faint.Render(" working…")
 	case m.msg != "" && m.msg == m.errMsg:
-		msg = styleBad.Render(msg)
+		msg = th().Bad.Render(msg)
 	}
 	foot = append(foot, fit(msg, m.w)+reset)
 

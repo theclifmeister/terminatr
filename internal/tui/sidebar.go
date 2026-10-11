@@ -360,9 +360,9 @@ func sidebarLines(all []treeRow, w, h int, foot []string) []string {
 	}
 	h -= len(foot)
 	focused := slices.ContainsFunc(all, func(r treeRow) bool { return r.cursor })
-	border := styleFaint.Render("│")
+	border := th().Faint.Render("│")
 	if focused {
-		border = styleAccent.Render("│")
+		border = th().Accent.Render("│")
 	}
 	out := make([]string, 0, h)
 	n := 0 // every project, those under a folded divider too
@@ -386,7 +386,7 @@ func sidebarLines(all []treeRow, w, h int, foot []string) []string {
 		if slim {
 			note = " —"
 		}
-		out = append(out, styleFaint.Render(fit(note, cw))+reset+border)
+		out = append(out, th().Faint.Render(fit(note, cw))+reset+border)
 	}
 	for _, r := range rows[sideTop(rows, h):] {
 		if len(out) >= h {
@@ -409,7 +409,7 @@ func sidebarLines(all []treeRow, w, h int, foot []string) []string {
 // the slim strip the word alone, cut with "…".
 func sideHead(n, cw int, slim bool) string {
 	if slim {
-		return styleTitle.Render(fit(" PROJECTS", cw))
+		return th().Title.Render(fit(" PROJECTS", cw))
 	}
 	count := ""
 	if n > 0 {
@@ -417,15 +417,15 @@ func sideHead(n, cw int, slim bool) string {
 	}
 	gap := cw - ansi.StringWidth(" PROJECTS") - len(count) - 2
 	if gap < 1 {
-		return styleTitle.Render(fit(countLabel(" PROJECTS", n), cw))
+		return th().Title.Render(fit(countLabel(" PROJECTS", n), cw))
 	}
-	return styleTitle.Render(" PROJECTS") + strings.Repeat(" ", gap) + styleFaint.Render(count) + "  "
+	return th().Title.Render(" PROJECTS") + strings.Repeat(" ", gap) + th().Faint.Render(count) + "  "
 }
 
 // coordLook is a coordinator's glyph and style: "·" when none runs.
 func coordLook(state string) (string, lipgloss.Style) {
 	if state == "" {
-		return ic().none, styleFaint
+		return ic().none, th().Faint
 	}
 	return stateLook(state)
 }
@@ -454,7 +454,7 @@ func treeLine(r treeRow, cw int, slim, focused bool) string {
 // treeSel says whether r is the highlighted row (the keyboard's while
 // the sidebar has the focus, else the one you are on) and its style.
 func treeSel(r treeRow, focused bool) (bool, lipgloss.Style) {
-	sel := styleSel.Bold(true)
+	sel := th().Sel.Bold(true)
 	if focused {
 		return r.cursor, sel.Foreground(lipgloss.Cyan)
 	}
@@ -523,28 +523,28 @@ func treeCells(r treeRow, cw int, slim, focused bool) string {
 	lw := max(room-runsWidth(lead)-runsWidth(label)-1, 0) // a blank parts it from the grid
 	switch r.kind {
 	case treeProject:
-		look := styleHead
+		look := th().Head
 		switch {
 		case r.current:
-			look = styleTitle
+			look = th().Title
 		case r.inactive:
-			look = styleFaint
+			look = th().Faint
 		}
 		label = append(label, cellRun{fitLabel(r.slug, lw), look})
 	case treeCoordinator:
-		look := stylePlain
+		look := th().Plain
 		if r.state == "" || r.dormant {
-			look = styleFaint
+			look = th().Faint
 		}
 		label = append(label, cellRun{fitLabel("coordinator", lw), look})
 	default:
-		look := stylePlain
+		look := th().Plain
 		if r.dormant {
-			look = styleFaint
+			look = th().Faint
 		}
 		label = append(label, cellRun{threadLabel(r.name, r.title, lw), look})
 	}
-	label = append(label, cellRun{strings.Repeat(" ", room-runsWidth(lead)-runsWidth(label)), stylePlain})
+	label = append(label, cellRun{strings.Repeat(" ", room-runsWidth(lead)-runsWidth(label)), th().Plain})
 	rest := append(label, grid...)
 	if r.here {
 		return fit(runsRender(lead)+sel.Render(fit(runsPlain(rest), cw-runsWidth(lead))), cw)
@@ -562,11 +562,11 @@ func treeLead(r treeRow) (lead, label []cellRun) {
 		wide = " " // a Nerd Font icon draws over the blank after it
 	}
 	if r.kind == treeProject {
-		folder, fst := i.folder, styleFaint
+		folder, fst := i.folder, th().Faint
 		if r.current {
-			folder, fst = i.folderOpen, styleAccent
+			folder, fst = i.folderOpen, th().Accent
 		}
-		return []cellRun{{" ", stylePlain}}, []cellRun{{folder + wide + " ", fst}}
+		return []cellRun{{" ", th().Plain}}, []cellRun{{folder + wide + " ", fst}}
 	}
 	conn, node := i.mid, i.thread
 	if r.last {
@@ -585,7 +585,7 @@ func treeLead(r treeRow) (lead, label []cellRun) {
 	if r.kind == treeThread {
 		indent = "   "
 	}
-	return []cellRun{{" " + indent, stylePlain}, {conn + node, styleFaint}, {" ", stylePlain}}, nil
+	return []cellRun{{" " + indent, th().Plain}, {conn + node, th().Faint}, {" ", th().Plain}}, nil
 }
 
 // rowCols are the grid's columns row r keeps in a row cw cells wide
@@ -651,14 +651,14 @@ func gridCell(r treeRow, c sideCol) cellRun {
 	i := ic()
 	col := func(on bool, g string, st lipgloss.Style) cellRun {
 		if !on || g == "" {
-			return cellRun{"  ", stylePlain}
+			return cellRun{"  ", th().Plain}
 		}
 		return cellRun{g + " ", st}
 	}
 	thread, proj := r.kind == treeThread, r.kind == treeProject
 	switch c.id {
 	case view.ColCount:
-		num, nst := "", styleFaint
+		num, nst := "", th().Faint
 		switch r.kind {
 		case treeProject:
 			n := r.threads
@@ -667,16 +667,16 @@ func gridCell(r treeRow, c sideCol) cellRun {
 			}
 			num = fmt.Sprint(n)
 			if n > 0 {
-				nst = stylePlain
+				nst = th().Plain
 			}
 		case treeCoordinator:
 			if r.ctx >= 0 && !r.dormant {
 				num = fmt.Sprintf("%d%%", r.ctx)
 				switch {
 				case r.ctx >= 80:
-					nst = styleBad
+					nst = th().Bad
 				case r.ctxHint:
-					nst = styleWarn
+					nst = th().Warn
 				}
 			}
 		default:
@@ -688,38 +688,38 @@ func gridCell(r treeRow, c sideCol) cellRun {
 	case view.ColCI:
 		switch {
 		case thread && r.ci == "pass":
-			return col(true, i.ciPass, styleGood)
+			return col(true, i.ciPass, th().Good)
 		case thread && r.ci == "fail":
-			return col(true, i.ciFail, styleBad)
+			return col(true, i.ciFail, th().Bad)
 		case thread && r.ci == "pending":
-			return col(true, i.ciRun, styleFaint)
+			return col(true, i.ciRun, th().Faint)
 		}
-		return col(false, "", stylePlain)
+		return col(false, "", th().Plain)
 	case view.ColState:
 		var g string
 		var st lipgloss.Style
 		switch {
 		case proj && (!r.folded() || r.inactive):
 		case r.dormant:
-			g, st = i.none, styleFaint
+			g, st = i.none, th().Faint
 		case thread:
 			if g, st = stateLook(r.state); g == "" {
-				g, st = i.none, styleFaint
+				g, st = i.none, th().Faint
 			}
 		default:
 			g, st = coordLook(r.state)
 		}
 		return col(g != "", g, st)
 	case view.ColRemote:
-		return col(r.kind == treeCoordinator && r.remote && !r.dormant, i.remote, styleAccent)
+		return col(r.kind == treeCoordinator && r.remote && !r.dormant, i.remote, th().Accent)
 	case view.ColPaused:
-		return col(proj && r.paused, i.paused, styleWarn)
+		return col(proj && r.paused, i.paused, th().Warn)
 	case view.ColInactive:
-		return col(proj && r.inactive || r.dormant, i.inactive, styleFaint)
+		return col(proj && r.inactive || r.dormant, i.inactive, th().Faint)
 	case view.ColNeeds:
-		return col(r.hint, i.hint, styleWarn)
+		return col(r.hint, i.hint, th().Warn)
 	}
-	return cellRun{strings.Repeat(" ", c.w), stylePlain}
+	return cellRun{strings.Repeat(" ", c.w), th().Plain}
 }
 
 // sideCol is a column of the grid on the right of a full sidebar's rows
@@ -804,7 +804,7 @@ func dividerCells(r treeRow, cw int, slim bool, sel lipgloss.Style) string {
 	if r.here {
 		return fit(" "+sel.Render(line), cw)
 	}
-	return fit(" "+styleFaint.Render(line), cw)
+	return fit(" "+th().Faint.Render(line), cw)
 }
 
 // slimCells is a project's row in the slim strip, cw cells wide: its
@@ -813,18 +813,18 @@ func slimCells(r treeRow, cw int, sel lipgloss.Style) string {
 	i := ic()
 	g, st := coordLook(r.state)
 	if r.inactive {
-		g, st = i.inactive, styleFaint
+		g, st = i.inactive, th().Faint
 	}
-	hint := cellRun{"  ", stylePlain}
+	hint := cellRun{"  ", th().Plain}
 	if r.hint {
-		hint = cellRun{i.hint + " ", styleWarn}
+		hint = cellRun{i.hint + " ", th().Warn}
 	}
-	look := styleHead
+	look := th().Head
 	switch {
 	case r.current:
-		look = styleTitle
+		look = th().Title
 	case r.inactive:
-		look = styleFaint
+		look = th().Faint
 	}
 	rest := []cellRun{{g + " ", st}, {fit(r.slug, max(cw-5, 0)), look}, hint}
 	if r.here {
@@ -1802,16 +1802,16 @@ func sideFooter(all []treeRow, w int, s ServerInfo, session bool) []string {
 		d1, d2 = r.details()
 	}
 	out := []string{
-		styleFaint.Render(" " + strings.Repeat("─", cw-1)),
-		styleHead.Render(fit(" "+d1, cw)),
-		styleFaint.Render(fit(" "+d2, cw)),
+		th().Faint.Render(" " + strings.Repeat("─", cw-1)),
+		th().Head.Render(fit(" "+d1, cw)),
+		th().Faint.Render(fit(" "+d2, cw)),
 		sideKeyBar(r, focused, session, cw),
 	}
 	if h := versionHint(s); h != "" {
 		if ansi.StringWidth(h) > cw-1 {
 			h = versionHintShort(s)
 		}
-		out = append(out, styleFaint.Render(fit(" "+h, cw)))
+		out = append(out, th().Faint.Render(fit(" "+h, cw)))
 	}
 	return out
 }
