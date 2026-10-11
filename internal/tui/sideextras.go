@@ -274,6 +274,7 @@ func sideKeyFor(in sideKeysIn, key string) (sideStep, bool) {
 	if st, ok := sideFilterKey(in, key); ok {
 		return st, true
 	}
+	key = binds.side.canon(key)
 	op, ok := sideOp(key)
 	if !ok {
 		return sideStep{}, false

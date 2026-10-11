@@ -21,19 +21,22 @@ type keyGroup struct {
 }
 
 // sessionKeys are the prefix commands (attach.go, prefix.go), in the
-// order the help lists them. Each means the same everywhere: in a
-// session, on the dashboard, over any popup (which it closes first).
-var sessionKeys = []keyHelp{
-	{"prefix+d", "back to the dashboard, on every console of the view (the session keeps running); on the dashboard it closes the popups"},
-	{"prefix+q", "quit this console, from anywhere: a session, the dashboard, a popup, the sidebar, tm attach (the server, the sessions and other consoles keep running)"},
-	{"prefix+a i t , ? n", "the project popup, settings, help or the new-project prompt, over the session or the dashboard; t and i are the project popup on its Tasks and Inbox tabs; esc closes it"},
-	{"prefix+] [", "the next / previous project's coordinator"},
-	{"prefix+{ } b", "narrow / widen the sidebar, or make it a slim strip"},
-	{"prefix+|", "show or hide the panel on the right: beside a thread's pane its info panel (task, steps, state, PR, last report; drag its border to resize it), on the dashboard the details panel"},
-	{"prefix+tab", "the keyboard to the next area: in a session the projects sidebar (its keys below), the info panel (↑ ↓ scroll, enter its task) and back to the pane, which gets no keys meanwhile; on the dashboard as tab"},
-	{"prefix+;", "back to the last place: the area, sidebar row and session the keyboard was in before, such as the thread you were typing in; again goes back"},
-	{"prefix+r", "turn remote control of a coordinator on or off, to continue it from another device (asks first): the session's, or on the dashboard the selected project's; ⌁ beside the coordinator's state in the sidebar while it is on. With the project's setting on, tm turns it back on when it drops, but your off holds until the coordinator is started anew"},
-	{"prefix+prefix", "send the prefix key itself to the program"},
+// order the help lists them, in the bound keys (keybind.go). Each means
+// the same everywhere: in a session, on the dashboard, over any popup
+// (which it closes first).
+func sessionKeys() []keyHelp {
+	return []keyHelp{
+		{"prefix+d", "back to the dashboard, on every console of the view (the session keeps running); on the dashboard it closes the popups"},
+		{"prefix+q", "quit this console, from anywhere: a session, the dashboard, a popup, the sidebar, tm attach (the server, the sessions and other consoles keep running)"},
+		{"prefix+" + boundKeys("a", "i", "t", ",", "?", "n"), "the project popup, settings, help or the new-project prompt, over the session or the dashboard; t and i are the project popup on its Tasks and Inbox tabs; esc closes it"},
+		{"prefix+" + boundKeys("]", "["), "the next / previous project's coordinator"},
+		{"prefix+" + boundKeys("{", "}", "b"), "narrow / widen the sidebar, or make it a slim strip"},
+		{"prefix+" + boundKey("|"), "show or hide the panel on the right: beside a thread's pane its info panel (task, steps, state, PR, last report; drag its border to resize it), on the dashboard the details panel"},
+		{"prefix+tab", "the keyboard to the next area: in a session the projects sidebar (its keys below), the info panel (↑ ↓ scroll, enter its task) and back to the pane, which gets no keys meanwhile; on the dashboard as tab"},
+		{"prefix+" + boundKey(";"), "back to the last place: the area, sidebar row and session the keyboard was in before, such as the thread you were typing in; again goes back"},
+		{"prefix+r", "turn remote control of a coordinator on or off, to continue it from another device (asks first): the session's, or on the dashboard the selected project's; ⌁ beside the coordinator's state in the sidebar while it is on. With the project's setting on, tm turns it back on when it drops, but your off holds until the coordinator is started anew"},
+		{"prefix+prefix", "send the prefix key itself to the program"},
+	}
 }
 
 // popupKeys are the project popup's own keys (projectView). None is a
@@ -85,22 +88,20 @@ var mouseKeys = []keyHelp{
 
 // keyGroups is every key, grouped.
 func keyGroups() []keyGroup {
-	var dash []keyHelp
-	for _, a := range actions {
-		if a.label != "" {
-			dash = append(dash, keyHelp{a.label, a.help})
+	lines := func(t keyTable, rows []bindable) []keyHelp {
+		var out []keyHelp
+		for i, r := range rows {
+			if r.label != "" {
+				out = append(out, keyHelp{keyLabel(t, rows, i), r.help})
+			}
 		}
+		return out
 	}
-	var side []keyHelp
-	for _, a := range sideActions {
-		if a.label != "" {
-			side = append(side, keyHelp{a.label, a.help})
-		}
-	}
+	dash, side := lines(binds.list, listBindables()), lines(binds.side, sideBindables())
 	return []keyGroup{
 		{"On the dashboard", dash},
 		{"With the mouse", mouseKeys},
-		{"Prefix commands: the same everywhere", sessionKeys},
+		{"Prefix commands: the same everywhere", sessionKeys()},
 		{"In the sidebar (tab, or prefix+tab in a session)", side},
 		{"In the project popup", popupKeys},
 		{"In the settings (, or the project popup's Settings tab)", settingsKeys},

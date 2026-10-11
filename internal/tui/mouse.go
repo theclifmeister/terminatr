@@ -341,7 +341,7 @@ func (m *dash) click(x, y int, double bool) tea.Cmd {
 		return nil
 	}
 	if double && key == m.sel {
-		return m.key(keyMsg("enter"))
+		return m.key(keyMsg(boundKey("enter")))
 	}
 	m.sel, m.userSel = key, true
 	return nil
@@ -392,14 +392,12 @@ func pressItem(label, key string) menuItem {
 }
 
 // dashItems are the ≡ menu's items: every action of the keys table that
-// has a menu entry, in the table's order.
+// has a menu entry, in the table's order, each pressing its bound key.
 func (m *dash) dashItems() []menuItem {
 	var out []menuItem
 	for _, a := range actions {
-		for i, word := range a.menu {
-			if word != "" && i < len(a.keys) {
-				out = append(out, pressItem(word, a.keys[i]))
-			}
+		if a.menu != "" {
+			out = append(out, pressItem(a.menu, boundKey(a.keys[0])))
 		}
 	}
 	return out
@@ -408,7 +406,7 @@ func (m *dash) dashItems() []menuItem {
 // enterWord is what enter does on r (attach, open), "" nothing.
 func (m *dash) enterWord(r row) string {
 	for _, a := range actions {
-		if a.keys[0] == "enter" {
+		if a.id == "row.open" {
 			return a.foot(m, r, true)
 		}
 	}
@@ -429,13 +427,13 @@ func (m *dash) rowItems(r row) []menuItem {
 	}
 	var out []menuItem
 	if word := m.enterWord(r); word != "" {
-		out = append(out, on(pressItem(word, "enter")))
+		out = append(out, on(pressItem(word, boundKey("enter"))))
 	}
 	if r.project != "" {
-		out = append(out, on(pressItem("project popup", "a")), on(pressItem("tasks", "t")), on(pressItem("inbox", "i")))
+		out = append(out, on(pressItem("project popup", boundKey("a"))), on(pressItem("tasks", boundKey("t"))), on(pressItem("inbox", boundKey("i"))))
 	}
 	if _, why := m.adoptable(r, true); why == "" {
-		out = append(out, on(pressItem("adopt as a thread", "T")))
+		out = append(out, on(pressItem("adopt as a thread", boundKey("T"))))
 	}
 	return out
 }

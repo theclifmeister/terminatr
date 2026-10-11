@@ -14,11 +14,19 @@ import (
 // (prefixStep): d, q, r, the dashboard keys (prefixCommands), the
 // sidebar's and the info panel's (paneCommands) and the prefix itself.
 
-// prefixHint is the footer while the prefix waits for its command.
-const prefixHint = "prefix ▸ d dashboard · q quit · a i t , ? n popups · p ] [ projects · { } b sidebar · | details · tab area · ; last place · r remote · esc cancel"
+// prefixHint is the footer while the prefix waits for its command, in
+// the bound keys (keybind.go).
+func prefixHint() string {
+	return "prefix ▸ d dashboard · q quit · " + boundKeys("a", "i", "t", ",", "?", "n") + " popups · p " + boundKeys("]", "[") +
+		" projects · " + boundKeys("{", "}", "b") + " sidebar · " + boundKey("|") + " details · tab area · " + boundKey(";") +
+		" last place · r remote · esc cancel"
+}
 
-// prefixCommand runs the key typed after the prefix.
+// prefixCommand runs the key typed after the prefix: a bound key runs as
+// its action's default (keybind.go), which the switch speaks.
 func (m *dash) prefixCommand(key string) tea.Cmd {
+	typed := key
+	key = binds.list.canon(key)
 	switch {
 	case key == "q":
 		m.quitting = true
@@ -61,7 +69,7 @@ func (m *dash) prefixCommand(key string) tea.Cmd {
 		}
 		return tea.Batch(back, m.listKey(key))
 	}
-	m.msg = "prefix+" + key + " isn't a command; ? lists them"
+	m.msg = "prefix+" + typed + " isn't a command; " + boundKey("?") + " lists them"
 	return nil
 }
 

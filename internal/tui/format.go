@@ -172,8 +172,12 @@ func fit(s string, w int) string {
 const pendingHead = " prefix ▸ "
 
 // pendingList are the prefix commands, as the status bar lists them
-// after the prefix.
-const pendingList = `d dashboard · q quit · a project · n new · p ] [ projects · i t , ? · { } b sidebar · | info · tab sidebar keys · ; last place · r remote control`
+// after the prefix, in the bound keys (keybind.go).
+func pendingList() string {
+	return "d dashboard · q quit · " + boundKey("a") + " project · " + boundKey("n") + " new · p " + boundKeys("]", "[") +
+		" projects · " + boundKeys("i", "t", ",", "?") + " · " + boundKeys("{", "}", "b") + " sidebar · " + boundKey("|") +
+		" info · tab sidebar keys · " + boundKey(";") + " last place · r remote control"
+}
 
 // The status bar's notes while the sidebar's cursor previews a row:
 // waiting for it to rest (previewDelay), then showing it; previewShort
@@ -189,7 +193,9 @@ const (
 const pathMin = 20
 
 // statusRight is the status bar's right end: the global keys.
-const statusRight = "prefix+? help · prefix+d dashboard · " + menuButton + " menu "
+func statusRight() string {
+	return "prefix+" + boundKey("?") + " help · prefix+d dashboard · " + menuButton + " menu "
+}
 
 // statusBar is the attach status bar (docs/SPEC.md §4): under a faint
 // rule (the caller's), with no fill and muted. Left, where you are: the
@@ -212,17 +218,17 @@ func statusBar(s proto.SessionInfo, ts *thread.Status, title string, pending boo
 	if pending {
 		right := "prefix again sends it "
 		w := cols - ansi.StringWidth(right) - 1
-		left := styleFaint.Render(pendingHead) + keysLine(pendingList)
+		left := styleFaint.Render(pendingHead) + keysLine(pendingList())
 		if w < 1 {
 			return fit(left, cols), nil
 		}
-		hs := hints(pendingList, ansi.StringWidth(pendingHead))
+		hs := hints(pendingList(), ansi.StringWidth(pendingHead))
 		hs = slices.DeleteFunc(hs, func(h hint) bool { return h.x1 > w-1 })
 		hs = append(hs, hint{w + 1, w + 1 + 21, "prefix"})
 		return fit(left, w) + reset + " " + styleFaint.Render(right), hs
 	}
-	right := keysLine(strings.TrimSuffix(statusRight, " ")) + " "
-	rw := ansi.StringWidth(statusRight)
+	right := keysLine(strings.TrimSuffix(statusRight(), " ")) + " "
+	rw := ansi.StringWidth(statusRight())
 	g, gst := stateLook(stateWord(s))
 	if g == "" {
 		g, gst = ic().none, styleFaint

@@ -1453,31 +1453,35 @@ const (
 // sideAction is a sidebar key: its keys, what it does, its help line and
 // the mouse's way to the same thing (TestEverySidebarClickHasKey).
 type sideAction struct {
+	// id is its stable name and keys its default keys, as an action's
+	// (actions.go); fixed ones can't be rebound (keybind.go).
+	id          string
 	keys        []string
 	op          int
 	label, help string
+	fixed       bool
 }
 
 var sideActions = []sideAction{
-	{[]string{"up", "k"}, sideUp, "↑ ↓ k j", "move through the tree; the pane shows what the cursor rests on (a project its dashboard, a coordinator or a thread its session, live), the keyboard stays in the sidebar, and nothing starts"},
-	{[]string{"down", "j"}, sideDown, "", ""},
-	{[]string{"enter"}, sideEnter, "enter", "into the pane: a project's dashboard or a session gets the keyboard; a coordinator not running starts, and an inactive project's starts activating the project; on the inactive divider it folds or unfolds"},
-	{[]string{"right", "l"}, sideIn, "→ ←", "→ unfolds a folded project or the inactive divider, else goes into the pane as enter; ← folds an unfolded one, or from a row under a project goes up to it. Folding never activates or deactivates"},
-	{[]string{"left", "h"}, sideOut, "", ""},
-	{[]string{"esc"}, sideBack, "esc", "back to the list (in a session: to the pane)"},
-	{[]string{"space"}, sideActive, "space", "on a project: activate it, or deactivate it (its coordinator and threads stop, to resume when you activate it; asks first while they run)"},
-	{[]string{"z"}, sideFoldAll, "z Z", "z folds every project and the inactive divider, Z unfolds them all"},
-	{[]string{"Z"}, sideUnfoldAll, "", ""},
-	{[]string{"p"}, sidePin, "p", "on a project: pin it to the top of the active projects, or unpin it (its order only)"},
-	{[]string{"home"}, sideFirst, "home end", "the first / last row"},
-	{[]string{"end"}, sideLast, "", ""},
-	{[]string{"pgup"}, sidePageUp, "pgup pgdown", "a page up / down"},
-	{[]string{"pgdown"}, sidePageDown, "", ""},
-	{[]string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}, sideNth, "1-9", "the first to ninth project, counted down the tree"},
-	{[]string{"w"}, sideNeedNext, "w W", "the next / previous row that needs you, round the ends; it unfolds what hides the row, and clears a filter that does"},
-	{[]string{"W"}, sideNeedPrev, "", ""},
-	{[]string{"/"}, sideFilter, "/", "filter: type to narrow the tree to what matches (a project's name, a thread's task, title or id) and the projects over it; enter keeps the filter, esc clears it"},
-	{[]string{"?"}, sideHelp, "?", "help, as prefix+?"},
+	{id: "side.up", keys: []string{"up", "k"}, op: sideUp, label: "↑ ↓ k j", help: "move through the tree; the pane shows what the cursor rests on (a project its dashboard, a coordinator or a thread its session, live), the keyboard stays in the sidebar, and nothing starts"},
+	{id: "side.down", keys: []string{"down", "j"}, op: sideDown},
+	{id: "side.enter", keys: []string{"enter"}, op: sideEnter, label: "enter", help: "into the pane: a project's dashboard or a session gets the keyboard; a coordinator not running starts, and an inactive project's starts activating the project; on the inactive divider it folds or unfolds"},
+	{id: "side.unfold", keys: []string{"right", "l"}, op: sideIn, label: "→ ←", help: "→ unfolds a folded project or the inactive divider, else goes into the pane as enter; ← folds an unfolded one, or from a row under a project goes up to it. Folding never activates or deactivates"},
+	{id: "side.fold", keys: []string{"left", "h"}, op: sideOut},
+	{id: "side.back", keys: []string{"esc"}, op: sideBack, label: "esc", help: "back to the list (in a session: to the pane)", fixed: true},
+	{id: "side.activate", keys: []string{"space"}, op: sideActive, label: "space", help: "on a project: activate it, or deactivate it (its coordinator and threads stop, to resume when you activate it; asks first while they run)"},
+	{id: "side.fold-all", keys: []string{"z"}, op: sideFoldAll, label: "z Z", help: "z folds every project and the inactive divider, Z unfolds them all"},
+	{id: "side.unfold-all", keys: []string{"Z"}, op: sideUnfoldAll},
+	{id: "side.pin", keys: []string{"p"}, op: sidePin, label: "p", help: "on a project: pin it to the top of the active projects, or unpin it (its order only)"},
+	{id: "side.first", keys: []string{"home"}, op: sideFirst, label: "home end", help: "the first / last row"},
+	{id: "side.last", keys: []string{"end"}, op: sideLast},
+	{id: "side.page-up", keys: []string{"pgup"}, op: sidePageUp, label: "pgup pgdown", help: "a page up / down"},
+	{id: "side.page-down", keys: []string{"pgdown"}, op: sidePageDown},
+	{id: "side.nth", keys: []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}, op: sideNth, label: "1-9", help: "the first to ninth project, counted down the tree", fixed: true},
+	{id: "side.needs-next", keys: []string{"w"}, op: sideNeedNext, label: "w W", help: "the next / previous row that needs you, round the ends; it unfolds what hides the row, and clears a filter that does"},
+	{id: "side.needs-prev", keys: []string{"W"}, op: sideNeedPrev},
+	{id: "side.filter", keys: []string{"/"}, op: sideFilter, label: "/", help: "filter: type to narrow the tree to what matches (a project's name, a thread's task, title or id) and the projects over it; enter keeps the filter, esc clears it"},
+	{id: "side.help", keys: []string{"?"}, op: sideHelp, label: "?", help: "help, as prefix+?"},
 }
 
 // sideOp is the sidebar operation of key; ok is false for none.
@@ -1770,31 +1774,33 @@ func counted(n int, word string) string {
 // fit.
 func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 	var keys []string
+	// The keys as the bar writes them, or as a keymap binds them.
+	enter, space, left := barKey("side.enter", "⏎"), barKey("side.activate", "␣"), barKey("side.fold", "←")
 	switch {
 	case focused && sideFilterNow().typing:
 		keys = []string{"type filter", "⏎ keep", "esc clear"}
 	case !focused && session:
-		keys = []string{"prefix+tab sidebar", "prefix+? help"}
+		keys = []string{"prefix+tab sidebar", "prefix+" + barKey("help.open", "?") + " help"}
 	case !focused:
-		keys = []string{"tab sidebar", "? help"}
+		keys = []string{"tab sidebar", barKey("help.open", "?") + " help"}
 	case r == nil:
 	case r.kind == treeDivider && r.fold:
-		keys = []string{"⏎ unfold"}
+		keys = []string{enter + " unfold"}
 	case r.kind == treeDivider:
-		keys = []string{"⏎ fold"}
+		keys = []string{enter + " fold"}
 	case r.kind == treeProject:
-		fold := "← fold"
+		fold := barKey("side.fold", "←") + " fold"
 		if r.fold {
-			fold = "→ unfold"
+			fold = barKey("side.unfold", "→") + " unfold"
 		}
-		act, pin := "␣ deactivate", "p pin"
+		act, pin := space+" deactivate", barKey("side.pin", "p")+" pin"
 		if r.inactive {
-			act = "␣ activate"
+			act = space + " activate"
 		}
 		if r.pinned {
-			pin = "p unpin"
+			pin = barKey("side.pin", "p") + " unpin"
 		}
-		keys = []string{"⏎ open"}
+		keys = []string{enter + " open"}
 		if r.fold || r.inactive {
 			keys = append(keys, fold)
 		}
@@ -1803,19 +1809,19 @@ func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 			keys = append(keys, pin)
 		}
 	case r.kind == treeCoordinator && r.dormant:
-		keys = []string{"⏎ start", "← project"}
+		keys = []string{enter + " start", left + " project"}
 	case r.kind == treeCoordinator && r.state == "":
-		keys = []string{"⏎ start", "← project"}
+		keys = []string{enter + " start", left + " project"}
 	case r.kind == treeCoordinator, r.session != "":
-		keys = []string{"⏎ attach", "← project"}
+		keys = []string{enter + " attach", left + " project"}
 		if r.hint {
-			keys = append(keys, "w next "+ic().hint)
+			keys = append(keys, barKey("side.needs-next", "w")+" next "+ic().hint)
 		}
 	default:
-		keys = []string{"← project"}
+		keys = []string{left + " project"}
 	}
 	if focused && !sideFilterNow().typing {
-		keys = append(keys, "? help")
+		keys = append(keys, barKey("side.help", "?")+" help")
 	}
 	for len(keys) > 1 && ansi.StringWidth(" "+strings.Join(keys, " · ")) > cw {
 		keys = keys[:len(keys)-1]

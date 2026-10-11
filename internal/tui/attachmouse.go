@@ -307,6 +307,9 @@ func (c *client) sessionItems() []aitem {
 		case key == "d" && c.bare:
 			label = "leave"
 		}
+		if key != "prefix" {
+			key = boundKey(key)
+		}
 		out = append(out, aitem{label: label, key: "prefix+" + key, run: func() { c.command(key) }})
 	}
 	return out
