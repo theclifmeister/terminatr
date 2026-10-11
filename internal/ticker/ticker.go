@@ -126,6 +126,9 @@ type Options struct {
 	// reason): work in its worktree or branch (upkeep.go). nil checks
 	// with git.
 	Kept func(r *thread.Record) (string, error)
+	// Swept is called after each sweep of Run, which may have raised
+	// items and polled PRs (the mods' event bus looks again).
+	Swept func()
 }
 
 // Ticker is the event loop.
@@ -354,6 +357,9 @@ func (t *Ticker) Run(ctx context.Context) {
 			}
 		}
 		t.Sweep()
+		if t.o.Swept != nil {
+			t.o.Swept()
+		}
 		if !timer.Stop() {
 			select {
 			case <-timer.C:
