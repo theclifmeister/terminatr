@@ -1,0 +1,155 @@
+package modproto
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"sync"
+)
+
+// ErrClosed says the host's stdout ended: the host exited or is exiting.
+// The supervisor reads its exit code; the event bus calls this mod gone.
+var ErrClosed = errors.New("mod host closed")
+
+// Client is the server's side of one host: it sends hello, events and
+// shutdown, and hands the host's requests and notifications to callbacks.
+type Client struct {
+	conn *Conn
+	// OnRequest answers a host request (a $ API call) with Reply or
+	// ReplyError on Conn. Each runs in its own goroutine.
+	onRequest func(*Message)
+	// OnNotify gets the host's notifications, in order, on the read loop:
+	// it must not block.
+	onNotify func(*Message)
+
+	mu     sync.Mutex
+	next   int64
+	waits  map[int64]chan *Message
+	closed bool
+	done   chan struct{}
+}
+
+// NewClient reads the host's messages from r until it ends and writes to
+// w. Either callback may be nil.
+func NewClient(r io.Reader, w io.Writer, onRequest, onNotify func(*Message)) *Client {
+	c := &Client{conn: NewConn(r, w), onRequest: onRequest, onNotify: onNotify,
+		waits: map[int64]chan *Message{}, done: make(chan struct{})}
+	go c.read()
+	return c
+}
+
+// Conn is the connection, for replies to the host's requests.
+func (c *Client) Conn() *Conn { return c.conn }
+
+// Done is closed once the host's stdout has ended.
+func (c *Client) Done() <-chan struct{} { return c.done }
+
+func (c *Client) read() {
+	defer func() {
+		c.mu.Lock()
+		c.closed = true
+		c.waits = nil
+		c.mu.Unlock()
+		close(c.done)
+	}()
+	for {
+		m, err := c.conn.Read()
+		var fe *FrameError
+		if errors.As(err, &fe) {
+			continue
+		}
+		if err != nil {
+			return
+		}
+		switch {
+		case m.IsResponse():
+			c.mu.Lock()
+			ch := c.waits[*m.ID]
+			delete(c.waits, *m.ID)
+			c.mu.Unlock()
+			if ch != nil {
+				ch <- m // buffered; a reply to a call that gave up is dropped
+			}
+		case m.IsRequest():
+			if c.onRequest == nil {
+				_ = c.conn.ReplyError(*m.ID, CodeMethodNotFound, "no broker")
+				continue
+			}
+			go c.onRequest(m)
+		case m.IsNotification():
+			if c.onNotify != nil {
+				c.onNotify(m)
+			}
+		}
+	}
+}
+
+// Call sends a request and waits for its answer, ctx's end, or the host's.
+// After ctx ends the answer, when it comes, is dropped.
+func (c *Client) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	ch := make(chan *Message, 1)
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return nil, ErrClosed
+	}
+	c.next++
+	id := c.next
+	c.waits[id] = ch
+	c.mu.Unlock()
+	forget := func() {
+		c.mu.Lock()
+		delete(c.waits, id)
+		c.mu.Unlock()
+	}
+	if err := c.conn.Request(id, method, params); err != nil {
+		forget()
+		return nil, fmt.Errorf("%w: %v", ErrClosed, err)
+	}
+	select {
+	case m := <-ch:
+		if m.Error != nil {
+			return nil, m.Error
+		}
+		return m.Result, nil
+	case <-ctx.Done():
+		forget()
+		return nil, ctx.Err()
+	case <-c.done:
+		return nil, ErrClosed
+	}
+}
+
+// Hello sends hello; the host runs the script and answers.
+func (c *Client) Hello(ctx context.Context, h Hello) (HelloResult, error) {
+	var r HelloResult
+	if h.Protocol == 0 {
+		h.Protocol = Protocol
+	}
+	raw, err := c.Call(ctx, MethodHello, h)
+	if err == nil {
+		err = json.Unmarshal(raw, &r)
+	}
+	return r, err
+}
+
+// Event gives the mod one event and returns when its handlers are done,
+// when ctx ends (the event bus's 5 s limit), or when the host is gone
+// (ErrClosed). A cancelled event's handlers may still be running in the
+// host; their answer is dropped, and the next event can be sent at once.
+func (c *Client) Event(ctx context.Context, ev Event) (EventResult, error) {
+	var r EventResult
+	raw, err := c.Call(ctx, MethodEvent, ev)
+	if err == nil {
+		err = json.Unmarshal(raw, &r)
+	}
+	return r, err
+}
+
+// Shutdown asks the host to exit 0.
+func (c *Client) Shutdown(ctx context.Context) error {
+	_, err := c.Call(ctx, MethodShutdown, nil)
+	return err
+}
