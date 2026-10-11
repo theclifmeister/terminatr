@@ -70,6 +70,13 @@ func unset(table, key string) error {
 	if key == "auto_close" {
 		keys = append(keys, "auto_resolve")
 	}
+	return Unset(table, keys...)
+}
+
+// Unset removes keys from table ("mods.<id>", …), everything else kept;
+// ErrForm when the file sets one in a form the line editor doesn't
+// change.
+func Unset(table string, keys ...string) error {
 	return edit(func(data []byte) ([]byte, error) {
 		for _, k := range keys {
 			out := Remove(data, table, k)

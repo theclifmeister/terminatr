@@ -296,7 +296,7 @@ type Config struct {
 	// Prefix is [keys] prefix, or the older [keys] detach that named the
 	// same key; Icons is [ui] icons. "" when unset.
 	Prefix, Icons string
-	// Unknown are the keys under [keys], [ui], [agent_mod] (or [mods]) and [agents.<name>] that tm doesn't know
+	// Unknown are the keys under [keys], [ui], [agent_mod] (or [mods]), [mods.<id>] and [agents.<name>] that tm doesn't know
 	// (e.g. "ui.icon"), sorted. tm doctor reports them; unlike a
 	// project's, they don't fail Load, so a typo there never stops tm.
 	Unknown []string
@@ -320,6 +320,8 @@ type Config struct {
 	// NeedsFirst is [ui] needs_first: the sidebar lists the projects
 	// where something needs you first. Off unless set true.
 	NeedsFirst bool
+	// Mods are the user mods' [mods.<id>] tables by id (mods.go).
+	Mods map[string]Mod
 	// UpdateCheck is [ui] update_check: the server looks once a day for a
 	// newer release and the dashboard says so. On unless set false.
 	UpdateCheck bool
@@ -383,20 +385,24 @@ func Load() (*Config, error) {
 			NeedsFirst  bool   `toml:"needs_first"`
 		} `toml:"ui"`
 		AgentMod rawAgentMod `toml:"agent_mod"`
-		// Mods is the older name of [agent_mod], read as an alias for
-		// each key [agent_mod] doesn't set. [mods.<id>] tables are
-		// reserved for user mods (not read yet).
-		Mods rawAgentMod `toml:"mods"`
+		// Mods are the user mods' [mods.<id>] tables and, under the
+		// keys enabled, band and pane, the older name of [agent_mod],
+		// read for each key [agent_mod] doesn't set.
+		Mods map[string]toml.Primitive `toml:"mods"`
 	}
 	md, err := toml.DecodeFile(path, &raw)
-	am := raw.AgentMod.over(raw.Mods)
 	if errors.Is(err, fs.ErrNotExist) {
 		return &Config{Path: path, AgentModBand: true, ContextHint: DefaultContextHint, UpdateCheck: true}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	c := &Config{Path: path, projects: raw.Projects, defaults: raw.Defaults, agent: raw.DefaultAgent, agents: raw.Agents,
+	old, mods, unknownMods, err := readMods(md, raw.Mods)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	am := raw.AgentMod.over(old)
+	c := &Config{Mods: mods, Path: path, projects: raw.Projects, defaults: raw.Defaults, agent: raw.DefaultAgent, agents: raw.Agents,
 		Prefix: cmp.Or(raw.Keys.Prefix, raw.Keys.Detach), Icons: raw.UI.Icons, AgentMod: am.Enabled != nil && *am.Enabled,
 		AgentModBand: am.Band == nil || *am.Band, AgentModPane: am.Pane != nil && *am.Pane,
 		ContextHint: DefaultContextHint, UpdateCheck: raw.UI.UpdateCheck == nil || *raw.UI.UpdateCheck, NeedsFirst: raw.UI.NeedsFirst}
@@ -406,12 +412,11 @@ func Load() (*Config, error) {
 		}
 		c.ContextHint = *h
 	}
+	c.Unknown = unknownMods
 	for _, k := range md.Undecoded() {
 		switch {
 		case len(k) >= 3 && k[0] == "projects", len(k) >= 2 && k[0] == "defaults":
 			return c, fmt.Errorf("%s: unknown setting %s", path, k.String())
-		case len(k) >= 2 && k[0] == "mods" && md.Type(k[:2]...) == "Hash":
-			// [mods.<id>] is reserved for user mods.
 		case len(k) >= 2 && (k[0] == "keys" || k[0] == "ui" || k[0] == "mods" || k[0] == "agent_mod"),
 			len(k) >= 3 && k[0] == "agents":
 			c.Unknown = append(c.Unknown, k.String())

@@ -47,3 +47,13 @@ func TrashDir() (string, error) { return sub(".trash") }
 
 // AgentsDir is <home>/agents, the user's agent manifests.
 func AgentsDir() (string, error) { return sub("agents") }
+
+// ModsDir is <home>/mods, the installed user mods, one folder per mod id
+// (mods design §8).
+func ModsDir() (string, error) { return sub("mods") }
+
+// ModStateDir is <home>/state/mods, each mod's own data and store.
+func ModStateDir() (string, error) { return sub(filepath.Join("state", "mods")) }
+
+// ModLogsDir is <home>/logs/mods, each mod's <id>.log.
+func ModLogsDir() (string, error) { return sub(filepath.Join("logs", "mods")) }

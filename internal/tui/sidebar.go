@@ -739,9 +739,9 @@ type modColumn struct {
 	title string
 }
 
-// maxModCol bounds a mod column's width, so one mod can't push the
-// labels out of the sidebar.
-const maxModCol = 12
+// maxModCol bounds a mod column's width (view.MaxModColumnWidth, which
+// the manifest check holds mods to as well).
+const maxModCol = view.MaxModColumnWidth
 
 // defaultCols are the grid's columns in the default order.
 var defaultCols = sideCols(nil, nil)
