@@ -16,7 +16,7 @@
 #   make test-claude  the scenarios against the real claude (needs a login; costs cents)
 #   make test-codex   the scenarios against the real codex (needs a ChatGPT login)
 #   make fuzz       run every fuzz target for FUZZTIME each (weekly)
-#   make vet        go vet ./... and staticcheck ./...
+#   make vet        go vet ./... and staticcheck ./... (under go.mod's Go)
 #   make vet-cross  go vet ./... for windows, darwin and freebsd, without cgo (no libghostty)
 #   make toolchain  check Go, Zig, pkg-config and git
 #   make env        print the PKG_CONFIG_PATH export, for gopls or a plain `go build`
@@ -39,6 +39,17 @@ GO           ?= go
 ZIG_MIN      := 0.16.0
 # staticcheck, pinned; `make vet` runs it after go vet.
 STATICCHECK  ?= honnef.co/go/tools/cmd/staticcheck@v0.8.1
+# staticcheck reads export data of the Go it runs under, and the pinned one
+# lags new Go releases (it fails on a newer local Go). So it runs under the
+# toolchain go.mod names. With GOTOOLCHAIN=local (CI) nothing is overridden:
+# CI's Go is already go.mod's. If the toolchain can't be fetched (offline,
+# GOPROXY=off), the recipe says so instead of a bare Go error.
+GO_MOD_VERSION := go$(shell sed -n 's/^go //p' go.mod)
+ifeq ($(GOTOOLCHAIN),local)
+SC_TOOLCHAIN :=
+else
+SC_TOOLCHAIN := GOTOOLCHAIN=$(GO_MOD_VERSION)
+endif
 
 # A linked worktree (a terminatr thread's) has no .build of its own: it
 # uses the main checkout's when that has one, instead of fetching and
@@ -160,7 +171,8 @@ test-codex: $(READY)
 
 vet: $(READY)
 	$(GO) vet ./...
-	$(GO) run $(STATICCHECK) ./...
+	@$(SC_TOOLCHAIN) $(GO) run $(STATICCHECK) ./... || { s=$$?; \
+		echo "staticcheck failed. It runs under $(GO_MOD_VERSION) (go.mod); if the output above says that toolchain could not be downloaded, fetch it once online (GOTOOLCHAIN=$(GO_MOD_VERSION) go version) or run with GOTOOLCHAIN=local on a matching Go." >&2; exit $$s; }
 
 # Type-checks the tree for other OSes in seconds, without cgo: internal/emu
 # is then its stub (emu_nocgo.go). Windows and FreeBSD catch Unix-only and

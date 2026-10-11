@@ -17,6 +17,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/modbus"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/widget"
 )
 
 // Grants a method may need ([permissions] in mod.toml).
@@ -74,8 +75,15 @@ type Settings map[string]Value
 // Role is a theme role (internal/tui theme.go) that colours a span.
 type Role string
 
-// Roles are the theme roles a span may name.
-var Roles = []string{"head", "sel", "faint", "accent", "title", "bad", "warn", "good", "info", "plain"}
+// Roles are the theme roles a span may name (widget.Roles: the mods
+// design §6, Spans).
+var Roles = widget.Roles
+
+// Icon is an icon name, drawn from the console's icon set.
+type Icon string
+
+// Icons are the icon names a span may name (widget.Icons).
+var Icons = widget.Icons
 
 // Level is a toast's or notification's level.
 type Level string
@@ -83,16 +91,27 @@ type Level string
 // Levels are the levels.
 var Levels = []string{"info", "warn", "error"}
 
-// Span is a run of text in one theme role: what a cell, status segment
-// or badge is made of.
+// Span is a run of text in one theme role, or an icon: what a cell,
+// status segment or badge is made of (widget.Span).
 type Span struct {
-	Text string `json:"text"`
+	Text string `json:"text,omitempty"`
 	Role Role   `json:"role,omitempty"`
+	Icon Icon   `json:"icon,omitempty"`
 }
 
 // Widget is a view's widget tree (the widget set: text, list, table, kv,
 // progress, steps, bars, keys), drawn by terminatr.
 type Widget map[string]Value
+
+// ViewOptions are $.ui.view.set's options: the project the tree is for
+// (a project tab's, as view.opened names it; none: every project), the
+// count a project tab shows beside its title, and the lines a dashboard
+// card asks for (at most 20).
+type ViewOptions struct {
+	Project string `json:"project,omitempty"`
+	Count   *int   `json:"count,omitempty"`
+	Height  int    `json:"height,omitempty"`
+}
 
 // Project is one project the mod runs for.
 type Project struct {
@@ -228,8 +247,8 @@ var Methods = []Method{
 		Doc: "Publishes the mod's status-bar segment; null clears it."},
 	{Name: "ui.toast", Params: []Param{{Name: "text", Type: typ[string]()}, {Name: "level", Type: typ[Level](), Optional: true}},
 		Doc: "Shows a short message on the consoles."},
-	{Name: "ui.view.set", Params: []Param{{Name: "view", Type: typ[string]()}, {Name: "widget", Type: typ[*Widget]()}}, Needs: GrantViews,
-		Doc: "Publishes the widget tree of a view the manifest declares; null clears it."},
+	{Name: "ui.view.set", Params: []Param{{Name: "view", Type: typ[string]()}, {Name: "widget", Type: typ[*Widget]()}, {Name: "options", Type: typ[ViewOptions](), Optional: true}}, Needs: GrantViews,
+		Doc: "Publishes the widget tree of a view the manifest declares, for one project (options.project) or all; null clears it."},
 	{Name: "ui.view.open", Params: []Param{{Name: "view", Type: typ[string]()}}, Needs: GrantViews,
 		Doc: "Asks the console to show a view; only after a human input (a key, a click or a command)."},
 	{Name: "ui.notify", Params: []Param{{Name: "notification", Type: typ[Notification]()}}, Needs: GrantNotify,

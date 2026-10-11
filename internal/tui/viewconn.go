@@ -31,6 +31,8 @@ type ViewConn struct {
 
 	callMu sync.Mutex // one call at a time on ctl
 	ctl    *server.Client
+	// serve, when set, answers the calls instead of the server (tests).
+	serve func(method string, p proto.ViewParams) (view.View, error)
 }
 
 // ErrViewDown is returned by calls while the server is away.
@@ -263,6 +265,9 @@ func (vc *ViewConn) waitRejoin(old string, d time.Duration) string {
 func (vc *ViewConn) call(method string, p proto.ViewParams) (view.View, error) {
 	vc.callMu.Lock()
 	defer vc.callMu.Unlock()
+	if vc.serve != nil {
+		return vc.serve(method, p)
+	}
 	if vc.ctl == nil {
 		c, err := server.Connect(vc.paths, false)
 		if err != nil {

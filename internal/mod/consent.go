@@ -41,6 +41,17 @@ func (m *Manifest) Kinds() []string {
 	return out
 }
 
+// ViewWords are the panels m draws, in the consent screen's words: a
+// project-popup tab "Review queue", a dashboard card "Cost".
+func (m *Manifest) ViewWords() []string {
+	var out []string
+	for _, v := range m.Provides.Views {
+		where := map[string]string{SlotProjectTab: "a project-popup tab", SlotDashboardCard: "a dashboard card", SlotFull: "a full view"}[v.Slot]
+		out = append(out, fmt.Sprintf("%s %q", where, Clean(v.Title, false)))
+	}
+	return out
+}
+
 // PermWords is permission perm in the consent screen's words: "reads
 // your projects", "talks to api.linear.app", "runs glab".
 func (p Permissions) PermWords(perm string) string {
@@ -137,6 +148,9 @@ func consent(m *Manifest, fsys fs.FS) string {
 		fmt.Fprintln(&b, Clean(m.Homepage, false))
 	}
 	fmt.Fprintf(&b, "Provides: %s\n", strings.Join(m.Kinds(), " · "))
+	if v := m.ViewWords(); len(v) > 0 {
+		fmt.Fprintf(&b, "Panels it draws (marked mod: %s): %s\n", m.ID, strings.Join(v, " · "))
+	}
 	asked := m.Permissions.Requested()
 	if len(asked) == 0 {
 		fmt.Fprintln(&b, "Permissions: none (safe)")

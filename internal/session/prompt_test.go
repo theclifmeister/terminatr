@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -397,5 +398,40 @@ func TestPromptStallLogged(t *testing.T) {
 	if n != 1 || !strings.Contains(line, "agent working (hooks), last hook event UserPromptSubmit at ") ||
 		!strings.Contains(line, "tm agent explain s-test") {
 		t.Fatalf("%d stall line(s), last %q", n, line)
+	}
+}
+
+// TestScreenClock: output between two readings of the screen is never
+// forgotten, and a prompt waiting to be pasted gets the screen read
+// first. T283: text typed 0.1s after a reading of the empty box was
+// dropped from the next ones for a second, and a nudge queued meanwhile
+// was pasted onto it.
+func TestScreenClock(t *testing.T) {
+	t0 := time.Now()
+	at := func(ms int) time.Time { return t0.Add(time.Duration(ms) * time.Millisecond) }
+	var out atomic.Bool
+	c := screenClock{last: t0}
+	out.Store(true) // the user's text, echoed just after the reading at t0
+	if c.due(at(100), &out, false) {
+		t.Fatal("read again before screenInterval")
+	}
+	if !out.Load() {
+		t.Fatal("the output was taken without a reading: the next ones miss it")
+	}
+	if !c.due(t0.Add(screenInterval), &out, false) || out.Load() {
+		t.Fatal("output kept, yet no reading after screenInterval")
+	}
+	// With a prompt waiting to be pasted, output is read at once.
+	out.Store(true)
+	if !c.due(c.last.Add(sourceTick), &out, true) || out.Load() {
+		t.Fatal("a paste would go by a reading older than the output")
+	}
+	// Without output, a reading per screenIdleEval, paste or not.
+	last := c.last
+	if c.due(last.Add(sourceTick), &out, true) {
+		t.Fatal("read with no output and no screenIdleEval gone by")
+	}
+	if !c.due(last.Add(screenIdleEval), &out, false) {
+		t.Fatal("no reading after screenIdleEval")
 	}
 }

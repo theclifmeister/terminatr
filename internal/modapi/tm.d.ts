@@ -61,8 +61,8 @@ export interface TM {
     /** Shows a short message on the consoles. */
     toast(text: string, level?: TM.Level): Promise<void>;
     view: {
-      /** Publishes the widget tree of a view the manifest declares; null clears it. Needs the views grant. */
-      set(view: string, widget: TM.Widget | null): Promise<void>;
+      /** Publishes the widget tree of a view the manifest declares, for one project (options.project) or all; null clears it. Needs the views grant. */
+      set(view: string, widget: TM.Widget | null, options?: TM.ViewOptions): Promise<void>;
       /** Asks the console to show a view; only after a human input (a key, a click or a command). Needs the views grant. */
       open(view: string): Promise<void>;
     };
@@ -152,6 +152,13 @@ export declare namespace TM {
     ok: boolean;
   }
 
+  interface CellTarget {
+    project?: string;
+    task?: string;
+    thread?: string;
+    session?: string;
+  }
+
   interface Clock {
     now: string;
   }
@@ -174,6 +181,8 @@ export declare namespace TM {
     body: string;
   }
 
+  type Icon = "working" | "blocked" | "idle" | "starting" | "running" | "review" | "done" | "other" | "ci.pass" | "ci.fail" | "ci.run" | "todo.done" | "todo.now" | "todo.open" | "hint" | "remote" | "paused" | "inactive" | "folder" | "thread" | "coordinator";
+
   interface InboxItem {
     project: string;
     id: string;
@@ -192,11 +201,19 @@ export declare namespace TM {
     column?: string;
     view?: string;
     widget?: string;
+    row?: string;
     key?: string;
     target?: Target;
   }
 
   type Level = "info" | "warn" | "error";
+
+  interface ModCell {
+    mod: string;
+    column: string;
+    target: CellTarget;
+    spans: Span[];
+  }
 
   interface Notification {
     title: string;
@@ -235,6 +252,7 @@ export declare namespace TM {
     context?: WatchContext;
     questions?: number;
     ticker?: WatchTicker;
+    cells?: ModCell[];
   }
 
   interface Ready {
@@ -257,7 +275,7 @@ export declare namespace TM {
     remember?: string[];
   }
 
-  type Role = "head" | "sel" | "faint" | "accent" | "title" | "bad" | "warn" | "good" | "info" | "plain";
+  type Role = "accent" | "good" | "warn" | "bad" | "info" | "faint" | "head";
 
   interface RunOptions {
     cwd?: string;
@@ -285,8 +303,9 @@ export declare namespace TM {
   type Settings = Record<string, Value>;
 
   interface Span {
-    text: string;
+    text?: string;
     role?: Role;
+    icon?: Icon;
   }
 
   interface Target {
@@ -342,6 +361,12 @@ export declare namespace TM {
     project?: string;
     width: number;
     height: number;
+  }
+
+  interface ViewOptions {
+    project?: string;
+    count?: number;
+    height?: number;
   }
 
   interface WatchContext {

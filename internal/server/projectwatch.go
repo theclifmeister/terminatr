@@ -33,7 +33,9 @@ func (s *Server) projectWatchState(slug string) (proto.ProjectWatch, error) {
 	if err != nil {
 		return proto.ProjectWatch{}, err
 	}
-	return ProjectWatchOf(p, s.list().Sessions, ticker.StatePath(s.opts.Paths.Sessions)), nil
+	w := ProjectWatchOf(p, s.list().Sessions, ticker.StatePath(s.opts.Paths.Sessions))
+	w.Cells = s.projectCells(p.Slug)
+	return w, nil
 }
 
 // ProjectWatchOf is project p's ProjectWatch, with sessions the server's

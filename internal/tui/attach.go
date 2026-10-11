@@ -256,6 +256,9 @@ type pane struct {
 // client is the attached window: its panes and everything they share.
 type client struct {
 	paths server.Paths
+	// cells are the mods' cells and status segments from the last poll
+	// (pollState). Guarded by mu.
+	cells *modCells
 	log   *log.Logger
 	enc   *emu.Encoder
 	vc    *ViewConn
@@ -334,6 +337,7 @@ type client struct {
 	outer       map[int]bool // focus reports and SGR set on the outer terminal
 	outerTrack  int          // the mouse tracking mode set there: 1000, 1002, 1003 or 0
 	bell        bool         // ring the outer terminal's bell with the next frame
+	osc         []byte       // OS notifications of mods to draw with the next frame (modnotice.go)
 	buf         []byte
 
 	// detaching is set before DETACH is written. The server may hang up
@@ -1322,7 +1326,7 @@ func (c *client) status() {
 	if c.flash != "" {
 		where = c.flash // a note in passing
 	}
-	line, hits := statusBar(c.focus.info, c.focus.status, c.paneTitle(), c.pending, c.cols, where)
+	line, hits := statusBar(c.focus.info, c.focus.status, c.paneTitle(), c.pending, c.cols, where, c.cells)
 	if c.single {
 		c.focus.r.SetStatus(line)
 	}
@@ -1651,6 +1655,8 @@ func (c *client) renderLoop(out io.Writer) Result {
 				b = append(b, '\a')
 				c.bell = false
 			}
+			b = append(b, c.osc...)
+			c.osc = nil
 			b = append(b, c.clip...)
 			c.clip = nil
 		}
@@ -1781,6 +1787,7 @@ func (c *client) pollState(ctx context.Context) {
 	}()
 	var alerts uint64
 	first := true
+	noticed := map[string]bool{}
 	tick := time.NewTicker(statePoll)
 	defer tick.Stop()
 	for {
@@ -1795,9 +1802,11 @@ func (c *client) pollState(ctx context.Context) {
 			}
 		}
 		ring := false
+		var osc []byte
 		if ctl != nil {
 			ring = !first && res.Alerts > alerts
 			alerts, first = res.Alerts, false
+			osc = claimNotices(ctl, res.ModNotices, noticed)
 		}
 		var projects []ProjectData
 		ctxHint, needsFirst := config.DefaultContextHint, false
@@ -1823,8 +1832,10 @@ func (c *client) pollState(ctx context.Context) {
 					}
 				}
 			}
+			c.cells = newModCells(res.Mods, res.Sessions)
 			c.status()
 			c.bell = c.bell || ring
+			c.osc = append(c.osc, osc...)
 			c.mu.Unlock()
 			c.poke()
 		}
