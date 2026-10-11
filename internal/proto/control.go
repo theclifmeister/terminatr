@@ -642,12 +642,15 @@ type NoticeResult struct {
 }
 
 // MethodModHosts lists the supervised code mods' hosts and where each
-// stands (mods design §8), for the Mods tab.
+// stands (mods design §8), for the Mods tab, tm doctor and tm mod dev.
 const MethodModHosts = "mod.hosts"
 
-// ModHostsResult is the answer of mod.hosts, by id.
+// ModHostsResult is the answer of mod.hosts, by id. NoMods: the server
+// runs in safe mode (tm --no-mods, TERMINATR_NO_MODS=1): no user mod
+// runs.
 type ModHostsResult struct {
-	Hosts []ModHost `json:"hosts"`
+	NoMods bool      `json:"no_mods,omitempty"`
+	Hosts  []ModHost `json:"hosts"`
 }
 
 // ModHost is one code mod's host: State is idle, starting, running,
@@ -665,8 +668,11 @@ type ModHost struct {
 	Err      string    `json:"err,omitempty"`
 }
 
-// MethodModRestart starts a code mod's host again now (the Mods tab's
-// r): a failed mod gets a fresh count, an idle one starts. The human's.
+// MethodModRestart reads the installed mods and config.toml again, then
+// starts a code mod's host again now (the Mods tab's r, tm mod dev after
+// each save): a failed mod gets a fresh count, an idle one starts, a mod
+// just enabled runs. It answers as mod.hosts. The human's; refused in
+// safe mode.
 const MethodModRestart = "mod.restart"
 
 // ModRestartParams are the params of mod.restart.

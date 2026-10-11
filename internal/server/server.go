@@ -24,6 +24,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/keychain"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modnotify"
 	"github.com/theclifmeister/terminatr/internal/modsup"
 	"github.com/theclifmeister/terminatr/internal/modview"
@@ -149,6 +150,8 @@ type Server struct {
 	// modSup runs the code mods' hosts (modhosts.go); set before Run
 	// serves, nil in a test's bare Server.
 	modSup atomic.Pointer[modsup.Supervisor]
+	// noMods is safe mode (mod.EnvNoMods): no user mod runs.
+	noMods bool
 	// modBr is the user mods' broker (modbroker.go).
 	modBr modBroker
 	// modViews are the views user mods draw (modviews.go).
@@ -241,6 +244,7 @@ func Run(ctx context.Context, opts Options) error {
 		log:      logger,
 		build:    version.BuildID(),
 		started:  time.Now(),
+		noMods:   mod.NoMods(os.Getenv),
 		stopReq:  make(chan struct{}),
 		sessions: map[string]*session.Session{},
 		records:  map[string]SessionRecord{},

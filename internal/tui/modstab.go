@@ -149,6 +149,13 @@ func (mt *modsTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
 	if m.data.ModsErr != "" {
 		return []string{th().Bad.Render("The mods can't be listed: " + oneLine(m.data.ModsErr))}, -1, nil
 	}
+	if m.data.NoMods {
+		out = append(out, faintLines("Safe mode (tm --no-mods): no user mod runs. tm server restart runs them again.", w)...)
+		out = append(out, "")
+		for len(hits) < len(out) {
+			hits = append(hits, noHit)
+		}
+	}
 	mods := m.data.Mods
 	if len(mods) == 0 {
 		out = append(out, faintLines("No mods installed. tm mod install <path | git-url[@tag]> installs one; it starts off, until you turn it on here.", w)...)

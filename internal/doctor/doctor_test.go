@@ -608,13 +608,18 @@ func TestMods(t *testing.T) {
 	}
 	os.WriteFile(filepath.Join(d.Paths.Home, "config.toml"), []byte("[mods.greedy]\nenabled = true\n[mods.gone]\nenabled = true\n"), 0o600)
 	var got []string
-	for _, c := range Mods(d) {
+	live := Live{Mods: &proto.ModHostsResult{NoMods: true, Hosts: []proto.ModHost{
+		{ID: "greedy", State: "failed", Err: "crashed 3 times in 5m0s\nmore"}, {ID: "ok", State: "running"}, {ID: "shaky", State: "backoff", Err: "exit 1"}}}}
+	for _, c := range Mods(d, live) {
 		if c.Status != Warn {
 			t.Fatalf("%+v", c)
 		}
 		got = append(got, c.Name+": "+c.Detail)
 	}
-	want := []string{"broken: doesn't load: has no name", "future: future needs mod API 9.0; this tm has 1.0: run tm update",
+	want := []string{"safe mode: the server runs no user mods (tm --no-mods); tm server restart runs them again",
+		"greedy: failed: crashed 3 times in 5m0s; its areas are blank (tm mod logs greedy, then tm mod disable greedy or fix it)",
+		"shaky: crashed: exit 1; restarting (tm mod logs shaky)",
+		"broken: doesn't load: has no name", "future: future needs mod API 9.0; this tm has 1.0: run tm update",
 		"greedy: asks for inbox, not granted: it runs without", "config.toml: [mods.gone] names no installed mod, ignored"}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("got\n%s", strings.Join(got, "\n"))
