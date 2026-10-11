@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modbus"
 	"github.com/theclifmeister/terminatr/internal/modhost"
 	"github.com/theclifmeister/terminatr/internal/modproto"
+	"github.com/theclifmeister/terminatr/internal/widget"
 )
 
 var update = flag.Bool("update", false, "rewrite tm.d.ts from the schema")
@@ -360,5 +362,22 @@ func TestAutoLabellerExample(t *testing.T) {
 	}
 	if m := b.call(); m.Method != "inbox.raise" || !strings.Contains(string(m.Params), `"subject":"T1"`) {
 		t.Fatalf("call %s %s", m.Method, m.Params)
+	}
+}
+
+// TestSpanIsWidgetSpan: the spans a mod publishes are the widget set's
+// (tsSame draws widget.Span as Span), field for field.
+func TestSpanIsWidgetSpan(t *testing.T) {
+	a, b := reflect.TypeFor[Span](), reflect.TypeFor[widget.Span]()
+	if a.NumField() != b.NumField() {
+		t.Fatalf("%d fields, widget.Span %d", a.NumField(), b.NumField())
+	}
+	for i := range a.NumField() {
+		if fa, fb := a.Field(i), b.Field(i); fa.Name != fb.Name || fa.Tag != fb.Tag {
+			t.Errorf("field %d: %s %s, widget.Span's %s %s", i, fa.Name, fa.Tag, fb.Name, fb.Tag)
+		}
+	}
+	if !slices.Equal(Roles, widget.Roles) || !slices.Equal(Icons, widget.Icons) {
+		t.Error("roles or icons differ")
 	}
 }
