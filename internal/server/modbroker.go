@@ -148,7 +148,9 @@ func (s *Server) modNamed(id string) (mod.Mod, bool) {
 	return mb.reg.Get(id)
 }
 
-// modLog appends line to mod id's log, ~/.terminatr/logs/mods/<id>.log.
+// modLog appends line to mod id's log, ~/.terminatr/logs/mods/<id>.log,
+// as one write in append mode beside the supervisor's lines; the
+// supervisor rotates the file (modsup.LogMax).
 func (s *Server) modLog(id, line string) {
 	dir, err := home.ModLogsDir()
 	if err != nil || mod.CheckID(id) != nil {
@@ -166,7 +168,7 @@ func (s *Server) modLog(id, line string) {
 		return
 	}
 	defer f.Close()
-	fmt.Fprintf(f, "%s %s\n", time.Now().UTC().Format(time.RFC3339), line)
+	fmt.Fprintf(f, "%s %s\n", time.Now().Format("2006-01-02T15:04:05.000Z07:00"), line)
 }
 
 // modProject reads the project params of a call, the project's slug as

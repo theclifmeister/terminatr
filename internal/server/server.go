@@ -24,6 +24,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/keychain"
+	"github.com/theclifmeister/terminatr/internal/modsup"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/plat/shell"
@@ -143,6 +144,9 @@ type Server struct {
 	watch watchers
 	// modEv is the user mods' event bus (modevents.go).
 	modEv *modEvents
+	// modSup runs the code mods' hosts (modhosts.go); set before Run
+	// serves, nil in a test's bare Server.
+	modSup atomic.Pointer[modsup.Supervisor]
 	// modBr is the user mods' broker (modbroker.go).
 	modBr modBroker
 	// versions caches agent versions for the mod guard (mods.go).
@@ -293,6 +297,16 @@ func Run(ctx context.Context, opts Options) error {
 	ectx, stopEvents := context.WithCancel(context.Background())
 	defer stopEvents()
 	go s.runModEvents(ectx)
+	hostsDone := make(chan struct{})
+	if sup := s.newModHosts(); sup != nil {
+		s.modSup.Store(sup)
+		go func() {
+			defer close(hostsDone)
+			s.runModHosts(ectx, sup)
+		}()
+	} else {
+		close(hostsDone)
+	}
 
 	select {
 	case <-ctx.Done():
@@ -301,6 +315,9 @@ func Run(ctx context.Context, opts Options) error {
 		logger.Printf("stopping: requested by a client")
 	}
 	s.modelsStop()
+	// The mod hosts go first: nothing waits on them.
+	stopEvents()
+	<-hostsDone
 	// Let a sweep in progress finish while the socket still answers.
 	stopTicker()
 	select {

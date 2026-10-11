@@ -237,7 +237,7 @@ func (e *Env) modList(outdated, asJSON bool) error {
 				*s = "-"
 			}
 		}
-		last := modStatus(m)
+		last := m.Status()
 		if outdated {
 			last = "→ " + row.Latest
 		}
@@ -258,27 +258,6 @@ func modGlyph(m mod.Mod) string {
 		return "●"
 	}
 	return "○"
-}
-
-// modStatus is the last column of tm mod list: what m runs with, or why
-// it doesn't run.
-func modStatus(m mod.Mod) string {
-	var s string
-	switch m.State {
-	case mod.Invalid, mod.Incompatible:
-		return string(m.State) + ": " + m.Reason()
-	case mod.Disabled:
-		s = "off"
-	default:
-		s = strings.Join(m.Manifest.Permissions.Words(m.Grants), " · ")
-		if len(m.WantsMore) > 0 {
-			s += " · wants more: " + strings.Join(m.Manifest.Permissions.Words(m.WantsMore), " · ")
-		}
-	}
-	if len(m.Projects) > 0 {
-		s += " · only " + strings.Join(m.Projects, ", ")
-	}
-	return s
 }
 
 // validRow is a folder in tm mod validate --json.
@@ -412,7 +391,7 @@ func (e *Env) modEnable(id, slug string, yes bool) error {
 		return err
 	}
 	if m, ok = r.Get(id); ok {
-		fmt.Fprintf(e.Stdout, "%s enabled: %s\n", id, modStatus(m))
+		fmt.Fprintf(e.Stdout, "%s enabled: %s\n", id, m.Status())
 	}
 	return nil
 }
