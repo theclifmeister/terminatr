@@ -204,7 +204,8 @@ func statusRight() string {
 // percent, a bar, the step) and the rest worth a glance (why it is
 // blocked, queued prompts, remote control, a model on next start), then
 // where: what the keyboard does away from the pane (the sidebar's
-// preview note, the info panel's keys) or a note in passing. Right, the
+// preview note, the info panel's keys) or a note in passing; then, when
+// room is left, the mods' status segments ($.ui.status.set). Right, the
 // global keys: prefix+? help · prefix+d dashboard · ≡ menu. After the
 // prefix it lists the commands instead, and "prefix again sends it".
 //
@@ -214,7 +215,7 @@ func statusRight() string {
 // which is configurable: only the help and the settings do. It returns
 // the line, cols cells wide, and its buttons, by column: after the
 // prefix each command; else ?, d and the ≡ menu.
-func statusBar(s proto.SessionInfo, ts *thread.Status, title string, pending bool, cols int, where string) (string, []hint) {
+func statusBar(s proto.SessionInfo, ts *thread.Status, title string, pending bool, cols int, where string, mods *modCells) (string, []hint) {
 	if pending {
 		right := "prefix again sends it "
 		w := cols - ansi.StringWidth(right) - 1
@@ -335,6 +336,11 @@ func statusBar(s proto.SessionInfo, ts *thread.Status, title string, pending boo
 	w := cols - rw
 	if w < 1 {
 		return fit(left, cols), nil
+	}
+	// The mods' segments (statusMods) show where there is room left,
+	// after everything else; they give way first.
+	if seg, sw := statusMods(mods); sw > 0 && ansi.StringWidth(left)+2+sw <= w-2 {
+		left += "  " + seg
 	}
 	hs := []hint{{w, w + 13, "?"}, {w + 16, w + 34, "d"}, {w + 37, w + 43, "menu"}}
 	return fit(left, w) + reset + right, hs

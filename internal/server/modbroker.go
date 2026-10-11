@@ -307,6 +307,8 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 	b.Handle("inbox.raise", mod.PermInbox, s.modRaise)
 	b.Handle("ui.view.set", mod.PermViews, s.modViewSet)
 	b.Handle("ui.view.open", mod.PermViews, s.modViewOpen)
+	b.Handle("ui.cell.set", "", s.modCellSet)
+	b.Handle("ui.status.set", "", s.modStatusSet)
 	b.Handle("ui.notify", mod.PermNotify, s.modNotify)
 	b.Handle("annotate", mod.PermProjectRead, s.modAnnotate)
 }

@@ -26,7 +26,7 @@ import (
 
 // statusLine is statusBar's line, without its buttons.
 func statusLine(s proto.SessionInfo, ts *thread.Status, pending bool, cols int, where string) string {
-	line, _ := statusBar(s, ts, "", pending, cols, where)
+	line, _ := statusBar(s, ts, "", pending, cols, where, nil)
 	return line
 }
 
@@ -467,7 +467,7 @@ func hasBell(cmd tea.Cmd) bool {
 func TestStatusLine(t *testing.T) {
 	info := proto.SessionInfo{ID: "s-4", Role: proto.RoleThread, Project: "terminatr", Agent: "claude", Thread: "t-0216", Task: "T232",
 		State: "working", TodosDone: 2, TodosTotal: 5, Current: "Write §8"}
-	line, _ := statusBar(info, nil, "Sidebar rework", false, 140, previewNote)
+	line, _ := statusBar(info, nil, "Sidebar rework", false, 140, previewNote, nil)
 	got := ansi.Strip(line)
 	want := " " + ic().working + " terminatr › T232 Sidebar rework  40% " + bar(40) + " 2/5 ▸ Write §8 · " + previewNote
 	if !strings.HasPrefix(got, want) || !strings.HasSuffix(got, " prefix+? help · prefix+d dashboard · ≡ menu ") {
@@ -485,18 +485,18 @@ func TestStatusLine(t *testing.T) {
 		105: "40% " + bar(40) + " · preview",
 		95:  "40% · preview",
 	} {
-		line, _ := statusBar(info, nil, "Sidebar rework", false, cols, previewNote)
+		line, _ := statusBar(info, nil, "Sidebar rework", false, cols, previewNote, nil)
 		if got := ansi.Strip(line); !strings.Contains(got, "T232 Sidebar rework  "+tail+" ") {
 			t.Errorf("%d columns: %q, want …%q", cols, got, tail)
 		}
 	}
-	line, _ = statusBar(info, nil, "Sidebar rework", false, 85, previewNote)
+	line, _ = statusBar(info, nil, "Sidebar rework", false, 85, previewNote, nil)
 	if got := ansi.Strip(line); !strings.Contains(got, " terminatr › T232 Sid…  40% · preview ") {
 		t.Errorf("85 columns: %q", got)
 	}
 	// A long note in passing is cut before the path is.
 	coord := proto.SessionInfo{ID: "s-1", Role: proto.RoleCoordinator, Project: "alpha", Agent: "claude", State: "idle"}
-	line, _ = statusBar(coord, nil, "", false, 120, "remote control off for alpha; it stays off until the coordinator is started anew")
+	line, _ = statusBar(coord, nil, "", false, 120, "remote control off for alpha; it stays off until the coordinator is started anew", nil)
 	if got := ansi.Strip(line); !strings.Contains(got, " alpha › coordinator  remote control off") || ansi.StringWidth(line) != 120 {
 		t.Errorf("long note: %q", got)
 	}

@@ -22,6 +22,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
 	"github.com/theclifmeister/terminatr/internal/view"
+	"github.com/theclifmeister/terminatr/internal/widget"
 )
 
 // The projects sidebar (docs/SPEC.md §4): a column on the left of every
@@ -110,6 +111,10 @@ type treeRow struct {
 	cursor bool
 	// cols are the grid's columns (sideCols); nil for the default ones.
 	cols []sideCol
+	// task is a thread's task ("T12"); cells are the mods' cells this
+	// console knows (modCells), for the grid's mod columns.
+	task  string
+	cells *modCells
 }
 
 // folded says a project row hides its coordinator and threads, or the
@@ -189,6 +194,9 @@ type treeIn struct {
 	// mod columns this console knows, by id (sideCols).
 	cols []string
 	mods map[string]modColumn
+	// cells are the mods' cells; with them the grid gets their sidebar
+	// columns (modCells.sideOrder) unless mods is set.
+	cells *modCells
 }
 
 // buildTree lays out the tree: the active projects, pinned ones first,
@@ -240,9 +248,13 @@ func buildTree(ps []ProjectData, sessions []proto.SessionInfo, in treeIn) []tree
 	if here >= 0 {
 		out[here].here = true
 	}
-	cols := sideCols(in.cols, in.mods)
+	order, mods := in.cols, in.mods
+	if mods == nil && in.cells != nil {
+		order, mods = in.cells.sideOrder(order), in.cells.sideMods()
+	}
+	cols := sideCols(order, mods)
 	for i := range out {
-		out[i].cols = cols
+		out[i].cols, out[i].cells = cols, in.cells
 	}
 	return out
 }
@@ -275,7 +287,7 @@ func projectRows(p ProjectData, sessions []proto.SessionInfo, byID map[string]pr
 		tr := treeRow{kind: treeThread, slug: p.Slug, thread: t.ID, name: threadName(t.Task, t.ID), title: oneLine(t.Title), pct: -1}
 		tr.state, _, tr.session = threadState(t, byID)
 		tr.pct = t.Status.Progress().Percent
-		tr.ci, tr.pr = t.Checks, t.PR
+		tr.ci, tr.pr, tr.task = t.Checks, t.PR, t.Task
 		tr.hint = tr.state == "blocked" || tr.state == "review" || t.Status != nil && t.Status.NeedsYou != ""
 		pr.hint = pr.hint || tr.hint
 		kids = append(kids, tr)
@@ -640,9 +652,43 @@ func fitLabel(s string, w int) string {
 func treeGrid(r treeRow, cols []sideCol) []cellRun {
 	out := make([]cellRun, 0, len(cols))
 	for _, c := range cols {
+		if c.mod != nil {
+			out = append(out, modRun(r.modCell(c.id), c.w))
+			continue
+		}
 		out = append(out, gridCell(r, c))
 	}
 	return out
+}
+
+// modCell is r's cell in mod column col: a project's, a coordinator's
+// session's, or a thread's (its own, else its task's, else its
+// session's), when the column shows on rows of r's kind; nil for none.
+func (r treeRow) modCell(col string) []widget.Span {
+	p := r.slug
+	switch r.kind {
+	case treeProject:
+		if r.cells.shows(col, proto.SlotSidebarProject) {
+			return r.cells.cell(col, proto.CellTarget{Project: p})
+		}
+	case treeCoordinator:
+		if r.session != "" && r.cells.shows(col, proto.SlotSidebarCoordinator) {
+			return r.cells.cell(col, proto.CellTarget{Session: r.session})
+		}
+	case treeThread:
+		if !r.cells.shows(col, proto.SlotSidebarThread) {
+			return nil
+		}
+		ts := []proto.CellTarget{{Project: p, Thread: r.thread}}
+		if r.task != "" {
+			ts = append(ts, proto.CellTarget{Project: p, Task: r.task})
+		}
+		if r.session != "" {
+			ts = append(ts, proto.CellTarget{Session: r.session})
+		}
+		return r.cells.cell(col, ts...)
+	}
+	return nil
 }
 
 // gridCell is r's cell in column c: a built-in column's (treeCells), a
@@ -836,8 +882,12 @@ func slimCells(r treeRow, cw int, sel lipgloss.Style) string {
 // cellRun is a run of cells of a tree row in one style.
 type cellRun struct {
 	s  string
-	st lipgloss.Style
+	st runStyle
 }
+
+// runStyle draws a run: a theme style, or a mod cell's spans
+// (spanStyle).
+type runStyle interface{ Render(strs ...string) string }
 
 // cutRuns cuts rs to at most w cells; a cut run ends in a blank, so a
 // Nerd Font icon never draws over what follows.
@@ -1050,7 +1100,7 @@ func (c *client) sideTree() []treeRow {
 		focus = c.focus.info.ID
 	}
 	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), focus: focus, ctxHint: c.side.ctxHint,
-		tree: sideTree(c.side.projects, c.v.Tree), cols: c.v.Columns})
+		tree: sideTree(c.side.projects, c.v.Tree), cols: c.v.Columns, cells: c.cells})
 	rows = sideRows(rows, c.side.needsFirst)
 	if c.kb == areaSide {
 		markCursor(rows, c.sideW, c.v.SideSel)
@@ -1061,7 +1111,7 @@ func (c *client) sideTree() []treeRow {
 // sideFullTree is the attach view's whole tree, nothing folded and no
 // filter (w W). c.mu held.
 func (c *client) sideFullTree() []treeRow {
-	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), ctxHint: c.side.ctxHint, tree: unfoldedTree(c.side.projects), cols: c.v.Columns})
+	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), ctxHint: c.side.ctxHint, tree: unfoldedTree(c.side.projects), cols: c.v.Columns, cells: c.cells})
 	if c.side.needsFirst {
 		rows = needsFirstOrder(rows)
 	}

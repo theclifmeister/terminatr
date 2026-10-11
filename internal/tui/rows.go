@@ -14,6 +14,8 @@ import (
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/view"
+	"github.com/theclifmeister/terminatr/internal/widget"
 )
 
 // Rows: what the dashboard list shows, as data. Layout and styling
@@ -54,6 +56,27 @@ type row struct {
 	// card: the row is a mod's dashboard card's header (modviews.go),
 	// its key the card's.
 	card bool
+	// mods are the mods' cells in their dashboard columns, after the
+	// state (rowMods).
+	mods []rowCell
+}
+
+// rowCell is a mod's cell on a dashboard row: its spans, as wide as
+// its column.
+type rowCell struct {
+	spans []widget.Span
+	w     int
+}
+
+// rowMods are a row's cells in the mod columns shown in slot, the first
+// of targets that has one in each; blank cells keep the columns lined
+// up down the rows of the slot.
+func rowMods(mc *modCells, slot string, targets ...proto.CellTarget) []rowCell {
+	var out []rowCell
+	for _, c := range mc.in(slot) {
+		out = append(out, rowCell{mc.cell(c.ID, targets...), min(c.Width, view.MaxModColumnWidth)})
+	}
+	return out
 }
 
 func (r row) selectable() bool { return r.key != "" }
@@ -67,6 +90,9 @@ func (r row) widths(w int) (who, what, state int) {
 		who = cmp.Or(r.whoW, colWho)
 	}
 	room := w - len([]rune(r.mark)) - state - colGap
+	for _, c := range r.mods {
+		room -= c.w + colGap
+	}
 	if who > 0 {
 		room -= who + colGap
 	}
@@ -89,7 +115,11 @@ func (r row) text(w int) string {
 }
 
 // line lays the row out for w cells; paint styles each column (0 mark, 1
-// who, 2 what, 3 state, 4 lead, 5 bar, 6 rest).
+// who, 2 what, 3 state, 4 lead, 5 bar, 6 rest, 7 a mod cell, given
+// plain: styled draws its spans).
+//
+// The mod cells follow the state, each as wide as its column; the rest
+// gives way to them.
 func (r row) line(w int, withBar bool, paint func(col int, s string) string) string {
 	who, what, state := r.widths(w)
 	gap := strings.Repeat(" ", colGap)
@@ -98,6 +128,10 @@ func (r row) line(w int, withBar bool, paint func(col int, s string) string) str
 		out += paint(1, fit(r.who, who)) + gap
 	}
 	out += paint(2, fit(r.what, what)) + gap + paint(3, fit(stateText(r.state), state)) + gap
+	for _, c := range r.mods {
+		plain, _ := spansCell(c.spans, c.w)
+		out += paint(7, plain) + gap
+	}
 	var rest []string
 	if r.lead != "" {
 		rest = append(rest, paint(4, r.lead))
@@ -126,8 +160,13 @@ func (r row) styled(w int) string {
 		return th().Faint.Render(fit(r.note, w))
 	}
 	_, st := stateLook(r.state)
+	mod := 0
 	line := r.line(w, r.hasBar(w), func(col int, s string) string {
 		switch col {
+		case 7:
+			_, styled := spansCell(r.mods[mod].spans, r.mods[mod].w)
+			mod++
+			return styled
 		case 0:
 			return markStyle(r.mark).Render(s)
 		case 1:
@@ -253,6 +292,7 @@ func buildRows(d Data, project string) []row {
 		for _, t := range p.NeedsYou {
 			r := row{key: fmt.Sprintf("nt:%s:%d", p.Slug, t.ID), project: p.Slug, task: t,
 				mark: markNeeds, who: p.Slug, what: t.Ref() + " " + oneLine(t.Title), state: string(t.Status), rest: t.Thread, pct: -1}
+			r.mods = rowMods(d.Cells, proto.SlotDashboardTask, proto.CellTarget{Project: p.Slug, Task: t.Ref()})
 			if len(t.Steps) > 0 {
 				r.pct = pctOf(t.StepsDone(), len(t.Steps))
 				r.rest = joinSp(fmt.Sprintf("%d/%d", t.StepsDone(), len(t.Steps)), t.Thread)
@@ -336,6 +376,14 @@ func buildRows(d Data, project string) []row {
 				rest = joinSp(rest, t.ID)
 			}
 			tr.what, tr.rest = threadName(t.Task, t.ID)+" "+oneLine(t.Title), rest
+			targets := []proto.CellTarget{{Project: p.Slug, Thread: t.ID}}
+			if t.Task != "" {
+				targets = append(targets, proto.CellTarget{Project: p.Slug, Task: t.Task})
+			}
+			if tr.session != "" {
+				targets = append(targets, proto.CellTarget{Session: tr.session})
+			}
+			tr.mods = rowMods(d.Cells, proto.SlotDashboardThread, targets...)
 			projs = append(projs, tr)
 		}
 		sort.SliceStable(members, func(i, j int) bool { return members[i].Thread < members[j].Thread })
