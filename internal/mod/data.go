@@ -348,6 +348,9 @@ type Template struct {
 	Mod, Name    string
 	Title, Notes string
 	Steps        []string
+	// Builtin: a built-in mod's (default-templates); a user mod's
+	// template of the same name comes first.
+	Builtin bool
 }
 
 // MaxTemplateSteps caps a template's steps.
@@ -449,14 +452,14 @@ func (m Mod) templates() (out []Template, errs []error) {
 			errs = append(errs, fmt.Errorf("%s: %w", m.ID, err))
 			continue
 		}
-		t.Mod = m.ID
+		t.Mod, t.Builtin = m.ID, m.Builtin
 		out = append(out, t)
 	}
 	return out, errs
 }
 
 // FindTemplate picks the template ref names from ts: <mod>:<name>, or a
-// name only one mod has.
+// name only one mod has (a built-in one giving way to a user mod's).
 func FindTemplate(ts []Template, ref string) (Template, error) {
 	modID, name, scoped := strings.Cut(ref, ":")
 	if !scoped {
@@ -467,6 +470,9 @@ func FindTemplate(ts []Template, ref string) (Template, error) {
 		if t.Name == name && (modID == "" || t.Mod == modID) {
 			hits = append(hits, t)
 		}
+	}
+	if len(hits) > 1 {
+		hits = slices.DeleteFunc(hits, func(t Template) bool { return t.Builtin })
 	}
 	switch len(hits) {
 	case 1:
@@ -505,4 +511,60 @@ func (r *Registry) AgentDirs() []AgentDir {
 		}
 	}
 	return out
+}
+
+// Load checks
+
+// DataChecks check the data files only the console can read whole: a
+// theme's colours, an icon set's glyphs, a keymap's action ids. The
+// console package (tui) sets them as it loads, so tm doctor and the Mods
+// tab check what the console would refuse; a kind without one is
+// checked as far as this package can (it parses).
+var DataChecks = map[string]func([]byte) error{}
+
+// CheckData loads every data file of the mod as tm would use it and
+// says what doesn't load, each error naming the kind: a theme, icon
+// set, keymap or layout that doesn't parse or check, a rules file that
+// can't be read, a template that doesn't parse. Nil when all load (and
+// for a mod whose manifest doesn't).
+func (m Mod) CheckData() []error {
+	if m.Manifest == nil {
+		return nil
+	}
+	var errs []error
+	for _, kind := range []string{KindTheme, KindIcons, KindKeymap, KindLayout} {
+		if !m.Has(kind) {
+			continue
+		}
+		data, err := m.Data(kind)
+		if err == nil {
+			switch kind {
+			case KindLayout:
+				_, err = ParseLayout(data)
+			case KindKeymap:
+				_, err = ParseKeymap(data)
+			}
+		}
+		if check := DataChecks[kind]; err == nil && check != nil {
+			err = check(data)
+		}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", kind, err))
+		}
+	}
+	for _, role := range sortedKeys(m.Manifest.Provides.Rules) {
+		if _, err := m.ReadFile(m.Manifest.Provides.Rules[role]); err != nil {
+			errs = append(errs, fmt.Errorf("rules %s: %w", role, err))
+		}
+	}
+	if m.Has(KindTemplates) {
+		ts, terrs := m.templates()
+		for _, err := range terrs {
+			errs = append(errs, fmt.Errorf("templates: %w", err))
+		}
+		if len(ts) == 0 && len(terrs) == 0 {
+			errs = append(errs, fmt.Errorf("templates: %s has no <name>.md", m.Manifest.Provides.Templates))
+		}
+	}
+	return errs
 }

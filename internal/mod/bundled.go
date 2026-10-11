@@ -64,8 +64,12 @@ var replaceHow = map[string]string{
 type ErrRequired struct{ ID string }
 
 func (e ErrRequired) Error() string {
-	return fmt.Sprintf("%s is built in and tm's default: it can't be turned off; %s", e.ID, replaceHow[e.ID])
+	return fmt.Sprintf("%s is built in and tm's default: it can't be turned off; %s", e.ID, e.Replace())
 }
+
+// Replace says what replaces the mod: "pick another theme in General
+// settings".
+func (e ErrRequired) Replace() string { return replaceHow[e.ID] }
 
 // BundledIDs are the bundled mods' ids, sorted. No installed mod may
 // take one.
@@ -145,9 +149,10 @@ func BundledPolicyText(role string) (string, bool) {
 	return string(b), err == nil
 }
 
-// withBundled adds the bundled mods to r, with their tables in tables.
-// An installed folder named as one is shadowed: it doesn't load, and
-// Shadowed says so.
+// withBundled adds the bundled mods to r, with their tables in tables,
+// after the installed ones (which tm mod list and the Mods tab show
+// first). An installed folder named as one is shadowed: it doesn't
+// load, and Shadowed says so.
 func (r *Registry) withBundled(tables map[string]config.Mod) {
 	for _, id := range BundledIDs() {
 		if i := slices.IndexFunc(r.Mods, func(m Mod) bool { return m.ID == id }); i >= 0 {
@@ -155,7 +160,8 @@ func (r *Registry) withBundled(tables map[string]config.Mod) {
 			r.Mods = slices.Delete(r.Mods, i, i+1)
 		}
 		r.Orphans = slices.DeleteFunc(r.Orphans, func(o string) bool { return o == id })
+	}
+	for _, id := range BundledIDs() {
 		r.Mods = append(r.Mods, Bundled(id, tables[id]))
 	}
-	slices.SortFunc(r.Mods, func(a, b Mod) int { return strings.Compare(a.ID, b.ID) })
 }

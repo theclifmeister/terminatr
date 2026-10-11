@@ -67,8 +67,11 @@ type Data struct {
 	// enabled code mods' hosts as the mod supervisor has them (mods
 	// design §8: idle, starting, running, backoff, failed), by id; nil
 	// when the server doesn't say (mod.hosts).
-	Mods     []mod.Mod
-	ModsErr  string
+	Mods    []mod.Mod
+	ModsErr string
+	// ModData says, by mod id, which of the mod's data files don't load
+	// (mod.CheckData), one per line.
+	ModData  map[string]string
 	ModHosts map[string]proto.ModHost
 }
 
@@ -308,7 +311,7 @@ func (s *ServerSource) Load() Data {
 	if reg, err := mod.Load(cfg); err != nil {
 		d.ModsErr = err.Error()
 	} else {
-		d.Mods = reg.Mods
+		d.Mods, d.ModData = reg.Mods, modData(reg.Mods)
 	}
 	if d.ServerOK {
 		var hosts proto.ModHostsResult
@@ -897,4 +900,27 @@ func coordinatorAgent(cfg *config.Config, flag string, safety config.Safety) (na
 		}
 	}
 	return name, model, nil
+}
+
+// modData are the mods' data files that don't load, by mod id
+// (Data.ModData): of the mods that load, not the built-in ones, which
+// tests check.
+func modData(mods []mod.Mod) map[string]string {
+	var out map[string]string
+	for _, md := range mods {
+		if md.Builtin || md.State != mod.Enabled && md.State != mod.Disabled {
+			continue
+		}
+		if errs := md.CheckData(); len(errs) > 0 {
+			lines := make([]string, len(errs))
+			for i, e := range errs {
+				lines[i] = oneLine(e.Error())
+			}
+			if out == nil {
+				out = map[string]string{}
+			}
+			out[md.ID] = strings.Join(lines, "\n")
+		}
+	}
+	return out
 }

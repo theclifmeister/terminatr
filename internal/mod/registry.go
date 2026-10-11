@@ -77,7 +77,8 @@ func (m Mod) Runs(slug string) bool {
 // Granted reports whether the mod runs with permission perm.
 func (m Mod) Granted(perm string) bool { return slices.Contains(m.Grants, perm) }
 
-// Registry is the installed mods, by id, and the [mods.<id>] tables of
+// Registry is the installed mods, by id, then the built-in ones, by id,
+// and the [mods.<id>] tables of
 // mods that aren't installed.
 type Registry struct {
 	Mods []Mod

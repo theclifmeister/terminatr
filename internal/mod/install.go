@@ -81,7 +81,8 @@ func Fetch(src Source) (*Staged, error) {
 }
 
 // Validate checks the mod folder dir as tm mod install would: its
-// manifest, the mod API and what tm would copy in. It returns the
+// manifest, the mod API and what tm would copy in, and its data files
+// load (CheckData; the console's checks when it is linked). It returns the
 // manifest when there is one, even with errors.
 func Validate(dir string) (*Manifest, error) {
 	if err := walkMod(dir, func(string, fs.DirEntry, string) error { return nil }); err != nil {
@@ -91,6 +92,9 @@ func Validate(dir string) (*Manifest, error) {
 	m, err := ReadManifest(dir)
 	if err == nil {
 		err = CheckAPI(m)
+	}
+	if err == nil {
+		err = errors.Join(Mod{ID: m.ID, Dir: dir, Manifest: m}.CheckData()...)
 	}
 	return m, err
 }

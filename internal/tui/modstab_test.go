@@ -361,7 +361,7 @@ func TestModsHostStates(t *testing.T) {
 	}{
 		{"running", proto.ModHost{State: "running", PID: 4242, RSS: 42_000_000, Restarts: 1}, []string{"● Review age", "Runs as pid 4242, using 42", "restarted 1×"}},
 		{"starting", proto.ModHost{State: "starting"}, []string{"◌ Review age", "Starting: its host loads its script."}},
-		{"idle", proto.ModHost{State: "idle"}, []string{"● Review age", "waits for its first event", "Waits for its first event: its host starts then."}},
+		{"idle", proto.ModHost{State: "idle"}, []string{"● Review age", "waits for its first", "Waits for its first event: its host starts then."}},
 		{"backoff", proto.ModHost{State: "backoff", Next: time.Now().Add(4500 * time.Millisecond), Err: "exit status 1"}, []string{"▲ Review age", "restarting in 5s: exit status 1", "r restarts it now"}},
 		{"failed", proto.ModHost{State: "failed", Err: "crashed 3 times in 5m"}, []string{"▲ Review age", "failed: crashed 3 times in 5m", "r restarts it; l shows its log"}},
 	} {
@@ -400,16 +400,18 @@ func TestModsHostStates(t *testing.T) {
 }
 
 // TestModsExamples: e shows where the example mods are and each one's
-// install line, and installs nothing; with no mod installed the tab
-// says how to install one and points at e.
+// install line, and installs nothing; with no mod of the user's
+// installed the tab lists the built-in ones, says how to install one
+// and points at e.
 func TestModsExamples(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
 	src := &fakeSource{data: testData()}
+	src.loadMods()
 	m := newDash(DashOptions{Source: src, Width: 160, Height: 60, State: DashState{Current: "beta"}})
 	m.setData(src.data)
 	press(m, ",", "3")
-	if out := screen(m); !strings.Contains(out, "No mods installed") || !strings.Contains(out, "e shows terminatr's example mods") {
-		t.Errorf("the empty tab:\n%s", out)
+	if out := screen(m); !strings.Contains(out, "Default theme") || !strings.Contains(out, "No mods of your own yet") || !strings.Contains(out, "shows terminatr's example mods") {
+		t.Errorf("the tab with only built-in mods:\n%s", out)
 	}
 	press(m, "e")
 	out := screen(m)
@@ -419,8 +421,10 @@ func TestModsExamples(t *testing.T) {
 		}
 	}
 	src.loadMods()
-	if len(src.data.Mods) != 0 {
-		t.Errorf("e installed %v", src.data.Mods)
+	for _, md := range src.data.Mods {
+		if !md.Builtin {
+			t.Errorf("e installed %s", md.ID)
+		}
 	}
 }
 
