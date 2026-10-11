@@ -42,16 +42,21 @@ func TestText(t *testing.T) {
 		"`tm thread answer <id> --choice N` or `--option \"<label>\"`", "`--question K`", "Never choose an answer yourself", "uploads/ folder", "attachments",
 		"or a task id", "Talk to the user in task ids", "short and factual", "merge and rewrite", "re-read it", "no longer true", "your own short summary", "Upkeep section", "`## Needs you` heading", "auto_clear", "`terminatr` context block holds `tm context`",
 		"`tm thread merge T<n>`", "as its own command, never chained", "never `gh pr merge`, `az repos pr update`", "don't poll it", "`not-green`", "`conflicting`", "`merge-not-allowed`", "`no-pr`", "a merge is `tm thread merge`, never gh or az",
-		"`tm ask add", "`[tm] answer questions`", "`tm ask list --json`", "AskUserQuestion", "`tm ask done Q<n>`", "Never open the dialog unasked"} {
+		"## Opening PRs", "Threads push their branch and report; they don't open PRs", "gh pr create --head <branch> --base <default>", "--body-file", "az repos pr create --source-branch", "az rest --method post", "tm finds the PR by the thread's branch", "`tm ask add", "`[tm] answer questions`", "`tm ask list --json`", "AskUserQuestion", "`tm ask done Q<n>`", "Never open the dialog unasked"} {
 		if !strings.Contains(coord, w) {
 			t.Errorf("coordinator rules lack %q", w)
 		}
 	}
 	thread, _ := Text("thread", "dev")
 	thread = strings.Join(strings.Fields(thread), " ")
-	for _, w := range []string{"Stay in your worktree", "read-only", "tm task steps T<n> add", "tm report", "## Remember", "`## Check`", "don't guess: say exactly what is missing", "uploads/ folder", "outside the project's repos", "mcp__terminatr__report", "Without them, the commands above"} {
+	for _, w := range []string{"Stay in your worktree", "read-only", "tm task steps T<n> add", "tm report", "## Remember", "`## Check`", "don't guess: say exactly what is missing", "uploads/ folder", "outside the project's repos", "push your branch", "don't open the pull request", "the PR's title and body in the report", "mcp__terminatr__report", "Without them, the commands above"} {
 		if !strings.Contains(thread, w) {
 			t.Errorf("thread rules lack %q", w)
+		}
+	}
+	for _, bad := range []string{"gh pr create", "az repos pr create", "az rest"} {
+		if strings.Contains(thread, bad) {
+			t.Errorf("thread rules still tell it to run %q", bad)
 		}
 	}
 	for _, bad := range []string{"", "human", "../skill", "coordinator.md"} {

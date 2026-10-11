@@ -2,7 +2,7 @@
 
 **One terminal for all your coding agents: a coordinator you talk to, threads that do the work.**
 
-You talk to one **coordinator**. It splits the work into tasks and hands each to a **thread**: an agent in its own git worktree that opens a pull request and reports back. `tm`, a single binary, keeps every agent running in a background server when you close the terminal, and its dashboard shows what each one is doing and what waits for you. All progress lives in plain markdown under `~/.terminatr/projects/<slug>/`, so clearing an agent's context loses nothing.
+You talk to one **coordinator**. It splits the work into tasks and hands each to a **thread**: an agent in its own git worktree that pushes a branch and reports back. `tm`, a single binary, keeps every agent running in a background server when you close the terminal, and its dashboard shows what each one is doing and what waits for you. All progress lives in plain markdown under `~/.terminatr/projects/<slug>/`, so clearing an agent's context loses nothing.
 
 **Claude Code and Codex are supported**; pi and opencode will follow. Agents plug in through a manifest ([docs/SPEC.md §8](docs/SPEC.md#8-agents)). Using Codex? See [docs/CODEX.md](docs/CODEX.md).
 

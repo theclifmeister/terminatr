@@ -117,7 +117,7 @@ function deny(r: Rules, rule: string, summary: string, target = ''): Denial {
   const tell = r.role === 'thread' ? 'say so in your report' : 'ask the user'
   const m: Record<string, string> = {
     'force-push': `force-pushing is not allowed here. Push without force; if the branch has diverged, merge instead of rewriting it, or ${tell}.`,
-    'push-default': `nothing is pushed straight to ${target || 'the default branch'}: work lands through a pull request. Push your own branch and open a PR.`,
+    'push-default': `nothing is pushed straight to ${target || 'the default branch'}: work lands through a pull request. Push your own branch and report; the coordinator opens the PR.`,
     'worktree-only': `a thread writes only inside its worktree (${r.writable?.[0] ?? ''}). Write the file there, or ${tell} what needs changing elsewhere.`,
     'delete-branch': `agents don't delete branches or worktrees; tm cleans them up once the work has merged. Leave them, and ${tell} if one is in the way.`,
     merge: `merging is the coordinator's job in this project (merge = "coordinator"). Leave the PR open with CI green and say so in your report.`,

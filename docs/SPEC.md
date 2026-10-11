@@ -570,7 +570,7 @@ Each enabled code mod runs in its own `tm mod host` child of the server: the sam
   | build-validation policies (Azure) | PR state, review, conflicts, merge detection | no check results and no failed-run excerpt; a PR with policies reports them |
   | `git` credentials for the remote | local work | fetches and pushes (`tm doctor` runs `git ls-remote origin HEAD`) |
 
-  PR lines in reports and in the dashboard take both forms: `https://github.com/<owner>/<repo>/pull/<n>` and `https://dev.azure.com/<org>/<project>/_git/<repo>/pullrequest/<n>` (or `https://<org>.visualstudio.com/…`). Threads open their PRs themselves (`gh pr create`, `az repos pr create` or an `az rest` POST); completing them is the coordinator's and the guard refuses a thread's attempt (§8.6). terminatr's own releases stay on GitHub Actions (OPERATIONS.md, Releasing) whatever host a project uses.
+  PR lines in reports and in the dashboard take both forms: `https://github.com/<owner>/<repo>/pull/<n>` and `https://dev.azure.com/<org>/<project>/_git/<repo>/pullrequest/<n>` (or `https://<org>.visualstudio.com/…`). Threads push their branch and report the PR's title and body; the coordinator opens the PR (`gh pr create`, `az repos pr create` or an `az rest` POST) and tm finds it by the thread's branch; completing PRs is the coordinator's and the guard refuses a thread's attempt (§8.6). terminatr's own releases stay on GitHub Actions (OPERATIONS.md, Releasing) whatever host a project uses.
 - **Worktrees live outside the project folder.** Claude Code loads `CLAUDE.md` from parent directories, so a worktree under the project folder would inherit the coordinator's role file.
 
 ### 5.2 Access model
