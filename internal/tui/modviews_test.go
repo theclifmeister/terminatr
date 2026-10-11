@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/theclifmeister/terminatr/internal/modaction"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 
@@ -288,6 +290,31 @@ func TestModTabBinding(t *testing.T) {
 	cv, ok := m.top().(*confirmView)
 	if !ok || cv.question != "Delegate T2 to the coordinator? It starts a thread for T2 Write docs." {
 		t.Fatalf("D opened %T %+v", m.top(), m.top())
+	}
+}
+
+// TestModTabHintClick: a click on the core's hint for a bound row runs
+// the action, as its key does, and never reaches the mod.
+func TestModTabHintClick(t *testing.T) {
+	src, m := panelDash(t)
+	src.board = &tasks.Board{Tasks: []*tasks.Task{{ID: 2, Title: "Write docs", Status: tasks.Ready}}}
+	v := &src.modViews.Views[0]
+	q := &v.Trees[0].Tree.Children[0]
+	q.Rows[1].Actions = []widget.Action{{ID: "task.delegate", Target: map[string]string{"project": "alpha", "task": "T2"}}}
+	m.setModViews(modViewsMsg{res: src.modViews})
+	m.openTab("alpha", tabOverview, 0)
+	press(m, "8")
+	press(m, "down")
+	time.Sleep(modaction.Stable + 20*time.Millisecond)
+	m.render()
+	x, y := at(t, m, "D delegate")
+	_, cmd := m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+	runAll(m, cmd)
+	if len(src.inputs) != 0 {
+		t.Fatalf("the click reached the mod: %+v", src.inputs)
+	}
+	if _, ok := m.top().(*confirmView); !ok {
+		t.Fatalf("the hint click opened %T", m.top())
 	}
 }
 
