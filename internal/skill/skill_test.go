@@ -4,6 +4,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/theclifmeister/terminatr/internal/mod"
 )
 
 // roles lists the roles that have rules.
@@ -78,9 +80,29 @@ func TestSafetyFirstAndLocked(t *testing.T) {
 		if !ok || !strings.Contains(over, string(safety)) || !strings.HasSuffix(over, "## Mine\n\nPropose nothing.\n") {
 			t.Errorf("%s: policy override %q", role, over)
 		}
-		pol, _ := rules.ReadFile("rules/" + role + ".policy.md")
-		if strings.Contains(string(pol), "## Safety") || strings.Contains(over, string(pol)) {
+		pol, ok := mod.BundledPolicyText(role)
+		if !ok || pol == "" {
+			t.Fatalf("%s: no built-in policy in the default-policy mod", role)
+		}
+		if strings.Contains(pol, "## Safety") || strings.Contains(over, pol) || strings.Contains(over, pol) {
 			t.Errorf("%s: policy part holds safety or survives an override", role)
+		}
+	}
+}
+
+// The built-in policy comes from the bundled default-policy mod as tm's
+// own text: no "Policy (mod: …)" heading, the same rules as before the
+// move. A user's policy mod comes before it.
+func TestBundledPolicy(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	for _, role := range roles() {
+		want, _ := Text(role, "dev")
+		got, ok := ForProject(role, "dev", "")
+		if !ok || got != want {
+			t.Errorf("%s: ForProject with only the built-in mods differs from Text", role)
+		}
+		if strings.Contains(got, "(mod: "+mod.BundledPolicy+")") {
+			t.Errorf("%s: the built-in policy is marked as a mod's", role)
 		}
 	}
 }

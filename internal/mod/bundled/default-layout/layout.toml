@@ -1,0 +1,5 @@
+# The sidebar's columns, in order: count (steps or context), ci (the PR's
+# checks), state, remote, paused, inactive and needs (needs you). The
+# safety columns (state, paused, inactive, needs) show even when a
+# layout leaves them out, at the end.
+sidebar = ["count", "ci", "state", "remote", "paused", "inactive", "needs"]

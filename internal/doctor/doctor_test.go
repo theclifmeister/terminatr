@@ -601,10 +601,14 @@ func TestMods(t *testing.T) {
 		"broken": "id = \"broken\"\n",
 		"future": "id = \"future\"\nname = \"F\"\nversion = \"1.0.0\"\napi = \"9.0\"\n",
 		"greedy": "id = \"greedy\"\nname = \"G\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nmain = \"m.js\"\n[permissions]\ninbox = true\n",
+		// A data file that doesn't load, and a folder a built-in mod's id
+		// shadows.
+		"askew":         "id = \"askew\"\nname = \"A\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nlayout = \"m.js\"\n",
+		"default-theme": "id = \"default-theme\"\nname = \"Mine\"\nversion = \"1.0.0\"\napi = \"1.0\"\n",
 	} {
 		os.MkdirAll(filepath.Join(mods, id), 0o755)
 		os.WriteFile(filepath.Join(mods, id, "mod.toml"), []byte(man), 0o644)
-		os.WriteFile(filepath.Join(mods, id, "m.js"), nil, 0o644)
+		os.WriteFile(filepath.Join(mods, id, "m.js"), []byte("sidebar = [\"state\", \"bogus\"]\n"), 0o644)
 	}
 	os.WriteFile(filepath.Join(d.Paths.Home, "config.toml"), []byte("[mods.greedy]\nenabled = true\n[mods.gone]\nenabled = true\n"), 0o600)
 	var got []string
@@ -619,8 +623,11 @@ func TestMods(t *testing.T) {
 	want := []string{"safe mode: the server runs no user mods (tm --no-mods); tm server restart runs them again",
 		"greedy: failed: crashed 3 times in 5m0s; its areas are blank (tm mod logs greedy, then tm mod disable greedy or fix it)",
 		"shaky: crashed: exit 1; restarting (tm mod logs shaky)",
+		`askew: doesn't load its layout: sidebar: no column "bogus" (built in: count, ci, state, remote, paused, inactive, needs; a mod's: <mod>.<column>)`,
 		"broken: doesn't load: has no name", "future: future needs mod API 9.0; this tm has 1.0: run tm update",
-		"greedy: asks for inbox, not granted: it runs without", "config.toml: [mods.gone] names no installed mod, ignored"}
+		"greedy: asks for inbox, not granted: it runs without",
+		"default-theme: mods/default-theme isn't loaded: default-theme is a built-in mod's id; give your copy another id",
+		"config.toml: [mods.gone] names no installed mod, ignored"}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("got\n%s", strings.Join(got, "\n"))
 	}

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/theclifmeister/terminatr/internal/mod"
 )
 
 const modReviewAge = `
@@ -47,7 +49,7 @@ func TestModInstallEnableRemove(t *testing.T) {
 	h.expect(1, "human-only", thr, "mod", "enable", "review-age", "--yes")
 	// Without a terminal it needs --yes, and installs nothing.
 	h.expect(2, "confirm with --yes", human, "mod", "install", src)
-	if out := h.ok(human, "mod", "list"); !strings.Contains(out, "No mods installed") {
+	if out := h.ok(human, "mod", "list"); !strings.Contains(out, "No mods of your own yet") || !strings.Contains(out, "● default-theme") || strings.Contains(out, "review-age") {
 		t.Fatalf("list: %q", out)
 	}
 	out := h.ok(human, "mod", "install", src, "--yes")
@@ -69,13 +71,22 @@ func TestModInstallEnableRemove(t *testing.T) {
 		t.Fatalf("y: exit %d %q %q", code, out, errs)
 	}
 	var rows []modRow
-	if err := json.Unmarshal([]byte(h.ok(human, "mod", "list", "--json")), &rows); err != nil || len(rows) != 1 || rows[0].State != "enabled" || rows[0].Grants[0] != "project_read" {
+	if err := json.Unmarshal([]byte(h.ok(human, "mod", "list", "--json")), &rows); err != nil || len(rows) != 1+len(mod.BundledIDs()) || rows[0].ID != "review-age" || rows[0].State != "enabled" || rows[0].Grants[0] != "project_read" || rows[0].Builtin || !rows[1].Builtin {
 		t.Fatalf("list --json: %+v %v", rows, err)
 	}
 	h.ok(human, "mod", "disable", "review-age")
 	if out := h.ok(human, "mod", "list"); !strings.Contains(out, "○ review-age") {
 		t.Errorf("after disable: %q", out)
 	}
+	// The built-in defaults tm can't do without stay on; the templates
+	// can be turned off and on; none is removed or updated on its own.
+	h.expect(1, "it can't be turned off; pick another theme", human, "mod", "disable", "default-theme")
+	h.ok(human, "mod", "disable", "default-templates")
+	if out := h.ok(human, "mod", "list"); !strings.Contains(out, "○ default-templates") || !strings.Contains(out, "● default-theme") {
+		t.Errorf("after disabling the templates: %q", out)
+	}
+	h.ok(human, "mod", "enable", "default-templates", "--yes")
+	h.expect(1, "built in", human, "mod", "remove", "default-templates", "--yes")
 	h.expect(1, "not-confirmed", human, "mod", "remove", "review-age")
 	h.ok(human, "mod", "remove", "review-age", "--yes")
 	if _, err := os.Stat(filepath.Join(h.root, "mods", "review-age")); err == nil {

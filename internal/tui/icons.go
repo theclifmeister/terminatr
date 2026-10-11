@@ -63,46 +63,14 @@ type iconSet struct {
 	barOn, barOff               string
 }
 
-var unicodeIcons = iconSet{
-	name:   IconsUnicode,
-	folder: "■", folderOpen: "■",
-	mid: "├─", end: "└─",
-	hint: "⚑", current: "▸", remote: "⌁", paused: "∥", inactive: "⊘",
-	working: "●", blocked: "▲", idle: "○", starting: "◌", running: "▷", review: "◆", done: "✓", other: "·", none: "·",
-	ciPass: "☑", ciFail: "☒", ciRun: "☐",
-	fold: "▸", unfold: "▾",
-	todoDone: "✓", todoNow: "◐", todoOpen: "○",
-	barOn: "▰", barOff: "▱",
-}
-
-// nerdIcons are Nerd Font glyphs (Private Use Area), with Unicode where
-// a plain shape reads as well.
-var nerdIcons = iconSet{
-	name:   IconsNerd,
-	wide:   true,
-	folder: "", folderOpen: "", // nf-fa-folder, folder_open
-	mid: "├╴", end: "└╴",
-	coord: "\U000f06a9", thread: "", // nf-md-robot, nf-oct-git_branch
-	hint: "", current: "", remote: "", paused: "\uf04c", inactive: "\uf011", // bell, chevron_right, wifi, pause, power_off
-	working: "", blocked: "", idle: "", starting: "", running: "",
-	review: "", done: "", other: "", none: "·", // circle, warning, circle_o, spinner, eye, check, stop_circle
-	ciPass: "\uf058", ciFail: "\uf057", ciRun: "\uf1ce", // check_circle, times_circle, circle_o_notch
-	fold: "▸", unfold: "▾",
-	todoDone: "", todoNow: "", todoOpen: "", // check, dot_circle_o, circle_o
-	barOn: "▰", barOff: "▱",
-}
-
-var asciiIcons = iconSet{
-	name:   IconsASCII,
-	folder: "+", folderOpen: "+",
-	mid: "|-", end: "`-",
-	hint: "?", current: ">", remote: "@", paused: "=", inactive: "/",
-	working: "*", blocked: "!", idle: "o", starting: "~", running: ":", review: "#", done: "v", other: "-", none: ".",
-	ciPass: "+", ciFail: "x", ciRun: "~",
-	fold: ">", unfold: "v",
-	todoDone: "x", todoNow: "~", todoOpen: "o",
-	barOn: "#", barOff: "-",
-}
+// The built-in sets are the bundled icon mods' (mods design §11):
+// unicode-icons, nerd-icons and ascii-icons, each a whole set
+// (bundledIcons).
+var (
+	unicodeIcons = bundledIcons(IconsUnicode)
+	nerdIcons    = bundledIcons(IconsNerd)
+	asciiIcons   = bundledIcons(IconsASCII)
+)
 
 // icons is this console's set, iconsValue the setting's value it came
 // from.

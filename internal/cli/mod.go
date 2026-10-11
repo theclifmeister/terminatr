@@ -224,6 +224,8 @@ type modRow struct {
 	Source    string   `json:"source,omitempty"`
 	Latest    string   `json:"latest,omitempty"`
 	Behind    bool     `json:"behind,omitempty"`
+	// Builtin: it ships in tm (a bundled mod); it updates with tm.
+	Builtin bool `json:"builtin,omitempty"`
 }
 
 func (e *Env) modList(outdated, asJSON bool) error {
@@ -233,7 +235,7 @@ func (e *Env) modList(outdated, asJSON bool) error {
 	}
 	rows, shown := []modRow{}, []mod.Mod{}
 	for _, m := range r.Mods {
-		row := modRow{ID: m.ID, State: string(m.State), Kinds: []string{}, Grants: m.Grants, WantsMore: m.WantsMore, Projects: m.Projects, Error: m.Reason()}
+		row := modRow{ID: m.ID, State: string(m.State), Kinds: []string{}, Grants: m.Grants, WantsMore: m.WantsMore, Projects: m.Projects, Error: m.Reason(), Builtin: m.Builtin}
 		if row.Grants == nil {
 			row.Grants = []string{}
 		}
@@ -286,7 +288,13 @@ func (e *Env) modList(outdated, asJSON bool) error {
 		}
 		fmt.Fprintf(tw, "%s %s\t%s\t%s\t%s\t%s\n", modGlyph(m), m.ID, name, version, kinds, last)
 	}
-	return tw.Flush()
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	if !outdated && !slices.ContainsFunc(shown, func(m mod.Mod) bool { return !m.Builtin }) {
+		fmt.Fprintln(e.Stdout, "No mods of your own yet. tm mod install <path | git-url[@tag]> installs one.")
+	}
+	return nil
 }
 
 // modGlyph is the Mods tab's mark for m (mods design §9): ● on, ○ off,
@@ -319,7 +327,9 @@ func (e *Env) modValidate(dirs []string, asJSON bool) error {
 			return err
 		}
 		for _, m := range r.Mods {
-			dirs = append(dirs, m.Dir)
+			if !m.Builtin { // tm's own tests check those
+				dirs = append(dirs, m.Dir)
+			}
 		}
 	}
 	rows := []validRow{}
@@ -421,7 +431,7 @@ func (e *Env) modEnable(id, slug string, yes bool) error {
 	// Turning it on, or granting what it wants more, is consent; running
 	// it for one more project grants nothing new.
 	if m.State != mod.Enabled || len(m.WantsMore) > 0 {
-		fmt.Fprint(e.Stdout, mod.Consent(m.Manifest, m.Dir))
+		fmt.Fprint(e.Stdout, m.Consent())
 		if err := e.confirm(yes, "tm mod enable "+id, "Enable "+mod.Clean(m.Manifest.Name, false)+"?"); err != nil {
 			return err
 		}
