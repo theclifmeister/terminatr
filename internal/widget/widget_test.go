@@ -94,7 +94,7 @@ func TestCheckLimits(t *testing.T) {
 // row without an id gets its index.
 func TestCheckCleans(t *testing.T) {
 	w := mustDecode(t, `{"kind":"stack","title":"a\u001b]52;c;SGVsbG8=\u0007b","children":[
-		{"kind":"list","id":"l","rows":[{"spans":[{"text":"x\u001b[31my‮z​w\nv\tu"}]},{"id":"r"}]},
+		{"kind":"list","id":"l","rows":[{"spans":[{"text":"x\u001b[31my\u202ez\u200bw\nv\tu"}]},{"id":"r"}]},
 		{"kind":"text","text":"one\ntwo"}]}`)
 	if w.Title != "a]52;c;SGVsbG8=b" {
 		t.Errorf("title %q", w.Title)
