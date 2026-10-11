@@ -84,7 +84,7 @@ func TestManifestErrors(t *testing.T) {
 		{"dotdot", "id = \"x\"\n" + base + "[provides]\ntheme = \"../theme.toml\"\n", "has a .. in it"},
 		{"absolute", "id = \"x\"\n" + base + "[provides]\ntheme = \"/etc/passwd\"\n", "inside the mod's folder"},
 		{"column without code", "id = \"x\"\n" + base + "[provides]\ncolumns = [{ id = \"a\", width = 2, where = [\"sidebar.thread\"] }]\n", "needs provides.main"},
-		{"wide column", "id = \"x\"\n" + base + "[provides]\nmain = \"m.ts\"\ncolumns = [{ id = \"a\", width = 40, where = [\"sidebar.thread\"] }]\n", "width must be"},
+		{"wide column", "id = \"x\"\n" + base + "[provides]\nmain = \"m.ts\"\ncolumns = [{ id = \"a\", width = 13, where = [\"sidebar.thread\"] }]\n", "width must be"},
 		{"bad slot", "id = \"x\"\n" + base + "[provides]\nmain = \"m.ts\"\nviews = [{ id = \"v\", title = \"V\", slot = \"pane\" }]\n[permissions]\nviews = true\n", "slot \"pane\""},
 		{"views ungranted", "id = \"x\"\n" + base + "[provides]\nmain = \"m.ts\"\nviews = [{ id = \"v\", title = \"V\", slot = \"full\" }]\n", "needs permissions.views"},
 		{"data mod perms", "id = \"x\"\n" + base + "[permissions]\ninbox = true\n", "are for code mods"},

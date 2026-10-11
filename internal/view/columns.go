@@ -33,6 +33,11 @@ const MaxColumns = 32
 // maxColID bounds one column id: a mod id and a column id.
 const maxColID = 128
 
+// MaxModColumnWidth bounds a mod column's width in cells: the manifest
+// check refuses a wider one (internal/mod) and the sidebar never draws
+// one wider, so one mod can't push the labels out of the sidebar.
+const MaxModColumnWidth = 12
+
 // IsModColumn says whether id names a mod's column, "<mod>.<column>",
 // each part [a-z0-9-] and not empty.
 func IsModColumn(id string) bool {

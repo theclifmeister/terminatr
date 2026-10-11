@@ -23,6 +23,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/theclifmeister/terminatr/internal/update"
+	"github.com/theclifmeister/terminatr/internal/view"
 )
 
 // ManifestFile is the manifest's name in a mod's folder.
@@ -203,8 +204,9 @@ func (s Setting) span() string {
 	return fmt.Sprintf("at most %d", *s.Max)
 }
 
-// MaxColumnWidth caps a mod column, in cells.
-const MaxColumnWidth = 16
+// MaxColumnWidth caps a mod column, in cells: the width the sidebar
+// draws at most (view.MaxModColumnWidth).
+const MaxColumnWidth = view.MaxModColumnWidth
 
 var (
 	idRE    = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
