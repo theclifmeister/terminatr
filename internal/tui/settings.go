@@ -225,19 +225,23 @@ func settingsErr(err error) error {
 	return err
 }
 
-// settingsView is the , popup: the settings of every project, in two
-// tabs: General, and All projects (the project settings every project
-// follows unless it sets its own).
+// settingsView is the , popup: the settings of every project, in three
+// tabs: General, All projects (the project settings every project
+// follows unless it sets its own) and Mods (modstab.go).
 type settingsView struct {
 	tab  int
 	tabs [2]settingsList
+	mods modsTab
 	// top is each tab's first line shown; shown the selection's line
 	// (plus one) it last scrolled to (projectView.scroll).
-	top, shown [2]int
+	top, shown [len(settingsTabs)]int
 }
 
 // settingsTabs are the , popup's tabs.
-var settingsTabs = [2]string{"General", "All projects"}
+var settingsTabs = [3]string{"General", "All projects", "Mods"}
+
+// tabMods is the Mods tab's index.
+const tabMods = 2
 
 func (m *dash) openSettings() {
 	m.catalogs = m.src.Catalogs()
@@ -363,29 +367,56 @@ func nextSplit(cur float64) float64 {
 }
 
 func (sv *settingsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
-	switch s := k.String(); s {
+	s := k.String()
+	if sv.tab == tabMods && s != "h" && s != "left" && s != "right" {
+		// Its own keys first: l is its log.
+		if cmd, ok := sv.mods.key(m, k); ok {
+			return cmd
+		}
+	}
+	n := len(settingsTabs)
+	switch s {
 	case "esc":
 		m.pop()
 		return nil
-	case "right", "l", "left", "h":
-		sv.tab = 1 - sv.tab
+	case "right", "l":
+		sv.tab = (sv.tab + 1) % n
 		return nil
-	case "1", "2":
+	case "left", "h":
+		sv.tab = (sv.tab + n - 1) % n
+		return nil
+	case "1", "2", "3":
 		sv.tab = int(s[0] - '1')
+		return nil
+	}
+	if sv.tab == tabMods {
 		return nil
 	}
 	cmd, _ := sv.tabs[sv.tab].key(m, k)
 	return cmd
 }
 
+// tabLines are tab i's lines, its selected line and what a click on
+// each line picks.
+func (sv *settingsView) tabLines(m *dash, i, w int) ([]string, int, []int) {
+	if i == tabMods {
+		return sv.mods.lines(m, w)
+	}
+	return sv.tabs[i].lines(m, w)
+}
+
 func (sv *settingsView) render(m *dash) string {
 	w := m.inner(viewWidth)
-	lines, sel, hits := sv.tabs[sv.tab].lines(m, w)
+	lines, sel, hits := sv.tabLines(m, sv.tab, w)
 	lines = append(lines, "")
 	keys := "enter change · ↑ ↓ move · ← → tabs · esc close"
-	if sv.tab == 0 {
+	switch sv.tab {
+	case 0:
 		lines = append(lines, faintLines("A project's own settings (starting threads, yolo mode, remote control, …) are in its popup: a on the dashboard, prefix+a in a session.", w)...)
-	} else {
+	case tabMods:
+		lines = append(lines, faintLines("Mods extend terminatr: themes, keys, columns, panels. They never change the safety settings, and no agent can turn one on. tm mod install adds one.", w)...)
+		keys = modsKeys
+	default:
 		lines = append(lines, faintLines("Every project follows these, a new one too, unless it sets its own in its popup (a on the dashboard, prefix+a in a session); x there makes it follow these again.", w)...)
 		keys = "enter change · + - number · ↑ ↓ move · ← → tabs · esc close"
 	}
@@ -399,12 +430,6 @@ func (sv *settingsView) render(m *dash) string {
 	all = append(all, hits...)
 	for len(all) < len(head)+len(lines) {
 		all = append(all, noHit)
-	}
-	// As tall as the longer tab, so switching tabs doesn't resize it.
-	height := 0
-	for i := range sv.tabs {
-		l, _, _ := sv.tabs[i].lines(m, w)
-		height = max(height, len(head)+len(l)+3)
 	}
 	b := box{title: "Settings", head: head, body: lines, sel: -1, hits: all, keys: keys}
 	b.scroll = sv.scroll(m.boxRows(b)-len(head), sel, len(lines))
@@ -466,10 +491,22 @@ func (sv *settingsView) click(m *dash, item, col int, _ bool) tea.Cmd {
 		}
 		return nil
 	}
+	if sv.tab == tabMods {
+		if item >= 0 {
+			sv.mods.sel = item
+		}
+		return nil
+	}
 	return sv.tabs[sv.tab].click(m, item, col)
 }
 
-func (sv *settingsView) wheel(m *dash, d int) { sv.tabs[sv.tab].key(m, arrow(d)) }
+func (sv *settingsView) wheel(m *dash, d int) {
+	if sv.tab == tabMods {
+		sv.mods.key(m, arrow(d))
+		return
+	}
+	sv.tabs[sv.tab].key(m, arrow(d))
+}
 
 // captureView takes the next ctrl+<key> as the new prefix key.
 type captureView struct{ err string }

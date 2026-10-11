@@ -128,6 +128,14 @@ func Consent(m *Manifest, dir string) string {
 			fmt.Fprintf(&b, "  - %s\n", w)
 		}
 	}
+	b.WriteString(m.Shown(dir))
+	return b.String()
+}
+
+// Shown is every rules addendum and agent manifest of m, in folder dir,
+// in full, as the consent screen shows them; "" when it has none.
+func (m *Manifest) Shown(dir string) string {
+	var b strings.Builder
 	for _, f := range m.agentText(dir) {
 		writeFile(&b, f)
 	}
@@ -245,4 +253,28 @@ func (m Mod) Reason() string {
 	}
 	line, _, _ := strings.Cut(m.Err.Error(), "\n")
 	return Clean(line, false)
+}
+
+// Status is what m runs with, or why it doesn't run, in the consent
+// screen's words: tm mod list's last column and the Mods tab's.
+func (m Mod) Status() string {
+	var s string
+	switch m.State {
+	case Invalid, Incompatible:
+		return string(m.State) + ": " + m.Reason()
+	case Disabled:
+		s = "off"
+	default:
+		s = strings.Join(m.Manifest.Permissions.Words(m.Grants), " · ")
+		if len(m.WantsMore) > 0 {
+			s += " · wants more: " + strings.Join(m.Manifest.Permissions.Words(m.WantsMore), " · ")
+		}
+	}
+	if m.Builtin {
+		s = "built in · " + s
+	}
+	if len(m.Projects) > 0 {
+		s += " · only " + strings.Join(m.Projects, ", ")
+	}
+	return s
 }
