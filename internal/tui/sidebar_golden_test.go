@@ -19,8 +19,9 @@ var updateGolden = flag.Bool("update", false, "rewrite the sidebar's golden file
 // goldenTree is a tree with every column of the grid in use: a
 // coordinator with remote control on and its context use, threads with
 // a PR whose checks pass, fail or run, one without a task, a paused
-// project, a coordinator with questions, a folded inactive project and
-// an unfolded one whose rows are dormant.
+// project, a folded active project (its coordinator's state on its row,
+// with its questions), the unfolded inactive divider, a folded inactive
+// project and an unfolded one whose rows are dormant.
 func goldenTree() []treeRow {
 	return []treeRow{
 		{kind: treeProject, slug: "terminatr", state: "working", current: true, threads: 4, hint: true, pct: -1},
@@ -32,9 +33,9 @@ func goldenTree() []treeRow {
 		{kind: treeProject, slug: "herdr", state: "idle", threads: 1, paused: true, pct: -1},
 		{kind: treeCoordinator, slug: "herdr", state: "idle", ctx: 12, pct: -1, last: true},
 		{kind: treeThread, slug: "herdr", thread: "t-0031", name: "T12", title: "Bump dependencies", state: "working", pct: 20, ci: "pending", last: true},
-		{kind: treeProject, slug: "website", state: "blocked", hint: true, pct: -1},
-		{kind: treeCoordinator, slug: "website", state: "blocked", ctx: 84, ctxHint: true, hint: true, pct: -1, last: true},
-		{kind: treeProject, slug: "dotfiles", inactive: true, threads: 1, pct: -1},
+		{kind: treeProject, slug: "website", state: "blocked", hint: true, pct: -1, fold: true},
+		{kind: treeDivider, threads: 2, slugs: []string{"dotfiles", "notes-app"}, pct: -1},
+		{kind: treeProject, slug: "dotfiles", inactive: true, threads: 1, pct: -1, fold: true},
 		{kind: treeProject, slug: "notes-app", inactive: true, expanded: true, threads: 1, pct: -1},
 		{kind: treeCoordinator, slug: "notes-app", dormant: true, ctx: -1, pct: -1, last: true},
 		{kind: treeThread, slug: "notes-app", thread: "t-0004", name: "T7", title: "Zsh prompt", dormant: true, pct: 30, last: true},

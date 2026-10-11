@@ -171,9 +171,10 @@ type Source interface {
 	// SetRemote turns remote control of the project's running
 	// coordinator on or off (prefix+r), saying what it did.
 	SetRemote(slug string, on bool) (string, error)
-	// Lifecycle activates, deactivates, pauses, resumes, archives or
-	// deletes a project (verb "activate", "deactivate", "pause",
-	// "resume", "archive", "delete"), saying what it did (lifecycle.go).
+	// Lifecycle activates, deactivates, pauses, resumes, archives,
+	// deletes, pins or unpins a project (verb "activate", "deactivate",
+	// "pause", "resume", "archive", "delete", "pin", "unpin"), saying
+	// what it did (lifecycle.go).
 	// Deactivating stops the project's coordinator and threads: the
 	// caller asks first.
 	Lifecycle(slug, verb string) (string, error)
@@ -448,6 +449,8 @@ func (s *ServerSource) Lifecycle(slug, verb string) (string, error) {
 		return ActivateProject(s.call, s.Caller, slug, verb == "activate")
 	case "pause", "resume":
 		return PauseProject(s.Caller, slug, verb == "pause")
+	case "pin", "unpin":
+		return PinProject(s.Caller, slug, verb == "pin")
 	case "archive":
 		return ArchiveProject(s.call, s.Caller, slug, true)
 	case "delete":
@@ -647,6 +650,9 @@ func catalogNames(cats []Catalog) []string {
 
 // inactive says whether the user deactivated the project (§5.1).
 func (p ProjectData) inactive() bool { return p.Safety != nil && !p.Safety.Active }
+
+// pinned says the user pinned the project to the top of the sidebar.
+func (p ProjectData) pinned() bool { return p.Safety != nil && p.Safety.Pinned }
 
 // InactiveError is opening an inactive project's coordinator: opening
 // never activates (docs/SPEC.md §5.1).

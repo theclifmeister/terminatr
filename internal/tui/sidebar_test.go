@@ -243,7 +243,8 @@ func testTreeNameNeverCut(t *testing.T, r treeRow) {
 
 // TestDashboardSidebarKeys: tab gives the sidebar the keyboard; ↑ ↓ move
 // its cursor, → goes into a project and ← on a row under a project up
-// to it, enter does what a click does and esc goes back to the
+// to it, ← on a project folds it and → unfolds it, enter does what a
+// click does and esc goes back to the
 // list. Keys that aren't the sidebar's still run the list's actions.
 func TestDashboardSidebarKeys(t *testing.T) {
 	src := &fakeSource{data: testData()}
@@ -268,7 +269,9 @@ func TestDashboardSidebarKeys(t *testing.T) {
 	steps := []struct{ key, cursor string }{
 		// ↑ on the first row wraps round to the last, ↓ there back.
 		{"up", "c:alpha"}, {"up", "p:alpha"}, {"up", "t:beta/t-0006"}, {"down", "p:alpha"}, {"right", "c:alpha"}, {"right", "c:alpha"},
-		{"left", "p:alpha"}, {"left", "p:alpha"}, {"j", "c:alpha"}, {"down", "p:beta"}, {"down", "c:beta"}, {"down", "t:beta/t-0005"},
+		// ← on the project folds it, → unfolds it again.
+		{"left", "p:alpha"}, {"left", "p:alpha"}, {"j", "p:beta"}, {"k", "p:alpha"}, {"right", "p:alpha"},
+		{"j", "c:alpha"}, {"down", "p:beta"}, {"down", "c:beta"}, {"down", "t:beta/t-0005"},
 	}
 	for i, s := range steps {
 		keyPress(m, s.key)
@@ -379,6 +382,8 @@ func TestEverySidebarClickHasKey(t *testing.T) {
 		"open the coordinator": "enter", "attach": "enter",
 		"activate": "space on the project", "deactivate": "space on the project",
 		"expand": "→ on the project", "collapse": "← on the project", "start the coordinator": "enter",
+		"fold": "← on the project or the divider", "unfold": "→ on the project or the divider",
+		"pin to the top": "p on the project", "unpin": "p on the project",
 	}
 	m, _ := fresh()
 	for i := range m.tree() {

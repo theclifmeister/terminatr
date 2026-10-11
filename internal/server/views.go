@@ -207,6 +207,9 @@ func (vs *views) subscribe(p proto.ViewSubscribeParams, pid int) (*member, strin
 		if p.Info != nil {
 			lv.v.Info = p.Info.Clamp()
 		}
+		if p.Tree != nil && p.Tree.Valid() == nil {
+			lv.v.Tree = *p.Tree
+		}
 		vs.byName[name] = lv
 	}
 	vs.nextClient++
@@ -338,7 +341,7 @@ func (vs *views) renameProject(from, to string) {
 		if cur == from {
 			cur = to
 		}
-		moved := v.IsExpanded(from) && v.Expand(from, false) && v.Expand(to, true)
+		moved := v.Tree.Rename(from, to)
 		if moved || cur != v.Current || sel != v.Selected || side != v.SideSel {
 			v.Current, v.Selected, v.SideSel = cur, sel, side
 			vs.changedLocked(lv)
@@ -432,6 +435,14 @@ func (vs *views) do(method string, p proto.ViewParams) (view.View, *proto.Error)
 			return before, proto.Errorf(proto.ErrBadParams, "no project")
 		}
 		v.Expand(p.Project, p.On)
+	case proto.MethodViewTree:
+		if p.Tree == nil {
+			return before, proto.Errorf(proto.ErrBadParams, "no tree")
+		}
+		if err := p.Tree.Valid(); err != nil {
+			return before, proto.Errorf(proto.ErrBadParams, "%v", err)
+		}
+		v.Tree = *p.Tree
 	case proto.MethodViewSideSel:
 		if len(p.Key) > view.MaxKey {
 			return before, proto.Errorf(proto.ErrBadParams, "key too long")

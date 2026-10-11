@@ -312,7 +312,7 @@ func (c *client) sideMenu(m emu.Mouse) {
 	t, can, why := r.target()
 	switch {
 	case !ok:
-	case !can:
+	case !can && r.kind != treeDivider:
 		c.flash = why
 		c.status()
 	default:
@@ -329,6 +329,8 @@ func (c *client) sideTitle(r treeRow) string {
 		return r.slug + " coordinator"
 	case treeThread:
 		return r.thread
+	case treeDivider:
+		return "inactive projects"
 	}
 	return r.slug
 }
@@ -352,12 +354,18 @@ func (c *client) sideItems(r treeRow, t Target) []aitem {
 		add("show its dashboard", "", func() { c.sideGo(Target{Project: r.slug}) })
 		if r.inactive {
 			label, key := expandLabel(r)
-			add(label, key, func() { c.act(proto.MethodViewExpand, proto.ViewParams{Project: r.slug, On: !r.expanded}) })
+			add(label, key, func() { c.refold(foldProject(r, !r.fold)) })
 		} else {
 			add("open its coordinator", "", func() { c.sideGo(Target{Project: r.slug, Coordinator: true}) })
+			label, key := foldLabel(r)
+			add(label, key, func() { c.refold(foldProject(r, !r.fold)) })
 		}
 		popups()
 		add(activeLabel(r), "space", func() { c.askActive(r.slug, r.inactive) })
+		add(pinLabel(r), "p", func() { c.setPinned(r.slug, !r.pinned) })
+	case treeDivider:
+		label, key := foldLabel(r)
+		add(label, key, func() { c.refold(foldDivider(r)) })
 	case treeCoordinator:
 		add(coordLabel(r), "", func() { c.sideGo(t) })
 		popups()

@@ -81,9 +81,9 @@ func attachCmd(e *Env, args []string) int {
 	}
 	uiFile := uiFile()
 	lay := tui.LoadLayout(uiFile)
-	side, info := lay.Sidebar, lay.Info
+	side, info, tree := lay.Sidebar, lay.Info, lay.Tree
 	vc, err := tui.JoinView(p, proto.ViewSubscribeParams{Own: true, Bare: true, StatusBar: true, Session: id,
-		Cols: cols, Rows: rows, Sidebar: &side, Info: &info})
+		Cols: cols, Rows: rows, Sidebar: &side, Info: &info, Tree: &tree})
 	if err != nil {
 		return e.srvFail("attach", err)
 	}

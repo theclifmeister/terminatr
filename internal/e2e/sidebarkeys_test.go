@@ -154,7 +154,7 @@ func TestSmokeSidebarClickFocus(t *testing.T) {
 	}
 	coordinator()
 	coordinatorOf(t, env, demo)
-	w.Type("zqzq")
+	w.Type("xqxq")
 	w.Key(keyDown)
 	w.Key(keyEnter)
 	w.WaitUntil("on t-0001 again", wait, func(sc string) bool { return lastLine(sc, demo+" t-0001") })
@@ -166,7 +166,7 @@ func TestSmokeSidebarClickFocus(t *testing.T) {
 	w.WaitUntil("pane focused", wait, func(sc string) bool { return !lastLine(sc, "sidebar:") })
 	w.Type("hello-click")
 	w.WaitFor("hello-click", wait)
-	if sc := w.PaneScreen(); strings.Contains(sc, "zqzq") {
+	if sc := w.PaneScreen(); strings.Contains(sc, "xqxq") {
 		t.Fatalf("keys typed while the sidebar had the keyboard reached the pane:\n%s", sc)
 	}
 	w.Quit()
