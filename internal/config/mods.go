@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -63,7 +64,8 @@ func readMods(md toml.MetaData, prims map[string]toml.Primitive) (old rawAgentMo
 			}
 			continue
 		}
-		if md.Type("mods", id) != "Hash" {
+		// A table, or one only its [mods.<id>.settings] defines (no type).
+		if t := md.Type("mods", id); t != "Hash" && t != "" {
 			unknown = append(unknown, "mods."+id)
 			continue
 		}
@@ -82,3 +84,53 @@ func readMods(md toml.MetaData, prims map[string]toml.Primitive) (old rawAgentMo
 
 // ModsTable is the config.toml table of mod id.
 func ModsTable(id string) string { return "mods." + id }
+
+// RemoveModsTable removes mod id's [mods.<id>] table and the tables
+// under it ([mods.<id>.settings]) from config.toml, everything else kept
+// (tm mod remove, and tm mod install of an id whose table was left
+// behind, so a new install starts disabled and ungranted). ErrForm when
+// the file sets them in a form the line editor doesn't change.
+func RemoveModsTable(id string) error {
+	return edit(func(data []byte) ([]byte, error) {
+		if data == nil {
+			return nil, nil
+		}
+		return DropTable(data, ModsTable(id))
+	})
+}
+
+// DropTable returns data without table and the tables below it: their
+// header lines and every line up to the next table that isn't one of
+// them. A file without them comes back as it was.
+func DropTable(data []byte, table string) ([]byte, error) {
+	want := splitTable(table)
+	under := func(h []string) bool { return len(h) >= len(want) && equal(h[:len(want)], want) }
+	var out []string
+	in := false
+	for _, l := range strings.SplitAfter(string(data), "\n") {
+		if h, ok := header(l); ok {
+			in = under(h)
+		} else if m := arrayHeaderRE.FindStringSubmatch(strings.TrimRight(l, "\r\n")); m != nil {
+			in = under(splitTable(m[1]))
+		}
+		if !in {
+			out = append(out, l)
+		}
+	}
+	res := []byte(strings.Join(out, ""))
+	var got map[string]any
+	if _, err := toml.Decode(string(res), &got); err != nil {
+		return nil, fmt.Errorf("the settings can't be read: %w", err)
+	}
+	v := any(got)
+	for _, k := range want {
+		m, ok := v.(map[string]any)
+		if !ok {
+			return res, nil
+		}
+		if v, ok = m[k]; !ok {
+			return res, nil
+		}
+	}
+	return nil, ErrForm
+}
