@@ -16,15 +16,17 @@ import (
 )
 
 // TestModEvents: a subscribed mod gets mod.ready with its projects, then
-// what changes in their files and the ticker's state, after a wake or
-// the poll; a mod without project_read gets no project events.
+// what changes in their files and the ticker's state, after a wake;
+// a mod without project_read gets no project events.
 func TestModEvents(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
 	p, err := ResolvePaths()
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv(envModEventsPoll, "50ms")
+	// Looks come from the wakes below only: a poll could fall between
+	// the changes and split their events across two looks.
+	t.Setenv(envModEventsPoll, "1h")
 	pr := newWatchProject(t)
 	if _, err := pr.Tasks().Add(human, []tasks.NewTask{{Title: "Work", Status: "started", Steps: []string{"a", "b"}}}); err != nil {
 		t.Fatal(err)
@@ -109,8 +111,14 @@ func TestModEvents(t *testing.T) {
 	// The blind mod got none of it, but does get the clock and sessions.
 	c, done := context.WithTimeout(ctx, 100*time.Millisecond)
 	defer done()
-	if ev, err := blind.Next(c); err == nil {
-		t.Fatalf("blind got %s", ev.Name)
+	for {
+		ev, err := blind.Next(c)
+		if err != nil {
+			break
+		}
+		if ev.Name != modbus.ClockMinute { // the test may cross a minute
+			t.Fatalf("blind got %s", ev.Name)
+		}
 	}
 }
 
