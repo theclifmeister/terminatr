@@ -1,6 +1,7 @@
 package mod
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -18,8 +19,8 @@ import (
 // its files inside a delimited block.
 
 // Kinds names what the mod provides, for tm mod list and the Mods tab:
-// code, column, view, theme, icons, keymap, layout, rules, templates,
-// agents.
+// code, column, view, tools, theme, icons, keymap, layout, rules,
+// templates, agents.
 func (m *Manifest) Kinds() []string {
 	p := m.Provides
 	var out []string
@@ -31,6 +32,7 @@ func (m *Manifest) Kinds() []string {
 	add(p.Main != "", "code")
 	add(len(p.Columns) > 0, "column")
 	add(len(p.Views) > 0, "view")
+	add(len(p.Tools) > 0, "tools")
 	add(p.Theme != "", "theme")
 	add(p.Icons != "", "icons")
 	add(p.Keymap != "", "keymap")
@@ -132,8 +134,9 @@ func Consent(m *Manifest, dir string) string {
 	return b.String()
 }
 
-// Shown is every rules addendum and agent manifest of m, in folder dir,
-// in full, as the consent screen shows them; "" when it has none.
+// Shown is every rules addendum, agent manifest and agent tool of m, in
+// folder dir, in full, as the consent screen shows them; "" when it has
+// none.
 func (m *Manifest) Shown(dir string) string {
 	var b strings.Builder
 	for _, f := range m.agentText(dir) {
@@ -147,8 +150,9 @@ type shownFile struct {
 	Title, Rel, Text string
 }
 
-// agentText lists the files of m that agents obey or tm runs: its rules
-// addenda by role, then its agent manifests, each with its text.
+// agentText lists the text of m that agents obey or read, or tm runs:
+// its rules addenda by role, its agent manifests, then its tools (the
+// description and input an agent is given), each with its text.
 func (m *Manifest) agentText(dir string) []shownFile {
 	var out []shownFile
 	for _, role := range sortedKeys(m.Provides.Rules) {
@@ -167,7 +171,42 @@ func (m *Manifest) agentText(dir string) []shownFile {
 			return nil
 		})
 	}
+	for _, t := range m.Provides.Tools {
+		out = append(out, shownFile{"Tool it offers your " + toolRoles(t) + " (they read its description)", ToolName(m.ID, t.ID), toolText(t)})
+	}
 	return out
+}
+
+// toolRoles is "threads", "coordinators" or "threads and coordinators".
+func toolRoles(t Tool) string {
+	switch {
+	case !t.For(RoleCoordinator):
+		return "threads"
+	case !t.For(RoleThread):
+		return "coordinators"
+	}
+	return "threads and coordinators"
+}
+
+// toolText is a tool as its agent is given it: the description, then
+// each input property with its schema.
+func toolText(t Tool) string {
+	var b strings.Builder
+	b.WriteString(strings.TrimSpace(t.Description) + "\n")
+	if len(t.Input.Properties) == 0 {
+		b.WriteString("Input: none\n")
+		return b.String()
+	}
+	b.WriteString("Input:\n")
+	for _, k := range sortedKeys(t.Input.Properties) {
+		spec, _ := json.Marshal(t.Input.Properties[k])
+		req := ""
+		if slices.Contains(t.Input.Required, k) {
+			req = " (required)"
+		}
+		fmt.Fprintf(&b, "  %s%s: %s\n", k, req, spec)
+	}
+	return b.String()
 }
 
 func readText(dir, rel string) string {
