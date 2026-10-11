@@ -4,8 +4,12 @@ import (
 	"encoding/json"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/server"
 )
 
 func TestMCPServes(t *testing.T) {
@@ -23,8 +27,11 @@ func TestMCPServes(t *testing.T) {
 		calls = append(calls, name+" "+string(input))
 		return "out " + name, name == "done"
 	}
+	list := func() []proto.ToolDef {
+		return append(slices.Clone(server.ThreadTools), proto.ToolDef{Name: "lint_lint_report", Description: "[mod: lint] Lints.", InputSchema: map[string]any{"type": "object"}})
+	}
 	var out strings.Builder
-	if err := runMCP(strings.NewReader(in), &out, call); err != nil {
+	if err := runMCP(strings.NewReader(in), &out, list, call); err != nil {
 		t.Fatal(err)
 	}
 	if got := strings.Join(calls, "|"); got != `status {"percent":40}|done {}` {
@@ -37,9 +44,9 @@ func TestMCPServes(t *testing.T) {
 	var r struct {
 		ID     json.RawMessage `json:"id"`
 		Result struct {
-			ProtocolVersion string    `json:"protocolVersion"`
-			Tools           []mcpTool `json:"tools"`
-			IsError         bool      `json:"isError"`
+			ProtocolVersion string          `json:"protocolVersion"`
+			Tools           []proto.ToolDef `json:"tools"`
+			IsError         bool            `json:"isError"`
 			Content         []struct{ Text string }
 		}
 		Error *rpcErr
@@ -54,7 +61,7 @@ func TestMCPServes(t *testing.T) {
 	for _, tl := range r.Result.Tools {
 		names = append(names, tl.Name)
 	}
-	if strings.Join(names, ",") != "report,status,steps,done" {
+	if strings.Join(names, ",") != "report,status,steps,done,lint_lint_report" {
 		t.Errorf("tools = %v", names)
 	}
 	r.Result.Content = nil
@@ -79,7 +86,7 @@ func TestMCPToolsMatchMod(t *testing.T) {
 		t.Fatal(err)
 	}
 	src := string(b)
-	for _, tl := range mcpTools {
+	for _, tl := range server.ThreadTools {
 		i := strings.Index(src, "name: '"+tl.Name+"'")
 		if i < 0 {
 			t.Errorf("tool %s is not in tools.ts", tl.Name)

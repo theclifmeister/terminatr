@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { answer, body, TOOLS } from '../hooks/tools'
+import { answer, body, modTools, TOOLS } from '../hooks/tools'
 
 const SOCKET = '/run/s/s-7/mod.sock'
 
@@ -12,7 +12,7 @@ type Call = { url: string; body: unknown }
 // mod's socket, answering POST /v1/tools/<name> with reply, and records
 // the tools registered and the calls; beneath stands for the user's
 // rules, and the tool's description as the engine has it.
-async function start($: Engine, on: On, role: string, reply: (name: string) => { status: number; text: string } | Error) {
+async function start($: Engine, on: On, role: string, reply: (name: string) => { status: number; text: string } | Error, listed = '') {
   const clock = mock.clock(on)
   mock.env(on, { TERMINATR_SESSION: 's-7', TERMINATR_MOD_SOCKET: SOCKET, TERMINATR_ROLE: role })
   const calls: Call[] = []
@@ -26,7 +26,8 @@ async function start($: Engine, on: On, role: string, reply: (name: string) => {
   on('ui.log', async () => ({ value: undefined }))
   on('http.fetch', async (_$, e) => {
     expect(e.init?.socketPath).toBe(SOCKET)
-    const m = /\/v1\/tools\/([a-z]+)$/.exec(e.url)
+    if (e.url.endsWith('/v1/tools')) return { value: { status: listed ? 200 : 404, ok: !!listed, headers: {}, text: listed } }
+    const m = /\/v1\/tools\/([a-z0-9_-]+)$/.exec(e.url)
     if (!m) return { value: { status: e.url.includes('/v1/prompts') ? 410 : 204, ok: true, headers: {}, text: '' } }
     calls.push({ url: e.url, body: JSON.parse(e.init?.body ?? 'null') })
     const r = reply(m[1])
@@ -85,4 +86,39 @@ test('a body carries the tool fields alone; a reply reads as a result or a deny'
     expect(t.name).toMatch(/^[a-z_]+$/)
     expect(t.description.length).toBeLessThan(2048)
   }
+})
+
+const LISTED = JSON.stringify({
+  tools: [
+    { name: 'status', description: 'x', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+    {
+      name: 'lint_lint_report',
+      description: '[mod: lint] Lints a report draft.',
+      inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'], additionalProperties: false },
+    },
+  ],
+})
+
+test("a coordinator gets the mods' tools the server lists; a call goes to the server", async ($, on) => {
+  const { calls, tools } = await start($, on, 'coordinator', name => ({ status: 200, text: `{"text":"5 chars via ${name}"}` }), LISTED)
+  expect(tools()).toEqual(['mcp__terminatr__lint_lint_report'])
+  const r = await $.tool.call({ tool: 'mcp__terminatr__lint_lint_report', text: 'hello' })
+  expect(r).toEqual({ result: '5 chars via lint_lint_report' })
+  expect(calls[0]).toEqual({ url: 'http://terminatr/v1/tools/lint_lint_report', body: { text: 'hello' } })
+  expect((await $.tool.check({ tool: 'mcp__terminatr__lint_lint_report', text: 'x' })).decision).toBe('allow')
+})
+
+test("a thread gets its own tools and the mods'; a mod's refusal is the tool's error", async ($, on) => {
+  const { tools } = await start($, on, 'thread', () => ({ status: 422, text: '{"error":"no draft"}' }), LISTED)
+  expect(tools()).toEqual([
+    'mcp__terminatr__done', 'mcp__terminatr__lint_lint_report', 'mcp__terminatr__report', 'mcp__terminatr__status', 'mcp__terminatr__steps',
+  ])
+  expect(await $.tool.call({ tool: 'mcp__terminatr__lint_lint_report', text: 'x' })).toEqual({ deny: 'no draft' })
+})
+
+test("modTools keeps the mods' well-formed tools alone", () => {
+  expect(modTools(200, LISTED).map(t => t.name)).toEqual(['lint_lint_report'])
+  expect(modTools(200, '{"tools":[{"name":"x_y","description":"d"}]}')).toEqual([])
+  expect(modTools(200, 'nope')).toEqual([])
+  expect(modTools(404, LISTED)).toEqual([])
 })

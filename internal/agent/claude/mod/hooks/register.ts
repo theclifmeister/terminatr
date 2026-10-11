@@ -33,7 +33,10 @@
 // In a thread session it gives the model the thread's tools,
 // mcp__terminatr__report, __status, __steps and __done, served over the
 // same socket (hooks/tools.ts): typed, checked by the server, run as the
-// thread, and let through without a permission prompt.
+// thread, and let through without a permission prompt. In a thread or a
+// coordinator it also gives the model the tools enabled user mods offer
+// the session (GET /v1/tools, mcp__terminatr__<mod>_<tool>), each call
+// answered by the mod through the server.
 //
 // In a coordinator with open questions (tm ask) the status entry says so,
 // "2 questions · /answer": the entry cannot be pressed, so /answer runs
@@ -62,7 +65,8 @@ import type { Ack, Offer } from './deliver'
 import { feed } from './feed'
 import { guard } from './guarded'
 import { registerPane, sawViewport } from './pane'
-import { answer, body, toolName, TOOLS } from './tools'
+import { answer, body, MOD_TOOL, modTools, toolName, TOOLS } from './tools'
+import type { ThreadTool } from './tools'
 import { initialTurn, stateOf, step, waitKey } from './turn'
 import { initialUsage, reportOf } from './usage'
 import type { TurnUsageIn, UsageReport } from './usage'
@@ -112,7 +116,7 @@ export const register: Register = on => {
     await update($, band, () => isBand)
     await startReports($)
     const role = await $.env.get('TERMINATR_ROLE')
-    if (socket && role === 'thread') await registerTools($)
+    if (socket && (role === 'thread' || role === 'coordinator')) await registerTools($, role)
     if (role === 'coordinator' && isBand) await $.command.register({ name: 'answer', description: "Open the coordinator's questions to you in a dialog" })
     if (bin && id) void follow($, bin, id, isBand)
     return started
@@ -154,6 +158,28 @@ export const register: Register = on => {
     })
     on('tool.describe', { tool }, async ($, e, next) => ({ ...(await next(e)), isDeferred: false }))
   }
+
+  // The user mods' tools (<mod>_<tool>): each call goes to the server,
+  // which checks the input against the tool's schema and has the mod
+  // answer. They run unasked, as the thread's own do: the user enabled
+  // the mod and saw each tool's description when they did.
+  on('tool.call', { tool: MOD_TOOL }, async ($, e, next) => {
+    const t = offered.get(e.tool)
+    if (!t) return next(e)
+    if (!socket) return { deny: 'terminatr: this session has no mod socket' }
+    try {
+      const r = await $.http.fetch(`http://terminatr/v1/tools/${t.name}`, {
+        method: 'POST', socketPath: socket, headers: { 'content-type': 'application/json' }, body: body(t, e),
+      })
+      return answer(r.status, r.text)
+    } catch (err) {
+      return { deny: `terminatr: the server didn't answer (${String(err)})` }
+    }
+  })
+  on('tool.check', { tool: MOD_TOOL }, async ($, e, next) => {
+    const v = await next(e)
+    return !offered.has(e.tool) || v.decision === 'deny' ? v : { decision: 'allow' }
+  })
 
   // The menu is open while next(e) is pending; whichever answers first,
   // the user in the pane or tm, answers the call. Returning with next(e)
@@ -367,16 +393,33 @@ async function watchLoop($: EngineInterface) {
   keepDelivering($).catch(() => {})
 }
 
-// registerTools lists the thread's tools for the model; one that fails
-// leaves its shell command.
-async function registerTools($: EngineInterface) {
-  for (const t of TOOLS) {
+// offered are the user mods' tools this session registered, by the name
+// the model calls.
+const offered = new Map<string, ThreadTool>()
+
+// registerTools lists the session's tools for the model: a thread's own
+// (one that fails leaves its shell command), then the user mods' tools
+// the server offers the session (GET /v1/tools).
+async function registerTools($: EngineInterface, role: string) {
+  const reg = async (t: ThreadTool) => {
     try {
       await $.tool.register(t)
+      return true
     } catch (err) {
       $.ui.log(`terminatr: tool ${t.name}: ${String(err)}`, { to: 'debug' })
+      return false
     }
   }
+  if (role === 'thread') for (const t of TOOLS) await reg(t)
+  let listed: ThreadTool[] = []
+  try {
+    const r = await $.http.fetch('http://terminatr/v1/tools', { method: 'GET', socketPath: socket })
+    listed = modTools(r.status, r.text)
+  } catch (err) {
+    $.ui.log(`terminatr: listing the mods' tools: ${String(err)}`, { to: 'debug' })
+  }
+  offered.clear()
+  for (const t of listed) if (await reg(t)) offered.set(toolName(t), t)
 }
 
 // keepDelivering runs the prompt loop until the session is gone or a
