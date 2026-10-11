@@ -3,6 +3,7 @@ package modhost
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"strings"
 	"time"
 
@@ -78,9 +79,10 @@ func (h *Host) jsTimer(c goja.FunctionCall, repeat bool) goja.Value {
 	if !ok {
 		panic(h.vm.NewTypeError("the timer's callback is not a function"))
 	}
-	d := time.Duration(c.Argument(1).ToFloat() * float64(time.Millisecond))
-	if d < minDelay || d != d { // d != d: NaN
-		d = minDelay
+	msec := c.Argument(1).ToFloat()
+	d := minDelay
+	if !math.IsNaN(msec) && msec*float64(time.Millisecond) > float64(minDelay) {
+		d = time.Duration(min(msec*float64(time.Millisecond), float64(math.MaxInt64)))
 	}
 	var args []goja.Value
 	if len(c.Arguments) > 2 {
