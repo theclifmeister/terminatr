@@ -240,9 +240,15 @@ func (w *Window) RightClick(x, y int) {
 
 // Mouse sends mouse events, encoded as the window's terminal reports
 // them: only while the program in the window tracks the mouse.
+//
+// Each event is encoded as the window's terminal would at that moment.
+// Once the first went through, a later one that encodes to nothing is
+// dropped, as a terminal drops it: the program acted on the press and
+// stopped tracking the mouse (an attach leaving for a popup over the
+// session) before the release came.
 func (w *Window) Mouse(ms ...emu.Mouse) {
 	w.env.T.Helper()
-	for _, m := range ms {
+	for i, m := range ms {
 		w.mu.Lock()
 		enc, err := w.encoder()
 		var b []byte
@@ -250,6 +256,9 @@ func (w *Window) Mouse(ms ...emu.Mouse) {
 			b, err = enc.Mouse(w.term, m)
 		}
 		w.mu.Unlock()
+		if i > 0 && err == nil && len(b) == 0 {
+			return
+		}
 		w.send(fmt.Sprintf("mouse %+v", m), b, err)
 	}
 }

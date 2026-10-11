@@ -192,8 +192,8 @@ func (e *Env) modLogs(id string, follow bool, lines string) error {
 
 // restartMod asks the server to start mod id's host again (mod.restart),
 // starting the server if none runs; tests replace it.
-var restartMod = func(id string) (proto.ModStatusResult, error) {
-	var res proto.ModStatusResult
+var restartMod = func(id string) (proto.ModHostsResult, error) {
+	var res proto.ModHostsResult
 	c, _, err := connect(true)
 	if err != nil {
 		return res, err

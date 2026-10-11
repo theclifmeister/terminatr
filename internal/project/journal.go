@@ -78,6 +78,11 @@ func (p *Project) AddItem(kind, subject, summary string, needsUser bool) (*Item,
 	return it, nil
 }
 
+// KindMod is an item a user mod raised for the coordinator ($.inbox.raise,
+// through the server's broker): its subject starts with "mod:<id> ". It
+// is data, as every item is.
+const KindMod = "mod"
+
 // KindTakeover is the inbox item that tells the coordinator the user typed
 // into a thread's pane (§4).
 const KindTakeover = "takeover"

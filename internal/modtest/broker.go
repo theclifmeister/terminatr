@@ -68,7 +68,7 @@ func (b *Broker) Answer(method string, params json.RawMessage) (json.RawMessage,
 		return nil, &modproto.Error{Code: modproto.CodeMethodNotFound, Message: "unknown method " + method}
 	}
 	if m.Needs != "" && !slices.Contains(b.grants, m.Needs) {
-		return nil, &modproto.Error{Code: modproto.CodeInvalidRequest, Message: fmt.Sprintf("refused: %s needs the %s permission", method, m.Needs)}
+		return nil, &modproto.Error{Code: modproto.CodeDenied, Message: fmt.Sprintf("refused: %s needs the %s permission", method, m.Needs)}
 	}
 	for _, a := range b.answers {
 		if a.Method == method && Match(a.Params, params) {
@@ -82,11 +82,12 @@ func (b *Broker) Answer(method string, params json.RawMessage) (json.RawMessage,
 		}
 	}
 	var p struct {
-		Key   string          `json:"key"`
-		Value json.RawMessage `json:"value"`
-		Path  string          `json:"path"`
-		Text  string          `json:"text"`
-		Slug  string          `json:"slug"`
+		Key    string          `json:"key"`
+		Value  json.RawMessage `json:"value"`
+		Path   string          `json:"path"`
+		Text   string          `json:"text"`
+		Append bool            `json:"append"`
+		Slug   string          `json:"slug"`
 	}
 	_ = json.Unmarshal(params, &p)
 	switch method {
@@ -110,7 +111,11 @@ func (b *Broker) Answer(method string, params json.RawMessage) (json.RawMessage,
 		}
 		return marshal(t), nil
 	case "fs.write":
-		b.files[p.Path] = p.Text
+		if p.Append {
+			b.files[p.Path] += p.Text
+		} else {
+			b.files[p.Path] = p.Text
+		}
 	case "projects.list", "tasks.list", "actions.list":
 		return json.RawMessage("[]"), nil
 	case "actions.available":

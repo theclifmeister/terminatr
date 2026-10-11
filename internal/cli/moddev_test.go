@@ -82,9 +82,9 @@ func TestModDev(t *testing.T) {
 
 	restarts := make(chan string, 10)
 	oldRestart, oldInt, oldEvery := restartMod, interrupted, devEvery
-	restartMod = func(id string) (proto.ModStatusResult, error) {
+	restartMod = func(id string) (proto.ModHostsResult, error) {
 		restarts <- id
-		return proto.ModStatusResult{Hosts: []proto.ModHost{{ID: id, State: "running"}}}, nil
+		return proto.ModHostsResult{Hosts: []proto.ModHost{{ID: id, State: "running"}}}, nil
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	interrupted = func() (context.Context, context.CancelFunc) { return ctx, func() {} }

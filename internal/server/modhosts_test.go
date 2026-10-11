@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"os"
 	"path/filepath"
@@ -10,6 +11,8 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/modapi"
+	"github.com/theclifmeister/terminatr/internal/modproto"
 	"github.com/theclifmeister/terminatr/internal/modsup"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
@@ -83,25 +86,156 @@ func TestModHostsFollowConfig(t *testing.T) {
 		return len(st) == 1 && st[0].ID == "code" && st[0].State == modsup.Backoff
 	})
 	// mod.restart: the human's, for an enabled code mod.
-	if _, perr := s.modRestart(proto.ModRestartParams{ID: "code"}, caller.Caller{Kind: caller.Thread}); perr == nil || perr.Code != "human-only" {
+	if _, perr := s.restartMod("code", caller.Caller{Kind: caller.Thread}); perr == nil || perr.Code != "human-only" {
 		t.Fatalf("an agent restarted a mod: %v", perr)
 	}
-	if _, perr := s.modRestart(proto.ModRestartParams{ID: "theme"}, human); perr == nil || perr.Code != proto.ErrRefused {
+	if _, perr := s.restartMod("theme", human); perr == nil || perr.Code != proto.ErrBadParams {
 		t.Fatalf("restarted a data mod: %v", perr)
 	}
-	res, perr := s.modRestart(proto.ModRestartParams{ID: "code"}, human)
-	if perr != nil || len(res.(proto.ModStatusResult).Hosts) != 1 {
+	res, perr := s.restartMod("code", human)
+	if perr != nil || len(res.(proto.ModHostsResult).Hosts) != 1 {
 		t.Fatalf("mod.restart: %+v %v", res, perr)
 	}
-	if st := s.modStatus(); st.NoMods || len(st.Hosts) != 1 || st.Hosts[0].ID != "code" {
-		t.Fatalf("mod.status %+v", st)
+	if st := s.modHosts(); st.NoMods || len(st.Hosts) != 1 || st.Hosts[0].ID != "code" {
+		t.Fatalf("mod.hosts %+v", st)
 	}
 	write("config.toml", "[mods.code]\nenabled = false\n")
 	wait("code stopped", func(st []modsup.Status) bool { return len(st) == 0 })
 }
 
+// TestModRestartHumanOnly: mod.hosts lists the hosts as the Mods tab
+// reads them; mod.restart is refused for an agent, and for a mod that
+// has no host, and restarts one for the human.
+func TestModRestartHumanOnly(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("TERMINATR_HOME", home)
+	s := &Server{opts: Options{Bin: "/nonexistent/tm"}, log: log.New(&testWriter{t: t}, "server: ", 0),
+		sessions: map[string]*session.Session{}, modEv: newModEvents()}
+	if res := s.modHosts(); res.Hosts == nil || len(res.Hosts) != 0 {
+		t.Fatalf("no supervisor: %+v", res)
+	}
+	if _, perr := s.restartMod("code", caller.Caller{Kind: caller.Human}); perr == nil {
+		t.Fatal("restarted a mod without a supervisor")
+	}
+	sup := s.newModHosts()
+	defer sup.Close()
+	s.modSup.Store(sup)
+	// Installed and enabled, as mod.restart reads the mods again first.
+	os.MkdirAll(filepath.Join(home, "mods", "code"), 0o700)
+	os.WriteFile(filepath.Join(home, "mods", "code", "mod.toml"), []byte("id = \"code\"\nname = \"X\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nmain = \"main.js\"\n"), 0o600)
+	os.WriteFile(filepath.Join(home, "mods", "code", "main.js"), nil, 0o600)
+	os.WriteFile(filepath.Join(home, "config.toml"), []byte("[mods.code]\nenabled = true\n"), 0o600)
+	sup.Set([]modsup.Spec{{ID: "code", Entry: filepath.Join(home, "mods", "code", "main.js")}})
+	if res := s.modHosts(); len(res.Hosts) != 1 || res.Hosts[0].ID != "code" || res.Hosts[0].State == "" {
+		t.Fatalf("hosts: %+v", res)
+	}
+	for _, c := range []caller.Caller{{Kind: caller.Coordinator, Project: "p"}, {Kind: caller.Thread, Project: "p", Thread: "t-0001"}} {
+		if _, perr := s.restartMod("code", c); perr == nil || perr.Code != "human-only" {
+			t.Errorf("%v restarted it: %v", c.Kind, perr)
+		}
+	}
+	if _, perr := s.restartMod("other", caller.Caller{Kind: caller.Human}); perr == nil {
+		t.Error("restarted a mod that has no host")
+	}
+	if _, perr := s.restartMod("code", caller.Caller{Kind: caller.Human}); perr != nil {
+		t.Errorf("the human's restart: %v", perr)
+	}
+}
+
+// TestModHostReachesBroker: a TypeScript mod's $ calls go from its
+// supervised host through the supervisor's Broker hook
+// (Server.ModRequest) to the broker, and the answers come back to it:
+// its store, a project it runs for, and a fetch it has no grant for,
+// refused with the broker's code and audited in its log.
+func TestModHostReachesBroker(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("TERMINATR_HOME", home)
+	t.Setenv(envModsPoll, "20ms")
+	p, err := ResolvePaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	newWatchProject(t)
+	dir := filepath.Join(home, "mods", "probe")
+	if err := os.MkdirAll(filepath.Join(dir, "types"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"mod.toml": "id = \"probe\"\nname = \"P\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nmain = \"main.ts\"\n" +
+			"[permissions]\nproject_read = true\n",
+		"types/tm.d.ts": modapi.TS(),
+		"main.ts": `import type { TM } from "./types/tm";
+
+$.on("mod.ready", async () => {
+  await $.store.set("k", 42);
+  const v = (await $.store.get("k")) as number;
+  const w: TM.ProjectWatch = await $.project.get("demo");
+  let refused = 0;
+  try {
+    await $.http.fetch("https://example.com/");
+  } catch (e) {
+    refused = (e as { code: number }).code;
+  }
+  await $.store.set("seen", { v, project: w.project, refused });
+});
+`,
+	}
+	for name, text := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := "[mods.probe]\nenabled = true\ngrants = [\"project_read\"]\nprojects = [\"demo\"]\n"
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{opts: Options{Paths: p, Bin: os.Args[0]}, log: log.New(&testWriter{t: t}, "server: ", 0),
+		sessions: map[string]*session.Session{}, modEv: newModEvents()}
+	sup := s.newModHosts()
+	s.modSup.Store(sup)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.runModHosts(ctx, sup)
+	}()
+	defer func() {
+		cancel()
+		<-done
+	}()
+	store := filepath.Join(home, "state", "mods", "probe", "store.json")
+	type seen struct {
+		V       int    `json:"v"`
+		Project string `json:"project"`
+		Refused int    `json:"refused"`
+	}
+	want := seen{V: 42, Project: "demo", Refused: modproto.CodeDenied}
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		b, _ := os.ReadFile(store)
+		var m struct {
+			Seen *seen `json:"seen"`
+		}
+		if json.Unmarshal(b, &m) == nil && m.Seen != nil {
+			if *m.Seen != want {
+				t.Fatalf("seen %+v, want %+v", *m.Seen, want)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			logText, _ := os.ReadFile(filepath.Join(home, "logs", "mods", "probe.log"))
+			t.Fatalf("store %q; hosts %+v; log:\n%s", b, s.ModHosts(), logText)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	logText, _ := os.ReadFile(filepath.Join(home, "logs", "mods", "probe.log"))
+	if !strings.Contains(string(logText), "broker: denied http.fetch") {
+		t.Fatalf("log:\n%s", logText)
+	}
+}
+
 // TestModHostsSafeMode: in safe mode no user mod is given to the
-// supervisor, mod.status says so and mod.restart refuses.
+// supervisor, mod.hosts says so and mod.restart refuses.
 func TestModHostsSafeMode(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("TERMINATR_HOME", home)
@@ -122,10 +256,10 @@ func TestModHostsSafeMode(t *testing.T) {
 	if specs, ok := s.modSpecs(); !ok || len(specs) != 0 {
 		t.Fatalf("safe mode runs %+v", specs)
 	}
-	if !s.modStatus().NoMods {
-		t.Fatal("mod.status doesn't say safe mode")
+	if !s.modHosts().NoMods {
+		t.Fatal("mod.hosts doesn't say safe mode")
 	}
-	if _, perr := s.modRestart(proto.ModRestartParams{ID: "code"}, human); perr == nil || !strings.Contains(perr.Message, "safe mode") {
+	if _, perr := s.restartMod("code", human); perr == nil || !strings.Contains(perr.Message, "safe mode") {
 		t.Fatalf("mod.restart in safe mode: %v", perr)
 	}
 }

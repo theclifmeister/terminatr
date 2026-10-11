@@ -26,9 +26,9 @@ type Live struct {
 	// (serverCodeHost); nil when it is not running or can't tell (an
 	// older server).
 	CodeHost *proto.CodeHostStatus
-	// Mods is the server's answer to mod.status; nil when it is not
+	// Mods is the server's answer to mod.hosts; nil when it is not
 	// running or can't tell (an older server).
-	Mods *proto.ModStatusResult
+	Mods *proto.ModHostsResult
 }
 
 // callTimeout bounds each of doctor's calls to the server; a server
@@ -133,8 +133,8 @@ func Server(d Deps) ([]Check, Live) {
 		}
 		out = append(out, Check{Group: g, Name: "last shutdown", Status: Warn, Detail: detail + "; see " + p.Log})
 	}
-	var ms proto.ModStatusResult
-	if err := c.CallWithin(callTimeout, proto.MethodModStatus, nil, &ms); err == nil {
+	var ms proto.ModHostsResult
+	if err := c.CallWithin(callTimeout, proto.MethodModHosts, nil, &ms); err == nil {
 		live.Mods = &ms
 	}
 	var list proto.SessionListResult

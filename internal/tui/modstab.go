@@ -1,15 +1,19 @@
 package tui
 
 import (
+	"cmp"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // The settings popup's Mods tab (mods design §9): every installed mod on
@@ -26,7 +30,7 @@ import (
 type modsTab struct{ sel int }
 
 // modsKeys are the Mods tab's action row.
-const modsKeys = "enter on/off · p permissions · s settings · l log · u update · x remove · e examples · ← → tabs · esc close"
+const modsKeys = "enter on/off · p permissions · s settings · l log · r restart · u update · x remove · e examples · ← → tabs · esc close"
 
 // selMod is the selected mod, false for none.
 func (mt *modsTab) selMod(m *dash) (mod.Mod, bool) {
@@ -69,24 +73,62 @@ func modKinds(md mod.Mod) string {
 	return strings.Join(k, " · ")
 }
 
-// modFailure is the last error of the mod's host when it failed.
-func modFailure(m *dash, md mod.Mod) string {
-	if md.State != mod.Enabled {
-		return ""
+// modHost is the enabled code mod's host as the supervisor has it;
+// false for a data mod, one that is off, or when the server doesn't say.
+func modHost(m *dash, md mod.Mod) (proto.ModHost, bool) {
+	if md.State != mod.Enabled || md.Manifest == nil || !md.Manifest.IsCode() {
+		return proto.ModHost{}, false
 	}
-	return oneLine(m.data.ModFailures[md.ID])
+	h, ok := m.data.ModHosts[md.ID]
+	return h, ok
 }
 
-// modLook is the mod's mark and status, each with its style.
+// modFailure is the last error of the mod's host when it failed.
+func modFailure(m *dash, md mod.Mod) string {
+	if h, ok := modHost(m, md); ok && h.State == hostFailed {
+		return cmp.Or(oneLine(h.Err), "no reason given")
+	}
+	return ""
+}
+
+// The supervisor's states (modsup.State) as mod.hosts says them.
+const (
+	hostIdle     = "idle"
+	hostStarting = "starting"
+	hostRunning  = "running"
+	hostBackoff  = "backoff"
+	hostFailed   = "failed"
+)
+
+// hostRestart is "restarting in 5s: <err>" for a host in backoff.
+func hostRestart(h proto.ModHost) string {
+	secs := max(int(math.Ceil(time.Until(h.Next).Seconds())), 0)
+	out := fmt.Sprintf("restarting in %ds", secs)
+	if e := oneLine(h.Err); e != "" {
+		out += ": " + e
+	}
+	return out
+}
+
+// modLook is the mod's mark and status, each with its style: a code
+// mod that is on by its host's state (mods design §8), the others by
+// their own.
 func modLook(m *dash, md mod.Mod) (mark string, ms lipgloss.Style, status string, ss lipgloss.Style) {
 	plain := th().Plain
+	h, hosted := modHost(m, md)
 	switch {
-	case modFailure(m, md) != "":
+	case hosted && h.State == hostFailed:
 		return ic().blocked, th().Bad, "failed: " + modFailure(m, md), th().Bad
+	case hosted && h.State == hostBackoff:
+		return ic().blocked, th().Warn, hostRestart(h), th().Warn
 	case md.State == mod.Invalid || md.State == mod.Incompatible:
 		return ic().blocked, th().Bad, md.Status(), th().Bad
 	case md.State == mod.Enabled && len(md.WantsMore) > 0:
 		return ic().review, th().Warn, "wants more: " + strings.Join(md.Manifest.Permissions.Words(md.WantsMore), " · "), th().Warn
+	case hosted && h.State == hostStarting:
+		return ic().starting, th().Good, md.Status(), th().Accent
+	case hosted && h.State == hostIdle:
+		return ic().working, th().Good, md.Status() + " · waits for its first event", th().Faint
 	case md.State == mod.Enabled && md.Builtin:
 		return ic().working, th().Good, md.Status(), th().Faint
 	case md.State == mod.Enabled:
@@ -154,6 +196,29 @@ func (mt *modsTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
 	return out, sel, hits
 }
 
+// hostWords say where a host that is fine stands.
+func hostWords(h proto.ModHost) string {
+	switch h.State {
+	case hostRunning:
+		out := "Runs"
+		if h.PID > 0 {
+			out += fmt.Sprintf(" as pid %d", h.PID)
+		}
+		if h.RSS > 0 {
+			out += ", using " + sizeWords(int64(h.RSS))
+		}
+		if h.Restarts > 0 {
+			out += fmt.Sprintf(", restarted %d×", h.Restarts)
+		}
+		return out + "."
+	case hostStarting:
+		return "Starting: its host loads its script."
+	case hostIdle:
+		return "Waits for its first event: its host starts then."
+	}
+	return "Its host is " + h.State + "."
+}
+
 // modAbout are the selected mod's lines under the list: what it is and
 // who made it, then why it doesn't run, or what of its settings tm
 // didn't take.
@@ -174,12 +239,20 @@ func modAbout(m *dash, md mod.Mod, w int) []string {
 	if len(md.Projects) > 0 {
 		out = append(out, faintLines("Runs only for "+joinAnd(md.Projects)+".", w)...)
 	}
+	h, hosted := modHost(m, md)
 	switch f := modFailure(m, md); {
 	case f != "":
 		for _, l := range wrapLines("Failed: "+f, w) {
 			out = append(out, th().Bad.Render(l))
 		}
-		out = append(out, faintLines("Its columns and panels stay blank until it runs again; your threads carry on. l shows its log.", w)...)
+		out = append(out, faintLines("Its columns and panels stay blank until it runs again; your threads carry on. r restarts it; l shows its log.", w)...)
+	case hosted && h.State == hostBackoff:
+		for _, l := range wrapLines("Its host stopped: "+hostRestart(h)+".", w) {
+			out = append(out, th().Warn.Render(l))
+		}
+		out = append(out, faintLines("r restarts it now; l shows its log.", w)...)
+	case hosted:
+		out = append(out, faintLines(hostWords(h), w)...)
 	case md.State == mod.Invalid || md.State == mod.Incompatible:
 		for _, l := range wrapLines(md.Status(), w) {
 			out = append(out, th().Bad.Render(l))
@@ -205,7 +278,7 @@ func (mt *modsTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 	}
 	md, ok := mt.selMod(m)
 	if !ok {
-		return nil, slices.Contains([]string{"enter", "space", " ", "p", "s", "l", "u", "x"}, s)
+		return nil, slices.Contains([]string{"enter", "space", " ", "p", "s", "l", "r", "u", "x"}, s)
 	}
 	switch s {
 	case "enter", "space", " ":
@@ -216,6 +289,8 @@ func (mt *modsTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 		m.push(newModSettings(md))
 	case "l":
 		m.openModLog(md)
+	case "r":
+		return m.modRestart(md), true
 	case "u":
 		return m.modUpdate(md), true
 	case "x":
@@ -249,6 +324,27 @@ func (m *dash) modAct(id, verb, msg string) tea.Cmd {
 			return actionMsg{err: err}
 		}
 		return actionMsg{msg: msg}
+	})
+}
+
+// modRestart starts a code mod's host again (mod.restart): a failed one
+// gets a fresh count. A data mod has no host to restart.
+func (m *dash) modRestart(md mod.Mod) tea.Cmd {
+	name := modName(md)
+	switch {
+	case md.Manifest == nil || !md.Manifest.IsCode():
+		m.fail(fmt.Errorf("%s has no code to restart: only a code mod runs", name))
+		return nil
+	case md.State != mod.Enabled:
+		m.fail(fmt.Errorf("%s is off: enter turns it on", name))
+		return nil
+	}
+	src := m.src
+	return m.act(func() actionMsg {
+		if err := src.RestartMod(md.ID); err != nil {
+			return actionMsg{err: fmt.Errorf("%s: %w", name, err)}
+		}
+		return actionMsg{msg: "restarted " + name}
 	})
 }
 

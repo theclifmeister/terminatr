@@ -177,8 +177,8 @@ func (e *Env) warnModsRun(c *server.Client) {
 	if !mod.NoMods(e.Getenv) || c.Started {
 		return
 	}
-	var res proto.ModStatusResult
-	if err := c.Call(proto.MethodModStatus, nil, &res); err != nil || res.NoMods {
+	var res proto.ModHostsResult
+	if err := c.Call(proto.MethodModHosts, nil, &res); err != nil || res.NoMods {
 		return
 	}
 	fmt.Fprintln(e.Stderr, "tm: --no-mods: the server was already running with user mods; tm --no-mods server restart restarts it without them")

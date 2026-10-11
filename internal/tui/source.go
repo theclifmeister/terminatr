@@ -20,7 +20,9 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/modannot"
 	"github.com/theclifmeister/terminatr/internal/models"
+	"github.com/theclifmeister/terminatr/internal/modnotify"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -36,6 +38,9 @@ import (
 type Data struct {
 	ServerOK bool
 	Sessions []proto.SessionInfo
+	// ModNotices are the notifications of user mods in the server's tray
+	// (modnotice.go).
+	ModNotices []modnotify.Notice
 	// Alerts is the server's notification count; the bell rings when it
 	// goes up (docs/SPEC.md §4).
 	Alerts   uint64
@@ -63,14 +68,15 @@ type Data struct {
 	// the header says so (docs/SPEC.md §8.2).
 	NoAgent bool
 	// Mods are the installed mods, by id, for the settings popup's Mods
-	// tab; ModsErr says why they can't be listed. ModFailures are the
-	// last error of each enabled mod whose host failed (mods design §8:
-	// ▲ failed), by id, from the mod supervisor.
-	Mods        []mod.Mod
-	ModsErr     string
-	ModFailures map[string]string
+	// tab; ModsErr says why they can't be listed. ModHosts are the
+	// enabled code mods' hosts as the mod supervisor has them (mods
+	// design §8: idle, starting, running, backoff, failed), by id; nil
+	// when the server doesn't say (mod.hosts).
+	Mods     []mod.Mod
+	ModsErr  string
+	ModHosts map[string]proto.ModHost
 	// NoMods: the server runs in safe mode (tm --no-mods): no user mod
-	// runs.
+	// runs (mod.hosts).
 	NoMods bool
 }
 
@@ -111,7 +117,10 @@ type ProjectData struct {
 	// Checkouts are notes on the repos whose local default branch is
 	// behind origin, by repo path, as the ticker last saw them.
 	Checkouts map[string]string
-	Err       string
+	// Badges are the mods' annotations in the project, by target
+	// (modannot.Task, modannot.Thread), of the mods that run for it.
+	Badges map[string][]modannot.Badge
+	Err    string
 }
 
 // ThreadRow is one thread: its record (thread.toml) and its STATUS.md,
@@ -228,6 +237,10 @@ type Source interface {
 	// ModLog is the end of mod id's log, at most max bytes (cut says it
 	// was longer); "" when it has none.
 	ModLog(id string, max int64) (text string, cut bool, err error)
+	// RestartMod starts code mod id's host again now (mod.restart): a
+	// failed mod gets a fresh count. It is refused when tm runs inside
+	// an agent.
+	RestartMod(id string) error
 }
 
 // Review is what the user needs to review a task: how to check it (the
@@ -296,21 +309,8 @@ func (s *ServerSource) Load() Data {
 	if err := s.call(proto.MethodSessionList, nil, &res); err != nil {
 		d.Err = err.Error()
 	} else {
-		d.ServerOK, d.Sessions, d.Alerts = true, res.Sessions, res.Alerts
+		d.ServerOK, d.Sessions, d.Alerts, d.ModNotices = true, res.Sessions, res.Alerts, res.ModNotices
 		d.Server = ServerInfo{Version: res.Version, Build: res.Build, Latest: res.Latest, Upgrade: res.Upgrade}
-		// A server older than mod.status runs no mods to report.
-		var ms proto.ModStatusResult
-		if s.call(proto.MethodModStatus, nil, &ms) == nil {
-			d.NoMods = ms.NoMods
-			for _, h := range ms.Hosts {
-				if h.State == "failed" { // modsup.Failed
-					if d.ModFailures == nil {
-						d.ModFailures = map[string]string{}
-					}
-					d.ModFailures[h.ID] = h.Err
-				}
-			}
-		}
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -320,6 +320,16 @@ func (s *ServerSource) Load() Data {
 		d.ModsErr = err.Error()
 	} else {
 		d.Mods = reg.Mods
+	}
+	if d.ServerOK {
+		var hosts proto.ModHostsResult
+		if err := s.call(proto.MethodModHosts, nil, &hosts); err == nil {
+			d.NoMods = hosts.NoMods
+			d.ModHosts = make(map[string]proto.ModHost, len(hosts.Hosts))
+			for _, h := range hosts.Hosts {
+				d.ModHosts[h.ID] = h
+			}
+		}
 	}
 	if cfg != nil {
 		d.AgentMod, d.AgentModBand, d.AgentModPane, d.ContextHint, d.UpdateCheck = cfg.AgentMod, cfg.AgentModBand, cfg.AgentModPane, cfg.ContextHint, cfg.UpdateCheck
@@ -335,6 +345,7 @@ func (s *ServerSource) Load() Data {
 	if err != nil && d.Err == "" {
 		d.Err = err.Error()
 	}
+	badgers := badgeMods(d.Mods)
 	for _, sum := range list {
 		if sum.Safety != nil && sum.Safety.Archived {
 			continue // hidden: tm project unarchive brings it back
@@ -374,10 +385,46 @@ func (s *ServerSource) Load() Data {
 			pd.Unread, pd.Items = len(items), items
 			qs, _ := p.Questions()
 			pd.Questions = len(qs)
+			pd.Badges = badgesOf(badgers, sum.Slug)
 		}
 		d.Projects = append(d.Projects, pd)
 	}
 	return d
+}
+
+// badgeMods are the mods whose annotations show: enabled, with the
+// project_read grant that $.annotate needs. A mod disabled, regranted or
+// removed shows no badges.
+func badgeMods(mods []mod.Mod) []mod.Mod {
+	var out []mod.Mod
+	for _, m := range mods {
+		if m.State == mod.Enabled && m.Granted(mod.PermProjectRead) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// badgesOf reads the badges of mods for project slug, by target, in the
+// mods' id order.
+func badgesOf(mods []mod.Mod, slug string) map[string][]modannot.Badge {
+	state, err := home.ModStateDir()
+	if err != nil {
+		return nil
+	}
+	var out map[string][]modannot.Badge
+	for _, m := range mods {
+		if !m.Runs(slug) {
+			continue
+		}
+		for target, bs := range modannot.Read(filepath.Join(state, m.ID), m.ID, slug) {
+			if out == nil {
+				out = map[string][]modannot.Badge{}
+			}
+			out[target] = append(out[target], bs...)
+		}
+	}
+	return out
 }
 
 func (s *ServerSource) Board(slug string) (*tasks.Board, error) {
@@ -465,6 +512,9 @@ func (s *ServerSource) SetSetting(table, key string, value any) error {
 	}
 	slug, isProject := strings.CutPrefix(table, "projects.")
 	if !isProject {
+		if value == nil {
+			return config.Unset(table, key)
+		}
 		return config.Set(table, key, value)
 	}
 	detail := fmt.Sprint(value)
@@ -712,6 +762,13 @@ func (s *ServerSource) ModLog(id string, max int64) (string, bool, error) {
 		return "", false, err
 	}
 	return tail(filepath.Join(dir, id+".log"), max)
+}
+
+func (s *ServerSource) RestartMod(id string) error {
+	if s.Caller.IsAgent() {
+		return mod.ErrHumanOnly
+	}
+	return s.call(proto.MethodModRestart, proto.ModRestartParams{ID: id}, nil)
 }
 
 // tail reads the last max bytes of file path, from its first whole

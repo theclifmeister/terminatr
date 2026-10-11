@@ -44,7 +44,7 @@ func (s *Server) newModHosts() *modsup.Supervisor {
 	}
 	return modsup.New(modsup.Options{
 		Bin: s.opts.Bin, CacheDir: cache, StateDir: state, LogDir: logs,
-		Subscribe: s.SubscribeMod, Logf: s.log.Printf,
+		Subscribe: s.SubscribeMod, Broker: s.ModRequest, Logf: s.log.Printf,
 		TMVersion: version.Version, API: mod.APIVersion(),
 	})
 }
@@ -100,38 +100,38 @@ func (s *Server) ModHosts() []modsup.Status {
 	return nil
 }
 
-// modStatus answers mod.status.
-func (s *Server) modStatus() proto.ModStatusResult {
-	res := proto.ModStatusResult{NoMods: s.noMods, Hosts: []proto.ModHost{}}
+// modHosts is mod.hosts: ModHosts, and safe mode.
+func (s *Server) modHosts() proto.ModHostsResult {
+	res := proto.ModHostsResult{NoMods: s.noMods, Hosts: []proto.ModHost{}}
 	for _, st := range s.ModHosts() {
-		res.Hosts = append(res.Hosts, proto.ModHost{ID: st.ID, State: string(st.State), Since: st.Since, PID: st.PID,
-			RSS: st.RSS, Restarts: st.Restarts, Next: st.Next, Err: st.Err})
+		res.Hosts = append(res.Hosts, proto.ModHost{ID: st.ID, State: string(st.State), Since: st.Since,
+			PID: st.PID, RSS: st.RSS, Restarts: st.Restarts, Next: st.Next, Err: st.Err})
 	}
 	return res
 }
 
-// modRestart answers mod.restart: the supervisor takes the mods as they
-// are now, so a mod just enabled is there, and starts id's host again.
-func (s *Server) modRestart(p proto.ModRestartParams, c caller.Caller) (any, *proto.Error) {
+// restartMod is mod.restart: the human starts mod id's host again, with
+// the mods as they are now, so a mod just enabled runs (tm mod dev); an
+// agent is refused, and so is any in safe mode.
+func (s *Server) restartMod(id string, c caller.Caller) (any, *proto.Error) {
 	if c.IsAgent() {
-		return nil, proto.Errorf("human-only", "mods are restarted by the human")
+		return nil, proto.Errorf("human-only", "the user restarts mods")
 	}
-	if err := mod.CheckID(p.ID); err != nil {
+	if err := mod.CheckID(id); err != nil {
 		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 	}
 	if s.noMods {
 		return nil, proto.Errorf(proto.ErrRefused, "the server runs in safe mode (%s): no user mod runs; restart it without", mod.EnvNoMods)
 	}
 	sup := s.modSup.Load()
-	if sup == nil {
-		return nil, proto.Errorf(proto.ErrRefused, "this server runs no code mods")
+	if sup != nil {
+		if specs, ok := s.modSpecs(); ok {
+			sup.Set(specs)
+		}
 	}
-	if specs, ok := s.modSpecs(); ok {
-		sup.Set(specs)
+	if sup == nil || !sup.Restart(id) {
+		return nil, proto.Errorf(proto.ErrBadParams, "mod %q doesn't run: only an enabled code mod has a host", id)
 	}
-	if !sup.Restart(p.ID) {
-		return nil, proto.Errorf(proto.ErrRefused, "%s isn't an enabled code mod", p.ID)
-	}
-	s.log.Printf("mod.restart %s", p.ID)
-	return s.modStatus(), nil
+	s.log.Printf("mod.restart %s", id)
+	return s.modHosts(), nil
 }

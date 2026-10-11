@@ -53,6 +53,7 @@ type fakeSource struct {
 	library    []thread.LibFile
 	libFiles   map[string]string // "t-0001/name" -> content
 	libRemoved []string          // "t-0001/name", "t-0001/" for all
+	restarted  []string          // mod ids
 }
 
 func (f *fakeSource) SetRemote(slug string, on bool) (string, error) {
@@ -105,6 +106,9 @@ func (f *fakeSource) SetSetting(table, key string, value any) error {
 			return config.UnsetProject(slug, key)
 		}
 		return config.SetProject(slug, key, value)
+	}
+	if value == nil {
+		return config.Unset(table, key)
 	}
 	return config.Set(table, key, value)
 }

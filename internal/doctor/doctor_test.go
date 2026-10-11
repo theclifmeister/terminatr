@@ -608,7 +608,7 @@ func TestMods(t *testing.T) {
 	}
 	os.WriteFile(filepath.Join(d.Paths.Home, "config.toml"), []byte("[mods.greedy]\nenabled = true\n[mods.gone]\nenabled = true\n"), 0o600)
 	var got []string
-	live := Live{Mods: &proto.ModStatusResult{NoMods: true, Hosts: []proto.ModHost{
+	live := Live{Mods: &proto.ModHostsResult{NoMods: true, Hosts: []proto.ModHost{
 		{ID: "greedy", State: "failed", Err: "crashed 3 times in 5m0s\nmore"}, {ID: "ok", State: "running"}, {ID: "shaky", State: "backoff", Err: "exit 1"}}}}
 	for _, c := range Mods(d, live) {
 		if c.Status != Warn {

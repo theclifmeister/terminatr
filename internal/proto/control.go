@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/theclifmeister/terminatr/internal/modnotify"
 )
 
 // Error codes of control responses. Clients match on these, never on
@@ -325,6 +327,9 @@ type SessionListResult struct {
 	// thread reported); a client rings its bell when it goes up
 	// (docs/SPEC.md §4).
 	Alerts uint64 `json:"alerts"`
+	// ModNotices are the notifications user mods sent that are still in
+	// the tray (modnotify); consoles show them.
+	ModNotices []modnotify.Notice `json:"mod_notices,omitempty"`
 	// Version and Build are the server's own (version.Version and
 	// version.BuildID()), which a client shows and compares with its
 	// own.
@@ -582,36 +587,57 @@ type QuestionsOpenResult struct {
 	Open    int    `json:"open"`
 }
 
-// MethodModStatus lists the code mods the server runs and where each
-// stands under the mod supervisor (mods design §8): tm doctor, tm mod
-// dev. Anyone may ask.
-const MethodModStatus = "mod.status"
+// MethodNotifyClaim says a console draws mod notification id as an OS
+// notification: the first caller gets OK, the others none, so that one
+// console rings it. MethodNotifyDismiss takes it out of the tray (a
+// button pressed, or the human dismissed it). Both are the human's.
+const (
+	MethodNotifyClaim   = "notify.claim"
+	MethodNotifyDismiss = "notify.dismiss"
+)
 
-// ModStatusResult is the answer of mod.status.
-type ModStatusResult struct {
-	// NoMods: the server runs in safe mode (tm --no-mods,
-	// TERMINATR_NO_MODS=1): no user mod runs.
+// NoticeParams are the params of notify.claim and notify.dismiss.
+type NoticeParams struct {
+	ID string `json:"id"`
+}
+
+// NoticeResult is their result.
+type NoticeResult struct {
+	OK bool `json:"ok"`
+}
+
+// MethodModHosts lists the supervised code mods' hosts and where each
+// stands (mods design §8), for the Mods tab, tm doctor and tm mod dev.
+const MethodModHosts = "mod.hosts"
+
+// ModHostsResult is the answer of mod.hosts, by id. NoMods: the server
+// runs in safe mode (tm --no-mods, TERMINATR_NO_MODS=1): no user mod
+// runs.
+type ModHostsResult struct {
 	NoMods bool      `json:"no_mods,omitempty"`
 	Hosts  []ModHost `json:"hosts"`
 }
 
-// ModHost is one supervised code mod: State is modsup's (idle, starting,
-// running, backoff, failed), Err why its last host ended or it failed.
+// ModHost is one code mod's host: State is idle, starting, running,
+// backoff or failed; RSS its resident set in bytes when it runs; Next
+// when a host in backoff restarts; Err why the last host ended, or why
+// the mod failed.
 type ModHost struct {
 	ID       string    `json:"id"`
 	State    string    `json:"state"`
-	Since    time.Time `json:"since,omitzero"`
+	Since    time.Time `json:"since"`
 	PID      int       `json:"pid,omitempty"`
 	RSS      uint64    `json:"rss,omitempty"`
 	Restarts int       `json:"restarts,omitempty"`
 	Next     time.Time `json:"next,omitzero"`
-	Err      string    `json:"error,omitempty"`
+	Err      string    `json:"err,omitempty"`
 }
 
 // MethodModRestart reads the installed mods and config.toml again, then
-// starts code mod ID's host afresh, now (not on its first event), with
-// a clean failure count: tm mod dev after each save, the Mods tab's r.
-// The human's.
+// starts a code mod's host again now (the Mods tab's r, tm mod dev after
+// each save): a failed mod gets a fresh count, an idle one starts, a mod
+// just enabled runs. It answers as mod.hosts. The human's; refused in
+// safe mode.
 const MethodModRestart = "mod.restart"
 
 // ModRestartParams are the params of mod.restart.

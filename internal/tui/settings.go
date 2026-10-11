@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/version"
@@ -278,19 +279,40 @@ func globalSettings(note string) []setting {
 				return "full"
 			},
 			change: func(m *dash) tea.Cmd { return m.sideKey("b") }},
-		{label: "Icons", help: "The glyphs of the sidebar's tree, states and progress: Nerd Font icons, Unicode shapes, or ASCII for any font. Auto picks Nerd Font icons in Ghostty, Unicode elsewhere. Each console decides auto for itself.",
+		{label: "Theme", help: "The colours of every part of tm: the built-in one, on your terminal's own 16 colours, or a theme from a mod that is on, which may differ light and dark. Each console follows its terminal's light or dark scheme.",
+			value: func(m *dash) string { return themeSetting() },
+			change: func(m *dash) tea.Cmd {
+				choices := modChoices([]string{ThemeDefault}, mod.KindTheme)
+				next := choices[(slices.Index(choices, themeSetting())+1)%len(choices)]
+				cfg, _ := config.Load()
+				return m.pickMod("theme", next, useTheme(loadMods(cfg), next))
+			}},
+		{label: "Icons", help: "The glyphs of the sidebar's tree, states and progress: Nerd Font icons, Unicode shapes, ASCII for any font, or a set from a mod that is on. Auto picks Nerd Font icons in Ghostty, Unicode elsewhere. Each console decides auto for itself.",
 			value: func(m *dash) string {
 				v := iconsSetting()
-				if v == IconsAuto {
+				if v == IconsAuto || ic().name != v {
 					return v + " (" + ic().name + ")"
 				}
 				return v
 			},
 			change: func(m *dash) tea.Cmd {
-				cur := iconsSetting()
-				next := IconChoices[(slices.Index(IconChoices, cur)+1)%len(IconChoices)]
-				setIcons(next)
-				return m.setSetting("ui", "icons", next, "icons: "+next+"; consoles started earlier pick them up when they next open")
+				choices := modChoices(IconChoices, mod.KindIcons)
+				next := choices[(slices.Index(choices, iconsSetting())+1)%len(choices)]
+				return m.pickMod("icons", next, setIcons(next))
+			}},
+		{label: "Layout", help: "The order of the sidebar's columns: the built-in one, or a layout from a mod that is on, which may place a mod's columns. The state, paused, inactive and needs-you columns always show. Every console of this view follows.",
+			value: func(m *dash) string { return layoutValue() },
+			change: func(m *dash) tea.Cmd {
+				choices := modChoices([]string{ThemeDefault}, mod.KindLayout)
+				next := choices[(slices.Index(choices, layoutValue())+1)%len(choices)]
+				cfg, _ := config.Load()
+				cols, err := modLayout(loadMods(cfg), next)
+				layoutVal.Store(next)
+				cmd := m.pickMod("layout", next, err)
+				if m.view == nil {
+					return cmd
+				}
+				return tea.Batch(cmd, m.call(proto.MethodViewColumns, proto.ViewParams{Columns: cols}))
 			}},
 		{label: "Context hint", help: "Tell a coordinator to consider /clear once its context window is this full: a toast in its pane, a bell and a yellow percent on its sidebar row (red from 80%). Its context lives in files, so a clear loses nothing. Off never says it.",
 			value: func(m *dash) string {
@@ -352,6 +374,25 @@ func globalSettings(note string) []setting {
 				return m.setSetting("agent_mod", "pane", on, "agent mod pane "+onOff(on)+"; coordinators launched from now on follow it")
 			}},
 	}
+}
+
+// pickMod saves a [ui] pick of a built-in or a mod's theme, icons or
+// layout (key), which this console has just applied: "default" as
+// unset. err says why a mod's didn't load, and so the built-in
+// one is in use.
+func (m *dash) pickMod(key, value string, err error) tea.Cmd {
+	msg := key + ": " + value + "; consoles started earlier pick it up when they next open"
+	if key == "layout" {
+		msg = key + ": " + value
+	}
+	if err != nil {
+		msg = key + ": " + value + " doesn't load (" + oneLine(err.Error()) + "); the built-in one is used"
+	}
+	var v any = value
+	if value == ThemeDefault {
+		v = nil
+	}
+	return m.setSetting("ui", key, v, msg)
 }
 
 // splitSteps are the list widths enter steps through.

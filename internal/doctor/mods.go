@@ -50,7 +50,7 @@ func Mods(d Deps, live Live) []Check {
 
 // hostChecks are a running server's supervised code mods that failed or
 // are backing off, and its safe mode.
-func hostChecks(res *proto.ModStatusResult) []Check {
+func hostChecks(res *proto.ModHostsResult) []Check {
 	const g = "mods"
 	if res == nil {
 		return nil

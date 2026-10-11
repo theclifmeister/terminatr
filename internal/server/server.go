@@ -25,6 +25,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/keychain"
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/modnotify"
 	"github.com/theclifmeister/terminatr/internal/modsup"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
@@ -150,6 +151,10 @@ type Server struct {
 	modSup atomic.Pointer[modsup.Supervisor]
 	// noMods is safe mode (mod.EnvNoMods): no user mod runs.
 	noMods bool
+	// modBr is the user mods' broker (modbroker.go).
+	modBr modBroker
+	// notices are the mods' notifications (modnotify.go).
+	notices *modnotify.Hub
 	// versions caches agent versions for the mod guard (mods.go).
 	versions versions
 	// asks are the sessions' open questions (ask.go).
@@ -247,6 +252,7 @@ func Run(ctx context.Context, opts Options) error {
 		prevProject: map[string]string{},
 		protocol:    proto.Protocol,
 		modEv:       newModEvents(),
+		notices:     modnotify.New(nil),
 	}
 	if n, deaf := testHello(); n > 0 || deaf {
 		s.deaf = deaf
@@ -617,6 +623,14 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 		res, perr := s.setActive(p, s.callerOf(peerPID))
 		s.kick()
 		return res, perr
+	case proto.MethodModHosts:
+		return s.modHosts(), nil
+	case proto.MethodModRestart:
+		var p proto.ModRestartParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.restartMod(p.ID, s.callerOf(peerPID))
 	case proto.MethodPing:
 		return map[string]bool{"pong": true}, nil
 	case proto.MethodServerStatus:
@@ -633,6 +647,12 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 		return s.stop(p)
 	case proto.MethodSessionList:
 		return s.list(), nil
+	case proto.MethodNotifyClaim, proto.MethodNotifyDismiss:
+		var p proto.NoticeParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.noticeCall(req.Method, p, s.callerOf(peerPID))
 	case proto.MethodSessionStart:
 		var p proto.SessionStartParams
 		if err := decodeParams(req.Params, &p); err != nil {
@@ -726,14 +746,6 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 			return nil, err
 		}
 		return s.adopt(p)
-	case proto.MethodModStatus:
-		return s.modStatus(), nil
-	case proto.MethodModRestart:
-		var p proto.ModRestartParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.modRestart(p, s.callerOf(peerPID))
 	case proto.MethodAgentList:
 		return s.agentList(), nil
 	case proto.MethodAgentReload:
@@ -794,6 +806,7 @@ func (s *Server) list() proto.SessionListResult {
 	if l := s.latest.Load(); l != nil {
 		res.Latest, res.Upgrade = l.Tag, l.Upgrade
 	}
+	res.ModNotices = s.modNotices()
 	s.checkForUpdate()
 	for _, sess := range sessions {
 		res.Sessions = append(res.Sessions, s.info(sess))
