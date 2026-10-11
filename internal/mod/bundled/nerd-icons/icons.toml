@@ -1,0 +1,36 @@
+# The nerd icon set: every glyph of iconSet (icons.go), one cell wide (the
+# connectors mid and end two), no emoji. coord and thread may be "".
+
+name = "nerd"
+wide = true
+
+folder     = "\uf07b"  # nf-fa-folder
+folderOpen = "\uf07c"  # nf-fa-folder_open
+mid        = "├╴"
+end        = "└╴"
+coord      = "\U000f06a9"  # nf-md-robot
+thread     = "\uf418"  # nf-oct-git_branch
+hint       = "\uf0f3"  # nf-fa-bell
+current    = "\uf054"  # nf-fa-chevron_right
+remote     = "\uf1eb"  # nf-fa-wifi
+paused     = "\uf04c"  # nf-fa-pause
+inactive   = "\uf011"  # nf-fa-power_off
+working    = "\uf111"  # nf-fa-circle
+blocked    = "\uf071"  # nf-fa-warning
+idle       = "\uf10c"  # nf-fa-circle_o
+starting   = "\uf110"  # nf-fa-spinner
+running    = "\uf111"  # nf-fa-circle
+review     = "\uf06e"  # nf-fa-eye
+done       = "\uf00c"  # nf-fa-check
+other      = "\uf28d"  # nf-fa-stop_circle
+none       = "·"
+ciPass     = "\uf058"  # nf-fa-check_circle
+ciFail     = "\uf057"  # nf-fa-times_circle
+ciRun      = "\uf1ce"  # nf-fa-circle_o_notch
+fold       = "▸"
+unfold     = "▾"
+todoDone   = "\uf00c"  # nf-fa-check
+todoNow    = "\uf192"  # nf-fa-dot_circle_o
+todoOpen   = "\uf10c"  # nf-fa-circle_o
+barOn      = "▰"
+barOff     = "▱"

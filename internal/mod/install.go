@@ -104,6 +104,9 @@ func Install(c caller.Caller, st *Staged) error {
 		return ErrHumanOnly
 	}
 	id := st.Manifest.ID
+	if IsBundled(id) {
+		return fmt.Errorf("%s is a built-in mod's id: give your copy another id in its mod.toml", id)
+	}
 	mods, err := home.ModsDir()
 	if err != nil {
 		return err
@@ -188,6 +191,9 @@ func Remove(c caller.Caller, id string, purge bool) error {
 	}
 	if err := CheckID(id); err != nil {
 		return err
+	}
+	if IsBundled(id) {
+		return fmt.Errorf("%s is built in: it can be turned off, not removed", id)
 	}
 	mods, err := home.ModsDir()
 	if err != nil {

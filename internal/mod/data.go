@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"os"
 	"path"
@@ -99,10 +100,19 @@ func (r *Registry) Provider(kind, id string) (Mod, error) {
 // It is checked again to be inside it (the folder may have changed since
 // the mod loaded) and at most MaxDataFile.
 func (m Mod) ReadFile(rel string) ([]byte, error) {
-	if err := inside(m.Dir, rel, rel, false); err != nil {
-		return nil, fmt.Errorf("%s: %w", m.ID, err)
+	var f fs.File
+	var err error
+	if m.FS != nil {
+		if err := inside("", rel, rel, false); err != nil {
+			return nil, fmt.Errorf("%s: %w", m.ID, err)
+		}
+		f, err = m.FS.Open(rel)
+	} else {
+		if err := inside(m.Dir, rel, rel, false); err != nil {
+			return nil, fmt.Errorf("%s: %w", m.ID, err)
+		}
+		f, err = os.Open(filepath.Join(m.Dir, filepath.FromSlash(rel)))
 	}
-	f, err := os.Open(filepath.Join(m.Dir, filepath.FromSlash(rel)))
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", m.ID, err)
 	}
@@ -173,15 +183,19 @@ func ParseKeymap(data []byte) (map[string][]string, error) {
 	return out, errors.Join(errs...)
 }
 
-// Keymap is the keymaps of the enabled keymap mods, joined: each action
-// id to its keys, from the first mod (in the order they were enabled)
-// that binds it, and from none whose keymap doesn't parse. A key bound
-// by two mods goes to the first; the later mod's action keeps its
-// default keys. errs say what was left out, each naming its mod.
+// Keymap is the keymaps of the enabled keymap mods, joined, but the
+// built-in default-keymap's, the base they apply over: each action id
+// to its keys, from the first mod (in the order they were enabled) that
+// binds it, and from none whose keymap doesn't parse. A key bound by two
+// mods goes to the first; the later mod's action keeps its default
+// keys. errs say what was left out, each naming its mod.
 func (r *Registry) Keymap() (km map[string][]string, from map[string]string, errs []error) {
 	km, from = map[string][]string{}, map[string]string{}
 	keyOwner := map[string]string{} // key → the id the first mod bound it to
 	for _, m := range r.Providers(KindKeymap) {
+		if m.Builtin {
+			continue
+		}
 		data, err := m.Data(KindKeymap)
 		var one map[string][]string
 		if err == nil {
@@ -267,11 +281,14 @@ var rulesKeys = []string{RulesCoordinator, RulesThread, RulesCoordinatorPolicy, 
 type Addendum struct {
 	Mod  string
 	Text string
+	// Builtin: it is a built-in mod's (default-policy), tm's own text.
+	Builtin bool
 }
 
 // Rules are the mods' rules for role (coordinator or thread) in project
 // slug ("" for any): the policy of the first enabled policy mod that
-// runs there (nil: the built-in policy) and every addendum, by mod id.
+// runs there (the user's before the built-in default-policy; nil: none)
+// and every addendum, by mod id.
 // errs say which files couldn't be read, or which policy mods lost to
 // an earlier one.
 func (r *Registry) Rules(role, slug string) (policy *Addendum, addenda []Addendum, errs []error) {
@@ -283,10 +300,12 @@ func (r *Registry) Rules(role, slug string) (policy *Addendum, addenda []Addendu
 			switch b, err := m.ReadFile(f); {
 			case err != nil:
 				errs = append(errs, err)
+			case policy != nil && m.Builtin:
+				// The built-in policy is the one a mod's replaces.
 			case policy != nil:
 				errs = append(errs, fmt.Errorf("%s: its %s policy is not used: %s's came first", m.ID, role, policy.Mod))
 			default:
-				policy = &Addendum{Mod: m.ID, Text: string(b)}
+				policy = &Addendum{Mod: m.ID, Text: string(b), Builtin: m.Builtin}
 			}
 		}
 	}
@@ -399,28 +418,39 @@ func (r *Registry) Templates(slug string) (out []Template, errs []error) {
 		if !m.Runs(slug) || !m.Has(KindTemplates) {
 			continue
 		}
-		dir := m.Manifest.Provides.Templates
+		ts, terrs := m.templates()
+		out, errs = append(out, ts...), append(errs, terrs...)
+	}
+	return out, errs
+}
+
+// templates are the mod's task templates; errs say which didn't read.
+func (m Mod) templates() (out []Template, errs []error) {
+	dir := m.Manifest.Provides.Templates
+	var files []string
+	if m.FS != nil {
+		files, _ = fs.Glob(m.FS, path.Join(dir, "*.md"))
+	} else {
 		if err := inside(m.Dir, "provides.templates", dir, true); err != nil {
+			return nil, []error{fmt.Errorf("%s: %w", m.ID, err)}
+		}
+		files, _ = filepath.Glob(filepath.Join(m.Dir, filepath.FromSlash(dir), "*.md"))
+	}
+	slices.Sort(files)
+	for _, f := range files {
+		name := strings.TrimSuffix(filepath.Base(f), ".md")
+		b, err := m.ReadFile(path.Join(dir, filepath.Base(f)))
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		t, err := ParseTemplate(name, b)
+		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", m.ID, err))
 			continue
 		}
-		files, _ := filepath.Glob(filepath.Join(m.Dir, filepath.FromSlash(dir), "*.md"))
-		slices.Sort(files)
-		for _, f := range files {
-			name := strings.TrimSuffix(filepath.Base(f), ".md")
-			b, err := m.ReadFile(path.Join(dir, filepath.Base(f)))
-			if err != nil {
-				errs = append(errs, err)
-				continue
-			}
-			t, err := ParseTemplate(name, b)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("%s: %w", m.ID, err))
-				continue
-			}
-			t.Mod = m.ID
-			out = append(out, t)
-		}
+		t.Mod = m.ID
+		out = append(out, t)
 	}
 	return out, errs
 }

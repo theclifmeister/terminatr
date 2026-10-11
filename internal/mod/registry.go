@@ -55,10 +55,17 @@ type Mod struct {
 	// Order is its [mods.<id>] table's place in config.toml: the order
 	// mods were enabled in (config.Mod.Order).
 	Order int
-	// Builtin: the mod ships inside tm (a bundled mod, mods design §11).
-	// It can be turned off, never removed or updated on its own: it
-	// updates with tm.
+	// Builtin: the mod ships inside tm (a bundled mod, mods design §11,
+	// bundled.go). It is never removed or updated on its own: it updates
+	// with tm. Its files are in FS, not in a folder (Dir is "").
 	Builtin bool
+	// Required: a built-in default tm can't do without (the look, the
+	// keys, the layout, the policy); it can't be turned off, only
+	// replaced by another mod.
+	Required bool
+	// FS holds a built-in mod's files; nil for an installed one, whose
+	// files are in Dir.
+	FS fs.FS
 }
 
 // Runs reports whether the mod runs for project slug: valid, compatible,
@@ -77,6 +84,9 @@ type Registry struct {
 	// Orphans are ids config.toml has a [mods.<id>] table for that no
 	// installed mod has: tm doctor lists them.
 	Orphans []string
+	// Shadowed are installed folders named as a built-in mod: they
+	// don't load (tm doctor lists them).
+	Shadowed []string
 }
 
 // Get returns the mod id.
@@ -100,8 +110,9 @@ func (r *Registry) For(slug string) []Mod {
 	return out
 }
 
-// Load reads the mods installed in ~/.terminatr/mods and joins them with
-// c's [mods.<id>] tables (c nil: none). A missing folder is no mods.
+// Load reads the mods installed in ~/.terminatr/mods, adds the bundled
+// ones (bundled.go) and joins them with c's [mods.<id>] tables (c nil:
+// none). A missing folder is no installed mods.
 func Load(c *config.Config) (*Registry, error) {
 	dir, err := home.ModsDir()
 	if err != nil {
@@ -111,11 +122,17 @@ func Load(c *config.Config) (*Registry, error) {
 	if c != nil {
 		tables = c.Mods
 	}
-	return LoadDir(dir, tables)
+	r, err := LoadDir(dir, tables)
+	if err != nil {
+		return nil, err
+	}
+	r.withBundled(tables)
+	return r, nil
 }
 
-// LoadDir is Load from the folder dir with the tables given. One broken
-// mod never stops the others loading: it is listed Invalid.
+// LoadDir is Load from the folder dir with the tables given, without the
+// bundled mods. One broken mod never stops the others loading: it is
+// listed Invalid.
 func LoadDir(dir string, tables map[string]config.Mod) (*Registry, error) {
 	ents, err := os.ReadDir(dir)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {

@@ -1,0 +1,15 @@
+# Built into tm (mods design §11): the policy part of the coordinator's
+# and the threads' rules (tm skill coordinator, tm skill thread). The
+# safety part is tm's own, always first, and no mod replaces it. Copy
+# this folder, change its id and name, edit the rules and tm mod
+# install it: an enabled policy mod comes before this one.
+id          = "default-policy"
+name        = "Default policy"
+version     = "1.0.0"
+api         = "1.0"
+description = "How the coordinator and its threads work: tm's own policy, after the safety rules."
+authors     = ["terminatr"]
+
+[provides.rules]
+coordinator_policy = "rules/coordinator.md"
+thread_policy      = "rules/thread.md"

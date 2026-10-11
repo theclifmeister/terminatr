@@ -1,0 +1,29 @@
+# The roles theme.go draws everything with, over the terminal's 16 ANSI
+# colours. Each role is { fg, bg, bold, faint, reverse }; a colour is an
+# ANSI name, a 0-255 index or #rrggbb, and a second entry is the
+# truecolor choice (the first its ANSI fallback). Every role is set
+# here: a theme mod's role left out falls back to these.
+
+[dark]
+head   = { bold = true }
+sel    = { reverse = true }
+faint  = { faint = true }
+accent = { fg = ["cyan"] }
+title  = { fg = ["cyan"], bold = true }
+bad    = { fg = ["red"] }
+warn   = { fg = ["yellow"] }
+good   = { fg = ["green"] }
+info   = { fg = ["blue"] }
+plain  = {}
+
+[light]
+head   = { bold = true }
+sel    = { reverse = true }
+faint  = { faint = true }
+accent = { fg = ["cyan"] }
+title  = { fg = ["cyan"], bold = true }
+bad    = { fg = ["red"] }
+warn   = { fg = ["yellow"] }
+good   = { fg = ["green"] }
+info   = { fg = ["blue"] }
+plain  = {}

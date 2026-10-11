@@ -49,6 +49,9 @@ func SetEnabled(c caller.Caller, id string, on bool) error {
 	if on && (m.State == Invalid || m.State == Incompatible) {
 		return fmt.Errorf("%s can't be enabled: %w", id, m.Err)
 	}
+	if !on && m.Required {
+		return ErrRequired{id}
+	}
 	return config.Set(config.ModsTable(id), "enabled", on)
 }
 
