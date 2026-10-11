@@ -141,6 +141,8 @@ type Server struct {
 	views *views
 	// watch wakes the session watches (watch.go).
 	watch watchers
+	// modEv is the user mods' event bus (modevents.go).
+	modEv *modEvents
 	// versions caches agent versions for the mod guard (mods.go).
 	versions versions
 	// asks are the sessions' open questions (ask.go).
@@ -236,6 +238,7 @@ func Run(ctx context.Context, opts Options) error {
 
 		prevProject: map[string]string{},
 		protocol:    proto.Protocol,
+		modEv:       newModEvents(),
 	}
 	if n, deaf := testHello(); n > 0 || deaf {
 		s.deaf = deaf
@@ -285,6 +288,9 @@ func Run(ctx context.Context, opts Options) error {
 	s.views.load()
 	tctx, stopTicker := context.WithCancel(context.Background())
 	tickerDone := s.startTicker(tctx)
+	ectx, stopEvents := context.WithCancel(context.Background())
+	defer stopEvents()
+	go s.runModEvents(ectx)
 
 	select {
 	case <-ctx.Done():
@@ -673,6 +679,7 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 		}
 		res, perr := s.asks.answer(p.ID, p.Index, p.Answer)
 		s.watch.wake()
+		s.modEv.wake()
 		return res, perr
 	case proto.MethodQuestionsOpen:
 		var p proto.QuestionsOpenParams
@@ -943,6 +950,7 @@ func (s *Server) sessionExited(sess *session.Session) {
 		s.tick.Kick()
 	}
 	s.watch.wake()
+	s.modEv.wake()
 	if s.stopping {
 		return // keep the record: shutdown writes it for resume
 	}

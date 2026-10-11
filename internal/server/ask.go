@@ -150,7 +150,9 @@ func (s *Server) serveAsk(c net.Conn, br *bufio.Reader, req proto.Request) {
 	o := s.asks.put(p.ID, q)
 	defer s.asks.drop(p.ID, o)
 	s.watch.wake()
+	s.modEv.wake()
 	defer s.watch.wake()
+	defer s.modEv.wake()
 	resp.Result = []byte("{}")
 	if err := writeJSONLine(c, resp); err != nil {
 		return

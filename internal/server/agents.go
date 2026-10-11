@@ -572,6 +572,7 @@ func (s *Server) agentChanged(sess *session.Session) {
 		s.tick.Kick()
 	}
 	s.watch.wake()
+	s.modEv.wake()
 	s.log.Printf("session %s: %s %s/%s (%s)", sess.ID(), st.Agent, st.State, st.Reason, st.Sources)
 	if blocked := st.State == agent.StateBlocked; blocked != s.blocked[sess.ID()] {
 		if blocked {
