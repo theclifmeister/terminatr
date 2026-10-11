@@ -587,3 +587,36 @@ type QuestionsOpenResult struct {
 	Via     string `json:"via"`
 	Open    int    `json:"open"`
 }
+
+// MethodModHosts lists the supervised code mods' hosts and where each
+// stands (mods design §8), for the Mods tab.
+const MethodModHosts = "mod.hosts"
+
+// ModHostsResult is the answer of mod.hosts, by id.
+type ModHostsResult struct {
+	Hosts []ModHost `json:"hosts"`
+}
+
+// ModHost is one code mod's host: State is idle, starting, running,
+// backoff or failed; RSS its resident set in bytes when it runs; Next
+// when a host in backoff restarts; Err why the last host ended, or why
+// the mod failed.
+type ModHost struct {
+	ID       string    `json:"id"`
+	State    string    `json:"state"`
+	Since    time.Time `json:"since"`
+	PID      int       `json:"pid,omitempty"`
+	RSS      uint64    `json:"rss,omitempty"`
+	Restarts int       `json:"restarts,omitempty"`
+	Next     time.Time `json:"next,omitzero"`
+	Err      string    `json:"err,omitempty"`
+}
+
+// MethodModRestart starts a code mod's host again now (the Mods tab's
+// r): a failed mod gets a fresh count, an idle one starts. The human's.
+const MethodModRestart = "mod.restart"
+
+// ModRestartParams are the params of mod.restart.
+type ModRestartParams struct {
+	ID string `json:"id"`
+}

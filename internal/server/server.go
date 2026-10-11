@@ -621,6 +621,14 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 		res, perr := s.setActive(p, s.callerOf(peerPID))
 		s.kick()
 		return res, perr
+	case proto.MethodModHosts:
+		return s.modHosts(), nil
+	case proto.MethodModRestart:
+		var p proto.ModRestartParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.restartMod(p.ID, s.callerOf(peerPID))
 	case proto.MethodPing:
 		return map[string]bool{"pong": true}, nil
 	case proto.MethodServerStatus:

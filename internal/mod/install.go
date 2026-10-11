@@ -179,9 +179,9 @@ const removedFile = ".removed"
 const KeepRemoved = 30 * 24 * time.Hour
 
 // Remove uninstalls mod id: its folder (a link tm mod dev made is only
-// unlinked) and its [mods.<id>] table. Its data folder is kept for
-// KeepRemoved, so a reinstall finds it, unless purge, which also removes
-// its log.
+// unlinked), its [mods.<id>] table and its cache folder (its bundle,
+// the supervisor's). Its data folder is kept for KeepRemoved, so a
+// reinstall finds it, unless purge, which also removes its log.
 func Remove(c caller.Caller, id string, purge bool) error {
 	if c.IsAgent() {
 		return ErrHumanOnly
@@ -202,6 +202,9 @@ func Remove(c caller.Caller, id string, purge bool) error {
 	}
 	if err := os.RemoveAll(dir); err != nil {
 		return err
+	}
+	if cache, err := home.ModCacheDir(); err == nil {
+		os.RemoveAll(filepath.Join(cache, id))
 	}
 	state, err := home.ModStateDir()
 	if err != nil {
