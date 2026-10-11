@@ -132,8 +132,7 @@ func TestModBroker(t *testing.T) {
 // modPending are the schema's methods whose handlers come in their own
 // tasks (Broker.Handle): drop each from here when its handler lands.
 var modPending = map[string]bool{
-	"ui.toast":     true,
-	"actions.list": true, "actions.available": true,
+	"ui.toast": true,
 }
 
 // TestModBrokerAPI: the broker's methods are mod API v1's, the schema the
