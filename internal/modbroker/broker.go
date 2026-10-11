@@ -29,16 +29,17 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/modproto"
 )
 
-// Error codes a refused or failed call answers with, as JSON-RPC errors
-// on the mod host's wire.
+// Error codes a refused or failed call answers with: the JSON-RPC errors
+// of the mod host's wire (modproto).
 const (
-	CodeNoMethod  = -32601 // no such method
-	CodeBadParams = -32602 // params missing or of the wrong shape
-	CodeDenied    = -32010 // the mod may not: a grant, a path, a host, a program
-	CodeNotFound  = -32011 // the project, thread, file or key isn't there
-	CodeFailed    = -32012 // allowed, and it failed (I/O, a timeout, the network)
+	CodeNoMethod  = modproto.CodeMethodNotFound
+	CodeBadParams = modproto.CodeInvalidParams
+	CodeDenied    = modproto.CodeDenied
+	CodeNotFound  = modproto.CodeNotFound
+	CodeFailed    = modproto.CodeFailed
 )
 
 // Error is a call's refusal or failure, said to the mod.
@@ -50,10 +51,12 @@ type Error struct {
 func (e *Error) Error() string { return e.Message }
 
 // Denied, BadParams, NotFound and Failed make the Error of each kind.
-func Denied(format string, a ...any) *Error    { return &Error{CodeDenied, fmt.Sprintf(format, a...)} }
-func BadParams(format string, a ...any) *Error { return &Error{CodeBadParams, fmt.Sprintf(format, a...)} }
-func NotFound(format string, a ...any) *Error  { return &Error{CodeNotFound, fmt.Sprintf(format, a...)} }
-func Failed(format string, a ...any) *Error    { return &Error{CodeFailed, fmt.Sprintf(format, a...)} }
+func Denied(format string, a ...any) *Error { return &Error{CodeDenied, fmt.Sprintf(format, a...)} }
+func BadParams(format string, a ...any) *Error {
+	return &Error{CodeBadParams, fmt.Sprintf(format, a...)}
+}
+func NotFound(format string, a ...any) *Error { return &Error{CodeNotFound, fmt.Sprintf(format, a...)} }
+func Failed(format string, a ...any) *Error   { return &Error{CodeFailed, fmt.Sprintf(format, a...)} }
 
 // IsDenied reports whether err is a refusal.
 func IsDenied(err error) bool {
