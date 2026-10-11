@@ -15,6 +15,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -54,6 +55,19 @@ type fakeSource struct {
 	libFiles   map[string]string // "t-0001/name" -> content
 	libRemoved []string          // "t-0001/name", "t-0001/" for all
 	restarted  []string          // mod ids
+	templates  []mod.Template
+	added      []string // "slug title|notes|step;step"
+}
+
+func (f *fakeSource) Templates(string) []mod.Template { return f.templates }
+
+func (f *fakeSource) AddTask(slug, title string, tpl *mod.Template) (string, error) {
+	notes, steps := "", []string(nil)
+	if tpl != nil {
+		title, notes, steps = tpl.Apply(title)
+	}
+	f.added = append(f.added, slug+" "+title+"|"+notes+"|"+strings.Join(steps, ";"))
+	return fmt.Sprintf("T%d", 10+len(f.added)), nil
 }
 
 func (f *fakeSource) SetRemote(slug string, on bool) (string, error) {

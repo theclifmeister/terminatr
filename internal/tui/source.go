@@ -150,6 +150,13 @@ type Source interface {
 	SetSetting(table, key string, value any) error
 	// SetRepo adds or removes one of a project's repositories.
 	SetRepo(slug, path string, add bool) error
+	// Templates are the task templates of the mods that run for the
+	// project (mod.Registry.Templates): what the new-task prompt offers.
+	Templates(slug string) []mod.Template
+	// AddTask adds a task to the project as the human, with template
+	// tpl laid on it when not nil (tm task add --template), and returns
+	// its ref (T12). It is refused when tm runs inside an agent.
+	AddTask(slug, title string, tpl *mod.Template) (string, error)
 	// Agents lists the installed agents: the ones tm can run.
 	Agents() []string
 	// ModsNote names the agents the Agent mod setting is for and the version
@@ -522,6 +529,45 @@ func (s *ServerSource) Lifecycle(slug, verb string) (string, error) {
 		return DeleteProject(s.call, s.Caller, slug)
 	}
 	return "", fmt.Errorf("unknown project action %q", verb)
+}
+
+func (s *ServerSource) Templates(slug string) []mod.Template {
+	cfg, err := config.Load()
+	if err != nil {
+		cfg = nil
+	}
+	reg, err := mod.Load(cfg)
+	if err != nil {
+		return nil
+	}
+	ts, _ := reg.Templates(slug) // tm doctor and the Mods tab say which don't load
+	return ts
+}
+
+func (s *ServerSource) AddTask(slug, title string, tpl *mod.Template) (string, error) {
+	if s.Caller.IsAgent() {
+		return "", errHumanOnly
+	}
+	p, err := project.Open(slug)
+	if err != nil {
+		return "", err
+	}
+	it := tasks.NewTask{Title: title}
+	if tpl != nil {
+		it.Title, it.Notes, it.Steps = tpl.Apply(title)
+	}
+	res, err := p.Tasks().Add(s.Caller, []tasks.NewTask{it})
+	switch {
+	case err != nil:
+		return "", err
+	case len(res) != 1:
+		return "", errors.New("the task wasn't added")
+	case res[0].Result == "failed":
+		return "", errors.New(res[0].Error)
+	case res[0].Result == "existing":
+		return res[0].ID, fmt.Errorf("%s %s is there already", res[0].ID, oneLine(res[0].Title))
+	}
+	return res[0].ID, nil
 }
 
 func (s *ServerSource) SetRepo(slug, path string, add bool) error {
