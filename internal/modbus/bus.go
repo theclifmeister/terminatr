@@ -138,11 +138,23 @@ var ErrClosed = errors.New("mod event queue closed")
 // Mod is the queue's mod id.
 func (s *Sub) Mod() string { return s.mod }
 
+// SetEvents replaces the event names the queue lets through (nil: all),
+// for the events the mod's hello and later subscribe notifications named.
+// What is queued already stays.
+func (s *Sub) SetEvents(events []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.o.Events = slices.Clone(events)
+}
+
 func (s *Sub) wants(ev Event) bool {
 	if need := Needs(ev.Name); need != "" && !s.grants[need] {
 		return false
 	}
-	if s.o.Events != nil && !slices.Contains(s.o.Events, ev.Name) {
+	s.mu.Lock()
+	events := s.o.Events
+	s.mu.Unlock()
+	if events != nil && !slices.Contains(events, ev.Name) {
 		return false
 	}
 	return ev.Project == "" || s.o.Project == nil || s.o.Project(ev.Project)
@@ -176,6 +188,30 @@ func (s *Sub) Len() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.q)
+}
+
+// Wait returns once an event is queued, not counting mod.ready: a mod
+// whose host starts lazily starts on its first event. It returns
+// ErrClosed once the queue is closed, or ctx's error. It is for the time
+// no Next runs: the two share one wake-up.
+func (s *Sub) Wait(ctx context.Context) error {
+	for {
+		s.mu.Lock()
+		closed, n := s.closed, len(s.q)
+		s.mu.Unlock()
+		switch {
+		case closed:
+			return ErrClosed
+		case n > 0:
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-s.done:
+		case <-s.signal:
+		}
+	}
 }
 
 // Next is the mod's next event, waiting for one until ctx ends or the
