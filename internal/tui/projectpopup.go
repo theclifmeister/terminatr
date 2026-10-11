@@ -139,6 +139,13 @@ func (pv *projectView) data(m *dash) ProjectData {
 }
 
 func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
+	if v, ok := pv.modTab(m); ok {
+		// The mod's view moves, scrolls and filters first; what it
+		// leaves (esc without a filter, the tabs) is the popup's.
+		if cmd, used := pv.modTabKey(m, v, k.String()); used {
+			return cmd
+		}
+	}
 	if pv.tab == tabTasks {
 		// The task keys (asks.go).
 		if t := pv.selTask(); t != nil {
@@ -160,13 +167,18 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		m.pop()
 		return nil
 	case "right":
-		pv.tab = (pv.tab + 1) % tabCount
+		pv.tab = (pv.tab + 1) % pv.tabs(m)
 		return nil
 	case "left":
-		pv.tab = (pv.tab + tabCount - 1) % tabCount
+		pv.tab = (pv.tab + pv.tabs(m) - 1) % pv.tabs(m)
 		return nil
-	case "1", "2", "3", "4", "5", "6", "7":
-		pv.tab = int(s[0] - '1')
+	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+		if t := int(s[0] - '1'); t < pv.tabs(m) {
+			pv.tab = t
+		}
+		return nil
+	}
+	if pv.tab >= tabCount {
 		return nil
 	}
 	s := k.String()
@@ -392,6 +404,9 @@ func (pv *projectView) render(m *dash) string { return m.popup(pv.box(m)) }
 func (pv *projectView) box(m *dash) box {
 	w := m.inner(viewWidth)
 	p := pv.data(m)
+	if v, ok := pv.modTab(m); ok {
+		return pv.modTabBox(m, p, v)
+	}
 	var body []string
 	var hits []int
 	sel := -1
@@ -429,7 +444,7 @@ func (pv *projectView) box(m *dash) box {
 			keys = "enter read · d delete · D delete the thread's · " + keys
 		}
 	}
-	head := []string{pv.tabBar(p), ""}
+	head := []string{pv.tabBar(m, p), ""}
 	all := append([]int{tabHit, noHit}, hits...)
 	for len(all) < len(head)+len(body) {
 		all = append(all, noHit)
@@ -463,10 +478,13 @@ const tabHit = -2
 // inbox item, task or setting (which it changes, as enter does).
 func (pv *projectView) click(m *dash, item, col int, double bool) tea.Cmd {
 	if item == tabHit {
-		if t := pv.tabAt(pv.data(m), col); t >= 0 {
+		if t := pv.tabAt(m, pv.data(m), col); t >= 0 {
 			pv.tab = t
 		}
 		return nil
+	}
+	if v, ok := pv.modTab(m); ok {
+		return m.panelClick(v, pv.slug, col, item)
 	}
 	if pv.tab == tabSettings {
 		return pv.settings.click(m, item, col)
@@ -486,10 +504,10 @@ func (pv *projectView) click(m *dash, item, col int, double bool) tea.Cmd {
 }
 
 // tabAt is the tab at column col of the tab bar, -1 for none.
-func (pv *projectView) tabAt(p ProjectData, col int) int {
+func (pv *projectView) tabAt(m *dash, p ProjectData, col int) int {
 	x := 0
-	for i := range tabNames {
-		w := len([]rune(pv.tabLabel(p, i))) + 2
+	for i := range pv.tabs(m) {
+		w := len([]rune(pv.tabLabel(m, p, i))) + 2
 		if col >= x && col < x+w {
 			return i
 		}
@@ -501,6 +519,10 @@ func (pv *projectView) tabAt(p ProjectData, col int) int {
 // wheel moves the selection as the arrows do, or scrolls a tab without
 // one by three lines.
 func (pv *projectView) wheel(m *dash, d int) {
+	if v, ok := pv.modTab(m); ok {
+		m.panelWheel(v, pv.slug, d)
+		return
+	}
 	if pv.tab == tabKeys || pv.tab == tabMemory {
 		pv.nudge[pv.tab] += 3 * d
 		return
@@ -510,10 +532,10 @@ func (pv *projectView) wheel(m *dash, d int) {
 
 // tabBar names the tabs, the open one in reverse video, with the inbox's
 // count.
-func (pv *projectView) tabBar(p ProjectData) string {
+func (pv *projectView) tabBar(m *dash, p ProjectData) string {
 	var parts []string
-	for i := range tabNames {
-		label := pv.tabLabel(p, i)
+	for i := range pv.tabs(m) {
+		label := pv.tabLabel(m, p, i)
 		if i == pv.tab {
 			parts = append(parts, th().Sel.Render(" "+label+" "))
 		} else {
@@ -524,8 +546,14 @@ func (pv *projectView) tabBar(p ProjectData) string {
 }
 
 // tabLabel is tab i's label: its number and name, with the inbox's
-// count.
-func (pv *projectView) tabLabel(p ProjectData, i int) string {
+// count; a mod's tab its title and the count it sets.
+func (pv *projectView) tabLabel(m *dash, p ProjectData, i int) string {
+	if i >= tabCount {
+		if tabs := m.mv.tabsFor(pv.slug); i-tabCount < len(tabs) {
+			return modTabLabel(tabs[i-tabCount], pv.slug, i)
+		}
+		return ""
+	}
 	label := fmt.Sprintf("%d %s", i+1, tabNames[i])
 	if i == tabInbox && len(p.Items) > 0 {
 		label += fmt.Sprintf(" %d", len(p.Items))

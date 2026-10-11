@@ -21,6 +21,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/models"
+	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -230,6 +231,12 @@ type Source interface {
 	// failed mod gets a fresh count. It is refused when tm runs inside
 	// an agent.
 	RestartMod(id string) error
+	// ModViews are the views user mods draw, with their trees and the
+	// mods' requests to open one here; shown are the views this console
+	// shows now (mod.views). ModViewInput sends a key or a click in a
+	// mod's view to the mod (mod.view.input).
+	ModViews(shown []modview.Shown) (proto.ModViewsResult, error)
+	ModViewInput(p proto.ModViewInputParams) error
 }
 
 // Review is what the user needs to review a task: how to check it (the
@@ -710,6 +717,16 @@ func (s *ServerSource) ModLog(id string, max int64) (string, bool, error) {
 		return "", false, err
 	}
 	return tail(filepath.Join(dir, id+".log"), max)
+}
+
+func (s *ServerSource) ModViews(shown []modview.Shown) (proto.ModViewsResult, error) {
+	var res proto.ModViewsResult
+	err := s.call(proto.MethodModViews, proto.ModViewsParams{Shown: shown}, &res)
+	return res, err
+}
+
+func (s *ServerSource) ModViewInput(p proto.ModViewInputParams) error {
+	return s.call(proto.MethodModViewInput, p, nil)
 }
 
 func (s *ServerSource) RestartMod(id string) error {
