@@ -207,16 +207,19 @@ type dash struct {
 
 	// The view (nil without one). viewSeq is its version when the
 	// dashboard opened; selPending counts this console's selections on
-	// their way, which the view's own doesn't overwrite meanwhile.
-	view       *ViewConn
-	viewSeq    uint64
-	viewSide   SidebarLayout // the view's sidebar, as last sent or seen
-	watch      <-chan struct{}
-	stopWatch  func()
-	selPending int
-	userSel    bool // the user moved the selection: tell the view
-	sized      bool // the first window size came
-	done       chan struct{}
+	// their way, which the view's own doesn't overwrite meanwhile, and
+	// treePending its changes of the folds (refold): a version of the
+	// view from before one would fold back what was just unfolded.
+	view        *ViewConn
+	viewSeq     uint64
+	viewSide    SidebarLayout // the view's sidebar, as last sent or seen
+	watch       <-chan struct{}
+	stopWatch   func()
+	selPending  int
+	treePending int
+	userSel     bool // the user moved the selection: tell the view
+	sized       bool // the first window size came
+	done        chan struct{}
 
 	// over: a popup over a session (Over), nil for the dashboard; feed
 	// follows the session under it, nil for none. leaving: a popup action
@@ -278,6 +281,7 @@ type viewMsg struct{}
 type viewDoneMsg struct {
 	sel  bool // a selection
 	side bool // a move of the sidebar's keyboard row
+	tree bool // a change of what the sidebar's tree folds
 	err  error
 }
 type boardMsg struct {
@@ -427,16 +431,19 @@ func (m *dash) waitView() tea.Cmd {
 
 // call runs a view action in the background.
 func (m *dash) call(method string, p proto.ViewParams) tea.Cmd {
-	vc, sel, side := m.view, method == proto.MethodViewSelect, method == proto.MethodViewSideSel
+	vc, sel, side, tree := m.view, method == proto.MethodViewSelect, method == proto.MethodViewSideSel, method == proto.MethodViewTree
 	if sel {
 		m.selPending++
+	}
+	if tree {
+		m.treePending++
 	}
 	if side {
 		m.sideBusy, m.sideSent = true, p.Key
 	}
 	return func() tea.Msg {
 		_, err := vc.Do(method, p)
-		return viewDoneMsg{sel: sel, side: side, err: err}
+		return viewDoneMsg{sel: sel, side: side, tree: tree, err: err}
 	}
 }
 
@@ -468,8 +475,10 @@ func (m *dash) fromView() tea.Cmd {
 	if !m.sideBusy && m.sideSel == m.sideSent {
 		m.sideSel, m.sideSent = v.SideSel, v.SideSel
 	}
-	// Kept in the layout too, so that saving it keeps the view's.
-	m.folds, m.layout.Tree = v.Tree, v.Tree
+	if m.treePending == 0 {
+		// Kept in the layout too, so that saving it keeps the view's.
+		m.folds, m.layout.Tree = v.Tree, v.Tree
+	}
 	if !m.sideDrag && v.Sidebar != m.viewSide {
 		m.layout.Sidebar, m.viewSide = v.Sidebar, v.Sidebar
 		m.setWidth(m.winW)
@@ -536,6 +545,13 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case viewDoneMsg:
 		if msg.sel {
 			m.selPending--
+		}
+		if msg.tree {
+			// The view has this console's change now (ViewConn.Do).
+			if m.treePending--; m.treePending == 0 {
+				t := m.view.View().Tree
+				m.folds, m.layout.Tree = t, t
+			}
 		}
 		if msg.side {
 			m.sideBusy = false
