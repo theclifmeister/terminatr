@@ -147,6 +147,8 @@ type Server struct {
 	// modSup runs the code mods' hosts (modhosts.go); set before Run
 	// serves, nil in a test's bare Server.
 	modSup atomic.Pointer[modsup.Supervisor]
+	// modBr is the user mods' broker (modbroker.go).
+	modBr modBroker
 	// versions caches agent versions for the mod guard (mods.go).
 	versions versions
 	// asks are the sessions' open questions (ask.go).
