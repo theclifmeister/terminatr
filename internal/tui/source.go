@@ -20,7 +20,9 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/modannot"
 	"github.com/theclifmeister/terminatr/internal/models"
+	"github.com/theclifmeister/terminatr/internal/modnotify"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -36,6 +38,9 @@ import (
 type Data struct {
 	ServerOK bool
 	Sessions []proto.SessionInfo
+	// ModNotices are the notifications of user mods in the server's tray
+	// (modnotice.go).
+	ModNotices []modnotify.Notice
 	// Alerts is the server's notification count; the bell rings when it
 	// goes up (docs/SPEC.md §4).
 	Alerts   uint64
@@ -109,7 +114,10 @@ type ProjectData struct {
 	// Checkouts are notes on the repos whose local default branch is
 	// behind origin, by repo path, as the ticker last saw them.
 	Checkouts map[string]string
-	Err       string
+	// Badges are the mods' annotations in the project, by target
+	// (modannot.Task, modannot.Thread), of the mods that run for it.
+	Badges map[string][]modannot.Badge
+	Err    string
 }
 
 // ThreadRow is one thread: its record (thread.toml) and its STATUS.md,
@@ -298,7 +306,7 @@ func (s *ServerSource) Load() Data {
 	if err := s.call(proto.MethodSessionList, nil, &res); err != nil {
 		d.Err = err.Error()
 	} else {
-		d.ServerOK, d.Sessions, d.Alerts = true, res.Sessions, res.Alerts
+		d.ServerOK, d.Sessions, d.Alerts, d.ModNotices = true, res.Sessions, res.Alerts, res.ModNotices
 		d.Server = ServerInfo{Version: res.Version, Build: res.Build, Latest: res.Latest, Upgrade: res.Upgrade}
 	}
 	cfg, err := config.Load()
@@ -333,6 +341,7 @@ func (s *ServerSource) Load() Data {
 	if err != nil && d.Err == "" {
 		d.Err = err.Error()
 	}
+	badgers := badgeMods(d.Mods)
 	for _, sum := range list {
 		if sum.Safety != nil && sum.Safety.Archived {
 			continue // hidden: tm project unarchive brings it back
@@ -372,10 +381,46 @@ func (s *ServerSource) Load() Data {
 			pd.Unread, pd.Items = len(items), items
 			qs, _ := p.Questions()
 			pd.Questions = len(qs)
+			pd.Badges = badgesOf(badgers, sum.Slug)
 		}
 		d.Projects = append(d.Projects, pd)
 	}
 	return d
+}
+
+// badgeMods are the mods whose annotations show: enabled, with the
+// project_read grant that $.annotate needs. A mod disabled, regranted or
+// removed shows no badges.
+func badgeMods(mods []mod.Mod) []mod.Mod {
+	var out []mod.Mod
+	for _, m := range mods {
+		if m.State == mod.Enabled && m.Granted(mod.PermProjectRead) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// badgesOf reads the badges of mods for project slug, by target, in the
+// mods' id order.
+func badgesOf(mods []mod.Mod, slug string) map[string][]modannot.Badge {
+	state, err := home.ModStateDir()
+	if err != nil {
+		return nil
+	}
+	var out map[string][]modannot.Badge
+	for _, m := range mods {
+		if !m.Runs(slug) {
+			continue
+		}
+		for target, bs := range modannot.Read(filepath.Join(state, m.ID), m.ID, slug) {
+			if out == nil {
+				out = map[string][]modannot.Badge{}
+			}
+			out[target] = append(out[target], bs...)
+		}
+	}
+	return out
 }
 
 func (s *ServerSource) Board(slug string) (*tasks.Board, error) {
@@ -463,6 +508,9 @@ func (s *ServerSource) SetSetting(table, key string, value any) error {
 	}
 	slug, isProject := strings.CutPrefix(table, "projects.")
 	if !isProject {
+		if value == nil {
+			return config.Unset(table, key)
+		}
 		return config.Set(table, key, value)
 	}
 	detail := fmt.Sprint(value)

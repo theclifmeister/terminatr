@@ -11,7 +11,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/guard"
+	"github.com/theclifmeister/terminatr/internal/mod"
 )
 
 //go:embed manifests/*.toml
@@ -52,6 +54,22 @@ func Load(userDir string) (*Registry, error) {
 	}
 
 	if userDir != "" {
+		// The enabled mods' agents/*.toml install as if in userDir
+		// (mods design §2 tier 3), the first enabled winning a name; the
+		// user's own file of that name wins over them.
+		dirs := modAgentDirs(userDir)
+		for i := len(dirs) - 1; i >= 0; i-- {
+			files, _ := filepath.Glob(filepath.Join(dirs[i].Dir, "*.toml"))
+			for _, f := range files {
+				data, err := readManifest(dirs[i].Dir, f)
+				if err == nil {
+					err = r.add(data, f)
+				}
+				if err != nil {
+					errs = append(errs, fmt.Errorf("mod %s: %s: %w", dirs[i].Mod, filepath.Base(f), err))
+				}
+			}
+		}
 		files, _ := filepath.Glob(filepath.Join(userDir, "*.toml"))
 		for _, f := range files {
 			data, err := os.ReadFile(f)
@@ -64,6 +82,49 @@ func Load(userDir string) (*Registry, error) {
 		}
 	}
 	return r, errors.Join(errs...)
+}
+
+// modAgentDirs are the agent folders of the enabled mods installed
+// beside userDir (<home>/mods beside <home>/agents).
+func modAgentDirs(userDir string) []mod.AgentDir {
+	modsDir := filepath.Join(filepath.Dir(userDir), "mods")
+	if ents, _ := os.ReadDir(modsDir); len(ents) == 0 {
+		return nil
+	}
+	cfg, _ := config.Load()
+	var tables map[string]config.Mod
+	if cfg != nil {
+		tables = cfg.Mods
+	}
+	reg, err := mod.LoadDir(modsDir, tables)
+	if err != nil {
+		return nil
+	}
+	return reg.AgentDirs()
+}
+
+// readManifest reads a mod's agent manifest in its folder dir: a file
+// there, not a link out of it, at most mod.MaxDataFile.
+func readManifest(dir, path string) ([]byte, error) {
+	root, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return nil, err
+	}
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return nil, err
+	}
+	if filepath.Dir(real) != root {
+		return nil, errors.New("leads out of the mod's agents folder")
+	}
+	fi, err := os.Stat(real)
+	if err != nil {
+		return nil, err
+	}
+	if fi.Size() > mod.MaxDataFile {
+		return nil, fmt.Errorf("over %d KiB", mod.MaxDataFile>>10)
+	}
+	return os.ReadFile(path)
 }
 
 func (r *Registry) add(data []byte, source string) error {
