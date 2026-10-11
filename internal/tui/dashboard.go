@@ -150,6 +150,10 @@ func Dashboard(opts DashOptions) (DashResult, error) {
 		return DashResult{}, err
 	}
 	d := final.(*dash)
+	if d.mv.sent != "" {
+		// The dashboard and its popups are gone: their mod views close.
+		_, _ = d.src.ModViews(nil)
+	}
 	d.result.State = DashState{Selected: d.sel, Current: d.current}
 	d.result.SideFocus = d.result.Attach != "" && d.focus == areaSide
 	return d.result, nil
@@ -188,6 +192,7 @@ type dash struct {
 	queued   []func(m *dash) tea.Cmd // settings keys pressed while it runs, in order
 	catalogs []Catalog               // the agents' models, read when the , popup opens (catalog.go)
 	stack    []overlay               // views open on top of the list, topmost last
+	mv       modViews                // the views user mods draw (modviews.go)
 	under    overlay                 // the popup the topmost draws over, while it draws
 	geo      *boxGeo                 // where the topmost was drawn, for the mouse
 	// lastClick is the last left click, for double-clicks; detailTop is
@@ -563,6 +568,9 @@ func (m *dash) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	m.notePlace()
+	if c := m.modViewsChanged(); c != nil {
+		cmd = tea.Batch(cmd, c)
+	}
 	if m.view == nil {
 		return m, cmd
 	}
@@ -639,9 +647,16 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.setData(msg.data)
 	case tickMsg:
-		return m, tea.Batch(m.load(), m.reloadBoards())
+		return m, tea.Batch(m.load(), m.reloadBoards(), m.pollModViews())
 	case bindingMsg:
 		return m, m.runBinding(msg)
+	case modViewsMsg:
+		return m, m.setModViews(msg)
+	case modInputMsg:
+		if msg.err != nil {
+			m.fail(msg.err)
+		}
+		return m, nil
 	case boardMsg:
 		if pv := m.projectPopupView(); pv != nil && pv.slug == msg.slug {
 			if msg.err == nil {
@@ -1017,7 +1032,7 @@ func (m *dash) setData(d Data) tea.Cmd {
 // rebuild lays the rows out again from the last poll, for the listed
 // project; a selection that went away moves to the first row.
 func (m *dash) rebuild() {
-	m.rows = buildRows(m.data, listProject(m.data, m.current))
+	m.rows = append(buildRows(m.data, listProject(m.data, m.current)), m.cardRows()...)
 	if m.selIndex() < 0 {
 		m.sel = ""
 		for _, r := range m.rows {
@@ -1369,6 +1384,16 @@ func (m *dash) listLines(w int, inline bool) (lines, keys []string, sel int) {
 	}
 	for _, r := range m.rows {
 		switch {
+		case r.card:
+			if v, ok := m.mv.card(r.key); ok {
+				selected := r.key == m.sel
+				for i, l := range m.cardLines(v, w, selected) {
+					if i == 0 && selected {
+						sel = len(lines)
+					}
+					add(l, r.key)
+				}
+			}
 		case r.head == "NEEDS YOU" || r.head == "OTHER SESSIONS":
 			add(m.ruleIn(countLabel(r.head, r.count), sectionStyle(r.head), w), "")
 		case r.head != "":

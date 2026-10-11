@@ -1,0 +1,196 @@
+package tui
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/theclifmeister/terminatr/internal/modaction"
+	"github.com/theclifmeister/terminatr/internal/tasks"
+
+	"github.com/theclifmeister/terminatr/internal/modview"
+	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/widget"
+)
+
+func (f *fakeSource) ModViews(shown []modview.Shown) (proto.ModViewsResult, error) {
+	f.shown = shown
+	return f.modViews, nil
+}
+
+func (f *fakeSource) ModViewInput(p proto.ModViewInputParams) error {
+	f.inputs = append(f.inputs, p)
+	return nil
+}
+
+// panelViews are a mod's tab (for alpha, with a count) and card.
+func panelViews() []proto.ModView {
+	two := 2
+	queue := &widget.Widget{Kind: widget.KindStack, Children: []widget.Widget{
+		{Kind: widget.KindList, ID: "q", Rows: []widget.Row{
+			{ID: "T1", Spans: []widget.Span{{Text: "T1 fix the login"}}},
+			{ID: "T2", Spans: []widget.Span{{Text: "T2 write docs"}}}}},
+		{Kind: widget.KindKeys, ID: "k", Keys: []widget.Key{{Key: "o", Label: "older first"}}},
+	}}
+	cost := &widget.Widget{Kind: widget.KindKV, Pairs: []widget.Pair{{Key: "today", Value: []widget.Span{{Text: "$4.20"}}}}}
+	return []proto.ModView{
+		{Mod: "panel", Name: "Panel", View: "queue", Title: "Review queue", Slot: "project.tab", Projects: []string{"alpha"},
+			Trees: []modview.Tree{{Project: "alpha", Count: &two, Tree: queue}}},
+		{Mod: "panel", Name: "Panel", View: "cost", Title: "Cost", Slot: "dashboard.card",
+			Trees: []modview.Tree{{Tree: cost, Height: 3}}},
+	}
+}
+
+func panelDash(t *testing.T) (*fakeSource, *dash) {
+	t.Helper()
+	src := &fakeSource{data: testData(), modViews: proto.ModViewsResult{Views: panelViews()}}
+	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 40, State: DashState{Current: "alpha"}})
+	m.layout.Details = false
+	m.setData(src.data)
+	m.setModViews(modViewsMsg{res: src.modViews})
+	return src, m
+}
+
+// TestModTab: a mod's project tab comes after the core tabs with its
+// title and count, is marked as the mod's, moves its cursor in the core
+// and sends a declared key to the mod with the row under the cursor.
+func TestModTab(t *testing.T) {
+	src, m := panelDash(t)
+	m.openTab("alpha", tabOverview, 0)
+	out := screen(m)
+	if !strings.Contains(out, "8 Review queue 2") {
+		t.Fatalf("no mod tab in the tab bar:\n%s", out)
+	}
+	press(m, "8")
+	out = screen(m)
+	for _, want := range []string{"mod: panel · Review queue", "T1 fix the login", "T2 write docs", "older first", "/ filter"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("mod tab lacks %q:\n%s", want, out)
+		}
+	}
+	if s := m.shownViews(); len(s) != 2 || s[0].View != "queue" || s[0].Project != "alpha" || s[0].Slot != "project.tab" {
+		t.Errorf("shown %+v", s)
+	}
+	press(m, "down")
+	cmd := press(m, "o")
+	if cmd == nil {
+		t.Fatal("a declared key sent nothing")
+	}
+	run(m, cmd)
+	if len(src.inputs) != 1 || src.inputs[0].Row != "T2" || src.inputs[0].Key != "o" || src.inputs[0].Project != "alpha" || src.inputs[0].Widget != "q" {
+		t.Fatalf("inputs %+v", src.inputs)
+	}
+	// An undeclared key reaches no mod; esc closes the popup.
+	press(m, "x")
+	if len(src.inputs) != 1 {
+		t.Fatalf("an undeclared key was sent: %+v", src.inputs)
+	}
+	// The mod's tab isn't beta's.
+	m.pop()
+	m.openTab("beta", tabOverview, 0)
+	if strings.Contains(screen(m), "Review queue") {
+		t.Error("beta has alpha's mod tab")
+	}
+}
+
+// TestModViewFailed: a failed mod's tab and card say so, with its log,
+// and show no stale tree.
+func TestModViewFailed(t *testing.T) {
+	_, m := panelDash(t)
+	views := panelViews()
+	for i := range views {
+		views[i].State, views[i].Err, views[i].Log = proto.ModViewFailed, "crashed 3 times", "/h/logs/mods/panel.log"
+		views[i].Trees = nil
+	}
+	m.setModViews(modViewsMsg{res: proto.ModViewsResult{Views: views}})
+	out := screen(m)
+	if !strings.Contains(out, "mod failed: crashed 3 times") || strings.Contains(out, "$4.20") {
+		t.Errorf("card:\n%s", out)
+	}
+	m.openTab("alpha", tabCount, 0)
+	out = screen(m)
+	for _, want := range []string{"mod failed: crashed 3 times", "panel.log", "mod: panel"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("failed tab lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "T1 fix") || strings.Contains(out, "Review queue 2") {
+		t.Errorf("stale tree or count:\n%s", out)
+	}
+}
+
+// TestModCard: a card below the sections, headed by its title, the
+// mod's name and mark; z folds it, enter opens it as a popup.
+func TestModCard(t *testing.T) {
+	_, m := panelDash(t)
+	out := screen(m)
+	sess, card := strings.Index(out, "SESSIONS"), strings.Index(out, "Cost · Panel")
+	if card < 0 || card < sess || !strings.Contains(out, "mod: panel") || !strings.Contains(out, "$4.20") {
+		t.Fatalf("no card below the sections:\n%s", out)
+	}
+	m.sel = "mc:panel/cost"
+	press(m, "z")
+	if out := screen(m); strings.Contains(out, "$4.20") || !strings.Contains(out, "▸ Cost") {
+		t.Errorf("z didn't fold the card:\n%s", out)
+	}
+	for _, s := range m.shownViews() {
+		if s.View == "cost" {
+			t.Error("a folded card counts as shown")
+		}
+	}
+	press(m, "z", "enter")
+	if _, ok := m.top().(*cardView); !ok {
+		t.Fatalf("enter didn't open the card: %T", m.top())
+	}
+	if out := screen(m); !strings.Contains(out, "mod: panel · Cost") || !strings.Contains(out, "$4.20") {
+		t.Errorf("card popup:\n%s", out)
+	}
+}
+
+// TestModViewOpen: a mod's open request after a human input opens its
+// tab in the project's popup, once.
+func TestModViewOpen(t *testing.T) {
+	_, m := panelDash(t)
+	open := modViewsMsg{res: proto.ModViewsResult{Views: panelViews(), Open: []modview.Open{{Seq: 1, Mod: "panel", View: "queue", Project: "alpha"}}}}
+	m.setModViews(open)
+	pv := m.projectPopupView()
+	if pv == nil || pv.slug != "alpha" || pv.tab != tabCount {
+		t.Fatalf("not opened on the mod tab: %+v", pv)
+	}
+	m.pop()
+	m.setModViews(open)
+	if m.projectPopupView() != nil {
+		t.Error("the same request opened twice")
+	}
+}
+
+// TestModTabBinding: a row of a mod's tab that binds task.delegate shows
+// the core's hint; D there (once the row has been still for 300 ms)
+// never reaches the mod: the core re-checks the live board and asks.
+func TestModTabBinding(t *testing.T) {
+	src, m := panelDash(t)
+	src.board = &tasks.Board{Tasks: []*tasks.Task{{ID: 2, Title: "Write docs", Status: tasks.Ready}}}
+	v := &src.modViews.Views[0]
+	q := &v.Trees[0].Tree.Children[0]
+	q.Rows[1].Actions = []widget.Action{{ID: "task.delegate", Target: map[string]string{"project": "alpha", "task": "T2"}}}
+	m.setModViews(modViewsMsg{res: src.modViews})
+	m.openTab("alpha", tabOverview, 0)
+	press(m, "8")
+	press(m, "down")
+	if out := screen(m); !strings.Contains(out, "D delegate") {
+		t.Fatalf("no core hint for the bound row:\n%s", out)
+	}
+	time.Sleep(modaction.Stable + 20*time.Millisecond)
+	cmd := press(m, "D")
+	if cmd == nil {
+		t.Fatal("D on the bound row did nothing")
+	}
+	runAll(m, cmd)
+	if len(src.inputs) != 0 {
+		t.Fatalf("the press reached the mod: %+v", src.inputs)
+	}
+	cv, ok := m.top().(*confirmView)
+	if !ok || cv.question != "Delegate T2 to the coordinator? It starts a thread for T2 Write docs." {
+		t.Fatalf("D opened %T %+v", m.top(), m.top())
+	}
+}

@@ -103,6 +103,16 @@ type Span struct {
 // progress, steps, bars, keys), drawn by terminatr.
 type Widget map[string]Value
 
+// ViewOptions are $.ui.view.set's options: the project the tree is for
+// (a project tab's, as view.opened names it; none: every project), the
+// count a project tab shows beside its title, and the lines a dashboard
+// card asks for (at most 20).
+type ViewOptions struct {
+	Project string `json:"project,omitempty"`
+	Count   *int   `json:"count,omitempty"`
+	Height  int    `json:"height,omitempty"`
+}
+
 // Project is one project the mod runs for.
 type Project struct {
 	Slug string `json:"slug"`
@@ -241,8 +251,8 @@ var Methods = []Method{
 		Doc: "Publishes the mod's status-bar segment; null clears it."},
 	{Name: "ui.toast", Params: []Param{{Name: "text", Type: typ[string]()}, {Name: "level", Type: typ[Level](), Optional: true}},
 		Doc: "Shows a short message on the consoles."},
-	{Name: "ui.view.set", Params: []Param{{Name: "view", Type: typ[string]()}, {Name: "widget", Type: typ[*Widget]()}}, Needs: GrantViews,
-		Doc: "Publishes the widget tree of a view the manifest declares; null clears it."},
+	{Name: "ui.view.set", Params: []Param{{Name: "view", Type: typ[string]()}, {Name: "widget", Type: typ[*Widget]()}, {Name: "options", Type: typ[ViewOptions](), Optional: true}}, Needs: GrantViews,
+		Doc: "Publishes the widget tree of a view the manifest declares, for one project (options.project) or all; null clears it."},
 	{Name: "ui.view.open", Params: []Param{{Name: "view", Type: typ[string]()}}, Needs: GrantViews,
 		Doc: "Asks the console to show a view; only after a human input (a key, a click or a command)."},
 	{Name: "ui.notify", Params: []Param{{Name: "notification", Type: typ[Notification]()}}, Needs: GrantNotify,

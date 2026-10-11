@@ -116,9 +116,9 @@ func (b *Bus) Publish(name, project string, data any) {
 	}
 }
 
-// PublishTo queues an event for mod alone, if it is subscribed and the
-// event is for it (action.done: only the mod whose row was pressed
-// hears of it). It never blocks.
+// PublishTo queues an event for mod alone (an input on one of its
+// views, a view it shows, action.done for its own binding), if it is
+// subscribed and the event is for it. It never blocks.
 func (b *Bus) PublishTo(mod, name, project string, data any) {
 	b.mu.Lock()
 	s := b.subs[mod]

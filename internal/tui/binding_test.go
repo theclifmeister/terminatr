@@ -38,6 +38,9 @@ func runAll(m *dash, cmd tea.Cmd) {
 		}
 	case actionMsg:
 		m.Update(msg)
+	case bindingMsg:
+		_, next := m.Update(msg)
+		runAll(m, next)
 	}
 }
 

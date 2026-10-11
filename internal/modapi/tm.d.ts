@@ -61,8 +61,8 @@ export interface TM {
     /** Shows a short message on the consoles. */
     toast(text: string, level?: TM.Level): Promise<void>;
     view: {
-      /** Publishes the widget tree of a view the manifest declares; null clears it. Needs the views grant. */
-      set(view: string, widget: TM.Widget | null): Promise<void>;
+      /** Publishes the widget tree of a view the manifest declares, for one project (options.project) or all; null clears it. Needs the views grant. */
+      set(view: string, widget: TM.Widget | null, options?: TM.ViewOptions): Promise<void>;
       /** Asks the console to show a view; only after a human input (a key, a click or a command). Needs the views grant. */
       open(view: string): Promise<void>;
     };
@@ -203,6 +203,7 @@ export declare namespace TM {
     column?: string;
     view?: string;
     widget?: string;
+    row?: string;
     key?: string;
     target?: Target;
   }
@@ -362,6 +363,12 @@ export declare namespace TM {
     project?: string;
     width: number;
     height: number;
+  }
+
+  interface ViewOptions {
+    project?: string;
+    count?: number;
+    height?: number;
   }
 
   interface WatchContext {

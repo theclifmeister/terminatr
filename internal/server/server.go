@@ -26,6 +26,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/keychain"
 	"github.com/theclifmeister/terminatr/internal/modnotify"
 	"github.com/theclifmeister/terminatr/internal/modsup"
+	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/plat/shell"
@@ -150,6 +151,9 @@ type Server struct {
 	modSup atomic.Pointer[modsup.Supervisor]
 	// modBr is the user mods' broker (modbroker.go).
 	modBr modBroker
+	// modViews are the views user mods draw (modviews.go).
+	modViewSt  *modview.Store
+	modViewsMu sync.Mutex
 	// modCl are the mods' cells (modcells.go).
 	modCl modCells
 	// notices are the mods' notifications (modnotify.go).
@@ -627,6 +631,18 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 		return res, perr
 	case proto.MethodModHosts:
 		return s.modHosts(), nil
+	case proto.MethodModViews:
+		var p proto.ModViewsParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.modViews(p, peerPID, s.callerOf(peerPID))
+	case proto.MethodModViewInput:
+		var p proto.ModViewInputParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.modViewInput(p, peerPID, s.callerOf(peerPID))
 	case proto.MethodModRestart:
 		var p proto.ModRestartParams
 		if err := decodeParams(req.Params, &p); err != nil {

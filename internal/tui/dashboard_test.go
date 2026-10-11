@@ -18,6 +18,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/models"
+	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -58,6 +59,9 @@ type fakeSource struct {
 	libRemoved []string          // "t-0001/name", "t-0001/" for all
 	done       []string          // action.done: "mod action project/task ok"
 	restarted  []string          // mod ids
+	modViews   proto.ModViewsResult
+	shown      []modview.Shown // the views the last ModViews said were shown
+	inputs     []proto.ModViewInputParams
 }
 
 func (f *fakeSource) SetRemote(slug string, on bool) (string, error) {

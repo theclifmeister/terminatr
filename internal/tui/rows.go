@@ -53,6 +53,9 @@ type row struct {
 	// questions is the coordinator's open questions on its row in NEEDS
 	// YOU: enter has it open them.
 	questions int
+	// card: the row is a mod's dashboard card's header (modviews.go),
+	// its key the card's.
+	card bool
 	// mods are the mods' cells in their dashboard columns, after the
 	// state (rowMods).
 	mods []rowCell
