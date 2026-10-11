@@ -55,13 +55,6 @@ const (
 // guardNow is the clock of the inbox window (a variable for tests).
 var guardNow = time.Now
 
-// guardSecrets are the credential stores, relative to home, that belong
-// to no agent; each agent's own are in its manifest ([guard] secrets).
-var guardSecrets = []string{
-	".ssh", ".aws", ".gnupg", ".netrc", ".git-credentials", ".npmrc", ".pypirc",
-	".config/gh", ".config/gcloud", ".azure", ".azure-devops", ".docker/config.json", ".kube",
-}
-
 // guardSettings is a project's resolved settings; a config.toml that
 // doesn't load leaves the defaults, so the guard stays on.
 var guardSettings = func(slug string) config.Safety {
@@ -131,12 +124,7 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 			g.Protected = append(g.Protected, b)
 		}
 	}
-	if home != "" {
-		for _, p := range guardSecrets {
-			g.Secrets = append(g.Secrets, filepath.Join(home, p))
-		}
-	}
-	g.Secrets = withReal(append(g.Secrets, agent.GuardSecrets(reg, home, os.Getenv)...))
+	g.Secrets = withReal(agent.Secrets(reg, home, os.Getenv))
 	return g
 }
 

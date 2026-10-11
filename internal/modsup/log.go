@@ -52,6 +52,13 @@ func (l *modLog) Printf(format string, args ...any) {
 		strings.TrimRight(fmt.Sprintf(format, args...), "\n") + "\n"
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	// The broker appends its audit lines to the same file (whole lines,
+	// O_APPEND), so the size is read, not only counted.
+	if l.f != nil {
+		if fi, err := l.f.Stat(); err == nil {
+			l.size = fi.Size()
+		}
+	}
 	if l.f != nil && l.size > 0 && l.size+int64(len(line)) > LogMax {
 		l.f.Close()
 		l.f = nil
