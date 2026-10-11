@@ -710,18 +710,18 @@ func TestCoordinatorContext(t *testing.T) {
 		t.Fatalf("row %+v", c)
 	}
 	line := treeCells(c, sideDefault-2, false, false)
-	if gridCol(line, gridCount) != "42%" || !strings.Contains(line, styleWarn.Render(" 42% ")) {
+	if gridCol(line, gridCount) != "42%" || !strings.Contains(line, th().Warn.Render(" 42% ")) {
 		t.Fatalf("line %q", line)
 	}
 	// Below the threshold: faint.
 	rows = buildTree([]ProjectData{{Slug: "demo"}}, sessions, treeIn{current: "demo", ctxHint: 60})
-	if line := treeCells(rows[1], sideDefault-2, false, false); gridCol(line, gridCount) != "42%" || !strings.Contains(line, styleFaint.Render(" 42% ")) {
+	if line := treeCells(rows[1], sideDefault-2, false, false); gridCol(line, gridCount) != "42%" || !strings.Contains(line, th().Faint.Render(" 42% ")) {
 		t.Fatalf("below: %q", line)
 	}
 	// From 80%: red.
 	sessions[0].Context = 170_000
 	rows = buildTree([]ProjectData{{Slug: "demo"}}, sessions, treeIn{current: "demo", ctxHint: 40})
-	if line := treeCells(rows[1], sideDefault-2, false, false); !strings.Contains(line, styleBad.Render(" 85% ")) {
+	if line := treeCells(rows[1], sideDefault-2, false, false); !strings.Contains(line, th().Bad.Render(" 85% ")) {
 		t.Fatalf("80%%: %q", line)
 	}
 	sessions[0].Context = 84_000

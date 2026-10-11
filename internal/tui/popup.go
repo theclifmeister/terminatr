@@ -168,10 +168,10 @@ func (m *dash) boxRows(b box) int {
 // border, the lines, a blank row and the action rows, and more (a
 // scroll mark) in its bottom border. A line is fitted to the inner width.
 func drawBox(title string, bw int, lines, acts []string, more string) []string {
-	border := styleAccent
+	border := th().Accent
 	inner := max(bw-4, 1)
 	if title != "" {
-		title = " " + styleTitle.Render(oneLine(title)) + " "
+		title = " " + th().Title.Render(oneLine(title)) + " "
 	}
 	fill := max(bw-3-ansi.StringWidth(title), 0)
 	out := []string{border.Render("╭─") + title + border.Render(strings.Repeat("─", fill)+"╮")}
@@ -190,7 +190,7 @@ func drawBox(title string, bw int, lines, acts []string, more string) []string {
 	if more != "" {
 		more = " " + more + " "
 	}
-	out = append(out, border.Render("╰"+strings.Repeat("─", max(bw-3-ansi.StringWidth(more), 0)))+styleFaint.Render(more)+border.Render("─╯"))
+	out = append(out, border.Render("╰"+strings.Repeat("─", max(bw-3-ansi.StringWidth(more), 0)))+th().Faint.Render(more)+border.Render("─╯"))
 	return out
 }
 
@@ -265,7 +265,7 @@ func (m *dash) popup(b box) string {
 		if m.winW-x-bw < sliver {
 			right = strings.Repeat(" ", max(m.winW-x-bw, 0))
 		}
-		out[i] = styleFaint.Render(left) + lines[i-y] + reset + styleFaint.Render(right)
+		out[i] = th().Faint.Render(left) + lines[i-y] + reset + th().Faint.Render(right)
 	}
 	return strings.Join(out, "\n")
 }
@@ -274,7 +274,7 @@ func (m *dash) popup(b box) string {
 // its sidebar part (the header and the footer stay as they are).
 func dimRow(line string, side int, body bool) string {
 	if body {
-		return styleFaint.Render(ansi.Strip(line))
+		return th().Faint.Render(ansi.Strip(line))
 	}
-	return styleFaint.Render(ansi.Strip(ansi.Cut(line, 0, side))) + ansi.Cut(line, side, ansi.StringWidth(line)+1)
+	return th().Faint.Render(ansi.Strip(ansi.Cut(line, 0, side))) + ansi.Cut(line, side, ansi.StringWidth(line)+1)
 }

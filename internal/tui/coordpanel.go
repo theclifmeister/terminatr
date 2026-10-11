@@ -104,8 +104,8 @@ func coordLines(pw *proto.ProjectWatch, w int, now time.Time) ([]string, []infoH
 		}
 	}
 
-	line(styleTitle.Render(oneLine(pw.Project)), infoHit{})
-	line(styleFaint.Render(coordSummary(pw)), infoHit{})
+	line(th().Title.Render(oneLine(pw.Project)), infoHit{})
+	line(th().Faint.Render(coordSummary(pw)), infoHit{})
 	if c := pw.Context; c != nil {
 		text, look, hint := contextWords(c)
 		line(look.Render(text), infoHit{})
@@ -124,7 +124,7 @@ func coordLines(pw *proto.ProjectWatch, w int, now time.Time) ([]string, []infoH
 	}
 	if len(pw.NeedsYou) == 0 && pw.Questions == 0 {
 		gap()
-		line(styleFaint.Render("Nothing waits for you."), infoHit{})
+		line(th().Faint.Render("Nothing waits for you."), infoHit{})
 	} else {
 		heading("NEEDS YOU")
 	}
@@ -133,15 +133,15 @@ func coordLines(pw *proto.ProjectWatch, w int, now time.Time) ([]string, []infoH
 	if pw.Questions > 0 {
 		h := infoHit{kind: hitQuestions}
 		g, _ := stateLook("blocked")
-		item(styleWarn.Render(g+" "+project.QuestionsWaiting(pw.Questions))+styleFaint.Render(" · a or click answers"), h)
+		item(th().Warn.Render(g+" "+project.QuestionsWaiting(pw.Questions))+th().Faint.Render(" · a or click answers"), h)
 	}
 	for _, n := range pw.NeedsYou {
 		h := taskHit(n.Task)
 		// What went wrong in red, what waits on the user in yellow
 		// (docs/STYLE.md, colour roles), as the /tm pane draws them.
-		look := styleBad
+		look := th().Bad
 		if n.Why == proto.WhyReview || n.Why == proto.WhyQuestion {
-			look = styleWarn
+			look = th().Warn
 		}
 		ref := n.Task
 		if ref == "" {
@@ -151,20 +151,20 @@ func coordLines(pw *proto.ProjectWatch, w int, now time.Time) ([]string, []infoH
 			ref = n.Session
 		}
 		g, _ := stateLook(whyState[n.Why])
-		item(styleHead.Render(ref)+" "+look.Render(strings.TrimSpace(g+" "+whyWords[n.Why]))+" "+oneLine(n.Title), h)
+		item(th().Head.Render(ref)+" "+look.Render(strings.TrimSpace(g+" "+whyWords[n.Why]))+" "+oneLine(n.Title), h)
 		switch {
 		case n.Why == proto.WhyQueue:
 			what := "the coordinator hears of nothing"
 			if n.Thread != "" {
 				what = "the thread gets nothing"
 			}
-			wrapped("  ", styleBad.Render(what+" until it clears; tm agent explain "+n.Session+" says why"), infoHit{})
+			wrapped("  ", th().Bad.Render(what+" until it clears; tm agent explain "+n.Session+" says why"), infoHit{})
 		case n.Question != "":
-			wrapped("  ", styleWarn.Render("“"+oneLine(n.Question)+"”"), h)
+			wrapped("  ", th().Warn.Render("“"+oneLine(n.Question)+"”"), h)
 		case n.PR != "":
-			look := styleFaint
+			look := th().Faint
 			if n.Why == proto.WhyCI || prBad(n.PR) {
-				look = styleBad
+				look = th().Bad
 			}
 			ph := h
 			if n.PRURL != "" {
@@ -173,7 +173,7 @@ func coordLines(pw *proto.ProjectWatch, w int, now time.Time) ([]string, []infoH
 			wrapped("  ", look.Render(n.PR), ph)
 		}
 		if n.Asked != "" {
-			line(styleFaint.Render("  asked the coordinator: "+kindWord(n.Asked)), h)
+			line(th().Faint.Render("  asked the coordinator: "+kindWord(n.Asked)), h)
 		}
 	}
 
@@ -193,7 +193,7 @@ func coordLines(pw *proto.ProjectWatch, w int, now time.Time) ([]string, []infoH
 		}
 		text := strings.Join(parts, " ")
 		if it.Title != "" {
-			text += styleFaint.Render(" " + oneLine(it.Title))
+			text += th().Faint.Render(" " + oneLine(it.Title))
 		}
 		line(kindStyle(it.Kind).Render(kindWord(it.Kind))+" "+text, taskHit(it.Task))
 	}
@@ -220,21 +220,21 @@ func coordLines(pw *proto.ProjectWatch, w int, now time.Time) ([]string, []infoH
 		if t.Session != "" && !t.Done {
 			h = infoHit{kind: hitSession, session: t.Session}
 		} else {
-			text = styleFaint.Render(text)
+			text = th().Faint.Render(text)
 		}
 		line(text, h)
 		switch {
 		case t.Task != nil && t.Task.Current != "":
-			line(styleFaint.Render("  ▸ ")+oneLine(t.Task.Current), h)
+			line(th().Faint.Render("  ▸ ")+oneLine(t.Task.Current), h)
 		case t.Task != nil:
-			line(styleFaint.Render("  "+oneLine(t.Task.Title)), h)
+			line(th().Faint.Render("  "+oneLine(t.Task.Title)), h)
 		default:
-			line(styleFaint.Render("  "+oneLine(t.Title)), h)
+			line(th().Faint.Render("  "+oneLine(t.Title)), h)
 		}
 		if t.PR != "" {
-			look := styleFaint
+			look := th().Faint
 			if t.PRBad {
-				look = styleBad
+				look = th().Bad
 			}
 			ph := h
 			if t.PRURL != "" {
@@ -254,15 +254,15 @@ func coordLines(pw *proto.ProjectWatch, w int, now time.Time) ([]string, []infoH
 	}
 	for i, t := range pw.Ready {
 		if i == coordReady {
-			line(styleFaint.Render(fmt.Sprintf("  and %d more", len(pw.Ready)-coordReady)), infoHit{})
+			line(th().Faint.Render(fmt.Sprintf("  and %d more", len(pw.Ready)-coordReady)), infoHit{})
 			break
 		}
 		g, st := stateLook(t.Status)
 		text := st.Render(strings.TrimSpace(g+" "+t.Status)) + " " + oneLine(t.Title)
 		if t.Asked != "" {
-			text += styleFaint.Render(" · asked the coordinator: " + kindWord(t.Asked))
+			text += th().Faint.Render(" · asked the coordinator: " + kindWord(t.Asked))
 		}
-		item(styleHead.Render(t.Task)+" "+text, taskHit(t.Task))
+		item(th().Head.Render(t.Task)+" "+text, taskHit(t.Task))
 	}
 
 	// The ticker's timers, a row each, labels in a column
@@ -275,11 +275,11 @@ func coordLines(pw *proto.ProjectWatch, w int, now time.Time) ([]string, []infoH
 				lw = max(lw, ansi.StringWidth(r.Label))
 			}
 			for _, r := range rows {
-				look := styleFaint
+				look := th().Faint
 				if r.Bad {
-					look = styleBad
+					look = th().Bad
 				}
-				line(styleFaint.Render(r.Label+strings.Repeat(" ", lw-ansi.StringWidth(r.Label)+2))+look.Render(r.Value), infoHit{})
+				line(th().Faint.Render(r.Label+strings.Repeat(" ", lw-ansi.StringWidth(r.Label)+2))+look.Render(r.Value), infoHit{})
 			}
 		}
 	}
@@ -315,11 +315,11 @@ func contextWords(c *proto.WatchContext) (text string, look lipgloss.Style, hint
 	text = fmt.Sprintf("context %s / %s · %d%%", kTokens(c.Tokens), kTokens(c.Window), c.Percent)
 	switch {
 	case c.Percent >= 80:
-		look = styleBad
+		look = th().Bad
 	case c.Hint:
-		look = styleWarn
+		look = th().Warn
 	default:
-		look = styleFaint
+		look = th().Faint
 	}
 	if c.Hint {
 		hint = "consider /clear: the context lives in files (tm context)"

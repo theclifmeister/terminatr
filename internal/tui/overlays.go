@@ -48,7 +48,7 @@ func (m *dash) top() overlay {
 // styled otherwise.
 func line(r row, w int, selected bool) string {
 	if selected {
-		return styleSel.Render(fit(r.text(w), w))
+		return th().Sel.Render(fit(r.text(w), w))
 	}
 	return r.styled(w)
 }
@@ -83,7 +83,7 @@ func (h *helpView) render(m *dash) string { return m.popup(h.box(m)) }
 func (m *dash) helpBody() []string {
 	lines := helpLines(m.prefix, m.inner(viewWidth))
 	if v := versionTitle(m.data.Server); v != "" {
-		lines = append([]string{styleFaint.Render(v), ""}, lines...)
+		lines = append([]string{th().Faint.Render(v), ""}, lines...)
 	}
 	return lines
 }
@@ -160,7 +160,7 @@ func (in *inputView) render(m *dash) string {
 	body = append(body, wrapInput("", in.text+"█", w)...)
 	if n := len([]rune(in.text)); in.max > 0 && n*10 >= in.max*8 {
 		// Near the limit: how much is left.
-		body = append(body, styleFaint.Render(fmt.Sprintf("%d of at most %d characters", n, in.max)))
+		body = append(body, th().Faint.Render(fmt.Sprintf("%d of at most %d characters", n, in.max)))
 	}
 	return m.popup(box{title: in.title, body: body, sel: -1, keys: "enter ok · ctrl+u clear · esc cancel", dialog: true})
 }
@@ -178,7 +178,7 @@ func wrapInput(label, text string, w int) []string {
 	}
 	if l := len([]rune(label)); l <= len([]rune(lines[0])) {
 		first := []rune(lines[0])
-		lines[0] = styleAccent.Render(label) + string(first[l:])
+		lines[0] = th().Accent.Render(label) + string(first[l:])
 	}
 	return lines
 }

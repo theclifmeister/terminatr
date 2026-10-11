@@ -114,7 +114,7 @@ func sideFilterLine(cw int) (string, bool) {
 	if f.typing {
 		s += "▏"
 	}
-	return styleAccent.Render(fit(s, cw)), true
+	return th().Accent.Render(fit(s, cw)), true
 }
 
 // sideTree is what the tree folds: while a filter narrows the tree
