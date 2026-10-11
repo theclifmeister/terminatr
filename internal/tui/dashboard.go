@@ -701,9 +701,25 @@ func (m *dash) showProject(slug string) tea.Cmd {
 // current, and its row the one you are on; the keyboard's row is marked
 // while the sidebar has the focus.
 func (m *dash) tree() []treeRow {
-	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint, expanded: m.expanded})
+	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint,
+		expanded: sideExpanded(m.data.Projects, m.expanded)})
+	rows = sideRows(rows, m.data.NeedsFirst)
 	if m.focus == areaSide {
 		markCursor(rows, m.sideW(), m.sideSel)
+	}
+	return rows
+}
+
+// fullTree is the sidebar's whole tree: every project expanded, no
+// filter (w W).
+func (m *dash) fullTree() []treeRow {
+	var all []string
+	for _, p := range m.data.Projects {
+		all = append(all, p.Slug)
+	}
+	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint, expanded: all})
+	if m.data.NeedsFirst {
+		rows = needsFirstOrder(rows)
 	}
 	return rows
 }
@@ -736,11 +752,10 @@ func (m *dash) cycleFocus(key string) tea.Cmd {
 // sideKey runs a key while the sidebar has the focus; ok is false for a
 // key that isn't the sidebar's, which goes to the list's actions.
 func (m *dash) sideKeyboard(key string) (tea.Cmd, bool) {
-	op, ok := sideOp(key)
+	st, ok := sideKeyFor(sideKeysIn{tree: m.tree, full: m.fullTree, w: m.sideW(), h: m.h, sel: m.sideSel}, key)
 	if !ok {
 		return nil, false
 	}
-	st := sideKeyStep(m.tree(), m.sideW(), m.sideSel, op)
 	var cmds []tea.Cmd
 	if st.msg != "" {
 		m.msg = st.msg

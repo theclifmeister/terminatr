@@ -300,6 +300,13 @@ func globalSettings(note string) []setting {
 				m.data.ContextHint = next
 				return m.setSetting("ui", "context_hint", next, "context hint "+contextHintWords(next))
 			}},
+		{label: "Needs you first", help: "The sidebar lists the projects where something needs you (a thread waits on you, a task to review, a question) first, the active ones above the inactive as always. Off keeps them in their usual order. Every console follows.",
+			value: func(m *dash) string { return onOff(m.data.NeedsFirst) },
+			change: func(m *dash) tea.Cmd {
+				on := !m.data.NeedsFirst
+				m.data.NeedsFirst = on
+				return m.setSetting("ui", "needs_first", on, "needs you first "+onOff(on))
+			}},
 		{label: "Models", help: "Each agent's models a thread may run, a line on when each fits, and the default. Agents release new ones often: add, change or remove them here. Enter lists them.",
 			value:  func(m *dash) string { return catalogWords(m.catalogs) },
 			change: func(m *dash) tea.Cmd { m.openCatalog(); return nil }},

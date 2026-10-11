@@ -1746,18 +1746,18 @@ func (c *client) pollState(ctx context.Context) {
 			alerts, first = res.Alerts, false
 		}
 		var projects []ProjectData
-		ctxHint := config.DefaultContextHint
+		ctxHint, needsFirst := config.DefaultContextHint, false
 		if c.side != nil {
 			projects = loadSideProjects(c.paths)
 			if cfg, err := config.Load(); err == nil {
-				ctxHint = cfg.ContextHint
+				ctxHint, needsFirst = cfg.ContextHint, cfg.NeedsFirst
 			}
 		}
 		statuses := threadStatuses(res.Sessions)
 		c.pollInfo(res.Sessions)
 		if c.lock() {
 			if c.side != nil {
-				c.side.projects, c.side.sessions, c.side.ctxHint = projects, res.Sessions, ctxHint
+				c.side.projects, c.side.sessions, c.side.ctxHint, c.side.needsFirst = projects, res.Sessions, ctxHint, needsFirst
 				if ctl != nil {
 					c.side.server = ServerInfo{Version: res.Version, Build: res.Build, Latest: res.Latest, Upgrade: res.Upgrade}
 				}
