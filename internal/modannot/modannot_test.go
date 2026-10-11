@@ -10,7 +10,7 @@ import (
 func TestSetReadClean(t *testing.T) {
 	dir := t.TempDir()
 	spans, err := Clean([]Span{{Text: "do\x1b[31mcs\n", Role: "info"}, {Text: "  "}, {Text: "x", Role: "nope"}})
-	if err != nil || len(spans) != 2 || spans[0].Text != "do [31mcs" || spans[1].Role != "" {
+	if err != nil || len(spans) != 2 || spans[0].Text != "do[31mcs" || spans[1].Role != "" {
 		t.Fatalf("Clean = %+v, %v", spans, err)
 	}
 	if _, err := Clean(make([]Span, MaxSpans+1)); err == nil {

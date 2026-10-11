@@ -18,10 +18,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
+	"github.com/theclifmeister/terminatr/internal/widget"
 )
 
 // File is the store's name in a mod's own folder.
@@ -37,15 +36,9 @@ const (
 	MaxBytes   = 1 << 20
 )
 
-// Roles are the theme roles a span may name; the same as the mod API's
-// (modapi.Roles, checked by a test).
-var Roles = []string{"head", "sel", "faint", "accent", "title", "bad", "warn", "good", "info", "plain"}
-
-// Span is a run of text in a theme role.
-type Span struct {
-	Text string `json:"text"`
-	Role string `json:"role,omitempty"`
-}
+// Span is a run of text in a theme role: the widget set's span, whose
+// Icon a badge does not use.
+type Span = widget.Span
 
 // Badge is one annotation of a mod on a target, as a console draws it.
 type Badge struct {
@@ -79,8 +72,8 @@ func CheckKey(key string) error {
 }
 
 // Clean makes spans safe to draw: each text one line of at most MaxText
-// runes with its control characters (escape sequences included) made
-// spaces, an unknown role plain, empty spans dropped. It refuses more than
+// runes (widget.Clean strips control characters, escape sequences
+// included), an unknown role plain, icons dropped, empty spans dropped. It refuses more than
 // MaxSpans.
 func Clean(spans []Span) ([]Span, error) {
 	if len(spans) > MaxSpans {
@@ -88,12 +81,7 @@ func Clean(spans []Span) ([]Span, error) {
 	}
 	var out []Span
 	for _, s := range spans {
-		t := strings.Join(strings.Fields(strings.Map(func(r rune) rune {
-			if unicode.IsControl(r) || r == utf8.RuneError {
-				return ' '
-			}
-			return r
-		}, s.Text)), " ")
+		t := strings.Join(strings.Fields(strings.ReplaceAll(widget.Clean(s.Text), "\n", " ")), " ")
 		if rs := []rune(t); len(rs) > MaxText {
 			t = string(rs[:MaxText-1]) + "…"
 		}
@@ -101,7 +89,7 @@ func Clean(spans []Span) ([]Span, error) {
 			continue
 		}
 		role := s.Role
-		if !slices.Contains(Roles, role) {
+		if !slices.Contains(widget.Roles, role) {
 			role = ""
 		}
 		out = append(out, Span{Text: t, Role: role})
