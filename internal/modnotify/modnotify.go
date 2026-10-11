@@ -1,8 +1,9 @@
 // Package modnotify holds the OS notifications user mods send with
 // $.ui.notify (mods design §5 and §7, the notify grant). The server keeps
 // them in a Hub; every console shows them, one console draws the OS
-// notification, and a button on one is a core action id on a task: pressing
-// it makes the console run the core's own key for it, with the core's own
+// notification, and a button on one is a core action id on a task, bound as
+// a mod's row binds one (modaction): pressing it goes through the console's
+// action binding, with its reach check, live re-check and the core's own
 // confirmation. The mod never acts, and what it writes is data: its text is
 // clipped to one line and stripped of control characters (an escape
 // sequence would reach the terminal), and its title is marked with the
@@ -18,6 +19,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/theclifmeister/terminatr/internal/modaction"
 )
 
 // Limits on what a mod sends.
@@ -38,36 +41,16 @@ const (
 // Levels are the levels a notification has; "" is info.
 var Levels = []string{"info", "warn", "error"}
 
-// CoreAction is an action a notification button may name: an id of the
-// console's popup actions (tui coreActions), with the label the core gives
-// it. A mod can't word a button: Label is the core's.
-type CoreAction struct {
-	ID    string
-	Label string
-	// Confirms says the core asks before it acts; the others only show.
-	Confirms bool
-}
-
-// Actions are the core actions a button may name, all on a task. They are
-// the ones a notification about a task is for (example 5): to look at it,
-// and to ask the coordinator to delegate, accept or send it back, or to
-// answer what it waits on.
-var Actions = []CoreAction{
-	{ID: "task.show", Label: "Show"},
-	{ID: "task.delegate", Label: "Delegate", Confirms: true},
-	{ID: "task.accept", Label: "Accept", Confirms: true},
-	{ID: "task.send-back", Label: "Send back", Confirms: true},
-	{ID: "task.coordinator", Label: "Answer"},
-}
-
-// Action returns the core action named id.
-func Action(id string) (CoreAction, bool) {
-	for _, a := range Actions {
-		if a.ID == id {
-			return a, true
-		}
+// Action is the core action a button may name, id: one of the action
+// binding's (modaction, the mods design §11) that takes a project, so it
+// can carry the button's task. Its label, key and confirmation are the
+// core's; a mod can't word a button.
+func Action(id string) (modaction.Action, bool) {
+	a, ok := modaction.Lookup(id)
+	if !ok || a.On == modaction.OnSession {
+		return modaction.Action{}, false
 	}
-	return CoreAction{}, false
+	return a, true
 }
 
 // Button is a notification's button as the consoles get it: the core
@@ -205,9 +188,11 @@ func (h *Hub) Post(mod string, req Request) (Notice, error) {
 
 // ActionIDs lists the action ids a button may name.
 func ActionIDs() string {
-	ids := make([]string, len(Actions))
-	for i, a := range Actions {
-		ids[i] = a.ID
+	var ids []string
+	for _, a := range modaction.Actions {
+		if _, ok := Action(a.ID); ok {
+			ids = append(ids, a.ID)
+		}
 	}
 	return strings.Join(ids, ", ")
 }

@@ -594,6 +594,34 @@ type QuestionsOpenResult struct {
 	Open    int    `json:"open"`
 }
 
+// MethodModActionDone tells the server a human ran a core action that a
+// mod's row, view or notification bound (the mods design §11; docs/SPEC.md
+// §5.3, Action binding), so the mod gets action.done and can redraw. The
+// console calls it after the core ran the action, or refused it as not
+// available; human-only, refused for an agent.
+const MethodModActionDone = "mod.action.done"
+
+// ModActionDoneParams are the params of mod.action.done: the mod whose
+// binding was pressed, the action and its target, and whether it ran.
+type ModActionDoneParams struct {
+	ModActionParams
+	OK bool `json:"ok"`
+}
+
+// MethodModActionCheck asks the server, before the console runs a
+// pressed binding, whether it is in its mod's reach: project_read, and
+// a target in a project the mod runs for (a session's own project).
+// Human-only.
+const MethodModActionCheck = "mod.action.check"
+
+// ModActionParams name a mod's binding: the mod, the action and its
+// target.
+type ModActionParams struct {
+	Mod    string            `json:"mod"`
+	Action string            `json:"action"`
+	Target map[string]string `json:"target,omitempty"`
+}
+
 // MethodNotifyClaim says a console draws mod notification id as an OS
 // notification: the first caller gets OK, the others none, so that one
 // console rings it. MethodNotifyDismiss takes it out of the tray (a

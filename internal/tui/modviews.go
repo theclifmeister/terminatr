@@ -128,6 +128,7 @@ func (mv *modViews) host(v proto.ModView, project string) *widget.View {
 	h := mv.hosted[k]
 	if h == nil {
 		h = widget.NewView()
+		h.SetBindKeys(BindKeys) // this console's keys for bound actions
 		mv.hosted[k] = h
 	}
 	if mv.trees[k] != t.Tree {
@@ -187,10 +188,14 @@ func (m *dash) panelWheel(v proto.ModView, project string, d int) {
 	}
 }
 
-// sendInput sends ev, if any, to v's mod.
+// sendInput sends ev, if any, to v's mod. A bound action pressed never
+// reaches the mod: the core runs it (pressBinding, mods design §11).
 func (m *dash) sendInput(v proto.ModView, project string, ev *widget.Event) tea.Cmd {
 	if ev == nil {
 		return nil
+	}
+	if ev.Kind == widget.EventAction {
+		return m.pressBinding(v.Mod, ev)
 	}
 	src := m.src
 	p := proto.ModViewInputParams{Mod: v.Mod, View: v.View, Project: project, Kind: ev.Kind, Widget: ev.Widget, Row: ev.Row, Key: ev.Key}
@@ -207,6 +212,9 @@ func panelHints(host *widget.View) string {
 	}
 	if host.Focus() == "" {
 		return "↑ ↓ scroll"
+	}
+	if b := boundHints(host); b != "" {
+		return b + " · ↑ ↓ move · / filter"
 	}
 	return "↑ ↓ move · / filter"
 }

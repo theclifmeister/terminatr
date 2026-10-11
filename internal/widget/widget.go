@@ -22,6 +22,8 @@ import (
 	"unicode"
 
 	"github.com/rivo/uniseg"
+
+	"github.com/theclifmeister/terminatr/internal/modaction"
 )
 
 // The kinds of widget.
@@ -103,8 +105,9 @@ type Row struct {
 	Spans []Span   `json:"spans,omitempty"`
 	Cells [][]Span `json:"cells,omitempty"`
 	// Actions name the core actions the row's keys run (mods design §11).
-	// The widget only carries them: the action binding checks and runs
-	// them, never the mod.
+	// The widget only carries them: the core's key runs one, after the
+	// console re-checks it against live state and asks (View.Key), never
+	// the mod.
 	Actions []Action `json:"actions,omitempty"`
 }
 
@@ -159,6 +162,7 @@ const (
 	MaxColumns  = 12
 	MaxValues   = 512
 	MaxKeys     = 12
+	MaxActions  = 8    // bound on one row
 	MaxText     = 4096 // bytes of one string
 	MaxTextLine = 500  // lines of a text widget
 )
@@ -402,15 +406,52 @@ func (c *checker) rowsOf(w *Widget, at string) {
 		} else {
 			c.spans(r.Spans, join(rat, "spans"))
 		}
-		for j, a := range r.Actions {
-			if !actionRE.MatchString(a.ID) {
-				c.bad(fmt.Sprintf("%s[%d].id", join(rat, "actions"), j), "%q is not an action id", a.ID)
-			}
-			if len(a.Target) > 8 {
-				c.bad(fmt.Sprintf("%s[%d].target", join(rat, "actions"), j), "more than 8 fields")
+		c.actions(r.Actions, join(rat, "actions"))
+	}
+}
+
+// actions checks a row's bound actions (mods design §11): each names a
+// core action a mod may bind (modaction), once, on a target of the shape
+// it takes. Whether it is available is checked when it is pressed.
+func (c *checker) actions(as []Action, at string) {
+	if len(as) > MaxActions {
+		c.bad(at, "%d actions, over %d", len(as), MaxActions)
+	}
+	seen := map[string]bool{}
+	for j, a := range as {
+		aat := fmt.Sprintf("%s[%d]", at, j)
+		if !actionRE.MatchString(a.ID) {
+			c.bad(join(aat, "id"), "%q is not an action id", a.ID)
+			continue
+		}
+		spec, ok := modaction.Lookup(a.ID)
+		switch {
+		case !ok:
+			c.bad(join(aat, "id"), "%q is not an action a mod may bind ($.actions.list names them)", a.ID)
+			continue
+		case seen[a.ID]:
+			c.bad(join(aat, "id"), "%q is bound twice", a.ID)
+		}
+		seen[a.ID] = true
+		for k, v := range a.Target {
+			if !slices.Contains(targetKeys, k) {
+				c.bad(join(aat, "target"), "%q is not a target field (%s)", k, strings.Join(targetKeys, ", "))
+			} else if len(v) > 256 || strings.IndexFunc(v, unicode.IsControl) >= 0 {
+				c.bad(join(aat, "target."+k), "not an id (at most 256 bytes, no control characters)")
 			}
 		}
+		if why := modaction.TargetWhy(spec, ActionTarget(a)); why != "" {
+			c.bad(join(aat, "target"), "%s", why)
+		}
 	}
+}
+
+// targetKeys are a target's fields, mod API v1's (modbus.Target).
+var targetKeys = []string{"project", "task", "thread", "session"}
+
+// ActionTarget is a's target as the core action table takes it.
+func ActionTarget(a Action) modaction.Target {
+	return modaction.Target{Project: a.Target["project"], Task: a.Target["task"], Thread: a.Target["thread"], Session: a.Target["session"]}
 }
 
 func (c *checker) spans(ss []Span, at string) {
