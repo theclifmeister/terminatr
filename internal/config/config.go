@@ -4,7 +4,7 @@
 // project follows for every key it doesn't set (among them the agents
 // threads and coordinators run), and the TUI's prefix key ([keys] prefix) and icon set ([ui] icons), whose
 // values the TUI checks, and whether sessions load terminatr's mod
-// ([mods] enabled, docs/SPEC.md §8.6).
+// ([agent_mod] enabled, docs/SPEC.md §8.6).
 //
 // Changing safety settings is a human action: tm writes this file only
 // from the TUI's settings popups, on the human's keypress (write.go). It
@@ -296,23 +296,23 @@ type Config struct {
 	// Prefix is [keys] prefix, or the older [keys] detach that named the
 	// same key; Icons is [ui] icons. "" when unset.
 	Prefix, Icons string
-	// Unknown are the keys under [keys], [ui], [mods] and [agents.<name>] that tm doesn't know
+	// Unknown are the keys under [keys], [ui], [agent_mod] (or [mods]) and [agents.<name>] that tm doesn't know
 	// (e.g. "ui.icon"), sorted. tm doctor reports them; unlike a
 	// project's, they don't fail Load, so a typo there never stops tm.
 	Unknown []string
-	// Mods is [mods] enabled: agent sessions load terminatr's mod, where
+	// AgentMod is [agent_mod] enabled (older [mods] enabled): agent sessions load terminatr's mod, where
 	// the agent has one and its version is new enough. Off by default
 	// while the mods API is early access.
-	Mods bool
-	// ModsBand is [mods] band: with the mod loaded, it draws the band
+	AgentMod bool
+	// AgentModBand is [agent_mod] band: with the mod loaded, it draws the band
 	// above the prompt, its status entry and the CI toast. On unless set
 	// false.
-	ModsBand bool
-	// ModsPane is [mods] pane: with the mod loaded, a coordinator session
+	AgentModBand bool
+	// AgentModPane is [agent_mod] pane: with the mod loaded, a coordinator session
 	// opens its /tm dashboard pane by itself when it starts, where it
 	// would dock as a sidebar. Off unless set true (T90: the TUI's info
 	// panel shows the same beside the coordinator); /tm opens it anyway.
-	ModsPane bool
+	AgentModPane bool
 	// ContextHint is [ui] context_hint: the percent of its model's
 	// context window at which a coordinator is told to consider /clear
 	// (DefaultContextHint when unset, 0 for never).
@@ -332,6 +332,21 @@ type Config struct {
 	agents map[string]rawAgent
 }
 
+// rawAgentMod is [agent_mod], and the older [mods] it replaced.
+type rawAgentMod struct {
+	Enabled *bool `toml:"enabled"`
+	Band    *bool `toml:"band"`
+	Pane    *bool `toml:"pane"`
+}
+
+// over returns r with each key it doesn't set taken from old.
+func (r rawAgentMod) over(old rawAgentMod) rawAgentMod {
+	r.Enabled = cmp.Or(r.Enabled, old.Enabled)
+	r.Band = cmp.Or(r.Band, old.Band)
+	r.Pane = cmp.Or(r.Pane, old.Pane)
+	return r
+}
+
 // Path returns <home>/config.toml.
 func Path() (string, error) {
 	d, err := home.Dir()
@@ -344,7 +359,7 @@ func Path() (string, error) {
 // Load reads config.toml. A missing file gives the defaults. Unknown keys
 // inside a [projects.<slug>] or the [defaults] table are errors, so a
 // typo can't silently leave a safety setting at its default; those under
-// [keys], [ui] and [mods] are listed in Unknown. With such a safety error, the
+// [keys], [ui] and [agent_mod] are listed in Unknown. With such a safety error, the
 // Config is returned too, for its Prefix and Icons: a file that doesn't
 // parse gives none.
 func Load() (*Config, error) {
@@ -367,22 +382,23 @@ func Load() (*Config, error) {
 			UpdateCheck *bool  `toml:"update_check"`
 			NeedsFirst  bool   `toml:"needs_first"`
 		} `toml:"ui"`
-		Mods struct {
-			Enabled bool  `toml:"enabled"`
-			Band    *bool `toml:"band"`
-			Pane    *bool `toml:"pane"`
-		} `toml:"mods"`
+		AgentMod rawAgentMod `toml:"agent_mod"`
+		// Mods is the older name of [agent_mod], read as an alias for
+		// each key [agent_mod] doesn't set. [mods.<id>] tables are
+		// reserved for user mods (not read yet).
+		Mods rawAgentMod `toml:"mods"`
 	}
 	md, err := toml.DecodeFile(path, &raw)
+	am := raw.AgentMod.over(raw.Mods)
 	if errors.Is(err, fs.ErrNotExist) {
-		return &Config{Path: path, ModsBand: true, ContextHint: DefaultContextHint, UpdateCheck: true}, nil
+		return &Config{Path: path, AgentModBand: true, ContextHint: DefaultContextHint, UpdateCheck: true}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	c := &Config{Path: path, projects: raw.Projects, defaults: raw.Defaults, agent: raw.DefaultAgent, agents: raw.Agents,
-		Prefix: cmp.Or(raw.Keys.Prefix, raw.Keys.Detach), Icons: raw.UI.Icons, Mods: raw.Mods.Enabled,
-		ModsBand: raw.Mods.Band == nil || *raw.Mods.Band, ModsPane: raw.Mods.Pane != nil && *raw.Mods.Pane,
+		Prefix: cmp.Or(raw.Keys.Prefix, raw.Keys.Detach), Icons: raw.UI.Icons, AgentMod: am.Enabled != nil && *am.Enabled,
+		AgentModBand: am.Band == nil || *am.Band, AgentModPane: am.Pane != nil && *am.Pane,
 		ContextHint: DefaultContextHint, UpdateCheck: raw.UI.UpdateCheck == nil || *raw.UI.UpdateCheck, NeedsFirst: raw.UI.NeedsFirst}
 	if h := raw.UI.ContextHint; h != nil {
 		if *h < 0 || *h > 100 {
@@ -394,7 +410,9 @@ func Load() (*Config, error) {
 		switch {
 		case len(k) >= 3 && k[0] == "projects", len(k) >= 2 && k[0] == "defaults":
 			return c, fmt.Errorf("%s: unknown setting %s", path, k.String())
-		case len(k) >= 2 && (k[0] == "keys" || k[0] == "ui" || k[0] == "mods"),
+		case len(k) >= 2 && k[0] == "mods" && md.Type(k[:2]...) == "Hash":
+			// [mods.<id>] is reserved for user mods.
+		case len(k) >= 2 && (k[0] == "keys" || k[0] == "ui" || k[0] == "mods" || k[0] == "agent_mod"),
 			len(k) >= 3 && k[0] == "agents":
 			c.Unknown = append(c.Unknown, k.String())
 		}

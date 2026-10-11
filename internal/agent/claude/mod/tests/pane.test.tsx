@@ -185,7 +185,7 @@ test('on the main screen it waits for /tm', async ($, on) => {
   expect(seen.opened).toEqual([])
 })
 
-test('[mods] pane = false: no pane by itself, /tm still toggles it', async ($, on) => {
+test('[agent_mod] pane = false: no pane by itself, /tm still toggles it', async ($, on) => {
   const { seen, clock } = await start($, on, 'coordinator', [project()], { TERMINATR_PANE: 'off' })
   await draw($, true)
   await clock.advance(20_000)

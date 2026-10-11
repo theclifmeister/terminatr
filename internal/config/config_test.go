@@ -225,28 +225,46 @@ func TestAllProjectsReleasedRemoved(t *testing.T) {
 	}
 }
 
-// TestMods: [mods] enabled and pane are off unless set, band on unless
+// TestAgentMod: [agent_mod] enabled and pane are off unless set, band on unless
 // set false; its unknown keys are listed, not errors.
-func TestMods(t *testing.T) {
+func TestAgentMod(t *testing.T) {
 	write(t, "")
-	if c, _ := Load(); c.Mods || !c.ModsBand || c.ModsPane {
-		t.Fatalf("without a file: mods %v, band %v, pane %v", c.Mods, c.ModsBand, c.ModsPane)
+	if c, _ := Load(); c.AgentMod || !c.AgentModBand || c.AgentModPane {
+		t.Fatalf("without a file: mods %v, band %v, pane %v", c.AgentMod, c.AgentModBand, c.AgentModPane)
 	}
-	write(t, "[mods]\nenabled = true\nsidebar = true\n")
+	write(t, "[agent_mod]\nenabled = true\nsidebar = true\n")
 	c, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !c.Mods || !c.ModsBand || c.ModsPane || strings.Join(c.Unknown, ",") != "mods.sidebar" {
-		t.Fatalf("mods %v, band %v, pane %v, unknown %v", c.Mods, c.ModsBand, c.ModsPane, c.Unknown)
+	if !c.AgentMod || !c.AgentModBand || c.AgentModPane || strings.Join(c.Unknown, ",") != "agent_mod.sidebar" {
+		t.Fatalf("mods %v, band %v, pane %v, unknown %v", c.AgentMod, c.AgentModBand, c.AgentModPane, c.Unknown)
 	}
-	write(t, "[mods]\nenabled = true\nband = false\n")
-	if c, err := Load(); err != nil || !c.Mods || c.ModsBand || c.ModsPane || len(c.Unknown) != 0 {
+	write(t, "[agent_mod]\nenabled = true\nband = false\n")
+	if c, err := Load(); err != nil || !c.AgentMod || c.AgentModBand || c.AgentModPane || len(c.Unknown) != 0 {
 		t.Fatalf("band = false: %v, %+v", err, c)
 	}
-	write(t, "[mods]\nenabled = true\npane = true\n")
-	if c, err := Load(); err != nil || !c.ModsBand || !c.ModsPane || len(c.Unknown) != 0 {
+	write(t, "[agent_mod]\nenabled = true\npane = true\n")
+	if c, err := Load(); err != nil || !c.AgentModBand || !c.AgentModPane || len(c.Unknown) != 0 {
 		t.Fatalf("pane = true: %v, %+v", err, c)
+	}
+}
+
+// TestAgentModAlias: the older [mods] enabled, band and pane still count
+// for each key [agent_mod] doesn't set; [mods.<id>] tables are reserved
+// and not unknown, a stray scalar under [mods] still is.
+func TestAgentModAlias(t *testing.T) {
+	write(t, "[mods]\nenabled = true\nband = false\npane = true\n")
+	if c, err := Load(); err != nil || !c.AgentMod || c.AgentModBand || !c.AgentModPane || len(c.Unknown) != 0 {
+		t.Fatalf("alias: %v, %+v", err, c)
+	}
+	write(t, "[mods]\nenabled = true\nband = false\n[agent_mod]\nenabled = false\n")
+	if c, err := Load(); err != nil || c.AgentMod || c.AgentModBand {
+		t.Fatalf("agent_mod wins per key: %v, %+v", err, c)
+	}
+	write(t, "[mods.nord]\nenabled = true\ntheme = \"x\"\n\n[mods]\nsidebar = 1\n")
+	if c, err := Load(); err != nil || c.AgentMod || strings.Join(c.Unknown, ",") != "mods.sidebar" {
+		t.Fatalf("reserved [mods.<id>]: %v, %+v", err, c)
 	}
 }
 

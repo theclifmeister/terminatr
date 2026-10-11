@@ -31,12 +31,12 @@ func TestEdit(t *testing.T) {
 			"default_agent = \"pi\"\n[keys]\n"},
 		{"other table's key untouched", "[projects.other]\nyolo = false\n[projects.demo]\n", "projects.demo", "yolo", true,
 			"[projects.other]\nyolo = false\n[projects.demo]\nyolo = true\n"},
-		{"mods table absent: appended", "default_agent = \"claude\"\n[ui]\nicons = \"ascii\"\n", "mods", "enabled", true,
-			"default_agent = \"claude\"\n[ui]\nicons = \"ascii\"\n\n[mods]\nenabled = true\n"},
-		{"mods band beside enabled", "[mods]\nenabled = true\n\n[projects.demo]\nyolo = true\n", "mods", "band", false,
-			"[mods]\nenabled = true\nband = false\n\n[projects.demo]\nyolo = true\n"},
-		{"mods line edited, comment kept", "# mods\n[mods]\nenabled = false # early access\nband = true\n", "mods", "enabled", true,
-			"# mods\n[mods]\nenabled = true # early access\nband = true\n"},
+		{"mods table absent: appended", "default_agent = \"claude\"\n[ui]\nicons = \"ascii\"\n", "agent_mod", "enabled", true,
+			"default_agent = \"claude\"\n[ui]\nicons = \"ascii\"\n\n[agent_mod]\nenabled = true\n"},
+		{"mods band beside enabled", "[agent_mod]\nenabled = true\n\n[projects.demo]\nyolo = true\n", "agent_mod", "band", false,
+			"[agent_mod]\nenabled = true\nband = false\n\n[projects.demo]\nyolo = true\n"},
+		{"mods line edited, comment kept", "# mods\n[agent_mod]\nenabled = false # early access\nband = true\n", "agent_mod", "enabled", true,
+			"# mods\n[agent_mod]\nenabled = true # early access\nband = true\n"},
 		{"string escaped", "", "keys", "prefix", `ctrl+"`,
 			"[keys]\nprefix = \"ctrl+\\\"\"\n"},
 	} {
@@ -63,8 +63,8 @@ func TestEditOtherForms(t *testing.T) {
 			t.Errorf("%q: err %v, want ErrForm", in, err)
 		}
 	}
-	for _, in := range []string{"mods.enabled = false\n", "mods = { enabled = false }\n"} {
-		if _, err := Edit([]byte(in), "mods", "enabled", true); !errors.Is(err, ErrForm) {
+	for _, in := range []string{"agent_mod.enabled = false\n", "agent_mod = { enabled = false }\n"} {
+		if _, err := Edit([]byte(in), "agent_mod", "enabled", true); !errors.Is(err, ErrForm) {
 			t.Errorf("%q: err %v, want ErrForm", in, err)
 		}
 	}

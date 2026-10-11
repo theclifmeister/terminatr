@@ -310,42 +310,42 @@ func globalSettings(note string) []setting {
 		{label: "Models", help: "Each agent's models a thread may run, a line on when each fits, and the default. Agents release new ones often: add, change or remove them here. Enter lists them.",
 			value:  func(m *dash) string { return catalogWords(m.catalogs) },
 			change: func(m *dash) tea.Cmd { m.openCatalog(); return nil }},
-		{label: "Mods", help: "Load terminatr's mod in agent panes (early access). Needs " + note + " or newer. Applies to sessions launched after the change.",
-			value: func(m *dash) string { return onOff(m.data.Mods) },
+		{label: "Agent mod", help: "Load terminatr's agent mod in agent panes (early access). Needs " + note + " or newer. Applies to sessions launched after the change.",
+			value: func(m *dash) string { return onOff(m.data.AgentMod) },
 			change: func(m *dash) tea.Cmd {
-				on := !m.data.Mods
-				m.data.Mods = on
-				msg := "mods off; sessions launched from now on load no mod"
+				on := !m.data.AgentMod
+				m.data.AgentMod = on
+				msg := "agent mod off; sessions launched from now on load no mod"
 				if on {
-					msg = "mods on; sessions launched from now on load the mod"
+					msg = "agent mod on; sessions launched from now on load the mod"
 				}
-				return m.setSetting("mods", "enabled", on, msg)
+				return m.setSetting("agent_mod", "enabled", on, msg)
 			}},
-		{label: "Mods band", help: "The band, status entry and toast in the pane; the feed still runs. Only matters while Mods is on. Applies to sessions launched after the change.",
-			value: func(m *dash) string { return onOff(m.data.ModsBand) },
+		{label: "Agent mod band", help: "The band, status entry and toast in the pane; the feed still runs. Only matters while Agent mod is on. Applies to sessions launched after the change.",
+			value: func(m *dash) string { return onOff(m.data.AgentModBand) },
 			from: func(m *dash) string {
-				if !m.data.Mods {
-					return "needs Mods on"
+				if !m.data.AgentMod {
+					return "needs Agent mod on"
 				}
 				return ""
 			},
 			change: func(m *dash) tea.Cmd {
-				on := !m.data.ModsBand
-				m.data.ModsBand = on
-				return m.setSetting("mods", "band", on, "mods band "+onOff(on)+"; sessions launched from now on follow it")
+				on := !m.data.AgentModBand
+				m.data.AgentModBand = on
+				return m.setSetting("agent_mod", "band", on, "agent mod band "+onOff(on)+"; sessions launched from now on follow it")
 			}},
-		{label: "Mods pane", help: "Open the /tm dashboard pane beside the coordinator when it starts, where it docks as a sidebar (fullscreen, 144+ columns). Off by default: in tm the info panel beside the coordinator shows the same; /tm is for Claude desktop and Remote Control, and opens or closes it either way. Only matters while Mods is on. Applies to coordinators launched after the change.",
-			value: func(m *dash) string { return onOff(m.data.ModsPane) },
+		{label: "Agent mod pane", help: "Open the /tm dashboard pane beside the coordinator when it starts, where it docks as a sidebar (fullscreen, 144+ columns). Off by default: in tm the info panel beside the coordinator shows the same; /tm is for Claude desktop and Remote Control, and opens or closes it either way. Only matters while Agent mod is on. Applies to coordinators launched after the change.",
+			value: func(m *dash) string { return onOff(m.data.AgentModPane) },
 			from: func(m *dash) string {
-				if !m.data.Mods {
-					return "needs Mods on"
+				if !m.data.AgentMod {
+					return "needs Agent mod on"
 				}
 				return ""
 			},
 			change: func(m *dash) tea.Cmd {
-				on := !m.data.ModsPane
-				m.data.ModsPane = on
-				return m.setSetting("mods", "pane", on, "mods pane "+onOff(on)+"; coordinators launched from now on follow it")
+				on := !m.data.AgentModPane
+				m.data.AgentModPane = on
+				return m.setSetting("agent_mod", "pane", on, "agent mod pane "+onOff(on)+"; coordinators launched from now on follow it")
 			}},
 	}
 }

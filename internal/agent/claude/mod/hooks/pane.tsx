@@ -7,7 +7,7 @@
 // It follows `tm watch --project <slug> --json` for the session's life
 // and keeps the latest line in $.state. In tm the coordinator's info
 // panel shows the same (T90), so the pane is for Claude desktop and
-// Remote Control: only with [mods] pane on (the server sets
+// Remote Control: only with [agent_mod] pane on (the server sets
 // TERMINATR_PANE=off otherwise) it opens by itself once the session
 // starts, where it docks as a sidebar: the fullscreen layout, from 144
 // columns (the engine seats a pane opened unasked from there). /tm opens

@@ -81,7 +81,7 @@ func (f *fakeSource) Load() Data {
 			}
 			all, _ := cfg.AllProjects()
 			f.data.Defaults = &all
-			f.data.Mods, f.data.ModsBand = cfg.Mods, cfg.ModsBand
+			f.data.AgentMod, f.data.AgentModBand = cfg.AgentMod, cfg.AgentModBand
 		}
 	}
 	return f.data

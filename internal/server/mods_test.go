@@ -32,7 +32,7 @@ func modsServer(t *testing.T, enabled bool, version string) (*Server, agent.Agen
 	h := t.TempDir()
 	t.Setenv(home.Env, h)
 	if enabled {
-		os.WriteFile(filepath.Join(h, "config.toml"), []byte("[mods]\nenabled = true\n"), 0o600)
+		os.WriteFile(filepath.Join(h, "config.toml"), []byte("[agent_mod]\nenabled = true\n"), 0o600)
 	}
 	bin := t.TempDir()
 	os.WriteFile(filepath.Join(bin, "claude"+testExe), []byte("#!/bin/sh\n"), 0o700)
@@ -53,7 +53,7 @@ func modsServer(t *testing.T, enabled bool, version string) (*Server, agent.Agen
 	return s, modder{agent.FromManifest(m), m}, runs, &buf
 }
 
-// TestModsFor: the mod loads only with [mods] enabled and a version at
+// TestModsFor: the mod loads only with [agent_mod] enabled and a version at
 // least the tested one, which is read once per binary.
 func TestModsFor(t *testing.T) {
 	s, a, runs, _ := modsServer(t, true, "2.1.291")
@@ -89,7 +89,7 @@ func TestVersionsSeeUpgrade(t *testing.T) {
 	}
 }
 
-// TestBandSetting: [mods] band is on unless set false, and on when
+// TestBandSetting: [agent_mod] band is on unless set false, and on when
 // config.toml doesn't load.
 func TestBandSetting(t *testing.T) {
 	h := t.TempDir()
@@ -98,7 +98,7 @@ func TestBandSetting(t *testing.T) {
 	for _, c := range []struct {
 		body string
 		want bool
-	}{{"", true}, {"[mods]\nenabled = true\n", true}, {"[mods]\nband = false\n", false}, {"[mods\n", true}} {
+	}{{"", true}, {"[agent_mod]\nenabled = true\n", true}, {"[agent_mod]\nband = false\n", false}, {"[mods\n", true}} {
 		os.WriteFile(cfg, []byte(c.body), 0o600)
 		if got := bandSetting(); got != c.want {
 			t.Errorf("%q: band %v, want %v", c.body, got, c.want)

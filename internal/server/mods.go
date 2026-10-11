@@ -1,7 +1,7 @@
 package server
 
 // terminatr's mod (docs/SPEC.md §8.6, Mods): an agent that ships one
-// (agent.Modder) loads it only when [mods] enabled is on and the agent's
+// (agent.Modder) loads it only when [agent_mod] enabled is on and the agent's
 // version is at least the one the mod was tested on. Otherwise the
 // session starts as before, on its command hooks alone, which stay in
 // either case.
@@ -24,33 +24,33 @@ import (
 // agent binary (versions caches it).
 const versionTimeout = 5 * time.Second
 
-// modsSetting is [mods] enabled; a config.toml that doesn't load leaves
+// modsSetting is [agent_mod] enabled; a config.toml that doesn't load leaves
 // mods off.
 func modsSetting() bool {
 	cfg, err := config.Load()
-	return err == nil && cfg.Mods
+	return err == nil && cfg.AgentMod
 }
 
-// envBand is set to "off" in a session with the mod when [mods] band is
+// envBand is set to "off" in a session with the mod when [agent_mod] band is
 // false: the mod then draws no band, status entry or toast.
 const envBand = "TERMINATR_BAND"
 
-// bandSetting is [mods] band; a config.toml that doesn't load leaves it
+// bandSetting is [agent_mod] band; a config.toml that doesn't load leaves it
 // on, as when unset.
 func bandSetting() bool {
 	cfg, err := config.Load()
-	return err != nil || cfg.ModsBand
+	return err != nil || cfg.AgentModBand
 }
 
 // envPane is set to "off" in a coordinator session with the mod unless
-// [mods] pane is true: the mod then opens its /tm pane only when asked.
+// [agent_mod] pane is true: the mod then opens its /tm pane only when asked.
 const envPane = "TERMINATR_PANE"
 
-// paneSetting is [mods] pane; a config.toml that doesn't load leaves it
+// paneSetting is [agent_mod] pane; a config.toml that doesn't load leaves it
 // off, as when unset (T90).
 func paneSetting() bool {
 	cfg, err := config.Load()
-	return err == nil && cfg.ModsPane
+	return err == nil && cfg.AgentModPane
 }
 
 // modsFor reports whether a session of a gets terminatr's mod, and logs

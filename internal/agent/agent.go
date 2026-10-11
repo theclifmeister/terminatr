@@ -51,7 +51,7 @@ type LaunchSpec struct {
 	TMBin         string // absolute path of the running tm binary, for hooks
 	Socket        string // server socket path; the agent's sandbox must allow it
 	// Mods loads terminatr's own mod into the agent (a Modder), beside
-	// its command hooks. The core sets it only when [mods] enabled is on
+	// its command hooks. The core sets it only when [agent_mod] enabled is on
 	// and the agent's version is at least ModsMinVersion.
 	Mods bool
 
