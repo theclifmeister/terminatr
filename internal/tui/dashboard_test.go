@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/version"
+	"github.com/theclifmeister/terminatr/internal/view"
 )
 
 // statusLine is statusBar's line, without its buttons.
@@ -985,5 +987,44 @@ func TestVersionPlaces(t *testing.T) {
 	m.openSettings()
 	if s := ansi.Strip(whole(m)); !strings.Contains(s, "About: tm "+version.Version+" · server v9.9.9 · update check on") {
 		t.Errorf("settings:\n%s", s)
+	}
+}
+
+// TestViewCallsInTurn: the view calls of one console reach the server in
+// the order they were made, though each runs in a command of its own. A
+// click on a project, then one on its coordinator, must not apply as
+// view.attach, then view.project: the view would leave the attach just
+// begun for the dashboard (T283, TestSmokeCoordinatorRemoteControl).
+func TestViewCallsInTurn(t *testing.T) {
+	var mu sync.Mutex
+	var got []string
+	vc := &ViewConn{v: view.View{Name: "v", Seq: 1}, up: true, watch: map[chan struct{}]bool{},
+		serve: func(method string, _ proto.ViewParams) (view.View, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			got = append(got, method)
+			return view.View{Name: "v", Seq: uint64(len(got) + 1)}, nil
+		}}
+	src := &fakeSource{data: testData()}
+	m := newDash(DashOptions{Source: src, Width: 120, Height: 30, State: DashState{Current: "beta"}})
+	m.setData(src.data)
+	m.view = vc
+	project := m.showProject("alpha")
+	_, attach := m.update(actionMsg{attach: "s-1", current: "alpha"})
+	if project == nil || attach == nil {
+		t.Fatal("no view calls")
+	}
+	// The attach's command runs first, as the scheduler may have it.
+	ran := make(chan struct{})
+	go func() { attach(); close(ran) }()
+	select {
+	case <-ran:
+		t.Fatal("view.attach went before the view.project made earlier")
+	case <-time.After(50 * time.Millisecond):
+	}
+	project()
+	<-ran
+	if want := []string{proto.MethodViewProject, proto.MethodViewAttach}; !slices.Equal(got, want) {
+		t.Fatalf("calls %v, want %v", got, want)
 	}
 }
