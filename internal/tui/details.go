@@ -5,8 +5,10 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/theclifmeister/terminatr/internal/modannot"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -21,7 +23,7 @@ func (m *dash) details(r row, w int) []string {
 	d := &panel{w: w}
 	switch {
 	case r.task != nil:
-		taskPanelWith(d, r.task, nil, m.asked(r.project, r.task), m.taskUsage(r.project, r.task.ID))
+		taskPanelWith(d, r.task, nil, m.asked(r.project, r.task), m.taskUsage(r.project, r.task.ID), m.badges(r.project, modannot.Task(r.task.Ref())))
 	case r.thread != nil:
 		m.threadPanel(d, r)
 	case strings.HasPrefix(r.key, "p:"):
@@ -82,6 +84,61 @@ func (d *panel) title(text, state string) {
 	d.add(th().Faint.Render(strings.Repeat("─", max(d.w-2, 0))))
 }
 
+// badges shows the mods' annotations under the title: per mod one line
+// of its badges, "mod: <id>" faint after them, so a user can tell a
+// mod's words from terminatr's. Spans are drawn in their theme role; the
+// text was cleaned by the store.
+func (d *panel) badges(bs []modannot.Badge) {
+	for i := 0; i < len(bs); {
+		j := i
+		for j < len(bs) && bs[j].Mod == bs[i].Mod {
+			j++
+		}
+		var parts []string
+		for _, b := range bs[i:j] {
+			for _, sp := range b.Spans {
+				parts = append(parts, roleStyle(sp.Role).Render(sp.Text))
+			}
+		}
+		d.add(strings.Join(parts, "  ") + "  " + th().Faint.Render("mod: "+bs[i].Mod))
+		i = j
+	}
+}
+
+// roleStyle is the style of theme role name; plain when it is unknown.
+func roleStyle(name string) lipgloss.Style {
+	t := th()
+	switch name {
+	case "head":
+		return t.Head
+	case "sel":
+		return t.Sel
+	case "faint":
+		return t.Faint
+	case "accent":
+		return t.Accent
+	case "title":
+		return t.Title
+	case "bad":
+		return t.Bad
+	case "warn":
+		return t.Warn
+	case "good":
+		return t.Good
+	case "info":
+		return t.Info
+	}
+	return t.Plain
+}
+
+// badges are the mods' annotations of target in project slug.
+func (m *dash) badges(slug, target string) []modannot.Badge {
+	if p := m.projectData(slug); p != nil {
+		return p.Badges[target]
+	}
+	return nil
+}
+
 // field is a "label  value" line.
 func (d *panel) field(label, value string) {
 	if value != "" {
@@ -122,6 +179,7 @@ func (m *dash) threadPanel(d *panel, r row) {
 		}
 	}
 	d.title(threadName(t.Task, t.ID)+" "+t.Title, state)
+	d.badges(m.badges(r.project, modannot.Thread(t.ID)))
 	d.field("project", r.project)
 	d.field("thread", t.ID)
 	d.field("session", t.Session)
@@ -176,8 +234,9 @@ func (m *dash) taskUsage(slug string, id int) thread.Usage {
 // what it is blocked on; for a task in review, how to check it and
 // whether its change shipped (rv, when known); and what the coordinator
 // was asked about it (asked, an item kind, "" for nothing).
-func taskPanelWith(d *panel, t *tasks.Task, rv *Review, asked string, usage thread.Usage) {
+func taskPanelWith(d *panel, t *tasks.Task, rv *Review, asked string, usage thread.Usage, badges []modannot.Badge) {
 	d.title(t.Ref()+" "+t.Title, string(t.Status))
+	d.badges(badges)
 	d.field("thread", t.Thread)
 	d.field("usage", usage.String())
 	if asked != "" {
