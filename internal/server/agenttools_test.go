@@ -21,7 +21,7 @@ name = "Lint"
 version = "0.1.0"
 api = "1.0"
 [provides]
-main = "main.js"
+main = "main.ts"
 
 [[provides.tools]]
 id = "lint_report"
@@ -40,7 +40,8 @@ description = "Never answers pong."
 `
 
 const lintToolMain = `
-$.tool.handle("lint_report", (input, call) => input.text.length + " chars from " + call.role + " " + call.thread + " of " + call.project);
+type Lint = { text: string; max?: number };
+$.tool.handle("lint_report", (input: any, call: any) => (input as Lint).text.length + " chars from " + call.role + " " + call.thread + " of " + call.project);
 $.tool.handle("ping", async () => { throw new Error("no pong today"); });
 `
 
@@ -62,7 +63,7 @@ func TestModAgentTools(t *testing.T) {
 		}
 	}
 	write("mods/lint/mod.toml", lintToolManifest)
-	write("mods/lint/main.js", lintToolMain)
+	write("mods/lint/main.ts", lintToolMain)
 	write("config.toml", "[mods.lint]\nenabled = true\nprojects = [\"proj\"]\n")
 
 	rt, err := os.MkdirTemp(ipc.ShortDir(), "tmmod")
