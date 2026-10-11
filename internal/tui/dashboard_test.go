@@ -1,12 +1,14 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,11 +18,13 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/models"
+	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/version"
+	"github.com/theclifmeister/terminatr/internal/view"
 )
 
 // statusLine is statusBar's line, without its buttons.
@@ -53,7 +57,11 @@ type fakeSource struct {
 	library    []thread.LibFile
 	libFiles   map[string]string // "t-0001/name" -> content
 	libRemoved []string          // "t-0001/name", "t-0001/" for all
+	done       []string          // action.done: "mod action project/task ok"
 	restarted  []string          // mod ids
+	modViews   proto.ModViewsResult
+	shown      []modview.Shown // the views the last ModViews said were shown
+	inputs     []proto.ModViewInputParams
 }
 
 func (f *fakeSource) SetRemote(slug string, on bool) (string, error) {
@@ -985,5 +993,56 @@ func TestVersionPlaces(t *testing.T) {
 	m.openSettings()
 	if s := ansi.Strip(whole(m)); !strings.Contains(s, "About: tm "+version.Version+" · server v9.9.9 · update check on") {
 		t.Errorf("settings:\n%s", s)
+	}
+}
+
+func (f *fakeSource) ModActionDone(mod, action string, target map[string]string, ok bool) error {
+	f.done = append(f.done, fmt.Sprintf("%s %s %s/%s%s %v", mod, action, target["project"], target["task"], target["session"], ok))
+	return nil
+}
+
+func (f *fakeSource) ModActionCheck(mod, action string, target map[string]string) error {
+	if target["project"] == "beta" {
+		return errors.New(mod + " doesn't run for project beta")
+	}
+	return nil
+}
+
+// TestViewCallsInTurn: the view calls of one console reach the server in
+// the order they were made, though each runs in a command of its own. A
+// click on a project, then one on its coordinator, must not apply as
+// view.attach, then view.project: the view would leave the attach just
+// begun for the dashboard (T283, TestSmokeCoordinatorRemoteControl).
+func TestViewCallsInTurn(t *testing.T) {
+	var mu sync.Mutex
+	var got []string
+	vc := &ViewConn{v: view.View{Name: "v", Seq: 1}, up: true, watch: map[chan struct{}]bool{},
+		serve: func(method string, _ proto.ViewParams) (view.View, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			got = append(got, method)
+			return view.View{Name: "v", Seq: uint64(len(got) + 1)}, nil
+		}}
+	src := &fakeSource{data: testData()}
+	m := newDash(DashOptions{Source: src, Width: 120, Height: 30, State: DashState{Current: "beta"}})
+	m.setData(src.data)
+	m.view = vc
+	project := m.showProject("alpha")
+	_, attach := m.update(actionMsg{attach: "s-1", current: "alpha"})
+	if project == nil || attach == nil {
+		t.Fatal("no view calls")
+	}
+	// The attach's command runs first, as the scheduler may have it.
+	ran := make(chan struct{})
+	go func() { attach(); close(ran) }()
+	select {
+	case <-ran:
+		t.Fatal("view.attach went before the view.project made earlier")
+	case <-time.After(50 * time.Millisecond):
+	}
+	project()
+	<-ran
+	if want := []string{proto.MethodViewProject, proto.MethodViewAttach}; !slices.Equal(got, want) {
+		t.Fatalf("calls %v, want %v", got, want)
 	}
 }

@@ -60,6 +60,7 @@ func (s *Server) runModHosts(ctx context.Context, sup *modsup.Supervisor) {
 		if specs, ok := s.modSpecs(); ok {
 			sup.Set(specs)
 		}
+		s.expireModViews()
 		select {
 		case <-ctx.Done():
 			return
