@@ -81,8 +81,20 @@ func (s *Server) modSpecs() ([]modsup.Spec, bool) {
 		if m.State != mod.Enabled || m.Manifest == nil || !m.Manifest.IsCode() {
 			continue
 		}
-		specs = append(specs, modsup.Spec{ID: m.ID, Entry: filepath.Join(m.Dir, filepath.FromSlash(m.Manifest.Provides.Main)),
-			Grants: m.Grants, Projects: m.Projects, Settings: m.Settings})
+		sp := modsup.Spec{ID: m.ID, Grants: m.Grants, Projects: m.Projects, Settings: m.Settings}
+		if m.Builtin {
+			// Precompiled into tm (go generate ./internal/mod): it
+			// runs without esbuild, and from the server's start.
+			b, err := m.ReadFile(m.Manifest.Provides.Main)
+			if err != nil {
+				s.log.Printf("mods: built-in %s: %v", m.ID, err)
+				continue
+			}
+			sp.Bundle, sp.Eager = b, true
+		} else {
+			sp.Entry = filepath.Join(m.Dir, filepath.FromSlash(m.Manifest.Provides.Main))
+		}
+		specs = append(specs, sp)
 	}
 	return specs, true
 }

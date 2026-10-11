@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/view"
 	"github.com/theclifmeister/terminatr/internal/widget"
@@ -121,6 +122,7 @@ func (mc *modCells) sideOrder(order []string) []string {
 	if len(order) == 0 {
 		order = view.DefaultColumns
 	}
+	order = prciOrder(order, mods)
 	var add []string
 	for _, c := range mc.cols {
 		if _, ok := mods[c.ID]; ok && !slices.Contains(order, c.ID) {
@@ -161,6 +163,13 @@ func modRun(ss []widget.Span, w int) cellRun {
 	inner := w
 	if w > 1 {
 		inner = w - 1
+		// A Nerd Font icon brings its own blank (widgetLook.Icon): a
+		// cell that fits whole and ends in one needs no other.
+		if n := spansWidth(ss); n <= w {
+			if plain, styled := spansCell(ss, w); strings.HasSuffix(plain, " ") {
+				return cellRun{plain, spanStyle{plain, styled}}
+			}
+		}
 	}
 	plain, styled := spansCell(ss, inner)
 	pad := strings.Repeat(" ", w-inner)
@@ -179,6 +188,18 @@ func (s spanStyle) Render(strs ...string) string {
 	return th().Plain.Render(in)
 }
 
+// spansWidth is how many cells ss take drawn whole.
+func spansWidth(ss []widget.Span) int {
+	n := 0
+	for _, s := range ss {
+		n += ansi.StringWidth(s.Text)
+		if s.Icon != "" {
+			n += ansi.StringWidth(widgetLook{}.Icon(s.Icon))
+		}
+	}
+	return n
+}
+
 // statusMods is the mods' status segments for the status bar, each cut
 // to statusModMax cells and parted by two blanks, and its width.
 func statusMods(mc *modCells) (string, int) {
@@ -188,14 +209,7 @@ func statusMods(mc *modCells) (string, int) {
 	var parts []string
 	w := 0
 	for _, st := range mc.status {
-		n := 0
-		for _, s := range st.Spans {
-			n += ansi.StringWidth(s.Text)
-			if s.Icon != "" {
-				n += ansi.StringWidth(widgetLook{}.Icon(s.Icon))
-			}
-		}
-		plain, styled := spansCell(st.Spans, min(n, statusModMax))
+		plain, styled := spansCell(st.Spans, min(spansWidth(st.Spans), statusModMax))
 		if strings.TrimSpace(plain) == "" {
 			continue
 		}
@@ -206,4 +220,32 @@ func statusMods(mc *modCells) (string, int) {
 		parts = append(parts, styled)
 	}
 	return strings.Join(parts, "  "), w
+}
+
+// prciOrder is order with the PR/CI column drawn by whoever draws it: a
+// layout's ci, or the bundled pr-ci-column mod's column it names, is the
+// mod's column while the mod is on (mods declares it) and the built-in
+// ci column while it is off, once, where the order first names either.
+// The built-in mod is the PR/CI column's code (mods design §11, proof
+// 1); the Go cell stays, so turning the mod off never drops the column.
+func prciOrder(order []string, mods map[string]modColumn) []string {
+	if !slices.Contains(order, view.ColCI) && !slices.Contains(order, mod.PRCIColumn) {
+		return order
+	}
+	id := view.ColCI
+	if m, ok := mods[mod.PRCIColumn]; ok && m.width > 0 {
+		id = mod.PRCIColumn
+	}
+	out := make([]string, 0, len(order))
+	done := false
+	for _, c := range order {
+		if c == view.ColCI || c == mod.PRCIColumn {
+			if done {
+				continue
+			}
+			c, done = id, true
+		}
+		out = append(out, c)
+	}
+	return out
 }

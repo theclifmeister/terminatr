@@ -86,7 +86,7 @@ func ProjectWatchOf(p *project.Project, sessions []proto.SessionInfo, tickerStat
 			}
 		}
 		pr := prs[r.ID]
-		wt.PR, wt.PRURL, wt.PRBad = prWords(pr), pr.URL, isPRBad(pr)
+		wt.PR, wt.PRURL, wt.PRBad, wt.PRChecks = prWords(pr), pr.URL, isPRBad(pr), pr.Checks
 		if pr.Number > 0 {
 			wt.PRChecked = timing.ThreadPolled[r.ID]
 		}

@@ -148,6 +148,10 @@ type WatchThread struct {
 	// PRBad says the PR needs acting on: failing checks, conflicts,
 	// requested changes or behind its base.
 	PRBad bool `json:"pr_bad,omitempty"`
+	// PRChecks are its PR's checks as the ticker last saw them: pass,
+	// fail or pending; "" without a PR or checks (the sidebar's CI
+	// column, and mod.ready's snapshot for the pr-ci-column mod).
+	PRChecks string `json:"pr_checks,omitempty"`
 	// PRChecked is when the ticker last asked gh about the thread's PR.
 	PRChecked time.Time `json:"pr_checked,omitzero"`
 	Reports   int       `json:"reports,omitempty"`
