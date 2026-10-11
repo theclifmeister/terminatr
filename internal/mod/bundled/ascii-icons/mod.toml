@@ -1,0 +1,13 @@
+# Built into tm (mods design §11): the ascii icon set, [ui] icons = "ascii".
+# Copy this folder, change its id and name, and tm mod install it to
+# start your own set (or write one with base = "ascii" and only the glyphs
+# you change).
+id          = "ascii-icons"
+name        = "ASCII icons"
+version     = "1.0.0"
+api         = "1.0"
+description = "ASCII only, for a terminal or font without Unicode."
+authors     = ["terminatr"]
+
+[provides]
+icons = "icons.toml"

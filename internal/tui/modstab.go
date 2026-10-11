@@ -123,6 +123,9 @@ func modLook(m *dash, md mod.Mod) (mark string, ms lipgloss.Style, status string
 		return ic().blocked, th().Warn, hostRestart(h), th().Warn
 	case md.State == mod.Invalid || md.State == mod.Incompatible:
 		return ic().blocked, th().Bad, md.Status(), th().Bad
+	case md.State == mod.Enabled && m.data.ModData[md.ID] != "":
+		first, _, _ := strings.Cut(m.data.ModData[md.ID], "\n")
+		return ic().blocked, th().Bad, "doesn't load its " + first, th().Bad
 	case md.State == mod.Enabled && len(md.WantsMore) > 0:
 		return ic().review, th().Warn, "wants more: " + strings.Join(md.Manifest.Permissions.Words(md.WantsMore), " · "), th().Warn
 	case hosted && h.State == hostStarting:
@@ -164,6 +167,12 @@ func (mt *modsTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
 		return out, -1, nil
 	}
 	mt.sel = min(mt.sel, len(mods)-1)
+	defer func() {
+		if !slices.ContainsFunc(mods, func(md mod.Mod) bool { return !md.Builtin }) {
+			out = append(out, "")
+			out = append(out, faintLines("No mods of your own yet. tm mod install <path | git-url[@tag]> installs one; it starts off, until you turn it on here. e shows terminatr's example mods.", w)...)
+		}
+	}()
 	nameW, kindW, verW := 4, 4, 1
 	for _, md := range mods {
 		nameW = max(nameW, ansi.StringWidth(modName(md)))
@@ -239,6 +248,20 @@ func modAbout(m *dash, md mod.Mod, w int) []string {
 	if len(md.Projects) > 0 {
 		out = append(out, faintLines("Runs only for "+joinAnd(md.Projects)+".", w)...)
 	}
+	if md.Builtin {
+		about := "Built into tm, and tm's defaults are drawn from it: copy its folder from terminatr's internal/mod/bundled to start your own."
+		if md.Required {
+			about += " It can't be turned off; " + mod.ErrRequired{ID: md.ID}.Replace() + "."
+		}
+		out = append(out, faintLines(about, w)...)
+	}
+	for _, l := range strings.Split(m.data.ModData[md.ID], "\n") {
+		if l != "" {
+			for _, wl := range wrapLines("Doesn't load its "+l, w) {
+				out = append(out, th().Bad.Render(wl))
+			}
+		}
+	}
 	h, hosted := modHost(m, md)
 	switch f := modFailure(m, md); {
 	case f != "":
@@ -309,6 +332,9 @@ func (m *dash) modToggle(md mod.Mod) tea.Cmd {
 	case md.State == mod.Invalid || md.State == mod.Incompatible:
 		m.fail(fmt.Errorf("%s can't be turned on: %s", name, md.Reason()))
 		return nil
+	case md.State == mod.Enabled && md.Required:
+		m.fail(mod.ErrRequired{ID: md.ID})
+		return nil
 	case md.State == mod.Enabled && len(md.WantsMore) == 0:
 		return m.modAct(md.ID, "disable", name+" off")
 	}
@@ -351,7 +377,11 @@ func (m *dash) modRestart(md mod.Mod) tea.Cmd {
 func (m *dash) modRemove(md mod.Mod) {
 	name := modName(md)
 	if md.Builtin {
-		m.fail(fmt.Errorf("%s is built in: it can be turned off, not removed", name))
+		why := "it can be turned off, not removed"
+		if md.Required {
+			why = "tm can't do without it"
+		}
+		m.fail(fmt.Errorf("%s is built in: %s", name, why))
 		return
 	}
 	m.confirm("Remove a mod", "Remove "+name+"? Its data is kept for 30 days, so installing it again finds it.", func() tea.Cmd {
@@ -408,7 +438,7 @@ func (cv *consentView) lines(m *dash, md mod.Mod, w int) []string {
 			out = append(out, ansi.Truncate(l, w, "…"))
 		}
 	}
-	if shown := man.Shown(md.Dir); shown != "" {
+	if shown := md.Shown(); shown != "" {
 		out = append(out, "")
 		for _, l := range strings.Split(strings.TrimRight(shown, "\n"), "\n") {
 			out = append(out, strings.Split(ansi.Hardwrap(strings.ReplaceAll(l, "\t", "    "), max(w, 10), true), "\n")...)

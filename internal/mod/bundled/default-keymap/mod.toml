@@ -1,0 +1,12 @@
+# Built into tm (mods design §11): the keys of every action that can be
+# rebound. Copy this folder, change its id and name, edit keymap.toml
+# and tm mod install it; or write a keymap of only the actions you move.
+id          = "default-keymap"
+name        = "Default keymap"
+version     = "1.0.0"
+api         = "1.0"
+description = "tm's own keys for every action that can be rebound."
+authors     = ["terminatr"]
+
+[provides]
+keymap = "keymap.toml"
