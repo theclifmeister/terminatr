@@ -41,7 +41,9 @@ func TestModAnnotate(t *testing.T) {
 		return 0
 	}
 	spans := []map[string]string{{"text": "docs", "role": "info"}}
-	tgt := func(m map[string]string) map[string]any { return map[string]any{"target": m, "key": "labels", "spans": spans} }
+	tgt := func(m map[string]string) map[string]any {
+		return map[string]any{"target": m, "key": "labels", "spans": spans}
+	}
 	if err := call(tgt(map[string]string{"project": "demo", "task": "T1"})); err != nil {
 		t.Fatal(err)
 	}
