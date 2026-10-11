@@ -120,10 +120,12 @@ func Line(s string, n int) string {
 
 // Errors Post answers with.
 var (
-	ErrRate = errors.New("notifications are limited to " + fmt.Sprint(PerMinute) + " a minute")
+	// ErrNoTray: there is no Hub (a bare Server in a test).
+	ErrNoTray = errors.New("there is no notification tray")
+	ErrRate   = errors.New("notifications are limited to " + fmt.Sprint(PerMinute) + " a minute")
 )
 
-// Hub is the tray: the notifications mods sent that are neither dismissed
+// Hub is the tray (the methods of a nil Hub hold nothing and refuse): the notifications mods sent that are neither dismissed
 // nor old.
 type Hub struct {
 	now func() time.Time
@@ -145,6 +147,9 @@ func New(now func() time.Time) *Hub {
 // Post checks req from mod and puts it in the tray. A mod over its rate is
 // refused; one over its share loses its oldest.
 func (h *Hub) Post(mod string, req Request) (Notice, error) {
+	if h == nil {
+		return Notice{}, ErrNoTray
+	}
 	title := Line(req.Title, MaxTitle)
 	if title == "" {
 		return Notice{}, errors.New("a notification needs a title")
@@ -242,6 +247,9 @@ func (h *Hub) expire(now time.Time) {
 
 // List is the tray, oldest first.
 func (h *Hub) List() []Notice {
+	if h == nil {
+		return nil
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.expire(h.now())
@@ -256,6 +264,9 @@ func (h *Hub) List() []Notice {
 // whether this call was the first: only that console draws the OS
 // notification, so several consoles don't ring it several times.
 func (h *Hub) Claim(id string) bool {
+	if h == nil {
+		return false
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, x := range h.list {
@@ -270,6 +281,9 @@ func (h *Hub) Claim(id string) bool {
 // Dismiss takes notification id out of the tray, and says whether it was
 // there.
 func (h *Hub) Dismiss(id string) bool {
+	if h == nil {
+		return false
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for i, x := range h.list {
@@ -283,6 +297,9 @@ func (h *Hub) Dismiss(id string) bool {
 
 // DropMod takes all of mod's notifications out: it was disabled or removed.
 func (h *Hub) DropMod(mod string) {
+	if h == nil {
+		return
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	keep := h.list[:0]

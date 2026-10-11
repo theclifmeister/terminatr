@@ -102,3 +102,14 @@ func TestTaskNumber(t *testing.T) {
 		}
 	}
 }
+
+func TestNilHub(t *testing.T) {
+	var h *Hub
+	if _, err := h.Post("m", Request{Title: "x"}); err == nil {
+		t.Error("a nil hub took a notification")
+	}
+	if h.List() != nil || h.Claim("n1") || h.Dismiss("n1") {
+		t.Error("a nil hub holds something")
+	}
+	h.DropMod("m")
+}
