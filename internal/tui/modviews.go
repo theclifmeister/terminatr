@@ -213,7 +213,7 @@ func panelHints(host *widget.View) string {
 
 // shownViews are the mods' views this console shows now: a mod tab of
 // an open project popup, the unfolded cards while the dashboard's list
-// shows, and an open card.
+// shows, an open card and an open full view.
 func (m *dash) shownViews() []modview.Shown {
 	var out []modview.Shown
 	add := func(v proto.ModView, project string, w, h int) {
@@ -232,6 +232,11 @@ func (m *dash) shownViews() []modview.Shown {
 		case *cardView:
 			if v, ok := m.mv.card(o.card); ok {
 				add(v, o.project, w, h)
+			}
+		case *fullView:
+			if v, ok := o.modView(m); ok {
+				fw, fh := o.size(m)
+				add(v, o.project, fw, fh)
 			}
 		}
 	}
@@ -313,8 +318,8 @@ func (m *dash) setModViews(msg modViewsMsg) tea.Cmd {
 }
 
 // openModView shows the view a mod asked to open: its tab in the
-// project popup of the input's project, or its card, unfolded and
-// selected.
+// project popup of the input's project, its card, unfolded and
+// selected, or its full view over what shows.
 func (m *dash) openModView(o modview.Open) {
 	for _, v := range m.mv.list {
 		if v.Mod != o.Mod || v.View != o.View {
@@ -341,6 +346,8 @@ func (m *dash) openModView(o modview.Open) {
 			if m.top() == nil {
 				m.sel, m.userSel = cardKey(v), true
 			}
+		case mod.SlotFull:
+			m.openFull(v, cmp.Or(o.Project, listProject(m.data, m.current)))
 		}
 		return
 	}
@@ -530,5 +537,130 @@ func (cv *cardView) click(m *dash, item, col int, _ bool) tea.Cmd {
 func (cv *cardView) wheel(m *dash, d int) {
 	if v, ok := cv.view(m); ok {
 		m.panelWheel(v, cv.project, d)
+	}
+}
+
+// The full views: a mod's view in the dashboard's body, opened only by
+// the human, from the ≡ menu or a key in another of the mod's views (a
+// request the mod makes in its handler). The header, the footer with
+// its keys and message, and the sidebar with its needs-you marks stay
+// as they are, and the body's first line is NEEDS YOU's count, so a
+// full view never hides what waits for the user. esc returns to what
+// was under it.
+
+// fullView is a mod's full view, open.
+type fullView struct {
+	mod, view, project string
+}
+
+// fullViews are the mods' full views, in order.
+func (mv *modViews) fullViews() []proto.ModView {
+	var out []proto.ModView
+	for _, v := range mv.list {
+		if v.Slot == mod.SlotFull {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// fullItems are the ≡ menu's items opening the mods' full views.
+func (m *dash) fullItems() []menuItem {
+	var out []menuItem
+	for _, v := range m.mv.fullViews() {
+		out = append(out, menuItem{label: v.Title + " · mod: " + v.Mod, run: func(m *dash) tea.Cmd {
+			m.openFull(v, listProject(m.data, m.current))
+			return nil
+		}})
+	}
+	return out
+}
+
+// openFull opens v's full view for project, over whatever shows.
+func (m *dash) openFull(v proto.ModView, project string) {
+	if fv, ok := m.top().(*fullView); ok && fv.mod == v.Mod && fv.view == v.View {
+		return
+	}
+	m.push(&fullView{mod: v.Mod, view: v.View, project: project})
+}
+
+func (fv *fullView) modView(m *dash) (proto.ModView, bool) {
+	for _, v := range m.mv.fullViews() {
+		if v.Mod == fv.mod && v.View == fv.view {
+			return v, true
+		}
+	}
+	return proto.ModView{}, false
+}
+
+// fullGutter is the cells left of a full view's lines.
+const fullGutter = 2
+
+// size is the room for the mod's tree: the body less NEEDS YOU's line
+// and the mod's mark, and the gutters.
+func (fv *fullView) size(m *dash) (int, int) {
+	return max(m.w-2*fullGutter, 4), max(m.bodyRows()-2, 1)
+}
+
+// needsLine is NEEDS YOU's count, as the dashboard heads its section.
+func (m *dash) needsLine(w int) string {
+	for _, r := range m.rows {
+		if r.head == "NEEDS YOU" {
+			return m.ruleIn(countLabel(r.head, r.count), sectionStyle(r.head), w)
+		}
+	}
+	return m.ruleIn("NEEDS YOU 0", th().Faint, w)
+}
+
+func (fv *fullView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
+	v, ok := fv.modView(m)
+	if !ok {
+		m.close(fv)
+		return nil
+	}
+	used, cmd := m.panelKeyPress(v, fv.project, k.String())
+	if !used && k.String() == "esc" {
+		m.close(fv)
+	}
+	return cmd
+}
+
+func (fv *fullView) render(m *dash) string {
+	v, ok := fv.modView(m)
+	w, h := fv.size(m)
+	gutter := strings.Repeat(" ", fullGutter)
+	body := []string{m.needsLine(m.w)}
+	title, keys := "mod view", "esc back"
+	var lines []string
+	if !ok {
+		lines = []string{th().Faint.Render("This view is gone: its mod was disabled or removed.")}
+	} else {
+		title = v.Title
+		keys = joinKeys(panelHints(m.mv.host(v, fv.project)), keys)
+		body = append(body, gutter+modMark(v, w))
+		lines = m.panelLines(v, fv.project, w, h)
+	}
+	hits := []int{noHit, noHit}
+	for i, l := range lines {
+		body = append(body, gutter+fit(l, w)+reset)
+		hits = append(hits, i)
+	}
+	out := m.withSide(m.frame(title, body, -1, keys))
+	// The mouse: the body is the view's, the header above it its edge.
+	m.geo = &boxGeo{x: m.sideW() + fullGutter - 2, y: 0, w: m.w, h: m.bodyRows() + 1,
+		head: 0, top: 0, rows: m.bodyRows(), hits: hits}
+	return out
+}
+
+func (fv *fullView) click(m *dash, item, col int, _ bool) tea.Cmd {
+	if v, ok := fv.modView(m); ok && item >= 0 {
+		return m.panelClick(v, fv.project, col, item)
+	}
+	return nil
+}
+
+func (fv *fullView) wheel(m *dash, d int) {
+	if v, ok := fv.modView(m); ok {
+		m.panelWheel(v, fv.project, d)
 	}
 }
