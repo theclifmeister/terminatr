@@ -1,10 +1,10 @@
  PROJECTS                      2   │
  ■ beta             0              │
  └─ coordinator         ·          │
+ ── ▾ inactive (1) ─────────────── │
  ■ demo             0         ⊘    │
  └─ coordinator         ·     ⊘    │
     └─ t-0001 S…        ·     ⊘    │
-                                   │
                                    │
                                    │
                                    │
