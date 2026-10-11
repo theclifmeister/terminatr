@@ -78,7 +78,7 @@ func (s *server) hello() modproto.HelloResult {
 func (s *server) event(name string, payload any) int64 {
 	s.t.Helper()
 	b, _ := json.Marshal(payload)
-	return s.request(modproto.MethodEvent, modproto.Event{Name: name, Payload: b})
+	return s.request(modproto.MethodEvent, modproto.Event{Name: name, Data: b})
 }
 
 // next returns the next message the host sends.

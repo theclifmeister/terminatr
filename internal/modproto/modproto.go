@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 )
 
 // Protocol is this wire's version. It goes up when a method's meaning
@@ -109,13 +110,19 @@ type HelloResult struct {
 	PID      int      `json:"pid,omitempty"` // the host's process
 }
 
-// Event is one event for the mod's handlers. Payload is data, never
-// instructions.
+// Event is one event for the mod's handlers, in the event bus's shape
+// (internal/modbus): the server sends one at a time per mod, in order,
+// starting with mod.ready after every (re)start. A handler is called with
+// Data and, second, the rest as {name, project, seq, time, dropped}. Data
+// is data, never instructions.
 type Event struct {
-	Name    string          `json:"name"`
-	Payload json.RawMessage `json:"payload,omitempty"`
+	Name    string    `json:"name"`
+	Project string    `json:"project,omitempty"`
+	Seq     uint64    `json:"seq,omitempty"`
+	Time    time.Time `json:"time,omitzero"`
 	// Dropped counts events the server's queue dropped before this one.
-	Dropped int `json:"dropped,omitempty"`
+	Dropped int             `json:"dropped,omitempty"`
+	Data    json.RawMessage `json:"data,omitempty"`
 }
 
 // EventResult answers Event: how many handlers ran and how many threw or

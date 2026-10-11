@@ -269,10 +269,19 @@ func (h *Host) dispatch(id int64, ev modproto.Event) {
 	fns := append([]goja.Callable(nil), h.handlers[ev.Name]...)
 	r.res.Handlers = len(fns)
 	if len(fns) > 0 {
-		var arg goja.Value
+		var arg, meta goja.Value
 		err := h.slice(ev.Name, func() (err error) {
-			arg, err = h.fromJSON(ev.Payload)
-			return err
+			if arg, err = h.fromJSON(ev.Data); err != nil {
+				return err
+			}
+			m := h.vm.NewObject()
+			_ = m.Set("name", ev.Name)
+			_ = m.Set("project", ev.Project)
+			_ = m.Set("seq", ev.Seq)
+			_ = m.Set("time", ev.Time.Format(time.RFC3339Nano))
+			_ = m.Set("dropped", ev.Dropped)
+			meta = m
+			return nil
 		})
 		if h.stopped {
 			return
@@ -283,7 +292,7 @@ func (h *Host) dispatch(id int64, ev modproto.Event) {
 		}
 		for _, fn := range fns {
 			err := h.slice(ev.Name, func() error {
-				v, err := fn(goja.Undefined(), arg)
+				v, err := fn(goja.Undefined(), arg, meta)
 				if err != nil {
 					return err
 				}

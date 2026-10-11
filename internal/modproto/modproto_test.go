@@ -12,7 +12,7 @@ import (
 func TestConnRoundTrip(t *testing.T) {
 	var buf bytes.Buffer
 	c := NewConn(nil, &buf)
-	_ = c.Request(1, MethodEvent, Event{Name: "clock.minute", Payload: json.RawMessage(`{"now":1}`)})
+	_ = c.Request(1, MethodEvent, Event{Name: "clock.minute", Data: json.RawMessage(`{"now":1}`)})
 	_ = c.Notify(MethodLog, Log{Level: "info", Text: "hi"})
 	_ = c.Reply(1, nil)
 	_ = c.ReplyError(2, CodeMethodNotFound, "no")
