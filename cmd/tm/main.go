@@ -13,10 +13,17 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent/codex"
 	"github.com/theclifmeister/terminatr/internal/cli"
 	"github.com/theclifmeister/terminatr/internal/emu"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
 
 func main() {
+	// Safe mode (mods design §9): no user mods in this tm, nor in a
+	// server it starts, which inherits the variable.
+	if len(os.Args) > 1 && os.Args[1] == "--no-mods" {
+		os.Setenv(mod.EnvNoMods, "1")
+		os.Args = append(os.Args[:1], os.Args[2:]...)
+	}
 	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version") {
 		fmt.Println("tm", version.Version, "build", version.BuildID())
 		return
@@ -54,8 +61,9 @@ var own = []string{"version", "selftest"}
 
 // usage lists every command, from cli's table, so it can't drift.
 func usage() string {
-	return "usage: tm [--own]   (the dashboard)\n" +
-		"       tm <command> ...\n" +
+	return "usage: tm [--no-mods] [--own]   (the dashboard)\n" +
+		"       tm [--no-mods] <command> ...\n" +
+		"--no-mods is safe mode: a server this tm starts runs no user mods\n" +
 		"commands: " + strings.Join(append(append([]string{}, own...), cli.Commands()...), " | ") + "\n" +
 		"docs/SPEC.md §10 lists every command and flag"
 }

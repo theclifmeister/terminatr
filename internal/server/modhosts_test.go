@@ -14,6 +14,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modapi"
 	"github.com/theclifmeister/terminatr/internal/modproto"
 	"github.com/theclifmeister/terminatr/internal/modsup"
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
 )
 
@@ -84,6 +85,20 @@ func TestModHostsFollowConfig(t *testing.T) {
 	wait("code backing off", func(st []modsup.Status) bool {
 		return len(st) == 1 && st[0].ID == "code" && st[0].State == modsup.Backoff
 	})
+	// mod.restart: the human's, for an enabled code mod.
+	if _, perr := s.restartMod("code", caller.Caller{Kind: caller.Thread}); perr == nil || perr.Code != "human-only" {
+		t.Fatalf("an agent restarted a mod: %v", perr)
+	}
+	if _, perr := s.restartMod("theme", human); perr == nil || perr.Code != proto.ErrBadParams {
+		t.Fatalf("restarted a data mod: %v", perr)
+	}
+	res, perr := s.restartMod("code", human)
+	if perr != nil || len(res.(proto.ModHostsResult).Hosts) != 1 {
+		t.Fatalf("mod.restart: %+v %v", res, perr)
+	}
+	if st := s.modHosts(); st.NoMods || len(st.Hosts) != 1 || st.Hosts[0].ID != "code" {
+		t.Fatalf("mod.hosts %+v", st)
+	}
 	write("config.toml", "[mods.code]\nenabled = false\n")
 	wait("code stopped", func(st []modsup.Status) bool { return len(st) == 0 })
 }
@@ -105,7 +120,12 @@ func TestModRestartHumanOnly(t *testing.T) {
 	sup := s.newModHosts()
 	defer sup.Close()
 	s.modSup.Store(sup)
-	sup.Set([]modsup.Spec{{ID: "code", Entry: filepath.Join(home, "main.js")}})
+	// Installed and enabled, as mod.restart reads the mods again first.
+	os.MkdirAll(filepath.Join(home, "mods", "code"), 0o700)
+	os.WriteFile(filepath.Join(home, "mods", "code", "mod.toml"), []byte("id = \"code\"\nname = \"X\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nmain = \"main.js\"\n"), 0o600)
+	os.WriteFile(filepath.Join(home, "mods", "code", "main.js"), nil, 0o600)
+	os.WriteFile(filepath.Join(home, "config.toml"), []byte("[mods.code]\nenabled = true\n"), 0o600)
+	sup.Set([]modsup.Spec{{ID: "code", Entry: filepath.Join(home, "mods", "code", "main.js")}})
 	if res := s.modHosts(); len(res.Hosts) != 1 || res.Hosts[0].ID != "code" || res.Hosts[0].State == "" {
 		t.Fatalf("hosts: %+v", res)
 	}
@@ -211,5 +231,35 @@ $.on("mod.ready", async () => {
 	logText, _ := os.ReadFile(filepath.Join(home, "logs", "mods", "probe.log"))
 	if !strings.Contains(string(logText), "broker: denied http.fetch") {
 		t.Fatalf("log:\n%s", logText)
+	}
+}
+
+// TestModHostsSafeMode: in safe mode no user mod is given to the
+// supervisor, mod.hosts says so and mod.restart refuses.
+func TestModHostsSafeMode(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("TERMINATR_HOME", home)
+	os.MkdirAll(filepath.Join(home, "mods", "code"), 0o700)
+	os.WriteFile(filepath.Join(home, "mods", "code", "mod.toml"), []byte("id = \"code\"\nname = \"X\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nmain = \"main.js\"\n"), 0o600)
+	os.WriteFile(filepath.Join(home, "mods", "code", "main.js"), nil, 0o600)
+	os.WriteFile(filepath.Join(home, "config.toml"), []byte("[mods.code]\nenabled = true\n"), 0o600)
+	p, err := ResolvePaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{opts: Options{Paths: p, Bin: "/nonexistent/tm"}, log: log.New(&testWriter{t: t}, "server: ", 0),
+		sessions: map[string]*session.Session{}, modEv: newModEvents()}
+	if specs, ok := s.modSpecs(); !ok || len(specs) != 1 {
+		t.Fatalf("specs %+v %v", specs, ok)
+	}
+	s.noMods = true
+	if specs, ok := s.modSpecs(); !ok || len(specs) != 0 {
+		t.Fatalf("safe mode runs %+v", specs)
+	}
+	if !s.modHosts().NoMods {
+		t.Fatal("mod.hosts doesn't say safe mode")
+	}
+	if _, perr := s.restartMod("code", human); perr == nil || !strings.Contains(perr.Message, "safe mode") {
+		t.Fatalf("mod.restart in safe mode: %v", perr)
 	}
 }
