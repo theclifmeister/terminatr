@@ -34,6 +34,10 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == codex.ProbeCommand {
 		os.Exit(codex.ProbeMain(os.Args[2:]))
 	}
+	// A code mod's host, started by the server (internal/modhost).
+	if len(os.Args) > 2 && os.Args[1] == "mod" && os.Args[2] == "host" {
+		os.Exit(modHost(os.Args[3:]))
+	}
 	if len(os.Args) > 1 && (os.Args[1] == "help" || os.Args[1] == "-h" || os.Args[1] == "--help") {
 		fmt.Println(usage())
 		return
