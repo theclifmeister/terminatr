@@ -179,7 +179,7 @@ func TestEveryPrefixCommandListed(t *testing.T) {
 	for _, e := range sessionMenu {
 		menu = append(menu, e.key)
 	}
-	_, hs := statusBar(proto.SessionInfo{ID: "s-1"}, nil, "", true, 400, "")
+	_, hs := statusBar(proto.SessionInfo{ID: "s-1"}, nil, "", true, 400, "", nil)
 	var bar []string
 	for _, h := range hs {
 		bar = append(bar, h.key)

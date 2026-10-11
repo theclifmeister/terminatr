@@ -69,6 +69,9 @@ type Data struct {
 	Mods        []mod.Mod
 	ModsErr     string
 	ModFailures map[string]string
+	// Cells are the mods' cells and status segments (session.list's
+	// Mods and the sessions' Cells); nil for none.
+	Cells *modCells
 }
 
 // ServerInfo is the running server's identity, from session.list.
@@ -294,6 +297,7 @@ func (s *ServerSource) Load() Data {
 		d.Err = err.Error()
 	} else {
 		d.ServerOK, d.Sessions, d.Alerts = true, res.Sessions, res.Alerts
+		d.Cells = newModCells(res.Mods, res.Sessions)
 		d.Server = ServerInfo{Version: res.Version, Build: res.Build, Latest: res.Latest, Upgrade: res.Upgrade}
 	}
 	cfg, err := config.Load()
