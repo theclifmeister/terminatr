@@ -169,10 +169,12 @@ func (s *Server) accessFor(role, slug, cwd string) (agent.Access, error) {
 	return agent.Access{}, fmt.Errorf("unknown role %q", role)
 }
 
-// mergeCommands are the PR merge commands the opt-in coordinator_merges
-// setting allows the coordinator without a prompt: GitHub's, and Azure
-// DevOps' (completing a PR is an update with --status completed).
-var mergeCommands = []string{"gh pr merge", "az repos pr update"}
+// mergeCommands are the commands the opt-in coordinator_merges setting
+// allows the coordinator without a prompt: tm's own merge, which checks
+// CI, mergeability and the project's merge setting itself. The raw
+// host commands (gh pr merge, az repos pr update) stay out: Claude
+// Code's auto mode blocks a merge it can't match to a rule exactly.
+var mergeCommands = []string{"tm thread merge"}
 
 // coordinatorCommands is the commands a coordinator may run unprompted:
 // the merge commands when the project opted in and the coordinator is
