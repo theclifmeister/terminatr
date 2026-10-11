@@ -137,7 +137,9 @@ func TestSmokeSidebar(t *testing.T) {
 
 	// From the session: demo's thread's row attaches the thread, still in
 	// the attach view.
-	w.WaitUntil("demo's thread", wait, func(sc string) bool { return treeRow(sc, demo, "t-0001 ") >= 0 && lastLine(sc, beta+" › coordinator") })
+	w.WaitUntil("demo's thread", wait, func(sc string) bool {
+		return treeRow(sc, demo, "t-0001 ") >= 0 && lastLine(sc, beta+" › coordinator")
+	})
 	w.Click(5, treeRow(w.Screen(), demo, "t-0001 "))
 	for _, x := range both {
 		x.WaitUntil("on t-0001", wait, func(sc string) bool { return lastLine(sc, demo+" › t-0001") })

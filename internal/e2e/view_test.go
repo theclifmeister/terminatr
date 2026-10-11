@@ -187,7 +187,7 @@ func TestSmokeFirstViewFills(t *testing.T) {
 	// Typing claims as before: w2's rectangle, then w1's again.
 	w2.Type("x")
 	waitPaneSize(t, env, co, threadCols(100), 24) // less the status bar and the rule above it
-	w1.Key(keyEsc) // the sidebar kept the keyboard from the click
+	w1.Key(keyEsc)                                // the sidebar kept the keyboard from the click
 	w1.Type("y")
 	waitPaneSize(t, env, co, threadCols(136), 38)
 
