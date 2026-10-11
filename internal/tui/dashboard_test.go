@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -56,6 +57,7 @@ type fakeSource struct {
 	library    []thread.LibFile
 	libFiles   map[string]string // "t-0001/name" -> content
 	libRemoved []string          // "t-0001/name", "t-0001/" for all
+	done       []string          // action.done: "mod action project/task ok"
 	restarted  []string          // mod ids
 	modViews   proto.ModViewsResult
 	shown      []modview.Shown // the views the last ModViews said were shown
@@ -992,6 +994,18 @@ func TestVersionPlaces(t *testing.T) {
 	if s := ansi.Strip(whole(m)); !strings.Contains(s, "About: tm "+version.Version+" · server v9.9.9 · update check on") {
 		t.Errorf("settings:\n%s", s)
 	}
+}
+
+func (f *fakeSource) ModActionDone(mod, action string, target map[string]string, ok bool) error {
+	f.done = append(f.done, fmt.Sprintf("%s %s %s/%s%s %v", mod, action, target["project"], target["task"], target["session"], ok))
+	return nil
+}
+
+func (f *fakeSource) ModActionCheck(mod, action string, target map[string]string) error {
+	if target["project"] == "beta" {
+		return errors.New(mod + " doesn't run for project beta")
+	}
+	return nil
 }
 
 // TestViewCallsInTurn: the view calls of one console reach the server in

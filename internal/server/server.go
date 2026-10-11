@@ -740,6 +740,18 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 		s.watch.wake()
 		s.modEv.wake()
 		return res, perr
+	case proto.MethodModActionDone:
+		var p proto.ModActionDoneParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.modActionDone(p, peerPID)
+	case proto.MethodModActionCheck:
+		var p proto.ModActionParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.modActionCheck(p, peerPID)
 	case proto.MethodQuestionsOpen:
 		var p proto.QuestionsOpenParams
 		if err := decodeParams(req.Params, &p); err != nil {

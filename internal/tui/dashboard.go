@@ -612,8 +612,6 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.call(proto.MethodViewSize, proto.ViewParams{Cols: uint16(msg.Width), Rows: uint16(msg.Height), Resize: resize})
 		}
 		return m, nil
-	case noticeBoardMsg:
-		return m, m.noticeBoard(msg)
 	case viewMsg:
 		return m, m.fromView()
 	case feedMsg:
@@ -650,6 +648,8 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.setData(msg.data)
 	case tickMsg:
 		return m, tea.Batch(m.load(), m.reloadBoards(), m.pollModViews())
+	case bindingMsg:
+		return m, m.runBinding(msg)
 	case modViewsMsg:
 		return m, m.setModViews(msg)
 	case modInputMsg:
