@@ -1211,12 +1211,9 @@ func (m *dash) listLines(w int, inline bool) (lines, keys []string, sel int) {
 		case r.head == "NEEDS YOU" || r.head == "OTHER SESSIONS":
 			add(m.ruleIn(countLabel(r.head, r.count), sectionStyle(r.head), w), "")
 		case r.head != "":
-			// A project's own section is headed by its name.
-			title := countLabel(r.head, r.count)
-			if r.headNote != "" {
-				title += " · " + r.headNote
-			}
-			add(m.ruleIn(title, styleTitle, w), "")
+			// A project's own section is headed by its name, its state
+			// label at the right, which a click toggles (stateAt).
+			add(projectHead(r, w), stateKey+r.head)
 		case r.key != "" && r.key == m.sel:
 			sel = len(lines)
 			st := styleSel
@@ -1234,6 +1231,80 @@ func (m *dash) listLines(w int, inline bool) (lines, keys []string, sel int) {
 		}
 	}
 	return lines, keys, sel
+}
+
+// stateKey marks the project header's line among listLines' keys: no
+// row to select, but its state label takes a click.
+const stateKey = "state:"
+
+// stateLabel is a project header's state label: "● active — space to
+// deactivate", or "⊘ inactive — space to activate"; short leaves the
+// hint out.
+func stateLabel(active, short bool) (string, lipgloss.Style) {
+	label, st := ic().working+" active — space to deactivate", styleGood
+	if !active {
+		label, st = ic().inactive+" inactive — space to activate", styleFaint
+	}
+	if short {
+		label, _, _ = strings.Cut(label, " — ")
+	}
+	return label, st
+}
+
+// projectHead is the project section's header w cells wide: its name,
+// ∥ paused while paused, a faint rule, and at the right its state label
+// (docs/SPEC.md §4), shortened, then left out, when narrow.
+func projectHead(r row, w int) string {
+	left := " " + styleTitle.Render(countLabel(r.head, r.count))
+	if r.paused {
+		left += "  " + styleWarn.Render(ic().paused+" paused")
+	}
+	lw := ansi.StringWidth(left)
+	if r.headNote == "" {
+		return left + " " + styleFaint.Render(strings.Repeat("─", max(w-lw-1, 0)))
+	}
+	for _, short := range []bool{false, true} {
+		label, st := stateLabel(r.headNote == "active", short)
+		if fill := w - lw - ansi.StringWidth(label) - 3; fill >= 3 {
+			return left + " " + styleFaint.Render(strings.Repeat("─", fill)) + " " + st.Render(label) + " "
+		}
+	}
+	return fit(left, w)
+}
+
+// stateAt is the project whose state label is at body cell (x, y) of the
+// list, "" for none.
+func (m *dash) stateAt(x, y int) string {
+	split, lw := m.split()
+	if split && x >= lw {
+		return ""
+	}
+	lines, keys, sel := m.listLines(lw, !split)
+	i := scrollTop(sel, m.bodyRows(), len(keys)) + y - 1
+	if y < 1 || y > m.bodyRows() || i >= len(keys) {
+		return ""
+	}
+	slug, ok := strings.CutPrefix(keys[i], stateKey)
+	if !ok {
+		return ""
+	}
+	// The label is at the line's right end, before its last blank.
+	for _, short := range []bool{false, true} {
+		label, _ := stateLabel(m.projectActive(slug), short)
+		if l := ansi.Strip(lines[i]); strings.HasSuffix(l, " "+label+" ") {
+			if x >= ansi.StringWidth(l)-ansi.StringWidth(label)-1 && x < ansi.StringWidth(l)-1 {
+				return slug
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
+// projectActive says whether slug is active.
+func (m *dash) projectActive(slug string) bool {
+	p := m.projectData(slug)
+	return p != nil && !p.inactive()
 }
 
 // footRows is the footer's height: a rule, the keys, the message.

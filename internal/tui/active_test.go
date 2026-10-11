@@ -121,8 +121,9 @@ func TestExpandInactiveProject(t *testing.T) {
 }
 
 // TestDashboardActiveToggle: the project's section header names its
-// state, the footer says what space does, and space on the dashboard
-// toggles the project shown, asking first while sessions run.
+// state in a label at its right, the footer says what space does, and
+// space on the dashboard, or a click on the label, toggles the project
+// shown, asking first while sessions run.
 func TestDashboardActiveToggle(t *testing.T) {
 	d := testData()
 	off := config.Defaults
@@ -134,14 +135,23 @@ func TestDashboardActiveToggle(t *testing.T) {
 	m.setData(src.data)
 	m.sel = "p:beta"
 	out := whole(m)
-	if !strings.Contains(out, " beta · inactive ─") || !strings.Contains(out, "space activate") {
+	if !strings.Contains(out, " beta ─") || !strings.Contains(out, "─ ⊘ inactive — space to activate") || !strings.Contains(out, "space activate") {
 		t.Fatalf("inactive project: header or footer missing:\n%s", out)
 	}
-	run(m, keyPress(m, "space"))
+	label := -1
+	for y := 1; y <= m.bodyRows(); y++ {
+		if m.stateAt(m.w-3, y) == "beta" {
+			label = y
+		}
+	}
+	if label < 0 || m.stateAt(2, label) != "" {
+		t.Fatalf("the state label is at row %d", label)
+	}
+	run(m, m.click(m.w-3, label, false))
 	if !slices.Equal(src.lifecycle, []string{"beta activate"}) {
 		t.Fatalf("lifecycle %v, want beta activated", src.lifecycle)
 	}
-	if out := whole(m); !strings.Contains(out, " beta · active ─") || !strings.Contains(out, "space deactivate") {
+	if out := whole(m); !strings.Contains(out, "● active — space to deactivate") || !strings.Contains(out, "space deactivate") {
 		t.Fatalf("after activating:\n%s", out)
 	}
 	m.current, m.sel = "alpha", "p:alpha"

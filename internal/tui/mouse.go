@@ -317,7 +317,7 @@ func (m *dash) rowAt(x, y int) string {
 	}
 	_, keys, sel := m.listLines(lw, !split)
 	i := scrollTop(sel, m.bodyRows(), len(keys)) + y - 1
-	if y < 1 || y > m.bodyRows() || i >= len(keys) {
+	if y < 1 || y > m.bodyRows() || i >= len(keys) || strings.HasPrefix(keys[i], stateKey) {
 		return ""
 	}
 	return keys[i]
@@ -329,6 +329,10 @@ func (m *dash) click(x, y int, double bool) tea.Cmd {
 	if split, lw := m.split(); split && x == lw && y >= 1 && y <= m.bodyRows() {
 		m.dragging = true
 		return nil
+	}
+	if slug := m.stateAt(x, y); slug != "" && !m.busy {
+		// The project header's state label: as space.
+		return m.toggleActive(slug, !m.projectActive(slug))
 	}
 	key := m.rowAt(x, y)
 	if key == "" {

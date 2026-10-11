@@ -24,7 +24,8 @@ import (
 type row struct {
 	key      string // selection identity, stable across refreshes
 	head     string // a section header: NEEDS YOU, the project, SESSIONS
-	headNote string // after a project header's name: active or inactive
+	headNote string // a project header's state label: active or inactive
+	paused   bool   // a project header: the project is paused
 	note     string // an unselectable line: task counts, "no projects; …"
 
 	// An item's columns: its marker (" ! ", indent), who (project slug or
@@ -258,11 +259,12 @@ func buildRows(d Data, project string) []row {
 	}
 	needs = append(needs, loose...)
 	var head, headNote string
+	paused := false
 	for _, p := range d.Projects {
 		if p.Slug != project {
 			continue
 		}
-		head = p.Slug
+		head, paused = p.Slug, p.Safety != nil && p.Safety.Paused
 		headNote = "active"
 		if p.inactive() {
 			headNote = "inactive"
@@ -365,7 +367,7 @@ func buildRows(d Data, project string) []row {
 		rows = append(rows, needs...)
 	}
 	if head != "" {
-		rows = append(rows, row{head: head, headNote: headNote})
+		rows = append(rows, row{head: head, headNote: headNote, paused: paused})
 		rows = append(rows, projs...)
 	} else {
 		rows = append(rows, row{note: "  no projects; n creates one"})
