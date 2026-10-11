@@ -213,6 +213,7 @@ type dash struct {
 	view        *ViewConn
 	viewSeq     uint64
 	viewSide    SidebarLayout // the view's sidebar, as last sent or seen
+	sideCols    []string      // the view's sidebar columns (view.View.Columns)
 	watch       <-chan struct{}
 	stopWatch   func()
 	selPending  int
@@ -255,6 +256,7 @@ func newDash(o DashOptions) *dash {
 		m.sideSel, m.sideSent = v.SideSel, v.SideSel
 		m.folds, m.layout.Tree = v.Tree, v.Tree
 		m.layout.Sidebar, m.viewSide = v.Sidebar, v.Sidebar
+		m.sideCols = v.Columns
 		m.layout.Info = v.Info
 		m.watch, m.stopWatch = vc.Watch()
 	}
@@ -479,6 +481,7 @@ func (m *dash) fromView() tea.Cmd {
 		// Kept in the layout too, so that saving it keeps the view's.
 		m.folds, m.layout.Tree = v.Tree, v.Tree
 	}
+	m.sideCols = v.Columns
 	if !m.sideDrag && v.Sidebar != m.viewSide {
 		m.layout.Sidebar, m.viewSide = v.Sidebar, v.Sidebar
 		m.setWidth(m.winW)
@@ -728,7 +731,7 @@ func (m *dash) showProject(slug string) tea.Cmd {
 // while the sidebar has the focus.
 func (m *dash) tree() []treeRow {
 	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint,
-		tree: sideTree(m.data.Projects, m.folds)})
+		tree: sideTree(m.data.Projects, m.folds), cols: m.sideCols})
 	rows = sideRows(rows, m.data.NeedsFirst)
 	if m.focus == areaSide {
 		markCursor(rows, m.sideW(), m.sideSel)
@@ -738,7 +741,7 @@ func (m *dash) tree() []treeRow {
 
 // fullTree is the sidebar's whole tree: nothing folded, no filter (w W).
 func (m *dash) fullTree() []treeRow {
-	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint, tree: unfoldedTree(m.data.Projects)})
+	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint, tree: unfoldedTree(m.data.Projects), cols: m.sideCols})
 	if m.data.NeedsFirst {
 		rows = needsFirstOrder(rows)
 	}

@@ -108,6 +108,8 @@ type treeRow struct {
 	// cursor is the keyboard's row, set while the sidebar has this
 	// console's keyboard focus (markCursor).
 	cursor bool
+	// cols are the grid's columns (sideCols); nil for the default ones.
+	cols []sideCol
 }
 
 // folded says a project row hides its coordinator and threads, or the
@@ -183,6 +185,10 @@ type treeIn struct {
 	ctxHint int
 	// tree is what the user folded (the view's).
 	tree view.Tree
+	// cols is the grid's column order (the view's Columns); mods are the
+	// mod columns this console knows, by id (sideCols).
+	cols []string
+	mods map[string]modColumn
 }
 
 // buildTree lays out the tree: the active projects, pinned ones first,
@@ -233,6 +239,10 @@ func buildTree(ps []ProjectData, sessions []proto.SessionInfo, in treeIn) []tree
 	}
 	if here >= 0 {
 		out[here].here = true
+	}
+	cols := sideCols(in.cols, in.mods)
+	for i := range out {
+		out[i].cols = cols
 	}
 	return out
 }
@@ -474,7 +484,9 @@ func treeSel(r treeRow, focused bool) (bool, lipgloss.Style) {
 //	                                      its state, ⚑ while it waits on you
 //
 // The columns are count/%, PR/CI, state, remote, paused, inactive and
-// needs you (sideGrid cells). A project row's state column is its
+// needs you (sideGrid cells), in the order the view's Columns gives
+// (view.Columns), where a mod's columns take their slots too (sideCols).
+// A project row's state column is its
 // coordinator's state, only while the project is folded: unfolded, the
 // coordinator's row shows it. The rows of an inactive project the user
 // unfolded are dormant: faint, "·" for their state and ⊘. The nerd set
@@ -483,7 +495,8 @@ func treeSel(r treeRow, focused bool) (bool, lipgloss.Style) {
 // title is cut with "…", but a thread's name (its task id) never is: its
 // title gives way. Project rows are bold, the current one in the accent
 // colour; the connectors are faint. A sidebar too narrow for the grid
-// and a label drops the count/% column, then the PR/CI one.
+// and a label drops the mod columns, then the count/% column, then the
+// PR/CI one (rowCols).
 //
 // The slim strip (sideSlim) shows projects alone, "● term…⚑": its
 // coordinator's state (⊘ while inactive), its name cut to 5 cells, and
@@ -501,53 +514,9 @@ func treeCells(r treeRow, cw int, slim, focused bool) string {
 	if slim {
 		return slimCells(r, cw, sel)
 	}
-	i := ic()
-	wide := ""
-	if i.wide {
-		wide = " " // a Nerd Font icon draws over the blank after it
-	}
-	grid := treeGrid(r)
-	// The lead stays out of the highlight: the margin, and on a row under
-	// a project the connector and its icon.
-	var lead, label []cellRun
-	if r.kind == treeProject {
-		folder, fst := i.folder, th().Faint
-		if r.current {
-			folder, fst = i.folderOpen, th().Accent
-		}
-		lead = []cellRun{{" ", th().Plain}}
-		label = []cellRun{{folder + wide + " ", fst}}
-	} else {
-		conn, node := i.mid, i.thread
-		if r.last {
-			conn = i.end
-		}
-		if r.kind == treeCoordinator {
-			node = i.coord
-		}
-		if node != "" {
-			node += wide
-		}
-		// A thread sits one level down, under the coordinator's label.
-		// The coordinator is the project's last row, so no │ runs down
-		// beside its threads.
-		indent := ""
-		if r.kind == treeThread {
-			indent = "   "
-		}
-		lead = []cellRun{{" " + indent, th().Plain}, {conn + node, th().Faint}, {" ", th().Plain}}
-	}
-	// Narrow: the count/% column gives way, then the PR/CI one, before
-	// the label is cut below a thread's whole name (5 cells for the
-	// others); narrower still, the label goes, then the lead is cut.
-	least := 5
-	if r.kind == treeThread {
-		least = ansi.StringWidth(r.name)
-	}
-	need := runsWidth(lead) + runsWidth(label) + least + 1
-	for len(grid) > 5 && cw-runsWidth(grid) < need {
-		grid = grid[1:]
-	}
+	lead, label := treeLead(r)
+	cols := rowCols(r, cw, lead, label)
+	grid := treeGrid(r, cols)
 	room := max(cw-runsWidth(grid), 0) // the lead's and the label's
 	lead = cutRuns(lead, room)
 	label = cutRuns(label, room-runsWidth(lead))
@@ -583,6 +552,81 @@ func treeCells(r treeRow, cw int, slim, focused bool) string {
 	return fit(runsRender(lead)+runsRender(rest), cw)
 }
 
+// treeLead is the start of a full sidebar's row r, before its name:
+// the lead, which stays out of the highlight (the margin, and on a row
+// under a project the connector and its icon), and the label's icon.
+func treeLead(r treeRow) (lead, label []cellRun) {
+	i := ic()
+	wide := ""
+	if i.wide {
+		wide = " " // a Nerd Font icon draws over the blank after it
+	}
+	if r.kind == treeProject {
+		folder, fst := i.folder, th().Faint
+		if r.current {
+			folder, fst = i.folderOpen, th().Accent
+		}
+		return []cellRun{{" ", th().Plain}}, []cellRun{{folder + wide + " ", fst}}
+	}
+	conn, node := i.mid, i.thread
+	if r.last {
+		conn = i.end
+	}
+	if r.kind == treeCoordinator {
+		node = i.coord
+	}
+	if node != "" {
+		node += wide
+	}
+	// A thread sits one level down, under the coordinator's label. The
+	// coordinator is the project's last row, so no │ runs down beside
+	// its threads.
+	indent := ""
+	if r.kind == treeThread {
+		indent = "   "
+	}
+	return []cellRun{{" " + indent, th().Plain}, {conn + node, th().Faint}, {" ", th().Plain}}, nil
+}
+
+// rowCols are the grid's columns row r keeps in a row cw cells wide
+// whose lead and label's icon are lead and label. Narrow, the mod
+// columns give way, the rightmost first, then the count/% column, then
+// the PR/CI one, before the label is cut below a thread's whole name (5
+// cells for the others); narrower still, the label goes, then the lead
+// is cut. The other columns never give way.
+func rowCols(r treeRow, cw int, lead, label []cellRun) []sideCol {
+	cols := r.columns()
+	least := 5
+	if r.kind == treeThread {
+		least = ansi.StringWidth(r.name)
+	}
+	need := runsWidth(lead) + runsWidth(label) + least + 1
+	for cw-colsWidth(cols) < need {
+		j := dropCol(cols)
+		if j < 0 {
+			break
+		}
+		cols = slices.Delete(slices.Clone(cols), j, j+1)
+	}
+	return cols
+}
+
+// dropCol is the column of cols a narrow row gives up first (rowCols),
+// -1 when none may go.
+func dropCol(cols []sideCol) int {
+	for j := len(cols) - 1; j >= 0; j-- {
+		if cols[j].mod != nil {
+			return j
+		}
+	}
+	for _, id := range []string{view.ColCount, view.ColCI} {
+		if j := slices.IndexFunc(cols, func(c sideCol) bool { return c.id == id }); j >= 0 {
+			return j
+		}
+	}
+	return -1
+}
+
 // fitLabel is fit, blank where not even a letter and "…" fit.
 func fitLabel(s string, w int) string {
 	if w < 2 && ansi.StringWidth(s) > w {
@@ -591,9 +635,19 @@ func fitLabel(s string, w int) string {
 	return fit(s, w)
 }
 
-// treeGrid is the grid on the right of a full sidebar's row: count/%,
-// PR/CI, state, remote, paused, inactive, needs you (treeCells).
-func treeGrid(r treeRow) []cellRun {
+// treeGrid is the grid on the right of a full sidebar's row: the cells
+// of r's columns cols (rowCols), each as wide as its column.
+func treeGrid(r treeRow, cols []sideCol) []cellRun {
+	out := make([]cellRun, 0, len(cols))
+	for _, c := range cols {
+		out = append(out, gridCell(r, c))
+	}
+	return out
+}
+
+// gridCell is r's cell in column c: a built-in column's (treeCells), a
+// mod's blank until the mod publishes cells.
+func gridCell(r treeRow, c sideCol) cellRun {
 	i := ic()
 	col := func(on bool, g string, st lipgloss.Style) cellRun {
 		if !on || g == "" {
@@ -601,63 +655,134 @@ func treeGrid(r treeRow) []cellRun {
 		}
 		return cellRun{g + " ", st}
 	}
-	num, nst := "", th().Faint
-	switch r.kind {
-	case treeProject:
-		n := r.threads
-		if r.inactive {
-			n = 0 // nothing of it runs
-		}
-		num = fmt.Sprint(n)
-		if n > 0 {
-			nst = th().Plain
-		}
-	case treeCoordinator:
-		if r.ctx >= 0 && !r.dormant {
-			num = fmt.Sprintf("%d%%", r.ctx)
-			switch {
-			case r.ctx >= 80:
-				nst = th().Bad
-			case r.ctxHint:
-				nst = th().Warn
+	thread, proj := r.kind == treeThread, r.kind == treeProject
+	switch c.id {
+	case view.ColCount:
+		num, nst := "", th().Faint
+		switch r.kind {
+		case treeProject:
+			n := r.threads
+			if r.inactive {
+				n = 0 // nothing of it runs
+			}
+			num = fmt.Sprint(n)
+			if n > 0 {
+				nst = th().Plain
+			}
+		case treeCoordinator:
+			if r.ctx >= 0 && !r.dormant {
+				num = fmt.Sprintf("%d%%", r.ctx)
+				switch {
+				case r.ctx >= 80:
+					nst = th().Bad
+				case r.ctxHint:
+					nst = th().Warn
+				}
+			}
+		default:
+			if r.pct >= 0 {
+				num = fmt.Sprintf("%d%%", r.pct)
 			}
 		}
-	default:
-		if r.pct >= 0 {
-			num = fmt.Sprintf("%d%%", r.pct)
+		return cellRun{fmt.Sprintf("%*s ", pctCol-1, num), nst}
+	case view.ColCI:
+		switch {
+		case thread && r.ci == "pass":
+			return col(true, i.ciPass, th().Good)
+		case thread && r.ci == "fail":
+			return col(true, i.ciFail, th().Bad)
+		case thread && r.ci == "pending":
+			return col(true, i.ciRun, th().Faint)
 		}
-	}
-	out := []cellRun{{fmt.Sprintf("%*s ", pctCol-1, num), nst}}
-	thread, proj := r.kind == treeThread, r.kind == treeProject
-	switch {
-	case thread && r.ci == "pass":
-		out = append(out, col(true, i.ciPass, th().Good))
-	case thread && r.ci == "fail":
-		out = append(out, col(true, i.ciFail, th().Bad))
-	case thread && r.ci == "pending":
-		out = append(out, col(true, i.ciRun, th().Faint))
-	default:
-		out = append(out, col(false, "", th().Plain))
-	}
-	var g string
-	var st lipgloss.Style
-	switch {
-	case proj && (!r.folded() || r.inactive):
-	case r.dormant:
-		g, st = i.none, th().Faint
-	case thread:
-		if g, st = stateLook(r.state); g == "" {
+		return col(false, "", th().Plain)
+	case view.ColState:
+		var g string
+		var st lipgloss.Style
+		switch {
+		case proj && (!r.folded() || r.inactive):
+		case r.dormant:
 			g, st = i.none, th().Faint
+		case thread:
+			if g, st = stateLook(r.state); g == "" {
+				g, st = i.none, th().Faint
+			}
+		default:
+			g, st = coordLook(r.state)
 		}
-	default:
-		g, st = coordLook(r.state)
+		return col(g != "", g, st)
+	case view.ColRemote:
+		return col(r.kind == treeCoordinator && r.remote && !r.dormant, i.remote, th().Accent)
+	case view.ColPaused:
+		return col(proj && r.paused, i.paused, th().Warn)
+	case view.ColInactive:
+		return col(proj && r.inactive || r.dormant, i.inactive, th().Faint)
+	case view.ColNeeds:
+		return col(r.hint, i.hint, th().Warn)
 	}
-	return append(out,
-		col(g != "", g, st),
-		col(r.kind == treeCoordinator && r.remote && !r.dormant, i.remote, th().Accent),
-		col(proj && r.paused, i.paused, th().Warn),
-		col(proj && r.inactive || r.dormant, i.inactive, th().Faint),
-		col(r.hint, i.hint, th().Warn))
+	return cellRun{strings.Repeat(" ", c.w), th().Plain}
+}
+
+// sideCol is a column of the grid on the right of a full sidebar's rows
+// (treeCells): a built-in one, or a mod's.
+type sideCol struct {
+	id  string
+	w   int
+	mod *modColumn // a mod's column, nil for a built-in one
+}
+
+// modColumn is a mod's sidebar column as its manifest declares it (the
+// mods design §5): its width in cells and its title. A mod column draws
+// blank until the mod publishes its cells, and blank again while its mod
+// host is down; the rest of the row never moves for it.
+type modColumn struct {
+	width int
+	title string
+}
+
+// maxModCol bounds a mod column's width, so one mod can't push the
+// labels out of the sidebar.
+const maxModCol = 12
+
+// defaultCols are the grid's columns in the default order.
+var defaultCols = sideCols(nil, nil)
+
+// sideCols are the grid's columns in order (view.Columns: the safety
+// columns always among them): the built-in ones, and those of the mods
+// in mods; a mod column no mod declares takes no room.
+func sideCols(order []string, mods map[string]modColumn) []sideCol {
+	var out []sideCol
+	for _, id := range view.Columns(order) {
+		switch {
+		case id == view.ColCount:
+			out = append(out, sideCol{id: id, w: pctCol})
+		case !view.IsModColumn(id):
+			out = append(out, sideCol{id: id, w: 2})
+		default:
+			if m, ok := mods[id]; ok && m.width > 0 {
+				m.width = min(m.width, maxModCol)
+				out = append(out, sideCol{id: id, w: m.width, mod: &m})
+			}
+		}
+	}
+	return out
+}
+
+// columns are r's grid columns, the default ones unless buildTree set
+// them.
+func (r treeRow) columns() []sideCol {
+	if r.cols == nil {
+		return defaultCols
+	}
+	return r.cols
+}
+
+// colsWidth is the width of the grid of cols.
+func colsWidth(cols []sideCol) int {
+	w := 0
+	for _, c := range cols {
+		w += c.w
+	}
+	return w
 }
 
 // dividerCells is the inactive divider's row cw cells wide, faint:
@@ -925,7 +1050,7 @@ func (c *client) sideTree() []treeRow {
 		focus = c.focus.info.ID
 	}
 	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), focus: focus, ctxHint: c.side.ctxHint,
-		tree: sideTree(c.side.projects, c.v.Tree)})
+		tree: sideTree(c.side.projects, c.v.Tree), cols: c.v.Columns})
 	rows = sideRows(rows, c.side.needsFirst)
 	if c.kb == areaSide {
 		markCursor(rows, c.sideW, c.v.SideSel)
@@ -936,7 +1061,7 @@ func (c *client) sideTree() []treeRow {
 // sideFullTree is the attach view's whole tree, nothing folded and no
 // filter (w W). c.mu held.
 func (c *client) sideFullTree() []treeRow {
-	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), ctxHint: c.side.ctxHint, tree: unfoldedTree(c.side.projects)})
+	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), ctxHint: c.side.ctxHint, tree: unfoldedTree(c.side.projects), cols: c.v.Columns})
 	if c.side.needsFirst {
 		rows = needsFirstOrder(rows)
 	}
@@ -1826,9 +1951,9 @@ func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 // pctCol is the width of the grid's count/% column: "100% ".
 const pctCol = 5
 
-// sideGrid is the width of the grid on the right of every row of the
-// full sidebar: the count/% column, then six glyph columns two cells
-// wide (treeCells).
+// sideGrid is the width of the default grid on the right of every row
+// of the full sidebar: the count/% column, then six glyph columns two
+// cells wide (treeCells).
 const sideGrid = pctCol + 6*2
 
 // threadLabel is a thread row's label w cells wide: "T12 Title" (a
