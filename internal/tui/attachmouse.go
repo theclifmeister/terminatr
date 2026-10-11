@@ -157,9 +157,9 @@ func (mn *amenu) lines() []string {
 	var rows []string
 	for i, it := range mn.items {
 		key := fmt.Sprintf("%*s", kw, it.key)
-		l := fit(it.label, inner-kw) + styleAccent.Render(key)
+		l := fit(it.label, inner-kw) + th().Accent.Render(key)
 		if i == mn.sel {
-			l = styleSel.Render(fit(it.label, inner-kw) + key)
+			l = th().Sel.Render(fit(it.label, inner-kw) + key)
 		}
 		rows = append(rows, l)
 	}

@@ -246,9 +246,9 @@ func (tv *taskView) render(m *dash) string {
 	title := "Task · " + tv.pv.slug
 	t := tv.task()
 	if t == nil {
-		body := styleFaint.Render("loading…")
+		body := th().Faint.Render("loading…")
 		if tv.pv.board != nil {
-			body = styleFaint.Render("this task is gone")
+			body = th().Faint.Render("this task is gone")
 		}
 		return m.popup(box{title: title, body: []string{body}, sel: -1, keys: "esc back"})
 	}
@@ -359,7 +359,7 @@ func doneCount(b *tasks.Board) int {
 func doneNote(n, w int) []string {
 	return []string{
 		sectionRule("DONE", sectionStyle("DONE"), w),
-		styleFaint.Render(fmt.Sprintf("… %d done (b shows them)", n)),
+		th().Faint.Render(fmt.Sprintf("… %d done (b shows them)", n)),
 	}
 }
 
@@ -402,7 +402,7 @@ func (pv *projectView) box(m *dash) box {
 		keys = "+ add repository · x remove it · " + keys
 	case tabInbox:
 		body, sel, hits = inboxLines(p.Items, pv.sel[tabInbox], w)
-		body = append(body, "", styleFaint.Render("The coordinator handles these (tm inbox done)."))
+		body = append(body, "", th().Faint.Render("The coordinator handles these (tm inbox done)."))
 	case tabTasks:
 		body, sel, hits = pv.taskLines(m, w)
 		keys = taskListKeys(pv.selTask(), pv.board, pv.doneAll, "esc close")
@@ -515,9 +515,9 @@ func (pv *projectView) tabBar(p ProjectData) string {
 	for i := range tabNames {
 		label := pv.tabLabel(p, i)
 		if i == pv.tab {
-			parts = append(parts, styleSel.Render(" "+label+" "))
+			parts = append(parts, th().Sel.Render(" "+label+" "))
 		} else {
-			parts = append(parts, styleFaint.Render(" "+label+" "))
+			parts = append(parts, th().Faint.Render(" "+label+" "))
 		}
 	}
 	return strings.Join(parts, " ")
@@ -536,12 +536,12 @@ func (pv *projectView) tabLabel(p ProjectData, i int) string {
 // overview is the project's slug, goal, repositories, machine and
 // agents.
 func (pv *projectView) overview(m *dash, p ProjectData, w int) ([]string, int, []int) {
-	field := func(label string) string { return styleFaint.Render(fmt.Sprintf("%-14s", label)) }
+	field := func(label string) string { return th().Faint.Render(fmt.Sprintf("%-14s", label)) }
 	var out []string
 	repoAt := map[int]int{} // a repository's line: its index
-	out = append(out, field("Project")+styleHead.Render(p.Slug))
+	out = append(out, field("Project")+th().Head.Render(p.Slug))
 	if g := strings.TrimSpace(p.Goal); g == "" {
-		out = append(out, field("Goal")+styleFaint.Render("none set; ask the coordinator to set one"))
+		out = append(out, field("Goal")+th().Faint.Render("none set; ask the coordinator to set one"))
 	} else {
 		for i, l := range wrapLines(oneLine(g), w-14) {
 			label := field("")
@@ -554,7 +554,7 @@ func (pv *projectView) overview(m *dash, p ProjectData, w int) ([]string, int, [
 	out = append(out, "")
 	sel := -1
 	if len(p.Repos) == 0 {
-		out = append(out, field("Repositories")+styleFaint.Render("none; + adds one"))
+		out = append(out, field("Repositories")+th().Faint.Render("none; + adds one"))
 	}
 	for i, r := range p.Repos {
 		label := field("")
@@ -564,17 +564,17 @@ func (pv *projectView) overview(m *dash, p ProjectData, w int) ([]string, int, [
 		repoAt[len(out)] = i
 		if i == pv.sel[tabOverview] {
 			sel = len(out)
-			out = append(out, label+styleSel.Render(fit(r, w-14)))
+			out = append(out, label+th().Sel.Render(fit(r, w-14)))
 		} else {
 			out = append(out, label+r)
 		}
 		if n := p.Checkouts[r]; n != "" {
-			out = append(out, field("")+styleWarn.Render(fit(n, w-14)))
+			out = append(out, field("")+th().Warn.Render(fit(n, w-14)))
 		}
 	}
 	out = append(out, "")
 	host, _ := os.Hostname()
-	out = append(out, field("Machines")+"this one"+styleFaint.Render("  "+host))
+	out = append(out, field("Machines")+"this one"+th().Faint.Render("  "+host))
 	out = append(out, "")
 	out = append(out, field("Coordinator")+pv.coordinatorLine(m, p))
 	threads := map[string][]string{}
@@ -583,7 +583,7 @@ func (pv *projectView) overview(m *dash, p ProjectData, w int) ([]string, int, [
 		threads[a] = append(threads[a], t.ID)
 	}
 	if len(threads) == 0 {
-		out = append(out, field("Threads")+styleFaint.Render("none open"))
+		out = append(out, field("Threads")+th().Faint.Render("none open"))
 	}
 	agents := make([]string, 0, len(threads))
 	for a := range threads {
@@ -595,7 +595,7 @@ func (pv *projectView) overview(m *dash, p ProjectData, w int) ([]string, int, [
 		if i == 0 {
 			label = field("Threads")
 		}
-		out = append(out, label+a+styleFaint.Render(" · "+strings.Join(threads[a], " ")))
+		out = append(out, label+a+th().Faint.Render(" · "+strings.Join(threads[a], " ")))
 	}
 	s := config.Defaults
 	if p.Safety != nil {
@@ -605,7 +605,7 @@ func (pv *projectView) overview(m *dash, p ProjectData, w int) ([]string, int, [
 	if s.Yolo {
 		modes = append(modes, "yolo mode")
 	}
-	out = append(out, field("")+styleFaint.Render(strings.Join(modes, " · ")+" (Settings tab)"))
+	out = append(out, field("")+th().Faint.Render(strings.Join(modes, " · ")+" (Settings tab)"))
 	c := p.Counts
 	needs := needsYouWords(c["needs_you"])
 	if c["needs_you"] > 0 {
@@ -613,7 +613,7 @@ func (pv *projectView) overview(m *dash, p ProjectData, w int) ([]string, int, [
 	}
 	out = append(out, "", field("Tasks")+fmt.Sprintf("%s · %d in motion · %d on deck · %d done", needs, c["in_motion"], c["on_deck"], c["done"]))
 	if p.Err != "" {
-		out = append(out, "", styleBad.Render("error: "+oneLine(p.Err)))
+		out = append(out, "", th().Bad.Render("error: "+oneLine(p.Err)))
 	}
 	return out, sel, lineHits(len(out), repoAt)
 }
@@ -635,9 +635,9 @@ func lineHits(n int, at map[int]int) []int {
 func (pv *projectView) coordinatorLine(m *dash, p ProjectData) string {
 	for _, s := range m.data.Sessions {
 		if s.Role == proto.RoleCoordinator && s.Project == p.Slug {
-			line := cmp.Or(s.Agent, config.LegacyAgent) + styleFaint.Render(" · "+s.ID+" "+stateWord(s))
+			line := cmp.Or(s.Agent, config.LegacyAgent) + th().Faint.Render(" · "+s.ID+" "+stateWord(s))
 			if s.RemoteControl {
-				line += styleFaint.Render(" · remote control on")
+				line += th().Faint.Render(" · remote control on")
 			}
 			return line
 		}
@@ -649,22 +649,22 @@ func (pv *projectView) coordinatorLine(m *dash, p ProjectData) string {
 	name, why := resolvedAgent(s.CoordinatorAgent, m.src.Agents())
 	switch {
 	case name == "" && len(m.src.Agents()) > 1 && s.CoordinatorAgent == "":
-		return styleWarn.Render(why) + styleFaint.Render(" · not running; enter on the project asks which agent")
+		return th().Warn.Render(why) + th().Faint.Render(" · not running; enter on the project asks which agent")
 	case name == "":
-		return styleWarn.Render(why) + styleFaint.Render(" · nothing can start")
+		return th().Warn.Render(why) + th().Faint.Render(" · nothing can start")
 	case s.CoordinatorAgent == "":
 		name += " (auto)"
 	}
 	if s.CoordinatorModel != "" {
-		name += styleFaint.Render(" · " + s.CoordinatorModel)
+		name += th().Faint.Render(" · " + s.CoordinatorModel)
 	}
-	return name + styleFaint.Render(" · not running; enter on the project starts it")
+	return name + th().Faint.Render(" · not running; enter on the project starts it")
 }
 
 // taskLines are the Tasks tab's lines.
 func (pv *projectView) taskLines(m *dash, w int) ([]string, int, []int) {
 	if pv.board == nil {
-		return []string{styleFaint.Render("loading…")}, -1, nil
+		return []string{th().Faint.Render("loading…")}, -1, nil
 	}
 	return taskList(m, pv.slug, pv.board, pv.tasks(), pv.sel[tabTasks], pv.doneAll, w)
 }
@@ -716,7 +716,7 @@ func taskList(m *dash, slug string, b *tasks.Board, list []*tasks.Task, selected
 		add(noHit, doneNote(doneCount(b), w)...)
 	}
 	if len(out) == 0 {
-		add(noHit, styleFaint.Render("no tasks"))
+		add(noHit, th().Faint.Render("no tasks"))
 	}
 	return out, sel, hits
 }
@@ -765,11 +765,11 @@ func kindWord(kind string) string {
 func kindStyle(kind string) lipgloss.Style {
 	switch kind {
 	case "pr-checks-failed", "pr-conflict", "exited", "gh-failing", "blocked", "needs-you", "guard", "model-refused":
-		return styleBad
+		return th().Bad
 	case "report", "pr-merged", "pr-opened", "task-done", "thread-resolved":
-		return styleGood
+		return th().Good
 	}
-	return styleWarn
+	return th().Warn
 }
 
 // inboxLines are a project's unhandled inbox items, one row for the
@@ -797,16 +797,16 @@ func inboxLines(items []project.Item, sel, w int) ([]string, int, []int) {
 			if r.Title != "" {
 				rest += " " + oneLine(r.Title)
 			}
-			lines = append(lines, styleSel.Render(fit(kind+"  "+when+"  "+rest, w)))
+			lines = append(lines, th().Sel.Render(fit(kind+"  "+when+"  "+rest, w)))
 			continue
 		}
 		if r.Title != "" {
-			rest += " " + styleFaint.Render(oneLine(r.Title))
+			rest += " " + th().Faint.Render(oneLine(r.Title))
 		}
-		lines = append(lines, fit(kindStyle(r.Kind).Render(kind)+"  "+styleFaint.Render(when)+"  "+rest, w)+reset)
+		lines = append(lines, fit(kindStyle(r.Kind).Render(kind)+"  "+th().Faint.Render(when)+"  "+rest, w)+reset)
 	}
 	if len(rows) == 0 {
-		lines = append(lines, styleFaint.Render("inbox empty"))
+		lines = append(lines, th().Faint.Render("inbox empty"))
 		hits = append(hits, noHit)
 	}
 	return lines, at, hits
@@ -818,9 +818,9 @@ func inboxLines(items []project.Item, sel, w int) ([]string, int, []int) {
 func (pv *projectView) memoryLines(m *dash, w int) []string {
 	switch {
 	case pv.memErr != nil:
-		return []string{styleBad.Render("error: " + oneLine(pv.memErr.Error()))}
+		return []string{th().Bad.Render("error: " + oneLine(pv.memErr.Error()))}
 	case pv.memory == nil:
-		return []string{styleFaint.Render("loading…")}
+		return []string{th().Faint.Render("loading…")}
 	}
 	mem := pv.memory
 	var out []string
@@ -832,7 +832,7 @@ func (pv *projectView) memoryLines(m *dash, w int) []string {
 		if lines := mdLines(text, w); len(lines) > 0 {
 			out = append(out, lines...)
 		} else {
-			out = append(out, styleFaint.Render(none))
+			out = append(out, th().Faint.Render(none))
 		}
 	}
 	section("CONTEXT", mem.Context, "no context yet")
@@ -842,7 +842,7 @@ func (pv *projectView) memoryLines(m *dash, w int) []string {
 		notes += "- " + n + "\n"
 	}
 	section("NOTES", notes, "no notes yet")
-	out = append(out, "", styleFaint.Render("Read-only: the coordinator keeps these; every thread is told them."))
+	out = append(out, "", th().Faint.Render("Read-only: the coordinator keeps these; every thread is told them."))
 	return out
 }
 
@@ -860,7 +860,7 @@ func mdLines(text string, w int) []string {
 		if h, ok := strings.CutPrefix(l, "#"); ok {
 			h = strings.TrimSpace(strings.TrimLeft(h, "#"))
 			if !first || !strings.HasPrefix(l, "# ") {
-				out = append(out, styleHead.Render(fit(h, w)))
+				out = append(out, th().Head.Render(fit(h, w)))
 			}
 			first = false
 			continue

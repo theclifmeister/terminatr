@@ -58,7 +58,7 @@ func libGroup(f thread.LibFile, w int) string {
 		rest += " · archived"
 	}
 	head := joinSp(f.Task, oneLine(f.Title))
-	return styleHead.Render(ansi.Truncate(head, max(w-ansi.StringWidth(rest), 8), "…")) + styleFaint.Render(rest)
+	return th().Head.Render(ansi.Truncate(head, max(w-ansi.StringWidth(rest), 8), "…")) + th().Faint.Render(rest)
 }
 
 // sizeWords is a byte count in words: 812 B, 3.4 KB, 1.2 MB.
@@ -76,13 +76,13 @@ func sizeWords(n int64) string {
 func (pv *projectView) libraryLines(w int) ([]string, int, []int) {
 	switch {
 	case pv.libErr != nil:
-		return []string{styleBad.Render("error: " + oneLine(pv.libErr.Error()))}, -1, nil
+		return []string{th().Bad.Render("error: " + oneLine(pv.libErr.Error()))}, -1, nil
 	case !pv.libOK:
-		return []string{styleFaint.Render("loading…")}, -1, nil
+		return []string{th().Faint.Render("loading…")}, -1, nil
 	}
 	files := pv.libFiles()
 	if len(files) == 0 {
-		return []string{styleFaint.Render("no files: a thread's report attaches them (tm report --attach)")}, -1, nil
+		return []string{th().Faint.Render("no files: a thread's report attaches them (tm report --attach)")}, -1, nil
 	}
 	var out []string
 	var hits []int
@@ -100,7 +100,7 @@ func (pv *projectView) libraryLines(w int) ([]string, int, []int) {
 		l := "  " + fit(f.Name, max(w-len(size)-4, 4)) + "  " + size
 		if i == pv.sel[tabLibrary] {
 			sel = len(out)
-			l = styleSel.Render(fit(l, w))
+			l = th().Sel.Render(fit(l, w))
 		} else {
 			l = fit(l, w) + reset
 		}
@@ -223,7 +223,7 @@ func (lv *libView) lines(w int) []string {
 		if len(out) > 0 {
 			out = append(out, "")
 		}
-		out = append(out, styleFaint.Render(lv.note))
+		out = append(out, th().Faint.Render(lv.note))
 	}
 	return out
 }
