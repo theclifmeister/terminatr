@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -711,6 +712,27 @@ func (r treeRow) target() (t Target, ok bool, why string) {
 	return t, true, ""
 }
 
+// previewDelay is how long the sidebar's cursor rests on a row before
+// the view shows what is under it, so moving through the tree doesn't
+// open every row on its way.
+const previewDelay = 200 * time.Millisecond
+
+// preview is what the view shows while the sidebar's cursor rests on r:
+// a project's dashboard, a coordinator's or a thread's live session. A
+// row with no session running (an inactive project's, a coordinator not
+// started) shows its project's dashboard: a preview never starts
+// anything. ok is false on the row you are on, which already shows.
+func (r treeRow) preview() (t Target, ok bool) {
+	if r.here {
+		return t, false
+	}
+	t.Project = r.slug
+	if r.kind != treeProject && r.session != "" {
+		t.Session = r.session
+	}
+	return t, true
+}
+
 // OpenTarget opens t in the view vc: shows the project's dashboard, or
 // attaches the coordinator (started first, by the project's
 // coordinator_agent, when none runs)
@@ -853,9 +875,10 @@ func (c *client) nextArea() {
 }
 
 // sideKeyboard runs a key while the sidebar has the keyboard: a sidebar
-// key (sideActions) moves its cursor or opens the row; tab moves on to
-// the next area, as prefix+tab; any other key is dropped, so nothing
-// reaches the pane. c.mu held; released here.
+// key (sideActions) moves its cursor, and the view previews the row it
+// rests on (previewSoon), or goes into the pane; tab moves on to the
+// next area, as prefix+tab; ? is the help, as prefix+?; any other key is
+// dropped, so nothing reaches the pane. c.mu held; released here.
 func (c *client) sideKeyboard(k uv.Key) {
 	name := keyName(k)
 	op, ok := sideOp(name)
@@ -874,14 +897,21 @@ func (c *client) sideKeyboard(k uv.Key) {
 	}
 	st := sideKeyStep(c.sideTree(), c.sideW, c.v.SideSel, op)
 	c.flash = st.msg
-	if st.back || st.target != nil && !st.here {
-		c.kb = areaMain
+	if st.help {
+		// A plain key that is a prefix command does what it does.
+		do := prefixStep(c.prefix, true, k, c.dashboard)
+		c.status()
+		c.mu.Unlock()
+		c.run(do)
+		return
 	}
-	if st.target != nil && st.here {
-		c.flash = "you are on it"
+	if st.back || st.into {
+		// Into the pane: the session's, or the dashboard's list.
+		c.kb = areaMain
 	}
 	if st.sel != "" {
 		c.v.SideSel = st.sel // at once here; the view follows
+		c.previewSoon(st.sel)
 	}
 	c.status()
 	c.mu.Unlock()
@@ -899,6 +929,49 @@ func (c *client) sideKeyboard(k uv.Key) {
 		c.act(proto.MethodViewExpand, proto.ViewParams{Project: st.expand, On: st.expandOn})
 	}
 	c.poke()
+}
+
+// previewSoon shows the row sel in the view once the sidebar's cursor
+// has rested on it for previewDelay, the keyboard still in the sidebar
+// (preview). A bare view has nothing to preview in: it would hand this
+// console over to view main. c.mu held.
+func (c *client) previewSoon(sel string) {
+	if c.bare {
+		return
+	}
+	c.previewSeq++
+	seq := c.previewSeq
+	c.previewing = true
+	time.AfterFunc(previewDelay, func() { c.previewNow(seq, sel) })
+}
+
+// previewNow shows the row sel, unless the cursor moved on or left the
+// sidebar meanwhile.
+func (c *client) previewNow(seq uint64, sel string) {
+	if !c.lock() {
+		return
+	}
+	if seq != c.previewSeq {
+		c.mu.Unlock()
+		return
+	}
+	c.previewing = false
+	var t Target
+	ok := false
+	if c.kb == areaSide && c.side != nil && c.v.SideSel == sel {
+		for _, r := range shownRows(c.sideTree(), c.sideW) {
+			if r.key() == sel {
+				t, ok = r.preview()
+				break
+			}
+		}
+	}
+	c.status()
+	c.mu.Unlock()
+	c.poke()
+	if ok {
+		c.sideGo(t)
+	}
 }
 
 // expandLabel is an inactive project row's menu item that expands or
@@ -1138,18 +1211,20 @@ func (c *client) sideGo(t Target) {
 
 // The sidebar's keyboard (docs/SPEC.md §4): tab on the dashboard, or
 // prefix+tab in a session, gives it the focus; these keys then move its
-// cursor (the view's SideSel) and open what it is on. One table drives
-// the keys and the help.
+// cursor (the view's SideSel), and the view previews what the cursor
+// rests on (previewDelay) while the keyboard stays here; enter or →
+// takes it into the pane. One table drives the keys and the help.
 
 // Sidebar key operations.
 const (
 	sideUp = iota
 	sideDown
-	sideIn     // on a project, down to its first row
-	sideOut    // on a row under a project, up to it
-	sideEnter  // what a click does
+	sideIn     // a folded row unfolds; any other goes in, as sideEnter
+	sideOut    // an unfolded row folds; a row under a project goes up to it
+	sideEnter  // into the pane: the keyboard follows
 	sideBack   // the focus goes back to the list or the pane
 	sideActive // on a project, activate or deactivate it
+	sideHelp   // the help, as prefix+?
 )
 
 // sideAction is a sidebar key: its keys, what it does, its help line and
@@ -1161,13 +1236,14 @@ type sideAction struct {
 }
 
 var sideActions = []sideAction{
-	{[]string{"up", "k"}, sideUp, "↑ ↓ k j", "move through the tree"},
+	{[]string{"up", "k"}, sideUp, "↑ ↓ k j", "move through the tree; the pane shows what the cursor rests on (a project its dashboard, a coordinator or a thread its session, live), the keyboard stays in the sidebar, and nothing starts"},
 	{[]string{"down", "j"}, sideDown, "", ""},
-	{[]string{"right", "l"}, sideIn, "→ ←", "→ on a project goes down into it, ← on a row under a project up to it; on an inactive project → expands it and ← folds it again, never activating it"},
+	{[]string{"enter"}, sideEnter, "enter", "into the pane: a project's dashboard or a session gets the keyboard; a coordinator not running starts, and an inactive project's starts activating the project"},
+	{[]string{"right", "l"}, sideIn, "→ ←", "→ unfolds a folded project, else goes into the pane as enter; ← folds an unfolded one, or from a row under a project goes up to it. Unfolding an inactive project never activates it"},
 	{[]string{"left", "h"}, sideOut, "", ""},
-	{[]string{"enter"}, sideEnter, "enter", "what a click does: a project shows its dashboard, its coordinator or a thread attaches; an inactive project's coordinator starts, activating the project"},
 	{[]string{"esc"}, sideBack, "esc", "back to the list (in a session: to the pane)"},
 	{[]string{"space"}, sideActive, "space", "on a project: activate it, or deactivate it (its coordinator and threads stop, to resume when you activate it; asks first while they run)"},
+	{[]string{"?"}, sideHelp, "?", "help, as prefix+?"},
 }
 
 // sideOp is the sidebar operation of key; ok is false for none.
@@ -1186,8 +1262,12 @@ type sideStep struct {
 	sel    string
 	target *Target
 	here   bool // target is the row you are on
-	msg    string
-	back   bool
+	// into: the keyboard goes into the pane (enter, →), to the target
+	// once it shows.
+	into bool
+	msg  string
+	back bool
+	help bool
 	// toggle is the project to activate (activate) or deactivate.
 	toggle   string
 	activate bool
@@ -1199,8 +1279,11 @@ type sideStep struct {
 // sideKeyStep decides what sidebar key op does with the cursor at sel in
 // the tree all, drawn w columns wide.
 func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
-	if op == sideBack {
+	switch op {
+	case sideBack:
 		return sideStep{back: true}
+	case sideHelp:
+		return sideStep{help: true}
 	}
 	rows := shownRows(all, w)
 	i := sideCursor(rows, sel)
@@ -1220,14 +1303,11 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 	case sideDown:
 		return moveTo(i + 1)
 	case sideIn:
-		switch {
-		case r.kind != treeProject || w <= sideSlim:
-		case r.inactive && !r.expanded:
+		if r.folded() && w > sideSlim {
 			// Expanding never activates (§5.1).
 			return sideStep{expand: r.slug, expandOn: true, sel: "c:" + r.slug}
-		default:
-			return moveTo(i + 1)
 		}
+		return enterStep(r)
 	case sideOut:
 		if r.kind == treeProject && r.expanded {
 			return sideStep{expand: r.slug}
@@ -1243,13 +1323,19 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 		}
 		return sideStep{toggle: r.slug, activate: r.inactive}
 	case sideEnter:
-		t, can, why := r.target()
-		if !can {
-			return sideStep{msg: why}
-		}
-		return sideStep{target: &t, here: r.here && r.kind != treeProject}
+		return enterStep(r)
 	}
 	return sideStep{}
+}
+
+// enterStep is enter on r: into the pane, opening r's target first
+// unless it already shows.
+func enterStep(r treeRow) sideStep {
+	t, can, why := r.target()
+	if !can {
+		return sideStep{msg: why}
+	}
+	return sideStep{target: &t, here: r.here, into: true}
 }
 
 // sideHint is the hint while the sidebar has the keyboard focus.

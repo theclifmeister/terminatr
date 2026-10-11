@@ -310,6 +310,11 @@ type client struct {
 	// the sidebar or the info panel. While another area has it the pane
 	// gets no keys, paste or prefix-twice.
 	kb area
+	// previewSeq counts the sidebar cursor's moves, so a preview only
+	// shows the row it last rested on; previewing: one is pending
+	// (previewSoon).
+	previewSeq uint64
+	previewing bool
 	// The info panel right of a thread's pane (infopanel.go), nil for
 	// none; infoW is its width, 0 while it doesn't show.
 	info        *infoPanel

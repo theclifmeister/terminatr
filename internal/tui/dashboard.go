@@ -165,10 +165,13 @@ type dash struct {
 	// keyboard row, the view's. sideSent is the last one sent; one is
 	// on its way at a time (sideBusy), so they arrive in order, and the
 	// view's own doesn't overwrite this console's meanwhile.
-	focus    area
-	sideSel  string
-	sideSent string
-	sideBusy bool
+	focus   area
+	sideSel string
+	// previewSeq counts the sidebar cursor's moves: only the last one's
+	// preview shows (previewSoon).
+	previewSeq uint64
+	sideSent   string
+	sideBusy   bool
 	// expanded are the inactive projects expanded in the sidebar's
 	// tree: the view's, changed here at once (expand).
 	expanded []string
@@ -525,6 +528,8 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.fromView()
 	case feedMsg:
 		return m, m.fromFeed()
+	case previewMsg:
+		return m, m.preview(msg.seq)
 	case viewDoneMsg:
 		if msg.sel {
 			m.selPending--
@@ -733,8 +738,10 @@ func (m *dash) cycleFocus(key string) tea.Cmd {
 	return nil
 }
 
-// sideKey runs a key while the sidebar has the focus; ok is false for a
-// key that isn't the sidebar's, which goes to the list's actions.
+// sideKeyboard runs a key while the sidebar has the focus; ok is false
+// for a key that isn't the sidebar's, which goes to the list's actions.
+// A move previews the row the cursor rests on (previewSoon); enter or →
+// goes into it, and the keyboard follows.
 func (m *dash) sideKeyboard(key string) (tea.Cmd, bool) {
 	op, ok := sideOp(key)
 	if !ok {
@@ -745,20 +752,23 @@ func (m *dash) sideKeyboard(key string) (tea.Cmd, bool) {
 	if st.msg != "" {
 		m.msg = st.msg
 	}
+	if st.help {
+		// A plain key that is a prefix command does what it does.
+		return m.prefixCommand(key), true
+	}
 	if st.back {
 		m.focus = areaMain
 	}
 	if st.sel != "" && st.sel != m.sideSel {
 		m.sideSel = st.sel
-		cmds = append(cmds, m.sendSideSel())
+		cmds = append(cmds, m.sendSideSel(), m.previewSoon())
 	}
 	if t := st.target; t != nil {
-		if t.Session != "" || t.Coordinator {
-			// enter, unlike a click, gives the session it attaches the
-			// keyboard, as in a session.
-			m.focus = areaMain
+		// Into the pane: the list, or the session attached.
+		m.focus = areaMain
+		if !st.here {
+			cmds = append(cmds, m.openTarget(*t))
 		}
-		cmds = append(cmds, m.openTarget(*t))
 	}
 	if st.toggle != "" {
 		cmds = append(cmds, m.toggleActive(st.toggle, st.activate))
@@ -767,6 +777,42 @@ func (m *dash) sideKeyboard(key string) (tea.Cmd, bool) {
 		cmds = append(cmds, m.expand(st.expand, st.expandOn))
 	}
 	return tea.Batch(cmds...), true
+}
+
+// previewMsg: the sidebar's cursor may have rested on its row for
+// previewDelay.
+type previewMsg struct{ seq uint64 }
+
+// previewSoon previews the sidebar's row once its cursor has rested on
+// it for previewDelay.
+func (m *dash) previewSoon() tea.Cmd {
+	m.previewSeq++
+	seq := m.previewSeq
+	return tea.Tick(previewDelay, func(time.Time) tea.Msg { return previewMsg{seq} })
+}
+
+// preview shows what the sidebar's cursor rests on, the keyboard staying
+// in the sidebar: a project's dashboard, or a session, which ends the
+// dashboard (the session keeps the sidebar's keyboard, Result.SideFocus).
+func (m *dash) preview(seq uint64) tea.Cmd {
+	if seq != m.previewSeq || m.focus != areaSide || m.top() != nil || m.busy {
+		return nil
+	}
+	for _, r := range shownRows(m.tree(), m.sideW()) {
+		if r.key() != m.sideSel {
+			continue
+		}
+		t, ok := r.preview()
+		switch {
+		case !ok:
+		case t.Session != "":
+			return m.openTarget(t)
+		case t.Project != m.current:
+			return m.showProject(t.Project)
+		}
+		return nil
+	}
+	return nil
 }
 
 // expand expands or collapses an inactive project in the sidebar's
