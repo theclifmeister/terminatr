@@ -76,7 +76,7 @@ func TestModNotify(t *testing.T) {
 	}
 	n := res.ModNotices[0]
 	if n.Mod != "ping" || n.Title != "T12 [31mneeds you" || n.Text != "in review for 2 days" || n.Level != "warn" ||
-		len(n.Buttons) != 2 || n.Buttons[0].Label != "Accept" || n.Buttons[1].Label != "Send back" ||
+		len(n.Buttons) != 2 || n.Buttons[0].Label != "accept" || n.Buttons[1].Label != "send back" ||
 		n.Buttons[0].Project != "demo" || n.Buttons[0].Task != 12 {
 		t.Fatalf("notice = %+v", n)
 	}

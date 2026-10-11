@@ -42,7 +42,7 @@ func drive(m *dash, cmd tea.Cmd) []tea.Msg {
 			out = append(out, drive(m, c)...)
 		}
 	case nil:
-	case noticeBoardMsg:
+	case bindingMsg:
 		out = append(out, msg)
 		_, c := m.Update(msg)
 		drive(m, c)
@@ -61,7 +61,7 @@ func TestModNoticeButton(t *testing.T) {
 	m.src = src
 	base.board.Tasks[1].Status = tasks.Review
 	base.data.ModNotices = []modnotify.Notice{{ID: "n1", Mod: "ping", Title: "T2 is in review", Level: "warn",
-		Buttons: []modnotify.Button{{ID: "task.accept", Label: "Accept", Project: "alpha", Task: 2}}}}
+		Buttons: []modnotify.Button{{ID: "task.accept", Label: "accept", Project: "alpha", Task: 2}}}}
 	cmd := func() tea.Cmd { d := base.Load(); return m.setData(d) }()
 	var raw string
 	for _, msg := range drive(m, cmd) {
@@ -86,7 +86,7 @@ func TestModNoticeButton(t *testing.T) {
 	}
 	now := time.Now()
 	nv.now, nv.stableAt = func() time.Time { return now }, now
-	if out := screen(m); !strings.Contains(out, "mod: ping") || !strings.Contains(out, "1 Accept T2") {
+	if out := screen(m); !strings.Contains(out, "mod: ping") || !strings.Contains(out, "1 accept T2") {
 		t.Fatalf("view:\n%s", out)
 	}
 	keyPress(m, "1")
@@ -109,7 +109,7 @@ func TestModNoticeButton(t *testing.T) {
 func TestModNoticePrecondition(t *testing.T) {
 	base, m := popupData(t)
 	m.src = &noticeFake{fakeSource: base}
-	drive(m, m.pressNotice(modnotify.Button{ID: "task.accept", Project: "alpha", Task: 2}))
+	drive(m, m.pressNotice("ping", modnotify.Button{ID: "task.accept", Project: "alpha", Task: 2}))
 	if _, ok := m.top().(*confirmView); ok || len(base.asked) != 0 {
 		t.Fatalf("asked for a task not in review: %T", m.top())
 	}

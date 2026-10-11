@@ -11,6 +11,7 @@
 "row.open" = ["enter"]
 "session.adopt" = ["T"]
 "project.activate" = ["space"]
+"card.fold" = ["z"]
 "project.new" = ["n"]
 "project.popup" = ["a"]
 "project.tasks" = ["t"]

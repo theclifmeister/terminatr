@@ -77,6 +77,8 @@ func init() {
 					return ""
 				case r.task != nil:
 					return "show"
+				case r.card:
+					return "open"
 				case r.questions > 0:
 					return "answer"
 				case r.session != "":
@@ -105,6 +107,18 @@ func init() {
 				return ""
 			},
 			run: (*dash).toggleHere},
+		{id: "card.fold", keys: []string{"z"}, label: "z", help: "on a mod's card (below the sections): fold it to its header, or unfold it",
+			menu: "fold / unfold the mod card",
+			foot: func(m *dash, r row, ok bool) string {
+				if !ok || !r.card {
+					return ""
+				}
+				if m.mv.folded[r.key] {
+					return "unfold"
+				}
+				return "fold"
+			},
+			run: (*dash).foldCard},
 		{id: "project.new", keys: []string{"n"}, label: "n", help: "new project", menu: "new project",
 			foot: func(m *dash, _ row, _ bool) string {
 				if len(m.data.Projects) == 0 {
@@ -188,6 +202,8 @@ func (m *dash) enter(string) tea.Cmd {
 	case !ok:
 	case r.task != nil:
 		return m.showTask(r.project, r.task.ID)
+	case r.card:
+		return m.openCard(r.key)
 	case r.questions > 0:
 		return m.answerQuestions(r.project)
 	case r.session != "":
