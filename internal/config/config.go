@@ -121,8 +121,8 @@ type Safety struct {
 	// its context reaches [ui] context_hint, only while nothing waits on
 	// it (§7.5): the project's state lives in files, so nothing is lost.
 	AutoClear bool `json:"auto_clear"`
-	// CoordinatorMerges adds a permission allow rule for the PR merge
-	// command (gh pr merge; the Azure DevOps equivalent) to the
+	// CoordinatorMerges adds a permission allow rule for tm thread merge
+	// (which makes the PR merge itself, on GitHub and Azure DevOps) to the
 	// coordinator's launch settings only, so an auto-mode classifier that
 	// doesn't see the standing merge rule stops refusing it. Threads never
 	// get it, and the guard still refuses their merges. Only effective

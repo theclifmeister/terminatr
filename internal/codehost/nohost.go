@@ -14,6 +14,7 @@ func (NoHost) PRState(string, string) string               { return "" }
 func (NoHost) PRHead(string, string) (string, int, string) { return "", 0, "" }
 func (NoHost) MergeCommit(repo string, n int) string       { return GitHub{}.MergeCommit(repo, n) }
 func (NoHost) MergedPR(repo, commit string) int            { return GitHub{}.MergedPR(repo, commit) }
+func (NoHost) Merge(string, PR) error                      { return ErrNoRef }
 func (NoHost) Hints(int) Hints                             { return Hints{} }
 func (NoHost) Doctor(DoctorDeps) []Check                   { return nil }
 func (NoHost) ParsePRURL(string) (int, bool)               { return 0, false }
