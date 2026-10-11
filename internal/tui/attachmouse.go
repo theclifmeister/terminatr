@@ -39,6 +39,7 @@ var sessionMenu = []struct{ label, key string }{
 	{"slim sidebar on / off", "b"},
 	{"info panel on / off", "|"},
 	{"keyboard to the sidebar", "tab"},
+	{"back to the last place", ";"},
 	{"remote control on / off…", "r"},
 	{"send the prefix key", "prefix"},
 }

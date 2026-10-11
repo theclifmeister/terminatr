@@ -275,7 +275,7 @@ func sideTop(rows []treeRow, h int) int {
 			cur = i
 		}
 	}
-	return scrollTop(cur, max(h-1, 1), len(rows))
+	return scrollTop(cur, max(h-sideHeadRows(), 1), len(rows))
 }
 
 // sidebarLines draws the sidebar w columns wide (its border included) and
@@ -311,8 +311,14 @@ func sidebarLines(all []treeRow, w, h int, foot []string) []string {
 		}
 	}
 	out = append(out, sideHead(n, cw-gap, slim)+strings.Repeat(" ", gap)+reset+border)
+	if l, ok := sideFilterLine(cw - gap); ok {
+		out = append(out, l+strings.Repeat(" ", gap)+reset+border)
+	}
 	if n == 0 {
 		note := " no projects"
+		if sideFilterNow().text != "" {
+			note = " no match"
+		}
 		if slim {
 			note = " —"
 		}
@@ -677,8 +683,9 @@ func sideHitAt(all []treeRow, w, h, x, y int) (r treeRow, ok, border bool) {
 		return r, false, true
 	}
 	rows := shownRows(all, w)
-	i := sideTop(rows, h) + y - 1
-	if y < 1 || x < 0 || x >= w-1 || i >= len(rows) {
+	head := sideHeadRows()
+	i := sideTop(rows, h) + y - head
+	if y < head || x < 0 || x >= w-1 || i >= len(rows) {
 		return r, false, false
 	}
 	return rows[i], true, false
@@ -815,6 +822,9 @@ type sidebar struct {
 	server   ServerInfo // the running server
 	drag     bool       // the mouse is moving its border
 	drawn    []string   // the lines on screen; nil repaints them all
+
+	// needsFirst is [ui] needs_first: the projects that need you first.
+	needsFirst bool
 }
 
 // sideCurrent is the attach view's current project: the focused pane's,
@@ -832,9 +842,25 @@ func (c *client) sideTree() []treeRow {
 	if c.focus != nil {
 		focus = c.focus.info.ID
 	}
-	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), focus: focus, ctxHint: c.side.ctxHint, expanded: c.v.Expanded})
+	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), focus: focus, ctxHint: c.side.ctxHint,
+		expanded: sideExpanded(c.side.projects, c.v.Expanded)})
+	rows = sideRows(rows, c.side.needsFirst)
 	if c.kb == areaSide {
 		markCursor(rows, c.sideW, c.v.SideSel)
+	}
+	return rows
+}
+
+// sideFullTree is the attach view's whole tree, every project expanded
+// and no filter (w W). c.mu held.
+func (c *client) sideFullTree() []treeRow {
+	var all []string
+	for _, p := range c.side.projects {
+		all = append(all, p.Slug)
+	}
+	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), ctxHint: c.side.ctxHint, expanded: all})
+	if c.side.needsFirst {
+		rows = needsFirstOrder(rows)
 	}
 	return rows
 }
@@ -885,21 +911,25 @@ func (c *client) nextArea() {
 // dropped, so nothing reaches the pane. c.mu held; released here.
 func (c *client) sideKeyboard(k uv.Key) {
 	name := keyName(k)
-	op, ok := sideOp(name)
+	in := sideKeysIn{tree: c.sideTree, full: c.sideFullTree, w: c.sideW, h: c.sideRows(), sel: c.v.SideSel}
 	if name == "tab" {
 		c.flash = ""
 		c.mu.Unlock()
 		c.nextArea()
 		return
 	}
-	if !ok || c.side == nil {
+	var st sideStep
+	ok := false
+	if c.side != nil {
+		st, ok = sideKeyFor(in, name)
+	}
+	if !ok {
 		c.flash = ""
 		c.status()
 		c.mu.Unlock()
 		c.poke()
 		return
 	}
-	st := sideKeyStep(c.sideTree(), c.sideW, c.v.SideSel, op)
 	c.flash = st.msg
 	if st.help {
 		// A plain key that is a prefix command does what it does.
@@ -1149,6 +1179,13 @@ func (c *client) sideMouse(m emu.Mouse) {
 		}
 		c.poke()
 		return
+	case !sd.drag && m.Action == emu.MouseMotion && m.Button == emu.MouseNone:
+		changed := setSideHover(sideTip(c.sideTree(), c.sideW, c.sideRows(), m.X, m.Y))
+		c.mu.Unlock()
+		if changed {
+			c.poke()
+		}
+		return
 	case sd.drag && m.Action == emu.MouseRelease:
 		sd.drag = false
 		l := c.v.Sidebar
@@ -1257,6 +1294,14 @@ var sideActions = []sideAction{
 	{[]string{"left", "h"}, sideOut, "", ""},
 	{[]string{"esc"}, sideBack, "esc", "back to the list (in a session: to the pane)"},
 	{[]string{"space"}, sideActive, "space", "on a project: activate it, or deactivate it (its coordinator and threads stop, to resume when you activate it; asks first while they run)"},
+	{[]string{"home"}, sideFirst, "home end", "the first / last row"},
+	{[]string{"end"}, sideLast, "", ""},
+	{[]string{"pgup"}, sidePageUp, "pgup pgdown", "a page up / down"},
+	{[]string{"pgdown"}, sidePageDown, "", ""},
+	{[]string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}, sideNth, "1-9", "the first to ninth project, counted down the tree"},
+	{[]string{"w"}, sideNeedNext, "w W", "the next / previous row that needs you, round the ends; it unfolds what hides the row, and clears a filter that does"},
+	{[]string{"W"}, sideNeedPrev, "", ""},
+	{[]string{"/"}, sideFilter, "/", "filter: type to narrow the tree to what matches (a project's name, a thread's task, title or id) and the projects over it; enter keeps the filter, esc clears it"},
 	{[]string{"?"}, sideHelp, "?", "help, as prefix+?"},
 }
 
@@ -1313,9 +1358,10 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 	}
 	switch op {
 	case sideUp:
-		return moveTo(i - 1)
+		// Round the ends: the sidebar only, the list stops at them.
+		return moveTo((i - 1 + len(rows)) % len(rows))
 	case sideDown:
-		return moveTo(i + 1)
+		return moveTo((i + 1) % len(rows))
 	case sideIn:
 		if r.folded() && w > sideSlim {
 			// Expanding never activates (§5.1).
@@ -1376,7 +1422,11 @@ func sideFooter(all []treeRow, w int, s ServerInfo, session bool) []string {
 		}
 	}
 	d1, d2 := "", ""
-	if r != nil {
+	switch tip := sideHoverTip(); {
+	case tip != "":
+		// The glyph under the mouse, instead of the row (sideTip).
+		d1, d2 = tip, "(hover)"
+	case r != nil:
 		d1, d2 = r.details()
 	}
 	out := []string{
@@ -1469,6 +1519,8 @@ func counted(n int, word string) string {
 func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 	var keys []string
 	switch {
+	case focused && sideFilterNow().typing:
+		keys = []string{"type filter", "⏎ keep", "esc clear"}
 	case !focused && session:
 		keys = []string{"prefix+tab sidebar", "prefix+? help"}
 	case !focused:
@@ -1488,10 +1540,13 @@ func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 		keys = []string{"⏎ start", "← project"}
 	case r.kind == treeCoordinator, r.session != "":
 		keys = []string{"⏎ attach", "← project"}
+		if r.hint {
+			keys = append(keys, "w next "+ic().hint)
+		}
 	default:
 		keys = []string{"← project"}
 	}
-	if focused {
+	if focused && !sideFilterNow().typing {
 		keys = append(keys, "? help")
 	}
 	for len(keys) > 1 && ansi.StringWidth(" "+strings.Join(keys, " · ")) > cw {

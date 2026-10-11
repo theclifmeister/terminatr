@@ -61,6 +61,8 @@ func init() {
 		}},
 		{keys: []string{"tab", "shift+tab"}, label: "tab shift+tab", help: "the keyboard to the next / previous area: the list, the details panel, the projects sidebar (its keys below); esc back to the list",
 			mouse: "a click on the area", run: (*dash).cycleFocus},
+		{keys: []string{";"}, label: ";", help: "back to the last place: the area, sidebar row or session the keyboard was in before (prefix+; anywhere)",
+			menu: []string{"back to the last place"}, run: (*dash).goLastPlace},
 		{keys: []string{"enter"}, label: "enter", help: "attach to the selected session; on a project, open its coordinator; a task in NEEDS YOU shows in the project popup; questions waiting there open in the coordinator's question dialog",
 			menu: []string{"open the selected row"},
 			foot: func(_ *dash, r row, ok bool) string {

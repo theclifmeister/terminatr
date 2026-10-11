@@ -203,12 +203,16 @@ func TestOuterModes(t *testing.T) {
 		{"", true, "\x1b[?1002h\x1b[?1006h"},
 		{"\x1b[?1003h", true, "\x1b[?1002l\x1b[?1003h"},
 		{"\x1b[?1003l", true, "\x1b[?1003l\x1b[?1002h"},
+		{"", true, "\x1b[?1002l\x1b[?1003h"}, // the full sidebar: its tooltip
 	}
 	for i, s := range steps {
 		mirror.Write([]byte(s.program))
-		c.side = nil
+		c.side, c.sideW = nil, 0
 		if s.side {
 			c.side = &sidebar{}
+		}
+		if i == 6 {
+			c.sideW = sideDefault
 		}
 		if got := string(c.outerModes()); got != s.want {
 			t.Errorf("step %d: %q, want %q", i, got, s.want)

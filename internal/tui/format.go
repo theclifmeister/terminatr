@@ -173,7 +173,7 @@ const pendingHead = " prefix ▸ "
 
 // pendingList are the prefix commands, as the status bar lists them
 // after the prefix.
-const pendingList = `d dashboard · q quit · a project · n new · p ] [ projects · i t , ? · { } b sidebar · | info · tab sidebar keys · r remote control`
+const pendingList = `d dashboard · q quit · a project · n new · p ] [ projects · i t , ? · { } b sidebar · | info · tab sidebar keys · ; last place · r remote control`
 
 // The status bar's notes while the sidebar's cursor previews a row:
 // waiting for it to rest (previewDelay), then showing it; previewShort

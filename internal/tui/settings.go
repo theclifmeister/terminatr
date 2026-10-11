@@ -300,6 +300,13 @@ func globalSettings(note string) []setting {
 				m.data.ContextHint = next
 				return m.setSetting("ui", "context_hint", next, "context hint "+contextHintWords(next))
 			}},
+		{label: "Needs you first", help: "The sidebar lists the projects where something needs you (a thread waits on you, a task to review, a question) first, the active ones above the inactive as always. Off keeps them in their usual order. Every console follows.",
+			value: func(m *dash) string { return onOff(m.data.NeedsFirst) },
+			change: func(m *dash) tea.Cmd {
+				on := !m.data.NeedsFirst
+				m.data.NeedsFirst = on
+				return m.setSetting("ui", "needs_first", on, "needs you first "+onOff(on))
+			}},
 		{label: "Models", help: "Each agent's models a thread may run, a line on when each fits, and the default. Agents release new ones often: add, change or remove them here. Enter lists them.",
 			value:  func(m *dash) string { return catalogWords(m.catalogs) },
 			change: func(m *dash) tea.Cmd { m.openCatalog(); return nil }},
@@ -768,7 +775,7 @@ func safetySettings(slug string) []setting {
 			value: func(m *dash) string { return onOff(safety(m).AutoClear) },
 			change: toggle("auto_clear", func(s config.Safety) bool { return s.AutoClear },
 				func(s *config.Safety, on bool) { s.AutoClear = on }, "auto-clear for coordinators")},
-		{label: "Coordinator may merge", help: "Let the coordinator run the pull request merge command (gh pr merge, or the Azure DevOps equivalent) without the agent's auto mode refusing it: tm adds a permission allow rule to the coordinator only. Threads never get it, and the guard still refuses their merges. Only has an effect while merge is coordinator (the default). Off by default.",
+		{label: "Coordinator may merge", help: "Let the coordinator merge pull requests with tm thread merge without the agent's auto mode refusing it: tm adds a permission allow rule for that command to the coordinator only. It merges only a PR whose checks are green on its current head and that the host calls mergeable, with a regular merge commit, on GitHub and Azure DevOps. Threads never get it, and the guard still refuses their merges. Only has an effect while merge is coordinator (the default). Off by default.",
 			value: func(m *dash) string { return onOff(safety(m).CoordinatorMerges) },
 			change: toggle("coordinator_merges", func(s config.Safety) bool { return s.CoordinatorMerges },
 				func(s *config.Safety, on bool) { s.CoordinatorMerges = on }, "the coordinator merging")},

@@ -181,6 +181,8 @@ func (m *dash) mouse(msg tea.Msg) tea.Cmd {
 			m.setWidth(m.winW)
 		case m.dragging:
 			m.layout.Split = clampSplit(float64(x-m.sideW()) / float64(max(m.w, 1)))
+		default:
+			m.hover(msg.Mouse())
 		}
 	case tea.MouseReleaseMsg:
 		if m.dragging || m.sideDrag {

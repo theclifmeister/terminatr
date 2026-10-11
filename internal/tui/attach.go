@@ -1107,8 +1107,8 @@ type prefixDo struct {
 
 // paneCommands are the keys that, after the prefix, act on the window
 // itself: the sidebar's width ({ }), its slim strip (b), the keyboard
-// (tab) and the info panel (|).
-var paneCommands = map[string]bool{"{": true, "}": true, "b": true, "tab": true, "|": true}
+// (tab), the info panel (|) and the last place (;).
+var paneCommands = map[string]bool{"{": true, "}": true, "b": true, "tab": true, "|": true, ";": true}
 
 // keyName names k as paneCommands does.
 func keyName(k uv.Key) string {
@@ -1265,6 +1265,8 @@ func (c *client) paneCommand(cmd string) {
 		c.nextArea()
 	case "|":
 		c.infoToggle()
+	case ";":
+		c.goLastPlace()
 	}
 	c.poke()
 }
@@ -1297,6 +1299,7 @@ func paneName(s proto.SessionInfo) string {
 
 // status redraws the status bar. c.mu held.
 func (c *client) status() {
+	c.notePlace()
 	if !c.statusBar || c.focus == nil {
 		return
 	}
@@ -1405,6 +1408,9 @@ func (c *client) mouse(ev uv.Event) {
 	// The status bar runs across the window, the rule above it under
 	// the sidebar and the pane.
 	status := c.statusBar && (m.Y >= c.rows-1 || m.Y >= c.paneRows && m.X < c.cols-c.infoW)
+	if (m.X >= c.sideW || m.Y >= c.sideRows()) && setSideHover("") {
+		c.poke() // off the sidebar: its tooltip goes
+	}
 	switch {
 	case c.menu != nil:
 		c.menuMouse(m)
@@ -1556,6 +1562,11 @@ func (c *client) outerModes() []byte {
 		// The sidebar takes clicks and drags whatever the program wants;
 		// selecting text in a pane then needs Shift.
 		track = 1002
+	}
+	if c.side != nil && c.sideW > sideSlim {
+		// Every motion, for the sidebar's tooltip; the program still
+		// gets only what it asked for (emu's encoder).
+		track = 1003
 	}
 	var b []byte
 	set := func(n int, on bool) {
@@ -1783,18 +1794,18 @@ func (c *client) pollState(ctx context.Context) {
 			alerts, first = res.Alerts, false
 		}
 		var projects []ProjectData
-		ctxHint := config.DefaultContextHint
+		ctxHint, needsFirst := config.DefaultContextHint, false
 		if c.side != nil {
 			projects = loadSideProjects(c.paths)
 			if cfg, err := config.Load(); err == nil {
-				ctxHint = cfg.ContextHint
+				ctxHint, needsFirst = cfg.ContextHint, cfg.NeedsFirst
 			}
 		}
 		statuses := threadStatuses(res.Sessions)
 		c.pollInfo(res.Sessions)
 		if c.lock() {
 			if c.side != nil {
-				c.side.projects, c.side.sessions, c.side.ctxHint = projects, res.Sessions, ctxHint
+				c.side.projects, c.side.sessions, c.side.ctxHint, c.side.needsFirst = projects, res.Sessions, ctxHint, needsFirst
 				if ctl != nil {
 					c.side.server = ServerInfo{Version: res.Version, Build: res.Build, Latest: res.Latest, Upgrade: res.Upgrade}
 				}

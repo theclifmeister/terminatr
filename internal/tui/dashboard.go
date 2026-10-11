@@ -492,6 +492,7 @@ func (m *dash) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.result.Attach, m.result.Message = cmp.Or(m.over.Session, "view"), m.msg
 		return m, tea.Quit
 	}
+	m.notePlace()
 	if m.view == nil {
 		return m, cmd
 	}
@@ -706,9 +707,25 @@ func (m *dash) showProject(slug string) tea.Cmd {
 // current, and its row the one you are on; the keyboard's row is marked
 // while the sidebar has the focus.
 func (m *dash) tree() []treeRow {
-	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint, expanded: m.expanded})
+	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint,
+		expanded: sideExpanded(m.data.Projects, m.expanded)})
+	rows = sideRows(rows, m.data.NeedsFirst)
 	if m.focus == areaSide {
 		markCursor(rows, m.sideW(), m.sideSel)
+	}
+	return rows
+}
+
+// fullTree is the sidebar's whole tree: every project expanded, no
+// filter (w W).
+func (m *dash) fullTree() []treeRow {
+	var all []string
+	for _, p := range m.data.Projects {
+		all = append(all, p.Slug)
+	}
+	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint, expanded: all})
+	if m.data.NeedsFirst {
+		rows = needsFirstOrder(rows)
 	}
 	return rows
 }
@@ -743,11 +760,10 @@ func (m *dash) cycleFocus(key string) tea.Cmd {
 // A move previews the row the cursor rests on (previewSoon); enter or →
 // goes into it, and the keyboard follows.
 func (m *dash) sideKeyboard(key string) (tea.Cmd, bool) {
-	op, ok := sideOp(key)
+	st, ok := sideKeyFor(sideKeysIn{tree: m.tree, full: m.fullTree, w: m.sideW(), h: m.h, sel: m.sideSel}, key)
 	if !ok {
 		return nil, false
 	}
-	st := sideKeyStep(m.tree(), m.sideW(), m.sideSel, op)
 	var cmds []tea.Cmd
 	if st.msg != "" {
 		m.msg = st.msg
@@ -1082,6 +1098,9 @@ func (m *dash) View() tea.View {
 	v := tea.NewView(m.render())
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
+	if m.sideW() > sideSlim {
+		v.MouseMode = tea.MouseModeAllMotion // the sidebar's tooltip
+	}
 	v.WindowTitle = "terminatr"
 	return v
 }

@@ -42,6 +42,9 @@ type Data struct {
 	// ContextHint is [ui] context_hint: the percent of its context window
 	// from which a coordinator is told to consider /clear; 0 for never.
 	ContextHint int
+	// NeedsFirst is [ui] needs_first: the sidebar lists the projects
+	// where something needs you first.
+	NeedsFirst bool
 	// UpdateCheck is [ui] update_check, on unless set false.
 	UpdateCheck bool
 	// Server is what the server says about itself: its version and
@@ -260,6 +263,7 @@ func (s *ServerSource) Load() Data {
 	}
 	if cfg, err := config.Load(); err == nil {
 		d.Mods, d.ModsBand, d.ModsPane, d.ContextHint, d.UpdateCheck = cfg.Mods, cfg.ModsBand, cfg.ModsPane, cfg.ContextHint, cfg.UpdateCheck
+		d.NeedsFirst = cfg.NeedsFirst
 		if all, err := cfg.AllProjects(); err == nil {
 			d.Defaults = &all
 		}
