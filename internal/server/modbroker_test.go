@@ -7,9 +7,12 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/modapi"
 	"github.com/theclifmeister/terminatr/internal/modbroker"
 	"github.com/theclifmeister/terminatr/internal/modproto"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -126,23 +129,52 @@ func TestModBroker(t *testing.T) {
 	}
 }
 
-// apiV1 are mod API v1's broker methods this broker answers, by their
-// wire names, with the grant each needs: the schema the $ bindings are
-// built from (internal/modapi's Methods, T251). Keep the two the same.
-var apiV1 = map[string]string{
-	"projects.list": "project_read", "project.get": "project_read", "tasks.list": "project_read",
-	"thread.get": "project_read", "report.get": "project_read",
-	"store.get": "", "store.set": "", "store.del": "", "fs.read": "", "fs.write": "",
-	"inbox.raise": "inbox", "http.fetch": "net", "process.run": "commands",
+// modPending are the schema's methods whose handlers come in their own
+// tasks (Broker.Handle): drop each from here when its handler lands.
+var modPending = map[string]bool{
+	"ui.cell.set": true, "ui.status.set": true, "ui.toast": true,
+	"actions.list": true, "actions.available": true,
 }
 
+// TestModBrokerAPI: the broker's methods are mod API v1's, the schema the
+// $ bindings are built from (modapi.Methods), one list: every method the
+// host sends has a handler, every handler is a method of the schema, and
+// the broker checks the grant the schema says it needs.
 func TestModBrokerAPI(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
 	s := &Server{log: log.New(os.Stderr, "", 0), modEv: newModEvents()}
 	b := s.broker()
-	for name, want := range apiV1 {
-		if got, ok := b.Needs(name); !ok || got != want {
-			t.Errorf("%s: needs %q (%v), want %q", name, got, ok, want)
+	schema := map[string]modapi.Method{}
+	for _, m := range modapi.Methods {
+		schema[m.Name] = m
+		if m.Needs != "" && !slices.Contains(mod.Perms, m.Needs) {
+			t.Errorf("%s: needs %q, which is no permission of mod.toml", m.Name, m.Needs)
+		}
+		needs, ok := b.Needs(m.Name)
+		switch {
+		case modPending[m.Name]:
+			if ok {
+				t.Errorf("%s has a handler now: drop it from modPending", m.Name)
+			}
+		case m.Local:
+			// Answered in the host from hello; the broker may answer it too.
+			if ok && needs != m.Needs {
+				t.Errorf("%s: the broker checks %q, the schema says %q", m.Name, needs, m.Needs)
+			}
+		case !ok:
+			t.Errorf("%s: a method of the schema with no handler", m.Name)
+		case needs != m.Needs:
+			t.Errorf("%s: the broker checks %q, the schema says %q", m.Name, needs, m.Needs)
+		}
+	}
+	for name := range modPending {
+		if _, ok := schema[name]; !ok {
+			t.Errorf("modPending names %s, which the schema hasn't", name)
+		}
+	}
+	for _, name := range b.Methods() {
+		if _, ok := schema[name]; !ok {
+			t.Errorf("%s: a handler for no method of the schema", name)
 		}
 	}
 }

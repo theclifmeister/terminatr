@@ -57,9 +57,9 @@ func idPart(s string) bool {
 	return true
 }
 
-// validColumns checks a column list read from disk or the wire: its
+// ValidColumns checks a column list read from disk or the wire: its
 // size only; Columns drops what it doesn't know.
-func validColumns(cols []string) error {
+func ValidColumns(cols []string) error {
 	if len(cols) > MaxColumns {
 		return fmt.Errorf("%d sidebar columns, at most %d", len(cols), MaxColumns)
 	}

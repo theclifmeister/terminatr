@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/modnotify"
 	"github.com/theclifmeister/terminatr/internal/modview"
 )
 
@@ -327,6 +328,9 @@ type SessionListResult struct {
 	// thread reported); a client rings its bell when it goes up
 	// (docs/SPEC.md §4).
 	Alerts uint64 `json:"alerts"`
+	// ModNotices are the notifications user mods sent that are still in
+	// the tray (modnotify); consoles show them.
+	ModNotices []modnotify.Notice `json:"mod_notices,omitempty"`
 	// Version and Build are the server's own (version.Version and
 	// version.BuildID()), which a client shows and compares with its
 	// own.
@@ -582,6 +586,25 @@ type QuestionsOpenResult struct {
 	Session string `json:"session"`
 	Via     string `json:"via"`
 	Open    int    `json:"open"`
+}
+
+// MethodNotifyClaim says a console draws mod notification id as an OS
+// notification: the first caller gets OK, the others none, so that one
+// console rings it. MethodNotifyDismiss takes it out of the tray (a
+// button pressed, or the human dismissed it). Both are the human's.
+const (
+	MethodNotifyClaim   = "notify.claim"
+	MethodNotifyDismiss = "notify.dismiss"
+)
+
+// NoticeParams are the params of notify.claim and notify.dismiss.
+type NoticeParams struct {
+	ID string `json:"id"`
+}
+
+// NoticeResult is their result.
+type NoticeResult struct {
+	OK bool `json:"ok"`
 }
 
 // MethodModHosts lists the supervised code mods' hosts and where each

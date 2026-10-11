@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -118,8 +119,13 @@ type DashResult struct {
 
 // Dashboard runs the dashboard until the user quits or picks a session.
 func Dashboard(opts DashOptions) (DashResult, error) {
-	loadIcons()
+	err := loadLook()
+	cols, lerr := configLayout()
+	if n := lookNews(errors.Join(err, lerr)); n != "" && opts.State.Message == "" {
+		opts.State.Message = n
+	}
 	m := newDash(opts)
+	m.wantCols = &cols // a layout that doesn't load: the built-in order
 	defer close(m.done)
 	if o := opts.Over; o != nil && o.Session != "" && opts.View != nil {
 		// The session keeps drawing under the popup.
@@ -210,6 +216,9 @@ type dash struct {
 
 	alerts uint64
 	seen   bool // the first poll arrived (no bell for old alerts)
+	// noticed are the mod notifications the console has seen, so each is
+	// drawn once (modnotice.go).
+	noticed map[string]bool
 	// modsFailed are the mods whose failure the footer has said
 	// (noteModFailures).
 	modsFailed map[string]bool
@@ -219,10 +228,13 @@ type dash struct {
 	// their way, which the view's own doesn't overwrite meanwhile, and
 	// treePending its changes of the folds (refold): a version of the
 	// view from before one would fold back what was just unfolded.
-	view        *ViewConn
-	viewSeq     uint64
-	viewSide    SidebarLayout // the view's sidebar, as last sent or seen
-	sideCols    []string      // the view's sidebar columns (view.View.Columns)
+	view     *ViewConn
+	viewSeq  uint64
+	viewSide SidebarLayout // the view's sidebar, as last sent or seen
+	sideCols []string      // the view's sidebar columns (view.View.Columns)
+	// wantCols, when set, is the column order this console's layout
+	// ([ui] layout) asks the view for: sent once, if the view's differs.
+	wantCols    *[]string
 	watch       <-chan struct{}
 	stopWatch   func()
 	selPending  int
@@ -387,7 +399,14 @@ func (m *dash) reloadBoards() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-func (m *dash) Init() tea.Cmd { return tea.Batch(m.load(), m.waitView(), m.waitFeed()) }
+func (m *dash) Init() tea.Cmd {
+	cmds := []tea.Cmd{m.load(), m.waitView(), m.waitFeed()}
+	if themed() {
+		// A mod's theme may differ light and dark: ask the terminal.
+		cmds = append(cmds, tea.RequestBackgroundColor)
+	}
+	return tea.Batch(cmds...)
+}
 
 // feedMsg: the session under the popup drew something.
 type feedMsg struct{}
@@ -537,6 +556,12 @@ func (m *dash) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.userSel = false
 		cmds = append(cmds, m.call(proto.MethodViewSelect, proto.ViewParams{Key: m.sel}))
 	}
+	if w := m.wantCols; w != nil {
+		m.wantCols = nil
+		if !slices.Equal(view.Columns(*w), view.Columns(m.view.View().Columns)) {
+			cmds = append(cmds, m.call(proto.MethodViewColumns, proto.ViewParams{Columns: *w}))
+		}
+	}
 	if l := m.layout.Sidebar; !m.sideDrag && l != m.viewSide {
 		m.viewSide = l
 		cmds = append(cmds, m.call(proto.MethodViewSidebar, proto.ViewParams{Sidebar: &l}))
@@ -546,6 +571,9 @@ func (m *dash) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.BackgroundColorMsg:
+		setScheme(msg.IsDark())
+		return m, nil
 	case tea.WindowSizeMsg:
 		changed := msg.Width != m.winW || msg.Height != m.h
 		m.h = msg.Height
@@ -561,6 +589,8 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.call(proto.MethodViewSize, proto.ViewParams{Cols: uint16(msg.Width), Rows: uint16(msg.Height), Resize: resize})
 		}
 		return m, nil
+	case noticeBoardMsg:
+		return m, m.noticeBoard(msg)
 	case viewMsg:
 		return m, m.fromView()
 	case feedMsg:
@@ -920,6 +950,7 @@ func (m *dash) setData(d Data) tea.Cmd {
 	m.data, m.loaded = d, true
 	m.rebuild()
 	m.noteModFailures()
+	noticeCmds := m.drawNotices()
 	ring := false
 	if d.ServerOK {
 		ring = m.seen && d.Alerts > m.alerts
@@ -929,6 +960,7 @@ func (m *dash) setData(d Data) tea.Cmd {
 	if ring {
 		cmds = append(cmds, tea.Raw("\a"))
 	}
+	cmds = append(cmds, noticeCmds...)
 	switch {
 	case first && m.then == "t" && m.over != nil && m.over.Task > 0:
 		// The info panel's task, over its session: in the popup's
@@ -1024,6 +1056,10 @@ func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 		return o.key(m, k)
 	}
 	if m.busy {
+		return nil
+	}
+	if k.String() == "N" && len(m.data.ModNotices) > 0 {
+		m.openNotices()
 		return nil
 	}
 	switch m.area() {
