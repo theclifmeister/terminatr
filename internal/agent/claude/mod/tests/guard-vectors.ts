@@ -313,7 +313,7 @@ export default {
 "messages": {
  "thread": {
   "force-push": "terminatr guard (force-push): force-pushing is not allowed here. Push without force; if the branch has diverged, merge instead of rewriting it, or say so in your report.",
-  "push-default": "terminatr guard (push-default): nothing is pushed straight to master: work lands through a pull request. Push your own branch and open a PR.",
+  "push-default": "terminatr guard (push-default): nothing is pushed straight to master: work lands through a pull request. Push your own branch and report; the coordinator opens the PR.",
   "worktree-only": "terminatr guard (worktree-only): a thread writes only inside its worktree (/h/.terminatr/worktrees/demo/t-0001-fix). Write the file there, or say so in your report what needs changing elsewhere.",
   "delete-branch": "terminatr guard (delete-branch): agents don't delete branches or worktrees; tm cleans them up once the work has merged. Leave them, and say so in your report if one is in the way.",
   "merge": "terminatr guard (merge): merging is the coordinator's job in this project (merge = \"coordinator\"). Leave the PR open with CI green and say so in your report.",
@@ -321,7 +321,7 @@ export default {
  },
  "coordinator": {
   "force-push": "terminatr guard (force-push): force-pushing is not allowed here. Push without force; if the branch has diverged, merge instead of rewriting it, or ask the user.",
-  "push-default": "terminatr guard (push-default): nothing is pushed straight to master: work lands through a pull request. Push your own branch and open a PR.",
+  "push-default": "terminatr guard (push-default): nothing is pushed straight to master: work lands through a pull request. Push your own branch and report; the coordinator opens the PR.",
   "worktree-only": "terminatr guard (worktree-only): a thread writes only inside its worktree (/h/.terminatr/worktrees/demo/t-0001-fix). Write the file there, or ask the user what needs changing elsewhere.",
   "delete-branch": "terminatr guard (delete-branch): agents don't delete branches or worktrees; tm cleans them up once the work has merged. Leave them, and ask the user if one is in the way.",
   "merge": "terminatr guard (merge): merging is the coordinator's job in this project (merge = \"coordinator\"). Leave the PR open with CI green and say so in your report.",

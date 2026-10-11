@@ -206,6 +206,26 @@ func RoleFiles(reg *Registry) []string {
 	return out
 }
 
+// HomeSecrets are the credential stores, relative to home, that belong
+// to no agent; each agent's own are in its manifest ([guard] secrets).
+var HomeSecrets = []string{
+	".ssh", ".aws", ".gnupg", ".netrc", ".git-credentials", ".npmrc", ".pypirc",
+	".config/gh", ".config/gcloud", ".azure", ".azure-devops", ".docker/config.json", ".kube",
+}
+
+// Secrets is every credential store the guard and the mods broker keep
+// everyone out of: HomeSecrets under home (none when home is empty) and
+// GuardSecrets.
+func Secrets(reg *Registry, home string, getenv func(string) string) []string {
+	var out []string
+	if home != "" {
+		for _, p := range HomeSecrets {
+			out = append(out, filepath.Join(home, p))
+		}
+	}
+	return append(out, GuardSecrets(reg, home, getenv)...)
+}
+
 // GuardSecrets is every known agent's [guard] secrets, resolved: the
 // built-in manifests' and reg's (nil: the built-ins only), so a user
 // manifest replacing a built-in one doesn't drop what it protected.

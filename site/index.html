@@ -40,7 +40,7 @@
    ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║██║  ██║   ██║   ██║  ██║
    ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝</pre>
   <p class="tagline">One terminal for all your coding agents.<br><span class="hl">A coordinator you talk to, threads that do the work.</span></p>
-  <p class="pitch">You talk to one <strong>coordinator</strong>. It splits the work into tasks and hands each to a <strong>thread</strong>: an agent in its own git worktree that opens a pull request and reports back. <code>tm</code>, a single binary, keeps every agent running in a background server when you close the terminal, and its dashboard shows what each one is doing and what waits for you. All progress lives in plain markdown under <code>~/.terminatr/projects/</code>, so clearing an agent's context loses nothing.</p>
+  <p class="pitch">You talk to one <strong>coordinator</strong>. It splits the work into tasks and hands each to a <strong>thread</strong>: an agent in its own git worktree that pushes a branch and reports back. <code>tm</code>, a single binary, keeps every agent running in a background server when you close the terminal, and its dashboard shows what each one is doing and what waits for you. All progress lives in plain markdown under <code>~/.terminatr/projects/</code>, so clearing an agent's context loses nothing.</p>
   <div class="cta">
     <a class="btn primary" href="#install">Install</a>
     <a class="btn" href="https://github.com/theclifmeister/terminatr">Source on GitHub</a>
@@ -103,7 +103,7 @@
     </li>
     <li>
       <h3><span class="glyph" aria-hidden="true">⎇</span> PRs, merged when CI is green</h3>
-      <p>Threads push their branch and open a pull request on GitHub or Azure DevOps. tm watches the checks: a failing run goes back to the thread with the log, a conflict with main asks for a merge. Threads can't merge; the coordinator does, once the checks pass.</p>
+      <p>Threads push their branch and the coordinator opens the pull request on GitHub or Azure DevOps. tm watches the checks: a failing run goes back to the thread with the log, a conflict with main asks for a merge. Threads can't merge; the coordinator does, once the checks pass.</p>
     </li>
     <li>
       <h3><span class="glyph" aria-hidden="true">✓</span> Tasks and an inbox</h3>

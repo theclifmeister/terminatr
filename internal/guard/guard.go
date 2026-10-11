@@ -212,7 +212,7 @@ func (r Rules) deny(rule, summary, target string) *Denial {
 	case "force-push":
 		m = "force-pushing is not allowed here. Push without force; if the branch has diverged, merge instead of rewriting it, or " + tell + "."
 	case "push-default":
-		m = "nothing is pushed straight to " + target + ": work lands through a pull request. Push your own branch and open a PR."
+		m = "nothing is pushed straight to " + target + ": work lands through a pull request. Push your own branch and report; the coordinator opens the PR."
 	case "worktree-only":
 		m = "a thread writes only inside its worktree (" + first + "). Write the file there, or " + tell + " what needs changing elsewhere."
 	case "delete-branch":
