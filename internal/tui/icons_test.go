@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/theclifmeister/terminatr/internal/config"
 	"reflect"
 	"strings"
 	"testing"
@@ -140,8 +141,8 @@ func TestIconsSetting(t *testing.T) {
 	}
 	for _, want := range []string{IconsNerd, IconsUnicode, IconsASCII, IconsAuto} {
 		run(m, press(m, "enter"))
-		if iconsSetting() != want || configIcons() != want {
-			t.Fatalf("enter: %s, file %s, want %s (%v)", iconsSetting(), configIcons(), want, src.settings)
+		if iconsSetting() != want || fileIcons() != want {
+			t.Fatalf("enter: %s, file %s, want %s (%v)", iconsSetting(), fileIcons(), want, src.settings)
 		}
 	}
 	if strings.Contains(screen(m), "icons =") || strings.Contains(screen(m), "[ui]") {
@@ -154,4 +155,10 @@ func TestIconsSetting(t *testing.T) {
 	if loadIcons() != IconsASCII || ic().name != IconsASCII {
 		t.Fatalf("reloaded: %s %s", iconsSetting(), ic().name)
 	}
+}
+
+// fileIcons is config.toml's icons setting.
+func fileIcons() string {
+	cfg, _ := config.Load()
+	return configIcons(cfg)
 }

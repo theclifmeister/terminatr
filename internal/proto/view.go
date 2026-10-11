@@ -35,6 +35,10 @@ const (
 	MethodViewSidebar = "view.sidebar"
 	// MethodViewInfo sets the info panel beside a thread's pane (Info).
 	MethodViewInfo = "view.info"
+	// MethodViewColumns sets the order of the sidebar's columns
+	// (Columns, from the layout mod [ui] layout picks; none for the
+	// built-in order).
+	MethodViewColumns = "view.columns"
 	// MethodViewSize reports the client's window (Cols, Rows). With
 	// Resize, the user really resized it: the client becomes the view's
 	// latest and the panes follow.
@@ -123,4 +127,6 @@ type ViewParams struct {
 	Resize  bool          `json:"resize,omitempty"`
 	// On expands the project (view.expand); false collapses it.
 	On bool `json:"on,omitempty"`
+	// Columns is the sidebar's column order (view.columns).
+	Columns []string `json:"columns,omitempty"`
 }

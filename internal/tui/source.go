@@ -504,6 +504,9 @@ func (s *ServerSource) SetSetting(table, key string, value any) error {
 	}
 	slug, isProject := strings.CutPrefix(table, "projects.")
 	if !isProject {
+		if value == nil {
+			return config.Unset(table, key)
+		}
 		return config.Set(table, key, value)
 	}
 	detail := fmt.Sprint(value)
