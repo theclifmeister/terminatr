@@ -462,6 +462,11 @@ func (vs *views) do(method string, p proto.ViewParams) (view.View, *proto.Error)
 		v.Info = p.Info.Clamp()
 		layout()
 		resize = true
+	case proto.MethodViewColumns:
+		if err := view.ValidColumns(p.Columns); err != nil {
+			return before, proto.Errorf(proto.ErrBadParams, "%v", err)
+		}
+		v.Columns = p.Columns
 	case proto.MethodViewSize:
 		if p.Cols == 0 || p.Rows == 0 {
 			return before, proto.Errorf(proto.ErrBadParams, "invalid size %d×%d", p.Cols, p.Rows)

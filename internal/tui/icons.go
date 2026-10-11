@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/mod"
 )
 
 // Icon sets (docs/SPEC.md §4): the glyphs of the sidebar's tree and of
@@ -132,20 +133,39 @@ func iconSetFor(value, term string) *iconSet {
 	return &unicodeIcons
 }
 
-// setIcons makes the setting's value this console's icon set.
-func setIcons(value string) {
-	icons.Store(iconSetFor(value, os.Getenv("TERM_PROGRAM")))
+// setIcons makes the setting's value this console's icon set: a
+// built-in choice, or an enabled icons mod's id. A mod's set that
+// doesn't load leaves auto's, and the error says why.
+func setIcons(value string) error {
+	if slices.Contains(IconChoices, value) {
+		return setIconsFrom(nil, value)
+	}
+	cfg, _ := config.Load()
+	return setIconsFrom(loadMods(cfg), value)
+}
+
+// setIconsFrom is setIcons with the mods in r.
+func setIconsFrom(r *mod.Registry, value string) error {
+	set, err := iconSetFor(value, os.Getenv("TERM_PROGRAM")), error(nil)
+	if !slices.Contains(IconChoices, value) && r != nil {
+		if s, e := modIcons(r, value); e != nil {
+			err = e
+		} else {
+			set = s
+		}
+	}
+	icons.Store(set)
 	iconsValue.Store(value)
+	return err
 }
 
 // iconsSetting is the icons setting's value this console uses.
 func iconsSetting() string { return iconsValue.Load().(string) }
 
-// configIcons is config.toml's [ui] icons: auto when the file or the key
-// is missing or unreadable (tm doctor reports a broken file).
-func configIcons() string {
-	cfg, _ := config.Load()
-	if cfg == nil || !slices.Contains(IconChoices, cfg.Icons) {
+// configIcons is config.toml's [ui] icons (cfg, nil when it doesn't
+// load): auto when the file or the key is missing.
+func configIcons(cfg *config.Config) string {
+	if cfg == nil || cfg.Icons == "" {
 		return IconsAuto
 	}
 	return cfg.Icons
@@ -153,7 +173,8 @@ func configIcons() string {
 
 // loadIcons makes config.toml's icons setting this console's set.
 func loadIcons() string {
-	v := configIcons()
-	setIcons(v)
+	cfg, _ := config.Load()
+	v := configIcons(cfg)
+	setIconsFrom(loadMods(cfg), v)
 	return v
 }

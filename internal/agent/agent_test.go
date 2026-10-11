@@ -977,3 +977,52 @@ func TestGuardToolVectors(t *testing.T) {
 		}
 	}
 }
+
+// TestModAgents: an enabled mod's agents/<name>.toml loads as if in the
+// user's agents folder; the user's own file of that name wins; a mod
+// that is off adds nothing; a link out of the mod's folder is refused.
+func TestModAgents(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("TERMINATR_HOME", root)
+	write := func(rel, body string) {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manifest := func(name, cmd string) string {
+		return "manifest_version = 1\nname = \"" + name + "\"\n[launch]\ncommand = \"" + cmd + "\"\n"
+	}
+	modToml := func(id string) string {
+		return "id = \"" + id + "\"\nname = \"" + id + "\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nagents = \"agents\"\n"
+	}
+	write("mods/pi/mod.toml", modToml("pi"))
+	write("mods/pi/agents/pi.toml", manifest("pi", "pi-from-mod"))
+	write("mods/pi/agents/aider.toml", manifest("aider", "aider-from-mod"))
+	write("mods/off/mod.toml", modToml("off"))
+	write("mods/off/agents/off.toml", manifest("off", "off"))
+	write("agents/aider.toml", manifest("aider", "aider-mine"))
+	write("config.toml", "[mods.pi]\nenabled = true\n")
+	outside := filepath.Join(t.TempDir(), "evil.toml")
+	os.WriteFile(outside, []byte(manifest("evil", "evil")), 0o644)
+	if err := os.Symlink(outside, filepath.Join(root, "mods/pi/agents/evil.toml")); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := Load(filepath.Join(root, "agents"))
+	if err == nil || !strings.Contains(err.Error(), "mod pi: evil.toml: leads out") {
+		t.Fatalf("link out: %v", err)
+	}
+	if _, ok := r.Get("pi"); !ok || !strings.Contains(r.Source["pi"], filepath.Join("mods", "pi", "agents")) {
+		t.Fatalf("pi from the mod: %v", r.Source)
+	}
+	if !strings.HasSuffix(r.Source["aider"], filepath.Join("agents", "aider.toml")) || strings.Contains(r.Source["aider"], "mods") {
+		t.Fatalf("the user's aider: %s", r.Source["aider"])
+	}
+	for _, n := range []string{"off", "evil"} {
+		if _, ok := r.Get(n); ok {
+			t.Fatalf("%s loaded", n)
+		}
+	}
+}

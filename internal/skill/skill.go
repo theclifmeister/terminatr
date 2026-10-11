@@ -8,6 +8,9 @@ import (
 	"embed"
 	"fmt"
 	"strings"
+
+	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/mod"
 )
 
 //go:embed rules/*.md
@@ -42,4 +45,51 @@ func TextWithPolicy(role, version, policy string) (string, bool) {
 		policy = string(body)
 	}
 	return fmt.Sprintf("tm skill %s v%s\n\n%s\n%s\n", role, strings.TrimPrefix(version, "v"), safety, strings.TrimRight(policy, "\n")), true
+}
+
+// Addendum is a mod's rules text for a role: a policy that replaces the
+// built-in one, or house rules added after it.
+type Addendum struct {
+	Mod, Text string
+}
+
+// WithMods is Text with mods' rules (mods design §2 tier 3, §7 "Tighten
+// only"): policy, when it names a mod, replaces the role's policy part
+// under a heading that names it; each addendum follows the built-in
+// text under "## House rules (mod: <id>)". Neither can remove a safety
+// rule: the safety part comes first, always the built-in one.
+func WithMods(role, version string, policy Addendum, addenda []Addendum) (string, bool) {
+	text := ""
+	if policy.Mod != "" {
+		text = fmt.Sprintf("## Policy (mod: %s)\n\n%s", policy.Mod, strings.TrimSpace(policy.Text))
+	}
+	out, ok := TextWithPolicy(role, version, text)
+	if !ok {
+		return "", false
+	}
+	for _, a := range addenda {
+		out += fmt.Sprintf("\n## House rules (mod: %s)\n\n%s\n", a.Mod, strings.TrimSpace(a.Text))
+	}
+	return out, true
+}
+
+// ForProject is the role's rules with the mods' that run for project
+// slug ("" for every enabled mod): Text when no mod adds any, or the
+// mods can't be read.
+func ForProject(role, version, slug string) (string, bool) {
+	cfg, _ := config.Load()
+	r, err := mod.Load(cfg)
+	if err != nil {
+		return Text(role, version)
+	}
+	var policy Addendum
+	p, add, _ := r.Rules(role, slug)
+	if p != nil {
+		policy = Addendum{Mod: p.Mod, Text: p.Text}
+	}
+	addenda := make([]Addendum, len(add))
+	for i, a := range add {
+		addenda[i] = Addendum{Mod: a.Mod, Text: a.Text}
+	}
+	return WithMods(role, version, policy, addenda)
 }
