@@ -50,6 +50,8 @@ const threadUsage = `usage: tm thread <command> [--project <slug>] [--json]
                                  relay the user's answer to a question menu
   ack <id>                       acknowledge the latest report
   stop <id> | restart <id>
+  merge <id>                     merge the thread's PR (merge = coordinator): checks green on
+                                 its head, mergeable, regular merge commit; else a refusal says why
   resolve <id> [--discard]       --discard also removes a worktree with uncommitted changes
                                  and its branch; refused when the branch has unsaved commits
 
@@ -227,6 +229,14 @@ func runThread(e *Env, args []string) error {
 				return usagef("answer with --choice N, --option LABEL or --text T")
 			}
 			return e.threadAnswer(p, id, a)
+		}
+	case "merge":
+		run = func(p *project.Project, pos []string) error {
+			id, err := oneID(pos, "merge <id>")
+			if err != nil {
+				return err
+			}
+			return e.threadMerge(p, id)
 		}
 	case "ack", "stop", "restart", "resolve":
 		discard := new(bool)
