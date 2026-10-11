@@ -211,6 +211,9 @@ type dash struct {
 
 	alerts uint64
 	seen   bool // the first poll arrived (no bell for old alerts)
+	// noticed are the mod notifications the console has seen, so each is
+	// drawn once (modnotice.go).
+	noticed map[string]bool
 	// modsFailed are the mods whose failure the footer has said
 	// (noteModFailures).
 	modsFailed map[string]bool
@@ -578,6 +581,8 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.call(proto.MethodViewSize, proto.ViewParams{Cols: uint16(msg.Width), Rows: uint16(msg.Height), Resize: resize})
 		}
 		return m, nil
+	case noticeBoardMsg:
+		return m, m.noticeBoard(msg)
 	case viewMsg:
 		return m, m.fromView()
 	case feedMsg:
@@ -930,6 +935,7 @@ func (m *dash) setData(d Data) tea.Cmd {
 	m.data, m.loaded = d, true
 	m.rebuild()
 	m.noteModFailures()
+	noticeCmds := m.drawNotices()
 	ring := false
 	if d.ServerOK {
 		ring = m.seen && d.Alerts > m.alerts
@@ -939,6 +945,7 @@ func (m *dash) setData(d Data) tea.Cmd {
 	if ring {
 		cmds = append(cmds, tea.Raw("\a"))
 	}
+	cmds = append(cmds, noticeCmds...)
 	switch {
 	case first && m.then == "t" && m.over != nil && m.over.Task > 0:
 		// The info panel's task, over its session: in the popup's
@@ -1034,6 +1041,10 @@ func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 		return o.key(m, k)
 	}
 	if m.busy {
+		return nil
+	}
+	if k.String() == "N" && len(m.data.ModNotices) > 0 {
+		m.openNotices()
 		return nil
 	}
 	switch m.area() {

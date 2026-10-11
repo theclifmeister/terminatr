@@ -133,7 +133,7 @@ func TestModBroker(t *testing.T) {
 // tasks (Broker.Handle): drop each from here when its handler lands.
 var modPending = map[string]bool{
 	"ui.cell.set": true, "ui.status.set": true, "ui.toast": true,
-	"ui.view.set": true, "ui.view.open": true, "ui.notify": true,
+	"ui.view.set": true, "ui.view.open": true,
 	"actions.list": true, "actions.available": true,
 }
 
