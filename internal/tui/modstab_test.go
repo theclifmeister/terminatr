@@ -6,11 +6,13 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // The fake's mod calls are the real ones, as the human, on the test's
@@ -34,6 +36,11 @@ func (f *fakeSource) ReplaceMod(id string, st *mod.Staged, grant []string) error
 }
 func (f *fakeSource) ModLog(id string, max int64) (string, bool, error) {
 	return f.human().ModLog(id, max)
+}
+
+func (f *fakeSource) RestartMod(id string) error {
+	f.restarted = append(f.restarted, id)
+	return nil
 }
 
 // loadMods lists the installed mods into f's data, as ServerSource.Load.
@@ -285,7 +292,7 @@ func TestModsFailure(t *testing.T) {
 	press(m, "enter")
 	modAct(m, src, "y")
 	m.msg = ""
-	src.data.ModFailures = map[string]string{"review-age": "401 from api.example.com"}
+	src.data.ModHosts = map[string]proto.ModHost{"review-age": {ID: "review-age", State: "failed", Err: "401 from api.example.com"}}
 	m.setData(src.data)
 	if m.msg != "mod Review age failed · , then 3 for details" {
 		t.Errorf("footer: %q", m.msg)
@@ -302,7 +309,7 @@ func TestModsFailure(t *testing.T) {
 		}
 	}
 
-	src.data.ModFailures = nil
+	src.data.ModHosts = nil
 	for i := range src.data.Mods {
 		src.data.Mods[i].Builtin = src.data.Mods[i].ID == "nord"
 	}
@@ -324,6 +331,71 @@ func TestModsFailure(t *testing.T) {
 	modAct(m, src, "y")
 	if slices.ContainsFunc(src.data.Mods, func(md mod.Mod) bool { return md.ID == "future" }) {
 		t.Errorf("x, y didn't remove it: %v", src.data.Mods)
+	}
+}
+
+// TestModsHostStates: an enabled code mod is marked by its host's
+// state (mods design §8): running ● with its pid and memory in the
+// details, starting ◌, idle ● waiting for its first event, backoff ▲
+// restarting in so many seconds, failed ▲; a data mod is unchanged. r
+// restarts a code mod that is on, and refuses a data mod and an off one.
+func TestModsHostStates(t *testing.T) {
+	src, m := modsDash(t)
+	selectMod(t, m, "review-age")
+	press(m, "enter")
+	modAct(m, src, "y")
+	selectMod(t, m, "nord")
+	press(m, "enter")
+	modAct(m, src, "y")
+	host := func(h proto.ModHost) {
+		h.ID = "review-age"
+		src.data.ModHosts = map[string]proto.ModHost{"review-age": h, "nord": {ID: "nord", State: "failed", Err: "never"}}
+		m.msg = ""
+		m.setData(src.data)
+		selectMod(t, m, "review-age")
+	}
+	for _, c := range []struct {
+		name string
+		h    proto.ModHost
+		want []string
+	}{
+		{"running", proto.ModHost{State: "running", PID: 4242, RSS: 42_000_000, Restarts: 1}, []string{"● Review age", "Runs as pid 4242, using 42", "restarted 1×"}},
+		{"starting", proto.ModHost{State: "starting"}, []string{"◌ Review age", "Starting: its host loads its script."}},
+		{"idle", proto.ModHost{State: "idle"}, []string{"● Review age", "waits for its first event", "Waits for its first event: its host starts then."}},
+		{"backoff", proto.ModHost{State: "backoff", Next: time.Now().Add(4500 * time.Millisecond), Err: "exit status 1"}, []string{"▲ Review age", "restarting in 5s: exit status 1", "r restarts it now"}},
+		{"failed", proto.ModHost{State: "failed", Err: "crashed 3 times in 5m"}, []string{"▲ Review age", "failed: crashed 3 times in 5m", "r restarts it; l shows its log"}},
+	} {
+		host(c.h)
+		out := screen(m)
+		for _, want := range c.want {
+			if !strings.Contains(out, want) {
+				t.Errorf("%s lacks %q:\n%s", c.name, want, out)
+			}
+		}
+		if strings.Contains(out, "▲ Nord") || strings.Contains(out, "failed: never") {
+			t.Errorf("%s: a data mod took a host's state:\n%s", c.name, out)
+		}
+		if note := strings.Contains(m.msg, "failed"); note != (c.name == "failed") {
+			t.Errorf("%s: footer %q", c.name, m.msg)
+		}
+	}
+
+	run(m, keyPress(m, "r"))
+	if !slices.Equal(src.restarted, []string{"review-age"}) || m.msg != "restarted Review age" {
+		t.Errorf("r: restarted %v, %q", src.restarted, m.msg)
+	}
+	selectMod(t, m, "nord")
+	m.msg = ""
+	run(m, keyPress(m, "r"))
+	if len(src.restarted) != 1 || !strings.Contains(m.msg, "no code to restart") {
+		t.Errorf("r on a data mod: restarted %v, %q", src.restarted, m.msg)
+	}
+	selectMod(t, m, "review-age")
+	modAct(m, src, "enter")
+	m.msg = ""
+	run(m, keyPress(m, "r"))
+	if len(src.restarted) != 1 || !strings.Contains(m.msg, "is off") {
+		t.Errorf("r on an off mod: restarted %v, %q", src.restarted, m.msg)
 	}
 }
 
