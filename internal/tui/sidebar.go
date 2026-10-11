@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"slices"
@@ -77,6 +78,8 @@ type treeRow struct {
 	// blocked or waits on you.
 	hint    bool
 	ci      string // a thread: its PR's checks, pass, fail or pending; "" for none
+	pr      int    // a thread: its PR's number, 0 for none
+	asks    int    // a coordinator row: its questions waiting
 	remote  bool   // a coordinator row: its remote control is on
 	ctx     int    // a coordinator row: its context window's use in percent, -1 for unknown
 	ctxHint bool   // a coordinator row: ctx reached [ui] context_hint
@@ -201,14 +204,14 @@ func buildTree(ps []ProjectData, sessions []proto.SessionInfo, in treeIn) []tree
 			tr := treeRow{kind: treeThread, slug: p.Slug, thread: t.ID, name: threadName(t.Task, t.ID), title: oneLine(t.Title), pct: -1}
 			tr.state, _, tr.session = threadState(t, byID)
 			tr.pct = t.Status.Progress().Percent
-			tr.ci = t.Checks
+			tr.ci, tr.pr = t.Checks, t.PR
 			tr.hint = tr.state == "blocked" || tr.state == "review" || t.Status != nil && t.Status.NeedsYou != ""
 			pr.hint = pr.hint || tr.hint
 			kids = append(kids, tr)
 		}
 		// The threads hang under the coordinator, the project's only child.
 		coord := treeRow{kind: treeCoordinator, slug: p.Slug, session: pr.session, state: pr.state, remote: remote, pct: -1, last: true,
-			hint: p.Questions > 0, ctx: ctx, ctxHint: ctx >= 0 && in.ctxHint > 0 && ctx >= in.ctxHint}
+			hint: p.Questions > 0, asks: p.Questions, ctx: ctx, ctxHint: ctx >= 0 && in.ctxHint > 0 && ctx >= in.ctxHint}
 		if len(kids) > 0 {
 			kids[len(kids)-1].last = true
 		}
@@ -276,7 +279,8 @@ func sideTop(rows []treeRow, h int) int {
 }
 
 // sidebarLines draws the sidebar w columns wide (its border included) and
-// h rows tall: a header with the count of projects, then the tree. While
+// h rows tall: a header with the count of projects, then the tree, then
+// the footer's lines (sideFooter) at the bottom. While
 // it has the keyboard focus (a row is the cursor) its border is in the
 // accent colour and the cursor's row is highlighted instead of the one
 // you are on.
@@ -325,7 +329,7 @@ func sidebarLines(all []treeRow, w, h int, foot []string) []string {
 	}
 	out = out[:h]
 	for _, f := range foot {
-		out = append(out, styleFaint.Render(fit(" "+f, cw-gap))+strings.Repeat(" ", gap)+reset+border)
+		out = append(out, fit(f, cw-gap)+reset+strings.Repeat(" ", gap)+border)
 	}
 	return out
 }
@@ -791,7 +795,7 @@ func loadSideProjects(paths server.Paths) []ProjectData {
 				if r.State == thread.Resolved {
 					continue
 				}
-				tr := ThreadRow{Record: r, Checks: prs[r.ID].Checks}
+				tr := ThreadRow{Record: r, Checks: prs[r.ID].Checks, PR: prs[r.ID].Number}
 				tr.Status, _ = thread.ReadStatus(p, r.ID)
 				pd.Threads = append(pd.Threads, tr)
 			}
@@ -1056,7 +1060,8 @@ func (c *client) setActive(slug string, on bool) {
 
 // appendSidebar draws the sidebar's changed lines. c.mu held.
 func (c *client) appendSidebar(b []byte, wrote bool) ([]byte, bool) {
-	lines := sidebarLines(c.sideTree(), c.sideW, c.rows, sideFoot(c.side.server, c.sideW-1))
+	rows := c.sideTree()
+	lines := sidebarLines(rows, c.sideW, c.rows, sideFooter(rows, c.sideW, c.side.server, true))
 	for y, l := range lines {
 		if y < len(c.side.drawn) && c.side.drawn[y] == l {
 			continue
@@ -1340,6 +1345,154 @@ func enterStep(r treeRow) sideStep {
 
 // sideHint is the hint while the sidebar has the keyboard focus.
 const sideHint = "sidebar: ↑ ↓ move · → ← in/out · enter open · esc back"
+
+// sideFooter is the full sidebar's footer, below its tree (docs/SPEC.md
+// §4): a faint rule, two lines about the highlighted row (the cursor's
+// while the sidebar has the keyboard, else the one you are on; details),
+// its key bar (sideKeyBar), and the hint that an update is out when
+// there is one. session: drawn beside a session, where prefix+tab gives
+// the sidebar the keyboard (tab on the dashboard). None in the slim
+// strip. Each line is w-1-sideGap cells wide, styled.
+func sideFooter(all []treeRow, w int, s ServerInfo, session bool) []string {
+	cw := w - 1 - sideGap
+	if w <= sideSlim || cw < 4 {
+		return nil
+	}
+	var r *treeRow
+	focused := false
+	for i := range all {
+		if all[i].cursor {
+			r, focused = &all[i], true
+			break
+		}
+		if all[i].here && r == nil {
+			r = &all[i]
+		}
+	}
+	d1, d2 := "", ""
+	if r != nil {
+		d1, d2 = r.details()
+	}
+	out := []string{
+		styleFaint.Render(" " + strings.Repeat("─", cw-1)),
+		styleHead.Render(fit(" "+d1, cw)),
+		styleFaint.Render(fit(" "+d2, cw)),
+		sideKeyBar(r, focused, session, cw),
+	}
+	if h := versionHint(s); h != "" {
+		if ansi.StringWidth(h) > cw-1 {
+			h = versionHintShort(s)
+		}
+		out = append(out, styleFaint.Render(fit(" "+h, cw)))
+	}
+	return out
+}
+
+// details are the footer's two lines about r: its full name and state,
+// then what goes with it (the coordinator's context, a thread's
+// progress, its PR's number and checks).
+func (r treeRow) details() (string, string) {
+	running := func(state string) string { return cmp.Or(state, "not running") }
+	switch r.kind {
+	case treeProject:
+		bits := []string{r.slug, "active"}
+		if r.inactive {
+			bits[1] = "inactive"
+		}
+		if r.paused {
+			bits = append(bits, "paused")
+		}
+		if r.inactive {
+			return strings.Join(bits, " · "), "previewing it starts nothing"
+		}
+		return strings.Join(bits, " · "), fmt.Sprintf("%s · coordinator %s", counted(r.threads, "thread"), running(r.state))
+	case treeCoordinator:
+		if r.dormant {
+			return r.slug + " coordinator · dormant", "enter starts it and activates " + r.slug
+		}
+		var bits []string
+		if r.ctx >= 0 {
+			bits = append(bits, fmt.Sprintf("context %d%%", r.ctx))
+		}
+		if r.remote {
+			bits = append(bits, "remote control on")
+		}
+		if r.asks > 0 {
+			bits = append(bits, counted(r.asks, "question")+" waiting")
+		}
+		if r.state == "" {
+			bits = append(bits, "enter starts it")
+		}
+		return r.slug + " coordinator · " + running(r.state), strings.Join(bits, " · ")
+	}
+	l1 := r.thread + " · ad hoc"
+	switch {
+	case r.name != r.thread:
+		l1 = strings.TrimSpace(r.name+" "+r.title) + " (" + r.thread + ")"
+	case r.title != "":
+		l1 = r.thread + " " + r.title
+	}
+	bits := []string{running(r.state)}
+	if r.dormant {
+		bits[0] = "dormant"
+	}
+	if r.pct >= 0 {
+		bits = append(bits, fmt.Sprintf("%d%%", r.pct))
+	}
+	if r.pr > 0 {
+		bits = append(bits, fmt.Sprintf("PR #%d", r.pr))
+		if w := map[string]string{"pass": "passes", "fail": "fails", "pending": "running"}[r.ci]; w != "" {
+			bits = append(bits, "CI "+w)
+		}
+	}
+	return l1, strings.Join(bits, " · ")
+}
+
+// counted is "1 thread", "2 threads".
+func counted(n int, word string) string {
+	if n == 1 {
+		return "1 " + word
+	}
+	return fmt.Sprintf("%d %ss", n, word)
+}
+
+// sideKeyBar is the footer's key bar, cw cells wide: the keys that do
+// something on r while the sidebar has the keyboard (focused), else the
+// way to give it the keyboard. "? help" gives way first when they don't
+// fit.
+func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
+	var keys []string
+	switch {
+	case !focused && session:
+		keys = []string{"prefix+tab sidebar", "prefix+? help"}
+	case !focused:
+		keys = []string{"tab sidebar", "? help"}
+	case r == nil:
+	case r.kind == treeProject && r.inactive:
+		in := "→ unfold"
+		if !r.folded() {
+			in = "← fold"
+		}
+		keys = []string{"⏎ open", in, "␣ activate"}
+	case r.kind == treeProject:
+		keys = []string{"⏎ open", "␣ deactivate"}
+	case r.kind == treeCoordinator && r.dormant:
+		keys = []string{"⏎ start", "← project"}
+	case r.kind == treeCoordinator && r.state == "":
+		keys = []string{"⏎ start", "← project"}
+	case r.kind == treeCoordinator, r.session != "":
+		keys = []string{"⏎ attach", "← project"}
+	default:
+		keys = []string{"← project"}
+	}
+	if focused {
+		keys = append(keys, "? help")
+	}
+	for len(keys) > 1 && ansi.StringWidth(" "+strings.Join(keys, " · ")) > cw {
+		keys = keys[:len(keys)-1]
+	}
+	return fit(" "+keysLine(strings.Join(keys, " · ")), cw)
+}
 
 // pctCol is the width of the grid's count/% column: "100% ".
 const pctCol = 5

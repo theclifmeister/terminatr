@@ -907,22 +907,29 @@ func TestVersionHint(t *testing.T) {
 	if v := serverVersion(own); strings.Contains(v, "(tm") {
 		t.Errorf("footer for the same version: %q", v)
 	}
-	if f := sideFoot(other, 31); len(f) != 2 || f[1] != versionHintShort(other) {
+	last := func(w int, s ServerInfo) string {
+		f := sideFooter(nil, w, s, false)
+		if len(f) == 0 {
+			return ""
+		}
+		return strings.TrimSpace(ansi.Strip(f[len(f)-1]))
+	}
+	if f := last(32, other); f != versionHintShort(other) {
 		t.Errorf("narrow footer %q", f)
 	}
-	if f := sideFoot(other, 120); len(f) != 2 || f[1] != versionHint(other) {
+	if f := last(130, other); f != versionHint(other) {
 		t.Errorf("wide footer %q", f)
 	}
-	if f := sideFoot(other, sideSlim); f != nil {
+	if f := sideFooter(nil, sideSlim, other, false); f != nil {
 		t.Errorf("slim footer %q", f)
 	}
-	if f := sideFoot(ServerInfo{}, 31); f != nil {
-		t.Errorf("old server footer %q", f)
+	if f := sideFooter(nil, 32, ServerInfo{}, false); len(f) != 4 {
+		t.Errorf("footer without a hint %q", f)
 	}
 }
 
-// The version is in the sidebar's last lines, not the header; settings
-// say it in an About line.
+// The version is in the help and the ≡ menu's title, not the header or
+// the sidebar; settings say it in an About line.
 func TestVersionPlaces(t *testing.T) {
 	src := &fakeSource{data: testData()}
 	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 30, State: DashState{Current: "beta"}})
@@ -934,9 +941,19 @@ func TestVersionPlaces(t *testing.T) {
 	if strings.Contains(lines[0], "v9.9.9") || !strings.Contains(lines[0], "server ok") {
 		t.Errorf("header %q", lines[0])
 	}
-	if last := lines[len(lines)-1]; !strings.Contains(last, "v9.9.9") {
-		t.Errorf("sidebar footer %q", last)
+	if strings.Contains(whole(m), "v9.9.9") {
+		t.Errorf("the version shows:\n%s", whole(m))
 	}
+	keyPress(m, "?")
+	if s := whole(m); !strings.Contains(s, "terminatr v9.9.9") {
+		t.Errorf("help:\n%s", s)
+	}
+	keyPress(m, "esc")
+	m.openMenu(versionTitle(m.data.Server), m.dashItems(), 0, m.bodyRows())
+	if s := whole(m); !strings.Contains(s, "terminatr v9.9.9") {
+		t.Errorf("menu:\n%s", s)
+	}
+	m.stack = nil
 	m.openSettings()
 	if s := ansi.Strip(whole(m)); !strings.Contains(s, "About: tm "+version.Version+" · server v9.9.9 · update check on") {
 		t.Errorf("settings:\n%s", s)

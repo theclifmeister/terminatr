@@ -103,8 +103,10 @@ type ThreadRow struct {
 	Report  *thread.Report
 	TaskRec *tasks.Task
 	// Checks are its pull request's checks as the ticker last saw them:
-	// pass, fail or pending; "" without a PR or checks.
+	// pass, fail or pending; "" without a PR or checks. PR is its
+	// number, 0 for none.
 	Checks string
+	PR     int
 }
 
 // Source is the dashboard's view of the world; tests use a fake. It
@@ -298,7 +300,7 @@ func (s *ServerSource) Load() Data {
 				tr := ThreadRow{Record: r}
 				tr.Status, _ = thread.ReadStatus(p, r.ID)
 				tr.Report, _ = thread.ReadReport(p, r.ID)
-				tr.Checks = prs[r.ID].Checks
+				tr.Checks, tr.PR = prs[r.ID].Checks, prs[r.ID].Number
 				if b != nil && r.TaskID() > 0 {
 					tr.TaskRec = b.Find(r.TaskID())
 				}

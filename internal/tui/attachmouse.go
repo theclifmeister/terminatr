@@ -62,7 +62,7 @@ func (c *client) command(name string) {
 		return
 	case "menu":
 		if c.lock() {
-			c.openMenu("", c.sessionItems(), c.sideW, c.rows-1, true)
+			c.openMenu(c.menuTitle(), c.sessionItems(), c.sideW, c.rows-1, true)
 			c.mu.Unlock()
 			c.poke()
 		}
@@ -282,6 +282,14 @@ func (c *client) menuMouse(m emu.Mouse) {
 	c.poke()
 }
 
+// menuTitle is the ≡ menu's title: the server's version. c.mu held.
+func (c *client) menuTitle() string {
+	if c.side == nil {
+		return ""
+	}
+	return versionTitle(c.side.server)
+}
+
 // sessionItems are the ≡ menu's items for the focused pane: the prefix
 // commands, less those that don't apply (the dashboard's in a bare view,
 // remote control off a coordinator).
@@ -391,7 +399,7 @@ func (c *client) statusMouse(m emu.Mouse) {
 	}
 	switch m.Button {
 	case emu.MouseRight:
-		c.openMenu("", c.sessionItems(), m.X, c.rows-1, true)
+		c.openMenu(c.menuTitle(), c.sessionItems(), m.X, c.rows-1, true)
 	case emu.MouseLeft:
 		if key := hintAt(c.statusHits, m.X-c.sideW); key != "" {
 			c.mu.Unlock()

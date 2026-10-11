@@ -246,7 +246,7 @@ func (m *dash) hintClick(x int) tea.Cmd {
 	switch key := hintAt(hints(m.shownKeys, 1), x); key {
 	case "":
 	case menuButton:
-		m.openMenu("", m.dashItems(), x, m.bodyRows())
+		m.openMenu(versionTitle(m.data.Server), m.dashItems(), x, m.bodyRows())
 	default:
 		return m.pressKey(key)
 	}
@@ -347,7 +347,7 @@ func (m *dash) rowMenu(x, y int) tea.Cmd {
 	key := m.rowAt(x, y)
 	if key == "" {
 		if y >= 1 && y <= m.bodyRows() {
-			m.openMenu("", m.dashItems(), x, y-1)
+			m.openMenu(versionTitle(m.data.Server), m.dashItems(), x, y-1)
 		}
 		return nil
 	}

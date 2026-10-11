@@ -1444,7 +1444,7 @@ func (c *client) mouse(ev uv.Event) {
 		// tm's: the program doesn't take the mouse. A left drag selects.
 		switch {
 		case press && m.Button == emu.MouseRight:
-			c.openMenu("", c.sessionItems(), m.X, m.Y, false)
+			c.openMenu(c.menuTitle(), c.sessionItems(), m.X, m.Y, false)
 		case m.Button == emu.MouseLeft:
 			c.selMouse(p, m)
 		}

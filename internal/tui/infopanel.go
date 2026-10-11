@@ -649,7 +649,7 @@ func (c *client) infoMouse(m emu.Mouse) {
 		c.mu.Unlock()
 		return
 	case m.Button == emu.MouseRight:
-		c.openMenu("", c.sessionItems(), m.X, m.Y, false)
+		c.openMenu(c.menuTitle(), c.sessionItems(), m.X, m.Y, false)
 		c.mu.Unlock()
 		c.poke()
 		return
