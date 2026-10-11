@@ -1343,9 +1343,6 @@ func enterStep(r treeRow) sideStep {
 	return sideStep{target: &t, here: r.here, into: true}
 }
 
-// sideHint is the hint while the sidebar has the keyboard focus.
-const sideHint = "sidebar: ↑ ↓ move · → ← in/out · enter open · esc back"
-
 // sideFooter is the full sidebar's footer, below its tree (docs/SPEC.md
 // §4): a faint rule, two lines about the highlighted row (the cursor's
 // while the sidebar has the keyboard, else the one you are on; details),

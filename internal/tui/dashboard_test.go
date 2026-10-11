@@ -24,7 +24,7 @@ import (
 
 // statusLine is statusBar's line, without its buttons.
 func statusLine(s proto.SessionInfo, ts *thread.Status, pending bool, cols int, where string) string {
-	line, _ := statusBar(s, ts, pending, cols, where)
+	line, _ := statusBar(s, ts, "", pending, cols, where)
 	return line
 }
 
@@ -451,25 +451,42 @@ func hasBell(cmd tea.Cmd) bool {
 	return false
 }
 
+// TestStatusLine: bar B, unfilled. Left the state glyph, project ›
+// pane, the progress and the note; right the global keys. As it
+// narrows, the step gives way, then the bar, then the preview note
+// shrinks; the percent stays. After the prefix: the commands.
 func TestStatusLine(t *testing.T) {
-	info := proto.SessionInfo{ID: "s-4", Role: proto.RoleCoordinator, Project: "terminatr", Agent: "claude",
+	info := proto.SessionInfo{ID: "s-4", Role: proto.RoleThread, Project: "terminatr", Agent: "claude", Thread: "t-0216", Task: "T232",
 		State: "working", TodosDone: 2, TodosTotal: 5, Current: "Write §8"}
-	got := statusLine(info, nil, false, 100, "")
-	want := "\x1b[7m terminatr coordinator · working 40% 2/5 ▸ Write §8 · s-4"
-	if !strings.HasPrefix(got, want) || !strings.HasSuffix(got, ` ≡ menu · prefix+d dashboard `+"\x1b[27m") {
+	line, _ := statusBar(info, nil, "Sidebar rework", false, 140, previewNote)
+	got := ansi.Strip(line)
+	want := " " + ic().working + " terminatr › T232 Sidebar rework  40% " + bar(40) + " 2/5 ▸ Write §8 · " + previewNote
+	if !strings.HasPrefix(got, want) || !strings.HasSuffix(got, " prefix+? help · prefix+d dashboard · ≡ menu ") {
 		t.Fatalf("status line %q", got)
 	}
-	if w := len([]rune(strings.TrimSuffix(strings.TrimPrefix(got, "\x1b[7m"), "\x1b[27m"))); w != 100 {
-		t.Fatalf("status line is %d cells, want 100", w)
+	if strings.Contains(line, "\x1b[7m") {
+		t.Fatalf("status line in reverse video: %q", line)
 	}
-	// No window buttons: split panes and zoom are gone.
-	for _, b := range []string{"│", "─", "⤢", "×"} {
-		if strings.Contains(got, b) {
-			t.Fatalf("status line has %q: %q", b, got)
+	if w := ansi.StringWidth(line); w != 140 {
+		t.Fatalf("status line is %d cells, want 140", w)
+	}
+	for cols, tail := range map[int]string{
+		120: "40% " + bar(40) + " · " + previewNote,
+		112: "40% · " + previewNote,
+		105: "40% " + bar(40) + " · preview",
+		95:  "40% · preview",
+	} {
+		line, _ := statusBar(info, nil, "Sidebar rework", false, cols, previewNote)
+		if got := ansi.Strip(line); !strings.Contains(got, "T232 Sidebar rework  "+tail+" ") {
+			t.Errorf("%d columns: %q, want …%q", cols, got, tail)
 		}
 	}
+	line, _ = statusBar(info, nil, "Sidebar rework", false, 85, previewNote)
+	if got := ansi.Strip(line); !strings.Contains(got, " terminatr › T232 Sid…  40% · preview ") {
+		t.Errorf("85 columns: %q", got)
+	}
 	// After the prefix: the commands.
-	got = statusLine(info, nil, true, 160, "")
+	got = ansi.Strip(statusLine(info, nil, true, 160, ""))
 	if !strings.Contains(got, `d dashboard · q quit · a project · n new · p ] [ projects · i t , ? · { } b sidebar · | info · tab sidebar keys`) || !strings.Contains(got, `prefix again sends it`) {
 		t.Fatalf("pending status line %q", got)
 	}

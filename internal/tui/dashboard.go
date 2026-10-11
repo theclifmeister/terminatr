@@ -1285,7 +1285,8 @@ func (m *dash) frame(title string, body []string, sel int, keys string) string {
 	case m.prefixed:
 		keys = prefixHint
 	case m.focus == areaSide && m.top() == nil:
-		keys = sideHint + " · tab next"
+		// The sidebar's own keys are in its key bar.
+		keys = "esc back to the list · tab next area"
 	case m.area() == areaDetails && m.top() == nil:
 		keys = "details: ↑ ↓ scroll · esc back · tab next"
 	}

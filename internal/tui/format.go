@@ -171,73 +171,160 @@ func fit(s string, w int) string {
 // pendingHead starts the status bar's list of commands after the prefix.
 const pendingHead = " prefix ▸ "
 
-// statusBar is the attach status bar (docs/SPEC.md §4): session,
-// project, state, progress, a note on the pane (where: the sidebar's keys,
-// a flash) and "prefix+d dashboard", in reverse video. After the
-// prefix it lists the commands instead. Hints never show the prefix's
-// key, which is configurable: only the help and the settings do. It
-// returns the line and its buttons, by column: after the prefix each
-// command; else the ≡ menu and "prefix+d dashboard".
-func statusBar(s proto.SessionInfo, ts *thread.Status, pending bool, cols int, where string) (string, []hint) {
-	// The session, its state, then what the keyboard does when it is
-	// away from the pane. A project's session is named by its project
-	// and role, its id last: a handle, not news; one of the user's own
-	// has only its id and command to go by, id first.
-	var parts []string
-	id := ""
+// pendingList are the prefix commands, as the status bar lists them
+// after the prefix.
+const pendingList = `d dashboard · q quit · a project · n new · p ] [ projects · i t , ? · { } b sidebar · | info · tab sidebar keys · r remote control`
+
+// The status bar's notes while the sidebar's cursor previews a row:
+// waiting for it to rest (previewDelay), then showing it; previewShort
+// is what previewNote shrinks to.
+const (
+	previewWait  = "preview…"
+	previewNote  = "preview · ⏎ to type here"
+	previewShort = "preview"
+)
+
+// statusRight is the status bar's right end: the global keys.
+const statusRight = "prefix+? help · prefix+d dashboard · " + menuButton + " menu "
+
+// statusBar is the attach status bar (docs/SPEC.md §4): under a faint
+// rule (the caller's), with no fill and muted. Left, where you are: the
+// session's state glyph, project › pane (a thread's task and title, the
+// coordinator, else the session's id and command), its progress (the
+// percent, a bar, the step) and the rest worth a glance (why it is
+// blocked, queued prompts, remote control, a model on next start), then
+// where: what the keyboard does away from the pane (the sidebar's
+// preview note, the info panel's keys) or a note in passing. Right, the
+// global keys: prefix+? help · prefix+d dashboard · ≡ menu. After the
+// prefix it lists the commands instead, and "prefix again sends it".
+//
+// When the left side doesn't fit, the step and the rest give way first,
+// then the bar, then the preview note shrinks to "preview", then the
+// title is cut; the percent stays. Hints never show the prefix's key,
+// which is configurable: only the help and the settings do. It returns
+// the line, cols cells wide, and its buttons, by column: after the
+// prefix each command; else ?, d and the ≡ menu.
+func statusBar(s proto.SessionInfo, ts *thread.Status, title string, pending bool, cols int, where string) (string, []hint) {
+	if pending {
+		right := "prefix again sends it "
+		w := cols - ansi.StringWidth(right) - 1
+		left := styleFaint.Render(pendingHead) + keysLine(pendingList)
+		if w < 1 {
+			return fit(left, cols), nil
+		}
+		hs := hints(pendingList, ansi.StringWidth(pendingHead))
+		hs = slices.DeleteFunc(hs, func(h hint) bool { return h.x1 > w-1 })
+		hs = append(hs, hint{w + 1, w + 1 + 21, "prefix"})
+		return fit(left, w) + reset + " " + styleFaint.Render(right), hs
+	}
+	right := keysLine(strings.TrimSuffix(statusRight, " ")) + " "
+	rw := ansi.StringWidth(statusRight)
+	g, gst := stateLook(stateWord(s))
+	if g == "" {
+		g, gst = ic().none, styleFaint
+	}
+	path := s.ID + " › " + sessionName(s)
 	if s.Project != "" {
-		parts = append(parts, s.Project+" "+sessionName(s))
-		id = s.ID
-	} else {
-		parts = append(parts, s.ID, sessionName(s))
+		pane := sessionName(s)
+		if s.Role == proto.RoleThread && title != "" {
+			pane += " " + oneLine(title)
+		}
+		path = s.Project + " › " + pane
 	}
-	st := stateWord(s)
-	if p := progress(s, ts); p != "" {
-		st += " " + p
+	// The progress, from the most to the least: the percent always
+	// stays.
+	pr := sessionProgress(s)
+	cur := s.Current
+	if ts != nil {
+		pr, cur = ts.Progress(), ts.Current
 	}
-	parts = append(parts, st)
+	var pct, step string
+	var rest []string
+	if pr.Percent >= 0 {
+		pct = fmt.Sprintf("%d%%", pr.Percent)
+	} else if c := s.ContextPercent(); s.Role == proto.RoleCoordinator && c >= 0 {
+		pct = fmt.Sprintf("context %d%%", c)
+	}
+	if pr.Total > 0 {
+		step = fmt.Sprintf("%d/%d", pr.Done, pr.Total)
+	}
+	if cur != "" {
+		step = strings.TrimSpace(step + " ▸ " + oneLine(cur))
+	}
+	if s.State == "blocked" && s.Reason != "" {
+		rest = append(rest, blockReason(s))
+	}
+	if s.Queued > 0 {
+		q := fmt.Sprintf("%d queued", s.Queued)
+		if s.QueueNote(time.Now()) != "" {
+			q += " (held)"
+		}
+		rest = append(rest, q)
+	}
 	if s.RemoteControl {
-		parts = append(parts, "remote control on")
+		rest = append(rest, "remote control on")
 	}
 	if s.ModelPending {
 		// The coordinator's agent can't switch models live (§8.2).
-		parts = append(parts, modelWord(s.ModelNext)+" on next start")
+		rest = append(rest, modelWord(s.ModelNext)+" on next start")
 	}
-	if where != "" {
-		parts = append(parts, where)
+	join := func(parts ...string) string {
+		var out []string
+		for _, p := range parts {
+			if p != "" {
+				out = append(out, p)
+			}
+		}
+		return strings.Join(out, " ")
 	}
-	if id != "" && where == "" {
-		// A note in passing takes the id's place.
-		parts = append(parts, id)
+	barW := ""
+	if pr.Percent >= 0 {
+		barW = bar(pr.Percent)
 	}
-	left := " " + strings.Join(parts, " · ")
-	if pending {
-		left = pendingHead + `d dashboard · q quit · a project · n new · p ] [ projects · i t , ? · { } b sidebar · | info · tab sidebar keys · r remote control`
+	progs := []string{join(pct, barW, step, strings.Join(rest, " · ")), join(pct, barW), pct}
+	wheres := []string{where}
+	if where == previewNote {
+		wheres = append(wheres, previewShort)
 	}
-	right, rh := statusRight(pending)
-	w := cols - ansi.StringWidth(right) - 1
+	tail := func(pg, wh string) string {
+		switch {
+		case pg == "":
+			return wh
+		case wh == "":
+			return pg
+		}
+		return pg + " · " + wh
+	}
+	room := cols - rw - 2 - 3 // a gap of two, the margin and the glyph
+	t := ""
+	fits := false
+	for _, wh := range wheres {
+		for _, pg := range progs {
+			t = tail(pg, wh)
+			if ansi.StringWidth(path)+2+ansi.StringWidth(t) <= room {
+				fits = true
+				break
+			}
+		}
+		if fits {
+			break
+		}
+	}
+	if !fits {
+		// The title gives way, down to nothing; then the tail is cut.
+		t = tail(pct, wheres[len(wheres)-1])
+		path = strings.TrimRight(fit(path, max(room-2-ansi.StringWidth(t), 0)), " ")
+	}
+	left := " " + gst.Render(g) + " " + styleHead.Render(path)
+	if t != "" {
+		left += "  " + styleFaint.Render(t)
+	}
+	w := cols - rw
 	if w < 1 {
-		return "\x1b[7m" + fit(left, cols) + "\x1b[27m", nil
+		return fit(left, cols), nil
 	}
-	var hs []hint
-	if pending {
-		hs = hints(strings.TrimPrefix(left, pendingHead), ansi.StringWidth(pendingHead))
-	}
-	// Only what shows: the left part is cut at w.
-	hs = slices.DeleteFunc(hs, func(h hint) bool { return h.x1 > w-1 })
-	for _, h := range rh {
-		hs = append(hs, hint{h.x0 + w + 1, h.x1 + w + 1, h.key})
-	}
-	return "\x1b[7m" + fit(left, w) + " " + right + "\x1b[27m", hs
-}
-
-// statusRight is the status bar's right end and its buttons: the ≡ menu
-// and "prefix+d dashboard", or after the prefix "prefix again sends it".
-func statusRight(pending bool) (string, []hint) {
-	if pending {
-		return "prefix again sends it ", []hint{{0, 21, "prefix"}}
-	}
-	return menuButton + " menu · prefix+d dashboard ", []hint{{0, 6, "menu"}, {9, 9 + len("prefix+d dashboard"), "d"}}
+	hs := []hint{{w, w + 13, "?"}, {w + 16, w + 34, "d"}, {w + 37, w + 43, "menu"}}
+	return fit(left, w) + reset + right, hs
 }
 
 // sessionProgress is a session's progress from its own todos.

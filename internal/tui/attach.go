@@ -1299,19 +1299,41 @@ func (c *client) status() {
 	}
 	where := ""
 	switch {
+	case c.kb == areaSide && c.previewing:
+		where = previewWait
 	case c.kb == areaSide:
-		where = sideHint
+		where = previewNote
 	case c.kb == areaInfo:
 		where = c.infoHintNow()
 	}
 	if c.flash != "" {
-		where = strings.TrimPrefix(where+" · "+c.flash, " · ")
+		where = c.flash // a note in passing
 	}
-	line, hits := statusBar(c.focus.info, c.focus.status, c.pending, c.cols-c.sideW, where)
+	line, hits := statusBar(c.focus.info, c.focus.status, c.paneTitle(), c.pending, c.cols-c.sideW, where)
 	if c.single {
 		c.focus.r.SetStatus(line)
 	}
 	c.statusText, c.statusHits = line, hits
+}
+
+// paneTitle is the title of the focused pane's thread, from the
+// sidebar's projects; "" for none. c.mu held.
+func (c *client) paneTitle() string {
+	in := c.focus.info
+	if c.side == nil || in.Thread == "" {
+		return ""
+	}
+	for _, p := range c.side.projects {
+		if p.Slug != in.Project {
+			continue
+		}
+		for _, t := range p.Threads {
+			if t.Record != nil && t.ID == in.Thread {
+				return t.Title
+			}
+		}
+	}
+	return ""
 }
 
 // input sends a key to the focused program.
@@ -1664,6 +1686,12 @@ func (c *client) frameSplit(vis []*pane) ([]byte, error) {
 		}
 	}
 	if c.statusBar && c.statusText != c.statusDrawn {
+		// A faint rule under the pane, then the bar under the pane and
+		// the info panel.
+		if c.rows > 1 {
+			b = append(b, fmt.Sprintf("\x1b[%d;%dH\x1b[0m", c.rows-1, c.sideW+1)...)
+			b = append(b, styleFaint.Render(strings.Repeat("─", c.paneCols))...)
+		}
 		b = append(b, fmt.Sprintf("\x1b[%d;%dH\x1b[0m", c.rows, c.sideW+1)...)
 		b = append(b, c.statusText...)
 		b = append(b, "\x1b[0m"...)

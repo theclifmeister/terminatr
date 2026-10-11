@@ -45,7 +45,7 @@ func TestProgressSameEverywhere(t *testing.T) {
 	if panel := ansi.Strip(strings.Join(m.details(r, 50), "\n")); !strings.Contains(panel, want) {
 		t.Errorf("details panel:\n%s", panel)
 	}
-	if bar := statusLine(info, st, false, 120, ""); !strings.Contains(bar, want) || strings.Contains(bar, "33%") {
-		t.Errorf("status bar: %q", bar)
+	if sb := ansi.Strip(statusLine(info, st, false, 120, "")); !strings.Contains(sb, "55% "+bar(55)+" 2/4") || strings.Contains(sb, "33%") {
+		t.Errorf("status bar: %q", sb)
 	}
 }
