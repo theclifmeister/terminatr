@@ -79,6 +79,9 @@ type Data struct {
 	// (mod.CheckData), one per line.
 	ModData  map[string]string
 	ModHosts map[string]proto.ModHost
+	// NoMods: the server runs in safe mode (tm --no-mods): no user mod
+	// runs (mod.hosts).
+	NoMods bool
 	// Cells are the mods' cells and status segments (session.list's
 	// Mods and the sessions' Cells); nil for none.
 	Cells *modCells
@@ -348,6 +351,7 @@ func (s *ServerSource) Load() Data {
 	if d.ServerOK {
 		var hosts proto.ModHostsResult
 		if err := s.call(proto.MethodModHosts, nil, &hosts); err == nil {
+			d.NoMods = hosts.NoMods
 			d.ModHosts = make(map[string]proto.ModHost, len(hosts.Hosts))
 			for _, h := range hosts.Hosts {
 				d.ModHosts[h.ID] = h
