@@ -5,7 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/modannot"
 )
 
 // modsRow selects the General tab's row labelled label.
@@ -101,5 +104,21 @@ func TestModsSettingsForm(t *testing.T) {
 	}
 	if !strings.Contains(screen(m), "it stays as it is") {
 		t.Fatalf("no refusal:\n%s", screen(m))
+	}
+}
+
+func TestPanelBadges(t *testing.T) {
+	d := &panel{w: 60}
+	d.badges([]modannot.Badge{
+		{Mod: "lab", Key: "a", Spans: []modannot.Span{{Text: "docs", Role: "info"}}},
+		{Mod: "lab", Key: "b", Spans: []modannot.Span{{Text: "no-check", Role: "warn"}}},
+		{Mod: "other", Key: "a", Spans: []modannot.Span{{Text: "x"}}},
+	})
+	if len(d.lines) != 2 {
+		t.Fatalf("lines = %q", d.lines)
+	}
+	first := ansi.Strip(d.lines[0])
+	if !strings.Contains(first, "docs  no-check") || !strings.Contains(first, "mod: lab") || !strings.Contains(ansi.Strip(d.lines[1]), "mod: other") {
+		t.Fatalf("lines = %q", d.lines)
 	}
 }
