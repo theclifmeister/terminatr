@@ -24,6 +24,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/keychain"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modsup"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
@@ -147,6 +148,8 @@ type Server struct {
 	// modSup runs the code mods' hosts (modhosts.go); set before Run
 	// serves, nil in a test's bare Server.
 	modSup atomic.Pointer[modsup.Supervisor]
+	// noMods is safe mode (mod.EnvNoMods): no user mod runs.
+	noMods bool
 	// versions caches agent versions for the mod guard (mods.go).
 	versions versions
 	// asks are the sessions' open questions (ask.go).
@@ -230,6 +233,7 @@ func Run(ctx context.Context, opts Options) error {
 		log:      logger,
 		build:    version.BuildID(),
 		started:  time.Now(),
+		noMods:   mod.NoMods(os.Getenv),
 		stopReq:  make(chan struct{}),
 		sessions: map[string]*session.Session{},
 		records:  map[string]SessionRecord{},
@@ -722,6 +726,14 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 			return nil, err
 		}
 		return s.adopt(p)
+	case proto.MethodModStatus:
+		return s.modStatus(), nil
+	case proto.MethodModRestart:
+		var p proto.ModRestartParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.modRestart(p, s.callerOf(peerPID))
 	case proto.MethodAgentList:
 		return s.agentList(), nil
 	case proto.MethodAgentReload:

@@ -581,3 +581,40 @@ type QuestionsOpenResult struct {
 	Via     string `json:"via"`
 	Open    int    `json:"open"`
 }
+
+// MethodModStatus lists the code mods the server runs and where each
+// stands under the mod supervisor (mods design §8): tm doctor, tm mod
+// dev. Anyone may ask.
+const MethodModStatus = "mod.status"
+
+// ModStatusResult is the answer of mod.status.
+type ModStatusResult struct {
+	// NoMods: the server runs in safe mode (tm --no-mods,
+	// TERMINATR_NO_MODS=1): no user mod runs.
+	NoMods bool      `json:"no_mods,omitempty"`
+	Hosts  []ModHost `json:"hosts"`
+}
+
+// ModHost is one supervised code mod: State is modsup's (idle, starting,
+// running, backoff, failed), Err why its last host ended or it failed.
+type ModHost struct {
+	ID       string    `json:"id"`
+	State    string    `json:"state"`
+	Since    time.Time `json:"since,omitzero"`
+	PID      int       `json:"pid,omitempty"`
+	RSS      uint64    `json:"rss,omitempty"`
+	Restarts int       `json:"restarts,omitempty"`
+	Next     time.Time `json:"next,omitzero"`
+	Err      string    `json:"error,omitempty"`
+}
+
+// MethodModRestart reads the installed mods and config.toml again, then
+// starts code mod ID's host afresh, now (not on its first event), with
+// a clean failure count: tm mod dev after each save, the Mods tab's r.
+// The human's.
+const MethodModRestart = "mod.restart"
+
+// ModRestartParams are the params of mod.restart.
+type ModRestartParams struct {
+	ID string `json:"id"`
+}

@@ -69,6 +69,9 @@ type Data struct {
 	Mods        []mod.Mod
 	ModsErr     string
 	ModFailures map[string]string
+	// NoMods: the server runs in safe mode (tm --no-mods): no user mod
+	// runs.
+	NoMods bool
 }
 
 // ServerInfo is the running server's identity, from session.list.
@@ -295,6 +298,19 @@ func (s *ServerSource) Load() Data {
 	} else {
 		d.ServerOK, d.Sessions, d.Alerts = true, res.Sessions, res.Alerts
 		d.Server = ServerInfo{Version: res.Version, Build: res.Build, Latest: res.Latest, Upgrade: res.Upgrade}
+		// A server older than mod.status runs no mods to report.
+		var ms proto.ModStatusResult
+		if s.call(proto.MethodModStatus, nil, &ms) == nil {
+			d.NoMods = ms.NoMods
+			for _, h := range ms.Hosts {
+				if h.State == "failed" { // modsup.Failed
+					if d.ModFailures == nil {
+						d.ModFailures = map[string]string{}
+					}
+					d.ModFailures[h.ID] = h.Err
+				}
+			}
+		}
 	}
 	cfg, err := config.Load()
 	if err != nil {
