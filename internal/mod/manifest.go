@@ -169,8 +169,7 @@ type Permissions struct {
 	Views       bool     `toml:"views"`
 	Notify      bool     `toml:"notify"`
 	Inbox       bool     `toml:"inbox"`
-	// Tools: offer agents the tools in [provides].tools.
-	Tools bool `toml:"tools"`
+	Tools       bool     `toml:"tools"` // offer agents [provides].tools
 	Net         []string `toml:"net"`
 	Commands    []string `toml:"commands"`
 	Files       Files    `toml:"files"`
