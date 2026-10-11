@@ -267,7 +267,8 @@ func TestDashboardSidebarKeys(t *testing.T) {
 		t.Fatalf("tab: focus %d cursor %q:\n%s", m.focus, cursor(), whole(m))
 	}
 	steps := []struct{ key, cursor string }{
-		{"up", "c:alpha"}, {"up", "p:alpha"}, {"up", "p:alpha"}, {"right", "c:alpha"}, {"right", "c:alpha"},
+		// ↑ on the first row wraps round to the last, ↓ there back.
+		{"up", "c:alpha"}, {"up", "p:alpha"}, {"up", "t:beta/t-0006"}, {"down", "p:alpha"}, {"right", "c:alpha"}, {"right", "c:alpha"},
 		// ← on the project folds it, → unfolds it again.
 		{"left", "p:alpha"}, {"left", "p:alpha"}, {"j", "p:beta"}, {"k", "p:alpha"}, {"right", "p:alpha"},
 		{"j", "c:alpha"}, {"down", "p:beta"}, {"down", "c:beta"}, {"down", "t:beta/t-0005"},

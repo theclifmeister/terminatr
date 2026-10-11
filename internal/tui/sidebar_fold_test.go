@@ -13,7 +13,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/view"
 )
 
-func treeKeys(rows []treeRow) []string {
+func rowKeys(rows []treeRow) []string {
 	var out []string
 	for _, r := range rows {
 		out = append(out, r.key())
@@ -33,8 +33,8 @@ func TestTreeOrder(t *testing.T) {
 	}
 	ps := []ProjectData{mk("a", true, false), mk("b", false, true), mk("c", true, true), mk("d", false, false), mk("e", true, false)}
 	rows := buildTree(ps, nil, treeIn{})
-	if want := []string{"p:c", "c:c", "p:a", "c:a", "p:e", "c:e", dividerKey}; !slices.Equal(treeKeys(rows), want) {
-		t.Fatalf("tree %v, want %v", treeKeys(rows), want)
+	if want := []string{"p:c", "c:c", "p:a", "c:a", "p:e", "c:e", dividerKey}; !slices.Equal(rowKeys(rows), want) {
+		t.Fatalf("tree %v, want %v", rowKeys(rows), want)
 	}
 	div := rows[len(rows)-1]
 	if !div.folded() || div.threads != 2 || !slices.Equal(div.slugs, []string{"b", "d"}) {
@@ -47,14 +47,14 @@ func TestTreeOrder(t *testing.T) {
 		t.Fatalf("header %q counts the projects under the folded divider too", l)
 	}
 	rows = buildTree(ps, nil, treeIn{tree: view.Tree{Folded: []string{"a"}, InactiveOpen: true}})
-	if want := []string{"p:c", "c:c", "p:a", "p:e", "c:e", dividerKey, "p:b", "p:d"}; !slices.Equal(treeKeys(rows), want) {
-		t.Fatalf("tree %v, want %v", treeKeys(rows), want)
+	if want := []string{"p:c", "c:c", "p:a", "p:e", "c:e", dividerKey, "p:b", "p:d"}; !slices.Equal(rowKeys(rows), want) {
+		t.Fatalf("tree %v, want %v", rowKeys(rows), want)
 	}
 	if l := ansi.Strip(treeCells(rows[5], 35, false, false)); !strings.Contains(l, "▾ inactive (2)") {
 		t.Fatalf("unfolded divider %q", l)
 	}
 	// The slim strip shows the divider too, shrunk.
-	if got := treeKeys(slimRows(rows)); !slices.Equal(got, []string{"p:c", "p:a", "p:e", dividerKey, "p:b", "p:d"}) {
+	if got := rowKeys(slimRows(rows)); !slices.Equal(got, []string{"p:c", "p:a", "p:e", dividerKey, "p:b", "p:d"}) {
 		t.Fatalf("slim %v", got)
 	}
 	if l := ansi.Strip(treeCells(rows[5], sideSlim-1, true, false)); l != " ─▾2───── " {
@@ -83,7 +83,7 @@ func foldDash(t *testing.T) (*dash, *fakeSource, string) {
 func TestDividerKeys(t *testing.T) {
 	m, src, ui := foldDash(t)
 	m.sideSel = dividerKey
-	open := func() bool { return slices.Contains(treeKeys(m.tree()), "p:beta") }
+	open := func() bool { return slices.Contains(rowKeys(m.tree()), "p:beta") }
 	for i, s := range []struct {
 		key  string
 		open bool
@@ -98,7 +98,7 @@ func TestDividerKeys(t *testing.T) {
 		t.Fatalf("space on the divider: lifecycle %v msg %q", src.lifecycle, m.msg)
 	}
 	// A click on it toggles it.
-	y := slices.Index(treeKeys(m.tree()), dividerKey) + 1
+	y := slices.Index(rowKeys(m.tree()), dividerKey) + 1
 	run(m, m.sideClick(tea.Mouse{X: 5, Y: y, Button: tea.MouseLeft}))
 	if !open() || len(src.opened) != 0 {
 		t.Fatalf("click: open %v, opened %v", open(), src.opened)
@@ -108,8 +108,8 @@ func TestDividerKeys(t *testing.T) {
 	}
 	n := newDash(DashOptions{Source: src, Width: 120, Height: 30, UIFile: ui})
 	n.setData(src.data)
-	if !slices.Contains(treeKeys(n.tree()), "p:beta") {
-		t.Fatalf("a new dashboard didn't start with ui.json's tree: %v", treeKeys(n.tree()))
+	if !slices.Contains(rowKeys(n.tree()), "p:beta") {
+		t.Fatalf("a new dashboard didn't start with ui.json's tree: %v", rowKeys(n.tree()))
 	}
 }
 
@@ -120,11 +120,11 @@ func TestDividerKeys(t *testing.T) {
 func TestFoldAllAndPin(t *testing.T) {
 	m, src, ui := foldDash(t)
 	m.sideSel = "c:alpha"
-	if !slices.Contains(treeKeys(m.tree()), m.sideSel) {
-		t.Fatalf("no row %s: %v", m.sideSel, treeKeys(m.tree()))
+	if !slices.Contains(rowKeys(m.tree()), m.sideSel) {
+		t.Fatalf("no row %s: %v", m.sideSel, rowKeys(m.tree()))
 	}
 	run(m, keyPress(m, "z"))
-	if got := treeKeys(m.tree()); !slices.Equal(got, []string{"p:alpha", dividerKey}) || m.sideSel != "p:alpha" {
+	if got := rowKeys(m.tree()); !slices.Equal(got, []string{"p:alpha", dividerKey}) || m.sideSel != "p:alpha" {
 		t.Fatalf("z: tree %v, cursor %q", got, m.sideSel)
 	}
 	if l := LoadLayout(ui).Tree; !slices.Equal(l.Folded, []string{"alpha"}) || l.InactiveOpen {
@@ -136,7 +136,7 @@ func TestFoldAllAndPin(t *testing.T) {
 	}
 	run(m, keyPress(m, "Z"))
 	want := []string{"p:alpha", "c:alpha", dividerKey, "p:beta", "c:beta", "t:beta/t-0005", "t:beta/t-0006"}
-	if got := treeKeys(m.tree()); !slices.Equal(got, want) || len(src.lifecycle) != 0 {
+	if got := rowKeys(m.tree()); !slices.Equal(got, want) || len(src.lifecycle) != 0 {
 		t.Fatalf("Z: tree %v, want %v; lifecycle %v", got, want, src.lifecycle)
 	}
 	// z on a dormant row moves the cursor to the divider.
@@ -159,5 +159,37 @@ func TestFoldAllAndPin(t *testing.T) {
 	run(m, keyPress(m, "p"))
 	if len(src.lifecycle) != 2 || !strings.Contains(m.msg, "p on a project") {
 		t.Fatalf("p on the divider: lifecycle %v msg %q", src.lifecycle, m.msg)
+	}
+}
+
+// TestPinnedAboveNeedsFirst: with needs-you-first on, the pinned
+// projects keep the top, those that need you first among them, then the
+// rest the same way; an inactive project's pin changes nothing.
+func TestPinnedAboveNeedsFirst(t *testing.T) {
+	p := func(slug string, pinned, hint, inactive bool) treeRow {
+		return treeRow{kind: treeProject, slug: slug, pinned: pinned, hint: hint, inactive: inactive}
+	}
+	rows := []treeRow{
+		p("b", true, false, false), p("e", true, true, false), p("a", false, true, false), p("c", false, false, false),
+		{kind: treeDivider}, p("x", true, false, true), p("y", false, true, true),
+	}
+	want := []string{"p:e", "p:b", "p:a", "p:c", dividerKey, "p:y", "p:x"}
+	if got := rowKeys(needsFirstOrder(rows)); !slices.Equal(got, want) {
+		t.Fatalf("%v, want %v", got, want)
+	}
+}
+
+// TestNeedYouUnfoldsActive: w to a row under a folded active project
+// unfolds it, and under a folded divider opens it.
+func TestNeedYouUnfoldsActive(t *testing.T) {
+	m, _ := sideDash(t)
+	m.sideSel = "p:beta"
+	run(m, keyPress(m, "left"))
+	if slices.Contains(rowKeys(m.tree()), "t:beta/t-0005") {
+		t.Fatal("← didn't fold beta")
+	}
+	run(m, keyPress(m, "w"))
+	if got := sideCursorKey(m); got != "t:beta/t-0005" || m.folds.IsFolded("beta") {
+		t.Fatalf("w: cursor %q, folds %+v", got, m.folds)
 	}
 }

@@ -63,6 +63,7 @@ func act(m *dash, src *fakeSource, name string) {
 
 func popupData(t *testing.T) (*fakeSource, *dash) {
 	t.Helper()
+	resetConsole() // this console's filter and last place (sideextras.go)
 	t.Setenv("TERMINATR_HOME", t.TempDir())
 	src := &fakeSource{data: testData(), agents: []string{"claude", "pi"}}
 	alpha := &src.data.Projects[0]

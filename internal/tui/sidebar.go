@@ -322,7 +322,7 @@ func sideTop(rows []treeRow, h int) int {
 			cur = i
 		}
 	}
-	return scrollTop(cur, max(h-1, 1), len(rows))
+	return scrollTop(cur, max(h-sideHeadRows(), 1), len(rows))
 }
 
 // sidebarLines draws the sidebar w columns wide (its border included) and
@@ -360,8 +360,14 @@ func sidebarLines(all []treeRow, w, h int, foot []string) []string {
 		}
 	}
 	out = append(out, sideHead(n, cw-gap, slim)+strings.Repeat(" ", gap)+reset+border)
+	if l, ok := sideFilterLine(cw - gap); ok {
+		out = append(out, l+strings.Repeat(" ", gap)+reset+border)
+	}
 	if n == 0 {
 		note := " no projects"
+		if sideFilterNow().text != "" {
+			note = " no match"
+		}
 		if slim {
 			note = " —"
 		}
@@ -751,8 +757,9 @@ func sideHitAt(all []treeRow, w, h, x, y int) (r treeRow, ok, border bool) {
 		return r, false, true
 	}
 	rows := shownRows(all, w)
-	i := sideTop(rows, h) + y - 1
-	if y < 1 || x < 0 || x >= w-1 || i >= len(rows) {
+	head := sideHeadRows()
+	i := sideTop(rows, h) + y - head
+	if y < head || x < 0 || x >= w-1 || i >= len(rows) {
 		return r, false, false
 	}
 	return rows[i], true, false
@@ -870,6 +877,9 @@ type sidebar struct {
 	server   ServerInfo // the running server
 	drag     bool       // the mouse is moving its border
 	drawn    []string   // the lines on screen; nil repaints them all
+
+	// needsFirst is [ui] needs_first: the projects that need you first.
+	needsFirst bool
 }
 
 // sideCurrent is the attach view's current project: the focused pane's,
@@ -887,9 +897,21 @@ func (c *client) sideTree() []treeRow {
 	if c.focus != nil {
 		focus = c.focus.info.ID
 	}
-	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), focus: focus, ctxHint: c.side.ctxHint, tree: c.v.Tree})
+	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), focus: focus, ctxHint: c.side.ctxHint,
+		tree: sideTree(c.side.projects, c.v.Tree)})
+	rows = sideRows(rows, c.side.needsFirst)
 	if c.kb == areaSide {
 		markCursor(rows, c.sideW, c.v.SideSel)
+	}
+	return rows
+}
+
+// sideFullTree is the attach view's whole tree, nothing folded and no
+// filter (w W). c.mu held.
+func (c *client) sideFullTree() []treeRow {
+	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), ctxHint: c.side.ctxHint, tree: unfoldedTree(c.side.projects)})
+	if c.side.needsFirst {
+		rows = needsFirstOrder(rows)
 	}
 	return rows
 }
@@ -939,21 +961,25 @@ func (c *client) nextArea() {
 // reaches the pane. c.mu held; released here.
 func (c *client) sideKeyboard(k uv.Key) {
 	name := keyName(k)
-	op, ok := sideOp(name)
+	in := sideKeysIn{tree: c.sideTree, full: c.sideFullTree, w: c.sideW, h: c.rows, sel: c.v.SideSel}
 	if name == "tab" {
 		c.flash = ""
 		c.mu.Unlock()
 		c.nextArea()
 		return
 	}
-	if !ok || c.side == nil {
+	var st sideStep
+	ok := false
+	if c.side != nil {
+		st, ok = sideKeyFor(in, name)
+	}
+	if !ok {
 		c.flash = ""
 		c.status()
 		c.mu.Unlock()
 		c.poke()
 		return
 	}
-	st := sideKeyStep(c.sideTree(), c.sideW, c.v.SideSel, op)
 	c.flash = st.msg
 	if st.back || st.target != nil && !st.here {
 		c.kb = areaMain
@@ -1144,7 +1170,7 @@ func (c *client) setActive(slug string, on bool) {
 
 // appendSidebar draws the sidebar's changed lines. c.mu held.
 func (c *client) appendSidebar(b []byte, wrote bool) ([]byte, bool) {
-	lines := sidebarLines(c.sideTree(), c.sideW, c.rows, sideFoot(c.side.server, c.sideW-1))
+	lines := sidebarLines(c.sideTree(), c.sideW, c.rows, hoverFoot(sideFoot(c.side.server, c.sideW-1)))
 	for y, l := range lines {
 		if y < len(c.side.drawn) && c.side.drawn[y] == l {
 			continue
@@ -1222,6 +1248,13 @@ func (c *client) sideMouse(m emu.Mouse) {
 			c.setSidebar(l, false)
 		}
 		c.poke()
+		return
+	case !sd.drag && m.Action == emu.MouseMotion && m.Button == emu.MouseNone:
+		changed := setSideHover(sideTip(c.sideTree(), c.sideW, c.rows, m.X, m.Y))
+		c.mu.Unlock()
+		if changed {
+			c.poke()
+		}
 		return
 	case sd.drag && m.Action == emu.MouseRelease:
 		sd.drag = false
@@ -1346,6 +1379,14 @@ var sideActions = []sideAction{
 	{[]string{"z"}, sideFoldAll, "z Z", "z folds every project and the inactive divider, Z unfolds them all"},
 	{[]string{"Z"}, sideUnfoldAll, "", ""},
 	{[]string{"p"}, sidePin, "p", "on a project: pin it to the top of the active projects, or unpin it (its order only)"},
+	{[]string{"home"}, sideFirst, "home end", "the first / last row"},
+	{[]string{"end"}, sideLast, "", ""},
+	{[]string{"pgup"}, sidePageUp, "pgup pgdown", "a page up / down"},
+	{[]string{"pgdown"}, sidePageDown, "", ""},
+	{[]string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}, sideNth, "1-9", "the first to ninth project, counted down the tree"},
+	{[]string{"w"}, sideNeedNext, "w W", "the next / previous row that needs you, round the ends; it unfolds what hides the row, and clears a filter that does"},
+	{[]string{"W"}, sideNeedPrev, "", ""},
+	{[]string{"/"}, sideFilter, "/", "filter: type to narrow the tree to what matches (a project's name, a thread's task, title or id) and the projects over it; enter keeps the filter, esc clears it"},
 }
 
 // sideOp is the sidebar operation of key; ok is false for none.
@@ -1450,9 +1491,10 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 	}
 	switch op {
 	case sideUp:
-		return moveTo(i - 1)
+		// Round the ends: the sidebar only, the list stops at them.
+		return moveTo((i - 1 + len(rows)) % len(rows))
 	case sideDown:
-		return moveTo(i + 1)
+		return moveTo((i + 1) % len(rows))
 	case sideIn:
 		if r.kind == treeProject && w > sideSlim {
 			return moveTo(i + 1)
