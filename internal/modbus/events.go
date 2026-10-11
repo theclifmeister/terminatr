@@ -149,3 +149,49 @@ type Clock struct {
 type Ready struct {
 	Projects []proto.ProjectWatch `json:"projects"`
 }
+
+// Target is what a mod's cell, row, action or input is about: a task or
+// a thread of a project, or a session.
+type Target struct {
+	Project string `json:"project,omitempty"`
+	Task    string `json:"task,omitempty"`
+	Thread  string `json:"thread,omitempty"`
+	Session string `json:"session,omitempty"`
+}
+
+// Input is ui.click and ui.key: the human clicked, or pressed Key on, one
+// of the mod's own columns, views or widgets.
+type Input struct {
+	Column string  `json:"column,omitempty"`
+	View   string  `json:"view,omitempty"`
+	Widget string  `json:"widget,omitempty"`
+	Key    string  `json:"key,omitempty"` // ui.key only
+	Target *Target `json:"target,omitempty"`
+}
+
+// Done is action.done: a human ran a core action bound in the
+// mod's row, view or notification, and whether it succeeded.
+type Done struct {
+	Action string `json:"action"`
+	Target Target `json:"target"`
+	OK     bool   `json:"ok"`
+}
+
+// View is view.opened and view.closed: a view the manifest declares, the
+// slot it is shown in (project.tab, dashboard.card, full) and its size in
+// cells.
+type View struct {
+	View    string `json:"view"`
+	Slot    string `json:"slot"`
+	Project string `json:"project,omitempty"`
+	Width   int    `json:"width"`
+	Height  int    `json:"height"`
+}
+
+// Command is command.run: the human ran one of the mod's commands, in
+// Project, with Selection the row selected then.
+type Command struct {
+	Command   string  `json:"command"`
+	Project   string  `json:"project,omitempty"`
+	Selection *Target `json:"selection,omitempty"`
+}

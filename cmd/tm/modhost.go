@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/modapi"
 	"github.com/theclifmeister/terminatr/internal/modhost"
 	"github.com/theclifmeister/terminatr/internal/modproto"
 )
@@ -34,6 +35,6 @@ func modHost(args []string) int {
 	}
 	return modhost.Run(modhost.Options{
 		Name: fs.Arg(0), Script: script, Budget: *budget,
-		In: os.Stdin, Out: out, Started: started,
+		In: os.Stdin, Out: out, Bind: modapi.Bind, Started: started,
 	})
 }
