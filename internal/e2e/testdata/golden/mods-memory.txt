@@ -1,0 +1,36 @@
+ PROJECTS                      1   │ tm dashboard                                               ● server ok · 2 sessions
+ ■ demo        2                   │ demo ────────────────────────────────────────────── ● active — space to deactivate
+ └─ coordi…             ·          │  coordinator                      —           not running; enter starts it  3 inbox
+    ├─ T1    50% ☐      ○          │  T1 Fix the login              ○ idle             report new  50% 1/2 ▸ Fix it  <duration>…
+    └─ T2   ╭─ demo ───────────────────────────────────────────────────────────────────────────────────────╮
+            │  1 overview   2 inbox 3   3 tasks   4 settings   5 keys   6 memory   7 library               │
+            │ mod: memory-tab · memory                                                                     │
+            │ Memory  MEMORY.md                                                                            │
+            │ - Tests before push: run make test before every push                                         │
+            │ - Login flow: the redirect lives in auth/session.go                                          │
+            │ enter files · n next · p previous                                                            │────────────
+            │                                                                                              │
+            │                                                                                              │ntext-gauge
+            │                                                                                              │
+            │                                                                                              │s, so
+            │                                                                                              │
+            │                                                                                              │: cost-card
+            │                                                                                              │
+            │                                                                                              │
+            │                                                                                              │
+            │                                                                                              │
+            │                                                                                              │
+            │                                                                                              │
+            │                                                                                              │
+            │                                                                                              │
+            │                                                                                              │
+            │                                                                                              │
+            │                                                                                              │
+            │                                                                                              │
+            │                                                                                              │
+            │ ↑ ↓ scroll · ← → tabs · esc close                                                            │
+            ╰──────────────────────────────────────────────────────────────────────────────────────────────╯
+ ───────────────────────────────── │
+ demo · active                     │────────────────────────────────────────────────────────────────────────────────────
+ 2 threads · coordinator not runn… │
+ tab sidebar · ? help              │

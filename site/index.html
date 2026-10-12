@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>terminatr: one terminal for all your coding agents</title>
-<meta name="description" content="tm runs your coding agents in a background server: one coordinator you talk to, threads that work in git worktrees and open pull requests, and a dashboard that survives closing the terminal.">
+<meta name="description" content="tm runs your coding agents in a background server: one coordinator you talk to, threads that work in git worktrees and open pull requests, and a dashboard that survives closing the terminal. Mods in TypeScript make it yours.">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0b0d14">
 <meta property="og:title" content="terminatr">
@@ -24,6 +24,7 @@
   <nav aria-label="Sections">
     <a href="#features">features</a>
     <a href="#screens">screens</a>
+    <a href="#mods">mods</a>
     <a href="#install">install</a>
     <a href="https://github.com/theclifmeister/terminatr">github</a>
   </nav>
@@ -107,7 +108,7 @@
     </li>
     <li>
       <h3><span class="glyph" aria-hidden="true">✓</span> Tasks and an inbox</h3>
-      <p>Tasks with steps in a plain <code>TASKS.md</code>: on deck, in motion, needs you, done. Threads hand in reports; the coordinator reads them from its inbox and moves the task. What waits for you, a review, a question, a red build, comes first under <strong>NEEDS YOU</strong>.</p>
+      <p>Tasks with steps in a plain <code>TASKS.md</code>: on deck, in motion, needs you, done. <kbd>+</kbd> adds one, from a template if you like. Threads hand in reports; the coordinator reads them from its inbox and moves the task. What waits for you, a review, a question, a red build, comes first under <strong>NEEDS YOU</strong>.</p>
     </li>
     <li>
       <h3><span class="glyph" aria-hidden="true">⌁</span> Works over SSH</h3>
@@ -118,12 +119,12 @@
       <p>One Go binary. macOS builds are signed with a Developer ID and notarised. Install with Homebrew or a one-line script; <code>tm update</code> upgrades it and <code>tm doctor</code> checks the setup.</p>
     </li>
     <li>
-      <h3><span class="glyph" aria-hidden="true">◈</span> Built on Claude Code mods</h3>
-      <p>tm loads its own <strong>mod</strong> (Claude Code's plugin hooks, early access, Claude Code 2.1.289 or newer) to set and read state: whether a session is working or blocked, its context use, open questions and approvals, and the guard. No screen-scraping; a few screen rules only cross-check.</p>
+      <h3><span class="glyph" aria-hidden="true">◈</span> Mods: make it yours</h3>
+      <p>Add a dashboard card, a sidebar column, a popup tab, a full view or a key, in <strong>TypeScript</strong>. Mods run sandboxed and ask before they get anything; the Tasks tab and the PR/CI column are mods too. <a href="#mods">More below</a>.</p>
     </li>
     <li>
       <h3><span class="glyph" aria-hidden="true">⚙</span> Agents as data</h3>
-      <p>Claude Code and Codex today; pi and opencode will follow. Agents plug in through a TOML manifest that says how to launch and resume them and read their state, so adding one is data, not a rewrite.</p>
+      <p>Claude Code and Codex today; pi and opencode will follow. Agents plug in through a TOML manifest that says how to launch and resume them and read their state from hooks and session logs, not by scraping the screen. For Claude Code, tm's <strong>Agent mod</strong> (early access, off by default, Claude Code 2.1.289 or newer) adds a status band, a <code>/tm</code> pane and the session's context and token use.</p>
     </li>
   </ul>
 </section>
@@ -215,7 +216,7 @@
                                    <span class="dim">│</span>  tasks: 0 need you · 1 in motion · 1 on deck
             <span class="dim">╭─</span> demo <span class="dim">───────────────────────────────────────────────────────────────────────────────────────╮────────────</span>
             <span class="dim">│</span>  1 overview   <span class="warn">2 inbox</span>   3 tasks   4 settings   5 keys   6 memory   7 library                 <span class="dim">│</span>
-            <span class="dim">│</span> mod: tasks-tab · tasks                                                                       <span class="dim">│</span>
+            <span class="dim">│</span> <span class="mod">mod: tasks-tab</span> · tasks                                                                       <span class="dim">│</span>
             <span class="dim">│</span> <span class="head">IN MOTION</span> <span class="dim">──────────────────────────────────────────────────────────────────────────────────</span> <span class="dim">│</span>
             <span class="dim">│</span> <span class="task">T1</span>  Write the README  <span class="ok">● started</span>  1/2                                                         <span class="dim">│</span>
             <span class="dim">│</span>       <span class="ok">✓</span> Draft                                                                                <span class="dim">│</span>
@@ -429,8 +430,304 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
   </div>
 </section>
 
+<section id="mods" aria-labelledby="mods-title">
+  <h2 id="mods-title"><span class="num">03</span> Mods</h2>
+  <p class="lede">Make tm yours. A mod is a folder with a <code>mod.toml</code> and, for code, a TypeScript file. It can add a card to the dashboard, a column to the sidebar, a tab to the project popup, a full view or a key. tm draws what it asks for, runs it in a sandbox, and keeps the actions to itself: a mod can offer to clear a session or answer a question, and tm asks you before anything runs.</p>
+
+  <div class="tabs" role="tablist" aria-label="Mod screens">
+    <button role="tab" id="tab-mods-dashboard" aria-controls="panel-mods-dashboard" aria-selected="true">cards</button>
+    <button role="tab" id="tab-mods-standup" aria-controls="panel-mods-standup" aria-selected="false" tabindex="-1">command</button>
+    <button role="tab" id="tab-mods-menu" aria-controls="panel-mods-menu" aria-selected="false" tabindex="-1">≡ menu</button>
+    <button role="tab" id="tab-mods-settings" aria-controls="panel-mods-settings" aria-selected="false" tabindex="-1">mods tab</button>
+    <button role="tab" id="tab-mods-memory" aria-controls="panel-mods-memory" aria-selected="false" tabindex="-1">memory</button>
+  </div>
+
+  <figure class="term tabpanel" role="tabpanel" id="panel-mods-dashboard" aria-labelledby="tab-mods-dashboard">
+    <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>tm · dashboard</span></div>
+    <div class="scroll" tabindex="0">
+<!-- screen:mods-dashboard --><pre class="screen" style="--cols:180" data-golden="mods-dashboard.txt"> <span class="head">PROJECTS</span>                      1   <span class="dim">│</span> <span class="title">tm dashboard</span>                                                                                                           <span class="ok">● server ok</span> · 2 sessions
+ <span class="accent">■</span> demo        2                   <span class="dim">│</span> demo <span class="dim">────────────────────────────────────────────────────────</span> ● active — space to deactivate <span class="dim">│</span> <span class="task">T1</span> Fix the login
+ <span class="dim">└─</span> coordi…             ·          <span class="dim">│</span>  coordinator                           —           not running; <span class="key">enter</span> starts it  <span class="warn">3 inbox</span>     <span class="dim">│</span> <span class="idle">○ idle</span>
+    <span class="dim">├─</span> <span class="task">T1</span>    <span class="accent">50%</span> <span class="idle">☐</span>      ○          <span class="dim">│</span>  <span class="task">T1</span> Fix the login                  <span class="idle">○ idle</span>             <span class="warn">report new</span>  <span class="accent">50%</span> 1/2 <span class="warn">▸</span> Fix it  4m  PR #…<span class="dim">│</span> <span class="dim">───────────────────────────────────────────────</span>
+    <span class="dim">└─</span> <span class="task">T2</span>        <span class="idle">☐</span> <span class="accent">4%</span>   ○          <span class="dim">│</span>  <span class="task">T2</span> Write the docs                 <span class="idle">○ idle</span>      <span class="accent">4%</span>     4m  <span class="task">t-0002</span>                             <span class="dim">│</span> project   demo
+                                   <span class="dim">│</span>  tasks: 0 need you · 2 in motion · 0 on deck                                                 <span class="dim">│</span> thread    <span class="task">t-0001</span>
+                                   <span class="dim">│</span> <span class="head">OTHER SESSIONS</span> <span class="dim">──────────────────────────────────────────────────────────────────────────────│</span> session   s-3
+                                   <span class="dim">│</span>  none outside the projects (2 in them)                                                       <span class="dim">│</span> progress  <span class="accent">▰▰▰</span><span class="dim">▱▱</span> <span class="accent">50%</span> 1/2
+                                   <span class="dim">│</span> ▾ Context nearly full · Context gauge <span class="dim">───────────────────────────────────</span> <span class="mod">mod: context-gauge</span> <span class="dim">│</span> now       <span class="warn">▸</span> Fix it
+                                   <span class="dim">│</span>   No session is past <span class="accent">80%</span> of its context.                                                     <span class="dim">│</span> updated   4m ago
+                                   <span class="dim">│</span>   Clear starts a fresh conversation: the project's state is in its files, so nothing is lost.<span class="dim">│</span> PR        <span class="link">https://github.com/o/r/pull/7</span>
+                                   <span class="dim">│</span> ▾ Cost · Cost card <span class="dim">──────────────────────────────────────────────────────────</span> <span class="mod">mod: cost-card</span> <span class="dim">│</span> report    1, new · for the coordinator
+                                   <span class="dim">│</span>   today   <span class="accent">$0.00</span>  25.0k tokens                                                                <span class="dim">│</span>
+                                   <span class="dim">│</span>   7 days  <span class="accent">$0.00</span>                                                                              <span class="dim">│</span> steps 1/2
+                                   <span class="dim">│</span>   <span class="accent">▁▁▁▁▁▁▁</span>                                                                                    <span class="dim">│</span>   <span class="ok">✓</span> 1 Reproduce the bug
+                                   <span class="dim">│</span>   Thread          Tokens   Cost                                                              <span class="dim">│</span>   ○ 2 Fix it
+                                   <span class="dim">│</span>   Write the docs   25.0k  <span class="accent">$0.00</span>                                                              <span class="dim">│</span>
+                                   <span class="dim">│</span>                                                                                              <span class="dim">│</span> <span class="key">enter</span> attach
+                                   <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+                                   <span class="dim">│</span>                                                                                              <span class="dim">│</span> Last report <span class="mod">mod: report-glance</span> <span class="dim">────────────────</span>
+                                   <span class="dim">│</span>                                                                                              <span class="dim">│</span> report 1  Fixed the login redirect.
+                                   <span class="dim">│</span>                                                                                              <span class="dim">│</span> next  Merge the PR
+                                   <span class="dim">│</span>                                                                                              <span class="dim">│</span> no ## Check
+                                   <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+ <span class="dim">─────────────────────────────────</span> <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+ demo · active                     <span class="dim">│────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
+ 2 threads · coordinator not runn… <span class="dim">│</span> <span class="key">≡ menu</span> · <span class="key">enter</span> attach · space deactivate · a project · t tasks · i inbox · , settings · ? help · <span class="key">prefix+q</span> quit
+ tab sidebar · ? help              <span class="dim">│</span></pre><!-- /screen:mods-dashboard -->
+    </div>
+    <figcaption>Three example mods on the dashboard: Context gauge's <em>Ctx</em> column and card, Cost card's tokens per thread (this one runs Codex on a plan, so no dollar cost), and Report glance's section under the selected thread. The sidebar's PR/CI column (☐ checks running) is built in.</figcaption>
+  </figure>
+  <figure class="term tabpanel" role="tabpanel" id="panel-mods-standup" aria-labelledby="tab-mods-standup" hidden>
+    <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>tm · standup</span></div>
+    <div class="scroll" tabindex="0">
+<!-- screen:mods-standup --><pre class="screen" style="--cols:120" data-golden="mods-standup.txt"> <span class="head">PROJECTS</span>                      1   <span class="dim">│</span> <span class="title">tm dashboard</span> · Standup                                     <span class="ok">● server ok</span> · 2 sessions
+ <span class="accent">■</span> demo        2                   <span class="dim">│</span> <span class="head">NEEDS YOU</span> 0 <span class="dim">───────────────────────────────────────────────────────────────────────</span>
+ <span class="dim">└─</span> coordi…             ·          <span class="dim">│</span>  <span class="mod">mod: standup</span> · Standup
+    <span class="dim">├─</span> <span class="task">T1</span>    <span class="accent">50%</span> <span class="idle">☐</span>      ○          <span class="dim">│</span>  demo  2 started
+    <span class="dim">└─</span> <span class="task">T2</span>        <span class="idle">☐</span> <span class="accent">4%</span>   ○          <span class="dim">│</span>  Started (2)
+                                   <span class="dim">│</span>  <span class="task">T1</span> Fix the login  1/2  <span class="task">t-0001</span>
+                                   <span class="dim">│</span>  <span class="task">T2</span> Write the docs  <span class="task">t-0002</span>
+                                   <span class="dim">│</span>
+                                   <span class="dim">│</span>
+                                   <span class="dim">│</span>
+                                   <span class="dim">│</span>
+                                   <span class="dim">│</span>
+                                   <span class="dim">│</span>
+                                   <span class="dim">│</span>
+ <span class="dim">─────────────────────────────────</span> <span class="dim">│</span>
+ demo · active                     <span class="dim">│────────────────────────────────────────────────────────────────────────────────────</span>
+ 2 threads · coordinator not runn… <span class="dim">│</span> ↑ ↓ move · / filter · <span class="key">esc</span> back
+ tab sidebar · ? help              <span class="dim">│</span> ran Standup · <span class="mod">mod: standup</span></pre><!-- /screen:mods-standup -->
+    </div>
+    <figcaption>A mod's command: <kbd>S</kbd> on the dashboard, its ≡ menu entry, <kbd>prefix</kbd> <kbd>S</kbd> inside a session or <code>tm mod run standup show</code> opens Standup's full view of the project.</figcaption>
+  </figure>
+  <figure class="term tabpanel" role="tabpanel" id="panel-mods-menu" aria-labelledby="tab-mods-menu" hidden>
+    <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>tm · dashboard</span></div>
+    <div class="scroll" tabindex="0">
+<!-- screen:mods-menu --><pre class="screen" style="--cols:120" data-golden="mods-menu.txt"> <span class="head">PROJECTS</span>                      1   <span class="dim">│</span> <span class="title">tm dashboard</span>                                               <span class="ok">● server ok</span> · 2 sessions
+ <span class="accent">■</span> demo        2                   <span class="dim">│</span> demo <span class="dim">──────────────────────────────────────────────</span> ● active — space to deactivate
+ <span class="dim">└─</span> coordi…             ·          <span class="dim">│</span>  coordinator                      —           not running; <span class="key">enter</span> starts it  <span class="warn">3 inbox</span>
+    <span class="dim">├─</span> <span class="task">T1</span>    <span class="accent">50%</span> <span class="idle">☐</span>      ○          <span class="dim">│</span>  <span class="task">T1</span> Fix the login              <span class="idle">○ idle</span>             <span class="warn">report new</span>  <span class="accent">50%</span> 1/2 <span class="warn">▸</span> Fix it  4m…
+    <span class="dim">└─</span> <span class="task">T2</span>        <span class="idle">☐</span> <span class="accent">4%</span>   ○          <span class="dim">│</span>        steps 1/2
+                                   <span class="dim">│</span>          <span class="ok">✓</span> 1 Reproduce the bug
+                                   <span class="dim">│</span>          ○ 2 Fix it
+                                   <span class="dim">│</span>        <span class="warn">report new</span> · for the coordinator
+                                   <span class="dim">│</span>  <span class="task">T2</span> Write the docs             <span class="idle">○ idle</span>      <span class="accent">4%</span>     4m          <span class="task">t-0002</span>
+                                   <span class="dim">│</span>  tasks: 0 need you · 2 in motion · 0 on deck
+                                   <span class="dim">│</span> <span class="dim">╭─</span> terminatr dev <span class="dim">─────────────────────────────╮────────────────────────────────────</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> back to the last place                    ; <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> open the selected row                 <span class="key">enter</span> <span class="dim">│────────────────</span> <span class="mod">mod: context-gauge</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> adopt as a thread                         T <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> activate / deactivate the project     space <span class="dim">│</span>t's state is in its files, so
+                                   <span class="dim">│</span> <span class="dim">│</span> fold / unfold the mod card                z <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> new project                               n <span class="dim">│────────────────────</span> <span class="mod">mod: cost-card</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> project popup                             a <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> tasks                                     t <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> inbox                                     i <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> next project                              ] <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> previous project                          [ <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> narrower list                             &lt; <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> wider list                                &gt; <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> narrower sidebar                          { <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> wider sidebar                             } <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> slim sidebar on / off                     b <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> details panel on / off                    | <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> settings                                  , <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> help: keys and mouse                      ? <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> quit                               <span class="key">prefix+q</span> <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> Standup · <span class="mod">mod: standup</span>                    S <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span>                                             <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> <span class="key">enter</span> pick · <span class="key">esc</span> close                      <span class="dim">│</span>
+ <span class="dim">─────────────────────────────────</span> <span class="dim">│</span> <span class="dim">╰─────────────────────────────────────────────╯</span>
+ demo · active                     <span class="dim">│────────────────────────────────────────────────────────────────────────────────────</span>
+ 2 threads · coordinator not runn… <span class="dim">│</span>
+ tab sidebar · ? help              <span class="dim">│</span></pre><!-- /screen:mods-menu -->
+    </div>
+    <figcaption>The ≡ menu lists the mods' commands and views after tm's own, with their keys.</figcaption>
+  </figure>
+  <figure class="term tabpanel" role="tabpanel" id="panel-mods-settings" aria-labelledby="tab-mods-settings" hidden>
+    <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>tm · settings</span></div>
+    <div class="scroll" tabindex="0">
+<!-- screen:mods-settings --><pre class="screen" style="--cols:120" data-golden="mods-settings.txt"> <span class="head">PROJECTS</span>                      1   <span class="dim">│</span> <span class="title">tm dashboard</span>                                               <span class="ok">● server ok</span> · 2 sessions
+ <span class="accent">■</span> demo        2                   <span class="dim">│</span> demo <span class="dim">──────────────────────────────────────────────</span> ● active — space to deactivate
+ <span class="dim">└─</span> coordi…             ·          <span class="dim">│</span>  coordinator                      —           not running; <span class="key">enter</span> starts it  <span class="warn">3 inbox</span>
+    <span class="dim">├─</span> <span class="task">T1</span>    <span class="accent">50%</span> <span class="idle">☐</span>      ○          <span class="dim">│</span>  <span class="task">T1</span> Fix the login              <span class="idle">○ idle</span>             <span class="warn">report new</span>  <span class="accent">50%</span> 1/2 <span class="warn">▸</span> Fix it  4m…
+    <span class="dim">└─</span> <span class="task">T2</span>   <span class="dim">╭─</span> Settings <span class="dim">───────────────────────────────────────────────────────────────────────────────────╮</span>
+            <span class="dim">│</span>  1 General   2 All projects   3 Mods                                                         <span class="dim">│</span>
+            <span class="dim">│</span> About: tm dev · server dev · update check on                                                 <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span> <span class="ok">● </span>Context gauge      code · column · view      1.0.0  reads your projects · draws its own p… <span class="dim">│</span>
+            <span class="dim">│</span> <span class="ok">● </span>Cost card          code · view               1.0.0  reads your projects · draws its own p… <span class="dim">│</span>
+            <span class="dim">│</span> <span class="ok">● </span>Report glance      code · view               1.0.0  reads your projects · draws its own p… <span class="dim">│────────────</span>
+            <span class="dim">│</span> <span class="ok">● </span>Standup            code · view · commands    1.0.0  reads your projects · draws its own p… <span class="dim">│</span>
+            <span class="dim">│</span> <span class="ok">● </span>ASCII icons        icons · built in          1.0.0  built in · safe                        <span class="dim">│</span>ntext-gauge
+            <span class="dim">│</span> <span class="ok">● </span>Default keymap     keymap · built in         1.0.0  built in · safe                        <span class="dim">│</span>
+            <span class="dim">│</span> <span class="ok">● </span>Default layout     layout · built in         1.0.0  built in · safe                        <span class="dim">│</span>s, so
+            <span class="dim">│</span> <span class="ok">● </span>Default policy     rules · built in          1.0.0  built in · safe                        <span class="dim">│</span>
+            <span class="dim">│</span> <span class="ok">● </span>Default templates  templates · built in      1.0.0  built in · safe                        <span class="dim">│</span>: cost-card
+            <span class="dim">│</span> <span class="ok">● </span>Default theme      theme · built in          1.0.0  built in · safe                        <span class="dim">│</span>
+            <span class="dim">│</span> <span class="ok">● </span>Memory tab         code · view · built in    1.0.0  built in · reads your projects · draw… <span class="dim">│</span>
+            <span class="dim">│</span> <span class="ok">● </span>Nerd Font icons    icons · built in          1.0.0  built in · safe                        <span class="dim">│</span>
+            <span class="dim">│</span> <span class="ok">● </span>PR/CI column       code · column · built in  1.0.0  built in · reads your projects         <span class="dim">│</span>
+            <span class="dim">│</span> <span class="ok">● </span>Tasks tab          code · view · built in    1.0.0  built in · reads your projects · draw… <span class="dim">│</span>
+            <span class="dim">│</span> <span class="ok">● </span>Unicode icons      icons · built in          1.0.0  built in · safe                        <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span> Context gauge: How full each session's context window is, by its row; a card lists the ones  <span class="dim">│</span>
+            <span class="dim">│</span> past the warning, where C clears one (tm asks first) and <span class="key">enter</span> attaches to it. For Claude    <span class="dim">│</span>
+            <span class="dim">│</span> sessions it needs the Agent mod on (early access, off by default: Settings, Agent mod, or    <span class="dim">│</span>
+            <span class="dim">│</span> [agent_mod] enabled = true), which reports their context and use. By terminatr.              <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span> <span class="key">enter</span> on/off · p permissions · s settings · d defaults · l log · r restart · u update        <span class="dim">│</span>
+            <span class="dim">│</span> x remove · e examples · <span class="key">← →</span> tabs · <span class="key">esc</span> close                                                 <span class="dim">│</span>
+            <span class="dim">╰─────────────────────────────────────────────────────────────────────────────────────</span> more ↓ <span class="dim">─╯</span>
+ <span class="dim">─────────────────────────────────</span> <span class="dim">│</span>
+ demo · active                     <span class="dim">│────────────────────────────────────────────────────────────────────────────────────</span>
+ 2 threads · coordinator not runn… <span class="dim">│</span>
+ tab sidebar · ? help              <span class="dim">│</span></pre><!-- /screen:mods-settings -->
+    </div>
+    <figcaption>Settings, Mods: your mods, then the built-in ones, each with what it provides and what it may do. Turn one on or off, read its permissions, settings and log, or apply the defaults it suggests.</figcaption>
+  </figure>
+  <figure class="term tabpanel" role="tabpanel" id="panel-mods-memory" aria-labelledby="tab-mods-memory" hidden>
+    <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>tm · project</span></div>
+    <div class="scroll" tabindex="0">
+<!-- screen:mods-memory --><pre class="screen" style="--cols:120" data-golden="mods-memory.txt"> <span class="head">PROJECTS</span>                      1   <span class="dim">│</span> <span class="title">tm dashboard</span>                                               <span class="ok">● server ok</span> · 2 sessions
+ <span class="accent">■</span> demo        2                   <span class="dim">│</span> demo <span class="dim">──────────────────────────────────────────────</span> ● active — space to deactivate
+ <span class="dim">└─</span> coordi…             ·          <span class="dim">│</span>  coordinator                      —           not running; <span class="key">enter</span> starts it  <span class="warn">3 inbox</span>
+    <span class="dim">├─</span> <span class="task">T1</span>    <span class="accent">50%</span> <span class="idle">☐</span>      ○          <span class="dim">│</span>  <span class="task">T1</span> Fix the login              <span class="idle">○ idle</span>             <span class="warn">report new</span>  <span class="accent">50%</span> 1/2 <span class="warn">▸</span> Fix it  4m…
+    <span class="dim">└─</span> <span class="task">T2</span>   <span class="dim">╭─</span> demo <span class="dim">───────────────────────────────────────────────────────────────────────────────────────╮</span>
+            <span class="dim">│</span>  1 overview   <span class="warn">2 inbox</span> 3   3 tasks   4 settings   5 keys   6 memory   7 library               <span class="dim">│</span>
+            <span class="dim">│</span> <span class="mod">mod: memory-tab</span> · memory                                                                     <span class="dim">│</span>
+            <span class="dim">│</span> Memory  MEMORY.md                                                                            <span class="dim">│</span>
+            <span class="dim">│</span> - Tests before push: run make test before every push                                         <span class="dim">│</span>
+            <span class="dim">│</span> - Login flow: the redirect lives in auth/session.go                                          <span class="dim">│</span>
+            <span class="dim">│</span> <span class="key">enter</span> files · n next · p previous                                                            <span class="dim">│────────────</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>ntext-gauge
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>s, so
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>: cost-card
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span> ↑ ↓ scroll · <span class="key">← →</span> tabs · <span class="key">esc</span> close                                                            <span class="dim">│</span>
+            <span class="dim">╰──────────────────────────────────────────────────────────────────────────────────────────────╯</span>
+ <span class="dim">─────────────────────────────────</span> <span class="dim">│</span>
+ demo · active                     <span class="dim">│────────────────────────────────────────────────────────────────────────────────────</span>
+ 2 threads · coordinator not runn… <span class="dim">│</span>
+ tab sidebar · ? help              <span class="dim">│</span></pre><!-- /screen:mods-memory -->
+    </div>
+    <figcaption>The project popup's Memory tab, a built-in mod: what the coordinator keeps in the project's memory, read-only.</figcaption>
+  </figure>
+
+  <h3 class="sub">Where a mod shows up</h3>
+  <ul class="features">
+    <li>
+      <h3><span class="glyph" aria-hidden="true">▦</span> Views</h3>
+      <p>Dashboard cards, project popup tabs, full views with the header and sidebar kept in sight, and sections in the details and coordinator panels. tm owns the cursor, the scrolling and the filter.</p>
+    </li>
+    <li>
+      <h3><span class="glyph" aria-hidden="true">┃</span> Columns</h3>
+      <p>Cells in the sidebar and on the dashboard's rows: a context gauge, a CI mark, whatever a row should show.</p>
+    </li>
+    <li>
+      <h3><span class="glyph" aria-hidden="true">⌘</span> Commands</h3>
+      <p>A key on the dashboard, an entry in the ≡ menu, <kbd>prefix</kbd> plus that key inside any session, and <code>tm mod run</code> from a shell. A key tm already uses stays tm's.</p>
+    </li>
+    <li>
+      <h3><span class="glyph" aria-hidden="true">✉</span> Notifications</h3>
+      <p>OS notifications with buttons that run tm's own actions: answer an agent's question with one of its options, accept or send back a review, show the task. Each button opens tm's confirmation first.</p>
+    </li>
+    <li>
+      <h3><span class="glyph" aria-hidden="true">⚒</span> Agent tools</h3>
+      <p>Tools a mod offers your agents, served by <code>tm mcp</code>. The consent screen shows each tool's description and input in full, as the agent will read them.</p>
+    </li>
+    <li>
+      <h3><span class="glyph" aria-hidden="true">⛨</span> Guard rules</h3>
+      <p>Rules that refuse more of what agents may run, never less: a mod can tighten the guard, not loosen it. A change reaches running sessions at once.</p>
+    </li>
+    <li>
+      <h3><span class="glyph" aria-hidden="true">◇</span> Suggested defaults</h3>
+      <p>Values a mod suggests for everyday settings such as auto-close or PR follow-ups. They change nothing until you apply them (<kbd>d</kbd> in the Mods tab), and your own settings win. Safety settings are off limits.</p>
+    </li>
+    <li>
+      <h3><span class="glyph" aria-hidden="true">◐</span> Themes, keys, code hosts</h3>
+      <p>Data mods change the theme, icons, keymap and layout. A code host mod serves another forge: GitLab merge requests show and merge as tm's PRs do.</p>
+    </li>
+  </ul>
+
+  <h3 class="sub">Safe by design</h3>
+  <ul class="features">
+    <li>
+      <h3><span class="glyph" aria-hidden="true">✓</span> You consent first</h3>
+      <p>Installing shows what a mod asks for in plain words. It installs <em>off</em>; you turn it on in the Mods tab or with <code>tm mod enable</code>, for every project or only some.</p>
+    </li>
+    <li>
+      <h3><span class="glyph" aria-hidden="true">▣</span> Sandboxed</h3>
+      <p>Each code mod runs in its own host under the OS sandbox: seatbelt on macOS, landlock on Linux, a restricted token on Windows. It reads its own files and nothing else, starts no program and, on macOS and Linux, makes no connection; it asks tm, which checks its grants.</p>
+    </li>
+    <li>
+      <h3><span class="glyph" aria-hidden="true">⏎</span> Mods draw, tm acts</h3>
+      <p>A row or a button only <em>names</em> an action: clear a session, answer a question, accept a task. tm checks it against the live state, asks you, then runs it. Clearing starts the agent on a fresh conversation once it is idle; the project's files keep its state.</p>
+    </li>
+    <li>
+      <h3><span class="glyph" aria-hidden="true">⌂</span> Only you act as you</h3>
+      <p>Your console talks to the server on a socket of its own that agents' sandboxes don't allow, so a thread can't open your views, press your buttons or clear a session in your name. If a mod gets in the way, <code>tm --no-mods</code> starts with the built-in ones only.</p>
+    </li>
+  </ul>
+
+  <h3 class="sub">Built in</h3>
+  <p class="lede">Some of tm is mods already, drawn the same way yours are: the project popup's <strong>Tasks tab</strong>, the sidebar's <strong>PR/CI column</strong>, the <strong>Memory tab</strong>, the <strong>default task templates</strong>, and the default theme, icons, keymap, layout and guard policy. The Tasks tab, PR/CI column and Memory tab are in the examples too: to change one, copy it under another id, install the copy and turn the built-in one off.</p>
+
+  <h3 class="sub">Examples to start from</h3>
+  <div class="table">
+    <table class="examples">
+      <thead><tr><th scope="col">mod</th><th scope="col">what it does</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">standup</th><td>A command: <kbd>S</kbd>, a ≡ menu entry and <code>tm mod run</code>, opening a full view of the project's tasks.</td></tr>
+        <tr><th scope="row">context-gauge<sup>*</sup></th><td>How full each session's context is, as a column, and a card of the ones near the limit, where <kbd>C</kbd> clears one (tm asks first).</td></tr>
+        <tr><th scope="row">cost-card<sup>*</sup></th><td>A dashboard card: tokens and estimated cost per thread, today and over 7 days, with a sparkline.</td></tr>
+        <tr><th scope="row">notify-me</th><td>An OS notification when an agent asks you something or a task reaches review, with buttons that answer, accept, send back or show.</td></tr>
+        <tr><th scope="row">memory-search<sup>*</sup></th><td>An agent tool that finds the matching lines in the project's memory.</td></tr>
+        <tr><th scope="row">report-glance</th><td>Panel sections: the selected thread's latest report under its details, and who reported in the coordinator's panel.</td></tr>
+        <tr><th scope="row">thread-timeline</th><td>A full view of each thread's state changes over the last hours.</td></tr>
+        <tr><th scope="row">vim-keys</th><td>A keymap, no code: <kbd>g</kbd> and <kbd>G</kbd> for the ends of a list, <kbd>Ctrl+U</kbd> and <kbd>Ctrl+D</kbd> for pages.</td></tr>
+        <tr><th scope="row">nord</th><td>A theme and an icon set for dark and light terminals.</td></tr>
+        <tr><th scope="row">gitlab</th><td>A code host: GitLab merge requests and pipelines as tm's PRs, through <code>glab</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note"><sup>*</sup> Claude Code sessions need tm's <strong>Agent mod</strong> for these: it is early access and <strong>off by default</strong>. Turn it on in Settings (<kbd>,</kbd>, <em>Agent mod</em>) or with <code>[agent_mod] enabled = true</code> in <code>config.toml</code>; sessions started after use it. Without it these load but stay empty for Claude.</p>
+
+  <div class="installs mods-cmds">
+    <div class="os">
+      <h3>Try one</h3>
+      <div class="cmdline"><code>git clone https://github.com/theclifmeister/terminatr</code><button class="copy" type="button" aria-label="Copy the clone command">copy</button></div>
+      <div class="cmdline"><code>tm mod install terminatr/examples/mods/standup</code><button class="copy" type="button" aria-label="Copy the mod install command">copy</button></div>
+      <p class="note">Then turn it on in the Mods tab (<kbd>,</kbd> then <kbd>3</kbd>) or with <code>tm mod enable standup</code>. <code>tm mod install</code> also takes a git URL. The <a href="https://github.com/theclifmeister/terminatr/tree/main/examples/mods">examples</a> have one of each kind.</p>
+    </div>
+    <div class="os">
+      <h3>Write your own</h3>
+      <div class="cmdline"><code>tm mod new my-mod --kind column</code><button class="copy" type="button" aria-label="Copy the new mod command">copy</button></div>
+      <div class="cmdline"><code>tm mod dev my-mod</code><button class="copy" type="button" aria-label="Copy the dev command">copy</button></div>
+      <div class="cmdline"><code>tm mod test my-mod</code><button class="copy" type="button" aria-label="Copy the test command">copy</button></div>
+      <div class="cmdline"><code>tm mod logs my-mod</code><button class="copy" type="button" aria-label="Copy the logs command">copy</button></div>
+      <p class="note"><code>new</code> writes a scaffold with the types and a test fixture (<code>--kind</code> also takes <code>hook</code>, <code>theme</code>, <code>icons</code>, <code>keymap</code> and <code>rules</code>). <code>dev</code> runs it live and restarts it on each save, <code>test</code> replays its fixtures, <code>logs</code> shows what it printed.</p>
+    </div>
+  </div>
+</section>
+
 <section id="install" aria-labelledby="install-title">
-  <h2 id="install-title"><span class="num">03</span> Install</h2>
+  <h2 id="install-title"><span class="num">04</span> Install</h2>
   <p class="lede">macOS 13+, Linux (glibc 2.28+) or Windows, with Claude Code or Codex. Pick your system.</p>
   <div class="installs">
     <div class="os">

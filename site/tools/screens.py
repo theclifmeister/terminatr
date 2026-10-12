@@ -42,6 +42,11 @@ SCREENS = {
     "sidebar": "sidebar-unicode.txt",
     "coordinator": "infopanel-coordinator",
     "threadpanel": "infopanel-thread",
+    "mods-dashboard": "mods-dashboard.txt",
+    "mods-standup": "mods-standup.txt",
+    "mods-menu": "mods-menu.txt",
+    "mods-settings": "mods-settings.txt",
+    "mods-memory": "mods-memory.txt",
 }
 
 BORDERS = "│╭╮╰╯"
@@ -97,10 +102,15 @@ RULES = [
     (r"[╭╮╰╯│─└┘├┌┐]+", "dim"),
     (r"\b(PROJECTS|NEEDS YOU|IN MOTION|ON DECK|OTHER SESSIONS|THREADS|STEPS|THREAD|REPOSITORIES)\b", "head"),
     (r"tm dashboard", "title"),
+    (r"mod: [a-z-]+", "mod"),
     (r"◆ review", "warn"),
     (r"▲ blocked", "bad"),
     (r"⚑", "bad"),
     (r"● started", "ok"),
+    (r"● (?=[A-Z])", "ok"),
+    (r"☐", "idle"),
+    (r"▁+", "accent"),
+    (r"\$\d+\.\d\d", "accent"),
     (r"▷ running", "ok"),
     (r"○ (idle|ready)", "idle"),
     (r"✓", "ok"),
@@ -112,7 +122,7 @@ RULES = [
     (r"\bT\d+\b|\bt-\d{4}\b(?!-)", "task"),
     (r"report new|\d inbox\b|inbox 1", "warn"),
     (r"\d+%", "accent"),
-    (r"(≡ menu|prefix\+[a-z]|\benter\b|\besc\b|← →)", "key"),
+    (r"(≡ menu|prefix\+[a-zA-Z]|\benter\b|\besc\b|← →)", "key"),
 ]
 PATTERN = re.compile("|".join(f"(?P<g{i}>{p})" for i, (p, _) in enumerate(RULES)))
 
