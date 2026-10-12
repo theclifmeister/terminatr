@@ -1,0 +1,14 @@
+# Zen: the dashboard with nothing but what needs you and the project.
+# The sidebar is hidden (a "⚑ N" badge shows when something needs you;
+# b brings the sidebar back).
+[sidebar]
+mode = "hidden"
+
+[details]
+place = "off"
+
+[footer]
+style = "compact"
+
+[dashboard]
+sections = ["needs", "project"]

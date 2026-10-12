@@ -34,6 +34,9 @@ on in the Mods tab (`,` then `3`), or with `tm mod enable <id>`. `e` in the Mods
 | + | [standup](standup) | a command: the key `S`, a ≡ menu entry and `tm mod run standup show` | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.22.0/examples/mods/standup` |
 | + | [report-glance](report-glance) | panel sections: one at the bottom of the details panel, one in the coordinator's info panel | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.22.0/examples/mods/report-glance` |
 | + | [gitlab](gitlab) | a code host: GitLab merge requests as tm's PRs | runs glab | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.22.0/examples/mods/gitlab` |
+| + | [zen](zen) | a layout (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.22.0/examples/mods/zen` |
+| + | [cockpit](cockpit) | a layout (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.22.0/examples/mods/cockpit` |
+| + | [compact](compact) | a layout (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.22.0/examples/mods/compact` |
 
 **Claude needs the Agent mod for three of them.** `memory-search`'s
 tool, and the context and use that `context-gauge` and `cost-card` read
@@ -84,6 +87,14 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
 - **vim-keys** moves actions by their stable ids. It can't take the
   escape hatches (`esc`, `ctrl+c`, the prefix and its commands), and a
   key two actions want is refused.
+- **zen**, **cockpit** and **compact** are layouts (`api = "1.5"`): each
+  states only what it changes. Zen hides the sidebar (`b` brings it
+  back; a `⚑ N` badge shows what needs you), turns the details panel off
+  and keeps only the NEEDS YOU and project sections. Cockpit puts the
+  sidebar on the right at 22 % and the panel under the list at 40 %.
+  Compact narrows the sidebar and takes out the extra lines. Pick one in
+  Settings (General: Layout); the sidebar's side, width and mode are the
+  view's, shared by its consoles.
 - **context-gauge** reads `session.state`. The card's rows only *name*
   `session.clear` (`C`) and `session.attach` (`enter`). The core shows the
   keys and checks the session still runs; `C` asks first, in tm's words,

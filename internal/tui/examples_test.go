@@ -72,6 +72,16 @@ func TestExampleMods(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+		if x.Has(mod.KindLayout) {
+			// CheckData parses it and gates its keys on the manifest's api.
+			if errs := x.CheckData(); len(errs) > 0 {
+				t.Errorf("%s layout: %v", m.ID, errs)
+			}
+			data, _ := x.Data(mod.KindLayout)
+			if l, err := mod.ParseLayout(data); err != nil || !l.V2 {
+				t.Errorf("%s layout: %v, v2 %v", m.ID, err, l.V2)
+			}
+		}
 		if x.Has(mod.KindIcons) {
 			data, _ := x.Data(mod.KindIcons)
 			if s, err := parseIcons(data); err != nil || s.name != m.ID {
