@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -502,6 +503,22 @@ func (c *Config) Own(slug string) []string {
 	if !ok {
 		return nil
 	}
+	return r.own()
+}
+
+// OwnDefaults lists the keys [defaults] sets (ProjectKeys order),
+// auto_resolve as auto_close: the all-projects settings the human chose,
+// where the rest are Defaults.
+func (c *Config) OwnDefaults() []string {
+	if c == nil {
+		return nil
+	}
+	return c.defaults.own()
+}
+
+// own lists the keys r sets (ProjectKeys order), auto_resolve as
+// auto_close.
+func (r rawSafety) own() []string {
 	set := map[string]bool{
 		"start_threads": r.StartThreads != nil, "yolo": r.Yolo != nil,
 		"coordinator_approves": r.CoordinatorApproves != nil, "parallel_threads": r.ParallelThreads != nil,
@@ -518,6 +535,18 @@ func (c *Config) Own(slug string) []string {
 		}
 	}
 	return out
+}
+
+// Value is the setting key's value in s (a bool, an int, a string or a
+// []string), nil for a key Safety doesn't have.
+func (s Safety) Value(key string) any {
+	v := reflect.ValueOf(s)
+	for i := range v.NumField() {
+		if tag, _, _ := strings.Cut(v.Type().Field(i).Tag.Get("json"), ","); tag == key {
+			return v.Field(i).Interface()
+		}
+	}
+	return nil
 }
 
 // apply sets in s every setting r names, checked; table names it in
