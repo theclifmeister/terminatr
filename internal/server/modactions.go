@@ -8,6 +8,11 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modaction"
@@ -169,25 +174,110 @@ func (s *Server) modBinding(id, action string, target map[string]string, peerPID
 }
 
 // modActionCheck is mod.action.check: whether a pressed binding is in
-// its mod's reach, asked before the console runs it.
+// its mod's reach, asked before the console runs it. In reach, it
+// answers a press token for that console and binding, which the
+// console's mod.action.done must present.
 func (s *Server) modActionCheck(p proto.ModActionParams, peerPID int) (any, *proto.Error) {
-	if _, perr := s.modBinding(p.Mod, p.Action, p.Target, peerPID); perr != nil {
+	t, perr := s.modBinding(p.Mod, p.Action, p.Target, peerPID)
+	if perr != nil {
 		return nil, perr
 	}
-	return struct{}{}, nil
+	return proto.ModActionCheckResult{Token: s.presses.issue(peerPID, pressKey(p.Mod, p.Action, t), time.Now())}, nil
 }
 
 // modActionDone is mod.action.done from a console: the human ran (ok)
 // or was refused an action mod p.Mod's row bound. Human-only: an agent
 // can't make a mod believe the human acted. The binding must be in the
-// mod's reach (modBinding); the event goes to that mod alone.
+// mod's reach (modBinding), and p.Token the press token the same
+// console's mod.action.check gave for it, used once: so a done follows
+// a check for that very press, and one check makes at most one done.
+// The event goes to that mod alone.
 func (s *Server) modActionDone(p proto.ModActionDoneParams, peerPID int) (any, *proto.Error) {
 	t, perr := s.modBinding(p.Mod, p.Action, p.Target, peerPID)
 	if perr != nil {
 		return nil, perr
 	}
+	if !s.presses.take(p.Token, peerPID, pressKey(p.Mod, p.Action, t), time.Now()) {
+		return nil, proto.Errorf("refused", "no press of %s's %s binding to report: mod.action.check gives the token", p.Mod, p.Action)
+	}
 	if s.modEv != nil {
 		s.modEv.bus.PublishTo(p.Mod, modbus.ActionDone, t.Project, modbus.Done{Action: p.Action, Target: modbus.Target(t), OK: p.OK})
 	}
 	return struct{}{}, nil
+}
+
+// maxPresses is how many press tokens one console may hold at once; a
+// new one beyond it drops its oldest.
+const maxPresses = 32
+
+// pressTokens are the press tokens mod.action.check gave out and
+// mod.action.done hasn't used: each good once, for one binding, from the
+// console (peer pid) that asked, for proto.ModActionTokenTTL. The zero
+// value is ready.
+type pressTokens struct {
+	mu     sync.Mutex
+	tokens map[string]press
+}
+
+type press struct {
+	pid  int
+	key  string
+	made time.Time
+}
+
+// pressKey names a binding: mod, action and the target's fields.
+func pressKey(mod, action string, t modaction.Target) string {
+	return strings.Join([]string{mod, action, t.Project, t.Task, t.Thread, t.Session}, "\x00")
+}
+
+// issue makes a token for console pid's press of binding key.
+func (p *pressTokens) issue(pid int, key string, now time.Time) string {
+	var b [16]byte
+	rand.Read(b[:])
+	tok := hex.EncodeToString(b[:])
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.tokens == nil {
+		p.tokens = map[string]press{}
+	}
+	p.expire(now)
+	oldest, n := "", 0
+	for t, pr := range p.tokens {
+		if pr.pid != pid {
+			continue
+		}
+		n++
+		if oldest == "" || pr.made.Before(p.tokens[oldest].made) {
+			oldest = t
+		}
+	}
+	if n >= maxPresses {
+		delete(p.tokens, oldest)
+	}
+	p.tokens[tok] = press{pid: pid, key: key, made: now}
+	return tok
+}
+
+// take uses token tok up: true when it is good for console pid's press
+// of binding key. A token shown with the wrong console or binding is
+// spent all the same, so it can't be tried again.
+func (p *pressTokens) take(tok string, pid int, key string, now time.Time) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.expire(now)
+	pr, ok := p.tokens[tok]
+	if !ok {
+		return false
+	}
+	delete(p.tokens, tok)
+	return pr.pid == pid && pr.key == key
+}
+
+// expire drops the tokens older than the TTL; p.mu held.
+func (p *pressTokens) expire(now time.Time) {
+	for t, pr := range p.tokens {
+		if now.Sub(pr.made) >= proto.ModActionTokenTTL {
+			delete(p.tokens, t)
+		}
+	}
 }

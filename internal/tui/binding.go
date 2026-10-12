@@ -25,10 +25,12 @@ import (
 // human. The mod hears of it as action.done.
 
 // binding is a pressed action a mod bound: the mod's id, the action and
-// its target as the mod published them.
+// its target as the mod published them, and the press token the
+// server's check gave, which the action.done for this press presents.
 type binding struct {
 	mod    string
 	action widget.Action
+	token  string
 }
 
 func (b *binding) target() modaction.Target { return widget.ActionTarget(b.action) }
@@ -58,10 +60,12 @@ func (m *dash) pressBinding(mod string, ev *widget.Event) tea.Cmd {
 	t, src := b.target(), m.src
 	return func() tea.Msg {
 		msg := bindingMsg{b: b}
-		if err := src.ModActionCheck(b.mod, b.action.ID, b.action.Target); err != nil {
+		tok, err := src.ModActionCheck(b.mod, b.action.ID, b.action.Target)
+		if err != nil {
 			msg.err, msg.refused = err, true
 			return msg
 		}
+		msg.b.token = tok
 		if t.Project != "" && t.Task != "" {
 			msg.board, msg.err = src.Board(t.Project)
 		}
@@ -127,7 +131,7 @@ func (m *dash) actVia(b *binding, fn func() (actionMsg, bool)) tea.Cmd {
 	return m.act(func() actionMsg {
 		msg, ok := fn()
 		if b != nil {
-			_ = src.ModActionDone(b.mod, b.action.ID, b.action.Target, ok)
+			_ = src.ModActionDone(b.mod, b.action.ID, b.action.Target, ok, b.token)
 		}
 		return msg
 	})
@@ -137,7 +141,7 @@ func (m *dash) actVia(b *binding, fn func() (actionMsg, bool)) tea.Cmd {
 func (m *dash) bindingDone(b *binding, ok bool) tea.Cmd {
 	src := m.src
 	return func() tea.Msg {
-		_ = src.ModActionDone(b.mod, b.action.ID, b.action.Target, ok)
+		_ = src.ModActionDone(b.mod, b.action.ID, b.action.Target, ok, b.token)
 		return nil
 	}
 }

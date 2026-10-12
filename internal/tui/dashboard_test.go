@@ -1011,17 +1011,24 @@ func TestVersionPlaces(t *testing.T) {
 	}
 }
 
-func (f *fakeSource) ModActionDone(mod, action string, target map[string]string, ok bool) error {
-	f.done = append(f.done, fmt.Sprintf("%s %s %s/%s%s %v", mod, action, target["project"], target["task"], target["session"], ok))
+func (f *fakeSource) ModActionDone(mod, action string, target map[string]string, ok bool, token string) error {
+	d := fmt.Sprintf("%s %s %s/%s%s %v", mod, action, target["project"], target["task"], target["session"], ok)
+	if token != fakePressToken(mod, action) {
+		// Not the token its check gave: the server would refuse it.
+		d += " (no press token)"
+	}
+	f.done = append(f.done, d)
 	return nil
 }
 
-func (f *fakeSource) ModActionCheck(mod, action string, target map[string]string) error {
+func (f *fakeSource) ModActionCheck(mod, action string, target map[string]string) (string, error) {
 	if target["project"] == "beta" {
-		return errors.New(mod + " doesn't run for project beta")
+		return "", errors.New(mod + " doesn't run for project beta")
 	}
-	return nil
+	return fakePressToken(mod, action), nil
 }
+
+func fakePressToken(mod, action string) string { return "press " + mod + " " + action }
 
 // TestViewCallsInTurn: the view calls of one console reach the server in
 // the order they were made, though each runs in a command of its own. A
