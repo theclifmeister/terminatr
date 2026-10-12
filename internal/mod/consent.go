@@ -201,6 +201,9 @@ func consent(m *Manifest, fsys fs.FS) string {
 			fmt.Fprintf(&b, "  - %s\n", w)
 		}
 	}
+	if m.Permissions.Tools {
+		fmt.Fprintln(&b, ToolsAgentModNote)
+	}
 	if d := m.DefaultWords(); len(d) > 0 {
 		fmt.Fprintf(&b, "%s:\n", DefaultsNote)
 		for _, w := range d {
@@ -210,6 +213,11 @@ func consent(m *Manifest, fsys fs.FS) string {
 	b.WriteString(m.shown(fsys))
 	return b.String()
 }
+
+// ToolsAgentModNote is the consent's line for a mod that offers agents
+// tools: Claude reaches a mod's tools through the Agent mod only, which
+// is early access and off by default (T301 L1).
+const ToolsAgentModNote = "Claude threads get its tools only while the Agent mod is on (early access, off by default: Settings, Agent mod, or [agent_mod] enabled = true)"
 
 // DefaultsNote heads the defaults a mod suggests in its consent (mods
 // design §7, Tighten only).

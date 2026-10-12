@@ -33,6 +33,14 @@ Then turn it on in the Mods tab (`,` then `3`), or with `tm mod enable
 | + | [report-glance](report-glance) | panel sections: one at the bottom of the details panel, one in the coordinator's info panel | reads your projects, draws its own panels | `tm mod install terminatr/examples/mods/report-glance` |
 | + | [gitlab](gitlab) | a code host: GitLab merge requests as tm's PRs | runs glab | `tm mod install terminatr/examples/mods/gitlab` |
 
+**Claude needs the Agent mod for three of them.** `memory-search`'s
+tool, and the context and use that `context-gauge` and `cost-card` read
+from `session.state`, reach tm from a Claude session through tm's Agent
+mod, which is early access and off by default. Turn it on in Settings
+(`,`, *Agent mod*) or with `[agent_mod] enabled = true` in
+`config.toml`; it applies to sessions started after. With it off these
+three load but stay empty for Claude, and their consent says so.
+
 `pr-ci-column`, `memory-tab` and `tasks-tab` already ship inside tm,
 and `tm mod install` refuses a built-in mod's id. To change one, copy it, give the
 copy its own id and install that:
