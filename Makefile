@@ -144,7 +144,10 @@ fuzz: $(READY)
 # (scripts/e2e-shard.sh), as CI does.
 E2E_RACE ?=
 E2E_SHARD ?=
-E2E_GOFLAGS := $(if $(filter 1,$(E2E_RACE)),-race)
+# A race-built tm starts slowly: the smoke set outgrew go test's 10 minute
+# default per shard on macOS, so -race runs get a longer -timeout.
+E2E_TIMEOUT ?= $(if $(filter 1,$(E2E_RACE)),30m,10m)
+E2E_GOFLAGS := $(if $(filter 1,$(E2E_RACE)),-race) -timeout $(E2E_TIMEOUT)
 
 e2e: $(READY)
 	E2E=1 E2E_RACE=$(E2E_RACE) $(GO) test $(E2E_GOFLAGS) -count=1 ./internal/e2e $(E2E_FLAGS)

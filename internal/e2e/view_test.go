@@ -173,7 +173,7 @@ func TestSmokeFirstViewFills(t *testing.T) {
 	// The first console to show the coordinator gives it its rectangle:
 	// the window less the sidebar and the status bar.
 	w1 := env.Window(136, 40)
-	w1.WaitFor(" ■ "+alpha, wait)
+	w1.WaitFor(" ■ "+alpha, agentWait)
 	clickCoordinator(t, w1, alpha)
 	w1.WaitUntil("attached to alpha", agentWait, func(sc string) bool { return lastLine(sc, alpha+" › coordinator") })
 	waitPaneSize(t, env, co, threadCols(136), 38)
@@ -202,7 +202,7 @@ func TestSmokeFirstViewFills(t *testing.T) {
 	assertPaneSize(t, env, th, threadCols(120), 28)
 	for _, w := range []*Window{w2, w3, w4} {
 		w.Detach()
-		w.WaitExit(wait)
+		w.WaitExit(agentWait)
 	}
 }
 
