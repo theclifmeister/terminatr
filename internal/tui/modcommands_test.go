@@ -90,15 +90,39 @@ func TestModCommandMenuAndHelp(t *testing.T) {
 		t.Fatalf("menu entry sent %+v", src.commands)
 	}
 	help := strings.Join(keyLines(200, m.commandHelp()), "\n")
-	for _, want := range []string{"Mod commands", "Relabel (tm mod run lab relabel)", "Sweep (tm mod run lab sweep); its key j is taken", "Go beta (tm mod run only"} {
+	for _, want := range []string{"Mod commands", "Relabel · Labeller (tm mod run lab relabel)", "g prefix+g", "Sweep · Labeller (tm mod run lab sweep); its key j is taken", "in a mod's view"} {
 		if !strings.Contains(help, want) {
 			t.Errorf("help lacks %q:\n%s", want, help)
 		}
+	}
+	if strings.Contains(help, "Go beta") {
+		t.Errorf("help lists a command of a mod limited to another project:\n%s", help)
 	}
 	if got := strings.Join(m.keyConflicts("lab"), "; "); got != "key conflict: j is the core's list.down" {
 		t.Errorf("lab's conflicts %q", got)
 	}
 	if got := strings.Join(m.keyConflicts("late"), "; "); got != "key conflict: g is lab:relabel's" {
 		t.Errorf("late's conflicts %q", got)
+	}
+}
+
+// TestModHelpScope: the help lists the commands of the mods that run for
+// the project shown, none in safe mode, and no mod's group without any.
+func TestModHelpScope(t *testing.T) {
+	src, m := commandDash(t)
+	// A disabled mod isn't in the registry's commands at all.
+	if h := strings.Join(keyLines(200, m.commandHelp()), "\n"); strings.Contains(h, "tm mod run off") {
+		t.Fatalf("a disabled mod's command is listed:\n%s", h)
+	}
+	m.over = &Over{Project: "beta"}
+	if h := strings.Join(keyLines(200, m.commandHelp()), "\n"); !strings.Contains(h, "Go beta · Only") || !strings.Contains(h, "G prefix+G") {
+		t.Fatalf("beta's help lacks its command:\n%s", h)
+	}
+	m.over = nil
+	src.data.NoMods = true
+	m.setData(src.data)
+	h := strings.Join(keyLines(200, m.commandHelp()), "\n")
+	if strings.Contains(h, "Mod commands:") || strings.Contains(h, "Relabel") {
+		t.Fatalf("safe mode lists mods' commands:\n%s", h)
 	}
 }
