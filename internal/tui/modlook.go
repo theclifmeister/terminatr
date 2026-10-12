@@ -110,12 +110,15 @@ func useTheme(r *mod.Registry, value string) error {
 	return err
 }
 
-// setScheme follows the console's colour scheme, light or dark (mode
-// 2031, or the terminal's background).
-func setScheme(dark bool) {
-	if themeDark.Swap(dark) != dark {
-		setTheme(*themeTab.Load(), dark)
+// setScheme follows the console's colour scheme, light or dark: the
+// terminal's background (OSC 11), in the dashboard and in a session
+// alike. It reports whether the scheme changed.
+func setScheme(dark bool) bool {
+	if themeDark.Swap(dark) == dark {
+		return false
 	}
+	setTheme(*themeTab.Load(), dark)
+	return true
 }
 
 // themed reports whether the console's theme is a mod's, whose light and

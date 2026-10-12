@@ -57,10 +57,14 @@ const (
 
 // Outer terminal setup: alternate screen, bracketed paste, kitty keyboard
 // "disambiguate" (so Shift+Enter and the prefix are unambiguous), colour
-// scheme updates (2031) plus a query for the current scheme.
+// scheme updates (2031) plus a query for the current scheme, and a query
+// for the background colour (OSC 11), from which the theme takes its
+// light or dark roles, as the dashboard's does (T319).
 const (
-	outerSetup   = "\x1b[?1049h\x1b[?2004h\x1b[>1u\x1b[?2031h\x1b[?996n"
-	outerRestore = "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1006l\x1b[?2031l" +
+	outerSetup = "\x1b[?1049h\x1b[?2004h\x1b[>1u\x1b[?2031h\x1b[?996n" + askBackground
+	// askBackground asks the outer terminal its background colour.
+	askBackground = "\x1b]11;?\x07"
+	outerRestore  = "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1006l\x1b[?2031l" +
 		"\x1b[<u\x1b[?2004l\x1b[0m\x1b[0 q\x1b[?25h\x1b[?1049l"
 )
 
@@ -1023,16 +1027,37 @@ func (c *client) handle(ev uv.Event) {
 		if _, ok := e.(uv.LightColorSchemeEvent); ok {
 			scheme = emu.SchemeLight
 		}
-		setScheme(scheme == emu.SchemeDark)
+		// The panes' programs get the scheme. The console's theme follows
+		// the background instead, like the dashboard's: a terminal whose
+		// scheme (the system's, say) isn't its background's would flip
+		// the theme between the two views. It may have changed with the
+		// scheme: ask it again.
 		if !c.lock() {
 			return
 		}
 		ps := c.leaves()
+		c.osc = append(c.osc, askBackground...)
 		c.mu.Unlock()
+		c.poke()
 		for _, p := range ps {
 			c.send(p, proto.FrameColorScheme, []byte{byte(scheme)})
 		}
+	case uv.BackgroundColorEvent:
+		c.background(e.IsDark())
 	}
+}
+
+// background follows the outer terminal's background, light or dark:
+// the theme's roles for it, and the sidebar, info panel and status bar
+// drawn again in them.
+func (c *client) background(dark bool) {
+	if !setScheme(dark) || !c.lock() {
+		return
+	}
+	c.full = true
+	c.status()
+	c.mu.Unlock()
+	c.poke()
 }
 
 // key handles a key from the outer terminal: the prefix and the command

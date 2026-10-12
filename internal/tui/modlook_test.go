@@ -1,10 +1,15 @@
 package tui
 
 import (
+	"fmt"
+	"image/color"
 	"os"
 	"slices"
 	"strings"
 	"testing"
+
+	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/mod"
@@ -206,5 +211,59 @@ func TestLookPickers(t *testing.T) {
 	}
 	if out := screen(m); strings.Contains(out, "[ui]") || strings.Contains(out, "theme =") {
 		t.Fatalf("the popup names the file's keys:\n%s", out)
+	}
+}
+
+// TestThemeAcrossViews (T319): a mod's theme keeps its scheme as the
+// console goes from the dashboard (a project's folder) to a session
+// (its coordinator) and back. Both take light or dark from the
+// terminal's background; the session's colour scheme report (2031),
+// which may differ (the system's appearance under a dark terminal),
+// goes to the panes' programs and leaves the theme be.
+func TestThemeAcrossViews(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	t.Setenv("COLORTERM", "truecolor")
+	resetLook(t)
+	installMod(t, "nord", nord)
+	writeConfig(t, "[ui]\ntheme = \"nord\"\n[mods.nord]\nenabled = true\n")
+	const light, dark = "94;129;172", "136;192;208" // nord's accent
+	accent := func(view, want string) {
+		t.Helper()
+		if got := th().Accent.Render("x"); !strings.Contains(got, want) {
+			t.Fatalf("%s: accent %q, want %s", view, got, want)
+		}
+	}
+
+	// A light terminal background, with the system dark.
+	white := color.RGBA{0xff, 0xff, 0xff, 0xff}
+	for i := range 3 {
+		// The dashboard: it loads the look and asks the background.
+		if err := loadLook(); err != nil {
+			t.Fatal(err)
+		}
+		(&dash{}).update(tea.BackgroundColorMsg{Color: white})
+		accent(fmt.Sprintf("dashboard %d", i), light)
+
+		// The session: it loads the look again, then the terminal
+		// answers its scheme query (dark) and its background one.
+		if err := loadLook(); err != nil {
+			t.Fatal(err)
+		}
+		c := &client{}
+		c.handle(uv.DarkColorSchemeEvent{})
+		accent(fmt.Sprintf("session %d, scheme report", i), light)
+		if !strings.Contains(string(c.osc), askBackground) {
+			t.Fatalf("a scheme change doesn't ask the background again: %q", c.osc)
+		}
+		c.handle(uv.BackgroundColorEvent{Color: white})
+		accent(fmt.Sprintf("session %d, background", i), light)
+	}
+
+	// The background turning dark recolours the session's own parts.
+	c := &client{}
+	c.handle(uv.BackgroundColorEvent{Color: color.RGBA{0x2e, 0x34, 0x40, 0xff}})
+	accent("session, dark background", dark)
+	if !c.full {
+		t.Fatal("a new scheme doesn't redraw the sidebar and status bar")
 	}
 }
