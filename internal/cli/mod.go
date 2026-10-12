@@ -249,7 +249,7 @@ func (e *Env) modExamples(asJSON bool) error {
 	if asJSON {
 		rows := []exampleRow{}
 		for _, x := range mod.Examples {
-			rows = append(rows, exampleRow{ID: x.ID, Surface: x.Surface, Perms: append([]string{}, x.Perms...),
+			rows = append(rows, exampleRow{ID: x.ID, Surface: x.Surface, Perms: append([]string{}, x.Perms()...),
 				Builtin: mod.IsBundled(x.ID), Install: mod.InstallLines(x.ID)})
 		}
 		return e.printJSON(struct {
@@ -261,7 +261,7 @@ func (e *Env) modExamples(asJSON bool) error {
 	fmt.Fprintf(e.Stdout, "terminatr's example mods, one for each place a mod can show up: %s\n", mod.ExamplesURL)
 	fmt.Fprintf(e.Stdout, "Nothing here is installed. From a checkout (git clone %s), then:\n", mod.ExamplesRepo)
 	for _, x := range mod.Examples {
-		fmt.Fprintf(e.Stdout, "\n%s  %s · %s\n", x.ID, x.Surface, strings.Join(mod.Permissions{}.Words(x.Perms), " · "))
+		fmt.Fprintf(e.Stdout, "\n%s  %s · %s\n", x.ID, x.Surface, strings.Join(x.Words(), " · "))
 		for _, l := range mod.InstallLines(x.ID) {
 			fmt.Fprintf(e.Stdout, "  %s\n", l)
 		}

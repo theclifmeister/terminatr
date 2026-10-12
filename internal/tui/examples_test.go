@@ -44,8 +44,13 @@ func TestExampleMods(t *testing.T) {
 		if m.ID != d.Name() {
 			t.Errorf("%s: id %q isn't its folder's name", d.Name(), m.ID)
 		}
-		if asks := m.Permissions.Requested(); ok && !slices.Equal(asks, e.Perms) {
-			t.Errorf("%s asks for %q; mod.Examples says %q", m.ID, asks, e.Perms)
+		if asks := m.Permissions.Requested(); ok && !slices.Equal(asks, e.Perms()) {
+			t.Errorf("%s asks for %q; mod.Examples says %q", m.ID, asks, e.Perms())
+		}
+		// In the consent screen's words: gitlab "runs glab", not "runs "
+		// (T301 B6).
+		if want := m.Permissions.Words(m.Permissions.Requested()); ok && !slices.Equal(e.Words(), want) {
+			t.Errorf("%s: tm mod examples says %q; its consent says %q", m.ID, e.Words(), want)
 		}
 		x := mod.Mod{ID: m.ID, Dir: dir, Manifest: m}
 		if x.Has(mod.KindKeymap) {

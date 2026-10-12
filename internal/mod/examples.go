@@ -17,28 +17,35 @@ const ExamplesRepo = "https://github.com/theclifmeister/terminatr"
 const ExamplesPath = "examples/mods"
 
 // Example is one mod of the folder: its id (and folder name), the
-// surface it shows and the permissions it asks for.
+// surface it shows and the permissions its mod.toml asks for.
 type Example struct {
 	ID, Surface string
-	Perms       []string
+	Asks        Permissions
 }
+
+// Perms are the permissions the example asks for, by name.
+func (x Example) Perms() []string { return x.Asks.Requested() }
+
+// Words are the example's permissions in the consent screen's words
+// ("runs glab"); none is "safe".
+func (x Example) Words() []string { return x.Asks.Words(x.Perms()) }
 
 // Examples are the folder's mods: one per surface, an agent tool and a
 // code host.
 var Examples = []Example{
-	{"nord", "theme and icon set", nil},
-	{"vim-keys", "keymap", nil},
-	{"context-gauge", "a cell in the sidebar and dashboard, and a card whose rows bind session.clear and session.attach", []string{PermProjectRead, PermViews, PermActions}},
-	{"cost-card", "a dashboard card", []string{PermProjectRead, PermViews}},
-	{"notify-me", "OS notifications with core-action buttons, a question's options among them", []string{PermProjectRead, PermNotify, PermActions}},
-	{"thread-timeline", "a full view", []string{PermProjectRead, PermViews}},
-	{"standup", "a command: a key, a ≡ menu entry and tm mod run", []string{PermProjectRead, PermViews}},
-	{"report-glance", "panel sections: the details panel's and the coordinator's", []string{PermProjectRead, PermViews}},
-	{"pr-ci-column", "a sidebar column (also built in)", []string{PermProjectRead}},
-	{"memory-tab", "a project-popup tab (also built in)", []string{PermProjectRead, PermViews}},
-	{"tasks-tab", "a project-popup tab whose rows bind tm's task actions (built in, off)", []string{PermProjectRead, PermViews}},
-	{"memory-search", "an agent tool", []string{PermProjectRead, PermTools}},
-	{"gitlab", "a code host (GitLab, through glab)", []string{PermCommands}},
+	{"nord", "theme and icon set", Permissions{}},
+	{"vim-keys", "keymap", Permissions{}},
+	{"context-gauge", "a cell in the sidebar and dashboard, and a card whose rows bind session.clear and session.attach", Permissions{ProjectRead: true, Views: true, Actions: []string{"session.clear"}}},
+	{"cost-card", "a dashboard card", Permissions{ProjectRead: true, Views: true}},
+	{"notify-me", "OS notifications with core-action buttons, a question's options among them", Permissions{ProjectRead: true, Notify: true, Actions: []string{"question.answer"}}},
+	{"thread-timeline", "a full view", Permissions{ProjectRead: true, Views: true}},
+	{"standup", "a command: a key, a ≡ menu entry and tm mod run", Permissions{ProjectRead: true, Views: true}},
+	{"report-glance", "panel sections: the details panel's and the coordinator's", Permissions{ProjectRead: true, Views: true}},
+	{"pr-ci-column", "a sidebar column (also built in)", Permissions{ProjectRead: true}},
+	{"memory-tab", "a project-popup tab (also built in)", Permissions{ProjectRead: true, Views: true}},
+	{"tasks-tab", "a project-popup tab whose rows bind tm's task actions (built in, off)", Permissions{ProjectRead: true, Views: true}},
+	{"memory-search", "an agent tool", Permissions{ProjectRead: true, Tools: true}},
+	{"gitlab", "a code host (GitLab, through glab)", Permissions{Commands: []string{"glab"}}},
 }
 
 // InstallLines are how example id installs from a checkout of

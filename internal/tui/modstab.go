@@ -981,7 +981,7 @@ func (ev *examplesView) lines(w int) []string {
 	out = append(out, faintLines("From a checkout: git clone "+mod.ExamplesRepo+", then", w)...)
 	for _, e := range mod.Examples {
 		out = append(out, "")
-		out = append(out, ansi.Truncate(th().Head.Render(e.ID)+"  "+e.Surface+th().Faint.Render(" · "+strings.Join(mod.Permissions{}.Words(e.Perms), " · ")), w, "…"))
+		out = append(out, ansi.Truncate(th().Head.Render(e.ID)+"  "+e.Surface+th().Faint.Render(" · "+strings.Join(e.Words(), " · ")), w, "…"))
 		for _, l := range mod.InstallLines(e.ID) {
 			out = append(out, ansi.Truncate("  "+l, w, "…"))
 		}
