@@ -12,6 +12,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
@@ -62,14 +63,14 @@ func (e *Env) openArg(path string) (*os.File, error) {
 // argPlaces says where an agent's files may be, for its refusal.
 func (e *Env) argPlaces() string {
 	if e.Caller.Kind == caller.Thread {
-		return "its worktree or a temp folder"
+		return "its worktree or its own temp folder ($TMPDIR)"
 	}
-	return "its project's folder or worktrees, or a temp folder"
+	return "its project's folder or worktrees, or its own temp folder ($TMPDIR)"
 }
 
 // argRoots are the folders an agent caller's files may be in: a thread's
 // worktree, a coordinator's project folder and its threads' worktrees,
-// and the temp folders where an agent writes what it hands in. Each comes
+// and the agent's own temp folder, where it writes what it hands in. Each comes
 // also with its links resolved (/tmp is /private/tmp on macOS), so either
 // spelling of a path matches.
 func (e *Env) argRoots() []string {
@@ -92,7 +93,7 @@ func (e *Env) argRoots() []string {
 			}
 		}
 	}
-	roots = append(roots, tempRoots()...)
+	roots = append(roots, tempRoots(e)...)
 	out := make([]string, 0, 2*len(roots))
 	for _, r := range roots {
 		if !filepath.IsAbs(r) {
@@ -106,9 +107,37 @@ func (e *Env) argRoots() []string {
 	return out
 }
 
-// tempRoots are the temp folders an agent's files may be in (a variable
-// for tests, whose own temp folders are under them).
-var tempRoots = func() []string { return []string{os.TempDir(), "/tmp"} }
+// tempRoots is the temp folder an agent caller's files may be in: its
+// agent's own, where its sandbox has it write ([guard] temp, its
+// TMPDIR), not every temp folder, which holds files that sandbox keeps
+// from it; the server's own when the agent is unknown (a mod's call).
+// A variable for tests, whose own temp folders are elsewhere.
+var tempRoots = func(e *Env) []string {
+	if name := e.callerAgent(); name != "" {
+		if d := agent.AgentTemp(nil, name, os.Getenv); d != "" {
+			return []string{d}
+		}
+	}
+	return []string{os.TempDir()}
+}
+
+// callerAgent is the agent that runs in the caller's session, "" when
+// there is none or no server says.
+func (e *Env) callerAgent() string {
+	if e.Caller.Session == "" {
+		return ""
+	}
+	var res proto.SessionListResult
+	if err := e.call(proto.MethodSessionList, nil, &res); err != nil {
+		return ""
+	}
+	for _, s := range res.Sessions {
+		if s.ID == e.Caller.Session {
+			return s.Agent
+		}
+	}
+	return ""
+}
 
 // holdsHome reports whether dir is the home folder or holds it.
 func holdsHome(dir string) bool {

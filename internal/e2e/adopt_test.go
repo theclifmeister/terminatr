@@ -14,6 +14,9 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
+	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/server"
 )
 
 const adoptScript = `
@@ -35,6 +38,83 @@ cmd = 'printf "## Report\nAdopted and done.\n\n## Next\nReview it\n" | "$TERMINA
 do = "run"
 cmd = '"$TERMINATR_BIN" done > "$OUT/adopt-done" 2>&1; echo "exit $?" >> "$OUT/adopt-done"'
 `
+
+// coordAdoptScripts are a coordinator's adopts: of the session the test
+// names in $OUT/sid, with the flag that no longer stands for the user's
+// word, and of a session that doesn't exist; then, once the user asked,
+// of that session again.
+var coordAdoptScripts = map[string]string{
+	"coord-adopt": `
+[[step]]
+do = "run"
+cmd = '"$TERMINATR_BIN" thread adopt "$(cat "$OUT/sid")" --approved-by-user > "$OUT/adopt-unasked" 2>&1; echo "exit $?" >> "$OUT/adopt-unasked"'
+
+[[step]]
+do = "run"
+cmd = '"$TERMINATR_BIN" thread adopt s-99 > "$OUT/adopt-missing" 2>&1; echo "exit $?" >> "$OUT/adopt-missing"'
+`,
+	"coord-adopt-asked": `
+[[step]]
+do = "run"
+cmd = '"$TERMINATR_BIN" thread adopt "$(cat "$OUT/sid")" > "$OUT/adopt-asked" 2>&1; echo "exit $?" >> "$OUT/adopt-asked"'
+`,
+}
+
+// TestThreadAdoptNeedsTheUser (T315): the coordinator adopts only the
+// session the user asked it to on the human socket (T on the dashboard),
+// whatever start_threads and --approved-by-user say; unasked, its refusal
+// is the same for a session that doesn't exist. The go-ahead is used up.
+func TestThreadAdoptNeedsTheUser(t *testing.T) {
+	env, projDir, out := threadEnv(t)
+	env.scripts(coordAdoptScripts)
+	writeConfig(t, env, "[projects.demo]\nstart_threads = \"auto\"\n")
+	repo := firstRepo(t, projDir)
+	env.Trust(repo)
+	s := env.StartAgent("claude", repo)
+	env.WaitState(s, "idle", agentWait)
+	os.WriteFile(filepath.Join(out, "sid"), []byte(s.ID), 0o644)
+
+	coord := &Session{ID: strings.TrimSpace(env.MustCLI("project", "open", "demo"))}
+	env.WaitState(coord, "idle", agentWait)
+	env.Prompt(coord, "run coord-adopt")
+	unasked, missing := readOut(t, out, "adopt-unasked"), readOut(t, out, "adopt-missing")
+	if !strings.Contains(unasked, "needs-approval") || !strings.Contains(unasked, "hasn't asked to adopt "+s.ID) || !strings.Contains(unasked, "exit 1") {
+		t.Fatalf("unasked adopt: %q", unasked)
+	}
+	if !strings.Contains(missing, "needs-approval") || strings.Contains(missing, "no session") || !strings.Contains(missing, "exit 1") {
+		t.Fatalf("adopt of a missing session: %q", missing)
+	}
+	if info, _ := env.Info(s); info.Role != "shell" {
+		t.Fatalf("adopted unasked: %+v", info)
+	}
+
+	// The user's T: the go-ahead on the human socket, which a client in
+	// an agent's session doesn't try (a run of this suite from a thread).
+	t.Setenv(caller.EnvSession, "")
+	c, err := server.Dial(server.Paths{Socket: env.Socket}, proto.KindControl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if err := c.Call(proto.MethodSessionAdoptAsk, proto.SessionAdoptAskParams{ID: s.ID, Project: "demo"}, nil); err != nil {
+		t.Fatalf("session.adopt.ask: %v", err)
+	}
+	env.WaitState(coord, "idle", agentWait)
+	env.Prompt(coord, "run coord-adopt-asked")
+	if got := readOut(t, out, "adopt-asked"); !strings.Contains(got, "adopted session "+s.ID+" as t-0001") {
+		t.Fatalf("asked adopt: %q", got)
+	}
+	if info, _ := env.Info(s); info.Role != "thread" || info.Thread != "t-0001" {
+		t.Fatalf("session after adopt: %+v", info)
+	}
+	var asked proto.SessionAdoptAskResult
+	if err := c.Call(proto.MethodSessionAdoptAsk, proto.SessionAdoptAskParams{ID: s.ID, Project: "demo", Check: true}, &asked); err != nil || asked.Asked {
+		t.Fatalf("the go-ahead outlived the adopt: %+v %v", asked, err)
+	}
+	if j, _ := os.ReadFile(filepath.Join(projDir, "JOURNAL.md")); !strings.Contains(string(j), "coordinator thread.adopt t-0001") || !strings.Contains(string(j), "(asked by the user)") {
+		t.Errorf("journal:\n%s", j)
+	}
+}
 
 func TestThreadAdopt(t *testing.T) {
 	env, projDir, out := threadEnv(t)

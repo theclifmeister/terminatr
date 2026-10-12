@@ -21,8 +21,9 @@ import (
 func TestAgentFiles(t *testing.T) {
 	h := newHarness(t)
 	tmp := t.TempDir()
-	tempRoots = func() []string { return []string{tmp} }
-	t.Cleanup(func() { tempRoots = func() []string { return []string{os.TempDir(), "/tmp"} } })
+	prev := tempRoots
+	tempRoots = func(*Env) []string { return []string{tmp} }
+	t.Cleanup(func() { tempRoots = prev })
 	h.ok(human, "project", "new", "demo")
 	h.env["TERMINATR_PROJECT"] = "demo"
 	p, _ := project.Open("demo")

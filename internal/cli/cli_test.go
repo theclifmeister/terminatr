@@ -575,3 +575,21 @@ func TestArchivedShow(t *testing.T) {
 		}
 	}
 }
+
+// TestAgentThreadLimits (T315): under start_threads = propose --over-cap
+// is no go-ahead of its own; an agent names only the project's repos
+// with --repo, and only the user adds one.
+func TestAgentThreadLimits(t *testing.T) {
+	h := newHarness(t)
+	listed, other := t.TempDir(), t.TempDir()
+	h.ok(human, "project", "new", "demo", "--repo", listed)
+	h.expect(1, "needs-approval", coord, "thread", "start", "--over-cap", "Fix it", "--project", "demo")
+
+	os.WriteFile(filepath.Join(h.root, "config.toml"), []byte("[projects.demo]\nstart_threads = \"auto\"\n"), 0o600)
+	h.expect(1, "unlisted-repo", coord, "thread", "start", "--repo", other, "Fix it", "--project", "demo")
+	h.expect(1, "human-only", coord, "project", "repo", "add", other, "--project", "demo")
+	if out := h.ok(human, "project", "repo", "add", other, "--project", "demo"); !strings.Contains(out, "added") {
+		t.Fatalf("the human's repo add: %q", out)
+	}
+	h.ok(coord, "project", "repo", "remove", other, "--project", "demo")
+}

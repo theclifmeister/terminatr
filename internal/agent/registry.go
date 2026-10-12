@@ -265,6 +265,15 @@ func GuardWritable(reg *Registry, name, home string, getenv func(string) string)
 	return GuardPaths(m.Guard.Writable, home, getenv)
 }
 
+// AgentTemp is the temp folder of the agent named name ([guard] temp,
+// GuardTemp): reg's manifest, else the built-in one; "" for none.
+func AgentTemp(reg *Registry, name string, getenv func(string) string) string {
+	if m := manifestNamed(reg, name); m != nil {
+		return GuardTemp(m.Guard.Temp, getenv)
+	}
+	return ""
+}
+
 // GuardTools is the [guard.tools] of the agent named name: reg's
 // manifest, else the built-in one.
 func GuardTools(reg *Registry, name string) map[string]guard.Tool {

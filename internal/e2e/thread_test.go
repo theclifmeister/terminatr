@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -110,7 +111,7 @@ cmd = 'printf "## Report\nSome work.\n" | "$TERMINATR_BIN" report > "$OUT/badrep
 
 [[step]]
 do = "run"
-cmd = 'printf "notes\n" > "$OUT/notes.md"; printf "PR: https://github.com/o/r/pull/7\n\n## Report\nDid it.\n\n## Next\nMerge the PR\n\n## Remember\n- a lesson\n" | "$TERMINATR_BIN" report --attach "$OUT/notes.md" > "$OUT/report" 2>&1; echo "exit $?" >> "$OUT/report"'
+cmd = 'printf "notes\n" > "$AGENT_TMP/notes.md"; printf "PR: https://github.com/o/r/pull/7\n\n## Report\nDid it.\n\n## Next\nMerge the PR\n\n## Remember\n- a lesson\n" | "$TERMINATR_BIN" report --attach "$AGENT_TMP/notes.md" > "$OUT/report" 2>&1; echo "exit $?" >> "$OUT/report"'
 
 [[step]]
 do = "run"
@@ -135,6 +136,17 @@ func threadEnv(t *testing.T) (env *Env, projDir, out string) {
 	env.Setenv("FAKEAGENT_SCRIPTS", scripts)
 	out = t.TempDir()
 	env.Setenv("OUT", out)
+	// The fake Claude writes what it attaches in its own temp folder, as
+	// Claude does ([guard] temp): $CLAUDE_CODE_TMPDIR/claude-<uid>; where
+	// there are no uids (Windows), the server's temp folder holds out.
+	agentTmp := out
+	if uid := os.Getuid(); uid >= 0 {
+		ct := t.TempDir()
+		env.Setenv("CLAUDE_CODE_TMPDIR", ct)
+		agentTmp = filepath.Join(ct, "claude-"+strconv.Itoa(uid))
+		os.MkdirAll(agentTmp, 0o700)
+	}
+	env.Setenv("AGENT_TMP", agentTmp)
 
 	root := t.TempDir()
 	origin, repo := filepath.Join(root, "origin.git"), filepath.Join(root, "repo")

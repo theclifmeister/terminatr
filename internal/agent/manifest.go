@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -179,6 +180,12 @@ type Guard struct {
 	// Writable are the agent's own folders its threads write to besides
 	// the worktree and the temporary folders (the worktree-only rule).
 	Writable []string `toml:"writable"`
+	// Temp is where the agent's sandbox has it write temporary files
+	// (its TMPDIR): entries absolute or under $VAR, "{uid}" the user's
+	// id; the first that resolves is the agent's temp folder, the only
+	// one an agent's file arguments may name besides its worktree
+	// (docs/SPEC.md §7.2).
+	Temp []string `toml:"temp"`
 	// Tools are the agent's tools the guard judges, by name: each one's
 	// kind (shell, write, patch, read, glob) and the input fields that
 	// kind reads, e.g. Bash = { kind = "shell", fields = ["command"] };
@@ -218,6 +225,33 @@ func GuardPaths(entries []string, home string, getenv func(string) string) []str
 
 // validGuardPath reports whether a [guard] entry is home-relative or
 // starts with a variable, and stays out of "..".
+// GuardTemp resolves [guard] temp to the agent's temp folder: the first
+// entry whose variables are set and that is absolute on this system,
+// with "{uid}" the user's id (an entry with one is left out where there
+// are no uids: Windows); "" for none.
+func GuardTemp(entries []string, getenv func(string) string) string {
+	for _, e := range entries {
+		missing := false
+		p := os.Expand(e, func(name string) string {
+			v := getenv(name)
+			if v == "" {
+				missing = true
+			}
+			return v
+		})
+		if strings.Contains(p, "{uid}") {
+			if os.Getuid() < 0 {
+				continue
+			}
+			p = strings.ReplaceAll(p, "{uid}", strconv.Itoa(os.Getuid()))
+		}
+		if !missing && filepath.IsAbs(p) {
+			return filepath.Clean(p)
+		}
+	}
+	return ""
+}
+
 func validGuardPath(e string) bool {
 	if e == "" || slices.Contains(strings.Split(filepath.ToSlash(e), "/"), "..") {
 		return false
@@ -398,6 +432,11 @@ func (m *Manifest) validate() error {
 	for _, e := range m.Guard.Writable {
 		if !validGuardPath(e) {
 			errs = append(errs, fmt.Errorf("guard.writable: %q is not relative to home or under $VAR", e))
+		}
+	}
+	for _, e := range m.Guard.Temp {
+		if e == "" || slices.Contains(strings.Split(filepath.ToSlash(e), "/"), "..") || !(strings.HasPrefix(e, "/") || strings.HasPrefix(e, "$")) {
+			errs = append(errs, fmt.Errorf("guard.temp: %q is not absolute or under $VAR", e))
 		}
 	}
 	for _, name := range slices.Sorted(maps.Keys(m.Guard.Tools)) {

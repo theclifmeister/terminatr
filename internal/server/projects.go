@@ -172,6 +172,9 @@ func (s *Server) adopt(p proto.SessionAdoptParams) (any, *proto.Error) {
 	st, hasAgent := sess.AgentState()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if p.Asked && s.adoptAsks[p.ID] != p.Project {
+		return nil, proto.Errorf(proto.ErrRefused, "the user hasn't asked to adopt session %s into %s", p.ID, p.Project)
+	}
 	r, ok := s.records[p.ID]
 	if !ok {
 		return nil, proto.Errorf(proto.ErrUnknownSession, "no session %q", p.ID)
@@ -192,6 +195,7 @@ func (s *Server) adopt(p proto.SessionAdoptParams) (any, *proto.Error) {
 	}
 	r.Prompted = r.Prompted || worked(st)
 	s.records[p.ID] = r
+	delete(s.adoptAsks, p.ID)
 	sess.Adopt(session.Identity{Role: r.Role, Project: r.Project, Thread: r.Thread})
 	if err := s.saveLocked(""); err != nil {
 		s.log.Printf("sessions.json: %v", err)
@@ -202,4 +206,26 @@ func (s *Server) adopt(p proto.SessionAdoptParams) (any, *proto.Error) {
 	s.watch.wake()
 	s.log.Printf("session %s: adopted as thread %s of %s", p.ID, p.Thread, p.Project)
 	return proto.SessionStartResult{Session: s.info(sess)}, nil
+}
+
+// adoptAsk records the human's go-ahead to adopt session p.ID into
+// project p.Project (T on the dashboard), replacing an earlier one for
+// another project; with p.Check it only says whether that go-ahead
+// waits. It is human-only (proto.HumanOnly): an agent's tm thread adopt
+// needs it (session.adopt's Asked), so the coordinator can't take over
+// the user's own agent session on its own word.
+func (s *Server) adoptAsk(p proto.SessionAdoptAskParams) (any, *proto.Error) {
+	if p.ID == "" || p.Project == "" {
+		return nil, proto.Errorf(proto.ErrBadParams, "session.adopt.ask needs a session and a project")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if p.Check {
+		return proto.SessionAdoptAskResult{Asked: s.adoptAsks[p.ID] == p.Project && s.sessions[p.ID] != nil}, nil
+	}
+	if s.sessions[p.ID] == nil {
+		return nil, proto.Errorf(proto.ErrUnknownSession, "no session %q", p.ID)
+	}
+	s.adoptAsks[p.ID] = p.Project
+	return proto.SessionAdoptAskResult{Asked: true}, nil
 }

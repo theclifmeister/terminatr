@@ -771,6 +771,12 @@ func (s *ServerSource) AskAdopt(slug string, sess proto.SessionInfo) (bool, erro
 	if err != nil {
 		return false, err
 	}
+	// The go-ahead the coordinator's tm thread adopt needs is the
+	// server's, given only on the human socket; the inbox item, which an
+	// agent could write too, only tells the coordinator.
+	if err := s.call(proto.MethodSessionAdoptAsk, proto.SessionAdoptAskParams{ID: sess.ID, Project: slug}, nil); err != nil {
+		return false, err
+	}
 	return p.AskAdopt(s.Caller, sess.ID, adoptWhere(sess, ""))
 }
 

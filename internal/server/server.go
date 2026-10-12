@@ -117,12 +117,15 @@ type Server struct {
 	sleeping map[string]bool
 	dormant  map[string]SessionRecord
 	blocked  map[string]bool // sessions whose agent is blocked, for alerts
-	nextID   int
-	stopping bool
-	prevShut string
-	lost     []string
-	resumed  []string
-	conns    map[net.Conn]struct{}
+	// adoptAsks are the human's go-aheads to adopt a session (by id)
+	// into a project (session.adopt.ask), kept until it is adopted.
+	adoptAsks map[string]string
+	nextID    int
+	stopping  bool
+	prevShut  string
+	lost      []string
+	resumed   []string
+	conns     map[net.Conn]struct{}
 	// handlers counts the connection goroutines: Run waits for them, so
 	// nothing logs or writes state after it returned.
 	handlers sync.WaitGroup
@@ -257,20 +260,21 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	s := &Server{
-		opts:     opts,
-		log:      logger,
-		build:    version.BuildID(),
-		started:  time.Now(),
-		noMods:   mod.NoMods(os.Getenv),
-		stopReq:  make(chan struct{}),
-		sessions: map[string]*session.Session{},
-		records:  map[string]SessionRecord{},
-		relaunch: map[string]bool{},
-		sleeping: map[string]bool{},
-		dormant:  map[string]SessionRecord{},
-		blocked:  map[string]bool{},
-		nextID:   1,
-		conns:    map[net.Conn]struct{}{},
+		opts:      opts,
+		log:       logger,
+		build:     version.BuildID(),
+		started:   time.Now(),
+		noMods:    mod.NoMods(os.Getenv),
+		stopReq:   make(chan struct{}),
+		sessions:  map[string]*session.Session{},
+		records:   map[string]SessionRecord{},
+		relaunch:  map[string]bool{},
+		sleeping:  map[string]bool{},
+		dormant:   map[string]SessionRecord{},
+		blocked:   map[string]bool{},
+		adoptAsks: map[string]string{},
+		nextID:    1,
+		conns:     map[net.Conn]struct{}{},
 
 		prevProject: map[string]string{},
 		protocol:    proto.Protocol,
@@ -898,6 +902,12 @@ func (s *Server) dispatch(req proto.Request, peerPID int, human bool, who func()
 			return nil, err
 		}
 		return s.adopt(p)
+	case proto.MethodSessionAdoptAsk:
+		var p proto.SessionAdoptAskParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.adoptAsk(p)
 	case proto.MethodAgentList:
 		return s.agentList(), nil
 	case proto.MethodAgentReload:
@@ -1149,6 +1159,7 @@ func (s *Server) sessionExited(sess *session.Session) {
 	}()
 	delete(s.sessions, sess.ID())
 	delete(s.blocked, sess.ID())
+	delete(s.adoptAsks, sess.ID())
 	s.closeModLocked(sess.ID())
 	if s.tick != nil {
 		s.tick.Kick()
