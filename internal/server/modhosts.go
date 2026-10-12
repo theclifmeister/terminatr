@@ -87,18 +87,21 @@ func (s *Server) modSpecs() ([]modsup.Spec, bool) {
 		if m.State != mod.Enabled || m.Manifest == nil || !m.Manifest.IsCode() || s.noMods && !m.Builtin {
 			continue
 		}
-		sp := modsup.Spec{ID: m.ID, Grants: m.Grants, Projects: m.Projects, Settings: m.Settings}
+		// A mod that draws columns runs from the server's start: a
+		// lazy host never says mod.ready, so its cached cells would stay
+		// stale after a restart until an event arrived. The others (the
+		// Memory tab) wait, lazily, for their first event.
+		sp := modsup.Spec{ID: m.ID, Grants: m.Grants, Projects: m.Projects, Settings: m.Settings,
+			Eager: len(m.Manifest.Provides.Columns) > 0}
 		if m.Builtin {
 			// Precompiled into tm (go generate ./internal/mod): it
-			// runs without esbuild; one that draws columns runs from
-			// the server's start, the others (the Memory tab) wait,
-			// lazily, for their first event.
+			// runs without esbuild.
 			b, err := m.ReadFile(m.Manifest.Provides.Main)
 			if err != nil {
 				s.log.Printf("mods: built-in %s: %v", m.ID, err)
 				continue
 			}
-			sp.Bundle, sp.Eager = b, len(m.Manifest.Provides.Columns) > 0
+			sp.Bundle = b
 		} else {
 			sp.Entry = filepath.Join(m.Dir, filepath.FromSlash(m.Manifest.Provides.Main))
 		}
