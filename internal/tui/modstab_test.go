@@ -22,6 +22,9 @@ func (f *fakeSource) human() *ServerSource {
 }
 
 func (f *fakeSource) ModAct(id, verb string) error { return f.human().ModAct(id, verb) }
+func (f *fakeSource) ApplyModDefaults(id string) ([]mod.Suggestion, error) {
+	return f.human().ApplyModDefaults(id)
+}
 func (f *fakeSource) SetModGrants(id string, grants []string) error {
 	return f.human().SetModGrants(id, grants)
 }
@@ -540,5 +543,58 @@ func TestModsDataAndBuiltin(t *testing.T) {
 	modAct(m, src, "enter")
 	if modState(t, src, mod.BundledTemplates).State != mod.Disabled {
 		t.Errorf("enter on default-templates: %q", m.msg)
+	}
+}
+
+// TestModsDefaults: d shows the defaults a mod suggests for all
+// projects beside what they follow now; y applies them once it's on,
+// to config.toml's [defaults], leaving the one the human set there and
+// the one already at its value. Its consent lists them.
+func TestModsDefaults(t *testing.T) {
+	src, m := modsDash(t)
+	installMod(t, "policy", map[string]string{"mod.toml": "id = \"policy\"\nname = \"Policy\"\nversion = \"1.0.0\"\napi = \"1.1\"\n" +
+		"[defaults]\nauto_close = \"days\"\nauto_close_days = 3\npr_followup = true\n"})
+	if err := config.SetDefaults("auto_close_days", 5); err != nil {
+		t.Fatal(err)
+	}
+	src.loadMods()
+	m.setData(src.data)
+	selectMod(t, m, "review-age")
+	press(m, "d")
+	if _, ok := m.top().(*settingsView); !ok || !strings.Contains(m.msg, "Review age suggests no defaults") {
+		t.Fatalf("d on a mod without defaults: %T %q", m.top(), m.msg)
+	}
+	selectMod(t, m, "policy")
+	press(m, "enter")
+	if out := screen(m); !strings.Contains(out, "It suggests defaults for all projects") || !strings.Contains(out, `auto_close = "days"`) {
+		t.Errorf("consent lacks the defaults:\n%s", out)
+	}
+	press(m, "esc")
+	press(m, "d")
+	out := screen(m)
+	for _, want := range []string{"Policy · defaults", `"merged" → "days"`, "5 · yours, stays (it suggests 3)", "true · already", "It is off"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("defaults lacks %q:\n%s", want, out)
+		}
+	}
+	press(m, "y")
+	if cfg, _ := config.Load(); slices.Contains(cfg.OwnDefaults(), "auto_close") {
+		t.Fatal("y applied an off mod's defaults")
+	}
+	press(m, "esc")
+	modAct(m, src, "enter")
+	modAct(m, src, "y")
+	press(m, "d")
+	if out := screen(m); !strings.Contains(out, "y apply") {
+		t.Errorf("an on mod's defaults offer y:\n%s", out)
+	}
+	modAct(m, src, "y")
+	if !strings.Contains(m.msg, "all projects take Policy's auto_close") {
+		t.Errorf("msg %q", m.msg)
+	}
+	cfg, _ := config.Load()
+	s, _ := cfg.AllProjects()
+	if s.AutoClose != config.CloseDays || s.AutoCloseDays != 5 || !slices.Equal(cfg.OwnDefaults(), []string{"auto_close", "auto_close_days"}) {
+		t.Errorf("after y: %s %d, [defaults] sets %v", s.AutoClose, s.AutoCloseDays, cfg.OwnDefaults())
 	}
 }

@@ -157,6 +157,8 @@ type Server struct {
 	// modViews are the views user mods draw (modviews.go).
 	modViewSt  *modview.Store
 	modViewsMu sync.Mutex
+	// presses are the press tokens of mod.action.check (modactions.go).
+	presses pressTokens
 	// modCl are the mods' cells (modcells.go).
 	modCl modCells
 	// notices are the mods' notifications (modnotify.go).

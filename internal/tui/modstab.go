@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -30,7 +31,7 @@ import (
 type modsTab struct{ sel int }
 
 // modsKeys are the Mods tab's action row.
-const modsKeys = "enter on/off · p permissions · s settings · l log · r restart · u update · x remove · e examples · ← → tabs · esc close"
+const modsKeys = "enter on/off · p permissions · s settings · d defaults · l log · r restart · u update · x remove · e examples · ← → tabs · esc close"
 
 // selMod is the selected mod, false for none.
 func (mt *modsTab) selMod(m *dash) (mod.Mod, bool) {
@@ -303,7 +304,7 @@ func (mt *modsTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 	}
 	md, ok := mt.selMod(m)
 	if !ok {
-		return nil, slices.Contains([]string{"enter", "space", " ", "p", "s", "l", "r", "u", "x"}, s)
+		return nil, slices.Contains([]string{"enter", "space", " ", "p", "s", "d", "l", "r", "u", "x"}, s)
 	}
 	switch s {
 	case "enter", "space", " ":
@@ -312,6 +313,12 @@ func (mt *modsTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 		m.push(&modPermsView{id: md.ID})
 	case "s":
 		m.push(newModSettings(md))
+	case "d":
+		if md.Manifest == nil || len(md.Manifest.Defaults) == 0 {
+			m.fail(fmt.Errorf("%s suggests no defaults", modName(md)))
+			return nil, true
+		}
+		m.push(&modDefaultsView{id: md.ID})
 	case "l":
 		m.openModLog(md)
 	case "r":
@@ -440,6 +447,13 @@ func (cv *consentView) lines(m *dash, md mod.Mod, w int) []string {
 			out = append(out, ansi.Truncate(l, w, "…"))
 		}
 	}
+	if d := man.DefaultWords(); len(d) > 0 {
+		out = append(out, "")
+		out = append(out, wrapLines("It suggests defaults for all projects. Nothing changes until you apply them (d in the Mods tab, once it's on), and a setting your config.toml sets stays yours:", w)...)
+		for _, l := range d {
+			out = append(out, ansi.Truncate("  • "+l, w, "…"))
+		}
+	}
 	if shown := md.Shown(); shown != "" {
 		out = append(out, "")
 		for _, l := range strings.Split(strings.TrimRight(shown, "\n"), "\n") {
@@ -502,6 +516,100 @@ func (cv *consentView) render(m *dash) string {
 		title = modName(md) + " wants more"
 	}
 	return m.popup(box{title: title, body: cv.lines(m, md, m.inner(viewWidth)), sel: -1, scroll: cv.scroll, keys: keys})
+}
+
+// modDefaultsView shows the defaults a mod suggests for all projects
+// (mods design §7, Tighten only), each beside what all projects follow
+// now: y applies them, as the human's change, once the mod is on. A
+// setting config.toml's [defaults] sets stays the human's.
+type modDefaultsView struct {
+	id     string
+	scroll int
+}
+
+func (dv *modDefaultsView) lines(md mod.Mod, w int) []string {
+	cfg, _ := config.Load()
+	out := wrapLines(modName(md)+" suggests these defaults for all projects; a project's own settings still win.", w)
+	out = append(out, "")
+	kw := 0
+	sgs := md.Manifest.Suggestions(cfg)
+	for _, sg := range sgs {
+		kw = max(kw, len(sg.Key))
+	}
+	for _, sg := range sgs {
+		l := fmt.Sprintf("  %-*s  ", kw, sg.Key)
+		switch {
+		case sg.Yours:
+			l += mod.SettingWords(sg.Now) + th().Faint.Render(" · yours, stays (it suggests "+mod.SettingWords(sg.Value)+")")
+		case !sg.Applies():
+			l += mod.SettingWords(sg.Now) + th().Faint.Render(" · already")
+		default:
+			l += th().Faint.Render(mod.SettingWords(sg.Now)+" → ") + th().Accent.Render(mod.SettingWords(sg.Value))
+		}
+		out = append(out, ansi.Truncate(l, w, "…"))
+	}
+	out = append(out, "")
+	switch {
+	case md.State != mod.Enabled:
+		out = append(out, faintLines("It is off: its defaults apply once it's on.", w)...)
+	case !slices.ContainsFunc(sgs, mod.Suggestion.Applies):
+		out = append(out, faintLines("Nothing to apply.", w)...)
+	default:
+		out = append(out, faintLines("y writes them to config.toml's [defaults], as your change; settings → All projects changes them back.", w)...)
+	}
+	return out
+}
+
+func (dv *modDefaultsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
+	md, ok := modByID(m, dv.id)
+	if !ok || md.Manifest == nil {
+		m.pop()
+		return nil
+	}
+	if d, ok := scrollKeys[k.String()]; ok {
+		dv.scroll = clampScroll(dv.scroll+d, len(dv.lines(md, m.inner(viewWidth))))
+		return nil
+	}
+	switch k.String() {
+	case "y":
+		if md.State != mod.Enabled {
+			m.fail(fmt.Errorf("%s is off: enter turns it on", modName(md)))
+			return nil
+		}
+		m.pop()
+		src, name := m.src, modName(md)
+		return m.act(func() actionMsg {
+			done, err := src.ApplyModDefaults(md.ID)
+			switch {
+			case err != nil:
+				return actionMsg{err: err}
+			case len(done) == 0:
+				return actionMsg{msg: "nothing to apply"}
+			}
+			keys := make([]string, len(done))
+			for i, sg := range done {
+				keys[i] = sg.Key
+			}
+			return actionMsg{msg: "all projects take " + name + "'s " + strings.Join(keys, ", ")}
+		})
+	case "n", "esc", "q":
+		m.pop()
+	}
+	return nil
+}
+
+func (dv *modDefaultsView) wheel(m *dash, d int) { dv.key(m, arrow(d)) }
+
+func (dv *modDefaultsView) render(m *dash) string {
+	md, ok := modByID(m, dv.id)
+	if !ok || md.Manifest == nil {
+		return m.popup(box{title: "Mod", body: []string{th().Faint.Render("It is no longer installed.")}, sel: -1, keys: "esc back"})
+	}
+	keys := "↑ ↓ scroll · esc back"
+	if md.State == mod.Enabled {
+		keys = "y apply · " + keys
+	}
+	return m.popup(box{title: modName(md) + " · defaults", body: dv.lines(md, m.inner(viewWidth)), sel: -1, scroll: dv.scroll, keys: keys})
 }
 
 // modPermsView lists the permissions a mod asks for, each granted or

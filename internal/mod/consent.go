@@ -21,7 +21,7 @@ import (
 
 // Kinds names what the mod provides, for tm mod list and the Mods tab:
 // code, column, view, tools, code host, commands, theme, icons, keymap,
-// layout, rules, templates, agents, guard.
+// layout, rules, templates, agents, guard, defaults.
 func (m *Manifest) Kinds() []string {
 	p := m.Provides
 	var out []string
@@ -44,6 +44,7 @@ func (m *Manifest) Kinds() []string {
 	add(p.Templates != "", "templates")
 	add(p.Agents != "", "agents")
 	add(len(p.Guard) > 0, "guard")
+	add(len(m.Defaults) > 0, "defaults")
 	return out
 }
 
@@ -190,8 +191,37 @@ func consent(m *Manifest, fsys fs.FS) string {
 			fmt.Fprintf(&b, "  - %s\n", w)
 		}
 	}
+	if d := m.DefaultWords(); len(d) > 0 {
+		fmt.Fprintf(&b, "%s:\n", DefaultsNote)
+		for _, w := range d {
+			fmt.Fprintf(&b, "  - %s\n", w)
+		}
+	}
 	b.WriteString(m.shown(fsys))
 	return b.String()
+}
+
+// DefaultsNote heads the defaults a mod suggests in its consent (mods
+// design §7, Tighten only).
+const DefaultsNote = "Defaults it suggests for all projects (nothing changes until you apply them, with d in the Mods tab or tm mod defaults; a setting your config.toml sets stays yours)"
+
+// DefaultWords are the defaults m suggests as the consent lists them:
+// auto_close = "days".
+func (m *Manifest) DefaultWords() []string {
+	var out []string
+	for _, s := range m.Suggestions(nil) {
+		out = append(out, s.Key+" = "+SettingWords(s.Value))
+	}
+	return out
+}
+
+// SettingWords is a setting's value as config.toml writes it: a string
+// quoted, control characters removed.
+func SettingWords(v any) string {
+	if s, ok := v.(string); ok {
+		return fmt.Sprintf("%q", Clean(s, false))
+	}
+	return fmt.Sprint(v)
 }
 
 // Shown is every rules addendum, agent manifest, agent tool and guard

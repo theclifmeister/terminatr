@@ -131,7 +131,9 @@ func TestModActionDone(t *testing.T) {
 	}
 	pid := os.Getpid()
 	target := map[string]string{"project": "demo", "task": "T2"}
-	if _, perr := s.modActionDone(proto.ModActionDoneParams{ModActionParams: proto.ModActionParams{Mod: "lab", Action: "task.accept", Target: target}, OK: true}, pid); perr != nil {
+	press := proto.ModActionParams{Mod: "lab", Action: "task.accept", Target: target}
+	tok := checkToken(t, s, press, pid)
+	if _, perr := s.modActionDone(proto.ModActionDoneParams{ModActionParams: press, OK: true, Token: tok}, pid); perr != nil {
 		t.Fatal(perr)
 	}
 	ev, err := sub.Next(ctx)
@@ -157,7 +159,99 @@ func TestModActionDone(t *testing.T) {
 			t.Errorf("check %+v accepted", p)
 		}
 	}
-	if _, perr := s.modActionCheck(proto.ModActionParams{Mod: "lab", Action: "task.accept", Target: target}, pid); perr != nil {
+	if _, perr := s.modActionCheck(press, pid); perr != nil {
 		t.Errorf("check of a binding in reach: %v", perr)
+	}
+}
+
+func checkToken(t *testing.T, s *Server, p proto.ModActionParams, pid int) string {
+	t.Helper()
+	res, perr := s.modActionCheck(p, pid)
+	r, _ := res.(proto.ModActionCheckResult)
+	if perr != nil || r.Token == "" {
+		t.Fatalf("check %+v = %+v, %v", p, res, perr)
+	}
+	return r.Token
+}
+
+// TestModActionDoneToken: mod.action.done needs the press token its
+// console's mod.action.check gave for that binding, once (T288): a done
+// with none, a used one, one for another binding or console, or an
+// expired one is refused and the mod hears nothing.
+func TestModActionDoneToken(t *testing.T) {
+	s := modActionsSetup(t, `"project_read"`)
+	sub := s.SubscribeMod("lab", []string{"project_read"}, func(slug string) bool { return slug == "demo" })
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if ev, err := sub.Next(ctx); err != nil || ev.Name != modbus.ModReady {
+		t.Fatalf("first event %v, %v", ev.Name, err)
+	}
+	pid := os.Getpid()
+	accept := proto.ModActionParams{Mod: "lab", Action: "task.accept", Target: map[string]string{"project": "demo", "task": "T2"}}
+	show := proto.ModActionParams{Mod: "lab", Action: "task.show", Target: map[string]string{"project": "demo", "task": "T2"}}
+	done := func(p proto.ModActionParams, tok string, pid int) *proto.Error {
+		_, perr := s.modActionDone(proto.ModActionDoneParams{ModActionParams: p, OK: true, Token: tok}, pid)
+		return perr
+	}
+	if done(accept, "", pid) == nil {
+		t.Error("a done with no token")
+	}
+	if done(accept, "0123456789abcdef0123456789abcdef", pid) == nil {
+		t.Error("a done with a made-up token")
+	}
+	tok := checkToken(t, s, accept, pid)
+	if done(show, tok, pid) == nil {
+		t.Error("a token for another action")
+	}
+	if done(accept, tok, pid) == nil {
+		t.Error("a token tried on another binding is still good")
+	}
+	tok = checkToken(t, s, accept, pid)
+	if done(accept, tok, pid+1) == nil {
+		t.Error("a token from another console")
+	}
+	tok = checkToken(t, s, accept, pid)
+	if perr := done(accept, tok, pid); perr != nil {
+		t.Fatalf("the press's own token: %v", perr)
+	}
+	if done(accept, tok, pid) == nil {
+		t.Error("a token used twice")
+	}
+	tok = checkToken(t, s, accept, pid)
+	s.presses.mu.Lock()
+	pr := s.presses.tokens[tok]
+	pr.made = pr.made.Add(-proto.ModActionTokenTTL)
+	s.presses.tokens[tok] = pr
+	s.presses.mu.Unlock()
+	if done(accept, tok, pid) == nil {
+		t.Error("an expired token")
+	}
+	// Only the one good done reached the mod.
+	if ev, err := sub.Next(ctx); err != nil || ev.Name != modbus.ActionDone {
+		t.Fatalf("action.done = %+v, %v", ev, err)
+	}
+	if n := sub.Len(); n != 0 {
+		t.Errorf("%d more events for refused dones", n)
+	}
+}
+
+// TestPressTokensCap: one console holds at most maxPresses tokens; a
+// new one drops its oldest, and other consoles' are kept.
+func TestPressTokensCap(t *testing.T) {
+	var p pressTokens
+	now := time.Now()
+	other := p.issue(2, "k", now)
+	first := p.issue(1, "k", now)
+	for i := 1; i <= maxPresses; i++ {
+		p.issue(1, "k", now.Add(time.Duration(i)*time.Millisecond))
+	}
+	if len(p.tokens) != maxPresses+1 {
+		t.Errorf("%d tokens held", len(p.tokens))
+	}
+	if p.take(first, 1, "k", now) {
+		t.Error("the oldest token outlived the cap")
+	}
+	if !p.take(other, 2, "k", now) {
+		t.Error("another console's token was dropped")
 	}
 }

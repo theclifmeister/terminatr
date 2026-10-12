@@ -110,8 +110,42 @@ func sets(data []byte, table, key string) bool {
 
 // setSafety sets a safety setting in table, a project's or [defaults].
 func setSafety(table, key string, value any) error {
+	if err := CheckSetting(key, value); err != nil {
+		return err
+	}
+	if key == "coordinator_agent" && table == DefaultsTable {
+		// [defaults] coordinator_agent replaces the older top-level
+		// default_agent: it goes in the same write.
+		return edit(func(data []byte) ([]byte, error) {
+			out, err := Edit(data, table, key, value)
+			if err != nil {
+				return nil, err
+			}
+			return Remove(out, "", "default_agent"), nil
+		})
+	}
+	if key == "auto_close" {
+		// auto_close replaces the older auto_resolve: its line goes in the
+		// same write, so nothing obsolete is left ignored in the file.
+		return edit(func(data []byte) ([]byte, error) {
+			out, err := Edit(data, table, key, value)
+			if err != nil {
+				return nil, err
+			}
+			return Remove(out, table, "auto_resolve"), nil
+		})
+	}
+	return Set(table, key, value)
+}
+
+// CheckSetting checks value against the project setting key's type
+// and limits, as SetProject and SetDefaults do before they write it.
+func CheckSetting(key string, value any) error {
 	if !validKey(key) {
 		return fmt.Errorf("unknown setting %q", key)
+	}
+	if t, ok := settingType(key); ok && (value == nil || reflect.TypeOf(value) != t) {
+		return fmt.Errorf("%s must be %s", key, typeWords[t.Kind()])
 	}
 	if key == "start_threads" && value != StartPropose && value != StartAuto {
 		return fmt.Errorf("start threads must be %q or %q", StartPropose, StartAuto)
@@ -143,29 +177,22 @@ func setSafety(table, key string, value any) error {
 		}
 		return errors.New("models must be a list of names")
 	}
-	if key == "coordinator_agent" && table == DefaultsTable {
-		// [defaults] coordinator_agent replaces the older top-level
-		// default_agent: it goes in the same write.
-		return edit(func(data []byte) ([]byte, error) {
-			out, err := Edit(data, table, key, value)
-			if err != nil {
-				return nil, err
-			}
-			return Remove(out, "", "default_agent"), nil
-		})
+	return nil
+}
+
+// typeWords name a setting's type in errors.
+var typeWords = map[reflect.Kind]string{reflect.Bool: "true or false", reflect.Int: "a number", reflect.String: "a string", reflect.Slice: "a list of names"}
+
+// settingType is the Go type of the setting key's value: the field of
+// rawSafety its toml tag names, without the pointer.
+func settingType(key string) (reflect.Type, bool) {
+	t := reflect.TypeFor[rawSafety]()
+	for i := range t.NumField() {
+		if t.Field(i).Tag.Get("toml") == key {
+			return t.Field(i).Type.Elem(), true
+		}
 	}
-	if key == "auto_close" {
-		// auto_close replaces the older auto_resolve: its line goes in the
-		// same write, so nothing obsolete is left ignored in the file.
-		return edit(func(data []byte) ([]byte, error) {
-			out, err := Edit(data, table, key, value)
-			if err != nil {
-				return nil, err
-			}
-			return Remove(out, table, "auto_resolve"), nil
-		})
-	}
-	return Set(table, key, value)
+	return nil, false
 }
 
 // validKey reports whether key is a project setting.
