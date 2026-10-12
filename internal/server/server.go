@@ -314,6 +314,7 @@ func Run(ctx context.Context, opts Options) error {
 	hostsDone := make(chan struct{})
 	if sup := s.newModHosts(); sup != nil {
 		s.modSup.Store(sup)
+		codehost.Provide(s.codeHostMod)
 		go func() {
 			defer close(hostsDone)
 			s.runModHosts(ectx, sup)

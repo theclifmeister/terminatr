@@ -23,7 +23,8 @@ type Example struct {
 	Perms       []string
 }
 
-// Examples are the folder's mods: one per surface, and an agent tool.
+// Examples are the folder's mods: one per surface, an agent tool and a
+// code host.
 var Examples = []Example{
 	{"nord", "theme and icon set", nil},
 	{"vim-keys", "keymap", nil},
@@ -35,6 +36,7 @@ var Examples = []Example{
 	{"pr-ci-column", "a sidebar column (also built in)", []string{PermProjectRead}},
 	{"memory-tab", "a project-popup tab (also built in)", []string{PermProjectRead, PermViews}},
 	{"memory-search", "an agent tool", []string{PermProjectRead, PermTools}},
+	{"gitlab", "a code host (GitLab, through glab)", []string{PermCommands}},
 }
 
 // InstallLines are how example id installs from a checkout of

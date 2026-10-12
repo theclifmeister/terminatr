@@ -119,25 +119,34 @@ func (r *runner) setClient(c *modproto.Client) {
 	r.signal()
 }
 
-// callTool runs one of the mod's agent tools in its host: at once while
-// it runs, after it starts when it is idle or starting. A mod in backoff
-// or failed answers why, without waiting.
-func (r *runner) callTool(ctx context.Context, call modproto.ToolCall) (modproto.ToolResult, error) {
+// callTool runs one of the mod's agent tools in its host (call).
+func (r *runner) callTool(ctx context.Context, call modproto.ToolCall) (res modproto.ToolResult, err error) {
+	err = r.call(ctx, func(c *modproto.Client) (err error) {
+		res, err = c.ToolCall(ctx, call)
+		return err
+	})
+	return res, err
+}
+
+// call runs f with the host's connection: at once while it runs, after
+// it starts when it is idle or starting. A mod in backoff or failed
+// answers why, without waiting.
+func (r *runner) call(ctx context.Context, f func(c *modproto.Client) error) error {
 	for {
 		r.mu.Lock()
 		c, st, changed := r.client, r.st, r.changed
 		r.mu.Unlock()
 		switch {
 		case c != nil && st.State == Running:
-			res, err := c.ToolCall(ctx, call)
+			err := f(c)
 			if errors.Is(err, modproto.ErrClosed) {
 				err = fmt.Errorf("mod %s's host ended during the call", r.spec.ID)
 			}
-			return res, err
+			return err
 		case st.State == Failed:
-			return modproto.ToolResult{}, fmt.Errorf("mod %s failed: %s", r.spec.ID, st.Err)
+			return fmt.Errorf("mod %s failed: %s", r.spec.ID, st.Err)
 		case st.State == Backoff:
-			return modproto.ToolResult{}, fmt.Errorf("mod %s is restarting (%s)", r.spec.ID, st.Err)
+			return fmt.Errorf("mod %s is restarting (%s)", r.spec.ID, st.Err)
 		case st.State == Idle:
 			select {
 			case r.wake <- struct{}{}:
@@ -147,9 +156,9 @@ func (r *runner) callTool(ctx context.Context, call modproto.ToolCall) (modproto
 		select {
 		case <-changed:
 		case <-ctx.Done():
-			return modproto.ToolResult{}, fmt.Errorf("mod %s: %w", r.spec.ID, ctx.Err())
+			return fmt.Errorf("mod %s: %w", r.spec.ID, ctx.Err())
 		case <-r.ctx.Done():
-			return modproto.ToolResult{}, fmt.Errorf("mod %s stopped", r.spec.ID)
+			return fmt.Errorf("mod %s stopped", r.spec.ID)
 		}
 	}
 }

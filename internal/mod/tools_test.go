@@ -127,3 +127,44 @@ func TestConsentTools(t *testing.T) {
 		t.Fatalf("changed tool: %+v", d)
 	}
 }
+
+const gitlabMod = `
+id = "gitlab"
+name = "GitLab"
+version = "1.0.0"
+api = "1.1"
+
+[provides]
+main = "main.ts"
+code_host = "gitlab"
+
+[permissions]
+commands = ["glab"]
+`
+
+// TestManifestCodeHost: a code host is a code mod's, of a kind that
+// isn't tm's own, with the commands grant; the consent says what tm
+// does with it.
+func TestManifestCodeHost(t *testing.T) {
+	m, err := ParseManifest([]byte(gitlabMod), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(m.Kinds(), ","); got != "code,code host" {
+		t.Fatalf("kinds %v", got)
+	}
+	if c := consent(m, nil); !strings.Contains(c, `Code host gitlab: for projects whose code_host is "gitlab"`) || !strings.Contains(c, "runs glab") {
+		t.Fatalf("consent %s", c)
+	}
+	for _, c := range []struct{ from, to, want string }{
+		{`code_host = "gitlab"`, `code_host = "github"`, "not github or azure"},
+		{`code_host = "gitlab"`, `code_host = "GitLab"`, "lowercase"},
+		{`commands = ["glab"]`, ``, "needs permissions.commands"},
+		{`main = "main.ts"`, ``, "needs provides.main"},
+	} {
+		_, err := ParseManifest([]byte(strings.Replace(gitlabMod, c.from, c.to, 1)), "")
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v, want %q", c.to, err, c.want)
+		}
+	}
+}

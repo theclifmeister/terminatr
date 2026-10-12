@@ -1,0 +1,78 @@
+{
+  "name": "the failing job's log of the merge request's head pipeline",
+  "answers": [
+    {
+      "method": "process.run",
+      "params": {
+        "argv": [
+          "glab",
+          "api",
+          "--hostname",
+          "gitlab.com",
+          "projects/acme%2Fweb%2Fshop/merge_requests/7"
+        ]
+      },
+      "result": {
+        "code": 0,
+        "stdout": "{\"iid\": 7, \"web_url\": \"https://gitlab.com/acme/web/shop/-/merge_requests/7\", \"state\": \"opened\", \"source_branch\": \"feat\", \"target_branch\": \"main\", \"sha\": \"0123456789abcdef0123456789abcdef01234567\", \"merge_commit_sha\": null, \"squash_commit_sha\": null, \"merged_at\": null, \"has_conflicts\": false, \"detailed_merge_status\": \"mergeable\", \"head_pipeline\": {\"id\": 99, \"status\": \"failed\"}}",
+        "stderr": ""
+      }
+    },
+    {
+      "method": "process.run",
+      "params": {
+        "argv": [
+          "glab",
+          "api",
+          "--hostname",
+          "gitlab.com",
+          "projects/acme%2Fweb%2Fshop/pipelines/99/jobs?scope[]=failed&per_page=1"
+        ]
+      },
+      "result": {
+        "code": 0,
+        "stdout": "[{\"id\": 5, \"name\": \"unit\", \"stage\": \"test\"}]",
+        "stderr": ""
+      }
+    },
+    {
+      "method": "process.run",
+      "params": {
+        "argv": [
+          "glab",
+          "api",
+          "--hostname",
+          "gitlab.com",
+          "projects/acme%2Fweb%2Fshop/jobs/5/trace"
+        ]
+      },
+      "result": {
+        "code": 0,
+        "stdout": "$ go test ./...\n--- FAIL: TestX\nFAIL\n",
+        "stderr": ""
+      }
+    }
+  ],
+  "events": [
+    {
+      "name": "codehost.failedLog",
+      "data": {
+        "remote": {
+          "kind": "gitlab",
+          "host": "gitlab.com",
+          "path": "acme/web/shop"
+        },
+        "number": 7,
+        "head": "0123456789abcdef0123456789abcdef01234567"
+      }
+    }
+  ],
+  "expect": {
+    "codehost": [
+      {
+        "job": "test: unit",
+        "log": "$ go test ./...\n--- FAIL: TestX\nFAIL\n"
+      }
+    ]
+  }
+}

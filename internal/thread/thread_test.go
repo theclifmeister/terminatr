@@ -101,6 +101,10 @@ func TestValidate(t *testing.T) {
 	if r, err := Validate("PR: " + az + "\n## Report\nDone.\n## Next\nReview it\n"); err != nil || r.PR != az {
 		t.Fatalf("Azure PR line: %+v, %v", r, err)
 	}
+	gl := "https://gitlab.com/acme/web/shop/-/merge_requests/9"
+	if r, err := Validate("PR: " + gl + "\n## Report\nDone.\n## Next\nReview it\n"); err != nil || r.PR != gl {
+		t.Fatalf("GitLab PR line: %+v, %v", r, err)
+	}
 	for _, c := range []struct{ text, want string }{
 		{"PR: https://dev.azure.com/org/proj/_git/repo/pull/34\n## Report\n## Next\n", "pullrequest/<n>"},
 		{"PR: https://dev.azure.com/org/proj/_git/repo/pullrequest/x\n## Report\n## Next\n", "bad PR line"},

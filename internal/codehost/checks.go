@@ -22,19 +22,25 @@ type RepoHost struct {
 // GitHub's gh once (also when there are no repos, as on a fresh
 // install), Azure DevOps' az once (with no Azure repo, only when az is
 // installed, marked unused), then each Azure repo's access and
-// git's credentials for its origin. Both tm doctor and the server run
+// git's credentials for its origin, then each code host mod's kind in
+// use: which mod serves it and the mod's own checks (Mod.Doctor). Both tm doctor and the server run
 // it, the server so that it answers from the context its sessions have
 // (docs/SPEC.md §3.3 server.codehost). The CLI checks and the repos run
 // at once, each repo holding one of azSlots, so a machine with many
 // repos waits about as long as for one or two; the lines keep this order.
 func Checks(d DoctorDeps, hosts []RepoHost) []Check {
 	github, azure := len(hosts) == 0, false
+	var mods []Target // one per kind a code host mod serves
 	for _, h := range hosts {
-		switch h.Target.Kind {
-		case AzureKind:
+		switch k := h.Target.Kind; {
+		case k == AzureKind:
 			azure = true
-		case NoKind:
+		case k == NoKind:
 			// nothing to poll, nothing to check
+		case ModKind(k):
+			if !slices.ContainsFunc(mods, func(t Target) bool { return t.Kind == k }) {
+				mods = append(mods, Target{Kind: k})
+			}
 		default:
 			github = true
 		}
@@ -59,6 +65,9 @@ func Checks(d DoctorDeps, hosts []RepoHost) []Check {
 			defer func() { <-azSlots }()
 			return append(Azure{Target: h.Target}.Access(d), gitCredentials(d, h))
 		})
+	}
+	for _, t := range mods {
+		jobs = append(jobs, func() []Check { return pickMod(t, "").Doctor(d) })
 	}
 	parts := make([][]Check, len(jobs))
 	var wg sync.WaitGroup
