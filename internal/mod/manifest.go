@@ -257,12 +257,24 @@ func (t Tool) Schema() map[string]any {
 // jsonTypes are the types a tool's input property may have.
 var jsonTypes = []string{"string", "integer", "number", "boolean", "array", "object"}
 
-// View slots (mods design §6).
+// View slots (mods design §6). A details.section is a section at the
+// bottom of the dashboard's details panel, for the project, task or
+// thread it shows; a coordinator.section one at the bottom of the
+// coordinator's info panel, for its project (mods design §12, Phase 2).
+// Sections show; they take no keys.
 const (
-	SlotProjectTab    = "project.tab"
-	SlotDashboardCard = "dashboard.card"
-	SlotFull          = "full"
+	SlotProjectTab         = "project.tab"
+	SlotDashboardCard      = "dashboard.card"
+	SlotFull               = "full"
+	SlotDetailsSection     = "details.section"
+	SlotCoordinatorSection = "coordinator.section"
 )
+
+// Slots are the view slots, in the manifest check's words' order.
+var Slots = []string{SlotProjectTab, SlotDashboardCard, SlotFull, SlotDetailsSection, SlotCoordinatorSection}
+
+// IsSection says whether slot is a panel section's.
+func IsSection(slot string) bool { return slot == SlotDetailsSection || slot == SlotCoordinatorSection }
 
 // Permissions are what the mod asks for. The human grants each by name
 // in [mods.<id>] grants; a mod runs with granted ∩ requested. The lists
@@ -560,8 +572,8 @@ func (m *Manifest) check(dir string) error {
 		if strings.TrimSpace(v.Title) == "" {
 			bad("%s: has no title", at)
 		}
-		if v.Slot != SlotProjectTab && v.Slot != SlotDashboardCard && v.Slot != SlotFull {
-			bad("%s: slot %q must be %s, %s or %s", at, v.Slot, SlotProjectTab, SlotDashboardCard, SlotFull)
+		if !slices.Contains(Slots, v.Slot) {
+			bad("%s: slot %q must be one of %s", at, v.Slot, strings.Join(Slots, ", "))
 		}
 	}
 	if len(p.Guard) > MaxGuardRules {

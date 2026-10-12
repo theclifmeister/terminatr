@@ -1,0 +1,25 @@
+{
+  "name": "the coordinator's panel: the threads that reported, most first",
+  "answers": [
+    { "method": "project.get", "params": { "slug": "demo" },
+      "result": { "project": "demo", "threads": [
+        { "id": "t-0001", "title": "Fix the login", "reports": 1 },
+        { "id": "t-0002", "title": "New", "reports": 0 },
+        { "id": "t-0003", "title": "Write docs", "reports": 3 }] } }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "reports", "slot": "coordinator.section", "project": "demo", "width": 38, "height": 20 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "project.get", "params": { "slug": "demo" } },
+      { "method": "ui.view.set",
+        "params": { "view": "reports", "options": { "project": "demo" },
+          "widget": { "kind": "list", "id": "threads", "rows": [
+            { "id": "t-0003", "spans": [{ "text": "t-0003", "role": "head" }, { "text": " 3 · " }, { "text": "Write docs", "role": "faint" }] },
+            { "id": "t-0001", "spans": [{ "text": "t-0001", "role": "head" }, { "text": " 1 · " }, { "text": "Fix the login", "role": "faint" }] }
+          ] } } }
+    ]
+  }
+}

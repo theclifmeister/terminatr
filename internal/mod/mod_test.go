@@ -290,3 +290,32 @@ func TestWritesHumanOnly(t *testing.T) {
 		t.Fatalf("%+v", ra)
 	}
 }
+
+func TestSectionViews(t *testing.T) {
+	const toml = `id = "notes"
+name = "Notes"
+version = "0.1.0"
+api = "1.0"
+
+[provides]
+main  = "main.ts"
+views = [
+  { id = "review", title = "Review", slot = "details.section" },
+  { id = "digest", title = "Digest", slot = "coordinator.section" },
+]
+
+[permissions]
+views = true
+`
+	dir := install(t, t.TempDir(), "notes", map[string]string{"mod.toml": toml, "main.ts": ""})
+	m, err := ReadManifest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !IsSection(m.Provides.Views[0].Slot) || !IsSection(m.Provides.Views[1].Slot) || IsSection(SlotDashboardCard) {
+		t.Fatalf("%+v", m.Provides.Views)
+	}
+	if got := m.ViewWords(); !slices.Equal(got, []string{`a details-panel section "Review"`, `a coordinator-panel section "Digest"`}) {
+		t.Fatalf("%q", got)
+	}
+}

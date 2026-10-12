@@ -72,9 +72,9 @@ export interface TM {
     /** Shows a short message on the consoles. */
     toast(text: string, level?: TM.Level): Promise<void>;
     view: {
-      /** Publishes the widget tree of a view the manifest declares, for one project (options.project) or all; null clears it. Needs the views grant. */
+      /** Publishes the widget tree of a view the manifest declares, for one project (options.project) or all, a details.section's also for one task or thread of it (options.task, options.thread); null clears it. Needs the views grant. */
       set(view: string, widget: TM.Widget | null, options?: TM.ViewOptions): Promise<void>;
-      /** Asks the console to show a view; only after a human input (a key, a click or a command). Needs the views grant. */
+      /** Asks the console to show a view (not a panel section, which shows with its panel); only after a human input (a key, a click or a command). Needs the views grant. */
       open(view: string): Promise<void>;
     };
     /** Sends an OS notification through a console. Needs the notify grant. */
@@ -131,7 +131,7 @@ export declare namespace TM {
     "ui.cursor": Input;
     /** A human ran a core action bound in the mod's row, view or notification. */
     "action.done": ActionDone;
-    /** One of the mod's views is shown: publish it with $.ui.view.set. Needs the views grant. */
+    /** One of the mod's views is shown: publish it with $.ui.view.set. A details.section names the task or thread the details panel shows: publish for that one, and clear it on view.closed. Needs the views grant. */
     "view.opened": ViewEvent;
     /** One of the mod's views is no longer shown. Needs the views grant. */
     "view.closed": ViewEvent;
@@ -394,12 +394,16 @@ export declare namespace TM {
     view: string;
     slot: string;
     project?: string;
+    task?: string;
+    thread?: string;
     width: number;
     height: number;
   }
 
   interface ViewOptions {
     project?: string;
+    task?: string;
+    thread?: string;
     count?: number;
     height?: number;
   }
