@@ -593,7 +593,7 @@ func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human b
 			s.serveAsk(c, br, req)
 			return
 		}
-		result, perr := s.dispatch(req, peerPID)
+		result, perr := s.dispatch(req, peerPID, human)
 		resp := proto.Response{ID: req.ID, Error: perr}
 		if perr == nil {
 			b, err := json.Marshal(result)
@@ -613,6 +613,21 @@ func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human b
 	}
 }
 
+// mayAnswer refuses session.answer on session in to caller c unless c is
+// the human on the human socket, or the coordinator of the session's
+// own project answering one of its threads (tm thread answer, docs/SPEC.md
+// §11.2), on either socket. A coordinator's own questions are the
+// human's to answer.
+func (s *Server) mayAnswer(in proto.SessionInfo, c caller.Caller, human bool) *proto.Error {
+	switch {
+	case c.Kind == caller.Human && human:
+		return nil
+	case c.Kind == caller.Coordinator && in.Project != "" && c.Project == in.Project && in.Role != proto.RoleCoordinator:
+		return nil
+	}
+	return proto.Errorf("human-only", "only the human, on the human socket (%s), or project %s's coordinator answers session %s's questions", ipc.HumanName, in.Project, in.ID)
+}
+
 // humanSocketOnly refuses human-only method m on the server socket:
 // every agent's sandbox allows that one, and the pid walk that tells an
 // agent from the human (callerOf) ends where a process left its
@@ -621,7 +636,7 @@ func humanSocketOnly(m string) *proto.Error {
 	return proto.Errorf("human-only", "%s answers only on the human socket (%s), which no agent's sandbox allows", m, ipc.HumanName)
 }
 
-func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
+func (s *Server) dispatch(req proto.Request, peerPID int, human bool) (any, *proto.Error) {
 	if req.Method == proto.MethodViewDigest {
 		var p proto.ViewDigestParams
 		if err := decodeParams(req.Params, &p); err != nil {
@@ -783,7 +798,11 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 		if err := decodeParams(req.Params, &p); err != nil {
 			return nil, err
 		}
-		if _, perr := s.session(p.ID); perr != nil {
+		sess, perr := s.session(p.ID)
+		if perr != nil {
+			return nil, perr
+		}
+		if perr := s.mayAnswer(sess.Info(), s.callerOf(peerPID), human); perr != nil {
 			return nil, perr
 		}
 		res, perr := s.asks.answer(p.ID, p.Index, p.Answer)

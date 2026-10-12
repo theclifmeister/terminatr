@@ -32,7 +32,6 @@ func onHumanSocketOnly(err error) bool {
 // Dial takes the human socket.
 func TestHumanSocket(t *testing.T) {
 	p := testPaths(t)
-	t.Setenv(caller.EnvSession, "") // the human's, even under an agent's tm
 	startServer(t, p)
 	if fi, err := os.Stat(p.HumanSocket()); err != nil || fi.Mode()&os.ModeSocket == 0 || fi.Mode().Perm() != 0o600 {
 		t.Fatalf("human socket %s: %v %v", p.HumanSocket(), fi, err)
@@ -71,6 +70,18 @@ func TestHumanSocket(t *testing.T) {
 			t.Errorf("ping: %v", err)
 		}
 	}
+	// session.answer: the human answers on the human socket only.
+	var started proto.SessionStartResult
+	call(t, human, proto.MethodSessionStart, proto.SessionStartParams{Argv: []string{testSh(t)}, Cwd: t.TempDir()}, &started)
+	ans := proto.SessionAnswerParams{ID: started.Session.ID, Answer: "free text"}
+	var perr *proto.Error
+	if err := srv.Call(proto.MethodSessionAnswer, ans, nil); !errors.As(err, &perr) || perr.Code != "human-only" {
+		t.Errorf("session.answer on the server socket: %v, want human-only", err)
+	}
+	if err := human.Call(proto.MethodSessionAnswer, ans, nil); !errors.As(err, &perr) || perr.Code != proto.ErrNoQuestion {
+		t.Errorf("session.answer on the human socket: %v, want %s", err, proto.ErrNoQuestion)
+	}
+
 	// An agent's session doesn't try the human socket.
 	t.Setenv(caller.EnvSession, "s-1")
 	t.Setenv(caller.EnvRole, string(caller.Thread))
@@ -93,7 +104,6 @@ func TestHumanSocket(t *testing.T) {
 // human-only methods.
 func TestHumanSocketFallback(t *testing.T) {
 	p := testPaths(t)
-	t.Setenv(caller.EnvSession, "")
 	startServer(t, p)
 	if err := os.Remove(p.HumanSocket()); err != nil {
 		t.Fatal(err)
@@ -111,5 +121,38 @@ func TestHumanSocketFallback(t *testing.T) {
 	}
 	if err := c.Call(proto.MethodModActionCheck, proto.ModActionParams{Mod: "m", Action: "a"}, nil); !onHumanSocketOnly(err) {
 		t.Fatalf("mod.action.check on the server socket: %v", err)
+	}
+}
+
+// TestMayAnswer: session.answer is the human's, on the human socket, or
+// the coordinator's of the session's own project for its threads.
+func TestMayAnswer(t *testing.T) {
+	s := &Server{}
+	thread := proto.SessionInfo{ID: "s-2", Role: proto.RoleThread, Project: "p"}
+	coordSess := proto.SessionInfo{ID: "s-1", Role: proto.RoleCoordinator, Project: "p"}
+	loose := proto.SessionInfo{ID: "s-3", Role: proto.RoleShell}
+	human := caller.Caller{Kind: caller.Human}
+	coord := caller.Caller{Kind: caller.Coordinator, Project: "p"}
+	for _, c := range []struct {
+		name   string
+		in     proto.SessionInfo
+		c      caller.Caller
+		humanS bool
+		ok     bool
+	}{
+		{"human on the human socket", thread, human, true, true},
+		{"human on the human socket, a coordinator's menu", coordSess, human, true, true},
+		{"human on the server socket", thread, human, false, false},
+		{"the project's coordinator", thread, coord, false, true},
+		{"the project's coordinator on the human socket", thread, coord, true, true},
+		{"a coordinator answering a coordinator's menu", coordSess, coord, false, false},
+		{"another project's coordinator", thread, caller.Caller{Kind: caller.Coordinator, Project: "q"}, true, false},
+		{"a coordinator, a session outside the projects", loose, caller.Caller{Kind: caller.Coordinator}, true, false},
+		{"a thread", thread, caller.Caller{Kind: caller.Thread, Project: "p", Thread: "t-0001"}, true, false},
+		{"a mod", thread, caller.ForMod("m"), true, false},
+	} {
+		if perr := s.mayAnswer(c.in, c.c, c.humanS); (perr == nil) != c.ok {
+			t.Errorf("%s: %v, want ok %v", c.name, perr, c.ok)
+		}
 	}
 }
