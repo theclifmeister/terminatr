@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
@@ -87,8 +88,9 @@ var mouseKeys = []keyHelp{
 	{"shift+drag", "your terminal's own selection (option+drag in some macOS terminals)"},
 }
 
-// keyGroups is every key, grouped.
-func keyGroups() []keyGroup {
+// keyGroups is every key, grouped; mods are the mods' commands
+// (commandHelp), a group of their own when there are any.
+func keyGroups(mods []keyHelp) []keyGroup {
 	lines := func(t keyTable, rows []bindable) []keyHelp {
 		var out []keyHelp
 		for i, r := range rows {
@@ -99,7 +101,7 @@ func keyGroups() []keyGroup {
 		return out
 	}
 	dash, side := lines(binds.list, listBindables()), lines(binds.side, sideBindables())
-	return []keyGroup{
+	groups := []keyGroup{
 		{"On the dashboard", dash},
 		{"With the mouse", mouseKeys},
 		{"Prefix commands: the same everywhere", sessionKeys()},
@@ -107,14 +109,18 @@ func keyGroups() []keyGroup {
 		{"In the project popup", popupKeys},
 		{"In the settings (, or the project popup's Settings tab)", settingsKeys},
 	}
+	if len(mods) > 0 {
+		groups = slices.Insert(groups, 1, keyGroup{"Mod commands: on the dashboard and in the ≡ menu", mods})
+	}
+	return groups
 }
 
 // helpLines are the help's lines w cells wide: the prefix key, every key
 // (keyLines), then the symbols.
-func helpLines(prefix string, w int) []string {
+func helpLines(prefix string, w int, mods []keyHelp) []string {
 	out := faintLines("The prefix key is "+prefix+": prefix+d means "+prefix+", then d. Change it in the settings (,).", w)
 	out = append(out, "")
-	out = append(out, keyLines(w)...)
+	out = append(out, keyLines(w, mods)...)
 	out = append(out, "")
 	return append(out, symbolLines(w)...)
 }
@@ -153,9 +159,9 @@ const keyCol = 19
 
 // keyLines draws the keys list w cells wide: each help wraps under
 // itself, so nothing is cut off.
-func keyLines(w int) []string {
+func keyLines(w int, mods []keyHelp) []string {
 	var out []string
-	for i, g := range keyGroups() {
+	for i, g := range keyGroups(mods) {
 		if i > 0 {
 			out = append(out, "")
 		}

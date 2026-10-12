@@ -31,6 +31,7 @@ var Examples = []Example{
 	{"cost-card", "a dashboard card", []string{PermProjectRead, PermViews}},
 	{"notify-me", "OS notifications", []string{PermProjectRead, PermNotify}},
 	{"thread-timeline", "a full view", []string{PermProjectRead, PermViews}},
+	{"standup", "a command: a key, a ≡ menu entry and tm mod run", []string{PermProjectRead, PermViews}},
 	{"pr-ci-column", "a sidebar column (also built in)", []string{PermProjectRead}},
 	{"memory-tab", "a project-popup tab (also built in)", []string{PermProjectRead, PermViews}},
 }

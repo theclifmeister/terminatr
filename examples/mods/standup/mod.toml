@@ -1,0 +1,29 @@
+# A command (mods design §2 tier 4, §13): S on the dashboard, the ≡
+# menu's "Standup · mod: standup" or `tm mod run standup show --project
+# <slug>` runs it. From a console it opens a full view of where the
+# project's tasks stand; from tm mod run, which can't open a view, it
+# shows the same in one line as a toast.
+id = "standup"
+name = "Standup"
+version = "1.0.0"
+api = "1.0"
+description = "S opens a full view of where the project's tasks stand: blocked, in review, started, ready."
+authors = ["terminatr"]
+homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/standup"
+
+[provides]
+main = "main.ts"
+
+[[provides.views]]
+id = "standup"
+title = "Standup"
+slot = "full"
+
+[[provides.commands]]
+id = "show"
+title = "Standup"
+key = "S"
+
+[permissions]
+project_read = true
+views = true

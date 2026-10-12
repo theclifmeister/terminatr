@@ -81,7 +81,7 @@ func (h *helpView) render(m *dash) string { return m.popup(h.box(m)) }
 // helpBody is the help's lines: the version tm and its server run first
 // (versionTitle), then the keys and symbols.
 func (m *dash) helpBody() []string {
-	lines := helpLines(m.prefix, m.inner(viewWidth))
+	lines := helpLines(m.prefix, m.inner(viewWidth), m.commandHelp())
 	if v := versionTitle(m.data.Server); v != "" {
 		lines = append([]string{th().Faint.Render(v), ""}, lines...)
 	}

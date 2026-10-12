@@ -218,7 +218,7 @@ var Events = []Event{
 	{Name: modbus.ActionDone, Data: typ[modbus.Done](), Doc: "A human ran a core action bound in the mod's row, view or notification."},
 	{Name: modbus.ViewOpened, Data: typ[modbus.View](), Needs: GrantViews, Doc: "One of the mod's views is shown: publish it with $.ui.view.set."},
 	{Name: modbus.ViewClosed, Data: typ[modbus.View](), Needs: GrantViews, Doc: "One of the mod's views is no longer shown."},
-	{Name: modbus.CommandRun, Data: typ[modbus.Command](), Doc: "The human ran one of the mod's commands."},
+	{Name: modbus.CommandRun, Data: typ[modbus.Command](), Doc: "The human ran one of the commands in the manifest's [provides].commands: by its key or ≡ menu entry (then the mod may open a view), or with tm mod run."},
 	{Name: modbus.ModSettings, Data: typ[Settings](), Doc: "The user changed the mod's settings: these are the new ones."},
 }
 

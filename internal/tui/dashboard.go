@@ -1124,6 +1124,9 @@ func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 			return cmd
 		}
 	}
+	if c, ok := m.commandFor(k.String()); ok {
+		return m.runCommand(c)
+	}
 	return m.listKey(binds.list.canon(k.String()))
 }
 

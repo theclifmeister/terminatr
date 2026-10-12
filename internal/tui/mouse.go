@@ -393,7 +393,7 @@ func pressItem(label, key string) menuItem {
 
 // dashItems are the ≡ menu's items: every action of the keys table that
 // has a menu entry, in the table's order, each pressing its bound key,
-// then the mods' full views.
+// then the mods' full views and commands (modcommands.go).
 func (m *dash) dashItems() []menuItem {
 	var out []menuItem
 	for _, a := range actions {
@@ -401,7 +401,8 @@ func (m *dash) dashItems() []menuItem {
 			out = append(out, pressItem(a.menu, boundKey(a.keys[0])))
 		}
 	}
-	return append(out, m.fullItems()...)
+	out = append(out, m.fullItems()...)
+	return append(out, m.commandItems()...)
 }
 
 // enterWord is what enter does on r (attach, open), "" nothing.
