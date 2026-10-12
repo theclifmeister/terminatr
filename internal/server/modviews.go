@@ -137,6 +137,17 @@ func checkSectionTarget(slot, project, task, thr string) error {
 	return nil
 }
 
+// checkShownTarget checks what a shown view is for: a details.section's
+// task or thread, as a tree's (checkSectionTarget), or the task a
+// project tab was opened to show (mod API 1.3), which its mod hears in
+// view.opened.
+func checkShownTarget(slot, project, task, thr string) error {
+	if slot == mod.SlotProjectTab && task != "" && thr == "" {
+		return checkSectionTarget(mod.SlotDetailsSection, project, task, "")
+	}
+	return checkSectionTarget(slot, project, task, thr)
+}
+
 // ui.view.open {view}: show one of the mod's views on the console of the
 // human input its handler runs for, once; refused otherwise.
 func (s *Server) modViewOpen(_ context.Context, c *modbroker.Call) (any, error) {
@@ -217,7 +228,7 @@ func (s *Server) modViews(p proto.ModViewsParams, pid int, c caller.Caller) (any
 		}
 		d, ok := declaredView(mods[i], v.View)
 		return !ok || d.Slot != v.Slot || v.Project != "" && !mods[i].Runs(v.Project) ||
-			checkSectionTarget(v.Slot, v.Project, v.Task, v.Thread) != nil
+			checkShownTarget(v.Slot, v.Project, v.Task, v.Thread) != nil
 	})
 	opened, closed := store.Show(pid, shown)
 	s.publishViews(opened, closed)

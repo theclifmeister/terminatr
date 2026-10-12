@@ -67,7 +67,7 @@ func TestModAgentTools(t *testing.T) {
 	}
 	write("mods/lint/mod.toml", lintToolManifest)
 	write("mods/lint/main.ts", lintToolMain)
-	write("config.toml", "[mods.lint]\nenabled = true\ngrants = [\"tools\"]\nprojects = [\"proj\"]\n[mods.pr-ci-column]\nenabled = false\n[mods.memory-tab]\nenabled = false\n")
+	write("config.toml", "[mods.lint]\nenabled = true\ngrants = [\"tools\"]\nprojects = [\"proj\"]\n[mods.pr-ci-column]\nenabled = false\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n")
 
 	rt, err := os.MkdirTemp(ipc.ShortDir(), "tmmod")
 	if err != nil {
@@ -192,7 +192,7 @@ func TestModAgentTools(t *testing.T) {
 
 	// The human revokes the tools grant: the tools go from the list, and
 	// a call is refused, over the socket and over tool.run alike.
-	write("config.toml", "[mods.lint]\nenabled = true\ngrants = []\nprojects = [\"proj\"]\n[mods.pr-ci-column]\nenabled = false\n[mods.memory-tab]\nenabled = false\n")
+	write("config.toml", "[mods.lint]\nenabled = true\ngrants = []\nprojects = [\"proj\"]\n[mods.pr-ci-column]\nenabled = false\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n")
 	s.modBr.mu.Lock()
 	s.modBr.reg = nil // what modRegistryAge does within a second
 	s.modBr.mu.Unlock()
@@ -210,7 +210,7 @@ func TestModAgentTools(t *testing.T) {
 	if rr := res.(proto.ToolRunResult); !rr.IsError || !strings.Contains(rr.Text, "tools grant") {
 		t.Fatalf("tool.run after the revoke: %+v", rr)
 	}
-	write("config.toml", "[mods.lint]\nenabled = true\ngrants = [\"tools\"]\nprojects = [\"proj\"]\n[mods.pr-ci-column]\nenabled = false\n[mods.memory-tab]\nenabled = false\n")
+	write("config.toml", "[mods.lint]\nenabled = true\ngrants = [\"tools\"]\nprojects = [\"proj\"]\n[mods.pr-ci-column]\nenabled = false\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n")
 	s.modBr.mu.Lock()
 	s.modBr.reg = nil
 	s.modBr.mu.Unlock()

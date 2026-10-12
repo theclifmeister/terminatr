@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,11 +19,13 @@ import (
 	"github.com/theclifmeister/terminatr/internal/widget"
 )
 
-// TestBuiltinTasksTab: the built-in Tasks tab (the action-binding pilot,
-// mods design §12 Phase 2) runs only once turned on, from its
-// precompiled bundle: shown for a project, it draws the board grouped
-// under head rows, each task's row binding tm's task actions and the
-// started task's steps as its more; b shows the done tasks.
+// TestBuiltinTasksTab: the built-in Tasks tab (mods design §12 Phase 2)
+// runs by default, from its precompiled bundle: shown for a project, it
+// draws the board grouped under head rows, each task's row binding tm's
+// task actions and the started task's steps as its more, and + (a new
+// task) bound in the whole view; b shows the done tasks; a title edited
+// shows at once (tasks.changed); opened to show a done task, the done
+// tasks are listed.
 func TestBuiltinTasksTab(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("TERMINATR_HOME", home)
@@ -31,7 +34,8 @@ func TestBuiltinTasksTab(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := "[mods.tasks-tab]\nenabled = true\n[mods.memory-tab]\nenabled = false\n[mods.pr-ci-column]\nenabled = false\n"
+	t.Setenv(envModEventsPoll, "20ms")
+	cfg := "[mods.memory-tab]\nenabled = false\n[mods.pr-ci-column]\nenabled = false\n"
 	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -50,13 +54,21 @@ func TestBuiltinTasksTab(t *testing.T) {
 	s.modSup.Store(sup)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
+	var looks atomic.Int64 // the events' looks
+	s.modEv.hold = func() func() { return func() { looks.Add(1) } }
+	evDone := make(chan struct{})
 	go func() {
 		defer close(done)
 		s.runModHosts(ctx, sup)
 	}()
+	go func() {
+		defer close(evDone)
+		s.runModEvents(ctx)
+	}()
 	defer func() {
 		cancel()
 		<-done
+		<-evDone
 	}()
 
 	shown := []modview.Shown{{Mod: mod.BundledTasks, View: mod.TasksView, Slot: mod.SlotProjectTab, Project: "demo", Width: 70, Height: 20}}
@@ -105,6 +117,29 @@ func TestBuiltinTasksTab(t *testing.T) {
 	if a := rows[3].Actions; len(a) != 2 || a[0].ID != "task.show" || a[1].ID != "task.delegate" || a[1].Target["task"] != "T2" {
 		t.Errorf("T2 binds %+v", a)
 	}
+	if k := board.Children[len(board.Children)-1]; k.Kind != widget.KindKeys || len(k.Actions) != 1 || k.Actions[0].ID != "task.new" || k.Actions[0].Target["project"] != "demo" {
+		t.Errorf("no task.new in the view: %+v", k)
+	}
+
+	// A title edited: no task's status or steps changed, yet it shows,
+	// once the events have their first look (their baseline).
+	for n := looks.Load(); looks.Load() < n+2; {
+		time.Sleep(10 * time.Millisecond)
+	}
+	title := "Fix the login page"
+	if _, err := p.Tasks().Edit(human, 1, &title, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	tree(title)
+
+	// Shown again (b showed the done tasks before): a new opening, the
+	// done tasks folded; then for the done T3: they are listed.
+	if _, perr := s.modViews(proto.ModViewsParams{Shown: []modview.Shown{}}, 42, human); perr != nil {
+		t.Fatal(perr)
+	}
+	tree("1 done (b shows them)")
+	shown[0].Task = "T3"
+	tree(`"id":"T3"`)
 
 	in := proto.ModViewInputParams{Mod: mod.BundledTasks, View: mod.TasksView, Project: "demo", Kind: widget.EventKey, Key: "b", Widget: "tasks", Row: "T1"}
 	if _, perr := s.modViewInput(in, 42, human); perr != nil {

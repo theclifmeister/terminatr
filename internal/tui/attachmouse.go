@@ -293,7 +293,7 @@ func (c *client) menuTitle() string {
 
 // sessionItems are the ≡ menu's items for the focused pane: the prefix
 // commands, less those that don't apply (the dashboard's in a bare view,
-// remote control off a coordinator).
+// remote control off a coordinator), then the mods' commands.
 // c.mu held.
 func (c *client) sessionItems() []aitem {
 	var out []aitem
@@ -312,7 +312,7 @@ func (c *client) sessionItems() []aitem {
 		}
 		out = append(out, aitem{label: label, key: "prefix+" + key, run: func() { c.command(key) }})
 	}
-	return out
+	return append(out, c.commandItems()...)
 }
 
 // sideMenu opens the menu of the sidebar row at (m.X, m.Y): show the

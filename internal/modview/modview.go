@@ -189,11 +189,13 @@ func (s *Store) Clear(mod string) {
 }
 
 // Input notes a human input to mod from console pid, about project: for
-// a while (InputWindow), the mod may open one view.
-func (s *Store) Input(mod string, pid int, project string) {
+// a while (InputWindow), the mod may open one view. The open it allows
+// has a Seq greater than the one returned.
+func (s *Store) Input(mod string, pid int, project string) uint64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.inputs[mod] = input{pid: pid, project: project, at: s.now()}
+	return s.seq
 }
 
 // Open asks for mod's view to be opened on the console of the human

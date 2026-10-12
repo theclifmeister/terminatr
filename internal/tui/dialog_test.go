@@ -128,9 +128,9 @@ func TestActionRowClicks(t *testing.T) {
 // under it still in view (dimmed), and esc goes back to it.
 func TestPopupStacks(t *testing.T) {
 	_, m := popupData(t)
-	m.Update(keyPress(m, "a")())
+	feed(m, keyPress(m, "a"))
 	keyPress(m, "3")
-	keyPress(m, "enter") // the task, over the Tasks tab
+	pressKey(m, "enter") // the task, over the Tasks tab
 	out := screen(m)
 	if !strings.Contains(out, "─ Task · alpha ─") {
 		t.Fatalf("the task view doesn't draw over the project popup:\n%s", out)

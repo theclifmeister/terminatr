@@ -16,6 +16,7 @@ import (
 // TM namespace.
 var tsNames = map[reflect.Type]string{
 	typ[modbus.Task]():       "TaskChanged",
+	typ[modbus.Tasks]():      "TasksChanged",
 	typ[modbus.Thread]():     "ThreadState",
 	typ[modbus.Item]():       "InboxItem",
 	typ[modbus.Session]():    "SessionState",

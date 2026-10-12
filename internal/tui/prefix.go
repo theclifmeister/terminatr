@@ -12,7 +12,8 @@ import (
 // It never reaches a popup as a plain key: a command that opens or goes
 // somewhere closes the popups first. Its keys are those of a session
 // (prefixStep): d, q, r, the dashboard keys (prefixCommands), the
-// sidebar's and the info panel's (paneCommands) and the prefix itself.
+// sidebar's and the info panel's (paneCommands), the prefix itself and
+// the mods' command keys (modcommands.go), which the core's come before.
 
 // prefixHint is the footer while the prefix waits for its command, in
 // the bound keys (keybind.go).
@@ -68,6 +69,15 @@ func (m *dash) prefixCommand(key string) tea.Cmd {
 			back = m.toDashboard()
 		}
 		return tea.Batch(back, m.listKey(key))
+	case m.commandKeyed(typed) && m.over != nil:
+		// A mod's command over a session: the session runs it, with
+		// itself selected, and shows the view the mod opens.
+		m.stack, m.result.Command = nil, typed
+		return nil
+	case m.commandKeyed(typed):
+		m.stack = nil
+		c, _ := m.commandFor(typed)
+		return m.runCommand(c)
 	}
 	m.msg = "prefix+" + typed + " isn't a command; " + boundKey("?") + " lists them"
 	return nil

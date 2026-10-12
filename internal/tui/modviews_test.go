@@ -20,7 +20,7 @@ import (
 
 func (f *fakeSource) ModViews(shown []modview.Shown) (proto.ModViewsResult, error) {
 	f.shown = shown
-	return f.modViews, nil
+	return f.modViewsNow(), nil
 }
 
 func (f *fakeSource) ModViewInput(p proto.ModViewInputParams) error {
@@ -465,12 +465,12 @@ func TestModFullViewBinding(t *testing.T) {
 	}
 }
 
-// TestTasksTabMod: the built-in Tasks tab mod's tab (the action-binding
-// pilot) is drawn in the core Tasks tab's place (3 tasks), with its
-// section heads and the selected task's steps; enter on a row opens the
-// task over the popup, as the core tab's enter does, through the bound
-// task.show; + is still the popup's new task; the core tab's own task
-// keys don't run under it. With the mod off the core Tasks tab draws.
+// TestTasksTabMod: the built-in Tasks tab mod's tab is drawn as the
+// Tasks tab (3 tasks), with its section heads and the selected task's
+// steps; enter on a row opens the task over the popup through the bound
+// task.show, at once (the view's first tree needs no wait); + runs the
+// task.new the tab binds in the whole view; keys a row doesn't bind run
+// nothing. With the mod off the tab says so.
 func TestTasksTabMod(t *testing.T) {
 	src, m := panelDash(t)
 	src.board = &tasks.Board{Tasks: []*tasks.Task{
@@ -488,7 +488,7 @@ func TestTasksTabMod(t *testing.T) {
 			{ID: "T2", Cells: [][]widget.Span{{{Text: "T2"}}, {{Text: "Ship it"}}, {{Text: "ready"}}},
 				Actions: []widget.Action{{ID: "task.show", Target: task("T2")}, {ID: "task.delegate", Target: task("T2")}}},
 		}},
-		{Kind: widget.KindText, Text: "+ adds a task, from a template or none", Role: "faint"},
+		{Kind: widget.KindKeys, ID: "keys", Actions: []widget.Action{{ID: "task.new", Target: map[string]string{"project": "alpha"}}}},
 	}}
 	tasksView := proto.ModView{Mod: mod.BundledTasks, Name: "Tasks tab", View: mod.TasksView, Title: "tasks", Slot: mod.SlotProjectTab,
 		Trees: []modview.Tree{{Project: "alpha", Tree: board}}}
@@ -505,8 +505,8 @@ func TestTasksTabMod(t *testing.T) {
 	if strings.Contains(out, "9 tasks") {
 		t.Errorf("the mod's tab is listed again after the core tabs:\n%s", out)
 	}
-	// Down skips the head: T2 is under the cursor, T1's steps fold.
-	press(m, "down")
+	// j, as down, skips the head: T2 is under the cursor, T1's steps fold.
+	press(m, "j")
 	out = screen(m)
 	if !strings.Contains(out, "D delegate") || strings.Contains(out, "Proofread") {
 		t.Errorf("down didn't land on T2:\n%s", out)
@@ -518,7 +518,6 @@ func TestTasksTabMod(t *testing.T) {
 			t.Fatalf("%s opened %T", k, m.top())
 		}
 	}
-	time.Sleep(modaction.Stable + 20*time.Millisecond)
 	runAll(m, press(m, "enter"))
 	if tv, ok := m.top().(*taskView); !ok || tv.id != 2 {
 		t.Fatalf("enter opened %T %+v", m.top(), m.top())
@@ -535,6 +534,9 @@ func TestTasksTabMod(t *testing.T) {
 	if _, ok := m.top().(*projectView); ok {
 		t.Error("+ asked for no new task")
 	}
+	if want := "tasks-tab task.new alpha/ true"; len(src.done) != 2 || src.done[1] != want {
+		t.Errorf("done %q, want %q", src.done, want)
+	}
 	for len(m.stack) > 0 {
 		if _, ok := m.top().(*projectView); ok {
 			break
@@ -542,10 +544,10 @@ func TestTasksTabMod(t *testing.T) {
 		m.pop()
 	}
 
-	// Off: the core Tasks tab.
+	// Off: the tab says so.
 	src.modViews.Views = panelViews()
 	m.setModViews(modViewsMsg{res: src.modViews})
-	if out := screen(m); strings.Contains(out, "mod: tasks-tab") || !strings.Contains(out, "Ship it") {
+	if out := screen(m); strings.Contains(out, "mod: tasks-tab") || !strings.Contains(out, "The tasks-tab mod draws this tab, and it isn't running") {
 		t.Errorf("tasks mod off:\n%s", out)
 	}
 }

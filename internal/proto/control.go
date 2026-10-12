@@ -811,6 +811,13 @@ type ModCommandParams struct {
 	Console   bool       `json:"console,omitempty"`
 }
 
+// ModCommandResult answers mod.command. After: from a console, the view
+// the mod may open shows up in that console's mod.views Open with a Seq
+// greater than After (a session's console goes over to it).
+type ModCommandResult struct {
+	After uint64 `json:"after,omitempty"`
+}
+
 // ModTarget is a row a mod is told of: a project, task, thread or
 // session (modbus.Target).
 type ModTarget struct {

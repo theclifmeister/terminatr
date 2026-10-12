@@ -1,16 +1,15 @@
 # The project popup's Tasks tab as a code mod (mods design §11 and §12,
-# Phase 2: the action-binding pilot). terminatr ships this mod built in
-# but off: the Go Tasks tab draws until the pilot is accepted. Turn it on
-# in the Mods tab, or with [mods.tasks-tab] enabled = true in
-# config.toml; it then draws in the Tasks tab's place. This folder is its
-# source, and `go generate ./internal/mod` precompiles main.ts into the
-# binary. To change it, copy the folder, give the copy another id and
+# Phase 2). terminatr ships this mod built in and on: it draws the Tasks
+# tab, which has no other drawing. Turned off (the Mods tab, or
+# [mods.tasks-tab] enabled = false in config.toml), the tab says so.
+# This folder is its source, and `go generate ./internal/mod` precompiles
+# main.ts into the binary. To change it, copy the folder, give the copy another id and
 # install it by path (tm mod install refuses a built-in mod's id).
 id = "tasks-tab"
 name = "Tasks tab"
 version = "1.0.0"
-api = "1.2"
-description = "The project's tasks in its popup, grouped as the board has them; D, A, x, c and enter are tm's own actions, bound on each row."
+api = "1.4"
+description = "The project's tasks in its popup, grouped as the board has them; D, A, x, c, enter and + are tm's own actions, bound on each row and in the tab."
 authors = ["terminatr"]
 homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/tasks-tab"
 

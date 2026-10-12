@@ -263,22 +263,12 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 		if err != nil {
 			return nil, err
 		}
-		out := []ModTask{}
 		board, err := p.Tasks().Load()
 		if err != nil {
 			return nil, err
 		}
 		items, _ := p.Inbox()
-		for _, t := range board.Tasks {
-			steps := make([]modapi.TaskStep, 0, len(t.Steps))
-			for _, st := range t.Steps {
-				steps = append(steps, modapi.TaskStep{Text: st.Text, Done: st.Done})
-			}
-			out = append(out, ModTask{ID: t.Ref(), Title: t.Title, Status: string(t.Status),
-				StepsDone: t.StepsDone(), StepsTotal: len(t.Steps), Thread: t.Thread,
-				Steps: steps, Updated: t.Updated, Asked: project.TaskAsked(items, t.Ref())})
-		}
-		return out, nil
+		return modTasks(board, items), nil
 	})
 	b.Handle("thread.get", mod.PermProjectRead, func(_ context.Context, c *modbroker.Call) (any, error) {
 		var a struct {
@@ -480,4 +470,20 @@ func modLine(s string, n int) string {
 		}
 		return r
 	}, s), n)
+}
+
+// modTasks is $.tasks.list's answer: board's tasks, in board order, with
+// what the unhandled items ask about each.
+func modTasks(board *tasks.Board, items []project.Item) []ModTask {
+	out := []ModTask{}
+	for _, t := range board.Tasks {
+		steps := make([]modapi.TaskStep, 0, len(t.Steps))
+		for _, st := range t.Steps {
+			steps = append(steps, modapi.TaskStep{Text: st.Text, Done: st.Done})
+		}
+		out = append(out, ModTask{ID: t.Ref(), Title: t.Title, Status: string(t.Status),
+			StepsDone: t.StepsDone(), StepsTotal: len(t.Steps), Thread: t.Thread,
+			Steps: steps, Updated: t.Updated, Asked: project.TaskAsked(items, t.Ref())})
+	}
+	return out
 }

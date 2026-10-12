@@ -10,9 +10,11 @@ import (
 )
 
 // The mods' commands (mods design §2 tier 4, §9): an enabled code mod's
-// [provides].commands, each run by its key on the dashboard, by its
+// [provides].commands, each run by its key on the dashboard, by
+// prefix+key anywhere (in a session too, attachcommands.go), by its
 // entry in the ≡ menu (after the core's entries, with the mods' full
-// views, each marked mod: id) or by tm mod run; the mod gets
+// views, each marked mod: id; a session's ≡ menu too) or by tm mod run;
+// the mod gets
 // command.run with the project and the row selected (mod.command). The
 // core's keys come first: a command whose key the core (or a mod
 // enabled earlier) has keeps its menu entry, and the Mods tab says key
@@ -21,20 +23,31 @@ import (
 // modCommands are the commands of the mods that run: a user mod's none
 // in safe mode.
 func (m *dash) modCommands() []mod.ModCommand {
+	return runningCommands(m.data.ModCommands, m.data.NoMods)
+}
+
+// runningCommands are the commands of list that run: a user mod's none
+// in safe mode (noMods).
+func runningCommands(list []mod.ModCommand, noMods bool) []mod.ModCommand {
 	var out []mod.ModCommand
-	for _, c := range m.data.ModCommands {
-		if !m.data.NoMods || c.Builtin {
+	for _, c := range list {
+		if !noMods || c.Builtin {
 			out = append(out, c)
 		}
 	}
 	return out
 }
 
-// coreKey is the core's action (or "locked") on key k on the
-// dashboard, "" when no core key is k: a command may have it then.
+// coreKey is the core's action (or "locked", or its prefix command) on
+// key k on the dashboard and after the prefix, "" when no core key is k:
+// a command may have it then.
 func coreKey(k, prefix string) string {
 	if slices.Contains(lockedKeys, k) || k == prefix || k == "N" {
 		return "locked"
+	}
+	if prefixCommands[k] || paneCommands[k] {
+		// prefix+k is the core's, even with its action bound elsewhere.
+		return "prefix+" + k
 	}
 	for _, tb := range []struct {
 		t    keyTable
@@ -51,8 +64,13 @@ func coreKey(k, prefix string) string {
 
 // commandKey is c's key when it has it: "" when it has none or lost it
 // to the core or to a mod enabled earlier.
-func (m *dash) commandKey(c mod.ModCommand) string {
-	if c.Key == "" || coreKey(c.Key, m.prefix) != "" {
+func (m *dash) commandKey(c mod.ModCommand) string { return commandKeyOf(c, m.prefix) }
+
+// commandKeyOf is c's key with prefix the prefix key: the same on the
+// dashboard (the key, or prefix+key) and in a session (prefix+key),
+// since the core's dashboard keys hold every prefix command's.
+func commandKeyOf(c mod.ModCommand, prefix string) string {
+	if c.Key == "" || coreKey(c.Key, prefix) != "" {
 		return ""
 	}
 	return c.Key
@@ -109,6 +127,15 @@ func (m *dash) runCommand(c mod.ModCommand) tea.Cmd {
 	return func() tea.Msg { return modInputMsg{err: src.ModCommand(p)} }
 }
 
+// sessionTarget is session s as a command's selection in project slug;
+// nil when it is another project's.
+func sessionTarget(s proto.SessionInfo, slug string) *proto.ModTarget {
+	if slug == "" || s.Project != slug {
+		return nil
+	}
+	return &proto.ModTarget{Project: slug, Session: s.ID, Thread: s.Thread, Task: s.Task}
+}
+
 // commandItems are the ≡ menu's items running the mods' commands that
 // run for the project shown.
 func (m *dash) commandItems() []menuItem {
@@ -136,4 +163,10 @@ func (m *dash) commandHelp() []keyHelp {
 		out = append(out, keyHelp{keyShown(m.commandKey(c)), help})
 	}
 	return out
+}
+
+// commandKeyed says whether key k runs a mod's command here.
+func (m *dash) commandKeyed(k string) bool {
+	_, ok := m.commandFor(k)
+	return ok
 }

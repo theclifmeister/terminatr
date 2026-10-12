@@ -69,6 +69,8 @@ func TestWhy(t *testing.T) {
 		{"task.accept", task("T5"), "already waiting on the coordinator"},
 		{"task.send-back", task("T3"), ""},
 		{"task.send-back", task("T1"), "not in review or done"},
+		{"task.new", Target{Project: "alpha"}, ""},
+		{"task.new", Target{Project: "beta"}, "no project beta"},
 		{"task.coordinator", Target{Project: "alpha"}, ""},
 		{"task.coordinator", Target{Project: "alpha", Task: "T1"}, ""},
 		{"project.activate", Target{Project: "alpha"}, ""},

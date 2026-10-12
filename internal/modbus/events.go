@@ -10,6 +10,7 @@ import (
 // and payload fields are only ever added.
 const (
 	TaskChanged    = "task.changed"
+	TasksChanged   = "tasks.changed"
 	ThreadState    = "thread.state"
 	ThreadStarted  = "thread.started"
 	ThreadResolved = "thread.resolved"
@@ -44,7 +45,7 @@ const (
 // Needs is the grant a mod needs to get event name; "" for none.
 func Needs(name string) string {
 	switch name {
-	case TaskChanged, ThreadState, ThreadStarted, ThreadResolved, ReportStored, InboxItem, PRChanged, SessionQuestion:
+	case TaskChanged, TasksChanged, ThreadState, ThreadStarted, ThreadResolved, ReportStored, InboxItem, PRChanged, SessionQuestion:
 		return GrantProjectRead
 	case ViewOpened, ViewClosed:
 		return GrantViews
@@ -63,6 +64,14 @@ type Task struct {
 	StepsDone  int    `json:"steps_done"`
 	StepsTotal int    `json:"steps_total"`
 	Thread     string `json:"thread,omitempty"`
+}
+
+// Tasks is tasks.changed (mod API 1.4): something of project's board
+// that $.tasks.list shows changed (a title, a step, a status, a task
+// added or gone) or an ask about one of its tasks came or was handled.
+// It names the project only: a mod lists the tasks again.
+type Tasks struct {
+	Project string `json:"project"`
 }
 
 // Thread is thread.state: the thread's state as the views show it (its

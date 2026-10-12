@@ -40,7 +40,7 @@ func cmdServer(t *testing.T) *Server {
 			t.Fatal(err)
 		}
 	}
-	cfg := "[mods.lab]\nenabled = true\ngrants = [\"views\"]\nprojects = [\"demo\"]\n[mods.memory-tab]\nenabled = false\n"
+	cfg := "[mods.lab]\nenabled = true\ngrants = [\"views\"]\nprojects = [\"demo\"]\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n"
 	if err := os.WriteFile(filepath.Join(tmHome, "config.toml"), []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,8 @@ func TestModCommand(t *testing.T) {
 	if s.modViewStore().Open("lab", "out") {
 		t.Fatal("tm mod run let the mod open a view")
 	}
-	if _, perr := s.modCommand(proto.ModCommandParams{Mod: "lab", Command: "relabel", Console: true}, 7, human); perr != nil {
+	res, perr := s.modCommand(proto.ModCommandParams{Mod: "lab", Command: "relabel", Console: true}, 7, human)
+	if perr != nil {
 		t.Fatal(perr)
 	}
 	if ev := next(t, sub); ev.Data.(modbus.Command).Selection != nil {
@@ -78,6 +79,12 @@ func TestModCommand(t *testing.T) {
 	}
 	if !s.modViewStore().Open("lab", "out") {
 		t.Fatal("a console's command didn't let the mod open a view")
+	}
+	// The open comes after the answer's After, for a session's console
+	// to tell it from older ones.
+	after := res.(proto.ModCommandResult).After
+	if o := s.modViewStore().Opens(7); len(o) != 1 || o[0].Seq <= after {
+		t.Fatalf("opens %+v after %d", o, after)
 	}
 	for name, tc := range map[string]struct {
 		p    proto.ModCommandParams

@@ -148,6 +148,26 @@ func TestTrackerSessions(t *testing.T) {
 	}
 }
 
+// TestTrackerBoard: tasks.changed follows the board's digest, whatever
+// changed in it (a title, an ask handled), once, after the tasks' own
+// events.
+func TestTrackerBoard(t *testing.T) {
+	b := New()
+	s := b.Subscribe("m", Options{Grants: all})
+	tr := NewTracker(b, nil)
+	cur := state()
+	cur.Board = "a"
+	tr.Project("p", cur)
+	next := *cur
+	next.Board = "b" // a title edited: no task.changed, but tasks.changed
+	tr.Project("p", &next)
+	tr.Project("p", &next)
+	want := []string{"tasks.changed {Project:p}"}
+	if got := drain(t, s); fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("events %q, want %q", got, want)
+	}
+}
+
 // TestTrackerQuestions: session.question once a menu opens on a session
 // after the baseline, when another question replaces it, and once it
 // goes (no question); the same question again publishes nothing.

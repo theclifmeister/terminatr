@@ -221,6 +221,7 @@ type RunResult struct {
 var Events = []Event{
 	{Name: modbus.ModReady, Data: typ[modbus.Ready](), Doc: "First after every (re)start: a snapshot of the projects the mod runs for (none without project_read), not a replay."},
 	{Name: modbus.TaskChanged, Data: typ[modbus.Task](), Needs: GrantProjectRead, Doc: "A task's status or steps changed, or it is new (from \"\")."},
+	{Name: modbus.TasksChanged, Data: typ[modbus.Tasks](), Needs: GrantProjectRead, Doc: "Anything $.tasks.list shows of a project changed: a title, a step, a status, a task added or gone, an ask about a task came or was handled (mod API 1.4). List the tasks again."},
 	{Name: modbus.ThreadState, Data: typ[modbus.Thread](), Needs: GrantProjectRead, Doc: "A thread's state changed, or the question it waits on."},
 	{Name: modbus.ThreadStarted, Data: typ[modbus.ThreadLife](), Needs: GrantProjectRead, Doc: "A thread started."},
 	{Name: modbus.ThreadResolved, Data: typ[modbus.ThreadLife](), Needs: GrantProjectRead, Doc: "A thread was resolved."},
@@ -234,9 +235,9 @@ var Events = []Event{
 	{Name: modbus.UIKey, Data: typ[modbus.Input](), Doc: "The human pressed a key on one of the mod's views or widgets."},
 	{Name: modbus.UICursor, Data: typ[modbus.Input](), Doc: "The row under the cursor of a view's focused list (widget) is now row (\"\": none), moved by a key, a click, the filter or a publish; sent when the view shows, and again on each change. To follow the selection."},
 	{Name: modbus.ActionDone, Data: typ[modbus.Done](), Doc: "A human ran a core action bound in the mod's row, view or notification."},
-	{Name: modbus.ViewOpened, Data: typ[modbus.View](), Needs: GrantViews, Doc: "One of the mod's views is shown: publish it with $.ui.view.set. A details.section names the task or thread the details panel shows: publish for that one, and clear it on view.closed."},
+	{Name: modbus.ViewOpened, Data: typ[modbus.View](), Needs: GrantViews, Doc: "One of the mod's views is shown: publish it with $.ui.view.set. A details.section names the task or thread the details panel shows: publish for that one, and clear it on view.closed. A project.tab opened to show a task picked elsewhere names it (mod API 1.4): list its row, and the console puts the cursor on the row that binds an action on it."},
 	{Name: modbus.ViewClosed, Data: typ[modbus.View](), Needs: GrantViews, Doc: "One of the mod's views is no longer shown."},
-	{Name: modbus.CommandRun, Data: typ[modbus.Command](), Doc: "The human ran one of the commands in the manifest's [provides].commands: by its key or ≡ menu entry (then the mod may open a view), or with tm mod run."},
+	{Name: modbus.CommandRun, Data: typ[modbus.Command](), Doc: "The human ran one of the commands in the manifest's [provides].commands: by its key (on the dashboard, or prefix+key in a session: the selection is then that session), or ≡ menu entry (then the mod may open a view), or with tm mod run."},
 	{Name: modbus.ModSettings, Data: typ[Settings](), Doc: "The user changed the mod's settings: these are the new ones."},
 }
 
