@@ -19,7 +19,7 @@ import (
 // file of the data mods loads; the defaults tm needs are required, the
 // templates aren't.
 func TestBundled(t *testing.T) {
-	want := []string{"ascii-icons", "default-keymap", "default-layout", "default-policy", "default-templates", "default-theme", "memory-tab", "nerd-icons", "pr-ci-column", "unicode-icons"}
+	want := []string{"ascii-icons", "default-keymap", "default-layout", "default-policy", "default-templates", "default-theme", "memory-tab", "nerd-icons", "pr-ci-column", "tasks-tab", "unicode-icons"}
 	if got := BundledIDs(); !slices.Equal(got, want) {
 		t.Fatalf("bundled %q", got)
 	}
@@ -196,6 +196,29 @@ func TestBundledMemoryTab(t *testing.T) {
 	}
 	if m := Bundled(BundledMemory, config.Mod{EnabledSet: true}); m.State != Disabled {
 		t.Errorf("turned off: %s", m.State)
+	}
+}
+
+// TestBundledTasksTab: the Tasks tab, the action-binding pilot, is a
+// built-in code mod kept off (the Go tab draws) until its table turns it
+// on; it can be turned off again.
+func TestBundledTasksTab(t *testing.T) {
+	m := Bundled(BundledTasks, config.Mod{})
+	if m.State != Disabled || !m.Builtin || m.Required || m.Manifest == nil || !m.Manifest.IsCode() || !DefaultOff(BundledTasks) {
+		t.Fatalf("tasks-tab: %+v", m)
+	}
+	if v := m.Manifest.Provides.Views; len(v) != 1 || v[0].Slot != SlotProjectTab || v[0].ID != TasksView {
+		t.Errorf("views %+v", v)
+	}
+	if m := Bundled(BundledTasks, config.Mod{EnabledSet: true, Enabled: true}); m.State != Enabled ||
+		!slices.Equal(m.Grants, []string{PermProjectRead, PermViews}) {
+		t.Errorf("turned on: %s %v", m.State, m.Grants)
+	}
+	if m := Bundled(BundledTasks, config.Mod{EnabledSet: true}); m.State != Disabled {
+		t.Errorf("turned off: %s", m.State)
+	}
+	if DefaultOff(BundledMemory) {
+		t.Error("memory-tab is on by default")
 	}
 }
 

@@ -191,7 +191,7 @@ func TestModExamples(t *testing.T) {
 		t.Fatalf("%d examples", len(got.Examples))
 	}
 	for _, x := range got.Examples {
-		if x.Builtin != (x.ID == "pr-ci-column" || x.ID == "memory-tab") || len(x.Install) == 0 {
+		if x.Builtin != (x.ID == "pr-ci-column" || x.ID == "memory-tab" || x.ID == "tasks-tab") || len(x.Install) == 0 {
 			t.Errorf("%+v", x)
 		}
 	}

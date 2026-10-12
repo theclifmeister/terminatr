@@ -77,19 +77,40 @@ func runsFor(v proto.ModView, slug string) bool {
 	return v.Projects == nil || slices.Contains(v.Projects, slug)
 }
 
-// isMemoryTab says whether v is the built-in Memory tab mod's tab (mods
-// design §11, proof 2), which the popup draws in its core Memory tab's
-// place rather than after the core tabs. Only the bundled mod has its
-// id: an installed folder of that name is shadowed.
-func isMemoryTab(v proto.ModView) bool {
-	return v.Mod == mod.BundledMemory && v.View == mod.MemoryView && v.Slot == mod.SlotProjectTab
+// coreTabMods are the built-in mods whose project tab the popup draws
+// in a core tab's place, rather than after the core tabs, while the mod
+// runs: the Memory tab mod's (mods design §11, proof 2) and the Tasks
+// tab mod's (the action-binding pilot, §12 Phase 2, off unless turned
+// on). Only a bundled mod has its id: an installed folder of that name
+// is shadowed.
+var coreTabMods = []struct {
+	tab       int
+	mod, view string
+}{
+	{tabMemory, mod.BundledMemory, mod.MemoryView},
+	{tabTasks, mod.BundledTasks, mod.TasksView},
 }
 
-// memoryTab is the built-in Memory tab mod's tab for project slug, while
-// the mod runs for it; the core Memory tab draws otherwise.
-func (mv *modViews) memoryTab(slug string) (proto.ModView, bool) {
+// coreTabOf is the core tab mod view v draws in, ok false for a view
+// that is a tab of its own.
+func coreTabOf(v proto.ModView) (int, bool) {
+	if v.Slot != mod.SlotProjectTab {
+		return 0, false
+	}
+	for _, c := range coreTabMods {
+		if v.Mod == c.mod && v.View == c.view {
+			return c.tab, true
+		}
+	}
+	return 0, false
+}
+
+// coreTab is the built-in mod's tab that draws in core tab tab for
+// project slug, while the mod runs for it; the core's own tab draws
+// otherwise.
+func (mv *modViews) coreTab(slug string, tab int) (proto.ModView, bool) {
 	for _, v := range mv.list {
-		if isMemoryTab(v) && runsFor(v, slug) {
+		if t, ok := coreTabOf(v); ok && t == tab && runsFor(v, slug) {
 			return v, true
 		}
 	}
@@ -97,11 +118,11 @@ func (mv *modViews) memoryTab(slug string) (proto.ModView, bool) {
 }
 
 // tabsFor are the mods' project tabs for project slug, in order, after
-// the core tabs (the Memory tab mod's is in the core tabs).
+// the core tabs (the built-in ones that draw in a core tab are not).
 func (mv *modViews) tabsFor(slug string) []proto.ModView {
 	var out []proto.ModView
 	for _, v := range mv.list {
-		if v.Slot == mod.SlotProjectTab && runsFor(v, slug) && !isMemoryTab(v) {
+		if _, core := coreTabOf(v); v.Slot == mod.SlotProjectTab && runsFor(v, slug) && !core {
 			out = append(out, v)
 		}
 	}
@@ -455,8 +476,8 @@ func (m *dash) openModView(o modview.Open) {
 				m.openTab(slug, tabOverview, 0)
 				pv = m.projectPopupView()
 			}
-			if isMemoryTab(v) {
-				pv.tab = tabMemory
+			if t, ok := coreTabOf(v); ok {
+				pv.tab = t
 			}
 			for i, t := range m.mv.tabsFor(slug) {
 				if t.Mod == v.Mod && t.View == v.View {
@@ -482,10 +503,10 @@ func (m *dash) openModView(o modview.Open) {
 func (pv *projectView) tabs(m *dash) int { return tabCount + len(m.mv.tabsFor(pv.slug)) }
 
 // modTab is the mod view of pv's open tab, if it is a mod's: the
-// Memory tab is the Memory tab mod's while it runs.
+// Memory and Tasks tabs are their built-in mods' while those run.
 func (pv *projectView) modTab(m *dash) (proto.ModView, bool) {
-	if pv.tab == tabMemory {
-		return m.mv.memoryTab(pv.slug)
+	if v, ok := m.mv.coreTab(pv.slug, pv.tab); ok {
+		return v, true
 	}
 	if pv.tab < tabCount {
 		return proto.ModView{}, false

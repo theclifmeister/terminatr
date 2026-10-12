@@ -148,7 +148,13 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			return cmd
 		}
 	}
-	if pv.tab == tabTasks {
+	if pv.tab == tabTasks && modded {
+		// The Tasks tab mod binds the task keys on its rows; + is the
+		// popup's still, as no row stands for a new task.
+		if k.String() == "+" {
+			return m.newTask(pv.slug)
+		}
+	} else if pv.tab == tabTasks {
 		// The task keys (asks.go).
 		if t := pv.selTask(); t != nil {
 			switch k.String() {
@@ -559,7 +565,7 @@ func (pv *projectView) tabLabel(m *dash, p ProjectData, i int) string {
 		}
 		return ""
 	}
-	if v, ok := m.mv.memoryTab(pv.slug); ok && i == tabMemory {
+	if v, ok := m.mv.coreTab(pv.slug, i); ok {
 		return modTabLabel(v, pv.slug, i)
 	}
 	label := fmt.Sprintf("%d %s", i+1, tabNames[i])

@@ -53,7 +53,10 @@ func TestModBroker(t *testing.T) {
 	if _, err := project.New(project.Options{Slug: "other"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.Tasks().Add(human, []tasks.NewTask{{Title: "Fix the login", Status: "started"}, {Title: "Two"}}); err != nil {
+	if _, err := p.Tasks().Add(human, []tasks.NewTask{{Title: "Fix the login", Status: "started", Steps: []string{"Repro", "Fix"}}, {Title: "Two", Status: "ready"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.AddItem(project.KindDelegate, "T2", "delegate T2", false); err != nil {
 		t.Fatal(err)
 	}
 	s := &Server{log: log.New(os.Stderr, "", 0), modEv: newModEvents()}
@@ -78,6 +81,14 @@ func TestModBroker(t *testing.T) {
 	}
 	if ts := got.([]ModTask); len(ts) != 2 || ts[0].ID != "T1" || ts[0].Status != "started" {
 		t.Fatalf("tasks.list = %+v", ts)
+	}
+	// Mod API 1.2: the steps, the date, and what asks the coordinator.
+	if ts := got.([]ModTask); len(ts[0].Steps) != 2 || ts[0].Steps[1].Text != "Fix" || ts[0].Steps[1].Done ||
+		ts[0].Updated == "" || ts[0].Asked != "" || ts[1].Asked != project.KindDelegate || ts[1].Steps == nil {
+		t.Fatalf("tasks.list = %+v", ts)
+	}
+	if err := p.DoneItems(project.KindDelegate, "T2"); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := call("tasks.list", map[string]string{"slug": "other"}); code(err) != modbroker.CodeDenied {
 		t.Fatalf("a project it doesn't run for: %v", err)

@@ -109,6 +109,15 @@ type Row struct {
 	// console re-checks it against live state and asks (View.Key), never
 	// the mod.
 	Actions []Action `json:"actions,omitempty"`
+	// Head makes the row a section heading (mod API 1.2): its spans
+	// (a table's too) drawn as a rule across the width, after a blank
+	// line unless it comes first. The cursor never stops on one, the
+	// filter hides it, and it binds nothing.
+	Head bool `json:"head,omitempty"`
+	// More are lines drawn under the row while the cursor is on it
+	// (mod API 1.2), such as a task's steps: the console shows them as
+	// the cursor moves, without asking the mod.
+	More [][]Span `json:"more,omitempty"`
 }
 
 // Action is a core action id and its target, such as task.delegate on
@@ -163,6 +172,7 @@ const (
 	MaxValues   = 512
 	MaxKeys     = 12
 	MaxActions  = 8        // bound on one row
+	MaxMore     = 64       // lines under one row
 	MaxText     = 4096     // bytes of one string
 	MaxBody     = 64 << 10 // bytes of a text widget's text, a long file's
 	MaxTextLine = 2000     // lines of a text widget, pairs, steps
@@ -406,6 +416,20 @@ func (c *checker) rowsOf(w *Widget, at string) {
 			}
 		} else {
 			c.spans(r.Spans, join(rat, "spans"))
+		}
+		if r.Head {
+			if w.Kind == KindTable {
+				c.spans(r.Spans, join(rat, "spans"))
+			}
+			if len(r.Cells) > 0 || len(r.Actions) > 0 || len(r.More) > 0 {
+				c.bad(rat, "a head row has spans only: no cells, actions or more")
+			}
+		}
+		if len(r.More) > MaxMore {
+			c.bad(join(rat, "more"), "%d lines, over %d", len(r.More), MaxMore)
+		}
+		for j := range r.More {
+			c.spans(r.More[j], fmt.Sprintf("%s[%d]", join(rat, "more"), j))
 		}
 		c.actions(r.Actions, join(rat, "actions"))
 	}

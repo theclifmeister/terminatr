@@ -94,6 +94,11 @@ func (m *dash) runBinding(msg bindingMsg) tea.Cmd {
 	task := st.Task(t.Project, t.Task)
 	switch b.action.ID {
 	case "task.show":
+		// From the project's own popup (its Tasks tab mod's row), the
+		// task opens over it, as enter on the core Tasks tab does.
+		if pv, ok := m.top().(*projectView); ok && pv.slug == t.Project {
+			return tea.Batch(m.openTask(pv, task), m.bindingDone(&b, true))
+		}
 		return tea.Batch(m.showTask(t.Project, task.ID), m.bindingDone(&b, true))
 	case "task.delegate":
 		return m.delegate(t.Project, task, &b)

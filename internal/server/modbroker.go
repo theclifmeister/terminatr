@@ -27,6 +27,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modannot"
+	"github.com/theclifmeister/terminatr/internal/modapi"
 	"github.com/theclifmeister/terminatr/internal/modbroker"
 	"github.com/theclifmeister/terminatr/internal/modproto"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -223,14 +224,7 @@ type (
 	ModProject struct {
 		Slug string `json:"slug"`
 	}
-	ModTask struct {
-		ID         string `json:"id"` // "T12"
-		Title      string `json:"title"`
-		Status     string `json:"status"`
-		StepsDone  int    `json:"steps_done"`
-		StepsTotal int    `json:"steps_total"`
-		Thread     string `json:"thread,omitempty"`
-	}
+	ModTask = modapi.Task
 )
 
 // modMethods adds the server's methods to b.
@@ -265,9 +259,15 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 		if err != nil {
 			return nil, err
 		}
+		items, _ := p.Inbox()
 		for _, t := range board.Tasks {
+			steps := make([]modapi.TaskStep, 0, len(t.Steps))
+			for _, st := range t.Steps {
+				steps = append(steps, modapi.TaskStep{Text: st.Text, Done: st.Done})
+			}
 			out = append(out, ModTask{ID: t.Ref(), Title: t.Title, Status: string(t.Status),
-				StepsDone: t.StepsDone(), StepsTotal: len(t.Steps), Thread: t.Thread})
+				StepsDone: t.StepsDone(), StepsTotal: len(t.Steps), Thread: t.Thread,
+				Steps: steps, Updated: t.Updated, Asked: project.TaskAsked(items, t.Ref())})
 		}
 		return out, nil
 	})

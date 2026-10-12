@@ -17,9 +17,10 @@ import (
 // as data mods, embedded in the binary and listed with the installed
 // ones as "built in": the built-in theme, the three icon sets, the
 // default keymap, the sidebar's default layout, the coordinator's and
-// the threads' policy, and task templates; and one code mod, the
-// sidebar's PR/CI column (pr-ci-column, precompiled by go generate from
-// examples/mods, package bundlegen). tm draws its defaults from
+// the threads' policy, and task templates; and code mods, the sidebar's
+// PR/CI column (pr-ci-column), the popup's Memory tab (memory-tab) and
+// its Tasks tab (tasks-tab), precompiled by go generate from
+// examples/mods (package bundlegen). tm draws its defaults from
 // these files, so each default is a mod anyone can copy and change, and
 // the loaders get their first users. They load from the binary, never
 // from disk; they update with tm. They are enabled unless their
@@ -30,6 +31,11 @@ import (
 // the policy) can't be turned off: another mod replaces them (a pick in
 // General settings, or an enabled keymap or policy mod). The templates
 // and the PR/CI column can.
+//
+// One is off until turned on: the Tasks tab (tasks-tab), the pilot of
+// the action binding (design §12, Phase 2), kept behind this flag while
+// the Go Tasks tab stays the default; enabled = true in its table turns
+// it on.
 
 //go:generate go run ./bundlegen/cmd
 //go:embed all:bundled
@@ -48,7 +54,23 @@ const (
 	// BundledMemory is the project popup's Memory tab, a code mod (proof
 	// 2 of the mod API, design §11); its source is examples/mods/memory-tab.
 	BundledMemory = "memory-tab"
+	// BundledTasks is the project popup's Tasks tab, a code mod (the
+	// action-binding pilot, design §12 Phase 2), off by default; its
+	// source is examples/mods/tasks-tab.
+	BundledTasks = "tasks-tab"
 )
+
+// TasksView is the Tasks tab mod's project tab: the popup draws it in
+// the core Tasks tab's place while the mod runs.
+const TasksView = "tasks"
+
+// defaultOff are the bundled mods that are off unless their table turns
+// them on.
+var defaultOff = []string{BundledTasks}
+
+// DefaultOff says whether bundled mod id is off unless its [mods.<id>]
+// table says enabled = true.
+func DefaultOff(id string) bool { return slices.Contains(defaultOff, id) }
 
 // MemoryView is the Memory tab mod's project tab: the popup draws it in
 // the core Memory tab's place while the mod runs.
@@ -141,7 +163,7 @@ func Bundled(id string, t config.Mod) Mod {
 		m.Settings[k], _ = man.Settings[k].Check(man.Settings[k].Default)
 	}
 	m.State = Enabled
-	if t.EnabledSet && !t.Enabled && !m.Required {
+	if t.EnabledSet && !t.Enabled && !m.Required || DefaultOff(id) && !(t.EnabledSet && t.Enabled) {
 		m.State = Disabled
 	}
 	return m

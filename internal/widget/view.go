@@ -211,6 +211,9 @@ func (l *list) refilter() {
 	l.shown = l.shown[:0]
 	q := strings.ToLower(l.filter)
 	for i := range l.w.Rows {
+		if l.w.Rows[i].Head {
+			continue // never under the cursor
+		}
 		if q == "" || strings.Contains(strings.ToLower(rowText(l.w, &l.w.Rows[i])), q) {
 			l.shown = append(l.shown, i)
 		}
@@ -219,6 +222,25 @@ func (l *list) refilter() {
 		l.idx = i
 	}
 	l.move(0)
+}
+
+// drawn are the rows a list draws: every row, heads included, or with a
+// filter the rows that pass it.
+func (l *list) drawn() []int {
+	if l.filter != "" {
+		return l.shown
+	}
+	out := make([]int, len(l.w.Rows))
+	for i := range out {
+		out[i] = i
+	}
+	return out
+}
+
+// more says whether a row of the list has lines under it (Row.More),
+// which move with the cursor.
+func (l *list) more() bool {
+	return slices.ContainsFunc(l.w.Rows, func(r Row) bool { return len(r.More) > 0 })
 }
 
 // move moves the cursor by n shown rows, within them.
@@ -289,6 +311,9 @@ func (v *View) Key(k string) (bool, *Event) {
 		}
 		l.move(n)
 		v.follow = true
+		if l.more() {
+			v.layValid = false
+		}
 		return true, nil
 	case "tab", "shift+tab":
 		if len(v.order) < 2 {
@@ -508,6 +533,9 @@ func (v *View) Click(x, y int) *Event {
 		}
 		if i := slices.IndexFunc(l.shown, func(r int) bool { return l.w.Rows[r].ID == ln.row }); i >= 0 {
 			l.idx, l.cursor = i, ln.row
+		}
+		if l.more() {
+			v.layValid = false
 		}
 		if v.focus != ln.list {
 			v.focus, v.editing, v.layValid = ln.list, false, false
