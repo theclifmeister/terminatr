@@ -20,11 +20,11 @@
                                    │ │ inbox                                     i │
                                    │ │ next project                              ] │
                                    │ │ previous project                          [ │
-                                   │ │ narrower list                             < │
-                                   │ │ wider list                                > │
+                                   │ │ smaller list                              < │
+                                   │ │ larger list                               > │
                                    │ │ narrower sidebar                          { │
                                    │ │ wider sidebar                             } │
-                                   │ │ slim sidebar on / off                     b │
+                                   │ │ sidebar: slim / hide / full               b │
                                    │ │ details panel on / off                    | │
                                    │ │ settings                                  , │
                                    │ │ help: keys and mouse                      ? │
