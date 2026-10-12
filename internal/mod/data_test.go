@@ -150,23 +150,6 @@ func TestKeymapJoined(t *testing.T) {
 	}
 }
 
-func TestParseLayout(t *testing.T) {
-	l, err := ParseLayout([]byte(`sidebar = ["count", "review-age.age", "state", "needs"]`))
-	if err != nil || !slices.Equal(l.Sidebar, []string{"count", "review-age.age", "state", "needs"}) {
-		t.Fatalf("%v %v", l, err)
-	}
-	for _, tc := range []struct{ toml, want string }{
-		{`sidebar = ["count", "bogus"]`, `no column "bogus"`},
-		{`sidebar = ["count", "count"]`, "listed twice"},
-		{"sidebar = []\ndashboard = []", "unknown key dashboard"},
-		{`sidebar = "count"`, "sidebar"},
-	} {
-		if _, err := ParseLayout([]byte(tc.toml)); err == nil || !strings.Contains(err.Error(), tc.want) {
-			t.Errorf("%s: %v, want %q", tc.toml, err, tc.want)
-		}
-	}
-}
-
 // TestRules: every addendum of an enabled mod running for the project,
 // by id; the first enabled policy for the role; a mod limited to other
 // projects adds nothing.

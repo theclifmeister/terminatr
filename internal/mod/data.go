@@ -15,8 +15,6 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-
-	"github.com/theclifmeister/terminatr/internal/view"
 )
 
 // Data mods (mods design §2, tiers 1-3): files tm reads, with no code
@@ -240,42 +238,6 @@ func keyArea(id string) string {
 		return "side "
 	}
 	return "list "
-}
-
-// Layouts
-
-// Layout is a layout mod's file: the order of the sidebar's columns, the
-// built-in ids (view.DefaultColumns) and mods' ("review-age.age").
-type Layout struct {
-	Sidebar []string `toml:"sidebar"`
-}
-
-// ParseLayout reads and checks a layout. A safety column it leaves out
-// is still shown, at the end (view.Columns).
-func ParseLayout(data []byte) (Layout, error) {
-	var l Layout
-	md, err := toml.Decode(string(data), &l)
-	if err != nil {
-		return l, err
-	}
-	var errs []error
-	for _, k := range md.Undecoded() {
-		errs = append(errs, fmt.Errorf("unknown key %s", k))
-	}
-	if len(l.Sidebar) > view.MaxColumns {
-		errs = append(errs, fmt.Errorf("sidebar: %d columns, at most %d", len(l.Sidebar), view.MaxColumns))
-	}
-	seen := map[string]bool{}
-	for _, c := range l.Sidebar {
-		switch {
-		case !slices.Contains(view.DefaultColumns, c) && !view.IsModColumn(c):
-			errs = append(errs, fmt.Errorf("sidebar: no column %q (built in: %s; a mod's: <mod>.<column>)", c, strings.Join(view.DefaultColumns, ", ")))
-		case seen[c]:
-			errs = append(errs, fmt.Errorf("sidebar: %s is listed twice", c))
-		}
-		seen[c] = true
-	}
-	return l, errors.Join(errs...)
 }
 
 // Rules addenda and policy
@@ -563,7 +525,8 @@ var DataChecks = map[string]func([]byte) error{}
 
 // CheckData loads every data file of the mod as tm would use it and
 // says what doesn't load, each error naming the kind: a theme, icon
-// set, keymap or layout that doesn't parse or check, a rules file that
+// set, keymap or layout that doesn't parse or check (a v2 layout in a mod
+// below API 1.5 included), a rules file that
 // can't be read, a template that doesn't parse. Nil when all load (and
 // for a mod whose manifest doesn't).
 func (m Mod) CheckData() []error {
@@ -579,7 +542,10 @@ func (m Mod) CheckData() []error {
 		if err == nil {
 			switch kind {
 			case KindLayout:
-				_, err = ParseLayout(data)
+				var l Layout
+				if l, err = ParseLayout(data); err == nil {
+					err = l.CheckAPI(m.Manifest.API)
+				}
 			case KindKeymap:
 				_, err = ParseKeymap(data)
 			}

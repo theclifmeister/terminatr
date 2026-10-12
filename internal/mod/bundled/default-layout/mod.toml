@@ -1,11 +1,12 @@
-# Built into tm (mods design §11): the sidebar's column order. Copy this
-# folder, change its id and name, reorder layout.toml and tm mod install
-# it; then pick it in General settings, Layout.
+# Built into tm (mods design §11): the built-in layout, every key of
+# layout.toml documented. Copy this folder, change its id and name,
+# change layout.toml and tm mod install it; then pick it in General
+# settings, Layout.
 id          = "default-layout"
 name        = "Default layout"
-version     = "1.0.0"
-api         = "1.0"
-description = "The sidebar's built-in column order."
+version     = "1.1.0"
+api         = "1.5"
+description = "The built-in layout: the sidebar's column order, every other key documented."
 authors     = ["terminatr"]
 
 [provides]
