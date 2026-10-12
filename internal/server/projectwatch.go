@@ -361,10 +361,10 @@ func contextOf(slug string, sessions []proto.SessionInfo) *proto.WatchContext {
 // ticker has nothing to ask, so the pane says so instead of "ok" or
 // "failing".
 func noPRHost(p *project.Project) bool {
-	if len(p.Meta.Repos) == 0 {
+	if len(p.Repos) == 0 {
 		return false
 	}
-	for _, r := range p.Meta.Repos {
+	for _, r := range p.Repos {
 		if codehost.Detect(r, p.CodeHost()).Kind != codehost.NoKind {
 			return false
 		}

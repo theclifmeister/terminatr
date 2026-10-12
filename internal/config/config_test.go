@@ -427,3 +427,63 @@ func TestModsTables(t *testing.T) {
 		t.Fatal("a bad older [mods] enabled passed")
 	}
 }
+
+// TestRepos (T335): a project's repo list is its table's repos, never
+// [defaults]', and no settings write reaches it; SetRepos and
+// UpdateRepos write it, an empty one too, and RenameTable moves it.
+func TestRepos(t *testing.T) {
+	write(t, "[projects.demo]\nyolo = true # mine\nrepos = [\"/src/a\"]\n\n[projects.other]\nyolo = false\n")
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, set := c.Repos("demo"); !set || !reflect.DeepEqual(got, []string{"/src/a"}) {
+		t.Fatalf("demo: %v %v", got, set)
+	}
+	if got, set := c.Repos("other"); set || got != nil {
+		t.Fatalf("other: %v %v", got, set)
+	}
+	if got, set := (*Config)(nil).Repos("demo"); set || got != nil {
+		t.Fatalf("nil: %v %v", got, set)
+	}
+	if own := c.Own("demo"); !reflect.DeepEqual(own, []string{"yolo"}) {
+		t.Fatalf("own %v: repos isn't a setting", own)
+	}
+	if err := SetProject("demo", "repos", []string{"/x"}); err == nil {
+		t.Fatal("SetProject wrote repos")
+	}
+	if err := UnsetProject("demo", "repos"); err == nil {
+		t.Fatal("UnsetProject removed repos")
+	}
+	if err := UpdateRepos("other", func(old []string, set bool) ([]string, error) {
+		if set || old != nil {
+			t.Errorf("other's list: %v %v", old, set)
+		}
+		return []string{"/src/b"}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetRepos("demo", nil); err != nil {
+		t.Fatal(err)
+	}
+	c, _ = Load()
+	if got, set := c.Repos("demo"); !set || len(got) != 0 {
+		t.Fatalf("demo emptied: %v %v", got, set)
+	}
+	if got, _ := c.Repos("other"); !reflect.DeepEqual(got, []string{"/src/b"}) {
+		t.Fatalf("other: %v", got)
+	}
+	data, _ := os.ReadFile(c.Path)
+	if !strings.Contains(string(data), "yolo = true # mine") {
+		t.Fatalf("the user's line changed:\n%s", data)
+	}
+	out, err := RenameTable(data, "other", "renamed")
+	if err != nil || !strings.Contains(string(out), "[projects.renamed]\nyolo = false\nrepos = [\"/src/b\"]") {
+		t.Fatalf("rename: %v\n%s", err, out)
+	}
+
+	write(t, "[defaults]\nrepos = [\"/src/a\"]\n")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "defaults can't set repos") {
+		t.Fatalf("defaults repos: %v", err)
+	}
+}

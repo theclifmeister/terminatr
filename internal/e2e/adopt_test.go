@@ -236,19 +236,28 @@ func TestThreadAdopt(t *testing.T) {
 	}
 }
 
-// firstRepo is the project's first repository, as PROJECT.md lists it.
+// firstRepo is the project's first repository, as config.toml lists it
+// (T335).
 func firstRepo(t *testing.T, projDir string) string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(projDir, "PROJECT.md"))
-	if err != nil {
-		t.Fatal(err)
+	repos := approvedRepos(t, projDir)
+	if len(repos) == 0 {
+		t.Fatalf("no repos for %s in config.toml", projDir)
 	}
-	_, front, _ := strings.Cut(string(b), "+++\n")
-	front, _, _ = strings.Cut(front, "+++")
-	var meta struct{ Repos []string }
-	if _, err := toml.Decode(front, &meta); err != nil || len(meta.Repos) == 0 {
-		t.Fatalf("PROJECT.md repos: %v %+v", err, meta)
-	}
-	r, _ := filepath.EvalSymlinks(meta.Repos[0])
+	r, _ := filepath.EvalSymlinks(repos[0])
 	return r
+}
+
+// approvedRepos is the repo list of the project in projDir, from
+// [projects.<slug>] repos in its home's config.toml.
+func approvedRepos(t *testing.T, projDir string) []string {
+	t.Helper()
+	slug, home := filepath.Base(projDir), filepath.Dir(filepath.Dir(projDir))
+	var cfg struct {
+		Projects map[string]struct{ Repos []string } `toml:"projects"`
+	}
+	if _, err := toml.DecodeFile(filepath.Join(home, "config.toml"), &cfg); err != nil {
+		t.Fatalf("config.toml: %v", err)
+	}
+	return cfg.Projects[slug].Repos
 }

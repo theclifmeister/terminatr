@@ -117,7 +117,7 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 	repos := []string{r.Cwd}
 	if r.Role == proto.RoleCoordinator {
 		if p, err := project.Open(r.Project); err == nil {
-			repos = p.Meta.Repos
+			repos = p.Repos
 		}
 	}
 	for _, repo := range repos {
@@ -299,8 +299,9 @@ func (s *Server) hookRules(r SessionRecord) GuardRules {
 
 // guardStamp says, cheaply (stats only), whether what a session of
 // project slug's rules are made of changed: config.toml (the settings,
-// which mods are enabled and for which projects, their grants), the
-// project's PROJECT.md (its repos), and each installed mod's mod.toml
+// which mods are enabled and for which projects, their grants, the
+// projects' repos), the project's PROJECT.md (its repos until they move
+// to config.toml, project.MoveRepos), and each installed mod's mod.toml
 // (an install, update or removal). A stamp that changed drops the mods'
 // registry the broker keeps for a second (modRegistryAge) too.
 func guardStamp(slug string) string {

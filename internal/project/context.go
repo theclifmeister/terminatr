@@ -86,10 +86,10 @@ func (p *Project) Context(seen Ticked) ([]Section, error) {
 		"Folder: " + p.Dir,
 		"Goal: " + orNone(p.Meta.Goal),
 	}
-	if len(p.Meta.Repos) == 0 {
+	if len(p.Repos) == 0 {
 		head = append(head, "Repos: (none)")
 	}
-	for _, r := range p.Meta.Repos {
+	for _, r := range p.Repos {
 		line := "Repo: " + r
 		if n := seen.Checkouts[r]; n != "" {
 			line += " · " + n
@@ -569,7 +569,7 @@ func CodeHosts() []codehost.RepoHost {
 		if err != nil {
 			continue
 		}
-		for _, r := range p.Meta.Repos {
+		for _, r := range p.Repos {
 			if k := s.Slug + "\x00" + r; !seen[k] {
 				seen[k] = true
 				out = append(out, codehost.RepoHost{Repo: r, Target: codehost.Detect(r, p.CodeHost())})

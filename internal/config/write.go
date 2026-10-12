@@ -537,8 +537,8 @@ func setting(l, key string) (indent, comment string, ok bool) {
 }
 
 // ClearProject removes keys from a project's table, e.g. a deleted
-// project's archived and paused, so a new project of the same slug
-// starts without them.
+// project's archived, paused and repos, so a new project of the same
+// slug starts without them.
 func ClearProject(slug string, keys ...string) error {
 	return edit(func(data []byte) ([]byte, error) {
 		if data == nil {
@@ -548,6 +548,50 @@ func ClearProject(slug string, keys ...string) error {
 			data = Remove(data, "projects."+slug, k)
 		}
 		return data, nil
+	})
+}
+
+// SetRepos writes project slug's repo list ([projects.<slug>] repos),
+// an empty one too. No socket method writes it: the user's tm project
+// repo and project popup do, and the coordinator's tm project repo
+// remove, which runs in the server (cli.run).
+func SetRepos(slug string, repos []string) error {
+	return UpdateRepos(slug, func([]string, bool) ([]string, error) { return repos, nil })
+}
+
+// UpdateRepos rewrites project slug's repo list with fn under the
+// file's lock: fn gets the list and whether the table sets one, and
+// returns the new list, written even when empty.
+func UpdateRepos(slug string, fn func(old []string, set bool) ([]string, error)) error {
+	return edit(func(data []byte) ([]byte, error) {
+		var raw struct {
+			Projects map[string]struct {
+				Repos *[]string `toml:"repos"`
+			} `toml:"projects"`
+		}
+		if _, err := toml.Decode(string(data), &raw); err != nil {
+			return nil, fmt.Errorf("the settings can't be read: %w", err)
+		}
+		var old []string
+		r := raw.Projects[slug].Repos
+		if r != nil {
+			old = *r
+		}
+		repos, err := fn(slices.Clone(old), r != nil)
+		if err != nil {
+			return nil, err
+		}
+		if repos == nil {
+			repos = []string{}
+		}
+		out, err := Edit(data, "projects."+slug, "repos", repos)
+		if err != nil {
+			return nil, err
+		}
+		if !sets(out, "projects."+slug, "repos") {
+			return nil, ErrForm
+		}
+		return out, nil
 	})
 }
 

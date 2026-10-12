@@ -23,10 +23,10 @@ import (
 
 // Meta is PROJECT.md's front matter. A project has no display name: its
 // slug is its only name. A name key left by an older tm is ignored, and
-// dropped the next time tm writes the front matter.
+// dropped the next time tm writes the front matter; so is a repos key,
+// the repo list's place before config.toml (Project.Repos, MoveRepos).
 type Meta struct {
 	Goal    string    `toml:"goal"`
-	Repos   []string  `toml:"repos"`
 	Created time.Time `toml:"created"`
 	// CodeHost and AzureURL override where the repos' pull requests live
 	// (codehost.Config): "github", "azure", or the kind a code host mod
@@ -47,6 +47,11 @@ type Project struct {
 	Slug string
 	Dir  string
 	Meta Meta
+	// Repos are the project's repositories, those the user approved for
+	// its threads' worktrees: [projects.<slug>] repos in config.toml,
+	// the human's file, never PROJECT.md, which the coordinator writes
+	// (T335). Only the user adds one (SetRepo).
+	Repos []string
 	// Instructions is PROJECT.md's body: the standing instructions.
 	Instructions string
 }
@@ -125,15 +130,48 @@ func Open(slug string) (*Project, error) {
 		return nil, err
 	}
 	p := &Project{Slug: slug, Dir: dir}
-	body, err := mdfile.Read(p.Path("PROJECT.md"), &p.Meta)
+	data, err := os.ReadFile(p.Path("PROJECT.md"))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, refuse("unknown-project", "no project %q (tm project list)", slug)
 	}
 	if err != nil {
 		return nil, err
 	}
+	body, err := mdfile.Decode(data, &p.Meta)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", p.Path("PROJECT.md"), err)
+	}
 	p.Instructions = strings.TrimSpace(string(body))
+	p.Repos = approvedRepos(slug, data)
 	return p, nil
+}
+
+// approvedRepos is project slug's repo list from config.toml, or none
+// when the file doesn't parse. Until MoveRepos has run, a project the
+// file has no list for keeps PROJECT.md's (data), as an older tm did.
+func approvedRepos(slug string, data []byte) []string {
+	cfg, _ := config.Load() // a safety error still gives the tables
+	if repos, set := cfg.Repos(slug); set || reposMoved() {
+		return repos
+	}
+	return legacyRepos(data)
+}
+
+// legacyRepos is the repos key of a PROJECT.md (data) an older tm wrote.
+func legacyRepos(data []byte) []string {
+	var old struct {
+		Repos []string `toml:"repos"`
+	}
+	if _, err := mdfile.Decode(data, &old); err != nil {
+		return nil
+	}
+	var out []string
+	for _, r := range old.Repos {
+		if filepath.IsAbs(r) {
+			out = append(out, filepath.Clean(r))
+		}
+	}
+	return out
 }
 
 // Path joins a name onto the project folder.
@@ -193,10 +231,18 @@ func New(o Options) (*Project, error) {
 	if now.IsZero() {
 		now = time.Now()
 	}
-	p := &Project{Slug: slug, Dir: dir, Meta: Meta{Goal: strings.TrimSpace(o.Goal), Repos: repos, Created: now.UTC().Truncate(time.Second)}}
+	p := &Project{Slug: slug, Dir: dir, Repos: repos, Meta: Meta{Goal: strings.TrimSpace(o.Goal), Created: now.UTC().Truncate(time.Second)}}
 	p.Instructions = strings.TrimSpace(instructionsTemplate)
 	if err := p.scaffold(); err != nil {
 		return nil, fmt.Errorf("create %s: %w", dir, err)
+	}
+	// The list goes to config.toml, replacing one a table of the slug
+	// still had: a new project starts with only the repos named here.
+	cfg, _ := config.Load()
+	if _, set := cfg.Repos(slug); set || len(repos) > 0 {
+		if err := config.SetRepos(slug, repos); err != nil {
+			return p, fmt.Errorf("created %s, but its repos aren't saved in config.toml: %w", dir, err)
+		}
 	}
 	return p, nil
 }
@@ -312,7 +358,7 @@ func List() ([]Summary, error) {
 			out = append(out, s)
 			continue
 		}
-		s.Goal, s.Repos = p.Meta.Goal, p.Meta.Repos
+		s.Goal, s.Repos = p.Meta.Goal, p.Repos
 		if safety, err := cfg.Safety(p.Slug); err == nil {
 			s.Safety = &safety
 		}
@@ -380,23 +426,28 @@ func Resolve(flag string, getenv func(string) string, cwd string) (string, error
 	return "", nil
 }
 
-// SetRepo adds (or removes) a repo in PROJECT.md's repo list. An added
-// path must be a directory. changed is false when it was already so.
+// SetRepo adds (or removes) a repo in the project's repo list, in
+// config.toml (Project.Repos). An added path must be a directory.
+// changed is false when it was already so. Adding is the user's: the
+// callers refuse an agent.
 func (p *Project) SetRepo(path string, add bool) (changed bool, err error) {
 	if add {
 		if fi, err := os.Stat(path); err != nil || !fi.IsDir() {
 			return false, refuse("invalid-repo", "%s is not a directory", path)
 		}
 	}
-	err = mdfile.Update(p.Path("PROJECT.md"), func(old []byte) ([]byte, error) {
-		var m Meta
-		body, err := mdfile.Decode(old, &m)
-		if err != nil {
-			return nil, err
+	data, err := os.ReadFile(p.Path("PROJECT.md"))
+	if err != nil {
+		return false, err
+	}
+	var repos []string
+	err = config.UpdateRepos(p.Slug, func(old []string, set bool) ([]string, error) {
+		if !set && !reposMoved() {
+			old = legacyRepos(data)
 		}
-		var repos []string
+		repos, changed = nil, false
 		found := false
-		for _, r := range m.Repos {
+		for _, r := range old {
 			if r == path {
 				found = true
 				if !add {
@@ -409,12 +460,11 @@ func (p *Project) SetRepo(path string, add bool) (changed bool, err error) {
 			repos = append(repos, path)
 		}
 		changed = found != add
-		if !changed {
-			return old, nil
-		}
-		m.Repos = repos
-		p.Meta = m
-		return mdfile.Join(m, body)
+		return repos, nil
 	})
-	return changed, err
+	if err != nil {
+		return false, err
+	}
+	p.Repos = repos
+	return changed, nil
 }

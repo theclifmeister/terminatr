@@ -8,6 +8,7 @@ package server
 import (
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
@@ -173,7 +174,7 @@ func (s *Server) adopt(p proto.SessionAdoptParams) (any, *proto.Error) {
 	now := sess.Info()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if p.Asked && !s.adoptAsks[p.ID].allows(p.Project, now) {
+	if p.Asked && !s.adoptAsks[p.ID].allows(p.Project, now, time.Now()) {
 		return nil, proto.Errorf(proto.ErrRefused, "the user hasn't asked to adopt session %s into %s", p.ID, p.Project)
 	}
 	r, ok := s.records[p.ID]
@@ -211,13 +212,22 @@ func (s *Server) adopt(p proto.SessionAdoptParams) (any, *proto.Error) {
 
 // adoptAsk records the human's go-ahead to adopt session p.ID into
 // project p.Project (T on the dashboard), replacing an earlier one for
-// another project; with p.Check it only says whether that go-ahead
-// waits. It is human-only (proto.HumanOnly): an agent's tm thread adopt
-// needs it (session.adopt's Asked), so the coordinator can't take over
-// the user's own agent session on its own word.
+// another project, for AdoptAskTTL; with p.Check it only says whether
+// that go-ahead waits, and with p.Withdraw it drops it (T again). It is
+// human-only (proto.HumanOnly): an agent's tm thread adopt needs it
+// (session.adopt's Asked), so the coordinator can't take over the
+// user's own agent session on its own word.
 func (s *Server) adoptAsk(p proto.SessionAdoptAskParams) (any, *proto.Error) {
 	if p.ID == "" || p.Project == "" {
 		return nil, proto.Errorf(proto.ErrBadParams, "session.adopt.ask needs a session and a project")
+	}
+	if p.Withdraw {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.adoptAsks[p.ID].project == p.Project {
+			delete(s.adoptAsks, p.ID)
+		}
+		return proto.SessionAdoptAskResult{}, nil
 	}
 	sess, perr := s.session(p.ID)
 	if perr != nil {
@@ -230,24 +240,34 @@ func (s *Server) adoptAsk(p proto.SessionAdoptAskParams) (any, *proto.Error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if p.Check {
-		return proto.SessionAdoptAskResult{Asked: s.adoptAsks[p.ID].allows(p.Project, now)}, nil
+		return proto.SessionAdoptAskResult{Asked: s.adoptAsks[p.ID].allows(p.Project, now, time.Now())}, nil
 	}
-	s.adoptAsks[p.ID] = adoptAsk{project: p.Project, agent: now.Agent, cwd: now.Cwd, agentSID: now.AgentSID}
+	s.adoptAsks[p.ID] = adoptAsk{project: p.Project, agent: now.Agent, cwd: now.Cwd, agentSID: now.AgentSID, at: time.Now()}
 	return proto.SessionAdoptAskResult{Asked: true}, nil
 }
 
+// AdoptAskTTL is how long the human's go-ahead to adopt a session
+// holds: a coordinator that hasn't adopted it by then needs T again, so
+// a go-ahead the user forgot doesn't wait for good.
+const AdoptAskTTL = time.Hour
+
 // adoptAsk is the human's go-ahead to adopt a session into project, and
 // what ran in it when they gave it: the agent, its folder and, once
-// known, its conversation.
+// known, its conversation; at is when.
 type adoptAsk struct {
 	project, agent, cwd, agentSID string
+	at                            time.Time
 }
 
-// allows reports whether the go-ahead is for project and the session
-// still runs what the user saw (now, its info): the same agent in the
-// same folder, not another one started in that shell since.
-func (a adoptAsk) allows(project string, now proto.SessionInfo) bool {
+// allows reports whether the go-ahead is for project, not older than
+// AdoptAskTTL at t, and the session still runs what the user saw (now,
+// its info): the same agent in the same folder, not another one started
+// in that shell since.
+func (a adoptAsk) allows(project string, now proto.SessionInfo, t time.Time) bool {
 	if a.project == "" || a.project != project || a.agent != now.Agent || a.cwd != now.Cwd {
+		return false
+	}
+	if t.Sub(a.at) > AdoptAskTTL {
 		return false
 	}
 	return a.agentSID == "" || now.AgentSID == "" || a.agentSID == now.AgentSID

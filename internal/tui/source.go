@@ -213,6 +213,9 @@ type Source interface {
 	// agent session outside the projects, as a thread (docs/SPEC.md §4,
 	// Adopt). It reports false when an item already asks it.
 	AskAdopt(slug string, s proto.SessionInfo) (bool, error)
+	// WithdrawAdopt takes the user's go-ahead to adopt session id back
+	// (T again while it is asked), and the coordinator's item with it.
+	WithdrawAdopt(slug, id string) error
 	// OpenQuestions has the project's coordinator put its open questions
 	// (tm ask) to the user in its question dialog (questions.open).
 	OpenQuestions(slug string) (proto.QuestionsOpenResult, error)
@@ -780,6 +783,26 @@ func (s *ServerSource) AskAdopt(slug string, sess proto.SessionInfo) (bool, erro
 	return p.AskAdopt(s.Caller, sess.ID, adoptWhere(sess, ""))
 }
 
+// WithdrawAdopt takes back the user's go-ahead to adopt session id into
+// project slug: the server's, which the coordinator's tm thread adopt
+// needs, and the inbox item that told it.
+func (s *ServerSource) WithdrawAdopt(slug, id string) error {
+	if s.Caller.IsAgent() {
+		return errHumanOnly
+	}
+	p, err := project.Open(slug)
+	if err != nil {
+		return err
+	}
+	if err := s.call(proto.MethodSessionAdoptAsk, proto.SessionAdoptAskParams{ID: id, Project: slug, Withdraw: true}, nil); err != nil {
+		return err
+	}
+	if err := p.DoneItems(project.KindAdopt, id); err != nil {
+		return err
+	}
+	return p.Journal(s.Caller, "thread.adopt.withdraw", id, "")
+}
+
 // adoptWhere says what runs in session s and where, for an adopt ask:
 // "claude in /src/app on fix-login"; home, when set, is shortened to ~.
 func adoptWhere(s proto.SessionInfo, home string) string {
@@ -807,8 +830,8 @@ func (s *ServerSource) Review(slug string, t *tasks.Task) Review {
 			rv.Check, reportPR = rep.Check, rep.PR
 		}
 	}
-	if repo == "" && len(p.Meta.Repos) > 0 {
-		repo = p.Meta.Repos[0]
+	if repo == "" && len(p.Repos) > 0 {
+		repo = p.Repos[0]
 	}
 	pr := ticker.PRs(ticker.StatePath(s.Paths.Sessions), slug)[t.Thread]
 	rv.PR = pr.Number

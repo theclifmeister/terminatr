@@ -294,6 +294,13 @@ func Run(ctx context.Context, opts Options) error {
 	s.modelsCtx, s.modelsStop = context.WithCancel(context.Background())
 	defer s.modelsStop()
 	s.refreshModels()
+	// Before any agent can run a command: the repo lists leave
+	// PROJECT.md for config.toml, once (T335).
+	if moved, err := project.MoveRepos(time.Now()); err != nil {
+		logger.Printf("repo lists: %v", err)
+	} else if len(moved) > 0 {
+		logger.Printf("repo lists moved to config.toml: %s", strings.Join(moved, ", "))
+	}
 	toResume, lost := s.loadPrevious()
 	if err := s.saveLocked(""); err != nil {
 		logger.Printf("sessions.json: %v", err)

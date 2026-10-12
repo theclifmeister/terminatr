@@ -7,14 +7,45 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/BurntSushi/toml"
 )
 
+// writeConfig replaces config.toml with body, keeping each project's
+// repo list (T335: tm project new wrote it there) unless body sets one.
 func writeConfig(t *testing.T, env *Env, body string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(env.Home, "config.toml"), []byte(body), 0o600); err != nil {
+	path := filepath.Join(env.Home, "config.toml")
+	var old, now struct {
+		Projects map[string]struct{ Repos *[]string } `toml:"projects"`
+	}
+	if _, err := toml.DecodeFile(path, &old); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if _, err := toml.Decode(body, &now); err != nil {
+		t.Fatal(err)
+	}
+	for slug, p := range old.Projects {
+		if p.Repos == nil || now.Projects[slug].Repos != nil {
+			continue
+		}
+		quoted := make([]string, len(*p.Repos))
+		for i, r := range *p.Repos {
+			quoted[i] = strconv.Quote(r)
+		}
+		line := "repos = [" + strings.Join(quoted, ", ") + "]\n"
+		header := "[projects." + slug + "]\n"
+		if strings.Contains(body, header) {
+			body = strings.Replace(body, header, header+line, 1)
+		} else {
+			body += "\n" + header + line
+		}
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
