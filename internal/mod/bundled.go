@@ -17,7 +17,9 @@ import (
 // as data mods, embedded in the binary and listed with the installed
 // ones as "built in": the built-in theme, the three icon sets, the
 // default keymap, the sidebar's default layout, the coordinator's and
-// the threads' policy, and task templates. tm draws its defaults from
+// the threads' policy, and task templates; and one code mod, the
+// sidebar's PR/CI column (pr-ci-column, precompiled by go generate from
+// examples/mods, package bundlegen). tm draws its defaults from
 // these files, so each default is a mod anyone can copy and change, and
 // the loaders get their first users. They load from the binary, never
 // from disk; they update with tm. They are enabled unless their
@@ -27,8 +29,9 @@ import (
 // The defaults tm can't do without (the look, the keys, the layout and
 // the policy) can't be turned off: another mod replaces them (a pick in
 // General settings, or an enabled keymap or policy mod). The templates
-// can.
+// and the PR/CI column can.
 
+//go:generate go run ./bundlegen/cmd
 //go:embed all:bundled
 var bundledFS embed.FS
 
@@ -39,7 +42,14 @@ const (
 	BundledLayout    = "default-layout"
 	BundledPolicy    = "default-policy"
 	BundledTemplates = "default-templates"
+	// BundledPRCI is the sidebar's PR/CI column, a code mod (proof 1 of
+	// the mod API, design §11); its source is examples/mods/pr-ci-column.
+	BundledPRCI = "pr-ci-column"
 )
+
+// PRCIColumn is the PR/CI mod's column, in layouts: the built-in ci
+// column draws in its place while the mod is off (view.ColCI).
+const PRCIColumn = BundledPRCI + ".ci"
 
 // BundledIcons is the bundled icon set mod for a built-in set's name
 // (unicode, nerd, ascii): "<name>-icons".
@@ -116,7 +126,13 @@ func Bundled(id string, t config.Mod) Mod {
 			man.Version = v
 		}
 	}
+	// It is part of tm: it runs with what it asks for, as tm does,
+	// without a consent screen, and with its settings' defaults.
+	m.Grants = man.Permissions.Requested()
 	m.Settings = map[string]any{}
+	for _, k := range sortedKeys(man.Settings) {
+		m.Settings[k], _ = man.Settings[k].Check(man.Settings[k].Default)
+	}
 	m.State = Enabled
 	if t.EnabledSet && !t.Enabled && !m.Required {
 		m.State = Disabled

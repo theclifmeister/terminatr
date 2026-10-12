@@ -6,11 +6,13 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modapi"
 	"github.com/theclifmeister/terminatr/internal/modproto"
 	"github.com/theclifmeister/terminatr/internal/modsup"
@@ -52,12 +54,22 @@ func TestModHostsFollowConfig(t *testing.T) {
 	s := &Server{opts: Options{Paths: p, Bin: "/nonexistent/tm"}, log: log.New(&testWriter{t: t}, "server: ", 0),
 		sessions: map[string]*session.Session{}, modEv: newModEvents()}
 	specs, ok := s.modSpecs()
-	if !ok || len(specs) != 1 {
+	if !ok || len(specs) != 2 {
 		t.Fatalf("specs %+v %v", specs, ok)
 	}
 	if sp := specs[0]; sp.ID != "code" || sp.Entry != filepath.Join(home, "mods", "code", "main.js") ||
-		len(sp.Grants) != 1 || len(sp.Projects) != 1 {
+		len(sp.Grants) != 1 || len(sp.Projects) != 1 || sp.Bundle != nil || sp.Eager {
 		t.Fatalf("spec %+v", sp)
+	}
+	// The built-in PR/CI column runs its precompiled bundle, at once.
+	if sp := specs[1]; sp.ID != mod.BundledPRCI || sp.Entry != "" || len(sp.Bundle) == 0 || !sp.Eager ||
+		!slices.Equal(sp.Grants, []string{mod.PermProjectRead}) {
+		t.Fatalf("built-in spec %s %q %d bytes eager %v %v", sp.ID, sp.Entry, len(sp.Bundle), sp.Eager, sp.Grants)
+	}
+	// Off, it is no spec: the rest of the test follows the user's mod.
+	write("config.toml", "[mods.code]\nenabled = true\ngrants = [\"project_read\"]\nprojects = [\"demo\"]\n[mods.pr-ci-column]\nenabled = false\n")
+	if specs, _ := s.modSpecs(); len(specs) != 1 || specs[0].ID != "code" {
+		t.Fatalf("with the built-in off: %+v", specs)
 	}
 
 	sup := s.newModHosts()
@@ -99,7 +111,7 @@ func TestModHostsFollowConfig(t *testing.T) {
 	if st := s.modHosts(); st.NoMods || len(st.Hosts) != 1 || st.Hosts[0].ID != "code" {
 		t.Fatalf("mod.hosts %+v", st)
 	}
-	write("config.toml", "[mods.code]\nenabled = false\n")
+	write("config.toml", "[mods.code]\nenabled = false\n[mods.pr-ci-column]\nenabled = false\n")
 	wait("code stopped", func(st []modsup.Status) bool { return len(st) == 0 })
 }
 
@@ -235,7 +247,8 @@ $.on("mod.ready", async () => {
 }
 
 // TestModHostsSafeMode: in safe mode no user mod is given to the
-// supervisor, mod.hosts says so and mod.restart refuses.
+// supervisor (a built-in one still is), mod.hosts says so and
+// mod.restart refuses a user mod.
 func TestModHostsSafeMode(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("TERMINATR_HOME", home)
@@ -249,11 +262,12 @@ func TestModHostsSafeMode(t *testing.T) {
 	}
 	s := &Server{opts: Options{Paths: p, Bin: "/nonexistent/tm"}, log: log.New(&testWriter{t: t}, "server: ", 0),
 		sessions: map[string]*session.Session{}, modEv: newModEvents()}
-	if specs, ok := s.modSpecs(); !ok || len(specs) != 1 {
+	if specs, ok := s.modSpecs(); !ok || len(specs) != 2 {
 		t.Fatalf("specs %+v %v", specs, ok)
 	}
+	// Built-in mods are part of tm: safe mode still runs them.
 	s.noMods = true
-	if specs, ok := s.modSpecs(); !ok || len(specs) != 0 {
+	if specs, ok := s.modSpecs(); !ok || len(specs) != 1 || specs[0].ID != mod.BundledPRCI {
 		t.Fatalf("safe mode runs %+v", specs)
 	}
 	if !s.modHosts().NoMods {

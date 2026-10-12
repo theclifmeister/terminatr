@@ -181,13 +181,13 @@ jobs:
             echo "modapi=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          hits=$(git diff --name-only HEAD^1 HEAD | grep -E '^(internal/modapi/|internal/moddev/|\.github/workflows/ci\.yml$)' || true)
+          hits=$(git diff --name-only HEAD^1 HEAD | grep -E '^(internal/modapi/|internal/moddev/|examples/mods/|\.github/workflows/ci\.yml$)' || true)
           echo "modapi-related: ${hits:-none}"
           echo "modapi=$([ -n "$hits" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
   # The user mods' types (docs/SPEC.md §5.3, Mod dev tools): tsc --strict
-  # on tm mod new's code scaffolds and internal/modapi/testdata's
-  # examples against the generated tm.d.ts. Needs Go and a pinned
+  # on tm mod new's code scaffolds, internal/modapi/testdata's examples
+  # and examples/mods against the generated tm.d.ts. Needs Go and a pinned
   # TypeScript, not libghostty.
   mod-types:
     needs: changes

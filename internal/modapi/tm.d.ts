@@ -443,6 +443,7 @@ export declare namespace TM {
     pr?: string;
     pr_url?: string;
     pr_bad?: boolean;
+    pr_checks?: string;
     pr_checked?: string;
     reports?: number;
     done?: boolean;

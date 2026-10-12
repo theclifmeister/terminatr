@@ -86,6 +86,11 @@ type Spec struct {
 	Projects []string
 	// Settings are its options, sent in hello.
 	Settings map[string]any
+	// Eager starts the host with the supervisor instead of on its first
+	// event: a bundled mod that draws on the sidebar, whose cells shown
+	// from the last run would otherwise stay stale until something
+	// changes (a lazy host never gets mod.ready's snapshot before).
+	Eager bool
 }
 
 // Status is one supervised mod's state, for the Mods tab, tm mod list and
@@ -196,7 +201,8 @@ func New(o Options) *Supervisor {
 	return s
 }
 
-// Set makes specs the mods that run: a new one starts (lazily), one that
+// Set makes specs the mods that run: a new one starts (lazily unless
+// Eager), one that
 // changed is stopped and started again (which also clears its failure),
 // and one no longer listed is stopped. It returns at once.
 func (s *Supervisor) Set(specs []Spec) {
@@ -219,7 +225,7 @@ func (s *Supervisor) Set(specs []Spec) {
 	}
 	for _, id := range slices.Sorted(maps.Keys(want)) {
 		if _, ok := s.mods[id]; !ok {
-			s.start(want[id], false, old[id])
+			s.start(want[id], want[id].Eager, old[id])
 		}
 	}
 }

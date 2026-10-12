@@ -1,7 +1,9 @@
 package mod
 
 import (
+	"bytes"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -9,18 +11,22 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/mod/bundlegen"
 )
 
 // TestBundled: the bundled mods (mods design §11) load from the binary,
 // valid, enabled and built in, after the installed ones; every data
-// file of theirs loads; the defaults tm needs are required, the
+// file of the data mods loads; the defaults tm needs are required, the
 // templates aren't.
 func TestBundled(t *testing.T) {
-	want := []string{"ascii-icons", "default-keymap", "default-layout", "default-policy", "default-templates", "default-theme", "nerd-icons", "unicode-icons"}
+	want := []string{"ascii-icons", "default-keymap", "default-layout", "default-policy", "default-templates", "default-theme", "nerd-icons", "pr-ci-column", "unicode-icons"}
 	if got := BundledIDs(); !slices.Equal(got, want) {
 		t.Fatalf("bundled %q", got)
 	}
 	for _, id := range want {
+		if slices.Contains(bundlegen.Code, id) {
+			continue // TestBundledCodeMod
+		}
 		m := Bundled(id, config.Mod{})
 		if m.State != Enabled || !m.Builtin || m.FS == nil || m.Dir != "" || m.Err != nil {
 			t.Errorf("%s: %+v", id, m)
@@ -151,5 +157,43 @@ func TestCheckData(t *testing.T) {
 		if !strings.HasPrefix(got[i], want[i]) {
 			t.Errorf("got %q, want %q…", got[i], want[i])
 		}
+	}
+}
+
+// TestBundledCodeCurrent: each bundled code mod's embedded files are what
+// go generate makes of its source in examples/mods.
+func TestBundledCodeCurrent(t *testing.T) {
+	for _, id := range bundlegen.Code {
+		want, err := bundlegen.Files(filepath.Join("..", "..", "examples", "mods", id), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for name, b := range want {
+			got, err := fs.ReadFile(bundledFS, "bundled/"+id+"/"+name)
+			if err != nil || !bytes.Equal(got, b) {
+				t.Errorf("bundled/%s/%s is stale: run go generate ./internal/mod", id, name)
+			}
+		}
+	}
+}
+
+// TestBundledCodeMod: the PR/CI column is a built-in code mod, on by
+// default, with what it asks for granted, and its bundle embedded.
+func TestBundledCodeMod(t *testing.T) {
+	m := Bundled(BundledPRCI, config.Mod{})
+	if m.State != Enabled || !m.Builtin || m.Required || m.Manifest == nil || !m.Manifest.IsCode() {
+		t.Fatalf("pr-ci-column: %+v", m)
+	}
+	if !slices.Equal(m.Grants, []string{PermProjectRead}) {
+		t.Errorf("grants %v", m.Grants)
+	}
+	if b, err := m.ReadFile(m.Manifest.Provides.Main); err != nil || len(b) == 0 {
+		t.Errorf("its bundle: %v", err)
+	}
+	if c := m.Manifest.Provides.Columns; len(c) != 1 || BundledPRCI+"."+c[0].ID != PRCIColumn {
+		t.Errorf("columns %+v", c)
+	}
+	if m := Bundled(BundledPRCI, config.Mod{EnabledSet: true}); m.State != Disabled {
+		t.Errorf("turned off: %s", m.State)
 	}
 }
