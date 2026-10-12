@@ -191,10 +191,12 @@ func ParseKeymap(data []byte) (map[string][]string, error) {
 // to its keys, from the first mod (in the order they were enabled) that
 // binds it, and from none whose keymap doesn't parse. A key bound by two
 // mods goes to the first; the later mod's action keeps its default
-// keys. errs say what was left out, each naming its mod.
+// keys. errs say what was left out, each naming its mod. The sidebar's
+// actions (side.*) and the rest are keyed apart, as the console's two key
+// tables are: pgdown may page both the sidebar and a list.
 func (r *Registry) Keymap() (km map[string][]string, from map[string]string, errs []error) {
 	km, from = map[string][]string{}, map[string]string{}
-	keyOwner := map[string]string{} // key → the id the first mod bound it to
+	keyOwner := map[string]string{} // area and key → the id the first mod bound it to
 	for _, m := range r.Providers(KindKeymap) {
 		if m.Builtin {
 			continue
@@ -217,18 +219,27 @@ func (r *Registry) Keymap() (km map[string][]string, from map[string]string, err
 				continue
 			}
 			for _, k := range one[id] {
-				if o, ok := keyOwner[k]; ok {
+				if o, ok := keyOwner[keyArea(id)+k]; ok {
 					errs = append(errs, fmt.Errorf("%s keymap: key conflict: %s is %s's %s", m.ID, k, from[o], o))
 					continue ids
 				}
 			}
 			km[id], from[id] = one[id], m.ID
 			for _, k := range one[id] {
-				keyOwner[k] = id
+				keyOwner[keyArea(id)+k] = id
 			}
 		}
 	}
 	return km, from, errs
+}
+
+// keyArea is the key table action id is in, as a prefix of its keys:
+// the sidebar's (side.*) or the list's (the rest).
+func keyArea(id string) string {
+	if strings.HasPrefix(id, "side.") {
+		return "side "
+	}
+	return "list "
 }
 
 // Layouts

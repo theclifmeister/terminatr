@@ -142,6 +142,21 @@ func TestModValidate(t *testing.T) {
 	if code != 1 || !strings.Contains(out, "invalid  "+bad) || !strings.Contains(out, "has no name") {
 		t.Errorf("bad: exit %d %q", code, out)
 	}
+	// A keymap whose own actions want one key, as the console would
+	// refuse it (T301 B3); the sidebar's and a list's may share one.
+	keys := t.TempDir()
+	for name, text := range map[string]string{
+		"mod.toml":    "id = \"keys\"\nname = \"Keys\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nkeymap = \"keymap.toml\"\n",
+		"keymap.toml": "\"list.up\" = [\"K\"]\n\"list.down\" = [\"K\"]\n\"side.page-down\" = [\"ctrl+d\"]\n\"list.page-down\" = [\"ctrl+d\"]\n",
+	} {
+		if err := os.WriteFile(filepath.Join(keys, name), []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	code, out, _ = h.run(thr, "", "mod", "validate", keys)
+	if code != 1 || !strings.Contains(out, "list.down: its key is taken by list.up") || strings.Contains(out, "page-down") {
+		t.Errorf("own conflict: exit %d %q", code, out)
+	}
 	h.expect(2, "takes no --yes", human, "mod", "validate", good, "--yes")
 	h.expect(2, "unknown subcommand", human, "mod", "search", "x")
 }

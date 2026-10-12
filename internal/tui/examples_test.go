@@ -12,9 +12,9 @@ import (
 // TestExampleMods: every mod of terminatr's examples/mods validates with
 // the console's data checks (mods design §13: kept honest by CI), one
 // folder for each of mod.Examples and no other, asking for the
-// permissions it lists; a keymap applies with
-// nothing refused, and an icon set or theme loads as the dashboard reads
-// it. Their code runs in internal/modtest's TestExamples.
+// permissions it lists; a keymap applies with nothing refused, also as
+// the console loads it enabled, and an icon set or theme loads as the
+// dashboard reads it. Their code runs in internal/modtest's TestExamples.
 func TestExampleMods(t *testing.T) {
 	root := filepath.Join("..", "..", "examples", "mods")
 	dirs, err := os.ReadDir(root)
@@ -56,6 +56,12 @@ func TestExampleMods(t *testing.T) {
 			}
 			if err := ApplyKeymap(km, DefaultPrefixKey); err != nil {
 				t.Errorf("%s keymap: %v", m.ID, err)
+			}
+			// As a console loads it, enabled: vim-keys's pgdown in both
+			// the sidebar and the lists was a conflict there (T301 B3).
+			x.State = mod.Enabled
+			if err := loadKeymap(&mod.Registry{Mods: []mod.Mod{x}}); err != nil {
+				t.Errorf("%s keymap enabled: %v", m.ID, err)
 			}
 			if err := ApplyKeymap(nil, DefaultPrefixKey); err != nil {
 				t.Fatal(err)
