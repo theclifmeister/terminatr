@@ -857,12 +857,18 @@ func dividerCells(r treeRow, cw int, slim bool, sel lipgloss.Style) string {
 }
 
 // slimCells is a project's row in the slim strip, cw cells wide: its
-// state column, its name, its needs-you column.
+// state column, its name, its needs-you column. The state column says
+// inactive, else paused (the strip has no paused column), unless the
+// coordinator is blocked or waiting, which needs you first.
 func slimCells(r treeRow, cw int, sel lipgloss.Style) string {
 	i := ic()
 	g, st := coordLook(r.state)
-	if r.inactive {
+	word, _, _ := strings.Cut(r.state, " ")
+	switch {
+	case r.inactive:
 		g, st = i.inactive, th().Faint
+	case r.paused && word != "blocked" && word != "waiting":
+		g, st = i.paused, th().Warn
 	}
 	hint := cellRun{"  ", th().Plain}
 	if r.hint {

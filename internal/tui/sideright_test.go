@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -155,5 +156,25 @@ func TestNeedsBadge(t *testing.T) {
 	bar := ansi.Strip(c.statusText)
 	if !strings.HasSuffix(bar, badge+" ") || ansi.StringWidth(bar) != 160 || hintAt(c.statusHits, 160-2) != thenNeeds {
 		t.Fatalf("hidden: status %q, hits %v", bar, c.statusHits)
+	}
+}
+
+// TestSlimPaused: the slim strip's state column says paused for a
+// paused project whose coordinator is idle; blocked still wins, and
+// inactive.
+func TestSlimPaused(t *testing.T) {
+	d := testData()
+	d.Projects[0].Safety = &config.Safety{Paused: true, Active: true} // alpha: its coordinator is blocked
+	d.Projects[1].Safety = &config.Safety{Paused: true, Active: true} // beta: none runs
+	rows := slimRows(buildTree(d.Projects, d.Sessions, treeIn{current: "beta"}))
+	got := map[string]string{}
+	for _, r := range rows {
+		got[r.slug] = ansi.Strip(slimCells(r, sideSlim-1, th().Plain))
+	}
+	if !strings.HasPrefix(got["beta"], " "+ic().paused+" beta") {
+		t.Errorf("paused beta in the strip: %q (%q)", got["beta"], got)
+	}
+	if strings.Contains(got["alpha"], ic().paused) {
+		t.Errorf("paused alpha's blocked coordinator gave way: %q", got["alpha"])
 	}
 }
