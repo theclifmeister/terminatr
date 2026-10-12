@@ -22,6 +22,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/update"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
@@ -68,7 +69,59 @@ type Provides struct {
 	// Templates and Agents are folders: task templates, agent manifests.
 	Templates string `toml:"templates"`
 	Agents    string `toml:"agents"`
+	// Guard are guard rules the mod adds (mods design §7, Tighten only).
+	Guard []GuardRule `toml:"guard"`
 }
+
+// GuardRule is a guard rule a mod adds to the core's (docs/SPEC.md
+// §8.6, Guard): it only refuses. It names commands a shell tool may not
+// run and files no file tool may write or read, with the sentence the
+// agent reads; the guard serves it labelled with the mod (mod:<mod
+// id>.<rule id>). Nothing in it can turn a core rule off: a manifest
+// with a key a rule doesn't have is invalid.
+//
+//	[[provides.guard]]
+//	id = "no-destroy"
+//	commands = ["terraform destroy", "kubectl delete namespace*"]
+//	writes = ["~/infra/prod"]
+//	message = "infrastructure is the human's to change. Say what you need in your report."
+type GuardRule struct {
+	ID string `toml:"id"`
+	// Commands are the commands refused, each words: the command's name
+	// (as typed, without its folder), then words its arguments include in
+	// this order, others between them allowed. A word ending in * matches
+	// any word it starts.
+	Commands []string `toml:"commands"`
+	// Writes are the files and folders no write or patch tool writes in,
+	// Reads those no read or glob tool reads: absolute, or from ~/.
+	Writes []string `toml:"writes"`
+	Reads  []string `toml:"reads"`
+	// Roles are the sessions it guards: thread, coordinator; empty for
+	// both.
+	Roles []string `toml:"roles"`
+	// Message is what the agent reads when the rule refuses a call: why,
+	// and what to do instead.
+	Message string `toml:"message"`
+}
+
+// For says whether the rule guards a session of role.
+func (g GuardRule) For(role string) bool { return len(g.Roles) == 0 || slices.Contains(g.Roles, role) }
+
+// guardRuleKeys are the keys a [[provides.guard]] rule may have.
+var guardRuleKeys = []string{"id", "commands", "writes", "reads", "roles", "message"}
+
+// Limits of a mod's guard rules.
+const (
+	MaxGuardRules      = 32
+	MaxGuardPatterns   = 32
+	MaxGuardMessageLen = 400
+)
+
+// SafetyKeys are config.toml's safety settings (mods design §7, The
+// rule): only a human call changes them, so a manifest that names one
+// as a key anywhere (a setting's name included) but a tool's input
+// schema is invalid. A mod may tighten, never loosen.
+var SafetyKeys = []string{"yolo", "guard", "guard_off", "merge", "coordinator_merges", "complete_tasks", "start_threads", "models", "parallel_threads", "coordinator_approves"}
 
 // Column is a column a code mod publishes cells into, named
 // <mod id>.<column id> in layouts.
@@ -320,13 +373,43 @@ func CheckID(id string) error {
 // folder, to check that the files it names are there; "" skips that.
 func ParseManifest(data []byte, dir string) (*Manifest, error) {
 	var m Manifest
-	if _, err := toml.Decode(string(data), &m); err != nil {
+	md, err := toml.Decode(string(data), &m)
+	if err != nil {
 		return nil, fmt.Errorf("%s doesn't parse: %w", ManifestFile, err)
 	}
-	if err := m.check(dir); err != nil {
+	if err := errors.Join(loosens(md), m.check(dir)); err != nil {
 		return &m, err
 	}
 	return &m, nil
+}
+
+// loosens reports each key of a manifest that reaches for a safety
+// setting (SafetyKeys) and each key of a guard rule it doesn't have: a
+// mod only tightens (mods design §7, Tighten only). Tools' input schemas
+// are the agent's, not tm's settings: their names aren't checked.
+func loosens(md toml.MetaData) error {
+	var errs []error
+	seen := map[string]bool{}
+	for _, k := range md.Keys() {
+		at := strings.Join(k, ".")
+		switch {
+		case len(k) > 1 && k[0] == "provides" && k[1] == "tools":
+		case len(k) == 3 && k[0] == "provides" && k[1] == "guard" && !slices.Contains(guardRuleKeys, k[2]):
+			errs = append(errs, fmt.Errorf("%s: a guard rule only refuses: it has %s", at, strings.Join(guardRuleKeys, ", ")))
+		default:
+			for i, e := range k {
+				if i == 1 && k[0] == "provides" && e == "guard" || !slices.Contains(SafetyKeys, e) {
+					continue
+				}
+				if at := strings.Join(k[:i+1], "."); !seen[at] {
+					seen[at] = true
+					errs = append(errs, fmt.Errorf("%s: a mod can't set %s: safety settings are the human's, in config.toml, and a mod only tightens", at, e))
+				}
+				break
+			}
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // ReadManifest reads and checks dir/mod.toml.
@@ -429,6 +512,49 @@ func (m *Manifest) check(dir string) error {
 		}
 		if v.Slot != SlotProjectTab && v.Slot != SlotDashboardCard && v.Slot != SlotFull {
 			bad("%s: slot %q must be %s, %s or %s", at, v.Slot, SlotProjectTab, SlotDashboardCard, SlotFull)
+		}
+	}
+	if len(p.Guard) > MaxGuardRules {
+		bad("provides.guard: at most %d rules", MaxGuardRules)
+	}
+	for i, g := range p.Guard {
+		at := fmt.Sprintf("provides.guard[%d]", i)
+		switch {
+		case !idRE.MatchString(g.ID):
+			bad("%s: id %q must be lowercase letters, digits and dashes", at, g.ID)
+		case slices.Contains(config.GuardRules, g.ID):
+			bad("%s: id %q is a core rule's: a mod adds rules, it doesn't change the core's", at, g.ID)
+		case seen["g:"+g.ID]:
+			bad("%s: id %q is listed twice", at, g.ID)
+		}
+		seen["g:"+g.ID] = true
+		if len(g.Commands)+len(g.Writes)+len(g.Reads) == 0 {
+			bad("%s: refuses nothing: list commands, writes or reads", at)
+		}
+		if len(g.Commands) > MaxGuardPatterns || len(g.Writes) > MaxGuardPatterns || len(g.Reads) > MaxGuardPatterns {
+			bad("%s: at most %d commands, writes and reads each", at, MaxGuardPatterns)
+		}
+		for _, c := range g.Commands {
+			if w := strings.Fields(c); len(w) == 0 || !progRE.MatchString(w[0]) {
+				bad("%s: command %q must start with a program's name (no path, no *)", at, c)
+			}
+		}
+		for _, r := range slices.Concat(g.Writes, g.Reads) {
+			if !strings.HasPrefix(r, "~/") && !filepath.IsAbs(r) && !path.IsAbs(r) {
+				bad("%s: %q must be absolute or start with ~/", at, r)
+			} else if slices.Contains(strings.Split(filepath.ToSlash(r), "/"), "..") {
+				bad("%s: %q has a .. in it", at, r)
+			}
+		}
+		for _, r := range g.Roles {
+			if r != RoleThread && r != RoleCoordinator {
+				bad("%s: role %q must be %s or %s", at, r, RoleThread, RoleCoordinator)
+			}
+		}
+		if msg := strings.TrimSpace(g.Message); msg == "" {
+			bad("%s: has no message: say why, and what to do instead", at)
+		} else if len(msg) > MaxGuardMessageLen {
+			bad("%s: message is longer than %d bytes", at, MaxGuardMessageLen)
 		}
 	}
 	if len(p.Tools) > MaxTools {
