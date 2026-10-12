@@ -1,0 +1,30 @@
+{
+  "name": "the card shows a project's threads by cost, with nothing spent this week",
+  "store": {
+    "threads": {
+      "demo/t-0012": { "project": "demo", "thread": "t-0012", "title": "Login page", "tokens": 1250000, "cost": 3.4 },
+      "demo/t-0013": { "project": "demo", "thread": "t-0013", "title": "Fix the build", "tokens": 900, "cost": 0.05 },
+      "web/t-0001": { "project": "web", "thread": "t-0001", "title": "Landing", "tokens": 50000, "cost": 9 }
+    },
+    "days": { "2020-01-01": { "tokens": 10, "cost": 1 } }
+  },
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "cost", "slot": "dashboard.card", "project": "demo", "width": 60, "height": 8 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set", "params": { "view": "cost", "options": { "project": "demo", "height": 9 },
+        "widget": { "kind": "stack", "children": [
+          { "kind": "kv", "pairs": [
+            { "key": "today", "value": [{ "text": "$0.00" }, { "text": "  0 tokens" }] },
+            { "key": "7 days", "value": [{ "text": "$0.00" }] } ] },
+          { "kind": "bars", "values": [0, 0, 0, 0, 0, 0, 0], "spark": true },
+          { "kind": "table", "id": "threads", "rows": [
+            { "id": "demo/t-0012", "cells": [[{ "text": "Login page" }], [{ "text": "1.3M" }], [{ "text": "$3.40" }]] },
+            { "id": "demo/t-0013", "cells": [[{ "text": "Fix the build" }], [{ "text": "900" }], [{ "text": "$0.05" }]] }
+          ] }
+        ] } } }
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "text too short is the tool's error, which the agent reads (and the log counts as a failed handler)",
+  "events": [
+    { "name": "tool.call", "data": { "tool": "find", "input": { "text": " a" }, "project": "demo", "role": "thread", "thread": "t-0012", "session": "s-7" } }
+  ],
+  "expect": {
+    "no_calls": ["memory.list"],
+    "failures": 1,
+    "tools": ["error: text needs at least two characters"]
+  }
+}

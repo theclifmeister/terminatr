@@ -137,10 +137,12 @@ func TestRunChecksTheFixture(t *testing.T) {
 	}
 	no := []string{}
 	r := m.Run(&Fixture{Grants: &no, Settings: map[string]any{"nope": 1},
-		Events: []Step{{Name: "task.changed"}, {Name: "made.up"}}, Expect: Expect{Calls: []Call{{Method: "ui.nothing"}}}}, "f.json")
+		Events: []Step{{Name: "task.changed"}, {Name: "made.up"}, {Name: ToolStep, Data: json.RawMessage(`{"tool":"lint"}`)}},
+		Expect: Expect{Calls: []Call{{Method: "ui.nothing"}}, Tools: []string{"a", "b"}}}, "f.json")
 	all := strings.Join(r.Problems, "\n")
 	for _, p := range []string{"nope: the mod has no such setting", "task.changed needs the project_read permission",
-		`no event is called "made.up"`, `no method is called "ui.nothing"`} {
+		`no event is called "made.up"`, `no method is called "ui.nothing"`, `the mod offers no tool "lint"`,
+		"2 answers for 1 tool calls"} {
 		if !strings.Contains(all, p) {
 			t.Errorf("problems %q lack %q", r.Problems, p)
 		}

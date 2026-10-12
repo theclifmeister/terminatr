@@ -1,0 +1,17 @@
+{
+  "name": "a session that exits loses its cell, and an open card is drawn again without it",
+  "store": { "sessions": { "s-7": { "project": "demo", "thread": "t-0012", "role": "thread", "context": 88 } } },
+  "events": [
+    { "name": "view.opened", "data": { "view": "full", "slot": "dashboard.card", "width": 60, "height": 8 } },
+    { "name": "session.state", "project": "demo",
+      "data": { "session": "s-7", "project": "demo", "thread": "t-0012", "role": "thread", "state": "exited", "context": 88 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set", "params": { "view": "full", "widget": { "children": [{ "rows": [{ "id": "s-7" }] }, {}] } } },
+      { "method": "ui.cell.set", "params": { "column": "ctx", "target": { "session": "s-7" }, "spans": null } },
+      { "method": "ui.view.set", "params": { "view": "full", "widget": { "children": [{ "rows": [] }, {}] } } }
+    ],
+    "store": { "sessions": { "s-7": null } }
+  }
+}

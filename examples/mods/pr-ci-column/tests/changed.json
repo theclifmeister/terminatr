@@ -1,0 +1,18 @@
+{
+  "name": "pr.changed redraws the thread's cell, and thread.resolved clears it",
+  "store": { "drawn": ["demo/t-0001"] },
+  "events": [
+    { "name": "pr.changed", "project": "demo",
+      "data": { "project": "demo", "thread": "t-0001", "number": 41, "state": "OPEN", "checks": "fail" } },
+    { "name": "thread.resolved", "project": "demo",
+      "data": { "project": "demo", "thread": "t-0001", "agent": "claude" } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.cell.set", "params": { "column": "ci", "target": { "project": "demo", "thread": "t-0001" }, "spans": [{ "icon": "ci.fail", "role": "bad" }] } },
+      { "method": "ui.cell.set", "params": { "column": "ci", "target": { "project": "demo", "thread": "t-0001" }, "spans": null } }
+    ],
+    "no_calls": ["project.get"],
+    "store": { "drawn": [] }
+  }
+}

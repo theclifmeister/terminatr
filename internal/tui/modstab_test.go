@@ -415,7 +415,7 @@ func TestModsExamples(t *testing.T) {
 	}
 	press(m, "e")
 	out := screen(m)
-	for _, want := range []string{"Example mods", mod.ExamplesURL, "git clone " + mod.ExamplesRepo, "tm mod install terminatr/examples/mods/nord", "memory-tab", "Nothing here is installed"} {
+	for _, want := range []string{"Example mods", mod.ExamplesURL, "git clone " + mod.ExamplesRepo, "tm mod install terminatr/examples/mods/nord", "memory-tab", "copy it under another id", "Nothing here is installed"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("examples lack %q:\n%s", want, out)
 		}

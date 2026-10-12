@@ -1,0 +1,9 @@
+{
+  "name": "with review off, a task reaching review notifies nothing",
+  "settings": { "review": false },
+  "events": [
+    { "name": "task.changed", "project": "demo",
+      "data": { "project": "demo", "id": "T12", "title": "Add the login page", "from": "started", "to": "review", "steps_done": 4, "steps_total": 4 } }
+  ],
+  "expect": { "no_calls": ["ui.notify"] }
+}

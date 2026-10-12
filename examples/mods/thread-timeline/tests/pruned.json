@@ -1,0 +1,9 @@
+{
+  "name": "a project the mod no longer runs for loses its history at the start",
+  "store": { "log": { "gone": { "t-0001": { "changes": [{ "at": "2026-10-01T09:00:00Z", "state": "working" }] } } } },
+  "events": [
+    { "name": "mod.ready", "data": { "projects": [{ "project": "demo", "needs_you": [], "inbox": [], "threads": [], "ready": [] }] } },
+    { "name": "thread.state", "project": "demo", "data": { "project": "demo", "thread": "t-0002", "state": "idle" } }
+  ],
+  "expect": { "store": { "log": { "gone": null, "demo": { "t-0002": { "changes": [{ "state": "idle" }] } } } } }
+}

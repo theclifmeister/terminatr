@@ -145,8 +145,10 @@ func (s *Server) lookModEvents(tr *modbus.Tracker) {
 	sessions := s.list().Sessions
 	ss := make([]modbus.Session, 0, len(sessions))
 	for _, info := range sessions {
-		ss = append(ss, modbus.Session{Session: info.ID, Project: info.Project, Thread: info.Thread, Role: info.Role,
-			Agent: info.Agent, State: info.State, Reason: info.Reason, Context: info.ContextPercent()})
+		n := modbus.Session{Session: info.ID, Project: info.Project, Thread: info.Thread, Role: info.Role,
+			Agent: info.Agent, State: info.State, Reason: info.Reason, Context: info.ContextPercent()}
+		n.Tokens, n.CostUSD = sessionUsage(info)
+		ss = append(ss, n)
 	}
 	tr.Sessions(ss)
 	list, err := project.List()
@@ -165,6 +167,24 @@ func (s *Server) lookModEvents(tr *modbus.Tracker) {
 		}
 		tr.Project(p.Slug, projectState(p, sessions, statePath))
 	}
+}
+
+// sessionUsage is what session info's thread has used so far: its
+// record's totals while the session is the thread's; none for a session
+// that is no thread's.
+func sessionUsage(info proto.SessionInfo) (int64, float64) {
+	if info.Role != proto.RoleThread || info.Project == "" || info.Thread == "" {
+		return 0, 0
+	}
+	p, err := project.Open(info.Project)
+	if err != nil {
+		return 0, 0
+	}
+	r, err := thread.Load(p, info.Thread)
+	if err != nil || r.Session != info.ID {
+		return 0, 0
+	}
+	return r.Usage.Tokens(), r.Usage.CostUSD
 }
 
 // projectState is project p's state for the tracker, with sessions the

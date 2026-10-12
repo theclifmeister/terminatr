@@ -1,0 +1,40 @@
+# An agent tool (mods design §2, tier 5), with the eight examples of
+# terminatr's examples/mods (§13). Agents get it as memory-search_find,
+# through the agent mod or tm mcp, in sessions of the projects the mod
+# runs for. Install it by path from a checkout:
+#   tm mod install terminatr/examples/mods/memory-search
+id = "memory-search"
+name = "Memory search"
+version = "1.0.0"
+api = "1.0"
+description = "A tool agents call to search the project's memory files (CONTEXT.md, MEMORY.md, memory/) for a word, line by line."
+authors = ["terminatr"]
+homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/memory-search"
+
+[provides]
+main = "main.ts"
+
+# The description and the input are text the agent reads: the consent
+# screen shows them in full.
+[[provides.tools]]
+id = "find"
+description = "Search this project's memory files (CONTEXT.md, MEMORY.md and the notes in memory/) for text, case-insensitively. Returns matching lines as path:line: text."
+roles = ["thread", "coordinator"]
+
+[provides.tools.input]
+required = ["text"]
+
+[provides.tools.input.properties.text]
+type = "string"
+description = "The text to look for."
+minLength = 2
+
+[provides.tools.input.properties.limit]
+type = "integer"
+description = "At most this many lines (20 when left out)."
+minimum = 1
+maximum = 100
+
+[permissions]
+project_read = true
+tools = true

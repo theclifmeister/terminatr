@@ -1,0 +1,28 @@
+{
+  "name": "the card lists the sessions past the warning, fullest first, each row bound to session.attach",
+  "settings": { "warn": 70 },
+  "store": { "sessions": {
+    "s-7": { "project": "demo", "thread": "t-0012", "role": "thread", "context": 74 },
+    "s-2": { "project": "demo", "thread": "", "role": "coordinator", "context": 96 },
+    "s-4": { "project": "demo", "thread": "t-0013", "role": "thread", "context": 20 },
+    "s-5": { "project": "web", "thread": "t-0001", "role": "thread", "context": 99 }
+  } },
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "full", "slot": "dashboard.card", "project": "demo", "width": 60, "height": 8 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set", "params": { "view": "full", "options": { "project": "demo" },
+        "widget": { "kind": "stack", "children": [
+          { "kind": "list", "id": "sessions", "rows": [
+            { "id": "s-2", "spans": [{ "text": " 96%", "role": "bad" }, { "text": "  demo coordinator" }],
+              "actions": [{ "id": "session.attach", "target": { "session": "s-2" } }] },
+            { "id": "s-7", "spans": [{ "text": " 74%", "role": "warn" }, { "text": "  demo t-0012" }],
+              "actions": [{ "id": "session.attach", "target": { "session": "s-7" } }] }
+          ] },
+          { "kind": "text", "role": "faint" }
+        ] } } }
+    ]
+  }
+}

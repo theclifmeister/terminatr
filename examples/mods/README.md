@@ -1,0 +1,84 @@
+# Example mods
+
+One small, working mod for each place a mod can show up in terminatr,
+plus an agent tool: to see each surface working, and to get ideas to
+build and share. They are samples, not defaults. Nothing here is loaded
+or turned on until you install it, and installing goes through the
+usual consent screen. Two of them, `pr-ci-column` and `memory-tab`, are
+also the sources of mods built into tm.
+
+From a checkout of the repository:
+
+```sh
+git clone https://github.com/theclifmeister/terminatr
+tm mod install terminatr/examples/mods/nord
+```
+
+Then turn it on in the Mods tab (`,` then `3`), or with `tm mod enable
+<id>`. `e` in the Mods tab and `tm mod examples` show this list too.
+
+| # | Mod | Surface | Asks for | Install |
+|---|-----|---------|----------|---------|
+| 1 | [nord](nord) | theme and icon set (data) | nothing (safe) | `tm mod install terminatr/examples/mods/nord` |
+| 2 | [vim-keys](vim-keys) | keymap (data) | nothing (safe) | `tm mod install terminatr/examples/mods/vim-keys` |
+| 3 | [context-gauge](context-gauge) | a cell in the sidebar and on the dashboard, and a card whose rows bind `session.attach` | reads your projects, draws its own panels | `tm mod install terminatr/examples/mods/context-gauge` |
+| 4 | [cost-card](cost-card) | a dashboard card | reads your projects, draws its own panels | `tm mod install terminatr/examples/mods/cost-card` |
+| 5 | [notify-me](notify-me) | OS notifications with core-action buttons | reads your projects, shows notifications | `tm mod install terminatr/examples/mods/notify-me` |
+| 6 | [thread-timeline](thread-timeline) | a full view (≡ menu) | reads your projects, draws its own panels | `tm mod install terminatr/examples/mods/thread-timeline` |
+| 7 | [pr-ci-column](pr-ci-column) | a sidebar column (built in) | reads your projects | copy it under another id first, see below |
+| 8 | [memory-tab](memory-tab) | a project-popup tab (built in) | reads your projects, draws its own panels | copy it under another id first, see below |
+| + | [memory-search](memory-search) | an agent tool, `memory-search_find` | reads your projects, offers tools to agents | `tm mod install terminatr/examples/mods/memory-search` |
+
+`pr-ci-column` and `memory-tab` already ship inside tm, and `tm mod
+install` refuses a built-in mod's id. To change one, copy it, give the
+copy its own id and install that:
+
+```sh
+cp -R terminatr/examples/mods/pr-ci-column my-pr-ci-column
+# set id = "my-pr-ci-column" in my-pr-ci-column/mod.toml
+tm mod install my-pr-ci-column
+```
+
+Turn the built-in one off in the Mods tab so the two don't both draw.
+
+## How they are kept working
+
+Each code mod has fixtures in its `tests/` folder: events to send, what
+the fake broker answers, and the calls the mod must make. `tm mod test
+<folder>` replays them, and CI runs every example's fixtures
+(`internal/modtest`'s `TestExamples`) and checks every example loads as
+the console reads it (`internal/tui`'s `TestExampleMods`), and type-checks
+each `main.ts` with `tsc --strict` against this tm's `tm.d.ts`. A change
+to the mod API that breaks an example fails the build.
+
+To start your own, `tm mod new <id> --kind column` (or `hook`, `theme`,
+`icons`, `keymap`, `rules`) writes a scaffold with the types and a
+fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
+
+## Notes on each
+
+- **nord** sets every theme role for a dark and a light terminal; each
+  colour has an ANSI fallback and a truecolor choice. Its icon set gives
+  only the glyphs it changes over the `unicode` base. A glyph two cells
+  wide, or an emoji, makes the set refuse to load, and the console keeps
+  its built-in icons and says why.
+- **vim-keys** moves actions by their stable ids. It can't take the
+  escape hatches (`esc`, `ctrl+c`, the prefix and its commands), and a
+  key two actions want is refused.
+- **context-gauge** reads `session.state`. The card's rows only *name*
+  `session.attach`. The core shows the key, checks the session still
+  runs, and attaches; you then `/clear` there. The mod hears
+  `action.done`. A bindable `session.clear` isn't in mod API 1.0 yet.
+- **cost-card** uses the `tokens` and `cost_usd` that `session.state`
+  carries for a thread's session (its thread's totals so far). Days
+  count only what was spent while the mod ran.
+- **notify-me** buttons are core action ids (`task.accept`,
+  `task.send-back`, `task.show`). Pressing one opens tm's own
+  confirmation for the task as the board has it now. The notification
+  itself accepts or sends back nothing.
+- **thread-timeline** records state changes in its own store, so its
+  history starts when it is installed. The view keeps the header,
+  sidebar and NEEDS YOU in sight, and `esc` returns.
+- **memory-search** answers an agent's call with the matching lines of
+  the project's memory. The agent's input is data; the consent screen
+  shows the tool's description and input in full.

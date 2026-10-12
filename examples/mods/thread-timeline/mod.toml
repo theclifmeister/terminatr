@@ -1,0 +1,23 @@
+# Example 6 of terminatr's examples/mods (mods design §13): a full view.
+# Open it from the dashboard's ≡ menu ("Thread timeline · mod:
+# thread-timeline"); esc returns. Install it by path from a checkout:
+#   tm mod install terminatr/examples/mods/thread-timeline
+id = "thread-timeline"
+name = "Thread timeline"
+version = "1.0.0"
+api = "1.0"
+description = "Each thread as a row of its state changes over time (working, waiting, review), with a chart of the changes per hour."
+authors = ["terminatr"]
+homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/thread-timeline"
+
+[provides]
+main = "main.ts"
+
+[[provides.views]]
+id = "timeline"
+title = "Thread timeline"
+slot = "full"
+
+[permissions]
+project_read = true
+views = true

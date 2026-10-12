@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/modbus"
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -118,5 +119,37 @@ func TestUntilMinute(t *testing.T) {
 	now := time.Date(2026, 10, 11, 12, 30, 15, 0, time.UTC)
 	if d := untilMinute(now); d != 45*time.Second {
 		t.Fatalf("untilMinute = %v", d)
+	}
+}
+
+// TestSessionUsage: session.state carries what a thread's session has
+// used so far, from its thread's record; none for a coordinator, or for
+// a session the thread no longer runs.
+func TestSessionUsage(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	pr := newWatchProject(t)
+	rec, err := thread.Create(pr, thread.Record{Title: "work", Task: "T1", Agent: "claude"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := thread.Update(pr, rec.ID, func(r *thread.Record) error {
+		r.Session = "s-3"
+		r.Usage = thread.Usage{Turns: 2, Input: 1000, Output: 500, CacheRead: 8500, CostUSD: 0.42}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		info   proto.SessionInfo
+		tokens int64
+		cost   float64
+	}{
+		{proto.SessionInfo{ID: "s-3", Project: "demo", Thread: rec.ID, Role: proto.RoleThread}, 10000, 0.42},
+		{proto.SessionInfo{ID: "s-9", Project: "demo", Thread: rec.ID, Role: proto.RoleThread}, 0, 0},
+		{proto.SessionInfo{ID: "s-3", Project: "demo", Role: proto.RoleCoordinator}, 0, 0},
+	} {
+		if tokens, cost := sessionUsage(c.info); tokens != c.tokens || cost != c.cost {
+			t.Errorf("%+v: %d tokens, $%v; want %d, $%v", c.info, tokens, cost, c.tokens, c.cost)
+		}
 	}
 }

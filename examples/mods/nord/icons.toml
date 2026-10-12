@@ -1,0 +1,21 @@
+# Nord's icons: only the glyphs it changes. base is the built-in set that
+# gives every glyph left out (unicode, nerd or ascii) and whose rules the
+# set keeps: unicode allows no Private Use Area glyph, nerd allows a Nerd
+# Font's, ascii stays ASCII. Every glyph is checked as the set loads: one
+# cell wide (mid and end two), no emoji. A set that breaks a rule doesn't
+# load, and the console keeps the built-in icons and says why.
+base = "unicode"
+name = "nord"
+
+working  = "◉"
+idle     = "◯"
+blocked  = "◭"
+review   = "◇"
+done     = "✔"
+ciPass   = "✔"
+ciFail   = "✘"
+ciRun    = "◌"
+todoDone = "✔"
+todoNow  = "◑"
+barOn    = "━"
+barOff   = "─"
