@@ -29,12 +29,30 @@ func (m *dash) geom() dashGeo {
 	return dashGeo{w: m.winW, h: m.h, sideW: m.sideW(), l: m.layout}
 }
 
-// side is the sidebar: the window's left columns.
-func (g dashGeo) side() rect { return rect{0, 0, g.sideW, g.h} }
+// side is the sidebar: the window's left columns, or its right ones;
+// none (w 0) while hidden.
+func (g dashGeo) side() rect {
+	if g.l.Sidebar.Right() {
+		return rect{max(g.w-g.sideW, 0), 0, g.sideW, g.h}
+	}
+	return rect{0, 0, g.sideW, g.h}
+}
 
 // main is the dashboard's own area: the window less the sidebar, at
 // least a column.
-func (g dashGeo) main() rect { return rect{g.sideW, 0, max(g.w-g.sideW, 1), g.h} }
+func (g dashGeo) main() rect {
+	if g.l.Sidebar.Right() {
+		return rect{0, 0, max(g.w-g.sideW, 1), g.h}
+	}
+	return rect{g.sideW, 0, max(g.w-g.sideW, 1), g.h}
+}
+
+// sideCol is window column x as the sidebar's own drawing has it, -1
+// off the sidebar (sideLocal).
+func (g dashGeo) sideCol(x int) int {
+	s := g.side()
+	return sideLocal(x, s.x, s.w, g.l.Sidebar.Right())
+}
 
 // footRows is the footer's height: a rule, the keys, the message.
 const footRows = 3

@@ -351,13 +351,22 @@ func sideTop(rows []treeRow, h int) int {
 	return scrollTop(cur, max(h-sideHeadRows(), 1), len(rows))
 }
 
-// sidebarLines draws the sidebar w columns wide (its border included) and
+// sidebarLines draws the sidebar on the left: sideLines.
+func sidebarLines(all []treeRow, w, h int, foot []string) []string {
+	return sideLines(all, w, h, foot, false)
+}
+
+// sideLines draws the sidebar w columns wide (its border included) and
 // h rows tall: a header with the count of projects, then the tree, then
 // the footer's lines (sideFooter) at the bottom. While
 // it has the keyboard focus (a row is the cursor) its border is in the
 // accent colour and the cursor's row is highlighted instead of the one
-// you are on.
-func sidebarLines(all []treeRow, w, h int, foot []string) []string {
+// you are on. Its border is its last column, its first on the right
+// (right): the rest is the same either way.
+func sideLines(all []treeRow, w, h int, foot []string, right bool) []string {
+	if w <= 0 {
+		return make([]string, max(h, 0))
+	}
 	cw := max(w-1, 0) // less the border
 	slim := w <= sideSlim
 	// Every full row leaves a column before the border (sideGap); in the
@@ -376,6 +385,12 @@ func sidebarLines(all []treeRow, w, h int, foot []string) []string {
 	if focused {
 		border = th().Accent.Render("│")
 	}
+	edge := func(s string) string {
+		if right {
+			return border + s
+		}
+		return s + border
+	}
 	out := make([]string, 0, h)
 	n := 0 // every project, those under a folded divider too
 	for _, r := range all {
@@ -386,9 +401,9 @@ func sidebarLines(all []treeRow, w, h int, foot []string) []string {
 			n += r.threads
 		}
 	}
-	out = append(out, sideHead(n, cw-gap, slim)+strings.Repeat(" ", gap)+reset+border)
+	out = append(out, edge(sideHead(n, cw-gap, slim)+strings.Repeat(" ", gap)+reset))
 	if l, ok := sideFilterLine(cw - gap); ok {
-		out = append(out, l+strings.Repeat(" ", gap)+reset+border)
+		out = append(out, edge(l+strings.Repeat(" ", gap)+reset))
 	}
 	if n == 0 {
 		note := " no projects"
@@ -398,20 +413,20 @@ func sidebarLines(all []treeRow, w, h int, foot []string) []string {
 		if slim {
 			note = " —"
 		}
-		out = append(out, th().Faint.Render(fit(note, cw))+reset+border)
+		out = append(out, edge(th().Faint.Render(fit(note, cw))+reset))
 	}
 	for _, r := range rows[sideTop(rows, h):] {
 		if len(out) >= h {
 			break
 		}
-		out = append(out, treeLine(r, cw, slim, focused)+reset+border)
+		out = append(out, edge(treeLine(r, cw, slim, focused)+reset))
 	}
 	for len(out) < h {
-		out = append(out, strings.Repeat(" ", cw)+border)
+		out = append(out, edge(strings.Repeat(" ", cw)))
 	}
 	out = out[:h]
 	for _, f := range foot {
-		out = append(out, fit(f, cw-gap)+reset+strings.Repeat(" ", gap)+border)
+		out = append(out, edge(fit(f, cw-gap)+reset+strings.Repeat(" ", gap)))
 	}
 	return out
 }
@@ -920,6 +935,9 @@ func runsRender(rs []cellRun) string {
 // sideHitAt is what column x, row y of a sidebar w×h holds: the border,
 // or a tree row.
 func sideHitAt(all []treeRow, w, h, x, y int) (r treeRow, ok, border bool) {
+	if x < 0 || w <= 0 {
+		return r, false, false
+	}
 	if x == w-1 {
 		return r, false, true
 	}
@@ -930,6 +948,23 @@ func sideHitAt(all []treeRow, w, h, x, y int) (r treeRow, ok, border bool) {
 		return r, false, false
 	}
 	return rows[i], true, false
+}
+
+// sideLocal is window column x of a sidebar w wide from column at, as
+// the sidebar's own drawing has it (sideHitAt, sideTip): its border
+// last. On the right (right) the border is its first column. -1 off
+// the sidebar.
+func sideLocal(x, at, w int, right bool) int {
+	x -= at
+	switch {
+	case x < 0 || x >= w:
+		return -1
+	case !right:
+		return x
+	case x == 0:
+		return w - 1
+	}
+	return x - 1
 }
 
 // Target is where a click on the sidebar goes: a project's dashboard, its
@@ -1411,12 +1446,16 @@ func (c *client) setActive(slug string, on bool) {
 // appendSidebar draws the sidebar's changed lines. c.mu held.
 func (c *client) appendSidebar(b []byte, wrote bool) ([]byte, bool) {
 	rows := c.sideTree()
-	lines := sidebarLines(rows, c.sideW, c.sideRows(), sideFooter(rows, c.sideW, c.side.server, true))
+	lines := sideLines(rows, c.sideW, c.sideRows(), sideFooter(rows, c.sideW, c.side.server, true), c.v.Sidebar.Right())
+	if c.sideW == 0 {
+		lines = nil // hidden
+	}
+	x := c.sideX()
 	for y, l := range lines {
 		if y < len(c.side.drawn) && c.side.drawn[y] == l {
 			continue
 		}
-		b = append(b, fmt.Sprintf("\x1b[%d;1H\x1b[0m", y+1)...)
+		b = append(b, fmt.Sprintf("\x1b[%d;%dH\x1b[0m", y+1, x+1)...)
 		b = append(b, l...)
 		wrote = true
 	}
@@ -1491,7 +1530,13 @@ func (c *client) sideMouse(m emu.Mouse) {
 	sd := c.side
 	switch {
 	case sd.drag && m.Action == emu.MouseMotion:
-		l := c.v.Sidebar.DragTo(m.X, c.viewCols())
+		// The border's column in the view's window, which may be
+		// another size than this one: on the right, from its right edge.
+		x := m.X
+		if c.v.Sidebar.Right() {
+			x = c.viewCols() - (c.cols - m.X)
+		}
+		l := c.v.Sidebar.DragTo(x, c.viewCols())
 		same := l == c.v.Sidebar
 		c.mu.Unlock()
 		if !same {
@@ -1500,7 +1545,7 @@ func (c *client) sideMouse(m emu.Mouse) {
 		c.poke()
 		return
 	case !sd.drag && m.Action == emu.MouseMotion && m.Button == emu.MouseNone:
-		changed := setSideHover(sideTip(c.sideTree(), c.sideW, c.sideRows(), m.X, m.Y))
+		changed := setSideHover(sideTip(c.sideTree(), c.sideW, c.sideRows(), c.sideCol(m.X), m.Y))
 		c.mu.Unlock()
 		if changed {
 			c.poke()
@@ -1516,7 +1561,7 @@ func (c *client) sideMouse(m emu.Mouse) {
 		c.mu.Unlock()
 		return
 	}
-	r, ok, border := sideHitAt(c.sideTree(), c.sideW, c.sideRows(), m.X, m.Y)
+	r, ok, border := sideHitAt(c.sideTree(), c.sideW, c.sideRows(), c.sideCol(m.X), m.Y)
 	t, can, why := r.target()
 	sel := ""
 	if ok && !border {

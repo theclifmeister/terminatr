@@ -780,7 +780,7 @@ func (m *dash) sideClick(mo tea.Mouse) tea.Cmd {
 	if mo.Button != tea.MouseLeft {
 		return nil
 	}
-	r, ok, border := sideHitAt(m.tree(), m.sideW(), m.h, mo.X, mo.Y)
+	r, ok, border := sideHitAt(m.tree(), m.sideW(), m.h, m.geom().sideCol(mo.X), mo.Y)
 	t, can, why := r.target()
 	var cmd tea.Cmd
 	if ok && !border {
@@ -875,20 +875,25 @@ func (m *dash) fullTree() []treeRow {
 }
 
 // area is the area with the keyboard: the list when the details panel
-// has it but doesn't show (the window got narrower).
+// has it but doesn't show (the window got narrower), or the sidebar has
+// it while hidden.
 func (m *dash) area() area {
-	if split, _ := m.split(); m.focus == areaDetails && !split {
+	if split, _ := m.split(); m.focus == areaDetails && !split || m.focus == areaSide && m.sideW() == 0 {
 		return areaMain
 	}
 	return m.focus
 }
 
 // cycleFocus moves the keyboard to the next area (tab), or the previous
-// (shift+tab): the list, the details panel when it shows, the sidebar.
+// (shift+tab): the list, the details panel when it shows, the sidebar
+// unless it is hidden.
 func (m *dash) cycleFocus(key string) tea.Cmd {
-	areas := []area{areaMain, areaSide}
+	areas := []area{areaMain}
 	if split, _ := m.split(); split {
-		areas = []area{areaMain, areaDetails, areaSide}
+		areas = append(areas, areaDetails)
+	}
+	if m.sideW() > 0 {
+		areas = append(areas, areaSide)
 	}
 	m.focus = cycle(areas, m.area(), key == "shift+tab")
 	if m.focus == areaSide {
@@ -1313,18 +1318,24 @@ func (m *dash) render() string {
 	return m.withSide(m.renderList())
 }
 
-// withSide puts the sidebar beside the dashboard's lines s.
+// withSide puts the sidebar beside the dashboard's lines s, on its
+// side.
 func (m *dash) withSide(s string) string {
 	lines := strings.Split(s, "\n")
 	rows := m.tree()
-	side := sidebarLines(rows, m.sideW(), m.h, sideFooter(rows, m.sideW(), m.data.Server, m.over != nil))
+	right := m.layout.Sidebar.Right()
+	side := sideLines(rows, m.sideW(), m.h, sideFooter(rows, m.sideW(), m.data.Server, m.over != nil), right)
 	w := m.geom().main().w
 	for i := range side {
 		var l string
 		if i < len(lines) {
 			l = lines[i]
 		}
-		side[i] += fit(l, w) + reset
+		if right {
+			side[i] = fit(l, w) + reset + side[i]
+		} else {
+			side[i] += fit(l, w) + reset
+		}
 	}
 	return strings.Join(side, "\n")
 }
@@ -1576,7 +1587,7 @@ func (m *dash) frame(title string, body []string, sel int, keys string) string {
 	switch {
 	case m.prefixed:
 		keys = prefixHint()
-	case m.focus == areaSide && m.top() == nil:
+	case m.area() == areaSide && m.top() == nil:
 		// The sidebar's own keys are in its key bar.
 		keys = "esc back to the list · tab next area"
 	case m.area() == areaDetails && m.top() == nil:

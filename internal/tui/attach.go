@@ -786,6 +786,9 @@ func (c *client) relayout() {
 	if c.side != nil {
 		c.sideW = min(c.geo.SideW, max(c.cols-1, 1))
 	}
+	if c.sideW == 0 && c.kb == areaSide {
+		c.kb = areaMain // hidden: the keyboard skips it
+	}
 	c.infoW = 0
 	if c.info != nil {
 		c.infoW = min(c.geo.InfoW, max(c.cols-c.sideW-1, 0))
@@ -800,7 +803,7 @@ func (c *client) relayout() {
 	c.statusBar = c.geo.Status > 0
 	c.paneCols = max(c.cols-c.sideW-c.infoW, 1)
 	c.paneRows = max(c.rows-c.geo.Status, 1)
-	own := view.Rect{X: c.sideW, Y: 0, W: c.paneCols, H: c.paneRows}
+	own := view.Rect{X: c.paneX(), Y: 0, W: c.paneCols, H: c.paneRows}
 	c.focus = c.panes[c.v.Focus]
 	vis := c.visible()
 	// The pane draws alone, unless it shares the window with the sidebar,
@@ -820,6 +823,32 @@ func (c *client) relayout() {
 	c.full = true
 	c.status()
 }
+
+// sideX is the sidebar's first column: 0, or on the right the window's
+// last sideW. The view is drawn from the window's top left, so on the
+// right the sidebar keeps to this window's edge. c.mu held.
+func (c *client) sideX() int {
+	if c.v.Sidebar.Right() {
+		return max(c.cols-c.sideW, 0)
+	}
+	return 0
+}
+
+// paneX is the pane's first column: right of a sidebar on the left, else
+// the window's first. c.mu held.
+func (c *client) paneX() int {
+	if c.v.Sidebar.Right() {
+		return 0
+	}
+	return c.sideW
+}
+
+// onSide says whether window column x is the sidebar's. c.mu held.
+func (c *client) onSide(x int) bool { return x >= c.sideX() && x < c.sideX()+c.sideW }
+
+// sideCol is window column x as the sidebar's drawing has it (sideLocal),
+// -1 off it. c.mu held.
+func (c *client) sideCol(x int) int { return sideLocal(x, c.sideX(), c.sideW, c.v.Sidebar.Right()) }
 
 // clip is r within area; empty when they don't meet.
 func clip(r, area view.Rect) view.Rect {
@@ -1308,7 +1337,7 @@ func (c *client) paneLines(o *Over) []string {
 	if p == nil || p.mirror == nil {
 		return make([]string, c.paneRows)
 	}
-	o.X, o.Y, o.H = p.rect.X-c.sideW, p.rect.Y, p.rect.H
+	o.X, o.Y, o.H = p.rect.X-c.paneX(), p.rect.Y, p.rect.H
 	if p.r != nil {
 		o.Top = p.r.Top()
 	}
@@ -1471,7 +1500,7 @@ func (c *client) mouse(ev uv.Event) {
 	press := m.Action == emu.MousePress && (m.Button == emu.MouseLeft || m.Button == emu.MouseRight || m.Button == emu.MouseMiddle)
 	// The status bar runs across the window, the rule above it too.
 	status := c.statusBar && (m.Y >= c.paneRows)
-	if (m.X >= c.sideW || m.Y >= c.sideRows()) && setSideHover("") {
+	if (!c.onSide(m.X) || m.Y >= c.sideRows()) && setSideHover("") {
 		c.poke() // off the sidebar: its tooltip goes
 	}
 	switch {
@@ -1504,7 +1533,7 @@ func (c *client) mouse(ev uv.Event) {
 			c.mu.Unlock()
 		}
 		return
-	case c.side != nil && (m.X < c.sideW && m.Y < c.sideRows() || c.side.drag):
+	case c.side != nil && (c.onSide(m.X) && m.Y < c.sideRows() || c.side.drag):
 		if press && m.Button == emu.MouseRight && !c.side.drag {
 			c.sideMenu(m)
 			return
