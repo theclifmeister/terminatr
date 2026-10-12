@@ -311,19 +311,20 @@ func globalSettings(note string) []setting {
 				next := choices[(slices.Index(choices, iconsSetting())+1)%len(choices)]
 				return m.pickMod("icons", next, setIcons(next))
 			}},
-		{label: "Layout", help: "The order of the sidebar's columns: the built-in one, or a layout from a mod that is on, which may place a mod's columns. The state, paused, inactive and needs-you columns always show. Every console of this view follows.",
+		{label: "Layout", help: "The built-in layout, or one from a mod that is on: the sidebar's columns (a mod's among them), width and mode, and the details panel's place and size. A layout sets only what it changes; what you change under it (a drag, { }, b, < >, |) is kept for it, and the rest is yours as before. The state, paused, inactive and needs-you columns always show. The sidebar is the view's: every console of this view follows.",
 			value: func(m *dash) string { return layoutValue() },
 			change: func(m *dash) tea.Cmd {
 				choices := modChoices([]string{ThemeDefault}, mod.KindLayout)
 				next := choices[(slices.Index(choices, layoutValue())+1)%len(choices)]
 				cfg, _ := config.Load()
-				cols, err := modLayout(loadMods(cfg), next)
-				layoutVal.Store(next)
+				spec, err := modLayout(loadMods(cfg), next)
+				useLayoutValue(next, spec)
+				m.useLayout(next, spec, true)
 				cmd := m.pickMod("layout", next, err)
 				if m.view == nil {
 					return cmd
 				}
-				return tea.Batch(cmd, m.call(proto.MethodViewColumns, proto.ViewParams{Columns: cols}))
+				return tea.Batch(cmd, m.call(proto.MethodViewColumns, proto.ViewParams{Columns: layoutColumns(spec)}))
 			}},
 		{label: "Context hint", help: "Tell a coordinator to consider /clear once its context window is this full: a toast in its pane, a bell and a yellow percent on its sidebar row (red from 80%). Its context lives in files, so a clear loses nothing. Off never says it.",
 			value: func(m *dash) string {

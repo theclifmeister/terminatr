@@ -80,7 +80,7 @@ func attachCmd(e *Env, args []string) int {
 		cols, rows = 80, 24
 	}
 	uiFile := uiFile()
-	lay := tui.LoadLayout(uiFile)
+	lay := tui.ConsoleLayout(uiFile, int(cols))
 	side, info, tree := lay.Sidebar, lay.Info, lay.Tree
 	vc, err := tui.JoinView(p, proto.ViewSubscribeParams{Own: true, Bare: true, StatusBar: true, Session: id,
 		Cols: cols, Rows: rows, Sidebar: &side, Info: &info, Tree: &tree})

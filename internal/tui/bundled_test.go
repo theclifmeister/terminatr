@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -52,8 +53,9 @@ func TestDefaultLayout(t *testing.T) {
 		t.Fatalf("default layout %q %v, want %q", l.Columns, err, view.DefaultColumns)
 	}
 	for _, v := range []string{"", ThemeDefault} {
-		if cols, err := modLayout(&mod.Registry{}, v); cols != nil || err != nil {
-			t.Errorf("%q: %q %v", v, cols, err)
+		if l, err := modLayout(&mod.Registry{}, v); layoutColumns(l) != nil || err != nil ||
+			!reflect.DeepEqual(effectiveLayout(l, DefaultLayout, v), effectiveLayout(mod.Layout{}, DefaultLayout, v)) {
+			t.Errorf("%q: %+v %v", v, l, err)
 		}
 	}
 }

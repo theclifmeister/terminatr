@@ -181,7 +181,8 @@ func (m *dash) mouse(msg tea.Msg) tea.Cmd {
 			m.layout.Sidebar = m.layout.Sidebar.DragTo(x, m.winW)
 			m.setWidth(m.winW)
 		case m.dragging:
-			m.layout.Split = clampSplit(float64(x-m.sideW()) / float64(max(m.w, 1)))
+			m.layout.Split = clampSplit(float64(x-m.geom().body().x) / float64(max(m.w, 1)))
+			m.layout.detCells = 0
 		default:
 			m.hover(msg.Mouse())
 		}
@@ -199,8 +200,8 @@ func (m *dash) mouse(msg tea.Msg) tea.Cmd {
 		case tea.MouseWheelDown:
 			d = 1
 		}
-		if d != 0 && (mo.X >= m.sideW() || m.top() != nil) {
-			m.wheel(max(mo.X-m.sideW(), 0), mo.Y, d)
+		if d != 0 && (!m.geom().side().hasX(mo.X) || m.top() != nil) {
+			m.wheel(mo.X, d)
 		}
 	}
 	return nil
@@ -209,19 +210,20 @@ func (m *dash) mouse(msg tea.Msg) tea.Cmd {
 // press handles a button pressed: on the sidebar, the footer's hints,
 // the topmost popup, else the list.
 func (m *dash) press(mo tea.Mouse) tea.Cmd {
+	g := m.geom()
 	// A popup is centred on the whole window: what it covers is its.
 	if o := m.top(); o != nil && m.geo != nil && m.geo.inside(mo.X, mo.Y) {
-		return m.popupClick(o, mo.Button, mo.X, mo.Y, mo.Button == tea.MouseLeft && m.lastClick.double(mo.X-m.sideW(), mo.Y, time.Now()))
+		return m.popupClick(o, mo.Button, mo.X, mo.Y, mo.Button == tea.MouseLeft && m.lastClick.double(mo.X-g.main().x, mo.Y, time.Now()))
 	}
-	if mo.X < m.sideW() {
+	if g.side().hasX(mo.X) {
 		if mo.Button == tea.MouseRight {
 			return m.sideMenu(mo)
 		}
 		return m.sideClick(mo)
 	}
-	x, y := mo.X-m.sideW(), mo.Y
+	x, y := mo.X-g.main().x, mo.Y
 	double := mo.Button == tea.MouseLeft && m.lastClick.double(x, y, time.Now())
-	if y == m.h-2 {
+	if y == g.keysRow() {
 		if mo.Button == tea.MouseLeft {
 			return m.hintClick(x)
 		}
@@ -234,7 +236,7 @@ func (m *dash) press(mo tea.Mouse) tea.Cmd {
 	case tea.MouseLeft:
 		// A click gives its area the keyboard.
 		m.focus = areaMain
-		if split, lw := m.split(); split && x > lw {
+		if g.details().hasX(mo.X) {
 			m.focus = areaDetails
 		}
 		return m.click(x, y, double)
@@ -288,16 +290,16 @@ func (m *dash) popupClick(o overlay, btn tea.MouseButton, x, y int, double bool)
 	return c.click(m, g.hits[li], x-g.x-2, double)
 }
 
-// wheel moves through what is under body cell (x, y) by d: the topmost
+// wheel moves through what is under window column x by d: the topmost
 // popup, the details panel, else the list.
-func (m *dash) wheel(x, y, d int) {
+func (m *dash) wheel(x, d int) {
 	if o := m.top(); o != nil {
 		if w, ok := o.(wheeler); ok {
 			w.wheel(m, d)
 		}
 		return
 	}
-	if split, lw := m.split(); split && x > lw {
+	if m.geom().details().hasX(x) {
 		m.scrollDetails(3 * d)
 		return
 	}
@@ -312,15 +314,18 @@ func (m *dash) scrollDetails(d int) {
 	m.detailTop = max(m.detailTop+d, 0)
 }
 
-// rowAt is the key of the list's row at window row y ("" for none).
+// rowAt is the key of the list's row at the dashboard's column x,
+// window row y ("" for none).
 func (m *dash) rowAt(x, y int) string {
-	split, lw := m.split()
-	if split && x >= lw {
+	g := m.geom()
+	split, lw := g.split()
+	if x >= g.list().w {
 		return ""
 	}
 	_, keys, sel := m.listLines(lw, !split)
-	i := scrollTop(sel, m.bodyRows(), len(keys)) + y - 1
-	if y < 1 || y > m.bodyRows() || i >= len(keys) || strings.HasPrefix(keys[i], stateKey) {
+	b := g.body()
+	i := scrollTop(sel, b.h, len(keys)) + y - b.y
+	if !b.hasY(y) || i >= len(keys) || strings.HasPrefix(keys[i], stateKey) {
 		return ""
 	}
 	return keys[i]
@@ -329,7 +334,7 @@ func (m *dash) rowAt(x, y int) string {
 // click selects the row under the mouse, opens it on a double-click, or
 // starts dragging the divider.
 func (m *dash) click(x, y int, double bool) tea.Cmd {
-	if split, lw := m.split(); split && x == lw && y >= 1 && y <= m.bodyRows() {
+	if g := m.geom(); x+g.main().x == g.divider() && g.body().hasY(y) {
 		m.dragging = true
 		return nil
 	}
@@ -351,16 +356,17 @@ func (m *dash) click(x, y int, double bool) tea.Cmd {
 // rowMenu opens the menu of the row under a right-click, which it
 // selects; elsewhere in the list, the menu of every action.
 func (m *dash) rowMenu(x, y int) tea.Cmd {
+	b := m.geom().body()
 	key := m.rowAt(x, y)
 	if key == "" {
-		if y >= 1 && y <= m.bodyRows() {
-			m.openMenu(versionTitle(m.data.Server), m.dashItems(), x, y-1)
+		if b.hasY(y) {
+			m.openMenu(versionTitle(m.data.Server), m.dashItems(), x, y-b.y)
 		}
 		return nil
 	}
 	m.sel, m.userSel = key, true
 	if r, ok := m.selected(); ok {
-		m.openMenu(oneLine(rowTitle(r)), m.rowItems(r), x, y-1)
+		m.openMenu(oneLine(rowTitle(r)), m.rowItems(r), x, y-b.y)
 	}
 	return nil
 }

@@ -45,6 +45,7 @@ func resetLook(t *testing.T) {
 		setIcons(IconsUnicode)
 		ApplyKeymap(nil, DefaultPrefixKey)
 		layoutVal.Store(ThemeDefault)
+		layoutSpec.Store(nil)
 	})
 }
 
@@ -143,13 +144,13 @@ func TestLayoutMod(t *testing.T) {
 		"layout.toml": "sidebar = [\"needs\", \"review-age.age\", \"count\"]\n",
 	})
 	writeConfig(t, "[ui]\nlayout = \"wide\"\n[mods.wide]\nenabled = true\n")
-	cols, err := configLayout()
-	if err != nil || !slices.Equal(cols, []string{"needs", "review-age.age", "count", "state", "paused", "inactive"}) || layoutValue() != "wide" {
-		t.Fatalf("%v %v", cols, err)
+	l, err := configLayout()
+	if cols := layoutColumns(l); err != nil || !slices.Equal(cols, []string{"needs", "review-age.age", "count", "state", "paused", "inactive"}) || layoutValue() != "wide" {
+		t.Fatalf("%v %v", l.Columns, err)
 	}
 	installMod(t, "wide", map[string]string{"layout.toml": "sidebar = [\"bogus\"]\n"})
-	if cols, err := configLayout(); cols != nil || err == nil || !strings.Contains(err.Error(), "wide layout") {
-		t.Fatalf("broken: %v %v", cols, err)
+	if l, err := configLayout(); layoutColumns(l) != nil || err == nil || !strings.Contains(err.Error(), "wide layout") {
+		t.Fatalf("broken: %v %v", l, err)
 	}
 }
 
@@ -292,8 +293,8 @@ func TestSafeModeLook(t *testing.T) {
 	if themed() || themeSetting() != ThemeDefault || ic().name == "nord" || binds.list.canon("L") == "[" {
 		t.Fatalf("user data loaded: %v %s %s", themed(), themeSetting(), ic().name)
 	}
-	if cols, lerr := configLayout(); cols != nil || lerr != nil || layoutValue() != ThemeDefault {
-		t.Fatalf("layout %v %v %s", cols, lerr, layoutValue())
+	if l, lerr := configLayout(); layoutColumns(l) != nil || lerr != nil || layoutValue() != ThemeDefault {
+		t.Fatalf("layout %v %v %s", l, lerr, layoutValue())
 	}
 	for _, kind := range []string{mod.KindTheme, mod.KindIcons, mod.KindLayout} {
 		if c := modChoices(nil, kind); len(c) != 0 {

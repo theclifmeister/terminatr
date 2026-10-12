@@ -257,11 +257,16 @@ func (m *dash) inbox(string) tea.Cmd {
 }
 
 func (m *dash) resize(key string) tea.Cmd {
-	if split, _ := m.split(); !split {
+	split, lw := m.split()
+	if !split {
 		m.msg = fmt.Sprintf("the details panel shows when the dashboard (the window less the sidebar) is %d columns or wider; | turns it on", splitMin)
 		return nil
 	}
 	l := m.layout
+	if l.detCells != 0 {
+		// A panel the layout gives in cells steps from its share now.
+		l.Split, l.detCells = float64(lw)/float64(max(m.w, 1)), 0
+	}
 	if key == "<" {
 		l.Split -= splitStep
 	} else {

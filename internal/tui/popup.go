@@ -234,9 +234,10 @@ func (m *dash) popup(b box) string {
 
 	x := max((m.winW-bw)/2, 0)
 	y := max((m.h-len(lines))/2, 0)
+	g := m.geom()
 	if b.at != nil {
-		x = max(min(b.at[0]+m.sideW(), m.winW-bw), 0)
-		y = max(min(b.at[1]+1, m.h-footRows-len(lines)), 1)
+		x = max(min(b.at[0]+g.main().x, m.winW-bw), 0)
+		y = max(min(b.at[1]+g.body().y, g.footer().y-len(lines)), g.body().y)
 	}
 	hits := b.hits
 	if len(head) < len(b.head) && len(hits) >= len(b.head) {
@@ -251,7 +252,7 @@ func (m *dash) popup(b box) string {
 			line = base[i]
 		}
 		if i < y || i >= y+len(lines) {
-			out[i] = dimRow(line, m.sideW(), i >= 1 && i < m.h-footRows)
+			out[i] = dimRow(line, g.side().w, i >= g.body().y && i < g.footer().y)
 			continue
 		}
 		// Beside the box, a margin too narrow to read is cleared, so no

@@ -13,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -128,11 +129,15 @@ type DashResult struct {
 // Dashboard runs the dashboard until the user quits or picks a session.
 func Dashboard(opts DashOptions) (DashResult, error) {
 	err := loadLook()
-	cols, lerr := configLayout()
+	spec, lerr := configLayout()
 	if n := lookNews(errors.Join(err, lerr)); n != "" && opts.State.Message == "" {
 		opts.State.Message = n
 	}
 	m := newDash(opts)
+	// Safe mode puts its own sidebar on the view, whatever a layout
+	// left there.
+	m.useLayout(layoutValue(), spec, m.safe)
+	cols := layoutColumns(spec)
 	m.wantCols = &cols // a layout that doesn't load: the built-in order
 	defer close(m.done)
 	if o := opts.Over; o != nil && o.Session != "" && opts.View != nil {
@@ -216,7 +221,14 @@ type dash struct {
 	detailKey string
 	shownKeys string // the footer's hints as drawn: its buttons
 
+	// layout is the console's layout, effective: ui.json (ui) under the
+	// layout mod in use (spec, the [ui] layout layoutID), with the
+	// view's sidebar. safe: safe mode, the built-in layout.
 	layout   Layout
+	ui       Layout
+	spec     mod.Layout
+	layoutID string
+	safe     bool
 	uiFile   string
 	dragging bool // the mouse is moving the divider
 	sideDrag bool // the mouse is moving the sidebar's border
@@ -274,7 +286,7 @@ func newDash(o DashOptions) *dash {
 	}
 	m := &dash{src: o.Source, cwd: o.Cwd, h: h,
 		sel: o.State.Selected, current: o.State.Current, msg: o.State.Message,
-		layout: LoadLayout(o.UIFile), uiFile: o.UIFile,
+		ui: LoadLayout(o.UIFile), uiFile: o.UIFile, safe: safeMode(),
 		prefix: cmp.Or(o.Prefix, DefaultPrefixKey), then: o.State.Then, done: make(chan struct{}), over: o.Over}
 	if o.Over != nil {
 		m.then = o.Over.Key
@@ -286,6 +298,7 @@ func newDash(o DashOptions) *dash {
 	if o.State.SideFocus {
 		m.focus = areaSide
 	}
+	m.layout = effectiveLayout(m.spec, m.ui, m.layoutID)
 	m.folds = m.layout.Tree
 	if vc := o.View; vc != nil {
 		v := vc.View()
@@ -307,7 +320,7 @@ func newDash(o DashOptions) *dash {
 // leaves.
 func (m *dash) setWidth(w int) {
 	m.winW = w
-	m.w = max(w-m.sideW(), 1)
+	m.w = m.geom().main().w
 }
 
 // sideW is the sidebar's width in this window.
@@ -1305,12 +1318,13 @@ func (m *dash) withSide(s string) string {
 	lines := strings.Split(s, "\n")
 	rows := m.tree()
 	side := sidebarLines(rows, m.sideW(), m.h, sideFooter(rows, m.sideW(), m.data.Server, m.over != nil))
+	w := m.geom().main().w
 	for i := range side {
 		var l string
 		if i < len(lines) {
 			l = lines[i]
 		}
-		side[i] += fit(l, m.w) + reset
+		side[i] += fit(l, w) + reset
 	}
 	return strings.Join(side, "\n")
 }
@@ -1344,10 +1358,11 @@ func (m *dash) base() []string {
 	if m.over == nil {
 		return m.listBody()
 	}
-	body := make([]string, m.bodyRows())
+	b := m.geom().body()
+	body := make([]string, b.h)
 	for i := range body {
-		if i+1 < len(m.over.Screen) {
-			body[i] = m.over.Screen[i+1]
+		if i+b.y < len(m.over.Screen) {
+			body[i] = m.over.Screen[i+b.y]
 		}
 	}
 	return body
@@ -1356,9 +1371,10 @@ func (m *dash) base() []string {
 // listBody is the list (and the details panel beside it) as the body's
 // rows, scrolled so the selected row shows.
 func (m *dash) listBody() []string {
-	split, lw := m.split()
+	g := m.geom()
+	split, lw := g.split()
 	lines, _, sel := m.listLines(lw, !split)
-	room := m.bodyRows()
+	room, dw := g.body().h, g.details().w
 	top := scrollTop(sel, room, len(lines))
 	if !split {
 		body := make([]string, room)
@@ -1369,7 +1385,7 @@ func (m *dash) listBody() []string {
 	// row from the top.
 	var right []string
 	if r, ok := m.selected(); ok {
-		right = m.details(r, m.w-lw-1)
+		right = m.details(r, dw)
 	}
 	if m.detailKey == m.sel {
 		// Scrolled with the wheel.
@@ -1391,7 +1407,7 @@ func (m *dash) listBody() []string {
 		if i < len(right) {
 			d = right[i]
 		}
-		body[i] = fit(l, lw) + reset + div + fit(d, m.w-lw-1) + reset
+		body[i] = fit(l, lw) + reset + div + fit(d, dw) + reset
 	}
 	return body
 }
@@ -1484,13 +1500,15 @@ func projectHead(r row, w int) string {
 // stateAt is the project whose state label is at body cell (x, y) of the
 // list, "" for none.
 func (m *dash) stateAt(x, y int) string {
-	split, lw := m.split()
-	if split && x >= lw {
+	g := m.geom()
+	split, lw := g.split()
+	if x >= g.list().w {
 		return ""
 	}
 	lines, keys, sel := m.listLines(lw, !split)
-	i := scrollTop(sel, m.bodyRows(), len(keys)) + y - 1
-	if y < 1 || y > m.bodyRows() || i >= len(keys) {
+	b := g.body()
+	i := scrollTop(sel, b.h, len(keys)) + y - b.y
+	if !b.hasY(y) || i >= len(keys) {
 		return ""
 	}
 	slug, ok := strings.CutPrefix(keys[i], stateKey)
@@ -1515,12 +1533,6 @@ func (m *dash) projectActive(slug string) bool {
 	p := m.projectData(slug)
 	return p != nil && !p.inactive()
 }
-
-// footRows is the footer's height: a rule, the keys, the message.
-const footRows = 3
-
-// bodyRows is the room between the header and the footer.
-func (m *dash) bodyRows() int { return max(m.h-1-footRows, 1) }
 
 // scrollTop is the first of n lines to show in room rows so that line
 // sel shows.

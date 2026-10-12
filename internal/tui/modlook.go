@@ -28,12 +28,12 @@ import (
 const ThemeDefault = "default"
 
 // safeMode is tm --no-mods (mod.EnvNoMods): the console uses the
-// built-in theme, icon set and keymap, and no user mod's data, so a mod
-// can never make the keys unreachable.
+// built-in theme, icon set, layout and keymap, and no user mod's data,
+// so a mod can never make the keys or the sidebar unreachable.
 func safeMode() bool { return mod.NoMods(os.Getenv) }
 
 // safeLookNote is the footer's one line about safe mode's built-in look.
-const safeLookNote = "safe mode (tm --no-mods): built-in theme, icons and keymap; mods' data is not loaded"
+const safeLookNote = "safe mode (tm --no-mods): built-in theme, icons, layout and keymap; mods' data is not loaded"
 
 // loadMods is the registry of the user's mods with config.toml's tables;
 // none when ~/.terminatr/mods can't be read. In safe mode only the
@@ -169,40 +169,67 @@ func modIcons(r *mod.Registry, id string) (*iconSet, error) {
 
 // Layout
 
-// modLayout is the sidebar's column order layout names ("default", the
-// bundled default-layout mod's, or a mod id): nil for the built-in
-// order, view.DefaultColumns, which the view keeps as nil.
-func modLayout(r *mod.Registry, value string) ([]string, error) {
+// modLayout is the layout value names ("default", the bundled
+// default-layout mod's, or a mod id), the whole of it: the sidebar's
+// columns and every other part it sets. One that doesn't load is the
+// built-in layout, and the error says why.
+func modLayout(r *mod.Registry, value string) (mod.Layout, error) {
 	var data []byte
 	if value == "" || value == ThemeDefault {
 		value, data = mod.BundledLayout, mod.BundledData(mod.BundledLayout, mod.KindLayout)
 	} else {
 		m, err := r.Provider(mod.KindLayout, value)
 		if err != nil {
-			return nil, err
+			return mod.Layout{}, err
 		}
 		if data, err = m.Data(mod.KindLayout); err != nil {
-			return nil, err
+			return mod.Layout{}, err
 		}
 	}
 	l, err := mod.ParseLayout(data)
 	if err != nil {
-		return nil, fmt.Errorf("%s layout: %w", value, err)
+		return mod.Layout{}, fmt.Errorf("%s layout: %w", value, err)
 	}
-	cols := view.Columns(l.Columns)
-	if slices.Equal(cols, view.DefaultColumns) {
-		return nil, nil
-	}
-	return cols, nil
+	return l, nil
 }
 
-// layoutVal is the layout setting's value this console uses.
-var layoutVal atomic.Value
+// layoutColumns is the sidebar's column order a layout gives: nil for
+// the built-in order, view.DefaultColumns, which the view keeps as nil.
+func layoutColumns(l mod.Layout) []string {
+	cols := view.Columns(l.Columns)
+	if slices.Equal(cols, view.DefaultColumns) {
+		return nil
+	}
+	return cols
+}
+
+// layoutVal is the layout setting's value this console uses, and
+// layoutSpec its layout (nil until configLayout read it).
+var (
+	layoutVal  atomic.Value
+	layoutSpec atomic.Pointer[mod.Layout]
+)
 
 func init() { layoutVal.Store(ThemeDefault) }
 
 // layoutValue is the layout setting's value this console uses.
 func layoutValue() string { return layoutVal.Load().(string) }
+
+// useLayoutValue makes value, whose layout is spec, this console's.
+func useLayoutValue(value string, spec mod.Layout) {
+	layoutVal.Store(value)
+	layoutSpec.Store(&spec)
+}
+
+// currentLayout is this console's layout and its setting's value, read
+// from config.toml the first time.
+func currentLayout() (mod.Layout, string) {
+	if l := layoutSpec.Load(); l != nil {
+		return *l, layoutValue()
+	}
+	l, _ := configLayout()
+	return l, layoutValue()
+}
 
 // layoutSetting is config.toml's [ui] layout, "default" when unset.
 func layoutSetting(cfg *config.Config) string {
@@ -212,20 +239,20 @@ func layoutSetting(cfg *config.Config) string {
 	return cfg.Layout
 }
 
-// configLayout is the column order config.toml's [ui] layout gives:
-// nil for the built-in one, and for one that doesn't load (the error
-// says why).
-func configLayout() ([]string, error) {
+// configLayout is the layout config.toml's [ui] layout gives, which it
+// makes this console's: the built-in one in safe mode, and for one that
+// doesn't load (the error says why).
+func configLayout() (mod.Layout, error) {
 	cfg, _ := config.Load()
 	if safeMode() {
-		cfg = nil // the built-in order
+		cfg = nil // the built-in layout
 	}
-	layoutVal.Store(layoutSetting(cfg))
-	cols, err := modLayout(loadMods(cfg), layoutSetting(cfg))
+	l, err := modLayout(loadMods(cfg), layoutSetting(cfg))
+	useLayoutValue(layoutSetting(cfg), l)
 	if err != nil {
-		return nil, fmt.Errorf("layout: %w", err)
+		return l, fmt.Errorf("layout: %w", err)
 	}
-	return cols, nil
+	return l, nil
 }
 
 // loadLook makes config.toml's theme, icons and keymap this console's,
