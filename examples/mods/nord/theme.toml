@@ -1,0 +1,30 @@
+# The Nord palette (https://www.nordtheme.com) over tm's roles. Each role
+# is { fg, bg, bold, faint, reverse }. A colour is an ANSI name, a 0-255
+# index or #rrggbb; with two, the first is what a terminal without
+# truecolor gets and the second what one with it gets. A role left out
+# is the built-in one (default-theme's), so a theme can set only a few.
+# The console picks [dark] or [light] by the terminal's background.
+
+[dark]
+head   = { fg = ["brightwhite", "#eceff4"], bold = true }
+sel    = { fg = ["black", "#2e3440"], bg = ["cyan", "#88c0d0"] }
+faint  = { fg = ["brightblack", "#4c566a"] }
+accent = { fg = ["cyan", "#88c0d0"] }
+title  = { fg = ["cyan", "#8fbcbb"], bold = true }
+bad    = { fg = ["red", "#bf616a"] }
+warn   = { fg = ["yellow", "#ebcb8b"] }
+good   = { fg = ["green", "#a3be8c"] }
+info   = { fg = ["blue", "#81a1c1"] }
+plain  = { fg = ["white", "#d8dee9"] }
+
+[light]
+head   = { fg = ["black", "#2e3440"], bold = true }
+sel    = { fg = ["brightwhite", "#eceff4"], bg = ["blue", "#5e81ac"] }
+faint  = { fg = ["brightblack", "#7b88a1"] }
+accent = { fg = ["blue", "#5e81ac"] }
+title  = { fg = ["blue", "#5e81ac"], bold = true }
+bad    = { fg = ["red", "#bf616a"] }
+warn   = { fg = ["yellow", "#d08770"] }
+good   = { fg = ["green", "#6f8f57"] }
+info   = { fg = ["blue", "#81a1c1"] }
+plain  = { fg = ["black", "#3b4252"] }

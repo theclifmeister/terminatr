@@ -1,0 +1,12 @@
+{
+  "name": "a refused notification is logged, not thrown",
+  "answers": [{ "method": "ui.notify", "error": "notifications are limited to 6 a minute" }],
+  "events": [
+    { "name": "thread.state", "project": "demo",
+      "data": { "project": "demo", "thread": "t-0012", "task": "T12", "state": "blocked", "needs_you": "Which port?" } }
+  ],
+  "expect": {
+    "calls": [{ "method": "ui.notify", "params": { "notification": { "title": "T12 needs you" } } }],
+    "logs": ["not notified: notifications are limited to 6 a minute"]
+  }
+}

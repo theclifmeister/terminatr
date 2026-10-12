@@ -37,6 +37,23 @@ export type Rules = {
   // so paths are compared with case folded and ~/.Terminatr/worktrees
   // is the worktrees folder.
   caseFold?: boolean
+  // The rules the user's enabled mods add: they only refuse, in force
+  // whichever core rules the human turned off.
+  mods?: readonly ModRule[]
+}
+
+// A guard rule a mod adds (mods design §7, Tighten only): the commands a
+// shell tool may not run (each its words: the name, then words its
+// arguments include in that order; a word ending in * matches any word
+// it starts) and the files no file tool may write or read, with the
+// mod's sentence. Judged on each simple command before the core's rules.
+export type ModRule = {
+  mod: string
+  id: string
+  commands?: readonly (readonly string[])[]
+  writes?: readonly string[]
+  reads?: readonly string[]
+  message: string
 }
 
 // What the guard knows of a tool: its kind (shell, write, patch, read,
@@ -59,7 +76,7 @@ export const off: Rules = { on: false }
 export function rulesOf(text: string): Rules {
   try {
     const r = JSON.parse(text) as Rules
-    return r && typeof r === 'object' && r.on === true && Array.isArray(r.rules) ? r : off
+    return r && typeof r === 'object' && r.on === true && (Array.isArray(r.rules) || Array.isArray(r.mods)) ? r : off
   } catch {
     return off
   }
@@ -68,12 +85,18 @@ export function rulesOf(text: string): Rules {
 // judge is the rule the call of tool with input breaks, or null. The
 // tool is judged by its kind in r.tools, from the fields listed there.
 export function judge(r: Rules, tool: string, input: Record<string, unknown>): Denial | null {
-  if (!r.on || !r.rules?.length) return null
+  if (!r.on || (!r.rules?.length && !r.mods?.length)) return null
   const t = r.tools && Object.hasOwn(r.tools, tool) ? r.tools[tool] : undefined
   if (!t) return null
-  const has = (id: string) => r.rules!.includes(id)
+  const has = (id: string) => r.rules?.includes(id) ?? false
   const values = (t.fields ?? []).map(f => input[f]).filter((v): v is string => typeof v === 'string' && v !== '')
-  const writable = (p: string) => (r.writable ?? []).some(w => under(r, abs(r, p), w))
+  const writable = (p: string) => (r.writable ?? []).some(w => under(r, p, w))
+  // A file tool writing p (absolute).
+  const judgeWrite = (p: string): Denial | null => {
+    if (has('worktree-only') && !writable(p)) return deny(r, 'worktree-only', `${tool} of ${safe(p)}`)
+    const m = (r.mods ?? []).find(m => (m.writes ?? []).some(w => under(r, p, w)))
+    return m ? denyMod(m, `${tool} of ${safe(p)}`) : null
+  }
   switch (t.kind) {
     case 'shell': {
       let ask: Denial | null = null
@@ -85,22 +108,30 @@ export function judge(r: Rules, tool: string, input: Record<string, unknown>): D
       return ask
     }
     case 'write':
-      if (!has('worktree-only')) return null
-      for (const p of values) if (!writable(p)) return deny(r, 'worktree-only', `${tool} of ${safe(abs(r, p))}`)
+      for (const p of values) {
+        const d = judgeWrite(abs(r, p))
+        if (d) return d
+      }
       return null
     case 'patch':
       // Each file the patch adds, updates, deletes or moves to is a write.
-      if (!has('worktree-only')) return null
       for (const patch of values) {
-        for (const p of patchPaths(patch)) if (!writable(p)) return deny(r, 'worktree-only', `${tool} of ${safe(abs(r, p))}`)
+        for (const p of patchPaths(patch)) {
+          const d = judgeWrite(abs(r, p))
+          if (d) return d
+        }
       }
       return null
     case 'read':
     case 'glob':
       // A glob's fields may be patterns: judged by the part before the
       // first wildcard.
-      if (!has('credentials')) return null
-      for (const p of values) if (isSecret(r, abs(r, p))) return deny(r, 'credentials', `${tool} of ${safe(abs(r, p))}`)
+      for (const v of values) {
+        const p = abs(r, v)
+        if (has('credentials') && isSecret(r, p)) return deny(r, 'credentials', `${tool} of ${safe(p)}`)
+        const m = (r.mods ?? []).find(m => covers(r, m.reads ?? [], p))
+        if (m) return denyMod(m, `${tool} of ${safe(p)}`)
+      }
       return null
   }
   return null
@@ -126,6 +157,36 @@ function deny(r: Rules, rule: string, summary: string, target = ''): Denial {
   return { rule, message: `terminatr guard (${rule}): ${m[rule]}`, summary }
 }
 
+// judgeMods judges a simple command, its name and arguments, by the
+// mods' rules; fold compares them with case folded (PowerShell's), and
+// under caseFold the name is.
+function judgeMods(r: Rules, name: string, args: readonly string[], fold: boolean): Denial | null {
+  for (const m of r.mods ?? []) {
+    for (const c of m.commands ?? []) {
+      if (c.length === 0 || !modWord(c[0], name, fold || r.caseFold === true)) continue
+      let j = 1
+      for (const a of args) if (j < c.length && modWord(c[j], a, fold)) j++
+      if (j === c.length) return denyMod(m, c.map(safe).join(' '))
+    }
+  }
+  return null
+}
+
+// modWord: word w is pattern p, or starts with p's text before a final *.
+function modWord(p: string, w: string, fold: boolean): boolean {
+  if (fold) {
+    p = p.toLowerCase()
+    w = w.toLowerCase()
+  }
+  return p.endsWith('*') ? w.startsWith(p.slice(0, -1)) : p === w
+}
+
+// The refusal under mod rule m: its own sentence, labelled with the mod.
+function denyMod(m: ModRule, summary: string): Denial {
+  const rule = `mod:${m.mod}.${m.id}`
+  return { rule, message: `terminatr guard (${rule}): ${m.message}`, summary }
+}
+
 // judgeBash checks each simple command of a Bash command line.
 function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Denial | null {
   for (const words of commands(command)) {
@@ -133,6 +194,8 @@ function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Den
     if (argv.length === 0) continue
     const cmd = base(argv[0])
     const args = argv.slice(1)
+    const md = judgeMods(r, cmd, args, false)
+    if (md) return md
     if (cmd === 'git') {
       const d = judgeGit(r, has, args)
       if (d) return d
@@ -560,12 +623,19 @@ function under(r: Rules, p: string, root: string): boolean {
   return root !== '' && (p === root || p.startsWith(root.endsWith('/') ? root : root + '/'))
 }
 
-// isSecret: p is a credential store or inside one; a glob counts by the
-// part before its first wildcard.
+// isSecret: p is a credential store or inside one (covers).
 function isSecret(r: Rules, p: string): boolean {
+  return covers(r, r.secrets ?? [], p)
+}
+
+// covers: p is one of roots or inside one (credential stores, a mod's
+// reads); a glob counts by the part before its first wildcard, and
+// covers a root it could reach, unless it is the root of the file
+// system or the home folder.
+function covers(r: Rules, roots: readonly string[], p: string): boolean {
   const fixed = p.replace(/[*?[{].*$/, '').replace(/\/$/, '') || '/'
   const root = fixed === '/' || /^[A-Za-z]:\/?$/.test(fixed)
-  return (r.secrets ?? []).some(s => under(r, fixed, s) || (fixed !== p && under(r, s, fixed) && !root && fold(r, fixed) !== fold(r, r.home ?? '')))
+  return roots.some(s => under(r, fixed, s) || (fixed !== p && under(r, s, fixed) && !root && fold(r, fixed) !== fold(r, r.home ?? '')))
 }
 
 // isWorktreeRoot: removing p takes a worktree with it: the thread's own,
@@ -656,6 +726,8 @@ function judgePSCommand(r: Rules, has: (id: string) => boolean, words: string[])
   }
   const cmd = psName(argv[0])
   const args = argv.slice(1)
+  const md = judgeMods(r, cmd, args, true)
+  if (md) return md
   let d: Denial | null = null
   if (PS_EVAL.has(cmd)) return askOf(cmd)
   if (cmd === 'pwsh' || cmd === 'powershell') return judgePwsh(r, has, args)

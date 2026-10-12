@@ -1,0 +1,38 @@
+# Example 3 of terminatr's examples/mods (mods design §13): a cell in the
+# sidebar and on the dashboard's thread rows, and a dashboard card whose
+# rows bind a core action. Install it by path from a checkout:
+#   tm mod install terminatr/examples/mods/context-gauge
+id = "context-gauge"
+name = "Context gauge"
+version = "1.0.0"
+api = "1.0"
+description = "How full each session's context window is, by its row; a card lists the ones past the warning, and enter attaches to one so you can /clear it."
+authors = ["terminatr"]
+homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/context-gauge"
+
+[provides]
+main = "main.ts"
+
+[[provides.columns]]
+id = "ctx"
+title = "Ctx"
+width = 5
+where = ["sidebar.thread", "sidebar.coordinator", "dashboard.thread"]
+
+[[provides.views]]
+id = "full"
+title = "Context nearly full"
+slot = "dashboard.card"
+
+[permissions]
+# The card's rows bind session.attach, which needs project_read; the card
+# itself needs views. The cells alone would need nothing.
+project_read = true
+views = true
+
+[settings.warn]
+type = "int"
+default = 80
+min = 50
+max = 95
+label = "Warn from this % of the context window"

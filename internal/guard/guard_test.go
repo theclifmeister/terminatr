@@ -93,6 +93,19 @@ func TestVectors(t *testing.T) {
 	}
 }
 
+// TestModMessage: a mod rule's refusal is labelled with the mod and
+// gives the mod's sentence; with every core rule off it still refuses.
+func TestModMessage(t *testing.T) {
+	r := loadVectors(t).Rules["mods-only"]
+	d := r.Judge("Bash", map[string]any{"command": "terraform destroy"})
+	if d == nil || d.Message != "terminatr guard (mod:infra.no-destroy): infrastructure is the human's to change." {
+		t.Fatalf("got %+v", d)
+	}
+	if (ModRule{Mod: "a-b", ID: "c"}).Name() != "mod:a-b.c" {
+		t.Fatal("name")
+	}
+}
+
 func TestCommands(t *testing.T) {
 	got := Commands(`cd x && git push -f origin 'my branch'; echo "a $(gh pr merge 3) b" | cat`)
 	want := [][]string{{"cd", "x"}, {"git", "push", "-f", "origin", "my branch"}, {"gh", "pr", "merge", "3"}, {"echo", "a $(gh pr merge 3) b"}, {"cat"}}
@@ -119,7 +132,8 @@ func FuzzJudge(f *testing.F) {
 	r := Rules{On: true, Role: "thread", Rules: []string{"force-push", "push-default", "worktree-only", "delete-branch", "merge", "credentials"},
 		Home: "/h", Cwd: "/w", Writable: []string{"/w"}, Worktrees: "/h/wt", Protected: []string{"main"}, Secrets: []string{"/h/.ssh"},
 		Tools: map[string]Tool{"Bash": {Kind: KindShell, Fields: []string{"command"}}, "PowerShell": {Kind: KindShell, Syntax: SyntaxPowerShell, Fields: []string{"command"}},
-			"apply_patch": {Kind: KindPatch, Fields: []string{"command"}}, "Glob": {Kind: KindGlob, Fields: []string{"pattern"}}}}
+			"apply_patch": {Kind: KindPatch, Fields: []string{"command"}}, "Glob": {Kind: KindGlob, Fields: []string{"pattern"}}},
+		Mods: []ModRule{{Mod: "m", ID: "x", Commands: [][]string{{"terraform", "destroy*"}, {"kubectl"}}, Writes: []string{"/h/p"}, Reads: []string{"/etc"}, Message: "no"}}}
 	f.Fuzz(func(t *testing.T, s string) {
 		r.Judge("Bash", map[string]any{"command": s})
 		r.Judge("PowerShell", map[string]any{"command": s})

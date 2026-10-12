@@ -1,0 +1,26 @@
+{
+  "name": "the tool answers the matching lines of the caller's project memory, with path and line",
+  "answers": [
+    { "method": "memory.list", "params": { "slug": "demo" },
+      "result": [{ "path": "CONTEXT.md", "title": "Context", "bytes": 60 }, { "path": "memory/release.md", "title": "Release", "bytes": 80 }] },
+    { "method": "memory.read", "params": { "slug": "demo", "path": "CONTEXT.md" }, "result": "# Context\nWe ship from main.\nThe Release is weekly." },
+    { "method": "memory.read", "params": { "slug": "demo", "path": "memory/release.md" }, "result": "Tag first.\nRelease notes go in CHANGELOG.md." }
+  ],
+  "events": [
+    { "name": "tool.call", "data": { "tool": "find", "input": { "text": "release" }, "project": "demo", "role": "thread", "thread": "t-0012", "session": "s-7" } },
+    { "name": "tool.call", "data": { "tool": "find", "input": { "text": "release", "limit": 1 }, "project": "demo", "role": "coordinator", "session": "s-2" } },
+    { "name": "tool.call", "data": { "tool": "find", "input": { "text": "kubernetes" }, "project": "demo", "role": "thread", "thread": "t-0012", "session": "s-7" } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "memory.list", "params": { "slug": "demo" } },
+      { "method": "memory.read", "params": { "slug": "demo", "path": "CONTEXT.md" } },
+      { "method": "memory.read", "params": { "slug": "demo", "path": "memory/release.md" } }
+    ],
+    "tools": [
+      "CONTEXT.md:3: The Release is weekly.\nmemory/release.md:2: Release notes go in CHANGELOG.md.",
+      "CONTEXT.md:3: The Release is weekly.\n(1 more; ask with a higher limit or narrower text)",
+      "No line of demo's memory holds \"kubernetes\"."
+    ]
+  }
+}

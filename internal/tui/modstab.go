@@ -874,7 +874,9 @@ func (ev *examplesView) lines(w int) []string {
 	for _, e := range mod.Examples {
 		out = append(out, "")
 		out = append(out, ansi.Truncate(th().Head.Render(e.ID)+"  "+e.Surface+th().Faint.Render(" · "+strings.Join(mod.Permissions{}.Words(e.Perms), " · ")), w, "…"))
-		out = append(out, ansi.Truncate("  "+mod.InstallLine(e.ID), w, "…"))
+		for _, l := range mod.InstallLines(e.ID) {
+			out = append(out, ansi.Truncate("  "+l, w, "…"))
+		}
 	}
 	return out
 }

@@ -164,3 +164,35 @@ func TestModRun(t *testing.T) {
 		t.Fatalf("sent %+v", got)
 	}
 }
+
+// TestModExamples: tm mod examples shows the folder and each example's
+// install lines, an agent may run it, and a built-in one says to copy it
+// under another id first.
+func TestModExamples(t *testing.T) {
+	h := newHarness(t)
+	out := h.ok(thr, "mod", "examples")
+	for _, want := range []string{mod.ExamplesURL, "git clone " + mod.ExamplesRepo, "tm mod install terminatr/examples/mods/nord",
+		"cp -R terminatr/examples/mods/pr-ci-column my-pr-ci-column", "tm mod install my-pr-ci-column", "memory-search  an agent tool", "tm mod install terminatr/examples/mods/standup"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("examples lack %q:\n%s", want, out)
+		}
+	}
+	var got struct {
+		Examples []struct {
+			ID      string   `json:"id"`
+			Builtin bool     `json:"builtin"`
+			Install []string `json:"install"`
+		} `json:"examples"`
+	}
+	if err := json.Unmarshal([]byte(h.ok(human, "mod", "examples", "--json")), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Examples) != len(mod.Examples) {
+		t.Fatalf("%d examples", len(got.Examples))
+	}
+	for _, x := range got.Examples {
+		if x.Builtin != (x.ID == "pr-ci-column" || x.ID == "memory-tab") || len(x.Install) == 0 {
+			t.Errorf("%+v", x)
+		}
+	}
+}

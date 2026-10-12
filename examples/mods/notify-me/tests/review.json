@@ -1,0 +1,20 @@
+{
+  "name": "a task reaching review notifies with Accept, Send back and Show",
+  "events": [
+    { "name": "task.changed", "project": "demo",
+      "data": { "project": "demo", "id": "T12", "title": "Add the login page", "from": "started", "to": "review", "steps_done": 4, "steps_total": 4 } },
+    { "name": "task.changed", "project": "demo",
+      "data": { "project": "demo", "id": "T13", "title": "Fix the build", "from": "open", "to": "started", "steps_done": 0, "steps_total": 2 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.notify", "params": { "notification": {
+        "title": "T12 is ready for review", "text": "demo: Add the login page",
+        "actions": [
+          { "id": "task.accept", "target": { "project": "demo", "task": "T12" } },
+          { "id": "task.send-back", "target": { "project": "demo", "task": "T12" } },
+          { "id": "task.show", "target": { "project": "demo", "task": "T12" } }
+        ] } } }
+    ]
+  }
+}

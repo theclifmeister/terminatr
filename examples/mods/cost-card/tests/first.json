@@ -1,0 +1,15 @@
+{
+  "name": "a thread seen first is named from the project and sets a baseline: nothing counts to today",
+  "answers": [{ "method": "thread.get", "params": { "project": "demo", "thread": "t-0020" }, "result": { "id": "t-0020", "title": "Search" } }],
+  "events": [
+    { "name": "session.state", "project": "demo",
+      "data": { "session": "s-8", "project": "demo", "thread": "t-0020", "role": "thread", "state": "working", "context": 12, "tokens": 52000, "cost_usd": 1.5 } },
+    { "name": "session.state", "project": "demo",
+      "data": { "session": "s-2", "project": "demo", "role": "coordinator", "state": "idle", "context": 40 } }
+  ],
+  "expect": {
+    "calls": [{ "method": "thread.get", "params": { "project": "demo", "thread": "t-0020" } }],
+    "no_calls": ["ui.view.set"],
+    "store": { "threads": { "demo/t-0020": { "title": "Search", "tokens": 52000, "cost": 1.5 } }, "days": null }
+  }
+}

@@ -92,7 +92,20 @@ func (m *Mod) Run(f *Fixture, file string) (r Result) {
 	if steps[0].Name != modbus.ModReady {
 		steps = append([]Step{{Name: modbus.ModReady, Data: json.RawMessage(`{"projects":[]}`)}}, steps...)
 	}
+	tools := 0
 	for i, s := range steps {
+		if s.Name == ToolStep {
+			tools++
+			var c modproto.ToolCall
+			_ = json.Unmarshal(s.Data, &c)
+			switch {
+			case !slices.ContainsFunc(m.Manifest.Provides.Tools, func(t mod.Tool) bool { return t.ID == c.Tool }):
+				bad("events[%d]: the mod offers no tool %q", i, c.Tool)
+			case !slices.Contains(grants, mod.PermTools):
+				bad("events[%d]: a tool call needs the tools permission, which the mod isn't granted", i)
+			}
+			continue
+		}
 		known := slices.ContainsFunc(modapi.Events, func(e modapi.Event) bool { return e.Name == s.Name })
 		switch need := modbus.Needs(s.Name); {
 		case !known:
@@ -100,6 +113,9 @@ func (m *Mod) Run(f *Fixture, file string) (r Result) {
 		case need != "" && !slices.Contains(grants, need):
 			bad("events[%d]: %s needs the %s permission, which the mod isn't granted: it would never get it", i, s.Name, need)
 		}
+	}
+	if len(f.Expect.Tools) > tools {
+		bad("expect.tools: %d answers for %d tool calls", len(f.Expect.Tools), tools)
 	}
 	for _, c := range f.Expect.Calls {
 		if !modapi.Has(c.Method) {
@@ -131,11 +147,25 @@ func (m *Mod) Run(f *Fixture, file string) (r Result) {
 	if err != nil {
 		bad("loading the script: %v", err)
 	}
+	var answers []string
 	for i, s := range steps {
 		if err != nil {
 			break
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), EventLimit)
+		if s.Name == ToolStep {
+			var raw json.RawMessage
+			if raw, err = d.call(ctx, modproto.MethodToolCall, s.Data); err != nil {
+				// The handler's throw is the agent's answer, not the run's end.
+				answers, err = append(answers, "error: "+err.Error()), nil
+			} else {
+				var res modproto.ToolResult
+				_ = json.Unmarshal(raw, &res)
+				answers = append(answers, res.Text)
+			}
+			cancel()
+			continue
+		}
 		_, err = d.call(ctx, modproto.MethodEvent, modproto.Event{Name: s.Name, Project: s.Project,
 			Seq: uint64(i + 1), Time: time.Now(), Data: s.Data})
 		cancel()
@@ -189,6 +219,11 @@ func (m *Mod) Run(f *Fixture, file string) (r Result) {
 	for _, want := range f.Expect.Logs {
 		if !slices.ContainsFunc(r.Logs, func(l string) bool { return strings.Contains(l, want) }) {
 			bad("no log line has %q", want)
+		}
+	}
+	for i, want := range f.Expect.Tools {
+		if i < len(answers) && !strings.Contains(answers[i], want) {
+			bad("tool call %d answered %q; expected it to hold %q", i+1, answers[i], want)
 		}
 	}
 	store := b.Store()

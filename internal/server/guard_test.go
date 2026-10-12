@@ -357,3 +357,120 @@ func TestGuardSecrets(t *testing.T) {
 		t.Errorf("claude thread %+v", g)
 	}
 }
+
+// TestGuardModRules: an enabled mod's guard rules reach the sessions of
+// its projects and roles, labelled with the mod, even with every core
+// rule off; the guard off takes them too. A refusal under one is
+// journaled; a mod rule the session doesn't have is refused.
+func TestGuardModRules(t *testing.T) {
+	testPaths(t)
+	p := newWatchProject(t)
+	dir := filepath.Join(os.Getenv("TERMINATR_HOME"), "mods", "infra")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `id = "infra"
+name = "Infra"
+version = "1.0.0"
+api = "1.0"
+
+[[provides.guard]]
+id = "no-destroy"
+commands = ["terraform destroy"]
+writes = ["~/infra/prod"]
+message = "infrastructure is the human's to change."
+
+[[provides.guard]]
+id = "no-prod"
+reads = ["/etc/prod"]
+roles = ["coordinator"]
+message = "prod secrets\nstay with the human."
+`
+	if err := os.WriteFile(filepath.Join(dir, "mod.toml"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rt, err := os.MkdirTemp(ipc.ShortDir(), "tmguard")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(rt) })
+	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
+	config := func(body string) {
+		t.Helper()
+		writeConfig(t, body)
+		s.modBr.mu.Lock()
+		s.modBr.reg = nil
+		s.modBr.mu.Unlock()
+	}
+	thread := SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: "t-0001", Cwd: rt}
+	coord := SessionRecord{ID: "s-1", Role: proto.RoleCoordinator, Agent: "claude", Project: p.Slug, Cwd: p.Dir}
+	names := func(g GuardRules) string {
+		var out []string
+		for _, m := range g.Mods {
+			out = append(out, m.Name())
+		}
+		return strings.Join(out, " ")
+	}
+
+	if g := s.guardRulesFor(thread); names(g) != "" {
+		t.Fatalf("not enabled: %+v", g.Mods)
+	}
+	config("[mods.infra]\nenabled = true\n")
+	g := s.guardRulesFor(thread)
+	home, _ := os.UserHomeDir()
+	if names(g) != "mod:infra.no-destroy" || g.Mods[0].Writes[0] != filepath.Join(home, "infra", "prod") ||
+		!slices.Equal(g.Mods[0].Commands[0], []string{"terraform", "destroy"}) || g.Mods[0].Message != "infrastructure is the human's to change." {
+		t.Fatalf("thread %+v", g.Mods)
+	}
+	if g := s.guardRulesFor(coord); names(g) != "mod:infra.no-destroy mod:infra.no-prod" || g.Mods[1].Message != "prod secrets stay with the human." {
+		t.Fatalf("coordinator %+v", g.Mods)
+	}
+	config("[defaults]\nguard_off = [\"force-push\", \"push-default\", \"worktree-only\", \"delete-branch\", \"merge\", \"credentials\"]\n[mods.infra]\nenabled = true\n")
+	if g := s.guardRulesFor(thread); !g.On || g.Rules != nil || names(g) != "mod:infra.no-destroy" ||
+		g.Judge("Bash", map[string]any{"command": "terraform destroy"}) == nil {
+		t.Fatalf("core rules off %+v", g)
+	}
+	config("[projects." + p.Slug + "]\nguard = false\n[mods.infra]\nenabled = true\n")
+	if g := s.guardRulesFor(thread); g.On || g.Mods != nil {
+		t.Fatalf("guard off %+v", g)
+	}
+	config("[mods.infra]\nenabled = true\nprojects = [\"other\"]\n")
+	if g := s.guardRulesFor(thread); names(g) != "" {
+		t.Fatalf("another project's mod %+v", g.Mods)
+	}
+
+	config("[mods.infra]\nenabled = true\n")
+	s.mu.Lock()
+	sock, err := s.listenMod("s-2", rt)
+	s.records["s-2"] = thread
+	s.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.closeMods)
+	c := modClient(sock)
+	resp, err := c.Get("http://terminatr/v1/rules")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got GuardRules
+	err = json.NewDecoder(resp.Body).Decode(&got)
+	resp.Body.Close()
+	if err != nil || names(got) != "mod:infra.no-destroy" {
+		t.Fatalf("GET /v1/rules %+v, %v", got.Mods, err)
+	}
+	for _, rule := range []string{"mod:infra.no-prod", "mod:infra.nope", "mod:other.no-destroy"} {
+		if code := postMod(t, c, "/v1/denied", `{"rule":"`+rule+`","tool":"Bash"}`); code != http.StatusBadRequest {
+			t.Errorf("%s: %d", rule, code)
+		}
+	}
+	if code := postMod(t, c, "/v1/denied", `{"rule":"mod:infra.no-destroy","tool":"Bash","summary":"terraform destroy"}`); code != http.StatusNoContent {
+		t.Fatalf("denied: %d", code)
+	}
+	lines, _, _ := p.JournalTail(5)
+	if !slices.ContainsFunc(lines, func(l string) bool {
+		return strings.Contains(l, "guard.deny t-0001 mod:infra.no-destroy Bash: terraform destroy")
+	}) {
+		t.Errorf("journal %q", lines)
+	}
+}

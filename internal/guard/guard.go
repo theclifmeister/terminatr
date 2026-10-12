@@ -57,7 +57,33 @@ type Rules struct {
 	// plat/caps), so paths are compared with case folded and
 	// ~/.Terminatr/worktrees is the worktrees folder.
 	CaseFold bool `json:"caseFold,omitempty"`
+	// Mods are the rules the user's enabled mods add: they only refuse,
+	// in force whichever core rules the human turned off.
+	Mods []ModRule `json:"mods,omitempty"`
 }
+
+// ModRule is a guard rule a mod adds (mods design §7, Tighten only): the
+// commands a shell tool may not run and the files no file tool may write
+// or read, with the mod's sentence. Its commands are judged on each
+// simple command before the core's rules; it only ever refuses.
+type ModRule struct {
+	Mod string `json:"mod"`
+	ID  string `json:"id"`
+	// Commands are the commands refused, each its words: the command's
+	// name, then words its arguments include in that order, others
+	// between them allowed. A word ending in * matches any word it
+	// starts. PowerShell's commands are compared with case folded.
+	Commands [][]string `json:"commands,omitempty"`
+	// Writes are the files and folders no write or patch tool writes in;
+	// Reads those no read or glob tool reads (a glob by the part before
+	// its first wildcard). Absolute.
+	Writes  []string `json:"writes,omitempty"`
+	Reads   []string `json:"reads,omitempty"`
+	Message string   `json:"message"`
+}
+
+// Name is the rule's name in a refusal and the journal: mod:<mod>.<id>.
+func (m ModRule) Name() string { return "mod:" + m.Mod + "." + m.ID }
 
 // Tool is what the guard knows of one of an agent's tools: its kind and
 // the fields of its input the kind reads. A shell tool's Syntax is how
@@ -113,7 +139,7 @@ type Denial struct {
 // Judge is the rule the call of tool with input breaks, or nil. The
 // tool is judged by its kind in r.Tools, from the fields listed there.
 func (r Rules) Judge(tool string, input map[string]any) *Denial {
-	if !r.On || len(r.Rules) == 0 {
+	if !r.On || len(r.Rules) == 0 && len(r.Mods) == 0 {
 		return nil
 	}
 	t, ok := r.Tools[tool]
@@ -144,36 +170,90 @@ func (r Rules) Judge(tool string, input map[string]any) *Denial {
 		}
 		return ask
 	case KindWrite:
-		if !r.has("worktree-only") {
-			return nil
-		}
 		for _, p := range values {
-			if !r.writable(r.abs(p)) {
-				return r.deny("worktree-only", tool+" of "+safe(r.abs(p)), "")
+			if d := r.judgeWrite(tool, r.abs(p)); d != nil {
+				return d
 			}
 		}
 	case KindPatch:
-		if !r.has("worktree-only") {
-			return nil
-		}
 		for _, patch := range values {
 			for _, p := range PatchPaths(patch) {
-				if !r.writable(r.abs(p)) {
-					return r.deny("worktree-only", tool+" of "+safe(r.abs(p)), "")
+				if d := r.judgeWrite(tool, r.abs(p)); d != nil {
+					return d
 				}
 			}
 		}
 	case KindRead, KindGlob:
-		if !r.has("credentials") {
-			return nil
-		}
 		for _, p := range values {
-			if r.isSecret(r.abs(p)) {
-				return r.deny("credentials", tool+" of "+safe(r.abs(p)), "")
+			p = r.abs(p)
+			if r.has("credentials") && r.isSecret(p) {
+				return r.deny("credentials", tool+" of "+safe(p), "")
+			}
+			for _, m := range r.Mods {
+				if r.covers(m.Reads, p) {
+					return r.denyMod(m, tool+" of "+safe(p))
+				}
 			}
 		}
 	}
 	return nil
+}
+
+// judgeWrite judges a file tool writing p (absolute).
+func (r Rules) judgeWrite(tool, p string) *Denial {
+	if r.has("worktree-only") && !r.writable(p) {
+		return r.deny("worktree-only", tool+" of "+safe(p), "")
+	}
+	for _, m := range r.Mods {
+		if slices.ContainsFunc(m.Writes, func(w string) bool { return r.under(p, w) }) {
+			return r.denyMod(m, tool+" of "+safe(p))
+		}
+	}
+	return nil
+}
+
+// judgeMods judges a simple command, its name and arguments, by the
+// mods' rules; fold compares them with case folded (PowerShell's), and
+// under CaseFold the name is.
+func (r Rules) judgeMods(name string, args []string, fold bool) *Denial {
+	for _, m := range r.Mods {
+		for _, c := range m.Commands {
+			if len(c) == 0 || !modWord(c[0], name, fold || r.CaseFold) {
+				continue
+			}
+			j := 1
+			for _, a := range args {
+				if j < len(c) && modWord(c[j], a, fold) {
+					j++
+				}
+			}
+			if j == len(c) {
+				words := make([]string, len(c))
+				for i, w := range c {
+					words[i] = safe(w)
+				}
+				return r.denyMod(m, strings.Join(words, " "))
+			}
+		}
+	}
+	return nil
+}
+
+// modWord: word w is pattern p, or starts with p's text before a final *.
+func modWord(p, w string, fold bool) bool {
+	if fold {
+		p, w = strings.ToLower(p), strings.ToLower(w)
+	}
+	if pre, ok := strings.CutSuffix(p, "*"); ok {
+		return strings.HasPrefix(w, pre)
+	}
+	return p == w
+}
+
+// denyMod is the refusal under mod rule m: its own sentence, labelled
+// with the mod.
+func (r Rules) denyMod(m ModRule, summary string) *Denial {
+	return &Denial{Rule: m.Name(), Message: "terminatr guard (" + m.Name() + "): " + m.Message, Summary: summary}
 }
 
 var patchFile = regexp.MustCompile(`(?m)^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+?)\s*$`)
@@ -234,6 +314,9 @@ func (r Rules) judgeBash(command string) *Denial {
 		}
 		cmd := base(argv[0])
 		args := argv[1:]
+		if d := r.judgeMods(cmd, args, false); d != nil {
+			return d
+		}
 		var d *Denial
 		switch {
 		case cmd == "git":
@@ -922,15 +1005,20 @@ func under(p, root string) bool {
 
 var wildcard = regexp.MustCompile(`[*?[{].*$`)
 
-// isSecret: p is a credential store or inside one; a glob counts by the
-// part before its first wildcard.
-func (r Rules) isSecret(p string) bool {
+// isSecret: p is a credential store or inside one (covers).
+func (r Rules) isSecret(p string) bool { return r.covers(r.Secrets, p) }
+
+// covers: p is one of roots or inside one (credential stores, a mod's
+// reads); a glob counts by the part before its first wildcard, and
+// covers a root it could reach, unless it is the root of the file
+// system or the home folder.
+func (r Rules) covers(roots []string, p string) bool {
 	fixed := strings.TrimSuffix(wildcard.ReplaceAllString(p, ""), "/")
 	if fixed == "" {
 		fixed = "/"
 	}
 	root := fixed == "/" || driveRoot.MatchString(fixed)
-	return slices.ContainsFunc(r.Secrets, func(s string) bool {
+	return slices.ContainsFunc(roots, func(s string) bool {
 		return r.under(fixed, s) || (fixed != p && r.under(s, fixed) && !root && r.fold(fixed) != r.fold(r.Home))
 	})
 }

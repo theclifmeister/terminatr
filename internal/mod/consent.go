@@ -13,14 +13,15 @@ import (
 
 // What the human sees before a mod is installed, enabled or updated
 // (mods design §7 and §9, Consent): each permission in plain words,
-// every rules addendum and agent manifest in full (text an agent obeys
-// and commands tm runs), then a y/n question. A mod's own text is shown
-// with control characters removed, so it can't drive the terminal, and
-// its files inside a delimited block.
+// every rules addendum, agent manifest, agent tool and guard rule in
+// full (text an agent obeys or reads, and commands tm runs), then a y/n
+// question. A mod's own text is shown with control characters removed,
+// so it can't drive the terminal, and its files inside a delimited
+// block.
 
 // Kinds names what the mod provides, for tm mod list and the Mods tab:
 // code, column, view, tools, theme, icons, keymap, layout, rules,
-// templates, agents.
+// templates, agents, guard.
 func (m *Manifest) Kinds() []string {
 	p := m.Provides
 	var out []string
@@ -41,6 +42,7 @@ func (m *Manifest) Kinds() []string {
 	add(len(p.Rules) > 0, "rules")
 	add(p.Templates != "", "templates")
 	add(p.Agents != "", "agents")
+	add(len(p.Guard) > 0, "guard")
 	return out
 }
 
@@ -186,9 +188,9 @@ func consent(m *Manifest, fsys fs.FS) string {
 	return b.String()
 }
 
-// Shown is every rules addendum, agent manifest and agent tool of m, in
-// folder dir, in full, as the consent screen shows them; "" when it has
-// none.
+// Shown is every rules addendum, agent manifest, agent tool and guard
+// rule of m, in folder dir, in full, as the consent screen shows them;
+// "" when it has none.
 func (m *Manifest) Shown(dir string) string { return m.shown(os.DirFS(dir)) }
 
 func (m *Manifest) shown(fsys fs.FS) string {
@@ -206,7 +208,8 @@ type shownFile struct {
 
 // agentText lists the text of m that agents obey or read, or tm runs:
 // its rules addenda by role, its agent manifests, then its tools (the
-// description and input an agent is given), each with its text.
+// description and input an agent is given) and its guard rules (what
+// each refuses, and the message an agent reads), each with its text.
 func (m *Manifest) agentText(fsys fs.FS) []shownFile {
 	var out []shownFile
 	for _, role := range sortedKeys(m.Provides.Rules) {
@@ -225,7 +228,31 @@ func (m *Manifest) agentText(fsys fs.FS) []shownFile {
 	for _, t := range m.Provides.Tools {
 		out = append(out, shownFile{"Tool it offers your " + toolRoles(t) + " (they read its description)", ToolName(m.ID, t.ID), toolText(t)})
 	}
+	for _, g := range m.Provides.Guard {
+		out = append(out, shownFile{"Guard rule it adds for your " + guardRoles(g) + " (it only refuses; they read its message)", "mod:" + m.ID + "." + g.ID, guardText(g)})
+	}
 	return out
+}
+
+// guardRoles is "threads", "coordinators" or "threads and coordinators".
+func guardRoles(g GuardRule) string {
+	return toolRoles(Tool{Roles: g.Roles})
+}
+
+// guardText is a guard rule as the consent shows it: what it refuses,
+// then the message.
+func guardText(g GuardRule) string {
+	var b strings.Builder
+	for _, l := range []struct {
+		what string
+		list []string
+	}{{"Refuses the commands", g.Commands}, {"Refuses writes in", g.Writes}, {"Refuses reads of", g.Reads}} {
+		if len(l.list) > 0 {
+			fmt.Fprintf(&b, "%s: %s\n", l.what, strings.Join(l.list, " · "))
+		}
+	}
+	fmt.Fprintf(&b, "Message: %s\n", strings.TrimSpace(g.Message))
+	return b.String()
 }
 
 // toolRoles is "threads", "coordinators" or "threads and coordinators".

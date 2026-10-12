@@ -1,0 +1,21 @@
+{
+  "name": "what a thread spends counts to today, and the open card is drawn again",
+  "store": { "threads": { "demo/t-0012": { "project": "demo", "thread": "t-0012", "title": "Login page", "tokens": 1000, "cost": 0.25 } } },
+  "events": [
+    { "name": "view.opened", "data": { "view": "cost", "slot": "dashboard.card", "width": 60, "height": 8 } },
+    { "name": "session.state", "project": "demo",
+      "data": { "session": "s-7", "project": "demo", "thread": "t-0012", "role": "thread", "state": "idle", "context": 30, "tokens": 4000, "cost_usd": 0.5 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set", "params": { "view": "cost", "widget": { "children": [
+        { "pairs": [{ "key": "today", "value": [{ "text": "$0.00" }, {}] }, {}] }, {}, {} ] } } },
+      { "method": "ui.view.set", "params": { "view": "cost", "widget": { "children": [
+        { "pairs": [{ "key": "today", "value": [{ "text": "$0.25" }, { "text": "  3.0k tokens" }] }, { "value": [{ "text": "$0.25" }] }] },
+        { "values": [0, 0, 0, 0, 0, 0, 0.25] },
+        { "rows": [{ "id": "demo/t-0012", "cells": [[{ "text": "demo Login page" }], [{ "text": "4.0k" }], [{ "text": "$0.50" }]] }] } ] } } }
+    ],
+    "no_calls": ["thread.get"],
+    "store": { "threads": { "demo/t-0012": { "tokens": 4000, "cost": 0.5 } } }
+  }
+}
