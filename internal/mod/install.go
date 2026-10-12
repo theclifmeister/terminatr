@@ -113,6 +113,25 @@ func Validate(dir string) (*Manifest, error) {
 	return m, err
 }
 
+// Taken says why a mod with id can't be installed next to the mods in
+// r, "" when it can: it is a built-in mod's id, or installed already,
+// with what works instead (tm mod update only takes a mod that records
+// where it came from, T301 B10). tm mod install and the Mods tab ask it
+// before the consent, so nobody consents to what Install would refuse.
+func Taken(r *Registry, id string) string {
+	old, ok := r.Get(id)
+	if !ok && !IsBundled(id) {
+		return ""
+	}
+	hint := "tm mod update " + id
+	if old.Builtin || IsBundled(id) {
+		hint = "it is a built-in mod's id; give your copy another id in its mod.toml"
+	} else if _, ok := ReadSource(old.Dir); !ok {
+		hint = "it records no source (installed by hand, or by tm mod dev); tm mod remove " + id + " first"
+	}
+	return fmt.Sprintf("%s is already installed: %s", id, hint)
+}
+
 // Install installs the staged mod, disabled and with nothing granted:
 // its id mustn't be installed yet, and a [mods.<id>] table left behind
 // by an earlier one is removed so it grants nothing. A data folder kept

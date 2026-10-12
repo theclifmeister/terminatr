@@ -756,6 +756,12 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 	case tea.KeyPressMsg:
 		return m, m.key(msg)
+	case tea.PasteMsg:
+		// Into a prompt: a path or a URL is often pasted.
+		if p, ok := m.top().(interface{ paste(*dash, string) }); ok {
+			p.paste(m, msg.Content)
+		}
+		return m, nil
 	case tea.MouseClickMsg, tea.MouseMotionMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg:
 		return m, m.mouse(msg)
 	}

@@ -24,21 +24,33 @@ import (
 // it permissions, updating and removing it are the human's calls, each
 // after the mod's consent or a question; tm refuses them inside an
 // agent. Built-in mods can be turned off, never removed or updated on
-// their own. Nothing here installs a mod: e only shows where the
-// example mods are and how to install one.
+// their own. i installs a mod, and e lists the example mods to install
+// one of them (modinstall.go): each after its consent, and off.
 
-// modsTab is the Mods tab's selection.
-type modsTab struct{ sel int }
+// modsTab is the Mods tab's selection; want is a mod to select once a
+// poll lists it (one just installed).
+type modsTab struct {
+	sel  int
+	want string
+}
 
 // modsKeys are the Mods tab's action row.
-const modsKeys = "enter on/off · p permissions · s settings · d defaults · l log · r restart · u update · x remove · e examples · ← → tabs · esc close"
+const modsKeys = "enter on/off · i install · p permissions · s settings · d defaults · l log · r restart · u update · x remove · e examples · ← → tabs · esc close"
 
 // selMod is the selected mod, false for none.
 func (mt *modsTab) selMod(m *dash) (mod.Mod, bool) {
+	mt.find(m.data.Mods)
 	if mt.sel < len(m.data.Mods) {
 		return m.data.Mods[mt.sel], true
 	}
 	return mod.Mod{}, false
+}
+
+// find selects the mod the tab wants, once mods lists it.
+func (mt *modsTab) find(mods []mod.Mod) {
+	if i := slices.IndexFunc(mods, func(md mod.Mod) bool { return md.ID == mt.want }); mt.want != "" && i >= 0 {
+		mt.sel, mt.want = i, ""
+	}
 }
 
 // modByID is mod id as the last poll has it.
@@ -164,16 +176,17 @@ func (mt *modsTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
 	}
 	mods := m.data.Mods
 	if len(mods) == 0 {
-		out = append(out, faintLines("No mods installed. tm mod install <path | git-url[@tag]> installs one; it starts off, until you turn it on here.", w)...)
+		out = append(out, faintLines("No mods installed. i installs one from a folder or a git URL, as tm mod install does; it starts off, until you turn it on here.", w)...)
 		out = append(out, "")
-		out = append(out, faintLines("e shows terminatr's example mods, one for each place a mod can show up, and how to install them.", w)...)
+		out = append(out, faintLines("e lists terminatr's example mods, one for each place a mod can show up, to install one.", w)...)
 		return out, -1, nil
 	}
+	mt.find(mods)
 	mt.sel = min(mt.sel, len(mods)-1)
 	defer func() {
 		if !slices.ContainsFunc(mods, func(md mod.Mod) bool { return !md.Builtin }) {
 			out = append(out, "")
-			out = append(out, faintLines("No mods of your own yet. tm mod install <path | git-url[@tag]> installs one; it starts off, until you turn it on here. e shows terminatr's example mods.", w)...)
+			out = append(out, faintLines("No mods of your own yet. i installs one from a folder or a git URL, as tm mod install does; it starts off, until you turn it on here. e lists terminatr's example mods to install one.", w)...)
 		}
 	}()
 	nameW, kindW, verW := 4, 4, 1
@@ -298,8 +311,12 @@ func (mt *modsTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 		mt.sel = moveSel(mt.sel, d, len(m.data.Mods))
 		return nil, true
 	}
-	if s == "e" {
+	switch s {
+	case "e":
 		m.push(&examplesView{})
+		return nil, true
+	case "i":
+		m.installPrompt("")
 		return nil, true
 	}
 	md, ok := mt.selMod(m)
@@ -422,6 +439,15 @@ type consentView struct {
 }
 
 func (cv *consentView) lines(m *dash, md mod.Mod, w int) []string {
+	return consentLines(md, cv.question(md), w)
+}
+
+// consentLines are mod md's consent as tm draws it, enabling it or
+// installing it (tm mod install's, mods design §9): what it is and
+// provides, each permission it asks for in plain words and its colour,
+// the defaults it suggests, every rules addendum, agent manifest, tool
+// and guard rule in full, then question.
+func consentLines(md mod.Mod, question string, w int) []string {
 	man := md.Manifest
 	var out []string
 	out = append(out, th().Head.Render(ansi.Truncate(oneLine(man.Headline()), w, "…")))
@@ -432,6 +458,15 @@ func (cv *consentView) lines(m *dash, md mod.Mod, w int) []string {
 		out = append(out, th().Faint.Render(ansi.Truncate(oneLine(mod.Clean(man.Homepage, false)), w, "…")))
 	}
 	out = append(out, wrapLines("Provides: "+strings.Join(man.Kinds(), " · "), w)...)
+	if v := man.ViewWords(); len(v) > 0 {
+		out = append(out, wrapLines("Panels it draws: "+strings.Join(v, " · "), w)...)
+	}
+	if k := man.Provides.CodeHost; k != "" {
+		out = append(out, wrapLines(fmt.Sprintf("Code host %s: for projects whose code_host is %q, tm asks it about their pull requests and has it merge one tm thread merge checked.", k, k), w)...)
+	}
+	if c := man.CommandWords(); len(c) > 0 {
+		out = append(out, wrapLines("Commands you can run: "+strings.Join(c, " · "), w)...)
+	}
 	out = append(out, "")
 	asked := man.Permissions.Requested()
 	if len(asked) == 0 {
@@ -447,6 +482,9 @@ func (cv *consentView) lines(m *dash, md mod.Mod, w int) []string {
 			out = append(out, ansi.Truncate(l, w, "…"))
 		}
 	}
+	if man.Permissions.Tools {
+		out = append(out, faintLines(mod.ToolsAgentModNote+".", w)...)
+	}
 	if d := man.DefaultWords(); len(d) > 0 {
 		out = append(out, "")
 		out = append(out, wrapLines("It suggests defaults for all projects. Nothing changes until you apply them (d in the Mods tab, once it's on), and a setting your config.toml sets stays yours:", w)...)
@@ -460,8 +498,7 @@ func (cv *consentView) lines(m *dash, md mod.Mod, w int) []string {
 			out = append(out, strings.Split(ansi.Hardwrap(strings.ReplaceAll(l, "\t", "    "), max(w, 10), true), "\n")...)
 		}
 	}
-	out = append(out, "", th().Head.Render(cv.question(md)))
-	return out
+	return append(out, "", th().Head.Render(question))
 }
 
 func (cv *consentView) question(md mod.Mod) string {
@@ -969,40 +1006,6 @@ func (uv *updateView) wheel(m *dash, d int) { uv.key(m, arrow(d)) }
 
 func (uv *updateView) render(m *dash) string {
 	return m.popup(box{title: "Update " + modName(uv.md), body: uv.lines(m.inner(viewWidth)), sel: -1, scroll: uv.scroll, keys: "y yes · n no · ↑ ↓ scroll · esc cancel"})
-}
-
-// examplesView shows where terminatr's example mods are and how to
-// install each (mods design §13). It installs and enables nothing.
-type examplesView struct{ scroll int }
-
-func (ev *examplesView) lines(w int) []string {
-	out := wrapLines("terminatr's example mods: one small, working mod for each place a mod can show up, to see it work and to get ideas to build and share. Nothing here is installed or turned on: install one with its line, then turn it on in this tab after its consent.", w)
-	out = append(out, "", th().Accent.Render(ansi.Truncate(mod.ExamplesURL, w, "…")), "")
-	for _, e := range mod.Examples {
-		out = append(out, "")
-		out = append(out, ansi.Truncate(th().Head.Render(e.ID)+"  "+e.Surface+th().Faint.Render(" · "+strings.Join(e.Words(), " · ")), w, "…"))
-		for _, l := range mod.InstallLines(e.ID) {
-			out = append(out, ansi.Truncate("  "+l, w, "…"))
-		}
-	}
-	return out
-}
-
-func (ev *examplesView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
-	if d, ok := scrollKeys[k.String()]; ok {
-		ev.scroll = clampScroll(ev.scroll+d, len(ev.lines(m.inner(viewWidth))))
-		return nil
-	}
-	if s := k.String(); s == "esc" || s == "q" {
-		m.pop()
-	}
-	return nil
-}
-
-func (ev *examplesView) wheel(m *dash, d int) { ev.key(m, arrow(d)) }
-
-func (ev *examplesView) render(m *dash) string {
-	return m.popup(box{title: "Example mods", body: ev.lines(m.inner(viewWidth)), sel: -1, scroll: ev.scroll, keys: "↑ ↓ scroll · esc back"})
 }
 
 // noteModFailures says once, in the footer, that a mod failed since the

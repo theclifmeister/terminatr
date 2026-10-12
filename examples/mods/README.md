@@ -17,7 +17,7 @@ The tag pins the example as that release made it, for that release's
 mod API (main's may already need the next one); `tm mod update` moves
 it on to the newest release tag that changed its folder, and `tm mod
 examples` prints these lines for your tm's own release. Then turn it
-on in the Mods tab (`,` then `3`), or with `tm mod enable <id>`. `e` in the Mods tab and `tm mod examples` show this list too.
+on in the Mods tab (`,` then `3`), or with `tm mod enable <id>`. `e` in the Mods tab lists them too and installs the selected one with `i`, after the same consent; `tm mod examples` prints this list.
 
 | # | Mod | Surface | Asks for | Install |
 |---|-----|---------|----------|---------|

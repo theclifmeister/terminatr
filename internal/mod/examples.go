@@ -69,13 +69,18 @@ var Examples = []Example{
 	{"gitlab", "a code host (GitLab, through glab)", Permissions{Commands: []string{"glab"}}},
 }
 
-// InstallLines are how example id installs: one tm mod install of its
-// folder's tree URL at ExamplesRef. A built-in mod's id can't be
+// ExampleSource is where example id installs from, as tm mod install
+// takes it: its folder's tree URL at ExamplesRef. The Mods tab's
+// examples list installs it with i.
+func ExampleSource(id string) string { return ExamplesURL + "/" + id }
+
+// InstallLines are how example id installs: one tm mod install of
+// ExampleSource. A built-in mod's id can't be
 // installed (Install refuses it), so for one of those they say to copy
 // the folder from a checkout under another id first.
 func InstallLines(id string) []string {
 	if !IsBundled(id) {
-		return []string{"tm mod install " + ExamplesURL + "/" + id}
+		return []string{"tm mod install " + ExampleSource(id)}
 	}
 	src := "terminatr/" + ExamplesPath + "/" + id
 	cp := "my-" + id

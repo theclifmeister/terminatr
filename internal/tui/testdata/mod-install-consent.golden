@@ -1,0 +1,31 @@
+Infra guard 1.2.0 (infra-guard) by Ada
+Keeps agents off production.
+Provides: code · tools · rules · guard
+
+It may:
+  • reads your projects
+  • offers tools to agents
+Claude threads get its tools only while the Agent mod is on (early
+access, off by default: Settings, Agent mod, or [agent_mod] enabled =
+true).
+
+Rules it adds for every thread, rules.md, in full:
+----- begin rules.md -----
+Never touch prod.
+----- end rules.md -----
+Tool it offers your threads and coordinators (they read its description)
+, infra-guard_prod_status, in full:
+----- begin infra-guard_prod_status -----
+Says whether production is frozen.
+Input: none
+----- end infra-guard_prod_status -----
+Guard rule it adds for your threads and coordinators (it only refuses; t
+hey read its message), mod:infra-guard.no-destroy, in full:
+----- begin mod:infra-guard.no-destroy -----
+Refuses the commands: terraform destroy
+Message: Infrastructure is the human's to change.
+----- end mod:infra-guard.no-destroy -----
+
+From /home/ada/mods/infra-guard. It installs off: tm asks next whether
+to turn it on.
+Install Infra guard?

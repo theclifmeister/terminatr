@@ -125,14 +125,20 @@ func (in *inputView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "ctrl+u":
 		in.text = ""
 	default:
-		if k.Text != "" {
-			in.text += oneLine(k.Text)
-			if r := []rune(in.text); in.max > 0 && len(r) > in.max {
-				in.text = string(r[:in.max])
-			}
-		}
+		in.paste(m, k.Text)
 	}
 	return nil
+}
+
+// paste adds text typed or pasted, on one line, as far as max allows.
+func (in *inputView) paste(_ *dash, text string) {
+	if text == "" {
+		return
+	}
+	in.text += oneLine(strings.TrimRight(text, "\r\n"))
+	if r := []rune(in.text); in.max > 0 && len(r) > in.max {
+		in.text = string(r[:in.max])
+	}
 }
 
 func (in *inputView) cancelled(m *dash) {
