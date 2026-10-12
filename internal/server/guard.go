@@ -3,8 +3,9 @@ package server
 // The mod's guard (docs/SPEC.md §8.6, Guard): the standing rules as
 // checks on each tool call. The server decides which rules a session's
 // mod enforces, from the human's settings (config.toml: guard,
-// guard_off, merge) and the session's role, and serves them on the mod
-// socket as GET /v1/rules; the mod matches each call itself
+// guard_off, merge) and the session's role, adds the rules the user's
+// enabled mods add (they only refuse: mods design §7, Tighten only), and
+// serves them on the mod socket as GET /v1/rules; the mod matches each call itself
 // (hooks/guard.ts) and reports a refusal with POST /v1/denied, which the
 // server journals (and puts in the project's inbox only when a session is refused repeatedly).
 
@@ -24,6 +25,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/guard"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -125,7 +127,38 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		}
 	}
 	g.Secrets = withReal(agent.Secrets(reg, home, os.Getenv))
+	g.Mods = s.guardMods(r, home)
 	return g
+}
+
+// guardMods are the guard rules the user's mods that run for session
+// r's project add for its role, labelled with each mod: commands as
+// words, paths from ~ made absolute and with their symlinks resolved.
+// They only add refusals, so mods that can't be read add none.
+func (s *Server) guardMods(r SessionRecord, home string) []guard.ModRule {
+	reg := s.modRegistry()
+	if reg == nil {
+		return nil
+	}
+	abs := func(paths []string) []string {
+		var out []string
+		for _, p := range paths {
+			if rest, ok := strings.CutPrefix(p, "~/"); ok {
+				p = filepath.Join(home, filepath.FromSlash(rest))
+			}
+			out = append(out, p)
+		}
+		return withReal(out)
+	}
+	var out []guard.ModRule
+	for _, g := range reg.GuardRules(r.Role, r.Project) {
+		m := guard.ModRule{Mod: g.Mod, ID: g.ID, Writes: abs(g.Writes), Reads: abs(g.Reads), Message: strings.TrimSpace(mod.Clean(g.Message, false))}
+		for _, c := range g.Commands {
+			m.Commands = append(m.Commands, strings.Fields(c))
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 // withReal is paths, each followed by its symlinks resolved where that
@@ -165,7 +198,8 @@ func (s *Server) guardRoutes(mux *http.ServeMux, id string) {
 		if err == nil {
 			err = json.Unmarshal(b, &d)
 		}
-		if err == nil && !slices.Contains(config.GuardRules, d.Rule) {
+		mods := strings.HasPrefix(d.Rule, "mod:")
+		if err == nil && !mods && !slices.Contains(config.GuardRules, d.Rule) {
 			err = fmt.Errorf("unknown rule %q", d.Rule)
 		}
 		if err != nil {
@@ -177,6 +211,11 @@ func (s *Server) guardRoutes(mux *http.ServeMux, id string) {
 		s.mu.Unlock()
 		if !ok {
 			http.Error(w, "session "+id+" is gone", http.StatusGone)
+			return
+		}
+		// A mod's rule is one the session has.
+		if mods && !slices.ContainsFunc(s.guardMods(rec, ""), func(m guard.ModRule) bool { return m.Name() == d.Rule }) {
+			http.Error(w, fmt.Sprintf("unknown rule %q", d.Rule), http.StatusBadRequest)
 			return
 		}
 		s.guardDenied(rec, d)

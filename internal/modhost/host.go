@@ -199,12 +199,6 @@ func (h *Host) request(m *modproto.Message) {
 			return
 		}
 		h.callTool(id, call)
-	default: // a code host method (read checked it)
-		if !h.ready {
-			_ = h.conn.ReplyError(id, modproto.CodeNotReady, m.Method+" before hello")
-			return
-		}
-		h.callCodeHost(id, m.Method, m.Params)
 	case modproto.MethodShutdown:
 		_ = h.conn.Reply(id, struct{}{})
 		h.exit(modproto.ExitOK)
@@ -215,6 +209,12 @@ func (h *Host) request(m *modproto.Message) {
 			HeapInuse: ms.HeapInuse, Sys: ms.Sys, Goroutines: runtime.NumGoroutine(),
 			Timers: len(h.timers), Pending: len(h.pending),
 		})
+	default: // a code host method (read checked it)
+		if !h.ready {
+			_ = h.conn.ReplyError(id, modproto.CodeNotReady, m.Method+" before hello")
+			return
+		}
+		h.callCodeHost(id, m.Method, m.Params)
 	}
 }
 

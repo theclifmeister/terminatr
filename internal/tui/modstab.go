@@ -128,6 +128,8 @@ func modLook(m *dash, md mod.Mod) (mark string, ms lipgloss.Style, status string
 		return ic().blocked, th().Bad, "doesn't load its " + first, th().Bad
 	case md.State == mod.Enabled && len(md.WantsMore) > 0:
 		return ic().review, th().Warn, "wants more: " + strings.Join(md.Manifest.Permissions.Words(md.WantsMore), " · "), th().Warn
+	case md.State == mod.Enabled && len(m.keyConflicts(md.ID)) > 0:
+		return ic().working, th().Good, strings.Join(m.keyConflicts(md.ID), " · "), th().Warn
 	case hosted && h.State == hostStarting:
 		return ic().starting, th().Good, md.Status(), th().Accent
 	case hosted && h.State == hostIdle:

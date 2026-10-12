@@ -438,7 +438,7 @@ func (pv *projectView) box(m *dash) box {
 		}
 	case tabKeys:
 		// The same list as the help.
-		body = keyLines(w)
+		body = keyLines(w, m.commandHelp())
 		keys = "↑ ↓ scroll · " + keys
 	case tabMemory:
 		body = pv.memoryLines(m, w)

@@ -1,0 +1,21 @@
+{
+  "name": "tm mod run can't open the view: the same in one line, as a toast",
+  "answers": [
+    { "method": "ui.view.open", "params": { "view": "standup" }, "error": "ui.view.open works only in a handler for a human input" },
+    { "method": "tasks.list", "params": { "slug": "demo" },
+      "result": [{ "id": "T1", "title": "Fix the login", "status": "blocked", "steps_done": 0, "steps_total": 0 },
+                 { "id": "T2", "title": "Write docs", "status": "ready", "steps_done": 0, "steps_total": 0 },
+                 { "id": "T4", "title": "More docs", "status": "ready", "steps_done": 0, "steps_total": 0 }] }
+  ],
+  "events": [
+    { "name": "command.run", "project": "demo", "data": { "command": "show", "project": "demo" } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.open", "params": { "view": "standup" } },
+      { "method": "tasks.list", "params": { "slug": "demo" } },
+      { "method": "ui.toast", "params": { "text": "demo: 1 blocked · 2 ready" } }
+    ],
+    "no_calls": ["ui.view.set"]
+  }
+}

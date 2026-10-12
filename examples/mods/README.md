@@ -28,6 +28,7 @@ Then turn it on in the Mods tab (`,` then `3`), or with `tm mod enable
 | 7 | [pr-ci-column](pr-ci-column) | a sidebar column (built in) | reads your projects | copy it under another id first, see below |
 | 8 | [memory-tab](memory-tab) | a project-popup tab (built in) | reads your projects, draws its own panels | copy it under another id first, see below |
 | + | [memory-search](memory-search) | an agent tool, `memory-search_find` | reads your projects, offers tools to agents | `tm mod install terminatr/examples/mods/memory-search` |
+| + | [standup](standup) | a command: the key `S`, a ≡ menu entry and `tm mod run standup show` | reads your projects, draws its own panels | `tm mod install terminatr/examples/mods/standup` |
 | + | [gitlab](gitlab) | a code host: GitLab merge requests as tm's PRs | runs glab | `tm mod install terminatr/examples/mods/gitlab` |
 
 `pr-ci-column` and `memory-tab` already ship inside tm, and `tm mod
@@ -93,3 +94,9 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
   (git must find the commits on the remote), and makes the merge
   checks itself. `tm doctor` shows which mod serves the kind and glab's
   login.
+- **standup** declares a command in `[[provides.commands]]`. `S` on the
+  dashboard or its ≡ menu entry runs it with the project shown, and
+  being a human input it may open the mod's full view. `tm mod run
+  standup show --project <slug>` can't open a view, so the mod says the
+  same in one line as a toast. A key the core (or a mod enabled
+  earlier) has stays theirs; the Mods tab then says key conflict.

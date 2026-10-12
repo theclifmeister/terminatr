@@ -8,6 +8,8 @@
 // (internal/agent TestGuardToolVectors), and a lowercase vocabulary like
 // pi's and opencode's. A case the guard asks about rather than refuses
 // (a PowerShell command it can't read) has rule "unknown" and "ask": true.
+// The thread-mods and mods-only sets carry rules a mod adds (mods design
+// §7, Tighten only): the core's and the mod's, and the mod's alone.
 // Everything after "export default " is JSON, for the Go test: keep it
 // so (double quotes, no trailing commas, no comments). One case a line.
 export default {
@@ -37,6 +39,8 @@ export default {
  "thread-casefold": {"on": true, "role": "thread", "rules": ["force-push", "push-default", "worktree-only", "delete-branch", "merge", "credentials"], "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "writable": ["/h/.terminatr/worktrees/demo/t-0001-fix", "/tmp", "/private/tmp"], "worktrees": "/h/.terminatr/worktrees", "protected": ["main", "master"], "secrets": ["/h/.ssh", "/h/.aws", "/h/.config/gh", "/h/.codex/auth.json", "/ch/auth.json"], "caseFold": true},
  "coordinator-casefold": {"on": true, "role": "coordinator", "rules": ["force-push", "push-default", "delete-branch", "credentials"], "home": "/h", "cwd": "/h/.terminatr/projects/demo", "worktrees": "/h/.terminatr/worktrees", "protected": ["main", "master"], "secrets": ["/h/.ssh", "/h/.aws", "/h/.config/gh", "/h/.codex/auth.json", "/ch/auth.json"], "caseFold": true},
  "thread-windows": {"on": true, "role": "thread", "rules": ["force-push", "push-default", "worktree-only", "delete-branch", "merge", "credentials"], "home": "C:\\Users\\me", "cwd": "C:\\Users\\me\\.terminatr\\worktrees\\demo\\t-0001-fix", "writable": ["C:\\Users\\me\\.terminatr\\worktrees\\demo\\t-0001-fix", "C:\\Users\\me\\AppData\\Local\\Temp"], "worktrees": "C:\\Users\\me\\.terminatr\\worktrees", "protected": ["main", "master"], "secrets": ["C:\\Users\\me\\.ssh", "C:\\Users\\me\\.config\\gh", "C:\\Users\\me\\.azure", "C:\\Users\\me\\.codex\\auth.json"], "caseFold": true},
+ "thread-mods": {"on": true, "role": "thread", "rules": ["force-push", "push-default", "worktree-only", "delete-branch", "merge", "credentials"], "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "writable": ["/h/.terminatr/worktrees/demo/t-0001-fix", "/tmp", "/private/tmp"], "worktrees": "/h/.terminatr/worktrees", "protected": ["main", "master"], "secrets": ["/h/.ssh", "/h/.aws", "/h/.config/gh", "/h/.codex/auth.json", "/ch/auth.json"], "mods": [{"mod": "infra", "id": "no-destroy", "commands": [["terraform", "destroy"], ["kubectl", "delete", "namespace*"]], "writes": ["/h/infra/prod"], "message": "infrastructure is the human's to change."}, {"mod": "infra", "id": "no-prod", "reads": ["/etc/prod"], "message": "prod secrets stay with the human."}]},
+ "mods-only": {"on": true, "role": "thread", "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "mods": [{"mod": "infra", "id": "no-destroy", "commands": [["terraform", "destroy"], ["kubectl", "delete", "namespace*"]], "writes": ["/h/infra/prod"], "message": "infrastructure is the human's to change."}, {"mod": "infra", "id": "no-prod", "reads": ["/etc/prod"], "message": "prod secrets stay with the human."}]},
  "off": {"on": false}
 },
 "cases": [
@@ -308,7 +312,32 @@ export default {
  {"rules": "thread-windows", "tool": "Write", "input": {"file_path": "docs\\a.md"}, "rule": null},
  {"rules": "thread-windows", "tool": "Read", "input": {"file_path": "C:\\Users\\me\\.azure\\msal_token_cache.json"}, "rule": "credentials", "summary": "Read of C:/Users/me/.azure/msal_token_cache.json"},
  {"rules": "thread-windows", "tool": "Glob", "input": {"pattern": "C:\\*"}, "rule": null},
- {"rules": "thread-windows", "tool": "Glob", "input": {"pattern": "C:\\Users\\me\\.config\\*"}, "rule": "credentials", "summary": "Glob of C:/Users/me/.config/?"}
+ {"rules": "thread-windows", "tool": "Glob", "input": {"pattern": "C:\\Users\\me\\.config\\*"}, "rule": "credentials", "summary": "Glob of C:/Users/me/.config/?"},
+ {"rules": "thread-mods", "tool": "Bash", "input": {"command": "terraform destroy"}, "rule": "mod:infra.no-destroy", "summary": "terraform destroy"},
+ {"rules": "thread-mods", "tool": "Bash", "input": {"command": "cd infra && TF_LOG=1 terraform -chdir=prod destroy -auto-approve"}, "rule": "mod:infra.no-destroy", "summary": "terraform destroy"},
+ {"rules": "thread-mods", "tool": "Bash", "input": {"command": "/usr/local/bin/terraform destroy"}, "rule": "mod:infra.no-destroy", "summary": "terraform destroy"},
+ {"rules": "thread-mods", "tool": "Bash", "input": {"command": "echo $(terraform destroy)"}, "rule": "mod:infra.no-destroy", "summary": "terraform destroy"},
+ {"rules": "thread-mods", "tool": "Bash", "input": {"command": "terraform plan"}, "rule": null},
+ {"rules": "thread-mods", "tool": "Bash", "input": {"command": "echo terraform destroy"}, "rule": null},
+ {"rules": "thread-mods", "tool": "Bash", "input": {"command": "Terraform destroy"}, "rule": null},
+ {"rules": "thread-mods", "tool": "Bash", "input": {"command": "kubectl delete namespace demo"}, "rule": "mod:infra.no-destroy", "summary": "kubectl delete namespace?"},
+ {"rules": "thread-mods", "tool": "Bash", "input": {"command": "kubectl -n x delete namespaces/demo"}, "rule": "mod:infra.no-destroy", "summary": "kubectl delete namespace?"},
+ {"rules": "thread-mods", "tool": "Bash", "input": {"command": "kubectl delete pod demo"}, "rule": null},
+ {"rules": "thread-mods", "tool": "Bash", "input": {"command": "git push -f"}, "rule": "force-push", "summary": "git push with force"},
+ {"rules": "thread-mods", "tool": "PowerShell", "input": {"command": "& 'C:\\tools\\Terraform.exe' DESTROY"}, "rule": "mod:infra.no-destroy", "summary": "terraform destroy"},
+ {"rules": "thread-mods", "tool": "PowerShell", "input": {"command": "bash -c 'terraform destroy'"}, "rule": "mod:infra.no-destroy", "summary": "terraform destroy"},
+ {"rules": "thread-mods", "tool": "Write", "input": {"file_path": "/h/infra/prod/main.tf"}, "rule": "worktree-only", "summary": "Write of /h/infra/prod/main.tf"},
+ {"rules": "thread-mods", "tool": "Read", "input": {"file_path": "/etc/prod/db.env"}, "rule": "mod:infra.no-prod", "summary": "Read of /etc/prod/db.env"},
+ {"rules": "thread-mods", "tool": "Glob", "input": {"pattern": "/etc/**"}, "rule": "mod:infra.no-prod", "summary": "Glob of /etc/??"},
+ {"rules": "thread-mods", "tool": "Read", "input": {"file_path": "/etc/hosts"}, "rule": null},
+ {"rules": "thread-mods", "tool": "Read", "input": {"file_path": "~/.ssh/id_rsa"}, "rule": "credentials", "summary": "Read of /h/.ssh/id_rsa"},
+ {"rules": "mods-only", "tool": "Write", "input": {"file_path": "/h/infra/prod/main.tf"}, "rule": "mod:infra.no-destroy", "summary": "Write of /h/infra/prod/main.tf"},
+ {"rules": "mods-only", "tool": "Edit", "input": {"file_path": "~/infra/prod"}, "rule": "mod:infra.no-destroy", "summary": "Edit of /h/infra/prod"},
+ {"rules": "mods-only", "tool": "Write", "input": {"file_path": "/h/infra/production/x"}, "rule": null},
+ {"rules": "mods-only", "tool": "apply_patch", "input": {"command": "*** Begin Patch\n*** Update File: /h/infra/prod/a.tf\n*** End Patch"}, "rule": "mod:infra.no-destroy", "summary": "apply_patch of /h/infra/prod/a.tf"},
+ {"rules": "mods-only", "tool": "Bash", "input": {"command": "git push -f origin main"}, "rule": null},
+ {"rules": "mods-only", "tool": "Bash", "input": {"command": "terraform destroy"}, "rule": "mod:infra.no-destroy", "summary": "terraform destroy"},
+ {"rules": "mods-only", "tool": "Read", "input": {"file_path": "/h/.ssh/id_rsa"}, "rule": null}
 ],
 "messages": {
  "thread": {
