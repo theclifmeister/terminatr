@@ -436,6 +436,7 @@ func (s *Server) launchAgent(l agentLaunch) (*session.Session, *proto.Error) {
 		Cols: l.cols, Rows: l.rows, Created: r.Created,
 		Xtversion: "terminatr " + version.Version,
 		Scheme:    s.scheme,
+		Colors:    s.colors,
 		Logf:      s.log.Printf,
 		OnExit:    s.sessionExited,
 		// Set before Start: the first session.list must show it.

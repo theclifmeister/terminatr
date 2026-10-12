@@ -253,7 +253,7 @@ func TestThemeAcrossViews(t *testing.T) {
 		c := &client{}
 		c.handle(uv.DarkColorSchemeEvent{})
 		accent(fmt.Sprintf("session %d, scheme report", i), light)
-		if !strings.Contains(string(c.osc), askBackground) {
+		if !strings.Contains(string(c.osc), askColors) {
 			t.Fatalf("a scheme change doesn't ask the background again: %q", c.osc)
 		}
 		c.handle(uv.BackgroundColorEvent{Color: white})

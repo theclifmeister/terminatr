@@ -24,6 +24,57 @@ type Options struct {
 	// WritePty is set: the scheme, and false while it is unknown (the
 	// query then goes unanswered).
 	ColorScheme func() (Scheme, bool)
+	// Colors are the default colours the emulator answers OSC 10, 11
+	// and 4 queries with (when WritePty is set), from the terminal a
+	// client is attached from; SetColors changes them.
+	Colors Colors
+}
+
+// RGB is a 24-bit colour.
+type RGB struct{ R, G, B uint8 }
+
+// Colors are a terminal's default colours as its answers to OSC 10
+// (foreground), 11 (background) and 4 (the 16 ANSI palette entries) gave
+// them, with which of them are known. The zero value knows none.
+type Colors struct {
+	Fg, Bg  RGB
+	Palette [16]RGB
+	Known   uint32 // KnownFg, KnownBg, and bit i for Palette[i]
+}
+
+const (
+	KnownFg uint32 = 1 << 16
+	KnownBg uint32 = 1 << 17
+)
+
+// colorsLen is the length of an encoded Colors: Known, then Fg, Bg and
+// the palette, three bytes each.
+const colorsLen = 4 + 18*3
+
+// Encode returns c as a FrameColors payload.
+func (c Colors) Encode() []byte {
+	b := make([]byte, 0, colorsLen)
+	b = append(b, byte(c.Known>>24), byte(c.Known>>16), byte(c.Known>>8), byte(c.Known))
+	for _, rgb := range append([]RGB{c.Fg, c.Bg}, c.Palette[:]...) {
+		b = append(b, rgb.R, rgb.G, rgb.B)
+	}
+	return b
+}
+
+// DecodeColors reverses Encode; false for a payload of another length.
+func DecodeColors(b []byte) (Colors, bool) {
+	var c Colors
+	if len(b) != colorsLen {
+		return c, false
+	}
+	c.Known = uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3])
+	c.Known &= KnownFg | KnownBg | 0xffff
+	rgb := func(i int) RGB { o := 4 + 3*i; return RGB{b[o], b[o+1], b[o+2]} }
+	c.Fg, c.Bg = rgb(0), rgb(1)
+	for i := range c.Palette {
+		c.Palette[i] = rgb(2 + i)
+	}
+	return c, true
 }
 
 // Scheme is a light or dark colour scheme (mode 2031 reports).

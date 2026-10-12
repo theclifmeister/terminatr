@@ -111,6 +111,10 @@ const (
 	// terminal reported its colour scheme. Programs that enabled mode
 	// 2031 get a report, and CSI ? 996 n is answered with it.
 	FrameColorScheme FrameType = 14
+	// FrameColors carries the client's terminal's default colours, as its
+	// answers to OSC 10, 11 and 4 gave them (emu.Colors.Encode). The
+	// pane's OSC 10/11/4 queries are answered with them.
+	FrameColors FrameType = 16
 )
 
 // MaxFrame bounds a frame's payload.
