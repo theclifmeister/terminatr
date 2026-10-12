@@ -25,6 +25,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/guard"
+	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
@@ -190,7 +191,7 @@ func (s *Server) guardRoutes(mux *http.ServeMux, id string) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(s.guardRulesFor(rec))
+		json.NewEncoder(w).Encode(s.hookRules(rec))
 	})
 	mux.HandleFunc("POST /v1/denied", func(w http.ResponseWriter, r *http.Request) {
 		var d GuardDenial
@@ -261,17 +262,28 @@ var hookRulesCache = struct {
 type hookRulesEntry struct {
 	rules GuardRules
 	at    time.Time
+	stamp string
 }
 
-// hookRules is session r's rules, worked out at most once per
-// hookRulesFor.
+// hookRules is session r's rules, for its hooks and its mod (GET
+// /v1/rules): worked out again when what they are made of changed (the
+// human's settings, the project, a mod enabled, disabled, updated or
+// removed: guardStamp), so a guard mod tightens or loosens running
+// sessions at once (T301 B4), and at least once per hookRulesFor for
+// what only git says (the protected branches).
 func (s *Server) hookRules(r SessionRecord) GuardRules {
 	now := guardNow()
+	stamp := guardStamp(r.Project)
 	hookRulesCache.Lock()
 	e, ok := hookRulesCache.m[r.ID]
 	hookRulesCache.Unlock()
-	if ok && now.Sub(e.at) < hookRulesFor {
+	if ok && e.stamp == stamp && now.Sub(e.at) < hookRulesFor {
 		return e.rules
+	}
+	if ok && e.stamp != stamp {
+		// The registry read within the last second may predate the
+		// change.
+		s.shareModRegistry(nil)
 	}
 	g := s.guardRulesFor(r)
 	hookRulesCache.Lock()
@@ -280,9 +292,41 @@ func (s *Server) hookRules(r SessionRecord) GuardRules {
 			delete(hookRulesCache.m, id)
 		}
 	}
-	hookRulesCache.m[r.ID] = hookRulesEntry{rules: g, at: now}
+	hookRulesCache.m[r.ID] = hookRulesEntry{rules: g, at: now, stamp: stamp}
 	hookRulesCache.Unlock()
 	return g
+}
+
+// guardStamp says, cheaply (stats only), whether what a session of
+// project slug's rules are made of changed: config.toml (the settings,
+// which mods are enabled and for which projects, their grants), the
+// project's PROJECT.md (its repos), and each installed mod's mod.toml
+// (an install, update or removal). A stamp that changed drops the mods'
+// registry the broker keeps for a second (modRegistryAge) too.
+func guardStamp(slug string) string {
+	var b strings.Builder
+	stat := func(path string) {
+		if fi, err := os.Stat(path); err == nil {
+			fmt.Fprintf(&b, "%s %d %d;", path, fi.Size(), fi.ModTime().UnixNano())
+		} else {
+			fmt.Fprintf(&b, "%s -;", path)
+		}
+	}
+	if path, err := config.Path(); err == nil {
+		stat(path)
+	}
+	if slug != "" {
+		if dir, err := project.Dir(slug); err == nil {
+			stat(filepath.Join(dir, "PROJECT.md"))
+		}
+	}
+	if mods, err := home.ModsDir(); err == nil {
+		ents, _ := os.ReadDir(mods)
+		for _, e := range ents {
+			stat(filepath.Join(mods, e.Name(), "mod.toml"))
+		}
+	}
+	return b.String()
 }
 
 // guardRecent is when each session was last refused, within the window.

@@ -164,7 +164,8 @@ func (s *Server) modRegistry() *mod.Registry {
 	return mb.reg
 }
 
-// shareModRegistry makes reg, read just now, the broker's registry.
+// shareModRegistry makes reg, read just now, the broker's registry; nil
+// has it read anew at its next use.
 func (s *Server) shareModRegistry(reg *mod.Registry) {
 	mb := &s.modBr
 	mb.mu.Lock()

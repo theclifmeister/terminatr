@@ -10,7 +10,10 @@
 // or refuse keeps Claude's answer. An ask is not reported.
 //
 // The rules come from the server (GET /v1/rules), fetched at the first
-// call after a load and again once they are a minute old. Without the mod
+// call after a load and again once they are a second old, so a change of
+// the human's settings or of a guard mod reaches the session at once
+// (the server answers from the rules it keeps while nothing they are
+// made of changed: a fetch is cheap). Without the mod
 // socket, or when the server can't say, the guard is off: the session
 // keeps exactly the permission rules it has without the mod.
 
@@ -20,7 +23,7 @@ import { judge, off, rulesOf } from './guard'
 import type { Denial, Rules } from './guard'
 
 // RULES_TTL_MS is how long fetched rules hold; FETCH_MS bounds a fetch.
-const RULES_TTL_MS = 60_000
+const RULES_TTL_MS = 1_000
 const FETCH_MS = 2_000
 
 let cached: { at: number; rules: Promise<Rules> } | null = null
@@ -55,7 +58,7 @@ async function rulesNow($: EngineInterface): Promise<Rules> {
   try {
     const socket = (await $.env.get('TERMINATR_MOD_SOCKET')) ?? ''
     if (!socket) return off
-    const now = (await $.clock.now()) * 1000
+    const now = await $.clock.now()
     if (!cached || now - cached.at > RULES_TTL_MS) cached = { at: now, rules: fetchRules($, socket) }
     return await cached.rules
   } catch {
