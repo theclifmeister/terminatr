@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
@@ -83,6 +85,7 @@ coordinator = "rules.md"
 
 [settings]
 warn_after_hours = { type = "int", default = 24, min = 1, max = 720, label = "Warn after (hours)" }
+wording          = { type = "string", default = "waiting", label = "Word in the column" }
 `
 
 // installMod writes a mod folder under ~/.terminatr/mods.
@@ -288,6 +291,67 @@ func TestModsSettingsPage(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "It has no settings.") {
 		t.Errorf("a mod without settings says so:\n%s", out)
 	}
+}
+
+// TestModsTextSetting: enter on a text setting opens a line with its
+// value; enter saves what was typed or pasted, esc leaves it, x puts
+// the default back, and a value with a control character is refused.
+func TestModsTextSetting(t *testing.T) {
+	src, m := modsDash(t)
+	selectMod(t, m, "review-age")
+	press(m, "s", "down")
+	if out := screen(m); !strings.Contains(out, "wording") || !strings.Contains(out, "waiting") {
+		t.Fatalf("s doesn't show the text setting:\n%s", out)
+	}
+	clear := tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl}
+	edit := func(text string) {
+		t.Helper()
+		press(m, "enter")
+		in, ok := m.top().(*inputView)
+		if !ok || in.text != modState(t, src, "review-age").Settings["wording"] {
+			t.Fatalf("enter doesn't open its value: %T", m.top())
+		}
+		m.Update(clear)
+		m.Update(tea.PasteMsg{Content: text})
+	}
+
+	edit("in review for")
+	press(m, "esc")
+	if md := modState(t, src, "review-age"); md.Settings["wording"] != "waiting" || m.msg != "wording unchanged" {
+		t.Errorf("esc saved %q (%q)", md.Settings["wording"], m.msg)
+	}
+	if _, ok := m.top().(*modSettingsView); !ok {
+		t.Fatalf("esc doesn't go back to the settings: %T", m.top())
+	}
+
+	edit("in review for")
+	modAct(m, src, "enter")
+	if md := modState(t, src, "review-age"); md.Settings["wording"] != "in review for" {
+		t.Errorf("enter saved %q (%s)", md.Settings["wording"], m.msg)
+	}
+	data, _ := os.ReadFile(filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml"))
+	if !strings.Contains(string(data), "[mods.review-age.settings]\nwording = \"in review for\"\n") {
+		t.Errorf("config.toml:\n%s", data)
+	}
+
+	modAct(m, src, "x")
+	if md := modState(t, src, "review-age"); md.Settings["wording"] != "waiting" {
+		t.Errorf("x left %q", md.Settings["wording"])
+	}
+
+	// Typed text stays on one line; the write refuses a control
+	// character or a value too long all the same.
+	if err := src.SetModSetting("review-age", "wording", "two\nlines"); err == nil || !strings.Contains(err.Error(), "one line") {
+		t.Errorf("a newline: %v", err)
+	}
+	if err := src.SetModSetting("review-age", "wording", strings.Repeat("a", mod.MaxTextSetting+1)); err == nil {
+		t.Error("a value over the cap was saved")
+	}
+	edit("a\tb")
+	if in := m.top().(*inputView); in.text != "a b" {
+		t.Errorf("a pasted tab: %q", in.text)
+	}
+	press(m, "esc")
 }
 
 // TestModsFailure: a mod whose host failed shows ▲ failed with its last

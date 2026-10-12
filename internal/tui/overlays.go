@@ -95,6 +95,9 @@ type inputView struct {
 	// most runes it takes, 0 for no limit.
 	cancel string
 	max    int
+	// keep submits the text as typed, an empty one too (a text
+	// setting), instead of trimmed with empty as a cancel.
+	keep bool
 }
 
 func (m *dash) prompt(title, label, initial string, submit func(string) tea.Cmd) {
@@ -114,6 +117,9 @@ func (in *inputView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		in.cancelled(m)
 	case "enter":
 		m.pop()
+		if in.keep {
+			return in.submit(in.text)
+		}
 		if t := strings.TrimSpace(in.text); t != "" {
 			return in.submit(t)
 		}

@@ -725,8 +725,8 @@ func (v *modPermsView) render(m *dash) string {
 
 // newModSettings is the mod's own settings page, from its manifest:
 // enter turns a yes/no over or steps a choice, + and - change a number,
-// x puts one back to its default. Text settings show here and are set
-// in the mod's [mods.<id>.settings] for now.
+// enter on a text one opens a line to edit it in, x puts one back to
+// its default.
 func newModSettings(md mod.Mod) *modSettingsView {
 	v := &modSettingsView{id: md.ID, title: modName(md) + " · settings"}
 	if md.Manifest == nil {
@@ -800,7 +800,18 @@ func modSettingRow(id, key string, s mod.Setting) setting {
 			return set(m, next, fmt.Sprintf("%s: %d", key, next))
 		}
 	case mod.SettingString:
-		r.help += " A text setting can't be changed here yet."
+		r.change = func(m *dash) tea.Cmd {
+			old, _ := cur(m).(string)
+			m.push(&inputView{title: key, label: help, text: old, cancel: key + " unchanged",
+				max: mod.MaxTextSetting, keep: true, submit: func(v string) tea.Cmd {
+					if v == old {
+						m.msg = key + " unchanged"
+						return nil
+					}
+					return set(m, v, key+" saved")
+				}})
+			return nil
+		}
 	}
 	return r
 }
@@ -839,7 +850,7 @@ func (v *modSettingsView) render(m *dash) string {
 		all[i] = noHit
 	}
 	return m.popup(box{title: v.title, head: head, body: lines, sel: sel, hits: append(all, hits...),
-		keys: "enter change · + - number · x default · ↑ ↓ move · esc back"})
+		keys: "enter change or edit · + - number · x default · ↑ ↓ move · esc back"})
 }
 
 func (v *modSettingsView) click(m *dash, item, col int, _ bool) tea.Cmd {

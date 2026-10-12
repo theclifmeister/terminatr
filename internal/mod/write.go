@@ -4,6 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
@@ -110,6 +113,25 @@ func SetProjects(c caller.Caller, id string, projects []string) error {
 	return config.Set(config.ModsTable(id), "projects", projects)
 }
 
+// MaxTextSetting caps a text setting the human sets, in characters.
+const MaxTextSetting = 500
+
+// checkText refuses a text value that is too long or has a control
+// character (a newline among them): a setting is one line.
+func checkText(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return nil
+	}
+	if utf8.RuneCountInString(str) > MaxTextSetting {
+		return fmt.Errorf("must be at most %d characters", MaxTextSetting)
+	}
+	if strings.ContainsFunc(str, unicode.IsControl) {
+		return fmt.Errorf("must be one line, without control characters")
+	}
+	return nil
+}
+
 // SetSetting sets one of mod id's own options, checked against its
 // manifest; a nil value removes it, back to the default.
 func SetSetting(c caller.Caller, id, key string, value any) error {
@@ -132,6 +154,9 @@ func SetSetting(c caller.Caller, id, key string, value any) error {
 		return config.Unset(table, key)
 	}
 	v, err := s.Check(value)
+	if err == nil {
+		err = checkText(v)
+	}
 	if err != nil {
 		return fmt.Errorf("%s %v", key, err)
 	}
