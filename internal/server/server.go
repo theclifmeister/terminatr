@@ -570,12 +570,12 @@ func (s *Server) hello() proto.Hello {
 }
 
 func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human bool) {
-	who := s.whoFor(peerPID)
 	for {
 		var req proto.Request
 		if err := readJSONLine(br, &req); err != nil {
 			return
 		}
+		who := s.whoFor(peerPID)
 		perr := mayCall(req.Method, human, who)
 		if perr == nil {
 			perr = s.mayAddress(req, human, who)
@@ -656,10 +656,9 @@ func mayCall(m string, human bool, who func() caller.Caller) *proto.Error {
 	return nil
 }
 
-// whoFor is callerOf(pid), deferred and asked once: a connection keeps
-// the answer for its life. The walk is the costly part of a call (the
-// TUI's view.* calls, every hook event), and a pid that ends and is
-// reused can't change a connection's caller afterwards.
+// whoFor is callerOf(pid), deferred and asked once: one request's gates
+// and handler share one walk. Not a connection's: a session.adopt can
+// make a shell session an agent's while a connection from it stays open.
 func (s *Server) whoFor(pid int) func() caller.Caller {
 	return sync.OnceValue(func() caller.Caller { return s.callerOf(pid) })
 }
