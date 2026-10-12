@@ -173,7 +173,7 @@ func Attach(opts Options) (res Result, err error) {
 	if so == nil {
 		so = &SidebarOptions{}
 	}
-	c.side = &sidebar{uiFile: so.UIFile, projects: loadSideProjects(c.paths)}
+	c.side = &sidebar{uiFile: so.UIFile, projects: loadSideProjects(c.paths), compact: ConsoleLayout(so.UIFile).compact()}
 	c.info = &infoPanel{}
 	c.setWindow(cols, rows)
 	watch, stopWatch := vc.Watch()
@@ -389,8 +389,20 @@ func (c *client) setWindow(cols, rows int) {
 	c.paneCols = max(cols-c.sideW-c.infoW, 1)
 	c.paneRows = rows
 	if c.statusBar {
-		c.paneRows = max(rows-2, 1)
+		c.paneRows = max(rows-c.barRows(), 1)
 	}
+}
+
+// barRows is the status bar's height with the rule above it: 2, 1 for
+// a compact one (the view's StatusCompact), 0 for none. c.mu held.
+func (c *client) barRows() int {
+	switch {
+	case !c.statusBar:
+		return 0
+	case c.geo.Status == 1:
+		return 1
+	}
+	return 2
 }
 
 // empty says whether no pane is open.
@@ -1815,8 +1827,8 @@ func (c *client) frameSplit(vis []*pane) ([]byte, error) {
 	}
 	if c.statusBar && c.statusText != c.statusDrawn {
 		// A faint rule across the window under the sidebar, the pane
-		// and the info panel, then the bar.
-		if c.rows > 1 {
+		// and the info panel (none when compact), then the bar.
+		if c.rows > 1 && c.barRows() > 1 {
 			b = append(b, fmt.Sprintf("\x1b[%d;1H\x1b[0m", c.rows-1)...)
 			b = append(b, th().Faint.Render(strings.Repeat("─", max(c.cols, 0)))...)
 		}

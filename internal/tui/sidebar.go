@@ -1122,6 +1122,9 @@ type sidebar struct {
 
 	// needsFirst is [ui] needs_first: the projects that need you first.
 	needsFirst bool
+	// compact is the console's layout's rows.density = compact: the
+	// footer keeps its key bar alone.
+	compact bool
 }
 
 // sideCurrent is the attach view's current project: the focused pane's,
@@ -1464,7 +1467,7 @@ func (c *client) setActive(slug string, on bool) {
 // appendSidebar draws the sidebar's changed lines. c.mu held.
 func (c *client) appendSidebar(b []byte, wrote bool) ([]byte, bool) {
 	rows := c.sideTree()
-	lines := sideLines(rows, c.sideW, c.sideRows(), sideFooter(rows, c.sideW, c.side.server, true), c.v.Sidebar.Right())
+	lines := sideLines(rows, c.sideW, c.sideRows(), sideFooter(rows, c.sideW, c.side.server, true, c.side.compact), c.v.Sidebar.Right())
 	if c.sideW == 0 {
 		lines = nil // hidden
 	}
@@ -1484,10 +1487,7 @@ func (c *client) appendSidebar(b []byte, wrote bool) ([]byte, bool) {
 // sideRows is the sidebar's height in a session: the window less the
 // status bar and the rule above it, which run under it too. c.mu held.
 func (c *client) sideRows() int {
-	if c.statusBar {
-		return max(c.rows-2, 1)
-	}
-	return c.rows
+	return max(c.rows-c.barRows(), 1)
 }
 
 // viewCols is the width the view is laid out at. c.mu held.
@@ -1880,8 +1880,10 @@ func enterStep(r treeRow) sideStep {
 // its key bar (sideKeyBar), and the hint that an update is out when
 // there is one. session: drawn beside a session, where prefix+tab gives
 // the sidebar the keyboard (tab on the dashboard). None in the slim
-// strip. Each line is w-1-sideGap cells wide, styled.
-func sideFooter(all []treeRow, w int, s ServerInfo, session bool) []string {
+// strip. compact (rows.density) keeps the key bar alone, where a
+// glyph's tooltip shows instead. Each line is w-1-sideGap cells wide,
+// styled.
+func sideFooter(all []treeRow, w int, s ServerInfo, session, compact bool) []string {
 	cw := w - 1 - sideGap
 	if w <= sideSlim || cw < 4 {
 		return nil
@@ -1898,7 +1900,8 @@ func sideFooter(all []treeRow, w int, s ServerInfo, session bool) []string {
 		}
 	}
 	d1, d2 := "", ""
-	switch tip := sideHoverTip(); {
+	tip := sideHoverTip()
+	switch {
 	case tip != "":
 		// The glyph under the mouse, instead of the row (sideTip).
 		d1, d2 = tip, "(hover)"
@@ -1910,6 +1913,12 @@ func sideFooter(all []treeRow, w int, s ServerInfo, session bool) []string {
 		th().Head.Render(fit(" "+d1, cw)),
 		th().Faint.Render(fit(" "+d2, cw)),
 		sideKeyBar(r, focused, session, cw),
+	}
+	if compact {
+		out = out[3:]
+		if tip != "" {
+			out[0] = th().Head.Render(fit(" "+tip, cw))
+		}
 	}
 	if h := versionHint(s); h != "" {
 		if ansi.StringWidth(h) > cw-1 {

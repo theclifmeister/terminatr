@@ -13,7 +13,8 @@ type Geometry struct {
 	// SideW is the projects sidebar's width, 0 for none, and SideX its
 	// first column: 0, or the window's last SideW on the right; InfoW the
 	// info panel's right of the pane, 0 for none; Status is the status
-	// bar's height with the empty row above it (0 or 2). Area is the
+	// bar's height with the rule above it (0, 1 compact without the
+	// rule, or 2). Area is the
 	// pane's: the window less those. On the right the order is the pane,
 	// the info panel, the sidebar.
 	SideW, SideX, InfoW, Status int
@@ -23,13 +24,16 @@ type Geometry struct {
 }
 
 // Chrome is the sidebar's width and the height of the status bar with
-// the empty row between it and the pane, of v in a window cols wide.
+// the rule between it and the pane, of v in a window cols wide.
 // Every view has the sidebar, 0 wide when hidden; a bare one has the
-// status bar only when asked for.
+// status bar only when asked for; a compact one has no rule.
 func (v *View) Chrome(cols int) (sideW, status int) {
 	status = 2
-	if v.Bare && !v.StatusBar {
+	switch {
+	case v.Bare && !v.StatusBar:
 		status = 0
+	case v.StatusCompact:
+		status = 1
 	}
 	return v.Sidebar.Cols(cols), status
 }

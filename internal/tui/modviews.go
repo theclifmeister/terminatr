@@ -421,7 +421,7 @@ func (m *dash) shownViews() []modview.Shown {
 		g := m.geom()
 		lw := g.list().w
 		for _, v := range m.mv.cards() {
-			if !m.mv.folded[cardKey(v)] {
+			if m.cardShows(cardKey(v)) {
 				add(v, project, "", lw, m.cardHeight(v, project))
 			}
 		}
@@ -647,13 +647,19 @@ func (m *dash) cardLines(v proto.ModView, w int, sel bool) []string {
 		head = th().Title.Render(left) + " " + th().Faint.Render(strings.Repeat("─", fill))
 	}
 	out := []string{fit(head, w) + reset}
-	if m.mv.folded[cardKey(v)] {
+	if !m.cardShows(cardKey(v)) {
 		return out
 	}
 	for _, l := range m.panelLines(v, project, w-3, m.cardHeight(v, project)) {
 		out = append(out, "   "+fit(l, w-3)+reset)
 	}
 	return out
+}
+
+// cardShows says whether the card key shows its lines under its header:
+// unless it is folded, or the rows are compact and it isn't selected.
+func (m *dash) cardShows(key string) bool {
+	return !m.mv.folded[key] && (!m.layout.compact() || key == m.sel)
 }
 
 // openCard opens the selected card as a popup, to move and filter in
@@ -833,9 +839,9 @@ func (fv *fullView) render(m *dash) string {
 		hits = append(hits, i)
 	}
 	out := m.withSide(m.frame(title, body, -1, keys))
-	// The mouse: the body is the view's, the header above it its edge.
+	// The mouse: the body is the view's, the row above it (the header) its edge.
 	g := m.geom()
-	m.geo = &boxGeo{x: g.main().x + fullGutter - 2, y: g.header().y, w: g.main().w, h: g.body().h + 1,
+	m.geo = &boxGeo{x: g.main().x + fullGutter - 2, y: g.body().y - 1, w: g.main().w, h: g.body().h + 1,
 		head: 0, top: 0, rows: g.body().h, hits: hits}
 	return out
 }

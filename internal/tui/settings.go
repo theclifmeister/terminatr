@@ -334,7 +334,7 @@ func globalSettings(note string) []setting {
 				next := choices[(slices.Index(choices, iconsSetting())+1)%len(choices)]
 				return m.pickMod("icons", next, setIcons(next))
 			}},
-		{label: "Layout", help: "The built-in layout, or one from a mod that is on: the sidebar's columns (a mod's among them), width and mode, and the details panel's place and size. A layout sets only what it changes; what you change under it (a drag, { }, b, < >, |) is kept for it, and the rest is yours as before. The state, paused, inactive and needs-you columns always show. The sidebar is the view's: every console of this view follows.",
+		{label: "Layout", help: "The built-in layout, or one from a mod that is on: the sidebar's columns (a mod's among them), width and mode, the details panel's place and size, the header, the footer, the status bar and how compact the rows are. A layout sets only what it changes; what you change under it (a drag, { }, b, < >, |) is kept for it, and the rest is yours as before. The state, paused, inactive and needs-you columns always show. The sidebar and the status bar are the view's: every console of this view follows.",
 			value: func(m *dash) string { return layoutValue() },
 			change: func(m *dash) tea.Cmd {
 				choices := modChoices([]string{ThemeDefault}, mod.KindLayout)

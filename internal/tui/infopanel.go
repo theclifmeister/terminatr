@@ -421,10 +421,7 @@ func (c *client) infoScroll(d int) {
 // rule over it, which run across the window, as under the sidebar.
 // c.mu held.
 func (c *client) infoRows() int {
-	if c.statusBar {
-		return max(c.rows-2, 1)
-	}
-	return c.rows
+	return max(c.rows-c.barRows(), 1)
 }
 
 // appendInfo draws the panel's changed lines: its border, then its

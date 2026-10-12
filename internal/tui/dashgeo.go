@@ -57,28 +57,61 @@ func (g dashGeo) sideCol(x int) int {
 	return sideLocal(x, s.x, s.w, g.l.Sidebar.Right())
 }
 
-// footRows is the footer's height: a rule, the keys, the message.
-const footRows = 3
+// headRows is the header's height: a row, none when hidden.
+func (g dashGeo) headRows() int {
+	if g.l.header == styleHidden {
+		return 0
+	}
+	return 1
+}
 
-// header is the dashboard's top row: its title and the server's state.
+// footRows is the footer's height: a rule, the keys and the message;
+// compact, the keys or the message; hidden, none.
+func (g dashGeo) footRows() int {
+	switch g.l.footer {
+	case styleHidden:
+		return 0
+	case styleCompact:
+		return 1
+	}
+	return 3
+}
+
+// header is the dashboard's top row: its title and the server's state;
+// no rows (h 0) when hidden, when its alarms and the needs-you badge
+// draw over the body's first row, at the same y (chrome.go).
 func (g dashGeo) header() rect {
 	a := g.main()
-	return rect{a.x, 0, a.w, 1}
+	return rect{a.x, 0, a.w, g.headRows()}
 }
 
-// footer is the dashboard's bottom rows: a rule, the keys, the message.
+// footer is the dashboard's bottom rows: a rule, the keys, the message;
+// one row compact, none (h 0) hidden.
 func (g dashGeo) footer() rect {
 	a := g.main()
-	return rect{a.x, g.h - footRows, a.w, footRows}
+	n := g.footRows()
+	return rect{a.x, g.h - n, a.w, n}
 }
 
-// keysRow is the footer's row of key hints, whose buttons take clicks.
-func (g dashGeo) keysRow() int { return g.footer().y + 1 }
+// keysRow is the footer's row of key hints, whose buttons take clicks;
+// -1 for none. A compact footer's row has them while it shows no
+// message (dash.shownKeys says).
+func (g dashGeo) keysRow() int {
+	f := g.footer()
+	switch f.h {
+	case 0:
+		return -1
+	case 1:
+		return f.y
+	}
+	return f.y + 1
+}
 
 // body is the room between the header and the footer, at least a row.
 func (g dashGeo) body() rect {
 	a := g.main()
-	return rect{a.x, 1, a.w, max(g.h-1-footRows, 1)}
+	top := g.headRows()
+	return rect{a.x, top, a.w, max(g.h-top-g.footRows(), 1)}
 }
 
 // panel is where the details panel shows: right of the list when the
