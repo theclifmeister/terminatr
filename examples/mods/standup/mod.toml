@@ -1,5 +1,5 @@
 # A command (mods design §2 tier 4, §13): S on the dashboard, the ≡
-# menu's "Standup · mod: standup" or `tm mod run standup show --project
+# menu's "Standup · standup" or `tm mod run standup show --project
 # <slug>` runs it. From a console it opens a full view of where the
 # project's tasks stand; from tm mod run, which can't open a view, it
 # shows the same in one line as a toast.

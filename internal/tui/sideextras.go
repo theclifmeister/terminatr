@@ -584,16 +584,6 @@ func gridTip(r treeRow, c sideCol) string {
 			return "context use"
 		}
 		return "progress"
-	case view.ColCI:
-		switch r.ci {
-		case "pass":
-			return "PR checks pass"
-		case "fail":
-			return "PR checks fail"
-		case "pending":
-			return "PR checks running"
-		}
-		return ""
 	case view.ColState:
 		switch {
 		case r.dormant:
@@ -620,8 +610,7 @@ func gridTip(r treeRow, c sideCol) string {
 		return "needs you: it waits on you"
 	}
 	if c.mod != nil {
-		mod, _, _ := strings.Cut(c.id, ".")
-		return cmp.Or(c.mod.title, c.id) + " (mod: " + mod + ")"
+		return cmp.Or(c.mod.title, c.id)
 	}
 	return ""
 }

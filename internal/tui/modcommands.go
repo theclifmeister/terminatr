@@ -13,7 +13,7 @@ import (
 // [provides].commands, each run by its key on the dashboard, by
 // prefix+key anywhere (in a session too, attachcommands.go), by its
 // entry in the ≡ menu (after the core's entries, with the mods' full
-// views, each marked mod: id; a session's ≡ menu too) or by tm mod run;
+// views, each with its mod's id; a session's ≡ menu too) or by tm mod run;
 // the mod gets
 // command.run with the project and the row selected (mod.command). The
 // core's keys come first: a command whose key the core (or a mod
@@ -108,7 +108,7 @@ func (m *dash) commandFor(k string) (mod.ModCommand, bool) {
 func (m *dash) runCommand(c mod.ModCommand) tea.Cmd {
 	slug := m.projectHere()
 	if !c.Runs(slug) {
-		m.msg = c.Title + " (mod: " + c.Mod + ") doesn't run for " + slug
+		m.msg = c.Title + " (" + c.Mod + ") doesn't run for " + slug
 		return nil
 	}
 	p := proto.ModCommandParams{Mod: c.Mod, Command: c.ID, Project: slug, Console: true}
@@ -122,7 +122,7 @@ func (m *dash) runCommand(c mod.ModCommand) tea.Cmd {
 		}
 		p.Selection = &sel
 	}
-	m.msg = "ran " + c.Title + " · mod: " + c.Mod
+	m.msg = "ran " + c.Title
 	src := m.src
 	return func() tea.Msg { return modInputMsg{err: src.ModCommand(p)} }
 }
@@ -145,7 +145,7 @@ func (m *dash) commandItems() []menuItem {
 		if !c.InMenu() || !c.Runs(slug) {
 			continue
 		}
-		out = append(out, menuItem{label: c.Title + " · mod: " + c.Mod, key: keyShown(m.commandKey(c)),
+		out = append(out, menuItem{label: c.Title + " · " + c.Mod, key: keyShown(m.commandKey(c)),
 			run: func(m *dash) tea.Cmd { return m.runCommand(c) }})
 	}
 	return out
@@ -156,7 +156,7 @@ func (m *dash) commandItems() []menuItem {
 func (m *dash) commandHelp() []keyHelp {
 	var out []keyHelp
 	for _, c := range m.modCommands() {
-		help := c.Title + " (mod: " + c.Mod + "; tm mod run " + c.Mod + " " + c.ID + ")"
+		help := c.Title + " (tm mod run " + c.Mod + " " + c.ID + ")"
 		if c.Key != "" && m.commandKey(c) == "" {
 			help += "; its key " + c.Key + " is taken"
 		}

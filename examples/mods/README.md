@@ -55,6 +55,10 @@ tm mod install my-pr-ci-column
 ```
 
 Turn the built-in one off in the Mods tab so the two don't both draw.
+Your copy is a mod of its own: a tab after tm's tabs, or a column of its
+own. The built-in ones are the only drawing of the Tasks tab, the Memory
+tab and the PR/CI column, so with one off its tab says the mod is off
+and how to turn it on (`,` then `3`), and the column takes no room.
 
 ## How they are kept working
 

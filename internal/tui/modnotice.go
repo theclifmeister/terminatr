@@ -17,7 +17,7 @@ import (
 // Mod notifications (mods design §7, notify): the server keeps what user
 // mods sent with $.ui.notify (session.list's ModNotices). The console
 // draws each as an OS notification, once over all consoles (notify.claim),
-// marked "terminatr · mod: id", and N lists them. A button is a core
+// titled "terminatr · id", and N lists them. A button is a core
 // action id on a task, pressed as an action binding (pressNotice): the
 // core's reach check, precondition check on the live board and
 // confirmation come first. The mod hears of nothing, and its words never
@@ -47,13 +47,13 @@ func (s *ServerSource) DismissNotice(id string) {
 // OSNotice is the escape sequence that has the terminal show an OS
 // notification for n: OSC 9 in iTerm2, OSC 777 in the others that have
 // one (Ghostty, WezTerm, kitty, foot). The title is always "terminatr ·
-// mod: id" and the text n's title and text, without anything the terminal
+// id" and the text n's title and text, without anything the terminal
 // would read as more than text.
 func OSNotice(termProgram string, n modnotify.Notice) string {
 	clean := func(s string) string {
 		return strings.ReplaceAll(modnotify.Line(s, modnotify.MaxText+modnotify.MaxTitle), ";", ",")
 	}
-	title := "terminatr · mod: " + clean(n.Mod)
+	title := "terminatr · " + clean(n.Mod)
 	body := clean(n.Title)
 	if n.Text != "" {
 		body += ": " + clean(n.Text)
@@ -203,7 +203,7 @@ func (nv *noticesView) render(m *dash) string {
 		if i == nv.sel {
 			sel = len(body)
 		}
-		mark := th().Faint.Render("mod: " + n.Mod)
+		mark := th().Faint.Render(n.Mod)
 		title := oneLine(n.Title)
 		switch n.Level {
 		case "warn":

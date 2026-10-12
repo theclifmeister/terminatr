@@ -35,12 +35,12 @@ func TestDashboardSidebar(t *testing.T) {
 	m.setData(src.data)
 	want := []string{
 		" PROJECTS                      2   │ tm dashboard",
-		" ■ alpha            0           ⚑  │", // a task needs you; a blank column before the border
+		" ■ alpha              0         ⚑  │", // a task needs you; a blank column before the border
 		" └─ coordinator         ▲          │", // the project's state is on its coordinator's row
-		" ■ beta             2           ⚑  │",
+		" ■ beta               2         ⚑  │",
 		" └─ coordinator         ·          │",
-		"    ├─ T4 Write…  60%   ●       ⚑  │", // threads hang under the coordinator, task id and title; t-0005 waits on a question
-		"    └─ t-0006 O…        ·          │", // a thread without a task: its own id
+		"    ├─ T4 Write d…  60% ●       ⚑  │", // threads hang under the coordinator, task id and title; t-0005 waits on a question
+		"    └─ t-0006 Old…      ·          │", // a thread without a task: its own id
 	}
 	lines := strings.Split(whole(m), "\n")
 	for i, w := range want {
@@ -171,7 +171,6 @@ const sideWidest = 160
 // The grid's columns (treeCells), by their index in it.
 const (
 	gridCount = iota
-	gridCI
 	gridState
 	gridRemote
 	gridPaused
@@ -181,8 +180,20 @@ const (
 
 // gridCol is column c of the grid of a full sidebar's row as treeCells
 // draws it (treeLine's: its last, blank column left off), trimmed;
-// counted from the right, so a narrow row's (without the count/% and
-// PR/CI columns) reads alike from the state column on.
+// counted from the right, so a narrow row's (without the count/%
+// column) reads alike from the state column on. A row without mod
+// columns: prciCol reads one with the PR/CI mod's.
+// prciCol is the PR/CI mod's column of a full sidebar's row with it
+// (sideGrid and two cells), trimmed.
+func prciCol(row string) string {
+	r := []rune(ansi.Strip(row))
+	at := len(r) - sideGrid - 2 + pctCol
+	if at < 0 {
+		return ""
+	}
+	return strings.TrimSpace(string(r[at : at+2]))
+}
+
 func gridCol(row string, c int) string {
 	r := []rune(ansi.Strip(row))
 	at := len(r) - sideGrid + pctCol + (c-1)*2

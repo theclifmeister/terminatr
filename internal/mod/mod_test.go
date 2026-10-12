@@ -70,7 +70,7 @@ func TestManifestExample(t *testing.T) {
 		t.Fatalf("requested %v", got)
 	}
 	// The consent names the panels it draws and how they are marked.
-	if c := Consent(m, dir); !strings.Contains(c, `Panels it draws (marked mod: review-age): a project-popup tab "Review queue"`) ||
+	if c := Consent(m, dir); !strings.Contains(c, `Panels it draws: a project-popup tab "Review queue"`) ||
 		!strings.Contains(c, "draws its own panels") {
 		t.Fatalf("consent:\n%s", c)
 	}

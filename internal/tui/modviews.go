@@ -20,7 +20,7 @@ import (
 // and its dashboard.card a card below the dashboard's sections, which
 // enter opens as a popup to move, filter and press the mod's keys in.
 // The mod publishes a widget tree; terminatr draws it (widget.View, in
-// this console's look) in its own frame, marked "mod: <id>", and keeps
+// this console's look) in its own frame, and keeps
 // the cursor, filter and scroll. Only a declared key and a click on a
 // row or a key hint reach the mod, as ui.key and ui.click, and where the
 // cursor went, as ui.cursor (one at a time per view). The console
@@ -79,11 +79,11 @@ func runsFor(v proto.ModView, slug string) bool {
 }
 
 // coreTabMods are the built-in mods whose project tab the popup draws
-// in a core tab's place, rather than after the core tabs, while the mod
-// runs: the Memory tab mod's (mods design §11, proof 2) and the Tasks
-// tab mod's (§12 Phase 2; the Tasks tab has no core drawing of its
-// own). Only a bundled mod has its id: an installed folder of that name
-// is shadowed.
+// as a core tab, rather than after the core tabs: the Memory tab mod's
+// (mods design §11, proof 2) and the Tasks tab mod's (§12 Phase 2).
+// Neither tab has a core drawing of its own: while its mod doesn't run
+// it says so (modOffLines). Only a bundled mod has its id: an installed
+// folder of that name is shadowed.
 var coreTabMods = []struct {
 	tab       int
 	mod, view string
@@ -106,9 +106,8 @@ func coreTabOf(v proto.ModView) (int, bool) {
 	return 0, false
 }
 
-// coreTab is the built-in mod's tab that draws in core tab tab for
-// project slug, while the mod runs for it; the core's own tab draws
-// otherwise.
+// coreTab is the built-in mod's tab that draws core tab tab for
+// project slug, while the mod runs for it.
 func (mv *modViews) coreTab(slug string, tab int) (proto.ModView, bool) {
 	for _, v := range mv.list {
 		if t, ok := coreTabOf(v); ok && t == tab && runsFor(v, slug) {
@@ -116,6 +115,31 @@ func (mv *modViews) coreTab(slug string, tab int) (proto.ModView, bool) {
 		}
 	}
 	return proto.ModView{}, false
+}
+
+// modOffLines are a core tab whose built-in mod (coreTabMods) doesn't
+// run for pv's project: which mod draws it, that it is off and how to
+// turn it on; enabled and not drawing yet, that it is on its way.
+func (pv *projectView) modOffLines(m *dash, w int) []string {
+	id := ""
+	for _, c := range coreTabMods {
+		if c.tab == pv.tab {
+			id = c.mod
+		}
+	}
+	var md mod.Mod
+	if i := slices.IndexFunc(m.data.Mods, func(md mod.Mod) bool { return md.ID == id }); i >= 0 {
+		md = m.data.Mods[i]
+	}
+	switch {
+	case md.State == mod.Enabled && md.Runs(pv.slug):
+		return faintLines(fmt.Sprintf("Waiting for the %s mod to draw this tab…", id), w)
+	case md.State == mod.Enabled:
+		return append(faintLines(fmt.Sprintf("The %s mod draws this tab, and it is off for %s.", id, pv.slug), w),
+			faintLines(fmt.Sprintf("Turn it on for %s in the Mods tab (, then 3), or with tm mod enable %s --project %s.", pv.slug, id, pv.slug), w)...)
+	}
+	return append(faintLines(fmt.Sprintf("The %s mod draws this tab, and it is off.", id), w),
+		faintLines(fmt.Sprintf("Turn it on in the Mods tab (, then 3), or with tm mod enable %s.", id), w)...)
 }
 
 // tabsFor are the mods' project tabs for project slug, in order, after
@@ -219,12 +243,6 @@ func (m *dash) safeOff(id string) bool {
 	}
 	i := slices.IndexFunc(m.data.Mods, func(md mod.Mod) bool { return md.ID == id })
 	return i < 0 || !m.data.Mods[i].Builtin
-}
-
-// modMark is the faint line that marks a panel as the mod's (mods
-// design §6): a mod can't pass its view off as terminatr's own.
-func modMark(v proto.ModView, w int) string {
-	return th().Faint.Render(fit("mod: "+v.Mod+" · "+v.Title, w)) + reset
 }
 
 // panelKeyPress gives key k to v's view for project: the core's keys
@@ -563,11 +581,11 @@ func (pv *projectView) modTabKey(m *dash, v proto.ModView, k string) (tea.Cmd, b
 	return cmd, used
 }
 
-// modTabBox is a mod tab's box: the tab bar, the mod's mark, and its
+// modTabBox is a mod tab's box: the tab bar, a blank line, and its
 // view drawn in the rows left.
 func (pv *projectView) modTabBox(m *dash, p ProjectData, v proto.ModView) box {
 	w := m.inner(viewWidth)
-	head := []string{pv.tabBar(m, p), modMark(v, w)}
+	head := []string{pv.tabBar(m, p), ""}
 	pv.pickTask(v, m.mv.host(v, pv.slug))
 	keys := joinKeys(panelHints(m.mv.host(v, pv.slug)), "← → tabs · esc close")
 	b := box{title: pv.slug, head: head, sel: -1, keys: keys}
@@ -607,7 +625,7 @@ func (m *dash) cardRows() []row {
 }
 
 // cardLines are card v's lines w cells wide: its header, with the mod's
-// name and mark, and unless folded its view. sel draws the header
+// name, and unless folded its view. sel draws the header
 // selected.
 func (m *dash) cardLines(v proto.ModView, w int, sel bool) []string {
 	project := listProject(m.data, m.current)
@@ -615,7 +633,6 @@ func (m *dash) cardLines(v proto.ModView, w int, sel bool) []string {
 	if m.mv.folded[cardKey(v)] {
 		fold = "▸"
 	}
-	mark := "mod: " + v.Mod
 	left := " " + fold + " " + v.Title
 	if v.Name != "" && v.Name != v.Title {
 		left += " · " + v.Name
@@ -626,10 +643,10 @@ func (m *dash) cardLines(v proto.ModView, w int, sel bool) []string {
 		if m.area() != areaMain {
 			st = st.Faint(true)
 		}
-		head = st.Render(fit(left+"  "+mark, w))
+		head = st.Render(fit(left, w))
 	} else {
-		fill := max(w-len([]rune(left))-len([]rune(mark))-3, 1)
-		head = th().Title.Render(left) + " " + th().Faint.Render(strings.Repeat("─", fill)+" "+mark)
+		fill := max(w-len([]rune(left))-2, 1)
+		head = th().Title.Render(left) + " " + th().Faint.Render(strings.Repeat("─", fill))
 	}
 	out := []string{fit(head, w) + reset}
 	if m.mv.folded[cardKey(v)] {
@@ -687,10 +704,10 @@ func (cv *cardView) box(m *dash) box {
 		return box{title: "mod card", body: []string{"This card is gone."}, sel: -1, keys: "esc close"}
 	}
 	w := m.inner(viewWidth)
-	b := box{title: v.Title, head: []string{modMark(v, w)}, sel: -1,
+	b := box{title: v.Title, sel: -1,
 		keys: joinKeys(panelHints(m.mv.host(v, cv.project)), "esc close")}
-	body := m.panelLines(v, cv.project, w, max(m.boxRows(b)-1, 1))
-	hits := []int{noHit}
+	body := m.panelLines(v, cv.project, w, max(m.boxRows(b), 1))
+	var hits []int
 	for i := range body {
 		hits = append(hits, i)
 	}
@@ -741,7 +758,7 @@ func (mv *modViews) fullViews() []proto.ModView {
 func (m *dash) fullItems() []menuItem {
 	var out []menuItem
 	for _, v := range m.mv.fullViews() {
-		out = append(out, menuItem{label: v.Title + " · mod: " + v.Mod, run: func(m *dash) tea.Cmd {
+		out = append(out, menuItem{label: v.Title + " · " + v.Mod, run: func(m *dash) tea.Cmd {
 			m.openFull(v, listProject(m.data, m.current))
 			return nil
 		}})
@@ -769,10 +786,10 @@ func (fv *fullView) modView(m *dash) (proto.ModView, bool) {
 // fullGutter is the cells left of a full view's lines.
 const fullGutter = 2
 
-// size is the room for the mod's tree: the body less NEEDS YOU's line
-// and the mod's mark, and the gutters.
+// size is the room for the mod's tree: the body less NEEDS YOU's line,
+// and the gutters.
 func (fv *fullView) size(m *dash) (int, int) {
-	return max(m.w-2*fullGutter, 4), max(m.bodyRows()-2, 1)
+	return max(m.w-2*fullGutter, 4), max(m.bodyRows()-1, 1)
 }
 
 // needsLine is NEEDS YOU's count, as the dashboard heads its section.
@@ -810,10 +827,9 @@ func (fv *fullView) render(m *dash) string {
 	} else {
 		title = v.Title
 		keys = joinKeys(panelHints(m.mv.host(v, fv.project)), keys)
-		body = append(body, gutter+modMark(v, w))
 		lines = m.panelLines(v, fv.project, w, h)
 	}
-	hits := []int{noHit, noHit}
+	hits := []int{noHit}
 	for i, l := range lines {
 		body = append(body, gutter+fit(l, w)+reset)
 		hits = append(hits, i)

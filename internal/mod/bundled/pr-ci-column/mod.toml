@@ -5,6 +5,9 @@
 # source, and `go generate ./internal/mod` precompiles main.ts into the
 # binary. To change it, copy the folder, give the copy another id, and
 # install that (tm mod install refuses a built-in mod's id).
+# It is the PR/CI column's only drawing: turned off (the Mods tab, or
+# [mods.pr-ci-column] enabled = false in config.toml), the column takes
+# no room.
 id = "pr-ci-column"
 name = "PR/CI column"
 version = "1.0.0"

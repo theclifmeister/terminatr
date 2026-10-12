@@ -11,7 +11,7 @@ import (
 // renamed. A mod's own column is "<mod>.<column>" (review-age.age).
 const (
 	ColCount    = "count"    // a project's open threads, a coordinator's context use, a thread's progress
-	ColCI       = "ci"       // a thread's PR checks
+	ColCI       = "ci"       // where the pr-ci-column mod's PR checks column goes
 	ColState    = "state"    // the coordinator's or the thread's state
 	ColRemote   = "remote"   // a coordinator's remote control
 	ColPaused   = "paused"   // a paused project

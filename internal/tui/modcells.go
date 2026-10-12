@@ -122,7 +122,7 @@ func (mc *modCells) sideOrder(order []string) []string {
 	if len(order) == 0 {
 		order = view.DefaultColumns
 	}
-	order = prciOrder(order, mods)
+	order = prciOrder(order)
 	var add []string
 	for _, c := range mc.cols {
 		if _, ok := mods[c.ID]; ok && !slices.Contains(order, c.ID) {
@@ -222,20 +222,16 @@ func statusMods(mc *modCells) (string, int) {
 	return strings.Join(parts, "  "), w
 }
 
-// prciOrder is order with the PR/CI column drawn by whoever draws it: a
-// layout's ci, or the bundled pr-ci-column mod's column it names, is the
-// mod's column while the mod is on (mods declares it) and the built-in
-// ci column while it is off, once, where the order first names either.
-// The built-in mod is the PR/CI column's code (mods design §11, proof
-// 1); the Go cell stays, so turning the mod off never drops the column.
-func prciOrder(order []string, mods map[string]modColumn) []string {
+// prciOrder is order with the PR/CI column as the bundled pr-ci-column
+// mod's: a layout's ci, or the mod's column it names, is the mod's
+// column, once, where the order first names either. The mod is the
+// column's only drawing (mods design §11, proof 1): while it is off no
+// mod declares the column, so it takes no room (sideCols).
+func prciOrder(order []string) []string {
 	if !slices.Contains(order, view.ColCI) && !slices.Contains(order, mod.PRCIColumn) {
 		return order
 	}
-	id := view.ColCI
-	if m, ok := mods[mod.PRCIColumn]; ok && m.width > 0 {
-		id = mod.PRCIColumn
-	}
+	id := mod.PRCIColumn
 	out := make([]string, 0, len(order))
 	done := false
 	for _, c := range order {

@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/theclifmeister/terminatr/internal/mod"
 )
 
 // TestSidebarColumnOrder: the grid follows the view's column order, and
@@ -34,13 +36,15 @@ func TestSidebarColumnOrder(t *testing.T) {
 func TestSidebarModColumn(t *testing.T) {
 	defer setIcons(IconsUnicode)
 	order := []string{"count", "ci", "review-age.age", "state", "remote", "paused", "inactive", "needs"}
-	mods := map[string]modColumn{"review-age.age": {width: 4, title: "age"}}
+	// goldenTree's rows have the PR/CI mod's column (ci), as by default.
+	prci := map[string]modColumn{mod.PRCIColumn: {width: 2, title: "CI"}}
+	mods := map[string]modColumn{"review-age.age": {width: 4, title: "age"}, mod.PRCIColumn: prci[mod.PRCIColumn]}
 	for _, set := range IconChoices[1:] {
 		setIcons(set)
 		withMod, undeclared := goldenTree(), goldenTree()
 		for i := range withMod {
 			withMod[i].cols = sideCols(order, mods)
-			undeclared[i].cols = sideCols(order, nil)
+			undeclared[i].cols = sideCols(order, prci)
 		}
 		for i, r := range goldenTree() {
 			if r.kind == treeDivider {
@@ -71,11 +75,11 @@ func TestSidebarModColumn(t *testing.T) {
 			}
 		}
 	}
-	if c := sideCols(order, map[string]modColumn{"review-age.age": {width: 50}}); c[2].w != maxModCol {
+	if c := sideCols(order, map[string]modColumn{"review-age.age": {width: 50}, mod.PRCIColumn: prci[mod.PRCIColumn]}); c[2].w != maxModCol {
 		t.Errorf("a mod column %d wide", c[2].w)
 	}
 	c := sideCols(order, mods)[2]
-	if got := gridTip(treeRow{kind: treeThread}, c); got != "age (mod: review-age)" {
+	if got := gridTip(treeRow{kind: treeThread}, c); got != "age" {
 		t.Errorf("tip %q", got)
 	}
 }

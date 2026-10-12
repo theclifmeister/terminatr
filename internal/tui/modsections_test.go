@@ -46,7 +46,7 @@ func TestDetailsSections(t *testing.T) {
 		return ansi.Strip(strings.Join(m.details(r, 60), "\n"))
 	}
 	out := panelOf("th:beta:t-0005")
-	i, j := strings.Index(out, "Notes mod: notes"), strings.Index(out, "reviewed twice")
+	i, j := strings.Index(out, "Notes ─"), strings.Index(out, "reviewed twice")
 	if i < 0 || j < i || strings.Contains(out, "not here") || strings.Contains(out, "alpha is on track") {
 		t.Fatalf("thread's panel:\n%s", out)
 	}
@@ -65,7 +65,7 @@ func TestDetailsSections(t *testing.T) {
 	if out := panelOf("p:alpha"); !strings.Contains(out, "alpha is on track") {
 		t.Fatalf("project's panel:\n%s", out)
 	}
-	if out := panelOf("p:beta"); strings.Contains(out, "mod: notes") {
+	if out := panelOf("p:beta"); strings.Contains(out, "Notes ─") {
 		t.Fatalf("a section the mod drew nothing for:\n%s", out)
 	}
 	// A failed mod says so, not its stale tree.
@@ -89,7 +89,7 @@ func TestCoordSections(t *testing.T) {
 	pw := &proto.ProjectWatch{Project: "demo"}
 	lines, hits := infoLines(&infoData{slug: "demo", watch: pw, sections: list}, 40, time.Now())
 	out := ansi.Strip(strings.Join(lines, "\n"))
-	if !strings.Contains(out, "Digest mod: digest") || !strings.HasSuffix(strings.TrimSpace(out), "3 merged today") ||
+	if !strings.Contains(out, "Digest ─") || strings.Contains(out, "mod: ") || !strings.HasSuffix(strings.TrimSpace(out), "3 merged today") ||
 		strings.Contains(out, "not for demo") || strings.Contains(out, "details only") {
 		t.Fatalf("panel:\n%s", out)
 	}

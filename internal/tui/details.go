@@ -89,8 +89,7 @@ func (d *panel) title(text, state string) {
 }
 
 // badges shows the mods' annotations under the title: per mod one line
-// of its badges, "mod: <id>" faint after them, so a user can tell a
-// mod's words from terminatr's. Spans are drawn in their theme role; the
+// of its badges. Spans are drawn in their theme role; the
 // text was cleaned by the store.
 func (d *panel) badges(bs []modannot.Badge) {
 	for i := 0; i < len(bs); {
@@ -104,7 +103,7 @@ func (d *panel) badges(bs []modannot.Badge) {
 				parts = append(parts, roleStyle(sp.Role).Render(sp.Text))
 			}
 		}
-		d.add(strings.Join(parts, "  ") + "  " + th().Faint.Render("mod: "+bs[i].Mod))
+		d.add(strings.Join(parts, "  "))
 		i = j
 	}
 }

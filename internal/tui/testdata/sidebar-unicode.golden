@@ -18,20 +18,20 @@ width 36
 
 width 24
  PROJECTS          5   │
- ■ termi…           ⚑  │
- └─ coor…   ● ⌁        │
+ ■ termina…         ⚑  │
+ └─ coordi… ● ⌁        │
     ├─ T232 ●          │
     ├─ T229 ◆       ⚑  │
     ├─ T231 ▲       ⚑  │
     └─      ○          │
  ■ herdr        ∥      │
- └─ coor…   ○          │
+ └─ coordi… ○          │
     └─ T12  ●          │
- ■ websi…   ▲       ⚑  │
+ ■ website  ▲       ⚑  │
  ── ▾ inactive (2) ─── │
- ■ dotfi…         ⊘    │
- ■ notes…         ⊘    │
- └─ coor…   ·     ⊘    │
+ ■ dotfiles       ⊘    │
+ ■ notes-a…       ⊘    │
+ └─ coordi… ·     ⊘    │
     └─ T7   ·     ⊘    │
 
 width 11

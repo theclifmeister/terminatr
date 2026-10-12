@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -29,7 +28,9 @@ import (
 // the inbox, the tasks and the memory are read-only, since the
 // coordinator keeps them, save that D, A and x ask it to act on a task
 // (asks.go). The Tasks tab is the built-in tasks-tab mod's, which binds
-// those keys on its rows (modviews.go, binding.go). Which tab is open
+// those keys on its rows (modviews.go, binding.go), and the Memory tab
+// the built-in memory-tab mod's; neither has another drawing, so with
+// its mod off the tab says how to turn it on. Which tab is open
 // is this console's own, as every popup.
 
 // The tabs, in order.
@@ -61,10 +62,6 @@ type projectView struct {
 	board             *tasks.Board
 	reviews           map[int]Review // the tasks in review, by id
 	settings          settingsList
-	// memory is the project's memory (the Memory tab), nil until it
-	// loads; memErr is why it didn't.
-	memory *project.Memory
-	memErr error
 	// library is every thread's library files, newest first (the
 	// Library tab), libOK once loaded; libErr is why it didn't.
 	library []thread.LibFile
@@ -341,10 +338,9 @@ func (pv *projectView) box(m *dash) box {
 	case tabInbox:
 		body, sel, hits = inboxLines(p.Items, pv.sel[tabInbox], w)
 		body = append(body, "", th().Faint.Render("The coordinator handles these (tm inbox done)."))
-	case tabTasks:
-		// The tasks-tab mod draws this tab (modTab): it isn't running.
-		body = []string{th().Faint.Render(fit("The tasks-tab mod draws this tab, and it isn't running.", w)),
-			th().Faint.Render(fit("Turn it on in the Mods tab (≡), or with tm mod enable tasks-tab.", w))}
+	case tabTasks, tabMemory:
+		// A built-in mod draws this tab (modTab): it isn't running.
+		body = pv.modOffLines(m, w)
 	case tabSettings:
 		body, sel, hits = pv.settings.lines(m, w)
 		keys = "enter change · + - number · ↑ ↓ move · " + keys
@@ -355,9 +351,6 @@ func (pv *projectView) box(m *dash) box {
 	case tabKeys:
 		// The same list as the help.
 		body = keyLines(w, m.commandHelp())
-		keys = "↑ ↓ scroll · " + keys
-	case tabMemory:
-		body = pv.memoryLines(m, w)
 		keys = "↑ ↓ scroll · " + keys
 	case tabLibrary:
 		body, sel, hits = pv.libraryLines(w)
@@ -440,7 +433,7 @@ func (pv *projectView) wheel(m *dash, d int) {
 		m.panelWheel(v, pv.slug, d)
 		return
 	}
-	if pv.tab == tabKeys || pv.tab == tabMemory {
+	if pv.tab == tabKeys {
 		pv.nudge[pv.tab] += 3 * d
 		return
 	}
@@ -685,87 +678,4 @@ func inboxLines(items []project.Item, sel, w int) ([]string, int, []int) {
 		hits = append(hits, noHit)
 	}
 	return lines, at, hits
-}
-
-// memoryLines are the project's memory, read-only: CONTEXT.md, MEMORY.md
-// and the memory notes' titles, as text (a link shows its text only, so
-// no file path shows).
-func (pv *projectView) memoryLines(m *dash, w int) []string {
-	switch {
-	case pv.memErr != nil:
-		return []string{th().Bad.Render("error: " + oneLine(pv.memErr.Error()))}
-	case pv.memory == nil:
-		return []string{th().Faint.Render("loading…")}
-	}
-	mem := pv.memory
-	var out []string
-	section := func(title, text, none string) {
-		if len(out) > 0 {
-			out = append(out, "")
-		}
-		out = append(out, sectionRule(title, sectionStyle(title), w))
-		if lines := mdLines(text, w); len(lines) > 0 {
-			out = append(out, lines...)
-		} else {
-			out = append(out, th().Faint.Render(none))
-		}
-	}
-	section("CONTEXT", mem.Context, "no context yet")
-	section("MEMORY", mem.Index, "no memory yet")
-	notes := ""
-	for _, n := range mem.Notes {
-		notes += "- " + n + "\n"
-	}
-	section("NOTES", notes, "no notes yet")
-	out = append(out, "", th().Faint.Render("Read-only: the coordinator keeps these; every thread is told them."))
-	return out
-}
-
-// mdLink is a markdown link: its text and its target.
-var mdLink = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
-
-// mdLines is a markdown file as text w cells wide: a heading in bold
-// (its first one, the file's title, left out), a link as its text, a
-// list item wrapped under its text.
-func mdLines(text string, w int) []string {
-	var out []string
-	first := true
-	for _, l := range strings.Split(strings.TrimSpace(text), "\n") {
-		l = mdLink.ReplaceAllString(strings.TrimRight(l, " \t"), "$1")
-		if h, ok := strings.CutPrefix(l, "#"); ok {
-			h = strings.TrimSpace(strings.TrimLeft(h, "#"))
-			if !first || !strings.HasPrefix(l, "# ") {
-				out = append(out, th().Head.Render(fit(h, w)))
-			}
-			first = false
-			continue
-		}
-		first = false
-		if strings.TrimSpace(l) == "" {
-			if len(out) > 0 && out[len(out)-1] != "" {
-				out = append(out, "")
-			}
-			continue
-		}
-		// A list item's lines hang under its text.
-		body := strings.TrimLeft(l, " ")
-		indent := len(l) - len(body)
-		for _, b := range []string{"- ", "* ", "+ "} {
-			if strings.HasPrefix(body, b) {
-				indent += len(b)
-				break
-			}
-		}
-		lead := l[:indent]
-		for i, wl := range wrapLines(l[indent:], w-indent) {
-			if i > 0 {
-				lead = strings.Repeat(" ", indent)
-			}
-			out = append(out, lead+wl)
-		}
-	}
-	for len(out) > 0 && out[len(out)-1] == "" {
-		out = out[:len(out)-1]
-	}
-	return out
 }

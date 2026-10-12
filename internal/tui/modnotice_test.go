@@ -23,10 +23,10 @@ func (f *noticeFake) DismissNotice(id string)    { f.dismissed = append(f.dismis
 func TestOSNotice(t *testing.T) {
 	n := modnotify.Notice{Mod: "ping", Title: "T3; needs\x1b you", Text: "in review"}
 	got := OSNotice("ghostty", n)
-	if got != "\x1b]777;notify;terminatr · mod: ping;T3, needs you: in review\a" {
+	if got != "\x1b]777;notify;terminatr · ping;T3, needs you: in review\a" {
 		t.Fatalf("osc 777 = %q", got)
 	}
-	if got := OSNotice("iTerm.app", n); !strings.HasPrefix(got, "\x1b]9;terminatr · mod: ping") || strings.Count(got, "\x1b") != 1 {
+	if got := OSNotice("iTerm.app", n); !strings.HasPrefix(got, "\x1b]9;terminatr · ping") || strings.Count(got, "\x1b") != 1 {
 		t.Fatalf("osc 9 = %q", got)
 	}
 }
@@ -72,7 +72,7 @@ func TestModNoticeButton(t *testing.T) {
 			}
 		}
 	}
-	if !strings.Contains(raw, "mod: ping") || len(src.claimed) != 1 {
+	if !strings.Contains(raw, "terminatr · ping") || len(src.claimed) != 1 {
 		t.Fatalf("raw %q claimed %v", raw, src.claimed)
 	}
 	m.setData(base.Load())
@@ -87,7 +87,7 @@ func TestModNoticeButton(t *testing.T) {
 	}
 	now := time.Now()
 	nv.now, nv.stableAt = func() time.Time { return now }, now
-	if out := screen(m); !strings.Contains(out, "mod: ping") || !strings.Contains(out, "1 accept T2") {
+	if out := screen(m); !strings.Contains(out, "ping") || !strings.Contains(out, "1 accept T2") {
 		t.Fatalf("view:\n%s", out)
 	}
 	keyPress(m, "1")

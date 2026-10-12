@@ -1,5 +1,5 @@
 # Example 6 of terminatr's examples/mods (mods design §13): a full view.
-# Open it from the dashboard's ≡ menu ("Thread timeline · mod:
+# Open it from the dashboard's ≡ menu ("Thread timeline ·
 # thread-timeline"); esc returns. Install it by path from a checkout:
 #   tm mod install terminatr/examples/mods/thread-timeline
 id = "thread-timeline"

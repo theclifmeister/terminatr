@@ -46,69 +46,62 @@ func prciCells(ps []ProjectData) *modCells {
 	return newModCells(m, nil)
 }
 
-// TestPRCIColumnParity: the bundled mod's column draws each thread row
-// exactly as the built-in ci column does, in every icon set, styles
-// included: proof 1 of the mod API (mods design §11) loses nothing.
-func TestPRCIColumnParity(t *testing.T) {
+// TestPRCIColumn: the bundled mod's column is the PR/CI column, each
+// thread's checks drawn in its role's style, in every icon set (mods
+// design §11, proof 1). With the mod off there is no PR/CI column: it
+// takes no room and no row draws a check.
+func TestPRCIColumn(t *testing.T) {
 	defer icons.Store(ic())
 	ps := prciProjects()
+	ids := func(cs []sideCol) (out []string) {
+		for _, c := range cs {
+			out = append(out, c.id)
+		}
+		return out
+	}
 	for _, set := range []*iconSet{&unicodeIcons, &nerdIcons, &asciiIcons} {
 		icons.Store(set)
-		goRows := buildTree(ps, nil, treeIn{})
+		offRows := buildTree(ps, nil, treeIn{})
 		modRows := buildTree(ps, nil, treeIn{cells: prciCells(ps)})
-		if len(goRows) != len(modRows) {
-			t.Fatalf("%d rows, %d with the mod", len(goRows), len(modRows))
-		}
-		ids := func(cs []sideCol) (out []string) {
-			for _, c := range cs {
-				out = append(out, c.id)
-			}
-			return out
-		}
 		if got := ids(modRows[0].columns()); slices.Contains(got, view.ColCI) || !slices.Contains(got, mod.PRCIColumn) {
 			t.Fatalf("columns with the mod %v", got)
 		}
-		for i := range goRows {
-			for _, w := range []int{20, 34, 60} {
-				g, m := treeCells(goRows[i], w, false, false), treeCells(modRows[i], w, false, false)
-				if ansi.Strip(g) != ansi.Strip(m) {
-					t.Errorf("%s at %d cells:\n go  %q\n mod %q", goRows[i].key(), w, g, m)
-				}
-				// Where the row is wide enough for the grid, the glyph is drawn
-				// in its role's style; the blank after it may be styled
-				// apart (it draws the same).
-				r := modRows[i]
-				if r.kind != treeThread || r.ci == "" {
-					continue
-				}
-				ss := prciLook[r.ci]
-				open, _, _ := strings.Cut(roleStyle(ss[0].Role).Render("\x00"), "\x00")
-				glyph := strings.TrimSpace(widgetLook{}.Icon(ss[0].Icon))
-				if strings.Contains(ansi.Strip(g), glyph) && !strings.Contains(m, open+glyph) {
-					t.Errorf("%s: no %q in %q", r.key(), open+glyph, m)
-				}
+		if got := ids(offRows[0].columns()); slices.Contains(got, view.ColCI) || slices.Contains(got, mod.PRCIColumn) {
+			t.Fatalf("columns without the mod %v", got)
+		}
+		if on, off := colsWidth(modRows[0].columns()), colsWidth(offRows[0].columns()); on != off+2 {
+			t.Errorf("the grid is %d cells with the mod, %d without", on, off)
+		}
+		for i, r := range modRows {
+			if r.kind != treeThread || r.ci == "" {
+				continue
+			}
+			ss := prciLook[r.ci]
+			open, _, _ := strings.Cut(roleStyle(ss[0].Role).Render("\x00"), "\x00")
+			glyph := strings.TrimSpace(widgetLook{}.Icon(ss[0].Icon))
+			if m := treeCells(r, 60, false, false); !strings.Contains(m, open+glyph) {
+				t.Errorf("%s: no %q in %q", r.key(), open+glyph, m)
+			}
+			if g := ansi.Strip(treeCells(offRows[i], 60, false, false)); strings.Contains(g, glyph) {
+				t.Errorf("%s without the mod draws %q: %q", r.key(), glyph, g)
 			}
 		}
 	}
 }
 
-// TestPRCIOrder: a layout's ci is the mod's column while the mod is on,
-// the built-in one while it is off, once, wherever the layout puts it.
+// TestPRCIOrder: a layout's ci is the mod's column, once, wherever the
+// layout puts it.
 func TestPRCIOrder(t *testing.T) {
-	on := map[string]modColumn{mod.PRCIColumn: {width: 2, title: "CI"}}
 	for _, c := range []struct {
-		order []string
-		mods  map[string]modColumn
-		want  []string
+		order, want []string
 	}{
-		{[]string{"count", "ci", "state"}, on, []string{"count", mod.PRCIColumn, "state"}},
-		{[]string{"count", "ci", "state"}, nil, []string{"count", "ci", "state"}},
-		{[]string{"state", mod.PRCIColumn, "count"}, nil, []string{"state", "ci", "count"}},
-		{[]string{mod.PRCIColumn, "ci", "state"}, on, []string{mod.PRCIColumn, "state"}},
-		{[]string{"state", "needs"}, on, []string{"state", "needs"}},
+		{[]string{"count", "ci", "state"}, []string{"count", mod.PRCIColumn, "state"}},
+		{[]string{"state", mod.PRCIColumn, "count"}, []string{"state", mod.PRCIColumn, "count"}},
+		{[]string{mod.PRCIColumn, "ci", "state"}, []string{mod.PRCIColumn, "state"}},
+		{[]string{"state", "needs"}, []string{"state", "needs"}},
 	} {
-		if got := prciOrder(c.order, c.mods); !slices.Equal(got, c.want) {
-			t.Errorf("prciOrder(%v, on %v) = %v, want %v", c.order, c.mods != nil, got, c.want)
+		if got := prciOrder(c.order); !slices.Equal(got, c.want) {
+			t.Errorf("prciOrder(%v) = %v, want %v", c.order, got, c.want)
 		}
 	}
 	// No layout naming the column adds it a second time.
@@ -121,8 +114,8 @@ func TestPRCIOrder(t *testing.T) {
 	}
 }
 
-// BenchmarkSidebarCI is the sidebar's frame cost with the PR/CI column
-// drawn by the built-in Go cell and by the bundled mod's cells: 10
+// BenchmarkSidebarCI is the sidebar's frame cost without the PR/CI
+// column and with the bundled mod's cells: 10
 // projects of 8 threads, built (buildTree, as each poll does) and drawn
 // (treeCells per row, as each frame does).
 func BenchmarkSidebarCI(b *testing.B) {
@@ -148,7 +141,7 @@ func BenchmarkSidebarCI(b *testing.B) {
 		name string
 		in   func() treeIn
 	}{
-		{"go", func() treeIn { return treeIn{} }},
+		{"off", func() treeIn { return treeIn{} }},
 		{"mod", func() treeIn { return treeIn{cells: newModCells(m, nil)} }},
 	} {
 		b.Run(c.name+"/build", func(b *testing.B) {

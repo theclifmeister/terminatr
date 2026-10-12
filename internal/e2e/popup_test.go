@@ -77,17 +77,16 @@ func saved(w *Window, desc string, cond func(screen string) bool) string {
 
 // TestSmokeProjectPopup: a opens the project popup; its tabs switch;
 // a setting changes in place, persists and reaches the coordinator's
-// context; the Keys tab is the help's list; the Memory tab shows the
-// project's memory; prefix+a opens it from a
+// context; the Keys tab is the help's list; the Memory tab, its mod
+// off, says how to turn it on; prefix+a opens it from a
 // session, on this console only; no screen names the settings file.
 func TestSmokeProjectPopup(t *testing.T) {
 	env := New(t)
 	env.FakeClaude() // an agent installed: what most users have
-	// The Memory tab asserted below is the core one: the built-in
-	// memory-tab mod would draw in its place once its host is up, so a
-	// race. It is off here, from before the
-	// server starts (a host already up would be stopped only on the
-	// supervisor's next look).
+	// The built-in memory-tab mod is off here, from before the server
+	// starts (a host already up would be stopped only on the
+	// supervisor's next look): the Memory tab, which has no other
+	// drawing, says so (TestModScreens has the mod's tab).
 	if err := os.WriteFile(filepath.Join(env.Home, "config.toml"), []byte("[mods.memory-tab]\nenabled = false\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -224,14 +223,11 @@ func TestSmokeProjectPopup(t *testing.T) {
 	w.WaitFor("On the dashboard", wait)
 	keys := popupBody(w.Screen(), cols)
 	screens = append(screens, w.Screen())
-	// The Memory tab: the project's CONTEXT.md and MEMORY.md as text,
-	// with no file path.
+	// The Memory tab with its mod off: it says so, and how to turn it
+	// on.
 	w.Type("6")
-	w.WaitFor("Living context for this project", wait)
-	w.WaitFor("One line per memory file", wait)
-	if sc := w.Screen(); strings.Contains(sc, ".md") {
-		t.Fatalf("the Memory tab shows a file:\n%s", sc)
-	}
+	w.WaitFor("The memory-tab mod draws this tab, and it is off.", wait)
+	w.WaitFor("Turn it on in the Mods tab (, then 3), or with tm mod enable memory-tab.", wait)
 	screens = append(screens, w.Screen())
 	w.Key(keyEsc)
 	w.WaitUntil("popup closed", wait, func(sc string) bool { return !strings.Contains(sc, "1 overview") })

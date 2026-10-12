@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
@@ -23,7 +24,7 @@ var updateGolden = flag.Bool("update", false, "rewrite the sidebar's golden file
 // with its questions), the unfolded inactive divider, a folded inactive
 // project and an unfolded one whose rows are dormant.
 func goldenTree() []treeRow {
-	return []treeRow{
+	rows := []treeRow{
 		{kind: treeProject, slug: "terminatr", state: "working", current: true, threads: 4, hint: true, pct: -1},
 		{kind: treeCoordinator, slug: "terminatr", state: "working", remote: true, ctx: 38, pct: -1, last: true},
 		{kind: treeThread, slug: "terminatr", thread: "t-0216", name: "T232", title: "Sidebar rework mockup", state: "working", pct: 40},
@@ -40,6 +41,21 @@ func goldenTree() []treeRow {
 		{kind: treeCoordinator, slug: "notes-app", dormant: true, ctx: -1, pct: -1, last: true},
 		{kind: treeThread, slug: "notes-app", thread: "t-0004", name: "T7", title: "Zsh prompt", dormant: true, pct: 30, last: true},
 	}
+	// The PR/CI column is the built-in pr-ci-column mod's, on as it is
+	// by default: its cells as its main.ts publishes them.
+	mc := &proto.ModCells{Columns: []proto.ModColumn{{ID: mod.PRCIColumn, Title: "CI", Width: 2, Where: []string{proto.SlotSidebarThread}}}}
+	for _, r := range rows {
+		if ss := prciLook[r.ci]; r.kind == treeThread && ss != nil {
+			mc.Cells = append(mc.Cells, proto.ModCell{Mod: mod.BundledPRCI, Column: "ci",
+				Target: proto.CellTarget{Project: r.slug, Thread: r.thread}, Spans: ss})
+		}
+	}
+	cells := newModCells(mc, nil)
+	cols := sideCols(nil, cells.sideMods())
+	for i := range rows {
+		rows[i].cells, rows[i].cols = cells, cols
+	}
+	return rows
 }
 
 // TestSidebarGolden: the sidebar in each icon set, at the default width
@@ -92,18 +108,18 @@ func TestTreeGridData(t *testing.T) {
 		{ID: "s-1", Role: proto.RoleCoordinator, Project: "demo", State: "idle"},
 		{ID: "s-2", Role: proto.RoleThread, Project: "demo", State: "blocked"},
 	}
-	rows := buildTree(ps, sessions, treeIn{current: "demo"})
+	rows := buildTree(ps, sessions, treeIn{current: "demo", cells: prciCells(ps)})
 	if len(rows) != 4 || !rows[0].hint || !rows[1].hint || rows[2].ci != "pass" || !rows[2].hint || rows[3].ci != "fail" || !rows[3].hint {
 		t.Fatalf("rows %+v", rows)
 	}
 	setIcons(IconsUnicode)
-	if c := treeCells(rows[2], sideDefault-2, false, false); gridCol(c, gridCI) != "☑" || gridCol(c, gridNeeds) != "⚑" {
+	if c := treeCells(rows[2], sideDefault-2, false, false); prciCol(c) != "☑" || gridCol(c, gridNeeds) != "⚑" {
 		t.Errorf("thread row %q", ansi.Strip(c))
 	}
-	if c := treeCells(rows[3], sideDefault-2, false, false); gridCol(c, gridCI) != "☒" {
+	if c := treeCells(rows[3], sideDefault-2, false, false); prciCol(c) != "☒" {
 		t.Errorf("thread row %q", ansi.Strip(c))
 	}
-	if c := treeCells(rows[1], sideDefault-2, false, false); gridCol(c, gridCI) != "" || gridCol(c, gridNeeds) != "⚑" {
+	if c := treeCells(rows[1], sideDefault-2, false, false); prciCol(c) != "" || gridCol(c, gridNeeds) != "⚑" {
 		t.Errorf("coordinator row %q", ansi.Strip(c))
 	}
 	// Unfolded, a project row leaves its state to its coordinator's row.

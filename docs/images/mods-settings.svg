@@ -93,8 +93,7 @@
 <text x="310.0" y="265.2" fill="#c8d0f0" textLength="134.4" lengthAdjust="spacingAndGlyphs">icons · built in</text>
 <text x="528.4" y="265.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
 <text x="587.2" y="265.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">built in · safe</text>
-<text x="914.8" y="265.2" fill="#4e5578">│</text>
-<text x="923.2" y="265.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">ntext-gauge</text>
+<text x="914.8" y="265.2" fill="#4e5578" textLength="100.8" lengthAdjust="spacingAndGlyphs">│───────────</text>
 <text x="116.8" y="282.2" fill="#4e5578">│</text>
 <text x="133.6" y="282.2" fill="#9ece6a">●</text>
 <text x="150.4" y="282.2" fill="#c8d0f0" textLength="117.6" lengthAdjust="spacingAndGlyphs">Default keymap</text>
@@ -123,8 +122,7 @@
 <text x="310.0" y="333.2" fill="#c8d0f0" textLength="168.0" lengthAdjust="spacingAndGlyphs">templates · built in</text>
 <text x="528.4" y="333.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
 <text x="587.2" y="333.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">built in · safe</text>
-<text x="914.8" y="333.2" fill="#4e5578">│</text>
-<text x="923.2" y="333.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">: cost-card</text>
+<text x="914.8" y="333.2" fill="#4e5578" textLength="100.8" lengthAdjust="spacingAndGlyphs">│───────────</text>
 <text x="116.8" y="350.2" fill="#4e5578">│</text>
 <text x="133.6" y="350.2" fill="#9ece6a">●</text>
 <text x="150.4" y="350.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">Default theme</text>
@@ -187,14 +185,14 @@
 <text x="914.8" y="537.2" fill="#4e5578">│</text>
 <text x="116.8" y="554.2" fill="#4e5578">│</text>
 <text x="133.6" y="554.2" fill="#7aa2f7" textLength="42.0" lengthAdjust="spacingAndGlyphs">enter</text>
-<text x="184.0" y="554.2" fill="#c8d0f0" textLength="663.6" lengthAdjust="spacingAndGlyphs">on/off · p permissions · s settings · d defaults · l log · r restart · u update</text>
+<text x="184.0" y="554.2" fill="#c8d0f0" textLength="672.0" lengthAdjust="spacingAndGlyphs">on/off · i install · p permissions · s settings · d defaults · l log · r restart</text>
 <text x="914.8" y="554.2" fill="#4e5578">│</text>
 <text x="116.8" y="571.2" fill="#4e5578">│</text>
-<text x="133.6" y="571.2" fill="#c8d0f0" textLength="193.2" lengthAdjust="spacingAndGlyphs">x remove · e examples ·</text>
-<text x="335.2" y="571.2" fill="#7aa2f7" textLength="25.2" lengthAdjust="spacingAndGlyphs">← →</text>
-<text x="368.8" y="571.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">tabs ·</text>
-<text x="427.6" y="571.2" fill="#7aa2f7" textLength="25.2" lengthAdjust="spacingAndGlyphs">esc</text>
-<text x="461.2" y="571.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">close</text>
+<text x="133.6" y="571.2" fill="#c8d0f0" textLength="285.6" lengthAdjust="spacingAndGlyphs">u update · x remove · e examples ·</text>
+<text x="427.6" y="571.2" fill="#7aa2f7" textLength="25.2" lengthAdjust="spacingAndGlyphs">← →</text>
+<text x="461.2" y="571.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">tabs ·</text>
+<text x="520.0" y="571.2" fill="#7aa2f7" textLength="25.2" lengthAdjust="spacingAndGlyphs">esc</text>
+<text x="553.6" y="571.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">close</text>
 <text x="914.8" y="571.2" fill="#4e5578">│</text>
 <text x="116.8" y="588.2" fill="#4e5578" textLength="722.4" lengthAdjust="spacingAndGlyphs">╰─────────────────────────────────────────────────────────────────────────────────────</text>
 <text x="847.6" y="588.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">more ↓</text>
