@@ -266,12 +266,21 @@ func GuardWritable(reg *Registry, name, home string, getenv func(string) string)
 }
 
 // AgentTemp is the temp folder of the agent named name ([guard] temp,
-// GuardTemp): reg's manifest, else the built-in one; "" for none.
-func AgentTemp(reg *Registry, name string, getenv func(string) string) string {
-	if m := manifestNamed(reg, name); m != nil {
-		return GuardTemp(m.Guard.Temp, getenv)
+// GuardTemp; "" for none) and, resolved in it, the subfolders its
+// sandbox keeps from it ([guard] temp_private): reg's manifest, else
+// the built-in one.
+func AgentTemp(reg *Registry, name, home string, getenv func(string) string) (dir string, private []string) {
+	m := manifestNamed(reg, name)
+	if m == nil {
+		return "", nil
 	}
-	return ""
+	if dir = GuardTemp(m.Guard.Temp, home, getenv); dir == "" {
+		return "", nil
+	}
+	for _, p := range m.Guard.TempPrivate {
+		private = append(private, filepath.Join(dir, p))
+	}
+	return dir, private
 }
 
 // GuardTools is the [guard.tools] of the agent named name: reg's

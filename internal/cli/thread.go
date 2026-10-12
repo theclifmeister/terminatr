@@ -339,14 +339,15 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	repo := *o.repo
 	if repo != "" {
 		repo = e.abs(repo)
-		if fi, err := os.Stat(repo); err != nil || !fi.IsDir() {
-			return usagef("--repo %s is not a directory", repo)
-		}
 		// An agent names only the project's repos, which the user adds:
 		// any other path would give a thread a worktree of whatever
-		// repository the agent names.
+		// repository the agent names. Asked first, so the refusal says
+		// nothing about the path.
 		if e.Caller.IsAgent() && !listedRepo(p, repo) {
 			return &tasks.Error{Code: "unlisted-repo", Msg: fmt.Sprintf("--repo %s is not one of the project's repos (tm context lists them); only the user adds one", repo)}
+		}
+		if fi, err := os.Stat(repo); err != nil || !fi.IsDir() {
+			return usagef("--repo %s is not a directory", repo)
 		}
 	} else if len(p.Meta.Repos) > 0 {
 		repo = p.Meta.Repos[0]

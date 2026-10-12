@@ -119,7 +119,7 @@ type Server struct {
 	blocked  map[string]bool // sessions whose agent is blocked, for alerts
 	// adoptAsks are the human's go-aheads to adopt a session (by id)
 	// into a project (session.adopt.ask), kept until it is adopted.
-	adoptAsks map[string]string
+	adoptAsks map[string]adoptAsk
 	nextID    int
 	stopping  bool
 	prevShut  string
@@ -272,7 +272,7 @@ func Run(ctx context.Context, opts Options) error {
 		sleeping:  map[string]bool{},
 		dormant:   map[string]SessionRecord{},
 		blocked:   map[string]bool{},
-		adoptAsks: map[string]string{},
+		adoptAsks: map[string]adoptAsk{},
 		nextID:    1,
 		conns:     map[net.Conn]struct{}{},
 

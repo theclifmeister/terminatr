@@ -25,11 +25,14 @@ func TestAgentTemp(t *testing.T) {
 		{"codex", nil, "/tmp"},
 		{"nosuch", nil, ""},
 	} {
-		if got := AgentTemp(nil, c.agent, env(c.env)); got != c.want {
+		if got, _ := AgentTemp(nil, c.agent, "/home/u", env(c.env)); got != c.want {
 			t.Errorf("AgentTemp(%s, %v) = %q, want %q", c.agent, c.env, got, c.want)
 		}
 	}
-	if got := GuardTemp([]string{"relative/tmp", "$UNSET/x"}, env(nil)); got != "" {
-		t.Errorf("GuardTemp of entries that don't resolve = %q", got)
+	if got := GuardTemp([]string{"relative/tmp", "$UNSET/x", "$ROOT", "$HOMEISH", "/home"}, "/home/u", env(map[string]string{"ROOT": "/", "HOMEISH": "/home/u"})); got != "" {
+		t.Errorf("GuardTemp of entries that don't resolve, the root or ones holding home = %q", got)
+	}
+	if _, private := AgentTemp(nil, "claude", "/home/u", env(nil)); len(private) != 1 || private[0] != "/tmp/claude-"+uid+"/bash-edit-diff" {
+		t.Errorf("claude's private temp folders: %q", private)
 	}
 }

@@ -186,6 +186,10 @@ type Guard struct {
 	// one an agent's file arguments may name besides its worktree
 	// (docs/SPEC.md §7.2).
 	Temp []string `toml:"temp"`
+	// TempPrivate are subfolders of the temp folder that the agent's
+	// sandbox keeps from it (Claude's bash-edit-diff): no file argument
+	// of its may be in them.
+	TempPrivate []string `toml:"temp_private"`
 	// Tools are the agent's tools the guard judges, by name: each one's
 	// kind (shell, write, patch, read, glob) and the input fields that
 	// kind reads, e.g. Bash = { kind = "shell", fields = ["command"] };
@@ -223,13 +227,12 @@ func GuardPaths(entries []string, home string, getenv func(string) string) []str
 	return out
 }
 
-// validGuardPath reports whether a [guard] entry is home-relative or
-// starts with a variable, and stays out of "..".
 // GuardTemp resolves [guard] temp to the agent's temp folder: the first
 // entry whose variables are set and that is absolute on this system,
 // with "{uid}" the user's id (an entry with one is left out where there
-// are no uids: Windows); "" for none.
-func GuardTemp(entries []string, getenv func(string) string) string {
+// are no uids: Windows); "" for none. An entry that resolves to the root
+// or to a folder holding home is skipped: it is no agent's own.
+func GuardTemp(entries []string, home string, getenv func(string) string) string {
 	for _, e := range entries {
 		missing := false
 		p := os.Expand(e, func(name string) string {
@@ -245,13 +248,25 @@ func GuardTemp(entries []string, getenv func(string) string) string {
 			}
 			p = strings.ReplaceAll(p, "{uid}", strconv.Itoa(os.Getuid()))
 		}
-		if !missing && filepath.IsAbs(p) {
-			return filepath.Clean(p)
+		if p = filepath.Clean(p); missing || !filepath.IsAbs(p) || filepath.Dir(p) == p || holds(p, home) {
+			continue
 		}
+		return p
 	}
 	return ""
 }
 
+// holds reports whether dir is home or holds it (home "" holds nothing).
+func holds(dir, home string) bool {
+	if home == "" {
+		return false
+	}
+	rel, err := filepath.Rel(dir, filepath.Clean(home))
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// validGuardPath reports whether a [guard] entry is home-relative or
+// starts with a variable, and stays out of "..".
 func validGuardPath(e string) bool {
 	if e == "" || slices.Contains(strings.Split(filepath.ToSlash(e), "/"), "..") {
 		return false
@@ -437,6 +452,11 @@ func (m *Manifest) validate() error {
 	for _, e := range m.Guard.Temp {
 		if e == "" || slices.Contains(strings.Split(filepath.ToSlash(e), "/"), "..") || !(strings.HasPrefix(e, "/") || strings.HasPrefix(e, "$")) {
 			errs = append(errs, fmt.Errorf("guard.temp: %q is not absolute or under $VAR", e))
+		}
+	}
+	for _, e := range m.Guard.TempPrivate {
+		if !filepath.IsLocal(e) {
+			errs = append(errs, fmt.Errorf("guard.temp_private: %q is not a folder inside the temp folder", e))
 		}
 	}
 	for _, name := range slices.Sorted(maps.Keys(m.Guard.Tools)) {

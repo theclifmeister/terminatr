@@ -13,6 +13,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
@@ -27,8 +28,9 @@ func (e *Env) openArg(path string) (*os.File, error) {
 	if !e.Caller.IsAgent() {
 		return os.Open(path)
 	}
+	roots, private := e.argRoots()
 	var lastErr error
-	for _, root := range e.argRoots() {
+	for _, root := range roots {
 		rel, err := filepath.Rel(root, path)
 		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			continue
@@ -43,7 +45,7 @@ func (e *Env) openArg(path string) (*os.File, error) {
 		f, err := fsx.OpenInNoBlock(r, rel)
 		r.Close()
 		if err == nil {
-			if err = agentFileOK(f); err == nil {
+			if err = agentFileOK(f, private); err == nil {
 				return f, nil
 			}
 			f.Close()
@@ -73,8 +75,7 @@ func (e *Env) argPlaces() string {
 // and the agent's own temp folder, where it writes what it hands in. Each comes
 // also with its links resolved (/tmp is /private/tmp on macOS), so either
 // spelling of a path matches.
-func (e *Env) argRoots() []string {
-	var roots []string
+func (e *Env) argRoots() (roots, private []string) {
 	if e.Caller.Project != "" {
 		if p, err := project.Open(e.Caller.Project); err == nil {
 			switch e.Caller.Kind {
@@ -93,7 +94,8 @@ func (e *Env) argRoots() []string {
 			}
 		}
 	}
-	roots = append(roots, tempRoots(e)...)
+	temp, private := tempRoots(e)
+	roots = append(roots, temp...)
 	out := make([]string, 0, 2*len(roots))
 	for _, r := range roots {
 		if !filepath.IsAbs(r) {
@@ -104,21 +106,35 @@ func (e *Env) argRoots() []string {
 			out = append(out, real)
 		}
 	}
-	return out
+	return out, private
 }
 
-// tempRoots is the temp folder an agent caller's files may be in: its
-// agent's own, where its sandbox has it write ([guard] temp, its
-// TMPDIR), not every temp folder, which holds files that sandbox keeps
-// from it; the server's own when the agent is unknown (a mod's call).
-// A variable for tests, whose own temp folders are elsewhere.
-var tempRoots = func(e *Env) []string {
-	if name := e.callerAgent(); name != "" {
-		if d := agent.AgentTemp(nil, name, os.Getenv); d != "" {
-			return []string{d}
-		}
+// tempRoots is the temp folder an agent caller's files may be in, and
+// its subfolders they may not: its agent's own, where its sandbox has it
+// write ([guard] temp, its TMPDIR, less [guard] temp_private), not every
+// temp folder, which holds files that sandbox keeps from it. None when
+// the agent or its temp folder is unknown. os.TempDir() for a call
+// that runs in the caller's own process (no server: its sandbox opens
+// the file) and for a mod's. A variable for tests, whose own temp
+// folders are elsewhere.
+var tempRoots = func(e *Env) (roots, private []string) {
+	if e.Caller.Kind == caller.Mod || e.Caller.Session == "" {
+		return []string{os.TempDir()}, nil
 	}
-	return []string{os.TempDir()}
+	name := e.callerAgent()
+	if name == "" {
+		return nil, nil
+	}
+	var reg *agent.Registry
+	if paths, err := server.ResolvePaths(); err == nil {
+		reg, _ = agent.Load(paths.AgentsDir())
+	}
+	h, _ := os.UserHomeDir()
+	dir, private := agent.AgentTemp(reg, name, h, os.Getenv)
+	if dir == "" {
+		return nil, nil
+	}
+	return []string{dir}, private
 }
 
 // callerAgent is the agent that runs in the caller's session, "" when
@@ -164,8 +180,9 @@ func realPath(path string) string {
 }
 
 // agentFileOK refuses an agent's open file f unless it is a regular file
-// with one link, outside every credential store (agent.Secrets).
-func agentFileOK(f *os.File) error {
+// with one link, outside every credential store (agent.Secrets) and the
+// private folders of its temp folder.
+func agentFileOK(f *os.File, private []string) error {
 	fi, err := f.Stat()
 	if err != nil {
 		return err
@@ -178,6 +195,13 @@ func agentFileOK(f *os.File) error {
 	}
 	real := realPath(f.Name())
 	h, _ := os.UserHomeDir()
+	for _, p := range private {
+		for _, pp := range []string{filepath.Clean(p), realPath(p)} {
+			if rel, err := filepath.Rel(pp, real); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return &tasks.Error{Code: "outside-roots", Msg: fmt.Sprintf("%s is in a folder its agent's sandbox keeps from it", f.Name())}
+			}
+		}
+	}
 	for _, sec := range agent.Secrets(nil, h, os.Getenv) {
 		for _, sp := range []string{filepath.Clean(sec), realPath(sec)} {
 			if rel, err := filepath.Rel(sp, real); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {

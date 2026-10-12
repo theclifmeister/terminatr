@@ -170,9 +170,10 @@ func (s *Server) adopt(p proto.SessionAdoptParams) (any, *proto.Error) {
 		return nil, proto.Errorf(proto.ErrUnknownSession, "session %q has exited", p.ID)
 	}
 	st, hasAgent := sess.AgentState()
+	now := sess.Info()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if p.Asked && s.adoptAsks[p.ID] != p.Project {
+	if p.Asked && !s.adoptAsks[p.ID].allows(p.Project, now) {
 		return nil, proto.Errorf(proto.ErrRefused, "the user hasn't asked to adopt session %s into %s", p.ID, p.Project)
 	}
 	r, ok := s.records[p.ID]
@@ -218,14 +219,36 @@ func (s *Server) adoptAsk(p proto.SessionAdoptAskParams) (any, *proto.Error) {
 	if p.ID == "" || p.Project == "" {
 		return nil, proto.Errorf(proto.ErrBadParams, "session.adopt.ask needs a session and a project")
 	}
+	sess, perr := s.session(p.ID)
+	if perr != nil {
+		if p.Check {
+			return proto.SessionAdoptAskResult{}, nil
+		}
+		return nil, perr
+	}
+	now := sess.Info()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if p.Check {
-		return proto.SessionAdoptAskResult{Asked: s.adoptAsks[p.ID] == p.Project && s.sessions[p.ID] != nil}, nil
+		return proto.SessionAdoptAskResult{Asked: s.adoptAsks[p.ID].allows(p.Project, now)}, nil
 	}
-	if s.sessions[p.ID] == nil {
-		return nil, proto.Errorf(proto.ErrUnknownSession, "no session %q", p.ID)
-	}
-	s.adoptAsks[p.ID] = p.Project
+	s.adoptAsks[p.ID] = adoptAsk{project: p.Project, agent: now.Agent, cwd: now.Cwd, agentSID: now.AgentSID}
 	return proto.SessionAdoptAskResult{Asked: true}, nil
+}
+
+// adoptAsk is the human's go-ahead to adopt a session into project, and
+// what ran in it when they gave it: the agent, its folder and, once
+// known, its conversation.
+type adoptAsk struct {
+	project, agent, cwd, agentSID string
+}
+
+// allows reports whether the go-ahead is for project and the session
+// still runs what the user saw (now, its info): the same agent in the
+// same folder, not another one started in that shell since.
+func (a adoptAsk) allows(project string, now proto.SessionInfo) bool {
+	if a.project == "" || a.project != project || a.agent != now.Agent || a.cwd != now.Cwd {
+		return false
+	}
+	return a.agentSID == "" || now.AgentSID == "" || a.agentSID == now.AgentSID
 }
