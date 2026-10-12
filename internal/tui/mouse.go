@@ -181,8 +181,7 @@ func (m *dash) mouse(msg tea.Msg) tea.Cmd {
 			m.layout.Sidebar = m.layout.Sidebar.DragTo(x, m.winW)
 			m.setWidth(m.winW)
 		case m.dragging:
-			m.layout.Split = clampSplit(float64(x-m.geom().body().x) / float64(max(m.w, 1)))
-			m.layout.detCells = 0
+			m.dragTo(x, msg.Mouse().Y)
 		default:
 			m.hover(msg.Mouse())
 		}
@@ -201,7 +200,7 @@ func (m *dash) mouse(msg tea.Msg) tea.Cmd {
 			d = 1
 		}
 		if d != 0 && (!m.geom().side().hasX(mo.X) || m.top() != nil) {
-			m.wheel(mo.X, d)
+			m.wheel(mo.X, mo.Y, d)
 		}
 	}
 	return nil
@@ -236,7 +235,7 @@ func (m *dash) press(mo tea.Mouse) tea.Cmd {
 	case tea.MouseLeft:
 		// A click gives its area the keyboard.
 		m.focus = areaMain
-		if g.details().hasX(mo.X) {
+		if g.details().has(mo.X, mo.Y) {
 			m.focus = areaDetails
 		}
 		return m.click(x, y, double)
@@ -290,20 +289,36 @@ func (m *dash) popupClick(o overlay, btn tea.MouseButton, x, y int, double bool)
 	return c.click(m, g.hits[li], x-g.x-2, double)
 }
 
-// wheel moves through what is under window column x by d: the topmost
-// popup, the details panel, else the list.
-func (m *dash) wheel(x, d int) {
+// wheel moves through what is under window cell (x, y) by d: the
+// topmost popup, the details panel, else the list.
+func (m *dash) wheel(x, y, d int) {
 	if o := m.top(); o != nil {
 		if w, ok := o.(wheeler); ok {
 			w.wheel(m, d)
 		}
 		return
 	}
-	if m.geom().details().hasX(x) {
+	if m.geom().details().has(x, y) {
 		m.scrollDetails(3 * d)
 		return
 	}
 	m.move(d)
+}
+
+// dragTo moves the details panel's divider to window cell (x, y): the
+// list's share of the width (right), the panel's of the body's rows
+// (bottom).
+func (m *dash) dragTo(x, y int) {
+	g := m.geom()
+	b := g.body()
+	switch g.panel() {
+	case placeRight:
+		m.layout.Split = clampSplit(float64(x-b.x) / float64(max(b.w, 1)))
+		m.layout.detCells = 0
+	case placeBottom:
+		m.layout.DetailsRows = clampRows(float64(b.y+b.h-y) / float64(max(b.h, 1)))
+		m.layout.rowCells = 0
+	}
 }
 
 // scrollDetails scrolls the details panel by d lines.
@@ -318,14 +333,13 @@ func (m *dash) scrollDetails(d int) {
 // window row y ("" for none).
 func (m *dash) rowAt(x, y int) string {
 	g := m.geom()
-	split, lw := g.split()
-	if x >= g.list().w {
+	b := g.list()
+	if !b.has(x+b.x, y) {
 		return ""
 	}
-	_, keys, sel := m.listLines(lw, !split)
-	b := g.body()
+	_, keys, sel := m.listLines(b.w, g.panel() == "")
 	i := scrollTop(sel, b.h, len(keys)) + y - b.y
-	if !b.hasY(y) || i >= len(keys) || strings.HasPrefix(keys[i], stateKey) {
+	if i >= len(keys) || strings.HasPrefix(keys[i], stateKey) {
 		return ""
 	}
 	return keys[i]
@@ -334,7 +348,7 @@ func (m *dash) rowAt(x, y int) string {
 // click selects the row under the mouse, opens it on a double-click, or
 // starts dragging the divider.
 func (m *dash) click(x, y int, double bool) tea.Cmd {
-	if g := m.geom(); x+g.main().x == g.divider() && g.body().hasY(y) {
+	if g := m.geom(); g.divider().has(x+g.main().x, y) {
 		m.dragging = true
 		return nil
 	}

@@ -353,8 +353,8 @@ func TestDetailsWheel(t *testing.T) {
 	m := newDash(DashOptions{Source: src, Width: 170, Height: 14, State: DashState{Current: "beta"}})
 	m.setData(src.data)
 	m.sel = "th:beta:t-0005"
-	split, lw := m.split()
-	if !split {
+	lw := m.geom().list().w
+	if m.panel() != placeRight {
 		t.Fatal("no details panel")
 	}
 	first := screen(m)
