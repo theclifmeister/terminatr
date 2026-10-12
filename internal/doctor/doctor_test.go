@@ -613,7 +613,8 @@ func TestMods(t *testing.T) {
 	os.WriteFile(filepath.Join(d.Paths.Home, "config.toml"), []byte("[mods.greedy]\nenabled = true\n[mods.gone]\nenabled = true\n"), 0o600)
 	var got []string
 	live := Live{Mods: &proto.ModHostsResult{NoMods: true, Hosts: []proto.ModHost{
-		{ID: "greedy", State: "failed", Err: "crashed 3 times in 5m0s\nmore"}, {ID: "ok", State: "running"}, {ID: "shaky", State: "backoff", Err: "exit 1"}}}}
+		{ID: "greedy", State: "failed", Err: "crashed 3 times in 5m0s\nmore"}, {ID: "ok", State: "running", Sandbox: "seatbelt"}, {ID: "shaky", State: "backoff", Err: "exit 1"},
+		{ID: "bare", State: "running", Sandbox: "none: OS sandbox unavailable: landlock: function not implemented"}}}}
 	for _, c := range Mods(d, live) {
 		if c.Status != Warn {
 			t.Fatalf("%+v", c)
@@ -623,6 +624,7 @@ func TestMods(t *testing.T) {
 	want := []string{"safe mode: the server runs no user mods (tm --no-mods); tm server restart runs them again",
 		"greedy: failed: crashed 3 times in 5m0s; its areas are blank (tm mod logs greedy, then tm mod disable greedy or fix it)",
 		"shaky: crashed: exit 1; restarting (tm mod logs shaky)",
+		"bare: its host runs without the OS sandbox (OS sandbox unavailable: landlock: function not implemented); the language and process sandboxes still apply",
 		`askew: doesn't load its layout: sidebar: no column "bogus" (built in: count, ci, state, remote, paused, inactive, needs; a mod's: <mod>.<column>)`,
 		"broken: doesn't load: has no name", "future: future needs mod API 9.0; this tm has 1.0: run tm update",
 		"greedy: asks for inbox, not granted: it runs without",

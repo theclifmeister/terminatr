@@ -24,7 +24,11 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modhost"
 	"github.com/theclifmeister/terminatr/internal/modproto"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
+	"github.com/theclifmeister/terminatr/internal/plat/sandbox"
 )
+
+// startSandboxed is sandbox.Start; tests replace it.
+var startSandboxed = sandbox.Start
 
 // readRSS is proc.RSS; tests replace it.
 var readRSS = proc.RSS
@@ -440,12 +444,13 @@ func (r *runner) once(sub *modbus.Sub) (code int, why string) {
 	if err := errors.Join(err1, err2, err3); err != nil {
 		return modproto.ExitLoad, fmt.Sprintf("starting its host: %v", err)
 	}
-	if err := cmd.Start(); err != nil {
+	sb, mode, err := r.start(cmd, bundle)
+	if err != nil {
 		return modproto.ExitLoad, fmt.Sprintf("starting its host: %v", err)
 	}
 	h := &host{pid: cmd.Process.Pid, proc: cmd.Process}
 	r.mu.Lock()
-	r.host, r.st.RSS = h, 0
+	r.host, r.st.RSS, r.st.Sandbox = h, 0, mode
 	r.mu.Unlock()
 	defer func() {
 		r.mu.Lock()
@@ -484,6 +489,7 @@ func (r *runner) once(sub *modbus.Sub) (code int, why string) {
 		<-client.Done()
 		<-stderrDone
 		_ = cmd.Wait()
+		sb.Release()
 		close(exited)
 	}()
 	end := func() (int, string) {
@@ -543,6 +549,30 @@ func (r *runner) once(sub *modbus.Sub) (code int, why string) {
 	dcancel()
 	<-delivered
 	return end()
+}
+
+// start starts cmd, a host running bundle, in the OS sandbox (mods
+// design §7): it may read the tm binary and the bundle, nothing else, and
+// has no network. Where the sandbox can't apply (an old kernel, a server
+// that already runs in a sandbox) the host starts without it, said in the
+// mod's log once, and mode says why. On success the caller releases sb
+// once cmd has exited.
+func (r *runner) start(cmd *exec.Cmd, bundle string) (sb *sandbox.Proc, mode string, err error) {
+	sb, err = startSandboxed(cmd, sandbox.Policy{Exe: r.sup.o.Bin, Read: []string{bundle}})
+	if err == nil {
+		return sb, sb.Mode, nil
+	}
+	if !errors.Is(err, sandbox.ErrUnavailable) {
+		return nil, "", err
+	}
+	mode = "none: " + err.Error()
+	r.mu.Lock()
+	warned := r.st.Sandbox == mode
+	r.mu.Unlock()
+	if !warned {
+		r.logf("runs without the OS sandbox: %v", err)
+	}
+	return nil, mode, cmd.Start()
 }
 
 // handler gives one event to the host; a handler that ran clears the run
