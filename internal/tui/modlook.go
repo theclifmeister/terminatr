@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -26,12 +27,24 @@ import (
 // ThemeDefault is the built-in theme's and layout's name in the pickers.
 const ThemeDefault = "default"
 
+// safeMode is tm --no-mods (mod.EnvNoMods): the console uses the
+// built-in theme, icon set and keymap, and no user mod's data, so a mod
+// can never make the keys unreachable.
+func safeMode() bool { return mod.NoMods(os.Getenv) }
+
+// safeLookNote is the footer's one line about safe mode's built-in look.
+const safeLookNote = "safe mode (tm --no-mods): built-in theme, icons and keymap; mods' data is not loaded"
+
 // loadMods is the registry of the user's mods with config.toml's tables;
-// none when ~/.terminatr/mods can't be read.
+// none when ~/.terminatr/mods can't be read. In safe mode only the
+// bundled mods stay.
 func loadMods(cfg *config.Config) *mod.Registry {
 	r, err := mod.Load(cfg)
 	if err != nil {
 		return &mod.Registry{}
+	}
+	if safeMode() {
+		r.Mods = slices.DeleteFunc(slices.Clone(r.Mods), func(m mod.Mod) bool { return !m.Builtin })
 	}
 	return r
 }
@@ -204,6 +217,9 @@ func layoutSetting(cfg *config.Config) string {
 // says why).
 func configLayout() ([]string, error) {
 	cfg, _ := config.Load()
+	if safeMode() {
+		cfg = nil // the built-in order
+	}
 	layoutVal.Store(layoutSetting(cfg))
 	cols, err := modLayout(loadMods(cfg), layoutSetting(cfg))
 	if err != nil {
@@ -219,13 +235,17 @@ func loadLook() error {
 	r := loadMods(cfg)
 	var errs []error
 	theme := ThemeDefault
-	if cfg != nil && cfg.Theme != "" {
+	if cfg != nil && cfg.Theme != "" && !safeMode() {
 		theme = cfg.Theme
 	}
 	if err := useTheme(r, theme); err != nil {
 		errs = append(errs, fmt.Errorf("theme: %w", err))
 	}
-	if err := setIconsFrom(r, configIcons(cfg)); err != nil {
+	icons := configIcons(cfg)
+	if safeMode() && !slices.Contains(IconChoices, icons) {
+		icons = IconsAuto // a mod's set
+	}
+	if err := setIconsFrom(r, icons); err != nil {
 		errs = append(errs, fmt.Errorf("icons: %w", err))
 	}
 	if err := loadKeymap(r); err != nil {
@@ -237,6 +257,9 @@ func loadLook() error {
 // lookNote is loadLook's error as one line for a footer.
 func lookNote(err error) string {
 	if err == nil {
+		if safeMode() {
+			return safeLookNote
+		}
 		return ""
 	}
 	return "mods: " + oneLine(err.Error())

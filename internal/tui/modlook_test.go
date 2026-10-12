@@ -267,3 +267,47 @@ func TestThemeAcrossViews(t *testing.T) {
 		t.Fatal("a new scheme doesn't redraw the sidebar and status bar")
 	}
 }
+
+// TestSafeModeLook: with tm --no-mods the console takes no user mod's
+// theme, icons, layout or keymap, offers none, and says so once.
+func TestSafeModeLook(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	t.Setenv("TERM_PROGRAM", "Apple_Terminal")
+	t.Setenv(mod.EnvNoMods, "1")
+	resetLook(t)
+	installMod(t, "nord", nord)
+	installMod(t, "keys", map[string]string{
+		"mod.toml":  "id = \"keys\"\nname = \"K\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nkeymap = \"keys.toml\"\n",
+		"keys.toml": "project.next = [\"L\"]\n",
+	})
+	installMod(t, "wide", map[string]string{
+		"mod.toml":    "id = \"wide\"\nname = \"Wide\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nlayout = \"layout.toml\"\n",
+		"layout.toml": "sidebar = [\"needs\", \"count\"]\n",
+	})
+	writeConfig(t, "[ui]\ntheme = \"nord\"\nicons = \"nord\"\nlayout = \"wide\"\n[mods.nord]\nenabled = true\n[mods.keys]\nenabled = true\n[mods.wide]\nenabled = true\n")
+	err := loadLook()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if themed() || themeSetting() != ThemeDefault || ic().name == "nord" || binds.list.canon("L") == "[" {
+		t.Fatalf("user data loaded: %v %s %s", themed(), themeSetting(), ic().name)
+	}
+	if cols, lerr := configLayout(); cols != nil || lerr != nil || layoutValue() != ThemeDefault {
+		t.Fatalf("layout %v %v %s", cols, lerr, layoutValue())
+	}
+	for _, kind := range []string{mod.KindTheme, mod.KindIcons, mod.KindLayout} {
+		if c := modChoices(nil, kind); len(c) != 0 {
+			t.Errorf("%s offered %v", kind, c)
+		}
+	}
+	if n := lookNews(err); n != safeLookNote || lookNews(err) != "" {
+		t.Fatalf("note %q", n)
+	}
+	if rows := globalSettings(""); !safeMode() || safeModeRow().value(nil) == "" || len(rows) == 0 {
+		t.Fatal("no safe mode row")
+	}
+	t.Setenv(mod.EnvNoMods, "")
+	if err := loadLook(); err != nil || themeSetting() != "nord" {
+		t.Fatalf("off: %v %s", err, themeSetting())
+	}
+}

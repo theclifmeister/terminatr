@@ -246,8 +246,19 @@ const tabMods = 2
 
 func (m *dash) openSettings() {
 	m.catalogs = m.src.Catalogs()
-	sv := &settingsView{tabs: [2]settingsList{{rows: globalSettings(m.src.ModsNote())}, {rows: allProjectsSettings()}}}
+	rows := globalSettings(m.src.ModsNote())
+	if safeMode() {
+		rows = append([]setting{safeModeRow()}, rows...)
+	}
+	sv := &settingsView{tabs: [2]settingsList{{rows: rows}, {rows: allProjectsSettings()}}}
 	m.push(sv)
+}
+
+// safeModeRow shows tm --no-mods in General: the theme, icons and keymap
+// are the built-in ones, whatever the Mods tab has on.
+func safeModeRow() setting {
+	return setting{label: "Safe mode", help: "tm --no-mods: this console uses the built-in theme, icons, layout and keymap, and loads no user mod's data, so no mod can make keys unreachable. The mods stay installed and on; restart tm without --no-mods to use them.",
+		value: func(m *dash) string { return "on (tm --no-mods)" }}
 }
 
 func globalSettings(note string) []setting {
