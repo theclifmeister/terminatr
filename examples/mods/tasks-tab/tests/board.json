@@ -1,0 +1,61 @@
+{
+  "name": "the tab, shown, groups the board's tasks, binds tm's task actions on each row and folds the done ones",
+  "answers": [
+    { "method": "tasks.list", "params": { "slug": "demo" },
+      "result": [
+        { "id": "T1", "title": "Fix login", "status": "review", "steps_done": 0, "steps_total": 0, "thread": "t-0001", "steps": [] },
+        { "id": "T2", "title": "Upgrade Go", "status": "blocked", "steps_done": 0, "steps_total": 0, "steps": [] },
+        { "id": "T3", "title": "Dark mode", "status": "started", "steps_done": 1, "steps_total": 2, "thread": "t-0003",
+          "steps": [{ "text": "Theme roles", "done": true }, { "text": "Settings picker", "done": false }] },
+        { "id": "T4", "title": "Search", "status": "ready", "steps_done": 0, "steps_total": 0, "steps": [], "asked": "delegate" },
+        { "id": "T5", "title": "Idea", "status": "open", "steps_done": 0, "steps_total": 0, "steps": [] },
+        { "id": "T6", "title": "Old", "status": "done", "steps_done": 0, "steps_total": 0, "steps": [], "updated": "2026-10-01" },
+        { "id": "T7", "title": "Older", "status": "done", "steps_done": 0, "steps_total": 0, "steps": [], "updated": "2026-09-01" }
+      ] }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "tasks", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "tasks.list", "params": { "slug": "demo" } },
+      { "method": "ui.view.set",
+        "params": { "view": "tasks", "options": { "project": "demo" },
+          "widget": { "kind": "stack", "children": [
+            { "kind": "table", "id": "tasks", "empty": "no tasks", "rows": [
+              { "id": "g:needs-you", "head": true, "spans": [{ "text": "NEEDS YOU", "role": "warn" }] },
+              { "id": "T1",
+                "cells": [[{ "text": "T1" }], [{ "text": "Fix login" }], [{ "text": "review", "role": "warn" }], [{ "text": "t-0001", "role": "faint" }]],
+                "actions": [
+                  { "id": "task.show", "target": { "project": "demo", "task": "T1" } },
+                  { "id": "task.accept", "target": { "project": "demo", "task": "T1" } },
+                  { "id": "task.send-back", "target": { "project": "demo", "task": "T1" } }] },
+              { "id": "T2", "actions": [
+                  { "id": "task.show", "target": { "project": "demo", "task": "T2" } },
+                  { "id": "task.coordinator", "target": { "project": "demo", "task": "T2" } },
+                  { "id": "task.delegate", "target": { "project": "demo", "task": "T2" } }] },
+              { "id": "g:in-motion", "head": true },
+              { "id": "T3",
+                "cells": [[{ "text": "T3" }], [{ "text": "Dark mode" }], [{ "text": "started", "role": "faint" }], [{ "text": "1/2 t-0003", "role": "faint" }]],
+                "actions": [{ "id": "task.show", "target": { "project": "demo", "task": "T3" } }],
+                "more": [
+                  [{ "text": "      " }, { "icon": "todo.done", "role": "good" }, { "text": " Theme roles" }],
+                  [{ "text": "      " }, { "icon": "todo.open", "role": "faint" }, { "text": " Settings picker" }]] },
+              { "id": "g:on-deck", "head": true },
+              { "id": "T4",
+                "cells": [[{ "text": "T4" }], [{ "text": "Search" }], [{ "text": "ready", "role": "faint" }], [{ "text": "asked the coordinator", "role": "warn" }]],
+                "actions": [{ "id": "task.show", "target": { "project": "demo", "task": "T4" } }] },
+              { "id": "g:backlog", "head": true },
+              { "id": "T5", "actions": [
+                  { "id": "task.show", "target": { "project": "demo", "task": "T5" } },
+                  { "id": "task.delegate", "target": { "project": "demo", "task": "T5" } }] },
+              { "id": "g:done", "head": true, "spans": [{ "text": "DONE", "role": "head" }] }
+            ] },
+            { "kind": "text", "text": "… 2 done (b shows them)", "role": "faint" },
+            { "kind": "text", "text": "+ adds a task, from a template or none", "role": "faint" },
+            { "kind": "keys", "keys": [{ "key": "b", "label": "done" }] }
+          ] } } }
+    ]
+  }
+}

@@ -4,8 +4,8 @@ One small, working mod for each place a mod can show up in terminatr,
 plus an agent tool and a code host: to see each surface working, and to get ideas to
 build and share. They are samples, not defaults. Nothing here is loaded
 or turned on until you install it, and installing goes through the
-usual consent screen. Two of them, `pr-ci-column` and `memory-tab`, are
-also the sources of mods built into tm.
+usual consent screen. Three of them, `pr-ci-column`, `memory-tab` and
+`tasks-tab`, are also the sources of mods built into tm.
 
 From a checkout of the repository:
 
@@ -27,13 +27,14 @@ Then turn it on in the Mods tab (`,` then `3`), or with `tm mod enable
 | 6 | [thread-timeline](thread-timeline) | a full view (≡ menu) | reads your projects, draws its own panels | `tm mod install terminatr/examples/mods/thread-timeline` |
 | 7 | [pr-ci-column](pr-ci-column) | a sidebar column (built in) | reads your projects | copy it under another id first, see below |
 | 8 | [memory-tab](memory-tab) | a project-popup tab (built in) | reads your projects, draws its own panels | copy it under another id first, see below |
+| + | [tasks-tab](tasks-tab) | the popup's Tasks tab, its rows bound to tm's task actions (built in, off) | reads your projects, draws its own panels | copy it under another id first, see below |
 | + | [memory-search](memory-search) | an agent tool, `memory-search_find` | reads your projects, offers tools to agents | `tm mod install terminatr/examples/mods/memory-search` |
 | + | [standup](standup) | a command: the key `S`, a ≡ menu entry and `tm mod run standup show` | reads your projects, draws its own panels | `tm mod install terminatr/examples/mods/standup` |
 | + | [report-glance](report-glance) | panel sections: one at the bottom of the details panel, one in the coordinator's info panel | reads your projects, draws its own panels | `tm mod install terminatr/examples/mods/report-glance` |
 | + | [gitlab](gitlab) | a code host: GitLab merge requests as tm's PRs | runs glab | `tm mod install terminatr/examples/mods/gitlab` |
 
-`pr-ci-column` and `memory-tab` already ship inside tm, and `tm mod
-install` refuses a built-in mod's id. To change one, copy it, give the
+`pr-ci-column`, `memory-tab` and `tasks-tab` already ship inside tm,
+and `tm mod install` refuses a built-in mod's id. To change one, copy it, give the
 copy its own id and install that:
 
 ```sh
@@ -95,6 +96,16 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
   (git must find the commits on the remote), and makes the merge
   checks itself. `tm doctor` shows which mod serves the kind and glab's
   login.
+- **tasks-tab** is the pilot of the action binding (mods design §12,
+  Phase 2): the project popup's Tasks tab as a mod. It ships off, and
+  the Go tab draws, until the pilot is accepted; turn it on in the Mods
+  tab or with `[mods.tasks-tab] enabled = true`. Its rows only *name*
+  `task.show`, `task.delegate`, `task.accept`, `task.send-back` and
+  `task.coordinator`: tm shows the keys, checks the live board, asks
+  and runs them. Section heads and the selected task's steps are
+  widget rows (`head`, `more`, mod API 1.2), so the cursor never waits
+  on the mod. `+` stays the popup's key, since no row stands for a new
+  task.
 - **standup** declares a command in `[[provides.commands]]`. `S` on the
   dashboard or its ≡ menu entry runs it with the project shown, and
   being a human input it may open the mod's full view. `tm mod run

@@ -3,7 +3,7 @@ package mod
 // terminatr's examples/mods folder (mods design §13): one small, working
 // mod per mod surface, so people see each surface working and get ideas
 // to build and share. They are sample mods, not defaults: nothing in the
-// folder is loaded or enabled, though two of them are the sources of
+// folder is loaded or enabled, though three of them are the sources of
 // built-in mods. The Mods tab's e, its empty state and tm mod examples
 // show the link and each one's install lines, and do nothing else.
 
@@ -36,6 +36,7 @@ var Examples = []Example{
 	{"report-glance", "panel sections: the details panel's and the coordinator's", []string{PermProjectRead, PermViews}},
 	{"pr-ci-column", "a sidebar column (also built in)", []string{PermProjectRead}},
 	{"memory-tab", "a project-popup tab (also built in)", []string{PermProjectRead, PermViews}},
+	{"tasks-tab", "a project-popup tab whose rows bind tm's task actions (built in, off)", []string{PermProjectRead, PermViews}},
 	{"memory-search", "an agent tool", []string{PermProjectRead, PermTools}},
 	{"gitlab", "a code host (GitLab, through glab)", []string{PermCommands}},
 }

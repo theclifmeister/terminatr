@@ -1,0 +1,42 @@
+{
+  "name": "b shows the done tasks, newest first, each bound to task.send-back",
+  "answers": [
+    { "method": "tasks.list", "params": { "slug": "demo" },
+      "result": [
+        { "id": "T6", "title": "Old", "status": "done", "steps_done": 1, "steps_total": 1, "steps": [{ "text": "Ship", "done": true }], "updated": "2026-09-01" },
+        { "id": "T7", "title": "Newer", "status": "done", "steps_done": 0, "steps_total": 0, "steps": [], "updated": "2026-10-01" }
+      ] }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "tasks", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } },
+    { "name": "ui.key", "project": "demo",
+      "data": { "view": "tasks", "widget": "tasks", "key": "b", "target": { "project": "demo" } } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "tasks.list", "params": { "slug": "demo" } },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "table", "rows": [{ "id": "g:done", "head": true }] },
+            { "kind": "text", "text": "… 2 done (b shows them)" },
+            { "kind": "text" },
+            { "kind": "keys", "keys": [{ "key": "b", "label": "done" }] }
+          ] } } },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "table", "rows": [
+              { "id": "g:done", "head": true },
+              { "id": "T7", "actions": [
+                  { "id": "task.show", "target": { "project": "demo", "task": "T7" } },
+                  { "id": "task.send-back", "target": { "project": "demo", "task": "T7" } }] },
+              { "id": "T6", "actions": [
+                  { "id": "task.show", "target": { "project": "demo", "task": "T6" } },
+                  { "id": "task.send-back", "target": { "project": "demo", "task": "T6" } }] }
+            ] },
+            { "kind": "text" },
+            { "kind": "keys", "keys": [{ "key": "b", "label": "hide done" }] }
+          ] } } }
+    ]
+  }
+}

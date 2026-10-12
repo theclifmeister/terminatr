@@ -464,3 +464,88 @@ func TestModFullViewBinding(t *testing.T) {
 		t.Fatalf("D opened %T", m.top())
 	}
 }
+
+// TestTasksTabMod: the built-in Tasks tab mod's tab (the action-binding
+// pilot) is drawn in the core Tasks tab's place (3 tasks), with its
+// section heads and the selected task's steps; enter on a row opens the
+// task over the popup, as the core tab's enter does, through the bound
+// task.show; + is still the popup's new task; the core tab's own task
+// keys don't run under it. With the mod off the core Tasks tab draws.
+func TestTasksTabMod(t *testing.T) {
+	src, m := panelDash(t)
+	src.board = &tasks.Board{Tasks: []*tasks.Task{
+		{ID: 1, Title: "Write the README", Status: tasks.Started, Steps: []tasks.Step{{N: 1, Text: "Draft", Done: true}, {N: 2, Text: "Proofread"}}},
+		{ID: 2, Title: "Ship it", Status: tasks.Ready},
+	}}
+	task := func(id string) map[string]string { return map[string]string{"project": "alpha", "task": id} }
+	board := &widget.Widget{Kind: widget.KindStack, Children: []widget.Widget{
+		{Kind: widget.KindTable, ID: "tasks", Columns: []widget.Column{{}, {}, {}}, Rows: []widget.Row{
+			{ID: "g:in-motion", Head: true, Spans: []widget.Span{{Text: "IN MOTION", Role: "head"}}},
+			{ID: "T1", Cells: [][]widget.Span{{{Text: "T1"}}, {{Text: "Write the README"}}, {{Text: "started"}}},
+				Actions: []widget.Action{{ID: "task.show", Target: task("T1")}},
+				More:    [][]widget.Span{{{Text: "   "}, {Icon: "todo.open"}, {Text: " Proofread"}}}},
+			{ID: "g:on-deck", Head: true, Spans: []widget.Span{{Text: "ON DECK", Role: "head"}}},
+			{ID: "T2", Cells: [][]widget.Span{{{Text: "T2"}}, {{Text: "Ship it"}}, {{Text: "ready"}}},
+				Actions: []widget.Action{{ID: "task.show", Target: task("T2")}, {ID: "task.delegate", Target: task("T2")}}},
+		}},
+		{Kind: widget.KindText, Text: "+ adds a task, from a template or none", Role: "faint"},
+	}}
+	tasksView := proto.ModView{Mod: mod.BundledTasks, Name: "Tasks tab", View: mod.TasksView, Title: "tasks", Slot: mod.SlotProjectTab,
+		Trees: []modview.Tree{{Project: "alpha", Tree: board}}}
+	src.modViews.Views = append(src.modViews.Views, tasksView)
+	m.setModViews(modViewsMsg{res: src.modViews})
+	m.Update(m.openTab("alpha", tabOverview, 0)())
+	press(m, "3")
+	out := screen(m)
+	for _, want := range []string{"3 tasks", "8 Review queue", "mod: tasks-tab · tasks", "IN MOTION ─", "ON DECK ─", "Write the README", "Proofread", "enter show"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("tasks tab lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "9 tasks") {
+		t.Errorf("the mod's tab is listed again after the core tabs:\n%s", out)
+	}
+	// Down skips the head: T2 is under the cursor, T1's steps fold.
+	press(m, "down")
+	out = screen(m)
+	if !strings.Contains(out, "D delegate") || strings.Contains(out, "Proofread") {
+		t.Errorf("down didn't land on T2:\n%s", out)
+	}
+	// The core tab's c, A and x do nothing here: T2 binds none of them.
+	for _, k := range []string{"A", "x", "c"} {
+		runAll(m, press(m, k))
+		if _, ok := m.top().(*projectView); !ok {
+			t.Fatalf("%s opened %T", k, m.top())
+		}
+	}
+	time.Sleep(modaction.Stable + 20*time.Millisecond)
+	runAll(m, press(m, "enter"))
+	if tv, ok := m.top().(*taskView); !ok || tv.id != 2 {
+		t.Fatalf("enter opened %T %+v", m.top(), m.top())
+	}
+	if len(src.inputs) != 0 {
+		t.Errorf("the press reached the mod: %+v", src.inputs)
+	}
+	// The mod hears action.done with the press token its check gave.
+	if want := "tasks-tab task.show alpha/T2 true"; len(src.done) != 1 || src.done[0] != want {
+		t.Errorf("done %q, want %q", src.done, want)
+	}
+	m.pop()
+	runAll(m, press(m, "+"))
+	if _, ok := m.top().(*projectView); ok {
+		t.Error("+ asked for no new task")
+	}
+	for len(m.stack) > 0 {
+		if _, ok := m.top().(*projectView); ok {
+			break
+		}
+		m.pop()
+	}
+
+	// Off: the core Tasks tab.
+	src.modViews.Views = panelViews()
+	m.setModViews(modViewsMsg{res: src.modViews})
+	if out := screen(m); strings.Contains(out, "mod: tasks-tab") || !strings.Contains(out, "Ship it") {
+		t.Errorf("tasks mod off:\n%s", out)
+	}
+}

@@ -410,3 +410,50 @@ func TestEmptyAndNoMatch(t *testing.T) {
 		t.Errorf("down on no rows: %v %v", ok, ev)
 	}
 }
+
+// TestHeadsAndMore: a head row is a section rule the cursor skips and a
+// filter hides; a row's more lines show under it only while the cursor
+// is on it; a table without column titles draws no header; a head row
+// can't bind or carry cells.
+func TestHeadsAndMore(t *testing.T) {
+	w := mustDecode(t, `{"kind":"table","id":"t","columns":[{"title":""},{"title":""}],"rows":[
+		{"id":"h1","head":true,"spans":[{"text":"NEEDS YOU","role":"warn"}]},
+		{"id":"T1","cells":[[{"text":"T1"}],[{"text":"fix"}]],"more":[[{"text":"  "},{"icon":"todo.open"},{"text":" step one"}]]},
+		{"id":"h2","head":true,"spans":[{"text":"DONE"}]},
+		{"id":"T2","cells":[[{"text":"T2"}],[{"text":"ship"}]]}]}`)
+	v := NewView()
+	v.Set(w)
+	if v.Cursor("t") != "T1" {
+		t.Fatalf("cursor on %q, not the first task", v.Cursor("t"))
+	}
+	got := v.Render(20, 10, plainLook{})
+	want := []string{"NEEDS YOU ──────────", "\x1b[7mT1  fix             \x1b[m", "  ○ step one", "", "DONE ───────────────", "T2  ship"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("render:\n%q\nwant\n%q", got, want)
+	}
+	v.Key("down")
+	if v.Cursor("t") != "T2" {
+		t.Fatalf("down landed on %q", v.Cursor("t"))
+	}
+	if got := strings.Join(v.Render(20, 10, plainLook{}), "\n"); strings.Contains(got, "step one") {
+		t.Errorf("more stays under a row the cursor left:\n%s", got)
+	}
+	v.Key("up")
+	if v.Cursor("t") != "T1" {
+		t.Fatalf("up landed on %q", v.Cursor("t"))
+	}
+	v.Key("/")
+	v.Key("s")
+	v.Key("h")
+	if got := v.Render(20, 10, plainLook{}); len(got) != 2 || !strings.Contains(got[1], "T2  ship") {
+		t.Errorf("filtered:\n%q", got)
+	}
+	for _, bad := range []string{
+		`{"kind":"list","id":"l","rows":[{"head":true,"spans":[{"text":"x"}],"actions":[{"id":"task.show","target":{"project":"p","task":"T1"}}]}]}`,
+		`{"kind":"table","id":"t","columns":[{"title":"a"}],"rows":[{"head":true,"cells":[[{"text":"x"}]]}]}`,
+	} {
+		if _, err := Decode([]byte(bad)); err == nil || !strings.Contains(err.Error(), "head row") {
+			t.Errorf("%s: %v", bad, err)
+		}
+	}
+}

@@ -230,9 +230,13 @@ func (lo *layer) rows(w *Widget) {
 		for i, c := range w.Columns {
 			hs = append(hs, pad(clip(c.Title, widths[i]), widths[i], c.Right))
 		}
-		lo.add(lo.look.Style("head", strings.TrimRight(strings.Join(hs, "  "), " ")))
+		// A table whose columns have no titles has no header.
+		if h := strings.TrimRight(strings.Join(hs, "  "), " "); h != "" {
+			lo.add(lo.look.Style("head", h))
+		}
 	}
-	if len(l.shown) == 0 {
+	drawn := l.drawn()
+	if len(drawn) == 0 {
 		switch {
 		case l.filter != "":
 			lo.add(lo.look.Style("faint", "no match"))
@@ -241,8 +245,17 @@ func (lo *layer) rows(w *Widget) {
 		}
 		return
 	}
-	for _, i := range l.shown {
+	for n, i := range drawn {
 		r := &w.Rows[i]
+		if r.Head {
+			// A section rule: the head's spans, then ─ to the width.
+			if n > 0 {
+				lo.add("")
+			}
+			head := lo.spans(r.Spans)
+			lo.add(head + " " + lo.look.Style("faint", strings.Repeat("─", max(lo.w-ansi.StringWidth(head)-1, 0))))
+			continue
+		}
 		var s, plain string
 		if w.Kind == KindTable {
 			var cs, ps []string
@@ -259,6 +272,12 @@ func (lo *layer) rows(w *Widget) {
 			s, plain = lo.spans(r.Spans), lo.plainSpans(r.Spans)
 		}
 		lo.out = append(lo.out, line{s: clip(s, lo.w), list: w.ID, row: r.ID, plain: pad(clip(plain, lo.w), lo.w, false)})
+		// The cursor's row's lines under it; a click on one picks the row.
+		if r.ID == l.cursor {
+			for _, m := range r.More {
+				lo.out = append(lo.out, line{s: clip(lo.spans(m), lo.w), list: w.ID, row: r.ID, plain: pad(clip(lo.plainSpans(m), lo.w), lo.w, false)})
+			}
+		}
 	}
 }
 

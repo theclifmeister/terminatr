@@ -139,6 +139,18 @@ type Task struct {
 	StepsDone  int    `json:"steps_done"`
 	StepsTotal int    `json:"steps_total"`
 	Thread     string `json:"thread,omitempty"`
+	// Mod API 1.2: the steps themselves, the date the task last changed
+	// (YYYY-MM-DD), and the kind of the item that asks the coordinator
+	// about it (delegate, accept or send-back; none while nothing does).
+	Steps   []TaskStep `json:"steps"`
+	Updated string     `json:"updated,omitempty"`
+	Asked   string     `json:"asked,omitempty"`
+}
+
+// TaskStep is one step of a task (mod API 1.2).
+type TaskStep struct {
+	Text string `json:"text"`
+	Done bool   `json:"done"`
 }
 
 // InboxRaise is the item $.inbox.raise gives the coordinator: data only,
