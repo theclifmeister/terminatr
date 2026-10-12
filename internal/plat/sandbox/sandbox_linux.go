@@ -3,6 +3,7 @@ package sandbox
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"sync"
@@ -41,6 +42,24 @@ func start(cmd *exec.Cmd, pol Policy) (*Proc, error) {
 	type result struct {
 		mode string
 		err  error
+	}
+	// The confined thread can't open /dev/null for an unset stdio file,
+	// as cmd.Start would: open it here.
+	if cmd.Stdin == nil || cmd.Stdout == nil || cmd.Stderr == nil {
+		null, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
+		if err != nil {
+			return nil, err
+		}
+		defer null.Close()
+		if cmd.Stdin == nil {
+			cmd.Stdin = null
+		}
+		if cmd.Stdout == nil {
+			cmd.Stdout = null
+		}
+		if cmd.Stderr == nil {
+			cmd.Stderr = null
+		}
 	}
 	done := make(chan result, 1)
 	go func() {

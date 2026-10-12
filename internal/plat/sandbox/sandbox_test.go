@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -38,6 +39,8 @@ func child(args []string) int {
 	}
 	_, err := os.ReadFile(allowed)
 	say("read-allowed", err)
+	_, err = os.ReadFile(secret) // landlock's or seatbelt's refusal, before seccomp
+	say("read-secret-early", err)
 	_, _ = time.Now().Zone() // as the host does before Lockdown
 	say("lockdown", Lockdown())
 	_, err = os.ReadFile(secret)
@@ -115,8 +118,8 @@ func TestStartConfines(t *testing.T) {
 		name, res, _ := strings.Cut(sc.Text(), " ")
 		got[name] = res
 	}
-	want := map[string]bool{"read-allowed": true, "lockdown": true, "read-secret": false, "write": false, "exec": false}
-	if addr != "" {
+	want := map[string]bool{"read-allowed": true, "lockdown": true, "read-secret-early": false, "read-secret": false, "write": false, "exec": false}
+	if addr != "" && runtime.GOOS != "windows" { // Windows' sandbox leaves the network to the language sandbox
 		want["dial"] = false
 	}
 	for name, ok := range want {
