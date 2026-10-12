@@ -122,6 +122,11 @@ func TestClaudeLaunch(t *testing.T) {
 	if !settings.Sandbox.Enabled || !reflect.DeepEqual(settings.Sandbox.Network.AllowUnixSockets, []string{"/run/tm.sock"}) {
 		t.Fatalf("thread sandbox = %+v", settings.Sandbox)
 	}
+	// A thread's Bash can't leave the sandbox: outside it, it would reach
+	// the human socket (docs/SPEC.md §5.2).
+	if u := settings.Sandbox.AllowUnsandboxedCommands; u == nil || *u {
+		t.Fatalf("thread sandbox allows unsandboxed commands: %+v", settings.Sandbox)
+	}
 	if settings.StatusLine != nil {
 		t.Fatal("settings must never set statusLine; it would replace the user's")
 	}
@@ -133,7 +138,7 @@ func TestClaudeLaunch(t *testing.T) {
 		t.Fatal(err)
 	}
 	settings = parseSettings(t, l.Files["claude-settings.json"])
-	if settings.Sandbox.Enabled || len(settings.Permissions.Deny) != 0 {
+	if settings.Sandbox.Enabled || settings.Sandbox.AllowUnsandboxedCommands != nil || len(settings.Permissions.Deny) != 0 {
 		t.Fatalf("coordinator must not get the thread sandbox or deny rules: %+v", settings)
 	}
 
@@ -169,8 +174,9 @@ func TestClaudeLaunch(t *testing.T) {
 type claudeSettings struct {
 	Permissions struct{ Allow, Deny []string }
 	Sandbox     struct {
-		Enabled bool
-		Network struct{ AllowUnixSockets []string }
+		Enabled                  bool
+		AllowUnsandboxedCommands *bool
+		Network                  struct{ AllowUnixSockets []string }
 	}
 	StatusLine any `json:"statusLine"`
 }
