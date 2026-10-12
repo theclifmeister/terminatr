@@ -418,18 +418,16 @@ func (m *dash) shownViews() []modview.Shown {
 	}
 	if m.over == nil {
 		project := listProject(m.data, m.current)
-		split, lw := m.split()
-		if !split {
-			lw = m.w
-		}
+		g := m.geom()
+		lw := g.list().w
 		for _, v := range m.mv.cards() {
 			if !m.mv.folded[cardKey(v)] {
 				add(v, project, "", lw, m.cardHeight(v, project))
 			}
 		}
-		if r, ok := m.selected(); ok && split {
+		if r, ok := m.selected(); ok && g.details().w > 0 {
 			if project, task, thr, ok := sectionTarget(r); ok {
-				out = append(out, sectionsShown(m.mv.list, mod.SlotDetailsSection, project, task, thr, m.w-lw-1)...)
+				out = append(out, sectionsShown(m.mv.list, mod.SlotDetailsSection, project, task, thr, g.details().w)...)
 			}
 		}
 	}
@@ -836,8 +834,9 @@ func (fv *fullView) render(m *dash) string {
 	}
 	out := m.withSide(m.frame(title, body, -1, keys))
 	// The mouse: the body is the view's, the header above it its edge.
-	m.geo = &boxGeo{x: m.sideW() + fullGutter - 2, y: 0, w: m.w, h: m.bodyRows() + 1,
-		head: 0, top: 0, rows: m.bodyRows(), hits: hits}
+	g := m.geom()
+	m.geo = &boxGeo{x: g.main().x + fullGutter - 2, y: g.header().y, w: g.main().w, h: g.body().h + 1,
+		head: 0, top: 0, rows: g.body().h, hits: hits}
 	return out
 }
 
