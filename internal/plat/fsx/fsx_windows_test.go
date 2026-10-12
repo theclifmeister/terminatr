@@ -153,4 +153,20 @@ func TestLinkDirIsJunction(t *testing.T) {
 	if err != nil || fi.Mode()&os.ModeSymlink != 0 {
 		t.Fatalf("Lstat: %v, %v", fi.Mode(), err)
 	}
+	// EvalSymlinks fails on a path through it; through Unjunction's
+	// folder it resolves.
+	os.WriteFile(filepath.Join(target, "f"), nil, 0o600)
+	if _, err := filepath.EvalSymlinks(filepath.Join(link, "f")); err == nil {
+		t.Log("EvalSymlinks now walks through a junction")
+	}
+	dir := Unjunction(link)
+	if !SamePath(dir, target) {
+		t.Fatalf("Unjunction %q, want %q", dir, target)
+	}
+	if _, err := filepath.EvalSymlinks(filepath.Join(dir, "f")); err != nil {
+		t.Fatal(err)
+	}
+	if Unjunction(target) != target {
+		t.Errorf("Unjunction changed a plain folder")
+	}
 }

@@ -5,6 +5,7 @@ package fsx
 import (
 	"encoding/binary"
 	"os"
+	"path/filepath"
 	"unicode/utf16"
 
 	"golang.org/x/sys/windows"
@@ -23,6 +24,20 @@ func LinkDir(target, link string) error {
 		return &os.LinkError{Op: "junction", Old: target, New: link, Err: jerr}
 	}
 	return nil
+}
+
+// Unjunction is dir, or the folder it names when dir is a junction.
+// Go reports a junction as irregular, neither a folder nor a symlink, so
+// filepath.EvalSymlinks fails (ENOTDIR) on any path through one.
+func Unjunction(dir string) string {
+	fi, err := os.Lstat(dir)
+	if err != nil || fi.Mode()&os.ModeSymlink != 0 || !isLink(fi) {
+		return dir
+	}
+	if t, err := os.Readlink(dir); err == nil && filepath.IsAbs(t) {
+		return filepath.Clean(t)
+	}
+	return dir
 }
 
 // junction makes link an empty directory, then a mount point reparse
