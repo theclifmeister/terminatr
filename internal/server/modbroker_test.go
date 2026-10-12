@@ -140,16 +140,12 @@ func TestModBroker(t *testing.T) {
 	}
 }
 
-// modPending are the schema's methods whose handlers come in their own
-// tasks (Broker.Handle): drop each from here when its handler lands.
-var modPending = map[string]bool{
-	"ui.toast": true,
-}
-
 // TestModBrokerAPI: the broker's methods are mod API v1's, the schema the
 // $ bindings are built from (modapi.Methods), one list: every method the
 // host sends has a handler, every handler is a method of the schema, and
-// the broker checks the grant the schema says it needs.
+// the broker checks the grant the schema says it needs. tm mod test's
+// fake broker answers the schema's methods, so a mod that passes its
+// tests calls nothing the server lacks (ui.toast did, T301).
 func TestModBrokerAPI(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
 	s := &Server{log: log.New(os.Stderr, "", 0), modEv: newModEvents()}
@@ -162,10 +158,6 @@ func TestModBrokerAPI(t *testing.T) {
 		}
 		needs, ok := b.Needs(m.Name)
 		switch {
-		case modPending[m.Name]:
-			if ok {
-				t.Errorf("%s has a handler now: drop it from modPending", m.Name)
-			}
 		case m.Local:
 			// Answered in the host from hello; the broker may answer it too.
 			if ok && needs != m.Needs {
@@ -175,11 +167,6 @@ func TestModBrokerAPI(t *testing.T) {
 			t.Errorf("%s: a method of the schema with no handler", m.Name)
 		case needs != m.Needs:
 			t.Errorf("%s: the broker checks %q, the schema says %q", m.Name, needs, m.Needs)
-		}
-	}
-	for name := range modPending {
-		if _, ok := schema[name]; !ok {
-			t.Errorf("modPending names %s, which the schema hasn't", name)
 		}
 	}
 	for _, name := range b.Methods() {

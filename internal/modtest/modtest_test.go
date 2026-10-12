@@ -208,3 +208,19 @@ func TestExamples(t *testing.T) {
 		}
 	}
 }
+
+// TestBrokerToast: the fake takes ui.toast as the server does, and
+// refuses what the server refuses.
+func TestBrokerToast(t *testing.T) {
+	b := NewBroker(nil, nil, nil, nil)
+	for params, ok := range map[string]bool{
+		`{"text":"hi"}`:                true,
+		`{"text":"hi","level":"warn"}`: true,
+		`{"text":"  "}`:                false,
+		`{"text":"hi","level":"loud"}`: false,
+	} {
+		if _, err := b.Answer("ui.toast", json.RawMessage(params)); (err == nil) != ok {
+			t.Errorf("%s: %v", params, err)
+		}
+	}
+}

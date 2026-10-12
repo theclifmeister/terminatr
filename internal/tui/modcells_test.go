@@ -144,3 +144,27 @@ func TestModCellsStatusBar(t *testing.T) {
 		t.Errorf("narrow:\n%q\n%q", ansi.Strip(narrow), ansi.Strip(plain))
 	}
 }
+
+// TestModToasts: a toast shows once in the message line, its mod's name
+// in front; the first poll's toasts are old news, an error draws as one,
+// and a server restarted (counting from 1 again) still gets through.
+func TestModToasts(t *testing.T) {
+	m := &dash{}
+	m.showToasts([]proto.ModToast{{Seq: 4, Mod: "standup", Name: "Standup", Text: "old"}})
+	if m.msg != "" {
+		t.Fatalf("first poll showed %q", m.msg)
+	}
+	m.showToasts([]proto.ModToast{{Seq: 4, Text: "old"}, {Seq: 5, Mod: "standup", Name: "Standup", Text: "demo: 3 started", Level: "info"}})
+	if m.msg != "Standup: demo: 3 started" || m.errMsg != "" {
+		t.Fatalf("msg %q err %q", m.msg, m.errMsg)
+	}
+	m.msg = "something else"
+	m.showToasts([]proto.ModToast{{Seq: 5, Text: "demo: 3 started"}})
+	if m.msg != "something else" {
+		t.Fatalf("shown twice: %q", m.msg)
+	}
+	m.showToasts([]proto.ModToast{{Seq: 1, Mod: "lab", Text: "broke", Level: "error"}})
+	if m.msg != "lab: broke" || m.errMsg != m.msg {
+		t.Fatalf("after a restart msg %q err %q", m.msg, m.errMsg)
+	}
+}

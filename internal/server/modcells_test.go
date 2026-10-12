@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/mod"
@@ -67,6 +68,19 @@ func TestModCells(t *testing.T) {
 	if err := call("ui.status.set", `{"spans":[{"text":"2 waiting"}]}`); err != nil {
 		t.Fatal(err)
 	}
+	// $.ui.toast, which tm mod test's fake broker took and the server
+	// didn't (T301 B1); it needs no grant.
+	if err := call("ui.toast", `{"text":"T1 is\nready\u001b[2J","level":"warn"}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := call("ui.toast", `{"text":"plain"}`); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{`{"text":""}`, `{"text":" \n "}`, `{"text":"x","level":"loud"}`} {
+		if err := call("ui.toast", bad); code(err) != modbroker.CodeBadParams {
+			t.Errorf("ui.toast %s: %v", bad, err)
+		}
+	}
 	for _, bad := range []struct {
 		params string
 		code   int
@@ -98,6 +112,10 @@ func TestModCells(t *testing.T) {
 	if st := res.Mods.Status; len(st) != 1 || st[0].Name != "Review age" {
 		t.Fatalf("status %+v", st)
 	}
+	if ts := res.Mods.Toasts; len(ts) != 2 || ts[0] != (proto.ModToast{Seq: 1, Mod: "review-age", Name: "Review age", Text: "T1 is ready [2J", Level: "warn"}) ||
+		ts[1].Seq != 2 || ts[1].Level != "info" {
+		t.Fatalf("toasts %+v", ts)
+	}
 	w, err := s.projectWatchState("demo")
 	if err != nil || len(w.Cells) != 1 || w.Cells[0].Target != (proto.CellTarget{Project: "demo", Task: "T1"}) {
 		t.Fatalf("watch cells %+v %v", w.Cells, err)
@@ -127,5 +145,23 @@ func TestModCells(t *testing.T) {
 	s.noteMods(reg)
 	if res := s.sessionList(); res.Mods != nil {
 		t.Fatalf("a mod turned off %+v", res.Mods)
+	}
+}
+
+// TestModToastsExpire: a toast is kept for the consoles' polls a few
+// seconds, and the store keeps the last few.
+func TestModToastsExpire(t *testing.T) {
+	var ts modToasts
+	all := func(string) bool { return true }
+	ts.add("a", "old", "info", time.Now().Add(-toastTTL-time.Second))
+	ts.add("b", "new", "info", time.Now())
+	if got := ts.list(all); len(got) != 1 || got[0].Text != "new" || got[0].Seq != 2 {
+		t.Fatalf("list %+v", got)
+	}
+	for range toastMax + 3 {
+		ts.add("b", "x", "info", time.Now())
+	}
+	if got := ts.list(func(id string) bool { return id != "a" }); len(got) != toastMax {
+		t.Fatalf("kept %d", len(got))
 	}
 }
