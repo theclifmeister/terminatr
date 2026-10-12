@@ -37,6 +37,12 @@ func TestServerAddr(t *testing.T) {
 	if !Fits(run, ServerName) || Fits(long, ServerName) {
 		t.Fatal("Fits disagrees with ServerAddr")
 	}
+	if a, err := HumanAddr(Addr(filepath.Join(run, ServerName))); err != nil || a != Addr(filepath.Join(run, HumanName)) {
+		t.Fatalf("HumanAddr = %q, %v", a, err)
+	}
+	if _, err := HumanAddr(Addr(filepath.Join("/"+strings.Repeat("d", MaxPath-len(ServerName)-1), ServerName))); err == nil {
+		t.Fatal("a human socket over the budget passed")
+	}
 	if a := SessionAddr(filepath.FromSlash("/run/s/1"), "mod.sock"); a != Addr(filepath.FromSlash("/run/s/1/mod.sock")) {
 		t.Fatalf("SessionAddr = %q", a)
 	}

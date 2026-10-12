@@ -24,6 +24,12 @@ const MaxPath = 100
 // ServerName is the server socket's name in its run directory.
 const ServerName = "tm.sock"
 
+// HumanName is the human socket's name, beside the server socket: the
+// same server, for the human's console and CLI only. No agent's sandbox
+// allows it (docs/SPEC.md §5.2), so the human-only methods answer there
+// alone (§11.1).
+const HumanName = "human.sock"
+
 // Fits reports whether a socket in dir named name fits the sun_path
 // budget.
 func Fits(dir, name string) bool {
@@ -37,6 +43,16 @@ func ServerAddr(runDir, override string) (Addr, error) {
 	if p == "" {
 		p = filepath.Join(runDir, ServerName)
 	}
+	if len(p) > MaxPath {
+		return "", fmt.Errorf("socket path %q is %d bytes; unix sockets allow at most %d here", p, len(p), MaxPath)
+	}
+	return Addr(p), nil
+}
+
+// HumanAddr is the human socket beside server socket a. It fails when
+// the path is over the sun_path budget.
+func HumanAddr(a Addr) (Addr, error) {
+	p := filepath.Join(filepath.Dir(string(a)), HumanName)
 	if len(p) > MaxPath {
 		return "", fmt.Errorf("socket path %q is %d bytes; unix sockets allow at most %d here", p, len(p), MaxPath)
 	}

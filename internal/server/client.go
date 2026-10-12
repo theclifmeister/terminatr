@@ -59,9 +59,25 @@ type Client struct {
 func Dial(p Paths, kind proto.Kind) (*Client, error) { return dial(p, kind, proto.Protocol) }
 
 // dial is Dial claiming protocol, which Stop lowers to an older server's.
+// A control connection tries the human socket first, which the human-only
+// methods need (docs/SPEC.md §11.1): where it can't connect (an agent's
+// sandbox, an older server) it uses the server socket. A server too slow
+// to answer there is too slow on both.
 func dial(p Paths, kind proto.Kind, protocol int) (*Client, error) {
+	if kind == proto.KindControl && p.Socket != "" {
+		c, err := dialAt(p.HumanSocket(), kind, protocol)
+		var ne net.Error
+		if err == nil || errors.As(err, &ne) && ne.Timeout() {
+			return c, err
+		}
+	}
+	return dialAt(p.Socket, kind, protocol)
+}
+
+// dialAt connects to the socket at sock and performs the handshake.
+func dialAt(sock string, kind proto.Kind, protocol int) (*Client, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), UnresponsiveTimeout)
-	conn, err := ipc.Dial(ctx, ipc.Addr(p.Socket))
+	conn, err := ipc.Dial(ctx, ipc.Addr(sock))
 	cancel()
 	if err != nil {
 		return nil, err

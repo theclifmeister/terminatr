@@ -236,8 +236,21 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", p.Socket, err)
 	}
+	// The human socket: the same server, which no agent's sandbox lets
+	// connect, so the human-only methods answer there alone.
+	human, err := ipc.HumanAddr(ipc.Addr(p.Socket))
+	var hln net.Listener
+	if err == nil {
+		os.Remove(string(human))
+		hln, err = ipc.Listen(human)
+	}
+	if err != nil {
+		ln.Close()
+		return fmt.Errorf("listen %s: %w", human, err)
+	}
 	if err := os.WriteFile(p.PID, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
 		ln.Close()
+		hln.Close()
 		return err
 	}
 
@@ -286,21 +299,26 @@ func Run(ctx context.Context, opts Options) error {
 		}
 	}()
 
-	acceptDone := make(chan struct{})
-	go func() {
-		defer close(acceptDone)
-		for {
-			c, err := ln.Accept()
-			if err != nil {
-				return
+	var accepting sync.WaitGroup
+	accept := func(ln net.Listener, human bool) {
+		accepting.Add(1)
+		go func() {
+			defer accepting.Done()
+			for {
+				c, err := ln.Accept()
+				if err != nil {
+					return
+				}
+				s.handlers.Add(1)
+				go func() {
+					defer s.handlers.Done()
+					s.handle(c, human)
+				}()
 			}
-			s.handlers.Add(1)
-			go func() {
-				defer s.handlers.Done()
-				s.handle(c)
-			}()
-		}
-	}()
+		}()
+	}
+	accept(ln, false)
+	accept(hln, true)
 	// Resume once hooks can be answered: a resumed agent fires
 	// SessionStart at once.
 	if outs := s.resume(toResume); s.prevShut != "" {
@@ -347,7 +365,8 @@ func Run(ctx context.Context, opts Options) error {
 		logger.Printf("ticker: still sweeping; stopping anyway")
 	}
 	ln.Close()
-	<-acceptDone
+	hln.Close()
+	accepting.Wait()
 	s.shutdown()
 	handled := make(chan struct{})
 	go func() {
@@ -360,6 +379,7 @@ func Run(ctx context.Context, opts Options) error {
 		logger.Printf("connections still closing; stopping anyway")
 	}
 	os.Remove(p.Socket)
+	os.Remove(string(human))
 	os.Remove(p.PID)
 	logger.Printf("server stopped")
 	return nil
@@ -479,8 +499,9 @@ func (s *Server) shutdown() {
 }
 
 // handle runs one connection: peer check, handshake, then control or
-// attach.
-func (s *Server) handle(c net.Conn) {
+// attach. human is the connection came in on the human socket, which
+// no agent's sandbox lets connect: the human-only methods need it.
+func (s *Server) handle(c net.Conn, human bool) {
 	defer c.Close()
 	peer, err := ipc.PeerOf(c)
 	if err != nil {
@@ -527,7 +548,7 @@ func (s *Server) handle(c net.Conn) {
 	}
 	switch hello.Kind {
 	case proto.KindControl, proto.KindHook:
-		s.serveControl(c, br, pid)
+		s.serveControl(c, br, pid, human)
 	case proto.KindAttach:
 		s.serveAttach(c, br)
 	default:
@@ -546,11 +567,17 @@ func (s *Server) hello() proto.Hello {
 	}
 }
 
-func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int) {
+func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human bool) {
 	for {
 		var req proto.Request
 		if err := readJSONLine(br, &req); err != nil {
 			return
+		}
+		if !human && proto.HumanOnly(req.Method) {
+			if err := writeJSONLine(c, proto.Response{ID: req.ID, Error: humanSocketOnly(req.Method)}); err != nil {
+				return
+			}
+			continue
 		}
 		switch req.Method {
 		case proto.MethodViewSubscribe:
@@ -584,6 +611,14 @@ func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int) {
 			s.requestStop()
 		}
 	}
+}
+
+// humanSocketOnly refuses human-only method m on the server socket:
+// every agent's sandbox allows that one, and the pid walk that tells an
+// agent from the human (callerOf) ends where a process left its
+// session's tree, so only the human socket vouches for the human.
+func humanSocketOnly(m string) *proto.Error {
+	return proto.Errorf("human-only", "%s answers only on the human socket (%s), which no agent's sandbox allows", m, ipc.HumanName)
 }
 
 func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {

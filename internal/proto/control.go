@@ -478,6 +478,21 @@ const (
 	MethodCLIRun = "cli.run"
 )
 
+// HumanOnly reports whether method m is one only the human calls: the
+// server answers it on the human socket alone (ipc.HumanName, docs/SPEC.md
+// §11.1), and still refuses an agent caller there. The press tokens of
+// mod.action.check and mod.action.done are among them.
+func HumanOnly(m string) bool {
+	switch m {
+	case MethodProjectRename, MethodProjectActive,
+		MethodModViews, MethodModViewInput, MethodModCommand, MethodModRestart,
+		MethodNotifyClaim, MethodNotifyDismiss,
+		MethodModActionCheck, MethodModActionDone:
+		return true
+	}
+	return false
+}
+
 // MethodProjectRename renames a project's slug (tm project rename,
 // docs/SPEC.md §5.1): the server checks no thread of it runs, stops its
 // coordinator, renames it between two ticker sweeps, and starts the
