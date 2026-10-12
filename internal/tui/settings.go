@@ -310,13 +310,8 @@ func globalSettings(note string) []setting {
 				m.setLayout(l)
 				return nil
 			}},
-		{label: "Sidebar", help: "The projects sidebar: full, or the slim strip (b on the dashboard). Every console of this view follows.",
-			value: func(m *dash) string {
-				if m.layout.Sidebar.Slim {
-					return "slim"
-				}
-				return "full"
-			},
+		{label: "Sidebar", help: "The projects sidebar: full, the slim strip or hidden (⚑ N in the header counts what needs you; b on the dashboard). Every console of this view follows.",
+			value:  func(m *dash) string { return m.layout.mode() },
 			change: func(m *dash) tea.Cmd { return m.sideKey("b") }},
 		{label: "Theme", help: "The colours of every part of tm: the built-in one, on your terminal's own 16 colours, or a theme from a mod that is on, which may differ light and dark. Each console follows its terminal's light or dark scheme.",
 			value: func(m *dash) string { return themeSetting() },

@@ -252,7 +252,7 @@ func (m *dash) popup(b box) string {
 			line = base[i]
 		}
 		if i < y || i >= y+len(lines) {
-			out[i] = dimRow(line, g.side().w, i >= g.body().y && i < g.footer().y)
+			out[i] = dimRow(line, g.side(), i >= g.body().y && i < g.footer().y)
 			continue
 		}
 		// Beside the box, a margin too narrow to read is cleared, so no
@@ -273,9 +273,13 @@ func (m *dash) popup(b box) string {
 
 // dimRow dims a window row under a popup: all of it in the body, else
 // its sidebar part (the header and the footer stay as they are).
-func dimRow(line string, side int, body bool) string {
+func dimRow(line string, side rect, body bool) string {
 	if body {
 		return th().Faint.Render(ansi.Strip(line))
 	}
-	return th().Faint.Render(ansi.Strip(ansi.Cut(line, 0, side))) + ansi.Cut(line, side, ansi.StringWidth(line)+1)
+	end := ansi.StringWidth(line) + 1
+	if side.x > 0 { // on the right
+		return ansi.Cut(line, 0, side.x) + reset + th().Faint.Render(ansi.Strip(ansi.Cut(line, side.x, end)))
+	}
+	return th().Faint.Render(ansi.Strip(ansi.Cut(line, 0, side.w))) + ansi.Cut(line, side.w, end)
 }

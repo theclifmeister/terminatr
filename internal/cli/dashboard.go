@@ -64,7 +64,7 @@ func (e *Env) fullConsole(own bool, goTo *tui.Target) int {
 	if !ok {
 		cols, rows = 80, 24
 	}
-	lay := tui.ConsoleLayout(uiFile, int(cols))
+	lay := tui.ConsoleLayout(uiFile)
 	side, info, tree := lay.Sidebar, lay.Info, lay.Tree
 	vc, err := tui.JoinView(p, proto.ViewSubscribeParams{Own: own, Cols: cols, Rows: rows, Sidebar: &side, Info: &info, Tree: &tree})
 	if err != nil {
@@ -139,7 +139,7 @@ func (e *Env) openCmd(slug, agentName string) error {
 	}
 	// The pane gets the window less the sidebar and the status bar.
 	uiFile := uiFile()
-	lay := tui.ConsoleLayout(uiFile, int(cols))
+	lay := tui.ConsoleLayout(uiFile)
 	side, info, tree := lay.Sidebar, lay.Info, lay.Tree
 	id, err := tui.OpenCoordinator(c.Call, slug, agentName, max(int(cols)-side.Cols(int(cols)), 1), int(max(rows, 2)-1))
 	c.Close()

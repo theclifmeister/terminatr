@@ -396,7 +396,12 @@ type infoPanel struct {
 }
 
 // infoX is the panel's first column (its border). c.mu held.
-func (c *client) infoX() int { return c.cols - c.infoW }
+func (c *client) infoX() int {
+	if c.v.Sidebar.Right() {
+		return max(c.cols-c.sideW-c.infoW, 0) // between the pane and the sidebar
+	}
+	return c.cols - c.infoW
+}
 
 // infoLayout lays the panel's content out at its width: when its data
 // or its width changes, not with every frame. c.mu held.
@@ -641,7 +646,11 @@ func (c *client) infoMouse(m emu.Mouse) {
 	case ip.drag && m.Action == emu.MouseMotion:
 		// The border's column in the view's window, which may be another
 		// size than this one.
-		x := c.viewCols() - (c.cols - m.X)
+		gap := c.cols - m.X
+		if c.v.Sidebar.Right() {
+			gap -= c.sideW
+		}
+		x := c.viewCols() - gap
 		l := c.v.Info.DragTo(x, c.viewCols(), c.geo.SideW)
 		same := l == c.v.Info
 		c.mu.Unlock()

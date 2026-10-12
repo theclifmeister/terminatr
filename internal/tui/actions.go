@@ -143,7 +143,7 @@ func init() {
 		{id: "sidebar.narrower", keys: []string{"{"}, label: "{ }", help: "narrow / widen the projects sidebar (or drag its border)", menu: "narrower sidebar",
 			run: (*dash).sideKey},
 		{id: "sidebar.wider", keys: []string{"}"}, menu: "wider sidebar", run: (*dash).sideKey},
-		{id: "sidebar.slim", keys: []string{"b"}, label: "b", help: "the sidebar as a slim strip (glyphs and short names), and back", menu: "slim sidebar on / off",
+		{id: "sidebar.slim", keys: []string{"b"}, label: "b", help: "the sidebar: full, a slim strip (glyphs and short names), hidden, full again", menu: "sidebar: slim / hide / full",
 			run: (*dash).sideKey},
 		{id: "details.toggle", keys: []string{"|"}, label: "|", help: "show or hide the details panel, where the layout puts it: right of the list (dashboards 120 columns or wider) or under it", menu: "details panel on / off",
 			run: (*dash).toggleDetails},

@@ -220,6 +220,7 @@ type dash struct {
 	detailTop int
 	detailKey string
 	shownKeys string // the footer's hints as drawn: its buttons
+	badgeAt   [2]int // the header's needs-you badge as drawn: its columns, [0 0] for none
 
 	// layout is the console's layout, effective: ui.json (ui) under the
 	// layout mod in use (spec, the [ui] layout layoutID), with the
@@ -780,7 +781,7 @@ func (m *dash) sideClick(mo tea.Mouse) tea.Cmd {
 	if mo.Button != tea.MouseLeft {
 		return nil
 	}
-	r, ok, border := sideHitAt(m.tree(), m.sideW(), m.h, mo.X, mo.Y)
+	r, ok, border := sideHitAt(m.tree(), m.sideW(), m.h, m.geom().sideCol(mo.X), mo.Y)
 	t, can, why := r.target()
 	var cmd tea.Cmd
 	if ok && !border {
@@ -875,20 +876,25 @@ func (m *dash) fullTree() []treeRow {
 }
 
 // area is the area with the keyboard: the list when the details panel
-// has it but doesn't show (the window got narrower).
+// has it but doesn't show (the window got narrower), or the sidebar has
+// it while hidden.
 func (m *dash) area() area {
-	if m.focus == areaDetails && m.panel() == "" {
+	if m.focus == areaDetails && m.panel() == "" || m.focus == areaSide && m.sideW() == 0 {
 		return areaMain
 	}
 	return m.focus
 }
 
 // cycleFocus moves the keyboard to the next area (tab), or the previous
-// (shift+tab): the list, the details panel when it shows, the sidebar.
+// (shift+tab): the list, the details panel when it shows, the sidebar
+// unless it is hidden.
 func (m *dash) cycleFocus(key string) tea.Cmd {
-	areas := []area{areaMain, areaSide}
+	areas := []area{areaMain}
 	if m.panel() != "" {
-		areas = []area{areaMain, areaDetails, areaSide}
+		areas = append(areas, areaDetails)
+	}
+	if m.sideW() > 0 {
+		areas = append(areas, areaSide)
 	}
 	m.focus = cycle(areas, m.area(), key == "shift+tab")
 	if m.focus == areaSide {
@@ -1047,6 +1053,10 @@ func (m *dash) setData(d Data) tea.Cmd {
 			m.push(&taskView{pv: pv, id: m.over.Task})
 		}
 		m.then = ""
+	case first && m.then == thenNeeds:
+		// The needs-you badge clicked in a session.
+		m.goNeeds()
+		m.then = ""
 	case first && m.over != nil && m.over.View:
 		// The view a mod opened after a command in the session.
 		cmds = append(cmds, m.pollModViews())
@@ -1073,6 +1083,37 @@ func (m *dash) rebuild() {
 				m.sel = r.key
 				break
 			}
+		}
+	}
+}
+
+// needsCount is what NEEDS YOU counts: what waits on the human, in
+// every project.
+func (m *dash) needsCount() int {
+	for _, r := range m.rows {
+		if r.head == "NEEDS YOU" {
+			return r.count
+		}
+	}
+	return 0
+}
+
+// thenNeeds is the then (DashState.Then) of the needs-you badge clicked
+// in a session: NEEDS YOU's first row selected.
+const thenNeeds = "needs-you"
+
+// goNeeds selects NEEDS YOU's first row: a click on the needs-you badge.
+func (m *dash) goNeeds() {
+	in := false
+	for _, r := range m.rows {
+		switch {
+		case r.head == "NEEDS YOU":
+			in = true
+		case r.head != "":
+			in = false
+		case in && r.selectable():
+			m.sel, m.userSel, m.focus = r.key, true, areaMain
+			return
 		}
 	}
 }
@@ -1313,18 +1354,24 @@ func (m *dash) render() string {
 	return m.withSide(m.renderList())
 }
 
-// withSide puts the sidebar beside the dashboard's lines s.
+// withSide puts the sidebar beside the dashboard's lines s, on its
+// side.
 func (m *dash) withSide(s string) string {
 	lines := strings.Split(s, "\n")
 	rows := m.tree()
-	side := sidebarLines(rows, m.sideW(), m.h, sideFooter(rows, m.sideW(), m.data.Server, m.over != nil))
+	right := m.layout.Sidebar.Right()
+	side := sideLines(rows, m.sideW(), m.h, sideFooter(rows, m.sideW(), m.data.Server, m.over != nil), right)
 	w := m.geom().main().w
 	for i := range side {
 		var l string
 		if i < len(lines) {
 			l = lines[i]
 		}
-		side[i] += fit(l, w) + reset
+		if right {
+			side[i] = fit(l, w) + reset + side[i]
+		} else {
+			side[i] += fit(l, w) + reset
+		}
 	}
 	return strings.Join(side, "\n")
 }
@@ -1566,6 +1613,18 @@ func (m *dash) frame(title string, body []string, sel int, keys string) string {
 		n := len(m.data.Sessions)
 		right = th().Good.Render(ic().working) + " server ok" + th().Faint.Render(fmt.Sprintf(" · %d session%s", n, map[bool]string{true: "s"}[n != 1]))
 	}
+	// With the sidebar hidden, what needs you is counted before the
+	// server's state: a click on it goes there.
+	m.badgeAt = [2]int{}
+	badge := ""
+	if m.sideW() == 0 {
+		badge = needsBadge(m.needsCount())
+	}
+	if badge != "" {
+		right = badge + " " + right
+		x := max(m.w-ansi.StringWidth(right)-1, 1) + 1
+		m.badgeAt = [2]int{x, x + ansi.StringWidth(badge)}
+	}
 	// The app, not a project: the project's own section is headed by its
 	// slug, which may well be "terminatr".
 	left := th().Title.Render(" tm dashboard")
@@ -1580,7 +1639,7 @@ func (m *dash) frame(title string, body []string, sel int, keys string) string {
 	switch {
 	case m.prefixed:
 		keys = prefixHint()
-	case m.focus == areaSide && m.top() == nil:
+	case m.area() == areaSide && m.top() == nil:
 		// The sidebar's own keys are in its key bar.
 		keys = "esc back to the list · tab next area"
 	case m.area() == areaDetails && m.top() == nil:

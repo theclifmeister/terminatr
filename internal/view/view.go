@@ -115,6 +115,9 @@ func (v *View) Valid() error {
 	if err := v.Tree.Valid(); err != nil {
 		return fmt.Errorf("view %s: %w", v.Name, err)
 	}
+	if err := v.Sidebar.Valid(); err != nil {
+		return fmt.Errorf("view %s: %w", v.Name, err)
+	}
 	if err := ValidColumns(v.Columns); err != nil {
 		return fmt.Errorf("view %s: %w", v.Name, err)
 	}
