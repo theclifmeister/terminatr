@@ -136,6 +136,7 @@
   <div class="tabs" role="tablist" aria-label="Screens">
     <button role="tab" id="tab-needs" aria-controls="panel-needs" aria-selected="true">needs you</button>
     <button role="tab" id="tab-thread" aria-controls="panel-thread" aria-selected="false" tabindex="-1">thread</button>
+    <button role="tab" id="tab-session" aria-controls="panel-session" aria-selected="false" tabindex="-1">session</button>
     <button role="tab" id="tab-tasks" aria-controls="panel-tasks" aria-selected="false" tabindex="-1">tasks</button>
     <button role="tab" id="tab-inbox" aria-controls="panel-inbox" aria-selected="false" tabindex="-1">inbox</button>
     <button role="tab" id="tab-overview" aria-controls="panel-overview" aria-selected="false" tabindex="-1">project</button>
@@ -206,6 +207,42 @@
  tab sidebar · ? help              <span class="dim">│</span></pre><!-- /screen:thread -->
     </div>
     <figcaption>A thread on its task: state, progress, the step it is on, its pull request and a fresh report for the coordinator.</figcaption>
+  </figure>
+  <figure class="term tabpanel" role="tabpanel" id="panel-session" aria-labelledby="tab-session" hidden>
+    <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>tm · session</span></div>
+    <div class="scroll" tabindex="0">
+<!-- screen:session --><pre class="screen" style="--cols:160" data-golden="session-sidebar.txt"> <span class="head">PROJECTS</span>                      1   <span class="dim">│</span>✻ Fake Claude Code 2.1.289                                                          <span class="dim">│</span> <span class="task">T1</span> Fix the login
+ <span class="accent">■</span> demo        2                   <span class="dim">│</span>  cwd: ~/src/demo                                                                   <span class="dim">│</span> <span class="ok">● started</span> · click to open
+ <span class="dim">└─</span> coordi…             ·          <span class="dim">│</span>                                                                                    <span class="dim">│</span>
+    <span class="dim">├─</span> <span class="task">T1</span>    <span class="accent">50%</span> <span class="idle">☐</span>      ○          <span class="dim">│</span>⏺ Reproducing the login bug first.                                                  <span class="dim">│</span> <span class="head">STEPS</span> <span class="dim">───────────────────────────────</span>
+    <span class="dim">└─</span> <span class="task">T2</span>        <span class="idle">☐</span> <span class="accent">4%</span>   ○          <span class="dim">│</span>⏺ Bash(go test ./auth/...)                                                          <span class="dim">│</span> <span class="accent">▰▰▰</span><span class="dim">▱▱</span> <span class="accent">50%</span> 1/2
+                                   <span class="dim">│</span>  ⎿  Done                                                                           <span class="dim">│</span> <span class="ok">✓</span> Reproduce the bug
+                                   <span class="dim">│</span>⏺ The redirect drops the next parameter after a login. Fixing it in auth/session.go.<span class="dim">│</span> <span class="warn">◐</span> Fix it
+                                   <span class="dim">│</span>⏺ Edit(auth/session.go)                                                             <span class="dim">│</span>
+                                   <span class="dim">│</span>  ⎿  Done                                                                           <span class="dim">│</span> <span class="head">THREAD</span> <span class="dim">──────────────────────────────</span>
+                                   <span class="dim">│────────────────────────────────────────────────────────────────────────────────────│</span> thread    <span class="task">t-0001</span> <span class="idle">○ idle</span>
+                                   <span class="dim">│</span>❯                                                                                   <span class="dim">│</span> now       <span class="warn">▸</span> Fix it
+                                   <span class="dim">│────────────────────────────────────────────────────────────────────────────────────│</span> PR        #7 open, checks pending
+                                   <span class="dim">│</span>  ? for shortcuts                                                                   <span class="dim">│</span>
+                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span> LAST REPORT 4m ago <span class="dim">──────────────────</span>
+                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span> Fixed the login redirect.
+                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span>
+                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span> branch    tm/demo/t-0001-fix-the-login
+                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span> …/worktrees/demo/t-0001-fix-the-login
+                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span> active    4m ago
+                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span>
+                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span>
+                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span>
+                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span>
+                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span>
+ <span class="dim">─────────────────────────────────</span> <span class="dim">│</span>                                                                                    <span class="dim">│</span>
+ <span class="task">T1</span> Fix the login (<span class="task">t-0001</span>)         <span class="dim">│</span>                                                                                    <span class="dim">│</span>
+ idle · <span class="accent">50%</span> · <span class="link">PR #7</span> · CI running   <span class="dim">│</span>                                                                                    <span class="dim">│</span>
+ <span class="key">prefix+tab</span> sidebar                <span class="dim">│</span>                                                                                    <span class="dim">│</span>
+<span class="dim">────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
+ ○ demo › <span class="task">T1</span> Fix the login  <span class="accent">50%</span> <span class="accent">▰▰▰</span><span class="dim">▱▱</span> 1/2 <span class="warn">▸</span> Fix it                                                                  <span class="key">prefix+?</span> help · <span class="key">prefix+d</span> dashboard · <span class="key">≡ menu</span></pre><!-- /screen:session -->
+    </div>
+    <figcaption>Inside a thread's session: the project tree on the left, the thread's steps, PR and last report on the right, and where you are in the status bar. The agent here is tm's test stand-in.</figcaption>
   </figure>
   <figure class="term tabpanel" role="tabpanel" id="panel-tasks" aria-labelledby="tab-tasks" hidden>
     <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>tm · project popup</span></div>

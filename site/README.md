@@ -8,7 +8,9 @@ The screens are tm's own: the end-to-end tests' golden captures (`internal/e2e/t
 python3 site/tools/screens.py
 ```
 
-The mods screens are `TestModScreens`'s goldens (the example mods installed in a test tm); after a change to a mod or the console, rewrite them with `E2E=1 go test ./internal/e2e -run TestModScreens -update` first.
+The mods and session screens are `TestModScreens`'s goldens (the example mods installed in a test tm); after a change to a mod or the console, rewrite them with `E2E=1 go test ./internal/e2e -run TestModScreens -update` first.
+
+It also writes the README's images, the same screens as SVG, into `docs/images/`.
 
 It fills the captures' masks (`<duration>`, `<session>`, …) with neutral values and stops if one is left, or if a screen shows a home path.
 

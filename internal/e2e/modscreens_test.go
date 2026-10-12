@@ -9,6 +9,7 @@ package e2e
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ func TestModScreens(t *testing.T) {
 	env, _, _ := tickerEnv(t)
 	state := fakeGH(t, env)
 	env.FakeCodex() // a thread whose session reports its context and tokens
+	env.Setenv("FAKEAGENT_CWD_LABEL", "~/src/demo")
 	root, err := moduleRoot()
 	if err != nil {
 		t.Fatal(err)
@@ -108,4 +110,45 @@ cmd = 'printf "PR: https://github.com/o/r/pull/7\n\n## Report\nFixed the login r
 	w.Key(Enter)
 	w.WaitFor("Login flow: the redirect", wait)
 	w.Golden("mods-memory.txt", popupMasks...)
+	w.Key(keyEsc)
+	w.WaitUntil("popup closed", wait, func(sc string) bool { return !strings.Contains(sc, "1 overview") })
+
+	// A thread's session with the sidebar and its info panel, for the
+	// README: the fake agent clears its conversation (the kickoff names
+	// temp paths) and shows a little work.
+	os.WriteFile(filepath.Join(env.scriptsDir(), "session-shot.toml"), []byte(`
+[[step]]
+do = "clear"
+
+[[step]]
+do = "stream"
+ms = 50
+text = "Reproducing the login bug first."
+
+[[step]]
+do = "tool"
+tool = "Bash"
+input = { command = "go test ./auth/..." }
+
+[[step]]
+do = "stream"
+ms = 50
+text = "The redirect drops the next parameter after a login. Fixing it in auth/session.go."
+
+[[step]]
+do = "tool"
+tool = "Edit"
+input = { file_path = "auth/session.go" }
+`), 0o644)
+	p("thread", "prompt", "t-0001", "run session-shot")
+	env.WaitFor(th, "Edit(auth/session.go)", agentWait)
+	env.WaitState(th, "idle", agentWait)
+	w.Resize(160, 30)
+	w.WaitFor("OTHER SESSIONS", wait)
+	w.Quiet(400 * time.Millisecond)
+	w.ClickText("T1 Fix the login", 1)
+	w.Key(Enter)
+	w.WaitFor("Edit(auth/session.go)", wait)
+	w.WaitFor("LAST REPORT", wait)
+	w.Golden("session-sidebar.txt", Mask{Name: "worktree", Re: regexp.MustCompile(`worktree  \S+`)})
 }

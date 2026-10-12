@@ -1,0 +1,30 @@
+ PROJECTS                      1   │✻ Fake Claude Code 2.1.289                                                          │ T1 Fix the login
+ ■ demo        2                   │  cwd: ~/src/demo                                                                   │ ● started · click to open
+ └─ coordi…             ·          │                                                                                    │
+    ├─ T1    50% ☐      ○          │⏺ Reproducing the login bug first.                                                  │ STEPS ───────────────────────────────
+    └─ T2        ☐ 4%   ○          │⏺ Bash(go test ./auth/...)                                                          │ ▰▰▰▱▱ 50% 1/2
+                                   │  ⎿  Done                                                                           │ ✓ Reproduce the bug
+                                   │⏺ The redirect drops the next parameter after a login. Fixing it in auth/session.go.│ ◐ Fix it
+                                   │⏺ Edit(auth/session.go)                                                             │
+                                   │  ⎿  Done                                                                           │ THREAD ──────────────────────────────
+                                   │────────────────────────────────────────────────────────────────────────────────────│ thread    t-0001 ○ idle
+                                   │❯                                                                                   │ now       ▸ Fix it
+                                   │────────────────────────────────────────────────────────────────────────────────────│ PR        #7 open, checks pending
+                                   │  ? for shortcuts                                                                   │
+                                   │                                                                                    │ LAST REPORT <duration> ago ──────────────────
+                                   │                                                                                    │ Fixed the login redirect.
+                                   │                                                                                    │
+                                   │                                                                                    │ branch    tm/demo/t-0001-fix-the-login
+                                   │                                                                                    │ <worktree>
+                                   │                                                                                    │ active    <duration> ago
+                                   │                                                                                    │
+                                   │                                                                                    │
+                                   │                                                                                    │
+                                   │                                                                                    │
+                                   │                                                                                    │
+ ───────────────────────────────── │                                                                                    │
+ T1 Fix the login (t-0001)         │                                                                                    │
+ idle · 50% · PR #7 · CI running   │                                                                                    │
+ prefix+tab sidebar                │                                                                                    │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ○ demo › T1 Fix the login  50% ▰▰▰▱▱ 1/2 ▸ Fix it                                                                  prefix+? help · prefix+d dashboard · ≡ menu

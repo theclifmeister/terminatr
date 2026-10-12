@@ -137,7 +137,11 @@ func (a *app) frameLocked(now time.Time) string {
 		title = string(f[int(now.Sub(a.born)/(150*time.Millisecond))%len(f)]) + " Fake Claude"
 	}
 	header := []string{"✻ Fake Claude Code " + a.version}
-	header = append(header, wrap("  cwd: "+a.cwd, cols)...)
+	cwd := a.cwd
+	if l := os.Getenv("FAKEAGENT_CWD_LABEL"); l != "" {
+		cwd = l // a screen capture's stand-in for the temp folder
+	}
+	header = append(header, wrap("  cwd: "+cwd, cols)...)
 	header = append(header, "")
 	bottom := a.bottomLocked(now, cols)
 	var conv []string
