@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // TestDashboardSidebarRight: on the right the sidebar is the window's
@@ -100,5 +101,59 @@ func TestAttachSidebarRight(t *testing.T) {
 		if a == areaSide {
 			t.Fatal("prefix+tab goes to a hidden sidebar")
 		}
+	}
+}
+
+// TestNeedsBadge: with the sidebar hidden, "⚑ N" counts what NEEDS YOU
+// counts: in the dashboard's header, where a click selects NEEDS YOU's
+// first row, and at the right of the attach status bar, where a click
+// opens the dashboard there.
+func TestNeedsBadge(t *testing.T) {
+	src := &fakeSource{data: testData()}
+	m := newDash(DashOptions{Source: src, Width: 160, Height: 30, UIFile: filepath.Join(t.TempDir(), "ui.json"), State: DashState{Current: "beta"}})
+	m.setData(src.data)
+	n := needsYouCount(src.data.Projects, src.data.Sessions)
+	if n == 0 || n != m.needsCount() {
+		t.Fatalf("needs-you count %d, NEEDS YOU says %d", n, m.needsCount())
+	}
+	badge := "⚑ " + strconv.Itoa(n)
+	if head := strings.Split(whole(m), "\n")[0]; strings.Contains(head, badge) {
+		t.Fatalf("a badge beside the sidebar: %q", head)
+	}
+	press(m, "b")
+	head := strings.Split(whole(m), "\n")[0]
+	i := strings.Index(head, badge)
+	if i < 0 || !strings.Contains(head[i:], "server ok") {
+		t.Fatalf("hidden: no badge before the server's state: %q", head)
+	}
+	m.sel = ""
+	m.Update(tea.MouseClickMsg{X: ansi.StringWidth(head[:i]), Y: 0, Button: tea.MouseLeft})
+	if r, ok := m.selected(); !ok || !strings.HasPrefix(r.key, "n") {
+		t.Fatalf("badge click selected %q", m.sel)
+	}
+
+	// Clicked in a session: the dashboard opens on NEEDS YOU.
+	m = newDash(DashOptions{Source: src, Width: 160, Height: 30, State: DashState{Current: "beta", Then: thenNeeds}})
+	m.setData(src.data)
+	if r, ok := m.selected(); !ok || !strings.HasPrefix(r.key, "n") || m.then != "" {
+		t.Fatalf("then needs-you selected %q", m.sel)
+	}
+
+	c := infoClient(t, 160)
+	c.statusBar = true
+	c.focus = &pane{info: proto.SessionInfo{ID: "s-1", Role: proto.RoleCoordinator, Project: "alpha"}}
+	c.side.projects, c.side.sessions = src.data.Projects, src.data.Sessions
+	c.status()
+	if strings.Contains(ansi.Strip(c.statusText), badge) {
+		t.Fatalf("a badge beside the sidebar: %q", ansi.Strip(c.statusText))
+	}
+	c.v.Sidebar.Hidden = true
+	f := c.focus
+	c.relayout()
+	c.focus = f // no pane in the test: relayout forgets it
+	c.status()
+	bar := ansi.Strip(c.statusText)
+	if !strings.HasSuffix(bar, badge+" ") || ansi.StringWidth(bar) != 160 || hintAt(c.statusHits, 160-2) != thenNeeds {
+		t.Fatalf("hidden: status %q, hits %v", bar, c.statusHits)
 	}
 }

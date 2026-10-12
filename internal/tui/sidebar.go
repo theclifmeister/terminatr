@@ -19,6 +19,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
 	"github.com/theclifmeister/terminatr/internal/view"
@@ -1063,7 +1064,8 @@ func OpenTarget(p server.Paths, vc *ViewConn, t Target) error {
 }
 
 // loadSideProjects reads the projects and their open threads, with their
-// STATUS.md and their PRs' checks (the ticker's), from the project folders:
+// STATUS.md and their PRs' checks (the ticker's), and what needs you,
+// from the project folders:
 // what the attach client polls for
 // its sidebar.
 func loadSideProjects(paths server.Paths) []ProjectData {
@@ -1075,6 +1077,16 @@ func loadSideProjects(paths server.Paths) []ProjectData {
 		}
 		pd := ProjectData{Slug: sum.Slug, Safety: sum.Safety}
 		if p, err := project.Open(sum.Slug); err == nil {
+			// What NEEDS YOU counts, for the badge of a hidden sidebar.
+			if b, err := p.Tasks().Load(); err == nil {
+				for _, t := range b.Tasks {
+					if tasks.GroupOf(t.Status) == tasks.NeedsYou {
+						pd.NeedsYou = append(pd.NeedsYou, t)
+					}
+				}
+			}
+			qs, _ := p.Questions()
+			pd.Questions = len(qs)
 			recs, _ := thread.List(p)
 			prs := ticker.PRs(ticker.StatePath(paths.Sessions), sum.Slug)
 			for _, r := range recs {

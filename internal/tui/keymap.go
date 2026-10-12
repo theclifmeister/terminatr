@@ -31,7 +31,7 @@ func sessionKeys() []keyHelp {
 		{"prefix+q", "quit this console, from anywhere: a session, the dashboard, a popup, the sidebar, tm attach (the server, the sessions and other consoles keep running)"},
 		{"prefix+" + boundKeys("a", "i", "t", ",", "?", "n"), "the project popup, settings, help or the new-project prompt, over the session or the dashboard; t and i are the project popup on its Tasks and Inbox tabs; esc closes it"},
 		{"prefix+" + boundKeys("]", "["), "the next / previous project's coordinator"},
-		{"prefix+" + boundKeys("{", "}", "b"), "narrow / widen the sidebar, or make it a slim strip"},
+		{"prefix+" + boundKeys("{", "}", "b"), "narrow / widen the sidebar; b hides it, a slim strip, full again"},
 		{"prefix+" + boundKey("|"), "show or hide the panel on the right: beside a thread's pane its info panel (task, steps, state, PR, last report; drag its border to resize it), on the dashboard the details panel"},
 		{"prefix+tab", "the keyboard to the next area: in a session the projects sidebar (its keys below), the info panel (↑ ↓ scroll, enter its task) and back to the pane, which gets no keys meanwhile; on the dashboard as tab"},
 		{"prefix+" + boundKey(";"), "back to the last place: the area, sidebar row and session the keyboard was in before, such as the thread you were typing in; again goes back"},

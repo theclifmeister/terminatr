@@ -14,6 +14,7 @@ import (
 	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/emu"
@@ -1190,7 +1191,7 @@ type prefixDo struct {
 }
 
 // paneCommands are the keys that, after the prefix, act on the window
-// itself: the sidebar's width ({ }), its slim strip (b), the keyboard
+// itself: the sidebar's width ({ }), hidden or slim (b), the keyboard
 // (tab), the info panel (|) and the last place (;).
 var paneCommands = map[string]bool{"{": true, "}": true, "b": true, "tab": true, "|": true, ";": true}
 
@@ -1348,8 +1349,8 @@ func (c *client) paneLines(o *Over) []string {
 	return o.place(strings.Split(s, "\n"), c.paneRows)
 }
 
-// paneCommand runs a command on the window: the sidebar's width, its
-// slim strip, its keyboard.
+// paneCommand runs a command on the window: the sidebar's width, hidden
+// or slim, its keyboard.
 func (c *client) paneCommand(cmd string) {
 	switch cmd {
 	case "{", "}", "b":
@@ -1408,7 +1409,25 @@ func (c *client) status() {
 	if c.flash != "" {
 		where = c.flash // a note in passing
 	}
-	line, hits := statusBar(c.focus.info, c.focus.status, c.paneTitle(), c.pending, c.cols, where, c.cells)
+	// With the sidebar hidden, what needs you is counted at the right end:
+	// a click on it opens the dashboard there.
+	badge := ""
+	if c.side != nil && c.sideW == 0 {
+		badge = needsBadge(needsYouCount(c.side.projects, c.side.sessions))
+	}
+	bw := ansi.StringWidth(badge)
+	if c.cols < bw+20 {
+		badge, bw = "", 0 // no room
+	}
+	sw := c.cols
+	if bw > 0 {
+		sw -= bw + 1
+	}
+	line, hits := statusBar(c.focus.info, c.focus.status, c.paneTitle(), c.pending, sw, where, c.cells)
+	if bw > 0 {
+		line += reset + badge + " "
+		hits = append(hits, hint{c.cols - bw - 1, c.cols - 1, thenNeeds})
+	}
 	if c.single {
 		c.focus.r.SetStatus(line)
 	}

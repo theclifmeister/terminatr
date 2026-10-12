@@ -220,6 +220,7 @@ type dash struct {
 	detailTop int
 	detailKey string
 	shownKeys string // the footer's hints as drawn: its buttons
+	badgeAt   [2]int // the header's needs-you badge as drawn: its columns, [0 0] for none
 
 	// layout is the console's layout, effective: ui.json (ui) under the
 	// layout mod in use (spec, the [ui] layout layoutID), with the
@@ -1052,6 +1053,10 @@ func (m *dash) setData(d Data) tea.Cmd {
 			m.push(&taskView{pv: pv, id: m.over.Task})
 		}
 		m.then = ""
+	case first && m.then == thenNeeds:
+		// The needs-you badge clicked in a session.
+		m.goNeeds()
+		m.then = ""
 	case first && m.over != nil && m.over.View:
 		// The view a mod opened after a command in the session.
 		cmds = append(cmds, m.pollModViews())
@@ -1078,6 +1083,37 @@ func (m *dash) rebuild() {
 				m.sel = r.key
 				break
 			}
+		}
+	}
+}
+
+// needsCount is what NEEDS YOU counts: what waits on the human, in
+// every project.
+func (m *dash) needsCount() int {
+	for _, r := range m.rows {
+		if r.head == "NEEDS YOU" {
+			return r.count
+		}
+	}
+	return 0
+}
+
+// thenNeeds is the then (DashState.Then) of the needs-you badge clicked
+// in a session: NEEDS YOU's first row selected.
+const thenNeeds = "needs-you"
+
+// goNeeds selects NEEDS YOU's first row: a click on the needs-you badge.
+func (m *dash) goNeeds() {
+	in := false
+	for _, r := range m.rows {
+		switch {
+		case r.head == "NEEDS YOU":
+			in = true
+		case r.head != "":
+			in = false
+		case in && r.selectable():
+			m.sel, m.userSel, m.focus = r.key, true, areaMain
+			return
 		}
 	}
 }
@@ -1572,6 +1608,18 @@ func (m *dash) frame(title string, body []string, sel int, keys string) string {
 	default:
 		n := len(m.data.Sessions)
 		right = th().Good.Render(ic().working) + " server ok" + th().Faint.Render(fmt.Sprintf(" · %d session%s", n, map[bool]string{true: "s"}[n != 1]))
+	}
+	// With the sidebar hidden, what needs you is counted before the
+	// server's state: a click on it goes there.
+	m.badgeAt = [2]int{}
+	badge := ""
+	if m.sideW() == 0 {
+		badge = needsBadge(m.needsCount())
+	}
+	if badge != "" {
+		right = badge + " " + right
+		x := max(m.w-ansi.StringWidth(right)-1, 1) + 1
+		m.badgeAt = [2]int{x, x + ansi.StringWidth(badge)}
 	}
 	// The app, not a project: the project's own section is headed by its
 	// slug, which may well be "terminatr".

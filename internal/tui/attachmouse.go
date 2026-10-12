@@ -36,7 +36,7 @@ var sessionMenu = []struct{ label, key string }{
 	{"help: keys and mouse", "?"},
 	{"narrower sidebar", "{"},
 	{"wider sidebar", "}"},
-	{"slim sidebar on / off", "b"},
+	{"sidebar: hide / slim / full", "b"},
 	{"info panel on / off", "|"},
 	{"keyboard to the sidebar", "tab"},
 	{"back to the last place", ";"},
@@ -413,7 +413,11 @@ func (c *client) statusMouse(m emu.Mouse) {
 	case emu.MouseRight:
 		c.openMenu(c.menuTitle(), c.sessionItems(), m.X, c.rows-1, true)
 	case emu.MouseLeft:
-		if key := hintAt(c.statusHits, m.X); key != "" {
+		if key := hintAt(c.statusHits, m.X); key == thenNeeds {
+			c.mu.Unlock()
+			c.detachThen(thenNeeds)
+			return
+		} else if key != "" {
 			c.mu.Unlock()
 			c.command(key)
 			c.poke()
