@@ -334,3 +334,32 @@ func TestModSpecsColumnModsEager(t *testing.T) {
 		t.Fatalf("mod without columns eager: %v", got)
 	}
 }
+
+// TestModSpecsShareRegistry: a mod installed and enabled just after the
+// broker read the registry is answered at once by the host modSpecs
+// starts, not refused as not installed for the broker's cache's second
+// (T301 B7).
+func TestModSpecsShareRegistry(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("TERMINATR_HOME", home)
+	p, err := ResolvePaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{opts: Options{Paths: p}, log: log.New(&testWriter{t: t}, "server: ", 0), modEv: newModEvents()}
+	if _, err := s.CallMod(context.Background(), "naughty", "store.get", json.RawMessage(`{"key":"k"}`)); err == nil {
+		t.Fatal("a mod not installed yet answered")
+	}
+	dir := filepath.Join(home, "mods", "naughty")
+	os.MkdirAll(dir, 0o700)
+	os.WriteFile(filepath.Join(dir, "mod.toml"), []byte("id = \"naughty\"\nname = \"N\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nmain = \"main.js\"\n"), 0o600)
+	os.WriteFile(filepath.Join(dir, "main.js"), nil, 0o600)
+	os.WriteFile(filepath.Join(home, "config.toml"), []byte("[mods.naughty]\nenabled = true\n"), 0o600)
+	specs, ok := s.modSpecs()
+	if !ok || !slices.ContainsFunc(specs, func(sp modsup.Spec) bool { return sp.ID == "naughty" }) {
+		t.Fatalf("specs %+v", specs)
+	}
+	if _, err := s.CallMod(context.Background(), "naughty", "store.get", json.RawMessage(`{"key":"k"}`)); err != nil {
+		t.Fatalf("the new host's first call: %v", err)
+	}
+}

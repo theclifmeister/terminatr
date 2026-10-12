@@ -204,13 +204,21 @@ func barKey(id, shown string) string {
 // apply. A nil or empty keymap is the defaults. It is set before the
 // console starts: the keys are read without a lock.
 func ApplyKeymap(km map[string][]string, prefix string) error {
+	list, side, err := planKeymap(km, prefix)
+	binds.list, binds.side = list, side
+	return err
+}
+
+// planKeymap is what ApplyKeymap would set, and what it leaves out, without
+// setting it: tm mod validate and tm doctor check a keymap mod with it.
+func planKeymap(km map[string][]string, prefix string) (keyTable, keyTable, error) {
 	var errs []error
 	list, side := listBindables(), sideBindables()
+	var out [2]keyTable
 	tables := []struct {
-		t    *keyTable
 		rows []bindable
 		want map[string][]string
-	}{{&binds.list, list, map[string][]string{}}, {&binds.side, side, map[string][]string{}}}
+	}{{list, map[string][]string{}}, {side, map[string][]string{}}}
 	for _, id := range slices.Sorted(maps.Keys(km)) {
 		ti := 0
 		if tableOf(id) == &binds.side {
@@ -252,10 +260,10 @@ func ApplyKeymap(km map[string][]string, prefix string) error {
 			}
 		}
 	}
-	for _, tb := range tables {
-		*tb.t = newKeyTable(tb.rows, tb.want)
+	for i, tb := range tables {
+		out[i] = newKeyTable(tb.rows, tb.want)
 	}
-	return errors.Join(errs...)
+	return out[0], out[1], errors.Join(errs...)
 }
 
 // checkBinding is what is wrong with binding id (row, nil when no table

@@ -87,6 +87,9 @@ type Data struct {
 	// Cells are the mods' cells and status segments (session.list's
 	// Mods and the sessions' Cells); nil for none.
 	Cells *modCells
+	// Toasts are the mods' toasts of the last few seconds (session.list's
+	// Mods), oldest first.
+	Toasts []proto.ModToast
 }
 
 // ServerInfo is the running server's identity, from session.list.
@@ -354,6 +357,9 @@ func (s *ServerSource) Load() Data {
 	} else {
 		d.ServerOK, d.Sessions, d.Alerts, d.ModNotices = true, res.Sessions, res.Alerts, res.ModNotices
 		d.Cells = newModCells(res.Mods, res.Sessions)
+		if res.Mods != nil {
+			d.Toasts = res.Mods.Toasts
+		}
 		d.Server = ServerInfo{Version: res.Version, Build: res.Build, Latest: res.Latest, Upgrade: res.Upgrade}
 	}
 	cfg, err := config.Load()

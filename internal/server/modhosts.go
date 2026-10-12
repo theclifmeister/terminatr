@@ -82,6 +82,10 @@ func (s *Server) modSpecs() ([]modsup.Spec, bool) {
 		return nil, false
 	}
 	s.noteMods(reg)
+	// The broker answers the hosts started from reg by reg, not by a
+	// registry it read before the mod was installed or enabled: that
+	// one would refuse every call of a new host's first second (T301 B7).
+	s.shareModRegistry(reg)
 	var specs []modsup.Spec
 	for _, m := range reg.Mods {
 		if m.State != mod.Enabled || m.Manifest == nil || !m.Manifest.IsCode() || s.noMods && !m.Builtin {

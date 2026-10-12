@@ -9,6 +9,12 @@ import (
 	"path/filepath"
 )
 
+// LinkDir makes link a symlink to the directory target, an absolute path.
+func LinkDir(target, link string) error { return os.Symlink(target, link) }
+
+// Unjunction is dir: only Windows has junctions.
+func Unjunction(dir string) string { return dir }
+
 // LinkRoleFile makes dir/name point at the role file target in the same
 // directory, so an agent that reads name reads target: a relative
 // symlink. An existing link to target is kept; anything else at name is

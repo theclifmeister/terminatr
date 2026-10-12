@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // commandDash is a dashboard with three mods' commands: lab's relabel
@@ -66,13 +67,18 @@ func TestModCommandKeys(t *testing.T) {
 // the help lists them all, and the Mods tab names the key conflicts.
 func TestModCommandMenuAndHelp(t *testing.T) {
 	src, m := commandDash(t)
+	// A full view of the command's title is one entry, the command's
+	// (standup's view and S, T301 B9); another full view stays.
+	m.setModViews(modViewsMsg{res: proto.ModViewsResult{Views: []proto.ModView{
+		{Mod: "lab", Name: "Lab", View: "relabel", Title: "Relabel", Slot: "full"},
+		{Mod: "lab", Name: "Lab", View: "board", Title: "Board", Slot: "full"}}}})
 	var labels []string
 	for _, it := range m.dashItems() {
 		if strings.Contains(it.label, "mod: ") {
 			labels = append(labels, it.label+"="+it.key)
 		}
 	}
-	if got, want := strings.Join(labels, " | "), "Relabel · mod: lab=g | Sweep · mod: lab= | Sync · mod: late="; got != want {
+	if got, want := strings.Join(labels, " | "), "Board · mod: lab= | Relabel · mod: lab=g | Sweep · mod: lab= | Sync · mod: late="; got != want {
 		t.Fatalf("menu\n got %s\nwant %s", got, want)
 	}
 	for _, it := range m.dashItems() {

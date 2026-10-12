@@ -118,6 +118,11 @@ func (p Paths) Check(path string, write bool) (string, error) {
 			return "", Denied("%s: no home folder", path)
 		}
 		abs = filepath.Join(p.Home, filepath.FromSlash(strings.TrimPrefix(path, "~")))
+	case caps.Windows && rootless(path):
+		// \Windows\win.ini is on the own folder's drive, as /etc/passwd
+		// is the root's on Unix: outside, not a file of the own folder
+		// (T301 B10).
+		abs = filepath.Join(filepath.VolumeName(p.Own)+`\`, path)
 	case !filepath.IsAbs(path):
 		abs = filepath.Join(p.Own, path)
 	}
@@ -153,6 +158,13 @@ func (p Paths) Check(path string, write bool) (string, error) {
 		return "", outside
 	}
 	return real, nil
+}
+
+// rootless says whether a Windows path is rooted but names no drive
+// (\x or /x), which filepath.IsAbs calls relative.
+func rootless(path string) bool {
+	return (strings.HasPrefix(path, `\`) || strings.HasPrefix(path, "/")) &&
+		!strings.HasPrefix(path, `\\`) && !strings.HasPrefix(path, "//")
 }
 
 func (p Paths) under(x string, roots []string) bool {

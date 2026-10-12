@@ -135,6 +135,26 @@ func ReadReport(p *project.Project, id string) (*Report, error) {
 	return r, nil
 }
 
+// Section is the text under a report's "## <name>" heading, up to the
+// next "## " heading, trimmed; "" when it has none.
+func Section(text, name string) string {
+	var out []string
+	in := false
+	for _, l := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		if h, ok := strings.CutPrefix(strings.TrimSpace(l), "## "); ok {
+			if in {
+				break
+			}
+			in = strings.TrimSpace(h) == name
+			continue
+		}
+		if in {
+			out = append(out, l)
+		}
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
 // StoreReport validates text and stores it as REPORT.md, moving the
 // previous one to reports/<n>.md, and copies attachments into library/
 // (docs/SPEC.md §7.2). It returns the report's number.

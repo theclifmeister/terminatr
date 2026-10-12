@@ -60,12 +60,26 @@ type ModStatus struct {
 	Spans []widget.Span `json:"spans"`
 }
 
+// ModToast is a short message a mod showed with $.ui.toast: Seq counts
+// the server's toasts, so a console shows each once; Name is its mod's
+// name, Level info, warn or error. Text is one line, cleaned by the
+// server.
+type ModToast struct {
+	Seq   uint64 `json:"seq"`
+	Mod   string `json:"mod"`
+	Name  string `json:"name,omitempty"`
+	Text  string `json:"text"`
+	Level string `json:"level"`
+}
+
 // ModCells are the mods' cells as session.list sends them: the enabled
 // code mods' columns, in mod order, then the cells of projects, tasks
 // and threads (a session's are on its SessionInfo) and the status
-// segments, of the mods whose hosts haven't failed.
+// segments, of the mods whose hosts haven't failed, and the toasts of
+// the last few seconds.
 type ModCells struct {
 	Columns []ModColumn `json:"columns,omitempty"`
 	Cells   []ModCell   `json:"cells,omitempty"`
 	Status  []ModStatus `json:"status,omitempty"`
+	Toasts  []ModToast  `json:"toasts,omitempty"`
 }

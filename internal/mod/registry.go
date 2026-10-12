@@ -11,6 +11,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 )
 
 // State is where a mod stands in the registry: whether it may run, not
@@ -150,6 +151,9 @@ func LoadDir(dir string, tables map[string]config.Mod) (*Registry, error) {
 		if fi, err := os.Stat(p); err != nil || !fi.IsDir() {
 			continue
 		}
+		// A junction (tm mod dev's link on Windows) is read as its
+		// folder: paths through it don't resolve.
+		p = fsx.Unjunction(p)
 		seen[e.Name()] = true
 		r.Mods = append(r.Mods, load(e.Name(), p, tables[e.Name()]))
 	}

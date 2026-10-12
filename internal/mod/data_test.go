@@ -122,10 +122,12 @@ func TestKeymapJoined(t *testing.T) {
 	install(t, mods, "vim", map[string]string{"mod.toml": dataMod("vim", `keymap = "keys.toml"`), "keys.toml": "list.down = [\"j\"]\nproject.next = [\"L\"]\n"})
 	install(t, mods, "emacs", map[string]string{"mod.toml": dataMod("emacs", `keymap = "keys.toml"`), "keys.toml": "list.down = [\"ctrl+n\"]\nproject.prev = [\"L\"]\nlist.up = [\"ctrl+p\"]\n"})
 	install(t, mods, "broken", map[string]string{"mod.toml": dataMod("broken", `keymap = "keys.toml"`), "keys.toml": "x = "})
+	// The sidebar's keys and the lists' are apart (T301 B3).
+	install(t, mods, "pages", map[string]string{"mod.toml": dataMod("pages", `keymap = "keys.toml"`), "keys.toml": "list.page-down = [\"ctrl+d\"]\nside.page-down = [\"ctrl+d\"]\n"})
 	// emacs was enabled after vim, though its id sorts first.
-	r, _ := LoadDir(mods, enabled("vim", "emacs", "broken"))
+	r, _ := LoadDir(mods, enabled("vim", "emacs", "broken", "pages"))
 	km, from, errs := r.Keymap()
-	want := map[string][]string{"list.down": {"j"}, "project.next": {"L"}, "list.up": {"ctrl+p"}}
+	want := map[string][]string{"list.down": {"j"}, "project.next": {"L"}, "list.up": {"ctrl+p"}, "list.page-down": {"ctrl+d"}, "side.page-down": {"ctrl+d"}}
 	if len(km) != len(want) {
 		t.Fatalf("keymap %v", km)
 	}
@@ -138,6 +140,9 @@ func TestKeymapJoined(t *testing.T) {
 		t.Fatalf("from %v", from)
 	}
 	msg := joined(errs)
+	if strings.Contains(msg, "pages") {
+		t.Errorf("the sidebar's and a list's ctrl+d conflict:\n%s", msg)
+	}
 	for _, w := range []string{"emacs keymap: list.down is bound by vim", "emacs keymap: key conflict: L is vim's project.next", "broken keymap"} {
 		if !strings.Contains(msg, w) {
 			t.Errorf("errors lack %q:\n%s", w, msg)

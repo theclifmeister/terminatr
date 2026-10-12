@@ -17,8 +17,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"strings"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/modbus"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -221,6 +223,26 @@ func sessionQuestions(sessions []proto.SessionInfo) []modbus.Question {
 	return out
 }
 
+// questionNoText is a thread's needs_you when its session is blocked on
+// a question whose text tm doesn't have (no Agent mod to report the
+// menu).
+const questionNoText = "a question in its session"
+
+// sessionNeedsYou is what a thread's session waits on the human for: its
+// open menu's question, or questionNoText when it is blocked on a
+// question all the same. The menu's text comes from the Agent mod; the
+// hooks say a question blocks the session without it, and that needs
+// the human just as much (T301 L2).
+func sessionNeedsYou(info proto.SessionInfo) string {
+	if q := openQuestion(info.Question); q != "" {
+		return q
+	}
+	if info.State == string(agent.StateBlocked) && info.Reason == "question" {
+		return questionNoText
+	}
+	return ""
+}
+
 // projectState is project p's state for the tracker, with sessions the
 // server's and tickerState the ticker's state file.
 func projectState(p *project.Project, sessions []proto.SessionInfo, tickerState string) *modbus.ProjectState {
@@ -251,7 +273,7 @@ func projectState(p *project.Project, sessions []proto.SessionInfo, tickerState 
 		if r.State != thread.Resolved {
 			if info, ok := byThread[r.ID]; ok && info.State != "" {
 				ts.State.State, ts.State.Reason = info.State, info.Reason
-				ts.State.NeedsYou = openQuestion(info.Question)
+				ts.State.NeedsYou = sessionNeedsYou(info)
 			}
 			if sst, _ := thread.ReadStatus(p, r.ID); sst != nil && sst.NeedsYou != "" {
 				ts.State.NeedsYou = sst.NeedsYou
@@ -287,6 +309,12 @@ func modReport(slug, id string) *modbus.Report {
 	if err != nil || rep == nil {
 		return nil
 	}
-	return &modbus.Report{Project: slug, Thread: id, Task: r.Task, PR: rep.PR,
-		Sections: modbus.ReportSections{Report: rep.Text, Next: rep.Next, Check: rep.Check, Remember: rep.Remember}}
+	// The ## Report section, not the whole file (T301 B2); a report
+	// edited by hand out of shape gives its text.
+	body := thread.Section(rep.Text, "Report")
+	if body == "" && !strings.Contains(rep.Text, "## Report") {
+		body = strings.TrimSpace(rep.Text)
+	}
+	return &modbus.Report{Project: slug, Thread: id, Task: r.Task, PR: rep.PR, Report: r.Reports,
+		Sections: modbus.ReportSections{Report: body, Next: rep.Next, Check: rep.Check, Remember: rep.Remember}}
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -142,5 +143,50 @@ func TestModCellsStatusBar(t *testing.T) {
 	plain, _ := statusBar(info, nil, "", false, 70, "", nil)
 	if narrow != plain {
 		t.Errorf("narrow:\n%q\n%q", ansi.Strip(narrow), ansi.Strip(plain))
+	}
+}
+
+// TestModToasts: a toast shows once in the message line, its mod's name
+// in front; the first poll's toasts are old news, an error draws as one,
+// and a server restarted (counting from 1 again) still gets through.
+func TestModToasts(t *testing.T) {
+	m := &dash{}
+	m.showToasts([]proto.ModToast{{Seq: 4, Mod: "standup", Name: "Standup", Text: "old"}})
+	if m.msg != "" {
+		t.Fatalf("first poll showed %q", m.msg)
+	}
+	m.showToasts([]proto.ModToast{{Seq: 4, Text: "old"}, {Seq: 5, Mod: "standup", Name: "Standup", Text: "demo: 3 started", Level: "info"}})
+	if m.msg != "Standup: demo: 3 started" || m.errMsg != "" {
+		t.Fatalf("msg %q err %q", m.msg, m.errMsg)
+	}
+	m.msg = "something else"
+	m.showToasts([]proto.ModToast{{Seq: 5, Text: "demo: 3 started"}})
+	if m.msg != "something else" {
+		t.Fatalf("shown twice: %q", m.msg)
+	}
+	m.showToasts([]proto.ModToast{{Seq: 1, Mod: "lab", Text: "broke", Level: "error"}})
+	if m.msg != "lab: broke" || m.errMsg != m.msg {
+		t.Fatalf("after a restart msg %q err %q", m.msg, m.errMsg)
+	}
+}
+
+// TestSafeModeCards: in safe mode a user mod's view says it is off, not
+// that it waits for a host that doesn't run; a built-in one's still
+// waits (T301 B8).
+func TestSafeModeCards(t *testing.T) {
+	m := &dash{}
+	m.data.NoMods = true
+	m.data.Mods = []mod.Mod{{ID: "cost-card"}, {ID: "memory-tab", Builtin: true}}
+	user := proto.ModView{Mod: "cost-card", Name: "Cost card", View: "card", Title: "Cost"}
+	if got := strings.Join(m.panelLines(user, "demo", 80, 5), " "); !strings.Contains(got, "Cost card is off in safe mode") {
+		t.Fatalf("user mod: %q", got)
+	}
+	builtin := proto.ModView{Mod: "memory-tab", Name: "Memory", View: "tab", Title: "Memory"}
+	if got := strings.Join(m.panelLines(builtin, "demo", 80, 5), " "); !strings.Contains(got, "Waiting for Memory") {
+		t.Fatalf("built-in: %q", got)
+	}
+	m.data.NoMods = false
+	if got := strings.Join(m.panelLines(user, "demo", 80, 5), " "); !strings.Contains(got, "Waiting for Cost card") {
+		t.Fatalf("not safe mode: %q", got)
 	}
 }

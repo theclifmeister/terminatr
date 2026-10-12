@@ -7,7 +7,7 @@ id = "memory-search"
 name = "Memory search"
 version = "1.0.0"
 api = "1.0"
-description = "A tool agents call to search the project's memory files (CONTEXT.md, MEMORY.md, memory/) for a word, line by line."
+description = "A tool agents call to search the project's memory files (CONTEXT.md, MEMORY.md, memory/) for a word, line by line. Claude threads get it only with the Agent mod on (early access, off by default: Settings, Agent mod, or [agent_mod] enabled = true)."
 authors = ["terminatr"]
 homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/memory-search"
 

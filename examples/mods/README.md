@@ -33,6 +33,14 @@ Then turn it on in the Mods tab (`,` then `3`), or with `tm mod enable
 | + | [report-glance](report-glance) | panel sections: one at the bottom of the details panel, one in the coordinator's info panel | reads your projects, draws its own panels | `tm mod install terminatr/examples/mods/report-glance` |
 | + | [gitlab](gitlab) | a code host: GitLab merge requests as tm's PRs | runs glab | `tm mod install terminatr/examples/mods/gitlab` |
 
+**Claude needs the Agent mod for three of them.** `memory-search`'s
+tool, and the context and use that `context-gauge` and `cost-card` read
+from `session.state`, reach tm from a Claude session through tm's Agent
+mod, which is early access and off by default. Turn it on in Settings
+(`,`, *Agent mod*) or with `[agent_mod] enabled = true` in
+`config.toml`; it applies to sessions started after. With it off these
+three load but stay empty for Claude, and their consent says so.
+
 `pr-ci-column`, `memory-tab` and `tasks-tab` already ship inside tm,
 and `tm mod install` refuses a built-in mod's id. To change one, copy it, give the
 copy its own id and install that:
@@ -78,7 +86,9 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
   under `[permissions]` (mod API 1.3), which the consent shows.
 - **cost-card** uses the `tokens` and `cost_usd` that `session.state`
   carries for a thread's session (its thread's totals so far). Days
-  count only what was spent while the mod ran.
+  count only what was spent while the mod ran: a thread started then
+  counts from nothing (`thread.started`), its first turn included; one
+  already running when the mod first hears of it counts from there.
 - **notify-me** buttons are core action ids. A question menu open on a
   thread or a coordinator (`session.question`, mod API 1.3) gets its
   first three options as `question.answer` buttons; a review gets

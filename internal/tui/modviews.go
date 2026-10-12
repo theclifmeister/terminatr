@@ -200,10 +200,24 @@ func (m *dash) panelLines(v proto.ModView, project string, w, h int) []string {
 		return failedLines(v, w)
 	}
 	host := m.mv.host(v, project)
+	if host == nil && m.safeOff(v.Mod) {
+		// Its host doesn't run: it would wait for ever (T301 B8).
+		return faintLines(fmt.Sprintf("%s is off in safe mode (tm --no-mods). tm server restart runs it again.", v.Name), w)
+	}
 	if host == nil {
 		return faintLines(fmt.Sprintf("Waiting for %s to draw %s…", v.Name, v.Title), w)
 	}
 	return host.Render(w, h, widgetLook{})
+}
+
+// safeOff says whether mod id is a user mod the server doesn't run, in
+// safe mode (a built-in one still runs).
+func (m *dash) safeOff(id string) bool {
+	if !m.data.NoMods {
+		return false
+	}
+	i := slices.IndexFunc(m.data.Mods, func(md mod.Mod) bool { return md.ID == id })
+	return i < 0 || !m.data.Mods[i].Builtin
 }
 
 // modMark is the faint line that marks a panel as the mod's (mods

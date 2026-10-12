@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/theclifmeister/terminatr/internal/modapi"
@@ -88,6 +89,7 @@ func (b *Broker) Answer(method string, params json.RawMessage) (json.RawMessage,
 		Text   string          `json:"text"`
 		Append bool            `json:"append"`
 		Slug   string          `json:"slug"`
+		Level  string          `json:"level"`
 	}
 	_ = json.Unmarshal(params, &p)
 	switch method {
@@ -115,6 +117,11 @@ func (b *Broker) Answer(method string, params json.RawMessage) (json.RawMessage,
 			b.files[p.Path] += p.Text
 		} else {
 			b.files[p.Path] = p.Text
+		}
+	case "ui.toast":
+		// Refused as the server refuses it (ui.toast in internal/server).
+		if strings.TrimSpace(p.Text) == "" || p.Level != "" && !slices.Contains(modapi.Levels, p.Level) {
+			return nil, &modproto.Error{Code: modproto.CodeInvalidParams, Message: "ui.toast: a toast needs a text, and a level of info, warn or error"}
 		}
 	case "projects.list", "tasks.list", "actions.list", "memory.list":
 		return json.RawMessage("[]"), nil

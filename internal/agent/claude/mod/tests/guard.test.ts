@@ -74,11 +74,12 @@ async function start($: Engine, on: On, rules: Rules | null, env: Record<string,
   mock.env(on, { TERMINATR_BIN: '/opt/tm', TERMINATR_SESSION: 's-7', ...env })
   const denied: { rule: string; tool: string; summary: string }[] = []
   let fetches = 0
+  let current = rules
   on('http.fetch', async (_$, e) => {
     const ok = (status: number, text = '') => ({ value: { status, ok: status < 300, headers: {}, text } })
     if (e.url.endsWith('/v1/rules')) {
       fetches++
-      return rules ? ok(200, JSON.stringify(rules)) : ok(500, 'down')
+      return current ? ok(200, JSON.stringify(current)) : ok(500, 'down')
     }
     if (e.url.endsWith('/v1/denied')) {
       denied.push(JSON.parse(e.init?.body ?? '{}'))
@@ -94,7 +95,7 @@ async function start($: Engine, on: On, rules: Rules | null, env: Record<string,
   on('tool.check', async () => ({ decision: 'allow' as const }))
   await $.session.start({ cwd: WT, surface: 'terminal', isInteractive: true })
   await clock.settle()
-  return { clock, denied, fetches: () => fetches }
+  return { clock, denied, fetches: () => fetches, setRules: (r: Rules | null) => { current = r } }
 }
 
 test('a refused call returns the rule\'s sentence and is reported; others run', async ($, on) => {
@@ -127,6 +128,21 @@ test('rules the server couldn\'t give are asked for again at the next call', asy
     expect((r as { deny?: string }).deny).toBe(undefined)
   }
   expect(fetches()).toBe(2)
+})
+
+test('the server\'s rules changing reach the session within a second, tighter or looser', async ($, on) => {
+  const { clock, setRules } = await start($, on, { ...thread, on: false })
+  const push = async () => ((await $.tool.call({ tool: 'Bash', command: 'git push --force origin tm/x' })) as { deny?: string }).deny
+  expect(await push()).toBe(undefined)
+  setRules(thread)
+  // Held for a second: a burst of calls asks once.
+  await clock.advance(500)
+  expect(await push()).toBe(undefined)
+  await clock.advance(501)
+  expect(await push()).toContain('terminatr guard (force-push)')
+  setRules({ ...thread, on: false })
+  await clock.advance(1_001)
+  expect(await push()).toBe(undefined)
 })
 
 test('a PowerShell command the guard can\'t read is asked, with its reason; one it refuses is refused', async ($, on) => {

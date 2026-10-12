@@ -249,3 +249,34 @@ func prciOrder(order []string, mods map[string]modColumn) []string {
 	}
 	return out
 }
+
+// showToasts shows the mods' toasts this console hasn't shown yet in the
+// message line, the last one winning, its mod's name in front; an error
+// draws as one. The first poll only notes where the toasts are, so a
+// console opened later doesn't repeat them; a server restarted counts
+// from 1 again.
+func (m *dash) showToasts(ts []proto.ModToast) {
+	if len(ts) == 0 {
+		return
+	}
+	last := ts[len(ts)-1]
+	if last.Seq < m.toastSeq {
+		m.toastSeq = 0
+	}
+	if !m.toasted {
+		m.toastSeq, m.toasted = last.Seq, true
+		return
+	}
+	if last.Seq <= m.toastSeq {
+		return
+	}
+	m.toastSeq = last.Seq
+	name := last.Name
+	if name == "" {
+		name = last.Mod
+	}
+	m.msg = name + ": " + last.Text
+	if last.Level == "error" {
+		m.errMsg = m.msg
+	}
+}

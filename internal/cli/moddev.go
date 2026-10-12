@@ -21,6 +21,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/moddev"
 	"github.com/theclifmeister/terminatr/internal/modtest"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -313,9 +314,10 @@ func (e *Env) modDev(arg string, yes bool) error {
 	return nil
 }
 
-// devLink makes ~/.terminatr/mods/<id> a link to dir, or finds it one
-// already. It refuses an installed copy, or a link elsewhere: tm mod
-// remove takes either away.
+// devLink makes ~/.terminatr/mods/<id> a link to dir (a junction on
+// Windows, which needs no symlink privilege), or finds it one already.
+// It refuses an installed copy, or a link elsewhere: tm mod remove takes
+// either away.
 func devLink(id, dir string) (made bool, err error) {
 	mods, err := home.ModsDir()
 	if err != nil {
@@ -328,16 +330,19 @@ func devLink(id, dir string) (made bool, err error) {
 		if err := os.MkdirAll(mods, 0o700); err != nil {
 			return false, err
 		}
-		return true, os.Symlink(dir, link)
+		return true, fsx.LinkDir(dir, link)
 	case err != nil:
 		return false, err
-	case fi.Mode()&fs.ModeSymlink == 0:
+	case !fsx.IsLink(fi):
 		return false, fmt.Errorf("%s is installed from elsewhere: tm mod remove %s first, or give your copy another id", id, id)
 	}
-	to, err := filepath.EvalSymlinks(link)
-	if err != nil || to != dir {
-		target, _ := os.Readlink(link)
-		return false, fmt.Errorf("%s is linked to %s: tm mod remove %s unlinks it", id, target, id)
+	target, _ := os.Readlink(link)
+	if filepath.Clean(target) == dir {
+		return false, nil
 	}
-	return false, nil
+	// EvalSymlinks follows symlinks, not junctions: a link to a link.
+	if to, err := filepath.EvalSymlinks(link); err == nil && to == dir {
+		return false, nil
+	}
+	return false, fmt.Errorf("%s is linked to %s: tm mod remove %s unlinks it", id, target, id)
 }

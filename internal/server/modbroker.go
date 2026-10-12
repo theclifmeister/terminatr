@@ -164,6 +164,15 @@ func (s *Server) modRegistry() *mod.Registry {
 	return mb.reg
 }
 
+// shareModRegistry makes reg, read just now, the broker's registry; nil
+// has it read anew at its next use.
+func (s *Server) shareModRegistry(reg *mod.Registry) {
+	mb := &s.modBr
+	mb.mu.Lock()
+	defer mb.mu.Unlock()
+	mb.reg, mb.at = reg, time.Now()
+}
+
 // modLog appends line to mod id's log, ~/.terminatr/logs/mods/<id>.log,
 // as one write in append mode beside the supervisor's lines; the
 // supervisor rotates the file (modsup.LogMax).
@@ -326,6 +335,7 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 	b.Handle("ui.view.open", mod.PermViews, s.modViewOpen)
 	b.Handle("ui.cell.set", "", s.modCellSet)
 	b.Handle("ui.status.set", "", s.modStatusSet)
+	b.Handle("ui.toast", "", s.modToast)
 	b.Handle("ui.notify", mod.PermNotify, s.modNotify)
 	b.Handle("annotate", mod.PermProjectRead, s.modAnnotate)
 }
