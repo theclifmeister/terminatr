@@ -299,7 +299,7 @@ func clickCoordinator(t *testing.T, w *Window, slug string) {
 	t.Helper()
 	w.Click(4, sideRow(t, w.Screen(), slug))
 	y := -1
-	w.WaitUntil(slug+"'s coordinator row", wait, func(sc string) bool { y = treeRow(sc, slug, "coordinator"); return y >= 0 })
+	w.WaitUntil(slug+"'s coordinator row", agentWait, func(sc string) bool { y = treeRow(sc, slug, "coordinator"); return y >= 0 })
 	w.Click(4, y)
 }
 
