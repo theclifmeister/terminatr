@@ -37,11 +37,12 @@ func Stamp(dir string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), err
 }
 
-// Watch calls changed each time the folder dir changes, once its stamp
-// has held still for one more look (an editor's save may be several
-// writes), until ctx ends. It looks every every.
-func Watch(ctx context.Context, dir string, every time.Duration, changed func()) {
-	last, _ := Stamp(dir)
+// Watch calls changed each time the folder dir changes from stamp last
+// (Stamp's, taken when the caller read the folder, so a save between
+// that and Watch's first look counts), once its stamp has held still for
+// one more look (an editor's save may be several writes), until ctx
+// ends. It looks every every.
+func Watch(ctx context.Context, dir, last string, every time.Duration, changed func()) {
 	pending := ""
 	t := time.NewTicker(every)
 	defer t.Stop()
