@@ -224,6 +224,9 @@ func (e *Env) modDev(arg string, yes bool) error {
 	if real, err := filepath.EvalSymlinks(dir); err == nil {
 		dir = real
 	}
+	// The folder's stamp before it is first read: a save from here on,
+	// during the first start too, is a change Watch sees.
+	since, _ := moddev.Stamp(dir)
 	m, err := mod.Validate(dir)
 	if err != nil {
 		return &project.Error{Code: "invalid-mod", Msg: fmt.Sprintf("%s: %s", dir, strings.ReplaceAll(mod.Clean(err.Error(), true), "\n", "; "))}
@@ -291,7 +294,7 @@ func (e *Env) modDev(arg string, yes bool) error {
 		go moddev.Follow(ctx, path, off, devEvery, out)
 	}
 	fmt.Fprintf(out, "watching %s; ^C stops\n", dir)
-	moddev.Watch(ctx, dir, devEvery, func() {
+	moddev.Watch(ctx, dir, since, devEvery, func() {
 		next, err := mod.Validate(dir)
 		if err != nil {
 			fmt.Fprintf(out, "── %s: invalid, not reloaded:\n", m.ID)

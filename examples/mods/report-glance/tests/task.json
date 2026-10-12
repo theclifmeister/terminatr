@@ -1,0 +1,28 @@
+{
+  "name": "a task's row: the report of the task's thread, published for the task; cleared when the row goes",
+  "answers": [
+    { "method": "tasks.list", "params": { "slug": "demo" },
+      "result": [{ "id": "T12", "title": "Fix the login", "status": "review", "steps_done": 2, "steps_total": 2, "thread": "t-0003" }] },
+    { "method": "report.get", "params": { "project": "demo", "thread": "t-0003" },
+      "result": { "project": "demo", "thread": "t-0003", "report": 1, "sections": { "report": "Done.", "next": [] } } }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "last", "slot": "details.section", "project": "demo", "task": "T12", "width": 58, "height": 20 } },
+    { "name": "view.closed", "project": "demo",
+      "data": { "view": "last", "slot": "details.section", "project": "demo", "task": "T12", "width": 58, "height": 20 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "tasks.list", "params": { "slug": "demo" } },
+      { "method": "report.get", "params": { "project": "demo", "thread": "t-0003" } },
+      { "method": "ui.view.set",
+        "params": { "view": "last", "options": { "project": "demo", "task": "T12" },
+          "widget": { "kind": "stack", "children": [
+            { "kind": "text", "lines": [[{ "text": "report 1", "role": "head" }, { "text": "  Done." }]] },
+            { "kind": "text", "text": "no ## Check", "role": "warn" }
+          ] } } },
+      { "method": "ui.view.set", "params": { "view": "last", "widget": null, "options": { "project": "demo", "task": "T12" } } }
+    ]
+  }
+}

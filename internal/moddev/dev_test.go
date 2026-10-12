@@ -76,9 +76,12 @@ func TestWatch(t *testing.T) {
 	defer cancel()
 	var mu sync.Mutex
 	n := 0
-	go Watch(ctx, dir, 5*time.Millisecond, func() { mu.Lock(); n++; mu.Unlock() })
+	since, err := Stamp(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	go Watch(ctx, dir, since, 5*time.Millisecond, func() { mu.Lock(); n++; mu.Unlock() })
 	count := func() int { mu.Lock(); defer mu.Unlock(); return n }
-	time.Sleep(30 * time.Millisecond)
 	os.WriteFile(filepath.Join(dir, "node_modules", "x.js"), []byte("x"), 0o644)
 	time.Sleep(30 * time.Millisecond)
 	if count() != 0 {

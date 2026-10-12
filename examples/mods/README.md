@@ -30,6 +30,7 @@ Then turn it on in the Mods tab (`,` then `3`), or with `tm mod enable
 | + | [tasks-tab](tasks-tab) | the popup's Tasks tab, its rows bound to tm's task actions (built in, off) | reads your projects, draws its own panels | copy it under another id first, see below |
 | + | [memory-search](memory-search) | an agent tool, `memory-search_find` | reads your projects, offers tools to agents | `tm mod install terminatr/examples/mods/memory-search` |
 | + | [standup](standup) | a command: the key `S`, a ≡ menu entry and `tm mod run standup show` | reads your projects, draws its own panels | `tm mod install terminatr/examples/mods/standup` |
+| + | [report-glance](report-glance) | panel sections: one at the bottom of the details panel, one in the coordinator's info panel | reads your projects, draws its own panels | `tm mod install terminatr/examples/mods/report-glance` |
 | + | [gitlab](gitlab) | a code host: GitLab merge requests as tm's PRs | runs glab | `tm mod install terminatr/examples/mods/gitlab` |
 
 `pr-ci-column`, `memory-tab` and `tasks-tab` already ship inside tm,
@@ -111,3 +112,10 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
   standup show --project <slug>` can't open a view, so the mod says the
   same in one line as a toast. A key the core (or a mod enabled
   earlier) has stays theirs; the Mods tab then says key conflict.
+- **report-glance** declares a `details.section` and a
+  `coordinator.section`. When the details panel shows a thread or a
+  task, the mod gets `view.opened` naming it, publishes that row's
+  latest report for it, and clears it on `view.closed`. The
+  coordinator's info panel gets the threads that reported. A row the mod
+  draws nothing for (a project's own) has no section. Sections show
+  only: their keys stay the panel's.

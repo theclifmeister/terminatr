@@ -1817,7 +1817,7 @@ func (c *client) pollState(ctx context.Context) {
 			}
 		}
 		statuses := threadStatuses(res.Sessions)
-		c.pollInfo(res.Sessions)
+		c.pollInfo(ctl, res.Sessions)
 		if c.lock() {
 			if c.side != nil {
 				c.side.projects, c.side.sessions, c.side.ctxHint, c.side.needsFirst = projects, res.Sessions, ctxHint, needsFirst
