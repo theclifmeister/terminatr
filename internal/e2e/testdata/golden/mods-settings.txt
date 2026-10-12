@@ -27,8 +27,8 @@
             │ sessions it needs the Agent mod on (early access, off by default: Settings, Agent mod, or    │
             │ [agent_mod] enabled = true), which reports their context and use. By terminatr.              │
             │                                                                                              │
-            │ enter on/off · p permissions · s settings · d defaults · l log · r restart · u update        │
-            │ x remove · e examples · ← → tabs · esc close                                                 │
+            │ enter on/off · i install · p permissions · s settings · d defaults · l log · r restart       │
+            │ u update · x remove · e examples · ← → tabs · esc close                                      │
             ╰───────────────────────────────────────────────────────────────────────────────────── more ↓ ─╯
  ───────────────────────────────── │
  demo · active                     │────────────────────────────────────────────────────────────────────────────────────

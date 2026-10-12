@@ -90,6 +90,69 @@ func TestParseSource(t *testing.T) {
 	}
 }
 
+func TestParseSourceSubdir(t *testing.T) {
+	for _, c := range []struct{ arg, git, ref, sub, str string }{
+		{arg: "https://github.com/theclifmeister/terminatr/tree/v0.20.0/examples/mods/standup",
+			git: "https://github.com/theclifmeister/terminatr", ref: "v0.20.0", sub: "examples/mods/standup"},
+		{arg: "https://github.com/ada/mods/tree/main/nord/", git: "https://github.com/ada/mods", ref: "main", sub: "nord",
+			str: "https://github.com/ada/mods/tree/main/nord"},
+		{arg: "https://github.com/ada/tm-nord/tree/v1", git: "https://github.com/ada/tm-nord", ref: "v1",
+			str: "https://github.com/ada/tm-nord@v1"},
+		{arg: "https://github.com/ada/mods//nord", git: "https://github.com/ada/mods", sub: "nord"},
+		{arg: "https://github.com/ada/mods//nord@v0.4.0", git: "https://github.com/ada/mods", ref: "v0.4.0", sub: "nord",
+			str: "https://github.com/ada/mods/tree/v0.4.0/nord"},
+		{arg: "https://example.com/ada/mods.git//themes/nord@main", git: "https://example.com/ada/mods.git", ref: "main", sub: "themes/nord"},
+		{arg: "ssh://git@example.com/mods.git//nord@v1", git: "ssh://git@example.com/mods.git", ref: "v1", sub: "nord"},
+		{arg: "git@example.com:ada/mods.git//nord@v1", git: "git@example.com:ada/mods.git", ref: "v1", sub: "nord"},
+		{arg: "file:///srv/mods//nord", git: "file:///srv/mods", sub: "nord"},
+		{arg: "file:///srv/mods", git: "file:///srv/mods"},
+	} {
+		s, err := ParseSource(c.arg, "")
+		if err != nil || s.Git != c.git || s.Ref != c.ref || s.Subdir != c.sub {
+			t.Errorf("%s: got %+v %v", c.arg, s, err)
+			continue
+		}
+		want := c.str
+		if want == "" {
+			want = c.arg
+		}
+		if s.String() != want {
+			t.Errorf("%s: String %s, want %s", c.arg, s, want)
+		}
+		if back, err := ParseSource(s.String(), ""); err != nil || back != s {
+			t.Errorf("%s: doesn't read back: %+v %v", s, back, err)
+		}
+	}
+	for _, bad := range []string{
+		"https://example.com/mods//../etc",
+		"https://example.com/mods//nord/../../x",
+		"https://example.com/mods///etc/passwd",
+		"https://example.com/mods//nord//x",
+		"https://example.com/mods//./nord",
+		"https://example.com/mods//.git",
+		"https://example.com/mods//nord/.GIT/hooks",
+		"https://example.com/mods//-nord",
+		"https://example.com/mods//%2e%2e/x",
+		"https://example.com/mods//a\\..\\b",
+		"https://example.com/mods//c:/x",
+		"https://github.com/ada/mods/tree/main/../x",
+		"https://github.com/ada/mods/tree/main//x",
+		"https://github.com/ada/mods/tree/main/nord@v1",
+		"https://github.com/ada/mods/tree/-x/nord",
+		"https://github.com/ada/mods/blob/main/nord/mod.toml",
+		"file:////nord",
+	} {
+		if s, err := ParseSource(bad, ""); err == nil && s.Subdir != "" || err == nil && strings.Contains(bad, "github.com") {
+			t.Errorf("%q: no error: %+v", bad, s)
+		}
+	}
+	for _, bad := range []string{"", "/x", "..", "a/..", "a/./b", "a/", ".git", "a/.Git", "-a", "a b", "a:b", "a\\b", "a%2fb"} {
+		if CheckSubdir(bad) == nil {
+			t.Errorf("CheckSubdir(%q) passed", bad)
+		}
+	}
+}
+
 func TestInstallFromPath(t *testing.T) {
 	h := withHome(t)
 	src := install(t, t.TempDir(), "nord", map[string]string{"mod.toml": nordToml, "theme.toml": "", "rules/thread.md": "Be terse.\n", ".git/HEAD": "x"})
@@ -133,6 +196,21 @@ func TestInstallFromPath(t *testing.T) {
 	if err := Install(human, st2); err == nil || !strings.Contains(err.Error(), "already installed") {
 		t.Errorf("second install: %v", err)
 	}
+	// Taken says so before the consent, naming what works instead.
+	r := registryOf(t)
+	for id, want := range map[string]string{
+		"nord":       "nord is already installed: tm mod update nord",
+		"memory-tab": "memory-tab is already installed: it is a built-in mod's id",
+		"free":       "",
+	} {
+		if got := Taken(r, id); !strings.HasPrefix(got, want) || (want == "") != (got == "") {
+			t.Errorf("Taken(%s) = %q, want %q…", id, got, want)
+		}
+	}
+	os.Remove(filepath.Join(m.Dir, SourceFile))
+	if got := Taken(registryOf(t), "nord"); !strings.Contains(got, "records no source") {
+		t.Errorf("Taken of a mod with no source: %q", got)
+	}
 }
 
 func TestFetchRefuses(t *testing.T) {
@@ -155,6 +233,37 @@ func TestFetchRefuses(t *testing.T) {
 	if ents, _ := os.ReadDir(filepath.Join(os.Getenv(home.Env), "mods")); len(ents) != 0 {
 		t.Errorf("staging left behind: %v", ents)
 	}
+}
+
+// TestLinksResolvedInside: a link is followed as the OS would, so links
+// that read as inside but resolve out are refused.
+func TestLinksResolvedInside(t *testing.T) {
+	withHome(t)
+	for name, links := range map[string][][2]string{
+		"through a link to ..":   {{"rules/up", ".."}, {"rules/out", "up/../x"}},
+		"through a link to .":    {{"here", "."}, {"out", "here/.."}},
+		"a loop":                 {{"a", "b"}, {"b", "a"}},
+		"a missing name then ..": {{"out", "missing/../../x"}},
+		"absolute":               {{"abs", "/etc"}},
+		"via a chain":            {{"rules/one", "two"}, {"rules/two", "../.."}},
+	} {
+		src := install(t, t.TempDir(), "nord", map[string]string{"mod.toml": nordToml, "theme.toml": "", "rules/thread.md": ""})
+		for _, l := range links {
+			os.Symlink(l[1], filepath.Join(src, filepath.FromSlash(l[0])))
+		}
+		if _, err := Fetch(Source{Path: src}); err == nil || !strings.Contains(err.Error(), "must stay inside") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	src := install(t, t.TempDir(), "nord", map[string]string{"mod.toml": nordToml, "theme.toml": "", "rules/thread.md": ""})
+	for _, l := range [][2]string{{"rules/up", ".."}, {"rules/theme", "up/theme.toml"}, {"same", "rules/../theme.toml"}, {"later", "not-yet"}, {"here", "."}} {
+		os.Symlink(l[1], filepath.Join(src, filepath.FromSlash(l[0])))
+	}
+	st, err := Fetch(Source{Path: src})
+	if err != nil {
+		t.Fatalf("links that stay inside: %v", err)
+	}
+	st.Close()
 }
 
 func TestEnableDisableProjects(t *testing.T) {
@@ -305,7 +414,9 @@ func gitRepo(t *testing.T, files map[string]string, tag string) (string, func(fi
 	}
 	return dir, func(files map[string]string, tag string) {
 		for name, body := range files {
-			os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644)
+			p := filepath.Join(dir, filepath.FromSlash(name))
+			os.MkdirAll(filepath.Dir(p), 0o755)
+			os.WriteFile(p, []byte(body), 0o644)
 		}
 		run("add", "-A")
 		run("commit", "-q", "-m", "more")
@@ -356,5 +467,135 @@ func TestInstallFromGit(t *testing.T) {
 	b := Source{Git: "file://" + repo, Ref: "main", Commit: s.Commit}
 	if _, behind, err := Latest(b); err != nil || !behind {
 		t.Errorf("branch: %v %v", behind, err)
+	}
+}
+
+// subdirRepo is a repository holding the nord mod in mods/nord, beside
+// other files tm mustn't copy in.
+func subdirRepo(t *testing.T) (string, func(files map[string]string, tag string)) {
+	t.Helper()
+	return gitRepo(t, map[string]string{
+		"README.md": "mods\n", "other/secret.txt": "not the mod\n",
+		"mods/nord/mod.toml": nordToml, "mods/nord/theme.toml": "", "mods/nord/rules/thread.md": "",
+	}, "v0.4.0")
+}
+
+func TestInstallFromGitSubdir(t *testing.T) {
+	withHome(t)
+	repo, gitCommit := subdirRepo(t)
+	src, err := ParseSource("file://"+repo+"//mods/nord@v0.4.0", "")
+	if err != nil || src.Subdir != "mods/nord" || src.Ref != "v0.4.0" {
+		t.Fatalf("parse: %+v %v", src, err)
+	}
+	installFrom(t, src)
+	m, ok := registryOf(t).Get("nord")
+	if !ok || m.State != Disabled {
+		t.Fatalf("installed: %+v", m)
+	}
+	for _, f := range []string{"README.md", "other", "mods", ".git"} {
+		if _, err := os.Lstat(filepath.Join(m.Dir, f)); err == nil {
+			t.Errorf("%s was copied in", f)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(m.Dir, "rules", "thread.md")); err != nil {
+		t.Errorf("the mod's files: %v", err)
+	}
+	s, _ := ReadSource(m.Dir)
+	if s.Git != src.Git || s.Subdir != "mods/nord" || s.Ref != "v0.4.0" || len(s.Commit) != 40 || len(s.Tree) != 40 {
+		t.Fatalf("source record %+v", s)
+	}
+	if _, behind, err := Latest(s); err != nil || behind {
+		t.Fatalf("fresh install behind: %v %v", behind, err)
+	}
+	// A new tag that changes only files outside the folder isn't news.
+	gitCommit(map[string]string{"README.md": "more\n"}, "v0.5.0")
+	if next, behind, err := Latest(s); err != nil || behind {
+		t.Fatalf("a tag that didn't touch the mod: %q %v %v", next, behind, err)
+	}
+	b := Source{Git: s.Git, Ref: "main", Subdir: s.Subdir, Commit: s.Commit, Tree: s.Tree}
+	if _, behind, err := Latest(b); err != nil || behind {
+		t.Errorf("branch moved outside the mod: %v %v", behind, err)
+	}
+	gitCommit(map[string]string{"mods/nord/mod.toml": strings.Replace(nordToml, "0.4.0", "0.6.0", 1)}, "v0.6.0")
+	next, behind, err := Latest(s)
+	if err != nil || !behind || next != "v0.6.0" {
+		t.Fatalf("after a new tag: %q %v %v", next, behind, err)
+	}
+	if _, behind, err := Latest(b); err != nil || !behind {
+		t.Errorf("branch moved in the mod: %v %v", behind, err)
+	}
+	n, err := Next(s)
+	if err != nil || n.Ref != "v0.6.0" || n.Subdir != "mods/nord" {
+		t.Fatalf("next: %+v %v", n, err)
+	}
+	st, err := Fetch(n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := Replace(human, "nord", st, nil); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = registryOf(t).Get("nord")
+	s, _ = ReadSource(m.Dir)
+	if m.Manifest.Version != "0.6.0" || s.Ref != "v0.6.0" || s.Subdir != "mods/nord" {
+		t.Fatalf("after update: %+v %+v", m.Manifest, s)
+	}
+	if _, behind, err := Latest(s); err != nil || behind {
+		t.Errorf("updated copy behind: %v %v", behind, err)
+	}
+}
+
+func TestFetchSubdirRefuses(t *testing.T) {
+	withHome(t)
+	outside := t.TempDir()
+	repo, gitCommit := subdirRepo(t)
+	os.Symlink("../../other", filepath.Join(repo, "mods", "nord", "escape"))
+	os.Symlink("../other", filepath.Join(repo, "mods", "link"))
+	os.Symlink(outside, filepath.Join(repo, "mods", "abs"))
+	gitCommit(map[string]string{"mods/file": "x"}, "")
+	url := "file://" + repo
+	for sub, want := range map[string]string{
+		"mods/nord":    "must stay inside",
+		"mods/link":    "is a link",
+		"mods/abs":     "is a link",
+		"mods/missing": "no folder",
+		"mods/file":    "isn't a folder",
+		"../repo":      "..",
+		"/etc":         "absolute",
+		".git":         ".git",
+	} {
+		st, err := Fetch(Source{Git: url, Subdir: sub})
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: %v, want %q", sub, err, want)
+		}
+		st.Close()
+	}
+	if ents, _ := os.ReadDir(filepath.Join(os.Getenv(home.Env), "mods")); len(ents) != 0 {
+		t.Errorf("staging left behind: %v", ents)
+	}
+}
+
+// TestExampleInstallLines: each example installs with one tm mod install
+// of its folder in terminatr's repository at a release tag, or main.
+func TestExampleInstallLines(t *testing.T) {
+	for _, c := range [][3]string{{"release", "v0.21.0", "v0.21.0"}, {"snapshot", "v0.21.0", "main"}, {"", "dev", "main"}, {"release", "v0.21.0-rc1", "main"}} {
+		if got := examplesRef(c[0], c[1]); got != c[2] {
+			t.Errorf("examplesRef(%q, %q) = %q, want %q", c[0], c[1], got, c[2])
+		}
+	}
+	for _, x := range Examples {
+		if _, err := os.Stat(filepath.Join("..", "..", ExamplesPath, x.ID, "mod.toml")); err != nil {
+			t.Errorf("%s: %v", x.ID, err)
+		}
+		lines := InstallLines(x.ID)
+		if IsBundled(x.ID) {
+			continue
+		}
+		arg, ok := strings.CutPrefix(lines[0], "tm mod install ")
+		s, err := ParseSource(arg, "")
+		if len(lines) != 1 || !ok || err != nil || s.Git != ExamplesRepo || s.Ref != ExamplesRef || s.Subdir != ExamplesPath+"/"+x.ID || s.String() != arg {
+			t.Errorf("%s: %q: %+v %v", x.ID, lines, s, err)
+		}
 	}
 }

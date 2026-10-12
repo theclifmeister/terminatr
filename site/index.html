@@ -613,8 +613,8 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
             <span class="dim">│</span> sessions it needs the Agent mod on (early access, off by default: Settings, Agent mod, or    <span class="dim">│</span>
             <span class="dim">│</span> [agent_mod] enabled = true), which reports their context and use. By terminatr.              <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
-            <span class="dim">│</span> <span class="key">enter</span> on/off · p permissions · s settings · d defaults · l log · r restart · u update        <span class="dim">│</span>
-            <span class="dim">│</span> x remove · e examples · <span class="key">← →</span> tabs · <span class="key">esc</span> close                                                 <span class="dim">│</span>
+            <span class="dim">│</span> <span class="key">enter</span> on/off · i install · p permissions · s settings · d defaults · l log · r restart       <span class="dim">│</span>
+            <span class="dim">│</span> u update · x remove · e examples · <span class="key">← →</span> tabs · <span class="key">esc</span> close                                      <span class="dim">│</span>
             <span class="dim">╰─────────────────────────────────────────────────────────────────────────────────────</span> more ↓ <span class="dim">─╯</span>
  <span class="dim">─────────────────────────────────</span> <span class="dim">│</span>
  demo · active                     <span class="dim">│────────────────────────────────────────────────────────────────────────────────────</span>
@@ -706,7 +706,7 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
   <ul class="features">
     <li>
       <h3><span class="glyph" aria-hidden="true">✓</span> You consent first</h3>
-      <p>Installing shows what a mod asks for in plain words. It installs <em>off</em>; you turn it on in the Mods tab or with <code>tm mod enable</code>, for every project or only some.</p>
+      <p>Installing shows what a mod asks for in plain words. It installs <em>off</em>; you turn it on in the Mods tab or with <code>tm mod enable</code>, for every project or only some. Install from the Mods tab too: <kbd>i</kbd> takes a folder or a git URL, and <kbd>e</kbd> installs an example.</p>
     </li>
     <li>
       <h3><span class="glyph" aria-hidden="true">▣</span> Sandboxed</h3>
@@ -749,8 +749,8 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
     <div class="os">
       <h3>Try one</h3>
       <div class="cmdline"><code>git clone https://github.com/theclifmeister/terminatr</code><button class="copy" type="button" aria-label="Copy the clone command">copy</button></div>
-      <div class="cmdline"><code>tm mod install terminatr/examples/mods/standup</code><button class="copy" type="button" aria-label="Copy the mod install command">copy</button></div>
-      <p class="note">Then turn it on in the Mods tab (<kbd>,</kbd> then <kbd>3</kbd>) or with <code>tm mod enable standup</code>. <code>tm mod install</code> also takes a git URL. The <a href="https://github.com/theclifmeister/terminatr/tree/main/examples/mods">examples</a> have one of each kind.</p>
+      <div class="cmdline"><code>tm mod install https://github.com/theclifmeister/terminatr/tree/v0.20.0/examples/mods/standup</code><button class="copy" type="button" aria-label="Copy the mod install command">copy</button></div>
+      <p class="note">Then turn it on in the Mods tab (<kbd>,</kbd> then <kbd>3</kbd>) or with <code>tm mod enable standup</code>. Or skip the shell: in the Mods tab, <kbd>e</kbd> lists the examples and <kbd>i</kbd> installs the selected one. <code>tm mod install</code> also takes a folder, a git URL or a repository's subfolder (<code>&lt;git-url&gt;//&lt;folder&gt;@&lt;tag&gt;</code>). The <a href="https://github.com/theclifmeister/terminatr/tree/main/examples/mods">examples</a> have one of each kind.</p>
     </div>
     <div class="os">
       <h3>Write your own</h3>

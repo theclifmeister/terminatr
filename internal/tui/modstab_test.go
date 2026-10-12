@@ -37,6 +37,11 @@ func (f *fakeSource) FetchModUpdate(id string) (*mod.Staged, error) {
 func (f *fakeSource) ReplaceMod(id string, st *mod.Staged, grant []string) error {
 	return f.human().ReplaceMod(id, st, grant)
 }
+func (f *fakeSource) FetchMod(arg string) (*mod.Staged, error) {
+	f.fetchedMods = append(f.fetchedMods, arg)
+	return f.human().FetchMod(arg)
+}
+func (f *fakeSource) InstallMod(st *mod.Staged) error { return f.human().InstallMod(st) }
 func (f *fakeSource) ModLog(id string, max int64) (string, bool, error) {
 	return f.human().ModLog(id, max)
 }
@@ -413,12 +418,12 @@ func TestModsExamples(t *testing.T) {
 	m := newDash(DashOptions{Source: src, Width: 160, Height: 60, State: DashState{Current: "beta"}})
 	m.setData(src.data)
 	press(m, ",", "3")
-	if out := screen(m); !strings.Contains(out, "Default theme") || !strings.Contains(out, "No mods of your own yet") || !strings.Contains(out, "shows terminatr's example mods") {
+	if out := screen(m); !strings.Contains(out, "Default theme") || !strings.Contains(out, "No mods of your own yet") || !strings.Contains(out, "lists terminatr's example mods") {
 		t.Errorf("the tab with only built-in mods:\n%s", out)
 	}
 	press(m, "e")
 	out := screen(m)
-	for _, want := range []string{"Example mods", mod.ExamplesURL, "git clone " + mod.ExamplesRepo, "tm mod install terminatr/examples/mods/nord", "memory-tab", "tm mod install terminatr/examples/mods/standup", "copy it under another id", "Nothing here is installed"} {
+	for _, want := range []string{"Example mods", mod.ExamplesURL, "git clone --depth 1 --branch " + mod.ExamplesRef + " " + mod.ExamplesRepo, "tm mod install " + mod.ExamplesURL + "/nord", "memory-tab", "tm mod install " + mod.ExamplesURL + "/standup", "copy it under another id", "Nothing here is installed"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("examples lack %q:\n%s", want, out)
 		}

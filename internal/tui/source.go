@@ -269,6 +269,14 @@ type Source interface {
 	// permissions the human accepted). The caller closes the staged copy.
 	FetchModUpdate(id string) (*mod.Staged, error)
 	ReplaceMod(id string, st *mod.Staged, grant []string) error
+	// FetchMod stages the mod at arg, a folder or a git URL as tm mod
+	// install takes it, and checks that its id is free (mod.Taken), so
+	// the Mods tab shows the consent of what InstallMod would install;
+	// InstallMod installs it, disabled (tm mod install, mods design §8).
+	// Both are refused when tm runs inside an agent. The caller closes
+	// the staged copy.
+	FetchMod(arg string) (*mod.Staged, error)
+	InstallMod(st *mod.Staged) error
 	// ModLog is the end of mod id's log, at most max bytes (cut says it
 	// was longer); "" when it has none.
 	ModLog(id string, max int64) (text string, cut bool, err error)
@@ -873,6 +881,52 @@ func (s *ServerSource) FetchModUpdate(id string) (*mod.Staged, error) {
 
 func (s *ServerSource) ReplaceMod(id string, st *mod.Staged, grant []string) error {
 	return mod.Replace(s.Caller, id, st, grant)
+}
+
+func (s *ServerSource) FetchMod(arg string) (*mod.Staged, error) {
+	if s.Caller.IsAgent() {
+		return nil, mod.ErrHumanOnly
+	}
+	mod.SweepRemoved(time.Now())
+	src, err := mod.ParseSource(homePath(arg), "")
+	if err != nil {
+		return nil, err
+	}
+	st, err := mod.Fetch(src)
+	if err != nil {
+		st.Close()
+		return nil, fmt.Errorf("%s: %s", src, strings.ReplaceAll(mod.Clean(err.Error(), true), "\n", "; "))
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		cfg = nil
+	}
+	reg, err := mod.Load(cfg)
+	if err == nil {
+		if why := mod.Taken(reg, st.Manifest.ID); why != "" {
+			err = errors.New(why)
+		}
+	}
+	if err != nil {
+		st.Close()
+		return nil, err
+	}
+	return st, nil
+}
+
+func (s *ServerSource) InstallMod(st *mod.Staged) error {
+	return mod.Install(s.Caller, st)
+}
+
+// homePath expands a leading ~/ in a folder typed into the console,
+// as a shell would have for tm mod install.
+func homePath(arg string) string {
+	if rest, ok := strings.CutPrefix(arg, "~/"); ok {
+		if h, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(h, rest)
+		}
+	}
+	return arg
 }
 
 // installedMod is mod id as the registry has it now.

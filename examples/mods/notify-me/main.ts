@@ -9,7 +9,7 @@
 // checked against the live menu or board; nothing is accepted, sent
 // back or answered by the notification, and the mod hears of a press
 // only as action.done. The console draws the notification under its own
-// title, terminatr · mod: notify-me.
+// title, terminatr · notify-me.
 import type { TM } from "./types/tm";
 declare const $: TM;
 

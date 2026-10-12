@@ -455,7 +455,7 @@ func (sv *settingsView) render(m *dash) string {
 	case 0:
 		lines = append(lines, faintLines("A project's own settings (starting threads, yolo mode, remote control, …) are in its popup: a on the dashboard, prefix+a in a session.", w)...)
 	case tabMods:
-		lines = append(lines, faintLines("Mods extend terminatr: themes, keys, columns, panels. They never change the safety settings, and no agent can turn one on. tm mod install adds one.", w)...)
+		lines = append(lines, faintLines("Mods extend terminatr: themes, keys, columns, panels. They never change the safety settings, and no agent can install or turn one on. i installs one, e lists the examples.", w)...)
 		keys = modsKeys
 	default:
 		lines = append(lines, faintLines("Every project follows these, a new one too, unless it sets its own in its popup (a on the dashboard, prefix+a in a session); x there makes it follow these again.", w)...)

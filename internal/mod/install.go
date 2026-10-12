@@ -39,7 +39,8 @@ func (s *Staged) Close() {
 }
 
 // Fetch copies the mod at src into a staging folder (a git URL is cloned
-// first, at src.Ref) and checks it as Validate does. An invalid mod
+// first, at src.Ref, and only its folder src.Subdir copied) and checks
+// it as Validate does. An invalid mod
 // comes back with its manifest, if any, and the reasons.
 func Fetch(src Source) (*Staged, error) {
 	mods, err := home.ModsDir()
@@ -56,10 +57,23 @@ func Fetch(src Source) (*Staged, error) {
 	st := &Staged{Dir: filepath.Join(tmp, "mod"), Source: src, tmp: tmp}
 	from := src.Path
 	if src.Git != "" {
+		if src.Subdir != "" {
+			// Checked again here: a Source can come from a .tm-source.json.
+			if err := CheckSubdir(src.Subdir); err != nil {
+				st.Close()
+				return nil, err
+			}
+		}
 		from = filepath.Join(tmp, "clone")
-		if st.Source.Commit, err = clone(src.Git, src.Ref, from); err != nil {
+		if st.Source.Commit, st.Source.Tree, err = clone(src.Git, src.Ref, src.Subdir, from); err != nil {
 			st.Close()
 			return nil, err
+		}
+		if src.Subdir != "" {
+			if from, err = subdirIn(from, src.Subdir); err != nil {
+				st.Close()
+				return nil, err
+			}
 		}
 	}
 	if err := copyMod(from, st.Dir); err != nil {
@@ -97,6 +111,25 @@ func Validate(dir string) (*Manifest, error) {
 		err = errors.Join(Mod{ID: m.ID, Dir: dir, Manifest: m}.CheckData()...)
 	}
 	return m, err
+}
+
+// Taken says why a mod with id can't be installed next to the mods in
+// r, "" when it can: it is a built-in mod's id, or installed already,
+// with what works instead (tm mod update only takes a mod that records
+// where it came from, T301 B10). tm mod install and the Mods tab ask it
+// before the consent, so nobody consents to what Install would refuse.
+func Taken(r *Registry, id string) string {
+	old, ok := r.Get(id)
+	if !ok && !IsBundled(id) {
+		return ""
+	}
+	hint := "tm mod update " + id
+	if old.Builtin || IsBundled(id) {
+		hint = "it is a built-in mod's id; give your copy another id in its mod.toml"
+	} else if _, ok := ReadSource(old.Dir); !ok {
+		hint = "it records no source (installed by hand, or by tm mod dev); tm mod remove " + id + " first"
+	}
+	return fmt.Sprintf("%s is already installed: %s", id, hint)
 }
 
 // Install installs the staged mod, disabled and with nothing granted:

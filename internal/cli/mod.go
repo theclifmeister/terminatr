@@ -18,7 +18,7 @@ import (
 )
 
 const modUsage = `usage: tm mod list [--outdated] [--json]
-       tm mod install <path | git-url[@tag]> [--yes]
+       tm mod install <path | git-url[//subfolder][@tag] | github-tree-url> [--yes]
        tm mod enable <id> [--project <slug>] [--yes]
        tm mod disable <id> [--project <slug>]
        tm mod remove <id> [--purge] [--yes]
@@ -34,7 +34,10 @@ const modUsage = `usage: tm mod list [--outdated] [--json]
 
 User mods (docs/SPEC.md §5.3), installed in ~/.terminatr/mods. install
 takes a folder or a git URL (https://, ssh://, file://, user@host:path)
-with an optional @tag; there is no catalogue. It shows what the mod asks
+with an optional //<subfolder> holding the mod and an optional @tag,
+e.g. https://example.com/mods.git//nord@v1.0.0, or a GitHub folder's
+URL (https://github.com/<owner>/<repo>/tree/<tag>/<subfolder>); only
+the subfolder is fetched and copied in. There is no catalogue. It shows what the mod asks
 for and installs it disabled after a y on a terminal (--yes without
 one). enable grants what it asks for, after the same question; with
 --project it runs for that project too (disable --project takes one
@@ -259,7 +262,7 @@ func (e *Env) modExamples(asJSON bool) error {
 		}{mod.ExamplesURL, mod.ExamplesRepo, rows})
 	}
 	fmt.Fprintf(e.Stdout, "terminatr's example mods, one for each place a mod can show up: %s\n", mod.ExamplesURL)
-	fmt.Fprintf(e.Stdout, "Nothing here is installed. From a checkout (git clone %s), then:\n", mod.ExamplesRepo)
+	fmt.Fprintln(e.Stdout, "Nothing here is installed. Each installs with one line, then turns on in the Mods tab or with tm mod enable <id>:")
 	for _, x := range mod.Examples {
 		fmt.Fprintf(e.Stdout, "\n%s  %s · %s\n", x.ID, x.Surface, strings.Join(x.Words(), " · "))
 		for _, l := range mod.InstallLines(x.ID) {
@@ -492,16 +495,8 @@ func (e *Env) modInstall(arg string, yes bool) error {
 	defer st.Close()
 	m := st.Manifest
 	if r, err := registry(); err == nil {
-		if old, ok := r.Get(m.ID); ok {
-			// Name what works: tm mod update only takes a mod that
-			// records where it came from (T301 B10).
-			hint := "tm mod update " + m.ID
-			if old.Builtin {
-				hint = "it is a built-in mod's id; give your copy another id in its mod.toml"
-			} else if _, ok := mod.ReadSource(old.Dir); !ok {
-				hint = "it records no source (installed by hand, or by tm mod dev); tm mod remove " + m.ID + " first"
-			}
-			return &project.Error{Code: "mod-exists", Msg: fmt.Sprintf("%s is already installed: %s", m.ID, hint)}
+		if why := mod.Taken(r, m.ID); why != "" {
+			return &project.Error{Code: "mod-exists", Msg: why}
 		}
 	}
 	fmt.Fprintf(e.Stdout, "%s\nFrom %s. It installs disabled: tm mod enable %s turns it on.\n", mod.Consent(m, st.Dir), src, m.ID)

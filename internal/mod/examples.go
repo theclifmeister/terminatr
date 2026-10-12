@@ -7,14 +7,35 @@ package mod
 // built-in mods. The Mods tab's e, its empty state and tm mod examples
 // show the link and each one's install lines, and do nothing else.
 
-// ExamplesURL is the folder in terminatr's repository.
-const ExamplesURL = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods"
+import (
+	"regexp"
 
-// ExamplesRepo is the repository to clone for them.
+	"github.com/theclifmeister/terminatr/internal/version"
+)
+
+// ExamplesRepo is terminatr's repository.
 const ExamplesRepo = "https://github.com/theclifmeister/terminatr"
 
 // ExamplesPath is the folder in a checkout of ExamplesRepo.
 const ExamplesPath = "examples/mods"
+
+// ExamplesRef is the ref the install lines pin: this tm's release tag,
+// so an example speaks the mod API this tm does (main's may already
+// need the next release) and tm mod update moves it on to the newest
+// tag; main for a build that isn't a release.
+var ExamplesRef = examplesRef(version.Channel, version.Version)
+
+func examplesRef(channel, v string) string {
+	if channel == "release" && releaseTagRE.MatchString(v) {
+		return v
+	}
+	return "main"
+}
+
+var releaseTagRE = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)
+
+// ExamplesURL is the folder in terminatr's repository, at ExamplesRef.
+var ExamplesURL = ExamplesRepo + "/tree/" + ExamplesRef + "/" + ExamplesPath
 
 // Example is one mod of the folder: its id (and folder name), the
 // surface it shows and the permissions its mod.toml asks for.
@@ -48,18 +69,24 @@ var Examples = []Example{
 	{"gitlab", "a code host (GitLab, through glab)", Permissions{Commands: []string{"glab"}}},
 }
 
-// InstallLines are how example id installs from a checkout of
-// ExamplesRepo in the current folder. A built-in mod's id can't be
+// ExampleSource is where example id installs from, as tm mod install
+// takes it: its folder's tree URL at ExamplesRef. The Mods tab's
+// examples list installs it with i.
+func ExampleSource(id string) string { return ExamplesURL + "/" + id }
+
+// InstallLines are how example id installs: one tm mod install of
+// ExampleSource. A built-in mod's id can't be
 // installed (Install refuses it), so for one of those they say to copy
-// the folder under another id first.
+// the folder from a checkout under another id first.
 func InstallLines(id string) []string {
-	src := "terminatr/" + ExamplesPath + "/" + id
 	if !IsBundled(id) {
-		return []string{"tm mod install " + src}
+		return []string{"tm mod install " + ExampleSource(id)}
 	}
+	src := "terminatr/" + ExamplesPath + "/" + id
 	cp := "my-" + id
 	return []string{
 		"built in already; to change it, copy it under another id:",
+		"git clone --depth 1 --branch " + ExamplesRef + " " + ExamplesRepo,
 		"cp -R " + src + " " + cp + "   # then set id = \"" + cp + "\" in " + cp + "/mod.toml",
 		"tm mod install " + cp,
 	}

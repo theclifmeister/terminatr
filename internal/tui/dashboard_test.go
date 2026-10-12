@@ -46,22 +46,23 @@ type fakeSource struct {
 	repos    []string // +path or -path
 	// delegated are the tasks asked to be delegated: "slug T12"; asked
 	// the other asks: "accept slug T12", "send-back slug T12 note".
-	delegated  []string
-	asked      []string
-	adopted    []string // "slug s-3"
-	answered   []string // slugs whose questions were opened
-	reviews    map[int]Review
-	agents     []string
-	remote     []string // "slug on" or "slug off"
-	lifecycle  []string // "slug verb"
-	library    []thread.LibFile
-	libFiles   map[string]string // "t-0001/name" -> content
-	libRemoved []string          // "t-0001/name", "t-0001/" for all
-	done       []string          // action.done: "mod action project/task ok"
-	restarted  []string          // mod ids
-	templates  []mod.Template
-	added      []string // "slug title|notes|step;step"
-	modViews   proto.ModViewsResult
+	delegated   []string
+	asked       []string
+	adopted     []string // "slug s-3"
+	answered    []string // slugs whose questions were opened
+	reviews     map[int]Review
+	agents      []string
+	remote      []string // "slug on" or "slug off"
+	lifecycle   []string // "slug verb"
+	library     []thread.LibFile
+	libFiles    map[string]string // "t-0001/name" -> content
+	libRemoved  []string          // "t-0001/name", "t-0001/" for all
+	done        []string          // action.done: "mod action project/task ok"
+	restarted   []string          // mod ids
+	fetchedMods []string          // what FetchMod was asked for
+	templates   []mod.Template
+	added       []string // "slug title|notes|step;step"
+	modViews    proto.ModViewsResult
 	// tasksTab: ModViews lists the Tasks tab mod's view, drawn from the
 	// board (taskstab_test.go), its done tasks listed with tasksDoneAll.
 	tasksTab     bool
