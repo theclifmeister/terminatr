@@ -70,7 +70,7 @@ func ProjectWatchOf(p *project.Project, sessions []proto.SessionInfo, tickerStat
 		wt := proto.WatchThread{ID: r.ID, Title: r.Title, Reports: r.Reports, Done: r.Done}
 		if info, ok := byThread[r.ID]; ok {
 			wt.Session, wt.State, wt.Reason = info.ID, info.State, info.Reason
-			wt.NeedsYou = openQuestion(info.Question)
+			wt.NeedsYou = sessionNeedsYou(info)
 		}
 		st, _ := thread.ReadStatus(p, r.ID)
 		if st != nil && st.NeedsYou != "" {

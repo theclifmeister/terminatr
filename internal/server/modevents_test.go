@@ -194,3 +194,31 @@ func TestModReport(t *testing.T) {
 		t.Fatalf("report %+v", r)
 	}
 }
+
+// TestNeedsYouWithoutAgentMod: a thread whose session the hooks say is
+// blocked on a question needs you, though no Agent mod reported the
+// menu's text; the menu's text wins when there is one, and a permission
+// prompt isn't a question (T301 L2).
+func TestNeedsYouWithoutAgentMod(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	pr := newWatchProject(t)
+	rec, err := thread.Create(pr, thread.Record{Title: "work", Task: "T1", Agent: "claude", State: thread.Running, Session: "s-3"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := proto.SessionInfo{ID: "s-3", Project: "demo", Thread: rec.ID, Role: proto.RoleThread, State: "blocked", Reason: "question"}
+	needs := func(info proto.SessionInfo) string {
+		return projectState(pr, []proto.SessionInfo{info}, "").Threads[rec.ID].State.NeedsYou
+	}
+	if got := needs(info); got != questionNoText {
+		t.Fatalf("no menu: needs_you %q", got)
+	}
+	info.Question = &proto.Question{Questions: []proto.QuestionItem{{Question: "Which port?"}}}
+	if got := needs(info); got != "Which port?" {
+		t.Fatalf("menu: needs_you %q", got)
+	}
+	info.Question, info.Reason = nil, "permission"
+	if got := needs(info); got != "" {
+		t.Fatalf("permission: needs_you %q", got)
+	}
+}
