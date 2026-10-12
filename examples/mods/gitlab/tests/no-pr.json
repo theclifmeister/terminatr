@@ -1,0 +1,101 @@
+{
+  "name": "no merge request is null; a 404 by number is null; glab logged out is a failed call",
+  "answers": [
+    {
+      "method": "process.run",
+      "params": {
+        "argv": [
+          "glab",
+          "api",
+          "--hostname",
+          "gitlab.com",
+          "projects/acme%2Fweb%2Fshop/merge_requests?source_branch=none&state=all&order_by=updated_at&sort=desc&per_page=1"
+        ]
+      },
+      "result": {
+        "code": 0,
+        "stdout": "[]",
+        "stderr": ""
+      }
+    },
+    {
+      "method": "process.run",
+      "params": {
+        "argv": [
+          "glab",
+          "api",
+          "--hostname",
+          "gitlab.com",
+          "projects/acme%2Fweb%2Fshop/merge_requests/8"
+        ]
+      },
+      "result": {
+        "code": 1,
+        "stdout": "",
+        "stderr": "glab: 404 Not Found (HTTP 404)"
+      }
+    },
+    {
+      "method": "process.run",
+      "params": {
+        "argv": [
+          "glab",
+          "api",
+          "--hostname",
+          "gitlab.com",
+          "projects/acme%2Fweb%2Fshop/merge_requests/9"
+        ]
+      },
+      "result": {
+        "code": 1,
+        "stdout": "",
+        "stderr": "glab: 401 Unauthorized (HTTP 401)"
+      }
+    }
+  ],
+  "events": [
+    {
+      "name": "codehost.pr",
+      "data": {
+        "remote": {
+          "kind": "gitlab",
+          "host": "gitlab.com",
+          "path": "acme/web/shop"
+        },
+        "branch": "none"
+      }
+    },
+    {
+      "name": "codehost.pr",
+      "data": {
+        "remote": {
+          "kind": "gitlab",
+          "host": "gitlab.com",
+          "path": "acme/web/shop"
+        },
+        "number": 8
+      }
+    },
+    {
+      "name": "codehost.pr",
+      "data": {
+        "remote": {
+          "kind": "gitlab",
+          "host": "gitlab.com",
+          "path": "acme/web/shop"
+        },
+        "number": 9
+      }
+    }
+  ],
+  "expect": {
+    "failures": 1,
+    "codehost": [
+      null,
+      null,
+      {
+        "error": "401 Unauthorized"
+      }
+    ]
+  }
+}

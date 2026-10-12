@@ -22,6 +22,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/update"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
@@ -56,6 +57,11 @@ type Provides struct {
 	// Tools are tools the mod offers agents, through the agent mod and
 	// tm mcp; its code answers each call ($.tool.handle).
 	Tools []Tool `toml:"tools"`
+	// CodeHost is the code host kind the mod serves ("gitlab", mods
+	// design §2 tier 5): its code answers the codehost.* methods
+	// ($.codehost.handle) for the projects whose code_host names it. It
+	// runs the host's CLI, so it needs the commands permission.
+	CodeHost string `toml:"code_host"`
 	// Data files: a theme, an icon set, a keymap, a layout (.toml).
 	Theme  string `toml:"theme"`
 	Icons  string `toml:"icons"`
@@ -476,6 +482,17 @@ func (m *Manifest) check(dir string) error {
 	}
 	if m.Permissions.Tools && len(p.Tools) == 0 {
 		bad("permissions.tools offers no tool: list them in provides.tools")
+	}
+	if p.CodeHost != "" {
+		switch {
+		case !code:
+			bad("provides.code_host: a code host needs provides.main, the code that answers it")
+		case !codehost.ModKind(p.CodeHost):
+			bad("provides.code_host: %q must be lowercase letters, digits and dashes, and not github or azure (tm's own hosts)", p.CodeHost)
+		}
+		if len(m.Permissions.Commands) == 0 {
+			bad("provides.code_host needs permissions.commands: the host's CLI it runs (glab)")
+		}
 	}
 	if len(p.Views) > 0 && !m.Permissions.Views {
 		bad("provides.views needs permissions.views")

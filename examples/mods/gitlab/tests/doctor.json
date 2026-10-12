@@ -1,0 +1,63 @@
+{
+  "name": "doctor: glab found and logged in on the server",
+  "answers": [
+    {
+      "method": "process.run",
+      "params": {
+        "argv": [
+          "glab",
+          "version"
+        ]
+      },
+      "result": {
+        "code": 0,
+        "stdout": "glab 1.46.0",
+        "stderr": ""
+      }
+    },
+    {
+      "method": "process.run",
+      "params": {
+        "argv": [
+          "glab",
+          "auth",
+          "status"
+        ]
+      },
+      "result": {
+        "code": 1,
+        "stdout": "",
+        "stderr": "x gitlab.com: not logged in"
+      }
+    }
+  ],
+  "events": [
+    {
+      "name": "codehost.doctor",
+      "data": {
+        "remote": {
+          "kind": "gitlab",
+          "host": "",
+          "path": ""
+        }
+      }
+    }
+  ],
+  "expect": {
+    "codehost": [
+      {
+        "checks": [
+          {
+            "name": "glab",
+            "ok": true
+          },
+          {
+            "name": "glab auth",
+            "ok": false,
+            "detail": "not logged in: run glab auth login"
+          }
+        ]
+      }
+    ]
+  }
+}

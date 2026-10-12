@@ -599,7 +599,14 @@ func (t *Ticker) autoClose(p *project.Project, r *thread.Record, m *threadMemo, 
 	if m.Resolving || !closeDue(safety, r, m.PR, cur, now, t.o.Day) {
 		return
 	}
-	why, err := t.o.Unsaved(r, m.PR.Head)
+	// A merged PR's head counts as pushed, its branch gone with the
+	// merge, only on tm's own hosts' word: a code host mod's isn't
+	// enough to drop commits git can't find on the remote.
+	pushed := m.PR.Head
+	if r.Repo != "" && codehost.External(t.host(p, r.Repo)) {
+		pushed = ""
+	}
+	why, err := t.o.Unsaved(r, pushed)
 	if err != nil {
 		t.o.Log.Printf("ticker: %s: auto-close %s: %v", p.Slug, r.ID, err)
 		why = "work that can't be checked"

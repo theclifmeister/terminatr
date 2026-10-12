@@ -29,7 +29,8 @@ type Meta struct {
 	Repos   []string  `toml:"repos"`
 	Created time.Time `toml:"created"`
 	// CodeHost and AzureURL override where the repos' pull requests live
-	// (codehost.Config): "github" or "azure", and the Azure DevOps
+	// (codehost.Config): "github", "azure", or the kind a code host mod
+	// serves ("gitlab"), and the Azure DevOps
 	// organization URL for a server tm doesn't recognize. Unset, each
 	// repo's origin URL decides.
 	CodeHost string `toml:"code_host,omitempty"`
@@ -38,7 +39,7 @@ type Meta struct {
 
 // CodeHost is the project's code host override, for codehost.Pick.
 func (p *Project) CodeHost() codehost.Config {
-	return codehost.Config{CodeHost: p.Meta.CodeHost, AzureURL: p.Meta.AzureURL}
+	return codehost.Config{CodeHost: p.Meta.CodeHost, AzureURL: p.Meta.AzureURL, Project: p.Slug}
 }
 
 // Project is one project folder, ~/.terminatr/projects/<slug>/.

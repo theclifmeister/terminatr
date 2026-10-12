@@ -118,7 +118,7 @@ var ThreadTools = []proto.ToolDef{
 		Description: "Hand in your report to the coordinator (what `tm report` does): whenever you finish or stop to wait. " +
 			"Each field is a section of the report; the server checks the format and answers with the report number, or why it refused.",
 		InputSchema: toolObject(map[string]any{
-			"pr":       map[string]any{"type": "string", "pattern": "^https://", "description": "The PR URL, if you opened one: https://github.com/<owner>/<repo>/pull/<n> or https://dev.azure.com/<org>/<project>/_git/<repo>/pullrequest/<n>."},
+			"pr":       map[string]any{"type": "string", "pattern": "^https://", "description": "The PR URL, if you opened one: https://github.com/<owner>/<repo>/pull/<n>, https://dev.azure.com/<org>/<project>/_git/<repo>/pullrequest/<n> or https://gitlab.com/<group>/<project>/-/merge_requests/<n>."},
 			"report":   map[string]any{"type": "string", "minLength": 1, "description": "The report itself, in Markdown: what you did, what you assumed, any repository outside the project you used. Subheadings are ### (## is reserved for the sections)."},
 			"next":     toolLines("What happens next: one imperative action per item, at most 100 characters each.", 100),
 			"check":    toolLines("Optional: how the user can see the change working (what to run, where to look), a few lines.", 0),
@@ -551,7 +551,7 @@ func reportText(in ModReportTool) (string, error) {
 	}
 	if in.PR != "" {
 		if _, _, ok := codehost.ParsePRURL(in.PR); !ok {
-			return "", toolErr("pr: want https://github.com/<owner>/<repo>/pull/<n> or https://dev.azure.com/<org>/<project>/_git/<repo>/pullrequest/<n>")
+			return "", toolErr("pr: want https://github.com/<owner>/<repo>/pull/<n>, https://dev.azure.com/<org>/<project>/_git/<repo>/pullrequest/<n> or https://gitlab.com/<group>/<project>/-/merge_requests/<n>")
 		}
 	}
 	for _, l := range strings.Split(in.Report, "\n") {

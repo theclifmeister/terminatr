@@ -19,6 +19,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -39,7 +41,21 @@ const (
 	// MethodToolCall runs one of the mod's agent tools: ToolCall →
 	// ToolResult, or an error (CodeNoTool, CodeToolFailed).
 	MethodToolCall = "tool.call"
+	// CodeHostPrefix starts the methods a code host mod answers
+	// (codehost.pr, …; CodeHostMethods): params → the handler's answer
+	// as JSON, or an error (CodeNoHandler, CodeHandlerFailed).
+	CodeHostPrefix = "codehost."
 )
+
+// CodeHostMethods are the code host methods after CodeHostPrefix, as
+// $.codehost.handle names them (internal/codehost's Mod sends them).
+var CodeHostMethods = []string{"pr", "prState", "prHead", "failedLog", "merge", "doctor"}
+
+// IsCodeHost says whether method is one of the code host methods.
+func IsCodeHost(method string) bool {
+	name, ok := strings.CutPrefix(method, CodeHostPrefix)
+	return ok && slices.Contains(CodeHostMethods, name)
+}
 
 // Notifications the host sends the server.
 const (
@@ -67,6 +83,8 @@ const (
 	CodeLoad           = -32001 // hello: the script threw while loading
 	CodeNoTool         = -32002 // tool.call: the script handles no such tool
 	CodeToolFailed     = -32003 // tool.call: the handler threw or rejected
+	CodeNoHandler      = -32004 // codehost.*: the script handles no such method
+	CodeHandlerFailed  = -32005 // codehost.*: the handler threw or rejected
 	// The broker's answers to a $ call (internal/modbroker).
 	CodeDenied   = -32010 // the mod may not: a grant, a path, a host, a program, a project
 	CodeNotFound = -32011 // the project, thread, file or key isn't there
@@ -120,6 +138,9 @@ type HelloResult struct {
 	// Tools are the agent tools the script handles ($.tool.handle)
 	// while loading, sorted.
 	Tools []string `json:"tools,omitempty"`
+	// CodeHost are the code host methods the script handles
+	// ($.codehost.handle) while loading, sorted.
+	CodeHost []string `json:"codehost,omitempty"`
 }
 
 // ToolCall is an agent's call of one of the mod's tools, from a session

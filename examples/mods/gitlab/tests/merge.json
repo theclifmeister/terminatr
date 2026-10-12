@@ -1,0 +1,86 @@
+{
+  "name": "merge sends the checked head as sha, a merge commit, the source branch kept",
+  "answers": [
+    {
+      "method": "process.run",
+      "params": {
+        "argv": [
+          "glab",
+          "api",
+          "--hostname",
+          "gitlab.com",
+          "--method",
+          "PUT",
+          "--raw-field",
+          "sha=0123456789abcdef0123456789abcdef01234567",
+          "--raw-field",
+          "squash=false",
+          "--raw-field",
+          "should_remove_source_branch=false",
+          "projects/acme%2Fweb%2Fshop/merge_requests/7/merge"
+        ]
+      },
+      "result": {
+        "code": 0,
+        "stdout": "{\"iid\": 7, \"state\": \"merged\"}",
+        "stderr": ""
+      }
+    }
+  ],
+  "events": [
+    {
+      "name": "codehost.merge",
+      "data": {
+        "remote": {
+          "kind": "gitlab",
+          "host": "gitlab.com",
+          "path": "acme/web/shop"
+        },
+        "number": 7,
+        "head": "0123456789abcdef0123456789abcdef01234567"
+      }
+    },
+    {
+      "name": "codehost.merge",
+      "data": {
+        "remote": {
+          "kind": "gitlab",
+          "host": "gitlab.com",
+          "path": "acme/web/shop"
+        },
+        "number": 7
+      }
+    }
+  ],
+  "expect": {
+    "failures": 1,
+    "calls": [
+      {
+        "method": "process.run",
+        "params": {
+          "argv": [
+            "glab",
+            "api",
+            "--hostname",
+            "gitlab.com",
+            "--method",
+            "PUT",
+            "--raw-field",
+            "sha=0123456789abcdef0123456789abcdef01234567",
+            "--raw-field",
+            "squash=false",
+            "--raw-field",
+            "should_remove_source_branch=false",
+            "projects/acme%2Fweb%2Fshop/merge_requests/7/merge"
+          ]
+        }
+      }
+    ],
+    "codehost": [
+      {},
+      {
+        "error": "merge needs the number and head"
+      }
+    ]
+  }
+}

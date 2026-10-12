@@ -92,8 +92,15 @@ func (m *Mod) Run(f *Fixture, file string) (r Result) {
 	if steps[0].Name != modbus.ModReady {
 		steps = append([]Step{{Name: modbus.ModReady, Data: json.RawMessage(`{"projects":[]}`)}}, steps...)
 	}
-	tools := 0
+	tools, hosts := 0, 0
 	for i, s := range steps {
+		if modproto.IsCodeHost(s.Name) {
+			hosts++
+			if m.Manifest.Provides.CodeHost == "" {
+				bad("events[%d]: %s asks a code host, which the mod doesn't provide (provides.code_host)", i, s.Name)
+			}
+			continue
+		}
 		if s.Name == ToolStep {
 			tools++
 			var c modproto.ToolCall
@@ -116,6 +123,9 @@ func (m *Mod) Run(f *Fixture, file string) (r Result) {
 	}
 	if len(f.Expect.Tools) > tools {
 		bad("expect.tools: %d answers for %d tool calls", len(f.Expect.Tools), tools)
+	}
+	if len(f.Expect.CodeHost) > hosts {
+		bad("expect.codehost: %d answers for %d code host calls", len(f.Expect.CodeHost), hosts)
 	}
 	for _, c := range f.Expect.Calls {
 		if !modapi.Has(c.Method) {
@@ -148,11 +158,24 @@ func (m *Mod) Run(f *Fixture, file string) (r Result) {
 		bad("loading the script: %v", err)
 	}
 	var answers []string
+	var hostAnswers []json.RawMessage
 	for i, s := range steps {
 		if err != nil {
 			break
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), EventLimit)
+		if modproto.IsCodeHost(s.Name) {
+			var raw json.RawMessage
+			if raw, err = d.call(ctx, s.Name, s.Data); err != nil {
+				// The handler's throw is a failed call of the host, not
+				// the run's end.
+				raw, _ = json.Marshal(map[string]string{"error": err.Error()})
+				err = nil
+			}
+			hostAnswers = append(hostAnswers, raw)
+			cancel()
+			continue
+		}
 		if s.Name == ToolStep {
 			var raw json.RawMessage
 			if raw, err = d.call(ctx, modproto.MethodToolCall, s.Data); err != nil {
@@ -224,6 +247,27 @@ func (m *Mod) Run(f *Fixture, file string) (r Result) {
 	for i, want := range f.Expect.Tools {
 		if i < len(answers) && !strings.Contains(answers[i], want) {
 			bad("tool call %d answered %q; expected it to hold %q", i+1, answers[i], want)
+		}
+	}
+	for i, want := range f.Expect.CodeHost {
+		if i >= len(hostAnswers) {
+			break
+		}
+		got := hostAnswers[i]
+		var w struct {
+			Error *string `json:"error"`
+		}
+		if json.Unmarshal(want, &w) == nil && w.Error != nil {
+			var g struct {
+				Error string `json:"error"`
+			}
+			if json.Unmarshal(got, &g) != nil || g.Error == "" || !strings.Contains(g.Error, *w.Error) {
+				bad("code host call %d answered %s; expected an error holding %q", i+1, got, *w.Error)
+			}
+			continue
+		}
+		if !Match(want, got) {
+			bad("code host call %d answered %s; expected %s", i+1, got, want)
 		}
 	}
 	store := b.Store()
