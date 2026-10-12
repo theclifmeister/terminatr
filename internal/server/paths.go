@@ -29,7 +29,7 @@ func RunDir(e Env) string {
 	if e.XDGRuntimeDir != "" {
 		dir = filepath.Join(e.XDGRuntimeDir, "terminatr")
 	}
-	if !ipc.Fits(dir, ipc.ServerName) || !ipc.Fits(dir, ipc.HumanName) {
+	if !ipc.Fits(dir, ipc.ServerName) {
 		h := sha256.Sum256([]byte(resolve(e.TerminatrHome)))
 		dir = filepath.Join(ipc.ShortDir(), fmt.Sprintf("terminatr-%d-%x", e.UID, h[:4]))
 	}

@@ -246,7 +246,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	if err != nil {
 		ln.Close()
-		return fmt.Errorf("listen %s: %w", human, err)
+		return fmt.Errorf("human socket: %w", err)
 	}
 	if err := os.WriteFile(p.PID, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
 		ln.Close()

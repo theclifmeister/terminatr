@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -62,9 +63,11 @@ func Dial(p Paths, kind proto.Kind) (*Client, error) { return dial(p, kind, prot
 // A control connection tries the human socket first, which the human-only
 // methods need (docs/SPEC.md §11.1): where it can't connect (an agent's
 // sandbox, an older server) it uses the server socket. A server too slow
-// to answer there is too slow on both.
+// to answer there is too slow on both. An agent's session doesn't try:
+// its sandbox would report each refused connect to the agent, as a
+// prompt to run tm outside the sandbox.
 func dial(p Paths, kind proto.Kind, protocol int) (*Client, error) {
-	if kind == proto.KindControl && p.Socket != "" {
+	if kind == proto.KindControl && p.Socket != "" && !caller.FromEnv().IsAgent() {
 		c, err := dialAt(p.HumanSocket(), kind, protocol)
 		var ne net.Error
 		if err == nil || errors.As(err, &ne) && ne.Timeout() {
@@ -132,6 +135,7 @@ func Connect(p Paths, autostart bool) (*Client, error) {
 	switch {
 	case lerr == nil:
 		os.Remove(p.Socket)
+		os.Remove(p.HumanSocket())
 		os.Remove(p.PID)
 		lk.Unlock()
 		if !autostart {

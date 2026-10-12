@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -31,6 +32,7 @@ func onHumanSocketOnly(err error) bool {
 // Dial takes the human socket.
 func TestHumanSocket(t *testing.T) {
 	p := testPaths(t)
+	t.Setenv(caller.EnvSession, "") // the human's, even under an agent's tm
 	startServer(t, p)
 	if fi, err := os.Stat(p.HumanSocket()); err != nil || fi.Mode()&os.ModeSocket == 0 || fi.Mode().Perm() != 0o600 {
 		t.Fatalf("human socket %s: %v %v", p.HumanSocket(), fi, err)
@@ -69,6 +71,17 @@ func TestHumanSocket(t *testing.T) {
 			t.Errorf("ping: %v", err)
 		}
 	}
+	// An agent's session doesn't try the human socket.
+	t.Setenv(caller.EnvSession, "s-1")
+	t.Setenv(caller.EnvRole, string(caller.Thread))
+	agent, err := Dial(p, proto.KindControl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer agent.Close()
+	if got := agent.conn.RemoteAddr().String(); got != p.Socket {
+		t.Errorf("an agent's Dial connected to %q, want %q", got, p.Socket)
+	}
 	if proto.HumanOnly(proto.MethodCLIRun) || proto.HumanOnly(proto.MethodCallerWho) {
 		t.Error("an agent's own methods are human-only")
 	}
@@ -80,6 +93,7 @@ func TestHumanSocket(t *testing.T) {
 // human-only methods.
 func TestHumanSocketFallback(t *testing.T) {
 	p := testPaths(t)
+	t.Setenv(caller.EnvSession, "")
 	startServer(t, p)
 	if err := os.Remove(p.HumanSocket()); err != nil {
 		t.Fatal(err)

@@ -25,10 +25,11 @@ const MaxPath = 100
 const ServerName = "tm.sock"
 
 // HumanName is the human socket's name, beside the server socket: the
-// same server, for the human's console and CLI only. No agent's sandbox
+// same server, for the human's console and CLI only. It is no longer
+// than ServerName, so it fits wherever the server socket does. No agent's sandbox
 // allows it (docs/SPEC.md §5.2), so the human-only methods answer there
 // alone (§11.1).
-const HumanName = "human.sock"
+const HumanName = "human"
 
 // Fits reports whether a socket in dir named name fits the sun_path
 // budget.
