@@ -23,10 +23,10 @@ import (
 // and no host. The look (a theme, an icon set) and the sidebar's layout
 // are one at a time, picked in General settings ([ui] theme, icons,
 // layout); every enabled keymap applies, the first enabled winning a
-// key; rules addenda, task templates and agent manifests all add up.
-// The look, keys, layout and agents are the console's and the
-// machine's, so they follow a mod being enabled, not its projects;
-// rules and templates follow its projects too.
+// key; rules addenda, task templates, agent manifests and guard rules
+// all add up. The look, keys, layout and agents are the console's and
+// the machine's, so they follow a mod being enabled, not its projects;
+// rules, templates and guard rules follow its projects too.
 
 // Data kinds, as [provides] names them.
 const (
@@ -37,6 +37,7 @@ const (
 	KindRules     = "rules"
 	KindTemplates = "templates"
 	KindAgents    = "agents"
+	KindGuard     = "guard"
 )
 
 // MaxDataFile caps a data file tm reads from a mod: a theme, an icon
@@ -64,6 +65,8 @@ func (m Mod) Has(kind string) bool {
 		return p.Templates != ""
 	case KindAgents:
 		return p.Agents != ""
+	case KindGuard:
+		return len(p.Guard) > 0
 	}
 	return false
 }
@@ -325,6 +328,31 @@ func (r *Registry) Rules(role, slug string) (policy *Addendum, addenda []Addendu
 		}
 	}
 	return policy, addenda, errs
+}
+
+// ModGuardRule is a mod's guard rule, with the mod's id.
+type ModGuardRule struct {
+	Mod string
+	GuardRule
+}
+
+// GuardRules are the guard rules the enabled mods add for sessions of
+// role in project slug, by mod id then the manifest's order. They only
+// add refusals (mods design §7, Tighten only); the guard serves them
+// with the core's when the human has it on.
+func (r *Registry) GuardRules(role, slug string) []ModGuardRule {
+	var out []ModGuardRule
+	for _, m := range r.Mods {
+		if !m.Runs(slug) || !m.Has(KindGuard) {
+			continue
+		}
+		for _, g := range m.Manifest.Provides.Guard {
+			if g.For(role) {
+				out = append(out, ModGuardRule{Mod: m.ID, GuardRule: g})
+			}
+		}
+	}
+	return out
 }
 
 // Task templates
