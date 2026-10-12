@@ -624,7 +624,7 @@ func TestClickFocus(t *testing.T) {
 	}
 
 	// A list row: the list; the details panel: the panel.
-	_, lw := m.split()
+	lw := m.geom().list().w
 	m.Update(tea.MouseClickMsg{X: sw + 3, Y: 3, Button: tea.MouseLeft})
 	if m.focus != areaMain || cursor() != "" {
 		t.Fatalf("list click: focus %d cursor %q", m.focus, cursor())

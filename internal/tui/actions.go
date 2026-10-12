@@ -137,21 +137,16 @@ func init() {
 			run: func(m *dash, _ string) tea.Cmd { return m.cycleProject(true) }},
 		{id: "project.prev", keys: []string{"["}, menu: "previous project",
 			run: func(m *dash, _ string) tea.Cmd { return m.cycleProject(false) }},
-		{id: "list.narrower", keys: []string{"<"}, label: "< >", help: "narrow / widen the list beside the details panel (or drag the divider)", menu: "narrower list",
+		{id: "list.narrower", keys: []string{"<"}, label: "< >", help: "shrink / grow the list beside or above the details panel (or drag the divider)", menu: "smaller list",
 			run: (*dash).resize},
-		{id: "list.wider", keys: []string{">"}, menu: "wider list", run: (*dash).resize},
+		{id: "list.wider", keys: []string{">"}, menu: "larger list", run: (*dash).resize},
 		{id: "sidebar.narrower", keys: []string{"{"}, label: "{ }", help: "narrow / widen the projects sidebar (or drag its border)", menu: "narrower sidebar",
 			run: (*dash).sideKey},
 		{id: "sidebar.wider", keys: []string{"}"}, menu: "wider sidebar", run: (*dash).sideKey},
 		{id: "sidebar.slim", keys: []string{"b"}, label: "b", help: "the sidebar: full, hidden, a slim strip (glyphs and short names), full again", menu: "sidebar: hide / slim / full",
 			run: (*dash).sideKey},
-		{id: "details.toggle", keys: []string{"|"}, label: "|", help: "show or hide the details panel (windows 120 columns or wider)", menu: "details panel on / off",
-			run: func(m *dash, _ string) tea.Cmd {
-				l := m.layout
-				l.Details = !l.Details
-				m.setLayout(l)
-				return nil
-			}},
+		{id: "details.toggle", keys: []string{"|"}, label: "|", help: "show or hide the details panel, where the layout puts it: right of the list (dashboards 120 columns or wider) or under it", menu: "details panel on / off",
+			run: (*dash).toggleDetails},
 		{id: "settings.open", keys: []string{","}, label: ",", help: "settings for every project: the prefix key, the default agent, the layout (a project's own are under a)", menu: "settings",
 			foot: always("settings"), run: func(m *dash, _ string) tea.Cmd { m.openSettings(); return nil }},
 		{id: "help.open", keys: []string{"?"}, label: "?", help: "help", menu: "help: keys and mouse",
@@ -256,24 +251,57 @@ func (m *dash) inbox(string) tea.Cmd {
 	return nil
 }
 
+// resize steps the list's share beside the details panel (right) or
+// above it (bottom): < makes the list smaller, > larger.
 func (m *dash) resize(key string) tea.Cmd {
-	split, lw := m.split()
-	if !split {
-		m.msg = fmt.Sprintf("the details panel shows when the dashboard (the window less the sidebar) is %d columns or wider; | turns it on", splitMin)
-		return nil
-	}
-	l := m.layout
-	if l.detCells != 0 {
-		// A panel the layout gives in cells steps from its share now.
-		l.Split, l.detCells = float64(lw)/float64(max(m.w, 1)), 0
-	}
+	g := m.geom()
+	l, d := m.layout, splitStep
 	if key == "<" {
-		l.Split -= splitStep
-	} else {
-		l.Split += splitStep
+		d = -d
+	}
+	switch g.panel() {
+	case placeRight:
+		if l.detCells != 0 {
+			// A panel the layout gives in cells steps from its share now.
+			l.Split, l.detCells = float64(g.list().w)/float64(max(g.body().w, 1)), 0
+		}
+		l.Split += d
+	case placeBottom:
+		l.DetailsRows = l.rows()
+		if l.rowCells != 0 {
+			// As for cells: rows step from the panel's share now.
+			l.DetailsRows, l.rowCells = 1-float64(g.list().h)/float64(max(g.body().h, 1)), 0
+		}
+		l.DetailsRows -= d
+	default:
+		m.msg = m.noPanel()
+		return nil
 	}
 	m.setLayout(l)
 	return nil
+}
+
+// toggleDetails turns the details panel off, or on at its place; the
+// footer says why it doesn't show when the window has no room for it.
+func (m *dash) toggleDetails(string) tea.Cmd {
+	l := m.layout
+	l.Details = !l.Details
+	m.setLayout(l)
+	if l.Details && m.panel() == "" {
+		m.msg = m.noPanel()
+	}
+	return nil
+}
+
+// noPanel says why the details panel doesn't show.
+func (m *dash) noPanel() string {
+	switch m.layout.place() {
+	case placeOff:
+		return "the details panel is off; | turns it on"
+	case placeBottom:
+		return fmt.Sprintf("the details panel shows under the list when the dashboard has %d rows or more between its header and footer; here a thread's details show under its row", bottomMin)
+	}
+	return fmt.Sprintf("the details panel shows right of the list when the dashboard (the window less the sidebar) is %d columns or wider; here a thread's details show under its row", splitMin)
 }
 
 func (m *dash) sideKey(key string) tea.Cmd {

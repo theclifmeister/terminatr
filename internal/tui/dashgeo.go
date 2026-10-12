@@ -2,7 +2,7 @@ package tui
 
 // The dashboard's geometry (the layout v2 design §4, L2): where the
 // sidebar, the header, the body (the list, and the details panel beside
-// it) and the footer are in the window, in one place, one method each,
+// or under it) and the footer are in the window, in one place, one method each,
 // so the layout's parts change one region at a time. Rects are in
 // window cells; the dashboard's own code works in its area's columns
 // (x less main().x) and the window's rows.
@@ -15,6 +15,9 @@ func (r rect) hasX(x int) bool { return x >= r.x && x < r.x+r.w }
 
 // hasY says whether row y is in r.
 func (r rect) hasY(y int) bool { return y >= r.y && y < r.y+r.h }
+
+// has says whether cell (x, y) is in r.
+func (r rect) has(x, y int) bool { return r.hasX(x) && r.hasY(y) }
 
 // dashGeo is the dashboard's geometry in a window w by h, the sidebar
 // sideW wide, under the effective layout l.
@@ -78,48 +81,82 @@ func (g dashGeo) body() rect {
 	return rect{a.x, 1, a.w, max(g.h-1-footRows, 1)}
 }
 
-// split says whether the details panel shows beside the list, and the
-// list's width (in the dashboard's columns) when it does: a panel
-// given in cells keeps them while the list keeps its least share.
-func (g dashGeo) split() (bool, int) {
-	w := g.main().w
-	if !g.l.Details || w < splitMin {
-		return false, w
+// panel is where the details panel shows: right of the list when the
+// dashboard is splitMin columns or wider, under it when the body has
+// bottomMin rows or more, else "" (also with the panel off): the
+// selected thread's details then show inline under its row.
+func (g dashGeo) panel() string {
+	switch p := g.l.place(); {
+	case p == placeRight && g.main().w >= splitMin:
+		return placeRight
+	case p == placeBottom && g.body().h >= bottomMin:
+		return placeBottom
 	}
-	if c := g.l.detCells; c > 0 {
-		return true, min(max(w-c-1, int(float64(w)*minSplit+0.5)), int(float64(w)*maxSplit+0.5))
-	}
-	return true, int(float64(w)*g.l.Split + 0.5)
+	return ""
 }
 
-// list is the list: the body, or its left part beside the details
+// listW is the list's width beside the right panel (in the dashboard's
+// columns): a panel given in cells keeps them while the list keeps its
+// least share.
+func (g dashGeo) listW() int {
+	w := g.main().w
+	if c := g.l.detCells; c > 0 {
+		return min(max(w-c-1, int(float64(w)*minSplit+0.5)), int(float64(w)*maxSplit+0.5))
+	}
+	return int(float64(w)*g.l.Split + 0.5)
+}
+
+// listH is the list's height above the bottom panel: the body less the
+// panel's share (or its rows and the divider), the list and the panel,
+// its divider in, keeping bottomMin/2 rows each.
+func (g dashGeo) listH() int {
+	h := g.body().h
+	lh := h - int(float64(h)*g.l.rows()+0.5)
+	if c := g.l.rowCells; c > 0 {
+		lh = h - c - 1
+	}
+	lo := max(bottomMin/2, int(float64(h)*(1-maxRows)+0.5))
+	hi := min(h-bottomMin/2, int(float64(h)*(1-minRows)+0.5))
+	return min(max(lh, lo), hi)
+}
+
+// list is the list: the body, or its part beside or above the details
 // panel.
 func (g dashGeo) list() rect {
 	b := g.body()
-	if split, lw := g.split(); split {
-		b.w = lw
+	switch g.panel() {
+	case placeRight:
+		b.w = g.listW()
+	case placeBottom:
+		b.h = g.listH()
 	}
 	return b
 }
 
-// divider is the details panel's divider column, beside the list; -1
-// with no panel.
-func (g dashGeo) divider() int {
-	if split, lw := g.split(); split {
-		return g.body().x + lw
+// divider is the details panel's divider: a column right of the list,
+// or a row under it; empty (w or h 0) with no panel.
+func (g dashGeo) divider() rect {
+	b, l := g.body(), g.list()
+	switch g.panel() {
+	case placeRight:
+		return rect{l.x + l.w, b.y, 1, b.h}
+	case placeBottom:
+		return rect{b.x, l.y + l.h, b.w, 1}
 	}
-	return -1
+	return rect{b.x + b.w, b.y, 0, b.h}
 }
 
-// details is the details panel right of the divider; empty (w 0) with
-// no panel.
+// details is the details panel past the divider; empty (w 0) with no
+// panel.
 func (g dashGeo) details() rect {
-	b := g.body()
-	split, lw := g.split()
-	if !split {
-		return rect{b.x + b.w, b.y, 0, b.h}
+	b, d := g.body(), g.divider()
+	switch g.panel() {
+	case placeRight:
+		return rect{d.x + 1, b.y, b.x + b.w - d.x - 1, b.h}
+	case placeBottom:
+		return rect{b.x, d.y + 1, b.w, b.y + b.h - d.y - 1}
 	}
-	return rect{b.x + lw + 1, b.y, b.w - lw - 1, b.h}
+	return rect{b.x + b.w, b.y, 0, b.h}
 }
 
 // bodyRows is the room between the header and the footer.
