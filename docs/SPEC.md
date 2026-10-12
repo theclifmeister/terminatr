@@ -1253,7 +1253,7 @@ Claude Code is pure data (`manifests/claude.toml`), except for the optional sock
      | `PreToolUse` / `PostToolUse` / `PostToolUseFailure` | working, transient |
      | `PermissionRequest` (`tool_name = AskUserQuestion`) | blocked / question |
      | `PermissionRequest` (other tools) | blocked / permission, with `tool_name` and `tool_use_id` |
-     | `Notification` `permission_prompt` / `elicitation_dialog` / `agent_needs_input` | blocked (late: about 6 s after the dialog) |
+     | `Notification` `permission_prompt` / `elicitation_dialog` / `agent_needs_input` | blocked (late: about 6 s after the dialog); while the hooks or the status file say blocked already, it confirms that dialog and keeps its reason (`permission_prompt` comes for an AskUserQuestion menu too) |
      | `Notification` `idle_prompt` | idle (60 s after `Stop`) |
      | `Stop`, `StopFailure` | idle |
      | `SubagentStart` / `SubagentStop` with `agent_type` | `+bg` / `-bg`, keyed by `agent_id` |

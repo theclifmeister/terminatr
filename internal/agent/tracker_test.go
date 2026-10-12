@@ -143,6 +143,52 @@ func TestTrackerStaleCases(t *testing.T) {
 	})
 }
 
+// TestTrackerQuestionLateNotification: T305. Claude confirms an
+// AskUserQuestion menu with Notification(permission_prompt) about 6 s
+// later. That confirms the open dialog, not a new one: the state stays
+// blocked/question throughout, or the thread's needs_you blinks out for a
+// second and back, and notify-me tells the same question twice.
+func TestTrackerQuestionLateNotification(t *testing.T) {
+	ask := func(r *rig) {
+		r.hook("UserPromptSubmit", nil)
+		r.hook("PreToolUse", map[string]any{"tool_name": "AskUserQuestion"})
+		r.hook("PermissionRequest", map[string]any{"tool_name": "AskUserQuestion"})
+	}
+	t.Run("with the status file", func(t *testing.T) {
+		r := newRig(t)
+		ask(r)
+		r.status(StateBlocked, "question")
+		r.want(StateBlocked, "question", "status_file")
+		r.tick(6 * time.Second)
+		r.hook("Notification", map[string]any{"notification_type": "permission_prompt"})
+		r.want(StateBlocked, "question", "")
+		r.tick(statusLag)
+		r.want(StateBlocked, "question", "status_file")
+	})
+	t.Run("hooks only", func(t *testing.T) {
+		r := newRig(t)
+		ask(r)
+		r.want(StateBlocked, "question", "hooks")
+		r.tick(6 * time.Second)
+		r.hook("Notification", map[string]any{"notification_type": "permission_prompt"})
+		r.want(StateBlocked, "question", "hooks")
+		// Answered, then a real permission dialog: its own reason.
+		r.hook("PostToolUse", map[string]any{"tool_name": "AskUserQuestion"})
+		r.hook("PreToolUse", map[string]any{"tool_name": "Write"})
+		r.hook("PermissionRequest", map[string]any{"tool_name": "Write"})
+		r.want(StateBlocked, "permission", "hooks")
+	})
+	t.Run("no PermissionRequest hook, the status file says question", func(t *testing.T) {
+		r := newRig(t)
+		r.hook("UserPromptSubmit", nil)
+		r.hook("PreToolUse", map[string]any{"tool_name": "AskUserQuestion"})
+		r.status(StateBlocked, "question")
+		r.tick(6 * time.Second)
+		r.hook("Notification", map[string]any{"notification_type": "permission_prompt"})
+		r.want(StateBlocked, "question", "")
+	})
+}
+
 func TestTrackerRanking(t *testing.T) {
 	r := newRig(t)
 	// The status file beats hooks.

@@ -250,8 +250,17 @@ func (t *Tracker) Hook(ev HookEvent, sigs []Signal) (sidChanged bool) {
 				t.edge = &sc
 				rec.Signals = append(rec.Signals, string(s.State)+" (transient)")
 			} else {
+				// A blocked hook while the hooks say blocked already, with
+				// no tool call since, confirms the open dialog (Claude's
+				// Notification comes ~6 s late, and says permission_prompt
+				// for an AskUserQuestion menu too): it keeps its reason
+				// (T305).
+				if sc.State == StateBlocked && t.hook != nil && t.hook.State == StateBlocked && t.hook.Reason != "" &&
+					(t.edge == nil || !t.edge.At.After(t.hook.At)) {
+					sc.Reason = t.hook.Reason
+				}
 				t.hook = &sc
-				rec.Signals = append(rec.Signals, stateText(s.State, s.Reason))
+				rec.Signals = append(rec.Signals, stateText(sc.State, sc.Reason))
 			}
 		}
 	}
@@ -446,6 +455,11 @@ func (t *Tracker) merge() Merged {
 		// up, or for statusLag at most.
 		m.State, m.Reason = t.hook.State, t.hook.Reason
 		used = append(used, "hooks")
+		// Both blocked: the file names what it waits for (a late
+		// permission_prompt confirms a question menu too, T305).
+		if t.status.State == StateBlocked && m.State == StateBlocked && t.status.Reason != "" {
+			m.Reason = t.status.Reason
+		}
 	case t.statusDoubt(t.now()) != "":
 		// Rule 2a: a working status file no turn explains.
 		m.State, m.Reason = t.hook.State, t.hook.Reason
