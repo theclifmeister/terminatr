@@ -151,16 +151,37 @@ func (m *dash) commandItems() []menuItem {
 	return out
 }
 
-// commandHelp are the mods' commands as the help lists them: the key
-// (none when it has none or lost it) and the title, with the mod.
+// commandHelp are the mods' commands as the help lists them, for the
+// commands that run for the project shown: the keys (the dashboard's
+// and prefix+key; none when it has none or lost it, then its ≡ menu
+// entry, or none) and the title with the mod's name. The keys are the
+// effective ones: a key the core (or a keymap) holds isn't the command's.
+// A last line says where the keys inside a mod's own view are.
 func (m *dash) commandHelp() []keyHelp {
 	var out []keyHelp
+	slug := m.projectHere()
 	for _, c := range m.modCommands() {
-		help := c.Title + " (tm mod run " + c.Mod + " " + c.ID + ")"
-		if c.Key != "" && m.commandKey(c) == "" {
-			help += "; its key " + c.Key + " is taken"
+		if !c.Runs(slug) {
+			continue
 		}
-		out = append(out, keyHelp{keyShown(m.commandKey(c)), help})
+		name := c.Name
+		if name == "" {
+			name = c.Mod
+		}
+		help := c.Title + " · " + name + " (tm mod run " + c.Mod + " " + c.ID + ")"
+		keys := "≡ menu"
+		switch k := m.commandKey(c); {
+		case k != "":
+			keys = keyShown(k) + " prefix+" + keyShown(k)
+		case c.Key != "":
+			help += "; its key " + c.Key + " is taken"
+		case !c.InMenu():
+			keys = "tm mod run"
+		}
+		out = append(out, keyHelp{keys, help})
+	}
+	if len(out) > 0 {
+		out = append(out, keyHelp{"in a mod's view", "the keys a mod's own view takes are in that view's hint"})
 	}
 	return out
 }
