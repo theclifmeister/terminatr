@@ -526,6 +526,10 @@ func TestTasksTabMod(t *testing.T) {
 	if len(src.inputs) != 0 {
 		t.Errorf("the press reached the mod: %+v", src.inputs)
 	}
+	// The mod hears action.done with the press token its check gave.
+	if want := "tasks-tab task.show alpha/T2 true"; len(src.done) != 1 || src.done[0] != want {
+		t.Errorf("done %q, want %q", src.done, want)
+	}
 	m.pop()
 	runAll(m, press(m, "+"))
 	if _, ok := m.top().(*projectView); ok {
