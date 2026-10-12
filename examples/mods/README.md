@@ -86,7 +86,9 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
   under `[permissions]` (mod API 1.3), which the consent shows.
 - **cost-card** uses the `tokens` and `cost_usd` that `session.state`
   carries for a thread's session (its thread's totals so far). Days
-  count only what was spent while the mod ran.
+  count only what was spent while the mod ran: a thread started then
+  counts from nothing (`thread.started`), its first turn included; one
+  already running when the mod first hears of it counts from there.
 - **notify-me** buttons are core action ids. A question menu open on a
   thread or a coordinator (`session.question`, mod API 1.3) gets its
   first three options as `question.answer` buttons; a review gets

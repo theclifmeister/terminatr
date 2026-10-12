@@ -1,0 +1,22 @@
+{
+  "name": "a thread started while the mod ran counts from nothing: its first turn counts to today",
+  "answers": [{ "method": "thread.get", "params": { "project": "demo", "thread": "t-0021" }, "result": { "id": "t-0021", "title": "Docs" } }],
+  "events": [
+    { "name": "view.opened", "data": { "view": "cost", "slot": "dashboard.card", "width": 60, "height": 8 } },
+    { "name": "thread.started", "project": "demo", "data": { "project": "demo", "thread": "t-0021", "task": "T4", "agent": "claude" } },
+    { "name": "session.state", "project": "demo",
+      "data": { "session": "s-9", "project": "demo", "thread": "t-0021", "role": "thread", "state": "idle", "context": 5, "tokens": 168600, "cost_usd": 0.78 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set", "params": { "view": "cost", "widget": { "children": [
+        { "pairs": [{ "key": "today", "value": [{ "text": "$0.00" }, {}] }, {}] }, {}, {} ] } } },
+      { "method": "thread.get", "params": { "project": "demo", "thread": "t-0021" } },
+      { "method": "ui.view.set", "params": { "view": "cost", "widget": { "children": [
+        { "pairs": [{ "key": "today", "value": [{ "text": "$0.78" }, { "text": "  168.6k tokens" }] }, { "value": [{ "text": "$0.78" }] }] },
+        {},
+        { "rows": [{ "id": "demo/t-0021", "cells": [[{ "text": "demo Docs" }], [{ "text": "168.6k" }], [{ "text": "$0.78" }]] }] } ] } } }
+    ],
+    "store": { "threads": { "demo/t-0021": { "title": "Docs", "tokens": 168600, "cost": 0.78 } }, "fresh": {} }
+  }
+}
