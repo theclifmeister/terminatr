@@ -383,6 +383,20 @@ func layoutSections(s []string) []string {
 	return out
 }
 
+// shows says whether the dashboard shows section id (a layout leaves
+// out other and cards to hide them). A zero Layout shows all of them.
+func (l Layout) shows(id string) bool {
+	return slices.Contains(l.order(), id)
+}
+
+// order is the sections in the order the dashboard lays them out.
+func (l Layout) order() []string {
+	if l.sections == nil {
+		return mod.LayoutSections
+	}
+	return l.sections
+}
+
 // tweak is ui with the console's change from was to now (both
 // effective under spec): each part that changed goes under id when the
 // layout sets it, else at the top level. In safe mode (safe) nothing

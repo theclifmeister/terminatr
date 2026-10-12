@@ -421,7 +421,7 @@ func (m *dash) shownViews() []modview.Shown {
 		g := m.geom()
 		lw := g.list().w
 		for _, v := range m.mv.cards() {
-			if m.cardShows(cardKey(v)) {
+			if m.layout.shows("cards") && m.cardShows(cardKey(v)) {
 				add(v, project, "", lw, m.cardHeight(v, project))
 			}
 		}
@@ -525,6 +525,9 @@ func (m *dash) openModView(o modview.Open) {
 				}
 			}
 		case mod.SlotDashboardCard:
+			if !m.layout.shows("cards") {
+				return // hidden: no row to select
+			}
 			delete(m.mv.folded, cardKey(v))
 			if m.top() == nil {
 				m.sel, m.userSel = cardKey(v), true
@@ -616,6 +619,9 @@ func (m *dash) cardHeight(v proto.ModView, project string) int {
 // header row each, selectable; its lines are drawn under it (listLines).
 func (m *dash) cardRows() []row {
 	var out []row
+	if !m.layout.shows("cards") {
+		return nil
+	}
 	for _, v := range m.mv.cards() {
 		out = append(out, row{key: cardKey(v), what: v.Title, pct: -1, card: true})
 	}

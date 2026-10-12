@@ -1083,7 +1083,7 @@ func (m *dash) setData(d Data) tea.Cmd {
 // rebuild lays the rows out again from the last poll, for the listed
 // project; a selection that went away moves to the first row.
 func (m *dash) rebuild() {
-	m.rows = append(buildRows(m.data, listProject(m.data, m.current)), m.cardRows()...)
+	m.rows = buildRows(m.data, listProject(m.data, m.current), m.layout.order(), m.cardRows())
 	if m.layout.compact() {
 		m.rows = compactRows(m.rows)
 	}

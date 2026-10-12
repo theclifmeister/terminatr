@@ -255,7 +255,7 @@ func listProject(d Data, current string) string {
 // shows the task in the project popup, and the coordinator accepts the
 // work. Everything about threads goes to their coordinator, the user's
 // single point of contact (§4).
-func buildRows(d Data, project string) []row {
+func buildRows(d Data, project string, sections []string, cards []row) []row {
 	var projs, other []row
 	bySlug := map[string]bool{}
 	for _, p := range d.Projects {
@@ -416,28 +416,40 @@ func buildRows(d Data, project string) []row {
 		other = append(other, sr)
 	}
 
+	// The sections come in the layout's order; one it leaves out is
+	// hidden (layoutSections has put needs and project back).
 	var rows []row
-	if len(needs) > 0 {
-		rows = append(rows, row{head: "NEEDS YOU", count: len(needs)})
-		rows = append(rows, needs...)
-	}
-	if head != "" {
-		rows = append(rows, row{head: head, headNote: headNote, paused: paused})
-		rows = append(rows, projs...)
-	} else {
-		rows = append(rows, row{note: "  no projects; n creates one"})
-	}
-	// The header's count is every session; this section has those outside
-	// the projects, so it says so.
-	rows = append(rows, row{head: "OTHER SESSIONS", count: len(other)})
-	if len(other) == 0 {
-		note := "  no sessions"
-		if n := len(d.Sessions); n > 0 {
-			note = fmt.Sprintf("  none outside the projects (%d in them)", n)
+	for _, id := range sections {
+		switch id {
+		case "needs":
+			if len(needs) > 0 {
+				rows = append(rows, row{head: "NEEDS YOU", count: len(needs)})
+				rows = append(rows, needs...)
+			}
+		case "project":
+			if head != "" {
+				rows = append(rows, row{head: head, headNote: headNote, paused: paused})
+				rows = append(rows, projs...)
+			} else {
+				rows = append(rows, row{note: "  no projects; n creates one"})
+			}
+		case "other":
+			// The header's count is every session; this section has those
+			// outside the projects, so it says so.
+			rows = append(rows, row{head: "OTHER SESSIONS", count: len(other)})
+			if len(other) == 0 {
+				note := "  no sessions"
+				if n := len(d.Sessions); n > 0 {
+					note = fmt.Sprintf("  none outside the projects (%d in them)", n)
+				}
+				other = []row{{note: note}}
+			}
+			rows = append(rows, other...)
+		case "cards":
+			rows = append(rows, cards...)
 		}
-		other = []row{{note: note}}
 	}
-	return append(rows, other...)
+	return rows
 }
 
 // compactRows are rows with no extra lines (rows.density = compact):

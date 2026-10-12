@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -30,7 +31,7 @@ func TestProgressSameEverywhere(t *testing.T) {
 
 	const want = "55% 2/4"
 	var r row
-	for _, x := range buildRows(data, "alpha") {
+	for _, x := range buildRows(data, "alpha", mod.LayoutSections, nil) {
 		if x.thread != nil {
 			r = x
 		}

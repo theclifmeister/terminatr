@@ -271,6 +271,14 @@ func modAbout(m *dash, md mod.Mod, w int) []string {
 		}
 		out = append(out, faintLines(about, w)...)
 	}
+	if md.Manifest != nil && !m.layout.shows("cards") {
+		for _, v := range md.Manifest.Provides.Views {
+			if v.Slot == mod.SlotDashboardCard {
+				out = append(out, faintLines("Its dashboard card is hidden: the layout's dashboard.sections leaves out cards.", w)...)
+				break
+			}
+		}
+	}
 	for _, l := range strings.Split(m.data.ModData[md.ID], "\n") {
 		if l != "" {
 			for _, wl := range wrapLines("Doesn't load its "+l, w) {
