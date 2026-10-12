@@ -146,3 +146,21 @@ func TestScopeInSession(t *testing.T) {
 		t.Errorf("session.read on the server socket from no session: %v, want refused", err)
 	}
 }
+
+// TestMayAddressParams: the gate reads the params as the method does; a
+// field that doesn't decode is refused, not let through unchecked.
+func TestMayAddressParams(t *testing.T) {
+	s := &Server{sessions: map[string]*session.Session{}, records: map[string]SessionRecord{}}
+	thread := caller.Caller{Kind: caller.Thread, Project: "p", Thread: "t-0001", Session: "s-2"}
+	who := func() caller.Caller { return thread }
+	for _, raw := range []string{
+		`{"id":"s-3","scrollback":"x"}`,
+		`{"id":"s-2","ID":"s-3"}`,
+		`{"id":"s-3","id":"s-2","id":"s-3"}`,
+		`[]`,
+	} {
+		if perr := s.mayAddress(proto.Request{Method: proto.MethodSessionRead, Params: json.RawMessage(raw)}, false, who); perr == nil {
+			t.Errorf("session.read %s from s-2: allowed", raw)
+		}
+	}
+}
