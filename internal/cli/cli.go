@@ -228,7 +228,12 @@ func (e *Env) readArg(path string) (string, error) {
 	if path == "-" {
 		data, err = io.ReadAll(e.Stdin)
 	} else {
-		data, err = os.ReadFile(e.abs(path))
+		var f *os.File
+		if f, err = e.openArg(path); err != nil {
+			return "", err
+		}
+		data, err = io.ReadAll(f)
+		f.Close()
 	}
 	if err != nil {
 		return "", usagef("%v", err)

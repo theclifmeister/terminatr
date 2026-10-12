@@ -72,6 +72,9 @@ func runLibrary(e *Env, args []string) error {
 		if err != nil {
 			return err
 		}
+		if err := e.coordinatorOnly(p, "tm library rm"); err != nil {
+			return err
+		}
 		n, err := thread.RemoveLibrary(p, e.Caller, pos[0], name)
 		if err != nil {
 			return err

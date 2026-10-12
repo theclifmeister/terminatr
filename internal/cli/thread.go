@@ -777,11 +777,17 @@ func tickerState() string {
 	return ticker.StatePath(paths.Sessions)
 }
 
+// liveSessions are the server's sessions, read in the server as the
+// human: for an agent only its own project's (§11.1), whose threads it
+// may list.
 func (e *Env) liveSessions() map[string]proto.SessionInfo {
 	out := map[string]proto.SessionInfo{}
 	var res proto.SessionListResult
 	if err := e.call(proto.MethodSessionList, nil, &res); err == nil {
 		for _, s := range res.Sessions {
+			if e.Caller.IsAgent() && (s.Project == "" || s.Project != e.Caller.Project) {
+				continue
+			}
 			out[s.ID] = s
 		}
 	}
@@ -1945,7 +1951,7 @@ func runReport(e *Env, args []string) error {
 	for _, a := range *attach {
 		files = append(files, e.abs(a))
 	}
-	n, err := thread.StoreReport(p, r.ID, text, files, time.Now())
+	n, err := thread.StoreReportFrom(p, r.ID, text, files, func(a string) (*os.File, error) { return e.openArg(a) }, time.Now())
 	if err != nil {
 		return err
 	}

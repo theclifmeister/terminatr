@@ -14,8 +14,8 @@ import (
 )
 
 // TestMayAddress: a session-addressed call names the caller's own session
-// (hook.event, session.ask), or one it may see (session.read and .watch,
-// agent.explain: a coordinator also its project's), or its own project
+// (hook.event, session.ask), or one it may see (session.read, .wait and
+// .watch, agent.explain: a coordinator also its project's), or its own project
 // (project.watch). The human on the human socket names any; a caller the
 // pid walk finds in no session names none on the server socket.
 func TestMayAddress(t *testing.T) {
@@ -70,6 +70,12 @@ func TestMayAddress(t *testing.T) {
 		{proto.MethodProjectWatch, project("p"), false, human, false},
 		{proto.MethodProjectWatch, project("q"), true, human, true},
 		{proto.MethodSessionList, nil, false, human, true},
+		{proto.MethodSessionWait, proto.SessionWaitParams{ID: "s-2"}, false, thread, true},
+		{proto.MethodSessionWait, proto.SessionWaitParams{ID: "s-3"}, false, thread, false},
+		{proto.MethodSessionWait, proto.SessionWaitParams{ID: "s-3"}, false, coord, true},
+		{proto.MethodSessionWait, proto.SessionWaitParams{ID: "s-5"}, false, coord, false},
+		{proto.MethodSessionWait, proto.SessionWaitParams{ID: "s-4"}, false, human, false},
+		{proto.MethodSessionWait, proto.SessionWaitParams{ID: "s-4"}, true, human, true},
 	} {
 		raw, _ := json.Marshal(c.params)
 		who := func() caller.Caller { return c.c }
@@ -101,15 +107,22 @@ func scopeProbe(sock, other string) int {
 		return "ok"
 	}
 	own := os.Getenv(caller.EnvSession)
-	fmt.Printf("probe own=%s other=%s hook=%s done\n",
+	var list proto.SessionListResult
+	listed := refused(c.Call(proto.MethodSessionList, nil, &list))
+	for _, in := range list.Sessions {
+		listed += " " + in.ID
+	}
+	fmt.Printf("probe own=%s other=%s hook=%s wait=%s list=%s done\n",
 		refused(c.Call(proto.MethodSessionRead, proto.SessionReadParams{ID: own}, nil)),
 		refused(c.Call(proto.MethodSessionRead, proto.SessionReadParams{ID: other}, nil)),
-		refused(c.Call(proto.MethodHookEvent, proto.HookEventParams{Session: other, Agent: "claude"}, nil)))
+		refused(c.Call(proto.MethodHookEvent, proto.HookEventParams{Session: other, Agent: "claude"}, nil)),
+		refused(c.Call(proto.MethodSessionWait, proto.SessionWaitParams{ID: other, TimeoutMS: 1}, nil)),
+		listed)
 	return 0
 }
 
 // TestScopeInSession: a process in a session's tree, on the server
-// socket, reads its own session and nothing else; the test, which the pid
+// socket, reads, waits on and lists its own session and nothing else; the test, which the pid
 // walk finds in no session, reads both only on the human socket.
 func TestScopeInSession(t *testing.T) {
 	p := testPaths(t)
@@ -127,7 +140,7 @@ func TestScopeInSession(t *testing.T) {
 	}
 	call(t, c, proto.MethodSessionKeys, proto.SessionKeysParams{ID: ids[0],
 		Data: fmt.Sprintf("'%s' scope-probe '%s' %s\r", os.Args[0], p.Socket, ids[1])}, nil)
-	want := "probe own=ok other=refused hook=refused done"
+	want := "probe own=ok other=refused hook=refused wait=refused list=ok " + ids[0] + " done"
 	eventually(t, "the probe", func() bool {
 		var rr proto.SessionReadResult
 		call(t, c, proto.MethodSessionRead, proto.SessionReadParams{ID: ids[0]}, &rr)
