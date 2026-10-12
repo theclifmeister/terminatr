@@ -35,12 +35,27 @@ func jobs() map[string]bool {
 // booting them out, if they left a server job loaded that wasn't loaded
 // before. Use as `os.Exit(servicetest.Run(m))`.
 func Run(m *testing.M) int {
+	NotAServer()
 	if os.Getenv(service.LaunchEnvVar) == "" {
 		os.Setenv(service.LaunchEnvVar, "off")
 	}
 	before := jobs()
 	code := m.Run()
 	return Leaked(before, code)
+}
+
+// NotAServer ends a test binary that a test started as the server, before
+// it runs anything. An autostart in a test (server.StartChild) runs
+// os.Executable, the test binary, as `server run --detached`; the binary
+// would run its whole suite again, autostarts included, and the copies
+// multiplied and outlived go test, starving every package after it (T337).
+// Exiting here makes that autostart fail at once, as with no server. Run
+// calls it; a TestMain that can't use Run calls it first.
+func NotAServer() {
+	if len(os.Args) > 1 && os.Args[1] == "server" {
+		fmt.Fprintln(os.Stderr, "a test binary is no server: a test autostarted one; tests start a built tm or none")
+		os.Exit(1)
+	}
 }
 
 // Leaked boots out the server jobs loaded now that are not in before and
