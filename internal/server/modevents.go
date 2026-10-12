@@ -38,6 +38,9 @@ const (
 type modEvents struct {
 	bus  *modbus.Bus
 	kick chan struct{}
+	// hold, when set, runs before each look and the func it returns
+	// after it (tests: changes made while it holds land in one look).
+	hold func() (release func())
 }
 
 func newModEvents() *modEvents {
@@ -130,7 +133,12 @@ func (s *Server) runModEvents(ctx context.Context) {
 			continue
 		}
 		looked = true
+		release := func() {}
+		if e.hold != nil {
+			release = e.hold()
+		}
 		s.lookModEvents(tr)
+		release()
 	}
 }
 
