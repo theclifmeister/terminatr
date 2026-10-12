@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -166,5 +167,26 @@ func TestModToasts(t *testing.T) {
 	m.showToasts([]proto.ModToast{{Seq: 1, Mod: "lab", Text: "broke", Level: "error"}})
 	if m.msg != "lab: broke" || m.errMsg != m.msg {
 		t.Fatalf("after a restart msg %q err %q", m.msg, m.errMsg)
+	}
+}
+
+// TestSafeModeCards: in safe mode a user mod's view says it is off, not
+// that it waits for a host that doesn't run; a built-in one's still
+// waits (T301 B8).
+func TestSafeModeCards(t *testing.T) {
+	m := &dash{}
+	m.data.NoMods = true
+	m.data.Mods = []mod.Mod{{ID: "cost-card"}, {ID: "memory-tab", Builtin: true}}
+	user := proto.ModView{Mod: "cost-card", Name: "Cost card", View: "card", Title: "Cost"}
+	if got := strings.Join(m.panelLines(user, "demo", 80, 5), " "); !strings.Contains(got, "Cost card is off in safe mode") {
+		t.Fatalf("user mod: %q", got)
+	}
+	builtin := proto.ModView{Mod: "memory-tab", Name: "Memory", View: "tab", Title: "Memory"}
+	if got := strings.Join(m.panelLines(builtin, "demo", 80, 5), " "); !strings.Contains(got, "Waiting for Memory") {
+		t.Fatalf("built-in: %q", got)
+	}
+	m.data.NoMods = false
+	if got := strings.Join(m.panelLines(user, "demo", 80, 5), " "); !strings.Contains(got, "Waiting for Cost card") {
+		t.Fatalf("not safe mode: %q", got)
 	}
 }
