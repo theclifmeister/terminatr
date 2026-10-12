@@ -39,6 +39,10 @@ const (
 	boardRefresh = 5 * time.Second
 )
 
+// awaitView is how long a popup over a session waits for the view a mod
+// opened (Over.View) to be listed.
+const awaitView = 3 * time.Second
+
 // DashState is what survives an attach: the selected row, the project
 // last attached to (for ] and [), and a message for the footer.
 type DashState struct {
@@ -97,6 +101,11 @@ type Over struct {
 	// Where the pane is in Screen: after X columns of padding, at rows
 	// Y to Y+H, from its row Top. The session's output goes there.
 	X, Y, H, Top int
+	// View: a mod asked to open one of its views after a command run in
+	// the session (attachcommands.go); the popup is that view, from the
+	// mod's open requests after After.
+	View  bool
+	After uint64
 }
 
 // DashResult says why the dashboard ended: Attach names a session to
@@ -195,8 +204,11 @@ type dash struct {
 	catalogs []Catalog               // the agents' models, read when the , popup opens (catalog.go)
 	stack    []overlay               // views open on top of the list, topmost last
 	mv       modViews                // the views user mods draw (modviews.go)
-	under    overlay                 // the popup the topmost draws over, while it draws
-	geo      *boxGeo                 // where the topmost was drawn, for the mouse
+	// awaitView: over a session for a mod's view (Over.View), the popup
+	// waits for it until then.
+	awaitView time.Time
+	under     overlay // the popup the topmost draws over, while it draws
+	geo       *boxGeo // where the topmost was drawn, for the mouse
 	// lastClick is the last left click, for double-clicks; detailTop is
 	// the details panel's first line, scrolled with the wheel, for the
 	// row detailKey (another row shows from the top).
@@ -267,6 +279,10 @@ func newDash(o DashOptions) *dash {
 		prefix: cmp.Or(o.Prefix, DefaultPrefixKey), then: o.State.Then, done: make(chan struct{}), over: o.Over}
 	if o.Over != nil {
 		m.then = o.Over.Key
+		if o.Over.View {
+			// Wait a little for the mods' views to show the one opened.
+			m.mv.seen, m.awaitView = o.Over.After, time.Now().Add(awaitView)
+		}
 	}
 	if o.State.SideFocus {
 		m.focus = areaSide
@@ -1022,6 +1038,9 @@ func (m *dash) setData(d Data) tea.Cmd {
 			m.push(&taskView{pv: pv, id: m.over.Task})
 		}
 		m.then = ""
+	case first && m.over != nil && m.over.View:
+		// The view a mod opened after a command in the session.
+		cmds = append(cmds, m.pollModViews())
 	case first && m.then != "":
 		// The key typed after the prefix in a session, now that the
 		// projects are known.
@@ -1320,7 +1339,7 @@ func (m *dash) renderList() string {
 // overDone says the popup over a session closed: its key ran and no
 // overlay is left.
 func (m *dash) overDone() bool {
-	return m.over != nil && m.loaded && m.then == "" && m.top() == nil && !m.busy
+	return m.over != nil && m.loaded && m.then == "" && m.top() == nil && !m.busy && time.Now().After(m.awaitView)
 }
 
 // base is what a popup draws over, as the body's rows: the list, or the
