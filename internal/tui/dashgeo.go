@@ -10,9 +10,6 @@ package tui
 // rect is a region of the window: x, y its top left cell, w by h.
 type rect struct{ x, y, w, h int }
 
-// has says whether cell (x, y) is in r.
-func (r rect) has(x, y int) bool { return r.hasX(x) && r.hasY(y) }
-
 // hasX says whether column x is in r.
 func (r rect) hasX(x int) bool { return x >= r.x && x < r.x+r.w }
 
