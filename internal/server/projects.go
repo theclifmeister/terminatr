@@ -6,6 +6,7 @@ package server
 // into threads/<id>/.
 
 import (
+	"os"
 	"path/filepath"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
@@ -26,25 +27,35 @@ import (
 // File access rules are the second layer (§5.2). The walk stops at a
 // parent that started after its child: the real parent is gone and its
 // pid reused (Windows keeps a dead parent's pid; Unix hands the orphan
-// to init).
+// to init). It also stops at the server itself: what the server runs
+// (the in-server CLI, mods) is the human's, even when the server was
+// started by a tm inside an agent's session that still lives. A caller
+// found in a session carries that session's id (Caller.Session), a
+// shell's included.
 func (s *Server) callerOf(pid int) caller.Caller {
 	s.mu.Lock()
 	byPID := make(map[int]SessionRecord, len(s.sessions))
+	recordOf := func(id string) SessionRecord {
+		r := s.records[id]
+		r.ID = id
+		return r
+	}
 	for id, sess := range s.sessions {
-		byPID[sess.PID()] = s.records[id]
+		byPID[sess.PID()] = recordOf(id)
 	}
 	// Where the system tracks a session's processes (a Windows job), that
 	// settles it: a parent chain can break where a process (MSYS's exec,
 	// say) ends before its child.
 	for id, sess := range s.sessions {
 		if sess.Holds(pid) {
-			byPID[pid] = s.records[id]
+			byPID[pid] = recordOf(id)
 			break
 		}
 	}
 	s.mu.Unlock()
 	var child proc.Info // pid's child on the way up, once there is one
-	for i := 0; i < 64 && pid > 1; i++ {
+	self := os.Getpid()
+	for i := 0; i < 64 && pid > 1 && pid != self; i++ {
 		in, err := proc.Lookup(pid)
 		if err == nil && i > 0 && !in.ParentOf(child) {
 			break // child's parent is gone and its pid reused
@@ -52,11 +63,11 @@ func (s *Server) callerOf(pid int) caller.Caller {
 		if r, ok := byPID[pid]; ok {
 			switch r.Role {
 			case proto.RoleCoordinator:
-				return caller.Caller{Kind: caller.Coordinator, Project: r.Project}
+				return caller.Caller{Kind: caller.Coordinator, Project: r.Project, Session: r.ID}
 			case proto.RoleThread:
-				return caller.Caller{Kind: caller.Thread, Project: r.Project, Thread: r.Thread}
+				return caller.Caller{Kind: caller.Thread, Project: r.Project, Thread: r.Thread, Session: r.ID}
 			}
-			return caller.Caller{Kind: caller.Human}
+			return caller.Caller{Kind: caller.Human, Session: r.ID}
 		}
 		if err != nil || in.PPID == pid {
 			break

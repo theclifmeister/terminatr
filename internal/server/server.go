@@ -570,12 +570,17 @@ func (s *Server) hello() proto.Hello {
 }
 
 func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human bool) {
+	who := s.whoFor(peerPID)
 	for {
 		var req proto.Request
 		if err := readJSONLine(br, &req); err != nil {
 			return
 		}
-		if perr := mayCall(req.Method, human, s.whoFor(peerPID)); perr != nil {
+		perr := mayCall(req.Method, human, who)
+		if perr == nil {
+			perr = s.mayAddress(req, human, who)
+		}
+		if perr != nil {
 			if err := writeJSONLine(c, proto.Response{ID: req.ID, Error: perr}); err != nil {
 				return
 			}
@@ -595,7 +600,7 @@ func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human b
 			s.serveAsk(c, br, req)
 			return
 		}
-		result, perr := s.dispatch(req, peerPID, human)
+		result, perr := s.dispatch(req, peerPID, human, who)
 		resp := proto.Response{ID: req.ID, Error: perr}
 		if perr == nil {
 			b, err := json.Marshal(result)
@@ -651,9 +656,12 @@ func mayCall(m string, human bool, who func() caller.Caller) *proto.Error {
 	return nil
 }
 
-// whoFor is callerOf(pid), deferred.
+// whoFor is callerOf(pid), deferred and asked once: a connection keeps
+// the answer for its life. The walk is the costly part of a call (the
+// TUI's view.* calls, every hook event), and a pid that ends and is
+// reused can't change a connection's caller afterwards.
 func (s *Server) whoFor(pid int) func() caller.Caller {
-	return func() caller.Caller { return s.callerOf(pid) }
+	return sync.OnceValue(func() caller.Caller { return s.callerOf(pid) })
 }
 
 // attachMethod names an attach connection in mayCall and its errors.
@@ -667,7 +675,7 @@ func humanSocketOnly(m string) *proto.Error {
 	return proto.Errorf("human-only", "%s answers only on the human socket (%s), which no agent's sandbox allows", m, ipc.HumanName)
 }
 
-func (s *Server) dispatch(req proto.Request, peerPID int, human bool) (any, *proto.Error) {
+func (s *Server) dispatch(req proto.Request, peerPID int, human bool, who func() caller.Caller) (any, *proto.Error) {
 	if req.Method == proto.MethodViewDigest {
 		var p proto.ViewDigestParams
 		if err := decodeParams(req.Params, &p); err != nil {
@@ -710,13 +718,13 @@ func (s *Server) dispatch(req proto.Request, peerPID int, human bool) (any, *pro
 		if err := decodeParams(req.Params, &p); err != nil {
 			return nil, err
 		}
-		return s.renameProject(p, s.callerOf(peerPID))
+		return s.renameProject(p, who())
 	case proto.MethodProjectActive:
 		var p proto.ProjectActiveParams
 		if err := decodeParams(req.Params, &p); err != nil {
 			return nil, err
 		}
-		res, perr := s.setActive(p, s.callerOf(peerPID))
+		res, perr := s.setActive(p, who())
 		s.kick()
 		return res, perr
 	case proto.MethodModHosts:
@@ -726,25 +734,25 @@ func (s *Server) dispatch(req proto.Request, peerPID int, human bool) (any, *pro
 		if err := decodeParams(req.Params, &p); err != nil {
 			return nil, err
 		}
-		return s.modViews(p, peerPID, s.callerOf(peerPID))
+		return s.modViews(p, peerPID, who())
 	case proto.MethodModViewInput:
 		var p proto.ModViewInputParams
 		if err := decodeParams(req.Params, &p); err != nil {
 			return nil, err
 		}
-		return s.modViewInput(p, peerPID, s.callerOf(peerPID))
+		return s.modViewInput(p, peerPID, who())
 	case proto.MethodModCommand:
 		var p proto.ModCommandParams
 		if err := decodeParams(req.Params, &p); err != nil {
 			return nil, err
 		}
-		return s.modCommand(p, peerPID, s.callerOf(peerPID))
+		return s.modCommand(p, peerPID, who())
 	case proto.MethodModRestart:
 		var p proto.ModRestartParams
 		if err := decodeParams(req.Params, &p); err != nil {
 			return nil, err
 		}
-		return s.restartMod(p.ID, s.callerOf(peerPID))
+		return s.restartMod(p.ID, who())
 	case proto.MethodPing:
 		return map[string]bool{"pong": true}, nil
 	case proto.MethodServerStatus:
@@ -766,7 +774,7 @@ func (s *Server) dispatch(req proto.Request, peerPID int, human bool) (any, *pro
 		if err := decodeParams(req.Params, &p); err != nil {
 			return nil, err
 		}
-		return s.noticeCall(req.Method, p, s.callerOf(peerPID))
+		return s.noticeCall(req.Method, p, who())
 	case proto.MethodSessionStart:
 		var p proto.SessionStartParams
 		if err := decodeParams(req.Params, &p); err != nil {
@@ -833,7 +841,7 @@ func (s *Server) dispatch(req proto.Request, peerPID int, human bool) (any, *pro
 		if perr != nil {
 			return nil, perr
 		}
-		c := s.callerOf(peerPID)
+		c := who()
 		if perr := s.mayAnswer(sess.Info(), c, human); perr != nil {
 			return nil, perr
 		}
@@ -855,7 +863,7 @@ func (s *Server) dispatch(req proto.Request, peerPID int, human bool) (any, *pro
 		if err := decodeParams(req.Params, &p); err != nil {
 			return nil, err
 		}
-		return s.clearSession(p.ID, s.callerOf(peerPID))
+		return s.clearSession(p.ID, who())
 	case proto.MethodModActionCheck:
 		var p proto.ModActionParams
 		if err := decodeParams(req.Params, &p); err != nil {

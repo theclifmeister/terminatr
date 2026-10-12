@@ -35,6 +35,10 @@ type Caller struct {
 	Project string // the agent's project slug; empty for the human
 	Thread  string // the thread id, e.g. "t-0003", for Kind == Thread
 	Mod     string // the mod's id, e.g. "auto-labeller", for Kind == Mod
+	// Session is the session the server's pid walk placed the caller in
+	// (any role, a shell's too), which session-addressed calls are scoped
+	// to (docs/SPEC.md §11.1). The environment never sets it.
+	Session string
 }
 
 // ForMod is the caller for mod id's brokered calls.
