@@ -37,7 +37,7 @@ import (
 const threadUsage = `usage: tm thread <command> [--project <slug>] [--json]
 
   start [--task T12] [--agent A] [--model M] [--repo PATH] [--base B] [--approved-by-user] [--over-cap] "title"
-  adopt <session> [--task T12] [--title "…"] [--approved-by-user]
+  adopt <session> [--task T12] [--title "…"]
                                  make a running agent session outside the projects a thread
   list [--all]                   open threads; --all adds resolved and archived ones
   show <id>                      <id> is a thread id (t-0003) or a task id (T12):
@@ -137,10 +137,13 @@ func runThread(e *Env, args []string) error {
 			return e.threadStart(p, o, *asJSON)
 		}
 	case "adopt":
-		o := adoptOpts{task: f.String("task"), title: f.String("title"), approved: f.Bool("approved-by-user")}
+		o := adoptOpts{task: f.String("task"), title: f.String("title")}
+		// Accepted and ignored: the user's go-ahead to adopt is T on the
+		// dashboard, which no flag stands in for (threadAdopt).
+		f.Bool("approved-by-user")
 		run = func(p *project.Project, pos []string) error {
 			if len(pos) != 1 {
-				return usagef("usage: tm thread adopt <session> [--task T12] [--title \"…\"] [--approved-by-user]")
+				return usagef("usage: tm thread adopt <session> [--task T12] [--title \"…\"]")
 			}
 			return e.threadAdopt(p, pos[0], o, *asJSON)
 		}
@@ -312,7 +315,9 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	if err := parkedErr(p, safety); err != nil {
 		return err
 	}
-	if safety.StartThreads == config.StartPropose && e.Caller.IsAgent() && !*o.approved && !*o.overCap {
+	// --over-cap is the user's word on the cap, not on the thread: under
+	// propose it still needs --approved-by-user.
+	if safety.StartThreads == config.StartPropose && e.Caller.IsAgent() && !*o.approved {
 		return &tasks.Error{Code: "needs-approval", Msg: "start_threads = propose: propose the thread to the user, and once they agree start it with --approved-by-user"}
 	}
 	if !*o.overCap {
@@ -334,6 +339,13 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	repo := *o.repo
 	if repo != "" {
 		repo = e.abs(repo)
+		// An agent names only the project's repos, which the user adds:
+		// any other path would give a thread a worktree of whatever
+		// repository the agent names. Asked first, so the refusal says
+		// nothing about the path.
+		if e.Caller.IsAgent() && !listedRepo(p, repo) {
+			return &tasks.Error{Code: "unlisted-repo", Msg: fmt.Sprintf("--repo %s is not one of the project's repos (tm context lists them); only the user adds one", repo)}
+		}
 		if fi, err := os.Stat(repo); err != nil || !fi.IsDir() {
 			return usagef("--repo %s is not a directory", repo)
 		}
@@ -560,7 +572,6 @@ func (e *Env) threadFiles(p *project.Project, r *thread.Record, task *tasks.Task
 
 type adoptOpts struct {
 	task, title *string
-	approved    *bool
 }
 
 // threadAdopt makes a running agent session outside the projects a
@@ -581,8 +592,24 @@ func (e *Env) threadAdopt(p *project.Project, sid string, o adoptOpts, asJSON bo
 	if err := parkedErr(p, safety); err != nil {
 		return err
 	}
-	if safety.StartThreads == config.StartPropose && e.Caller.IsAgent() && !*o.approved {
-		return &tasks.Error{Code: "needs-approval", Msg: "start_threads = propose: ask the user, and once they agree adopt it with --approved-by-user"}
+	// An agent adopts only the session the user asked it to, with T on
+	// the dashboard: the user's own session is theirs, so neither
+	// --approved-by-user (the agent's word) nor start_threads = auto
+	// will do. Asked before anything else, so the refusal is the same
+	// whether or not the session exists and wherever it belongs.
+	if e.Caller.IsAgent() {
+		var ask proto.SessionAdoptAskResult
+		err := e.call(proto.MethodSessionAdoptAsk, proto.SessionAdoptAskParams{ID: sid, Project: p.Slug, Check: true}, &ask)
+		var perr *proto.Error
+		if errors.As(err, &perr) && perr.Code == proto.ErrUnknownMethod {
+			return &tasks.Error{Code: "old-server", Msg: "the running server can't check the user's go-ahead to adopt; restart it (tm server restart)"}
+		}
+		if err != nil {
+			return err
+		}
+		if !ask.Asked {
+			return &tasks.Error{Code: "needs-approval", Msg: fmt.Sprintf("the user hasn't asked to adopt %s into %s: only the user adopts their own session, with T on its row in tm's dashboard (or tm thread adopt in their shell); ask them to", sid, p.Slug)}
+		}
 	}
 	var res proto.SessionListResult
 	if err := e.call(proto.MethodSessionList, nil, &res); err != nil {
@@ -640,7 +667,7 @@ func (e *Env) threadAdopt(p *project.Project, sid string, o adoptOpts, asJSON bo
 		return fail(err)
 	}
 	var adopted proto.SessionStartResult
-	if err := e.call(proto.MethodSessionAdopt, proto.SessionAdoptParams{ID: sid, Project: p.Slug, Thread: r.ID, Brief: brief}, &adopted); err != nil {
+	if err := e.call(proto.MethodSessionAdopt, proto.SessionAdoptParams{ID: sid, Project: p.Slug, Thread: r.ID, Brief: brief, Asked: e.Caller.IsAgent()}, &adopted); err != nil {
 		var perr *proto.Error
 		if errors.As(err, &perr) && perr.Code == proto.ErrUnknownMethod {
 			err = &tasks.Error{Code: "old-server", Msg: "the running server can't adopt sessions; restart it (tm server restart)"}
@@ -651,8 +678,8 @@ func (e *Env) threadAdopt(p *project.Project, sid string, o adoptOpts, asJSON bo
 		r, _ = thread.Update(p, r.ID, func(x *thread.Record) error { x.AgentSID = adopted.Session.AgentSID; return nil })
 	}
 	detail := strings.TrimSpace(r.Task+" "+r.Title) + " (session " + sid + ")"
-	if *o.approved {
-		detail += " (approved by the user)"
+	if e.Caller.IsAgent() {
+		detail += " (asked by the user)"
 	}
 	if err := p.Journal(e.Caller, "thread.adopt", r.ID, detail); err != nil {
 		return err
@@ -670,6 +697,17 @@ func (e *Env) threadAdopt(p *project.Project, sid string, o adoptOpts, asJSON bo
 	}
 	fmt.Fprintf(e.Stdout, " (prompt %s)\n", pr.Via)
 	return nil
+}
+
+// listedRepo reports whether dir is one of p's repos, either spelling
+// of a path with links.
+func listedRepo(p *project.Project, dir string) bool {
+	for _, r := range p.Meta.Repos {
+		if filepath.Clean(r) == filepath.Clean(dir) || realPath(r) == realPath(dir) {
+			return true
+		}
+	}
+	return false
 }
 
 // underCap refuses a new thread while capN or more of the project's
@@ -1559,7 +1597,7 @@ func (e *Env) threadRestart(p *project.Project, id string) error {
 	if r.Repo != "" && !r.Checkout {
 		was := r.Repo
 		if !followRepo(p, r) {
-			return &tasks.Error{Code: "no-repo", Msg: fmt.Sprintf("thread %s's repo %s is gone; add its new place with tm project repo add PATH, or resolve the thread", id, was)}
+			return &tasks.Error{Code: "no-repo", Msg: fmt.Sprintf("thread %s's repo %s is gone; the user adds its new place (tm project repo add PATH), or resolve the thread", id, was)}
 		}
 		if r.Repo != was {
 			if _, err := thread.Update(p, id, func(x *thread.Record) error { x.Repo = r.Repo; return nil }); err != nil {

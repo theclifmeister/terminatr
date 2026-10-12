@@ -124,7 +124,7 @@ It moves `projects/<slug>/` and `worktrees/<slug>/`, reconnects git with each mo
 
 ### Moving a repository
 
-When a project's repository moves (renamed folder, new disk), tell the project: `tm project repo add NEW --project <slug>` and `tm project repo remove OLD --project <slug>`. A thread whose recorded repo is gone then follows its branch to the repo that has it on `tm thread restart` and `tm thread resolve` (its worktree reconnected with `git worktree repair`, its record updated). When no repo of the project has the branch, restart refuses with `no-repo`, and resolve says the repo is gone and keeps the worktree, without running git.
+When a project's repository moves (renamed folder, new disk), tell the project from your own shell (a coordinator can't add a repo): `tm project repo add NEW --project <slug>` and `tm project repo remove OLD --project <slug>`. A thread whose recorded repo is gone then follows its branch to the repo that has it on `tm thread restart` and `tm thread resolve` (its worktree reconnected with `git worktree repair`, its record updated). When no repo of the project has the branch, restart refuses with `no-repo`, and resolve says the repo is gone and keeps the worktree, without running git.
 
 The build directory moves with a checkout: libghostty-vt's pkg-config files name their prefix relative to themselves (`${pcfiledir}`), which `make` rewrites once after building it, so a `.build/` built before that still links the library at the path it was built at until the next `make` there. A thread's worktree has no `.build/` of its own; `make` and `make env` in it use the main checkout's.
 

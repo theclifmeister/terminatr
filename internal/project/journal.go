@@ -135,7 +135,7 @@ func (p *Project) AskAdopt(c caller.Caller, sid, where string) (bool, error) {
 	if where != "" {
 		summary += " (" + where + ")"
 	}
-	if _, err := p.AddItem(KindAdopt, sid, summary+" as a thread (tm thread adopt "+sid+" --approved-by-user)", false); err != nil {
+	if _, err := p.AddItem(KindAdopt, sid, summary+" as a thread (tm thread adopt "+sid+")", false); err != nil {
 		return false, err
 	}
 	return true, p.Journal(c, "thread.adopt.ask", sid, where)

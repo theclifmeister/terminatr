@@ -170,8 +170,12 @@ func (s *Server) adopt(p proto.SessionAdoptParams) (any, *proto.Error) {
 		return nil, proto.Errorf(proto.ErrUnknownSession, "session %q has exited", p.ID)
 	}
 	st, hasAgent := sess.AgentState()
+	now := sess.Info()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if p.Asked && !s.adoptAsks[p.ID].allows(p.Project, now) {
+		return nil, proto.Errorf(proto.ErrRefused, "the user hasn't asked to adopt session %s into %s", p.ID, p.Project)
+	}
 	r, ok := s.records[p.ID]
 	if !ok {
 		return nil, proto.Errorf(proto.ErrUnknownSession, "no session %q", p.ID)
@@ -192,6 +196,7 @@ func (s *Server) adopt(p proto.SessionAdoptParams) (any, *proto.Error) {
 	}
 	r.Prompted = r.Prompted || worked(st)
 	s.records[p.ID] = r
+	delete(s.adoptAsks, p.ID)
 	sess.Adopt(session.Identity{Role: r.Role, Project: r.Project, Thread: r.Thread})
 	if err := s.saveLocked(""); err != nil {
 		s.log.Printf("sessions.json: %v", err)
@@ -202,4 +207,48 @@ func (s *Server) adopt(p proto.SessionAdoptParams) (any, *proto.Error) {
 	s.watch.wake()
 	s.log.Printf("session %s: adopted as thread %s of %s", p.ID, p.Thread, p.Project)
 	return proto.SessionStartResult{Session: s.info(sess)}, nil
+}
+
+// adoptAsk records the human's go-ahead to adopt session p.ID into
+// project p.Project (T on the dashboard), replacing an earlier one for
+// another project; with p.Check it only says whether that go-ahead
+// waits. It is human-only (proto.HumanOnly): an agent's tm thread adopt
+// needs it (session.adopt's Asked), so the coordinator can't take over
+// the user's own agent session on its own word.
+func (s *Server) adoptAsk(p proto.SessionAdoptAskParams) (any, *proto.Error) {
+	if p.ID == "" || p.Project == "" {
+		return nil, proto.Errorf(proto.ErrBadParams, "session.adopt.ask needs a session and a project")
+	}
+	sess, perr := s.session(p.ID)
+	if perr != nil {
+		if p.Check {
+			return proto.SessionAdoptAskResult{}, nil
+		}
+		return nil, perr
+	}
+	now := sess.Info()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if p.Check {
+		return proto.SessionAdoptAskResult{Asked: s.adoptAsks[p.ID].allows(p.Project, now)}, nil
+	}
+	s.adoptAsks[p.ID] = adoptAsk{project: p.Project, agent: now.Agent, cwd: now.Cwd, agentSID: now.AgentSID}
+	return proto.SessionAdoptAskResult{Asked: true}, nil
+}
+
+// adoptAsk is the human's go-ahead to adopt a session into project, and
+// what ran in it when they gave it: the agent, its folder and, once
+// known, its conversation.
+type adoptAsk struct {
+	project, agent, cwd, agentSID string
+}
+
+// allows reports whether the go-ahead is for project and the session
+// still runs what the user saw (now, its info): the same agent in the
+// same folder, not another one started in that shell since.
+func (a adoptAsk) allows(project string, now proto.SessionInfo) bool {
+	if a.project == "" || a.project != project || a.agent != now.Agent || a.cwd != now.Cwd {
+		return false
+	}
+	return a.agentSID == "" || now.AgentSID == "" || a.agentSID == now.AgentSID
 }

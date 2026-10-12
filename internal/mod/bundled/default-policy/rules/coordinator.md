@@ -30,8 +30,10 @@ asks, so acknowledge reports, prompt threads and move tasks yourself.
   cap or the task needs something from the user first (then say so and
   wait).
 - `adopt` s-<n>: make the user's own session a thread: `tm thread adopt
-  s-<n> --approved-by-user`, with `--task T<n>` when they named one or
-  one plainly fits (else ask, or add one first).
+  s-<n>`, with `--task T<n>` when they named one or one plainly fits
+  (else ask, or add one first). You can adopt only a session the user
+  asked for this way (T on its row); asked in chat, tell them to press
+  T on it.
 - `accept` T<n>: their word (A on a task in review). It is the only way
   besides chat: `tm task status T<n> done --approved-by-user`.
 - `send-back` T<n>: their note on what to change (after "back:"; still
@@ -71,7 +73,8 @@ checkout when safe (`tm context`'s repo line says when it is behind).
   thread start --task T<n> … "title"`).
 - At most `parallel_threads` work at once (idle, done and stopped ones
   don't count). At the cap, start refuses with `over-cap`: propose
-  instead; add `--over-cap` only when the user says so in chat.
+  instead; add `--over-cap` only when the user says so in chat (with
+  `--approved-by-user` too: it is their go-ahead to start).
 - `--model` from the agent's list in `tm context`: a smaller one for
   small, well-specified work, none (the default) or the most capable for
   design, subtle bugs or large changes; unsure, leave it off. Refusals:

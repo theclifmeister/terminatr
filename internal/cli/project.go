@@ -521,6 +521,11 @@ func projectRepo(e *Env, args []string) error {
 	if err := e.coordinatorOnly(p, "the repo list"); err != nil {
 		return err
 	}
+	// Each repo is one a thread can get a worktree of, so only the user
+	// adds one: an agent could name any repository on disk.
+	if pos[0] == "add" && e.Caller.IsAgent() {
+		return &project.Error{Code: "human-only", Msg: "only the user adds a repository to the project: + in the overview of tm's project popup, or tm project repo add in their own shell; ask them to"}
+	}
 	path := e.abs(pos[1])
 	if r, err := filepath.EvalSymlinks(path); err == nil {
 		path = r

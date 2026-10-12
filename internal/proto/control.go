@@ -82,6 +82,12 @@ const (
 	// MethodSessionAdopt makes a plain agent session a project thread's
 	// (docs/SPEC.md §9, Adopt).
 	MethodSessionAdopt = "session.adopt"
+	// MethodSessionAdoptAsk records the human's go-ahead to adopt a
+	// session into a project (T on the dashboard), or with Check only
+	// reports whether one waits (docs/SPEC.md §9, Adopt). Human-only: an
+	// agent's tm thread adopt needs that go-ahead, which nothing an agent
+	// writes can stand in for.
+	MethodSessionAdoptAsk = "session.adopt.ask"
 )
 
 // SessionAdoptParams are the params of session.adopt: the session, and
@@ -92,6 +98,24 @@ type SessionAdoptParams struct {
 	Project string `json:"project"`
 	Thread  string `json:"thread"`
 	Brief   string `json:"brief,omitempty"`
+	// Asked adopts only on the human's go-ahead for this session and
+	// project (session.adopt.ask), and uses it up: set for an agent's
+	// tm thread adopt.
+	Asked bool `json:"asked,omitempty"`
+}
+
+// SessionAdoptAskParams are the params of session.adopt.ask: the session
+// the human asks to adopt into project, or with Check whether such a
+// go-ahead waits, recording nothing.
+type SessionAdoptAskParams struct {
+	ID      string `json:"id"`
+	Project string `json:"project"`
+	Check   bool   `json:"check,omitempty"`
+}
+
+// SessionAdoptAskResult says whether the human's go-ahead waits.
+type SessionAdoptAskResult struct {
+	Asked bool `json:"asked"`
 }
 
 // ClosedRestarting is the FrameClosed reason of a session that the server
@@ -498,7 +522,7 @@ func HumanOnly(m string) bool {
 		MethodNotifyClaim, MethodNotifyDismiss,
 		MethodModActionCheck, MethodModActionDone, MethodSessionClear,
 		MethodSessionStart, MethodSessionStop, MethodSessionKeys, MethodSessionPrompt,
-		MethodSessionAdopt, MethodSessionRemote, MethodSessionModel, MethodQuestionsOpen,
+		MethodSessionAdopt, MethodSessionAdoptAsk, MethodSessionRemote, MethodSessionModel, MethodQuestionsOpen,
 		MethodServerStop, MethodAgentReload:
 		return true
 	}

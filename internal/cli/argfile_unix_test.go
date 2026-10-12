@@ -21,8 +21,9 @@ import (
 func TestAgentFiles(t *testing.T) {
 	h := newHarness(t)
 	tmp := t.TempDir()
-	tempRoots = func() []string { return []string{tmp} }
-	t.Cleanup(func() { tempRoots = func() []string { return []string{os.TempDir(), "/tmp"} } })
+	prev := tempRoots
+	tempRoots = func(*Env) ([]string, []string) { return []string{tmp}, []string{filepath.Join(tmp, "private")} }
+	t.Cleanup(func() { tempRoots = prev })
 	h.ok(human, "project", "new", "demo")
 	h.env["TERMINATR_PROJECT"] = "demo"
 	p, _ := project.Open("demo")
@@ -50,6 +51,13 @@ func TestAgentFiles(t *testing.T) {
 		}
 	}
 	h.expect(1, "outside-roots", thr, "report", "--file", secret)
+	// A private folder of the agent's temp folder, its sandbox's to keep,
+	// as a path or through a relative link beside it.
+	os.MkdirAll(filepath.Join(tmp, "private"), 0o700)
+	os.WriteFile(filepath.Join(tmp, "private", "diff"), []byte(report), 0o600)
+	os.Symlink(filepath.Join("private", "diff"), filepath.Join(tmp, "plink"))
+	h.expect(1, "outside-roots", thr, "report", "--file", filepath.Join(tmp, "private", "diff"))
+	h.expect(1, "outside-roots", thr, "report", "--file", filepath.Join(tmp, "plink"))
 	// A FIFO would hold the server; a hard link names a file the agent
 	// may not read.
 	if err := syscall.Mkfifo(filepath.Join(wt, "fifo"), 0o600); err != nil {

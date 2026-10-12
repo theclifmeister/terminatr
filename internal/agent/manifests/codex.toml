@@ -130,6 +130,8 @@ logged_out = { "result.account.type" = "!*", "result.requiresOpenaiAuth" = "true
 # The guard (docs/SPEC.md §8.6): Codex's login, in ~/.codex or $CODEX_HOME.
 [guard]
 secrets = [".codex/auth.json", "$CODEX_HOME/auth.json"]
+# The TMPDIR it inherits from the server, else /tmp.
+temp = ["$TMPDIR", "/tmp"]
 
 # The tools the guard judges, by kind, and the input fields each reads:
 # the shell's command line, and apply_patch's patch text (its command).

@@ -142,6 +142,10 @@ template = '''
 [guard]
 secrets = [".claude/.credentials.json", "$CLAUDE_CONFIG_DIR/.credentials.json"]
 writable = [".claude/plans", ".claude/projects"]
+# The sandbox's TMPDIR: $CLAUDE_CODE_TMPDIR/claude-<uid>, else /tmp/claude-<uid>.
+temp = ["$CLAUDE_CODE_TMPDIR/claude-{uid}", "/tmp/claude-{uid}"]
+# Its sandbox keeps Bash from this one (a read deny).
+temp_private = ["bash-edit-diff"]
 
 # The tools the guard judges, by kind, and the input fields each reads.
 # The mod's guard (hooks/guard.ts) gets them from GET /v1/rules too.
