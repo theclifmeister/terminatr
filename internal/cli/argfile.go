@@ -1,13 +1,16 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -33,12 +36,22 @@ func (e *Env) openArg(path string) (*os.File, error) {
 		if err != nil {
 			continue
 		}
-		f, err := r.Open(rel)
+		// Non-blocking, so a FIFO can't hold the server; then only a
+		// regular file with one link (a hard link could name a file the
+		// sandbox keeps from the agent) and outside every credential store.
+		f, err := fsx.OpenInNoBlock(r, rel)
 		r.Close()
 		if err == nil {
-			return f, nil
+			if err = agentFileOK(f); err == nil {
+				return f, nil
+			}
+			f.Close()
 		}
 		lastErr = err
+	}
+	var refused *tasks.Error
+	if errors.As(lastErr, &refused) {
+		return nil, refused
 	}
 	if lastErr != nil {
 		return nil, usagef("%v", lastErr)
@@ -65,7 +78,10 @@ func (e *Env) argRoots() []string {
 		if p, err := project.Open(e.Caller.Project); err == nil {
 			switch e.Caller.Kind {
 			case caller.Thread:
-				if r, err := thread.Load(p, e.Caller.Thread); err == nil && r.Worktree != "" {
+				// thread.toml is in the project folder, which the
+				// coordinator writes, and an adopted thread's worktree is
+				// wherever its agent ran: never a folder holding the home.
+				if r, err := thread.Load(p, e.Caller.Thread); err == nil && r.Worktree != "" && !holdsHome(r.Worktree) {
 					roots = append(roots, r.Worktree)
 				}
 			case caller.Coordinator:
@@ -93,3 +109,52 @@ func (e *Env) argRoots() []string {
 // tempRoots are the temp folders an agent's files may be in (a variable
 // for tests, whose own temp folders are under them).
 var tempRoots = func() []string { return []string{os.TempDir(), "/tmp"} }
+
+// holdsHome reports whether dir is the home folder or holds it.
+func holdsHome(dir string) bool {
+	h, err := os.UserHomeDir()
+	if err != nil {
+		return true
+	}
+	for _, d := range []string{filepath.Clean(dir), realPath(dir)} {
+		for _, hd := range []string{filepath.Clean(h), realPath(h)} {
+			if rel, err := filepath.Rel(d, hd); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// realPath is path with its links resolved, path itself when that fails.
+func realPath(path string) string {
+	if r, err := filepath.EvalSymlinks(path); err == nil {
+		return r
+	}
+	return filepath.Clean(path)
+}
+
+// agentFileOK refuses an agent's open file f unless it is a regular file
+// with one link, outside every credential store (agent.Secrets).
+func agentFileOK(f *os.File) error {
+	fi, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if !fi.Mode().IsRegular() {
+		return &tasks.Error{Code: "invalid-file", Msg: fmt.Sprintf("%s is not a regular file", f.Name())}
+	}
+	if fsx.Links(fi) > 1 {
+		return &tasks.Error{Code: "invalid-file", Msg: fmt.Sprintf("%s has other hard links; an agent's files may not", f.Name())}
+	}
+	real := realPath(f.Name())
+	h, _ := os.UserHomeDir()
+	for _, sec := range agent.Secrets(nil, h, os.Getenv) {
+		for _, sp := range []string{filepath.Clean(sec), realPath(sec)} {
+			if rel, err := filepath.Rel(sp, real); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return &tasks.Error{Code: "outside-roots", Msg: fmt.Sprintf("%s is in a credential store", f.Name())}
+			}
+		}
+	}
+	return nil
+}

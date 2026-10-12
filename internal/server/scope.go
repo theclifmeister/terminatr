@@ -101,14 +101,14 @@ func (s *Server) sees(c caller.Caller, id string) bool {
 
 // listFor is session.list's answer for caller c, on the human socket when
 // human. A scoped caller gets the sessions it sees (sees), and none of
-// what only a console shows: the mods' notices, columns, cells of
-// projects, tasks and threads, status segments and toasts.
+// what only a console shows: the alert count, the mods' notices, columns,
+// cells of projects, tasks and threads, status segments and toasts.
 func (s *Server) listFor(c caller.Caller, human bool) proto.SessionListResult {
 	res := s.sessionList()
 	if unscoped(c, human) {
 		return res
 	}
-	res.Mods, res.ModNotices = nil, nil
+	res.Mods, res.ModNotices, res.Alerts = nil, nil, 0
 	seen := res.Sessions[:0]
 	for _, in := range res.Sessions {
 		if s.sees(c, in.ID) {

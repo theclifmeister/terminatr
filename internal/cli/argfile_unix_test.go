@@ -1,9 +1,12 @@
+//go:build unix
+
 package cli
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -47,6 +50,19 @@ func TestAgentFiles(t *testing.T) {
 		}
 	}
 	h.expect(1, "outside-roots", thr, "report", "--file", secret)
+	// A FIFO would hold the server; a hard link names a file the agent
+	// may not read.
+	if err := syscall.Mkfifo(filepath.Join(wt, "fifo"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h.expect(1, "invalid-file", thr, "report", "--file", "fifo")
+	if code, _, errs := h.run(thr, report, "report", "--attach", "fifo"); code == 0 || !strings.Contains(errs, "not a regular file") {
+		t.Errorf("report --attach of a FIFO: exit %d, %s", code, errs)
+	}
+	if err := os.Link(secret, filepath.Join(wt, "hard")); err != nil {
+		t.Fatal(err)
+	}
+	h.expect(1, "invalid-file", thr, "report", "--file", "hard")
 	if code, _, errs := h.run(thr, report, "report", "--attach", "plan.md", "--attach", filepath.Join(tmp, "chart.png")); code != 0 || !stored("plan.md") || !stored("chart.png") {
 		t.Fatalf("report with attachments in the worktree and temp: exit %d, %s", code, errs)
 	}
@@ -64,4 +80,17 @@ func TestAgentFiles(t *testing.T) {
 
 	// The human's open anywhere.
 	h.ok(human, "task", "edit", "T1", "--notes-file", secret)
+}
+
+// TestAgentRootsNoHome: a thread's worktree root never holds the home
+// folder (thread.toml is the coordinator's to write; an adopted thread's
+// worktree is wherever its agent ran).
+func TestAgentRootsNoHome(t *testing.T) {
+	h, _ := os.UserHomeDir()
+	if !holdsHome(h) || !holdsHome(filepath.Dir(h)) || !holdsHome("/") {
+		t.Error("the home folder or a folder holding it is a root")
+	}
+	if holdsHome(filepath.Join(h, "src", "app")) || holdsHome(t.TempDir()) {
+		t.Error("a folder in the home, or a temp folder, holds the home")
+	}
 }
