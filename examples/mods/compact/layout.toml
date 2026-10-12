@@ -1,0 +1,12 @@
+# Compact: the same screens in fewer cells.
+[sidebar]
+width = 30
+
+[footer]
+style = "compact"
+
+[status_bar]
+style = "compact"
+
+[rows]
+density = "compact"

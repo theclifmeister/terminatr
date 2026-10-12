@@ -1,0 +1,8 @@
+# Cockpit: sidebar on the right, details panel under the list.
+[sidebar]
+side  = "right"
+width = "22%"
+
+[details]
+place = "bottom"
+size  = "40%"

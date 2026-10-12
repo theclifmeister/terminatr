@@ -67,6 +67,9 @@ var Examples = []Example{
 	{"tasks-tab", "a project-popup tab whose rows bind tm's task actions (built in)", Permissions{ProjectRead: true, Views: true}},
 	{"memory-search", "an agent tool", Permissions{ProjectRead: true, Tools: true}},
 	{"gitlab", "a code host (GitLab, through glab)", Permissions{Commands: []string{"glab"}}},
+	{"zen", "a layout: no sidebar or details panel, only needs and the project", Permissions{}},
+	{"cockpit", "a layout: sidebar on the right, details panel along the bottom", Permissions{}},
+	{"compact", "a layout: narrower sidebar, one-row footer and status bar, no extra lines", Permissions{}},
 }
 
 // ExampleSource is where example id installs from, as tm mod install
