@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -90,3 +91,27 @@ func quote(s string) string {
 }
 
 func lockdown() error { return nil }
+
+// spellings are what a sandbox matching paths sees on the way to path:
+// path made absolute, then each symlink along it (macOS's /var), and the
+// resolved path when it differs.
+func spellings(path string) []string {
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	out := []string{path}
+	for p := path; ; {
+		if fi, err := os.Lstat(p); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+			out = append(out, p)
+		}
+		up := filepath.Dir(p)
+		if up == p {
+			break
+		}
+		p = up
+	}
+	if real, err := filepath.EvalSymlinks(path); err == nil && real != path {
+		out = append(out, real)
+	}
+	return out
+}

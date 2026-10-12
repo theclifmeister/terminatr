@@ -8,9 +8,7 @@ package sandbox
 
 import (
 	"errors"
-	"os"
 	"os/exec"
-	"path/filepath"
 )
 
 // Policy is what a confined program may do: run its own executable and
@@ -68,27 +66,3 @@ func Start(cmd *exec.Cmd, pol Policy) (*Proc, error) {
 // running programs. It is a no-op elsewhere, where Start's sandbox
 // already covers the whole program.
 func Lockdown() error { return lockdown() }
-
-// spellings are what a sandbox matching paths sees on the way to path:
-// path made absolute, then each symlink along it (macOS's /var), and the
-// resolved path when it differs.
-func spellings(path string) []string {
-	if abs, err := filepath.Abs(path); err == nil {
-		path = abs
-	}
-	out := []string{path}
-	for p := path; ; {
-		if fi, err := os.Lstat(p); err == nil && fi.Mode()&os.ModeSymlink != 0 {
-			out = append(out, p)
-		}
-		up := filepath.Dir(p)
-		if up == p {
-			break
-		}
-		p = up
-	}
-	if real, err := filepath.EvalSymlinks(path); err == nil && real != path {
-		out = append(out, real)
-	}
-	return out
-}
