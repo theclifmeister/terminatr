@@ -20,8 +20,8 @@
                                    │ │ inbox                                     i │
                                    │ │ next project                              ] │
                                    │ │ previous project                          [ │
-                                   │ │ narrower list                             < │
-                                   │ │ wider list                                > │
+                                   │ │ smaller list                              < │
+                                   │ │ larger list                               > │
                                    │ │ narrower sidebar                          { │
                                    │ │ wider sidebar                             } │
                                    │ │ slim sidebar on / off                     b │
