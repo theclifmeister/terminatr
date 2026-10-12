@@ -9,6 +9,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modapi"
 	"github.com/theclifmeister/terminatr/internal/modhost"
 	"github.com/theclifmeister/terminatr/internal/modproto"
+	"github.com/theclifmeister/terminatr/internal/plat/sandbox"
 )
 
 // modHost runs `tm mod host [--budget D] <entry>`: one code mod, started
@@ -32,6 +33,12 @@ func modHost(args []string) int {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "tm mod host:", err)
 		return modproto.ExitLoad
+	}
+	// The script is read: from here the host opens no file, socket or
+	// program (mods design §7). The time zone is read first, for Date.
+	_, _ = time.Now().Zone()
+	if err := sandbox.Lockdown(); err != nil {
+		fmt.Fprintln(os.Stderr, "tm mod host: running without the seccomp filter:", err)
 	}
 	return modhost.Run(modhost.Options{
 		Name: fs.Arg(0), Script: script, Budget: *budget,

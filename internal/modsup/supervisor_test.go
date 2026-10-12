@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modhost"
 	"github.com/theclifmeister/terminatr/internal/modproto"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
+	"github.com/theclifmeister/terminatr/internal/plat/sandbox"
 )
 
 // The test binary is the hosts' tm: run as `mod host …` it is one, as
@@ -36,6 +38,11 @@ func hostMain(args []string) int {
 	os.Stdout = os.Stderr
 	script, err := modhost.Load(fs.Arg(0))
 	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return modproto.ExitLoad
+	}
+	_, _ = time.Now().Zone()
+	if err := sandbox.Lockdown(); err != nil { // as cmd/tm's host does
 		fmt.Fprintln(os.Stderr, err)
 		return modproto.ExitLoad
 	}
@@ -328,4 +335,38 @@ func TestCloseStopsHosts(t *testing.T) {
 	if st := f.status("c"); st.ID != "" {
 		t.Fatalf("Set after Close started %+v", st)
 	}
+}
+
+func TestHostSandboxed(t *testing.T) {
+	f := newFixture(t, nil)
+	f.sup.Set([]Spec{f.mod("m", "main.ts", minuteMod)})
+	st := f.waitState("m", Running)
+	f.minute()
+	f.waitLog("m", "info: minute string")
+	if err := sandbox.Check(); err != nil {
+		if !strings.HasPrefix(st.Sandbox, "none: ") {
+			t.Fatalf("sandbox unavailable (%v), status says %q", err, st.Sandbox)
+		}
+		t.Skipf("no OS sandbox here: %v", err)
+	}
+	if st.Sandbox == "" || strings.HasPrefix(st.Sandbox, "none") {
+		t.Fatalf("host not sandboxed: %q", st.Sandbox)
+	}
+}
+
+func TestHostWithoutSandbox(t *testing.T) {
+	old := startSandboxed
+	startSandboxed = func(*exec.Cmd, sandbox.Policy) (*sandbox.Proc, error) {
+		return nil, fmt.Errorf("%w: test", sandbox.ErrUnavailable)
+	}
+	t.Cleanup(func() { startSandboxed = old })
+	f := newFixture(t, nil)
+	f.sup.Set([]Spec{f.mod("m", "main.ts", minuteMod)})
+	st := f.waitState("m", Running)
+	if want := "none: " + sandbox.ErrUnavailable.Error() + ": test"; st.Sandbox != want {
+		t.Fatalf("sandbox %q, want %q", st.Sandbox, want)
+	}
+	f.waitLog("m", "runs without the OS sandbox")
+	f.minute()
+	f.waitLog("m", "info: minute string")
 }

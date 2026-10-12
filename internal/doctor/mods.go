@@ -57,8 +57,8 @@ func Mods(d Deps, live Live) []Check {
 	return out
 }
 
-// hostChecks are a running server's supervised code mods that failed or
-// are backing off, and its safe mode.
+// hostChecks are a running server's supervised code mods that failed,
+// are backing off or run without the OS sandbox, and its safe mode.
 func hostChecks(res *proto.ModHostsResult) []Check {
 	const g = "mods"
 	if res == nil {
@@ -81,6 +81,10 @@ func hostChecks(res *proto.ModHostsResult) []Check {
 		case "backoff": // modsup.Backoff
 			out = append(out, Check{Group: g, Name: h.ID, Status: Warn,
 				Detail: fmt.Sprintf("crashed%s; restarting (tm mod logs %s)", why, h.ID)})
+		}
+		if why, ok := strings.CutPrefix(h.Sandbox, "none: "); ok {
+			out = append(out, Check{Group: g, Name: h.ID, Status: Warn,
+				Detail: "its host runs without the OS sandbox (" + firstLine(why) + "); the language and process sandboxes still apply"})
 		}
 	}
 	return out

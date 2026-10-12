@@ -115,6 +115,9 @@ type Status struct {
 	Next time.Time
 	// Err is why the last host ended, or why the mod failed.
 	Err string
+	// Sandbox is the OS sandbox its last host ran in (sandbox.Mode, as
+	// "seatbelt"), or "none: <why>"; empty before a host started.
+	Sandbox string
 }
 
 // Options configure a supervisor. The zero value of each limit is its

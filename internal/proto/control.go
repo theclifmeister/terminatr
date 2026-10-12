@@ -701,6 +701,9 @@ type ModHost struct {
 	Restarts int       `json:"restarts,omitempty"`
 	Next     time.Time `json:"next,omitzero"`
 	Err      string    `json:"err,omitempty"`
+	// Sandbox is modsup.Status.Sandbox: the OS sandbox the host runs in,
+	// or "none: <why>".
+	Sandbox string `json:"sandbox,omitempty"`
 }
 
 // MethodModRestart reads the installed mods and config.toml again, then

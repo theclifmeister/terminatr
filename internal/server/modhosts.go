@@ -124,7 +124,7 @@ func (s *Server) modHosts() proto.ModHostsResult {
 	res := proto.ModHostsResult{NoMods: s.noMods, Hosts: []proto.ModHost{}}
 	for _, st := range s.ModHosts() {
 		res.Hosts = append(res.Hosts, proto.ModHost{ID: st.ID, State: string(st.State), Since: st.Since,
-			PID: st.PID, RSS: st.RSS, Restarts: st.Restarts, Next: st.Next, Err: st.Err})
+			PID: st.PID, RSS: st.RSS, Restarts: st.Restarts, Next: st.Next, Err: st.Err, Sandbox: st.Sandbox})
 	}
 	return res
 }
