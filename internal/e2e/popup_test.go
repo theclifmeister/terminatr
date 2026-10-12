@@ -92,6 +92,12 @@ func TestSmokeProjectPopup(t *testing.T) {
 	env.MustCLI("task", "add", "Ship it", "--status", "ready", "--project", slug)
 
 	// A resolved thread with two library files, for the Library tab.
+	// The Memory tab asserted below is the core one: the built-in
+	// memory-tab mod would draw in its place once its host is up, so a
+	// race. It is off here.
+	if err := os.WriteFile(filepath.Join(env.Home, "config.toml"), []byte("[mods.memory-tab]\nenabled = false\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("TERMINATR_HOME", env.Home)
 	p, err := project.Open(slug)
 	if err != nil {
