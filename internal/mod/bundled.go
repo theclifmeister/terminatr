@@ -45,7 +45,14 @@ const (
 	// BundledPRCI is the sidebar's PR/CI column, a code mod (proof 1 of
 	// the mod API, design §11); its source is examples/mods/pr-ci-column.
 	BundledPRCI = "pr-ci-column"
+	// BundledMemory is the project popup's Memory tab, a code mod (proof
+	// 2 of the mod API, design §11); its source is examples/mods/memory-tab.
+	BundledMemory = "memory-tab"
 )
+
+// MemoryView is the Memory tab mod's project tab: the popup draws it in
+// the core Memory tab's place while the mod runs.
+const MemoryView = "memory"
 
 // PRCIColumn is the PR/CI mod's column, in layouts: the built-in ci
 // column draws in its place while the mod is off (view.ColCI).

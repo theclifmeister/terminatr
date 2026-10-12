@@ -11,7 +11,9 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modaction"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modview"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/widget"
 )
@@ -164,6 +166,67 @@ func TestModViewOpen(t *testing.T) {
 	m.setModViews(open)
 	if m.projectPopupView() != nil {
 		t.Error("the same request opened twice")
+	}
+}
+
+// TestMemoryTabMod: the built-in Memory tab mod's tab is drawn in the
+// core Memory tab's place (6 memory), marked as the mod's, not again
+// after the core tabs; enter on a file reaches the mod. With the mod off
+// the core Memory tab draws; a failed mod shows that, not the core tab.
+func TestMemoryTabMod(t *testing.T) {
+	files := &widget.Widget{Kind: widget.KindStack, Children: []widget.Widget{
+		{Kind: widget.KindList, ID: "files", Rows: []widget.Row{
+			{ID: "CONTEXT.md", Spans: []widget.Span{{Text: "Context"}, {Text: "  CONTEXT.md · 1 KB", Role: "faint"}}},
+			{ID: "memory/decisions.md", Spans: []widget.Span{{Text: "Decisions"}}}}},
+		{Kind: widget.KindKeys, Keys: []widget.Key{{Key: "enter", Label: "read"}}},
+	}}
+	memView := proto.ModView{Mod: mod.BundledMemory, Name: "Memory tab", View: mod.MemoryView, Title: "memory", Slot: mod.SlotProjectTab,
+		Trees: []modview.Tree{{Project: "alpha", Tree: files}}}
+	src := &fakeSource{data: testData(), modViews: proto.ModViewsResult{Views: append(panelViews(), memView)}}
+	src.memory = project.Memory{Context: "# Context\n\nThe core tab's text.\n"}
+	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 40, State: DashState{Current: "alpha"}})
+	m.layout.Details = false
+	m.setData(src.data)
+	m.setModViews(modViewsMsg{res: src.modViews})
+	m.openTab("alpha", tabOverview, 0)
+	press(m, "6")
+	out := screen(m)
+	for _, want := range []string{"6 memory", "8 Review queue", "mod: memory-tab · memory", "Context", "CONTEXT.md · 1 KB", "Decisions", "read"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("memory tab lacks %q:\n%s", want, out)
+		}
+	}
+	for _, not := range []string{"9 memory", "The core tab's text."} {
+		if strings.Contains(out, not) {
+			t.Errorf("memory tab shows %q:\n%s", not, out)
+		}
+	}
+	if s := m.shownViews(); len(s) == 0 || s[0].Mod != mod.BundledMemory || s[0].Project != "alpha" {
+		t.Errorf("shown %+v", s)
+	}
+	press(m, "down")
+	run(m, press(m, "enter"))
+	if len(src.inputs) != 1 || src.inputs[0].Mod != mod.BundledMemory || src.inputs[0].Row != "memory/decisions.md" || src.inputs[0].Key != "enter" {
+		t.Fatalf("inputs %+v", src.inputs)
+	}
+	if pv := m.projectPopupView(); pv == nil || pv.tab != tabMemory {
+		t.Fatal("enter left the Memory tab")
+	}
+
+	// Failed: the core's failure state, never the core tab's text.
+	src.modViews.Views[2].State = proto.ModViewFailed
+	src.modViews.Views[2].Err = "host exited"
+	m.setModViews(modViewsMsg{res: src.modViews})
+	if out := screen(m); !strings.Contains(out, "mod failed: host exited") || strings.Contains(out, "The core tab's text.") {
+		t.Errorf("failed memory mod:\n%s", out)
+	}
+
+	// Off: the core Memory tab.
+	src.modViews.Views = panelViews()
+	m.setModViews(modViewsMsg{res: src.modViews})
+	m.projectPopupView().memory = &src.memory
+	if out := screen(m); !strings.Contains(out, "The core tab's text.") || strings.Contains(out, "mod: memory-tab") {
+		t.Errorf("memory mod off:\n%s", out)
 	}
 }
 

@@ -140,7 +140,8 @@ func (pv *projectView) data(m *dash) ProjectData {
 }
 
 func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
-	if v, ok := pv.modTab(m); ok {
+	v, modded := pv.modTab(m)
+	if modded {
 		// The mod's view moves, scrolls and filters first; what it
 		// leaves (esc without a filter, the tabs) is the popup's.
 		if cmd, used := pv.modTabKey(m, v, k.String()); used {
@@ -182,7 +183,7 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	}
-	if pv.tab >= tabCount {
+	if modded || pv.tab >= tabCount {
 		return nil
 	}
 	s := k.String()
@@ -557,6 +558,9 @@ func (pv *projectView) tabLabel(m *dash, p ProjectData, i int) string {
 			return modTabLabel(tabs[i-tabCount], pv.slug, i)
 		}
 		return ""
+	}
+	if v, ok := m.mv.memoryTab(pv.slug); ok && i == tabMemory {
+		return modTabLabel(v, pv.slug, i)
 	}
 	label := fmt.Sprintf("%d %s", i+1, tabNames[i])
 	if i == tabInbox && len(p.Items) > 0 {

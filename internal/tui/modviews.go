@@ -63,11 +63,31 @@ func runsFor(v proto.ModView, slug string) bool {
 	return v.Projects == nil || slices.Contains(v.Projects, slug)
 }
 
-// tabsFor are the mods' project tabs for project slug, in order.
+// isMemoryTab says whether v is the built-in Memory tab mod's tab (mods
+// design §11, proof 2), which the popup draws in its core Memory tab's
+// place rather than after the core tabs. Only the bundled mod has its
+// id: an installed folder of that name is shadowed.
+func isMemoryTab(v proto.ModView) bool {
+	return v.Mod == mod.BundledMemory && v.View == mod.MemoryView && v.Slot == mod.SlotProjectTab
+}
+
+// memoryTab is the built-in Memory tab mod's tab for project slug, while
+// the mod runs for it; the core Memory tab draws otherwise.
+func (mv *modViews) memoryTab(slug string) (proto.ModView, bool) {
+	for _, v := range mv.list {
+		if isMemoryTab(v) && runsFor(v, slug) {
+			return v, true
+		}
+	}
+	return proto.ModView{}, false
+}
+
+// tabsFor are the mods' project tabs for project slug, in order, after
+// the core tabs (the Memory tab mod's is in the core tabs).
 func (mv *modViews) tabsFor(slug string) []proto.ModView {
 	var out []proto.ModView
 	for _, v := range mv.list {
-		if v.Slot == mod.SlotProjectTab && runsFor(v, slug) {
+		if v.Slot == mod.SlotProjectTab && runsFor(v, slug) && !isMemoryTab(v) {
 			out = append(out, v)
 		}
 	}
@@ -344,6 +364,9 @@ func (m *dash) openModView(o modview.Open) {
 				m.openTab(slug, tabOverview, 0)
 				pv = m.projectPopupView()
 			}
+			if isMemoryTab(v) {
+				pv.tab = tabMemory
+			}
 			for i, t := range m.mv.tabsFor(slug) {
 				if t.Mod == v.Mod && t.View == v.View {
 					pv.tab = tabCount + i
@@ -367,8 +390,12 @@ func (m *dash) openModView(o modview.Open) {
 // tabs is how many tabs pv has: the core's and the mods'.
 func (pv *projectView) tabs(m *dash) int { return tabCount + len(m.mv.tabsFor(pv.slug)) }
 
-// modTab is the mod view of pv's open tab, if it is a mod's.
+// modTab is the mod view of pv's open tab, if it is a mod's: the
+// Memory tab is the Memory tab mod's while it runs.
 func (pv *projectView) modTab(m *dash) (proto.ModView, bool) {
+	if pv.tab == tabMemory {
+		return m.mv.memoryTab(pv.slug)
+	}
 	if pv.tab < tabCount {
 		return proto.ModView{}, false
 	}

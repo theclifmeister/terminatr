@@ -42,7 +42,8 @@ func panelServer(t *testing.T, grants string) *Server {
 			t.Fatal(err)
 		}
 	}
-	cfg := "[mods.panel]\nenabled = true\ngrants = [" + grants + "]\nprojects = [\"demo\"]\n"
+	// The built-in Memory tab off: these tests are about mod panel.
+	cfg := "[mods.panel]\nenabled = true\ngrants = [" + grants + "]\nprojects = [\"demo\"]\n[mods.memory-tab]\nenabled = false\n"
 	if err := os.WriteFile(filepath.Join(tmHome, "config.toml"), []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}

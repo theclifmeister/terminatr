@@ -185,3 +185,24 @@ func TestMatch(t *testing.T) {
 		}
 	}
 }
+
+// TestExamples: every code mod of examples/mods that has fixtures passes
+// them (mods design §13: kept honest by CI).
+func TestExamples(t *testing.T) {
+	root := filepath.Join("..", "..", "examples", "mods")
+	dirs, _ := filepath.Glob(filepath.Join(root, "*", "tests"))
+	if len(dirs) == 0 {
+		t.Fatal("no example has fixtures")
+	}
+	for _, d := range dirs {
+		res, err := RunDir(filepath.Dir(d))
+		if err != nil {
+			t.Fatalf("%s: %v", d, err)
+		}
+		for _, r := range res {
+			if !r.OK {
+				t.Errorf("%s %s: %q", filepath.Base(filepath.Dir(d)), r.File, r.Problems)
+			}
+		}
+	}
+}

@@ -19,7 +19,7 @@ import (
 )
 
 // Code are the bundled code mods' ids: folders of examples/mods.
-var Code = []string{"pr-ci-column"}
+var Code = []string{"memory-tab", "pr-ci-column"}
 
 // Main is a bundled code mod's main in its embedded folder.
 const Main = "main.js"

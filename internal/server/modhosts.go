@@ -90,13 +90,15 @@ func (s *Server) modSpecs() ([]modsup.Spec, bool) {
 		sp := modsup.Spec{ID: m.ID, Grants: m.Grants, Projects: m.Projects, Settings: m.Settings}
 		if m.Builtin {
 			// Precompiled into tm (go generate ./internal/mod): it
-			// runs without esbuild, and from the server's start.
+			// runs without esbuild; one that draws columns runs from
+			// the server's start, the others (the Memory tab) wait,
+			// lazily, for their first event.
 			b, err := m.ReadFile(m.Manifest.Provides.Main)
 			if err != nil {
 				s.log.Printf("mods: built-in %s: %v", m.ID, err)
 				continue
 			}
-			sp.Bundle, sp.Eager = b, true
+			sp.Bundle, sp.Eager = b, len(m.Manifest.Provides.Columns) > 0
 		} else {
 			sp.Entry = filepath.Join(m.Dir, filepath.FromSlash(m.Manifest.Provides.Main))
 		}
@@ -126,7 +128,8 @@ func (s *Server) modHosts() proto.ModHostsResult {
 
 // restartMod is mod.restart: the human starts mod id's host again, with
 // the mods as they are now, so a mod just enabled runs (tm mod dev); an
-// agent is refused, and so is any in safe mode.
+// agent is refused, and so is a user mod in safe mode (a built-in one
+// runs there).
 func (s *Server) restartMod(id string, c caller.Caller) (any, *proto.Error) {
 	if c.IsAgent() {
 		return nil, proto.Errorf("human-only", "the user restarts mods")
