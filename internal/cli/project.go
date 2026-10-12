@@ -300,6 +300,16 @@ func projectList(e *Env, args []string) error {
 	if err != nil {
 		return err
 	}
+	if e.Caller.Kind == caller.Thread {
+		// A thread lists its own project only (ownProject).
+		own := list[:0]
+		for _, s := range list {
+			if e.ownProject(s.Slug) == nil {
+				own = append(own, s)
+			}
+		}
+		list = own
+	}
 	usage := map[string]thread.Usage{}
 	for _, s := range list {
 		if p, err := project.Open(s.Slug); err == nil && s.Error == "" {
@@ -356,7 +366,21 @@ func (e *Env) openProject(flag string) (*project.Project, error) {
 	if slug == "" {
 		return nil, usagef("no project here; pass --project <slug> (tm project list)")
 	}
+	if err := e.ownProject(slug); err != nil {
+		return nil, err
+	}
 	return project.Open(slug)
+}
+
+// ownProject refuses a thread caller any project but its own, before
+// anything looks the slug up, so the answer is the same whether the other
+// project exists or not (docs/SPEC.md §11.1, T336). A thread with no
+// project names none. The human and coordinators pass.
+func (e *Env) ownProject(slug string) error {
+	if e.Caller.Kind != caller.Thread || e.Caller.Project != "" && e.Caller.Project == slug {
+		return nil
+	}
+	return &project.Error{Code: "other-project", Msg: "a thread sees only its own project"}
 }
 
 const contextUsage = `usage: tm context [--project <slug>] [--json]`
@@ -493,6 +517,11 @@ func runSkill(e *Env, args []string) error {
 	}
 	if len(pos) != 1 {
 		return usagef("%s", skillUsage)
+	}
+	if *slug != "" {
+		if err := e.ownProject(*slug); err != nil {
+			return err
+		}
 	}
 	text, ok := skill.ForProject(pos[0], version.Version, cmp.Or(*slug, e.Caller.Project))
 	if !ok {

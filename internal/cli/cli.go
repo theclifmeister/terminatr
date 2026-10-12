@@ -93,7 +93,9 @@ func Commands() []string {
 
 // checked are the commands whose rights depend on the caller: for them
 // the server's view of the caller is combined with the environment's.
-var checked = map[string]bool{"project": true, "task": true, "inbox": true, "library": true, "ask": true, "mod": true}
+// Every forwarded command is checked too, so one run here, its session's
+// variables unset, is still narrowed to the agent the server sees.
+var checked = map[string]bool{"mod": true, "skill": true}
 
 // Run dispatches args (without the program name).
 func (e *Env) Run(args []string) (code int, handled bool) {
@@ -104,7 +106,7 @@ func (e *Env) Run(args []string) (code int, handled bool) {
 	if !ok {
 		return 0, false
 	}
-	if checked[args[0]] && e.Identify != nil {
+	if (checked[args[0]] || forwarded[args[0]]) && e.Identify != nil {
 		if c, ok := e.Identify(); ok {
 			e.Caller = caller.Narrower(e.Caller, c)
 		}
