@@ -41,6 +41,12 @@ func TestTypesCompileStrict(t *testing.T) {
 	if err != nil || len(examples) == 0 {
 		t.Fatalf("no examples: %v", err)
 	}
+	// terminatr's examples/mods, the built-in code mods' sources among them.
+	shipped, err := filepath.Glob(filepath.Join("..", "..", "examples", "mods", "*", "main.ts"))
+	if err != nil || len(shipped) == 0 {
+		t.Fatalf("no examples/mods: %v", err)
+	}
+	examples = append(examples, shipped...)
 	for _, main := range examples {
 		src, err := os.ReadFile(main)
 		if err != nil {

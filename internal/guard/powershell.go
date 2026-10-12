@@ -108,6 +108,9 @@ func (r Rules) judgePSCommand(words []string) *Denial {
 	}
 	cmd := psName(argv[0])
 	args := argv[1:]
+	if d := r.judgeMods(cmd, args, true); d != nil {
+		return d
+	}
 	var d *Denial
 	switch {
 	case psEval[cmd]:

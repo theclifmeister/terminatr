@@ -1,0 +1,21 @@
+# A code host (mods design §2, tier 5; §12 Phase 2): GitLab's merge
+# requests for the projects whose PROJECT.md says code_host = "gitlab".
+# tm asks this mod what it would ask gh or az: a merge request's state,
+# checks and review, the failing job's log, and, from tm thread merge, to
+# merge the head tm checked. It runs glab on glab's own login, which the
+# mod never sees. Install it by path from a checkout:
+#   tm mod install terminatr/examples/mods/gitlab
+id = "gitlab"
+name = "GitLab"
+version = "1.0.0"
+api = "1.1"
+description = "GitLab merge requests as tm's pull requests, through glab: state, pipeline, approvals, the failing job's log, and the merge tm thread merge checked."
+authors = ["terminatr"]
+homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/gitlab"
+
+[provides]
+main = "main.ts"
+code_host = "gitlab"
+
+[permissions]
+commands = ["glab"]

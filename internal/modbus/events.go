@@ -21,6 +21,7 @@ const (
 	// Published by the console, action and view parts of the API.
 	UIClick     = "ui.click"
 	UIKey       = "ui.key"
+	UICursor    = "ui.cursor"
 	ActionDone  = "action.done"
 	ViewOpened  = "view.opened"
 	ViewClosed  = "view.closed"
@@ -136,6 +137,11 @@ type Session struct {
 	// Context is the percentage of the context window the latest turn
 	// used; -1 when unknown.
 	Context int `json:"context"`
+	// Tokens and CostUSD are what the session's thread has used so far,
+	// summed over its turns (thread.Usage, docs/SPEC.md §8.6): numbers
+	// only, none for a session that is no thread's.
+	Tokens  int64   `json:"tokens,omitempty"`
+	CostUSD float64 `json:"cost_usd,omitempty"`
 }
 
 // Clock is clock.minute, on every minute.
@@ -160,7 +166,8 @@ type Target struct {
 }
 
 // Input is ui.click and ui.key: the human clicked, or pressed Key on, one
-// of the mod's own columns, views or widgets.
+// of the mod's own columns, views or widgets; and ui.cursor: the row
+// under the cursor of a view's focused list is now Row ("" for none).
 type Input struct {
 	Column string `json:"column,omitempty"`
 	View   string `json:"view,omitempty"`
@@ -180,12 +187,15 @@ type Done struct {
 }
 
 // View is view.opened and view.closed: a view the manifest declares, the
-// slot it is shown in (project.tab, dashboard.card, full) and its size in
-// cells.
+// slot it is shown in (project.tab, dashboard.card, full, details.section,
+// coordinator.section), the project it shows (and for a details.section
+// the task or thread the details panel shows) and its size in cells.
 type View struct {
 	View    string `json:"view"`
 	Slot    string `json:"slot"`
 	Project string `json:"project,omitempty"`
+	Task    string `json:"task,omitempty"`
+	Thread  string `json:"thread,omitempty"`
 	Width   int    `json:"width"`
 	Height  int    `json:"height"`
 }

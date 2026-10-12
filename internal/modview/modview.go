@@ -43,9 +43,13 @@ const OpenLife = 10 * time.Second
 // console polling again: then they are closed for it.
 const ShownLife = 15 * time.Second
 
-// Tree is a published tree: for one project, or for all ("").
+// Tree is a published tree: for one project, or for all (""). A
+// details.section's tree may be for one task or thread of its project
+// instead, the row the details panel shows.
 type Tree struct {
 	Project string `json:"project,omitempty"`
+	Task    string `json:"task,omitempty"`
+	Thread  string `json:"thread,omitempty"`
 	// Count is the number a project tab shows beside its title; nil for
 	// none.
 	Count *int `json:"count,omitempty"`
@@ -56,18 +60,28 @@ type Tree struct {
 }
 
 // Shown is a view a console shows: the mod's view, in a slot, for a
-// project, at a size in cells.
+// project (and a details.section for the task or thread the details
+// panel shows), at a size in cells.
 type Shown struct {
 	Mod     string `json:"mod"`
 	View    string `json:"view"`
 	Slot    string `json:"slot,omitempty"`
 	Project string `json:"project,omitempty"`
+	Task    string `json:"task,omitempty"`
+	Thread  string `json:"thread,omitempty"`
 	Width   int    `json:"width"`
 	Height  int    `json:"height"`
 }
 
 // key is a shown view's identity: its size may change while it shows.
-func (s Shown) key() Shown { return Shown{Mod: s.Mod, View: s.View, Slot: s.Slot, Project: s.Project} }
+func (s Shown) key() Shown {
+	return Shown{Mod: s.Mod, View: s.View, Slot: s.Slot, Project: s.Project, Task: s.Task, Thread: s.Thread}
+}
+
+// For says whether t is the tree for project, task and thread, exactly.
+func (t Tree) For(project, task, thread string) bool {
+	return t.Project == project && t.Task == task && t.Thread == thread
+}
 
 // Open is a mod's request that a console show one of its views.
 type Open struct {
@@ -134,18 +148,18 @@ func (s *Store) Set(mod, view string, t Tree, size int) error {
 		views = map[string][]Tree{}
 		s.trees[mod] = views
 	}
-	list := slices.DeleteFunc(views[view], func(o Tree) bool { return o.Project == t.Project })
+	list := slices.DeleteFunc(views[view], func(o Tree) bool { return o.For(t.Project, t.Task, t.Thread) })
 	if t.Tree == nil {
 		views[view] = list
 		return nil
 	}
 	if len(list) >= MaxTrees {
-		return ErrFull("a view keeps at most 64 trees: one per project, and one for all")
+		return ErrFull("a view keeps at most 64 trees: one per project (or task or thread a section shows), and one for all; clear one on view.closed")
 	}
 	total := size
 	for v, l := range views {
 		for _, o := range l {
-			if v != view || o.Project != t.Project {
+			if v != view || !o.For(t.Project, t.Task, t.Thread) {
 				total += o.size
 			}
 		}
@@ -290,7 +304,8 @@ func (s *Store) allLocked() []Shown {
 }
 
 func compare(a, b Shown) int {
-	return cmp.Or(cmp.Compare(a.Mod, b.Mod), cmp.Compare(a.View, b.View), cmp.Compare(a.Slot, b.Slot), cmp.Compare(a.Project, b.Project))
+	return cmp.Or(cmp.Compare(a.Mod, b.Mod), cmp.Compare(a.View, b.View), cmp.Compare(a.Slot, b.Slot), cmp.Compare(a.Project, b.Project),
+		cmp.Compare(a.Task, b.Task), cmp.Compare(a.Thread, b.Thread))
 }
 
 // diff is what is in after and not before (opened), and the other way

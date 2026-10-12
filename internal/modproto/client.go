@@ -164,3 +164,25 @@ func (c *Client) Shutdown(ctx context.Context) error {
 	_, err := c.Call(ctx, MethodShutdown, nil)
 	return err
 }
+
+// ToolCall runs one of the mod's agent tools and returns the text its
+// handler gave, or its error (an *Error with CodeNoTool or
+// CodeToolFailed), ctx's end or ErrClosed.
+func (c *Client) ToolCall(ctx context.Context, call ToolCall) (ToolResult, error) {
+	var r ToolResult
+	raw, err := c.Call(ctx, MethodToolCall, call)
+	if err == nil {
+		err = json.Unmarshal(raw, &r)
+	}
+	return r, err
+}
+
+// CodeHost runs one of the code host methods (IsCodeHost) in the mod and
+// returns its handler's answer as JSON, or its error (an *Error with
+// CodeNoHandler or CodeHandlerFailed), ctx's end or ErrClosed.
+func (c *Client) CodeHost(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	if !IsCodeHost(method) {
+		return nil, fmt.Errorf("%s is not a code host method", method)
+	}
+	return c.Call(ctx, method, params)
+}

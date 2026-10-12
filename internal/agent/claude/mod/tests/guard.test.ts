@@ -61,6 +61,12 @@ test('the guard off refuses nothing', () => {
   expect(rulesOf(JSON.stringify(thread)).rules).toEqual(all)
 })
 
+test('a mod rule is labelled with the mod and refuses with every core rule off', () => {
+  const r = rulesOf(JSON.stringify({ ...(vectors as unknown as Vectors).rules['mods-only'], tools: TOOLS }))
+  expect(judge(r, 'Bash', { command: 'terraform destroy' })?.message).toBe("terminatr guard (mod:infra.no-destroy): infrastructure is the human's to change.")
+  expect(judge(r, 'Bash', { command: 'git push -f origin main' })).toBe(null)
+})
+
 // start runs session.start in a terminatr session whose server answers
 // the rules with rules, and keeps what the mod reports refused.
 async function start($: Engine, on: On, rules: Rules | null, env: Record<string, string> = { TERMINATR_MOD_SOCKET: SOCKET }) {

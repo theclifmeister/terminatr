@@ -104,11 +104,15 @@ type Span struct {
 type Widget map[string]Value
 
 // ViewOptions are $.ui.view.set's options: the project the tree is for
-// (a project tab's, as view.opened names it; none: every project), the
-// count a project tab shows beside its title, and the lines a dashboard
-// card asks for (at most 20).
+// (a project tab's, as view.opened names it; none: every project), for a
+// details.section the task or thread of that project it is for (as
+// view.opened names it; none: the project's own row), the count a
+// project tab shows beside its title, and the lines a dashboard card or
+// a section asks for (at most 20).
 type ViewOptions struct {
 	Project string `json:"project,omitempty"`
+	Task    string `json:"task,omitempty"`
+	Thread  string `json:"thread,omitempty"`
 	Count   *int   `json:"count,omitempty"`
 	Height  int    `json:"height,omitempty"`
 }
@@ -116,6 +120,15 @@ type ViewOptions struct {
 // Project is one project the mod runs for.
 type Project struct {
 	Slug string `json:"slug"`
+}
+
+// MemoryFile is one of a project's memory files: its path in the project
+// folder (CONTEXT.md, MEMORY.md or memory/<name>.md), its title (a
+// note's first heading) and its size.
+type MemoryFile struct {
+	Path  string `json:"path"`
+	Title string `json:"title"`
+	Bytes int64  `json:"bytes"`
 }
 
 // Task is one task of a project's board.
@@ -205,15 +218,16 @@ var Events = []Event{
 	{Name: modbus.ClockMinute, Data: typ[modbus.Clock](), Doc: "Every minute."},
 	{Name: modbus.UIClick, Data: typ[modbus.Input](), Doc: "The human clicked one of the mod's columns, views or widgets."},
 	{Name: modbus.UIKey, Data: typ[modbus.Input](), Doc: "The human pressed a key on one of the mod's views or widgets."},
+	{Name: modbus.UICursor, Data: typ[modbus.Input](), Doc: "The row under the cursor of a view's focused list (widget) is now row (\"\": none), moved by a key, a click, the filter or a publish; sent when the view shows, and again on each change. To follow the selection."},
 	{Name: modbus.ActionDone, Data: typ[modbus.Done](), Doc: "A human ran a core action bound in the mod's row, view or notification."},
-	{Name: modbus.ViewOpened, Data: typ[modbus.View](), Needs: GrantViews, Doc: "One of the mod's views is shown: publish it with $.ui.view.set."},
+	{Name: modbus.ViewOpened, Data: typ[modbus.View](), Needs: GrantViews, Doc: "One of the mod's views is shown: publish it with $.ui.view.set. A details.section names the task or thread the details panel shows: publish for that one, and clear it on view.closed."},
 	{Name: modbus.ViewClosed, Data: typ[modbus.View](), Needs: GrantViews, Doc: "One of the mod's views is no longer shown."},
-	{Name: modbus.CommandRun, Data: typ[modbus.Command](), Doc: "The human ran one of the mod's commands."},
+	{Name: modbus.CommandRun, Data: typ[modbus.Command](), Doc: "The human ran one of the commands in the manifest's [provides].commands: by its key or ≡ menu entry (then the mod may open a view), or with tm mod run."},
 	{Name: modbus.ModSettings, Data: typ[Settings](), Doc: "The user changed the mod's settings: these are the new ones."},
 }
 
-// Methods are $'s methods, besides $.on and $.log, which the host builds
-// in.
+// Methods are $'s methods, besides $.on, $.log, $.tool.handle and
+// $.codehost.handle, which the host builds in.
 var Methods = []Method{
 	// Read.
 	{Name: "projects.list", Result: typ[[]Project](), Needs: GrantProjectRead,
@@ -226,6 +240,10 @@ var Methods = []Method{
 		Doc: "A thread of a project; null when there is none."},
 	{Name: "report.get", Params: []Param{{Name: "project", Type: typ[string]()}, {Name: "thread", Type: typ[string]()}}, Result: typ[*modbus.Report](), Needs: GrantProjectRead,
 		Doc: "A thread's latest report; null when it has none."},
+	{Name: "memory.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]MemoryFile](), Needs: GrantProjectRead,
+		Doc: "A project's memory files: CONTEXT.md, MEMORY.md and the notes in memory/, by title."},
+	{Name: "memory.read", Params: []Param{{Name: "slug", Type: typ[string]()}, {Name: "path", Type: typ[string]()}}, Result: typ[string](), Needs: GrantProjectRead,
+		Doc: "The text of one of a project's memory files, by the path memory.list gives (1 MB at most)."},
 	// Own state.
 	{Name: "store.get", Params: []Param{{Name: "key", Type: typ[string]()}}, Result: typ[Value](),
 		Doc: "A value the mod stored; null when there is none."},
@@ -252,9 +270,9 @@ var Methods = []Method{
 	{Name: "ui.toast", Params: []Param{{Name: "text", Type: typ[string]()}, {Name: "level", Type: typ[Level](), Optional: true}},
 		Doc: "Shows a short message on the consoles."},
 	{Name: "ui.view.set", Params: []Param{{Name: "view", Type: typ[string]()}, {Name: "widget", Type: typ[*Widget]()}, {Name: "options", Type: typ[ViewOptions](), Optional: true}}, Needs: GrantViews,
-		Doc: "Publishes the widget tree of a view the manifest declares, for one project (options.project) or all; null clears it."},
+		Doc: "Publishes the widget tree of a view the manifest declares, for one project (options.project) or all, a details.section's also for one task or thread of it (options.task, options.thread); null clears it."},
 	{Name: "ui.view.open", Params: []Param{{Name: "view", Type: typ[string]()}}, Needs: GrantViews,
-		Doc: "Asks the console to show a view; only after a human input (a key, a click or a command)."},
+		Doc: "Asks the console to show a view (not a panel section, which shows with its panel); only after a human input (a key, a click or a command)."},
 	{Name: "ui.notify", Params: []Param{{Name: "notification", Type: typ[Notification]()}}, Needs: GrantNotify,
 		Doc: "Sends an OS notification through a console."},
 	// Actions.
@@ -272,10 +290,10 @@ var Methods = []Method{
 		Doc: "Runs a program the commands grant lists, with a scrubbed env, no shell and a timeout."},
 }
 
-// Has says whether name is a method of $ (on and log included) or an
-// event.
+// Has says whether name is a method of $ (on, log, tool.handle and
+// codehost.handle included) or an event.
 func Has(name string) bool {
-	if name == "on" || name == "log" {
+	if name == "on" || name == "log" || name == "tool.handle" || name == "codehost.handle" {
 		return true
 	}
 	for _, m := range Methods {

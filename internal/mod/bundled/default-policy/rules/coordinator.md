@@ -174,7 +174,10 @@ POST the PR to the REST API instead: `az rest --method post --resource
 499b84ac-1321-427f-aa17-267ca6975798 --url
 https://dev.azure.com/<org>/<project>/_apis/git/repositories/<repo>/pullrequests?api-version=7.1
 --body @pr.json`, with `sourceRefName`, `targetRefName` (`refs/heads/…`),
-`title` and `description`. tm finds the PR by the thread's branch, so
+`title` and `description`. For a project whose `code_host` is
+`"gitlab"` (served by a code host mod), `glab mr create --source-branch
+<branch> --target-branch <default> --title "…" --description "…"
+--yes`. tm finds the PR by the thread's branch, so
 nothing else links it. A report that already has a `PR:` line, or a
 branch that already has a PR, needs none. Then merge it under the
 project's merge rules (below).

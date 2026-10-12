@@ -68,7 +68,7 @@ func (t *Ticker) mergeOf(p *project.Project, pm *projectMemo, id string) *mergeM
 }
 
 // PRNumber is the number of a GitHub or Azure DevOps pull request's URL,
-// 0 for none.
+// or a GitLab merge request's, 0 for none.
 func PRNumber(url string) int {
 	n, _, _ := codehost.ParsePRURL(url)
 	return n

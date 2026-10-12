@@ -56,6 +56,16 @@ type Answer struct {
 // Step is one event, in the event bus's shape: its name, the project it
 // is about and its data. WaitMS waits after its handlers are done, for
 // the mod's timers.
+//
+// A step named tool.call (ToolStep) is an agent's call of one of the
+// mod's tools instead: Data is {tool, input, project, role, thread,
+// session}, as the server sends it, and what the handler answers is
+// checked against Expect.Tools.
+//
+// A step named after a code host method (codehost.pr, …;
+// modproto.IsCodeHost) is tm asking the mod's code host instead: Data
+// is the method's args ({remote, branch, number, …}, codehost.ModRef),
+// and the handler's answer is checked against Expect.CodeHost.
 type Step struct {
 	Name    string          `json:"name"`
 	Project string          `json:"project,omitempty"`
@@ -77,7 +87,19 @@ type Expect struct {
 	// Store must be part of the store at the end (Match's rule); a key
 	// whose value is null must be missing.
 	Store map[string]json.RawMessage `json:"store,omitempty"`
+	// Tools are the answers to the tool.call steps, in order: each must
+	// be part of the text the agent would get, or of "error: <message>"
+	// when the handler threw.
+	Tools []string `json:"tools,omitempty"`
+	// CodeHost are the answers to the code host steps, in order: each
+	// must match the JSON the handler answered (Match's rule), or be
+	// {"error": "<part of the message>"} when it threw.
+	CodeHost []json.RawMessage `json:"codehost,omitempty"`
 }
+
+// ToolStep is the name of a step that calls one of the mod's agent
+// tools rather than sending an event.
+const ToolStep = "tool.call"
 
 // Call is a $ API call: the method, as the wire names it
 // ("ui.cell.set"), and its params object.

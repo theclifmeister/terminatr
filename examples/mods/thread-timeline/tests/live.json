@@ -1,0 +1,24 @@
+{
+  "name": "with the view open, a change draws it again; a resolved thread's row goes faint",
+  "store": { "log": { "demo": { "t-0007": { "task": "T7", "changes": [{ "at": "2026-10-01T09:00:00Z", "state": "working" }] } } } },
+  "events": [
+    { "name": "mod.ready", "data": { "projects": [{ "project": "demo", "needs_you": [], "inbox": [], "threads": [], "ready": [] }] } },
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "timeline", "slot": "full", "project": "demo", "width": 100, "height": 30 } },
+    { "name": "thread.resolved", "project": "demo",
+      "data": { "project": "demo", "thread": "t-0007", "task": "T7", "agent": "claude" } },
+    { "name": "view.closed", "project": "demo",
+      "data": { "view": "timeline", "slot": "full", "project": "demo", "width": 100, "height": 30 } },
+    { "name": "thread.state", "project": "demo",
+      "data": { "project": "demo", "thread": "t-0008", "state": "working" } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set", "params": { "widget": { "children": [{ "rows": [
+        { "id": "t-0007", "cells": [[{ "text": "t-0007" }], [{ "text": "T7" }], [{ "icon": "working" }], [{ "role": "faint" }]] } ] }, {}] } } },
+      { "method": "ui.view.set", "params": { "widget": { "children": [{ "rows": [
+        { "id": "t-0007", "cells": [[{ "text": "t-0007", "role": "faint" }], [{}], [{ "icon": "working" }, { "icon": "done" }], [{ "text": "resolved 0m" }]] } ] }, {}] } } }
+    ],
+    "store": { "log": { "demo": { "t-0007": { "resolved": true }, "t-0008": { "changes": [{ "state": "working" }] } } } }
+  }
+}

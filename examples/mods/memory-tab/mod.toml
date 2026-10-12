@@ -1,0 +1,24 @@
+# The project popup's Memory tab as a code mod (mods design §11, proof 2;
+# §13 example 8). terminatr ships this mod built in: this folder is its
+# source, and `go generate ./internal/mod` precompiles main.ts into the
+# binary. To change it, copy the folder, give the copy another id and
+# install it by path (tm mod install refuses a built-in mod's id).
+id = "memory-tab"
+name = "Memory tab"
+version = "1.0.0"
+api = "1.0"
+description = "The project's memory in its popup: a list of the memory files and a text viewer, read-only."
+authors = ["terminatr"]
+homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/memory-tab"
+
+[provides]
+main = "main.ts"
+
+[[provides.views]]
+id = "memory"
+title = "memory"
+slot = "project.tab"
+
+[permissions]
+project_read = true
+views = true

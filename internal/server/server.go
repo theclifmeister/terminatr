@@ -316,6 +316,7 @@ func Run(ctx context.Context, opts Options) error {
 	hostsDone := make(chan struct{})
 	if sup := s.newModHosts(); sup != nil {
 		s.modSup.Store(sup)
+		codehost.Provide(s.codeHostMod)
 		go func() {
 			defer close(hostsDone)
 			s.runModHosts(ectx, sup)
@@ -621,6 +622,8 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 			return nil, err
 		}
 		return s.toolRunRPC(p, peerPID)
+	case proto.MethodToolList:
+		return s.toolListRPC(peerPID)
 	case proto.MethodProjectRename:
 		var p proto.ProjectRenameParams
 		if err := decodeParams(req.Params, &p); err != nil {
@@ -649,6 +652,12 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 			return nil, err
 		}
 		return s.modViewInput(p, peerPID, s.callerOf(peerPID))
+	case proto.MethodModCommand:
+		var p proto.ModCommandParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.modCommand(p, peerPID, s.callerOf(peerPID))
 	case proto.MethodModRestart:
 		var p proto.ModRestartParams
 		if err := decodeParams(req.Params, &p); err != nil {

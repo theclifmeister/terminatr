@@ -43,7 +43,7 @@ func TestEventsMatchBus(t *testing.T) {
 	bus := []string{
 		modbus.TaskChanged, modbus.ThreadState, modbus.ThreadStarted, modbus.ThreadResolved,
 		modbus.ReportStored, modbus.InboxItem, modbus.PRChanged, modbus.SessionState, modbus.ClockMinute,
-		modbus.UIClick, modbus.UIKey, modbus.ActionDone, modbus.ViewOpened, modbus.ViewClosed,
+		modbus.UIClick, modbus.UIKey, modbus.UICursor, modbus.ActionDone, modbus.ViewOpened, modbus.ViewClosed,
 		modbus.CommandRun, modbus.ModSettings, modbus.ModReady,
 	}
 	var names []string
@@ -78,7 +78,7 @@ func TestSchema(t *testing.T) {
 			optional = p.Optional
 		}
 	}
-	for _, n := range []string{"on", "log", "project.get", "ui.view.set", "view.opened"} {
+	for _, n := range []string{"on", "log", "tool.handle", "project.get", "ui.view.set", "view.opened"} {
 		if !Has(n) {
 			t.Errorf("Has(%q) false", n)
 		}

@@ -50,7 +50,7 @@ func (f *fakeSource) loadMods() {
 		cfg = nil
 	}
 	if reg, err := mod.Load(cfg); err == nil {
-		f.data.Mods = reg.Mods
+		f.data.Mods, f.data.ModData = reg.Mods, modData(reg.Mods)
 	}
 }
 
@@ -361,7 +361,7 @@ func TestModsHostStates(t *testing.T) {
 	}{
 		{"running", proto.ModHost{State: "running", PID: 4242, RSS: 42_000_000, Restarts: 1}, []string{"● Review age", "Runs as pid 4242, using 42", "restarted 1×"}},
 		{"starting", proto.ModHost{State: "starting"}, []string{"◌ Review age", "Starting: its host loads its script."}},
-		{"idle", proto.ModHost{State: "idle"}, []string{"● Review age", "waits for its first event", "Waits for its first event: its host starts then."}},
+		{"idle", proto.ModHost{State: "idle"}, []string{"● Review age", "waits for its first", "Waits for its first event: its host starts then."}},
 		{"backoff", proto.ModHost{State: "backoff", Next: time.Now().Add(4500 * time.Millisecond), Err: "exit status 1"}, []string{"▲ Review age", "restarting in 5s: exit status 1", "r restarts it now"}},
 		{"failed", proto.ModHost{State: "failed", Err: "crashed 3 times in 5m"}, []string{"▲ Review age", "failed: crashed 3 times in 5m", "r restarts it; l shows its log"}},
 	} {
@@ -400,27 +400,31 @@ func TestModsHostStates(t *testing.T) {
 }
 
 // TestModsExamples: e shows where the example mods are and each one's
-// install line, and installs nothing; with no mod installed the tab
-// says how to install one and points at e.
+// install line, and installs nothing; with no mod of the user's
+// installed the tab lists the built-in ones, says how to install one
+// and points at e.
 func TestModsExamples(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
 	src := &fakeSource{data: testData()}
+	src.loadMods()
 	m := newDash(DashOptions{Source: src, Width: 160, Height: 60, State: DashState{Current: "beta"}})
 	m.setData(src.data)
 	press(m, ",", "3")
-	if out := screen(m); !strings.Contains(out, "No mods installed") || !strings.Contains(out, "e shows terminatr's example mods") {
-		t.Errorf("the empty tab:\n%s", out)
+	if out := screen(m); !strings.Contains(out, "Default theme") || !strings.Contains(out, "No mods of your own yet") || !strings.Contains(out, "shows terminatr's example mods") {
+		t.Errorf("the tab with only built-in mods:\n%s", out)
 	}
 	press(m, "e")
 	out := screen(m)
-	for _, want := range []string{"Example mods", mod.ExamplesURL, "git clone " + mod.ExamplesRepo, "tm mod install terminatr/examples/mods/nord", "memory-tab", "Nothing here is installed"} {
+	for _, want := range []string{"Example mods", mod.ExamplesURL, "git clone " + mod.ExamplesRepo, "tm mod install terminatr/examples/mods/nord", "memory-tab", "tm mod install terminatr/examples/mods/standup", "copy it under another id", "Nothing here is installed"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("examples lack %q:\n%s", want, out)
 		}
 	}
 	src.loadMods()
-	if len(src.data.Mods) != 0 {
-		t.Errorf("e installed %v", src.data.Mods)
+	for _, md := range src.data.Mods {
+		if !md.Builtin {
+			t.Errorf("e installed %s", md.ID)
+		}
 	}
 }
 
@@ -498,5 +502,43 @@ func TestModsProjectLine(t *testing.T) {
 		if got := rows[i].value(m); got != want {
 			t.Errorf("%s: Mods %q, want %q", slug, got, want)
 		}
+	}
+}
+
+// TestModsDataAndBuiltin: an enabled data mod whose file doesn't load
+// is ▲ with what doesn't load; a built-in mod says it is built in, and
+// one tm can't do without isn't turned off.
+func TestModsDataAndBuiltin(t *testing.T) {
+	src, m := modsDash(t)
+	installMod(t, "askew", map[string]string{"mod.toml": "id = \"askew\"\nname = \"Askew\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nlayout = \"l.toml\"\n", "l.toml": "sidebar = [\"bogus\"]\n"})
+	os.WriteFile(filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml"), []byte("[mods.askew]\nenabled = true\n"), 0o600)
+	src.loadMods()
+	m.setData(src.data)
+	selectMod(t, m, "askew")
+	out := screen(m)
+	for _, want := range []string{"▲ Askew", "doesn't load its layout", `Doesn't load its layout: sidebar: no column "bogus"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("askew lacks %q:\n%s", want, out)
+		}
+	}
+	selectMod(t, m, mod.BundledTheme)
+	out = screen(m)
+	for _, want := range []string{"● Default theme", "theme · built in", "Built into tm", "It can't be turned off; pick another theme in General settings."} {
+		if !strings.Contains(out, want) {
+			t.Errorf("default-theme lacks %q:\n%s", want, out)
+		}
+	}
+	modAct(m, src, "enter")
+	if !strings.Contains(m.msg, "can't be turned off") || modState(t, src, mod.BundledTheme).State != mod.Enabled {
+		t.Errorf("enter on default-theme: %q", m.msg)
+	}
+	press(m, "x")
+	if !strings.Contains(m.msg, "Default theme is built in: tm can't do without it") {
+		t.Errorf("x on default-theme: %q", m.msg)
+	}
+	selectMod(t, m, mod.BundledTemplates)
+	modAct(m, src, "enter")
+	if modState(t, src, mod.BundledTemplates).State != mod.Disabled {
+		t.Errorf("enter on default-templates: %q", m.msg)
 	}
 }

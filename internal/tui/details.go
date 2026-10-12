@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modannot"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -32,6 +33,9 @@ func (m *dash) details(r row, w int) []string {
 		if s, ok := m.session(r.session); ok {
 			sessionPanel(d, s)
 		}
+	}
+	if project, task, thr, ok := sectionTarget(r); ok {
+		modSections(d, m.mv.list, mod.SlotDetailsSection, project, task, thr)
 	}
 	return d.lines
 }

@@ -56,8 +56,6 @@ func TestCheckRefuses(t *testing.T) {
 		{`{"kind":"keys","keys":[{"key":"/","label":"find"}]}`, `"/" is terminatr's`},
 		{`{"kind":"keys","keys":[{"key":"ctrl+x","label":"x"}]}`, "is not a key"},
 		{`{"kind":"keys","keys":[{"key":"o","label":"a"},{"key":"o","label":"b"}]}`, "declared twice"},
-		{`{"kind":"text","lines":[[{"text":"ok 🚀"}]]}`, "wide glyph"},
-		{`{"kind":"text","text":"漢字"}`, "wide glyph"},
 		{`{"kind":"list","id":"a","rows":[{"spans":[{"text":"x","role":"pink"}]}]}`, `role "pink"`},
 		{`{"kind":"list","id":"a","rows":[{"spans":[{"icon":"rocket"}]}]}`, `"rocket" is not an icon`},
 		{`{"kind":"list","id":"a","rows":[{"actions":[{"id":"Delete Everything"}]}]}`, "not an action id"},
@@ -86,6 +84,41 @@ func TestCheckLimits(t *testing.T) {
 	}
 	if _, err := Decode(make([]byte, MaxBytes+1)); err == nil {
 		t.Error("an oversized tree decoded")
+	}
+	// A text widget holds a long file; any other string is a line.
+	long := strings.Repeat("abcdefg\n", MaxText/4)
+	if err := (&Widget{Kind: KindText, Text: long}).Check(); err != nil {
+		t.Errorf("a %d-byte text: %v", len(long), err)
+	}
+	if err := (&Widget{Kind: KindText, Title: long}).Check(); err == nil {
+		t.Errorf("a %d-byte title passed", len(long))
+	}
+	if err := (&Widget{Kind: KindText, Text: strings.Repeat("x", MaxBody+1)}).Check(); err == nil {
+		t.Error("a text over MaxBody passed")
+	}
+	if err := (&Widget{Kind: KindText, Text: strings.Repeat("\n", MaxTextLine+1)}).Check(); err == nil {
+		t.Error("a text over MaxTextLine passed")
+	}
+}
+
+// TestCheckNarrows: a wide glyph (an emoji, a CJK character, an emoji
+// sequence) becomes a ?, wherever it is, and the tree still draws.
+func TestCheckNarrows(t *testing.T) {
+	w := mustDecode(t, `{"kind":"stack","title":"ok 🚀","children":[
+		{"kind":"text","text":"漢字\nthumbs 👍🏽 family 👨‍👩‍👧 sun ☀️ é → ✓"},
+		{"kind":"list","id":"l","rows":[{"spans":[{"text":"🚀 go"}]}]}]}`)
+	if w.Title != "ok ?" {
+		t.Errorf("title %q", w.Title)
+	}
+	if got, want := w.Children[0].Text, "??\nthumbs ? family ??? sun ? é → ✓"; got != want {
+		t.Errorf("text %q, want %q", got, want)
+	}
+	if got := w.Children[1].Rows[0].Spans[0].Text; got != "? go" {
+		t.Errorf("span %q", got)
+	}
+	ss := []Span{{Text: "日本 x"}}
+	if err := CheckSpans(ss); err != nil || ss[0].Text != "?? x" {
+		t.Errorf("spans %q: %v", ss[0].Text, err)
 	}
 }
 
@@ -313,6 +346,51 @@ func TestClick(t *testing.T) {
 	}
 	if ev := v.Click(0, 9); ev != nil {
 		t.Errorf("click below: %+v", ev)
+	}
+}
+
+// TestMoved: the mod hears where the cursor is once, first when the
+// tree shows, then each time a key, a click, the filter or a publish
+// puts it on another row or list, and again after Forget.
+func TestMoved(t *testing.T) {
+	cur := func(w, r string) *Event { return &Event{Kind: EventCursor, Widget: w, Row: r} }
+	same := func(got, want *Event) bool {
+		return got == nil && want == nil || got != nil && want != nil && *got == *want
+	}
+	v := NewView()
+	if ev := v.Moved(); ev != nil {
+		t.Errorf("no tree: %+v", ev)
+	}
+	tree := mustDecode(t, `{"kind":"stack","children":[
+		{"kind":"list","id":"a","rows":[{"id":"x","spans":[{"text":"x"}]},{"id":"y","spans":[{"text":"y"}]}]},
+		{"kind":"list","id":"b","rows":[]}]}`)
+	v.Set(tree)
+	for i, step := range []struct {
+		do   func()
+		want *Event
+	}{
+		{func() {}, cur("a", "x")},
+		{func() {}, nil},
+		{func() { v.Key("up") }, nil},
+		{func() { v.Key("down") }, cur("a", "y")},
+		{func() { v.Key("/"); v.Key("x") }, cur("a", "x")},
+		{func() { v.Key("esc"); v.Key("esc") }, nil},
+		{func() { v.Set(listOf("y", "z")) }, cur("l", "y")},
+		{func() { v.Set(listOf("y", "z")) }, nil},
+		{func() { v.Set(listOf("z")) }, cur("l", "z")},
+		{func() { v.Render(20, 5, plainLook{}); v.Click(0, 0) }, nil},
+		{func() { v.Set(listOf()) }, cur("l", "")},
+		{func() { v.Forget() }, cur("l", "")},
+	} {
+		step.do()
+		if got := v.Moved(); !same(got, step.want) {
+			t.Errorf("step %d: %+v, want %+v", i, got, step.want)
+		}
+	}
+	v.Set(tree)
+	v.Moved()
+	if v.Key("tab"); !same(v.Moved(), cur("b", "")) {
+		t.Error("tab to an empty list wasn't told")
 	}
 }
 

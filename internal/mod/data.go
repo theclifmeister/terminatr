@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"os"
 	"path"
@@ -22,10 +23,10 @@ import (
 // and no host. The look (a theme, an icon set) and the sidebar's layout
 // are one at a time, picked in General settings ([ui] theme, icons,
 // layout); every enabled keymap applies, the first enabled winning a
-// key; rules addenda, task templates and agent manifests all add up.
-// The look, keys, layout and agents are the console's and the
-// machine's, so they follow a mod being enabled, not its projects;
-// rules and templates follow its projects too.
+// key; rules addenda, task templates, agent manifests and guard rules
+// all add up. The look, keys, layout and agents are the console's and
+// the machine's, so they follow a mod being enabled, not its projects;
+// rules, templates and guard rules follow its projects too.
 
 // Data kinds, as [provides] names them.
 const (
@@ -36,6 +37,7 @@ const (
 	KindRules     = "rules"
 	KindTemplates = "templates"
 	KindAgents    = "agents"
+	KindGuard     = "guard"
 )
 
 // MaxDataFile caps a data file tm reads from a mod: a theme, an icon
@@ -63,6 +65,8 @@ func (m Mod) Has(kind string) bool {
 		return p.Templates != ""
 	case KindAgents:
 		return p.Agents != ""
+	case KindGuard:
+		return len(p.Guard) > 0
 	}
 	return false
 }
@@ -99,10 +103,19 @@ func (r *Registry) Provider(kind, id string) (Mod, error) {
 // It is checked again to be inside it (the folder may have changed since
 // the mod loaded) and at most MaxDataFile.
 func (m Mod) ReadFile(rel string) ([]byte, error) {
-	if err := inside(m.Dir, rel, rel, false); err != nil {
-		return nil, fmt.Errorf("%s: %w", m.ID, err)
+	var f fs.File
+	var err error
+	if m.FS != nil {
+		if err := inside("", rel, rel, false); err != nil {
+			return nil, fmt.Errorf("%s: %w", m.ID, err)
+		}
+		f, err = m.FS.Open(rel)
+	} else {
+		if err := inside(m.Dir, rel, rel, false); err != nil {
+			return nil, fmt.Errorf("%s: %w", m.ID, err)
+		}
+		f, err = os.Open(filepath.Join(m.Dir, filepath.FromSlash(rel)))
 	}
-	f, err := os.Open(filepath.Join(m.Dir, filepath.FromSlash(rel)))
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", m.ID, err)
 	}
@@ -173,15 +186,19 @@ func ParseKeymap(data []byte) (map[string][]string, error) {
 	return out, errors.Join(errs...)
 }
 
-// Keymap is the keymaps of the enabled keymap mods, joined: each action
-// id to its keys, from the first mod (in the order they were enabled)
-// that binds it, and from none whose keymap doesn't parse. A key bound
-// by two mods goes to the first; the later mod's action keeps its
-// default keys. errs say what was left out, each naming its mod.
+// Keymap is the keymaps of the enabled keymap mods, joined, but the
+// built-in default-keymap's, the base they apply over: each action id
+// to its keys, from the first mod (in the order they were enabled) that
+// binds it, and from none whose keymap doesn't parse. A key bound by two
+// mods goes to the first; the later mod's action keeps its default
+// keys. errs say what was left out, each naming its mod.
 func (r *Registry) Keymap() (km map[string][]string, from map[string]string, errs []error) {
 	km, from = map[string][]string{}, map[string]string{}
 	keyOwner := map[string]string{} // key → the id the first mod bound it to
 	for _, m := range r.Providers(KindKeymap) {
+		if m.Builtin {
+			continue
+		}
 		data, err := m.Data(KindKeymap)
 		var one map[string][]string
 		if err == nil {
@@ -267,11 +284,14 @@ var rulesKeys = []string{RulesCoordinator, RulesThread, RulesCoordinatorPolicy, 
 type Addendum struct {
 	Mod  string
 	Text string
+	// Builtin: it is a built-in mod's (default-policy), tm's own text.
+	Builtin bool
 }
 
 // Rules are the mods' rules for role (coordinator or thread) in project
 // slug ("" for any): the policy of the first enabled policy mod that
-// runs there (nil: the built-in policy) and every addendum, by mod id.
+// runs there (the user's before the built-in default-policy; nil: none)
+// and every addendum, by mod id.
 // errs say which files couldn't be read, or which policy mods lost to
 // an earlier one.
 func (r *Registry) Rules(role, slug string) (policy *Addendum, addenda []Addendum, errs []error) {
@@ -283,10 +303,12 @@ func (r *Registry) Rules(role, slug string) (policy *Addendum, addenda []Addendu
 			switch b, err := m.ReadFile(f); {
 			case err != nil:
 				errs = append(errs, err)
+			case policy != nil && m.Builtin:
+				// The built-in policy is the one a mod's replaces.
 			case policy != nil:
 				errs = append(errs, fmt.Errorf("%s: its %s policy is not used: %s's came first", m.ID, role, policy.Mod))
 			default:
-				policy = &Addendum{Mod: m.ID, Text: string(b)}
+				policy = &Addendum{Mod: m.ID, Text: string(b), Builtin: m.Builtin}
 			}
 		}
 	}
@@ -306,6 +328,31 @@ func (r *Registry) Rules(role, slug string) (policy *Addendum, addenda []Addendu
 		}
 	}
 	return policy, addenda, errs
+}
+
+// ModGuardRule is a mod's guard rule, with the mod's id.
+type ModGuardRule struct {
+	Mod string
+	GuardRule
+}
+
+// GuardRules are the guard rules the enabled mods add for sessions of
+// role in project slug, by mod id then the manifest's order. They only
+// add refusals (mods design §7, Tighten only); the guard serves them
+// with the core's when the human has it on.
+func (r *Registry) GuardRules(role, slug string) []ModGuardRule {
+	var out []ModGuardRule
+	for _, m := range r.Mods {
+		if !m.Runs(slug) || !m.Has(KindGuard) {
+			continue
+		}
+		for _, g := range m.Manifest.Provides.Guard {
+			if g.For(role) {
+				out = append(out, ModGuardRule{Mod: m.ID, GuardRule: g})
+			}
+		}
+	}
+	return out
 }
 
 // Task templates
@@ -329,6 +376,9 @@ type Template struct {
 	Mod, Name    string
 	Title, Notes string
 	Steps        []string
+	// Builtin: a built-in mod's (default-templates); a user mod's
+	// template of the same name comes first.
+	Builtin bool
 }
 
 // MaxTemplateSteps caps a template's steps.
@@ -399,34 +449,45 @@ func (r *Registry) Templates(slug string) (out []Template, errs []error) {
 		if !m.Runs(slug) || !m.Has(KindTemplates) {
 			continue
 		}
-		dir := m.Manifest.Provides.Templates
+		ts, terrs := m.templates()
+		out, errs = append(out, ts...), append(errs, terrs...)
+	}
+	return out, errs
+}
+
+// templates are the mod's task templates; errs say which didn't read.
+func (m Mod) templates() (out []Template, errs []error) {
+	dir := m.Manifest.Provides.Templates
+	var files []string
+	if m.FS != nil {
+		files, _ = fs.Glob(m.FS, path.Join(dir, "*.md"))
+	} else {
 		if err := inside(m.Dir, "provides.templates", dir, true); err != nil {
+			return nil, []error{fmt.Errorf("%s: %w", m.ID, err)}
+		}
+		files, _ = filepath.Glob(filepath.Join(m.Dir, filepath.FromSlash(dir), "*.md"))
+	}
+	slices.Sort(files)
+	for _, f := range files {
+		name := strings.TrimSuffix(filepath.Base(f), ".md")
+		b, err := m.ReadFile(path.Join(dir, filepath.Base(f)))
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		t, err := ParseTemplate(name, b)
+		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", m.ID, err))
 			continue
 		}
-		files, _ := filepath.Glob(filepath.Join(m.Dir, filepath.FromSlash(dir), "*.md"))
-		slices.Sort(files)
-		for _, f := range files {
-			name := strings.TrimSuffix(filepath.Base(f), ".md")
-			b, err := m.ReadFile(path.Join(dir, filepath.Base(f)))
-			if err != nil {
-				errs = append(errs, err)
-				continue
-			}
-			t, err := ParseTemplate(name, b)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("%s: %w", m.ID, err))
-				continue
-			}
-			t.Mod = m.ID
-			out = append(out, t)
-		}
+		t.Mod, t.Builtin = m.ID, m.Builtin
+		out = append(out, t)
 	}
 	return out, errs
 }
 
 // FindTemplate picks the template ref names from ts: <mod>:<name>, or a
-// name only one mod has.
+// name only one mod has (a built-in one giving way to a user mod's).
 func FindTemplate(ts []Template, ref string) (Template, error) {
 	modID, name, scoped := strings.Cut(ref, ":")
 	if !scoped {
@@ -437,6 +498,9 @@ func FindTemplate(ts []Template, ref string) (Template, error) {
 		if t.Name == name && (modID == "" || t.Mod == modID) {
 			hits = append(hits, t)
 		}
+	}
+	if len(hits) > 1 {
+		hits = slices.DeleteFunc(hits, func(t Template) bool { return t.Builtin })
 	}
 	switch len(hits) {
 	case 1:
@@ -475,4 +539,60 @@ func (r *Registry) AgentDirs() []AgentDir {
 		}
 	}
 	return out
+}
+
+// Load checks
+
+// DataChecks check the data files only the console can read whole: a
+// theme's colours, an icon set's glyphs, a keymap's action ids. The
+// console package (tui) sets them as it loads, so tm doctor and the Mods
+// tab check what the console would refuse; a kind without one is
+// checked as far as this package can (it parses).
+var DataChecks = map[string]func([]byte) error{}
+
+// CheckData loads every data file of the mod as tm would use it and
+// says what doesn't load, each error naming the kind: a theme, icon
+// set, keymap or layout that doesn't parse or check, a rules file that
+// can't be read, a template that doesn't parse. Nil when all load (and
+// for a mod whose manifest doesn't).
+func (m Mod) CheckData() []error {
+	if m.Manifest == nil {
+		return nil
+	}
+	var errs []error
+	for _, kind := range []string{KindTheme, KindIcons, KindKeymap, KindLayout} {
+		if !m.Has(kind) {
+			continue
+		}
+		data, err := m.Data(kind)
+		if err == nil {
+			switch kind {
+			case KindLayout:
+				_, err = ParseLayout(data)
+			case KindKeymap:
+				_, err = ParseKeymap(data)
+			}
+		}
+		if check := DataChecks[kind]; err == nil && check != nil {
+			err = check(data)
+		}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", kind, err))
+		}
+	}
+	for _, role := range sortedKeys(m.Manifest.Provides.Rules) {
+		if _, err := m.ReadFile(m.Manifest.Provides.Rules[role]); err != nil {
+			errs = append(errs, fmt.Errorf("rules %s: %w", role, err))
+		}
+	}
+	if m.Has(KindTemplates) {
+		ts, terrs := m.templates()
+		for _, err := range terrs {
+			errs = append(errs, fmt.Errorf("templates: %w", err))
+		}
+		if len(ts) == 0 && len(terrs) == 0 {
+			errs = append(errs, fmt.Errorf("templates: %s has no <name>.md", m.Manifest.Provides.Templates))
+		}
+	}
+	return errs
 }

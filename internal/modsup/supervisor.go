@@ -18,7 +18,9 @@ package modsup
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -85,6 +87,11 @@ type Spec struct {
 	Projects []string
 	// Settings are its options, sent in hello.
 	Settings map[string]any
+	// Eager starts the host with the supervisor instead of on its first
+	// event: a bundled mod that draws on the sidebar, whose cells shown
+	// from the last run would otherwise stay stale until something
+	// changes (a lazy host never gets mod.ready's snapshot before).
+	Eager bool
 }
 
 // Status is one supervised mod's state, for the Mods tab, tm mod list and
@@ -195,7 +202,8 @@ func New(o Options) *Supervisor {
 	return s
 }
 
-// Set makes specs the mods that run: a new one starts (lazily), one that
+// Set makes specs the mods that run: a new one starts (lazily unless
+// Eager), one that
 // changed is stopped and started again (which also clears its failure),
 // and one no longer listed is stopped. It returns at once.
 func (s *Supervisor) Set(specs []Spec) {
@@ -218,7 +226,7 @@ func (s *Supervisor) Set(specs []Spec) {
 	}
 	for _, id := range slices.Sorted(maps.Keys(want)) {
 		if _, ok := s.mods[id]; !ok {
-			s.start(want[id], false, old[id])
+			s.start(want[id], want[id].Eager, old[id])
 		}
 	}
 }
@@ -247,6 +255,38 @@ func (s *Supervisor) Restart(id string) bool {
 	r.stop()
 	s.start(r.spec, true, r.done)
 	return true
+}
+
+// CallTool runs agent tool call.Tool of mod id in its host, starting an
+// idle host first, and returns the text the mod's handler gave, or why
+// it didn't: the mod isn't supervised, failed, is restarting, its host
+// ended, ctx ended, or the handler's error (a *modproto.Error).
+func (s *Supervisor) CallTool(ctx context.Context, id string, call modproto.ToolCall) (modproto.ToolResult, error) {
+	s.mu.Lock()
+	r, ok := s.mods[id]
+	s.mu.Unlock()
+	if !ok {
+		return modproto.ToolResult{}, fmt.Errorf("mod %s doesn't run: only an enabled code mod has a host", id)
+	}
+	return r.callTool(ctx, call)
+}
+
+// CallCodeHost runs code host method (modproto.IsCodeHost) of mod id in
+// its host, starting an idle host first, and returns the handler's
+// answer as JSON, or why there is none, as CallTool does.
+func (s *Supervisor) CallCodeHost(ctx context.Context, id, method string, params any) (json.RawMessage, error) {
+	s.mu.Lock()
+	r, ok := s.mods[id]
+	s.mu.Unlock()
+	if !ok {
+		return nil, fmt.Errorf("mod %s doesn't run: only an enabled code mod has a host", id)
+	}
+	var res json.RawMessage
+	err := r.call(ctx, func(c *modproto.Client) (err error) {
+		res, err = c.CodeHost(ctx, method, params)
+		return err
+	})
+	return res, err
 }
 
 // Status lists the supervised mods, by id.

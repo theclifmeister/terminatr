@@ -1,0 +1,19 @@
+{
+  "name": "at the start each thread with a PR gets its checks' cell; a resolved thread drawn before is cleared",
+  "store": { "drawn": ["demo/t-0003"] },
+  "events": [
+    { "name": "mod.ready", "data": { "projects": [
+      { "project": "demo", "needs_you": [], "inbox": [], "ready": [], "threads": [
+        { "id": "t-0001", "title": "Login", "pr_checks": "pass" },
+        { "id": "t-0002", "title": "Build", "pr_checks": "pending" },
+        { "id": "t-0004", "title": "Docs" } ] } ] } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.cell.set", "params": { "column": "ci", "target": { "project": "demo", "thread": "t-0001" }, "spans": [{ "icon": "ci.pass", "role": "good" }] } },
+      { "method": "ui.cell.set", "params": { "column": "ci", "target": { "project": "demo", "thread": "t-0002" }, "spans": [{ "icon": "ci.run", "role": "faint" }] } },
+      { "method": "ui.cell.set", "params": { "column": "ci", "target": { "project": "demo", "thread": "t-0003" }, "spans": null } }
+    ],
+    "store": { "drawn": ["demo/t-0001", "demo/t-0002"] }
+  }
+}

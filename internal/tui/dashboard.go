@@ -657,6 +657,8 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.fail(msg.err)
 		}
 		return m, nil
+	case modCursorMsg:
+		return m, m.cursorSent(msg)
 	case boardMsg:
 		if pv := m.projectPopupView(); pv != nil && pv.slug == msg.slug {
 			if msg.err == nil {
@@ -1121,6 +1123,9 @@ func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 		if cmd, ok := m.detailsKey(k.String()); ok {
 			return cmd
 		}
+	}
+	if c, ok := m.commandFor(k.String()); ok {
+		return m.runCommand(c)
 	}
 	return m.listKey(binds.list.canon(k.String()))
 }

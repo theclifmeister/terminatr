@@ -137,10 +137,12 @@ func TestRunChecksTheFixture(t *testing.T) {
 	}
 	no := []string{}
 	r := m.Run(&Fixture{Grants: &no, Settings: map[string]any{"nope": 1},
-		Events: []Step{{Name: "task.changed"}, {Name: "made.up"}}, Expect: Expect{Calls: []Call{{Method: "ui.nothing"}}}}, "f.json")
+		Events: []Step{{Name: "task.changed"}, {Name: "made.up"}, {Name: ToolStep, Data: json.RawMessage(`{"tool":"lint"}`)}},
+		Expect: Expect{Calls: []Call{{Method: "ui.nothing"}}, Tools: []string{"a", "b"}}}, "f.json")
 	all := strings.Join(r.Problems, "\n")
 	for _, p := range []string{"nope: the mod has no such setting", "task.changed needs the project_read permission",
-		`no event is called "made.up"`, `no method is called "ui.nothing"`} {
+		`no event is called "made.up"`, `no method is called "ui.nothing"`, `the mod offers no tool "lint"`,
+		"2 answers for 1 tool calls"} {
 		if !strings.Contains(all, p) {
 			t.Errorf("problems %q lack %q", r.Problems, p)
 		}
@@ -182,6 +184,27 @@ func TestMatch(t *testing.T) {
 	} {
 		if got := Match(json.RawMessage(c.want), json.RawMessage(c.got)); got != c.ok {
 			t.Errorf("Match(%s, %s) = %v", c.want, c.got, got)
+		}
+	}
+}
+
+// TestExamples: every code mod of examples/mods that has fixtures passes
+// them (mods design §13: kept honest by CI).
+func TestExamples(t *testing.T) {
+	root := filepath.Join("..", "..", "examples", "mods")
+	dirs, _ := filepath.Glob(filepath.Join(root, "*", "tests"))
+	if len(dirs) == 0 {
+		t.Fatal("no example has fixtures")
+	}
+	for _, d := range dirs {
+		res, err := RunDir(filepath.Dir(d))
+		if err != nil {
+			t.Fatalf("%s: %v", d, err)
+		}
+		for _, r := range res {
+			if !r.OK {
+				t.Errorf("%s %s: %q", filepath.Base(filepath.Dir(d)), r.File, r.Problems)
+			}
 		}
 	}
 }

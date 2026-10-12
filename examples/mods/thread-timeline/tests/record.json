@@ -1,0 +1,30 @@
+{
+  "name": "a thread's states are recorded, and the view shows them as marks with a task.show binding",
+  "events": [
+    { "name": "thread.started", "project": "demo",
+      "data": { "project": "demo", "thread": "t-0012", "task": "T12", "agent": "claude" } },
+    { "name": "thread.state", "project": "demo",
+      "data": { "project": "demo", "thread": "t-0012", "task": "T12", "state": "working" } },
+    { "name": "thread.state", "project": "demo",
+      "data": { "project": "demo", "thread": "t-0012", "task": "T12", "state": "working" } },
+    { "name": "thread.state", "project": "demo",
+      "data": { "project": "demo", "thread": "t-0012", "task": "T12", "state": "blocked", "needs_you": "Which port?" } },
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "timeline", "slot": "full", "project": "demo", "width": 100, "height": 30 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set", "params": { "view": "timeline", "options": { "project": "demo" },
+        "widget": { "kind": "stack", "children": [
+          { "kind": "table", "id": "threads", "rows": [
+            { "id": "t-0012",
+              "cells": [[{ "text": "t-0012" }], [{ "text": "T12" }],
+                [{ "icon": "starting" }, { "icon": "working", "role": "good" }, { "icon": "blocked", "role": "warn" }],
+                [{ "text": "blocked 0m", "role": "faint" }]],
+              "actions": [{ "id": "task.show", "target": { "project": "demo", "task": "T12" } }] } ] },
+          { "kind": "bars", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3] }
+        ] } } }
+    ],
+    "store": { "log": { "demo": { "t-0012": { "task": "T12", "changes": [{ "state": "started" }, { "state": "working" }, { "state": "blocked" }] } } } }
+  }
+}

@@ -78,6 +78,8 @@ type Host struct {
 	hello    *modproto.Hello
 	ready    bool // hello answered
 	handlers map[string][]goja.Callable
+	tools    map[string]goja.Callable // $.tool.handle's, by tool id
+	codehost map[string]goja.Callable // $.codehost.handle's, by method name
 	nextID   int64
 	pending  map[int64]pendingCall
 	timers   map[int64]*timer
@@ -114,6 +116,8 @@ func Run(opt Options) int {
 		vm:        goja.New(),
 		prog:      prog,
 		handlers:  map[string][]goja.Callable{},
+		tools:     map[string]goja.Callable{},
+		codehost:  map[string]goja.Callable{},
 		pending:   map[int64]pendingCall{},
 		timers:    map[int64]*timer{},
 		unhandled: map[*goja.Promise]struct{}{},
@@ -154,9 +158,13 @@ func (h *Host) read() {
 			h.loop.post(func() { h.response(m) })
 		case m.IsRequest():
 			switch m.Method {
-			case modproto.MethodHello, modproto.MethodEvent, modproto.MethodShutdown, modproto.MethodStats:
+			case modproto.MethodHello, modproto.MethodEvent, modproto.MethodShutdown, modproto.MethodStats, modproto.MethodToolCall:
 				h.loop.post(func() { h.request(m) })
 			default:
+				if modproto.IsCodeHost(m.Method) {
+					h.loop.post(func() { h.request(m) })
+					break
+				}
 				_ = h.conn.ReplyError(*m.ID, modproto.CodeMethodNotFound, "unknown method "+m.Method)
 			}
 		}
@@ -180,6 +188,17 @@ func (h *Host) request(m *modproto.Message) {
 			return
 		}
 		h.dispatch(id, ev)
+	case modproto.MethodToolCall:
+		if !h.ready {
+			_ = h.conn.ReplyError(id, modproto.CodeNotReady, "tool.call before hello")
+			return
+		}
+		var call modproto.ToolCall
+		if err := json.Unmarshal(m.Params, &call); err != nil || call.Tool == "" {
+			_ = h.conn.ReplyError(id, modproto.CodeInvalidParams, "tool.call needs a tool")
+			return
+		}
+		h.callTool(id, call)
 	case modproto.MethodShutdown:
 		_ = h.conn.Reply(id, struct{}{})
 		h.exit(modproto.ExitOK)
@@ -190,6 +209,12 @@ func (h *Host) request(m *modproto.Message) {
 			HeapInuse: ms.HeapInuse, Sys: ms.Sys, Goroutines: runtime.NumGoroutine(),
 			Timers: len(h.timers), Pending: len(h.pending),
 		})
+	default: // a code host method (read checked it)
+		if !h.ready {
+			_ = h.conn.ReplyError(id, modproto.CodeNotReady, m.Method+" before hello")
+			return
+		}
+		h.callCodeHost(id, m.Method, m.Params)
 	}
 }
 
@@ -241,7 +266,182 @@ func (h *Host) onHello(id int64, params json.RawMessage) {
 		LoadMS:   ms(time.Since(start)),
 		StartMS:  ms(time.Since(h.opt.Started)),
 		PID:      os.Getpid(),
+		Tools:    h.toolNames(),
+		CodeHost: sortedKeys(h.codehost),
 	})
+}
+
+func (h *Host) toolNames() []string { return sortedKeys(h.tools) }
+
+func sortedKeys(m map[string]goja.Callable) []string {
+	names := make([]string, 0, len(m))
+	for n := range m {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// callTool runs the handler of one of the mod's agent tools with the
+// call's input and, second, {tool, project, role, thread, session}, and
+// answers with what it returned once a returned promise has settled: a
+// string as it is, anything else as JSON, nothing as "". A handler that
+// throws or rejects answers CodeToolFailed with its message, which the
+// agent reads as the tool's error.
+func (h *Host) callTool(id int64, call modproto.ToolCall) {
+	fn, ok := h.tools[call.Tool]
+	if !ok {
+		_ = h.conn.ReplyError(id, modproto.CodeNoTool, "the mod handles no tool "+call.Tool)
+		return
+	}
+	h.answer(id, "tool:"+call.Tool, modproto.CodeToolFailed, func() (goja.Value, error) {
+		input := call.Input
+		if len(input) == 0 || string(input) == "null" {
+			input = json.RawMessage("{}")
+		}
+		arg, err := h.fromJSON(input)
+		if err != nil {
+			return nil, err
+		}
+		meta := h.vm.NewObject()
+		_ = meta.Set("tool", call.Tool)
+		_ = meta.Set("project", call.Project)
+		_ = meta.Set("role", call.Role)
+		_ = meta.Set("thread", call.Thread)
+		_ = meta.Set("session", call.Session)
+		return fn(goja.Undefined(), arg, meta)
+	}, func(v goja.Value) error {
+		text, err := h.toolText(v)
+		if err != nil {
+			return errors.New("its answer is not text or JSON: " + err.Error())
+		}
+		return h.conn.Reply(id, modproto.ToolResult{Text: text})
+	})
+}
+
+// callCodeHost runs the handler of code host method m.Method
+// ($.codehost.handle) with its params and answers with what it returned,
+// as JSON (nothing as null), once a returned promise has settled. A
+// handler that throws or rejects answers CodeHandlerFailed with its
+// message; the server reads it as a failed call of the host.
+func (h *Host) callCodeHost(id int64, method string, params json.RawMessage) {
+	name := strings.TrimPrefix(method, modproto.CodeHostPrefix)
+	fn, ok := h.codehost[name]
+	if !ok {
+		_ = h.conn.ReplyError(id, modproto.CodeNoHandler, "the mod handles no code host method "+name)
+		return
+	}
+	h.answer(id, method, modproto.CodeHandlerFailed, func() (goja.Value, error) {
+		if len(params) == 0 {
+			params = json.RawMessage("{}")
+		}
+		arg, err := h.fromJSON(params)
+		if err != nil {
+			return nil, err
+		}
+		return fn(goja.Undefined(), arg)
+	}, func(v goja.Value) error {
+		b, err := h.toJSON(v)
+		if err != nil {
+			return errors.New("its answer is not JSON: " + err.Error())
+		}
+		if b == nil || (v != nil && goja.IsNull(v)) {
+			b = json.RawMessage("null")
+		}
+		return h.conn.Reply(id, b)
+	})
+}
+
+// answer runs a handler (call) in a slice of its own, under the budget,
+// and answers request id once with reply of what it returned, after a
+// returned promise has settled. A handler that throws or rejects, or
+// whose answer reply refuses, answers failCode with the message.
+func (h *Host) answer(id int64, where string, failCode int, call func() (goja.Value, error), reply func(goja.Value) error) {
+	answered := false
+	bad := func(msg string) {
+		if answered {
+			return
+		}
+		answered = true
+		_ = h.conn.ReplyError(id, failCode, clip(msg))
+	}
+	ok1 := func(v goja.Value) {
+		if answered {
+			return
+		}
+		if err := reply(v); err != nil {
+			bad(err.Error())
+			return
+		}
+		answered = true
+	}
+	err := h.slice(where, func() error {
+		v, err := call()
+		if err != nil {
+			return err
+		}
+		p, isPromise := v.Export().(*goja.Promise)
+		if !isPromise {
+			ok1(v)
+			return nil
+		}
+		then, _ := goja.AssertFunction(h.vm.ToValue(p).ToObject(h.vm).Get("then"))
+		onOK := h.vm.ToValue(func(c goja.FunctionCall) goja.Value { ok1(c.Argument(0)); return goja.Undefined() })
+		onBad := h.vm.ToValue(func(c goja.FunctionCall) goja.Value {
+			msg, stack := describeValue(c.Argument(0))
+			h.failed(where, modproto.KindRejected, msg, stack, 0)
+			bad(message(c.Argument(0), msg))
+			return goja.Undefined()
+		})
+		_, err = then(h.vm.ToValue(p), onOK, onBad)
+		return err
+	})
+	if h.stopped {
+		return
+	}
+	if err != nil {
+		msg, _ := describe(err)
+		var ex *goja.Exception
+		if errors.As(err, &ex) {
+			msg = message(ex.Value(), msg)
+		}
+		bad(msg)
+	}
+}
+
+// message is a thrown Error's message, what the agent reads; else def.
+func message(v goja.Value, def string) string {
+	if o, ok := v.(*goja.Object); ok {
+		if m := o.Get("message"); m != nil && !goja.IsUndefined(m) && m.String() != "" {
+			return m.String()
+		}
+	}
+	return def
+}
+
+// toolText is a tool handler's answer as the agent's text.
+func (h *Host) toolText(v goja.Value) (string, error) {
+	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
+		return "", nil
+	}
+	if s, ok := v.Export().(string); ok {
+		return clipTool(s), nil
+	}
+	b, err := h.toJSON(v)
+	if err != nil {
+		return "", err
+	}
+	return clipTool(string(b)), nil
+}
+
+// maxToolText caps a tool's answer, as the agent gets it.
+const maxToolText = 64 << 10
+
+func clipTool(s string) string {
+	if len(s) > maxToolText {
+		return s[:maxToolText] + "…"
+	}
+	return s
 }
 
 func (h *Host) events() []string {

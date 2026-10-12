@@ -49,6 +49,37 @@ func TestSetTrees(t *testing.T) {
 	}
 }
 
+func TestSectionTrees(t *testing.T) {
+	s := New()
+	for _, tr := range []Tree{
+		{Project: "alpha", Tree: text("project")},
+		{Project: "alpha", Task: "T1", Tree: text("task")},
+		{Project: "alpha", Thread: "t-0001", Tree: text("thread")},
+		{Project: "alpha", Task: "T1", Tree: text("task2")},
+	} {
+		if err := s.Set("m", "s", tr, 10); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := s.Trees("m", "s")
+	if len(got) != 3 || got[2].Tree.Text != "task2" || !got[0].For("alpha", "", "") {
+		t.Fatalf("trees %+v", got)
+	}
+	s.Set("m", "s", Tree{Project: "alpha", Task: "T1"}, 0)
+	if got := s.Trees("m", "s"); len(got) != 2 || got[1].Thread != "t-0001" {
+		t.Fatalf("after clearing the task's %+v", got)
+	}
+	// A section shown for another row is another view on show.
+	opened, _ := s.Show(1, []Shown{{Mod: "m", View: "s", Slot: "details.section", Project: "alpha", Task: "T1"}})
+	if len(opened) != 1 {
+		t.Fatalf("opened %+v", opened)
+	}
+	opened, closed := s.Show(1, []Shown{{Mod: "m", View: "s", Slot: "details.section", Project: "alpha", Task: "T2"}})
+	if len(opened) != 1 || len(closed) != 1 || closed[0].Task != "T1" || opened[0].Task != "T2" {
+		t.Fatalf("opened %+v closed %+v", opened, closed)
+	}
+}
+
 func TestOpenNeedsHumanInput(t *testing.T) {
 	s := New()
 	now := clock(s)

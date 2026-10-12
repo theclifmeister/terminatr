@@ -6,7 +6,8 @@ package server
 // them (mod.views), saying which they show: the server turns that into
 // view.opened and view.closed for the mod. A human's key or click in a
 // view reaches the mod as ui.key or ui.click (mod.view.input), and only
-// then may the mod ask for one of its views to open ($.ui.view.open).
+// then may the mod ask for one of its views to open ($.ui.view.open);
+// where a view's cursor went reaches it as ui.cursor.
 // A view whose host failed shows that, never its stale trees, and a
 // restarted host starts with no trees and gets view.opened again for
 // the views on show.
@@ -15,6 +16,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"slices"
 
@@ -26,6 +28,8 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modsup"
 	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/widget"
 )
 
@@ -62,6 +66,8 @@ func (s *Server) modViewSet(_ context.Context, c *modbroker.Call) (any, error) {
 		Widget  json.RawMessage `json:"widget"`
 		Options *struct {
 			Project string `json:"project"`
+			Task    string `json:"task"`
+			Thread  string `json:"thread"`
 			Count   *int   `json:"count"`
 			Height  int    `json:"height"`
 		} `json:"options"`
@@ -69,7 +75,8 @@ func (s *Server) modViewSet(_ context.Context, c *modbroker.Call) (any, error) {
 	if err := c.Decode(&a); err != nil {
 		return nil, err
 	}
-	if _, ok := declaredView(c.Mod, a.View); !ok {
+	v, ok := declaredView(c.Mod, a.View)
+	if !ok {
 		return nil, modbroker.BadParams("ui.view.set: %s declares no view %q in [provides].views", c.Mod.ID, a.View)
 	}
 	t := modview.Tree{}
@@ -79,7 +86,10 @@ func (s *Server) modViewSet(_ context.Context, c *modbroker.Call) (any, error) {
 				return nil, err
 			}
 		}
-		t.Project, t.Count, t.Height = o.Project, o.Count, o.Height
+		if err := checkSectionTarget(v.Slot, o.Project, o.Task, o.Thread); err != nil {
+			return nil, modbroker.BadParams("ui.view.set: %v", err)
+		}
+		t.Project, t.Task, t.Thread, t.Count, t.Height = o.Project, o.Task, o.Thread, o.Count, o.Height
 	}
 	if len(a.Widget) > 0 && string(a.Widget) != "null" {
 		w, err := widget.Decode(a.Widget)
@@ -98,6 +108,29 @@ func (s *Server) modViewSet(_ context.Context, c *modbroker.Call) (any, error) {
 	return nil, nil
 }
 
+// checkSectionTarget says why a view of slot can't be for task or thread thr
+// of project: only a details.section is for one of them, one at a time,
+// of a project named, by its ref (T12, t-0003).
+func checkSectionTarget(slot, project, task, thr string) error {
+	switch {
+	case task == "" && thr == "":
+		return nil
+	case slot != mod.SlotDetailsSection:
+		return fmt.Errorf("only a %s is for a task or a thread", mod.SlotDetailsSection)
+	case project == "":
+		return errors.New("a task or a thread needs its project")
+	case task != "" && thr != "":
+		return errors.New("a task or a thread, not both")
+	case task != "":
+		if n, ok := tasks.ParseRef(task); !ok || task != fmt.Sprintf("T%d", n) {
+			return fmt.Errorf("task %q isn't a task's ref (T12)", task)
+		}
+	case !thread.ValidID(thr):
+		return fmt.Errorf("thread %q isn't a thread's id (t-0003)", thr)
+	}
+	return nil
+}
+
 // ui.view.open {view}: show one of the mod's views on the console of the
 // human input its handler runs for, once; refused otherwise.
 func (s *Server) modViewOpen(_ context.Context, c *modbroker.Call) (any, error) {
@@ -107,8 +140,12 @@ func (s *Server) modViewOpen(_ context.Context, c *modbroker.Call) (any, error) 
 	if err := c.Decode(&a); err != nil {
 		return nil, err
 	}
-	if _, ok := declaredView(c.Mod, a.View); !ok {
+	v, ok := declaredView(c.Mod, a.View)
+	if !ok {
 		return nil, modbroker.BadParams("ui.view.open: %s declares no view %q in [provides].views", c.Mod.ID, a.View)
+	}
+	if mod.IsSection(v.Slot) {
+		return nil, modbroker.BadParams("ui.view.open: %s is a panel section: it shows with its panel, never opened", a.View)
 	}
 	if !s.modViewStore().Open(c.Mod.ID, a.View) {
 		return nil, modbroker.Denied("ui.view.open works only in a handler for a human input (a key or a click in one of %s's views), once", c.Mod.ID)
@@ -173,7 +210,8 @@ func (s *Server) modViews(p proto.ModViewsParams, pid int, c caller.Caller) (any
 			return true
 		}
 		d, ok := declaredView(mods[i], v.View)
-		return !ok || d.Slot != v.Slot || v.Project != "" && !mods[i].Runs(v.Project)
+		return !ok || d.Slot != v.Slot || v.Project != "" && !mods[i].Runs(v.Project) ||
+			checkSectionTarget(v.Slot, v.Project, v.Task, v.Thread) != nil
 	})
 	opened, closed := store.Show(pid, shown)
 	s.publishViews(opened, closed)
@@ -188,7 +226,7 @@ func (s *Server) publishViews(opened, closed []modview.Shown) {
 	}
 	pub := func(name string, list []modview.Shown) {
 		for _, v := range list {
-			s.modEv.bus.PublishTo(v.Mod, name, v.Project, modbus.View{View: v.View, Slot: v.Slot, Project: v.Project, Width: v.Width, Height: v.Height})
+			s.modEv.bus.PublishTo(v.Mod, name, v.Project, modbus.View{View: v.View, Slot: v.Slot, Project: v.Project, Task: v.Task, Thread: v.Thread, Width: v.Width, Height: v.Height})
 		}
 	}
 	pub(modbus.ViewClosed, closed)
@@ -209,7 +247,8 @@ func (s *Server) modViewsRestarted(id string) {
 }
 
 // modViewInput is mod.view.input: a human's declared key or click in a
-// mod's view, to the mod as ui.key or ui.click. It lets the mod open a
+// mod's view, to the mod as ui.key or ui.click, or where its cursor
+// went, as ui.cursor. A key or a click lets the mod open a
 // view on this console for a while (modview.InputWindow).
 func (s *Server) modViewInput(p proto.ModViewInputParams, pid int, c caller.Caller) (any, *proto.Error) {
 	if c.IsAgent() {
@@ -228,13 +267,15 @@ func (s *Server) modViewInput(p proto.ModViewInputParams, pid int, c caller.Call
 	name := modbus.UIClick
 	switch p.Kind {
 	case widget.EventClick:
+	case widget.EventCursor:
+		name = modbus.UICursor
 	case widget.EventKey:
 		name = modbus.UIKey
 		if p.Key == "" || len(p.Key) > 16 {
 			return nil, proto.Errorf(proto.ErrBadParams, "no key")
 		}
 	default:
-		return nil, proto.Errorf(proto.ErrBadParams, "kind %q is not key or click", p.Kind)
+		return nil, proto.Errorf(proto.ErrBadParams, "kind %q is not key, click or cursor", p.Kind)
 	}
 	if len(p.Widget) > 64 || len(p.Row) > 256 {
 		return nil, proto.Errorf(proto.ErrBadParams, "widget or row id too long")
@@ -246,7 +287,11 @@ func (s *Server) modViewInput(p proto.ModViewInputParams, pid int, c caller.Call
 	if p.Project != "" {
 		in.Target = &modbus.Target{Project: p.Project}
 	}
-	s.modViewStore().Input(p.Mod, pid, p.Project)
+	// The cursor moves with a publish too: only a key or a click lets
+	// the mod open a view.
+	if name != modbus.UICursor {
+		s.modViewStore().Input(p.Mod, pid, p.Project)
+	}
 	if s.modEv != nil {
 		s.modEv.bus.PublishTo(p.Mod, name, p.Project, in)
 	}

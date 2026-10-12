@@ -1,0 +1,24 @@
+{
+  "name": "the details panel shows a thread: its latest report, at the bottom",
+  "answers": [
+    { "method": "report.get", "params": { "project": "demo", "thread": "t-0003" },
+      "result": { "project": "demo", "thread": "t-0003", "task": "T12", "report": 2,
+        "sections": { "report": "Fixed the login.\nMore below.", "next": ["Review the PR"], "check": ["Log in twice"] } } }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "last", "slot": "details.section", "project": "demo", "thread": "t-0003", "width": 58, "height": 20 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "report.get", "params": { "project": "demo", "thread": "t-0003" } },
+      { "method": "ui.view.set",
+        "params": { "view": "last", "options": { "project": "demo", "thread": "t-0003" },
+          "widget": { "kind": "stack", "children": [
+            { "kind": "text", "lines": [[{ "text": "report 2", "role": "head" }, { "text": "  Fixed the login." }]] },
+            { "kind": "list", "id": "next", "rows": [{ "id": "0", "spans": [{ "text": "next  ", "role": "faint" }, { "text": "Review the PR" }] }] },
+            { "kind": "text", "text": "1 way to check it", "role": "good" }
+          ] } } }
+    ]
+  }
+}

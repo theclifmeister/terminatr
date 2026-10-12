@@ -1,0 +1,13 @@
+# Built into tm (mods design §11): the unicode icon set, [ui] icons = "unicode".
+# Copy this folder, change its id and name, and tm mod install it to
+# start your own set (or write one with base = "unicode" and only the glyphs
+# you change).
+id          = "unicode-icons"
+name        = "Unicode icons"
+version     = "1.0.0"
+api         = "1.0"
+description = "Plain Unicode glyphs, for any font."
+authors     = ["terminatr"]
+
+[provides]
+icons = "icons.toml"

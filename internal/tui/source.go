@@ -73,9 +73,14 @@ type Data struct {
 	// enabled code mods' hosts as the mod supervisor has them (mods
 	// design §8: idle, starting, running, backoff, failed), by id; nil
 	// when the server doesn't say (mod.hosts).
-	Mods     []mod.Mod
-	ModsErr  string
+	Mods    []mod.Mod
+	ModsErr string
+	// ModData says, by mod id, which of the mod's data files don't load
+	// (mod.CheckData), one per line.
+	ModData  map[string]string
 	ModHosts map[string]proto.ModHost
+	// ModCommands are the enabled code mods' commands (mod.Registry.Commands).
+	ModCommands []mod.ModCommand
 	// NoMods: the server runs in safe mode (tm --no-mods): no user mod
 	// runs (mod.hosts).
 	NoMods bool
@@ -162,6 +167,13 @@ type Source interface {
 	SetSetting(table, key string, value any) error
 	// SetRepo adds or removes one of a project's repositories.
 	SetRepo(slug, path string, add bool) error
+	// Templates are the task templates of the mods that run for the
+	// project (mod.Registry.Templates): what the new-task prompt offers.
+	Templates(slug string) []mod.Template
+	// AddTask adds a task to the project as the human, with template
+	// tpl laid on it when not nil (tm task add --template), and returns
+	// its ref (T12). It is refused when tm runs inside an agent.
+	AddTask(slug, title string, tpl *mod.Template) (string, error)
 	// Agents lists the installed agents: the ones tm can run.
 	Agents() []string
 	// ModsNote names the agents the Agent mod setting is for and the version
@@ -257,6 +269,8 @@ type Source interface {
 	// mod's view to the mod (mod.view.input).
 	ModViews(shown []modview.Shown) (proto.ModViewsResult, error)
 	ModViewInput(p proto.ModViewInputParams) error
+	// ModCommand runs one of a mod's commands (mod.command).
+	ModCommand(p proto.ModCommandParams) error
 }
 
 // Review is what the user needs to review a task: how to check it (the
@@ -336,7 +350,7 @@ func (s *ServerSource) Load() Data {
 	if reg, err := mod.Load(cfg); err != nil {
 		d.ModsErr = err.Error()
 	} else {
-		d.Mods = reg.Mods
+		d.Mods, d.ModData, d.ModCommands = reg.Mods, modData(reg.Mods), reg.Commands()
 	}
 	if d.ServerOK {
 		var hosts proto.ModHostsResult
@@ -587,6 +601,45 @@ func (s *ServerSource) Lifecycle(slug, verb string) (string, error) {
 	return "", fmt.Errorf("unknown project action %q", verb)
 }
 
+func (s *ServerSource) Templates(slug string) []mod.Template {
+	cfg, err := config.Load()
+	if err != nil {
+		cfg = nil
+	}
+	reg, err := mod.Load(cfg)
+	if err != nil {
+		return nil
+	}
+	ts, _ := reg.Templates(slug) // tm doctor and the Mods tab say which don't load
+	return ts
+}
+
+func (s *ServerSource) AddTask(slug, title string, tpl *mod.Template) (string, error) {
+	if s.Caller.IsAgent() {
+		return "", errHumanOnly
+	}
+	p, err := project.Open(slug)
+	if err != nil {
+		return "", err
+	}
+	it := tasks.NewTask{Title: title}
+	if tpl != nil {
+		it.Title, it.Notes, it.Steps = tpl.Apply(title)
+	}
+	res, err := p.Tasks().Add(s.Caller, []tasks.NewTask{it})
+	switch {
+	case err != nil:
+		return "", err
+	case len(res) != 1:
+		return "", errors.New("the task wasn't added")
+	case res[0].Result == "failed":
+		return "", errors.New(res[0].Error)
+	case res[0].Result == "existing":
+		return res[0].ID, fmt.Errorf("%s %s is there already", res[0].ID, oneLine(res[0].Title))
+	}
+	return res[0].ID, nil
+}
+
 func (s *ServerSource) SetRepo(slug, path string, add bool) error {
 	if s.Caller.IsAgent() {
 		return errHumanOnly
@@ -799,6 +852,10 @@ func (s *ServerSource) ModViewInput(p proto.ModViewInputParams) error {
 	return s.call(proto.MethodModViewInput, p, nil)
 }
 
+func (s *ServerSource) ModCommand(p proto.ModCommandParams) error {
+	return s.call(proto.MethodModCommand, p, nil)
+}
+
 func (s *ServerSource) RestartMod(id string) error {
 	if s.Caller.IsAgent() {
 		return mod.ErrHumanOnly
@@ -981,4 +1038,27 @@ func coordinatorAgent(cfg *config.Config, flag string, safety config.Safety) (na
 		}
 	}
 	return name, model, nil
+}
+
+// modData are the mods' data files that don't load, by mod id
+// (Data.ModData): of the mods that load, not the built-in ones, which
+// tests check.
+func modData(mods []mod.Mod) map[string]string {
+	var out map[string]string
+	for _, md := range mods {
+		if md.Builtin || md.State != mod.Enabled && md.State != mod.Disabled {
+			continue
+		}
+		if errs := md.CheckData(); len(errs) > 0 {
+			lines := make([]string, len(errs))
+			for i, e := range errs {
+				lines[i] = oneLine(e.Error())
+			}
+			if out == nil {
+				out = map[string]string{}
+			}
+			out[md.ID] = strings.Join(lines, "\n")
+		}
+	}
+	return out
 }

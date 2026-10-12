@@ -553,11 +553,31 @@ type CallerInfo struct {
 	Thread  string `json:"thread,omitempty"`
 }
 
-// MethodToolRun runs one of a thread's tools (report, status, steps,
-// done; docs/SPEC.md §8.6) for `tm mcp`, which serves them to agents
-// that speak MCP. The server tells the thread from the peer pid, as for
-// cli.run, and answers like POST /v1/tools/{name} on the mod socket.
+// MethodToolRun runs one of a session's tools (a thread's report,
+// status, steps and done, and the tools user mods offer; docs/SPEC.md
+// §8.6) for `tm mcp`, which serves them to agents that speak MCP. The
+// server tells the session from the peer pid, as for cli.run, and
+// answers like POST /v1/tools/{name} on the mod socket.
 const MethodToolRun = "tool.run"
+
+// MethodToolList lists the tools of the caller's session, found from
+// the peer pid, as GET /v1/tools on the mod socket does: no params,
+// answered with ToolListResult.
+const MethodToolList = "tool.list"
+
+// ToolDef is a tool as an agent is given it: its name, description and
+// input as a JSON schema (MCP's tools/list shape, and what Claude's
+// $.tool.register takes).
+type ToolDef struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	InputSchema map[string]any `json:"inputSchema"`
+}
+
+// ToolListResult is the answer of tool.list and GET /v1/tools.
+type ToolListResult struct {
+	Tools []ToolDef `json:"tools"`
+}
 
 // ToolRunParams are the params of tool.run: the tool and its input as
 // the model gave it (a JSON object).
@@ -739,15 +759,41 @@ type ModView struct {
 // The view states of ModView.
 const ModViewFailed = "failed"
 
+// MethodModCommand runs one of a mod's commands (mods design §2 tier 4):
+// the human's key or ≡ menu entry on a console, or tm mod run. The mod
+// gets command.run. The human's: an agent is refused.
+const MethodModCommand = "mod.command"
+
+// ModCommandParams are the params of mod.command: the mod, its command,
+// the project it runs in ("" for none) and the row selected then.
+// Console says it comes from a console's key or menu, which lets the
+// mod open one of its views there (as a key in its view does).
+type ModCommandParams struct {
+	Mod       string     `json:"mod"`
+	Command   string     `json:"command"`
+	Project   string     `json:"project,omitempty"`
+	Selection *ModTarget `json:"selection,omitempty"`
+	Console   bool       `json:"console,omitempty"`
+}
+
+// ModTarget is a row a mod is told of: a project, task, thread or
+// session (modbus.Target).
+type ModTarget struct {
+	Project string `json:"project,omitempty"`
+	Task    string `json:"task,omitempty"`
+	Thread  string `json:"thread,omitempty"`
+	Session string `json:"session,omitempty"`
+}
+
 // MethodModViewInput sends a human's key or click in a mod's view to
 // the mod, as ui.key or ui.click (mods design §6): only the keys the mod
-// declared, and clicks on its rows and key hints. The human's: an
-// agent is refused.
+// declared, and clicks on its rows and key hints; and where the cursor
+// went, as ui.cursor. The human's: an agent is refused.
 const MethodModViewInput = "mod.view.input"
 
 // ModViewInputParams are the params of mod.view.input: Kind is
-// widget.EventKey or widget.EventClick, Widget the focused (or clicked)
-// list or keys widget, Row the row under its cursor.
+// widget.EventKey, widget.EventClick or widget.EventCursor, Widget the
+// focused (or clicked) list or keys widget, Row the row under its cursor.
 type ModViewInputParams struct {
 	Mod     string `json:"mod"`
 	View    string `json:"view"`

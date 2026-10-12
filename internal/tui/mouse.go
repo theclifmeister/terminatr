@@ -393,7 +393,7 @@ func pressItem(label, key string) menuItem {
 
 // dashItems are the ≡ menu's items: every action of the keys table that
 // has a menu entry, in the table's order, each pressing its bound key,
-// then the mods' full views.
+// then the mods' full views and commands (modcommands.go).
 func (m *dash) dashItems() []menuItem {
 	var out []menuItem
 	for _, a := range actions {
@@ -401,7 +401,8 @@ func (m *dash) dashItems() []menuItem {
 			out = append(out, pressItem(a.menu, boundKey(a.keys[0])))
 		}
 	}
-	return append(out, m.fullItems()...)
+	out = append(out, m.fullItems()...)
+	return append(out, m.commandItems()...)
 }
 
 // enterWord is what enter does on r (attach, open), "" nothing.
@@ -500,6 +501,8 @@ type menuView struct {
 	items []menuItem
 	sel   int
 	at    [2]int
+	// centred: it opens in the middle (a menu opened by a key), not at.
+	centred bool
 }
 
 // openMenu opens a menu with its top left corner at body cell (x, y).
@@ -568,5 +571,9 @@ func (mv *menuView) box() box {
 	if title == "" {
 		title = "Menu"
 	}
-	return box{title: title, body: lines, sel: mv.sel, hits: hits, at: &mv.at, keys: keys, width: w + 4}
+	at := &mv.at
+	if mv.centred {
+		at = nil
+	}
+	return box{title: title, body: lines, sel: mv.sel, hits: hits, at: at, keys: keys, width: w + 4}
 }

@@ -116,12 +116,14 @@ func (b *Broker) Answer(method string, params json.RawMessage) (json.RawMessage,
 		} else {
 			b.files[p.Path] = p.Text
 		}
-	case "projects.list", "tasks.list", "actions.list":
+	case "projects.list", "tasks.list", "actions.list", "memory.list":
 		return json.RawMessage("[]"), nil
 	case "actions.available":
 		return json.RawMessage("false"), nil
 	case "project.get":
 		return nil, &modproto.Error{Code: modproto.CodeInternal, Message: fmt.Sprintf("no project %q: the fixture answers project.get", p.Slug)}
+	case "memory.read":
+		return nil, &modproto.Error{Code: modproto.CodeNotFound, Message: "no memory file: the fixture answers memory.read"}
 	case "http.fetch", "process.run":
 		return nil, &modproto.Error{Code: modproto.CodeInternal, Message: "the fixture has no answer for " + method}
 	}

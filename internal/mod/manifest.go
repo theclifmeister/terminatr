@@ -22,6 +22,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/theclifmeister/terminatr/internal/codehost"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/update"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
@@ -53,6 +55,17 @@ type Provides struct {
 	Main    string   `toml:"main"`
 	Columns []Column `toml:"columns"`
 	Views   []View   `toml:"views"`
+	// Tools are tools the mod offers agents, through the agent mod and
+	// tm mcp; its code answers each call ($.tool.handle).
+	Tools []Tool `toml:"tools"`
+	// CodeHost is the code host kind the mod serves ("gitlab", mods
+	// design §2 tier 5): its code answers the codehost.* methods
+	// ($.codehost.handle) for the projects whose code_host names it. It
+	// runs the host's CLI, so it needs the commands permission.
+	CodeHost string `toml:"code_host"`
+	// Commands are what the human can run from the dashboard (a key, a
+	// ≡ menu entry) or tm mod run; its code gets command.run.
+	Commands []Command `toml:"commands"`
 	// Data files: a theme, an icon set, a keymap, a layout (.toml).
 	Theme  string `toml:"theme"`
 	Icons  string `toml:"icons"`
@@ -65,7 +78,59 @@ type Provides struct {
 	// Templates and Agents are folders: task templates, agent manifests.
 	Templates string `toml:"templates"`
 	Agents    string `toml:"agents"`
+	// Guard are guard rules the mod adds (mods design §7, Tighten only).
+	Guard []GuardRule `toml:"guard"`
 }
+
+// GuardRule is a guard rule a mod adds to the core's (docs/SPEC.md
+// §8.6, Guard): it only refuses. It names commands a shell tool may not
+// run and files no file tool may write or read, with the sentence the
+// agent reads; the guard serves it labelled with the mod (mod:<mod
+// id>.<rule id>). Nothing in it can turn a core rule off: a manifest
+// with a key a rule doesn't have is invalid.
+//
+//	[[provides.guard]]
+//	id = "no-destroy"
+//	commands = ["terraform destroy", "kubectl delete namespace*"]
+//	writes = ["~/infra/prod"]
+//	message = "infrastructure is the human's to change. Say what you need in your report."
+type GuardRule struct {
+	ID string `toml:"id"`
+	// Commands are the commands refused, each words: the command's name
+	// (as typed, without its folder), then words its arguments include in
+	// this order, others between them allowed. A word ending in * matches
+	// any word it starts.
+	Commands []string `toml:"commands"`
+	// Writes are the files and folders no write or patch tool writes in,
+	// Reads those no read or glob tool reads: absolute, or from ~/.
+	Writes []string `toml:"writes"`
+	Reads  []string `toml:"reads"`
+	// Roles are the sessions it guards: thread, coordinator; empty for
+	// both.
+	Roles []string `toml:"roles"`
+	// Message is what the agent reads when the rule refuses a call: why,
+	// and what to do instead.
+	Message string `toml:"message"`
+}
+
+// For says whether the rule guards a session of role.
+func (g GuardRule) For(role string) bool { return len(g.Roles) == 0 || slices.Contains(g.Roles, role) }
+
+// guardRuleKeys are the keys a [[provides.guard]] rule may have.
+var guardRuleKeys = []string{"id", "commands", "writes", "reads", "roles", "message"}
+
+// Limits of a mod's guard rules.
+const (
+	MaxGuardRules      = 32
+	MaxGuardPatterns   = 32
+	MaxGuardMessageLen = 400
+)
+
+// SafetyKeys are config.toml's safety settings (mods design §7, The
+// rule): only a human call changes them, so a manifest that names one
+// as a key anywhere (a setting's name included) but a tool's input
+// schema is invalid. A mod may tighten, never loosen.
+var SafetyKeys = []string{"yolo", "guard", "guard_off", "merge", "coordinator_merges", "complete_tasks", "start_threads", "models", "parallel_threads", "coordinator_approves"}
 
 // Column is a column a code mod publishes cells into, named
 // <mod id>.<column id> in layouts.
@@ -83,12 +148,139 @@ type View struct {
 	Slot  string `toml:"slot"`
 }
 
-// View slots (mods design §6).
+// Command is a command of a code mod (mods design §2, tier 4): the
+// human runs it with its key on the dashboard, from the ≡ menu's Mods
+// group or with tm mod run <mod> <id>, and the mod gets command.run.
+// It is named <mod id>:<command id> (CommandName).
+type Command struct {
+	ID    string `toml:"id"`
+	Title string `toml:"title"`
+	// Key is its key on the dashboard's list, "" for none. A key the
+	// core (or a mod enabled earlier) has is a key conflict: the command
+	// keeps its menu entry and tm mod run.
+	Key string `toml:"key"`
+	// Menu false leaves it out of the ≡ menu.
+	Menu *bool `toml:"menu"`
+}
+
+// InMenu says whether the command has a ≡ menu entry.
+func (c Command) InMenu() bool { return c.Menu == nil || *c.Menu }
+
+// CommandName is "<mod>:<command>", how the Mods tab, the help and tm
+// mod run's messages name a command.
+func CommandName(mod, cmd string) string { return mod + ":" + cmd }
+
+// Limits of a mod's commands.
 const (
-	SlotProjectTab    = "project.tab"
-	SlotDashboardCard = "dashboard.card"
-	SlotFull          = "full"
+	MaxCommands     = 16
+	MaxCommandTitle = 48
 )
+
+// LockedCommandKeys are keys no command takes: the escape hatches (esc,
+// ctrl+c, the prefix commands d, q and r), the area keys and the
+// sidebar's numbers. The prefix itself is the console's to refuse.
+var LockedCommandKeys = []string{"esc", "ctrl+c", "d", "q", "r", "tab", "shift+tab", "enter",
+	"1", "2", "3", "4", "5", "6", "7", "8", "9"}
+
+// CheckCommandKey says why key can't be a command's, nil if it can.
+func CheckCommandKey(key string) error {
+	switch {
+	case key == "" || len(key) > 16 || strings.ContainsAny(key, " \t\n") || strings.ToLower(key) != key && len(key) > 1:
+		return fmt.Errorf("%q isn't a key (\"g\", \"G\", \"ctrl+g\", \"f5\")", key)
+	case strings.HasPrefix(key, "prefix+"):
+		return fmt.Errorf("%s: a command has no prefix key", key)
+	case slices.Contains(LockedCommandKeys, key):
+		return fmt.Errorf("%s is locked (esc, ctrl+c, d, q, r, tab, enter and 1-9 stay the core's)", key)
+	}
+	return nil
+}
+
+// Tool is a tool a code mod offers agents (mods design §2, tier 5): an
+// agent calls it as <mod id>_<tool id> (ToolName), and the call goes
+// agent → agent mod (or tm mcp) → server → the mod's host. Its
+// description and input are text the agent reads, so the consent shows
+// them in full.
+type Tool struct {
+	ID          string `toml:"id"`
+	Description string `toml:"description"`
+	// Roles are the sessions that get it: thread, coordinator; empty
+	// for both.
+	Roles []string  `toml:"roles"`
+	Input ToolInput `toml:"input"`
+}
+
+// ToolInput is a tool's input as a JSON schema of an object: its
+// properties, each a schema with a type (string, integer, number,
+// boolean, array or object) and whatever else JSON schema allows, and
+// the required ones. Other properties are refused.
+type ToolInput struct {
+	Properties map[string]map[string]any `toml:"properties"`
+	Required   []string                  `toml:"required"`
+}
+
+// Session roles a tool may be for.
+const (
+	RoleThread      = "thread"
+	RoleCoordinator = "coordinator"
+)
+
+// Limits of a mod's tools. MaxToolName keeps an agent's full name for
+// it within 64 characters (Claude's mcp__terminatr__<name>).
+const (
+	MaxTools       = 16
+	MaxToolName    = 48
+	MaxToolDescLen = 2048
+)
+
+// ToolName is the name agents call mod id's tool by: "<mod>_<tool>".
+// A mod id has no underscore, so the first one splits it (ParseToolName),
+// and terminatr's own tools (report, status, …) have none.
+func ToolName(mod, tool string) string { return mod + "_" + tool }
+
+// ParseToolName splits a mod tool's name into the mod's id and the
+// tool's; ok is false for a name that isn't one.
+func ParseToolName(name string) (mod, tool string, ok bool) {
+	mod, tool, ok = strings.Cut(name, "_")
+	return mod, tool, ok && idRE.MatchString(mod) && keyRE.MatchString(tool)
+}
+
+// For says whether the tool is offered to a session of role.
+func (t Tool) For(role string) bool { return len(t.Roles) == 0 || slices.Contains(t.Roles, role) }
+
+// Schema is the tool's input as the JSON schema agents are given.
+func (t Tool) Schema() map[string]any {
+	props := map[string]any{}
+	for k, v := range t.Input.Properties {
+		props[k] = v
+	}
+	s := map[string]any{"type": "object", "properties": props, "additionalProperties": false}
+	if len(t.Input.Required) > 0 {
+		s["required"] = slices.Clone(t.Input.Required)
+	}
+	return s
+}
+
+// jsonTypes are the types a tool's input property may have.
+var jsonTypes = []string{"string", "integer", "number", "boolean", "array", "object"}
+
+// View slots (mods design §6). A details.section is a section at the
+// bottom of the dashboard's details panel, for the project, task or
+// thread it shows; a coordinator.section one at the bottom of the
+// coordinator's info panel, for its project (mods design §12, Phase 2).
+// Sections show; they take no keys.
+const (
+	SlotProjectTab         = "project.tab"
+	SlotDashboardCard      = "dashboard.card"
+	SlotFull               = "full"
+	SlotDetailsSection     = "details.section"
+	SlotCoordinatorSection = "coordinator.section"
+)
+
+// Slots are the view slots, in the manifest check's words' order.
+var Slots = []string{SlotProjectTab, SlotDashboardCard, SlotFull, SlotDetailsSection, SlotCoordinatorSection}
+
+// IsSection says whether slot is a panel section's.
+func IsSection(slot string) bool { return slot == SlotDetailsSection || slot == SlotCoordinatorSection }
 
 // Permissions are what the mod asks for. The human grants each by name
 // in [mods.<id>] grants; a mod runs with granted ∩ requested. The lists
@@ -98,6 +290,7 @@ type Permissions struct {
 	Views       bool     `toml:"views"`
 	Notify      bool     `toml:"notify"`
 	Inbox       bool     `toml:"inbox"`
+	Tools       bool     `toml:"tools"` // offer agents [provides].tools
 	Net         []string `toml:"net"`
 	Commands    []string `toml:"commands"`
 	Files       Files    `toml:"files"`
@@ -116,18 +309,19 @@ const (
 	PermViews       = "views"
 	PermNotify      = "notify"
 	PermInbox       = "inbox"
+	PermTools       = "tools"
 	PermFiles       = "files"
 	PermNet         = "net"
 	PermCommands    = "commands"
 )
 
 // Perms are all the permission names, in the consent screen's order.
-var Perms = []string{PermProjectRead, PermViews, PermNotify, PermInbox, PermFiles, PermNet, PermCommands}
+var Perms = []string{PermProjectRead, PermViews, PermNotify, PermInbox, PermTools, PermFiles, PermNet, PermCommands}
 
 // Requested lists the permissions the manifest asks for, in Perms order.
 func (p Permissions) Requested() []string {
 	asks := map[string]bool{
-		PermProjectRead: p.ProjectRead, PermViews: p.Views, PermNotify: p.Notify, PermInbox: p.Inbox,
+		PermProjectRead: p.ProjectRead, PermViews: p.Views, PermNotify: p.Notify, PermInbox: p.Inbox, PermTools: p.Tools,
 		PermFiles: len(p.Files.Read)+len(p.Files.Write) > 0, PermNet: len(p.Net) > 0, PermCommands: len(p.Commands) > 0,
 	}
 	var out []string
@@ -247,13 +441,43 @@ func CheckID(id string) error {
 // folder, to check that the files it names are there; "" skips that.
 func ParseManifest(data []byte, dir string) (*Manifest, error) {
 	var m Manifest
-	if _, err := toml.Decode(string(data), &m); err != nil {
+	md, err := toml.Decode(string(data), &m)
+	if err != nil {
 		return nil, fmt.Errorf("%s doesn't parse: %w", ManifestFile, err)
 	}
-	if err := m.check(dir); err != nil {
+	if err := errors.Join(loosens(md), m.check(dir)); err != nil {
 		return &m, err
 	}
 	return &m, nil
+}
+
+// loosens reports each key of a manifest that reaches for a safety
+// setting (SafetyKeys) and each key of a guard rule it doesn't have: a
+// mod only tightens (mods design §7, Tighten only). Tools' input schemas
+// are the agent's, not tm's settings: their names aren't checked.
+func loosens(md toml.MetaData) error {
+	var errs []error
+	seen := map[string]bool{}
+	for _, k := range md.Keys() {
+		at := strings.Join(k, ".")
+		switch {
+		case len(k) > 1 && k[0] == "provides" && k[1] == "tools":
+		case len(k) == 3 && k[0] == "provides" && k[1] == "guard" && !slices.Contains(guardRuleKeys, k[2]):
+			errs = append(errs, fmt.Errorf("%s: a guard rule only refuses: it has %s", at, strings.Join(guardRuleKeys, ", ")))
+		default:
+			for i, e := range k {
+				if i == 1 && k[0] == "provides" && e == "guard" || !slices.Contains(SafetyKeys, e) {
+					continue
+				}
+				if at := strings.Join(k[:i+1], "."); !seen[at] {
+					seen[at] = true
+					errs = append(errs, fmt.Errorf("%s: a mod can't set %s: safety settings are the human's, in config.toml, and a mod only tightens", at, e))
+				}
+				break
+			}
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // ReadManifest reads and checks dir/mod.toml.
@@ -354,8 +578,137 @@ func (m *Manifest) check(dir string) error {
 		if strings.TrimSpace(v.Title) == "" {
 			bad("%s: has no title", at)
 		}
-		if v.Slot != SlotProjectTab && v.Slot != SlotDashboardCard && v.Slot != SlotFull {
-			bad("%s: slot %q must be %s, %s or %s", at, v.Slot, SlotProjectTab, SlotDashboardCard, SlotFull)
+		if !slices.Contains(Slots, v.Slot) {
+			bad("%s: slot %q must be one of %s", at, v.Slot, strings.Join(Slots, ", "))
+		}
+	}
+	if len(p.Guard) > MaxGuardRules {
+		bad("provides.guard: at most %d rules", MaxGuardRules)
+	}
+	for i, g := range p.Guard {
+		at := fmt.Sprintf("provides.guard[%d]", i)
+		switch {
+		case !idRE.MatchString(g.ID):
+			bad("%s: id %q must be lowercase letters, digits and dashes", at, g.ID)
+		case slices.Contains(config.GuardRules, g.ID):
+			bad("%s: id %q is a core rule's: a mod adds rules, it doesn't change the core's", at, g.ID)
+		case seen["g:"+g.ID]:
+			bad("%s: id %q is listed twice", at, g.ID)
+		}
+		seen["g:"+g.ID] = true
+		if len(g.Commands)+len(g.Writes)+len(g.Reads) == 0 {
+			bad("%s: refuses nothing: list commands, writes or reads", at)
+		}
+		if len(g.Commands) > MaxGuardPatterns || len(g.Writes) > MaxGuardPatterns || len(g.Reads) > MaxGuardPatterns {
+			bad("%s: at most %d commands, writes and reads each", at, MaxGuardPatterns)
+		}
+		for _, c := range g.Commands {
+			if w := strings.Fields(c); len(w) == 0 || !progRE.MatchString(w[0]) {
+				bad("%s: command %q must start with a program's name (no path, no *)", at, c)
+			}
+		}
+		for _, r := range slices.Concat(g.Writes, g.Reads) {
+			if !strings.HasPrefix(r, "~/") && !filepath.IsAbs(r) && !path.IsAbs(r) {
+				bad("%s: %q must be absolute or start with ~/", at, r)
+			} else if slices.Contains(strings.Split(filepath.ToSlash(r), "/"), "..") {
+				bad("%s: %q has a .. in it", at, r)
+			}
+		}
+		for _, r := range g.Roles {
+			if r != RoleThread && r != RoleCoordinator {
+				bad("%s: role %q must be %s or %s", at, r, RoleThread, RoleCoordinator)
+			}
+		}
+		if msg := strings.TrimSpace(g.Message); msg == "" {
+			bad("%s: has no message: say why, and what to do instead", at)
+		} else if len(msg) > MaxGuardMessageLen {
+			bad("%s: message is longer than %d bytes", at, MaxGuardMessageLen)
+		}
+	}
+	if len(p.Tools) > MaxTools {
+		bad("provides.tools: at most %d tools", MaxTools)
+	}
+	for i, t := range p.Tools {
+		at := fmt.Sprintf("provides.tools[%d]", i)
+		switch {
+		case !code:
+			bad("%s: a tool needs provides.main, the code that answers it", at)
+		case !keyRE.MatchString(t.ID):
+			bad("%s: id %q must be lowercase letters, digits and underscores, starting with a letter", at, t.ID)
+		case len(ToolName(m.ID, t.ID)) > MaxToolName:
+			bad("%s: %s is longer than %d characters", at, ToolName(m.ID, t.ID), MaxToolName)
+		case seen["t:"+t.ID]:
+			bad("%s: id %q is listed twice", at, t.ID)
+		}
+		seen["t:"+t.ID] = true
+		if d := strings.TrimSpace(t.Description); d == "" {
+			bad("%s: has no description", at)
+		} else if len(d) > MaxToolDescLen {
+			bad("%s: description is longer than %d bytes", at, MaxToolDescLen)
+		}
+		for _, r := range t.Roles {
+			if r != RoleThread && r != RoleCoordinator {
+				bad("%s: role %q must be %s or %s", at, r, RoleThread, RoleCoordinator)
+			}
+		}
+		for _, k := range sortedKeys(t.Input.Properties) {
+			if !keyRE.MatchString(k) {
+				bad("%s: input property %q must be lowercase letters, digits and underscores", at, k)
+			}
+			if typ, _ := t.Input.Properties[k]["type"].(string); !slices.Contains(jsonTypes, typ) {
+				bad("%s: input property %q needs a type: %s", at, k, strings.Join(jsonTypes, ", "))
+			}
+		}
+		for _, k := range t.Input.Required {
+			if _, ok := t.Input.Properties[k]; !ok {
+				bad("%s: required %q isn't an input property", at, k)
+			}
+		}
+	}
+	if len(p.Commands) > MaxCommands {
+		bad("provides.commands: at most %d commands", MaxCommands)
+	}
+	keys := map[string]string{}
+	for i, c := range p.Commands {
+		at := fmt.Sprintf("provides.commands[%d]", i)
+		switch {
+		case !code:
+			bad("%s: a command needs provides.main, the code that runs it", at)
+		case !idRE.MatchString(c.ID):
+			bad("%s: id %q must be lowercase letters, digits and dashes", at, c.ID)
+		case seen["k:"+c.ID]:
+			bad("%s: id %q is listed twice", at, c.ID)
+		}
+		seen["k:"+c.ID] = true
+		if t := strings.TrimSpace(c.Title); t == "" {
+			bad("%s: has no title", at)
+		} else if len([]rune(t)) > MaxCommandTitle {
+			bad("%s: title is longer than %d characters", at, MaxCommandTitle)
+		}
+		if c.Key != "" {
+			if err := CheckCommandKey(c.Key); err != nil {
+				bad("%s: key %v", at, err)
+			} else if o, ok := keys[c.Key]; ok {
+				bad("%s: key %s is %s's already", at, c.Key, o)
+			}
+			keys[c.Key] = c.ID
+		}
+	}
+	if len(p.Tools) > 0 && !m.Permissions.Tools {
+		bad("provides.tools needs permissions.tools")
+	}
+	if m.Permissions.Tools && len(p.Tools) == 0 {
+		bad("permissions.tools offers no tool: list them in provides.tools")
+	}
+	if p.CodeHost != "" {
+		switch {
+		case !code:
+			bad("provides.code_host: a code host needs provides.main, the code that answers it")
+		case !codehost.ModKind(p.CodeHost):
+			bad("provides.code_host: %q must be lowercase letters, digits and dashes, and not github or azure (tm's own hosts)", p.CodeHost)
+		}
+		if len(m.Permissions.Commands) == 0 {
+			bad("provides.code_host needs permissions.commands: the host's CLI it runs (glab)")
 		}
 	}
 	if len(p.Views) > 0 && !m.Permissions.Views {

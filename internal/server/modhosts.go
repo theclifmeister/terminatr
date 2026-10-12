@@ -87,8 +87,25 @@ func (s *Server) modSpecs() ([]modsup.Spec, bool) {
 		if m.State != mod.Enabled || m.Manifest == nil || !m.Manifest.IsCode() || s.noMods && !m.Builtin {
 			continue
 		}
-		specs = append(specs, modsup.Spec{ID: m.ID, Entry: filepath.Join(m.Dir, filepath.FromSlash(m.Manifest.Provides.Main)),
-			Grants: m.Grants, Projects: m.Projects, Settings: m.Settings})
+		// A mod that draws columns runs from the server's start: a
+		// lazy host never says mod.ready, so its cached cells would stay
+		// stale after a restart until an event arrived. The others (the
+		// Memory tab) wait, lazily, for their first event.
+		sp := modsup.Spec{ID: m.ID, Grants: m.Grants, Projects: m.Projects, Settings: m.Settings,
+			Eager: len(m.Manifest.Provides.Columns) > 0}
+		if m.Builtin {
+			// Precompiled into tm (go generate ./internal/mod): it
+			// runs without esbuild.
+			b, err := m.ReadFile(m.Manifest.Provides.Main)
+			if err != nil {
+				s.log.Printf("mods: built-in %s: %v", m.ID, err)
+				continue
+			}
+			sp.Bundle = b
+		} else {
+			sp.Entry = filepath.Join(m.Dir, filepath.FromSlash(m.Manifest.Provides.Main))
+		}
+		specs = append(specs, sp)
 	}
 	return specs, true
 }
@@ -114,7 +131,8 @@ func (s *Server) modHosts() proto.ModHostsResult {
 
 // restartMod is mod.restart: the human starts mod id's host again, with
 // the mods as they are now, so a mod just enabled runs (tm mod dev); an
-// agent is refused, and so is any in safe mode.
+// agent is refused, and so is a user mod in safe mode (a built-in one
+// runs there).
 func (s *Server) restartMod(id string, c caller.Caller) (any, *proto.Error) {
 	if c.IsAgent() {
 		return nil, proto.Errorf("human-only", "the user restarts mods")
@@ -122,7 +140,7 @@ func (s *Server) restartMod(id string, c caller.Caller) (any, *proto.Error) {
 	if err := mod.CheckID(id); err != nil {
 		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 	}
-	if s.noMods {
+	if s.noMods && !mod.IsBundled(id) {
 		return nil, proto.Errorf(proto.ErrRefused, "the server runs in safe mode (%s): no user mod runs; restart it without", mod.EnvNoMods)
 	}
 	sup := s.modSup.Load()

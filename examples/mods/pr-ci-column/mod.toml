@@ -1,0 +1,24 @@
+# The sidebar's PR/CI column as a code mod (mods design §11, proof 1;
+# §13 example 7). terminatr ships this mod built in: this folder is its
+# source, and `go generate ./internal/mod` precompiles main.ts into the
+# binary. To change it, copy the folder, give the copy another id, and
+# install that (tm mod install refuses a built-in mod's id).
+id = "pr-ci-column"
+name = "PR/CI column"
+version = "1.0.0"
+api = "1.0"
+description = "Each thread's pull request checks in a sidebar column: passing, failing or running."
+authors = ["terminatr"]
+homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/pr-ci-column"
+
+[provides]
+main = "main.ts"
+
+[[provides.columns]]
+id = "ci"
+title = "CI"
+width = 2
+where = ["sidebar.thread"]
+
+[permissions]
+project_read = true

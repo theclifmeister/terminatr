@@ -1,0 +1,19 @@
+{
+  "name": "a session past the warning shows its use in warn, and is remembered",
+  "events": [
+    { "name": "session.state", "project": "demo",
+      "data": { "session": "s-7", "project": "demo", "thread": "t-0012", "role": "thread", "state": "working", "context": 85 } },
+    { "name": "session.state", "project": "demo",
+      "data": { "session": "s-2", "project": "demo", "role": "coordinator", "state": "idle", "context": 31 } },
+    { "name": "session.state",
+      "data": { "session": "s-9", "role": "shell", "state": "idle", "context": 90 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.cell.set", "params": { "column": "ctx", "target": { "session": "s-7" }, "spans": [{ "text": "85%", "role": "warn" }] } },
+      { "method": "ui.cell.set", "params": { "column": "ctx", "target": { "session": "s-2" }, "spans": [{ "text": "31%", "role": "faint" }] } }
+    ],
+    "no_calls": ["ui.view.set"],
+    "store": { "sessions": { "s-7": { "project": "demo", "thread": "t-0012", "context": 85 }, "s-9": null } }
+  }
+}

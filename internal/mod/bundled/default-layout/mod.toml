@@ -1,0 +1,12 @@
+# Built into tm (mods design §11): the sidebar's column order. Copy this
+# folder, change its id and name, reorder layout.toml and tm mod install
+# it; then pick it in General settings, Layout.
+id          = "default-layout"
+name        = "Default layout"
+version     = "1.0.0"
+api         = "1.0"
+description = "The sidebar's built-in column order."
+authors     = ["terminatr"]
+
+[provides]
+layout = "layout.toml"

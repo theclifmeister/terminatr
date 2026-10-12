@@ -6,10 +6,14 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/theclifmeister/terminatr/internal/modaction"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modview"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/widget"
 )
@@ -21,6 +25,11 @@ func (f *fakeSource) ModViews(shown []modview.Shown) (proto.ModViewsResult, erro
 
 func (f *fakeSource) ModViewInput(p proto.ModViewInputParams) error {
 	f.inputs = append(f.inputs, p)
+	return nil
+}
+
+func (f *fakeSource) ModCommand(p proto.ModCommandParams) error {
+	f.commands = append(f.commands, p)
 	return nil
 }
 
@@ -94,6 +103,61 @@ func TestModTab(t *testing.T) {
 	}
 }
 
+// drainCursors runs cmd and the batch it may be, feeding ui.cursor sends
+// back as they return.
+func drainCursors(m *dash, cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	switch msg := cmd().(type) {
+	case tea.BatchMsg:
+		for _, c := range msg {
+			drainCursors(m, c)
+		}
+	case modCursorMsg:
+		_, next := m.Update(msg)
+		drainCursors(m, next)
+	}
+}
+
+// TestModViewCursor: a mod hears where its view's cursor is, as
+// ui.cursor: when the view shows, then on each move, one send at a time
+// with the moves made meanwhile down to the latest, never twice the
+// same, and again once the view was hidden and shows again.
+func TestModViewCursor(t *testing.T) {
+	src, m := panelDash(t)
+	m.openTab("alpha", tabCount, 0)
+	cursors := func() (out []string) {
+		for _, p := range src.inputs {
+			if p.Kind != widget.EventCursor || p.Mod != "panel" || p.View != "queue" || p.Project != "alpha" {
+				t.Fatalf("input %+v", p)
+			}
+			out = append(out, p.Widget+"/"+p.Row)
+		}
+		return out
+	}
+	drainCursors(m, m.setModViews(modViewsMsg{res: src.modViews}))
+	if got := cursors(); !slices.Equal(got, []string{"q/T1"}) {
+		t.Fatalf("shown: %q", got)
+	}
+	drainCursors(m, m.setModViews(modViewsMsg{res: src.modViews}))
+	sent := press(m, "down")
+	if press(m, "up", "down", "up") != nil {
+		t.Error("a second send while one is on its way")
+	}
+	drainCursors(m, sent)
+	if got := cursors(); !slices.Equal(got, []string{"q/T1", "q/T2", "q/T1"}) {
+		t.Fatalf("moves: %q", got)
+	}
+	m.pop()
+	drainCursors(m, m.setModViews(modViewsMsg{res: src.modViews}))
+	m.openTab("alpha", tabCount, 0)
+	drainCursors(m, m.setModViews(modViewsMsg{res: src.modViews}))
+	if got := cursors(); len(got) != 4 || got[3] != "q/T1" {
+		t.Fatalf("shown again: %q", got)
+	}
+}
+
 // TestModViewFailed: a failed mod's tab and card say so, with its log,
 // and show no stale tree.
 func TestModViewFailed(t *testing.T) {
@@ -162,6 +226,67 @@ func TestModViewOpen(t *testing.T) {
 	m.setModViews(open)
 	if m.projectPopupView() != nil {
 		t.Error("the same request opened twice")
+	}
+}
+
+// TestMemoryTabMod: the built-in Memory tab mod's tab is drawn in the
+// core Memory tab's place (6 memory), marked as the mod's, not again
+// after the core tabs; enter on a file reaches the mod. With the mod off
+// the core Memory tab draws; a failed mod shows that, not the core tab.
+func TestMemoryTabMod(t *testing.T) {
+	files := &widget.Widget{Kind: widget.KindStack, Children: []widget.Widget{
+		{Kind: widget.KindList, ID: "files", Rows: []widget.Row{
+			{ID: "CONTEXT.md", Spans: []widget.Span{{Text: "Context"}, {Text: "  CONTEXT.md · 1 KB", Role: "faint"}}},
+			{ID: "memory/decisions.md", Spans: []widget.Span{{Text: "Decisions"}}}}},
+		{Kind: widget.KindKeys, Keys: []widget.Key{{Key: "enter", Label: "read"}}},
+	}}
+	memView := proto.ModView{Mod: mod.BundledMemory, Name: "Memory tab", View: mod.MemoryView, Title: "memory", Slot: mod.SlotProjectTab,
+		Trees: []modview.Tree{{Project: "alpha", Tree: files}}}
+	src := &fakeSource{data: testData(), modViews: proto.ModViewsResult{Views: append(panelViews(), memView)}}
+	src.memory = project.Memory{Context: "# Context\n\nThe core tab's text.\n"}
+	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 40, State: DashState{Current: "alpha"}})
+	m.layout.Details = false
+	m.setData(src.data)
+	m.setModViews(modViewsMsg{res: src.modViews})
+	m.openTab("alpha", tabOverview, 0)
+	press(m, "6")
+	out := screen(m)
+	for _, want := range []string{"6 memory", "8 Review queue", "mod: memory-tab · memory", "Context", "CONTEXT.md · 1 KB", "Decisions", "read"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("memory tab lacks %q:\n%s", want, out)
+		}
+	}
+	for _, not := range []string{"9 memory", "The core tab's text."} {
+		if strings.Contains(out, not) {
+			t.Errorf("memory tab shows %q:\n%s", not, out)
+		}
+	}
+	if s := m.shownViews(); len(s) == 0 || s[0].Mod != mod.BundledMemory || s[0].Project != "alpha" {
+		t.Errorf("shown %+v", s)
+	}
+	press(m, "down")
+	run(m, press(m, "enter"))
+	if len(src.inputs) != 1 || src.inputs[0].Mod != mod.BundledMemory || src.inputs[0].Row != "memory/decisions.md" || src.inputs[0].Key != "enter" {
+		t.Fatalf("inputs %+v", src.inputs)
+	}
+	if pv := m.projectPopupView(); pv == nil || pv.tab != tabMemory {
+		t.Fatal("enter left the Memory tab")
+	}
+
+	// Failed: the core's failure state, never the core tab's text.
+	src.modViews.Views[2].State = proto.ModViewFailed
+	src.modViews.Views[2].Err = "host exited"
+	m.setModViews(modViewsMsg{res: src.modViews})
+	if out := screen(m); !strings.Contains(out, "mod failed: host exited") || strings.Contains(out, "The core tab's text.") {
+		t.Errorf("failed memory mod:\n%s", out)
+	}
+
+	// Off: the core Memory tab.
+	src.modViews.Views = panelViews()
+	m.setModViews(modViewsMsg{res: src.modViews})
+	m.projectPopupView().memory = &src.memory
+	if out := screen(m); !strings.Contains(out, "The core tab's text.") || strings.Contains(out, "mod: memory-tab") {
+		t.Errorf("memory mod off:\n%s", out)
 	}
 }
 
@@ -288,6 +413,31 @@ func TestModTabBinding(t *testing.T) {
 	cv, ok := m.top().(*confirmView)
 	if !ok || cv.question != "Delegate T2 to the coordinator? It starts a thread for T2 Write docs." {
 		t.Fatalf("D opened %T %+v", m.top(), m.top())
+	}
+}
+
+// TestModTabHintClick: a click on the core's hint for a bound row runs
+// the action, as its key does, and never reaches the mod.
+func TestModTabHintClick(t *testing.T) {
+	src, m := panelDash(t)
+	src.board = &tasks.Board{Tasks: []*tasks.Task{{ID: 2, Title: "Write docs", Status: tasks.Ready}}}
+	v := &src.modViews.Views[0]
+	q := &v.Trees[0].Tree.Children[0]
+	q.Rows[1].Actions = []widget.Action{{ID: "task.delegate", Target: map[string]string{"project": "alpha", "task": "T2"}}}
+	m.setModViews(modViewsMsg{res: src.modViews})
+	m.openTab("alpha", tabOverview, 0)
+	press(m, "8")
+	press(m, "down")
+	time.Sleep(modaction.Stable + 20*time.Millisecond)
+	m.render()
+	x, y := at(t, m, "D delegate")
+	_, cmd := m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+	runAll(m, cmd)
+	if len(src.inputs) != 0 {
+		t.Fatalf("the click reached the mod: %+v", src.inputs)
+	}
+	if _, ok := m.top().(*confirmView); !ok {
+		t.Fatalf("the hint click opened %T", m.top())
 	}
 }
 

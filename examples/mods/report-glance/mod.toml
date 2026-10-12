@@ -1,0 +1,28 @@
+# Panel sections (mods design §12, Phase 2; §13): a details-panel
+# section and a coordinator-panel section. Install it by path from a
+# checkout:
+#   tm mod install terminatr/examples/mods/report-glance
+id = "report-glance"
+name = "Report glance"
+version = "1.0.0"
+api = "1.0"
+description = "The latest report of the thread (or the task's thread) in the details panel, and who reported in the coordinator's panel."
+authors = ["terminatr"]
+homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/report-glance"
+
+[provides]
+main = "main.ts"
+
+[[provides.views]]
+id = "last"
+title = "Last report"
+slot = "details.section"
+
+[[provides.views]]
+id = "reports"
+title = "Reports"
+slot = "coordinator.section"
+
+[permissions]
+project_read = true
+views = true

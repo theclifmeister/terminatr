@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/models/modelstest"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -460,10 +461,10 @@ func TestKeysParity(t *testing.T) {
 	keyPress(m, "5")
 	// Both are keyLines, each wrapped to its own box's width.
 	b := m.top().(*projectView).box(m)
-	if want := keyLines(m.inner(viewWidth)); strings.Join(b.body, "\n") != strings.Join(want, "\n") {
+	if want := keyLines(m.inner(viewWidth), nil); strings.Join(b.body, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("keys tab isn't the keys:\n%s", strings.Join(b.body, "\n"))
 	}
-	if want := helpLines(m.prefix, m.inner(viewWidth)); strings.Join(help, "\n") != strings.Join(want, "\n") {
+	if want := helpLines(m.prefix, m.inner(viewWidth), nil); strings.Join(help, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("help isn't the keys:\n%s", strings.Join(help, "\n"))
 	}
 	text := ansi.Strip(strings.Join(help, "\n"))
@@ -487,7 +488,7 @@ func TestKeysParity(t *testing.T) {
 		}
 	}
 	// Wide windows: nothing is cut off; lines wrap instead.
-	for _, l := range keyLines(60) {
+	for _, l := range keyLines(60, nil) {
 		if w := ansi.StringWidth(l); w > 60 {
 			t.Errorf("line %d cells wide: %q", w, l)
 		}
@@ -1609,5 +1610,58 @@ func TestAgentSettings(t *testing.T) {
 	act(m, src, "enter")
 	if _, co := agentsOf(t, "alpha"); co != "claude" {
 		t.Fatalf("enter didn't pick a known agent: %q", co)
+	}
+}
+
+// TestNewTaskPrompt: + in the Tasks tab offers the templates of the
+// project's mods (the built-in bug, spike and chore here), then asks for
+// the title, and adds the task as the human with the template laid on
+// it; with no template it asks for the title only.
+func TestNewTaskPrompt(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	src, m := needsYouData(t, 86+sideDefault)
+	reg, err := mod.Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src.templates, _ = reg.Templates("alpha")
+	m.Update(keyPress(m, "t")())
+	if out := screen(m); !strings.Contains(out, "+ adds a task, from a template or none") {
+		t.Fatalf("no + in the Tasks tab's keys:\n%s", out)
+	}
+	keyPress(m, "+")
+	out := screen(m)
+	for _, want := range []string{"New task · alpha", "no template", "bug · Bug: …", "spike · Spike: …", "chore · Chore: …"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("the template menu lacks %q:\n%s", want, out)
+		}
+	}
+	keyPress(m, "down") // bug (the templates are by name: bug, chore, spike)
+	keyPress(m, "enter")
+	if out := screen(m); !strings.Contains(out, "Its title, for Bug: {title}") {
+		t.Fatalf("title prompt:\n%s", out)
+	}
+	for _, r := range "crash on start" {
+		keyPress(m, string(r))
+	}
+	run(m, keyPress(m, "enter"))
+	if len(src.added) != 1 || !strings.HasPrefix(src.added[0], "alpha Bug: crash on start|What happens") || !strings.Contains(src.added[0], "Reproduce it in a failing test;") {
+		t.Fatalf("added %v, %q", src.added, m.msg)
+	}
+	if m.msg != "added T11 to alpha" {
+		t.Errorf("footer %q", m.msg)
+	}
+
+	src.templates = nil
+	keyPress(m, "+")
+	if out := screen(m); !strings.Contains(out, "Its title:") || strings.Contains(out, "no template") {
+		t.Fatalf("no templates, straight to the title:\n%s", out)
+	}
+	for _, r := range "plain" {
+		keyPress(m, string(r))
+	}
+	run(m, keyPress(m, "enter"))
+	if len(src.added) != 2 || src.added[1] != "alpha plain||" {
+		t.Fatalf("added %v", src.added)
 	}
 }

@@ -11,6 +11,8 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/BurntSushi/toml"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/theclifmeister/terminatr/internal/mod"
 )
 
 // The dashboard's look. Colours are the terminal's 16 ANSI colours, so
@@ -57,21 +59,44 @@ type themeTable struct {
 	Dark  roleSet `toml:"dark"`
 }
 
-// builtinRoles is the built-in look over the terminal's 16 ANSI colours.
-var builtinRoles = roleSet{
-	Head:   &roleSpec{Bold: true},
-	Sel:    &roleSpec{Reverse: true},
-	Faint:  &roleSpec{Faint: true},
-	Accent: &roleSpec{Fg: []string{"cyan"}},
-	Title:  &roleSpec{Fg: []string{"cyan"}, Bold: true},
-	Bad:    &roleSpec{Fg: []string{"red"}},
-	Warn:   &roleSpec{Fg: []string{"yellow"}},
-	Good:   &roleSpec{Fg: []string{"green"}},
-	Info:   &roleSpec{Fg: []string{"blue"}},
-	Plain:  &roleSpec{},
+// builtinTheme is the built-in look over the terminal's 16 ANSI colours:
+// the bundled default-theme mod's theme.toml (mods design §11), every
+// role set in both schemes. builtinRoles are its dark roles, to which a
+// mod's role left out falls back.
+var (
+	builtinTheme = mustTheme(mod.BundledData(mod.BundledTheme, mod.KindTheme))
+	builtinRoles = builtinTheme.Dark
+)
+
+// mustTheme is the bundled theme data parsed; tm built without a whole
+// one is a bug.
+func mustTheme(data []byte) themeTable {
+	tt, err := parseTheme(data)
+	if err != nil {
+		panic("bundled theme: " + err.Error())
+	}
+	for _, rs := range []roleSet{tt.Light, tt.Dark} {
+		if missing := rs.missing(); len(missing) > 0 {
+			panic("bundled theme: no " + strings.Join(missing, ", "))
+		}
+	}
+	return tt
 }
 
-var builtinTheme = themeTable{Light: builtinRoles, Dark: builtinRoles}
+// missing are the roles rs leaves out.
+func (rs roleSet) missing() []string {
+	var out []string
+	for _, r := range []struct {
+		name string
+		spec *roleSpec
+	}{{"head", rs.Head}, {"sel", rs.Sel}, {"faint", rs.Faint}, {"accent", rs.Accent}, {"title", rs.Title},
+		{"bad", rs.Bad}, {"warn", rs.Warn}, {"good", rs.Good}, {"info", rs.Info}, {"plain", rs.Plain}} {
+		if r.spec == nil {
+			out = append(out, r.name)
+		}
+	}
+	return out
+}
 
 var ansiNames = map[string]int{
 	"black": 0, "red": 1, "green": 2, "yellow": 3, "blue": 4, "magenta": 5, "cyan": 6, "white": 7,
@@ -170,11 +195,20 @@ func (rs roleSet) resolve(truecolor bool) (*Theme, error) {
 	return &t, nil
 }
 
-// parseTheme reads a theme's TOML ([light] and [dark] role tables).
+// parseTheme reads a theme's TOML ([light] and [dark] role tables); a
+// key it doesn't know is an error.
 func parseTheme(data []byte) (themeTable, error) {
 	var tt themeTable
-	if _, err := toml.Decode(string(data), &tt); err != nil {
+	md, err := toml.Decode(string(data), &tt)
+	if err != nil {
 		return tt, err
+	}
+	if u := md.Undecoded(); len(u) > 0 {
+		keys := make([]string, len(u))
+		for i, k := range u {
+			keys[i] = k.String()
+		}
+		return tt, fmt.Errorf("unknown key %s", strings.Join(keys, ", "))
 	}
 	return tt, nil
 }

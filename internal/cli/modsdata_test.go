@@ -77,7 +77,13 @@ func TestTaskTemplate(t *testing.T) {
 	if out := h.ok(coord, "task", "show", "T2"); !strings.Contains(out, "Mine.") || strings.Contains(out, "What happens") {
 		t.Fatalf("T2 notes:\n%s", out)
 	}
-	h.expect(1, "no template \"chore\"; there are basics:bug", coord, "task", "add", "x", "--template", "chore")
+	h.expect(1, "no template \"nope\"; there are basics:bug, default-templates:bug", coord, "task", "add", "x", "--template", "nope")
+	// The built-in templates are there too; a user mod's of the same name
+	// (basics:bug, above) comes first.
+	h.ok(coord, "task", "add", "tidy go.mod", "--template", "chore")
+	if out := h.ok(coord, "task", "show", "T3"); !strings.Contains(out, "Chore: tidy go.mod") || !strings.Contains(out, "Make the change") {
+		t.Fatalf("T3 from the built-in chore template:\n%s", out)
+	}
 	os.WriteFile(filepath.Join(h.root, "config.toml"), []byte("[mods.basics]\nenabled = true\n[mods.more]\nenabled = true\n"), 0o600)
 	h.expect(1, "basics:bug, more:bug", coord, "task", "add", "x", "--template", "bug")
 }
