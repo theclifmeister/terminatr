@@ -1,0 +1,22 @@
+{
+  "name": "a thread that starts to need you notifies once, with Show; one that already did at the start doesn't",
+  "events": [
+    { "name": "mod.ready", "data": { "projects": [
+      { "project": "demo", "needs_you": [], "inbox": [], "ready": [],
+        "threads": [{ "id": "t-0007", "title": "Docs", "needs_you": "Which licence?" }] } ] } },
+    { "name": "thread.state", "project": "demo",
+      "data": { "project": "demo", "thread": "t-0007", "task": "T7", "state": "blocked", "needs_you": "Which licence?" } },
+    { "name": "thread.state", "project": "demo",
+      "data": { "project": "demo", "thread": "t-0012", "task": "T12", "state": "blocked", "needs_you": "Merge into main or release?" } },
+    { "name": "thread.state", "project": "demo",
+      "data": { "project": "demo", "thread": "t-0012", "task": "T12", "state": "blocked", "needs_you": "Merge into main or release?" } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.notify", "params": { "notification": {
+        "title": "T12 needs you", "text": "demo: Merge into main or release?", "level": "warn",
+        "actions": [{ "id": "task.show", "target": { "project": "demo", "task": "T12" } }] } } }
+    ],
+    "store": { "asked": { "demo/t-0007": "Which licence?", "demo/t-0012": "Merge into main or release?" } }
+  }
+}

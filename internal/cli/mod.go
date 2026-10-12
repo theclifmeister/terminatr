@@ -26,6 +26,7 @@ const modUsage = `usage: tm mod list [--outdated] [--json]
        tm mod dev <dir> [--yes]
        tm mod test [<dir>…] [--json]
        tm mod logs <id> [--follow|-f] [--lines|-n N]
+       tm mod examples [--json]
 
 User mods (docs/SPEC.md §5.3), installed in ~/.terminatr/mods. install
 takes a folder or a git URL (https://, ssh://, file://, user@host:path)
@@ -46,8 +47,9 @@ interrupted; it then disables it, leaving the link (tm mod remove
 unlinks it). test replays each code mod's tests/*.json fixtures with a
 fake broker (the current folder when none is named) and exits 1 if
 any fails. logs prints the end of a mod's log, and follows it with -f.
-All but list, validate, new, test and logs are the human's: an agent
-is refused.`
+examples shows where terminatr's example mods are and how to install
+each; it installs nothing. All but list, validate, new, test, logs and
+examples are the human's: an agent is refused.`
 
 func init() { commands["mod"] = runMod }
 
@@ -76,6 +78,7 @@ func runMod(e *Env, args []string) error {
 		"list": {"json", "outdated"}, "install": {"yes"}, "enable": {"project", "yes"}, "disable": {"project"},
 		"remove": {"purge", "yes"}, "update": {"yes"}, "validate": {"json"},
 		"new": {"kind", "dir"}, "dev": {"yes"}, "test": {"json"}, "logs": {"follow", "f", "lines", "n"},
+		"examples": {"json"},
 	}
 	ok, known := allowed[args[0]]
 	if !known {
@@ -111,6 +114,11 @@ func runMod(e *Env, args []string) error {
 		return e.modNew(id, *kind, *dir)
 	case "test":
 		return e.modTest(pos, *asJSON)
+	case "examples":
+		if len(pos) > 0 {
+			return usagef("%s", modUsage)
+		}
+		return e.modExamples(*asJSON)
 	case "logs":
 		id, err := one()
 		if err != nil {
@@ -171,7 +179,43 @@ func runMod(e *Env, args []string) error {
 
 // agentMod are the tm mod subcommands an agent may run: they read, or
 // write only in the folder given.
-var agentMod = map[string]bool{"list": true, "validate": true, "new": true, "test": true, "logs": true}
+var agentMod = map[string]bool{"list": true, "validate": true, "new": true, "test": true, "logs": true, "examples": true}
+
+// exampleRow is an example mod in tm mod examples --json.
+type exampleRow struct {
+	ID      string   `json:"id"`
+	Surface string   `json:"surface"`
+	Perms   []string `json:"permissions"`
+	Builtin bool     `json:"builtin,omitempty"`
+	Install []string `json:"install"`
+}
+
+// modExamples is tm mod examples (mods design §13): the folder's link
+// and each example's install lines, as the Mods tab's e shows them. It
+// installs and enables nothing.
+func (e *Env) modExamples(asJSON bool) error {
+	if asJSON {
+		rows := []exampleRow{}
+		for _, x := range mod.Examples {
+			rows = append(rows, exampleRow{ID: x.ID, Surface: x.Surface, Perms: append([]string{}, x.Perms...),
+				Builtin: mod.IsBundled(x.ID), Install: mod.InstallLines(x.ID)})
+		}
+		return e.printJSON(struct {
+			URL      string       `json:"url"`
+			Repo     string       `json:"repo"`
+			Examples []exampleRow `json:"examples"`
+		}{mod.ExamplesURL, mod.ExamplesRepo, rows})
+	}
+	fmt.Fprintf(e.Stdout, "terminatr's example mods, one for each place a mod can show up: %s\n", mod.ExamplesURL)
+	fmt.Fprintf(e.Stdout, "Nothing here is installed. From a checkout (git clone %s), then:\n", mod.ExamplesRepo)
+	for _, x := range mod.Examples {
+		fmt.Fprintf(e.Stdout, "\n%s  %s · %s\n", x.ID, x.Surface, strings.Join(mod.Permissions{}.Words(x.Perms), " · "))
+		for _, l := range mod.InstallLines(x.ID) {
+			fmt.Fprintf(e.Stdout, "  %s\n", l)
+		}
+	}
+	return nil
+}
 
 func humanOnly() error {
 	return &project.Error{Code: "human-only", Msg: "mods are installed, enabled, updated and removed by the human"}

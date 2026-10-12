@@ -1,0 +1,16 @@
+# Example 2 of terminatr's examples/mods (mods design §13): a keymap, a
+# data mod with no code. It moves actions by their stable ids (docs/SPEC.md
+# §4 Action ids); help and the ≡ menu show the new keys. The escape
+# hatches (esc, ctrl+c, prefix+d, prefix+q, prefix+prefix) can't be
+# rebound, so they stay. Install it by path from a checkout and enable it:
+#   tm mod install terminatr/examples/mods/vim-keys && tm mod enable vim-keys
+id = "vim-keys"
+name = "Vim keys"
+version = "1.0.0"
+api = "1.0"
+description = "Vim-style navigation: g and G for the sidebar's ends, ctrl+u and ctrl+d for pages."
+authors = ["terminatr"]
+homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/vim-keys"
+
+[provides]
+keymap = "keymap.toml"

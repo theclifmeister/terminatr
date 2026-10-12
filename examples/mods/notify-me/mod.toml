@@ -1,0 +1,28 @@
+# Example 5 of terminatr's examples/mods (mods design §13): OS
+# notifications whose buttons are core actions. Install it by path from a
+# checkout:
+#   tm mod install terminatr/examples/mods/notify-me
+id = "notify-me"
+name = "Notify me"
+version = "1.0.0"
+api = "1.0"
+description = "An OS notification when a thread needs you or a task reaches review, with Accept, Send back and Show buttons that run the core's own actions."
+authors = ["terminatr"]
+homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/notify-me"
+
+[provides]
+main = "main.ts"
+
+[permissions]
+project_read = true
+notify = true
+
+[settings.needs_you]
+type = "bool"
+default = true
+label = "When a thread needs you"
+
+[settings.review]
+type = "bool"
+default = true
+label = "When a task reaches review"

@@ -1,0 +1,15 @@
+# Example 1 of terminatr's examples/mods (mods design §13): a theme and an
+# icon set, a data mod with no code. Install it by path from a checkout,
+# enable it, then pick it in Settings (General: Theme and Icons):
+#   tm mod install terminatr/examples/mods/nord && tm mod enable nord
+id = "nord"
+name = "Nord"
+version = "1.0.0"
+api = "1.0"
+description = "The Nord palette, in light and dark, with icons drawn to match."
+authors = ["terminatr"]
+homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/nord"
+
+[provides]
+theme = "theme.toml"
+icons = "icons.toml"

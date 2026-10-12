@@ -329,6 +329,8 @@ export declare namespace TM {
     state: string;
     reason?: string;
     context: number;
+    tokens?: number;
+    cost_usd?: number;
   }
 
   type Settings = Record<string, Value>;

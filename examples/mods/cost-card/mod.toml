@@ -1,0 +1,29 @@
+# Example 4 of terminatr's examples/mods (mods design §13): a dashboard
+# card. Install it by path from a checkout:
+#   tm mod install terminatr/examples/mods/cost-card
+id = "cost-card"
+name = "Cost card"
+version = "1.0.0"
+api = "1.0"
+description = "Tokens and estimated cost per thread on the dashboard, today's and the last 7 days', with a sparkline."
+authors = ["terminatr"]
+homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/cost-card"
+
+[provides]
+main = "main.ts"
+
+[[provides.views]]
+id = "cost"
+title = "Cost"
+slot = "dashboard.card"
+
+[permissions]
+project_read = true
+views = true
+
+[settings.rows]
+type = "int"
+default = 5
+min = 1
+max = 15
+label = "Threads listed"

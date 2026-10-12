@@ -136,6 +136,11 @@ type Session struct {
 	// Context is the percentage of the context window the latest turn
 	// used; -1 when unknown.
 	Context int `json:"context"`
+	// Tokens and CostUSD are what the session's thread has used so far,
+	// summed over its turns (thread.Usage, docs/SPEC.md §8.6): numbers
+	// only, none for a session that is no thread's.
+	Tokens  int64   `json:"tokens,omitempty"`
+	CostUSD float64 `json:"cost_usd,omitempty"`
 }
 
 // Clock is clock.minute, on every minute.
