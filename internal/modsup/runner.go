@@ -388,13 +388,15 @@ func (h *host) why() string {
 }
 
 // hostEvents are the events a host handles: its hello's, and those it
-// subscribed to since. sub is the queue they filter, once open.
+// subscribed to since. sub is the queue they filter, once open. A
+// subscribe arrives on the client's read loop, maybe before once has
+// recorded the hello: mu guards all but r and bundle.
 type hostEvents struct {
 	r      *runner
 	bundle string
-	tools  []string // the tools its hello said it handles
 
 	mu     sync.Mutex
+	tools  []string // the tools its hello said it handles
 	events []string
 	sub    *modbus.Sub
 }
@@ -404,6 +406,18 @@ type hostEvents struct {
 func (e *hostEvents) add(names []string, sub *modbus.Sub) []string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.addLocked(names, sub)
+}
+
+// hello records the host's hello: its tools, and its events as add does.
+func (e *hostEvents) hello(tools, names []string, sub *modbus.Sub) []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.tools = tools
+	return e.addLocked(names, sub)
+}
+
+func (e *hostEvents) addLocked(names []string, sub *modbus.Sub) []string {
 	for _, n := range names {
 		if !slices.Contains(e.events, n) {
 			e.events = append(e.events, n)
@@ -530,8 +544,7 @@ func (r *runner) once(sub *modbus.Sub) (code int, why string) {
 	if sub == nil {
 		sub = r.subscribe(nil)
 	}
-	ev.tools = res.Tools
-	events := ev.add(res.Events, sub)
+	events := ev.hello(res.Tools, res.Events, sub)
 	r.setClient(client)
 	defer r.setClient(nil)
 	r.set(Running, "")
