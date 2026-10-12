@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1544" height="542" viewBox="0 0 1544 542" role="img" aria-labelledby="t">
+<title id="t">tm · dashboard with mods</title>
+<style>text{font:14px ui-monospace,SFMono-Regular,Menlo,Consolas,'DejaVu Sans Mono','Liberation Mono',monospace;white-space:pre}</style>
+<rect width="1544" height="542" rx="10" fill="#11131c"/>
+<rect width="1544" height="34" rx="10" fill="#161925"/><rect y="24" width="1544" height="10" fill="#161925"/>
+<line x1="0" y1="34" x2="1544" y2="34" stroke="#262a3d"/>
+<circle cx="18" cy="17" r="5.5" fill="#f7768e"/><circle cx="36" cy="17" r="5.5" fill="#e0af68"/><circle cx="54" cy="17" r="5.5" fill="#9ece6a"/>
+<text x="72" y="21" fill="#8189ad" style="font-size:12px">tm · dashboard with mods</text>
+<text x="24.4" y="61.2" fill="#bb9af7" font-weight="700" textLength="67.2" lengthAdjust="spacingAndGlyphs">PROJECTS</text>
+<text x="276.4" y="61.2" fill="#c8d0f0">1</text>
+<text x="310.0" y="61.2" fill="#4e5578">│</text>
+<text x="326.8" y="61.2" fill="#c8d0f0" font-weight="700" textLength="100.8" lengthAdjust="spacingAndGlyphs">tm dashboard</text>
+<text x="1326.4" y="61.2" fill="#9ece6a" textLength="92.4" lengthAdjust="spacingAndGlyphs">● server ok</text>
+<text x="1427.2" y="61.2" fill="#c8d0f0" textLength="100.8" lengthAdjust="spacingAndGlyphs">· 2 sessions</text>
+<text x="24.4" y="78.2" fill="#7dcfff">■</text>
+<text x="41.2" y="78.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">demo</text>
+<text x="142.0" y="78.2" fill="#c8d0f0">2</text>
+<text x="310.0" y="78.2" fill="#4e5578">│</text>
+<text x="326.8" y="78.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">demo</text>
+<text x="368.8" y="78.2" fill="#4e5578" textLength="470.4" lengthAdjust="spacingAndGlyphs">────────────────────────────────────────────────────────</text>
+<text x="847.6" y="78.2" fill="#c8d0f0" textLength="252.0" lengthAdjust="spacingAndGlyphs">● active — space to deactivate</text>
+<text x="1108.0" y="78.2" fill="#4e5578">│</text>
+<text x="1124.8" y="78.2" fill="#7dcfff" font-weight="700" textLength="16.8" lengthAdjust="spacingAndGlyphs">T1</text>
+<text x="1150.0" y="78.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">Fix the login</text>
+<text x="24.4" y="95.2" fill="#4e5578" textLength="16.8" lengthAdjust="spacingAndGlyphs">└─</text>
+<text x="49.6" y="95.2" fill="#c8d0f0" textLength="58.8" lengthAdjust="spacingAndGlyphs">coordi…</text>
+<text x="217.6" y="95.2" fill="#c8d0f0">·</text>
+<text x="310.0" y="95.2" fill="#4e5578">│</text>
+<text x="335.2" y="95.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">coordinator</text>
+<text x="654.4" y="95.2" fill="#c8d0f0">—</text>
+<text x="755.2" y="95.2" fill="#c8d0f0" textLength="100.8" lengthAdjust="spacingAndGlyphs">not running;</text>
+<text x="864.4" y="95.2" fill="#7aa2f7" textLength="42.0" lengthAdjust="spacingAndGlyphs">enter</text>
+<text x="914.8" y="95.2" fill="#c8d0f0" textLength="75.6" lengthAdjust="spacingAndGlyphs">starts it</text>
+<text x="1007.2" y="95.2" fill="#e0af68" textLength="58.8" lengthAdjust="spacingAndGlyphs">3 inbox</text>
+<text x="1108.0" y="95.2" fill="#4e5578">│</text>
+<text x="1124.8" y="95.2" fill="#8189ad" textLength="50.4" lengthAdjust="spacingAndGlyphs">○ idle</text>
+<text x="49.6" y="112.2" fill="#4e5578" textLength="16.8" lengthAdjust="spacingAndGlyphs">├─</text>
+<text x="74.8" y="112.2" fill="#7dcfff" font-weight="700" textLength="16.8" lengthAdjust="spacingAndGlyphs">T1</text>
+<text x="125.2" y="112.2" fill="#7dcfff" textLength="25.2" lengthAdjust="spacingAndGlyphs">50%</text>
+<text x="158.8" y="112.2" fill="#8189ad">☐</text>
+<text x="217.6" y="112.2" fill="#c8d0f0">○</text>
+<text x="310.0" y="112.2" fill="#4e5578">│</text>
+<text x="335.2" y="112.2" fill="#7dcfff" font-weight="700" textLength="16.8" lengthAdjust="spacingAndGlyphs">T1</text>
+<text x="360.4" y="112.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">Fix the login</text>
+<text x="620.8" y="112.2" fill="#8189ad" textLength="50.4" lengthAdjust="spacingAndGlyphs">○ idle</text>
+<text x="780.4" y="112.2" fill="#e0af68" textLength="84.0" lengthAdjust="spacingAndGlyphs">report new</text>
+<text x="881.2" y="112.2" fill="#7dcfff" textLength="25.2" lengthAdjust="spacingAndGlyphs">50%</text>
+<text x="914.8" y="112.2" fill="#c8d0f0" textLength="25.2" lengthAdjust="spacingAndGlyphs">1/2</text>
+<text x="948.4" y="112.2" fill="#e0af68">▸</text>
+<text x="965.2" y="112.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">Fix it</text>
+<text x="1032.4" y="112.2" fill="#c8d0f0" textLength="16.8" lengthAdjust="spacingAndGlyphs">4m</text>
+<text x="1066.0" y="112.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">PR #…</text>
+<text x="1108.0" y="112.2" fill="#4e5578">│</text>
+<text x="1124.8" y="112.2" fill="#4e5578" textLength="394.8" lengthAdjust="spacingAndGlyphs">───────────────────────────────────────────────</text>
+<text x="49.6" y="129.2" fill="#4e5578" textLength="16.8" lengthAdjust="spacingAndGlyphs">└─</text>
+<text x="74.8" y="129.2" fill="#7dcfff" font-weight="700" textLength="16.8" lengthAdjust="spacingAndGlyphs">T2</text>
+<text x="158.8" y="129.2" fill="#8189ad">☐</text>
+<text x="175.6" y="129.2" fill="#7dcfff" textLength="16.8" lengthAdjust="spacingAndGlyphs">4%</text>
+<text x="217.6" y="129.2" fill="#c8d0f0">○</text>
+<text x="310.0" y="129.2" fill="#4e5578">│</text>
+<text x="335.2" y="129.2" fill="#7dcfff" font-weight="700" textLength="16.8" lengthAdjust="spacingAndGlyphs">T2</text>
+<text x="360.4" y="129.2" fill="#c8d0f0" textLength="117.6" lengthAdjust="spacingAndGlyphs">Write the docs</text>
+<text x="620.8" y="129.2" fill="#8189ad" textLength="50.4" lengthAdjust="spacingAndGlyphs">○ idle</text>
+<text x="721.6" y="129.2" fill="#7dcfff" textLength="16.8" lengthAdjust="spacingAndGlyphs">4%</text>
+<text x="780.4" y="129.2" fill="#c8d0f0" textLength="16.8" lengthAdjust="spacingAndGlyphs">4m</text>
+<text x="814.0" y="129.2" fill="#7dcfff" font-weight="700" textLength="50.4" lengthAdjust="spacingAndGlyphs">t-0002</text>
+<text x="1108.0" y="129.2" fill="#4e5578">│</text>
+<text x="1124.8" y="129.2" fill="#c8d0f0" textLength="58.8" lengthAdjust="spacingAndGlyphs">project</text>
+<text x="1208.8" y="129.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">demo</text>
+<text x="310.0" y="146.2" fill="#4e5578">│</text>
+<text x="335.2" y="146.2" fill="#c8d0f0" textLength="361.2" lengthAdjust="spacingAndGlyphs">tasks: 0 need you · 2 in motion · 0 on deck</text>
+<text x="1108.0" y="146.2" fill="#4e5578">│</text>
+<text x="1124.8" y="146.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">thread</text>
+<text x="1208.8" y="146.2" fill="#7dcfff" font-weight="700" textLength="50.4" lengthAdjust="spacingAndGlyphs">t-0001</text>
+<text x="310.0" y="163.2" fill="#4e5578">│</text>
+<text x="326.8" y="163.2" fill="#bb9af7" font-weight="700" textLength="117.6" lengthAdjust="spacingAndGlyphs">OTHER SESSIONS</text>
+<text x="452.8" y="163.2" fill="#4e5578" textLength="663.6" lengthAdjust="spacingAndGlyphs">──────────────────────────────────────────────────────────────────────────────│</text>
+<text x="1124.8" y="163.2" fill="#c8d0f0" textLength="58.8" lengthAdjust="spacingAndGlyphs">session</text>
+<text x="1208.8" y="163.2" fill="#c8d0f0" textLength="25.2" lengthAdjust="spacingAndGlyphs">s-3</text>
+<text x="310.0" y="180.2" fill="#4e5578">│</text>
+<text x="335.2" y="180.2" fill="#c8d0f0" textLength="310.8" lengthAdjust="spacingAndGlyphs">none outside the projects (2 in them)</text>
+<text x="1108.0" y="180.2" fill="#4e5578">│</text>
+<text x="1124.8" y="180.2" fill="#c8d0f0" textLength="67.2" lengthAdjust="spacingAndGlyphs">progress</text>
+<text x="1208.8" y="180.2" fill="#7dcfff" textLength="25.2" lengthAdjust="spacingAndGlyphs">▰▰▰</text>
+<text x="1234.0" y="180.2" fill="#4e5578" textLength="16.8" lengthAdjust="spacingAndGlyphs">▱▱</text>
+<text x="1259.2" y="180.2" fill="#7dcfff" textLength="25.2" lengthAdjust="spacingAndGlyphs">50%</text>
+<text x="1292.8" y="180.2" fill="#c8d0f0" textLength="25.2" lengthAdjust="spacingAndGlyphs">1/2</text>
+<text x="310.0" y="197.2" fill="#4e5578">│</text>
+<text x="326.8" y="197.2" fill="#c8d0f0" textLength="310.8" lengthAdjust="spacingAndGlyphs">▾ Context nearly full · Context gauge</text>
+<text x="646.0" y="197.2" fill="#4e5578" textLength="294.0" lengthAdjust="spacingAndGlyphs">───────────────────────────────────</text>
+<text x="948.4" y="197.2" fill="#bb9af7" textLength="151.2" lengthAdjust="spacingAndGlyphs">mod: context-gauge</text>
+<text x="1108.0" y="197.2" fill="#4e5578">│</text>
+<text x="1124.8" y="197.2" fill="#c8d0f0" textLength="25.2" lengthAdjust="spacingAndGlyphs">now</text>
+<text x="1208.8" y="197.2" fill="#e0af68">▸</text>
+<text x="1225.6" y="197.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">Fix it</text>
+<text x="310.0" y="214.2" fill="#4e5578">│</text>
+<text x="343.6" y="214.2" fill="#c8d0f0" textLength="151.2" lengthAdjust="spacingAndGlyphs">No session is past</text>
+<text x="503.2" y="214.2" fill="#7dcfff" textLength="25.2" lengthAdjust="spacingAndGlyphs">80%</text>
+<text x="536.8" y="214.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">of its context.</text>
+<text x="1108.0" y="214.2" fill="#4e5578">│</text>
+<text x="1124.8" y="214.2" fill="#c8d0f0" textLength="58.8" lengthAdjust="spacingAndGlyphs">updated</text>
+<text x="1208.8" y="214.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">4m ago</text>
+<text x="310.0" y="231.2" fill="#4e5578">│</text>
+<text x="343.6" y="231.2" fill="#c8d0f0" textLength="764.4" lengthAdjust="spacingAndGlyphs">Clear starts a fresh conversation: the project's state is in its files, so nothing is lost.</text>
+<text x="1108.0" y="231.2" fill="#4e5578">│</text>
+<text x="1124.8" y="231.2" fill="#c8d0f0" textLength="16.8" lengthAdjust="spacingAndGlyphs">PR</text>
+<text x="1208.8" y="231.2" fill="#7aa2f7" textLength="243.6" lengthAdjust="spacingAndGlyphs">https://github.com/o/r/pull/7</text>
+<text x="310.0" y="248.2" fill="#4e5578">│</text>
+<text x="326.8" y="248.2" fill="#c8d0f0" textLength="151.2" lengthAdjust="spacingAndGlyphs">▾ Cost · Cost card</text>
+<text x="486.4" y="248.2" fill="#4e5578" textLength="487.2" lengthAdjust="spacingAndGlyphs">──────────────────────────────────────────────────────────</text>
+<text x="982.0" y="248.2" fill="#bb9af7" textLength="117.6" lengthAdjust="spacingAndGlyphs">mod: cost-card</text>
+<text x="1108.0" y="248.2" fill="#4e5578">│</text>
+<text x="1124.8" y="248.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">report</text>
+<text x="1208.8" y="248.2" fill="#c8d0f0" textLength="235.2" lengthAdjust="spacingAndGlyphs">1, new · for the coordinator</text>
+<text x="310.0" y="265.2" fill="#4e5578">│</text>
+<text x="343.6" y="265.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">today</text>
+<text x="410.8" y="265.2" fill="#7dcfff" textLength="42.0" lengthAdjust="spacingAndGlyphs">$0.00</text>
+<text x="469.6" y="265.2" fill="#c8d0f0" textLength="100.8" lengthAdjust="spacingAndGlyphs">25.0k tokens</text>
+<text x="1108.0" y="265.2" fill="#4e5578">│</text>
+<text x="310.0" y="282.2" fill="#4e5578">│</text>
+<text x="343.6" y="282.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">7 days</text>
+<text x="410.8" y="282.2" fill="#7dcfff" textLength="42.0" lengthAdjust="spacingAndGlyphs">$0.00</text>
+<text x="1108.0" y="282.2" fill="#4e5578">│</text>
+<text x="1124.8" y="282.2" fill="#c8d0f0" textLength="75.6" lengthAdjust="spacingAndGlyphs">steps 1/2</text>
+<text x="310.0" y="299.2" fill="#4e5578">│</text>
+<text x="343.6" y="299.2" fill="#7dcfff" textLength="58.8" lengthAdjust="spacingAndGlyphs">▁▁▁▁▁▁▁</text>
+<text x="1108.0" y="299.2" fill="#4e5578">│</text>
+<text x="1141.6" y="299.2" fill="#9ece6a">✓</text>
+<text x="1158.4" y="299.2" fill="#c8d0f0" textLength="159.6" lengthAdjust="spacingAndGlyphs">1 Reproduce the bug</text>
+<text x="310.0" y="316.2" fill="#4e5578">│</text>
+<text x="343.6" y="316.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">Thread</text>
+<text x="478.0" y="316.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">Tokens</text>
+<text x="553.6" y="316.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">Cost</text>
+<text x="1108.0" y="316.2" fill="#4e5578">│</text>
+<text x="1141.6" y="316.2" fill="#c8d0f0" textLength="84.0" lengthAdjust="spacingAndGlyphs">○ 2 Fix it</text>
+<text x="310.0" y="333.2" fill="#4e5578">│</text>
+<text x="343.6" y="333.2" fill="#c8d0f0" textLength="117.6" lengthAdjust="spacingAndGlyphs">Write the docs</text>
+<text x="486.4" y="333.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">25.0k</text>
+<text x="545.2" y="333.2" fill="#7dcfff" textLength="42.0" lengthAdjust="spacingAndGlyphs">$0.00</text>
+<text x="1108.0" y="333.2" fill="#4e5578">│</text>
+<text x="310.0" y="350.2" fill="#4e5578">│</text>
+<text x="1108.0" y="350.2" fill="#4e5578">│</text>
+<text x="1124.8" y="350.2" fill="#7aa2f7" textLength="42.0" lengthAdjust="spacingAndGlyphs">enter</text>
+<text x="1175.2" y="350.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">attach</text>
+<text x="310.0" y="367.2" fill="#4e5578">│</text>
+<text x="1108.0" y="367.2" fill="#4e5578">│</text>
+<text x="310.0" y="384.2" fill="#4e5578">│</text>
+<text x="1108.0" y="384.2" fill="#4e5578">│</text>
+<text x="1124.8" y="384.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">Last report</text>
+<text x="1225.6" y="384.2" fill="#bb9af7" textLength="151.2" lengthAdjust="spacingAndGlyphs">mod: report-glance</text>
+<text x="1385.2" y="384.2" fill="#4e5578" textLength="134.4" lengthAdjust="spacingAndGlyphs">────────────────</text>
+<text x="310.0" y="401.2" fill="#4e5578">│</text>
+<text x="1108.0" y="401.2" fill="#4e5578">│</text>
+<text x="1124.8" y="401.2" fill="#c8d0f0" textLength="67.2" lengthAdjust="spacingAndGlyphs">report 1</text>
+<text x="1208.8" y="401.2" fill="#c8d0f0" textLength="210.0" lengthAdjust="spacingAndGlyphs">Fixed the login redirect.</text>
+<text x="310.0" y="418.2" fill="#4e5578">│</text>
+<text x="1108.0" y="418.2" fill="#4e5578">│</text>
+<text x="1124.8" y="418.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">next</text>
+<text x="1175.2" y="418.2" fill="#c8d0f0" textLength="100.8" lengthAdjust="spacingAndGlyphs">Merge the PR</text>
+<text x="310.0" y="435.2" fill="#4e5578">│</text>
+<text x="1108.0" y="435.2" fill="#4e5578">│</text>
+<text x="1124.8" y="435.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">no ## Check</text>
+<text x="310.0" y="452.2" fill="#4e5578">│</text>
+<text x="1108.0" y="452.2" fill="#4e5578">│</text>
+<text x="24.4" y="469.2" fill="#4e5578" textLength="277.2" lengthAdjust="spacingAndGlyphs">─────────────────────────────────</text>
+<text x="310.0" y="469.2" fill="#4e5578">│</text>
+<text x="1108.0" y="469.2" fill="#4e5578">│</text>
+<text x="24.4" y="486.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">demo · active</text>
+<text x="310.0" y="486.2" fill="#4e5578" textLength="1218.0" lengthAdjust="spacingAndGlyphs">│────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</text>
+<text x="24.4" y="503.2" fill="#c8d0f0" textLength="277.2" lengthAdjust="spacingAndGlyphs">2 threads · coordinator not runn…</text>
+<text x="310.0" y="503.2" fill="#4e5578">│</text>
+<text x="326.8" y="503.2" fill="#7aa2f7" textLength="50.4" lengthAdjust="spacingAndGlyphs">≡ menu</text>
+<text x="385.6" y="503.2" fill="#c8d0f0">·</text>
+<text x="402.4" y="503.2" fill="#7aa2f7" textLength="42.0" lengthAdjust="spacingAndGlyphs">enter</text>
+<text x="452.8" y="503.2" fill="#c8d0f0" textLength="680.4" lengthAdjust="spacingAndGlyphs">attach · space deactivate · a project · t tasks · i inbox · , settings · ? help ·</text>
+<text x="1141.6" y="503.2" fill="#7aa2f7" textLength="67.2" lengthAdjust="spacingAndGlyphs">prefix+q</text>
+<text x="1217.2" y="503.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">quit</text>
+<text x="24.4" y="520.2" fill="#c8d0f0" textLength="168.0" lengthAdjust="spacingAndGlyphs">tab sidebar · ? help</text>
+<text x="310.0" y="520.2" fill="#4e5578">│</text>
+</svg>

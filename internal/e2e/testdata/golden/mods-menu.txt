@@ -1,0 +1,38 @@
+ PROJECTS                      1   │ tm dashboard                                               ● server ok · 2 sessions
+ ■ demo        2                   │ demo ────────────────────────────────────────────── ● active — space to deactivate
+ └─ coordi…             ·          │  coordinator                      —           not running; enter starts it  3 inbox
+    ├─ T1    50% ☐      ○          │  T1 Fix the login              ○ idle             report new  50% 1/2 ▸ Fix it  <duration>…
+    └─ T2        ☐ 4%   ○          │        steps 1/2
+                                   │          ✓ 1 Reproduce the bug
+                                   │          ○ 2 Fix it
+                                   │        report new · for the coordinator
+                                   │  T2 Write the docs             ○ idle      4%     <duration>  t-0002
+                                   │  tasks: 0 need you · 2 in motion · 0 on deck
+                                   │ ╭─ terminatr dev ─────────────────────────────╮────────────────────────────────────
+                                   │ │ back to the last place                    ; │
+                                   │ │ open the selected row                 enter │──────────────── mod: context-gauge
+                                   │ │ adopt as a thread                         T │
+                                   │ │ activate / deactivate the project     space │t's state is in its files, so
+                                   │ │ fold / unfold the mod card                z │
+                                   │ │ new project                               n │──────────────────── mod: cost-card
+                                   │ │ project popup                             a │
+                                   │ │ tasks                                     t │
+                                   │ │ inbox                                     i │
+                                   │ │ next project                              ] │
+                                   │ │ previous project                          [ │
+                                   │ │ narrower list                             < │
+                                   │ │ wider list                                > │
+                                   │ │ narrower sidebar                          { │
+                                   │ │ wider sidebar                             } │
+                                   │ │ slim sidebar on / off                     b │
+                                   │ │ details panel on / off                    | │
+                                   │ │ settings                                  , │
+                                   │ │ help: keys and mouse                      ? │
+                                   │ │ quit                               prefix+q │
+                                   │ │ Standup · mod: standup                    S │
+                                   │ │                                             │
+                                   │ │ enter pick · esc close                      │
+ ───────────────────────────────── │ ╰─────────────────────────────────────────────╯
+ demo · active                     │────────────────────────────────────────────────────────────────────────────────────
+ 2 threads · coordinator not runn… │
+ tab sidebar · ? help              │

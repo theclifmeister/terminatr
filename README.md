@@ -6,21 +6,35 @@ You talk to one **coordinator**. It splits the work into tasks and hands each to
 
 **Claude Code and Codex are supported**; pi and opencode will follow. Agents plug in through a manifest ([docs/SPEC.md §8](docs/SPEC.md#8-agents)). Using Codex? See [docs/CODEX.md](docs/CODEX.md).
 
-For Claude Code, tm uses its mods (plugin hooks, early access, Claude Code 2.1.289 or newer) to set and read state: session state, context use, questions and approvals, and the guard. It doesn't screen-scrape ([docs/SPEC.md §8.6](docs/SPEC.md#8-agents)).
+tm reads each agent's state from its hooks and session logs, not by scraping the screen. For Claude Code, tm's **Agent mod** (Claude Code's plugin hooks; early access, off by default, Claude Code 2.1.289 or newer) adds a status band, a `/tm` pane, and the session's context and token use ([docs/SPEC.md §8.6](docs/SPEC.md#8-agents)).
 
-```
- PROJECTS                    1 │ tm dashboard                                                                          ● server ok · 1 session
- ■ demo                    1   │ demo ────────────────────────────────────────────────────────────────────────────────────────────────────────
- └─ coordinator              · │  coordinator                               —           not running; enter starts it  1 inbox
-    └─ T1 Fix the login  50% ○ │  T1 Fix the login                          ○ idle      report new  ▰▰▰▱▱  50% 1/2 ▸ Fix  2m  PR #7  t-0001
-                               │        steps 1/2
-                               │          ✓ 1 Reproduce
-                               │          ○ 2 Fix
-                               │        report new · for the coordinator
-                               │  tasks: 0 need you · 1 in motion · 0 on deck
-                               │ ≡ menu · enter attach · a project · t tasks · i inbox · , settings · ? help · prefix+q quit
-                               │
-```
+![The tm dashboard: the project tree on the left with a coordinator and a thread on task T1 at 50%, the dashboard in the middle listing them, and the selected thread's task, steps, PR and report on the right.](docs/images/dashboard.svg)
+
+## A look around
+
+These are tm's own screens, captured by its end-to-end tests (the agent in them is a test stand-in).
+
+Every agent runs in its own session. Open one and tm keeps the project tree on the left and the thread's task, steps, PR and last report on the right; the status bar says where you are and how far it got.
+
+![A thread's session: the agent's conversation in the middle, the project sidebar on the left, and the thread's info panel on the right with its steps, PR and last report.](docs/images/session.svg)
+
+`a` opens the project popup: its overview, inbox, tasks, settings, keys, memory and library. The Tasks tab shows the board by state, with the selected task's steps; `+` adds a task, from a template if you like.
+
+![The project popup's Tasks tab: the board grouped by state, with a task in motion showing its steps and one on deck.](docs/images/tasks.svg)
+
+## Mods
+
+Mods make tm yours. A mod is a folder with a `mod.toml` and, for code, a TypeScript file. It can add dashboard cards, sidebar and dashboard columns, project popup tabs, full views, sections in the details and coordinator panels, commands (a key, a ≡ menu entry, `prefix`+key inside a session, `tm mod run`), OS notifications with buttons, agent tools served by `tm mcp`, guard rules that only tighten, suggested defaults, themes, keymaps and code hosts (GitLab).
+
+![The dashboard with three example mods: the Context gauge's column and card, the Cost card's tokens per thread, and Report glance's section under the selected thread's details.](docs/images/mods.svg)
+
+Mods are safe by design. Installing one shows what it asks for, and it installs turned off. Each code mod runs in its own host under the OS sandbox and asks tm for everything. A mod only names an action, such as clearing a session or answering a question; tm checks it and asks you before it runs. Your console talks to the server on a socket of its own that agents' sandboxes don't allow, so an agent can't act as you. `tm --no-mods` starts with the built-in mods only.
+
+Some of tm is mods already: the Tasks tab, the sidebar's PR/CI column, the Memory tab and the default task templates. Settings (`,`) then `3` lists every mod, what it provides and what it may do.
+
+![Settings, Mods tab: the installed example mods, then the built-in ones, each with what it provides and the permissions it runs with.](docs/images/mods-settings.svg)
+
+To try one, install it from [the examples](examples/mods) and turn it on in the Mods tab: `tm mod install terminatr/examples/mods/standup`. To write your own, run `tm mod new my-mod --kind column`, `tm mod dev my-mod` (live, restarts on save), `tm mod test my-mod` and `tm mod logs my-mod`. In Claude Code sessions, memory-search, context-gauge and cost-card need the Agent mod, which is early access and off by default: turn it on in Settings (*Agent mod*) or with `[agent_mod] enabled = true` in `config.toml`.
 
 ## Requirements
 

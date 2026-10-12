@@ -30,26 +30,29 @@
     }
   }
 
-  // Screen tabs (WAI-ARIA tabs: arrows, Home and End move between them).
-  var tabs = Array.prototype.slice.call(document.querySelectorAll('[role="tab"]'));
-  function select(tab, focus) {
-    tabs.forEach(function (t) {
-      var on = t === tab;
-      t.setAttribute("aria-selected", on ? "true" : "false");
-      t.tabIndex = on ? 0 : -1;
-      document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
-    });
-    if (focus) tab.focus();
-  }
-  tabs.forEach(function (tab, n) {
-    tab.addEventListener("click", function () { select(tab, false); });
-    tab.addEventListener("keydown", function (e) {
-      var to = null;
-      if (e.key === "ArrowRight") to = tabs[(n + 1) % tabs.length];
-      else if (e.key === "ArrowLeft") to = tabs[(n - 1 + tabs.length) % tabs.length];
-      else if (e.key === "Home") to = tabs[0];
-      else if (e.key === "End") to = tabs[tabs.length - 1];
-      if (to) { e.preventDefault(); select(to, true); }
+  // Screen tabs (WAI-ARIA tabs: arrows, Home and End move between them),
+  // each tab list on its own.
+  document.querySelectorAll('[role="tablist"]').forEach(function (list) {
+    var tabs = Array.prototype.slice.call(list.querySelectorAll('[role="tab"]'));
+    function select(tab, focus) {
+      tabs.forEach(function (t) {
+        var on = t === tab;
+        t.setAttribute("aria-selected", on ? "true" : "false");
+        t.tabIndex = on ? 0 : -1;
+        document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+      });
+      if (focus) tab.focus();
+    }
+    tabs.forEach(function (tab, n) {
+      tab.addEventListener("click", function () { select(tab, false); });
+      tab.addEventListener("keydown", function (e) {
+        var to = null;
+        if (e.key === "ArrowRight") to = tabs[(n + 1) % tabs.length];
+        else if (e.key === "ArrowLeft") to = tabs[(n - 1 + tabs.length) % tabs.length];
+        else if (e.key === "Home") to = tabs[0];
+        else if (e.key === "End") to = tabs[tabs.length - 1];
+        if (to) { e.preventDefault(); select(to, true); }
+      });
     });
   });
 

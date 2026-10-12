@@ -1,0 +1,18 @@
+ PROJECTS                      1   │ tm dashboard · Standup                                     ● server ok · 2 sessions
+ ■ demo        2                   │ NEEDS YOU 0 ───────────────────────────────────────────────────────────────────────
+ └─ coordi…             ·          │  mod: standup · Standup
+    ├─ T1    50% ☐      ○          │  demo  2 started
+    └─ T2        ☐ 4%   ○          │  Started (2)
+                                   │  T1 Fix the login  1/2  t-0001
+                                   │  T2 Write the docs  t-0002
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+ ───────────────────────────────── │
+ demo · active                     │────────────────────────────────────────────────────────────────────────────────────
+ 2 threads · coordinator not runn… │ ↑ ↓ move · / filter · esc back
+ tab sidebar · ? help              │ ran Standup · mod: standup

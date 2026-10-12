@@ -1,0 +1,210 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="678" viewBox="0 0 1040 678" role="img" aria-labelledby="t">
+<title id="t">tm · Settings, Mods tab</title>
+<style>text{font:14px ui-monospace,SFMono-Regular,Menlo,Consolas,'DejaVu Sans Mono','Liberation Mono',monospace;white-space:pre}</style>
+<rect width="1040" height="678" rx="10" fill="#11131c"/>
+<rect width="1040" height="34" rx="10" fill="#161925"/><rect y="24" width="1040" height="10" fill="#161925"/>
+<line x1="0" y1="34" x2="1040" y2="34" stroke="#262a3d"/>
+<circle cx="18" cy="17" r="5.5" fill="#f7768e"/><circle cx="36" cy="17" r="5.5" fill="#e0af68"/><circle cx="54" cy="17" r="5.5" fill="#9ece6a"/>
+<text x="72" y="21" fill="#8189ad" style="font-size:12px">tm · Settings, Mods tab</text>
+<text x="24.4" y="61.2" fill="#bb9af7" font-weight="700" textLength="67.2" lengthAdjust="spacingAndGlyphs">PROJECTS</text>
+<text x="276.4" y="61.2" fill="#c8d0f0">1</text>
+<text x="310.0" y="61.2" fill="#4e5578">│</text>
+<text x="326.8" y="61.2" fill="#c8d0f0" font-weight="700" textLength="100.8" lengthAdjust="spacingAndGlyphs">tm dashboard</text>
+<text x="822.4" y="61.2" fill="#9ece6a" textLength="92.4" lengthAdjust="spacingAndGlyphs">● server ok</text>
+<text x="923.2" y="61.2" fill="#c8d0f0" textLength="100.8" lengthAdjust="spacingAndGlyphs">· 2 sessions</text>
+<text x="24.4" y="78.2" fill="#7dcfff">■</text>
+<text x="41.2" y="78.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">demo</text>
+<text x="142.0" y="78.2" fill="#c8d0f0">2</text>
+<text x="310.0" y="78.2" fill="#4e5578">│</text>
+<text x="326.8" y="78.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">demo</text>
+<text x="368.8" y="78.2" fill="#4e5578" textLength="386.4" lengthAdjust="spacingAndGlyphs">──────────────────────────────────────────────</text>
+<text x="763.6" y="78.2" fill="#c8d0f0" textLength="252.0" lengthAdjust="spacingAndGlyphs">● active — space to deactivate</text>
+<text x="24.4" y="95.2" fill="#4e5578" textLength="16.8" lengthAdjust="spacingAndGlyphs">└─</text>
+<text x="49.6" y="95.2" fill="#c8d0f0" textLength="58.8" lengthAdjust="spacingAndGlyphs">coordi…</text>
+<text x="217.6" y="95.2" fill="#c8d0f0">·</text>
+<text x="310.0" y="95.2" fill="#4e5578">│</text>
+<text x="335.2" y="95.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">coordinator</text>
+<text x="612.4" y="95.2" fill="#c8d0f0">—</text>
+<text x="713.2" y="95.2" fill="#c8d0f0" textLength="100.8" lengthAdjust="spacingAndGlyphs">not running;</text>
+<text x="822.4" y="95.2" fill="#7aa2f7" textLength="42.0" lengthAdjust="spacingAndGlyphs">enter</text>
+<text x="872.8" y="95.2" fill="#c8d0f0" textLength="75.6" lengthAdjust="spacingAndGlyphs">starts it</text>
+<text x="965.2" y="95.2" fill="#e0af68" textLength="58.8" lengthAdjust="spacingAndGlyphs">3 inbox</text>
+<text x="49.6" y="112.2" fill="#4e5578" textLength="16.8" lengthAdjust="spacingAndGlyphs">├─</text>
+<text x="74.8" y="112.2" fill="#7dcfff" font-weight="700" textLength="16.8" lengthAdjust="spacingAndGlyphs">T1</text>
+<text x="125.2" y="112.2" fill="#7dcfff" textLength="25.2" lengthAdjust="spacingAndGlyphs">50%</text>
+<text x="158.8" y="112.2" fill="#8189ad">☐</text>
+<text x="217.6" y="112.2" fill="#c8d0f0">○</text>
+<text x="310.0" y="112.2" fill="#4e5578">│</text>
+<text x="335.2" y="112.2" fill="#7dcfff" font-weight="700" textLength="16.8" lengthAdjust="spacingAndGlyphs">T1</text>
+<text x="360.4" y="112.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">Fix the login</text>
+<text x="587.2" y="112.2" fill="#8189ad" textLength="50.4" lengthAdjust="spacingAndGlyphs">○ idle</text>
+<text x="746.8" y="112.2" fill="#e0af68" textLength="84.0" lengthAdjust="spacingAndGlyphs">report new</text>
+<text x="847.6" y="112.2" fill="#7dcfff" textLength="25.2" lengthAdjust="spacingAndGlyphs">50%</text>
+<text x="881.2" y="112.2" fill="#c8d0f0" textLength="25.2" lengthAdjust="spacingAndGlyphs">1/2</text>
+<text x="914.8" y="112.2" fill="#e0af68">▸</text>
+<text x="931.6" y="112.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">Fix it</text>
+<text x="998.8" y="112.2" fill="#c8d0f0" textLength="25.2" lengthAdjust="spacingAndGlyphs">4m…</text>
+<text x="49.6" y="129.2" fill="#4e5578" textLength="16.8" lengthAdjust="spacingAndGlyphs">└─</text>
+<text x="74.8" y="129.2" fill="#7dcfff" font-weight="700" textLength="16.8" lengthAdjust="spacingAndGlyphs">T2</text>
+<text x="116.8" y="129.2" fill="#4e5578" textLength="16.8" lengthAdjust="spacingAndGlyphs">╭─</text>
+<text x="142.0" y="129.2" fill="#c8d0f0" textLength="67.2" lengthAdjust="spacingAndGlyphs">Settings</text>
+<text x="217.6" y="129.2" fill="#4e5578" textLength="705.6" lengthAdjust="spacingAndGlyphs">───────────────────────────────────────────────────────────────────────────────────╮</text>
+<text x="116.8" y="146.2" fill="#4e5578">│</text>
+<text x="142.0" y="146.2" fill="#c8d0f0" textLength="75.6" lengthAdjust="spacingAndGlyphs">1 General</text>
+<text x="242.8" y="146.2" fill="#c8d0f0" textLength="117.6" lengthAdjust="spacingAndGlyphs">2 All projects</text>
+<text x="385.6" y="146.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">3 Mods</text>
+<text x="914.8" y="146.2" fill="#4e5578">│</text>
+<text x="116.8" y="163.2" fill="#4e5578">│</text>
+<text x="133.6" y="163.2" fill="#c8d0f0" textLength="369.6" lengthAdjust="spacingAndGlyphs">About: tm dev · server dev · update check on</text>
+<text x="914.8" y="163.2" fill="#4e5578">│</text>
+<text x="116.8" y="180.2" fill="#4e5578">│</text>
+<text x="914.8" y="180.2" fill="#4e5578">│</text>
+<text x="116.8" y="197.2" fill="#4e5578">│</text>
+<text x="133.6" y="197.2" fill="#9ece6a">●</text>
+<text x="150.4" y="197.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">Context gauge</text>
+<text x="310.0" y="197.2" fill="#c8d0f0" textLength="168.0" lengthAdjust="spacingAndGlyphs">code · column · view</text>
+<text x="528.4" y="197.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
+<text x="587.2" y="197.2" fill="#c8d0f0" textLength="319.2" lengthAdjust="spacingAndGlyphs">reads your projects · draws its own p…</text>
+<text x="914.8" y="197.2" fill="#4e5578">│</text>
+<text x="116.8" y="214.2" fill="#4e5578">│</text>
+<text x="133.6" y="214.2" fill="#9ece6a">●</text>
+<text x="150.4" y="214.2" fill="#c8d0f0" textLength="75.6" lengthAdjust="spacingAndGlyphs">Cost card</text>
+<text x="310.0" y="214.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">code · view</text>
+<text x="528.4" y="214.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
+<text x="587.2" y="214.2" fill="#c8d0f0" textLength="319.2" lengthAdjust="spacingAndGlyphs">reads your projects · draws its own p…</text>
+<text x="914.8" y="214.2" fill="#4e5578">│</text>
+<text x="116.8" y="231.2" fill="#4e5578">│</text>
+<text x="133.6" y="231.2" fill="#9ece6a">●</text>
+<text x="150.4" y="231.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">Report glance</text>
+<text x="310.0" y="231.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">code · view</text>
+<text x="528.4" y="231.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
+<text x="587.2" y="231.2" fill="#c8d0f0" textLength="319.2" lengthAdjust="spacingAndGlyphs">reads your projects · draws its own p…</text>
+<text x="914.8" y="231.2" fill="#4e5578" textLength="109.2" lengthAdjust="spacingAndGlyphs">│────────────</text>
+<text x="116.8" y="248.2" fill="#4e5578">│</text>
+<text x="133.6" y="248.2" fill="#9ece6a">●</text>
+<text x="150.4" y="248.2" fill="#c8d0f0" textLength="58.8" lengthAdjust="spacingAndGlyphs">Standup</text>
+<text x="310.0" y="248.2" fill="#c8d0f0" textLength="184.8" lengthAdjust="spacingAndGlyphs">code · view · commands</text>
+<text x="528.4" y="248.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
+<text x="587.2" y="248.2" fill="#c8d0f0" textLength="319.2" lengthAdjust="spacingAndGlyphs">reads your projects · draws its own p…</text>
+<text x="914.8" y="248.2" fill="#4e5578">│</text>
+<text x="116.8" y="265.2" fill="#4e5578">│</text>
+<text x="133.6" y="265.2" fill="#9ece6a">●</text>
+<text x="150.4" y="265.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">ASCII icons</text>
+<text x="310.0" y="265.2" fill="#c8d0f0" textLength="134.4" lengthAdjust="spacingAndGlyphs">icons · built in</text>
+<text x="528.4" y="265.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
+<text x="587.2" y="265.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">built in · safe</text>
+<text x="914.8" y="265.2" fill="#4e5578">│</text>
+<text x="923.2" y="265.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">ntext-gauge</text>
+<text x="116.8" y="282.2" fill="#4e5578">│</text>
+<text x="133.6" y="282.2" fill="#9ece6a">●</text>
+<text x="150.4" y="282.2" fill="#c8d0f0" textLength="117.6" lengthAdjust="spacingAndGlyphs">Default keymap</text>
+<text x="310.0" y="282.2" fill="#c8d0f0" textLength="142.8" lengthAdjust="spacingAndGlyphs">keymap · built in</text>
+<text x="528.4" y="282.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
+<text x="587.2" y="282.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">built in · safe</text>
+<text x="914.8" y="282.2" fill="#4e5578">│</text>
+<text x="116.8" y="299.2" fill="#4e5578">│</text>
+<text x="133.6" y="299.2" fill="#9ece6a">●</text>
+<text x="150.4" y="299.2" fill="#c8d0f0" textLength="117.6" lengthAdjust="spacingAndGlyphs">Default layout</text>
+<text x="310.0" y="299.2" fill="#c8d0f0" textLength="142.8" lengthAdjust="spacingAndGlyphs">layout · built in</text>
+<text x="528.4" y="299.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
+<text x="587.2" y="299.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">built in · safe</text>
+<text x="914.8" y="299.2" fill="#4e5578">│</text>
+<text x="923.2" y="299.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">s, so</text>
+<text x="116.8" y="316.2" fill="#4e5578">│</text>
+<text x="133.6" y="316.2" fill="#9ece6a">●</text>
+<text x="150.4" y="316.2" fill="#c8d0f0" textLength="117.6" lengthAdjust="spacingAndGlyphs">Default policy</text>
+<text x="310.0" y="316.2" fill="#c8d0f0" textLength="134.4" lengthAdjust="spacingAndGlyphs">rules · built in</text>
+<text x="528.4" y="316.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
+<text x="587.2" y="316.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">built in · safe</text>
+<text x="914.8" y="316.2" fill="#4e5578">│</text>
+<text x="116.8" y="333.2" fill="#4e5578">│</text>
+<text x="133.6" y="333.2" fill="#9ece6a">●</text>
+<text x="150.4" y="333.2" fill="#c8d0f0" textLength="142.8" lengthAdjust="spacingAndGlyphs">Default templates</text>
+<text x="310.0" y="333.2" fill="#c8d0f0" textLength="168.0" lengthAdjust="spacingAndGlyphs">templates · built in</text>
+<text x="528.4" y="333.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
+<text x="587.2" y="333.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">built in · safe</text>
+<text x="914.8" y="333.2" fill="#4e5578">│</text>
+<text x="923.2" y="333.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">: cost-card</text>
+<text x="116.8" y="350.2" fill="#4e5578">│</text>
+<text x="133.6" y="350.2" fill="#9ece6a">●</text>
+<text x="150.4" y="350.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">Default theme</text>
+<text x="310.0" y="350.2" fill="#c8d0f0" textLength="134.4" lengthAdjust="spacingAndGlyphs">theme · built in</text>
+<text x="528.4" y="350.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
+<text x="587.2" y="350.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">built in · safe</text>
+<text x="914.8" y="350.2" fill="#4e5578">│</text>
+<text x="116.8" y="367.2" fill="#4e5578">│</text>
+<text x="133.6" y="367.2" fill="#9ece6a">●</text>
+<text x="150.4" y="367.2" fill="#c8d0f0" textLength="84.0" lengthAdjust="spacingAndGlyphs">Memory tab</text>
+<text x="310.0" y="367.2" fill="#c8d0f0" textLength="184.8" lengthAdjust="spacingAndGlyphs">code · view · built in</text>
+<text x="528.4" y="367.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
+<text x="587.2" y="367.2" fill="#c8d0f0" textLength="319.2" lengthAdjust="spacingAndGlyphs">built in · reads your projects · draw…</text>
+<text x="914.8" y="367.2" fill="#4e5578">│</text>
+<text x="116.8" y="384.2" fill="#4e5578">│</text>
+<text x="133.6" y="384.2" fill="#9ece6a">●</text>
+<text x="150.4" y="384.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">Nerd Font icons</text>
+<text x="310.0" y="384.2" fill="#c8d0f0" textLength="134.4" lengthAdjust="spacingAndGlyphs">icons · built in</text>
+<text x="528.4" y="384.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
+<text x="587.2" y="384.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">built in · safe</text>
+<text x="914.8" y="384.2" fill="#4e5578">│</text>
+<text x="116.8" y="401.2" fill="#4e5578">│</text>
+<text x="133.6" y="401.2" fill="#9ece6a">●</text>
+<text x="150.4" y="401.2" fill="#c8d0f0" textLength="100.8" lengthAdjust="spacingAndGlyphs">PR/CI column</text>
+<text x="310.0" y="401.2" fill="#c8d0f0" textLength="201.6" lengthAdjust="spacingAndGlyphs">code · column · built in</text>
+<text x="528.4" y="401.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
+<text x="587.2" y="401.2" fill="#c8d0f0" textLength="252.0" lengthAdjust="spacingAndGlyphs">built in · reads your projects</text>
+<text x="914.8" y="401.2" fill="#4e5578">│</text>
+<text x="116.8" y="418.2" fill="#4e5578">│</text>
+<text x="133.6" y="418.2" fill="#9ece6a">●</text>
+<text x="150.4" y="418.2" fill="#c8d0f0" textLength="75.6" lengthAdjust="spacingAndGlyphs">Tasks tab</text>
+<text x="310.0" y="418.2" fill="#c8d0f0" textLength="184.8" lengthAdjust="spacingAndGlyphs">code · view · built in</text>
+<text x="528.4" y="418.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
+<text x="587.2" y="418.2" fill="#c8d0f0" textLength="319.2" lengthAdjust="spacingAndGlyphs">built in · reads your projects · draw…</text>
+<text x="914.8" y="418.2" fill="#4e5578">│</text>
+<text x="116.8" y="435.2" fill="#4e5578">│</text>
+<text x="133.6" y="435.2" fill="#9ece6a">●</text>
+<text x="150.4" y="435.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">Unicode icons</text>
+<text x="310.0" y="435.2" fill="#c8d0f0" textLength="134.4" lengthAdjust="spacingAndGlyphs">icons · built in</text>
+<text x="528.4" y="435.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
+<text x="587.2" y="435.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">built in · safe</text>
+<text x="914.8" y="435.2" fill="#4e5578">│</text>
+<text x="116.8" y="452.2" fill="#4e5578">│</text>
+<text x="914.8" y="452.2" fill="#4e5578">│</text>
+<text x="116.8" y="469.2" fill="#4e5578">│</text>
+<text x="133.6" y="469.2" fill="#c8d0f0" textLength="764.4" lengthAdjust="spacingAndGlyphs">Context gauge: How full each session's context window is, by its row; a card lists the ones</text>
+<text x="914.8" y="469.2" fill="#4e5578">│</text>
+<text x="116.8" y="486.2" fill="#4e5578">│</text>
+<text x="133.6" y="486.2" fill="#c8d0f0" textLength="470.4" lengthAdjust="spacingAndGlyphs">past the warning, where C clears one (tm asks first) and</text>
+<text x="612.4" y="486.2" fill="#7aa2f7" textLength="42.0" lengthAdjust="spacingAndGlyphs">enter</text>
+<text x="662.8" y="486.2" fill="#c8d0f0" textLength="218.4" lengthAdjust="spacingAndGlyphs">attaches to it. For Claude</text>
+<text x="914.8" y="486.2" fill="#4e5578">│</text>
+<text x="116.8" y="503.2" fill="#4e5578">│</text>
+<text x="133.6" y="503.2" fill="#c8d0f0" textLength="747.6" lengthAdjust="spacingAndGlyphs">sessions it needs the Agent mod on (early access, off by default: Settings, Agent mod, or</text>
+<text x="914.8" y="503.2" fill="#4e5578">│</text>
+<text x="116.8" y="520.2" fill="#4e5578">│</text>
+<text x="133.6" y="520.2" fill="#c8d0f0" textLength="663.6" lengthAdjust="spacingAndGlyphs">[agent_mod] enabled = true), which reports their context and use. By terminatr.</text>
+<text x="914.8" y="520.2" fill="#4e5578">│</text>
+<text x="116.8" y="537.2" fill="#4e5578">│</text>
+<text x="914.8" y="537.2" fill="#4e5578">│</text>
+<text x="116.8" y="554.2" fill="#4e5578">│</text>
+<text x="133.6" y="554.2" fill="#7aa2f7" textLength="42.0" lengthAdjust="spacingAndGlyphs">enter</text>
+<text x="184.0" y="554.2" fill="#c8d0f0" textLength="663.6" lengthAdjust="spacingAndGlyphs">on/off · p permissions · s settings · d defaults · l log · r restart · u update</text>
+<text x="914.8" y="554.2" fill="#4e5578">│</text>
+<text x="116.8" y="571.2" fill="#4e5578">│</text>
+<text x="133.6" y="571.2" fill="#c8d0f0" textLength="193.2" lengthAdjust="spacingAndGlyphs">x remove · e examples ·</text>
+<text x="335.2" y="571.2" fill="#7aa2f7" textLength="25.2" lengthAdjust="spacingAndGlyphs">← →</text>
+<text x="368.8" y="571.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">tabs ·</text>
+<text x="427.6" y="571.2" fill="#7aa2f7" textLength="25.2" lengthAdjust="spacingAndGlyphs">esc</text>
+<text x="461.2" y="571.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">close</text>
+<text x="914.8" y="571.2" fill="#4e5578">│</text>
+<text x="116.8" y="588.2" fill="#4e5578" textLength="722.4" lengthAdjust="spacingAndGlyphs">╰─────────────────────────────────────────────────────────────────────────────────────</text>
+<text x="847.6" y="588.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">more ↓</text>
+<text x="906.4" y="588.2" fill="#4e5578" textLength="16.8" lengthAdjust="spacingAndGlyphs">─╯</text>
+<text x="24.4" y="605.2" fill="#4e5578" textLength="277.2" lengthAdjust="spacingAndGlyphs">─────────────────────────────────</text>
+<text x="310.0" y="605.2" fill="#4e5578">│</text>
+<text x="24.4" y="622.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">demo · active</text>
+<text x="310.0" y="622.2" fill="#4e5578" textLength="714.0" lengthAdjust="spacingAndGlyphs">│────────────────────────────────────────────────────────────────────────────────────</text>
+<text x="24.4" y="639.2" fill="#c8d0f0" textLength="277.2" lengthAdjust="spacingAndGlyphs">2 threads · coordinator not runn…</text>
+<text x="310.0" y="639.2" fill="#4e5578">│</text>
+<text x="24.4" y="656.2" fill="#c8d0f0" textLength="168.0" lengthAdjust="spacingAndGlyphs">tab sidebar · ? help</text>
+<text x="310.0" y="656.2" fill="#4e5578">│</text>
+</svg>

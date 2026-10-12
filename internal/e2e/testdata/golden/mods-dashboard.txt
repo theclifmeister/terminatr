@@ -1,0 +1,28 @@
+ PROJECTS                      1   │ tm dashboard                                                                                                           ● server ok · 2 sessions
+ ■ demo        2                   │ demo ──────────────────────────────────────────────────────── ● active — space to deactivate │ T1 Fix the login
+ └─ coordi…             ·          │  coordinator                           —           not running; enter starts it  3 inbox     │ ○ idle
+    ├─ T1    50% ☐      ○          │  T1 Fix the login                  ○ idle             report new  50% 1/2 ▸ Fix it  <duration>  PR #…│ ───────────────────────────────────────────────
+    └─ T2        ☐ 4%   ○          │  T2 Write the docs                 ○ idle      4%     <duration>  t-0002                             │ project   demo
+                                   │  tasks: 0 need you · 2 in motion · 0 on deck                                                 │ thread    t-0001
+                                   │ OTHER SESSIONS ──────────────────────────────────────────────────────────────────────────────│ session   <session>
+                                   │  none outside the projects (2 in them)                                                       │ progress  ▰▰▰▱▱ 50% 1/2
+                                   │ ▾ Context nearly full · Context gauge ─────────────────────────────────── mod: context-gauge │ now       ▸ Fix it
+                                   │   No session is past 80% of its context.                                                     │ updated   <duration> ago
+                                   │   Clear starts a fresh conversation: the project's state is in its files, so nothing is lost.│ PR        https://github.com/o/r/pull/7
+                                   │ ▾ Cost · Cost card ────────────────────────────────────────────────────────── mod: cost-card │ report    1, new · for the coordinator
+                                   │   today   $0.00  25.0k tokens                                                                │
+                                   │   7 days  $0.00                                                                              │ steps 1/2
+                                   │   ▁▁▁▁▁▁▁                                                                                    │   ✓ 1 Reproduce the bug
+                                   │   Thread          Tokens   Cost                                                              │   ○ 2 Fix it
+                                   │   Write the docs   25.0k  $0.00                                                              │
+                                   │                                                                                              │ enter attach
+                                   │                                                                                              │
+                                   │                                                                                              │ Last report mod: report-glance ────────────────
+                                   │                                                                                              │ report 1  Fixed the login redirect.
+                                   │                                                                                              │ next  Merge the PR
+                                   │                                                                                              │ no ## Check
+                                   │                                                                                              │
+ ───────────────────────────────── │                                                                                              │
+ demo · active                     │────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 2 threads · coordinator not runn… │ ≡ menu · enter attach · space deactivate · a project · t tasks · i inbox · , settings · ? help · prefix+q quit
+ tab sidebar · ? help              │
