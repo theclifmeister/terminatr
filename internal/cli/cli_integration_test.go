@@ -14,6 +14,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/theclifmeister/terminatr/internal/service"
+	"github.com/theclifmeister/terminatr/internal/service/servicetest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,6 +30,12 @@ func TestMain(m *testing.M) {
 	if dir := os.Getenv("TM_FAKE_LAUNCHCTL_DIR"); dir != "" && filepath.Base(os.Args[0]) == "launchctl" {
 		os.Exit(fakeLaunchctl(dir, os.Args[1:]))
 	}
+	// No test starts a server through the user's launchd; one that did
+	// would fail the run (servicetest).
+	if os.Getenv(service.LaunchEnvVar) == "" {
+		os.Setenv(service.LaunchEnvVar, "off")
+	}
+	before := servicetest.Snapshot()
 	code := func() int {
 		flag.Parse()
 		if testing.Short() {
@@ -50,7 +58,7 @@ func TestMain(m *testing.M) {
 		}
 		return m.Run()
 	}()
-	os.Exit(code)
+	os.Exit(servicetest.Leaked(before, code))
 }
 
 // tmProc runs the binary with a clean environment: only PATH, HOME, the
