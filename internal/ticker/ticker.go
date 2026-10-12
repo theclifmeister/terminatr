@@ -749,10 +749,10 @@ func (t *Ticker) ghRan(slug string, err error) {
 
 // noHosts is whether project p has repos and none has a PR host to poll.
 func (t *Ticker) noHosts(p *project.Project) bool {
-	if len(p.Meta.Repos) == 0 {
+	if len(p.Repos) == 0 {
 		return false
 	}
-	for _, r := range p.Meta.Repos {
+	for _, r := range p.Repos {
 		if t.host(p, r).Kind() != codehost.NoKind {
 			return false
 		}

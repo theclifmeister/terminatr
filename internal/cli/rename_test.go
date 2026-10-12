@@ -155,8 +155,8 @@ func TestResolveMissingOrMovedRepo(t *testing.T) {
 		t.Fatalf("resolve after a move: %q", out)
 	}
 	p, _ := project.Open("demo")
-	if r, _ := thread.Load(p, rec.ID); r.Repo != p.Meta.Repos[1] {
-		t.Fatalf("repo %q, want %q", r.Repo, p.Meta.Repos[1])
+	if r, _ := thread.Load(p, rec.ID); r.Repo != p.Repos[1] {
+		t.Fatalf("repo %q, want %q", r.Repo, p.Repos[1])
 	}
 
 	// Gone for good: nothing for git to do, and no git error.

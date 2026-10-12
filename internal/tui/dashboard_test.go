@@ -49,6 +49,7 @@ type fakeSource struct {
 	delegated   []string
 	asked       []string
 	adopted     []string // "slug s-3"
+	withdrawn   []string // "slug s-3"
 	answered    []string // slugs whose questions were opened
 	reviews     map[int]Review
 	agents      []string
@@ -170,6 +171,10 @@ func (f *fakeSource) OpenQuestions(slug string) (proto.QuestionsOpenResult, erro
 func (f *fakeSource) AskAdopt(slug string, s proto.SessionInfo) (bool, error) {
 	f.adopted = append(f.adopted, slug+" "+s.ID)
 	return true, nil
+}
+func (f *fakeSource) WithdrawAdopt(slug, id string) error {
+	f.withdrawn = append(f.withdrawn, slug+" "+id)
+	return nil
 }
 func (f *fakeSource) Ask(slug string, id int, kind, note string) (bool, error) {
 	ref := fmt.Sprintf("T%d", id)

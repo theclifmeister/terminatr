@@ -106,11 +106,13 @@ type SessionAdoptParams struct {
 
 // SessionAdoptAskParams are the params of session.adopt.ask: the session
 // the human asks to adopt into project, or with Check whether such a
-// go-ahead waits, recording nothing.
+// go-ahead waits, recording nothing, or with Withdraw the human taking
+// theirs back.
 type SessionAdoptAskParams struct {
-	ID      string `json:"id"`
-	Project string `json:"project"`
-	Check   bool   `json:"check,omitempty"`
+	ID       string `json:"id"`
+	Project  string `json:"project"`
+	Check    bool   `json:"check,omitempty"`
+	Withdraw bool   `json:"withdraw,omitempty"`
 }
 
 // SessionAdoptAskResult says whether the human's go-ahead waits.

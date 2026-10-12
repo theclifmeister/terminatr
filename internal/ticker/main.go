@@ -37,7 +37,7 @@ func (t *Ticker) projectMemo(slug string) *projectMemo {
 // and sorted, once each.
 func repos(p *project.Project) []string {
 	set := map[string]bool{}
-	for _, r := range p.Meta.Repos {
+	for _, r := range p.Repos {
 		set[filepath.Clean(r)] = true
 	}
 	if recs, err := thread.List(p); err == nil {

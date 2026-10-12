@@ -227,6 +227,19 @@ func (m *dash) adoptable(r row, ok bool) (proto.SessionInfo, string) {
 	return s, ""
 }
 
+// adoptAsked reports whether an inbox item of slug's asks its
+// coordinator to adopt session id.
+func (m *dash) adoptAsked(slug, id string) bool {
+	if p := m.projectData(slug); p != nil {
+		for _, it := range p.Items {
+			if it.Kind == project.KindAdopt && it.Subject == id {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // adopt asks, then has the current project's coordinator adopt the
 // selected agent session as a thread.
 func (m *dash) adopt(string) tea.Cmd {
@@ -237,6 +250,20 @@ func (m *dash) adopt(string) tea.Cmd {
 		return nil
 	}
 	slug, src := m.projectHere(), m.src
+	if m.adoptAsked(slug, s.ID) {
+		// T again takes the go-ahead back (T335): without it the
+		// coordinator can't adopt the session.
+		question := "Withdraw your go-ahead to adopt " + s.ID + " as a thread of " + slug + "? The coordinator can't adopt it then."
+		m.confirmNo("Withdraw "+s.ID, question, s.ID+" still asked", func() tea.Cmd {
+			return m.act(func() actionMsg {
+				if err := src.WithdrawAdopt(slug, s.ID); err != nil {
+					return actionMsg{err: err}
+				}
+				return actionMsg{msg: "withdrew the go-ahead to adopt " + s.ID}
+			})
+		})
+		return nil
+	}
 	home, _ := os.UserHomeDir()
 	question := "Adopt " + s.ID + " as a thread of " + slug + "? The coordinator links it to a task and briefs it.\n\n" + adoptWhere(s, home)
 	m.confirmNo("Adopt "+s.ID, question, s.ID+" not adopted", func() tea.Cmd {

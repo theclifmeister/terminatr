@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
@@ -65,7 +66,9 @@ func (p *Project) SetFlag(c caller.Caller, key string, on bool) (changed bool, e
 // Trash moves the project's folder to <home>/.trash/<slug>-<UTC time>
 // and returns where it went. Its threads' worktrees stay where they are
 // (tm doctor lists them as leftovers), and its active, archived,
-// paused and pinned settings are dropped, so a new project of the slug starts without them.
+// paused and pinned settings and its repo list are dropped, so a new
+// project of the slug starts without them; the journal line, which goes
+// with the folder, names the repos.
 func (p *Project) Trash(c caller.Caller, now time.Time) (string, error) {
 	trash, err := home.TrashDir()
 	if err != nil {
@@ -83,13 +86,17 @@ func (p *Project) Trash(c caller.Caller, now time.Time) (string, error) {
 		dst = fmt.Sprintf("%s-%d", base, i)
 	}
 	// The journal line goes in first, so it travels with the folder.
-	if err := p.Journal(c, "project.delete", p.Slug, "moved to "+dst); err != nil {
+	detail := "moved to " + dst
+	if len(p.Repos) > 0 {
+		detail += "; its repos were " + strings.Join(p.Repos, " ")
+	}
+	if err := p.Journal(c, "project.delete", p.Slug, detail); err != nil {
 		return "", err
 	}
 	if err := os.Rename(p.Dir, dst); err != nil {
 		return "", err
 	}
-	if err := config.ClearProject(p.Slug, "active", "archived", "paused", "pinned"); err != nil {
+	if err := config.ClearProject(p.Slug, "active", "archived", "paused", "pinned", "repos"); err != nil {
 		return dst, fmt.Errorf("moved to %s, but its settings stay: %w", dst, err)
 	}
 	return dst, nil

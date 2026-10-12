@@ -72,18 +72,14 @@ func githubRepo(t *testing.T, projDir string) {
 	repoGit(t, repo, "config", "url."+bare+".insteadOf", ghOrigin)
 }
 
-// projectRepo is the project's one repo, from its PROJECT.md.
+// projectRepo is the project's one repo, from config.toml.
 func projectRepo(t *testing.T, projDir string) string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(projDir, "PROJECT.md"))
-	if err != nil {
-		t.Fatal(err)
+	repos := approvedRepos(t, projDir)
+	if len(repos) != 1 {
+		t.Fatalf("repos of %s: %v", projDir, repos)
 	}
-	m := regexp.MustCompile(`repos = \["([^"]+)"\]`).FindSubmatch(b)
-	if m == nil {
-		t.Fatalf("no repo in PROJECT.md:\n%s", b)
-	}
-	return string(m[1])
+	return repos[0]
 }
 
 func repoGit(t *testing.T, repo string, args ...string) string {

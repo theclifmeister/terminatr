@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -76,7 +77,7 @@ func TestNewLayout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q.Meta.Goal != "Ship it" || len(q.Meta.Repos) != 1 || q.Meta.Repos[0] != repo {
+	if q.Meta.Goal != "Ship it" || len(q.Repos) != 1 || q.Repos[0] != repo {
 		t.Fatalf("meta %+v", q.Meta)
 	}
 	if !strings.HasPrefix(q.Instructions, "# Instructions") {
@@ -126,11 +127,15 @@ func TestLegacyName(t *testing.T) {
 	if l, err := List(); err != nil || len(l) != 1 || l[0].Slug != "demo" || l[0].Error != "" {
 		t.Fatalf("list: %v %+v", err, l)
 	}
-	if _, err := q.SetRepo(repo, true); err != nil {
+	old = strings.Replace(old, "repos = []", "repos = ["+strconv.Quote(repo)+"]", 1)
+	if err := os.WriteFile(p.Path("PROJECT.md"), []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := MoveRepos(time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(p.Path("PROJECT.md"))
-	if strings.Contains(string(b), "name") || !strings.Contains(string(b), `goal = "Ship it"`) || !strings.Contains(string(b), "Keep it.") || !strings.Contains(string(b), repo) {
+	if strings.Contains(string(b), "name") || strings.Contains(string(b), "repos") || !strings.Contains(string(b), `goal = "Ship it"`) || !strings.Contains(string(b), "Keep it.") {
 		t.Fatalf("rewritten:\n%s", b)
 	}
 }
@@ -244,7 +249,7 @@ func TestContextDeterministicAndCapped(t *testing.T) {
 	prs := map[string]string{"t-0001": "#8 open, checks pass"}
 	p.AddItem("report", "t-0001", "t-0001 reported", false)
 
-	seen := Ticked{PRs: prs, Checkouts: map[string]string{p.Meta.Repos[0]: "local main is 3 behind origin (uncommitted changes)"},
+	seen := Ticked{PRs: prs, Checkouts: map[string]string{p.Repos[0]: "local main is 3 behind origin (uncommitted changes)"},
 		Queues: []HeldQueue{{Session: "s-28", Role: "coordinator", Queued: 1, Why: "prompt box not empty", Since: time.Date(2026, 10, 5, 19, 45, 49, 0, time.UTC)}}}
 	sec1, err := p.Context(seen)
 	if err != nil {
@@ -257,7 +262,7 @@ func TestContextDeterministicAndCapped(t *testing.T) {
 	}
 	for _, want := range []string{
 		"Goal: Ship v1",
-		"Repo: " + p.Meta.Repos[0] + " · local main is 3 behind origin (uncommitted changes)",
+		"Repo: " + p.Repos[0] + " · local main is 3 behind origin (uncommitted changes)",
 		"[… 80 more lines in CONTEXT.md]",
 		"In motion (1)\n  T16  started  Fix login  0/2",
 		"Done (15)",

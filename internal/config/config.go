@@ -259,6 +259,11 @@ type rawSafety struct {
 	ArchiveThreads *int      `toml:"archive_threads_days"`
 	ArchiveInbox   *int      `toml:"archive_inbox_days"`
 	ArchiveJournal *int      `toml:"archive_journal_days"`
+	// Repos is the project's repo list, the repositories the user
+	// approved for its threads' worktrees (Config.Repos): here, not in
+	// PROJECT.md, which the coordinator writes. Not a setting: neither
+	// the settings popups nor [defaults] have it.
+	Repos *[]string `toml:"repos"`
 }
 
 // CheckAgent checks an agent name's shape: one word. Whether the
@@ -466,6 +471,20 @@ func (c *Config) Safety(slug string) (Safety, error) {
 	return s, r.apply(&s, c.Path, "projects."+slug)
 }
 
+// Repos is project slug's repo list ([projects.<slug>] repos), the
+// repositories the user approved, and whether the table sets it at all.
+// A nil Config has none.
+func (c *Config) Repos(slug string) (repos []string, set bool) {
+	if c == nil {
+		return nil, false
+	}
+	r, ok := c.projects[slug]
+	if !ok || r.Repos == nil {
+		return nil, false
+	}
+	return slices.Clone(*r.Repos), true
+}
+
 // ProjectSlugs lists, sorted, the projects the file has a table for.
 func (c *Config) ProjectSlugs() []string {
 	if c == nil {
@@ -495,6 +514,9 @@ func (c *Config) AllProjects() (Safety, error) {
 	// state: in [defaults] it would stop, hide or pin every project.
 	if c.defaults.Active != nil || c.defaults.Paused != nil || c.defaults.Archived != nil || c.defaults.Pinned != nil {
 		return s, fmt.Errorf("%s: defaults can't set active, paused, archived or pinned; they are each project's own", c.Path)
+	}
+	if c.defaults.Repos != nil {
+		return s, fmt.Errorf("%s: defaults can't set repos; each project's repos are its own", c.Path)
 	}
 	return s, c.defaults.apply(&s, c.Path, "defaults")
 }

@@ -89,7 +89,7 @@ func projectNew(e *Env, args []string) error {
 		return err
 	}
 	if *asJSON {
-		return e.printJSON(map[string]any{"slug": p.Slug, "dir": p.Dir, "goal": p.Meta.Goal, "repos": p.Meta.Repos})
+		return e.printJSON(map[string]any{"slug": p.Slug, "dir": p.Dir, "goal": p.Meta.Goal, "repos": p.Repos})
 	}
 	fmt.Fprintf(e.Stdout, "created project %s at %s\n", p.Slug, p.Dir)
 	if reg := models.Registry(); reg != nil && len(models.Installed(reg, nil)) == 0 {
@@ -531,8 +531,8 @@ func runSkill(e *Env, args []string) error {
 	return err
 }
 
-// projectRepo changes the project's repo list in PROJECT.md: the human
-// or the coordinator.
+// projectRepo changes the project's repo list, in config.toml
+// (project.Project.Repos): the human, or the coordinator removing one.
 func projectRepo(e *Env, args []string) error {
 	f := newFlags()
 	slug := f.String("project")

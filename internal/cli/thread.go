@@ -349,8 +349,8 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 		if fi, err := os.Stat(repo); err != nil || !fi.IsDir() {
 			return usagef("--repo %s is not a directory", repo)
 		}
-	} else if len(p.Meta.Repos) > 0 {
-		repo = p.Meta.Repos[0]
+	} else if len(p.Repos) > 0 {
+		repo = p.Repos[0]
 	}
 	if *o.base != "" && repo == "" {
 		return usagef("--base needs a repo")
@@ -608,7 +608,7 @@ func (e *Env) threadAdopt(p *project.Project, sid string, o adoptOpts, asJSON bo
 			return err
 		}
 		if !ask.Asked {
-			return &tasks.Error{Code: "needs-approval", Msg: fmt.Sprintf("the user hasn't asked to adopt %s into %s: only the user adopts their own session, with T on its row in tm's dashboard (or tm thread adopt in their shell); ask them to", sid, p.Slug)}
+			return &tasks.Error{Code: "needs-approval", Msg: fmt.Sprintf("the user hasn't asked to adopt %s into %s, or took it back, or asked over an hour ago: only the user adopts their own session, with T on its row in tm's dashboard (or tm thread adopt in their shell); ask them to", sid, p.Slug)}
 		}
 	}
 	var res proto.SessionListResult
@@ -702,7 +702,7 @@ func (e *Env) threadAdopt(p *project.Project, sid string, o adoptOpts, asJSON bo
 // listedRepo reports whether dir is one of p's repos, either spelling
 // of a path with links.
 func listedRepo(p *project.Project, dir string) bool {
-	for _, r := range p.Meta.Repos {
+	for _, r := range p.Repos {
 		if filepath.Clean(r) == filepath.Clean(dir) || realPath(r) == realPath(dir) {
 			return true
 		}
@@ -1837,7 +1837,7 @@ func followRepo(p *project.Project, r *thread.Record) bool {
 	if r.Branch == "" {
 		return false
 	}
-	for _, repo := range p.Meta.Repos {
+	for _, repo := range p.Repos {
 		if repo == r.Repo || !worktree.BranchExists(repo, r.Branch) {
 			continue
 		}
