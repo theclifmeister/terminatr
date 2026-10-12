@@ -39,14 +39,13 @@ func TestTargets(t *testing.T) {
 }
 
 func TestCheck(t *testing.T) {
-	ss := []widget.Span{{Text: "3d\x1b[31m", Role: "warn"}, {Icon: "review"}}
-	if err := Check(ss); err != nil || ss[0].Text != "3d[31m" {
-		t.Errorf("%v %q", err, ss[0].Text)
+	ss := []widget.Span{{Text: "3d\x1b[31m", Role: "warn"}, {Icon: "review"}, {Text: "🚀 go"}}
+	if err := Check(ss); err != nil || ss[0].Text != "3d[31m" || ss[2].Text != "? go" {
+		t.Errorf("%v %q %q", err, ss[0].Text, ss[2].Text)
 	}
 	for _, bad := range [][]widget.Span{
 		{{Text: "x", Role: "blink"}},
 		{{Icon: "rocket"}},
-		{{Text: "🚀"}},
 		{{Text: strings.Repeat("x", MaxText+1)}},
 	} {
 		if Check(bad) == nil {

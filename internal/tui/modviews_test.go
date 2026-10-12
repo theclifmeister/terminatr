@@ -98,6 +98,61 @@ func TestModTab(t *testing.T) {
 	}
 }
 
+// drainCursors runs cmd and the batch it may be, feeding ui.cursor sends
+// back as they return.
+func drainCursors(m *dash, cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	switch msg := cmd().(type) {
+	case tea.BatchMsg:
+		for _, c := range msg {
+			drainCursors(m, c)
+		}
+	case modCursorMsg:
+		_, next := m.Update(msg)
+		drainCursors(m, next)
+	}
+}
+
+// TestModViewCursor: a mod hears where its view's cursor is, as
+// ui.cursor: when the view shows, then on each move, one send at a time
+// with the moves made meanwhile down to the latest, never twice the
+// same, and again once the view was hidden and shows again.
+func TestModViewCursor(t *testing.T) {
+	src, m := panelDash(t)
+	m.openTab("alpha", tabCount, 0)
+	cursors := func() (out []string) {
+		for _, p := range src.inputs {
+			if p.Kind != widget.EventCursor || p.Mod != "panel" || p.View != "queue" || p.Project != "alpha" {
+				t.Fatalf("input %+v", p)
+			}
+			out = append(out, p.Widget+"/"+p.Row)
+		}
+		return out
+	}
+	drainCursors(m, m.setModViews(modViewsMsg{res: src.modViews}))
+	if got := cursors(); !slices.Equal(got, []string{"q/T1"}) {
+		t.Fatalf("shown: %q", got)
+	}
+	drainCursors(m, m.setModViews(modViewsMsg{res: src.modViews}))
+	sent := press(m, "down")
+	if press(m, "up", "down", "up") != nil {
+		t.Error("a second send while one is on its way")
+	}
+	drainCursors(m, sent)
+	if got := cursors(); !slices.Equal(got, []string{"q/T1", "q/T2", "q/T1"}) {
+		t.Fatalf("moves: %q", got)
+	}
+	m.pop()
+	drainCursors(m, m.setModViews(modViewsMsg{res: src.modViews}))
+	m.openTab("alpha", tabCount, 0)
+	drainCursors(m, m.setModViews(modViewsMsg{res: src.modViews}))
+	if got := cursors(); len(got) != 4 || got[3] != "q/T1" {
+		t.Fatalf("shown again: %q", got)
+	}
+}
+
 // TestModViewFailed: a failed mod's tab and card say so, with its log,
 // and show no stale tree.
 func TestModViewFailed(t *testing.T) {

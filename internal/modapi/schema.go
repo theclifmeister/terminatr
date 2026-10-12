@@ -214,6 +214,7 @@ var Events = []Event{
 	{Name: modbus.ClockMinute, Data: typ[modbus.Clock](), Doc: "Every minute."},
 	{Name: modbus.UIClick, Data: typ[modbus.Input](), Doc: "The human clicked one of the mod's columns, views or widgets."},
 	{Name: modbus.UIKey, Data: typ[modbus.Input](), Doc: "The human pressed a key on one of the mod's views or widgets."},
+	{Name: modbus.UICursor, Data: typ[modbus.Input](), Doc: "The row under the cursor of a view's focused list (widget) is now row (\"\": none), moved by a key, a click, the filter or a publish; sent when the view shows, and again on each change. To follow the selection."},
 	{Name: modbus.ActionDone, Data: typ[modbus.Done](), Doc: "A human ran a core action bound in the mod's row, view or notification."},
 	{Name: modbus.ViewOpened, Data: typ[modbus.View](), Needs: GrantViews, Doc: "One of the mod's views is shown: publish it with $.ui.view.set."},
 	{Name: modbus.ViewClosed, Data: typ[modbus.View](), Needs: GrantViews, Doc: "One of the mod's views is no longer shown."},

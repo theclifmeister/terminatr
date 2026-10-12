@@ -6,7 +6,8 @@ package server
 // them (mod.views), saying which they show: the server turns that into
 // view.opened and view.closed for the mod. A human's key or click in a
 // view reaches the mod as ui.key or ui.click (mod.view.input), and only
-// then may the mod ask for one of its views to open ($.ui.view.open).
+// then may the mod ask for one of its views to open ($.ui.view.open);
+// where a view's cursor went reaches it as ui.cursor.
 // A view whose host failed shows that, never its stale trees, and a
 // restarted host starts with no trees and gets view.opened again for
 // the views on show.
@@ -209,7 +210,8 @@ func (s *Server) modViewsRestarted(id string) {
 }
 
 // modViewInput is mod.view.input: a human's declared key or click in a
-// mod's view, to the mod as ui.key or ui.click. It lets the mod open a
+// mod's view, to the mod as ui.key or ui.click, or where its cursor
+// went, as ui.cursor. A key or a click lets the mod open a
 // view on this console for a while (modview.InputWindow).
 func (s *Server) modViewInput(p proto.ModViewInputParams, pid int, c caller.Caller) (any, *proto.Error) {
 	if c.IsAgent() {
@@ -228,13 +230,15 @@ func (s *Server) modViewInput(p proto.ModViewInputParams, pid int, c caller.Call
 	name := modbus.UIClick
 	switch p.Kind {
 	case widget.EventClick:
+	case widget.EventCursor:
+		name = modbus.UICursor
 	case widget.EventKey:
 		name = modbus.UIKey
 		if p.Key == "" || len(p.Key) > 16 {
 			return nil, proto.Errorf(proto.ErrBadParams, "no key")
 		}
 	default:
-		return nil, proto.Errorf(proto.ErrBadParams, "kind %q is not key or click", p.Kind)
+		return nil, proto.Errorf(proto.ErrBadParams, "kind %q is not key, click or cursor", p.Kind)
 	}
 	if len(p.Widget) > 64 || len(p.Row) > 256 {
 		return nil, proto.Errorf(proto.ErrBadParams, "widget or row id too long")
@@ -246,7 +250,11 @@ func (s *Server) modViewInput(p proto.ModViewInputParams, pid int, c caller.Call
 	if p.Project != "" {
 		in.Target = &modbus.Target{Project: p.Project}
 	}
-	s.modViewStore().Input(p.Mod, pid, p.Project)
+	// The cursor moves with a publish too: only a key or a click lets
+	// the mod open a view.
+	if name != modbus.UICursor {
+		s.modViewStore().Input(p.Mod, pid, p.Project)
+	}
 	if s.modEv != nil {
 		s.modEv.bus.PublishTo(p.Mod, name, p.Project, in)
 	}

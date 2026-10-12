@@ -3,27 +3,11 @@
   // ../../examples/mods/memory-tab/main.ts
   var VIEW = "memory";
   var LIST = "files";
-  var MAX_TEXT = 4e3;
-  var MAX_LINES = 400;
-  var MAX_BLOCKS = 56;
+  var MAX_TEXT = 6e4;
+  var MAX_LINES = 1900;
+  var MAX_BLOCKS = 250;
+  var MAX_TREE = 8e5;
   var tabs = /* @__PURE__ */ new Map();
-  function narrow(s, strict = false) {
-    var _a;
-    let out = "";
-    for (const ch of s) {
-      const c = (_a = ch.codePointAt(0)) != null ? _a : 0;
-      if (strict ? !safe(c) : wide(c)) out += "?";
-      else if (c === 65039 || c === 8205) continue;
-      else out += ch;
-    }
-    return out;
-  }
-  function wide(c) {
-    return c >= 4352 && c <= 4447 || c === 8986 || c === 8987 || c === 9001 || c === 9002 || c >= 9193 && c <= 9196 || c === 9200 || c === 9203 || c === 9725 || c === 9726 || c >= 9748 && c <= 9749 || c >= 9800 && c <= 9811 || c === 9855 || c === 9875 || c === 9889 || c === 9898 || c === 9899 || c === 9917 || c === 9918 || c === 9924 || c === 9925 || c === 9934 || c === 9940 || c === 9962 || c === 9970 || c === 9971 || c === 9973 || c === 9978 || c === 9981 || c === 9989 || c === 9994 || c === 9995 || c === 10024 || c === 10060 || c === 10062 || c >= 10067 && c <= 10069 || c === 10071 || c >= 10133 && c <= 10135 || c === 10160 || c === 10175 || c === 11035 || c === 11036 || c === 11088 || c === 11093 || c >= 11904 && c <= 12350 || c >= 12353 && c <= 13311 || c >= 13312 && c <= 19903 || c >= 19968 && c <= 40959 || c >= 40960 && c <= 42191 || c >= 43360 && c <= 43391 || c >= 44032 && c <= 55203 || c >= 63744 && c <= 64255 || c >= 65040 && c <= 65049 || c >= 65072 && c <= 65135 || c >= 65280 && c <= 65376 || c >= 65504 && c <= 65510 || c >= 94176 && c <= 101119 || c >= 110592 && c <= 111359 || c >= 126976 && c <= 129791 || c >= 131072 && c <= 262141;
-  }
-  function safe(c) {
-    return c === 10 || c >= 32 && c <= 126 || c >= 160 && c <= 591 || c >= 8208 && c <= 8231 || c >= 8592 && c <= 8703 || c >= 9472 && c <= 9727 || c >= 10003 && c <= 10008;
-  }
   function bytes(s) {
     var _a;
     let n = 0;
@@ -41,6 +25,7 @@
     const out = [];
     let run = [];
     let runBytes = 0;
+    let total = 0;
     let first = true;
     const flush = () => {
       while (run.length > 0 && run[run.length - 1] === "") run.pop();
@@ -50,7 +35,7 @@
       runBytes = 0;
     };
     for (let line of md.replace(/\r\n?/g, "\n").split("\n")) {
-      if (out.length >= MAX_BLOCKS) break;
+      if (out.length >= MAX_BLOCKS || total > MAX_TREE) break;
       line = line.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\s+$/, "");
       const h = /^#{1,6}\s+(.*)$/.exec(line);
       if (h) {
@@ -65,18 +50,20 @@
       if (line === "" && (run.length === 0 || run[run.length - 1] === "")) continue;
       while (bytes(line) > MAX_TEXT && out.length < MAX_BLOCKS) {
         flush();
-        const hi = line.charCodeAt(999);
-        const end = hi >= 55296 && hi <= 56319 ? 999 : 1e3;
+        const hi = line.charCodeAt(15999);
+        const end = hi >= 55296 && hi <= 56319 ? 15999 : 16e3;
         const cut2 = line.slice(0, end);
         out.push({ kind: "text", text: cut2 });
         line = line.slice(cut2.length);
+        total += bytes(cut2);
       }
       const n = bytes(line) + 1;
       if (runBytes + n > MAX_TEXT || run.length >= MAX_LINES) flush();
       run.push(line);
       runBytes += n;
+      total += n;
     }
-    const cut = out.length >= MAX_BLOCKS;
+    const cut = out.length >= MAX_BLOCKS || total > MAX_TREE;
     if (!cut) flush();
     if (cut) out.push({ kind: "text", text: "… the rest of the file doesn't fit the tab.", role: "faint" });
     return out;
@@ -134,12 +121,12 @@
   }
   async function publish(project, t) {
     var _a;
-    const w = tree(t);
     try {
-      await $.ui.view.set(VIEW, JSON.parse(narrow(JSON.stringify(w))), { project });
+      await $.ui.view.set(VIEW, tree(t), { project });
     } catch (e) {
-      $.log(`memory-tab: ${project}: ${String((_a = e == null ? void 0 : e.message) != null ? _a : e)}; drawing it in plain text`);
-      await $.ui.view.set(VIEW, JSON.parse(narrow(JSON.stringify(w), true)), { project });
+      const why = String((_a = e == null ? void 0 : e.message) != null ? _a : e);
+      $.log(`memory-tab: ${project}: ${why}`);
+      await $.ui.view.set(VIEW, { kind: "text", text: `can't draw ${t.open || "the files"}: ${why}`, role: "bad" }, { project });
     }
   }
   function tab(project) {
