@@ -312,6 +312,9 @@ type SessionStartParams struct {
 	Kickoff string `json:"kickoff,omitempty"`
 	Yolo    bool   `json:"yolo,omitempty"`
 	Model   string `json:"model,omitempty"`
+	// NoSandboxEscapes starts a thread whose agent can't run a command
+	// outside its sandbox (sandbox_escapes = false, docs/SPEC.md §5.2).
+	NoSandboxEscapes bool `json:"no_sandbox_escapes,omitempty"`
 	// RemoteControl starts a coordinator reachable from another device,
 	// named after its project; the agent's manifest must support it.
 	RemoteControl bool `json:"remote_control,omitempty"`

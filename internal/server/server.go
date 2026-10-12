@@ -1078,7 +1078,7 @@ func (s *Server) startSession(p proto.SessionStartParams) (any, *proto.Error) {
 		Created: created, Cols: cols, Rows: rows}
 	if p.Agent != "" {
 		rec.Agent, rec.AgentSessionID, rec.Brief, rec.Model, rec.Yolo = p.Agent, newUUID(), p.Brief, p.Model, p.Yolo
-		rec.Kickoff, rec.RemoteControl = p.Kickoff, p.RemoteControl
+		rec.Kickoff, rec.RemoteControl, rec.NoSandboxEscapes = p.Kickoff, p.RemoteControl, p.NoSandboxEscapes
 		if p.RemoteControl && role != proto.RoleCoordinator {
 			return nil, proto.Errorf(proto.ErrRefused, "remote control is for coordinators; threads are reached through theirs")
 		}

@@ -47,6 +47,9 @@ type SessionRecord struct {
 	Cols     uint16 `json:"cols,omitempty"`
 	Rows     uint16 `json:"rows,omitempty"`
 	Yolo     bool   `json:"yolo,omitempty"`
+	// NoSandboxEscapes: the agent can't run a command outside its
+	// sandbox, across resumes too.
+	NoSandboxEscapes bool `json:"no_sandbox_escapes,omitempty"`
 	// RemoteControl: the agent runs with remote control on, so a resume
 	// keeps it on.
 	RemoteControl bool `json:"remote_control,omitempty"`

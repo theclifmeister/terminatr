@@ -43,7 +43,10 @@ type LaunchSpec struct {
 	Kickoff    string // the first user prompt, e.g. "Read your brief and do what it says."
 	Resume     bool   // resume AgentSID instead of starting fresh; AgentSID must be set
 	Yolo       bool   // skip the agent's own permission prompts (project setting)
-	Model      string // optional; "" passes none: the agent's own default
+	// NoSandboxEscapes keeps every command of a thread's agent in its
+	// sandbox, approved or not (sandbox_escapes = false, docs/SPEC.md §5.2).
+	NoSandboxEscapes bool
+	Model            string // optional; "" passes none: the agent's own default
 	// RemoteControl starts the agent reachable from another device
 	// ([remote_control] args), listed there as RemoteName.
 	RemoteControl bool
