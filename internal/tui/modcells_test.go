@@ -43,7 +43,7 @@ func TestModCellsSidebar(t *testing.T) {
 	setIcons(IconsUnicode)
 	mc := testCells()
 	order := mc.sideOrder(nil)
-	if want := []string{"count", "ci", "pr-ci.dot", "review-age.age", "state", "remote", "paused", "inactive", "needs"}; !slices.Equal(order, want) {
+	if want := []string{"count", mod.PRCIColumn, "pr-ci.dot", "review-age.age", "state", "remote", "paused", "inactive", "needs"}; !slices.Equal(order, want) {
 		t.Fatalf("order %v", order)
 	}
 	if got := mc.sideOrder([]string{"review-age.age", "needs"}); got[0] != "review-age.age" || !slices.Contains(got, "pr-ci.dot") {
@@ -95,7 +95,7 @@ func TestModCellsSidebar(t *testing.T) {
 	for _, r := range rows {
 		if r.key() == "t:demo:t-0001" {
 			for _, c := range r.columns() {
-				if c.id == "review-age.age" && gridTip(r, c) != "age (mod: review-age)" {
+				if c.id == "review-age.age" && gridTip(r, c) != "age" {
 					t.Errorf("tip %q", gridTip(r, c))
 				}
 			}

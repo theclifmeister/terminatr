@@ -65,7 +65,7 @@ func (c *client) sessionCommand(k string) (mod.ModCommand, bool) {
 }
 
 // commandItems are the ≡ menu's entries running the mods' commands for
-// the focused session's project, each marked mod: id. c.mu held.
+// the focused session's project, each with its mod's id. c.mu held.
 func (c *client) commandItems() []aitem {
 	if c.focus == nil {
 		return nil
@@ -79,7 +79,7 @@ func (c *client) commandItems() []aitem {
 		if k := commandKeyOf(mc, c.prefix.String()); k != "" {
 			key = "prefix+" + k
 		}
-		out = append(out, aitem{label: mc.Title + " · mod: " + mc.Mod, key: key, run: func() { c.runCommand(mc) }})
+		out = append(out, aitem{label: mc.Title + " · " + mc.Mod, key: key, run: func() { c.runCommand(mc) }})
 	}
 	return out
 }
@@ -97,9 +97,9 @@ func (c *client) runCommand(mc mod.ModCommand) {
 	slug := info.Project
 	run := mc.Runs(slug)
 	if run {
-		c.flash = "ran " + mc.Title + " · mod: " + mc.Mod
+		c.flash = "ran " + mc.Title
 	} else {
-		c.flash = mc.Title + " (mod: " + mc.Mod + ") doesn't run for " + slug
+		c.flash = mc.Title + " (" + mc.Mod + ") doesn't run for " + slug
 	}
 	c.status()
 	send := c.sendCommand

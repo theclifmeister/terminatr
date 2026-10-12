@@ -74,7 +74,7 @@ cmd = 'printf "PR: https://github.com/o/r/pull/7\n\n## Report\nFixed the login r
 	// The ≡ menu ends with the mods' commands and views; standup's
 	// command opens its full view.
 	w.ClickText(menuGlyph+" menu", 0)
-	w.WaitFor("Standup · mod: standup", wait)
+	w.WaitFor("Standup · standup", wait)
 	w.Golden("mods-menu.txt", dashMasks...)
 	w.Key(keyEsc)
 	w.WaitUntil("menu closed", wait, func(sc string) bool { return !strings.Contains(sc, "enter pick") })
@@ -104,8 +104,7 @@ cmd = 'printf "PR: https://github.com/o/r/pull/7\n\n## Report\nFixed the login r
 	w.Type("a")
 	w.WaitFor("1 overview", wait)
 	w.Type("6")
-	w.WaitFor("mod: memory-tab", agentWait)
-	w.WaitFor("Memory  MEMORY.md", wait)
+	w.WaitFor("Memory  MEMORY.md", agentWait)
 	w.Key(keyDown)
 	w.Key(Enter)
 	w.WaitFor("Login flow: the redirect", wait)

@@ -10,11 +10,11 @@
             │ ● Cost card          code · view               1.0.0  reads your projects · draws its own p… │
             │ ● Report glance      code · view               1.0.0  reads your projects · draws its own p… │────────────
             │ ● Standup            code · view · commands    1.0.0  reads your projects · draws its own p… │
-            │ ● ASCII icons        icons · built in          1.0.0  built in · safe                        │ntext-gauge
+            │ ● ASCII icons        icons · built in          1.0.0  built in · safe                        │───────────
             │ ● Default keymap     keymap · built in         1.0.0  built in · safe                        │
             │ ● Default layout     layout · built in         1.0.0  built in · safe                        │s, so
             │ ● Default policy     rules · built in          1.0.0  built in · safe                        │
-            │ ● Default templates  templates · built in      1.0.0  built in · safe                        │: cost-card
+            │ ● Default templates  templates · built in      1.0.0  built in · safe                        │───────────
             │ ● Default theme      theme · built in          1.0.0  built in · safe                        │
             │ ● Memory tab         code · view · built in    1.0.0  built in · reads your projects · draw… │
             │ ● Nerd Font icons    icons · built in          1.0.0  built in · safe                        │

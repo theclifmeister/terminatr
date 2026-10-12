@@ -64,7 +64,7 @@ func TestSessionCommandKeys(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("prefix+g sent nothing")
 	}
-	if !strings.Contains(c.flash, "ran Relabel · mod: lab") {
+	if !strings.Contains(c.flash, "ran Relabel") {
 		t.Errorf("flash %q", c.flash)
 	}
 	// The answer's After is what the session watches the opens from.
@@ -78,7 +78,7 @@ func TestSessionCommandKeys(t *testing.T) {
 	for _, k := range []string{"j", "G"} {
 		press(k)
 	}
-	if !strings.Contains(c.flash, "Go beta (mod: only) doesn't run for alpha") {
+	if !strings.Contains(c.flash, "Go beta (only) doesn't run for alpha") {
 		t.Errorf("flash %q", c.flash)
 	}
 	select {
@@ -101,14 +101,14 @@ func TestSessionCommandMenu(t *testing.T) {
 	var got []string
 	var run func()
 	for _, it := range c.sessionItems() {
-		if strings.Contains(it.label, "mod: ") {
+		if strings.HasSuffix(it.label, " · lab") {
 			got = append(got, it.label+"="+it.key)
 		}
-		if it.label == "Sweep · mod: lab" {
+		if it.label == "Sweep · lab" {
 			run = it.run
 		}
 	}
-	if g, want := strings.Join(got, " | "), "Relabel · mod: lab=prefix+g | Sweep · mod: lab= | Pop · mod: lab="; g != want {
+	if g, want := strings.Join(got, " | "), "Relabel · lab=prefix+g | Sweep · lab= | Pop · lab="; g != want {
 		t.Fatalf("menu\n got %s\nwant %s", g, want)
 	}
 	run()

@@ -602,8 +602,8 @@ func treeLead(r treeRow) (lead, label []cellRun) {
 
 // rowCols are the grid's columns row r keeps in a row cw cells wide
 // whose lead and label's icon are lead and label. Narrow, the mod
-// columns give way, the rightmost first, then the count/% column, then
-// the PR/CI one, before the label is cut below a thread's whole name (5
+// columns give way (the PR/CI one among them), the rightmost first,
+// then the count/% column, before the label is cut below a thread's whole name (5
 // cells for the others); narrower still, the label goes, then the lead
 // is cut. The other columns never give way.
 func rowCols(r treeRow, cw int, lead, label []cellRun) []sideCol {
@@ -631,10 +631,8 @@ func dropCol(cols []sideCol) int {
 			return j
 		}
 	}
-	for _, id := range []string{view.ColCount, view.ColCI} {
-		if j := slices.IndexFunc(cols, func(c sideCol) bool { return c.id == id }); j >= 0 {
-			return j
-		}
+	if j := slices.IndexFunc(cols, func(c sideCol) bool { return c.id == view.ColCount }); j >= 0 {
+		return j
 	}
 	return -1
 }
@@ -731,16 +729,6 @@ func gridCell(r treeRow, c sideCol) cellRun {
 			}
 		}
 		return cellRun{fmt.Sprintf("%*s ", pctCol-1, num), nst}
-	case view.ColCI:
-		switch {
-		case thread && r.ci == "pass":
-			return col(true, i.ciPass, th().Good)
-		case thread && r.ci == "fail":
-			return col(true, i.ciFail, th().Bad)
-		case thread && r.ci == "pending":
-			return col(true, i.ciRun, th().Faint)
-		}
-		return col(false, "", th().Plain)
 	case view.ColState:
 		var g string
 		var st lipgloss.Style
@@ -797,7 +785,7 @@ var defaultCols = sideCols(nil, nil)
 // in mods; a mod column no mod declares takes no room.
 func sideCols(order []string, mods map[string]modColumn) []sideCol {
 	var out []sideCol
-	for _, id := range prciOrder(view.Columns(order), mods) {
+	for _, id := range prciOrder(view.Columns(order)) {
 		switch {
 		case id == view.ColCount:
 			out = append(out, sideCol{id: id, w: pctCol})
@@ -2008,9 +1996,10 @@ func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 const pctCol = 5
 
 // sideGrid is the width of the default grid on the right of every row
-// of the full sidebar: the count/% column, then six glyph columns two
-// cells wide (treeCells).
-const sideGrid = pctCol + 6*2
+// of the full sidebar without mod columns: the count/% column, then five
+// glyph columns two cells wide (treeCells). The PR/CI column is the
+// pr-ci-column mod's: two cells more while it is on.
+const sideGrid = pctCol + 5*2
 
 // threadLabel is a thread row's label w cells wide: "T12 Title" (a
 // thread without a task: "t-0001 Title"), the title cut to fit (or left

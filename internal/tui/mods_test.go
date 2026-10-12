@@ -118,7 +118,7 @@ func TestPanelBadges(t *testing.T) {
 		t.Fatalf("lines = %q", d.lines)
 	}
 	first := ansi.Strip(d.lines[0])
-	if !strings.Contains(first, "docs  no-check") || !strings.Contains(first, "mod: lab") || !strings.Contains(ansi.Strip(d.lines[1]), "mod: other") {
+	if !strings.Contains(first, "docs  no-check") || strings.Contains(first, "mod: ") || strings.TrimSpace(ansi.Strip(d.lines[1])) != "x" {
 		t.Fatalf("lines = %q", d.lines)
 	}
 }

@@ -93,8 +93,7 @@
 <text x="310.0" y="265.2" fill="#c8d0f0" textLength="134.4" lengthAdjust="spacingAndGlyphs">icons · built in</text>
 <text x="528.4" y="265.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
 <text x="587.2" y="265.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">built in · safe</text>
-<text x="914.8" y="265.2" fill="#4e5578">│</text>
-<text x="923.2" y="265.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">ntext-gauge</text>
+<text x="914.8" y="265.2" fill="#4e5578" textLength="100.8" lengthAdjust="spacingAndGlyphs">│───────────</text>
 <text x="116.8" y="282.2" fill="#4e5578">│</text>
 <text x="133.6" y="282.2" fill="#9ece6a">●</text>
 <text x="150.4" y="282.2" fill="#c8d0f0" textLength="117.6" lengthAdjust="spacingAndGlyphs">Default keymap</text>
@@ -123,8 +122,7 @@
 <text x="310.0" y="333.2" fill="#c8d0f0" textLength="168.0" lengthAdjust="spacingAndGlyphs">templates · built in</text>
 <text x="528.4" y="333.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
 <text x="587.2" y="333.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">built in · safe</text>
-<text x="914.8" y="333.2" fill="#4e5578">│</text>
-<text x="923.2" y="333.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">: cost-card</text>
+<text x="914.8" y="333.2" fill="#4e5578" textLength="100.8" lengthAdjust="spacingAndGlyphs">│───────────</text>
 <text x="116.8" y="350.2" fill="#4e5578">│</text>
 <text x="133.6" y="350.2" fill="#9ece6a">●</text>
 <text x="150.4" y="350.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">Default theme</text>

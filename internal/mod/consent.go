@@ -184,7 +184,7 @@ func consent(m *Manifest, fsys fs.FS) string {
 	}
 	fmt.Fprintf(&b, "Provides: %s\n", strings.Join(m.Kinds(), " · "))
 	if v := m.ViewWords(); len(v) > 0 {
-		fmt.Fprintf(&b, "Panels it draws (marked mod: %s): %s\n", m.ID, strings.Join(v, " · "))
+		fmt.Fprintf(&b, "Panels it draws: %s\n", strings.Join(v, " · "))
 	}
 	if k := m.Provides.CodeHost; k != "" {
 		fmt.Fprintf(&b, "Code host %s: for projects whose code_host is %q, tm asks it about their pull requests and has it merge one tm thread merge checked (tm still checks the merge and anything it removes)\n", k, k)

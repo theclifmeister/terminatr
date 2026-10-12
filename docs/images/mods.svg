@@ -87,8 +87,7 @@
 <text x="1292.8" y="180.2" fill="#c8d0f0" textLength="25.2" lengthAdjust="spacingAndGlyphs">1/2</text>
 <text x="310.0" y="197.2" fill="#4e5578">│</text>
 <text x="326.8" y="197.2" fill="#c8d0f0" textLength="310.8" lengthAdjust="spacingAndGlyphs">▾ Context nearly full · Context gauge</text>
-<text x="646.0" y="197.2" fill="#4e5578" textLength="294.0" lengthAdjust="spacingAndGlyphs">───────────────────────────────────</text>
-<text x="948.4" y="197.2" fill="#bb9af7" textLength="151.2" lengthAdjust="spacingAndGlyphs">mod: context-gauge</text>
+<text x="646.0" y="197.2" fill="#4e5578" textLength="453.6" lengthAdjust="spacingAndGlyphs">──────────────────────────────────────────────────────</text>
 <text x="1108.0" y="197.2" fill="#4e5578">│</text>
 <text x="1124.8" y="197.2" fill="#c8d0f0" textLength="25.2" lengthAdjust="spacingAndGlyphs">now</text>
 <text x="1208.8" y="197.2" fill="#e0af68">▸</text>
@@ -107,8 +106,7 @@
 <text x="1208.8" y="231.2" fill="#7aa2f7" textLength="243.6" lengthAdjust="spacingAndGlyphs">https://github.com/o/r/pull/7</text>
 <text x="310.0" y="248.2" fill="#4e5578">│</text>
 <text x="326.8" y="248.2" fill="#c8d0f0" textLength="151.2" lengthAdjust="spacingAndGlyphs">▾ Cost · Cost card</text>
-<text x="486.4" y="248.2" fill="#4e5578" textLength="487.2" lengthAdjust="spacingAndGlyphs">──────────────────────────────────────────────────────────</text>
-<text x="982.0" y="248.2" fill="#bb9af7" textLength="117.6" lengthAdjust="spacingAndGlyphs">mod: cost-card</text>
+<text x="486.4" y="248.2" fill="#4e5578" textLength="613.2" lengthAdjust="spacingAndGlyphs">─────────────────────────────────────────────────────────────────────────</text>
 <text x="1108.0" y="248.2" fill="#4e5578">│</text>
 <text x="1124.8" y="248.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">report</text>
 <text x="1208.8" y="248.2" fill="#c8d0f0" textLength="235.2" lengthAdjust="spacingAndGlyphs">1, new · for the coordinator</text>
@@ -147,8 +145,7 @@
 <text x="310.0" y="384.2" fill="#4e5578">│</text>
 <text x="1108.0" y="384.2" fill="#4e5578">│</text>
 <text x="1124.8" y="384.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">Last report</text>
-<text x="1225.6" y="384.2" fill="#bb9af7" textLength="151.2" lengthAdjust="spacingAndGlyphs">mod: report-glance</text>
-<text x="1385.2" y="384.2" fill="#4e5578" textLength="134.4" lengthAdjust="spacingAndGlyphs">────────────────</text>
+<text x="1225.6" y="384.2" fill="#4e5578" textLength="294.0" lengthAdjust="spacingAndGlyphs">───────────────────────────────────</text>
 <text x="310.0" y="401.2" fill="#4e5578">│</text>
 <text x="1108.0" y="401.2" fill="#4e5578">│</text>
 <text x="1124.8" y="401.2" fill="#c8d0f0" textLength="67.2" lengthAdjust="spacingAndGlyphs">report 1</text>

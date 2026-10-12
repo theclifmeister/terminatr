@@ -117,7 +117,7 @@ func TestProjectPopup(t *testing.T) {
 	}
 	keyPress(m, "right")
 	out = screen(m)
-	for _, want := range []string{"mod: tasks-tab · tasks", "IN MOTION", "T1  Write the README  ● started  1/2 t-0002", "✓ Draft", "Review", "ON DECK", "T2  Ship it", "enter show · + new task · ↑ ↓ move"} {
+	for _, want := range []string{"IN MOTION", "T1  Write the README  ● started  1/2 t-0002", "✓ Draft", "Review", "ON DECK", "T2  Ship it", "enter show · + new task · ↑ ↓ move"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("tasks tab lacks %q:\n%s", want, out)
 		}
@@ -993,16 +993,10 @@ func TestAllProjectsSettings(t *testing.T) {
 	}
 }
 
-// TestMemoryTab: tab 6 shows the project's CONTEXT.md, MEMORY.md and
-// memory notes' titles, read-only, as text: a link shows its text only,
-// the files' own titles are left out, and no file path shows.
+// TestMemoryTab: tab 6 is the memory-tab mod's; without it the tab
+// says the mod is off. The arrows go on to the Library tab and round.
 func TestMemoryTab(t *testing.T) {
-	src, m := popupData(t)
-	src.memory = project.Memory{
-		Context: "# Context\n\nThe plan, see [the doc](docs/plan.md).\n\n## Where things stand\n\n- " + strings.Repeat("a long item ", 12) + "end\n",
-		Index:   "# Memory\n\n- [Decisions](memory/decisions.md): host choices\n",
-		Notes:   []string{"Design decisions"},
-	}
+	_, m := popupData(t)
 	feed(m, keyPress(m, "a"))
 	pv := m.top().(*projectView)
 	keyPress(m, "6")
@@ -1010,19 +1004,9 @@ func TestMemoryTab(t *testing.T) {
 		t.Fatalf("6: tab %d", pv.tab)
 	}
 	out := screen(m)
-	// A wrapped list item hangs under its text.
-	if !regexp.MustCompile(`│   (a )?(long )?item`).MatchString(out) {
-		t.Errorf("memory tab: a wrapped item doesn't hang:\n%s", out)
-	}
-	for _, want := range []string{"6 memory", "CONTEXT", "The plan, see the doc.", "Where things stand", "- a long item",
-		"MEMORY", "- Decisions: host choices", "NOTES", "- Design decisions", "Read-only", "↑ ↓ scroll"} {
+	for _, want := range []string{"6 memory", "The memory-tab mod draws this tab"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("memory tab lacks %q:\n%s", want, out)
-		}
-	}
-	for _, not := range []string{"docs/plan.md", "memory/decisions.md", "# Context", ".md"} {
-		if strings.Contains(out, not) {
-			t.Errorf("memory tab shows %q:\n%s", not, out)
 		}
 	}
 	keyPress(m, "right")
@@ -1032,12 +1016,6 @@ func TestMemoryTab(t *testing.T) {
 	keyPress(m, "right")
 	if pv.tab != tabOverview {
 		t.Fatalf("right from the last tab: %d", pv.tab)
-	}
-	src.memory = project.Memory{}
-	m.Update(m.loadPopup("alpha")())
-	keyPress(m, "6")
-	if out := screen(m); !strings.Contains(out, "no context yet") || !strings.Contains(out, "no notes yet") {
-		t.Fatalf("empty memory:\n%s", out)
 	}
 }
 

@@ -15,7 +15,7 @@ import (
 // the dashboard's details panel, for the project, task or thread the
 // panel shows; its coordinator.section one at the bottom of the
 // coordinator's info panel, for its project. The core's sections come
-// first, and each mod section's heading carries "mod: <id>". The console
+// first, and a mod section's heading is its title. The console
 // says which it shows (mod.views), naming the task or thread, so the mod
 // hears view.opened for exactly that row and publishes for it; a mod
 // that drew nothing for the row adds nothing. Sections show: they take
@@ -84,7 +84,7 @@ func modSections(d *panel, list []proto.ModView, slot, project, task, thr string
 		if len(lines) == 0 {
 			continue
 		}
-		d.section(v.Title, "mod: "+v.Mod)
+		d.section(v.Title, "")
 		for _, l := range lines {
 			d.add(l)
 		}

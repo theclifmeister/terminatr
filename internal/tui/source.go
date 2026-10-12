@@ -229,9 +229,6 @@ type Source interface {
 	// Deactivating stops the project's coordinator and threads: the
 	// caller asks first.
 	Lifecycle(slug, verb string) (string, error)
-	// Memory is the project's CONTEXT.md, MEMORY.md and memory notes'
-	// titles, for the project popup's Memory tab.
-	Memory(slug string) (project.Memory, error)
 	// Library lists the files of every thread's library, newest first,
 	// for the project popup's Library tab; LibraryRead reads up to max
 	// bytes of one (truncated says it was longer); LibraryRemove
@@ -483,14 +480,6 @@ func (s *ServerSource) Board(slug string) (*tasks.Board, error) {
 		return nil, err
 	}
 	return p.Tasks().Load()
-}
-
-func (s *ServerSource) Memory(slug string) (project.Memory, error) {
-	p, err := project.Open(slug)
-	if err != nil {
-		return project.Memory{}, err
-	}
-	return p.ReadMemory()
 }
 
 func (s *ServerSource) Library(slug string) ([]thread.LibFile, error) {

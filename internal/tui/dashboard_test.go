@@ -54,7 +54,6 @@ type fakeSource struct {
 	agents     []string
 	remote     []string // "slug on" or "slug off"
 	lifecycle  []string // "slug verb"
-	memory     project.Memory
 	library    []thread.LibFile
 	libFiles   map[string]string // "t-0001/name" -> content
 	libRemoved []string          // "t-0001/name", "t-0001/" for all
@@ -212,7 +211,6 @@ func (f *fakeSource) LibraryRemove(_, id, name string) (int, error) {
 	return n, nil
 }
 func (f *fakeSource) Review(slug string, t *tasks.Task) Review { return f.reviews[t.ID] }
-func (f *fakeSource) Memory(string) (project.Memory, error)    { return f.memory, nil }
 func (f *fakeSource) Agents() []string {
 	if f.agents == nil {
 		return []string{"claude"} // one agent installed
@@ -907,7 +905,7 @@ func TestDashboardNeedsYouTasks(t *testing.T) {
 		}
 		at += i
 	}
-	if side := whole(m); !strings.Contains(side, " ■ alpha            0           ⚑  │") {
+	if side := whole(m); !strings.Contains(side, " ■ alpha              0         ⚑  │") {
 		t.Errorf("no sidebar hint for alpha:\n%s", side)
 	}
 

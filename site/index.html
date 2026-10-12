@@ -253,7 +253,7 @@
                                    <span class="dim">│</span>  tasks: 0 need you · 1 in motion · 1 on deck
             <span class="dim">╭─</span> demo <span class="dim">───────────────────────────────────────────────────────────────────────────────────────╮────────────</span>
             <span class="dim">│</span>  1 overview   <span class="warn">2 inbox</span>   3 tasks   4 settings   5 keys   6 memory   7 library                 <span class="dim">│</span>
-            <span class="dim">│</span> <span class="mod">mod: tasks-tab</span> · tasks                                                                       <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span> <span class="head">IN MOTION</span> <span class="dim">──────────────────────────────────────────────────────────────────────────────────</span> <span class="dim">│</span>
             <span class="dim">│</span> <span class="task">T1</span>  Write the README  <span class="ok">● started</span>  1/2                                                         <span class="dim">│</span>
             <span class="dim">│</span>       <span class="ok">✓</span> Draft                                                                                <span class="dim">│</span>
@@ -490,10 +490,10 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
                                    <span class="dim">│</span>  tasks: 0 need you · 2 in motion · 0 on deck                                                 <span class="dim">│</span> thread    <span class="task">t-0001</span>
                                    <span class="dim">│</span> <span class="head">OTHER SESSIONS</span> <span class="dim">──────────────────────────────────────────────────────────────────────────────│</span> session   s-3
                                    <span class="dim">│</span>  none outside the projects (2 in them)                                                       <span class="dim">│</span> progress  <span class="accent">▰▰▰</span><span class="dim">▱▱</span> <span class="accent">50%</span> 1/2
-                                   <span class="dim">│</span> ▾ Context nearly full · Context gauge <span class="dim">───────────────────────────────────</span> <span class="mod">mod: context-gauge</span> <span class="dim">│</span> now       <span class="warn">▸</span> Fix it
+                                   <span class="dim">│</span> ▾ Context nearly full · Context gauge <span class="dim">──────────────────────────────────────────────────────</span> <span class="dim">│</span> now       <span class="warn">▸</span> Fix it
                                    <span class="dim">│</span>   No session is past <span class="accent">80%</span> of its context.                                                     <span class="dim">│</span> updated   4m ago
                                    <span class="dim">│</span>   Clear starts a fresh conversation: the project's state is in its files, so nothing is lost.<span class="dim">│</span> PR        <span class="link">https://github.com/o/r/pull/7</span>
-                                   <span class="dim">│</span> ▾ Cost · Cost card <span class="dim">──────────────────────────────────────────────────────────</span> <span class="mod">mod: cost-card</span> <span class="dim">│</span> report    1, new · for the coordinator
+                                   <span class="dim">│</span> ▾ Cost · Cost card <span class="dim">─────────────────────────────────────────────────────────────────────────</span> <span class="dim">│</span> report    1, new · for the coordinator
                                    <span class="dim">│</span>   today   <span class="accent">$0.00</span>  25.0k tokens                                                                <span class="dim">│</span>
                                    <span class="dim">│</span>   7 days  <span class="accent">$0.00</span>                                                                              <span class="dim">│</span> steps 1/2
                                    <span class="dim">│</span>   <span class="accent">▁▁▁▁▁▁▁</span>                                                                                    <span class="dim">│</span>   <span class="ok">✓</span> 1 Reproduce the bug
@@ -501,7 +501,7 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
                                    <span class="dim">│</span>   Write the docs   25.0k  <span class="accent">$0.00</span>                                                              <span class="dim">│</span>
                                    <span class="dim">│</span>                                                                                              <span class="dim">│</span> <span class="key">enter</span> attach
                                    <span class="dim">│</span>                                                                                              <span class="dim">│</span>
-                                   <span class="dim">│</span>                                                                                              <span class="dim">│</span> Last report <span class="mod">mod: report-glance</span> <span class="dim">────────────────</span>
+                                   <span class="dim">│</span>                                                                                              <span class="dim">│</span> Last report <span class="dim">───────────────────────────────────</span>
                                    <span class="dim">│</span>                                                                                              <span class="dim">│</span> report 1  Fixed the login redirect.
                                    <span class="dim">│</span>                                                                                              <span class="dim">│</span> next  Merge the PR
                                    <span class="dim">│</span>                                                                                              <span class="dim">│</span> no ## Check
@@ -518,11 +518,11 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
     <div class="scroll" tabindex="0">
 <!-- screen:mods-standup --><pre class="screen" style="--cols:120" data-golden="mods-standup.txt"> <span class="head">PROJECTS</span>                      1   <span class="dim">│</span> <span class="title">tm dashboard</span> · Standup                                     <span class="ok">● server ok</span> · 2 sessions
  <span class="accent">■</span> demo        2                   <span class="dim">│</span> <span class="head">NEEDS YOU</span> 0 <span class="dim">───────────────────────────────────────────────────────────────────────</span>
- <span class="dim">└─</span> coordi…             ·          <span class="dim">│</span>  <span class="mod">mod: standup</span> · Standup
-    <span class="dim">├─</span> <span class="task">T1</span>    <span class="accent">50%</span> <span class="idle">☐</span>      ○          <span class="dim">│</span>  demo  2 started
-    <span class="dim">└─</span> <span class="task">T2</span>        <span class="idle">☐</span> <span class="accent">4%</span>   ○          <span class="dim">│</span>  Started (2)
-                                   <span class="dim">│</span>  <span class="task">T1</span> Fix the login  1/2  <span class="task">t-0001</span>
+ <span class="dim">└─</span> coordi…             ·          <span class="dim">│</span>  demo  2 started
+    <span class="dim">├─</span> <span class="task">T1</span>    <span class="accent">50%</span> <span class="idle">☐</span>      ○          <span class="dim">│</span>  Started (2)
+    <span class="dim">└─</span> <span class="task">T2</span>        <span class="idle">☐</span> <span class="accent">4%</span>   ○          <span class="dim">│</span>  <span class="task">T1</span> Fix the login  1/2  <span class="task">t-0001</span>
                                    <span class="dim">│</span>  <span class="task">T2</span> Write the docs  <span class="task">t-0002</span>
+                                   <span class="dim">│</span>
                                    <span class="dim">│</span>
                                    <span class="dim">│</span>
                                    <span class="dim">│</span>
@@ -533,7 +533,7 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
  <span class="dim">─────────────────────────────────</span> <span class="dim">│</span>
  demo · active                     <span class="dim">│────────────────────────────────────────────────────────────────────────────────────</span>
  2 threads · coordinator not runn… <span class="dim">│</span> ↑ ↓ move · / filter · <span class="key">esc</span> back
- tab sidebar · ? help              <span class="dim">│</span> ran Standup · <span class="mod">mod: standup</span></pre><!-- /screen:mods-standup -->
+ tab sidebar · ? help              <span class="dim">│</span> ran Standup</pre><!-- /screen:mods-standup -->
     </div>
     <figcaption>A mod's command: <kbd>S</kbd> on the dashboard, its ≡ menu entry, <kbd>prefix</kbd> <kbd>S</kbd> inside a session or <code>tm mod run standup show</code> opens Standup's full view of the project.</figcaption>
   </figure>
@@ -552,11 +552,11 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
                                    <span class="dim">│</span>  tasks: 0 need you · 2 in motion · 0 on deck
                                    <span class="dim">│</span> <span class="dim">╭─</span> terminatr dev <span class="dim">─────────────────────────────╮────────────────────────────────────</span>
                                    <span class="dim">│</span> <span class="dim">│</span> back to the last place                    ; <span class="dim">│</span>
-                                   <span class="dim">│</span> <span class="dim">│</span> open the selected row                 <span class="key">enter</span> <span class="dim">│────────────────</span> <span class="mod">mod: context-gauge</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> open the selected row                 <span class="key">enter</span> <span class="dim">│───────────────────────────────────</span>
                                    <span class="dim">│</span> <span class="dim">│</span> adopt as a thread                         T <span class="dim">│</span>
                                    <span class="dim">│</span> <span class="dim">│</span> activate / deactivate the project     space <span class="dim">│</span>t's state is in its files, so
                                    <span class="dim">│</span> <span class="dim">│</span> fold / unfold the mod card                z <span class="dim">│</span>
-                                   <span class="dim">│</span> <span class="dim">│</span> new project                               n <span class="dim">│────────────────────</span> <span class="mod">mod: cost-card</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> new project                               n <span class="dim">│───────────────────────────────────</span>
                                    <span class="dim">│</span> <span class="dim">│</span> project popup                             a <span class="dim">│</span>
                                    <span class="dim">│</span> <span class="dim">│</span> tasks                                     t <span class="dim">│</span>
                                    <span class="dim">│</span> <span class="dim">│</span> inbox                                     i <span class="dim">│</span>
@@ -571,7 +571,7 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
                                    <span class="dim">│</span> <span class="dim">│</span> settings                                  , <span class="dim">│</span>
                                    <span class="dim">│</span> <span class="dim">│</span> help: keys and mouse                      ? <span class="dim">│</span>
                                    <span class="dim">│</span> <span class="dim">│</span> quit                               <span class="key">prefix+q</span> <span class="dim">│</span>
-                                   <span class="dim">│</span> <span class="dim">│</span> Standup · <span class="mod">mod: standup</span>                    S <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> Standup · standup                         S <span class="dim">│</span>
                                    <span class="dim">│</span> <span class="dim">│</span>                                             <span class="dim">│</span>
                                    <span class="dim">│</span> <span class="dim">│</span> <span class="key">enter</span> pick · <span class="key">esc</span> close                      <span class="dim">│</span>
  <span class="dim">─────────────────────────────────</span> <span class="dim">│</span> <span class="dim">╰─────────────────────────────────────────────╯</span>
@@ -596,11 +596,11 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
             <span class="dim">│</span> <span class="ok">● </span>Cost card          code · view               1.0.0  reads your projects · draws its own p… <span class="dim">│</span>
             <span class="dim">│</span> <span class="ok">● </span>Report glance      code · view               1.0.0  reads your projects · draws its own p… <span class="dim">│────────────</span>
             <span class="dim">│</span> <span class="ok">● </span>Standup            code · view · commands    1.0.0  reads your projects · draws its own p… <span class="dim">│</span>
-            <span class="dim">│</span> <span class="ok">● </span>ASCII icons        icons · built in          1.0.0  built in · safe                        <span class="dim">│</span>ntext-gauge
+            <span class="dim">│</span> <span class="ok">● </span>ASCII icons        icons · built in          1.0.0  built in · safe                        <span class="dim">│───────────</span>
             <span class="dim">│</span> <span class="ok">● </span>Default keymap     keymap · built in         1.0.0  built in · safe                        <span class="dim">│</span>
             <span class="dim">│</span> <span class="ok">● </span>Default layout     layout · built in         1.0.0  built in · safe                        <span class="dim">│</span>s, so
             <span class="dim">│</span> <span class="ok">● </span>Default policy     rules · built in          1.0.0  built in · safe                        <span class="dim">│</span>
-            <span class="dim">│</span> <span class="ok">● </span>Default templates  templates · built in      1.0.0  built in · safe                        <span class="dim">│</span>: cost-card
+            <span class="dim">│</span> <span class="ok">● </span>Default templates  templates · built in      1.0.0  built in · safe                        <span class="dim">│───────────</span>
             <span class="dim">│</span> <span class="ok">● </span>Default theme      theme · built in          1.0.0  built in · safe                        <span class="dim">│</span>
             <span class="dim">│</span> <span class="ok">● </span>Memory tab         code · view · built in    1.0.0  built in · reads your projects · draw… <span class="dim">│</span>
             <span class="dim">│</span> <span class="ok">● </span>Nerd Font icons    icons · built in          1.0.0  built in · safe                        <span class="dim">│</span>
@@ -632,17 +632,17 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
     <span class="dim">├─</span> <span class="task">T1</span>    <span class="accent">50%</span> <span class="idle">☐</span>      ○          <span class="dim">│</span>  <span class="task">T1</span> Fix the login              <span class="idle">○ idle</span>             <span class="warn">report new</span>  <span class="accent">50%</span> 1/2 <span class="warn">▸</span> Fix it  4m…
     <span class="dim">└─</span> <span class="task">T2</span>   <span class="dim">╭─</span> demo <span class="dim">───────────────────────────────────────────────────────────────────────────────────────╮</span>
             <span class="dim">│</span>  1 overview   <span class="warn">2 inbox</span> 3   3 tasks   4 settings   5 keys   6 memory   7 library               <span class="dim">│</span>
-            <span class="dim">│</span> <span class="mod">mod: memory-tab</span> · memory                                                                     <span class="dim">│</span>
+            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span> Memory  MEMORY.md                                                                            <span class="dim">│</span>
             <span class="dim">│</span> - Tests before push: run make test before every push                                         <span class="dim">│</span>
             <span class="dim">│</span> - Login flow: the redirect lives in auth/session.go                                          <span class="dim">│</span>
             <span class="dim">│</span> <span class="key">enter</span> files · n next · p previous                                                            <span class="dim">│────────────</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
-            <span class="dim">│</span>                                                                                              <span class="dim">│</span>ntext-gauge
+            <span class="dim">│</span>                                                                                              <span class="dim">│───────────</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>s, so
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
-            <span class="dim">│</span>                                                                                              <span class="dim">│</span>: cost-card
+            <span class="dim">│</span>                                                                                              <span class="dim">│───────────</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>

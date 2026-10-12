@@ -13,7 +13,6 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modview"
-	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/widget"
 )
@@ -73,7 +72,7 @@ func TestModTab(t *testing.T) {
 	}
 	press(m, "8")
 	out = screen(m)
-	for _, want := range []string{"mod: panel · Review queue", "T1 fix the login", "T2 write docs", "older first", "/ filter"} {
+	for _, want := range []string{"T1 fix the login", "T2 write docs", "older first", "/ filter"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("mod tab lacks %q:\n%s", want, out)
 		}
@@ -174,7 +173,7 @@ func TestModViewFailed(t *testing.T) {
 	}
 	m.openTab("alpha", tabCount, 0)
 	out = screen(m)
-	for _, want := range []string{"mod failed: crashed 3 times", "panel.log", "mod: panel"} {
+	for _, want := range []string{"mod failed: crashed 3 times", "panel.log"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("failed tab lacks %q:\n%s", want, out)
 		}
@@ -185,12 +184,12 @@ func TestModViewFailed(t *testing.T) {
 }
 
 // TestModCard: a card below the sections, headed by its title, the
-// mod's name and mark; z folds it, enter opens it as a popup.
+// mod's name; z folds it, enter opens it as a popup.
 func TestModCard(t *testing.T) {
 	_, m := panelDash(t)
 	out := screen(m)
 	sess, card := strings.Index(out, "SESSIONS"), strings.Index(out, "Cost · Panel")
-	if card < 0 || card < sess || !strings.Contains(out, "mod: panel") || !strings.Contains(out, "$4.20") {
+	if card < 0 || card < sess || !strings.Contains(out, "Cost") || !strings.Contains(out, "$4.20") {
 		t.Fatalf("no card below the sections:\n%s", out)
 	}
 	m.sel = "mc:panel/cost"
@@ -207,7 +206,7 @@ func TestModCard(t *testing.T) {
 	if _, ok := m.top().(*cardView); !ok {
 		t.Fatalf("enter didn't open the card: %T", m.top())
 	}
-	if out := screen(m); !strings.Contains(out, "mod: panel · Cost") || !strings.Contains(out, "$4.20") {
+	if out := screen(m); strings.Contains(out, "mod: ") || !strings.Contains(out, "$4.20") {
 		t.Errorf("card popup:\n%s", out)
 	}
 }
@@ -229,10 +228,10 @@ func TestModViewOpen(t *testing.T) {
 	}
 }
 
-// TestMemoryTabMod: the built-in Memory tab mod's tab is drawn in the
-// core Memory tab's place (6 memory), marked as the mod's, not again
-// after the core tabs; enter on a file reaches the mod. With the mod off
-// the core Memory tab draws; a failed mod shows that, not the core tab.
+// TestMemoryTabMod: the built-in Memory tab mod draws the Memory tab (6
+// memory), unmarked, and not again after the core tabs; enter on a file
+// reaches the mod. A failed mod shows that; with the mod off the tab
+// says so, and how to turn it on.
 func TestMemoryTabMod(t *testing.T) {
 	files := &widget.Widget{Kind: widget.KindStack, Children: []widget.Widget{
 		{Kind: widget.KindList, ID: "files", Rows: []widget.Row{
@@ -243,7 +242,6 @@ func TestMemoryTabMod(t *testing.T) {
 	memView := proto.ModView{Mod: mod.BundledMemory, Name: "Memory tab", View: mod.MemoryView, Title: "memory", Slot: mod.SlotProjectTab,
 		Trees: []modview.Tree{{Project: "alpha", Tree: files}}}
 	src := &fakeSource{data: testData(), modViews: proto.ModViewsResult{Views: append(panelViews(), memView)}}
-	src.memory = project.Memory{Context: "# Context\n\nThe core tab's text.\n"}
 	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 40, State: DashState{Current: "alpha"}})
 	m.layout.Details = false
 	m.setData(src.data)
@@ -251,12 +249,12 @@ func TestMemoryTabMod(t *testing.T) {
 	m.openTab("alpha", tabOverview, 0)
 	press(m, "6")
 	out := screen(m)
-	for _, want := range []string{"6 memory", "8 Review queue", "mod: memory-tab · memory", "Context", "CONTEXT.md · 1 KB", "Decisions", "read"} {
+	for _, want := range []string{"6 memory", "8 Review queue", "Context", "CONTEXT.md · 1 KB", "Decisions", "read"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("memory tab lacks %q:\n%s", want, out)
 		}
 	}
-	for _, not := range []string{"9 memory", "The core tab's text."} {
+	for _, not := range []string{"9 memory", "mod: memory-tab"} {
 		if strings.Contains(out, not) {
 			t.Errorf("memory tab shows %q:\n%s", not, out)
 		}
@@ -273,21 +271,18 @@ func TestMemoryTabMod(t *testing.T) {
 		t.Fatal("enter left the Memory tab")
 	}
 
-	// Failed: the core's failure state, never the core tab's text.
+	// Failed: the core's failure state.
 	src.modViews.Views[2].State = proto.ModViewFailed
 	src.modViews.Views[2].Err = "host exited"
 	m.setModViews(modViewsMsg{res: src.modViews})
-	if out := screen(m); !strings.Contains(out, "mod failed: host exited") || strings.Contains(out, "The core tab's text.") {
+	if out := screen(m); !strings.Contains(out, "mod failed: host exited") {
 		t.Errorf("failed memory mod:\n%s", out)
 	}
 
-	// Off: the core Memory tab.
+	// Off: the tab says so, and how to turn it on.
 	src.modViews.Views = panelViews()
 	m.setModViews(modViewsMsg{res: src.modViews})
-	m.projectPopupView().memory = &src.memory
-	if out := screen(m); !strings.Contains(out, "The core tab's text.") || strings.Contains(out, "mod: memory-tab") {
-		t.Errorf("memory mod off:\n%s", out)
-	}
+	checkModOff(t, m, mod.BundledMemory)
 }
 
 // fullDash is panelDash with a mod's full view too.
@@ -319,7 +314,7 @@ func TestModFullView(t *testing.T) {
 	if strings.Contains(screen(m), "09:12") {
 		t.Fatal("the full view's tree shows on the dashboard")
 	}
-	i := slices.IndexFunc(m.dashItems(), func(it menuItem) bool { return it.label == "Timeline · mod: panel" })
+	i := slices.IndexFunc(m.dashItems(), func(it menuItem) bool { return it.label == "Timeline · panel" })
 	if i < 0 {
 		t.Fatal("the ≡ menu lacks the full view")
 	}
@@ -328,7 +323,7 @@ func TestModFullView(t *testing.T) {
 		t.Fatalf("the menu didn't open the full view: %T", m.top())
 	}
 	out := whole(m)
-	for _, want := range []string{"tm dashboard · Timeline", "server ok", "NEEDS YOU 2", "mod: panel · Timeline", "09:12 t-0004 started", "older first", "esc back", "alpha"} {
+	for _, want := range []string{"tm dashboard · Timeline", "server ok", "NEEDS YOU 2", "09:12 t-0004 started", "older first", "esc back", "alpha"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("full view lacks %q:\n%s", want, out)
 		}
@@ -497,7 +492,7 @@ func TestTasksTabMod(t *testing.T) {
 	m.Update(m.openTab("alpha", tabOverview, 0)())
 	press(m, "3")
 	out := screen(m)
-	for _, want := range []string{"3 tasks", "8 Review queue", "mod: tasks-tab · tasks", "IN MOTION ─", "ON DECK ─", "Write the README", "Proofread", "enter show"} {
+	for _, want := range []string{"3 tasks", "8 Review queue", "IN MOTION ─", "ON DECK ─", "Write the README", "Proofread", "enter show"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("tasks tab lacks %q:\n%s", want, out)
 		}
@@ -544,10 +539,38 @@ func TestTasksTabMod(t *testing.T) {
 		m.pop()
 	}
 
-	// Off: the tab says so.
+	// Off: the tab says so, and how to turn it on.
 	src.modViews.Views = panelViews()
 	m.setModViews(modViewsMsg{res: src.modViews})
-	if out := screen(m); strings.Contains(out, "mod: tasks-tab") || !strings.Contains(out, "The tasks-tab mod draws this tab, and it isn't running") {
-		t.Errorf("tasks mod off:\n%s", out)
+	checkModOff(t, m, mod.BundledTasks)
+}
+
+// checkModOff checks the open core tab that built-in mod id draws, with
+// no view of the mod's: off, it says so and names the Mods tab's real
+// keys; off for the project, how to turn it on for it; on, that it
+// waits for the mod.
+func checkModOff(t *testing.T, m *dash, id string) {
+	t.Helper()
+	slug := m.projectPopupView().slug
+	saved := m.data.Mods
+	defer func() { m.data.Mods = saved }()
+	for _, c := range []struct {
+		md   mod.Mod
+		want []string
+	}{
+		{mod.Mod{ID: id, State: mod.Disabled}, []string{"The " + id + " mod draws this tab, and it is off.", "Mods tab (, then 3)", "tm mod enable " + id + "."}},
+		{mod.Mod{ID: id, State: mod.Enabled, Projects: []string{"zeta"}}, []string{"it is off for " + slug, "Mods tab (, then 3)", "tm mod enable " + id + " --project " + slug}},
+		{mod.Mod{ID: id, State: mod.Enabled}, []string{"Waiting for the " + id + " mod to draw this tab"}},
+	} {
+		m.data.Mods = []mod.Mod{c.md}
+		out := strings.Join(strings.Fields(screen(m)), " ")
+		for _, want := range c.want {
+			if !strings.Contains(out, want) {
+				t.Errorf("%s %s: lacks %q:\n%s", id, c.md.State, want, screen(m))
+			}
+		}
+		if strings.Contains(out, "≡") || strings.Contains(out, "mod: ") {
+			t.Errorf("%s %s: names ≡ or marks the mod:\n%s", id, c.md.State, screen(m))
+		}
 	}
 }

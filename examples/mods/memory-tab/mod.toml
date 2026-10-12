@@ -3,6 +3,8 @@
 # source, and `go generate ./internal/mod` precompiles main.ts into the
 # binary. To change it, copy the folder, give the copy another id and
 # install it by path (tm mod install refuses a built-in mod's id).
+# It is the Memory tab's only drawing: turned off (the Mods tab, or
+# [mods.memory-tab] enabled = false in config.toml), the tab says so.
 id = "memory-tab"
 name = "Memory tab"
 version = "1.0.0"

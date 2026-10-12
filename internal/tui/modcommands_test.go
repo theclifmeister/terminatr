@@ -41,7 +41,7 @@ func TestModCommandKeys(t *testing.T) {
 	if c.Mod != "lab" || c.Command != "relabel" || c.Project != "alpha" || !c.Console || c.Selection == nil || c.Selection.Project != "alpha" {
 		t.Fatalf("sent %+v %+v", c, c.Selection)
 	}
-	if !strings.Contains(m.msg, "ran Relabel · mod: lab") {
+	if !strings.Contains(m.msg, "ran Relabel") {
 		t.Fatalf("msg %q", m.msg)
 	}
 	// j stays the core's list.down.
@@ -74,15 +74,15 @@ func TestModCommandMenuAndHelp(t *testing.T) {
 		{Mod: "lab", Name: "Lab", View: "board", Title: "Board", Slot: "full"}}}})
 	var labels []string
 	for _, it := range m.dashItems() {
-		if strings.Contains(it.label, "mod: ") {
+		if strings.HasSuffix(it.label, " · lab") || strings.HasSuffix(it.label, " · late") {
 			labels = append(labels, it.label+"="+it.key)
 		}
 	}
-	if got, want := strings.Join(labels, " | "), "Board · mod: lab= | Relabel · mod: lab=g | Sweep · mod: lab= | Sync · mod: late="; got != want {
+	if got, want := strings.Join(labels, " | "), "Board · lab= | Relabel · lab=g | Sweep · lab= | Sync · late="; got != want {
 		t.Fatalf("menu\n got %s\nwant %s", got, want)
 	}
 	for _, it := range m.dashItems() {
-		if it.label == "Relabel · mod: lab" {
+		if it.label == "Relabel · lab" {
 			run(m, it.run(m))
 		}
 	}
@@ -90,7 +90,7 @@ func TestModCommandMenuAndHelp(t *testing.T) {
 		t.Fatalf("menu entry sent %+v", src.commands)
 	}
 	help := strings.Join(keyLines(200, m.commandHelp()), "\n")
-	for _, want := range []string{"Mod commands", "Relabel (mod: lab; tm mod run lab relabel)", "Sweep (mod: lab; tm mod run lab sweep); its key j is taken", "Go beta (mod: only"} {
+	for _, want := range []string{"Mod commands", "Relabel (tm mod run lab relabel)", "Sweep (tm mod run lab sweep); its key j is taken", "Go beta (tm mod run only"} {
 		if !strings.Contains(help, want) {
 			t.Errorf("help lacks %q:\n%s", want, help)
 		}
