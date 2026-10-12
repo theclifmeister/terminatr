@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -33,6 +34,9 @@ func testPaths(t *testing.T) Paths {
 	t.Setenv("TERMINATR_HOME", home)
 	t.Setenv("TERMINATR_SOCKET", filepath.Join(sockDir, "tm.sock"))
 	t.Setenv("TERMINATR_LAUNCHD", "off")
+	// The human's, even under an agent's tm: an agent's Dial skips the
+	// human socket.
+	t.Setenv(caller.EnvSession, "")
 	p, err := ResolvePaths()
 	if err != nil {
 		t.Fatal(err)

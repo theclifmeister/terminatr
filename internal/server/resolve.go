@@ -7,6 +7,7 @@ import (
 	"runtime"
 
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 )
 
 const homeEnv = home.Env
@@ -21,6 +22,13 @@ type Paths struct {
 	PID      string // RunDir/server.pid
 	Log      string // Home/logs/server.log
 	Sessions string // Home/state/sessions.json
+}
+
+// HumanSocket is the human socket beside the server's (ipc.HumanName):
+// the human's console and CLI dial it first, and the human-only methods
+// answer only there (docs/SPEC.md §11.1).
+func (p Paths) HumanSocket() string {
+	return filepath.Join(filepath.Dir(p.Socket), ipc.HumanName)
 }
 
 // ResolvePaths computes the paths from the process environment. The state
@@ -48,6 +56,9 @@ func ResolvePaths() (Paths, error) {
 	}
 	sock, err := SocketPath(env)
 	if err != nil {
+		return Paths{}, err
+	}
+	if _, err := ipc.HumanAddr(ipc.Addr(sock)); err != nil {
 		return Paths{}, err
 	}
 	run := filepath.Dir(sock)
