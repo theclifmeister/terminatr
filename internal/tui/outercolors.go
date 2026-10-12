@@ -16,7 +16,9 @@ import (
 // background (OSC 10, 11) and the 16 ANSI palette entries (OSC 4) at
 // start and whenever the colour scheme changes, and sends what it
 // answered to the panes' sessions, whose emulators answer the programs'
-// own OSC 10/11/4 queries with them.
+// own OSC 10/11/4 queries with them. A theme's pane palette (§5.3) goes
+// in place of the colours it sets, as the renderer draws them, and the
+// panes get them again when it changes (the theme or the scheme).
 
 // askColors asks the outer terminal its colours, then its attributes
 // (DA1): every terminal answers DA1, after the colour queries before it,
@@ -55,23 +57,49 @@ func (c *client) gotColor(known uint32, col color.Color) {
 	c.mu.Unlock()
 }
 
-// sendColors sends the panes the outer terminal's colours, once they
-// answered (DA1 came) and only when they changed.
+// sendColors sends the panes the outer terminal's colours under the
+// theme's pane palette, once they answered (DA1 came) or the palette
+// changed, and only when they changed.
 func (c *client) sendColors() {
 	if !c.lock() {
 		return
 	}
-	if c.colors == c.sentColors {
+	colors := themedColors(c.colors, c.pal)
+	if colors == c.sentColors {
 		c.mu.Unlock()
 		return
 	}
-	c.sentColors = c.colors
-	payload := c.colors.Encode()
+	c.sentColors = colors
+	payload := colors.Encode()
 	ps := c.leaves()
 	c.mu.Unlock()
 	for _, p := range ps {
 		c.send(p, proto.FrameColors, payload)
 	}
+}
+
+// themedColors are the outer terminal's colours with the pane palette's
+// (nil for none) in place of those it sets, known whether or not the
+// terminal answered.
+func themedColors(outer emu.Colors, pal *emu.Palette) emu.Colors {
+	if pal == nil {
+		return outer
+	}
+	if pal.Fg != nil {
+		outer.Fg = *pal.Fg
+		outer.Known |= emu.KnownFg
+	}
+	if pal.Bg != nil {
+		outer.Bg = *pal.Bg
+		outer.Known |= emu.KnownBg
+	}
+	for i, rgb := range pal.ANSI {
+		if rgb != nil {
+			outer.Palette[i] = *rgb
+			outer.Known |= 1 << i
+		}
+	}
+	return outer
 }
 
 // paletteAnswer parses an OSC 4 answer, ESC ] 4 ; index ; colour ST,

@@ -209,3 +209,13 @@ func OSC52(which byte, data []byte) []byte {
 	b = base64.StdEncoding.AppendEncode(b, data)
 	return append(b, '\a')
 }
+
+// Palette is the colours a renderer draws a pane's symbolic colours with
+// (a theme's pane palette, docs/SPEC.md §5.3): the default foreground and
+// background (SGR 39/49) and the 16 ANSI colours (palette indexes 0-15).
+// A nil entry stays symbolic, for the outer terminal's own; indexes
+// 16-255 and the program's truecolor always do.
+type Palette struct {
+	Fg, Bg *RGB
+	ANSI   [16]*RGB
+}

@@ -5,7 +5,7 @@
 id = "nord"
 name = "Nord"
 version = "1.0.0"
-api = "1.0"
+api = "1.6"
 description = "The Nord palette, in light and dark, with icons drawn to match."
 authors = ["terminatr"]
 homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/nord"

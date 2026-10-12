@@ -80,7 +80,10 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
 ## Notes on each
 
 - **nord** sets every theme role for a dark and a light terminal; each
-  colour has an ANSI fallback and a truecolor choice. Its icon set gives
+  colour has an ANSI fallback and a truecolor choice. Its `[dark.pane]`
+  and `[light.pane]` (`api = "1.6"`) colour the panes too, on a
+  truecolor terminal: every agent's and shell's default colours and 16
+  ANSI colours become Nord's. Its icon set gives
   only the glyphs it changes over the `unicode` base. A glyph two cells
   wide, or an emoji, makes the set refuse to load, and the console keeps
   its built-in icons and says why.

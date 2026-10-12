@@ -14,8 +14,9 @@ import (
 // cell renderer (docs/SPEC.md §3.3). It redraws only the rows libghostty
 // marks dirty, wraps every frame in mode 2026 so the outer terminal never
 // shows a torn one, keeps palette colours as palette indexes and default
-// colours as SGR 39/49 (so the user's theme applies), and re-anchors the
-// cursor after multi-codepoint graphemes.
+// colours as SGR 39/49 (so the user's theme applies) unless SetPalette
+// gives it a theme's, and re-anchors the cursor after multi-codepoint
+// graphemes.
 //
 // The outer window may differ in size from the pane: the pane is cropped
 // or padded, never resized. When the pane has more rows than the window,
@@ -34,6 +35,12 @@ type Renderer struct {
 	sgr  []byte
 	last []byte
 	full bool // the next frame clears and repaints everything
+
+	// pal is the palette symbolic colours are drawn with (nil: none), and
+	// reset the SGR sequence of a default cell under it ("\x1b[0m"
+	// without one), which blanks and erases are drawn with.
+	pal   *Palette
+	reset []byte
 
 	outCols, outRows int
 	top              int // first pane row shown
@@ -69,7 +76,20 @@ func NewRenderer(cols, rows uint16) (*Renderer, error) {
 		rs.Close()
 		return nil, fmt.Errorf("emu: row cells: %w", err)
 	}
-	return &Renderer{rs: rs, ri: ri, rc: rc, full: true, outCols: int(cols), outRows: int(rows)}, nil
+	return &Renderer{rs: rs, ri: ri, rc: rc, full: true, outCols: int(cols), outRows: int(rows),
+		reset: []byte("\x1b[0m")}, nil
+}
+
+// SetPalette makes the renderer draw the pane's default and 16 ANSI
+// colours with p's, or symbolic again with nil; a new palette repaints
+// everything on the next frame.
+func (r *Renderer) SetPalette(p *Palette) {
+	if p == r.pal {
+		return
+	}
+	r.pal, r.full = p, true
+	r.reset = appendDefault(append(r.reset[:0], "\x1b[0"...), p)
+	r.reset = append(r.reset, 'm')
 }
 
 // Close frees the renderer.
@@ -154,11 +174,11 @@ func (r *Renderer) Frame(t *Terminal, held bool) ([]byte, error) {
 	case r.full && r.shared:
 		for y := range r.outRows {
 			b = appendCUP(b, r.oy+y+1, r.ox+1)
-			b = appendECH(append(b, "\x1b[0m"...), r.outCols)
+			b = appendECH(append(b, r.reset...), r.outCols)
 		}
 		wrote = true
 	case r.full:
-		b = append(b, "\x1b[0m\x1b[H\x1b[2J"...)
+		b = append(append(b, r.reset...), "\x1b[H\x1b[2J"...)
 		wrote = true
 	}
 	if r.full || dirty != libghostty.RenderStateDirtyFalse {
@@ -257,8 +277,8 @@ func (r *Renderer) viewTop(paneRows int, cur *libghostty.RenderStateCursor) int 
 // row draws the iterator's current row at pane row oy of the window.
 func (r *Renderer) row(b []byte, oy int) ([]byte, error) {
 	b = appendCUP(b, r.oy+oy+1, r.ox+1)
-	b = append(b, "\x1b[0m"...)
-	r.last = append(r.last[:0], "\x1b[0m"...)
+	b = append(b, r.reset...)
+	r.last = append(r.last[:0], r.reset...)
 	if err := r.ri.Cells(r.rc); err != nil {
 		return nil, err
 	}
@@ -296,15 +316,15 @@ func (r *Renderer) row(b []byte, oy int) ([]byte, error) {
 			continue
 		}
 		if pendingBlank > 0 {
-			if string(r.last) != "\x1b[0m" {
-				b = append(b, "\x1b[0m"...)
-				r.last = append(r.last[:0], "\x1b[0m"...)
+			if string(r.last) != string(r.reset) {
+				b = append(b, r.reset...)
+				r.last = append(r.last[:0], r.reset...)
 			}
 			for ; pendingBlank > 0; pendingBlank-- {
 				b = append(b, ' ')
 			}
 		}
-		r.sgr = sgrFor(r.sgr[:0], st, selected)
+		r.sgr = sgrFor(r.sgr[:0], st, selected, r.pal)
 		if string(r.sgr) != string(r.last) {
 			b = append(b, r.sgr...)
 			r.last = append(r.last[:0], r.sgr...)
@@ -328,9 +348,9 @@ func (r *Renderer) row(b []byte, oy int) ([]byte, error) {
 	// shared window only up to the pane's edge.
 	if pendingBlank > 0 || x < r.outCols {
 		if r.shared {
-			b = appendECH(append(b, "\x1b[0m"...), r.outCols-x+pendingBlank)
+			b = appendECH(append(b, r.reset...), r.outCols-x+pendingBlank)
 		} else {
-			b = append(b, "\x1b[0m\x1b[K"...)
+			b = append(append(b, r.reset...), "\x1b[K"...)
 		}
 		r.last = r.last[:0]
 	}
@@ -356,11 +376,22 @@ func appendCUP(b []byte, row, col int) []byte {
 }
 
 // appendColor appends one colour of an SGR sequence. base is 30 (fg), 40
-// (bg) or 50 (underline colour, 58).
-func appendColor(b []byte, c libghostty.StyleColor, base int) []byte {
+// (bg) or 50 (underline colour, 58). With a palette, its colours replace
+// the default fore- and background and the 16 ANSI colours.
+func appendColor(b []byte, c libghostty.StyleColor, base int, pal *Palette) []byte {
 	switch c.Tag {
+	case libghostty.StyleColorNone:
+		if pal != nil && base == 30 && pal.Fg != nil {
+			return appendRGB(b, base, *pal.Fg)
+		}
+		if pal != nil && base == 40 && pal.Bg != nil {
+			return appendRGB(b, base, *pal.Bg)
+		}
 	case libghostty.StyleColorPalette:
 		n := int(c.Palette)
+		if pal != nil && n < 16 && pal.ANSI[n] != nil {
+			return appendRGB(b, base, *pal.ANSI[n])
+		}
 		b = append(b, ';')
 		switch {
 		case base != 50 && n < 8:
@@ -373,21 +404,43 @@ func appendColor(b []byte, c libghostty.StyleColor, base int) []byte {
 			b = strconv.AppendInt(b, int64(n), 10)
 		}
 	case libghostty.StyleColorRGB:
-		b = append(b, ';')
-		b = strconv.AppendInt(b, int64(base+8), 10)
-		b = append(b, ";2;"...)
-		b = strconv.AppendInt(b, int64(c.RGB.R), 10)
-		b = append(b, ';')
-		b = strconv.AppendInt(b, int64(c.RGB.G), 10)
-		b = append(b, ';')
-		b = strconv.AppendInt(b, int64(c.RGB.B), 10)
+		b = appendRGB(b, base, RGB{c.RGB.R, c.RGB.G, c.RGB.B})
 	}
 	return b
 }
 
-// sgrFor returns the complete SGR sequence, starting from a reset, for st;
-// a selected cell is drawn with fore- and background swapped.
-func sgrFor(dst []byte, st *libghostty.Style, selected bool) []byte {
+// appendRGB appends a truecolor colour of an SGR sequence (base as for
+// appendColor).
+func appendRGB(b []byte, base int, c RGB) []byte {
+	b = append(b, ';')
+	b = strconv.AppendInt(b, int64(base+8), 10)
+	b = append(b, ";2;"...)
+	b = strconv.AppendInt(b, int64(c.R), 10)
+	b = append(b, ';')
+	b = strconv.AppendInt(b, int64(c.G), 10)
+	b = append(b, ';')
+	return strconv.AppendInt(b, int64(c.B), 10)
+}
+
+// appendDefault appends a default cell's colours under pal: its default
+// fore- and background, nothing without one.
+func appendDefault(b []byte, pal *Palette) []byte {
+	if pal == nil {
+		return b
+	}
+	if pal.Fg != nil {
+		b = appendRGB(b, 30, *pal.Fg)
+	}
+	if pal.Bg != nil {
+		b = appendRGB(b, 40, *pal.Bg)
+	}
+	return b
+}
+
+// sgrFor returns the complete SGR sequence, starting from a reset, for st
+// under pal (nil for none); a selected cell is drawn with fore- and
+// background swapped.
+func sgrFor(dst []byte, st *libghostty.Style, selected bool, pal *Palette) []byte {
 	dst = append(dst, "\x1b[0"...)
 	if st.Bold() {
 		dst = append(dst, ";1"...)
@@ -425,9 +478,9 @@ func sgrFor(dst []byte, st *libghostty.Style, selected bool) []byte {
 	if st.Overline() {
 		dst = append(dst, ";53"...)
 	}
-	dst = appendColor(dst, st.FgColor(), 30)
-	dst = appendColor(dst, st.BgColor(), 40)
-	dst = appendColor(dst, st.UnderlineColor(), 50)
+	dst = appendColor(dst, st.FgColor(), 30, pal)
+	dst = appendColor(dst, st.BgColor(), 40, pal)
+	dst = appendColor(dst, st.UnderlineColor(), 50, pal)
 	return append(dst, 'm')
 }
 

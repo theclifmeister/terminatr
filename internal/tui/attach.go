@@ -350,8 +350,10 @@ type client struct {
 	buf         []byte
 
 	// colors are the outer terminal's colours as it answered askColors;
-	// sentColors those last sent to the panes (outercolors.go).
+	// sentColors those last sent to the panes, under pal, the theme's
+	// pane palette the panes are drawn with (outercolors.go).
 	colors, sentColors emu.Colors
+	pal                *emu.Palette
 
 	// detaching is set before DETACH is written. The server may hang up
 	// as soon as it reads it, so from then on a failed write or a closed
@@ -1759,7 +1761,13 @@ func (c *client) renderLoop(out io.Writer) Result {
 		}
 		vis := c.shown()
 		held := false
+		// The theme's pane palette, for this scheme: the panes are drawn
+		// with it, and their programs' colour queries answered with it.
+		pal := th().Pane
+		repal := pal != c.pal
+		c.pal = pal
 		for _, p := range vis {
+			p.r.SetPalette(pal)
 			if p.held && time.Since(p.heldAt) > maxHold {
 				p.held = false // the program never ended its update; draw anyway
 			}
@@ -1793,6 +1801,9 @@ func (c *client) renderLoop(out io.Writer) Result {
 			c.clip = nil
 		}
 		c.mu.Unlock()
+		if repal {
+			c.sendColors()
+		}
 		if err != nil {
 			c.finish(Result{Reason: "render: " + err.Error()})
 			continue

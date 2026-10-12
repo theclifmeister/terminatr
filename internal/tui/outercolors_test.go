@@ -71,3 +71,44 @@ func TestOuterColors(t *testing.T) {
 		t.Fatalf("the new background wasn't sent: %+v", c.sentColors)
 	}
 }
+
+// TestThemedColors: the panes' programs are answered with the theme's
+// pane palette where it sets a colour, the terminal's elsewhere, and
+// again when the palette changes; without one, as the terminal answered.
+func TestThemedColors(t *testing.T) {
+	c := &client{}
+	c.handle(uv.ForegroundColorEvent{Color: color.RGBA{0xee, 0xee, 0xee, 0xff}})
+	c.handle(uv.UnknownOscEvent("\x1b]4;3;rgb:aaaa/bbbb/cccc\x07"))
+	c.handle(uv.UnknownOscEvent("\x1b]4;4;rgb:1111/2222/3333\x07"))
+	c.handle(uv.PrimaryDeviceAttributesEvent{62})
+	outer := c.sentColors
+
+	pal := &emu.Palette{Bg: &emu.RGB{R: 0x2e, G: 0x34, B: 0x40}}
+	pal.ANSI[3] = &emu.RGB{R: 0xeb, G: 0xcb, B: 0x8b}
+	c.pal = pal
+	c.sendColors()
+	got := c.sentColors
+	if got.Fg != outer.Fg || got.Bg != *pal.Bg || got.Palette[3] != *pal.ANSI[3] || got.Palette[4] != outer.Palette[4] {
+		t.Fatalf("themed %+v", got)
+	}
+	if want := emu.KnownFg | emu.KnownBg | 1<<3 | 1<<4; got.Known != want {
+		t.Fatalf("known %b, want %b", got.Known, want)
+	}
+	// The terminal answering again keeps the theme's over its own.
+	c.handle(uv.UnknownOscEvent("\x1b]4;3;rgb:0000/0000/0000\x07"))
+	c.handle(uv.PrimaryDeviceAttributesEvent{62})
+	if c.sentColors.Palette[3] != *pal.ANSI[3] {
+		t.Fatalf("the terminal's colour 3 went over the theme's: %+v", c.sentColors.Palette[3])
+	}
+	// No palette (another theme, safe mode, no truecolor): the terminal's.
+	c.pal = nil
+	c.sendColors()
+	if c.sentColors.Known&emu.KnownBg != 0 || c.sentColors.Palette[3] != (emu.RGB{}) {
+		t.Fatalf("unthemed %+v", c.sentColors)
+	}
+
+	// A theme alone answers, before the terminal does.
+	if th := themedColors(emu.Colors{}, pal); th.Known != emu.KnownBg|1<<3 || th.Bg != *pal.Bg {
+		t.Fatalf("theme alone %+v", th)
+	}
+}

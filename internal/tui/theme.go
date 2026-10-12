@@ -12,6 +12,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/mod"
 )
 
@@ -25,6 +26,9 @@ import (
 // th() is the current one.
 type Theme struct {
 	Head, Sel, SelFocus, Faint, Accent, Title, Bad, Warn, Good, Info, Plain lipgloss.Style
+	// Pane is the panes' palette, nil to keep their colours symbolic (no
+	// pane table, or a terminal without truecolor).
+	Pane *emu.Palette
 }
 
 // roleSpec is one role as data: foreground and background colours (each
@@ -53,6 +57,53 @@ type roleSet struct {
 	Good     *roleSpec `toml:"good"`
 	Info     *roleSpec `toml:"info"`
 	Plain    *roleSpec `toml:"plain"`
+	// Pane is the panes' palette (mod API 1.6); none in the built-in theme.
+	Pane *paneSpec `toml:"pane"`
+}
+
+// paneSpec is a scheme's pane palette, [light.pane] or [dark.pane]: the
+// colours the panes' programs' default foreground and background and 16
+// ANSI colours are drawn with, each #rrggbb. Whatever it leaves out
+// stays the outer terminal's own.
+type paneSpec struct {
+	Fg      string   `toml:"fg"`
+	Bg      string   `toml:"bg"`
+	Palette []string `toml:"palette"`
+}
+
+// palette is the spec as a renderer's palette; a bad colour is an error
+// naming its key.
+func (p *paneSpec) palette() (*emu.Palette, error) {
+	var pal emu.Palette
+	var err error
+	if pal.Fg, err = parseRGB(p.Fg); err != nil {
+		return nil, fmt.Errorf("pane fg: %w", err)
+	}
+	if pal.Bg, err = parseRGB(p.Bg); err != nil {
+		return nil, fmt.Errorf("pane bg: %w", err)
+	}
+	if n := len(p.Palette); n != 0 && n != 16 {
+		return nil, fmt.Errorf("pane palette: takes the 16 ANSI colours, got %d", n)
+	}
+	for i, c := range p.Palette {
+		if pal.ANSI[i], err = parseRGB(c); err != nil {
+			return nil, fmt.Errorf("pane palette %d: %w", i, err)
+		}
+	}
+	return &pal, nil
+}
+
+// parseRGB reads #rrggbb; nil for "".
+func parseRGB(s string) (*emu.RGB, error) {
+	if s == "" {
+		return nil, nil
+	}
+	if len(s) == 7 && s[0] == '#' {
+		if v, err := strconv.ParseUint(s[1:], 16, 24); err == nil {
+			return &emu.RGB{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v)}, nil
+		}
+	}
+	return nil, fmt.Errorf("bad colour %q (want #rrggbb)", s)
 }
 
 // themeTable is a theme as data: a role set per colour scheme.
@@ -194,6 +245,15 @@ func (rs roleSet) resolve(truecolor bool) (*Theme, error) {
 			return nil, fmt.Errorf("%s: %w", r.name, err)
 		}
 		*r.out = st
+	}
+	if rs.Pane != nil {
+		pal, err := rs.Pane.palette()
+		if err != nil {
+			return nil, err
+		}
+		if truecolor {
+			t.Pane = pal
+		}
 	}
 	return &t, nil
 }

@@ -57,6 +57,7 @@ func NewRenderer(cols, rows uint16) (*Renderer, error)           { return nil, E
 func (r *Renderer) Close()                                       {}
 func (r *Renderer) SetSize(cols, rows uint16)                    {}
 func (r *Renderer) SetRect(x, y, cols, rows int)                 {}
+func (r *Renderer) SetPalette(p *Palette)                        {}
 func (r *Renderer) Cursor() []byte                               { return nil }
 func (r *Renderer) SetStatus(line string)                        {}
 func (r *Renderer) Invalidate()                                  {}

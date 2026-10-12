@@ -526,8 +526,8 @@ var DataChecks = map[string]func([]byte) error{}
 // CheckData loads every data file of the mod as tm would use it and
 // says what doesn't load, each error naming the kind: a theme, icon
 // set, keymap or layout that doesn't parse or check (a v2 layout in a mod
-// below API 1.5 included), a rules file that
-// can't be read, a template that doesn't parse. Nil when all load (and
+// below API 1.5, or a theme's pane palette below 1.6, included), a rules
+// file that can't be read, a template that doesn't parse. Nil when all load (and
 // for a mod whose manifest doesn't).
 func (m Mod) CheckData() []error {
 	if m.Manifest == nil {
@@ -548,6 +548,8 @@ func (m Mod) CheckData() []error {
 				}
 			case KindKeymap:
 				_, err = ParseKeymap(data)
+			case KindTheme:
+				err = ThemeCheckAPI(data, m.Manifest.API)
 			}
 		}
 		if check := DataChecks[kind]; err == nil && check != nil {
