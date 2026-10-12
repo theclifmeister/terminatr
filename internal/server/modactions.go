@@ -33,7 +33,7 @@ func (s *Server) modActionMethods(b *modbroker.Broker) {
 	b.Handle("actions.list", "", func(context.Context, *modbroker.Call) (any, error) {
 		out := make([]modapi.Action, len(modaction.Actions))
 		for i, a := range modaction.Actions {
-			out[i] = modapi.Action{ID: a.ID, Label: a.Label, Key: a.Key, On: a.On, Confirm: a.Confirm, Precondition: a.Precondition}
+			out[i] = modapi.Action{ID: a.ID, Label: a.Label, Key: a.Key, On: a.On, Confirm: a.Confirm, Precondition: a.Precondition, Consent: a.Consent}
 		}
 		return out, nil
 	})
@@ -53,7 +53,7 @@ func (s *Server) modActionMethods(b *modbroker.Broker) {
 			return nil, modbroker.BadParams("actions.available: %s", why)
 		}
 		if err := s.modActionScope(c.Mod, spec, a.Target); err != nil {
-			if spec.On == modaction.OnSession && !modbroker.IsDenied(err) {
+			if onSession(spec) && !modbroker.IsDenied(err) {
 				// A session that isn't running, or not in a project the
 				// mod runs for, answers alike: no probing for sessions.
 				return false, nil
@@ -64,10 +64,18 @@ func (s *Server) modActionMethods(b *modbroker.Broker) {
 	})
 }
 
+// onSession says whether a's target names a session (session.attach,
+// session.clear, question.answer).
+func onSession(a modaction.Action) bool {
+	return a.On == modaction.OnSession || a.On == modaction.OnQuestion
+}
+
 // modActionScope refuses a binding of action a on target t outside mod
-// m's reach: it needs project_read, and the target's project (a
-// session's own project) must be one m runs for. A session outside the
-// projects, or not running, is not found. The console asks it before it
+// m's reach: it needs project_read, an action that needs a grant of its
+// own (modaction.Action.Consent) needs m to list it under [permissions]
+// actions with the actions grant (mod.Mod.Binds), and the target's
+// project (a session's own project) must be one m runs for. A session
+// outside the projects, or not running, is not found. The console asks it before it
 // runs a pressed binding (mod.action.check), and action.done and
 // $.actions.available check it, so a mod enabled for one project can't
 // have the human act on, or attach to, another.
@@ -75,8 +83,11 @@ func (s *Server) modActionScope(m mod.Mod, a modaction.Action, t modaction.Targe
 	if !m.Granted(mod.PermProjectRead) {
 		return modbroker.Denied("binding %s needs the %s permission, which %s doesn't have", a.ID, mod.PermProjectRead, m.ID)
 	}
+	if !m.Binds(a) {
+		return modbroker.Denied("binding %s needs it in [permissions] actions, with the %s grant, which %s doesn't have", a.ID, mod.PermActions, m.ID)
+	}
 	slug := t.Project
-	if a.On == modaction.OnSession {
+	if onSession(a) {
 		sess, perr := s.session(t.Session)
 		if perr != nil {
 			return modbroker.NotFound("no session %s", t.Session)
@@ -135,6 +146,25 @@ func (l *liveActions) Asked(slug, ref string) string {
 	return project.TaskAsked(items, ref)
 }
 
+func (l *liveActions) Menu(id string) []modaction.MenuQuestion {
+	return menuOf(l.s.asks.of(id))
+}
+
+// menuOf is question menu q as a precondition sees it.
+func menuOf(q *proto.Question) []modaction.MenuQuestion {
+	if q == nil {
+		return nil
+	}
+	out := make([]modaction.MenuQuestion, len(q.Questions))
+	for i, it := range q.Questions {
+		out[i] = modaction.MenuQuestion{Question: it.Question, Multi: it.MultiSelect, Answered: it.Answered}
+		for _, o := range it.Options {
+			out[i].Options = append(out[i].Options, o.Label)
+		}
+	}
+	return out
+}
+
 func (l *liveActions) Session(id string) bool {
 	sess, perr := l.s.session(id)
 	if perr != nil {
@@ -152,7 +182,7 @@ func (l *liveActions) Session(id string) bool {
 // on target: the action is bindable, the target of its shape and in the
 // mod's reach (modActionScope). Human-only: only a human's console asks.
 func (s *Server) modBinding(id, action string, target map[string]string, peerPID int) (modaction.Target, *proto.Error) {
-	t := modaction.Target{Project: target["project"], Task: target["task"], Thread: target["thread"], Session: target["session"]}
+	t := modaction.TargetOf(target)
 	if s.callerOf(peerPID).IsAgent() {
 		return t, proto.Errorf("human-only", "only a human's console presses a mod's binding")
 	}
@@ -227,7 +257,7 @@ type press struct {
 
 // pressKey names a binding: mod, action and the target's fields.
 func pressKey(mod, action string, t modaction.Target) string {
-	return strings.Join([]string{mod, action, t.Project, t.Task, t.Thread, t.Session}, "\x00")
+	return strings.Join([]string{mod, action, t.Project, t.Task, t.Thread, t.Session, t.Question, t.Option}, "\x00")
 }
 
 // issue makes a token for console pid's press of binding key.

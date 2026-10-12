@@ -113,8 +113,7 @@ func (m *dash) drawNotices() []tea.Cmd {
 // hears action.done. The notices view has kept the press waiting
 // noticeStable already.
 func (m *dash) pressNotice(mod string, b modnotify.Button) tea.Cmd {
-	target := map[string]string{"project": b.Project, "task": fmt.Sprintf("T%d", b.Task)}
-	return m.pressBinding(mod, &widget.Event{Kind: widget.EventAction, Action: &widget.Action{ID: b.ID, Target: target}, Stable: true})
+	return m.pressBinding(mod, &widget.Event{Kind: widget.EventAction, Action: &widget.Action{ID: b.ID, Target: b.Target()}, Stable: true})
 }
 
 // noticesView lists the notifications of mods.
@@ -220,6 +219,10 @@ func (nv *noticesView) render(m *dash) string {
 		}
 		var bs []string
 		for j, b := range n.Buttons {
+			if b.Session != "" {
+				bs = append(bs, fmt.Sprintf("%d %s %q", j+1, b.Label, oneLine(b.Option)))
+				continue
+			}
 			bs = append(bs, fmt.Sprintf("%d %s T%d", j+1, b.Label, b.Task))
 		}
 		if len(bs) > 0 {

@@ -16,7 +16,7 @@ var humanOnlyMethods = []string{
 	proto.MethodProjectRename, proto.MethodProjectActive,
 	proto.MethodModViews, proto.MethodModViewInput, proto.MethodModCommand, proto.MethodModRestart,
 	proto.MethodNotifyClaim, proto.MethodNotifyDismiss,
-	proto.MethodModActionCheck, proto.MethodModActionDone,
+	proto.MethodModActionCheck, proto.MethodModActionDone, proto.MethodSessionClear,
 }
 
 // onHumanSocketOnly reports whether err is the server socket's refusal

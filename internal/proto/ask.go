@@ -67,6 +67,12 @@ type SessionAnswerParams struct {
 	ID     string `json:"id"`
 	Index  int    `json:"index"`
 	Answer string `json:"answer"`
+	// Question, when set, is the text question Index must still ask,
+	// unanswered and single-select, and Answer must be one of its
+	// options' labels; refused otherwise. A console's question.answer
+	// binding sets it, so a menu replaced after the human confirmed gets
+	// no answer meant for another (docs/SPEC.md §5.3, Action binding).
+	Question string `json:"question,omitempty"`
 }
 
 // SessionAnswerResult says how many questions still wait for an answer;

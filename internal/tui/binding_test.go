@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/widget"
 )
 
@@ -136,5 +137,59 @@ func TestBoundHints(t *testing.T) {
 	v.Set(w)
 	if got := boundHints(v); got != "D delegate · enter show · space activate / deactivate" {
 		t.Errorf("hints %q", got)
+	}
+}
+
+// TestBindingClearAnswer: session.clear and question.answer run only
+// after tm's own confirmation, which names the session and, for an
+// answer, the live question and option; an option the live menu doesn't
+// have is not available, and nothing is sent.
+func TestBindingClearAnswer(t *testing.T) {
+	src, m := popupData(t)
+	for i := range m.data.Sessions {
+		if m.data.Sessions[i].ID == "s-9" {
+			m.data.Sessions[i].Question = &proto.Question{Questions: []proto.QuestionItem{
+				{Question: "Which colour?", Options: []proto.QuestionOption{{Label: "Red"}, {Label: "Blue"}}},
+			}}
+		}
+	}
+
+	runAll(m, pressed(m, boundPress("session.clear", map[string]string{"session": "s-9"}, true)))
+	cv, ok := m.top().(*confirmView)
+	if !ok || !strings.HasPrefix(cv.question, "Clear alpha t-0003's conversation?") || len(src.cleared) != 0 {
+		t.Fatalf("clear opened %T %+v, cleared %v", m.top(), cv, src.cleared)
+	}
+	run(m, keyPress(m, "n"))
+	if len(src.cleared) != 0 || len(src.done) != 0 {
+		t.Fatalf("n cleared: %v %v", src.cleared, src.done)
+	}
+	runAll(m, pressed(m, boundPress("session.clear", map[string]string{"session": "s-9"}, true)))
+	run(m, keyPress(m, "y"))
+	if len(src.cleared) != 1 || src.cleared[0] != "s-9" || len(src.done) != 1 || src.done[0] != "lab session.clear /s-9 true" {
+		t.Fatalf("after y: %v %v", src.cleared, src.done)
+	}
+
+	src.done = nil
+	answer := func(option string) map[string]string {
+		return map[string]string{"session": "s-9", "question": "Which colour?", "option": option}
+	}
+	runAll(m, pressed(m, boundPress("question.answer", answer("Green"), true)))
+	if _, ok := m.top().(*confirmView); ok || !strings.Contains(m.msg, `not available: that question has no option "Green"`) {
+		t.Fatalf("a lying row: %T %q", m.top(), m.msg)
+	}
+	runAll(m, pressed(m, boundPress("question.answer", answer("Blue"), true)))
+	cv, ok = m.top().(*confirmView)
+	if !ok || cv.question != `Answer alpha t-0003's question "Which colour?" with "Blue"? It goes to the agent as your answer.` {
+		t.Fatalf("answer opened %T %+v", m.top(), cv)
+	}
+	if len(src.answers) != 0 {
+		t.Fatalf("answered before yes: %v", src.answers)
+	}
+	run(m, keyPress(m, "y"))
+	if len(src.answers) != 1 || src.answers[0] != "s-9 0 Which colour? → Blue" {
+		t.Fatalf("answers %v", src.answers)
+	}
+	if len(src.done) != 2 || !strings.HasSuffix(src.done[0], " false") || !strings.HasSuffix(src.done[1], " true") {
+		t.Errorf("done %v", src.done)
 	}
 }

@@ -21,9 +21,9 @@ Then turn it on in the Mods tab (`,` then `3`), or with `tm mod enable
 |---|-----|---------|----------|---------|
 | 1 | [nord](nord) | theme and icon set (data) | nothing (safe) | `tm mod install terminatr/examples/mods/nord` |
 | 2 | [vim-keys](vim-keys) | keymap (data) | nothing (safe) | `tm mod install terminatr/examples/mods/vim-keys` |
-| 3 | [context-gauge](context-gauge) | a cell in the sidebar and on the dashboard, and a card whose rows bind `session.attach` | reads your projects, draws its own panels | `tm mod install terminatr/examples/mods/context-gauge` |
+| 3 | [context-gauge](context-gauge) | a cell in the sidebar and on the dashboard, and a card whose rows bind `session.clear` and `session.attach` | reads your projects, draws its own panels, offers you keys that clear a session's conversation | `tm mod install terminatr/examples/mods/context-gauge` |
 | 4 | [cost-card](cost-card) | a dashboard card | reads your projects, draws its own panels | `tm mod install terminatr/examples/mods/cost-card` |
-| 5 | [notify-me](notify-me) | OS notifications with core-action buttons | reads your projects, shows notifications | `tm mod install terminatr/examples/mods/notify-me` |
+| 5 | [notify-me](notify-me) | OS notifications with core-action buttons, a question's options among them | reads your projects, shows notifications, offers you buttons that answer an agent's question | `tm mod install terminatr/examples/mods/notify-me` |
 | 6 | [thread-timeline](thread-timeline) | a full view (≡ menu) | reads your projects, draws its own panels | `tm mod install terminatr/examples/mods/thread-timeline` |
 | 7 | [pr-ci-column](pr-ci-column) | a sidebar column (built in) | reads your projects | copy it under another id first, see below |
 | 8 | [memory-tab](memory-tab) | a project-popup tab (built in) | reads your projects, draws its own panels | copy it under another id first, see below |
@@ -70,16 +70,24 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
   escape hatches (`esc`, `ctrl+c`, the prefix and its commands), and a
   key two actions want is refused.
 - **context-gauge** reads `session.state`. The card's rows only *name*
-  `session.attach`. The core shows the key, checks the session still
-  runs, and attaches; you then `/clear` there. The mod hears
-  `action.done`. A bindable `session.clear` isn't in mod API 1.0 yet.
+  `session.clear` (`C`) and `session.attach` (`enter`). The core shows the
+  keys and checks the session still runs; `C` asks first, in tm's words,
+  then has the agent start a fresh conversation once it is idle (the
+  project's files keep its state), and `enter` attaches. The mod hears
+  `action.done`. `session.clear` needs `actions = ["session.clear"]`
+  under `[permissions]` (mod API 1.3), which the consent shows.
 - **cost-card** uses the `tokens` and `cost_usd` that `session.state`
   carries for a thread's session (its thread's totals so far). Days
   count only what was spent while the mod ran.
-- **notify-me** buttons are core action ids (`task.accept`,
-  `task.send-back`, `task.show`). Pressing one opens tm's own
-  confirmation for the task as the board has it now. The notification
-  itself accepts or sends back nothing.
+- **notify-me** buttons are core action ids. A question menu open on a
+  thread or a coordinator (`session.question`, mod API 1.3) gets its
+  first three options as `question.answer` buttons; a review gets
+  `task.accept`, `task.send-back` and `task.show`; a question in a
+  thread's status gets `task.show`. Pressing one opens tm's own
+  confirmation for the question as the session asks it now, or the task
+  as the board has it now. The notification itself answers, accepts or
+  sends back nothing. `question.answer` needs `actions =
+  ["question.answer"]` under `[permissions]`, which the consent shows.
 - **thread-timeline** records state changes in its own store, so its
   history starts when it is installed. The view keeps the header,
   sidebar and NEEDS YOU in sight, and `esc` returns.

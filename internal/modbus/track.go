@@ -31,13 +31,17 @@ type Tracker struct {
 	projects map[string]*ProjectState
 	sessions map[string]Session
 	primed   bool // sessions seen once: a new one is news
+	// questions are the sessions' open questions, primedQ that they
+	// were seen once.
+	questions map[string]Question
+	primedQ   bool
 	// report reads thread's newest report; nil when it can't.
 	report func(project, thread string) *Report
 }
 
 // NewTracker publishes to bus; report reads a thread's newest report.
 func NewTracker(bus *Bus, report func(project, thread string) *Report) *Tracker {
-	return &Tracker{bus: bus, projects: map[string]*ProjectState{}, sessions: map[string]Session{}, report: report}
+	return &Tracker{bus: bus, projects: map[string]*ProjectState{}, sessions: map[string]Session{}, questions: map[string]Question{}, report: report}
 }
 
 // Reset forgets what was seen: the next states are baselines again (no
@@ -45,7 +49,8 @@ func NewTracker(bus *Bus, report func(project, thread string) *Report) *Tracker 
 func (t *Tracker) Reset() {
 	clear(t.projects)
 	clear(t.sessions)
-	t.primed = false
+	clear(t.questions)
+	t.primed, t.primedQ = false, false
 }
 
 // Project publishes what changed in project slug since its last state.
@@ -130,6 +135,39 @@ func (t *Tracker) Sessions(cur []Session) {
 		t.bus.Publish(SessionState, o.Project, o)
 	}
 	t.primed = true
+}
+
+// Questions publishes session.question for each session in a project
+// whose open question changed: one opened (after the first call),
+// another replaced it, or it was answered or went, with the session.
+// cur holds the sessions with a question open.
+func (t *Tracker) Questions(cur []Question) {
+	seen := map[string]bool{}
+	for _, n := range cur {
+		seen[n.Session] = true
+		o, ok := t.questions[n.Session]
+		t.questions[n.Session] = n
+		if ok && !sameAsk(o.Question, n.Question) || !ok && t.primedQ {
+			t.bus.Publish(SessionQuestion, n.Project, n)
+		}
+	}
+	for _, id := range slices.Sorted(maps.Keys(t.questions)) {
+		if seen[id] {
+			continue
+		}
+		o := t.questions[id]
+		delete(t.questions, id)
+		o.Question = nil
+		t.bus.Publish(SessionQuestion, o.Project, o)
+	}
+	t.primedQ = true
+}
+
+func sameAsk(a, b *Ask) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Question == b.Question && a.Header == b.Header && a.MultiSelect == b.MultiSelect && slices.Equal(a.Options, b.Options)
 }
 
 // byTaskID orders "T9" before "T10".

@@ -802,10 +802,14 @@ func (s *Server) dispatch(req proto.Request, peerPID int, human bool) (any, *pro
 		if perr != nil {
 			return nil, perr
 		}
-		if perr := s.mayAnswer(sess.Info(), s.callerOf(peerPID), human); perr != nil {
+		c := s.callerOf(peerPID)
+		if perr := s.mayAnswer(sess.Info(), c, human); perr != nil {
 			return nil, perr
 		}
-		res, perr := s.asks.answer(p.ID, p.Index, p.Answer)
+		res, perr := s.asks.answer(p.ID, p.Index, p.Answer, p.Question)
+		if perr == nil && p.Question != "" {
+			s.journalAnswer(p, c)
+		}
 		s.watch.wake()
 		s.modEv.wake()
 		return res, perr
@@ -815,6 +819,12 @@ func (s *Server) dispatch(req proto.Request, peerPID int, human bool) (any, *pro
 			return nil, err
 		}
 		return s.modActionDone(p, peerPID)
+	case proto.MethodSessionClear:
+		var p proto.SessionIDParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.clearSession(p.ID, s.callerOf(peerPID))
 	case proto.MethodModActionCheck:
 		var p proto.ModActionParams
 		if err := decodeParams(req.Params, &p); err != nil {

@@ -20,15 +20,27 @@ import (
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
-// Target is what a bound action acts on: a task or a project, or a
-// session. Its fields are mod API v1's (modbus.Target, which converts to
-// it); the package keeps its own so that proto, which carries the
-// notification buttons, can depend on it.
+// Target is what a bound action acts on: a task or a project, a
+// session, or an option of the question a session's menu asks. Its
+// fields are mod API v1's (modbus.Target, which converts to it); the
+// package keeps its own so that proto, which carries the notification
+// buttons, can depend on it.
 type Target struct {
 	Project string `json:"project,omitempty"`
 	Task    string `json:"task,omitempty"`
 	Thread  string `json:"thread,omitempty"`
 	Session string `json:"session,omitempty"`
+	// Question is the text of a question the session's open menu asks,
+	// and Option the label of one of its options (mod API 1.3).
+	Question string `json:"question,omitempty"`
+	Option   string `json:"option,omitempty"`
+}
+
+// TargetOf is the target of a binding's fields, as a widget row or a
+// notification button carries them.
+func TargetOf(m map[string]string) Target {
+	return Target{Project: m["project"], Task: m["task"], Thread: m["thread"], Session: m["session"],
+		Question: m["question"], Option: m["option"]}
 }
 
 // The kinds of inbox item a task action drops: KindDelegate,
@@ -49,6 +61,9 @@ const (
 	OnTask    = "task"    // project and task
 	OnProject = "project" // project
 	OnSession = "session" // session
+	// OnQuestion is session, question and option: an option of a
+	// question the session's open menu asks.
+	OnQuestion = "question"
 )
 
 // Action is one bindable action.
@@ -69,6 +84,11 @@ type Action struct {
 	Confirm bool `json:"confirm"`
 	// Precondition says, for a mod's author, when it is available.
 	Precondition string `json:"precondition"`
+	// Consent, when set, is what the consent screen says a mod binding
+	// it may offer: a mod binds it only when its manifest lists it under
+	// [permissions] actions and the human granted that (mod API 1.3).
+	// The other actions need no grant of their own.
+	Consent string `json:"consent,omitempty"`
 }
 
 // Actions are the bindable actions of mod API v1. Only these may be
@@ -89,6 +109,12 @@ var Actions = []Action{
 		Precondition: "the project exists; it toggles, and the confirmation names which"},
 	{ID: "session.attach", Label: "attach", Key: "enter", On: OnSession,
 		Precondition: "the session is running"},
+	{ID: "session.clear", Label: "clear", Key: "C", On: OnSession, Confirm: true,
+		Precondition: "the session is running and its agent has a clear prompt; the clear waits until the agent is idle",
+		Consent:      "clear an agent session's conversation"},
+	{ID: "question.answer", Label: "answer", Key: "a", On: OnQuestion, Confirm: true,
+		Precondition: "the session's open question menu asks the question, unanswered and single-select, and the option is one of its labels",
+		Consent:      "answer an agent's question with one of its options"},
 }
 
 // Lookup is action id, ok false for one that isn't bindable.
@@ -112,6 +138,17 @@ type State interface {
 	Asked(slug, ref string) string
 	// Session says whether session id is running.
 	Session(id string) bool
+	// Menu is the question menu open on session id, nil for none.
+	Menu(id string) []MenuQuestion
+}
+
+// MenuQuestion is one question of a session's open question menu, as a
+// precondition sees it.
+type MenuQuestion struct {
+	Question string
+	Multi    bool
+	Answered bool
+	Options  []string
 }
 
 // Why is why action id is not available on target t in state st, "" when
@@ -132,6 +169,11 @@ func Why(id string, st State, t Target) string {
 			return "session " + t.Session + " is not running"
 		}
 		return ""
+	case OnQuestion:
+		if !st.Session(t.Session) {
+			return "session " + t.Session + " is not running"
+		}
+		return NotAnswerable(st.Menu(t.Session), t.Question, t.Option)
 	}
 	if !st.Project(t.Project) {
 		return "no project " + t.Project
@@ -156,13 +198,20 @@ func Why(id string, st State, t Target) string {
 	return ""
 }
 
-// targetWhy checks the target's shape for a: the fields its kind needs,
+// TargetWhy checks the target's shape for a: the fields its kind needs,
 // and none it doesn't.
 func TargetWhy(a Action, t Target) string {
+	if a.On != OnQuestion && (t.Question != "" || t.Option != "") {
+		return a.ID + " takes no question or option"
+	}
 	switch a.On {
 	case OnSession:
 		if t.Session == "" || t.Project != "" || t.Task != "" || t.Thread != "" {
 			return a.ID + " takes a target of {session}"
+		}
+	case OnQuestion:
+		if t.Session == "" || t.Question == "" || t.Option == "" || t.Project != "" || t.Task != "" || t.Thread != "" {
+			return a.ID + " takes a target of {session, question, option}"
 		}
 	case OnProject:
 		if t.Project == "" || t.Session != "" || t.Thread != "" {
@@ -245,4 +294,37 @@ func NotAskable(t *tasks.Task, kind string) string {
 		return NotSendable(t)
 	}
 	return "unknown ask " + kind
+}
+
+// Answer finds question q in menu: its index, and the option's label
+// as the menu has it, or why it can't be answered with option, "" when
+// it can. Only the label itself counts (no number, no other case, no
+// words of the mod's own): a mod names an option, and the human
+// confirms that option of that question.
+func Answer(menu []MenuQuestion, q, option string) (int, string) {
+	if menu == nil {
+		return -1, "the session has no open question"
+	}
+	for i, m := range menu {
+		if m.Question != q {
+			continue
+		}
+		switch {
+		case m.Answered:
+			return -1, "that question is answered already"
+		case m.Multi:
+			return -1, "a question where several options may be picked is answered in the session"
+		case !slices.Contains(m.Options, option):
+			return -1, "that question has no option " + strconv.Quote(option)
+		}
+		return i, ""
+	}
+	return -1, "the session's open menu doesn't ask that question"
+}
+
+// NotAnswerable is why question q of menu can't be answered with
+// option, "" when it can (Answer).
+func NotAnswerable(menu []MenuQuestion, q, option string) string {
+	_, why := Answer(menu, q, option)
+	return why
 }

@@ -487,7 +487,7 @@ func HumanOnly(m string) bool {
 	case MethodProjectRename, MethodProjectActive,
 		MethodModViews, MethodModViewInput, MethodModCommand, MethodModRestart,
 		MethodNotifyClaim, MethodNotifyDismiss,
-		MethodModActionCheck, MethodModActionDone:
+		MethodModActionCheck, MethodModActionDone, MethodSessionClear:
 		return true
 	}
 	return false
@@ -647,6 +647,14 @@ type ModActionDoneParams struct {
 	// asked, for ModActionTokenTTL.
 	Token string `json:"token"`
 }
+
+// MethodSessionClear clears an agent session's conversation
+// (SessionIDParams): the server pastes its agent's clear prompt ([inject]
+// clear, /clear for Claude) as a plain prompt, queued until the agent is
+// idle, and journals it. Human-only: a console runs it for a mod's
+// session.clear binding once the human confirmed it. The result is a
+// SessionPromptResult.
+const MethodSessionClear = "session.clear"
 
 // MethodModActionCheck asks the server, before the console runs a
 // pressed binding, whether it is in its mod's reach: project_read, and

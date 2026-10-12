@@ -11,6 +11,7 @@ import (
 	"bufio"
 	"io"
 	"net"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -71,8 +72,11 @@ func (a *asks) drop(id string, o *openAsk) {
 
 // answer gives question i of session id's open question its answer.
 // When none is left unanswered, the answers go to the mod and the
-// question closes.
-func (a *asks) answer(id string, i int, ans string) (proto.SessionAnswerResult, *proto.Error) {
+// question closes. With question set (a console's question.answer
+// binding), question i must still ask it, unanswered, and ans must be
+// one of its options' labels: a menu replaced since the human confirmed
+// gets no answer meant for another.
+func (a *asks) answer(id string, i int, ans, question string) (proto.SessionAnswerResult, *proto.Error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	o := a.open[id]
@@ -84,6 +88,21 @@ func (a *asks) answer(id string, i int, ans string) (proto.SessionAnswerResult, 
 	}
 	if strings.TrimSpace(ans) == "" {
 		return proto.SessionAnswerResult{}, proto.Errorf(proto.ErrBadParams, "empty answer")
+	}
+	if question != "" {
+		it := o.q.Questions[i]
+		labels := make([]string, len(it.Options))
+		for j, op := range it.Options {
+			labels[j] = op.Label
+		}
+		switch {
+		case it.Question != question:
+			return proto.SessionAnswerResult{}, proto.Errorf(proto.ErrNoQuestion, "session %s's open menu no longer asks that question", id)
+		case it.Answered:
+			return proto.SessionAnswerResult{}, proto.Errorf(proto.ErrRefused, "that question is answered already")
+		case it.MultiSelect || !slices.Contains(labels, ans):
+			return proto.SessionAnswerResult{}, proto.Errorf(proto.ErrBadParams, "%q is not one of that question's options", ans)
+		}
 	}
 	o.q.Questions[i].Answered, o.q.Questions[i].Answer = true, ans
 	left := 0
