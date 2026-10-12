@@ -30,10 +30,6 @@ func notAskable(t *tasks.Task, kind string) string { return modaction.NotAskable
 // coordinator something about it.
 const delegateWaiting = "waiting on the coordinator"
 
-// askedRow is what a task's row says while an item asks the
-// coordinator something about it, in the words the panels use.
-const askedRow = "asked the coordinator"
-
 // waitingFor says what the coordinator is asked, for kind's item.
 func waitingFor(kind string) string {
 	switch kind {

@@ -182,16 +182,16 @@ func TestManifestFiles(t *testing.T) {
 
 func TestCheckAPI(t *testing.T) {
 	for _, tc := range []struct{ api, minTM, tm, want string }{
-		{"1.2", "", "v0.19.0", ""},
+		{"1.4", "", "v0.19.0", ""},
 		{"1.0", "", "v0.19.0", ""},
-		{"1.4", "", "v0.19.0", "review-age needs mod API 1.4; this tm has 1.2: run tm update"},
+		{"1.5", "", "v0.19.0", "review-age needs mod API 1.5; this tm has 1.4: run tm update"},
 		{"2.0", "", "v0.19.0", "needs mod API 2.0"},
 		{"0.9", "", "v0.19.0", "was written for mod API 0.9"},
 		{"1.1", "0.20.0", "v0.19.0", "needs tm 0.20.0; this tm is v0.19.0"},
 		{"1.1", "0.19.0", "v0.19.0", ""},
 		{"1.1", "0.20.0", "dev", ""}, // a source build passes min_tm
 	} {
-		err := checkAPI(&Manifest{ID: "review-age", API: tc.api, MinTM: tc.minTM}, 1, 2, tc.tm)
+		err := checkAPI(&Manifest{ID: "review-age", API: tc.api, MinTM: tc.minTM}, 1, 4, tc.tm)
 		if tc.want == "" && err != nil || tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)) {
 			t.Errorf("api %s min_tm %q on %s: %v, want %q", tc.api, tc.minTM, tc.tm, err, tc.want)
 		}

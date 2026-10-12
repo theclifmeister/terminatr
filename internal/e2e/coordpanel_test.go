@@ -109,7 +109,7 @@ func TestSmokeCoordinatorPanel(t *testing.T) {
 		return strings.Contains(sc, "tm "+coord.ID) && strings.Contains(sc, "╭─ Task · demo ")
 	})
 	w.Key(keyEsc)
-	w.WaitFor("enter show · D delegate · esc close", wait)
+	w.WaitFor("enter show · D delegate · + new task", wait)
 	w.Key(keyEsc)
 	// The panel shows beside the popup too: back means the popup and
 	// the dashboard's header are gone.

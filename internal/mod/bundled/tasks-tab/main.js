@@ -10,8 +10,8 @@
     { id: "backlog", title: "BACKLOG", statuses: ["open"] },
     { id: "done", title: "DONE", statuses: ["done"] }
   ];
-  function groupOf(status) {
-    for (const g of GROUPS) if (g.statuses.includes(status)) return g.id;
+  function groupOf(status2) {
+    for (const g of GROUPS) if (g.statuses.includes(status2)) return g.id;
     return "on-deck";
   }
   var tabs = /* @__PURE__ */ new Map();
@@ -40,16 +40,21 @@
     }
     return out;
   }
-  function statusRole(status) {
-    switch (status) {
-      case "blocked":
-        return "bad";
-      case "review":
-        return "warn";
-      case "done":
-        return "good";
-    }
-    return "faint";
+  function status(s) {
+    var _a;
+    const look = {
+      started: ["working", "good"],
+      blocked: ["blocked", "bad"],
+      review: ["review", "warn"],
+      done: ["done", "good"],
+      open: ["idle", void 0],
+      ready: ["idle", void 0]
+    };
+    const [icon, role] = (_a = look[s]) != null ? _a : ["other", "faint"];
+    return [
+      { icon, role },
+      { text: " " + s, role }
+    ];
   }
   function row(project, t) {
     var _a, _b;
@@ -59,7 +64,7 @@
     if (more) rest.push({ text: (rest.length > 0 ? "  " : "") + more, role: "faint" });
     const r = {
       id: t.id,
-      cells: [[{ text: t.id }], [{ text: t.title }], [{ text: t.status, role: statusRole(t.status) }], rest],
+      cells: [[{ text: t.id }], [{ text: t.title }], status(t.status), rest],
       actions: actions(project, t)
     };
     if (t.status !== "done" && ((_b = t.steps) != null ? _b : []).length > 0) {
@@ -117,10 +122,8 @@
       }
     ];
     if (folded) children.push({ kind: "text", text: `… ${done} done (b shows them)`, role: "faint" });
-    children.push({ kind: "text", text: "+ adds a task, from a template or none", role: "faint" });
-    if (t.doneAll || done > 0) {
-      children.push({ kind: "keys", keys: [{ key: "b", label: t.doneAll ? "hide done" : "done" }] });
-    }
+    const keys = t.doneAll || done > 0 ? [{ key: "b", label: t.doneAll ? "hide done" : "done" }] : [];
+    children.push({ kind: "keys", id: "keys", keys, actions: [{ id: "task.new", target: { project } }] });
     return { kind: "stack", children };
   }
   async function load(project, t) {
@@ -154,21 +157,14 @@
     const t = (_a = tabs.get(e.project)) != null ? _a : { tasks: [], doneAll: false, error: "" };
     tabs.set(e.project, t);
     await load(e.project, t);
+    if (e.task && t.tasks.some((x) => x.id === e.task && x.status === "done")) t.doneAll = true;
     await publish(e.project, t);
   });
   $.on("view.closed", async (e) => {
     if (e.view !== VIEW || !e.project) return;
     tabs.delete(e.project);
   });
-  $.on("task.changed", async (e) => refresh(e.project));
-  $.on("inbox.item", async (e) => refresh(e.project));
-  $.on("action.done", async (e) => {
-    var _a;
-    return refresh((_a = e.target) == null ? void 0 : _a.project);
-  });
-  $.on("clock.minute", async () => {
-    for (const p of [...tabs.keys()]) await refresh(p);
-  });
+  $.on("tasks.changed", async (e) => refresh(e.project));
   $.on("ui.key", async (e) => {
     var _a;
     const project = (_a = e.target) == null ? void 0 : _a.project;

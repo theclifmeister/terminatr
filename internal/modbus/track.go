@@ -9,7 +9,10 @@ import (
 // server reads it from the project's files, the ticker's state and its
 // sessions, and the Tracker publishes what changed since the last one.
 type ProjectState struct {
-	Tasks   map[string]Task // by id, To the status
+	Tasks map[string]Task // by id, To the status
+	// Board is all $.tasks.list shows of the board, the asks too, as a
+	// digest: tasks.changed when it differs.
+	Board   string
 	Threads map[string]ThreadSnap
 	Inbox   map[string]Item // the unhandled items, by id
 	PRs     map[string]PR   // by thread, only threads with a PR
@@ -55,7 +58,7 @@ func (t *Tracker) Reset() {
 
 // Project publishes what changed in project slug since its last state.
 // Events of one project go out in the order of the design's table:
-// threads started, tasks, thread states, reports, PRs, inbox items,
+// threads started, tasks (each task, then the board), thread states, reports, PRs, inbox items,
 // threads resolved; each kind in id order.
 func (t *Tracker) Project(slug string, cur *ProjectState) {
 	old := t.projects[slug]
@@ -78,6 +81,9 @@ func (t *Tracker) Project(slug string, cur *ProjectState) {
 		}
 		n.From = o.To
 		pub(TaskChanged, n)
+	}
+	if cur.Board != old.Board {
+		pub(TasksChanged, Tasks{Project: slug})
 	}
 	for _, id := range threads {
 		n, o := cur.Threads[id], old.Threads[id]

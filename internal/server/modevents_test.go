@@ -101,7 +101,7 @@ func TestModEvents(t *testing.T) {
 	var names []string
 	var task modbus.Task
 	var prEv modbus.PR
-	for len(names) < 5 {
+	for len(names) < 6 {
 		ev := next(reader)
 		names = append(names, ev.Name)
 		switch d := ev.Data.(type) {
@@ -111,7 +111,7 @@ func TestModEvents(t *testing.T) {
 			prEv = d
 		}
 	}
-	want := []string{modbus.ThreadStarted, modbus.TaskChanged, modbus.ThreadState, modbus.PRChanged, modbus.InboxItem}
+	want := []string{modbus.ThreadStarted, modbus.TaskChanged, modbus.TasksChanged, modbus.ThreadState, modbus.PRChanged, modbus.InboxItem}
 	if len(names) != len(want) {
 		t.Fatalf("events %v, want %v", names, want)
 	}

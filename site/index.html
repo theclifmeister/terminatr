@@ -215,14 +215,14 @@
                                    <span class="dim">│</span>  tasks: 0 need you · 1 in motion · 1 on deck
             <span class="dim">╭─</span> demo <span class="dim">───────────────────────────────────────────────────────────────────────────────────────╮────────────</span>
             <span class="dim">│</span>  1 overview   <span class="warn">2 inbox</span>   3 tasks   4 settings   5 keys   6 memory   7 library                 <span class="dim">│</span>
-            <span class="dim">│</span>                                                                                              <span class="dim">│</span>
+            <span class="dim">│</span> mod: tasks-tab · tasks                                                                       <span class="dim">│</span>
             <span class="dim">│</span> <span class="head">IN MOTION</span> <span class="dim">──────────────────────────────────────────────────────────────────────────────────</span> <span class="dim">│</span>
-            <span class="dim">│</span> <span class="task">T1</span>     Write the README                  <span class="ok">● started</span>   <span class="accent">▰▰▰</span><span class="dim">▱▱</span>  1/2                              <span class="dim">│</span>
-            <span class="dim">│</span>        <span class="ok">✓</span> Draft                                                                               <span class="dim">│</span>
-            <span class="dim">│</span>        ○ Review                                                                              <span class="dim">│</span>
+            <span class="dim">│</span> <span class="task">T1</span>  Write the README  <span class="ok">● started</span>  1/2                                                         <span class="dim">│</span>
+            <span class="dim">│</span>       <span class="ok">✓</span> Draft                                                                                <span class="dim">│</span>
+            <span class="dim">│</span>       ○ Review                                                                               <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span> <span class="head">ON DECK</span> <span class="dim">────────────────────────────────────────────────────────────────────────────────────</span> <span class="dim">│</span>
-            <span class="dim">│</span> <span class="task">T2</span>     Ship it                           <span class="idle">○ ready</span>                                             <span class="dim">│</span>
+            <span class="dim">│</span> <span class="task">T2</span>  Ship it           <span class="idle">○ ready</span>                                                                <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
@@ -243,7 +243,7 @@
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
-            <span class="dim">│</span> <span class="key">enter</span> show · <span class="key">esc</span> close                                                                       <span class="dim">│</span>
+            <span class="dim">│</span> <span class="key">enter</span> show · + new task · ↑ ↓ move · / filter · <span class="key">← →</span> tabs · <span class="key">esc</span> close                         <span class="dim">│</span>
             <span class="dim">╰──────────────────────────────────────────────────────────────────────────────────────────────╯</span>
  <span class="dim">─────────────────────────────────</span> <span class="dim">│</span>
  demo · active                     <span class="dim">│────────────────────────────────────────────────────────────────────────────────────</span>
@@ -357,7 +357,7 @@
     <figure class="term small">
       <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>coordinator panel</span></div>
       <div class="scroll" tabindex="0">
-<!-- screen:coordinator --><pre class="screen" style="--cols:39" data-golden="infopanel-coordinator"><span class="dim">│</span> demo
+<!-- screen:coordinator --><pre class="screen" style="--cols:40" data-golden="infopanel-coordinator"><span class="dim">│</span> demo
 <span class="dim">│</span> 1 needs you · 1 thread
 <span class="dim">│</span>
 <span class="dim">│</span> <span class="head">NEEDS YOU</span> <span class="dim">───────────────────────────</span>
@@ -385,7 +385,7 @@
 <span class="dim">│</span>
 <span class="dim">│</span>
 <span class="dim">│</span>
-<span class="dim">│</span>
+<span class="dim">────────────────────────────────────────</span>
 ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">≡ menu</span></pre><!-- /screen:coordinator -->
       </div>
       <figcaption>Beside the coordinator: what needs you, the threads, what is on deck.</figcaption>
@@ -421,7 +421,7 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
 <span class="dim">│</span>
 <span class="dim">│</span>
 <span class="dim">│</span>
-<span class="dim">│</span>
+<span class="dim">────────────────────────────────────────</span>
 ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">≡ menu</span></pre><!-- /screen:threadpanel -->
       </div>
       <figcaption>Beside a thread: its task, steps, branch and worktree.</figcaption>

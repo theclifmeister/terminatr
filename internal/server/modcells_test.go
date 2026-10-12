@@ -43,7 +43,7 @@ func TestModCells(t *testing.T) {
 		}
 	}
 	cfgPath := filepath.Join(tmHome, "config.toml")
-	if err := os.WriteFile(cfgPath, []byte("[mods.review-age]\nenabled = true\nprojects = [\"demo\"]\n[mods.pr-ci-column]\nenabled = false\n[mods.memory-tab]\nenabled = false\n"), 0o600); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("[mods.review-age]\nenabled = true\nprojects = [\"demo\"]\n[mods.pr-ci-column]\nenabled = false\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	newWatchProject(t)
@@ -135,7 +135,7 @@ func TestModCells(t *testing.T) {
 	}
 
 	// Turned off: its cells go.
-	if err := os.WriteFile(cfgPath, []byte("[mods.review-age]\nenabled = false\n[mods.pr-ci-column]\nenabled = false\n[mods.memory-tab]\nenabled = false\n"), 0o600); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("[mods.review-age]\nenabled = false\n[mods.pr-ci-column]\nenabled = false\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, _ = config.Load()

@@ -43,7 +43,7 @@ var Examples = []Example{
 	{"report-glance", "panel sections: the details panel's and the coordinator's", Permissions{ProjectRead: true, Views: true}},
 	{"pr-ci-column", "a sidebar column (also built in)", Permissions{ProjectRead: true}},
 	{"memory-tab", "a project-popup tab (also built in)", Permissions{ProjectRead: true, Views: true}},
-	{"tasks-tab", "a project-popup tab whose rows bind tm's task actions (built in, off)", Permissions{ProjectRead: true, Views: true}},
+	{"tasks-tab", "a project-popup tab whose rows bind tm's task actions (built in)", Permissions{ProjectRead: true, Views: true}},
 	{"memory-search", "an agent tool", Permissions{ProjectRead: true, Tools: true}},
 	{"gitlab", "a code host (GitLab, through glab)", Permissions{Commands: []string{"glab"}}},
 }

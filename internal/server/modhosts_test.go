@@ -55,7 +55,7 @@ func TestModHostsFollowConfig(t *testing.T) {
 	s := &Server{opts: Options{Paths: p, Bin: "/nonexistent/tm"}, log: log.New(&testWriter{t: t}, "server: ", 0),
 		sessions: map[string]*session.Session{}, modEv: newModEvents()}
 	specs, ok := s.modSpecs()
-	if !ok || len(specs) != 3 {
+	if !ok || len(specs) != 4 {
 		t.Fatalf("specs %+v %v", specs, ok)
 	}
 	if sp := specs[0]; sp.ID != "code" || sp.Entry != filepath.Join(home, "mods", "code", "main.js") ||
@@ -72,8 +72,12 @@ func TestModHostsFollowConfig(t *testing.T) {
 		!slices.Equal(sp.Grants, []string{mod.PermProjectRead}) {
 		t.Fatalf("built-in spec %s %q %d bytes eager %v %v", sp.ID, sp.Entry, len(sp.Bundle), sp.Eager, sp.Grants)
 	}
+	// The built-in Tasks tab too, lazily.
+	if sp := specs[3]; sp.ID != mod.BundledTasks || sp.Entry != "" || len(sp.Bundle) == 0 || sp.Eager || len(sp.Grants) != 2 {
+		t.Fatalf("built-in spec %s %q %d bytes eager %v %v", sp.ID, sp.Entry, len(sp.Bundle), sp.Eager, sp.Grants)
+	}
 	// Off, they are no specs: the rest of the test follows the user's mod.
-	write("config.toml", "[mods.code]\nenabled = true\ngrants = [\"project_read\"]\nprojects = [\"demo\"]\n[mods.memory-tab]\nenabled = false\n[mods.pr-ci-column]\nenabled = false\n")
+	write("config.toml", "[mods.code]\nenabled = true\ngrants = [\"project_read\"]\nprojects = [\"demo\"]\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n[mods.pr-ci-column]\nenabled = false\n")
 	if specs, _ := s.modSpecs(); len(specs) != 1 || specs[0].ID != "code" {
 		t.Fatalf("with the built-in off: %+v", specs)
 	}
@@ -117,7 +121,7 @@ func TestModHostsFollowConfig(t *testing.T) {
 	if st := s.modHosts(); st.NoMods || len(st.Hosts) != 1 || st.Hosts[0].ID != "code" {
 		t.Fatalf("mod.hosts %+v", st)
 	}
-	write("config.toml", "[mods.code]\nenabled = false\n[mods.memory-tab]\nenabled = false\n[mods.pr-ci-column]\nenabled = false\n")
+	write("config.toml", "[mods.code]\nenabled = false\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n[mods.pr-ci-column]\nenabled = false\n")
 	wait("code stopped", func(st []modsup.Status) bool { return len(st) == 0 })
 }
 
@@ -268,12 +272,12 @@ func TestModHostsSafeMode(t *testing.T) {
 	}
 	s := &Server{opts: Options{Paths: p, Bin: "/nonexistent/tm"}, log: log.New(&testWriter{t: t}, "server: ", 0),
 		sessions: map[string]*session.Session{}, modEv: newModEvents()}
-	if specs, ok := s.modSpecs(); !ok || len(specs) != 3 {
+	if specs, ok := s.modSpecs(); !ok || len(specs) != 4 {
 		t.Fatalf("specs %+v %v", specs, ok)
 	}
 	// Built-in mods are part of tm: safe mode still runs them.
 	s.noMods = true
-	if specs, ok := s.modSpecs(); !ok || len(specs) != 2 || specs[0].ID != mod.BundledMemory || specs[1].ID != mod.BundledPRCI {
+	if specs, ok := s.modSpecs(); !ok || len(specs) != 3 || specs[0].ID != mod.BundledMemory || specs[1].ID != mod.BundledPRCI || specs[2].ID != mod.BundledTasks {
 		t.Fatalf("safe mode runs %+v", specs)
 	}
 	if !s.modHosts().NoMods {

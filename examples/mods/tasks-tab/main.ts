@@ -1,14 +1,15 @@
-// The project popup's Tasks tab (mods design §11, the action-binding
-// pilot of §12 Phase 2): the board's tasks grouped as tm groups them
-// (needs you, in motion, on deck, backlog, done), the done ones folded
-// until b. Each row names the core actions its keys run: enter shows
-// the task, D delegates, A accepts, x sends back, c opens the
-// coordinator. The mod only names them. The key, its word, the check
-// against the live board, the confirmation and the run are tm's, and
-// the mod hears action.done afterwards. The cursor, the filter, the
-// scroll and the selected task's steps (a row's more) are the core's
-// too, so moving never waits on the mod. + (a new task) stays the
-// popup's own key: it binds to no row.
+// The project popup's Tasks tab (mods design §11 and §12 Phase 2):
+// the board's tasks grouped as tm groups them (needs you, in motion, on
+// deck, backlog, done), the done ones folded until b. Each row names the
+// core actions its keys run: enter shows the task, D delegates, A
+// accepts, x sends back, c opens the coordinator; + (a new task) is
+// bound in the whole view, as no row stands for it. The mod only names
+// them. The key, its word, the check against the live board, the
+// confirmation and the run are tm's, and the mod hears action.done
+// afterwards. The cursor, the filter, the scroll and the selected task's
+// steps (a row's more) are the core's too, so moving never waits on the
+// mod, and a task picked elsewhere (t, NEEDS YOU) gets the cursor once
+// its row is listed.
 import type { TM } from "./types/tm";
 declare const $: TM;
 
@@ -67,16 +68,22 @@ function actions(project: string, t: TM.Task): { id: string; target: Record<stri
   return out;
 }
 
-function statusRole(status: string): TM.Role {
-  switch (status) {
-    case "blocked":
-      return "bad";
-    case "review":
-      return "warn";
-    case "done":
-      return "good";
-  }
-  return "faint";
+// status is a task's status cell: its icon and word, as tm's own task
+// rows draw them.
+function status(s: string): TM.Span[] {
+  const look: Record<string, [TM.Icon, TM.Role | undefined]> = {
+    started: ["working", "good"],
+    blocked: ["blocked", "bad"],
+    review: ["review", "warn"],
+    done: ["done", "good"],
+    open: ["idle", undefined],
+    ready: ["idle", undefined],
+  };
+  const [icon, role]: [TM.Icon, TM.Role | undefined] = look[s] ?? ["other", "faint"];
+  return [
+    { icon, role },
+    { text: " " + s, role },
+  ];
 }
 
 function row(project: string, t: TM.Task): TM.Value {
@@ -86,7 +93,7 @@ function row(project: string, t: TM.Task): TM.Value {
   if (more) rest.push({ text: (rest.length > 0 ? "  " : "") + more, role: "faint" });
   const r: Record<string, TM.Value> = {
     id: t.id,
-    cells: [[{ text: t.id }], [{ text: t.title }], [{ text: t.status, role: statusRole(t.status) }], rest] as TM.Value,
+    cells: [[{ text: t.id }], [{ text: t.title }], status(t.status), rest] as TM.Value,
     actions: actions(project, t) as TM.Value,
   };
   // The selected task's steps, under it, unless it is done.
@@ -148,10 +155,9 @@ function tree(project: string, t: Tab): TM.Widget {
     },
   ];
   if (folded) children.push({ kind: "text", text: `… ${done} done (b shows them)`, role: "faint" });
-  children.push({ kind: "text", text: "+ adds a task, from a template or none", role: "faint" });
-  if (t.doneAll || done > 0) {
-    children.push({ kind: "keys", keys: [{ key: "b", label: t.doneAll ? "hide done" : "done" }] });
-  }
+  // b is the mod's own key; + runs tm's new task, from a template or none.
+  const keys = t.doneAll || done > 0 ? [{ key: "b", label: t.doneAll ? "hide done" : "done" }] : [];
+  children.push({ kind: "keys", id: "keys", keys, actions: [{ id: "task.new", target: { project } }] });
   return { kind: "stack", children };
 }
 
@@ -182,11 +188,14 @@ async function refresh(project: string | undefined): Promise<void> {
   await publish(project, t);
 }
 
+// The tab shows. When it was opened to show a task (e.task) that is
+// done, the done tasks are listed, so its row is there for the cursor.
 $.on("view.opened", async (e) => {
   if (e.view !== VIEW || !e.project) return;
   const t: Tab = tabs.get(e.project) ?? { tasks: [], doneAll: false, error: "" };
   tabs.set(e.project, t);
   await load(e.project, t);
+  if (e.task && t.tasks.some((x) => x.id === e.task && x.status === "done")) t.doneAll = true;
   await publish(e.project, t);
 });
 
@@ -195,15 +204,9 @@ $.on("view.closed", async (e) => {
   tabs.delete(e.project);
 });
 
-// The board changed: a task's status or steps, a new task, a new ask, or
-// an action the human ran from the tab. The minute catches the rest (a
-// title edited, an ask handled).
-$.on("task.changed", async (e) => refresh(e.project));
-$.on("inbox.item", async (e) => refresh(e.project));
-$.on("action.done", async (e) => refresh(e.target?.project));
-$.on("clock.minute", async () => {
-  for (const p of [...tabs.keys()]) await refresh(p);
-});
+// Anything the tab shows changed: a task's title, status or steps, a
+// task added, an ask made or handled.
+$.on("tasks.changed", async (e) => refresh(e.project));
 
 $.on("ui.key", async (e) => {
   const project = e.target?.project;

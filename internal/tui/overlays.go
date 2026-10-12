@@ -5,8 +5,6 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-
-	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
 // Overlays: the views opened on top of the list (help, a prompt, the
@@ -42,15 +40,6 @@ func (m *dash) top() overlay {
 		return nil
 	}
 	return m.stack[len(m.stack)-1]
-}
-
-// line draws r w cells wide: plain in reverse video when selected,
-// styled otherwise.
-func line(r row, w int, selected bool) string {
-	if selected {
-		return th().Sel.Render(fit(r.text(w), w))
-	}
-	return r.styled(w)
 }
 
 // moveSel moves a list selection by d within n items.
@@ -181,24 +170,6 @@ func wrapInput(label, text string, w int) []string {
 		lines[0] = th().Accent.Render(label) + string(first[l:])
 	}
 	return lines
-}
-
-// taskTitleCol is where a task row's title starts: after its id and
-// the gap (taskRow).
-const taskTitleCol = 5 + colGap
-
-// taskRow is a task as every task list draws it (the
-// project popup's Tasks tab): id, title, state, progress, thread.
-func taskRow(t *tasks.Task, asked bool) row {
-	r := row{who: t.Ref(), what: oneLine(t.Title), state: string(t.Status), rest: t.Thread, pct: -1, whoW: 5, whatMin: 10}
-	if len(t.Steps) > 0 {
-		r.pct = pctOf(t.StepsDone(), len(t.Steps))
-		r.rest = joinSp(fmt.Sprintf("%d/%d", t.StepsDone(), len(t.Steps)), t.Thread)
-	}
-	if asked {
-		r.lead = askedRow // first, so it is never cut
-	}
-	return r
 }
 
 // joinKeys joins key lists, skipping empty ones.
