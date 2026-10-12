@@ -222,6 +222,10 @@ func (m *dash) press(mo tea.Mouse) tea.Cmd {
 	}
 	x, y := mo.X-g.main().x, mo.Y
 	double := mo.Button == tea.MouseLeft && m.lastClick.double(x, y, time.Now())
+	if b := m.badgeAt; y == g.header().y && m.top() == nil && mo.Button == tea.MouseLeft && x >= b[0] && x < b[1] {
+		m.goNeeds()
+		return nil
+	}
 	if y == g.keysRow() {
 		if mo.Button == tea.MouseLeft {
 			return m.hintClick(x)
@@ -470,7 +474,7 @@ func (m *dash) rowItems(r row) []menuItem {
 
 // sideMenu opens the menu of the sidebar row under a right-click.
 func (m *dash) sideMenu(mo tea.Mouse) tea.Cmd {
-	r, ok, _ := sideHitAt(m.tree(), m.sideW(), m.h, mo.X, mo.Y)
+	r, ok, _ := sideHitAt(m.tree(), m.sideW(), m.h, m.geom().sideCol(mo.X), mo.Y)
 	if !ok {
 		return nil
 	}

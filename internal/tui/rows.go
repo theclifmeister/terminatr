@@ -436,6 +436,35 @@ func buildRows(d Data, project string) []row {
 	return append(rows, other...)
 }
 
+// needsYouCount is what NEEDS YOU counts (buildRows) in ps and sessions:
+// blocked sessions other than threads', each project's waiting
+// questions (one row) and its tasks that need you.
+func needsYouCount(ps []ProjectData, sessions []proto.SessionInfo) int {
+	n := 0
+	for _, s := range sessions {
+		if s.State == "blocked" && s.Role != proto.RoleThread {
+			n++
+		}
+	}
+	for _, p := range ps {
+		n += len(p.NeedsYou)
+		if p.Questions > 0 {
+			n++
+		}
+	}
+	return n
+}
+
+// needsBadge is "⚑ N" in the warning colour, for n things that need the
+// human while the sidebar, and its needs-you column, is hidden; "" for
+// none.
+func needsBadge(n int) string {
+	if n == 0 {
+		return ""
+	}
+	return th().Warn.Render(fmt.Sprintf("%s %d", ic().hint, n))
+}
+
 // taskCounts are a project's task counts; tasks that need the user say
 // where to see them: the task list (t).
 func taskCounts(c map[string]int) string {

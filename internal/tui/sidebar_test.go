@@ -92,9 +92,14 @@ func TestDashboardSidebar(t *testing.T) {
 	if LoadLayout(ui).Sidebar.Width != 32 {
 		t.Fatalf("}: ui.json %+v", LoadLayout(ui))
 	}
+	// b cycles: the slim strip, hidden, full.
 	press(m, "b")
-	if m.sideW() != sideSlim || !LoadLayout(ui).Sidebar.Slim {
+	if m.sideW() != sideSlim || !LoadLayout(ui).Sidebar.Slim || LoadLayout(ui).Sidebar.Hidden {
 		t.Fatalf("b: sidebar %d, ui.json %+v", m.sideW(), LoadLayout(ui))
+	}
+	press(m, "b")
+	if m.sideW() != 0 || !LoadLayout(ui).Sidebar.Hidden || m.w != 120 {
+		t.Fatalf("b b: sidebar %d, ui.json %+v", m.sideW(), LoadLayout(ui))
 	}
 	press(m, "b")
 

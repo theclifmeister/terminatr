@@ -14,6 +14,7 @@ import (
 	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/emu"
@@ -786,6 +787,9 @@ func (c *client) relayout() {
 	if c.side != nil {
 		c.sideW = min(c.geo.SideW, max(c.cols-1, 1))
 	}
+	if c.sideW == 0 && c.kb == areaSide {
+		c.kb = areaMain // hidden: the keyboard skips it
+	}
 	c.infoW = 0
 	if c.info != nil {
 		c.infoW = min(c.geo.InfoW, max(c.cols-c.sideW-1, 0))
@@ -800,7 +804,7 @@ func (c *client) relayout() {
 	c.statusBar = c.geo.Status > 0
 	c.paneCols = max(c.cols-c.sideW-c.infoW, 1)
 	c.paneRows = max(c.rows-c.geo.Status, 1)
-	own := view.Rect{X: c.sideW, Y: 0, W: c.paneCols, H: c.paneRows}
+	own := view.Rect{X: c.paneX(), Y: 0, W: c.paneCols, H: c.paneRows}
 	c.focus = c.panes[c.v.Focus]
 	vis := c.visible()
 	// The pane draws alone, unless it shares the window with the sidebar,
@@ -820,6 +824,32 @@ func (c *client) relayout() {
 	c.full = true
 	c.status()
 }
+
+// sideX is the sidebar's first column: 0, or on the right the window's
+// last sideW. The view is drawn from the window's top left, so on the
+// right the sidebar keeps to this window's edge. c.mu held.
+func (c *client) sideX() int {
+	if c.v.Sidebar.Right() {
+		return max(c.cols-c.sideW, 0)
+	}
+	return 0
+}
+
+// paneX is the pane's first column: right of a sidebar on the left, else
+// the window's first. c.mu held.
+func (c *client) paneX() int {
+	if c.v.Sidebar.Right() {
+		return 0
+	}
+	return c.sideW
+}
+
+// onSide says whether window column x is the sidebar's. c.mu held.
+func (c *client) onSide(x int) bool { return x >= c.sideX() && x < c.sideX()+c.sideW }
+
+// sideCol is window column x as the sidebar's drawing has it (sideLocal),
+// -1 off it. c.mu held.
+func (c *client) sideCol(x int) int { return sideLocal(x, c.sideX(), c.sideW, c.v.Sidebar.Right()) }
 
 // clip is r within area; empty when they don't meet.
 func clip(r, area view.Rect) view.Rect {
@@ -1161,7 +1191,7 @@ type prefixDo struct {
 }
 
 // paneCommands are the keys that, after the prefix, act on the window
-// itself: the sidebar's width ({ }), its slim strip (b), the keyboard
+// itself: the sidebar's width ({ }), slim or hidden (b), the keyboard
 // (tab), the info panel (|) and the last place (;).
 var paneCommands = map[string]bool{"{": true, "}": true, "b": true, "tab": true, "|": true, ";": true}
 
@@ -1308,7 +1338,7 @@ func (c *client) paneLines(o *Over) []string {
 	if p == nil || p.mirror == nil {
 		return make([]string, c.paneRows)
 	}
-	o.X, o.Y, o.H = p.rect.X-c.sideW, p.rect.Y, p.rect.H
+	o.X, o.Y, o.H = p.rect.X-c.paneX(), p.rect.Y, p.rect.H
 	if p.r != nil {
 		o.Top = p.r.Top()
 	}
@@ -1319,8 +1349,8 @@ func (c *client) paneLines(o *Over) []string {
 	return o.place(strings.Split(s, "\n"), c.paneRows)
 }
 
-// paneCommand runs a command on the window: the sidebar's width, its
-// slim strip, its keyboard.
+// paneCommand runs a command on the window: the sidebar's width, hidden
+// or slim, its keyboard.
 func (c *client) paneCommand(cmd string) {
 	switch cmd {
 	case "{", "}", "b":
@@ -1379,7 +1409,25 @@ func (c *client) status() {
 	if c.flash != "" {
 		where = c.flash // a note in passing
 	}
-	line, hits := statusBar(c.focus.info, c.focus.status, c.paneTitle(), c.pending, c.cols, where, c.cells)
+	// With the sidebar hidden, what needs you is counted at the right end:
+	// a click on it opens the dashboard there.
+	badge := ""
+	if c.side != nil && c.sideW == 0 {
+		badge = needsBadge(needsYouCount(c.side.projects, c.side.sessions))
+	}
+	bw := ansi.StringWidth(badge)
+	if c.cols < bw+20 {
+		badge, bw = "", 0 // no room
+	}
+	sw := c.cols
+	if bw > 0 {
+		sw -= bw + 1
+	}
+	line, hits := statusBar(c.focus.info, c.focus.status, c.paneTitle(), c.pending, sw, where, c.cells)
+	if bw > 0 {
+		line += reset + badge + " "
+		hits = append(hits, hint{c.cols - bw - 1, c.cols - 1, thenNeeds})
+	}
 	if c.single {
 		c.focus.r.SetStatus(line)
 	}
@@ -1471,7 +1519,7 @@ func (c *client) mouse(ev uv.Event) {
 	press := m.Action == emu.MousePress && (m.Button == emu.MouseLeft || m.Button == emu.MouseRight || m.Button == emu.MouseMiddle)
 	// The status bar runs across the window, the rule above it too.
 	status := c.statusBar && (m.Y >= c.paneRows)
-	if (m.X >= c.sideW || m.Y >= c.sideRows()) && setSideHover("") {
+	if (!c.onSide(m.X) || m.Y >= c.sideRows()) && setSideHover("") {
 		c.poke() // off the sidebar: its tooltip goes
 	}
 	switch {
@@ -1504,7 +1552,7 @@ func (c *client) mouse(ev uv.Event) {
 			c.mu.Unlock()
 		}
 		return
-	case c.side != nil && (m.X < c.sideW && m.Y < c.sideRows() || c.side.drag):
+	case c.side != nil && (c.onSide(m.X) && m.Y < c.sideRows() || c.side.drag):
 		if press && m.Button == emu.MouseRight && !c.side.drag {
 			c.sideMenu(m)
 			return
