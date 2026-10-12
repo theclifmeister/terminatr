@@ -12,8 +12,10 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -21,8 +23,9 @@ import (
 )
 
 // Where a mod comes from (mods design §8, Install): a folder, or a git
-// URL at a tag. There is no catalogue in v1, and tm never installs a mod
-// from a project's repo on its own.
+// URL at a tag, the mod at the repository's root or in a subfolder of
+// it. There is no catalogue in v1, and tm never installs a mod from a
+// project's repo on its own.
 
 // SourceFile records, in an installed mod's folder, where it came from.
 // The mod can't write its own folder (the broker gives it only its data
@@ -30,39 +33,145 @@ import (
 const SourceFile = ".tm-source.json"
 
 // Source is where a mod was installed from: Path, a folder, or Git, a
-// URL at Ref (a tag or branch; "" the default branch).
+// URL at Ref (a tag or branch; "" the default branch), with the mod in
+// its folder Subdir ("" the root).
 type Source struct {
 	Path string `json:"path,omitempty"`
 	Git  string `json:"git,omitempty"`
 	Ref  string `json:"ref,omitempty"`
+	// Subdir is the mod's folder in the repository, a slash path that
+	// CheckSubdir accepts.
+	Subdir string `json:"subdir,omitempty"`
 	// Commit is the git commit installed.
 	Commit string `json:"commit,omitempty"`
+	// Tree is the git tree of Subdir at Commit, so an update check can
+	// tell whether the mod's folder changed, not just the repository.
+	Tree string `json:"tree,omitempty"`
 	// Hash is the sha256 of the installed files (TreeHash).
 	Hash      string    `json:"hash,omitempty"`
 	Installed time.Time `json:"installed,omitzero"`
 }
 
-// String is the source as tm mod install takes it.
+// String is the source as tm mod install takes it: a GitHub subfolder
+// at a ref as its tree URL, any other as <git-url>[//<subdir>][@<ref>].
 func (s Source) String() string {
 	switch {
 	case s.Path != "":
 		return s.Path
-	case s.Ref != "":
-		return s.Git + "@" + s.Ref
+	case s.Subdir != "" && s.Ref != "" && githubRepoRE.MatchString(s.Git) && !strings.Contains(s.Ref, "/"):
+		return s.Git + "/tree/" + s.Ref + "/" + s.Subdir
 	}
-	return s.Git
+	out := s.Git
+	if s.Subdir != "" {
+		out += "//" + s.Subdir
+	}
+	if s.Ref != "" {
+		out += "@" + s.Ref
+	}
+	return out
 }
 
 var (
 	// scpRE is git's user@host:path form.
 	scpRE = regexp.MustCompile(`^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:`)
 	refRE = regexp.MustCompile(`^[A-Za-z0-9._][A-Za-z0-9._/+-]*$`)
+	// githubRepoRE is a GitHub repository's https URL; githubTreeRE one
+	// of its folders at a ref, as GitHub links it.
+	githubRepoRE = regexp.MustCompile(`^https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$`)
+	githubTreeRE = regexp.MustCompile(`^(https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+)/(tree|blob)/([^/]+)(?:/(.*))?$`)
+	// segRE is one name in a subfolder's path.
+	segRE = regexp.MustCompile(`^[A-Za-z0-9._+-]+$`)
 )
 
+// CheckSubdir checks p, a mod's folder in a git repository, as a slash
+// path that stays inside the repository and names no git internals: no
+// leading /, no empty, . or .. names, no .git, no name starting with -,
+// and only letters, digits and . _ + - in names (no \, : or %).
+func CheckSubdir(p string) error {
+	switch {
+	case p == "":
+		return errors.New("no folder named after //")
+	case strings.HasPrefix(p, "/") || filepath.IsAbs(p) || filepath.VolumeName(p) != "":
+		return fmt.Errorf("%s: the folder must be relative to the repository's root, not absolute", p)
+	}
+	for _, seg := range strings.Split(p, "/") {
+		switch {
+		case seg == "" || seg == ".":
+			return fmt.Errorf("%s: empty or . names aren't allowed in the folder's path", p)
+		case seg == "..":
+			return fmt.Errorf("%s: .. isn't allowed: the folder must be inside the repository", p)
+		case strings.EqualFold(seg, ".git"):
+			return fmt.Errorf("%s: a mod can't come from a .git folder", p)
+		case strings.HasPrefix(seg, "-") || !segRE.MatchString(seg):
+			return fmt.Errorf("%s: a folder name may hold only letters, digits and . _ + -, and not start with -", p)
+		}
+	}
+	return nil
+}
+
+// parseGit reads a git source: a GitHub tree URL
+// (https://github.com/<owner>/<repo>/tree/<ref>/<path>), or a git URL
+// with an optional //<path> (the mod's folder in the repository) and
+// an optional @<ref> after it.
+func parseGit(arg string) (Source, error) {
+	if m := githubTreeRE.FindStringSubmatch(arg); m != nil {
+		if m[2] == "blob" {
+			return Source{}, fmt.Errorf("%s is a file: give its folder's /tree/ URL", arg)
+		}
+		ref, sub := m[3], strings.TrimRight(m[4], "/")
+		if !refRE.MatchString(ref) {
+			return Source{}, fmt.Errorf("%q isn't a tag or branch name", ref)
+		}
+		if strings.Contains(sub, "@") {
+			return Source{}, fmt.Errorf("%s: a tree URL names its ref after /tree/; drop the @", arg)
+		}
+		if sub != "" {
+			if err := CheckSubdir(sub); err != nil {
+				return Source{}, err
+			}
+		}
+		return Source{Git: m[1], Ref: ref, Subdir: sub}, nil
+	}
+	url, ref := arg, ""
+	if i := strings.LastIndex(arg, "@"); i > strings.LastIndexAny(arg, "/:") {
+		url, ref = arg[:i], arg[i+1:]
+		if !refRE.MatchString(ref) {
+			return Source{}, fmt.Errorf("%q isn't a tag or branch name", ref)
+		}
+	}
+	// The repository's path starts after the scheme's :// (or scp's :);
+	// a // after that starts the subfolder.
+	start := strings.Index(url, "://") + 3
+	if start < 3 {
+		start = strings.Index(url, ":") + 1
+	}
+	i := strings.Index(url[start:], "//")
+	if i < 0 {
+		return Source{Git: url, Ref: ref}, nil
+	}
+	if strings.HasPrefix(url, "file://") && i == 0 {
+		// file:///abs: the third slash is the path's.
+		if j := strings.Index(url[start+1:], "//"); j >= 0 {
+			i = j + 1
+		} else {
+			return Source{Git: url, Ref: ref}, nil
+		}
+	}
+	repo, sub := url[:start+i], strings.TrimRight(url[start+i+2:], "/")
+	if strings.TrimLeft(repo[start:], "/") == "" {
+		return Source{}, fmt.Errorf("%s: no repository before //", arg)
+	}
+	if err := CheckSubdir(sub); err != nil {
+		return Source{}, err
+	}
+	return Source{Git: repo, Ref: ref, Subdir: sub}, nil
+}
+
 // ParseSource reads tm mod install's argument: a git URL (https://,
-// ssh://, file:// or user@host:path) with an optional @tag, or else a
-// folder, relative to cwd. Plain http:// and git:// are refused: nothing
-// would vouch for what they fetch.
+// ssh://, file:// or user@host:path) with an optional //<subfolder> and
+// @tag, or a GitHub tree URL (parseGit), or else a folder, relative to
+// cwd. Plain http:// and git:// are refused: nothing would vouch for
+// what they fetch.
 func ParseSource(arg, cwd string) (Source, error) {
 	switch {
 	case arg == "" || strings.HasPrefix(arg, "-"):
@@ -70,14 +179,7 @@ func ParseSource(arg, cwd string) (Source, error) {
 	case strings.HasPrefix(arg, "http://"), strings.HasPrefix(arg, "git://"):
 		return Source{}, fmt.Errorf("%s: use https:// or ssh://, which check whom they talk to", arg)
 	case strings.HasPrefix(arg, "https://"), strings.HasPrefix(arg, "ssh://"), strings.HasPrefix(arg, "file://"), scpRE.MatchString(arg):
-		url, ref := arg, ""
-		if i := strings.LastIndex(arg, "@"); i > strings.LastIndexAny(arg, "/:") {
-			url, ref = arg[:i], arg[i+1:]
-			if !refRE.MatchString(ref) {
-				return Source{}, fmt.Errorf("%q isn't a tag or branch name", ref)
-			}
-		}
-		return Source{Git: url, Ref: ref}, nil
+		return parseGit(arg)
 	}
 	p := arg
 	if !filepath.IsAbs(p) && cwd != "" {
@@ -157,10 +259,7 @@ func walkMod(root string, fn func(rel string, d fs.DirEntry, abs string) error) 
 			if err != nil {
 				return err
 			}
-			if filepath.IsAbs(target) || filepath.VolumeName(target) != "" {
-				return fmt.Errorf("%s links to %s: a mod's links must stay inside it", rel, target)
-			}
-			if r := filepath.Clean(filepath.Join(filepath.Dir(rel), target)); r == ".." || strings.HasPrefix(filepath.ToSlash(r), "../") {
+			if !linkInside(root, rel, target) {
 				return fmt.Errorf("%s links to %s: a mod's links must stay inside it", rel, target)
 			}
 		case d.IsDir():
@@ -179,6 +278,65 @@ func walkMod(root string, fn func(rel string, d fs.DirEntry, abs string) error) 
 		}
 		return fn(rel, d, p)
 	})
+}
+
+// maxHops bounds how many links linkInside follows for one link.
+const maxHops = 40
+
+// linkInside reports whether the link at rel in root, to target, stays
+// inside root as the OS resolves it: name by name, following each link
+// on the way, so that d -> .. and e -> d/../x (inside, read as text)
+// count as leading out. An absolute target, a loop and a name missing
+// before a .. are refused; a name missing at the end is not followed,
+// so it can't lead out.
+func linkInside(root, rel, target string) bool {
+	var dir []string
+	if d := path.Dir(rel); d != "." {
+		dir = strings.Split(d, "/")
+	}
+	split := func(t string) ([]string, bool) {
+		if filepath.IsAbs(t) || filepath.VolumeName(t) != "" || strings.HasPrefix(filepath.ToSlash(t), "/") {
+			return nil, false
+		}
+		return strings.Split(filepath.ToSlash(t), "/"), true
+	}
+	todo, ok := split(target)
+	for hops := 0; ok && len(todo) > 0; {
+		c := todo[0]
+		todo = todo[1:]
+		switch c {
+		case "", ".":
+			continue
+		case "..":
+			if len(dir) == 0 {
+				return false
+			}
+			dir = dir[:len(dir)-1]
+			continue
+		}
+		fi, err := os.Lstat(filepath.Join(root, filepath.Join(dir...), c))
+		switch {
+		case err != nil:
+			if slices.Contains(todo, "..") {
+				return false
+			}
+		case fi.Mode()&fs.ModeSymlink != 0:
+			if hops++; hops > maxHops {
+				return false
+			}
+			t, err := os.Readlink(filepath.Join(root, filepath.Join(dir...), c))
+			if err != nil {
+				return false
+			}
+			var more []string
+			if more, ok = split(t); ok {
+				todo = append(more, todo...)
+			}
+			continue
+		}
+		dir = append(dir, c)
+	}
+	return ok
 }
 
 // copyMod copies the mod folder src to dst, which doesn't exist yet:
@@ -299,16 +457,91 @@ func git(dir string, args ...string) (string, error) {
 }
 
 // clone fetches url at ref ("" the default branch) into dir, shallow,
-// and returns the commit.
-func clone(url, ref, dir string) (string, error) {
+// and returns the commit. With sub, a folder CheckSubdir accepted, the
+// clone is sparse: only sub's files (and the root's) are fetched and
+// checked out, and tree is sub's git tree.
+func clone(url, ref, sub, dir string) (commit, tree string, err error) {
 	args := []string{"clone", "--quiet", "--depth", "1", "--no-tags"}
+	if sub != "" {
+		args = append(args, "--filter=blob:none", "--sparse")
+	}
 	if ref != "" {
 		args = append(args, "--branch", ref)
 	}
 	if _, err := git("", append(args, "--", url, dir)...); err != nil {
+		return "", "", err
+	}
+	if sub != "" {
+		if tree, err = subdirTree(dir, "HEAD", sub); err != nil {
+			return "", "", err
+		}
+		if _, err := git(dir, "sparse-checkout", "set", "--cone", "--", sub); err != nil {
+			return "", "", err
+		}
+	}
+	commit, err = git(dir, "rev-parse", "HEAD")
+	return commit, tree, err
+}
+
+// subdirIn is folder sub (CheckSubdir) of the checkout root, refused
+// unless each name on the way is a real folder: a link there could lead
+// the copy out of the checkout.
+func subdirIn(root, sub string) (string, error) {
+	p := root
+	for _, seg := range strings.Split(sub, "/") {
+		p = filepath.Join(p, seg)
+		fi, err := os.Lstat(p)
+		switch {
+		case err != nil:
+			return "", fmt.Errorf("it has no folder %s", sub)
+		case fi.Mode()&fs.ModeSymlink != 0:
+			return "", fmt.Errorf("%s is a link in the repository, not a folder", sub)
+		case !fi.IsDir():
+			return "", fmt.Errorf("%s isn't a folder", sub)
+		}
+	}
+	return p, nil
+}
+
+// remoteTree is the git tree of folder sub at ref of url, fetched
+// shallow and without file contents into a scratch repository.
+func remoteTree(url, ref, sub string) (string, error) {
+	tmp, err := os.MkdirTemp("", "tm-mod-tree-")
+	if err != nil {
 		return "", err
 	}
-	return git(dir, "rev-parse", "HEAD")
+	defer os.RemoveAll(tmp)
+	if ref == "" {
+		ref = "HEAD"
+	}
+	if _, err := git(tmp, "init", "--quiet"); err != nil {
+		return "", err
+	}
+	if _, err := git(tmp, "fetch", "--quiet", "--depth", "1", "--no-tags", "--filter=blob:none", "--", url, ref); err != nil {
+		return "", err
+	}
+	return subdirTree(tmp, "FETCH_HEAD", sub)
+}
+
+// subdirTree is the git tree of folder sub at commit in the repository
+// dir, refused when sub is missing or a file or link there.
+func subdirTree(dir, commit, sub string) (string, error) {
+	out, err := git(dir, "ls-tree", "--full-tree", commit, "--", sub)
+	if err != nil {
+		return "", err
+	}
+	// <mode> <type> <id>\t<path>
+	meta, path, _ := strings.Cut(out, "\t")
+	f := strings.Fields(meta)
+	switch {
+	case out == "" || path != sub || len(f) != 3:
+		return "", fmt.Errorf("it has no folder %s", sub)
+	case f[0] == "120000":
+		return "", fmt.Errorf("%s is a link in the repository, not a folder", sub)
+	case f[1] != "tree":
+		return "", fmt.Errorf("%s isn't a folder", sub)
+	}
+	return f[2], nil
 }
 
 // remoteHead is the commit ref ("" the default branch) names at url.
@@ -361,9 +594,10 @@ func newestTag(url, ref string) (string, error) {
 
 // Latest says whether the source s of an installed mod has moved on:
 // a folder whose files differ from the copy, a newer version tag than
-// the one pinned, or a branch at another commit. next names what an
-// update would install: the folder's manifest version, the tag, or the
-// commit.
+// the one pinned, or a branch at another commit. For a mod in a
+// subfolder, a newer tag or commit counts only when the subfolder's
+// tree differs from the one installed. next names what an update would
+// install: the folder's manifest version, the tag, or the commit.
 func Latest(s Source) (next string, behind bool, err error) {
 	switch {
 	case s.Path != "":
@@ -382,20 +616,54 @@ func Latest(s Source) (next string, behind bool, err error) {
 		return "", false, errors.New("no source recorded")
 	case isVersionTag(s.Ref):
 		tag, err := newestTag(s.Git, s.Ref)
-		return tag, tag != "", err
+		if err != nil || tag == "" {
+			return "", false, err
+		}
+		if changed, err := subdirChanged(s, tag); err != nil || !changed {
+			return "", false, err
+		}
+		return tag, true, nil
 	}
 	commit, err := remoteHead(s.Git, s.Ref)
 	if err != nil || commit == s.Commit {
 		return "", false, err
 	}
+	if changed, err := subdirChanged(s, commit); err != nil || !changed {
+		return "", false, err
+	}
 	return shortCommit(commit), true, nil
+}
+
+// subdirChanged says whether the subfolder of s differs at ref (a tag
+// or commit) from the tree installed; a mod at the root always has.
+func subdirChanged(s Source, ref string) (bool, error) {
+	if s.Subdir == "" || s.Tree == "" {
+		return true, nil
+	}
+	if ref == s.Commit {
+		return false, nil
+	}
+	if isVersionTag(ref) {
+		ref = "refs/tags/" + ref
+	} else if s.Ref != "" {
+		// A commit can't be fetched by its id from every host: fetch the
+		// branch it is the head of.
+		ref = s.Ref
+	} else {
+		ref = ""
+	}
+	tree, err := remoteTree(s.Git, ref, s.Subdir)
+	if err != nil {
+		return false, err
+	}
+	return tree != s.Tree, nil
 }
 
 // Next is the source an update of a mod installed from s fetches: a
 // version tag moves on to the newest one; a folder, branch or other tag
 // is fetched again as it is.
 func Next(s Source) (Source, error) {
-	next := Source{Path: s.Path, Git: s.Git, Ref: s.Ref}
+	next := Source{Path: s.Path, Git: s.Git, Ref: s.Ref, Subdir: s.Subdir}
 	if s.Git != "" && isVersionTag(s.Ref) {
 		tag, err := newestTag(s.Git, s.Ref)
 		if err != nil {

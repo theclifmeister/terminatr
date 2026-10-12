@@ -976,9 +976,8 @@ func (uv *updateView) render(m *dash) string {
 type examplesView struct{ scroll int }
 
 func (ev *examplesView) lines(w int) []string {
-	out := wrapLines("terminatr's example mods: one small, working mod for each place a mod can show up, to see it work and to get ideas to build and share. Nothing here is installed or turned on: install one by path, then turn it on in this tab after its consent.", w)
+	out := wrapLines("terminatr's example mods: one small, working mod for each place a mod can show up, to see it work and to get ideas to build and share. Nothing here is installed or turned on: install one with its line, then turn it on in this tab after its consent.", w)
 	out = append(out, "", th().Accent.Render(ansi.Truncate(mod.ExamplesURL, w, "…")), "")
-	out = append(out, faintLines("From a checkout: git clone "+mod.ExamplesRepo+", then", w)...)
 	for _, e := range mod.Examples {
 		out = append(out, "")
 		out = append(out, ansi.Truncate(th().Head.Render(e.ID)+"  "+e.Surface+th().Faint.Render(" · "+strings.Join(e.Words(), " · ")), w, "…"))
