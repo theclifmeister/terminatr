@@ -343,6 +343,9 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	if *o.base != "" && repo == "" {
 		return usagef("--base needs a repo")
 	}
+	if err := e.serverAgent(agentName); err != nil {
+		return err
+	}
 	now := time.Now().UTC()
 	rec := thread.Record{Title: o.title, Agent: agentName, Model: *o.model, Repo: repo, State: thread.Running, Created: now, LastPrompt: now}
 	if task != nil {
@@ -410,7 +413,6 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	return nil
 }
 
-// checkAgent refuses an agent the registry doesn't know (tm agent
 // threadAgent is the agent a thread runs: --agent, else the project's
 // thread_agent, else the one installed agent (docs/SPEC.md §8.2,
 // §11.2). One that isn't installed, none installed, or several with
@@ -432,6 +434,31 @@ func threadAgent(flag string, safety config.Safety) (string, error) {
 		return "", refusal(models.NotInstalled(reg, flag, installed))
 	}
 	return flag, nil
+}
+
+// serverAgent refuses an agent the server doesn't know before a thread
+// is created for it. This process and the server each read the
+// manifests, the server only at its start and on tm agent reload: a
+// manifest added since is read again first.
+func (e *Env) serverAgent(name string) error {
+	for _, m := range []string{proto.MethodAgentList, proto.MethodAgentReload} {
+		agents, err := serverAgents(e, m)
+		if err != nil {
+			return err
+		}
+		if slices.ContainsFunc(agents, func(a proto.AgentInfo) bool { return a.Name == name }) {
+			return nil
+		}
+	}
+	return &tasks.Error{Code: models.CodeUnknownAgent, Msg: fmt.Sprintf("the server has no agent %q (tm agent list)", name)}
+}
+
+// serverAgents are the server's agents, from agent.list or agent.reload
+// (a variable for tests).
+var serverAgents = func(e *Env, method string) ([]proto.AgentInfo, error) {
+	var res proto.AgentListResult
+	err := e.call(method, nil, &res)
+	return res.Agents, err
 }
 
 // checkModel refuses a model the project may not start a thread with

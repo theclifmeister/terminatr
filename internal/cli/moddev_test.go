@@ -134,6 +134,11 @@ func TestModDev(t *testing.T) {
 	if out := h.ok(human, "mod", "list"); !strings.Contains(out, "○ my-hook") {
 		t.Errorf("still on after dev:\n%s", out)
 	}
+	// The link it left is found again (a junction on Windows).
+	real, _ := filepath.EvalSymlinks(dir)
+	if made, err := devLink("my-hook", real); made || err != nil {
+		t.Fatalf("devLink again: made %v, %v", made, err)
+	}
 	// Another folder with the same id is refused; remove unlinks, keeping
 	// the folder.
 	other := filepath.Join(h.cwd, "other")

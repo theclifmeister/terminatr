@@ -123,6 +123,10 @@ func CheckPrivate(dir string) error {
 	return checkOwnerMode(dir, fi)
 }
 
+// IsLink reports whether fi, from os.Lstat, is a link: a symlink, or on
+// Windows any reparse point (a junction LinkDir made among them).
+func IsLink(fi fs.FileInfo) bool { return isLink(fi) }
+
 // Canonical is p absolute, cleaned and with its symlinks resolved; the
 // part that doesn't exist is kept as written.
 func Canonical(p string) string {

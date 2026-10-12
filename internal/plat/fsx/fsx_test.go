@@ -205,3 +205,35 @@ func TestTempRoots(t *testing.T) {
 		t.Fatalf("TempRoots = %q", roots)
 	}
 }
+
+// LinkDir's link reads as the folder, reports as a link and names it;
+// removing the link leaves the folder (a junction on Windows).
+func TestLinkDir(t *testing.T) {
+	target := t.TempDir()
+	if r, err := filepath.EvalSymlinks(target); err == nil {
+		target = r
+	}
+	os.WriteFile(filepath.Join(target, "f"), []byte("x"), 0o600)
+	link := filepath.Join(t.TempDir(), "l")
+	if err := LinkDir(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(filepath.Join(link, "f")); err != nil || string(b) != "x" {
+		t.Fatalf("through the link: %q %v", b, err)
+	}
+	if fi, err := os.Lstat(link); err != nil || !IsLink(fi) {
+		t.Fatalf("Lstat: %v, %v", fi.Mode(), err)
+	}
+	if fi, err := os.Stat(link); err != nil || !fi.IsDir() {
+		t.Fatalf("Stat: not a folder: %v", err)
+	}
+	if to, err := os.Readlink(link); err != nil || filepath.Clean(to) != target {
+		t.Fatalf("Readlink %q %v, want %q", to, err, target)
+	}
+	if err := os.RemoveAll(link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "f")); err != nil {
+		t.Fatalf("removing the link touched the folder: %v", err)
+	}
+}

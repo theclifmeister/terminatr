@@ -140,3 +140,17 @@ func TestMain(m *testing.M) {
 	}
 	os.Exit(m.Run())
 }
+
+// A normal user can't make symlinks: LinkDir makes a junction, which Go
+// reports as irregular, not as a symlink.
+func TestLinkDirIsJunction(t *testing.T) {
+	target := t.TempDir()
+	link := filepath.Join(t.TempDir(), "l")
+	if err := LinkDir(target, link); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Lstat(link)
+	if err != nil || fi.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("Lstat: %v, %v", fi.Mode(), err)
+	}
+}
