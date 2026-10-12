@@ -36,6 +36,7 @@ const helloFile = "host.json"
 type helloRecord struct {
 	Bundle string   `json:"bundle"`
 	Events []string `json:"events"`
+	Tools  []string `json:"tools,omitempty"`
 }
 
 // runner supervises one mod: it starts its host, restarts it, and fails
@@ -51,9 +52,17 @@ type runner struct {
 	done  chan struct{}
 	after <-chan struct{}
 
-	mu      sync.Mutex
-	st      Status
-	host    *host
+	// wake starts an idle host now: an agent called one of its tools.
+	wake chan struct{}
+
+	mu   sync.Mutex
+	st   Status
+	host *host
+	// client is the running host's connection, once it answered hello.
+	client *modproto.Client
+	// changed is closed, and replaced, whenever st.State or client
+	// changes: a tool call waits on it.
+	changed chan struct{}
 	crashes []time.Time
 	// streak counts the crashes since a host last ran CrashWindow: it
 	// picks the backoff.
@@ -61,8 +70,8 @@ type runner struct {
 }
 
 func newRunner(s *Supervisor, sp Spec, after <-chan struct{}) *runner {
-	r := &runner{sup: s, spec: sp, done: make(chan struct{}), after: after,
-		st: Status{ID: sp.ID, State: Starting, Since: time.Now()}}
+	r := &runner{sup: s, spec: sp, done: make(chan struct{}), after: after, wake: make(chan struct{}, 1),
+		changed: make(chan struct{}), st: Status{ID: sp.ID, State: Starting, Since: time.Now()}}
 	r.ctx, r.cancel = context.WithCancel(s.ctx)
 	return r
 }
@@ -86,6 +95,7 @@ func (r *runner) set(state State, why string) {
 	defer r.mu.Unlock()
 	if r.st.State != state {
 		r.st.State, r.st.Since = state, time.Now()
+		r.signal()
 	}
 	if why != "" {
 		r.st.Err = why
@@ -93,6 +103,78 @@ func (r *runner) set(state State, why string) {
 	if state != Backoff {
 		r.st.Next = time.Time{}
 	}
+}
+
+// signal wakes the tool calls waiting on a change; r.mu held.
+func (r *runner) signal() {
+	close(r.changed)
+	r.changed = make(chan struct{})
+}
+
+// setClient records the running host's connection, nil once it ends.
+func (r *runner) setClient(c *modproto.Client) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.client = c
+	r.signal()
+}
+
+// callTool runs one of the mod's agent tools in its host: at once while
+// it runs, after it starts when it is idle or starting. A mod in backoff
+// or failed answers why, without waiting.
+func (r *runner) callTool(ctx context.Context, call modproto.ToolCall) (modproto.ToolResult, error) {
+	for {
+		r.mu.Lock()
+		c, st, changed := r.client, r.st, r.changed
+		r.mu.Unlock()
+		switch {
+		case c != nil && st.State == Running:
+			res, err := c.ToolCall(ctx, call)
+			if errors.Is(err, modproto.ErrClosed) {
+				err = fmt.Errorf("mod %s's host ended during the call", r.spec.ID)
+			}
+			return res, err
+		case st.State == Failed:
+			return modproto.ToolResult{}, fmt.Errorf("mod %s failed: %s", r.spec.ID, st.Err)
+		case st.State == Backoff:
+			return modproto.ToolResult{}, fmt.Errorf("mod %s is restarting (%s)", r.spec.ID, st.Err)
+		case st.State == Idle:
+			select {
+			case r.wake <- struct{}{}:
+			default:
+			}
+		}
+		select {
+		case <-changed:
+		case <-ctx.Done():
+			return modproto.ToolResult{}, fmt.Errorf("mod %s: %w", r.spec.ID, ctx.Err())
+		case <-r.ctx.Done():
+			return modproto.ToolResult{}, fmt.Errorf("mod %s stopped", r.spec.ID)
+		}
+	}
+}
+
+// idle waits for the first event that starts a lazy host, or for a tool
+// call (woke). sub stays open on either; an error is sub's or r.ctx's.
+func (r *runner) idle(sub *modbus.Sub) (woke bool, err error) {
+	ctx, cancel := context.WithCancel(r.ctx)
+	defer cancel()
+	called := make(chan bool, 1)
+	go func() {
+		select {
+		case <-r.wake:
+			called <- true
+			cancel()
+		case <-ctx.Done():
+			called <- false
+		}
+	}()
+	err = sub.Wait(ctx)
+	cancel()
+	if woke = <-called; woke && r.ctx.Err() == nil {
+		return true, nil
+	}
+	return false, err
 }
 
 func (r *runner) pid() int {
@@ -144,13 +226,13 @@ func (r *runner) run(eager bool) {
 		var sub *modbus.Sub
 		if lazy {
 			lazy = false
-			if events := r.lazyEvents(); slices.ContainsFunc(events, wakes) {
+			if events, tools := r.lazyEvents(); slices.ContainsFunc(events, wakes) || len(tools) > 0 {
 				sub = r.subscribe(events)
 				r.mu.Lock()
 				r.st.Events = events
 				r.mu.Unlock()
 				r.set(Idle, "")
-				if err := sub.Wait(r.ctx); err != nil {
+				if _, err := r.idle(sub); err != nil {
 					sub.Close()
 					if r.ctx.Err() != nil {
 						return
@@ -227,23 +309,25 @@ func (r *runner) subscribe(events []string) *modbus.Sub {
 // given to every host as it starts, never queued.
 func wakes(name string) bool { return name != modbus.ModReady }
 
-// lazyEvents are the events the last host handled, when it ran the bundle
-// a start now would run: the host then waits for the first of them. A
-// mod that handled none but mod.ready (it runs on timers) starts at once.
-func (r *runner) lazyEvents() []string {
+// lazyEvents are the events and agent tools the last host handled, when
+// it ran the bundle a start now would run: the host then waits for the
+// first of those events, or a call of one of its tools. A mod that
+// handled none of either but mod.ready (it runs on timers) starts at
+// once.
+func (r *runner) lazyEvents() (events, tools []string) {
 	b, err := os.ReadFile(filepath.Join(r.sup.cacheDir(r.spec.ID), helloFile))
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	var rec helloRecord
 	if json.Unmarshal(b, &rec) != nil {
-		return nil
+		return nil, nil
 	}
 	bundle, err := r.prepare()
 	if err != nil || filepath.Base(bundle) != rec.Bundle {
-		return nil
+		return nil, nil
 	}
-	return rec.Events
+	return rec.Events, rec.Tools
 }
 
 // prepare returns the bundle to run: a bundled mod's precompiled script,
@@ -295,6 +379,7 @@ func (h *host) why() string {
 type hostEvents struct {
 	r      *runner
 	bundle string
+	tools  []string // the tools its hello said it handles
 
 	mu     sync.Mutex
 	events []string
@@ -321,7 +406,7 @@ func (e *hostEvents) add(names []string, sub *modbus.Sub) []string {
 	if e.sub != nil {
 		e.sub.SetEvents(e.events)
 	}
-	e.r.saveHello(e.bundle, e.events)
+	e.r.saveHello(e.bundle, e.events, e.tools)
 	e.r.mu.Lock()
 	e.r.st.Events = slices.Clone(e.events)
 	e.r.mu.Unlock()
@@ -430,7 +515,10 @@ func (r *runner) once(sub *modbus.Sub) (code int, why string) {
 	if sub == nil {
 		sub = r.subscribe(nil)
 	}
+	ev.tools = res.Tools
 	events := ev.add(res.Events, sub)
+	r.setClient(client)
+	defer r.setClient(nil)
 	r.set(Running, "")
 	r.logf("started: pid %d in %s (script %.0f ms); handles %s", h.pid, time.Since(started).Round(time.Millisecond),
 		res.LoadMS, cmp.Or(strings.Join(events, ", "), "no events"))
@@ -539,9 +627,9 @@ func (r *runner) notified(m *modproto.Message, ev *hostEvents) {
 	}
 }
 
-// saveHello records the events the host for bundle handles.
-func (r *runner) saveHello(bundle string, events []string) {
-	b, _ := json.Marshal(helloRecord{Bundle: filepath.Base(bundle), Events: events})
+// saveHello records the events and tools the host for bundle handles.
+func (r *runner) saveHello(bundle string, events, tools []string) {
+	b, _ := json.Marshal(helloRecord{Bundle: filepath.Base(bundle), Events: events, Tools: tools})
 	if err := writeAtomic(filepath.Join(r.sup.cacheDir(r.spec.ID), helloFile), b); err != nil {
 		r.log.Printf("supervisor: %s: %v", helloFile, err)
 	}

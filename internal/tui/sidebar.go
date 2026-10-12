@@ -797,7 +797,7 @@ var defaultCols = sideCols(nil, nil)
 // in mods; a mod column no mod declares takes no room.
 func sideCols(order []string, mods map[string]modColumn) []sideCol {
 	var out []sideCol
-	for _, id := range view.Columns(order) {
+	for _, id := range prciOrder(view.Columns(order), mods) {
 		switch {
 		case id == view.ColCount:
 			out = append(out, sideCol{id: id, w: pctCol})

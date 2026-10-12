@@ -19,7 +19,7 @@ import (
 // file of the data mods loads; the defaults tm needs are required, the
 // templates aren't.
 func TestBundled(t *testing.T) {
-	want := []string{"ascii-icons", "default-keymap", "default-layout", "default-policy", "default-templates", "default-theme", "memory-tab", "nerd-icons", "unicode-icons"}
+	want := []string{"ascii-icons", "default-keymap", "default-layout", "default-policy", "default-templates", "default-theme", "memory-tab", "nerd-icons", "pr-ci-column", "unicode-icons"}
 	if got := BundledIDs(); !slices.Equal(got, want) {
 		t.Fatalf("bundled %q", got)
 	}
@@ -195,6 +195,27 @@ func TestBundledMemoryTab(t *testing.T) {
 		t.Errorf("views %+v", v)
 	}
 	if m := Bundled(BundledMemory, config.Mod{EnabledSet: true}); m.State != Disabled {
+		t.Errorf("turned off: %s", m.State)
+	}
+}
+
+// TestBundledCodeMod: the PR/CI column is a built-in code mod, on by
+// default, with what it asks for granted, and its bundle embedded.
+func TestBundledCodeMod(t *testing.T) {
+	m := Bundled(BundledPRCI, config.Mod{})
+	if m.State != Enabled || !m.Builtin || m.Required || m.Manifest == nil || !m.Manifest.IsCode() {
+		t.Fatalf("pr-ci-column: %+v", m)
+	}
+	if !slices.Equal(m.Grants, []string{PermProjectRead}) {
+		t.Errorf("grants %v", m.Grants)
+	}
+	if b, err := m.ReadFile(m.Manifest.Provides.Main); err != nil || len(b) == 0 {
+		t.Errorf("its bundle: %v", err)
+	}
+	if c := m.Manifest.Provides.Columns; len(c) != 1 || BundledPRCI+"."+c[0].ID != PRCIColumn {
+		t.Errorf("columns %+v", c)
+	}
+	if m := Bundled(BundledPRCI, config.Mod{EnabledSet: true}); m.State != Disabled {
 		t.Errorf("turned off: %s", m.State)
 	}
 }

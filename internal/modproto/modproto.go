@@ -36,6 +36,9 @@ const (
 	MethodEvent    = "event"    // request, Event → EventResult
 	MethodShutdown = "shutdown" // request, no params → {}; the host then exits 0
 	MethodStats    = "stats"    // request, no params → Stats
+	// MethodToolCall runs one of the mod's agent tools: ToolCall →
+	// ToolResult, or an error (CodeNoTool, CodeToolFailed).
+	MethodToolCall = "tool.call"
 )
 
 // Notifications the host sends the server.
@@ -62,6 +65,8 @@ const (
 	CodeInternal       = -32603
 	CodeNotReady       = -32000 // an event before hello, or a second hello
 	CodeLoad           = -32001 // hello: the script threw while loading
+	CodeNoTool         = -32002 // tool.call: the script handles no such tool
+	CodeToolFailed     = -32003 // tool.call: the handler threw or rejected
 	// The broker's answers to a $ call (internal/modbroker).
 	CodeDenied   = -32010 // the mod may not: a grant, a path, a host, a program, a project
 	CodeNotFound = -32011 // the project, thread, file or key isn't there
@@ -112,6 +117,26 @@ type HelloResult struct {
 	LoadMS   float64  `json:"load_ms"`       // running the script
 	StartMS  float64  `json:"start_ms"`      // exec to the hello answer
 	PID      int      `json:"pid,omitempty"` // the host's process
+	// Tools are the agent tools the script handles ($.tool.handle)
+	// while loading, sorted.
+	Tools []string `json:"tools,omitempty"`
+}
+
+// ToolCall is an agent's call of one of the mod's tools, from a session
+// of a project the mod runs for. Input is the agent's, checked against
+// the tool's schema by the server: data, never instructions.
+type ToolCall struct {
+	Tool    string          `json:"tool"` // the tool's id in the manifest, "lint_report"
+	Input   json.RawMessage `json:"input,omitempty"`
+	Project string          `json:"project"`
+	Role    string          `json:"role"`             // "thread" or "coordinator"
+	Thread  string          `json:"thread,omitempty"` // a thread's id
+	Session string          `json:"session"`
+}
+
+// ToolResult answers ToolCall: the text the agent gets.
+type ToolResult struct {
+	Text string `json:"text"`
 }
 
 // Event is one event for the mod's handlers, in the event bus's shape

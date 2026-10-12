@@ -390,11 +390,11 @@ func (m *dash) modRemove(md mod.Mod) {
 }
 
 // permStyle is a permission's colour in the consent (mods design §7):
-// what reads or tells stays inside tm, files and the network reach out,
-// and running programs reaches furthest.
+// what reads or tells stays inside tm; agent tools, files and the network
+// reach out; and running programs reaches furthest.
 func permStyle(perm string) lipgloss.Style {
 	switch perm {
-	case mod.PermFiles, mod.PermNet:
+	case mod.PermTools, mod.PermFiles, mod.PermNet:
 		return th().Warn
 	case mod.PermCommands:
 		return th().Bad

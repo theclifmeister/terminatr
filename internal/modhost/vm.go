@@ -12,9 +12,9 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modproto"
 )
 
-// setupVM gives the VM its globals: $ with on and log, the timers, and
-// nothing else (no require, console, fetch or process). Code can't be
-// made from strings (noCodeFromStrings).
+// setupVM gives the VM its globals: $ with on, log and tool.handle, the
+// timers, and nothing else (no require, console, fetch or process). Code
+// can't be made from strings (noCodeFromStrings).
 func (h *Host) setupVM() {
 	vm := h.vm
 	noCodeFromStrings(vm)
@@ -34,6 +34,9 @@ func (h *Host) setupVM() {
 	h.dollar = vm.NewObject()
 	_ = h.dollar.Set("on", h.jsOn)
 	_ = h.dollar.Set("log", h.jsLog)
+	tool := vm.NewObject()
+	_ = tool.Set("handle", h.jsToolHandle)
+	_ = h.dollar.Set("tool", tool)
 	_ = vm.Set("$", h.dollar)
 
 	_ = vm.Set("setTimeout", func(c goja.FunctionCall) goja.Value { return h.jsTimer(c, false) })
@@ -87,6 +90,18 @@ func (h *Host) jsOn(c goja.FunctionCall) goja.Value {
 	if first && h.ready {
 		_ = h.conn.Notify(modproto.MethodSubscribe, modproto.Subscribe{Events: []string{n}})
 	}
+	return goja.Undefined()
+}
+
+// $.tool.handle(id, fn) answers the agent tool id of the manifest's
+// [[provides.tools]] with fn; a second handle replaces the first.
+func (h *Host) jsToolHandle(c goja.FunctionCall) goja.Value {
+	name := c.Argument(0)
+	fn, ok := goja.AssertFunction(c.Argument(1))
+	if goja.IsUndefined(name) || name.String() == "" || !ok {
+		panic(h.vm.NewTypeError("$.tool.handle(id, handler): needs a tool id and a function"))
+	}
+	h.tools[name.String()] = fn
 	return goja.Undefined()
 }
 

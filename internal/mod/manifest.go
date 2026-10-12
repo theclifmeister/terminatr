@@ -53,6 +53,9 @@ type Provides struct {
 	Main    string   `toml:"main"`
 	Columns []Column `toml:"columns"`
 	Views   []View   `toml:"views"`
+	// Tools are tools the mod offers agents, through the agent mod and
+	// tm mcp; its code answers each call ($.tool.handle).
+	Tools []Tool `toml:"tools"`
 	// Data files: a theme, an icon set, a keymap, a layout (.toml).
 	Theme  string `toml:"theme"`
 	Icons  string `toml:"icons"`
@@ -83,6 +86,74 @@ type View struct {
 	Slot  string `toml:"slot"`
 }
 
+// Tool is a tool a code mod offers agents (mods design §2, tier 5): an
+// agent calls it as <mod id>_<tool id> (ToolName), and the call goes
+// agent → agent mod (or tm mcp) → server → the mod's host. Its
+// description and input are text the agent reads, so the consent shows
+// them in full.
+type Tool struct {
+	ID          string `toml:"id"`
+	Description string `toml:"description"`
+	// Roles are the sessions that get it: thread, coordinator; empty
+	// for both.
+	Roles []string  `toml:"roles"`
+	Input ToolInput `toml:"input"`
+}
+
+// ToolInput is a tool's input as a JSON schema of an object: its
+// properties, each a schema with a type (string, integer, number,
+// boolean, array or object) and whatever else JSON schema allows, and
+// the required ones. Other properties are refused.
+type ToolInput struct {
+	Properties map[string]map[string]any `toml:"properties"`
+	Required   []string                  `toml:"required"`
+}
+
+// Session roles a tool may be for.
+const (
+	RoleThread      = "thread"
+	RoleCoordinator = "coordinator"
+)
+
+// Limits of a mod's tools. MaxToolName keeps an agent's full name for
+// it within 64 characters (Claude's mcp__terminatr__<name>).
+const (
+	MaxTools       = 16
+	MaxToolName    = 48
+	MaxToolDescLen = 2048
+)
+
+// ToolName is the name agents call mod id's tool by: "<mod>_<tool>".
+// A mod id has no underscore, so the first one splits it (ParseToolName),
+// and terminatr's own tools (report, status, …) have none.
+func ToolName(mod, tool string) string { return mod + "_" + tool }
+
+// ParseToolName splits a mod tool's name into the mod's id and the
+// tool's; ok is false for a name that isn't one.
+func ParseToolName(name string) (mod, tool string, ok bool) {
+	mod, tool, ok = strings.Cut(name, "_")
+	return mod, tool, ok && idRE.MatchString(mod) && keyRE.MatchString(tool)
+}
+
+// For says whether the tool is offered to a session of role.
+func (t Tool) For(role string) bool { return len(t.Roles) == 0 || slices.Contains(t.Roles, role) }
+
+// Schema is the tool's input as the JSON schema agents are given.
+func (t Tool) Schema() map[string]any {
+	props := map[string]any{}
+	for k, v := range t.Input.Properties {
+		props[k] = v
+	}
+	s := map[string]any{"type": "object", "properties": props, "additionalProperties": false}
+	if len(t.Input.Required) > 0 {
+		s["required"] = slices.Clone(t.Input.Required)
+	}
+	return s
+}
+
+// jsonTypes are the types a tool's input property may have.
+var jsonTypes = []string{"string", "integer", "number", "boolean", "array", "object"}
+
 // View slots (mods design §6).
 const (
 	SlotProjectTab    = "project.tab"
@@ -98,6 +169,7 @@ type Permissions struct {
 	Views       bool     `toml:"views"`
 	Notify      bool     `toml:"notify"`
 	Inbox       bool     `toml:"inbox"`
+	Tools       bool     `toml:"tools"` // offer agents [provides].tools
 	Net         []string `toml:"net"`
 	Commands    []string `toml:"commands"`
 	Files       Files    `toml:"files"`
@@ -116,18 +188,19 @@ const (
 	PermViews       = "views"
 	PermNotify      = "notify"
 	PermInbox       = "inbox"
+	PermTools       = "tools"
 	PermFiles       = "files"
 	PermNet         = "net"
 	PermCommands    = "commands"
 )
 
 // Perms are all the permission names, in the consent screen's order.
-var Perms = []string{PermProjectRead, PermViews, PermNotify, PermInbox, PermFiles, PermNet, PermCommands}
+var Perms = []string{PermProjectRead, PermViews, PermNotify, PermInbox, PermTools, PermFiles, PermNet, PermCommands}
 
 // Requested lists the permissions the manifest asks for, in Perms order.
 func (p Permissions) Requested() []string {
 	asks := map[string]bool{
-		PermProjectRead: p.ProjectRead, PermViews: p.Views, PermNotify: p.Notify, PermInbox: p.Inbox,
+		PermProjectRead: p.ProjectRead, PermViews: p.Views, PermNotify: p.Notify, PermInbox: p.Inbox, PermTools: p.Tools,
 		PermFiles: len(p.Files.Read)+len(p.Files.Write) > 0, PermNet: len(p.Net) > 0, PermCommands: len(p.Commands) > 0,
 	}
 	var out []string
@@ -357,6 +430,52 @@ func (m *Manifest) check(dir string) error {
 		if v.Slot != SlotProjectTab && v.Slot != SlotDashboardCard && v.Slot != SlotFull {
 			bad("%s: slot %q must be %s, %s or %s", at, v.Slot, SlotProjectTab, SlotDashboardCard, SlotFull)
 		}
+	}
+	if len(p.Tools) > MaxTools {
+		bad("provides.tools: at most %d tools", MaxTools)
+	}
+	for i, t := range p.Tools {
+		at := fmt.Sprintf("provides.tools[%d]", i)
+		switch {
+		case !code:
+			bad("%s: a tool needs provides.main, the code that answers it", at)
+		case !keyRE.MatchString(t.ID):
+			bad("%s: id %q must be lowercase letters, digits and underscores, starting with a letter", at, t.ID)
+		case len(ToolName(m.ID, t.ID)) > MaxToolName:
+			bad("%s: %s is longer than %d characters", at, ToolName(m.ID, t.ID), MaxToolName)
+		case seen["t:"+t.ID]:
+			bad("%s: id %q is listed twice", at, t.ID)
+		}
+		seen["t:"+t.ID] = true
+		if d := strings.TrimSpace(t.Description); d == "" {
+			bad("%s: has no description", at)
+		} else if len(d) > MaxToolDescLen {
+			bad("%s: description is longer than %d bytes", at, MaxToolDescLen)
+		}
+		for _, r := range t.Roles {
+			if r != RoleThread && r != RoleCoordinator {
+				bad("%s: role %q must be %s or %s", at, r, RoleThread, RoleCoordinator)
+			}
+		}
+		for _, k := range sortedKeys(t.Input.Properties) {
+			if !keyRE.MatchString(k) {
+				bad("%s: input property %q must be lowercase letters, digits and underscores", at, k)
+			}
+			if typ, _ := t.Input.Properties[k]["type"].(string); !slices.Contains(jsonTypes, typ) {
+				bad("%s: input property %q needs a type: %s", at, k, strings.Join(jsonTypes, ", "))
+			}
+		}
+		for _, k := range t.Input.Required {
+			if _, ok := t.Input.Properties[k]; !ok {
+				bad("%s: required %q isn't an input property", at, k)
+			}
+		}
+	}
+	if len(p.Tools) > 0 && !m.Permissions.Tools {
+		bad("provides.tools needs permissions.tools")
+	}
+	if m.Permissions.Tools && len(p.Tools) == 0 {
+		bad("permissions.tools offers no tool: list them in provides.tools")
 	}
 	if len(p.Views) > 0 && !m.Permissions.Views {
 		bad("provides.views needs permissions.views")

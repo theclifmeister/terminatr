@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -53,23 +54,28 @@ func TestModHostsFollowConfig(t *testing.T) {
 
 	s := &Server{opts: Options{Paths: p, Bin: "/nonexistent/tm"}, log: log.New(&testWriter{t: t}, "server: ", 0),
 		sessions: map[string]*session.Session{}, modEv: newModEvents()}
-	// The built-in Memory tab runs its precompiled bundle, with what it
-	// asks for, lazily: it draws no column.
 	specs, ok := s.modSpecs()
-	if !ok || len(specs) != 2 || specs[1].ID != mod.BundledMemory {
-		t.Fatalf("specs with the built-in %+v %v", specs, ok)
-	}
-	if sp := specs[1]; sp.Entry != "" || len(sp.Bundle) == 0 || sp.Eager || len(sp.Grants) != 2 {
-		t.Fatalf("built-in spec %s %d bytes eager %v grants %v", sp.Entry, len(sp.Bundle), sp.Eager, sp.Grants)
-	}
-	write("config.toml", cfg+"[mods.memory-tab]\nenabled = false\n")
-	specs, ok = s.modSpecs()
-	if !ok || len(specs) != 1 {
+	if !ok || len(specs) != 3 {
 		t.Fatalf("specs %+v %v", specs, ok)
 	}
 	if sp := specs[0]; sp.ID != "code" || sp.Entry != filepath.Join(home, "mods", "code", "main.js") ||
-		len(sp.Grants) != 1 || len(sp.Projects) != 1 {
+		len(sp.Grants) != 1 || len(sp.Projects) != 1 || sp.Bundle != nil || sp.Eager {
 		t.Fatalf("spec %+v", sp)
+	}
+	// The built-in Memory tab runs its precompiled bundle, with what it
+	// asks for, lazily: it draws no column.
+	if sp := specs[1]; sp.ID != mod.BundledMemory || sp.Entry != "" || len(sp.Bundle) == 0 || sp.Eager || len(sp.Grants) != 2 {
+		t.Fatalf("built-in spec %s %q %d bytes eager %v %v", sp.ID, sp.Entry, len(sp.Bundle), sp.Eager, sp.Grants)
+	}
+	// The built-in PR/CI column runs its precompiled bundle, at once.
+	if sp := specs[2]; sp.ID != mod.BundledPRCI || sp.Entry != "" || len(sp.Bundle) == 0 || !sp.Eager ||
+		!slices.Equal(sp.Grants, []string{mod.PermProjectRead}) {
+		t.Fatalf("built-in spec %s %q %d bytes eager %v %v", sp.ID, sp.Entry, len(sp.Bundle), sp.Eager, sp.Grants)
+	}
+	// Off, they are no specs: the rest of the test follows the user's mod.
+	write("config.toml", "[mods.code]\nenabled = true\ngrants = [\"project_read\"]\nprojects = [\"demo\"]\n[mods.memory-tab]\nenabled = false\n[mods.pr-ci-column]\nenabled = false\n")
+	if specs, _ := s.modSpecs(); len(specs) != 1 || specs[0].ID != "code" {
+		t.Fatalf("with the built-in off: %+v", specs)
 	}
 
 	sup := s.newModHosts()
@@ -111,7 +117,7 @@ func TestModHostsFollowConfig(t *testing.T) {
 	if st := s.modHosts(); st.NoMods || len(st.Hosts) != 1 || st.Hosts[0].ID != "code" {
 		t.Fatalf("mod.hosts %+v", st)
 	}
-	write("config.toml", "[mods.code]\nenabled = false\n[mods.memory-tab]\nenabled = false\n")
+	write("config.toml", "[mods.code]\nenabled = false\n[mods.memory-tab]\nenabled = false\n[mods.pr-ci-column]\nenabled = false\n")
 	wait("code stopped", func(st []modsup.Status) bool { return len(st) == 0 })
 }
 
@@ -247,7 +253,8 @@ $.on("mod.ready", async () => {
 }
 
 // TestModHostsSafeMode: in safe mode no user mod is given to the
-// supervisor (a built-in one is), mod.hosts says so and mod.restart refuses.
+// supervisor (a built-in one still is), mod.hosts says so and
+// mod.restart refuses a user mod.
 func TestModHostsSafeMode(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("TERMINATR_HOME", home)
@@ -261,12 +268,12 @@ func TestModHostsSafeMode(t *testing.T) {
 	}
 	s := &Server{opts: Options{Paths: p, Bin: "/nonexistent/tm"}, log: log.New(&testWriter{t: t}, "server: ", 0),
 		sessions: map[string]*session.Session{}, modEv: newModEvents()}
-	if specs, ok := s.modSpecs(); !ok || len(specs) != 2 || specs[0].ID != "code" || specs[1].ID != mod.BundledMemory {
+	if specs, ok := s.modSpecs(); !ok || len(specs) != 3 {
 		t.Fatalf("specs %+v %v", specs, ok)
 	}
-	// Safe mode stops user mods only: the built-in Memory tab is tm's.
+	// Built-in mods are part of tm: safe mode still runs them.
 	s.noMods = true
-	if specs, ok := s.modSpecs(); !ok || len(specs) != 1 || specs[0].ID != mod.BundledMemory {
+	if specs, ok := s.modSpecs(); !ok || len(specs) != 2 || specs[0].ID != mod.BundledMemory || specs[1].ID != mod.BundledPRCI {
 		t.Fatalf("safe mode runs %+v", specs)
 	}
 	if !s.modHosts().NoMods {

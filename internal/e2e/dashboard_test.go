@@ -22,6 +22,11 @@ var (
 // dashMasks hide the cwd column's temp paths.
 var dashMasks = []Mask{{Name: "tmp", Re: regexp.MustCompile(`/\S*/T/\S*|/tmp/\S*`)}}
 
+// popupEdgeCwd hides where the session row's cwd shows past a popup's
+// right border: its column follows the duration hidden under the popup
+// (9s, then 10s), which DefaultMasks can't mask there.
+var popupEdgeCwd = Mask{Name: "edge", Re: regexp.MustCompile(`(?m)│ ?/\S*[ \t]*$`), Repl: "│/"}
+
 // newProject creates a project through the CLI and returns its slug and
 // folder.
 func newProject(env *Env, name string) (slug, dir string) {
@@ -82,7 +87,7 @@ func TestSmokeDashboard(t *testing.T) {
 	w.Type("t")
 	w.WaitFor("3 tasks", wait)
 	w.WaitFor("T1", wait)
-	w.Golden("dashboard-tasks.txt", dashMasks...)
+	w.Golden("dashboard-tasks.txt", append(dashMasks, popupEdgeCwd)...)
 	w.Type("D")
 	w.WaitFor("T1 is in review", wait)
 	if out := env.MustCLI("task", "show", "T1", "--project", slug, "--json"); !strings.Contains(out, `"status": "review"`) {

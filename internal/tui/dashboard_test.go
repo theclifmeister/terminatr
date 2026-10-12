@@ -60,11 +60,11 @@ type fakeSource struct {
 	libRemoved []string          // "t-0001/name", "t-0001/" for all
 	done       []string          // action.done: "mod action project/task ok"
 	restarted  []string          // mod ids
+	templates  []mod.Template
+	added      []string // "slug title|notes|step;step"
 	modViews   proto.ModViewsResult
 	shown      []modview.Shown // the views the last ModViews said were shown
 	inputs     []proto.ModViewInputParams
-	templates  []mod.Template
-	added      []string // "slug title|notes|step;step"
 }
 
 func (f *fakeSource) Templates(string) []mod.Template { return f.templates }

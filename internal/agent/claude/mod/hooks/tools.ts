@@ -1,9 +1,11 @@
-// A thread's tools (docs/SPEC.md §8.6, Mods): in a thread session the mod
-// registers typed tools for what a thread otherwise runs through the
-// shell (tm report, tm status, tm task steps, tm done), and serves each
-// call with POST /v1/tools/<name> on the session's mod socket, where the
-// server checks the input and runs the command as this thread. Plain
-// data and functions, for the tests.
+// A session's tools (docs/SPEC.md §8.6, Mods): in a thread session the
+// mod registers typed tools for what a thread otherwise runs through the
+// shell (tm report, tm status, tm task steps, tm done), and in a thread
+// or coordinator session the tools enabled user mods offer it, which it
+// lists with GET /v1/tools (named <mod>_<tool>). It serves each call with
+// POST /v1/tools/<name> on the session's mod socket, where the server
+// checks the input and runs the command as this thread, or has the mod
+// answer. Plain data and functions, for the tests.
 
 // A tool as $.tool.register takes it; the model calls it as
 // mcp__terminatr__<name>.
@@ -78,6 +80,32 @@ export const TOOLS: readonly ThreadTool[] = [
 ]
 
 export const toolName = (t: ThreadTool) => `mcp__terminatr__${t.name}` as const
+
+// A user mod's tool as the model calls it: mcp__terminatr__<mod>_<tool>.
+// A mod id has no underscore and the thread's tools none at all.
+export const MOD_TOOL = /^mcp__terminatr__[a-z0-9-]+_[a-z0-9_]+$/
+
+// modTools are the user mods' tools in the server's answer to GET
+// /v1/tools; anything else in it, or an answer that isn't one, is none.
+export function modTools(status: number, text: string): ThreadTool[] {
+  if (status < 200 || status >= 300) return []
+  let got: unknown
+  try {
+    got = JSON.parse(text)
+  } catch {
+    return []
+  }
+  const tools = (got as { tools?: unknown } | null)?.tools
+  if (!Array.isArray(tools)) return []
+  const out: ThreadTool[] = []
+  for (const t of tools as Record<string, unknown>[]) {
+    if (!t || typeof t.name !== 'string' || typeof t.description !== 'string' || !MOD_TOOL.test(`mcp__terminatr__${t.name}`)) continue
+    const schema = t.inputSchema as ThreadTool['inputSchema'] | undefined
+    if (!schema || schema.type !== 'object' || typeof schema.properties !== 'object') continue
+    out.push({ name: t.name, description: t.description, inputSchema: schema })
+  }
+  return out
+}
 
 // body is the call's arguments as the server takes them: the tool's own
 // fields alone (a tool.call input carries the envelope beside them).
