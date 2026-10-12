@@ -40,6 +40,10 @@ type Window struct {
 // ends its synchronized update, as tm's attach does.
 const maxHold = time.Second
 
+// windowColors are a window's default foreground and background.
+var windowColors = emu.Colors{Fg: emu.RGB{R: 0xcd, G: 0xd6, B: 0xf4}, Bg: emu.RGB{R: 0x1e, G: 0x1e, B: 0x2e},
+	Known: emu.KnownFg | emu.KnownBg}
+
 // Window opens a window of the given size running `tm args…`.
 func (e *Env) Window(cols, rows uint16, args ...string) *Window {
 	e.T.Helper()
@@ -63,8 +67,10 @@ func (e *Env) WindowCmd(cols, rows uint16, argv ...string) *Window {
 		Cols: cols, Rows: rows, Scrollback: 1000,
 		WritePty:  func(b []byte) { w.con.Write(b) },
 		Xtversion: "terminatr-e2e",
-		// Like a terminal on a dark desktop, it answers CSI ? 996 n.
+		// Like a terminal on a dark desktop, it answers CSI ? 996 n,
+		// and OSC 10/11 with a dark theme's colours.
 		ColorScheme: func() (emu.Scheme, bool) { return emu.SchemeDark, true },
+		Colors:      windowColors,
 	})
 	if err != nil {
 		e.T.Fatal(err)

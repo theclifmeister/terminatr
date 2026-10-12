@@ -100,7 +100,47 @@ func NewWith(o Options) (*Terminal, error) {
 		t.Close()
 		return nil, err
 	}
-	return &Terminal{t: t}, nil
+	term := &Terminal{t: t}
+	if o.Colors.Known != 0 {
+		if err := term.SetColors(o.Colors); err != nil {
+			t.Close()
+			return nil, err
+		}
+	}
+	return term, nil
+}
+
+// SetColors makes c the terminal's default colours: OSC 10 and 11
+// queries are answered with the foreground and background while they are
+// known (and not at all otherwise), OSC 4 queries with the known palette
+// entries and libghostty's default palette for the rest. A program's own
+// OSC 10/11/4 changes still win until it resets them.
+func (t *Terminal) SetColors(c Colors) error {
+	lib := func(rgb RGB) *libghostty.ColorRGB { return &libghostty.ColorRGB{R: rgb.R, G: rgb.G, B: rgb.B} }
+	var fg, bg *libghostty.ColorRGB
+	if c.Known&KnownFg != 0 {
+		fg = lib(c.Fg)
+	}
+	if c.Known&KnownBg != 0 {
+		bg = lib(c.Bg)
+	}
+	pal := libghostty.DefaultPalette()
+	for i, rgb := range c.Palette {
+		if c.Known&(1<<i) != 0 {
+			pal[i] = *lib(rgb)
+		}
+	}
+	err := t.t.SetColorForeground(fg)
+	if err == nil {
+		err = t.t.SetColorBackground(bg)
+	}
+	if err == nil {
+		err = t.t.SetColorPalette(&pal)
+	}
+	if err != nil {
+		return fmt.Errorf("emu: set colours: %w", err)
+	}
+	return nil
 }
 
 // setScrollback limits scrollback by lines only. libghostty also has a
