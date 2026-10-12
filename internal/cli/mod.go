@@ -492,8 +492,16 @@ func (e *Env) modInstall(arg string, yes bool) error {
 	defer st.Close()
 	m := st.Manifest
 	if r, err := registry(); err == nil {
-		if _, ok := r.Get(m.ID); ok {
-			return &project.Error{Code: "mod-exists", Msg: fmt.Sprintf("%s is already installed: tm mod update %s", m.ID, m.ID)}
+		if old, ok := r.Get(m.ID); ok {
+			// Name what works: tm mod update only takes a mod that
+			// records where it came from (T301 B10).
+			hint := "tm mod update " + m.ID
+			if old.Builtin {
+				hint = "it is a built-in mod's id; give your copy another id in its mod.toml"
+			} else if _, ok := mod.ReadSource(old.Dir); !ok {
+				hint = "it records no source (installed by hand, or by tm mod dev); tm mod remove " + m.ID + " first"
+			}
+			return &project.Error{Code: "mod-exists", Msg: fmt.Sprintf("%s is already installed: %s", m.ID, hint)}
 		}
 	}
 	fmt.Fprintf(e.Stdout, "%s\nFrom %s. It installs disabled: tm mod enable %s turns it on.\n", mod.Consent(m, st.Dir), src, m.ID)

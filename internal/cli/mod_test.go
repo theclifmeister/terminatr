@@ -59,7 +59,20 @@ func TestModInstallEnableRemove(t *testing.T) {
 			t.Errorf("install output lacks %q:\n%s", want, out)
 		}
 	}
-	h.expect(1, "mod-exists", human, "mod", "install", src, "--yes")
+	h.expect(1, "already installed: tm mod update review-age", human, "mod", "install", src, "--yes")
+	// A hint that works (T301 B10): a built-in id can't be updated, nor
+	// a mod that records no source.
+	h.expect(1, "a built-in mod's id; give your copy another id", human, "mod", "install",
+		modSource(t, strings.Replace(modReviewAge, `"review-age"`, `"pr-ci-column"`, 1)), "--yes")
+	byHand := filepath.Join(h.root, "mods", "by-hand")
+	if err := os.CopyFS(byHand, os.DirFS(modSource(t, strings.Replace(modReviewAge, `"review-age"`, `"by-hand"`, 1)))); err != nil {
+		t.Fatal(err)
+	}
+	h.expect(1, "records no source (installed by hand, or by tm mod dev); tm mod remove by-hand first", human, "mod", "install",
+		modSource(t, strings.Replace(modReviewAge, `"review-age"`, `"by-hand"`, 1)), "--yes")
+	if err := os.RemoveAll(byHand); err != nil {
+		t.Fatal(err)
+	}
 	if out := h.ok(coord, "mod", "list"); !strings.Contains(out, "○ review-age") || !strings.Contains(out, "off") {
 		t.Errorf("list after install: %q", out)
 	}
