@@ -12,8 +12,9 @@ import (
 // TestSmokeSidebarSide: a layout mod puts the sidebar on the right at a
 // share of the window (docs/SPEC.md §4). The dashboard and an attached
 // pane start at the window's left, the sidebar's border is its first
-// column, and the pane gets the window less the sidebar; prefix+b hides
-// the sidebar (the pane takes the window), then shows the slim strip.
+// column, and the pane gets the window less the sidebar; prefix+b shows
+// the slim strip, again hides the sidebar (the pane takes the window),
+// and again brings the full one back.
 func TestSmokeSidebarSide(t *testing.T) {
 	env := New(t)
 	dir := t.TempDir()
@@ -52,16 +53,21 @@ func TestSmokeSidebarSide(t *testing.T) {
 		t.Fatalf("no sidebar border at column %d:\n%s", cols-side, w.Screen())
 	}
 
-	// Hidden: the pane has the window; again: the slim strip.
-	w.Prefix("b")
-	waitPaneSize(t, env, s1, cols, 28)
+	// The slim strip; hidden: the pane has the window; full again.
 	w.Prefix("b")
 	waitPaneSize(t, env, s1, uint16(cols-view.SideSlim), 28)
+	w.Prefix("b")
+	waitPaneSize(t, env, s1, cols, 28)
+	if !Poll(wait, func() bool { return strings.Contains(readFile(env.Home, "ui.json"), `"mode": "hidden"`) }) {
+		t.Fatalf("ui.json after b b: %s", readFile(env.Home, "ui.json"))
+	}
+	w.Prefix("b")
+	waitPaneSize(t, env, s1, uint16(cols-side), 28)
 	if !Poll(wait, func() bool {
 		u := readFile(env.Home, "ui.json")
-		return strings.Contains(u, `"slim": true`) && !strings.Contains(u, "hidden")
+		return strings.Contains(u, `"slim": false`) && !strings.Contains(u, "hidden")
 	}) {
-		t.Fatalf("ui.json after b b: %s", readFile(env.Home, "ui.json"))
+		t.Fatalf("ui.json after b b b: %s", readFile(env.Home, "ui.json"))
 	}
 	w.Quit()
 	w.WaitExit(wait)

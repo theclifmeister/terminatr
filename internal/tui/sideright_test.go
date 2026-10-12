@@ -49,8 +49,9 @@ func TestDashboardSidebarRight(t *testing.T) {
 		t.Fatalf("drag: sidebar %d, dashboard %d, ui.json %+v", m.sideW(), m.w, LoadLayout(ui).Sidebar)
 	}
 
-	// Hidden: no columns, the list has the window, tab skips it.
-	press(m, "b")
+	// Hidden (b after the slim strip): no columns, the list has the
+	// window, tab skips it.
+	press(m, "b", "b")
 	if m.sideW() != 0 || m.w != 120 || !strings.HasPrefix(strings.Split(whole(m), "\n")[0], " tm dashboard") {
 		t.Fatalf("hidden: sidebar %d, dashboard %d", m.sideW(), m.w)
 	}
@@ -121,7 +122,7 @@ func TestNeedsBadge(t *testing.T) {
 	if head := strings.Split(whole(m), "\n")[0]; strings.Contains(head, badge) {
 		t.Fatalf("a badge beside the sidebar: %q", head)
 	}
-	press(m, "b")
+	press(m, "b", "b")
 	head := strings.Split(whole(m), "\n")[0]
 	i := strings.Index(head, badge)
 	if i < 0 || !strings.Contains(head[i:], "server ok") {

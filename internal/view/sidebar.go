@@ -103,8 +103,8 @@ func (s Sidebar) least(w int) int { return min(s.width(w), SideDefault) }
 // Full says whether the sidebar is at its full width in a window w wide.
 func (s Sidebar) Full(w int) bool { return s.Cols(w) > SideSlim }
 
-// Key applies a sidebar key ({ narrower, } wider, b the next of hidden,
-// slim strip, full) to s in a window w wide; msg says why nothing
+// Key applies a sidebar key ({ narrower, } wider, b the next of full,
+// slim strip, hidden) to s in a window w wide; msg says why nothing
 // changed.
 func (s Sidebar) Key(key string, w int) (out Sidebar, msg string) {
 	s = s.Clamp()
@@ -113,14 +113,14 @@ func (s Sidebar) Key(key string, w int) (out Sidebar, msg string) {
 	case "b":
 		switch {
 		case s.Hidden:
-			s.Hidden, s.Slim = false, true
-		case s.Slim:
-			s.Slim = false
+			s.Hidden = false
 			if !s.Full(w) {
 				msg = narrow
 			}
-		default:
+		case s.Slim:
 			s.Hidden = true
+		default:
+			s.Slim = true
 		}
 		return s, msg
 	case "{", "}":

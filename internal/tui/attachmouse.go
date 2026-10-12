@@ -36,7 +36,7 @@ var sessionMenu = []struct{ label, key string }{
 	{"help: keys and mouse", "?"},
 	{"narrower sidebar", "{"},
 	{"wider sidebar", "}"},
-	{"sidebar: hide / slim / full", "b"},
+	{"sidebar: slim / hide / full", "b"},
 	{"info panel on / off", "|"},
 	{"keyboard to the sidebar", "tab"},
 	{"back to the last place", ";"},
