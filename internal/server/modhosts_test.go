@@ -283,3 +283,50 @@ func TestModHostsSafeMode(t *testing.T) {
 		t.Fatalf("mod.restart in safe mode: %v", perr)
 	}
 }
+
+// TestModSpecsColumnModsEager: a user code mod that declares columns is
+// started with the server (Eager), as a built-in one is, so its cached
+// cells don't stay stale waiting for a mod.ready a lazy host never gets;
+// one without columns stays lazy.
+func TestModSpecsColumnModsEager(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("TERMINATR_HOME", home)
+	p, err := ResolvePaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	head := "name = \"X\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nmain = \"main.js\"\n"
+	for id, extra := range map[string]string{
+		"cols":  "[[provides.columns]]\nid = \"c\"\ntitle = \"C\"\nwidth = 2\nwhere = [\"sidebar.thread\"]\n",
+		"nocol": "",
+	} {
+		dir := filepath.Join(home, "mods", id)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "mod.toml"), []byte("id = \""+id+"\"\n"+head+extra), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "main.js"), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte("[mods.cols]\nenabled = true\n[mods.nocol]\nenabled = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{opts: Options{Paths: p}, log: log.New(&testWriter{t: t}, "server: ", 0)}
+	specs, ok := s.modSpecs()
+	if !ok {
+		t.Fatal("modSpecs not ok")
+	}
+	got := map[string]bool{}
+	for _, sp := range specs {
+		got[sp.ID] = sp.Eager
+	}
+	if eager, ok := got["cols"]; !ok || !eager {
+		t.Fatalf("column mod not eager: %v", got)
+	}
+	if eager, ok := got["nocol"]; !ok || eager {
+		t.Fatalf("mod without columns eager: %v", got)
+	}
+}

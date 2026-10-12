@@ -21,6 +21,7 @@ const (
 	// Published by the console, action and view parts of the API.
 	UIClick     = "ui.click"
 	UIKey       = "ui.key"
+	UICursor    = "ui.cursor"
 	ActionDone  = "action.done"
 	ViewOpened  = "view.opened"
 	ViewClosed  = "view.closed"
@@ -165,7 +166,8 @@ type Target struct {
 }
 
 // Input is ui.click and ui.key: the human clicked, or pressed Key on, one
-// of the mod's own columns, views or widgets.
+// of the mod's own columns, views or widgets; and ui.cursor: the row
+// under the cursor of a view's focused list is now Row ("" for none).
 type Input struct {
 	Column string `json:"column,omitempty"`
 	View   string `json:"view,omitempty"`

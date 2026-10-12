@@ -127,6 +127,8 @@ export declare namespace TM {
     "ui.click": Input;
     /** The human pressed a key on one of the mod's views or widgets. */
     "ui.key": Input;
+    /** The row under the cursor of a view's focused list (widget) is now row ("": none), moved by a key, a click, the filter or a publish; sent when the view shows, and again on each change. To follow the selection. */
+    "ui.cursor": Input;
     /** A human ran a core action bound in the mod's row, view or notification. */
     "action.done": ActionDone;
     /** One of the mod's views is shown: publish it with $.ui.view.set. Needs the views grant. */

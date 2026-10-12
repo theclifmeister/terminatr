@@ -83,6 +83,14 @@ func saved(w *Window, desc string, cond func(screen string) bool) string {
 func TestSmokeProjectPopup(t *testing.T) {
 	env := New(t)
 	env.FakeClaude() // an agent installed: what most users have
+	// The Memory tab asserted below is the core one: the built-in
+	// memory-tab mod would draw in its place once its host is up, so a
+	// race. It is off here, from before the
+	// server starts (a host already up would be stopped only on the
+	// supervisor's next look).
+	if err := os.WriteFile(filepath.Join(env.Home, "config.toml"), []byte("[mods.memory-tab]\nenabled = false\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	slug, _ := newProject(env, "demo")
 	repo := env.Workdir()
 	env.MustCLI("project", "repo", "add", repo, "--project", slug)
