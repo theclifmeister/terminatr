@@ -1,0 +1,115 @@
+{
+  "name": "a merge request found by its branch, in tm's fixed words: failed pipeline, approved, mergeable",
+  "answers": [
+    {
+      "method": "process.run",
+      "params": {
+        "argv": [
+          "glab",
+          "api",
+          "--hostname",
+          "gitlab.com",
+          "projects/acme%2Fweb%2Fshop/merge_requests?source_branch=feat&state=all&order_by=updated_at&sort=desc&per_page=1"
+        ]
+      },
+      "result": {
+        "code": 0,
+        "stdout": "[{\"iid\": 7, \"state\": \"opened\"}]",
+        "stderr": ""
+      }
+    },
+    {
+      "method": "process.run",
+      "params": {
+        "argv": [
+          "glab",
+          "api",
+          "--hostname",
+          "gitlab.com",
+          "projects/acme%2Fweb%2Fshop/merge_requests/7"
+        ]
+      },
+      "result": {
+        "code": 0,
+        "stdout": "{\"iid\": 7, \"web_url\": \"https://gitlab.com/acme/web/shop/-/merge_requests/7\", \"state\": \"opened\", \"source_branch\": \"feat\", \"target_branch\": \"main\", \"sha\": \"0123456789abcdef0123456789abcdef01234567\", \"merge_commit_sha\": null, \"squash_commit_sha\": null, \"merged_at\": null, \"has_conflicts\": false, \"detailed_merge_status\": \"mergeable\", \"head_pipeline\": {\"id\": 99, \"status\": \"failed\"}}",
+        "stderr": ""
+      }
+    },
+    {
+      "method": "process.run",
+      "params": {
+        "argv": [
+          "glab",
+          "api",
+          "--hostname",
+          "gitlab.com",
+          "projects/acme%2Fweb%2Fshop/merge_requests/7/approvals"
+        ]
+      },
+      "result": {
+        "code": 0,
+        "stdout": "{\"approved\": true, \"approvals_left\": 0, \"approved_by\": [{\"user\": {\"username\": \"ada\"}}]}",
+        "stderr": ""
+      }
+    }
+  ],
+  "events": [
+    {
+      "name": "codehost.pr",
+      "data": {
+        "remote": {
+          "kind": "gitlab",
+          "host": "gitlab.com",
+          "path": "acme/web/shop"
+        },
+        "branch": "feat"
+      }
+    },
+    {
+      "name": "codehost.prState",
+      "data": {
+        "remote": {
+          "kind": "gitlab",
+          "host": "gitlab.com",
+          "path": "acme/web/shop"
+        },
+        "branch": "feat"
+      }
+    },
+    {
+      "name": "codehost.prHead",
+      "data": {
+        "remote": {
+          "kind": "gitlab",
+          "host": "gitlab.com",
+          "path": "acme/web/shop"
+        },
+        "url": "https://gitlab.com/acme/web/shop/-/merge_requests/7",
+        "number": 7
+      }
+    }
+  ],
+  "expect": {
+    "codehost": [
+      {
+        "number": 7,
+        "url": "https://gitlab.com/acme/web/shop/-/merge_requests/7",
+        "state": "OPEN",
+        "checks": "fail",
+        "failed": 1,
+        "review": "APPROVED",
+        "base": "main",
+        "head": "0123456789abcdef0123456789abcdef01234567",
+        "mergeable": "MERGEABLE"
+      },
+      {
+        "state": "OPEN"
+      },
+      {
+        "state": "OPEN",
+        "number": 7,
+        "head": "feat"
+      }
+    ]
+  }
+}

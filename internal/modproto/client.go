@@ -176,3 +176,13 @@ func (c *Client) ToolCall(ctx context.Context, call ToolCall) (ToolResult, error
 	}
 	return r, err
 }
+
+// CodeHost runs one of the code host methods (IsCodeHost) in the mod and
+// returns its handler's answer as JSON, or its error (an *Error with
+// CodeNoHandler or CodeHandlerFailed), ctx's end or ErrClosed.
+func (c *Client) CodeHost(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	if !IsCodeHost(method) {
+		return nil, fmt.Errorf("%s is not a code host method", method)
+	}
+	return c.Call(ctx, method, params)
+}

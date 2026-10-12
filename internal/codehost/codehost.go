@@ -21,6 +21,10 @@ import (
 const (
 	GitHubKind = "github"
 	AzureKind  = "azure"
+	// GitLabKind is GitLab's: no host of tm's own serves it, a code
+	// host mod does (Mod). tm knows its PR URLs (ParsePR) and the merge
+	// commits it writes (MergeCommit), so neither is the mod's word.
+	GitLabKind = "gitlab"
 	// NoKind is a repo with no PR host to ask: no origin, a local one,
 	// or a well-known host that isn't GitHub or Azure DevOps.
 	NoKind = ""
@@ -71,7 +75,7 @@ type DoctorDeps struct {
 // Host is one pull-request provider. Every method takes the repo (a
 // checkout of it) the PR belongs to.
 type Host interface {
-	// Kind is GitHubKind or AzureKind.
+	// Kind is GitHubKind, AzureKind, or a code host mod's kind.
 	Kind() string
 	// PR looks a PR up. ErrNoRef when ref names nothing, ErrNoPR when the
 	// host has none; other errors are failures (see ErrNoPR).
@@ -107,27 +111,38 @@ type Host interface {
 // Config is a project's override of the host (PROJECT.md code_host and
 // azure_url, docs/SPEC.md §5.1). Zero picks by the origin URL.
 type Config struct {
-	// CodeHost is GitHubKind, AzureKind or "" (by origin).
+	// CodeHost is GitHubKind, AzureKind, "" (by origin), or the kind a
+	// code host mod provides ("gitlab", ModKind).
 	CodeHost string
 	// AzureURL is the Azure DevOps organization (or collection) URL, for
 	// a server whose host Detect doesn't know.
 	AzureURL string
+	// Project is the project's slug: a code host mod serves the projects
+	// it runs for.
+	Project string
 }
 
 // Target is what Detect makes of a repo: its host kind and, for Azure
 // DevOps, where the repo is.
 type Target struct {
 	Kind    string
-	OrgURL  string // https://dev.azure.com/org, https://org.visualstudio.com
+	OrgURL  string // https://dev.azure.com/org, https://org.visualstudio.com; GitLab's https://host
 	Project string
-	Repo    string
+	Repo    string // GitLab's project path, group/subgroup/project
 }
 
 // Detect tells which host repo's PRs live on, from cfg, else its origin
 // URL (ParseRemote); GitHub when neither says Azure DevOps, unless the
-// repo has no origin or one on a host with no PRs to poll (NoKind).
+// repo has no origin or one on a host with no PRs to poll (NoKind). A
+// code host mod's kind in cfg is taken as it is, with the server and
+// project path of the origin (ModRemote).
 func Detect(repo string, cfg Config) Target {
 	url := origin(repo)
+	if ModKind(cfg.CodeHost) {
+		t, _ := ModRemote(url)
+		t.Kind = cfg.CodeHost
+		return t
+	}
 	switch cfg.CodeHost {
 	case GitHubKind:
 		return Target{Kind: GitHubKind}
@@ -169,9 +184,14 @@ func pollable(url string) bool {
 }
 
 // Pick is the Host for repo (Detect). A repo on Azure DevOps gets GitHub
-// too until the Azure DevOps host is registered (newAzure), as before.
+// too until the Azure DevOps host is registered (newAzure), as before. A
+// code host mod's kind gets that mod (Provide), or a host that says why
+// there is none (Unserved).
 func Pick(repo string, cfg Config) Host {
 	t := Detect(repo, cfg)
+	if ModKind(t.Kind) {
+		return pickMod(t, cfg.Project)
+	}
 	if t.Kind == NoKind {
 		return NoHost{}
 	}

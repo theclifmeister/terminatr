@@ -1,6 +1,8 @@
 package ticker
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -976,5 +978,49 @@ func TestNoPRHost(t *testing.T) {
 	}
 	if k := r.kinds(); k != KindGHFailing {
 		t.Fatalf("with a host again: %q", k)
+	}
+}
+
+// TestAutoCloseModHostPushed: a merged PR's head counts as pushed on
+// tm's own host's word, not on a code host mod's: git must find the
+// commits on the remote before the worktree goes.
+func TestAutoCloseModHostPushed(t *testing.T) {
+	const head = "0123456789abcdef0123456789abcdef01234567"
+	for _, mod := range []bool{false, true} {
+		r := newRig(t)
+		var pushed []string
+		host := func(string, codehost.Config) codehost.Host {
+			if !mod {
+				return r.codeHost("", codehost.Config{})
+			}
+			return codehost.Mod{Target: codehost.Target{Kind: codehost.GitLabKind, OrgURL: "https://gitlab.com", Repo: "acme/shop"}, ID: "gitlab",
+				Call: func(_ context.Context, method string, _ any) (json.RawMessage, error) {
+					if method != codehost.MethodPR {
+						return nil, fmt.Errorf("no %s", method)
+					}
+					return json.RawMessage(`{"number":7,"state":"MERGED","head":"` + head + `"}`), nil
+				}}
+		}
+		r.gh = []string{`{"number":7,"state":"MERGED","headRefOid":"` + head + `"}`}
+		r.tk = New(Options{Host: r.host, Log: log.New(io.Discard, "", 0), State: filepath.Join(t.TempDir(), "ticker.json"),
+			Now: func() time.Time { return r.now },
+			Unsaved: func(_ *thread.Record, p string) (string, error) {
+				pushed = append(pushed, p)
+				return "", nil
+			},
+			CodeHost: host})
+		r.host.set("s-2", "idle", "")
+		r.sweep(0)
+		r.sweep(time.Minute)
+		want := head
+		if mod {
+			want = ""
+		}
+		if len(pushed) == 0 || pushed[0] != want {
+			t.Errorf("mod %v: pushed %q, want %q", mod, pushed, want)
+		}
+		if strings.Join(r.host.resolved, ",") != "demo/t-0001" {
+			t.Errorf("mod %v: resolved %v", mod, r.host.resolved)
+		}
 	}
 }

@@ -20,8 +20,8 @@ import (
 // block.
 
 // Kinds names what the mod provides, for tm mod list and the Mods tab:
-// code, column, view, tools, theme, icons, keymap, layout, rules,
-// templates, agents, guard.
+// code, column, view, tools, code host, commands, theme, icons, keymap,
+// layout, rules, templates, agents, guard.
 func (m *Manifest) Kinds() []string {
 	p := m.Provides
 	var out []string
@@ -34,6 +34,7 @@ func (m *Manifest) Kinds() []string {
 	add(len(p.Columns) > 0, "column")
 	add(len(p.Views) > 0, "view")
 	add(len(p.Tools) > 0, "tools")
+	add(p.CodeHost != "", "code host")
 	add(len(p.Commands) > 0, "commands")
 	add(p.Theme != "", "theme")
 	add(p.Icons != "", "icons")
@@ -173,6 +174,9 @@ func consent(m *Manifest, fsys fs.FS) string {
 	fmt.Fprintf(&b, "Provides: %s\n", strings.Join(m.Kinds(), " · "))
 	if v := m.ViewWords(); len(v) > 0 {
 		fmt.Fprintf(&b, "Panels it draws (marked mod: %s): %s\n", m.ID, strings.Join(v, " · "))
+	}
+	if k := m.Provides.CodeHost; k != "" {
+		fmt.Fprintf(&b, "Code host %s: for projects whose code_host is %q, tm asks it about their pull requests and has it merge one tm thread merge checked (tm still checks the merge and anything it removes)\n", k, k)
 	}
 	if c := m.CommandWords(); len(c) > 0 {
 		fmt.Fprintf(&b, "Commands you can run: %s\n", strings.Join(c, " · "))

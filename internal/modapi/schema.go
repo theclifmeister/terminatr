@@ -226,8 +226,8 @@ var Events = []Event{
 	{Name: modbus.ModSettings, Data: typ[Settings](), Doc: "The user changed the mod's settings: these are the new ones."},
 }
 
-// Methods are $'s methods, besides $.on, $.log and $.tool.handle, which
-// the host builds in.
+// Methods are $'s methods, besides $.on, $.log, $.tool.handle and
+// $.codehost.handle, which the host builds in.
 var Methods = []Method{
 	// Read.
 	{Name: "projects.list", Result: typ[[]Project](), Needs: GrantProjectRead,
@@ -290,10 +290,10 @@ var Methods = []Method{
 		Doc: "Runs a program the commands grant lists, with a scrubbed env, no shell and a timeout."},
 }
 
-// Has says whether name is a method of $ (on, log and tool.handle
-// included) or an event.
+// Has says whether name is a method of $ (on, log, tool.handle and
+// codehost.handle included) or an event.
 func Has(name string) bool {
-	if name == "on" || name == "log" || name == "tool.handle" {
+	if name == "on" || name == "log" || name == "tool.handle" || name == "codehost.handle" {
 		return true
 	}
 	for _, m := range Methods {

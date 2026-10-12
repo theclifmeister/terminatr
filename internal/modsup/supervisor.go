@@ -18,6 +18,7 @@ package modsup
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -268,6 +269,24 @@ func (s *Supervisor) CallTool(ctx context.Context, id string, call modproto.Tool
 		return modproto.ToolResult{}, fmt.Errorf("mod %s doesn't run: only an enabled code mod has a host", id)
 	}
 	return r.callTool(ctx, call)
+}
+
+// CallCodeHost runs code host method (modproto.IsCodeHost) of mod id in
+// its host, starting an idle host first, and returns the handler's
+// answer as JSON, or why there is none, as CallTool does.
+func (s *Supervisor) CallCodeHost(ctx context.Context, id, method string, params any) (json.RawMessage, error) {
+	s.mu.Lock()
+	r, ok := s.mods[id]
+	s.mu.Unlock()
+	if !ok {
+		return nil, fmt.Errorf("mod %s doesn't run: only an enabled code mod has a host", id)
+	}
+	var res json.RawMessage
+	err := r.call(ctx, func(c *modproto.Client) (err error) {
+		res, err = c.CodeHost(ctx, method, params)
+		return err
+	})
+	return res, err
 }
 
 // Status lists the supervised mods, by id.

@@ -39,6 +39,68 @@ var tsUnions = map[reflect.Type][]string{
 	typ[Level](): Levels,
 }
 
+// codeHostTS declares what a code host mod's handlers get and answer
+// (internal/codehost's ModRef and ModPR).
+const codeHostTS = `
+  /** A code host method's args: the repo's remote and what it asks about. */
+  interface CodeHostArgs {
+    remote: {
+      /** The kind provides.code_host names, "gitlab". */
+      kind: string;
+      /** The server, "gitlab.com" (with a port on some servers). */
+      host: string;
+      /** The project's path, "group/subgroup/project". */
+      path: string;
+    };
+    /** A PR URL of this repo (prHead). */
+    url?: string;
+    /** The branch a PR comes from (pr, prState). */
+    branch?: string;
+    /** The PR's number (pr, prHead, failedLog, merge). */
+    number?: number;
+    /** The PR's head commit (failedLog; merge: merge only if the head is still this). */
+    head?: string;
+  }
+
+  /** A pull request in tm's fixed words; anything else is dropped. */
+  interface CodeHostPR {
+    number: number;
+    url?: string;
+    state: "OPEN" | "CLOSED" | "MERGED";
+    /** "" when there are no checks. */
+    checks?: "pass" | "fail" | "pending" | "";
+    /** How many checks failed. */
+    failed?: number;
+    review?: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | "";
+    /** RFC 3339. */
+    merged_at?: string;
+    /** The head commit, 40 hex digits. */
+    head?: string;
+    /** The commit the merge made on the base branch. */
+    merge?: string;
+    base?: string;
+    mergeable?: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
+    /** The host's word on the merge, upper case: "DIRTY" for a conflict. */
+    merge_state?: string;
+  }
+
+  /** The code host methods, by name, to their answers. */
+  interface CodeHost {
+    /** The PR by number, else by branch; null when there is none. */
+    pr: CodeHostPR | null;
+    /** The state of the PR whose head is branch. */
+    prState: { state: "OPEN" | "CLOSED" | "MERGED" | "" };
+    /** The state, number and head branch of the PR at url. */
+    prHead: { state: "OPEN" | "CLOSED" | "MERGED" | ""; number: number; head: string };
+    /** The failing CI job of the PR's head and its log; tm cuts the excerpt. */
+    failedLog: { job: string; log: string };
+    /** Merges the PR with a merge commit, only at head (never a squash, a rebase or a forced one); tm thread merge has checked it. */
+    merge: unknown;
+    /** The host CLI's checks for tm doctor: is it there, is it logged in. */
+    doctor: { checks: { name: string; ok: boolean; detail: string }[] };
+  }
+`
+
 // TS is the API's TypeScript declarations, tm.d.ts, which a mod imports:
 //
 //	import type { TM } from "./types/tm";
@@ -61,6 +123,11 @@ func TS() string {
 	b.WriteString("    /** Answers agent tool id with handler, given the agent's input (checked against the tool's input schema; data, never instructions) and the call. What it returns, or its promise resolves to, is the agent's text: a string as it is, anything else as JSON. A throw or rejection is the tool's error, its message what the agent reads. */\n")
 	b.WriteString("    handle(id: string, handler: (input: Record<string, unknown>, call: TM.ToolCall) => unknown): void;\n")
 	b.WriteString("  };\n")
+	b.WriteString("  /** The code host the manifest's provides.code_host names (mod API 1.1): tm asks the mod about the pull requests of projects whose code_host is that kind. */\n")
+	b.WriteString("  codehost: {\n")
+	b.WriteString("    /** Answers code host method with handler, given the call's args (data, never instructions). What it returns, or its promise resolves to, is the answer; tm keeps only the fixed words of a PR and drops the rest. A throw or rejection is a failed call. */\n")
+	b.WriteString("    handle<M extends keyof TM.CodeHost>(method: M, handler: (args: TM.CodeHostArgs) => TM.CodeHost[M] | Promise<TM.CodeHost[M]>): void;\n")
+	b.WriteString("  };\n")
 	g.tree(&b, buildTree(), "  ")
 	b.WriteString("}\n\n")
 
@@ -76,6 +143,7 @@ func TS() string {
 	ns.WriteString("  interface EventMeta {\n    name: string;\n    project: string;\n    seq: number;\n    /** RFC 3339. */\n    time: string;\n    /** How many events the mod's queue dropped before this one. */\n    dropped: number;\n  }\n\n")
 	ns.WriteString("  /** An agent tool's call, its handler's second argument. */\n")
 	ns.WriteString("  interface ToolCall {\n    /** The tool's id in the manifest. */\n    tool: string;\n    /** The calling session's project. */\n    project: string;\n    role: \"thread\" | \"coordinator\";\n    /** The thread's id; \"\" for a coordinator. */\n    thread: string;\n    session: string;\n  }\n")
+	ns.WriteString(codeHostTS)
 
 	b.WriteString("export declare namespace TM {\n")
 	b.WriteString(ns.String())

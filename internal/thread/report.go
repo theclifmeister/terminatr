@@ -25,7 +25,7 @@ const (
 )
 
 // isPRLine says whether t is tm report's PR line: "PR: " and the URL of a
-// GitHub or Azure DevOps pull request.
+// GitHub or Azure DevOps pull request, or a GitLab merge request.
 func isPRLine(t string) bool {
 	u, ok := strings.CutPrefix(t, "PR: ")
 	if !ok {
@@ -36,7 +36,7 @@ func isPRLine(t string) bool {
 }
 
 // PRLineWant is what a PR line looks like, for the error and tool texts.
-const PRLineWant = "PR: https://github.com/<owner>/<repo>/pull/<n> or https://dev.azure.com/<org>/<project>/_git/<repo>/pullrequest/<n>"
+const PRLineWant = "PR: https://github.com/<owner>/<repo>/pull/<n>, https://dev.azure.com/<org>/<project>/_git/<repo>/pullrequest/<n> or https://gitlab.com/<group>/<project>/-/merge_requests/<n>"
 
 // Report is a validated report.
 type Report struct {
