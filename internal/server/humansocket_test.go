@@ -3,6 +3,8 @@ package server
 import (
 	"errors"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -17,6 +19,21 @@ var humanOnlyMethods = []string{
 	proto.MethodModViews, proto.MethodModViewInput, proto.MethodModCommand, proto.MethodModRestart,
 	proto.MethodNotifyClaim, proto.MethodNotifyDismiss,
 	proto.MethodModActionCheck, proto.MethodModActionDone, proto.MethodSessionClear,
+	proto.MethodSessionStart, proto.MethodSessionStop, proto.MethodSessionKeys, proto.MethodSessionPrompt,
+	proto.MethodSessionAdopt, proto.MethodSessionRemote, proto.MethodQuestionsOpen,
+	proto.MethodServerStop, proto.MethodAgentReload,
+	proto.MethodViewSubscribe, proto.MethodViewAttach, proto.MethodViewDashboard, proto.MethodViewProject,
+	proto.MethodViewSelect, proto.MethodViewSideSel, proto.MethodViewExpand, proto.MethodViewTree,
+	proto.MethodViewSidebar, proto.MethodViewInfo, proto.MethodViewColumns, proto.MethodViewSize,
+	proto.MethodViewInput,
+}
+
+// handledElsewhere are human-only methods the loop of TestHumanSocket
+// doesn't run on the human socket: with empty params they would stop
+// the server, start a shell in the home folder, or turn the connection
+// into a view stream.
+var handledElsewhere = map[string]bool{
+	proto.MethodServerStop: true, proto.MethodSessionStart: true, proto.MethodViewSubscribe: true,
 }
 
 // onHumanSocketOnly reports whether err is the server socket's refusal
@@ -60,6 +77,9 @@ func TestHumanSocket(t *testing.T) {
 		}
 		// The handler answers: what it says of empty params doesn't
 		// matter here, only that it isn't the socket's refusal.
+		if handledElsewhere[m] {
+			continue
+		}
 		if err := human.Call(m, struct{}{}, nil); onHumanSocketOnly(err) {
 			t.Errorf("%s on the human socket: %v", m, err)
 		}
@@ -93,8 +113,118 @@ func TestHumanSocket(t *testing.T) {
 	if got := agent.conn.RemoteAddr().String(); got != p.Socket {
 		t.Errorf("an agent's Dial connected to %q, want %q", got, p.Socket)
 	}
-	if proto.HumanOnly(proto.MethodCLIRun) || proto.HumanOnly(proto.MethodCallerWho) {
-		t.Error("an agent's own methods are human-only")
+	for _, m := range []string{proto.MethodCLIRun, proto.MethodCallerWho, proto.MethodHookEvent,
+		proto.MethodSessionList, proto.MethodSessionRead, proto.MethodSessionWait, proto.MethodSessionAsk,
+		proto.MethodToolRun, proto.MethodToolList, proto.MethodViewDigest} {
+		if proto.HumanOnly(m) {
+			t.Errorf("an agent's own method %s is human-only", m)
+		}
+	}
+}
+
+// TestHumanSocketCLIRun: cli.run from a process the pid walk calls the
+// human answers on the human socket only; on the server socket it would
+// run project commands as the human.
+func TestHumanSocketCLIRun(t *testing.T) {
+	p := testPaths(t)
+	startServer(t, p)
+	srv, err := dialAt(p.Socket, proto.KindControl, proto.Protocol)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	human, err := Dial(p, proto.KindControl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer human.Close()
+	run := proto.CLIRunParams{Args: []string{"project", "list"}}
+	if err := srv.Call(proto.MethodCLIRun, run, nil); !onHumanSocketOnly(err) {
+		t.Errorf("cli.run from the human on the server socket: %v, want the human-only refusal", err)
+	}
+	// The test server runs no project commands: past the gate, it says so.
+	var perr *proto.Error
+	if err := human.Call(proto.MethodCLIRun, run, nil); !errors.As(err, &perr) || perr.Code != proto.ErrRefused {
+		t.Errorf("cli.run on the human socket: %v, want %s", err, proto.ErrRefused)
+	}
+}
+
+// TestHumanSocketAttach: attach answers on the human socket only, and
+// Attach dials it.
+func TestHumanSocketAttach(t *testing.T) {
+	p := testPaths(t)
+	startServer(t, p)
+	c, err := Dial(p, proto.KindControl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	var started proto.SessionStartResult
+	call(t, c, proto.MethodSessionStart, proto.SessionStartParams{Argv: []string{testSh(t)}, Cwd: t.TempDir()}, &started)
+	id := started.Session.ID
+
+	srv, err := dialAt(p.Socket, proto.KindAttach, proto.Protocol)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	if err := writeJSONLine(srv.conn, proto.AttachRequest{Attach: proto.AttachParams{Session: id}}); err != nil {
+		t.Fatal(err)
+	}
+	var reply proto.AttachReply
+	if err := readJSONLine(srv.br, &reply); err != nil {
+		t.Fatal(err)
+	}
+	if reply.Attached != nil || !onHumanSocketOnly(reply.Error) {
+		t.Errorf("attach on the server socket: %+v, want the human-only refusal", reply)
+	}
+
+	a, info, err := Attach(p, proto.AttachParams{Session: id})
+	if err != nil {
+		t.Fatalf("Attach: %v", err)
+	}
+	defer a.Close()
+	if got := a.conn.RemoteAddr().String(); got != p.HumanSocket() || info == nil || info.ID != id {
+		t.Errorf("Attach connected to %q (%+v), want the human socket", got, info)
+	}
+}
+
+// TestMayCall: the human-only methods and attach answer on the human
+// socket to a caller outside every agent's session; cli.run on the
+// server socket only to an agent the pid walk finds.
+func TestMayCall(t *testing.T) {
+	human := caller.Caller{Kind: caller.Human}
+	coord := caller.Caller{Kind: caller.Coordinator, Project: "p"}
+	thread := caller.Caller{Kind: caller.Thread, Project: "p", Thread: "t-0001"}
+	for _, c := range []struct {
+		m      string
+		humanS bool
+		c      caller.Caller
+		ok     bool
+	}{
+		{proto.MethodSessionKeys, true, human, true},
+		{proto.MethodSessionKeys, false, human, false},
+		{proto.MethodSessionKeys, true, coord, false},
+		{proto.MethodSessionStart, false, thread, false},
+		{proto.MethodSessionStart, true, thread, false},
+		{proto.MethodViewSelect, true, coord, false},
+		{proto.MethodViewSelect, true, human, true},
+		{proto.MethodServerStop, false, human, false},
+		{attachMethod, false, human, false},
+		{attachMethod, true, thread, false},
+		{attachMethod, true, human, true},
+		{proto.MethodCLIRun, false, thread, true},
+		{proto.MethodCLIRun, false, coord, true},
+		{proto.MethodCLIRun, false, human, false},
+		{proto.MethodCLIRun, true, human, true},
+		{proto.MethodCLIRun, true, thread, true},
+		{proto.MethodSessionRead, false, thread, true},
+		{proto.MethodHookEvent, false, human, true},
+	} {
+		who := func() caller.Caller { return c.c }
+		if perr := mayCall(c.m, c.humanS, who); (perr == nil) != c.ok {
+			t.Errorf("%s (human socket %v) from %v: %v, want ok %v", c.m, c.humanS, c.c.Kind, perr, c.ok)
+		}
 	}
 }
 
@@ -153,6 +283,42 @@ func TestMayAnswer(t *testing.T) {
 	} {
 		if perr := s.mayAnswer(c.in, c.c, c.humanS); (perr == nil) != c.ok {
 			t.Errorf("%s: %v, want ok %v", c.name, perr, c.ok)
+		}
+	}
+}
+
+// TestNoSandboxEscapesReachesLaunch: session.start's no_sandbox_escapes
+// (tm thread start's sandbox_escapes = false) reaches the agent's launch
+// spec, where Claude's manifest turns it into allowUnsandboxedCommands.
+func TestNoSandboxEscapesReachesLaunch(t *testing.T) {
+	p := testPaths(t)
+	if err := os.MkdirAll(p.AgentsDir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `manifest_version = 1
+name = "esc"
+[launch]
+command = ` + strconv.Quote(testSh(t)) + `
+args = ["-c", "sleep 30"]
+[[launch.files]]
+path = "esc"
+template = "{{.NoSandboxEscapes}}"
+`
+	if err := os.WriteFile(filepath.Join(p.AgentsDir(), "esc.toml"), []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	startServer(t, p)
+	c, err := Dial(p, proto.KindControl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	for _, off := range []bool{false, true} {
+		var started proto.SessionStartResult
+		call(t, c, proto.MethodSessionStart, proto.SessionStartParams{Agent: "esc", Cwd: t.TempDir(), NoSandboxEscapes: off}, &started)
+		b, err := os.ReadFile(filepath.Join(p.RunDir, "s", started.Session.ID, "esc"))
+		if err != nil || string(b) != strconv.FormatBool(off) {
+			t.Errorf("no_sandbox_escapes %v: launch file %q, %v", off, b, err)
 		}
 	}
 }

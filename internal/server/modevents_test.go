@@ -103,6 +103,10 @@ func TestModEvents(t *testing.T) {
 	var prEv modbus.PR
 	for len(names) < 6 {
 		ev := next(reader)
+		// The minute ticks by the wall clock, whenever the test runs into it.
+		if ev.Name == modbus.ClockMinute {
+			continue
+		}
 		names = append(names, ev.Name)
 		switch d := ev.Data.(type) {
 		case modbus.Task:
@@ -130,8 +134,14 @@ func TestModEvents(t *testing.T) {
 	// The blind mod got none of it, but does get the clock and sessions.
 	c, done := context.WithTimeout(ctx, 100*time.Millisecond)
 	defer done()
-	if ev, err := blind.Next(c); err == nil {
-		t.Fatalf("blind got %s", ev.Name)
+	for {
+		ev, err := blind.Next(c)
+		if err != nil {
+			break
+		}
+		if ev.Name != modbus.ClockMinute {
+			t.Fatalf("blind got %s", ev.Name)
+		}
 	}
 }
 

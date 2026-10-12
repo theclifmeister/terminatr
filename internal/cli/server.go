@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -126,6 +127,12 @@ func serverRun(e *Env, args []string) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), sigs...)
 	defer stop()
+	// A server started from inside a session (tm autostarting it there)
+	// is no agent: its own calls (cli.run's commands) dial the human
+	// socket, which a session's variables would make them skip.
+	for _, k := range []string{caller.EnvSession, caller.EnvRole, caller.EnvProject, caller.EnvThread} {
+		os.Unsetenv(k)
+	}
 	bin, _ := os.Executable()
 	opts := server.Options{Paths: p, Log: logger, Bin: bin, Source: source, RunCLI: RunInServer}
 	if len(os.Args) > 2 && os.Args[1] == "server" && os.Args[2] == "run" {

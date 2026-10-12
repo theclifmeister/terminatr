@@ -378,7 +378,7 @@ func (s *Server) launchAgent(l agentLaunch) (*session.Session, *proto.Error) {
 	spec := agent.LaunchSpec{
 		Role: agent.Role(r.Role), SessionID: r.ID, AgentSID: r.AgentSessionID,
 		Cwd: r.Cwd, RepoRoot: repo.RepoRoot, GitDir: repo.GitDir, RuntimeDir: rt, BriefPath: r.Brief, Kickoff: l.kick, Resume: l.resume,
-		Yolo: r.Yolo, Model: r.Model, TMBin: s.opts.Bin, Socket: s.opts.Paths.Socket, Access: access,
+		Yolo: r.Yolo, NoSandboxEscapes: r.NoSandboxEscapes, Model: r.Model, TMBin: s.opts.Bin, Socket: s.opts.Paths.Socket, Access: access,
 		RemoteControl: r.RemoteControl, RemoteName: remoteName(r),
 		Mods: modSock != "",
 	}

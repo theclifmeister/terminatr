@@ -133,6 +133,11 @@ type Safety struct {
 	// checkout of a project repo to origin's default branch when that
 	// branch is checked out, clean and only behind (§7.5).
 	FastForwardCheckout bool `json:"fast_forward_checkout"`
+	// SandboxEscapes lets a thread's agent ask to run a command outside
+	// its sandbox, which the human or auto mode then approves (§5.2).
+	// Off, Claude threads start with sandbox.allowUnsandboxedCommands =
+	// false: what can't run in the sandbox doesn't run.
+	SandboxEscapes bool `json:"sandbox_escapes"`
 	// ThreadAgent is the agent tm thread start runs without --agent, and
 	// CoordinatorAgent the one a new coordinator runs (§8, §11.2): names
 	// from the agent registry (tm agent list). "" when no table sets
@@ -218,7 +223,7 @@ const LegacyAgent = "claude"
 // [defaults] (all projects) name.
 var Defaults = Safety{StartThreads: StartPropose, Yolo: false, CoordinatorApproves: true,
 	ParallelThreads: 10, AutoClose: CloseMerged, AutoCloseDays: 7, PRFollowup: true, PRPollSeconds: DefaultPRPollSeconds,
-	CompleteTasks: CompleteUser, FastForwardCheckout: true, Merge: MergeCoordinator, Guard: true, Active: true,
+	CompleteTasks: CompleteUser, FastForwardCheckout: true, SandboxEscapes: true, Merge: MergeCoordinator, Guard: true, Active: true,
 	ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30}
 
 type rawSafety struct {
@@ -238,6 +243,7 @@ type rawSafety struct {
 	AutoClear      *bool     `toml:"auto_clear"`
 	CoordMerges    *bool     `toml:"coordinator_merges"`
 	FastForward    *bool     `toml:"fast_forward_checkout"`
+	SandboxEsc     *bool     `toml:"sandbox_escapes"`
 	ThreadAgent    *string   `toml:"thread_agent"`
 	CoordAgent     *string   `toml:"coordinator_agent"`
 	Models         *[]string `toml:"models"`
@@ -524,7 +530,7 @@ func (r rawSafety) own() []string {
 		"coordinator_approves": r.CoordinatorApproves != nil, "parallel_threads": r.ParallelThreads != nil,
 		"auto_close": r.AutoClose != nil || r.AutoResolve != nil, "auto_close_days": r.AutoCloseDays != nil,
 		"pr_followup": r.PRFollowup != nil, "pr_poll_seconds": r.PRPoll != nil, "complete_tasks": r.CompleteTasks != nil,
-		"coordinator_remote_control": r.CoordinatorRC != nil, "auto_clear": r.AutoClear != nil, "coordinator_merges": r.CoordMerges != nil, "fast_forward_checkout": r.FastForward != nil,
+		"coordinator_remote_control": r.CoordinatorRC != nil, "auto_clear": r.AutoClear != nil, "coordinator_merges": r.CoordMerges != nil, "fast_forward_checkout": r.FastForward != nil, "sandbox_escapes": r.SandboxEsc != nil,
 		"thread_agent": r.ThreadAgent != nil, "coordinator_agent": r.CoordAgent != nil, "models": r.Models != nil, "coordinator_model": r.CoordModel != nil, "archive_tasks_days": r.ArchiveTasks != nil, "archive_threads_days": r.ArchiveThreads != nil,
 		"archive_inbox_days": r.ArchiveInbox != nil, "archive_journal_days": r.ArchiveJournal != nil,
 	}
@@ -619,6 +625,9 @@ func (r rawSafety) apply(s *Safety, path, table string) error {
 	}
 	if r.FastForward != nil {
 		s.FastForwardCheckout = *r.FastForward
+	}
+	if r.SandboxEsc != nil {
+		s.SandboxEscapes = *r.SandboxEsc
 	}
 	for _, a := range []struct {
 		key string

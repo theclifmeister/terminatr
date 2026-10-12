@@ -122,18 +122,35 @@ func TestClaudeLaunch(t *testing.T) {
 	if !settings.Sandbox.Enabled || !reflect.DeepEqual(settings.Sandbox.Network.AllowUnixSockets, []string{"/run/tm.sock"}) {
 		t.Fatalf("thread sandbox = %+v", settings.Sandbox)
 	}
+	// sandbox_escapes on (the default): Claude's own default stands, so
+	// the agent may ask to run a command outside the sandbox.
+	if settings.Sandbox.AllowUnsandboxedCommands != nil {
+		t.Fatalf("thread sandbox sets allowUnsandboxedCommands by default: %+v", settings.Sandbox)
+	}
+	// Off: a thread's Bash can't leave the sandbox, where it would reach
+	// the human socket (docs/SPEC.md §5.2).
+	closed := spec
+	closed.NoSandboxEscapes = true
+	l, err = a.Launch(closed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := parseSettings(t, l.Files["claude-settings.json"]); s.Sandbox.AllowUnsandboxedCommands == nil || *s.Sandbox.AllowUnsandboxedCommands || !s.Sandbox.Enabled {
+		t.Fatalf("thread sandbox with sandbox_escapes off = %+v", s.Sandbox)
+	}
 	if settings.StatusLine != nil {
 		t.Fatal("settings must never set statusLine; it would replace the user's")
 	}
 
 	coord := spec
 	coord.Role, coord.Access = Role("coordinator"), Access{Read: []string{"/h/.terminatr/worktrees/p"}}
+	coord.NoSandboxEscapes = true // a coordinator's Bash has no sandbox to keep
 	l, err = a.Launch(coord)
 	if err != nil {
 		t.Fatal(err)
 	}
 	settings = parseSettings(t, l.Files["claude-settings.json"])
-	if settings.Sandbox.Enabled || len(settings.Permissions.Deny) != 0 {
+	if settings.Sandbox.Enabled || settings.Sandbox.AllowUnsandboxedCommands != nil || len(settings.Permissions.Deny) != 0 {
 		t.Fatalf("coordinator must not get the thread sandbox or deny rules: %+v", settings)
 	}
 
@@ -169,8 +186,9 @@ func TestClaudeLaunch(t *testing.T) {
 type claudeSettings struct {
 	Permissions struct{ Allow, Deny []string }
 	Sandbox     struct {
-		Enabled bool
-		Network struct{ AllowUnixSockets []string }
+		Enabled                  bool
+		AllowUnsandboxedCommands *bool
+		Network                  struct{ AllowUnixSockets []string }
 	}
 	StatusLine any `json:"statusLine"`
 }

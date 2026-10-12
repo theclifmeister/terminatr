@@ -47,12 +47,13 @@ coordinator_remote_control = true
 auto_clear = true
 coordinator_merges = true
 fast_forward_checkout = false
+sandbox_escapes = false
 `)
 	c, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s, _ := c.Safety("demo"); !reflect.DeepEqual(s, Safety{StartThreads: "auto", Yolo: true, CoordinatorApproves: true, ParallelThreads: 10, AutoClose: "merged", AutoCloseDays: 7, PRFollowup: true, PRPollSeconds: 120, CompleteTasks: "merged", FastForwardCheckout: true, Merge: "coordinator", Guard: true, Active: true, ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30}) {
+	if s, _ := c.Safety("demo"); !reflect.DeepEqual(s, Safety{StartThreads: "auto", Yolo: true, CoordinatorApproves: true, ParallelThreads: 10, AutoClose: "merged", AutoCloseDays: 7, PRFollowup: true, PRPollSeconds: 120, CompleteTasks: "merged", FastForwardCheckout: true, SandboxEscapes: true, Merge: "coordinator", Guard: true, Active: true, ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30}) {
 		t.Fatalf("demo %+v", s)
 	}
 	if s, _ := c.Safety("other"); !reflect.DeepEqual(s, Safety{StartThreads: "propose", ParallelThreads: 10, AutoClose: "off", AutoCloseDays: 7, PRPollSeconds: 120, CompleteTasks: "user", CoordinatorRemoteControl: true, AutoClear: true, CoordinatorMerges: true, Merge: "coordinator", Guard: true, Active: true, ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30}) {
@@ -168,9 +169,11 @@ parallel_threads = 4
 auto_close = "off"
 complete_tasks = "merged"
 archive_threads_days = 14
+sandbox_escapes = false
 
 [projects.demo]
 parallel_threads = 2
+sandbox_escapes = true
 complete_tasks = "user"
 archive_journal_days = 90
 
@@ -190,7 +193,7 @@ auto_resolve = true
 		t.Fatalf("a new project %+v, want all projects", s)
 	}
 	want := all
-	want.ParallelThreads, want.CompleteTasks, want.ArchiveJournalDays = 2, "user", 90
+	want.ParallelThreads, want.CompleteTasks, want.ArchiveJournalDays, want.SandboxEscapes = 2, "user", 90, true
 	if s, _ := c.Safety("demo"); !reflect.DeepEqual(s, want) {
 		t.Fatalf("demo %+v", s)
 	}
@@ -198,7 +201,7 @@ auto_resolve = true
 	if s, _ := c.Safety("old"); s.AutoClose != CloseMerged || s.ParallelThreads != 4 {
 		t.Fatalf("old %+v", s)
 	}
-	if got := strings.Join(c.Own("demo"), " "); got != "parallel_threads complete_tasks archive_journal_days" {
+	if got := strings.Join(c.Own("demo"), " "); got != "parallel_threads complete_tasks sandbox_escapes archive_journal_days" {
 		t.Fatalf("Own(demo) = %q", got)
 	}
 	if got := strings.Join(c.Own("old"), " "); got != "auto_close" {

@@ -113,6 +113,9 @@ template = '''
 # Edit(...) allow rules also open the Bash sandbox for writing (a thread's
 # commits go to the main repo's git dir).
 # Never put statusLine here: --settings would replace the user's own.
+# With sandbox_escapes off, a thread's Bash can't leave the sandbox
+# (allowUnsandboxedCommands): a command run outside it would reach the
+# human socket (§3.2), whoever approved it.
 [[launch.files]]
 path = "claude-settings.json"
 template = '''
@@ -124,6 +127,9 @@ template = '''
   "sandbox": {
     {{- if eq .Role "thread"}}
     "enabled": true,
+    {{- if .NoSandboxEscapes}}
+    "allowUnsandboxedCommands": false,
+    {{- end}}
     {{- end}}
     "network": {"allowUnixSockets": [{{json .Socket}}]}
   }
