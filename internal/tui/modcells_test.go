@@ -111,7 +111,7 @@ func TestModCellsDashboard(t *testing.T) {
 		Threads:  []ThreadRow{{Record: &thread.Record{ID: "t-0002", Task: "T4", State: thread.Running}}},
 	}}}
 	var task, thr row
-	for _, r := range buildRows(d, "demo") {
+	for _, r := range buildRows(d, "demo", mod.LayoutSections, nil) {
 		switch {
 		case r.task != nil:
 			task = r
