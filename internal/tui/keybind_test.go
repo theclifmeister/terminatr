@@ -32,7 +32,7 @@ var wantIDs = []string{
 	"side.nth", "side.needs-next", "side.needs-prev", "side.filter", "side.help",
 	"popup.close", "repo.add", "repo.remove", "task.new", "task.show", "task.delegate", "task.accept", "task.send-back",
 	"task.coordinator", "tasks.done", "library.read", "library.delete", "library.delete-thread",
-	"session.attach", "session.dashboard", "session.remote", "prefix.send",
+	"session.attach", "session.clear", "question.answer", "session.dashboard", "session.remote", "prefix.send",
 }
 
 // TestActionIDs: every action has one stable id, unique and well formed,

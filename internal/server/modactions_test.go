@@ -21,13 +21,19 @@ import (
 // grants, and a demo board: T1 started, T2 in review.
 func modActionsSetup(t *testing.T, grants string) *Server {
 	t.Helper()
+	return modActionsSetupWith(t, labManifest, grants)
+}
+
+// modActionsSetupWith is modActionsSetup with lab's manifest.
+func modActionsSetupWith(t *testing.T, manifest, grants string) *Server {
+	t.Helper()
 	tmHome := t.TempDir()
 	t.Setenv("TERMINATR_HOME", tmHome)
 	dir := filepath.Join(tmHome, "mods", "lab")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	for name, text := range map[string]string{"mod.toml": labManifest, "main.js": ""} {
+	for name, text := range map[string]string{"mod.toml": manifest, "main.js": ""} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o600); err != nil {
 			t.Fatal(err)
 		}

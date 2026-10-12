@@ -245,6 +245,14 @@ type Source interface {
 	// projects, project_read), asked before the console runs one; in
 	// reach, it gives the press's token.
 	ModActionCheck(mod, action string, target map[string]string) (token string, err error)
+	// ClearSession clears session id's conversation (session.clear), on
+	// the human's confirmed press of a mod's session.clear binding.
+	ClearSession(id string) error
+	// AnswerQuestion answers question index of the menu open on session
+	// id with option, its label, on the human's confirmed press of a
+	// mod's question.answer binding; refused unless that question still
+	// asks question, unanswered (session.answer).
+	AnswerQuestion(id string, index int, question, option string) error
 	// ModAct enables, disables or removes installed mod id (verb
 	// "enable", "disable", "remove"), on the human's answer in the Mods
 	// tab (mods design §9). Enabling grants every permission the mod
@@ -736,6 +744,14 @@ func (s *ServerSource) ModActionCheck(mod, action string, target map[string]stri
 	var res proto.ModActionCheckResult
 	err := s.call(proto.MethodModActionCheck, proto.ModActionParams{Mod: mod, Action: action, Target: target}, &res)
 	return res.Token, err
+}
+
+func (s *ServerSource) ClearSession(id string) error {
+	return s.call(proto.MethodSessionClear, proto.SessionIDParams{ID: id}, nil)
+}
+
+func (s *ServerSource) AnswerQuestion(id string, index int, question, option string) error {
+	return s.call(proto.MethodSessionAnswer, proto.SessionAnswerParams{ID: id, Index: index, Answer: option, Question: question}, nil)
 }
 
 func (s *ServerSource) OpenQuestions(slug string) (proto.QuestionsOpenResult, error) {

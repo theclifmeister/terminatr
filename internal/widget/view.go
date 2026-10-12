@@ -187,12 +187,23 @@ func bindSig(w *Widget, r *Row) string {
 	b.WriteByte(0)
 	for _, a := range r.Actions {
 		t := ActionTarget(a)
-		for _, s := range []string{a.ID, t.Project, t.Task, t.Thread, t.Session} {
+		for _, s := range []string{a.ID, t.Project, t.Task, t.Thread, t.Session, t.Question, t.Option} {
 			b.WriteString(s)
 			b.WriteByte(0)
 		}
 	}
 	return b.String()
+}
+
+// BoundActions are every action w's rows bind, w's children's too.
+func BoundActions(w *Widget) []Action {
+	var out []Action
+	walk(w, func(x *Widget) {
+		for _, r := range x.Rows {
+			out = append(out, r.Actions...)
+		}
+	})
+	return out
 }
 
 func walk(w *Widget, f func(*Widget)) {

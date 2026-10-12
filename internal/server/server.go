@@ -751,7 +751,10 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 		if _, perr := s.session(p.ID); perr != nil {
 			return nil, perr
 		}
-		res, perr := s.asks.answer(p.ID, p.Index, p.Answer)
+		res, perr := s.asks.answer(p.ID, p.Index, p.Answer, p.Question)
+		if perr == nil && p.Question != "" {
+			s.journalAnswer(p, s.callerOf(peerPID))
+		}
 		s.watch.wake()
 		s.modEv.wake()
 		return res, perr
@@ -761,6 +764,12 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 			return nil, err
 		}
 		return s.modActionDone(p, peerPID)
+	case proto.MethodSessionClear:
+		var p proto.SessionIDParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.clearSession(p.ID, s.callerOf(peerPID))
 	case proto.MethodModActionCheck:
 		var p proto.ModActionParams
 		if err := decodeParams(req.Params, &p); err != nil {

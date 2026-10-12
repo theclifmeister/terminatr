@@ -28,6 +28,8 @@ const (
 	MaxTitle   = 60
 	MaxText    = 240
 	MaxButtons = 3
+	// MaxQuestion bounds a question.answer button's question text.
+	MaxQuestion = 1024
 	// PerMinute is how many notifications one mod may send a minute, and
 	// MaxKept how many of one mod's stay in the tray (older ones go).
 	PerMinute = 6
@@ -43,8 +45,9 @@ var Levels = []string{"info", "warn", "error"}
 
 // Action is the core action a button may name, id: one of the action
 // binding's (modaction, the mods design §11) that takes a project, so it
-// can carry the button's task. Its label, key and confirmation are the
-// core's; a mod can't word a button.
+// can carry the button's task, or question.answer (mod API 1.3), which
+// carries a session's question and one of its options. Its label, key
+// and confirmation are the core's; a mod can't word a button.
 func Action(id string) (modaction.Action, bool) {
 	a, ok := modaction.Lookup(id)
 	if !ok || a.On == modaction.OnSession {
@@ -54,12 +57,24 @@ func Action(id string) (modaction.Action, bool) {
 }
 
 // Button is a notification's button as the consoles get it: the core
-// action, its label (the core's), and the task it is about.
+// action, its label (the core's), and the task it is about; or for
+// question.answer the session, the question and the option.
 type Button struct {
-	ID      string `json:"id"`
-	Label   string `json:"label"`
-	Project string `json:"project"`
-	Task    int    `json:"task"`
+	ID       string `json:"id"`
+	Label    string `json:"label"`
+	Project  string `json:"project,omitempty"`
+	Task     int    `json:"task,omitempty"`
+	Session  string `json:"session,omitempty"`
+	Question string `json:"question,omitempty"`
+	Option   string `json:"option,omitempty"`
+}
+
+// Target is b's target as the action binding takes it.
+func (b Button) Target() map[string]string {
+	if b.Session != "" {
+		return map[string]string{"session": b.Session, "question": b.Question, "option": b.Option}
+	}
+	return map[string]string{"project": b.Project, "task": fmt.Sprintf("T%d", b.Task)}
 }
 
 // Notice is a notification in the tray.
@@ -157,7 +172,19 @@ func (h *Hub) Post(mod string, req Request) (Notice, error) {
 		if !ok {
 			return Notice{}, fmt.Errorf("%q is not an action a notification can name (%s)", b.ID, ActionIDs())
 		}
-		if b.Project == "" || b.Task <= 0 {
+		if a.On == modaction.OnQuestion {
+			t := modaction.Target{Session: b.Session, Question: b.Question, Option: b.Option}
+			if why := modaction.TargetWhy(a, t); why != "" || b.Project != "" || b.Task != 0 {
+				return Notice{}, fmt.Errorf("%s needs a target with a session, a question and an option", b.ID)
+			}
+			if len(b.Session) > 256 || len(b.Question) > MaxQuestion || len(b.Option) > 256 ||
+				strings.IndexFunc(b.Session+b.Question+b.Option, unicode.IsControl) >= 0 {
+				return Notice{}, fmt.Errorf("%s: a session, question or option too long, or with control characters", b.ID)
+			}
+			n.Buttons = append(n.Buttons, Button{ID: a.ID, Label: a.Label, Session: b.Session, Question: b.Question, Option: b.Option})
+			continue
+		}
+		if b.Project == "" || b.Task <= 0 || b.Session != "" {
 			return Notice{}, fmt.Errorf("%s needs a target with a project and a task", b.ID)
 		}
 		n.Buttons = append(n.Buttons, Button{ID: a.ID, Label: a.Label, Project: b.Project, Task: b.Task})
