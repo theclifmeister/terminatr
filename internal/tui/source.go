@@ -165,6 +165,9 @@ type Source interface {
 	// a project's own value, so it follows all projects again. It is
 	// refused when tm runs inside an agent.
 	SetSetting(table, key string, value any) error
+	// ApplyModDefaults applies the defaults an enabled mod suggests for
+	// all projects, on the human's keypress (ApplyModDefaults).
+	ApplyModDefaults(id string) ([]mod.Suggestion, error)
 	// SetRepo adds or removes one of a project's repositories.
 	SetRepo(slug, path string, add bool) error
 	// Templates are the task templates of the mods that run for the
@@ -540,7 +543,7 @@ func (s *ServerSource) SetSetting(table, key string, value any) error {
 		if err != nil {
 			return err
 		}
-		journalAll(s.Caller, key, value)
+		journalAll(s.Caller, key, value, "all projects")
 		return nil
 	}
 	slug, isProject := strings.CutPrefix(table, "projects.")
@@ -566,9 +569,52 @@ func (s *ServerSource) SetSetting(table, key string, value any) error {
 	return nil
 }
 
+// ApplyModDefaults applies the defaults enabled mod id suggests for all
+// projects (mods design §7, Tighten only), on the human's word: each in
+// [defaults], journaled as the human's change, except a key config.toml
+// already sets there (the human's stays) or one already at the value.
+// It returns the suggestions applied.
+func ApplyModDefaults(c caller.Caller, id string) ([]mod.Suggestion, error) {
+	if c.IsAgent() {
+		return nil, errHumanOnly
+	}
+	cfg, err := config.Load()
+	if err != nil && cfg == nil {
+		return nil, err
+	}
+	r, err := mod.Load(cfg)
+	if err != nil {
+		return nil, err
+	}
+	md, ok := r.Get(id)
+	switch {
+	case !ok:
+		return nil, fmt.Errorf("no mod %q is installed", id)
+	case md.State != mod.Enabled || md.Manifest == nil:
+		return nil, fmt.Errorf("%s is off: its defaults apply once it is enabled", id)
+	}
+	var done []mod.Suggestion
+	for _, sg := range md.Manifest.Suggestions(cfg) {
+		if !sg.Applies() {
+			continue
+		}
+		if err := config.SetDefaults(sg.Key, sg.Value); err != nil {
+			return done, fmt.Errorf("%s: %w", sg.Key, err)
+		}
+		journalAll(c, sg.Key, sg.Value, "all projects, suggested by mod:"+id)
+		done = append(done, sg)
+	}
+	return done, nil
+}
+
+func (s *ServerSource) ApplyModDefaults(id string) ([]mod.Suggestion, error) {
+	return ApplyModDefaults(s.Caller, id)
+}
+
 // journalAll records a change of an all-projects setting in the journal
-// of each project that follows it, i.e. doesn't set key itself.
-func journalAll(c caller.Caller, key string, value any) {
+// of each project that follows it, i.e. doesn't set key itself; why
+// follows the value in brackets.
+func journalAll(c caller.Caller, key string, value any, why string) {
 	cfg, err := config.Load()
 	if err != nil {
 		return
@@ -582,7 +628,7 @@ func journalAll(c caller.Caller, key string, value any) {
 			continue
 		}
 		if p, err := project.Open(sum.Slug); err == nil {
-			p.Journal(c, "settings."+key, sum.Slug, fmt.Sprint(value)+" (all projects)")
+			p.Journal(c, "settings."+key, sum.Slug, fmt.Sprint(value)+" ("+why+")")
 		}
 	}
 }

@@ -46,6 +46,11 @@ type Manifest struct {
 	Provides    Provides           `toml:"provides"`
 	Permissions Permissions        `toml:"permissions"`
 	Settings    map[string]Setting `toml:"settings"`
+	// Defaults are values the mod suggests for all projects' non-safety
+	// settings (DefaultKeys), as config.toml's [defaults] names them
+	// (mods design §7, Tighten only): nothing changes until the human
+	// applies them, and a key config.toml sets stays the human's.
+	Defaults map[string]any `toml:"defaults"`
 }
 
 // Provides is what tm loads from the mod, any mix of tiers. Paths are
@@ -125,6 +130,13 @@ const (
 	MaxGuardPatterns   = 32
 	MaxGuardMessageLen = 400
 )
+
+// DefaultKeys are the all-projects settings a mod may suggest a value
+// for ([defaults] in mod.toml): how threads close, PRs are followed and
+// the board is kept. Never a safety setting (SafetyKeys), and never
+// which agent or model runs or who reaches the coordinator remotely.
+var DefaultKeys = []string{"auto_close", "auto_close_days", "pr_followup", "pr_poll_seconds", "auto_clear", "fast_forward_checkout",
+	"archive_tasks_days", "archive_threads_days", "archive_inbox_days", "archive_journal_days"}
 
 // SafetyKeys are config.toml's safety settings (mods design §7, The
 // rule): only a human call changes them, so a manifest that names one
@@ -756,7 +768,60 @@ func (m *Manifest) check(dir string) error {
 			bad("%s: default %v", at, err)
 		}
 	}
+	for _, k := range sortedKeys(m.Defaults) {
+		at := "defaults." + k
+		switch {
+		case slices.Contains(SafetyKeys, k):
+			// loosens says why.
+		case !slices.Contains(DefaultKeys, k):
+			bad("%s: a mod may suggest only %s", at, strings.Join(DefaultKeys, ", "))
+		default:
+			if err := config.CheckSetting(k, settingValue(m.Defaults[k])); err != nil {
+				bad("%s: %v", at, err)
+			}
+		}
+	}
 	return errors.Join(errs...)
+}
+
+// settingValue is a value TOML decoded as config's setters take it: an
+// int for an integer.
+func settingValue(v any) any {
+	if n, ok := v.(int64); ok {
+		return int(n)
+	}
+	return v
+}
+
+// Suggestion is a default a mod suggests for all projects, beside what
+// they follow now.
+type Suggestion struct {
+	Key string
+	// Value is the mod's; Now is all projects' value today, config.toml's
+	// [defaults] or tm's own.
+	Value, Now any
+	// Yours: config.toml's [defaults] sets it, so it stays as it is.
+	Yours bool
+}
+
+// Applies says whether applying the suggestion changes config.toml: the
+// human hasn't set the key and the value differs.
+func (s Suggestion) Applies() bool { return !s.Yours && fmt.Sprint(s.Value) != fmt.Sprint(s.Now) }
+
+// Suggestions are the defaults m suggests (DefaultKeys order), each
+// beside c's all-projects value; a nil c is tm's own defaults.
+func (m *Manifest) Suggestions(c *config.Config) []Suggestion {
+	now, _ := c.AllProjects()
+	yours := c.OwnDefaults()
+	var out []Suggestion
+	for _, k := range DefaultKeys {
+		v, ok := m.Defaults[k]
+		if !ok {
+			continue
+		}
+		out = append(out, Suggestion{Key: k, Value: settingValue(v), Now: now.Value(k), Yours: slices.Contains(yours, k)})
+	}
+	return out
 }
 
 // inside reports why rel, named at in the manifest, isn't a file (or a

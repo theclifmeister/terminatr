@@ -14,6 +14,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/tui"
 )
 
 const modUsage = `usage: tm mod list [--outdated] [--json]
@@ -28,6 +29,7 @@ const modUsage = `usage: tm mod list [--outdated] [--json]
        tm mod test [<dir>…] [--json]
        tm mod logs <id> [--follow|-f] [--lines|-n N]
        tm mod run <id> <command> [--project <slug>]
+       tm mod defaults <id> [--apply] [--yes]
        tm mod examples [--json]
 
 User mods (docs/SPEC.md §5.3), installed in ~/.terminatr/mods. install
@@ -39,7 +41,11 @@ one). enable grants what it asks for, after the same question; with
 off). update fetches each mod's source again and asks again only for new
 permissions or changed rules. run runs one of an enabled mod's commands
 (its [provides].commands), as its key or ≡ menu entry on the dashboard
-does, in the project given, if any. remove keeps the mod's data 30 days unless
+does, in the project given, if any. defaults shows the values an
+enabled mod suggests for all projects' non-safety settings beside what
+they follow now; --apply writes them to config.toml's [defaults] as
+your change, after a y (--yes without a terminal), leaving each one
+[defaults] already sets. remove keeps the mod's data 30 days unless
 --purge. validate checks mod folders (the installed mods when none is
 named) and exits 1 if any is invalid.
 
@@ -69,7 +75,7 @@ func runMod(e *Env, args []string) error {
 		return usagef("%s", modUsage)
 	}
 	f := newFlags()
-	asJSON, outdated, yes, purge := f.Bool("json"), f.Bool("outdated"), f.Bool("yes"), f.Bool("purge")
+	asJSON, outdated, yes, purge, apply := f.Bool("json"), f.Bool("outdated"), f.Bool("yes"), f.Bool("purge"), f.Bool("apply")
 	slug := f.String("project")
 	kind, dir := f.String("kind"), f.String("dir")
 	follow, followF := f.Bool("follow"), f.Bool("f")
@@ -83,13 +89,14 @@ func runMod(e *Env, args []string) error {
 		"remove": {"purge", "yes"}, "update": {"yes"}, "validate": {"json"},
 		"new": {"kind", "dir"}, "dev": {"yes"}, "test": {"json"}, "logs": {"follow", "f", "lines", "n"},
 		"run":      {"project"},
+		"defaults": {"apply", "yes"},
 		"examples": {"json"},
 	}
 	ok, known := allowed[args[0]]
 	if !known {
 		return usagef("unknown subcommand %q\n%s", args[0], modUsage)
 	}
-	for _, n := range []string{"json", "outdated", "yes", "purge", "project", "kind", "dir", "follow", "f", "lines", "n"} {
+	for _, n := range []string{"json", "outdated", "yes", "purge", "apply", "project", "kind", "dir", "follow", "f", "lines", "n"} {
 		if f.IsSet(n) && !slices.Contains(ok, n) {
 			return usagef("tm mod %s takes no --%s\n%s", args[0], n, modUsage)
 		}
@@ -172,6 +179,12 @@ func runMod(e *Env, args []string) error {
 			return usagef("%s", modUsage)
 		}
 		return e.modRun(pos[0], pos[1], *slug)
+	case "defaults":
+		id, err := one()
+		if err != nil {
+			return err
+		}
+		return e.modDefaults(id, *apply, *yes)
 	case "remove":
 		id, err := one()
 		if err != nil {
@@ -528,6 +541,68 @@ func (e *Env) modEnable(id, slug string, yes bool) error {
 	}
 	if m, ok = r.Get(id); ok {
 		fmt.Fprintf(e.Stdout, "%s enabled: %s\n", id, m.Status())
+	}
+	return nil
+}
+
+// modDefaults is tm mod defaults: the defaults mod id suggests for all
+// projects (mods design §7, Tighten only), each beside what they follow
+// now, applied with apply as the human's change after a question.
+func (e *Env) modDefaults(id string, apply, yes bool) error {
+	c, err := config.Load()
+	if err != nil && c == nil {
+		return err
+	}
+	r, err := mod.Load(c)
+	if err != nil {
+		return err
+	}
+	m, ok := r.Get(id)
+	switch {
+	case !ok:
+		return &project.Error{Code: "refused", Msg: fmt.Sprintf("no mod %q is installed", id)}
+	case m.Manifest == nil:
+		return &project.Error{Code: "invalid-mod", Msg: fmt.Sprintf("%s: %s", id, m.Reason())}
+	case len(m.Manifest.Defaults) == 0:
+		fmt.Fprintf(e.Stdout, "%s suggests no defaults\n", id)
+		return nil
+	}
+	sgs := m.Manifest.Suggestions(c)
+	fmt.Fprintf(e.Stdout, "%s suggests for all projects (a project's own settings still win):\n", id)
+	tw := tabwriter.NewWriter(e.Stdout, 0, 0, 2, ' ', 0)
+	for _, sg := range sgs {
+		now, want := mod.SettingWords(sg.Now), mod.SettingWords(sg.Value)
+		switch {
+		case sg.Yours:
+			fmt.Fprintf(tw, "  %s\t%s\tyours in [defaults], stays (it suggests %s)\n", sg.Key, now, want)
+		case !sg.Applies():
+			fmt.Fprintf(tw, "  %s\t%s\talready\n", sg.Key, now)
+		default:
+			fmt.Fprintf(tw, "  %s\t%s → %s\n", sg.Key, now, want)
+		}
+	}
+	tw.Flush()
+	if !slices.ContainsFunc(sgs, mod.Suggestion.Applies) {
+		fmt.Fprintln(e.Stdout, "Nothing to apply.")
+		return nil
+	}
+	if m.State != mod.Enabled {
+		fmt.Fprintf(e.Stdout, "It is off: tm mod enable %s, then tm mod defaults %s --apply.\n", id, id)
+		return nil
+	}
+	if !apply {
+		fmt.Fprintf(e.Stdout, "tm mod defaults %s --apply writes them to config.toml's [defaults], as your change.\n", id)
+		return nil
+	}
+	if err := e.confirm(yes, "tm mod defaults "+id+" --apply", "Apply them to all projects?"); err != nil {
+		return err
+	}
+	done, err := tui.ApplyModDefaults(e.Caller, id)
+	for _, sg := range done {
+		fmt.Fprintf(e.Stdout, "all projects: %s = %s\n", sg.Key, mod.SettingWords(sg.Value))
+	}
+	if err != nil {
+		return modErr(err)
 	}
 	return nil
 }
