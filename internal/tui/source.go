@@ -235,11 +235,13 @@ type Source interface {
 	LibraryRead(slug, id, name string, max int64) (data []byte, truncated bool, err error)
 	LibraryRemove(slug, id, name string) (int, error)
 	// ModActionDone tells the server a human ran (ok) or was refused an
-	// action mod's row or button bound, for the mod's action.done.
-	ModActionDone(mod, action string, target map[string]string, ok bool) error
+	// action mod's row or button bound, for the mod's action.done, with
+	// the press token ModActionCheck gave for that press.
+	ModActionDone(mod, action string, target map[string]string, ok bool, token string) error
 	// ModActionCheck refuses a binding outside its mod's reach (its
-	// projects, project_read), asked before the console runs one.
-	ModActionCheck(mod, action string, target map[string]string) error
+	// projects, project_read), asked before the console runs one; in
+	// reach, it gives the press's token.
+	ModActionCheck(mod, action string, target map[string]string) (token string, err error)
 	// ModAct enables, disables or removes installed mod id (verb
 	// "enable", "disable", "remove"), on the human's answer in the Mods
 	// tab (mods design §9). Enabling grants every permission the mod
@@ -680,12 +682,14 @@ func (s *ServerSource) Ask(slug string, id int, kind, note string) (bool, error)
 	return p.AskDelegate(s.Caller, t.Ref())
 }
 
-func (s *ServerSource) ModActionDone(mod, action string, target map[string]string, ok bool) error {
-	return s.call(proto.MethodModActionDone, proto.ModActionDoneParams{ModActionParams: proto.ModActionParams{Mod: mod, Action: action, Target: target}, OK: ok}, nil)
+func (s *ServerSource) ModActionDone(mod, action string, target map[string]string, ok bool, token string) error {
+	return s.call(proto.MethodModActionDone, proto.ModActionDoneParams{ModActionParams: proto.ModActionParams{Mod: mod, Action: action, Target: target}, OK: ok, Token: token}, nil)
 }
 
-func (s *ServerSource) ModActionCheck(mod, action string, target map[string]string) error {
-	return s.call(proto.MethodModActionCheck, proto.ModActionParams{Mod: mod, Action: action, Target: target}, nil)
+func (s *ServerSource) ModActionCheck(mod, action string, target map[string]string) (string, error) {
+	var res proto.ModActionCheckResult
+	err := s.call(proto.MethodModActionCheck, proto.ModActionParams{Mod: mod, Action: action, Target: target}, &res)
+	return res.Token, err
 }
 
 func (s *ServerSource) OpenQuestions(slug string) (proto.QuestionsOpenResult, error) {
