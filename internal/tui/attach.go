@@ -1740,7 +1740,9 @@ func (c *client) renderLoop(out io.Writer) Result {
 		}
 		vis := c.shown()
 		held := false
+		pal := th().Pane // the theme's pane palette, for this scheme
 		for _, p := range vis {
+			p.r.SetPalette(pal)
 			if p.held && time.Since(p.heldAt) > maxHold {
 				p.held = false // the program never ended its update; draw anyway
 			}

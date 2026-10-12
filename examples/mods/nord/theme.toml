@@ -4,6 +4,13 @@
 # truecolor gets and the second what one with it gets. A role left out
 # is the built-in one (default-theme's), so a theme can set only a few.
 # The console picks [dark] or [light] by the terminal's background.
+#
+# [dark.pane] and [light.pane] (mod API 1.6) colour the panes: the
+# programs' default foreground and background and their 16 ANSI colours
+# (black red green yellow blue magenta cyan white, then the bright ones),
+# each #rrggbb, on a terminal with truecolor. Every agent and shell
+# follows; a program's own truecolor stays as it drew it. Leave the
+# table out and the panes keep your terminal's own colours.
 
 [dark]
 head   = { fg = ["brightwhite", "#eceff4"], bold = true }
@@ -18,6 +25,14 @@ good   = { fg = ["green", "#a3be8c"] }
 info   = { fg = ["blue", "#81a1c1"] }
 plain  = { fg = ["white", "#d8dee9"] }
 
+[dark.pane]
+fg = "#d8dee9"
+bg = "#2e3440"
+palette = [
+  "#3b4252", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#88c0d0", "#e5e9f0",
+  "#4c566a", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#8fbcbb", "#eceff4",
+]
+
 [light]
 head   = { fg = ["black", "#2e3440"], bold = true }
 sel    = { fg = ["brightwhite", "#eceff4"], bg = ["blue", "#5e81ac"] }
@@ -30,3 +45,12 @@ warn   = { fg = ["yellow", "#d08770"] }
 good   = { fg = ["green", "#6f8f57"] }
 info   = { fg = ["blue", "#81a1c1"] }
 plain  = { fg = ["black", "#3b4252"] }
+
+# Nord's colours darkened where they'd fade on a light background.
+[light.pane]
+fg = "#2e3440"
+bg = "#eceff4"
+palette = [
+  "#3b4252", "#bf616a", "#6f8f57", "#d08770", "#5e81ac", "#b48ead", "#4f8f9c", "#d8dee9",
+  "#4c566a", "#bf616a", "#6f8f57", "#d08770", "#5e81ac", "#b48ead", "#4f8f9c", "#e5e9f0",
+]

@@ -92,6 +92,9 @@ func Fetch(src Source) (*Staged, error) {
 	if err == nil {
 		err = Mod{ID: st.Manifest.ID, Dir: st.Dir, Manifest: st.Manifest}.checkLayoutAPI()
 	}
+	if err == nil {
+		err = Mod{ID: st.Manifest.ID, Dir: st.Dir, Manifest: st.Manifest}.checkThemeAPI()
+	}
 	if err != nil {
 		return st, err
 	}

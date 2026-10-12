@@ -12,16 +12,18 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/mod"
 )
 
 // nord is the design's example A (mods design §10): a theme and an icon
 // set.
 var nord = map[string]string{
-	"mod.toml": "id = \"nord\"\nname = \"Nord\"\nversion = \"0.4.0\"\napi = \"1.0\"\n[provides]\ntheme = \"theme.toml\"\nicons = \"icons.toml\"\n",
+	"mod.toml": "id = \"nord\"\nname = \"Nord\"\nversion = \"0.4.0\"\napi = \"1.6\"\n[provides]\ntheme = \"theme.toml\"\nicons = \"icons.toml\"\n",
 	"theme.toml": `[dark]
 accent = { fg = ["cyan", "#88c0d0"] }
 bad    = { fg = ["red", "#bf616a"], bold = true }
+pane   = { bg = "#2e3440" }
 [light]
 accent = { fg = ["cyan", "#5e81ac"] }
 `,
@@ -68,9 +70,15 @@ func TestThemeMod(t *testing.T) {
 	if !strings.Contains(th().Accent.Render("x"), "136;192;208") {
 		t.Fatalf("accent isn't nord's: %q", th().Accent.Render("x"))
 	}
+	if p := th().Pane; p == nil || p.Bg == nil || *p.Bg != (emu.RGB{R: 0x2e, G: 0x34, B: 0x40}) || p.Fg != nil {
+		t.Fatalf("nord dark pane palette: %+v", p)
+	}
 	setScheme(false)
 	if th().Bad.GetBold() || !strings.Contains(th().Accent.Render("x"), "94;129;172") {
 		t.Fatalf("nord light: %q", th().Accent.Render("x"))
+	}
+	if th().Pane != nil {
+		t.Fatalf("nord light has no pane table, yet %+v", th().Pane)
 	}
 
 	installMod(t, "nord", map[string]string{"theme.toml": "[dark]\nbad = { fg = [\"#zzz\"] }\n"})
@@ -290,7 +298,7 @@ func TestSafeModeLook(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if themed() || themeSetting() != ThemeDefault || ic().name == "nord" || binds.list.canon("L") == "[" {
+	if themed() || themeSetting() != ThemeDefault || ic().name == "nord" || binds.list.canon("L") == "[" || th().Pane != nil {
 		t.Fatalf("user data loaded: %v %s %s", themed(), themeSetting(), ic().name)
 	}
 	if l, lerr := configLayout(); layoutColumns(l) != nil || lerr != nil || layoutValue() != ThemeDefault {
