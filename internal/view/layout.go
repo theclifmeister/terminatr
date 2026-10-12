@@ -10,20 +10,22 @@ type Rect struct{ X, Y, W, H int }
 
 // Geometry is a view laid out in a window.
 type Geometry struct {
-	// SideW is the projects sidebar's width, 0 for none; InfoW the info
-	// panel's on the right, 0 for none; Status is the status bar's height
-	// with the empty row above it (0 or 2). Area is the pane's: the
-	// window less those.
-	SideW, InfoW, Status int
-	Area                 Rect
+	// SideW is the projects sidebar's width, 0 for none, and SideX its
+	// first column: 0, or the window's last SideW on the right; InfoW the
+	// info panel's right of the pane, 0 for none; Status is the status
+	// bar's height with the empty row above it (0 or 2). Area is the
+	// pane's: the window less those. On the right the order is the pane,
+	// the info panel, the sidebar.
+	SideW, SideX, InfoW, Status int
+	Area                        Rect
 	// Pane is the session shown in Area, "" for none.
 	Pane string
 }
 
 // Chrome is the sidebar's width and the height of the status bar with
 // the empty row between it and the pane, of v in a window cols wide.
-// Every view has the sidebar; a bare one has the status bar only when
-// asked for.
+// Every view has the sidebar, 0 wide when hidden; a bare one has the
+// status bar only when asked for.
 func (v *View) Chrome(cols int) (sideW, status int) {
 	status = 2
 	if v.Bare && !v.StatusBar {
@@ -39,6 +41,10 @@ func (v *View) Lay(cols, rows int) Geometry {
 	if v.Panel && v.Mode == ModeLayout {
 		infoW = v.Info.Cols(cols, sideW)
 	}
-	return Geometry{SideW: sideW, InfoW: infoW, Status: status, Pane: v.Shown(),
+	g := Geometry{SideW: sideW, InfoW: infoW, Status: status, Pane: v.Shown(),
 		Area: Rect{sideW, 0, max(cols-sideW-infoW, 1), max(rows-status, 1)}}
+	if v.Sidebar.Right() {
+		g.SideX, g.Area.X = max(cols-sideW, 0), 0
+	}
+	return g
 }

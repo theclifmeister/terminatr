@@ -81,7 +81,7 @@ func TestDashboardSidebar(t *testing.T) {
 		t.Fatalf("coordinator click opened %v, attach %q", src.opened, m.result.Attach)
 	}
 
-	// Dragging the border resizes and saves; } widens; b slims.
+	// Dragging the border resizes and saves; } widens; b hides.
 	m.Update(tea.MouseClickMsg{X: sideDefault - 1, Y: 5, Button: tea.MouseLeft})
 	m.Update(tea.MouseMotionMsg{X: 29, Y: 5, Button: tea.MouseLeft})
 	m.Update(tea.MouseReleaseMsg{X: 29, Y: 5, Button: tea.MouseLeft})
@@ -92,9 +92,14 @@ func TestDashboardSidebar(t *testing.T) {
 	if LoadLayout(ui).Sidebar.Width != 32 {
 		t.Fatalf("}: ui.json %+v", LoadLayout(ui))
 	}
+	// b cycles: hidden, the slim strip, full.
+	press(m, "b")
+	if m.sideW() != 0 || !LoadLayout(ui).Sidebar.Hidden || m.w != 120 {
+		t.Fatalf("b: sidebar %d, ui.json %+v", m.sideW(), LoadLayout(ui))
+	}
 	press(m, "b")
 	if m.sideW() != sideSlim || !LoadLayout(ui).Sidebar.Slim {
-		t.Fatalf("b: sidebar %d, ui.json %+v", m.sideW(), LoadLayout(ui))
+		t.Fatalf("b b: sidebar %d, ui.json %+v", m.sideW(), LoadLayout(ui))
 	}
 	press(m, "b")
 

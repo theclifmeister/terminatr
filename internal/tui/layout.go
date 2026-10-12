@@ -35,12 +35,11 @@ type Layout struct {
 	// DetailsRows is the bottom panel's share of the body's rows, 0 for
 	// the default.
 	DetailsRows float64
-	// Sidebar is the projects sidebar's width, on the dashboard and while
-	// attached alike.
+	// Sidebar is the projects sidebar's layout, on the dashboard and
+	// while attached alike: its width, mode and side (the view's).
+	// ui.json keeps its width and mode; the side and a width given as a
+	// share come from the layout mod.
 	Sidebar SidebarLayout
-	// SideMode is the sidebar's mode: full, slim or hidden; "" is what
-	// Sidebar.Slim says (ui.json writes only hidden).
-	SideMode string
 	// Info is the info panel's beside a thread's pane, while attached.
 	Info view.Info
 	// Tree is what the sidebar's tree folds: new views start with it.
@@ -53,8 +52,6 @@ type Layout struct {
 	set       layoutSet // the parts the layout (or a tweak under it) sets
 	detCells  int       // the right panel's width in cells, 0 for Split's
 	rowCells  int       // the bottom panel's height in rows, 0 for DetailsRows'
-	sideShare float64   // the sidebar's width as a share of the window, 0 for Sidebar.Width
-	side      string    // sidebar.side: left, right
 	header    string    // header.style: shown, hidden
 	footer    string    // footer.style: shown, compact, hidden
 	statusBar string    // status_bar.style: shown, compact
@@ -65,7 +62,7 @@ type Layout struct {
 // layoutSet says which of the console's parts the layout in use sets:
 // a change to one is kept under its id (tweak).
 type layoutSet struct {
-	place, split, rows, width, mode bool
+	place, split, rows, width, mode, side bool
 }
 
 // LayoutTweak is the console's own change under one layout mod
@@ -102,26 +99,45 @@ type layoutFile struct {
 	Layouts      map[string]LayoutTweak `json:"layouts,omitempty"`
 }
 
-// sidebarFile is ui.json's sidebar: the view's, and the mode (mode wins
-// over slim).
+// sidebarFile is ui.json's sidebar: its width, slim, and the mode (mode
+// wins over slim; a hidden one is slim too, for an older tm).
 type sidebarFile struct {
-	SidebarLayout
-	Mode string `json:"mode,omitempty"`
+	Width int    `json:"width"`
+	Slim  bool   `json:"slim"`
+	Mode  string `json:"mode,omitempty"`
+}
+
+// fileSidebar is s as ui.json writes it.
+func fileSidebar(s SidebarLayout) sidebarFile {
+	f := sidebarFile{Width: s.Width, Slim: s.Slim || s.Hidden}
+	if s.Hidden {
+		f.Mode = modeHidden
+	}
+	return f
 }
 
 func (l Layout) MarshalJSON() ([]byte, error) {
 	return json.Marshal(layoutFile{Details: l.Details, DetailsPlace: l.DetailsPlace, Split: l.Split, DetailsRows: l.DetailsRows,
-		Sidebar: sidebarFile{l.Sidebar, l.SideMode}, Info: l.Info, Tree: l.Tree, Layouts: l.Layouts})
+		Sidebar: fileSidebar(l.Sidebar), Info: l.Info, Tree: l.Tree, Layouts: l.Layouts})
 }
 
 func (l *Layout) UnmarshalJSON(b []byte) error {
 	f := layoutFile{Details: l.Details, DetailsPlace: l.DetailsPlace, Split: l.Split, DetailsRows: l.DetailsRows,
-		Sidebar: sidebarFile{l.Sidebar, l.SideMode}, Info: l.Info, Tree: l.Tree, Layouts: l.Layouts}
+		Sidebar: fileSidebar(l.Sidebar), Info: l.Info, Tree: l.Tree, Layouts: l.Layouts}
 	if err := json.Unmarshal(b, &f); err != nil {
 		return err
 	}
+	side := SidebarLayout{Width: f.Sidebar.Width, Slim: f.Sidebar.Slim}
+	switch f.Sidebar.Mode {
+	case modeHidden:
+		side.Hidden = true
+	case modeSlim:
+		side.Slim = true
+	case modeFull:
+		side.Slim = false
+	}
 	*l = Layout{Details: f.Details, DetailsPlace: f.DetailsPlace, Split: f.Split, DetailsRows: f.DetailsRows,
-		Sidebar: f.Sidebar.SidebarLayout, SideMode: f.Sidebar.Mode, Info: f.Info, Tree: f.Tree, Layouts: f.Layouts}
+		Sidebar: side, Info: f.Info, Tree: f.Tree, Layouts: f.Layouts}
 	return nil
 }
 
@@ -164,9 +180,6 @@ func LoadLayout(path string) Layout {
 	l.DetailsRows = clampRows(l.DetailsRows)
 	if !slices.Contains([]string{placeRight, placeBottom, placeOff}, l.DetailsPlace) {
 		l.DetailsPlace = ""
-	}
-	if !slices.Contains([]string{modeFull, modeSlim, modeHidden}, l.SideMode) {
-		l.SideMode = ""
 	}
 	l.Sidebar = l.Sidebar.Clamp()
 	l.Info = l.Info.Clamp()
@@ -237,11 +250,10 @@ func (l Layout) place() string {
 	return placeRight
 }
 
-// mode is the sidebar's mode: hidden as SideMode says, else full or
-// slim as Sidebar.Slim does.
+// mode is the sidebar's mode: hidden, slim or full.
 func (l Layout) mode() string {
 	switch {
-	case l.SideMode == modeHidden && l.Sidebar.Slim:
+	case l.Sidebar.Hidden:
 		return modeHidden
 	case l.Sidebar.Slim:
 		return modeSlim
@@ -298,34 +310,34 @@ func effectiveLayout(spec mod.Layout, ui Layout, id string) Layout {
 		l.DetailsRows, l.rowCells, l.set.rows = t.DetailsRows, 0, true
 	}
 
+	// The sidebar's width: cells, or a share of the window the view's
+	// consoles each make cells of.
+	l.Sidebar.Share, l.Sidebar.Side, l.Sidebar.Hidden = 0, "", false
 	if w := spec.Width; !w.IsZero() {
 		l.set.width = true
 		if w.Cells != 0 {
 			l.Sidebar.Width = w.Cells
 		}
-		l.sideShare = w.Share
+		l.Sidebar.Share = w.Share
 	}
 	if ts.Width != 0 {
-		l.Sidebar.Width, l.sideShare, l.set.width = ts.Width, 0, true
+		l.Sidebar.Width, l.Sidebar.Share, l.set.width = ts.Width, 0, true
 	}
-	l.Sidebar = l.Sidebar.Clamp()
 
-	mode := ui.SideMode
-	if mode == "" {
-		mode = ui.mode()
-	}
+	mode := ui.mode()
 	if spec.Mode != "" {
 		mode, l.set.mode = spec.Mode, true
 	}
 	if ts.Mode != "" {
 		mode, l.set.mode = ts.Mode, true
 	}
-	// Until the view has a hidden sidebar, hidden shows the slim strip:
-	// it never disappears.
-	l.Sidebar.Slim, l.SideMode = mode != modeFull, mode
+	l.Sidebar.Slim, l.Sidebar.Hidden = mode == modeSlim, mode == modeHidden
 
 	// What only a layout mod sets.
-	l.side = cmp.Or(spec.Side, "left")
+	if spec.Side != "" {
+		l.Sidebar.Side, l.set.side = spec.Side, true
+	}
+	l.Sidebar = l.Sidebar.Clamp()
 	l.header = cmp.Or(spec.Header, "shown")
 	l.footer = cmp.Or(spec.Footer, "shown")
 	l.statusBar = cmp.Or(spec.StatusBar, "shown")
@@ -398,7 +410,7 @@ func tweak(ui Layout, was, now Layout, id string, safe bool) Layout {
 			ui.DetailsRows = now.DetailsRows
 		}
 	}
-	if now.Sidebar.Width != was.Sidebar.Width {
+	if now.Sidebar.Width != was.Sidebar.Width || now.Sidebar.Share != was.Sidebar.Share {
 		if at(was.set.width) {
 			ts.Width = now.Sidebar.Width
 		} else {
@@ -409,8 +421,7 @@ func tweak(ui Layout, was, now Layout, id string, safe bool) Layout {
 		if at(was.set.mode) {
 			ts.Mode = m
 		} else {
-			ui.Sidebar.Slim = m != modeFull
-			ui.SideMode = map[string]string{modeHidden: modeHidden}[m]
+			ui.Sidebar.Slim, ui.Sidebar.Hidden = m == modeSlim, m == modeHidden
 		}
 	}
 	if !under {
@@ -461,19 +472,19 @@ func (m *dash) setLayout(l Layout) {
 // folds aside (refold saves them).
 func sameLayout(a, b Layout) bool {
 	return a.Details == b.Details && a.DetailsPlace == b.DetailsPlace && a.Split == b.Split && a.detCells == b.detCells &&
-		a.DetailsRows == b.DetailsRows && a.Sidebar == b.Sidebar && a.SideMode == b.SideMode && a.Info == b.Info
+		a.DetailsRows == b.DetailsRows && a.Sidebar == b.Sidebar && a.Info == b.Info
 }
 
 // saveLayout writes ui.json: what changed since it was read, under the
 // layout in use where it sets that part (tweak). A failed save only
 // costs the preference, so it shows in the footer and nothing else.
 func (m *dash) saveLayout() {
-	was := effectiveLayout(m.spec, m.ui, m.layoutID).sized(m.winW)
+	was := effectiveLayout(m.spec, m.ui, m.layoutID)
 	m.ui = tweak(m.ui, was, m.layout, m.layoutID, m.safe)
 	// Resolved again, the parts changed are the tweaks'; the view's
 	// sidebar is as shown.
 	l := effectiveLayout(m.spec, m.ui, m.layoutID)
-	l.Sidebar, l.SideMode, l.Info, l.Tree = m.layout.Sidebar, m.layout.SideMode, m.layout.Info, m.layout.Tree
+	l.Sidebar, l.Info, l.Tree = m.layout.Sidebar, m.layout.Info, m.layout.Tree
 	m.layout = l
 	if m.uiFile == "" {
 		return
@@ -483,33 +494,27 @@ func (m *dash) saveLayout() {
 	}
 }
 
-// sized is l with a sidebar width given as a share of the window made
-// cells, in a window w wide.
-func (l Layout) sized(w int) Layout {
-	if l.sideShare != 0 {
-		l.Sidebar.Width = max(int(l.sideShare*float64(w)+0.5), view.SideMin)
-	}
-	return l
-}
-
 // useLayout makes the layout mod spec, the [ui] layout id, this
 // console's. whole (a layout picked, safe mode) takes every part of the
 // sidebar from it and ui.json; else the view's sidebar keeps what the
 // layout doesn't set, as another console left it.
 func (m *dash) useLayout(id string, spec mod.Layout, whole bool) {
 	m.spec, m.layoutID = spec, id
-	l := effectiveLayout(spec, m.ui, id).sized(m.winW)
-	side, mode := l.Sidebar, l.SideMode
+	l := effectiveLayout(spec, m.ui, id)
+	side := l.Sidebar
 	if !whole {
-		side, mode = m.layout.Sidebar, m.layout.SideMode
+		side = m.layout.Sidebar
 		if l.set.width {
-			side.Width = l.Sidebar.Width
+			side.Width, side.Share = l.Sidebar.Width, l.Sidebar.Share
 		}
 		if l.set.mode {
-			side.Slim, mode = l.Sidebar.Slim, l.SideMode
+			side.Slim, side.Hidden = l.Sidebar.Slim, l.Sidebar.Hidden
+		}
+		if l.set.side {
+			side.Side = l.Sidebar.Side
 		}
 	}
-	l.Sidebar, l.SideMode, l.Info, l.Tree = side, mode, m.layout.Info, m.layout.Tree
+	l.Sidebar, l.Info, l.Tree = side, m.layout.Info, m.layout.Tree
 	m.layout = l
 	m.setWidth(m.winW)
 }
@@ -527,10 +532,10 @@ func SaveSidebar(path string, s SidebarLayout) error {
 }
 
 // ConsoleLayout is ui.json at path under this console's layout ([ui]
-// layout), in a window cols wide: the sidebar a new view starts with.
-func ConsoleLayout(path string, cols int) Layout {
+// layout): the sidebar a new view starts with.
+func ConsoleLayout(path string) Layout {
 	spec, id := currentLayout()
-	return effectiveLayout(spec, LoadLayout(path), id).sized(cols)
+	return effectiveLayout(spec, LoadLayout(path), id)
 }
 
 // SaveTree writes what the sidebar's tree folds to path and keeps the

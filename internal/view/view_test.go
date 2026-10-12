@@ -3,6 +3,7 @@ package view
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 )
@@ -185,11 +186,18 @@ func TestSidebar(t *testing.T) {
 	if l, _ = l.Key("{", 120); l.Width != SideDefault {
 		t.Fatalf("{ gave %+v", l)
 	}
-	if l, _ = l.Key("b", 120); !l.Slim || l.Cols(120) != SideSlim {
-		t.Fatalf("b gave %+v", l)
+	// b cycles: full, hidden, slim strip, full.
+	if l, _ = l.Key("b", 120); !l.Hidden || l.Cols(120) != 0 {
+		t.Fatalf("b on full gave %+v", l)
+	}
+	if l, _ = l.Key("b", 120); l.Hidden || !l.Slim || l.Cols(120) != SideSlim {
+		t.Fatalf("b on hidden gave %+v", l)
 	}
 	if l, _ = l.Key("}", 120); l.Slim {
 		t.Fatalf("} kept the slim strip: %+v", l)
+	}
+	if l, _ = (Sidebar{Hidden: true}).Key("{", 120); l.Hidden || l.Cols(120) != SideDefault {
+		t.Fatalf("{ on hidden gave %+v", l)
 	}
 	if _, msg = def.Key("}", 70); !strings.Contains(msg, "too narrow") {
 		t.Fatalf("} in a narrow window: %q", msg)
@@ -227,6 +235,63 @@ func TestSidebar(t *testing.T) {
 	}
 	if l = def.DragTo(150, 200); l.Width != 200-SideRoom {
 		t.Fatalf("drag to 150: %+v", l)
+	}
+
+	// A share is of each window, floored at SideMin; the usual cut and
+	// the strip still apply.
+	share := Sidebar{Share: 0.25}.Clamp()
+	for _, c := range []struct{ w, want int }{{200, 50}, {120, 30}, {80, 20}, {79, SideSlim}, {300, 75}} {
+		if got := share.Cols(c.w); got != c.want {
+			t.Errorf("25%% of %d: %d columns, want %d", c.w, got, c.want)
+		}
+	}
+	if got := (Sidebar{Share: 0.1}).Cols(100); got != SideMin {
+		t.Errorf("10%% of 100: %d, want the minimum", got)
+	}
+	// { } and a drag make it cells.
+	if l, _ = share.Key("}", 200); l.Share != 0 || l.Width != 52 {
+		t.Fatalf("} on a share: %+v", l)
+	}
+	// On the right the border is the first column: a drag to x leaves
+	// w-x columns.
+	right := Sidebar{Side: SideRight}.Clamp()
+	if l = right.DragTo(170, 200); l.Width != 30 || !l.Right() {
+		t.Fatalf("right drag to 170: %+v", l)
+	}
+	if l = right.DragTo(195, 200); !l.Slim {
+		t.Fatalf("right drag to 195: %+v", l)
+	}
+	if l = (Sidebar{Hidden: true}).Clamp(); l.Cols(200) != 0 || l.Full(200) {
+		t.Fatalf("hidden: %d columns", l.Cols(200))
+	}
+	if (Sidebar{Hidden: true, Slim: true}).Clamp().Slim {
+		t.Fatal("hidden and slim: Clamp keeps one")
+	}
+	for _, bad := range []Sidebar{{Side: "top"}, {Share: 0.05}, {Share: 0.9}, {Share: math.NaN()}} {
+		if bad.Valid() == nil {
+			t.Errorf("%+v is valid", bad)
+		}
+	}
+	if (Sidebar{Side: SideRight, Share: 0.22}).Valid() != nil {
+		t.Error("right at 22% refused")
+	}
+}
+
+// TestLaySide: with the sidebar on the right the pane starts at 0, then
+// the info panel, then the sidebar; hidden gives the pane the window.
+func TestLaySide(t *testing.T) {
+	v := &View{Mode: ModeLayout, Focus: "s1", Panel: true, Sidebar: Sidebar{Side: SideRight}.Clamp(), Info: Info{}.Clamp()}
+	g := v.Lay(200, 50)
+	if g.SideW != SideDefault || g.SideX != 200-SideDefault || g.Area.X != 0 || g.Area.W != 200-SideDefault-g.InfoW || g.InfoW == 0 {
+		t.Fatalf("right: %+v", g)
+	}
+	v.Sidebar.Hidden = true
+	if g = v.Lay(200, 50); g.SideW != 0 || g.Area.X != 0 || g.Area.W != 200-g.InfoW {
+		t.Fatalf("hidden: %+v", g)
+	}
+	v.Sidebar = Sidebar{Share: 0.25}.Clamp()
+	if g = v.Lay(200, 50); g.SideW != 50 || g.SideX != 0 || g.Area.X != 50 {
+		t.Fatalf("left 25%%: %+v", g)
 	}
 }
 

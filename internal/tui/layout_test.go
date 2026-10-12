@@ -32,7 +32,7 @@ func TestEffectiveLayout(t *testing.T) {
 	if l.Sidebar.Width != 44 || l.Split != 0.5 || !l.Details || l.place() != placeRight || l.mode() != modeFull || l.set != (layoutSet{}) {
 		t.Fatalf("no layout: %+v", l)
 	}
-	if !slices.Equal(l.sections, mod.LayoutSections) || l.side != "left" || l.header != "shown" || l.footer != "shown" || l.statusBar != "shown" || l.density != "normal" {
+	if !slices.Equal(l.sections, mod.LayoutSections) || l.Sidebar.Right() || l.header != "shown" || l.footer != "shown" || l.statusBar != "shown" || l.density != "normal" {
 		t.Fatalf("built-in parts: %+v", l)
 	}
 
@@ -42,10 +42,10 @@ func TestEffectiveLayout(t *testing.T) {
 	if l.Sidebar.Width != 50 || !l.Sidebar.Slim || l.mode() != modeSlim || l.place() != placeBottom || l.DetailsRows != 0.4 || l.Split != 0.5 {
 		t.Fatalf("cockpit: %+v", l)
 	}
-	if l.side != "right" || l.footer != "compact" || !slices.Equal(l.sections, []string{"needs", "project"}) {
+	if !l.Sidebar.Right() || l.footer != "compact" || !slices.Equal(l.sections, []string{"needs", "project"}) {
 		t.Fatalf("cockpit's own parts: %+v", l)
 	}
-	if want := (layoutSet{place: true, rows: true, width: true, mode: true}); l.set != want {
+	if want := (layoutSet{place: true, rows: true, width: true, mode: true, side: true}); l.set != want {
 		t.Fatalf("set %+v, want %+v", l.set, want)
 	}
 
@@ -65,7 +65,7 @@ func TestEffectiveLayout(t *testing.T) {
 	if l = effectiveLayout(parseSpec(t, "[details]\nsize = 50\n"), ui, "x"); l.detCells != 50 || !l.set.split {
 		t.Fatalf("50 cells: %+v", l)
 	}
-	if l = effectiveLayout(parseSpec(t, "[sidebar]\nwidth = \"25%\"\n"), ui, "x").sized(200); l.Sidebar.Width != 50 {
+	if l = effectiveLayout(parseSpec(t, "[sidebar]\nwidth = \"25%\"\n"), ui, "x"); l.Sidebar.Share != 0.25 || l.Sidebar.Cols(200) != 50 {
 		t.Fatalf("25%% of 200: %+v", l)
 	}
 
@@ -91,8 +91,8 @@ func TestEffectiveLayout(t *testing.T) {
 	if l = effectiveLayout(mod.Layout{}, top, ""); l.place() != placeOff || l.mode() != modeSlim {
 		t.Fatalf("top level: %+v", l)
 	}
-	top.SideMode = modeHidden
-	if l = effectiveLayout(mod.Layout{}, top, ""); l.mode() != modeHidden || !l.Sidebar.Slim {
+	top.Sidebar.Hidden = true
+	if l = effectiveLayout(mod.Layout{}, top, ""); l.mode() != modeHidden || l.Sidebar.Slim || l.Sidebar.Cols(200) != 0 {
 		t.Fatalf("hidden: %+v", l)
 	}
 }
@@ -148,7 +148,7 @@ func TestTweak(t *testing.T) {
 	now = was
 	now.Sidebar.Slim = true
 	ui = tweak(ui, was, now, ThemeDefault, false)
-	if !ui.Sidebar.Slim || ui.SideMode != "" || len(ui.Layouts) != 1 {
+	if !ui.Sidebar.Slim || ui.Sidebar.Hidden || len(ui.Layouts) != 1 {
 		t.Fatalf("b: %+v", ui)
 	}
 
@@ -196,7 +196,7 @@ func TestLayoutFileKeys(t *testing.T) {
 		"details_place": "bottom", "details_rows": 0.9,
 		"layouts": {"cockpit": {"sidebar": {"width": 30, "mode": "bogus"}, "split": 0.1, "seq": 3}}}`), 0o600)
 	l := LoadLayout(path)
-	if l.Sidebar.Width != 40 || !l.Sidebar.Slim || l.SideMode != modeHidden || l.DetailsPlace != placeBottom || l.DetailsRows != maxRows {
+	if l.Sidebar.Width != 40 || l.Sidebar.Slim || !l.Sidebar.Hidden || l.DetailsPlace != placeBottom || l.DetailsRows != maxRows {
 		t.Fatalf("read %+v", l)
 	}
 	if c := l.Layouts["cockpit"]; c.Sidebar.Width != 30 || c.Sidebar.Mode != "" || c.Split != minSplit || c.Seq != 3 {
@@ -205,7 +205,11 @@ func TestLayoutFileKeys(t *testing.T) {
 	if err := SaveLayout(path, l); err != nil {
 		t.Fatal(err)
 	}
-	if again := LoadLayout(path); again.SideMode != modeHidden || again.Layouts["cockpit"].Sidebar.Width != 30 {
+	b, _ = os.ReadFile(path)
+	if !strings.Contains(string(b), `"slim": true`) || !strings.Contains(string(b), `"mode": "hidden"`) {
+		t.Fatalf("hidden is written slim too, for an older tm:\n%s", b)
+	}
+	if again := LoadLayout(path); !again.Sidebar.Hidden || again.Layouts["cockpit"].Sidebar.Width != 30 {
 		t.Fatalf("round trip %+v", again)
 	}
 }

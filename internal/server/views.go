@@ -201,8 +201,8 @@ func (vs *views) subscribe(p proto.ViewSubscribeParams, pid int) (*member, strin
 	if lv == nil {
 		lv = &liveView{v: view.View{Name: name, Own: p.Own, Bare: p.Own && p.Bare, StatusBar: p.StatusBar,
 			Mode: view.ModeDashboard}, members: map[string]*member{}}
-		if p.Sidebar != nil {
-			lv.v.Sidebar = *p.Sidebar
+		if p.Sidebar != nil && p.Sidebar.Valid() == nil {
+			lv.v.Sidebar = p.Sidebar.Clamp()
 		}
 		if p.Info != nil {
 			lv.v.Info = p.Info.Clamp()
@@ -451,6 +451,9 @@ func (vs *views) do(method string, p proto.ViewParams) (view.View, *proto.Error)
 	case proto.MethodViewSidebar:
 		if p.Sidebar == nil {
 			return before, proto.Errorf(proto.ErrBadParams, "no sidebar")
+		}
+		if err := p.Sidebar.Valid(); err != nil {
+			return before, proto.Errorf(proto.ErrBadParams, "%v", err)
 		}
 		v.Sidebar = p.Sidebar.Clamp()
 		layout()
