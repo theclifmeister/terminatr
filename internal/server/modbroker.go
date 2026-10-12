@@ -164,6 +164,14 @@ func (s *Server) modRegistry() *mod.Registry {
 	return mb.reg
 }
 
+// shareModRegistry makes reg, read just now, the broker's registry.
+func (s *Server) shareModRegistry(reg *mod.Registry) {
+	mb := &s.modBr
+	mb.mu.Lock()
+	defer mb.mu.Unlock()
+	mb.reg, mb.at = reg, time.Now()
+}
+
 // modLog appends line to mod id's log, ~/.terminatr/logs/mods/<id>.log,
 // as one write in append mode beside the supervisor's lines; the
 // supervisor rotates the file (modsup.LogMax).
