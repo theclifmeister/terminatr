@@ -8,6 +8,23 @@ import (
 )
 
 // drain is the events queued in s, after its mod.ready, as "name data".
+// drainEvents is every event s has queued, mod.ready aside.
+func drainEvents(t *testing.T, s *Sub) []Event {
+	t.Helper()
+	var out []Event
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		ev, err := s.Next(ctx)
+		cancel()
+		if err != nil {
+			return out
+		}
+		if ev.Name != ModReady {
+			out = append(out, ev)
+		}
+	}
+}
+
 func drain(t *testing.T, s *Sub) []string {
 	t.Helper()
 	var out []string
@@ -128,5 +145,47 @@ func TestTrackerSessions(t *testing.T) {
 	}
 	if got := drain(t, s); fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("events:\n%q\nwant\n%q", got, want)
+	}
+}
+
+// TestTrackerQuestions: session.question once a menu opens on a session
+// after the baseline, when another question replaces it, and once it
+// goes (no question); the same question again publishes nothing.
+func TestTrackerQuestions(t *testing.T) {
+	b := New()
+	s := b.Subscribe("m", Options{Grants: []string{GrantProjectRead}})
+	tr := NewTracker(b, nil)
+	ask := func(q string) *Ask {
+		return &Ask{Question: q, Options: []AskOption{{Label: "Yes"}, {Label: "No"}}}
+	}
+	old := Question{Session: "s-1", Project: "p", Role: "coordinator", Question: ask("Before?")}
+	tr.Questions([]Question{old})
+	if got := drain(t, s); len(got) != 0 {
+		t.Fatalf("baseline %v", got)
+	}
+	a := Question{Session: "s-2", Project: "p", Thread: "t-0001", Role: "thread", Question: ask("Ship it?")}
+	tr.Questions([]Question{old, a})
+	tr.Questions([]Question{old, a})
+	a.Question = ask("Really?")
+	tr.Questions([]Question{old, a})
+	tr.Questions([]Question{old})
+	var got []string
+	for _, e := range drainEvents(t, s) {
+		q := e.Data.(Question)
+		w := "none"
+		if q.Question != nil {
+			w = q.Question.Question
+		}
+		got = append(got, e.Name+" "+q.Session+" "+w)
+	}
+	want := []string{"session.question s-2 Ship it?", "session.question s-2 Really?", "session.question s-2 none"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("events %q, want %q", got, want)
+	}
+	// Without project_read, none of it.
+	n := b.Subscribe("n", Options{})
+	tr.Questions([]Question{old, a})
+	if got := drain(t, n); len(got) != 0 {
+		t.Errorf("without project_read: %v", got)
 	}
 }

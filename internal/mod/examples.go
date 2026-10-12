@@ -28,9 +28,9 @@ type Example struct {
 var Examples = []Example{
 	{"nord", "theme and icon set", nil},
 	{"vim-keys", "keymap", nil},
-	{"context-gauge", "a cell in the sidebar and dashboard, and a card whose rows bind session.attach", []string{PermProjectRead, PermViews}},
+	{"context-gauge", "a cell in the sidebar and dashboard, and a card whose rows bind session.clear and session.attach", []string{PermProjectRead, PermViews, PermActions}},
 	{"cost-card", "a dashboard card", []string{PermProjectRead, PermViews}},
-	{"notify-me", "OS notifications with core-action buttons", []string{PermProjectRead, PermNotify}},
+	{"notify-me", "OS notifications with core-action buttons, a question's options among them", []string{PermProjectRead, PermNotify, PermActions}},
 	{"thread-timeline", "a full view", []string{PermProjectRead, PermViews}},
 	{"standup", "a command: a key, a ≡ menu entry and tm mod run", []string{PermProjectRead, PermViews}},
 	{"report-glance", "panel sections: the details panel's and the coordinator's", []string{PermProjectRead, PermViews}},

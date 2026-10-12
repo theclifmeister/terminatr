@@ -186,6 +186,7 @@ type Action struct {
 	On           string `json:"on"`
 	Confirm      bool   `json:"confirm"`
 	Precondition string `json:"precondition,omitempty"`
+	Consent      string `json:"consent,omitempty"`
 }
 
 // FetchOptions are $.http.fetch's options.
@@ -227,6 +228,7 @@ var Events = []Event{
 	{Name: modbus.InboxItem, Data: typ[modbus.Item](), Needs: GrantProjectRead, Doc: "A new item in the coordinator's inbox."},
 	{Name: modbus.PRChanged, Data: typ[modbus.PR](), Needs: GrantProjectRead, Doc: "The ticker learnt something new of a thread's PR."},
 	{Name: modbus.SessionState, Data: typ[modbus.Session](), Doc: "A session's agent state or context use changed, or it exited."},
+	{Name: modbus.SessionQuestion, Data: typ[modbus.Question](), Needs: GrantProjectRead, Doc: "The question a thread's or coordinator's open question menu asks changed (mod API 1.3): its first unanswered question, none once it is answered or gone. Its options can be offered as question.answer bindings."},
 	{Name: modbus.ClockMinute, Data: typ[modbus.Clock](), Doc: "Every minute."},
 	{Name: modbus.UIClick, Data: typ[modbus.Input](), Doc: "The human clicked one of the mod's columns, views or widgets."},
 	{Name: modbus.UIKey, Data: typ[modbus.Input](), Doc: "The human pressed a key on one of the mod's views or widgets."},

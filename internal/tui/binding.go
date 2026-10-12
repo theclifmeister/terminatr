@@ -9,6 +9,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/modaction"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/widget"
 )
@@ -124,6 +125,12 @@ func (m *dash) runBinding(msg bindingMsg) tea.Cmd {
 		return m.actVia(&b, func() (actionMsg, bool) {
 			return actionMsg{attach: s.ID, current: s.Project}, true
 		})
+	case "session.clear":
+		s, _ := m.session(t.Session)
+		return m.clearSession(s, &b)
+	case "question.answer":
+		s, _ := m.session(t.Session)
+		return m.answerQuestion(s, t.Question, t.Option, &b)
 	}
 	m.msg = "not available: " + b.action.ID
 	return m.bindingDone(&b, false)
@@ -182,6 +189,75 @@ func (d dashActions) Asked(slug, ref string) string {
 func (d dashActions) Session(id string) bool {
 	_, ok := d.m.session(id)
 	return ok
+}
+
+func (d dashActions) Menu(id string) []modaction.MenuQuestion {
+	s, ok := d.m.session(id)
+	if !ok || s.Question == nil {
+		return nil
+	}
+	out := make([]modaction.MenuQuestion, len(s.Question.Questions))
+	for i, it := range s.Question.Questions {
+		out[i] = modaction.MenuQuestion{Question: it.Question, Multi: it.MultiSelect, Answered: it.Answered}
+		for _, o := range it.Options {
+			out[i].Options = append(out[i].Options, o.Label)
+		}
+	}
+	return out
+}
+
+// sessionWho names session s in a confirmation: "demo t-0003", "demo
+// coordinator", or its id outside the projects.
+func sessionWho(s proto.SessionInfo) string {
+	switch {
+	case s.Project == "":
+		return s.ID
+	case s.Thread != "":
+		return s.Project + " " + s.Thread
+	}
+	return s.Project + " coordinator"
+}
+
+// clearSession asks, then clears session s's conversation (a mod's
+// session.clear binding, b): tm pastes the agent's clear prompt once it
+// is idle. The project's files hold its state.
+func (m *dash) clearSession(s proto.SessionInfo, b *binding) tea.Cmd {
+	who := sessionWho(s)
+	question := "Clear " + who + "'s conversation? Its agent starts afresh once idle; the project's files keep its task and state."
+	m.confirmNo("Clear "+who, question, who+" not cleared", func() tea.Cmd {
+		src, id := m.src, s.ID
+		return m.actVia(b, func() (actionMsg, bool) {
+			if err := src.ClearSession(id); err != nil {
+				return actionMsg{err: err}, false
+			}
+			return actionMsg{msg: "clearing " + who + "'s conversation once it is idle"}, true
+		})
+	})
+	return nil
+}
+
+// answerQuestion asks, then answers question q of the menu open on
+// session s with option (a mod's question.answer binding, b), in the
+// words the live menu has; the server refuses it if the menu changed
+// meanwhile.
+func (m *dash) answerQuestion(s proto.SessionInfo, q, option string, b *binding) tea.Cmd {
+	i, why := modaction.Answer(dashActions{m: m}.Menu(s.ID), q, option)
+	if why != "" {
+		m.msg = "not available: " + why
+		return m.bindingDone(b, false)
+	}
+	who := sessionWho(s)
+	question := fmt.Sprintf("Answer %s's question %q with %q? It goes to the agent as your answer.", who, oneLine(q), oneLine(option))
+	m.confirmNo("Answer "+who, question, who+"'s question not answered", func() tea.Cmd {
+		src, id := m.src, s.ID
+		return m.actVia(b, func() (actionMsg, bool) {
+			if err := src.AnswerQuestion(id, i, q, option); err != nil {
+				return actionMsg{err: err}, false
+			}
+			return actionMsg{msg: "answered " + who + ": " + oneLine(option)}, true
+		})
+	})
+	return nil
 }
 
 // BindKeys are the keys this console's keymap gives bindable action id,

@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+
+	"github.com/theclifmeister/terminatr/internal/modaction"
 )
 
 // What the human sees before a mod is installed, enabled or updated
@@ -93,6 +95,14 @@ func (p Permissions) PermWords(perm string) string {
 		return "talks to " + strings.Join(p.Net, ", ")
 	case PermCommands:
 		return "runs " + strings.Join(p.Commands, ", ")
+	case PermActions:
+		var parts []string
+		for _, id := range p.Actions {
+			if a, ok := modaction.Lookup(id); ok && a.Consent != "" {
+				parts = append(parts, a.Consent+" ("+id+")")
+			}
+		}
+		return "offers you keys and buttons that " + strings.Join(parts, "; ") + "; tm asks you before each one runs"
 	case PermFiles:
 		var parts []string
 		if len(p.Files.Read) > 0 {

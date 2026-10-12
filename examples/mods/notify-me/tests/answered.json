@@ -1,0 +1,21 @@
+{
+  "name": "once the menu is answered, the same question asked again notifies again",
+  "store": { "asked": { "demo/t-0012": "Which port?" } },
+  "events": [
+    { "name": "session.question", "project": "demo",
+      "data": { "session": "s-7", "project": "demo", "thread": "t-0012", "role": "thread" } },
+    { "name": "session.question", "project": "demo",
+      "data": { "session": "s-7", "project": "demo", "thread": "t-0012", "role": "thread",
+        "question": { "question": "Which port?", "options": [ { "label": "8080" }, { "label": "3000" } ] } } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.notify", "params": { "notification": { "title": "t-0012 asks",
+        "actions": [
+          { "id": "question.answer", "target": { "session": "s-7", "question": "Which port?", "option": "8080" } },
+          { "id": "question.answer", "target": { "session": "s-7", "question": "Which port?", "option": "3000" } }
+        ] } } }
+    ],
+    "store": { "asked": { "demo/t-0012": "Which port?" } }
+  }
+}

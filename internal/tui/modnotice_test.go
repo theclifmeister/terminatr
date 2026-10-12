@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/theclifmeister/terminatr/internal/modnotify"
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
@@ -112,5 +113,38 @@ func TestModNoticePrecondition(t *testing.T) {
 	drive(m, m.pressNotice("ping", modnotify.Button{ID: "task.accept", Project: "alpha", Task: 2}))
 	if _, ok := m.top().(*confirmView); ok || len(base.asked) != 0 {
 		t.Fatalf("asked for a task not in review: %T", m.top())
+	}
+}
+
+// TestModNoticeAnswer: an answer button shows the option it answers
+// with, and its press opens tm's own confirmation of that answer to the
+// live question; only y sends it.
+func TestModNoticeAnswer(t *testing.T) {
+	base, m := popupData(t)
+	src := &noticeFake{fakeSource: base}
+	m.src = src
+	for i := range base.data.Sessions {
+		if base.data.Sessions[i].ID == "s-9" {
+			base.data.Sessions[i].Question = &proto.Question{Questions: []proto.QuestionItem{
+				{Question: "Ship it?", Options: []proto.QuestionOption{{Label: "Yes"}, {Label: "No"}}},
+			}}
+		}
+	}
+	b := modnotify.Button{ID: "question.answer", Label: "answer", Session: "s-9", Question: "Ship it?", Option: "Yes"}
+	base.data.ModNotices = []modnotify.Notice{{ID: "n1", Mod: "ping", Title: "t-0003 asks", Buttons: []modnotify.Button{b}}}
+	drive(m, m.setData(base.Load()))
+	keyPress(m, "N")
+	if out := screen(m); !strings.Contains(out, `1 answer "Yes"`) {
+		t.Fatalf("view:\n%s", out)
+	}
+	m.pop()
+	drive(m, m.pressNotice("ping", b))
+	cv, ok := m.top().(*confirmView)
+	if !ok || !strings.HasPrefix(cv.question, `Answer alpha t-0003's question "Ship it?" with "Yes"?`) || len(base.answers) != 0 {
+		t.Fatalf("button opened %T %+v, answers %v", m.top(), m.top(), base.answers)
+	}
+	drive(m, keyPress(m, "y"))
+	if len(base.answers) != 1 || base.answers[0] != "s-9 0 Ship it? → Yes" {
+		t.Fatalf("answers %v", base.answers)
 	}
 }
