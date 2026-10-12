@@ -74,7 +74,7 @@ func TestDashGeoBottom(t *testing.T) {
 
 	// 16 rows: the list 8, the divider and 7; 15: none.
 	g.l.rowCells = 0
-	g.h = 16 + 1 + footRows
+	g.h = 16 + 1 + g.footRows()
 	if g.list().h != 8 || g.details().h != 7 {
 		t.Errorf("16 rows: %+v %+v", g.list(), g.details())
 	}
@@ -87,5 +87,30 @@ func TestDashGeoBottom(t *testing.T) {
 	g = dashGeo{w: 200, h: 40, sideW: 36, l: effectiveLayout(mod.Layout{Details: placeOff}, DefaultLayout, "")}
 	if g.panel() != "" || g.list() != g.body() {
 		t.Errorf("off: %+v", g.list())
+	}
+}
+
+// TestDashGeoChrome: the header's and the footer's styles give their
+// rows to the body; the keys row follows the footer, none when hidden.
+func TestDashGeoChrome(t *testing.T) {
+	for _, c := range []struct {
+		header, footer string
+		body           rect
+		footer1        rect
+		keys           int
+	}{
+		{"", "", rect{36, 1, 164, 36}, rect{36, 37, 164, 3}, 38},
+		{"hidden", "", rect{36, 0, 164, 37}, rect{36, 37, 164, 3}, 38},
+		{"", "compact", rect{36, 1, 164, 38}, rect{36, 39, 164, 1}, 39},
+		{"hidden", "hidden", rect{36, 0, 164, 40}, rect{36, 40, 164, 0}, -1},
+	} {
+		spec := mod.Layout{Header: c.header, Footer: c.footer}
+		g := dashGeo{w: 200, h: 40, sideW: 36, l: effectiveLayout(spec, DefaultLayout, "")}
+		if g.body() != c.body || g.footer() != c.footer1 || g.keysRow() != c.keys {
+			t.Errorf("%q/%q: body %+v footer %+v keys %d", c.header, c.footer, g.body(), g.footer(), g.keysRow())
+		}
+		if g.header().h != 1-min(len(c.header), 1) || g.header().y != 0 {
+			t.Errorf("%q: header %+v", c.header, g.header())
+		}
 	}
 }

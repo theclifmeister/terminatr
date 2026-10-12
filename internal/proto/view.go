@@ -35,6 +35,9 @@ const (
 	MethodViewSidebar = "view.sidebar"
 	// MethodViewInfo sets the info panel beside a thread's pane (Info).
 	MethodViewInfo = "view.info"
+	// MethodViewStatus sets the status bar's style under a pane: Compact
+	// is its one row, without the rule above it (since protocol 14).
+	MethodViewStatus = "view.status"
 	// MethodViewColumns sets the order of the sidebar's columns
 	// (Columns, from the layout mod [ui] layout picks; none for the
 	// built-in order).
@@ -89,6 +92,9 @@ type ViewSubscribeParams struct {
 	// Tree is the tree's folds of a view created by this call (from the
 	// client's ui.json), as Sidebar.
 	Tree *view.Tree `json:"tree,omitempty"`
+	// StatusCompact is the status bar's style of a view created by this
+	// call (from the client's layout), as Sidebar.
+	StatusCompact bool `json:"status_compact,omitempty"`
 }
 
 // ViewSubscribeResult is the answer to view.subscribe: the client's id in
@@ -129,4 +135,6 @@ type ViewParams struct {
 	On bool `json:"on,omitempty"`
 	// Columns is the sidebar's column order (view.columns).
 	Columns []string `json:"columns,omitempty"`
+	// Compact is the status bar's style (view.status).
+	Compact bool `json:"compact,omitempty"`
 }

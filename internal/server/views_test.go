@@ -293,6 +293,31 @@ func TestViewsInfo(t *testing.T) {
 	}
 }
 
+// TestViewsStatus: view.status makes the status bar compact, one row
+// without the rule above it, and the pane gets the row; a view created
+// compact starts so.
+func TestViewsStatus(t *testing.T) {
+	h := newFakeHost("s-1")
+	vs := newViews(h, "", nil)
+	a, _ := join(t, vs, proto.ViewSubscribeParams{Cols: 200, Rows: 30})
+	mustDo(t, vs, proto.MethodViewAttach, proto.ViewParams{Client: a.id, Session: "s-1"})
+	if h.sizes["s-1"] != [2]uint16{200 - view.SideDefault, 28} {
+		t.Fatalf("shown: %v", h.sizes["s-1"])
+	}
+	v := mustDo(t, vs, proto.MethodViewStatus, proto.ViewParams{Client: a.id, Compact: true})
+	if !v.StatusCompact || h.sizes["s-1"] != [2]uint16{200 - view.SideDefault, 29} {
+		t.Fatalf("compact: %v %v", v.StatusCompact, h.sizes["s-1"])
+	}
+	v = mustDo(t, vs, proto.MethodViewStatus, proto.ViewParams{Client: a.id})
+	if v.StatusCompact || h.sizes["s-1"] != [2]uint16{200 - view.SideDefault, 28} {
+		t.Fatalf("shown again: %v %v", v.StatusCompact, h.sizes["s-1"])
+	}
+	_, own := join(t, vs, proto.ViewSubscribeParams{Own: true, Cols: 200, Rows: 30, StatusCompact: true})
+	if v, _ := vs.get(own); !v.StatusCompact {
+		t.Fatalf("a view created compact: %+v", v)
+	}
+}
+
 // TestViewsTree: view.project shows a project's dashboard, on every
 // console of the view, leaving the layout; view.sidesel moves the
 // sidebar's row; an own view keeps its tree to itself; view.expand is

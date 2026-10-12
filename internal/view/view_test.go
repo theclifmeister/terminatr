@@ -48,6 +48,16 @@ func TestLay(t *testing.T) {
 	if g = v.Lay(120, 30); g.SideW != SideDefault || g.Status != 2 {
 		t.Fatalf("bare chrome with a status bar %+v", g)
 	}
+	// Compact: the bar without the rule above it; a bare view without
+	// a status bar still has none.
+	v.StatusCompact = true
+	if g = v.Lay(120, 30); g.Status != 1 || g.Area.H != 29 {
+		t.Fatalf("compact status bar %+v", g)
+	}
+	v.StatusBar = false
+	if g = v.Lay(120, 30); g.Status != 0 {
+		t.Fatalf("bare compact chrome %+v", g)
+	}
 	// On the dashboard nothing is laid out.
 	v.Dashboard()
 	if g = v.Lay(120, 30); g.Pane != "" {

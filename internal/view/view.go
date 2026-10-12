@@ -40,6 +40,10 @@ type View struct {
 	// StatusBar draws the status bar in a bare view; the others always
 	// have one.
 	StatusBar bool `json:"status_bar,omitempty"`
+	// StatusCompact keeps the status bar to its one row: no rule above
+	// it (layout.toml status_bar.style = "compact"). Geometry, like the
+	// sidebar, so the view's: every console of it follows.
+	StatusCompact bool `json:"status_compact,omitempty"`
 	// Seq goes up with every change, so a client keeps the newest
 	// version it has seen.
 	Seq uint64 `json:"seq"`

@@ -980,7 +980,7 @@ func TestVersionHint(t *testing.T) {
 		t.Errorf("footer for the same version: %q", v)
 	}
 	last := func(w int, s ServerInfo) string {
-		f := sideFooter(nil, w, s, false)
+		f := sideFooter(nil, w, s, false, false)
 		if len(f) == 0 {
 			return ""
 		}
@@ -992,10 +992,10 @@ func TestVersionHint(t *testing.T) {
 	if f := last(130, other); f != versionHint(other) {
 		t.Errorf("wide footer %q", f)
 	}
-	if f := sideFooter(nil, sideSlim, other, false); f != nil {
+	if f := sideFooter(nil, sideSlim, other, false, false); f != nil {
 		t.Errorf("slim footer %q", f)
 	}
-	if f := sideFooter(nil, 32, ServerInfo{}, false); len(f) != 4 {
+	if f := sideFooter(nil, 32, ServerInfo{}, false, false); len(f) != 4 {
 		t.Errorf("footer without a hint %q", f)
 	}
 }

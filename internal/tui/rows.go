@@ -29,6 +29,10 @@ type row struct {
 	headNote string // a project header's state label: active or inactive
 	paused   bool   // a project header: the project is paused
 	note     string // an unselectable line: task counts, "no projects; …"
+	// counts marks the project's task counts' note; headTasks has them
+	// on its header instead, with rows.density = compact (compactRows).
+	counts    bool
+	headTasks string
 
 	// An item's columns: its marker (" ! ", indent), who (project slug or
 	// session id; rows of the project's own section have none), what
@@ -396,7 +400,7 @@ func buildRows(d Data, project string) []row {
 			projs = append(projs, sr)
 		}
 		c := p.Counts
-		projs = append(projs, row{note: "  tasks: " + taskCounts(c)})
+		projs = append(projs, row{note: "  tasks: " + taskCounts(c), counts: true})
 	}
 	home, _ := os.UserHomeDir()
 	for _, s := range d.Sessions {
@@ -434,6 +438,24 @@ func buildRows(d Data, project string) []row {
 		other = []row{{note: note}}
 	}
 	return append(rows, other...)
+}
+
+// compactRows are rows with no extra lines (rows.density = compact):
+// the project's task counts move onto its header's line.
+func compactRows(rows []row) []row {
+	head := -1
+	out := rows[:0:0]
+	for _, r := range rows {
+		switch {
+		case r.headNote != "":
+			head = len(out)
+		case r.counts && head >= 0:
+			out[head].headTasks = strings.TrimSpace(r.note)
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 // needsYouCount is what NEEDS YOU counts (buildRows) in ps and sessions:

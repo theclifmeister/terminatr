@@ -3,7 +3,6 @@ package tui
 import (
 	"cmp"
 	"errors"
-	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -261,7 +260,10 @@ type dash struct {
 	sideCols []string      // the view's sidebar columns (view.View.Columns)
 	// wantCols, when set, is the column order this console's layout
 	// ([ui] layout) asks the view for: sent once, if the view's differs.
-	wantCols    *[]string
+	wantCols *[]string
+	// wantCompact, when set, is the status bar's style this console's
+	// layout asks the view for (view.status), sent once as wantCols.
+	wantCompact *bool
 	watch       <-chan struct{}
 	stopWatch   func()
 	selPending  int
@@ -608,6 +610,12 @@ func (m *dash) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.wantCols = nil
 		if !slices.Equal(view.Columns(*w), view.Columns(m.view.View().Columns)) {
 			cmds = append(cmds, m.call(proto.MethodViewColumns, proto.ViewParams{Columns: *w}))
+		}
+	}
+	if c := m.wantCompact; c != nil {
+		m.wantCompact = nil
+		if *c != m.view.View().StatusCompact {
+			cmds = append(cmds, m.call(proto.MethodViewStatus, proto.ViewParams{Compact: *c}))
 		}
 	}
 	if l := m.layout.Sidebar; !m.sideDrag && l != m.viewSide {
@@ -1076,6 +1084,9 @@ func (m *dash) setData(d Data) tea.Cmd {
 // project; a selection that went away moves to the first row.
 func (m *dash) rebuild() {
 	m.rows = append(buildRows(m.data, listProject(m.data, m.current)), m.cardRows()...)
+	if m.layout.compact() {
+		m.rows = compactRows(m.rows)
+	}
 	if m.selIndex() < 0 {
 		m.sel = ""
 		for _, r := range m.rows {
@@ -1145,8 +1156,13 @@ func (m *dash) move(d int) {
 }
 
 // paneSize is the size new sessions get: the window less the status bar
-// and the rule above it.
-func (m *dash) paneSize() (int, int) { return m.w, max(m.h-2, 1) }
+// and the rule above it (none when compact).
+func (m *dash) paneSize() (int, int) {
+	if m.layout.StatusCompact() {
+		return m.w, max(m.h-1, 1)
+	}
+	return m.w, max(m.h-2, 1)
+}
 
 // key sends a key to the topmost overlay, else to the list's actions.
 // The prefix works here as in a session (docs/SPEC.md §4, the key
@@ -1360,7 +1376,7 @@ func (m *dash) withSide(s string) string {
 	lines := strings.Split(s, "\n")
 	rows := m.tree()
 	right := m.layout.Sidebar.Right()
-	side := sideLines(rows, m.sideW(), m.h, sideFooter(rows, m.sideW(), m.data.Server, m.over != nil), right)
+	side := sideLines(rows, m.sideW(), m.h, sideFooter(rows, m.sideW(), m.data.Server, m.over != nil, m.layout.compact()), right)
 	w := m.geom().main().w
 	for i := range side {
 		var l string
@@ -1466,9 +1482,11 @@ func (m *dash) listBody() []string {
 
 // listLines lays out the list w cells wide: its lines, the row key on
 // each (for the mouse) and the selected line. With inline set, a
-// selected thread's details show under its row.
+// selected thread's details show under its row, unless the rows are
+// compact (enter and the popup show them).
 func (m *dash) listLines(w int, inline bool) (lines, keys []string, sel int) {
 	sel = -1
+	inline = inline && !m.layout.compact()
 	add := func(l, key string) {
 		lines = append(lines, l)
 		keys = append(keys, key)
@@ -1530,7 +1548,9 @@ func stateLabel(active, short bool) (string, lipgloss.Style) {
 
 // projectHead is the project section's header w cells wide: its name,
 // ∥ paused while paused, a faint rule, and at the right its state label
-// (docs/SPEC.md §4), shortened, then left out, when narrow.
+// (docs/SPEC.md §4), shortened, then left out, when narrow. With
+// compact rows its task counts come before the label, which gives way
+// first.
 func projectHead(r row, w int) string {
 	left := " " + th().Title.Render(countLabel(r.head, r.count))
 	if r.paused {
@@ -1540,10 +1560,19 @@ func projectHead(r row, w int) string {
 	if r.headNote == "" {
 		return left + " " + th().Faint.Render(strings.Repeat("─", max(w-lw-1, 0)))
 	}
-	for _, short := range []bool{false, true} {
-		label, st := stateLabel(r.headNote == "active", short)
-		if fill := w - lw - ansi.StringWidth(label) - 3; fill >= 3 {
-			return left + " " + th().Faint.Render(strings.Repeat("─", fill)) + " " + st.Render(label) + " "
+	tasks := ""
+	if r.headTasks != "" {
+		tasks = " " + th().Faint.Render(r.headTasks)
+	}
+	for _, t := range []string{tasks, ""} {
+		for _, short := range []bool{false, true} {
+			label, st := stateLabel(r.headNote == "active", short)
+			if fill := w - lw - ansi.StringWidth(t) - ansi.StringWidth(label) - 3; fill >= 3 {
+				return left + " " + th().Faint.Render(strings.Repeat("─", fill)) + t + " " + st.Render(label) + " "
+			}
+		}
+		if fill := w - lw - ansi.StringWidth(t) - 2; t != "" && fill >= 3 {
+			return left + " " + th().Faint.Render(strings.Repeat("─", fill)) + t + " "
 		}
 	}
 	return fit(left, w)
@@ -1599,32 +1628,11 @@ func scrollTop(sel, room, n int) int {
 }
 
 // frame draws the header, the body scrolled so line sel shows, and the
-// footer: a rule, the keys or the input prompt, and the message.
+// footer, by the layout's styles (chrome.go): keys are the footer's key
+// hints.
 func (m *dash) frame(title string, body []string, sel int, keys string) string {
-	var right string
-	switch {
-	case !m.loaded:
-		right = th().Faint.Render("◌ loading…")
-	case !m.data.ServerOK:
-		right = th().Bad.Render("▲ server down: " + oneLine(m.data.Err))
-	case m.data.NoAgent:
-		right = th().Bad.Render("▲ no agent installed: nothing can start (tm doctor)")
-	default:
-		n := len(m.data.Sessions)
-		right = th().Good.Render(ic().working) + " server ok" + th().Faint.Render(fmt.Sprintf(" · %d session%s", n, map[bool]string{true: "s"}[n != 1]))
-	}
-	// With the sidebar hidden, what needs you is counted before the
-	// server's state: a click on it goes there.
-	m.badgeAt = [2]int{}
-	badge := ""
-	if m.sideW() == 0 {
-		badge = needsBadge(m.needsCount())
-	}
-	if badge != "" {
-		right = badge + " " + right
-		x := max(m.w-ansi.StringWidth(right)-1, 1) + 1
-		m.badgeAt = [2]int{x, x + ansi.StringWidth(badge)}
-	}
+	g := m.geom()
+	right, alarm, badge := m.headRight()
 	// The app, not a project: the project's own section is headed by its
 	// slug, which may well be "terminatr".
 	left := th().Title.Render(" tm dashboard")
@@ -1634,8 +1642,6 @@ func (m *dash) frame(title string, body []string, sel int, keys string) string {
 	if title != "" {
 		left += th().Faint.Render(" · ") + th().Head.Render(title)
 	}
-	head := fit(left, max(m.w-ansi.StringWidth(right)-1, 1)) + reset + " " + right
-	foot := []string{m.rule("")}
 	switch {
 	case m.prefixed:
 		keys = prefixHint()
@@ -1645,25 +1651,37 @@ func (m *dash) frame(title string, body []string, sel int, keys string) string {
 	case m.area() == areaDetails && m.top() == nil:
 		keys = "details: ↑ ↓ scroll · esc back · tab next"
 	}
-	m.shownKeys = keys
-	foot = append(foot, fit(" "+keysLine(keys), m.w)+reset)
-	msg := " " + oneLine(m.msg)
-	switch {
-	case m.busy:
-		msg = th().Faint.Render(" working…")
-	case m.msg != "" && m.msg == m.errMsg:
-		msg = th().Bad.Render(msg)
-	}
-	foot = append(foot, fit(msg, m.w)+reset)
+	foot := m.footLines(g, keys)
 
-	room := m.bodyRows()
+	room := g.body().h
 	top := scrollTop(sel, room, len(body))
 	end := min(top+room, len(body))
-	out := []string{head}
-	out = append(out, body[top:end]...)
+	rows := append([]string(nil), body[top:end]...)
 	for i := end - top; i < room; i++ {
-		out = append(out, "")
+		rows = append(rows, "")
 	}
+	var out []string
+	shown := right // the header's right part, as drawn
+	if g.headRows() > 0 {
+		out = append(out, fit(left, max(m.w-ansi.StringWidth(right)-1, 1))+reset+" "+right)
+	} else if shown = alarm; alarm != "" {
+		rows[0] = overRight(rows[0], alarm, m.w)
+	}
+	m.badgeAt = [2]int{}
+	if badge != "" {
+		x := max(m.w-ansi.StringWidth(shown)-1, 1) + 1
+		m.badgeAt = [2]int{x, x + ansi.StringWidth(badge)}
+	}
+	if g.footRows() == 0 {
+		msg := m.footMsg()
+		if m.prefixed {
+			msg = " " + keysLine(keys)
+		}
+		if msg != "" {
+			rows[len(rows)-1] = overLeft(rows[len(rows)-1], msg, m.w)
+		}
+	}
+	out = append(out, rows...)
 	out = append(out, foot...)
 	return strings.Join(out, "\n")
 }

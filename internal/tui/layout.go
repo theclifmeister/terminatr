@@ -153,8 +153,10 @@ const (
 	bottomMin    = 16   // a shorter body shows details under the row: the list and the panel 8 rows each
 )
 
-// The details panel's places and the sidebar's modes (layout.toml's
-// details.place and sidebar.mode).
+// The details panel's places, the sidebar's modes, and the styles of
+// the header, the footer, the status bar and the rows (layout.toml's
+// details.place, sidebar.mode, header/footer/status_bar.style and
+// rows.density).
 const (
 	placeRight  = "right"
 	placeBottom = "bottom"
@@ -162,6 +164,11 @@ const (
 	modeFull    = "full"
 	modeSlim    = "slim"
 	modeHidden  = "hidden"
+
+	styleShown   = "shown"
+	styleCompact = "compact"
+	styleHidden  = "hidden"
+	densityNorm  = "normal"
 )
 
 // DefaultLayout is the layout without a ui.json.
@@ -342,10 +349,10 @@ func effectiveLayout(spec mod.Layout, ui Layout, id string) Layout {
 		l.Sidebar.Side, l.set.side = spec.Side, true
 	}
 	l.Sidebar = l.Sidebar.Clamp()
-	l.header = cmp.Or(spec.Header, "shown")
-	l.footer = cmp.Or(spec.Footer, "shown")
-	l.statusBar = cmp.Or(spec.StatusBar, "shown")
-	l.density = cmp.Or(spec.Density, "normal")
+	l.header = cmp.Or(spec.Header, styleShown)
+	l.footer = cmp.Or(spec.Footer, styleShown)
+	l.statusBar = cmp.Or(spec.StatusBar, styleShown)
+	l.density = cmp.Or(spec.Density, densityNorm)
 	l.sections = layoutSections(spec.Sections)
 	return l
 }
@@ -521,8 +528,18 @@ func (m *dash) useLayout(id string, spec mod.Layout, whole bool) {
 	}
 	l.Sidebar, l.Info, l.Tree = side, m.layout.Info, m.layout.Tree
 	m.layout = l
+	c := l.StatusCompact()
+	m.wantCompact = &c
 	m.setWidth(m.winW)
 }
+
+// compact says whether the dashboard's and the sidebar's rows leave
+// out every extra line (rows.density = compact).
+func (l Layout) compact() bool { return l.density == styleCompact }
+
+// StatusCompact says whether the layout keeps the status bar under a
+// pane to its one row (status_bar.style = "compact"): the view's.
+func (l Layout) StatusCompact() bool { return l.statusBar == styleCompact }
 
 // SaveSidebar writes the sidebar's layout to path and keeps the rest of
 // the file: the attach client changes only the sidebar. A part the

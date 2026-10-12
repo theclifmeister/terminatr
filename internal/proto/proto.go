@@ -22,7 +22,8 @@ import (
 // 12: view.columns, the sidebar's column order from a layout mod.
 // 13: mods' cells (ModCells on session.list, Cells on SessionInfo and
 // ProjectWatch), added fields only. 14: the sidebar's side, share and
-// hidden (view.Sidebar), on the view and view.sidebar.
+// hidden (view.Sidebar), on the view and view.sidebar; the status bar's
+// style (view.status, the view's StatusCompact).
 const Protocol = 14
 
 // Kind is what a connection is for.

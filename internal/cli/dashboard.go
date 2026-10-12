@@ -66,7 +66,7 @@ func (e *Env) fullConsole(own bool, goTo *tui.Target) int {
 	}
 	lay := tui.ConsoleLayout(uiFile)
 	side, info, tree := lay.Sidebar, lay.Info, lay.Tree
-	vc, err := tui.JoinView(p, proto.ViewSubscribeParams{Own: own, Cols: cols, Rows: rows, Sidebar: &side, Info: &info, Tree: &tree})
+	vc, err := tui.JoinView(p, proto.ViewSubscribeParams{Own: own, Cols: cols, Rows: rows, Sidebar: &side, Info: &info, Tree: &tree, StatusCompact: lay.StatusCompact()})
 	if err != nil {
 		return e.srvFail("dashboard", err)
 	}
@@ -151,7 +151,7 @@ func (e *Env) openCmd(slug, agentName string) error {
 		return nil
 	}
 	vc, err := tui.JoinView(p, proto.ViewSubscribeParams{Own: true, Bare: true, StatusBar: true, Session: id,
-		Cols: cols, Rows: rows, Sidebar: &side, Info: &info, Tree: &tree})
+		Cols: cols, Rows: rows, Sidebar: &side, Info: &info, Tree: &tree, StatusCompact: lay.StatusCompact()})
 	if err != nil {
 		return err
 	}

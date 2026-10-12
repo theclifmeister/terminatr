@@ -210,6 +210,7 @@ func (vs *views) subscribe(p proto.ViewSubscribeParams, pid int) (*member, strin
 		if p.Tree != nil && p.Tree.Valid() == nil {
 			lv.v.Tree = *p.Tree
 		}
+		lv.v.StatusCompact = p.StatusCompact
 		vs.byName[name] = lv
 	}
 	vs.nextClient++
@@ -463,6 +464,10 @@ func (vs *views) do(method string, p proto.ViewParams) (view.View, *proto.Error)
 			return before, proto.Errorf(proto.ErrBadParams, "no info panel")
 		}
 		v.Info = p.Info.Clamp()
+		layout()
+		resize = true
+	case proto.MethodViewStatus:
+		v.StatusCompact = p.Compact
 		layout()
 		resize = true
 	case proto.MethodViewColumns:
