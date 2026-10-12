@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"reflect"
 	"testing"
 
@@ -74,5 +75,37 @@ func TestBadThemeKeepsBuiltin(t *testing.T) {
 	}
 	if !reflect.DeepEqual(th().Bad.GetForeground(), lipgloss.Red) {
 		t.Error("built-in look not kept")
+	}
+}
+
+// The sidebar's focused row comes from the theme: the default keeps its
+// cyan bar, and nord's has a foreground that differs from its background.
+func TestSelFocusFromTheme(t *testing.T) {
+	data, err := os.ReadFile("../../examples/mods/nord/theme.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tt, err := parseTheme(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, dark := range []bool{true, false} {
+		th, err := themeFor(tt, dark, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fg, bg := th.SelFocus.GetForeground(), th.SelFocus.GetBackground()
+		if fg == nil || bg == nil || fg == bg || th.SelFocus.GetReverse() {
+			t.Errorf("nord dark=%v focused row: fg %v bg %v", dark, fg, bg)
+		}
+	}
+	// A theme that sets sel but not sel_focus falls back to its sel.
+	tt2, _ := parseTheme([]byte("[dark]\nsel = { fg = [\"black\"], bg = [\"white\"] }\n"))
+	th2, _ := themeFor(tt2, true, false)
+	if th2.SelFocus.GetBackground() != th2.Sel.GetBackground() {
+		t.Error("sel_focus should fall back to sel")
+	}
+	if !builtinRoles.SelFocus.Reverse {
+		t.Error("default sel_focus is the cyan bar")
 	}
 }
