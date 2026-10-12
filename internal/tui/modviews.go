@@ -176,11 +176,7 @@ func (mv *modViews) host(v proto.ModView, project string) *widget.View {
 // why there is none.
 func (m *dash) panelLines(v proto.ModView, project string, w, h int) []string {
 	if v.State == proto.ModViewFailed {
-		out := []string{th().Bad.Render(fit(ic().blocked+" mod failed: "+cmp.Or(v.Err, "its host stopped"), w)) + reset}
-		if v.Log != "" {
-			out = append(out, faintLines("Its log: "+v.Log, w)...)
-		}
-		return append(out, faintLines("Restart it in the Mods tab of the settings (,): r.", w)...)
+		return failedLines(v, w)
 	}
 	host := m.mv.host(v, project)
 	if host == nil {
@@ -296,8 +292,8 @@ func (m *dash) tellCursors() tea.Cmd {
 	var cmds []tea.Cmd
 	for _, s := range m.shownViews() {
 		i := slices.IndexFunc(m.mv.list, func(v proto.ModView) bool { return v.Mod == s.Mod && v.View == s.View })
-		if i < 0 {
-			continue
+		if i < 0 || mod.IsSection(s.Slot) {
+			continue // a section has no cursor
 		}
 		v := m.mv.list[i]
 		shown[panelKey(v, s.Project)] = true
@@ -370,6 +366,11 @@ func (m *dash) shownViews() []modview.Shown {
 				add(v, project, lw, m.cardHeight(v, project))
 			}
 		}
+		if r, ok := m.selected(); ok && split {
+			if project, task, thr, ok := sectionTarget(r); ok {
+				out = append(out, sectionsShown(m.mv.list, mod.SlotDetailsSection, project, task, thr, m.w-lw-1)...)
+			}
+		}
 	}
 	return out
 }
@@ -378,7 +379,7 @@ func (m *dash) shownViews() []modview.Shown {
 func shownKey(list []modview.Shown) string {
 	var b strings.Builder
 	for _, s := range list {
-		fmt.Fprintf(&b, "%s/%s/%s/%s %dx%d;", s.Mod, s.View, s.Slot, s.Project, s.Width, s.Height)
+		fmt.Fprintf(&b, "%s/%s/%s/%s/%s/%s %dx%d;", s.Mod, s.View, s.Slot, s.Project, s.Task, s.Thread, s.Width, s.Height)
 	}
 	return b.String()
 }

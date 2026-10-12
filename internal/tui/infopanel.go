@@ -14,6 +14,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/emu"
+	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/plat/open"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -53,6 +55,9 @@ type infoData struct {
 	// (project.watch); set only beside a coordinator, which has none of
 	// the above but slug and session.
 	watch *proto.ProjectWatch
+	// sections are the mods' coordinator sections, as mod.views last
+	// listed them (modsections.go); beside a coordinator only.
+	sections []proto.ModView
 }
 
 // loadInfo reads the panel's data for session s, one of sessions: a
@@ -149,7 +154,13 @@ func infoLines(d *infoData, w int, now time.Time) ([]string, []infoHit) {
 		return pl.lines, nil
 	}
 	if d.watch != nil {
-		return coordLines(d.watch, w, now)
+		lines, hits := coordLines(d.watch, w, now)
+		pl.lines = lines
+		modSections(pl, d.sections, mod.SlotCoordinatorSection, d.slug, "", "")
+		for len(hits) < len(pl.lines) {
+			hits = append(hits, infoHit{})
+		}
+		return pl.lines, hits
 	}
 	s := d.session
 	id := s.Thread
@@ -372,7 +383,11 @@ func shortHome(p, home string) string {
 // infoPanel is the attach client's info panel: what it shows and this
 // console's own state of it. Guarded by client.mu.
 type infoPanel struct {
-	data  *infoData
+	data *infoData
+	// views are the mods' views as mod.views last listed them beside a
+	// coordinator, sent whether that poll said a section shows.
+	views []proto.ModView
+	sent  bool
 	lines []string  // the content, as last laid out
 	hits  []infoHit // what a click on each content line does
 	top   int       // the first content line shown
@@ -694,11 +709,19 @@ func (c *client) infoMouse(m emu.Mouse) {
 }
 
 // pollInfo reads the panel's data for the focused session, outside c.mu.
-func (c *client) pollInfo(sessions []proto.SessionInfo) {
+// Beside a coordinator it also asks ctl (nil: no server) for the mods'
+// views, saying which of their coordinator sections the panel shows, by
+// the views the last poll listed; once it shows none, it says so once.
+func (c *client) pollInfo(ctl *server.Client, sessions []proto.SessionInfo) {
 	if !c.lock() {
 		return
 	}
 	id, on := c.v.Focus, c.info != nil
+	var prev []proto.ModView
+	sent, w := false, 0
+	if on {
+		prev, sent, w = c.info.views, c.info.sent, c.infoW-1
+	}
 	c.mu.Unlock()
 	if !on {
 		return
@@ -709,9 +732,33 @@ func (c *client) pollInfo(sessions []proto.SessionInfo) {
 			d = loadInfo(c.paths, s, sessions)
 		}
 	}
+	var views []proto.ModView
+	if coord := d != nil && d.watch != nil; coord || sent {
+		var shown []modview.Shown
+		if coord && w > 0 {
+			shown = sectionsShown(prev, mod.SlotCoordinatorSection, d.slug, "", "", w)
+		}
+		views, sent = pollViews(ctl, shown), len(shown) > 0
+		if coord {
+			d.sections = views
+		}
+	}
 	if c.lock() {
-		c.info.data = d
+		c.info.data, c.info.views, c.info.sent = d, views, sent
 		c.infoLayout()
 		c.mu.Unlock()
 	}
+}
+
+// pollViews is mod.views on ctl, saying the console shows shown: the
+// mods' views, nil without a server (or an older one).
+func pollViews(ctl *server.Client, shown []modview.Shown) []proto.ModView {
+	if ctl == nil {
+		return nil
+	}
+	var res proto.ModViewsResult
+	if ctl.Call(proto.MethodModViews, proto.ModViewsParams{Shown: shown}, &res) != nil {
+		return nil
+	}
+	return res.Views
 }

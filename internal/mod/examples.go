@@ -33,6 +33,7 @@ var Examples = []Example{
 	{"notify-me", "OS notifications with core-action buttons", []string{PermProjectRead, PermNotify}},
 	{"thread-timeline", "a full view", []string{PermProjectRead, PermViews}},
 	{"standup", "a command: a key, a ≡ menu entry and tm mod run", []string{PermProjectRead, PermViews}},
+	{"report-glance", "panel sections: the details panel's and the coordinator's", []string{PermProjectRead, PermViews}},
 	{"pr-ci-column", "a sidebar column (also built in)", []string{PermProjectRead}},
 	{"memory-tab", "a project-popup tab (also built in)", []string{PermProjectRead, PermViews}},
 	{"memory-search", "an agent tool", []string{PermProjectRead, PermTools}},
