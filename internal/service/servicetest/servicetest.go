@@ -7,19 +7,16 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/service"
 )
 
-// jobs lists the loaded dev.terminatr.server.* labels ("" list off macOS).
+// jobs lists the loaded dev.terminatr.server.* labels (none where there is
+// no launchctl).
 func jobs() map[string]bool {
 	out := map[string]bool{}
-	if runtime.GOOS != "darwin" {
-		return out
-	}
 	b, err := exec.Command("launchctl", "list").Output()
 	if err != nil {
 		return out
