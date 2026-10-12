@@ -134,6 +134,7 @@ const (
 	defaultRows  = 0.4  // the bottom panel's share of the body
 	minRows      = 0.2  // either way
 	maxRows      = 0.7  //
+	bottomMin    = 16   // a shorter body shows details under the row: the list and the panel 8 rows each
 )
 
 // The details panel's places and the sidebar's modes (layout.toml's
@@ -236,6 +237,9 @@ func (l Layout) place() string {
 	}
 	return placeRight
 }
+
+// rows is the bottom panel's share of the body's rows, its divider in.
+func (l Layout) rows() float64 { return cmp.Or(l.DetailsRows, defaultRows) }
 
 // mode is the sidebar's mode: hidden as SideMode says, else full or
 // slim as Sidebar.Slim does.
@@ -439,13 +443,14 @@ func tweak(ui Layout, was, now Layout, id string, safe bool) Layout {
 	return ui
 }
 
-// split says whether the dashboard shows the details panel, and the
-// list's width when it does.
-func (m *dash) split() (bool, int) { return m.geom().split() }
+// panel is where the dashboard shows the details panel: right,
+// bottom, or "" for none (dashGeo.panel).
+func (m *dash) panel() string { return m.geom().panel() }
 
 // setLayout changes the layout and saves it.
 func (m *dash) setLayout(l Layout) {
 	l.Split = clampSplit(l.Split)
+	l.DetailsRows = clampRows(l.DetailsRows)
 	l.Sidebar = l.Sidebar.Clamp()
 	if !sameLayout(l, m.layout) {
 		side := l.Sidebar != m.layout.Sidebar
@@ -461,7 +466,7 @@ func (m *dash) setLayout(l Layout) {
 // folds aside (refold saves them).
 func sameLayout(a, b Layout) bool {
 	return a.Details == b.Details && a.DetailsPlace == b.DetailsPlace && a.Split == b.Split && a.detCells == b.detCells &&
-		a.DetailsRows == b.DetailsRows && a.Sidebar == b.Sidebar && a.SideMode == b.SideMode && a.Info == b.Info
+		a.DetailsRows == b.DetailsRows && a.rowCells == b.rowCells && a.Sidebar == b.Sidebar && a.SideMode == b.SideMode && a.Info == b.Info
 }
 
 // saveLayout writes ui.json: what changed since it was read, under the

@@ -609,7 +609,7 @@ func (m *dash) cardHeight(v proto.ModView, project string) int {
 	if v.State == proto.ModViewFailed {
 		h = 3
 	}
-	return max(min(h, modview.MaxHeight, m.bodyRows()/2), 1)
+	return max(min(h, modview.MaxHeight, m.geom().list().h/2), 1)
 }
 
 // cardRows are the cards' rows below the dashboard's sections: a

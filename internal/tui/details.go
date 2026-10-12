@@ -16,8 +16,9 @@ import (
 )
 
 // The details panel: everything about the selected row, beside the list
-// in a wide window (docs/SPEC.md §4). Narrower windows show a thread's
-// details under its row instead.
+// in a wide window or under it in a tall one, as the layout places it
+// (docs/SPEC.md §4). Without room for it, or with it off, a thread's
+// details show under its row instead.
 
 // details is the panel for r, w cells wide, styled.
 func (m *dash) details(r row, w int) []string {

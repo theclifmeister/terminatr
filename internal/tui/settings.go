@@ -266,19 +266,47 @@ func globalSettings(note string) []setting {
 		{label: "Prefix key", help: "Starts the session commands, written prefix+<key> in hints. Inside tmux, which takes ctrl+b, pick another. Enter, then press the new one.",
 			value:  func(m *dash) string { return m.prefix },
 			change: func(m *dash) tea.Cmd { m.push(&captureView{}); return nil }},
-		{label: "Details panel", help: "The panel beside the list, in windows 120 columns or wider (| on the dashboard). This console only.",
-			value: func(m *dash) string { return onOff(m.layout.Details) },
+		{label: "Details panel", help: "Where the panel about the selected row shows: right of the list (in dashboards 120 columns or wider), under it (with 16 rows or more), or off; where it has no room, a thread's details show under its row. | on the dashboard turns it off and on. A layout mod may set it. This console only.",
+			value: func(m *dash) string {
+				p := m.layout.place()
+				if p != placeOff && m.panel() == "" {
+					p += " (no room: under the row)"
+				}
+				return p
+			},
 			change: func(m *dash) tea.Cmd {
 				l := m.layout
-				l.Details = !l.Details
+				switch l.place() {
+				case placeRight:
+					l.Details, l.DetailsPlace = true, placeBottom
+				case placeBottom:
+					l.Details = false
+				default:
+					l.Details, l.DetailsPlace = true, placeRight
+				}
 				m.setLayout(l)
 				return nil
 			}},
-		{label: "List width", help: "The list's share beside the details panel; < and > on the dashboard fine-tune it. This console only.",
-			value: func(m *dash) string { return fmt.Sprintf("%d%%", int(m.layout.Split*100+0.5)) },
+		{label: "List size", help: "The list's share beside the details panel (its width) or above it (its height); < and > on the dashboard fine-tune it, as dragging the divider does. This console only.",
+			value: func(m *dash) string {
+				l := m.layout
+				switch {
+				case l.place() == placeBottom && l.rowCells != 0:
+					return fmt.Sprintf("the panel %d rows", l.rowCells)
+				case l.place() == placeBottom:
+					return fmt.Sprintf("%d%% high", int((1-l.rows())*100+0.5))
+				case l.detCells != 0:
+					return fmt.Sprintf("the panel %d columns", l.detCells)
+				}
+				return fmt.Sprintf("%d%% wide", int(l.Split*100+0.5))
+			},
 			change: func(m *dash) tea.Cmd {
 				l := m.layout
-				l.Split = nextSplit(l.Split)
+				if l.place() == placeBottom {
+					l.DetailsRows, l.rowCells = nextRows(l.rows()), 0
+				} else {
+					l.Split, l.detCells = nextSplit(l.Split), 0
+				}
 				m.setLayout(l)
 				return nil
 			}},
@@ -417,6 +445,19 @@ func nextSplit(cur float64) float64 {
 		}
 	}
 	return splitSteps[0]
+}
+
+// rowsSteps are the bottom panel's shares enter steps through: the
+// list 70%, 60%, 50% high.
+var rowsSteps = []float64{0.3, 0.4, 0.5}
+
+func nextRows(cur float64) float64 {
+	for _, s := range rowsSteps {
+		if s > cur+0.001 {
+			return s
+		}
+	}
+	return rowsSteps[0]
 }
 
 func (sv *settingsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {

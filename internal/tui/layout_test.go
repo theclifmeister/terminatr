@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/theclifmeister/terminatr/internal/mod"
 )
 
@@ -230,10 +232,10 @@ func TestDashLayout(t *testing.T) {
 	if m.sideW() != 50 || m.w != 150 {
 		t.Fatalf("cockpit: sidebar %d, dashboard %d", m.sideW(), m.w)
 	}
-	if split, lw := m.split(); !split || lw != 150-60-1 {
+	if lw := m.geom().list().w; m.panel() != placeRight || lw != 150-60-1 {
 		t.Fatalf("cockpit's panel: list %d", lw)
 	}
-	if g := m.geom(); g.details().w != 60 || g.divider() != 50+89 || g.list().w != 89 || g.body() != (rect{50, 1, 150, 36}) {
+	if g := m.geom(); g.details().w != 60 || g.divider().x != 50+89 || g.list().w != 89 || g.body() != (rect{50, 1, 150, 36}) {
 		t.Fatalf("geometry %+v %+v", g.details(), g.body())
 	}
 
@@ -331,5 +333,112 @@ func TestPickLayout(t *testing.T) {
 	pick.change(m)
 	if layoutValue() != ThemeDefault || m.sideW() != sideDefault || !m.layout.Details {
 		t.Fatalf("default: %s, sidebar %d, details %v", layoutValue(), m.sideW(), m.layout.Details)
+	}
+}
+
+// TestDetailsBottom: under a layout that puts the details panel at the
+// bottom, it shows under the list with a rule above it; the wheel and
+// the keys scroll it, < > and the divider's drag size it (kept for the
+// layout); a short window shows the details under the row; the
+// settings row says and steps the place.
+func TestDetailsBottom(t *testing.T) {
+	src := &fakeSource{data: testData()}
+	ui := filepath.Join(t.TempDir(), "ui.json")
+	m := newDash(DashOptions{Source: src, Width: 200, Height: 40, UIFile: ui, State: DashState{Current: "beta"}})
+	m.safe = false
+	m.setData(src.data)
+	m.useLayout("cockpit", parseSpec(t, "[details]\nplace = \"bottom\"\n"), true)
+	m.sel = "th:beta:t-0005"
+
+	g := m.geom()
+	if m.panel() != placeBottom || g.list().h != 22 {
+		t.Fatalf("panel %q, list %+v", m.panel(), g.list())
+	}
+	lines := strings.Split(screen(m), "\n")
+	if rule := strings.Repeat("─", g.body().w); lines[g.divider().y] != rule {
+		t.Fatalf("divider row %q", lines[g.divider().y])
+	}
+	panel := strings.Join(lines[g.details().y:g.details().y+g.details().h], "\n")
+	if !strings.Contains(panel, "thread    t-0005") || strings.Contains(screen(m), "        todos") {
+		t.Fatalf("the panel:\n%s", screen(m))
+	}
+
+	// The wheel over the panel scrolls it; over the list it moves.
+	first := screen(m)
+	mouseAt(m, tea.MouseWheelDown, g.details().x+5, g.details().y+2)
+	if m.sel != "th:beta:t-0005" || screen(m) == first || m.detailTop != 3 {
+		t.Fatalf("the wheel over the panel: sel %s top %d", m.sel, m.detailTop)
+	}
+	// The keys too, once it has the keyboard.
+	mouseAt(m, tea.MouseLeft, g.details().x+5, g.details().y+2)
+	if m.focus != areaDetails {
+		t.Fatalf("a click on the panel: focus %d", m.focus)
+	}
+	keyPress(m, "up")
+	if m.detailTop != 2 || m.sel != "th:beta:t-0005" {
+		t.Fatalf("up in the panel: top %d sel %s", m.detailTop, m.sel)
+	}
+	keyPress(m, "esc")
+	mouseAt(m, tea.MouseWheelDown, g.list().x+5, g.list().y+2)
+	if m.sel == "th:beta:t-0005" {
+		t.Fatal("the wheel over the list didn't move")
+	}
+
+	// < shrinks the list, > grows it back; the layout doesn't set the
+	// size, so ui.json's top level keeps it.
+	press(m, "<")
+	if h := m.geom().list().h; h != 20 {
+		t.Fatalf("< list %d", h)
+	}
+	if l := LoadLayout(ui); l.DetailsRows != 0.45 || l.Layouts["cockpit"].DetailsRows != 0 {
+		t.Fatalf("< saved %+v", l)
+	}
+	press(m, ">")
+	if h := m.geom().list().h; h != 22 {
+		t.Fatalf("> list %d", h)
+	}
+
+	// The divider's drag: the panel takes the rows under the mouse.
+	d := m.geom().divider()
+	m.Update(tea.MouseClickMsg{X: d.x + 10, Y: d.y, Button: tea.MouseLeft})
+	m.Update(tea.MouseMotionMsg{X: d.x + 10, Y: 20, Button: tea.MouseLeft})
+	m.Update(tea.MouseReleaseMsg{X: d.x + 10, Y: 20, Button: tea.MouseLeft})
+	if g := m.geom(); g.list().h != 19 || g.divider().y != 20 || LoadLayout(ui).DetailsRows != 0.47 {
+		t.Fatalf("drag: %+v, ui.json %+v", g.list(), LoadLayout(ui))
+	}
+
+	// A short window: the details under the row, and < says why.
+	m.Update(tea.WindowSizeMsg{Width: 200, Height: 19})
+	m.sel = "th:beta:t-0005"
+	if m.panel() != "" || !strings.Contains(screen(m), "        todos") {
+		t.Fatalf("short window:\n%s", screen(m))
+	}
+	press(m, "<")
+	if !strings.Contains(m.msg, "16 rows") {
+		t.Fatalf("msg %q", m.msg)
+	}
+	m.Update(tea.WindowSizeMsg{Width: 200, Height: 40})
+
+	// The settings row says the place, and enter steps it: off, right,
+	// bottom.
+	var place setting
+	for _, s := range globalSettings("") {
+		if s.label == "Details panel" {
+			place = s
+		}
+	}
+	for _, want := range []string{"bottom", "off", "right", "bottom"} {
+		if v := place.value(m); v != want {
+			t.Fatalf("details panel %q, want %q", v, want)
+		}
+		place.change(m)
+	}
+	m.Update(tea.WindowSizeMsg{Width: 200, Height: 19})
+	if v := place.value(m); v != "off" {
+		t.Fatalf("off in a short window: %q", v)
+	}
+	press(m, "|")
+	if v := place.value(m); !strings.HasPrefix(v, "bottom (no room") || !strings.Contains(m.msg, "16 rows") {
+		t.Fatalf("| in a short window: %q, msg %q", v, m.msg)
 	}
 }

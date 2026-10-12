@@ -626,13 +626,13 @@ func TestDashboardSplit(t *testing.T) {
 	}
 
 	// < narrows the list and saves the layout; | hides the panel.
-	_, before := m.split()
+	before := m.geom().list().w
 	press(m, "<")
-	if _, after := m.split(); after >= before {
+	if after := m.geom().list().w; after >= before {
 		t.Fatalf("< kept the list at %d columns", after)
 	}
 	press(m, "|")
-	if split, _ := m.split(); split {
+	if m.panel() != "" {
 		t.Fatal("| left the panel shown")
 	}
 	if l := LoadLayout(ui); l.Details || l.Split != defaultSplit-splitStep {
@@ -646,11 +646,11 @@ func TestDashboardSplit(t *testing.T) {
 	if m.sel != "n:s-4" {
 		t.Fatalf("click selected %q", m.sel)
 	}
-	_, lw := m.split()
+	lw := m.geom().list().w
 	m.Update(tea.MouseClickMsg{X: sw + lw, Y: 5, Button: tea.MouseLeft})
 	m.Update(tea.MouseMotionMsg{X: sw + 70, Y: 5, Button: tea.MouseLeft})
 	m.Update(tea.MouseReleaseMsg{X: sw + 70, Y: 5, Button: tea.MouseLeft})
-	if _, lw := m.split(); lw != 70 || LoadLayout(ui).Split != 0.5 {
+	if lw := m.geom().list().w; lw != 70 || LoadLayout(ui).Split != 0.5 {
 		t.Fatalf("drag: list %d wide, ui.json %+v", lw, LoadLayout(ui))
 	}
 
@@ -800,7 +800,7 @@ func TestDashboardPopups(t *testing.T) {
 
 	press(m, ",")
 	out = screen(m)
-	for _, want := range []string{"Settings", "Prefix key", "ctrl+b", "Details panel", "List width", "Sidebar"} {
+	for _, want := range []string{"Settings", "Prefix key", "ctrl+b", "Details panel", "List size", "Sidebar"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("settings lack %q:\n%s", want, out)
 		}

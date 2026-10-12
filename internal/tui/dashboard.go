@@ -877,7 +877,7 @@ func (m *dash) fullTree() []treeRow {
 // area is the area with the keyboard: the list when the details panel
 // has it but doesn't show (the window got narrower).
 func (m *dash) area() area {
-	if split, _ := m.split(); m.focus == areaDetails && !split {
+	if m.focus == areaDetails && m.panel() == "" {
 		return areaMain
 	}
 	return m.focus
@@ -887,7 +887,7 @@ func (m *dash) area() area {
 // (shift+tab): the list, the details panel when it shows, the sidebar.
 func (m *dash) cycleFocus(key string) tea.Cmd {
 	areas := []area{areaMain, areaSide}
-	if split, _ := m.split(); split {
+	if m.panel() != "" {
 		areas = []area{areaMain, areaDetails, areaSide}
 	}
 	m.focus = cycle(areas, m.area(), key == "shift+tab")
@@ -1368,46 +1368,51 @@ func (m *dash) base() []string {
 	return body
 }
 
-// listBody is the list (and the details panel beside it) as the body's
-// rows, scrolled so the selected row shows.
+// listBody is the list (and the details panel beside or under it) as
+// the body's rows, the list scrolled so the selected row shows.
 func (m *dash) listBody() []string {
 	g := m.geom()
-	split, lw := g.split()
-	lines, _, sel := m.listLines(lw, !split)
-	room, dw := g.body().h, g.details().w
-	top := scrollTop(sel, room, len(lines))
-	if !split {
-		body := make([]string, room)
-		copy(body, lines[min(top, len(lines)):])
-		return body
+	ls, dr, place := g.list(), g.details(), g.panel()
+	lines, _, sel := m.listLines(ls.w, place == "")
+	top := scrollTop(sel, ls.h, len(lines))
+	list := make([]string, ls.h)
+	copy(list, lines[min(top, len(lines)):])
+	if place == "" {
+		return list
 	}
 	// The list scrolls on its own; the details panel shows the selected
 	// row from the top.
-	var right []string
+	var panel []string
 	if r, ok := m.selected(); ok {
-		right = m.details(r, dw)
+		panel = m.details(r, dr.w)
 	}
 	if m.detailKey == m.sel {
 		// Scrolled with the wheel.
-		m.detailTop = min(m.detailTop, max(len(right)-room, 0))
-		right = right[m.detailTop:]
+		m.detailTop = min(m.detailTop, max(len(panel)-dr.h, 0))
+		panel = panel[m.detailTop:]
 	}
+	panel = append(panel, make([]string, max(dr.h-len(panel), 0))...)[:dr.h]
 	// The details panel's divider is in the accent colour while the
 	// panel has the keyboard.
-	div := th().Faint.Render("│")
+	st := th().Faint
 	if m.focus == areaDetails {
-		div = th().Accent.Render("│")
+		st = th().Accent
 	}
-	body := make([]string, room)
+	if place == placeBottom {
+		body := make([]string, 0, g.body().h)
+		for _, l := range list {
+			body = append(body, fit(l, ls.w)+reset)
+		}
+		body = append(body, st.Render(strings.Repeat("─", dr.w)))
+		for _, d := range panel {
+			body = append(body, fit(d, dr.w)+reset)
+		}
+		return body
+	}
+	div := st.Render("│")
+	body := make([]string, ls.h)
 	for i := range body {
-		var l, d string
-		if top+i < len(lines) {
-			l = lines[top+i]
-		}
-		if i < len(right) {
-			d = right[i]
-		}
-		body[i] = fit(l, lw) + reset + div + fit(d, dw) + reset
+		body[i] = fit(list[i], ls.w) + reset + div + fit(panel[i], dr.w) + reset
 	}
 	return body
 }
@@ -1501,14 +1506,13 @@ func projectHead(r row, w int) string {
 // list, "" for none.
 func (m *dash) stateAt(x, y int) string {
 	g := m.geom()
-	split, lw := g.split()
-	if x >= g.list().w {
+	b := g.list()
+	if !b.has(x+b.x, y) {
 		return ""
 	}
-	lines, keys, sel := m.listLines(lw, !split)
-	b := g.body()
+	lines, keys, sel := m.listLines(b.w, g.panel() == "")
 	i := scrollTop(sel, b.h, len(keys)) + y - b.y
-	if !b.hasY(y) || i >= len(keys) {
+	if i >= len(keys) {
 		return ""
 	}
 	slug, ok := strings.CutPrefix(keys[i], stateKey)
