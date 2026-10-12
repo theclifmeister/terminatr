@@ -49,7 +49,7 @@ func (e *Env) fullConsole(own bool, goTo *tui.Target) int {
 	if err != nil {
 		return e.srvFail("dashboard", err)
 	}
-	e.warnModsRun(c)
+	modsNote := e.modsRunNote(c)
 	c.Close()
 	who := e.Caller
 	if e.Identify != nil {
@@ -75,14 +75,14 @@ func (e *Env) fullConsole(own bool, goTo *tui.Target) int {
 	if own {
 		args = []string{"--own"}
 	}
-	var st tui.DashState
+	st := tui.DashState{Message: modsNote}
 	if goTo != nil {
 		if err := tui.OpenTarget(p, vc, *goTo); err != nil {
 			st.Message = err.Error()
 		}
 	}
 	attach := vc.View().Mode == view.ModeLayout
-	flash := ""        // the popup's last message, for the session's status bar
+	flash := modsNote  // the popup's last message, for the session's status bar
 	command := ""      // a prefix command typed over the popup, for the session
 	sideFocus := false // the sidebar has the keyboard, across screens
 	for {
@@ -171,15 +171,20 @@ func (e *Env) openCmd(slug, agentName string) error {
 	return nil
 }
 
-// warnModsRun warns when tm --no-mods found a server already running
-// with user mods: safe mode is the server's, set when it starts.
-func (e *Env) warnModsRun(c *server.Client) {
+// modsRunNote is the hint when tm --no-mods found a server already
+// running with user mods (safe mode is the server's, set when it
+// starts); "" otherwise. It goes on stderr, which the dashboard covers
+// at once, and in the console's message line, so it is read as it
+// starts and not only after quitting (T301 B8).
+func (e *Env) modsRunNote(c *server.Client) string {
 	if !mod.NoMods(e.Getenv) || c.Started {
-		return
+		return ""
 	}
 	var res proto.ModHostsResult
 	if err := c.Call(proto.MethodModHosts, nil, &res); err != nil || res.NoMods {
-		return
+		return ""
 	}
-	fmt.Fprintln(e.Stderr, "tm: --no-mods: the server was already running with user mods; tm --no-mods server restart restarts it without them")
+	note := "--no-mods: the server was already running with user mods; tm --no-mods server restart restarts it without them"
+	fmt.Fprintln(e.Stderr, "tm: "+note)
+	return note
 }

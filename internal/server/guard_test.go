@@ -223,13 +223,11 @@ func TestHookGuard(t *testing.T) {
 		t.Errorf("journal %q, want %q", got, want)
 	}
 
-	// The rules are kept a minute: the human's settings reach the
-	// session's hooks after that.
-	writeConfig(t, "[projects."+p.Slug+"]\nguard_off = [\"merge\"]\n")
 	if judge("Bash", map[string]any{"command": "gh pr merge 1"}) == nil {
-		t.Error("rules changed within the minute")
+		t.Error("merge again: not refused")
 	}
-	clock = clock.Add(hookRulesFor)
+	// The human's settings reach the session's hooks at once (T301 B4).
+	writeConfig(t, "[projects."+p.Slug+"]\nguard_off = [\"merge\"]\n")
 	if d := judge("Bash", map[string]any{"command": "gh pr merge 1"}); d != nil {
 		t.Errorf("merge turned off: %+v", d)
 	}
@@ -472,5 +470,62 @@ message = "prod secrets\nstay with the human."
 		return strings.Contains(l, "guard.deny t-0001 mod:infra.no-destroy Bash: terraform destroy")
 	}) {
 		t.Errorf("journal %q", lines)
+	}
+}
+
+// TestGuardModLive: a guard mod enabled, disabled, updated or removed
+// changes a running session's guard decisions at once, for its hooks
+// and for its mod's GET /v1/rules, without a restart (T301 B4).
+func TestGuardModLive(t *testing.T) {
+	testPaths(t)
+	p := newWatchProject(t)
+	clock := time.Date(2026, 10, 12, 12, 0, 0, 0, time.UTC)
+	guardNow = func() time.Time { return clock } // never a minute later
+	t.Cleanup(func() { guardNow = time.Now })
+	dir := filepath.Join(os.Getenv("TERMINATR_HOME"), "mods", "infra")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := func(cmd string) {
+		t.Helper()
+		m := "id = \"infra\"\nname = \"Infra\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[[provides.guard]]\nid = \"no-destroy\"\ncommands = [\"" + cmd + "\"]\nmessage = \"the human's.\"\n"
+		if err := os.WriteFile(filepath.Join(dir, "mod.toml"), []byte(m), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manifest("terraform destroy")
+	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
+	rec := SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "codex", Project: p.Slug, Thread: "t-0001", Cwd: t.TempDir()}
+	s.records["s-2"] = rec
+	judge := s.hookGuardOf("s-2", false)
+	refused := func(cmd string) bool {
+		t.Helper()
+		hook := judge("Bash", map[string]any{"command": cmd}) != nil
+		if mod := s.hookRules(rec).Judge("Bash", map[string]any{"command": cmd}) != nil; mod != hook {
+			t.Fatalf("%s: the hooks say refused %v, the mod's rules %v", cmd, hook, mod)
+		}
+		return hook
+	}
+	if refused("terraform destroy") {
+		t.Fatal("refused before the mod was enabled")
+	}
+	writeConfig(t, "[mods.infra]\nenabled = true\n")
+	if !refused("terraform destroy") {
+		t.Fatal("enabled: not refused")
+	}
+	writeConfig(t, "[mods.infra]\nenabled = false\n")
+	if refused("terraform destroy") {
+		t.Fatal("disabled: still refused")
+	}
+	writeConfig(t, "[mods.infra]\nenabled = true\n")
+	manifest("pulumi destroy --yes")
+	if refused("terraform destroy") || !refused("pulumi destroy --yes") {
+		t.Fatal("updated: the old rule holds")
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	if refused("pulumi destroy --yes") {
+		t.Fatal("removed: still refused")
 	}
 }

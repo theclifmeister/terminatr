@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -393,7 +394,9 @@ func pressItem(label, key string) menuItem {
 
 // dashItems are the ≡ menu's items: every action of the keys table that
 // has a menu entry, in the table's order, each pressing its bound key,
-// then the mods' full views and commands (modcommands.go).
+// then the mods' full views and commands (modcommands.go). A mod's full
+// view and its command of the same title (standup's view and S, which
+// opens it) are one entry, the command's, which shows the key (T301 B9).
 func (m *dash) dashItems() []menuItem {
 	var out []menuItem
 	for _, a := range actions {
@@ -401,8 +404,13 @@ func (m *dash) dashItems() []menuItem {
 			out = append(out, pressItem(a.menu, boundKey(a.keys[0])))
 		}
 	}
-	out = append(out, m.fullItems()...)
-	return append(out, m.commandItems()...)
+	cmds := m.commandItems()
+	for _, f := range m.fullItems() {
+		if !slices.ContainsFunc(cmds, func(c menuItem) bool { return c.label == f.label }) {
+			out = append(out, f)
+		}
+	}
+	return append(out, cmds...)
 }
 
 // enterWord is what enter does on r (attach, open), "" nothing.

@@ -59,7 +59,20 @@ func TestModInstallEnableRemove(t *testing.T) {
 			t.Errorf("install output lacks %q:\n%s", want, out)
 		}
 	}
-	h.expect(1, "mod-exists", human, "mod", "install", src, "--yes")
+	h.expect(1, "already installed: tm mod update review-age", human, "mod", "install", src, "--yes")
+	// A hint that works (T301 B10): a built-in id can't be updated, nor
+	// a mod that records no source.
+	h.expect(1, "a built-in mod's id; give your copy another id", human, "mod", "install",
+		modSource(t, strings.Replace(modReviewAge, `"review-age"`, `"pr-ci-column"`, 1)), "--yes")
+	byHand := filepath.Join(h.root, "mods", "by-hand")
+	if err := os.CopyFS(byHand, os.DirFS(modSource(t, strings.Replace(modReviewAge, `"review-age"`, `"by-hand"`, 1)))); err != nil {
+		t.Fatal(err)
+	}
+	h.expect(1, "records no source (installed by hand, or by tm mod dev); tm mod remove by-hand first", human, "mod", "install",
+		modSource(t, strings.Replace(modReviewAge, `"review-age"`, `"by-hand"`, 1)), "--yes")
+	if err := os.RemoveAll(byHand); err != nil {
+		t.Fatal(err)
+	}
 	if out := h.ok(coord, "mod", "list"); !strings.Contains(out, "○ review-age") || !strings.Contains(out, "off") {
 		t.Errorf("list after install: %q", out)
 	}
@@ -142,6 +155,21 @@ func TestModValidate(t *testing.T) {
 	if code != 1 || !strings.Contains(out, "invalid  "+bad) || !strings.Contains(out, "has no name") {
 		t.Errorf("bad: exit %d %q", code, out)
 	}
+	// A keymap whose own actions want one key, as the console would
+	// refuse it (T301 B3); the sidebar's and a list's may share one.
+	keys := t.TempDir()
+	for name, text := range map[string]string{
+		"mod.toml":    "id = \"keys\"\nname = \"Keys\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nkeymap = \"keymap.toml\"\n",
+		"keymap.toml": "\"list.up\" = [\"K\"]\n\"list.down\" = [\"K\"]\n\"side.page-down\" = [\"ctrl+d\"]\n\"list.page-down\" = [\"ctrl+d\"]\n",
+	} {
+		if err := os.WriteFile(filepath.Join(keys, name), []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	code, out, _ = h.run(thr, "", "mod", "validate", keys)
+	if code != 1 || !strings.Contains(out, "list.down: its key is taken by list.up") || strings.Contains(out, "page-down") {
+		t.Errorf("own conflict: exit %d %q", code, out)
+	}
 	h.expect(2, "takes no --yes", human, "mod", "validate", good, "--yes")
 	h.expect(2, "unknown subcommand", human, "mod", "search", "x")
 }
@@ -172,7 +200,8 @@ func TestModExamples(t *testing.T) {
 	h := newHarness(t)
 	out := h.ok(thr, "mod", "examples")
 	for _, want := range []string{mod.ExamplesURL, "git clone " + mod.ExamplesRepo, "tm mod install terminatr/examples/mods/nord",
-		"cp -R terminatr/examples/mods/pr-ci-column my-pr-ci-column", "tm mod install my-pr-ci-column", "memory-search  an agent tool", "tm mod install terminatr/examples/mods/standup"} {
+		"cp -R terminatr/examples/mods/pr-ci-column my-pr-ci-column", "tm mod install my-pr-ci-column", "memory-search  an agent tool", "tm mod install terminatr/examples/mods/standup",
+		"gitlab  a code host (GitLab, through glab) · runs glab\n"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("examples lack %q:\n%s", want, out)
 		}
@@ -194,5 +223,38 @@ func TestModExamples(t *testing.T) {
 		if x.Builtin != (x.ID == "pr-ci-column" || x.ID == "memory-tab" || x.ID == "tasks-tab") || len(x.Install) == 0 {
 			t.Errorf("%+v", x)
 		}
+	}
+}
+
+// TestModEnableToolsAgentMod: enabling a mod that offers tools says,
+// while the Agent mod is off, that Claude threads won't get them (T301
+// L1); with it on it says nothing.
+func TestModEnableToolsAgentMod(t *testing.T) {
+	h := newHarness(t)
+	src := modSource(t, `id = "lint"
+name = "Lint"
+version = "1.0.0"
+api = "1.0"
+[provides]
+main = "main.ts"
+[[provides.tools]]
+id = "ping"
+description = "Answers pong."
+[permissions]
+tools = true
+`)
+	if out := h.ok(human, "mod", "install", src, "--yes"); !strings.Contains(out, mod.ToolsAgentModNote) {
+		t.Errorf("install consent lacks the Agent mod: %q", out)
+	}
+	if out := h.ok(human, "mod", "enable", "lint", "--yes"); !strings.Contains(out, "The Agent mod is off: Claude threads get its tools only") {
+		t.Errorf("enable, Agent mod off: %q", out)
+	}
+	cfg := filepath.Join(h.root, "config.toml")
+	old, _ := os.ReadFile(cfg)
+	if err := os.WriteFile(cfg, append([]byte("[agent_mod]\nenabled = true\n"), old...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out := h.ok(human, "mod", "enable", "lint", "--yes"); strings.Contains(out, "Agent mod is off") {
+		t.Errorf("enable, Agent mod on: %q", out)
 	}
 }

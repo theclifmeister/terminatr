@@ -187,6 +187,8 @@ type dash struct {
 	folds    view.Tree
 	msg      string
 	errMsg   string                  // msg when it reports a failure, drawn as one
+	toastSeq uint64                  // the last mod toast shown (showToasts)
+	toasted  bool                    // a poll set toastSeq
 	busy     bool                    // an action is running
 	acts     int                     // actions started, so a poll knows whether one began since it did
 	queued   []func(m *dash) tea.Cmd // settings keys pressed while it runs, in order
@@ -999,6 +1001,7 @@ func (m *dash) setData(d Data) tea.Cmd {
 	m.data, m.loaded = d, true
 	m.rebuild()
 	m.noteModFailures()
+	m.showToasts(d.Toasts)
 	noticeCmds := m.drawNotices()
 	ring := false
 	if d.ServerOK {

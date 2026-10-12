@@ -7,13 +7,17 @@
 // session.state carries a thread's totals so far (tokens, cost_usd). The
 // mod keeps each thread's last totals in its store, and adds what grew
 // to the day it grew on, so the days count only what was spent while
-// the mod ran.
+// the mod ran. A thread that started while it ran (thread.started)
+// counts from nothing, so its first turn, spent before its first
+// session.state, counts too; one that was running already when the mod
+// first hears of it sets a baseline, its earlier spend unknown.
 import type { TM } from "./types/tm";
 declare const $: TM;
 
 const CARD = "cost";
 const THREADS = "threads";
 const DAYS = "days";
+const FRESH = "fresh";
 const KEEP_DAYS = 14;
 
 interface Used {
@@ -30,6 +34,7 @@ interface Day {
 
 let threads: Record<string, Used> = {}; // by "<project>/<thread>"
 let days: Record<string, Day> = {}; // by "YYYY-MM-DD"
+let fresh: Record<string, true> = {}; // threads started while the mod ran, not heard of since
 const shown = new Set<string>(); // projects whose card shows ("" for all)
 
 const money = (usd: number) => `$${usd.toFixed(2)}`;
@@ -90,12 +95,19 @@ async function draw(now: Date) {
 $.on("mod.ready", async () => {
   threads = ((await $.store.get(THREADS)) as Record<string, Used>) ?? {};
   days = ((await $.store.get(DAYS)) as Record<string, Day>) ?? {};
+  fresh = ((await $.store.get(FRESH)) as Record<string, true>) ?? {};
+});
+
+$.on("thread.started", async (e) => {
+  fresh[`${e.project}/${e.thread}`] = true;
+  await $.store.set(FRESH, fresh);
 });
 
 $.on("session.state", async (e, meta) => {
   if (!e.project || !e.thread || e.tokens === undefined) return;
   const k = `${e.project}/${e.thread}`;
-  const was = threads[k];
+  // A thread started while the mod ran spent from nothing.
+  const was: Used | undefined = threads[k] ?? (fresh[k] ? { project: e.project, thread: e.thread, title: "", tokens: 0, cost: 0 } : undefined);
   const tokens = e.tokens ?? 0;
   const cost = e.cost_usd ?? 0;
   if (was && was.tokens === tokens && was.cost === cost) return;
@@ -108,9 +120,13 @@ $.on("session.state", async (e, meta) => {
     await $.store.set(DAYS, days);
   }
   // The thread's title, once: its id until the project says.
-  const title = was?.title ?? (await $.thread.get(e.project, e.thread))?.title ?? e.thread;
+  const title = was?.title || (await $.thread.get(e.project, e.thread))?.title || e.thread;
   threads[k] = { project: e.project, thread: e.thread, title, tokens, cost };
   await $.store.set(THREADS, threads);
+  if (fresh[k]) {
+    delete fresh[k];
+    await $.store.set(FRESH, fresh);
+  }
   await draw(now);
 });
 

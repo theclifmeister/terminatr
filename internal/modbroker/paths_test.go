@@ -115,6 +115,18 @@ func TestPathsCheck(t *testing.T) {
 		{"own\x00.txt", false, false},
 		{"~", false, false},
 	}
+	if caps.Windows {
+		// A rooted path without a drive is on the own folder's drive,
+		// outside, as on Unix; not a file of the own folder (T301 B10).
+		cases = append(cases, []struct {
+			path  string
+			write bool
+			ok    bool
+		}{
+			{`/Windows/win.ini`, false, false},
+			{`\Windows\win.ini`, true, false},
+		}...)
+	}
 	if caps.CaseFold {
 		cases = append(cases, []struct {
 			path  string
@@ -224,6 +236,24 @@ func TestWindowsName(t *testing.T) {
 		}
 		if got := windowsName(c.path) != ""; got != c.bad {
 			t.Errorf("windowsName(%q) = %v, want %v", c.path, got, c.bad)
+		}
+	}
+}
+
+// TestRootless: a Windows path rooted without a drive, which
+// filepath.IsAbs calls relative there (T301 B10).
+func TestRootless(t *testing.T) {
+	for path, want := range map[string]bool{
+		`/Windows/win.ini`:   true,
+		`\Windows\win.ini`:   true,
+		`C:\Windows\win.ini`: false,
+		`\\server\share\x`:   false,
+		`//server/share/x`:   false,
+		`own.txt`:            false,
+		`sub\own.txt`:        false,
+	} {
+		if got := rootless(path); got != want {
+			t.Errorf("rootless(%q) = %v, want %v", path, got, want)
 		}
 	}
 }

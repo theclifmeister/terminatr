@@ -103,6 +103,7 @@ func (s *Server) modCellsView() *proto.ModCells {
 	out := &proto.ModCells{
 		Cells:  s.cells().Cells(show, func(t proto.CellTarget) bool { return t.Session == "" }),
 		Status: s.cells().Status(show),
+		Toasts: s.toasts.list(show),
 	}
 	if shown := s.modCl.shown.Load(); shown != nil {
 		ids := make([]string, 0, len(*shown))
@@ -121,8 +122,11 @@ func (s *Server) modCellsView() *proto.ModCells {
 		for i := range out.Status {
 			out.Status[i].Name = (*shown)[out.Status[i].Mod].name
 		}
+		for i := range out.Toasts {
+			out.Toasts[i].Name = (*shown)[out.Toasts[i].Mod].name
+		}
 	}
-	if len(out.Columns) == 0 && len(out.Cells) == 0 && len(out.Status) == 0 {
+	if len(out.Columns) == 0 && len(out.Cells) == 0 && len(out.Status) == 0 && len(out.Toasts) == 0 {
 		return nil
 	}
 	return out

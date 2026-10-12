@@ -249,7 +249,7 @@ func (e *Env) modExamples(asJSON bool) error {
 	if asJSON {
 		rows := []exampleRow{}
 		for _, x := range mod.Examples {
-			rows = append(rows, exampleRow{ID: x.ID, Surface: x.Surface, Perms: append([]string{}, x.Perms...),
+			rows = append(rows, exampleRow{ID: x.ID, Surface: x.Surface, Perms: append([]string{}, x.Perms()...),
 				Builtin: mod.IsBundled(x.ID), Install: mod.InstallLines(x.ID)})
 		}
 		return e.printJSON(struct {
@@ -261,7 +261,7 @@ func (e *Env) modExamples(asJSON bool) error {
 	fmt.Fprintf(e.Stdout, "terminatr's example mods, one for each place a mod can show up: %s\n", mod.ExamplesURL)
 	fmt.Fprintf(e.Stdout, "Nothing here is installed. From a checkout (git clone %s), then:\n", mod.ExamplesRepo)
 	for _, x := range mod.Examples {
-		fmt.Fprintf(e.Stdout, "\n%s  %s · %s\n", x.ID, x.Surface, strings.Join(mod.Permissions{}.Words(x.Perms), " · "))
+		fmt.Fprintf(e.Stdout, "\n%s  %s · %s\n", x.ID, x.Surface, strings.Join(x.Words(), " · "))
 		for _, l := range mod.InstallLines(x.ID) {
 			fmt.Fprintf(e.Stdout, "  %s\n", l)
 		}
@@ -492,8 +492,16 @@ func (e *Env) modInstall(arg string, yes bool) error {
 	defer st.Close()
 	m := st.Manifest
 	if r, err := registry(); err == nil {
-		if _, ok := r.Get(m.ID); ok {
-			return &project.Error{Code: "mod-exists", Msg: fmt.Sprintf("%s is already installed: tm mod update %s", m.ID, m.ID)}
+		if old, ok := r.Get(m.ID); ok {
+			// Name what works: tm mod update only takes a mod that
+			// records where it came from (T301 B10).
+			hint := "tm mod update " + m.ID
+			if old.Builtin {
+				hint = "it is a built-in mod's id; give your copy another id in its mod.toml"
+			} else if _, ok := mod.ReadSource(old.Dir); !ok {
+				hint = "it records no source (installed by hand, or by tm mod dev); tm mod remove " + m.ID + " first"
+			}
+			return &project.Error{Code: "mod-exists", Msg: fmt.Sprintf("%s is already installed: %s", m.ID, hint)}
 		}
 	}
 	fmt.Fprintf(e.Stdout, "%s\nFrom %s. It installs disabled: tm mod enable %s turns it on.\n", mod.Consent(m, st.Dir), src, m.ID)
@@ -541,6 +549,9 @@ func (e *Env) modEnable(id, slug string, yes bool) error {
 	}
 	if m, ok = r.Get(id); ok {
 		fmt.Fprintf(e.Stdout, "%s enabled: %s\n", id, m.Status())
+		if c, _ := config.Load(); m.Manifest != nil && m.Manifest.Permissions.Tools && (c == nil || !c.AgentMod) {
+			fmt.Fprintf(e.Stdout, "The Agent mod is off: %s.\n", mod.ToolsAgentModNote)
+		}
 	}
 	return nil
 }

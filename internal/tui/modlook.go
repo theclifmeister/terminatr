@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -327,18 +326,10 @@ func init() {
 		if err != nil {
 			return err
 		}
-		rows := append(listBindables(), sideBindables()...)
-		var errs []error
-		for _, id := range slices.Sorted(maps.Keys(km)) {
-			i := slices.IndexFunc(rows, func(b bindable) bool { return b.id == id })
-			var row *bindable
-			if i >= 0 {
-				row = &rows[i]
-			}
-			if err := checkBinding(row, id, km[id], ConfigPrefix()); err != nil {
-				errs = append(errs, err)
-			}
-		}
-		return errors.Join(errs...)
+		// As the console would apply it over tm's keys: an action id
+		// it lacks, a locked key, and a key two of the mod's own
+		// actions (or one of tm's) want (T301 B3).
+		_, _, err = planKeymap(km, ConfigPrefix())
+		return err
 	}
 }

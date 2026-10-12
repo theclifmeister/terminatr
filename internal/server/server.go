@@ -163,6 +163,8 @@ type Server struct {
 	modCl modCells
 	// notices are the mods' notifications (modnotify.go).
 	notices *modnotify.Hub
+	// toasts are the mods' toasts (modtoast.go).
+	toasts modToasts
 	// versions caches agent versions for the mod guard (mods.go).
 	versions versions
 	// asks are the sessions' open questions (ask.go).
