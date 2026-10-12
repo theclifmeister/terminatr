@@ -227,6 +227,11 @@ func TestCallerRules(t *testing.T) {
 	h.ok(human, "project", "new", "other")
 	h.expect(1, "other-project", coord, "task", "add", "x", "--project", "other")
 	h.ok(coord, "task", "list", "--project", "other")
+
+	// A screen is read in the server as the human: a thread reads only
+	// its own, an agent only its project's.
+	h.expect(1, "coordinator-only", thr, "thread", "read", "t-0002")
+	h.expect(1, "other-project", coord, "thread", "read", "t-0001", "--project", "other")
 }
 
 func TestContextAndCwdResolution(t *testing.T) {

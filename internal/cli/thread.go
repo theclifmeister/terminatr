@@ -997,6 +997,15 @@ func (e *Env) archivedShow(p *project.Project, at *thread.ArchivedThread, asJSON
 }
 
 func (e *Env) threadRead(p *project.Project, id string, n int) error {
+	// The screen is read in the server as the human (cli.run), so the
+	// caller's scope is checked here: a thread reads its own, a
+	// coordinator its project's (docs/SPEC.md §11.1).
+	if e.Caller.Kind == caller.Thread && e.Caller.Thread != id {
+		return &tasks.Error{Code: "coordinator-only", Msg: fmt.Sprintf("reading thread %s's screen is the coordinator's", id)}
+	}
+	if e.Caller.IsAgent() && e.Caller.Project != p.Slug {
+		return &tasks.Error{Code: "other-project", Msg: fmt.Sprintf("agents of project %s can't read project %s's threads", e.Caller.Project, p.Slug)}
+	}
 	r, err := thread.Load(p, id)
 	if err != nil {
 		return err

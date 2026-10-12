@@ -13,9 +13,14 @@ import (
 
 // The test binary is the supervisor's tm too: run as `mod host …` it is
 // a mod host, as cmd/tm's is, with the $ API's bindings (modapi.Bind).
+// Run as `scope-probe SOCKET OTHER` inside a session it is a caller of
+// session-addressed methods (TestScopeInSession).
 func TestMain(m *testing.M) {
 	if len(os.Args) > 2 && os.Args[1] == "mod" && os.Args[2] == "host" {
 		os.Exit(testHostMain(os.Args[3:]))
+	}
+	if len(os.Args) == 4 && os.Args[1] == "scope-probe" {
+		os.Exit(scopeProbe(os.Args[2], os.Args[3]))
 	}
 	os.Exit(m.Run())
 }

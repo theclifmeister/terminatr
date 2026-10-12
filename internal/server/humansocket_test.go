@@ -20,7 +20,7 @@ var humanOnlyMethods = []string{
 	proto.MethodNotifyClaim, proto.MethodNotifyDismiss,
 	proto.MethodModActionCheck, proto.MethodModActionDone, proto.MethodSessionClear,
 	proto.MethodSessionStart, proto.MethodSessionStop, proto.MethodSessionKeys, proto.MethodSessionPrompt,
-	proto.MethodSessionAdopt, proto.MethodSessionRemote, proto.MethodQuestionsOpen,
+	proto.MethodSessionAdopt, proto.MethodSessionRemote, proto.MethodSessionModel, proto.MethodQuestionsOpen,
 	proto.MethodServerStop, proto.MethodAgentReload,
 	proto.MethodViewSubscribe, proto.MethodViewAttach, proto.MethodViewDashboard, proto.MethodViewProject,
 	proto.MethodViewSelect, proto.MethodViewSideSel, proto.MethodViewExpand, proto.MethodViewTree,

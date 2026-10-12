@@ -498,7 +498,7 @@ func HumanOnly(m string) bool {
 		MethodNotifyClaim, MethodNotifyDismiss,
 		MethodModActionCheck, MethodModActionDone, MethodSessionClear,
 		MethodSessionStart, MethodSessionStop, MethodSessionKeys, MethodSessionPrompt,
-		MethodSessionAdopt, MethodSessionRemote, MethodQuestionsOpen,
+		MethodSessionAdopt, MethodSessionRemote, MethodSessionModel, MethodQuestionsOpen,
 		MethodServerStop, MethodAgentReload:
 		return true
 	}
