@@ -30,6 +30,7 @@ func TestMain(m *testing.M) {
 	if dir := os.Getenv("TM_FAKE_LAUNCHCTL_DIR"); dir != "" && filepath.Base(os.Args[0]) == "launchctl" {
 		os.Exit(fakeLaunchctl(dir, os.Args[1:]))
 	}
+	servicetest.NotAServer()
 	// No test starts a server through the user's launchd; one that did
 	// would fail the run (servicetest).
 	if os.Getenv(service.LaunchEnvVar) == "" {
