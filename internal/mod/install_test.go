@@ -196,6 +196,21 @@ func TestInstallFromPath(t *testing.T) {
 	if err := Install(human, st2); err == nil || !strings.Contains(err.Error(), "already installed") {
 		t.Errorf("second install: %v", err)
 	}
+	// Taken says so before the consent, naming what works instead.
+	r := registryOf(t)
+	for id, want := range map[string]string{
+		"nord":       "nord is already installed: tm mod update nord",
+		"memory-tab": "memory-tab is already installed: it is a built-in mod's id",
+		"free":       "",
+	} {
+		if got := Taken(r, id); !strings.HasPrefix(got, want) || (want == "") != (got == "") {
+			t.Errorf("Taken(%s) = %q, want %q…", id, got, want)
+		}
+	}
+	os.Remove(filepath.Join(m.Dir, SourceFile))
+	if got := Taken(registryOf(t), "nord"); !strings.Contains(got, "records no source") {
+		t.Errorf("Taken of a mod with no source: %q", got)
+	}
 }
 
 func TestFetchRefuses(t *testing.T) {
