@@ -210,9 +210,6 @@ func OSC52(which byte, data []byte) []byte {
 	return append(b, '\a')
 }
 
-// RGB is a colour as red, green and blue.
-type RGB struct{ R, G, B uint8 }
-
 // Palette is the colours a renderer draws a pane's symbolic colours with
 // (a theme's pane palette, docs/SPEC.md §5.3): the default foreground and
 // background (SGR 39/49) and the 16 ANSI colours (palette indexes 0-15).
