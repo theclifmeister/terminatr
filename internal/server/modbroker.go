@@ -131,8 +131,7 @@ func (s *Server) broker() *modbroker.Broker {
 	return mb.b
 }
 
-// modNamed is installed mod id as the registry has it, read anew when
-// older than modRegistryAge.
+// modNamed is installed mod id as the registry has it (modRegistry).
 func (s *Server) modNamed(id string) (mod.Mod, bool) {
 	r := s.modRegistry()
 	if r == nil {

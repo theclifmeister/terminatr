@@ -619,6 +619,8 @@ func (s *Server) dispatch(req proto.Request, peerPID int) (any, *proto.Error) {
 			return nil, err
 		}
 		return s.toolRunRPC(p, peerPID)
+	case proto.MethodToolList:
+		return s.toolListRPC(peerPID)
 	case proto.MethodProjectRename:
 		var p proto.ProjectRenameParams
 		if err := decodeParams(req.Params, &p); err != nil {
