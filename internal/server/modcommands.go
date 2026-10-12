@@ -5,7 +5,8 @@ package server
 // on a console, or with tm mod run (mod.command), and the mod gets
 // command.run, starting its host if it waits for its first event. From
 // a console's key or menu entry it may then open one of its views there,
-// as after a key in its view.
+// as after a key in its view: a session's console then shows it over
+// the session, by the answer's After.
 
 import (
 	"github.com/theclifmeister/terminatr/internal/caller"
@@ -59,12 +60,13 @@ func (s *Server) modCommand(p proto.ModCommandParams, pid int, c caller.Caller) 
 		}
 		ev.Selection = &modbus.Target{Project: t.Project, Task: t.Task, Thread: t.Thread, Session: t.Session}
 	}
+	var res proto.ModCommandResult
 	if p.Console {
-		s.modViewStore().Input(m.ID, pid, p.Project)
+		res.After = s.modViewStore().Input(m.ID, pid, p.Project)
 	}
 	s.log.Printf("mod.command %s by %s", mod.CommandName(m.ID, p.Command), c)
 	if s.modEv != nil {
 		s.modEv.bus.PublishTo(m.ID, modbus.CommandRun, p.Project, ev)
 	}
-	return struct{}{}, nil
+	return res, nil
 }

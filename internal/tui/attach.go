@@ -17,6 +17,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/emu"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/plat/term"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -225,6 +226,9 @@ func Attach(opts Options) (res Result, err error) {
 		go c.askRemote()
 	case "tab", "|":
 		go c.paneCommand(opts.Command)
+	case "":
+	default:
+		go c.keyCommand(opts.Command)
 	}
 	res = c.renderLoop(opts.Out)
 	cancel()
@@ -349,6 +353,14 @@ type client struct {
 	then      string
 	goTo      *Target // a sidebar click in a bare view, carried like then
 	over      *Over   // a popup to open over the session, carried like then
+
+	// The mods' commands (attachcommands.go): those that run, read
+	// every cmdReload (cmdsAt), the command whose view open this
+	// session watches for, and how to send one (nil: to the server).
+	cmds        []mod.ModCommand
+	cmdsAt      time.Time
+	wait        *cmdWait
+	sendCommand func(proto.ModCommandParams) (proto.ModCommandResult, error)
 
 	wake    chan struct{}
 	endOnce sync.Once
@@ -1063,6 +1075,11 @@ func (c *client) key(k uv.Key) {
 		return
 	}
 	do := prefixStep(c.prefix, pending, k, c.dashboard)
+	var cmd mod.ModCommand
+	if pending && do == (prefixDo{}) {
+		// No core command: a mod's, if one has the key.
+		cmd, do.command = c.sessionCommand(keyName(k))
+	}
 	c.pending = do.arm
 	redraw := pending || do.arm || c.flash != ""
 	c.flash = ""
@@ -1077,6 +1094,10 @@ func (c *client) key(k uv.Key) {
 		if c.kb == areaMain { // another area has the keyboard: nothing leaks
 			c.input(k)
 		}
+		return
+	}
+	if do.command {
+		c.runCommand(cmd)
 		return
 	}
 	c.run(do)
@@ -1110,6 +1131,8 @@ type prefixDo struct {
 	// remote asks to turn the focused coordinator's remote control on
 	// or off.
 	remote bool
+	// command: a mod's command has the key (attachcommands.go).
+	command bool
 }
 
 // paneCommands are the keys that, after the prefix, act on the window
@@ -1229,7 +1252,12 @@ func (c *client) popupOverTask(project, key string, id int) {
 	if !c.lock() {
 		return
 	}
-	o := &Over{Key: key, Project: project, Task: id}
+	c.goOver(&Over{Key: key, Project: project, Task: id})
+}
+
+// goOver leaves the attach for the dashboard over this pane, which runs
+// o and attaches again once its popup closes. c.mu held; released here.
+func (c *client) goOver(o *Over) {
 	o.Screen = c.paneLines(o)
 	if p := c.focus; p != nil {
 		o.Session, o.Title = p.info.ID, p.info.ID+" · "+strings.TrimPrefix(p.info.Project+" "+sessionName(p.info), " ")
@@ -1817,7 +1845,18 @@ func (c *client) pollState(ctx context.Context) {
 			}
 		}
 		statuses := threadStatuses(res.Sessions)
-		c.pollInfo(ctl, res.Sessions)
+		views := c.pollInfo(ctl, res.Sessions)
+		if w := c.waiting(); w != nil {
+			if views == nil {
+				views = pollViews(ctl, nil) // the panel shows no view
+			}
+			c.takeOpen(w, views)
+		}
+		var cmds []mod.ModCommand
+		reload := time.Since(c.cmdsAt) >= cmdReload
+		if reload {
+			cmds = loadCommands(ctl)
+		}
 		if c.lock() {
 			if c.side != nil {
 				c.side.projects, c.side.sessions, c.side.ctxHint, c.side.needsFirst = projects, res.Sessions, ctxHint, needsFirst
@@ -1833,6 +1872,9 @@ func (c *client) pollState(ctx context.Context) {
 				}
 			}
 			c.cells = newModCells(res.Mods, res.Sessions)
+			if reload {
+				c.cmds, c.cmdsAt = cmds, time.Now()
+			}
 			c.status()
 			c.bell = c.bell || ring
 			c.osc = append(c.osc, osc...)

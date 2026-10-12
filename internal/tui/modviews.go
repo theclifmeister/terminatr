@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -468,6 +469,7 @@ func (m *dash) setModViews(msg modViewsMsg) tea.Cmd {
 		}
 		m.mv.seen = o.Seq
 		m.openModView(o)
+		m.awaitView = time.Time{}
 	}
 	return m.tellCursors()
 }

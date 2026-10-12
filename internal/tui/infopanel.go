@@ -712,9 +712,10 @@ func (c *client) infoMouse(m emu.Mouse) {
 // Beside a coordinator it also asks ctl (nil: no server) for the mods'
 // views, saying which of their coordinator sections the panel shows, by
 // the views the last poll listed; once it shows none, it says so once.
-func (c *client) pollInfo(ctl *server.Client, sessions []proto.SessionInfo) {
+// It returns that answer, nil when it didn't ask.
+func (c *client) pollInfo(ctl *server.Client, sessions []proto.SessionInfo) *proto.ModViewsResult {
 	if !c.lock() {
-		return
+		return nil
 	}
 	id, on := c.v.Focus, c.info != nil
 	var prev []proto.ModView
@@ -724,7 +725,7 @@ func (c *client) pollInfo(ctl *server.Client, sessions []proto.SessionInfo) {
 	}
 	c.mu.Unlock()
 	if !on {
-		return
+		return nil
 	}
 	var d *infoData
 	for _, s := range sessions {
@@ -733,12 +734,16 @@ func (c *client) pollInfo(ctl *server.Client, sessions []proto.SessionInfo) {
 		}
 	}
 	var views []proto.ModView
+	var res *proto.ModViewsResult
 	if coord := d != nil && d.watch != nil; coord || sent {
 		var shown []modview.Shown
 		if coord && w > 0 {
 			shown = sectionsShown(prev, mod.SlotCoordinatorSection, d.slug, "", "", w)
 		}
-		views, sent = pollViews(ctl, shown), len(shown) > 0
+		res, sent = pollViews(ctl, shown), len(shown) > 0
+		if res != nil {
+			views = res.Views
+		}
 		if coord {
 			d.sections = views
 		}
@@ -748,11 +753,13 @@ func (c *client) pollInfo(ctl *server.Client, sessions []proto.SessionInfo) {
 		c.infoLayout()
 		c.mu.Unlock()
 	}
+	return res
 }
 
 // pollViews is mod.views on ctl, saying the console shows shown: the
-// mods' views, nil without a server (or an older one).
-func pollViews(ctl *server.Client, shown []modview.Shown) []proto.ModView {
+// mods' views and the views they ask to open, nil without a server (or
+// an older one).
+func pollViews(ctl *server.Client, shown []modview.Shown) *proto.ModViewsResult {
 	if ctl == nil {
 		return nil
 	}
@@ -760,5 +767,5 @@ func pollViews(ctl *server.Client, shown []modview.Shown) []proto.ModView {
 	if ctl.Call(proto.MethodModViews, proto.ModViewsParams{Shown: shown}, &res) != nil {
 		return nil
 	}
-	return res.Views
+	return &res
 }
