@@ -2,8 +2,8 @@
 // small tree of text, list, table, kv, progress, steps, bars and keys,
 // stacked, that the mod publishes as JSON and terminatr draws with its own
 // theme, icons, widths, scrolling and mouse hits. A mod never writes
-// terminal bytes: span text has its control characters stripped and
-// refuses wide glyphs, and a span's look is a theme role or an icon name.
+// terminal bytes: span text has its control characters stripped and its
+// wide glyphs replaced, and a span's look is a theme role or an icon name.
 //
 // The list state is the core's (State): the cursor, the scroll and the
 // filter move on a key or a click without a round trip to the mod host.
@@ -156,15 +156,16 @@ type Key struct {
 const (
 	MaxBytes    = 1 << 20 // the JSON
 	MaxDepth    = 4       // stacks in stacks
-	MaxWidgets  = 64
+	MaxWidgets  = 256
 	MaxRows     = 5000 // in all the lists and tables
 	MaxSpans    = 16   // in a row, a cell, a line or a value
 	MaxColumns  = 12
 	MaxValues   = 512
 	MaxKeys     = 12
-	MaxActions  = 8    // bound on one row
-	MaxText     = 4096 // bytes of one string
-	MaxTextLine = 500  // lines of a text widget
+	MaxActions  = 8        // bound on one row
+	MaxText     = 4096     // bytes of one string
+	MaxBody     = 64 << 10 // bytes of a text widget's text, a long file's
+	MaxTextLine = 2000     // lines of a text widget, pairs, steps
 )
 
 var idRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
@@ -198,8 +199,8 @@ func Decode(data []byte) (*Widget, error) {
 
 // Check checks the tree in place: kinds, roles, icons, ids, keys and the
 // limits. It strips control and format characters from every string and
-// refuses a string with a wide glyph (an emoji, a CJK character), whose
-// width differs between terminals. The error names the node, as
+// replaces each wide glyph (an emoji, a CJK character), whose width
+// differs between terminals, with a ?. The error names the node, as
 // children[1].rows[3].spans[0].
 func (w *Widget) Check() error {
 	c := checker{ids: map[string]bool{}}
@@ -210,7 +211,7 @@ func (w *Widget) Check() error {
 // CheckSpans checks spans that stand alone, a cell or a status segment
 // (mods design §6, Spans), as Check checks a tree's: at most MaxSpans,
 // roles and icons by name, each text cleaned in place, newlines become
-// spaces, wide glyphs refused. The error names the span, as spans[2].
+// spaces, wide glyphs ?. The error names the span, as spans[2].
 func CheckSpans(ss []Span) error {
 	c := checker{ids: map[string]bool{}}
 	c.spans(ss, "spans")
@@ -270,7 +271,7 @@ func (c *checker) widget(w *Widget, at string, depth int) {
 			c.widget(&w.Children[i], fmt.Sprintf("%s[%d]", join(at, "children"), i), depth+1)
 		}
 	case KindText:
-		c.text(&w.Text, join(at, "text"))
+		c.body(&w.Text, join(at, "text"))
 		c.role(w.Role, join(at, "role"))
 		if n := strings.Count(w.Text, "\n") + len(w.Lines); n > MaxTextLine {
 			c.bad(at, "%d lines, over %d", n, MaxTextLine)
@@ -475,24 +476,23 @@ func (c *checker) role(r, at string) {
 	}
 }
 
-// str cleans *s in place (Clean, a newline becoming a space) and refuses
-// wide glyphs and long text.
+// str cleans *s in place (Clean, a newline becoming a space, Narrow)
+// and refuses long text.
 func (c *checker) str(s *string, at string) {
-	c.text(s, at)
+	c.text(s, at, MaxText)
 	*s = strings.ReplaceAll(*s, "\n", " ")
 }
 
-// text is str keeping newlines, for a text widget's Text.
-func (c *checker) text(s *string, at string) {
-	if len(*s) > MaxText {
-		c.bad(at, "%d bytes, over %d", len(*s), MaxText)
+// body is str keeping newlines, for a text widget's Text, up to MaxBody.
+func (c *checker) body(s *string, at string) { c.text(s, at, MaxBody) }
+
+func (c *checker) text(s *string, at string, limit int) {
+	if len(*s) > limit {
+		c.bad(at, "%d bytes, over %d", len(*s), limit)
 		*s = (*s)[:0]
 		return
 	}
-	*s = Clean(*s)
-	if g, ok := wideGlyph(*s); ok {
-		c.bad(at, "%q is a wide glyph (emoji and wide characters are refused)", g)
-	}
+	*s = Narrow(Clean(*s))
 }
 
 // Clean strips what could reach the terminal as other than text: control
@@ -518,8 +518,31 @@ func Clean(s string) string {
 	return b.String()
 }
 
-// wideGlyph is the first grapheme of s wider than one cell.
+// Narrow replaces each grapheme of s wider than one cell, an emoji or a
+// CJK character, with a ?: terminals disagree on how wide they draw, so
+// the rest of the line would shift.
+func Narrow(s string) string {
+	if _, ok := wideGlyph(s); !ok {
+		return s
+	}
+	var b strings.Builder
+	g := uniseg.NewGraphemes(s)
+	for g.Next() {
+		if g.Width() > 1 {
+			b.WriteByte('?')
+		} else {
+			b.WriteString(g.Str())
+		}
+	}
+	return b.String()
+}
+
+// wideGlyph is the first grapheme of s wider than one cell. Below
+// U+1100 nothing is wide but with a variation selector, which is above.
 func wideGlyph(s string) (string, bool) {
+	if strings.IndexFunc(s, func(r rune) bool { return r >= 0x1100 }) < 0 {
+		return "", false
+	}
 	g := uniseg.NewGraphemes(s)
 	for g.Next() {
 		if g.Width() > 1 {

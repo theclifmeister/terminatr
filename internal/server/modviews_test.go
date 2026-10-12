@@ -65,7 +65,8 @@ func next(t *testing.T, sub *modbus.Sub) modbus.Event {
 
 // TestModViews: a mod publishes its views' trees, a console polls them
 // and says what it shows (view.opened, view.closed), its keys reach the
-// mod (ui.key), only after which the mod may open a view; a restarted
+// mod (ui.key), only after which the mod may open a view, and its
+// cursor's moves (ui.cursor), which don't let it; a restarted
 // host loses its trees and gets view.opened again.
 func TestModViews(t *testing.T) {
 	s := panelServer(t, `"project_read", "views"`)
@@ -116,6 +117,20 @@ func TestModViews(t *testing.T) {
 		t.Fatal("the other project's tab was opened")
 	}
 
+	// Where the cursor went reaches the mod, but lets it open nothing.
+	if _, perr := s.modViewInput(proto.ModViewInputParams{Mod: "panel", View: "queue", Project: "demo", Kind: "cursor", Widget: "q", Row: "T1"}, 42, human); perr != nil {
+		t.Fatal(perr)
+	}
+	ev = next(t, sub)
+	if in, ok := ev.Data.(modbus.Input); ev.Name != modbus.UICursor || !ok || in.Widget != "q" || in.Row != "T1" || in.Key != "" || in.Target.Project != "demo" {
+		t.Fatalf("event %s %+v", ev.Name, ev.Data)
+	}
+	if err := call("ui.view.open", map[string]any{"view": "cost"}); err == nil {
+		t.Fatal("open after a cursor move")
+	}
+	if _, perr := s.modViewInput(proto.ModViewInputParams{Mod: "panel", View: "queue", Project: "demo", Kind: "scroll"}, 42, human); perr == nil {
+		t.Fatal("kind scroll was taken")
+	}
 	if _, perr := s.modViewInput(proto.ModViewInputParams{Mod: "panel", View: "queue", Project: "demo", Kind: "key", Widget: "q", Row: "T1", Key: "o"}, 42,
 		caller.Caller{Kind: caller.Coordinator}); perr == nil {
 		t.Fatal("an agent's input was taken")

@@ -13,6 +13,7 @@ import (
 // clicks and the wheel move it here, so moving the cursor never needs a
 // round trip to the mod host; only a key the mod declared, and a click on
 // a row or a key hint, come back as an Event for it (ui.key, ui.click).
+// Where the cursor is the mod hears after the fact (Moved, ui.cursor).
 //
 // A View is for one goroutine, the console's.
 type View struct {
@@ -43,6 +44,10 @@ type View struct {
 	since    map[rowKey]bound
 	shifted  time.Time
 	now      func() time.Time
+
+	// told is the focused list and its cursor's row as Moved last
+	// reported them.
+	told rowKey
 }
 
 // rowKey is a row of a list.
@@ -71,7 +76,7 @@ type list struct {
 // binds, pressed, for the console to re-check against live state, ask
 // and run (the mods design §11). The mod hears of it only as action.done.
 type Event struct {
-	Kind   string `json:"kind"` // EventKey or EventClick
+	Kind   string `json:"kind"` // EventKey, EventClick or EventCursor
 	Widget string `json:"widget,omitempty"`
 	Row    string `json:"row,omitempty"`
 	Key    string `json:"key,omitempty"`
@@ -87,6 +92,7 @@ type Event struct {
 const (
 	EventKey    = "key"
 	EventClick  = "click"
+	EventCursor = "cursor"
 	EventAction = "action"
 )
 
@@ -463,6 +469,23 @@ func (v *View) event(kind, key string) *Event {
 	}
 	return e
 }
+
+// Moved is an EventCursor when the focused list, or the row under its
+// cursor, is not the one it last reported: a key, a click or the filter
+// moved it, or a publish did (its row went), or nothing was reported
+// yet. Row "" is no row (an empty list). nil when nothing changed.
+func (v *View) Moved() *Event {
+	now := rowKey{v.focus, v.Cursor(v.focus)}
+	if now == v.told {
+		return nil
+	}
+	v.told = now
+	return &Event{Kind: EventCursor, Widget: now.list, Row: now.row}
+}
+
+// Forget forgets what Moved reported, so it reports again: the view
+// was hidden, and its mod told it closed.
+func (v *View) Forget() { v.told = rowKey{} }
 
 // Wheel scrolls by n lines (up when negative) without moving the cursor.
 func (v *View) Wheel(n int) {

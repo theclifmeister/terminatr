@@ -657,6 +657,8 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.fail(msg.err)
 		}
 		return m, nil
+	case modCursorMsg:
+		return m, m.cursorSent(msg)
 	case boardMsg:
 		if pv := m.projectPopupView(); pv != nil && pv.slug == msg.slug {
 			if msg.err == nil {

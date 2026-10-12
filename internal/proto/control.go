@@ -746,13 +746,13 @@ const ModViewFailed = "failed"
 
 // MethodModViewInput sends a human's key or click in a mod's view to
 // the mod, as ui.key or ui.click (mods design §6): only the keys the mod
-// declared, and clicks on its rows and key hints. The human's: an
-// agent is refused.
+// declared, and clicks on its rows and key hints; and where the cursor
+// went, as ui.cursor. The human's: an agent is refused.
 const MethodModViewInput = "mod.view.input"
 
 // ModViewInputParams are the params of mod.view.input: Kind is
-// widget.EventKey or widget.EventClick, Widget the focused (or clicked)
-// list or keys widget, Row the row under its cursor.
+// widget.EventKey, widget.EventClick or widget.EventCursor, Widget the
+// focused (or clicked) list or keys widget, Row the row under its cursor.
 type ModViewInputParams struct {
 	Mod     string `json:"mod"`
 	View    string `json:"view"`
