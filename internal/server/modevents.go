@@ -15,6 +15,7 @@ package server
 import (
 	"cmp"
 	"context"
+	"strings"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/modbus"
@@ -280,6 +281,12 @@ func modReport(slug, id string) *modbus.Report {
 	if err != nil || rep == nil {
 		return nil
 	}
-	return &modbus.Report{Project: slug, Thread: id, Task: r.Task, PR: rep.PR,
-		Sections: modbus.ReportSections{Report: rep.Text, Next: rep.Next, Check: rep.Check, Remember: rep.Remember}}
+	// The ## Report section, not the whole file (T301 B2); a report
+	// edited by hand out of shape gives its text.
+	body := thread.Section(rep.Text, "Report")
+	if body == "" && !strings.Contains(rep.Text, "## Report") {
+		body = strings.TrimSpace(rep.Text)
+	}
+	return &modbus.Report{Project: slug, Thread: id, Task: r.Task, PR: rep.PR, Report: r.Reports,
+		Sections: modbus.ReportSections{Report: body, Next: rep.Next, Check: rep.Check, Remember: rep.Remember}}
 }

@@ -173,3 +173,24 @@ func TestSessionUsage(t *testing.T) {
 		}
 	}
 }
+
+// TestModReport: report.get and report.stored give the report's number
+// and its ## Report section, not the whole file (T301 B2).
+func TestModReport(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	pr := newWatchProject(t)
+	rec, err := thread.Create(pr, thread.Record{Title: "work", Task: "T1", Agent: "claude"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"## Report\nfirst\n## Next\n- go\n", "PR: https://github.com/o/r/pull/3\n## Report\nFixed the login.\n\nTwo lines.\n## Next\n- merge it\n## Check\nrun it\n"} {
+		if _, err := thread.StoreReport(pr, rec.ID, text, nil, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := modReport("demo", rec.ID)
+	if r == nil || r.Report != 2 || r.Sections.Report != "Fixed the login.\n\nTwo lines." || r.PR != "https://github.com/o/r/pull/3" ||
+		len(r.Sections.Next) != 1 || r.Sections.Next[0] != "merge it" || len(r.Sections.Check) != 1 || r.Task != "T1" {
+		t.Fatalf("report %+v", r)
+	}
+}
