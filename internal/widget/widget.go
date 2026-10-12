@@ -87,6 +87,10 @@ type Widget struct {
 	Spark  bool      `json:"spark,omitempty"`  // bars: one line, ▁▂▃▅▇
 
 	Keys []Key `json:"keys,omitempty"` // keys
+	// Actions are core actions bound in the whole view, whatever row
+	// the cursor is on (keys; mod API 1.3), such as task.new: an action
+	// no row stands for. A row's own action on the same key comes first.
+	Actions []Action `json:"actions,omitempty"`
 }
 
 // Span is a piece of text in a role, or an icon (mods design §6):
@@ -309,6 +313,10 @@ func (c *checker) widget(w *Widget, at string, depth int) {
 		c.bars(w, at)
 	case KindKeys:
 		c.keys(w, at)
+		c.actions(w.Actions, join(at, "actions"))
+	}
+	if len(w.Actions) > 0 && w.Kind != KindKeys {
+		c.bad(join(at, "actions"), "only a keys widget, or a row, binds actions")
 	}
 }
 
@@ -435,7 +443,7 @@ func (c *checker) rowsOf(w *Widget, at string) {
 	}
 }
 
-// actions checks a row's bound actions (mods design §11): each names a
+// actions checks a row's or a keys widget's bound actions (mods design §11): each names a
 // core action a mod may bind (modaction), once, on a target of the shape
 // it takes. Whether it is available is checked when it is pressed.
 func (c *checker) actions(as []Action, at string) {

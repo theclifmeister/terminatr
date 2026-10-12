@@ -4,16 +4,14 @@
                                    │  tasks: 0 need you · 1 in motion · 1 on deck
             ╭─ demo ───────────────────────────────────────────────────────────────────────────────────────╮────────────
             │  1 overview   2 inbox   3 tasks   4 settings   5 keys   6 memory   7 library                 │
-            │                                                                                              │
+            │ mod: tasks-tab · tasks                                                                       │
             │ IN MOTION ────────────────────────────────────────────────────────────────────────────────── │
-            │ T1     Write the README                  ● started   ▰▰▰▱▱  1/2                              │
-            │        ✓ Draft                                                                               │
-            │        ○ Review                                                                              │
+            │ T1  Write the README  ● started  1/2                                                         │
+            │       ✓ Draft                                                                                │
+            │       ○ Review                                                                               │
             │                                                                                              │
             │ ON DECK ──────────────────────────────────────────────────────────────────────────────────── │
-            │ T2     Ship it                           ○ ready                                             │
-            │                                                                                              │
-            │ + adds a task, from a template or none                                                       │
+            │ T2  Ship it           ○ ready                                                                │
             │                                                                                              │
             │                                                                                              │
             │                                                                                              │
@@ -32,7 +30,9 @@
             │                                                                                              │
             │                                                                                              │
             │                                                                                              │
-            │ enter show · esc close                                                                       │
+            │                                                                                              │
+            │                                                                                              │
+            │ enter show · + new task · ↑ ↓ move · / filter · ← → tabs · esc close                         │
             ╰──────────────────────────────────────────────────────────────────────────────────────────────╯
  ───────────────────────────────── │
  demo · active                     │────────────────────────────────────────────────────────────────────────────────────

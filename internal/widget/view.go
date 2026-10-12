@@ -21,6 +21,9 @@ type View struct {
 	lists map[string]*list
 	order []string // the lists and tables, in the tree's order
 	keys  []Key    // every keys widget's, in order
+	// acts are the actions bound in the whole view (the keys widgets'),
+	// in order, each id once.
+	acts  []Action
 	focus string
 	// editing: keys type into the focused list's filter.
 	editing bool
@@ -50,7 +53,8 @@ type View struct {
 	told rowKey
 }
 
-// rowKey is a row of a list.
+// rowKey is a row of a list; the zero rowKey stands for the actions
+// bound in the whole view.
 type rowKey struct{ list, row string }
 
 // bound is a row's bindings as last published, and since when.
@@ -125,12 +129,21 @@ func (v *View) Tree() *Widget { return v.tree }
 // filter and its cursor on the same row, by id; a cursor whose row went
 // stays at its place. The focus stays on its list, else goes to the
 // first one.
+//
+// The view's first tree counts as still from the start: nothing was on
+// show that a press could have been meant for, so the first press after
+// a view opens doesn't wait out modaction.Stable.
 func (v *View) Set(t *Widget) {
 	old := v.lists
 	focus, cursor, place := v.focus, v.Cursor(v.focus), v.place()
+	first := v.tree == nil
 	now := v.now()
+	stamp := now
+	if first {
+		stamp = time.Time{}
+	}
 	since := map[rowKey]bound{}
-	v.tree, v.lists, v.order, v.keys = t, map[string]*list{}, nil, nil
+	v.tree, v.lists, v.order, v.keys, v.acts = t, map[string]*list{}, nil, nil, nil
 	walk(t, func(w *Widget) {
 		switch w.Kind {
 		case KindList, KindTable:
@@ -150,13 +163,26 @@ func (v *View) Set(t *Widget) {
 				if b, ok := v.since[k]; ok && b.sig == sig {
 					since[k] = b
 				} else {
-					since[k] = bound{sig, now}
+					since[k] = bound{sig, stamp}
 				}
 			}
 		case KindKeys:
 			v.keys = append(v.keys, w.Keys...)
+			for _, a := range w.Actions {
+				if !slices.ContainsFunc(v.acts, func(o Action) bool { return o.ID == a.ID }) {
+					v.acts = append(v.acts, a)
+				}
+			}
 		}
 	})
+	if len(v.acts) > 0 {
+		sig := actionsSig(v.acts)
+		if b, ok := v.since[rowKey{}]; ok && b.sig == sig {
+			since[rowKey{}] = b
+		} else {
+			since[rowKey{}] = bound{sig, stamp}
+		}
+	}
 	if v.lists[v.focus] == nil {
 		v.focus, v.editing = "", false
 		if len(v.order) > 0 {
@@ -164,7 +190,7 @@ func (v *View) Set(t *Widget) {
 		}
 	}
 	v.since = since
-	if v.focus != focus || v.Cursor(v.focus) != cursor || v.place() != place {
+	if !first && (v.focus != focus || v.Cursor(v.focus) != cursor || v.place() != place) {
 		v.shifted = now
 	}
 	v.layValid = false
@@ -185,7 +211,14 @@ func bindSig(w *Widget, r *Row) string {
 	var b strings.Builder
 	b.WriteString(rowText(w, r))
 	b.WriteByte(0)
-	for _, a := range r.Actions {
+	b.WriteString(actionsSig(r.Actions))
+	return b.String()
+}
+
+// actionsSig is bound actions and their targets as one string.
+func actionsSig(as []Action) string {
+	var b strings.Builder
+	for _, a := range as {
 		t := ActionTarget(a)
 		for _, s := range []string{a.ID, t.Project, t.Task, t.Thread, t.Session} {
 			b.WriteString(s)
@@ -343,8 +376,8 @@ func (v *View) Key(k string) (bool, *Event) {
 	// A bound action's key is the core's: it runs the action the row
 	// under the cursor binds, and never reaches the mod; the key of one
 	// that changes state never does, even where the row binds none.
-	if a := v.boundKey(k); a != nil {
-		return true, v.press(a)
+	if b := v.boundKey(k); b != nil {
+		return true, v.press(&b.Action, b.View)
 	}
 	if v.coreKey(k) {
 		return false, nil
@@ -360,50 +393,52 @@ func (v *View) Key(k string) (bool, *Event) {
 type Bound struct {
 	Key    string
 	Action Action
+	// View: the action is bound in the whole view, not on the row.
+	View bool
 }
 
-// Bound are the actions the focused list's cursor row binds, each with
-// the console's key for it, for the frame to show as hints in the
-// core's words (modaction's labels). Where two share a key, the first
-// is the one the key runs; the other isn't listed.
+// Bound are the actions the focused list's cursor row binds, then those
+// bound in the whole view (a keys widget's), each with the console's key
+// for it, for the frame to show as hints in the core's words
+// (modaction's labels). Where two share a key, the first is the one the
+// key runs; the other isn't listed.
 func (v *View) Bound() []Bound {
-	r := v.cursorRow()
-	if r == nil {
-		return nil
-	}
 	var out []Bound
-	for _, a := range r.Actions {
-		for _, k := range v.bindKeys(a.ID) {
-			if !slices.ContainsFunc(out, func(b Bound) bool { return b.Key == k }) {
-				out = append(out, Bound{k, a})
-				break
+	add := func(as []Action, view bool) {
+		for _, a := range as {
+			for _, k := range v.bindKeys(a.ID) {
+				if !slices.ContainsFunc(out, func(b Bound) bool { return b.Key == k }) {
+					out = append(out, Bound{k, a, view})
+					break
+				}
 			}
 		}
 	}
+	if r := v.cursorRow(); r != nil {
+		add(r.Actions, false)
+	}
+	add(v.acts, true)
 	return out
 }
 
-// Press presses bound action id on the row under the cursor, as a click
-// on its hint does: nil when the row doesn't bind it.
+// Press presses bound action id on the row under the cursor, else in
+// the whole view, as a click on its hint does: nil when neither binds
+// it.
 func (v *View) Press(id string) *Event {
-	r := v.cursorRow()
-	if r == nil {
-		return nil
-	}
-	for i := range r.Actions {
-		if r.Actions[i].ID == id {
-			return v.press(&r.Actions[i])
+	for _, b := range v.Bound() {
+		if b.Action.ID == id {
+			return v.press(&b.Action, b.View)
 		}
 	}
 	return nil
 }
 
-// boundKey is the action key k runs on the row under the cursor, nil for
-// none.
-func (v *View) boundKey(k string) *Action {
+// boundKey is what key k runs: the action bound on the row under the
+// cursor or in the whole view, nil for none.
+func (v *View) boundKey(k string) *Bound {
 	for _, b := range v.Bound() {
 		if b.Key == k {
-			return &b.Action
+			return &b
 		}
 	}
 	return nil
@@ -422,6 +457,32 @@ func (v *View) coreKey(k string) bool {
 	return false
 }
 
+// Unbound is the action core key k stands for (coreKey) when the row
+// under the cursor binds none on it, aimed at the row's task (the
+// target of its first action that names one), for the console to say
+// why it isn't available: never to run it. nil when k is no such key or
+// the row names no task.
+func (v *View) Unbound(k string) *Action {
+	if v.boundKey(k) != nil {
+		return nil
+	}
+	r := v.cursorRow()
+	if r == nil {
+		return nil
+	}
+	i := slices.IndexFunc(r.Actions, func(a Action) bool { return ActionTarget(a).Task != "" })
+	if i < 0 {
+		return nil
+	}
+	for _, a := range modaction.Actions {
+		if a.Confirm && a.On == modaction.OnTask && slices.Contains(v.bindKeys(a.ID), k) {
+			t := ActionTarget(r.Actions[i])
+			return &Action{ID: a.ID, Target: map[string]string{"project": t.Project, "task": t.Task}}
+		}
+	}
+	return nil
+}
+
 // cursorRow is the focused list's row under its cursor, nil for none.
 func (v *View) cursorRow() *Row {
 	l := v.lists[v.focus]
@@ -436,17 +497,55 @@ func (v *View) cursorRow() *Row {
 	return nil
 }
 
-// press is the event of bound action a pressed on the cursor's row: it
-// counts only once the row's bindings, and the row the cursor is on,
-// had stayed as they are for modaction.Stable.
-func (v *View) press(a *Action) *Event {
+// press is the event of bound action a pressed on the cursor's row (or
+// in the whole view): it counts only once the row's bindings, and the
+// row the cursor is on, had stayed as they are for modaction.Stable; an
+// action of the whole view, once the view's actions had.
+func (v *View) press(a *Action, view bool) *Event {
 	e := v.event(EventAction, "")
 	cp := *a
 	e.Action = &cp
-	b, ok := v.since[rowKey{e.Widget, e.Row}]
 	now := v.now()
+	if view {
+		b, ok := v.since[rowKey{}]
+		e.Stable = ok && now.Sub(b.at) >= modaction.Stable
+		return e
+	}
+	b, ok := v.since[rowKey{e.Widget, e.Row}]
 	e.Stable = ok && now.Sub(b.at) >= modaction.Stable && now.Sub(v.shifted) >= modaction.Stable
 	return e
+}
+
+// Select puts the cursor on the first row, in the tree's order, that
+// binds an action on target t's task (a task picked elsewhere, which
+// the console shows in a mod's tab), focusing its list and dropping a
+// filter that hides it. It reports whether a row did; the human moving
+// it is the console's, so the press wait doesn't restart.
+func (v *View) Select(t modaction.Target) bool {
+	for _, id := range v.order {
+		l := v.lists[id]
+		for i := range l.w.Rows {
+			r := &l.w.Rows[i]
+			if r.Head || !slices.ContainsFunc(r.Actions, func(a Action) bool {
+				at := ActionTarget(a)
+				return at.Project == t.Project && at.Task == t.Task
+			}) {
+				continue
+			}
+			if !slices.Contains(l.shown, i) {
+				l.filter, v.editing = "", false
+				l.refilter()
+			}
+			l.idx = slices.Index(l.shown, i)
+			l.cursor = r.ID
+			if v.focus != id {
+				v.focus, v.editing = id, false
+			}
+			v.follow, v.layValid = true, false
+			return true
+		}
+	}
+	return false
 }
 
 // edit types into the filter: enter keeps it, esc drops it, the arrows

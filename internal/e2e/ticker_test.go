@@ -396,7 +396,7 @@ func TestSmokeDelegateFromList(t *testing.T) {
 	w.Type("t")
 	w.WaitFor("3 tasks", wait)
 	// T2 (in motion) first: its footer offers no D, and D only says why.
-	w.WaitFor("enter show · esc close", wait)
+	w.WaitFor("enter show · + new task", wait)
 	w.Type("D")
 	w.WaitFor("T2 is started: a thread already works on it", wait)
 	w.Type("j")
@@ -416,7 +416,7 @@ func TestSmokeDelegateFromList(t *testing.T) {
 	}
 	// Asked once: D again adds nothing.
 	w.Type("D")
-	w.WaitFor("T1 is already waiting on the coordinator to delegate it", wait)
+	w.WaitFor("not available: T1 is already waiting on the coordinator", wait)
 	if items := env.MustCLI("inbox", "list", "--project", "demo"); strings.Count(items, "delegate:") != 1 {
 		t.Fatalf("inbox:\n%s", items)
 	}
@@ -480,7 +480,7 @@ func TestSmokeAcceptSendBack(t *testing.T) {
 	}
 
 	w.Type("j")
-	w.WaitFor("enter show · c coordinator · D delegate · esc close", wait)
+	w.WaitFor("enter show · c coordinator · D delegate · + new task", wait)
 	w.Key(keyEnter)
 	w.WaitFor("Blocked on: which licence, MIT or Apache?", wait)
 	for _, ref := range []string{"T1", "T2"} {

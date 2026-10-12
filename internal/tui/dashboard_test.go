@@ -63,9 +63,13 @@ type fakeSource struct {
 	templates  []mod.Template
 	added      []string // "slug title|notes|step;step"
 	modViews   proto.ModViewsResult
-	shown      []modview.Shown // the views the last ModViews said were shown
-	inputs     []proto.ModViewInputParams
-	commands   []proto.ModCommandParams
+	// tasksTab: ModViews lists the Tasks tab mod's view, drawn from the
+	// board (taskstab_test.go), its done tasks listed with tasksDoneAll.
+	tasksTab     bool
+	tasksDoneAll bool
+	shown        []modview.Shown // the views the last ModViews said were shown
+	inputs       []proto.ModViewInputParams
+	commands     []proto.ModCommandParams
 }
 
 func (f *fakeSource) Templates(string) []mod.Template { return f.templates }
@@ -529,7 +533,7 @@ func TestStatusLine(t *testing.T) {
 // TestDashboardOverlays: views open on top of the list and close back
 // to the one below; the help lists every labelled action.
 func TestDashboardOverlays(t *testing.T) {
-	src := &fakeSource{data: testData()}
+	src := &fakeSource{data: testData(), tasksTab: true}
 	m := newDash(DashOptions{Source: src, Width: 100, Height: 30})
 	m.setData(src.data)
 	m.sel = "p:alpha"
@@ -541,8 +545,10 @@ func TestDashboardOverlays(t *testing.T) {
 	if !ok || pv.slug != "alpha" || pv.tab != tabTasks {
 		t.Fatalf("t: overlay %T", m.top())
 	}
-	m.Update(boardMsg{slug: "alpha", board: &tasks.Board{Tasks: []*tasks.Task{{ID: 1, Title: "One", Status: tasks.Review}}}})
-	press(m, "enter")
+	src.board = &tasks.Board{Tasks: []*tasks.Task{{ID: 1, Title: "One", Status: tasks.Review}}}
+	m.Update(boardMsg{slug: "alpha", board: src.board})
+	tasksTabNow(m, src)
+	runAll(m, press(m, "enter"))
 	tv, ok := m.top().(*taskView)
 	if !ok || !strings.Contains(screen(m), "Task · alpha") {
 		t.Fatalf("enter on the board:\n%s", screen(m))
@@ -867,10 +873,11 @@ func TestDashboardNeedsYouTasks(t *testing.T) {
 	alpha := &d.Projects[0]
 	alpha.NeedsYou = []*tasks.Task{board.Tasks[1], board.Tasks[2]}
 	alpha.Counts = map[string]int{"needs_you": 2, "in_motion": 1}
-	src := &fakeSource{data: d, board: board}
+	src := &fakeSource{data: d, board: board, tasksTab: true}
 	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 30, State: DashState{Current: "alpha"}})
 	m.layout.Details = false
 	m.setData(src.data)
+	tasksTabNow(m, src)
 	out := screen(m)
 	needs := strings.Index(out, "NEEDS YOU 4 ─")
 	if needs < 0 {
@@ -903,12 +910,17 @@ func TestDashboardNeedsYouTasks(t *testing.T) {
 	if !ok || pv.slug != "alpha" || pv.tab != tabTasks {
 		t.Fatalf("enter opened %T %+v", m.top(), m.top())
 	}
-	m.Update(cmd()) // the board
-	if pv.sel[tabTasks] != 1 || pv.tasks()[1].ID != 5 {
-		t.Errorf("selected task %d, want T5", pv.sel[tabTasks])
+	feed(m, cmd) // the board
+	// The mod hears which task the tab shows; the cursor goes to its row.
+	pollModViews(m)
+	if i := slices.IndexFunc(src.shown, func(s modview.Shown) bool { return s.Mod == mod.BundledTasks }); i < 0 || src.shown[i].Task != "T5" {
+		t.Errorf("shown %+v, want the Tasks tab for T5", src.shown)
 	}
-	if out := screen(m); !strings.Contains(out, "T5     Pick a licence") {
+	if out := screen(m); !strings.Contains(out, "c coordinator") {
 		t.Errorf("Tasks tab:\n%s", out)
+	}
+	if host := m.mv.host(src.tasksTabView(), "alpha"); host == nil || host.Cursor("tasks") != "T5" {
+		t.Errorf("cursor not on T5")
 	}
 	if len(src.opened) != 0 || m.result.Attach != "" {
 		t.Errorf("enter on a task acted: opened %v, attach %q", src.opened, m.result.Attach)

@@ -42,19 +42,19 @@ var popupStates = map[string]func(m *dash){
 	"the inbox":          func(m *dash) { keyPress(m, "i") },
 	"the settings":       func(m *dash) { keyPress(m, ",") },
 	"the menu":           func(m *dash) { m.openMenu("", m.dashItems(), 0, m.bodyRows()) },
-	"overview tab":       func(m *dash) { m.Update(keyPress(m, "a")()); keyPress(m, "1") },
-	"inbox tab":          func(m *dash) { m.Update(keyPress(m, "a")()); keyPress(m, "2") },
-	"tasks tab, review":  func(m *dash) { m.Update(keyPress(m, "a")()); keyPress(m, "3") },
-	"tasks tab, blocked": func(m *dash) { m.Update(keyPress(m, "a")()); keyPress(m, "3"); keyPress(m, "down") },
-	"tasks tab, open":    func(m *dash) { m.Update(keyPress(m, "a")()); keyPress(m, "3"); keyPress(m, "up"); keyPress(m, "up") },
-	"settings tab":       func(m *dash) { m.Update(keyPress(m, "a")()); keyPress(m, "4") },
-	"keys tab":           func(m *dash) { m.Update(keyPress(m, "a")()); keyPress(m, "5") },
-	"memory tab":         func(m *dash) { m.Update(keyPress(m, "a")()); keyPress(m, "6") },
-	"t list, review":     func(m *dash) { m.Update(keyPress(m, "t")()) },
-	"t list, blocked":    func(m *dash) { m.Update(keyPress(m, "t")()); keyPress(m, "down") },
-	"review task, shown": func(m *dash) { m.Update(keyPress(m, "t")()); keyPress(m, "enter") },
+	"overview tab":       func(m *dash) { feed(m, keyPress(m, "a")); keyPress(m, "1") },
+	"inbox tab":          func(m *dash) { feed(m, keyPress(m, "a")); keyPress(m, "2") },
+	"tasks tab, review":  func(m *dash) { feed(m, keyPress(m, "a")); keyPress(m, "3") },
+	"tasks tab, blocked": func(m *dash) { feed(m, keyPress(m, "a")); keyPress(m, "3"); keyPress(m, "down") },
+	"tasks tab, open":    func(m *dash) { feed(m, keyPress(m, "a")); keyPress(m, "3"); keyPress(m, "up"); keyPress(m, "up") },
+	"settings tab":       func(m *dash) { feed(m, keyPress(m, "a")); keyPress(m, "4") },
+	"keys tab":           func(m *dash) { feed(m, keyPress(m, "a")); keyPress(m, "5") },
+	"memory tab":         func(m *dash) { feed(m, keyPress(m, "a")); keyPress(m, "6") },
+	"t list, review":     func(m *dash) { feed(m, keyPress(m, "t")) },
+	"t list, blocked":    func(m *dash) { feed(m, keyPress(m, "t")); keyPress(m, "down") },
+	"review task, shown": func(m *dash) { feed(m, keyPress(m, "t")); keyPress(m, "enter") },
 	"blocked task, shown": func(m *dash) {
-		m.Update(keyPress(m, "t")())
+		feed(m, keyPress(m, "t"))
 		keyPress(m, "down")
 		keyPress(m, "enter")
 	},

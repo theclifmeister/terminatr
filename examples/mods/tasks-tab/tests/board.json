@@ -26,7 +26,7 @@
             { "kind": "table", "id": "tasks", "empty": "no tasks", "rows": [
               { "id": "g:needs-you", "head": true, "spans": [{ "text": "NEEDS YOU", "role": "warn" }] },
               { "id": "T1",
-                "cells": [[{ "text": "T1" }], [{ "text": "Fix login" }], [{ "text": "review", "role": "warn" }], [{ "text": "t-0001", "role": "faint" }]],
+                "cells": [[{ "text": "T1" }], [{ "text": "Fix login" }], [{ "icon": "review", "role": "warn" }, { "text": " review", "role": "warn" }], [{ "text": "t-0001", "role": "faint" }]],
                 "actions": [
                   { "id": "task.show", "target": { "project": "demo", "task": "T1" } },
                   { "id": "task.accept", "target": { "project": "demo", "task": "T1" } },
@@ -37,14 +37,14 @@
                   { "id": "task.delegate", "target": { "project": "demo", "task": "T2" } }] },
               { "id": "g:in-motion", "head": true },
               { "id": "T3",
-                "cells": [[{ "text": "T3" }], [{ "text": "Dark mode" }], [{ "text": "started", "role": "faint" }], [{ "text": "1/2 t-0003", "role": "faint" }]],
+                "cells": [[{ "text": "T3" }], [{ "text": "Dark mode" }], [{ "icon": "working", "role": "good" }, { "text": " started", "role": "good" }], [{ "text": "1/2 t-0003", "role": "faint" }]],
                 "actions": [{ "id": "task.show", "target": { "project": "demo", "task": "T3" } }],
                 "more": [
                   [{ "text": "      " }, { "icon": "todo.done", "role": "good" }, { "text": " Theme roles" }],
                   [{ "text": "      " }, { "icon": "todo.open", "role": "faint" }, { "text": " Settings picker" }]] },
               { "id": "g:on-deck", "head": true },
               { "id": "T4",
-                "cells": [[{ "text": "T4" }], [{ "text": "Search" }], [{ "text": "ready", "role": "faint" }], [{ "text": "asked the coordinator", "role": "warn" }]],
+                "cells": [[{ "text": "T4" }], [{ "text": "Search" }], [{ "icon": "idle" }, { "text": " ready" }], [{ "text": "asked the coordinator", "role": "warn" }]],
                 "actions": [{ "id": "task.show", "target": { "project": "demo", "task": "T4" } }] },
               { "id": "g:backlog", "head": true },
               { "id": "T5", "actions": [
@@ -53,8 +53,8 @@
               { "id": "g:done", "head": true, "spans": [{ "text": "DONE", "role": "head" }] }
             ] },
             { "kind": "text", "text": "… 2 done (b shows them)", "role": "faint" },
-            { "kind": "text", "text": "+ adds a task, from a template or none", "role": "faint" },
-            { "kind": "keys", "keys": [{ "key": "b", "label": "done" }] }
+            { "kind": "keys", "id": "keys", "keys": [{ "key": "b", "label": "done" }],
+              "actions": [{ "id": "task.new", "target": { "project": "demo" } }] }
           ] } } }
     ]
   }

@@ -15,6 +15,8 @@ package server
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/modbus"
@@ -200,11 +202,16 @@ func sessionUsage(info proto.SessionInfo) (int64, float64) {
 func projectState(p *project.Project, sessions []proto.SessionInfo, tickerState string) *modbus.ProjectState {
 	st := &modbus.ProjectState{Tasks: map[string]modbus.Task{}, Threads: map[string]modbus.ThreadSnap{},
 		Inbox: map[string]modbus.Item{}, PRs: map[string]modbus.PR{}}
+	items, itemsErr := p.Inbox()
 	if b, _ := p.Tasks().Load(); b != nil {
 		for _, t := range b.Tasks {
 			st.Tasks[t.Ref()] = modbus.Task{Project: p.Slug, ID: t.Ref(), Title: t.Title, To: string(t.Status),
 				StepsDone: t.StepsDone(), StepsTotal: len(t.Steps), Thread: t.Thread}
 		}
+		// What $.tasks.list shows, as a digest (tasks.changed).
+		js, _ := json.Marshal(modTasks(b, items))
+		sum := sha256.Sum256(js)
+		st.Board = string(sum[:])
 	}
 	byThread := map[string]proto.SessionInfo{}
 	for _, info := range sessions {
@@ -228,7 +235,7 @@ func projectState(p *project.Project, sessions []proto.SessionInfo, tickerState 
 		}
 		st.Threads[r.ID] = ts
 	}
-	if items, err := p.Inbox(); err == nil {
+	if itemsErr == nil {
 		for _, it := range items {
 			st.Inbox[it.ID] = modbus.Item{Project: p.Slug, ID: it.ID, Kind: it.Kind, Subject: it.Subject,
 				Summary: it.Summary, NeedsUser: it.NeedsUser}

@@ -1,0 +1,32 @@
+{
+  "name": "opened to show a done task, the tab lists the done tasks so its row is there; tasks.changed lists the tasks again",
+  "answers": [
+    { "method": "tasks.list", "params": { "slug": "demo" },
+      "result": [
+        { "id": "T5", "title": "Idea", "status": "open", "steps_done": 0, "steps_total": 0, "steps": [] },
+        { "id": "T6", "title": "Old", "status": "done", "steps_done": 0, "steps_total": 0, "steps": [], "updated": "2026-09-01" }
+      ] }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "tasks", "slot": "project.tab", "project": "demo", "task": "T6", "width": 70, "height": 20 } },
+    { "name": "tasks.changed", "project": "demo", "data": { "project": "demo" } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "tasks.list", "params": { "slug": "demo" } },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "table", "rows": [
+              { "id": "g:backlog", "head": true },
+              { "id": "T5" },
+              { "id": "g:done", "head": true },
+              { "id": "T6" }
+            ] },
+            { "kind": "keys", "keys": [{ "key": "b", "label": "hide done" }] }
+          ] } } },
+      { "method": "tasks.list", "params": { "slug": "demo" } },
+      { "method": "ui.view.set", "params": { "view": "tasks" } }
+    ]
+  }
+}

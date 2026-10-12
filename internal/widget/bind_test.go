@@ -99,12 +99,18 @@ func TestBoundKeys(t *testing.T) {
 }
 
 // TestStable: a press counts only once the row's bindings, and the row
-// under the cursor, had been unchanged for 300 ms.
+// under the cursor, had been unchanged for 300 ms; the view's first tree
+// counts at once.
 func TestStable(t *testing.T) {
 	v, now := clockView(t)
 	v.Set(mustDecode(t, bindTree))
+	if _, ev := v.Key("A"); ev == nil || !ev.Stable {
+		t.Fatalf("A at once on the first tree: %+v", ev)
+	}
+	// T1 says something else: it waits.
+	v.Set(mustDecode(t, strings.Replace(bindTree, `"T1 one"`, `"T1 uno"`, 1)))
 	if _, ev := v.Key("A"); ev == nil || ev.Stable {
-		t.Fatalf("A at once: %+v", ev)
+		t.Fatalf("A at once after T1 changed: %+v", ev)
 	}
 	*now = now.Add(299 * time.Millisecond)
 	if _, ev := v.Key("A"); ev.Stable {
@@ -115,7 +121,10 @@ func TestStable(t *testing.T) {
 		t.Error("A at 300 ms didn't count")
 	}
 
-	// The same tree again: still stable.
+	// The same tree again (T1's first text is a change back): stable
+	// once it was still.
+	v.Set(mustDecode(t, bindTree))
+	*now = now.Add(modaction.Stable)
 	v.Set(mustDecode(t, bindTree))
 	if _, ev := v.Key("A"); !ev.Stable {
 		t.Error("an unchanged republish reset the clock")
@@ -161,5 +170,87 @@ func TestStable(t *testing.T) {
 	v.Key("up")
 	if _, ev := v.Key("D"); !ev.Stable {
 		t.Error("the human's own move made D wait")
+	}
+}
+
+// TestViewActions: a keys widget's actions are bound whatever row the
+// cursor is on, after the row's own, and wait on their own changes.
+func TestViewActions(t *testing.T) {
+	tree := strings.Replace(bindTree, `"keys":[{"key":"D","label":"view"},{"key":"o","label":"open"}]`,
+		`"keys":[{"key":"o","label":"open"}],"actions":[{"id":"task.new","target":{"project":"p"}}]`, 1)
+	v, now := clockView(t)
+	v.Set(mustDecode(t, tree))
+	if _, ev := v.Key("+"); ev == nil || ev.Action == nil || ev.Action.ID != "task.new" || !ev.Stable {
+		t.Fatalf("+ on T1: %+v", ev)
+	}
+	v.Key("down")
+	v.Key("down") // T3 binds nothing
+	if b := v.Bound(); len(b) != 1 || b[0].Key != "+" || !b[0].View {
+		t.Errorf("Bound on T3: %+v", b)
+	}
+	if ev := v.Press("task.new"); ev == nil || !ev.Stable {
+		t.Errorf("Press task.new: %+v", ev)
+	}
+	// Its target changes: it waits; T3 moving doesn't make it.
+	v.Set(mustDecode(t, strings.Replace(tree, `"task.new","target":{"project":"p"}`, `"task.new","target":{"project":"q"}`, 1)))
+	if _, ev := v.Key("+"); ev == nil || ev.Stable {
+		t.Errorf("+ right after its target changed: %+v", ev)
+	}
+	*now = now.Add(modaction.Stable)
+	if _, ev := v.Key("+"); !ev.Stable {
+		t.Errorf("+ 300 ms later: %+v", ev)
+	}
+	for _, js := range []string{
+		`{"kind":"text","text":"x","actions":[{"id":"task.new","target":{"project":"p"}}]}`,
+		`{"kind":"keys","actions":[{"id":"settings.open"}]}`,
+	} {
+		if _, err := Decode([]byte(js)); err == nil {
+			t.Errorf("%s: no error", js)
+		}
+	}
+}
+
+// TestSelect: the console puts the cursor on the row bound to a task
+// picked elsewhere, dropping a filter that hides it.
+func TestSelect(t *testing.T) {
+	v, _ := clockView(t)
+	v.Set(mustDecode(t, bindTree))
+	if !v.Select(modaction.Target{Project: "p", Task: "T2"}) || v.Cursor("tasks") != "T2" {
+		t.Fatalf("Select T2: cursor %q", v.Cursor("tasks"))
+	}
+	if v.Select(modaction.Target{Project: "p", Task: "T3"}) || v.Select(modaction.Target{Project: "q", Task: "T1"}) {
+		t.Error("Select of a task no row binds")
+	}
+	v.Key("/")
+	for _, k := range []string{"o", "n", "e"} {
+		v.Key(k)
+	}
+	if v.Cursor("tasks") != "T1" {
+		t.Fatalf("filter one: cursor %q", v.Cursor("tasks"))
+	}
+	if !v.Select(modaction.Target{Project: "p", Task: "T2"}) || v.Cursor("tasks") != "T2" || v.Filter("tasks") != "" {
+		t.Errorf("Select under a filter: cursor %q filter %q", v.Cursor("tasks"), v.Filter("tasks"))
+	}
+}
+
+// TestUnbound: a core key the row doesn't bind names the action on the
+// row's task, for the console to say why not; never on a bound key or a
+// row that names no task.
+func TestUnbound(t *testing.T) {
+	v, _ := clockView(t)
+	v.Set(mustDecode(t, bindTree))
+	if a := v.Unbound("D"); a == nil || a.ID != "task.delegate" || a.Target["task"] != "T1" || a.Target["project"] != "p" {
+		t.Errorf("D on T1: %+v", a)
+	}
+	if a := v.Unbound("A"); a != nil {
+		t.Errorf("A on T1, which binds it: %+v", a)
+	}
+	if a := v.Unbound("o"); a != nil {
+		t.Errorf("o, the mod's key: %+v", a)
+	}
+	v.Key("down")
+	v.Key("down") // T3 names no task
+	if a := v.Unbound("D"); a != nil {
+		t.Errorf("D on T3: %+v", a)
 	}
 }

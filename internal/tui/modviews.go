@@ -80,8 +80,8 @@ func runsFor(v proto.ModView, slug string) bool {
 // coreTabMods are the built-in mods whose project tab the popup draws
 // in a core tab's place, rather than after the core tabs, while the mod
 // runs: the Memory tab mod's (mods design §11, proof 2) and the Tasks
-// tab mod's (the action-binding pilot, §12 Phase 2, off unless turned
-// on). Only a bundled mod has its id: an installed folder of that name
+// tab mod's (§12 Phase 2; the Tasks tab has no core drawing of its
+// own). Only a bundled mod has its id: an installed folder of that name
 // is shadowed.
 var coreTabMods = []struct {
 	tab       int
@@ -221,6 +221,13 @@ func (m *dash) panelKeyPress(v proto.ModView, project, k string) (bool, tea.Cmd)
 		return false, nil
 	}
 	used, ev := host.Key(k)
+	if alt, ok := map[string]string{"j": "down", "k": "up"}[k]; !used && ok && !host.Editing() {
+		// j and k move, as in the core's lists, unless the mod took them.
+		used, ev = host.Key(alt)
+	}
+	if a := host.Unbound(k); !used && a != nil {
+		return true, m.whyNot(*a)
+	}
 	return used, tea.Batch(m.sendInput(v, project, ev), m.sendCursor(v, project, host.Moved()))
 }
 
@@ -352,8 +359,8 @@ func panelHints(host *widget.View) string {
 // shows, an open card and an open full view.
 func (m *dash) shownViews() []modview.Shown {
 	var out []modview.Shown
-	add := func(v proto.ModView, project string, w, h int) {
-		s := modview.Shown{Mod: v.Mod, View: v.View, Slot: v.Slot, Project: project, Width: w, Height: h}
+	add := func(v proto.ModView, project, task string, w, h int) {
+		s := modview.Shown{Mod: v.Mod, View: v.View, Slot: v.Slot, Project: project, Task: task, Width: w, Height: h}
 		if !slices.ContainsFunc(out, func(o modview.Shown) bool { return o.Mod == s.Mod && o.View == s.View && o.Project == s.Project }) {
 			out = append(out, s)
 		}
@@ -363,16 +370,16 @@ func (m *dash) shownViews() []modview.Shown {
 		switch o := o.(type) {
 		case *projectView:
 			if v, ok := o.modTab(m); ok {
-				add(v, o.slug, w, h)
+				add(v, o.slug, o.shownTask(v), w, h)
 			}
 		case *cardView:
 			if v, ok := m.mv.card(o.card); ok {
-				add(v, o.project, w, h)
+				add(v, o.project, "", w, h)
 			}
 		case *fullView:
 			if v, ok := o.modView(m); ok {
 				fw, fh := o.size(m)
-				add(v, o.project, fw, fh)
+				add(v, o.project, "", fw, fh)
 			}
 		}
 	}
@@ -384,7 +391,7 @@ func (m *dash) shownViews() []modview.Shown {
 		}
 		for _, v := range m.mv.cards() {
 			if !m.mv.folded[cardKey(v)] {
-				add(v, project, lw, m.cardHeight(v, project))
+				add(v, project, "", lw, m.cardHeight(v, project))
 			}
 		}
 		if r, ok := m.selected(); ok && split {
@@ -535,6 +542,7 @@ func modTabLabel(v proto.ModView, slug string, i int) string {
 // modTabKey handles a key on a mod tab; ok false leaves it to the
 // popup (tabs, esc).
 func (pv *projectView) modTabKey(m *dash, v proto.ModView, k string) (tea.Cmd, bool) {
+	pv.picking = false
 	used, cmd := m.panelKeyPress(v, pv.slug, k)
 	return cmd, used
 }
@@ -544,6 +552,7 @@ func (pv *projectView) modTabKey(m *dash, v proto.ModView, k string) (tea.Cmd, b
 func (pv *projectView) modTabBox(m *dash, p ProjectData, v proto.ModView) box {
 	w := m.inner(viewWidth)
 	head := []string{pv.tabBar(m, p), modMark(v, w)}
+	pv.pickTask(v, m.mv.host(v, pv.slug))
 	keys := joinKeys(panelHints(m.mv.host(v, pv.slug)), "← → tabs · esc close")
 	b := box{title: pv.slug, head: head, sel: -1, keys: keys}
 	body := m.panelLines(v, pv.slug, w, max(m.boxRows(b)-len(head), 1))

@@ -36,7 +36,7 @@ var Examples = []Example{
 	{"report-glance", "panel sections: the details panel's and the coordinator's", []string{PermProjectRead, PermViews}},
 	{"pr-ci-column", "a sidebar column (also built in)", []string{PermProjectRead}},
 	{"memory-tab", "a project-popup tab (also built in)", []string{PermProjectRead, PermViews}},
-	{"tasks-tab", "a project-popup tab whose rows bind tm's task actions (built in, off)", []string{PermProjectRead, PermViews}},
+	{"tasks-tab", "a project-popup tab whose rows bind tm's task actions (built in)", []string{PermProjectRead, PermViews}},
 	{"memory-search", "an agent tool", []string{PermProjectRead, PermTools}},
 	{"gitlab", "a code host (GitLab, through glab)", []string{PermCommands}},
 }

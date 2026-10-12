@@ -158,6 +158,8 @@ func TestSmokeTickerCompleteOnMerge(t *testing.T) {
 	w.WaitFor("1 done (b shows them)", wait)
 	w.Type("b")
 	w.WaitFor("x send back", wait)
+	// T1's row just came: a press counts once it was still for 300 ms.
+	time.Sleep(400 * time.Millisecond)
 	w.Type("x")
 	w.WaitFor("What should change?", wait)
 	w.Type("still broken")

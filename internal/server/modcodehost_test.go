@@ -50,7 +50,7 @@ func TestCodeHostMod(t *testing.T) {
 		write("mods/"+id+"/mod.toml", strings.Replace(codeHostManifest, "%s", id, 1))
 		write("mods/"+id+"/main.ts", codeHostMain)
 	}
-	const off = "[mods.pr-ci-column]\nenabled = false\n[mods.memory-tab]\nenabled = false\n"
+	const off = "[mods.pr-ci-column]\nenabled = false\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n"
 	repo := t.TempDir()
 	for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", "git@gitlab.com:acme/shop.git"}} {
 		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {

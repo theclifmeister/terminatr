@@ -44,6 +44,9 @@ type bindingMsg struct {
 	// refused: the server refused the binding as outside its mod's
 	// reach; the mod is told nothing.
 	refused bool
+	// explain: a core key the row doesn't bind was pressed; the
+	// console only says why the action isn't available (whyNot).
+	explain bool
 }
 
 // pressBinding handles ev, an EventAction from mod's view (or a
@@ -73,11 +76,36 @@ func (m *dash) pressBinding(mod string, ev *widget.Event) tea.Cmd {
 	}
 }
 
+// whyNot says why action a, a core key the row under a mod view's
+// cursor doesn't bind (widget.View.Unbound), isn't available on the
+// row's task, as the core's own Tasks tab did: from the live board, the
+// same check a press runs. It never runs the action, nor tells the mod.
+func (m *dash) whyNot(a widget.Action) tea.Cmd {
+	b := binding{action: a}
+	t, src := b.target(), m.src
+	return func() tea.Msg {
+		msg := bindingMsg{b: b, explain: true}
+		msg.board, msg.err = src.Board(t.Project)
+		return msg
+	}
+}
+
 // runBinding re-checks a pressed binding against live state and runs
 // it as the core's own key does.
 func (m *dash) runBinding(msg bindingMsg) tea.Cmd {
 	b := msg.b
 	t := b.target()
+	if msg.explain {
+		why := ""
+		if msg.err == nil {
+			why = modaction.Why(b.action.ID, dashActions{m: m, board: msg.board}, t)
+		}
+		if a, _ := modaction.Lookup(b.action.ID); why == "" {
+			why = t.Task + " has no " + a.Label + " here"
+		}
+		m.msg = "not available: " + why
+		return nil
+	}
 	if _, ok := modaction.Lookup(b.action.ID); !ok {
 		// A view's tree can't carry one (widget.Check); nothing to tell.
 		m.msg = "not available: " + b.action.ID + " is not an action a mod may bind"
@@ -110,6 +138,8 @@ func (m *dash) runBinding(msg bindingMsg) tea.Cmd {
 		return m.accept(t.Project, task, &b)
 	case "task.send-back":
 		return m.sendBack(t.Project, task, &b)
+	case "task.new":
+		return tea.Batch(m.newTask(t.Project), m.bindingDone(&b, true))
 	case "task.coordinator":
 		return tea.Batch(m.openProject(t.Project), m.bindingDone(&b, true))
 	case "project.activate":

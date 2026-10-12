@@ -313,15 +313,15 @@ func TestDashboardMenus(t *testing.T) {
 // clicks; the wheel scrolls the keys.
 func TestPopupClicks(t *testing.T) {
 	src, m := popupData(t)
-	m.Update(keyPress(m, "a")()) // the board
+	feed(m, keyPress(m, "a")) // the board
 	clickOn(t, m, "3 tasks")
 	pv := m.top().(*projectView)
 	if pv.tab != tabTasks {
 		t.Fatalf("click on 3 tasks: tab %d", pv.tab)
 	}
 	clickOn(t, m, "Ship it")
-	if pv.sel[tabTasks] != 1 {
-		t.Fatalf("click on a task selected %d", pv.sel[tabTasks])
+	if c := tasksCursor(m, src); c != "T2" {
+		t.Fatalf("click on a task selected %q", c)
 	}
 	clickOn(t, m, "4 settings")
 	// A click selects a setting; a second click changes it.

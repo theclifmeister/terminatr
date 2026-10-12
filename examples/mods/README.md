@@ -27,7 +27,7 @@ Then turn it on in the Mods tab (`,` then `3`), or with `tm mod enable
 | 6 | [thread-timeline](thread-timeline) | a full view (≡ menu) | reads your projects, draws its own panels | `tm mod install terminatr/examples/mods/thread-timeline` |
 | 7 | [pr-ci-column](pr-ci-column) | a sidebar column (built in) | reads your projects | copy it under another id first, see below |
 | 8 | [memory-tab](memory-tab) | a project-popup tab (built in) | reads your projects, draws its own panels | copy it under another id first, see below |
-| + | [tasks-tab](tasks-tab) | the popup's Tasks tab, its rows bound to tm's task actions (built in, off) | reads your projects, draws its own panels | copy it under another id first, see below |
+| + | [tasks-tab](tasks-tab) | the popup's Tasks tab, its rows bound to tm's task actions (built in) | reads your projects, draws its own panels | copy it under another id first, see below |
 | + | [memory-search](memory-search) | an agent tool, `memory-search_find` | reads your projects, offers tools to agents | `tm mod install terminatr/examples/mods/memory-search` |
 | + | [standup](standup) | a command: the key `S`, a ≡ menu entry and `tm mod run standup show` | reads your projects, draws its own panels | `tm mod install terminatr/examples/mods/standup` |
 | + | [report-glance](report-glance) | panel sections: one at the bottom of the details panel, one in the coordinator's info panel | reads your projects, draws its own panels | `tm mod install terminatr/examples/mods/report-glance` |
@@ -96,16 +96,17 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
   (git must find the commits on the remote), and makes the merge
   checks itself. `tm doctor` shows which mod serves the kind and glab's
   login.
-- **tasks-tab** is the pilot of the action binding (mods design §12,
-  Phase 2): the project popup's Tasks tab as a mod. It ships off, and
-  the Go tab draws, until the pilot is accepted; turn it on in the Mods
-  tab or with `[mods.tasks-tab] enabled = true`. Its rows only *name*
-  `task.show`, `task.delegate`, `task.accept`, `task.send-back` and
-  `task.coordinator`: tm shows the keys, checks the live board, asks
+- **tasks-tab** is the project popup's Tasks tab, which tm draws with
+  it. Its rows only *name* `task.show`, `task.delegate`, `task.accept`,
+  `task.send-back` and `task.coordinator`, and its keys widget names
+  `task.new` for the whole tab (`+`), since no row stands for a new
+  task (mod API 1.3): tm shows the keys, checks the live board, asks
   and runs them. Section heads and the selected task's steps are
-  widget rows (`head`, `more`, mod API 1.2), so the cursor never waits
-  on the mod. `+` stays the popup's key, since no row stands for a new
-  task.
+  widget rows (`head`, `more`), so the cursor never waits on the mod.
+  It lists the tasks again on `tasks.changed`, so a title edited or an
+  ask handled shows at once. Opened to show a task picked elsewhere
+  (`view.opened` names it), it lists that task's row, done tasks
+  included, and tm puts the cursor on it.
 - **standup** declares a command in `[[provides.commands]]`. `S` on the
   dashboard or its ≡ menu entry runs it with the project shown, and
   being a human input it may open the mod's full view. `tm mod run

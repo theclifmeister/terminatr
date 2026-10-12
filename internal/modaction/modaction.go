@@ -83,6 +83,8 @@ var Actions = []Action{
 		Precondition: "the task is in review, and nothing already asks the coordinator about it"},
 	{ID: "task.send-back", Label: "send back", Key: "x", On: OnTask, Confirm: true,
 		Precondition: "the task is in review or done, and nothing already asks the coordinator about it; the human writes the note"},
+	{ID: "task.new", Label: "new task", Key: "+", On: OnProject,
+		Precondition: "the project exists; the human picks a template, if any, and types the title"},
 	{ID: "task.coordinator", Label: "coordinator", Key: "c", On: OnProject,
 		Precondition: "the project exists"},
 	{ID: "project.activate", Label: "activate / deactivate", Key: "space", On: OnProject, Confirm: true,
