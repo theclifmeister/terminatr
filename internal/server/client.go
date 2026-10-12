@@ -60,14 +60,15 @@ type Client struct {
 func Dial(p Paths, kind proto.Kind) (*Client, error) { return dial(p, kind, proto.Protocol) }
 
 // dial is Dial claiming protocol, which Stop lowers to an older server's.
-// A control connection tries the human socket first, which the human-only
-// methods need (docs/SPEC.md §11.1): where it can't connect (an agent's
-// sandbox, an older server) it uses the server socket. A server too slow
+// A control or attach connection tries the human socket first, which
+// attach and the human-only methods need (docs/SPEC.md §11.1): where it
+// can't connect (an agent's sandbox, an older server) it uses the server
+// socket. A server too slow
 // to answer there is too slow on both. An agent's session doesn't try:
 // its sandbox would report each refused connect to the agent, as a
 // prompt to run tm outside the sandbox.
 func dial(p Paths, kind proto.Kind, protocol int) (*Client, error) {
-	if kind == proto.KindControl && p.Socket != "" && !caller.FromEnv().IsAgent() {
+	if (kind == proto.KindControl || kind == proto.KindAttach) && p.Socket != "" && !caller.FromEnv().IsAgent() {
 		c, err := dialAt(p.HumanSocket(), kind, protocol)
 		var ne net.Error
 		if err == nil || errors.As(err, &ne) && ne.Timeout() {

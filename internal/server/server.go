@@ -552,7 +552,7 @@ func (s *Server) handle(c net.Conn, human bool) {
 	case proto.KindControl, proto.KindHook:
 		s.serveControl(c, br, pid, human)
 	case proto.KindAttach:
-		s.serveAttach(c, br)
+		s.serveAttach(c, br, pid, human)
 	default:
 		s.log.Printf("refused connection of unknown kind %q from pid %d", hello.Kind, pid)
 	}
@@ -575,8 +575,8 @@ func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human b
 		if err := readJSONLine(br, &req); err != nil {
 			return
 		}
-		if !human && proto.HumanOnly(req.Method) {
-			if err := writeJSONLine(c, proto.Response{ID: req.ID, Error: humanSocketOnly(req.Method)}); err != nil {
+		if perr := mayCall(req.Method, human, s.whoFor(peerPID)); perr != nil {
+			if err := writeJSONLine(c, proto.Response{ID: req.ID, Error: perr}); err != nil {
 				return
 			}
 			continue
@@ -629,6 +629,35 @@ func (s *Server) mayAnswer(in proto.SessionInfo, c caller.Caller, human bool) *p
 	}
 	return proto.Errorf("human-only", "only the human, on the human socket (%s), or project %s's coordinator answers session %s's questions", ipc.HumanName, in.Project, in.ID)
 }
+
+// mayCall is the gate of method m before it runs, who telling the
+// caller from the peer pid (asked only when needed: it walks the process
+// tree). A human-only method answers only on the human socket, and there
+// only to a caller the pid walk doesn't place in an agent's session (an
+// agent without an OS sandbox can reach the socket). cli.run on the server
+// socket must come from an agent the pid walk finds: one it calls the
+// human (a process that left its session's tree) would run project
+// commands as the human, whose own CLI uses the human socket.
+func mayCall(m string, human bool, who func() caller.Caller) *proto.Error {
+	humanOnly := proto.HumanOnly(m) || m == attachMethod
+	switch {
+	case humanOnly && !human:
+		return humanSocketOnly(m)
+	case humanOnly && who().IsAgent():
+		return proto.Errorf("human-only", "%s is the human's; an agent's session doesn't call it", m)
+	case m == proto.MethodCLIRun && !human && !who().IsAgent():
+		return proto.Errorf("human-only", "%s from outside every agent's session answers only on the human socket (%s)", m, ipc.HumanName)
+	}
+	return nil
+}
+
+// whoFor is callerOf(pid), deferred.
+func (s *Server) whoFor(pid int) func() caller.Caller {
+	return func() caller.Caller { return s.callerOf(pid) }
+}
+
+// attachMethod names an attach connection in mayCall and its errors.
+const attachMethod = "attach"
 
 // humanSocketOnly refuses human-only method m on the server socket:
 // every agent's sandbox allows that one, and the pid walk that tells an
@@ -1147,13 +1176,19 @@ func (s *Server) stopSession(id string) (any, *proto.Error) {
 // serveAttach streams one session to a client: the snapshot, then output
 // and resizes in order, while it reads the client's input and requests.
 // The client leaving (DETACH, EOF, a dead socket) changes nothing else.
-func (s *Server) serveAttach(c net.Conn, br *bufio.Reader) {
+func (s *Server) serveAttach(c net.Conn, br *bufio.Reader, peerPID int, human bool) {
 	c.SetReadDeadline(time.Now().Add(handshakeTimeout))
 	var req proto.AttachRequest
 	if err := readJSONLine(br, &req); err != nil {
 		return
 	}
 	c.SetReadDeadline(time.Time{})
+	// Attach types into a session as the human would: the human's alone,
+	// like session.keys.
+	if perr := mayCall(attachMethod, human, s.whoFor(peerPID)); perr != nil {
+		writeJSONLine(c, proto.AttachReply{Error: perr})
+		return
+	}
 	sess, perr := s.session(req.Attach.Session)
 	if perr != nil {
 		writeJSONLine(c, proto.AttachReply{Error: perr})
