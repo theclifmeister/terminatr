@@ -598,7 +598,8 @@ type QuestionsOpenResult struct {
 // mod's row, view or notification bound (the mods design §11; docs/SPEC.md
 // §5.3, Action binding), so the mod gets action.done and can redraw. The
 // console calls it after the core ran the action, or refused it as not
-// available; human-only, refused for an agent.
+// available; human-only, refused for an agent, and only with the press
+// token mod.action.check gave that console for that binding.
 const MethodModActionDone = "mod.action.done"
 
 // ModActionDoneParams are the params of mod.action.done: the mod whose
@@ -606,13 +607,27 @@ const MethodModActionDone = "mod.action.done"
 type ModActionDoneParams struct {
 	ModActionParams
 	OK bool `json:"ok"`
+	// Token is the press token of the mod.action.check that let this
+	// press run: good once, for this binding, from the console that
+	// asked, for ModActionTokenTTL.
+	Token string `json:"token"`
 }
 
 // MethodModActionCheck asks the server, before the console runs a
 // pressed binding, whether it is in its mod's reach: project_read, and
 // a target in a project the mod runs for (a session's own project).
-// Human-only.
+// Human-only. In reach, it answers a press token (ModActionCheckResult)
+// that the console's mod.action.done for this press must present.
 const MethodModActionCheck = "mod.action.check"
+
+// ModActionCheckResult is mod.action.check's answer: the press token.
+type ModActionCheckResult struct {
+	Token string `json:"token"`
+}
+
+// ModActionTokenTTL is how long a press token stays good: long enough
+// for the human to answer the core's confirmation.
+const ModActionTokenTTL = 30 * time.Minute
 
 // ModActionParams name a mod's binding: the mod, the action and its
 // target.
