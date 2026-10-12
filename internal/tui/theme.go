@@ -24,7 +24,7 @@ import (
 // per console from a themeTable, for the console's light or dark scheme;
 // th() is the current one.
 type Theme struct {
-	Head, Sel, Faint, Accent, Title, Bad, Warn, Good, Info, Plain lipgloss.Style
+	Head, Sel, SelFocus, Faint, Accent, Title, Bad, Warn, Good, Info, Plain lipgloss.Style
 }
 
 // roleSpec is one role as data: foreground and background colours (each
@@ -41,16 +41,18 @@ type roleSpec struct {
 // roleSet is every role's spec for one scheme. A role left out falls back
 // to the built-in one.
 type roleSet struct {
-	Head   *roleSpec `toml:"head"`
-	Sel    *roleSpec `toml:"sel"`
-	Faint  *roleSpec `toml:"faint"`
-	Accent *roleSpec `toml:"accent"`
-	Title  *roleSpec `toml:"title"`
-	Bad    *roleSpec `toml:"bad"`
-	Warn   *roleSpec `toml:"warn"`
-	Good   *roleSpec `toml:"good"`
-	Info   *roleSpec `toml:"info"`
-	Plain  *roleSpec `toml:"plain"`
+	Head *roleSpec `toml:"head"`
+	Sel  *roleSpec `toml:"sel"`
+	// SelFocus is optional: the sidebar's keyboard row while it has the focus.
+	SelFocus *roleSpec `toml:"sel_focus"`
+	Faint    *roleSpec `toml:"faint"`
+	Accent   *roleSpec `toml:"accent"`
+	Title    *roleSpec `toml:"title"`
+	Bad      *roleSpec `toml:"bad"`
+	Warn     *roleSpec `toml:"warn"`
+	Good     *roleSpec `toml:"good"`
+	Info     *roleSpec `toml:"info"`
+	Plain    *roleSpec `toml:"plain"`
 }
 
 // themeTable is a theme as data: a role set per colour scheme.
@@ -89,7 +91,7 @@ func (rs roleSet) missing() []string {
 	for _, r := range []struct {
 		name string
 		spec *roleSpec
-	}{{"head", rs.Head}, {"sel", rs.Sel}, {"faint", rs.Faint}, {"accent", rs.Accent}, {"title", rs.Title},
+	}{{"head", rs.Head}, {"sel", rs.Sel}, {"sel_focus", rs.SelFocus}, {"faint", rs.Faint}, {"accent", rs.Accent}, {"title", rs.Title},
 		{"bad", rs.Bad}, {"warn", rs.Warn}, {"good", rs.Good}, {"info", rs.Info}, {"plain", rs.Plain}} {
 		if r.spec == nil {
 			out = append(out, r.name)
@@ -172,6 +174,7 @@ func (rs roleSet) resolve(truecolor bool) (*Theme, error) {
 	}{
 		{"head", rs.Head, builtinRoles.Head, &t.Head},
 		{"sel", rs.Sel, builtinRoles.Sel, &t.Sel},
+		{"sel_focus", rs.selFocus(), builtinRoles.SelFocus, &t.SelFocus},
 		{"faint", rs.Faint, builtinRoles.Faint, &t.Faint},
 		{"accent", rs.Accent, builtinRoles.Accent, &t.Accent},
 		{"title", rs.Title, builtinRoles.Title, &t.Title},
@@ -193,6 +196,16 @@ func (rs roleSet) resolve(truecolor bool) (*Theme, error) {
 		*r.out = st
 	}
 	return &t, nil
+}
+
+// selFocus is the focused-selection spec: the set's own, else its sel
+// (so a theme that restyles sel never gets the built-in colours over
+// it), else nil for the built-in one.
+func (rs roleSet) selFocus() *roleSpec {
+	if rs.SelFocus != nil {
+		return rs.SelFocus
+	}
+	return rs.Sel
 }
 
 // parseTheme reads a theme's TOML ([light] and [dark] role tables); a

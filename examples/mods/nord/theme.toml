@@ -8,6 +8,7 @@
 [dark]
 head   = { fg = ["brightwhite", "#eceff4"], bold = true }
 sel    = { fg = ["black", "#2e3440"], bg = ["cyan", "#88c0d0"] }
+sel_focus = { fg = ["black", "#2e3440"], bg = ["brightcyan", "#8fbcbb"] }
 faint  = { fg = ["brightblack", "#4c566a"] }
 accent = { fg = ["cyan", "#88c0d0"] }
 title  = { fg = ["cyan", "#8fbcbb"], bold = true }
@@ -20,6 +21,7 @@ plain  = { fg = ["white", "#d8dee9"] }
 [light]
 head   = { fg = ["black", "#2e3440"], bold = true }
 sel    = { fg = ["brightwhite", "#eceff4"], bg = ["blue", "#5e81ac"] }
+sel_focus = { fg = ["brightwhite", "#eceff4"], bg = ["magenta", "#b48ead"] }
 faint  = { fg = ["brightblack", "#7b88a1"] }
 accent = { fg = ["blue", "#5e81ac"] }
 title  = { fg = ["blue", "#5e81ac"], bold = true }

@@ -466,11 +466,10 @@ func treeLine(r treeRow, cw int, slim, focused bool) string {
 // treeSel says whether r is the highlighted row (the keyboard's while
 // the sidebar has the focus, else the one you are on) and its style.
 func treeSel(r treeRow, focused bool) (bool, lipgloss.Style) {
-	sel := th().Sel.Bold(true)
 	if focused {
-		return r.cursor, sel.Foreground(lipgloss.Cyan)
+		return r.cursor, th().SelFocus.Bold(true)
 	}
-	return r.here, sel
+	return r.here, th().Sel.Bold(true)
 }
 
 // treeCells is one tree row cw cells wide, in this console's icon set
@@ -516,7 +515,7 @@ func treeSel(r treeRow, focused bool) (bool, lipgloss.Style) {
 // in the full sidebar.
 // The row you are on is in reverse video, so colour is never the only
 // signal. While the sidebar has the keyboard focus, the keyboard's row
-// is instead, in the accent colour.
+// is instead in the theme's sel_focus look (cyan reverse by default).
 func treeCells(r treeRow, cw int, slim, focused bool) string {
 	var sel lipgloss.Style
 	r.here, sel = treeSel(r, focused)

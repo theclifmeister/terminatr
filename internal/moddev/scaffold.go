@@ -230,7 +230,7 @@ const hookFixture = `{
 const themeTOML = `# A theme: each role's look, for a light and a dark terminal. A colour is
 # an ANSI name (red, brightblue…), a 0-255 index or #rrggbb; a second
 # entry is the truecolor choice, the first its ANSI fallback. A role left
-# out keeps the built-in look. Roles: head sel faint accent title bad
+# out keeps the built-in look. Roles: head sel sel_focus faint accent title bad
 # warn good info plain.
 
 [light.accent]
