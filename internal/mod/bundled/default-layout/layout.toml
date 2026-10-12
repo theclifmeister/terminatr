@@ -1,5 +1,59 @@
-# The sidebar's columns, in order: count (steps or context), ci (the PR's
-# checks), state, remote, paused, inactive and needs (needs you). The
-# safety columns (state, paused, inactive, needs) show even when a
-# layout leaves them out, at the end.
-sidebar = ["count", "ci", "state", "remote", "paused", "inactive", "needs"]
+# The built-in layout (layout.toml v2, mod API 1.5). It sets only the
+# sidebar's columns; every other key is shown commented out, with its
+# built-in value. A layout states only what it changes: a key it leaves
+# out keeps the built-in value, or the one the user set in the console.
+# Uncomment and change what yours changes. (v1, any mod API 1.x, is
+# the columns alone: a top-level array, sidebar = ["count", …].)
+
+[sidebar]
+# The columns, in order: count (steps or context), ci (the PR's checks),
+# state, remote, paused, inactive and needs (needs you), and mods'
+# (review-age.age). The safety columns (state, paused, inactive, needs)
+# show even when a layout leaves them out, at the end.
+columns = ["count", "ci", "state", "remote", "paused", "inactive", "needs"]
+# Which edge: left or right.
+# side = "left"
+# The full sidebar's width: cells, 14 to 200, or a share of the window,
+# "10%" to "60%". A narrow window still cuts it to leave the panes 60
+# columns, then shows the slim strip.
+# width = 36
+# full, slim (the strip, as b) or hidden (none; a ⚑ N badge shows what
+# needs you, and b brings the sidebar back).
+# mode = "full"
+
+[details]
+# The dashboard's details panel: right (beside the list, in a window
+# 120 columns wide or more), bottom (under the list, with 16 rows or
+# more) or off. Where it can't show, the details show under the
+# selected row.
+# place = "right"
+# The panel's size: cells (right, 24 to 200) or rows (bottom, 6 to 100),
+# or a share, "20%" to "70%" (bottom's is "40%"). Not with place = "off".
+# size = "35%"
+
+[header]
+# The dashboard's top row: shown or hidden (alarms then draw over the
+# first row).
+# style = "shown"
+
+[footer]
+# shown (rule, keys, message), compact (one row: the message, else the
+# keys) or hidden (messages draw over the last row; ? lists the keys).
+# style = "shown"
+
+[status_bar]
+# Under an attached pane: shown, or compact (no blank row above it).
+# style = "shown"
+
+[rows]
+# normal, or compact: no extra lines (no details under the selected
+# row, the tasks note on its section's line, mod cards' header only).
+# What needs you, state, paused and inactive always show.
+# density = "normal"
+
+[dashboard]
+# The list's sections, in order: needs (needs you), project, other
+# (sessions outside projects), cards (mods' cards). other and cards can
+# be left out to hide them; needs and project always show (first, if
+# left out).
+# sections = ["needs", "project", "other", "cards"]

@@ -176,7 +176,7 @@ func modLayout(r *mod.Registry, value string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s layout: %w", value, err)
 	}
-	cols := view.Columns(l.Sidebar)
+	cols := view.Columns(l.Columns)
 	if slices.Equal(cols, view.DefaultColumns) {
 		return nil, nil
 	}

@@ -40,7 +40,8 @@ func (s *Staged) Close() {
 
 // Fetch copies the mod at src into a staging folder (a git URL is cloned
 // first, at src.Ref, and only its folder src.Subdir copied) and checks
-// it as Validate does. An invalid mod
+// its manifest and mod API, a v2 layout's included (its other data files
+// are CheckData's, the Mods tab's). An invalid mod
 // comes back with its manifest, if any, and the reasons.
 func Fetch(src Source) (*Staged, error) {
 	mods, err := home.ModsDir()
@@ -87,6 +88,9 @@ func Fetch(src Source) (*Staged, error) {
 	st.Manifest, err = ReadManifest(st.Dir)
 	if err == nil {
 		err = CheckAPI(st.Manifest)
+	}
+	if err == nil {
+		err = Mod{ID: st.Manifest.ID, Dir: st.Dir, Manifest: st.Manifest}.checkLayoutAPI()
 	}
 	if err != nil {
 		return st, err

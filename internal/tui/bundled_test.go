@@ -48,8 +48,8 @@ func TestDefaultKeymap(t *testing.T) {
 // order, which the view keeps as nil.
 func TestDefaultLayout(t *testing.T) {
 	l, err := mod.ParseLayout(mod.BundledData(mod.BundledLayout, mod.KindLayout))
-	if err != nil || !slices.Equal(l.Sidebar, view.DefaultColumns) {
-		t.Fatalf("default layout %q %v, want %q", l.Sidebar, err, view.DefaultColumns)
+	if err != nil || !slices.Equal(l.Columns, view.DefaultColumns) {
+		t.Fatalf("default layout %q %v, want %q", l.Columns, err, view.DefaultColumns)
 	}
 	for _, v := range []string{"", ThemeDefault} {
 		if cols, err := modLayout(&mod.Registry{}, v); cols != nil || err != nil {
