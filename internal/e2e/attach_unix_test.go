@@ -163,3 +163,24 @@ func TestRunScriptLoginShellQueries(t *testing.T) {
 		env.AssertAlive(s)
 	}
 }
+
+// TestAttachColors (T339): a program in the pane asking for the
+// terminal's background (OSC 11) gets the window's, which the attach
+// client asked its terminal for and reported to the server.
+func TestAttachColors(t *testing.T) {
+	env := New(t)
+	s := env.Start("shell")
+	env.WaitFor(s, "$", wait)
+	w := env.Attach(100, 30, s.ID)
+	w.WaitFor("$", wait)
+	// The answer is 24 bytes, ESC and BEL shown as E and B; a read
+	// gives up after a second, so an unanswered query doesn't hang.
+	const want = "E]11;rgb:1e1e/1e1e/2e2eB"
+	if !Poll(wait, func() bool {
+		w.Type("clear; stty raw -echo min 0 time 10; printf '\\033]11;?\\007'; head -c 24 | tr '\\033\\007' EB; stty sane; echo\r")
+		return Poll(3*time.Second, func() bool { return strings.Contains(w.Screen(), want) })
+	}) {
+		t.Fatalf("the pane's OSC 11 query wasn't answered with the window's background:\n%s", w.Screen())
+	}
+	env.AssertMirrorsServer(w)
+}

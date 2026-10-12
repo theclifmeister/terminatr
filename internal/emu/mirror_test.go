@@ -349,3 +349,60 @@ func TestRendererSharedRect(t *testing.T) {
 		t.Fatalf("full-window frame %q", b)
 	}
 }
+
+// TestColors: OSC 10/11 queries go unanswered until the colours are
+// known, then get them, and OSC 4 the known palette entries; new colours
+// are answered from then on, and a program's own colour wins until it
+// resets it.
+func TestColors(t *testing.T) {
+	var replies bytes.Buffer
+	term, err := NewWith(Options{Cols: 80, Rows: 24, WritePty: func(b []byte) { replies.Write(b) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+	ask := func(q string) string {
+		t.Helper()
+		replies.Reset()
+		term.Write([]byte(q))
+		return replies.String()
+	}
+	if got := ask("\x1b]10;?\x07\x1b]11;?\x07"); got != "" {
+		t.Errorf("answered while the colours are unknown: %q", got)
+	}
+
+	var c Colors
+	c.Fg, c.Bg, c.Palette[1] = RGB{0xff, 0xee, 0xdd}, RGB{0x12, 0x34, 0x56}, RGB{1, 2, 3}
+	c.Known = KnownFg | KnownBg | 1<<1
+	if got, ok := DecodeColors(c.Encode()); !ok || got != c {
+		t.Fatalf("round trip: %+v %v, want %+v", got, ok, c)
+	}
+	if err := term.SetColors(c); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := ask("\x1b]11;?\x07"), "\x1b]11;rgb:1212/3434/5656\x07"; got != want {
+		t.Errorf("OSC 11: %q, want %q", got, want)
+	}
+	if got, want := ask("\x1b]10;?\x1b\\"), "\x1b]10;rgb:ffff/eeee/dddd\x1b\\"; got != want {
+		t.Errorf("OSC 10: %q, want %q", got, want)
+	}
+	if got, want := ask("\x1b]4;1;?\x07"), "\x1b]4;1;rgb:0101/0202/0303\x07"; got != want {
+		t.Errorf("OSC 4;1: %q, want %q", got, want)
+	}
+
+	c.Bg = RGB{0xfa, 0xfa, 0xfa}
+	term.SetColors(c)
+	if got, want := ask("\x1b]11;?\x07"), "\x1b]11;rgb:fafa/fafa/fafa\x07"; got != want {
+		t.Errorf("OSC 11 after a change: %q, want %q", got, want)
+	}
+
+	ask("\x1b]11;#000000\x07")
+	term.SetColors(c)
+	if got, want := ask("\x1b]11;?\x07"), "\x1b]11;rgb:0000/0000/0000\x07"; got != want {
+		t.Errorf("the program's own background: %q, want %q", got, want)
+	}
+	ask("\x1b]111\x07")
+	if got, want := ask("\x1b]11;?\x07"), "\x1b]11;rgb:fafa/fafa/fafa\x07"; got != want {
+		t.Errorf("after OSC 111: %q, want %q", got, want)
+	}
+}

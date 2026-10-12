@@ -313,3 +313,26 @@ func TestExitClosesSubscribers(t *testing.T) {
 		t.Fatalf("Read after exit: %v", err)
 	}
 }
+
+// TestColors: the program's OSC 11 query is answered with the colours a
+// client reported, and with new ones once they change.
+func TestColors(t *testing.T) {
+	s := start(t, "/bin/sh")
+	query := func(want string) {
+		t.Helper()
+		// The answer is 24 bytes; ESC and BEL shown as E and B.
+		s.Input([]byte("clear; stty raw -echo; printf '\\033]11;?\\007'; head -c 24 | tr '\\033\\007' EB; stty sane; echo\r"))
+		eventually(t, want, func() bool { return strings.Contains(screen(t, s), want) })
+	}
+	var c emu.Colors
+	c.Bg, c.Known = emu.RGB{R: 0x12, G: 0x34, B: 0x56}, emu.KnownBg
+	if err := s.SetColors(c); err != nil {
+		t.Fatal(err)
+	}
+	query("E]11;rgb:1212/3434/5656B")
+	c.Bg = emu.RGB{R: 0xfa, G: 0xfa, B: 0xfa}
+	if err := s.SetColors(c); err != nil {
+		t.Fatal(err)
+	}
+	query("E]11;rgb:fafa/fafa/fafaB")
+}

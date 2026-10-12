@@ -143,6 +143,9 @@ type Server struct {
 	// scheme is the colour scheme a client last reported; new sessions
 	// start with it.
 	scheme emu.Scheme
+	// colors are the terminal colours a client last reported; new
+	// sessions start with them.
+	colors emu.Colors
 
 	// views are what consoles show (views.go).
 	views *views
@@ -1127,6 +1130,7 @@ func (s *Server) startSession(p proto.SessionStartParams) (any, *proto.Error) {
 		Cols: cols, Rows: rows, Created: created,
 		Xtversion: "terminatr " + version.Version,
 		Scheme:    s.scheme,
+		Colors:    s.colors,
 		Logf:      s.log.Printf,
 		OnExit:    s.sessionExited,
 		// A shell gets agent state while an agent the user started by
@@ -1271,6 +1275,14 @@ loop:
 				if err := sess.SetColorScheme(scheme); err == nil {
 					s.mu.Lock()
 					s.scheme = scheme
+					s.mu.Unlock()
+				}
+			}
+		case proto.FrameColors:
+			if colors, ok := emu.DecodeColors(payload); ok {
+				if err := sess.SetColors(colors); err == nil {
+					s.mu.Lock()
+					s.colors = colors
 					s.mu.Unlock()
 				}
 			}

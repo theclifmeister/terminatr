@@ -58,14 +58,14 @@ const (
 
 // Outer terminal setup: alternate screen, bracketed paste, kitty keyboard
 // "disambiguate" (so Shift+Enter and the prefix are unambiguous), colour
-// scheme updates (2031) plus a query for the current scheme, and a query
-// for the background colour (OSC 11), from which the theme takes its
-// light or dark roles, as the dashboard's does (T319).
+// scheme updates (2031) plus a query for the current scheme, and queries
+// for its colours (askColors): the panes' programs get them, and the
+// theme takes its light or dark roles from the background (OSC 11), as
+// the dashboard's does (T319).
+var outerSetup = "\x1b[?1049h\x1b[?2004h\x1b[>1u\x1b[?2031h\x1b[?996n" + askColors
+
 const (
-	outerSetup = "\x1b[?1049h\x1b[?2004h\x1b[>1u\x1b[?2031h\x1b[?996n" + askBackground
-	// askBackground asks the outer terminal its background colour.
-	askBackground = "\x1b]11;?\x07"
-	outerRestore  = "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1006l\x1b[?2031l" +
+	outerRestore = "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1006l\x1b[?2031l" +
 		"\x1b[<u\x1b[?2004l\x1b[0m\x1b[0 q\x1b[?25h\x1b[?1049l"
 )
 
@@ -349,6 +349,10 @@ type client struct {
 	osc         []byte       // OS notifications of mods to draw with the next frame (modnotice.go)
 	buf         []byte
 
+	// colors are the outer terminal's colours as it answered askColors;
+	// sentColors those last sent to the panes (outercolors.go).
+	colors, sentColors emu.Colors
+
 	// detaching is set before DETACH is written. The server may hang up
 	// as soon as it reads it, so from then on a failed write or a closed
 	// stream is the detach completing, not a lost server. then, set
@@ -496,12 +500,17 @@ func (c *client) sync(v view.View) error {
 	}
 	c.v = v
 	c.relayout()
+	colors := c.sentColors
 	c.mu.Unlock()
 	for _, p := range gone {
 		c.send(p, proto.FrameDetach, nil)
 		p.conn.Close()
 	}
 	for _, p := range opened {
+		// A pane new to the window gets the colours the others have.
+		if colors.Known != 0 {
+			c.send(p, proto.FrameColors, colors.Encode())
+		}
 		go c.readLoop(p)
 	}
 	c.poke()
@@ -1072,20 +1081,30 @@ func (c *client) handle(ev uv.Event) {
 		// The panes' programs get the scheme. The console's theme follows
 		// the background instead, like the dashboard's: a terminal whose
 		// scheme (the system's, say) isn't its background's would flip
-		// the theme between the two views. It may have changed with the
-		// scheme: ask it again.
+		// the theme between the two views. It and the other colours may
+		// have changed with the scheme: ask them again.
 		if !c.lock() {
 			return
 		}
 		ps := c.leaves()
-		c.osc = append(c.osc, askBackground...)
+		c.osc = append(c.osc, askColors...)
 		c.mu.Unlock()
 		c.poke()
 		for _, p := range ps {
 			c.send(p, proto.FrameColorScheme, []byte{byte(scheme)})
 		}
+	case uv.ForegroundColorEvent:
+		c.gotColor(emu.KnownFg, e.Color)
 	case uv.BackgroundColorEvent:
+		c.gotColor(emu.KnownBg, e.Color)
 		c.background(e.IsDark())
+	case uv.UnknownOscEvent:
+		if i, col, ok := paletteAnswer(string(e)); ok {
+			c.gotColor(1<<i, col)
+		}
+	case uv.PrimaryDeviceAttributesEvent:
+		// The fence after the colour queries (askColors).
+		c.sendColors()
 	}
 }
 

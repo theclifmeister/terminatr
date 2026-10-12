@@ -31,6 +31,9 @@ type Config struct {
 	// Scheme is the colour scheme reported to the program until a client
 	// reports its own (SetColorScheme); 0 leaves queries unanswered.
 	Scheme emu.Scheme
+	// Colors are the default colours OSC 10/11/4 queries are answered
+	// with until a client reports its own (SetColors).
+	Colors emu.Colors
 	// Logf receives diagnostics; nil discards them.
 	Logf func(format string, args ...any)
 	// OnExit is called once, after the process has exited and every
@@ -124,6 +127,7 @@ func Start(cfg Config) (*Session, error) {
 		Xtversion: cfg.Xtversion,
 		// Called from term.Write, with s.mu held.
 		ColorScheme: func() (emu.Scheme, bool) { return s.scheme, s.scheme != 0 },
+		Colors:      cfg.Colors,
 	})
 	if err != nil {
 		return nil, err
@@ -414,6 +418,18 @@ func (s *Session) SetColorScheme(scheme emu.Scheme) error {
 		s.in.push(emu.SchemeReport(scheme), false)
 	}
 	return nil
+}
+
+// SetColors records the default colours of the terminal a client is
+// attached from: the program's OSC 10, 11 and 4 queries are answered
+// with them from now on.
+func (s *Session) SetColors(c emu.Colors) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.term == nil {
+		return ErrExited
+	}
+	return s.term.SetColors(c)
 }
 
 // RequestDigest puts a FrameDigest with the emulator's current state

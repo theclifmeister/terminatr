@@ -29,6 +29,7 @@ func (t *Terminal) Digest() (string, error)                      { return "", Er
 func (t *Terminal) PlainText() (string, error)                   { return "", ErrNoCgo }
 func (t *Terminal) Screen() (string, error)                      { return "", ErrNoCgo }
 func (t *Terminal) Close()                                       {}
+func (t *Terminal) SetColors(Colors) error                       { return ErrNoCgo }
 func (t *Terminal) Rows() (plain, noDim []string, err error)     { return nil, nil, ErrNoCgo }
 func (t *Terminal) Select(x0, y0, x1, y1 int) error              { return ErrNoCgo }
 func (t *Terminal) ClearSelection() error                        { return ErrNoCgo }
