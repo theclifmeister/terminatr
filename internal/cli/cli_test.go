@@ -232,6 +232,14 @@ func TestCallerRules(t *testing.T) {
 	// its own, an agent only its project's.
 	h.expect(1, "coordinator-only", thr, "thread", "read", "t-0002")
 	h.expect(1, "other-project", coord, "thread", "read", "t-0001", "--project", "other")
+
+	// Nor change another project's inbox, library or questions, or prompt
+	// its coordinator: those run in the server as the human too.
+	h.expect(1, "other-project", coord, "inbox", "done", "x", "--project", "other")
+	h.expect(1, "other-project", coord, "library", "rm", "t-0001", "--all", "--project", "other")
+	h.expect(1, "other-project", coord, "ask", "done", "Q1", "--project", "other")
+	h.expect(1, "other-project", coord, "ask", "open", "--project", "other")
+	h.ok(coord, "ask", "list", "--project", "other")
 }
 
 func TestContextAndCwdResolution(t *testing.T) {

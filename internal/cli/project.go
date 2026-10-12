@@ -376,7 +376,10 @@ func runContext(e *Env, args []string) error {
 		return err
 	}
 	seen := ticker.Seen(tickerState(), p.Slug)
-	seen.Queues, seen.Questions = liveWaits(p.Slug)
+	if !e.Caller.IsAgent() || e.Caller.Project == p.Slug {
+		// Live session state is the agent's own project's only (§11.1).
+		seen.Queues, seen.Questions = liveWaits(p.Slug)
+	}
 	sections, err := p.Context(seen)
 	if err != nil {
 		return err
@@ -458,6 +461,9 @@ func runInbox(e *Env, args []string) error {
 	case "done":
 		if len(pos) == 0 {
 			return usagef("%s", inboxUsage)
+		}
+		if err := e.coordinatorOnly(p, "tm inbox done"); err != nil {
+			return err
 		}
 		var failed error
 		for _, id := range pos {

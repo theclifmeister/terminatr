@@ -50,6 +50,13 @@ func runAsk(e *Env, args []string) error {
 	if err != nil {
 		return err
 	}
+	if sub != "list" && sub != "ls" {
+		// Reading another project is allowed; changing it, or prompting
+		// its coordinator (questions.open, as the human), is not.
+		if err := e.coordinatorOnly(p, "tm ask "+sub); err != nil {
+			return err
+		}
+	}
 	switch sub {
 	case "add":
 		var qs []project.Question

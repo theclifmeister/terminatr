@@ -159,11 +159,28 @@ func Section(text, name string) string {
 // previous one to reports/<n>.md, and copies attachments into library/
 // (docs/SPEC.md §7.2). It returns the report's number.
 func StoreReport(p *project.Project, id, text string, attach []string, now time.Time) (int, error) {
+	return StoreReportFrom(p, id, text, attach, os.Open, now)
+}
+
+// StoreReportFrom is StoreReport opening each attachment with open: the
+// caller's rules for which files it may name (an agent's, cli.openArg).
+func StoreReportFrom(p *project.Project, id, text string, attach []string, open func(string) (*os.File, error), now time.Time) (int, error) {
 	if _, err := Validate(text); err != nil {
 		return 0, err
 	}
+	files := make([]*os.File, 0, len(attach))
+	defer func() {
+		for _, f := range files {
+			f.Close()
+		}
+	}()
 	for _, a := range attach {
-		fi, err := os.Stat(a)
+		f, err := open(a)
+		if err != nil {
+			return 0, refuse("invalid-attachment", "%v", err)
+		}
+		files = append(files, f)
+		fi, err := f.Stat()
 		if err != nil {
 			return 0, refuse("invalid-attachment", "%v", err)
 		}
@@ -188,8 +205,8 @@ func StoreReport(p *project.Project, id, text string, attach []string, now time.
 		if err := fsx.WriteAtomic(Path(p, id, "REPORT.md"), []byte(strings.TrimSpace(strings.ReplaceAll(text, "\r\n", "\n"))+"\n"), 0o644); err != nil {
 			return err
 		}
-		for _, a := range attach {
-			if err := copyFile(a, Path(p, id, "library", filepath.Base(a))); err != nil {
+		for i, a := range attach {
+			if err := copyFile(files[i], Path(p, id, "library", filepath.Base(a))); err != nil {
 				return err
 			}
 		}
@@ -217,15 +234,11 @@ func Attachments(p *project.Project, id string) []string {
 	return out
 }
 
-func copyFile(src, dst string) error {
+// copyFile copies the open file in to dst, creating its folder.
+func copyFile(in *os.File, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
 	out, err := os.Create(dst)
 	if err != nil {
 		return err

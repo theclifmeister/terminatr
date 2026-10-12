@@ -220,6 +220,10 @@ func TestMayCall(t *testing.T) {
 		{proto.MethodCLIRun, true, thread, true},
 		{proto.MethodSessionRead, false, thread, true},
 		{proto.MethodHookEvent, false, human, true},
+		{proto.MethodViewDigest, false, human, true},
+		{proto.MethodViewDigest, true, human, true},
+		{proto.MethodViewDigest, false, thread, false},
+		{proto.MethodViewDigest, true, coord, false},
 	} {
 		who := func() caller.Caller { return c.c }
 		if perr := mayCall(c.m, c.humanS, who); (perr == nil) != c.ok {

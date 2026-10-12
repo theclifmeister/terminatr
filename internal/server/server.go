@@ -643,12 +643,17 @@ func (s *Server) mayAnswer(in proto.SessionInfo, c caller.Caller, human bool) *p
 // socket must come from an agent the pid walk finds: one it calls the
 // human (a process that left its session's tree) would run project
 // commands as the human, whose own CLI uses the human socket.
+// view.digest, a test's poke at the console of a pid, answers on either
+// socket (an e2e run from inside a thread has no human socket) but never
+// to a caller in an agent's session.
 func mayCall(m string, human bool, who func() caller.Caller) *proto.Error {
 	humanOnly := proto.HumanOnly(m) || m == attachMethod
 	switch {
 	case humanOnly && !human:
 		return humanSocketOnly(m)
 	case humanOnly && who().IsAgent():
+		return proto.Errorf("human-only", "%s is the human's; an agent's session doesn't call it", m)
+	case m == proto.MethodViewDigest && who().IsAgent():
 		return proto.Errorf("human-only", "%s is the human's; an agent's session doesn't call it", m)
 	case m == proto.MethodCLIRun && !human && !who().IsAgent():
 		return proto.Errorf("human-only", "%s from outside every agent's session answers only on the human socket (%s)", m, ipc.HumanName)
@@ -767,7 +772,7 @@ func (s *Server) dispatch(req proto.Request, peerPID int, human bool, who func()
 		}
 		return s.stop(p)
 	case proto.MethodSessionList:
-		return s.sessionList(), nil
+		return s.listFor(who(), human), nil
 	case proto.MethodNotifyClaim, proto.MethodNotifyDismiss:
 		var p proto.NoticeParams
 		if err := decodeParams(req.Params, &p); err != nil {
