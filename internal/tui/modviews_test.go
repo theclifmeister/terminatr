@@ -28,6 +28,11 @@ func (f *fakeSource) ModViewInput(p proto.ModViewInputParams) error {
 	return nil
 }
 
+func (f *fakeSource) ModCommand(p proto.ModCommandParams) error {
+	f.commands = append(f.commands, p)
+	return nil
+}
+
 // panelViews are a mod's tab (for alpha, with a count) and card.
 func panelViews() []proto.ModView {
 	two := 2

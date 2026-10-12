@@ -57,6 +57,9 @@ type Provides struct {
 	// Tools are tools the mod offers agents, through the agent mod and
 	// tm mcp; its code answers each call ($.tool.handle).
 	Tools []Tool `toml:"tools"`
+	// Commands are what the human can run from the dashboard (a key, a
+	// ≡ menu entry) or tm mod run; its code gets command.run.
+	Commands []Command `toml:"commands"`
 	// Data files: a theme, an icon set, a keymap, a layout (.toml).
 	Theme  string `toml:"theme"`
 	Icons  string `toml:"icons"`
@@ -137,6 +140,53 @@ type View struct {
 	ID    string `toml:"id"`
 	Title string `toml:"title"`
 	Slot  string `toml:"slot"`
+}
+
+// Command is a command of a code mod (mods design §2, tier 4): the
+// human runs it with its key on the dashboard, from the ≡ menu's Mods
+// group or with tm mod run <mod> <id>, and the mod gets command.run.
+// It is named <mod id>:<command id> (CommandName).
+type Command struct {
+	ID    string `toml:"id"`
+	Title string `toml:"title"`
+	// Key is its key on the dashboard's list, "" for none. A key the
+	// core (or a mod enabled earlier) has is a key conflict: the command
+	// keeps its menu entry and tm mod run.
+	Key string `toml:"key"`
+	// Menu false leaves it out of the ≡ menu.
+	Menu *bool `toml:"menu"`
+}
+
+// InMenu says whether the command has a ≡ menu entry.
+func (c Command) InMenu() bool { return c.Menu == nil || *c.Menu }
+
+// CommandName is "<mod>:<command>", how the Mods tab, the help and tm
+// mod run's messages name a command.
+func CommandName(mod, cmd string) string { return mod + ":" + cmd }
+
+// Limits of a mod's commands.
+const (
+	MaxCommands     = 16
+	MaxCommandTitle = 48
+)
+
+// LockedCommandKeys are keys no command takes: the escape hatches (esc,
+// ctrl+c, the prefix commands d, q and r), the area keys and the
+// sidebar's numbers. The prefix itself is the console's to refuse.
+var LockedCommandKeys = []string{"esc", "ctrl+c", "d", "q", "r", "tab", "shift+tab", "enter",
+	"1", "2", "3", "4", "5", "6", "7", "8", "9"}
+
+// CheckCommandKey says why key can't be a command's, nil if it can.
+func CheckCommandKey(key string) error {
+	switch {
+	case key == "" || len(key) > 16 || strings.ContainsAny(key, " \t\n") || strings.ToLower(key) != key && len(key) > 1:
+		return fmt.Errorf("%q isn't a key (\"g\", \"G\", \"ctrl+g\", \"f5\")", key)
+	case strings.HasPrefix(key, "prefix+"):
+		return fmt.Errorf("%s: a command has no prefix key", key)
+	case slices.Contains(LockedCommandKeys, key):
+		return fmt.Errorf("%s is locked (esc, ctrl+c, d, q, r, tab, enter and 1-9 stay the core's)", key)
+	}
+	return nil
 }
 
 // Tool is a tool a code mod offers agents (mods design §2, tier 5): an
@@ -595,6 +645,35 @@ func (m *Manifest) check(dir string) error {
 			if _, ok := t.Input.Properties[k]; !ok {
 				bad("%s: required %q isn't an input property", at, k)
 			}
+		}
+	}
+	if len(p.Commands) > MaxCommands {
+		bad("provides.commands: at most %d commands", MaxCommands)
+	}
+	keys := map[string]string{}
+	for i, c := range p.Commands {
+		at := fmt.Sprintf("provides.commands[%d]", i)
+		switch {
+		case !code:
+			bad("%s: a command needs provides.main, the code that runs it", at)
+		case !idRE.MatchString(c.ID):
+			bad("%s: id %q must be lowercase letters, digits and dashes", at, c.ID)
+		case seen["k:"+c.ID]:
+			bad("%s: id %q is listed twice", at, c.ID)
+		}
+		seen["k:"+c.ID] = true
+		if t := strings.TrimSpace(c.Title); t == "" {
+			bad("%s: has no title", at)
+		} else if len([]rune(t)) > MaxCommandTitle {
+			bad("%s: title is longer than %d characters", at, MaxCommandTitle)
+		}
+		if c.Key != "" {
+			if err := CheckCommandKey(c.Key); err != nil {
+				bad("%s: key %v", at, err)
+			} else if o, ok := keys[c.Key]; ok {
+				bad("%s: key %s is %s's already", at, c.Key, o)
+			}
+			keys[c.Key] = c.ID
 		}
 	}
 	if len(p.Tools) > 0 && !m.Permissions.Tools {

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 const modReviewAge = `
@@ -145,6 +146,25 @@ func TestModValidate(t *testing.T) {
 	h.expect(2, "unknown subcommand", human, "mod", "search", "x")
 }
 
+// TestModRun: tm mod run sends the command to the server, the human's
+// only, with the project when one is given.
+func TestModRun(t *testing.T) {
+	h := newHarness(t)
+	var got []proto.ModCommandParams
+	old := runModCommand
+	runModCommand = func(p proto.ModCommandParams) error { got = append(got, p); return nil }
+	t.Cleanup(func() { runModCommand = old })
+	h.expect(1, "human-only", thr, "mod", "run", "lab", "relabel")
+	h.expect(2, "usage", human, "mod", "run", "lab")
+	h.expect(2, "takes no --yes", human, "mod", "run", "lab", "relabel", "--yes")
+	if out := h.ok(human, "mod", "run", "lab", "relabel"); !strings.Contains(out, "ran lab:relabel") {
+		t.Fatalf("out %q", out)
+	}
+	if len(got) != 1 || got[0] != (proto.ModCommandParams{Mod: "lab", Command: "relabel"}) {
+		t.Fatalf("sent %+v", got)
+	}
+}
+
 // TestModExamples: tm mod examples shows the folder and each example's
 // install lines, an agent may run it, and a built-in one says to copy it
 // under another id first.
@@ -152,7 +172,7 @@ func TestModExamples(t *testing.T) {
 	h := newHarness(t)
 	out := h.ok(thr, "mod", "examples")
 	for _, want := range []string{mod.ExamplesURL, "git clone " + mod.ExamplesRepo, "tm mod install terminatr/examples/mods/nord",
-		"cp -R terminatr/examples/mods/pr-ci-column my-pr-ci-column", "tm mod install my-pr-ci-column", "memory-search  an agent tool"} {
+		"cp -R terminatr/examples/mods/pr-ci-column my-pr-ci-column", "tm mod install my-pr-ci-column", "memory-search  an agent tool", "tm mod install terminatr/examples/mods/standup"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("examples lack %q:\n%s", want, out)
 		}

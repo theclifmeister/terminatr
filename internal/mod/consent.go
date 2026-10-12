@@ -34,6 +34,7 @@ func (m *Manifest) Kinds() []string {
 	add(len(p.Columns) > 0, "column")
 	add(len(p.Views) > 0, "view")
 	add(len(p.Tools) > 0, "tools")
+	add(len(p.Commands) > 0, "commands")
 	add(p.Theme != "", "theme")
 	add(p.Icons != "", "icons")
 	add(p.Keymap != "", "keymap")
@@ -52,6 +53,20 @@ func (m *Manifest) ViewWords() []string {
 	for _, v := range m.Provides.Views {
 		where := map[string]string{SlotProjectTab: "a project-popup tab", SlotDashboardCard: "a dashboard card", SlotFull: "a full view"}[v.Slot]
 		out = append(out, fmt.Sprintf("%s %q", where, Clean(v.Title, false)))
+	}
+	return out
+}
+
+// CommandWords are m's commands as the consent lists them: "Relabel
+// (g)", "Sync now".
+func (m *Manifest) CommandWords() []string {
+	var out []string
+	for _, c := range m.Provides.Commands {
+		w := strings.TrimSpace(Clean(c.Title, false))
+		if c.Key != "" {
+			w += " (" + c.Key + ")"
+		}
+		out = append(out, w)
 	}
 	return out
 }
@@ -156,6 +171,9 @@ func consent(m *Manifest, fsys fs.FS) string {
 	fmt.Fprintf(&b, "Provides: %s\n", strings.Join(m.Kinds(), " · "))
 	if v := m.ViewWords(); len(v) > 0 {
 		fmt.Fprintf(&b, "Panels it draws (marked mod: %s): %s\n", m.ID, strings.Join(v, " · "))
+	}
+	if c := m.CommandWords(); len(c) > 0 {
+		fmt.Fprintf(&b, "Commands you can run: %s\n", strings.Join(c, " · "))
 	}
 	asked := m.Permissions.Requested()
 	if len(asked) == 0 {

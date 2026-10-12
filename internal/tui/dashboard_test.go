@@ -65,6 +65,7 @@ type fakeSource struct {
 	modViews   proto.ModViewsResult
 	shown      []modview.Shown // the views the last ModViews said were shown
 	inputs     []proto.ModViewInputParams
+	commands   []proto.ModCommandParams
 }
 
 func (f *fakeSource) Templates(string) []mod.Template { return f.templates }

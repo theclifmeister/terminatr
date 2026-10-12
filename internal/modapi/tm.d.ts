@@ -135,7 +135,7 @@ export declare namespace TM {
     "view.opened": ViewEvent;
     /** One of the mod's views is no longer shown. Needs the views grant. */
     "view.closed": ViewEvent;
-    /** The human ran one of the mod's commands. */
+    /** The human ran one of the commands in the manifest's [provides].commands: by its key or ≡ menu entry (then the mod may open a view), or with tm mod run. */
     "command.run": CommandRun;
     /** The user changed the mod's settings: these are the new ones. */
     "mod.settings": Settings;

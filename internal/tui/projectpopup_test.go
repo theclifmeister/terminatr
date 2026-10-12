@@ -461,10 +461,10 @@ func TestKeysParity(t *testing.T) {
 	keyPress(m, "5")
 	// Both are keyLines, each wrapped to its own box's width.
 	b := m.top().(*projectView).box(m)
-	if want := keyLines(m.inner(viewWidth)); strings.Join(b.body, "\n") != strings.Join(want, "\n") {
+	if want := keyLines(m.inner(viewWidth), nil); strings.Join(b.body, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("keys tab isn't the keys:\n%s", strings.Join(b.body, "\n"))
 	}
-	if want := helpLines(m.prefix, m.inner(viewWidth)); strings.Join(help, "\n") != strings.Join(want, "\n") {
+	if want := helpLines(m.prefix, m.inner(viewWidth), nil); strings.Join(help, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("help isn't the keys:\n%s", strings.Join(help, "\n"))
 	}
 	text := ansi.Strip(strings.Join(help, "\n"))
@@ -488,7 +488,7 @@ func TestKeysParity(t *testing.T) {
 		}
 	}
 	// Wide windows: nothing is cut off; lines wrap instead.
-	for _, l := range keyLines(60) {
+	for _, l := range keyLines(60, nil) {
 		if w := ansi.StringWidth(l); w > 60 {
 			t.Errorf("line %d cells wide: %q", w, l)
 		}

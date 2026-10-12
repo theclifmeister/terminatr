@@ -79,6 +79,8 @@ type Data struct {
 	// (mod.CheckData), one per line.
 	ModData  map[string]string
 	ModHosts map[string]proto.ModHost
+	// ModCommands are the enabled code mods' commands (mod.Registry.Commands).
+	ModCommands []mod.ModCommand
 	// NoMods: the server runs in safe mode (tm --no-mods): no user mod
 	// runs (mod.hosts).
 	NoMods bool
@@ -267,6 +269,8 @@ type Source interface {
 	// mod's view to the mod (mod.view.input).
 	ModViews(shown []modview.Shown) (proto.ModViewsResult, error)
 	ModViewInput(p proto.ModViewInputParams) error
+	// ModCommand runs one of a mod's commands (mod.command).
+	ModCommand(p proto.ModCommandParams) error
 }
 
 // Review is what the user needs to review a task: how to check it (the
@@ -346,7 +350,7 @@ func (s *ServerSource) Load() Data {
 	if reg, err := mod.Load(cfg); err != nil {
 		d.ModsErr = err.Error()
 	} else {
-		d.Mods, d.ModData = reg.Mods, modData(reg.Mods)
+		d.Mods, d.ModData, d.ModCommands = reg.Mods, modData(reg.Mods), reg.Commands()
 	}
 	if d.ServerOK {
 		var hosts proto.ModHostsResult
@@ -846,6 +850,10 @@ func (s *ServerSource) ModViews(shown []modview.Shown) (proto.ModViewsResult, er
 
 func (s *ServerSource) ModViewInput(p proto.ModViewInputParams) error {
 	return s.call(proto.MethodModViewInput, p, nil)
+}
+
+func (s *ServerSource) ModCommand(p proto.ModCommandParams) error {
+	return s.call(proto.MethodModCommand, p, nil)
 }
 
 func (s *ServerSource) RestartMod(id string) error {

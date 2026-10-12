@@ -1,0 +1,31 @@
+{
+  "name": "S on the dashboard opens the full view, which lists the project's tasks by status",
+  "answers": [
+    { "method": "tasks.list", "params": { "slug": "demo" },
+      "result": [{ "id": "T1", "title": "Fix the login", "status": "started", "steps_done": 1, "steps_total": 3, "thread": "t-0001" },
+                 { "id": "T2", "title": "Write docs", "status": "ready", "steps_done": 0, "steps_total": 0 },
+                 { "id": "T3", "title": "Old", "status": "done", "steps_done": 0, "steps_total": 0 }] }
+  ],
+  "events": [
+    { "name": "command.run", "project": "demo", "data": { "command": "show", "project": "demo", "selection": { "project": "demo" } } },
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "standup", "slot": "full", "project": "demo", "width": 100, "height": 30 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.open", "params": { "view": "standup" } },
+      { "method": "tasks.list", "params": { "slug": "demo" } },
+      { "method": "ui.view.set",
+        "params": { "view": "standup", "options": { "project": "demo" },
+          "widget": { "kind": "stack", "children": [
+            { "kind": "text", "lines": [[{ "text": "demo", "role": "head" }, { "text": "  1 started · 1 ready", "role": "faint" }]] },
+            { "kind": "text", "text": "Started (1)", "role": "accent" },
+            { "kind": "list", "id": "started", "rows": [
+              { "id": "T1", "spans": [{ "text": "T1 Fix the login" }, { "text": "  1/3", "role": "faint" }, { "text": "  t-0001", "role": "faint" }] }] },
+            { "kind": "text", "text": "Ready (1)", "role": "info" },
+            { "kind": "list", "id": "ready", "rows": [{ "id": "T2", "spans": [{ "text": "T2 Write docs" }] }] }
+          ] } } }
+    ],
+    "no_calls": ["ui.toast"]
+  }
+}

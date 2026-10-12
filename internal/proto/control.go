@@ -744,6 +744,32 @@ type ModView struct {
 // The view states of ModView.
 const ModViewFailed = "failed"
 
+// MethodModCommand runs one of a mod's commands (mods design §2 tier 4):
+// the human's key or ≡ menu entry on a console, or tm mod run. The mod
+// gets command.run. The human's: an agent is refused.
+const MethodModCommand = "mod.command"
+
+// ModCommandParams are the params of mod.command: the mod, its command,
+// the project it runs in ("" for none) and the row selected then.
+// Console says it comes from a console's key or menu, which lets the
+// mod open one of its views there (as a key in its view does).
+type ModCommandParams struct {
+	Mod       string     `json:"mod"`
+	Command   string     `json:"command"`
+	Project   string     `json:"project,omitempty"`
+	Selection *ModTarget `json:"selection,omitempty"`
+	Console   bool       `json:"console,omitempty"`
+}
+
+// ModTarget is a row a mod is told of: a project, task, thread or
+// session (modbus.Target).
+type ModTarget struct {
+	Project string `json:"project,omitempty"`
+	Task    string `json:"task,omitempty"`
+	Thread  string `json:"thread,omitempty"`
+	Session string `json:"session,omitempty"`
+}
+
 // MethodModViewInput sends a human's key or click in a mod's view to
 // the mod, as ui.key or ui.click (mods design §6): only the keys the mod
 // declared, and clicks on its rows and key hints; and where the cursor
