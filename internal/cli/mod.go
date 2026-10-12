@@ -18,7 +18,7 @@ import (
 )
 
 const modUsage = `usage: tm mod list [--outdated] [--json]
-       tm mod install <path | git-url[@tag]> [--yes]
+       tm mod install <path | git-url[//subfolder][@tag] | github-tree-url> [--yes]
        tm mod enable <id> [--project <slug>] [--yes]
        tm mod disable <id> [--project <slug>]
        tm mod remove <id> [--purge] [--yes]
@@ -34,7 +34,10 @@ const modUsage = `usage: tm mod list [--outdated] [--json]
 
 User mods (docs/SPEC.md §5.3), installed in ~/.terminatr/mods. install
 takes a folder or a git URL (https://, ssh://, file://, user@host:path)
-with an optional @tag; there is no catalogue. It shows what the mod asks
+with an optional //<subfolder> holding the mod and an optional @tag,
+e.g. https://example.com/mods.git//nord@v1.0.0, or a GitHub folder's
+URL (https://github.com/<owner>/<repo>/tree/<tag>/<subfolder>); only
+the subfolder is fetched and copied in. There is no catalogue. It shows what the mod asks
 for and installs it disabled after a y on a terminal (--yes without
 one). enable grants what it asks for, after the same question; with
 --project it runs for that project too (disable --project takes one
@@ -259,7 +262,7 @@ func (e *Env) modExamples(asJSON bool) error {
 		}{mod.ExamplesURL, mod.ExamplesRepo, rows})
 	}
 	fmt.Fprintf(e.Stdout, "terminatr's example mods, one for each place a mod can show up: %s\n", mod.ExamplesURL)
-	fmt.Fprintf(e.Stdout, "Nothing here is installed. From a checkout (git clone %s), then:\n", mod.ExamplesRepo)
+	fmt.Fprintln(e.Stdout, "Nothing here is installed. Each installs with one line, then turns on in the Mods tab or with tm mod enable <id>:")
 	for _, x := range mod.Examples {
 		fmt.Fprintf(e.Stdout, "\n%s  %s · %s\n", x.ID, x.Surface, strings.Join(x.Words(), " · "))
 		for _, l := range mod.InstallLines(x.ID) {

@@ -39,7 +39,8 @@ func (s *Staged) Close() {
 }
 
 // Fetch copies the mod at src into a staging folder (a git URL is cloned
-// first, at src.Ref) and checks it as Validate does. An invalid mod
+// first, at src.Ref, and only its folder src.Subdir copied) and checks
+// it as Validate does. An invalid mod
 // comes back with its manifest, if any, and the reasons.
 func Fetch(src Source) (*Staged, error) {
 	mods, err := home.ModsDir()
@@ -56,10 +57,23 @@ func Fetch(src Source) (*Staged, error) {
 	st := &Staged{Dir: filepath.Join(tmp, "mod"), Source: src, tmp: tmp}
 	from := src.Path
 	if src.Git != "" {
+		if src.Subdir != "" {
+			// Checked again here: a Source can come from a .tm-source.json.
+			if err := CheckSubdir(src.Subdir); err != nil {
+				st.Close()
+				return nil, err
+			}
+		}
 		from = filepath.Join(tmp, "clone")
-		if st.Source.Commit, err = clone(src.Git, src.Ref, from); err != nil {
+		if st.Source.Commit, st.Source.Tree, err = clone(src.Git, src.Ref, src.Subdir, from); err != nil {
 			st.Close()
 			return nil, err
+		}
+		if src.Subdir != "" {
+			if from, err = subdirIn(from, src.Subdir); err != nil {
+				st.Close()
+				return nil, err
+			}
 		}
 	}
 	if err := copyMod(from, st.Dir); err != nil {

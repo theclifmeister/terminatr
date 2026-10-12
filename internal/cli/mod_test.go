@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -143,6 +144,65 @@ func TestModUpdate(t *testing.T) {
 	}
 }
 
+// TestModInstallSubfolder: tm mod install takes a git URL with
+// //<subfolder>, copies in only that folder, and list --outdated and
+// update follow its newest tag that changed the folder.
+func TestModInstallSubfolder(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	h := newHarness(t)
+	repo := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"}, args...)...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	write := func(name, body string) {
+		p := filepath.Join(repo, filepath.FromSlash(name))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(body), 0o644)
+	}
+	write("README.md", "mods\n")
+	for name, body := range map[string]string{"mod.toml": modReviewAge, "main.ts": "", "rules.md": "Age every review.\n"} {
+		write("mods/review-age/"+name, body)
+	}
+	git("init", "-q", "-b", "main")
+	git("add", "-A")
+	git("commit", "-q", "-m", "one")
+	git("tag", "v1.0.0")
+	url := "file://" + repo + "//mods/review-age"
+	h.expect(2, "..", human, "mod", "install", "file://"+repo+"//mods/../mods/review-age", "--yes")
+	out := h.ok(human, "mod", "install", url+"@v1.0.0", "--yes")
+	if !strings.Contains(out, "From "+url+"@v1.0.0.") || !strings.Contains(out, "installed review-age 0.3.1") {
+		t.Fatalf("install: %q", out)
+	}
+	if _, err := os.Stat(filepath.Join(h.root, "mods", "review-age", "README.md")); err == nil {
+		t.Error("the repository's root was copied in")
+	}
+	write("README.md", "more\n")
+	git("commit", "-q", "-am", "two")
+	git("tag", "v1.1.0")
+	if out := h.ok(human, "mod", "list", "--outdated"); !strings.Contains(out, "up to date") {
+		t.Fatalf("outdated after a tag outside the folder: %q", out)
+	}
+	write("mods/review-age/mod.toml", strings.Replace(modReviewAge, "0.3.1", "0.3.2", 1))
+	git("commit", "-q", "-am", "three")
+	git("tag", "v1.2.0")
+	if out := h.ok(human, "mod", "list", "--outdated"); !strings.Contains(out, "→ v1.2.0") {
+		t.Fatalf("outdated: %q", out)
+	}
+	if out := h.ok(human, "mod", "update", "review-age"); !strings.Contains(out, "updated review-age to 0.3.2") || !strings.Contains(out, url+"@v1.2.0") {
+		t.Fatalf("update: %q", out)
+	}
+	if out := h.ok(human, "mod", "list", "--json"); !strings.Contains(out, url+"@v1.2.0") {
+		t.Fatalf("source after update: %q", out)
+	}
+}
+
 func TestModValidate(t *testing.T) {
 	h := newHarness(t)
 	good := modSource(t, modReviewAge)
@@ -199,8 +259,8 @@ func TestModRun(t *testing.T) {
 func TestModExamples(t *testing.T) {
 	h := newHarness(t)
 	out := h.ok(thr, "mod", "examples")
-	for _, want := range []string{mod.ExamplesURL, "git clone " + mod.ExamplesRepo, "tm mod install terminatr/examples/mods/nord",
-		"cp -R terminatr/examples/mods/pr-ci-column my-pr-ci-column", "tm mod install my-pr-ci-column", "memory-search  an agent tool", "tm mod install terminatr/examples/mods/standup",
+	for _, want := range []string{mod.ExamplesURL, "git clone --depth 1 --branch " + mod.ExamplesRef + " " + mod.ExamplesRepo, "tm mod install " + mod.ExamplesURL + "/nord",
+		"cp -R terminatr/examples/mods/pr-ci-column my-pr-ci-column", "tm mod install my-pr-ci-column", "memory-search  an agent tool", "tm mod install " + mod.ExamplesURL + "/standup",
 		"gitlab  a code host (GitLab, through glab) · runs glab\n"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("examples lack %q:\n%s", want, out)
