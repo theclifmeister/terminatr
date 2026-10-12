@@ -704,7 +704,7 @@ func (e *Env) launchThread(p *project.Project, r *thread.Record, brief, resume s
 	params := proto.SessionStartParams{
 		Agent: r.Agent, Cwd: r.Worktree, Cols: 120, Rows: 40,
 		Role: proto.RoleThread, Project: p.Slug, Thread: r.ID,
-		Brief: brief, Kickoff: thread.Kickoff(brief), Yolo: safety.Yolo, Model: r.Model, ResumeSID: resume,
+		Brief: brief, Kickoff: thread.Kickoff(brief), Yolo: safety.Yolo, NoSandboxEscapes: !safety.SandboxEscapes, Model: r.Model, ResumeSID: resume,
 	}
 	var res proto.SessionStartResult
 	if err := e.call(proto.MethodSessionStart, params, &res); err != nil {

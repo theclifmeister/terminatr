@@ -3,6 +3,8 @@ package server
 import (
 	"errors"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -281,6 +283,42 @@ func TestMayAnswer(t *testing.T) {
 	} {
 		if perr := s.mayAnswer(c.in, c.c, c.humanS); (perr == nil) != c.ok {
 			t.Errorf("%s: %v, want ok %v", c.name, perr, c.ok)
+		}
+	}
+}
+
+// TestNoSandboxEscapesReachesLaunch: session.start's no_sandbox_escapes
+// (tm thread start's sandbox_escapes = false) reaches the agent's launch
+// spec, where Claude's manifest turns it into allowUnsandboxedCommands.
+func TestNoSandboxEscapesReachesLaunch(t *testing.T) {
+	p := testPaths(t)
+	if err := os.MkdirAll(p.AgentsDir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `manifest_version = 1
+name = "esc"
+[launch]
+command = ` + strconv.Quote(testSh(t)) + `
+args = ["-c", "sleep 30"]
+[[launch.files]]
+path = "esc"
+template = "{{.NoSandboxEscapes}}"
+`
+	if err := os.WriteFile(filepath.Join(p.AgentsDir(), "esc.toml"), []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	startServer(t, p)
+	c, err := Dial(p, proto.KindControl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	for _, off := range []bool{false, true} {
+		var started proto.SessionStartResult
+		call(t, c, proto.MethodSessionStart, proto.SessionStartParams{Agent: "esc", Cwd: t.TempDir(), NoSandboxEscapes: off}, &started)
+		b, err := os.ReadFile(filepath.Join(p.RunDir, "s", started.Session.ID, "esc"))
+		if err != nil || string(b) != strconv.FormatBool(off) {
+			t.Errorf("no_sandbox_escapes %v: launch file %q, %v", off, b, err)
 		}
 	}
 }
