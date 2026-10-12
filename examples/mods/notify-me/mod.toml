@@ -5,8 +5,8 @@
 id = "notify-me"
 name = "Notify me"
 version = "1.0.0"
-api = "1.0"
-description = "An OS notification when a thread needs you or a task reaches review, with Accept, Send back and Show buttons that run the core's own actions."
+api = "1.3"
+description = "An OS notification when a thread or a coordinator asks you something or a task reaches review, with buttons that run the core's own actions: an option of the question, Accept, Send back, Show."
 authors = ["terminatr"]
 homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/notify-me"
 
@@ -16,6 +16,9 @@ main = "main.ts"
 [permissions]
 project_read = true
 notify = true
+# A question's options are question.answer buttons: each opens tm's own
+# confirmation of that answer; the notification answers nothing itself.
+actions = ["question.answer"]
 
 [settings.needs_you]
 type = "bool"

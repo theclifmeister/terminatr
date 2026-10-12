@@ -70,6 +70,8 @@ type fakeSource struct {
 	shown        []modview.Shown // the views the last ModViews said were shown
 	inputs       []proto.ModViewInputParams
 	commands     []proto.ModCommandParams
+	cleared      []string // session ids
+	answers      []string // "s-2 0 Which colour? → Blue"
 }
 
 func (f *fakeSource) Templates(string) []mod.Template { return f.templates }
@@ -151,6 +153,14 @@ func (f *fakeSource) SetRepo(slug, path string, add bool) error {
 			}
 		}
 	}
+	return nil
+}
+func (f *fakeSource) ClearSession(id string) error {
+	f.cleared = append(f.cleared, id)
+	return nil
+}
+func (f *fakeSource) AnswerQuestion(id string, index int, question, option string) error {
+	f.answers = append(f.answers, fmt.Sprintf("%s %d %s → %s", id, index, question, option))
 	return nil
 }
 func (f *fakeSource) OpenQuestions(slug string) (proto.QuestionsOpenResult, error) {

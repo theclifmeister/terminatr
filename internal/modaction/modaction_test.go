@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
@@ -14,6 +13,7 @@ type state struct {
 	board    map[string]*tasks.Task
 	asked    map[string]string
 	sessions map[string]bool
+	menus    map[string][]MenuQuestion
 }
 
 func (s state) Project(slug string) bool { return slug == "alpha" }
@@ -25,6 +25,7 @@ func (s state) Task(slug, ref string) *tasks.Task {
 }
 func (s state) Asked(slug, ref string) string { return s.asked[ref] }
 func (s state) Session(id string) bool        { return s.sessions[id] }
+func (s state) Menu(id string) []MenuQuestion { return s.menus[id] }
 
 func live() state {
 	return state{
@@ -35,12 +36,19 @@ func live() state {
 			"T4": {ID: 4, Title: "Started", Status: tasks.Started},
 			"T5": {ID: 5, Title: "Asked", Status: tasks.Review},
 		},
-		asked:    map[string]string{"T5": project.KindAccept},
-		sessions: map[string]bool{"s-1": true},
+		asked:    map[string]string{"T5": KindAccept},
+		sessions: map[string]bool{"s-1": true, "s-3": true},
+		menus: map[string][]MenuQuestion{"s-1": {
+			{Question: "Which colour?", Options: []string{"Red", "Blue"}},
+			{Question: "Done?", Answered: true, Options: []string{"Yes", "No"}},
+			{Question: "Which fruits?", Multi: true, Options: []string{"Apple", "Pear"}},
+		}},
 	}
 }
 
 func task(ref string) Target { return Target{Project: "alpha", Task: ref} }
+
+func answer(sess, q, option string) Target { return Target{Session: sess, Question: q, Option: option} }
 
 // TestWhy: the precondition is checked against live state, for every
 // action, and a target of the wrong shape is refused.
@@ -69,6 +77,16 @@ func TestWhy(t *testing.T) {
 		{"project.activate", Target{Project: "beta"}, "no project beta"},
 		{"session.attach", Target{Session: "s-1"}, ""},
 		{"session.attach", Target{Session: "s-2"}, "not running"},
+		{"session.clear", Target{Session: "s-1"}, ""},
+		{"session.clear", Target{Session: "s-2"}, "not running"},
+		{"question.answer", answer("s-1", "Which colour?", "Blue"), ""},
+		{"question.answer", answer("s-2", "Which colour?", "Blue"), "not running"},
+		{"question.answer", answer("s-3", "Which colour?", "Blue"), "no open question"},
+		{"question.answer", answer("s-1", "Which color?", "Blue"), "doesn't ask that question"},
+		{"question.answer", answer("s-1", "Which colour?", "blue"), `no option "blue"`},
+		{"question.answer", answer("s-1", "Which colour?", "2"), `no option "2"`},
+		{"question.answer", answer("s-1", "Done?", "Yes"), "answered already"},
+		{"question.answer", answer("s-1", "Which fruits?", "Pear"), "answered in the session"},
 		// Wrong shapes.
 		{"task.accept", Target{Project: "alpha", Task: "12"}, "takes a target of"},
 		{"task.accept", Target{Project: "alpha", Task: "T02"}, "takes a target of"},
@@ -76,6 +94,12 @@ func TestWhy(t *testing.T) {
 		{"task.accept", Target{Project: "alpha", Task: "T2", Session: "s-1"}, "takes a target of"},
 		{"session.attach", Target{Session: "s-1", Project: "alpha"}, "takes a target of"},
 		{"project.activate", Target{}, "takes a target of"},
+		{"session.clear", Target{Session: "s-1", Task: "T1"}, "takes a target of"},
+		{"session.attach", Target{Session: "s-1", Option: "Blue"}, "takes no question or option"},
+		{"task.accept", Target{Project: "alpha", Task: "T2", Question: "Which colour?"}, "takes no question or option"},
+		{"question.answer", Target{Session: "s-1", Question: "Which colour?"}, "takes a target of"},
+		{"question.answer", Target{Session: "s-1", Option: "Blue"}, "takes a target of"},
+		{"question.answer", Target{Session: "s-1", Question: "Which colour?", Option: "Blue", Project: "alpha"}, "takes a target of"},
 		// Not bindable: the core's settings, merges and the like.
 		{"settings.open", Target{}, "not an action a mod may bind"},
 		{"repo.remove", Target{Project: "alpha"}, "not an action a mod may bind"},
@@ -104,13 +128,16 @@ func TestTable(t *testing.T) {
 			t.Errorf("%s: label, key and precondition are all needed", a.ID)
 		}
 		switch a.On {
-		case OnTask, OnProject, OnSession:
+		case OnTask, OnProject, OnSession, OnQuestion:
 		default:
 			t.Errorf("%s: target kind %q", a.ID, a.On)
 		}
-		writes := askKind(a.ID) != "" || a.ID == "project.activate"
+		writes := askKind(a.ID) != "" || a.ID == "project.activate" || a.Consent != ""
 		if writes && !a.Confirm {
 			t.Errorf("%s changes state but doesn't ask first", a.ID)
+		}
+		if a.On == OnQuestion && a.Consent == "" {
+			t.Errorf("%s answers for the human but needs no consent", a.ID)
 		}
 	}
 	if _, ok := Lookup("task.delegate"); !ok {
@@ -121,10 +148,14 @@ func TestTable(t *testing.T) {
 	}
 }
 
-// TestKinds: the ask kinds are the inbox's.
-func TestKinds(t *testing.T) {
-	if KindDelegate != project.KindDelegate || KindAccept != project.KindAccept || KindSendBack != project.KindSendBack {
-		t.Error("the ask kinds differ from the inbox's")
+// TestAnswer: the index of the question answered.
+func TestAnswer(t *testing.T) {
+	menu := live().menus["s-1"]
+	if i, why := Answer(menu, "Which colour?", "Red"); i != 0 || why != "" {
+		t.Errorf("Answer = %d, %q", i, why)
+	}
+	if i, why := Answer(menu, "Which colour?", "Green"); i != -1 || why == "" {
+		t.Errorf("Answer of no option = %d, %q", i, why)
 	}
 }
 

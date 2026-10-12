@@ -88,7 +88,7 @@ type Widget struct {
 
 	Keys []Key `json:"keys,omitempty"` // keys
 	// Actions are core actions bound in the whole view, whatever row
-	// the cursor is on (keys; mod API 1.3), such as task.new: an action
+	// the cursor is on (keys; mod API 1.4), such as task.new: an action
 	// no row stands for. A row's own action on the same key comes first.
 	Actions []Action `json:"actions,omitempty"`
 }
@@ -469,8 +469,8 @@ func (c *checker) actions(as []Action, at string) {
 		for k, v := range a.Target {
 			if !slices.Contains(targetKeys, k) {
 				c.bad(join(aat, "target"), "%q is not a target field (%s)", k, strings.Join(targetKeys, ", "))
-			} else if len(v) > 256 || strings.IndexFunc(v, unicode.IsControl) >= 0 {
-				c.bad(join(aat, "target."+k), "not an id (at most 256 bytes, no control characters)")
+			} else if k == "question" && len(v) > MaxQuestionTarget || k != "question" && len(v) > 256 || strings.IndexFunc(v, unicode.IsControl) >= 0 {
+				c.bad(join(aat, "target."+k), "not an id (at most 256 bytes, a question %d, no control characters)", MaxQuestionTarget)
 			}
 		}
 		if why := modaction.TargetWhy(spec, ActionTarget(a)); why != "" {
@@ -479,13 +479,14 @@ func (c *checker) actions(as []Action, at string) {
 	}
 }
 
+// MaxQuestionTarget bounds a question.answer target's question text.
+const MaxQuestionTarget = 1024
+
 // targetKeys are a target's fields, mod API v1's (modbus.Target).
-var targetKeys = []string{"project", "task", "thread", "session"}
+var targetKeys = []string{"project", "task", "thread", "session", "question", "option"}
 
 // ActionTarget is a's target as the core action table takes it.
-func ActionTarget(a Action) modaction.Target {
-	return modaction.Target{Project: a.Target["project"], Task: a.Target["task"], Thread: a.Target["thread"], Session: a.Target["session"]}
-}
+func ActionTarget(a Action) modaction.Target { return modaction.TargetOf(a.Target) }
 
 func (c *checker) spans(ss []Span, at string) {
 	if len(ss) > MaxSpans {

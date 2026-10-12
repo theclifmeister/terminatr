@@ -1,0 +1,28 @@
+{
+  "name": "a question menu notifies once, its options as answer buttons; the thread's state with the same question doesn't notify again",
+  "events": [
+    { "name": "session.question", "project": "demo",
+      "data": { "session": "s-7", "project": "demo", "thread": "t-0012", "role": "thread",
+        "question": { "question": "Which port?", "header": "Port", "options": [
+          { "label": "8080", "description": "the usual" }, { "label": "3000" }, { "label": "443" }, { "label": "80" } ] } } },
+    { "name": "thread.state", "project": "demo",
+      "data": { "project": "demo", "thread": "t-0012", "task": "T12", "state": "blocked", "needs_you": "Which port?" } },
+    { "name": "session.question", "project": "demo",
+      "data": { "session": "s-2", "project": "demo", "role": "coordinator",
+        "question": { "question": "Which fruits?", "multi_select": true, "options": [ { "label": "Apple" }, { "label": "Pear" } ] } } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.notify", "params": { "notification": {
+        "title": "t-0012 asks", "text": "demo: Which port? (more in the session)", "level": "warn",
+        "actions": [
+          { "id": "question.answer", "target": { "session": "s-7", "question": "Which port?", "option": "8080" } },
+          { "id": "question.answer", "target": { "session": "s-7", "question": "Which port?", "option": "3000" } },
+          { "id": "question.answer", "target": { "session": "s-7", "question": "Which port?", "option": "443" } }
+        ] } } },
+      { "method": "ui.notify", "params": { "notification": {
+        "title": "demo coordinator asks", "text": "demo: Which fruits? (pick them in the session)", "level": "warn" } } }
+    ],
+    "store": { "asked": { "demo/t-0012": "Which port?", "demo/coordinator": "Which fruits?" } }
+  }
+}

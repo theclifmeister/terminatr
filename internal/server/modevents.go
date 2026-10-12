@@ -161,6 +161,7 @@ func (s *Server) lookModEvents(tr *modbus.Tracker) {
 		ss = append(ss, n)
 	}
 	tr.Sessions(ss)
+	tr.Questions(sessionQuestions(sessions))
 	list, err := project.List()
 	if err != nil {
 		s.log.Printf("mod events: %v", err)
@@ -195,6 +196,29 @@ func sessionUsage(info proto.SessionInfo) (int64, float64) {
 		return 0, 0
 	}
 	return r.Usage.Tokens(), r.Usage.CostUSD
+}
+
+// sessionQuestions are the questions open on the sessions of a project:
+// each one's first unanswered question.
+func sessionQuestions(sessions []proto.SessionInfo) []modbus.Question {
+	var out []modbus.Question
+	for _, info := range sessions {
+		if info.Project == "" || info.Question == nil {
+			continue
+		}
+		for _, it := range info.Question.Questions {
+			if it.Answered {
+				continue
+			}
+			a := &modbus.Ask{Question: it.Question, Header: it.Header, MultiSelect: it.MultiSelect, Options: []modbus.AskOption{}}
+			for _, o := range it.Options {
+				a.Options = append(a.Options, modbus.AskOption{Label: o.Label, Description: o.Description})
+			}
+			out = append(out, modbus.Question{Session: info.ID, Project: info.Project, Thread: info.Thread, Role: info.Role, Question: a})
+			break
+		}
+	}
+	return out
 }
 
 // projectState is project p's state for the tracker, with sessions the

@@ -390,6 +390,8 @@ var coreActions = []struct {
 	{"popup", bindable{id: "library.delete", keys: []string{"d"}, fixed: true, help: "delete the library file (asks first)"}},
 	{"popup", bindable{id: "library.delete-thread", keys: []string{"D"}, fixed: true, help: "delete all of the thread's library files (asks first)"}},
 	{"view", bindable{id: "session.attach", keys: []string{"enter"}, fixed: true, help: "attach to the session (a row of a mod's view)"}},
+	{"view", bindable{id: "session.clear", keys: []string{"C"}, fixed: true, help: "clear the session's conversation (a row of a mod's view; asks first)"}},
+	{"view", bindable{id: "question.answer", keys: []string{"a"}, fixed: true, help: "answer the session's question with the row's option (a row of a mod's view; asks first)"}},
 	{"session", bindable{id: "session.dashboard", keys: []string{"prefix+d"}, fixed: true, help: "back to the dashboard"}},
 	{"session", bindable{id: "session.remote", keys: []string{"prefix+r"}, fixed: true, help: "remote control of a coordinator on or off (asks first)"}},
 	{"session", bindable{id: "prefix.send", keys: []string{"prefix+prefix"}, fixed: true, help: "send the prefix key to the program"}},

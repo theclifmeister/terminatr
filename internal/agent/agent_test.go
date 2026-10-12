@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/guard"
+	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 )
 
 func claude(t *testing.T) Agent {
@@ -1023,6 +1024,42 @@ func TestModAgents(t *testing.T) {
 	for _, n := range []string{"off", "evil"} {
 		if _, ok := r.Get(n); ok {
 			t.Fatalf("%s loaded", n)
+		}
+	}
+}
+
+// TestNoHumanSocket: no embedded agent's launch, in any role, grants
+// the human socket (ipc.HumanName) or the run dir it shares with the
+// server's: each names the server socket alone, so a sandboxed agent,
+// and whatever it leaves running, can't reach the human-only methods
+// (docs/SPEC.md §5.2, §11.1).
+func TestNoHumanSocket(t *testing.T) {
+	r, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	brief := filepath.Join(dir, "brief.md")
+	os.WriteFile(brief, []byte("Brief."), 0o600)
+	const run, sock = "/tmrun", "/tmrun/tm.sock"
+	for _, name := range r.Names() {
+		a, _ := r.Get(name)
+		for _, role := range []Role{RoleThread, Role("coordinator")} {
+			spec := threadSpec()
+			spec.Role, spec.RuntimeDir, spec.BriefPath, spec.Socket = role, dir, brief, sock
+			l, err := a.Launch(spec)
+			if err != nil {
+				t.Fatalf("%s %s: %v", name, role, err)
+			}
+			all := append(append(slices.Clone(l.Argv), l.Env...), slices.Collect(maps.Keys(l.Files))...)
+			for _, f := range l.Files {
+				all = append(all, string(f))
+			}
+			for _, s := range all {
+				if strings.Contains(s, ipc.HumanName) || strings.Count(s, run) != strings.Count(s, sock) {
+					t.Errorf("%s %s launch grants more than the server socket: %.300q", name, role, s)
+				}
+			}
 		}
 	}
 }

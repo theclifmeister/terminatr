@@ -11,6 +11,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/modaction"
 )
 
 // reviewAge is the design's example manifest (mods design §5), with
@@ -97,6 +98,11 @@ func TestManifestErrors(t *testing.T) {
 		{"net ip", "id = \"x\"\n" + base + "[provides]\nmain = \"m.ts\"\n[permissions]\nnet = [\"10.0.0.1\"]\n", "isn't a host name"},
 		{"command path", "id = \"x\"\n" + base + "[provides]\nmain = \"m.ts\"\n[permissions]\ncommands = [\"/bin/sh\"]\n", "isn't a program name"},
 		{"files relative", "id = \"x\"\n" + base + "[provides]\nmain = \"m.ts\"\n[permissions]\nfiles = { read = [\"notes\"] }\n", "absolute or start with ~/"},
+		{"action unknown", "id = \"x\"\n" + base + "[provides]\nmain = \"m.ts\"\n[permissions]\nproject_read = true\nactions = [\"thread.merge\"]\n", "not an action a mod may bind"},
+		{"action needs no grant", "id = \"x\"\n" + base + "[provides]\nmain = \"m.ts\"\n[permissions]\nproject_read = true\nactions = [\"task.accept\"]\n", "needs no grant of its own"},
+		{"action twice", "id = \"x\"\n" + base + "[provides]\nmain = \"m.ts\"\n[permissions]\nproject_read = true\nactions = [\"session.clear\", \"session.clear\"]\n", "session.clear twice"},
+		{"actions without project_read", "id = \"x\"\n" + base + "[provides]\nmain = \"m.ts\"\n[permissions]\nactions = [\"session.clear\"]\n", "needs permissions.project_read"},
+		{"actions on a data mod", "id = \"x\"\n" + base + "[permissions]\nactions = [\"session.clear\"]\n", "are for code mods"},
 		{"setting default", "id = \"x\"\n" + base + "[settings]\nn = { type = \"int\", default = 0, min = 1 }\n", "default must be at least 1"},
 		{"choice no options", "id = \"x\"\n" + base + "[settings]\nc = { type = \"choice\", default = \"a\" }\n", "needs options"},
 		{"rules role", "id = \"x\"\n" + base + "[provides]\nrules = { human = \"r.md\" }\n", "coordinator or thread"},
@@ -106,6 +112,46 @@ func TestManifestErrors(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: %v, want %q", tc.name, err, tc.want)
 		}
+	}
+}
+
+// TestConsentActions: the actions a mod binds only with a grant of
+// their own are listed in its consent, each in tm's words, and Binds
+// holds only with the grant and the listing.
+func TestConsentActions(t *testing.T) {
+	toml := strings.Replace(reviewAge, `net          = ["api.example.com"]`, `actions = ["session.clear", "question.answer"]`, 1)
+	dir := install(t, t.TempDir(), "review-age", map[string]string{"mod.toml": toml, "main.ts": ""})
+	m, err := ReadManifest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := m.Permissions.Requested(); !slices.Equal(got, []string{PermProjectRead, PermViews, PermActions}) {
+		t.Fatalf("requested %v", got)
+	}
+	c := Consent(m, dir)
+	for _, want := range []string{"clear an agent session's conversation (session.clear)", "answer an agent's question with one of its options (question.answer)", "tm asks you before each one runs"} {
+		if !strings.Contains(c, want) {
+			t.Errorf("consent lacks %q:\n%s", want, c)
+		}
+	}
+	clear, _ := modaction.Lookup("session.clear")
+	attach, _ := modaction.Lookup("session.attach")
+	md := Mod{Manifest: m, Grants: []string{PermProjectRead, PermViews}}
+	if md.Binds(clear) || !md.Binds(attach) {
+		t.Error("without the actions grant: binds session.clear, or not session.attach")
+	}
+	md.Grants = append(md.Grants, PermActions)
+	if !md.Binds(clear) {
+		t.Error("with the grant, session.clear isn't bound")
+	}
+	m.Permissions.Actions = []string{"question.answer"}
+	if md.Binds(clear) {
+		t.Error("binds session.clear, which its manifest doesn't list")
+	}
+	// Listing another action asks again on update.
+	old, _ := ReadManifest(dir)
+	if ch := Diff(old, dir, m, dir); !slices.Equal(ch.NewPerms, []string{PermActions}) {
+		t.Errorf("diff: %+v", ch)
 	}
 }
 
@@ -136,16 +182,16 @@ func TestManifestFiles(t *testing.T) {
 
 func TestCheckAPI(t *testing.T) {
 	for _, tc := range []struct{ api, minTM, tm, want string }{
-		{"1.3", "", "v0.19.0", ""},
+		{"1.4", "", "v0.19.0", ""},
 		{"1.0", "", "v0.19.0", ""},
-		{"1.4", "", "v0.19.0", "review-age needs mod API 1.4; this tm has 1.3: run tm update"},
+		{"1.5", "", "v0.19.0", "review-age needs mod API 1.5; this tm has 1.4: run tm update"},
 		{"2.0", "", "v0.19.0", "needs mod API 2.0"},
 		{"0.9", "", "v0.19.0", "was written for mod API 0.9"},
 		{"1.1", "0.20.0", "v0.19.0", "needs tm 0.20.0; this tm is v0.19.0"},
 		{"1.1", "0.19.0", "v0.19.0", ""},
 		{"1.1", "0.20.0", "dev", ""}, // a source build passes min_tm
 	} {
-		err := checkAPI(&Manifest{ID: "review-age", API: tc.api, MinTM: tc.minTM}, 1, 3, tc.tm)
+		err := checkAPI(&Manifest{ID: "review-age", API: tc.api, MinTM: tc.minTM}, 1, 4, tc.tm)
 		if tc.want == "" && err != nil || tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)) {
 			t.Errorf("api %s min_tm %q on %s: %v, want %q", tc.api, tc.minTM, tc.tm, err, tc.want)
 		}

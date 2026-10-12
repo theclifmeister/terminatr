@@ -18,7 +18,10 @@ const (
 	InboxItem      = "inbox.item"
 	PRChanged      = "pr.changed"
 	SessionState   = "session.state"
-	ClockMinute    = "clock.minute"
+	// SessionQuestion (mod API 1.3): the question a session's open menu
+	// asks changed.
+	SessionQuestion = "session.question"
+	ClockMinute     = "clock.minute"
 	// Published by the console, action and view parts of the API.
 	UIClick     = "ui.click"
 	UIKey       = "ui.key"
@@ -42,7 +45,7 @@ const (
 // Needs is the grant a mod needs to get event name; "" for none.
 func Needs(name string) string {
 	switch name {
-	case TaskChanged, TasksChanged, ThreadState, ThreadStarted, ThreadResolved, ReportStored, InboxItem, PRChanged:
+	case TaskChanged, TasksChanged, ThreadState, ThreadStarted, ThreadResolved, ReportStored, InboxItem, PRChanged, SessionQuestion:
 		return GrantProjectRead
 	case ViewOpened, ViewClosed:
 		return GrantViews
@@ -63,7 +66,7 @@ type Task struct {
 	Thread     string `json:"thread,omitempty"`
 }
 
-// Tasks is tasks.changed (mod API 1.3): something of project's board
+// Tasks is tasks.changed (mod API 1.4): something of project's board
 // that $.tasks.list shows changed (a title, a step, a status, a task
 // added or gone) or an ask about one of its tasks came or was handled.
 // It names the project only: a mod lists the tasks again.
@@ -153,6 +156,34 @@ type Session struct {
 	CostUSD float64 `json:"cost_usd,omitempty"`
 }
 
+// Question is session.question (mod API 1.3): the first unanswered
+// question of the question menu open on a thread's or a coordinator's
+// session (Claude's AskUserQuestion), none once the menu is answered or
+// gone. A mod may offer its options as question.answer bindings: the
+// target is {session, question: Ask.Question, option: one of its
+// labels}, and the human confirms the answer in tm.
+type Question struct {
+	Session  string `json:"session"`
+	Project  string `json:"project"`
+	Thread   string `json:"thread,omitempty"`
+	Role     string `json:"role"`
+	Question *Ask   `json:"question,omitempty"`
+}
+
+// Ask is one question of a menu, its options as the menu lists them.
+type Ask struct {
+	Question    string      `json:"question"`
+	Header      string      `json:"header,omitempty"`
+	MultiSelect bool        `json:"multi_select,omitempty"`
+	Options     []AskOption `json:"options"`
+}
+
+// AskOption is one option of an Ask.
+type AskOption struct {
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
+}
+
 // Clock is clock.minute, on every minute.
 type Clock struct {
 	Now time.Time `json:"now"`
@@ -166,12 +197,15 @@ type Ready struct {
 }
 
 // Target is what a mod's cell, row, action or input is about: a task or
-// a thread of a project, or a session.
+// a thread of a project, or a session; for question.answer an option
+// (its label) of a question (its text) the session's menu asks.
 type Target struct {
-	Project string `json:"project,omitempty"`
-	Task    string `json:"task,omitempty"`
-	Thread  string `json:"thread,omitempty"`
-	Session string `json:"session,omitempty"`
+	Project  string `json:"project,omitempty"`
+	Task     string `json:"task,omitempty"`
+	Thread   string `json:"thread,omitempty"`
+	Session  string `json:"session,omitempty"`
+	Question string `json:"question,omitempty"`
+	Option   string `json:"option,omitempty"`
 }
 
 // Input is ui.click and ui.key: the human clicked, or pressed Key on, one

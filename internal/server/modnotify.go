@@ -12,6 +12,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/modaction"
 	"github.com/theclifmeister/terminatr/internal/modbroker"
 	"github.com/theclifmeister/terminatr/internal/modnotify"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -21,17 +22,16 @@ import (
 // notifyAction is a button as the mod sends it: a core action id on a
 // target.
 type notifyAction struct {
-	ID     string `json:"id"`
-	Target struct {
-		Project string `json:"project"`
-		Task    string `json:"task"`
-	} `json:"target"`
+	ID     string           `json:"id"`
+	Target modaction.Target `json:"target"`
 }
 
 // modNotify is ui.notify {notification: {title, text, level, actions}}
 // (or the notification's fields flat). The mod's own words are clipped
 // and cleaned; a button's label is the core's, and its target must be a
-// task of a project the mod runs for. The mod can't make a notification
+// task of a project the mod runs for, or for question.answer an option
+// of the question a session of such a project asks now, which the mod
+// lists under [permissions] actions. The mod can't make a notification
 // the human didn't get a say in: the rate is limited, and a button only
 // opens the core's confirmation.
 func (s *Server) modNotify(_ context.Context, c *modbroker.Call) (any, error) {
@@ -53,6 +53,20 @@ func (s *Server) modNotify(_ context.Context, c *modbroker.Call) (any, error) {
 	}
 	req := modnotify.Request{Title: a.Title, Text: a.Text, Level: a.Level}
 	for _, act := range a.Actions {
+		if spec, ok := modnotify.Action(act.ID); ok && spec.On == modaction.OnQuestion {
+			t := act.Target
+			if why := modaction.TargetWhy(spec, t); why != "" {
+				return nil, modbroker.BadParams("ui.notify: %s", why)
+			}
+			if err := s.modActionScope(c.Mod, spec, t); err != nil {
+				return nil, err
+			}
+			if why := modaction.NotAnswerable(menuOf(s.asks.of(t.Session)), t.Question, t.Option); why != "" {
+				return nil, modbroker.BadParams("ui.notify: %s: %s", act.ID, why)
+			}
+			req.Buttons = append(req.Buttons, modnotify.Button{ID: act.ID, Session: t.Session, Question: t.Question, Option: t.Option})
+			continue
+		}
 		if err := c.Project(act.Target.Project); err != nil {
 			return nil, err
 		}

@@ -23,6 +23,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/modaction"
 	"github.com/theclifmeister/terminatr/internal/modbroker"
 	"github.com/theclifmeister/terminatr/internal/modbus"
 	"github.com/theclifmeister/terminatr/internal/modsup"
@@ -95,6 +96,11 @@ func (s *Server) modViewSet(_ context.Context, c *modbroker.Call) (any, error) {
 		w, err := widget.Decode(a.Widget)
 		if err != nil {
 			return nil, modbroker.BadParams("ui.view.set: %v", err)
+		}
+		for _, b := range widget.BoundActions(w) {
+			if spec, ok := modaction.Lookup(b.ID); ok && !c.Mod.Binds(spec) {
+				return nil, modbroker.Denied("ui.view.set: binding %s needs it in [permissions] actions, with the %s grant, which %s doesn't have", b.ID, mod.PermActions, c.Mod.ID)
+			}
 		}
 		t.Tree = w
 	}

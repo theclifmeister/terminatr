@@ -30,17 +30,42 @@ func TestPostChecks(t *testing.T) {
 		t.Fatalf("notice = %+v", n)
 	}
 	for name, req := range map[string]Request{
-		"no title":     {Title: " \x1b "},
-		"bad level":    {Title: "x", Level: "loud"},
-		"unknown id":   {Title: "x", Buttons: []Button{{ID: "task.delete", Project: "p", Task: 1}}},
-		"no target":    {Title: "x", Buttons: []Button{{ID: "task.show"}}},
-		"many buttons": {Title: "x", Buttons: []Button{good, good, good, good}},
-		"settings id":  {Title: "x", Buttons: []Button{{ID: "settings.open", Project: "p", Task: 1}}},
-		"quit":         {Title: "x", Buttons: []Button{{ID: "console.quit", Project: "p", Task: 1}}},
+		"no title":          {Title: " \x1b "},
+		"bad level":         {Title: "x", Level: "loud"},
+		"unknown id":        {Title: "x", Buttons: []Button{{ID: "task.delete", Project: "p", Task: 1}}},
+		"no target":         {Title: "x", Buttons: []Button{{ID: "task.show"}}},
+		"many buttons":      {Title: "x", Buttons: []Button{good, good, good, good}},
+		"settings id":       {Title: "x", Buttons: []Button{{ID: "settings.open", Project: "p", Task: 1}}},
+		"quit":              {Title: "x", Buttons: []Button{{ID: "console.quit", Project: "p", Task: 1}}},
+		"clear":             {Title: "x", Buttons: []Button{{ID: "session.clear", Session: "s-1"}}},
+		"answer no option":  {Title: "x", Buttons: []Button{{ID: "question.answer", Session: "s-1", Question: "Ship?"}}},
+		"answer on a task":  {Title: "x", Buttons: []Button{{ID: "question.answer", Session: "s-1", Question: "Ship?", Option: "Yes", Project: "p", Task: 1}}},
+		"answer escape":     {Title: "x", Buttons: []Button{{ID: "question.answer", Session: "s-1", Question: "Ship?", Option: "Yes\x1b[2J"}}},
+		"task on a session": {Title: "x", Buttons: []Button{{ID: "task.accept", Project: "p", Task: 1, Session: "s-1"}}},
 	} {
 		if _, err := h.Post("m", req); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+// TestAnswerButton: question.answer carries its session, question and
+// option, under the core's label; its target is the binding's.
+func TestAnswerButton(t *testing.T) {
+	h := New(nil)
+	n, err := h.Post("m", Request{Title: "x", Buttons: []Button{{ID: "question.answer", Label: "Yes!", Session: "s-1", Question: "Ship?", Option: "Yes"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := n.Buttons[0]
+	if b.Label != "answer" || b.Option != "Yes" {
+		t.Fatalf("button %+v", b)
+	}
+	if got := b.Target(); got["session"] != "s-1" || got["question"] != "Ship?" || got["option"] != "Yes" || len(got) != 3 {
+		t.Errorf("target %v", got)
+	}
+	if got := (Button{ID: "task.show", Project: "p", Task: 3}).Target(); got["task"] != "T3" || got["project"] != "p" {
+		t.Errorf("task target %v", got)
 	}
 }
 

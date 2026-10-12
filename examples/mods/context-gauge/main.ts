@@ -1,11 +1,12 @@
 // A context gauge (mods design §13, example 3): each session's use of its
 // context window as a cell on its row, faint below the warning, then
 // warn, then bad from 95%. A dashboard card lists the sessions past the
-// warning; each row binds the core action session.attach, so enter
-// (or the key the console's keymap gives it) attaches to that session,
-// where /clear starts a fresh conversation. The mod only names the
-// action: the core checks it against live state and runs it, and the
-// mod hears action.done.
+// warning; each row binds the core actions session.clear (C) and
+// session.attach (enter, or the keys the console's keymap gives them).
+// C asks first, in tm's own words, then has the agent start a fresh
+// conversation once it is idle; the project's files keep its state. The
+// mod only names the actions: the core checks them against live state
+// and runs them, and the mod hears action.done.
 //
 // session.state carries the context use; it needs no grant. The mod
 // keeps what it saw in its store, since mod.ready's snapshot has no
@@ -50,13 +51,16 @@ function card(project: string): TM.Widget {
     .map((id) => ({
       id,
       spans: [{ text: `${sessions[id].context}%`.padStart(4), role: role(sessions[id].context) }, { text: "  " + who(sessions[id]) }],
-      actions: [{ id: "session.attach", target: { session: id } }],
+      actions: [
+        { id: "session.clear", target: { session: id } },
+        { id: "session.attach", target: { session: id } },
+      ],
     }));
   return {
     kind: "stack",
     children: [
       { kind: "list", id: "sessions", rows, empty: `No session is past ${warn()}% of its context.` },
-      { kind: "text", role: "faint", text: "Attach, then /clear: the project's state is in its files, so nothing is lost." },
+      { kind: "text", role: "faint", text: "Clear starts a fresh conversation: the project's state is in its files, so nothing is lost." },
     ],
   };
 }

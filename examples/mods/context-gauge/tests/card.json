@@ -1,5 +1,5 @@
 {
-  "name": "the card lists the sessions past the warning, fullest first, each row bound to session.attach",
+  "name": "the card lists the sessions past the warning, fullest first, each row bound to session.clear and session.attach",
   "settings": { "warn": 70 },
   "store": { "sessions": {
     "s-7": { "project": "demo", "thread": "t-0012", "role": "thread", "context": 74 },
@@ -17,9 +17,9 @@
         "widget": { "kind": "stack", "children": [
           { "kind": "list", "id": "sessions", "rows": [
             { "id": "s-2", "spans": [{ "text": " 96%", "role": "bad" }, { "text": "  demo coordinator" }],
-              "actions": [{ "id": "session.attach", "target": { "session": "s-2" } }] },
+              "actions": [{ "id": "session.clear", "target": { "session": "s-2" } }, { "id": "session.attach", "target": { "session": "s-2" } }] },
             { "id": "s-7", "spans": [{ "text": " 74%", "role": "warn" }, { "text": "  demo t-0012" }],
-              "actions": [{ "id": "session.attach", "target": { "session": "s-7" } }] }
+              "actions": [{ "id": "session.clear", "target": { "session": "s-7" } }, { "id": "session.attach", "target": { "session": "s-7" } }] }
           ] },
           { "kind": "text", "role": "faint" }
         ] } } }

@@ -24,6 +24,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/modaction"
 	"github.com/theclifmeister/terminatr/internal/update"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
@@ -306,6 +307,10 @@ type Permissions struct {
 	Net         []string `toml:"net"`
 	Commands    []string `toml:"commands"`
 	Files       Files    `toml:"files"`
+	// Actions are the core actions its rows and buttons may bind that
+	// need a grant of their own (modaction.Action.Consent: session.clear,
+	// question.answer; mod API 1.3). The human still confirms each press.
+	Actions []string `toml:"actions"`
 }
 
 // Files are the roots a mod may read, or write, outside its own folder.
@@ -325,16 +330,18 @@ const (
 	PermFiles       = "files"
 	PermNet         = "net"
 	PermCommands    = "commands"
+	PermActions     = "actions"
 )
 
 // Perms are all the permission names, in the consent screen's order.
-var Perms = []string{PermProjectRead, PermViews, PermNotify, PermInbox, PermTools, PermFiles, PermNet, PermCommands}
+var Perms = []string{PermProjectRead, PermViews, PermNotify, PermInbox, PermTools, PermFiles, PermNet, PermCommands, PermActions}
 
 // Requested lists the permissions the manifest asks for, in Perms order.
 func (p Permissions) Requested() []string {
 	asks := map[string]bool{
 		PermProjectRead: p.ProjectRead, PermViews: p.Views, PermNotify: p.Notify, PermInbox: p.Inbox, PermTools: p.Tools,
 		PermFiles: len(p.Files.Read)+len(p.Files.Write) > 0, PermNet: len(p.Net) > 0, PermCommands: len(p.Commands) > 0,
+		PermActions: len(p.Actions) > 0,
 	}
 	var out []string
 	for _, n := range Perms {
@@ -740,6 +747,20 @@ func (m *Manifest) check(dir string) error {
 			bad("permissions.commands: %q isn't a program name (no path, no arguments)", c)
 		}
 	}
+	for i, id := range perm.Actions {
+		a, ok := modaction.Lookup(id)
+		switch {
+		case !ok:
+			bad("permissions.actions: %q is not an action a mod may bind", id)
+		case a.Consent == "":
+			bad("permissions.actions: %s needs no grant of its own; list only %s", id, strings.Join(ConsentActions(), ", "))
+		case slices.Contains(perm.Actions[:i], id):
+			bad("permissions.actions: %s twice", id)
+		}
+	}
+	if len(perm.Actions) > 0 && !perm.ProjectRead {
+		bad("permissions.actions needs permissions.project_read: a binding is checked against the projects it acts in")
+	}
 	for _, r := range slices.Concat(perm.Files.Read, perm.Files.Write) {
 		if !strings.HasPrefix(r, "~/") && !filepath.IsAbs(r) {
 			bad("permissions.files: %q must be absolute or start with ~/", r)
@@ -873,4 +894,26 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// ConsentActions are the ids of the actions a mod binds only with
+// [permissions] actions listing them (modaction.Action.Consent).
+func ConsentActions() []string {
+	var out []string
+	for _, a := range modaction.Actions {
+		if a.Consent != "" {
+			out = append(out, a.ID)
+		}
+	}
+	return out
+}
+
+// Binds reports whether the mod may bind action a: one that needs no
+// grant of its own, or one its manifest lists under [permissions]
+// actions, with the actions grant.
+func (m Mod) Binds(a modaction.Action) bool {
+	if a.Consent == "" {
+		return true
+	}
+	return m.Manifest != nil && m.Granted(PermActions) && slices.Contains(m.Manifest.Permissions.Actions, a.ID)
 }
