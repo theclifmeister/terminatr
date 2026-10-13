@@ -228,6 +228,22 @@ func TestModViewOpen(t *testing.T) {
 	}
 }
 
+// TestModCardOpenProject: a request to open a card for another project
+// than the dashboard lists shows that project's dashboard, with the card
+// unfolded and selected.
+func TestModCardOpenProject(t *testing.T) {
+	_, m := panelDash(t)
+	m.mv.folded = map[string]bool{"mc:panel/cost": true}
+	m.setModViews(modViewsMsg{res: proto.ModViewsResult{Views: panelViews(),
+		Open: []modview.Open{{Seq: 1, Mod: "panel", View: "cost", Project: "beta"}}}})
+	if got := listProject(m.data, m.current); got != "beta" {
+		t.Errorf("dashboard lists %q, want beta", got)
+	}
+	if m.sel != "mc:panel/cost" || m.mv.folded["mc:panel/cost"] {
+		t.Errorf("card not selected and unfolded: sel %q folded %v", m.sel, m.mv.folded)
+	}
+}
+
 // TestMemoryTabMod: the built-in Memory tab mod draws the Memory tab (6
 // memory), unmarked, and not again after the core tabs; enter on a file
 // reaches the mod. A failed mod shows that; with the mod off the tab
