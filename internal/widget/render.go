@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -45,9 +46,10 @@ type keyHit struct {
 // scroll within the tree.
 func (v *View) Render(w, h int, look Look) []string {
 	w, h = max(w, 1), max(h, 0)
-	if !v.layValid || v.layW != w {
-		v.lay = layout(v, w, look)
-		v.layW, v.layValid = w, true
+	now := v.now()
+	if !v.layValid || v.layW != w || v.timed && now.Unix() != v.layAt {
+		v.lay = layout(v, w, look, now)
+		v.layW, v.layValid, v.layAt = w, true, now.Unix()
 	}
 	if v.follow {
 		if y := v.cursorLine(); y >= 0 {
@@ -95,11 +97,12 @@ func (v *View) cursorLine() int {
 }
 
 // layout lays the whole tree out at width w.
-func layout(v *View, w int, look Look) []line {
+// now is the clock time spans are drawn at.
+func layout(v *View, w int, look Look, now time.Time) []line {
 	if v.tree == nil {
 		return nil
 	}
-	lo := &layer{v: v, w: w, look: look}
+	lo := &layer{v: v, w: w, look: look, now: now}
 	lo.widget(v.tree)
 	return lo.out
 }
@@ -108,6 +111,7 @@ type layer struct {
 	v    *View
 	w    int
 	look Look
+	now  time.Time
 	out  []line
 }
 
@@ -181,8 +185,8 @@ func (lo *layer) spans(ss []Span) string {
 		if s.Icon != "" {
 			b.WriteString(lo.look.Style(s.Role, lo.look.Icon(s.Icon)))
 		}
-		if s.Text != "" {
-			b.WriteString(lo.look.Style(s.Role, s.Text))
+		if t := s.Words(lo.now); t != "" {
+			b.WriteString(lo.look.Style(s.Role, t))
 		}
 	}
 	return b.String()
@@ -195,7 +199,7 @@ func (lo *layer) plainSpans(ss []Span) string {
 		if s.Icon != "" {
 			b.WriteString(lo.look.Icon(s.Icon))
 		}
-		b.WriteString(s.Text)
+		b.WriteString(s.Words(lo.now))
 	}
 	return b.String()
 }

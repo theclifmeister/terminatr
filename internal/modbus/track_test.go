@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // drain is the events queued in s, after its mod.ready, as "name data".
@@ -171,6 +173,53 @@ func TestTrackerBoard(t *testing.T) {
 // TestTrackerQuestions: session.question once a menu opens on a session
 // after the baseline, when another question replaces it, and once it
 // goes (no question); the same question again publishes nothing.
+// ticker.changed follows the ticker's times and its failing flag: after
+// a PR poll, after a sync, when gh_failing flips; not when nothing moved.
+// The event's ticker is made only when it is published.
+func TestTrackerTicker(t *testing.T) {
+	b := New()
+	s := b.Subscribe("m", Options{Grants: all})
+	tr := NewTracker(b, nil)
+	t0 := time.Date(2026, 10, 13, 14, 0, 0, 0, time.UTC)
+	made := 0
+	look := func(tt TickerTimes) {
+		st := state()
+		st.Ticker = tt
+		st.TickerWatch = func() proto.WatchTicker {
+			made++
+			return proto.WatchTicker{PRChecked: tt.PRChecked, Synced: tt.Synced, PRPollSeconds: 120, GHFailing: tt.GHFailing}
+		}
+		tr.Project("p", st)
+	}
+	look(TickerTimes{})
+	for _, tc := range []struct {
+		name string
+		tt   TickerTimes
+		want string
+	}{
+		{"poll", TickerTimes{PRChecked: t0}, "ticker.changed {Project:p Ticker:{PRChecked:2026-10-13 14:00:00 +0000 UTC Synced:0001-01-01 00:00:00 +0000 UTC PRPollSeconds:120 GHFailing:false NoPRHost:false}}"},
+		{"unchanged", TickerTimes{PRChecked: t0.In(time.FixedZone("x", 3600))}, ""},
+		{"sync", TickerTimes{PRChecked: t0, Synced: t0.Add(time.Minute)}, "ticker.changed {Project:p Ticker:{PRChecked:2026-10-13 14:00:00 +0000 UTC Synced:2026-10-13 14:01:00 +0000 UTC PRPollSeconds:120 GHFailing:false NoPRHost:false}}"},
+		{"failing", TickerTimes{PRChecked: t0, Synced: t0.Add(time.Minute), GHFailing: true}, "ticker.changed {Project:p Ticker:{PRChecked:2026-10-13 14:00:00 +0000 UTC Synced:2026-10-13 14:01:00 +0000 UTC PRPollSeconds:120 GHFailing:true NoPRHost:false}}"},
+		{"fixed", TickerTimes{PRChecked: t0.Add(2 * time.Minute), Synced: t0.Add(time.Minute)}, "ticker.changed {Project:p Ticker:{PRChecked:2026-10-13 14:02:00 +0000 UTC Synced:2026-10-13 14:01:00 +0000 UTC PRPollSeconds:120 GHFailing:false NoPRHost:false}}"},
+	} {
+		look(tc.tt)
+		if got := fmt.Sprint(drain(t, s)); got != fmt.Sprint(nonEmpty(tc.want)) {
+			t.Errorf("%s: %s, want %s", tc.name, got, nonEmpty(tc.want))
+		}
+	}
+	if made != 4 {
+		t.Errorf("the ticker was made %d times, want 4: once per event", made)
+	}
+}
+
+func nonEmpty(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return []string{s}
+}
+
 func TestTrackerQuestions(t *testing.T) {
 	b := New()
 	s := b.Subscribe("m", Options{Grants: []string{GrantProjectRead}})

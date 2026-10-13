@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/rivo/uniseg"
@@ -95,10 +96,91 @@ type Widget struct {
 
 // Span is a piece of text in a role, or an icon (mods design §6):
 // [{text: "3d", role: "warn"}, {icon: "review"}].
+//
+// Ago and Until (mod API 1.7) are times, RFC 3339, that the console
+// draws with its own clock in place of Text, so they move without a new
+// publish: Ago as "40s ago", Until as "1m20s", or "due" once it passed
+// (Words). A span has at most one of Text, Ago and Until.
 type Span struct {
-	Text string `json:"text,omitempty"`
-	Role string `json:"role,omitempty"`
-	Icon string `json:"icon,omitempty"`
+	Text  string `json:"text,omitempty"`
+	Role  string `json:"role,omitempty"`
+	Icon  string `json:"icon,omitempty"`
+	Ago   string `json:"ago,omitempty"`
+	Until string `json:"until,omitempty"`
+}
+
+// Timed tells whether the span is drawn from the clock (Ago or Until).
+func (s Span) Timed() bool { return s.Ago != "" || s.Until != "" }
+
+// Words is the span's text as drawn at now: Text, or its Ago or Until
+// in words (AgeWords). A time that doesn't parse (a span not checked)
+// draws as nothing.
+func (s Span) Words(now time.Time) string {
+	switch {
+	case s.Ago != "":
+		t, err := time.Parse(time.RFC3339, s.Ago)
+		if err != nil {
+			return ""
+		}
+		return AgeWords(now.Sub(t)) + " ago"
+	case s.Until != "":
+		t, err := time.Parse(time.RFC3339, s.Until)
+		if err != nil {
+			return ""
+		}
+		if d := t.Sub(now); d >= time.Second {
+			return AgeWords(d)
+		}
+		return "due"
+	}
+	return s.Text
+}
+
+// Timed tells whether a span anywhere in the tree is drawn from the
+// clock (Span.Timed): its drawing then changes every second.
+func (w *Widget) Timed() bool {
+	timed := func(ss []Span) bool { return slices.ContainsFunc(ss, Span.Timed) }
+	for _, ss := range w.Lines {
+		if timed(ss) {
+			return true
+		}
+	}
+	for _, p := range w.Pairs {
+		if timed(p.Value) {
+			return true
+		}
+	}
+	for i := range w.Rows {
+		r := &w.Rows[i]
+		if timed(r.Spans) || slices.ContainsFunc(r.Cells, timed) || slices.ContainsFunc(r.More, timed) {
+			return true
+		}
+	}
+	for i := range w.Children {
+		if w.Children[i].Timed() {
+			return true
+		}
+	}
+	return false
+}
+
+// AgeWords writes a span of time, short: "40s", "1m20s", "2h5m".
+// Negative or tiny spans are "0s".
+func AgeWords(d time.Duration) string {
+	d = max(d, 0).Round(time.Second)
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		if s := int(d.Seconds()) % 60; s != 0 {
+			return fmt.Sprintf("%dm%ds", int(d.Minutes()), s)
+		}
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	}
+	if m := int(d.Minutes()) % 60; m != 0 {
+		return fmt.Sprintf("%dh%dm", int(d.Hours()), m)
+	}
+	return fmt.Sprintf("%dh", int(d.Hours()))
 }
 
 // Row is a list's or table's row. Spans are a list row's; Cells are a
@@ -500,7 +582,30 @@ func (c *checker) spans(ss []Span, at string) {
 		if s.Icon != "" && !slices.Contains(Icons, s.Icon) {
 			c.bad(join(sat, "icon"), "%q is not an icon name", s.Icon)
 		}
+		c.when(&s.Ago, join(sat, "ago"))
+		c.when(&s.Until, join(sat, "until"))
+		if n := btoi(s.Text != "") + btoi(s.Ago != "") + btoi(s.Until != ""); n > 1 {
+			c.bad(sat, "has %d of text, ago and until; at most one", n)
+		}
 	}
+}
+
+// when checks a span's Ago or Until: a time in RFC 3339.
+func (c *checker) when(s *string, at string) {
+	if *s == "" {
+		return
+	}
+	if _, err := time.Parse(time.RFC3339, *s); err != nil {
+		c.bad(at, "not a time in RFC 3339, as 2026-10-13T14:05:00Z")
+		*s = ""
+	}
+}
+
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func (c *checker) role(r, at string) {
