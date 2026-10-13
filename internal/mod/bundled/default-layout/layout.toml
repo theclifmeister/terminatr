@@ -26,7 +26,7 @@ columns = ["count", "ci", "state", "remote", "paused", "inactive", "needs"]
 # all are below. A section the list leaves out goes below, after
 # those it names, in the Mods tab's order; an id no mod has is skipped.
 # A layout can't hide a section: turn its mod off in the Mods tab.
-# sections = ["ticker.ticker", "tree"]
+# sections = ["ticker.band", "tree"]
 # The order of the sections under each project (mod API 1.7), always
 # below its threads; the ones left out follow in the Mods tab's order.
 # project_sections = ["ci-status.prs"]

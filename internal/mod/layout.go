@@ -74,7 +74,7 @@ type Layout struct {
 	Density                   string   // rows.density: normal, compact
 	Sections                  []string // dashboard.sections: needs, project, other, cards
 	// SideSections is sidebar.sections, the band's order: mods' sidebar
-	// sections ("ticker.ticker"), those before SectionTree above the
+	// sections ("ticker.band"), those before SectionTree above the
 	// tree. ProjectSections is sidebar.project_sections, the order of the
 	// sections under each project. Both need mod API 1.7.
 	SideSections, ProjectSections []string
