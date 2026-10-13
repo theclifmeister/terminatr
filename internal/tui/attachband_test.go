@@ -35,11 +35,7 @@ func sectionRows(rows []treeRow) []string {
 	var out []string
 	for _, r := range rows {
 		if r.kind == treeSection {
-			s := r.key()
-			if r.sec.waiting {
-				s += " waiting"
-			}
-			out = append(out, s)
+			out = append(out, r.key())
 		}
 	}
 	return out
@@ -47,9 +43,10 @@ func sectionRows(rows []treeRow) []string {
 
 // TestAttachBand: the attached sidebar draws the band from mod.views'
 // list as session.list names its sections: none without any, those it
-// names alone (safe mode leaves a user mod's out), one mod.views hasn't
-// listed yet waits; and it tells mod.views of them as the dashboard
-// does, for the focused pane's project.
+// names alone (safe mode leaves a user mod's out), none mod.views hasn't
+// listed a tree for yet, though mod.views still hears of it; and it
+// tells mod.views of them as the dashboard does, for the focused pane's
+// project.
 func TestAttachBand(t *testing.T) {
 	setIcons(IconsUnicode)
 	defer resetConsole()
@@ -76,8 +73,10 @@ func TestAttachBand(t *testing.T) {
 	if got := sectionRows(bandClient(bandTestViews(), safe).sideTree()); !slices.Equal(got, []string{"s:ticker.ticker"}) {
 		t.Fatalf("safe mode %v", got)
 	}
-	if got := sectionRows(bandClient(nil, bandTestSections()).sideTree()); !slices.Equal(got, []string{"s:ticker.ticker waiting", "s:ci.status waiting"}) {
-		t.Fatalf("before mod.views %v", got)
+	// Before any tree, no header (not even a waiting one), but the mods
+	// still hear of their sections, so they draw.
+	if c := bandClient(nil, bandTestSections()); len(sectionRows(c.sideTree())) != 0 || len(c.bandShown(bandTestSections())) != 2 {
+		t.Fatalf("before mod.views %v", sectionRows(c.sideTree()))
 	}
 
 	short := bandClient(bandTestViews(), bandTestSections())

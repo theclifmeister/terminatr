@@ -121,7 +121,7 @@ func TestSideProjGolden(t *testing.T) {
 	views = projTestViews()
 	views[len(views)-1].Trees = nil
 	_, m = projDash(t, 34, views)
-	show("waiting", m)
+	show("before the mod draws: no section, not even its header", m)
 
 	failed := projTestViews()
 	failed[len(failed)-1].State, failed[len(failed)-1].Err = proto.ModViewFailed, "exit 1"
@@ -426,6 +426,13 @@ func TestSideProjGuarantee(t *testing.T) {
 			}
 		}
 		w, foot := m.sideW(), m.sideFoot()
+		// The cursor on a project's section: its header takes a row, so
+		// the rows kept are those of a sidebar one row shorter (a ⚑ row
+		// that gives way is counted in the header's ⚑ N).
+		hw := h
+		if slices.ContainsFunc(with, func(r treeRow) bool { return r.cursor && r.kind == treeSection && r.sec.proj }) {
+			hw--
+		}
 		on := func(rows []treeRow) []string {
 			l := sideLayout(rows, w, h, foot)
 			var out []string
@@ -437,7 +444,7 @@ func TestSideProjGuarantee(t *testing.T) {
 			return out
 		}
 		got := on(with)
-		lw := sideLayout(without, w, h, foot)
+		lw := sideLayout(without, w, hw, foot)
 		for _, s := range lw.slots {
 			if r := lw.rows[s.row]; (r.hint || r.cursor || r.here) && !slices.Contains(got, r.key()) {
 				t.Fatalf("h=%d %d projects sel %q: %s shows without sections and not with them (%v)", h, len(ps), m.sideSel, r.key(), got)
