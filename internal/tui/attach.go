@@ -58,17 +58,25 @@ const (
 	endWait = 3 * time.Second
 )
 
+// enterScreen switches to the alternate screen.
+const enterScreen = "\x1b[?1049h"
+
 // Outer terminal setup: alternate screen, bracketed paste, kitty keyboard
 // "disambiguate" (so Shift+Enter and the prefix are unambiguous), colour
 // scheme updates (2031) plus a query for the current scheme, and queries
 // for its colours (askColors): the panes' programs get them, and the
 // theme takes its light or dark roles from the background (OSC 11), as
 // the dashboard's does (T319).
-var outerSetup = "\x1b[?1049h\x1b[?2004h\x1b[>1u\x1b[?2031h\x1b[?996n" + askColors
+var outerSetup = enterScreen + "\x1b[?2004h\x1b[>1u\x1b[?2031h\x1b[?996n" + askColors
 
 const (
-	outerRestore = "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1006l\x1b[?2031l" +
-		"\x1b[<u\x1b[?2004l\x1b[0m\x1b[0 q\x1b[?25h\x1b[?1049l"
+	outerRestore = outerHandover + leaveScreen
+	// outerHandover restores the modes the attach set but keeps its
+	// screen, for the dashboard to draw over (Options.Back).
+	outerHandover = "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1006l\x1b[?2031l" +
+		"\x1b[<u\x1b[?2004l\x1b[0m\x1b[0 q"
+	// leaveScreen shows the cursor and leaves the alternate screen.
+	leaveScreen = "\x1b[?25h\x1b[?1049l"
 )
 
 // Options configure Attach.
@@ -96,6 +104,16 @@ type Options struct {
 	// typed after the prefix over a popup on this session, which closed
 	// it (DashResult.Command).
 	Command string
+	// Handover: the dashboard handed this console over with the
+	// alternate screen on, showing its last frame (DashOptions.Handover):
+	// the attach draws its first frame over it rather than switch
+	// screens, so the switch is one frame (T372).
+	Handover bool
+	// Back: the dashboard follows an attach that doesn't quit (the
+	// console's loop). The attach then leaves the alternate screen on,
+	// its last frame showing and the cursor hidden, for the dashboard to
+	// draw over (DashOptions.Handover).
+	Back bool
 }
 
 // SidebarOptions configure the attach view's projects sidebar.
@@ -160,6 +178,14 @@ func Attach(opts Options) (res Result, err error) {
 	if !ok {
 		cols, rows = 80, 24
 	}
+	// Handed over, the screen is the dashboard's until the setup below:
+	// leave it when no dashboard draws it again.
+	handed := opts.Handover
+	defer func() {
+		if handed && (err != nil || res.Quit || !opts.Back) {
+			opts.Out.WriteString(leaveScreen)
+		}
+	}()
 	c, err := newClient(opts.Paths, opts.Log)
 	if err != nil {
 		return res, err
@@ -200,23 +226,32 @@ func Attach(opts Options) (res Result, err error) {
 		return res, err
 	}
 	var restoreOnce sync.Once
-	restore := func() {
+	restore := func(back bool) {
 		restoreOnce.Do(func() {
-			opts.Out.WriteString(outerRestore)
+			if back {
+				opts.Out.WriteString(outerHandover)
+			} else {
+				opts.Out.WriteString(outerRestore)
+			}
 			unraw()
 		})
 	}
-	defer restore()
+	defer func() { restore(opts.Back && err == nil && !res.Quit) }()
 	defer func() {
 		if p := recover(); p != nil {
-			restore()
+			restore(false)
 			panic(p)
 		}
 	}()
 	// Before the colour queries: the panes' palette, sent once they
 	// answered, needs the terminal's truecolor known (truecolor.go).
 	probeTerminal(opts.In, opts.Out, true)
-	if _, err := opts.Out.WriteString(outerSetup); err != nil {
+	setup := outerSetup
+	if handed {
+		setup = strings.TrimPrefix(setup, enterScreen) // on it already
+	}
+	handed = false // restore has the screen from here
+	if _, err := opts.Out.WriteString(setup); err != nil {
 		return res, err
 	}
 
@@ -245,7 +280,7 @@ func Attach(opts Options) (res Result, err error) {
 	res = c.renderLoop(opts.Out)
 	cancel()
 	stopInput()
-	restore()
+	restore(opts.Back && !res.Quit)
 	return res, nil
 }
 
@@ -1872,12 +1907,15 @@ func (c *client) paint(t *Theme, b []byte) []byte {
 // frameSplit draws the pane beside the sidebar or above the status bar:
 // the sidebar, the pane's changes, the status bar, then the
 // focused pane's cursor, all in one synchronised update; nil when nothing
-// changed. c.mu held.
+// changed. A full repaint (a new view, the window resized) overwrites
+// every cell in place and erases only what nothing draws, never the
+// whole screen first: a terminal that shows the update before its end
+// (no mode 2026, over a slow link) doesn't flash blank (T372). c.mu held.
 func (c *client) frameSplit(vis []*pane) ([]byte, error) {
 	b := append(c.buf[:0], "\x1b[?2026h\x1b[?25l"...)
 	wrote := false
 	if c.full {
-		b = append(b, "\x1b[0m\x1b[H\x1b[2J"...)
+		b = c.appendGaps(b, vis)
 		for _, p := range vis {
 			p.r.Invalidate()
 		}
@@ -1914,6 +1952,9 @@ func (c *client) frameSplit(vis []*pane) ([]byte, error) {
 		b = append(b, fmt.Sprintf("\x1b[%d;1H\x1b[0m", c.rows)...)
 		b = append(b, c.statusText...)
 		b = append(b, "\x1b[0m"...)
+		if n := c.cols - ansi.StringWidth(c.statusText); n > 0 {
+			b = append(b, fmt.Sprintf("\x1b[%dX", n)...) // what a longer bar left
+		}
 		c.statusDrawn, wrote = c.statusText, true
 	}
 	var cur string // the focused pane cropped away: no cursor
@@ -1936,6 +1977,36 @@ func (c *client) frameSplit(vis []*pane) ([]byte, error) {
 	b = append(b, "\x1b[?2026l"...)
 	c.buf = b
 	return b, nil
+}
+
+// appendGaps erases, on a full repaint, the cells above the status bar
+// that neither the sidebar, the info panel nor a pane draws over: what
+// the previous frame left there (a menu, the dashboard). c.mu held.
+func (c *client) appendGaps(b []byte, vis []*pane) []byte {
+	b = append(b, "\x1b[0m"...)
+	for y := range c.rows - c.barRows() {
+		var drawn [][2]int // the columns drawn on row y, [from, to)
+		if c.side != nil && c.sideW > 0 && y < c.sideRows() {
+			drawn = append(drawn, [2]int{c.sideX(), c.sideX() + c.sideW})
+		}
+		if c.info != nil && c.infoW > 0 && y < c.infoRows() {
+			drawn = append(drawn, [2]int{c.infoX(), c.infoX() + c.infoW})
+		}
+		for _, p := range vis {
+			if r := p.rect; y >= r.Y && y < r.Y+r.H {
+				drawn = append(drawn, [2]int{r.X, r.X + r.W})
+			}
+		}
+		slices.SortFunc(drawn, func(a, b [2]int) int { return a[0] - b[0] })
+		x := 0
+		for _, d := range append(drawn, [2]int{c.cols, c.cols}) {
+			if d[0] > x {
+				b = fmt.Appendf(b, "\x1b[%d;%dH\x1b[%dX", y+1, x+1, d[0]-x)
+			}
+			x = max(x, d[1])
+		}
+	}
+	return b
 }
 
 func errString(err error) string {

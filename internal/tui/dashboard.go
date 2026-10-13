@@ -84,6 +84,12 @@ type DashOptions struct {
 	// Over runs the dashboard as a popup over a session instead: see
 	// Over.
 	Over *Over
+	// Handover: an attach handed this console over with the alternate
+	// screen on, showing its last frame (Options.Back): the dashboard
+	// draws over it once it has its data (dashOut). Whatever the
+	// handover, a dashboard that ends attaching leaves the screen on for
+	// the attach to draw over (Options.Handover).
+	Handover bool
 }
 
 // Over is a popup opened over a session (docs/SPEC.md §4): prefix then
@@ -161,7 +167,8 @@ func Dashboard(opts DashOptions) (DashResult, error) {
 		defer m.stopWatch()
 	}
 	probeTerminal(opts.In, opts.Out, false)
-	popts := []tea.ProgramOption{tea.WithInput(opts.In), tea.WithOutput(opts.Out)}
+	m.out = newDashOut(opts.Out, opts.Handover)
+	popts := []tea.ProgramOption{tea.WithInput(opts.In), tea.WithOutput(m.out)}
 	if probedTruecolor.Load() {
 		// Bubble Tea reads the colour profile from the environment only.
 		popts = append(popts, tea.WithColorProfile(colorprofile.TrueColor))
@@ -170,10 +177,15 @@ func Dashboard(opts DashOptions) (DashResult, error) {
 		popts = append(popts, tea.WithWindowSize(opts.Width, opts.Height))
 	}
 	final, err := tea.NewProgram(m, popts...).Run()
+	m.out.flush()
 	if err != nil {
+		opts.Out.WriteString(leaveScreen)
 		return DashResult{}, err
 	}
 	d := final.(*dash)
+	if d.result.Attach == "" {
+		opts.Out.WriteString(leaveScreen) // quit: dashOut kept the screen
+	}
 	if d.mv.sent != "" {
 		// The dashboard and its popups are gone: their mod views close,
 		// but the sidebar's sections while a session attaches next,
@@ -191,6 +203,7 @@ func Dashboard(opts DashOptions) (DashResult, error) {
 
 type dash struct {
 	src  Source
+	out  *dashOut // nil in tests
 	cwd  string
 	w, h int // the dashboard's own area: the window less the sidebar
 	winW int // the window's width
@@ -1134,6 +1147,9 @@ func (m *dash) setPinned(slug string, on bool) tea.Cmd {
 func (m *dash) setData(d Data) tea.Cmd {
 	first := !m.loaded
 	m.data, m.loaded = d, true
+	if m.out != nil {
+		m.out.loaded()
+	}
 	if n := oldConsoleNews(d.Server); n != "" && m.msg == "" {
 		m.msg = n
 	}
