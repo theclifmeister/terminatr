@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,6 +20,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/plat/term"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -175,6 +177,7 @@ func Attach(opts Options) (res Result, err error) {
 	}
 	c.side = &sidebar{uiFile: so.UIFile, projects: loadSideProjects(c.paths), compact: ConsoleLayout(so.UIFile).compact()}
 	c.info = &infoPanel{}
+	c.views = handedViews() // the dashboard's, for the sections it showed
 	c.setWindow(cols, rows)
 	watch, stopWatch := vc.Watch()
 	defer stopWatch()
@@ -271,6 +274,10 @@ type client struct {
 	// cells are the mods' cells and status segments from the last poll
 	// (pollState). Guarded by mu.
 	cells *modCells
+	// views are the mods' views as mod.views last listed them (pollState):
+	// the info panel's coordinator sections and the sidebar's band. Guarded
+	// by mu.
+	views []proto.ModView
 	log   *log.Logger
 	enc   *emu.Encoder
 	vc    *ViewConn
@@ -1958,10 +1965,51 @@ func threadStatuses(sessions []proto.SessionInfo) map[string]*thread.Status {
 // statePoll is how often the status bar asks the server for state.
 const statePoll = 500 * time.Millisecond
 
-// pollState keeps the status bar and the sidebar current and rings the
-// bell when the server sent a notification (a session blocked, a thread
-// reported; docs/SPEC.md §4). It polls session.list; a lost server is
-// noticed by the attach streams themselves.
+// pollViewsNow says whether pollState asks mod.views on this tick: when
+// the mod sections shown (shownKey) changed since sent, every other
+// tick (about once a second) while some show, so their trees stay
+// current and the server keeps them open (modview.ShownLife), and every
+// tick while a command or a section's click waits for the view its mod
+// opens (cmdWait). None shown, it says so once, then costs nothing.
+func pollViewsNow(key, sent string, odd, waiting bool) bool {
+	return waiting || key != sent || key != "" && !odd
+}
+
+// bandShown are the attached sidebar's band sections for mod.views,
+// keeping secs, the sidebar sections session.list names.
+func (c *client) bandShown(secs []proto.ModSection) []modview.Shown {
+	if !c.lock() {
+		return nil
+	}
+	defer c.mu.Unlock()
+	if c.side == nil {
+		return nil
+	}
+	c.side.sections = secs
+	if !c.bandShows() {
+		return nil
+	}
+	return bandShown(c.band())
+}
+
+// setViews takes mod.views' list, and hands it on to the dashboard this
+// console may show next (handViews). c.mu held.
+func (c *client) setViews(list []proto.ModView) {
+	c.views = list
+	handViews(list)
+	if c.side != nil {
+		c.side.band.forget(func(k string) bool {
+			return slices.ContainsFunc(list, func(v proto.ModView) bool { return strings.HasPrefix(k, v.Mod+"/"+v.View+"/") })
+		})
+	}
+}
+
+// pollState keeps the status bar, the sidebar and the info panel current
+// and rings the bell when the server sent a notification (a session
+// blocked, a thread reported; docs/SPEC.md §4). It polls session.list,
+// and mod.views while the info panel or the sidebar shows mod sections
+// (pollViewsNow); a lost server is noticed by the attach streams
+// themselves.
 func (c *client) pollState(ctx context.Context) {
 	var ctl *server.Client
 	defer func() {
@@ -1972,6 +2020,10 @@ func (c *client) pollState(ctx context.Context) {
 	var alerts uint64
 	first := true
 	noticed := map[string]bool{}
+	// sent is the mod sections the last mod.views said this console
+	// shows (shownKey); none sent yet at first, so the first poll says
+	// what shows, sections the dashboard showed before it too.
+	sent, odd := "\x00", false
 	tick := time.NewTicker(statePoll)
 	defer tick.Stop()
 	for {
@@ -2001,13 +2053,18 @@ func (c *client) pollState(ctx context.Context) {
 			}
 		}
 		statuses := threadStatuses(res.Sessions)
-		views := c.pollInfo(ctl, res.Sessions)
-		if w := c.waiting(); w != nil {
-			if views == nil {
-				views = pollViews(ctl, nil) // the panel shows no view
-			}
-			c.takeOpen(w, views)
+		info, shown := c.pollInfo(res.Sessions)
+		var secs []proto.ModSection
+		if res.Mods != nil {
+			secs = res.Mods.Sections
 		}
+		shown = append(shown, c.bandShown(secs)...)
+		w := c.waiting()
+		var views *proto.ModViewsResult
+		if key := shownKey(shown); ctl != nil && pollViewsNow(key, sent, odd, w != nil) {
+			views, sent = pollViews(ctl, shown), key
+		}
+		odd = !odd
 		var cmds []mod.ModCommand
 		reload := time.Since(c.cmdsAt) >= cmdReload
 		if reload {
@@ -2032,6 +2089,10 @@ func (c *client) pollState(ctx context.Context) {
 				}
 			}
 			c.cells = newModCells(res.Mods, res.Sessions)
+			if views != nil {
+				c.setViews(views.Views)
+			}
+			c.showInfo(info)
 			if reload {
 				c.cmds, c.cmdsAt = cmds, time.Now()
 			}
@@ -2040,6 +2101,9 @@ func (c *client) pollState(ctx context.Context) {
 			c.osc = append(c.osc, osc...)
 			c.mu.Unlock()
 			c.poke()
+		}
+		if w != nil {
+			c.takeOpen(w, views)
 		}
 		select {
 		case <-ctx.Done():

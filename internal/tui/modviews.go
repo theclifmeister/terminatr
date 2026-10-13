@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -440,6 +441,29 @@ func (m *dash) shownViews() []modview.Shown {
 	return out
 }
 
+// handed is this process's last mod.views list. The dashboard and the
+// attached console run one after the other in one process, one console
+// to the server (one pid): each starts from the other's list, so its
+// first mod.views names the sidebar sections the other showed, and their
+// mods don't hear view.closed and view.opened on every switch.
+var handed atomic.Pointer[[]proto.ModView]
+
+// handViews keeps list for the console that shows next.
+func handViews(list []proto.ModView) { handed.Store(&list) }
+
+// handedViews is the list the console before this one last had.
+func handedViews() []proto.ModView {
+	if p := handed.Load(); p != nil {
+		return *p
+	}
+	return nil
+}
+
+// sidebarShown are the sidebar's sections among shown.
+func sidebarShown(shown []modview.Shown) []modview.Shown {
+	return slices.DeleteFunc(slices.Clone(shown), func(s modview.Shown) bool { return !mod.IsSidebar(s.Slot) })
+}
+
 // shownKey is the shown views as one string, to tell a change.
 func shownKey(list []modview.Shown) string {
 	var b strings.Builder
@@ -484,6 +508,7 @@ func (m *dash) setModViews(msg modViewsMsg) tea.Cmd {
 	}
 	m.mv.sent = msg.shown
 	m.mv.list = msg.res.Views
+	handViews(m.mv.list)
 	// Forget hosted views no longer listed.
 	listed := func(k string) bool {
 		return slices.ContainsFunc(m.mv.list, func(v proto.ModView) bool { return strings.HasPrefix(k, v.Mod+"/"+v.View+"/") })

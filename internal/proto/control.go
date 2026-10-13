@@ -879,3 +879,10 @@ type ModViewInputParams struct {
 	Row     string `json:"row,omitempty"`
 	Key     string `json:"key,omitempty"`
 }
+
+// ModViewInputResult is mod.view.input's answer to a key or a click:
+// the mod's open requests that follow it have a Seq greater than After,
+// as mod.command's (ModCommandResult).
+type ModViewInputResult struct {
+	After uint64 `json:"after,omitempty"`
+}

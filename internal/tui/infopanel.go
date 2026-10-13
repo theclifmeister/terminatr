@@ -383,11 +383,7 @@ func shortHome(p, home string) string {
 // infoPanel is the attach client's info panel: what it shows and this
 // console's own state of it. Guarded by client.mu.
 type infoPanel struct {
-	data *infoData
-	// views are the mods' views as mod.views last listed them beside a
-	// coordinator, sent whether that poll said a section shows.
-	views []proto.ModView
-	sent  bool
+	data  *infoData
 	lines []string  // the content, as last laid out
 	hits  []infoHit // what a click on each content line does
 	top   int       // the first content line shown
@@ -714,24 +710,23 @@ func (c *client) infoMouse(m emu.Mouse) {
 	}
 }
 
-// pollInfo reads the panel's data for the focused session, outside c.mu.
-// Beside a coordinator it also asks ctl (nil: no server) for the mods'
-// views, saying which of their coordinator sections the panel shows, by
-// the views the last poll listed; once it shows none, it says so once.
-// It returns that answer, nil when it didn't ask.
-func (c *client) pollInfo(ctl *server.Client, sessions []proto.SessionInfo) *proto.ModViewsResult {
+// pollInfo reads the panel's data for the focused session, outside c.mu,
+// and the mods' coordinator sections it shows beside a coordinator, by
+// the views mod.views last listed (pollState asks it, and showInfo
+// takes its answer); nil, nil without the panel.
+func (c *client) pollInfo(sessions []proto.SessionInfo) (*infoData, []modview.Shown) {
 	if !c.lock() {
-		return nil
+		return nil, nil
 	}
 	id, on := c.v.Focus, c.info != nil
 	var prev []proto.ModView
-	sent, w := false, 0
+	w := 0
 	if on {
-		prev, sent, w = c.info.views, c.info.sent, c.infoW-1
+		prev, w = c.views, c.infoW-1
 	}
 	c.mu.Unlock()
 	if !on {
-		return nil
+		return nil, nil
 	}
 	var d *infoData
 	for _, s := range sessions {
@@ -739,27 +734,24 @@ func (c *client) pollInfo(ctl *server.Client, sessions []proto.SessionInfo) *pro
 			d = loadInfo(c.paths, s, sessions)
 		}
 	}
-	var views []proto.ModView
-	var res *proto.ModViewsResult
-	if coord := d != nil && d.watch != nil; coord || sent {
-		var shown []modview.Shown
-		if coord && w > 0 {
-			shown = sectionsShown(prev, mod.SlotCoordinatorSection, d.slug, "", "", w)
-		}
-		res, sent = pollViews(ctl, shown), len(shown) > 0
-		if res != nil {
-			views = res.Views
-		}
-		if coord {
-			d.sections = views
-		}
+	var shown []modview.Shown
+	if d != nil && d.watch != nil && w > 0 {
+		shown = sectionsShown(prev, mod.SlotCoordinatorSection, d.slug, "", "", w)
 	}
-	if c.lock() {
-		c.info.data, c.info.views, c.info.sent = d, views, sent
-		c.infoLayout()
-		c.mu.Unlock()
+	return d, shown
+}
+
+// showInfo shows d in the panel, with the mods' views as mod.views last
+// listed them for its coordinator sections. c.mu held.
+func (c *client) showInfo(d *infoData) {
+	if c.info == nil {
+		return
 	}
-	return res
+	if d != nil && d.watch != nil {
+		d.sections = c.views
+	}
+	c.info.data = d
+	c.infoLayout()
 }
 
 // pollViews is mod.views on ctl, saying the console shows shown: the
