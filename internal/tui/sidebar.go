@@ -62,6 +62,7 @@ const (
 	treeCoordinator
 	treeThread
 	treeDivider // "inactive (n)": the inactive projects hang under it
+	treeSection // a mod's section in the band below the tree (sidesections.go)
 )
 
 // dividerKey is the inactive divider's row key.
@@ -116,6 +117,8 @@ type treeRow struct {
 	// console knows (modCells), for the grid's mod columns.
 	task  string
 	cells *modCells
+	// sec is a section row's section (treeSection).
+	sec *sideSection
 }
 
 // folded says a project row hides its coordinator and threads, or the
@@ -132,6 +135,8 @@ func (r treeRow) key() string {
 		return "t:" + r.slug + "/" + r.thread
 	case treeDivider:
 		return dividerKey
+	case treeSection:
+		return "s:" + r.sec.id
 	}
 	return "p:" + r.slug
 }
@@ -336,22 +341,6 @@ func shownRows(rows []treeRow, w int) []treeRow {
 	return rows
 }
 
-// sideTop is the first row shown in h rows (one is the header), so that
-// the keyboard's row, else the row you are on, shows.
-func sideTop(rows []treeRow, h int) int {
-	cur := -1
-	for i, r := range rows {
-		if r.cursor {
-			cur = i
-			break
-		}
-		if r.here {
-			cur = i
-		}
-	}
-	return scrollTop(cur, max(h-sideHeadRows(), 1), len(rows))
-}
-
 // sidebarLines draws the sidebar on the left: sideLines.
 func sidebarLines(all []treeRow, w, h int, foot []string) []string {
 	return sideLines(all, w, h, foot, false)
@@ -376,10 +365,10 @@ func sideLines(all []treeRow, w, h int, foot []string, right bool) []string {
 	if slim {
 		gap = 0
 	}
-	rows := shownRows(all, w)
 	if len(foot) > 0 && h < len(foot)+4 {
 		foot = nil // no room: the tree comes first
 	}
+	lay := sideLayout(all, w, h, len(foot))
 	h -= len(foot)
 	focused := slices.ContainsFunc(all, func(r treeRow) bool { return r.cursor })
 	border := th().Faint.Render("│")
@@ -393,15 +382,7 @@ func sideLines(all []treeRow, w, h int, foot []string, right bool) []string {
 		return s + border
 	}
 	out := make([]string, 0, h)
-	n := 0 // every project, those under a folded divider too
-	for _, r := range all {
-		switch {
-		case r.kind == treeProject && !r.inactive:
-			n++
-		case r.kind == treeDivider:
-			n += r.threads
-		}
-	}
+	n := projectCount(all)
 	out = append(out, edge(sideHead(n, cw-gap, slim)+strings.Repeat(" ", gap)+reset))
 	if l, ok := sideFilterLine(cw - gap); ok {
 		out = append(out, edge(l+strings.Repeat(" ", gap)+reset))
@@ -416,11 +397,11 @@ func sideLines(all []treeRow, w, h int, foot []string, right bool) []string {
 		}
 		out = append(out, edge(th().Faint.Render(fit(note, cw))+reset))
 	}
-	for _, r := range rows[sideTop(rows, h):] {
+	for _, s := range lay.slots {
 		if len(out) >= h {
 			break
 		}
-		out = append(out, edge(treeLine(r, cw, slim, focused)+reset))
+		out = append(out, edge(lay.line(s, cw, slim, focused)+reset))
 	}
 	for len(out) < h {
 		out = append(out, edge(strings.Repeat(" ", cw)))
@@ -939,22 +920,29 @@ func runsRender(rs []cellRun) string {
 	return b.String()
 }
 
-// sideHitAt is what column x, row y of a sidebar w×h holds: the border,
-// or a tree row.
-func sideHitAt(all []treeRow, w, h, x, y int) (r treeRow, ok, border bool) {
+// sideHitAt is what column x, row y of a sidebar w×h with a footer of
+// foot rows (sideFootRows) holds: the border, or a tree row; a band
+// section's header row for its header and its body (body).
+func sideHitAt(all []treeRow, w, h, foot, x, y int) (r treeRow, ok, border bool) {
+	r, ok, border, _ = sideHit(all, w, h, foot, x, y)
+	return r, ok, border
+}
+
+// sideHit is sideHitAt, saying whether the row is a section's body line.
+func sideHit(all []treeRow, w, h, foot, x, y int) (r treeRow, ok, border, body bool) {
 	if x < 0 || w <= 0 {
-		return r, false, false
+		return r, false, false, false
 	}
 	if x == w-1 {
-		return r, false, true
+		return r, false, true, false
 	}
-	rows := shownRows(all, w)
-	head := sideHeadRows()
-	i := sideTop(rows, h) + y - head
-	if y < head || x < 0 || x >= w-1 || i >= len(rows) {
-		return r, false, false
+	lay := sideLayout(all, w, h, foot)
+	i := y - lay.head
+	if y < lay.head || x >= w-1 || i >= len(lay.slots) || lay.slots[i].row < 0 {
+		return r, false, false, false
 	}
-	return rows[i], true, false
+	s := lay.slots[i]
+	return lay.rows[s.row], true, false, s.line >= 0
 }
 
 // sideLocal is window column x of a sidebar w wide from column at, as
@@ -996,6 +984,8 @@ func (r treeRow) target() (t Target, ok bool, why string) {
 		t.Coordinator, t.Activate = true, r.dormant
 	case treeDivider:
 		return t, false, "enter on the divider folds or unfolds it"
+	case treeSection:
+		return t, false, "a section: ← → fold it, enter opens it"
 	case treeThread:
 		if r.dormant {
 			return t, false, r.thread + " is dormant: start " + r.slug + "'s coordinator, or activate " + r.slug
@@ -1020,7 +1010,7 @@ const previewDelay = 200 * time.Millisecond
 // anything. ok is false on the row you are on, which already shows, and
 // on the inactive divider, which shows nothing.
 func (r treeRow) preview() (t Target, ok bool) {
-	if r.here || r.kind == treeDivider {
+	if r.here || r.kind == treeDivider || r.kind == treeSection {
 		return t, false
 	}
 	t.Project = r.slug
@@ -1258,6 +1248,7 @@ func (c *client) sideKeyboard(k uv.Key) {
 	if st.refold != nil {
 		c.refold(st.refold)
 	}
+	c.sectionDo(st)
 	if st.pin != "" {
 		c.setPinned(st.pin, st.pinOn)
 	}
@@ -1518,6 +1509,40 @@ func (c *client) appendSidebar(b []byte, wrote bool) ([]byte, bool) {
 	return b, wrote
 }
 
+// sideFoot is the rows the sidebar's footer takes (sideFootRows). c.mu
+// held.
+func (c *client) sideFoot() int {
+	if c.side == nil {
+		return 0
+	}
+	return sideFootRows(c.sideW, c.sideRows(), c.side.server, c.side.compact)
+}
+
+// sectionDo runs what a key or a click on a band section does: folds or
+// unfolds sections in the view (foldSections), or sends the mod the
+// ui.click that opens its view.
+func (c *client) sectionDo(st sideStep) {
+	if len(st.sections) > 0 {
+		c.foldSections(st.sections, st.foldOn)
+	}
+	if s := st.open; s != nil {
+		p := sectionClick(s)
+		go func() {
+			ctl, err := server.Connect(c.paths, false)
+			if err == nil {
+				err = ctl.Call(proto.MethodModViewInput, p, nil)
+				ctl.Close()
+			}
+			if err != nil && c.lock() {
+				c.flash = errMessage(err)
+				c.status()
+				c.mu.Unlock()
+				c.poke()
+			}
+		}()
+	}
+}
+
 // sideRows is the sidebar's height in a session: the window less the
 // status bar and the rule above it, which run under it too. c.mu held.
 func (c *client) sideRows() int {
@@ -1597,7 +1622,7 @@ func (c *client) sideMouse(m emu.Mouse) {
 		c.poke()
 		return
 	case !sd.drag && m.Action == emu.MouseMotion && m.Button == emu.MouseNone:
-		changed := setSideHover(sideTip(c.sideTree(), c.sideW, c.sideRows(), c.sideCol(m.X), m.Y))
+		changed := setSideHover(sideTip(c.sideTree(), c.sideW, c.sideRows(), c.sideFoot(), c.sideCol(m.X), m.Y))
 		c.mu.Unlock()
 		if changed {
 			c.poke()
@@ -1613,7 +1638,7 @@ func (c *client) sideMouse(m emu.Mouse) {
 		c.mu.Unlock()
 		return
 	}
-	r, ok, border := sideHitAt(c.sideTree(), c.sideW, c.sideRows(), c.sideCol(m.X), m.Y)
+	r, ok, border := sideHitAt(c.sideTree(), c.sideW, c.sideRows(), c.sideFoot(), c.sideCol(m.X), m.Y)
 	t, can, why := r.target()
 	sel := ""
 	if ok && !border {
@@ -1625,10 +1650,14 @@ func (c *client) sideMouse(m emu.Mouse) {
 		c.status()
 	}
 	open, fold := false, false
+	var sec sideStep
 	switch {
 	case border:
 		sd.drag = true
 	case !ok:
+	case r.kind == treeSection:
+		// Its header or its body: as enter on the header.
+		sec, _ = sectionStep(r, sideEnter)
 	case r.kind == treeDivider:
 		fold = true
 	case !can:
@@ -1650,6 +1679,7 @@ func (c *client) sideMouse(m emu.Mouse) {
 	if fold {
 		c.refold(foldDivider(r))
 	}
+	c.sectionDo(sec)
 	c.poke()
 }
 
@@ -1724,12 +1754,12 @@ type sideAction struct {
 var sideActions = []sideAction{
 	{id: "side.up", keys: []string{"up", "k"}, op: sideUp, label: "↑ ↓ k j", help: "move through the tree; the pane shows what the cursor rests on (a project its dashboard, a coordinator or a thread its session, live), the keyboard stays in the sidebar, and nothing starts"},
 	{id: "side.down", keys: []string{"down", "j"}, op: sideDown},
-	{id: "side.enter", keys: []string{"enter"}, op: sideEnter, label: "enter", help: "into the pane: a project's dashboard or a session gets the keyboard; a coordinator not running starts, and an inactive project's starts activating the project; on the inactive divider it folds or unfolds"},
-	{id: "side.unfold", keys: []string{"right", "l"}, op: sideIn, label: "→ ←", help: "→ unfolds a folded project or the inactive divider, else goes into the pane as enter; ← folds an unfolded one, or from a row under a project goes up to it. Folding never activates or deactivates"},
+	{id: "side.enter", keys: []string{"enter"}, op: sideEnter, label: "enter", help: "into the pane: a project's dashboard or a session gets the keyboard; a coordinator not running starts, and an inactive project's starts activating the project; on the inactive divider it folds or unfolds; on a mod's section it opens the view the mod names, else folds or unfolds it"},
+	{id: "side.unfold", keys: []string{"right", "l"}, op: sideIn, label: "→ ←", help: "→ unfolds a folded project, the inactive divider or a mod's section, else goes into the pane as enter; ← folds an unfolded one, or from a row under a project goes up to it. Folding never activates or deactivates"},
 	{id: "side.fold", keys: []string{"left", "h"}, op: sideOut},
 	{id: "side.back", keys: []string{"esc"}, op: sideBack, label: "esc", help: "back to the list (in a session: to the pane)", fixed: true},
 	{id: "side.activate", keys: []string{"space"}, op: sideActive, label: "space", help: "on a project: activate it, or deactivate it (its coordinator and threads stop, to resume when you activate it; asks first while they run)"},
-	{id: "side.fold-all", keys: []string{"z"}, op: sideFoldAll, label: "z Z", help: "z folds every project and the inactive divider, Z unfolds them all"},
+	{id: "side.fold-all", keys: []string{"z"}, op: sideFoldAll, label: "z Z", help: "z folds every project, the inactive divider and the mods' sections, Z unfolds them all"},
 	{id: "side.unfold-all", keys: []string{"Z"}, op: sideUnfoldAll},
 	{id: "side.pin", keys: []string{"p"}, op: sidePin, label: "p", help: "on a project: pin it to the top of the active projects, or unpin it (its order only)"},
 	{id: "side.first", keys: []string{"home"}, op: sideFirst, label: "home end", help: "the first / last row"},
@@ -1773,6 +1803,11 @@ type sideStep struct {
 	// pin is the project to pin (pinOn) or unpin.
 	pin   string
 	pinOn bool
+	// sections are the band's sections to fold (foldOn) or unfold, by
+	// id (view.sections); open the one whose view enter opens.
+	sections []string
+	foldOn   bool
+	open     *sideSection
 }
 
 // foldStep is what → (sideIn), ← (sideOut) and enter (sideEnter) do to
@@ -1844,6 +1879,11 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 		return sideStep{msg: "no projects"}
 	}
 	r := rows[i]
+	if r.kind == treeSection {
+		if st, ok := sectionStep(r, op); ok {
+			return st
+		}
+	}
 	if st, ok := foldStep(rows, i, op, w <= sideSlim); ok {
 		return st
 	}
@@ -1884,11 +1924,12 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 		}
 		return sideStep{pin: r.slug, pinOn: !r.pinned}
 	case sideFoldAll, sideUnfoldAll:
-		st := sideStep{refold: foldAll(all, op == sideFoldAll)}
+		// The sections too: view.tree, then view.sections.
+		st := sideStep{refold: foldAll(all, op == sideFoldAll), sections: sectionIDs(all), foldOn: op == sideFoldAll}
 		// The cursor moves onto what still shows: its project's row, or
 		// the divider.
 		switch {
-		case op == sideUnfoldAll:
+		case op == sideUnfoldAll, r.kind == treeSection:
 		case r.inactive || r.dormant:
 			st.sel = dividerKey
 		case r.kind != treeProject && r.kind != treeDivider:
@@ -1976,6 +2017,8 @@ func sideFooter(all []treeRow, w int, s ServerInfo, session, compact bool) []str
 func (r treeRow) details() (string, string) {
 	running := func(state string) string { return cmp.Or(state, "not running") }
 	switch r.kind {
+	case treeSection:
+		return sectionDetails(r.sec)
 	case treeDivider:
 		return counted(r.threads, "inactive project"), "nothing of them runs; folded by default"
 	case treeProject:
@@ -2059,6 +2102,8 @@ func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 	case !focused:
 		keys = []string{"tab sidebar", barKey("help.open", "?") + " help"}
 	case r == nil:
+	case r.kind == treeSection:
+		keys = sectionKeys(r.sec)
 	case r.kind == treeDivider && r.fold:
 		keys = []string{enter + " unfold"}
 	case r.kind == treeDivider:

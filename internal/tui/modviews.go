@@ -45,6 +45,8 @@ type modViews struct {
 	// cursors are the ui.cursor sends by panel key: one on its way at
 	// a time, and the latest move waiting behind it.
 	cursors map[string]*cursorSend
+	// band are the sidebar's sections' lines (sidesections.go).
+	band sectionCache
 }
 
 // cursorSend is a view's ui.cursor sends: busy while one is on its way,
@@ -431,6 +433,10 @@ func (m *dash) shownViews() []modview.Shown {
 			}
 		}
 	}
+	// The sidebar's band, under any popup too, while it has the room.
+	if bandFits(m.sideW(), m.h, m.sideFoot()) {
+		out = append(out, bandShown(m.band())...)
+	}
 	return out
 }
 
@@ -479,12 +485,16 @@ func (m *dash) setModViews(msg modViewsMsg) tea.Cmd {
 	m.mv.sent = msg.shown
 	m.mv.list = msg.res.Views
 	// Forget hosted views no longer listed.
+	listed := func(k string) bool {
+		return slices.ContainsFunc(m.mv.list, func(v proto.ModView) bool { return strings.HasPrefix(k, v.Mod+"/"+v.View+"/") })
+	}
 	for k := range m.mv.hosted {
-		if !slices.ContainsFunc(m.mv.list, func(v proto.ModView) bool { return strings.HasPrefix(k, v.Mod+"/"+v.View+"/") }) {
+		if !listed(k) {
 			delete(m.mv.hosted, k)
 			delete(m.mv.trees, k)
 		}
 	}
+	m.mv.band.forget(listed)
 	m.rebuild()
 	for _, o := range msg.res.Open {
 		if o.Seq <= m.mv.seen {

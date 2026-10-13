@@ -540,15 +540,20 @@ func setSideHover(tip string) (changed bool) {
 	return changed
 }
 
-// sideTip is what the glyph at column x, row y of a sidebar w×h means;
-// "" off the glyphs, and in the slim strip, which has no details line.
-func sideTip(all []treeRow, w, h, x, y int) string {
+// sideTip is what the glyph at column x, row y of a sidebar w×h with a
+// footer of foot rows means; over a mod's section, the mod that draws
+// it; "" off the glyphs, and in the slim strip, which has no details
+// line.
+func sideTip(all []treeRow, w, h, foot, x, y int) string {
 	if w <= sideSlim {
 		return ""
 	}
-	r, ok, _ := sideHitAt(all, w, h, x, y)
+	r, ok, _ := sideHitAt(all, w, h, foot, x, y)
 	if !ok {
 		return ""
+	}
+	if r.kind == treeSection {
+		return sectionTip(r.sec)
 	}
 	end := w - 1 - sideGap // the grid's right edge
 	lead, label := treeLead(r)
@@ -640,7 +645,7 @@ func stateMeaning(state string) string {
 func (m *dash) hover(mo tea.Mouse) {
 	tip := ""
 	if g := m.geom(); g.side().hasX(mo.X) && m.top() == nil {
-		tip = sideTip(m.tree(), m.sideW(), m.h, g.sideCol(mo.X), mo.Y)
+		tip = sideTip(m.tree(), m.sideW(), m.h, m.sideFoot(), g.sideCol(mo.X), mo.Y)
 	}
 	setSideHover(tip)
 }

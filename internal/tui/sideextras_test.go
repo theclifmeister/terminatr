@@ -128,7 +128,7 @@ func TestSidebarFilterClick(t *testing.T) {
 	lines := strings.Split(whole(m), "\n")
 	for y, l := range lines {
 		if strings.Contains(l, "t-0006") {
-			r, ok, _ := sideHitAt(m.tree(), m.sideW(), m.h, 5, y)
+			r, ok, _ := sideHitAt(m.tree(), m.sideW(), m.h, m.sideFoot(), 5, y)
 			if !ok || r.key() != "t:beta/t-0006" {
 				t.Fatalf("a click on line %d hits %q", y, r.key())
 			}
@@ -362,10 +362,10 @@ func TestSidebarTooltipIconSets(t *testing.T) {
 		setIcons(set)
 		m, _ := sideDash(t)
 		end := m.sideW() - 1 - sideGap
-		if got := sideTip(m.tree(), m.sideW(), m.h, end-10, 5); got != "working" {
+		if got := sideTip(m.tree(), m.sideW(), m.h, m.sideFoot(), end-10, 5); got != "working" {
 			t.Errorf("%s: %q", set, got)
 		}
-		if got := sideTip(m.tree(), m.sideW(), m.h, end-1, 5); got != "needs you: it waits on you" {
+		if got := sideTip(m.tree(), m.sideW(), m.h, m.sideFoot(), end-1, 5); got != "needs you: it waits on you" {
 			t.Errorf("%s, the glyph's second cell: %q", set, got)
 		}
 	}

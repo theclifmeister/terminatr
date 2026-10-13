@@ -319,7 +319,7 @@ func (c *client) sessionItems() []aitem {
 // project's dashboard, open its coordinator,
 // its popup, tasks and inbox; attach a thread. c.mu held; released here.
 func (c *client) sideMenu(m emu.Mouse) {
-	r, ok, _ := sideHitAt(c.sideTree(), c.sideW, c.sideRows(), c.sideCol(m.X), m.Y)
+	r, ok, _ := sideHitAt(c.sideTree(), c.sideW, c.sideRows(), c.sideFoot(), c.sideCol(m.X), m.Y)
 	t, can, why := r.target()
 	switch {
 	case !ok:
