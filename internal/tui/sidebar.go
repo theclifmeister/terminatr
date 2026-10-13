@@ -1172,7 +1172,7 @@ func (c *client) sideTree() []treeRow {
 	if c.focus != nil {
 		focus = c.focus.info.ID
 	}
-	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), focus: focus, ctxHint: c.side.ctxHint,
+	rows := buildTree(c.side.projects, c.sideSessions(), treeIn{current: c.sideCurrent(), focus: focus, ctxHint: c.side.ctxHint,
 		tree: sideTree(c.side.projects, c.v.Tree), cols: c.v.Columns, cells: c.cells})
 	rows = sideRows(rows, c.side.needsFirst)
 	if c.kb == areaSide {
@@ -1181,10 +1181,25 @@ func (c *client) sideTree() []treeRow {
 	return rows
 }
 
+// sideSessions are the sessions the sidebar's tree is built from: the
+// last poll's, and the panes' this client shows that it doesn't list
+// yet. Until the first poll it lists none, and a thread's row whose
+// session shows would otherwise have none (enter refused on it). c.mu
+// held.
+func (c *client) sideSessions() []proto.SessionInfo {
+	out := c.side.sessions
+	for _, p := range c.panes {
+		if p.info.ID != "" && !slices.ContainsFunc(out, func(s proto.SessionInfo) bool { return s.ID == p.info.ID }) {
+			out = append(slices.Clip(out), p.info)
+		}
+	}
+	return out
+}
+
 // sideFullTree is the attach view's whole tree, nothing folded and no
 // filter (w W). c.mu held.
 func (c *client) sideFullTree() []treeRow {
-	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), ctxHint: c.side.ctxHint, tree: unfoldedTree(c.side.projects), cols: c.v.Columns, cells: c.cells})
+	rows := buildTree(c.side.projects, c.sideSessions(), treeIn{current: c.sideCurrent(), ctxHint: c.side.ctxHint, tree: unfoldedTree(c.side.projects), cols: c.v.Columns, cells: c.cells})
 	if c.side.needsFirst {
 		rows = needsFirstOrder(rows)
 	}

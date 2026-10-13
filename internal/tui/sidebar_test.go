@@ -694,6 +694,34 @@ func TestSessionSidebarClickFocus(t *testing.T) {
 	}
 }
 
+// TestSessionSidebarBeforePoll: before the first poll lists any
+// session, the thread row of the session shown is the one you are on
+// and has its session, so enter on it goes into the pane rather than
+// saying it has none (the e2e's prefix+tab then found the keyboard in
+// the sidebar and went on to the info panel).
+func TestSessionSidebarBeforePoll(t *testing.T) {
+	c, err := newClient(server.Paths{}, log.New(io.Discard, "", 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.enc.Close()
+	d := testData()
+	c.prefix, c.statusBar = chord{'\\'}, true
+	c.setWindow(160, 40)
+	p := &pane{info: proto.SessionInfo{ID: "s-5", Role: proto.RoleThread, Project: "beta", Thread: "t-0005", State: "idle"}}
+	c.v = view.View{Mode: view.ModeLayout, Focus: "s-5"}
+	c.panes["s-5"], c.focus = p, p
+	c.side, c.sideW = &sidebar{projects: d.Projects}, sideDefault // no poll yet
+	c.kb, c.v.SideSel = areaSide, "t:beta/t-0005"
+	if k := hereKey(c.sideTree()); k != "t:beta/t-0005" {
+		t.Fatalf("the row you are on: %q", k)
+	}
+	c.key(uv.Key{Code: uv.KeyEnter})
+	if c.kb != areaMain || strings.Contains(c.statusText, "no running session") {
+		t.Fatalf("enter on the thread shown: focus %d status %q", c.kb, c.statusText)
+	}
+}
+
 // TestThreadNames: the UI names a thread by its task; a thread without
 // one (ad hoc, adopted) keeps its own id, and the session details show
 // the thread id.
