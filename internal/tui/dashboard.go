@@ -902,6 +902,7 @@ func (m *dash) tree() []treeRow {
 	rows = sideRows(rows, m.data.NeedsFirst)
 	if bandFits(m.sideW(), m.h, m.sideFoot()) {
 		rows = withSections(rows, m.band())
+		markUndrawn(rows, m.sideW(), m.h, m.sideFoot(), m.sideSel, m.focus == areaSide)
 	}
 	if m.focus == areaSide {
 		markCursor(rows, m.sideW(), m.sideSel)

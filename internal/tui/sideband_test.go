@@ -308,3 +308,50 @@ func TestSideBandGuarantee(t *testing.T) {
 		t.Errorf("want the ticker's header with +1:\n%s", out)
 	}
 }
+
+// TestSideBandUndrawnCursor: a header the band has no room to draw, even
+// as the cursor's, is off the cursor's path: down goes past it, and a
+// cursor left on it falls back to the row you are on (T369).
+func TestSideBandUndrawnCursor(t *testing.T) {
+	setIcons(IconsUnicode)
+	defer resetConsole()
+	undrawn := 0
+	for h := 14; h <= 40; h++ {
+		src, m := projDash(t, h, nil)
+		src.data.Projects = manyProjects(8)
+		src.modViews.Views = append(bandTestViews(), projTestView(slugsOf(src.data.Projects)...))
+		m.setData(src.data)
+		m.setModViews(modViewsMsg{res: src.modViews})
+		m.focus = areaSide
+		drawn := func() []string {
+			l := sideLayout(m.tree(), m.sideW(), h, m.sideFoot())
+			var out []string
+			for _, s := range slices.Concat(l.above, l.slots) {
+				if s.row >= 0 && s.line < 0 {
+					out = append(out, l.rows[s.row].key())
+				}
+			}
+			return out
+		}
+		for _, r := range m.tree() {
+			m.sideSel = r.key()
+			rows := m.tree()
+			i := slices.IndexFunc(rows, func(r treeRow) bool { return r.cursor })
+			if i < 0 || !slices.Contains(drawn(), rows[i].key()) {
+				t.Fatalf("h=%d sel %s: the cursor isn't drawn (%v)", h, m.sideSel, drawn())
+			}
+			if rows[i].key() != m.sideSel {
+				undrawn++
+			}
+		}
+		for range 2 * len(m.tree()) {
+			keyPress(m, "down")
+			if !slices.Contains(drawn(), m.sideSel) {
+				t.Fatalf("h=%d: down goes onto %s, which isn't drawn (%v)", h, m.sideSel, drawn())
+			}
+		}
+	}
+	if undrawn == 0 {
+		t.Errorf("no cursor on a header the band doesn't draw")
+	}
+}

@@ -124,6 +124,9 @@ type treeRow struct {
 	cells *modCells
 	// sec is a section row's section (treeSection).
 	sec *sideSection
+	// undrawn: a section's header the band has no room to draw
+	// (markUndrawn); the cursor's path skips it.
+	undrawn bool
 }
 
 // folded says a project row hides its coordinator and threads, or the
@@ -177,8 +180,7 @@ func hereKey(rows []treeRow) string {
 // markCursor marks the keyboard's row among the rows a sidebar w columns
 // wide shows: the sidebar has the keyboard focus.
 func markCursor(all []treeRow, w int, sel string) {
-	rows := shownRows(all, w)
-	i := sideCursor(rows, sel)
+	rows, i := cursorAt(all, w, sel)
 	if i < 0 {
 		return
 	}
@@ -189,6 +191,59 @@ func markCursor(all []treeRow, w int, sel string) {
 			return
 		}
 	}
+}
+
+// markUndrawn marks the band's headers that a sidebar w columns wide and
+// h rows tall, with a footer of foot rows, doesn't draw with the cursor
+// on them, while it has the focus (side): those fitBand gives no room
+// even as the cursor's, every one under bandMinBody rows. Without the
+// focus, those it doesn't draw.
+func markUndrawn(all []treeRow, w, h, foot int, sel string, side bool) {
+	laid := func(sel string) sideLay {
+		rows := slices.Clone(all)
+		if side {
+			markCursor(rows, w, sel)
+		}
+		return sideLayout(rows, w, h, foot)
+	}
+	lay := laid(sel)
+	if len(lay.rows) != len(all) {
+		return // the slim strip: no sections
+	}
+	// Under bandMinBody rows none shows, none counted as more.
+	short := lay.fit.more == 0 && !slices.Contains(lay.fit.show, true)
+	for j, i := range lay.band {
+		switch {
+		case !side || short || all[i].key() == sel:
+			all[i].undrawn = !lay.fit.show[j]
+		default:
+			// The layout turns on the cursor: the band may draw a header
+			// as the cursor's that it doesn't with the cursor elsewhere,
+			// and the other way round.
+			all[i].undrawn = !laid(all[i].key()).fit.show[j]
+		}
+	}
+}
+
+// cursorAt is the rows the cursor goes over in a sidebar w columns wide
+// and the index among them of the keyboard's row (sideCursor): the rows
+// it shows less the headers it doesn't draw (markUndrawn). A sel on one
+// of those is on the row above it, as the band lays it out.
+func cursorAt(all []treeRow, w int, sel string) ([]treeRow, int) {
+	rows := shownRows(all, w)
+	if !slices.ContainsFunc(rows, func(r treeRow) bool { return r.undrawn }) {
+		return rows, sideCursor(rows, sel)
+	}
+	if k := slices.IndexFunc(rows, func(r treeRow) bool { return r.key() == sel }); k >= 0 && rows[k].undrawn {
+		for ; k >= 0 && rows[k].undrawn; k-- {
+		}
+		sel = ""
+		if k >= 0 {
+			sel = rows[k].key()
+		}
+	}
+	rows = slices.DeleteFunc(slices.Clone(rows), func(r treeRow) bool { return r.undrawn })
+	return rows, sideCursor(rows, sel)
 }
 
 // treeIn is where a tree is drawn from: which project is current and
@@ -1229,6 +1284,7 @@ func (c *client) sideTree() []treeRow {
 	rows = sideRows(rows, c.side.needsFirst)
 	if c.bandShows() {
 		rows = withSections(rows, c.band())
+		markUndrawn(rows, c.sideW, c.sideRows(), c.sideFoot(), c.v.SideSel, c.kb == areaSide)
 	}
 	if c.kb == areaSide {
 		markCursor(rows, c.sideW, c.v.SideSel)
@@ -2039,8 +2095,7 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 	case sideHelp:
 		return sideStep{help: true}
 	}
-	rows := shownRows(all, w)
-	i := sideCursor(rows, sel)
+	rows, i := cursorAt(all, w, sel)
 	if i < 0 {
 		return sideStep{msg: "no projects"}
 	}

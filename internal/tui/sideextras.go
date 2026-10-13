@@ -317,8 +317,7 @@ func sideFilterKey(in sideKeysIn, key string) (sideStep, bool) {
 // sideFollow moves the cursor to the row it falls back on when its own
 // is no longer shown.
 func sideFollow(in sideKeysIn) sideStep {
-	rows := shownRows(in.tree(), in.w)
-	if i := sideCursor(rows, in.sel); i >= 0 && rows[i].key() != in.sel {
+	if rows, i := cursorAt(in.tree(), in.w, in.sel); i >= 0 && rows[i].key() != in.sel {
 		return sideStep{sel: rows[i].key()}
 	}
 	return sideStep{}
@@ -330,8 +329,7 @@ func sideExtraStep(in sideKeysIn, op int, key string) sideStep {
 		setSideFilter(sideFilterState{typing: true})
 		return sideFollow(in)
 	}
-	rows := shownRows(in.tree(), in.w)
-	i := sideCursor(rows, in.sel)
+	rows, i := cursorAt(in.tree(), in.w, in.sel)
 	if i < 0 {
 		return sideStep{msg: "no projects"}
 	}
