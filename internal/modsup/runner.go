@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -460,7 +461,7 @@ func (r *runner) once(sub *modbus.Sub) (code int, why string) {
 		return modproto.ExitLoad, fmt.Sprintf("its data folder: %v", err)
 	}
 	cmd := exec.Command(r.sup.o.Bin, "mod", "host", "--budget", r.sup.o.Budget.String(), bundle)
-	cmd.Dir, cmd.Env = dir, proc.BareEnv()
+	cmd.Dir, cmd.Env = dir, hostEnv(runtime.GOOS, os.Getenv)
 	stdin, err1 := cmd.StdinPipe()
 	stdout, err2 := cmd.StdoutPipe()
 	stderr, err3 := cmd.StderrPipe()
