@@ -159,10 +159,19 @@ func resolveRoles(rs roleSet, truecolor bool) (*Theme, error) {
 			return nil, err
 		}
 		if truecolor {
-			t.Pane = pal
+			t.Pane = emuPalette(pal)
 		}
 	}
 	return &t, nil
+}
+
+// emuPalette is a theme's pane palette as the renderer's.
+func emuPalette(p *tmtheme.Palette) *emu.Palette {
+	out := &emu.Palette{Fg: (*emu.RGB)(p.Fg), Bg: (*emu.RGB)(p.Bg)}
+	for i, c := range p.ANSI {
+		out.ANSI[i] = (*emu.RGB)(c)
+	}
+	return out
 }
 
 // themeFor is the Theme a table gives a console of the given scheme.

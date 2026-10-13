@@ -12,7 +12,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/mod"
 )
 
@@ -56,10 +55,20 @@ type Pane struct {
 	Palette []string `toml:"palette"`
 }
 
-// Resolve is the spec as a renderer's palette; a bad colour is an error
-// naming its key.
-func (p *Pane) Resolve() (*emu.Palette, error) {
-	var pal emu.Palette
+// RGB is a 24-bit colour (RGB's layout: this package stays free of
+// the emulator, so agents can use it).
+type RGB struct{ R, G, B uint8 }
+
+// Palette is a pane palette's colours (emu.Palette's layout), nil where
+// it sets none.
+type Palette struct {
+	Fg, Bg *RGB
+	ANSI   [16]*RGB
+}
+
+// Resolve is the spec's colours; a bad colour is an error naming its key.
+func (p *Pane) Resolve() (*Palette, error) {
+	var pal Palette
 	var err error
 	if pal.Fg, err = ParseRGB(p.Fg); err != nil {
 		return nil, fmt.Errorf("pane fg: %w", err)
@@ -79,13 +88,13 @@ func (p *Pane) Resolve() (*emu.Palette, error) {
 }
 
 // ParseRGB reads #rrggbb; nil for "".
-func ParseRGB(s string) (*emu.RGB, error) {
+func ParseRGB(s string) (*RGB, error) {
 	if s == "" {
 		return nil, nil
 	}
 	if len(s) == 7 && s[0] == '#' {
 		if v, err := strconv.ParseUint(s[1:], 16, 24); err == nil {
-			return &emu.RGB{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v)}, nil
+			return &RGB{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v)}, nil
 		}
 	}
 	return nil, fmt.Errorf("bad colour %q (want #rrggbb)", s)
@@ -263,10 +272,10 @@ func (a *Agent) color(c []string) string {
 }
 
 // xterm256 is a 256-colour index's xterm value (16-255).
-func xterm256(n int) *emu.RGB {
+func xterm256(n int) *RGB {
 	if n >= 232 {
 		v := uint8(8 + 10*(n-232))
-		return &emu.RGB{R: v, G: v, B: v}
+		return &RGB{R: v, G: v, B: v}
 	}
 	n -= 16
 	level := func(i int) uint8 {
@@ -275,10 +284,10 @@ func xterm256(n int) *emu.RGB {
 		}
 		return uint8(55 + 40*i)
 	}
-	return &emu.RGB{R: level(n / 36), G: level(n / 6 % 6), B: level(n % 6)}
+	return &RGB{R: level(n / 36), G: level(n / 6 % 6), B: level(n % 6)}
 }
 
-func hexOf(c *emu.RGB) string {
+func hexOf(c *RGB) string {
 	if c == nil {
 		return ""
 	}
