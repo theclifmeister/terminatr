@@ -159,6 +159,13 @@ type View struct {
 	ID    string `toml:"id"`
 	Title string `toml:"title"`
 	Slot  string `toml:"slot"`
+	// Description is a line about the view (mod API 1.7), shown on the
+	// sidebar's details line for a sidebar section.
+	Description string `toml:"description"`
+	// Opens is a sidebar section's companion view (mod API 1.7): one of
+	// the same mod's views in a project.tab, dashboard.card or full,
+	// which enter on the section's header asks the mod to open (ui.click).
+	Opens string `toml:"opens"`
 }
 
 // Command is a command of a code mod (mods design §2, tier 4): the
@@ -280,20 +287,49 @@ var jsonTypes = []string{"string", "integer", "number", "boolean", "array", "obj
 // bottom of the dashboard's details panel, for the project, task or
 // thread it shows; a coordinator.section one at the bottom of the
 // coordinator's info panel, for its project (mods design §12, Phase 2).
-// Sections show; they take no keys.
+// A sidebar.section is a section in the band above or below the
+// projects sidebar's tree, for the current project; a
+// sidebar.project.section one under each active project's threads, for
+// that project (mod API 1.7, T348). Sections show; they take no keys.
 const (
 	SlotProjectTab         = "project.tab"
 	SlotDashboardCard      = "dashboard.card"
 	SlotFull               = "full"
 	SlotDetailsSection     = "details.section"
 	SlotCoordinatorSection = "coordinator.section"
+	SlotSidebarSection     = "sidebar.section"
+	SlotProjectSection     = "sidebar.project.section"
 )
 
 // Slots are the view slots, in the manifest check's words' order.
-var Slots = []string{SlotProjectTab, SlotDashboardCard, SlotFull, SlotDetailsSection, SlotCoordinatorSection}
+var Slots = []string{SlotProjectTab, SlotDashboardCard, SlotFull, SlotDetailsSection, SlotCoordinatorSection,
+	SlotSidebarSection, SlotProjectSection}
 
 // IsSection says whether slot is a panel section's.
-func IsSection(slot string) bool { return slot == SlotDetailsSection || slot == SlotCoordinatorSection }
+func IsSection(slot string) bool {
+	switch slot {
+	case SlotDetailsSection, SlotCoordinatorSection, SlotSidebarSection, SlotProjectSection:
+		return true
+	}
+	return false
+}
+
+// IsSidebar says whether slot is a sidebar section's.
+func IsSidebar(slot string) bool { return slot == SlotSidebarSection || slot == SlotProjectSection }
+
+// opensSlots are the slots a sidebar section's companion view (opens)
+// may be in: those a view opens into.
+var opensSlots = []string{SlotProjectTab, SlotDashboardCard, SlotFull}
+
+// Limits of a mod's views.
+const (
+	// SidebarAPIMinor is the mod API minor the sidebar slots need.
+	SidebarAPIMinor = 7
+	// MaxSidebarViews is how many sidebar sections one mod declares.
+	MaxSidebarViews = 2
+	// MaxViewDescription bounds a view's description, in characters.
+	MaxViewDescription = 80
+)
 
 // Permissions are what the mod asks for. The human grants each by name
 // in [mods.<id>] grants; a mod runs with granted ∩ requested. The lists
@@ -600,6 +636,26 @@ func (m *Manifest) check(dir string) error {
 		if !slices.Contains(Slots, v.Slot) {
 			bad("%s: slot %q must be one of %s", at, v.Slot, strings.Join(Slots, ", "))
 		}
+		if maj, min, ok := splitAPI(m.API); IsSidebar(v.Slot) && ok && maj == 1 && min < SidebarAPIMinor {
+			bad(`%s: slot %s needs api = "1.%d"`, at, v.Slot, SidebarAPIMinor)
+		}
+		if len([]rune(strings.TrimSpace(v.Description))) > MaxViewDescription {
+			bad("%s: description is longer than %d characters", at, MaxViewDescription)
+		}
+		if v.Opens != "" {
+			i := slices.IndexFunc(p.Views, func(o View) bool { return o.ID == v.Opens })
+			switch {
+			case !IsSidebar(v.Slot):
+				bad("%s: opens is a sidebar section's: only a %s or a %s opens a view", at, SlotSidebarSection, SlotProjectSection)
+			case i < 0:
+				bad("%s: opens %q, which isn't one of its views", at, v.Opens)
+			case !slices.Contains(opensSlots, p.Views[i].Slot):
+				bad("%s: opens %q, a %s: it must be a %s", at, v.Opens, p.Views[i].Slot, strings.Join(opensSlots, ", "))
+			}
+		}
+	}
+	if n := len(slices.DeleteFunc(slices.Clone(p.Views), func(v View) bool { return !IsSidebar(v.Slot) })); n > MaxSidebarViews {
+		bad("provides.views: at most %d sidebar sections (%s, %s), not %d", MaxSidebarViews, SlotSidebarSection, SlotProjectSection, n)
 	}
 	if len(p.Guard) > MaxGuardRules {
 		bad("provides.guard: at most %d rules", MaxGuardRules)

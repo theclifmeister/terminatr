@@ -79,6 +79,7 @@ func TestManifestExample(t *testing.T) {
 // TestManifestErrors: each broken manifest is refused, saying why.
 func TestManifestErrors(t *testing.T) {
 	base := "name = \"X\"\nversion = \"1.0.0\"\napi = \"1.0\"\n"
+	base17 := strings.Replace(base, "1.0\"\n", "1.7\"\n", 1)
 	for _, tc := range []struct{ name, toml, want string }{
 		{"no id", base, "has no id"},
 		{"bad id", "id = \"Review_Age\"\n" + base, "lowercase letters"},
@@ -92,6 +93,12 @@ func TestManifestErrors(t *testing.T) {
 		{"column without code", "id = \"x\"\n" + base + "[provides]\ncolumns = [{ id = \"a\", width = 2, where = [\"sidebar.thread\"] }]\n", "needs provides.main"},
 		{"wide column", "id = \"x\"\n" + base + "[provides]\nmain = \"m.ts\"\ncolumns = [{ id = \"a\", width = 13, where = [\"sidebar.thread\"] }]\n", "width must be"},
 		{"bad slot", "id = \"x\"\n" + base + "[provides]\nmain = \"m.ts\"\nviews = [{ id = \"v\", title = \"V\", slot = \"pane\" }]\n[permissions]\nviews = true\n", "slot \"pane\""},
+		{"sidebar slot on 1.6", "id = \"x\"\n" + strings.Replace(base, "1.0", "1.6", 1) + "[provides]\nmain = \"m.ts\"\nviews = [{ id = \"v\", title = \"V\", slot = \"sidebar.section\" }]\n[permissions]\nviews = true\n", `slot sidebar.section needs api = "1.7"`},
+		{"opens unknown", "id = \"x\"\n" + base17 + "[provides]\nmain = \"m.ts\"\nviews = [{ id = \"v\", title = \"V\", slot = \"sidebar.section\", opens = \"w\" }]\n[permissions]\nviews = true\n", `opens "w", which isn't one of its views`},
+		{"opens a section", "id = \"x\"\n" + base17 + "[provides]\nmain = \"m.ts\"\nviews = [{ id = \"v\", title = \"V\", slot = \"sidebar.section\", opens = \"w\" }, { id = \"w\", title = \"W\", slot = \"details.section\" }]\n[permissions]\nviews = true\n", `opens "w", a details.section`},
+		{"opens from a card", "id = \"x\"\n" + base17 + "[provides]\nmain = \"m.ts\"\nviews = [{ id = \"v\", title = \"V\", slot = \"dashboard.card\", opens = \"w\" }, { id = \"w\", title = \"W\", slot = \"full\" }]\n[permissions]\nviews = true\n", "opens is a sidebar section's"},
+		{"three sidebar views", "id = \"x\"\n" + base17 + "[provides]\nmain = \"m.ts\"\nviews = [{ id = \"a\", title = \"A\", slot = \"sidebar.section\" }, { id = \"b\", title = \"B\", slot = \"sidebar.project.section\" }, { id = \"c\", title = \"C\", slot = \"sidebar.section\" }]\n[permissions]\nviews = true\n", "at most 2 sidebar sections"},
+		{"long description", "id = \"x\"\n" + base + "[provides]\nmain = \"m.ts\"\nviews = [{ id = \"v\", title = \"V\", slot = \"full\", description = \"" + strings.Repeat("d", 81) + "\" }]\n[permissions]\nviews = true\n", "description is longer than 80"},
 		{"views ungranted", "id = \"x\"\n" + base + "[provides]\nmain = \"m.ts\"\nviews = [{ id = \"v\", title = \"V\", slot = \"full\" }]\n", "needs permissions.views"},
 		{"data mod perms", "id = \"x\"\n" + base + "[permissions]\ninbox = true\n", "are for code mods"},
 		{"net url", "id = \"x\"\n" + base + "[provides]\nmain = \"m.ts\"\n[permissions]\nnet = [\"https://api.x.com/v1\"]\n", "isn't a host name"},
@@ -362,6 +369,42 @@ views = true
 		t.Fatalf("%+v", m.Provides.Views)
 	}
 	if got := m.ViewWords(); !slices.Equal(got, []string{`a details-panel section "Review"`, `a coordinator-panel section "Digest"`}) {
+		t.Fatalf("%q", got)
+	}
+}
+
+// TestSidebarViews: the sidebar slots need mod API 1.7, are sections,
+// name their companion view, and the consent says where they go.
+func TestSidebarViews(t *testing.T) {
+	const toml = `id = "ci-status"
+name = "CI status"
+version = "0.1.0"
+api = "1.7"
+
+[provides]
+main  = "main.ts"
+views = [
+  { id = "ticker", title = "Ticker", slot = "sidebar.section", description = "this project's PR polls" },
+  { id = "ci", title = "ci status", slot = "sidebar.project.section", opens = "prs" },
+  { id = "prs", title = "Open PRs", slot = "dashboard.card" },
+]
+
+[permissions]
+views = true
+`
+	dir := install(t, t.TempDir(), "ci-status", map[string]string{"mod.toml": toml, "main.ts": ""})
+	m, err := ReadManifest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := m.Provides.Views
+	if !IsSection(v[0].Slot) || !IsSection(v[1].Slot) || !IsSidebar(v[1].Slot) || IsSidebar(SlotDetailsSection) ||
+		v[0].Description != "this project's PR polls" || v[1].Opens != "prs" {
+		t.Fatalf("%+v", v)
+	}
+	want := []string{`a sidebar section "Ticker" (above or below your projects, on every screen)`,
+		`a section under each project "ci status" (in the sidebar)`, `a dashboard card "Open PRs"`}
+	if got := m.ViewWords(); !slices.Equal(got, want) {
 		t.Fatalf("%q", got)
 	}
 }
