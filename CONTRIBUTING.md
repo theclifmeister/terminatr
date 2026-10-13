@@ -111,6 +111,6 @@ docs/SPEC.md         the v0.1 specification
 docs/OPERATIONS.md   installing, state, logs, doctor, service, upgrading, uninstalling
 docs/research/       findings of the early spikes (libghostty, Claude Code, symlinks)
 docs/VMS.md          the test VMs (contributors)
-scripts/release/     release builds: per-target libghostty-vt, zig cc wrapper, signing, archive checks, formula
+scripts/release/     release builds: per-target libghostty-vt, C compiler wrapper (zig cc; Apple clang for darwin), signing, archive checks, formula
 Formula/             the Homebrew formula (rewritten by each release)
 ```

@@ -4,16 +4,19 @@
 # ($TM_ZIG overrides).
 # goreleaser sets CC to this script and TM_ZIG_TARGET per target.
 #
-# macOS targets link libresolv, which Zig doesn't ship: the macOS SDK's
-# .tbd stubs provide it, so darwin builds need a macOS host with the
-# Command Line Tools (the release workflow runs on macos-latest).
+# macOS targets use Apple's clang and ld instead, from the Command Line
+# Tools (the release workflow runs on macos-latest). Zig's linker writes
+# old-style rebase info (LC_DYLD_INFO_ONLY): dyld then rewrites pointers
+# in __DATA_CONST at every launch, leaving ~2.4 MB dirty in every tm
+# process. Apple's ld emits chained fixups (LC_DYLD_CHAINED_FIXUPS) and
+# those pages stay clean. The deployment target stays at Zig's default,
+# macOS 13.0 (scripts/release/check.sh checks both).
 root=$(cd "$(dirname "$0")/../.." && pwd)
 target=${TM_ZIG_TARGET:?TM_ZIG_TARGET is not set}
+macos_min=13.0
 case $target in
-*-macos*)
-	sdk=$(xcrun --sdk macosx --show-sdk-path) || exit 1
-	set -- "$@" -L"$sdk/usr/lib" -F"$sdk/System/Library/Frameworks"
-	;;
+aarch64-macos*) exec xcrun --sdk macosx clang -target "arm64-apple-macos$macos_min" "$@" ;;
+x86_64-macos*) exec xcrun --sdk macosx clang -target "x86_64-apple-macos$macos_min" "$@" ;;
 esac
 zig=${TM_ZIG:-$root/.build/release/zig}
 # Go probes the compiler with `-### -x c -c -`, which zig cc runs for real,

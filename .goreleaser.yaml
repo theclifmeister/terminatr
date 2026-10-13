@@ -6,9 +6,10 @@
 #
 # tm needs cgo (libghostty-vt), so every target is cross-compiled with
 # zig cc (scripts/release/cc.sh) against its own static libghostty-vt in
-# .build/release/. Linux binaries link glibc dynamically with a floor of
-# 2.28; macOS binaries link only libSystem and libresolv, whose stubs come
-# from the macOS SDK, so the whole release runs on a macOS host.
+# .build/release/, except darwin, which Apple's clang and ld link (chained
+# fixups, macOS 13.0). Linux binaries link glibc dynamically with a floor
+# of 2.28; macOS binaries link only system libraries from the macOS SDK,
+# so the whole release runs on a macOS host.
 version: 2
 
 project_name: tm
@@ -104,7 +105,7 @@ builds:
 # The darwin binaries are signed with a Developer ID (hardened runtime)
 # and notarised by the build hook above when the release workflow
 # provides the credentials (TM_SIGN_IDENTITY, TM_NOTARY_*). Snapshots are
-# left ad-hoc signed, as zig's linker made them.
+# left as Apple's ld made them: arm64 ad-hoc signed, amd64 unsigned.
 
 archives:
   - id: tm
