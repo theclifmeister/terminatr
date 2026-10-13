@@ -176,7 +176,7 @@ func Attach(opts Options) (res Result, err error) {
 		so = &SidebarOptions{}
 	}
 	lay := ConsoleLayout(so.UIFile)
-	c.side = &sidebar{uiFile: so.UIFile, projects: loadSideProjects(c.paths), compact: lay.compact(), order: lay.sideSections}
+	c.side = &sidebar{uiFile: so.UIFile, projects: loadSideProjects(c.paths), compact: lay.compact(), order: lay.sideSections, projOrder: lay.projSections}
 	c.info = &infoPanel{}
 	c.views = handedViews() // the dashboard's, for the sections it showed
 	c.setWindow(cols, rows)
@@ -1976,7 +1976,8 @@ func pollViewsNow(key, sent string, odd, waiting bool) bool {
 	return waiting || key != sent || key != "" && !odd
 }
 
-// bandShown are the attached sidebar's band sections for mod.views,
+// bandShown are the attached sidebar's band sections, and the sections of
+// the projects whose rows are on screen, for mod.views,
 // keeping secs, the sidebar sections session.list names.
 func (c *client) bandShown(secs []proto.ModSection) []modview.Shown {
 	if !c.lock() {
@@ -1990,7 +1991,8 @@ func (c *client) bandShown(secs []proto.ModSection) []modview.Shown {
 	if !c.bandShows() {
 		return nil
 	}
-	return bandShown(c.band())
+	in, rows := c.band(), c.sideTree()
+	return append(bandShown(in), projShown(rows, in, sideOnScreen(rows, c.sideW, c.sideRows(), c.sideFoot()))...)
 }
 
 // setViews takes mod.views' list, and hands it on to the dashboard this

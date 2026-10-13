@@ -384,6 +384,14 @@ func sideNeedStep(in sideKeysIn, at treeRow, back bool) sideStep {
 	}
 	full := in.full()
 	pos := slices.IndexFunc(full, func(r treeRow) bool { return r.key() == at.key() })
+	if pos < 0 && at.kind == treeSection && at.sec.proj {
+		// A project's section: from its project's last row.
+		for j, r := range full {
+			if r.slug == at.slug && r.kind != treeDivider {
+				pos = j
+			}
+		}
+	}
 	var to *treeRow
 	for n := 1; n <= len(full) && to == nil; n++ {
 		j := pos + n
