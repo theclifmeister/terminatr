@@ -1356,7 +1356,8 @@ func sectionStyle(title string) lipgloss.Style {
 }
 
 func (m *dash) View() tea.View {
-	v := tea.NewView(m.render())
+	// With a pane palette, every cell in the palette's colours (theme.go).
+	v := tea.NewView(th().paintWindow(m.render(), m.w, m.h))
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
 	if m.sideW() > sideSlim {

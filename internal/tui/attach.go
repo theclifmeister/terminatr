@@ -357,6 +357,8 @@ type client struct {
 	// pane palette the panes are drawn with (outercolors.go).
 	colors, sentColors emu.Colors
 	pal                *emu.Palette
+	fill               string // th().fillReset() as last drawn
+	painted            []byte // a frame painted in it (renderLoop)
 
 	// detaching is set before DETACH is written. The server may hang up
 	// as soon as it reads it, so from then on a failed write or a closed
@@ -1767,9 +1769,11 @@ func (c *client) renderLoop(out io.Writer) Result {
 		held := false
 		// The theme's pane palette, for this scheme: the panes are drawn
 		// with it, and their programs' colour queries answered with it.
-		pal := th().Pane
+		t := th()
+		pal := t.Pane
 		repal := pal != c.pal
 		c.pal = pal
+		c.refill(t, vis)
 		for _, p := range vis {
 			p.r.SetPalette(pal)
 			if p.held && time.Since(p.heldAt) > maxHold {
@@ -1792,6 +1796,9 @@ func (c *client) renderLoop(out io.Writer) Result {
 		}
 		if err == nil && c.dialog != nil && (len(b) > 0 || !c.dialog.drawn) {
 			b = c.appendMenu(b, c.dialog)
+		}
+		if err == nil {
+			b = c.paint(t, b)
 		}
 		if err == nil {
 			b = append(c.outerModes(), b...)
@@ -1822,6 +1829,31 @@ func (c *client) renderLoop(out io.Writer) Result {
 			time.AfterFunc(maxHold, c.poke) // draw once the hold times out
 		}
 	}
+}
+
+// refill follows the console's default colours under theme t: the
+// palette's when it has a pane palette (theme.go), the window drawn
+// again in them when they change. c.mu held.
+func (c *client) refill(t *Theme, vis []*pane) {
+	fill := t.fillReset()
+	if fill == c.fill {
+		return
+	}
+	c.fill, c.full = fill, true
+	for _, p := range vis {
+		p.r.Invalidate()
+	}
+}
+
+// paint is the frame b with the console's own areas, blanks and erases
+// in theme t's default colours (theme.go); b when it has none. c.mu
+// held.
+func (c *client) paint(t *Theme, b []byte) []byte {
+	if len(b) == 0 || !t.painting() {
+		return b
+	}
+	c.painted = t.appendPainted(append(c.painted[:0], c.fill...), b)
+	return c.painted
 }
 
 // frameSplit draws the pane beside the sidebar or above the status bar:

@@ -83,7 +83,8 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
   colour has an ANSI fallback and a truecolor choice. Its `[dark.pane]`
   and `[light.pane]` (`api = "1.6"`) colour the panes too, on a
   truecolor terminal: every agent's and shell's default colours and 16
-  ANSI colours become Nord's. Claude panes follow the theme's colours
+  ANSI colours become Nord's, and tm's own sidebar, panels and bars
+  take Nord's background and foreground. Claude panes follow the theme's colours
   live, a switch of theme or scheme included: tm hands Claude a theme
   made from Nord's roles and palette, since Claude's own themes are
   truecolor, which the palette leaves as drawn. Its icon set gives
