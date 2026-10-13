@@ -114,10 +114,11 @@ template = '''
 # commits go to the main repo's git dir).
 # Never put statusLine here: --settings would replace the user's own.
 # With a theme's pane palette (.PaneScheme, docs/SPEC.md §5.3), Claude
-# draws with its ANSI theme, which the palette colours: its own themes
-# are truecolor, which panes pass through. A --settings theme wins over
-# the user's (checked on 2.1.296); a running Claude doesn't re-read it,
-# so it applies from the next start or resume.
+# draws with the plugin theme below (custom:<plugin>:<file>), else its
+# ANSI theme, which the palette colours: its own themes are truecolor,
+# which panes pass through. A --settings theme wins over the user's
+# (checked on 2.1.296); a running Claude doesn't re-read it or a
+# plugin's theme, so either applies from the next start or resume.
 # With sandbox_escapes off, a thread's Bash can't leave the sandbox
 # (allowUnsandboxedCommands): a command run outside it would reach the
 # human socket (§3.2), whoever approved it.
@@ -125,7 +126,9 @@ template = '''
 path = "claude-settings.json"
 template = '''
 {
-  {{- if .PaneScheme}}
+  {{- if .Theme}}
+  "theme": "custom:terminatr:tm",
+  {{- else if .PaneScheme}}
   "theme": {{json (printf "%s-ansi" .PaneScheme)}},
   {{- end}}
   "permissions": {
@@ -142,6 +145,46 @@ template = '''
     "network": {"allowUnixSockets": [{{json .Socket}}]}
   }
 }
+'''
+
+# The tm theme as Claude's (docs/SPEC.md §8.6): a theme of the plugin
+# above, which the settings file selects. Its base is Claude's ANSI
+# theme, whose 16 colours the pane palette sets, so a token it doesn't
+# name follows the palette; the ones it names take the theme's roles
+# and the palette's foreground and background exactly, in truecolor:
+# the accent for Claude's own colour, good/bad/warn/info for its
+# states, faint for what's dimmed, and backgrounds a shade off the
+# pane's (the selection's too: Claude draws its text over it, not sel's
+# fg). A colour the theme doesn't give is left out (the base's).
+# Without .Theme it renders empty and isn't written. Claude ignores a
+# token or colour it doesn't know, and loads it only at start (2.1.296).
+[[launch.files]]
+path = "claude-plugin/themes/tm.json"
+template = '''
+{{- with .Theme -}}
+{{- $fg := or .PaneFg .Fg.plain -}}
+{{- $bg := .PaneBg -}}
+{{- $accent := or .Fg.accent .Fg.title -}}
+{{- $faint := or .Fg.faint (index .ANSI 8) -}}
+{{- $green := or .Fg.good (index .ANSI 2) -}}
+{{- $red := or .Fg.bad (index .ANSI 1) -}}
+{"name": "terminatr", "base": {{json (printf "%s-ansi" .Scheme)}}, "overrides": {{colors
+  "claude" $accent "claudeShimmer" (blend $accent $fg 30) "clawd_body" $accent "briefLabelClaude" $accent
+  "text" $fg "inverseText" $bg "clawd_background" $bg
+  "inactive" $faint "inactiveShimmer" (blend $faint $fg 30) "subtle" $faint
+  "promptBorder" $faint "promptBorderShimmer" (blend $faint $fg 30)
+  "success" .Fg.good "error" .Fg.bad "warning" .Fg.warn "warningShimmer" (blend .Fg.warn $fg 30)
+  "suggestion" .Fg.info "permission" .Fg.info "permissionShimmer" (blend .Fg.info $fg 30)
+  "ide" .Fg.info "briefLabelYou" .Fg.info "rate_limit_fill" .Fg.info "rate_limit_empty" (blend $bg .Fg.info 30)
+  "selectionBg" (or (blend $bg .Bg.sel 45) (blend $bg $fg 25))
+  "userMessageBackground" (blend $bg $fg 8) "userMessageBackgroundHover" (blend $bg $fg 12)
+  "composerSidebarBackground" (blend $bg $fg 5)
+  "bashMessageBackgroundColor" (blend $bg (index .ANSI 5) 12) "memoryBackgroundColor" (blend $bg (index .ANSI 6) 12)
+  "diffAdded" (blend $bg $green 35) "diffRemoved" (blend $bg $red 35)
+  "diffAddedDimmed" (blend $bg $green 15) "diffRemovedDimmed" (blend $bg $red 15)
+  "diffAddedWord" (blend $bg $green 60) "diffRemovedWord" (blend $bg $red 60)
+}}}
+{{- end}}
 '''
 
 # The guard (docs/SPEC.md §8.6): Claude's login, where it isn't in the

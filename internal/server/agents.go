@@ -19,10 +19,12 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/emu"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
 	"github.com/theclifmeister/terminatr/internal/skill"
+	"github.com/theclifmeister/terminatr/internal/theme"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
 	"github.com/theclifmeister/terminatr/internal/version"
@@ -334,6 +336,30 @@ func (s *Server) paneScheme() string {
 	return ""
 }
 
+// launchTheme is [ui] theme's colours for the scheme a console draws the
+// panes' palette in (paneScheme), for an agent to follow; nil for none
+// (no palette, safe mode, the built-in theme) or a theme that doesn't
+// load, which leaves the agent's ANSI theme (§8.6).
+func (s *Server) launchTheme(scheme string) *theme.Agent {
+	if scheme == "" || s.noMods {
+		return nil
+	}
+	cfg, _ := config.Load()
+	if cfg == nil || cfg.Theme == "" || cfg.Theme == mod.BundledTheme || cfg.Theme == "default" {
+		return nil
+	}
+	reg := s.modRegistry()
+	if reg == nil {
+		return nil
+	}
+	tt, err := theme.Load(reg, cfg.Theme)
+	if err != nil {
+		s.log.Printf("theme for agents: %v", err)
+		return nil
+	}
+	return theme.AgentColors(tt, scheme == "dark")
+}
+
 // agentLaunch is everything needed to (re)start one agent session.
 type agentLaunch struct {
 	rec    SessionRecord
@@ -401,6 +427,7 @@ func (s *Server) launchAgent(l agentLaunch) (*session.Session, *proto.Error) {
 	if spec.Model == "" {
 		spec.Model = launchModel(a, r.Project, r.Role == proto.RoleCoordinator)
 	}
+	spec.Theme = s.launchTheme(spec.PaneScheme)
 	launch, err := a.Launch(spec)
 	if err != nil {
 		s.closeModLocked(r.ID)

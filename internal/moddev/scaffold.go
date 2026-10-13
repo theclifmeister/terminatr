@@ -249,8 +249,8 @@ bold = true
 
 # The panes' colours too (mod API 1.6), on a truecolor terminal: the
 # programs' default foreground and background and their 16 ANSI colours,
-# each #rrggbb; Claude panes switch to Claude's ANSI theme. Left out, the
-# panes keep the terminal's own.
+# each #rrggbb; Claude panes follow the theme's colours from their next
+# start or resume. Left out, the panes keep the terminal's own.
 # [dark.pane]
 # fg = "#d8dee9"
 # bg = "#2e3440"
