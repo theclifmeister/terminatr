@@ -751,7 +751,11 @@ func safetySettings(slug string) []setting {
 		if all {
 			return ""
 		}
-		return fmt.Sprintf(" · %d working now", m.workingThreads(slug))
+		out := fmt.Sprintf(" · %d working now", m.workingThreads(slug))
+		if g := safety(m).GlobalParallelThreads; g > 0 {
+			out += fmt.Sprintf(" · %d of %d across projects", m.workingAll(), g)
+		}
+		return out
 	}
 	startWords := func(s config.Safety) string {
 		if s.StartThreads == config.StartAuto {
@@ -1036,7 +1040,25 @@ func safetySettings(slug string) []setting {
 			func(s config.Safety) string { return cmp.Or(s.ThreadAgent, "auto") }, func(s config.Safety) string { return cmp.Or(s.CoordinatorAgent, "auto") },
 			func(s config.Safety) string { return modelWords(s.Models) }, func(s config.Safety) string { return cmp.Or(s.CoordinatorModel, "agent's default") }, historyWords})
 	if all {
-		return rows
+		// The cap across every project is all projects' only: no
+		// project sets its own (config.DefaultsOnly). Under Parallel
+		// threads.
+		global := func(m *dash, n int) tea.Cmd {
+			msg := fmt.Sprintf("up to %d threads work at once across all projects", n)
+			if n == 0 {
+				msg = "no cap on threads across all projects"
+			}
+			return set(m, "global_parallel_threads", n, msg, func(s *config.Safety) { s.GlobalParallelThreads = n })
+		}
+		row := setting{label: "Threads across projects", help: "The most threads working at once in all projects together, beside each project's own cap; beyond it coordinators propose and wait. Off is no such cap. Idle and done threads don't count. Enter or + and - change it.",
+			value: func(m *dash) string {
+				return globalCapWords(safety(m).GlobalParallelThreads) + fmt.Sprintf(" · %d working now", m.workingAll())
+			},
+			change: func(m *dash) tea.Cmd { return global(m, nextStep(globalCapSteps, safety(m).GlobalParallelThreads)) },
+			adjust: func(m *dash, d int) tea.Cmd {
+				return global(m, min(max(safety(m).GlobalParallelThreads+d, 0), config.MaxGlobalThreads))
+			}}
+		return slices.Insert(rows, 4, row)
 	}
 	// The project's own state, never all projects': activate, pause,
 	// archive, delete.
@@ -1190,6 +1212,18 @@ func (m *dash) lifecycleVia(slug, verb string, b *binding) tea.Cmd {
 
 // capSteps are the caps enter steps through; + and - fine-tune.
 var capSteps = []int{1, 2, 3, 5, 10, 15, 20}
+
+// globalCapSteps are the caps across projects enter steps through; 0 is
+// off.
+var globalCapSteps = []int{0, 5, 10, 15, 20, 30}
+
+// globalCapWords is global_parallel_threads as the popup shows it.
+func globalCapWords(n int) string {
+	if n <= 0 {
+		return "off"
+	}
+	return fmt.Sprint(n)
+}
 
 // nextStep is the first step above cur, or the first one.
 func nextStep(steps []int, cur int) int {
@@ -1421,6 +1455,16 @@ func (m *dash) workingThreads(slug string) int {
 		recs = append(recs, t.Record)
 	}
 	return thread.Working(recs, m.data.Sessions)
+}
+
+// workingAll counts the threads of every project that count toward the
+// cap across projects (thread.IsWorking).
+func (m *dash) workingAll() int {
+	n := 0
+	for _, p := range m.data.Projects {
+		n += m.workingThreads(p.Slug)
+	}
+	return n
 }
 
 // remoteNote says when the running coordinator's remote control differs

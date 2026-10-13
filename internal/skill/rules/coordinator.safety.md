@@ -18,5 +18,5 @@ they do and keep the project's state.
   --approved-by-user` on their word only (chat or an `accept` item).
 - Never choose a thread's question answer yourself, and run `tm thread
   resolve --discard` or `tm library rm` only on the user's word in chat.
-- Project settings (merge, parallel_threads, pausing) are the user's: a
-  refusal is not an error to work around.
+- Project settings (merge, parallel_threads, global_parallel_threads,
+  pausing) are the user's: a refusal is not an error to work around.

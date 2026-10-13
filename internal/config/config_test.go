@@ -124,6 +124,8 @@ func TestBadSettings(t *testing.T) {
 		"[defaults]\nactive = false\n":                     "defaults can't set active, paused, archived or pinned",
 		"[defaults]\npinned = true\n":                      "defaults can't set active, paused, archived or pinned",
 		"[defaults]\nparallel_threads = 100\n":             "defaults.parallel_threads must be 1 to 99",
+		"[defaults]\nglobal_parallel_threads = -1\n":       "defaults.global_parallel_threads must be 0 (no cap) to 999",
+		"[projects.demo]\nglobal_parallel_threads = 5\n":   "projects.demo can't set global_parallel_threads",
 		"[defaults]\nauto_close = \"never\"\n":             "defaults.auto_close must be",
 		"[projects.demo]\nmerge = \"anyone\"\n":            "merge must be",
 		"[defaults]\nguard_off = [\"push\"]\n":             "unknown rule \"push\"",

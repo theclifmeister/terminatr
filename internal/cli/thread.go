@@ -321,7 +321,7 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 		return &tasks.Error{Code: "needs-approval", Msg: "start_threads = propose: propose the thread to the user, and once they agree start it with --approved-by-user"}
 	}
 	if !*o.overCap {
-		if err := e.underCap(p, safety.ParallelThreads); err != nil {
+		if err := e.underCap(p, safety.ParallelThreads, safety.GlobalParallelThreads); err != nil {
 			return err
 		}
 	}
@@ -711,8 +711,9 @@ func listedRepo(p *project.Project, dir string) bool {
 }
 
 // underCap refuses a new thread while capN or more of the project's
-// threads work (thread.IsWorking; docs/SPEC.md §9).
-func (e *Env) underCap(p *project.Project, capN int) error {
+// threads work (thread.IsWorking; docs/SPEC.md §9), or global (0 for no
+// such cap) or more of every project's together.
+func (e *Env) underCap(p *project.Project, capN, global int) error {
 	recs, err := thread.List(p)
 	if err != nil {
 		return err
@@ -723,6 +724,12 @@ func (e *Env) underCap(p *project.Project, capN int) error {
 	}
 	if n := thread.Working(recs, res.Sessions); n >= capN {
 		return &tasks.Error{Code: "over-cap", Msg: fmt.Sprintf("%d of %d parallel threads are working: propose the thread to the user instead and start it once one finishes; only if the user says to start it anyway, add --over-cap", n, capN)}
+	}
+	if global > 0 {
+		by := thread.WorkingAll(res.Sessions)
+		if n := thread.Total(by); n >= global {
+			return &tasks.Error{Code: "over-global-cap", Msg: fmt.Sprintf("%d of %d threads across all projects are working (%s): propose the thread to the user instead and start it once one finishes; only if the user says to start it anyway, add --over-cap", n, global, thread.ByProjectWords(by))}
+		}
 	}
 	return nil
 }

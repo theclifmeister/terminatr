@@ -1,13 +1,20 @@
 package thread
 
 import (
+	"fmt"
+	"maps"
+	"slices"
+	"strings"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // The parallel threads cap (docs/SPEC.md §9, §11.2): tm thread start
-// refuses a new thread while Working counts the project's cap or more.
+// refuses a new thread while Working counts the project's cap or more,
+// or WorkingAll the cap across projects (global_parallel_threads) or
+// more.
 
 // DoneSince is when the thread called tm done, if it did so after its
 // last prompt; zero otherwise (a new prompt gives it work again).
@@ -56,4 +63,54 @@ func Working(recs []*Record, sessions []proto.SessionInfo) int {
 		}
 	}
 	return n
+}
+
+// WorkingAll counts, by project slug, the threads of every project that
+// count toward the cap across projects: only projects with a thread
+// session in sessions can have one, so only theirs are read. A project
+// that can't be read counts none.
+func WorkingAll(sessions []proto.SessionInfo) map[string]int {
+	out := map[string]int{}
+	for _, s := range sessions {
+		if s.Thread == "" || s.Project == "" {
+			continue
+		}
+		if _, ok := out[s.Project]; ok {
+			continue
+		}
+		out[s.Project] = 0
+		p, err := project.Open(s.Project)
+		if err != nil {
+			continue
+		}
+		if recs, err := List(p); err == nil {
+			out[s.Project] = Working(recs, sessions)
+		}
+	}
+	maps.DeleteFunc(out, func(_ string, n int) bool { return n == 0 })
+	return out
+}
+
+// Total is the sum of WorkingAll's counts.
+func Total(by map[string]int) int {
+	n := 0
+	for _, c := range by {
+		n += c
+	}
+	return n
+}
+
+// ByProjectWords says WorkingAll's counts, largest first, e.g. "3 in
+// web, 1 in api"; "none" when there are none.
+func ByProjectWords(by map[string]int) string {
+	slugs := slices.Sorted(maps.Keys(by))
+	slices.SortStableFunc(slugs, func(a, b string) int { return by[b] - by[a] })
+	var parts []string
+	for _, s := range slugs {
+		parts = append(parts, fmt.Sprintf("%d in %s", by[s], s))
+	}
+	if len(parts) == 0 {
+		return "none"
+	}
+	return strings.Join(parts, ", ")
 }

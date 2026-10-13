@@ -913,7 +913,7 @@ func TestAllProjectsSettings(t *testing.T) {
 		keyPress(m, "down")
 	}
 	act(m, src, "enter") // 10 → 15
-	if out := screen(m); !strings.Contains(out, "Parallel threads             15") || strings.Contains(out, "working now") {
+	if out := screen(m); !strings.Contains(out, "Parallel threads             15") || strings.Contains(lineWith(out, "Parallel threads"), "working now") {
 		t.Fatalf("all projects' parallel threads:\n%s", out)
 	}
 	cfg, _ := config.Load()
@@ -1562,5 +1562,44 @@ func TestNewTaskPrompt(t *testing.T) {
 	run(m, keyPress(m, "enter"))
 	if len(src.added) != 2 || src.added[1] != "alpha plain||" {
 		t.Fatalf("added %v", src.added)
+	}
+}
+
+// TestGlobalThreadsSetting (T362): All projects has the cap across
+// projects, off by default, with the threads working in every project;
+// enter and + - write it to [defaults], and a project's Parallel threads
+// row shows the count against it once it is set. A project has no row of
+// its own for it.
+func TestGlobalThreadsSetting(t *testing.T) {
+	src, m := popupData(t)
+	keyPress(m, ",")
+	keyPress(m, "2")
+	if out := screen(m); !strings.Contains(lineWith(out, "Threads across projects"), "off · 2 working now") {
+		t.Fatalf("all projects tab:\n%s", out)
+	}
+	for range 4 {
+		keyPress(m, "down")
+	}
+	act(m, src, "enter") // off → 5
+	act(m, src, "+")
+	if out := screen(m); !strings.Contains(lineWith(out, "Threads across projects"), "6 · 2 working now") {
+		t.Fatalf("after enter and +:\n%s", out)
+	}
+	cfg, _ := config.Load()
+	if s := must(cfg.AllProjects()); s.GlobalParallelThreads != 6 {
+		t.Fatalf("not saved: %+v", s)
+	}
+	keyPress(m, "esc")
+	for _, r := range projectSettings("alpha") {
+		if r.label == "Threads across projects" {
+			t.Fatal("a project has its own global cap row")
+		}
+	}
+	s := must(cfg.Safety("alpha"))
+	m.projectData("alpha").Safety = &s
+	keyPress(m, "a")
+	keyPress(m, "4")
+	if out := screen(m); !strings.Contains(lineWith(out, "Parallel threads"), "10 · 1 working now · 2 of 6 across projects") {
+		t.Fatalf("project's row:\n%s", out)
 	}
 }

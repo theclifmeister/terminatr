@@ -85,6 +85,50 @@ func TestThreadCapAndOverride(t *testing.T) {
 	}
 }
 
+// TestGlobalThreadCap (T362): two projects, each under its own cap,
+// together at global_parallel_threads: tm thread start refuses with
+// over-global-cap and says which projects' threads work, tm context
+// shows the count; idle and stopped threads don't count, and --over-cap
+// passes both caps.
+func TestGlobalThreadCap(t *testing.T) {
+	env, projDir, _ := tickerEnv(t)
+	other, otherDir := newProject(env, "other")
+	writeConfig(t, env, "[defaults]\nglobal_parallel_threads = 2\n")
+	startThread(t, env, projDir) // demo t-0001, idle: doesn't count
+	env.MustCLI("thread", "start", "Elsewhere", "--project", other)
+	var rec struct{ Session string }
+	readTOML(t, filepath.Join(otherDir, "threads", "t-0001", "thread.toml"), &rec)
+	elsewhere := &Session{ID: rec.Session}
+	env.WaitState(elsewhere, "idle", agentWait)
+	env.MustCLI("thread", "start", "Second", "--project", "demo")
+	readTOML(t, filepath.Join(projDir, "threads", "t-0002", "thread.toml"), &rec)
+	second := &Session{ID: rec.Session}
+	env.WaitState(second, "idle", agentWait)
+
+	env.MustCLI("thread", "prompt", "t-0001", "run thread-block", "--project", other)
+	env.WaitState(elsewhere, "blocked", agentWait)
+	env.MustCLI("thread", "prompt", "t-0002", "run thread-block", "--project", "demo")
+	env.WaitState(second, "blocked", agentWait)
+	r := env.CLI("thread", "start", "Third", "--project", "demo")
+	if r.Code != 1 || !strings.Contains(r.Stderr, "over-global-cap") || !strings.Contains(r.Stderr, "2 of 2 threads across all projects are working (1 in demo, 1 in other)") {
+		t.Fatalf("at the global cap: exit %d\n%s%s", r.Code, r.Stdout, r.Stderr)
+	}
+	if _, err := os.Stat(filepath.Join(projDir, "threads", "t-0003")); !os.IsNotExist(err) {
+		t.Fatalf("a refused start left a thread: %v", err)
+	}
+	if ctx := env.MustCLI("context", "--project", "demo"); !strings.Contains(ctx, "parallel_threads=10 · global_parallel_threads=2 (2 working: demo 1, other 1)") {
+		t.Fatalf("context:\n%s", ctx)
+	}
+	env.MustCLI("thread", "start", "Third", "--over-cap", "--project", "demo")
+	if j, _ := os.ReadFile(filepath.Join(projDir, "JOURNAL.md")); !strings.Contains(string(j), "thread.start t-0003 Third (over the parallel threads cap, approved by the user)") {
+		t.Fatalf("journal:\n%s", j)
+	}
+	readTOML(t, filepath.Join(projDir, "threads", "t-0003", "thread.toml"), &rec)
+	env.WaitState(&Session{ID: rec.Session}, "idle", agentWait)
+	env.MustCLI("thread", "stop", "t-0001", "--project", other) // stopped: a slot frees
+	env.MustCLI("thread", "start", "Fourth", "--project", "demo")
+}
+
 // TestSmokeTickerAutoCloseKeepsUnsavedWork: the PR merged and the agent
 // is idle, but the worktree has uncommitted changes: the thread stays
 // open and the coordinator gets one item; once the work is gone, it

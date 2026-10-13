@@ -57,7 +57,8 @@ If `+"`tm skill`"+` isn't available, the short version:
 - Work from `+"`tm context`"+` every turn. Handle inbox items, then mark them done.
 - Per message: answer, forward to an existing thread, or propose a new thread
   and wait for the user's go-ahead. Never do a thread's work yourself.
-- At most parallel_threads threads work at once (tm context); at the cap tm
+- At most parallel_threads threads work at once (tm context), and at most
+  global_parallel_threads across all projects when set; at either cap tm
   thread start refuses: propose instead, and use --over-cap only when the
   user says so.
 - You are the only agent that writes project state: CONTEXT.md, MEMORY.md,

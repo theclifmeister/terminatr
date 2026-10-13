@@ -33,6 +33,9 @@ var ErrForm = errors.New("this setting is set in a form tm can't change here")
 // SetProject sets one of a project's safety settings by its key
 // (start_threads, yolo, …), checked against the setting's type.
 func SetProject(slug, key string, value any) error {
+	if slices.Contains(DefaultsOnly, key) {
+		return fmt.Errorf("%s is all projects' setting, not a project's", key)
+	}
 	return setSafety("projects."+slug, key, value)
 }
 
@@ -159,6 +162,9 @@ func CheckSetting(key string, value any) error {
 	if n, ok := value.(int); key == "parallel_threads" && (!ok || n < 1 || n > MaxParallelThreads) {
 		return fmt.Errorf("parallel threads must be 1 to %d", MaxParallelThreads)
 	}
+	if n, ok := value.(int); key == "global_parallel_threads" && (!ok || n < 0 || n > MaxGlobalThreads) {
+		return fmt.Errorf("global parallel threads must be 0 (no cap) to %d", MaxGlobalThreads)
+	}
 	if n, ok := value.(int); key == "auto_close_days" && (!ok || n < 1 || n > MaxAutoCloseDays) {
 		return fmt.Errorf("auto-close days must be 1 to %d", MaxAutoCloseDays)
 	}
@@ -206,14 +212,19 @@ func validKey(key string) bool {
 }
 
 // ProjectKeys are the settings of a [projects.<slug>] table; all but
-// ProjectOnly are also those of [defaults].
-var ProjectKeys = []string{"start_threads", "yolo", "coordinator_approves", "parallel_threads", "auto_close", "auto_close_days", "auto_resolve", "pr_followup", "pr_poll_seconds", "complete_tasks", "coordinator_remote_control", "auto_clear", "coordinator_merges", "fast_forward_checkout", "sandbox_escapes", "thread_agent", "coordinator_agent", "models", "coordinator_model", "active", "paused", "archived", "pinned",
+// ProjectOnly are also those of [defaults], and DefaultsOnly are only
+// those of [defaults].
+var ProjectKeys = []string{"start_threads", "yolo", "coordinator_approves", "parallel_threads", "global_parallel_threads", "auto_close", "auto_close_days", "auto_resolve", "pr_followup", "pr_poll_seconds", "complete_tasks", "coordinator_remote_control", "auto_clear", "coordinator_merges", "fast_forward_checkout", "sandbox_escapes", "thread_agent", "coordinator_agent", "models", "coordinator_model", "active", "paused", "archived", "pinned",
 	"archive_tasks_days", "archive_threads_days", "archive_inbox_days", "archive_journal_days"}
 
 // ProjectOnly are a project's own state, never all projects': an
 // inactive, paused, archived or pinned [defaults] would stop, hide or
 // pin every project.
 var ProjectOnly = []string{"active", "paused", "archived", "pinned"}
+
+// DefaultsOnly are all projects' settings, never a project's: the
+// global cap counts the threads of every project.
+var DefaultsOnly = []string{"global_parallel_threads"}
 
 // Set sets key in table ("" is the top level, "keys", "projects.<slug>")
 // to value: a bool, an int or a string.
