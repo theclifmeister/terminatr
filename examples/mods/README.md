@@ -4,8 +4,8 @@ One small, working mod for each place a mod can show up in terminatr,
 plus an agent tool and a code host: to see each surface working, and to get ideas to
 build and share. They are samples, not defaults. Nothing here is loaded
 or turned on until you install it, and installing goes through the
-usual consent screen. Three of them, `pr-ci-column`, `memory-tab` and
-`tasks-tab`, are also the sources of mods built into tm.
+usual consent screen. Four of them, `pr-ci-column`, `memory-tab`,
+`tasks-tab` and `ticker`, are also the sources of mods built into tm.
 
 Each installs with one line, from its folder at a release tag:
 
@@ -30,6 +30,7 @@ on in the Mods tab (`,` then `3`), or with `tm mod enable <id>`. `e` in the Mods
 | 7 | [pr-ci-column](pr-ci-column) | a sidebar column (built in) | reads your projects | copy it under another id first, see below |
 | 8 | [memory-tab](memory-tab) | a project-popup tab (built in) | reads your projects, draws its own panels | copy it under another id first, see below |
 | + | [tasks-tab](tasks-tab) | the popup's Tasks tab, its rows bound to tm's task actions (built in) | reads your projects, draws its own panels | copy it under another id first, see below |
+| + | [ticker](ticker) | a section in the coordinator's info panel or the sidebar, by its `place` setting (built in) | reads your projects, draws its own panels | copy it under another id first, see below |
 | + | [memory-search](memory-search) | an agent tool, `memory-search_find` | reads your projects, offers tools to agents | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/memory-search` |
 | + | [standup](standup) | a command: the key `S`, a ≡ menu entry and `tm mod run standup show` | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/standup` |
 | + | [report-glance](report-glance) | panel sections: one at the bottom of the details panel, one in the coordinator's info panel | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/report-glance` |
@@ -46,7 +47,7 @@ mod, which is early access and off by default. Turn it on in Settings
 `config.toml`; it applies to sessions started after. With it off these
 three load but stay empty for Claude, and their consent says so.
 
-`pr-ci-column`, `memory-tab` and `tasks-tab` already ship inside tm,
+`pr-ci-column`, `memory-tab`, `tasks-tab` and `ticker` already ship inside tm,
 and `tm mod install` refuses a built-in mod's id. To change one, copy it, give the
 copy its own id and install that:
 
@@ -156,6 +157,17 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
   standup show --project <slug>` can't open a view, so the mod says the
   same in one line as a toast. A key the core (or a mod enabled
   earlier) has stays theirs; the Mods tab then says key conflict.
+- **ticker** is when the ticker last polled a project's PRs and synced
+  its repos, and whether its PR host answers, as `kv` rows whose times
+  are `ago` and `until` spans (mod API 1.7), so they move without a
+  publish. It declares a `coordinator.section` (`ticker`) and a
+  `sidebar.section` (`band`); its `place` setting (`right`, the default,
+  `sidebar` or `both`) picks which show, and the other gets a `null`
+  tree, which draws nothing, not even a header. It publishes on
+  `view.opened` and `ticker.changed`; a settings change restarts it.
+  Turned off, the ticker shows nowhere, but tm itself still warns of a
+  failing PR host: a red line in the coordinator's panel and a red `▲`
+  after the project's name in the sidebar.
 - **report-glance** declares a `details.section` and a
   `coordinator.section`. When the details panel shows a thread or a
   task, the mod gets `view.opened` naming it, publishes that row's
