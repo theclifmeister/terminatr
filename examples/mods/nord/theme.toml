@@ -11,8 +11,11 @@
 # each #rrggbb, on a terminal with truecolor. Every agent and shell
 # follows; a program's own truecolor stays as it drew it, so Claude panes
 # get a theme made from these roles and palette, live, also when you
-# switch themes or your terminal turns light or dark. Leave the table out
-# and the panes keep your terminal's own colours.
+# switch themes or your terminal turns light or dark. tm's own areas (the
+# sidebar, the panels, the bars and the gaps between them) take the
+# table's fg and bg as their default colours, so the window is one
+# colour. Leave the table out and the panes and tm keep your terminal's
+# own colours.
 
 [dark]
 head   = { fg = ["brightwhite", "#eceff4"], bold = true }

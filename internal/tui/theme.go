@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bytes"
 	"fmt"
 	"image/color"
 	"strconv"
@@ -27,6 +28,10 @@ type Theme struct {
 	// Pane is the panes' palette, nil to keep their colours symbolic (no
 	// pane table, or a terminal without truecolor).
 	Pane *emu.Palette
+	// fillFg and fillBg are the console's own default colours, as SGR
+	// parameters ("38;2;r;g;b", "48;2;r;g;b"): the pane palette's, so
+	// tm's areas match its panes; "" for the terminal's own.
+	fillFg, fillBg string
 }
 
 // The theme's data (internal/theme): its role specs, a scheme's role
@@ -159,6 +164,8 @@ func resolveRoles(rs roleSet, truecolor bool) (*Theme, error) {
 		}
 		if truecolor {
 			t.Pane = emuPalette(pal)
+			t.fillFg = rgbParams(38, pal.Fg)
+			t.fillBg = rgbParams(48, pal.Bg)
 		}
 	}
 	return &t, nil
@@ -171,6 +178,15 @@ func emuPalette(p *tmtheme.Palette) *emu.Palette {
 		out.ANSI[i] = (*emu.RGB)(c)
 	}
 	return out
+}
+
+// rgbParams is an RGB colour as SGR parameters, base 38 (foreground) or
+// 48 (background); "" for none.
+func rgbParams(base int, c *tmtheme.RGB) string {
+	if c == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d;2;%d;%d;%d", base, c.R, c.G, c.B)
 }
 
 // themeFor is the Theme a table gives a console of the given scheme.
@@ -356,4 +372,157 @@ func sgrFg(seq string, fg bool) bool {
 		}
 	}
 	return fg
+}
+
+// Painting the console's default colours (docs/SPEC.md §3.3): with a
+// pane palette, every cell tm draws, in the dashboard and in a session,
+// has the palette's background and, where no role sets one, its
+// foreground, not the terminal's own; so the sidebar, panels, bars and
+// the gaps between them match the panes. tm paints cells rather than
+// setting the terminal's defaults (OSC 10/11), which a crash or a lost
+// SSH connection would leave changed.
+
+// painting reports whether the console paints its default colours.
+func (t *Theme) painting() bool { return t.fillFg != "" || t.fillBg != "" }
+
+// fillReset is the SGR sequence that resets to the console's default
+// colours: "\x1b[0m" plus the painted ones.
+func (t *Theme) fillReset() string {
+	return string(t.appendSGR(nil, []byte("0")))
+}
+
+// paintWindow paints a whole window's lines, w cells by h: every line
+// and the rows under them padded to w in the default colours, each
+// SGR reset setting them again. Unchanged when not painting.
+func (t *Theme) paintWindow(s string, w, h int) string {
+	if !t.painting() {
+		return s
+	}
+	lines := strings.Split(s, "\n")
+	for len(lines) < h {
+		lines = append(lines, "")
+	}
+	pre := t.fillReset()
+	b := make([]byte, 0, len(s)+len(lines)*(len(pre)*2+w/2))
+	for i, l := range lines {
+		if i > 0 {
+			b = append(b, '\n')
+		}
+		b = append(b, pre...)
+		b = t.appendPainted(b, []byte(l))
+		if n := w - ansi.StringWidth(l); n > 0 {
+			b = append(b, pre...)
+			b = append(b, strings.Repeat(" ", n)...)
+		}
+	}
+	return string(b)
+}
+
+// appendPainted appends terminal output s to dst, each SGR sequence in
+// it setting the console's default colours where it resets the
+// terminal's (0, 39, 49): text, blanks and erases (which take the
+// current background) are then drawn in them. Other sequences, and OSC,
+// DCS and APC strings, are copied as they are.
+func (t *Theme) appendPainted(dst, s []byte) []byte {
+	for len(s) > 0 {
+		i := bytes.IndexByte(s, 0x1b)
+		if i < 0 {
+			return append(dst, s...)
+		}
+		dst, s = append(dst, s[:i]...), s[i:]
+		n := 1
+		switch {
+		case len(s) > 1 && s[1] == '[':
+			n = 2
+			for n < len(s) && s[n] >= 0x20 && s[n] <= 0x3f {
+				n++
+			}
+			if n < len(s) {
+				n++ // the final byte
+			}
+			if s[n-1] == 'm' && sgrParams(s[2:n-1]) {
+				dst = t.appendSGR(dst, s[2:n-1])
+				s = s[n:]
+				continue
+			}
+		case len(s) > 1 && (s[1] == ']' || s[1] == 'P' || s[1] == '_' || s[1] == '^'):
+			n = stringEnd(s)
+		}
+		dst, s = append(dst, s[:n]...), s[n:]
+	}
+	return dst
+}
+
+// sgrParams reports whether p, a CSI sequence's bytes before its final
+// m, are an SGR's parameters: digits, ; and : only (no private marker
+// such as XTMODKEYS' >, no intermediate).
+func sgrParams(p []byte) bool {
+	for _, c := range p {
+		if (c < '0' || c > '9') && c != ';' && c != ':' {
+			return false
+		}
+	}
+	return true
+}
+
+// stringEnd is the length of the OSC, DCS, APC or PM string s starts
+// with, through its BEL or ST; all of s when it doesn't end.
+func stringEnd(s []byte) int {
+	for i := 2; i < len(s); i++ {
+		switch {
+		case s[i] == '\a':
+			return i + 1
+		case s[i] == 0x1b && i+1 < len(s) && s[i+1] == '\\':
+			return i + 2
+		}
+	}
+	return len(s)
+}
+
+// appendSGR appends the SGR sequence with parameters p, the console's
+// default colours set after each parameter that resets the terminal's.
+func (t *Theme) appendSGR(dst, p []byte) []byte {
+	dst = append(dst, "\x1b["...)
+	ps := bytes.Split(p, []byte(";"))
+	for i := 0; i < len(ps); i++ {
+		if i > 0 {
+			dst = append(dst, ';')
+		}
+		q := ps[i]
+		if len(q) == 0 {
+			q = []byte("0")
+		}
+		dst = append(dst, q...)
+		var fg, bg bool
+		switch string(q) {
+		case "0":
+			fg, bg = true, true
+		case "39":
+			fg = true
+		case "49":
+			bg = true
+		case "38", "48", "58":
+			// A colour's own parameters: ;5;n or ;2;r;g;b.
+			k := 0
+			if i+1 < len(ps) {
+				switch string(ps[i+1]) {
+				case "5":
+					k = 2
+				case "2":
+					k = 4
+				}
+			}
+			for ; k > 0 && i+1 < len(ps); k-- {
+				i++
+				dst = append(append(dst, ';'), ps[i]...)
+			}
+		}
+		if fg && t.fillFg != "" {
+			dst = append(append(dst, ';'), t.fillFg...)
+		}
+		if bg && t.fillBg != "" {
+			dst = append(append(dst, ';'), t.fillBg...)
+		}
+	}
+	return append(dst, 'm')
 }
