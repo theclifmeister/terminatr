@@ -40,7 +40,7 @@ func cmdServer(t *testing.T) *Server {
 			t.Fatal(err)
 		}
 	}
-	cfg := "[mods.lab]\nenabled = true\ngrants = [\"views\"]\nprojects = [\"demo\"]\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n"
+	cfg := "[mods.lab]\nenabled = true\ngrants = [\"views\"]\nprojects = [\"demo\"]\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n[mods.ticker]\nenabled = false\n"
 	if err := os.WriteFile(filepath.Join(tmHome, "config.toml"), []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}

@@ -1,0 +1,21 @@
+{
+  "name": "view.closed clears the project's tree, and a later ticker.changed draws nothing for it",
+  "answers": [
+    { "method": "project.get", "params": { "slug": "demo" },
+      "result": { "project": "demo", "threads": [], "ticker": { "pr_checked": "2026-10-13T12:00:00Z", "pr_poll_seconds": 120 } } }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "ticker", "slot": "coordinator.section", "project": "demo", "width": 38, "height": 4 } },
+    { "name": "view.closed", "project": "demo",
+      "data": { "view": "ticker", "slot": "coordinator.section", "project": "demo", "width": 38, "height": 4 } },
+    { "name": "ticker.changed", "project": "demo",
+      "data": { "project": "demo", "ticker": { "pr_checked": "2026-10-13T12:02:00Z", "pr_poll_seconds": 120 } } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set", "params": { "view": "ticker", "options": { "project": "demo", "height": 2 } } },
+      { "method": "ui.view.set", "params": { "view": "ticker", "options": { "project": "demo" }, "widget": null } }
+    ]
+  }
+}

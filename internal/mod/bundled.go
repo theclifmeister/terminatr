@@ -18,8 +18,9 @@ import (
 // ones as "built in": the built-in theme, the three icon sets, the
 // default keymap, the sidebar's default layout, the coordinator's and
 // the threads' policy, and task templates; and code mods, the sidebar's
-// PR/CI column (pr-ci-column), the popup's Memory tab (memory-tab) and
-// its Tasks tab (tasks-tab), precompiled by go generate from
+// PR/CI column (pr-ci-column), the popup's Memory tab (memory-tab), its
+// Tasks tab (tasks-tab) and the ticker's section (ticker), precompiled
+// by go generate from
 // examples/mods (package bundlegen). tm draws its defaults from
 // these files, so each default is a mod anyone can copy and change, and
 // the loaders get their first users. They load from the binary, never
@@ -30,7 +31,7 @@ import (
 // The defaults tm can't do without (the look, the keys, the layout and
 // the policy) can't be turned off: another mod replaces them (a pick in
 // General settings, or an enabled keymap or policy mod). The templates,
-// the PR/CI column and the popup's tabs can.
+// the PR/CI column, the popup's tabs and the ticker can.
 
 //go:generate go run ./bundlegen/cmd
 //go:embed all:bundled
@@ -52,6 +53,10 @@ const (
 	// BundledTasks is the project popup's Tasks tab, a code mod (design
 	// §12 Phase 2); its source is examples/mods/tasks-tab.
 	BundledTasks = "tasks-tab"
+	// BundledTicker is the ticker's section beside the coordinator (or in
+	// the sidebar's band, by its place setting), a code mod (sidebar
+	// sections design §8); its source is examples/mods/ticker.
+	BundledTicker = "ticker"
 )
 
 // TasksView is the Tasks tab mod's project tab: the popup draws it as
@@ -142,12 +147,11 @@ func Bundled(id string, t config.Mod) Mod {
 		}
 	}
 	// It is part of tm: it runs with what it asks for, as tm does,
-	// without a consent screen, and with its settings' defaults.
+	// without a consent screen. Its settings are an installed mod's:
+	// [mods.<id>.settings] over the defaults, so a change in the Mods tab
+	// changes its spec, and the server starts its host again with them.
 	m.Grants = man.Permissions.Requested()
-	m.Settings = map[string]any{}
-	for _, k := range sortedKeys(man.Settings) {
-		m.Settings[k], _ = man.Settings[k].Check(man.Settings[k].Default)
-	}
+	m.Settings, m.BadSettings = settingsOf(id, man, t.Settings)
 	m.State = Enabled
 	if t.EnabledSet && !t.Enabled && !m.Required {
 		m.State = Disabled

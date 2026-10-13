@@ -1,0 +1,33 @@
+{
+  "name": "place both: both views show; ticker.changed redraws them, the PR host failing in red with a badge",
+  "settings": { "place": "both" },
+  "answers": [
+    { "method": "project.get", "params": { "slug": "demo" },
+      "result": { "project": "demo", "threads": [], "ticker": { "pr_checked": "2026-10-13T12:00:00Z", "pr_poll_seconds": 0 } } }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "ticker", "slot": "coordinator.section", "project": "demo", "width": 38, "height": 4 } },
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "band", "slot": "sidebar.section", "project": "demo", "width": 30, "height": 4 } },
+    { "name": "ticker.changed", "project": "demo",
+      "data": { "project": "demo", "ticker": { "pr_checked": "2026-10-13T12:06:00Z", "pr_poll_seconds": 0, "gh_failing": true } } },
+    { "name": "ticker.changed", "project": "other",
+      "data": { "project": "other", "ticker": { "pr_checked": "2026-10-13T12:06:00Z", "pr_poll_seconds": 0 } } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set", "params": { "view": "ticker", "options": { "project": "demo", "height": 2 },
+          "widget": { "kind": "kv", "pairs": [
+            { "key": "PRs", "value": [{ "ago": "2026-10-13T12:00:00Z", "role": "faint" }] },
+            { "key": "PR host", "value": [{ "text": "ok", "role": "faint" }] } ] } } },
+      { "method": "ui.view.set", "params": { "view": "band", "options": { "project": "demo", "height": 2 } } },
+      { "method": "ui.view.set", "params": { "view": "ticker",
+          "options": { "project": "demo", "height": 2, "badge": [{ "text": "PR host ", "role": "bad" }, { "icon": "blocked", "role": "bad" }] },
+          "widget": { "kind": "kv", "pairs": [
+            { "key": "PRs", "value": [{ "ago": "2026-10-13T12:06:00Z", "role": "faint" }] },
+            { "key": "PR host", "value": [{ "text": "failing", "role": "bad" }] } ] } } },
+      { "method": "ui.view.set", "params": { "view": "band", "options": { "project": "demo", "badge": [{ "text": "PR host ", "role": "bad" }, { "icon": "blocked", "role": "bad" }] } } }
+    ]
+  }
+}

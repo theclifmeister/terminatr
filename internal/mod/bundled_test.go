@@ -19,7 +19,7 @@ import (
 // file of the data mods loads; the defaults tm needs are required, the
 // templates aren't.
 func TestBundled(t *testing.T) {
-	want := []string{"ascii-icons", "default-keymap", "default-layout", "default-policy", "default-templates", "default-theme", "memory-tab", "nerd-icons", "pr-ci-column", "tasks-tab", "unicode-icons"}
+	want := []string{"ascii-icons", "default-keymap", "default-layout", "default-policy", "default-templates", "default-theme", "memory-tab", "nerd-icons", "pr-ci-column", "tasks-tab", "ticker", "unicode-icons"}
 	if got := BundledIDs(); !slices.Equal(got, want) {
 		t.Fatalf("bundled %q", got)
 	}
@@ -232,6 +232,35 @@ func TestBundledCodeMod(t *testing.T) {
 		t.Errorf("columns %+v", c)
 	}
 	if m := Bundled(BundledPRCI, config.Mod{EnabledSet: true}); m.State != Disabled {
+		t.Errorf("turned off: %s", m.State)
+	}
+}
+
+// TestBundledTicker: the ticker is a built-in code mod, on by default
+// with what it asks for granted, with a coordinator.section and a
+// sidebar.section; its place setting comes from [mods.ticker.settings]
+// like an installed mod's (a bad value keeps the default and says so);
+// it can be turned off.
+func TestBundledTicker(t *testing.T) {
+	m := Bundled(BundledTicker, config.Mod{})
+	if m.State != Enabled || !m.Builtin || m.Required || m.Manifest == nil || !m.Manifest.IsCode() ||
+		!slices.Equal(m.Grants, []string{PermProjectRead, PermViews}) {
+		t.Fatalf("ticker: %+v", m)
+	}
+	if v := m.Manifest.Provides.Views; len(v) != 2 || v[0].ID != "ticker" || v[0].Slot != SlotCoordinatorSection ||
+		v[1].ID != "band" || v[1].Slot != SlotSidebarSection {
+		t.Errorf("views %+v", v)
+	}
+	if m.Settings["place"] != "right" || len(m.BadSettings) > 0 {
+		t.Errorf("default settings %v %v", m.Settings, m.BadSettings)
+	}
+	if m := Bundled(BundledTicker, config.Mod{Settings: map[string]any{"place": "both"}}); m.Settings["place"] != "both" {
+		t.Errorf("place both: %v", m.Settings)
+	}
+	if m := Bundled(BundledTicker, config.Mod{Settings: map[string]any{"place": "left"}}); m.Settings["place"] != "right" || len(m.BadSettings) != 1 {
+		t.Errorf("place left: %v %v", m.Settings, m.BadSettings)
+	}
+	if m := Bundled(BundledTicker, config.Mod{EnabledSet: true}); m.State != Disabled {
 		t.Errorf("turned off: %s", m.State)
 	}
 }
