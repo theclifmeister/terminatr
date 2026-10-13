@@ -162,9 +162,9 @@ type View struct {
 	// Description is a line about the view (mod API 1.7), shown on the
 	// sidebar's details line for a sidebar section.
 	Description string `toml:"description"`
-	// Opens is a sidebar section's companion view (mod API 1.7): one of
-	// the same mod's views in a project.tab, dashboard.card or full,
-	// which enter on the section's header asks the mod to open (ui.click).
+	// Opens is a section's companion view (mod API 1.7): one of the same
+	// mod's views in a project.tab, dashboard.card or full, which enter
+	// on the section's header asks the mod to open (ui.click).
 	Opens string `toml:"opens"`
 }
 
@@ -317,13 +317,18 @@ func IsSection(slot string) bool {
 // IsSidebar says whether slot is a sidebar section's.
 func IsSidebar(slot string) bool { return slot == SlotSidebarSection || slot == SlotProjectSection }
 
-// opensSlots are the slots a sidebar section's companion view (opens)
-// may be in: those a view opens into.
+// IsPanel says whether slot is a right-pane section's: the coordinator's
+// info panel, or the details panel (and a thread's info panel).
+func IsPanel(slot string) bool { return slot == SlotDetailsSection || slot == SlotCoordinatorSection }
+
+// opensSlots are the slots a section's companion view (opens) may be
+// in: those a view opens into.
 var opensSlots = []string{SlotProjectTab, SlotDashboardCard, SlotFull}
 
 // Limits of a mod's views.
 const (
-	// SidebarAPIMinor is the mod API minor the sidebar slots need.
+	// SidebarAPIMinor is the mod API minor the sidebar slots need, and
+	// opens, a badge and a height on the right pane's sections.
 	SidebarAPIMinor = 7
 	// MaxSidebarViews is how many sidebar sections one mod declares.
 	MaxSidebarViews = 2
@@ -645,8 +650,10 @@ func (m *Manifest) check(dir string) error {
 		if v.Opens != "" {
 			i := slices.IndexFunc(p.Views, func(o View) bool { return o.ID == v.Opens })
 			switch {
-			case !IsSidebar(v.Slot):
-				bad("%s: opens is a sidebar section's: only a %s or a %s opens a view", at, SlotSidebarSection, SlotProjectSection)
+			case !IsSection(v.Slot):
+				bad("%s: opens is a section's: only a %s, %s, %s or %s opens a view", at, SlotSidebarSection, SlotProjectSection, SlotCoordinatorSection, SlotDetailsSection)
+			case m.Before(SidebarAPIMinor):
+				bad(`%s: opens needs api = "1.%d"`, at, SidebarAPIMinor)
 			case i < 0:
 				bad("%s: opens %q, which isn't one of its views", at, v.Opens)
 			case !slices.Contains(opensSlots, p.Views[i].Slot):

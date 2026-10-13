@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/widget"
 )
 
@@ -150,7 +151,8 @@ func TestShowOpenedClosed(t *testing.T) {
 // badge is a few spans in a few cells.
 func TestHeightsAndBadge(t *testing.T) {
 	s := New()
-	for slot, want := range map[string]int{"sidebar.section": MaxSidebarHeight, "sidebar.project.section": MaxProjectSectionHeight, "dashboard.card": MaxHeight} {
+	for slot, want := range map[string]int{"sidebar.section": MaxSidebarHeight, "sidebar.project.section": MaxProjectSectionHeight, "dashboard.card": MaxHeight,
+		"coordinator.section": MaxSidebarHeight, "details.section": MaxSidebarHeight} {
 		if err := s.Set("m", slot, slot, Tree{Tree: text("x"), Height: 99}, 10); err != nil {
 			t.Fatal(err)
 		}
@@ -160,6 +162,14 @@ func TestHeightsAndBadge(t *testing.T) {
 	}
 	if d, m := Heights("sidebar.project.section"); d != DefaultProjectSectionHeight || m != MaxProjectSectionHeight {
 		t.Errorf("heights %d %d", d, m)
+	}
+	if d, m := Heights("coordinator.section"); d != DefaultSidebarHeight || m != MaxSidebarHeight {
+		t.Errorf("panel heights %d %d", d, m)
+	}
+	old, cur := &mod.Manifest{API: "1.6"}, &mod.Manifest{API: "1.7"}
+	if OldHeight("details.section", old, 0) != MaxSidebarHeight || OldHeight("details.section", old, 3) != 3 ||
+		OldHeight("coordinator.section", cur, 0) != 0 || OldHeight("sidebar.section", old, 0) != 0 || OldHeight("details.section", nil, 0) != 0 {
+		t.Error("old heights")
 	}
 	ok := []widget.Span{{Text: "PR host ", Role: "bad"}, {Icon: "blocked", Role: "bad"}}
 	if err := CheckBadge(ok); err != nil {

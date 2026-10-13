@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -286,6 +287,62 @@ func TestModSections(t *testing.T) {
 	}
 }
 
+// TestModPanelSections: the right pane's sections take a badge, a
+// height capped at 12 and 4 by default, from mod API 1.7; a section of
+// an older mod that asks no height gets 12, as it did before.
+func TestModPanelSections(t *testing.T) {
+	for _, api := range []string{"1.7", "1.6"} {
+		t.Run(api, func(t *testing.T) {
+			man := strings.Replace(`id = "panel"
+name = "Panel"
+version = "0.1.0"
+api = "API"
+[provides]
+main = "main.js"
+views = [
+  { id = "glance", title = "Glance", slot = "coordinator.section" },
+  { id = "checks", title = "Checks", slot = "details.section" },
+]
+[permissions]
+views = true
+`, "API", api, 1)
+			s := manifestServer(t, man, `"views"`)
+			sub := s.SubscribeMod("panel", []string{"views"}, nil)
+			next(t, sub) // mod.ready
+			call := func(params any) error {
+				raw, _ := json.Marshal(params)
+				_, err := s.CallMod(context.Background(), "panel", "ui.view.set", raw)
+				return err
+			}
+			tree := map[string]any{"kind": "text", "text": "2 ☒"}
+			badge := []any{map[string]any{"text": "1 ", "role": "bad"}, map[string]any{"icon": "blocked", "role": "bad"}}
+			for _, p := range []map[string]any{
+				{"view": "glance", "widget": tree, "options": map[string]any{"project": "demo", "height": 99, "badge": badge}},
+				{"view": "glance", "widget": tree},
+				{"view": "checks", "widget": tree, "options": map[string]any{"project": "demo", "thread": "t-0003", "height": 3, "badge": badge}},
+			} {
+				if err := call(p); err != nil {
+					t.Fatal(err)
+				}
+			}
+			old := 0
+			if api == "1.6" {
+				old = modview.MaxSidebarHeight
+			}
+			g, c := s.modViewStore().Trees("panel", "glance"), s.modViewStore().Trees("panel", "checks")
+			if len(g) != 2 || g[0].Height != modview.MaxSidebarHeight || len(g[0].Badge) != 2 || g[1].Height != old {
+				t.Fatalf("glance %+v", g)
+			}
+			if len(c) != 1 || c[0].Height != 3 || len(c[0].Badge) != 2 {
+				t.Fatalf("checks %+v", c)
+			}
+			if d, m := modview.Heights("details.section"); d != 4 || m != 12 {
+				t.Fatalf("heights %d %d", d, m)
+			}
+		})
+	}
+}
+
 const sidebarManifest = `id = "panel"
 name = "Panel"
 version = "0.1.0"
@@ -327,7 +384,7 @@ func TestModSidebarSections(t *testing.T) {
 		{"view": "ticker", "options": map[string]any{"project": "demo", "count": 1}},
 		{"view": "ci", "options": map[string]any{"project": "demo", "task": "T12"}},
 		{"view": "ci", "options": map[string]any{"project": "demo", "thread": "t-0003"}},
-		{"view": "prs", "options": map[string]any{"project": "demo", "badge": badge}},                           // not a sidebar section
+		{"view": "prs", "options": map[string]any{"project": "demo", "badge": badge}},                           // not a section
 		{"view": "ticker", "options": map[string]any{"badge": []any{map[string]any{"text": "thirteen cells"}}}}, // too wide
 		{"view": "ticker", "options": map[string]any{"badge": []any{map[string]any{"text": "a"}, map[string]any{"text": "b"}, // too many
 			map[string]any{"text": "c"}, map[string]any{"text": "d"}, map[string]any{"text": "e"}}}},

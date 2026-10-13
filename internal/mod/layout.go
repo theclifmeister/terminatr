@@ -22,7 +22,8 @@ import (
 // makes sidebar a table and adds the others:
 //
 //	[sidebar]    columns, side, width, mode; sections, project_sections (1.7)
-//	[details]    place, size
+//	[details]    place, size; sections (1.7)
+//	[coordinator] sections (1.7)
 //	[header]     style
 //	[footer]     style
 //	[status_bar] style
@@ -32,17 +33,27 @@ import (
 // LayoutAPIMinor is the mod API minor a v2 layout needs.
 const LayoutAPIMinor = 5
 
-// SectionsAPIMinor is the mod API minor sidebar.sections and
-// sidebar.project_sections need, as the sidebar slots do.
+// SectionsAPIMinor is the mod API minor sidebar.sections,
+// sidebar.project_sections, coordinator.sections and details.sections
+// need, as the sidebar slots do.
 const SectionsAPIMinor = SidebarAPIMinor
 
 // SectionTree is the reserved id in sidebar.sections that marks where the
 // tree sits: the band sections listed before it go above the tree.
 const SectionTree = "tree"
 
-// MaxLayoutSections bounds each of sidebar.sections and
-// sidebar.project_sections.
+// MaxLayoutSections bounds each list of sections.
 const MaxLayoutSections = 32
+
+// The right pane's blocks, in core's order: the reserved ids in
+// coordinator.sections (the coordinator's info panel) and in
+// details.sections (the details panel, and a thread's info panel, whose
+// one block is the rest of the panel). Mods' sections are placed among
+// them; they never reorder them.
+var (
+	CoordinatorBlocks = []string{"needs", "inbox", "threads", "deck"}
+	DetailsBlocks     = []string{"core"}
+)
 
 // Layout is a layout mod's file. An empty string, a zero Size or a nil
 // list is a key the file doesn't set.
@@ -67,6 +78,11 @@ type Layout struct {
 	// tree. ProjectSections is sidebar.project_sections, the order of the
 	// sections under each project. Both need mod API 1.7.
 	SideSections, ProjectSections []string
+	// CoordSections is coordinator.sections and DetSections
+	// details.sections: the right pane's mods' sections among core's
+	// blocks (CoordinatorBlocks, DetailsBlocks; PanelSections places
+	// them). Both need mod API 1.7.
+	CoordSections, DetSections []string
 	// V2 is set when the file has anything but the v1 array: it needs mod
 	// API 1.5.
 	V2 bool
@@ -99,7 +115,8 @@ var LayoutSections = []string{"needs", "project", "other", "cards"}
 // checked (and the API check names the first).
 var layoutTables = []layoutTable{
 	{"sidebar", []string{"columns", "side", "width", "mode", "sections", "project_sections"}},
-	{"details", []string{"place", "size"}},
+	{"details", []string{"place", "size", "sections"}},
+	{"coordinator", []string{"sections"}},
 	{"header", []string{"style"}},
 	{"footer", []string{"style"}},
 	{"status_bar", []string{"style"}},
@@ -165,8 +182,8 @@ func ParseLayout(data []byte) (Layout, error) {
 					first += " " + k
 				}
 				p.key(t.name+"."+k, v)
-				if t.name == "sidebar" && (k == "sections" || k == "project_sections") && l.v17Key == "" {
-					l.v17Key = "[sidebar] " + k
+				if (k == "sections" && t.name != "dashboard" || k == "project_sections") && l.v17Key == "" {
+					l.v17Key = "[" + t.name + "] " + k
 				}
 			}
 		}
@@ -271,6 +288,10 @@ func (p *layoutParser) key(name string, v any) {
 		l.SideSections = p.sideSections(name, v, true)
 	case "sidebar.project_sections":
 		l.ProjectSections = p.sideSections(name, v, false)
+	case "coordinator.sections":
+		l.CoordSections = p.panelSections(name, v, CoordinatorBlocks)
+	case "details.sections":
+		l.DetSections = p.panelSections(name, v, DetailsBlocks)
 	default:
 		s := p.enum(name, v)
 		switch name {
@@ -467,6 +488,109 @@ func SplitSections(order []string) (above, below []string) {
 		return nil, order
 	}
 	return order[:i], order[i+1:]
+}
+
+// panelSections checks coordinator.sections or details.sections: mods'
+// section ids, "<mod>.<view>", and core's blocks, each once, the blocks
+// in core's order, at most MaxLayoutSections. As in sidebar.sections, a
+// section the console doesn't have is skipped there.
+func (p *layoutParser) panelSections(key string, v any, blocks []string) []string {
+	arr, ok := v.([]any)
+	if !ok {
+		p.fail(`%s: a list of sections and core's blocks, ["%s", "<mod>.<view>", …]`, key, blocks[0])
+		return nil
+	}
+	if len(arr) > MaxLayoutSections {
+		p.fail("%s: %d sections, at most %d", key, len(arr), MaxLayoutSections)
+	}
+	out := make([]string, 0, len(arr))
+	seen := map[string]bool{}
+	last := "" // the block listed last, and its place in core's order
+	at := -1
+	for _, e := range arr {
+		s, ok := e.(string)
+		block := slices.Index(blocks, s)
+		switch {
+		case !ok:
+			p.fail("%s: sections are strings", key)
+			return nil
+		case seen[s] && block >= 0:
+			p.fail("%s: %q may appear once", key, s)
+		case seen[s]:
+			p.fail("%s: %s is listed twice", key, s)
+		case block >= 0 && block < at:
+			p.fail("%s: %q before %q: core's blocks keep their order (%s)", key, last, s, strings.Join(blocks, ", "))
+		case block < 0 && !view.IsModColumn(s):
+			p.fail("%s: no section %q (core's blocks: %s; a mod's: <mod>.<view>)", key, s, strings.Join(blocks, ", "))
+		default:
+			out = append(out, s)
+			if block >= 0 {
+				last, at = s, block
+			}
+		}
+		seen[s] = true
+	}
+	return out
+}
+
+// PanelPlace is where one of the right pane's sections goes: just above
+// core's block Before, or at the bottom of the panel for "".
+type PanelPlace struct {
+	ID     string // "<mod>.<view>"
+	Before string
+}
+
+// PanelSections places the right pane's sections ids ("<mod>.<view>", in
+// mod order) by a layout's order (coordinator.sections or
+// details.sections) among core's blocks (CoordinatorBlocks,
+// DetailsBlocks), in the order they are drawn:
+//
+//   - one listed after a block goes after it, just above core's next
+//     block, whether the list names it or not (an empty block keeps its
+//     place), or at the bottom after the last;
+//   - one listed before any block goes just above the first block listed
+//     after it;
+//   - with no block listed, all go at the bottom, in the list's order;
+//   - those the list doesn't name go at the bottom after the others, in
+//     mod order.
+//
+// An id no section has is skipped.
+func PanelSections(order, blocks, ids []string) []PanelPlace {
+	var out []PanelPlace
+	var waiting []string // listed before any block
+	after := ""          // the block before, "" before the first
+	used := map[string]bool{}
+	place := func(id, before string) {
+		if !used[id] && slices.Contains(ids, id) {
+			used[id] = true
+			out = append(out, PanelPlace{ID: id, Before: before})
+		}
+	}
+	for _, id := range order {
+		if i := slices.Index(blocks, id); i >= 0 {
+			for _, w := range waiting {
+				place(w, id)
+			}
+			waiting, after = nil, id
+			continue
+		}
+		if after == "" {
+			waiting = append(waiting, id)
+			continue
+		}
+		next := ""
+		if i := slices.Index(blocks, after); i+1 < len(blocks) {
+			next = blocks[i+1]
+		}
+		place(id, next)
+	}
+	for _, id := range waiting {
+		place(id, "")
+	}
+	for _, id := range ids {
+		place(id, "")
+	}
+	return out
 }
 
 // show is a value as a layout file writes it, for an error.

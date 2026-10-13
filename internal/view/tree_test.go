@@ -49,13 +49,15 @@ func TestTreeFolds(t *testing.T) {
 // project.
 func TestSectionFolds(t *testing.T) {
 	for id, ok := range map[string]bool{"ticker.ticker": true, "ci-status.prs@terminatr": true, "a.b@x-1": true,
+		"panel:ticker.ticker": true, "panel:a.b@x": false, "panel:a": false, "panel:": false, "Panel:a.b": false, "x:a.b": false,
 		"": false, "ticker": false, "Ticker.t": false, "a.b@": false, "a.b@-x": false, "a.b.c": false, "a.b@x@y": false} {
 		if ValidSection(id) != ok {
 			t.Errorf("ValidSection(%q) = %v", id, !ok)
 		}
 	}
 	var a Tree
-	if !a.FoldSections([]string{"m.v", "bad", "m.p@x"}, true) || !a.IsSectionFolded("m.v") || a.IsSectionFolded("bad") {
+	if !a.FoldSections([]string{"m.v", "bad", "m.p@x", "panel:m.p"}, true) || !a.IsSectionFolded("m.v") || a.IsSectionFolded("bad") ||
+		!a.IsSectionFolded("panel:m.p") {
 		t.Fatalf("fold: %+v", a)
 	}
 	if a.FoldSections([]string{"m.v"}, true) {
@@ -65,7 +67,8 @@ func TestSectionFolds(t *testing.T) {
 	if !b.FoldSections([]string{"m.v"}, false) || !a.IsSectionFolded("m.v") || b.IsSectionFolded("m.v") {
 		t.Fatalf("a copy shares its list: %+v %+v", a, b)
 	}
-	if !b.Rename("x", "y") || !b.IsSectionFolded("m.p@y") || b.IsSectionFolded("m.p@x") || !a.IsSectionFolded("m.p@x") {
+	if !b.Rename("x", "y") || !b.IsSectionFolded("m.p@y") || b.IsSectionFolded("m.p@x") || !a.IsSectionFolded("m.p@x") ||
+		!b.IsSectionFolded("panel:m.p") {
 		t.Fatalf("rename: %+v %+v", a, b)
 	}
 	var c Tree

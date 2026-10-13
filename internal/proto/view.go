@@ -32,7 +32,7 @@ const (
 	// divider open (since protocol 11). The view keeps its section folds
 	// (view.Tree.SectionsFolded): only view.sections changes those.
 	MethodViewTree = "view.tree"
-	// MethodViewSections folds (On) or unfolds the mods' sidebar sections
+	// MethodViewSections folds (On) or unfolds the mods' sections
 	// Sections, by section id (view.ValidSection), at most
 	// MaxViewSections a call (since protocol 15).
 	MethodViewSections = "view.sections"

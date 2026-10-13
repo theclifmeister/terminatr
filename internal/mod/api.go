@@ -46,6 +46,13 @@ func checkAPI(m *Manifest, major, minor int, tm string) error {
 	return nil
 }
 
+// Before says whether m was written for a mod API 1.x older than
+// 1.minor; false when its api doesn't read.
+func (m *Manifest) Before(minor int) bool {
+	maj, min, ok := splitAPI(m.API)
+	return ok && maj == 1 && min < minor
+}
+
 // splitAPI reads "MAJOR.MINOR".
 func splitAPI(s string) (major, minor int, ok bool) {
 	a, b, found := strings.Cut(s, ".")
