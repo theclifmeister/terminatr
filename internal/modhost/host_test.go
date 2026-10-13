@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -336,7 +338,7 @@ func TestTimers(t *testing.T) {
 	id := s.request(modproto.MethodStats, nil)
 	var st modproto.Stats
 	_ = json.Unmarshal(s.reply(id).Result, &st)
-	if st.Timers != 0 || st.Pending != 0 || st.HeapInuse == 0 {
+	if st.Timers != 0 || st.Pending != 0 || st.HeapInuse == 0 || st.MaxProcs == 0 || st.GCPercent == 0 || st.MemoryLimit == 0 {
 		t.Fatalf("stats %+v", st)
 	}
 }
@@ -522,5 +524,35 @@ func TestNewerProtocolIsRefused(t *testing.T) {
 func TestCompileErrorExits1(t *testing.T) {
 	if c := Run(Options{Name: "x.js", Script: "function (", In: strings.NewReader(""), Out: io.Discard}); c != modproto.ExitLoad {
 		t.Fatalf("exit %d", c)
+	}
+}
+
+// TestTune checks Tune sets the host's runtime settings and leaves each
+// one the environment sets alone (T360).
+func TestTune(t *testing.T) {
+	procs, gc, limit := runtimeSettings()
+	t.Cleanup(func() {
+		runtime.GOMAXPROCS(procs)
+		debug.SetGCPercent(gc)
+		debug.SetMemoryLimit(limit)
+	})
+	runtime.GOMAXPROCS(7)
+	debug.SetGCPercent(90)
+	debug.SetMemoryLimit(1 << 30)
+	Tune(func(k string) string {
+		if k == "GOGC" {
+			return "90"
+		}
+		return ""
+	})
+	if p, g, l := runtimeSettings(); p != MaxProcs || g != 90 || l != MemoryLimit {
+		t.Errorf("after Tune with GOGC set: GOMAXPROCS %d, GC %d%%, limit %d", p, g, l)
+	}
+	runtime.GOMAXPROCS(7)
+	debug.SetGCPercent(90)
+	debug.SetMemoryLimit(1 << 30)
+	Tune(func(k string) string { return map[string]string{"GOMAXPROCS": "7", "GOMEMLIMIT": "1GiB"}[k] })
+	if p, g, l := runtimeSettings(); p != 7 || g != GCPercent || l != 1<<30 {
+		t.Errorf("after Tune with GOMAXPROCS and GOMEMLIMIT set: GOMAXPROCS %d, GC %d%%, limit %d", p, g, l)
 	}
 }

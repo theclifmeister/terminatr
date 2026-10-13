@@ -205,9 +205,11 @@ func (h *Host) request(m *modproto.Message) {
 	case modproto.MethodStats:
 		var ms runtime.MemStats
 		runtime.ReadMemStats(&ms)
+		procs, gc, limit := runtimeSettings()
 		_ = h.conn.Reply(id, modproto.Stats{
 			HeapInuse: ms.HeapInuse, Sys: ms.Sys, Goroutines: runtime.NumGoroutine(),
 			Timers: len(h.timers), Pending: len(h.pending),
+			MaxProcs: procs, GCPercent: gc, MemoryLimit: limit,
 		})
 	default: // a code host method (read checked it)
 		if !h.ready {
