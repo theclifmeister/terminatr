@@ -139,14 +139,31 @@ func Server(d Deps) ([]Check, Live) {
 	}
 	var list proto.SessionListResult
 	if err := c.CallWithin(callTimeout, proto.MethodSessionList, nil, &list); err == nil {
-		live.Sessions = map[string]bool{}
-		for _, s := range list.Sessions {
-			live.Sessions[s.ID] = true
-		}
 		out = append(out, queueChecks(list.Sessions, time.Now())...)
-		out = append(out, runtimeDirs(p, live)...)
+		if live.Sessions = allSessions(list, st.Sessions); live.Sessions != nil {
+			out = append(out, runtimeDirs(p, live)...)
+		} else {
+			out = append(out, Check{Group: g, Name: "runtime dirs", Status: OK,
+				Detail: "not checked: from a session tm sees only its project's sessions, not every session of the server; run tm doctor in a terminal to check them"})
+		}
 	}
 	return out, live
+}
+
+// allSessions are the ids of every session of the server, from its
+// session.list answer and server.status's count; nil when the list holds
+// only the sessions the caller sees (a session's connection, which an
+// older server doesn't flag but lists fewer than it counts), so no
+// runtime dir is taken for a leftover of another project's session.
+func allSessions(list proto.SessionListResult, count int) map[string]bool {
+	if list.Scoped || len(list.Sessions) < count {
+		return nil
+	}
+	m := map[string]bool{}
+	for _, s := range list.Sessions {
+		m[s.ID] = true
+	}
+	return m
 }
 
 // queueChecks warns about sessions whose queued prompts are held while
@@ -209,7 +226,8 @@ func keychainCheck(d Deps, ks proto.KeychainStatus, err error) []Check {
 }
 
 // runtimeDirs finds session runtime dirs (<run dir>/s/<id>) of sessions
-// that no longer exist. Only called when the live session set is known.
+// that no longer exist. Only called when every live session is known
+// (allSessions), never from a session's scoped view.
 func runtimeDirs(p server.Paths, live Live) []Check {
 	root := filepath.Join(p.RunDir, "s")
 	entries, err := os.ReadDir(root)
@@ -259,7 +277,8 @@ func serverCodeHost(p server.Paths) *proto.CodeHostStatus {
 	return &ch
 }
 
-// sessionsNow asks the server for its sessions; nil if it can't.
+// sessionsNow asks the server for its sessions (allSessions); nil if it
+// can't tell.
 func sessionsNow(p server.Paths) map[string]bool {
 	c, err := server.Dial(p, proto.KindControl)
 	if err != nil {
@@ -269,15 +288,15 @@ func sessionsNow(p server.Paths) map[string]bool {
 		return nil
 	}
 	defer c.Close()
+	var st proto.ServerStatus
+	if err := c.CallWithin(callTimeout, proto.MethodServerStatus, nil, &st); err != nil {
+		return nil
+	}
 	var list proto.SessionListResult
 	if err := c.CallWithin(callTimeout, proto.MethodSessionList, nil, &list); err != nil {
 		return nil
 	}
-	m := map[string]bool{}
-	for _, s := range list.Sessions {
-		m[s.ID] = true
-	}
-	return m
+	return allSessions(list, st.Sessions)
 }
 
 func readPID(path string) int {

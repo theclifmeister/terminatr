@@ -112,6 +112,9 @@ func scopeProbe(sock, other string) int {
 	for _, in := range list.Sessions {
 		listed += " " + in.ID
 	}
+	if list.Scoped {
+		listed += " scoped"
+	}
 	fmt.Printf("probe own=%s other=%s hook=%s wait=%s list=%s done\n",
 		refused(c.Call(proto.MethodSessionRead, proto.SessionReadParams{ID: own}, nil)),
 		refused(c.Call(proto.MethodSessionRead, proto.SessionReadParams{ID: other}, nil)),
@@ -140,7 +143,7 @@ func TestScopeInSession(t *testing.T) {
 	}
 	call(t, c, proto.MethodSessionKeys, proto.SessionKeysParams{ID: ids[0],
 		Data: fmt.Sprintf("'%s' scope-probe '%s' %s\r", os.Args[0], p.Socket, ids[1])}, nil)
-	want := "probe own=ok other=refused hook=refused wait=refused list=ok " + ids[0] + " done"
+	want := "probe own=ok other=refused hook=refused wait=refused list=ok " + ids[0] + " scoped done"
 	eventually(t, "the probe", func() bool {
 		var rr proto.SessionReadResult
 		call(t, c, proto.MethodSessionRead, proto.SessionReadParams{ID: ids[0]}, &rr)
@@ -149,6 +152,11 @@ func TestScopeInSession(t *testing.T) {
 		}
 		return strings.Contains(rr.Text, want)
 	})
+	var all proto.SessionListResult
+	call(t, c, proto.MethodSessionList, nil, &all)
+	if all.Scoped || len(all.Sessions) != 2 {
+		t.Errorf("session.list on the human socket: %d sessions, scoped %v", len(all.Sessions), all.Scoped)
+	}
 	srv, err := dialAt(p.Socket, proto.KindControl, proto.Protocol)
 	if err != nil {
 		t.Fatal(err)

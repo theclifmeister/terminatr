@@ -376,6 +376,9 @@ type SessionListResult struct {
 	// Mods are the mods' columns, cells and status segments (since
 	// protocol 13); nil when no mod publishes any.
 	Mods *ModCells `json:"mods,omitempty"`
+	// Scoped is set when the list holds only the sessions the caller
+	// sees (a session's connection), not every session of the server.
+	Scoped bool `json:"scoped,omitempty"`
 }
 
 // SessionIDParams name one session.
