@@ -23,8 +23,10 @@ import (
 // 13: mods' cells (ModCells on session.list, Cells on SessionInfo and
 // ProjectWatch), added fields only. 14: the sidebar's side, share and
 // hidden (view.Sidebar), on the view and view.sidebar; the status bar's
-// style (view.status, the view's StatusCompact).
-const Protocol = 14
+// style (view.status, the view's StatusCompact). 15: the mods' sidebar
+// sections' folds (view.sections, view.Tree's SectionsFolded), added
+// fields and one method only.
+const Protocol = 15
 
 // Kind is what a connection is for.
 type Kind string

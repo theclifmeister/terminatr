@@ -2,6 +2,7 @@ package tui
 
 import (
 	"io"
+	"path/filepath"
 	"log"
 	"slices"
 	"strings"
@@ -367,5 +368,36 @@ func TestSidebarTooltipIconSets(t *testing.T) {
 		if got := sideTip(m.tree(), m.sideW(), m.h, end-1, 5); got != "needs you: it waits on you" {
 			t.Errorf("%s, the glyph's second cell: %q", set, got)
 		}
+	}
+}
+
+// TestAttachFoldSections: the attach screen folds sections here at once,
+// in the view and in ui.json; on a server of protocol 14 it keeps them as
+// its own and says nothing.
+func TestAttachFoldSections(t *testing.T) {
+	resetConsole()
+	t.Cleanup(resetConsole)
+	c, err := newClient(server.Paths{}, log.New(io.Discard, "", 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.enc.Close()
+	ui := filepath.Join(t.TempDir(), "ui.json")
+	c.side = &sidebar{uiFile: ui}
+	c.v = view.View{Name: "v", Seq: 1}
+	c.vc = &ViewConn{v: c.v, up: true, watch: map[chan struct{}]bool{},
+		serve: func(method string, _ proto.ViewParams) (view.View, error) {
+			return view.View{}, proto.Errorf(proto.ErrUnknownMethod, "unknown method %q", method)
+		}}
+	c.foldSections([]string{"ticker.ticker"}, true)
+	if v := c.vc.View(); !c.v.IsSectionFolded("ticker.ticker") || !v.IsSectionFolded("ticker.ticker") || c.flash != "" {
+		t.Fatalf("folds %+v, view %+v, flash %q", c.v.Tree, v.Tree, c.flash)
+	}
+	if l := LoadLayout(ui).Tree; !l.IsSectionFolded("ticker.ticker") {
+		t.Fatalf("ui.json: %+v", l)
+	}
+	c.foldSections([]string{"ticker.ticker"}, false)
+	if v := c.vc.View(); c.v.IsSectionFolded("ticker.ticker") || v.IsSectionFolded("ticker.ticker") || LoadLayout(ui).Tree.SectionsFolded != nil {
+		t.Fatalf("unfold: folds %+v, view %+v", c.v.Tree, v.Tree)
 	}
 }
