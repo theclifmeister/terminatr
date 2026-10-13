@@ -8,8 +8,9 @@ import (
 	"time"
 )
 
-// opensMod is a code mod with a band section (sidebar.section) that
-// counts the view.opened it hears per project, and says so.
+// opensMod is a code mod with two band sections (sidebar.section): one
+// counts the view.opened it hears per project, and says so; the other
+// opens its full view.
 const opensMod = `id = "opens"
 name = "Opens"
 version = "1.0.0"
@@ -20,6 +21,15 @@ main = "main.js"
 id = "opens"
 title = "Opens"
 slot = "sidebar.section"
+[[provides.views]]
+id = "launch"
+title = "Launch"
+slot = "sidebar.section"
+opens = "board"
+[[provides.views]]
+id = "board"
+title = "Board"
+slot = "full"
 [permissions]
 views = true
 `
@@ -28,7 +38,10 @@ const opensMain = `const n = {};
 $.on("view.opened", async (v) => {
   const k = v.view + "/" + (v.project || "");
   n[k] = (n[k] || 0) + 1;
-  await $.ui.view.set(v.view, { kind: "text", text: "opened " + n[k] + " for " + v.project }, { project: v.project });
+  await $.ui.view.set(v.view, { kind: "text", text: v.view + " opened " + n[k] + " for " + v.project }, { project: v.project });
+});
+$.on("ui.click", async (e) => {
+  if (e.view === "launch") await $.ui.view.open("board");
 });
 `
 
@@ -37,7 +50,7 @@ $.on("view.opened", async (v) => {
 // attached session show it; going from one to the other and back, the
 // mod hears view.opened once, as the console never says it closed. A
 // fold made in one console shows in the other, on the dashboard and
-// attached.
+// attached; attached, a header's companion view opens over the session.
 func TestSmokeSidebarSections(t *testing.T) {
 	env := New(t)
 	env.FakeClaude()
@@ -49,7 +62,7 @@ func TestSmokeSidebarSections(t *testing.T) {
 	env.MustCLI("mod", "install", dir, "--yes")
 	env.MustCLI("mod", "enable", "opens", "--yes")
 
-	once := "opened 1 for " + alpha
+	once := "opens opened 1 for " + alpha
 	band := func(w *Window, what string) {
 		t.Helper()
 		w.WaitUntil(what, agentWait, func(sc string) bool { return strings.Contains(sc, "▾ OPENS") && strings.Contains(sc, once) })
@@ -97,6 +110,13 @@ func TestSmokeSidebarSections(t *testing.T) {
 	}
 	w2.Quit()
 	w2.WaitExit(wait)
+
+	// enter (a click) on a header that opens a view shows it over the
+	// session; esc goes back.
+	w1.ClickText("LAUNCH", 0)
+	w1.WaitFor("board opened 1 for "+alpha, agentWait)
+	w1.Key(keyEsc)
+	w1.WaitUntil("back on the coordinator", wait, func(sc string) bool { return lastLine(sc, alpha+" › coordinator") })
 	w1.Quit()
 	w1.WaitExit(wait)
 }
