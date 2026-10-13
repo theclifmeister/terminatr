@@ -84,7 +84,7 @@ func sectionViews(list []proto.ModView, t panelTarget, o panelOpts) []proto.ModV
 // height, else the slot's default, at most the slot's most.
 func panelHeight(v proto.ModView, t panelTarget) int {
 	def, most := modview.Heights(t.slot)
-	if tr, _ := sectionTree(v, t.project, t.task, t.thr); tr != nil && tr.Height > 0 {
+	if tr := sectionTree(v, t.project, t.task, t.thr); tr != nil && tr.Height > 0 {
 		return min(tr.Height, most)
 	}
 	return def
@@ -119,7 +119,7 @@ func panelSections(list []proto.ModView, t panelTarget, o panelOpts, w int) []pa
 				s.lines = failedLines(v, w)
 			}
 		} else {
-			tr, _ := sectionTree(v, t.project, t.task, t.thr)
+			tr := sectionTree(v, t.project, t.task, t.thr)
 			if tr == nil {
 				continue
 			}

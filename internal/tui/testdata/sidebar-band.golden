@@ -226,7 +226,7 @@ cursor on a header (156×30, sidebar 36)
  this project's PR polls and sync  │
  ← fold · ? help                   │
 
-waiting (156×30, sidebar 36)
+before the mod draws: no section, not even its header (156×30, sidebar 36)
  PROJECTS                      2   │
  ■ alpha              0         ⚑  │
  └─ coordinator         ▲          │
@@ -235,9 +235,9 @@ waiting (156×30, sidebar 36)
     ├─ T4 Write d…  60% ●       ⚑  │
     └─ t-0006 Old…      ·          │
                                    │
- ▾ TICKER ──────────────────── …   │
  ▾ CI STATUS ─────────────── 1 ☒   │
    #412 passes                     │
+                                   │
                                    │
                                    │
                                    │

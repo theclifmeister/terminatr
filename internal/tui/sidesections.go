@@ -23,7 +23,10 @@ import (
 // Its header is a row of the tree's cursor path ("▾ TICKER ──
 // terminatr"): ← and → fold and unfold it, enter opens the view the mod
 // names (opens, by a ui.click) or else folds it. Its body is the mod's
-// tree, read-only: no cursor, no keys. The view keeps the folds
+// tree, read-only: no cursor, no keys. It shows from the mod's first
+// tree: until then, and while the tree is null, nothing shows, not even
+// its header (a view the mod leaves out, as the ticker's place does,
+// never flashes one). The view keeps the folds
 // (view.Tree.SectionsFolded, view.sections). The band takes at most half
 // the sidebar's body, its headers a quarter, and gives way, bodies first
 // and then headers, the bottom section first, so that every row with ⚑,
@@ -46,20 +49,20 @@ const bandMinBody = 12
 type sideSection struct {
 	// id is its fold's id, mod.view, or mod.view@slug under a project
 	// (view.Tree.SectionsFolded).
-	id              string
-	mod, view       string
-	title, name     string
-	desc, opens     string
-	log             string // a failed mod's log
-	builtin         bool
-	project         string // the project it shows for: enter's target
-	above           bool   // in the band above the tree (sidebar.sections)
-	proj            bool   // under its project's threads (sidebar.project.section)
-	of              string // the project of the tree it shows, "" for all
-	badge           []widget.Span
-	lines           []string // the body unfolded, as drawn
-	folded, waiting bool     // the user folded it; the mod drew nothing yet
-	failed          bool
+	id          string
+	mod, view   string
+	title, name string
+	desc, opens string
+	log         string // a failed mod's log
+	builtin     bool
+	project     string // the project it shows for: enter's target
+	above       bool   // in the band above the tree (sidebar.sections)
+	proj        bool   // under its project's threads (sidebar.project.section)
+	of          string // the project of the tree it shows, "" for all
+	badge       []widget.Span
+	lines       []string // the body unfolded, as drawn
+	folded      bool     // the user folded it
+	failed      bool
 }
 
 // want is how many body lines s asks for: none folded.
@@ -195,8 +198,8 @@ func withBand(tree, band []treeRow) []treeRow {
 }
 
 // bandRows are the band's header rows, with their sections: a failed
-// mod's says so, one that drew nothing yet waits, and one whose tree
-// for the project (and for all) is null adds nothing.
+// mod's says so, and one that drew nothing yet, or whose tree for the
+// project (and for all) is null, adds nothing.
 func bandRows(in bandIn) []treeRow {
 	var out []treeRow
 	w := bandWidth(in.w)
@@ -206,15 +209,16 @@ func bandRows(in bandIn) []treeRow {
 			desc: v.Description, opens: v.Opens, log: v.Log, builtin: builtinMod(in.mods, v.Mod), project: in.project,
 			above: i < len(above)}
 		s.folded = in.folds.IsSectionFolded(s.id)
-		switch t, drew := sectionTree(v, in.project, "", ""); {
+		switch t := sectionTree(v, in.project, "", ""); {
 		case v.State == proto.ModViewFailed:
 			s.failed = true
 			s.lines = []string{th().Bad.Render(fit(ic().blocked+" mod failed: "+cmp.Or(v.Err, "its host stopped"), w)) + reset,
 				th().Faint.Render(fit("r in the Mods tab restarts it", w)) + reset}
-		case t == nil && drew:
-			continue // null: nothing to say here
 		case t == nil:
-			s.waiting = true
+			// Nothing drawn yet, or null: nothing to say here. A section
+			// shows from its mod's first tree, so one the mod leaves out
+			// never flashes a header (the ticker's place = "right").
+			continue
 		default:
 			s.of, s.badge = t.Project, t.Badge
 			if !s.folded {
@@ -233,8 +237,8 @@ func bandRows(in bandIn) []treeRow {
 // thread, else its coordinator), none for a folded or an inactive one,
 // nor under the divider. A project the filter took out has no rows, so
 // no sections either. A failed mod's section is the band's (bandViews);
-// one that drew nothing for the project yet waits; one whose tree for
-// it (and for all) is null adds nothing there.
+// one that drew nothing for the project yet, or whose tree for it (and
+// for all) is null, adds nothing there.
 func projRows(tree []treeRow, in bandIn) []treeRow {
 	vs := slices.DeleteFunc(projViews(in), func(v proto.ModView) bool { return v.State == proto.ModViewFailed })
 	if len(vs) == 0 {
@@ -263,11 +267,9 @@ func projRows(tree []treeRow, in bandIn) []treeRow {
 			s := &sideSection{id: v.Mod + "." + v.View + "@" + slug, mod: v.Mod, view: v.View, title: v.Title, name: v.Name,
 				desc: v.Description, opens: v.Opens, log: v.Log, builtin: builtinMod(in.mods, v.Mod), project: slug, proj: true}
 			s.folded = in.folds.IsSectionFolded(s.id)
-			switch t, drew := sectionTree(v, slug, "", ""); {
-			case t == nil && drew:
-				continue
+			switch t := sectionTree(v, slug, "", ""); {
 			case t == nil:
-				s.waiting = true
+				continue // nothing drawn for it yet, or null
 			default:
 				s.of, s.badge = t.Project, t.Badge
 				if !s.folded {
@@ -295,7 +297,7 @@ func projShown(rows []treeRow, in bandIn, on func(slug string) bool) []modview.S
 				continue
 			}
 			h := def
-			if t, _ := sectionTree(v, r.slug, "", ""); t != nil && t.Height > 0 {
+			if t := sectionTree(v, r.slug, "", ""); t != nil && t.Height > 0 {
 				h = min(t.Height, most)
 			}
 			out = append(out, modview.Shown{Mod: v.Mod, View: v.View, Slot: v.Slot, Project: r.slug, Width: projWidth(in.w), Height: h})
@@ -306,29 +308,25 @@ func projShown(rows []treeRow, in bandIn, on func(slug string) bool) []modview.S
 
 // sectionTree is the tree section v shows for project's task or thread
 // (both "": the project's own): the one published for it, else, for the
-// project's own, the one for all projects. It is nil with drew true when
-// the mod published only null ones, nil with drew false while it
-// published none. The band and the right pane's panels look trees up
-// alike.
-func sectionTree(v proto.ModView, project, task, thr string) (t *modview.Tree, drew bool) {
+// project's own, the one for all projects; nil while the mod published
+// none, or only null ones (modview.Store keeps a section's null): then
+// no section shows, not even its header. The band and the right pane's panels look trees
+// up alike.
+func sectionTree(v proto.ModView, project, task, thr string) *modview.Tree {
 	own := task == "" && thr == ""
 	var all *modview.Tree
 	for i := range v.Trees {
 		tr := &v.Trees[i]
 		switch {
+		case tr.Tree == nil:
+			// null: says nothing
 		case tr.For(project, task, thr) && (project != "" || !own):
-			drew = true
-			if tr.Tree != nil {
-				return tr, true
-			}
+			return tr
 		case own && tr.For("", "", ""):
-			drew = true
-			if tr.Tree != nil {
-				all = tr
-			}
+			all = tr
 		}
 	}
-	return all, drew
+	return all
 }
 
 // bandShown are the band's sections as mod.views is told of them, so
@@ -344,7 +342,7 @@ func bandShown(in bandIn) []modview.Shown {
 		}
 		def, most := modview.Heights(mod.SlotSidebarSection)
 		h := def
-		if t, _ := sectionTree(v, in.project, "", ""); t != nil && t.Height > 0 {
+		if t := sectionTree(v, in.project, "", ""); t != nil && t.Height > 0 {
 			h = min(t.Height, most)
 		}
 		out = append(out, modview.Shown{Mod: v.Mod, View: v.View, Slot: v.Slot, Project: in.project, Width: bandWidth(in.w), Height: h})
@@ -719,14 +717,19 @@ func sideLayout(all []treeRow, w, h, foot int) sideLay {
 	for i, j := range tree {
 		trees[i] = lay.rows[j]
 	}
+	keepH := body
 	for _, a := range asks {
 		if a.proj && a.cursor && a.at > 0 {
 			// Without sections the cursor would be on the project's
-			// last row, just above its section.
+			// last row, just above its section. Its header needs a row
+			// of its own, so the rows kept are those of a body one row
+			// shorter: a ⚑ row that gives way for it is counted in the
+			// header's ⚑ N, and the cursor stays on screen.
 			trees[a.at-1].cursor = true
+			keepH = max(body-1, 0)
 		}
 	}
-	cur, keep := bandKeep(trees, body)
+	cur, keep := bandKeep(trees, keepH)
 	lay.fit = fitBand(body, len(trees), cur, keep, asks)
 	section := func(j int) []sideSlot {
 		if !lay.fit.show[j] {
@@ -863,8 +866,8 @@ func sectionHead(r treeRow, cw int, shrunk bool, more int, focused bool) string 
 // the right pane's: "▾ TICKER ───── word", its fold mark, its title, a
 // faint rule and on the right its badge, else unfolded word (the
 // band's project; none in a panel). A folded failed section's badge is
-// a red "▲ failed". A section that drew nothing yet, or gave its body up
-// for room (shrunk, drawn folded), ends in a faint "…"; the last header
+// a red "▲ failed". A section that gave its body up for room (shrunk,
+// drawn folded) ends in a faint "…"; the last header
 // shown says how many didn't fit (+N). pad leads it; end cells at the
 // right stay clear (the sidebar's needs-you column). hl draws it in sel.
 func sectionHeader(s *sideSection, pad string, w, end int, shrunk bool, more int, word string, hl bool, sel lipgloss.Style) string {
@@ -887,7 +890,7 @@ func sectionHeader(s *sideSection, pad string, w, end int, shrunk bool, more int
 	case !s.folded && !shrunk && word != "":
 		right = append(right, cellRun{word, th().Faint})
 	}
-	if s.waiting || shrunk {
+	if shrunk {
 		right = append(right, cellRun{"…", th().Faint})
 	}
 	if more > 0 {
@@ -955,8 +958,6 @@ func sectionDetails(s *sideSection) (string, string) {
 		return l1, "mod failed · its log: " + s.log
 	case s.failed:
 		return l1, "mod failed · r in the Mods tab restarts it"
-	case s.waiting:
-		return l1, "waiting for the mod to draw it"
 	}
 	return l1, s.desc
 }

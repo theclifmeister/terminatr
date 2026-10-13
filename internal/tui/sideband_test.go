@@ -116,7 +116,7 @@ func TestSideBandGolden(t *testing.T) {
 	waiting := bandTestViews()
 	waiting[0].Trees = nil
 	_, m = bandDash(t, 120+sideDefault, 30, waiting)
-	show("waiting", m)
+	show("before the mod draws: no section, not even its header", m)
 
 	got := b.String()
 	path := filepath.Join("testdata", "sidebar-band.golden")
