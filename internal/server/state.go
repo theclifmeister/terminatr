@@ -25,6 +25,13 @@ type State struct {
 	// §3.6, §5.1): not running, kept to resume when the project is
 	// activated.
 	Dormant []SessionRecord `json:"dormant,omitempty"`
+	// Colors (an emu.Colors FrameColors payload, in hex) and Scheme are
+	// the terminal colours and scheme a console last reported, with the
+	// theme's pane scheme: the next server starts with them, so the
+	// sessions it resumes before any console attached get them, and the
+	// agents their theme (T344).
+	Colors string `json:"colors,omitempty"`
+	Scheme uint8  `json:"scheme,omitempty"`
 }
 
 // SessionRecord is one session in sessions.json.
