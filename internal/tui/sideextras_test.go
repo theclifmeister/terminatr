@@ -2,8 +2,8 @@ package tui
 
 import (
 	"io"
-	"path/filepath"
 	"log"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
