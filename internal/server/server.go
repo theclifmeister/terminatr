@@ -146,6 +146,10 @@ type Server struct {
 	// colors are the terminal colours a client last reported; new
 	// sessions start with them.
 	colors emu.Colors
+	// liveThemed are the agents whose live theme (agent.LiveThemer)
+	// this server wrote for a launch: it rewrites them on every theme
+	// or scheme change (themeChangedLocked).
+	liveThemed map[string]bool
 
 	// views are what consoles show (views.go).
 	views *views
@@ -1274,7 +1278,10 @@ loop:
 				scheme := emu.Scheme(payload[0])
 				if err := sess.SetColorScheme(scheme); err == nil {
 					s.mu.Lock()
-					s.scheme = scheme
+					if s.scheme != scheme {
+						s.scheme = scheme
+						s.themeChangedLocked()
+					}
 					s.mu.Unlock()
 				}
 			}
@@ -1282,7 +1289,10 @@ loop:
 			if colors, ok := emu.DecodeColors(payload); ok {
 				if err := sess.SetColors(colors); err == nil {
 					s.mu.Lock()
-					s.colors = colors
+					if s.colors != colors {
+						s.colors = colors
+						s.themeChangedLocked()
+					}
 					s.mu.Unlock()
 				}
 			}

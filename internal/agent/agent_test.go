@@ -147,7 +147,7 @@ func TestClaudeLaunch(t *testing.T) {
 		t.Fatalf("theme %q without a pane palette", *settings.Theme)
 	}
 	// A theme's pane palette colours the 16 ANSI colours: Claude's ANSI
-	// theme for the scheme (T342).
+	// theme for the scheme, when tm's own theme file isn't written (T342).
 	for _, scheme := range []string{"dark", "light"} {
 		pal := spec
 		pal.PaneScheme = scheme
@@ -157,33 +157,60 @@ func TestClaudeLaunch(t *testing.T) {
 		if s := parseSettings(t, l.Files["claude-settings.json"]); s.Theme == nil || *s.Theme != scheme+"-ansi" || !s.Sandbox.Enabled {
 			t.Fatalf("pane scheme %s: theme %v, settings %+v", scheme, s.Theme, s)
 		}
-		if _, ok := l.Files["claude-plugin/themes/tm.json"]; ok {
-			t.Fatal("a plugin theme without the theme's colours")
+	}
+	// With it, whatever the palette: tm's theme in Claude's config folder,
+	// which follows the tm theme live (T345).
+	for _, scheme := range []string{"", "dark"} {
+		live := spec
+		live.PaneScheme, live.LiveTheme = scheme, true
+		if l, err = a.Launch(live); err != nil {
+			t.Fatal(err)
+		}
+		if s := parseSettings(t, l.Files["claude-settings.json"]); s.Theme == nil || *s.Theme != "custom:terminatr" {
+			t.Fatalf("live theme, pane scheme %q: settings select %v", scheme, s.Theme)
 		}
 	}
-	// With the theme's colours: the plugin's theme over Claude's ANSI one,
-	// the roles and the pane's colours in truecolor, none it lacks.
-	themed := spec
-	themed.PaneScheme = "light"
-	themed.Theme = &theme.Agent{Scheme: "light", PaneFg: "#2e3440", PaneBg: "#eceff4",
-		Fg: map[string]string{"head": "", "sel": "", "sel_focus": "", "faint": "#4c566a", "accent": "#5e81ac", "title": "",
-			"bad": "#bf616a", "warn": "", "good": "#a3be8c", "info": "#81a1c1", "plain": ""},
-		Bg: map[string]string{"sel": "#d8dee9"}}
-	if l, err = a.Launch(themed); err != nil {
-		t.Fatal(err)
+	for path := range l.Files {
+		if strings.Contains(path, "themes/") {
+			t.Fatalf("launch writes %s: the theme lives in Claude's config folder", path)
+		}
 	}
-	if s := parseSettings(t, l.Files["claude-settings.json"]); s.Theme == nil || *s.Theme != "custom:terminatr:tm" {
-		t.Fatalf("themed settings select %v", s.Theme)
+	m := ManifestOf(a)
+	if m.Theme.Path != "themes/terminatr.json" {
+		t.Fatalf("theme path %q: the settings select custom:terminatr", m.Theme.Path)
+	}
+	type themeData struct {
+		Theme     *theme.Agent
+		Base      string
+		Overrides map[string]json.RawMessage
 	}
 	var ct struct {
 		Name, Base string
 		Overrides  map[string]string
 	}
-	if err := json.Unmarshal(l.Files["claude-plugin/themes/tm.json"], &ct); err != nil {
-		t.Fatalf("tm.json: %v\n%s", err, l.Files["claude-plugin/themes/tm.json"])
+	// Without a pane palette: the user's own theme, as the server gives it.
+	out, err := m.RenderTheme(themeData{Base: "light-daltonized", Overrides: map[string]json.RawMessage{"claude": json.RawMessage(`"#123456"`)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(out), &ct); err != nil || ct.Name != "terminatr" || ct.Base != "light-daltonized" || len(ct.Overrides) != 1 || ct.Overrides["claude"] != "#123456" {
+		t.Fatalf("user's own theme: %v %+v\n%s", err, ct, out)
+	}
+	// With the theme's colours: over Claude's ANSI theme, the roles and
+	// the pane's colours in truecolor, none it lacks.
+	th := &theme.Agent{Scheme: "light", PaneFg: "#2e3440", PaneBg: "#eceff4",
+		Fg: map[string]string{"head": "", "sel": "", "sel_focus": "", "faint": "#4c566a", "accent": "#5e81ac", "title": "",
+			"bad": "#bf616a", "warn": "", "good": "#a3be8c", "info": "#81a1c1", "plain": ""},
+		Bg: map[string]string{"sel": "#d8dee9"}}
+	if out, err = m.RenderTheme(themeData{Theme: th}); err != nil {
+		t.Fatal(err)
+	}
+	ct.Overrides = nil
+	if err := json.Unmarshal([]byte(out), &ct); err != nil {
+		t.Fatalf("theme: %v\n%s", err, out)
 	}
 	if ct.Base != "light-ansi" || ct.Name != "terminatr" {
-		t.Fatalf("tm.json %+v", ct)
+		t.Fatalf("theme %+v", ct)
 	}
 	for tok, want := range map[string]string{
 		"claude": "#5e81ac", "error": "#bf616a", "success": "#a3be8c", "suggestion": "#81a1c1",

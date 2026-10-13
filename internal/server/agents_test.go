@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"io"
 	"log"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	_ "github.com/theclifmeister/terminatr/internal/agent/claude"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/home"
@@ -185,5 +187,102 @@ func TestLaunchTheme(t *testing.T) {
 	s.shareModRegistry(nil)
 	if a := s.launchTheme("dark"); a != nil {
 		t.Fatalf("nord is off, yet %+v", a)
+	}
+}
+
+// TestThemeChangeReachesClaude: a launch writes Claude's live theme into
+// its config folder and selects it; a console's new colours (another
+// theme's pane palette, a scheme switch, a theme without one) rewrite it
+// for the sessions already running, which Claude reloads; safe mode
+// writes none (T345).
+func TestThemeChangeReachesClaude(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	cfgDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", cfgDir)
+	dir, err := home.ModsDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"mod.toml":   "id = \"nord\"\nname = \"Nord\"\nversion = \"0.1.0\"\napi = \"1.6\"\n[provides]\ntheme = \"theme.toml\"\n",
+		"theme.toml": "[dark]\naccent = { fg = [\"cyan\", \"#88c0d0\"] }\n[dark.pane]\nbg = \"#2e3440\"\n[light]\naccent = { fg = [\"blue\", \"#5e81ac\"] }\n[light.pane]\nbg = \"#eceff4\"\n",
+	}
+	for name, body := range files {
+		p := filepath.Join(dir, "nord", name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfgPath, _ := config.Path()
+	if err := os.WriteFile(cfgPath, []byte("[ui]\ntheme = \"nord\"\n[mods.nord]\nenabled = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reg, err := agent.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	claude, _ := reg.Get("claude")
+	themePath := filepath.Join(cfgDir, "themes", "terminatr.json")
+	read := func() (ct struct {
+		Base      string
+		Overrides map[string]string
+	}) {
+		t.Helper()
+		b, err := os.ReadFile(themePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(b, &ct); err != nil {
+			t.Fatalf("%v\n%s", err, b)
+		}
+		return
+	}
+
+	// Safe mode: none, and the launch doesn't select it.
+	s := &Server{log: log.New(io.Discard, "", 0), agents: reg, noMods: true}
+	if s.writeLiveTheme(claude) {
+		t.Fatal("a live theme in safe mode")
+	}
+	if _, err := os.Stat(themePath); err == nil {
+		t.Fatal("safe mode wrote a theme")
+	}
+	// No console yet: the user's own theme (Claude's default, dark).
+	s.noMods = false
+	if !s.writeLiveTheme(claude) {
+		t.Fatal("no live theme for Claude")
+	}
+	if ct := read(); ct.Base != "dark" || len(ct.Overrides) != 0 {
+		t.Fatalf("before any console: %+v", ct)
+	}
+	// A console draws nord's dark palette: the running Claude gets it.
+	s.mu.Lock()
+	s.colors = emu.Colors{Known: emu.KnownBg | emu.PaneDark}
+	s.themeChangedLocked()
+	s.mu.Unlock()
+	if ct := read(); ct.Base != "dark-ansi" || ct.Overrides["claude"] != "#88c0d0" || ct.Overrides["inverseText"] != "#2e3440" {
+		t.Fatalf("nord dark: %+v", ct)
+	}
+	// The terminal turns light: nord's light palette.
+	s.mu.Lock()
+	s.colors, s.scheme = emu.Colors{Known: emu.KnownBg | emu.PaneLight}, emu.SchemeLight
+	s.themeChangedLocked()
+	s.mu.Unlock()
+	if ct := read(); ct.Base != "light-ansi" || ct.Overrides["claude"] != "#5e81ac" {
+		t.Fatalf("nord light: %+v", ct)
+	}
+	// A theme without a pane palette: the user's own theme again, which
+	// here follows the terminal (auto).
+	if err := os.WriteFile(filepath.Join(cfgDir, "settings.json"), []byte(`{"theme": "auto"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.mu.Lock()
+	s.colors = emu.Colors{Known: emu.KnownBg}
+	s.themeChangedLocked()
+	s.mu.Unlock()
+	if ct := read(); ct.Base != "light" || len(ct.Overrides) != 0 {
+		t.Fatalf("no pane palette: %+v", ct)
 	}
 }

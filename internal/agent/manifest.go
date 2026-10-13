@@ -113,6 +113,12 @@ type Manifest struct {
 	// Guard: the agent's own paths the guard knows (docs/SPEC.md §8.6).
 	Guard Guard `toml:"guard"`
 
+	// Theme is the theme file tm keeps in the agent's own config folder
+	// for a running agent to reload when the tm theme changes (Claude's
+	// <config>/themes, docs/SPEC.md §8.6): the agent's Go code knows the
+	// folder and writes it (a LiveThemer). Empty: none.
+	Theme ManifestFile `toml:"theme"`
+
 	Screen struct {
 		// Resize: "follow" (the default) lets the console typed in size
 		// the pane; "explicit" resizes it only on a window resize or a
@@ -579,6 +585,13 @@ func (m *Manifest) validate() error {
 			errs = append(errs, fmt.Errorf("launch.files %q must be relative, inside the runtime dir", f.Path))
 		}
 	}
+	if f := m.Theme; f.Path != "" || f.Template != "" {
+		if f.Path == "" || f.Template == "" {
+			errs = append(errs, errors.New("theme: path and template go together"))
+		} else if filepath.IsAbs(f.Path) || strings.Contains(f.Path, "..") {
+			errs = append(errs, fmt.Errorf("theme.path %q must be relative, inside the agent's config folder", f.Path))
+		}
+	}
 	return errors.Join(errs...)
 }
 
@@ -996,6 +1009,16 @@ func TOMLString(s string) string {
 	}
 	b.WriteByte('"')
 	return b.String()
+}
+
+// RenderTheme renders [theme]'s template with data (the LiveThemer's
+// own), with the launch templates' functions.
+func (m *Manifest) RenderTheme(data any) (string, error) {
+	s, err := render(m.Theme.Template, data)
+	if err != nil {
+		return "", fmt.Errorf("theme %s: %w", m.Theme.Path, err)
+	}
+	return s, nil
 }
 
 func render(tmpl string, data any) (string, error) {
