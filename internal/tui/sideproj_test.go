@@ -241,9 +241,10 @@ func TestSideProjKeys(t *testing.T) {
 	if !m.folds.IsFolded("beta") || !m.folds.IsSectionFolded("prci.ci@beta") || m.sideSel != "p:beta" {
 		t.Fatalf("z: %+v, cursor %q", m.folds, m.sideSel)
 	}
+	m.folds.FoldSections([]string{"panel:prci.ci"}, true)
 	runAll(m, keyPress(m, "Z"))
-	if len(m.folds.SectionsFolded) != 0 {
-		t.Fatalf("Z left %v", m.folds.SectionsFolded)
+	if !slices.Equal(m.folds.SectionsFolded, []string{"panel:prci.ci"}) {
+		t.Fatalf("Z left %v, want the right pane's fold alone", m.folds.SectionsFolded)
 	}
 }
 

@@ -987,14 +987,15 @@ func sectionIDs(rows []treeRow) []string {
 
 // sectionIDs are the sections st folds or unfolds, the view's folds t
 // being what they are: with everySection those t folds too, at most a
-// view.sections call's.
+// view.sections call's. The right pane's (panel:…) aren't the
+// sidebar's.
 func (st sideStep) sectionIDs(t view.Tree) []string {
 	if !st.everySection {
 		return st.sections
 	}
 	out := slices.Clone(st.sections)
 	for _, id := range t.SectionsFolded {
-		if !slices.Contains(out, id) {
+		if !strings.HasPrefix(id, "panel:") && !slices.Contains(out, id) {
 			out = append(out, id)
 		}
 	}
