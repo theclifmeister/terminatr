@@ -82,6 +82,7 @@ var mouseKeys = []keyHelp{
 	{"state label", "at the right of the project's header on the dashboard (● active — space to deactivate): as space"},
 	{"sidebar", "a row takes the keyboard, its cursor on it, and a project shows its dashboard, its coordinator or a thread attaches; a click on the pane gives the keyboard back. Below the tree, two lines describe the highlighted row (its full title, state, PR and checks) and a key bar lists the keys that work on it"},
 	{"info panel", "beside a thread's pane: its task opens in the Tasks tab, its PR the browser; a click elsewhere gives it the keyboard"},
+	{"mod section", "in the info or details panel: a click on its fold mark folds or unfolds it; on its header or body it opens the view its mod names, else folds or unfolds it"},
 	{"hover", "a glyph in the full sidebar: what it means, at the sidebar's foot"},
 	{"wheel", "moves through a list; scrolls the details panel and long popups"},
 	{"drag", "the divider beside the details panel, the sidebar's border, the info panel's border"},

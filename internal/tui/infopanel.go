@@ -442,10 +442,8 @@ func (c *client) infoLayout() {
 	ip.lay = infoLay(ip.data, max(c.infoW-1, 1), time.Now(), c.infoOpts())
 	ip.lines, ip.hits = ip.lay.lines, ip.lay.hits
 	ip.top = min(ip.top, max(len(ip.lines)-c.infoRows(), 0))
-	if ip.sel != "" && !c.infoSelShows() {
-		ip.sel = ""
-		ip.lay = infoLay(ip.data, max(c.infoW-1, 1), time.Now(), c.infoOpts())
-		ip.lines, ip.hits = ip.lay.lines, ip.lay.hits
+	if ip.sel != "" && !slices.ContainsFunc(ip.lay.secs, func(s *sideSection) bool { return s.id == ip.sel }) {
+		ip.sel = "" // its section is gone
 	}
 }
 
