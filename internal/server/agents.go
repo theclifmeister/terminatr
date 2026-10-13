@@ -18,6 +18,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
@@ -318,6 +319,21 @@ func replacedContext(old string) string {
 		"; tm is now " + version.Version + ". These are your current rules and state, in its place:\n\n"
 }
 
+// paneScheme is the scheme whose pane palette a console last drew the
+// panes with (emu.PaneDark, emu.PaneLight), "" for none or in safe mode:
+// a theme mod's palette doesn't reach a new agent then; s.mu held.
+func (s *Server) paneScheme() string {
+	switch {
+	case s.noMods:
+		return ""
+	case s.colors.Known&emu.PaneDark != 0:
+		return "dark"
+	case s.colors.Known&emu.PaneLight != 0:
+		return "light"
+	}
+	return ""
+}
+
 // agentLaunch is everything needed to (re)start one agent session.
 type agentLaunch struct {
 	rec    SessionRecord
@@ -380,7 +396,7 @@ func (s *Server) launchAgent(l agentLaunch) (*session.Session, *proto.Error) {
 		Cwd: r.Cwd, RepoRoot: repo.RepoRoot, GitDir: repo.GitDir, RuntimeDir: rt, BriefPath: r.Brief, Kickoff: l.kick, Resume: l.resume,
 		Yolo: r.Yolo, NoSandboxEscapes: r.NoSandboxEscapes, Model: r.Model, TMBin: s.opts.Bin, Socket: s.opts.Paths.Socket, Access: access,
 		RemoteControl: r.RemoteControl, RemoteName: remoteName(r),
-		Mods: modSock != "",
+		Mods: modSock != "", PaneScheme: s.paneScheme(),
 	}
 	if spec.Model == "" {
 		spec.Model = launchModel(a, r.Project, r.Role == proto.RoleCoordinator)

@@ -9,8 +9,9 @@
 # programs' default foreground and background and their 16 ANSI colours
 # (black red green yellow blue magenta cyan white, then the bright ones),
 # each #rrggbb, on a terminal with truecolor. Every agent and shell
-# follows; a program's own truecolor stays as it drew it. Leave the
-# table out and the panes keep your terminal's own colours.
+# follows; a program's own truecolor stays as it drew it, so Claude panes
+# switch to Claude's ANSI theme automatically. Leave the table out and the
+# panes keep your terminal's own colours.
 
 [dark]
 head   = { fg = ["brightwhite", "#eceff4"], bold = true }

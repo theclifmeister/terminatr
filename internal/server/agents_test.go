@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/session"
 )
@@ -101,5 +102,26 @@ func TestCoordinatorEssentials(t *testing.T) {
 	}
 	if !strings.Contains(got, "[… cut at the size budget]") || !strings.HasSuffix(got, "the current state.\n") {
 		t.Fatalf("no cut mark or no last line:\n%s", got[len(got)-300:])
+	}
+}
+
+// TestPaneScheme: a new agent hears of the pane palette a console last
+// drew the panes with, by its scheme, and of none in safe mode (T342).
+func TestPaneScheme(t *testing.T) {
+	for _, c := range []struct {
+		known  uint32
+		noMods bool
+		want   string
+	}{
+		{0, false, ""},
+		{emu.KnownBg | 1<<3, false, ""},
+		{emu.KnownBg | emu.PaneDark, false, "dark"},
+		{emu.PaneLight, false, "light"},
+		{emu.KnownBg | emu.PaneDark, true, ""},
+	} {
+		s := &Server{colors: emu.Colors{Known: c.known}, noMods: c.noMods}
+		if got := s.paneScheme(); got != c.want {
+			t.Errorf("known %b, safe mode %v: %q, want %q", c.known, c.noMods, got, c.want)
+		}
 	}
 }

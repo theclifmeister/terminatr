@@ -91,7 +91,12 @@ func TestThemedColors(t *testing.T) {
 	if got.Fg != outer.Fg || got.Bg != *pal.Bg || got.Palette[3] != *pal.ANSI[3] || got.Palette[4] != outer.Palette[4] {
 		t.Fatalf("themed %+v", got)
 	}
-	if want := emu.KnownFg | emu.KnownBg | 1<<3 | 1<<4; got.Known != want {
+	// Marked with the palette's scheme: the server tells new agents (T342).
+	scheme := emu.PaneLight
+	if themeDark.Load() {
+		scheme = emu.PaneDark
+	}
+	if want := emu.KnownFg | emu.KnownBg | 1<<3 | 1<<4 | scheme; got.Known != want {
 		t.Fatalf("known %b, want %b", got.Known, want)
 	}
 	// The terminal answering again keeps the theme's over its own.
@@ -103,12 +108,15 @@ func TestThemedColors(t *testing.T) {
 	// No palette (another theme, safe mode, no truecolor): the terminal's.
 	c.pal = nil
 	c.sendColors()
-	if c.sentColors.Known&emu.KnownBg != 0 || c.sentColors.Palette[3] != (emu.RGB{}) {
+	if c.sentColors.Known&(emu.KnownBg|emu.PaneDark|emu.PaneLight) != 0 || c.sentColors.Palette[3] != (emu.RGB{}) {
 		t.Fatalf("unthemed %+v", c.sentColors)
 	}
 
 	// A theme alone answers, before the terminal does.
-	if th := themedColors(emu.Colors{}, pal); th.Known != emu.KnownBg|1<<3 || th.Bg != *pal.Bg {
+	if th := themedColors(emu.Colors{}, pal, true); th.Known != emu.KnownBg|1<<3|emu.PaneDark || th.Bg != *pal.Bg {
 		t.Fatalf("theme alone %+v", th)
+	}
+	if th := themedColors(emu.Colors{}, pal, false); th.Known&(emu.PaneDark|emu.PaneLight) != emu.PaneLight {
+		t.Fatalf("light palette marked %b", th.Known)
 	}
 }

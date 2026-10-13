@@ -377,6 +377,9 @@ func TestColors(t *testing.T) {
 	if got, ok := DecodeColors(c.Encode()); !ok || got != c {
 		t.Fatalf("round trip: %+v %v, want %+v", got, ok, c)
 	}
+	if got, _ := DecodeColors((Colors{Known: PaneLight | 1<<30}).Encode()); got.Known != PaneLight {
+		t.Fatalf("pane scheme round trip: known %b", got.Known)
+	}
 	if err := term.SetColors(c); err != nil {
 		t.Fatal(err)
 	}

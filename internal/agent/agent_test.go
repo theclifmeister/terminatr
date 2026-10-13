@@ -141,6 +141,22 @@ func TestClaudeLaunch(t *testing.T) {
 	if settings.StatusLine != nil {
 		t.Fatal("settings must never set statusLine; it would replace the user's")
 	}
+	// No pane palette: Claude's theme is the user's own.
+	if settings.Theme != nil {
+		t.Fatalf("theme %q without a pane palette", *settings.Theme)
+	}
+	// A theme's pane palette colours the 16 ANSI colours: Claude's ANSI
+	// theme for the scheme (T342).
+	for _, scheme := range []string{"dark", "light"} {
+		pal := spec
+		pal.PaneScheme = scheme
+		if l, err = a.Launch(pal); err != nil {
+			t.Fatal(err)
+		}
+		if s := parseSettings(t, l.Files["claude-settings.json"]); s.Theme == nil || *s.Theme != scheme+"-ansi" || !s.Sandbox.Enabled {
+			t.Fatalf("pane scheme %s: theme %v, settings %+v", scheme, s.Theme, s)
+		}
+	}
 
 	coord := spec
 	coord.Role, coord.Access = Role("coordinator"), Access{Read: []string{"/h/.terminatr/worktrees/p"}}
@@ -190,7 +206,8 @@ type claudeSettings struct {
 		AllowUnsandboxedCommands *bool
 		Network                  struct{ AllowUnixSockets []string }
 	}
-	StatusLine any `json:"statusLine"`
+	StatusLine any     `json:"statusLine"`
+	Theme      *string `json:"theme"`
 }
 
 func parseSettings(t *testing.T, b []byte) claudeSettings {

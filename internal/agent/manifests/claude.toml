@@ -113,6 +113,11 @@ template = '''
 # Edit(...) allow rules also open the Bash sandbox for writing (a thread's
 # commits go to the main repo's git dir).
 # Never put statusLine here: --settings would replace the user's own.
+# With a theme's pane palette (.PaneScheme, docs/SPEC.md §5.3), Claude
+# draws with its ANSI theme, which the palette colours: its own themes
+# are truecolor, which panes pass through. A --settings theme wins over
+# the user's (checked on 2.1.296); a running Claude doesn't re-read it,
+# so it applies from the next start or resume.
 # With sandbox_escapes off, a thread's Bash can't leave the sandbox
 # (allowUnsandboxedCommands): a command run outside it would reach the
 # human socket (§3.2), whoever approved it.
@@ -120,6 +125,9 @@ template = '''
 path = "claude-settings.json"
 template = '''
 {
+  {{- if .PaneScheme}}
+  "theme": {{json (printf "%s-ansi" .PaneScheme)}},
+  {{- end}}
   "permissions": {
     "allow": {{json (concat (rules "Read(/%s/**)" .Access.Read) (rules "Edit(/%s/**)" .Access.Write) (rules "Bash(%s:*)" .Access.Commands))}},
     "deny": {{json (concat (rules "Edit(/%s/**)" .Access.NoWrite) (rules "Edit(/%s)" .Access.NoWriteFiles))}}
