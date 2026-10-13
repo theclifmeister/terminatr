@@ -175,7 +175,8 @@ func Attach(opts Options) (res Result, err error) {
 	if so == nil {
 		so = &SidebarOptions{}
 	}
-	c.side = &sidebar{uiFile: so.UIFile, projects: loadSideProjects(c.paths), compact: ConsoleLayout(so.UIFile).compact()}
+	lay := ConsoleLayout(so.UIFile)
+	c.side = &sidebar{uiFile: so.UIFile, projects: loadSideProjects(c.paths), compact: lay.compact(), order: lay.sideSections}
 	c.info = &infoPanel{}
 	c.views = handedViews() // the dashboard's, for the sections it showed
 	c.setWindow(cols, rows)

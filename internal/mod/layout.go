@@ -21,7 +21,7 @@ import (
 // sidebar = ["count", …], the sidebar's column order; v2 (mod API 1.5)
 // makes sidebar a table and adds the others:
 //
-//	[sidebar]    columns, side, width, mode
+//	[sidebar]    columns, side, width, mode; sections, project_sections (1.7)
 //	[details]    place, size
 //	[header]     style
 //	[footer]     style
@@ -31,6 +31,18 @@ import (
 
 // LayoutAPIMinor is the mod API minor a v2 layout needs.
 const LayoutAPIMinor = 5
+
+// SectionsAPIMinor is the mod API minor sidebar.sections and
+// sidebar.project_sections need, as the sidebar slots do.
+const SectionsAPIMinor = SidebarAPIMinor
+
+// SectionTree is the reserved id in sidebar.sections that marks where the
+// tree sits: the band sections listed before it go above the tree.
+const SectionTree = "tree"
+
+// MaxLayoutSections bounds each of sidebar.sections and
+// sidebar.project_sections.
+const MaxLayoutSections = 32
 
 // Layout is a layout mod's file. An empty string, a zero Size or a nil
 // list is a key the file doesn't set.
@@ -50,11 +62,17 @@ type Layout struct {
 	Header, Footer, StatusBar string
 	Density                   string   // rows.density: normal, compact
 	Sections                  []string // dashboard.sections: needs, project, other, cards
+	// SideSections is sidebar.sections, the band's order: mods' sidebar
+	// sections ("ticker.ticker"), those before SectionTree above the
+	// tree. ProjectSections is sidebar.project_sections, the order of the
+	// sections under each project. Both need mod API 1.7.
+	SideSections, ProjectSections []string
 	// V2 is set when the file has anything but the v1 array: it needs mod
 	// API 1.5.
 	V2 bool
-	// v2Key is the first v2 table or key, as the API check names it.
-	v2Key string
+	// v2Key is the first v2 table or key, as the API check names it;
+	// v17Key the first that needs mod API 1.7.
+	v2Key, v17Key string
 }
 
 // Size is a size in cells (or rows), or a share of the window ("35%" →
@@ -80,7 +98,7 @@ var LayoutSections = []string{"needs", "project", "other", "cards"}
 // layoutTables are the v2 tables and their keys, in the order they are
 // checked (and the API check names the first).
 var layoutTables = []layoutTable{
-	{"sidebar", []string{"columns", "side", "width", "mode"}},
+	{"sidebar", []string{"columns", "side", "width", "mode", "sections", "project_sections"}},
 	{"details", []string{"place", "size"}},
 	{"header", []string{"style"}},
 	{"footer", []string{"style"}},
@@ -147,6 +165,9 @@ func ParseLayout(data []byte) (Layout, error) {
 					first += " " + k
 				}
 				p.key(t.name+"."+k, v)
+				if t.name == "sidebar" && (k == "sections" || k == "project_sections") && l.v17Key == "" {
+					l.v17Key = "[sidebar] " + k
+				}
 			}
 		}
 		if !l.V2 {
@@ -168,14 +189,21 @@ func ParseLayout(data []byte) (Layout, error) {
 }
 
 // CheckAPI says why a mod written for mod API api can't carry the
-// layout: a v2 one needs 1.5, so that an older tm refuses the mod by its
-// api (CheckAPI) rather than by a parse error. A v1 one goes with any
-// 1.x.
+// layout: a v2 one needs 1.5, and one with the sidebar's section keys
+// 1.7, so that an older tm refuses the mod by its api (CheckAPI) rather
+// than by a parse error. A v1 one goes with any 1.x.
 func (l Layout) CheckAPI(api string) error {
 	if !l.V2 {
 		return nil
 	}
-	if maj, min, ok := splitAPI(api); ok && maj == 1 && min < LayoutAPIMinor {
+	maj, min, ok := splitAPI(api)
+	if !ok || maj != 1 {
+		return nil
+	}
+	switch {
+	case l.v17Key != "" && min < SectionsAPIMinor:
+		return fmt.Errorf(`%s needs api = "1.%d" in mod.toml`, l.v17Key, SectionsAPIMinor)
+	case min < LayoutAPIMinor:
 		return fmt.Errorf(`%s needs api = "1.%d" in mod.toml`, l.v2Key, LayoutAPIMinor)
 	}
 	return nil
@@ -239,6 +267,10 @@ func (p *layoutParser) key(name string, v any) {
 		l.DetSize, p.detSize = p.size(name, v)
 	case "dashboard.sections":
 		l.Sections = p.sections(v)
+	case "sidebar.sections":
+		l.SideSections = p.sideSections(name, v, true)
+	case "sidebar.project_sections":
+		l.ProjectSections = p.sideSections(name, v, false)
 	default:
 		s := p.enum(name, v)
 		switch name {
@@ -384,6 +416,57 @@ func (p *layoutParser) sections(v any) []string {
 		seen[s] = true
 	}
 	return out
+}
+
+// sideSections checks sidebar.sections (band, which may hold the tree
+// marker once) or sidebar.project_sections: mods' section ids,
+// "<mod>.<view>", each once, at most MaxLayoutSections. Whether the mod
+// is there is the console's to see: an id it doesn't know is skipped.
+func (p *layoutParser) sideSections(key string, v any, band bool) []string {
+	want := `["<mod>.<view>", …]`
+	if band {
+		want = `["<mod>.<view>", "tree", …]`
+	}
+	arr, ok := v.([]any)
+	if !ok {
+		p.fail("%s: a list of sections, %s", key, want)
+		return nil
+	}
+	if len(arr) > MaxLayoutSections {
+		p.fail("%s: %d sections, at most %d", key, len(arr), MaxLayoutSections)
+	}
+	out := make([]string, 0, len(arr))
+	seen := map[string]bool{}
+	for _, e := range arr {
+		s, ok := e.(string)
+		switch {
+		case !ok:
+			p.fail("%s: sections are strings", key)
+			return nil
+		case s == SectionTree && !band:
+			p.fail(`%s: "tree" marks the tree in sidebar.sections; the sections under each project are always below its threads`, key)
+		case seen[s] && s == SectionTree:
+			p.fail("%s: %q may appear once", key, s)
+		case seen[s]:
+			p.fail("%s: %s is listed twice", key, s)
+		case s != SectionTree && !view.IsModColumn(s):
+			p.fail("%s: no section %q (a mod's: <mod>.<view>)", key, s)
+		default:
+			out = append(out, s)
+		}
+		seen[s] = true
+	}
+	return out
+}
+
+// SplitSections is a band order (sidebar.sections) as the ids above the
+// tree and those below it: all below without the tree marker.
+func SplitSections(order []string) (above, below []string) {
+	i := slices.Index(order, SectionTree)
+	if i < 0 {
+		return nil, order
+	}
+	return order[:i], order[i+1:]
 }
 
 // show is a value as a layout file writes it, for an error.

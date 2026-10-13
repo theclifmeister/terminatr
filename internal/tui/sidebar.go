@@ -343,19 +343,24 @@ func shownRows(rows []treeRow, w int) []treeRow {
 	return rows
 }
 
-// sidebarLines draws the sidebar on the left: sideLines.
+// sidebarLines draws the sidebar on the left with nothing needing you:
+// sideLines.
 func sidebarLines(all []treeRow, w, h int, foot []string) []string {
-	return sideLines(all, w, h, foot, false)
+	return sideLines(all, w, h, 0, foot, false)
 }
 
 // sideLines draws the sidebar w columns wide (its border included) and
 // h rows tall: a header with the count of projects, then the tree, then
-// the footer's lines (sideFooter) at the bottom. While
+// the footer's lines (sideFooter) at the bottom; the band of mod
+// sections below the tree, and above the header those a layout puts
+// above it. While a section shows above the tree or a row with ⚑ is
+// scrolled off, the header also says ⚑ N in the warning colour: needs
+// things that need you, as NEEDS YOU counts them. While
 // it has the keyboard focus (a row is the cursor) its border is in the
 // accent colour and the cursor's row is highlighted instead of the one
 // you are on. Its border is its last column, its first on the right
 // (right): the rest is the same either way.
-func sideLines(all []treeRow, w, h int, foot []string, right bool) []string {
+func sideLines(all []treeRow, w, h, needs int, foot []string, right bool) []string {
 	if w <= 0 {
 		return make([]string, max(h, 0))
 	}
@@ -384,8 +389,14 @@ func sideLines(all []treeRow, w, h int, foot []string, right bool) []string {
 		return s + border
 	}
 	out := make([]string, 0, h)
+	for _, s := range lay.above {
+		out = append(out, edge(lay.line(s, cw, slim, focused)+reset))
+	}
 	n := projectCount(all)
-	out = append(out, edge(sideHead(n, cw-gap, slim)+strings.Repeat(" ", gap)+reset))
+	if !lay.flag {
+		needs = 0
+	}
+	out = append(out, edge(sideHead(n, needs, cw-gap, slim)+strings.Repeat(" ", gap)+reset))
 	if l, ok := sideFilterLine(cw - gap); ok {
 		out = append(out, edge(l+strings.Repeat(" ", gap)+reset))
 	}
@@ -416,15 +427,25 @@ func sideLines(all []treeRow, w, h int, foot []string, right bool) []string {
 }
 
 // sideHead is the sidebar's header, cw cells wide: " PROJECTS", its
-// count of projects on the right, just before the needs-you column; in
-// the slim strip the word alone, cut with "…".
-func sideHead(n, cw int, slim bool) string {
+// count of projects on the right, just before the needs-you column, and
+// after it, with needs things that need you, ⚑ N (headFlag), for which
+// the count gives way; in the slim strip the word alone, cut with "…".
+func sideHead(n, needs, cw int, slim bool) string {
 	if slim {
 		return th().Title.Render(fit(" PROJECTS", cw))
 	}
 	count := ""
 	if n > 0 {
 		count = fmt.Sprint(n)
+	}
+	if lo, _ := headFlag(needs, cw); lo > 0 {
+		left := th().Title.Render(" PROJECTS")
+		if gap := lo - ansi.StringWidth(" PROJECTS") - len(count) - 2; count != "" && gap >= 1 {
+			left += strings.Repeat(" ", gap) + th().Faint.Render(count) + "  "
+		} else {
+			left += strings.Repeat(" ", lo-ansi.StringWidth(" PROJECTS"))
+		}
+		return left + needsBadge(needs) + "  "
 	}
 	gap := cw - ansi.StringWidth(" PROJECTS") - len(count) - 2
 	if gap < 1 {
@@ -939,12 +960,31 @@ func sideHit(all []treeRow, w, h, foot, x, y int) (r treeRow, ok, border, body b
 		return r, false, true, false
 	}
 	lay := sideLayout(all, w, h, foot)
-	i := y - lay.head
-	if y < lay.head || x >= w-1 || i >= len(lay.slots) || lay.slots[i].row < 0 {
+	if y >= 0 && y < len(lay.above) {
+		s := lay.above[y]
+		return lay.rows[s.row], true, false, s.line >= 0
+	}
+	i := y - len(lay.above) - lay.head
+	if i < 0 || i >= len(lay.slots) || lay.slots[i].row < 0 {
 		return r, false, false, false
 	}
 	s := lay.slots[i]
 	return lay.rows[s.row], true, false, s.line >= 0
+}
+
+// sideFlagAt says whether column x, row y of a sidebar w×h with a footer
+// of foot rows is the header's ⚑ N (sideLines with needs), a click on
+// which selects the first row that needs you, as w.
+func sideFlagAt(all []treeRow, w, h, foot, needs, x, y int) bool {
+	if w <= sideSlim || needs <= 0 || x < 0 || x >= w-1 {
+		return false
+	}
+	lay := sideLayout(all, w, h, foot)
+	if !lay.flag || y != len(lay.above) {
+		return false
+	}
+	lo, hi := headFlag(needs, w-1-sideGap)
+	return lo > 0 && x >= lo && x < hi
 }
 
 // sideLocal is window column x of a sidebar w wide from column at, as
@@ -1117,6 +1157,9 @@ type sidebar struct {
 	// compact is the console's layout's rows.density = compact: the
 	// footer keeps its key bar alone.
 	compact bool
+	// order is the console's layout's sidebar.sections: the band's
+	// order, those before "tree" above the tree.
+	order []string
 	// sections are the sidebar sections session.list names
 	// (mods.sections), band the band's lines (sidesections.go).
 	sections []proto.ModSection
@@ -1138,16 +1181,31 @@ func (c *client) sideTree() []treeRow {
 	if c.focus != nil {
 		focus = c.focus.info.ID
 	}
-	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), focus: focus, ctxHint: c.side.ctxHint,
+	rows := buildTree(c.side.projects, c.sideSessions(), treeIn{current: c.sideCurrent(), focus: focus, ctxHint: c.side.ctxHint,
 		tree: sideTree(c.side.projects, c.v.Tree), cols: c.v.Columns, cells: c.cells})
 	rows = sideRows(rows, c.side.needsFirst)
 	if c.bandShows() {
-		rows = append(rows, bandRows(c.band())...)
+		rows = withBand(rows, bandRows(c.band()))
 	}
 	if c.kb == areaSide {
 		markCursor(rows, c.sideW, c.v.SideSel)
 	}
 	return rows
+}
+
+// sideSessions are the sessions the sidebar's tree is built from: the
+// last poll's, and the panes' this client shows that it doesn't list
+// yet. Until the first poll it lists none, and a thread's row whose
+// session shows would otherwise have none (enter refused on it). c.mu
+// held.
+func (c *client) sideSessions() []proto.SessionInfo {
+	out := c.side.sessions
+	for _, p := range c.panes {
+		if p.info.ID != "" && !slices.ContainsFunc(out, func(s proto.SessionInfo) bool { return s.ID == p.info.ID }) {
+			out = append(slices.Clip(out), p.info)
+		}
+	}
+	return out
 }
 
 // bandShows says whether the attached sidebar shows its band of mod
@@ -1173,13 +1231,13 @@ func (c *client) band() bandIn {
 			list = append(list, proto.ModView{Mod: s.Mod, View: s.View, Title: s.Title, Slot: s.Slot})
 		}
 	}
-	return bandIn{list: list, project: c.sideCurrent(), folds: c.v.Tree, w: c.sideW, mods: mods, cache: &c.side.band}
+	return bandIn{list: list, project: c.sideCurrent(), folds: c.v.Tree, w: c.sideW, mods: mods, cache: &c.side.band, order: c.side.order}
 }
 
 // sideFullTree is the attach view's whole tree, nothing folded and no
 // filter (w W). c.mu held.
 func (c *client) sideFullTree() []treeRow {
-	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), ctxHint: c.side.ctxHint, tree: unfoldedTree(c.side.projects), cols: c.v.Columns, cells: c.cells})
+	rows := buildTree(c.side.projects, c.sideSessions(), treeIn{current: c.sideCurrent(), ctxHint: c.side.ctxHint, tree: unfoldedTree(c.side.projects), cols: c.v.Columns, cells: c.cells})
 	if c.side.needsFirst {
 		rows = needsFirstOrder(rows)
 	}
@@ -1251,15 +1309,22 @@ func (c *client) sideKeyboard(k uv.Key) {
 		c.poke()
 		return
 	}
-	c.flash = st.msg
 	if st.help {
 		// A plain key that is a prefix command does what it does.
+		c.flash = st.msg
 		do := prefixStep(c.prefix, true, k, c.dashboard)
 		c.status()
 		c.mu.Unlock()
 		c.run(do)
 		return
 	}
+	c.sideDo(st)
+}
+
+// sideDo does what a sidebar key decided (sideKeyFor). c.mu held;
+// released here.
+func (c *client) sideDo(st sideStep) {
+	c.flash = st.msg
 	if st.back || st.into {
 		// Into the pane: the session's, or the dashboard's list.
 		c.kb = areaMain
@@ -1527,7 +1592,7 @@ func (c *client) setActive(slug string, on bool) {
 // appendSidebar draws the sidebar's changed lines. c.mu held.
 func (c *client) appendSidebar(b []byte, wrote bool) ([]byte, bool) {
 	rows := c.sideTree()
-	lines := sideLines(rows, c.sideW, c.sideRows(), sideFooter(rows, c.sideW, c.side.server, true, c.side.compact), c.v.Sidebar.Right())
+	lines := sideLines(rows, c.sideW, c.sideRows(), needsYouCount(c.side.projects, c.side.sessions), sideFooter(rows, c.sideW, c.side.server, true, c.side.compact), c.v.Sidebar.Right())
 	if c.sideW == 0 {
 		lines = nil // hidden
 	}
@@ -1678,6 +1743,13 @@ func (c *client) sideMouse(m emu.Mouse) {
 		return
 	case m.Action != emu.MousePress || m.Button != emu.MouseLeft:
 		c.mu.Unlock()
+		return
+	}
+	if sideFlagAt(c.sideTree(), c.sideW, c.sideRows(), c.sideFoot(), needsYouCount(c.side.projects, c.side.sessions), c.sideCol(m.X), m.Y) {
+		// The header's ⚑ N: the first row that needs you, as w.
+		c.kb = areaSide
+		in := sideKeysIn{tree: c.sideTree, full: c.sideFullTree, w: c.sideW, h: c.sideRows(), sel: c.v.SideSel}
+		c.sideDo(sideNeedStep(in, treeRow{}, false))
 		return
 	}
 	r, ok, border := sideHitAt(c.sideTree(), c.sideW, c.sideRows(), c.sideFoot(), c.sideCol(m.X), m.Y)

@@ -3,6 +3,7 @@ package mod
 import (
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -89,7 +90,7 @@ func TestParseLayoutRefuses(t *testing.T) {
 	for _, tc := range []struct{ toml, want string }{
 		// Unknown keys and tables.
 		{"sidebar = []\nfooter_style = 1", "unknown key footer_style"},
-		{"[sidebar]\nside = \"left\"\ncolour = \"red\"", "unknown key sidebar.colour (sidebar takes columns, side, width, mode)"},
+		{"[sidebar]\nside = \"left\"\ncolour = \"red\"", "unknown key sidebar.colour (sidebar takes columns, side, width, mode, sections, project_sections)"},
 		{"[info]\nwidth = 30", "unknown key info"},
 		// Wrong types.
 		{`sidebar = "count"`, "sidebar: an array of columns, or a table"},
@@ -129,6 +130,16 @@ func TestParseLayoutRefuses(t *testing.T) {
 		// Sections.
 		{"[dashboard]\nsections = [\"needs\", \"tasks\"]", `dashboard.sections: no section "tasks" (needs, project, other, cards)`},
 		{"[dashboard]\nsections = [\"needs\", \"needs\"]", "dashboard.sections: needs is listed twice"},
+		// The sidebar's sections.
+		{"[sidebar]\nsections = \"tree\"", `sidebar.sections: a list of sections, ["<mod>.<view>", "tree", …]`},
+		{"[sidebar]\nsections = [1]", "sidebar.sections: sections are strings"},
+		{"[sidebar]\nsections = [\"tree\", \"a.b\", \"tree\"]", `sidebar.sections: "tree" may appear once`},
+		{"[sidebar]\nsections = [\"a.b\", \"a.b\"]", "sidebar.sections: a.b is listed twice"},
+		{"[sidebar]\nsections = [\"ticker\"]", `sidebar.sections: no section "ticker" (a mod's: <mod>.<view>)`},
+		{"[sidebar]\nsections = [" + strings.Repeat(`"a.b", `, 33) + "]", "sidebar.sections: 33 sections, at most 32"},
+		{"[sidebar]\nproject_sections = [\"tree\"]", `sidebar.project_sections: "tree" marks the tree in sidebar.sections`},
+		{"[sidebar]\nproject_sections = [\"Ci.prs\"]", `sidebar.project_sections: no section "Ci.prs"`},
+		{"[sidebar]\nproject_sections = [\"ci.prs\", \"ci.prs\"]", "sidebar.project_sections: ci.prs is listed twice"},
 	} {
 		if _, err := ParseLayout([]byte(tc.toml)); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s:\n  %v\n  want %q", tc.toml, err, tc.want)
@@ -152,6 +163,11 @@ func TestLayoutAPI(t *testing.T) {
 		{"[footer]\nstyle = \"compact\"", "1.4", `[footer] style needs api = "1.5"`},
 		{"[sidebar]\nside = \"right\"", "1.5", ""},
 		{"[sidebar]\nside = \"right\"", "2.0", ""}, // CheckAPI refuses the major
+		// The sidebar's sections need 1.7, naming the first.
+		{"[sidebar]\nside = \"right\"\nsections = [\"tree\"]", "1.5", `[sidebar] sections needs api = "1.7" in mod.toml`},
+		{"[sidebar]\nproject_sections = [\"ci.prs\"]", "1.6", `[sidebar] project_sections needs api = "1.7"`},
+		{"[sidebar]\nproject_sections = [\"ci.prs\"]\nsections = [\"a.b\"]", "1.4", `[sidebar] sections needs api = "1.7"`},
+		{"[sidebar]\nsections = [\"a.b\", \"tree\"]", "1.7", ""},
 	} {
 		l, err := ParseLayout([]byte(tc.toml))
 		if err != nil {
@@ -160,6 +176,33 @@ func TestLayoutAPI(t *testing.T) {
 		err = l.CheckAPI(tc.api)
 		if tc.want == "" && err != nil || tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)) {
 			t.Errorf("%s under %s: %v, want %q", tc.toml, tc.api, err, tc.want)
+		}
+	}
+}
+
+// TestParseSideSections: the band's order keeps the tree marker, and
+// splits at it into the sections above the tree and those below.
+func TestParseSideSections(t *testing.T) {
+	l, err := ParseLayout([]byte("[sidebar]\nsections = [\"ticker.ticker\", \"tree\", \"ci-status.ci\"]\nproject_sections = [\"ci-status.prs\", \"review-age.age\"]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(l.SideSections, []string{"ticker.ticker", "tree", "ci-status.ci"}) ||
+		!slices.Equal(l.ProjectSections, []string{"ci-status.prs", "review-age.age"}) || !l.V2 {
+		t.Fatalf("%+v", l)
+	}
+	for _, tc := range []struct {
+		order, above, below []string
+	}{
+		{[]string{"a.b", "tree", "c.d"}, []string{"a.b"}, []string{"c.d"}},
+		{[]string{"tree", "c.d"}, []string{}, []string{"c.d"}},
+		{[]string{"a.b", "tree"}, []string{"a.b"}, []string{}},
+		{[]string{"a.b", "c.d"}, nil, []string{"a.b", "c.d"}},
+		{nil, nil, nil},
+	} {
+		above, below := SplitSections(tc.order)
+		if !slices.Equal(above, tc.above) || !slices.Equal(below, tc.below) {
+			t.Errorf("%v: %v %v", tc.order, above, below)
 		}
 	}
 }

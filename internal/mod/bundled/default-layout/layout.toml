@@ -20,6 +20,16 @@ columns = ["count", "ci", "state", "remote", "paused", "inactive", "needs"]
 # full, slim (the strip, as b) or hidden (none; a ⚑ N badge shows what
 # needs you, and b brings the sidebar back).
 # mode = "full"
+# Mods' sidebar sections (mod API 1.7): the band's order, by
+# "<mod>.<view>". "tree" marks where the projects tree sits: sections
+# before it go above the tree, those after it below. Without "tree"
+# all are below. A section the list leaves out goes below, after
+# those it names, in the Mods tab's order; an id no mod has is skipped.
+# A layout can't hide a section: turn its mod off in the Mods tab.
+# sections = ["ticker.ticker", "tree"]
+# The order of the sections under each project (mod API 1.7), always
+# below its threads; the ones left out follow in the Mods tab's order.
+# project_sections = ["ci-status.prs"]
 
 [details]
 # The dashboard's details panel: right (beside the list, in a window

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -55,7 +57,7 @@ func TestAttachBand(t *testing.T) {
 	if got := sectionRows(c.sideTree()); !slices.Equal(got, []string{"s:ticker.ticker", "s:ci.status"}) {
 		t.Fatalf("band %v", got)
 	}
-	lines := strings.Join(sideLines(c.sideTree(), c.sideW, c.sideRows(), nil, false), "\n")
+	lines := strings.Join(sideLines(c.sideTree(), c.sideW, c.sideRows(), 0, nil, false), "\n")
 	if !strings.Contains(lines, "TICKER") || !strings.Contains(lines, "#412 passes") {
 		t.Fatalf("the sidebar:\n%s", lines)
 	}
@@ -95,6 +97,40 @@ func TestAttachBand(t *testing.T) {
 	rows := c.sideTree()
 	if i := slices.IndexFunc(rows, func(r treeRow) bool { return r.cursor }); i < 0 || rows[i].key() != "s:ci.status" {
 		t.Fatal("no cursor on the CI header")
+	}
+}
+
+// TestAttachBandAbove: under a layout with sections = ["ticker.ticker",
+// "tree"] the attached sidebar draws the ticker above PROJECTS, which
+// then says ⚑ N, and CI status below the tree; the ticker's header
+// comes before the first project in the cursor's path.
+func TestAttachBandAbove(t *testing.T) {
+	setIcons(IconsUnicode)
+	defer resetConsole()
+	c := bandClient(bandTestViews(), bandTestSections())
+	c.side.order = []string{"ticker.ticker", "tree"}
+	rows := c.sideTree()
+	if rows[0].key() != "s:ticker.ticker" || !rows[0].sec.above || rows[len(rows)-1].key() != "s:ci.status" || rows[len(rows)-1].sec.above {
+		t.Fatalf("rows %v", sectionRows(rows))
+	}
+	needs := needsYouCount(c.side.projects, c.side.sessions)
+	lines := sideLines(rows, c.sideW, c.sideRows(), needs, nil, false)
+	plain := make([]string, len(lines))
+	for i, l := range lines {
+		plain[i] = ansi.Strip(l)
+	}
+	head := slices.IndexFunc(plain, func(l string) bool { return strings.Contains(l, "PROJECTS") })
+	ci := slices.IndexFunc(plain, func(l string) bool { return strings.Contains(l, "CI STATUS") })
+	if !strings.Contains(plain[0], "TICKER") || head < 1 || !strings.Contains(plain[head+1], "alpha") || ci < head ||
+		needs == 0 || !strings.Contains(plain[head], fmt.Sprintf("%s %d", ic().hint, needs)) {
+		t.Fatalf("the sidebar:\n%s", strings.Join(plain, "\n"))
+	}
+
+	// ↑ from the first project goes to the ticker's header.
+	c.kb, c.v.SideSel = areaSide, "p:alpha"
+	in := sideKeysIn{tree: c.sideTree, full: c.sideFullTree, w: c.sideW, h: c.sideRows(), sel: c.v.SideSel}
+	if st, _ := sideKeyFor(in, "up"); st.sel != "s:ticker.ticker" {
+		t.Fatalf("↑ from alpha: %q", st.sel)
 	}
 }
 

@@ -1,0 +1,196 @@
+ticker above, CI status below (156×30, sidebar 36)
+ ▾ TICKER ───────────────── beta   │
+   PRs      40s ago · next 1m20s   │
+   synced   1m ago                 │
+   PR host  ok                     │
+ PROJECTS                 2  ⚑ 2   │
+ ■ alpha              0         ⚑  │
+ └─ coordinator         ▲          │
+ ■ beta               2         ⚑  │
+ └─ coordinator         ·          │
+    ├─ T4 Write d…  60% ●       ⚑  │
+    └─ t-0006 Old…      ·          │
+                                   │
+ ▾ CI STATUS ─────────────── 1 ☒   │
+   #412 passes                     │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+ ───────────────────────────────── │
+ beta · active                     │
+ 2 threads · coordinator not runn… │
+ tab sidebar · ? help              │
+
+both above (156×30, sidebar 36)
+ ▾ CI STATUS ─────────────── 1 ☒   │
+   #412 passes                     │
+ ▾ TICKER ───────────────── beta   │
+   PRs      40s ago · next 1m20s   │
+   synced   1m ago                 │
+   PR host  ok                     │
+ PROJECTS                 2  ⚑ 2   │
+ ■ alpha              0         ⚑  │
+ └─ coordinator         ▲          │
+ ■ beta               2         ⚑  │
+ └─ coordinator         ·          │
+    ├─ T4 Write d…  60% ●       ⚑  │
+    └─ t-0006 Old…      ·          │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+ ───────────────────────────────── │
+ beta · active                     │
+ 2 threads · coordinator not runn… │
+ tab sidebar · ? help              │
+
+cursor on the header above (156×30, sidebar 36)
+ ▾ TICKER ───────────────── beta   │
+   PRs      40s ago · next 1m20s   │
+   synced   1m ago                 │
+   PR host  ok                     │
+ PROJECTS                 2  ⚑ 2   │
+ ■ alpha              0         ⚑  │
+ └─ coordinator         ▲          │
+ ■ beta               2         ⚑  │
+ └─ coordinator         ·          │
+    ├─ T4 Write d…  60% ●       ⚑  │
+    └─ t-0006 Old…      ·          │
+                                   │
+ ▾ CI STATUS ─────────────── 1 ☒   │
+   #412 passes                     │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+ ───────────────────────────────── │
+ Ticker · ticker mod (built in)    │
+ this project's PR polls and sync  │
+ ← fold · ? help                   │
+
+narrow (156×30, sidebar 20)
+ ▾ TICKER ─ beta   │
+   PRs    40s ago… │
+   sync…  1m ago   │
+   PR h…  ok       │
+ PROJECTS 2  ⚑ 2   │
+ ■ alp…         ⚑  │
+ └─ co… ▲          │
+ ■ beta         ⚑  │
+ └─ co… ·          │
+    ├─  ●       ⚑  │
+    └─  ·          │
+                   │
+ ▾ CI STATUS 1 ☒   │
+   #412 passes     │
+                   │
+                   │
+                   │
+                   │
+                   │
+                   │
+                   │
+                   │
+                   │
+                   │
+                   │
+                   │
+ ───────────────── │
+ beta · active     │
+ 2 threads · coor… │
+ tab sidebar       │
+
+short window (156×17, sidebar 36)
+ ▸ TICKER ──────────────────── …   │
+ PROJECTS                 2  ⚑ 2   │
+ ■ alpha              0         ⚑  │
+ └─ coordinator         ▲          │
+ ■ beta               2         ⚑  │
+ └─ coordinator         ·          │
+    ├─ T4 Write d…  60% ●       ⚑  │
+    └─ t-0006 Old…      ·          │
+                                   │
+ ▾ CI STATUS ─────────────── 1 ☒   │
+   #412 passes                     │
+                                   │
+                                   │
+ ───────────────────────────────── │
+ beta · active                     │
+ 2 threads · coordinator not runn… │
+ tab sidebar · ? help              │
+
+too short for sections (156×15, sidebar 36)
+ PROJECTS                      2   │
+ ■ alpha              0         ⚑  │
+ └─ coordinator         ▲          │
+ ■ beta               2         ⚑  │
+ └─ coordinator         ·          │
+    ├─ T4 Write d…  60% ●       ⚑  │
+    └─ t-0006 Old…      ·          │
+                                   │
+                                   │
+                                   │
+                                   │
+ ───────────────────────────────── │
+ beta · active                     │
+ 2 threads · coordinator not runn… │
+ tab sidebar · ? help              │
+
+no sections, rows with ⚑ scrolled off (156×30, sidebar 36)
+ PROJECTS                 2  ⚑ 2   │
+ ■ alpha              0         ⚑  │
+ └─ coordinator         ▲          │
+ ■ beta              32         ⚑  │
+ └─ coordinator         ·          │
+    ├─ T4 Write d…  60% ●       ⚑  │
+    ├─ t-0100 Wai…      ▷       ⚑  │
+    ├─ t-0101 Wai…      ▷       ⚑  │
+    ├─ t-0102 Wai…      ▷       ⚑  │
+    ├─ t-0103 Wai…      ▷       ⚑  │
+    ├─ t-0104 Wai…      ▷       ⚑  │
+    ├─ t-0105 Wai…      ▷       ⚑  │
+    ├─ t-0106 Wai…      ▷       ⚑  │
+    ├─ t-0107 Wai…      ▷       ⚑  │
+    ├─ t-0108 Wai…      ▷       ⚑  │
+    ├─ t-0109 Wai…      ▷       ⚑  │
+    ├─ t-0110 Wai…      ▷       ⚑  │
+    ├─ t-0111 Wai…      ▷       ⚑  │
+    ├─ t-0112 Wai…      ▷       ⚑  │
+    ├─ t-0113 Wai…      ▷       ⚑  │
+    ├─ t-0114 Wai…      ▷       ⚑  │
+    ├─ t-0115 Wai…      ▷       ⚑  │
+    ├─ t-0116 Wai…      ▷       ⚑  │
+    ├─ t-0117 Wai…      ▷       ⚑  │
+    ├─ t-0118 Wai…      ▷       ⚑  │
+    ├─ t-0119 Wai…      ▷       ⚑  │
+ ───────────────────────────────── │
+ beta · active                     │
+ 32 threads · coordinator not run… │
+ tab sidebar · ? help              │
+
