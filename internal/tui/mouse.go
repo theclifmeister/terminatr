@@ -474,7 +474,7 @@ func (m *dash) rowItems(r row) []menuItem {
 
 // sideMenu opens the menu of the sidebar row under a right-click.
 func (m *dash) sideMenu(mo tea.Mouse) tea.Cmd {
-	r, ok, _ := sideHitAt(m.tree(), m.sideW(), m.h, m.geom().sideCol(mo.X), mo.Y)
+	r, ok, _ := sideHitAt(m.tree(), m.sideW(), m.h, m.sideFoot(), m.geom().sideCol(mo.X), mo.Y)
 	if !ok {
 		return nil
 	}

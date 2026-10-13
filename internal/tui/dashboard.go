@@ -797,7 +797,7 @@ func (m *dash) sideClick(mo tea.Mouse) tea.Cmd {
 	if mo.Button != tea.MouseLeft {
 		return nil
 	}
-	r, ok, border := sideHitAt(m.tree(), m.sideW(), m.h, m.geom().sideCol(mo.X), mo.Y)
+	r, ok, border := sideHitAt(m.tree(), m.sideW(), m.h, m.sideFoot(), m.geom().sideCol(mo.X), mo.Y)
 	t, can, why := r.target()
 	var cmd tea.Cmd
 	if ok && !border {
@@ -809,7 +809,12 @@ func (m *dash) sideClick(mo tea.Mouse) tea.Cmd {
 	switch {
 	case border:
 		m.sideDrag = true
-	case !ok || m.busy:
+	case !ok:
+	case r.kind == treeSection:
+		// Its header or its body: as enter on the header.
+		st, _ := sectionStep(r, sideEnter)
+		return tea.Batch(cmd, m.sectionCmd(st))
+	case m.busy:
 	case r.kind == treeDivider:
 		return tea.Batch(cmd, m.refold(foldDivider(r)))
 	case !can:
@@ -876,10 +881,39 @@ func (m *dash) tree() []treeRow {
 	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint,
 		tree: sideTree(m.data.Projects, m.folds), cols: m.sideCols, cells: m.data.Cells})
 	rows = sideRows(rows, m.data.NeedsFirst)
+	if bandFits(m.sideW(), m.h, m.sideFoot()) {
+		rows = append(rows, bandRows(m.band())...)
+	}
 	if m.focus == areaSide {
 		markCursor(rows, m.sideW(), m.sideSel)
 	}
 	return rows
+}
+
+// band is what the sidebar's band of mod sections is built from.
+func (m *dash) band() bandIn {
+	return bandIn{list: m.mv.list, project: listProject(m.data, m.current), folds: m.folds, w: m.sideW(),
+		mods: m.data.Mods, noMods: m.data.NoMods, cache: &m.mv.band}
+}
+
+// sideFoot is the rows the sidebar's footer takes (sideFootRows).
+func (m *dash) sideFoot() int {
+	return sideFootRows(m.sideW(), m.h, m.data.Server, m.layout.compact())
+}
+
+// sectionCmd runs what a key or a click on a band section does: folds
+// or unfolds sections in the view (view.sections), or sends the mod the
+// ui.click that opens its view.
+func (m *dash) sectionCmd(st sideStep) tea.Cmd {
+	var cmds []tea.Cmd
+	if len(st.sections) > 0 {
+		cmds = append(cmds, m.foldSections(st.sections, st.foldOn))
+	}
+	if s := st.open; s != nil {
+		src, p := m.src, sectionClick(s)
+		cmds = append(cmds, func() tea.Msg { return modInputMsg{err: src.ModViewInput(p)} })
+	}
+	return tea.Batch(cmds...)
 }
 
 // fullTree is the sidebar's whole tree: nothing folded, no filter (w W).
@@ -948,6 +982,7 @@ func (m *dash) sideKeyboard(key string) (tea.Cmd, bool) {
 	if st.refold != nil {
 		cmds = append(cmds, m.refold(st.refold))
 	}
+	cmds = append(cmds, m.sectionCmd(st))
 	var target *Target
 	if t := st.target; t != nil {
 		// Into the pane: the list, or the session attached.

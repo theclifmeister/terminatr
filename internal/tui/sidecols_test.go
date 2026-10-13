@@ -23,7 +23,7 @@ func TestSidebarColumnOrder(t *testing.T) {
 		{end - 6, "progress"},
 		{end - 1, ""}, // inactive: blank on a thread
 	} {
-		if got := sideTip(m.tree(), m.sideW(), m.h, s.x, 5); got != s.want {
+		if got := sideTip(m.tree(), m.sideW(), m.h, m.sideFoot(), s.x, 5); got != s.want {
 			t.Errorf("at %d: %q, want %q", s.x, got, s.want)
 		}
 	}
