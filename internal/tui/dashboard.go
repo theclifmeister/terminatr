@@ -239,8 +239,8 @@ type dash struct {
 	// detSel is the details panel's selected mod section header (its fold
 	// id), for the row detSelKey; "" for none.
 	detSel, detSelKey string
-	shownKeys string // the footer's hints as drawn: its buttons
-	badgeAt   [2]int // the header's needs-you badge as drawn: its columns, [0 0] for none
+	shownKeys         string // the footer's hints as drawn: its buttons
+	badgeAt           [2]int // the header's needs-you badge as drawn: its columns, [0 0] for none
 
 	// layout is the console's layout, effective: ui.json (ui) under the
 	// layout mod in use (spec, the [ui] layout layoutID), with the
