@@ -173,3 +173,27 @@ func TestHandViews(t *testing.T) {
 		t.Fatalf("handed %+v", got)
 	}
 }
+
+// TestAttachProj: the attached sidebar draws the per-project sections
+// session.list names under each project, as the dashboard does, and
+// tells mod.views of one per project on screen, next to the band's.
+func TestAttachProj(t *testing.T) {
+	setIcons(IconsUnicode)
+	defer resetConsole()
+	secs := append(bandTestSections(), proto.ModSection{Mod: "prci", View: "ci", Title: "ci status", Slot: mod.SlotProjectSection})
+	c := bandClient(projTestViews(), secs)
+	if got := sectionRows(c.sideTree()); !slices.Equal(got, []string{"s:prci.ci@alpha", "s:prci.ci@beta", "s:ticker.ticker", "s:ci.status"}) {
+		t.Fatalf("sections %v", got)
+	}
+	var shown []string
+	for _, s := range c.bandShown(secs) {
+		shown = append(shown, fmt.Sprintf("%s.%s %s", s.Mod, s.View, s.Project))
+	}
+	if want := []string{"ticker.ticker beta", "ci.status beta", "prci.ci alpha", "prci.ci beta"}; !slices.Equal(shown, want) {
+		t.Fatalf("shown %v, want %v", shown, want)
+	}
+	lines := ansi.Strip(strings.Join(sideLines(c.sideTree(), c.sideW, c.sideRows(), 0, nil, false), "\n"))
+	if !strings.Contains(lines, "    ▾ ci status") || !strings.Contains(lines, "      ☑ #412 beta docs") {
+		t.Fatalf("the sidebar:\n%s", lines)
+	}
+}

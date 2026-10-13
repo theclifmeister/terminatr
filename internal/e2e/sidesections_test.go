@@ -45,34 +45,67 @@ $.on("ui.click", async (e) => {
 });
 `
 
+// underMod is a code mod with a per-project section
+// (sidebar.project.section) that counts the view.opened it hears per
+// project, and says so.
+const underMod = `id = "under"
+name = "Under"
+version = "1.0.0"
+api = "1.7"
+[provides]
+main = "main.js"
+[[provides.views]]
+id = "under"
+title = "Under"
+slot = "sidebar.project.section"
+[permissions]
+views = true
+`
+
+const underMain = `const n = {};
+$.on("view.opened", async (v) => {
+  n[v.project] = (n[v.project] || 0) + 1;
+  await $.ui.view.set(v.view, { kind: "text", text: "under opened " + n[v.project] + " for " + v.project }, { project: v.project });
+});
+`
+
 // TestSmokeSidebarSections: a mod's band section below the sidebar's
-// tree (the T348 design §6) on both screens. The dashboard and the
-// attached session show it; going from one to the other and back, the
-// mod hears view.opened once, as the console never says it closed. A
-// fold made in one console shows in the other, on the dashboard and
-// attached; attached, a header's companion view opens over the session.
+// tree, and another's section under each project (the T348 design §6),
+// on both screens. The dashboard and the attached session show them;
+// going from one to the other and back, the mods hear view.opened once,
+// per project for the one under each, as the console never says it
+// closed. A fold made in one console shows in the other, on the
+// dashboard and attached; attached, a header's companion view opens over
+// the session.
 func TestSmokeSidebarSections(t *testing.T) {
 	env := New(t)
 	env.FakeClaude()
 	alpha, alphaDir := newProject(env, "alpha")
 	env.Trust(alphaDir)
-	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "mod.toml"), []byte(opensMod), 0o644)
-	os.WriteFile(filepath.Join(dir, "main.js"), []byte(opensMain), 0o644)
-	env.MustCLI("mod", "install", dir, "--yes")
-	env.MustCLI("mod", "enable", "opens", "--yes")
+	beta, _ := newProject(env, "beta")
+	for name, files := range map[string][2]string{"opens": {opensMod, opensMain}, "under": {underMod, underMain}} {
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, "mod.toml"), []byte(files[0]), 0o644)
+		os.WriteFile(filepath.Join(dir, "main.js"), []byte(files[1]), 0o644)
+		env.MustCLI("mod", "install", dir, "--yes")
+		env.MustCLI("mod", "enable", name, "--yes")
+	}
 
 	once := "opens opened 1 for " + alpha
+	under := []string{"under opened 1 for " + alpha, "under opened 1 for " + beta}
 	band := func(w *Window, what string) {
 		t.Helper()
-		w.WaitUntil(what, agentWait, func(sc string) bool { return strings.Contains(sc, "▾ OPENS") && strings.Contains(sc, once) })
+		w.WaitUntil(what, agentWait, func(sc string) bool {
+			return strings.Contains(sc, "▾ OPENS") && strings.Contains(sc, once) &&
+				strings.Contains(sc, under[0]) && strings.Contains(sc, under[1])
+		})
 	}
 	steady := func(w *Window, what string) {
 		t.Helper()
 		band(w, what)
 		time.Sleep(2500 * time.Millisecond) // a mod.views poll or two
-		if sc := w.Screen(); !strings.Contains(sc, once) {
-			t.Fatalf("%s: the mod heard view.opened again:\n%s", what, sc)
+		if sc := w.Screen(); !strings.Contains(sc, once) || !strings.Contains(sc, under[0]) || !strings.Contains(sc, under[1]) {
+			t.Fatalf("%s: a mod heard view.opened again:\n%s", what, sc)
 		}
 	}
 
