@@ -61,6 +61,11 @@ type Layout struct {
 	// (the band's order, "tree" where the tree sits) and
 	// sidebar.project_sections; nil for mod order, all below the tree.
 	sideSections, projSections []string
+	// coordSections and detSections are the layout's
+	// coordinator.sections and details.sections: the right pane's
+	// sections among core's blocks (mod.PanelSections); nil for mod
+	// order, all at the bottom.
+	coordSections, detSections []string
 }
 
 // layoutSet says which of the console's parts the layout in use sets:
@@ -359,6 +364,7 @@ func effectiveLayout(spec mod.Layout, ui Layout, id string) Layout {
 	l.density = cmp.Or(spec.Density, densityNorm)
 	l.sections = layoutSections(spec.Sections)
 	l.sideSections, l.projSections = spec.SideSections, spec.ProjectSections
+	l.coordSections, l.detSections = spec.CoordSections, spec.DetSections
 	return l
 }
 

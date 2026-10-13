@@ -40,6 +40,24 @@ columns = ["count", "ci", "state", "remote", "paused", "inactive", "needs"]
 # The panel's size: cells (right, 24 to 200) or rows (bottom, 6 to 100),
 # or a share, "20%" to "70%" (bottom's is "40%"). Not with place = "off".
 # size = "35%"
+# Mods' details-panel sections (mod API 1.7), by "<mod>.<view>", here
+# and in a thread's info panel beside its pane. "core" marks the
+# panel's own lines, under its title: sections before it go above them,
+# those after it below. Without "core" all are below. A section the
+# list leaves out goes below, after those it names, in the Mods tab's
+# order; an id no mod has is skipped.
+# sections = ["core"]
+
+[coordinator]
+# Mods' sections in the coordinator's info panel (mod API 1.7), by
+# "<mod>.<view>", among its blocks: needs (NEEDS YOU), inbox, threads
+# and deck (ON DECK). A section goes after the block listed before it,
+# or just above the first block listed after it; the blocks keep their
+# order, and one left out still shows in its place. Nothing goes above
+# the panel's title and counts. Without a block all are at the bottom;
+# a section the list leaves out goes at the bottom, after those it
+# names, in the Mods tab's order.
+# sections = ["needs", "inbox", "threads", "deck"]
 
 [header]
 # The dashboard's top row: shown or hidden (alarms then draw over the

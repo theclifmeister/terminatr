@@ -140,6 +140,16 @@ func TestParseLayoutRefuses(t *testing.T) {
 		{"[sidebar]\nproject_sections = [\"tree\"]", `sidebar.project_sections: "tree" marks the tree in sidebar.sections`},
 		{"[sidebar]\nproject_sections = [\"Ci.prs\"]", `sidebar.project_sections: no section "Ci.prs"`},
 		{"[sidebar]\nproject_sections = [\"ci.prs\", \"ci.prs\"]", "sidebar.project_sections: ci.prs is listed twice"},
+		// The right pane's sections: core's blocks once and in order.
+		{"[coordinator]\nsections = [\"threads\", \"needs\"]", `coordinator.sections: "threads" before "needs": core's blocks keep their order`},
+		{"[coordinator]\nsections = [\"needs\", \"a.b\", \"needs\"]", `coordinator.sections: "needs" may appear once`},
+		{"[coordinator]\nsections = [\"a.b\", \"a.b\"]", "coordinator.sections: a.b is listed twice"},
+		{"[coordinator]\nsections = [\"core\"]", `coordinator.sections: no section "core" (core's blocks: needs, inbox, threads, deck; a mod's: <mod>.<view>)`},
+		{"[coordinator]\nsections = [" + strings.Repeat(`"a.b", `, 33) + "]", "coordinator.sections: 33 sections, at most 32"},
+		{"[coordinator]\nsections = \"needs\"", "coordinator.sections: a list of sections and core's blocks"},
+		{"[coordinator]\nwidth = 3", "unknown key coordinator.width (coordinator takes sections)"},
+		{"[details]\nsections = [\"needs\"]", `details.sections: no section "needs" (core's blocks: core;`},
+		{"[details]\nsections = [\"core\", 3]", "details.sections: sections are strings"},
 	} {
 		if _, err := ParseLayout([]byte(tc.toml)); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s:\n  %v\n  want %q", tc.toml, err, tc.want)
@@ -168,6 +178,11 @@ func TestLayoutAPI(t *testing.T) {
 		{"[sidebar]\nproject_sections = [\"ci.prs\"]", "1.6", `[sidebar] project_sections needs api = "1.7"`},
 		{"[sidebar]\nproject_sections = [\"ci.prs\"]\nsections = [\"a.b\"]", "1.4", `[sidebar] sections needs api = "1.7"`},
 		{"[sidebar]\nsections = [\"a.b\", \"tree\"]", "1.7", ""},
+		// So do the right pane's.
+		{"[details]\nplace = \"right\"\nsections = [\"core\"]", "1.6", `[details] sections needs api = "1.7"`},
+		{"[coordinator]\nsections = [\"needs\"]", "1.5", `[coordinator] sections needs api = "1.7"`},
+		{"[coordinator]\nsections = [\"needs\", \"a.b\"]\n[details]\nsections = [\"a.b\", \"core\"]", "1.7", ""},
+		{"[dashboard]\nsections = [\"needs\"]", "1.5", ""},
 	} {
 		l, err := ParseLayout([]byte(tc.toml))
 		if err != nil {
@@ -203,6 +218,49 @@ func TestParseSideSections(t *testing.T) {
 		above, below := SplitSections(tc.order)
 		if !slices.Equal(above, tc.above) || !slices.Equal(below, tc.below) {
 			t.Errorf("%v: %v %v", tc.order, above, below)
+		}
+	}
+}
+
+// TestPanelSections: the right pane's lists parse, and place each
+// section just above one of core's blocks, or at the bottom.
+func TestPanelSections(t *testing.T) {
+	l, err := ParseLayout([]byte("[coordinator]\nsections = [\"needs\", \"ticker.ticker\", \"threads\", \"report-glance.reports\"]\n" +
+		"[details]\nplace = \"right\"\nsections = [\"ci-status.checks\", \"core\"]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(l.CoordSections, []string{"needs", "ticker.ticker", "threads", "report-glance.reports"}) ||
+		!slices.Equal(l.DetSections, []string{"ci-status.checks", "core"}) || l.Details != "right" {
+		t.Fatalf("%+v", l)
+	}
+	type pp = PanelPlace
+	co, de := CoordinatorBlocks, DetailsBlocks
+	for _, tc := range []struct {
+		order, blocks, ids []string
+		want               []PanelPlace
+	}{
+		// The design's example: after needs (above inbox, even with no
+		// inbox), after threads (above deck); the unlisted at the bottom.
+		{l.CoordSections, co, []string{"x.y", "report-glance.reports", "ticker.ticker"},
+			[]pp{{"ticker.ticker", "inbox"}, {"report-glance.reports", "deck"}, {"x.y", ""}}},
+		// Before any block: just above the first block listed after it.
+		{[]string{"a.a", "needs"}, co, []string{"a.a"}, []pp{{"a.a", "needs"}}},
+		{[]string{"a.a", "b.b", "threads", "c.c"}, co, []string{"c.c", "b.b", "a.a"}, []pp{{"a.a", "threads"}, {"b.b", "threads"}, {"c.c", "deck"}}},
+		// After the last block, or with no block: the bottom, in the
+		// list's order, then the rest in mod order.
+		{[]string{"deck", "a.a"}, co, []string{"z.z", "a.a"}, []pp{{"a.a", ""}, {"z.z", ""}}},
+		{[]string{"b.b", "a.a"}, co, []string{"a.a", "c.c", "b.b"}, []pp{{"b.b", ""}, {"a.a", ""}, {"c.c", ""}}},
+		// An id no section has is skipped; no layout keeps mod order.
+		{[]string{"gone.x", "needs", "a.a"}, co, []string{"a.a"}, []pp{{"a.a", "inbox"}}},
+		{nil, co, []string{"b.b", "a.a"}, []pp{{"b.b", ""}, {"a.a", ""}}},
+		// The details panel's one block.
+		{l.DetSections, de, []string{"ci-status.checks", "x.y"}, []pp{{"ci-status.checks", "core"}, {"x.y", ""}}},
+		{[]string{"core", "a.a"}, de, []string{"a.a"}, []pp{{"a.a", ""}}},
+		{nil, de, nil, nil},
+	} {
+		if got := PanelSections(tc.order, tc.blocks, tc.ids); !slices.Equal(got, tc.want) {
+			t.Errorf("%v of %v: %v, want %v", tc.order, tc.ids, got, tc.want)
 		}
 	}
 }

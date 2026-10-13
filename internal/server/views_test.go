@@ -329,8 +329,8 @@ func TestViewsSections(t *testing.T) {
 	b, _ := join(t, vs, proto.ViewSubscribeParams{Cols: 120, Rows: 30})
 	woken(a)
 	woken(b)
-	v := mustDo(t, vs, proto.MethodViewSections, proto.ViewParams{Client: a.id, Sections: []string{"ticker.ticker", "ci.prs@p"}, On: true})
-	if !v.IsSectionFolded("ticker.ticker") || !v.IsSectionFolded("ci.prs@p") || !woken(b) {
+	v := mustDo(t, vs, proto.MethodViewSections, proto.ViewParams{Client: a.id, Sections: []string{"ticker.ticker", "ci.prs@p", "panel:ticker.ticker"}, On: true})
+	if !v.IsSectionFolded("ticker.ticker") || !v.IsSectionFolded("ci.prs@p") || !v.IsSectionFolded("panel:ticker.ticker") || !woken(b) {
 		t.Fatalf("fold: %+v", v.Tree)
 	}
 	if v = mustDo(t, vs, proto.MethodViewSections, proto.ViewParams{Client: b.id, Sections: []string{"ci.prs@p"}}); v.IsSectionFolded("ci.prs@p") || !v.IsSectionFolded("ticker.ticker") || !woken(a) {
@@ -340,7 +340,7 @@ func TestViewsSections(t *testing.T) {
 	if woken(a) {
 		t.Fatal("a call that changed nothing woke the view")
 	}
-	for _, bad := range [][]string{nil, {"Nope"}, {"m.v", "m.v@"}, make([]string, proto.MaxViewSections+1)} {
+	for _, bad := range [][]string{nil, {"Nope"}, {"m.v", "m.v@"}, {"panel:m.v@p"}, make([]string, proto.MaxViewSections+1)} {
 		if _, err := vs.do(proto.MethodViewSections, proto.ViewParams{Client: a.id, Sections: bad, On: true}); err == nil {
 			t.Fatalf("view.sections took %q", bad)
 		}
@@ -360,13 +360,13 @@ func TestViewsSections(t *testing.T) {
 	// A renamed project keeps its sections' folds.
 	mustDo(t, vs, proto.MethodViewSections, proto.ViewParams{Client: a.id, Sections: []string{"ci.prs@p"}, On: true})
 	vs.renameProject("p", "q")
-	if v, _ := vs.get(view.Main); !v.IsSectionFolded("ci.prs@q") || v.IsSectionFolded("ci.prs@p") {
+	if v, _ := vs.get(view.Main); !v.IsSectionFolded("ci.prs@q") || v.IsSectionFolded("ci.prs@p") || !v.IsSectionFolded("panel:ticker.ticker") {
 		t.Fatalf("rename: %+v", v.Tree)
 	}
 	// views.json keeps them.
 	vs2 := newViews(h, path, nil)
 	vs2.load()
-	if v, _ := vs2.get(view.Main); !v.IsSectionFolded("ticker.ticker") || !v.IsSectionFolded("ci.prs@q") {
+	if v, _ := vs2.get(view.Main); !v.IsSectionFolded("ticker.ticker") || !v.IsSectionFolded("ci.prs@q") || !v.IsSectionFolded("panel:ticker.ticker") {
 		t.Fatalf("views.json: %+v", v.Tree)
 	}
 	// A new view starts with its client's (ui.json's) section folds.
