@@ -34,6 +34,7 @@ func hostMain(args []string) int {
 	if fs.Parse(args) != nil || fs.NArg() != 1 {
 		return modproto.ExitUsage
 	}
+	modhost.Tune(os.Getenv) // as cmd/tm's host does
 	out := os.Stdout
 	os.Stdout = os.Stderr
 	script, err := modhost.Load(fs.Arg(0))
@@ -369,4 +370,13 @@ func TestHostWithoutSandbox(t *testing.T) {
 	f.waitLog("m", "runs without the OS sandbox")
 	f.minute()
 	f.waitLog("m", "info: minute string")
+}
+
+// TestHostMemoryLimitUnderRSSLimit keeps the host's soft memory limit
+// (modhost.Tune) below the RSS ceiling, so the GC works harder before the
+// supervisor kills the host (T360).
+func TestHostMemoryLimitUnderRSSLimit(t *testing.T) {
+	if modhost.MemoryLimit >= DefaultRSSLimit {
+		t.Fatalf("host memory limit %d MiB is not under the RSS limit %d MiB", modhost.MemoryLimit>>20, DefaultRSSLimit>>20)
+	}
 }

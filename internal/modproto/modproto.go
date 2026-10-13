@@ -189,6 +189,10 @@ type Stats struct {
 	Goroutines int    `json:"goroutines"`
 	Timers     int    `json:"timers"`  // armed setTimeout/setInterval
 	Pending    int    `json:"pending"` // API calls waiting for the server
+	// The host's Go runtime settings: GOMAXPROCS, GOGC and GOMEMLIMIT.
+	MaxProcs    int   `json:"gomaxprocs,omitempty"`
+	GCPercent   int   `json:"gc_percent,omitempty"`
+	MemoryLimit int64 `json:"memory_limit,omitempty"`
 }
 
 // Log is a line for ~/.terminatr/logs/mods/<id>.log.

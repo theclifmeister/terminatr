@@ -26,6 +26,8 @@ func modHost(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: tm mod host [--budget D] <bundle.js | main.ts>")
 		return modproto.ExitUsage
 	}
+	// GOMAXPROCS 2, GOGC 50, a soft memory limit; the environment's win.
+	modhost.Tune(os.Getenv)
 	// stdout is the protocol's: anything else that prints goes to stderr.
 	out := os.Stdout
 	os.Stdout = os.Stderr
