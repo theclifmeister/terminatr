@@ -7,7 +7,8 @@
 #
 # Linux binaries pass through untouched. Without TM_SIGN_IDENTITY (a
 # snapshot, a fork, a local `make release-snapshot`) the binary keeps the
-# ad-hoc signature zig's linker gave it, and the script says so.
+# signature Apple's ld gave it (ad-hoc on arm64, none on amd64), and the
+# script says so.
 #
 #   TM_SIGN_IDENTITY  the identity's SHA-1 hash (security find-identity) or
 #                     "Developer ID Application: Name (TEAMID)" if that name is
@@ -28,7 +29,7 @@ goos=${2:?usage: sign.sh <path> <goos>}
 name=$(basename "$(dirname "$bin")")
 
 if [ -z "${TM_SIGN_IDENTITY:-}" ]; then
-	echo "sign: TM_SIGN_IDENTITY not set; $name stays ad-hoc signed and is not notarised"
+	echo "sign: TM_SIGN_IDENTITY not set; $name keeps its linker signature and is not notarised"
 	exit 0
 fi
 

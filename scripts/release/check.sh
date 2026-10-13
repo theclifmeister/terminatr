@@ -70,6 +70,13 @@ for a in "$dist"/tm_*.tar.gz "$dist"/tm_*.zip; do
 		# dynamic libghostty) would break on a clean machine.
 		libs=$(otool -L "$d/tm" | tail -n +2 | awk '{print $1}' | grep -v -e '^/usr/lib/' -e '^/System/Library/Frameworks/' || true)
 		[ -z "$libs" ] || fail "$name links non-system libraries: $libs"
+		# Linked by Apple's ld (scripts/release/cc.sh): chained fixups
+		# keep __DATA_CONST clean, where zig's old-style rebase info left
+		# ~2.4 MB dirty in every tm process; and still runs on macOS 13.
+		loads=$(otool -l "$d/tm")
+		echo "$loads" | grep -q 'cmd LC_DYLD_CHAINED_FIXUPS' || fail "$name: no chained fixups (LC_DYLD_CHAINED_FIXUPS)"
+		minos=$(echo "$loads" | awk '$1 == "minos" {print $2; exit}')
+		[ "$minos" = 13.0 ] || fail "$name: minimum macOS is $minos, want 13.0"
 	fi
 	if [ "$os" = darwin ] && [ -n "$signed" ]; then
 		v=$(codesign --verify --strict "$d/tm" 2>&1) || fail "$name: signature: $v"

@@ -12,7 +12,8 @@ name: release
 #   5. Formula/terminatr.rb is bumped in a pull request that merges itself
 #
 # Everything runs on one macOS runner: tm needs cgo, the Linux targets are
-# cross-compiled with zig cc, and the darwin targets need the macOS SDK.
+# cross-compiled with zig cc, and the darwin targets are linked by Apple's
+# clang and ld from the macOS SDK.
 # The secrets are listed in docs/OPERATIONS.md (Releasing).
 
 on:

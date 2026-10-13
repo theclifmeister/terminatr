@@ -253,8 +253,8 @@ env:
 	@echo 'export CGO_CFLAGS="$(CGO_CFLAGS)"'
 
 # Releases (docs/OPERATIONS.md): goreleaser cross-compiles tm with zig cc
-# for darwin/linux x amd64/arm64, against one libghostty-vt build per
-# target in .build/release/ (scripts/release/). `make release-snapshot`
+# (darwin: Apple's clang) for darwin/linux x amd64/arm64, against one
+# libghostty-vt build per target in .build/release/ (scripts/release/). `make release-snapshot`
 # builds the archives into dist/ without a tag; `make release` is what
 # the tag-triggered release workflow runs.
 GORELEASER_VERSION ?= v2.18.2
