@@ -1323,6 +1323,40 @@ func (c *client) refold(fn func(*view.Tree)) {
 	c.mu.Unlock()
 	c.poke()
 	c.act(proto.MethodViewTree, proto.ViewParams{Tree: &t})
+	c.saveTree(path, t)
+}
+
+// foldSections folds (on) or unfolds the sidebar sections ids: here at
+// once, in the view (view.sections, every console of it) and in ui.json,
+// with the tree new views start with. On a server of protocol 14 the
+// folds stay this console's (ViewConn.Sections).
+func (c *client) foldSections(ids []string, on bool) {
+	if !c.lock() {
+		return
+	}
+	t := c.v.Tree
+	if !t.FoldSections(ids, on) {
+		c.mu.Unlock()
+		return
+	}
+	c.v.Tree = t
+	path := ""
+	if c.side != nil {
+		path = c.side.uiFile
+	}
+	c.mu.Unlock()
+	c.poke()
+	if v, err := c.vc.Sections(ids, on); err != nil {
+		c.failed(err)
+	} else {
+		c.apply(v)
+	}
+	c.saveTree(path, t)
+}
+
+// saveTree keeps t in ui.json at path, if any, as the tree new views
+// start with.
+func (c *client) saveTree(path string, t view.Tree) {
 	if path == "" {
 		return
 	}
@@ -1786,10 +1820,13 @@ func foldAll(all []treeRow, fold bool) func(*view.Tree) {
 		}
 	}
 	active, inactive = active[:min(len(active), view.MaxExpanded)], inactive[:min(len(inactive), view.MaxExpanded)]
+	// The sections' folds are view.sections' (foldSections).
 	if fold {
-		return func(t *view.Tree) { *t = view.Tree{Folded: active} }
+		return func(t *view.Tree) { *t = view.Tree{Folded: active, SectionsFolded: t.SectionsFolded} }
 	}
-	return func(t *view.Tree) { *t = view.Tree{Expanded: inactive, InactiveOpen: true} }
+	return func(t *view.Tree) {
+		*t = view.Tree{Expanded: inactive, InactiveOpen: true, SectionsFolded: t.SectionsFolded}
+	}
 }
 
 // sideKeyStep decides what sidebar key op does with the cursor at sel in

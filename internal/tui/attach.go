@@ -950,6 +950,11 @@ func (c *client) act(method string, p proto.ViewParams) {
 		c.apply(v)
 		return
 	}
+	c.failed(err)
+}
+
+// failed says in the status bar why a view action failed.
+func (c *client) failed(err error) {
 	if c.lock() {
 		var perr *proto.Error
 		msg := err.Error()

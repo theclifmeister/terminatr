@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
 
@@ -235,5 +237,109 @@ func TestSideKeysWhileActing(t *testing.T) {
 	run(m, keyPress(m, "y"))
 	if !slices.Equal(src.lifecycle, []string{"beta activate", "alpha deactivate"}) {
 		t.Fatalf("lifecycle after y %v", src.lifecycle)
+	}
+}
+
+// TestFoldSections: a console folds sections in the view (view.sections)
+// and ui.json, which a new dashboard starts with; z keeps them. On a
+// server of protocol 14, which doesn't know view.sections, the console
+// keeps them as its own, through the view's new versions, until a server
+// that knows the method takes them.
+func TestFoldSections(t *testing.T) {
+	m, _, ui := foldDash(t)
+	server := view.View{Name: "v", Seq: 1}
+	var calls []string
+	protocol := 14
+	vc := &ViewConn{v: server, up: true, watch: map[chan struct{}]bool{},
+		serve: func(method string, p proto.ViewParams) (view.View, error) {
+			if method == proto.MethodViewSections || method == proto.MethodViewTree {
+				calls = append(calls, method)
+			}
+			switch {
+			case method == proto.MethodViewSections && protocol == 14:
+				return view.View{}, proto.Errorf(proto.ErrUnknownMethod, "unknown method %q", method)
+			case method == proto.MethodViewSections:
+				server.FoldSections(p.Sections, p.On)
+			case method == proto.MethodViewTree:
+				folded := server.SectionsFolded
+				server.Tree = *p.Tree
+				server.SectionsFolded = folded
+				if protocol == 14 {
+					server.SectionsFolded = nil
+				}
+			}
+			server.Seq++
+			return server, nil
+		}}
+	m.view = vc
+	// done runs cmd and the commands it batches, and gives the dashboard
+	// what the view calls answer.
+	var done func(cmd tea.Cmd)
+	done = func(cmd tea.Cmd) {
+		t.Helper()
+		if cmd == nil {
+			t.Fatal("no view call")
+		}
+		switch msg := cmd().(type) {
+		case tea.BatchMsg:
+			for _, c := range msg {
+				if c != nil {
+					done(c)
+				}
+			}
+		case viewDoneMsg:
+			m.update(msg)
+		}
+	}
+	done(m.foldSections([]string{"ticker.ticker", "ci.prs@alpha"}, true))
+	if v := vc.View(); !m.folds.IsSectionFolded("ticker.ticker") || !v.IsSectionFolded("ci.prs@alpha") || m.msg != "" {
+		t.Fatalf("a protocol-14 server: folds %+v, view %+v, msg %q", m.folds, vc.View().Tree, m.msg)
+	}
+	if m.foldSections([]string{"ticker.ticker"}, true) != nil {
+		t.Fatal("folding a folded section called the server")
+	}
+	// z sends view.tree, which the old server keeps without the folds:
+	// the console's stay, here and in ui.json.
+	done(keyPress(m, "z"))
+	if v := vc.View(); !m.folds.IsSectionFolded("ticker.ticker") || !v.IsSectionFolded("ticker.ticker") {
+		t.Fatalf("z lost the folds: %+v", m.folds)
+	}
+	if l := LoadLayout(ui).Tree; !l.IsSectionFolded("ticker.ticker") || !l.IsSectionFolded("ci.prs@alpha") {
+		t.Fatalf("ui.json: %+v", l)
+	}
+	n := newDash(DashOptions{Source: &fakeSource{data: testData()}, Width: 120, Height: 30, UIFile: ui})
+	if !n.folds.IsSectionFolded("ticker.ticker") {
+		t.Fatalf("a new dashboard didn't start with ui.json's folds: %+v", n.folds)
+	}
+	// A server of protocol 15 keeps them for the view.
+	protocol = 15
+	done(m.foldSections([]string{"ticker.ticker"}, false))
+	if v := vc.View(); v.IsSectionFolded("ticker.ticker") || v.IsSectionFolded("ci.prs@alpha") || m.folds.IsSectionFolded("ticker.ticker") {
+		t.Fatalf("a protocol-15 server: view %+v, folds %+v", v.Tree, m.folds)
+	}
+	if want := []string{proto.MethodViewSections, proto.MethodViewTree, proto.MethodViewSections}; !slices.Equal(calls, want) {
+		t.Fatalf("calls %v, want %v", calls, want)
+	}
+}
+
+// TestUISectionsRoundTrip: ui.json keeps the sections' folds with the
+// tree, and drops a broken list.
+func TestUISectionsRoundTrip(t *testing.T) {
+	ui := filepath.Join(t.TempDir(), "ui.json")
+	tree := view.Tree{Folded: []string{"a"}, SectionsFolded: []string{"m.v", "m.w@a"}}
+	if err := SaveTree(ui, tree); err != nil {
+		t.Fatal(err)
+	}
+	if got := LoadLayout(ui).Tree; !slices.Equal(got.SectionsFolded, tree.SectionsFolded) || !got.IsFolded("a") {
+		t.Fatalf("round trip: %+v", got)
+	}
+	if b, _ := os.ReadFile(ui); !strings.Contains(string(b), `"sections_folded"`) {
+		t.Fatalf("ui.json: %s", b)
+	}
+	if err := SaveTree(ui, view.Tree{SectionsFolded: []string{"not a section"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := LoadLayout(ui).Tree; len(got.SectionsFolded) != 0 {
+		t.Fatalf("a broken list was kept: %+v", got)
 	}
 }

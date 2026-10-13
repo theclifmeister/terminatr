@@ -318,6 +318,64 @@ func TestViewsStatus(t *testing.T) {
 	}
 }
 
+// TestViewsSections: view.sections folds sections for every console of
+// the view; view.tree, as a protocol-14 console sends it, keeps them;
+// views.json and a new view's tree carry them.
+func TestViewsSections(t *testing.T) {
+	h := newFakeHost("s-1")
+	path := filepath.Join(t.TempDir(), "views.json")
+	vs := newViews(h, path, nil)
+	a, _ := join(t, vs, proto.ViewSubscribeParams{Cols: 120, Rows: 30})
+	b, _ := join(t, vs, proto.ViewSubscribeParams{Cols: 120, Rows: 30})
+	woken(a)
+	woken(b)
+	v := mustDo(t, vs, proto.MethodViewSections, proto.ViewParams{Client: a.id, Sections: []string{"ticker.ticker", "ci.prs@p"}, On: true})
+	if !v.IsSectionFolded("ticker.ticker") || !v.IsSectionFolded("ci.prs@p") || !woken(b) {
+		t.Fatalf("fold: %+v", v.Tree)
+	}
+	if v = mustDo(t, vs, proto.MethodViewSections, proto.ViewParams{Client: b.id, Sections: []string{"ci.prs@p"}}); v.IsSectionFolded("ci.prs@p") || !v.IsSectionFolded("ticker.ticker") || !woken(a) {
+		t.Fatalf("unfold from the other console: %+v", v.Tree)
+	}
+	mustDo(t, vs, proto.MethodViewSections, proto.ViewParams{Client: b.id, Sections: []string{"ci.prs@p"}})
+	if woken(a) {
+		t.Fatal("a call that changed nothing woke the view")
+	}
+	for _, bad := range [][]string{nil, {"Nope"}, {"m.v", "m.v@"}, make([]string, proto.MaxViewSections+1)} {
+		if _, err := vs.do(proto.MethodViewSections, proto.ViewParams{Client: a.id, Sections: bad, On: true}); err == nil {
+			t.Fatalf("view.sections took %q", bad)
+		}
+	}
+	// A protocol-14 console's view.tree has no section folds: the view's
+	// stay. Nor can a protocol-15 one change them that way.
+	var tree14 view.Tree
+	if err := json.Unmarshal([]byte(`{"folded":["p"]}`), &tree14); err != nil {
+		t.Fatal(err)
+	}
+	if v = mustDo(t, vs, proto.MethodViewTree, proto.ViewParams{Client: b.id, Tree: &tree14}); !v.IsFolded("p") || !v.IsSectionFolded("ticker.ticker") {
+		t.Fatalf("a protocol-14 view.tree: %+v", v.Tree)
+	}
+	if v = mustDo(t, vs, proto.MethodViewTree, proto.ViewParams{Client: a.id, Tree: &view.Tree{SectionsFolded: []string{"x.y"}}}); v.IsSectionFolded("x.y") || !v.IsSectionFolded("ticker.ticker") {
+		t.Fatalf("view.tree changed the section folds: %+v", v.Tree)
+	}
+	// A renamed project keeps its sections' folds.
+	mustDo(t, vs, proto.MethodViewSections, proto.ViewParams{Client: a.id, Sections: []string{"ci.prs@p"}, On: true})
+	vs.renameProject("p", "q")
+	if v, _ := vs.get(view.Main); !v.IsSectionFolded("ci.prs@q") || v.IsSectionFolded("ci.prs@p") {
+		t.Fatalf("rename: %+v", v.Tree)
+	}
+	// views.json keeps them.
+	vs2 := newViews(h, path, nil)
+	vs2.load()
+	if v, _ := vs2.get(view.Main); !v.IsSectionFolded("ticker.ticker") || !v.IsSectionFolded("ci.prs@q") {
+		t.Fatalf("views.json: %+v", v.Tree)
+	}
+	// A new view starts with its client's (ui.json's) section folds.
+	_, own := join(t, vs, proto.ViewSubscribeParams{Own: true, Cols: 120, Rows: 30, Tree: &view.Tree{SectionsFolded: []string{"m.v"}}})
+	if v, _ := vs.get(own); !v.IsSectionFolded("m.v") {
+		t.Fatalf("a new view's tree: %+v", v.Tree)
+	}
+}
+
 // TestViewsTree: view.project shows a project's dashboard, on every
 // console of the view, leaving the layout; view.sidesel moves the
 // sidebar's row; an own view keeps its tree to itself; view.expand is

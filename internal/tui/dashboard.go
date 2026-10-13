@@ -1033,6 +1033,28 @@ func (m *dash) refold(fn func(*view.Tree)) tea.Cmd {
 	return m.call(proto.MethodViewTree, proto.ViewParams{Tree: &t})
 }
 
+// foldSections folds (on) or unfolds the sidebar sections ids: here at
+// once, in the view (view.sections, every console of it) and in ui.json,
+// as refold. On a server of protocol 14 the folds stay this console's
+// (ViewConn.Sections).
+func (m *dash) foldSections(ids []string, on bool) tea.Cmd {
+	t := m.folds
+	if !t.FoldSections(ids, on) {
+		return nil
+	}
+	m.folds, m.layout.Tree = t, t
+	m.saveLayout()
+	if m.view == nil {
+		return nil
+	}
+	vc := m.view
+	m.treePending++
+	return m.inTurn(func() tea.Msg {
+		_, err := vc.Sections(ids, on)
+		return viewDoneMsg{tree: true, err: err}
+	})
+}
+
 // setPinned pins a project to the top of the sidebar, or unpins it:
 // here at once, and in its setting.
 func (m *dash) setPinned(slug string, on bool) tea.Cmd {

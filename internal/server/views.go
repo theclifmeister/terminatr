@@ -443,7 +443,21 @@ func (vs *views) do(method string, p proto.ViewParams) (view.View, *proto.Error)
 		if err := p.Tree.Valid(); err != nil {
 			return before, proto.Errorf(proto.ErrBadParams, "%v", err)
 		}
+		// The section folds are view.sections': a console of protocol 14
+		// doesn't know them, and one of 15 sends them there.
+		folded := v.SectionsFolded
 		v.Tree = *p.Tree
+		v.SectionsFolded = folded
+	case proto.MethodViewSections:
+		if len(p.Sections) == 0 || len(p.Sections) > proto.MaxViewSections {
+			return before, proto.Errorf(proto.ErrBadParams, "1 to %d sections", proto.MaxViewSections)
+		}
+		for _, id := range p.Sections {
+			if !view.ValidSection(id) {
+				return before, proto.Errorf(proto.ErrBadParams, "no section %q", id)
+			}
+		}
+		v.FoldSections(p.Sections, p.On)
 	case proto.MethodViewSideSel:
 		if len(p.Key) > view.MaxKey {
 			return before, proto.Errorf(proto.ErrBadParams, "key too long")

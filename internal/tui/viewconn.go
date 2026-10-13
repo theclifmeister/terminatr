@@ -29,6 +29,10 @@ type ViewConn struct {
 	watch  map[chan struct{}]bool // woken by a new version, or up changing
 	digest map[chan struct{}]bool // woken by a view.digest event
 
+	// local holds the sections' folds while the server is one of protocol
+	// 14, without view.sections: the console keeps them as its own.
+	local *[]string
+
 	callMu sync.Mutex // one call at a time on ctl
 	ctl    *server.Client
 	// serve, when set, answers the calls instead of the server (tests).
@@ -135,11 +139,40 @@ func (vc *ViewConn) notify() {
 	}
 }
 
-// View is the newest version the console has.
+// View is the newest version the console has, with the console's own
+// section folds when the server doesn't keep them.
 func (vc *ViewConn) View() view.View {
 	vc.mu.Lock()
 	defer vc.mu.Unlock()
-	return vc.v.Clone()
+	v := vc.v.Clone()
+	if vc.local != nil {
+		v.SectionsFolded = *vc.local
+	}
+	return v
+}
+
+// Sections folds (on) or unfolds the sidebar sections ids for every
+// console of the view (view.sections), and returns the view afterwards.
+// A server of protocol 14 doesn't know the method: the console then keeps
+// the folds as its own, and says nothing.
+func (vc *ViewConn) Sections(ids []string, on bool) (view.View, error) {
+	v, err := vc.Do(proto.MethodViewSections, proto.ViewParams{Sections: ids, On: on})
+	var perr *proto.Error
+	if errors.As(err, &perr) && perr.Code == proto.ErrUnknownMethod {
+		t := v.Tree
+		t.FoldSections(ids, on)
+		vc.mu.Lock()
+		vc.local = &t.SectionsFolded
+		vc.mu.Unlock()
+		vc.notify()
+		return vc.View(), nil
+	}
+	if err == nil {
+		vc.mu.Lock()
+		vc.local = nil
+		vc.mu.Unlock()
+	}
+	return vc.View(), err
 }
 
 // Up says whether the console is joined (the server is there).
