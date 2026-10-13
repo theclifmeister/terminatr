@@ -209,6 +209,9 @@ func Attach(opts Options) (res Result, err error) {
 			panic(p)
 		}
 	}()
+	// Before the colour queries: the panes' palette, sent once they
+	// answered, needs the terminal's truecolor known (truecolor.go).
+	probeTerminal(opts.In, opts.Out, true)
 	if _, err := opts.Out.WriteString(outerSetup); err != nil {
 		return res, err
 	}

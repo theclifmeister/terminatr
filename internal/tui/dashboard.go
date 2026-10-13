@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/mod"
@@ -153,7 +154,12 @@ func Dashboard(opts DashOptions) (DashResult, error) {
 	if m.stopWatch != nil {
 		defer m.stopWatch()
 	}
+	probeTerminal(opts.In, opts.Out, false)
 	popts := []tea.ProgramOption{tea.WithInput(opts.In), tea.WithOutput(opts.Out)}
+	if probedTruecolor.Load() {
+		// Bubble Tea reads the colour profile from the environment only.
+		popts = append(popts, tea.WithColorProfile(colorprofile.TrueColor))
+	}
 	if opts.Width > 0 && opts.Height > 0 {
 		popts = append(popts, tea.WithWindowSize(opts.Width, opts.Height))
 	}
