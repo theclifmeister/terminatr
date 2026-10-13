@@ -4,7 +4,7 @@
 #   tm mod install terminatr/examples/mods/nord && tm mod enable nord
 id = "nord"
 name = "Nord"
-version = "1.1.0"
+version = "1.2.0"
 api = "1.6"
 description = "The Nord palette, in light and dark, with icons drawn to match."
 authors = ["terminatr"]

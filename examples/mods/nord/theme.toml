@@ -19,9 +19,9 @@
 
 [dark]
 head   = { fg = ["brightwhite", "#eceff4"], bold = true }
-sel    = { fg = ["black", "#2e3440"], bg = ["cyan", "#88c0d0"] }
-sel_focus = { fg = ["black", "#2e3440"], bg = ["brightcyan", "#8fbcbb"] }
-faint  = { fg = ["brightblack", "#4c566a"] }
+sel    = { fg = ["black", "#242933"], bg = ["cyan", "#88c0d0"] }
+sel_focus = { fg = ["black", "#242933"], bg = ["brightcyan", "#8fbcbb"] }
+faint  = { fg = ["brightblack", "#616e88"] }
 accent = { fg = ["cyan", "#88c0d0"] }
 title  = { fg = ["cyan", "#8fbcbb"], bold = true }
 bad    = { fg = ["red", "#bf616a"] }
@@ -32,30 +32,30 @@ plain  = { fg = ["white", "#d8dee9"] }
 
 [dark.pane]
 fg = "#d8dee9"
-bg = "#2e3440"
+bg = "#242933"
 palette = [
   "#3b4252", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#88c0d0", "#e5e9f0",
-  "#4c566a", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#8fbcbb", "#eceff4",
+  "#616e88", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#8fbcbb", "#eceff4",
 ]
 
 [light]
 head   = { fg = ["black", "#2e3440"], bold = true }
-sel    = { fg = ["brightwhite", "#eceff4"], bg = ["blue", "#5e81ac"] }
-sel_focus = { fg = ["brightwhite", "#eceff4"], bg = ["magenta", "#b48ead"] }
-faint  = { fg = ["brightblack", "#7b88a1"] }
-accent = { fg = ["blue", "#5e81ac"] }
-title  = { fg = ["blue", "#5e81ac"], bold = true }
-bad    = { fg = ["red", "#bf616a"] }
-warn   = { fg = ["yellow", "#d08770"] }
-good   = { fg = ["green", "#6f8f57"] }
-info   = { fg = ["blue", "#81a1c1"] }
+sel    = { fg = ["brightwhite", "#eceff4"], bg = ["blue", "#405c7d"] }
+sel_focus = { fg = ["brightwhite", "#eceff4"], bg = ["magenta", "#86597d"] }
+faint  = { fg = ["brightblack", "#74819c"] }
+accent = { fg = ["blue", "#405c7d"] }
+title  = { fg = ["blue", "#405c7d"], bold = true }
+bad    = { fg = ["red", "#ac4650"] }
+warn   = { fg = ["yellow", "#a24f35"] }
+good   = { fg = ["green", "#556e43"] }
+info   = { fg = ["blue", "#466a8e"] }
 plain  = { fg = ["black", "#3b4252"] }
 
-# Nord's colours darkened where they'd fade on a light background.
+# Nord's colours darkened to WCAG AA (4.5:1) on the light background.
 [light.pane]
 fg = "#2e3440"
-bg = "#eceff4"
+bg = "#e5e9f0"
 palette = [
-  "#3b4252", "#bf616a", "#6f8f57", "#d08770", "#5e81ac", "#b48ead", "#4f8f9c", "#d8dee9",
-  "#4c566a", "#bf616a", "#6f8f57", "#d08770", "#5e81ac", "#b48ead", "#4f8f9c", "#e5e9f0",
+  "#3b4252", "#ac4650", "#556e43", "#a24f35", "#405c7d", "#86597d", "#3d6e78", "#d8dee9",
+  "#4c566a", "#ac4650", "#556e43", "#a24f35", "#405c7d", "#86597d", "#3d6e78", "#eceff4",
 ]
