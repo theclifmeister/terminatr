@@ -21,7 +21,11 @@ import (
 // details show under its row instead.
 
 // details is the panel for r, w cells wide, styled.
-func (m *dash) details(r row, w int) []string {
+func (m *dash) details(r row, w int) []string { return m.detailsLay(r, w, 0).lines }
+
+// detailsLay is the panel for r, w cells wide and h rows tall (0: no
+// fitting), with the mods' details sections placed.
+func (m *dash) detailsLay(r row, w, h int) panelLay {
 	d := &panel{w: w}
 	switch {
 	case r.task != nil:
@@ -35,10 +39,36 @@ func (m *dash) details(r row, w int) []string {
 			sessionPanel(d, s)
 		}
 	}
-	if project, task, thr, ok := sectionTarget(r); ok {
-		modSections(d, m.mv.list, mod.SlotDetailsSection, project, task, thr)
+	if t, ok := detailsTarget(r); ok {
+		return layPanel(d, nil, m.mv.list, t, m.detailsOpts(h))
 	}
-	return d.lines
+	return panelLay{lines: d.lines}
+}
+
+// detailsTarget is what the details sections in r's panel show for; ok
+// false for a row that has none.
+func detailsTarget(r row) (panelTarget, bool) {
+	project, task, thr, ok := sectionTarget(r)
+	return panelTarget{slot: mod.SlotDetailsSection, project: project, task: task, thr: thr}, ok
+}
+
+// detailsOpts are this console's state of the details panel's sections,
+// h rows tall.
+func (m *dash) detailsOpts(h int) panelOpts {
+	return panelOpts{order: m.layout.detSections, folds: m.folds, sel: m.detSelNow(), focused: m.area() == areaDetails, rows: h,
+		mods: m.data.Mods, noMods: m.data.NoMods, cache: &m.mv.panel}
+}
+
+// detailsNow is the details panel as it shows now, ok false while it
+// doesn't.
+func (m *dash) detailsNow() (panelLay, bool) {
+	g := m.geom()
+	dr := g.details()
+	r, ok := m.selected()
+	if g.panel() == "" || dr.w <= 0 || !ok {
+		return panelLay{}, false
+	}
+	return m.detailsLay(r, dr.w, dr.h), true
 }
 
 func (m *dash) session(id string) (proto.SessionInfo, bool) {
@@ -50,10 +80,33 @@ func (m *dash) session(id string) (proto.SessionInfo, bool) {
 	return proto.SessionInfo{}, false
 }
 
-// panel collects a details panel's lines.
+// panel collects a details panel's lines: core's, with where its named
+// blocks start (block) and which lines are must-see (mustFrom), for the
+// mods' sections placed among them (panelsections.go).
 type panel struct {
-	w     int
-	lines []string
+	w      int
+	lines  []string
+	starts map[string]int
+	must   []bool
+}
+
+// block says core's block name starts at the next line.
+func (d *panel) block(name string) {
+	if d.starts == nil {
+		d.starts = map[string]int{}
+	}
+	d.starts[name] = len(d.lines)
+}
+
+// mustFrom marks the lines from line i on as must-see: no mod section
+// pushes one off the first screen.
+func (d *panel) mustFrom(i int) {
+	for len(d.must) < len(d.lines) {
+		d.must = append(d.must, false)
+	}
+	for j := i; j < len(d.lines); j++ {
+		d.must[j] = true
+	}
 }
 
 func (d *panel) add(s string) { d.lines = append(d.lines, fit(" "+s, d.w)+reset) }
@@ -79,7 +132,7 @@ func (d *panel) section(title, meta string) {
 }
 
 // title is the panel's first line, bold in the accent colour, and the
-// state under it.
+// state under it: the head; core's block, core, starts under it.
 func (d *panel) title(text, state string) {
 	d.add(th().Title.Render(oneLine(text)))
 	if state != "" && state != "—" {
@@ -87,6 +140,7 @@ func (d *panel) title(text, state string) {
 		d.add(st.Render(strings.TrimSpace(g + " " + state)))
 	}
 	d.add(th().Faint.Render(strings.Repeat("─", max(d.w-2, 0))))
+	d.block("core")
 }
 
 // badges shows the mods' annotations under the title: per mod one line
@@ -199,7 +253,9 @@ func (m *dash) threadPanel(d *panel, r row) {
 			d.field("updated", age(time.Since(st.Updated))+" ago")
 		}
 		if st.NeedsYou != "" {
+			from := len(d.lines)
 			d.field("waiting", th().Warn.Render(oneLine(st.NeedsYou)))
+			d.mustFrom(from)
 		}
 	}
 	if t.Report != nil && t.Report.PR != "" {
@@ -209,10 +265,12 @@ func (m *dash) threadPanel(d *panel, r row) {
 		d.field("report", reportState(t, true))
 	}
 	if q != nil {
+		from := len(d.lines)
 		d.section("QUESTION OPEN", "")
 		for _, l := range questionLines(q) {
 			d.wrap(l)
 		}
+		d.mustFrom(from)
 	}
 	d.gap()
 	for _, l := range threadDetail(t, "", false) {

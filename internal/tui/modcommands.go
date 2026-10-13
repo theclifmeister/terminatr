@@ -52,7 +52,7 @@ func coreKey(k, prefix string) string {
 	for _, tb := range []struct {
 		t    keyTable
 		rows []bindable
-	}{{binds.list, listBindables()}, {binds.side, sideBindables()}} {
+	}{{binds.list, listBindables()}, {binds.side, sideBindables()}, {binds.panel, panelBindables()}} {
 		for _, r := range tb.rows {
 			if slices.Contains(tb.t.keys(r.id, r.keys), k) {
 				return r.id

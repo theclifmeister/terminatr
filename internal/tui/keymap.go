@@ -101,12 +101,13 @@ func keyGroups(mods []keyHelp) []keyGroup {
 		}
 		return out
 	}
-	dash, side := lines(binds.list, listBindables()), lines(binds.side, sideBindables())
+	dash, side, panel := lines(binds.list, listBindables()), lines(binds.side, sideBindables()), lines(binds.panel, panelBindables())
 	groups := []keyGroup{
 		{"On the dashboard", dash},
 		{"With the mouse", mouseKeys},
 		{"Prefix commands: the same everywhere", sessionKeys()},
 		{"In the sidebar (tab, or prefix+tab in a session)", side},
+		{"In the info and details panels (tab, or a click)", panel},
 		{"In the project popup", popupKeys},
 		{"In the settings (, or the project popup's Settings tab)", settingsKeys},
 	}
@@ -172,7 +173,7 @@ func keyLines(w int, mods []keyHelp) []string {
 		}
 	}
 	out = append(out, "")
-	out = append(out, faintLines("A prefix command does the same in a session, on the dashboard and over a popup, and no plain key means something else: popups close with esc, and the lists refresh by themselves. The prefix is in the settings (,); inside tmux, which takes ctrl+b, pick another.", w)...)
+	out = append(out, faintLines("A prefix command does the same in a session, on the dashboard and over a popup, and no plain key means something else, but ] and [ in a panel with mod sections: popups close with esc, and the lists refresh by themselves. The prefix is in the settings (,); inside tmux, which takes ctrl+b, pick another.", w)...)
 	return append(out, faintLines("Every tm shows the same view: what one does, the others show, sized by the one typed in. tm --own keeps to itself. You talk to coordinators; they run the threads, their reports and the tasks.", w)...)
 }
 

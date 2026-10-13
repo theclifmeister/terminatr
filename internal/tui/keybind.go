@@ -80,7 +80,7 @@ type keyTable struct {
 }
 
 // binds are this console's keymaps, the defaults until ApplyKeymap.
-var binds struct{ list, side keyTable }
+var binds struct{ list, side, panel keyTable }
 
 // canon is the default key typed key runs as.
 func (t keyTable) canon(key string) string {
@@ -109,6 +109,8 @@ func tableOf(id string) *keyTable {
 	switch {
 	case strings.HasPrefix(id, "side."):
 		return &binds.side
+	case strings.HasPrefix(id, "panel."):
+		return &binds.panel
 	case id != "":
 		return &binds.list
 	}
@@ -204,25 +206,28 @@ func barKey(id, shown string) string {
 // apply. A nil or empty keymap is the defaults. It is set before the
 // console starts: the keys are read without a lock.
 func ApplyKeymap(km map[string][]string, prefix string) error {
-	list, side, err := planKeymap(km, prefix)
-	binds.list, binds.side = list, side
+	list, side, panel, err := planKeymap(km, prefix)
+	binds.list, binds.side, binds.panel = list, side, panel
 	return err
 }
 
 // planKeymap is what ApplyKeymap would set, and what it leaves out, without
 // setting it: tm mod validate and tm doctor check a keymap mod with it.
-func planKeymap(km map[string][]string, prefix string) (keyTable, keyTable, error) {
+func planKeymap(km map[string][]string, prefix string) (keyTable, keyTable, keyTable, error) {
 	var errs []error
-	list, side := listBindables(), sideBindables()
-	var out [2]keyTable
+	list, side, panel := listBindables(), sideBindables(), panelBindables()
+	var out [3]keyTable
 	tables := []struct {
 		rows []bindable
 		want map[string][]string
-	}{{list, map[string][]string{}}, {side, map[string][]string{}}}
+	}{{list, map[string][]string{}}, {side, map[string][]string{}}, {panel, map[string][]string{}}}
 	for _, id := range slices.Sorted(maps.Keys(km)) {
 		ti := 0
-		if tableOf(id) == &binds.side {
+		switch tableOf(id) {
+		case &binds.side:
 			ti = 1
+		case &binds.panel:
+			ti = 2
 		}
 		var row *bindable
 		if i := slices.IndexFunc(tables[ti].rows, func(r bindable) bool { return r.id == id }); i >= 0 {
@@ -259,11 +264,21 @@ func planKeymap(km map[string][]string, prefix string) (keyTable, keyTable, erro
 				dropped = drop(tb.want, id, "a prefix command's key can't mean something else in a popup or the sidebar") || dropped
 			}
 		}
+		// A panel key moved onto a prefix command's key would mean
+		// something else in the panel; only ] and [ do, by default.
+		for _, id := range slices.Sorted(maps.Keys(tables[2].want)) {
+			def := defaultKeys(id)
+			if slices.ContainsFunc(tables[2].want[id], func(k string) bool {
+				return (prefixCommands[k] || paneCommands[k]) && !slices.Contains(def, k)
+			}) {
+				dropped = drop(tables[2].want, id, "a prefix command's key can't mean something else in a panel") || dropped
+			}
+		}
 	}
 	for i, tb := range tables {
 		out[i] = newKeyTable(tb.rows, tb.want)
 	}
-	return out[0], out[1], errors.Join(errs...)
+	return out[0], out[1], out[2], errors.Join(errs...)
 }
 
 // checkBinding is what is wrong with binding id (row, nil when no table
@@ -408,7 +423,8 @@ var coreActions = []struct {
 // KeyAction is one action as the action binding and a keymap see it.
 type KeyAction struct {
 	// ID is its stable name; Area where it works ("list", "sidebar",
-	// "popup", "view" (a mod's view only) or "session"); Keys its keys now; Help its line in the help ("" for
+	// "panel" (the info and details panels), "popup", "view" (a mod's
+	// view only) or "session"); Keys its keys now; Help its line in the help ("" for
 	// one that shares the line above); Fixed that it can't be rebound.
 	ID, Area string
 	Keys     []string
@@ -425,7 +441,7 @@ func KeyActions() []KeyAction {
 		area string
 		t    keyTable
 		rows []bindable
-	}{{"list", binds.list, listBindables()}, {"sidebar", binds.side, sideBindables()}} {
+	}{{"list", binds.list, listBindables()}, {"sidebar", binds.side, sideBindables()}, {"panel", binds.panel, panelBindables()}} {
 		for _, r := range tb.rows {
 			out = append(out, KeyAction{ID: r.id, Area: tb.area, Keys: slices.Clone(tb.t.keys(r.id, r.keys)), Help: r.help, Fixed: r.fixed})
 		}

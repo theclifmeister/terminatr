@@ -17,7 +17,7 @@ import (
 // checks accept it.
 func TestDefaultKeymap(t *testing.T) {
 	km := DefaultKeymap()
-	for _, b := range append(listBindables(), sideBindables()...) {
+	for _, b := range slices.Concat(listBindables(), sideBindables(), panelBindables()) {
 		keys, ok := km[b.id]
 		switch {
 		case b.fixed && ok:

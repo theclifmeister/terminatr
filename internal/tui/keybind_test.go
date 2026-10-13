@@ -30,6 +30,8 @@ var wantIDs = []string{
 	"side.up", "side.down", "side.enter", "side.unfold", "side.fold", "side.back", "side.activate",
 	"side.fold-all", "side.unfold-all", "side.pin", "side.first", "side.last", "side.page-up", "side.page-down",
 	"side.nth", "side.needs-next", "side.needs-prev", "side.filter", "side.help",
+	"panel.up", "panel.down", "panel.page-up", "panel.page-down", "panel.first", "panel.last",
+	"panel.section-next", "panel.section-prev", "panel.unfold", "panel.fold", "panel.enter", "panel.back",
 	"popup.close", "repo.add", "repo.remove", "task.new", "task.show", "task.delegate", "task.accept", "task.send-back",
 	"task.coordinator", "tasks.done", "library.read", "library.delete", "library.delete-thread",
 	"session.attach", "session.clear", "question.answer", "session.dashboard", "session.remote", "prefix.send",

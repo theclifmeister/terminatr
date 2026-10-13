@@ -241,6 +241,9 @@ func (m *dash) press(mo tea.Mouse) tea.Cmd {
 		m.focus = areaMain
 		if g.details().has(mo.X, mo.Y) {
 			m.focus = areaDetails
+			if cmd, ok := m.detailsClick(mo.X-g.details().x, mo.Y-g.details().y); ok {
+				return cmd
+			}
 		}
 		return m.click(x, y, double)
 	case tea.MouseRight:
@@ -325,12 +328,46 @@ func (m *dash) dragTo(x, y int) {
 	}
 }
 
-// scrollDetails scrolls the details panel by d lines.
+// detailsClick is a click at cell (x, y) of the details panel on a mod
+// section: it selects its header, and folds, unfolds or opens it
+// (panelHeadClick); ok is false elsewhere.
+func (m *dash) detailsClick(x, y int) (tea.Cmd, bool) {
+	lay, shows := m.detailsNow()
+	if !shows {
+		return nil, false
+	}
+	top := 0
+	if m.detailKey == m.sel {
+		top = min(m.detailTop, max(len(lay.lines)-m.geom().details().h, 0))
+	}
+	i := top + y
+	if i < 0 || i >= len(lay.hits) || lay.hits[i].kind != hitSection {
+		return nil, false
+	}
+	j := slices.IndexFunc(lay.secs, func(s *sideSection) bool { return s.id == lay.hits[i].sec })
+	if j < 0 {
+		return nil, false
+	}
+	m.detSel, m.detSelKey = lay.secs[j].id, m.sel
+	return m.sectionCmd(panelHeadClick(lay.secs[j], x, lay.headAt(i) >= 0)), true
+}
+
+// scrollDetails scrolls the details panel by d lines; a selected
+// header scrolled off screen drops the selection.
 func (m *dash) scrollDetails(d int) {
 	if m.detailKey != m.sel {
 		m.detailKey, m.detailTop = m.sel, 0
 	}
 	m.detailTop = max(m.detailTop+d, 0)
+	if lay, ok := m.detailsNow(); ok {
+		rows := m.geom().details().h
+		m.detailTop = min(m.detailTop, max(len(lay.lines)-rows, 0))
+		if i := slices.IndexFunc(lay.secs, func(s *sideSection) bool { return s.id == m.detSelNow() }); i >= 0 {
+			if h := lay.heads[i]; h < m.detailTop || h >= m.detailTop+rows {
+				m.detSel = ""
+			}
+		}
+	}
 }
 
 // rowAt is the key of the list's row at the dashboard's column x,
