@@ -10,7 +10,7 @@ usual consent screen. Three of them, `pr-ci-column`, `memory-tab` and
 Each installs with one line, from its folder at a release tag:
 
 ```sh
-tm mod install https://github.com/theclifmeister/terminatr/tree/v0.24.0/examples/mods/nord
+tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/nord
 ```
 
 The tag pins the example as that release made it, for that release's
@@ -21,22 +21,22 @@ on in the Mods tab (`,` then `3`), or with `tm mod enable <id>`. `e` in the Mods
 
 | # | Mod | Surface | Asks for | Install |
 |---|-----|---------|----------|---------|
-| 1 | [nord](nord) | theme and icon set (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.24.0/examples/mods/nord` |
-| 2 | [vim-keys](vim-keys) | keymap (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.24.0/examples/mods/vim-keys` |
-| 3 | [context-gauge](context-gauge) | a cell in the sidebar and on the dashboard, and a card whose rows bind `session.clear` and `session.attach` | reads your projects, draws its own panels, offers you keys that clear a session's conversation | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.24.0/examples/mods/context-gauge` |
-| 4 | [cost-card](cost-card) | a dashboard card | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.24.0/examples/mods/cost-card` |
-| 5 | [notify-me](notify-me) | OS notifications with core-action buttons, a question's options among them | reads your projects, shows notifications, offers you buttons that answer an agent's question | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.24.0/examples/mods/notify-me` |
-| 6 | [thread-timeline](thread-timeline) | a full view (≡ menu) | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.24.0/examples/mods/thread-timeline` |
+| 1 | [nord](nord) | theme and icon set (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/nord` |
+| 2 | [vim-keys](vim-keys) | keymap (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/vim-keys` |
+| 3 | [context-gauge](context-gauge) | a cell in the sidebar and on the dashboard, and a card whose rows bind `session.clear` and `session.attach` | reads your projects, draws its own panels, offers you keys that clear a session's conversation | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/context-gauge` |
+| 4 | [cost-card](cost-card) | a dashboard card | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/cost-card` |
+| 5 | [notify-me](notify-me) | OS notifications with core-action buttons, a question's options among them | reads your projects, shows notifications, offers you buttons that answer an agent's question | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/notify-me` |
+| 6 | [thread-timeline](thread-timeline) | a full view (≡ menu) | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/thread-timeline` |
 | 7 | [pr-ci-column](pr-ci-column) | a sidebar column (built in) | reads your projects | copy it under another id first, see below |
 | 8 | [memory-tab](memory-tab) | a project-popup tab (built in) | reads your projects, draws its own panels | copy it under another id first, see below |
 | + | [tasks-tab](tasks-tab) | the popup's Tasks tab, its rows bound to tm's task actions (built in) | reads your projects, draws its own panels | copy it under another id first, see below |
-| + | [memory-search](memory-search) | an agent tool, `memory-search_find` | reads your projects, offers tools to agents | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.24.0/examples/mods/memory-search` |
-| + | [standup](standup) | a command: the key `S`, a ≡ menu entry and `tm mod run standup show` | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.24.0/examples/mods/standup` |
-| + | [report-glance](report-glance) | panel sections: one at the bottom of the details panel, one in the coordinator's info panel | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.24.0/examples/mods/report-glance` |
-| + | [gitlab](gitlab) | a code host: GitLab merge requests as tm's PRs | runs glab | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.24.0/examples/mods/gitlab` |
-| + | [zen](zen) | a layout (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.24.0/examples/mods/zen` |
-| + | [cockpit](cockpit) | a layout (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.24.0/examples/mods/cockpit` |
-| + | [compact](compact) | a layout (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.24.0/examples/mods/compact` |
+| + | [memory-search](memory-search) | an agent tool, `memory-search_find` | reads your projects, offers tools to agents | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/memory-search` |
+| + | [standup](standup) | a command: the key `S`, a ≡ menu entry and `tm mod run standup show` | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/standup` |
+| + | [report-glance](report-glance) | panel sections: one at the bottom of the details panel, one in the coordinator's info panel | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/report-glance` |
+| + | [gitlab](gitlab) | a code host: GitLab merge requests as tm's PRs | runs glab | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/gitlab` |
+| + | [zen](zen) | a layout (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/zen` |
+| + | [cockpit](cockpit) | a layout (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/cockpit` |
+| + | [compact](compact) | a layout (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/compact` |
 
 **Claude needs the Agent mod for three of them.** `memory-search`'s
 tool, and the context and use that `context-gauge` and `cost-card` read
@@ -51,7 +51,7 @@ and `tm mod install` refuses a built-in mod's id. To change one, copy it, give t
 copy its own id and install that:
 
 ```sh
-git clone --depth 1 --branch v0.24.0 https://github.com/theclifmeister/terminatr
+git clone --depth 1 --branch v0.25.2 https://github.com/theclifmeister/terminatr
 cp -R terminatr/examples/mods/pr-ci-column my-pr-ci-column
 # set id = "my-pr-ci-column" in my-pr-ci-column/mod.toml
 tm mod install my-pr-ci-column
