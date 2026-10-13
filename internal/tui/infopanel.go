@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -96,6 +97,7 @@ type infoHit struct {
 	task    int    // hitTask: the task's number
 	session string // hitSession: the session to show
 	url     string // hitPR: the PR's address
+	sec     string // hitSection: the mod section's fold id
 }
 
 // hitKind is the kind of an infoHit.
@@ -107,6 +109,7 @@ const (
 	hitPR                // the PR in the browser
 	hitSession           // that session in the pane (a coordinator's thread row)
 	hitQuestions         // the coordinator opens its questions (tm ask open)
+	hitSection           // a mod section's header or body (panelsections.go)
 )
 
 // prURL is the thread's PR's address: the ticker's, else its report's.
@@ -138,6 +141,33 @@ func (d *infoData) prLine() string {
 // infoLines draws the panel's content w cells wide (its border not
 // included), with what a click on each line does. now dates the ages.
 func infoLines(d *infoData, w int, now time.Time) ([]string, []infoHit) {
+	lay := infoLay(d, w, now, panelOpts{})
+	return lay.lines, lay.hits
+}
+
+// infoLay is the panel's content w cells wide with the mods' sections
+// placed as o says: beside a coordinator its coordinator sections,
+// beside a thread the details sections for it, as the dashboard's
+// details panel shows them on the thread's row.
+func infoLay(d *infoData, w int, now time.Time, o panelOpts) panelLay {
+	if d == nil {
+		pl := &panel{w: w}
+		pl.add(th().Faint.Render("no thread here"))
+		return panelLay{lines: pl.lines}
+	}
+	if d.watch != nil {
+		pl, hits := coordPanel(d.watch, w, now)
+		return layPanel(pl, hits, d.sections, infoTarget(d), o)
+	}
+	pl, hits := threadInfo(d, w, now)
+	return layPanel(pl, hits, d.sections, infoTarget(d), o)
+}
+
+// threadInfo is a thread's panel w cells wide, with what a click on
+// each line does: its head (the task's title and state) then core's
+// block, named core; what needs you, its question and a red PR line are
+// must-see.
+func threadInfo(d *infoData, w int, now time.Time) (*panel, []infoHit) {
 	pl := &panel{w: w}
 	var hits []infoHit
 	// hit makes the lines added since line from clickable.
@@ -149,19 +179,6 @@ func infoLines(d *infoData, w int, now time.Time) ([]string, []infoHit) {
 			hits[i] = h
 		}
 	}
-	if d == nil {
-		pl.add(th().Faint.Render("no thread here"))
-		return pl.lines, nil
-	}
-	if d.watch != nil {
-		lines, hits := coordLines(d.watch, w, now)
-		pl.lines = lines
-		modSections(pl, d.sections, mod.SlotCoordinatorSection, d.slug, "", "")
-		for len(hits) < len(pl.lines) {
-			hits = append(hits, infoHit{})
-		}
-		return pl.lines, hits
-	}
 	s := d.session
 	id := s.Thread
 	// The task, with its steps; the one under way marked.
@@ -171,6 +188,7 @@ func infoLines(d *infoData, w int, now time.Time) ([]string, []infoHit) {
 		g, st := stateLook(string(t.Status))
 		pl.add(st.Render(strings.TrimSpace(g+" "+string(t.Status))) + th().Faint.Render(" · click to open"))
 		hit(0, infoHit{kind: hitTask, task: t.ID})
+		pl.block("core")
 		if len(t.Steps) > 0 {
 			pl.section("STEPS", "")
 			pl.add(progressLine(thread.Progress{Percent: pctOf(t.StepsDone(), len(t.Steps)), Done: t.StepsDone(), Total: len(t.Steps)}))
@@ -190,6 +208,9 @@ func infoLines(d *infoData, w int, now time.Time) ([]string, []infoHit) {
 	case d.rec != nil:
 		pl.wrap(th().Title.Render(oneLine(d.rec.Title)))
 		pl.add(th().Faint.Render("no task"))
+	}
+	if pl.starts == nil {
+		pl.block("core")
 	}
 	// The thread: its state, progress, what it does now, what it waits on.
 	pl.section("THREAD", "")
@@ -217,22 +238,26 @@ func infoLines(d *infoData, w int, now time.Time) ([]string, []infoHit) {
 			pl.field("now", `"`+oneLine(ts.Activity)+`"`)
 		}
 		if ts.NeedsYou != "" {
+			from := len(pl.lines)
 			hang(pl, th().Faint.Render(fmt.Sprintf("%-9s", "needs you"))+" ", th().Warn.Render(oneLine(ts.NeedsYou)))
+			pl.mustFrom(from)
 		}
 	}
 	if q := s.Question; q != nil {
+		from := len(pl.lines)
 		pl.section("QUESTION OPEN", age(now.Sub(q.Since))+" ago")
 		for _, l := range questionLines(q) {
 			pl.wrap(l)
 		}
+		pl.mustFrom(from)
 		pl.gap()
 	}
 	// The PR and its checks.
 	if l := d.prLine(); l != "" {
-		look := th().Accent
+		look, bad := th().Accent, false
 		switch {
 		case d.pr.Checks == "fail" || d.pr.Mergeable == "CONFLICTING":
-			look = th().Bad
+			look, bad = th().Bad, true
 		case d.pr.State == "MERGED":
 			look = th().Good
 		}
@@ -240,6 +265,9 @@ func infoLines(d *infoData, w int, now time.Time) ([]string, []infoHit) {
 		hang(pl, th().Faint.Render(fmt.Sprintf("%-9s", "PR"))+" ", look.Render(l))
 		if d.prURL() != "" {
 			hit(from, infoHit{kind: hitPR, url: d.prURL()})
+		}
+		if bad {
+			pl.mustFrom(from)
 		}
 	}
 	// The last report: its first lines. Its Next items are the
@@ -281,7 +309,7 @@ func infoLines(d *infoData, w int, now time.Time) ([]string, []infoHit) {
 	for len(hits) < len(pl.lines) {
 		hits = append(hits, infoHit{})
 	}
-	return pl.lines, hits
+	return pl, hits
 }
 
 // maxRefusals is how many of the guard's refusals the panel lists.
@@ -389,6 +417,14 @@ type infoPanel struct {
 	top   int       // the first content line shown
 	drag  bool      // the mouse is moving its border
 	drawn []string  // the lines on screen; nil repaints them all
+	// lay is the content with the mods' sections placed, sel the
+	// selected section header's fold id ("" for none), cache their lines;
+	// coordOrder and detOrder are the layout's coordinator.sections and
+	// details.sections.
+	lay                  panelLay
+	sel                  string
+	cache                sectionCache
+	coordOrder, detOrder []string
 }
 
 // infoX is the panel's first column (its border). c.mu held.
@@ -403,14 +439,45 @@ func (c *client) infoX() int {
 // or its width changes, not with every frame. c.mu held.
 func (c *client) infoLayout() {
 	ip := c.info
-	ip.lines, ip.hits = infoLines(ip.data, max(c.infoW-1, 1), time.Now())
+	ip.lay = infoLay(ip.data, max(c.infoW-1, 1), time.Now(), c.infoOpts())
+	ip.lines, ip.hits = ip.lay.lines, ip.lay.hits
 	ip.top = min(ip.top, max(len(ip.lines)-c.infoRows(), 0))
+	if ip.sel != "" && !slices.ContainsFunc(ip.lay.secs, func(s *sideSection) bool { return s.id == ip.sel }) {
+		ip.sel = "" // its section is gone
+	}
+}
+
+// infoOpts are this console's state of the panel's mod sections. c.mu
+// held.
+func (c *client) infoOpts() panelOpts {
+	ip := c.info
+	o := panelOpts{order: ip.detOrder, folds: c.v.Tree, sel: ip.sel, focused: c.kb == areaInfo, rows: c.infoRows(), cache: &ip.cache}
+	if ip.data != nil && ip.data.watch != nil {
+		o.order = ip.coordOrder
+	}
+	return o
+}
+
+// infoSelShows says whether the selected header is on screen. c.mu held.
+func (c *client) infoSelShows() bool {
+	ip := c.info
+	i := slices.IndexFunc(ip.lay.secs, func(s *sideSection) bool { return s.id == ip.sel })
+	if i < 0 {
+		return false
+	}
+	h := ip.lay.heads[i]
+	return h >= ip.top && h < ip.top+c.infoRows()
 }
 
 // infoScroll moves the panel's content by d lines. c.mu held.
 func (c *client) infoScroll(d int) {
 	ip := c.info
 	ip.top = min(max(ip.top+d, 0), max(len(ip.lines)-c.infoRows(), 0))
+	if ip.sel != "" && !c.infoSelShows() {
+		// A header scrolled off screen drops the selection.
+		ip.sel = ""
+		c.infoLayout()
+	}
 }
 
 // infoRows is the panel's height: the window less the status bar and the
@@ -451,15 +518,24 @@ func (c *client) appendInfo(b []byte, wrote bool) ([]byte, bool) {
 const infoHint = "info panel ▸ ↑ ↓ scroll · enter task · esc back to the pane"
 
 // infoHintNow is infoHint, naming a when a coordinator's panel has open
-// questions to answer. c.mu held.
+// questions to answer, and the section keys while it has mod sections.
+// c.mu held.
 func (c *client) infoHintNow() string {
 	if c.info == nil {
 		return infoHint
 	}
-	if d := c.info.data; d != nil && d.watch != nil && d.watch.Questions > 0 {
-		return strings.Replace(infoHint, " · esc", " · a answers questions · esc", 1)
+	hint := infoHint
+	if keys := panelHintKeys(c.info.lay, c.info.sel); keys != "" {
+		enter := " · enter task"
+		if c.info.sel != "" {
+			enter = ""
+		}
+		hint = strings.Replace(hint, " · enter task", " · "+keys+enter, 1)
 	}
-	return infoHint
+	if d := c.info.data; d != nil && d.watch != nil && d.watch.Questions > 0 {
+		return strings.Replace(hint, " · esc", " · a answers questions · esc", 1)
+	}
+	return hint
 }
 
 // setInfo changes the view's info panel: a layout change, so every
@@ -507,42 +583,100 @@ func (c *client) infoToggle() {
 	c.setInfo(l, true)
 }
 
-// infoKeyboard runs a key while the panel has the keyboard: the arrows
-// scroll it, enter shows the task, a has a coordinator open its
-// questions, esc and tab give the keyboard back to the pane (tab, as
-// prefix+tab, to the next area: the pane); any other key is dropped.
-// c.mu held; released here.
+// infoKeyboard runs a key while the panel has the keyboard, by the
+// panel's key table (panelActions): the arrows scroll it, ] and [ select
+// a mod section's header, ← → and enter fold, unfold or open the
+// selected one; with none selected enter shows the task; a has a
+// coordinator open its questions; esc drops the selection, then, as tab
+// (prefix+tab: to the next area, the pane), gives the keyboard back to
+// the pane; any other key is dropped. c.mu held; released here.
 func (c *client) infoKeyboard(k uv.Key) {
 	c.flash = ""
+	ip := c.info
 	task, answer := false, false
-	switch keyName(k) {
-	case "a":
+	var do *sideStep
+	name := keyName(k)
+	op, ok := panelOp(name)
+	switch {
+	case name == "a":
 		answer = true
-	case "up", "k":
-		c.infoScroll(-1)
-	case "down", "j":
-		c.infoScroll(1)
-	case "pgup":
-		c.infoScroll(-c.rows / 2)
-	case "pgdown":
-		c.infoScroll(c.rows / 2)
-	case "home":
-		c.infoScroll(-len(c.info.lines))
-	case "end":
-		c.infoScroll(len(c.info.lines))
-	case "enter":
-		task = true
-	case "esc", "tab":
+	case name == "tab":
 		c.kb = areaMain
+		c.infoLayout()
+	case !ok:
+	case op == panelUp:
+		c.infoScroll(-1)
+	case op == panelDown:
+		c.infoScroll(1)
+	case op == panelPageUp:
+		c.infoScroll(-c.rows / 2)
+	case op == panelPageDown:
+		c.infoScroll(c.rows / 2)
+	case op == panelFirst:
+		c.infoScroll(-len(ip.lines))
+	case op == panelLast:
+		c.infoScroll(len(ip.lines))
+	case op == panelBack && ip.sel != "":
+		ip.sel = ""
+		c.infoLayout()
+	case op == panelBack:
+		c.kb = areaMain
+		c.infoLayout()
+	default:
+		st, next, took := panelStep(ip.lay, ip.sel, op)
+		switch {
+		case !took && op == panelEnter:
+			task = true
+		case !took:
+		case next != ip.sel:
+			ip.sel = next
+			c.infoLayout()
+			c.infoReveal()
+		default:
+			do = &st
+		}
 	}
 	c.status()
 	c.mu.Unlock()
 	c.poke()
+	if do != nil {
+		c.infoSection(*do)
+	}
 	if task {
 		c.infoTask(0)
 	}
 	if answer {
 		c.infoQuestions()
+	}
+}
+
+// infoReveal scrolls the panel so the selected header shows. c.mu held.
+func (c *client) infoReveal() {
+	ip := c.info
+	i := slices.IndexFunc(ip.lay.secs, func(s *sideSection) bool { return s.id == ip.sel })
+	if i < 0 || ip.lay.heads[i] < 0 {
+		return
+	}
+	h, rows := ip.lay.heads[i], c.infoRows()
+	switch {
+	case h < ip.top:
+		ip.top = h
+	case h >= ip.top+rows:
+		ip.top = h - rows + 1
+	}
+	ip.top = min(max(ip.top, 0), max(len(ip.lines)-rows, 0))
+}
+
+// infoSection runs what a key or a click on a mod section does
+// (sectionDo: folds through view.sections, opens through ui.click), then
+// lays the panel out with its folds.
+func (c *client) infoSection(st sideStep) {
+	c.sectionDo(st)
+	if c.lock() {
+		c.infoLayout()
+		c.status()
+		c.mu.Unlock()
+		c.poke()
 	}
 }
 
@@ -681,11 +815,23 @@ func (c *client) infoMouse(m emu.Mouse) {
 		return
 	}
 	var h infoHit
-	if i := ip.top + m.Y; i >= 0 && i < len(ip.hits) {
+	i := ip.top + m.Y
+	if i >= 0 && i < len(ip.hits) {
 		h = ip.hits[i]
 	}
 	// A click in the panel gives it the keyboard.
 	c.kb = areaInfo
+	var do *sideStep
+	if h.kind == hitSection {
+		// A click on a mod section selects its header and folds, unfolds
+		// or opens it.
+		if j := slices.IndexFunc(ip.lay.secs, func(s *sideSection) bool { return s.id == h.sec }); j >= 0 {
+			st := panelHeadClick(ip.lay.secs[j], m.X-c.infoX()-1, ip.lay.headAt(i) >= 0)
+			do = &st
+			ip.sel = h.sec
+		}
+	}
+	c.infoLayout()
 	slug := ""
 	if ip.data != nil {
 		slug = ip.data.slug
@@ -693,6 +839,9 @@ func (c *client) infoMouse(m emu.Mouse) {
 	c.status()
 	c.mu.Unlock()
 	c.poke()
+	if do != nil {
+		c.infoSection(*do)
+	}
 	switch h.kind {
 	case hitTask:
 		c.infoTask(h.task)
@@ -711,9 +860,10 @@ func (c *client) infoMouse(m emu.Mouse) {
 }
 
 // pollInfo reads the panel's data for the focused session, outside c.mu,
-// and the mods' coordinator sections it shows beside a coordinator, by
-// the views mod.views last listed (pollState asks it, and showInfo
-// takes its answer); nil, nil without the panel.
+// and the mods' sections it shows, by the views mod.views last listed
+// (pollState asks it, and showInfo takes its answer): beside a
+// coordinator its coordinator sections, beside a thread the details
+// sections for that thread; nil, nil without the panel.
 func (c *client) pollInfo(sessions []proto.SessionInfo) (*infoData, []modview.Shown) {
 	if !c.lock() {
 		return nil, nil
@@ -735,19 +885,28 @@ func (c *client) pollInfo(sessions []proto.SessionInfo) (*infoData, []modview.Sh
 		}
 	}
 	var shown []modview.Shown
-	if d != nil && d.watch != nil && w > 0 {
-		shown = sectionsShown(prev, mod.SlotCoordinatorSection, d.slug, "", "", w)
+	if d != nil && w > 0 {
+		shown = panelShown(prev, infoTarget(d), panelOpts{}, w)
 	}
 	return d, shown
 }
 
+// infoTarget is what the mods' sections in d's panel show for: a
+// coordinator's project, or a thread.
+func infoTarget(d *infoData) panelTarget {
+	if d.watch != nil {
+		return panelTarget{slot: mod.SlotCoordinatorSection, project: d.slug}
+	}
+	return panelTarget{slot: mod.SlotDetailsSection, project: d.slug, thr: d.session.Thread}
+}
+
 // showInfo shows d in the panel, with the mods' views as mod.views last
-// listed them for its coordinator sections. c.mu held.
+// listed them for its sections. c.mu held.
 func (c *client) showInfo(d *infoData) {
 	if c.info == nil {
 		return
 	}
-	if d != nil && d.watch != nil {
+	if d != nil {
 		d.sections = c.views
 	}
 	c.info.data = d

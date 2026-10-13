@@ -177,7 +177,7 @@ func Attach(opts Options) (res Result, err error) {
 	}
 	lay := ConsoleLayout(so.UIFile)
 	c.side = &sidebar{uiFile: so.UIFile, projects: loadSideProjects(c.paths), compact: lay.compact(), order: lay.sideSections, projOrder: lay.projSections}
-	c.info = &infoPanel{}
+	c.info = &infoPanel{coordOrder: lay.coordSections, detOrder: lay.detSections}
 	c.views = handedViews() // the dashboard's, for the sections it showed
 	c.setWindow(cols, rows)
 	watch, stopWatch := vc.Watch()

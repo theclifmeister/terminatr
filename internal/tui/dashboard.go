@@ -236,8 +236,11 @@ type dash struct {
 	lastClick click
 	detailTop int
 	detailKey string
-	shownKeys string // the footer's hints as drawn: its buttons
-	badgeAt   [2]int // the header's needs-you badge as drawn: its columns, [0 0] for none
+	// detSel is the details panel's selected mod section header (its fold
+	// id), for the row detSelKey; "" for none.
+	detSel, detSelKey string
+	shownKeys         string // the footer's hints as drawn: its buttons
+	badgeAt           [2]int // the header's needs-you badge as drawn: its columns, [0 0] for none
 
 	// layout is the console's layout, effective: ui.json (ui) under the
 	// layout mod in use (spec, the [ui] layout layoutID), with the
@@ -1322,19 +1325,84 @@ func (m *dash) sendSideSel() tea.Cmd {
 	return m.call(proto.MethodViewSideSel, proto.ViewParams{Key: m.sideSel})
 }
 
-// detailsKey runs a key while the details panel has the focus: the
-// arrows scroll it, esc goes back to the list. ok is false for the
-// other keys, which go to the list's actions.
+// detailsKey runs a key while the details panel has the focus, by the
+// panel's key table (panelActions): the arrows scroll it, ] and [
+// select a mod section's header, ← → and enter fold, unfold or open the
+// selected one, esc drops the selection, then goes back to the list. ok
+// is false for the other keys, and for ] [ ← → enter where they find no
+// section, which go to the list's actions.
 func (m *dash) detailsKey(key string) (tea.Cmd, bool) {
-	switch key {
-	case "up", "k", "down", "j", "pgup", "pgdown":
-		m.scrollDetails(scrollKeys[key])
-	case "esc":
-		m.focus = areaMain
-	default:
+	op, ok := panelOp(key)
+	if !ok {
 		return nil, false
 	}
+	switch op {
+	case panelUp:
+		m.scrollDetails(-1)
+	case panelDown:
+		m.scrollDetails(1)
+	case panelPageUp:
+		m.scrollDetails(scrollKeys["pgup"])
+	case panelPageDown:
+		m.scrollDetails(scrollKeys["pgdown"])
+	case panelFirst:
+		m.scrollDetails(-1 << 20)
+	case panelLast:
+		m.scrollDetails(1 << 20)
+	case panelBack:
+		if m.detSelNow() != "" {
+			m.detSel = ""
+		} else {
+			m.focus = areaMain
+		}
+	default:
+		lay, shows := m.detailsNow()
+		if !shows {
+			return nil, false
+		}
+		st, next, took := panelStep(lay, m.detSelNow(), op)
+		switch {
+		case !took:
+			return nil, false
+		case next != m.detSelNow():
+			m.detSel, m.detSelKey = next, m.sel
+			m.revealDetails()
+			return nil, true
+		}
+		return m.sectionCmd(st), true
+	}
 	return nil, true
+}
+
+// detSelNow is the details panel's selected header for the row shown.
+func (m *dash) detSelNow() string {
+	if m.detSelKey != m.sel {
+		return ""
+	}
+	return m.detSel
+}
+
+// revealDetails scrolls the details panel so its selected header shows.
+func (m *dash) revealDetails() {
+	lay, ok := m.detailsNow()
+	if !ok {
+		return
+	}
+	i := slices.IndexFunc(lay.secs, func(s *sideSection) bool { return s.id == m.detSelNow() })
+	if i < 0 || lay.heads[i] < 0 {
+		return
+	}
+	if m.detailKey != m.sel {
+		m.detailKey, m.detailTop = m.sel, 0
+	}
+	h, rows := lay.heads[i], m.geom().details().h
+	switch {
+	case h < m.detailTop:
+		m.detailTop = h
+	case h >= m.detailTop+rows:
+		m.detailTop = h - rows + 1
+	}
+	m.detailTop = min(max(m.detailTop, 0), max(len(lay.lines)-rows, 0))
 }
 
 // fail shows err in the footer, as a failure.
@@ -1543,7 +1611,7 @@ func (m *dash) listBody() []string {
 	// row from the top.
 	var panel []string
 	if r, ok := m.selected(); ok {
-		panel = m.details(r, dr.w)
+		panel = m.detailsLay(r, dr.w, dr.h).lines
 	}
 	if m.detailKey == m.sel {
 		// Scrolled with the wheel.
@@ -1746,6 +1814,11 @@ func (m *dash) frame(title string, body []string, sel int, keys string) string {
 		keys = "esc back to the list · tab next area"
 	case m.area() == areaDetails && m.top() == nil:
 		keys = "details: ↑ ↓ scroll · esc back · tab next"
+		if lay, ok := m.detailsNow(); ok {
+			if sk := panelHintKeys(lay, m.detSelNow()); sk != "" {
+				keys = "details: ↑ ↓ scroll · " + sk + " · esc back · tab next"
+			}
+		}
 	}
 	foot := m.footLines(g, keys)
 

@@ -46,8 +46,9 @@ type modViews struct {
 	// cursors are the ui.cursor sends by panel key: one on its way at
 	// a time, and the latest move waiting behind it.
 	cursors map[string]*cursorSend
-	// band are the sidebar's sections' lines (sidesections.go).
-	band sectionCache
+	// band are the sidebar's sections' lines (sidesections.go), panel the
+	// details panel's (panelsections.go).
+	band, panel sectionCache
 }
 
 // cursorSend is a view's ui.cursor sends: busy while one is on its way,
@@ -429,8 +430,8 @@ func (m *dash) shownViews() []modview.Shown {
 			}
 		}
 		if r, ok := m.selected(); ok && g.details().w > 0 {
-			if project, task, thr, ok := sectionTarget(r); ok {
-				out = append(out, sectionsShown(m.mv.list, mod.SlotDetailsSection, project, task, thr, g.details().w)...)
+			if t, ok := detailsTarget(r); ok {
+				out = append(out, panelShown(m.mv.list, t, m.detailsOpts(0), g.details().w)...)
 			}
 		}
 	}

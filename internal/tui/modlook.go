@@ -340,7 +340,7 @@ func DefaultKeymap() map[string][]string {
 
 // defaultKeys are action id's keys in its table; nil for no such id.
 func defaultKeys(id string) []string {
-	for _, b := range append(listBindables(), sideBindables()...) {
+	for _, b := range slices.Concat(listBindables(), sideBindables(), panelBindables()) {
 		if b.id == id {
 			return b.keys
 		}
@@ -375,7 +375,7 @@ func init() {
 		// As the console would apply it over tm's keys: an action id
 		// it lacks, a locked key, and a key two of the mod's own
 		// actions (or one of tm's) want (T301 B3).
-		_, _, err = planKeymap(km, ConfigPrefix())
+		_, _, _, err = planKeymap(km, ConfigPrefix())
 		return err
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/mod"
@@ -205,7 +206,7 @@ func bandRows(in bandIn) []treeRow {
 			desc: v.Description, opens: v.Opens, log: v.Log, builtin: builtinMod(in.mods, v.Mod), project: in.project,
 			above: i < len(above)}
 		s.folded = in.folds.IsSectionFolded(s.id)
-		switch t, drew := bandTree(v, in.project); {
+		switch t, drew := sectionTree(v, in.project, "", ""); {
 		case v.State == proto.ModViewFailed:
 			s.failed = true
 			s.lines = []string{th().Bad.Render(fit(ic().blocked+" mod failed: "+cmp.Or(v.Err, "its host stopped"), w)) + reset,
@@ -262,7 +263,7 @@ func projRows(tree []treeRow, in bandIn) []treeRow {
 			s := &sideSection{id: v.Mod + "." + v.View + "@" + slug, mod: v.Mod, view: v.View, title: v.Title, name: v.Name,
 				desc: v.Description, opens: v.Opens, log: v.Log, builtin: builtinMod(in.mods, v.Mod), project: slug, proj: true}
 			s.folded = in.folds.IsSectionFolded(s.id)
-			switch t, drew := bandTree(v, slug); {
+			switch t, drew := sectionTree(v, slug, "", ""); {
 			case t == nil && drew:
 				continue
 			case t == nil:
@@ -294,7 +295,7 @@ func projShown(rows []treeRow, in bandIn, on func(slug string) bool) []modview.S
 				continue
 			}
 			h := def
-			if t, _ := bandTree(v, r.slug); t != nil && t.Height > 0 {
+			if t, _ := sectionTree(v, r.slug, "", ""); t != nil && t.Height > 0 {
 				h = min(t.Height, most)
 			}
 			out = append(out, modview.Shown{Mod: v.Mod, View: v.View, Slot: v.Slot, Project: r.slug, Width: projWidth(in.w), Height: h})
@@ -303,23 +304,24 @@ func projShown(rows []treeRow, in bandIn, on func(slug string) bool) []modview.S
 	return out
 }
 
-// bandTree is the tree v's band section shows for project: the
-// project's, else the one for all projects; nil with drew true when the
-// mod published only null ones, nil with drew false while it published
-// none.
-func bandTree(v proto.ModView, project string) (t *modview.Tree, drew bool) {
+// sectionTree is the tree section v shows for project's task or thread
+// (both "": the project's own): the one published for it, else, for the
+// project's own, the one for all projects. It is nil with drew true when
+// the mod published only null ones, nil with drew false while it
+// published none. The band and the right pane's panels look trees up
+// alike.
+func sectionTree(v proto.ModView, project, task, thr string) (t *modview.Tree, drew bool) {
+	own := task == "" && thr == ""
 	var all *modview.Tree
 	for i := range v.Trees {
 		tr := &v.Trees[i]
 		switch {
-		case tr.Task != "" || tr.Thread != "":
-			continue
-		case tr.Project == project && project != "":
+		case tr.For(project, task, thr) && (project != "" || !own):
 			drew = true
 			if tr.Tree != nil {
 				return tr, true
 			}
-		case tr.Project == "":
+		case own && tr.For("", "", ""):
 			drew = true
 			if tr.Tree != nil {
 				all = tr
@@ -342,7 +344,7 @@ func bandShown(in bandIn) []modview.Shown {
 		}
 		def, most := modview.Heights(mod.SlotSidebarSection)
 		h := def
-		if t, _ := bandTree(v, in.project); t != nil && t.Height > 0 {
+		if t, _ := sectionTree(v, in.project, "", ""); t != nil && t.Height > 0 {
 			h = min(t.Height, most)
 		}
 		out = append(out, modview.Shown{Mod: v.Mod, View: v.View, Slot: v.Slot, Project: in.project, Width: bandWidth(in.w), Height: h})
@@ -400,6 +402,9 @@ func (c *sectionCache) lines(key string, t *widget.Widget, w, h int) []string {
 
 // forget drops the sections not in keep.
 func (c *sectionCache) forget(keep func(key string) bool) {
+	if c == nil {
+		return
+	}
 	for k := range c.hosts {
 		if !keep(k) {
 			delete(c.hosts, k)
@@ -839,29 +844,48 @@ func (l sideLay) line(s sideSlot, cw int, slim, focused bool) string {
 // sectionHead is a section's header row cw cells wide, its gap
 // included: " ▾ TICKER ───── terminatr", its fold mark, its title, a
 // faint rule and on the right its badge, else unfolded the project its
-// tree is for; under a project, at thread depth and its title as the
-// mod wrote it, "    ▾ ci status ──── 1 ☒", without the project. A section that drew nothing yet, or gave its body up for
-// room (shrunk, drawn folded), ends in a faint "…"; the last header
-// shown says how many didn't fit (+N). The cursor's is highlighted.
+// tree is for (sectionHeader); under a project, at thread depth and its
+// title as the mod wrote it, "    ▾ ci status ──── 1 ☒", without the
+// project. The cursor's is highlighted.
 func sectionHead(r treeRow, cw int, shrunk bool, more int, focused bool) string {
-	s := r.sec
 	hl, sel := treeSel(r, focused)
-	w := max(cw-sideGap, 0)
+	gap := strings.Repeat(" ", min(sideGap, cw))
+	// The needs-you column's cells stay clear; the header starts with a
+	// blank, at the tree's margin.
+	pad, word := " ", r.sec.of
+	if r.sec.proj {
+		pad, word = strings.Repeat(" ", projIndent), ""
+	}
+	return sectionHeader(r.sec, pad, max(cw-sideGap, 0), 2, shrunk, more, word, hl, sel) + gap
+}
+
+// sectionHeader is a mod section's header w cells wide, the band's and
+// the right pane's: "▾ TICKER ───── word", its fold mark, its title, a
+// faint rule and on the right its badge, else unfolded word (the
+// band's project; none in a panel). A folded failed section's badge is
+// a red "▲ failed". A section that drew nothing yet, or gave its body up
+// for room (shrunk, drawn folded), ends in a faint "…"; the last header
+// shown says how many didn't fit (+N). pad leads it; end cells at the
+// right stay clear (the sidebar's needs-you column). hl draws it in sel.
+func sectionHeader(s *sideSection, pad string, w, end int, shrunk bool, more int, word string, hl bool, sel lipgloss.Style) string {
 	mark := ic().unfold
 	if s.folded || shrunk {
 		mark = ic().fold
 	}
-	left := " " + mark + " " + strings.ToUpper(s.title)
+	title := strings.ToUpper(s.title)
 	if s.proj {
-		left = strings.Repeat(" ", projIndent) + mark + " " + s.title
+		title = s.title
 	}
+	left := pad + mark + " " + title
 	var right []cellRun
 	switch {
+	case s.failed && s.folded:
+		right = append(right, cellRun{ic().blocked + " failed", th().Bad})
 	case len(s.badge) > 0 && !s.failed:
 		plain, styled := spansCell(s.badge, spansWidth(s.badge))
 		right = append(right, cellRun{plain, spanStyle{plain, styled}})
-	case !s.folded && !shrunk && s.of != "" && !s.proj:
-		right = append(right, cellRun{s.of, th().Faint})
+	case !s.folded && !shrunk && word != "":
+		right = append(right, cellRun{word, th().Faint})
 	}
 	if s.waiting || shrunk {
 		right = append(right, cellRun{"…", th().Faint})
@@ -874,7 +898,7 @@ func sectionHead(r treeRow, cw int, shrunk bool, more int, focused bool) string 
 	}
 	// The badge keeps its cells, the title is cut for it, down to its
 	// mark and a few letters; narrower still the badge goes.
-	const end, least = 2, 6 // the needs-you column's cells; " ▾ CI…"
+	least := min(ansi.StringWidth(pad), 1) + 5 // " ▾ CI…"
 	rw := runsWidth(right)
 	if rw > 0 && rw+1+end+least > w {
 		right, rw = nil, 0
@@ -893,19 +917,18 @@ func sectionHead(r treeRow, cw int, shrunk bool, more int, focused bool) string 
 	if fill >= 3 {
 		mid, rule = " ", strings.Repeat("─", fill-2)
 	}
-	gap := strings.Repeat(" ", min(sideGap, cw))
 	if hl {
 		plain := head + mid + rule
 		if rule != "" {
 			plain += " "
 		}
-		return sel.Render(fit(plain+runsPlain(right), w)) + gap
+		return sel.Render(fit(plain+runsPlain(right), w))
 	}
 	out := th().Head.Render(head) + mid
 	if rule != "" {
 		out += th().Faint.Render(rule) + " "
 	}
-	return fit(out+runsRender(right), w) + gap
+	return fit(out+runsRender(right), w)
 }
 
 // sectionTip is what the hover says over a section: its mod.

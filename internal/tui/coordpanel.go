@@ -68,6 +68,14 @@ var whyState = map[string]string{
 // coordLines draws a coordinator's panel w cells wide, with what a click
 // on each line does.
 func coordLines(pw *proto.ProjectWatch, w int, now time.Time) ([]string, []infoHit) {
+	pl, hits := coordPanel(pw, w, now)
+	return pl.lines, hits
+}
+
+// coordPanel is coordLines' panel, with core's blocks named
+// (mod.CoordinatorBlocks: needs, inbox, threads, deck) and its head and
+// NEEDS YOU must-see, for the mods' sections placed among them.
+func coordPanel(pw *proto.ProjectWatch, w int, now time.Time) (*panel, []infoHit) {
 	pl := &panel{w: w}
 	var hits []infoHit
 	// line adds text as one line, h what a click on it does.
@@ -114,6 +122,8 @@ func coordLines(pw *proto.ProjectWatch, w int, now time.Time) ([]string, []infoH
 		}
 	}
 
+	pl.mustFrom(0)
+
 	// What waits for the user.
 	// heading starts a section.
 	heading := func(title string) {
@@ -122,6 +132,8 @@ func coordLines(pw *proto.ProjectWatch, w int, now time.Time) ([]string, []infoH
 			hits = append(hits, infoHit{})
 		}
 	}
+	pl.block("needs")
+	needs := len(pl.lines)
 	if len(pw.NeedsYou) == 0 && pw.Questions == 0 {
 		gap()
 		line(th().Faint.Render("Nothing waits for you."), infoHit{})
@@ -177,7 +189,12 @@ func coordLines(pw *proto.ProjectWatch, w int, now time.Time) ([]string, []infoH
 		}
 	}
 
+	if len(pw.NeedsYou) > 0 || pw.Questions > 0 {
+		pl.mustFrom(needs)
+	}
+
 	// The inbox, a row per kind per subject.
+	pl.block("inbox")
 	if len(pw.Inbox) > 0 {
 		heading("INBOX")
 	}
@@ -199,6 +216,7 @@ func coordLines(pw *proto.ProjectWatch, w int, now time.Time) ([]string, []infoH
 	}
 
 	// The threads, compact: a click on a running one shows its pane.
+	pl.block("threads")
 	if len(pw.Threads) > 0 {
 		heading("THREADS")
 	}
@@ -249,6 +267,7 @@ func coordLines(pw *proto.ProjectWatch, w int, now time.Time) ([]string, []infoH
 	}
 
 	// The tasks on deck.
+	pl.block("deck")
 	if len(pw.Ready) > 0 {
 		heading("ON DECK")
 	}
@@ -286,7 +305,7 @@ func coordLines(pw *proto.ProjectWatch, w int, now time.Time) ([]string, []infoH
 	for len(hits) < len(pl.lines) {
 		hits = append(hits, infoHit{})
 	}
-	return pl.lines, hits
+	return pl, hits
 }
 
 // coordSummary is the panel's second line: "3 need you · 1 in inbox · 5

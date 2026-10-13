@@ -82,6 +82,7 @@ var mouseKeys = []keyHelp{
 	{"state label", "at the right of the project's header on the dashboard (● active — space to deactivate): as space"},
 	{"sidebar", "a row takes the keyboard, its cursor on it, and a project shows its dashboard, its coordinator or a thread attaches; a click on the pane gives the keyboard back. Below the tree, two lines describe the highlighted row (its full title, state, PR and checks) and a key bar lists the keys that work on it"},
 	{"info panel", "beside a thread's pane: its task opens in the Tasks tab, its PR the browser; a click elsewhere gives it the keyboard"},
+	{"mod section", "in the info or details panel: a click on its fold mark folds or unfolds it; on its header or body it opens the view its mod names, else folds or unfolds it"},
 	{"hover", "a glyph in the full sidebar: what it means, at the sidebar's foot"},
 	{"wheel", "moves through a list; scrolls the details panel and long popups"},
 	{"drag", "the divider beside the details panel, the sidebar's border, the info panel's border"},
@@ -101,12 +102,13 @@ func keyGroups(mods []keyHelp) []keyGroup {
 		}
 		return out
 	}
-	dash, side := lines(binds.list, listBindables()), lines(binds.side, sideBindables())
+	dash, side, panel := lines(binds.list, listBindables()), lines(binds.side, sideBindables()), lines(binds.panel, panelBindables())
 	groups := []keyGroup{
 		{"On the dashboard", dash},
 		{"With the mouse", mouseKeys},
 		{"Prefix commands: the same everywhere", sessionKeys()},
 		{"In the sidebar (tab, or prefix+tab in a session)", side},
+		{"In the info and details panels (tab, or a click)", panel},
 		{"In the project popup", popupKeys},
 		{"In the settings (, or the project popup's Settings tab)", settingsKeys},
 	}
@@ -172,7 +174,7 @@ func keyLines(w int, mods []keyHelp) []string {
 		}
 	}
 	out = append(out, "")
-	out = append(out, faintLines("A prefix command does the same in a session, on the dashboard and over a popup, and no plain key means something else: popups close with esc, and the lists refresh by themselves. The prefix is in the settings (,); inside tmux, which takes ctrl+b, pick another.", w)...)
+	out = append(out, faintLines("A prefix command does the same in a session, on the dashboard and over a popup, and no plain key means something else, but ] and [ in a panel with mod sections: popups close with esc, and the lists refresh by themselves. The prefix is in the settings (,); inside tmux, which takes ctrl+b, pick another.", w)...)
 	return append(out, faintLines("Every tm shows the same view: what one does, the others show, sized by the one typed in. tm --own keeps to itself. You talk to coordinators; they run the threads, their reports and the tasks.", w)...)
 }
 

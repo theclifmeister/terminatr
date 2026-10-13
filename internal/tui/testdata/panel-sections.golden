@@ -1,0 +1,383 @@
+coordinator: below core's blocks (no layout) (26 rows)
+│ terminatr
+│ 1 needs you · 2 threads
+│
+│ NEEDS YOU ────────────────────────────
+│ T351 ▲ asks you Check the release
+│   notes
+│   “Which tag do we ship?”
+│
+│ THREADS ──────────────────────────────
+│ t-0323 T348 ● working 3/5
+│   ▸ Right-pane section design
+│ t-0004 T351 ▲ asks you 1/2
+│   Check the release notes
+│
+│ ON DECK ──────────────────────────────
+│ T349 ○ ready Layout v2 docs
+│
+│ ▾ TICKER ────────────────────────────
+│   PRs      40s ago · next 1m20s
+│   synced   1m ago
+│   PR host  ok
+│
+│ ▾ DIGEST ───────────────────────── 3 ☑
+│   3 merged today
+
+coordinator: above NEEDS YOU (30 rows)
+│ terminatr
+│ 1 needs you · 2 threads
+│
+│ ▾ TICKER ────────────────────────────
+│   PRs      40s ago · next 1m20s
+│   synced   1m ago
+│   PR host  ok
+│
+│ NEEDS YOU ────────────────────────────
+│ T351 ▲ asks you Check the release
+│   notes
+│   “Which tag do we ship?”
+│
+│ THREADS ──────────────────────────────
+│ t-0323 T348 ● working 3/5
+│   ▸ Right-pane section design
+│ t-0004 T351 ▲ asks you 1/2
+│   Check the release notes
+│
+│ ON DECK ──────────────────────────────
+│ T349 ○ ready Layout v2 docs
+
+coordinator: between NEEDS YOU and THREADS (30 rows)
+│ terminatr
+│ 1 needs you · 2 threads
+│
+│ NEEDS YOU ────────────────────────────
+│ T351 ▲ asks you Check the release
+│   notes
+│   “Which tag do we ship?”
+│
+│ ▾ TICKER ────────────────────────────
+│   PRs      40s ago · next 1m20s
+│   synced   1m ago
+│   PR host  ok
+│
+│ THREADS ──────────────────────────────
+│ t-0323 T348 ● working 3/5
+│   ▸ Right-pane section design
+│ t-0004 T351 ▲ asks you 1/2
+│   Check the release notes
+│
+│ ON DECK ──────────────────────────────
+│ T349 ○ ready Layout v2 docs
+
+coordinator: above NEEDS YOU, 14 rows: the body gives way (14 rows)
+│ terminatr
+│ 1 needs you · 2 threads
+│
+│ ▸ TICKER ─────────────────────────── …
+│
+│ NEEDS YOU ────────────────────────────
+│ T351 ▲ asks you Check the release
+│   notes
+│   “Which tag do we ship?”
+│
+│ THREADS ──────────────────────────────
+│ t-0323 T348 ● working 3/5
+│   ▸ Right-pane section design
+│ t-0004 T351 ▲ asks you 1/2
+  ┄ scrolls ┄
+│   Check the release notes
+│
+│ ON DECK ──────────────────────────────
+│ T349 ○ ready Layout v2 docs
+
+coordinator: above NEEDS YOU, 10 rows: at the bottom (10 rows)
+│ terminatr
+│ 1 needs you · 2 threads
+│
+│ NEEDS YOU ────────────────────────────
+│ T351 ▲ asks you Check the release
+│   notes
+│   “Which tag do we ship?”
+│
+│ THREADS ──────────────────────────────
+│ t-0323 T348 ● working 3/5
+  ┄ scrolls ┄
+│   ▸ Right-pane section design
+│ t-0004 T351 ▲ asks you 1/2
+│   Check the release notes
+│
+│ ON DECK ──────────────────────────────
+│ T349 ○ ready Layout v2 docs
+│
+│ ▾ TICKER ────────────────────────────
+│   PRs      40s ago · next 1m20s
+│   synced   1m ago
+│   PR host  ok
+
+coordinator: folded, with a badge (26 rows)
+│ terminatr
+│ 1 needs you · 2 threads
+│
+│ NEEDS YOU ────────────────────────────
+│ T351 ▲ asks you Check the release
+│   notes
+│   “Which tag do we ship?”
+│
+│ THREADS ──────────────────────────────
+│ t-0323 T348 ● working 3/5
+│   ▸ Right-pane section design
+│ t-0004 T351 ▲ asks you 1/2
+│   Check the release notes
+│
+│ ON DECK ──────────────────────────────
+│ T349 ○ ready Layout v2 docs
+│
+│ ▸ TICKER ────────────────────────────
+│
+│ ▸ DIGEST ───────────────────────── 3 ☑
+
+coordinator: failed (26 rows)
+│ terminatr
+│ 1 needs you · 2 threads
+│
+│ NEEDS YOU ────────────────────────────
+│ T351 ▲ asks you Check the release
+│   notes
+│   “Which tag do we ship?”
+│
+│ THREADS ──────────────────────────────
+│ t-0323 T348 ● working 3/5
+│   ▸ Right-pane section design
+│ t-0004 T351 ▲ asks you 1/2
+│   Check the release notes
+│
+│ ON DECK ──────────────────────────────
+│ T349 ○ ready Layout v2 docs
+│
+│ ▾ TICKER ────────────────────────────
+│   ▲ mod failed: exit 1
+│   Its log:
+│   ~/.terminatr/log/mods/ticker.log
+│   Restart it in the Mods tab of the
+│   settings (,): r.
+│
+│ ▾ DIGEST ───────────────────────── 3 ☑
+│   3 merged today
+
+coordinator: failed, folded (26 rows)
+│ terminatr
+│ 1 needs you · 2 threads
+│
+│ NEEDS YOU ────────────────────────────
+│ T351 ▲ asks you Check the release
+│   notes
+│   “Which tag do we ship?”
+│
+│ THREADS ──────────────────────────────
+│ t-0323 T348 ● working 3/5
+│   ▸ Right-pane section design
+│ t-0004 T351 ▲ asks you 1/2
+│   Check the release notes
+│
+│ ON DECK ──────────────────────────────
+│ T349 ○ ready Layout v2 docs
+│
+│ ▸ TICKER ──────────────────── ▲ failed
+
+coordinator: the digest's header selected (26 rows)
+│ terminatr
+│ 1 needs you · 2 threads
+│
+│ NEEDS YOU ────────────────────────────
+│ T351 ▲ asks you Check the release
+│   notes
+│   “Which tag do we ship?”
+│
+│ THREADS ──────────────────────────────
+│ t-0323 T348 ● working 3/5
+│   ▸ Right-pane section design
+│ t-0004 T351 ▲ asks you 1/2
+│   Check the release notes
+│
+│ ON DECK ──────────────────────────────
+│ T349 ○ ready Layout v2 docs
+│
+│ ▾ TICKER ────────────────────────────
+│   PRs      40s ago · next 1m20s
+│   synced   1m ago
+│   PR host  ok
+│
+│ ▾ DIGEST ───────────────────────── 3 ☑
+│   3 merged today
+
+coordinator: safe mode: the built-in ticker alone (26 rows)
+│ terminatr
+│ 1 needs you · 2 threads
+│
+│ NEEDS YOU ────────────────────────────
+│ T351 ▲ asks you Check the release
+│   notes
+│   “Which tag do we ship?”
+│
+│ THREADS ──────────────────────────────
+│ t-0323 T348 ● working 3/5
+│   ▸ Right-pane section design
+│ t-0004 T351 ▲ asks you 1/2
+│   Check the release notes
+│
+│ ON DECK ──────────────────────────────
+│ T349 ○ ready Layout v2 docs
+│
+│ ▾ TICKER ────────────────────────────
+│   PRs      40s ago · next 1m20s
+│   synced   1m ago
+│   PR host  ok
+
+a thread's info panel, at the bottom (28 rows)
+│ T26 Info panel on thread panes
+│ ● started · click to open
+│
+│ STEPS ───────────────────────────────
+│ ▰▰▰▱▱ 50% 2/4
+│ ✓ Layout
+│ ✓ Content
+│ ◐ Toggle
+│ ○ Clicks
+│
+│ THREAD ──────────────────────────────
+│ thread    t-0002 ● working
+│ model     sonnet
+│ now       ▸ Write the tests
+│ needs you Which key toggles it?
+│ PR        #70 open, checks pending,
+│           behind main
+│
+│ LAST REPORT 3h ago ──────────────────
+│ Layout done.
+│ Content done.
+│ Tests next.
+│ attached  chart.png, plan.md
+│
+│ branch    tm/demo/t-0002-info
+│ worktree  /tmp/wt/t-0002
+│ active    3h ago
+│
+  ┄ scrolls ┄
+│ ▾ CHECKS ──────────────────────── 1 ☒
+│   #408 ☒ global thread cap
+
+a thread's info panel, above core's block (28 rows)
+│ T26 Info panel on thread panes
+│ ● started · click to open
+│
+│ ▾ CHECKS ──────────────────────── 1 ☒
+│   #408 ☒ global thread cap
+│
+│ STEPS ───────────────────────────────
+│ ▰▰▰▱▱ 50% 2/4
+│ ✓ Layout
+│ ✓ Content
+│ ◐ Toggle
+│ ○ Clicks
+│
+│ THREAD ──────────────────────────────
+│ thread    t-0002 ● working
+│ model     sonnet
+│ now       ▸ Write the tests
+│ needs you Which key toggles it?
+│ PR        #70 open, checks pending,
+│           behind main
+│
+│ LAST REPORT 3h ago ──────────────────
+│ Layout done.
+│ Content done.
+│ Tests next.
+│ attached  chart.png, plan.md
+│
+│ branch    tm/demo/t-0002-info
+  ┄ scrolls ┄
+│ worktree  /tmp/wt/t-0002
+│ active    3h ago
+
+dashboard details panel (36 rows)
+│ T4 Write docs
+│ ● working
+│ ─────────────────────────────────────────────────────
+│ project   beta
+│ thread    t-0005
+│ session   s-5
+│ progress  ▰▰▰▱▱ 60% 3/5
+│ now       ▸ Draft §2
+│ waiting   Which licence?
+│ PR        https://github.com/o/r/pull/7
+│ report    1, new · for the coordinator
+│
+│ todos
+│   ✓ Outline
+│   ◐ Draft §2
+│ steps 1/2
+│   ✓ 1 Plan
+│   ○ 2 Write
+│
+│ enter attach
+│
+│ ▾ CHECKS ──────────────────────────────────────── 1 ☒
+│   #408 checks failed
+│
+│ ▾ NOTES ────────────────────────────────────────────
+│   reviewed twice
+
+dashboard details panel, checks above core's block (36 rows)
+│ T4 Write docs
+│ ● working
+│ ─────────────────────────────────────────────────────
+│ ▾ CHECKS ──────────────────────────────────────── 1 ☒
+│   #408 checks failed
+│
+│ project   beta
+│ thread    t-0005
+│ session   s-5
+│ progress  ▰▰▰▱▱ 60% 3/5
+│ now       ▸ Draft §2
+│ waiting   Which licence?
+│ PR        https://github.com/o/r/pull/7
+│ report    1, new · for the coordinator
+│
+│ todos
+│   ✓ Outline
+│   ◐ Draft §2
+│ steps 1/2
+│   ✓ 1 Plan
+│   ○ 2 Write
+│
+│ enter attach
+│
+│ ▾ NOTES ────────────────────────────────────────────
+│   reviewed twice
+
+dashboard details panel, safe mode: the built-in mod's alone (36 rows)
+│ T4 Write docs
+│ ● working
+│ ─────────────────────────────────────────────────────
+│ project   beta
+│ thread    t-0005
+│ session   s-5
+│ progress  ▰▰▰▱▱ 60% 3/5
+│ now       ▸ Draft §2
+│ waiting   Which licence?
+│ PR        https://github.com/o/r/pull/7
+│ report    1, new · for the coordinator
+│
+│ todos
+│   ✓ Outline
+│   ◐ Draft §2
+│ steps 1/2
+│   ✓ 1 Plan
+│   ○ 2 Write
+│
+│ enter attach
+│
+│ ▾ CHECKS ──────────────────────────────────────── 1 ☒
+│   #408 checks failed
+

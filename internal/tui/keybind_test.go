@@ -30,6 +30,8 @@ var wantIDs = []string{
 	"side.up", "side.down", "side.enter", "side.unfold", "side.fold", "side.back", "side.activate",
 	"side.fold-all", "side.unfold-all", "side.pin", "side.first", "side.last", "side.page-up", "side.page-down",
 	"side.nth", "side.needs-next", "side.needs-prev", "side.filter", "side.help",
+	"panel.up", "panel.down", "panel.page-up", "panel.page-down", "panel.first", "panel.last",
+	"panel.section-next", "panel.section-prev", "panel.unfold", "panel.fold", "panel.enter", "panel.back",
 	"popup.close", "repo.add", "repo.remove", "task.new", "task.show", "task.delegate", "task.accept", "task.send-back",
 	"task.coordinator", "tasks.done", "library.read", "library.delete", "library.delete-thread",
 	"session.attach", "session.clear", "question.answer", "session.dashboard", "session.remote", "prefix.send",
@@ -92,6 +94,10 @@ func TestKeymapRefuses(t *testing.T) {
 		{"popup key", map[string][]string{"project.next": {"x"}}, "project.next: a prefix command's key"},
 		{"sidebar key", map[string][]string{"project.next": {"Z"}}, "project.next: a prefix command's key"},
 		{"sidebar takes a prefix command", map[string][]string{"side.pin": {"]"}}, "side.pin: a prefix command's key"},
+		{"a panel takes a prefix command", map[string][]string{"panel.fold": {"i"}}, "panel.fold: a prefix command's key can't mean something else in a panel"},
+		{"a panel takes another prefix command", map[string][]string{"panel.section-next": {"t"}}, "panel.section-next: a prefix command's key"},
+		{"clash in a panel", map[string][]string{"panel.fold": {"right"}}, "panel.fold: its key is taken by panel.unfold"},
+		{"a panel's esc", map[string][]string{"panel.back": {"q"}}, "panel.back: can't be rebound"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			km := map[string][]string{}
@@ -104,7 +110,7 @@ func TestKeymapRefuses(t *testing.T) {
 				t.Fatalf("err %v, want %q", err, c.want)
 			}
 			for id := range c.km {
-				if binds.list.rebound(id) || binds.side.rebound(id) {
+				if binds.list.rebound(id) || binds.side.rebound(id) || binds.panel.rebound(id) {
 					t.Errorf("%s was rebound anyway", id)
 				}
 			}
