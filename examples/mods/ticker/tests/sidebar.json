@@ -1,5 +1,5 @@
 {
-  "name": "place sidebar: the band shows, the coordinator's section gets null",
+  "name": "place sidebar: the band shows, the coordinator's section gets null, for all projects from the start",
   "settings": { "place": "sidebar" },
   "answers": [
     { "method": "project.get", "params": { "slug": "demo" },
@@ -13,6 +13,7 @@
   ],
   "expect": {
     "calls": [
+      { "method": "ui.view.set", "params": { "view": "ticker", "widget": null } },
       { "method": "ui.view.set", "params": { "view": "ticker", "options": { "project": "demo" }, "widget": null } },
       { "method": "ui.view.set",
         "params": { "view": "band", "options": { "project": "demo", "height": 2 },

@@ -67,6 +67,10 @@ func Heights(slot string) (def, most int) {
 	return DefaultHeight, MaxHeight
 }
 
+// isSection says slot is a section's, whose null tree shows nothing
+// (Store.Set).
+func isSection(slot string) bool { return mod.IsSection(slot) }
+
 // OldHeight is the height a tree of slot asks for, from mod m: a right-pane section of a mod older than 1.7 that asks
 // none never knew of a default, so it gets the most (MaxSidebarHeight).
 func OldHeight(slot string, m *mod.Manifest, height int) int {
@@ -204,7 +208,11 @@ type ErrFull string
 func (e ErrFull) Error() string { return string(e) }
 
 // Set publishes mod's tree t of view, in slot, for project ("" for every
-// project the view shows); a nil tree clears it. size is the tree's JSON
+// project the view shows); a nil tree clears it. A section's nil tree is
+// kept, as a tree that says nothing: the console then draws no section
+// there, not even its header, where one never published waits for the
+// mod (sidebar sections design §4). Such a tree counts toward MaxTrees,
+// and makes room for another by going first. size is the tree's JSON
 // size.
 func (s *Store) Set(mod, view, slot string, t Tree, size int) error {
 	t.size = size
@@ -222,7 +230,13 @@ func (s *Store) Set(mod, view, slot string, t Tree, size int) error {
 		s.trees[mod] = views
 	}
 	list := slices.DeleteFunc(views[view], func(o Tree) bool { return o.For(t.Project, t.Task, t.Thread) })
-	if t.Tree == nil {
+	if len(list) >= MaxTrees {
+		// A tree that says nothing makes room first, the oldest of them.
+		if i := slices.IndexFunc(list, func(o Tree) bool { return o.Tree == nil }); i >= 0 {
+			list = slices.Delete(list, i, i+1)
+		}
+	}
+	if t.Tree == nil && (!isSection(slot) || len(list) >= MaxTrees) {
 		views[view] = list
 		return nil
 	}

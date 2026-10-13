@@ -4,7 +4,8 @@
 // console moves them by itself. The view ticker is a section of the
 // coordinator's info panel, the view band one of the sidebar's band; the
 // place setting picks which show, and a view it leaves out gets a null
-// tree, which draws nothing, not even a header. The mod publishes on
+// tree, which draws nothing, not even a header: for all projects from
+// its start, and for each project it opens for. The mod publishes on
 // view.opened and on ticker.changed, once per poll at most; it never
 // polls itself. Core warns of a failing PR host whatever this mod does.
 import type { TM } from "./types/tm";
@@ -57,6 +58,14 @@ async function paint(view: string, project: string, tk?: TM.WatchTicker): Promis
   if (tk?.gh_failing && !tk.no_pr_host) opts.badge = [{ text: "PR host ", role: "bad" }, { icon: "blocked", role: "bad" }];
   await $.ui.view.set(view, { kind: "kv", pairs }, opts);
 }
+
+// At the start, a view the place setting leaves out is cleared for all
+// projects, so no console waits for it to draw (its header would show).
+$.on("mod.ready", async () => {
+  for (const view of open.keys()) {
+    if (!wanted(view)) await $.ui.view.set(view, null);
+  }
+});
 
 $.on("view.opened", async (v) => {
   const projects = open.get(v.view);

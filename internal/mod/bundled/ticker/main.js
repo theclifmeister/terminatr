@@ -35,6 +35,11 @@
     if ((tk == null ? void 0 : tk.gh_failing) && !tk.no_pr_host) opts.badge = [{ text: "PR host ", role: "bad" }, { icon: "blocked", role: "bad" }];
     await $.ui.view.set(view, { kind: "kv", pairs }, opts);
   }
+  $.on("mod.ready", async () => {
+    for (const view of open.keys()) {
+      if (!wanted(view)) await $.ui.view.set(view, null);
+    }
+  });
   $.on("view.opened", async (v) => {
     const projects = open.get(v.view);
     if (!projects || !v.project) return;

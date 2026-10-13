@@ -76,8 +76,9 @@ func TestModHostsFollowConfig(t *testing.T) {
 	if sp := specs[3]; sp.ID != mod.BundledTasks || sp.Entry != "" || len(sp.Bundle) == 0 || sp.Eager || len(sp.Grants) != 2 {
 		t.Fatalf("built-in spec %s %q %d bytes eager %v %v", sp.ID, sp.Entry, len(sp.Bundle), sp.Eager, sp.Grants)
 	}
-	// The built-in ticker too, lazily, with its place setting's default.
-	if sp := specs[4]; sp.ID != mod.BundledTicker || sp.Entry != "" || len(sp.Bundle) == 0 || sp.Eager || len(sp.Grants) != 2 || sp.Settings["place"] != "right" {
+	// The built-in ticker at once too (it draws a sidebar section), with
+	// its place setting's default.
+	if sp := specs[4]; sp.ID != mod.BundledTicker || sp.Entry != "" || len(sp.Bundle) == 0 || !sp.Eager || len(sp.Grants) != 2 || sp.Settings["place"] != "right" {
 		t.Fatalf("built-in spec %s %q %d bytes eager %v %v %v", sp.ID, sp.Entry, len(sp.Bundle), sp.Eager, sp.Grants, sp.Settings)
 	}
 	// Off, they are no specs: the rest of the test follows the user's mod.
