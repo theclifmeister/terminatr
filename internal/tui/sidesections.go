@@ -44,6 +44,7 @@ type sideSection struct {
 	log             string // a failed mod's log
 	builtin         bool
 	project         string // the project it shows for: enter's target
+	above           bool   // in the band above the tree (sidebar.sections)
 	of              string // the project of the tree it shows, "" for all
 	badge           []widget.Span
 	lines           []string // the body unfolded, as drawn
@@ -70,6 +71,9 @@ type bandIn struct {
 	mods    []mod.Mod
 	noMods  bool
 	cache   *sectionCache
+	// order is the layout's sidebar.sections: the band's order, those
+	// before "tree" above the tree.
+	order []string
 }
 
 // bandWidth is a band section's body width in a sidebar w columns wide:
@@ -77,10 +81,11 @@ type bandIn struct {
 func bandWidth(w int) int { return max(w-1-sideGap-3, 1) }
 
 // bandViews are the band's sections the console shows for in.project,
-// in mod order: in safe mode a user mod's don't (its host doesn't run).
-func bandViews(in bandIn) []proto.ModView {
+// above the tree and below it, in the layout's order (orderSections):
+// in safe mode a user mod's don't show (its host doesn't run).
+func bandViews(in bandIn) (above, below []proto.ModView) {
 	if in.w <= sideSlim {
-		return nil
+		return nil, nil
 	}
 	var out []proto.ModView
 	for _, v := range sections(in.list, mod.SlotSidebarSection, in.project) {
@@ -89,7 +94,36 @@ func bandViews(in bandIn) []proto.ModView {
 		}
 		out = append(out, v)
 	}
-	return out
+	return orderSections(out, in.order)
+}
+
+// orderSections puts sections vs, in mod order, in a layout's order
+// (sidebar.sections, or sidebar.project_sections, which has no "tree"):
+// those it names before "tree" above the tree, those after it below,
+// and those it doesn't name below after them, in mod order. An id no
+// section has is skipped.
+func orderSections(vs []proto.ModView, order []string) (above, below []proto.ModView) {
+	ids, after := mod.SplitSections(order)
+	used := make([]bool, len(vs))
+	pick := func(ids []string) []proto.ModView {
+		var out []proto.ModView
+		for _, id := range ids {
+			for i, v := range vs {
+				if !used[i] && v.Mod+"."+v.View == id {
+					used[i] = true
+					out = append(out, v)
+				}
+			}
+		}
+		return out
+	}
+	above, below = pick(ids), pick(after)
+	for i, v := range vs {
+		if !used[i] {
+			below = append(below, v)
+		}
+	}
+	return above, below
 }
 
 // builtinMod says whether mod id is a built-in mod.
@@ -98,15 +132,28 @@ func builtinMod(mods []mod.Mod, id string) bool {
 	return i >= 0 && mods[i].Builtin
 }
 
+// withBand is the tree rows with the band's header rows: those above the
+// tree before its first row, the others after its last, so the cursor
+// meets them in the order they are drawn.
+func withBand(tree, band []treeRow) []treeRow {
+	i := slices.IndexFunc(band, func(r treeRow) bool { return !r.sec.above })
+	if i < 0 {
+		i = len(band)
+	}
+	return slices.Concat(band[:i], tree, band[i:])
+}
+
 // bandRows are the band's header rows, with their sections: a failed
 // mod's says so, one that drew nothing yet waits, and one whose tree
 // for the project (and for all) is null adds nothing.
 func bandRows(in bandIn) []treeRow {
 	var out []treeRow
 	w := bandWidth(in.w)
-	for _, v := range bandViews(in) {
+	above, below := bandViews(in)
+	for i, v := range slices.Concat(above, below) {
 		s := &sideSection{id: v.Mod + "." + v.View, mod: v.Mod, view: v.View, title: v.Title, name: v.Name,
-			desc: v.Description, opens: v.Opens, log: v.Log, builtin: builtinMod(in.mods, v.Mod), project: in.project}
+			desc: v.Description, opens: v.Opens, log: v.Log, builtin: builtinMod(in.mods, v.Mod), project: in.project,
+			above: i < len(above)}
 		s.folded = in.folds.IsSectionFolded(s.id)
 		switch t, drew := bandTree(v, in.project); {
 		case v.State == proto.ModViewFailed:
@@ -162,7 +209,8 @@ func bandTree(v proto.ModView, project string) (t *modview.Tree, drew bool) {
 // tree, which may publish another.
 func bandShown(in bandIn) []modview.Shown {
 	var out []modview.Shown
-	for _, v := range bandViews(in) {
+	above, below := bandViews(in)
+	for _, v := range slices.Concat(above, below) {
 		def, most := modview.Heights(mod.SlotSidebarSection)
 		h := def
 		if t, _ := bandTree(v, in.project); t != nil && t.Height > 0 {

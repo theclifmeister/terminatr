@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modview"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // TestFitBandProperties: for any sidebar body, tree and band, the band
@@ -138,5 +141,52 @@ func TestSideLayoutGuarantee(t *testing.T) {
 		if len(with.slots) > max(h-foot, 0) && h >= foot+4 {
 			t.Fatalf("h=%d foot=%d: %d rows laid out", h, foot, len(with.slots))
 		}
+	}
+}
+
+// TestOrderSections: the layout's sidebar.sections orders the band, the
+// ids before "tree" above it; what it doesn't name goes below after what
+// it names, in mod order; an id no mod has is skipped; without "tree"
+// all go below.
+func TestOrderSections(t *testing.T) {
+	vs := []proto.ModView{{Mod: "ticker", View: "ticker"}, {Mod: "ci", View: "ci"}, {Mod: "age", View: "age"}, {Mod: "ci", View: "prs"}}
+	ids := func(vs []proto.ModView) string {
+		var out []string
+		for _, v := range vs {
+			out = append(out, v.Mod+"."+v.View)
+		}
+		return strings.Join(out, " ")
+	}
+	for _, tc := range []struct {
+		order        []string
+		above, below string
+	}{
+		{nil, "", "ticker.ticker ci.ci age.age ci.prs"},
+		{[]string{"tree"}, "", "ticker.ticker ci.ci age.age ci.prs"},
+		{[]string{"ticker.ticker", "tree"}, "ticker.ticker", "ci.ci age.age ci.prs"},
+		{[]string{"ci.prs", "gone.x", "tree", "age.age"}, "ci.prs", "age.age ticker.ticker ci.ci"},
+		{[]string{"age.age", "ci.ci"}, "", "age.age ci.ci ticker.ticker ci.prs"},
+		{[]string{"tree", "ci.ci"}, "", "ci.ci ticker.ticker age.age ci.prs"},
+	} {
+		above, below := orderSections(vs, tc.order)
+		if ids(above) != tc.above || ids(below) != tc.below {
+			t.Errorf("%v: above %q below %q", tc.order, ids(above), ids(below))
+		}
+	}
+}
+
+// TestEffectiveLayoutSections: the layout mod's sidebar.sections and
+// project_sections reach the console's layout, and bandIn's order.
+func TestEffectiveLayoutSections(t *testing.T) {
+	spec, err := mod.ParseLayout([]byte("[sidebar]\nsections = [\"ticker.ticker\", \"tree\"]\nproject_sections = [\"ci.prs\"]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := effectiveLayout(spec, DefaultLayout, "mine")
+	if !slices.Equal(l.sideSections, []string{"ticker.ticker", "tree"}) || !slices.Equal(l.projSections, []string{"ci.prs"}) {
+		t.Fatalf("%+v", l)
+	}
+	if l = effectiveLayout(mod.Layout{}, DefaultLayout, ""); l.sideSections != nil || l.projSections != nil {
+		t.Fatalf("no layout: %+v", l)
 	}
 }

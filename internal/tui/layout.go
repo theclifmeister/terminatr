@@ -57,6 +57,10 @@ type Layout struct {
 	statusBar string    // status_bar.style: shown, compact
 	density   string    // rows.density: normal, compact
 	sections  []string  // dashboard.sections, needs and project always in
+	// sideSections and projSections are the layout's sidebar.sections
+	// (the band's order, "tree" where the tree sits) and
+	// sidebar.project_sections; nil for mod order, all below the tree.
+	sideSections, projSections []string
 }
 
 // layoutSet says which of the console's parts the layout in use sets:
@@ -354,6 +358,7 @@ func effectiveLayout(spec mod.Layout, ui Layout, id string) Layout {
 	l.statusBar = cmp.Or(spec.StatusBar, styleShown)
 	l.density = cmp.Or(spec.Density, densityNorm)
 	l.sections = layoutSections(spec.Sections)
+	l.sideSections, l.projSections = spec.SideSections, spec.ProjectSections
 	return l
 }
 

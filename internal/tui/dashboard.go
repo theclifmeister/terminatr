@@ -882,7 +882,7 @@ func (m *dash) tree() []treeRow {
 		tree: sideTree(m.data.Projects, m.folds), cols: m.sideCols, cells: m.data.Cells})
 	rows = sideRows(rows, m.data.NeedsFirst)
 	if bandFits(m.sideW(), m.h, m.sideFoot()) {
-		rows = append(rows, bandRows(m.band())...)
+		rows = withBand(rows, bandRows(m.band()))
 	}
 	if m.focus == areaSide {
 		markCursor(rows, m.sideW(), m.sideSel)
@@ -893,7 +893,7 @@ func (m *dash) tree() []treeRow {
 // band is what the sidebar's band of mod sections is built from.
 func (m *dash) band() bandIn {
 	return bandIn{list: m.mv.list, project: listProject(m.data, m.current), folds: m.folds, w: m.sideW(),
-		mods: m.data.Mods, noMods: m.data.NoMods, cache: &m.mv.band}
+		mods: m.data.Mods, noMods: m.data.NoMods, cache: &m.mv.band, order: m.layout.sideSections}
 }
 
 // sideFoot is the rows the sidebar's footer takes (sideFootRows).
