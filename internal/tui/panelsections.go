@@ -417,15 +417,6 @@ func layPanel(pl *panel, hits []infoHit, list []proto.ModView, t panelTarget, o 
 // fit1 is a panel line: s cut to w cells, its styles reset.
 func fit1(s string, w int) string { return fit(s, w) + reset }
 
-// panelFoldIDs are the fold ids of a panel's sections in lay.
-func panelFoldIDs(lay panelLay) []string {
-	out := make([]string, len(lay.secs))
-	for i, s := range lay.secs {
-		out[i] = s.id
-	}
-	return out
-}
-
 // panelStep is what a panel key op does on the selected section s (nil
 // for none): ] and [ move the selection among the headers drawn,
 // → unfolds s, ← folds it, enter opens the view its mod names (opens),
