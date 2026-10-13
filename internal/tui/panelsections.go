@@ -2,6 +2,9 @@ package tui
 
 import (
 	"slices"
+	"strings"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modview"
@@ -364,8 +367,10 @@ func layPanel(pl *panel, hits []infoHit, list []proto.ModView, t panelTarget, o 
 	if o.focused {
 		sel = th().SelFocus.Bold(true)
 	}
-	// section adds section j's lines.
-	section := func(j int) {
+	// section adds section j's lines: a blank, its header and its body;
+	// above a line of core's that isn't blank (the details panel's
+	// fields under its rule), the blank goes after it instead.
+	section := func(j int, after bool) {
 		lay.heads[j] = -1
 		if !fit.show[j] {
 			return
@@ -376,8 +381,10 @@ func layPanel(pl *panel, hits []infoHit, list []proto.ModView, t panelTarget, o 
 		if j == last {
 			more = fit.more
 		}
-		lay.lines = append(lay.lines, "")
-		lay.hits = append(lay.hits, infoHit{})
+		if !after {
+			lay.lines = append(lay.lines, "")
+			lay.hits = append(lay.hits, infoHit{})
+		}
 		lay.heads[j] = len(lay.lines)
 		head := sectionHeader(s, "", max(pl.w-2, 1), 0, fit.shrunk[j], more, "", s.id == o.sel, sel)
 		lay.lines = append(lay.lines, fit1(" "+head, pl.w))
@@ -386,18 +393,22 @@ func layPanel(pl *panel, hits []infoHit, list []proto.ModView, t panelTarget, o 
 			lay.lines = append(lay.lines, fit1("   "+l, pl.w))
 			lay.hits = append(lay.hits, hit)
 		}
+		if after {
+			lay.lines = append(lay.lines, "")
+			lay.hits = append(lay.hits, infoHit{})
+		}
 	}
 	next := 0
 	for i, l := range pl.lines {
 		for ; next < len(secs) && !fit.bottom[next] && asks[next].at <= i; next++ {
-			section(next)
+			section(next, strings.TrimSpace(ansi.Strip(l)) != "")
 		}
 		lay.lines = append(lay.lines, l)
 		lay.hits = append(lay.hits, hits[i])
 	}
 	for j := range secs {
 		if j >= next || fit.bottom[j] {
-			section(j)
+			section(j, false)
 		}
 	}
 	return lay

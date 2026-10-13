@@ -225,3 +225,52 @@ func TestPrefixOverSession(t *testing.T) {
 		t.Fatalf("prefix+z: %q", m.msg)
 	}
 }
+
+// TestPanelKeysClash: the panels' keys keep the key table's rule (SPEC
+// §4) but for one exception the user chose (T348 design §11.3, Q3): ]
+// and [ select a mod section's header while the details panel or the
+// info panel has sections; prefix+] and prefix+[ stay the next and
+// previous project there. In the details panel without sections every
+// prefix command's plain key is the list's, as on the list.
+func TestPanelKeysClash(t *testing.T) {
+	for _, a := range panelActions {
+		for _, k := range a.keys {
+			if isPrefixCommand(k) && k != "]" && k != "[" {
+				t.Errorf("panel key %q (%s) is prefix+%s, which means something else", k, a.id, k)
+			}
+		}
+	}
+	// No sections: a plain key is the dashboard key prefix then that key
+	// runs, as on the list. (; goes back to the last place, and the
+	// prefix itself moves where that is: it differs from the details
+	// panel on main too, outside the panels' keys.)
+	for _, k := range prefixKeysAll() {
+		if k == "q" || k == "d" || k == "r" || k == ";" {
+			continue
+		}
+		_, plain := needsYouData(t, 86+sideDefault)
+		_, prefixed := needsYouData(t, 86+sideDefault)
+		for _, m := range []*dash{plain, prefixed} {
+			m.layout.Details = true
+			m.focus = areaDetails
+		}
+		keyPress(plain, k)
+		prefixed.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
+		keyPress(prefixed, k)
+		if a, b := whole(plain), whole(prefixed); a != b {
+			t.Errorf("in the details panel, %s and prefix+%s differ:\n%s\n---\n%s", k, k, a, b)
+		}
+	}
+	// With sections: ] selects a header, prefix+] opens the next project.
+	src, m := detailsDash(t, detailsTestViews())
+	keyPress(m, "]")
+	if m.detSel == "" || len(src.opened) != 0 {
+		t.Fatalf("] in the details panel: selection %q, opened %v", m.detSel, src.opened)
+	}
+	m.current = "alpha"
+	m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
+	run(m, keyPress(m, "]"))
+	if len(src.opened) != 1 || src.opened[0] != "beta" {
+		t.Fatalf("prefix+] in the details panel opened %v", src.opened)
+	}
+}
