@@ -19,28 +19,28 @@ func text(s string) *widget.Widget { return &widget.Widget{Kind: widget.KindText
 func TestSetTrees(t *testing.T) {
 	s := New()
 	n := 3
-	if err := s.Set("m", "q", Tree{Tree: text("all")}, 10); err != nil {
+	if err := s.Set("m", "q", "", Tree{Tree: text("all")}, 10); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Set("m", "q", Tree{Project: "alpha", Tree: text("a"), Count: &n, Height: 99}, 10); err != nil {
+	if err := s.Set("m", "q", "", Tree{Project: "alpha", Tree: text("a"), Count: &n, Height: 99}, 10); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Set("m", "q", Tree{Project: "alpha", Tree: text("a2"), Height: 99}, 10); err != nil {
+	if err := s.Set("m", "q", "", Tree{Project: "alpha", Tree: text("a2"), Height: 99}, 10); err != nil {
 		t.Fatal(err)
 	}
 	got := s.Trees("m", "q")
 	if len(got) != 2 || got[1].Tree.Text != "a2" || got[1].Height != MaxHeight {
 		t.Fatalf("trees %+v", got)
 	}
-	s.Set("m", "q", Tree{Project: "alpha"}, 0)
+	s.Set("m", "q", "", Tree{Project: "alpha"}, 0)
 	if got := s.Trees("m", "q"); len(got) != 1 || got[0].Project != "" {
 		t.Fatalf("after clear %+v", got)
 	}
-	if err := s.Set("m", "other", Tree{Tree: text("big")}, MaxBytes); err == nil {
+	if err := s.Set("m", "other", "", Tree{Tree: text("big")}, MaxBytes); err == nil {
 		t.Fatal("over the mod's bytes: no error")
 	}
 	// Replacing a tree doesn't count its old size.
-	if err := s.Set("m", "q", Tree{Tree: text("big")}, MaxBytes-10); err != nil {
+	if err := s.Set("m", "q", "", Tree{Tree: text("big")}, MaxBytes-10); err != nil {
 		t.Fatal(err)
 	}
 	s.Clear("m")
@@ -57,7 +57,7 @@ func TestSectionTrees(t *testing.T) {
 		{Project: "alpha", Thread: "t-0001", Tree: text("thread")},
 		{Project: "alpha", Task: "T1", Tree: text("task2")},
 	} {
-		if err := s.Set("m", "s", tr, 10); err != nil {
+		if err := s.Set("m", "s", "", tr, 10); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -65,7 +65,7 @@ func TestSectionTrees(t *testing.T) {
 	if len(got) != 3 || got[2].Tree.Text != "task2" || !got[0].For("alpha", "", "") {
 		t.Fatalf("trees %+v", got)
 	}
-	s.Set("m", "s", Tree{Project: "alpha", Task: "T1"}, 0)
+	s.Set("m", "s", "", Tree{Project: "alpha", Task: "T1"}, 0)
 	if got := s.Trees("m", "s"); len(got) != 2 || got[1].Thread != "t-0001" {
 		t.Fatalf("after clearing the task's %+v", got)
 	}
@@ -143,5 +143,36 @@ func TestShowOpenedClosed(t *testing.T) {
 	}
 	if !strings.Contains(ErrFull("x").Error(), "x") {
 		t.Fatal("ErrFull")
+	}
+}
+
+// TestHeightsAndBadge: each slot caps the height it asks for, and a
+// badge is a few spans in a few cells.
+func TestHeightsAndBadge(t *testing.T) {
+	s := New()
+	for slot, want := range map[string]int{"sidebar.section": MaxSidebarHeight, "sidebar.project.section": MaxProjectSectionHeight, "dashboard.card": MaxHeight} {
+		if err := s.Set("m", slot, slot, Tree{Tree: text("x"), Height: 99}, 10); err != nil {
+			t.Fatal(err)
+		}
+		if got := s.Trees("m", slot)[0].Height; got != want {
+			t.Errorf("%s: height %d, want %d", slot, got, want)
+		}
+	}
+	if d, m := Heights("sidebar.project.section"); d != DefaultProjectSectionHeight || m != MaxProjectSectionHeight {
+		t.Errorf("heights %d %d", d, m)
+	}
+	ok := []widget.Span{{Text: "PR host ", Role: "bad"}, {Icon: "blocked", Role: "bad"}}
+	if err := CheckBadge(ok); err != nil {
+		t.Error(err)
+	}
+	for _, bad := range [][]widget.Span{
+		{{Text: "twelve cells!"}},
+		{{Text: "eleven cell"}, {Icon: "blocked"}},
+		{{Text: "a"}, {Text: "b"}, {Text: "c"}, {Text: "d"}, {Text: "e"}},
+		{{Icon: "bogus"}},
+	} {
+		if err := CheckBadge(bad); err == nil {
+			t.Errorf("%+v passed", bad)
+		}
 	}
 }

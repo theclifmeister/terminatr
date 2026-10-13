@@ -284,3 +284,92 @@ func TestModSections(t *testing.T) {
 		t.Fatalf("event %s %+v", ev.Name, ev.Data)
 	}
 }
+
+const sidebarManifest = `id = "panel"
+name = "Panel"
+version = "0.1.0"
+api = "1.7"
+[provides]
+main = "main.js"
+views = [
+  { id = "ticker", title = "Ticker", slot = "sidebar.section", description = "this project's PR polls" },
+  { id = "ci", title = "ci status", slot = "sidebar.project.section", opens = "prs" },
+  { id = "prs", title = "Open PRs", slot = "dashboard.card" },
+]
+[permissions]
+project_read = true
+views = true
+`
+
+// TestModSidebarSections: a sidebar section's height is capped by its
+// slot, it takes a badge and no task, thread or count, it is never
+// opened by the mod, mod.views names its description and companion,
+// and a per-project section shows only for a project.
+func TestModSidebarSections(t *testing.T) {
+	s := manifestServer(t, sidebarManifest, `"project_read", "views"`)
+	sub := s.SubscribeMod("panel", []string{"project_read", "views"}, nil)
+	next(t, sub) // mod.ready
+	call := func(params any) error {
+		raw, _ := json.Marshal(params)
+		_, err := s.CallMod(context.Background(), "panel", "ui.view.set", raw)
+		return err
+	}
+	tree := map[string]any{"kind": "text", "text": "PRs 40s ago"}
+	badge := []any{map[string]any{"text": "PR host ", "role": "bad"}, map[string]any{"icon": "blocked", "role": "bad"}}
+	if err := call(map[string]any{"view": "ticker", "widget": tree, "options": map[string]any{"project": "demo", "height": 99, "badge": badge}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := call(map[string]any{"view": "ci", "widget": tree, "options": map[string]any{"project": "demo", "height": 99}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []map[string]any{
+		{"view": "ticker", "options": map[string]any{"project": "demo", "count": 1}},
+		{"view": "ci", "options": map[string]any{"project": "demo", "task": "T12"}},
+		{"view": "ci", "options": map[string]any{"project": "demo", "thread": "t-0003"}},
+		{"view": "prs", "options": map[string]any{"project": "demo", "badge": badge}},                           // not a sidebar section
+		{"view": "ticker", "options": map[string]any{"badge": []any{map[string]any{"text": "thirteen cells"}}}}, // too wide
+		{"view": "ticker", "options": map[string]any{"badge": []any{map[string]any{"text": "a"}, map[string]any{"text": "b"}, // too many
+			map[string]any{"text": "c"}, map[string]any{"text": "d"}, map[string]any{"text": "e"}}}},
+		{"view": "ticker", "options": map[string]any{"badge": []any{map[string]any{"icon": "bogus"}}}},
+	} {
+		bad["widget"] = tree
+		if err := call(bad); err == nil {
+			t.Errorf("%v was set", bad)
+		}
+	}
+	raw, _ := json.Marshal(map[string]any{"view": "ticker"})
+	if _, err := s.CallMod(context.Background(), "panel", "ui.view.open", raw); err == nil || err.(*modbroker.Error).Code != modbroker.CodeBadParams {
+		t.Fatalf("a sidebar section opened: %v", err)
+	}
+
+	shown := []modview.Shown{
+		{Mod: "panel", View: "ticker", Slot: "sidebar.section", Project: "demo", Width: 30, Height: 4},
+		{Mod: "panel", View: "ci", Slot: "sidebar.project.section", Project: "demo", Width: 26, Height: 2},
+		{Mod: "panel", View: "ci", Slot: "sidebar.project.section", Width: 26, Height: 2},                   // dropped: no project
+		{Mod: "panel", View: "ci", Slot: "sidebar.project.section", Project: "other", Width: 26, Height: 2}, // dropped: not its project
+		{Mod: "panel", View: "ci", Slot: "sidebar.project.section", Project: "../x", Width: 26, Height: 2},  // dropped: not a slug
+	}
+	res, perr := s.modViews(proto.ModViewsParams{Shown: shown}, 42, human)
+	if perr != nil {
+		t.Fatal(perr)
+	}
+	v := res.(proto.ModViewsResult).Views
+	if len(v) != 3 || v[0].Description != "this project's PR polls" || v[1].Opens != "prs" || v[2].Opens != "" {
+		t.Fatalf("views %+v", v)
+	}
+	tk, ci := v[0].Trees, v[1].Trees
+	if len(tk) != 1 || tk[0].Height != modview.MaxSidebarHeight || len(tk[0].Badge) != 2 || tk[0].Badge[1].Icon != "blocked" {
+		t.Fatalf("ticker %+v", tk)
+	}
+	if len(ci) != 1 || ci[0].Height != modview.MaxProjectSectionHeight || ci[0].Badge != nil {
+		t.Fatalf("ci %+v", ci)
+	}
+	for range 2 {
+		if ev := next(t, sub); ev.Name != modbus.ViewOpened || ev.Data.(modbus.View).Project != "demo" {
+			t.Fatalf("event %s %+v", ev.Name, ev.Data)
+		}
+	}
+	if sub.Len() != 0 {
+		t.Fatal("a per-project section opened for no project, or another's")
+	}
+}

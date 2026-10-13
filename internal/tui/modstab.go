@@ -279,6 +279,10 @@ func modAbout(m *dash, md mod.Mod, w int) []string {
 			}
 		}
 	}
+	if md.Manifest != nil && !m.layout.Sidebar.Full(m.winW) &&
+		slices.ContainsFunc(md.Manifest.Provides.Views, func(v mod.View) bool { return mod.IsSidebar(v.Slot) }) {
+		out = append(out, faintLines("Its sidebar sections are hidden: they show only in the full sidebar, not the slim strip or a hidden one.", w)...)
+	}
 	for _, l := range strings.Split(m.data.ModData[md.ID], "\n") {
 		if l != "" {
 			for _, wl := range wrapLines("Doesn't load its "+l, w) {

@@ -242,8 +242,9 @@ type Done struct {
 
 // View is view.opened and view.closed: a view the manifest declares, the
 // slot it is shown in (project.tab, dashboard.card, full, details.section,
-// coordinator.section), the project it shows (and for a details.section
-// the task or thread the details panel shows) and its size in cells.
+// coordinator.section, sidebar.section, sidebar.project.section), the
+// project it shows (and for a details.section the task or thread the
+// details panel shows) and its size in cells.
 type View struct {
 	View    string `json:"view"`
 	Slot    string `json:"slot"`

@@ -807,7 +807,12 @@ type ModView struct {
 	Name  string `json:"name"`
 	View  string `json:"view"`
 	Title string `json:"title"`
-	Slot  string `json:"slot"` // project.tab, dashboard.card, full
+	Slot  string `json:"slot"` // project.tab, dashboard.card, full, a section's
+	// Description is the view's line for the sidebar's details line, and
+	// Opens a sidebar section's companion view: enter on its header
+	// sends the mod a ui.click (mod API 1.7).
+	Description string `json:"description,omitempty"`
+	Opens       string `json:"opens,omitempty"`
 	// State is "" while the mod's host runs, else "failed" (it failed or
 	// waits to restart: Err says why, Log names its log): a failed
 	// view shows that, never stale trees.

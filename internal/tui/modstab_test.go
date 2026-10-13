@@ -667,3 +667,23 @@ func TestModsDefaults(t *testing.T) {
 		t.Errorf("after y: %s %d, [defaults] sets %v", s.AutoClose, s.AutoCloseDays, cfg.OwnDefaults())
 	}
 }
+
+// TestModsSidebarHidden: a mod with a sidebar section says it is
+// hidden while the sidebar is slim or hidden, and not while it's full.
+func TestModsSidebarHidden(t *testing.T) {
+	_, m := modsDash(t)
+	md := mod.Mod{ID: "ticker", Manifest: &mod.Manifest{ID: "ticker", Name: "Ticker", Provides: mod.Provides{Main: "main.ts",
+		Views: []mod.View{{ID: "ticker", Title: "ticker", Slot: mod.SlotSidebarSection}}}}}
+	const want = "Its sidebar sections are hidden"
+	if got := strings.Join(modAbout(m, md, 200), "\n"); strings.Contains(got, want) {
+		t.Errorf("full sidebar:\n%s", got)
+	}
+	m.layout.Sidebar.Slim = true
+	if got := strings.Join(modAbout(m, md, 200), "\n"); !strings.Contains(got, want) {
+		t.Errorf("slim sidebar:\n%s", got)
+	}
+	m.layout.Sidebar.Slim, m.layout.Sidebar.Hidden = false, true
+	if got := strings.Join(modAbout(m, md, 200), "\n"); !strings.Contains(got, want) {
+		t.Errorf("hidden sidebar:\n%s", got)
+	}
+}

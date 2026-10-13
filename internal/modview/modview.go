@@ -10,10 +10,14 @@ package modview
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"sync"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/widget"
 )
 
@@ -30,7 +34,59 @@ const (
 	DefaultHeight = 8
 	// MaxCount bounds a tab's count.
 	MaxCount = 99999
+	// MaxSidebarHeight is the most body lines a sidebar.section asks
+	// for, DefaultSidebarHeight its lines when it asks for none.
+	MaxSidebarHeight     = 12
+	DefaultSidebarHeight = 4
+	// MaxProjectSectionHeight is the most body lines a
+	// sidebar.project.section asks for, DefaultProjectSectionHeight its
+	// lines when it asks for none.
+	MaxProjectSectionHeight     = 4
+	DefaultProjectSectionHeight = 2
+	// MaxBadgeSpans and MaxBadgeCells bound a sidebar section's badge,
+	// drawn on its header.
+	MaxBadgeSpans = 4
+	MaxBadgeCells = 12
+	// iconCells is what an icon counts in a badge's cells: the widest an
+	// icon set draws one (a private-use glyph and a blank).
+	iconCells = 2
 )
+
+// Heights are the lines a view in slot gets when it asks for none, and
+// the most it may ask for: a dashboard card's, or a sidebar section's.
+// Other slots take the room they are given.
+func Heights(slot string) (def, most int) {
+	switch slot {
+	case mod.SlotSidebarSection:
+		return DefaultSidebarHeight, MaxSidebarHeight
+	case mod.SlotProjectSection:
+		return DefaultProjectSectionHeight, MaxProjectSectionHeight
+	}
+	return DefaultHeight, MaxHeight
+}
+
+// CheckBadge checks a sidebar section's badge in place, as
+// widget.CheckSpans does: at most MaxBadgeSpans spans in
+// MaxBadgeCells cells, an icon counting iconCells.
+func CheckBadge(ss []widget.Span) error {
+	if len(ss) > MaxBadgeSpans {
+		return fmt.Errorf("a badge has at most %d spans, not %d", MaxBadgeSpans, len(ss))
+	}
+	if err := widget.CheckSpans(ss); err != nil {
+		return err
+	}
+	n := 0
+	for _, s := range ss {
+		n += ansi.StringWidth(s.Text)
+		if s.Icon != "" {
+			n += iconCells
+		}
+	}
+	if n > MaxBadgeCells {
+		return fmt.Errorf("a badge is at most %d cells (an icon counts %d), not %d", MaxBadgeCells, iconCells, n)
+	}
+	return nil
+}
 
 // InputWindow is how long after a human input to a mod its
 // $.ui.view.open may open a view: the event's handler time.
@@ -53,10 +109,14 @@ type Tree struct {
 	// Count is the number a project tab shows beside its title; nil for
 	// none.
 	Count *int `json:"count,omitempty"`
-	// Height is the lines a dashboard card asks for, within MaxHeight.
-	Height int            `json:"height,omitempty"`
-	Tree   *widget.Widget `json:"tree"`
-	size   int
+	// Height is the lines a dashboard card or a sidebar section asks
+	// for, within its slot's most (Heights); 0 for its default.
+	Height int `json:"height,omitempty"`
+	// Badge is what a sidebar section's header shows beside its title,
+	// folded or not (CheckBadge); nil for none.
+	Badge []widget.Span  `json:"badge,omitempty"`
+	Tree  *widget.Widget `json:"tree"`
+	size  int
 }
 
 // Shown is a view a console shows: the mod's view, in a slot, for a
@@ -132,11 +192,13 @@ type ErrFull string
 
 func (e ErrFull) Error() string { return string(e) }
 
-// Set publishes mod's tree t of view for project ("" for every project
-// the view shows); a nil tree clears it. size is the tree's JSON size.
-func (s *Store) Set(mod, view string, t Tree, size int) error {
+// Set publishes mod's tree t of view, in slot, for project ("" for every
+// project the view shows); a nil tree clears it. size is the tree's JSON
+// size.
+func (s *Store) Set(mod, view, slot string, t Tree, size int) error {
 	t.size = size
-	t.Height = min(max(t.Height, 0), MaxHeight)
+	_, most := Heights(slot)
+	t.Height = min(max(t.Height, 0), most)
 	if t.Count != nil {
 		c := min(max(*t.Count, 0), MaxCount)
 		t.Count = &c

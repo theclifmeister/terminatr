@@ -52,13 +52,22 @@ func (m *Manifest) Kinds() []string {
 
 // ViewWords are the panels m draws, in the consent screen's words: a
 // project-popup tab "Review queue", a dashboard card "Cost", a
-// details-panel section "Review".
+// details-panel section "Review", a sidebar section "Ticker" (above or
+// below your projects, on every screen).
 func (m *Manifest) ViewWords() []string {
 	var out []string
 	for _, v := range m.Provides.Views {
 		where := map[string]string{SlotProjectTab: "a project-popup tab", SlotDashboardCard: "a dashboard card", SlotFull: "a full view",
-			SlotDetailsSection: "a details-panel section", SlotCoordinatorSection: "a coordinator-panel section"}[v.Slot]
-		out = append(out, fmt.Sprintf("%s %q", where, Clean(v.Title, false)))
+			SlotDetailsSection: "a details-panel section", SlotCoordinatorSection: "a coordinator-panel section",
+			SlotSidebarSection: "a sidebar section", SlotProjectSection: "a section under each project"}[v.Slot]
+		w := fmt.Sprintf("%s %q", where, Clean(v.Title, false))
+		switch v.Slot {
+		case SlotSidebarSection:
+			w += " (above or below your projects, on every screen)"
+		case SlotProjectSection:
+			w += " (in the sidebar)"
+		}
+		out = append(out, w)
 	}
 	return out
 }

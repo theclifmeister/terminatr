@@ -28,6 +28,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modbus"
 	"github.com/theclifmeister/terminatr/internal/modsup"
 	"github.com/theclifmeister/terminatr/internal/modview"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -58,19 +59,21 @@ func declaredView(m mod.Mod, id string) (mod.View, bool) {
 	return mod.View{}, false
 }
 
-// ui.view.set {view, widget, options: {project, count, height}}: the
-// tree of one of the mod's views, for a project it runs for or for all;
-// a null widget clears it.
+// ui.view.set {view, widget, options: {project, task, thread, count,
+// height, badge}}: the tree of one of the mod's views, for a project it
+// runs for or for all; a null widget clears it. A sidebar section takes
+// a badge, and no task, thread or count.
 func (s *Server) modViewSet(_ context.Context, c *modbroker.Call) (any, error) {
 	var a struct {
 		View    string          `json:"view"`
 		Widget  json.RawMessage `json:"widget"`
 		Options *struct {
-			Project string `json:"project"`
-			Task    string `json:"task"`
-			Thread  string `json:"thread"`
-			Count   *int   `json:"count"`
-			Height  int    `json:"height"`
+			Project string        `json:"project"`
+			Task    string        `json:"task"`
+			Thread  string        `json:"thread"`
+			Count   *int          `json:"count"`
+			Height  int           `json:"height"`
+			Badge   []widget.Span `json:"badge"`
 		} `json:"options"`
 	}
 	if err := c.Decode(&a); err != nil {
@@ -90,7 +93,10 @@ func (s *Server) modViewSet(_ context.Context, c *modbroker.Call) (any, error) {
 		if err := checkSectionTarget(v.Slot, o.Project, o.Task, o.Thread); err != nil {
 			return nil, modbroker.BadParams("ui.view.set: %v", err)
 		}
-		t.Project, t.Task, t.Thread, t.Count, t.Height = o.Project, o.Task, o.Thread, o.Count, o.Height
+		if err := checkSidebarOptions(v.Slot, o.Count, o.Badge); err != nil {
+			return nil, modbroker.BadParams("ui.view.set: %v", err)
+		}
+		t.Project, t.Task, t.Thread, t.Count, t.Height, t.Badge = o.Project, o.Task, o.Thread, o.Count, o.Height, o.Badge
 	}
 	if len(a.Widget) > 0 && string(a.Widget) != "null" {
 		w, err := widget.Decode(a.Widget)
@@ -104,7 +110,7 @@ func (s *Server) modViewSet(_ context.Context, c *modbroker.Call) (any, error) {
 		}
 		t.Tree = w
 	}
-	if err := s.modViewStore().Set(c.Mod.ID, a.View, t, len(a.Widget)); err != nil {
+	if err := s.modViewStore().Set(c.Mod.ID, a.View, v.Slot, t, len(a.Widget)); err != nil {
 		var full modview.ErrFull
 		if errors.As(err, &full) {
 			return nil, modbroker.Denied("ui.view.set: %v", err)
@@ -137,15 +143,34 @@ func checkSectionTarget(slot, project, task, thr string) error {
 	return nil
 }
 
-// checkShownTarget checks what a shown view is for: a details.section's
-// task or thread, as a tree's (checkSectionTarget), or the task a
-// project tab was opened to show (mod API 1.3), which its mod hears in
-// view.opened.
-func checkShownTarget(slot, project, task, thr string) error {
-	if slot == mod.SlotProjectTab && task != "" && thr == "" {
-		return checkSectionTarget(mod.SlotDetailsSection, project, task, "")
+// checkSidebarOptions says why a view of slot can't have count or badge:
+// a count is a project tab's, and only a sidebar section has a badge
+// (modview.CheckBadge, which cleans it in place).
+func checkSidebarOptions(slot string, count *int, badge []widget.Span) error {
+	switch {
+	case count != nil && mod.IsSidebar(slot):
+		return fmt.Errorf("a %s has no count: show a number in its badge", slot)
+	case badge == nil:
+		return nil
+	case !mod.IsSidebar(slot):
+		return fmt.Errorf("only a %s or a %s has a badge", mod.SlotSidebarSection, mod.SlotProjectSection)
 	}
-	return checkSectionTarget(slot, project, task, thr)
+	return modview.CheckBadge(badge)
+}
+
+// checkShownTarget checks what a shown view is for: a details.section's
+// task or thread, as a tree's (checkSectionTarget), the task a project
+// tab was opened to show (mod API 1.3), which its mod hears in
+// view.opened, or a sidebar.project.section's project: one each, never
+// all (mod API 1.7).
+func checkShownTarget(slot, slug, task, thr string) error {
+	if slot == mod.SlotProjectTab && task != "" && thr == "" {
+		return checkSectionTarget(mod.SlotDetailsSection, slug, task, "")
+	}
+	if slot == mod.SlotProjectSection && !project.ValidSlug(slug) {
+		return fmt.Errorf("a %s shows for a project, not %q", slot, slug)
+	}
+	return checkSectionTarget(slot, slug, task, thr)
 }
 
 // ui.view.open {view}: show one of the mod's views on the console of the
@@ -208,6 +233,7 @@ func (s *Server) modViews(p proto.ModViewsParams, pid int, c caller.Caller) (any
 		failed := ok && (st.State == modsup.Failed || st.State == modsup.Backoff)
 		for _, v := range m.Manifest.Provides.Views {
 			mv.View, mv.Title, mv.Slot = v.ID, mod.Clean(v.Title, false), v.Slot
+			mv.Description, mv.Opens = oneLine(mod.Clean(v.Description, false), mod.MaxViewDescription), v.Opens
 			mv.State, mv.Err, mv.Log, mv.Trees = "", "", "", nil
 			if failed {
 				mv.State, mv.Err = proto.ModViewFailed, oneLine(st.Err, 200)
