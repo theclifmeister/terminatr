@@ -87,6 +87,7 @@ shots.html` (a page with a dark and a light palette).
 | info | blue | starting |
 | faint | SGR 2 | labels, meta, help text, the dimmed scene under a popup |
 | select | reverse | the selection where the keyboard is; faint reverse elsewhere |
+| plain | the terminal's own | everything else: names, titles of tasks and threads, values |
 
 - **C1.** Colour never carries meaning alone: a state has its glyph and
   its word.
@@ -97,6 +98,11 @@ shots.html` (a page with a dark and a light palette).
 - **C4.** Under a popup the whole scene dims, the sidebar too.
 - **C5.** The status bar has no fill: a faint rule above it, muted text,
   the state glyph in its colour and the keys in the accent colour.
+- **C6.** Every colour is a role's (`th()`), so a theme mod recolours
+  all of the console. Text drawn in no other role is plain: each line of
+  the chrome is drawn over the plain role (`plainUnder`), never in the
+  terminal's default colour. The tui tests fail on a colour set outside
+  `theme.go` and on chrome text in no role.
 
 ## Glyphs: one meaning each
 

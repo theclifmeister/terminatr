@@ -1663,7 +1663,7 @@ func (m *dash) frame(title string, body []string, sel int, keys string) string {
 	var out []string
 	shown := right // the header's right part, as drawn
 	if g.headRows() > 0 {
-		out = append(out, fit(left, max(m.w-ansi.StringWidth(right)-1, 1))+reset+" "+right)
+		out = append(out, plainUnder(fit(left, max(m.w-ansi.StringWidth(right)-1, 1))+reset+" "+right))
 	} else if shown = alarm; alarm != "" {
 		rows[0] = overRight(rows[0], alarm, m.w)
 	}
@@ -1681,8 +1681,15 @@ func (m *dash) frame(title string, body []string, sel int, keys string) string {
 			rows[len(rows)-1] = overLeft(rows[len(rows)-1], msg, m.w)
 		}
 	}
+	if m.over == nil { // over a session, the rows are its screen
+		for i, r := range rows {
+			rows[i] = plainUnder(r)
+		}
+	}
 	out = append(out, rows...)
-	out = append(out, foot...)
+	for _, f := range foot {
+		out = append(out, plainUnder(f))
+	}
 	return strings.Join(out, "\n")
 }
 

@@ -439,7 +439,7 @@ func (c *client) appendInfo(b []byte, wrote bool) ([]byte, bool) {
 		if i := ip.top + y; i < len(ip.lines) {
 			l = ip.lines[i]
 		}
-		lines[y] = border + fit(l, w) + reset
+		lines[y] = border + fit(plainUnder(l), w) + reset
 		if y < len(ip.drawn) && ip.drawn[y] == lines[y] {
 			continue
 		}
