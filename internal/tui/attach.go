@@ -209,6 +209,9 @@ func Attach(opts Options) (res Result, err error) {
 			panic(p)
 		}
 	}()
+	// Before the colour queries: the panes' palette, sent once they
+	// answered, needs the terminal's truecolor known (truecolor.go).
+	probeTerminal(opts.In, opts.Out, true)
 	if _, err := opts.Out.WriteString(outerSetup); err != nil {
 		return res, err
 	}
@@ -1978,6 +1981,10 @@ func (c *client) pollState(ctx context.Context) {
 				c.side.projects, c.side.sessions, c.side.ctxHint, c.side.needsFirst = projects, res.Sessions, ctxHint, needsFirst
 				if ctl != nil {
 					c.side.server = ServerInfo{Version: res.Version, Build: res.Build, Latest: res.Latest, Upgrade: res.Upgrade}
+					if n := oldConsoleNews(c.side.server); n != "" && c.flash == "" {
+						c.flash = n
+						c.status()
+					}
 				}
 			}
 			for _, p := range c.panes {

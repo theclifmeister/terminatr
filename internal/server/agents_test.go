@@ -139,23 +139,7 @@ func TestPaneScheme(t *testing.T) {
 // off, or in safe mode (T342).
 func TestLaunchTheme(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
-	dir, err := home.ModsDir()
-	if err != nil {
-		t.Fatal(err)
-	}
-	files := map[string]string{
-		"mod.toml":   "id = \"nord\"\nname = \"Nord\"\nversion = \"0.1.0\"\napi = \"1.6\"\n[provides]\ntheme = \"theme.toml\"\n",
-		"theme.toml": "[dark]\naccent = { fg = [\"cyan\", \"#88c0d0\"] }\n[dark.pane]\nbg = \"#2e3440\"\n",
-	}
-	for name, body := range files {
-		p := filepath.Join(dir, "nord", name)
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	writeNordMod(t)
 	cfgPath, _ := config.Path()
 	writeCfg := func(body string) {
 		if err := os.WriteFile(cfgPath, []byte(body), 0o600); err != nil {
@@ -190,22 +174,17 @@ func TestLaunchTheme(t *testing.T) {
 	}
 }
 
-// TestThemeChangeReachesClaude: a launch writes Claude's live theme into
-// its config folder and selects it; a console's new colours (another
-// theme's pane palette, a scheme switch, a theme without one) rewrite it
-// for the sessions already running, which Claude reloads; safe mode
-// writes none (T345).
-func TestThemeChangeReachesClaude(t *testing.T) {
-	t.Setenv("TERMINATR_HOME", t.TempDir())
-	cfgDir := t.TempDir()
-	t.Setenv("CLAUDE_CONFIG_DIR", cfgDir)
+// writeNordMod writes the nord theme mod, with a dark pane palette, into
+// TERMINATR_HOME's mods.
+func writeNordMod(t *testing.T) {
+	t.Helper()
 	dir, err := home.ModsDir()
 	if err != nil {
 		t.Fatal(err)
 	}
 	files := map[string]string{
 		"mod.toml":   "id = \"nord\"\nname = \"Nord\"\nversion = \"0.1.0\"\napi = \"1.6\"\n[provides]\ntheme = \"theme.toml\"\n",
-		"theme.toml": "[dark]\naccent = { fg = [\"cyan\", \"#88c0d0\"] }\n[dark.pane]\nbg = \"#2e3440\"\n[light]\naccent = { fg = [\"blue\", \"#5e81ac\"] }\n[light.pane]\nbg = \"#eceff4\"\n",
+		"theme.toml": "[dark]\naccent = { fg = [\"cyan\", \"#88c0d0\"] }\n[dark.pane]\nbg = \"#2e3440\"\n",
 	}
 	for name, body := range files {
 		p := filepath.Join(dir, "nord", name)
@@ -215,6 +194,69 @@ func TestThemeChangeReachesClaude(t *testing.T) {
 		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// TestColorsSurviveRestart: the colours and pane scheme a console last
+// reported outlive the server, so the next one's agents, resumed before
+// any console attached, get [ui] theme's colours (T344).
+func TestColorsSurviveRestart(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	writeNordMod(t)
+	cfgPath, _ := config.Path()
+	if err := os.WriteFile(cfgPath, []byte("[ui]\ntheme = \"nord\"\n[mods.nord]\nenabled = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "sessions.json")
+	newServer := func() *Server {
+		return &Server{opts: Options{Paths: Paths{Sessions: path}}, log: log.New(io.Discard, "", 0),
+			prevProject: map[string]string{}, dormant: map[string]SessionRecord{}, records: map[string]SessionRecord{}}
+	}
+	old := newServer()
+	old.colors = emu.Colors{Known: emu.KnownBg | emu.PaneDark, Bg: emu.RGB{R: 0x2e, G: 0x34, B: 0x40}}
+	old.scheme = emu.SchemeDark
+	if err := old.saveLocked("clean"); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newServer()
+	s.loadPrevious()
+	if s.colors != old.colors || s.scheme != emu.SchemeDark {
+		t.Errorf("restarted with colours %+v scheme %v, want %+v dark", s.colors, s.scheme, old.colors)
+	}
+	scheme := s.paneScheme()
+	if a := s.launchTheme(scheme); scheme != "dark" || a == nil || a.PaneBg != "#2e3440" {
+		t.Errorf("a session resumed at start: pane scheme %q, theme %+v", scheme, a)
+	}
+
+	// A server that never heard of a console's colours keeps none.
+	if err := newServer().saveLocked(""); err != nil {
+		t.Fatal(err)
+	}
+	s = newServer()
+	s.loadPrevious()
+	if got := s.paneScheme(); got != "" {
+		t.Errorf("no colours reported, yet pane scheme %q", got)
+	}
+}
+
+// TestThemeChangeReachesClaude: a launch writes Claude's live theme into
+// its config folder and selects it; a console's new colours (another
+// theme's pane palette, a scheme switch, a theme without one) rewrite it
+// for the sessions already running, which Claude reloads; safe mode
+// writes none (T345).
+func TestThemeChangeReachesClaude(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	cfgDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", cfgDir)
+	writeNordMod(t)
+	// With a light pane palette too.
+	dir, err := home.ModsDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "nord", "theme.toml"), []byte("[dark]\naccent = { fg = [\"cyan\", \"#88c0d0\"] }\n[dark.pane]\nbg = \"#2e3440\"\n[light]\naccent = { fg = [\"blue\", \"#5e81ac\"] }\n[light.pane]\nbg = \"#eceff4\"\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 	cfgPath, _ := config.Path()
 	if err := os.WriteFile(cfgPath, []byte("[ui]\ntheme = \"nord\"\n[mods.nord]\nenabled = true\n"), 0o600); err != nil {

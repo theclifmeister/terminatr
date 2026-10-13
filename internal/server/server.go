@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -422,6 +423,12 @@ func (s *Server) loadPrevious() (resume []SessionRecord, lost []restartOutcome) 
 	if prev.NextID > s.nextID {
 		s.nextID = prev.NextID
 	}
+	s.scheme = emu.Scheme(prev.Scheme)
+	if b, err := hex.DecodeString(prev.Colors); err == nil {
+		if c, ok := emu.DecodeColors(b); ok {
+			s.colors = c
+		}
+	}
 	if prev.Shutdown == "clean" {
 		s.prevShut = "clean"
 	} else {
@@ -468,6 +475,10 @@ func (s *Server) saveLocked(shutdown string) error {
 		Started:   s.started,
 		Shutdown:  shutdown,
 		NextID:    s.nextID,
+		Scheme:    uint8(s.scheme),
+	}
+	if s.colors.Known != 0 {
+		st.Colors = hex.EncodeToString(s.colors.Encode())
 	}
 	for _, r := range s.records {
 		if shutdown == "clean" {
@@ -481,6 +492,17 @@ func (s *Server) saveLocked(shutdown string) error {
 	}
 	sort.Slice(st.Dormant, func(i, j int) bool { return st.Dormant[i].Created.Before(st.Dormant[j].Created) })
 	return saveState(s.opts.Paths.Sessions, st)
+}
+
+// saveColorsLocked keeps the colours and scheme a console reported for
+// the next server (State.Colors); s.mu held.
+func (s *Server) saveColorsLocked() {
+	if s.stopping {
+		return // shutdown saves them, with the clean mark
+	}
+	if err := s.saveLocked(""); err != nil {
+		s.log.Printf("sessions.json: %v", err)
+	}
 }
 
 func (s *Server) requestStop() { s.stopOne.Do(func() { close(s.stopReq) }) }
@@ -1280,6 +1302,7 @@ loop:
 					s.mu.Lock()
 					if s.scheme != scheme {
 						s.scheme = scheme
+						s.saveColorsLocked()
 						s.themeChangedLocked()
 					}
 					s.mu.Unlock()
@@ -1291,6 +1314,7 @@ loop:
 					s.mu.Lock()
 					if s.colors != colors {
 						s.colors = colors
+						s.saveColorsLocked()
 						s.themeChangedLocked()
 					}
 					s.mu.Unlock()

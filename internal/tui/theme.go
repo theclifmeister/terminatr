@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"image/color"
-	"os"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -193,8 +192,7 @@ func th() *Theme { return theme.Load() }
 // setTheme makes the table's roles for the scheme this console's theme.
 // A table that doesn't resolve leaves the built-in look.
 func setTheme(tt themeTable, dark bool) error {
-	ct := strings.ToLower(os.Getenv("COLORTERM"))
-	t, err := themeFor(tt, dark, ct == "truecolor" || ct == "24bit")
+	t, err := themeFor(tt, dark, trueColor())
 	if err != nil {
 		t, _ = themeFor(builtinTheme, dark, false)
 	}
