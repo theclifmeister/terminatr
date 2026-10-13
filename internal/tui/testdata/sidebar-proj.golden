@@ -214,16 +214,14 @@ a null tree for alpha: nothing under it (156×34, sidebar 36)
  2 threads · coordinator not runn… │
  tab sidebar · ? help              │
 
-waiting (156×34, sidebar 36)
+before the mod draws: no section, not even its header (156×34, sidebar 36)
  PROJECTS                      2   │
  ■ alpha              0         ⚑  │
  └─ coordinator         ▲          │
-    ▾ ci status ────────────── …   │
  ■ beta               2         ⚑  │
  └─ coordinator         ·          │
     ├─ T4 Write d…  60% ●       ⚑  │
     └─ t-0006 Old…      ·          │
-    ▾ ci status ────────────── …   │
                                    │
  ▾ TICKER ───────────────── beta   │
    PRs      40s ago · next 1m20s   │
@@ -231,6 +229,8 @@ waiting (156×34, sidebar 36)
    PR host  ok                     │
  ▾ CI STATUS ─────────────── 1 ☒   │
    #412 passes                     │
+                                   │
+                                   │
                                    │
                                    │
                                    │
@@ -357,6 +357,7 @@ ten projects: the quarter share, the bottom projects' first (156×40, sidebar 36
  ■ p03                1            │
  └─ coordinator         ·          │
     └─ t-0003 Work      ▷          │
+    ▸ ci status ────────── 1 ☒ …   │
  ■ p04                1         ⚑  │
  └─ coordinator         ·          │
     └─ t-0004 Work      ▷       ⚑  │
@@ -379,8 +380,7 @@ ten projects: the quarter share, the bottom projects' first (156×40, sidebar 36
  └─ coordinator         ·          │
     └─ t-0010 Work      ▷       ⚑  │
                                    │
- ▾ TICKER ──────────────────── …   │
- ▸ CI STATUS ────────── 1 ☒ … +8   │
+ ▸ CI STATUS ────────── 1 ☒ … +7   │
  ───────────────────────────────── │
  p01 · active                      │
  1 thread · coordinator not runni… │

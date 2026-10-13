@@ -12,7 +12,6 @@ import (
 	"cmp"
 	"context"
 	"path/filepath"
-	"slices"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
@@ -94,13 +93,10 @@ func (s *Server) modSpecs() ([]modsup.Spec, bool) {
 		}
 		// A mod that draws columns runs from the server's start: a
 		// lazy host never says mod.ready, so its cached cells would stay
-		// stale after a restart until an event arrived. So does one with
-		// sidebar sections, which show on every screen: at mod.ready it
-		// can clear a section it leaves out (the ticker's place) before a
-		// console waits for it. The others (the Memory tab) wait, lazily,
-		// for their first event.
+		// stale after a restart until an event arrived. The others (the
+		// Memory tab) wait, lazily, for their first event.
 		sp := modsup.Spec{ID: m.ID, Grants: m.Grants, Projects: m.Projects, Settings: m.Settings,
-			Eager: len(m.Manifest.Provides.Columns) > 0 || slices.ContainsFunc(m.Manifest.Provides.Views, func(v mod.View) bool { return mod.IsSidebar(v.Slot) })}
+			Eager: len(m.Manifest.Provides.Columns) > 0}
 		if m.Builtin {
 			// Precompiled into tm (go generate ./internal/mod): it
 			// runs without esbuild.
