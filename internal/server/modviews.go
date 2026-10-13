@@ -61,8 +61,8 @@ func declaredView(m mod.Mod, id string) (mod.View, bool) {
 
 // ui.view.set {view, widget, options: {project, task, thread, count,
 // height, badge}}: the tree of one of the mod's views, for a project it
-// runs for or for all; a null widget clears it. A sidebar section takes
-// a badge, and no task, thread or count.
+// runs for or for all; a null widget clears it. A section takes a badge
+// (mod API 1.7); a sidebar section no task, thread or count.
 func (s *Server) modViewSet(_ context.Context, c *modbroker.Call) (any, error) {
 	var a struct {
 		View    string          `json:"view"`
@@ -98,6 +98,7 @@ func (s *Server) modViewSet(_ context.Context, c *modbroker.Call) (any, error) {
 		}
 		t.Project, t.Task, t.Thread, t.Count, t.Height, t.Badge = o.Project, o.Task, o.Thread, o.Count, o.Height, o.Badge
 	}
+	t.Height = modview.OldHeight(v.Slot, c.Mod.Manifest, t.Height)
 	if len(a.Widget) > 0 && string(a.Widget) != "null" {
 		w, err := widget.Decode(a.Widget)
 		if err != nil {
@@ -144,7 +145,7 @@ func checkSectionTarget(slot, project, task, thr string) error {
 }
 
 // checkSidebarOptions says why a view of slot can't have count or badge:
-// a count is a project tab's, and only a sidebar section has a badge
+// a sidebar section has no count, and only a section has a badge
 // (modview.CheckBadge, which cleans it in place).
 func checkSidebarOptions(slot string, count *int, badge []widget.Span) error {
 	switch {
@@ -152,8 +153,8 @@ func checkSidebarOptions(slot string, count *int, badge []widget.Span) error {
 		return fmt.Errorf("a %s has no count: show a number in its badge", slot)
 	case badge == nil:
 		return nil
-	case !mod.IsSidebar(slot):
-		return fmt.Errorf("only a %s or a %s has a badge", mod.SlotSidebarSection, mod.SlotProjectSection)
+	case !mod.IsSection(slot):
+		return fmt.Errorf("only a section (%s, %s, %s, %s) has a badge", mod.SlotSidebarSection, mod.SlotProjectSection, mod.SlotCoordinatorSection, mod.SlotDetailsSection)
 	}
 	return modview.CheckBadge(badge)
 }
