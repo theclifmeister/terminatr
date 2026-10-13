@@ -11,7 +11,7 @@ import (
 // colours; 256-colour indexes and the program's truecolor stay as drawn.
 func TestRendererPalette(t *testing.T) {
 	pane := newTerm(t, 20, 3)
-	r, err := NewRenderer(20, 3)
+	r, err := NewRenderer(20, 4) // a row below the pane
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,19 +31,19 @@ func TestRendererPalette(t *testing.T) {
 	pal.ANSI[12] = &RGB{129, 161, 193}
 	r.SetPalette(pal)
 	f, _ = r.Frame(pane, false)
-	if f == nil || !bytes.Contains(f, []byte("\x1b[2J")) {
+	if f == nil || !bytes.Contains(f, []byte("plain")) {
 		t.Fatalf("a new palette doesn't repaint: %q", f)
 	}
 	dflt := "\x1b[0;38;2;216;222;233;48;2;46;52;64m"
 	for _, want := range []string{
-		dflt + "\x1b[H\x1b[2J", // the clear paints the theme's background
+		dflt + "\x1b[J", // below the pane is erased in the theme's background
 		dflt + "plain",
 		"\x1b[0;38;2;191;97;106;48;2;46;52;64mred",    // ANSI red from the palette
 		"\x1b[0;38;2;129;161;193;48;2;46;52;64mbb",    // bright blue too
 		"\x1b[0;38;5;200;48;2;46;52;64mx",             // 256 colours stay
 		"\x1b[0;38;2;1;2;3;48;2;46;52;64my",           // the program's truecolor stays
 		"\x1b[0;7;38;2;216;222;233;48;2;46;52;64minv", // inverse swaps the theme's
-		dflt + "\x1b[K",                               // the row's end is erased in the background
+		dflt + "\x1b[K", // the row's end is erased in the background
 	} {
 		if !bytes.Contains(f, []byte(want)) {
 			t.Errorf("palette frame lacks %q: %q", want, f)

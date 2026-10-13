@@ -85,16 +85,21 @@ func (e *Env) fullConsole(own bool, goTo *tui.Target) int {
 	flash := modsNote  // the popup's last message, for the session's status bar
 	command := ""      // a prefix command typed over the popup, for the session
 	sideFocus := false // the sidebar has the keyboard, across screens
+	// handover: the screen is up, the last screen's frame showing, for the
+	// next to draw over (T372); the first starts it.
+	handover := false
 	for {
 		var over *tui.Over
 		if attach {
-			ares, code := e.attach(p, vc, &tui.SidebarOptions{UIFile: uiFile, Focus: sideFocus}, flash, command, args)
+			ares, code := e.attach(p, vc, tui.Options{Sidebar: &tui.SidebarOptions{UIFile: uiFile, Focus: sideFocus},
+				Flash: flash, Command: command, Handover: handover, Back: true}, args)
 			if code != ExitOK {
 				return code
 			}
 			if ares.Quit {
 				return ExitOK
 			}
+			handover = true
 			st.Message = strings.TrimPrefix(ares.Session+": "+ares.Reason, ": ")
 			st.Then = ares.Then // prefix then p, ] or [ in the session
 			st.SideFocus = ares.SideFocus
@@ -110,13 +115,14 @@ func (e *Env) fullConsole(own bool, goTo *tui.Target) int {
 		// size leaves the dashboard at 80×24 until it arrives (Windows).
 		wc, wr, _ := termSize()
 		res, err := tui.Dashboard(tui.DashOptions{Source: src, In: os.Stdin, Out: os.Stdout, Width: int(wc), Height: int(wr),
-			Cwd: e.Cwd, State: st, UIFile: uiFile, Prefix: tui.ConfigPrefix(), View: vc, Over: over})
+			Cwd: e.Cwd, State: st, UIFile: uiFile, Prefix: tui.ConfigPrefix(), View: vc, Over: over, Handover: handover})
 		if err != nil {
 			return e.srvFail("dashboard", err)
 		}
 		if res.Attach == "" {
 			return ExitOK
 		}
+		handover = true
 		attach, st, flash, command, sideFocus = true, tui.DashState{}, res.Message, res.Command, res.SideFocus
 	}
 }
@@ -159,7 +165,7 @@ func (e *Env) openCmd(slug, agentName string) error {
 	if agentName != "" {
 		args = append(args, "--agent", agentName)
 	}
-	res, code := e.attach(p, vc, &tui.SidebarOptions{UIFile: uiFile}, "", "", args)
+	res, code := e.attach(p, vc, tui.Options{Sidebar: &tui.SidebarOptions{UIFile: uiFile}}, args)
 	vc.Close()
 	if code != ExitOK {
 		return &exitError{code}

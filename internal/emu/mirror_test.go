@@ -343,9 +343,10 @@ func TestRendererSharedRect(t *testing.T) {
 	if b, _ := r.Frame(pane, false); b != nil {
 		t.Fatalf("idle frame %q", b)
 	}
-	// Back to the whole window: a full frame again.
+	// Back to the whole window: a full frame again, every row drawn in
+	// place, without a clear.
 	r.SetSize(30, 6)
-	if b, _ := r.Frame(pane, false); !bytes.Contains(b, []byte("\x1b[2J")) {
+	if b, _ := r.Frame(pane, false); !bytes.Contains(b, []byte("\x1b[1;1H")) || bytes.Contains(b, []byte("\x1b[2J")) {
 		t.Fatalf("full-window frame %q", b)
 	}
 }

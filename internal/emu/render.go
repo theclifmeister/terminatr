@@ -34,7 +34,7 @@ type Renderer struct {
 	buf  []byte
 	sgr  []byte
 	last []byte
-	full bool // the next frame clears and repaints everything
+	full bool // the next frame repaints everything
 
 	// pal is the palette symbolic colours are drawn with (nil: none), and
 	// reset the SGR sequence of a default cell under it ("\x1b[0m"
@@ -178,9 +178,12 @@ func (r *Renderer) Frame(t *Terminal, held bool) ([]byte, error) {
 		}
 		wrote = true
 	case r.full:
-		b = append(append(b, r.reset...), "\x1b[H\x1b[2J"...)
+		// Every row is drawn in place below, each to its end: no clear
+		// first, which a terminal that shows the update before its end
+		// would flash blank (T372).
 		wrote = true
 	}
+	shown := 0 // the window's rows the pane covers
 	if r.full || dirty != libghostty.RenderStateDirtyFalse {
 		if err := r.rs.RowIterator(r.ri); err != nil {
 			return nil, err
@@ -188,6 +191,7 @@ func (r *Renderer) Frame(t *Terminal, held bool) ([]byte, error) {
 		for y := 0; r.ri.Next(); y++ {
 			oy := y - r.top
 			if oy >= 0 && oy < r.outRows {
+				shown = oy + 1
 				rowDirty, _ := r.ri.Dirty()
 				if r.full || dirty == libghostty.RenderStateDirtyFull || rowDirty {
 					wrote = true
@@ -198,6 +202,12 @@ func (r *Renderer) Frame(t *Terminal, held bool) ([]byte, error) {
 			}
 			r.ri.SetDirty(false)
 		}
+	}
+	if r.full && !r.shared && shown < r.outRows {
+		// The window is taller than the pane: erase below it (the status
+		// line is drawn again after).
+		b = appendCUP(b, shown+1, 1)
+		b = append(append(b, r.reset...), "\x1b[J"...)
 	}
 	r.rs.SetDirty(libghostty.RenderStateDirtyFalse)
 	if r.status != "" && !r.shared && (r.full || r.status != r.drawn) {
