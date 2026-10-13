@@ -406,3 +406,68 @@ func countLabel(title string, n int) string {
 	}
 	return fmt.Sprintf("%s %d", title, n)
 }
+
+// plainUnder lays the plain role under s, one line of the console's chrome:
+// text drawn in no other role (no colour of its own) is drawn plain, so
+// a theme's plain colour reaches it too, not the terminal's default one.
+// The built-in plain draws nothing, so s stays as it is there.
+func plainUnder(s string) string {
+	pre := plainSGR()
+	if pre == "" || s == "" {
+		return s
+	}
+	var b strings.Builder
+	b.WriteString(pre)
+	fg := true
+	state := byte(0)
+	for len(s) > 0 {
+		seq, width, n, ns := ansi.DecodeSequence(s, state, nil)
+		state, s = ns, s[n:]
+		b.WriteString(seq)
+		if width == 0 && isSGR(seq) {
+			if fg = sgrFg(seq, fg); !fg {
+				b.WriteString(pre)
+				fg = true
+			}
+		}
+	}
+	b.WriteString(reset)
+	return b.String()
+}
+
+// plainSGR is the SGR sequence that turns the plain role on, "" when it
+// draws nothing.
+func plainSGR() string {
+	pre, _, _ := strings.Cut(th().Plain.Render("x"), "x")
+	return pre
+}
+
+// isSGR says whether seq is an SGR (colour and attribute) sequence.
+func isSGR(seq string) bool {
+	return strings.HasPrefix(seq, "\x1b[") && strings.HasSuffix(seq, "m")
+}
+
+// sgrFg is whether a foreground colour is set after the SGR sequence
+// seq, fg whether one was before it.
+func sgrFg(seq string, fg bool) bool {
+	ps := strings.Split(seq[2:len(seq)-1], ";")
+	for i := 0; i < len(ps); i++ {
+		switch p := ps[i]; {
+		case p == "" || p == "0" || p == "39":
+			fg = false
+		case p == "38" || p == "48" || p == "58":
+			if p == "38" {
+				fg = true
+			}
+			switch {
+			case i+1 < len(ps) && ps[i+1] == "5":
+				i += 2
+			case i+1 < len(ps) && ps[i+1] == "2":
+				i += 4
+			}
+		case len(p) == 2 && (p[0] == '3' || p[0] == '9') && p[1] >= '0' && p[1] <= '7':
+			fg = true
+		}
+	}
+	return fg
+}

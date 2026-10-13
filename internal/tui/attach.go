@@ -1457,6 +1457,7 @@ func (c *client) status() {
 		sw -= bw + 1
 	}
 	line, hits := statusBar(c.focus.info, c.focus.status, c.paneTitle(), c.pending, sw, where, c.cells)
+	line = plainUnder(line)
 	if bw > 0 {
 		line += reset + badge + " "
 		hits = append(hits, hint{c.cols - bw - 1, c.cols - 1, thenNeeds})

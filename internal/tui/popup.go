@@ -176,7 +176,7 @@ func drawBox(title string, bw int, lines, acts []string, more string) []string {
 	fill := max(bw-3-ansi.StringWidth(title), 0)
 	out := []string{border.Render("╭─") + title + border.Render(strings.Repeat("─", fill)+"╮")}
 	row := func(l string) string {
-		return border.Render("│") + " " + fit(l, inner) + reset + " " + border.Render("│")
+		return border.Render("│") + " " + fit(plainUnder(l), inner) + reset + " " + border.Render("│")
 	}
 	for _, l := range lines {
 		out = append(out, row(l))
