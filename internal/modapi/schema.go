@@ -92,11 +92,15 @@ type Level string
 var Levels = []string{"info", "warn", "error"}
 
 // Span is a run of text in one theme role, or an icon: what a cell,
-// status segment or badge is made of (widget.Span).
+// status segment or badge is made of (widget.Span). Ago and Until (mod
+// API 1.7) are RFC 3339 times the console draws in place of text with
+// its own clock: "40s ago", and "1m20s" or "due".
 type Span struct {
-	Text string `json:"text,omitempty"`
-	Role Role   `json:"role,omitempty"`
-	Icon Icon   `json:"icon,omitempty"`
+	Text  string `json:"text,omitempty"`
+	Role  Role   `json:"role,omitempty"`
+	Icon  Icon   `json:"icon,omitempty"`
+	Ago   string `json:"ago,omitempty"`
+	Until string `json:"until,omitempty"`
 }
 
 // Widget is a view's widget tree (the widget set: text, list, table, kv,
@@ -233,6 +237,7 @@ var Events = []Event{
 	{Name: modbus.ReportStored, Data: typ[modbus.Report](), Needs: GrantProjectRead, Doc: "A thread stored a report."},
 	{Name: modbus.InboxItem, Data: typ[modbus.Item](), Needs: GrantProjectRead, Doc: "A new item in the coordinator's inbox."},
 	{Name: modbus.PRChanged, Data: typ[modbus.PR](), Needs: GrantProjectRead, Doc: "The ticker learnt something new of a thread's PR."},
+	{Name: modbus.TickerChanged, Data: typ[modbus.Ticker](), Needs: GrantProjectRead, Doc: "A project's ticker polled PRs or synced its repos, or its PR host began or stopped failing (mod API 1.7): the ticker as $.project.get gives it. Draw its times as ago and until spans, which move by themselves."},
 	{Name: modbus.SessionState, Data: typ[modbus.Session](), Doc: "A session's agent state or context use changed, or it exited."},
 	{Name: modbus.SessionQuestion, Data: typ[modbus.Question](), Needs: GrantProjectRead, Doc: "The question a thread's or coordinator's open question menu asks changed (mod API 1.3): its first unanswered question, none once it is answered or gone. Its options can be offered as question.answer bindings."},
 	{Name: modbus.ClockMinute, Data: typ[modbus.Clock](), Doc: "Every minute."},

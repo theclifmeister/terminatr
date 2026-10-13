@@ -21,7 +21,10 @@ const (
 	// SessionQuestion (mod API 1.3): the question a session's open menu
 	// asks changed.
 	SessionQuestion = "session.question"
-	ClockMinute     = "clock.minute"
+	// TickerChanged (mod API 1.7): a project's ticker polled PRs or
+	// synced, or its PR host began or stopped failing.
+	TickerChanged = "ticker.changed"
+	ClockMinute   = "clock.minute"
 	// Published by the console, action and view parts of the API.
 	UIClick     = "ui.click"
 	UIKey       = "ui.key"
@@ -45,7 +48,7 @@ const (
 // Needs is the grant a mod needs to get event name; "" for none.
 func Needs(name string) string {
 	switch name {
-	case TaskChanged, TasksChanged, ThreadState, ThreadStarted, ThreadResolved, ReportStored, InboxItem, PRChanged, SessionQuestion:
+	case TaskChanged, TasksChanged, ThreadState, ThreadStarted, ThreadResolved, ReportStored, InboxItem, PRChanged, TickerChanged, SessionQuestion:
 		return GrantProjectRead
 	case ViewOpened, ViewClosed:
 		return GrantViews
@@ -134,6 +137,14 @@ type PR struct {
 	Review   string `json:"review,omitempty"` // APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED, ""
 	Behind   bool   `json:"behind,omitempty"`
 	Conflict bool   `json:"conflict,omitempty"`
+}
+
+// Ticker is ticker.changed (mod API 1.7): a project's ticker as
+// $.project.get gives it, after each PR poll or sync, and when
+// gh_failing flips.
+type Ticker struct {
+	Project string            `json:"project"`
+	Ticker  proto.WatchTicker `json:"ticker"`
 }
 
 // Session is session.state: a session's agent state or context use
