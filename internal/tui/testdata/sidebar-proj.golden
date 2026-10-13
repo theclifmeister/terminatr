@@ -1,0 +1,388 @@
+under each project (156×34, sidebar 36)
+ PROJECTS                      2   │
+ ■ alpha              0         ⚑  │
+ └─ coordinator         ▲          │
+    ▾ ci status ──────────── 1 ☒   │
+      ☑ #412 alpha docs            │
+      ☒ #415 alpha release         │
+ ■ beta               2         ⚑  │
+ └─ coordinator         ·          │
+    ├─ T4 Write d…  60% ●       ⚑  │
+    └─ t-0006 Old…      ·          │
+    ▾ ci status ──────────── 1 ☒   │
+      ☑ #412 beta docs             │
+      ☒ #415 beta release          │
+                                   │
+ ▾ TICKER ───────────────── beta   │
+   PRs      40s ago · next 1m20s   │
+   synced   1m ago                 │
+   PR host  ok                     │
+ ▾ CI STATUS ─────────────── 1 ☒   │
+   #412 passes                     │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+ ───────────────────────────────── │
+ beta · active                     │
+ 2 threads · coordinator not runn… │
+ tab sidebar · ? help              │
+
+beta folded: no section under it (156×34, sidebar 36)
+ PROJECTS                      2   │
+ ■ alpha              0         ⚑  │
+ └─ coordinator         ▲          │
+    ▾ ci status ──────────── 1 ☒   │
+      ☑ #412 alpha docs            │
+      ☒ #415 alpha release         │
+ ■ beta               2 ·       ⚑  │
+                                   │
+ ▾ TICKER ───────────────── beta   │
+   PRs      40s ago · next 1m20s   │
+   synced   1m ago                 │
+   PR host  ok                     │
+ ▾ CI STATUS ─────────────── 1 ☒   │
+   #412 passes                     │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+ ───────────────────────────────── │
+ beta · active                     │
+ 2 threads · coordinator not runn… │
+ tab sidebar · ? help              │
+
+alpha's section folded to its badge (156×34, sidebar 36)
+ PROJECTS                      2   │
+ ■ alpha              0         ⚑  │
+ └─ coordinator         ▲          │
+    ▸ ci status ──────────── 1 ☒   │
+ ■ beta               2         ⚑  │
+ └─ coordinator         ·          │
+    ├─ T4 Write d…  60% ●       ⚑  │
+    └─ t-0006 Old…      ·          │
+    ▾ ci status ──────────── 1 ☒   │
+      ☑ #412 beta docs             │
+      ☒ #415 beta release          │
+                                   │
+ ▾ TICKER ───────────────── beta   │
+   PRs      40s ago · next 1m20s   │
+   synced   1m ago                 │
+   PR host  ok                     │
+ ▾ CI STATUS ─────────────── 1 ☒   │
+   #412 passes                     │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+ ───────────────────────────────── │
+ beta · active                     │
+ 2 threads · coordinator not runn… │
+ tab sidebar · ? help              │
+
+an inactive project, expanded: none (156×34, sidebar 36)
+ PROJECTS                      3   │
+ ■ alpha              0         ⚑  │
+ └─ coordinator         ▲          │
+    ▾ ci status ──────────── 1 ☒   │
+      ☑ #412 alpha docs            │
+      ☒ #415 alpha release         │
+ ■ beta               2         ⚑  │
+ └─ coordinator         ·          │
+    ├─ T4 Write d…  60% ●       ⚑  │
+    └─ t-0006 Old…      ·          │
+    ▾ ci status ──────────── 1 ☒   │
+      ☑ #412 beta docs             │
+      ☒ #415 beta release          │
+ ── ▾ inactive (1) ─────────────── │
+ ■ gamma              0       ⊘    │
+ └─ coordinator         ·     ⊘    │
+                                   │
+ ▾ TICKER ───────────────── beta   │
+   PRs      40s ago · next 1m20s   │
+   synced   1m ago                 │
+   PR host  ok                     │
+ ▾ CI STATUS ─────────────── 1 ☒   │
+   #412 passes                     │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+ ───────────────────────────────── │
+ beta · active                     │
+ 2 threads · coordinator not runn… │
+ tab sidebar · ? help              │
+
+cursor on beta's section (156×34, sidebar 36)
+ PROJECTS                      2   │
+ ■ alpha              0         ⚑  │
+ └─ coordinator         ▲          │
+    ▾ ci status ──────────── 1 ☒   │
+      ☑ #412 alpha docs            │
+      ☒ #415 alpha release         │
+ ■ beta               2         ⚑  │
+ └─ coordinator         ·          │
+    ├─ T4 Write d…  60% ●       ⚑  │
+    └─ t-0006 Old…      ·          │
+    ▾ ci status ──────────── 1 ☒   │
+      ☑ #412 beta docs             │
+      ☒ #415 beta release          │
+                                   │
+ ▾ TICKER ───────────────── beta   │
+   PRs      40s ago · next 1m20s   │
+   synced   1m ago                 │
+   PR host  ok                     │
+ ▾ CI STATUS ─────────────── 1 ☒   │
+   #412 passes                     │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+ ───────────────────────────────── │
+ ci status · prci mod              │
+ this project's PRs and their che… │
+ ← fold · ⏎ open · ? help          │
+
+a null tree for alpha: nothing under it (156×34, sidebar 36)
+ PROJECTS                      2   │
+ ■ alpha              0         ⚑  │
+ └─ coordinator         ▲          │
+ ■ beta               2         ⚑  │
+ └─ coordinator         ·          │
+    ├─ T4 Write d…  60% ●       ⚑  │
+    └─ t-0006 Old…      ·          │
+    ▾ ci status ──────────── 1 ☒   │
+      ☑ #412 beta docs             │
+      ☒ #415 beta release          │
+                                   │
+ ▾ TICKER ───────────────── beta   │
+   PRs      40s ago · next 1m20s   │
+   synced   1m ago                 │
+   PR host  ok                     │
+ ▾ CI STATUS ─────────────── 1 ☒   │
+   #412 passes                     │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+ ───────────────────────────────── │
+ beta · active                     │
+ 2 threads · coordinator not runn… │
+ tab sidebar · ? help              │
+
+waiting (156×34, sidebar 36)
+ PROJECTS                      2   │
+ ■ alpha              0         ⚑  │
+ └─ coordinator         ▲          │
+    ▾ ci status ────────────── …   │
+ ■ beta               2         ⚑  │
+ └─ coordinator         ·          │
+    ├─ T4 Write d…  60% ●       ⚑  │
+    └─ t-0006 Old…      ·          │
+    ▾ ci status ────────────── …   │
+                                   │
+ ▾ TICKER ───────────────── beta   │
+   PRs      40s ago · next 1m20s   │
+   synced   1m ago                 │
+   PR host  ok                     │
+ ▾ CI STATUS ─────────────── 1 ☒   │
+   #412 passes                     │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+ ───────────────────────────────── │
+ beta · active                     │
+ 2 threads · coordinator not runn… │
+ tab sidebar · ? help              │
+
+failed: once, in the band (156×34, sidebar 36)
+ PROJECTS                      2   │
+ ■ alpha              0         ⚑  │
+ └─ coordinator         ▲          │
+ ■ beta               2         ⚑  │
+ └─ coordinator         ·          │
+    ├─ T4 Write d…  60% ●       ⚑  │
+    └─ t-0006 Old…      ·          │
+                                   │
+ ▾ TICKER ───────────────── beta   │
+   PRs      40s ago · next 1m20s   │
+   synced   1m ago                 │
+   PR host  ok                     │
+ ▾ CI STATUS ─────────────── 1 ☒   │
+   #412 passes                     │
+ ▾ CI STATUS ────────────────────  │
+   ▲ mod failed: exit 1            │
+   r in the Mods tab restarts it   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+ ───────────────────────────────── │
+ beta · active                     │
+ 2 threads · coordinator not runn… │
+ tab sidebar · ? help              │
+
+filter beta (156×34, sidebar 36)
+ PROJECTS                      1   │
+ /beta                             │
+ ■ beta               2         ⚑  │
+    ▾ ci status ──────────── 1 ☒   │
+      ☑ #412 beta docs             │
+      ☒ #415 beta release          │
+                                   │
+ ▾ TICKER ───────────────── beta   │
+   PRs      40s ago · next 1m20s   │
+   synced   1m ago                 │
+   PR host  ok                     │
+ ▾ CI STATUS ─────────────── 1 ☒   │
+   #412 passes                     │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+ ───────────────────────────────── │
+ beta · active                     │
+ 2 threads · coordinator not runn… │
+ tab sidebar · ? help              │
+
+short window (156×20, sidebar 36)
+ PROJECTS                      2   │
+ ■ alpha              0         ⚑  │
+ └─ coordinator         ▲          │
+    ▸ ci status ────────── 1 ☒ …   │
+ ■ beta               2         ⚑  │
+ └─ coordinator         ·          │
+    ├─ T4 Write d…  60% ●       ⚑  │
+    └─ t-0006 Old…      ·          │
+                                   │
+ ▾ TICKER ───────────────── beta   │
+   PRs      40s ago · next 1m20s   │
+   synced   1m ago                 │
+   PR host  ok                     │
+ ▸ CI STATUS ────────── 1 ☒ … +1   │
+                                   │
+                                   │
+ ───────────────────────────────── │
+ beta · active                     │
+ 2 threads · coordinator not runn… │
+ tab sidebar · ? help              │
+
+ten projects: the quarter share, the bottom projects' first (156×40, sidebar 36)
+ PROJECTS                     10   │
+ ■ p01                1            │
+ └─ coordinator         ·          │
+    └─ t-0001 Work      ▷          │
+    ▸ ci status ────────── 1 ☒ …   │
+ ■ p02                1         ⚑  │
+ └─ coordinator         ·          │
+    └─ t-0002 Work      ▷       ⚑  │
+    ▸ ci status ────────── 1 ☒ …   │
+ ■ p03                1            │
+ └─ coordinator         ·          │
+    └─ t-0003 Work      ▷          │
+ ■ p04                1         ⚑  │
+ └─ coordinator         ·          │
+    └─ t-0004 Work      ▷       ⚑  │
+ ■ p05                1            │
+ └─ coordinator         ·          │
+    └─ t-0005 Work      ▷          │
+ ■ p06                1         ⚑  │
+ └─ coordinator         ·          │
+    └─ t-0006 Work      ▷       ⚑  │
+ ■ p07                1            │
+ └─ coordinator         ·          │
+    └─ t-0007 Work      ▷          │
+ ■ p08                1         ⚑  │
+ └─ coordinator         ·          │
+    └─ t-0008 Work      ▷       ⚑  │
+ ■ p09                1            │
+ └─ coordinator         ·          │
+    └─ t-0009 Work      ▷          │
+ ■ p10                1         ⚑  │
+ └─ coordinator         ·          │
+    └─ t-0010 Work      ▷       ⚑  │
+                                   │
+ ▾ TICKER ──────────────────── …   │
+ ▸ CI STATUS ────────── 1 ☒ … +8   │
+ ───────────────────────────────── │
+ p01 · active                      │
+ 1 thread · coordinator not runni… │
+ tab sidebar · ? help              │
+

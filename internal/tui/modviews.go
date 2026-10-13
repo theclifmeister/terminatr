@@ -434,9 +434,13 @@ func (m *dash) shownViews() []modview.Shown {
 			}
 		}
 	}
-	// The sidebar's band, under any popup too, while it has the room.
+	// The sidebar's band, under any popup too, while it has the room,
+	// and the sections of the projects whose rows are on screen.
 	if bandFits(m.sideW(), m.h, m.sideFoot()) {
-		out = append(out, bandShown(m.band())...)
+		in := m.band()
+		out = append(out, bandShown(in)...)
+		rows := m.tree()
+		out = append(out, projShown(rows, in, sideOnScreen(rows, m.sideW(), m.h, m.sideFoot()))...)
 	}
 	return out
 }

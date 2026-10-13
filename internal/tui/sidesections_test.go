@@ -66,7 +66,7 @@ func TestFitBandProperties(t *testing.T) {
 		if b < bandMinBody && f.headers() > 0 {
 			t.Fatalf("%s: sections under %d rows", at, bandMinBody)
 		}
-		if f.used() > b/2 || f.headers() > b/4 || f.part(true) > b/4 {
+		if f.used() > b/2 || f.headers() > b/4 || f.part(placeAbove) > b/4 {
 			t.Fatalf("%s: over the caps", at)
 		}
 		more := 0
