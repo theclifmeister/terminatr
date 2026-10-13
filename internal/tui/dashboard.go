@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -136,6 +137,9 @@ func Dashboard(opts DashOptions) (DashResult, error) {
 		opts.State.Message = n
 	}
 	m := newDash(opts)
+	// The sidebar's sections the attached console showed, from its
+	// last mod.views, show here at once (handViews).
+	m.mv.list = handedViews()
 	// Safe mode puts its own sidebar on the view, whatever a layout
 	// left there.
 	m.useLayout(layoutValue(), spec, m.safe)
@@ -171,8 +175,14 @@ func Dashboard(opts DashOptions) (DashResult, error) {
 	}
 	d := final.(*dash)
 	if d.mv.sent != "" {
-		// The dashboard and its popups are gone: their mod views close.
-		_, _ = d.src.ModViews(nil)
+		// The dashboard and its popups are gone: their mod views close,
+		// but the sidebar's sections while a session attaches next,
+		// whose sidebar shows them on.
+		var keep []modview.Shown
+		if d.result.Attach != "" {
+			keep = sidebarShown(d.shownViews())
+		}
+		_, _ = d.src.ModViews(keep)
 	}
 	d.result.State = DashState{Selected: d.sel, Current: d.current}
 	d.result.SideFocus = d.result.Attach != "" && d.focus == areaSide

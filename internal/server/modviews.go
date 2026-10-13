@@ -332,11 +332,12 @@ func (s *Server) modViewInput(p proto.ModViewInputParams, pid int, c caller.Call
 	}
 	// The cursor moves with a publish too: only a key or a click lets
 	// the mod open a view.
+	var res proto.ModViewInputResult
 	if name != modbus.UICursor {
-		s.modViewStore().Input(p.Mod, pid, p.Project)
+		res.After = s.modViewStore().Input(p.Mod, pid, p.Project)
 	}
 	if s.modEv != nil {
 		s.modEv.bus.PublishTo(p.Mod, name, p.Project, in)
 	}
-	return struct{}{}, nil
+	return res, nil
 }

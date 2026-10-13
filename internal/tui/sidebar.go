@@ -16,6 +16,8 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/emu"
+	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -1115,6 +1117,10 @@ type sidebar struct {
 	// compact is the console's layout's rows.density = compact: the
 	// footer keeps its key bar alone.
 	compact bool
+	// sections are the sidebar sections session.list names
+	// (mods.sections), band the band's lines (sidesections.go).
+	sections []proto.ModSection
+	band     sectionCache
 }
 
 // sideCurrent is the attach view's current project: the focused pane's,
@@ -1135,10 +1141,39 @@ func (c *client) sideTree() []treeRow {
 	rows := buildTree(c.side.projects, c.side.sessions, treeIn{current: c.sideCurrent(), focus: focus, ctxHint: c.side.ctxHint,
 		tree: sideTree(c.side.projects, c.v.Tree), cols: c.v.Columns, cells: c.cells})
 	rows = sideRows(rows, c.side.needsFirst)
+	if c.bandShows() {
+		rows = append(rows, bandRows(c.band())...)
+	}
 	if c.kb == areaSide {
 		markCursor(rows, c.sideW, c.v.SideSel)
 	}
 	return rows
+}
+
+// bandShows says whether the attached sidebar shows its band of mod
+// sections: some mod has one, and the full sidebar has the room. c.mu
+// held.
+func (c *client) bandShows() bool {
+	return c.side != nil && len(c.side.sections) > 0 && c.sideW > 0 && bandFits(c.sideW, c.sideRows(), c.sideFoot())
+}
+
+// band is what the attached sidebar's band is built from: the views
+// mod.views last listed that session.list names as sidebar sections
+// (in safe mode only the built-in mods'), in their order; one it names
+// that mod.views didn't list yet waits. c.mu held.
+func (c *client) band() bandIn {
+	secs := c.side.sections
+	var list []proto.ModView
+	mods := make([]mod.Mod, 0, len(secs))
+	for _, s := range secs {
+		mods = append(mods, mod.Mod{ID: s.Mod, Builtin: s.Builtin})
+		if i := slices.IndexFunc(c.views, func(v proto.ModView) bool { return v.Mod == s.Mod && v.View == s.View }); i >= 0 {
+			list = append(list, c.views[i])
+		} else {
+			list = append(list, proto.ModView{Mod: s.Mod, View: s.View, Title: s.Title, Slot: s.Slot})
+		}
+	}
+	return bandIn{list: list, project: c.sideCurrent(), folds: c.v.Tree, w: c.sideW, mods: mods, cache: &c.side.band}
 }
 
 // sideFullTree is the attach view's whole tree, nothing folded and no
@@ -1520,7 +1555,8 @@ func (c *client) sideFoot() int {
 
 // sectionDo runs what a key or a click on a band section does: folds or
 // unfolds sections in the view (foldSections), or sends the mod the
-// ui.click that opens its view.
+// ui.click that opens its view, which then shows over the session as a
+// command's does (cmdWait, takeOpen).
 func (c *client) sectionDo(st sideStep) {
 	if len(st.sections) > 0 {
 		c.foldSections(st.sections, st.foldOn)
@@ -1528,17 +1564,23 @@ func (c *client) sectionDo(st sideStep) {
 	if s := st.open; s != nil {
 		p := sectionClick(s)
 		go func() {
+			var res proto.ModViewInputResult
 			ctl, err := server.Connect(c.paths, false)
 			if err == nil {
-				err = ctl.Call(proto.MethodModViewInput, p, nil)
+				err = ctl.Call(proto.MethodModViewInput, p, &res)
 				ctl.Close()
 			}
-			if err != nil && c.lock() {
+			if !c.lock() {
+				return
+			}
+			if err != nil {
 				c.flash = errMessage(err)
 				c.status()
-				c.mu.Unlock()
-				c.poke()
+			} else {
+				c.wait = &cmdWait{mod: p.Mod, after: res.After, until: time.Now().Add(modview.InputWindow + 2*statePoll)}
 			}
+			c.mu.Unlock()
+			c.poke()
 		}()
 	}
 }

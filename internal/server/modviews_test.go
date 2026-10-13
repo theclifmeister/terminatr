@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -371,5 +372,22 @@ func TestModSidebarSections(t *testing.T) {
 	}
 	if sub.Len() != 0 {
 		t.Fatal("a per-project section opened for no project, or another's")
+	}
+}
+
+// TestSessionListSections: session.list names the sidebar sections, so
+// an attached console knows to ask mod.views for them; in safe mode a
+// user mod's are not named.
+func TestSessionListSections(t *testing.T) {
+	s := manifestServer(t, sidebarManifest, `"project_read", "views"`)
+	m := s.modCellsView()
+	want := []proto.ModSection{{Mod: "panel", View: "ticker", Title: "Ticker", Slot: "sidebar.section"},
+		{Mod: "panel", View: "ci", Title: "ci status", Slot: "sidebar.project.section"}}
+	if m == nil || !slices.Equal(m.Sections, want) {
+		t.Fatalf("mods %+v", m)
+	}
+	s.noMods = true
+	if m := s.modCellsView(); m != nil && len(m.Sections) > 0 {
+		t.Fatalf("safe mode: %+v", m.Sections)
 	}
 }
