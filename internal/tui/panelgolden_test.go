@@ -114,7 +114,12 @@ func TestPanelSectionsGolden(t *testing.T) {
 	c := infoClient(t, 200)
 	c.views = []proto.ModView{{Mod: "ci", Name: "CI", View: "checks", Title: "checks", Slot: mod.SlotDetailsSection,
 		Trees: []modview.Tree{{Project: "demo", Thread: "t-0002", Tree: noteTree("#408 ☒ global thread cap"), Badge: []widget.Span{{Text: "1 ☒", Role: "bad"}}}}}}
-	c.showInfo(sampleInfo(time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)))
+	// The panel draws its ages by its clock: pinned 3h after the data,
+	// so they read "3h ago" at any time of day.
+	at := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+	infoClock = func() time.Time { return at.Add(3 * time.Hour) }
+	defer func() { infoClock = time.Now }()
+	c.showInfo(sampleInfo(at))
 	c.mu.Lock()
 	lines, rows := c.info.lines, c.infoRows()
 	c.mu.Unlock()

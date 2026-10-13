@@ -435,11 +435,14 @@ func (c *client) infoX() int {
 	return c.cols - c.infoW
 }
 
+// infoClock is the clock the panel's ages are drawn by; tests pin it.
+var infoClock = time.Now
+
 // infoLayout lays the panel's content out at its width: when its data
 // or its width changes, not with every frame. c.mu held.
 func (c *client) infoLayout() {
 	ip := c.info
-	ip.lay = infoLay(ip.data, max(c.infoW-1, 1), time.Now(), c.infoOpts())
+	ip.lay = infoLay(ip.data, max(c.infoW-1, 1), infoClock(), c.infoOpts())
 	ip.lines, ip.hits = ip.lay.lines, ip.lay.hits
 	ip.top = min(ip.top, max(len(ip.lines)-c.infoRows(), 0))
 	if ip.sel != "" && !slices.ContainsFunc(ip.lay.secs, func(s *sideSection) bool { return s.id == ip.sel }) {
