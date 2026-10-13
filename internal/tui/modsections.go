@@ -67,7 +67,7 @@ func sectionTree(v proto.ModView, project, task, thr string) *modview.Tree {
 
 // modSections adds the sections of slot for project's task or thread to
 // d: per mod a heading marked as its own, then its tree, at most the
-// lines it asks for (modview.MaxHeight). A mod that failed says so; one
+// lines it asks for (modview.Heights). A mod that failed says so; one
 // that drew nothing for the row adds nothing.
 func modSections(d *panel, list []proto.ModView, slot, project, task, thr string) {
 	w := max(d.w-2, 1)
@@ -76,7 +76,8 @@ func modSections(d *panel, list []proto.ModView, slot, project, task, thr string
 		if v.State == proto.ModViewFailed {
 			lines = failedLines(v, w)
 		} else if t := sectionTree(v, project, task, thr); t != nil {
-			h := cmp.Or(t.Height, modview.MaxHeight)
+			def, _ := modview.Heights(slot)
+			h := cmp.Or(t.Height, def)
 			view := widget.NewView()
 			view.Set(t.Tree)
 			lines = view.Render(w, h, sectionLook{})
@@ -95,9 +96,10 @@ func modSections(d *panel, list []proto.ModView, slot, project, task, thr string
 // project's task or thread, for mod.views.
 func sectionsShown(list []proto.ModView, slot, project, task, thr string, w int) []modview.Shown {
 	var out []modview.Shown
+	_, most := modview.Heights(slot)
 	for _, v := range sections(list, slot, project) {
 		out = append(out, modview.Shown{Mod: v.Mod, View: v.View, Slot: v.Slot, Project: project, Task: task, Thread: thr,
-			Width: max(w-2, 1), Height: modview.MaxHeight})
+			Width: max(w-2, 1), Height: most})
 	}
 	return out
 }

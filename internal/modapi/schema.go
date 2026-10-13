@@ -112,11 +112,13 @@ type Widget map[string]Value
 // details.section the task or thread of that project it is for (as
 // view.opened names it; none: the project's own row), the count a
 // project tab shows beside its title, the lines a dashboard card or a
-// section asks for (at most 20; a sidebar.section at most 12, 4 when it
-// asks for none; a sidebar.project.section at most 4, 2 when none), and
-// a sidebar section's badge on its header, folded or not (mod API 1.7:
-// at most 4 spans in 12 cells, an icon counting 2). A sidebar section
-// takes no task, thread or count.
+// section asks for (a card at most 20, 8 when it asks for none; from mod
+// API 1.7 a sidebar.section, coordinator.section or details.section at
+// most 12, 4 when none, though one of a mod older than 1.7 that asks
+// none gets 12; a sidebar.project.section at most 4, 2 when none), and a
+// section's badge on its header, folded or not (mod API 1.7: at most 4
+// spans in 12 cells, an icon counting 2). A sidebar section takes no
+// task, thread or count.
 type ViewOptions struct {
 	Project string `json:"project,omitempty"`
 	Task    string `json:"task,omitempty"`
@@ -241,11 +243,11 @@ var Events = []Event{
 	{Name: modbus.SessionState, Data: typ[modbus.Session](), Doc: "A session's agent state or context use changed, or it exited."},
 	{Name: modbus.SessionQuestion, Data: typ[modbus.Question](), Needs: GrantProjectRead, Doc: "The question a thread's or coordinator's open question menu asks changed (mod API 1.3): its first unanswered question, none once it is answered or gone. Its options can be offered as question.answer bindings."},
 	{Name: modbus.ClockMinute, Data: typ[modbus.Clock](), Doc: "Every minute."},
-	{Name: modbus.UIClick, Data: typ[modbus.Input](), Doc: "The human clicked one of the mod's columns, views or widgets, or pressed enter on (or clicked) the header of a sidebar section whose manifest names a companion view (opens, mod API 1.7): target.project is the section's project, and the mod may then open its companion with $.ui.view.open."},
+	{Name: modbus.UIClick, Data: typ[modbus.Input](), Doc: "The human clicked one of the mod's columns, views or widgets, or pressed enter on (or clicked) the header of a section whose manifest names a companion view (opens, mod API 1.7): target.project is the section's project (the panel's for a coordinator.section or details.section), and the mod may then open its companion with $.ui.view.open."},
 	{Name: modbus.UIKey, Data: typ[modbus.Input](), Doc: "The human pressed a key on one of the mod's views or widgets."},
 	{Name: modbus.UICursor, Data: typ[modbus.Input](), Doc: "The row under the cursor of a view's focused list (widget) is now row (\"\": none), moved by a key, a click, the filter or a publish; sent when the view shows, and again on each change. To follow the selection."},
 	{Name: modbus.ActionDone, Data: typ[modbus.Done](), Doc: "A human ran a core action bound in the mod's row, view or notification."},
-	{Name: modbus.ViewOpened, Data: typ[modbus.View](), Needs: GrantViews, Doc: "One of the mod's views is shown: publish it with $.ui.view.set. A details.section names the task or thread the details panel shows: publish for that one, and clear it on view.closed. A project.tab opened to show a task picked elsewhere names it (mod API 1.4): list its row, and the console puts the cursor on the row that binds an action on it. A sidebar.section is for the project the sidebar's tree is for; a sidebar.project.section opens once for each project whose rows show (mod API 1.7): publish for each, or one tree for all, and a null tree for a project shows no section under it."},
+	{Name: modbus.ViewOpened, Data: typ[modbus.View](), Needs: GrantViews, Doc: "One of the mod's views is shown: publish it with $.ui.view.set. A details.section names the task or thread the details panel shows, on the dashboard or beside that thread's pane: publish for that one, and clear it on view.closed. A project.tab opened to show a task picked elsewhere names it (mod API 1.4): list its row, and the console puts the cursor on the row that binds an action on it. A sidebar.section is for the project the sidebar's tree is for; a sidebar.project.section opens once for each project whose rows show (mod API 1.7): publish for each, or one tree for all, and a null tree for a project shows no section under it."},
 	{Name: modbus.ViewClosed, Data: typ[modbus.View](), Needs: GrantViews, Doc: "One of the mod's views is no longer shown."},
 	{Name: modbus.CommandRun, Data: typ[modbus.Command](), Doc: "The human ran one of the commands in the manifest's [provides].commands: by its key (on the dashboard, or prefix+key in a session: the selection is then that session), or ≡ menu entry (then the mod may open a view), or with tm mod run."},
 	{Name: modbus.ModSettings, Data: typ[Settings](), Doc: "The user changed the mod's settings: these are the new ones."},
@@ -295,7 +297,7 @@ var Methods = []Method{
 	{Name: "ui.toast", Params: []Param{{Name: "text", Type: typ[string]()}, {Name: "level", Type: typ[Level](), Optional: true}},
 		Doc: "Shows a short message on the consoles."},
 	{Name: "ui.view.set", Params: []Param{{Name: "view", Type: typ[string]()}, {Name: "widget", Type: typ[*Widget]()}, {Name: "options", Type: typ[ViewOptions](), Optional: true}}, Needs: GrantViews,
-		Doc: "Publishes the widget tree of a view the manifest declares, for one project (options.project) or all, a details.section's also for one task or thread of it (options.task, options.thread), a sidebar section's with a badge (options.badge); null clears it."},
+		Doc: "Publishes the widget tree of a view the manifest declares, for one project (options.project) or all, a details.section's also for one task or thread of it (options.task, options.thread), a section's with a badge (options.badge, mod API 1.7); null clears it."},
 	{Name: "ui.view.open", Params: []Param{{Name: "view", Type: typ[string]()}}, Needs: GrantViews,
 		Doc: "Asks the console to show a view (not a panel section, which shows with its panel); only after a human input (a key, a click or a command)."},
 	{Name: "ui.notify", Params: []Param{{Name: "notification", Type: typ[Notification]()}}, Needs: GrantNotify,

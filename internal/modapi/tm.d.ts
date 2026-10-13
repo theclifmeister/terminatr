@@ -77,7 +77,7 @@ export interface TM {
     /** Shows a short message on the consoles. */
     toast(text: string, level?: TM.Level): Promise<void>;
     view: {
-      /** Publishes the widget tree of a view the manifest declares, for one project (options.project) or all, a details.section's also for one task or thread of it (options.task, options.thread), a sidebar section's with a badge (options.badge); null clears it. Needs the views grant. */
+      /** Publishes the widget tree of a view the manifest declares, for one project (options.project) or all, a details.section's also for one task or thread of it (options.task, options.thread), a section's with a badge (options.badge, mod API 1.7); null clears it. Needs the views grant. */
       set(view: string, widget: TM.Widget | null, options?: TM.ViewOptions): Promise<void>;
       /** Asks the console to show a view (not a panel section, which shows with its panel); only after a human input (a key, a click or a command). Needs the views grant. */
       open(view: string): Promise<void>;
@@ -134,7 +134,7 @@ export declare namespace TM {
     "session.question": Question;
     /** Every minute. */
     "clock.minute": Clock;
-    /** The human clicked one of the mod's columns, views or widgets, or pressed enter on (or clicked) the header of a sidebar section whose manifest names a companion view (opens, mod API 1.7): target.project is the section's project, and the mod may then open its companion with $.ui.view.open. */
+    /** The human clicked one of the mod's columns, views or widgets, or pressed enter on (or clicked) the header of a section whose manifest names a companion view (opens, mod API 1.7): target.project is the section's project (the panel's for a coordinator.section or details.section), and the mod may then open its companion with $.ui.view.open. */
     "ui.click": Input;
     /** The human pressed a key on one of the mod's views or widgets. */
     "ui.key": Input;
@@ -142,7 +142,7 @@ export declare namespace TM {
     "ui.cursor": Input;
     /** A human ran a core action bound in the mod's row, view or notification. */
     "action.done": ActionDone;
-    /** One of the mod's views is shown: publish it with $.ui.view.set. A details.section names the task or thread the details panel shows: publish for that one, and clear it on view.closed. A project.tab opened to show a task picked elsewhere names it (mod API 1.4): list its row, and the console puts the cursor on the row that binds an action on it. A sidebar.section is for the project the sidebar's tree is for; a sidebar.project.section opens once for each project whose rows show (mod API 1.7): publish for each, or one tree for all, and a null tree for a project shows no section under it. Needs the views grant. */
+    /** One of the mod's views is shown: publish it with $.ui.view.set. A details.section names the task or thread the details panel shows, on the dashboard or beside that thread's pane: publish for that one, and clear it on view.closed. A project.tab opened to show a task picked elsewhere names it (mod API 1.4): list its row, and the console puts the cursor on the row that binds an action on it. A sidebar.section is for the project the sidebar's tree is for; a sidebar.project.section opens once for each project whose rows show (mod API 1.7): publish for each, or one tree for all, and a null tree for a project shows no section under it. Needs the views grant. */
     "view.opened": ViewEvent;
     /** One of the mod's views is no longer shown. Needs the views grant. */
     "view.closed": ViewEvent;

@@ -24,7 +24,7 @@ type Tree struct {
 	// InactiveOpen unfolds the divider: the inactive projects show under
 	// it.
 	InactiveOpen bool `json:"inactive_open,omitempty"`
-	// SectionsFolded are the mods' sidebar sections the user folded, by
+	// SectionsFolded are the mods' sections the user folded, by
 	// section id (ValidSection): their header alone shows. Sections start
 	// unfolded. view.tree leaves them alone; view.sections changes them
 	// (since protocol 15).
@@ -40,11 +40,16 @@ const MaxExpanded = 256
 const MaxSectionsFolded = 128
 
 // sectionRE is a section's id: mod.view for a band section,
-// mod.view@slug for a project's.
-var sectionRE = regexp.MustCompile(`^[a-z0-9-]+\.[a-z0-9-]+(@[a-z0-9][a-z0-9-]*)?$`)
+// mod.view@slug for a project's, panel:mod.view for the right pane's.
+var sectionRE = regexp.MustCompile(`^(panel:[a-z0-9-]+\.[a-z0-9-]+|[a-z0-9-]+\.[a-z0-9-]+(@[a-z0-9][a-z0-9-]*)?)$`)
 
-// ValidSection says whether id is a section's id: mod.view, or
-// mod.view@slug for a section under project slug.
+// PanelSection prefixes a right-pane section's id (panel:ticker.ticker):
+// one id for every project and row, kept apart from the sidebar's.
+const PanelSection = "panel:"
+
+// ValidSection says whether id is a section's id: mod.view, mod.view@slug
+// for a section under project slug, or panel:mod.view for a section of
+// the right pane (the coordinator's info panel, the details panel).
 func ValidSection(id string) bool { return len(id) <= MaxKey && sectionRE.MatchString(id) }
 
 // IsSectionFolded says whether the user folded section id.

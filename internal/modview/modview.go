@@ -34,8 +34,10 @@ const (
 	DefaultHeight = 8
 	// MaxCount bounds a tab's count.
 	MaxCount = 99999
-	// MaxSidebarHeight is the most body lines a sidebar.section asks
-	// for, DefaultSidebarHeight its lines when it asks for none.
+	// MaxSidebarHeight is the most body lines a sidebar.section, a
+	// coordinator.section or a details.section asks for,
+	// DefaultSidebarHeight its lines when it asks for none (a right-pane
+	// section of a mod older than API 1.7 gets the most: OldHeight).
 	MaxSidebarHeight     = 12
 	DefaultSidebarHeight = 4
 	// MaxProjectSectionHeight is the most body lines a
@@ -53,11 +55,11 @@ const (
 )
 
 // Heights are the lines a view in slot gets when it asks for none, and
-// the most it may ask for: a dashboard card's, or a sidebar section's.
-// Other slots take the room they are given.
+// the most it may ask for: a dashboard card's, or a section's. Other
+// slots take the room they are given.
 func Heights(slot string) (def, most int) {
 	switch slot {
-	case mod.SlotSidebarSection:
+	case mod.SlotSidebarSection, mod.SlotCoordinatorSection, mod.SlotDetailsSection:
 		return DefaultSidebarHeight, MaxSidebarHeight
 	case mod.SlotProjectSection:
 		return DefaultProjectSectionHeight, MaxProjectSectionHeight
@@ -65,7 +67,16 @@ func Heights(slot string) (def, most int) {
 	return DefaultHeight, MaxHeight
 }
 
-// CheckBadge checks a sidebar section's badge in place, as
+// OldHeight is the height a tree of slot asks for, from mod m: a right-pane section of a mod older than 1.7 that asks
+// none never knew of a default, so it gets the most (MaxSidebarHeight).
+func OldHeight(slot string, m *mod.Manifest, height int) int {
+	if height == 0 && mod.IsPanel(slot) && m != nil && m.Before(mod.SidebarAPIMinor) {
+		return MaxSidebarHeight
+	}
+	return height
+}
+
+// CheckBadge checks a section's badge in place, as
 // widget.CheckSpans does: at most MaxBadgeSpans spans in
 // MaxBadgeCells cells, an icon counting iconCells.
 func CheckBadge(ss []widget.Span) error {

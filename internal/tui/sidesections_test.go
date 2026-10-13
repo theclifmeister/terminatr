@@ -225,17 +225,20 @@ func TestOrderSections(t *testing.T) {
 }
 
 // TestEffectiveLayoutSections: the layout mod's sidebar.sections and
-// project_sections reach the console's layout, and bandIn's order.
+// project_sections, and the right pane's coordinator.sections and
+// details.sections, reach the console's layout, and bandIn's order.
 func TestEffectiveLayoutSections(t *testing.T) {
-	spec, err := mod.ParseLayout([]byte("[sidebar]\nsections = [\"ticker.ticker\", \"tree\"]\nproject_sections = [\"ci.prs\"]\n"))
+	spec, err := mod.ParseLayout([]byte("[sidebar]\nsections = [\"ticker.ticker\", \"tree\"]\nproject_sections = [\"ci.prs\"]\n" +
+		"[coordinator]\nsections = [\"needs\", \"ticker.ticker\"]\n[details]\nsections = [\"ci.checks\", \"core\"]\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	l := effectiveLayout(spec, DefaultLayout, "mine")
-	if !slices.Equal(l.sideSections, []string{"ticker.ticker", "tree"}) || !slices.Equal(l.projSections, []string{"ci.prs"}) {
+	if !slices.Equal(l.sideSections, []string{"ticker.ticker", "tree"}) || !slices.Equal(l.projSections, []string{"ci.prs"}) ||
+		!slices.Equal(l.coordSections, []string{"needs", "ticker.ticker"}) || !slices.Equal(l.detSections, []string{"ci.checks", "core"}) {
 		t.Fatalf("%+v", l)
 	}
-	if l = effectiveLayout(mod.Layout{}, DefaultLayout, ""); l.sideSections != nil || l.projSections != nil {
+	if l = effectiveLayout(mod.Layout{}, DefaultLayout, ""); l.sideSections != nil || l.projSections != nil || l.coordSections != nil || l.detSections != nil {
 		t.Fatalf("no layout: %+v", l)
 	}
 }
