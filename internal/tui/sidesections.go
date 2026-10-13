@@ -281,34 +281,40 @@ func (c *sectionCache) forget(keep func(key string) bool) {
 // The budget.
 
 // bandAsk is what a band section asks of the budget: its body lines
-// (none folded), and whether its header is the cursor's row.
+// (none folded), whether its header is the cursor's row, and whether it
+// is in the band above the tree.
 type bandAsk struct {
-	want   int
-	cursor bool
+	want          int
+	cursor, above bool
 }
 
 // bandFit is how the band fits a sidebar body: the rows the tree keeps,
 // and per section whether its header shows, its body lines, and whether
 // it gave its body up for room (shrunk); more is how many headers
-// didn't fit, which the last one shown says (+N).
+// didn't fit, which the last one shown says (+N). above says which
+// sections are in the band above the tree.
 type bandFit struct {
 	treeH  int
 	show   []bool
 	body   []int
 	shrunk []bool
+	above  []bool
 	more   int
 }
 
-// used is the rows the band takes: a blank row above it, the headers
-// shown and their bodies.
-func (f bandFit) used() int {
+// used is the rows the band takes, above the tree and below it.
+func (f bandFit) used() int { return f.part(true) + f.part(false) }
+
+// part is the rows the band above the tree takes (above), its headers
+// shown and their bodies, or the band below it, with a blank row above.
+func (f bandFit) part(above bool) int {
 	n := 0
 	for j, on := range f.show {
-		if on {
+		if on && f.above[j] == above {
 			n += 1 + f.body[j]
 		}
 	}
-	if n > 0 {
+	if n > 0 && !above {
 		n++
 	}
 	return n
@@ -324,40 +330,58 @@ func (f bandFit) headers() int {
 	return n
 }
 
-// fitBand fits the band's sections asks under a tree of n rows in a
-// sidebar body of b rows: the budget (the T348 design §4) and the
-// safety guarantee (§5) in one. cur is the tree row the tree scrolls to
-// (the cursor's, else the one you are on; -1 for none), and keep the
-// tree rows that must stay on screen: those with ⚑, the cursor's and
-// the one you are on, among the rows the tree shows without sections
-// (bandKeep).
+// fitBand fits the band's sections asks, those above the tree first,
+// around a tree of n rows in a sidebar body of b rows: the budget (the
+// T348 design §4) and the safety guarantee (§5) in one. cur is the tree
+// row the tree scrolls to (the cursor's, else the one you are on; -1 for
+// none), and keep the tree rows that must stay on screen: those with ⚑,
+// the cursor's and the one you are on, among the rows the tree shows
+// without sections (bandKeep).
 //
 // Each section gets its body lines, a folded one its header. The band
-// takes at most half the body, its headers a quarter; under bandMinBody
-// rows nothing. Then, while a row of keep would scroll off the tree's
-// rows left, the bodies give way, the bottom section's first, then the
-// headers, the cursor's last. The rows left are the tree's.
+// takes at most half the body, its headers a quarter, the band above
+// the tree a quarter; under bandMinBody rows nothing. Then, while a row
+// of keep would scroll off the tree's rows left, sections give way: the
+// bodies above the tree, then those below, each band's bottom section
+// first; then the headers in the same order, the cursor's last. The rows
+// left are the tree's.
 func fitBand(b, n, cur int, keep []int, asks []bandAsk) bandFit {
-	f := bandFit{treeH: max(b, 0), show: make([]bool, len(asks)), body: make([]int, len(asks)), shrunk: make([]bool, len(asks))}
+	f := bandFit{treeH: max(b, 0), show: make([]bool, len(asks)), body: make([]int, len(asks)), shrunk: make([]bool, len(asks)),
+		above: make([]bool, len(asks))}
+	for j, a := range asks {
+		f.above[j] = a.above
+	}
 	if b < bandMinBody || len(asks) == 0 {
 		return f
 	}
 	for j, a := range asks {
 		f.show[j], f.body[j] = true, min(max(a.want, 0), modview.MaxSidebarHeight)
 	}
-	shrink := func() bool {
+	// The order sections give way in: above the tree, then below, each
+	// from its bottom.
+	var order []int
+	for _, above := range []bool{true, false} {
 		for j := len(asks) - 1; j >= 0; j-- {
-			if f.show[j] && f.body[j] > 0 {
+			if asks[j].above == above {
+				order = append(order, j)
+			}
+		}
+	}
+	all := func(int) bool { return true }
+	up := func(j int) bool { return asks[j].above }
+	shrink := func(in func(int) bool) bool {
+		for _, j := range order {
+			if in(j) && f.show[j] && f.body[j] > 0 {
 				f.body[j], f.shrunk[j] = 0, true
 				return true
 			}
 		}
 		return false
 	}
-	drop := func(cursor bool) bool {
-		for j := len(asks) - 1; j >= 0; j-- {
+	drop := func(cursor bool, in func(int) bool) bool {
+		for _, j := range order {
 			switch {
-			case !f.show[j]:
+			case !in(j) || !f.show[j]:
 			case cursor || !asks[j].cursor:
 				f.show[j], f.body[j] = false, 0
 				return true
@@ -368,9 +392,12 @@ func fitBand(b, n, cur int, keep []int, asks []bandAsk) bandFit {
 		}
 		return false
 	}
-	for f.headers() > b/4 && drop(false) {
+	give := func(in func(int) bool) bool { return shrink(in) || drop(false, in) || drop(true, in) }
+	for f.headers() > b/4 && drop(false, all) {
 	}
-	for f.used() > b/2 && (shrink() || drop(false) || drop(true)) {
+	for f.part(true) > b/4 && give(up) {
+	}
+	for f.used() > b/2 && give(all) {
 	}
 	safe := func() bool {
 		h := b - f.used()
@@ -385,7 +412,7 @@ func fitBand(b, n, cur int, keep []int, asks []bandAsk) bandFit {
 		}
 		return true
 	}
-	for !safe() && (shrink() || drop(false) || drop(true)) {
+	for !safe() && give(all) {
 	}
 	f.treeH = b - f.used()
 	for j := range asks {
@@ -429,14 +456,19 @@ type sideSlot struct {
 	row, line int
 }
 
-// sideLay is a sidebar's layout: its shown rows, the rows above the
-// tree (head), its body's rows in order, and how the band fit.
+// sideLay is a sidebar's layout: its shown rows, the band above the
+// tree (above, drawn above the header), the header's rows (head), the
+// rest of its body's rows in order, and how the band fit.
 type sideLay struct {
 	rows  []treeRow
+	above []sideSlot
 	head  int
 	slots []sideSlot
 	fit   bandFit
 	band  []int // the rows' indexes of the band's headers, in fit's order
+	// flag: the header shows ⚑ N, what needs you, as a section above
+	// the tree shows or a row with ⚑ is scrolled off.
+	flag bool
 }
 
 // projectCount is every project of the tree, those under a folded
@@ -456,8 +488,8 @@ func projectCount(all []treeRow) int {
 
 // sideLayout lays out a sidebar w columns wide and h rows tall whose
 // footer takes foot rows (none when the sidebar is too short for it, as
-// sideLines draws it): the tree scrolled so the cursor's row shows,
-// then the band (fitBand).
+// sideLines draws it): the band above the tree, the header, the tree
+// scrolled so the cursor's row shows, then the band below (fitBand).
 func sideLayout(all []treeRow, w, h, foot int) sideLay {
 	lay := sideLay{rows: shownRows(all, w), head: sideHeadRows()}
 	if foot > 0 && h < foot+4 {
@@ -483,26 +515,55 @@ func sideLayout(all []treeRow, w, h, foot int) sideLay {
 	asks := make([]bandAsk, len(lay.band))
 	for j, i := range lay.band {
 		r := lay.rows[i]
-		asks[j] = bandAsk{want: r.sec.want(), cursor: r.cursor}
+		asks[j] = bandAsk{want: r.sec.want(), cursor: r.cursor, above: r.sec.above}
 	}
 	lay.fit = fitBand(body, len(trees), cur, keep, asks)
+	section := func(above bool) (out []sideSlot) {
+		for j, i := range lay.band {
+			if !lay.fit.show[j] || asks[j].above != above {
+				continue
+			}
+			out = append(out, sideSlot{row: i, line: -1})
+			for k := range lay.fit.body[j] {
+				out = append(out, sideSlot{row: i, line: k})
+			}
+		}
+		return out
+	}
+	lay.above = section(true)
 	top := scrollTop(cur, max(lay.fit.treeH, 1), len(trees))
-	for i := top; i < min(top+lay.fit.treeH, len(trees)); i++ {
-		lay.slots = append(lay.slots, sideSlot{row: tree[i], line: -1})
+	for i, r := range trees {
+		on := i >= top && i < top+lay.fit.treeH
+		if on {
+			lay.slots = append(lay.slots, sideSlot{row: tree[i], line: -1})
+		}
+		if r.hint && !on {
+			lay.flag = true
+		}
 	}
-	if lay.fit.headers() > 0 {
+	if below := section(false); len(below) > 0 {
 		lay.slots = append(lay.slots, sideSlot{row: -1, line: -1})
+		lay.slots = append(lay.slots, below...)
 	}
-	for j, i := range lay.band {
-		if !lay.fit.show[j] {
-			continue
-		}
-		lay.slots = append(lay.slots, sideSlot{row: i, line: -1})
-		for k := range lay.fit.body[j] {
-			lay.slots = append(lay.slots, sideSlot{row: i, line: k})
-		}
+	if len(lay.above) > 0 {
+		lay.flag = true
 	}
 	return lay
+}
+
+// headFlag is the columns of a full sidebar's header cw cells wide
+// (sideHead's) that ⚑ N, needs things that need you, takes: [lo, hi),
+// the needs-you column's two cells included; both 0 where it doesn't
+// fit.
+func headFlag(needs, cw int) (lo, hi int) {
+	if needs <= 0 {
+		return 0, 0
+	}
+	fw := ansi.StringWidth(fmt.Sprintf("%s %d", ic().hint, needs))
+	if cw-ansi.StringWidth(" PROJECTS")-fw-2 < 1 {
+		return 0, 0
+	}
+	return cw - 2 - fw, cw
 }
 
 // lastShown is the index in band of the last header shown, -1 for none.

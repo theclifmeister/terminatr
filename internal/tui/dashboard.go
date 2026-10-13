@@ -797,7 +797,13 @@ func (m *dash) sideClick(mo tea.Mouse) tea.Cmd {
 	if mo.Button != tea.MouseLeft {
 		return nil
 	}
-	r, ok, border := sideHitAt(m.tree(), m.sideW(), m.h, m.sideFoot(), m.geom().sideCol(mo.X), mo.Y)
+	x := m.geom().sideCol(mo.X)
+	if sideFlagAt(m.tree(), m.sideW(), m.h, m.sideFoot(), m.needsCount(), x, mo.Y) {
+		// The header's ⚑ N: the first row that needs you, as w.
+		m.focus = areaSide
+		return m.sideDo(sideNeedStep(m.sideKeysIn(), treeRow{}, false))
+	}
+	r, ok, border := sideHitAt(m.tree(), m.sideW(), m.h, m.sideFoot(), x, mo.Y)
 	t, can, why := r.target()
 	var cmd tea.Cmd
 	if ok && !border {
@@ -960,17 +966,27 @@ func (m *dash) cycleFocus(key string) tea.Cmd {
 // A move previews the row the cursor rests on (previewSoon); enter or →
 // goes into it, and the keyboard follows.
 func (m *dash) sideKeyboard(key string) (tea.Cmd, bool) {
-	st, ok := sideKeyFor(sideKeysIn{tree: m.tree, full: m.fullTree, w: m.sideW(), h: m.h, sel: m.sideSel}, key)
+	st, ok := sideKeyFor(m.sideKeysIn(), key)
 	if !ok {
 		return nil, false
 	}
+	return m.sideDo(st), true
+}
+
+// sideKeysIn is what a sidebar key works on, here.
+func (m *dash) sideKeysIn() sideKeysIn {
+	return sideKeysIn{tree: m.tree, full: m.fullTree, w: m.sideW(), h: m.h, sel: m.sideSel}
+}
+
+// sideDo does what a sidebar key decided (sideKeyFor).
+func (m *dash) sideDo(st sideStep) tea.Cmd {
 	var cmds []tea.Cmd
 	if st.msg != "" {
 		m.msg = st.msg
 	}
 	if st.help {
 		// A plain key that is a prefix command does what it does.
-		return m.prefixCommand(boundKey("?")), true
+		return m.prefixCommand(boundKey("?"))
 	}
 	if st.back {
 		m.focus = areaMain
@@ -996,7 +1012,7 @@ func (m *dash) sideKeyboard(key string) (tea.Cmd, bool) {
 		target = nil
 	}
 	if target == nil && st.toggle == "" && st.pin == "" {
-		return tea.Batch(cmds...), true
+		return tea.Batch(cmds...)
 	}
 	// What the key starts is an action: while one runs, it waits its
 	// turn, on the row it was pressed on, as the settings keys do; the
@@ -1015,7 +1031,7 @@ func (m *dash) sideKeyboard(key string) (tea.Cmd, bool) {
 	} else {
 		cmds = append(cmds, run(m))
 	}
-	return tea.Batch(cmds...), true
+	return tea.Batch(cmds...)
 }
 
 // previewMsg: the sidebar's cursor may have rested on its row for
@@ -1445,7 +1461,7 @@ func (m *dash) withSide(s string) string {
 	lines := strings.Split(s, "\n")
 	rows := m.tree()
 	right := m.layout.Sidebar.Right()
-	side := sideLines(rows, m.sideW(), m.h, sideFooter(rows, m.sideW(), m.data.Server, m.over != nil, m.layout.compact()), right)
+	side := sideLines(rows, m.sideW(), m.h, m.needsCount(), sideFooter(rows, m.sideW(), m.data.Server, m.over != nil, m.layout.compact()), right)
 	w := m.geom().main().w
 	for i := range side {
 		var l string
