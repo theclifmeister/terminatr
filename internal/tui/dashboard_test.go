@@ -961,6 +961,40 @@ func TestInboxLinesRows(t *testing.T) {
 	}
 }
 
+// TestOldConsoleHint: a console older than the server (started before
+// an upgrade the server restarted on) says to restart the console, not
+// the server, once as a message and in the footer in the warning colour
+// (T344).
+func TestOldConsoleHint(t *testing.T) {
+	defer func(v string) { version.Version = v }(version.Version)
+	defer oldConsoleSaid.Store(oldConsoleSaid.Load())
+	oldConsoleSaid.Store(false)
+	version.Version = "v0.24.0"
+	srv := ServerInfo{Version: "v0.25.0", Build: "v0.25.0+x+y"}
+	if !consoleOlder(srv) {
+		t.Fatal("v0.24.0 console, v0.25.0 server: not older")
+	}
+	h := versionHint(srv)
+	if !strings.Contains(h, "quit it and run tm again") || strings.Contains(h, "server restart") {
+		t.Errorf("hint %q", h)
+	}
+	if n := oldConsoleNews(srv); n != h {
+		t.Errorf("first news %q", n)
+	}
+	if n := oldConsoleNews(srv); n != "" {
+		t.Errorf("said again: %q", n)
+	}
+	for _, s := range []ServerInfo{
+		{Version: "v0.23.0", Build: "v0.23.0+x+y"}, // the server is older
+		{Version: "dev", Build: "dev+x+y"},         // a source build
+		{},                                         // a server too old to say
+	} {
+		if consoleOlder(s) {
+			t.Errorf("%+v: console older", s)
+		}
+	}
+}
+
 func TestVersionHint(t *testing.T) {
 	own := ServerInfo{Version: version.Version, Build: version.BuildID()}
 	if h := versionHint(own); h != "" {

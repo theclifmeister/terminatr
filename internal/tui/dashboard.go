@@ -6,6 +6,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -17,6 +18,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
+	"github.com/theclifmeister/terminatr/internal/update"
 	"github.com/theclifmeister/terminatr/internal/version"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
@@ -1044,6 +1046,9 @@ func (m *dash) setPinned(slug string, on bool) tea.Cmd {
 func (m *dash) setData(d Data) tea.Cmd {
 	first := !m.loaded
 	m.data, m.loaded = d, true
+	if n := oldConsoleNews(d.Server); n != "" && m.msg == "" {
+		m.msg = n
+	}
 	m.rebuild()
 	m.noteModFailures()
 	m.showToasts(d.Toasts)
@@ -1722,13 +1727,41 @@ func serverVersion(s ServerInfo) string {
 	return out
 }
 
-// versionHint is the footer's faint line while it has no message: the
-// installed tm is not the one the server runs, else a newer release is
-// out. Empty for neither.
+// consoleOlder reports whether this console runs an older tm than the
+// server: it was started before an upgrade and the server restarted on
+// the new one since. Its old code misses what the server now expects of
+// a console (the panes' theme, T344): only a restart of the console
+// fixes that, not of the server.
+func consoleOlder(s ServerInfo) bool {
+	if s.Build == "" || s.Build == version.BuildID() {
+		return false
+	}
+	newer, ok := update.Newer(s.Version, version.Version)
+	return ok && newer
+}
+
+// oldConsoleSaid: this console said it is older than the server, once.
+var oldConsoleSaid atomic.Bool
+
+// oldConsoleNews is the note that this console is older than the server
+// (consoleOlder), for the footer or the status bar, the first time it
+// is; "" after.
+func oldConsoleNews(s ServerInfo) string {
+	if !consoleOlder(s) || oldConsoleSaid.Swap(true) {
+		return ""
+	}
+	return versionHint(s)
+}
+
+// versionHint is the footer's faint line while it has no message: this
+// console is older than the server (a warning), the installed tm is not
+// the one the server runs, else a newer release is out. Empty for none.
 func versionHint(s ServerInfo) string {
 	switch {
 	case s.Build == "":
 		return ""
+	case consoleOlder(s):
+		return "this console runs tm " + version.Version + ", the server " + s.Version + ": quit it and run tm again"
 	case s.Build != version.BuildID():
 		return "tm " + version.Version + " is installed, the server runs " + s.Version + ": run tm server restart in a terminal"
 	case s.Latest != "":
@@ -1742,6 +1775,8 @@ func versionHintShort(s ServerInfo) string {
 	switch {
 	case s.Build == "":
 		return ""
+	case consoleOlder(s):
+		return "old console: quit, run tm again"
 	case s.Build != version.BuildID():
 		return "run tm server restart"
 	case s.Latest != "":

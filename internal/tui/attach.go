@@ -1981,6 +1981,10 @@ func (c *client) pollState(ctx context.Context) {
 				c.side.projects, c.side.sessions, c.side.ctxHint, c.side.needsFirst = projects, res.Sessions, ctxHint, needsFirst
 				if ctl != nil {
 					c.side.server = ServerInfo{Version: res.Version, Build: res.Build, Latest: res.Latest, Upgrade: res.Upgrade}
+					if n := oldConsoleNews(c.side.server); n != "" && c.flash == "" {
+						c.flash = n
+						c.status()
+					}
 				}
 			}
 			for _, p := range c.panes {

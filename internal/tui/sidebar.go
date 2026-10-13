@@ -1924,7 +1924,11 @@ func sideFooter(all []treeRow, w int, s ServerInfo, session, compact bool) []str
 		if ansi.StringWidth(h) > cw-1 {
 			h = versionHintShort(s)
 		}
-		out = append(out, th().Faint.Render(fit(" "+h, cw)))
+		st := th().Faint
+		if consoleOlder(s) {
+			st = th().Warn
+		}
+		out = append(out, st.Render(fit(" "+h, cw)))
 	}
 	return out
 }
