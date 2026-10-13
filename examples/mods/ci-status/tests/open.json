@@ -1,0 +1,24 @@
+{
+  "name": "enter on a section's header (ui.click on the section) opens the PRs tab; the tab lists every PR with the ticker's words and a count",
+  "answers": [
+    { "method": "project.get", "params": { "slug": "demo" },
+      "result": { "project": "demo", "threads": [
+        { "id": "t-0001", "title": "Sidebar", "pr": "#412 open, checks pending", "pr_checks": "pending" }
+      ] } }
+  ],
+  "events": [
+    { "name": "ui.click", "project": "demo", "data": { "view": "ci", "target": { "project": "demo" } } },
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "prs", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.open", "params": { "view": "prs" } },
+      { "method": "ui.view.set",
+        "params": { "view": "prs", "options": { "project": "demo", "count": 1 },
+          "widget": { "kind": "list", "id": "prs", "rows": [
+            { "id": "t-0001", "spans": [{ "icon": "ci.run", "role": "faint" }, { "text": " #412 ", "role": "faint" }, { "text": "t-0001 Sidebar" }, { "text": "  #412 open, checks pending", "role": "faint" }] }
+          ] } } }
+    ]
+  }
+}

@@ -24,7 +24,7 @@ Every agent runs in its own session. Open one and tm keeps the project tree on t
 
 ## Mods
 
-Mods make tm yours. A mod is a folder with a `mod.toml` and, for code, a TypeScript file. It can add dashboard cards, sidebar and dashboard columns, project popup tabs, full views, sections in the details and coordinator panels, commands (a key, a ≡ menu entry, `prefix`+key inside a session, `tm mod run`), OS notifications with buttons, agent tools served by `tm mcp`, guard rules that only tighten, suggested defaults, themes, keymaps and code hosts (GitLab).
+Mods make tm yours. A mod is a folder with a `mod.toml` and, for code, a TypeScript file. It can add dashboard cards, sidebar and dashboard columns, project popup tabs, full views, sections in the details and coordinator panels and in the sidebar (above or below the projects, or under each one), commands (a key, a ≡ menu entry, `prefix`+key inside a session, `tm mod run`), OS notifications with buttons, agent tools served by `tm mcp`, guard rules that only tighten, suggested defaults, themes, keymaps and code hosts (GitLab).
 
 ![The dashboard with three example mods: the Context gauge's column and card, the Cost card's tokens per thread, and Report glance's section under the selected thread's details.](docs/images/mods.svg)
 

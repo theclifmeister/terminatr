@@ -1,10 +1,11 @@
 // Report glance: panel sections (mods design §12, Phase 2). A
 // details.section shows at the bottom of the dashboard's details panel
-// for the row it shows: view.opened names the project and the task or
-// thread, and the mod publishes for exactly that one, then clears it on
-// view.closed. A coordinator.section shows at the bottom of the
-// coordinator's info panel, for its project. Sections show; they take no
-// keys. A row the mod draws nothing for (here, a project's own row) gets
+// for the row it shows, and beside a thread's pane for that thread:
+// view.opened names the project and the task or thread, and the mod
+// publishes for exactly that one, then clears it on view.closed. A
+// coordinator.section shows at the bottom of the coordinator's info
+// panel, for its project (a layout can place both among the panels'
+// blocks). Their bodies show; they take no keys. A row the mod draws nothing for (here, a project's own row) gets
 // no section at all.
 import type { TM } from "./types/tm";
 declare const $: TM;
