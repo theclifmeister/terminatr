@@ -20,7 +20,7 @@ var updateGolden = flag.Bool("update", false, "rewrite the sidebar's golden file
 // goldenTree is a tree with every column of the grid in use: a
 // coordinator with remote control on and its context use, threads with
 // a PR whose checks pass, fail or run, one without a task, a paused
-// project, a folded active project (its coordinator's state on its row,
+// project whose PR host fails (a red ▲ after its name), a folded active project (its coordinator's state on its row,
 // with its questions), the unfolded inactive divider, a folded inactive
 // project and an unfolded one whose rows are dormant.
 func goldenTree() []treeRow {
@@ -31,7 +31,7 @@ func goldenTree() []treeRow {
 		{kind: treeThread, slug: "terminatr", thread: "t-0213", name: "T229", title: "Active and inactive projects", state: "review", pct: 100, ci: "pass", hint: true},
 		{kind: treeThread, slug: "terminatr", thread: "t-0215", name: "T231", title: "Windows ConPTY host", state: "blocked", pct: 60, ci: "fail", hint: true},
 		{kind: treeThread, slug: "terminatr", thread: "t-0217", name: "t-0217", state: "idle", pct: -1, last: true},
-		{kind: treeProject, slug: "herdr", state: "idle", threads: 1, paused: true, pct: -1},
+		{kind: treeProject, slug: "herdr", state: "idle", threads: 1, paused: true, pct: -1, prFails: 3},
 		{kind: treeCoordinator, slug: "herdr", state: "idle", ctx: 12, pct: -1, last: true},
 		{kind: treeThread, slug: "herdr", thread: "t-0031", name: "T12", title: "Bump dependencies", state: "working", pct: 20, ci: "pending", last: true},
 		{kind: treeProject, slug: "website", state: "blocked", hint: true, pct: -1, fold: true},
