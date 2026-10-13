@@ -66,8 +66,12 @@ type LaunchSpec struct {
 	// Theme is the tm theme's colours for PaneScheme (roles and pane
 	// palette, docs/SPEC.md §5.3), nil without a pane palette or in safe
 	// mode: an agent that takes a theme of its own can follow them
-	// exactly (Claude's plugin theme, §8.6).
+	// exactly (Claude's live theme, §8.6).
 	Theme *theme.Agent
+	// LiveTheme says the agent's own theme file (a LiveThemer's, the
+	// manifest's [theme]) is written: the launch selects it, and the
+	// agent follows every later rewrite while it runs.
+	LiveTheme bool
 
 	// Access is the policy the core decided for this role. The manifest
 	// turns it into the agent's own permission and sandbox settings.
@@ -319,6 +323,18 @@ type Typist interface {
 // launch goes on: the trust screen then shows as blocked / trust.
 type Truster interface {
 	TrustDir(home, dir string) error
+}
+
+// LiveThemer is an Agent that keeps a theme file of tm's in its own
+// config folder and redraws with it, rewritten, while it runs
+// (docs/SPEC.md §8.6): the core writes it before each launch and again
+// on every change of the tm theme or the scheme. t is the tm theme's
+// colours for the pane palette's scheme, nil without one; scheme is
+// the terminal's, "dark", "light" or "" when unknown. home is the
+// user's home directory. It writes only when the content changes, and
+// reports whether the file is in place.
+type LiveThemer interface {
+	WriteTheme(home string, t *theme.Agent, scheme string) error
 }
 
 // Mover is an Agent that keeps state by folder path (conversations to

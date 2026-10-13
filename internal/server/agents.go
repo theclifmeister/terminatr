@@ -360,6 +360,56 @@ func (s *Server) launchTheme(scheme string) *theme.Agent {
 	return theme.AgentColors(tt, scheme == "dark")
 }
 
+// schemeName is the terminal's scheme a console last reported, "" for
+// none yet.
+func (s *Server) schemeName() string {
+	switch s.scheme {
+	case emu.SchemeDark:
+		return "dark"
+	case emu.SchemeLight:
+		return "light"
+	}
+	return ""
+}
+
+// writeLiveTheme writes a's own theme file for the tm theme and scheme
+// now (§8.6), when a keeps one, outside safe mode; false when it isn't
+// in place, so the launch doesn't select it; s.mu held.
+func (s *Server) writeLiveTheme(a agent.Agent) bool {
+	lt, ok := a.(agent.LiveThemer)
+	if !ok || s.noMods {
+		return false
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	if err := lt.WriteTheme(home, s.launchTheme(s.paneScheme()), s.schemeName()); err != nil {
+		s.log.Printf("agent %s: theme: %v", a.Name(), err)
+		return false
+	}
+	if s.liveThemed == nil {
+		s.liveThemed = map[string]bool{}
+	}
+	s.liveThemed[a.Name()] = true
+	return true
+}
+
+// themeChangedLocked rewrites the live theme of every agent this server
+// started with one, after a console reported new colours (another
+// theme's pane palette, or none) or another scheme: its running
+// sessions redraw with it, without a restart (§8.6); s.mu held.
+func (s *Server) themeChangedLocked() {
+	if s.agents == nil {
+		return
+	}
+	for name := range s.liveThemed {
+		if a, ok := s.agents.Get(name); ok {
+			s.writeLiveTheme(a)
+		}
+	}
+}
+
 // agentLaunch is everything needed to (re)start one agent session.
 type agentLaunch struct {
 	rec    SessionRecord
@@ -428,6 +478,7 @@ func (s *Server) launchAgent(l agentLaunch) (*session.Session, *proto.Error) {
 		spec.Model = launchModel(a, r.Project, r.Role == proto.RoleCoordinator)
 	}
 	spec.Theme = s.launchTheme(spec.PaneScheme)
+	spec.LiveTheme = s.writeLiveTheme(a)
 	launch, err := a.Launch(spec)
 	if err != nil {
 		s.closeModLocked(r.ID)

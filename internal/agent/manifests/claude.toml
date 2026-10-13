@@ -113,12 +113,13 @@ template = '''
 # Edit(...) allow rules also open the Bash sandbox for writing (a thread's
 # commits go to the main repo's git dir).
 # Never put statusLine here: --settings would replace the user's own.
-# With a theme's pane palette (.PaneScheme, docs/SPEC.md §5.3), Claude
-# draws with the plugin theme below (custom:<plugin>:<file>), else its
-# ANSI theme, which the palette colours: its own themes are truecolor,
-# which panes pass through. A --settings theme wins over the user's
-# (checked on 2.1.296); a running Claude doesn't re-read it or a
-# plugin's theme, so either applies from the next start or resume.
+# Outside safe mode Claude draws with tm's own theme in its config dir
+# ([theme] below, docs/SPEC.md §8.6), which the server rewrites on every
+# theme or scheme change and Claude reloads live (2.1.296); a --settings
+# theme wins over the user's, and is read only at start or resume. When
+# the server can't write that theme (.LiveTheme false), a pane palette
+# (.PaneScheme, §5.3) still gets Claude's ANSI theme, which the palette
+# colours: its own themes are truecolor, which panes pass through.
 # With sandbox_escapes off, a thread's Bash can't leave the sandbox
 # (allowUnsandboxedCommands): a command run outside it would reach the
 # human socket (§3.2), whoever approved it.
@@ -126,8 +127,8 @@ template = '''
 path = "claude-settings.json"
 template = '''
 {
-  {{- if .Theme}}
-  "theme": "custom:terminatr:tm",
+  {{- if .LiveTheme}}
+  "theme": "custom:terminatr",
   {{- else if .PaneScheme}}
   "theme": {{json (printf "%s-ansi" .PaneScheme)}},
   {{- end}}
@@ -147,19 +148,23 @@ template = '''
 }
 '''
 
-# The tm theme as Claude's (docs/SPEC.md §8.6): a theme of the plugin
-# above, which the settings file selects. Its base is Claude's ANSI
-# theme, whose 16 colours the pane palette sets, so a token it doesn't
-# name follows the palette; the ones it names take the theme's roles
+# The tm theme as Claude's (docs/SPEC.md §8.6): custom:terminatr, which
+# the settings file selects, at <config dir>/themes/terminatr.json
+# (CLAUDE_CONFIG_DIR, else ~/.claude), a file tm owns: Claude watches
+# that folder and redraws with a rewritten theme at once. Under a pane
+# palette (.Theme) its base is Claude's ANSI theme, whose 16 colours
+# the pane palette sets, so a token it doesn't name follows the palette; the ones it names take the theme's roles
 # and the palette's foreground and background exactly, in truecolor:
 # the accent for Claude's own colour, good/bad/warn/info for its
 # states, faint for what's dimmed, and backgrounds a shade off the
 # pane's (the selection's too: Claude draws its text over it, not sel's
 # fg). A colour the theme doesn't give is left out (the base's).
-# Without .Theme it renders empty and isn't written. Claude ignores a
-# token or colour it doesn't know, and loads it only at start (2.1.296).
-[[launch.files]]
-path = "claude-plugin/themes/tm.json"
+# Without one it is the user's own Claude theme (.Base, .Overrides,
+# which the server reads from their settings and themes), so the panes
+# look as they would without tm. Claude ignores a token or colour it
+# doesn't know.
+[theme]
+path = "themes/terminatr.json"
 template = '''
 {{- with .Theme -}}
 {{- $fg := or .PaneFg .Fg.plain -}}
@@ -184,6 +189,8 @@ template = '''
   "diffAddedDimmed" (blend $bg $green 15) "diffRemovedDimmed" (blend $bg $red 15)
   "diffAddedWord" (blend $bg $green 60) "diffRemovedWord" (blend $bg $red 60)
 }}}
+{{- else -}}
+{"name": "terminatr", "base": {{json .Base}}, "overrides": {{json .Overrides}}}
 {{- end}}
 '''
 

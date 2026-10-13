@@ -147,6 +147,10 @@ type Server struct {
 	// colors are the terminal colours a client last reported; new
 	// sessions start with them.
 	colors emu.Colors
+	// liveThemed are the agents whose live theme (agent.LiveThemer)
+	// this server wrote for a launch: it rewrites them on every theme
+	// or scheme change (themeChangedLocked).
+	liveThemed map[string]bool
 
 	// views are what consoles show (views.go).
 	views *views
@@ -1299,6 +1303,7 @@ loop:
 					if s.scheme != scheme {
 						s.scheme = scheme
 						s.saveColorsLocked()
+						s.themeChangedLocked()
 					}
 					s.mu.Unlock()
 				}
@@ -1310,6 +1315,7 @@ loop:
 					if s.colors != colors {
 						s.colors = colors
 						s.saveColorsLocked()
+						s.themeChangedLocked()
 					}
 					s.mu.Unlock()
 				}

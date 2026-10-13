@@ -84,9 +84,9 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
   and `[light.pane]` (`api = "1.6"`) colour the panes too, on a
   truecolor terminal: every agent's and shell's default colours and 16
   ANSI colours become Nord's. Claude panes follow the theme's colours
-  from their next start or resume: tm hands Claude a theme made from
-  Nord's roles and palette, since Claude's own themes are truecolor,
-  which the palette leaves as drawn. Its icon set gives
+  live, a switch of theme or scheme included: tm hands Claude a theme
+  made from Nord's roles and palette, since Claude's own themes are
+  truecolor, which the palette leaves as drawn. Its icon set gives
   only the glyphs it changes over the `unicode` base. A glyph two cells
   wide, or an emoji, makes the set refuse to load, and the console keeps
   its built-in icons and says why.
