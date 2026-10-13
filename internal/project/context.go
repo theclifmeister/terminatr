@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"regexp"
 	"slices"
@@ -57,6 +58,10 @@ type Ticked struct {
 	// Questions are the question menus open in the project's sessions,
 	// as their mods sent them (session.list, proto.SessionInfo.Question).
 	Questions []OpenQuestion
+	// Working counts every project's threads that count toward the cap
+	// across projects, by slug (thread.WorkingAll); nil when no server
+	// answered.
+	Working map[string]int
 }
 
 // OpenQuestion is one session's open question menu, its Lines as tm
@@ -108,8 +113,8 @@ func (p *Project) Context(seen Ticked) ([]Section, error) {
 	if closeRule == config.CloseDays {
 		closeRule = fmt.Sprintf("%d days after done or merged", safety.AutoCloseDays)
 	}
-	head = append(head, fmt.Sprintf("Safety: start_threads=%s · yolo=%t · coordinator_approves=%t · parallel_threads=%d · auto_close=%s · complete_tasks=%s (config.toml; the human's)",
-		safety.StartThreads, safety.Yolo, safety.CoordinatorApproves, safety.ParallelThreads, closeRule, safety.CompleteTasks))
+	head = append(head, fmt.Sprintf("Safety: start_threads=%s · yolo=%t · coordinator_approves=%t · parallel_threads=%s · auto_close=%s · complete_tasks=%s (config.toml; the human's)",
+		safety.StartThreads, safety.Yolo, safety.CoordinatorApproves, fmt.Sprint(safety.ParallelThreads)+globalCap(safety.GlobalParallelThreads, seen.Working), closeRule, safety.CompleteTasks))
 	if safety.Paused {
 		head = append(head, "Paused by the user: no nudges, no PR follow-up, and tm thread start refuses (project-paused) until they resume it")
 	}
@@ -577,4 +582,28 @@ func CodeHosts() []codehost.RepoHost {
 		}
 	}
 	return out
+}
+
+// globalCap is the Safety line's global_parallel_threads, after
+// parallel_threads: the cap across projects and, with a server, how many
+// threads work in which projects; "" without such a cap.
+func globalCap(n int, working map[string]int) string {
+	if n <= 0 {
+		return ""
+	}
+	out := fmt.Sprintf(" · global_parallel_threads=%d", n)
+	if working == nil {
+		return out
+	}
+	slugs := slices.Sorted(maps.Keys(working))
+	total, parts := 0, []string{}
+	for _, s := range slugs {
+		total += working[s]
+		parts = append(parts, fmt.Sprintf("%s %d", s, working[s]))
+	}
+	out += fmt.Sprintf(" (%d working", total)
+	if len(parts) > 0 {
+		out += ": " + strings.Join(parts, ", ")
+	}
+	return out + ")"
 }

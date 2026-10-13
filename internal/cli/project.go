@@ -400,9 +400,13 @@ func runContext(e *Env, args []string) error {
 		return err
 	}
 	seen := ticker.Seen(tickerState(), p.Slug)
+	sessions, live := liveSessions()
+	if live {
+		seen.Working = thread.WorkingAll(sessions)
+	}
 	if !e.Caller.IsAgent() || e.Caller.Project == p.Slug {
 		// Live session state is the agent's own project's only (§11.1).
-		seen.Queues, seen.Questions = liveWaits(p.Slug)
+		seen.Queues, seen.Questions = liveWaits(p.Slug, sessions)
 	}
 	sections, err := p.Context(seen)
 	if err != nil {
@@ -415,20 +419,25 @@ func runContext(e *Env, args []string) error {
 	return err
 }
 
-// liveWaits asks a running server (it starts none) for the project's
-// sessions whose queued prompts are held while the agent is idle, and
-// those with a question menu open.
-func liveWaits(slug string) (queues []project.HeldQueue, questions []project.OpenQuestion) {
+// liveSessions asks a running server (it starts none) for its sessions;
+// false without one.
+func liveSessions() ([]proto.SessionInfo, bool) {
 	c, _, err := connect(false)
 	if err != nil {
-		return nil, nil
+		return nil, false
 	}
 	defer c.Close()
 	var res proto.SessionListResult
 	if c.Call(proto.MethodSessionList, nil, &res) != nil {
-		return nil, nil
+		return nil, false
 	}
-	for _, s := range res.Sessions {
+	return res.Sessions, true
+}
+
+// liveWaits picks the project's sessions whose queued prompts are held
+// while the agent is idle, and those with a question menu open.
+func liveWaits(slug string, sessions []proto.SessionInfo) (queues []project.HeldQueue, questions []project.OpenQuestion) {
+	for _, s := range sessions {
 		if s.Project != slug {
 			continue
 		}

@@ -332,3 +332,46 @@ func TestSetModels(t *testing.T) {
 		t.Fatalf("after unset: %v", s.Models)
 	}
 }
+
+// TestGlobalParallelThreads (T362): unset is no cap across projects;
+// [defaults] sets it for every project, 0 to MaxGlobalThreads, and no
+// project table can.
+func TestGlobalParallelThreads(t *testing.T) {
+	write(t, "[projects.demo]\nparallel_threads = 2\n")
+	if s, err := (mustLoad(t)).Safety("demo"); err != nil || s.GlobalParallelThreads != 0 {
+		t.Fatalf("unset: %+v %v", s, err)
+	}
+	for _, n := range []int{-1, MaxGlobalThreads + 1} {
+		if err := SetDefaults("global_parallel_threads", n); err == nil {
+			t.Fatalf("wrote %d", n)
+		}
+	}
+	if err := SetProject("demo", "global_parallel_threads", 3); err == nil || !strings.Contains(err.Error(), "all projects' setting") {
+		t.Fatalf("a project's own global cap: %v", err)
+	}
+	if err := SetDefaults("global_parallel_threads", 6); err != nil {
+		t.Fatal(err)
+	}
+	c := mustLoad(t)
+	if s, _ := c.Safety("demo"); s.GlobalParallelThreads != 6 || s.ParallelThreads != 2 {
+		t.Fatalf("demo: %+v", s)
+	}
+	if got := c.OwnDefaults(); !slices.Equal(got, []string{"global_parallel_threads"}) {
+		t.Fatalf("own defaults: %v", got)
+	}
+	if err := SetDefaults("global_parallel_threads", 0); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := mustLoad(t).AllProjects(); s.GlobalParallelThreads != 0 {
+		t.Fatalf("0: %+v", s)
+	}
+}
+
+func mustLoad(t *testing.T) *Config {
+	t.Helper()
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}

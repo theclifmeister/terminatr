@@ -75,8 +75,10 @@ const DefaultContextHint = 40
 // Limits of the number settings.
 const (
 	MaxParallelThreads = 99
-	MaxAutoCloseDays   = 365
-	MaxArchiveDays     = 365
+	// MaxGlobalThreads bounds global_parallel_threads; 0 is no cap.
+	MaxGlobalThreads = 999
+	MaxAutoCloseDays = 365
+	MaxArchiveDays   = 365
 	// MinPRPollSeconds and MaxPRPollSeconds bound pr_poll_seconds.
 	MinPRPollSeconds     = 30
 	MaxPRPollSeconds     = 3600
@@ -97,6 +99,10 @@ type Safety struct {
 	// ParallelThreads is the most threads that may work at once: tm
 	// thread start refuses beyond it without --over-cap (§9).
 	ParallelThreads int `json:"parallel_threads"`
+	// GlobalParallelThreads is the most threads that may work at once
+	// across every project, 0 for no such cap: tm thread start refuses
+	// beyond it too (§9). Only [defaults] sets it (DefaultsOnly).
+	GlobalParallelThreads int `json:"global_parallel_threads"`
 	// AutoClose is when the ticker resolves a finished thread whose agent
 	// rests (§9): CloseOff, CloseMerged, or CloseDays after
 	// AutoCloseDays. Resolve's usual rules hold (never forced), and a
@@ -231,6 +237,7 @@ type rawSafety struct {
 	Yolo                *bool   `toml:"yolo"`
 	CoordinatorApproves *bool   `toml:"coordinator_approves"`
 	ParallelThreads     *int    `toml:"parallel_threads"`
+	GlobalThreads       *int    `toml:"global_parallel_threads"`
 	AutoClose           *string `toml:"auto_close"`
 	AutoCloseDays       *int    `toml:"auto_close_days"`
 	// AutoResolve is auto_close's older form: true is "merged", false
@@ -468,6 +475,11 @@ func (c *Config) Safety(slug string) (Safety, error) {
 	if !ok {
 		return s, nil
 	}
+	// The global cap counts every project's threads: a project's own
+	// value would mean nothing.
+	if r.GlobalThreads != nil {
+		return s, fmt.Errorf("%s: projects.%s can't set global_parallel_threads; it is all projects' cap, in [defaults]", c.Path, slug)
+	}
 	return s, r.apply(&s, c.Path, "projects."+slug)
 }
 
@@ -550,7 +562,8 @@ func (r rawSafety) own() []string {
 	set := map[string]bool{
 		"start_threads": r.StartThreads != nil, "yolo": r.Yolo != nil,
 		"coordinator_approves": r.CoordinatorApproves != nil, "parallel_threads": r.ParallelThreads != nil,
-		"auto_close": r.AutoClose != nil || r.AutoResolve != nil, "auto_close_days": r.AutoCloseDays != nil,
+		"global_parallel_threads": r.GlobalThreads != nil,
+		"auto_close":              r.AutoClose != nil || r.AutoResolve != nil, "auto_close_days": r.AutoCloseDays != nil,
 		"pr_followup": r.PRFollowup != nil, "pr_poll_seconds": r.PRPoll != nil, "complete_tasks": r.CompleteTasks != nil,
 		"coordinator_remote_control": r.CoordinatorRC != nil, "auto_clear": r.AutoClear != nil, "coordinator_merges": r.CoordMerges != nil, "fast_forward_checkout": r.FastForward != nil, "sandbox_escapes": r.SandboxEsc != nil,
 		"thread_agent": r.ThreadAgent != nil, "coordinator_agent": r.CoordAgent != nil, "models": r.Models != nil, "coordinator_model": r.CoordModel != nil, "archive_tasks_days": r.ArchiveTasks != nil, "archive_threads_days": r.ArchiveThreads != nil,
@@ -599,6 +612,12 @@ func (r rawSafety) apply(s *Safety, path, table string) error {
 			return fmt.Errorf("%s: %s.parallel_threads must be 1 to %d, not %d", path, table, MaxParallelThreads, n)
 		}
 		s.ParallelThreads = *r.ParallelThreads
+	}
+	if r.GlobalThreads != nil {
+		if n := *r.GlobalThreads; n < 0 || n > MaxGlobalThreads {
+			return fmt.Errorf("%s: %s.global_parallel_threads must be 0 (no cap) to %d, not %d", path, table, MaxGlobalThreads, n)
+		}
+		s.GlobalParallelThreads = *r.GlobalThreads
 	}
 	if r.AutoResolve != nil {
 		s.AutoClose = map[bool]string{true: CloseMerged, false: CloseOff}[*r.AutoResolve]

@@ -75,6 +75,12 @@ checkout when safe (`tm context`'s repo line says when it is behind).
   don't count). At the cap, start refuses with `over-cap`: propose
   instead; add `--over-cap` only when the user says so in chat (with
   `--approved-by-user` too: it is their go-ahead to start).
+- `global_parallel_threads` (Safety line, when set) caps threads across
+  all projects. At it, start refuses with `over-global-cap` and says
+  which projects' threads work: handle it as `over-cap` (propose, start
+  once a slot frees; `--over-cap` passes both on the user's word). Other
+  projects' threads free slots too, and nothing tells you: check `tm
+  context` again before starting.
 - `--model` from the agent's list in `tm context`: a smaller one for
   small, well-specified work, none (the default) or the most capable for
   design, subtle bugs or large changes; unsure, leave it off. Refusals:
