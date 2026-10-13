@@ -450,8 +450,10 @@ func TestSideProjGuarantee(t *testing.T) {
 				t.Fatalf("h=%d %d projects sel %q: %s shows without sections and not with them (%v)", h, len(ps), m.sideSel, r.key(), got)
 			}
 		}
-		if slices.Contains(rowKeys(with), m.sideSel) && m.focus == areaSide && !slices.Contains(got, m.sideSel) {
-			t.Fatalf("h=%d: the cursor's %s doesn't show (%v)", h, m.sideSel, got)
+		// The cursor shows, on a header the band draws too: a sel on one
+		// it doesn't draw falls back (cursorRows).
+		if i := slices.IndexFunc(with, func(r treeRow) bool { return r.cursor }); i >= 0 && !slices.Contains(got, with[i].key()) {
+			t.Fatalf("h=%d sel %q: the cursor's %s doesn't show (%v)", h, m.sideSel, with[i].key(), got)
 		}
 		lines := sidebarOf(m)
 		if len(lines) != h {
