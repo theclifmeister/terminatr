@@ -1,0 +1,33 @@
+# Per-project sidebar sections (sidebar sections design §9): under each
+# project's threads in the sidebar, its open pull requests and their
+# checks, failing first, with a badge that counts the failing ones; enter
+# on the section's header opens the project's PRs tab with the whole
+# list. A project without a PR gets no section. Install it from a
+# checkout:
+#   tm mod install terminatr/examples/mods/ci-status
+id = "ci-status"
+name = "CI status"
+version = "1.0.0"
+api = "1.7"
+description = "Each project's pull requests and their checks: a section under its threads in the sidebar, and a tab in its popup with them all."
+authors = ["terminatr"]
+homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/ci-status"
+
+[provides]
+main = "main.ts"
+
+[[provides.views]]
+id = "ci"
+title = "ci status"
+slot = "sidebar.project.section"
+opens = "prs"
+description = "this project's pull requests and their checks"
+
+[[provides.views]]
+id = "prs"
+title = "PRs"
+slot = "project.tab"
+
+[permissions]
+project_read = true
+views = true

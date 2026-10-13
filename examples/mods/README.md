@@ -27,6 +27,7 @@ on in the Mods tab (`,` then `3`), or with `tm mod enable <id>`. `e` in the Mods
 | 4 | [cost-card](cost-card) | a dashboard card | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/cost-card` |
 | 5 | [notify-me](notify-me) | OS notifications with core-action buttons, a question's options among them | reads your projects, shows notifications, offers you buttons that answer an agent's question | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/notify-me` |
 | 6 | [thread-timeline](thread-timeline) | a full view (≡ menu) | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/thread-timeline` |
+| + | [ci-status](ci-status) | a section under each project in the sidebar, whose header opens a project-popup tab with all its PRs | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.2/examples/mods/ci-status` |
 | 7 | [pr-ci-column](pr-ci-column) | a sidebar column (built in) | reads your projects | copy it under another id first, see below |
 | 8 | [memory-tab](memory-tab) | a project-popup tab (built in) | reads your projects, draws its own panels | copy it under another id first, see below |
 | + | [tasks-tab](tasks-tab) | the popup's Tasks tab, its rows bound to tm's task actions (built in) | reads your projects, draws its own panels | copy it under another id first, see below |

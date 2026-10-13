@@ -1,0 +1,21 @@
+{
+  "name": "pr.changed for a project on show draws its section again",
+  "answers": [
+    { "method": "project.get", "params": { "slug": "demo" },
+      "result": { "project": "demo", "threads": [
+        { "id": "t-0001", "title": "Sidebar", "pr": "#412 open, checks passed", "pr_checks": "pass" }
+      ] } }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "ci", "slot": "sidebar.project.section", "project": "demo", "width": 26, "height": 2 } },
+    { "name": "pr.changed", "project": "other", "data": { "project": "other", "thread": "t-0007", "number": 9, "state": "open", "checks": "fail" } },
+    { "name": "pr.changed", "project": "demo", "data": { "project": "demo", "thread": "t-0001", "number": 412, "state": "open", "checks": "pass" } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set", "params": { "view": "ci", "options": { "project": "demo", "height": 1, "badge": [{ "text": "1 ", "role": "good" }, { "icon": "ci.pass", "role": "good" }] } } },
+      { "method": "ui.view.set", "params": { "view": "ci", "options": { "project": "demo", "height": 1 } } }
+    ]
+  }
+}

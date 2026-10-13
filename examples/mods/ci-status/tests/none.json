@@ -1,0 +1,19 @@
+{
+  "name": "a project without a pull request gets a null tree, so no section shows under it; view.closed clears it",
+  "answers": [
+    { "method": "project.get", "params": { "slug": "quiet" },
+      "result": { "project": "quiet", "threads": [{ "id": "t-0009", "title": "Spike" }] } }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "quiet",
+      "data": { "view": "ci", "slot": "sidebar.project.section", "project": "quiet", "width": 26, "height": 2 } },
+    { "name": "view.closed", "project": "quiet",
+      "data": { "view": "ci", "slot": "sidebar.project.section", "project": "quiet", "width": 26, "height": 2 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set", "params": { "view": "ci", "options": { "project": "quiet" }, "widget": null } },
+      { "method": "ui.view.set", "params": { "view": "ci", "options": { "project": "quiet" }, "widget": null } }
+    ]
+  }
+}
