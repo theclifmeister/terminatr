@@ -92,6 +92,24 @@ func TestPanelSectionsGolden(t *testing.T) {
 	coord("the digest's header selected", 26, both, panelOpts{sel: "panel:digest.today", focused: true})
 	coord("safe mode: the built-in ticker alone", 26, both, panelOpts{noMods: true})
 
+	// PR polls failing (T357): core's red line in the head, under the
+	// counts, whether the ticker mod's section is unfolded, folded (its
+	// badge says it too), off or failed.
+	failing := func(name string, list []proto.ModView, o panelOpts) {
+		w := goldenWatch()
+		w.Ticker = &proto.WatchTicker{GHFailing: true}
+		pl, hits := coordPanel(w, 40, time.Now())
+		o.rows, o.mods = 26, mods
+		write("coordinator, PR host failing: "+name, layPanel(pl, hits, list, panelTarget{slot: mod.SlotCoordinatorSection, project: "terminatr"}, o).lines, 26)
+	}
+	failingTicker := tickerView()
+	failingTicker.Trees = []modview.Tree{{Tree: &widget.Widget{Kind: widget.KindText, Text: "PRs      6m ago · due\nsynced   1m ago\nPR host  failing"},
+		Badge: []widget.Span{{Text: "PR host ", Role: "bad"}, {Icon: "blocked", Role: "bad"}}}}
+	failing("the ticker unfolded", []proto.ModView{failingTicker}, panelOpts{})
+	failing("the ticker folded", []proto.ModView{failingTicker}, panelOpts{folds: folds})
+	failing("the ticker mod off", nil, panelOpts{})
+	failing("the ticker mod failed", []proto.ModView{failed}, panelOpts{})
+
 	// A thread's info panel: the details sections for the thread.
 	c := infoClient(t, 200)
 	c.views = []proto.ModView{{Mod: "ci", Name: "CI", View: "checks", Title: "checks", Slot: mod.SlotDetailsSection,
