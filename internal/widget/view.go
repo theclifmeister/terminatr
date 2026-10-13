@@ -35,8 +35,12 @@ type View struct {
 	lay      []line
 	layW     int
 	layValid bool
-	shown    int // first laid-out line the last Render showed
-	height   int // and how many lines it had
+	// timed: the tree has time spans (Span.Ago, Span.Until), so the
+	// layout is redone when the clock's second changes (layAt).
+	timed  bool
+	layAt  int64
+	shown  int // first laid-out line the last Render showed
+	height int // and how many lines it had
 
 	// The action binding (mods design §11). bindKeys are the console's
 	// keys for a bindable action; since is when each row's bindings or
@@ -193,7 +197,7 @@ func (v *View) Set(t *Widget) {
 	if !first && (v.focus != focus || v.Cursor(v.focus) != cursor || v.place() != place) {
 		v.shifted = now
 	}
-	v.layValid = false
+	v.layValid, v.timed = false, t != nil && t.Timed()
 }
 
 // place is the cursor's place among its list's shown rows, -1 for none.

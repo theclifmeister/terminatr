@@ -89,7 +89,8 @@ func TestModEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	os.MkdirAll(filepath.Dir(p.Sessions), 0o700)
-	if err := os.WriteFile(ticker.StatePath(p.Sessions), []byte(`{"threads": {"demo/`+rec.ID+`": {"pr": {"number": 4, "state": "OPEN", "checks": "fail", "merge_state": "BEHIND"}}}}`), 0o600); err != nil {
+	if err := os.WriteFile(ticker.StatePath(p.Sessions), []byte(`{"threads": {"demo/`+rec.ID+`": {"pr": {"number": 4, "state": "OPEN", "checks": "fail", "merge_state": "BEHIND"}}},
+		"projects": {"demo": {"pr_polled": "2026-10-13T14:00:00Z", "gh_fails": 3}}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pr.AddItem("report", rec.ID, "t-0001 reported", false); err != nil {
@@ -101,7 +102,8 @@ func TestModEvents(t *testing.T) {
 	var names []string
 	var task modbus.Task
 	var prEv modbus.PR
-	for len(names) < 6 {
+	var tickEv modbus.Ticker
+	for len(names) < 7 {
 		ev := next(reader)
 		// The minute ticks by the wall clock, whenever the test runs into it.
 		if ev.Name == modbus.ClockMinute {
@@ -113,9 +115,11 @@ func TestModEvents(t *testing.T) {
 			task = d
 		case modbus.PR:
 			prEv = d
+		case modbus.Ticker:
+			tickEv = d
 		}
 	}
-	want := []string{modbus.ThreadStarted, modbus.TaskChanged, modbus.TasksChanged, modbus.ThreadState, modbus.PRChanged, modbus.InboxItem}
+	want := []string{modbus.ThreadStarted, modbus.TaskChanged, modbus.TasksChanged, modbus.ThreadState, modbus.PRChanged, modbus.TickerChanged, modbus.InboxItem}
 	if len(names) != len(want) {
 		t.Fatalf("events %v, want %v", names, want)
 	}
@@ -129,6 +133,10 @@ func TestModEvents(t *testing.T) {
 	}
 	if prEv.Number != 4 || prEv.Checks != "fail" || !prEv.Behind || prEv.Thread != rec.ID {
 		t.Fatalf("pr.changed %+v", prEv)
+	}
+	// The PR poll and its failing gh: the ticker as project.get gives it.
+	if tk := tickEv.Ticker; tickEv.Project != "demo" || !tk.PRChecked.Equal(time.Date(2026, 10, 13, 14, 0, 0, 0, time.UTC)) || !tk.GHFailing || tk.PRPollSeconds == 0 {
+		t.Fatalf("ticker.changed %+v", tickEv)
 	}
 
 	// The blind mod got none of it, but does get the clock and sessions.

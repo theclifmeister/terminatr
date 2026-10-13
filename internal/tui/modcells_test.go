@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -143,6 +144,20 @@ func TestModCellsStatusBar(t *testing.T) {
 	plain, _ := statusBar(info, nil, "", false, 70, "", nil)
 	if narrow != plain {
 		t.Errorf("narrow:\n%q\n%q", ansi.Strip(narrow), ansi.Strip(plain))
+	}
+}
+
+// A cell's or status segment's time spans draw with the console's
+// clock: an hour ago, and a time that passed as due.
+func TestModCellsTimeSpans(t *testing.T) {
+	hour := time.Now().Add(-time.Hour).Format(time.RFC3339)
+	ss := []widget.Span{{Ago: hour, Role: "faint"}, {Text: " · "}, {Until: hour}}
+	plain, _ := spansCell(ss, 20)
+	if plain != "1h ago · due        " {
+		t.Errorf("cell %q", plain)
+	}
+	if n := spansWidth(ss); n != len("1h ago · due")-1 {
+		t.Errorf("width %d", n)
 	}
 }
 

@@ -3,6 +3,7 @@ package tui
 import (
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -143,8 +144,9 @@ func (mc *modCells) sideOrder(order []string) []string {
 // (a cut ends in a blank, as cutRuns cuts) and padded with blanks.
 func spansCell(ss []widget.Span, w int) (plain, styled string) {
 	var rs []cellRun
+	now := time.Now()
 	for _, s := range ss {
-		text := s.Text
+		text := s.Words(now)
 		if s.Icon != "" {
 			text = widgetLook{}.Icon(s.Icon) + text
 		}
@@ -191,8 +193,9 @@ func (s spanStyle) Render(strs ...string) string {
 // spansWidth is how many cells ss take drawn whole.
 func spansWidth(ss []widget.Span) int {
 	n := 0
+	now := time.Now()
 	for _, s := range ss {
-		n += ansi.StringWidth(s.Text)
+		n += ansi.StringWidth(s.Words(now))
 		if s.Icon != "" {
 			n += ansi.StringWidth(widgetLook{}.Icon(s.Icon))
 		}

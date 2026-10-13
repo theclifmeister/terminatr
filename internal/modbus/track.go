@@ -3,6 +3,9 @@ package modbus
 import (
 	"maps"
 	"slices"
+	"time"
+
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // ProjectState is what the events of a project are worked out from: the
@@ -16,6 +19,21 @@ type ProjectState struct {
 	Threads map[string]ThreadSnap
 	Inbox   map[string]Item // the unhandled items, by id
 	PRs     map[string]PR   // by thread, only threads with a PR
+	// Ticker is when the ticker last polled PRs and synced, and whether
+	// its polls fail: ticker.changed when it differs, with TickerWatch's
+	// ticker (nil: none).
+	Ticker      TickerTimes
+	TickerWatch func() proto.WatchTicker
+}
+
+// TickerTimes are what of a project's ticker ticker.changed follows.
+type TickerTimes struct {
+	PRChecked, Synced time.Time
+	GHFailing         bool
+}
+
+func (a TickerTimes) same(b TickerTimes) bool {
+	return a.PRChecked.Equal(b.PRChecked) && a.Synced.Equal(b.Synced) && a.GHFailing == b.GHFailing
 }
 
 // ThreadSnap is one thread in a ProjectState.
@@ -58,8 +76,8 @@ func (t *Tracker) Reset() {
 
 // Project publishes what changed in project slug since its last state.
 // Events of one project go out in the order of the design's table:
-// threads started, tasks (each task, then the board), thread states, reports, PRs, inbox items,
-// threads resolved; each kind in id order.
+// threads started, tasks (each task, then the board), thread states, reports, PRs, the ticker,
+// inbox items, threads resolved; each kind in id order.
 func (t *Tracker) Project(slug string, cur *ProjectState) {
 	old := t.projects[slug]
 	t.projects[slug] = cur
@@ -104,6 +122,9 @@ func (t *Tracker) Project(slug string, cur *ProjectState) {
 		if n, o := cur.PRs[id], old.PRs[id]; n != o {
 			pub(PRChanged, n)
 		}
+	}
+	if !cur.Ticker.same(old.Ticker) && cur.TickerWatch != nil {
+		pub(TickerChanged, Ticker{Project: slug, Ticker: cur.TickerWatch()})
 	}
 	for _, id := range slices.Sorted(maps.Keys(cur.Inbox)) {
 		if _, ok := old.Inbox[id]; !ok {

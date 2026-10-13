@@ -126,6 +126,8 @@ export declare namespace TM {
     "inbox.item": InboxItem;
     /** The ticker learnt something new of a thread's PR. Needs the project_read grant. */
     "pr.changed": PR;
+    /** A project's ticker polled PRs or synced its repos, or its PR host began or stopped failing (mod API 1.7): the ticker as $.project.get gives it. Draw its times as ago and until spans, which move by themselves. Needs the project_read grant. */
+    "ticker.changed": Ticker;
     /** A session's agent state or context use changed, or it exited. */
     "session.state": SessionState;
     /** The question a thread's or coordinator's open question menu asks changed (mod API 1.3): its first unanswered question, none once it is answered or gone. Its options can be offered as question.answer bindings. Needs the project_read grant. */
@@ -429,6 +431,8 @@ export declare namespace TM {
     text?: string;
     role?: Role;
     icon?: Icon;
+    ago?: string;
+    until?: string;
   }
 
   interface Target {
@@ -487,6 +491,11 @@ export declare namespace TM {
     state: string;
     reason?: string;
     needs_you?: string;
+  }
+
+  interface Ticker {
+    project: string;
+    ticker: WatchTicker;
   }
 
   /** Any JSON value. */
