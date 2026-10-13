@@ -29,8 +29,13 @@ const (
 	MethodViewExpand = "view.expand"
 	// MethodViewTree sets what the sidebar's tree folds (Tree): the
 	// active projects folded, the inactive ones expanded, the inactive
-	// divider open (since protocol 11).
+	// divider open (since protocol 11). The view keeps its section folds
+	// (view.Tree.SectionsFolded): only view.sections changes those.
 	MethodViewTree = "view.tree"
+	// MethodViewSections folds (On) or unfolds the mods' sidebar sections
+	// Sections, by section id (view.ValidSection), at most
+	// MaxViewSections a call (since protocol 15).
+	MethodViewSections = "view.sections"
 	// MethodViewSidebar sets the projects sidebar (Sidebar).
 	MethodViewSidebar = "view.sidebar"
 	// MethodViewInfo sets the info panel beside a thread's pane (Info).
@@ -131,10 +136,16 @@ type ViewParams struct {
 	Cols    uint16        `json:"cols,omitempty"`
 	Rows    uint16        `json:"rows,omitempty"`
 	Resize  bool          `json:"resize,omitempty"`
-	// On expands the project (view.expand); false collapses it.
+	// On expands the project (view.expand), or folds the sections
+	// (view.sections); false collapses or unfolds.
 	On bool `json:"on,omitempty"`
 	// Columns is the sidebar's column order (view.columns).
 	Columns []string `json:"columns,omitempty"`
 	// Compact is the status bar's style (view.status).
 	Compact bool `json:"compact,omitempty"`
+	// Sections are the section ids view.sections folds (On) or unfolds.
+	Sections []string `json:"sections,omitempty"`
 }
+
+// MaxViewSections bounds the section ids of one view.sections call.
+const MaxViewSections = 64
