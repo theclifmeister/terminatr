@@ -812,9 +812,8 @@ func (m *dash) sideClick(mo tea.Mouse) tea.Cmd {
 	case !ok:
 	case r.kind == treeSection:
 		// Its header or its body: as enter on the header.
-		m.sideSel = r.key()
 		st, _ := sectionStep(r, sideEnter)
-		return tea.Batch(m.sendSideSel(), m.sectionCmd(st))
+		return tea.Batch(cmd, m.sectionCmd(st))
 	case m.busy:
 	case r.kind == treeDivider:
 		return tea.Batch(cmd, m.refold(foldDivider(r)))
