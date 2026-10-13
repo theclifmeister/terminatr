@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/guard"
+	"github.com/theclifmeister/terminatr/internal/theme"
 )
 
 // State is the harness-neutral state of an agent session.
@@ -57,6 +58,16 @@ type LaunchSpec struct {
 	// its command hooks. The core sets it only when [agent_mod] enabled is on
 	// and the agent's version is at least ModsMinVersion.
 	Mods bool
+	// PaneScheme is "dark" or "light" when the console's theme draws the
+	// panes with its pane palette for that scheme (docs/SPEC.md §5.3),
+	// else "": an agent whose own theme is truecolor can switch to one
+	// over the 16 ANSI colours, which the palette colours.
+	PaneScheme string
+	// Theme is the tm theme's colours for PaneScheme (roles and pane
+	// palette, docs/SPEC.md §5.3), nil without a pane palette or in safe
+	// mode: an agent that takes a theme of its own can follow them
+	// exactly (Claude's plugin theme, §8.6).
+	Theme *theme.Agent
 
 	// Access is the policy the core decided for this role. The manifest
 	// turns it into the agent's own permission and sandbox settings.

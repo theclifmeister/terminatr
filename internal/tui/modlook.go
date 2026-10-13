@@ -11,6 +11,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/mod"
+	tmtheme "github.com/theclifmeister/terminatr/internal/theme"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
 
@@ -81,17 +82,9 @@ func init() {
 
 // modTheme reads mod id's theme.
 func modTheme(r *mod.Registry, id string) (themeTable, error) {
-	m, err := r.Provider(mod.KindTheme, id)
+	tt, err := tmtheme.Load(r, id)
 	if err != nil {
 		return builtinTheme, err
-	}
-	data, err := m.Data(mod.KindTheme)
-	if err != nil {
-		return builtinTheme, err
-	}
-	tt, err := parseTheme(data)
-	if err != nil {
-		return builtinTheme, fmt.Errorf("%s theme: %w", id, err)
 	}
 	// Resolve both schemes now, so a bad colour is said once, here.
 	for _, dark := range []bool{false, true} {

@@ -19,6 +19,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/theclifmeister/terminatr/internal/guard"
+	"github.com/theclifmeister/terminatr/internal/theme"
 )
 
 // ManifestVersion is the manifest format this binary reads.
@@ -720,6 +721,9 @@ func (a *manifestAgent) Launch(spec LaunchSpec) (Launch, error) {
 		if err != nil {
 			return out, fmt.Errorf("launch.files %s: %w", f.Path, err)
 		}
+		if strings.TrimSpace(s) == "" {
+			continue // nothing to say this launch, e.g. no theme
+		}
 		out.Files[f.Path] = []byte(s)
 	}
 	return out, nil
@@ -844,6 +848,13 @@ var funcs = template.FuncMap{
 	// mode per path (Codex's permission profile filesystem); any more
 	// arguments are directories to write besides (a coordinator's cwd).
 	"pathmodes": pathModes,
+	// blend is colour a moved pct percent of the way to colour b, both
+	// #rrggbb, e.g. a background a shade lighter; "" when either is.
+	"blend": blend,
+	// colors is a JSON object of name, colour pairs, leaving out those
+	// with no colour: colors "error" .Theme.Fg.bad "success" "" ->
+	// {"error":"#bf616a"}.
+	"colors": colors,
 	// concat joins lists, for building one JSON array from several grants.
 	"concat": func(lists ...[]string) []string {
 		out := []string{}
@@ -852,6 +863,39 @@ var funcs = template.FuncMap{
 		}
 		return out
 	},
+}
+
+func blend(a, b string, pct int) string {
+	x, errA := theme.ParseRGB(a)
+	y, errB := theme.ParseRGB(b)
+	if errA != nil || errB != nil || x == nil || y == nil {
+		return ""
+	}
+	mix := func(p, q uint8) int { return (int(p)*(100-pct) + int(q)*pct + 50) / 100 }
+	return fmt.Sprintf("#%02x%02x%02x", mix(x.R, y.R), mix(x.G, y.G), mix(x.B, y.B))
+}
+
+func colors(pairs ...string) (string, error) {
+	if len(pairs)%2 != 0 {
+		return "", fmt.Errorf("colors takes name, colour pairs, got %d values", len(pairs))
+	}
+	var b strings.Builder
+	b.WriteByte('{')
+	for i := 0; i < len(pairs); i += 2 {
+		if pairs[i+1] == "" {
+			continue
+		}
+		if b.Len() > 1 {
+			b.WriteByte(',')
+		}
+		k, _ := json.Marshal(pairs[i])
+		v, _ := json.Marshal(pairs[i+1])
+		b.Write(k)
+		b.WriteByte(':')
+		b.Write(v)
+	}
+	b.WriteByte('}')
+	return b.String(), nil
 }
 
 // posixPath is d in the form Claude matches permission rules against on

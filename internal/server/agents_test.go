@@ -1,11 +1,17 @@
 package server
 
 import (
+	"io"
+	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/emu"
+	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/session"
 )
@@ -101,5 +107,83 @@ func TestCoordinatorEssentials(t *testing.T) {
 	}
 	if !strings.Contains(got, "[… cut at the size budget]") || !strings.HasSuffix(got, "the current state.\n") {
 		t.Fatalf("no cut mark or no last line:\n%s", got[len(got)-300:])
+	}
+}
+
+// TestPaneScheme: a new agent hears of the pane palette a console last
+// drew the panes with, by its scheme, and of none in safe mode (T342).
+func TestPaneScheme(t *testing.T) {
+	for _, c := range []struct {
+		known  uint32
+		noMods bool
+		want   string
+	}{
+		{0, false, ""},
+		{emu.KnownBg | 1<<3, false, ""},
+		{emu.KnownBg | emu.PaneDark, false, "dark"},
+		{emu.PaneLight, false, "light"},
+		{emu.KnownBg | emu.PaneDark, true, ""},
+	} {
+		s := &Server{colors: emu.Colors{Known: c.known}, noMods: c.noMods}
+		if got := s.paneScheme(); got != c.want {
+			t.Errorf("known %b, safe mode %v: %q, want %q", c.known, c.noMods, got, c.want)
+		}
+	}
+}
+
+// TestLaunchTheme: a new agent gets [ui] theme's colours for the scheme
+// whose pane palette a console draws, read by the server itself; none
+// for the other scheme without one, the built-in theme, a mod that is
+// off, or in safe mode (T342).
+func TestLaunchTheme(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	dir, err := home.ModsDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"mod.toml":   "id = \"nord\"\nname = \"Nord\"\nversion = \"0.1.0\"\napi = \"1.6\"\n[provides]\ntheme = \"theme.toml\"\n",
+		"theme.toml": "[dark]\naccent = { fg = [\"cyan\", \"#88c0d0\"] }\n[dark.pane]\nbg = \"#2e3440\"\n",
+	}
+	for name, body := range files {
+		p := filepath.Join(dir, "nord", name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfgPath, _ := config.Path()
+	writeCfg := func(body string) {
+		if err := os.WriteFile(cfgPath, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeCfg("[ui]\ntheme = \"nord\"\n[mods.nord]\nenabled = true\n")
+	s := &Server{log: log.New(io.Discard, "", 0)}
+	a := s.launchTheme("dark")
+	if a == nil || a.Fg["accent"] != "#88c0d0" || a.PaneBg != "#2e3440" || a.Scheme != "dark" {
+		t.Fatalf("nord dark: %+v", a)
+	}
+	if a := s.launchTheme("light"); a != nil {
+		t.Fatalf("nord light has no pane palette, yet %+v", a)
+	}
+	if a := s.launchTheme(""); a != nil {
+		t.Fatalf("no pane scheme, yet %+v", a)
+	}
+	s.noMods = true
+	if a := s.launchTheme("dark"); a != nil {
+		t.Fatalf("safe mode, yet %+v", a)
+	}
+	s.noMods = false
+	writeCfg("[ui]\ntheme = \"default\"\n")
+	if a := s.launchTheme("dark"); a != nil {
+		t.Fatalf("built-in theme, yet %+v", a)
+	}
+	writeCfg("[ui]\ntheme = \"nord\"\n[mods.nord]\nenabled = false\n")
+	s.shareModRegistry(nil)
+	if a := s.launchTheme("dark"); a != nil {
+		t.Fatalf("nord is off, yet %+v", a)
 	}
 }

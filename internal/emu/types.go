@@ -39,12 +39,18 @@ type RGB struct{ R, G, B uint8 }
 type Colors struct {
 	Fg, Bg  RGB
 	Palette [16]RGB
-	Known   uint32 // KnownFg, KnownBg, and bit i for Palette[i]
+	Known   uint32 // KnownFg, KnownBg, PaneDark or PaneLight, and bit i for Palette[i]
 }
 
 const (
 	KnownFg uint32 = 1 << 16
 	KnownBg uint32 = 1 << 17
+	// PaneDark and PaneLight say the colours are under a theme's pane
+	// palette (docs/SPEC.md §5.3), the dark scheme's or the light one's:
+	// an agent started then may switch to an ANSI theme of its own, which
+	// the palette colours (§8.6).
+	PaneDark  uint32 = 1 << 18
+	PaneLight uint32 = 1 << 19
 )
 
 // colorsLen is the length of an encoded Colors: Known, then Fg, Bg and
@@ -68,7 +74,7 @@ func DecodeColors(b []byte) (Colors, bool) {
 		return c, false
 	}
 	c.Known = uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3])
-	c.Known &= KnownFg | KnownBg | 0xffff
+	c.Known &= KnownFg | KnownBg | PaneDark | PaneLight | 0xffff
 	rgb := func(i int) RGB { o := 4 + 3*i; return RGB{b[o], b[o+1], b[o+2]} }
 	c.Fg, c.Bg = rgb(0), rgb(1)
 	for i := range c.Palette {

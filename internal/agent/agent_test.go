@@ -14,6 +14,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
+	"github.com/theclifmeister/terminatr/internal/theme"
 )
 
 func claude(t *testing.T) Agent {
@@ -141,6 +142,63 @@ func TestClaudeLaunch(t *testing.T) {
 	if settings.StatusLine != nil {
 		t.Fatal("settings must never set statusLine; it would replace the user's")
 	}
+	// No pane palette: Claude's theme is the user's own.
+	if settings.Theme != nil {
+		t.Fatalf("theme %q without a pane palette", *settings.Theme)
+	}
+	// A theme's pane palette colours the 16 ANSI colours: Claude's ANSI
+	// theme for the scheme (T342).
+	for _, scheme := range []string{"dark", "light"} {
+		pal := spec
+		pal.PaneScheme = scheme
+		if l, err = a.Launch(pal); err != nil {
+			t.Fatal(err)
+		}
+		if s := parseSettings(t, l.Files["claude-settings.json"]); s.Theme == nil || *s.Theme != scheme+"-ansi" || !s.Sandbox.Enabled {
+			t.Fatalf("pane scheme %s: theme %v, settings %+v", scheme, s.Theme, s)
+		}
+		if _, ok := l.Files["claude-plugin/themes/tm.json"]; ok {
+			t.Fatal("a plugin theme without the theme's colours")
+		}
+	}
+	// With the theme's colours: the plugin's theme over Claude's ANSI one,
+	// the roles and the pane's colours in truecolor, none it lacks.
+	themed := spec
+	themed.PaneScheme = "light"
+	themed.Theme = &theme.Agent{Scheme: "light", PaneFg: "#2e3440", PaneBg: "#eceff4",
+		Fg: map[string]string{"head": "", "sel": "", "sel_focus": "", "faint": "#4c566a", "accent": "#5e81ac", "title": "",
+			"bad": "#bf616a", "warn": "", "good": "#a3be8c", "info": "#81a1c1", "plain": ""},
+		Bg: map[string]string{"sel": "#d8dee9"}}
+	if l, err = a.Launch(themed); err != nil {
+		t.Fatal(err)
+	}
+	if s := parseSettings(t, l.Files["claude-settings.json"]); s.Theme == nil || *s.Theme != "custom:terminatr:tm" {
+		t.Fatalf("themed settings select %v", s.Theme)
+	}
+	var ct struct {
+		Name, Base string
+		Overrides  map[string]string
+	}
+	if err := json.Unmarshal(l.Files["claude-plugin/themes/tm.json"], &ct); err != nil {
+		t.Fatalf("tm.json: %v\n%s", err, l.Files["claude-plugin/themes/tm.json"])
+	}
+	if ct.Base != "light-ansi" || ct.Name != "terminatr" {
+		t.Fatalf("tm.json %+v", ct)
+	}
+	for tok, want := range map[string]string{
+		"claude": "#5e81ac", "error": "#bf616a", "success": "#a3be8c", "suggestion": "#81a1c1",
+		"inactive": "#4c566a", "text": "#2e3440", "inverseText": "#eceff4", "selectionBg": "#e3e7ef",
+		"userMessageBackground": "#dde0e6", "diffAdded": "#d2ded0",
+	} {
+		if got := ct.Overrides[tok]; got != want {
+			t.Errorf("%s = %q, want %q", tok, got, want)
+		}
+	}
+	for _, tok := range []string{"warning", "warningShimmer", "bashMessageBackgroundColor"} {
+		if v, ok := ct.Overrides[tok]; ok {
+			t.Errorf("%s = %q, but the theme gives no colour for it", tok, v)
+		}
+	}
 
 	coord := spec
 	coord.Role, coord.Access = Role("coordinator"), Access{Read: []string{"/h/.terminatr/worktrees/p"}}
@@ -190,7 +248,8 @@ type claudeSettings struct {
 		AllowUnsandboxedCommands *bool
 		Network                  struct{ AllowUnixSockets []string }
 	}
-	StatusLine any `json:"statusLine"`
+	StatusLine any     `json:"statusLine"`
+	Theme      *string `json:"theme"`
 }
 
 func parseSettings(t *testing.T, b []byte) claudeSettings {

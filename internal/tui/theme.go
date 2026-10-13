@@ -9,11 +9,10 @@ import (
 	"sync/atomic"
 
 	"charm.land/lipgloss/v2"
-	"github.com/BurntSushi/toml"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/emu"
-	"github.com/theclifmeister/terminatr/internal/mod"
+	tmtheme "github.com/theclifmeister/terminatr/internal/theme"
 )
 
 // The dashboard's look. Colours are the terminal's 16 ANSI colours, so
@@ -31,136 +30,43 @@ type Theme struct {
 	Pane *emu.Palette
 }
 
-// roleSpec is one role as data: foreground and background colours (each
-// an ANSI name, a 0-255 index or #rrggbb; a second entry is the
-// truecolor choice, the first its ANSI fallback) and attributes.
-type roleSpec struct {
-	Fg      []string `toml:"fg"`
-	Bg      []string `toml:"bg"`
-	Bold    bool     `toml:"bold"`
-	Faint   bool     `toml:"faint"`
-	Reverse bool     `toml:"reverse"`
-}
+// The theme's data (internal/theme): its role specs, a scheme's role
+// set with the pane palette, and the table of both schemes.
+type (
+	roleSpec   = tmtheme.Role
+	roleSet    = tmtheme.RoleSet
+	themeTable = tmtheme.Table
+)
 
-// roleSet is every role's spec for one scheme. A role left out falls back
-// to the built-in one.
-type roleSet struct {
-	Head *roleSpec `toml:"head"`
-	Sel  *roleSpec `toml:"sel"`
-	// SelFocus is optional: the sidebar's keyboard row while it has the focus.
-	SelFocus *roleSpec `toml:"sel_focus"`
-	Faint    *roleSpec `toml:"faint"`
-	Accent   *roleSpec `toml:"accent"`
-	Title    *roleSpec `toml:"title"`
-	Bad      *roleSpec `toml:"bad"`
-	Warn     *roleSpec `toml:"warn"`
-	Good     *roleSpec `toml:"good"`
-	Info     *roleSpec `toml:"info"`
-	Plain    *roleSpec `toml:"plain"`
-	// Pane is the panes' palette (mod API 1.6); none in the built-in theme.
-	Pane *paneSpec `toml:"pane"`
-}
-
-// paneSpec is a scheme's pane palette, [light.pane] or [dark.pane]: the
-// colours the panes' programs' default foreground and background and 16
-// ANSI colours are drawn with, each #rrggbb. Whatever it leaves out
-// stays the outer terminal's own.
-type paneSpec struct {
-	Fg      string   `toml:"fg"`
-	Bg      string   `toml:"bg"`
-	Palette []string `toml:"palette"`
-}
-
-// palette is the spec as a renderer's palette; a bad colour is an error
-// naming its key.
-func (p *paneSpec) palette() (*emu.Palette, error) {
-	var pal emu.Palette
-	var err error
-	if pal.Fg, err = parseRGB(p.Fg); err != nil {
-		return nil, fmt.Errorf("pane fg: %w", err)
-	}
-	if pal.Bg, err = parseRGB(p.Bg); err != nil {
-		return nil, fmt.Errorf("pane bg: %w", err)
-	}
-	if n := len(p.Palette); n != 0 && n != 16 {
-		return nil, fmt.Errorf("pane palette: takes the 16 ANSI colours, got %d", n)
-	}
-	for i, c := range p.Palette {
-		if pal.ANSI[i], err = parseRGB(c); err != nil {
-			return nil, fmt.Errorf("pane palette %d: %w", i, err)
-		}
-	}
-	return &pal, nil
-}
-
-// parseRGB reads #rrggbb; nil for "".
-func parseRGB(s string) (*emu.RGB, error) {
-	if s == "" {
-		return nil, nil
-	}
-	if len(s) == 7 && s[0] == '#' {
-		if v, err := strconv.ParseUint(s[1:], 16, 24); err == nil {
-			return &emu.RGB{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v)}, nil
-		}
-	}
-	return nil, fmt.Errorf("bad colour %q (want #rrggbb)", s)
-}
-
-// themeTable is a theme as data: a role set per colour scheme.
-type themeTable struct {
-	Light roleSet `toml:"light"`
-	Dark  roleSet `toml:"dark"`
-}
+// parseTheme reads a theme's TOML; a key it doesn't know is an error.
+var parseTheme = tmtheme.Parse
 
 // builtinTheme is the built-in look over the terminal's 16 ANSI colours:
 // the bundled default-theme mod's theme.toml (mods design §11), every
 // role set in both schemes. builtinRoles are its dark roles, to which a
 // mod's role left out falls back.
 var (
-	builtinTheme = mustTheme(mod.BundledData(mod.BundledTheme, mod.KindTheme))
+	builtinTheme = mustTheme(tmtheme.Bundled())
 	builtinRoles = builtinTheme.Dark
 )
 
-// mustTheme is the bundled theme data parsed; tm built without a whole
-// one is a bug.
-func mustTheme(data []byte) themeTable {
-	tt, err := parseTheme(data)
+// mustTheme is the bundled theme; tm built without a whole one is a bug.
+func mustTheme(tt themeTable, err error) themeTable {
 	if err != nil {
 		panic("bundled theme: " + err.Error())
 	}
 	for _, rs := range []roleSet{tt.Light, tt.Dark} {
-		if missing := rs.missing(); len(missing) > 0 {
+		if missing := rs.Missing(); len(missing) > 0 {
 			panic("bundled theme: no " + strings.Join(missing, ", "))
 		}
 	}
 	return tt
 }
 
-// missing are the roles rs leaves out.
-func (rs roleSet) missing() []string {
-	var out []string
-	for _, r := range []struct {
-		name string
-		spec *roleSpec
-	}{{"head", rs.Head}, {"sel", rs.Sel}, {"sel_focus", rs.SelFocus}, {"faint", rs.Faint}, {"accent", rs.Accent}, {"title", rs.Title},
-		{"bad", rs.Bad}, {"warn", rs.Warn}, {"good", rs.Good}, {"info", rs.Info}, {"plain", rs.Plain}} {
-		if r.spec == nil {
-			out = append(out, r.name)
-		}
-	}
-	return out
-}
-
-var ansiNames = map[string]int{
-	"black": 0, "red": 1, "green": 2, "yellow": 3, "blue": 4, "magenta": 5, "cyan": 6, "white": 7,
-	"brightblack": 8, "brightred": 9, "brightgreen": 10, "brightyellow": 11,
-	"brightblue": 12, "brightmagenta": 13, "brightcyan": 14, "brightwhite": 15,
-}
-
 // parseColor reads one colour: an ANSI name, a 0-255 index or #rrggbb.
 func parseColor(s string) (color.Color, error) {
 	s = strings.ToLower(strings.TrimSpace(s))
-	n, ok := ansiNames[s]
+	n, ok := tmtheme.ANSINames[s]
 	if !ok {
 		if i, err := strconv.Atoi(s); err == nil && i >= 0 && i <= 255 {
 			n, ok = i, true
@@ -194,7 +100,8 @@ func pickColor(c []string, truecolor bool) (color.Color, error) {
 	return parseColor(c[0])
 }
 
-func (r *roleSpec) style(truecolor bool) (lipgloss.Style, error) {
+// specStyle is a role spec as a style.
+func specStyle(r *roleSpec, truecolor bool) (lipgloss.Style, error) {
 	st := lipgloss.NewStyle()
 	fg, err := pickColor(r.Fg, truecolor)
 	if err != nil {
@@ -213,9 +120,9 @@ func (r *roleSpec) style(truecolor bool) (lipgloss.Style, error) {
 	return st.Bold(r.Bold).Faint(r.Faint).Reverse(r.Reverse), nil
 }
 
-// resolve is the Theme for one scheme: each role from the set, else the
-// built-in one. A bad colour is an error naming the role.
-func (rs roleSet) resolve(truecolor bool) (*Theme, error) {
+// resolveRoles is the Theme for one scheme: each role from the set, else
+// the built-in one. A bad colour is an error naming the role.
+func resolveRoles(rs roleSet, truecolor bool) (*Theme, error) {
 	var t Theme
 	roles := []struct {
 		name string
@@ -225,7 +132,7 @@ func (rs roleSet) resolve(truecolor bool) (*Theme, error) {
 	}{
 		{"head", rs.Head, builtinRoles.Head, &t.Head},
 		{"sel", rs.Sel, builtinRoles.Sel, &t.Sel},
-		{"sel_focus", rs.selFocus(), builtinRoles.SelFocus, &t.SelFocus},
+		{"sel_focus", rs.SelFocusSpec(), builtinRoles.SelFocus, &t.SelFocus},
 		{"faint", rs.Faint, builtinRoles.Faint, &t.Faint},
 		{"accent", rs.Accent, builtinRoles.Accent, &t.Accent},
 		{"title", rs.Title, builtinRoles.Title, &t.Title},
@@ -240,58 +147,39 @@ func (rs roleSet) resolve(truecolor bool) (*Theme, error) {
 		if spec == nil {
 			spec = r.dflt
 		}
-		st, err := spec.style(truecolor)
+		st, err := specStyle(spec, truecolor)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", r.name, err)
 		}
 		*r.out = st
 	}
 	if rs.Pane != nil {
-		pal, err := rs.Pane.palette()
+		pal, err := rs.Pane.Resolve()
 		if err != nil {
 			return nil, err
 		}
 		if truecolor {
-			t.Pane = pal
+			t.Pane = emuPalette(pal)
 		}
 	}
 	return &t, nil
 }
 
-// selFocus is the focused-selection spec: the set's own, else its sel
-// (so a theme that restyles sel never gets the built-in colours over
-// it), else nil for the built-in one.
-func (rs roleSet) selFocus() *roleSpec {
-	if rs.SelFocus != nil {
-		return rs.SelFocus
+// emuPalette is a theme's pane palette as the renderer's.
+func emuPalette(p *tmtheme.Palette) *emu.Palette {
+	out := &emu.Palette{Fg: (*emu.RGB)(p.Fg), Bg: (*emu.RGB)(p.Bg)}
+	for i, c := range p.ANSI {
+		out.ANSI[i] = (*emu.RGB)(c)
 	}
-	return rs.Sel
-}
-
-// parseTheme reads a theme's TOML ([light] and [dark] role tables); a
-// key it doesn't know is an error.
-func parseTheme(data []byte) (themeTable, error) {
-	var tt themeTable
-	md, err := toml.Decode(string(data), &tt)
-	if err != nil {
-		return tt, err
-	}
-	if u := md.Undecoded(); len(u) > 0 {
-		keys := make([]string, len(u))
-		for i, k := range u {
-			keys[i] = k.String()
-		}
-		return tt, fmt.Errorf("unknown key %s", strings.Join(keys, ", "))
-	}
-	return tt, nil
+	return out
 }
 
 // themeFor is the Theme a table gives a console of the given scheme.
 func themeFor(tt themeTable, dark, truecolor bool) (*Theme, error) {
 	if dark {
-		return tt.Dark.resolve(truecolor)
+		return resolveRoles(tt.Dark, truecolor)
 	}
-	return tt.Light.resolve(truecolor)
+	return resolveRoles(tt.Light, truecolor)
 }
 
 // theme is this console's Theme.

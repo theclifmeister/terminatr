@@ -64,7 +64,7 @@ func (c *client) sendColors() {
 	if !c.lock() {
 		return
 	}
-	colors := themedColors(c.colors, c.pal)
+	colors := themedColors(c.colors, c.pal, themeDark.Load())
 	if colors == c.sentColors {
 		c.mu.Unlock()
 		return
@@ -80,10 +80,15 @@ func (c *client) sendColors() {
 
 // themedColors are the outer terminal's colours with the pane palette's
 // (nil for none) in place of those it sets, known whether or not the
-// terminal answered.
-func themedColors(outer emu.Colors, pal *emu.Palette) emu.Colors {
+// terminal answered, marked with the scheme the palette is for (dark).
+func themedColors(outer emu.Colors, pal *emu.Palette, dark bool) emu.Colors {
 	if pal == nil {
 		return outer
+	}
+	if dark {
+		outer.Known |= emu.PaneDark
+	} else {
+		outer.Known |= emu.PaneLight
 	}
 	if pal.Fg != nil {
 		outer.Fg = *pal.Fg

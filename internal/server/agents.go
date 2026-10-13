@@ -18,10 +18,13 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/emu"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
 	"github.com/theclifmeister/terminatr/internal/skill"
+	"github.com/theclifmeister/terminatr/internal/theme"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
 	"github.com/theclifmeister/terminatr/internal/version"
@@ -318,6 +321,45 @@ func replacedContext(old string) string {
 		"; tm is now " + version.Version + ". These are your current rules and state, in its place:\n\n"
 }
 
+// paneScheme is the scheme whose pane palette a console last drew the
+// panes with (emu.PaneDark, emu.PaneLight), "" for none or in safe mode:
+// a theme mod's palette doesn't reach a new agent then; s.mu held.
+func (s *Server) paneScheme() string {
+	switch {
+	case s.noMods:
+		return ""
+	case s.colors.Known&emu.PaneDark != 0:
+		return "dark"
+	case s.colors.Known&emu.PaneLight != 0:
+		return "light"
+	}
+	return ""
+}
+
+// launchTheme is [ui] theme's colours for the scheme a console draws the
+// panes' palette in (paneScheme), for an agent to follow; nil for none
+// (no palette, safe mode, the built-in theme) or a theme that doesn't
+// load, which leaves the agent's ANSI theme (§8.6).
+func (s *Server) launchTheme(scheme string) *theme.Agent {
+	if scheme == "" || s.noMods {
+		return nil
+	}
+	cfg, _ := config.Load()
+	if cfg == nil || cfg.Theme == "" || cfg.Theme == mod.BundledTheme || cfg.Theme == "default" {
+		return nil
+	}
+	reg := s.modRegistry()
+	if reg == nil {
+		return nil
+	}
+	tt, err := theme.Load(reg, cfg.Theme)
+	if err != nil {
+		s.log.Printf("theme for agents: %v", err)
+		return nil
+	}
+	return theme.AgentColors(tt, scheme == "dark")
+}
+
 // agentLaunch is everything needed to (re)start one agent session.
 type agentLaunch struct {
 	rec    SessionRecord
@@ -380,11 +422,12 @@ func (s *Server) launchAgent(l agentLaunch) (*session.Session, *proto.Error) {
 		Cwd: r.Cwd, RepoRoot: repo.RepoRoot, GitDir: repo.GitDir, RuntimeDir: rt, BriefPath: r.Brief, Kickoff: l.kick, Resume: l.resume,
 		Yolo: r.Yolo, NoSandboxEscapes: r.NoSandboxEscapes, Model: r.Model, TMBin: s.opts.Bin, Socket: s.opts.Paths.Socket, Access: access,
 		RemoteControl: r.RemoteControl, RemoteName: remoteName(r),
-		Mods: modSock != "",
+		Mods: modSock != "", PaneScheme: s.paneScheme(),
 	}
 	if spec.Model == "" {
 		spec.Model = launchModel(a, r.Project, r.Role == proto.RoleCoordinator)
 	}
+	spec.Theme = s.launchTheme(spec.PaneScheme)
 	launch, err := a.Launch(spec)
 	if err != nil {
 		s.closeModLocked(r.ID)
