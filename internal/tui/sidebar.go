@@ -99,7 +99,7 @@ type treeRow struct {
 	// prFails: a project whose PR host fails, the PR polls in a row that
 	// failed (ProjectData.PRHostFails); its name gets a red ▲.
 	prFails int
-	pinned  bool   // a project: pinned to the top of the active ones
+	pinned  bool // a project: pinned to the top of the active ones
 	// inactive: a project the user deactivated, shown collapsed: its row
 	// alone, no coordinator or thread rows (§5.1), unless the user
 	// expanded it; then its coordinator and threads are dormant rows.
