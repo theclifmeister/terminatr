@@ -143,7 +143,7 @@ func TestPanePalette(t *testing.T) {
 			t.Errorf("nord dark=%v pane palette without truecolor", dark)
 		}
 	}
-	if d, _ := themeFor(tt, true, true); *d.Pane.Bg != (emu.RGB{R: 0x2e, G: 0x34, B: 0x40}) || *d.Pane.ANSI[1] != (emu.RGB{R: 0xbf, G: 0x61, B: 0x6a}) {
+	if d, _ := themeFor(tt, true, true); *d.Pane.Bg != (emu.RGB{R: 0x24, G: 0x29, B: 0x33}) || *d.Pane.ANSI[1] != (emu.RGB{R: 0xbf, G: 0x61, B: 0x6a}) {
 		t.Errorf("nord dark pane: bg %v red %v", *d.Pane.Bg, *d.Pane.ANSI[1])
 	}
 	for _, dark := range []bool{true, false} {
