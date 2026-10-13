@@ -568,6 +568,9 @@ func sideTip(all []treeRow, w, h, foot, x, y int) string {
 	cols := rowCols(r, end, lead, label)
 	grid := treeGrid(r, cols)
 	line := ansi.Strip(treeCells(r, end, false, false))
+	if at, aw := prMarkAt(r, lead, label, grid, end); aw > 0 && x >= at && x < at+aw {
+		return "PR host failing: " + prHostWords(r.prFails)
+	}
 	for j := len(grid) - 1; j >= 0; j-- {
 		gw := ansi.StringWidth(grid[j].s)
 		end -= gw
@@ -581,6 +584,25 @@ func sideTip(all []treeRow, w, h, foot, x, y int) string {
 		return gridTip(r, cols[j])
 	}
 	return ""
+}
+
+// prMarkAt is where the red ▲ after project row r's name is, as
+// treeCells lays the row out end cells wide with lead, label and grid:
+// its column and width; width 0 when it has none.
+func prMarkAt(r treeRow, lead, label, grid []cellRun, end int) (at, w int) {
+	if r.kind != treeProject || r.prFails == 0 {
+		return 0, 0
+	}
+	room := max(end-runsWidth(grid), 0)
+	lead = cutRuns(lead, room)
+	label = cutRuns(label, room-runsWidth(lead))
+	lw := max(room-runsWidth(lead)-runsWidth(label)-1, 0)
+	name := projectName(r, lw, th().Plain)
+	if len(name) < 2 {
+		return 0, 0
+	}
+	// The mark is a blank, then the glyph.
+	return runsWidth(lead) + runsWidth(label) + runsWidth(name[:1]) + 1, ansi.StringWidth(ic().blocked)
 }
 
 // gridTip is the meaning of r's cell in column c (treeGrid).

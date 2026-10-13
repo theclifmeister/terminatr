@@ -350,14 +350,11 @@ func contextOf(slug string, sessions []proto.SessionInfo) *proto.WatchContext {
 	return nil
 }
 
-// noPRHost is whether p has repos and none has a PR host to poll: the
-// ticker has nothing to ask, so the pane says so instead of "ok" or
-// "failing".
 // watchTicker is project p's ticker as its dashboard shows it, from the
 // ticker's timing: its times, its poll interval, whether its PR host
 // fails or it has none.
 func watchTicker(p *project.Project, timing ticker.Timing) proto.WatchTicker {
-	noHost := noPRHost(p)
+	noHost := NoPRHost(p)
 	secs := config.DefaultPRPollSeconds
 	if cfg, err := config.Load(); err == nil {
 		if s, err := cfg.Safety(p.Slug); err == nil && s.PRPollSeconds > 0 {
@@ -367,7 +364,11 @@ func watchTicker(p *project.Project, timing ticker.Timing) proto.WatchTicker {
 	return proto.WatchTicker{PRChecked: timing.PRPolled, Synced: timing.Synced, PRPollSeconds: secs, GHFailing: timing.GHFailing && !noHost, NoPRHost: noHost}
 }
 
-func noPRHost(p *project.Project) bool {
+// NoPRHost is whether p has repos and none has a PR host to poll (no
+// origin, or one that is neither GitHub nor Azure DevOps): the ticker
+// has nothing to ask, so the pane says so instead of "ok" or "failing",
+// and nothing warns of a failing PR host.
+func NoPRHost(p *project.Project) bool {
 	if len(p.Repos) == 0 {
 		return false
 	}

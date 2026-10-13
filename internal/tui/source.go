@@ -132,7 +132,11 @@ type ProjectData struct {
 	// Badges are the mods' annotations in the project, by target
 	// (modannot.Task, modannot.Thread), of the mods that run for it.
 	Badges map[string][]modannot.Badge
-	Err    string
+	// PRHostFails counts the PR polls in a row on which the project's PR
+	// host failed, as the ticker last saw them; 0 while they work, or
+	// when it has no PR host. The sidebar marks its name red (▲).
+	PRHostFails int
+	Err         string
 }
 
 // ThreadRow is one thread: its record (thread.toml) and its STATUS.md,
@@ -404,6 +408,7 @@ func (s *ServerSource) Load() Data {
 		d.Err = err.Error()
 	}
 	badgers := badgeMods(d.Mods)
+	fails := ticker.HostFails(ticker.StatePath(s.Paths.Sessions))
 	for _, sum := range list {
 		if sum.Safety != nil && sum.Safety.Archived {
 			continue // hidden: tm project unarchive brings it back
@@ -444,10 +449,21 @@ func (s *ServerSource) Load() Data {
 			qs, _ := p.Questions()
 			pd.Questions = len(qs)
 			pd.Badges = badgesOf(badgers, sum.Slug)
+			pd.PRHostFails = hostFails(fails, p)
 		}
 		d.Projects = append(d.Projects, pd)
 	}
 	return d
+}
+
+// hostFails is project p's PRHostFails, of the ticker's fails by slug
+// (ticker.HostFails): none without a PR host, as the coordinator's
+// panel has it (server.NoPRHost).
+func hostFails(fails map[string]int, p *project.Project) int {
+	if n := fails[p.Slug]; n > 0 && !server.NoPRHost(p) {
+		return n
+	}
+	return 0
 }
 
 // badgeMods are the mods whose annotations show: enabled, with the

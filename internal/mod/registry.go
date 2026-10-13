@@ -195,23 +195,7 @@ func load(id, dir string, t config.Mod) Mod {
 			m.WantsMore = append(m.WantsMore, p)
 		}
 	}
-	m.Settings = map[string]any{}
-	for _, k := range sortedKeys(man.Settings) {
-		m.Settings[k], _ = man.Settings[k].Check(man.Settings[k].Default)
-	}
-	for _, k := range sortedKeys(t.Settings) {
-		s, ok := man.Settings[k]
-		if !ok {
-			m.BadSettings = append(m.BadSettings, fmt.Sprintf("%s: %s has no such setting", k, id))
-			continue
-		}
-		v, err := s.Check(t.Settings[k])
-		if err != nil {
-			m.BadSettings = append(m.BadSettings, fmt.Sprintf("%s %v; the default is used", k, err))
-			continue
-		}
-		m.Settings[k] = v
-	}
+	m.Settings, m.BadSettings = settingsOf(id, man, t.Settings)
 	if err := CheckAPI(man); err != nil {
 		m.Err, m.State = err, Incompatible
 		return m
@@ -221,4 +205,28 @@ func load(id, dir string, t config.Mod) Mod {
 		m.State = Enabled
 	}
 	return m
+}
+
+// settingsOf are mod id's settings: each of man's defaults, overlaid
+// with set (its [mods.<id>.settings]) where that is valid; bad say which
+// of set aren't.
+func settingsOf(id string, man *Manifest, set map[string]any) (settings map[string]any, bad []string) {
+	settings = map[string]any{}
+	for _, k := range sortedKeys(man.Settings) {
+		settings[k], _ = man.Settings[k].Check(man.Settings[k].Default)
+	}
+	for _, k := range sortedKeys(set) {
+		s, ok := man.Settings[k]
+		if !ok {
+			bad = append(bad, fmt.Sprintf("%s: %s has no such setting", k, id))
+			continue
+		}
+		v, err := s.Check(set[k])
+		if err != nil {
+			bad = append(bad, fmt.Sprintf("%s %v; the default is used", k, err))
+			continue
+		}
+		settings[k] = v
+	}
+	return settings, bad
 }

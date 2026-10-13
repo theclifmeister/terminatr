@@ -1024,3 +1024,24 @@ func TestAutoCloseModHostPushed(t *testing.T) {
 		}
 	}
 }
+
+// TestHostFails: HostFails reads every project's failed PR polls in a
+// row from one state file; a project whose polls work isn't listed, and
+// a missing or bad file lists none.
+func TestHostFails(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ticker.json")
+	os.WriteFile(path, []byte(`{"projects":{"demo":{"gh_fails":3},"fine":{"gh_fails":0},"nil":null}}`), 0o600)
+	if got := HostFails(path); len(got) != 1 || got["demo"] != 3 {
+		t.Fatalf("HostFails %v", got)
+	}
+	if !ReadTiming(path, "demo").GHFailing || ReadTiming(path, "fine").GHFailing {
+		t.Fatal("ReadTiming disagrees")
+	}
+	os.WriteFile(path, []byte(`{`), 0o600)
+	for _, p := range []string{path, filepath.Join(dir, "none.json")} {
+		if got := HostFails(p); len(got) != 0 {
+			t.Errorf("%s: %v", p, got)
+		}
+	}
+}

@@ -55,7 +55,7 @@ func TestModHostsFollowConfig(t *testing.T) {
 	s := &Server{opts: Options{Paths: p, Bin: "/nonexistent/tm"}, log: log.New(&testWriter{t: t}, "server: ", 0),
 		sessions: map[string]*session.Session{}, modEv: newModEvents()}
 	specs, ok := s.modSpecs()
-	if !ok || len(specs) != 4 {
+	if !ok || len(specs) != 5 {
 		t.Fatalf("specs %+v %v", specs, ok)
 	}
 	if sp := specs[0]; sp.ID != "code" || sp.Entry != filepath.Join(home, "mods", "code", "main.js") ||
@@ -76,8 +76,13 @@ func TestModHostsFollowConfig(t *testing.T) {
 	if sp := specs[3]; sp.ID != mod.BundledTasks || sp.Entry != "" || len(sp.Bundle) == 0 || sp.Eager || len(sp.Grants) != 2 {
 		t.Fatalf("built-in spec %s %q %d bytes eager %v %v", sp.ID, sp.Entry, len(sp.Bundle), sp.Eager, sp.Grants)
 	}
+	// The built-in ticker at once too (it draws a sidebar section), with
+	// its place setting's default.
+	if sp := specs[4]; sp.ID != mod.BundledTicker || sp.Entry != "" || len(sp.Bundle) == 0 || !sp.Eager || len(sp.Grants) != 2 || sp.Settings["place"] != "right" {
+		t.Fatalf("built-in spec %s %q %d bytes eager %v %v %v", sp.ID, sp.Entry, len(sp.Bundle), sp.Eager, sp.Grants, sp.Settings)
+	}
 	// Off, they are no specs: the rest of the test follows the user's mod.
-	write("config.toml", "[mods.code]\nenabled = true\ngrants = [\"project_read\"]\nprojects = [\"demo\"]\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n[mods.pr-ci-column]\nenabled = false\n")
+	write("config.toml", "[mods.code]\nenabled = true\ngrants = [\"project_read\"]\nprojects = [\"demo\"]\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n[mods.pr-ci-column]\nenabled = false\n[mods.ticker]\nenabled = false\n")
 	if specs, _ := s.modSpecs(); len(specs) != 1 || specs[0].ID != "code" {
 		t.Fatalf("with the built-in off: %+v", specs)
 	}
@@ -121,7 +126,7 @@ func TestModHostsFollowConfig(t *testing.T) {
 	if st := s.modHosts(); st.NoMods || len(st.Hosts) != 1 || st.Hosts[0].ID != "code" {
 		t.Fatalf("mod.hosts %+v", st)
 	}
-	write("config.toml", "[mods.code]\nenabled = false\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n[mods.pr-ci-column]\nenabled = false\n")
+	write("config.toml", "[mods.code]\nenabled = false\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n[mods.pr-ci-column]\nenabled = false\n[mods.ticker]\nenabled = false\n")
 	wait("code stopped", func(st []modsup.Status) bool { return len(st) == 0 })
 }
 
@@ -272,12 +277,12 @@ func TestModHostsSafeMode(t *testing.T) {
 	}
 	s := &Server{opts: Options{Paths: p, Bin: "/nonexistent/tm"}, log: log.New(&testWriter{t: t}, "server: ", 0),
 		sessions: map[string]*session.Session{}, modEv: newModEvents()}
-	if specs, ok := s.modSpecs(); !ok || len(specs) != 4 {
+	if specs, ok := s.modSpecs(); !ok || len(specs) != 5 {
 		t.Fatalf("specs %+v %v", specs, ok)
 	}
 	// Built-in mods are part of tm: safe mode still runs them.
 	s.noMods = true
-	if specs, ok := s.modSpecs(); !ok || len(specs) != 3 || specs[0].ID != mod.BundledMemory || specs[1].ID != mod.BundledPRCI || specs[2].ID != mod.BundledTasks {
+	if specs, ok := s.modSpecs(); !ok || len(specs) != 4 || specs[0].ID != mod.BundledMemory || specs[1].ID != mod.BundledPRCI || specs[2].ID != mod.BundledTasks || specs[3].ID != mod.BundledTicker {
 		t.Fatalf("safe mode runs %+v", specs)
 	}
 	if !s.modHosts().NoMods {
@@ -285,6 +290,54 @@ func TestModHostsSafeMode(t *testing.T) {
 	}
 	if _, perr := s.restartMod("code", human); perr == nil || !strings.Contains(perr.Message, "safe mode") {
 		t.Fatalf("mod.restart in safe mode: %v", perr)
+	}
+}
+
+// TestModSpecsTickerPlace: the built-in ticker's place setting, changed
+// as the Mods tab changes it, is in its spec, so the supervisor starts
+// its host again with it (Supervisor.Set restarts a changed spec), and
+// the new host hears view.opened again (SubscribeMod).
+func TestModSpecsTickerPlace(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("TERMINATR_HOME", home)
+	p, err := ResolvePaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{opts: Options{Paths: p}, log: log.New(&testWriter{t: t}, "server: ", 0)}
+	place := func() any {
+		t.Helper()
+		specs, ok := s.modSpecs()
+		if !ok {
+			t.Fatal("modSpecs not ok")
+		}
+		for _, sp := range specs {
+			if sp.ID == mod.BundledTicker {
+				return sp.Settings["place"]
+			}
+		}
+		t.Fatalf("no ticker spec: %+v", specs)
+		return nil
+	}
+	if got := place(); got != "right" {
+		t.Fatalf("default place %v", got)
+	}
+	for _, want := range []string{"sidebar", "both"} {
+		if err := mod.SetSetting(human, mod.BundledTicker, "place", want); err != nil {
+			t.Fatal(err)
+		}
+		if got := place(); got != want {
+			t.Fatalf("place %v, want %s", got, want)
+		}
+	}
+	if err := mod.SetSetting(human, mod.BundledTicker, "place", "left"); err == nil {
+		t.Fatal("place left taken")
+	}
+	if err := mod.SetSetting(human, mod.BundledTicker, "place", nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := place(); got != "right" {
+		t.Fatalf("place back to %v", got)
 	}
 }
 

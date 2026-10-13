@@ -96,7 +96,10 @@ type treeRow struct {
 	ctx     int    // a coordinator row: its context window's use in percent, -1 for unknown
 	ctxHint bool   // a coordinator row: ctx reached [ui] context_hint
 	paused  bool   // a project: paused (no nudges, follow-up or new threads)
-	pinned  bool   // a project: pinned to the top of the active ones
+	// prFails: a project whose PR host fails, the PR polls in a row that
+	// failed (ProjectData.PRHostFails); its name gets a red ▲.
+	prFails int
+	pinned  bool // a project: pinned to the top of the active ones
 	// inactive: a project the user deactivated, shown collapsed: its row
 	// alone, no coordinator or thread rows (§5.1), unless the user
 	// expanded it; then its coordinator and threads are dormant rows.
@@ -272,7 +275,7 @@ func buildTree(ps []ProjectData, sessions []proto.SessionInfo, in treeIn) []tree
 func projectRows(p ProjectData, sessions []proto.SessionInfo, byID map[string]proto.SessionInfo, in treeIn) []treeRow {
 	pr := treeRow{kind: treeProject, slug: p.Slug, pct: -1, threads: len(p.Threads), current: p.Slug == in.current,
 		hint: p.Counts["needs_you"] > 0 || p.Questions > 0, paused: p.Safety != nil && p.Safety.Paused,
-		pinned: p.pinned(), inactive: p.inactive()}
+		pinned: p.pinned(), inactive: p.inactive(), prFails: p.PRHostFails}
 	if pr.inactive && !in.tree.IsExpanded(p.Slug) {
 		pr.fold = true
 		return []treeRow{pr}
@@ -561,7 +564,7 @@ func treeCells(r treeRow, cw int, slim, focused bool) string {
 		case r.inactive:
 			look = th().Faint
 		}
-		label = append(label, cellRun{fitLabel(r.slug, lw), look})
+		label = append(label, projectName(r, lw, look)...)
 	case treeCoordinator:
 		look := th().Plain
 		if r.state == "" || r.dormant {
@@ -581,6 +584,40 @@ func treeCells(r treeRow, cw int, slim, focused bool) string {
 		return fit(runsRender(lead)+sel.Render(fit(runsPlain(rest), cw-runsWidth(lead))), cw)
 	}
 	return fit(runsRender(lead)+runsRender(rest), cw)
+}
+
+// prMark is the mark after the name of a project whose PR host fails:
+// a blank, then ▲ in the console's icon set (a Nerd Font icon draws over
+// the blank after it, so it gets one).
+func prMark() string {
+	i := ic()
+	if i.wide {
+		return " " + i.blocked + " "
+	}
+	return " " + i.blocked
+}
+
+// projectName is project row r's name in at most lw cells, in look,
+// and while its PR host fails, the red mark (prMark) right after it: the
+// name is cut before the mark, and a row too narrow for both keeps the
+// name alone.
+func projectName(r treeRow, lw int, look lipgloss.Style) []cellRun {
+	mark := prMark()
+	mw := ansi.StringWidth(mark)
+	if r.prFails == 0 || lw < mw+2 {
+		return []cellRun{{fitLabel(r.slug, lw), look}}
+	}
+	name := r.slug
+	if ansi.StringWidth(name) > lw-mw {
+		name = fitLabel(name, lw-mw)
+	}
+	return []cellRun{{name, look}, {mark, th().Bad}}
+}
+
+// prHostWords are the tooltip's and the details line's words for a
+// project whose PR host fails, n polls in a row.
+func prHostWords(n int) string {
+	return fmt.Sprintf("its PR host CLI failed on %s in a row · see the inbox", counted(n, "PR poll"))
 }
 
 // treeLead is the start of a full sidebar's row r, before its name:
@@ -880,6 +917,9 @@ func slimCells(r treeRow, cw int, sel lipgloss.Style) string {
 	}
 	look := th().Head
 	switch {
+	case r.prFails > 0:
+		// Its PR host fails: the full sidebar's red ▲ has no room here.
+		look = th().Bad
 	case r.current:
 		look = th().Title
 	case r.inactive:
@@ -1109,6 +1149,7 @@ func OpenTarget(p server.Paths, vc *ViewConn, t Target) error {
 func loadSideProjects(paths server.Paths) []ProjectData {
 	list, _ := project.List()
 	out := make([]ProjectData, 0, len(list))
+	fails := ticker.HostFails(ticker.StatePath(paths.Sessions))
 	for _, sum := range list {
 		if sum.Safety != nil && sum.Safety.Archived {
 			continue
@@ -1135,6 +1176,7 @@ func loadSideProjects(paths server.Paths) []ProjectData {
 				tr.Status, _ = thread.ReadStatus(p, r.ID)
 				pd.Threads = append(pd.Threads, tr)
 			}
+			pd.PRHostFails = hostFails(fails, p)
 		}
 		out = append(out, pd)
 	}
@@ -2169,6 +2211,9 @@ func (r treeRow) details() (string, string) {
 		}
 		if r.inactive {
 			return strings.Join(bits, " · "), "previewing it starts nothing"
+		}
+		if r.prFails > 0 {
+			return r.slug + ": PR host failing", prHostWords(r.prFails)
 		}
 		return strings.Join(bits, " · "), fmt.Sprintf("%s · coordinator %s", counted(r.threads, "thread"), running(r.state))
 	case treeCoordinator:

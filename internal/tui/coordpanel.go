@@ -114,6 +114,12 @@ func coordPanel(pw *proto.ProjectWatch, w int, now time.Time) (*panel, []infoHit
 
 	line(th().Title.Render(oneLine(pw.Project)), infoHit{})
 	line(th().Faint.Render(coordSummary(pw)), infoHit{})
+	// Core's warning, whatever the ticker mod does (on, off, failed or
+	// in the sidebar): PR polls fail, and the inbox says why. The ticker
+	// mod's section draws the ticker's times.
+	if prHostFailing(pw.Ticker) {
+		line(th().Bad.Render(strings.TrimSpace(ic().blocked+" PR host failing"))+th().Faint.Render(" · inbox"), infoHit{})
+	}
 	if c := pw.Context; c != nil {
 		text, look, hint := contextWords(c)
 		line(look.Render(text), infoHit{})
@@ -284,28 +290,16 @@ func coordPanel(pw *proto.ProjectWatch, w int, now time.Time) (*panel, []infoHit
 		item(th().Head.Render(t.Task)+" "+text, taskHit(t.Task))
 	}
 
-	// The ticker's timers, a row each, labels in a column
-	// (docs/STYLE.md S4); the PR host red on its own row while it fails.
-	if tk := pw.Ticker; tk != nil {
-		if rows := tk.Rows(now); len(rows) > 0 {
-			heading("TICKER")
-			lw := 0
-			for _, r := range rows {
-				lw = max(lw, ansi.StringWidth(r.Label))
-			}
-			for _, r := range rows {
-				look := th().Faint
-				if r.Bad {
-					look = th().Bad
-				}
-				line(th().Faint.Render(r.Label+strings.Repeat(" ", lw-ansi.StringWidth(r.Label)+2))+look.Render(r.Value), infoHit{})
-			}
-		}
-	}
 	for len(hits) < len(pl.lines) {
 		hits = append(hits, infoHit{})
 	}
 	return pl, hits
+}
+
+// prHostFailing says a project's PR polls fail: its ticker says so and
+// it has a PR host (watchTicker's rule).
+func prHostFailing(tk *proto.WatchTicker) bool {
+	return tk != nil && tk.GHFailing && !tk.NoPRHost
 }
 
 // coordSummary is the panel's second line: "3 need you · 1 in inbox · 5

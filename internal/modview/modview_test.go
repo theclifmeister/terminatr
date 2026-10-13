@@ -1,6 +1,8 @@
 package modview
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -78,6 +80,51 @@ func TestSectionTrees(t *testing.T) {
 	opened, closed := s.Show(1, []Shown{{Mod: "m", View: "s", Slot: "details.section", Project: "alpha", Task: "T2"}})
 	if len(opened) != 1 || len(closed) != 1 || closed[0].Task != "T1" || opened[0].Task != "T2" {
 		t.Fatalf("opened %+v closed %+v", opened, closed)
+	}
+}
+
+// TestSectionNullKept: a section's null tree is kept, as one that says
+// nothing (the console draws no section, rather than waiting), while a
+// card's clears; a null makes room for a tree when the view is full.
+func TestSectionNullKept(t *testing.T) {
+	s := New()
+	s.Set("m", "band", mod.SlotSidebarSection, Tree{}, 4)
+	s.Set("m", "band", mod.SlotSidebarSection, Tree{Project: "alpha", Tree: text("a")}, 10)
+	s.Set("m", "band", mod.SlotSidebarSection, Tree{Project: "alpha"}, 4)
+	got := s.Trees("m", "band")
+	if len(got) != 2 || got[0].Tree != nil || got[0].Project != "" || got[1].Tree != nil || got[1].Project != "alpha" {
+		t.Fatalf("section trees %+v", got)
+	}
+	s.Set("m", "card", mod.SlotDashboardCard, Tree{Tree: text("all")}, 10)
+	s.Set("m", "card", mod.SlotDashboardCard, Tree{}, 4)
+	if got := s.Trees("m", "card"); len(got) != 0 {
+		t.Fatalf("card trees %+v", got)
+	}
+	// Full: the oldest null goes first, for a tree or another null.
+	for i := 2; i < MaxTrees; i++ {
+		s.Set("m", "band", mod.SlotSidebarSection, Tree{Project: fmt.Sprintf("p%d", i), Tree: text("x")}, 1)
+	}
+	if err := s.Set("m", "band", mod.SlotSidebarSection, Tree{Project: "new", Tree: text("n")}, 1); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Trees("m", "band"); len(got) != MaxTrees || got[0].Project != "alpha" || got[len(got)-1].Project != "new" {
+		t.Fatalf("full: %d trees, first %+v", len(got), got[0])
+	}
+	if err := s.Set("m", "band", mod.SlotSidebarSection, Tree{Project: "x"}, 4); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Trees("m", "band"); len(got) != MaxTrees || got[len(got)-1].Project != "x" {
+		t.Fatalf("a null for a full view: %d, last %+v", len(got), got[len(got)-1])
+	}
+	if err := s.Set("m", "band", mod.SlotSidebarSection, Tree{Project: "y", Tree: text("y")}, 1); err != nil {
+		t.Fatalf("the null didn't make room: %v", err)
+	}
+	if err := s.Set("m", "band", mod.SlotSidebarSection, Tree{Project: "z", Tree: text("z")}, 1); err == nil {
+		t.Fatal("a view full of trees took another")
+	}
+	s.Set("m", "band", mod.SlotSidebarSection, Tree{Project: "z"}, 4)
+	if got := s.Trees("m", "band"); len(got) != MaxTrees || slices.ContainsFunc(got, func(o Tree) bool { return o.Project == "z" }) {
+		t.Fatal("a null went into a view full of trees")
 	}
 }
 

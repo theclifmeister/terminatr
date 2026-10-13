@@ -57,6 +57,27 @@ type Timing struct {
 	ThreadPolled map[string]time.Time
 }
 
+// HostFails reads, from the ticker's state file at path, the projects
+// whose PR polls fail: how many failed in a row, by slug (Timing's
+// GHFailing for each). One read for all projects, as the sidebars poll.
+func HostFails(path string) map[string]int {
+	out := map[string]int{}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return out
+	}
+	var st state
+	if json.Unmarshal(b, &st) != nil {
+		return out
+	}
+	for slug, pm := range st.Projects {
+		if pm != nil && pm.GHFails > 0 {
+			out[slug] = pm.GHFails
+		}
+	}
+	return out
+}
+
 // ReadTiming reads project slug's Timing from the ticker's state file at path;
 // zero when there is none.
 func ReadTiming(path, slug string) Timing {

@@ -234,6 +234,96 @@ coordinator: safe mode: the built-in ticker alone (26 rows)
 │   synced   1m ago
 │   PR host  ok
 
+coordinator, PR host failing: the ticker unfolded (26 rows)
+│ terminatr
+│ 1 needs you · 2 threads
+│ ▲ PR host failing · inbox
+│
+│ NEEDS YOU ────────────────────────────
+│ T351 ▲ asks you Check the release
+│   notes
+│   “Which tag do we ship?”
+│
+│ THREADS ──────────────────────────────
+│ t-0323 T348 ● working 3/5
+│   ▸ Right-pane section design
+│ t-0004 T351 ▲ asks you 1/2
+│   Check the release notes
+│
+│ ON DECK ──────────────────────────────
+│ T349 ○ ready Layout v2 docs
+│
+│ ▾ TICKER ─────────────────── PR host ▲
+│   PRs      6m ago · due
+│   synced   1m ago
+│   PR host  failing
+
+coordinator, PR host failing: the ticker folded (26 rows)
+│ terminatr
+│ 1 needs you · 2 threads
+│ ▲ PR host failing · inbox
+│
+│ NEEDS YOU ────────────────────────────
+│ T351 ▲ asks you Check the release
+│   notes
+│   “Which tag do we ship?”
+│
+│ THREADS ──────────────────────────────
+│ t-0323 T348 ● working 3/5
+│   ▸ Right-pane section design
+│ t-0004 T351 ▲ asks you 1/2
+│   Check the release notes
+│
+│ ON DECK ──────────────────────────────
+│ T349 ○ ready Layout v2 docs
+│
+│ ▸ TICKER ─────────────────── PR host ▲
+
+coordinator, PR host failing: the ticker mod off (26 rows)
+│ terminatr
+│ 1 needs you · 2 threads
+│ ▲ PR host failing · inbox
+│
+│ NEEDS YOU ────────────────────────────
+│ T351 ▲ asks you Check the release
+│   notes
+│   “Which tag do we ship?”
+│
+│ THREADS ──────────────────────────────
+│ t-0323 T348 ● working 3/5
+│   ▸ Right-pane section design
+│ t-0004 T351 ▲ asks you 1/2
+│   Check the release notes
+│
+│ ON DECK ──────────────────────────────
+│ T349 ○ ready Layout v2 docs
+
+coordinator, PR host failing: the ticker mod failed (26 rows)
+│ terminatr
+│ 1 needs you · 2 threads
+│ ▲ PR host failing · inbox
+│
+│ NEEDS YOU ────────────────────────────
+│ T351 ▲ asks you Check the release
+│   notes
+│   “Which tag do we ship?”
+│
+│ THREADS ──────────────────────────────
+│ t-0323 T348 ● working 3/5
+│   ▸ Right-pane section design
+│ t-0004 T351 ▲ asks you 1/2
+│   Check the release notes
+│
+│ ON DECK ──────────────────────────────
+│ T349 ○ ready Layout v2 docs
+│
+│ ▾ TICKER ────────────────────────────
+│   ▲ mod failed: exit 1
+│   Its log:
+│   ~/.terminatr/log/mods/ticker.log
+│   Restart it in the Mods tab of the
+│   settings (,): r.
+
 a thread's info panel, at the bottom (28 rows)
 │ T26 Info panel on thread panes
 │ ● started · click to open

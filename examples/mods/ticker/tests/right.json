@@ -1,0 +1,29 @@
+{
+  "name": "place right (the default): the coordinator's section shows, the sidebar's band gets null, for all projects from the start",
+  "answers": [
+    { "method": "project.get", "params": { "slug": "demo" },
+      "result": { "project": "demo", "threads": [], "ticker": {
+        "pr_checked": "2026-10-13T12:00:00Z", "synced": "2026-10-13T11:59:00Z", "pr_poll_seconds": 120 } } }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "ticker", "slot": "coordinator.section", "project": "demo", "width": 38, "height": 4 } },
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "band", "slot": "sidebar.section", "project": "demo", "width": 30, "height": 4 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set", "params": { "view": "band", "widget": null } },
+      { "method": "project.get", "params": { "slug": "demo" } },
+      { "method": "ui.view.set",
+        "params": { "view": "ticker", "options": { "project": "demo", "height": 3 },
+          "widget": { "kind": "kv", "pairs": [
+            { "key": "PRs", "value": [{ "ago": "2026-10-13T12:00:00Z", "role": "faint" }, { "text": " · next ", "role": "faint" }, { "until": "2026-10-13T12:02:00.000Z", "role": "faint" }] },
+            { "key": "synced", "value": [{ "ago": "2026-10-13T11:59:00Z", "role": "faint" }] },
+            { "key": "PR host", "value": [{ "text": "ok", "role": "faint" }] }
+          ] } } },
+      { "method": "project.get", "params": { "slug": "demo" } },
+      { "method": "ui.view.set", "params": { "view": "band", "options": { "project": "demo" }, "widget": null } }
+    ]
+  }
+}
