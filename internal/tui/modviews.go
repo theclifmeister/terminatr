@@ -526,21 +526,22 @@ func (m *dash) setModViews(msg modViewsMsg) tea.Cmd {
 	}
 	m.mv.band.forget(listed)
 	m.rebuild()
+	var cmds []tea.Cmd
 	for _, o := range msg.res.Open {
 		if o.Seq <= m.mv.seen {
 			continue
 		}
 		m.mv.seen = o.Seq
-		m.openModView(o)
+		cmds = append(cmds, m.openModView(o))
 		m.awaitView = time.Time{}
 	}
-	return m.tellCursors()
+	return tea.Batch(append(cmds, m.tellCursors())...)
 }
 
 // openModView shows the view a mod asked to open: its tab in the
 // project popup of the input's project, its card, unfolded and
 // selected, or its full view over what shows.
-func (m *dash) openModView(o modview.Open) {
+func (m *dash) openModView(o modview.Open) tea.Cmd {
 	for _, v := range m.mv.list {
 		if v.Mod != o.Mod || v.View != o.View {
 			continue
@@ -549,7 +550,7 @@ func (m *dash) openModView(o modview.Open) {
 		case mod.SlotProjectTab:
 			slug := cmp.Or(o.Project, m.projectHere())
 			if slug == "" || !runsFor(v, slug) {
-				return
+				return nil
 			}
 			pv := m.projectPopupView()
 			if pv == nil || pv.slug != slug {
@@ -566,17 +567,25 @@ func (m *dash) openModView(o modview.Open) {
 			}
 		case mod.SlotDashboardCard:
 			if !m.layout.shows("cards") {
-				return // hidden: no row to select
+				return nil // hidden: no row to select
 			}
 			delete(m.mv.folded, cardKey(v))
+			// The card draws for the dashboard's project: the click's.
+			var cmd tea.Cmd
+			if o.Project != "" && o.Project != listProject(m.data, m.current) && runsFor(v, o.Project) &&
+				slices.ContainsFunc(m.data.Projects, func(p ProjectData) bool { return p.Slug == o.Project }) {
+				cmd = m.showProject(o.Project)
+			}
 			if m.top() == nil {
 				m.sel, m.userSel = cardKey(v), true
 			}
+			return cmd
 		case mod.SlotFull:
 			m.openFull(v, cmp.Or(o.Project, listProject(m.data, m.current)))
 		}
-		return
+		return nil
 	}
+	return nil
 }
 
 // The project popup's mod tabs come after its core tabs: tab tabCount
