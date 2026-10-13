@@ -975,3 +975,79 @@ func TestThreadSandboxCheck(t *testing.T) {
 		t.Errorf("%+v", c)
 	}
 }
+
+// TestRuntimeDirsScoped: from a session's connection session.list shows
+// only the sessions the caller sees, so doctor must not take the other
+// projects' sessions' runtime dirs for leftovers, nor remove them on
+// --fix. The fake server answers like one seen from a coordinator: three
+// sessions, one listed.
+func TestRuntimeDirsScoped(t *testing.T) {
+	for _, flagged := range []bool{true, false} { // a server that says so, an older one that doesn't
+		d := testDeps(t)
+		lk, err := flock.TryLock(d.Paths.Lock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ln, err := net.Listen("unix", d.Paths.Socket)
+		if err != nil {
+			t.Fatal(err)
+		}
+		go fakeServer(ln, map[string]any{
+			proto.MethodServerStatus: proto.ServerStatus{PID: 1, Protocol: proto.Protocol, Build: "b0", Sessions: 3},
+			proto.MethodSessionList:  proto.SessionListResult{Sessions: []proto.SessionInfo{{ID: "s-2"}}, Scoped: flagged},
+			proto.MethodModHosts:     proto.ModHostsResult{NoMods: true},
+		})
+		for _, id := range []string{"s-1", "s-2", "s-3"} {
+			os.MkdirAll(filepath.Join(d.Paths.RunDir, "s", id), 0o700)
+		}
+		cs, live := Server(d)
+		if c := find(cs, "runtime dir"); len(c) != 0 {
+			t.Errorf("scoped=%v: flagged a live session's dir: %+v", flagged, c)
+		}
+		if c := find(cs, "runtime dirs"); len(c) != 1 || !strings.HasPrefix(c[0].Detail, "not checked") {
+			t.Errorf("scoped=%v: no note: %+v", flagged, cs)
+		}
+		if live.Sessions != nil {
+			t.Errorf("scoped=%v: sessions known: %v", flagged, live.Sessions)
+		}
+		if l := sessionsNow(d.Paths); l != nil {
+			t.Errorf("scoped=%v: sessionsNow: %v", flagged, l)
+		}
+		ln.Close()
+		lk.Unlock()
+	}
+}
+
+// fakeServer answers each connection's hello and then each request by
+// its method's entry in answers; an error for any other.
+func fakeServer(ln net.Listener, answers map[string]any) {
+	for {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		go func() {
+			defer c.Close()
+			br := bufio.NewReader(c)
+			br.ReadBytes('\n')
+			b, _ := json.Marshal(proto.Hello{Protocol: proto.Protocol, Version: "v0", Build: "b0"})
+			c.Write(append(b, '\n'))
+			for {
+				line, err := br.ReadBytes('\n')
+				if err != nil {
+					return
+				}
+				var req proto.Request
+				json.Unmarshal(line, &req)
+				res := proto.Response{ID: req.ID}
+				if a, ok := answers[req.Method]; ok {
+					res.Result, _ = json.Marshal(a)
+				} else {
+					res.Error = proto.Errorf(proto.ErrUnknownMethod, "%s", req.Method)
+				}
+				b, _ := json.Marshal(res)
+				c.Write(append(b, '\n'))
+			}
+		}()
+	}
+}
