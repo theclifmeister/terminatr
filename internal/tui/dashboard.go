@@ -901,7 +901,7 @@ func (m *dash) tree() []treeRow {
 		tree: sideTree(m.data.Projects, m.folds), cols: m.sideCols, cells: m.data.Cells})
 	rows = sideRows(rows, m.data.NeedsFirst)
 	if bandFits(m.sideW(), m.h, m.sideFoot()) {
-		rows = withBand(rows, bandRows(m.band()))
+		rows = withSections(rows, m.band())
 	}
 	if m.focus == areaSide {
 		markCursor(rows, m.sideW(), m.sideSel)
@@ -912,7 +912,8 @@ func (m *dash) tree() []treeRow {
 // band is what the sidebar's band of mod sections is built from.
 func (m *dash) band() bandIn {
 	return bandIn{list: m.mv.list, project: listProject(m.data, m.current), folds: m.folds, w: m.sideW(),
-		mods: m.data.Mods, noMods: m.data.NoMods, cache: &m.mv.band, order: m.layout.sideSections}
+		mods: m.data.Mods, noMods: m.data.NoMods, cache: &m.mv.band, order: m.layout.sideSections,
+		projOrder: m.layout.projSections}
 }
 
 // sideFoot is the rows the sidebar's footer takes (sideFootRows).
@@ -925,8 +926,8 @@ func (m *dash) sideFoot() int {
 // ui.click that opens its view.
 func (m *dash) sectionCmd(st sideStep) tea.Cmd {
 	var cmds []tea.Cmd
-	if len(st.sections) > 0 {
-		cmds = append(cmds, m.foldSections(st.sections, st.foldOn))
+	if ids := st.sectionIDs(m.folds); len(ids) > 0 {
+		cmds = append(cmds, m.foldSections(ids, st.foldOn))
 	}
 	if s := st.open; s != nil {
 		src, p := m.src, sectionClick(s)

@@ -1158,8 +1158,9 @@ type sidebar struct {
 	// footer keeps its key bar alone.
 	compact bool
 	// order is the console's layout's sidebar.sections: the band's
-	// order, those before "tree" above the tree.
-	order []string
+	// order, those before "tree" above the tree; projOrder its
+	// sidebar.project_sections.
+	order, projOrder []string
 	// sections are the sidebar sections session.list names
 	// (mods.sections), band the band's lines (sidesections.go).
 	sections []proto.ModSection
@@ -1185,7 +1186,7 @@ func (c *client) sideTree() []treeRow {
 		tree: sideTree(c.side.projects, c.v.Tree), cols: c.v.Columns, cells: c.cells})
 	rows = sideRows(rows, c.side.needsFirst)
 	if c.bandShows() {
-		rows = withBand(rows, bandRows(c.band()))
+		rows = withSections(rows, c.band())
 	}
 	if c.kb == areaSide {
 		markCursor(rows, c.sideW, c.v.SideSel)
@@ -1231,7 +1232,8 @@ func (c *client) band() bandIn {
 			list = append(list, proto.ModView{Mod: s.Mod, View: s.View, Title: s.Title, Slot: s.Slot})
 		}
 	}
-	return bandIn{list: list, project: c.sideCurrent(), folds: c.v.Tree, w: c.sideW, mods: mods, cache: &c.side.band, order: c.side.order}
+	return bandIn{list: list, project: c.sideCurrent(), folds: c.v.Tree, w: c.sideW, mods: mods, cache: &c.side.band, order: c.side.order,
+		projOrder: c.side.projOrder}
 }
 
 // sideFullTree is the attach view's whole tree, nothing folded and no
@@ -1623,8 +1625,13 @@ func (c *client) sideFoot() int {
 // ui.click that opens its view, which then shows over the session as a
 // command's does (cmdWait, takeOpen).
 func (c *client) sectionDo(st sideStep) {
-	if len(st.sections) > 0 {
-		c.foldSections(st.sections, st.foldOn)
+	ids := st.sections
+	if st.everySection && c.lock() {
+		ids = st.sectionIDs(c.v.Tree)
+		c.mu.Unlock()
+	}
+	if len(ids) > 0 {
+		c.foldSections(ids, st.foldOn)
 	}
 	if s := st.open; s != nil {
 		p := sectionClick(s)
@@ -1922,6 +1929,9 @@ type sideStep struct {
 	sections []string
 	foldOn   bool
 	open     *sideSection
+	// everySection: unfold every section the view folds too (Z), those
+	// of the projects it folded among them, which have no rows.
+	everySection bool
 }
 
 // foldStep is what → (sideIn), ← (sideOut) and enter (sideEnter) do to
@@ -1993,6 +2003,13 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 		return sideStep{msg: "no projects"}
 	}
 	r := rows[i]
+	if r.kind == treeSection && r.sec.proj && r.sec.folded && op == sideOut {
+		// ← on a project's folded section: up to its project, as on a
+		// thread.
+		if j := slices.IndexFunc(rows, func(x treeRow) bool { return x.kind == treeProject && x.slug == r.slug }); j >= 0 {
+			return sideStep{sel: rows[j].key()}
+		}
+	}
 	if r.kind == treeSection {
 		if st, ok := sectionStep(r, op); ok {
 			return st
@@ -2039,11 +2056,15 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 		return sideStep{pin: r.slug, pinOn: !r.pinned}
 	case sideFoldAll, sideUnfoldAll:
 		// The sections too: view.tree, then view.sections.
-		st := sideStep{refold: foldAll(all, op == sideFoldAll), sections: sectionIDs(all), foldOn: op == sideFoldAll}
+		st := sideStep{refold: foldAll(all, op == sideFoldAll), sections: sectionIDs(all), foldOn: op == sideFoldAll,
+			everySection: op == sideUnfoldAll}
 		// The cursor moves onto what still shows: its project's row, or
 		// the divider.
 		switch {
-		case op == sideUnfoldAll, r.kind == treeSection:
+		case op == sideUnfoldAll:
+		case r.kind == treeSection && r.sec.proj:
+			st.sel = "p:" + r.slug
+		case r.kind == treeSection:
 		case r.inactive || r.dormant:
 			st.sel = dividerKey
 		case r.kind != treeProject && r.kind != treeDivider:
