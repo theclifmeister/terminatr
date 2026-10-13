@@ -76,10 +76,24 @@ type ModToast struct {
 // code mods' columns, in mod order, then the cells of projects, tasks
 // and threads (a session's are on its SessionInfo) and the status
 // segments, of the mods whose hosts haven't failed, and the toasts of
-// the last few seconds.
+// the last few seconds. Sections are the sidebar sections the consoles
+// show (mod API 1.7), so an attached console knows whether to ask
+// mod.views for them.
 type ModCells struct {
-	Columns []ModColumn `json:"columns,omitempty"`
-	Cells   []ModCell   `json:"cells,omitempty"`
-	Status  []ModStatus `json:"status,omitempty"`
-	Toasts  []ModToast  `json:"toasts,omitempty"`
+	Columns  []ModColumn  `json:"columns,omitempty"`
+	Cells    []ModCell    `json:"cells,omitempty"`
+	Status   []ModStatus  `json:"status,omitempty"`
+	Toasts   []ModToast   `json:"toasts,omitempty"`
+	Sections []ModSection `json:"sections,omitempty"`
+}
+
+// ModSection is a mod's sidebar section as its manifest declares it:
+// Slot is sidebar.section or sidebar.project.section. In safe mode only
+// the built-in mods' are listed.
+type ModSection struct {
+	Mod     string `json:"mod"`
+	View    string `json:"view"`
+	Title   string `json:"title"`
+	Slot    string `json:"slot"`
+	Builtin bool   `json:"builtin,omitempty"`
 }

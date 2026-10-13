@@ -96,8 +96,8 @@ func (s *Server) cellShows() func(id string) bool {
 }
 
 // modCellsView is session.list's Mods: the shown mods' columns, the cells
-// of projects, tasks and threads, and the status segments; nil when there
-// is none of them.
+// of projects, tasks and threads, the status segments and the sidebar
+// sections; nil when there is none of them.
 func (s *Server) modCellsView() *proto.ModCells {
 	show := s.cellShows()
 	out := &proto.ModCells{
@@ -126,8 +126,26 @@ func (s *Server) modCellsView() *proto.ModCells {
 			out.Toasts[i].Name = (*shown)[out.Toasts[i].Mod].name
 		}
 	}
-	if len(out.Columns) == 0 && len(out.Cells) == 0 && len(out.Status) == 0 && len(out.Toasts) == 0 {
+	out.Sections = s.sidebarSections()
+	if len(out.Columns) == 0 && len(out.Cells) == 0 && len(out.Status) == 0 && len(out.Toasts) == 0 && len(out.Sections) == 0 {
 		return nil
+	}
+	return out
+}
+
+// sidebarSections are the views mod.views lists that are sidebar
+// sections, in mod order: in safe mode the built-in mods' alone.
+func (s *Server) sidebarSections() []proto.ModSection {
+	var out []proto.ModSection
+	for _, m := range s.viewMods() {
+		if s.noMods && !m.Builtin {
+			continue
+		}
+		for _, v := range m.Manifest.Provides.Views {
+			if mod.IsSidebar(v.Slot) {
+				out = append(out, proto.ModSection{Mod: m.ID, View: v.ID, Title: mod.Clean(v.Title, false), Slot: v.Slot, Builtin: m.Builtin})
+			}
+		}
 	}
 	return out
 }
