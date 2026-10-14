@@ -39,6 +39,9 @@ GO           ?= go
 ZIG_MIN      := 0.16.0
 # staticcheck, pinned; `make vet` runs it after go vet.
 STATICCHECK  ?= honnef.co/go/tools/cmd/staticcheck@v0.8.1
+# every check but the doc-comment forms (ST1020-22), which ~18 exported names
+# elsewhere in the tree still fail; the TUI passes all of them.
+SC_CHECKS    ?= all,-ST1020,-ST1021,-ST1022
 # staticcheck reads export data of the Go it runs under, and the pinned one
 # lags new Go releases (it fails on a newer local Go). So it runs under the
 # toolchain go.mod names. With GOTOOLCHAIN=local (CI) nothing is overridden:
@@ -174,7 +177,7 @@ test-codex: $(READY)
 
 vet: $(READY)
 	$(GO) vet ./...
-	@$(SC_TOOLCHAIN) $(GO) run $(STATICCHECK) ./... || { s=$$?; \
+	@$(SC_TOOLCHAIN) $(GO) run $(STATICCHECK) -checks $(SC_CHECKS) ./... || { s=$$?; \
 		echo "staticcheck failed. It runs under $(GO_MOD_VERSION) (go.mod); if the output above says that toolchain could not be downloaded, fetch it once online (GOTOOLCHAIN=$(GO_MOD_VERSION) go version) or run with GOTOOLCHAIN=local on a matching Go." >&2; exit $$s; }
 
 # Type-checks the tree for other OSes in seconds, without cgo: internal/emu
