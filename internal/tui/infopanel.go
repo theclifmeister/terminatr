@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -862,12 +863,12 @@ func (c *client) infoMouse(m emu.Mouse) {
 	}
 }
 
-// pollInfo reads the panel's data for the focused session, outside c.mu,
-// and the mods' sections it shows, by the views mod.views last listed
+// pollInfo reads the panel's data for the focused session through ic,
+// outside c.mu, and the mods' sections it shows, by the views mod.views last listed
 // (pollState asks it, and showInfo takes its answer): beside a
 // coordinator its coordinator sections, beside a thread the details
 // sections for that thread; nil, nil without the panel.
-func (c *client) pollInfo(sessions []proto.SessionInfo) (*infoData, []modview.Shown) {
+func (c *client) pollInfo(ic *infoCache, sessions []proto.SessionInfo) (*infoData, []modview.Shown) {
 	if !c.lock() {
 		return nil, nil
 	}
@@ -884,7 +885,7 @@ func (c *client) pollInfo(sessions []proto.SessionInfo) (*infoData, []modview.Sh
 	var d *infoData
 	for _, s := range sessions {
 		if s.ID == id {
-			d = loadInfo(c.paths, s, sessions)
+			d = ic.load(c.paths, s, sessions)
 		}
 	}
 	var shown []modview.Shown
@@ -904,16 +905,21 @@ func infoTarget(d *infoData) panelTarget {
 }
 
 // showInfo shows d in the panel, with the mods' views as mod.views last
-// listed them for its sections. c.mu held.
-func (c *client) showInfo(d *infoData) {
+// listed them for its sections, and reports whether it differs from
+// what the panel showed. c.mu held.
+func (c *client) showInfo(d *infoData) bool {
 	if c.info == nil {
-		return
+		return false
 	}
 	if d != nil {
 		d.sections = c.views
 	}
+	if reflect.DeepEqual(c.info.data, d) {
+		return false
+	}
 	c.info.data = d
 	c.infoLayout()
+	return true
 }
 
 // pollViews is mod.views on ctl, saying the console shows shown: the

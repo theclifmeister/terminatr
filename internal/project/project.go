@@ -125,6 +125,13 @@ func Dir(slug string) (string, error) {
 
 // Open reads a project by slug.
 func Open(slug string) (*Project, error) {
+	cfg, _ := config.Load() // a safety error still gives the tables
+	return OpenWith(slug, cfg)
+}
+
+// OpenWith reads a project by slug, its repos from cfg, the config
+// config.Load gave (which a reader of many projects loads once).
+func OpenWith(slug string, cfg *config.Config) (*Project, error) {
 	dir, err := Dir(slug)
 	if err != nil {
 		return nil, err
@@ -142,15 +149,15 @@ func Open(slug string) (*Project, error) {
 		return nil, fmt.Errorf("%s: %w", p.Path("PROJECT.md"), err)
 	}
 	p.Instructions = strings.TrimSpace(string(body))
-	p.Repos = approvedRepos(slug, data)
+	p.Repos = approvedRepos(cfg, slug, data)
 	return p, nil
 }
 
-// approvedRepos is project slug's repo list from config.toml, or none
-// when the file doesn't parse. Until MoveRepos has run, a project the
-// file has no list for keeps PROJECT.md's (data), as an older tm did.
-func approvedRepos(slug string, data []byte) []string {
-	cfg, _ := config.Load() // a safety error still gives the tables
+// approvedRepos is project slug's repo list from config.toml (cfg), or
+// none when the file doesn't parse (nil). Until MoveRepos has run, a
+// project the file has no list for keeps PROJECT.md's (data), as an
+// older tm did.
+func approvedRepos(cfg *config.Config, slug string, data []byte) []string {
 	if repos, set := cfg.Repos(slug); set || reposMoved() {
 		return repos
 	}
@@ -352,7 +359,7 @@ func List() ([]Summary, error) {
 			continue
 		}
 		s := Summary{Slug: e.Name(), Dir: filepath.Join(root, e.Name())}
-		p, err := Open(e.Name())
+		p, err := OpenWith(e.Name(), cfg)
 		if err != nil {
 			s.Error = err.Error()
 			out = append(out, s)

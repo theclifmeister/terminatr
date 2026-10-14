@@ -289,10 +289,10 @@ func projectState(p *project.Project, sessions []proto.SessionInfo, tickerState 
 	}
 	// The ticker's times are read on every look; the event's ticker,
 	// which asks git for the repos' hosts, only when they changed.
-	timing := ticker.ReadTiming(tickerState, p.Slug)
+	prs, timing := ticker.ReadProject(tickerState, p.Slug)
 	st.Ticker = modbus.TickerTimes{PRChecked: timing.PRPolled, Synced: timing.Synced, GHFailing: timing.GHFailing}
-	st.TickerWatch = func() proto.WatchTicker { return watchTicker(p, timing) }
-	for id, pr := range ticker.PRs(tickerState, p.Slug) {
+	st.TickerWatch = func() proto.WatchTicker { return projectTicker(p, timing) }
+	for id, pr := range prs {
 		st.PRs[id] = modbus.PR{Project: p.Slug, Thread: id, Number: pr.Number, URL: pr.URL, State: pr.State,
 			Checks: pr.Checks, Review: pr.Review, Behind: pr.MergeState == "BEHIND", Conflict: pr.Mergeable == "CONFLICTING"}
 	}

@@ -39,6 +39,15 @@ const defaultWatchPoll = time.Second
 type watchers struct {
 	mu   sync.Mutex
 	subs map[chan struct{}]struct{}
+	gen  uint64 // wakes so far
+}
+
+// generation counts the wakes so far: a cache built before the last
+// one is stale.
+func (w *watchers) generation() uint64 {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.gen
 }
 
 func (w *watchers) add() chan struct{} {
@@ -63,6 +72,7 @@ func (w *watchers) remove(ch chan struct{}) {
 func (w *watchers) wake() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.gen++
 	for ch := range w.subs {
 		select {
 		case ch <- struct{}{}:
