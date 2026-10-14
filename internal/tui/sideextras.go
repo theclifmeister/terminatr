@@ -375,6 +375,9 @@ func sideExtraStep(in sideKeysIn, op int, key string) sideStep {
 func sideNeedStep(in sideKeysIn, at treeRow, back bool) sideStep {
 	slim := in.w <= sideSlim
 	needs := func(r treeRow) bool {
+		if r.isPeer() {
+			return false // view-only: nothing there waits on this server
+		}
 		if slim {
 			return r.kind == treeProject && r.hint
 		}

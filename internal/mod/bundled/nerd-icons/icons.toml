@@ -33,6 +33,7 @@ ciFail     = "\uf057"  # nf-fa-times_circle
 ciRun      = "\uf1ce"  # nf-fa-circle_o_notch
 fold       = "▸"
 unfold     = "▾"
+linked     = "\uf0c1"  # nf-fa-link
 todoDone   = "\uf00c"  # nf-fa-check
 todoNow    = "\uf192"  # nf-fa-dot_circle_o
 todoOpen   = "\uf10c"  # nf-fa-circle_o
