@@ -404,6 +404,7 @@ func runContext(e *Env, args []string) error {
 		return err
 	}
 	seen := ticker.Seen(tickerState(), p.Slug)
+	seen.Links = linkLines(p)
 	sessions, live := liveSessions()
 	if live {
 		seen.Working = thread.WorkingAll(sessions)

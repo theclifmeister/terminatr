@@ -52,6 +52,25 @@ type ProjectWatch struct {
 	// Cells are the mods' cells for the project, its tasks and its
 	// threads (since protocol 13).
 	Cells []ModCell `json:"cells,omitempty"`
+	// Links are the project's links to other projects' coordinators
+	// (docs/SPEC.md §7.9), by the other project's slug; none when it has
+	// none. Never a message's text.
+	Links []WatchLink `json:"links,omitempty"`
+}
+
+// WatchLink is one link: its state in words ("linked both ways",
+// "waits for web to accept"), which way messages go, and the counts.
+type WatchLink struct {
+	Peer    string `json:"peer"`
+	State   string `json:"state"`
+	Send    bool   `json:"send,omitempty"`
+	Receive bool   `json:"receive,omitempty"`
+	Paused  bool   `json:"paused,omitempty"`
+	// Unread counts received messages whose item isn't handled; Held
+	// this project's messages waiting for the user's OK.
+	Unread int    `json:"unread,omitempty"`
+	Held   int    `json:"held,omitempty"`
+	Last   string `json:"last,omitempty"`
 }
 
 // WatchTicker is the ticker's slow timers for a project. Times, not

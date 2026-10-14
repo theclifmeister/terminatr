@@ -272,3 +272,17 @@ func projectLink(e *Env, args []string) error {
 	fmt.Fprintf(e.Stdout, "%s has no link to %s\n", p.Slug, pos[0])
 	return nil
 }
+
+// linkLines are tm context's Links section: each link with its state,
+// unread and held counts and the last message, never a message's text.
+func linkLines(p *project.Project) []string {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, r := range link.Rows(cfg, p) {
+		out = append(out, fmt.Sprintf("%s %s %s%s", r.Peer, r.Arrow(), r.Words(), rowCounts(r)))
+	}
+	return out
+}

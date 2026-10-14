@@ -284,7 +284,7 @@ func projectState(p *project.Project, sessions []proto.SessionInfo, tickerState 
 	if itemsErr == nil {
 		for _, it := range items {
 			st.Inbox[it.ID] = modbus.Item{Project: p.Slug, ID: it.ID, Kind: it.Kind, Subject: it.Subject,
-				Summary: it.Summary, NeedsUser: it.NeedsUser}
+				Summary: it.Summary, NeedsUser: it.NeedsUser, Message: it.Message}
 		}
 	}
 	// The ticker's times are read on every look; the event's ticker,

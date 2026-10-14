@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -158,6 +159,12 @@ func ProjectWatchOf(p *project.Project, sessions []proto.SessionInfo, tickerStat
 			Title: queueTitle(info, note)})
 	}
 	w.Context = contextOf(p.Slug, sessions)
+	if cfg, err := config.Load(); err == nil {
+		for _, r := range link.Rows(cfg, p) {
+			w.Links = append(w.Links, proto.WatchLink{Peer: r.Peer, State: r.Words(), Send: r.Send, Receive: r.Receive,
+				Paused: r.Paused, Unread: r.Unread, Held: r.Held, Last: r.Last})
+		}
+	}
 	if t := watchTicker(p, timing); !t.PRChecked.IsZero() || !t.Synced.IsZero() || t.NoPRHost {
 		w.Ticker = &t
 	}
