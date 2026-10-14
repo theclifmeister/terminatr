@@ -1,6 +1,6 @@
 // Package link carries messages between the coordinators of linked
 // projects (docs/SPEC.md §7.9), on one server or on a paired one
-// (§16.10). The user links two projects in their settings (config.Link);
+// (§16.11). The user links two projects in their settings (config.Link);
 // a coordinator writes with tm link send, and the message lands in the
 // other project's inbox as a link-message item whose summary is fixed
 // words, never the text. The text is read with tm link read, framed as
@@ -834,7 +834,7 @@ func Set(c caller.Caller, a, b, allow string, ask *bool) error {
 
 // setRemote writes p's entry for project slug on the paired server alias
 // (key b): only this side, since the other is that server's user's. A new
-// entry asks unless ask says otherwise (§16.10).
+// entry asks unless ask says otherwise (§16.11).
 func setRemote(c caller.Caller, p *project.Project, b, alias, slug, allow string, ask *bool) error {
 	if allow != config.LinkOff && !slices.Contains(config.LinkAllows, allow) {
 		return refuse("bad-direction", "a link is %s, %s, %s or %s", config.LinkBoth, config.LinkSend, config.LinkReceive, config.LinkOff)

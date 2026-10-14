@@ -1,6 +1,6 @@
 package server
 
-// Coordinator links across servers (docs/SPEC.md §16.10): the link's
+// Coordinator links across servers (docs/SPEC.md §16.11): the link's
 // peer.message reaches internal/link's Receive, and the outbox flusher
 // delivers this server's queued messages over the links that are up.
 

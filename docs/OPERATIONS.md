@@ -310,7 +310,7 @@ Both terminals then show the other server's name and id and the same six digits,
 
 ### Sharing a project
 
-Pairing alone shows nothing of either server's projects. To let the paired servers see a project, turn on **Shared with paired servers** in its Settings tab (`a`, then `4`); it asks first. They then see it read-only: what waits for you, the inbox, the threads with their state and PR, the tasks on deck and its sessions' states and models. Never its files, settings, paths, repos or worktrees, and nobody there can act on it. Only an active project is offered; turning the setting off hides it at once. Each project is shared on its own: all projects can't be shared in one go (SPEC §16.9).
+Pairing alone shows nothing of either server's projects. To let the paired servers see a project, turn on **Shared with paired servers** in its Settings tab (`a`, then `4`); it asks first. They then see it read-only: what waits for you, the inbox, the threads with their state and PR, the tasks on deck and its sessions' states and models. Never its files, settings, paths, repos or worktrees, and nobody there can act on it. Only an active project is offered; turning the setting off hides it at once. Each project is shared on its own: all projects can't be shared in one go (SPEC §16.9). Your server keeps the latest of what each paired server shares in memory, keeps showing it while a link is down (marked stale, with when it was last read) and refreshes it as soon as the link is back (SPEC §16.10).
 
 ### Linking projects across servers
 
@@ -323,7 +323,7 @@ acme ⇄ mini/api: linked both ways on this side
 
 and on `mini`, `tm project link api studio/acme`. The name is the other server's alias here (`tm peer list`) and the project's slug there. Each side is written separately, since neither user can set the other's; a message goes only when both allow it, and a side that doesn't answers with a `link-undelivered` item in the sender's inbox. On a link to another server each of the coordinator's messages waits for your OK (approve it in the Messages tab, or tell the coordinator in chat) unless you link with `--no-ask`.
 
-Messages wait in the sending server's outbox until the link is up, and `tm link log mini/api` shows each as `queued`, `sent` (the other server has it) or `read` (its coordinator handled it). One not taken within 72 hours is dropped with a `link-undelivered` item. Files don't cross servers; the text is at most 8 KB. The same rate limit and breaker apply on each server, and `tm link resume` lifts only this server's pause (SPEC §16.10).
+Messages wait in the sending server's outbox until the link is up, and `tm link log mini/api` shows each as `queued`, `sent` (the other server has it) or `read` (its coordinator handled it). One not taken within 72 hours is dropped with a `link-undelivered` item. Files don't cross servers; the text is at most 8 KB. The same rate limit and breaker apply on each server, and `tm link resume` lifts only this server's pause (SPEC §16.11).
 
 ### The servers' side
 

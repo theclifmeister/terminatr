@@ -31,7 +31,7 @@ func Settings(d Deps) []Check {
 	}
 	// A link names another project by its slug: one that isn't there
 	// (deleted, or a typo) carries nothing (docs/SPEC.md §7.9). One on a
-	// paired server, "<alias>/<slug>", needs the server paired (§16.10).
+	// paired server, "<alias>/<slug>", needs the server paired (§16.11).
 	var dangling []string
 	paired := map[string]bool{}
 	peers, _ := peer.LoadPeers(peer.DirIn(d.Paths.Home))

@@ -44,7 +44,7 @@ func (l Link) Sends() bool { return l.Allow == LinkBoth || l.Allow == LinkSend }
 func (l Link) Receives() bool { return l.Allow == LinkBoth || l.Allow == LinkReceive }
 
 // linkSlugRE is a project slug's shape (project.ValidSlug); remoteRE a
-// project on a paired server, "<alias>/<slug>" (docs/SPEC.md §16.10),
+// project on a paired server, "<alias>/<slug>" (docs/SPEC.md §16.11),
 // the alias as tm peer names the server (peer.CheckAlias).
 var (
 	linkSlugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)

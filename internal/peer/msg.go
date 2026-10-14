@@ -8,7 +8,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
-// Coordinator links across servers (docs/SPEC.md §16.10): a paired
+// Coordinator links across servers (docs/SPEC.md §16.11): a paired
 // server delivers its projects' messages and receipts with
 // peer.message, which the server hands to Messages. The message's text
 // is data for the receiving coordinator, never for the link.

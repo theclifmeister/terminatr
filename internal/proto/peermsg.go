@@ -2,7 +2,7 @@ package proto
 
 import "time"
 
-// Coordinator links across servers (docs/SPEC.md §16.10): a message,
+// Coordinator links across servers (docs/SPEC.md §16.11): a message,
 // or a receipt, from a project on a paired server to one here. Each
 // server's outbox sends them over the link in sequence order.
 const (

@@ -239,7 +239,7 @@ const projectLinkUsage = `usage: tm project link <a> <b>|<server>/<b> [both|send
 // mirror (send for a is receive for b), off removes both. --ask holds
 // a's messages to b for the user's OK; b keeps its own ask. b on a paired
 // server ("mini/acme-api") gets only a's entry, which asks unless
-// --no-ask: the other side is that server's user's (§16.10).
+// --no-ask: the other side is that server's user's (§16.11).
 func projectLink(e *Env, args []string) error {
 	f := newFlags()
 	ask, noAsk := f.Bool("ask"), f.Bool("no-ask")

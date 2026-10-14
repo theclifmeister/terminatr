@@ -1,6 +1,6 @@
 package link
 
-// Links to projects on paired servers (docs/SPEC.md §16.10). The link's
+// Links to projects on paired servers (docs/SPEC.md §16.11). The link's
 // key is qualified, "mini/acme-api": the server's alias (tm peer) and the
 // project's slug there. Each server checks its own entry: the sender
 // before anything leaves, the receiver when the message arrives. The
