@@ -25,6 +25,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/modnotify"
 	"github.com/theclifmeister/terminatr/internal/modview"
+	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -250,6 +251,12 @@ type Source interface {
 	// SetRemote turns remote control of the project's running
 	// coordinator on or off (prefix+r), saying what it did.
 	SetRemote(slug string, on bool) (string, error)
+	// Peers is the paired servers as tm peer list has them (docs/SPEC.md
+	// §16.8); RemovePeer unpins one as tm peer remove does, and has the
+	// server close its link. Both are the human's, refused when tm runs
+	// inside an agent.
+	Peers() (PeerList, error)
+	RemovePeer(alias string) error
 	// Lifecycle activates, deactivates, pauses, resumes, archives,
 	// deletes, pins or unpins a project (verb "activate", "deactivate",
 	// "pause", "resume", "archive", "delete", "pin", "unpin"), saying
@@ -600,6 +607,81 @@ func (s *ServerSource) OpenProject(slug string, cols, rows int) (string, error) 
 
 // errHumanOnly refuses a settings change from inside an agent.
 var errHumanOnly = errors.New("human-only: settings are changed by the human")
+
+// PeerList is the paired servers, for the settings' Peers tab
+// (peerstab.go): this server's id ("" before it has an identity key)
+// and each paired server with its link as the server has it.
+type PeerList struct {
+	ID, Short string
+	Peers     []PeerEntry
+	// Running: a server answered; LinkErr is why it can't read the
+	// identity key or the peers.
+	Running bool
+	LinkErr string
+}
+
+// PeerEntry is one paired server: the alias the user knows it by, its
+// server id and relay, and its link (nil while there is none).
+type PeerEntry struct {
+	Alias, ID, Short, Relay string
+	Link                    *proto.PeerLink
+}
+
+func (s *ServerSource) Peers() (PeerList, error) {
+	var l PeerList
+	if s.Caller.IsAgent() {
+		return l, errHumanOnly
+	}
+	dir := peer.DirIn(s.Paths.Home)
+	id, err := peer.LoadIdentity(dir)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return l, err
+	}
+	if id != nil {
+		l.ID, l.Short = id.ID.String(), id.ID.Short()
+	}
+	peers, err := peer.LoadPeers(dir)
+	if err != nil {
+		return l, err
+	}
+	links := map[string]proto.PeerLink{}
+	var st proto.ServerStatus
+	if s.call(proto.MethodServerStatus, nil, &st) == nil {
+		l.Running = true
+		if st.Link != nil {
+			l.LinkErr = st.Link.Error
+			for _, pl := range st.Link.Peers {
+				links[pl.ID] = pl
+			}
+		}
+	}
+	for _, p := range peers {
+		e := PeerEntry{Alias: p.Alias, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay}
+		if pl, ok := links[e.ID]; ok {
+			e.Link = &pl
+		}
+		l.Peers = append(l.Peers, e)
+	}
+	return l, nil
+}
+
+func (s *ServerSource) RemovePeer(alias string) error {
+	if s.Caller.IsAgent() {
+		return errHumanOnly
+	}
+	found, err := peer.Unpin(peer.DirIn(s.Paths.Home), alias)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("no paired server %s (tm peer list)", alias)
+	}
+	var st *proto.LinkStatus
+	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, server.ErrNotRunning) {
+		return fmt.Errorf("removed %s, but the server didn't read the peers again (%v); tm server restart does", alias, err)
+	}
+	return nil
+}
 
 func (s *ServerSource) SetLink(slug, other, allow string) error {
 	if s.Caller.IsAgent() {

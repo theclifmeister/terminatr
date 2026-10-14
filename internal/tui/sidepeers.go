@@ -118,7 +118,7 @@ func withPeers(tree []treeRow, in treeIn) []treeRow {
 	out = append(out, treeRow{kind: treeServer, pct: -1, link: &peerLink{local: true, host: host, state: proto.LinkUp}})
 	out = append(out, tree...)
 	for _, pm := range in.peers {
-		out = append(out, peerRows(pm, in.tree)...)
+		out = append(out, peerRows(pm, in.tree, in.current)...)
 	}
 	// A remote pane in the view is you are on its row.
 	if _, _, remote := strings.Cut(in.focus, "/"); remote {
@@ -145,7 +145,7 @@ func peerTarget(r treeRow) (t Target, ok bool, why string) {
 	if why := paneWhyNot(r); why != "" {
 		return t, false, why
 	}
-	return Target{Session: r.peer + "/" + r.session}, true, ""
+	return Target{Session: r.peer + "/" + r.session, Project: peerFold(r.peer, r.slug)}, true, ""
 }
 
 // paneWhyNot is why remote row r's pane doesn't open; "" when it does.
@@ -182,8 +182,9 @@ func paneWords(r treeRow) string {
 // folded each shared project's row, and under a project that is up to
 // date and not folded its coordinator and threads. A stale project
 // (its link down, or its last read failed) shows its row alone, its
-// last values dimmed.
-func peerRows(pm proto.PeerMirror, t view.Tree) []treeRow {
+// last values dimmed. The project whose dashboard shows (current, its
+// peerFold) is the row you are on.
+func peerRows(pm proto.PeerMirror, t view.Tree, current string) []treeRow {
 	link := peerLink{state: pm.State, reason: pm.Reason, since: pm.Since, rtt: pm.RTT, watch: pm.Watch,
 		pane: pm.Pane, panes: pm.Panes, version: pm.Version}
 	for _, p := range pm.Projects {
@@ -198,6 +199,11 @@ func peerRows(pm proto.PeerMirror, t view.Tree) []treeRow {
 		pl := link
 		pl.synced = p.Synced
 		rows = append(rows, peerProjectRows(pm.Alias, p, &pl, t)...)
+	}
+	for i := range rows {
+		if rows[i].kind == treePeerProject && peerFold(pm.Alias, rows[i].slug) == current {
+			rows[i].current, rows[i].here = true, true
+		}
 	}
 	for _, r := range rows {
 		head.hint = head.hint || r.kind == treePeerProject && r.hint
@@ -537,13 +543,14 @@ func peerKeyBar(r *treeRow) []string {
 		}
 		return []string{enter + " fold"}
 	case treePeerProject:
+		// enter shows its read-only dashboard (peerdash.go).
 		switch {
 		case r.stale:
-			return []string{left + " server"}
+			return []string{enter + " open", left + " server"}
 		case r.fold:
-			return []string{barKey("side.unfold", "→") + " unfold"}
+			return []string{enter + " open", barKey("side.unfold", "→") + " unfold"}
 		}
-		return []string{left + " fold"}
+		return []string{enter + " open", left + " fold"}
 	}
 	if paneWhyNot(*r) == "" {
 		return []string{enter + " open", left + " project"}

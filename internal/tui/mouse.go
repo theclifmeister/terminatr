@@ -393,6 +393,9 @@ func (m *dash) click(x, y int, double bool) tea.Cmd {
 		m.dragging = true
 		return nil
 	}
+	if m.remoteHere() {
+		return nil // no rows: the wheel and the keys scroll it
+	}
 	if slug := m.stateAt(x, y); slug != "" && !m.busy {
 		// The project header's state label: as space.
 		return m.toggleActive(slug, !m.projectActive(slug))
@@ -413,6 +416,9 @@ func (m *dash) click(x, y int, double bool) tea.Cmd {
 func (m *dash) rowMenu(x, y int) tea.Cmd {
 	b := m.geom().body()
 	key := m.rowAt(x, y)
+	if m.remoteHere() {
+		key = ""
+	}
 	if key == "" {
 		if b.hasY(y) {
 			m.openMenu(versionTitle(m.data.Server), m.dashItems(), x, y-b.y)
@@ -460,10 +466,15 @@ func pressItem(label, key string) menuItem {
 // opens it) are one entry, the command's, which shows the key (T301 B9).
 func (m *dash) dashItems() []menuItem {
 	var out []menuItem
+	remote := m.remoteHere()
 	for _, a := range actions {
-		if a.menu != "" {
+		if a.menu != "" && (!remote || remoteActions[a.id]) {
 			out = append(out, pressItem(a.menu, boundKey(a.keys[0])))
 		}
+	}
+	if remote {
+		// The mods' views and commands are this server's projects'.
+		return out
 	}
 	cmds := m.commandItems()
 	for _, f := range m.fullItems() {
@@ -552,6 +563,14 @@ func (m *dash) sideMenu(mo tea.Mouse) tea.Cmd {
 		title += " coordinator"
 		items = append(items, menuItem{label: coordLabel(r), key: "enter", run: func(m *dash) tea.Cmd { return m.openTarget(t) }},
 			show("project popup", "a"))
+	case treePeerProject:
+		// A paired server's: its read-only dashboard, and its fold.
+		title = r.peer + " / " + r.slug
+		items = append(items, menuItem{label: "show its dashboard", key: "enter", run: func(m *dash) tea.Cmd { return m.openTarget(t) }})
+		if !r.stale {
+			label, key := foldLabel(r)
+			items = append(items, menuItem{label: label, key: key, run: func(m *dash) tea.Cmd { return m.refold(foldPeer(r, !r.fold)) }})
+		}
 	default:
 		title = r.thread
 		items = append(items,

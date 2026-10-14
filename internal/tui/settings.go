@@ -226,23 +226,28 @@ func settingsErr(err error) error {
 	return err
 }
 
-// settingsView is the , popup: the settings of every project, in three
+// settingsView is the , popup: the settings of every project, in four
 // tabs: General, All projects (the project settings every project
-// follows unless it sets its own) and Mods (modstab.go).
+// follows unless it sets its own), Mods (modstab.go) and Peers, the
+// paired servers (peerstab.go).
 type settingsView struct {
-	tab  int
-	tabs [2]settingsList
-	mods modsTab
+	tab   int
+	tabs  [2]settingsList
+	mods  modsTab
+	peers peersTab
 	// top is each tab's first line shown; shown the selection's line
 	// (plus one) it last scrolled to (projectView.scroll).
 	top, shown [len(settingsTabs)]int
 }
 
 // settingsTabs are the , popup's tabs.
-var settingsTabs = [3]string{"General", "All projects", "Mods"}
+var settingsTabs = [4]string{"General", "All projects", "Mods", "Peers"}
 
-// tabMods is the Mods tab's index.
-const tabMods = 2
+// tabMods and tabPeers are the Mods and Peers tabs' indexes.
+const (
+	tabMods  = 2
+	tabPeers = 3
+)
 
 func (m *dash) openSettings() {
 	m.catalogs = m.src.Catalogs()
@@ -463,6 +468,11 @@ func (sv *settingsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			return cmd
 		}
 	}
+	if sv.tab == tabPeers {
+		if cmd, ok := sv.peers.key(m, k); ok {
+			return cmd
+		}
+	}
 	n := len(settingsTabs)
 	switch s {
 	case "esc":
@@ -474,11 +484,11 @@ func (sv *settingsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "left", "h":
 		sv.tab = (sv.tab + n - 1) % n
 		return nil
-	case "1", "2", "3":
+	case "1", "2", "3", "4":
 		sv.tab = int(s[0] - '1')
 		return nil
 	}
-	if sv.tab == tabMods {
+	if sv.tab == tabMods || sv.tab == tabPeers {
 		return nil
 	}
 	cmd, _ := sv.tabs[sv.tab].key(m, k)
@@ -488,8 +498,11 @@ func (sv *settingsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 // tabLines are tab i's lines, its selected line and what a click on
 // each line picks.
 func (sv *settingsView) tabLines(m *dash, i, w int) ([]string, int, []int) {
-	if i == tabMods {
+	switch i {
+	case tabMods:
 		return sv.mods.lines(m, w)
+	case tabPeers:
+		return sv.peers.lines(m, w)
 	}
 	return sv.tabs[i].lines(m, w)
 }
@@ -505,6 +518,9 @@ func (sv *settingsView) render(m *dash) string {
 	case tabMods:
 		lines = append(lines, faintLines("Mods extend terminatr: themes, keys, columns, panels. They never change the safety settings, and no agent can install or turn one on. i installs one, e lists the examples.", w)...)
 		keys = modsKeys
+	case tabPeers:
+		lines = append(lines, faintLines("Paired servers see the projects you share with them, read-only, in their sidebar; you see theirs in yours. No agent can pair, share or remove a server.", w)...)
+		keys = peersKeys
 	default:
 		lines = append(lines, faintLines("Every project follows these, a new one too, unless it sets its own in its popup (a on the dashboard, prefix+a in a session); x there makes it follow these again.", w)...)
 		keys = "enter change · + - number · ↑ ↓ move · ← → tabs · esc close"
@@ -580,18 +596,26 @@ func (sv *settingsView) click(m *dash, item, col int, _ bool) tea.Cmd {
 		}
 		return nil
 	}
-	if sv.tab == tabMods {
+	switch sv.tab {
+	case tabMods:
 		if item >= 0 {
 			sv.mods.sel = item
 		}
+		return nil
+	case tabPeers:
+		sv.peers.click(item)
 		return nil
 	}
 	return sv.tabs[sv.tab].click(m, item, col)
 }
 
 func (sv *settingsView) wheel(m *dash, d int) {
-	if sv.tab == tabMods {
+	switch sv.tab {
+	case tabMods:
 		sv.mods.key(m, arrow(d))
+		return
+	case tabPeers:
+		sv.peers.key(m, arrow(d))
 		return
 	}
 	sv.tabs[sv.tab].key(m, arrow(d))

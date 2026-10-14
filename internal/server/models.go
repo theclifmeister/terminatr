@@ -48,7 +48,9 @@ func (s *Server) refreshAgentModels(a agent.Agent, env []string) {
 	}
 	s.modelsBusy[m.Name] = true
 	s.modelsMu.Unlock()
+	s.modelsWG.Add(1)
 	go func() {
+		defer s.modelsWG.Done()
 		defer func() {
 			s.modelsMu.Lock()
 			delete(s.modelsBusy, m.Name)
@@ -58,6 +60,8 @@ func (s *Server) refreshAgentModels(a agent.Agent, env []string) {
 		if ctx == nil {
 			ctx = context.Background()
 		}
+		// shutdown cancels the probe and waits for it, so it never
+		// writes the cache after its server (or a test's home) is gone.
 		c, err := models.Refresh(ctx, m, env)
 		switch {
 		case err != nil:

@@ -163,8 +163,9 @@ func TestPeerRows(t *testing.T) {
 }
 
 // TestPeerRowsViewOnly: nothing meant for this server's projects reaches
-// a remote row: enter, a click and the preview open nothing (even where
-// this server has a project of the same name), space and p say what they
+// a remote row: enter, a click and the preview open nothing but a remote
+// project's read-only dashboard (TestRemoteTargets), even where this
+// server has a project of the same name; space and p say what they
 // are for, w W skip them, and 1-9 count this server's projects only.
 func TestPeerRowsViewOnly(t *testing.T) {
 	rows := peerTree(view.Tree{})
@@ -172,16 +173,19 @@ func TestPeerRowsViewOnly(t *testing.T) {
 		if r.kind != treeServer && !r.isPeer() {
 			continue
 		}
+		for _, op := range []int{sideActive, sidePin} {
+			if st := sideKeyStep(rows, sideDefault, r.key(), op); st.toggle != "" || st.pin != "" || st.target != nil {
+				t.Errorf("%s: op %d %+v", r.key(), op, st)
+			}
+		}
+		if r.kind == treePeerProject {
+			continue
+		}
 		if _, ok, why := r.target(); ok || why == "" {
 			t.Errorf("%s: target ok %v %q", r.key(), ok, why)
 		}
 		if _, ok := r.preview(); ok {
 			t.Errorf("%s previews", r.key())
-		}
-		for _, op := range []int{sideActive, sidePin} {
-			if st := sideKeyStep(rows, sideDefault, r.key(), op); st.toggle != "" || st.pin != "" || st.target != nil {
-				t.Errorf("%s: op %d %+v", r.key(), op, st)
-			}
 		}
 		if st := sideKeyStep(rows, sideDefault, r.key(), sideEnter); st.target != nil || st.msg == "" && st.refold == nil {
 			t.Errorf("%s: enter %+v", r.key(), st)
@@ -252,9 +256,9 @@ func TestPeerKeyBar(t *testing.T) {
 	for key, want := range map[string]string{
 		"g:":                      " ? help",
 		"g:mini":                  " ⏎ fold · ? help",
-		"r:mini/acme-api":         " ← fold · ? help",
+		"r:mini/acme-api":         " ⏎ open · ← fold · ? help",
 		"rt:mini/acme-api/t-0041": " ← project · ? help",
-		"r:nas/media":             " ← server · ? help",
+		"r:nas/media":             " ⏎ open · ← server · ? help",
 	} {
 		i := slices.IndexFunc(rows, func(r treeRow) bool { return r.key() == key })
 		if got := ansi.Strip(sideKeyBar(&rows[i], true, false, 40)); strings.TrimRight(got, " ") != want {
@@ -308,7 +312,7 @@ func TestPeerRowsOpenPanes(t *testing.T) {
 		for key, want := range map[string]string{"rc:mini/acme-api": "mini/r-1", "rt:mini/acme-api/t-0041": "mini/r-2"} {
 			r := rowOf(rows, key)
 			tg, ok, why := r.target()
-			if !ok || tg.Session != want || why != "" {
+			if !ok || tg.Session != want || tg.Project != "@mini/acme-api" || why != "" {
 				t.Errorf("%s %s: %+v %v %q", panes, key, tg, ok, why)
 			}
 			if st := sideKeyStep(rows, sideDefault, key, sideEnter); st.target == nil || st.target.Session != want || !st.into {
@@ -322,8 +326,9 @@ func TestPeerRowsOpenPanes(t *testing.T) {
 		if word := map[string]string{proto.PanesType: "its pane opens here", proto.PanesView: "its pane: view only"}[panes]; !strings.HasPrefix(d2, word) {
 			t.Errorf("%s: coordinator's details %q", panes, d2)
 		}
-		if _, ok, _ := rowOf(rows, "r:mini/acme-api").target(); ok {
-			t.Errorf("%s: the remote project opens", panes)
+		// The project opens its read-only dashboard, never a pane.
+		if tg, ok, _ := rowOf(rows, "r:mini/acme-api").target(); !ok || tg.Session != "" || tg.Project != "@mini/acme-api" {
+			t.Errorf("%s: the remote project's target %+v %v", panes, tg, ok)
 		}
 	}
 	rows := peerTreeWith(proto.PanesOff, "")

@@ -76,6 +76,13 @@ func coordLines(pw *proto.ProjectWatch, w int, now time.Time) ([]string, []infoH
 // (mod.CoordinatorBlocks: needs, inbox, threads, deck) and its head and
 // NEEDS YOU must-see, for the mods' sections placed among them.
 func coordPanel(pw *proto.ProjectWatch, w int, now time.Time) (*panel, []infoHit) {
+	return watchPanel(pw, w, now, false)
+}
+
+// watchPanel is coordPanel; readOnly draws it for a paired server's
+// project (peerdash.go), with no hint of a key or a command, which
+// would act here, not there.
+func watchPanel(pw *proto.ProjectWatch, w int, now time.Time, readOnly bool) (*panel, []infoHit) {
 	pl := &panel{w: w}
 	var hits []infoHit
 	// line adds text as one line, h what a click on it does.
@@ -151,7 +158,11 @@ func coordPanel(pw *proto.ProjectWatch, w int, now time.Time) (*panel, []infoHit
 	if pw.Questions > 0 {
 		h := infoHit{kind: hitQuestions}
 		g, _ := stateLook("blocked")
-		item(th().Warn.Render(g+" "+project.QuestionsWaiting(pw.Questions))+th().Faint.Render(" · a or click answers"), h)
+		text := th().Warn.Render(g + " " + project.QuestionsWaiting(pw.Questions))
+		if !readOnly {
+			text += th().Faint.Render(" · a or click answers")
+		}
+		item(text, h)
 	}
 	for _, n := range pw.NeedsYou {
 		h := taskHit(n.Task)
@@ -176,7 +187,11 @@ func coordPanel(pw *proto.ProjectWatch, w int, now time.Time) (*panel, []infoHit
 			if n.Thread != "" {
 				what = "the thread gets nothing"
 			}
-			wrapped("  ", th().Bad.Render(what+" until it clears; tm agent explain "+n.Session+" says why"), infoHit{})
+			why := "; tm agent explain " + n.Session + " says why"
+			if readOnly {
+				why = ""
+			}
+			wrapped("  ", th().Bad.Render(what+" until it clears"+why), infoHit{})
 		case n.Question != "":
 			wrapped("  ", th().Warn.Render("“"+oneLine(n.Question)+"”"), h)
 		case n.PR != "":

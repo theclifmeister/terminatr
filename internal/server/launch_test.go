@@ -72,6 +72,7 @@ func slowLaunchServer(t *testing.T) (s *Server, entered chan struct{}, release c
 		}
 		return []byte("9.9.9 (Claude Code)\n"), nil
 	}
+	s.modelsCtx, s.modelsStop = context.WithCancel(context.Background())
 	t.Cleanup(s.shutdown)
 	return s, entered, release
 }
