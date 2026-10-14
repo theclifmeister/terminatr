@@ -29,6 +29,9 @@ type Live struct {
 	// Mods is the server's answer to mod.hosts; nil when it is not
 	// running or can't tell (an older server).
 	Mods *proto.ModHostsResult
+	// Link is the server's links to paired servers (server.status); nil
+	// when it is not running or has no identity key.
+	Link *proto.LinkStatus
 }
 
 // callTimeout bounds each of doctor's calls to the server; a server
@@ -115,6 +118,7 @@ func Server(d Deps) ([]Check, Live) {
 	if err := c.CallWithin(callTimeout, proto.MethodServerStatus, nil, &st); err != nil {
 		return append(out, Check{Group: g, Name: "server", Status: Fail, Detail: fmt.Sprintf("pid %d: server.status: %v", pid, err)}), live
 	}
+	live.Link = st.Link
 	out = append(out, Check{Group: g, Name: "server", Status: OK,
 		Detail: fmt.Sprintf("pid %d, up %s, protocol %d, %d sessions", st.PID, time.Since(st.Started).Round(time.Second), st.Protocol, st.Sessions)})
 	if st.Build != d.Build {

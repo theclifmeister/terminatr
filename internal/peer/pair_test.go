@@ -148,7 +148,7 @@ func TestRotateIdentity(t *testing.T) {
 
 // pairBoth runs a pairing between two servers through the relay at url,
 // each side answering yes to its offer.
-func pairBoth(t *testing.T, a, b *server, url string, o PairOptions, answerA, answerB bool) (pa, pb *Paired, ea, eb error, offers [2]Offer) {
+func pairBoth(t *testing.T, a, b *server, url string, o PairOptions, answerA, answerB bool) (offers [2]Offer, pa, pb *Paired, ea, eb error) {
 	t.Helper()
 	code, err := NewCode(url)
 	if err != nil {
@@ -186,7 +186,7 @@ func TestPairThroughRelay(t *testing.T) {
 	_, _, url, tc := startRelay(t)
 	a, b := newServer(t), newServer(t)
 	o := PairOptions{Version: "0.27.0", RelayTLS: tc}
-	pa, pb, ea, eb, offers := pairBoth(t, a, b, url, o, true, true)
+	offers, pa, pb, ea, eb := pairBoth(t, a, b, url, o, true, true)
 	if ea != nil || eb != nil {
 		t.Fatalf("pair: %v / %v", ea, eb)
 	}
@@ -213,7 +213,7 @@ func TestPairThroughRelay(t *testing.T) {
 func TestPairDeclined(t *testing.T) {
 	_, _, url, tc := startRelay(t)
 	a, b := newServer(t), newServer(t)
-	_, _, ea, eb, _ := pairBoth(t, a, b, url, PairOptions{RelayTLS: tc}, true, false)
+	_, _, _, ea, eb := pairBoth(t, a, b, url, PairOptions{RelayTLS: tc}, true, false)
 	if !errors.Is(ea, ErrPeerNo) || !errors.Is(eb, ErrDeclined) {
 		t.Fatalf("got %v / %v", ea, eb)
 	}
