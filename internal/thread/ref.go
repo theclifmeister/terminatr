@@ -1,7 +1,6 @@
 package thread
 
 import (
-	"regexp"
 	"sort"
 	"strings"
 
@@ -9,15 +8,13 @@ import (
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
-var taskRefRE = regexp.MustCompile(`^[Tt][0-9]+$`)
-
 // ByRef is the thread id that ref names (docs/SPEC.md §9): a thread id
 // ("t-0003") as is, or a task id ("T12") resolved to that task's open
 // (unresolved) thread. A task with several open threads, or none, is
 // refused with a list of its threads, which stay reachable by their
 // ids.
 func ByRef(p *project.Project, ref string) (string, error) {
-	if !taskRefRE.MatchString(ref) {
+	if !tasks.ValidRef(ref) {
 		return ref, nil // a thread id, or a refusal from Load
 	}
 	n, ok := tasks.ParseRef(ref)

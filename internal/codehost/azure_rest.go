@@ -63,10 +63,16 @@ func (a Azure) get(dir, u string) ([]byte, error) {
 func (a Azure) rest(dir, u string, headers ...string) ([]byte, error) {
 	args := []string{"rest", "--method", "get", "--resource", azResource, "--url", u, "--headers", "Accept=application/json"}
 	args = append(args, headers...)
+	return a.az(dir, a.withSub(args)...)
+}
+
+// withSub is args with the subscription azSubs found for the
+// organization, when it found one.
+func (a Azure) withSub(args []string) []string {
 	if sub, ok := azSubs.Load(a.Target.OrgURL); ok {
 		args = append(args, "--subscription", sub.(string))
 	}
-	return a.az(dir, args...)
+	return args
 }
 
 func (a Azure) getenv(k string) string {

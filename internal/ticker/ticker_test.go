@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -1042,6 +1043,43 @@ func TestHostFails(t *testing.T) {
 	for _, p := range []string{path, filepath.Join(dir, "none.json")} {
 		if got := HostFails(p); len(got) != 0 {
 			t.Errorf("%s: %v", p, got)
+		}
+	}
+}
+
+// TestLoad: one read of the state file answers what the per-call
+// readers answer, and a missing or bad file is the empty State.
+func TestLoad(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ticker.json")
+	oid := strings.Repeat("a", 40)
+	os.WriteFile(path, []byte(`{"threads":{
+		"demo/t-0001":{"pr":{"number":7,"state":"OPEN","head":"`+oid+`"},"pr_polled":"2026-10-14T12:00:00Z"},
+		"demo/x/t-0002":{"pr":{"number":8}},
+		"other/t-0003":{"pr":{"number":9}},
+		"demo/t-0004":null},
+		"projects":{"demo":{"gh_fails":2,"repos":{"/r":{"branch":"main","behind":1},"/bad":{"branch":"-x","behind":1}}}}}`), 0o600)
+	s := Load(path)
+	prs, tm := s.Project("demo")
+	if len(prs) != 1 || prs["t-0001"].Number != 7 || !tm.GHFailing || tm.ThreadPolled["t-0001"].IsZero() {
+		t.Fatalf("Project: %v %+v", prs, tm)
+	}
+	if !reflect.DeepEqual(s.PRs("demo"), PRs(path, "demo")) || !reflect.DeepEqual(tm, ReadTiming(path, "demo")) ||
+		!reflect.DeepEqual(s.HostFails(), HostFails(path)) || !reflect.DeepEqual(s.Summaries("demo"), Summaries(path, "demo")) {
+		t.Fatal("State and the path readers disagree")
+	}
+	if c := s.Checkouts("demo"); len(c) != 1 || c["/r"] != "local main is 1 behind origin" || !reflect.DeepEqual(c, Checkouts(path, "demo")) {
+		t.Fatalf("Checkouts %v", c)
+	}
+	if sn := Seen(path, "demo"); sn.PRs["t-0001"] == "" || sn.Checkouts["/r"] == "" {
+		t.Fatalf("Seen %+v", sn)
+	}
+	os.WriteFile(path, []byte(`{"threads":{"demo/t-0001":{"pr":{"number":7}}},`), 0o600)
+	for _, p := range []string{path, filepath.Join(dir, "none.json")} {
+		s := Load(p)
+		prs, tm := s.Project("demo")
+		if len(prs) != 0 || tm.GHFailing || len(s.HostFails()) != 0 || len(s.Checkouts("demo")) != 0 {
+			t.Errorf("%s: %v %+v", p, prs, tm)
 		}
 	}
 }

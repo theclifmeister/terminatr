@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 )
 
 // loaders are the files a mod's script may import, by extension.
@@ -73,8 +74,8 @@ func Bundle(entry string) (code string, inputs map[string]string, err error) {
 				if err != nil {
 					return api.OnLoadResult{}, err
 				}
-				rel, err := filepath.Rel(root, real)
-				if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+				rel, ok := fsx.Within(root, real)
+				if !ok {
 					return api.OnLoadResult{}, fmt.Errorf("%s is outside the mod's folder", a.Path)
 				}
 				loader, ok := loaders[strings.ToLower(filepath.Ext(real))]
@@ -154,11 +155,11 @@ func Build(entry, cacheDir string) (string, error) {
 	sum := sha256.Sum256([]byte(code))
 	name := hex.EncodeToString(sum[:16]) + ".js"
 	path := filepath.Join(cacheDir, name)
-	if err := writeAtomic(path, []byte(code)); err != nil {
+	if err := fsx.WriteAtomic(path, []byte(code), 0o600); err != nil {
 		return "", err
 	}
 	rec, _ := json.MarshalIndent(bundleRecord{Bundler: bundler(), Entry: abs, Inputs: inputs, Bundle: name}, "", "  ")
-	if err := writeAtomic(filepath.Join(cacheDir, recordName), rec); err != nil {
+	if err := fsx.WriteAtomic(filepath.Join(cacheDir, recordName), rec, 0o600); err != nil {
 		return "", err
 	}
 	// Older bundles of this mod.
@@ -227,25 +228,4 @@ func bundler() string {
 		}
 	}
 	return "esbuild " + v + " es2017 iife 1"
-}
-
-func writeAtomic(path string, b []byte) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp-*")
-	if err != nil {
-		return err
-	}
-	if _, err := tmp.Write(b); err != nil {
-		tmp.Close()
-		os.Remove(tmp.Name())
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmp.Name())
-		return err
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		os.Remove(tmp.Name())
-		return err
-	}
-	return nil
 }

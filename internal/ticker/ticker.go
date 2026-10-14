@@ -20,6 +20,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
@@ -810,7 +811,7 @@ func (t *Ticker) ghHealth(p *project.Project) {
 	t.o.Log.Printf("ticker: %s: inbox %s %s", p.Slug, KindGHFailing, cli)
 }
 
-var subjectRE = regexp.MustCompile(`^(t-[0-9]{4,}|T[0-9]{1,9})$`)
+var subjectRE = regexp.MustCompile(`^(` + tasks.ThreadIDPattern + `|` + tasks.RefPattern + `)$`)
 
 // verbs are the nudge's words per item kind: fixed text.
 var verbs = map[string]string{

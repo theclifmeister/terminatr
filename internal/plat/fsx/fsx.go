@@ -172,6 +172,21 @@ func Rel(root, p string) (string, bool) {
 	return "", false
 }
 
+// Within is path relative to dir ("." for dir itself) when path is dir
+// or inside it, by filepath.Rel: names compare as Rel compares them
+// (exactly, but for case on Windows) and no symlink is resolved, so pass
+// resolved paths when links matter. A ".." step, or a path Rel can't
+// relate to dir (another volume, one relative and one absolute), is
+// outside. Use it for a containment check that must not widen with the
+// file system's case folding; Rel compares as the file system does.
+func Within(dir, path string) (string, bool) {
+	rel, err := filepath.Rel(dir, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", false
+	}
+	return rel, true
+}
+
 func equal(a, b string) bool {
 	if caps.CaseFold {
 		return strings.EqualFold(a, b)

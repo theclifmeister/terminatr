@@ -19,6 +19,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/theclifmeister/terminatr/internal/guard"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/theme"
 )
 
@@ -268,8 +269,8 @@ func holds(dir, home string) bool {
 	if home == "" {
 		return false
 	}
-	rel, err := filepath.Rel(dir, filepath.Clean(home))
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	_, ok := fsx.Within(dir, filepath.Clean(home))
+	return ok
 }
 
 // validGuardPath reports whether a [guard] entry is home-relative or

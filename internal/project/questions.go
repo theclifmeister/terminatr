@@ -20,6 +20,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/theclifmeister/terminatr/internal/mdfile"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
 // The question dialog's limits: 2 to 4 options a question (it adds
@@ -65,7 +66,6 @@ type questionStore struct {
 }
 
 var questionRefRE = regexp.MustCompile(`^[Qq]([1-9][0-9]*)$`)
-var taskRefRE = regexp.MustCompile(`^T[1-9][0-9]*$`)
 
 // Questions are the open questions, oldest first.
 func (p *Project) Questions() ([]Question, error) {
@@ -119,7 +119,7 @@ func (q *Question) Check() error {
 	q.Header = strings.TrimSpace(q.Header)
 	q.Question = strings.TrimSpace(q.Question)
 	q.Recommended = strings.TrimSpace(q.Recommended)
-	if q.Task != "" && !taskRefRE.MatchString(q.Task) {
+	if q.Task != "" && !tasks.ValidRef(q.Task) {
 		return refuse("invalid-question", "task %q is not a task id like T12", q.Task)
 	}
 	if q.Question == "" {

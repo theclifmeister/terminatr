@@ -281,18 +281,7 @@ func (m Mod) fixed(a ModPR) PR {
 	if upperRE.MatchString(a.MergeState) {
 		pr.MergeState = a.MergeState
 	}
-	if at, err := time.Parse(time.RFC3339, a.MergedAt); err == nil && pr.State == "MERGED" && at.Year() > 2000 {
-		pr.MergedAt = at.UTC()
-	}
-	if oidRE.MatchString(a.Head) {
-		pr.Head = a.Head
-	}
-	if pr.State == "MERGED" && oidRE.MatchString(a.Merge) {
-		pr.Merge = a.Merge
-	}
-	if branchRE.MatchString(a.Base) {
-		pr.Base = a.Base
-	}
+	pr.setRefs(a.MergedAt, a.Head, a.Merge, a.Base)
 	if branchRE.MatchString(a.Branch) {
 		pr.Branch = a.Branch
 	}

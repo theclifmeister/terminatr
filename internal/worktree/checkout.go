@@ -65,14 +65,7 @@ func (c Checkout) Note() string {
 // DefaultBranch is origin's default branch as last fetched ("main"), ""
 // when the repo has no origin/HEAD and the remote can't say.
 func DefaultBranch(repo string) string {
-	ref, err := git(repo, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
-	if err != nil || ref == "" {
-		git(repo, "remote", "set-head", "origin", "--auto")
-		if ref, err = git(repo, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"); err != nil {
-			return ""
-		}
-	}
-	b, ok := strings.CutPrefix(ref, "origin/")
+	b, ok := strings.CutPrefix(originHead(repo, true), "origin/")
 	if !ok || !branchRE.MatchString(b) {
 		return ""
 	}

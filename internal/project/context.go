@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"maps"
 	"os"
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -392,7 +391,7 @@ func (p *Project) threadSection(prs map[string]string) (Section, error) {
 	recs := map[string]map[string]any{}
 	resolved := archivedThreads(p)
 	for _, e := range entries {
-		if !e.IsDir() || !threadIDRE.MatchString(e.Name()) {
+		if !e.IsDir() || !tasks.ValidThreadID(e.Name()) {
 			continue
 		}
 		var rec map[string]any
@@ -457,15 +456,12 @@ func (p *Project) threadSection(prs map[string]string) (Section, error) {
 	return s, nil
 }
 
-// threadIDRE is a thread folder's name (thread.ValidID).
-var threadIDRE = regexp.MustCompile(`^t-[0-9]{4,}$`)
-
 // archivedThreads counts the tarballs in threads/archive/ (thread.Archive).
 func archivedThreads(p *Project) int {
 	ents, _ := os.ReadDir(p.Path("threads", "archive"))
 	n := 0
 	for _, e := range ents {
-		if id, ok := strings.CutSuffix(e.Name(), ".tar.gz"); ok && threadIDRE.MatchString(id) {
+		if id, ok := strings.CutSuffix(e.Name(), ".tar.gz"); ok && tasks.ValidThreadID(id) {
 			n++
 		}
 	}

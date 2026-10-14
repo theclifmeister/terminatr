@@ -210,13 +210,11 @@ func empty(dir string) bool {
 	return err == nil && len(es) == 0
 }
 
-// defaultBase is origin's default branch if known locally, else HEAD. No
-// fetch: doctor stays offline.
-func defaultBase(d Deps, repo string) string {
-	if ref, err := d.Run(repo, "git", "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"); err == nil && ref != "" {
-		return ref
-	}
-	if ref, err := d.Run(repo, "git", "symbolic-ref", "--quiet", "--short", "HEAD"); err == nil && ref != "" {
+// defaultBase is origin's default branch if known locally, else the
+// checked-out branch, else HEAD (worktree.DefaultRef). No fetch: doctor
+// stays offline.
+func defaultBase(repo string) string {
+	if ref := worktree.DefaultRef(repo); ref != "" {
 		return ref
 	}
 	return "HEAD"
@@ -233,7 +231,7 @@ func leftoverBranches(d Deps, ix *threadIndex, removable map[string]bool) []Chec
 		if err != nil || refs == "" {
 			continue
 		}
-		base := defaultBase(d, repo)
+		base := defaultBase(repo)
 		used := checkedOut(d, repo)
 		for _, br := range strings.Split(refs, "\n") {
 			parts := strings.SplitN(br, "/", 3)
