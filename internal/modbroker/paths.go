@@ -75,6 +75,9 @@ type Paths struct {
 	read, write []string
 }
 
+// Resolved is p ready to check: its roots expanded and resolved.
+func (p Paths) Resolved() Paths { return p.resolve() }
+
 // resolve expands and resolves the roots.
 func (p Paths) resolve() Paths {
 	exp := func(roots []string) []string {
@@ -109,14 +112,42 @@ func (p Paths) resolve() Paths {
 // only another process could, and that process could read the file
 // itself.
 func (p Paths) Check(path string, write bool) (string, error) {
+	abs, roots, err := p.byName(path, write)
+	if err != nil {
+		return "", err
+	}
+	real, err := realPath(abs)
+	if err != nil {
+		return "", Denied("%s: %v", path, err)
+	}
+	if why := p.denied(real); why != "" {
+		return "", Denied("%s %s", path, why)
+	}
+	if !p.under(real, roots) {
+		return "", p.outside(path, write)
+	}
+	return real, nil
+}
+
+// CheckName is Check by the path's name only, nothing looked at on disk
+// (tm mod test's broker, whose folders are made up): the path made
+// absolute and cleaned, or the refusal.
+func (p Paths) CheckName(path string, write bool) (string, error) {
+	abs, _, err := p.byName(path, write)
+	return abs, err
+}
+
+// byName is the part of Check that looks at the name only: the path
+// made absolute and cleaned, and the roots it must be under.
+func (p Paths) byName(path string, write bool) (string, []string, error) {
 	if path == "" || strings.ContainsRune(path, 0) || !utf8.ValidString(path) {
-		return "", BadParams("%q isn't a path", path)
+		return "", nil, BadParams("%q isn't a path", path)
 	}
 	abs := path
 	switch {
 	case path == "~" || strings.HasPrefix(path, "~/"):
 		if p.Home == "" {
-			return "", Denied("%s: no home folder", path)
+			return "", nil, Denied("%s: no home folder", path)
 		}
 		abs = filepath.Join(p.Home, filepath.FromSlash(strings.TrimPrefix(path, "~")))
 	case caps.Windows && rootless(path):
@@ -130,35 +161,43 @@ func (p Paths) Check(path string, write bool) (string, error) {
 	abs = filepath.Clean(abs)
 	if caps.Windows {
 		if why := windowsName(abs); why != "" {
-			return "", Denied("%s: %s", path, why)
+			return "", nil, Denied("%s: %s", path, why)
 		}
 	}
 	roots := p.read
-	kind := "read"
 	if write {
-		roots, kind = p.write, "write"
+		roots = p.write
 	}
 	roots = append(append([]string{}, p.own...), roots...)
-	outside := Denied("%s is outside the mod's own folder and the roots its files grant may %s", path, kind)
 	// By name first: nothing outside the roots is looked at on disk (an
 	// automount such as /net would block the look).
 	if why := p.denied(abs); why != "" {
-		return "", Denied("%s %s", path, why)
+		return "", nil, Denied("%s %s", path, why)
 	}
 	if !p.under(abs, roots) {
-		return "", outside
+		return "", nil, p.outside(path, write)
 	}
-	real, err := realPath(abs)
-	if err != nil {
-		return "", Denied("%s: %v", path, err)
+	return abs, roots, nil
+}
+
+func (p Paths) outside(path string, write bool) error {
+	kind := "read"
+	if write {
+		kind = "write"
 	}
-	if why := p.denied(real); why != "" {
-		return "", Denied("%s %s", path, why)
+	return Denied("%s is outside the mod's own folder and the roots its files grant may %s", path, kind)
+}
+
+// Root is the folder of the mod's own and its files grant's read roots
+// that real (a checked path) is in, the deepest one; "" when none.
+func (p Paths) Root(real string) string {
+	best := ""
+	for _, r := range append(append([]string{}, p.own...), p.read...) {
+		if fsx.Under(real, r) && len(r) > len(best) {
+			best = r
+		}
 	}
-	if !p.under(real, roots) {
-		return "", outside
-	}
-	return real, nil
+	return best
 }
 
 // CheckIn checks rel, a path relative to root (a thread's worktree,
