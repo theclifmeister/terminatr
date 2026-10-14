@@ -155,9 +155,14 @@ func TestSideBandKeys(t *testing.T) {
 		t.Fatalf("↓ again: %q", m.sideSel)
 	}
 	keyPress(m, "down")
-	if m.sideSel != "p:alpha" {
-		t.Fatalf("↓ from the last header goes round: %q", m.sideSel)
+	if m.sideSel != headKey {
+		t.Fatalf("↓ from the last header goes round to PROJECTS: %q", m.sideSel)
 	}
+	keyPress(m, "down")
+	if m.sideSel != "p:alpha" {
+		t.Fatalf("↓ from PROJECTS: %q", m.sideSel)
+	}
+	keyPress(m, "up")
 	keyPress(m, "up")
 	if m.sideSel != "s:ci.status" {
 		t.Fatalf("↑ round the top: %q", m.sideSel)
@@ -346,7 +351,7 @@ func TestSideBandUndrawnCursor(t *testing.T) {
 		}
 		for range 2 * len(m.tree()) {
 			keyPress(m, "down")
-			if !slices.Contains(drawn(), m.sideSel) {
+			if m.sideSel != headKey && !slices.Contains(drawn(), m.sideSel) {
 				t.Fatalf("h=%d: down goes onto %s, which isn't drawn (%v)", h, m.sideSel, drawn())
 			}
 		}

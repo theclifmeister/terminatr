@@ -60,6 +60,10 @@ type row struct {
 	// links is the project's held messages and paused links on its row
 	// in NEEDS YOU: enter opens the Messages tab.
 	links int
+	// remote is a paired server's project ("@alias/slug", peerFold) on
+	// its row in the all-projects NEEDS YOU: enter shows its read-only
+	// dashboard.
+	remote string
 	// card: the row is a mod's dashboard card's header (modviews.go),
 	// its key the card's.
 	card bool
@@ -234,8 +238,13 @@ func threadState(t *ThreadRow, byID map[string]proto.SessionInfo) (state, reason
 	return state, reason, session
 }
 
+// allProjects is the view's current project while the dashboard shows
+// every project's NEEDS YOU (the sidebar's PROJECTS header), which no
+// slug can be.
+const allProjects = "*"
+
 // listProject is the project the dashboard lists: current when it is
-// one, else the first.
+// one, else the first (allProjects too: shownProject).
 func listProject(d Data, current string) string {
 	for _, p := range d.Projects {
 		if p.Slug == current {
@@ -248,17 +257,32 @@ func listProject(d Data, current string) string {
 	return ""
 }
 
+// shownProject is what the dashboard's list shows: allProjects while
+// current is and there are projects, else listProject.
+func shownProject(d Data, current string) string {
+	if current == allProjects && len(d.Projects) > 0 {
+		return allProjects
+	}
+	return listProject(d, current)
+}
+
 // buildRows lays out NEEDS YOU, the project's own section and SESSIONS.
 // The sidebar's tree lists every project; the list shows one, project
-// (listProject): its coordinator, threads, sessions and task counts.
-// NEEDS YOU, across projects, holds only what waits on the user: blocked
-// coordinators, the tasks in each project's Needs you group (review or
-// blocked) under its project, and blocked sessions of the user's own
-// outside the projects. The task rows are to see, not to act on: enter
-// shows the task in the project popup, and the coordinator accepts the
-// work. Everything about threads goes to their coordinator, the user's
-// single point of contact (§4).
+// (listProject): what of it needs you, its coordinator, threads,
+// sessions and task counts. NEEDS YOU holds only what waits on the
+// user: the project's blocked coordinator, held messages, open
+// questions and the tasks in its Needs you group (review or blocked),
+// then the blocked sessions of the user's own outside the projects,
+// which are no project's. With project allProjects (the sidebar's
+// PROJECTS header) it is every project's instead, each row labelled
+// with its project, the paired servers' shared projects after this
+// server's (from their mirror's watch); the list has no project
+// section then. The task rows are to see,
+// not to act on: enter shows the task in the project popup, and the
+// coordinator accepts the work. Everything about threads goes to their
+// coordinator, the user's single point of contact (§4).
 func buildRows(d Data, project string, sections []string, cards []row) []row {
+	all := project == allProjects
 	var projs, other []row
 	bySlug := map[string]bool{}
 	for _, p := range d.Projects {
@@ -290,6 +314,9 @@ func buildRows(d Data, project string, sections []string, cards []row) []row {
 	}
 	var needs []row
 	for _, p := range d.Projects {
+		if !all && p.Slug != project {
+			continue
+		}
 		needs = append(needs, needsOf[p.Slug]...)
 		if p.Questions > 0 {
 			needs = append(needs, row{key: "nq:" + p.Slug, project: p.Slug, questions: p.Questions,
@@ -312,6 +339,15 @@ func buildRows(d Data, project string, sections []string, cards []row) []row {
 			needs = append(needs, r)
 		}
 	}
+	if all {
+		needs = append(needs, peerNeeds(d.Peers)...)
+	} else {
+		// The project's rows need no label: the section is the project's.
+		for i := range needs {
+			needs[i].who = ""
+		}
+	}
+	// The user's own, outside the projects: in every project's.
 	needs = append(needs, loose...)
 	var head, headNote string
 	paused := false
@@ -433,12 +469,17 @@ func buildRows(d Data, project string, sections []string, cards []row) []row {
 			if len(needs) > 0 {
 				rows = append(rows, row{head: "NEEDS YOU", count: len(needs)})
 				rows = append(rows, needs...)
+			} else if all {
+				rows = append(rows, row{head: "NEEDS YOU", count: 0}, row{note: "  nothing waits on you in any project"})
 			}
 		case "project":
-			if head != "" {
+			switch {
+			case all:
+				// Every project's NEEDS YOU, above: no project of its own.
+			case head != "":
 				rows = append(rows, row{head: head, headNote: headNote, paused: paused})
 				rows = append(rows, projs...)
-			} else {
+			default:
 				rows = append(rows, row{note: "  no projects; n creates one"})
 			}
 		case "other":
@@ -454,10 +495,41 @@ func buildRows(d Data, project string, sections []string, cards []row) []row {
 			}
 			rows = append(rows, other...)
 		case "cards":
-			rows = append(rows, cards...)
+			if !all {
+				rows = append(rows, cards...)
+			}
 		}
 	}
 	return rows
+}
+
+// peerNeeds are the NEEDS YOU rows of the paired servers' shared
+// projects, from the mirror's last watch of each (peer.list, §16.10):
+// its open questions, then what its ProjectWatch says waits on its
+// user, labelled "mini › acme-api". They are the other server's, to
+// see: enter shows that project's read-only dashboard.
+func peerNeeds(peers []proto.PeerMirror) []row {
+	var out []row
+	for _, pm := range peers {
+		for _, mp := range pm.Projects {
+			w := mp.Watch
+			if w == nil {
+				continue
+			}
+			fold, who := peerFold(pm.Alias, mp.Project), remoteCrumb(pm.Alias, mp.Project)
+			if w.Questions > 0 {
+				out = append(out, row{key: "nr:" + fold + ":q", remote: fold, mark: markNeeds, who: who,
+					what: questionsWaiting(w.Questions), state: "blocked", rest: "on " + pm.Alias, pct: -1})
+			}
+			for i, n := range w.NeedsYou {
+				ref := cmp.Or(n.Task, n.Thread, n.Session)
+				out = append(out, row{key: fmt.Sprintf("nr:%s:%d", fold, i), remote: fold, mark: markNeeds, who: who,
+					what: strings.TrimSpace(ref + " " + oneLine(n.Title)), state: cmp.Or(whyState[n.Why], "blocked"),
+					rest: joinSp(whyWords[n.Why], n.Thread), pct: -1})
+			}
+		}
+	}
+	return out
 }
 
 // compactRows are rows with no extra lines (rows.density = compact):

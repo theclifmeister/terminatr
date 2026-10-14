@@ -69,10 +69,37 @@ const (
 	treePeerProject
 	treePeerCoord
 	treePeerThread
+	// The PROJECTS header as the cursor's row (headRow): never in the
+	// tree, drawn as its header.
+	treeHead
 )
 
 // dividerKey is the inactive divider's row key.
 const dividerKey = "d:inactive"
+
+// headKey is the PROJECTS header's key as View.SideSel names it: the
+// cursor can rest on the header, whose target is every project's NEEDS
+// YOU (allProjects).
+const headKey = "h:projects"
+
+// headRow is the PROJECTS header as a row, for what the cursor does on
+// it (target, preview, details, the key bar); here: the all-projects
+// NEEDS YOU shows.
+func headRow(here bool) treeRow { return treeRow{kind: treeHead, pct: -1, here: here} }
+
+// sideRowOf is the row sel names among rows, the header's (headRow)
+// for headKey, with here for it.
+func sideRowOf(rows []treeRow, sel string, here bool) (treeRow, bool) {
+	if sel == headKey {
+		return headRow(here), true
+	}
+	for _, r := range rows {
+		if r.key() == sel {
+			return r, true
+		}
+	}
+	return treeRow{}, false
+}
 
 // treeRow is one row of the sidebar's tree.
 type treeRow struct {
@@ -158,6 +185,8 @@ func (r treeRow) key() string {
 		return "s:" + r.sec.id
 	case treeServer, treePeerProject, treePeerCoord, treePeerThread:
 		return peerKey(r)
+	case treeHead:
+		return headKey
 	}
 	return "p:" + r.slug
 }
@@ -423,7 +452,16 @@ func shownRows(rows []treeRow, w int) []treeRow {
 // sidebarLines draws the sidebar on the left with nothing needing you:
 // sideLines.
 func sidebarLines(all []treeRow, w, h int, foot []string) []string {
-	return sideLines(all, w, h, 0, foot, false)
+	return sideLines(all, w, h, sideHeadIn{}, foot, false)
+}
+
+// sideHeadIn is how the sidebar's PROJECTS header is drawn: needs, the
+// things that need you its ⚑ N counts; cursor, the keyboard's row is the
+// header (headKey); here, every project's NEEDS YOU shows (allProjects),
+// as the row you are on.
+type sideHeadIn struct {
+	needs        int
+	cursor, here bool
 }
 
 // sideLines draws the sidebar w columns wide (its border included) and
@@ -437,7 +475,7 @@ func sidebarLines(all []treeRow, w, h int, foot []string) []string {
 // accent colour and the cursor's row is highlighted instead of the one
 // you are on. Its border is its last column, its first on the right
 // (right): the rest is the same either way.
-func sideLines(all []treeRow, w, h, needs int, foot []string, right bool) []string {
+func sideLines(all []treeRow, w, h int, head sideHeadIn, foot []string, right bool) []string {
 	if w <= 0 {
 		return make([]string, max(h, 0))
 	}
@@ -454,7 +492,7 @@ func sideLines(all []treeRow, w, h, needs int, foot []string, right bool) []stri
 	}
 	lay := sideLayout(all, w, h, len(foot))
 	h -= len(foot)
-	focused := slices.ContainsFunc(all, func(r treeRow) bool { return r.cursor })
+	focused := head.cursor || slices.ContainsFunc(all, func(r treeRow) bool { return r.cursor })
 	border := th().Faint.Render("│")
 	if focused {
 		border = th().Accent.Render("│")
@@ -470,10 +508,19 @@ func sideLines(all []treeRow, w, h, needs int, foot []string, right bool) []stri
 		out = append(out, edge(lay.line(s, cw, slim, focused)+reset))
 	}
 	n := projectCount(all)
+	needs := head.needs
 	if !lay.flag {
 		needs = 0
 	}
-	out = append(out, edge(sideHead(n, needs, cw-gap, slim)+strings.Repeat(" ", gap)+reset))
+	hl := sideHead(n, needs, cw-gap, slim)
+	// The header highlighted as a row is (treeSel): the keyboard's while
+	// the sidebar has the focus, else while it is the row you are on.
+	hr := headRow(head.here)
+	hr.cursor = head.cursor
+	if sel, look := treeSel(hr, focused); sel {
+		hl = look.Render(ansi.Strip(hl))
+	}
+	out = append(out, edge(hl+strings.Repeat(" ", gap)+reset))
 	if l, ok := sideFilterLine(cw - gap); ok {
 		out = append(out, edge(l+strings.Repeat(" ", gap)+reset))
 	}
@@ -507,6 +554,8 @@ func sideLines(all []treeRow, w, h, needs int, foot []string, right bool) []stri
 // count of projects on the right, just before the needs-you column, and
 // after it, with needs things that need you, ⚑ N (headFlag), for which
 // the count gives way; in the slim strip the word alone, cut with "…".
+// A click on it (off ⚑ N), or enter with the cursor on it (headKey),
+// shows every project's NEEDS YOU (allProjects).
 func sideHead(n, needs, cw int, slim bool) string {
 	if slim {
 		return th().Title.Render(fit(" PROJECTS", cw))
@@ -1114,6 +1163,16 @@ func sideFlagAt(all []treeRow, w, h, foot, needs, x, y int) bool {
 	return lo > 0 && x >= lo && x < hi
 }
 
+// sideHeadAt says whether column x, row y of a sidebar w×h with a footer
+// of foot rows is its PROJECTS header (off its ⚑ N, sideFlagAt), a click
+// on which shows every project's NEEDS YOU.
+func sideHeadAt(all []treeRow, w, h, foot, x, y int) bool {
+	if w <= 0 || x < 0 || x >= w-1 {
+		return false
+	}
+	return y == len(sideLayout(all, w, h, foot).above)
+}
+
 // sideLocal is window column x of a sidebar w wide from column at, as
 // the sidebar's own drawing has it (sideHitAt, sideTip): its border
 // last. On the right (right) the border is its first column. -1 off
@@ -1150,6 +1209,10 @@ type Target struct {
 // target is where a click on r goes; ok is false for a thread without a
 // running session, with why.
 func (r treeRow) target() (t Target, ok bool, why string) {
+	if r.kind == treeHead {
+		// Every project's NEEDS YOU.
+		return Target{Project: allProjects}, true, ""
+	}
 	if r.kind == treePeerProject {
 		// Its read-only dashboard (peerdash.go).
 		return Target{Project: peerFold(r.peer, r.slug)}, true, ""
@@ -1191,6 +1254,9 @@ const previewDelay = 200 * time.Millisecond
 func (r treeRow) preview() (t Target, ok bool) {
 	if r.kind == treePeerProject && !r.here {
 		return Target{Project: peerFold(r.peer, r.slug)}, true
+	}
+	if r.kind == treeHead && !r.here {
+		return Target{Project: allProjects}, true
 	}
 	if r.here || r.kind == treeDivider || r.kind == treeSection || r.kind == treeServer || r.isPeer() {
 		return t, false
@@ -1488,11 +1554,8 @@ func (c *client) previewNow(seq uint64, sel string) {
 	var t Target
 	ok := false
 	if c.kb == areaSide && c.side != nil && c.v.SideSel == sel {
-		for _, r := range shownRows(c.sideTree(), c.sideW) {
-			if r.key() == sel {
-				t, ok = r.preview()
-				break
-			}
+		if r, found := sideRowOf(shownRows(c.sideTree(), c.sideW), sel, false); found {
+			t, ok = r.preview()
 		}
 	}
 	c.status()
@@ -1697,7 +1760,8 @@ func (c *client) setActive(slug string, on bool) {
 // appendSidebar draws the sidebar's changed lines. c.mu held.
 func (c *client) appendSidebar(b []byte, wrote bool) ([]byte, bool) {
 	rows := c.sideTree()
-	lines := sideLines(rows, c.sideW, c.sideRows(), needsYouCount(c.side.projects, c.side.sessions), sideFooter(rows, c.sideW, c.side.server, true, c.side.compact), c.v.Sidebar.Right())
+	head := sideHeadIn{needs: needsYouCount(c.side.projects, c.side.sessions), cursor: c.kb == areaSide && c.v.SideSel == headKey}
+	lines := sideLines(rows, c.sideW, c.sideRows(), head, sideFooter(rows, c.sideW, head, c.side.server, true, c.side.compact), c.v.Sidebar.Right())
 	if c.sideW == 0 {
 		lines = nil // hidden
 	}
@@ -1862,6 +1926,20 @@ func (c *client) sideMouse(m emu.Mouse) {
 		c.sideDo(sideNeedStep(in, treeRow{}, false))
 		return
 	}
+	if sideHeadAt(c.sideTree(), c.sideW, c.sideRows(), c.sideFoot(), c.sideCol(m.X), m.Y) {
+		// The PROJECTS header: every project's NEEDS YOU, on the
+		// dashboard; the sidebar keeps the keyboard on it.
+		c.kb, c.v.SideSel = areaSide, headKey
+		c.flash = ""
+		c.status()
+		c.mu.Unlock()
+		if c.vc != nil {
+			c.act(proto.MethodViewSideSel, proto.ViewParams{Key: headKey})
+		}
+		c.sideGo(Target{Project: allProjects})
+		c.poke()
+		return
+	}
 	r, ok, border := sideHitAt(c.sideTree(), c.sideW, c.sideRows(), c.sideFoot(), c.sideCol(m.X), m.Y)
 	t, can, why := r.target()
 	sel := ""
@@ -1982,9 +2060,9 @@ type sideAction struct {
 }
 
 var sideActions = []sideAction{
-	{id: "side.up", keys: []string{"up", "k"}, op: sideUp, label: "↑ ↓ k j", help: "move through the tree; the pane shows what the cursor rests on (a project its dashboard, a coordinator or a thread its session, live), the keyboard stays in the sidebar, and nothing starts"},
+	{id: "side.up", keys: []string{"up", "k"}, op: sideUp, label: "↑ ↓ k j", help: "move through the tree and the PROJECTS header; the pane shows what the cursor rests on (a project its dashboard, a coordinator or a thread its session, live; the header every project's NEEDS YOU), the keyboard stays in the sidebar, and nothing starts"},
 	{id: "side.down", keys: []string{"down", "j"}, op: sideDown},
-	{id: "side.enter", keys: []string{"enter"}, op: sideEnter, label: "enter", help: "into the pane: a project's dashboard or a session gets the keyboard; a coordinator not running starts, and an inactive project's starts activating the project; on the inactive divider it folds or unfolds; on a mod's section it opens the view the mod names, else folds or unfolds it"},
+	{id: "side.enter", keys: []string{"enter"}, op: sideEnter, label: "enter", help: "into the pane: a project's dashboard or a session gets the keyboard; a coordinator not running starts, and an inactive project's starts activating the project; on the PROJECTS header, every project's NEEDS YOU, labelled; on the inactive divider it folds or unfolds; on a mod's section it opens the view the mod names, else folds or unfolds it"},
 	{id: "side.unfold", keys: []string{"right", "l"}, op: sideIn, label: "→ ←", help: "→ unfolds a folded project, the inactive divider or a mod's section, else goes into the pane as enter; ← folds an unfolded one, or from a row under a project goes up to it. Folding never activates or deactivates"},
 	{id: "side.fold", keys: []string{"left", "h"}, op: sideOut},
 	{id: "side.back", keys: []string{"esc"}, op: sideBack, label: "esc", help: "back to the list (in a session: to the pane)", fixed: true},
@@ -2110,6 +2188,9 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 	case sideHelp:
 		return sideStep{help: true}
 	}
+	if sel == headKey {
+		return headStep(all, w, op)
+	}
 	rows, i := cursorAt(all, w, sel)
 	if i < 0 {
 		return sideStep{msg: "no projects"}
@@ -2138,10 +2219,11 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 	}
 	switch op {
 	case sideUp:
-		// Round the ends: the sidebar only, the list stops at them.
-		return moveTo((i - 1 + len(rows)) % len(rows))
+		// Round the ends, the PROJECTS header among the rows: the
+		// sidebar only, the list stops at them.
+		return cursorStep(rows, r.key(), -1)
 	case sideDown:
-		return moveTo((i + 1) % len(rows))
+		return cursorStep(rows, r.key(), 1)
 	case sideIn:
 		if r.kind == treeDivider {
 			return sideStep{}
@@ -2194,6 +2276,57 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 	return sideStep{}
 }
 
+// headStep is what sidebar key op does with the cursor on the PROJECTS
+// header: ↑ ↓ go on through the rows; enter and → show every project's
+// NEEDS YOU, the keyboard following into the list; z Z fold and unfold
+// everything, the cursor staying there; ← does nothing, and space and p
+// say what they are for.
+func headStep(all []treeRow, w, op int) sideStep {
+	rows, _ := cursorAt(all, w, "")
+	switch op {
+	case sideIn, sideEnter:
+		return enterStep(headRow(false))
+	case sideUp:
+		return cursorStep(rows, headKey, -1)
+	case sideDown:
+		return cursorStep(rows, headKey, 1)
+	case sideActive:
+		return sideStep{msg: "space on a project activates or deactivates it"}
+	case sidePin:
+		return sideStep{msg: "p on a project pins it to the top"}
+	case sideFoldAll, sideUnfoldAll:
+		return sideStep{refold: foldAll(all, op == sideFoldAll), sections: sectionIDs(all), foldOn: op == sideFoldAll,
+			everySection: op == sideUnfoldAll}
+	}
+	return sideStep{}
+}
+
+// cursorStep moves the cursor from the row keyed sel by d (↑ -1, ↓ 1),
+// round the ends, through the rows and the PROJECTS header at its place:
+// under the band above the tree, over the tree.
+func cursorStep(rows []treeRow, sel string, d int) sideStep {
+	above := 0
+	for above < len(rows) && rows[above].kind == treeSection && rows[above].sec.above {
+		above++
+	}
+	keys := make([]string, 0, len(rows)+1)
+	for _, r := range rows[:above] {
+		keys = append(keys, r.key())
+	}
+	keys = append(keys, headKey)
+	for _, r := range rows[above:] {
+		keys = append(keys, r.key())
+	}
+	i := slices.Index(keys, sel)
+	if i < 0 {
+		return sideStep{}
+	}
+	if j := (i + d + len(keys)) % len(keys); j != i {
+		return sideStep{sel: keys[j]}
+	}
+	return sideStep{}
+}
+
 // enterStep is enter on r: into the pane, opening r's target first
 // unless it already shows.
 func enterStep(r treeRow) sideStep {
@@ -2213,14 +2346,21 @@ func enterStep(r treeRow) sideStep {
 // strip. compact (rows.density) keeps the key bar alone, where a
 // glyph's tooltip shows instead. Each line is w-1-sideGap cells wide,
 // styled.
-func sideFooter(all []treeRow, w int, s ServerInfo, session, compact bool) []string {
+func sideFooter(all []treeRow, w int, head sideHeadIn, s ServerInfo, session, compact bool) []string {
 	cw := w - 1 - sideGap
 	if w <= sideSlim || cw < 4 {
 		return nil
 	}
 	var r *treeRow
 	focused := false
+	if head.cursor || head.here {
+		hr := headRow(head.here)
+		r, focused = &hr, head.cursor
+	}
 	for i := range all {
+		if focused {
+			break
+		}
 		if all[i].cursor {
 			r, focused = &all[i], true
 			break
@@ -2272,6 +2412,8 @@ func (r treeRow) details() (string, string) {
 		return peerDetails(r)
 	}
 	switch r.kind {
+	case treeHead:
+		return "all projects", "what needs you in every project, together"
 	case treeSection:
 		return sectionDetails(r.sec)
 	case treeDivider:
@@ -2360,6 +2502,8 @@ func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 	case !focused:
 		keys = []string{"tab sidebar", barKey("help.open", "?") + " help"}
 	case r == nil:
+	case r.kind == treeHead:
+		keys = []string{enter + " show all"}
 	case r.kind == treeSection:
 		keys = sectionKeys(r.sec)
 	case r.kind == treeServer, r.isPeer():

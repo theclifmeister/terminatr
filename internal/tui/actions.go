@@ -69,13 +69,13 @@ func init() {
 		{id: "focus.prev", keys: []string{"shift+tab"}, fixed: true, mouse: "a click on the area", run: (*dash).cycleFocus},
 		{id: "place.last", keys: []string{";"}, label: ";", help: "back to the last place: the area, sidebar row or session the keyboard was in before (prefix+; anywhere)",
 			menu: "back to the last place", run: (*dash).goLastPlace},
-		{id: "row.open", keys: []string{"enter"}, label: "enter", help: "attach to the selected session; on a project, open its coordinator; a task in NEEDS YOU shows in the project popup; questions waiting there open in the coordinator's question dialog",
+		{id: "row.open", keys: []string{"enter"}, label: "enter", help: "attach to the selected session; on a project, open its coordinator; a task in NEEDS YOU shows in the project popup; questions waiting there open in the coordinator's question dialog; a paired server's need in the all-projects NEEDS YOU shows its read-only dashboard",
 			menu: "open the selected row",
 			foot: func(_ *dash, r row, ok bool) string {
 				switch {
 				case !ok:
 					return ""
-				case r.task != nil:
+				case r.task != nil, r.remote != "":
 					return "show"
 				case r.card:
 					return "open"
@@ -204,6 +204,8 @@ func (m *dash) enter(string) tea.Cmd {
 		return m.showTask(r.project, r.task.ID)
 	case r.card:
 		return m.openCard(r.key)
+	case r.remote != "":
+		return m.showProject(r.remote)
 	case r.questions > 0:
 		return m.answerQuestions(r.project)
 	case r.links > 0:

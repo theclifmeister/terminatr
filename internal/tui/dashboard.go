@@ -24,8 +24,10 @@ import (
 	"github.com/theclifmeister/terminatr/internal/view"
 )
 
-// The dashboard (docs/SPEC.md §4): NEEDS YOU across projects, then each
-// project with its coordinator and threads, then the other sessions. It
+// The dashboard (docs/SPEC.md §4): the current project's NEEDS YOU, then
+// the project with its coordinator and threads, then the other
+// sessions; the sidebar's PROJECTS header shows every project's NEEDS
+// YOU instead (allProjects). It
 // is a client with no state of its own: it polls the server and the
 // project files every second. Attaching leaves the dashboard; the caller
 // runs the attach view and opens the dashboard again afterwards.
@@ -342,7 +344,9 @@ func newDash(o DashOptions) *dash {
 	if vc := o.View; vc != nil {
 		v := vc.View()
 		m.view, m.viewSeq = vc, v.Seq
-		m.sel = cmp.Or(v.Selected, m.sel)
+		if v.Selected != "p:"+allProjects {
+			m.sel = cmp.Or(v.Selected, m.sel)
+		}
 		m.current = v.Current
 		m.sideSel, m.sideSent = v.SideSel, v.SideSel
 		m.folds, m.layout.Tree = v.Tree, v.Tree
@@ -591,7 +595,9 @@ func (m *dash) fromView() tea.Cmd {
 		m.result.Attach = cmp.Or(v.Focus, "view")
 		return tea.Quit
 	}
-	if m.selPending == 0 && v.Selected != "" {
+	// The all-projects NEEDS YOU has no project row: "p:*" keeps the
+	// list's own selection (showProject).
+	if m.selPending == 0 && v.Selected != "" && v.Selected != "p:"+allProjects {
 		m.sel = v.Selected
 	}
 	if m.current != v.Current {
@@ -831,6 +837,12 @@ func (m *dash) sideClick(mo tea.Mouse) tea.Cmd {
 		m.focus = areaSide
 		return m.sideDo(sideNeedStep(m.sideKeysIn(), treeRow{}, false))
 	}
+	if sideHeadAt(m.tree(), m.sideW(), m.h, m.sideFoot(), x, mo.Y) {
+		// The PROJECTS header: every project's NEEDS YOU, the sidebar
+		// keeping the keyboard on it.
+		m.focus, m.sideSel = areaSide, headKey
+		return tea.Batch(m.sendSideSel(), m.openTarget(Target{Project: allProjects}))
+	}
 	r, ok, border := sideHitAt(m.tree(), m.sideW(), m.h, m.sideFoot(), x, mo.Y)
 	t, can, why := r.target()
 	var cmd tea.Cmd
@@ -899,6 +911,10 @@ func (m *dash) showProject(slug string) tea.Cmd {
 		m.rebuild()
 	}
 	m.sel = "p:" + slug
+	if slug == allProjects {
+		m.sel = ""
+		m.rebuild() // NEEDS YOU's first row
+	}
 	if m.view == nil {
 		return nil
 	}
@@ -925,6 +941,15 @@ func (m *dash) tree() []treeRow {
 		markCursor(rows, m.sideW(), m.sideSel)
 	}
 	return rows
+}
+
+// sideHeadIn is how the sidebar's PROJECTS header is drawn: its ⚑ N,
+// the keyboard's row while the sidebar has it there, the row you are on
+// while every project's NEEDS YOU shows.
+func (m *dash) sideHeadIn() sideHeadIn {
+	_, _, remote := m.remote()
+	return sideHeadIn{needs: m.needsCount(), cursor: m.focus == areaSide && m.sideSel == headKey,
+		here: m.over == nil && !remote && m.allShown()}
 }
 
 // band is what the sidebar's band of mod sections is built from.
@@ -986,8 +1011,12 @@ func (m *dash) cycleFocus(key string) tea.Cmd {
 	}
 	m.focus = cycle(areas, m.area(), key == "shift+tab")
 	if m.focus == areaSide {
-		// The keyboard's row starts on the row you are on.
+		// The keyboard's row starts on the row you are on: the header
+		// while every project's NEEDS YOU shows.
 		m.sideSel = hereKey(m.tree())
+		if m.sideHeadIn().here {
+			m.sideSel = headKey
+		}
 		return m.sendSideSel()
 	}
 	return nil
@@ -1085,19 +1114,17 @@ func (m *dash) preview(seq uint64) tea.Cmd {
 	if seq != m.previewSeq || m.focus != areaSide || m.top() != nil || m.busy {
 		return nil
 	}
-	for _, r := range shownRows(m.tree(), m.sideW()) {
-		if r.key() != m.sideSel {
-			continue
-		}
-		t, ok := r.preview()
-		switch {
-		case !ok:
-		case t.Session != "":
-			return m.openTarget(t)
-		case t.Project != m.current:
-			return m.showProject(t.Project)
-		}
+	r, ok := sideRowOf(shownRows(m.tree(), m.sideW()), m.sideSel, m.sideHeadIn().here)
+	if !ok {
 		return nil
+	}
+	t, ok := r.preview()
+	switch {
+	case !ok:
+	case t.Session != "":
+		return m.openTarget(t)
+	case t.Project != m.current:
+		return m.showProject(t.Project)
 	}
 	return nil
 }
@@ -1182,7 +1209,7 @@ func (m *dash) setData(d Data) tea.Cmd {
 		m.then = ""
 	case first && m.then == thenNeeds:
 		// The needs-you badge clicked in a session.
-		m.goNeeds()
+		cmds = append(cmds, m.goNeeds())
 		m.then = ""
 	case first && m.over != nil && m.over.View:
 		// The view a mod opened after a command in the session.
@@ -1202,7 +1229,7 @@ func (m *dash) setData(d Data) tea.Cmd {
 // rebuild lays the rows out again from the last poll, for the listed
 // project; a selection that went away moves to the first row.
 func (m *dash) rebuild() {
-	m.rows = buildRows(m.data, listProject(m.data, m.current), m.layout.order(), m.cardRows())
+	m.rows = buildRows(m.data, shownProject(m.data, m.current), m.layout.order(), m.cardRows())
 	if m.layout.compact() {
 		m.rows = compactRows(m.rows)
 	}
@@ -1217,23 +1244,30 @@ func (m *dash) rebuild() {
 	}
 }
 
-// needsCount is what NEEDS YOU counts: what waits on the human, in
-// every project.
+// needsCount is what waits on the human in every project of this
+// server, as the all-projects NEEDS YOU counts it (needsYouCount): the
+// header's ⚑ N.
 func (m *dash) needsCount() int {
-	for _, r := range m.rows {
-		if r.head == "NEEDS YOU" {
-			return r.count
-		}
-	}
-	return 0
+	return needsYouCount(m.data.Projects, m.data.Sessions)
 }
 
 // thenNeeds is the then (DashState.Then) of the needs-you badge clicked
 // in a session: NEEDS YOU's first row selected.
 const thenNeeds = "needs-you"
 
-// goNeeds selects NEEDS YOU's first row: a click on the needs-you badge.
-func (m *dash) goNeeds() {
+// goNeeds shows every project's NEEDS YOU and selects its first row: a
+// click on the needs-you badge, which counts them all.
+func (m *dash) goNeeds() tea.Cmd {
+	var cmd tea.Cmd
+	if !m.allShown() && len(m.data.Projects) > 0 {
+		cmd = m.showProject(allProjects)
+	}
+	m.selNeeds()
+	return cmd
+}
+
+// selNeeds selects NEEDS YOU's first row, with the list's keyboard.
+func (m *dash) selNeeds() {
 	in := false
 	for _, r := range m.rows {
 		switch {
@@ -1464,8 +1498,15 @@ func (m *dash) projectHere() string {
 	if r, ok := m.selected(); ok && r.project != "" {
 		return r.project
 	}
+	if m.allShown() {
+		return "" // every project's NEEDS YOU: none of its own
+	}
 	return listProject(m.data, m.current)
 }
+
+// allShown says whether the list shows every project's NEEDS YOU (the
+// sidebar's PROJECTS header) rather than one project.
+func (m *dash) allShown() bool { return shownProject(m.data, m.current) == allProjects }
 
 // cycleProject opens the coordinator of the next (or previous) project
 // after the current one.
@@ -1568,7 +1609,8 @@ func (m *dash) withSide(s string) string {
 	lines := strings.Split(s, "\n")
 	rows := m.tree()
 	right := m.layout.Sidebar.Right()
-	side := sideLines(rows, m.sideW(), m.h, m.needsCount(), sideFooter(rows, m.sideW(), m.data.Server, m.over != nil, m.layout.compact()), right)
+	head := m.sideHeadIn()
+	side := sideLines(rows, m.sideW(), m.h, head, sideFooter(rows, m.sideW(), head, m.data.Server, m.over != nil, m.layout.compact()), right)
 	w := m.geom().main().w
 	for i := range side {
 		var l string

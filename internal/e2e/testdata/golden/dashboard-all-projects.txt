@@ -1,0 +1,24 @@
+ PROJECTS                      2   │ tm dashboard · all projects                                ● server ok · 0 sessions
+ ■ alpha            0           ⚑  │ NEEDS YOU 2 ───────────────────────────────────────────────────────────────────────
+ └─ coordinator         ·          │  alpha         T1 Write the README        ◆ review
+ ■ beta             0           ⚑  │  beta          T1 Ship it                 ▲ blocked
+ └─ coordinator         ·          │ OTHER SESSIONS ────────────────────────────────────────────────────────────────────
+                                   │  no sessions
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+ ───────────────────────────────── │
+ all projects                      │────────────────────────────────────────────────────────────────────────────────────
+ what needs you in every project,… │ esc back to the list · tab next area
+ ⏎ show all · ? help               │

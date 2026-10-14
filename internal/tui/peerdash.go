@@ -55,7 +55,7 @@ func (m *dash) treeCurrent() string {
 	if _, _, ok := m.remote(); ok {
 		return m.current
 	}
-	return listProject(m.data, m.current)
+	return shownProject(m.data, m.current)
 }
 
 // findPeer is the mirror's server alias and its project slug; nil for
@@ -261,10 +261,14 @@ func (m *dash) remoteHere() bool {
 }
 
 // shownCrumb is the header's title on the dashboard: the remote
-// project's breadcrumb, "" for this server's.
+// project's breadcrumb, "all projects" for every project's NEEDS YOU,
+// "" for one of this server's.
 func (m *dash) shownCrumb() string {
 	if alias, slug, ok := m.remote(); ok {
 		return remoteCrumb(alias, slug)
+	}
+	if m.allShown() {
+		return "all projects"
 	}
 	return ""
 }

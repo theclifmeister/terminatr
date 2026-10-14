@@ -153,7 +153,7 @@ func TestCompactDensity(t *testing.T) {
 		t.Fatalf("inline details: normal %d lines, compact %d", count(normal), count(compact))
 	}
 
-	if f := sideFooter(nil, 32, ServerInfo{}, false, true); len(f) != 1 {
+	if f := sideFooter(nil, 32, sideHeadIn{}, ServerInfo{}, false, true); len(f) != 1 {
 		t.Fatalf("compact sidebar footer: %q", f)
 	}
 

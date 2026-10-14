@@ -143,7 +143,7 @@ func TestPanelsThemed(t *testing.T) {
 func TestSidebarThemed(t *testing.T) {
 	withProbeTheme(t)
 	rows := goldenTree()
-	side := sideLines(rows, 40, 30, 0, sideFooter(rows, 40, ServerInfo{}, false, false), false)
+	side := sideLines(rows, 40, 30, sideHeadIn{}, sideFooter(rows, 40, sideHeadIn{}, ServerInfo{}, false, false), false)
 	for _, l := range unthemed(strings.Join(side, "\n")) {
 		t.Error(l)
 	}

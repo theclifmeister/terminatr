@@ -54,7 +54,7 @@ func TestAttachBand(t *testing.T) {
 	if got := sectionRows(c.sideTree()); !slices.Equal(got, []string{"s:ticker.ticker", "s:ci.status"}) {
 		t.Fatalf("band %v", got)
 	}
-	lines := strings.Join(sideLines(c.sideTree(), c.sideW, c.sideRows(), 0, nil, false), "\n")
+	lines := strings.Join(sideLines(c.sideTree(), c.sideW, c.sideRows(), sideHeadIn{}, nil, false), "\n")
 	if !strings.Contains(lines, "TICKER") || !strings.Contains(lines, "#412 passes") {
 		t.Fatalf("the sidebar:\n%s", lines)
 	}
@@ -113,7 +113,7 @@ func TestAttachBandAbove(t *testing.T) {
 		t.Fatalf("rows %v", sectionRows(rows))
 	}
 	needs := needsYouCount(c.side.projects, c.side.sessions)
-	lines := sideLines(rows, c.sideW, c.sideRows(), needs, nil, false)
+	lines := sideLines(rows, c.sideW, c.sideRows(), sideHeadIn{needs: needs}, nil, false)
 	plain := make([]string, len(lines))
 	for i, l := range lines {
 		plain[i] = ansi.Strip(l)
@@ -125,11 +125,16 @@ func TestAttachBandAbove(t *testing.T) {
 		t.Fatalf("the sidebar:\n%s", strings.Join(plain, "\n"))
 	}
 
-	// ↑ from the first project goes to the ticker's header.
+	// ↑ from the first project goes to the PROJECTS header, then to the
+	// ticker's header above it.
 	c.kb, c.v.SideSel = areaSide, "p:alpha"
 	in := sideKeysIn{tree: c.sideTree, full: c.sideFullTree, w: c.sideW, h: c.sideRows(), sel: c.v.SideSel}
-	if st, _ := sideKeyFor(in, "up"); st.sel != "s:ticker.ticker" {
+	if st, _ := sideKeyFor(in, "up"); st.sel != headKey {
 		t.Fatalf("↑ from alpha: %q", st.sel)
+	}
+	in.sel = headKey
+	if st, _ := sideKeyFor(in, "up"); st.sel != "s:ticker.ticker" {
+		t.Fatalf("↑ from PROJECTS: %q", st.sel)
 	}
 }
 
@@ -191,7 +196,7 @@ func TestAttachProj(t *testing.T) {
 	if want := []string{"ticker.ticker beta", "ci.status beta", "prci.ci alpha", "prci.ci beta"}; !slices.Equal(shown, want) {
 		t.Fatalf("shown %v, want %v", shown, want)
 	}
-	lines := ansi.Strip(strings.Join(sideLines(c.sideTree(), c.sideW, c.sideRows(), 0, nil, false), "\n"))
+	lines := ansi.Strip(strings.Join(sideLines(c.sideTree(), c.sideW, c.sideRows(), sideHeadIn{}, nil, false), "\n"))
 	if !strings.Contains(lines, "    ▾ ci status") || !strings.Contains(lines, "      ☑ #412 beta docs") {
 		t.Fatalf("the sidebar:\n%s", lines)
 	}

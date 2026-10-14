@@ -270,6 +270,9 @@ func TestDashboardSidebarKeys(t *testing.T) {
 	m.layout.Details = false
 	m.setData(src.data)
 	cursor := func() string {
+		if m.sideHeadIn().cursor {
+			return headKey
+		}
 		for _, r := range m.tree() {
 			if r.cursor {
 				return r.key()
@@ -285,8 +288,9 @@ func TestDashboardSidebarKeys(t *testing.T) {
 		t.Fatalf("tab: focus %d cursor %q:\n%s", m.focus, cursor(), whole(m))
 	}
 	steps := []struct{ key, cursor string }{
-		// ↑ on the first row wraps round to the last, ↓ there back.
-		{"up", "c:alpha"}, {"up", "p:alpha"}, {"up", "t:beta/t-0006"}, {"down", "p:alpha"},
+		// ↑ on the first row goes to the PROJECTS header, then round to
+		// the last, ↓ there back.
+		{"up", "c:alpha"}, {"up", "p:alpha"}, {"up", headKey}, {"up", "t:beta/t-0006"}, {"down", headKey}, {"down", "p:alpha"},
 		// ← on the project folds it, → unfolds it again.
 		{"left", "p:alpha"}, {"left", "p:alpha"}, {"j", "p:beta"}, {"k", "p:alpha"}, {"right", "p:alpha"},
 		{"j", "c:alpha"}, {"left", "p:alpha"}, {"j", "c:alpha"}, {"down", "p:beta"}, {"down", "c:beta"}, {"down", "t:beta/t-0005"},
@@ -839,5 +843,76 @@ func TestSideKeyRules(t *testing.T) {
 		if ok != (i > 0) || got != want {
 			t.Errorf("preview of %s: %+v %v, want %+v", rows[i].key(), got, ok, want)
 		}
+	}
+}
+
+// TestSidebarProjectsHeader: the PROJECTS header is a stop of the
+// sidebar's cursor, above the tree: enter or → there shows every
+// project's NEEDS YOU and gives the list the keyboard; drawn in the
+// cursor's look while the cursor rests on it, and as the row you are
+// on while that view shows. The header's ⚑ N badge opens it too.
+func TestSidebarProjectsHeader(t *testing.T) {
+	setIcons(IconsUnicode)
+	defer resetConsole()
+	rows := buildTree(testData().Projects, testData().Sessions, treeIn{current: "beta"})
+	for _, op := range []int{sideEnter, sideIn} {
+		if st := sideKeyStep(rows, sideDefault, headKey, op); st.target == nil || st.target.Project != allProjects || !st.into {
+			t.Errorf("op %d on PROJECTS: %+v", op, st)
+		}
+	}
+	if st := sideKeyStep(rows, sideDefault, headKey, sideDown); st.sel != rows[0].key() {
+		t.Errorf("↓ from PROJECTS: %q", st.sel)
+	}
+	if st := sideKeyStep(rows, sideDefault, headKey, sideActive); st.toggle != "" || st.target != nil || st.msg == "" {
+		t.Errorf("space on PROJECTS: %+v", st)
+	}
+	if st := sideKeyStep(rows, sideDefault, headKey, sideFoldAll); st.refold == nil || st.sel != "" {
+		t.Errorf("z on PROJECTS: %+v", st)
+	}
+	if !sideHeadAt(rows, sideDefault, 20, 0, 2, 0) || sideHeadAt(rows, sideDefault, 20, 0, 2, 1) || sideHeadAt(rows, sideDefault, 20, 0, sideDefault-1, 0) {
+		t.Error("sideHeadAt: the header is row 0 off the border")
+	}
+	if t2, ok := headRow(false).preview(); !ok || t2.Project != allProjects {
+		t.Errorf("preview %+v %v", t2, ok)
+	}
+	if _, ok := headRow(true).preview(); ok {
+		t.Error("the header previews while its view shows")
+	}
+
+	src := &fakeSource{data: testData()}
+	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 30, State: DashState{Current: "beta"}})
+	m.setData(src.data)
+	m.focus, m.sideSel = areaSide, "p:alpha"
+	keyPress(m, "up")
+	if m.sideSel != headKey {
+		t.Fatalf("↑ from alpha: %q", m.sideSel)
+	}
+	head := m.sideHeadIn()
+	open, _, _ := strings.Cut(th().SelFocus.Bold(true).Render("x"), "x")
+	if l := sideLines(m.tree(), m.sideW(), m.h, head, nil, false)[0]; !head.cursor || !strings.HasPrefix(l, open+" PROJECTS") {
+		t.Errorf("the header isn't in the cursor's look: %q", l)
+	}
+	if foot := strings.Join(sidebarOf(m), "\n"); !strings.Contains(foot, "all projects") || !strings.Contains(foot, "show all") {
+		t.Errorf("the footer says nothing of the header:\n%s", foot)
+	}
+	runAll(m, keyPress(m, "enter"))
+	if !m.allShown() || m.focus != areaMain || !strings.Contains(screen(m), "tm dashboard · all projects") {
+		t.Fatalf("enter on PROJECTS: current %q focus %v\n%s", m.current, m.focus, screen(m))
+	}
+	// Back into the sidebar, the cursor starts on the header, the row
+	// you are on.
+	m.layout.Details = false
+	keyPress(m, "tab")
+	if m.focus != areaSide || m.sideSel != headKey {
+		t.Errorf("tab into the sidebar: focus %v sel %q", m.focus, m.sideSel)
+	}
+
+	// The ⚑ N badge, from a project with nothing waiting: every
+	// project's NEEDS YOU, its first row selected.
+	m = newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 30, State: DashState{Current: "beta"}})
+	m.setData(src.data)
+	m.goNeeds()
+	if r, _ := m.selected(); !m.allShown() || r.session != "s-1" || m.focus != areaMain {
+		t.Errorf("goNeeds: current %q selected %+v", m.current, r)
 	}
 }
