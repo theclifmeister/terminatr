@@ -1,0 +1,38 @@
+│ mini
+│ ◉ linked <rtt> · synced <duration> ago
+│
+│ Fix the login
+│ no task
+│
+│ THREAD ──────────────────────────────
+│ thread    t-0001 ○ idle
+│
+│ Read-only: nothing here acts on mini.
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│
+│

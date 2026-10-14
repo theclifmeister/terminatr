@@ -60,6 +60,10 @@ type infoData struct {
 	// sections are the mods' coordinator sections, as mod.views last
 	// listed them (modsections.go); beside a coordinator only.
 	sections []proto.ModView
+	// remote is a paired server's pane's, from the mirror
+	// (remotepanel.go); none of the above but slug ("@alias/slug") and
+	// session then.
+	remote *remoteData
 }
 
 // loadInfo reads the panel's data for session s, one of sessions: a
@@ -155,6 +159,11 @@ func infoLay(d *infoData, w int, now time.Time, o panelOpts) panelLay {
 		pl := &panel{w: w}
 		pl.add(th().Faint.Render("no thread here"))
 		return panelLay{lines: pl.lines}
+	}
+	if d.remote != nil {
+		// No mod sections: mods are per server.
+		pl, hits := remotePanel(d, w, now)
+		return layPanel(pl, hits, nil, infoTarget(d), o)
 	}
 	if d.watch != nil {
 		pl, hits := coordPanel(d.watch, w, now)
@@ -518,8 +527,13 @@ func (c *client) appendInfo(b []byte, wrote bool) ([]byte, bool) {
 	return b, wrote
 }
 
-// infoHint is the status bar's note while the panel has the keyboard.
-const infoHint = "info panel ▸ ↑ ↓ scroll · enter task · esc back to the pane"
+// infoHint is the status bar's note while the panel has the keyboard;
+// remoteHint beside a paired server's pane, whose task and questions are
+// that server's.
+const (
+	infoHint   = "info panel ▸ ↑ ↓ scroll · enter task · esc back to the pane"
+	remoteHint = "info panel ▸ ↑ ↓ scroll · esc back to the pane"
+)
 
 // infoHintNow is infoHint, naming a when a coordinator's panel has open
 // questions to answer, and the section keys while it has mod sections.
@@ -527,6 +541,9 @@ const infoHint = "info panel ▸ ↑ ↓ scroll · enter task · esc back to the
 func (c *client) infoHintNow() string {
 	if c.info == nil {
 		return infoHint
+	}
+	if d := c.info.data; d != nil && d.remote != nil {
+		return remoteHint
 	}
 	hint := infoHint
 	if keys := panelHintKeys(c.info.lay, c.info.sel); keys != "" {
@@ -602,6 +619,9 @@ func (c *client) infoKeyboard(k uv.Key) {
 	name := keyName(k)
 	op, ok := panelOp(name)
 	switch {
+	case ip.data != nil && ip.data.remote != nil && (name == "a" || ok && op == panelEnter && ip.sel == ""):
+		// The task and the questions are the paired server's.
+		c.flash = ip.data.remote.alias + "'s: view-only here"
 	case name == "a":
 		answer = true
 	case name == "tab":
@@ -864,23 +884,33 @@ func (c *client) infoMouse(m emu.Mouse) {
 }
 
 // pollInfo reads the panel's data for the focused session through ic,
-// outside c.mu, and the mods' sections it shows, by the views mod.views last listed
-// (pollState asks it, and showInfo takes its answer): beside a
-// coordinator its coordinator sections, beside a thread the details
-// sections for that thread; nil, nil without the panel.
-func (c *client) pollInfo(ic *infoCache, sessions []proto.SessionInfo) (*infoData, []modview.Shown) {
+// outside c.mu, and the mods' sections it shows, by the views mod.views
+// last listed (pollState asks it, and showInfo takes its answer):
+// beside a coordinator its coordinator sections, beside a thread the
+// details sections for that thread; nil, nil without the panel. A
+// paired server's pane's is from peers, the mirror, with no sections.
+func (c *client) pollInfo(ic *infoCache, sessions []proto.SessionInfo, peers []proto.PeerMirror) (*infoData, []modview.Shown) {
 	if !c.lock() {
 		return nil, nil
 	}
 	id, on := c.v.Focus, c.info != nil
 	var prev []proto.ModView
+	var remote *proto.SessionInfo
 	w := 0
 	if on {
 		prev, w = c.views, c.infoW-1
+		if c.focus != nil && c.focus.info.ID == id && c.focus.info.Server != "" {
+			in := c.focus.info
+			remote = &in
+		}
 	}
 	c.mu.Unlock()
 	if !on {
 		return nil, nil
+	}
+	if remote != nil {
+		// A paired server's pane: the mirror's, and no mod sections.
+		return loadRemoteInfo(peers, *remote), nil
 	}
 	var d *infoData
 	for _, s := range sessions {
@@ -911,7 +941,7 @@ func (c *client) showInfo(d *infoData) bool {
 	if c.info == nil {
 		return false
 	}
-	if d != nil {
+	if d != nil && d.remote == nil {
 		d.sections = c.views
 	}
 	if reflect.DeepEqual(c.info.data, d) {

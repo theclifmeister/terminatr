@@ -538,9 +538,9 @@ func (vs *views) do(method string, p proto.ViewParams) (view.View, *proto.Error)
 
 func (s *Server) pane(id string) (paneInfo, bool) {
 	if _, _, ok := remoteID(id); ok {
-		// Sized: no view gives it a size; no info panel, whose data is
-		// this server's own projects'.
-		return paneInfo{follows: true, sized: true, remote: true}, s.remotes != nil && s.remotes.alive(id)
+		// Sized: no view gives it a size. Only a coordinator or a thread
+		// crosses, so it has the info panel, drawn from the mirror.
+		return paneInfo{follows: true, sized: true, remote: true, panel: true}, s.remotes != nil && s.remotes.alive(id)
 	}
 	sess, perr := s.session(id)
 	if perr != nil {

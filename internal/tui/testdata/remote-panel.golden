@@ -1,0 +1,108 @@
+mini's coordinator (width 40)
+│ mini
+│ ◉ linked 38 ms · synced 2s ago
+│
+│ acme-api
+│ coordinator ● working · opus
+│ 2 need you · 2 threads
+│ context 84k / 200k · 42%
+│
+│ NEEDS YOU ────────────────────────────
+│ ▲ 1 question waiting
+│ T7 ▲ checks failed Billing export
+│   #70 open, checks failed
+│
+│ THREADS ──────────────────────────────
+│ t-0007 T7 ● working 2/5
+│   ▸ Write the CSV writer
+│   #70 open, checks failed · checked
+│   30s ago
+│ t-0008 ✓ done
+│   Docs
+│
+│ ON DECK ──────────────────────────────
+│ T9 ○ ready Rate limits
+│
+│ Read-only: nothing here acts on mini.
+
+mini's thread (width 40)
+│ mini
+│ ◉ linked 38 ms · synced 2s ago
+│
+│ T7 Billing export
+│ ● started
+│
+│ STEPS ────────────────────────────────
+│ ▰▰▱▱▱ 40% 2/5
+│ ◐ Write the CSV writer
+│
+│ THREAD ───────────────────────────────
+│ thread    t-0007 ● working
+│ model     sonnet
+│ todos     ▰▰▱▱▱ 33% 1/3
+│ now       ▸ Run the tests
+│ context   40k / 200k · 20%
+│ PR        #70 open, checks failed ·
+│           checked 30s ago
+│ checks    failing
+│ reports   2
+│
+│ Read-only: nothing here acts on mini.
+
+nas's thread, offline (width 40)
+│ nas
+│ ○ offline 4m · relay · last seen 14:02
+│
+│ T3 Transcode
+│ ● started
+│
+│ STEPS ────────────────────────────────
+│ ▰▰▰▱▱ 50% 1/2
+│
+│ THREAD ───────────────────────────────
+│ thread    t-0003 ○ idle
+│
+│ Read-only: nothing here acts on nas.
+
+a long server name (width 30)
+│ runnervm-6qbd8-ubuntu-24-04-…
+│ ◉ linked 38 ms · synced 2s
+│   ago
+│
+│ T7 Billing export
+│ ● started
+│
+│ STEPS ──────────────────────
+│ ▰▰▱▱▱ 40% 2/5
+│ ◐ Write the CSV writer
+│
+│ THREAD ─────────────────────
+│ thread    t-0007 ● working
+│ model     sonnet
+│ todos     ▰▰▱▱▱ 33% 1/3
+│ now       ▸ Run the tests
+│ context   40k / 200k · 20%
+│ PR        #70 open, checks
+│           failed · checked
+│           30s ago
+│ checks    failing
+│ reports   2
+│
+│ Read-only: nothing here acts
+│ on runnervm-6qbd8-ubuntu-24-
+│ 04-x64-standard-runner.
+
+not shared any more (width 40)
+│ mini
+│ ◉ linked 38 ms
+│
+│ mini doesn't share this project with
+│ this server any more.
+
+not paired any more (width 40)
+│ mini
+│ not paired any more
+│
+│ mini isn't paired with this server any
+│ more (tm peer list).
+
