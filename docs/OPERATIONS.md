@@ -227,7 +227,7 @@ Threads push their branch and report the PR's title and body; the coordinator op
 **GitLab** is served by a code host mod, not by tm itself (SPEC §3, **Code host**). terminatr's `examples/mods/gitlab` is one, through `glab`:
 
 1. Install glab (`brew install glab`) and `glab auth login` (for a self-managed server, `glab auth login --hostname gitlab.example.com`). The mod runs glab on that login; it never sees a token.
-2. `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.26.0/examples/mods/gitlab` (or a later release's tag), read the consent screen (it asks only to run `glab`), and enable it in the Mods tab with the `commands` grant, for the projects that use GitLab or all.
+2. `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.27.0/examples/mods/gitlab` (or a later release's tag), read the consent screen (it asks only to run `glab`), and enable it in the Mods tab with the `commands` grant, for the projects that use GitLab or all.
 3. Put `code_host = "gitlab"` in each such project's `PROJECT.md` front matter. Without it a `gitlab.com` remote has no PR host, as before.
 4. Run `tm doctor`: under `code host` it names the mod that serves `gitlab`, then glab and its login.
 
