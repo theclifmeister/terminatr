@@ -180,8 +180,9 @@ type Server struct {
 	notices *modnotify.Hub
 	// toasts are the mods' toasts (modtoast.go).
 	toasts modToasts
-	// versions caches agent versions for the mod guard (mods.go).
-	versions versions
+	// versions caches agent versions for the mod guard (mods.go); nil
+	// is the process's cache (agent.Version). Tests set their own.
+	versions *agent.Versions
 	// asks are the sessions' open questions (ask.go).
 	asks asks
 	// mods are the sessions' mod listeners by session id (modchan.go).

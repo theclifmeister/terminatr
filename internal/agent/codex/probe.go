@@ -96,7 +96,8 @@ func profileFlags(argv []string) (idx []int, name string, flags []string) {
 }
 
 // probeFunc checks that the profile flags hold under the codex binary
-// and returns its version ("" when it can't tell). A variable for tests.
+// and returns its version as m's version_args print it ("" when it
+// can't tell). A variable for tests.
 var probeFunc = probeProfile
 
 // probeCache keeps each verdict for a binary (path, size, mtime) and
@@ -110,12 +111,12 @@ type probeVerdict struct {
 
 // sandboxed returns l with the profile kept when it holds, or dropped,
 // with a warning, when it doesn't.
-func sandboxed(l agent.Launch, spec agent.LaunchSpec) agent.Launch {
+func sandboxed(l agent.Launch, spec agent.LaunchSpec, m *agent.Manifest) agent.Launch {
 	idx, name, flags := profileFlags(l.Argv)
 	if len(idx) == 0 {
 		return l
 	}
-	version, err := probeFunc(l.Argv[0], spec.TMBin, spec.Cwd, spec.Socket, name, flags)
+	version, err := probeFunc(m, l.Argv[0], spec.TMBin, spec.Cwd, spec.Socket, name, flags)
 	if err == nil {
 		return l
 	}
@@ -142,15 +143,12 @@ func sandboxed(l agent.Launch, spec agent.LaunchSpec) agent.Launch {
 // probeProfile runs `codex sandbox -P <name> -C cwd <flags> -- tm
 // codex-sandbox-probe <sock> <loopback>` and reports why the sandbox
 // doesn't hold, if it doesn't.
-func probeProfile(codex, tmBin, cwd, sock, name string, flags []string) (string, error) {
+func probeProfile(m *agent.Manifest, codex, tmBin, cwd, sock, name string, flags []string) (string, error) {
 	path, err := exec.LookPath(codex)
 	if err != nil {
 		return "", err
 	}
-	version := ""
-	if out, err := run(path, nil, "--version"); err == nil {
-		version = agent.ParseVersion(out)
-	}
+	version, _ := agent.Version(context.Background(), path, m, nil)
 	key := path + "\x00" + tmBin + "\x00" + cwd + "\x00" + sock + "\x00" + name + "\x00" + strings.Join(flags, "\x00")
 	if fi, err := os.Stat(path); err == nil {
 		key += fmt.Sprintf("\x00%d\x00%d", fi.Size(), fi.ModTime().UnixNano())
@@ -280,10 +278,7 @@ func (a *Agent) ProbeSandbox(tmBin string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	version := ""
-	if out, err := run(path, nil, "--version"); err == nil {
-		version = agent.ParseVersion(out)
-	}
+	version, _ := agent.Version(context.Background(), path, a.m, nil)
 	return version, probeOnce(path, tmBin, dir, sock, name, flags)
 }
 
@@ -331,10 +326,7 @@ func (a *Agent) ProbeThreadSandbox(tmBin string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	version := ""
-	if out, err := run(path, nil, "--version"); err == nil {
-		version = agent.ParseVersion(out)
-	}
+	version, _ := agent.Version(context.Background(), path, a.m, nil)
 	args := append([]string{"sandbox", "-P", name, "-C", work}, flags...)
 	args = append(args, "--", tmBin, ProbeCommand, sock, "127.0.0.1:1", filepath.Join(outside, "probe"))
 	out, err := run(path, flagsEnv(), args...)
