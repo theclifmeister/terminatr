@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The installed-agents scenarios of docs/SPEC.md §8.2 (Models): which
@@ -364,4 +365,55 @@ func fakeLog(t *testing.T, env *Env) string {
 	t.Helper()
 	b, _ := os.ReadFile(env.FakeLog())
 	return string(b)
+}
+
+// TestCoordinatorModelStaysOnUnknownCatalog: the ticker never switches a
+// coordinator because its agent's models went unknown (the cache missing
+// or failed): the wanted model would fall back to the agent's default,
+// and every coordinator would flip to /model default and back as the
+// cache changes. A real setting change is the one switch.
+func TestCoordinatorModelStaysOnUnknownCatalog(t *testing.T) {
+	env := New(t)
+	env.FakeClaude()
+	env.Setenv("TERMINATR_TICK_SWEEP", "1s")
+	modelsProject(t, env)
+	writeConfig(t, env, "[agents.claude]\ndefault_model = \"fake-big\"\n")
+	cache := filepath.Join(env.Home, "state", "models", "claude.json")
+	env.MustCLI("doctor") // asks the agent, which writes the cache
+	if !Poll(agentWait, func() bool { _, err := os.Stat(cache); return err == nil }) {
+		t.Fatal("the models were never asked")
+	}
+	good, err := os.ReadFile(cache)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := coordinator(t, env)
+	if i, _ := env.Info(c); i.Model != "fake-big" {
+		t.Fatalf("coordinator launched with model %q", i.Model)
+	}
+	steady := func(what string) {
+		t.Helper()
+		time.Sleep(4 * time.Second) // several sweeps
+		if i, _ := env.Info(c); i.Model != "fake-big" || i.ModelPending {
+			t.Fatalf("%s: model changed: %+v", what, i)
+		}
+		if strings.Contains(fakeLog(t, env), `"kind":"model"`) {
+			t.Fatalf("%s: tm switched the model:\n%s", what, fakeLog(t, env))
+		}
+	}
+	os.Remove(cache)
+	steady("cache missing")
+	os.WriteFile(cache, []byte(`{"agent":"claude","status":"failed","reason":"boom"}`), 0o600)
+	steady("cache failed")
+	os.WriteFile(cache, good, 0o600)
+	steady("cache good again")
+	writeConfig(t, env, "[agents.claude]\ndefault_model = \"fake-big\"\n\n[projects.demo]\ncoordinator_model = \"fake-small\"\n")
+	if !Poll(agentWait, func() bool { i, _ := env.Info(c); return i.Model == "fake-small" && !i.ModelPending }) {
+		i, _ := env.Info(c)
+		t.Fatalf("not switched: %+v", i)
+	}
+	time.Sleep(3 * time.Second)
+	if n := strings.Count(fakeLog(t, env), `"kind":"model"`); n != 1 {
+		t.Fatalf("%d model switches, want 1:\n%s", n, fakeLog(t, env))
+	}
 }
