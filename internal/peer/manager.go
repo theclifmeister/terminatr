@@ -31,6 +31,9 @@ type Options struct {
 	// Export is what paired servers may read of this one (peer.projects,
 	// peer.watch); nil exports nothing and leaves out CapWatch.
 	Export Exporter
+	// Messages takes paired servers' messages (peer.message); nil takes
+	// none and leaves out CapMsg.
+	Messages Messages
 }
 
 // Manager keeps a link to every paired server. Nothing local waits on
@@ -121,7 +124,7 @@ func (m *Manager) Reload() error {
 }
 
 func (m *Manager) add(id *Identity, cert tls.Certificate, p Peer) {
-	d := &dispatcher{ex: m.opts.Export, caller: caller.ForPeer(p.Alias)}
+	d := &dispatcher{ex: m.opts.Export, msgs: m.opts.Messages, caller: caller.ForPeer(p.Alias), peer: p.ID()}
 	l := &link{
 		peer:    p,
 		id:      id,
@@ -148,6 +151,9 @@ func (m *Manager) caps() []string {
 	caps := slices.Clone(Caps)
 	if m.opts.Export != nil {
 		caps = append(caps, CapWatch)
+	}
+	if m.opts.Messages != nil {
+		caps = append(caps, CapMsg)
 	}
 	return caps
 }

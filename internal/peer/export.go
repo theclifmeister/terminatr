@@ -42,22 +42,31 @@ type handler func(ctx context.Context, params json.RawMessage) (any, error)
 // signal: the board, inbox and threads change on disk.
 var watchPoll = 2 * time.Second
 
-// dispatcher answers a paired server's requests from the Exporter.
+// dispatcher answers a paired server's requests from the Exporter, and
+// hands its messages to Messages.
 type dispatcher struct {
 	ex     Exporter
+	msgs   Messages
 	caller caller.Caller
+	peer   ID
 }
 
 // methods are the peer.* methods a paired server may call: nothing
-// else is reachable from a link. All of them read.
+// else is reachable from a link. All of them read but peer.message,
+// which delivers a message to a linked project (§16.11).
 func (d *dispatcher) methods() map[string]handler {
-	if d == nil || d.ex == nil {
+	if d == nil || (d.ex == nil && d.msgs == nil) {
 		return nil
 	}
-	return map[string]handler{
-		proto.MethodPeerProjects: d.projects,
-		proto.MethodPeerWatch:    d.watch,
+	m := map[string]handler{}
+	if d.ex != nil {
+		m[proto.MethodPeerProjects] = d.projects
+		m[proto.MethodPeerWatch] = d.watch
 	}
+	if d.msgs != nil {
+		m[proto.MethodPeerMessage] = d.message
+	}
+	return m
 }
 
 func (d *dispatcher) projects(ctx context.Context, _ json.RawMessage) (any, error) {

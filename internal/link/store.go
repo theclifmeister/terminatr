@@ -25,6 +25,12 @@ type store struct {
 	// Held are the messages waiting for the user's OK, by "<from>><to>",
 	// so a look at the links reads no message files.
 	Held map[string][]string `json:"held,omitempty"`
+	// Epoch, Out and In order the outboxes to paired servers (remote.go):
+	// this store's random epoch, the last sequence queued to each alias,
+	// and the highest taken from each.
+	Epoch string            `json:"epoch,omitempty"`
+	Out   map[string]int    `json:"out,omitempty"`
+	In    map[string]*inSeq `json:"in,omitempty"`
 }
 
 // bucket is one direction's token bucket (PerHour, Burst).
@@ -68,6 +74,12 @@ func loadStore(file string) *store {
 	}
 	if s.Held == nil {
 		s.Held = map[string][]string{}
+	}
+	if s.Out == nil {
+		s.Out = map[string]int{}
+	}
+	if s.In == nil {
+		s.In = map[string]*inSeq{}
 	}
 	return s
 }

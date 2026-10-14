@@ -275,6 +275,7 @@ func Edit(data []byte, table, key string, value any) ([]byte, error) {
 	if _, err := toml.Decode(string(data), new(map[string]any)); err != nil {
 		return nil, fmt.Errorf("the settings can't be read: %w", err)
 	}
+	bare := keyText(key)
 	lines := strings.SplitAfter(string(data), "\n")
 	if len(lines) > 0 && lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
@@ -288,7 +289,7 @@ func Edit(data []byte, table, key string, value any) ([]byte, error) {
 	for i, l := range lines {
 		if h, ok := header(l); ok {
 			if in && !done {
-				out = insertAt(out, last, key+" = "+val+"\n", len(out))
+				out = insertAt(out, last, bare+" = "+val+"\n", len(out))
 				done = true
 			}
 			in = equal(h, want)
@@ -304,7 +305,7 @@ func Edit(data []byte, table, key string, value any) ([]byte, error) {
 				if strings.HasSuffix(l, "\n") || i < len(lines)-1 {
 					nl = "\n"
 				}
-				out = append(out, indent+key+" = "+val+comment+nl)
+				out = append(out, indent+bare+" = "+val+comment+nl)
 				done = true
 				continue
 			}
@@ -320,12 +321,12 @@ func Edit(data []byte, table, key string, value any) ([]byte, error) {
 	switch {
 	case done:
 	case found:
-		out = insertAt(out, last, key+" = "+val+"\n", len(out))
+		out = insertAt(out, last, bare+" = "+val+"\n", len(out))
 	default:
 		if len(out) > 0 && strings.TrimSpace(out[len(out)-1]) != "" {
 			out = append(out, "\n")
 		}
-		out = append(out, "["+table+"]\n", key+" = "+val+"\n")
+		out = append(out, "["+table+"]\n", bare+" = "+val+"\n")
 	}
 	res := []byte(strings.Join(out, ""))
 	// The edit must parse and say what was meant; else the file sets it
@@ -364,7 +365,17 @@ func Edit(data []byte, table, key string, value any) ([]byte, error) {
 		return res, nil
 	}
 	if want, ok := value.(Link); ok {
-		if got, err := parseLink(v); err != nil || got != want {
+		if got, _, err := parseLink(v); err != nil || got != want {
+			return nil, ErrForm
+		}
+		return res, nil
+	}
+	if want, ok := value.(remoteLink); ok {
+		got, askSet, err := parseLink(v)
+		if !askSet {
+			got.Ask = true
+		}
+		if err != nil || got != Link(want) {
 			return nil, ErrForm
 		}
 		return res, nil
@@ -444,6 +455,17 @@ func insertAt(lines []string, i int, s string, end int) []string {
 	return append(out, lines[i+1:]...)
 }
 
+// keyText is key as a TOML key: bare when it can be, else quoted
+// ("mini/acme-api").
+func keyText(key string) string {
+	for _, r := range key {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
+			return strconv.Quote(key)
+		}
+	}
+	return key
+}
+
 func tomlValue(v any) (string, error) {
 	switch v := v.(type) {
 	case bool:
@@ -464,6 +486,12 @@ func tomlValue(v any) (string, error) {
 			return allow, nil
 		}
 		return "{ allow = " + allow + ", ask = true }", nil
+	case remoteLink:
+		allow, _ := tomlValue(v.Allow)
+		if v.Ask {
+			return allow, nil
+		}
+		return "{ allow = " + allow + ", ask = false }", nil
 	case []string:
 		parts := make([]string, len(v))
 		for i, x := range v {

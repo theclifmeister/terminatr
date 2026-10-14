@@ -73,6 +73,9 @@ asks, so acknowledge reports, prompt threads and move tasks yourself.
 - `link-paused`: the link stopped after many exchanges without the
   user. Ask them whether to resume (`tm link resume <project>
   --approved-by-user`).
+- `link-undelivered`: a message to a project on a paired server didn't
+  arrive (refused there, or not taken in 72 hours); the item says why.
+  Tell the user; don't resend it in a loop.
 
 Mark every item done once handled. The server itself closes finished
 threads (auto_close), prompts threads about failing checks and conflicts
@@ -88,6 +91,11 @@ need, `--re` on a reply, a library file (`--attach t-<n>/<file>`) for
 anything long. Refused with `no-link` or `not-linked-back`: tell the user
 once; never ask the other coordinator to change settings. `rate-limited`
 and `link-paused` mean wait or ask the user, never retry in a loop.
+A link may name a project on a paired server, `<server>/<slug>` (`tm
+link send mini/acme-api "…"`): the same commands, but each message
+waits for the user's OK unless they turned ask off, it reaches the other
+server when the link is up (`tm link log` shows queued, sent, read), no
+files cross, and that server's user decides whether its side accepts.
 
 ## Threads
 
