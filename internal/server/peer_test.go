@@ -89,3 +89,41 @@ func TestServerStatusWithoutKey(t *testing.T) {
 		t.Fatalf("an unpaired server's link: %+v", st.Link)
 	}
 }
+
+// TestPeerReload: a key and peers written while the server runs (tm peer
+// pair) show once peer.reload reads them; removing the peer drops it.
+func TestPeerReload(t *testing.T) {
+	p := testPaths(t)
+	startServer(t, p)
+	c, err := Connect(p, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	var st *proto.LinkStatus
+	call(t, c, proto.MethodPeerReload, nil, &st)
+	if st != nil {
+		t.Fatalf("reload without a key: %+v", st)
+	}
+	dir := peer.DirIn(p.Home)
+	id, _, err := peer.EnsureIdentity(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	k, _, _ := ed25519.GenerateKey(nil)
+	if _, err := peer.Pin(dir, k, "ws://127.0.0.1:1", "mini", ""); err != nil {
+		t.Fatal(err)
+	}
+	call(t, c, proto.MethodPeerReload, nil, &st)
+	if st == nil || st.ID != id.ID.String() || len(st.Peers) != 1 || st.Peers[0].Alias != "mini" {
+		t.Fatalf("after pairing: %+v", st)
+	}
+	if ok, err := peer.Unpin(dir, "mini"); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	st = nil
+	call(t, c, proto.MethodPeerReload, nil, &st)
+	if st == nil || len(st.Peers) != 0 {
+		t.Fatalf("after remove: %+v", st)
+	}
+}

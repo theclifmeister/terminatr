@@ -961,6 +961,9 @@ func (s *Server) dispatch(req proto.Request, peerPID int, human bool, who func()
 	case proto.MethodAgentReload:
 		s.loadAgents()
 		return s.agentList(), nil
+	case proto.MethodPeerReload:
+		s.peers.Reload()
+		return s.peers.Status(), nil
 	case proto.MethodAgentExplain:
 		var p proto.SessionIDParams
 		if err := decodeParams(req.Params, &p); err != nil {

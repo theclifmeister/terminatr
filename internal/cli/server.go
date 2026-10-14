@@ -329,33 +329,38 @@ func peerLines(st *proto.LinkStatus, now time.Time) []string {
 		out = append(out, "peers     "+st.Error)
 	}
 	for _, p := range st.Peers {
-		parts := []string{p.State}
-		switch p.State {
-		case proto.LinkUp:
-			parts[0] += " " + ago(now, p.Since)
-			if p.RTT > 0 {
-				parts = append(parts, fmt.Sprintf("%.0f ms", max(p.RTT, 1)))
-			}
-			if p.Version != "" {
-				parts = append(parts, "tm "+p.Version)
-			}
-		case proto.LinkOffline:
-			parts[0] += " " + ago(now, p.Since)
-			if p.Reason != "" {
-				parts = append(parts, p.Reason)
-			}
-			if !p.Retry.IsZero() {
-				parts = append(parts, "dials again in "+p.Retry.Sub(now).Round(time.Second).String())
-			}
-		}
-		parts = append(parts, p.Transport)
-		line := fmt.Sprintf("peer      %s  %s", p.Alias, strings.Join(parts, " · "))
+		line := fmt.Sprintf("peer      %s  %s · %s", p.Alias, linkWords(p, now), p.Transport)
 		if p.State != proto.LinkUp && p.Error != "" {
 			line += "\n            " + p.Error
 		}
 		out = append(out, line)
 	}
 	return out
+}
+
+// linkWords is a link's state for people: "up 3m0s · 42 ms · tm 0.27.0",
+// "offline 4m0s · relay · dials again in 30s".
+func linkWords(p proto.PeerLink, now time.Time) string {
+	parts := []string{p.State}
+	switch p.State {
+	case proto.LinkUp:
+		parts[0] += " " + ago(now, p.Since)
+		if p.RTT > 0 {
+			parts = append(parts, fmt.Sprintf("%.0f ms", max(p.RTT, 1)))
+		}
+		if p.Version != "" {
+			parts = append(parts, "tm "+p.Version)
+		}
+	case proto.LinkOffline:
+		parts[0] += " " + ago(now, p.Since)
+		if p.Reason != "" {
+			parts = append(parts, p.Reason)
+		}
+		if !p.Retry.IsZero() {
+			parts = append(parts, "dials again in "+p.Retry.Sub(now).Round(time.Second).String())
+		}
+	}
+	return strings.Join(parts, " · ")
 }
 
 // ago is how long ago t was, to the second.

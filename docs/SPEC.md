@@ -99,6 +99,7 @@ One binary, several roles:
 | `internal/moddev` | The mod author's tools: `tm mod new`'s scaffolds, and the folder watch and log tail of `tm mod dev` and `tm mod logs` (§5.3) |
 | `internal/modbroker` | The broker for user mods: every `$` call checked against the mod's grants and done by the server; the path, host and program checks and the credential deny list (§5.3) |
 | `internal/relay` | `tm relay serve`, the meeting point of two linked servers, and the client side a server dials it with: the WebSocket subset, the signed hello, rooms, limits (§16) |
+| `internal/peer` | The server's identity key and paired servers, the pinned-TLS link to each (§16.7), and pairing by one-time code (§16.8) |
 
 The dependency rule: `server`, `session`, `ticker`, `tui`, `project`, `thread` and `tasks` MUST NOT import `internal/agent/<name>` or mention any agent by name. They see only `internal/agent`.
 
@@ -146,7 +147,7 @@ The dependency rule: `server`, `session`, `ticker`, `tui`, `project`, `thread` a
   - The run directory is `$XDG_RUNTIME_DIR/terminatr` on Linux when that is set, and `~/.terminatr/run` otherwise.
   - If `<run dir>/tm.sock` would be over 100 bytes, the run directory falls back to `/tmp/terminatr-<uid>-<hash>`, where `<hash>` is 8 hex digits of the SHA-256 of `TERMINATR_HOME` (cleaned, with the symlinks in its existing part resolved). Every home keeps its own server even with the fallback; the default `~/.terminatr` is unaffected unless its own path is that long.
   - `$TERMINATR_SOCKET` overrides the socket path, and an override over 100 bytes is refused, not truncated. The human socket is always `human` beside it (no longer than `tm.sock`, so it fits wherever that does).
-- **The human socket.** The server listens on a second socket, `human` beside `tm.sock` (mode 0600, same user, same protocol), for the human's console and CLI. Every control and attach connection (`tm`, the TUI) dials it first and falls back to `tm.sock` where it can't connect: an older server without one, a sandbox that refuses it. A process with a coordinator's or thread's session environment doesn't try (its sandbox would report each refused connect to the agent as a reason to leave the sandbox); the sandbox, not that choice, is the gate. No agent's sandbox allows it (§5.2), so the human-only methods (`project.rename`, `project.active`, `mod.views`, `mod.view.input`, `mod.command`, `mod.restart`, `notify.claim`, `notify.dismiss`, `mod.action.check`, `mod.action.done`, `session.clear`, what starts, stops or types into a session (`session.start`, `session.stop`, `session.keys`, `session.prompt`, `session.adopt`, `session.adopt.ask`, `session.remote`, `questions.open`), `session.model`, the console's `view.*` but `view.digest`, `server.stop` and `agent.reload`: `proto.HumanOnly`) and attach answer only there; on `tm.sock` they come back `human-only` and a control connection stays open. On the human socket they still refuse a caller the pid walk places in an agent's session (§11.1). `cli.run` is the other way round: on `tm.sock` it answers only a caller the pid walk places in an agent's session, since one it calls the human (a process that left its session's tree) would run project commands as the human; the human's own `tm` uses the human socket. An agent's own uses of the human-only session methods (`tm thread start`, `prompt`, `stop`, …) run inside the server through `cli.run`, after the command's own caller check, and the server's calls come in on the human socket (a server started from inside a session drops its `TERMINATR_SESSION`, `ROLE`, `PROJECT` and `THREAD`). Hooks use `tm.sock`.
+- **The human socket.** The server listens on a second socket, `human` beside `tm.sock` (mode 0600, same user, same protocol), for the human's console and CLI. Every control and attach connection (`tm`, the TUI) dials it first and falls back to `tm.sock` where it can't connect: an older server without one, a sandbox that refuses it. A process with a coordinator's or thread's session environment doesn't try (its sandbox would report each refused connect to the agent as a reason to leave the sandbox); the sandbox, not that choice, is the gate. No agent's sandbox allows it (§5.2), so the human-only methods (`project.rename`, `project.active`, `mod.views`, `mod.view.input`, `mod.command`, `mod.restart`, `notify.claim`, `notify.dismiss`, `mod.action.check`, `mod.action.done`, `session.clear`, what starts, stops or types into a session (`session.start`, `session.stop`, `session.keys`, `session.prompt`, `session.adopt`, `session.adopt.ask`, `session.remote`, `questions.open`), `session.model`, the console's `view.*` but `view.digest`, `server.stop`, `agent.reload` and `peer.reload`: `proto.HumanOnly`) and attach answer only there; on `tm.sock` they come back `human-only` and a control connection stays open. On the human socket they still refuse a caller the pid walk places in an agent's session (§11.1). `cli.run` is the other way round: on `tm.sock` it answers only a caller the pid walk places in an agent's session, since one it calls the human (a process that left its session's tree) would run project commands as the human; the human's own `tm` uses the human socket. An agent's own uses of the human-only session methods (`tm thread start`, `prompt`, `stop`, …) run inside the server through `cli.run`, after the command's own caller check, and the server's calls come in on the human socket (a server started from inside a session drops its `TERMINATR_SESSION`, `ROLE`, `PROJECT` and `THREAD`). Hooks use `tm.sock`.
   - `TERMINATR_HOME` (default `~/.terminatr`) moves everything else, which is how tests run isolated servers. (Terminatr was called Termilator up to v0.6.2 and Termalator up to v0.1.0; no release reads the old variables or moves the old directories: docs/OPERATIONS.md, "Upgrading from Termilator".) A custom `TERMINATR_HOME` ignores `$XDG_RUNTIME_DIR`, so a test server never shares a run directory with the user's.
   - `server.lock` and `server.pid` sit next to the socket, in the run directory. A `$TERMINATR_SOCKET` override therefore isolates the lock too (`server.ResolvePaths`).
 - **Permissions.**
@@ -198,6 +199,7 @@ So that this keeps working, every server of every future protocol keeps three pr
 | server | `ping`, `server.status`, `server.stop`, `server.keychain` (macOS: can the server's sessions reach the login keychain, §3.1; a server without it answers `unknown-method`, which `tm doctor` skips), `server.codehost` (runs tm doctor's code-host checks, `gh auth status`, `az` login and repo access, `git ls-remote origin`, in the server's own context, the one its sessions' `gh`, `az` and git have; result `{checks: [{name, ok, detail}]}`; a server without it answers `unknown-method` and doctor checks locally) |
 | sessions | `session.list` (since protocol 13 also the mods' cells: `mods {columns, cells, status}` and each session's `cells`, §5.3 **Cells**; with mod API 1.7 also `mods.sections [{mod, view, title, slot, builtin}]`, the `sidebar.section` and `sidebar.project.section` views consoles show, the built-in mods' alone in safe mode, so an attached console asks `mod.views` only when there are some), `session.start`, `session.stop`, `session.read` (screen text), `session.prompt` (queued, pasted once the agent is idle; the answer's `via` says how it went), `questions.open {project}` (the project's coordinator opens its open questions, §7.5 **Questions**; refused with none open or no coordinator running; result `{session, via, open}`), `session.keys`, `session.wait` (until a state), `session.model {id}` (applies the project's `coordinator_model` to its running coordinator, §8.2 **Models**; `how`: `unchanged`, `switched`, `next-start`), `session.remote {id, on}` (a coordinator's remote control, §11.2), `session.adopt {id, project, thread, brief, asked}` (a plain agent session becomes a thread's, §9 **Adopt**; refused unless it is a live shell-role session with an agent, and with `asked` unless the user's go-ahead waits, which it uses up), `session.adopt.ask {id, project, check, withdraw}` (human-only: records the user's go-ahead to adopt the session into the project for an hour, or with `check` answers `{asked}`, recording nothing, or with `withdraw` drops it; §9 **Adopt**), `session.watch {id}` (the session's state; the connection then streams `watch.changed`, below; a server without it answers `unknown-method`), `project.watch {project}` (a project's dashboard for the coordinator's /tm pane; the connection then streams `project.changed`, **Watch** below), `session.ask {id, question}` (a mod's open question menu; the connection then waits for its answers, **Ask** below), `session.answer {id, index, answer, question}` (one question of it, from `tm thread answer`; `no-question` when none is open; with `question`, from a console's `question.answer` binding, refused unless question `index` still asks it, unanswered and single-select, and `answer` is one of its options' labels), `session.clear {id}` (human-only: pastes the agent's clear prompt once it is idle, journaled; refused for an agent without `[inject] clear`; §5.3 **Action binding**) |
 | agents | `agent.list`, `agent.reload`, `agent.explain` (which signals and rules produced a session's state) |
+| peers | `peer.reload` (read the identity key and the paired servers again after `tm peer` changed them, answering the link status; the human's, §16.8) |
 | hooks | `hook.event` (from `tm hook`; also its own connection kind, §8.2) |
 | views | `view.subscribe` (join a view; the connection then streams `view.changed`), `view.attach`, `view.dashboard`, `view.project`, `view.select`, `view.sidesel`, `view.expand {project, on}` (expand or collapse an inactive project in the sidebar's tree, §4; since protocol 10), `view.tree {tree}` (what the sidebar's tree folds: active projects folded, inactive ones expanded, the inactive divider open, §4; since protocol 11; the view keeps its section folds whatever the tree sent says), `view.sections {sections, on}` (fold or unfold the mods' sections, by id: a sidebar section's `mod.view`, or `mod.view@slug` under a project, and a right-pane section's `panel:mod.view`, one id for every project and row, §4 **Mod sections**; at most 64 ids a call, and a view keeps at most 128 folded, the oldest going first; every console of the view follows, and `ui.json` keeps them with the tree; a console on a server of protocol 14 keeps them as its own; since protocol 15), `view.sidebar {sidebar}` (its width, slim; since protocol 14 also `side`, `share` and `hidden`, §4; a side other than left or right, or a share outside 10 % to 60 %, is refused), `view.info`, `view.status {compact}` (the status bar under a pane: one row without the rule above it, from the layout's `[status_bar] style`, §5.3; a layout change, as `view.sidebar`; since protocol 14), `view.columns {columns}` (the sidebar's column order, from the layout mod `[ui] layout` picks, §5.3; none for the built-in order; since protocol 12), `view.size`, `view.input` (below), `view.digest` (tests: a console's digest check, §15.2) |
 | callers | `caller.who` (who the peer pid is: the hosted session it descends from, and its role, §11.1) |
@@ -568,8 +570,9 @@ Each enabled code mod runs in its own `tm mod host` child of the server: the sam
   state/sessions.json                  live sessions, for resume (§3.6)              [server]
   state/views.json                     the server-owned views but own ones: screen, the session shown, selection, current project, sidebar (§3.3)  [server]
   state/mods/<id>/                     a user mod's own data, and store.json, its $.store (§5.3)  [the mod, through the broker]
-  state/peer/identity.key              the server's Ed25519 identity key, PKCS #8 PEM, 0600; its SHA-256 is the server id (§16.7)  [server, made at the first pairing]
-  state/peer/peers.json                the paired servers: alias, pinned public key, relay URL (§16.7)  [server, on the human's pairing]
+  state/peer/identity.key              the server's Ed25519 identity key, PKCS #8 PEM, 0600; its SHA-256 is the server id (§16.7)  [tm peer, made at the first pairing (§16.8)]
+  state/peer/peers.json                the paired servers: alias, pinned public key, relay URL (§16.7)  [tm peer, the human's (§16.8)]
+  state/peer/peers.lock                held while tm peer changes peers.json (§16.8)  [tm peer]
   cache/mods/<id>/                     a code mod's bundle, bundle.json and host.json (§3.7, Supervisor)  [server]
   state/repos-moved                    the mark that the projects' repo lists have moved from PROJECT.md to config.toml (below)  [server]
   state/ticker.json                    what the ticker already reported: thread states, PRs, nudges, syncs (§7.5)  [server]
@@ -1641,10 +1644,11 @@ These commands are used by the human, the coordinator and threads alike. Exit co
 | `tm agent list [--json] \| check <file> \| reload \| explain <session> [--json]` | human | §8: the agents tm knows, a manifest checked without loading it, the manifests read again, and why a session is in its state (§8.4) |
 | `tm hook --agent <name>` | harness hooks | §8.2 |
 | `tm mod host [--budget D] <bundle.js \| main.ts>` | the server | one code mod's host, speaking the mod host protocol on stdin and stdout (§3.7); not for people |
-| `tm doctor [--fix [--yes]] [--json]` | human | checks and changes nothing; `--fix` offers to remove leftovers and restart an old server after a `y` on a terminal (`--yes` instead, needed without one); `--json` for scripts; exit 1 only when a check fails. Checks: toolchain (with `gh auth status`: a warning when `gh` isn't logged in or can't read its token, since the ticker's PR polls need it, §7.5; the code-host lines (`gh`, `gh auth`, the `az` lines, `git origin`) are the running server's, from `server.codehost`, since over SSH on a Mac this shell has no login keychain while the server's sessions do: each carries `source` "server" in `--json` (a field added to every check, empty for the others) and `[server]` in the text; where this shell fails a check the server passes, a `local shell` note (ok, source "local") says so instead of a warning; with no server, or an older one, the checks run in this shell and are labelled `local`), install method and newer release, server (a server of an older protocol is a warning whose fix is `tm server restart`; on macOS, a server whose sessions can't reach the keychain is a warning whose fix is a restart from the Mac, §3.1; a session whose queued prompts are held while its agent is idle is a `prompt queue` warning, §8.6), sockets, manifests, hooks, enabled Claude plugins known to be unsafe in tm sessions (`claude plugin list --json`; a warning naming the reason and `claude plugin disable <id>`, no fix; the list is `unsafePlugins` in `internal/doctor/plugins.go`, today `worktrees@supermods`, whose "Remove N finished" removes clean worktrees with no commits ahead, which includes a fresh thread's), leftovers, settings tm no longer has (`complete_tasks = "released"`, read as `user`, in a project's table or `[defaults]`), and the installed agents and their models (§8.2 **Models**; doctor asks each installed agent again: a fail `agent` line when none is installed, naming the agents tm knows; per installed agent an ok `<agent> models` line, `12 models, asked 2.1.296 today (Claude Max, firstParty)`, with the models the user hid, added and the account refused, or a warning `unknown: <reason>` (logged out, with the login to run; probe failed; no lister); a fail for a `thread_agent` / `coordinator_agent` that isn't installed or tm doesn't know, naming who sets it; and warnings for several agents installed with none chosen for all projects, a `default_model` the agent doesn't offer now, the older `[agents.<name>] models` list, `[agents.<name>]` of an agent tm doesn't know, a manifest's ignored `[[models]]`, a `coordinator_model` its agent doesn't offer, and each model in a project's scope no installed agent offers, naming who allows it) |
+| `tm doctor [--fix [--yes]] [--json]` | human | checks and changes nothing; `--fix` offers to remove leftovers and restart an old server after a `y` on a terminal (`--yes` instead, needed without one); `--json` for scripts; exit 1 only when a check fails. Checks: toolchain (with `gh auth status`: a warning when `gh` isn't logged in or can't read its token, since the ticker's PR polls need it, §7.5; the code-host lines (`gh`, `gh auth`, the `az` lines, `git origin`) are the running server's, from `server.codehost`, since over SSH on a Mac this shell has no login keychain while the server's sessions do: each carries `source` "server" in `--json` (a field added to every check, empty for the others) and `[server]` in the text; where this shell fails a check the server passes, a `local shell` note (ok, source "local") says so instead of a warning; with no server, or an older one, the checks run in this shell and are labelled `local`), install method and newer release, server (a server of an older protocol is a warning whose fix is `tm server restart`; on macOS, a server whose sessions can't reach the keychain is a warning whose fix is a restart from the Mac, §3.1; a session whose queued prompts are held while its agent is idle is a `prompt queue` warning, §8.6), sockets, manifests, hooks, enabled Claude plugins known to be unsafe in tm sessions (`claude plugin list --json`; a warning naming the reason and `claude plugin disable <id>`, no fix; the list is `unsafePlugins` in `internal/doctor/plugins.go`, today `worktrees@supermods`, whose "Remove N finished" removes clean worktrees with no commits ahead, which includes a fresh thread's), leftovers, settings tm no longer has (`complete_tasks = "released"`, read as `user`, in a project's table or `[defaults]`), and the installed agents and their models (§8.2 **Models**; doctor asks each installed agent again: a fail `agent` line when none is installed, naming the agents tm knows; per installed agent an ok `<agent> models` line, `12 models, asked 2.1.296 today (Claude Max, firstParty)`, with the models the user hid, added and the account refused, or a warning `unknown: <reason>` (logged out, with the login to run; probe failed; no lister); a fail for a `thread_agent` / `coordinator_agent` that isn't installed or tm doesn't know, naming who sets it; and warnings for several agents installed with none chosen for all projects, a `default_model` the agent doesn't offer now, the older `[agents.<name>] models` list, `[agents.<name>]` of an agent tm doesn't know, a manifest's ignored `[[models]]`, a `coordinator_model` its agent doesn't offer, and each model in a project's scope no installed agent offers, naming who allows it), and the paired servers (§16.8: nothing for a server never paired, else one `peers` line with each link's state, a warning for a refused link, an old protocol or an unreachable relay) |
 | `tm mod list [--outdated] [--json] \| install <path\|git-url[//subfolder][@tag]\|github-tree-url> [--yes] \| enable <id> [--project <slug>] [--yes] \| disable <id> [--project <slug>] \| remove <id> [--purge] [--yes] \| update [<id>] [--yes] \| validate [<dir>…] [--json]` | human; list and validate: anyone | user mods, §5.3: install by path or git URL only, consent on a terminal (`--yes` without one) |
 | `tm mod new <id> [--kind column\|hook\|theme\|icons\|keymap\|rules] [--dir <dir>] \| dev <dir> [--yes] \| test [<dir>…] [--json] \| logs <id> [--follow\|-f] [--lines\|-n N]` | dev: human; the rest: anyone | the mod author's tools, §5.3: scaffold, run from a folder with a restart on every save, replay fixtures with a fake broker, read a mod's log |
 | `tm relay serve [--listen ADDR] (--cert FILE --key FILE \| --plain) [--trusted-proxy CIDR]… [--max-conns N] [--max-per-ip N] [--bandwidth MiB/s] [--log-ips]` | human (`human-only` for an agent) | the relay two linked servers meet through, on the user's own host (§16): `--listen` defaults to `:443`; TLS from the certificate files, reloaded when they change, or `--plain` for a TLS proxy in front, whose `X-Forwarded-For` counts only from a `--trusted-proxy`; runs until SIGINT or SIGTERM |
+| `tm peer pair [--relay URL] [--as ALIAS] \| join CODE [--as ALIAS] \| list [--json] \| remove ALIAS \| rotate [--yes]` | human (`human-only` for an agent) | pairing this server with another through a relay by a one-time code and a six-digit check, and the paired servers (§16.8) |
 | `tm update [--check [--json]] [--yes] [--restart]` | human | §10.1 |
 | `tm version` (or `--version`), `tm selftest`, `tm help` | anyone | the version and build id; `selftest` writes a line through libghostty-vt to show it is linked; `help` (or `-h`, `--help`) lists the commands |
 
@@ -1996,7 +2000,7 @@ project slugs, messages, pane content or a pairing code. It can drop or
 delay traffic; it can't read or forge it, nor join a room without a key.
 
 This section is the relay's side, and the link that dials it (§16.7).
-Pairing, which makes the identity key and fills the peers, is relay 3/7.
+Pairing, which makes the identity key and fills the peers, is §16.8.
 
 ### 16.1 Transport
 
@@ -2172,3 +2176,83 @@ own goroutine; no local call waits on one.
 
   `since` is when the state began, `retry` the next dial, `error` the last
   failure in words. The server's log has each change.
+
+### 16.8 Pairing
+
+`tm peer`: the human pairs this server with another through a relay,
+with a one-time code passed between the two people out of band (a chat,
+a call), never through the relay. The name is `peer`, not `link`: `tm
+link` is project links (§7.9). Pairing fills `state/peer/` (§16.7) and
+asks a running server to read it again (`peer.reload`).
+
+| command | does |
+|---|---|
+| `tm peer pair [--relay URL] [--as ALIAS]` | makes a code, prints it and waits up to 10 minutes for the other side to join |
+| `tm peer join CODE [--as ALIAS]` | joins the pairing a code names |
+| `tm peer list [--json]` | this server's id, then each peer: alias, id, relay, link state |
+| `tm peer remove ALIAS` | drops the peer and its link at once |
+| `tm peer rotate [--yes]` | a new identity key, after a `y`; every peer must pair again |
+
+- **Human only.** Every `tm peer` command refuses an agent (`human-only`,
+  from the server's view of the caller as for `tm relay serve`), and
+  `peer.reload` is a human-only method (the human socket, §3.2). The
+  CLI does the pairing itself, in the human's terminal, and writes
+  `state/peer/` under a lock (`state/peer/peers.lock`); a server that
+  isn't running reads it when it starts.
+- **The code** is the relay and an **80-bit secret** `T`, as 16 Crockford
+  base32 digits in four groups: `relay.example.net/7Q4M-K2XD-9HVA-PT3C`.
+  The relay part is its host (`wss://` and `/v1` implied), or the whole
+  URL when it is anything else (`ws://127.0.0.1:8080/7Q4M-…`). Reading
+  it back ignores case, hyphens and spaces, and takes `O` for 0 and `I`
+  or `L` for 1. `--relay` defaults to the relay every pinned peer uses;
+  with none, or several, it is needed. A code works once: the pairing
+  ends after one join, whatever the outcome.
+- **Room.** Both sides join the pair room `SHA-256("tm-pair room v1\n" ‖
+  T)` with their identity keys (§16.2; made now if the server has none).
+  The relay can't get `T` from it. The pairer prints the code once the
+  relay has it waiting (so the code works as soon as it shows) and waits
+  the relay's 10 minutes (§16.4); a joiner the relay tells to wait gives
+  up at once: nobody holds that code (mistyped, expired or used).
+- **TLS 1.3** inside the stream as on a link (§16.7), the joiner the
+  client, each end presenting its identity key and taking the other's
+  as it comes.
+- **Proof.** Each side sends `{"proof"}`: HMAC-SHA-256 keyed with `T`
+  over `"tm-pair proof v1\n" ‖ role ‖ 0x00 ‖ fp(pairer) ‖ fp(joiner) ‖
+  E`, role `pair` or `join`, E the TLS session's exported keying
+  material (label `tm-pair v1`, 32 bytes), and checks the other's. A
+  relay or anyone else in the middle doesn't know `T`, so its proof
+  fails (`the code doesn't match`) and the side that sees it closes
+  before anything else crosses.
+- **Names.** Then each sends `{"name", "version"}`: its host name (first
+  label, lower case) and tm release. The alias defaults to the other's
+  name (`a-z`, `0-9`, `-`, at most 32; else `peer`), with `-2`, `-3` …
+  when another key has it. `--as` sets it, and replaces a peer already
+  called that (pairing again after that peer rotated its key). A key
+  already pinned is paired again: its entry is replaced, and keeps its
+  alias without `--as`.
+- **Check.** Both terminals show the other's name, server id and six
+  digits, `SHA-256("tm-pair check v1\n" ‖ fp(pairer) ‖ fp(joiner))`'s
+  first 8 bytes, big-endian, mod 10⁶, as `418 207`; the same on both
+  sides only when each holds the other's real key. Each person answers
+  `y` once the digits match the other's (read aloud, or in the chat);
+  each side then sends `{"ok": true|false}`. A side pins the other's key
+  in `peers.json` only after its own `y` and the other's `ok`; otherwise
+  nothing is written. The answers fit the relay's 2 minutes for a mated
+  pair room (§16.4). Standard input needn't be a terminal: a script that
+  answers is the human's.
+- **Outcomes.** Exit 0 once paired; exit 1 with `declined` (either
+  side's no), `bad-code` (the proof failed, or nobody holds the code),
+  `own-server` (the two ends are one key), `unknown-peer` (remove);
+  exit 3 for the relay or the network.
+- **Remove** drops the entry; the other side's link then shows `offline
+  · peer` until its user removes it too. **Rotate** replaces
+  `identity.key` and keeps `peers.json`: each peer refuses the new key
+  (`offline · refused`) until the two pair again, which replaces the
+  entries on both sides.
+- **Lines.** `tm peer list`, without a server: `link not running`;
+  `--json`: `{"id", "short", "peers": [{"alias", "id", "short", "relay",
+  "link"}]}`, `link` as in `server.status` (§16.7). `tm doctor`'s `peers`
+  group: nothing for a server never paired; else one line, `ok` with
+  each peer's state, a warning when a link is refused, on an old
+  protocol or can't reach its relay, a failure when the key or
+  `peers.json` can't be read.

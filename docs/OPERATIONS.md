@@ -284,6 +284,30 @@ The log (`docker compose logs relay`, or the journal) shows `serving on …`, ro
 
 Behind your own reverse proxy (nginx, Traefik, the NAS's), run the relay with `--plain --listen :8080` on a private address, have the proxy pass WebSockets to it, and name the proxy with `--trusted-proxy <its address or subnet>`, so the relay's limits count real clients and not the proxy.
 
+### Pairing two servers
+
+With the relay up, pair the two servers once, each of you in your own terminal (an agent can't). On one (here `studio`):
+
+```
+$ tm peer pair --relay relay.example.net --as mini
+Made this server's identity key: server id 4F2A-91C3
+Pairing code (works once, for 10 minutes):
+
+    relay.example.net/7Q4M-K2XD-9HVA-PT3C
+
+On the other server: tm peer join relay.example.net/7Q4M-K2XD-9HVA-PT3C
+```
+
+Pass the code on yourself, in a chat or a call; it never goes through the relay, which can't read it. On the other server (`mini`), within 10 minutes:
+
+```
+$ tm peer join relay.example.net/7Q4M-K2XD-9HVA-PT3C --as studio
+```
+
+Both terminals then show the other server's name and id and the same six digits, `Check: 418 207`. Compare them (read them aloud, or paste them in the chat) and answer `y` on both sides only when they match; different digits mean someone else is in between, so answer `n` and make a new code. Each side pins the other's key once both said yes. `--as` names the other server here (by default its host name); the code is the relay's host and 16 letters and digits, and case, hyphens, `O`/`0` and `I`/`L`/`1` don't matter when you type it. A code works once; a join that says nobody is pairing with it was mistyped, has expired or was used. Later pairings use the same relay without `--relay`.
+
+`tm peer list` shows this server's id and each paired server with its link; `tm peer remove mini` drops one at once (remove this server on the other side too). `tm peer rotate` gives this server a new key, for a key you think was copied: every paired server then refuses it until you pair again with each (`tm peer pair --as mini` here, `tm peer join` there).
+
 ### The servers' side
 
 Each paired server keeps a link to the relay by itself; nothing to start. `tm server status` shows the server's id and each link:
@@ -309,6 +333,7 @@ peer      nas  offline 4m0s · relay · dials again in 30s · relay relay.exampl
 - Claude plugins you have enabled that are known to be unsafe in terminatr's sessions (from `claude plugin list --json`), each with the reason and the `claude plugin disable` command; today `worktrees@supermods`, whose "Remove N finished" removes a fresh thread's clean worktree. A warning only: doctor never disables a plugin;
 - a session whose queued prompts are held while its agent is idle (`prompt queue`: text left in its prompt box, or a dialog), which also holds a coordinator's nudges;
 - leftovers: worktrees under `~/.terminatr/worktrees` whose thread is resolved or gone, and `tm/<project>/…` branches already merged into the default branch;
+- paired servers, once this server has an identity key: one `peers` line with each link's state, a warning when a link is refused (pair again), its peer runs a too old tm, or its relay can't be reached;
 - upkeep: a project's `CONTEXT.md`, `MEMORY.md` or memory file over its size budget (the coordinator consolidates it);
 - settings in `config.toml`: keys tm doesn't know under `[keys]`, `[ui]` or `[agent_mod]` (ignored), and a project's (or All projects') Complete tasks still set to the removed "when released" (it now means by you; pick again in Settings).
 
