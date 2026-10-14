@@ -292,3 +292,13 @@ func tcpPipe(t *testing.T) (net.Conn, net.Conn) {
 	t.Cleanup(func() { a.Close(); b.Close() })
 	return a, b
 }
+
+func TestHostLabel(t *testing.T) {
+	for in, want := range map[string]string{
+		"3a5a3800c87c-E2A37F3E8BF5.local": "3a5a3800c87c-e2a37f3e8bf5", "Mini.Local": "mini", "studio": "studio", " Box.lan. ": "box", "": "",
+	} {
+		if got := HostLabel(in); got != want {
+			t.Errorf("HostLabel(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

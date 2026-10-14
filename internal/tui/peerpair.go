@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Pairing from the Peers tab (docs/SPEC.md §16.8): n asks for the relay
@@ -201,7 +202,7 @@ func (pv *pairView) render(m *dash) string {
 		if name == "" {
 			name = "(no name)"
 		}
-		body = wrapLines("The other server: "+name, w)
+		body = []string{ansi.Truncate("The other server: "+oneLine(name), max(w, 10), "…")}
 		body = append(body, fmt.Sprintf("server id %s · tm %s", pv.offer.Short, strings.TrimPrefix(pv.offer.Version, "v")))
 		body = append(body, "", "Check: "+th().Accent.Render(pv.offer.Check), "")
 		if pv.stage == pairCheck {

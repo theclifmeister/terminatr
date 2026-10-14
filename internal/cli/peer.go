@@ -44,7 +44,7 @@ const pairWait = 13 * time.Minute
 // server is told and asked about the peers.
 var (
 	pairRelayTLS = func() *tls.Config { return nil }
-	pairName     = func() string { h, _ := os.Hostname(); return h }
+	pairName     = func() string { h, _ := os.Hostname(); return peer.HostLabel(h) }
 	reloadPeers  = serverReloadPeers
 	peerLinks    = serverPeerLinks
 )

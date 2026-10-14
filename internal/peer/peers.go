@@ -157,6 +157,13 @@ func CheckAlias(s string) error {
 	return nil
 }
 
+// HostLabel is the name a server gives the other side when pairing
+// (docs/SPEC.md §16.8): the first label of its host name, in lower case.
+func HostLabel(host string) string {
+	host, _, _ = strings.Cut(strings.ToLower(strings.TrimSpace(host)), ".")
+	return host
+}
+
 // DefaultAlias is the alias for a server named name (its host name): the
 // first label in lower case, other characters as -; "peer" when nothing
 // is left.
