@@ -180,7 +180,7 @@ func remotePanel(d *infoData, w int, now time.Time) (*panel, []infoHit) {
 	var bodyHits []infoHit
 	if r.sess.Role == proto.RoleCoordinator || !r.found && d.session.Role == proto.RoleCoordinator {
 		body, bodyHits = watchPanel(r.project.Watch, w, peerNow, true)
-		body.lines = append(slices.Clone(body.lines[:1]), append([]string{fit(" "+remoteCoordLine(r), w)+reset}, body.lines[1:]...)...)
+		body.lines = append(slices.Clone(body.lines[:1]), append([]string{fit(" "+remoteCoordLine(r), w) + reset}, body.lines[1:]...)...)
 		bodyHits = append(slices.Clone(bodyHits[:1]), append([]infoHit{{}}, bodyHits[1:]...)...)
 	} else {
 		body, bodyHits = remoteThread(r, d.session, w, peerNow)
