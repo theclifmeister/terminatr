@@ -54,6 +54,10 @@ type Check struct {
 	Source string `json:"source,omitempty"`
 	// Fix repairs the problem; nil when there is nothing tm may do.
 	Fix *Fix `json:"fix,omitempty"`
+	// Peer and Relay carry a paired server's or a relay's health as
+	// fields, for --json; set only by the peers group's lines.
+	Peer  *PeerHealth  `json:"peer,omitempty"`
+	Relay *RelayHealth `json:"relay,omitempty"`
 }
 
 // Fix is one repair `tm doctor --fix` may do: a removal, or restarting a
@@ -112,6 +116,9 @@ type Deps struct {
 	Getenv func(string) string
 	// PATGet asks Azure DevOps a URL with a PAT; nil is codehost.PATGet.
 	PATGet func(url, pat string) ([]byte, error)
+	// Relay probes the relays the paired servers use (GET /healthz);
+	// nil skips them.
+	Relay *RelayProbe
 }
 
 // RepoHost is one repo in use and where its PRs live.
@@ -119,7 +126,7 @@ type RepoHost = codehost.RepoHost
 
 // DefaultDeps uses the real system.
 func DefaultDeps(p server.Paths, version, build string) Deps {
-	return Deps{Paths: p, GOOS: runtime.GOOS, LookPath: exec.LookPath, Run: run, Version: version, Build: build, Getenv: os.Getenv, Hosts: usedHosts,
+	return Deps{Paths: p, GOOS: runtime.GOOS, LookPath: exec.LookPath, Run: run, Version: version, Build: build, Getenv: os.Getenv, Hosts: usedHosts, Relay: &RelayProbe{},
 		Keychain:    func() proto.KeychainStatus { return keychain.Probe(runtime.GOOS, os.Getenv, keychain.Run) },
 		ProbeModels: func(m *agent.Manifest) (models.Cache, error) { return models.Refresh(context.Background(), m, nil) }}
 }

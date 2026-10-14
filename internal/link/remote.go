@@ -421,3 +421,60 @@ func (s *store) receipt(alias string, m proto.PeerMessage) proto.PeerMessageResu
 	}
 	return proto.PeerMessageResult{Status: proto.PeerDelivered}
 }
+
+// Backlog is what waits for, or failed to reach, one paired server.
+type Backlog struct {
+	// Queued entries wait in the outbox for the server to take them.
+	Queued int
+	// Undelivered are messages of projects here that the server
+	// refused, or didn't take within Expiry.
+	Undelivered int
+}
+
+// Backlogs counts, by alias of paired server, the outbox's entries and
+// the projects' undelivered messages; aliases with neither are left
+// out. A tm doctor look: it reads every project's message folders.
+func Backlogs() map[string]Backlog {
+	out := map[string]Backlog{}
+	if root, err := outboxDir(); err == nil {
+		dirs, _ := os.ReadDir(root)
+		for _, pd := range dirs {
+			if !pd.IsDir() {
+				continue
+			}
+			files, _ := os.ReadDir(filepath.Join(root, pd.Name()))
+			for _, f := range files {
+				if strings.HasSuffix(f.Name(), ".json") && !f.IsDir() {
+					b := out[pd.Name()]
+					b.Queued++
+					out[pd.Name()] = b
+				}
+			}
+		}
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return out
+	}
+	for _, slug := range cfg.ProjectSlugs() {
+		p, err := project.Open(slug)
+		if err != nil {
+			continue
+		}
+		for _, other := range Peers(p) {
+			alias, _, remote := config.Remote(other)
+			if !remote {
+				continue
+			}
+			msgs, _ := Log(p, other)
+			for _, m := range msgs {
+				if m.State == StateUndelivered {
+					b := out[alias]
+					b.Undelivered++
+					out[alias] = b
+				}
+			}
+		}
+	}
+	return out
+}

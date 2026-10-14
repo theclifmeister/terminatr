@@ -2023,7 +2023,7 @@ projects, §16.11; a paired server's panes in this server's consoles,
 - **WebSocket** on `/v1`, over TLS (`wss://`, port 443): a request with
   `Upgrade: websocket`, `Sec-WebSocket-Version: 13` and
   `Sec-WebSocket-Protocol: tm-relay.1`, else HTTP 400 or 426. No
-  extensions. `GET /healthz` answers `ok`; any other path is 404.
+  extensions. `GET /healthz` answers `ok`, with the relay's tm release in a `Tm-Version` header (and `Tm-Auto-Update: on|off` when its config says); any other path is 404.
 - **Our own framing.** tm implements the RFC 6455 subset it uses
   (`internal/relay/ws.go`, both ends); there is no WebSocket module. Clients
   mask their frames, the relay doesn't; reserved bits are refused;
@@ -2400,10 +2400,38 @@ asks a running server to read it again (`peer.reload`).
   "link", "panes"}]}`, `link` as in `server.status` (§16.7), `panes` the
   pane switch (§16.12); a switch that isn't off ends the peer's line
   (`; panes: write`; `panes` in `--json` too). `tm doctor`'s `peers`
-  group: nothing for a server never paired; else one line, `ok` with
-  each peer's state, a warning when a link is refused, on an old
-  protocol or can't reach its relay, a failure when the key or
-  `peers.json` can't be read.
+  group: nothing for a server never paired; else a `paired servers`
+  line (`ok`: this server's id and how many are paired). With the
+  server stopped that is all, plus the relay lines; with it running,
+  **a line per paired server** (`peer ALIAS`): link state and why,
+  latency (the last ping), when it was last seen (now while up; else
+  when the link went down, or "not seen since the server started"), its
+  tm version (warn when it is `SkewMinor` = 2 minor releases or more
+  from this tm, or another major), the pane level each side allows
+  (`off`, `view`, `write`: this side's from `peers.json`, the peer's from
+  the mirror), the projects shared each way (this server's shared
+  count; the peer's from the mirror), and the messages waiting: queued
+  in the outbox, undelivered (refused or expired; `link.Backlogs`).
+  **A line per relay in use** (`relay URL`, one for the peers that
+  meet through it): `GET /healthz` with a short timeout; for a CA
+  certificate the days left, for a pinned IP relay whether it shows
+  the pinned key (dates aren't checked there); the relay's tm version
+  (its `Tm-Version` header on `/healthz`, else what the links' hellos
+  said) and `update available` when a newer release is out; and
+  `auto-update on|off` when the relay says it (the `Tm-Auto-Update`
+  header, set from `Config.AutoUpdate`; the installed units don't set
+  it yet, so doctor shows nothing). Levels: `ok` when all is fine;
+  `warn` for an offline peer, a skewed tm, undelivered messages, a
+  CA certificate with under 14 days left (or expired), an
+  unreachable relay or one that is behind; `fail` for a pinned relay
+  that shows another key, or an identity key or `peers.json` that
+  can't be read. `--json` carries the same fields on each line: `peer`
+  (`alias`, `id`, `relay`, `state`, `reason`, `latency_ms`,
+  `last_seen`, `version`, `skew`, `panes_mine`, `panes_theirs`,
+  `shared_out`, `shared_in`, `queued`, `undelivered`) and `relay`
+  (`url`, `pinned`, `peers`, `reachable`, `error`, `cert_days`,
+  `pin_match`, `version`, `update_available`, `auto_update`). The
+  human's: agents see only `server.status`.
 
 ### 16.9 Sharing projects
 

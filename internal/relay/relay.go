@@ -53,6 +53,9 @@ type Config struct {
 	// Version is the relay's tm release, told to every client in the
 	// challenge; "" tells none.
 	Version string
+	// AutoUpdate, "on" or "off", is whether the host updates the relay
+	// by itself; told in /healthz's Tm-Auto-Update header, "" tells none.
+	AutoUpdate string
 	// UpdateFile is where an update request is written (update.go), in
 	// the relay's state directory; "" takes none.
 	UpdateFile string
@@ -136,6 +139,12 @@ func (s *Server) logf(format string, a ...any) {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/healthz":
+		if s.cfg.Version != "" {
+			w.Header().Set("Tm-Version", s.cfg.Version)
+		}
+		if s.cfg.AutoUpdate != "" {
+			w.Header().Set("Tm-Auto-Update", s.cfg.AutoUpdate)
+		}
 		io.WriteString(w, "ok\n")
 	case "/v1":
 		s.serveWS(w, r)
