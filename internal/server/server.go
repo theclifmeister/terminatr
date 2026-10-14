@@ -1117,8 +1117,8 @@ func (s *Server) startSession(p proto.SessionStartParams) (any, *proto.Error) {
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.stopping {
+		s.mu.Unlock()
 		return nil, proto.Errorf(proto.ErrRefused, "server is stopping")
 	}
 	id := fmt.Sprintf("s-%d", s.nextID)
@@ -1130,6 +1130,7 @@ func (s *Server) startSession(p proto.SessionStartParams) (any, *proto.Error) {
 		rec.Agent, rec.AgentSessionID, rec.Brief, rec.Model, rec.Yolo = p.Agent, newUUID(), p.Brief, p.Model, p.Yolo
 		rec.Kickoff, rec.RemoteControl, rec.NoSandboxEscapes = p.Kickoff, p.RemoteControl, p.NoSandboxEscapes
 		if p.RemoteControl && role != proto.RoleCoordinator {
+			s.mu.Unlock()
 			return nil, proto.Errorf(proto.ErrRefused, "remote control is for coordinators; threads are reached through theirs")
 		}
 		if p.RemoteControl && agent.RemoteControlOf(s.agentOr(p.Agent)) == nil {
@@ -1142,12 +1143,15 @@ func (s *Server) startSession(p proto.SessionStartParams) (any, *proto.Error) {
 		if p.ResumeSID != "" {
 			l.rec.AgentSessionID, l.rec.Prompted, l.resume, l.kick = p.ResumeSID, true, true, ""
 		}
-		sess, perr := s.launchAgent(l)
+		s.mu.Unlock()
+		// The id is new: only a stop since can keep it from starting.
+		sess, perr := s.launchAgent(l, s.notStoppingLocked)
 		if perr != nil {
 			return nil, perr
 		}
 		return proto.SessionStartResult{Session: s.info(sess)}, nil
 	}
+	defer s.mu.Unlock()
 	env := sessionEnv(s.baseEnv(), s.terminatrEnv(rec))
 	home, _ := os.UserHomeDir()
 	reg := s.agents
@@ -1188,8 +1192,13 @@ func (s *Server) sessionExited(sess *session.Session) {
 	// The views keep the panes of a stopping server, and of a session
 	// relaunched under its id: they come back with it.
 	gone := !s.stopping
+	relaunch, remote := false, false
 	defer func() {
 		s.mu.Unlock()
+		if relaunch {
+			// Without s.mu: a launch takes long (launchAgent).
+			gone = s.relaunchSession(sess, remote)
+		}
 		if gone {
 			s.views.sessionGone(sess.ID())
 		}
@@ -1212,7 +1221,7 @@ func (s *Server) sessionExited(sess *session.Session) {
 	}
 	if on, ok := s.relaunch[sess.ID()]; ok {
 		delete(s.relaunch, sess.ID())
-		gone = !s.relaunchLocked(sess, on)
+		relaunch, remote = true, on
 		return
 	}
 	os.RemoveAll(s.runtimeDir(sess.ID()))
@@ -1222,6 +1231,15 @@ func (s *Server) sessionExited(sess *session.Session) {
 	if err := s.saveLocked(""); err != nil {
 		s.log.Printf("sessions.json: %v", err)
 	}
+}
+
+// notStoppingLocked refuses a launch's commit once the server stops;
+// s.mu held.
+func (s *Server) notStoppingLocked() *proto.Error {
+	if s.stopping {
+		return proto.Errorf(proto.ErrRefused, "server is stopping")
+	}
+	return nil
 }
 
 func (s *Server) stopSession(id string) (any, *proto.Error) {

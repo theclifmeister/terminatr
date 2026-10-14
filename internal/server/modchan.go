@@ -96,19 +96,37 @@ type ModUsage struct {
 // held. Any listener the id had is closed first.
 func (s *Server) listenMod(id, rt string) (string, error) {
 	s.closeModLocked(id)
-	path := ipc.SessionAddr(rt, modSocketName)
-	os.Remove(string(path))
-	ln, err := ipc.Listen(path)
+	srv, path, err := s.openMod(id, rt)
 	if err != nil {
 		return "", err
 	}
-	srv := &http.Server{Handler: s.modHandler(id), ReadHeaderTimeout: 5 * time.Second}
+	s.setModLocked(id, srv)
+	return path, nil
+}
+
+// setModLocked makes srv session id's mod server, closing any it had;
+// s.mu held.
+func (s *Server) setModLocked(id string, srv *http.Server) {
+	s.closeModLocked(id)
 	if s.mods == nil {
 		s.mods = map[string]*http.Server{}
 	}
 	s.mods[id] = srv
+}
+
+// openMod opens session id's mod socket in its runtime dir rt and
+// serves it; the launch's commit makes it the session's (s.mods), and
+// abandoning the launch closes it. s.mu not needed.
+func (s *Server) openMod(id, rt string) (*http.Server, string, error) {
+	path := ipc.SessionAddr(rt, modSocketName)
+	os.Remove(string(path))
+	ln, err := ipc.Listen(path)
+	if err != nil {
+		return nil, "", err
+	}
+	srv := &http.Server{Handler: s.modHandler(id), ReadHeaderTimeout: 5 * time.Second}
 	go srv.Serve(ln)
-	return string(path), nil
+	return srv, string(path), nil
 }
 
 // closeModLocked closes session id's mod listener, if any; s.mu held.

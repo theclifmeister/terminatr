@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -412,6 +413,17 @@ func (s *Server) schemeName() string {
 // now (§8.6), when a keeps one, outside safe mode; false when it isn't
 // in place, so the launch doesn't select it; s.mu held.
 func (s *Server) writeLiveTheme(a agent.Agent) bool {
+	if !s.writeThemeFile(a, s.paneScheme(), s.schemeName()) {
+		return false
+	}
+	s.markLiveThemed(a)
+	return true
+}
+
+// writeThemeFile writes a's own theme file for the pane scheme pane and
+// the terminal's scheme, when a keeps one, outside safe mode; false when
+// it isn't in place. It reads no server state: s.mu needn't be held.
+func (s *Server) writeThemeFile(a agent.Agent, pane, scheme string) bool {
 	lt, ok := a.(agent.LiveThemer)
 	if !ok || s.noMods {
 		return false
@@ -420,15 +432,19 @@ func (s *Server) writeLiveTheme(a agent.Agent) bool {
 	if err != nil {
 		return false
 	}
-	if err := lt.WriteTheme(home, s.launchTheme(s.paneScheme()), s.schemeName()); err != nil {
+	if err := lt.WriteTheme(home, s.launchTheme(pane), scheme); err != nil {
 		s.log.Printf("agent %s: theme: %v", a.Name(), err)
 		return false
 	}
+	return true
+}
+
+// markLiveThemed has themeChangedLocked keep a's live theme; s.mu held.
+func (s *Server) markLiveThemed(a agent.Agent) {
 	if s.liveThemed == nil {
 		s.liveThemed = map[string]bool{}
 	}
 	s.liveThemed[a.Name()] = true
-	return true
 }
 
 // themeChangedLocked rewrites the live theme of every agent this server
@@ -455,11 +471,73 @@ type agentLaunch struct {
 	rows   uint16
 }
 
-// launchAgent builds the argv, environment and files for an agent
-// session and starts it; s.mu held.
-func (s *Server) launchAgent(l agentLaunch) (*session.Session, *proto.Error) {
+// launchView is the server state a launch reads, taken under s.mu so
+// that the slow part of the launch runs without it.
+type launchView struct {
+	agents     *agent.Registry
+	paneScheme string
+	schemeName string
+}
+
+// launchViewLocked takes the server state a launch reads; s.mu held.
+func (s *Server) launchViewLocked() launchView {
+	return launchView{agents: s.agents, paneScheme: s.paneScheme(), schemeName: s.schemeName()}
+}
+
+// preparedLaunch is an agent session ready to start: its files are
+// written and its mod listens; commitLaunchLocked starts it.
+type preparedLaunch struct {
+	l         agentLaunch
+	a         agent.Agent
+	rt        string
+	mod       *http.Server // the mod's server, nil for none
+	modSock   string
+	model     string
+	liveTheme bool
+	argv      []string
+	env       []string
+	kickoff   bool
+	agentSID  string
+	home      string
+}
+
+// launchAgent prepares an agent session without s.mu and starts it
+// under s.mu, when ok (under s.mu) still holds; ok nil always does.
+// s.mu not held: the git, config and version reads of a launch, its
+// files and the agent's own launch steps take long enough (seconds for
+// the first --version) to stall every hook and request behind them.
+func (s *Server) launchAgent(l agentLaunch, ok func() *proto.Error) (*session.Session, *proto.Error) {
+	s.mu.Lock()
+	v := s.launchViewLocked()
+	s.mu.Unlock()
+	p, perr := s.prepareLaunch(l, v)
+	if perr != nil {
+		return nil, perr
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ok != nil {
+		if perr := ok(); perr != nil {
+			p.abandon()
+			return nil, perr
+		}
+	}
+	return s.commitLaunchLocked(p)
+}
+
+// abandon undoes a prepared launch that doesn't start.
+func (p *preparedLaunch) abandon() {
+	if p.mod != nil {
+		p.mod.Close()
+	}
+	os.RemoveAll(p.rt)
+}
+
+// prepareLaunch builds the argv, environment and files for an agent
+// session from v, the server state when the launch began; s.mu not held.
+func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *proto.Error) {
 	r := l.rec
-	reg := s.agents
+	reg := v.agents
 	if reg == nil {
 		return nil, proto.Errorf(proto.ErrRefused, "no agents loaded")
 	}
@@ -485,16 +563,16 @@ func (s *Server) launchAgent(l agentLaunch) (*session.Session, *proto.Error) {
 	if d, err := worktree.GitDirs(r.Cwd); err == nil {
 		repo = worktree.Dirs{GitDir: realPath(d.GitDir), CommonDir: realPath(d.CommonDir), RepoRoot: realPath(d.RepoRoot)}
 	}
-	rt := s.runtimeDir(r.ID)
-	s.closeModLocked(r.ID)
-	os.RemoveAll(rt)
-	if err := os.MkdirAll(rt, 0o700); err != nil {
+	// No session of this id runs (a new id, a resume, a relaunch after
+	// the old one exited and its mod closed): its runtime dir is free.
+	p := &preparedLaunch{l: l, a: a, rt: s.runtimeDir(r.ID)}
+	os.RemoveAll(p.rt)
+	if err := os.MkdirAll(p.rt, 0o700); err != nil {
 		return nil, proto.Errorf(proto.ErrInternal, "%v", err)
 	}
-	modSock := ""
 	if s.modsFor(a, r.ID) {
 		// Without its channel the mod can't report state: no mod then.
-		if modSock, err = s.listenMod(r.ID, rt); err != nil {
+		if p.mod, p.modSock, err = s.openMod(r.ID, p.rt); err != nil {
 			s.log.Printf("session %s: no mod: %v", r.ID, err)
 		}
 	}
@@ -505,32 +583,31 @@ func (s *Server) launchAgent(l agentLaunch) (*session.Session, *proto.Error) {
 	}
 	spec := agent.LaunchSpec{
 		Role: agent.Role(r.Role), SessionID: r.ID, AgentSID: r.AgentSessionID,
-		Cwd: r.Cwd, RepoRoot: repo.RepoRoot, GitDir: repo.GitDir, RuntimeDir: rt, BriefPath: r.Brief, Kickoff: l.kick, Resume: l.resume,
+		Cwd: r.Cwd, RepoRoot: repo.RepoRoot, GitDir: repo.GitDir, RuntimeDir: p.rt, BriefPath: r.Brief, Kickoff: l.kick, Resume: l.resume,
 		Yolo: r.Yolo, NoSandboxEscapes: r.NoSandboxEscapes, Model: r.Model, TMBin: s.opts.Bin, Socket: s.opts.Paths.Socket, Access: access,
 		RemoteControl: r.RemoteControl, RemoteName: remoteName(r),
-		Mods: modSock != "", PaneScheme: s.paneScheme(),
+		Mods: p.modSock != "", PaneScheme: v.paneScheme,
 	}
 	if spec.Model == "" {
 		spec.Model = launchModel(a, r.Project, r.Role == proto.RoleCoordinator)
 	}
 	spec.Theme = s.launchTheme(spec.PaneScheme)
-	spec.LiveTheme = s.writeLiveTheme(a)
+	spec.LiveTheme = s.writeThemeFile(a, v.paneScheme, v.schemeName)
 	launch, err := a.Launch(spec)
 	if err != nil {
-		s.closeModLocked(r.ID)
+		p.abandon()
 		return nil, proto.Errorf(proto.ErrRefused, "%v", err)
 	}
 	for _, w := range launch.Warnings {
 		s.log.Printf("session %s: %s", r.ID, w)
 	}
-	if err := writeLaunchFiles(rt, launch.Files); err != nil {
-		s.closeModLocked(r.ID)
-		os.RemoveAll(rt)
+	if err := writeLaunchFiles(p.rt, launch.Files); err != nil {
+		p.abandon()
 		return nil, proto.Errorf(proto.ErrInternal, "%v", err)
 	}
 	set := s.terminatrEnv(r)
 	if spec.Mods {
-		set[envModSocket] = modSock
+		set[envModSocket] = p.modSock
 		if !bandSetting() {
 			set[envBand] = "off"
 		}
@@ -543,27 +620,40 @@ func (s *Server) launchAgent(l agentLaunch) (*session.Session, *proto.Error) {
 		set[k] = v
 	}
 	base := agent.FilterEnv(withBinFirst(s.baseEnv(), s.opts.Bin), launch.Unset)
-	env := sessionEnv(base, set)
+	p.env = sessionEnv(base, set)
 	r.Argv = launch.Argv
 	// The agent's own id is known ahead only when the launch gives it
 	// (Claude's --session-id, a resume). Codex picks its thread id itself
 	// and reports it with the first hook: until then there is none, so a
 	// prompt isn't queued for a thread that doesn't exist (T105).
-	agentSID := r.AgentSessionID
-	if !slices.Contains(launch.Argv, agentSID) {
-		agentSID = ""
+	p.agentSID = r.AgentSessionID
+	if !slices.Contains(launch.Argv, p.agentSID) {
+		p.agentSID = ""
 	}
-	home, _ := os.UserHomeDir()
+	p.home, _ = os.UserHomeDir()
 	// A thread never waits on a folder-trust screen for the worktree tm
 	// made for it (docs/SPEC.md §8.6): an agent that can, trusts it first.
-	if t, ok := a.(agent.Truster); ok && r.Role == proto.RoleThread && home != "" && s.ownWorktree(r.Cwd) {
-		if err := t.TrustDir(home, r.Cwd); err != nil {
+	if t, ok := a.(agent.Truster); ok && r.Role == proto.RoleThread && p.home != "" && s.ownWorktree(r.Cwd) {
+		if err := t.TrustDir(p.home, r.Cwd); err != nil {
 			s.log.Printf("session %s: trust %s: %v", r.ID, r.Cwd, err)
 		}
 	}
+	p.l.rec = r
+	p.model, p.liveTheme = spec.Model, spec.LiveTheme
+	p.argv, p.kickoff = launch.Argv, launch.Kickoff
+	return p, nil
+}
+
+// commitLaunchLocked starts a prepared agent session and records it;
+// s.mu held. The pty's spawn stays under s.mu: a hook the agent fires
+// at once then waits for the session to be known instead of finding
+// none.
+func (s *Server) commitLaunchLocked(p *preparedLaunch) (*session.Session, *proto.Error) {
+	r, a := p.l.rec, p.a
+	mod := p.modSock != ""
 	sess, err := session.Start(session.Config{
-		ID: r.ID, Role: r.Role, Project: r.Project, Thread: r.Thread, Argv: launch.Argv, Cwd: r.Cwd, Env: env,
-		Cols: l.cols, Rows: l.rows, Created: r.Created,
+		ID: r.ID, Role: r.Role, Project: r.Project, Thread: r.Thread, Argv: p.argv, Cwd: r.Cwd, Env: p.env,
+		Cols: p.l.cols, Rows: p.l.rows, Created: r.Created,
 		Xtversion: "terminatr " + version.Version,
 		Scheme:    s.scheme,
 		Colors:    s.colors,
@@ -572,36 +662,43 @@ func (s *Server) launchAgent(l agentLaunch) (*session.Session, *proto.Error) {
 		// Set before Start: the first session.list must show it.
 		RemoteControl: r.RemoteControl, RemoteHeld: r.RemoteHeld,
 		Agent: &session.AgentConfig{
-			Agent: a, AgentSID: agentSID, Kickoff: launch.Kickoff, Home: home,
-			Context:    s.hookContextOf(r.ID, modSock != ""),
-			Guard:      s.hookGuardOf(r.ID, modSock != ""),
+			Agent: a, AgentSID: p.agentSID, Kickoff: p.kickoff, Home: p.home,
+			Context:    s.hookContextOf(r.ID, mod),
+			Guard:      s.hookGuardOf(r.ID, mod),
 			OnChange:   s.agentChanged,
 			OnUsage:    s.tailUsage,
 			OnRefused:  s.modelRefused,
 			PromptHold: envDuration(envPromptHold), OnPromptResolved: s.promptResolved,
-			ModSocket: modSock,
+			ModSocket: p.modSock,
 		},
 	})
 	if err != nil {
-		s.closeModLocked(r.ID)
-		os.RemoveAll(rt)
+		p.abandon()
 		return nil, proto.Errorf(proto.ErrRefused, "%v", err)
+	}
+	if p.mod != nil {
+		s.setModLocked(r.ID, p.mod)
+	} else {
+		s.closeModLocked(r.ID)
+	}
+	if p.liveTheme {
+		s.markLiveThemed(a)
 	}
 	s.sessions[r.ID] = sess
 	s.records[r.ID] = r
 	if s.launched == nil {
 		s.launched = map[string]string{}
 	}
-	s.launched[r.ID] = spec.Model
-	sess.SetModel(session.ModelState{Model: spec.Model})
+	s.launched[r.ID] = p.model
+	sess.SetModel(session.ModelState{Model: p.model})
 	if err := s.saveLocked(""); err != nil {
 		s.log.Printf("sessions.json: %v", err)
 	}
 	how := "started"
-	if l.resume {
+	if p.l.resume {
 		how = "resumed " + r.AgentSessionID
 	}
-	s.log.Printf("session %s: %s agent %s pid %d %q in %s", r.ID, how, r.Agent, sess.PID(), launch.Argv, r.Cwd)
+	s.log.Printf("session %s: %s agent %s pid %d %q in %s", r.ID, how, r.Agent, sess.PID(), p.argv, r.Cwd)
 	// The version is information for the drift notes and the log, never
 	// a gate (docs/SPEC.md §8.8). Cached per binary; off the launch path.
 	go func(env []string) {
@@ -748,25 +845,28 @@ func worked(st session.AgentState) bool {
 // resume relaunches the previous server's agent sessions with their
 // latest agent session ids (docs/SPEC.md §3.6), and says what became of
 // each.
+// Each launch runs without s.mu, taking it only to start the session:
+// hooks of those already resumed, and requests, are answered meanwhile.
 func (s *Server) resume(recs []SessionRecord) (outs []restartOutcome) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	for _, r := range recs {
-		o := s.resumeLocked(r)
+		o := s.resumeOne(r)
+		s.mu.Lock()
 		if o.how == "lost" {
 			s.lost = append(s.lost, r.ID)
 		} else {
 			s.resumed = append(s.resumed, r.ID)
 		}
+		s.mu.Unlock()
 		outs = append(outs, o)
 	}
 	return outs
 }
 
-// resumeLocked relaunches one recorded agent session under its id:
+// resumeOne relaunches one recorded agent session under its id:
 // resumed, or fresh when it was never prompted (nothing to resume), or
-// lost when its cwd is gone or the launch fails. s.mu held.
-func (s *Server) resumeLocked(r SessionRecord) restartOutcome {
+// lost when its cwd is gone or the launch fails. s.mu not held.
+func (s *Server) resumeOne(r SessionRecord) restartOutcome {
+	kept := r
 	r.CleanExit = false
 	if _, err := os.Stat(r.Cwd); err != nil {
 		s.log.Printf("session %s: not resumed: %v", r.ID, err)
@@ -783,7 +883,17 @@ func (s *Server) resumeLocked(r SessionRecord) restartOutcome {
 		// Nothing to resume: the agent saved no conversation yet.
 		l.resume, l.kick, l.rec.AgentSessionID = false, r.Kickoff, newUUID()
 	}
-	if _, perr := s.launchAgent(l); perr != nil {
+	if _, perr := s.launchAgent(l, func() *proto.Error {
+		if _, taken := s.records[r.ID]; taken {
+			return proto.Errorf(proto.ErrRefused, "session %s: id taken during the resume", r.ID)
+		}
+		if perr := s.notStoppingLocked(); perr != nil {
+			// Not lost: dormant, the next server resumes it.
+			s.dormant[r.ID] = kept
+			return perr
+		}
+		return nil
+	}); perr != nil {
 		s.log.Printf("session %s: not resumed: %v", r.ID, perr)
 		return restartOutcome{rec: r, how: "lost"}
 	}

@@ -2,6 +2,7 @@ package server
 
 import (
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -191,29 +192,71 @@ func (s *Server) setRemote(id string, on bool) {
 	}
 }
 
-// relaunchLocked starts an agent session again under the same id, after
-// remote stopped it: resumed, or fresh if it was never prompted (there
-// is nothing to resume then). ok is false when it couldn't. s.mu held.
-func (s *Server) relaunchLocked(old *session.Session, remote bool) (ok bool) {
+// relaunchSession starts an agent session again under the same id,
+// after remote stopped it: resumed, or fresh if it was never prompted
+// (there is nothing to resume then). gone is true when it couldn't and
+// the session is gone for good; a stop meanwhile keeps its record for
+// the next server. s.mu not held.
+func (s *Server) relaunchSession(old *session.Session, remote bool) (gone bool) {
 	id := old.ID()
-	r := s.records[id]
-	r.RemoteControl = remote
 	info := old.Info()
-	l := agentLaunch{rec: r, resume: r.Prompted, cols: info.Cols, rows: info.Rows}
-	if !r.Prompted {
-		l.kick, l.rec.AgentSessionID = r.Kickoff, newUUID()
-	}
-	if _, perr := s.launchAgent(l); perr != nil {
+	for try := 0; ; try++ {
+		s.mu.Lock()
+		r, ok := s.records[id]
+		s.mu.Unlock()
+		if !ok {
+			return true
+		}
+		was := r
+		r.RemoteControl = remote
+		l := agentLaunch{rec: r, resume: r.Prompted, cols: info.Cols, rows: info.Rows}
+		if !r.Prompted {
+			l.kick, l.rec.AgentSessionID = r.Kickoff, newUUID()
+		}
+		stopping, changed := false, false
+		_, perr := s.launchAgent(l, func() *proto.Error {
+			// Launched from a copy of the record: it must still be the
+			// one recorded, and nothing may have started under its id.
+			cur, ok := s.records[id]
+			_, running := s.sessions[id]
+			switch {
+			case s.stopping:
+				stopping = true
+				return proto.Errorf(proto.ErrRefused, "server is stopping")
+			case ok && !running && !reflect.DeepEqual(cur, was) && try < relaunchTries:
+				changed = true
+				return proto.Errorf(proto.ErrRefused, "session %s: record changed during the relaunch", id)
+			case !ok || running:
+				return proto.Errorf(proto.ErrRefused, "session %s: gone or running during the relaunch", id)
+			}
+			return nil
+		})
+		switch {
+		case perr == nil:
+			return false
+		case stopping:
+			return false // shutdown writes the record for resume
+		case changed:
+			continue
+		}
 		s.log.Printf("session %s: relaunch failed: %v", id, perr)
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if _, running := s.sessions[id]; running {
+			return false
+		}
 		os.RemoveAll(s.runtimeDir(id))
 		delete(s.records, id)
 		if err := s.saveLocked(""); err != nil {
 			s.log.Printf("sessions.json: %v", err)
 		}
-		return false
+		return true
 	}
-	return true
 }
+
+// relaunchTries bounds the relaunches of one session whose record
+// changes while each is being prepared.
+const relaunchTries = 3
 
 // agentOr is the loaded agent of that name, or nil. s.mu held.
 func (s *Server) agentOr(name string) agent.Agent {
