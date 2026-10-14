@@ -47,6 +47,7 @@ func testDeps(t *testing.T) Deps {
 		PID: filepath.Join(run, "server.pid"), Log: filepath.Join(h, "logs", "server.log"), Sessions: filepath.Join(h, "state", "sessions.json")}
 	d := DefaultDeps(p, "v0", "b0")
 	d.GOOS = "linux"
+	d.Relay = nil       // never a real relay: tests give their own
 	d.ProbeModels = nil // never this machine's agents: tests save their answers (modelstest)
 	return d
 }

@@ -275,12 +275,18 @@ func TestRemoteUndelivered(t *testing.T) {
 		if got, _ := Read(acme, m2.ID); got.State != StateQueued {
 			t.Fatalf("before expiry: %s", got.State)
 		}
+		if b := Backlogs()["mini"]; b != (Backlog{Queued: 1, Undelivered: 1}) {
+			t.Fatalf("backlog before expiry: %+v", b)
+		}
 		*sv.clock = sv.clock.Add(2 * time.Minute)
 		Flush(context.Background(), toMini)
 		got, _ = Read(acme, m2.ID)
 		its = items(t, acme, KindUndelivered)
 		if got.State != StateUndelivered || len(its) != 2 || !strings.Contains(its[1].Summary+its[0].Summary, "didn't take it within 72 hours") {
 			t.Fatalf("expired: %s %+v", got.State, its)
+		}
+		if b := Backlogs()["mini"]; b != (Backlog{Undelivered: 2}) {
+			t.Fatalf("backlog after expiry: %+v", b)
 		}
 	})
 }

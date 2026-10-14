@@ -32,6 +32,10 @@ type Live struct {
 	// Link is the server's links to paired servers (server.status); nil
 	// when it is not running or has no identity key.
 	Link *proto.LinkStatus
+	// Peers is the server's mirror of the paired servers (peer.list):
+	// the panes level each allows, the projects each shares; nil when
+	// it is not running or can't tell.
+	Peers *proto.PeerList
 }
 
 // callTimeout bounds each of doctor's calls to the server; a server
@@ -140,6 +144,12 @@ func Server(d Deps) ([]Check, Live) {
 	var ms proto.ModHostsResult
 	if err := c.CallWithin(callTimeout, proto.MethodModHosts, nil, &ms); err == nil {
 		live.Mods = &ms
+	}
+	var pl proto.PeerList
+	if st.Link != nil && len(st.Link.Peers) > 0 {
+		if err := c.CallWithin(callTimeout, proto.MethodPeerList, nil, &pl); err == nil {
+			live.Peers = &pl
+		}
 	}
 	var list proto.SessionListResult
 	if err := c.CallWithin(callTimeout, proto.MethodSessionList, nil, &list); err == nil {

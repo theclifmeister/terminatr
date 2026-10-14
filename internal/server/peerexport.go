@@ -112,3 +112,7 @@ func (e peerExport) Watch(c caller.Caller, slug string) (proto.PeerWatch, error)
 }
 
 func (e peerExport) Changes() (<-chan struct{}, func()) { return e.changes() }
+
+// SharedProjects are the slugs of the projects this server offers to
+// paired servers, sorted.
+func SharedProjects() []string { return sharedProjects() }
