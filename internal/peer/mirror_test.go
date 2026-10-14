@@ -284,9 +284,9 @@ func TestMirrorPeerWithoutWatch(t *testing.T) {
 	f := newFakeLinks(0, map[string]int{"web": 1}, upLink("old"))
 	m := startMirror(f, MirrorOptions{})
 	defer m.Close()
-	l := waitList(t, m, "listed old", func(l proto.PeerList) bool { return peerOf(l, "old") != nil })
+	waitList(t, m, "listed old", func(l proto.PeerList) bool { return peerOf(l, "old") != nil })
 	time.Sleep(50 * time.Millisecond)
-	l = m.List()
+	l := m.List()
 	if p := peerOf(l, "old"); p.Watch || len(p.Projects) != 0 || p.Offset != 0 {
 		t.Fatalf("old %+v", p)
 	}
