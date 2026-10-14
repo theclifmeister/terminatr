@@ -197,6 +197,7 @@ type Server struct {
 	// modelsCtx ends the agents' models probes when the server stops.
 	modelsCtx  context.Context
 	modelsStop context.CancelFunc
+	modelsWG   sync.WaitGroup // the probes in flight; shutdown waits for them
 
 	// peers are the links to paired servers (internal/peer); set before
 	// Run serves.
@@ -556,6 +557,10 @@ func (s *Server) shutdown() {
 		}()
 	}
 	wg.Wait()
+	if s.modelsStop != nil {
+		s.modelsStop()
+	}
+	s.modelsWG.Wait()
 	s.closeMods()
 
 	s.mu.Lock()
