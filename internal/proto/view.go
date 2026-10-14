@@ -13,7 +13,8 @@ const (
 	// it closes, which leaves the view.
 	MethodViewSubscribe = "view.subscribe"
 	// MethodViewAttach shows a session (Session; Project becomes the
-	// current project).
+	// current project). As view.input, the client becomes the view's
+	// latest and the session is resized to its pane there.
 	MethodViewAttach = "view.attach"
 	// MethodViewDashboard shows the dashboard.
 	MethodViewDashboard = "view.dashboard"
@@ -82,7 +83,8 @@ type ViewSubscribeParams struct {
 	Own       bool   `json:"own,omitempty"`
 	Bare      bool   `json:"bare,omitempty"`
 	StatusBar bool   `json:"status_bar,omitempty"`
-	// Session, when set, is shown once joined, as view.attach would.
+	// Session, when set, is shown once joined, as view.attach would but
+	// without resizing it.
 	Session string `json:"session,omitempty"`
 	// Cols and Rows are the client's window. Joining never resizes a
 	// session.
