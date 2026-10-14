@@ -25,7 +25,6 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/guard"
-	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
@@ -61,16 +60,8 @@ var guardNow = time.Now
 
 // guardSettings is a project's resolved settings; a config.toml that
 // doesn't load leaves the defaults, so the guard stays on.
-var guardSettings = func(slug string) config.Safety {
-	cfg, err := config.Load()
-	if err != nil {
-		return config.Defaults
-	}
-	s, err := cfg.Safety(slug)
-	if err != nil {
-		return config.Defaults
-	}
-	return s
+func guardSettings(slug string) config.Safety {
+	return loadLaunchConfig().safety(slug)
 }
 
 // guardRulesFor is session record r's rules. Only a project's agents are
@@ -278,17 +269,12 @@ type hookRulesEntry struct {
 // what only git says (the protected branches).
 func (s *Server) hookRules(r SessionRecord) GuardRules {
 	now := guardNow()
-	stamp := guardStamp(r.Project)
+	stamp := s.guardStamp(r.Project)
 	hookRulesCache.Lock()
 	e, ok := hookRulesCache.m[r.ID]
 	hookRulesCache.Unlock()
 	if ok && e.stamp == stamp && now.Sub(e.at) < hookRulesFor {
 		return e.rules
-	}
-	if ok && e.stamp != stamp {
-		// The registry read within the last second may predate the
-		// change.
-		s.shareModRegistry(nil)
 	}
 	g := s.guardRulesFor(r)
 	hookRulesCache.Lock()
@@ -303,33 +289,17 @@ func (s *Server) hookRules(r SessionRecord) GuardRules {
 }
 
 // guardStamp says, cheaply (stats only), whether what a session of
-// project slug's rules are made of changed: config.toml (the settings,
-// which mods are enabled and for which projects, their grants, the
-// projects' repos), the project's PROJECT.md (its repos until they move
-// to config.toml, project.MoveRepos), and each installed mod's mod.toml
-// (an install, update or removal). A stamp that changed drops the mods'
-// registry the broker keeps for a second (modRegistryAge) too.
-func guardStamp(slug string) string {
+// project slug's rules are made of changed: the installed mods and
+// config.toml (s.installedMods, which reads them anew when they did, so the
+// rules worked out next see the change) and the project's PROJECT.md
+// (its repos until they move to config.toml, project.MoveRepos).
+func (s *Server) guardStamp(slug string) string {
+	_, _, stamp := s.installedMods(0)
 	var b strings.Builder
-	stat := func(path string) {
-		if fi, err := os.Stat(path); err == nil {
-			fmt.Fprintf(&b, "%s %d %d;", path, fi.Size(), fi.ModTime().UnixNano())
-		} else {
-			fmt.Fprintf(&b, "%s -;", path)
-		}
-	}
-	if path, err := config.Path(); err == nil {
-		stat(path)
-	}
+	b.WriteString(stamp)
 	if slug != "" {
 		if dir, err := project.Dir(slug); err == nil {
-			stat(filepath.Join(dir, "PROJECT.md"))
-		}
-	}
-	if mods, err := home.ModsDir(); err == nil {
-		ents, _ := os.ReadDir(mods)
-		for _, e := range ents {
-			stat(filepath.Join(mods, e.Name(), "mod.toml"))
+			stampFile(&b, filepath.Join(dir, "PROJECT.md"))
 		}
 	}
 	return b.String()

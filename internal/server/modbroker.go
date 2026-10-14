@@ -34,8 +34,9 @@ import (
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
-// modRegistryAge is how long the broker trusts the registry it read: a
-// grant the human takes back applies within it.
+// modRegistryAge is how long the broker trusts the registry without
+// looking at its files' stamp (modsStamp): a grant the human takes back
+// applies within it.
 const modRegistryAge = time.Second
 
 // modCallsAtOnce is how many of one mod's calls the broker works on at
@@ -55,9 +56,14 @@ type modBroker struct {
 	once sync.Once
 	b    *modbroker.Broker
 
-	mu  sync.Mutex
-	reg *mod.Registry
-	at  time.Time
+	// mu guards the installed mods as last read (installedMods): reg, read from
+	// files whose stamp was stamp, which was last looked at at checked;
+	// cfgOK is whether config.toml loaded then.
+	mu      sync.Mutex
+	reg     *mod.Registry
+	stamp   string
+	checked time.Time
+	cfgOK   bool
 	// logMu serialises writes to the mods' logs.
 	logMu sync.Mutex
 	// busy holds a slot per call each mod has running (modCallsAtOnce).
@@ -142,34 +148,80 @@ func (s *Server) modNamed(id string) (mod.Mod, bool) {
 	return r.Get(id)
 }
 
-// modRegistry is the installed mods, read anew when older than
-// modRegistryAge; nil when they can't be read.
+// modRegistry is the installed mods (installedMods), their files looked at again
+// when older than modRegistryAge; nil when they can't be read.
 func (s *Server) modRegistry() *mod.Registry {
-	mb := &s.modBr
-	mb.mu.Lock()
-	defer mb.mu.Unlock()
-	if mb.reg == nil || time.Since(mb.at) > modRegistryAge {
-		c, err := config.Load()
-		if err != nil && c == nil {
-			s.log.Printf("mods: config.toml: %v", err)
-		}
-		r, err := mod.Load(c)
-		if err != nil {
-			s.log.Printf("mods: %v", err)
-			return nil
-		}
-		mb.reg, mb.at = r, time.Now()
-	}
-	return mb.reg
+	reg, _, _ := s.installedMods(modRegistryAge)
+	return reg
 }
 
-// shareModRegistry makes reg, read just now, the broker's registry; nil
-// has it read anew at its next use.
-func (s *Server) shareModRegistry(reg *mod.Registry) {
+// installedMods is the installed mods, whether config.toml loaded, and their
+// files' stamp (modsStamp). It is the one reader of the mods for the
+// hosts (runModHosts), the broker (modRegistry) and the guard
+// (hookRules): it looks at the stamp when the last look is older than
+// maxAge, and reads config.toml and the mods anew only when the stamp
+// changed. reg is nil when they can't be read.
+func (s *Server) installedMods(maxAge time.Duration) (reg *mod.Registry, cfgOK bool, stamp string) {
 	mb := &s.modBr
 	mb.mu.Lock()
 	defer mb.mu.Unlock()
-	mb.reg, mb.at = reg, time.Now()
+	if mb.reg != nil && time.Since(mb.checked) <= maxAge {
+		return mb.reg, mb.cfgOK, mb.stamp
+	}
+	// Stamped before the read: a change in between reads again next time.
+	stamp = modsStamp()
+	if mb.reg != nil && stamp == mb.stamp {
+		mb.checked = time.Now()
+		return mb.reg, mb.cfgOK, mb.stamp
+	}
+	c, err := config.Load()
+	if err != nil && c == nil {
+		s.log.Printf("mods: config.toml: %v", err)
+	}
+	cfgOK = err == nil
+	r, err := mod.Load(c)
+	if err != nil {
+		s.log.Printf("mods: %v", err)
+		return nil, false, stamp
+	}
+	mb.reg, mb.cfgOK, mb.stamp, mb.checked = r, cfgOK, stamp, time.Now()
+	return r, cfgOK, stamp
+}
+
+// forgetMods has the mods read anew at their next use, whatever their
+// stamp says.
+func (s *Server) forgetMods() {
+	mb := &s.modBr
+	mb.mu.Lock()
+	defer mb.mu.Unlock()
+	mb.reg = nil
+}
+
+// modsStamp says, cheaply (stats only), whether the installed mods may
+// have changed: config.toml (which mods are enabled and for which
+// projects, their grants and settings) and each installed mod's mod.toml
+// (an install, update or removal).
+func modsStamp() string {
+	var b strings.Builder
+	if path, err := config.Path(); err == nil {
+		stampFile(&b, path)
+	}
+	if mods, err := home.ModsDir(); err == nil {
+		ents, _ := os.ReadDir(mods)
+		for _, e := range ents {
+			stampFile(&b, filepath.Join(mods, e.Name(), "mod.toml"))
+		}
+	}
+	return b.String()
+}
+
+// stampFile adds file path's size and modification time to b.
+func stampFile(b *strings.Builder, path string) {
+	if fi, err := os.Stat(path); err == nil {
+		fmt.Fprintf(b, "%s %d %d;", path, fi.Size(), fi.ModTime().UnixNano())
+	} else {
+		fmt.Fprintf(b, "%s -;", path)
+	}
 }
 
 // modLog appends line to mod id's log, ~/.terminatr/logs/mods/<id>.log,

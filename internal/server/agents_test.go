@@ -168,7 +168,7 @@ func TestLaunchTheme(t *testing.T) {
 		t.Fatalf("built-in theme, yet %+v", a)
 	}
 	writeCfg("[ui]\ntheme = \"nord\"\n[mods.nord]\nenabled = false\n")
-	s.shareModRegistry(nil)
+	s.forgetMods()
 	if a := s.launchTheme("dark"); a != nil {
 		t.Fatalf("nord is off, yet %+v", a)
 	}

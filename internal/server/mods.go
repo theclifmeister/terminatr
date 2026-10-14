@@ -16,40 +16,64 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/shell"
 )
 
-// modsSetting is [agent_mod] enabled; a config.toml that doesn't load leaves
-// mods off.
-func modsSetting() bool {
+// launchConfig is config.toml as one launch reads it, once
+// (config.Load's config and error): the settings a launch asks for are
+// read from it.
+type launchConfig struct {
+	cfg *config.Config
+	err error
+}
+
+// loadLaunchConfig reads config.toml for a launch.
+func loadLaunchConfig() launchConfig {
 	cfg, err := config.Load()
-	return err == nil && cfg.AgentMod
+	return launchConfig{cfg: cfg, err: err}
+}
+
+// safety is project slug's resolved settings; a config.toml that doesn't
+// load leaves the defaults, so the guard stays on.
+func (l launchConfig) safety(slug string) config.Safety {
+	if l.err != nil {
+		return config.Defaults
+	}
+	s, err := l.cfg.Safety(slug)
+	if err != nil {
+		return config.Defaults
+	}
+	return s
+}
+
+// agentMod is [agent_mod] enabled; a config.toml that doesn't load leaves
+// mods off.
+func (l launchConfig) agentMod() bool {
+	return l.err == nil && l.cfg.AgentMod
 }
 
 // envBand is set to "off" in a session with the mod when [agent_mod] band is
 // false: the mod then draws no band, status entry or toast.
 const envBand = "TERMINATR_BAND"
 
-// bandSetting is [agent_mod] band; a config.toml that doesn't load leaves it
+// band is [agent_mod] band; a config.toml that doesn't load leaves it
 // on, as when unset.
-func bandSetting() bool {
-	cfg, err := config.Load()
-	return err != nil || cfg.AgentModBand
+func (l launchConfig) band() bool {
+	return l.err != nil || l.cfg.AgentModBand
 }
 
 // envPane is set to "off" in a coordinator session with the mod unless
 // [agent_mod] pane is true: the mod then opens its /tm pane only when asked.
 const envPane = "TERMINATR_PANE"
 
-// paneSetting is [agent_mod] pane; a config.toml that doesn't load leaves it
+// pane is [agent_mod] pane; a config.toml that doesn't load leaves it
 // off, as when unset (T90).
-func paneSetting() bool {
-	cfg, err := config.Load()
-	return err == nil && cfg.AgentModPane
+func (l launchConfig) pane() bool {
+	return l.err == nil && l.cfg.AgentModPane
 }
 
-// modsFor reports whether a session of a gets terminatr's mod, and logs
-// why not when the setting asks for it.
-func (s *Server) modsFor(a agent.Agent, id string) bool {
+// modsFor reports whether a session of a gets terminatr's mod, by the
+// settings in lc, and logs why not when the setting asks for it.
+func (s *Server) modsFor(a agent.Agent, id string, lc launchConfig) bool {
 	m, ok := a.(agent.Modder)
-	if !ok || (!m.ModRequired() && !modsSetting()) {
+	if !ok || (!m.ModRequired() && !lc.agentMod()) {
 		return false
 	}
 	v, err := s.versionOf(a, s.baseEnv())

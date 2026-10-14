@@ -252,7 +252,7 @@ func TestAccessMergeCommands(t *testing.T) {
 	p := newWatchProject(t)
 	s := &Server{opts: Options{Paths: Paths{Home: os.Getenv("TERMINATR_HOME")}}}
 	cmds := func(role string) []string {
-		a, err := s.accessFor(role, p.Slug, t.TempDir())
+		a, err := s.accessFor(role, p.Slug, t.TempDir(), loadLaunchConfig())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -313,7 +313,7 @@ func TestAccessThreadGitDirs(t *testing.T) {
 		}
 		return out
 	}
-	a, err := s.accessFor(proto.RoleThread, p.Slug, wt)
+	a, err := s.accessFor(proto.RoleThread, p.Slug, wt, loadLaunchConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,7 +337,7 @@ func TestAccessThreadGitDirs(t *testing.T) {
 		t.Errorf("worktree: its own git dir in no-write %q", a.NoWrite)
 	}
 	// The main checkout: the same, without a git dir of its own to add.
-	m, _ := s.accessFor(proto.RoleThread, p.Slug, repo)
+	m, _ := s.accessFor(proto.RoleThread, p.Slug, repo, loadLaunchConfig())
 	if want := in("objects", "refs", "logs"); !slices.Equal(m.Write, want) {
 		t.Errorf("main checkout: write %q, want %q", m.Write, want)
 	}

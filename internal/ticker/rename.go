@@ -15,19 +15,31 @@ import (
 // completed for which merge, its threads' PR states. Without them the
 // next sweep would treat it as a new project and say it all again.
 
-// RenameProject runs move, which renames project from to to, between
-// two sweeps, and then files the project's memos under to. move's error
-// means nothing was renamed, and the memos stay.
+// RenameProject runs move, which renames project from to to, while no
+// sweep works on either name, and then files the project's memos under
+// to. It waits for that project's sweep, not for a whole sweep's git
+// and code host calls (PERF-07). move's error means nothing was
+// renamed, and the memos stay.
 func (t *Ticker) RenameProject(from, to string, move func() error) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	defer t.lockProjects(from, to)()
 	if err := move(); err != nil {
 		return err
 	}
+	t.mu.Lock()
 	t.st.rename(from, to)
 	delete(t.gh, from)
 	delete(t.ghErr, from)
+	t.renames++
+	// The state file is written with no sweep writing memos: now, or by
+	// the sweep under way before it ends (endSweep).
+	if !t.sweeping.TryLock() {
+		t.unsaved = true
+		t.mu.Unlock()
+		return nil
+	}
+	t.mu.Unlock()
 	t.save()
+	t.sweeping.Unlock()
 	return nil
 }
 

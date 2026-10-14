@@ -57,21 +57,21 @@ func modsServer(t *testing.T, enabled bool, version string) (*Server, agent.Agen
 // least the tested one, which is read once per binary.
 func TestModsFor(t *testing.T) {
 	s, a, runs, _ := modsServer(t, true, "2.1.291")
-	if !s.modsFor(a, "s-1") || !s.modsFor(a, "s-2") || *runs != 1 {
+	if !s.modsFor(a, "s-1", loadLaunchConfig()) || !s.modsFor(a, "s-2", loadLaunchConfig()) || *runs != 1 {
 		t.Fatalf("2.1.291 enabled: runs %d", *runs)
 	}
 	// Not a Modder: no mod, nothing run.
-	if s.modsFor(a.(modder).Agent, "s-3") || *runs != 1 {
+	if s.modsFor(a.(modder).Agent, "s-3", loadLaunchConfig()) || *runs != 1 {
 		t.Fatal("a plain agent got the mod")
 	}
 
 	s, a, _, buf := modsServer(t, true, "2.1.288")
-	if s.modsFor(a, "s-1") || !strings.Contains(buf.String(), "claude 2.1.288 is older than 2.1.289") {
+	if s.modsFor(a, "s-1", loadLaunchConfig()) || !strings.Contains(buf.String(), "claude 2.1.288 is older than 2.1.289") {
 		t.Fatalf("2.1.288: %q", buf.String())
 	}
 
 	s, a, runs, _ = modsServer(t, false, "2.1.291")
-	if s.modsFor(a, "s-1") || *runs != 0 {
+	if s.modsFor(a, "s-1", loadLaunchConfig()) || *runs != 0 {
 		t.Fatalf("disabled: runs %d", *runs)
 	}
 }
@@ -79,11 +79,11 @@ func TestModsFor(t *testing.T) {
 // TestVersionsSeeUpgrade: a changed binary is asked again.
 func TestVersionsSeeUpgrade(t *testing.T) {
 	s, a, runs, _ := modsServer(t, true, "2.1.291")
-	s.modsFor(a, "s-1")
+	s.modsFor(a, "s-1", loadLaunchConfig())
 	path := filepath.Join(strings.TrimPrefix(s.opts.Env[0], "PATH="+nowhere), "claude"+testExe)
 	os.WriteFile(path, []byte("#!/bin/sh\n# upgraded\n"), 0o700)
 	os.Chtimes(path, time.Now().Add(time.Minute), time.Now().Add(time.Minute))
-	s.modsFor(a, "s-2")
+	s.modsFor(a, "s-2", loadLaunchConfig())
 	if *runs != 2 {
 		t.Fatalf("runs %d, want 2", *runs)
 	}
@@ -100,7 +100,7 @@ func TestBandSetting(t *testing.T) {
 		want bool
 	}{{"", true}, {"[agent_mod]\nenabled = true\n", true}, {"[agent_mod]\nband = false\n", false}, {"[mods\n", true}} {
 		os.WriteFile(cfg, []byte(c.body), 0o600)
-		if got := bandSetting(); got != c.want {
+		if got := loadLaunchConfig().band(); got != c.want {
 			t.Errorf("%q: band %v, want %v", c.body, got, c.want)
 		}
 	}

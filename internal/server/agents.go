@@ -137,9 +137,10 @@ func (s *Server) ownWorktree(dir string) bool {
 	return len(parts) == 2 && parts[0] != ".." && parts[0] != "." && parts[1] != ".."
 }
 
-// accessFor is the role's file access policy (docs/SPEC.md §5.2). A
-// session outside a project gets no grants and no restrictions.
-func (s *Server) accessFor(role, slug, cwd string) (agent.Access, error) {
+// accessFor is the role's file access policy (docs/SPEC.md §5.2), with
+// the settings in lc. A session outside a project gets no grants and no
+// restrictions.
+func (s *Server) accessFor(role, slug, cwd string, lc launchConfig) (agent.Access, error) {
 	if slug == "" || role == proto.RoleShell {
 		return agent.Access{}, nil
 	}
@@ -154,7 +155,7 @@ func (s *Server) accessFor(role, slug, cwd string) (agent.Access, error) {
 	case proto.RoleCoordinator:
 		wt := realPath(filepath.Join(s.opts.Paths.Home, "worktrees", slug))
 		a := agent.Access{Read: []string{dir, wt}, NoWriteFiles: []string{cfg}}
-		a.Commands = coordinatorCommands(guardSettings(slug))
+		a.Commands = coordinatorCommands(lc.safety(slug))
 		return a, nil
 	case proto.RoleThread:
 		a := agent.Access{Read: []string{dir}, NoWrite: []string{dir}, NoWriteFiles: []string{cfg}}
@@ -382,6 +383,15 @@ func (s *Server) launchTheme(scheme string) *theme.Agent {
 		return nil
 	}
 	cfg, _ := config.Load()
+	return s.launchThemeOf(scheme, cfg)
+}
+
+// launchThemeOf is launchTheme with config.toml as cfg (nil: it didn't
+// load).
+func (s *Server) launchThemeOf(scheme string, cfg *config.Config) *theme.Agent {
+	if scheme == "" || s.noMods {
+		return nil
+	}
 	if cfg == nil || cfg.Theme == "" || cfg.Theme == mod.BundledTheme || cfg.Theme == "default" {
 		return nil
 	}
@@ -413,17 +423,21 @@ func (s *Server) schemeName() string {
 // now (§8.6), when a keeps one, outside safe mode; false when it isn't
 // in place, so the launch doesn't select it; s.mu held.
 func (s *Server) writeLiveTheme(a agent.Agent) bool {
-	if !s.writeThemeFile(a, s.paneScheme(), s.schemeName()) {
+	if _, ok := a.(agent.LiveThemer); !ok || s.noMods {
+		return false
+	}
+	if !s.writeThemeFile(a, s.launchTheme(s.paneScheme()), s.schemeName()) {
 		return false
 	}
 	s.markLiveThemed(a)
 	return true
 }
 
-// writeThemeFile writes a's own theme file for the pane scheme pane and
-// the terminal's scheme, when a keeps one, outside safe mode; false when
-// it isn't in place. It reads no server state: s.mu needn't be held.
-func (s *Server) writeThemeFile(a agent.Agent, pane, scheme string) bool {
+// writeThemeFile writes a's own theme file with the colours th (the
+// pane scheme's: launchTheme) and the terminal's scheme, when a keeps
+// one, outside safe mode; false when it isn't in place. It reads no
+// server state: s.mu needn't be held.
+func (s *Server) writeThemeFile(a agent.Agent, th *theme.Agent, scheme string) bool {
 	lt, ok := a.(agent.LiveThemer)
 	if !ok || s.noMods {
 		return false
@@ -432,7 +446,7 @@ func (s *Server) writeThemeFile(a agent.Agent, pane, scheme string) bool {
 	if err != nil {
 		return false
 	}
-	if err := lt.WriteTheme(home, s.launchTheme(pane), scheme); err != nil {
+	if err := lt.WriteTheme(home, th, scheme); err != nil {
 		s.log.Printf("agent %s: theme: %v", a.Name(), err)
 		return false
 	}
@@ -548,7 +562,9 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 	if l.resume && r.AgentSessionID == "" {
 		return nil, proto.Errorf(proto.ErrRefused, "session %s: no agent session id to resume", r.ID)
 	}
-	access, err := s.accessFor(r.Role, r.Project, r.Cwd)
+	// config.toml once for the launch: its access, mod, model and theme.
+	lc := loadLaunchConfig()
+	access, err := s.accessFor(r.Role, r.Project, r.Cwd, lc)
 	if err != nil {
 		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 	}
@@ -570,7 +586,7 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 	if err := os.MkdirAll(p.rt, 0o700); err != nil {
 		return nil, proto.Errorf(proto.ErrInternal, "%v", err)
 	}
-	if s.modsFor(a, r.ID) {
+	if s.modsFor(a, r.ID, lc) {
 		// Without its channel the mod can't report state: no mod then.
 		if p.mod, p.modSock, err = s.openMod(r.ID, p.rt); err != nil {
 			s.log.Printf("session %s: no mod: %v", r.ID, err)
@@ -589,10 +605,10 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		Mods: p.modSock != "", PaneScheme: v.paneScheme,
 	}
 	if spec.Model == "" {
-		spec.Model = launchModel(a, r.Project, r.Role == proto.RoleCoordinator)
+		spec.Model = launchModel(a, r.Project, r.Role == proto.RoleCoordinator, lc.cfg)
 	}
-	spec.Theme = s.launchTheme(spec.PaneScheme)
-	spec.LiveTheme = s.writeThemeFile(a, v.paneScheme, v.schemeName)
+	spec.Theme = s.launchThemeOf(spec.PaneScheme, lc.cfg)
+	spec.LiveTheme = s.writeThemeFile(a, spec.Theme, v.schemeName)
 	launch, err := a.Launch(spec)
 	if err != nil {
 		p.abandon()
@@ -608,10 +624,10 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 	set := s.terminatrEnv(r)
 	if spec.Mods {
 		set[envModSocket] = p.modSock
-		if !bandSetting() {
+		if !lc.band() {
 			set[envBand] = "off"
 		}
-		if !paneSetting() {
+		if !lc.pane() {
 			set[envPane] = "off"
 		}
 	}
