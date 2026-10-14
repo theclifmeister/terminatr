@@ -57,6 +57,10 @@ const (
 	// endWait is how long the last pane's session may be gone before the
 	// view says so; then the attach ends anyway.
 	endWait = 3 * time.Second
+	// closeWait is how long the view may say the last pane's session is
+	// gone before its stream says why: the two come on separate
+	// connections, and the stream's words are what the console prints.
+	closeWait = 2 * time.Second
 )
 
 // enterScreen switches to the alternate screen.
@@ -433,6 +437,9 @@ type client struct {
 	endOnce sync.Once
 	end     chan struct{}
 	result  Result
+	// paneEnded is told when a pane's stream says its session ended
+	// (ended), for goneResult.
+	paneEnded chan struct{}
 }
 
 func newClient(p server.Paths, l *log.Logger) (*client, error) {
@@ -441,7 +448,7 @@ func newClient(p server.Paths, l *log.Logger) (*client, error) {
 		return nil, err
 	}
 	return &client{paths: p, log: l, enc: enc, outer: map[int]bool{}, panes: map[string]*pane{},
-		wake: make(chan struct{}, 1), end: make(chan struct{})}, nil
+		wake: make(chan struct{}, 1), end: make(chan struct{}), paneEnded: make(chan struct{}, 1)}, nil
 }
 
 // setWindow records the window's size. c.mu held, or no other goroutine
@@ -600,7 +607,13 @@ func (c *client) viewLoop(watch <-chan struct{}) {
 		if same {
 			continue
 		}
-		if v.Mode != view.ModeLayout || v.Focus == "" {
+		if v.Focus == "" {
+			// The session left the view: its stream says why (a remote
+			// pane's "mini turned its panes off …"), maybe just after.
+			c.finish(c.goneResult())
+			return
+		}
+		if v.Mode != view.ModeLayout {
 			c.finish(c.endResult())
 			return
 		}
@@ -642,6 +655,29 @@ func (c *client) endResult() Result {
 		return Result{Reason: reason}
 	}
 	return detached
+}
+
+// goneResult is endResult once the view says the last session is gone:
+// it waits, up to closeWait, for the pane's stream to say why first.
+func (c *client) goneResult() Result {
+	deadline := time.NewTimer(closeWait)
+	defer deadline.Stop()
+	for !c.detaching.Load() {
+		c.mu.Lock()
+		told := c.lastReason != "" || len(c.panes) == 0
+		c.mu.Unlock()
+		if told {
+			break
+		}
+		select {
+		case <-c.paneEnded:
+		case <-c.end:
+			return c.result
+		case <-deadline.C:
+			return c.endResult()
+		}
+	}
+	return c.endResult()
 }
 
 // close frees every pane. Goroutines still running see c.closed through
@@ -850,6 +886,10 @@ func (c *client) ended(p *pane, reason string) {
 		c.relayout()
 	}
 	c.mu.Unlock()
+	select {
+	case c.paneEnded <- struct{}{}:
+	default:
+	}
 	p.conn.Close()
 	if last {
 		time.AfterFunc(endWait, func() { c.finish(Result{Reason: reason}) })

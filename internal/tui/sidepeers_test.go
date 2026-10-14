@@ -3,6 +3,9 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"io"
+	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,6 +16,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
@@ -429,5 +433,39 @@ func TestPrefixRepaint(t *testing.T) {
 	c.focus.info = proto.SessionInfo{ID: "s-1", Role: proto.RoleCoordinator}
 	if has(c) {
 		t.Error("repaint in a local pane's menu")
+	}
+}
+
+// TestGoneWaitsForReason: the view can say the last session is gone
+// before its stream says why (they come on separate connections); the
+// console still ends with the stream's words, not "detached", when the
+// closed frame comes after (T416: panes turned off on mini).
+func TestGoneWaitsForReason(t *testing.T) {
+	c, err := newClient(server.Paths{}, log.New(io.Discard, "", 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.enc.Close()
+	near, far := net.Pipe()
+	defer far.Close()
+	p := &pane{conn: server.StreamOver(near), info: proto.SessionInfo{ID: "mini/s-1", Server: "mini"}}
+	c.panes[p.info.ID], c.focus = p, p
+	go c.readLoop(p)
+
+	const words = "mini turned its panes off for this server"
+	go func() {
+		time.Sleep(100 * time.Millisecond) // after the view's word
+		server.StreamOver(far).WriteFrame(proto.FrameClosed, []byte(words))
+	}()
+	if res := c.goneResult(); res.Reason != words || res.Detached {
+		t.Fatalf("result %+v, want %q", res, words)
+	}
+
+	// No stream to wait for: the result is at once.
+	c2, _ := newClient(server.Paths{}, log.New(io.Discard, "", 0))
+	defer c2.enc.Close()
+	t0 := time.Now()
+	if res := c2.goneResult(); !res.Detached || time.Since(t0) > time.Second {
+		t.Fatalf("no pane: %+v after %v", res, time.Since(t0))
 	}
 }

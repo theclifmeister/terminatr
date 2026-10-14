@@ -2565,4 +2565,7 @@ user's own (§16.8); the far server's human decides what crosses.
   the fresh repaint replaces the frozen screen. A stream that ends
   otherwise closes the pane, in this server's words: `session exited on
   mini`, `mini stopped sharing acme`, `mini turned its panes off for
-  this server`, `the session on mini is gone`.
+  this server`, `the session on mini is gone`. The view's change and the
+  stream's end come on separate connections: a console whose view loses
+  its last session first waits up to 2 s for the stream's words, so it
+  prints them rather than a bare detach.
