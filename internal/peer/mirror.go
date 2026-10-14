@@ -404,7 +404,7 @@ func (m *Mirror) List() proto.PeerList {
 		return out
 	}
 	for _, l := range st.Peers {
-		pm := proto.PeerMirror{Alias: l.Alias, ID: l.ID, State: l.State, Reason: l.Reason, Since: l.Since,
+		pm := proto.PeerMirror{Alias: l.Alias, ID: l.ID, State: l.State, Reason: l.Reason, Since: l.Since, RTT: l.RTT,
 			Watch: slices.Contains(l.Caps, CapWatch), Projects: []proto.PeerMirrorProject{}}
 		if p := m.peers[l.ID]; p != nil {
 			if p.hasOffset {

@@ -849,6 +849,8 @@ func (m *dash) sideClick(mo tea.Mouse) tea.Cmd {
 	case m.busy:
 	case r.kind == treeDivider:
 		return tea.Batch(cmd, m.refold(foldDivider(r)))
+	case r.kind == treeServer && !r.link.local:
+		return tea.Batch(cmd, m.refold(foldPeer(r, !r.fold)))
 	case !can:
 		m.msg = why
 	default:
@@ -911,7 +913,7 @@ func (m *dash) showProject(slug string) tea.Cmd {
 // while the sidebar has the focus.
 func (m *dash) tree() []treeRow {
 	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint,
-		tree: sideTree(m.data.Projects, m.folds), cols: m.sideCols, cells: m.data.Cells})
+		tree: sideTree(m.data.Projects, m.folds), cols: m.sideCols, cells: m.data.Cells, peers: m.data.Peers})
 	rows = sideRows(rows, m.data.NeedsFirst)
 	if bandFits(m.sideW(), m.h, m.sideFoot()) {
 		rows = withSections(rows, m.band())
@@ -952,7 +954,7 @@ func (m *dash) sectionCmd(st sideStep) tea.Cmd {
 
 // fullTree is the sidebar's whole tree: nothing folded, no filter (w W).
 func (m *dash) fullTree() []treeRow {
-	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint, tree: unfoldedTree(m.data.Projects), cols: m.sideCols, cells: m.data.Cells})
+	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint, tree: unfoldedTree(m.data.Projects), cols: m.sideCols, cells: m.data.Cells, peers: m.data.Peers})
 	if m.data.NeedsFirst {
 		rows = needsFirstOrder(rows)
 	}

@@ -58,6 +58,10 @@ type iconSet struct {
 	ciPass, ciFail, ciRun string
 	// The inactive divider's mark: folded, unfolded.
 	fold, unfold string
+	// linked marks a server header whose link is up, and this server's
+	// (sidepeers.go); connecting, offline and refused ones take starting,
+	// idle and inactive.
+	linked string
 	// Todos and steps (todoGlyph), and the progress bar's cells (bar).
 	todoDone, todoNow, todoOpen string
 	barOn, barOff               string

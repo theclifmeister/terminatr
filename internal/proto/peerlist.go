@@ -32,7 +32,10 @@ type PeerMirror struct {
 	// as last measured; the peer's times (a session's created, the
 	// ticker's) less Offset are this server's. Unset (and 0) until a
 	// first answer carried the peer's now.
-	Offset   int64               `json:"offset_ms,omitempty"`
+	Offset int64 `json:"offset_ms,omitempty"`
+	// RTT is the link's last ping round trip in milliseconds, while up
+	// (PeerLink.RTT); a change of it alone doesn't bump Gen.
+	RTT      float64             `json:"rtt_ms,omitempty"`
 	Projects []PeerMirrorProject `json:"projects"`
 }
 

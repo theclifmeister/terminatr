@@ -61,6 +61,14 @@ const (
 	treeThread
 	treeDivider // "inactive (n)": the inactive projects hang under it
 	treeSection // a mod's section in the band below the tree (sidesections.go)
+	// A server group's header, with peers (sidepeers.go): this server's
+	// above its tree, each paired server's above its shared projects.
+	treeServer
+	// A paired server's shared project, its coordinator and its threads
+	// (sidepeers.go): drawn as the kinds above, never acted on as them.
+	treePeerProject
+	treePeerCoord
+	treePeerThread
 )
 
 // dividerKey is the inactive divider's row key.
@@ -123,6 +131,13 @@ type treeRow struct {
 	// undrawn: a section's header the band has no room to draw
 	// (markUndrawn); the cursor's path skips it.
 	undrawn bool
+	// peer is the paired server's alias of a server header or a remote
+	// row, "" for this server's; link is a server header's (sidepeers.go).
+	peer string
+	link *peerLink
+	// stale: a remote row whose link is down or whose last read failed:
+	// its last values, dimmed, no live state.
+	stale bool
 }
 
 // folded says a project row hides its coordinator and threads, or the
@@ -141,6 +156,8 @@ func (r treeRow) key() string {
 		return dividerKey
 	case treeSection:
 		return "s:" + r.sec.id
+	case treeServer, treePeerProject, treePeerCoord, treePeerThread:
+		return peerKey(r)
 	}
 	return "p:" + r.slug
 }
@@ -259,6 +276,11 @@ type treeIn struct {
 	// cells are the mods' cells; with them the grid gets their sidebar
 	// columns (modCells.sideOrder) unless mods is set.
 	cells *modCells
+	// peers are the paired servers as the server's mirror has them
+	// (peer.list): with any, the tree is in server groups (sidepeers.go);
+	// host names this server's, thisHost when "".
+	peers []proto.PeerMirror
+	host  string
 }
 
 // buildTree lays out the tree: the active projects, pinned ones first,
@@ -310,6 +332,7 @@ func buildTree(ps []ProjectData, sessions []proto.SessionInfo, in treeIn) []tree
 	if here >= 0 {
 		out[here].here = true
 	}
+	out = withPeers(out, in)
 	order, mods := in.cols, in.mods
 	if mods == nil && in.cells != nil {
 		order, mods = in.cells.sideOrder(order), in.cells.sideMods()
@@ -377,11 +400,11 @@ func projectRows(p ProjectData, sessions []proto.SessionInfo, byID map[string]pr
 }
 
 // slimRows are the rows the slim strip shows: the projects and the
-// divider.
+// divider, and with peers the server headers and remote projects.
 func slimRows(rows []treeRow) []treeRow {
 	var out []treeRow
 	for _, r := range rows {
-		if r.kind == treeProject || r.kind == treeDivider {
+		if r.kind == treeProject || r.kind == treeDivider || r.kind == treeServer || r.kind == treePeerProject {
 			r.here = r.current
 			out = append(out, r)
 		}
@@ -596,6 +619,10 @@ func treeCells(r treeRow, cw int, slim, focused bool) string {
 	if r.kind == treeDivider {
 		return dividerCells(r, cw, slim, sel)
 	}
+	if r.kind == treeServer {
+		return serverCells(r, cw, slim, sel)
+	}
+	r = r.drawn()
 	if slim {
 		return slimCells(r, cw, sel)
 	}
@@ -633,6 +660,10 @@ func treeCells(r treeRow, cw int, slim, focused bool) string {
 	rest := append(label, grid...)
 	if r.here {
 		return fit(runsRender(lead)+sel.Render(fit(runsPlain(rest), cw-runsWidth(lead))), cw)
+	}
+	if r.stale {
+		// Its last values, dimmed (sidepeers.go).
+		return fit(runsRender(lead)+th().Faint.Render(runsPlain(rest)), cw)
 	}
 	return fit(runsRender(lead)+runsRender(rest), cw)
 }
@@ -770,6 +801,9 @@ func treeGrid(r treeRow, cols []sideCol) []cellRun {
 // session's, or a thread's (its own, else its task's, else its
 // session's), when the column shows on rows of r's kind; nil for none.
 func (r treeRow) modCell(col string) []widget.Span {
+	if r.isPeer() {
+		return nil // the mods are this server's
+	}
 	p := r.slug
 	switch r.kind {
 	case treeProject:
@@ -841,7 +875,7 @@ func gridCell(r treeRow, c sideCol) cellRun {
 		var st lipgloss.Style
 		switch {
 		case proj && (!r.folded() || r.inactive):
-		case r.dormant:
+		case r.dormant, r.stale:
 			g, st = i.none, th().Faint
 		case thread:
 			if g, st = stateLook(r.state); g == "" {
@@ -957,6 +991,8 @@ func slimCells(r treeRow, cw int, sel lipgloss.Style) string {
 	g, st := coordLook(r.state)
 	word, _, _ := strings.Cut(r.state, " ")
 	switch {
+	case r.stale:
+		g, st = i.none, th().Faint
 	case r.inactive:
 		g, st = i.inactive, th().Faint
 	case r.paused && word != "blocked" && word != "waiting":
@@ -973,7 +1009,7 @@ func slimCells(r treeRow, cw int, sel lipgloss.Style) string {
 		look = th().Bad
 	case r.current:
 		look = th().Title
-	case r.inactive:
+	case r.inactive, r.stale:
 		look = th().Faint
 	}
 	rest := []cellRun{{g + " ", st}, {fit(r.slug, max(cw-5, 0)), look}, hint}
@@ -1111,6 +1147,9 @@ type Target struct {
 // target is where a click on r goes; ok is false for a thread without a
 // running session, with why.
 func (r treeRow) target() (t Target, ok bool, why string) {
+	if r.kind == treeServer || r.isPeer() {
+		return t, false, peerWhy(r)
+	}
 	t.Project = r.slug
 	switch r.kind {
 	case treeCoordinator:
@@ -1143,7 +1182,7 @@ const previewDelay = 200 * time.Millisecond
 // anything. ok is false on the row you are on, which already shows, and
 // on the inactive divider, which shows nothing.
 func (r treeRow) preview() (t Target, ok bool) {
-	if r.here || r.kind == treeDivider || r.kind == treeSection {
+	if r.here || r.kind == treeDivider || r.kind == treeSection || r.kind == treeServer || r.isPeer() {
 		return t, false
 	}
 	t.Project = r.slug
@@ -1216,6 +1255,8 @@ type sidebar struct {
 	// (mods.sections), band the band's lines (sidesections.go).
 	sections []proto.ModSection
 	band     sectionCache
+	// peers are the paired servers (Data.Peers), for the server groups.
+	peers []proto.PeerMirror
 }
 
 // sideCurrent is the attach view's current project: the focused pane's,
@@ -1234,7 +1275,7 @@ func (c *client) sideTree() []treeRow {
 		focus = c.focus.info.ID
 	}
 	rows := buildTree(c.side.projects, c.sideSessions(), treeIn{current: c.sideCurrent(), focus: focus, ctxHint: c.side.ctxHint,
-		tree: sideTree(c.side.projects, c.v.Tree), cols: c.v.Columns, cells: c.cells})
+		tree: sideTree(c.side.projects, c.v.Tree), cols: c.v.Columns, cells: c.cells, peers: c.side.peers})
 	rows = sideRows(rows, c.side.needsFirst)
 	if c.bandShows() {
 		rows = withSections(rows, c.band())
@@ -1291,7 +1332,7 @@ func (c *client) band() bandIn {
 // sideFullTree is the attach view's whole tree, nothing folded and no
 // filter (w W). c.mu held.
 func (c *client) sideFullTree() []treeRow {
-	rows := buildTree(c.side.projects, c.sideSessions(), treeIn{current: c.sideCurrent(), ctxHint: c.side.ctxHint, tree: unfoldedTree(c.side.projects), cols: c.v.Columns, cells: c.cells})
+	rows := buildTree(c.side.projects, c.sideSessions(), treeIn{current: c.sideCurrent(), ctxHint: c.side.ctxHint, tree: unfoldedTree(c.side.projects), cols: c.v.Columns, cells: c.cells, peers: c.side.peers})
 	if c.side.needsFirst {
 		rows = needsFirstOrder(rows)
 	}
@@ -1824,6 +1865,7 @@ func (c *client) sideMouse(m emu.Mouse) {
 	}
 	open, fold := false, false
 	var sec sideStep
+	var peer func(*view.Tree) // a paired server's header folds
 	switch {
 	case border:
 		sd.drag = true
@@ -1833,6 +1875,8 @@ func (c *client) sideMouse(m emu.Mouse) {
 		sec, _ = sectionStep(r, sideEnter)
 	case r.kind == treeDivider:
 		fold = true
+	case r.kind == treeServer && !r.link.local:
+		peer = foldPeer(r, !r.fold)
 	case !can:
 		c.flash = why
 		c.status()
@@ -1851,6 +1895,9 @@ func (c *client) sideMouse(m emu.Mouse) {
 	}
 	if fold {
 		c.refold(foldDivider(r))
+	}
+	if peer != nil {
+		c.refold(peer)
 	}
 	c.sectionDo(sec)
 	c.poke()
@@ -1994,6 +2041,9 @@ type sideStep struct {
 // strip shows no rows under a project: there only the divider folds.
 func foldStep(rows []treeRow, i, op int, slim bool) (st sideStep, ok bool) {
 	r := rows[i]
+	if r.kind == treeServer || r.isPeer() {
+		return peerFoldStep(rows, i, op, slim)
+	}
 	switch {
 	case r.kind == treeDivider && (op == sideIn && r.fold || op == sideOut && !r.fold || op == sideEnter):
 		return sideStep{refold: foldDivider(r)}, true
@@ -2030,6 +2080,7 @@ func foldAll(all []treeRow, fold bool) func(*view.Tree) {
 			inactive = r.slugs
 		}
 	}
+	active = append(active, peerFolds(all)...)
 	active, inactive = active[:min(len(active), view.MaxExpanded)], inactive[:min(len(inactive), view.MaxExpanded)]
 	// The sections' folds are view.sections' (foldSections).
 	if fold {
@@ -2089,6 +2140,11 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 	case sideOut:
 		for j := i - 1; j >= 0 && (r.kind == treeCoordinator || r.kind == treeThread); j-- {
 			if rows[j].kind == treeProject {
+				return moveTo(j)
+			}
+		}
+		for j := i - 1; j >= 0 && (r.kind == treePeerCoord || r.kind == treePeerThread); j-- {
+			if rows[j].kind == treePeerProject {
 				return moveTo(j)
 			}
 		}
@@ -2202,6 +2258,9 @@ func sideFooter(all []treeRow, w int, s ServerInfo, session, compact bool) []str
 // progress, its PR's number and checks).
 func (r treeRow) details() (string, string) {
 	running := func(state string) string { return cmp.Or(state, "not running") }
+	if r.kind == treeServer || r.isPeer() {
+		return peerDetails(r)
+	}
 	switch r.kind {
 	case treeSection:
 		return sectionDetails(r.sec)
@@ -2293,6 +2352,8 @@ func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 	case r == nil:
 	case r.kind == treeSection:
 		keys = sectionKeys(r.sec)
+	case r.kind == treeServer, r.isPeer():
+		keys = peerKeyBar(r)
 	case r.kind == treeDivider && r.fold:
 		keys = []string{enter + " unfold"}
 	case r.kind == treeDivider:

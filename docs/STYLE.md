@@ -119,6 +119,7 @@ shots.html` (a page with a dark and a light palette).
 | `⚑` | `?` | in the sidebar: something in this project needs you |
 | `⌁` `∥` `⊘` | `@` `=` `/` | remote control on; the project is paused; inactive |
 | `☑` `☒` `☐` | `+` `x` `~` | in the sidebar: a thread's PR checks pass, fail, run |
+| `◉` | `O` | with paired servers, a server's header: linked; there `◌` `○` `⊘` say connecting, offline, refused |
 | `✓` `◐` `○` | `x` `~` `o` | a step done, under way, to do |
 | `▸` | `>` | the step under way |
 | `▰▱` | `#-` | progress, always beside its count |

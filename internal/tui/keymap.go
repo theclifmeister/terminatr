@@ -145,6 +145,7 @@ func symbolLines(w int) []string {
 		{i.remote, "remote control is on for this coordinator"},
 		{i.paused, "the project is paused"},
 		{i.inactive, "the project is inactive: its coordinator and threads don't run"},
+		{i.linked, "with paired servers, a server's header: linked (" + i.starting + " connecting, " + i.idle + " offline, " + i.inactive + " refused)"},
 		{i.ciPass + " " + i.ciFail + " " + i.ciRun, "a thread's PR checks, in the sidebar's PR column: pass, fail, running; blank without a PR"},
 		{i.todoDone + " " + i.todoNow + " " + i.todoOpen, "a step done, under way, to do"},
 		{i.current, "the step under way"},
