@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/theclifmeister/terminatr/internal/home/hometest"
 	"github.com/theclifmeister/terminatr/internal/service"
 	"github.com/theclifmeister/terminatr/internal/service/servicetest"
 	"os"
@@ -37,7 +38,7 @@ func TestMain(m *testing.M) {
 		os.Setenv(service.LaunchEnvVar, "off")
 	}
 	before := servicetest.Snapshot()
-	code := func() int {
+	code := hometest.Run(func() int {
 		flag.Parse()
 		if testing.Short() {
 			return m.Run()
@@ -58,7 +59,7 @@ func TestMain(m *testing.M) {
 			tmBin = bin
 		}
 		return m.Run()
-	}()
+	})
 	os.Exit(servicetest.Leaked(before, code))
 }
 
