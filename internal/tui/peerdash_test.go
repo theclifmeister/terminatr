@@ -199,7 +199,8 @@ func TestPeersTab(t *testing.T) {
 		"relay relay.example.net · shares 2 projects · tm 0.27.0",
 		"nas   A1B2-C3D4  ○ offline 4m · relay",
 		"relay relay.example.net:8443 · shares 1 project · dial: refused",
-		"x remove · ↑ ↓ move · ← → tabs · esc close",
+		"p panes · x remove · ↑ ↓ move · ← → tabs · esc close",
+		"panes: off · it can't open this server's panes",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in\n%s", want, out)
@@ -230,5 +231,42 @@ func TestPeersTab(t *testing.T) {
 		if out := screen(m); !strings.Contains(out, list) {
 			t.Errorf("missing %q in\n%s", list, out)
 		}
+	}
+}
+
+// TestPeersTabPanes: p steps the selected server's pane switch off →
+// view → type → off (docs/SPEC.md §16.12), asking before each step that
+// lets it do more; n keeps it as it was.
+func TestPeersTabPanes(t *testing.T) {
+	m, src := remoteDash(t, "@mini/acme-api")
+	src.peers = peersList()
+	press(m, ",", "4")
+	sv := m.top().(*settingsView)
+	screen(m) // the tab reads the list as it draws
+	press(m, "p")
+	if _, ok := m.top().(*confirmView); !ok {
+		t.Fatalf("p: %T", m.top())
+	}
+	press(m, "n")
+	if len(src.panesSet) != 0 || m.msg != "panes unchanged for mini" {
+		t.Fatalf("n: %v %q", src.panesSet, m.msg)
+	}
+	press(m, "p")
+	run(m, press(m, "y"))
+	if !strings.Contains(screen(m), "panes: view · it can watch the coordinators and threads") {
+		t.Errorf("after view:\n%s", screen(m))
+	}
+	press(m, "p")
+	run(m, press(m, "y"))
+	if out := screen(m); !strings.Contains(out, "panes: type · it can watch and type into") {
+		t.Errorf("after type:\n%s", out)
+	}
+	// Off goes at once.
+	run(m, press(m, "p"))
+	if _, ok := m.top().(*confirmView); ok {
+		t.Fatal("off asked")
+	}
+	if !slices.Equal(src.panesSet, []string{"mini view", "mini type", "mini off"}) || sv.peers.list.Peers[0].Panes != "off" {
+		t.Fatalf("set %v, now %+v", src.panesSet, sv.peers.list.Peers[0])
 	}
 }

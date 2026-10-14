@@ -14,8 +14,10 @@ import (
 
 // The Peers tab of the , popup (docs/SPEC.md §4, §16.8): the servers
 // paired with this one, as tm peer list has them (Source.Peers): each
-// one's alias, server id, link and relay; x removes the selected one,
-// asking first, as tm peer remove does. Pairing stays in a terminal (tm
+// one's alias, server id, link and relay, and its pane switch; p steps
+// the switch off → view → type → off (asking before it lets the server
+// do more), as tm peer panes does; x removes the selected one, asking
+// first, as tm peer remove does. Pairing stays in a terminal (tm
 // peer pair, tm peer join): it shows a code to pass on and asks to
 // compare six digits. A project is shared from its own Settings tab.
 //
@@ -23,9 +25,9 @@ import (
 //	""
 //	" mini    91C3-77AB  ◉ linked · 38 ms"
 //	"         relay relay.example.net · shares 2 projects · tm 0.27.0"
+//	"         panes: type · it can watch and type into this server's …"
 //
-// Each server is a block of lines under its own: a setting per paired
-// server goes there (remote panes, T402).
+// Each server is a block of lines under its own: its settings go there.
 
 // peersTab is the Peers tab: the list as last read, and the selection.
 type peersTab struct {
@@ -36,7 +38,7 @@ type peersTab struct {
 }
 
 // peersKeys are the Peers tab's action row.
-const peersKeys = "x remove · ↑ ↓ move · ← → tabs · esc close"
+const peersKeys = "p panes · x remove · ↑ ↓ move · ← → tabs · esc close"
 
 // load reads the paired servers again.
 func (pt *peersTab) load(m *dash) {
@@ -95,8 +97,13 @@ func (pt *peersTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
 			out = append(out, strings.Repeat(" ", nameW+2)+d)
 			hits = append(hits, i)
 		}
+		for _, d := range faintLines(panesWords(e), max(w-nameW-2, 8)) {
+			out = append(out, strings.Repeat(" ", nameW+2)+d)
+			hits = append(hits, i)
+		}
 		out = append(out, "")
 	}
+	out = append(out, faintLines("p sets what the selected server may do with this server's panes, the coordinators and threads of the projects you share: nothing, watch them, or watch and type into them.", w)...)
 	out = append(out, faintLines("x removes the selected server, as tm peer remove does: its link closes and its projects leave the sidebar; remove this server there too. A project is shared from its own Settings tab (a on the dashboard).", w)...)
 	return out, sel, hits
 }
@@ -154,6 +161,58 @@ func peerAbout(m *dash, e PeerEntry) string {
 	return strings.Join(bits, " · ")
 }
 
+// panesLevel is e's pane switch, off when unset.
+func panesLevel(e PeerEntry) string {
+	if e.Panes == "" {
+		return proto.PanesOff
+	}
+	return e.Panes
+}
+
+// panesWords is a paired server's pane line: its switch and what that
+// lets it do.
+func panesWords(e PeerEntry) string {
+	what := map[string]string{
+		proto.PanesOff:  "it can't open this server's panes",
+		proto.PanesView: "it can watch the coordinators and threads of the projects you share, not type",
+		proto.PanesType: "it can watch and type into the coordinators and threads of the projects you share",
+	}[panesLevel(e)]
+	return "panes: " + panesLevel(e) + " · " + what
+}
+
+// nextPanes is the level p steps to from level.
+func nextPanes(level string) string {
+	switch level {
+	case proto.PanesView:
+		return proto.PanesType
+	case proto.PanesType:
+		return proto.PanesOff
+	}
+	return proto.PanesView
+}
+
+// panes steps the selected server's pane switch: asking first when it
+// lets that server do more, at once when less.
+func (pt *peersTab) panes(m *dash, e PeerEntry) tea.Cmd {
+	to := nextPanes(panesLevel(e))
+	set := func() tea.Cmd {
+		src, alias := m.src, e.Alias
+		return m.act(func() actionMsg {
+			err := src.SetPeerPanes(alias, to)
+			return actionMsg{err: err, msg: "panes " + to + " for " + alias, then: func(m *dash) { pt.load(m) }}
+		})
+	}
+	if to == proto.PanesOff {
+		return set()
+	}
+	q := map[string]string{
+		proto.PanesView: fmt.Sprintf("Let %s watch the coordinator and thread panes of the projects this server shares? It sees whatever they show.", e.Alias),
+		proto.PanesType: fmt.Sprintf("Let %s type into the coordinator and thread panes of the projects this server shares? Typing into an agent can run anything here; the first keys into a thread tell its coordinator.", e.Alias),
+	}[to]
+	m.confirmNo("Panes for "+e.Alias, q, "panes unchanged for "+e.Alias, set)
+	return nil
+}
+
 // relayWords is a relay as people read it: its host for wss://.
 func relayWords(r string) string {
 	if u, err := url.Parse(r); err == nil && u.Scheme == "wss" && u.Path == "" && u.Host != "" {
@@ -169,11 +228,14 @@ func (pt *peersTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 		pt.sel = moveSel(pt.sel, d, len(pt.list.Peers))
 		return nil, true
 	}
-	if s != "x" {
+	if s != "x" && s != "p" {
 		return nil, false
 	}
 	if pt.sel >= len(pt.list.Peers) {
 		return nil, true
+	}
+	if s == "p" {
+		return pt.panes(m, pt.list.Peers[pt.sel]), true
 	}
 	pt.remove(m, pt.list.Peers[pt.sel].Alias)
 	return nil, true

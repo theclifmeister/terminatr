@@ -257,6 +257,10 @@ type Source interface {
 	// inside an agent.
 	Peers() (PeerList, error)
 	RemovePeer(alias string) error
+	// SetPeerPanes sets what the paired server alias may do with this
+	// server's panes (proto.PanesOff, PanesView, PanesType; §16.12), as
+	// tm peer panes does, and has the server read the peers again.
+	SetPeerPanes(alias, level string) error
 	// Lifecycle activates, deactivates, pauses, resumes, archives,
 	// deletes, pins or unpins a project (verb "activate", "deactivate",
 	// "pause", "resume", "archive", "delete", "pin", "unpin"), saying
@@ -625,6 +629,8 @@ type PeerList struct {
 type PeerEntry struct {
 	Alias, ID, Short, Relay string
 	Link                    *proto.PeerLink
+	// Panes is this server's pane switch for it (proto.PanesOff …).
+	Panes string
 }
 
 func (s *ServerSource) Peers() (PeerList, error) {
@@ -656,7 +662,7 @@ func (s *ServerSource) Peers() (PeerList, error) {
 		}
 	}
 	for _, p := range peers {
-		e := PeerEntry{Alias: p.Alias, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay}
+		e := PeerEntry{Alias: p.Alias, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: p.PanesLevel()}
 		if pl, ok := links[e.ID]; ok {
 			e.Link = &pl
 		}
@@ -679,6 +685,24 @@ func (s *ServerSource) RemovePeer(alias string) error {
 	var st *proto.LinkStatus
 	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, server.ErrNotRunning) {
 		return fmt.Errorf("removed %s, but the server didn't read the peers again (%v); tm server restart does", alias, err)
+	}
+	return nil
+}
+
+func (s *ServerSource) SetPeerPanes(alias, level string) error {
+	if s.Caller.IsAgent() {
+		return errHumanOnly
+	}
+	found, err := peer.SetPanes(peer.DirIn(s.Paths.Home), alias, level)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("no paired server %s (tm peer list)", alias)
+	}
+	var st *proto.LinkStatus
+	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, server.ErrNotRunning) {
+		return fmt.Errorf("set, but the server didn't read the peers again (%v); tm server restart does", err)
 	}
 	return nil
 }
