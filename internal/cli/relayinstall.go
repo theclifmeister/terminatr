@@ -28,6 +28,15 @@ const (
 	relayBin      = "/usr/local/bin/tm"
 	relayUnitPath = "/etc/systemd/system/tm-relay.service"
 	relayStateLib = "/var/lib/private/tm-relay" // StateDirectory with DynamicUser
+
+	// The update units: a root oneshot running tm relay update, started
+	// by a daily timer (--auto-update) and by a path unit when the relay
+	// writes an update request into its state directory.
+	relayUpdateService = "/etc/systemd/system/tm-relay-update.service"
+	relayUpdateTimer   = "/etc/systemd/system/tm-relay-update.timer"
+	relayUpdatePath    = "/etc/systemd/system/tm-relay-update.path"
+	relayRequestName   = "update-request"
+	relayRequestFile   = relayStateLib + "/" + relayRequestName
 )
 
 // relayService is everything tm relay install, update and uninstall touch
@@ -121,11 +130,15 @@ func relayUnit(domain, email string) string {
 	if email != "" {
 		exec += " --email " + email
 	}
+	exec += relayRequestFlag
 	return relayUnitFor(exec, `# sudo tm relay install --domain <name> writes this file and does the
 # rest. By hand: set your DNS name below, then
 #   sudo install -m 755 tm /usr/local/bin/tm
-#   sudo cp tm-relay.service /etc/systemd/system/
+#   sudo cp tm-relay.service tm-relay-update.* /etc/systemd/system/
 #   sudo systemctl daemon-reload && sudo systemctl enable --now tm-relay
+#   sudo systemctl enable --now tm-relay-update.path tm-relay-update.timer
+# (the timer updates the relay daily; the path unit when a linked
+# server asks: drop either to do without).
 #
 # The relay runs as a throwaway user with only the right to bind 443. It
 # gets its own certificate from Let's Encrypt (TLS-ALPN-01, on 443: no
@@ -136,7 +149,7 @@ func relayUnit(domain, email string) string {
 
 // relayIPUnit is the systemd unit tm relay install --ip writes.
 func relayIPUnit(ip string) string {
-	return relayUnitFor("ExecStart="+relayBin+" relay serve --listen :443 --self-signed --ip "+ip+" --state ${STATE_DIRECTORY}",
+	return relayUnitFor("ExecStart="+relayBin+" relay serve --listen :443 --self-signed --ip "+ip+" --state ${STATE_DIRECTORY}"+relayRequestFlag,
 		`# sudo tm relay install --ip <address> writes this file and does the rest.
 #
 # The relay runs as a throwaway user with only the right to bind 443. It
@@ -146,6 +159,67 @@ func relayIPUnit(ip string) string {
 # the directory up.
 `)
 }
+
+// relayRequestFlag has the relay write update requests where
+// tm-relay-update.path looks.
+const relayRequestFlag = " --update-request ${STATE_DIRECTORY}/" + relayRequestName
+
+// relayUpdateServiceUnit is tm-relay-update.service: tm relay update as
+// root, started by the timer and the path unit.
+const relayUpdateServiceUnit = `# tm relay install writes this file (docs/OPERATIONS.md, Running a relay).
+#
+# tm relay update, as root: it removes the relay's update request, gets
+# the latest official release, checks its sha256 against the release's
+# checksums.txt and restarts tm-relay only when the release is newer.
+# Started by tm-relay-update.timer (daily, unless installed with
+# --auto-update=off) and by tm-relay-update.path (a linked server asked).
+
+[Unit]
+Description=terminatr relay update (tm relay update)
+Documentation=https://github.com/theclifmeister/terminatr/blob/main/docs/OPERATIONS.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=` + relayBin + ` relay update
+TimeoutStartSec=15min
+`
+
+// relayUpdateTimerUnit is tm-relay-update.timer: the daily update.
+const relayUpdateTimerUnit = `# tm relay install writes this file; --auto-update=off leaves it disabled.
+
+[Unit]
+Description=terminatr relay update, daily
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+`
+
+// relayUpdatePathUnit is tm-relay-update.path: the relay, unprivileged,
+// writes an update request into its state directory when a linked
+// server asks (at most once an hour); this starts tm relay update.
+const relayUpdatePathUnit = `# tm relay install writes this file.
+#
+# A server linked through the relay may ask it to update itself to the
+# latest official release (the Peers tab's u, tm peer relay-update). The
+# relay runs unprivileged and only writes this request file; tm relay
+# update, as root, removes it and does the update.
+
+[Unit]
+Description=terminatr relay update, when a linked server asks
+
+[Path]
+PathExists=` + relayRequestFile + `
+
+[Install]
+WantedBy=paths.target
+`
 
 func relayUnitFor(exec, about string) string {
 	return `# tm relay as a systemd service (docs/OPERATIONS.md, Running a relay).
@@ -216,6 +290,7 @@ func unitFlag(unit, flag string) string {
 func relayManage(e *Env, cmd string, args []string, h *relayService) error {
 	f := newFlags()
 	domain, email, ipMode := f.String("domain"), f.String("email"), f.Bool("ip")
+	autoUpdate := f.String("auto-update")
 	// --ip takes its address as the next argument, or none.
 	var flagArgs []string
 	for _, a := range args {
@@ -229,8 +304,16 @@ func relayManage(e *Env, cmd string, args []string, h *relayService) error {
 	if err != nil {
 		return err
 	}
-	if len(pos) > 1 || (len(pos) == 1 && !*ipMode) || (cmd != "install" && (*domain != "" || *email != "" || *ipMode)) {
+	if len(pos) > 1 || (len(pos) == 1 && !*ipMode) || (cmd != "install" && (*domain != "" || *email != "" || *ipMode || f.IsSet("auto-update"))) {
 		return usagef("%s", relayUsage)
+	}
+	auto := true
+	switch *autoUpdate {
+	case "", "on":
+	case "off":
+		auto = false
+	default:
+		return usagef("--auto-update=on or --auto-update=off, not %q", *autoUpdate)
 	}
 	var ip netip.Addr
 	if cmd == "install" {
@@ -267,30 +350,21 @@ func relayManage(e *Env, cmd string, args []string, h *relayService) error {
 	switch cmd {
 	case "install":
 		if ip.IsValid() {
-			return h.installIP(ctx, e, ip, len(pos) == 0)
+			return h.installIP(ctx, e, ip, len(pos) == 0, auto)
 		}
-		return h.install(ctx, e, *domain, *email)
+		return h.install(ctx, e, *domain, *email, auto)
 	case "update":
 		return h.update(ctx, e)
 	}
 	return h.uninstall(e)
 }
 
-func (h *relayService) install(ctx context.Context, e *Env, domain, email string) error {
+func (h *relayService) install(ctx context.Context, e *Env, domain, email string, auto bool) error {
 	if err := h.installBinary(); err != nil {
 		return err
 	}
-	unit := h.path(relayUnitPath)
-	if err := os.MkdirAll(filepath.Dir(unit), 0o755); err != nil {
+	if err := h.installUnits(relayUnit(domain, email), auto); err != nil {
 		return err
-	}
-	if err := writeFileAtomic(unit, []byte(relayUnit(domain, email)), 0o644); err != nil {
-		return err
-	}
-	for _, a := range [][]string{{"daemon-reload"}, {"enable", "tm-relay"}, {"restart", "tm-relay"}} {
-		if err := h.Systemctl(a...); err != nil {
-			return err
-		}
 	}
 	fmt.Fprintf(e.Stdout, "Installed %s and %s; tm-relay is starting.\nIt gets its certificate from Let's Encrypt, under their subscriber agreement (https://letsencrypt.org/repository/).\nWaiting for https://%s/healthz (the first certificate takes a few seconds)…\n", relayBin, relayUnitPath, domain)
 	if err := h.waitHealthy(ctx, domain, ""); err != nil {
@@ -302,14 +376,55 @@ func (h *relayService) install(ctx context.Context, e *Env, domain, email string
 
 Logs: journalctl -u tm-relay · new release: sudo tm relay update · remove: sudo tm relay uninstall
 `, domain)
+	autoUpdateNote(e, auto)
 	return nil
+}
+
+// installUnits writes the relay's unit and its update units, then
+// starts the relay and the path unit, and enables the daily timer when
+// auto (else disables it: install again with --auto-update=on).
+func (h *relayService) installUnits(relay string, auto bool) error {
+	if err := os.MkdirAll(h.path(filepath.Dir(relayUnitPath)), 0o755); err != nil {
+		return err
+	}
+	for _, u := range []struct{ path, text string }{
+		{relayUnitPath, relay},
+		{relayUpdateService, relayUpdateServiceUnit},
+		{relayUpdateTimer, relayUpdateTimerUnit},
+		{relayUpdatePath, relayUpdatePathUnit},
+	} {
+		if err := writeFileAtomic(h.path(u.path), []byte(u.text), 0o644); err != nil {
+			return err
+		}
+	}
+	timer := []string{"disable", "--now", "tm-relay-update.timer"}
+	if auto {
+		timer = []string{"enable", "--now", "tm-relay-update.timer"}
+	}
+	for _, a := range [][]string{{"daemon-reload"}, {"enable", "tm-relay"}, {"restart", "tm-relay"},
+		{"enable", "--now", "tm-relay-update.path"}, timer} {
+		if err := h.Systemctl(a...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// autoUpdateNote says how the relay keeps up with releases.
+func autoUpdateNote(e *Env, auto bool) {
+	if auto {
+		fmt.Fprintln(e.Stdout, "Auto-update: on. tm-relay-update.timer runs tm relay update daily (checksums checked; a restart only for a newer release); install again with --auto-update=off to stop it.")
+	} else {
+		fmt.Fprintln(e.Stdout, "Auto-update: off. Update with sudo tm relay update, or install again with --auto-update=on.")
+	}
+	fmt.Fprintln(e.Stdout, "Any server linked through the relay may also ask it to update to the latest release (the Peers tab's u, tm peer relay-update), at most once an hour.")
 }
 
 // installIP installs a relay without a domain: its key and self-signed
 // certificate are made here, in its state directory, before it starts,
 // so the address printed holds the pin of the key it serves. detected:
 // ip is this host's own, not given.
-func (h *relayService) installIP(ctx context.Context, e *Env, ip netip.Addr, detected bool) error {
+func (h *relayService) installIP(ctx context.Context, e *Env, ip netip.Addr, detected, auto bool) error {
 	if err := h.installBinary(); err != nil {
 		return err
 	}
@@ -319,17 +434,8 @@ func (h *relayService) installIP(ctx context.Context, e *Env, ip netip.Addr, det
 	if err != nil {
 		return err
 	}
-	unit := h.path(relayUnitPath)
-	if err := os.MkdirAll(filepath.Dir(unit), 0o755); err != nil {
+	if err := h.installUnits(relayIPUnit(ip.String()), auto); err != nil {
 		return err
-	}
-	if err := writeFileAtomic(unit, []byte(relayIPUnit(ip.String())), 0o644); err != nil {
-		return err
-	}
-	for _, a := range [][]string{{"daemon-reload"}, {"enable", "tm-relay"}, {"restart", "tm-relay"}} {
-		if err := h.Systemctl(a...); err != nil {
-			return err
-		}
 	}
 	address := relayAddress(ip, "", pin)
 	fmt.Fprintf(e.Stdout, "Installed %s and %s; tm-relay is starting, with a self-signed certificate for %s.\n", relayBin, relayUnitPath, ip)
@@ -355,6 +461,7 @@ Both servers must reach %[2]s on TCP port 443.`, address, ip)
 Back up %s: the paired servers pin the key in it, and a new key means giving both the new address (tm peer relay ALIAS ADDRESS).
 Logs: journalctl -u tm-relay · new release: sudo tm relay update · remove: sudo tm relay uninstall
 `, relayStateLib)
+	autoUpdateNote(e, auto)
 	return nil
 }
 
@@ -449,6 +556,15 @@ Then: curl %s (the relay keeps trying for a certificate by itself; journalctl -u
 }
 
 func (h *relayService) update(ctx context.Context, e *Env) error {
+	// A linked server's request (tm-relay-update.path started this): it
+	// is done once this runs, whatever comes of it, so a failing update
+	// isn't started again and again.
+	switch err := os.Remove(h.path(relayRequestFile)); {
+	case err == nil:
+		fmt.Fprintln(e.Stdout, "A linked server asked the relay to update to the latest release.")
+	case !errors.Is(err, os.ErrNotExist):
+		return fmt.Errorf("the relay's update request: %w", err)
+	}
 	rel, err := h.Client.Latest(ctx)
 	if err != nil {
 		return fmt.Errorf("the latest release: %w", err)
@@ -518,10 +634,24 @@ func (h *relayService) uninstall(e *Env) error {
 	if err := os.Remove(unit); err != nil {
 		return err
 	}
+	// An install from before the update units has none.
+	for _, u := range []string{relayUpdateTimer, relayUpdatePath, relayUpdateService} {
+		if _, err := os.Stat(h.path(u)); err != nil {
+			continue
+		}
+		if u != relayUpdateService {
+			if err := h.Systemctl("disable", "--now", filepath.Base(u)); err != nil {
+				return err
+			}
+		}
+		if err := os.Remove(h.path(u)); err != nil {
+			return err
+		}
+	}
 	if err := h.Systemctl("daemon-reload"); err != nil {
 		return err
 	}
-	fmt.Fprintf(e.Stdout, `Stopped tm-relay and removed %s.
+	fmt.Fprintf(e.Stdout, `Stopped tm-relay and removed %s and its update units.
 Kept %s (other tm commands may use it) and the relay's keys and certificates in %s: a self-signed relay's key is what the paired servers pin, so keep it to install again (sudo rm -r %[3]s drops them).
 `, relayUnitPath, relayBin, relayStateLib)
 	return nil

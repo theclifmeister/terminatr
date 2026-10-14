@@ -201,7 +201,7 @@ func TestRelayInstall(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(unit) != relayUnit("relay.example.net", "me@example.net") ||
-		!strings.Contains(string(unit), "--domain relay.example.net --state ${STATE_DIRECTORY} --email me@example.net\n") {
+		!strings.Contains(string(unit), "--domain relay.example.net --state ${STATE_DIRECTORY} --email me@example.net --update-request ${STATE_DIRECTORY}/update-request\n") {
 		t.Fatalf("unit:\n%s", unit)
 	}
 	if b, _ := os.ReadFile(filepath.Join(r.s.Root, "usr", "local", "bin", "tm")); string(b) != "tm v0.27.0" {
@@ -210,8 +210,31 @@ func TestRelayInstall(t *testing.T) {
 	if fi, _ := os.Stat(filepath.Join(r.s.Root, "usr", "local", "bin", "tm")); fi.Mode().Perm() != 0o755 {
 		t.Fatalf("binary mode %v", fi.Mode())
 	}
-	if got := strings.Join(r.calls, "; "); got != "daemon-reload; enable tm-relay; restart tm-relay" {
+	if got := strings.Join(r.calls, "; "); got != "daemon-reload; enable tm-relay; restart tm-relay; enable --now tm-relay-update.path; enable --now tm-relay-update.timer" {
 		t.Fatalf("systemctl: %s", got)
+	}
+	// The update units: a daily timer and a path unit on the relay's
+	// request file, both starting tm relay update as root.
+	for name, want := range map[string]string{
+		"tm-relay-update.service": relayUpdateServiceUnit,
+		"tm-relay-update.timer":   relayUpdateTimerUnit,
+		"tm-relay-update.path":    relayUpdatePathUnit,
+	} {
+		b, err := os.ReadFile(filepath.Join(r.s.Root, "etc", "systemd", "system", name))
+		if err != nil || string(b) != want {
+			t.Fatalf("%s: %v\n%s", name, err, b)
+		}
+	}
+	for _, want := range []string{"\nType=oneshot\n", "\nExecStart=/usr/local/bin/tm relay update\n"} {
+		if !strings.Contains(relayUpdateServiceUnit, want) || strings.Contains(relayUpdateServiceUnit, "DynamicUser") {
+			t.Fatalf("tm-relay-update.service: no %q, or not root", want)
+		}
+	}
+	if !strings.Contains(relayUpdateTimerUnit, "\nOnCalendar=daily\n") || !strings.Contains(relayUpdatePathUnit, "\nPathExists=/var/lib/private/tm-relay/update-request\n") {
+		t.Fatal("timer or path unit")
+	}
+	if !strings.Contains(out, "Auto-update: on") {
+		t.Fatalf("out: %s", out)
 	}
 	if len(r.asked) != 1 || r.asked[0] != "https://relay.example.net/healthz" {
 		t.Fatalf("healthz: %v", r.asked)
@@ -262,8 +285,11 @@ func TestRelayInstall(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(r.s.Root, "usr", "local", "bin", "tm")); err != nil {
 		t.Fatalf("binary removed: %v", err)
 	}
-	if got := strings.Join(r.calls, "; "); got != "disable --now tm-relay; daemon-reload" {
+	if got := strings.Join(r.calls, "; "); got != "disable --now tm-relay; disable --now tm-relay-update.timer; disable --now tm-relay-update.path; daemon-reload" {
 		t.Fatalf("systemctl: %s", got)
+	}
+	if entries, _ := os.ReadDir(filepath.Join(r.s.Root, "etc", "systemd", "system")); len(entries) != 0 {
+		t.Fatalf("units kept: %v", entries)
 	}
 	if out := h.ok(human, "relay", "uninstall"); !strings.Contains(out, "isn't installed") {
 		t.Fatalf("again: %s", out)
@@ -401,7 +427,7 @@ func TestRelayInstallIP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(unit) != relayIPUnit("203.0.113.5") || !strings.Contains(string(unit), "--self-signed --ip 203.0.113.5 --state ${STATE_DIRECTORY}\n") {
+	if string(unit) != relayIPUnit("203.0.113.5") || !strings.Contains(string(unit), "--self-signed --ip 203.0.113.5 --state ${STATE_DIRECTORY} --update-request ${STATE_DIRECTORY}/update-request\n") {
 		t.Fatalf("unit:\n%s", unit)
 	}
 	state := filepath.Join(r.s.Root, "var", "lib", "private", "tm-relay")
@@ -475,5 +501,67 @@ func TestRelayHealthPinned(t *testing.T) {
 	var pe *relay.PinError
 	if err := relayHealth(context.Background(), srv.URL+"/healthz#sha256="+strings.Repeat("ab", 32)); !errors.As(err, &pe) {
 		t.Fatalf("wrong pin: %v", err)
+	}
+}
+
+// --auto-update=off writes the timer but leaves it disabled; the path
+// unit is on either way. Only install takes the flag.
+func TestRelayInstallAutoUpdateOff(t *testing.T) {
+	h := newHarness(t)
+	r := newRelayRig(t)
+	h.expect(2, "--auto-update=on or --auto-update=off", human, "relay", "install", "--domain", "relay.example.net", "--auto-update=maybe")
+	h.expect(2, "usage", human, "relay", "update", "--auto-update=off")
+	out := h.ok(human, "relay", "install", "--ip", "203.0.113.5", "--auto-update=off")
+	if got := strings.Join(r.calls, "; "); got != "daemon-reload; enable tm-relay; restart tm-relay; enable --now tm-relay-update.path; disable --now tm-relay-update.timer" {
+		t.Fatalf("systemctl: %s", got)
+	}
+	if !strings.Contains(out, "Auto-update: off") {
+		t.Fatalf("out: %s", out)
+	}
+	if _, err := os.Stat(filepath.Join(r.s.Root, "etc", "systemd", "system", "tm-relay-update.timer")); err != nil {
+		t.Fatal(err)
+	}
+	r.calls = nil
+	h.ok(human, "relay", "install", "--ip", "203.0.113.5", "--auto-update", "on")
+	if !strings.HasSuffix(strings.Join(r.calls, "; "), "enable --now tm-relay-update.timer") {
+		t.Fatalf("systemctl: %v", r.calls)
+	}
+}
+
+// tm relay update removes a linked server's request before anything
+// else, so a failing update isn't started again and again.
+func TestRelayUpdateTakesTheRequest(t *testing.T) {
+	h := newHarness(t)
+	r := newRelayRig(t)
+	h.ok(human, "relay", "install", "--domain", "relay.example.net")
+	req := filepath.Join(r.s.Root, "var", "lib", "private", "tm-relay", "update-request")
+	os.MkdirAll(filepath.Dir(req), 0o700)
+	os.WriteFile(req, []byte("update to the latest release\n"), 0o600)
+	relayRelease(t, r.s, "v0.28.0", true)
+	h.expect(3, "does not match checksums.txt", human, "relay", "update")
+	if _, err := os.Stat(req); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("request kept: %v", err)
+	}
+	os.WriteFile(req, nil, 0o600)
+	relayRelease(t, r.s, "v0.27.0", false)
+	if out := h.ok(human, "relay", "update"); !strings.Contains(out, "A linked server asked") || !strings.Contains(out, "nothing to update") {
+		t.Fatalf("out: %s", out)
+	}
+}
+
+// The update units in deploy/relay are the ones tm relay install writes.
+func TestRelayUpdateUnitsAreTheDeployFiles(t *testing.T) {
+	for name, want := range map[string]string{
+		"tm-relay-update.service": relayUpdateServiceUnit,
+		"tm-relay-update.timer":   relayUpdateTimerUnit,
+		"tm-relay-update.path":    relayUpdatePathUnit,
+	} {
+		b, err := os.ReadFile(filepath.Join("..", "..", "deploy", "relay", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(b) != want {
+			t.Errorf("deploy/relay/%s differs from tm relay install's; write it as:\n%s", name, want)
+		}
 	}
 }
