@@ -39,6 +39,12 @@ func loadCommands(ctl *server.Client) []mod.ModCommand {
 	if err != nil {
 		cfg = nil
 	}
+	return commandsWith(ctl, cfg)
+}
+
+// commandsWith are loadCommands' commands, with config cfg (nil for one
+// that doesn't load).
+func commandsWith(ctl *server.Client, cfg *config.Config) []mod.ModCommand {
 	reg, err := mod.Load(cfg)
 	if err != nil {
 		return nil

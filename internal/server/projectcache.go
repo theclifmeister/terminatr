@@ -8,15 +8,14 @@ package server
 // no file read or git.
 
 import (
-	"encoding/binary"
-	"hash/fnv"
-	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -77,42 +76,45 @@ func (c *projectCache) get(slug, tickerState string, gen uint64) (*projectSnap, 
 	return snap, nil
 }
 
-// snapStamp hashes the stats of what snap was read from: the project's
-// files and folders, each of its threads' (a new thread changes the
-// threads folder), the ticker's state file, the config and the repos'
-// .git/config (their origin). Files are replaced by rename, so their
-// folder's mtime changes too.
+// snapStamp is the stat stamp (fsx.StatStamp) of what snap was read
+// from: the project's files and folders, each of its threads' (a new
+// thread changes the threads folder), the ticker's state file, the
+// config and the repos' .git/config (their origin).
 func snapStamp(snap *projectSnap, tickerState string) uint64 {
 	p := snap.p
-	h := fnv.New64a()
-	var buf [8]byte
-	stat := func(path string) {
-		h.Write([]byte(path))
-		fi, err := os.Stat(path)
-		if err != nil {
-			h.Write([]byte{0})
-			return
-		}
-		binary.LittleEndian.PutUint64(buf[:], uint64(fi.ModTime().UnixNano()))
-		h.Write(buf[:])
-		binary.LittleEndian.PutUint64(buf[:], uint64(fi.Size()))
-		h.Write(buf[:])
-	}
+	var paths []string
 	for _, name := range []string{"PROJECT.md", "TASKS.md", "questions.json", "inbox", "threads"} {
-		stat(p.Path(name))
+		paths = append(paths, p.Path(name))
 	}
 	for _, r := range snap.recs {
-		stat(thread.Dir(p, r.ID))
+		paths = append(paths, thread.Dir(p, r.ID))
 		for _, name := range []string{"thread.toml", "STATUS.md", "REPORT.md"} {
-			stat(thread.Path(p, r.ID, name))
+			paths = append(paths, thread.Path(p, r.ID, name))
 		}
 	}
-	stat(tickerState)
+	paths = append(paths, tickerState)
 	if path, err := config.Path(); err == nil {
-		stat(path)
+		paths = append(paths, path)
 	}
 	for _, repo := range p.Repos {
-		stat(filepath.Join(repo, ".git", "config"))
+		paths = append(paths, filepath.Join(repo, ".git", "config"))
 	}
-	return h.Sum64()
+	return fsx.StatStamp(paths...)
+}
+
+// ProjectSnaps is a project cache for a client that builds project
+// watches itself (the attach console's coordinator panel): it reads a
+// project's files again only when their stamp changed, or snapMaxAge
+// after. Its zero value is ready; one goroutine uses it.
+type ProjectSnaps struct{ c projectCache }
+
+// Watch is project slug's ProjectWatch for sessions, as ProjectWatchOf
+// gives it, from the cached snapshot. tickerState is the ticker's state
+// file.
+func (s *ProjectSnaps) Watch(slug string, sessions []proto.SessionInfo, tickerState string) (proto.ProjectWatch, error) {
+	snap, err := s.c.get(slug, tickerState, 0)
+	if err != nil {
+		return proto.ProjectWatch{}, err
+	}
+	return snap.watch(sessions), nil
 }

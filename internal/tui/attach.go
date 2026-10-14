@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -22,7 +23,6 @@ import (
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/plat/term"
-	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -421,6 +421,9 @@ type client struct {
 	wait        *cmdWait
 	sendCommand func(proto.ModCommandParams) (proto.ModCommandResult, error)
 
+	// polledAt is when the state poll last drew (applyPoll).
+	polledAt time.Time
+
 	wake    chan struct{}
 	endOnce sync.Once
 	end     chan struct{}
@@ -479,7 +482,7 @@ func (c *client) open(id string) (*pane, error) {
 		return nil, err
 	}
 	p := &pane{conn: conn, r: r, info: *info,
-		status: threadStatuses([]proto.SessionInfo{*info})[info.ID]}
+		status: statusCache{}.statuses([]proto.SessionInfo{*info})[info.ID]}
 	// The stream starts with the pane's snapshot.
 	typ, payload, err := conn.ReadFrame()
 	if err == nil && typ != proto.FrameSnapshot {
@@ -1810,72 +1813,77 @@ func (c *client) renderLoop(out io.Writer) Result {
 			return c.result
 		case <-tick.C:
 		}
-		if !c.lock() {
-			continue
+		c.drawFrame(out)
+	}
+}
+
+// drawFrame draws what changed since the last frame on out.
+func (c *client) drawFrame(out io.Writer) {
+	if !c.lock() {
+		return
+	}
+	vis := c.shown()
+	held := false
+	// The theme's pane palette, for this scheme: the panes are drawn
+	// with it, and their programs' colour queries answered with it.
+	t := th()
+	pal := t.Pane
+	repal := pal != c.pal
+	c.pal = pal
+	c.refill(t, vis)
+	for _, p := range vis {
+		p.r.SetPalette(pal)
+		if p.held && time.Since(p.heldAt) > maxHold {
+			p.held = false // the program never ended its update; draw anyway
 		}
-		vis := c.shown()
-		held := false
-		// The theme's pane palette, for this scheme: the panes are drawn
-		// with it, and their programs' colour queries answered with it.
-		t := th()
-		pal := t.Pane
-		repal := pal != c.pal
-		c.pal = pal
-		c.refill(t, vis)
-		for _, p := range vis {
-			p.r.SetPalette(pal)
-			if p.held && time.Since(p.heldAt) > maxHold {
-				p.held = false // the program never ended its update; draw anyway
-			}
-			held = held || p.held
+		held = held || p.held
+	}
+	var b []byte
+	var err error
+	switch {
+	case c.focus == nil:
+	case c.single && len(vis) == 1:
+		c.full = false // the renderer repaints after SetSize
+		b, err = vis[0].r.Frame(vis[0].mirror, vis[0].held)
+	default:
+		b, err = c.frameSplit(vis)
+	}
+	if err == nil && c.menu != nil && (len(b) > 0 || !c.menu.drawn) {
+		b = c.appendMenu(b, c.menu)
+	}
+	if err == nil && c.dialog != nil && (len(b) > 0 || !c.dialog.drawn) {
+		b = c.appendMenu(b, c.dialog)
+	}
+	if err == nil {
+		b = c.paint(t, b)
+	}
+	if err == nil {
+		b = append(c.outerModes(), b...)
+		if c.bell {
+			b = append(b, '\a')
+			c.bell = false
 		}
-		var b []byte
-		var err error
-		switch {
-		case c.focus == nil:
-		case c.single && len(vis) == 1:
-			c.full = false // the renderer repaints after SetSize
-			b, err = vis[0].r.Frame(vis[0].mirror, vis[0].held)
-		default:
-			b, err = c.frameSplit(vis)
+		b = append(b, c.osc...)
+		c.osc = nil
+		b = append(b, c.clip...)
+		c.clip = nil
+	}
+	c.mu.Unlock()
+	if repal {
+		c.sendColors()
+	}
+	if err != nil {
+		c.finish(Result{Reason: "render: " + err.Error()})
+		return
+	}
+	if len(b) > 0 {
+		if _, err := out.Write(b); err != nil {
+			c.finish(Result{Reason: "detached (terminal closed: " + err.Error() + ")", Detached: true, Quit: true})
+			return
 		}
-		if err == nil && c.menu != nil && (len(b) > 0 || !c.menu.drawn) {
-			b = c.appendMenu(b, c.menu)
-		}
-		if err == nil && c.dialog != nil && (len(b) > 0 || !c.dialog.drawn) {
-			b = c.appendMenu(b, c.dialog)
-		}
-		if err == nil {
-			b = c.paint(t, b)
-		}
-		if err == nil {
-			b = append(c.outerModes(), b...)
-			if c.bell {
-				b = append(b, '\a')
-				c.bell = false
-			}
-			b = append(b, c.osc...)
-			c.osc = nil
-			b = append(b, c.clip...)
-			c.clip = nil
-		}
-		c.mu.Unlock()
-		if repal {
-			c.sendColors()
-		}
-		if err != nil {
-			c.finish(Result{Reason: "render: " + err.Error()})
-			continue
-		}
-		if len(b) > 0 {
-			if _, err := out.Write(b); err != nil {
-				c.finish(Result{Reason: "detached (terminal closed: " + err.Error() + ")", Detached: true, Quit: true})
-				continue
-			}
-		}
-		if held {
-			time.AfterFunc(maxHold, c.poke) // draw once the hold times out
-		}
+	}
+	if held {
+		time.AfterFunc(maxHold, c.poke) // draw once the hold times out
 	}
 }
 
@@ -2016,24 +2024,6 @@ func errString(err error) string {
 	return err.Error()
 }
 
-// threadStatuses reads the STATUS.md of every thread session, by
-// session id, so the status bar shows the progress the dashboard shows
-// (docs/SPEC.md §7.3).
-func threadStatuses(sessions []proto.SessionInfo) map[string]*thread.Status {
-	out := map[string]*thread.Status{}
-	for _, s := range sessions {
-		if s.Role != proto.RoleThread || s.Project == "" || s.Thread == "" {
-			continue
-		}
-		if p, err := project.Open(s.Project); err == nil {
-			if st, err := thread.ReadStatus(p, s.Thread); err == nil {
-				out[s.ID] = st
-			}
-		}
-	}
-	return out
-}
-
 // statePoll is how often the status bar asks the server for state.
 const statePoll = 500 * time.Millisecond
 
@@ -2078,12 +2068,35 @@ func (c *client) setViews(list []proto.ModView) {
 	}
 }
 
+// idleRedraw is how often a console draws again while its poll finds
+// nothing changed: what shows ages ("4s", a mod's countdown) stays
+// current to the second.
+const idleRedraw = time.Second
+
+// polled is what one tick of pollState read, for applyPoll.
+type polled struct {
+	res        proto.SessionListResult
+	connected  bool // session.list answered
+	ring       bool
+	osc        []byte
+	projects   []ProjectData // nil: unchanged since the last tick
+	ctxHint    int
+	needsFirst bool
+	statuses   map[string]*thread.Status
+	info       *infoData
+	views      *proto.ModViewsResult
+	cmds       []mod.ModCommand
+	reload     bool // cmds were read
+}
+
 // pollState keeps the status bar, the sidebar and the info panel current
 // and rings the bell when the server sent a notification (a session
 // blocked, a thread reported; docs/SPEC.md §4). It polls session.list,
 // and mod.views while the info panel or the sidebar shows mod sections
 // (pollViewsNow); a lost server is noticed by the attach streams
-// themselves.
+// themselves. What it reads from files it reads again only where they
+// changed (sidecache.go), and it draws again only when what it read
+// changed, or idleRedraw after the last time.
 func (c *client) pollState(ctx context.Context) {
 	var ctl *server.Client
 	defer func() {
@@ -2098,86 +2111,60 @@ func (c *client) pollState(ctx context.Context) {
 	// shows (shownKey); none sent yet at first, so the first poll says
 	// what shows, sections the dashboard showed before it too.
 	sent, odd := "\x00", false
+	var conf configCache
+	side := sideCache{conf: &conf}
+	var info infoCache
+	stats := statusCache{}
 	tick := time.NewTicker(statePoll)
 	defer tick.Stop()
 	for {
 		if ctl == nil {
 			ctl, _ = server.Connect(c.paths, false)
 		}
-		var res proto.SessionListResult
+		var pl polled
 		if ctl != nil {
-			if err := ctl.Call(proto.MethodSessionList, nil, &res); err != nil {
+			if err := ctl.Call(proto.MethodSessionList, nil, &pl.res); err != nil {
 				ctl.Close()
 				ctl = nil
 			}
 		}
-		ring := false
-		var osc []byte
+		res := &pl.res
 		if ctl != nil {
-			ring = !first && res.Alerts > alerts
+			pl.connected = true
+			pl.ring = !first && res.Alerts > alerts
 			alerts, first = res.Alerts, false
-			osc = claimNotices(ctl, res.ModNotices, noticed)
+			pl.osc = claimNotices(ctl, res.ModNotices, noticed)
 		}
-		var projects []ProjectData
-		ctxHint, needsFirst := config.DefaultContextHint, false
+		pl.ctxHint = config.DefaultContextHint
 		if c.side != nil {
-			projects = loadSideProjects(c.paths)
-			if cfg, err := config.Load(); err == nil {
-				ctxHint, needsFirst = cfg.ContextHint, cfg.NeedsFirst
+			if projects, changed := side.load(c.paths); changed {
+				pl.projects = projects
 			}
+			pl.ctxHint, pl.needsFirst = conf.uiHints()
 		}
-		statuses := threadStatuses(res.Sessions)
-		info, shown := c.pollInfo(res.Sessions)
+		pl.statuses = stats.statuses(res.Sessions)
+		var shown []modview.Shown
+		pl.info, shown = c.pollInfo(&info, res.Sessions)
 		var secs []proto.ModSection
 		if res.Mods != nil {
 			secs = res.Mods.Sections
 		}
 		shown = append(shown, c.bandShown(secs)...)
 		w := c.waiting()
-		var views *proto.ModViewsResult
 		if key := shownKey(shown); ctl != nil && pollViewsNow(key, sent, odd, w != nil) {
-			views, sent = pollViews(ctl, shown), key
+			pl.views, sent = pollViews(ctl, shown), key
 		}
 		odd = !odd
-		var cmds []mod.ModCommand
-		reload := time.Since(c.cmdsAt) >= cmdReload
-		if reload {
-			cmds = loadCommands(ctl)
+		if pl.reload = time.Since(c.cmdsAt) >= cmdReload; pl.reload {
+			cfg, err := conf.get()
+			if err != nil {
+				cfg = nil
+			}
+			pl.cmds = commandsWith(ctl, cfg)
 		}
-		if c.lock() {
-			if c.side != nil {
-				c.side.projects, c.side.sessions, c.side.ctxHint, c.side.needsFirst = projects, res.Sessions, ctxHint, needsFirst
-				if ctl != nil {
-					c.side.server = ServerInfo{Version: res.Version, Build: res.Build, Latest: res.Latest, Upgrade: res.Upgrade}
-					if n := oldConsoleNews(c.side.server); n != "" && c.flash == "" {
-						c.flash = n
-						c.status()
-					}
-				}
-			}
-			for _, p := range c.panes {
-				for _, s := range res.Sessions {
-					if s.ID == p.info.ID {
-						p.info, p.status = s, statuses[s.ID]
-					}
-				}
-			}
-			c.cells = newModCells(res.Mods, res.Sessions)
-			if views != nil {
-				c.setViews(views.Views)
-			}
-			c.showInfo(info)
-			if reload {
-				c.cmds, c.cmdsAt = cmds, time.Now()
-			}
-			c.status()
-			c.bell = c.bell || ring
-			c.osc = append(c.osc, osc...)
-			c.mu.Unlock()
-			c.poke()
-		}
+		c.applyPoll(&pl, time.Now())
 		if w != nil {
-			c.takeOpen(w, views)
+			c.takeOpen(w, pl.views)
 		}
 		select {
 		case <-ctx.Done():
@@ -2187,4 +2174,70 @@ func (c *client) pollState(ctx context.Context) {
 		case <-tick.C:
 		}
 	}
+}
+
+// applyPoll takes what a tick of pollState read, and draws again when
+// it changed what shows, or idleRedraw after the last time (at now). It
+// reports whether it drew.
+func (c *client) applyPoll(pl *polled, now time.Time) bool {
+	if !c.lock() {
+		return false
+	}
+	changed := pl.ring || len(pl.osc) > 0
+	res := &pl.res
+	if c.side != nil {
+		if pl.projects != nil {
+			c.side.projects, changed = pl.projects, true
+		}
+		if !reflect.DeepEqual(c.side.sessions, res.Sessions) {
+			c.side.sessions, changed = res.Sessions, true
+		}
+		if c.side.ctxHint != pl.ctxHint || c.side.needsFirst != pl.needsFirst {
+			c.side.ctxHint, c.side.needsFirst, changed = pl.ctxHint, pl.needsFirst, true
+		}
+		if pl.connected {
+			if si := (ServerInfo{Version: res.Version, Build: res.Build, Latest: res.Latest, Upgrade: res.Upgrade}); si != c.side.server {
+				c.side.server, changed = si, true
+			}
+			if n := oldConsoleNews(c.side.server); n != "" && c.flash == "" {
+				c.flash, changed = n, true
+			}
+		}
+	}
+	for _, p := range c.panes {
+		for _, s := range res.Sessions {
+			if s.ID == p.info.ID && (p.status != pl.statuses[s.ID] || !reflect.DeepEqual(p.info, s)) {
+				p.info, p.status, changed = s, pl.statuses[s.ID], true
+			}
+		}
+	}
+	if cells := newModCells(res.Mods, res.Sessions); !reflect.DeepEqual(cells, c.cells) {
+		c.cells, changed = cells, true
+	}
+	if pl.views != nil {
+		changed = changed || !reflect.DeepEqual(c.views, pl.views.Views)
+		c.setViews(pl.views.Views)
+	}
+	if c.showInfo(pl.info) {
+		changed = true
+	}
+	if pl.reload {
+		changed = changed || !reflect.DeepEqual(c.cmds, pl.cmds)
+		c.cmds, c.cmdsAt = pl.cmds, now
+	}
+	draw := changed || now.Sub(c.polledAt) >= idleRedraw-statePoll/4 // ticks jitter
+	if draw {
+		if !changed && c.info != nil {
+			c.infoLayout() // its ages
+		}
+		c.polledAt = now
+		c.status()
+	}
+	c.bell = c.bell || pl.ring
+	c.osc = append(c.osc, pl.osc...)
+	c.mu.Unlock()
+	if draw {
+		c.poke()
+	}
+	return draw
 }
