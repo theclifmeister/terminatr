@@ -223,8 +223,7 @@ func (m *dash) press(mo tea.Mouse) tea.Cmd {
 	x, y := mo.X-g.main().x, mo.Y
 	double := mo.Button == tea.MouseLeft && m.lastClick.double(x, y, time.Now())
 	if b := m.badgeAt; y == g.header().y && m.top() == nil && mo.Button == tea.MouseLeft && x >= b[0] && x < b[1] {
-		m.goNeeds()
-		return nil
+		return m.goNeeds()
 	}
 	if y == g.keysRow() {
 		if mo.Button == tea.MouseLeft {

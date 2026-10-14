@@ -101,9 +101,11 @@ func TestSideAboveKeys(t *testing.T) {
 	keyPress(m, "tab")
 	m.sideSel = "p:alpha"
 	for _, step := range []struct{ key, want string }{
+		{"up", headKey}, // PROJECTS, between the band above and the tree
 		{"up", "s:ticker.ticker"},
 		{"up", "s:ci.status"}, // round the top, to the band below
 		{"down", "s:ticker.ticker"},
+		{"down", headKey},
 		{"down", "p:alpha"},
 	} {
 		keyPress(m, step.key)
@@ -145,7 +147,8 @@ func firstNeeds(m *dash) string {
 // TestSideAboveFlag: PROJECTS says ⚑ N while a section is above the
 // tree, not with the band below alone; a click on it gives the sidebar
 // the keyboard on the first row that needs you, and a click on the
-// header off it does nothing.
+// header off it shows every project's NEEDS YOU, the keyboard on the
+// header.
 func TestSideAboveFlag(t *testing.T) {
 	setIcons(IconsUnicode)
 	defer resetConsole()
@@ -166,13 +169,13 @@ func TestSideAboveFlag(t *testing.T) {
 	}
 	x := strings.Index(head, ic().hint)
 	x = len([]rune(head[:x]))
-	runAll(m, m.sideClick(tea.Mouse{X: 2, Y: y, Button: tea.MouseLeft}))
-	if m.focus == areaSide {
-		t.Fatalf("a click on PROJECTS off ⚑ N took the keyboard")
-	}
 	runAll(m, m.sideClick(tea.Mouse{X: x, Y: y, Button: tea.MouseLeft}))
 	if m.focus != areaSide || m.sideSel != firstNeeds(m) {
 		t.Fatalf("a click on ⚑ N: focus %v sel %q, want %q", m.focus, m.sideSel, firstNeeds(m))
+	}
+	runAll(m, m.sideClick(tea.Mouse{X: 2, Y: y, Button: tea.MouseLeft}))
+	if m.focus != areaSide || m.sideSel != headKey || !m.allShown() {
+		t.Fatalf("a click on PROJECTS off ⚑ N: focus %v sel %q current %q", m.focus, m.sideSel, m.current)
 	}
 }
 

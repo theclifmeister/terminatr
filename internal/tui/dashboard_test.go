@@ -351,10 +351,12 @@ func run(m *dash, cmd tea.Cmd) {
 	}
 }
 
-// TestDashboardRows: NEEDS YOU across projects, then the current
-// project's own section (its coordinator, threads and task counts; the
-// sidebar's tree lists the projects), then SESSIONS. A block's reason
-// and a new report lead the rest of a row, so they are never cut off.
+// TestDashboardRows: the current project's NEEDS YOU, then its own
+// section (its coordinator, threads and task counts; the sidebar's tree
+// lists the projects), then SESSIONS. Another project's needs aren't
+// listed: the PROJECTS header's all-projects view has them
+// (TestDashboardAllProjects). A block's reason and a new report lead
+// the rest of a row, so they are never cut off.
 func TestDashboardRows(t *testing.T) {
 	src := &fakeSource{data: testData()}
 	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 30, State: DashState{Current: "beta"}})
@@ -367,15 +369,14 @@ func TestDashboardRows(t *testing.T) {
 	if needs < 0 || !(needs < proj && proj < sess) {
 		t.Fatalf("sections out of order:\n%s", out)
 	}
-	if strings.Contains(out, "s-5 ") || strings.Contains(out, "PROJECTS") || strings.Contains(out[needs:], " alpha ─") {
-		t.Errorf("a thread's session, a PROJECTS section or another project listed:\n%s", out)
+	// beta waits on nothing: alpha's blocked coordinator isn't beta's;
+	// the user's own blocked session, outside the projects, is in every
+	// project's NEEDS YOU.
+	if strings.Contains(out, "s-5 ") || strings.Contains(out, "PROJECTS") || strings.Contains(out, " alpha ─") || strings.Contains(out[needs:proj], "alpha") {
+		t.Errorf("another project's needs, a thread's session, a PROJECTS section or another project listed:\n%s", out)
 	}
-	// NEEDS YOU: the blocked coordinator and the user's own blocked
-	// session; nothing of the threads (a blocked one, a report, a
-	// question), which are their coordinator's.
 	for _, want := range []string{
-		"NEEDS YOU 2 ─",
-		"  alpha         coordinator                               ▲ blocked   question",
+		"NEEDS YOU 1 ─",
 		"  s-4           claude                                    ▲ blocked   permission",
 		"  coordinator                               —           not running; enter starts it",
 		"  T4 Write docs                             ● working   report new  ▰▰▰▱▱  60% 3/5 ▸ Draft §2  PR #7  t-0005",
@@ -388,8 +389,23 @@ func TestDashboardRows(t *testing.T) {
 			t.Errorf("missing %q in\n%s", want, out)
 		}
 	}
+
+	// alpha's NEEDS YOU: its blocked coordinator, unlabelled (the
+	// section is alpha's), and nothing of its threads (a blocked one, a
+	// report, a question), which are their coordinator's.
+	m = newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 30, State: DashState{Current: "alpha"}})
+	m.layout.Details = false
+	m.setData(src.data)
+	out = screen(m)
+	needs, proj = strings.Index(out, "NEEDS YOU 2 ─"), strings.Index(out, " alpha ─")
+	if needs < 0 || needs > proj {
+		t.Fatalf("alpha's NEEDS YOU:\n%s", out)
+	}
 	needsYou := out[needs:proj]
-	for _, not := range []string{"t-0002", "t-0005", "report", "Which licence?"} {
+	if !strings.Contains(needsYou, "  coordinator                               ▲ blocked   question") || !strings.Contains(needsYou, "  s-4  ") {
+		t.Errorf("alpha's NEEDS YOU lacks its coordinator or the user's own session:\n%s", needsYou)
+	}
+	for _, not := range []string{"t-0002", "t-0005", "report", "Which licence?", "alpha "} {
 		if strings.Contains(needsYou, not) {
 			t.Errorf("NEEDS YOU shows %q:\n%s", not, needsYou)
 		}
@@ -403,6 +419,86 @@ func TestDashboardRows(t *testing.T) {
 	m.setData(src.data)
 	if out := screen(m); !strings.Contains(out, " alpha ─") || strings.Contains(out, "t-0005") {
 		t.Errorf("no current project:\n%s", out)
+	}
+}
+
+// TestDashboardAllProjects: the PROJECTS header's view lists every
+// project's NEEDS YOU, each row labelled with its project, the user's
+// own blocked sessions last, and no project section; the header says
+// all projects and keys about a project want a row of one.
+func TestDashboardAllProjects(t *testing.T) {
+	d := testData()
+	d.Projects[1].NeedsYou = []*tasks.Task{{ID: 9, Title: "Review the docs", Status: tasks.Review, Thread: "t-0005"}}
+	src := &fakeSource{data: d}
+	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 30, State: DashState{Current: allProjects}})
+	m.layout.Details = false
+	m.setData(src.data)
+	out := screen(m)
+	for _, want := range []string{
+		"tm dashboard · all projects",
+		"NEEDS YOU 3 ─",
+		"  alpha         coordinator                               ▲ blocked   question",
+		"  beta          T9 Review the docs",
+		"  s-4           claude                                    ▲ blocked   permission",
+		"OTHER SESSIONS",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, " alpha ─") || strings.Contains(out, " beta ─") || strings.Contains(out, "tasks: ") {
+		t.Errorf("a project section in the all-projects view:\n%s", out)
+	}
+	if a, b, s := strings.Index(out, "  alpha  "), strings.Index(out, "  beta  "), strings.Index(out, "  s-4  "); !(a < b && b < s) {
+		t.Errorf("not in the projects' order, the user's sessions last:\n%s", out)
+	}
+	if r, _ := m.selected(); r.session != "s-1" {
+		t.Errorf("selected %+v, want alpha's coordinator", r)
+	}
+	if m.sel = "n:s-4"; m.projectHere() != "" {
+		t.Errorf("project here %q on a session outside the projects", m.projectHere())
+	}
+
+	// Nothing waits anywhere: the view says so.
+	src.data.Projects[1].NeedsYou = nil
+	src.data.Sessions = slices.DeleteFunc(slices.Clone(src.data.Sessions), func(s proto.SessionInfo) bool { return s.State == "blocked" })
+	m.setData(src.data)
+	if out := screen(m); !strings.Contains(out, "NEEDS YOU ─") || !strings.Contains(out, "nothing waits on you in any project") {
+		t.Errorf("nothing needs you:\n%s", out)
+	}
+}
+
+// TestDashboardAllProjectsPeers: the all-projects view lists a paired
+// server's shared projects' needs too, from the mirror's watch, labelled
+// "mini › acme-api"; enter shows its read-only dashboard.
+func TestDashboardAllProjectsPeers(t *testing.T) {
+	d := testData()
+	d.Peers = []proto.PeerMirror{{Alias: "mini", State: "up", Watch: true, Projects: []proto.PeerMirrorProject{
+		{PeerProject: proto.PeerProject{Project: "acme-api"}, Watch: &proto.ProjectWatch{Questions: 1,
+			NeedsYou: []proto.WatchNeed{{Why: proto.WhyReview, Task: "T3", Title: "Rate limits", Thread: "t-0009"}}}},
+	}}}
+	src := &fakeSource{data: d}
+	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 30, State: DashState{Current: allProjects}})
+	m.layout.Details = false
+	m.setData(src.data)
+	out := screen(m)
+	for _, want := range []string{"mini › acme…", "1 question waiting", "on mini", "T3 Rate limits", "in review"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in\n%s", want, out)
+		}
+	}
+	m.sel = "nr:@mini/acme-api:0"
+	if foot := m.footKeys(); !strings.Contains(foot, "enter show") || strings.Contains(foot, "t tasks") {
+		t.Errorf("footer on a remote need %q", foot)
+	}
+	m.enter("")
+	if m.current != "@mini/acme-api" {
+		t.Errorf("enter on a remote need shows %q", m.current)
+	}
+	// A project of this server's lists no peer's needs.
+	m.showProject("alpha")
+	if out := screen(m); strings.Contains(out, "acme") {
+		t.Errorf("alpha's dashboard lists a peer's needs:\n%s", out)
 	}
 }
 
@@ -425,7 +521,7 @@ func TestDashboardDoneThread(t *testing.T) {
 
 func TestDashboardKeys(t *testing.T) {
 	src := &fakeSource{data: testData()}
-	m := newDash(DashOptions{Source: src, Cwd: "/work", Width: 100, Height: 30, State: DashState{Current: "beta"}})
+	m := newDash(DashOptions{Source: src, Cwd: "/work", Width: 100, Height: 30, State: DashState{Current: "alpha"}})
 	m.setData(src.data)
 
 	// enter on the blocked coordinator attaches to it.
@@ -677,7 +773,7 @@ func TestDashboardSplit(t *testing.T) {
 
 	// A click selects the row under it; dragging the divider resizes.
 	sw := m.sideW()
-	m.Update(tea.MouseClickMsg{X: sw + 3, Y: 3, Button: tea.MouseLeft}) // NEEDS YOU's second row
+	m.Update(tea.MouseClickMsg{X: sw + 3, Y: 2, Button: tea.MouseLeft}) // NEEDS YOU's first row
 	if m.sel != "n:s-4" {
 		t.Fatalf("click selected %q", m.sel)
 	}
@@ -787,10 +883,14 @@ func TestDashboardOver(t *testing.T) {
 // apply to the selected row.
 func TestDashboardFooter(t *testing.T) {
 	src := &fakeSource{data: testData()}
-	m := newDash(DashOptions{Source: src, Width: 100, Height: 30, State: DashState{Current: "beta"}})
+	m := newDash(DashOptions{Source: src, Width: 100, Height: 30, State: DashState{Current: allProjects}})
 	m.setData(src.data)
+	m.sel = "n:s-1" // alpha's, in every project's NEEDS YOU
+	if got, want := m.footKeys(), "≡ menu · enter attach · a project · t tasks · i inbox · , settings · ? help · prefix+q quit"; !strings.HasPrefix(got, want) {
+		t.Errorf("n:s-1: footer %q, want %q…", got, want)
+	}
+	m.showProject("beta")
 	for sel, want := range map[string]string{
-		"n:s-1":          "≡ menu · enter attach · a project · t tasks · i inbox · , settings · ? help · prefix+q quit",
 		"th:beta:t-0005": "≡ menu · enter attach · a project · t tasks · i inbox",
 		"th:beta:t-0006": "≡ menu · a project · t tasks · i inbox",
 		"p:beta":         "≡ menu · enter open · a project · t tasks",
@@ -903,9 +1003,9 @@ func TestPopupMargins(t *testing.T) {
 }
 
 // TestDashboardNeedsYouTasks: a project's tasks in review or blocked are
-// rows of NEEDS YOU under the project, the sidebar hints at them and the
-// count says where to look; enter shows the task in the project popup's
-// Tasks tab, and acts on nothing.
+// rows of its NEEDS YOU, the sidebar hints at them and the count says
+// where to look; enter shows the task in the project popup's Tasks tab,
+// and acts on nothing.
 func TestDashboardNeedsYouTasks(t *testing.T) {
 	d := testData()
 	board := &tasks.Board{Tasks: []*tasks.Task{
@@ -929,10 +1029,11 @@ func TestDashboardNeedsYouTasks(t *testing.T) {
 	}
 	at := needs
 	for _, want := range []string{
-		"  alpha         coordinator ",
-		"  alpha         T3 Remove the prefix caption              ◆ review    ▰▰▰▰▰  2/2  t-0002",
-		"  alpha         T5 Pick a licence                         ▲ blocked",
+		"  coordinator ",
+		"  T3 Remove the prefix caption              ◆ review    ▰▰▰▰▰  2/2  t-0002",
+		"  T5 Pick a licence                         ▲ blocked",
 		"  s-4 ",
+		" alpha ─",
 		"tasks: 2 need you (t lists them) · 1 in motion · 0 on deck",
 	} {
 		i := strings.Index(out[at:], want)
@@ -1049,7 +1150,7 @@ func TestVersionHint(t *testing.T) {
 		t.Errorf("footer for the same version: %q", v)
 	}
 	last := func(w int, s ServerInfo) string {
-		f := sideFooter(nil, w, s, false, false)
+		f := sideFooter(nil, w, sideHeadIn{}, s, false, false)
 		if len(f) == 0 {
 			return ""
 		}
@@ -1061,10 +1162,10 @@ func TestVersionHint(t *testing.T) {
 	if f := last(130, other); f != versionHint(other) {
 		t.Errorf("wide footer %q", f)
 	}
-	if f := sideFooter(nil, sideSlim, other, false, false); f != nil {
+	if f := sideFooter(nil, sideSlim, sideHeadIn{}, other, false, false); f != nil {
 		t.Errorf("slim footer %q", f)
 	}
-	if f := sideFooter(nil, 32, ServerInfo{}, false, false); len(f) != 4 {
+	if f := sideFooter(nil, 32, sideHeadIn{}, ServerInfo{}, false, false); len(f) != 4 {
 		t.Errorf("footer without a hint %q", f)
 	}
 }

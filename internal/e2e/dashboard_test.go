@@ -98,6 +98,42 @@ func TestSmokeDashboard(t *testing.T) {
 	w.WaitExit(wait)
 }
 
+// TestSmokeDashboardAllProjects: NEEDS YOU is the current project's
+// only, another project's task in review stays out of it; a click on
+// the sidebar's PROJECTS header lists every project's NEEDS YOU, each
+// row labelled with its project, and a click on a project goes back to
+// its own (docs/SPEC.md §4, **All projects**).
+func TestSmokeDashboardAllProjects(t *testing.T) {
+	env := New(t)
+	env.FakeClaude()
+	alpha, _ := newProject(env, "alpha")
+	beta, _ := newProject(env, "beta")
+	env.MustCLI("task", "add", "Write the README", "--project", alpha)
+	env.MustCLI("task", "status", "T1", "review", "--project", alpha)
+	env.MustCLI("task", "add", "Ship it", "--project", beta)
+	env.MustCLI("task", "status", "T1", "blocked", "--project", beta)
+	w := env.Window(120, 24)
+	w.WaitFor("1 needs you (t lists them)", wait)
+	sc := w.WaitFor("NEEDS YOU 1", wait)
+	if strings.Contains(sc, "Write the README") == strings.Contains(sc, "Ship it") {
+		t.Fatalf("NEEDS YOU isn't one project's:\n%s", sc)
+	}
+
+	w.ClickText("PROJECTS", 0)
+	w.WaitFor("tm dashboard · all projects", wait)
+	w.WaitFor("NEEDS YOU 2", wait)
+	w.WaitFor("alpha         T1 Write the README", wait)
+	w.WaitFor("beta          T1 Ship it", wait)
+	w.Golden("dashboard-all-projects.txt", dashMasks...)
+
+	w.ClickText("■ beta", 0)
+	w.WaitUntil("beta's dashboard", wait, func(sc string) bool {
+		return !strings.Contains(sc, "all projects") && strings.Contains(sc, "T1 Ship it") && !strings.Contains(sc, "Write the README")
+	})
+	w.Quit()
+	w.WaitExit(wait)
+}
+
 // TestSmokeFirstLocalRun is M4's "Try it" with the fake agent: an agent
 // session of the user's own, outside any project, shows on the dashboard
 // and enter attaches; a prompt typed there blocks on a permission dialog;
