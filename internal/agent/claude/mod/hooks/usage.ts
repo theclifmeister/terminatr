@@ -32,7 +32,7 @@ export type UsageReport = {
 }
 
 // What $.session.usage().context carries, as far as it is used.
-export type ContextIn = { tokens?: number; window?: number }
+type ContextIn = { tokens?: number; window?: number }
 
 export const initialUsage: TerminatrUsage = { usd: 0 }
 

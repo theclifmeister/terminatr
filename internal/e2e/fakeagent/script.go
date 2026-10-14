@@ -5,7 +5,6 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -114,18 +113,6 @@ func parseScript(data []byte) (script, error) {
 		}
 	}
 	return s, nil
-}
-
-// embeddedScripts lists the shipped script names.
-func embeddedScripts() []string {
-	var names []string
-	_ = fs.WalkDir(embedded, "scripts", func(p string, d fs.DirEntry, err error) error {
-		if err == nil && strings.HasSuffix(p, ".toml") {
-			names = append(names, strings.TrimSuffix(filepath.Base(p), ".toml"))
-		}
-		return nil
-	})
-	return names
 }
 
 // runPrompt runs the script a prompt names, or the default answer.

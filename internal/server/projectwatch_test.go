@@ -62,7 +62,7 @@ func TestProjectWatchOf(t *testing.T) {
 		{ID: "s-3", Role: proto.RoleThread, Project: p.Slug, Thread: t3, State: "idle"},
 		{ID: "s-9", Role: proto.RoleThread, Project: "other", Thread: t4, State: "working"},
 		// A coordinator whose nudge sits in a box with text in it; a
-		// hold under QueueNotice is a box being typed into.
+		// hold under queueNotice is a box being typed into.
 		{ID: "s-1", Role: proto.RoleCoordinator, Project: p.Slug, State: "idle", Queued: 1,
 			QueueHeld: "prompt box not empty", QueueHeldSince: time.Now().Add(-3 * time.Minute)},
 		{ID: "s-7", Role: proto.RoleThread, Project: p.Slug, State: "idle", Queued: 2,

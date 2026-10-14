@@ -14,8 +14,8 @@ import (
 // repository, change its configuration or name a program for it to run
 // (argRules). The paths among the arguments are Paths.CheckArgs'.
 func CheckRun(argv, commands []string) error {
-	if len(argv) == 0 || len(argv) > MaxArgs {
-		return BadParams("process.run: argv has 1 to %d strings", MaxArgs)
+	if len(argv) == 0 || len(argv) > maxArgs {
+		return BadParams("process.run: argv has 1 to %d strings", maxArgs)
 	}
 	size := 0
 	for _, s := range argv {
@@ -24,7 +24,7 @@ func CheckRun(argv, commands []string) error {
 			return BadParams("process.run: an argument has a NUL in it")
 		}
 	}
-	if size > MaxArgBytes {
+	if size > maxArgBytes {
 		return BadParams("process.run: the arguments are too long")
 	}
 	if !slices.Contains(commands, argv[0]) {

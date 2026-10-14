@@ -99,7 +99,7 @@ func unusedAzure(d DoctorDeps) []Check {
 }
 
 // gitCredentials proves git can read the repo's origin without asking
-// for a password (Exec sets GIT_TERMINAL_PROMPT=0): what fetches and
+// for a password (execIn sets GIT_TERMINAL_PROMPT=0): what fetches and
 // pushes of a thread's branch need.
 func gitCredentials(d DoctorDeps, h RepoHost) Check {
 	name := "git origin " + h.Target.Project + "/" + h.Target.Repo
@@ -110,12 +110,12 @@ func gitCredentials(d DoctorDeps, h RepoHost) Check {
 	return Check{Name: name, OK: true, Detail: "readable"}
 }
 
-// execTimeout bounds every program Exec runs.
+// execTimeout bounds every program execIn runs.
 const execTimeout = 10 * time.Second
 
-// Exec runs a program in dir and returns its combined, trimmed output;
+// execIn runs a program in dir and returns its combined, trimmed output;
 // the error carries its first line.
-func Exec(dir, name string, args ...string) (string, error) {
+func execIn(dir, name string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), execTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
@@ -137,5 +137,5 @@ func Exec(dir, name string, args ...string) (string, error) {
 
 // SystemDeps is DoctorDeps on the real system, in this process's context.
 func SystemDeps() DoctorDeps {
-	return DoctorDeps{LookPath: exec.LookPath, Run: Exec, Getenv: os.Getenv}
+	return DoctorDeps{LookPath: exec.LookPath, Run: execIn, Getenv: os.Getenv}
 }

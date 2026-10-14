@@ -32,7 +32,7 @@ test('commands splits a command line shell-style', () => {
 })
 
 // The shared vectors (guard-vectors.ts): the Go port in the server
-// (internal/server/guardmatch_test.go) passes the same cases.
+// (internal/guard/guard_test.go, TestVectors) passes the same cases.
 test('the shared vectors: rule and summary of each call', () => {
   const v = vectors as unknown as Vectors
   for (const c of v.cases) {

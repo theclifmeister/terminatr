@@ -57,8 +57,8 @@ func TestOwnsPRURL(t *testing.T) {
 		{Target{Kind: GitHubKind}, "https://github.com/o/r/pull/3", true},
 		{Target{Kind: GitHubKind}, "https://dev.azure.com/org/proj/_git/repo/pullrequest/3", false},
 	} {
-		if got := OwnsPRURL(c.t, c.in); got != c.want {
-			t.Errorf("OwnsPRURL(%+v, %q) = %v; want %v", c.t, c.in, got, c.want)
+		if got := ownsPRURL(c.t, c.in); got != c.want {
+			t.Errorf("ownsPRURL(%+v, %q) = %v; want %v", c.t, c.in, got, c.want)
 		}
 	}
 }

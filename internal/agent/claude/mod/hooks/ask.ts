@@ -5,7 +5,7 @@
 // functions of the tool's input and tm's output, for the tests.
 
 // A question of the AskUserQuestion tool, as far as tm reads it.
-export type AskQuestion = {
+type AskQuestion = {
   question: string
   header?: string
   multiSelect?: boolean

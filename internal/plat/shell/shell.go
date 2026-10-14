@@ -3,7 +3,7 @@
 // a kind of shell runs, and unwrapping shells and interpreters from a
 // process's argv to find the program they run.
 //
-// Quote, Command and Unwrap are pure: they behave the same on every OS, so
+// quote, command and Unwrap are pure: they behave the same on every OS, so
 // their Windows tables are tested on macOS and Linux too.
 package shell
 
@@ -15,22 +15,19 @@ import (
 	"strings"
 )
 
-// Kind is a family of shell syntax.
-type Kind string
+// kind is a family of shell syntax.
+type kind string
 
 const (
-	Sh         Kind = "sh"
-	Bash       Kind = "bash"
-	Zsh        Kind = "zsh"
-	Pwsh       Kind = "pwsh"       // PowerShell 7
-	PowerShell Kind = "powershell" // Windows PowerShell 5.1
-	Cmd        Kind = "cmd"
+	kindSh         kind = "sh"
+	kindBash       kind = "bash"
+	kindZsh        kind = "zsh"
+	kindPwsh       kind = "pwsh"       // PowerShell 7
+	kindPowerShell kind = "powershell" // Windows PowerShell 5.1
+	kindCmd        kind = "cmd"
 )
 
-// Kinds are every kind, in a stable order.
-var Kinds = []Kind{Sh, Bash, Zsh, Pwsh, PowerShell, Cmd}
-
-func (k Kind) powershell() bool { return k == Pwsh || k == PowerShell }
+func (k kind) powershell() bool { return k == kindPwsh || k == kindPowerShell }
 
 // Interactive is the argv of the user's interactive shell, which a
 // session runs when it is given no command: $SHELL -l, else /bin/sh -l;
@@ -58,12 +55,12 @@ func interactive(goos string, getenv func(string) string, lookPath func(string) 
 	return []string{"cmd.exe"}
 }
 
-// Quote makes s one word for a k shell, always quoted: POSIX '…' (a quote
+// quote makes s one word for a k shell, always quoted: POSIX '…' (a quote
 // ends the quoting, is escaped and reopens it), PowerShell '…' (a quote,
 // typographic ones included, is doubled), cmd "…" (a double quote is
 // doubled). cmd has no escape for %
 // inside quotes, so %NAME% still expands there.
-func Quote(k Kind, s string) string {
+func quote(k kind, s string) string {
 	switch {
 	case k.powershell():
 		var b strings.Builder
@@ -76,7 +73,7 @@ func Quote(k Kind, s string) string {
 		}
 		b.WriteByte('\'')
 		return b.String()
-	case k == Cmd:
+	case k == kindCmd:
 		return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
 	default:
 		return `'` + strings.ReplaceAll(s, `'`, `'\''`) + `'`
@@ -91,32 +88,32 @@ var bare = regexp.MustCompile(`^[A-Za-z0-9_./:-][A-Za-z0-9_./:~-]*$`)
 // environment variable.
 var envRef = regexp.MustCompile(`^\$([A-Za-z_][A-Za-z0-9_]*)$`)
 
-func word(k Kind, s string) string {
+func word(k kind, s string) string {
 	if bare.MatchString(s) {
 		return s
 	}
-	return Quote(k, s)
+	return quote(k, s)
 }
 
-// Command is the command line that runs exe with args in a k shell on
+// command is the command line that runs exe with args in a k shell on
 // goos, as an agent's hook configuration holds it. Words that need no
 // quoting stay bare.
 //
 // On Windows the exe takes forward slashes, which Git Bash, cmd, pwsh and
 // Windows PowerShell all run unquoted (herdr t-0012). A folder with a
-// space needs quoting; pass ShortPath(exe) to get its 8.3 form instead.
+// space needs quoting.
 // A quoted exe in PowerShell needs the call operator: & 'C:/…/tm.exe'.
 //
 // An exe of the form "$NAME" is the program an environment variable
 // names: "$NAME" in POSIX shells, & $env:NAME in PowerShell, "%NAME%" in
 // cmd.
-func Command(k Kind, goos, exe string, args ...string) string {
+func command(k kind, goos, exe string, args ...string) string {
 	var b strings.Builder
 	if m := envRef.FindStringSubmatch(exe); m != nil {
 		switch {
 		case k.powershell():
 			b.WriteString("& $env:" + m[1])
-		case k == Cmd:
+		case k == kindCmd:
 			b.WriteString(`"%` + m[1] + `%"`)
 		default:
 			b.WriteString(`"$` + m[1] + `"`)
@@ -129,9 +126,9 @@ func Command(k Kind, goos, exe string, args ...string) string {
 		case bare.MatchString(exe):
 			b.WriteString(exe)
 		case k.powershell():
-			b.WriteString("& " + Quote(k, exe))
+			b.WriteString("& " + quote(k, exe))
 		default:
-			b.WriteString(Quote(k, exe))
+			b.WriteString(quote(k, exe))
 		}
 	}
 	for _, a := range args {
@@ -141,20 +138,18 @@ func Command(k Kind, goos, exe string, args ...string) string {
 	return b.String()
 }
 
-// HookShell is the Kind of shell an agent runs hook commands in on this
+// hookShell is the kind of shell an agent runs hook commands in on this
 // OS: sh on Unix, PowerShell on Windows (Codex always uses it there).
-func HookShell() (Kind, string) { return hookShell(runtime.GOOS) }
-
-func hookShell(goos string) (Kind, string) {
+func hookShell(goos string) (kind, string) {
 	if goos == "windows" {
-		return PowerShell, goos
+		return kindPowerShell, goos
 	}
-	return Sh, goos
+	return kindSh, goos
 }
 
 // EnvCommand is the hook command line that runs the program the
 // environment variable name holds, with args, in the shell of this OS.
 func EnvCommand(name string, args ...string) string {
-	k, goos := HookShell()
-	return Command(k, goos, "$"+name, args...)
+	k, goos := hookShell(runtime.GOOS)
+	return command(k, goos, "$"+name, args...)
 }

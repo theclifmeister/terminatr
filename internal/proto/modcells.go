@@ -20,10 +20,6 @@ const (
 	SlotDashboardThread    = "dashboard.thread"
 )
 
-// ColumnSlots are the slots this tm draws mod columns in. A manifest may
-// name others (a newer tm's); they show nowhere here.
-var ColumnSlots = []string{SlotSidebarProject, SlotSidebarCoordinator, SlotSidebarThread, SlotDashboardTask, SlotDashboardThread}
-
 // CellTarget is what a cell is about, one of: a project (Project alone),
 // a task or a thread of a project (Project and Task, or Project and
 // Thread), or a session (Session alone).

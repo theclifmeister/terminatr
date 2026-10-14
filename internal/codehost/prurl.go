@@ -8,10 +8,10 @@ import (
 	"strings"
 )
 
-// PRLink is a parsed PR URL: its host kind, number and, for Azure DevOps,
+// prLink is a parsed PR URL: its host kind, number and, for Azure DevOps,
 // where the repo is (Target.OrgURL, Project, Repo as ParseRemote reads
-// them from a remote, so the two compare with SameRepo).
-type PRLink struct {
+// them from a remote, so the two compare with sameRepo).
+type prLink struct {
 	Kind   string
 	Number int
 	Target Target
@@ -41,35 +41,35 @@ var (
 //
 // ok is false for anything else: other hosts, a query or fragment, a
 // number of 0 or over nine digits.
-func ParsePR(s string) (l PRLink, ok bool) {
+func ParsePR(s string) (l prLink, ok bool) {
 	if m := gitlabPRRE.FindStringSubmatch(s); m != nil {
 		n, err := strconv.Atoi(m[3])
 		if err != nil || n < 1 || slices.ContainsFunc(strings.Split(m[2], "/"), func(seg string) bool { return strings.Trim(seg, ".") == "" }) {
-			return PRLink{}, false
+			return prLink{}, false
 		}
-		return PRLink{Kind: GitLabKind, Number: n, Target: Target{Kind: GitLabKind, OrgURL: "https://" + strings.ToLower(m[1]), Repo: m[2]}}, true
+		return prLink{Kind: GitLabKind, Number: n, Target: Target{Kind: GitLabKind, OrgURL: "https://" + strings.ToLower(m[1]), Repo: m[2]}}, true
 	}
 	if m := githubPRRE.FindStringSubmatch(s); m != nil {
 		n, err := strconv.Atoi(m[1])
 		if err != nil || n < 1 {
-			return PRLink{}, false
+			return prLink{}, false
 		}
-		return PRLink{Kind: GitHubKind, Number: n, Target: Target{Kind: GitHubKind}}, true
+		return prLink{Kind: GitHubKind, Number: n, Target: Target{Kind: GitHubKind}}, true
 	}
 	m := azurePRRE.FindStringSubmatch(s)
 	if m == nil {
-		return PRLink{}, false
+		return prLink{}, false
 	}
 	n, err := strconv.Atoi(m[2])
 	if err != nil || n < 1 {
-		return PRLink{}, false
+		return prLink{}, false
 	}
 	repoURL := strings.TrimSuffix(s, "/pullrequest/"+m[2])
 	t, ok := ParseRemote(repoURL)
 	if !ok {
-		return PRLink{}, false
+		return prLink{}, false
 	}
-	return PRLink{Kind: AzureKind, Number: n, Target: t}, true
+	return prLink{Kind: AzureKind, Number: n, Target: t}, true
 }
 
 // ParsePRURL is the number and host kind of a PR URL (ParsePR).
@@ -78,10 +78,10 @@ func ParsePRURL(s string) (n int, kind string, ok bool) {
 	return l.Number, l.Kind, ok
 }
 
-// SameRepo says whether two Azure DevOps targets are the same repo:
+// sameRepo says whether two Azure DevOps targets are the same repo:
 // organization, project and repo, names compared without case as Azure
 // DevOps does. A target of another kind is never the same.
-func SameRepo(a, b Target) bool {
+func sameRepo(a, b Target) bool {
 	if a.Kind != AzureKind || b.Kind != AzureKind {
 		return false
 	}
@@ -107,11 +107,11 @@ func orgName(orgURL string) string {
 	return ""
 }
 
-// OwnsPRURL says whether s is a PR URL of the repo t names: for GitHub
+// ownsPRURL says whether s is a PR URL of the repo t names: for GitHub
 // any github.com PR URL (gh resolves it itself), for Azure DevOps one
 // whose organization, project and repo are t's, for GitLab one on t's
 // server and project path (without case, as GitLab compares them).
-func OwnsPRURL(t Target, s string) bool {
+func ownsPRURL(t Target, s string) bool {
 	l, ok := ParsePR(s)
 	if !ok || l.Kind != t.Kind {
 		return false
@@ -122,7 +122,7 @@ func OwnsPRURL(t Target, s string) bool {
 	case GitLabKind:
 		return t.OrgURL != "" && strings.EqualFold(t.OrgURL, l.Target.OrgURL) && strings.EqualFold(t.Repo, l.Target.Repo)
 	}
-	return SameRepo(t, l.Target)
+	return sameRepo(t, l.Target)
 }
 
 // InRepo says whether pr is one of repo's own PRs, as tm thread merge

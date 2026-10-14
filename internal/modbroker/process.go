@@ -15,9 +15,9 @@ import (
 
 // Run limits.
 const (
-	MaxArgs       = 256
-	MaxArgBytes   = 64 << 10
-	MaxRunOutput  = 1 << 20 // each of stdout and stderr
+	maxArgs       = 256
+	maxArgBytes   = 64 << 10
+	maxRunOutput  = 1 << 20 // each of stdout and stderr
 	defaultRun    = 30 * time.Second
 	maxRun        = 120 * time.Second
 	runAfterClose = 2 * time.Second
@@ -52,7 +52,7 @@ type RunResult struct {
 	Code      int    `json:"code"` // the exit code; -1 when killed
 	Stdout    string `json:"stdout"`
 	Stderr    string `json:"stderr"`
-	Truncated bool   `json:"truncated,omitempty"` // output over MaxRunOutput was dropped
+	Truncated bool   `json:"truncated,omitempty"` // output over maxRunOutput was dropped
 	TimedOut  bool   `json:"timed_out,omitempty"`
 }
 
@@ -99,7 +99,7 @@ func run(ctx context.Context, c *Call) (any, error) {
 	if a.Options != nil {
 		a.RunOptions = *a.Options
 	}
-	if len(a.Stdin) > MaxRunOutput {
+	if len(a.Stdin) > maxRunOutput {
 		return nil, BadParams("process.run: the stdin is too long")
 	}
 	var progs []string
@@ -140,7 +140,7 @@ func run(ctx context.Context, c *Call) (any, error) {
 		cmd.Env = append(cmd.Env, "GIT_CEILING_DIRECTORIES="+filepath.Dir(root))
 	}
 	cmd.Stdin = strings.NewReader(a.Stdin)
-	out, errOut := &capped{n: MaxRunOutput}, &capped{n: MaxRunOutput}
+	out, errOut := &capped{n: maxRunOutput}, &capped{n: maxRunOutput}
 	cmd.Stdout, cmd.Stderr = out, errOut
 	cmd.WaitDelay = runAfterClose
 	proc.Group(cmd)

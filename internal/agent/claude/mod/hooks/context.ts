@@ -7,7 +7,7 @@
 import type { PromptContextBlock } from 'claude-code'
 
 // BLOCK is the block's name: it renders under `# terminatr`.
-export const BLOCK = 'terminatr'
+const BLOCK = 'terminatr'
 
 // withBlock is blocks with ours last, in place of an earlier one; none
 // for empty text.

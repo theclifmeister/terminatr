@@ -87,7 +87,7 @@ func TestSetClearKeep(t *testing.T) {
 func TestMaxCells(t *testing.T) {
 	s := Open("")
 	span := []widget.Span{{Text: "x"}}
-	for i := range MaxCells {
+	for i := range maxCells {
 		if _, err := s.Set("m", "c", proto.CellTarget{Project: "p", Task: "T" + string(rune('a'+i%26)) + strings.Repeat("x", i/26)}, span); err != nil {
 			t.Fatal(i, err)
 		}

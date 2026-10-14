@@ -11,8 +11,8 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 )
 
-// MaxStore is the most a mod's store holds, as JSON.
-const MaxStore = 1 << 20
+// maxStore is the most a mod's store holds, as JSON.
+const maxStore = 1 << 20
 
 // storeFile is a mod's store in its own folder.
 const storeFile = "store.json"
@@ -67,7 +67,7 @@ func (b *Broker) storeGet(_ context.Context, c *Call) (any, error) {
 }
 
 // store.set {key, value}: value is any JSON; the store stays under
-// MaxStore.
+// maxStore.
 func (b *Broker) storeSet(_ context.Context, c *Call) (any, error) {
 	a, err := c.storeKey()
 	if err != nil {
@@ -100,8 +100,8 @@ func (b *Broker) editStore(id string, edit func(map[string]json.RawMessage)) err
 	if err != nil {
 		return err
 	}
-	if len(data) > MaxStore {
-		return Denied("the store would be %d bytes, over its %d", len(data), MaxStore)
+	if len(data) > maxStore {
+		return Denied("the store would be %d bytes, over its %d", len(data), maxStore)
 	}
 	return fsx.WriteAtomic(filepath.Join(b.OwnDir(id), storeFile), data, 0o600)
 }

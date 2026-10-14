@@ -7,7 +7,7 @@ import (
 // Unwrap strips interpreters and shells from a process's argv, so an
 // agent started as `node /usr/lib/node_modules/.bin/claude`,
 // `sh -c "claude --resume x"`, `cmd /d /c claude.exe` or
-// `pwsh -NoProfile -Command "& claude"` is seen as `claude …`
+// `pwsh -NoProfile -command "& claude"` is seen as `claude …`
 // (docs/SPEC.md §8.2). Program names match case-insensitively, with
 // either path separator and without .exe, and the result's program loses
 // a .exe suffix.
@@ -24,7 +24,7 @@ func Unwrap(argv []string) []string {
 			if len(argv) < 3 || argv[1] != "-c" {
 				return trimExe(argv)
 			}
-			next = Split(argv[2])
+			next = split(argv[2])
 			if len(next) > 0 && next[0] == "exec" {
 				next = next[1:]
 			}
@@ -81,7 +81,7 @@ func unwrapCmd(args []string) []string {
 			if len(line) >= 2 && line[0] == '"' && line[len(line)-1] == '"' {
 				line = line[1 : len(line)-1]
 			}
-			return nilIfEmpty(Split(line))
+			return nilIfEmpty(split(line))
 		}
 	}
 	return nil
@@ -98,7 +98,7 @@ var psValued = map[string]bool{
 }
 
 // unwrapPowerShell takes pwsh's or powershell's arguments: parameters,
-// then -Command (the rest is a command line, & dropped) or -File (a script
+// then -command (the rest is a command line, & dropped) or -File (a script
 // and its arguments). A bare first argument is a file for pwsh and a
 // command for Windows PowerShell. It returns nil when there is neither.
 func unwrapPowerShell(name string, args []string) []string {
@@ -132,7 +132,7 @@ func psCommand(args []string) []string {
 // commandLine is a shell's command-line arguments as one argv: the shell
 // joins them with spaces and parses the result.
 func commandLine(args []string) []string {
-	return nilIfEmpty(Split(strings.Join(args, " ")))
+	return nilIfEmpty(split(strings.Join(args, " ")))
 }
 
 func nilIfEmpty(argv []string) []string {
@@ -142,10 +142,10 @@ func nilIfEmpty(argv []string) []string {
 	return argv
 }
 
-// Split splits a command line into words at unquoted white space,
+// split splits a command line into words at unquoted white space,
 // removing '…' and "…" quotes. It is the common subset of the shells'
 // syntax, enough to find a program and its arguments, not a parser.
-func Split(s string) []string {
+func split(s string) []string {
 	var out []string
 	var cur strings.Builder
 	in := false

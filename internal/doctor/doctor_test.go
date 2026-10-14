@@ -637,7 +637,7 @@ func TestMods(t *testing.T) {
 }
 
 // TestQueueChecks: a prompt held while its agent is idle shows once it
-// has been held for proto.QueueNotice (T43); a fresh hold, or a queue
+// has been held for queueNotice (T43); a fresh hold, or a queue
 // waiting on a working agent, doesn't.
 func TestQueueChecks(t *testing.T) {
 	now := time.Now()

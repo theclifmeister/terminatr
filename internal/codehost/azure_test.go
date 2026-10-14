@@ -75,7 +75,7 @@ func TestAzurePRFixtures(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", c.pr, err)
 		}
-		c.want.URL = AzurePRURL(shop, c.want.Number)
+		c.want.URL = azurePRURL(shop, c.want.Number)
 		if pr != c.want {
 			t.Errorf("%s:\n got %+v\nwant %+v", c.pr, pr, c.want)
 		}
@@ -223,7 +223,7 @@ func FuzzParseAzurePR(f *testing.F) {
 		if err != nil {
 			return
 		}
-		if pr.Number < 0 || pr.URL != "" && pr.URL != AzurePRURL(shop, pr.Number) || !upperRE.MatchString(pr.State) || !upperRE.MatchString(pr.Review) ||
+		if pr.Number < 0 || pr.URL != "" && pr.URL != azurePRURL(shop, pr.Number) || !upperRE.MatchString(pr.State) || !upperRE.MatchString(pr.Review) ||
 			!upperRE.MatchString(pr.Mergeable) || !upperRE.MatchString(pr.MergeState) || pr.Base != "" && !branchRE.MatchString(pr.Base) || pr.Branch != "" && !branchRE.MatchString(pr.Branch) ||
 			pr.Merge != "" && !oidRE.MatchString(pr.Merge) || pr.Head != "" && !oidRE.MatchString(pr.Head) ||
 			pr.Failed < 0 || pr.Checks != "" && pr.Checks != "pass" && pr.Checks != "fail" && pr.Checks != "pending" {
@@ -487,8 +487,8 @@ func TestAzureParsePRURL(t *testing.T) {
 			t.Errorf("%q: %d %v", s, n, ok)
 		}
 	}
-	if n, ok := vs.ParsePRURL(AzurePRURL(vs.Target, 9)); !ok || n != 9 {
-		t.Fatal("AzurePRURL doesn't parse back")
+	if n, ok := vs.ParsePRURL(azurePRURL(vs.Target, 9)); !ok || n != 9 {
+		t.Fatal("azurePRURL doesn't parse back")
 	}
 }
 

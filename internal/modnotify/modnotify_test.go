@@ -80,7 +80,7 @@ func TestButtonLabelIsTheCores(t *testing.T) {
 func TestRateAndKeep(t *testing.T) {
 	now := time.Now()
 	h := New(func() time.Time { return now })
-	for i := 0; i < PerMinute; i++ {
+	for i := 0; i < perMinute; i++ {
 		if _, err := h.Post("m", Request{Title: "x"}); err != nil {
 			t.Fatal(err)
 		}
@@ -91,7 +91,7 @@ func TestRateAndKeep(t *testing.T) {
 	if _, err := h.Post("other", Request{Title: "x"}); err != nil {
 		t.Fatalf("one mod's rate held up another: %v", err)
 	}
-	if got := len(h.List()); got != MaxKept+1 {
+	if got := len(h.List()); got != maxKept+1 {
 		t.Fatalf("kept %d", got)
 	}
 	now = now.Add(2 * time.Minute)
