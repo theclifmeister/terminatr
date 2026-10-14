@@ -375,6 +375,21 @@ func TestRelayUpdate(t *testing.T) {
 	if out := h.ok(human, "relay", "update"); !strings.Contains(out, "nothing to update") || len(r.calls) != 0 {
 		t.Fatalf("latest: %v %s", r.calls, out)
 	}
+
+	// A newer build, or one with no release version, is not downgraded
+	// unless --force.
+	for _, v := range []string{"v0.29.0", "dev"} {
+		r.s.Version, r.calls = v, nil
+		h.expect(3, "sudo tm relay update --force", human, "relay", "update")
+		if b, _ := os.ReadFile(bin); string(b) != "tm v0.28.0" || len(r.calls) != 0 {
+			t.Fatalf("%s: binary %q, calls %v", v, b, r.calls)
+		}
+	}
+	r.s.Version = "v0.29.0"
+	h.ok(human, "relay", "update", "--force")
+	if got := strings.Join(r.calls, "; "); got != "restart tm-relay" {
+		t.Fatalf("forced: %s", got)
+	}
 }
 
 // --self-signed makes a key and a certificate in the state directory,

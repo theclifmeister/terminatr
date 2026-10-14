@@ -291,6 +291,7 @@ func relayManage(e *Env, cmd string, args []string, h *relayService) error {
 	f := newFlags()
 	domain, email, ipMode := f.String("domain"), f.String("email"), f.Bool("ip")
 	autoUpdate := f.String("auto-update")
+	force := f.Bool("force")
 	// --ip takes its address as the next argument, or none.
 	var flagArgs []string
 	for _, a := range args {
@@ -304,7 +305,7 @@ func relayManage(e *Env, cmd string, args []string, h *relayService) error {
 	if err != nil {
 		return err
 	}
-	if len(pos) > 1 || (len(pos) == 1 && !*ipMode) || (cmd != "install" && (*domain != "" || *email != "" || *ipMode || f.IsSet("auto-update"))) {
+	if len(pos) > 1 || (len(pos) == 1 && !*ipMode) || (cmd != "update" && *force) || (cmd != "install" && (*domain != "" || *email != "" || *ipMode || f.IsSet("auto-update"))) {
 		return usagef("%s", relayUsage)
 	}
 	auto := true
@@ -354,7 +355,7 @@ func relayManage(e *Env, cmd string, args []string, h *relayService) error {
 		}
 		return h.install(ctx, e, *domain, *email, auto)
 	case "update":
-		return h.update(ctx, e)
+		return h.update(ctx, e, *force)
 	}
 	return h.uninstall(e)
 }
@@ -555,7 +556,7 @@ Let's Encrypt and both servers reach the relay on TCP port 443, so:
 Then: curl %s (the relay keeps trying for a certificate by itself; journalctl -u tm-relay shows how it goes)`, url, err, domain, where, url)
 }
 
-func (h *relayService) update(ctx context.Context, e *Env) error {
+func (h *relayService) update(ctx context.Context, e *Env, force bool) error {
 	// A linked server's request (tm-relay-update.path started this): it
 	// is done once this runs, whatever comes of it, so a failing update
 	// isn't started again and again.
@@ -569,9 +570,19 @@ func (h *relayService) update(ctx context.Context, e *Env) error {
 	if err != nil {
 		return fmt.Errorf("the latest release: %w", err)
 	}
-	if newer, ok := update.Newer(rel.Tag, h.Version); ok && !newer {
-		fmt.Fprintf(e.Stdout, "tm %s is the latest release; nothing to update.\n", h.Version)
-		return nil
+	newer, ok := update.Newer(rel.Tag, h.Version)
+	switch {
+	case ok && !newer:
+		// Equal, or this build is ahead of the release.
+		if ahead, _ := update.Newer(h.Version, rel.Tag); !ahead {
+			fmt.Fprintf(e.Stdout, "tm %s is the latest release; nothing to update.\n", h.Version)
+			return nil
+		}
+		if !force {
+			return fmt.Errorf("this tm (%s) is newer than the latest release (%s): installing it would be a downgrade, and the relay's unit may use flags the release lacks; sudo tm relay update --force to do it anyway", h.Version, rel.Tag)
+		}
+	case !ok && !force:
+		return fmt.Errorf("this tm (%s) isn't a release version, so it can't be compared with the latest release (%s); sudo tm relay update --force to install the release anyway", h.Version, rel.Tag)
 	}
 	bin := h.path(relayBin)
 	dir := filepath.Dir(bin)
