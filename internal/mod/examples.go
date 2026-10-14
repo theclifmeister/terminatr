@@ -63,6 +63,7 @@ var Examples = []Example{
 	{"standup", "a command: a key, a ≡ menu entry and tm mod run", Permissions{ProjectRead: true, Views: true}},
 	{"report-glance", "panel sections: the details panel's and the coordinator's", Permissions{ProjectRead: true, Views: true}},
 	{"ci-status", "a section under each project in the sidebar, opening a project-popup tab", Permissions{ProjectRead: true, Views: true}},
+	{"changes-column", "a sidebar column of each thread's git changes, before its PR exists", Permissions{ProjectRead: true}},
 	{"pr-ci-column", "a sidebar column (also built in)", Permissions{ProjectRead: true}},
 	{"memory-tab", "a project-popup tab (also built in)", Permissions{ProjectRead: true, Views: true}},
 	{"tasks-tab", "a project-popup tab whose rows bind tm's task actions (built in)", Permissions{ProjectRead: true, Views: true}},

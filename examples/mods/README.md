@@ -28,6 +28,7 @@ on in the Mods tab (`,` then `3`), or with `tm mod enable <id>`. `e` in the Mods
 | 5 | [notify-me](notify-me) | OS notifications with core-action buttons, a question's options among them | reads your projects, shows notifications, offers you buttons that answer an agent's question | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.4/examples/mods/notify-me` |
 | 6 | [thread-timeline](thread-timeline) | a full view (≡ menu) | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.4/examples/mods/thread-timeline` |
 | + | [ci-status](ci-status) | a section under each project in the sidebar, whose header opens a project-popup tab with all its PRs | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.4/examples/mods/ci-status` |
+| + | [changes-column](changes-column) | a sidebar column of each thread's git changes, before its PR exists | reads your projects | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.25.4/examples/mods/changes-column` |
 | 7 | [pr-ci-column](pr-ci-column) | a sidebar column (built in) | reads your projects | copy it under another id first, see below |
 | 8 | [memory-tab](memory-tab) | a project-popup tab (built in) | reads your projects, draws its own panels | copy it under another id first, see below |
 | + | [tasks-tab](tasks-tab) | the popup's Tasks tab, its rows bound to tm's task actions (built in) | reads your projects, draws its own panels | copy it under another id first, see below |
@@ -158,6 +159,14 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
   standup show --project <slug>` can't open a view, so the mod says the
   same in one line as a toast. A key the core (or a mod enabled
   earlier) has stays theirs; the Mods tab then says key conflict.
+- **changes-column** shows each thread's lines changed since its base,
+  `+12 -3`, with a `•` while it has uncommitted work (mod API 1.8). tm
+  runs git in the worktree itself, read-only (`$.thread.changes`), and
+  publishes `thread.changes` when a live thread edits, commits or pushes,
+  so the mod needs only `project_read`: no `commands` grant, and it
+  never learns where a worktree is. `$.thread.changes` also answers the
+  files with their buckets (uncommitted, unpushed, pushed) and, for one
+  path, its diff, for a mod that wants a full view.
 - **ticker** is when the ticker last polled a project's PRs and synced
   its repos, and whether its PR host answers, as `kv` rows whose times
   are `ago` and `until` spans (mod API 1.7), so they move without a
