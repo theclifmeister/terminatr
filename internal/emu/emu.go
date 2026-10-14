@@ -15,6 +15,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"go.mitchellh.com/libghostty"
@@ -217,9 +219,9 @@ func (t *Terminal) Snapshot() ([]byte, error) {
 }
 
 // VT returns bytes that repaint an outer terminal into this terminal's
-// state: the screen with styles, then the modes, cursor, scrolling region,
-// keyboard and charset state. It is a debug aid and the input of Digest,
-// not a protocol: replayed into a fresh emulator it loses the inactive
+// state: the scrollback and screen with styles, then the modes, cursor,
+// scrolling region, keyboard and charset state. It is the input of Digest
+// and of Repaint; replayed into a fresh emulator it loses the inactive
 // screen.
 func (t *Terminal) VT() ([]byte, error) {
 	f, err := libghostty.NewFormatter(t.t,
@@ -243,6 +245,68 @@ func (t *Terminal) VT() ([]byte, error) {
 	}
 	return []byte(s), nil
 }
+
+// Repaint returns bytes that rebuild this terminal's state in a fresh
+// emulator of the same size: VT with only the last history rows of the
+// scrollback. It is the remote panes' repaint (docs/SPEC.md §16.12): plain
+// VT, so the two emulators needn't be the same build, unlike Snapshot. It
+// loses the inactive screen, older scrollback, hyperlinks and soft wraps.
+//
+// VT leaves out trailing blank rows and gives the cursor in absolute
+// terms, which a fresh emulator would read differently: Repaint puts the
+// blank rows back and, in origin mode, places the cursor relative to the
+// scrolling region.
+func (t *Terminal) Repaint(history int) ([]byte, error) {
+	vt, err := t.VT()
+	if err != nil {
+		return nil, err
+	}
+	_, rows := t.Size()
+	keep := int(rows) + max(history, 0)
+	f, err := libghostty.NewFormatter(t.t,
+		libghostty.WithFormatterFormat(libghostty.FormatterFormatVT),
+		libghostty.WithFormatterExtraStyle(true),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("emu: formatter: %w", err)
+	}
+	defer f.Close()
+	content, err := f.FormatString()
+	if err != nil {
+		return nil, fmt.Errorf("emu: format: %w", err)
+	}
+	// vt is the modes, then home, the rows (content), then the cursor,
+	// region and pen: split it there.
+	home := bytes.Index(vt, []byte("\x1b[H"))
+	text := strings.TrimSuffix(content, "\x1b[0m")
+	if home < 0 || !bytes.HasPrefix(vt[home+3:], []byte(text)) {
+		return trimHistory(vt, keep), nil
+	}
+	pre, after := string(vt[:home]), string(vt[home+3+len(text):])
+	lines := strings.Split(text, "\r\n")
+	if total, err := t.t.TotalRows(); err == nil && int(total) > len(lines) {
+		lines = append(lines, make([]string, int(total)-len(lines))...)
+	}
+	if len(lines) > keep {
+		lines = lines[len(lines)-keep:]
+	}
+	if on, _ := t.t.Mode(libghostty.ModeOrigin); on {
+		// Origin mode on before the rows would put them inside the
+		// region: set it last, then place the cursor relative to it.
+		pre = strings.Replace(pre, "\x1b[?6h", "", 1)
+		top := 1
+		if m := regionRe.FindStringSubmatch(after); m != nil {
+			top, _ = strconv.Atoi(m[1])
+		}
+		x, _ := t.t.CursorX()
+		y, _ := t.t.CursorY()
+		after += fmt.Sprintf("\x1b[?6h\x1b[%d;%dH", int(y)-top+2, int(x)+1)
+	}
+	return []byte(pre + "\x1b[H" + strings.Join(lines, "\r\n") + "\x1b[0m" + after), nil
+}
+
+// regionRe finds the scrolling region VT sets (DECSTBM).
+var regionRe = regexp.MustCompile(`\x1b\[(\d+);(\d+)r`)
 
 // digestHistory is how many scrollback rows Digest covers. libghostty
 // trims scrollback page by page, and a terminal restored from a snapshot

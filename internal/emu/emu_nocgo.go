@@ -25,6 +25,7 @@ func (t *Terminal) Size() (cols, rows uint16)                    { return 0, 0 }
 func (t *Terminal) Title() string                                { return "" }
 func (t *Terminal) Snapshot() ([]byte, error)                    { return nil, ErrNoCgo }
 func (t *Terminal) VT() ([]byte, error)                          { return nil, ErrNoCgo }
+func (t *Terminal) Repaint(int) ([]byte, error)                  { return nil, ErrNoCgo }
 func (t *Terminal) Digest() (string, error)                      { return "", ErrNoCgo }
 func (t *Terminal) PlainText() (string, error)                   { return "", ErrNoCgo }
 func (t *Terminal) Screen() (string, error)                      { return "", ErrNoCgo }
