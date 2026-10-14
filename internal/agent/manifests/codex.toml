@@ -1,6 +1,6 @@
 # OpenAI Codex CLI (docs/SPEC.md §8.6, Codex).
 #
-# Verified against codex-cli 0.160.0 on macOS by the T91 research
+# First verified on codex-cli 0.160.0 on macOS by the T91 research
 # (threads/t-0083/library) and T98. Codex keeps no status file: state
 # comes from hooks, the rollout and the screen. The Go agent
 # (internal/agent/codex) adds the hooks themselves, with their trust

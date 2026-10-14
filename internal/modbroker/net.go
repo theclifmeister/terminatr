@@ -19,9 +19,9 @@ import (
 
 // Fetch limits.
 const (
-	MaxURL          = 8 << 10
-	MaxRequestBody  = 4 << 20
-	MaxResponseBody = 8 << 20
+	maxURL          = 8 << 10
+	maxRequestBody  = 4 << 20
+	maxResponseBody = 8 << 20
 	maxRedirects    = 5
 	defaultFetch    = 30 * time.Second
 	maxFetch        = 60 * time.Second
@@ -51,8 +51,8 @@ func HostAllowed(host string, hosts []string) bool {
 // was checked, or the refusal: HTTPS only, on its own port, no user or
 // password in it, and a host name (never an address) that hosts allows.
 func CheckURL(raw string, hosts []string) (*url.URL, error) {
-	if len(raw) > MaxURL {
-		return nil, BadParams("the URL is over %d bytes", MaxURL)
+	if len(raw) > maxURL {
+		return nil, BadParams("the URL is over %d bytes", maxURL)
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -241,8 +241,8 @@ func (b *Broker) fetch(ctx context.Context, c *Call) (any, error) {
 	if !slices.Contains(fetchMethods, meth) {
 		return nil, BadParams("http.fetch: method %q isn't one of %s", a.Method, strings.Join(fetchMethods, ", "))
 	}
-	if len(a.Body) > MaxRequestBody {
-		return nil, BadParams("http.fetch: the body is over %d bytes", MaxRequestBody)
+	if len(a.Body) > maxRequestBody {
+		return nil, BadParams("http.fetch: the body is over %d bytes", maxRequestBody)
 	}
 	timeout := defaultFetch
 	if a.TimeoutMS > 0 {
@@ -283,12 +283,12 @@ func (b *Broker) fetch(ctx context.Context, c *Call) (any, error) {
 		return nil, Failed("http.fetch %s: %v", u.Host, err)
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBody+1))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody+1))
 	if err != nil {
 		return nil, Failed("http.fetch %s: %v", u.Host, err)
 	}
-	if len(data) > MaxResponseBody {
-		return nil, Failed("http.fetch %s: the answer is over %d bytes", u.Host, MaxResponseBody)
+	if len(data) > maxResponseBody {
+		return nil, Failed("http.fetch %s: the answer is over %d bytes", u.Host, maxResponseBody)
 	}
 	res := FetchResult{Status: resp.StatusCode, URL: resp.Request.URL.String(), Headers: map[string]string{}, Body: string(data)}
 	for k := range resp.Header {

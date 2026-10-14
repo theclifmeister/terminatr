@@ -354,8 +354,8 @@ type Template struct {
 	Builtin bool
 }
 
-// MaxTemplateSteps caps a template's steps.
-const MaxTemplateSteps = 50
+// maxTemplateSteps caps a template's steps.
+const maxTemplateSteps = 50
 
 var (
 	templateNameRE = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
@@ -399,8 +399,8 @@ func ParseTemplate(name string, data []byte) (Template, error) {
 			return t, fmt.Errorf("template %s: under ## Steps, %q isn't a list item (- step)", name, strings.TrimSpace(l))
 		}
 	}
-	if len(t.Steps) > MaxTemplateSteps {
-		return t, fmt.Errorf("template %s: %d steps, at most %d", name, len(t.Steps), MaxTemplateSteps)
+	if len(t.Steps) > maxTemplateSteps {
+		return t, fmt.Errorf("template %s: %d steps, at most %d", name, len(t.Steps), maxTemplateSteps)
 	}
 	t.Notes = strings.TrimSpace(strings.Join(notes, "\n"))
 	return t, nil

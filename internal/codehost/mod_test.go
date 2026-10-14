@@ -43,7 +43,7 @@ func TestModPRFixedWords(t *testing.T) {
 	if pr != (PR{Number: 7, State: "OPEN"}) {
 		t.Errorf("kept %+v", pr)
 	}
-	if len(asked) != 1 || asked[0] != (ModRef{Remote: ModRemoteRef{Kind: "gitlab", Host: "gitlab.com", Path: "acme/shop"}, Branch: "feat"}) {
+	if len(asked) != 1 || asked[0] != (ModRef{Remote: modRemoteRef{Kind: "gitlab", Host: "gitlab.com", Path: "acme/shop"}, Branch: "feat"}) {
 		t.Errorf("asked %+v", asked)
 	}
 	// By a URL of this repo: its number; another repo's URL: the branch.
@@ -204,7 +204,7 @@ func TestModRemote(t *testing.T) {
 		"https://gitlab.com/shop": {},
 		"":                        {},
 	} {
-		got, ok := ModRemote(remote)
+		got, ok := modRemote(remote)
 		if got != want || ok != (want != Target{}) {
 			t.Errorf("%q: %+v %v", remote, got, ok)
 		}
@@ -212,7 +212,7 @@ func TestModRemote(t *testing.T) {
 }
 
 // TestPickMod: a code_host naming a mod's kind gets the provider's mod
-// for the project, or Unserved saying why; tm's own kinds and a value
+// for the project, or unserved saying why; tm's own kinds and a value
 // that isn't a kind keep their old picks.
 func TestPickMod(t *testing.T) {
 	repo, run := gitRepo(t)
@@ -221,7 +221,7 @@ func TestPickMod(t *testing.T) {
 
 	Provide(nil)
 	h := Pick(repo, Config{CodeHost: "gitlab", Project: "p"})
-	u, ok := h.(Unserved)
+	u, ok := h.(unserved)
 	if !ok || u.Target != (Target{Kind: GitLabKind, OrgURL: "https://gitlab.com", Repo: "acme/shop"}) {
 		t.Fatalf("no provider: %#v", h)
 	}
@@ -252,8 +252,8 @@ func TestPickMod(t *testing.T) {
 	if st := h.PRState(repo, "b"); st != "OPEN" {
 		t.Errorf("state %q", st)
 	}
-	if _, ok := Pick(repo, Config{CodeHost: "gitlab", Project: "none"}).(Unserved); !ok {
-		t.Error("no mod for the project isn't Unserved")
+	if _, ok := Pick(repo, Config{CodeHost: "gitlab", Project: "none"}).(unserved); !ok {
+		t.Error("no mod for the project isn't unserved")
 	}
 	for cfg, want := range map[Config]string{
 		{}:                   NoKind, // gitlab.com by origin: nothing to poll without a mod

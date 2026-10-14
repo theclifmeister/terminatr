@@ -1,15 +1,6 @@
 package e2e
 
-import (
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
-
-	"github.com/theclifmeister/terminatr/internal/plat/proc"
-)
+import "sync"
 
 // A run's binaries live in a tm-e2e-bin* temp dir with an owner file
 // naming the test process. Every tm server and session of the run
@@ -39,17 +30,6 @@ func noteRunDir(dir string) {
 	runDirs = append(runDirs, dir)
 }
 
-// killUnderRuns is killUnder for every run dir this run made.
-func killUnderRuns() []string {
-	runDirsMu.Lock()
-	defer runDirsMu.Unlock()
-	var killed []string
-	for _, d := range runDirs {
-		killed = append(killed, killUnder(d)...)
-	}
-	return killed
-}
-
 func noteFailed(name, artifacts string) {
 	failedMu.Lock()
 	defer failedMu.Unlock()
@@ -57,61 +37,4 @@ func noteFailed(name, artifacts string) {
 		name += " (artifacts: " + artifacts + ")"
 	}
 	failed = append(failed, name)
-}
-
-// sweepStale kills the processes of dead runs and removes their binaries
-// and run dirs. A bin dir without an owner file (older harness, or a run
-// still building) counts as dead only after an hour.
-func sweepStale() {
-	dirs, _ := filepath.Glob(filepath.Join(os.TempDir(), binPrefix+"*"))
-	for _, d := range dirs {
-		if !staleOwner(d) {
-			continue
-		}
-		killUnder(d)
-		os.RemoveAll(d)
-	}
-	// Run dirs of dead runs: no live server, and old enough that no
-	// running test is between creating one and starting its server.
-	runs, _ := filepath.Glob(filepath.Join(runDirBase, "tme2e*"))
-	for _, d := range runs {
-		fi, err := os.Stat(d)
-		if err != nil || time.Since(fi.ModTime()) < 10*time.Minute {
-			continue
-		}
-		b, _ := os.ReadFile(filepath.Join(d, "server.pid"))
-		if pid, _ := strconv.Atoi(strings.TrimSpace(string(b))); !Alive(pid) {
-			os.RemoveAll(d)
-		}
-	}
-}
-
-func staleOwner(dir string) bool {
-	b, err := os.ReadFile(filepath.Join(dir, ownerFile))
-	if err != nil {
-		fi, err := os.Stat(dir)
-		return err == nil && time.Since(fi.ModTime()) > time.Hour
-	}
-	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
-	return pid != os.Getpid() && !Alive(pid)
-}
-
-// killUnder SIGKILLs every process whose executable lies in dir and
-// returns what it killed.
-func killUnder(dir string) []string {
-	procs, err := proc.List()
-	if err != nil {
-		return nil
-	}
-	var killed []string
-	prefix := dir + string(filepath.Separator)
-	for _, p := range procs {
-		if p.PID == os.Getpid() || len(p.Argv) == 0 || !strings.HasPrefix(p.Argv[0], prefix) {
-			continue
-		}
-		if proc.Kill(p.PID) == nil {
-			killed = append(killed, strconv.Itoa(p.PID)+" "+strings.Join(p.Argv, " "))
-		}
-	}
-	return killed
 }

@@ -46,7 +46,7 @@ func Bind(h *modhost.Host) error {
 			return fmt.Errorf("%s: a local method with no binding", m.Name)
 		default:
 			fn = func(c goja.FunctionCall) goja.Value {
-				var params goja.Value = goja.Undefined()
+				params := goja.Value(goja.Undefined())
 				if len(m.Params) > 0 {
 					params = args(vm, m, c)
 				}

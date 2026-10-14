@@ -9,15 +9,6 @@ import "testing"
 // Scenario is one contract scenario, as a mod's fake glab sees it.
 type Scenario struct{ Name, GL, GLA string }
 
-// Scenarios are the contract's scenarios.
-func Scenarios() []Scenario {
-	out := make([]Scenario, len(scenarios))
-	for i, s := range scenarios {
-		out[i] = Scenario{s.name, s.gl, s.gla}
-	}
-	return out
-}
-
 // CheckModContract runs the contract against a host made per scenario.
 func CheckModContract(t *testing.T, name string, newHost func(s Scenario) Host) {
 	t.Helper()

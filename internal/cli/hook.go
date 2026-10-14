@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"os"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
@@ -93,7 +92,7 @@ func runHook(e *Env, args []string) error {
 		}
 	}
 	params := proto.HookEventParams{Session: session, Agent: name, Event: event,
-		PPID: os.Getppid(), At: time.Now(), Payload: payload, Token: token}
+		Payload: payload, Token: token}
 	if out := sendHook(paths.Socket, params, total); out != "" {
 		io.WriteString(e.Stdout, out)
 	}

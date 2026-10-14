@@ -127,9 +127,9 @@ var guardRuleKeys = []string{"id", "commands", "writes", "reads", "roles", "mess
 
 // Limits of a mod's guard rules.
 const (
-	MaxGuardRules      = 32
-	MaxGuardPatterns   = 32
-	MaxGuardMessageLen = 400
+	maxGuardRules      = 32
+	maxGuardPatterns   = 32
+	maxGuardMessageLen = 400
 )
 
 // DefaultKeys are the all-projects settings a mod may suggest a value
@@ -192,8 +192,8 @@ func CommandName(mod, cmd string) string { return mod + ":" + cmd }
 
 // Limits of a mod's commands.
 const (
-	MaxCommands     = 16
-	MaxCommandTitle = 48
+	maxCommands     = 16
+	maxCommandTitle = 48
 )
 
 // LockedCommandKeys are keys no command takes: the escape hatches (esc,
@@ -244,12 +244,12 @@ const (
 	RoleCoordinator = "coordinator"
 )
 
-// Limits of a mod's tools. MaxToolName keeps an agent's full name for
+// Limits of a mod's tools. maxToolName keeps an agent's full name for
 // it within 64 characters (Claude's mcp__terminatr__<name>).
 const (
-	MaxTools       = 16
-	MaxToolName    = 48
-	MaxToolDescLen = 2048
+	maxTools       = 16
+	maxToolName    = 48
+	maxToolDescLen = 2048
 )
 
 // ToolName is the name agents call mod id's tool by: "<mod>_<tool>".
@@ -330,8 +330,8 @@ const (
 	// SidebarAPIMinor is the mod API minor the sidebar slots need, and
 	// opens, a badge and a height on the right pane's sections.
 	SidebarAPIMinor = 7
-	// MaxSidebarViews is how many sidebar sections one mod declares.
-	MaxSidebarViews = 2
+	// maxSidebarViews is how many sidebar sections one mod declares.
+	maxSidebarViews = 2
 	// MaxViewDescription bounds a view's description, in characters.
 	MaxViewDescription = 80
 )
@@ -460,9 +460,9 @@ func (s Setting) span() string {
 	return fmt.Sprintf("at most %d", *s.Max)
 }
 
-// MaxColumnWidth caps a mod column, in cells: the width the sidebar
+// maxColumnWidth caps a mod column, in cells: the width the sidebar
 // draws at most (view.MaxModColumnWidth).
-const MaxColumnWidth = view.MaxModColumnWidth
+const maxColumnWidth = view.MaxModColumnWidth
 
 var (
 	idRE    = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
@@ -474,8 +474,8 @@ var (
 	keyRE  = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 )
 
-// MaxIDLen caps a mod id; it names folders, config tables and namespaces.
-const MaxIDLen = 40
+// maxIDLen caps a mod id; it names folders, config tables and namespaces.
+const maxIDLen = 40
 
 // reservedIDs are the older [mods] keys config.toml still reads as
 // [agent_mod]'s (enabled, band, pane): a mod by one of these names
@@ -487,8 +487,8 @@ func CheckID(id string) error {
 	switch {
 	case id == "":
 		return errors.New("has no id")
-	case len(id) > MaxIDLen:
-		return fmt.Errorf("id %q is longer than %d characters", id, MaxIDLen)
+	case len(id) > maxIDLen:
+		return fmt.Errorf("id %q is longer than %d characters", id, maxIDLen)
 	case !idRE.MatchString(id):
 		return fmt.Errorf("id %q must be lowercase letters, digits and single dashes", id)
 	case slices.Contains(reservedIDs, id):
@@ -612,8 +612,8 @@ func (m *Manifest) check(dir string) error {
 			bad("%s: id %q is listed twice", at, c.ID)
 		}
 		seen["c:"+c.ID] = true
-		if c.Width < 1 || c.Width > MaxColumnWidth {
-			bad("%s: width must be 1 to %d cells", at, MaxColumnWidth)
+		if c.Width < 1 || c.Width > maxColumnWidth {
+			bad("%s: width must be 1 to %d cells", at, maxColumnWidth)
 		}
 		if len(c.Where) == 0 {
 			bad("%s: where names no slot", at)
@@ -661,11 +661,11 @@ func (m *Manifest) check(dir string) error {
 			}
 		}
 	}
-	if n := len(slices.DeleteFunc(slices.Clone(p.Views), func(v View) bool { return !IsSidebar(v.Slot) })); n > MaxSidebarViews {
-		bad("provides.views: at most %d sidebar sections (%s, %s), not %d", MaxSidebarViews, SlotSidebarSection, SlotProjectSection, n)
+	if n := len(slices.DeleteFunc(slices.Clone(p.Views), func(v View) bool { return !IsSidebar(v.Slot) })); n > maxSidebarViews {
+		bad("provides.views: at most %d sidebar sections (%s, %s), not %d", maxSidebarViews, SlotSidebarSection, SlotProjectSection, n)
 	}
-	if len(p.Guard) > MaxGuardRules {
-		bad("provides.guard: at most %d rules", MaxGuardRules)
+	if len(p.Guard) > maxGuardRules {
+		bad("provides.guard: at most %d rules", maxGuardRules)
 	}
 	for i, g := range p.Guard {
 		at := fmt.Sprintf("provides.guard[%d]", i)
@@ -681,8 +681,8 @@ func (m *Manifest) check(dir string) error {
 		if len(g.Commands)+len(g.Writes)+len(g.Reads) == 0 {
 			bad("%s: refuses nothing: list commands, writes or reads", at)
 		}
-		if len(g.Commands) > MaxGuardPatterns || len(g.Writes) > MaxGuardPatterns || len(g.Reads) > MaxGuardPatterns {
-			bad("%s: at most %d commands, writes and reads each", at, MaxGuardPatterns)
+		if len(g.Commands) > maxGuardPatterns || len(g.Writes) > maxGuardPatterns || len(g.Reads) > maxGuardPatterns {
+			bad("%s: at most %d commands, writes and reads each", at, maxGuardPatterns)
 		}
 		for _, c := range g.Commands {
 			if w := strings.Fields(c); len(w) == 0 || !progRE.MatchString(w[0]) {
@@ -703,12 +703,12 @@ func (m *Manifest) check(dir string) error {
 		}
 		if msg := strings.TrimSpace(g.Message); msg == "" {
 			bad("%s: has no message: say why, and what to do instead", at)
-		} else if len(msg) > MaxGuardMessageLen {
-			bad("%s: message is longer than %d bytes", at, MaxGuardMessageLen)
+		} else if len(msg) > maxGuardMessageLen {
+			bad("%s: message is longer than %d bytes", at, maxGuardMessageLen)
 		}
 	}
-	if len(p.Tools) > MaxTools {
-		bad("provides.tools: at most %d tools", MaxTools)
+	if len(p.Tools) > maxTools {
+		bad("provides.tools: at most %d tools", maxTools)
 	}
 	for i, t := range p.Tools {
 		at := fmt.Sprintf("provides.tools[%d]", i)
@@ -717,16 +717,16 @@ func (m *Manifest) check(dir string) error {
 			bad("%s: a tool needs provides.main, the code that answers it", at)
 		case !keyRE.MatchString(t.ID):
 			bad("%s: id %q must be lowercase letters, digits and underscores, starting with a letter", at, t.ID)
-		case len(ToolName(m.ID, t.ID)) > MaxToolName:
-			bad("%s: %s is longer than %d characters", at, ToolName(m.ID, t.ID), MaxToolName)
+		case len(ToolName(m.ID, t.ID)) > maxToolName:
+			bad("%s: %s is longer than %d characters", at, ToolName(m.ID, t.ID), maxToolName)
 		case seen["t:"+t.ID]:
 			bad("%s: id %q is listed twice", at, t.ID)
 		}
 		seen["t:"+t.ID] = true
 		if d := strings.TrimSpace(t.Description); d == "" {
 			bad("%s: has no description", at)
-		} else if len(d) > MaxToolDescLen {
-			bad("%s: description is longer than %d bytes", at, MaxToolDescLen)
+		} else if len(d) > maxToolDescLen {
+			bad("%s: description is longer than %d bytes", at, maxToolDescLen)
 		}
 		for _, r := range t.Roles {
 			if r != RoleThread && r != RoleCoordinator {
@@ -747,8 +747,8 @@ func (m *Manifest) check(dir string) error {
 			}
 		}
 	}
-	if len(p.Commands) > MaxCommands {
-		bad("provides.commands: at most %d commands", MaxCommands)
+	if len(p.Commands) > maxCommands {
+		bad("provides.commands: at most %d commands", maxCommands)
 	}
 	keys := map[string]string{}
 	for i, c := range p.Commands {
@@ -764,8 +764,8 @@ func (m *Manifest) check(dir string) error {
 		seen["k:"+c.ID] = true
 		if t := strings.TrimSpace(c.Title); t == "" {
 			bad("%s: has no title", at)
-		} else if len([]rune(t)) > MaxCommandTitle {
-			bad("%s: title is longer than %d characters", at, MaxCommandTitle)
+		} else if len([]rune(t)) > maxCommandTitle {
+			bad("%s: title is longer than %d characters", at, maxCommandTitle)
 		}
 		if c.Key != "" {
 			if err := CheckCommandKey(c.Key); err != nil {

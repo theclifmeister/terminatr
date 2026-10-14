@@ -19,9 +19,9 @@ type hostFake struct {
 type scenario struct {
 	name string
 	gh   string // `gh pr view --json`; "!" prefix => error text
-	az   string // `az repos pr list`, else "!" error text
-	pol  string // `az repos pr policy list`
-	sts  string // `az devops invoke` PR statuses
+	az   string // `az rest` PR answer, else "!" error text
+	pol  string // `az rest` policy evaluations
+	sts  string // `az rest` PR statuses
 	// gl is GitLab's merge request (glab api projects/…/merge_requests/7),
 	// "" for none, "!" prefix => error text; gla its approvals.
 	gl, gla string
@@ -163,7 +163,7 @@ func CheckContract(t *testing.T, hosts []hostFake) {
 				t.Errorf("%s/%s: %v", h.name, s.name, err)
 				continue
 			}
-			if h.name == "azure" && (pr.URL != AzurePRURL(shop, 7) || pr.Head != sha) {
+			if h.name == "azure" && (pr.URL != azurePRURL(shop, 7) || pr.Head != sha) {
 				t.Errorf("%s/%s: URL %q head %q", h.name, s.name, pr.URL, pr.Head)
 			}
 			if h.name == "gitlab mod" && (pr.URL != glURL || pr.Head != sha) {

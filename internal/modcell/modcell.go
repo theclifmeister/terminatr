@@ -29,9 +29,9 @@ import (
 // Limits, so one mod can't grow the store, or the rows sent with every
 // session.list, without bound.
 const (
-	// MaxCells is how many cells a mod keeps; past it a new target is
+	// maxCells is how many cells a mod keeps; past it a new target is
 	// refused (a cell set again, or cleared, still is).
-	MaxCells = 2000
+	maxCells = 2000
 	// MaxText is the bytes of all the spans' text of one cell or status
 	// segment: a column is at most view.MaxModColumnWidth cells wide.
 	MaxText = 256
@@ -86,7 +86,7 @@ func Open(path string) *Store {
 	for _, c := range f.Cells {
 		if CheckTarget(c.Target) == nil && Check(c.Spans) == nil && c.Mod != "" && c.Column != "" && len(c.Spans) > 0 {
 			k := key{c.Mod, c.Column, c.Target}
-			if _, ok := s.cells[k]; !ok && s.count[c.Mod] < MaxCells {
+			if _, ok := s.cells[k]; !ok && s.count[c.Mod] < maxCells {
 				s.cells[k] = c.Spans
 				s.count[c.Mod]++
 			}
@@ -154,8 +154,8 @@ func (s *Store) Set(mod, column string, t proto.CellTarget, spans []widget.Span)
 		}
 	case had && slices.Equal(old, spans):
 		return false, nil
-	case !had && s.count[mod] >= MaxCells:
-		return false, fmt.Errorf("%s has %d cells, the most a mod keeps: clear some first", mod, MaxCells)
+	case !had && s.count[mod] >= maxCells:
+		return false, fmt.Errorf("%s has %d cells, the most a mod keeps: clear some first", mod, maxCells)
 	default:
 		if !had {
 			s.count[mod]++

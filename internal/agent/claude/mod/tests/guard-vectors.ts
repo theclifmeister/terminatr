@@ -1,5 +1,5 @@
 // The guard's shared test vectors: hooks/guard.ts (tests/guard.test.ts)
-// and its Go port in the server (internal/server/guardmatch_test.go) both
+// and its Go port (internal/guard/guard_test.go, TestVectors) both
 // pass every case: what the call breaks (rule, null for none) and the
 // summary journaled; and the sentence each rule gives each role. The
 // tools (each one's kind and input fields, as a manifest's [guard.tools]

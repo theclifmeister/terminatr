@@ -298,9 +298,8 @@ func NotAskable(t *tasks.Task, kind string) string {
 	return "unknown ask " + kind
 }
 
-// Answer finds question q in menu: its index, and the option's label
-// as the menu has it, or why it can't be answered with option, "" when
-// it can. Only the label itself counts (no number, no other case, no
+// Answer finds question q in menu: its index, or -1 and why it can't
+// be answered with option ("" when it can). Only the label itself counts (no number, no other case, no
 // words of the mod's own): a mod names an option, and the human
 // confirms that option of that question.
 func Answer(menu []MenuQuestion, q, option string) (int, string) {

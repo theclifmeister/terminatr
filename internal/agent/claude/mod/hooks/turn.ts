@@ -5,7 +5,7 @@ import type { TerminatrTurn } from '../types'
 // them to it. The server takes the state the mod reports over the
 // session's own channel (register.ts) in place of the command hooks.
 
-export type State = 'idle' | 'working' | 'blocked' | 'exited'
+type State = 'idle' | 'working' | 'blocked' | 'exited'
 
 // What the mod saw. A wait is a dialog the user has to answer: a
 // permission prompt or an AskUserQuestion menu, keyed by the tool and

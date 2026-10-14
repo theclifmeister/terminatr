@@ -23,32 +23,32 @@ import (
 
 // Limits on what one mod keeps here.
 const (
-	// MaxTrees is how many trees one view keeps: one for every project
+	// maxTrees is how many trees one view keeps: one for every project
 	// it runs for, and one for all.
-	MaxTrees = 64
+	maxTrees = 64
 	// MaxBytes is the JSON of all of a mod's trees together.
 	MaxBytes = 4 << 20
 	// MaxHeight is the most lines a dashboard card asks for.
 	MaxHeight = 20
 	// DefaultHeight is a card's height when the mod asks for none.
 	DefaultHeight = 8
-	// MaxCount bounds a tab's count.
-	MaxCount = 99999
+	// maxCount bounds a tab's count.
+	maxCount = 99999
 	// MaxSidebarHeight is the most body lines a sidebar.section, a
 	// coordinator.section or a details.section asks for,
-	// DefaultSidebarHeight its lines when it asks for none (a right-pane
+	// defaultSidebarHeight its lines when it asks for none (a right-pane
 	// section of a mod older than API 1.7 gets the most: OldHeight).
 	MaxSidebarHeight     = 12
-	DefaultSidebarHeight = 4
+	defaultSidebarHeight = 4
 	// MaxProjectSectionHeight is the most body lines a
-	// sidebar.project.section asks for, DefaultProjectSectionHeight its
+	// sidebar.project.section asks for, defaultProjectSectionHeight its
 	// lines when it asks for none.
 	MaxProjectSectionHeight     = 4
-	DefaultProjectSectionHeight = 2
-	// MaxBadgeSpans and MaxBadgeCells bound a sidebar section's badge,
+	defaultProjectSectionHeight = 2
+	// maxBadgeSpans and maxBadgeCells bound a sidebar section's badge,
 	// drawn on its header.
-	MaxBadgeSpans = 4
-	MaxBadgeCells = 12
+	maxBadgeSpans = 4
+	maxBadgeCells = 12
 	// iconCells is what an icon counts in a badge's cells: the widest an
 	// icon set draws one (a private-use glyph and a blank).
 	iconCells = 2
@@ -60,9 +60,9 @@ const (
 func Heights(slot string) (def, most int) {
 	switch slot {
 	case mod.SlotSidebarSection, mod.SlotCoordinatorSection, mod.SlotDetailsSection:
-		return DefaultSidebarHeight, MaxSidebarHeight
+		return defaultSidebarHeight, MaxSidebarHeight
 	case mod.SlotProjectSection:
-		return DefaultProjectSectionHeight, MaxProjectSectionHeight
+		return defaultProjectSectionHeight, MaxProjectSectionHeight
 	}
 	return DefaultHeight, MaxHeight
 }
@@ -81,11 +81,11 @@ func OldHeight(slot string, m *mod.Manifest, height int) int {
 }
 
 // CheckBadge checks a section's badge in place, as
-// widget.CheckSpans does: at most MaxBadgeSpans spans in
-// MaxBadgeCells cells, an icon counting iconCells.
+// widget.CheckSpans does: at most maxBadgeSpans spans in
+// maxBadgeCells cells, an icon counting iconCells.
 func CheckBadge(ss []widget.Span) error {
-	if len(ss) > MaxBadgeSpans {
-		return fmt.Errorf("a badge has at most %d spans, not %d", MaxBadgeSpans, len(ss))
+	if len(ss) > maxBadgeSpans {
+		return fmt.Errorf("a badge has at most %d spans, not %d", maxBadgeSpans, len(ss))
 	}
 	if err := widget.CheckSpans(ss); err != nil {
 		return err
@@ -97,8 +97,8 @@ func CheckBadge(ss []widget.Span) error {
 			n += iconCells
 		}
 	}
-	if n > MaxBadgeCells {
-		return fmt.Errorf("a badge is at most %d cells (an icon counts %d), not %d", MaxBadgeCells, iconCells, n)
+	if n > maxBadgeCells {
+		return fmt.Errorf("a badge is at most %d cells (an icon counts %d), not %d", maxBadgeCells, iconCells, n)
 	}
 	return nil
 }
@@ -211,7 +211,7 @@ func (e ErrFull) Error() string { return string(e) }
 // project the view shows); a nil tree clears it. A section's nil tree is
 // kept, as a tree that says nothing: the console then draws no section
 // there, not even its header, where one never published waits for the
-// mod (sidebar sections design §4). Such a tree counts toward MaxTrees,
+// mod (sidebar sections design §4). Such a tree counts toward maxTrees,
 // and makes room for another by going first. size is the tree's JSON
 // size.
 func (s *Store) Set(mod, view, slot string, t Tree, size int) error {
@@ -219,7 +219,7 @@ func (s *Store) Set(mod, view, slot string, t Tree, size int) error {
 	_, most := Heights(slot)
 	t.Height = min(max(t.Height, 0), most)
 	if t.Count != nil {
-		c := min(max(*t.Count, 0), MaxCount)
+		c := min(max(*t.Count, 0), maxCount)
 		t.Count = &c
 	}
 	s.mu.Lock()
@@ -230,17 +230,17 @@ func (s *Store) Set(mod, view, slot string, t Tree, size int) error {
 		s.trees[mod] = views
 	}
 	list := slices.DeleteFunc(views[view], func(o Tree) bool { return o.For(t.Project, t.Task, t.Thread) })
-	if len(list) >= MaxTrees {
+	if len(list) >= maxTrees {
 		// A tree that says nothing makes room first, the oldest of them.
 		if i := slices.IndexFunc(list, func(o Tree) bool { return o.Tree == nil }); i >= 0 {
 			list = slices.Delete(list, i, i+1)
 		}
 	}
-	if t.Tree == nil && (!isSection(slot) || len(list) >= MaxTrees) {
+	if t.Tree == nil && (!isSection(slot) || len(list) >= maxTrees) {
 		views[view] = list
 		return nil
 	}
-	if len(list) >= MaxTrees {
+	if len(list) >= maxTrees {
 		return ErrFull("a view keeps at most 64 trees: one per project (or task or thread a section shows), and one for all; clear one on view.closed")
 	}
 	total := size
