@@ -583,7 +583,7 @@ func HumanOnly(m string) bool {
 		MethodModActionCheck, MethodModActionDone, MethodSessionClear,
 		MethodSessionStart, MethodSessionStop, MethodSessionKeys, MethodSessionPrompt,
 		MethodSessionAdopt, MethodSessionAdoptAsk, MethodSessionRemote, MethodSessionModel, MethodQuestionsOpen,
-		MethodServerStop, MethodAgentReload, MethodPeerReload:
+		MethodServerStop, MethodAgentReload, MethodPeerReload, MethodPeerList:
 		return true
 	}
 	return strings.HasPrefix(m, "view.") && m != MethodViewDigest

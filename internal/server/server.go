@@ -200,6 +200,9 @@ type Server struct {
 	// peers are the links to paired servers (internal/peer); set before
 	// Run serves.
 	peers *peer.Manager
+	// mirror is what the links last read of the paired servers' shared
+	// projects (peer.list); set before Run serves.
+	mirror *peer.Mirror
 
 	// protocol is the protocol the hello claims, and deaf hangs up on
 	// every hello: test hooks (testhooks.go).
@@ -325,6 +328,9 @@ func Run(ctx context.Context, opts Options) error {
 	// projects through peerExport (§16.9), nothing else.
 	s.peers = peer.Start(peer.Options{Dir: peer.DirIn(p.Home), Version: version.Version, Logf: logger.Printf, Export: s.peerExport()})
 	defer s.peers.Close()
+	// What they share, for the consoles (§16.10).
+	s.mirror = peer.StartMirror(s.peers, peer.MirrorOptions{Logf: logger.Printf, Changed: s.watch.wake})
+	defer s.mirror.Close()
 	logger.Printf("server pid %d %s protocol %d listening on %s", os.Getpid(), s.build, proto.Protocol, p.Socket)
 	go func() {
 		if st := keychain.Probe(runtime.GOOS, os.Getenv, keychain.Run); st.Checked && !st.OK {
@@ -383,6 +389,7 @@ func Run(ctx context.Context, opts Options) error {
 		logger.Printf("stopping: requested by a client")
 	}
 	s.modelsStop()
+	s.mirror.Close()
 	s.peers.Close()
 	// The mod hosts go first: nothing waits on them.
 	stopEvents()
@@ -965,6 +972,8 @@ func (s *Server) dispatch(req proto.Request, peerPID int, human bool, who func()
 	case proto.MethodPeerReload:
 		s.peers.Reload()
 		return s.peers.Status(), nil
+	case proto.MethodPeerList:
+		return s.mirror.List(), nil
 	case proto.MethodAgentExplain:
 		var p proto.SessionIDParams
 		if err := decodeParams(req.Params, &p); err != nil {
