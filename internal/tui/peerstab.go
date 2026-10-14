@@ -1,0 +1,201 @@
+package tui
+
+import (
+	"fmt"
+	"net/url"
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/theclifmeister/terminatr/internal/proto"
+)
+
+// The Peers tab of the , popup (docs/SPEC.md §4, §16.8): the servers
+// paired with this one, as tm peer list has them (Source.Peers): each
+// one's alias, server id, link and relay; x removes the selected one,
+// asking first, as tm peer remove does. Pairing stays in a terminal (tm
+// peer pair, tm peer join): it shows a code to pass on and asks to
+// compare six digits. A project is shared from its own Settings tab.
+//
+//	" This server 4F2A-91C3"
+//	""
+//	" mini    91C3-77AB  ◉ linked · 38 ms"
+//	"         relay relay.example.net · shares 2 projects · tm 0.27.0"
+//
+// Each server is a block of lines under its own: a setting per paired
+// server goes there (remote panes, T402).
+
+// peersTab is the Peers tab: the list as last read, and the selection.
+type peersTab struct {
+	list   PeerList
+	err    error
+	loaded bool
+	sel    int
+}
+
+// peersKeys are the Peers tab's action row.
+const peersKeys = "x remove · ↑ ↓ move · ← → tabs · esc close"
+
+// load reads the paired servers again.
+func (pt *peersTab) load(m *dash) {
+	pt.list, pt.err = m.src.Peers()
+	pt.loaded = true
+	pt.sel = min(pt.sel, max(len(pt.list.Peers)-1, 0))
+}
+
+// lines draws the tab w cells wide: its lines, the selected server's
+// first line, and what a click on each line picks (a server's index).
+func (pt *peersTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
+	sel = -1
+	if !pt.loaded {
+		pt.load(m)
+	}
+	defer func() {
+		for len(hits) < len(out) {
+			hits = append(hits, noHit)
+		}
+	}()
+	l := pt.list
+	switch {
+	case pt.err != nil:
+		return []string{th().Bad.Render("The paired servers can't be read: " + oneLine(pt.err.Error()))}, -1, nil
+	case l.ID == "":
+		return faintLines("This server isn't paired with another. Pairing is done in a terminal: tm peer pair --relay URL on one server, then tm peer join CODE on the other, and both of you compare six digits.", w), -1, nil
+	}
+	out = append(out, th().Faint.Render("This server ")+l.Short)
+	if l.LinkErr != "" {
+		out = append(out, th().Bad.Render("The server can't link: "+oneLine(l.LinkErr)))
+	}
+	out = append(out, "")
+	if len(l.Peers) == 0 {
+		out = append(out, faintLines("No paired servers. Pair one in a terminal: tm peer pair --relay URL here, then tm peer join CODE on the other.", w)...)
+		return out, -1, nil
+	}
+	nameW := 4
+	for _, e := range l.Peers {
+		nameW = max(nameW, ansi.StringWidth(e.Alias))
+	}
+	nameW = min(nameW, 20)
+	for i, e := range l.Peers {
+		for len(hits) < len(out) {
+			hits = append(hits, noHit)
+		}
+		g, gst, words := peerLinkWords(m, e, l)
+		head := fit(e.Alias, nameW) + "  " + e.Short + "  "
+		if i == pt.sel {
+			sel = len(out)
+			out = append(out, th().Sel.Render(fit(head+g+" "+words, max(w-1, 1))))
+		} else {
+			out = append(out, th().Head.Render(fit(e.Alias, nameW))+"  "+th().Faint.Render(e.Short)+"  "+gst.Render(g)+" "+words)
+		}
+		hits = append(hits, i)
+		for _, d := range faintLines(peerAbout(m, e), max(w-nameW-2, 8)) {
+			out = append(out, strings.Repeat(" ", nameW+2)+d)
+			hits = append(hits, i)
+		}
+		out = append(out, "")
+	}
+	out = append(out, faintLines("x removes the selected server, as tm peer remove does: its link closes and its projects leave the sidebar; remove this server there too. A project is shared from its own Settings tab (a on the dashboard).", w)...)
+	return out, sel, hits
+}
+
+// peerLinkWords are a paired server's link glyph, its look and its
+// words: from the mirror while the dashboard polls it (it follows the
+// link as it goes), else as the list read it.
+func peerLinkWords(m *dash, e PeerEntry, l PeerList) (string, lipgloss.Style, string) {
+	var pl *peerLink
+	for _, pm := range m.data.Peers {
+		if pm.ID == e.ID {
+			pl = &peerLink{state: pm.State, reason: pm.Reason, since: pm.Since, rtt: pm.RTT}
+		}
+	}
+	if pl == nil && e.Link != nil {
+		pl = &peerLink{state: e.Link.State, reason: e.Link.Reason, since: e.Link.Since, rtt: e.Link.RTT}
+	}
+	if pl == nil {
+		words := "no link yet"
+		switch {
+		case !l.Running:
+			words = "the server isn't running"
+		case l.LinkErr != "":
+			words = "not linked"
+		}
+		g, st := linkLook(&peerLink{state: proto.LinkOffline})
+		return g, st, th().Faint.Render(words)
+	}
+	g, st := linkLook(pl)
+	words := linkWords(pl, sideClock())
+	if pl.state == proto.LinkUp {
+		words = "linked · " + words
+		if pl.rtt <= 0 {
+			words = "linked"
+		}
+	}
+	return g, st, words
+}
+
+// peerAbout is a paired server's second line: its relay, what it shares
+// with this server and its tm, as far as known.
+func peerAbout(m *dash, e PeerEntry) string {
+	bits := []string{"relay " + relayWords(e.Relay)}
+	for _, pm := range m.data.Peers {
+		if pm.ID == e.ID && pm.Watch {
+			bits = append(bits, "shares "+counted(len(pm.Projects), "project"))
+		}
+	}
+	if e.Link != nil && e.Link.Version != "" {
+		bits = append(bits, "tm "+strings.TrimPrefix(e.Link.Version, "v"))
+	}
+	if e.Link != nil && e.Link.Error != "" && e.Link.State != proto.LinkUp {
+		bits = append(bits, oneLine(e.Link.Error))
+	}
+	return strings.Join(bits, " · ")
+}
+
+// relayWords is a relay as people read it: its host for wss://.
+func relayWords(r string) string {
+	if u, err := url.Parse(r); err == nil && u.Scheme == "wss" && u.Path == "" && u.Host != "" {
+		return u.Host
+	}
+	return r
+}
+
+// key runs a key on the tab; ok is false for one it doesn't take.
+func (pt *peersTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
+	s := k.String()
+	if d, ok := scrollKeys[s]; ok {
+		pt.sel = moveSel(pt.sel, d, len(pt.list.Peers))
+		return nil, true
+	}
+	if s != "x" {
+		return nil, false
+	}
+	if pt.sel >= len(pt.list.Peers) {
+		return nil, true
+	}
+	pt.remove(m, pt.list.Peers[pt.sel].Alias)
+	return nil, true
+}
+
+// remove asks, then unpins alias and has the server close its link; the
+// tab reads the list again after.
+func (pt *peersTab) remove(m *dash, alias string) {
+	q := fmt.Sprintf("Remove %s? Its link closes at once and its projects leave the sidebar; it refuses this server until the two pair again. Remove this server on %s too (tm peer remove there).", alias, alias)
+	m.confirmNo("Remove "+alias, q, alias+" kept", func() tea.Cmd {
+		src := m.src
+		return m.act(func() actionMsg {
+			err := src.RemovePeer(alias)
+			return actionMsg{err: err, msg: "removed " + alias + "; its link closes. Remove this server on " + alias + " too.",
+				then: func(m *dash) { pt.load(m) }}
+		})
+	})
+}
+
+// click selects the server under a click.
+func (pt *peersTab) click(item int) {
+	if item >= 0 && item < len(pt.list.Peers) {
+		pt.sel = item
+	}
+}

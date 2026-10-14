@@ -342,6 +342,8 @@ func (c *client) sideTitle(r treeRow) string {
 		return r.thread
 	case treeDivider:
 		return "inactive projects"
+	case treePeerProject:
+		return r.peer + " / " + r.slug
 	}
 	return r.slug
 }
@@ -380,6 +382,13 @@ func (c *client) sideItems(r treeRow, t Target) []aitem {
 	case treeCoordinator:
 		add(coordLabel(r), "", func() { c.sideGo(t) })
 		popups()
+	case treePeerProject:
+		// A paired server's: its read-only dashboard, and its fold.
+		add("show its dashboard", "", func() { c.sideGo(t) })
+		if !r.stale {
+			label, key := foldLabel(r)
+			add(label, key, func() { c.refold(foldPeer(r, !r.fold)) })
+		}
 	default:
 		add("attach", "", func() { c.attachThread(t) })
 	}

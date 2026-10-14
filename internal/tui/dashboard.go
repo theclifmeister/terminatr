@@ -212,7 +212,9 @@ type dash struct {
 	loaded  bool
 	rows    []row
 	sel     string // key of the selected row
-	current string // the current project: the one listed (listProject)
+	current string // the current project: the one listed (listProject), or a paired server's shown (peerdash.go)
+	// remoteTop is the remote dashboard's first line shown.
+	remoteTop int
 	// focus is the area with this console's keyboard: the list, the
 	// sidebar or the details panel (tab). sideSel is the sidebar's
 	// keyboard row, the view's. sideSent is the last one sent; one is
@@ -593,7 +595,7 @@ func (m *dash) fromView() tea.Cmd {
 		m.sel = v.Selected
 	}
 	if m.current != v.Current {
-		m.current = v.Current
+		m.current, m.remoteTop = v.Current, 0
 		m.rebuild()
 	}
 	if !m.sideBusy && m.sideSel == m.sideSent {
@@ -893,7 +895,7 @@ func targetActs(t Target) bool { return t.Session != "" || t.Coordinator }
 // coordinator's row selected, on every console of the view.
 func (m *dash) showProject(slug string) tea.Cmd {
 	if m.current != slug {
-		m.current = slug
+		m.current, m.remoteTop = slug, 0
 		m.rebuild()
 	}
 	m.sel = "p:" + slug
@@ -912,7 +914,7 @@ func (m *dash) showProject(slug string) tea.Cmd {
 // current, and its row the one you are on; the keyboard's row is marked
 // while the sidebar has the focus.
 func (m *dash) tree() []treeRow {
-	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint,
+	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: m.treeCurrent(), ctxHint: m.data.ContextHint,
 		tree: sideTree(m.data.Projects, m.folds), cols: m.sideCols, cells: m.data.Cells, peers: m.data.Peers})
 	rows = sideRows(rows, m.data.NeedsFirst)
 	if bandFits(m.sideW(), m.h, m.sideFoot()) {
@@ -954,7 +956,7 @@ func (m *dash) sectionCmd(st sideStep) tea.Cmd {
 
 // fullTree is the sidebar's whole tree: nothing folded, no filter (w W).
 func (m *dash) fullTree() []treeRow {
-	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: listProject(m.data, m.current), ctxHint: m.data.ContextHint, tree: unfoldedTree(m.data.Projects), cols: m.sideCols, cells: m.data.Cells, peers: m.data.Peers})
+	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: m.treeCurrent(), ctxHint: m.data.ContextHint, tree: unfoldedTree(m.data.Projects), cols: m.sideCols, cells: m.data.Cells, peers: m.data.Peers})
 	if m.data.NeedsFirst {
 		rows = needsFirstOrder(rows)
 	}
@@ -1263,6 +1265,10 @@ func (m *dash) selected() (row, bool) {
 }
 
 func (m *dash) move(d int) {
+	if m.remoteHere() {
+		m.remoteScroll(d)
+		return
+	}
 	i := m.selIndex()
 	for j := i + d; j >= 0 && j < len(m.rows); j += d {
 		if m.rows[j].selectable() {
@@ -1328,6 +1334,9 @@ func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 		if cmd, ok := m.detailsKey(k.String()); ok {
 			return cmd
 		}
+	}
+	if cmd, ok := m.remoteKey(k.String()); ok {
+		return cmd
 	}
 	if c, ok := m.commandFor(k.String()); ok {
 		return m.runCommand(c)
@@ -1582,14 +1591,18 @@ func (m *dash) baseWindow() []string {
 		m.under = nil
 		return strings.Split(u.render(m), "\n")
 	}
-	return strings.Split(m.withSide(m.frame("", m.base(), -1, "")), "\n")
+	title := ""
+	if m.over == nil {
+		title = m.shownCrumb()
+	}
+	return strings.Split(m.withSide(m.frame(title, m.base(), -1, "")), "\n")
 }
 
 func (m *dash) renderList() string {
 	if m.over != nil {
 		return m.frame("", m.base(), -1, "")
 	}
-	return m.frame("", m.listBody(), -1, m.footKeys())
+	return m.frame(m.shownCrumb(), m.listBody(), -1, m.footKeys())
 }
 
 // overDone says the popup over a session closed: its key ran and no
@@ -1617,6 +1630,9 @@ func (m *dash) base() []string {
 // listBody is the list (and the details panel beside or under it) as
 // the body's rows, the list scrolled so the selected row shows.
 func (m *dash) listBody() []string {
+	if m.remoteHere() {
+		return m.remoteBody()
+	}
 	g := m.geom()
 	ls, dr, place := g.list(), g.details(), g.panel()
 	lines, _, sel := m.listLines(ls.w, place == "")

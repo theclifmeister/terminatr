@@ -25,11 +25,14 @@ type dashGeo struct {
 	w, h  int
 	sideW int
 	l     Layout
+	// noPanel: no details panel, whatever the layout (the remote
+	// dashboard, peerdash.go, has no rows to detail).
+	noPanel bool
 }
 
 // geom is the dashboard's geometry now.
 func (m *dash) geom() dashGeo {
-	return dashGeo{w: m.winW, h: m.h, sideW: m.sideW(), l: m.layout}
+	return dashGeo{w: m.winW, h: m.h, sideW: m.sideW(), l: m.layout, noPanel: m.remoteHere()}
 }
 
 // side is the sidebar: the window's left columns, or its right ones;
@@ -120,6 +123,7 @@ func (g dashGeo) body() rect {
 // selected thread's details then show inline under its row.
 func (g dashGeo) panel() string {
 	switch p := g.l.place(); {
+	case g.noPanel:
 	case p == placeRight && g.main().w >= splitMin:
 		return placeRight
 	case p == placeBottom && g.body().h >= bottomMin:
