@@ -1,0 +1,51 @@
+# tm relay behind Caddy, which gets and renews a certificate by ACME
+# (Let's Encrypt) and passes the WebSocket on (docs/OPERATIONS.md, Running
+# a relay). The relay itself serves plain HTTP on an internal network and
+# trusts only Caddy's X-Forwarded-For, so its per-address limits count
+# real clients.
+#
+#   RELAY_HOST=relay.example.net docker compose -f compose.acme.yaml up -d --build
+#
+# Needs ports 80 and 443 reachable from the internet and RELAY_HOST's DNS
+# pointing at this host. tm's link then dials wss://$RELAY_HOST.
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      RELAY_HOST: ${RELAY_HOST:?set RELAY_HOST to the relay's DNS name}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [relay]
+    depends_on: [relay]
+
+  relay:
+    build:
+      context: .
+      args:
+        TM_VERSION: latest # pin a tag, e.g. v0.27.0
+    image: tm-relay
+    restart: unless-stopped
+    command: ["--listen", ":8080", "--plain", "--trusted-proxy", "172.30.53.0/24"]
+    expose: ["8080"] # never published: only Caddy reaches it
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    pids_limit: 256
+    networks: [relay]
+
+networks:
+  relay:
+    ipam:
+      config:
+        - subnet: 172.30.53.0/24
+
+volumes:
+  caddy-data:
+  caddy-config:
