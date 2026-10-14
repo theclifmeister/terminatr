@@ -29,6 +29,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modnotify"
 	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/peer"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/relay"
@@ -379,6 +380,88 @@ type ServerSource struct {
 
 	mu  sync.Mutex
 	ctl *server.Client
+	// slow is what Load reads that an install, a setting or an edit
+	// changes (slowCache).
+	slow slowCache
+}
+
+// slowMaxAge is how long what slowCache read serves at most, for what
+// its stamp doesn't see: a mod's data file edited in its folder's
+// subfolder, an agent installed on the PATH.
+const slowMaxAge = 5 * time.Second
+
+// slowCache is what the dashboard's Load reads that changes only on an
+// install, a setting or an edit: the config, the mods' registry with
+// their data files' checks, and whether any agent is installed. It reads
+// them again when the stamp of config.toml, the mods and agents folders,
+// each mod's folder and manifest changes, or slowMaxAge after.
+type slowCache struct {
+	mu       sync.Mutex // Loads may overlap: a tick's and an action's
+	stamp    uint64
+	at       time.Time
+	modsDirs []string // the mods folder's entries, for the stamp
+	slowData
+}
+
+// slowData is what slowCache read. Its callers only read it.
+type slowData struct {
+	cfg     *config.Config // nil when it doesn't load
+	reg     *mod.Registry
+	regErr  error
+	modData map[string]string
+	noAgent bool
+}
+
+// load is what it read, read again where its stamp changed; agentsDir
+// is the agents' folder.
+func (sc *slowCache) load(agentsDir string) slowData {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	st := sc.stampNow(agentsDir)
+	if !sc.at.IsZero() && st == sc.stamp && time.Since(sc.at) < slowMaxAge {
+		return sc.slowData
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		cfg = nil
+	}
+	sc.cfg = cfg
+	sc.reg, sc.regErr = mod.Load(cfg)
+	sc.modData = nil
+	if sc.regErr == nil {
+		sc.modData = modData(sc.reg.Mods)
+	}
+	sc.noAgent = false
+	if reg, _ := agent.Load(agentsDir); reg != nil {
+		sc.noAgent = len(models.Installed(reg, nil)) == 0
+	}
+	sc.modsDirs = nil
+	if dir, err := home.ModsDir(); err == nil {
+		if ents, err := os.ReadDir(dir); err == nil {
+			for _, e := range ents {
+				sc.modsDirs = append(sc.modsDirs, filepath.Join(dir, e.Name()))
+			}
+		}
+	}
+	// Stamped after the reads, with the mods they found: a change while
+	// reading shows slowMaxAge later at most.
+	sc.stamp, sc.at = sc.stampNow(agentsDir), time.Now()
+	return sc.slowData
+}
+
+// stampNow is the stamp of the files load reads: config.toml, the mods
+// folder, each mod's folder and manifest as the last load listed them,
+// the agents folder.
+func (sc *slowCache) stampNow(agentsDir string) uint64 {
+	path, _ := config.Path()
+	paths := []string{path, agentsDir}
+	if dir, err := home.ModsDir(); err == nil {
+		paths = append(paths, dir)
+	}
+	for _, d := range sc.modsDirs {
+		paths = append(paths, d, filepath.Join(d, mod.ManifestFile))
+	}
+	return fsx.StatStamp(paths...)
 }
 
 // call makes one control call, reconnecting once if the connection broke.
@@ -426,14 +509,12 @@ func (s *ServerSource) Load() Data {
 		}
 		d.Server = ServerInfo{Version: res.Version, Build: res.Build, Latest: res.Latest, Upgrade: res.Upgrade}
 	}
-	cfg, err := config.Load()
-	if err != nil {
-		cfg = nil
-	}
-	if reg, err := mod.Load(cfg); err != nil {
-		d.ModsErr = err.Error()
+	sc := s.slow.load(s.Paths.AgentsDir())
+	cfg := sc.cfg
+	if sc.regErr != nil {
+		d.ModsErr = sc.regErr.Error()
 	} else {
-		d.Mods, d.ModData, d.ModCommands = reg.Mods, modData(reg.Mods), reg.Commands()
+		d.Mods, d.ModData, d.ModCommands = sc.reg.Mods, sc.modData, sc.reg.Commands()
 	}
 	if d.ServerOK {
 		d.Peers = loadPeers(s.call)
@@ -453,22 +534,21 @@ func (s *ServerSource) Load() Data {
 			d.Defaults = &all
 		}
 	}
-	if reg, _ := agent.Load(s.Paths.AgentsDir()); reg != nil {
-		d.NoAgent = len(models.Installed(reg, nil)) == 0
-	}
+	d.NoAgent = sc.noAgent
 	list, err := project.List()
 	if err != nil && d.Err == "" {
 		d.Err = err.Error()
 	}
 	badgers := badgeMods(d.Mods)
-	fails := ticker.HostFails(ticker.StatePath(s.Paths.Sessions))
+	tick := ticker.Load(ticker.StatePath(s.Paths.Sessions))
+	fails := tick.HostFails()
 	for _, sum := range list {
 		if sum.Safety != nil && sum.Safety.Archived {
 			continue // hidden: tm project unarchive brings it back
 		}
 		pd := ProjectData{Slug: sum.Slug, Goal: sum.Goal, Repos: sum.Repos,
 			Counts: sum.Counts, Safety: sum.Safety, Own: sum.Own, Err: sum.Error,
-			Checkouts: ticker.Checkouts(ticker.StatePath(s.Paths.Sessions), sum.Slug)}
+			Checkouts: tick.Checkouts(sum.Slug)}
 		if p, err := project.Open(sum.Slug); err == nil {
 			b, err := p.Tasks().Load()
 			if err != nil {
@@ -483,7 +563,7 @@ func (s *ServerSource) Load() Data {
 			}
 			recs, _ := thread.List(p)
 			pd.TaskUsage, pd.Usage = thread.TaskUsage(recs)
-			prs := ticker.PRs(ticker.StatePath(s.Paths.Sessions), sum.Slug)
+			prs := tick.PRs(sum.Slug)
 			for _, r := range recs {
 				if r.State == thread.Resolved {
 					continue
