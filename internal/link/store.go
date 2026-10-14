@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/home"
@@ -21,6 +22,9 @@ type store struct {
 	Next    int                `json:"next"`
 	Buckets map[string]*bucket `json:"buckets,omitempty"` // "<from>><to>"
 	Pairs   map[string]*pair   `json:"pairs,omitempty"`   // the two slugs, sorted, "a|b"
+	// Held are the messages waiting for the user's OK, by "<from>><to>",
+	// so a look at the links reads no message files.
+	Held map[string][]string `json:"held,omitempty"`
 }
 
 // bucket is one direction's token bucket (PerHour, Burst).
@@ -62,7 +66,19 @@ func loadStore(file string) *store {
 	if s.Pairs == nil {
 		s.Pairs = map[string]*pair{}
 	}
+	if s.Held == nil {
+		s.Held = map[string][]string{}
+	}
 	return s
+}
+
+// unhold takes message id off from → to's held list.
+func (s *store) unhold(from, to, id string) {
+	k := from + ">" + to
+	s.Held[k] = slices.DeleteFunc(s.Held[k], func(x string) bool { return x == id })
+	if len(s.Held[k]) == 0 {
+		delete(s.Held, k)
+	}
 }
 
 // withStore runs fn on the store under its lock and saves it when fn

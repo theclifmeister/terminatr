@@ -372,6 +372,7 @@ func Send(c caller.Caller, from *project.Project, toSlug string, o Opts) (*Messa
 		}
 		m.ID = s.nextID()
 		if ask {
+			s.Held[from.Slug+">"+to.Slug] = append(s.Held[from.Slug+">"+to.Slug], m.ID)
 			m.State = StateHeld
 			if err := write(from, m); err != nil {
 				return err
@@ -555,9 +556,13 @@ func Approve(c caller.Caller, p *project.Project, id string, approved bool) (*Me
 		return nil, refuse(code, "%s", msg)
 	}
 	err = withStore(func(s *store) error {
+		if err := stillHeld(p, m); err != nil {
+			return err
+		}
 		if err := s.allow(p.Slug, to.Slug, true, now()); err != nil {
 			return err
 		}
+		s.unhold(p.Slug, to.Slug, m.ID)
 		// The user's OK is the user's input on the link.
 		user := caller.Caller{Kind: caller.Human}
 		if err := s.deliver(user, p, to, m, nil); err != nil {
@@ -589,13 +594,30 @@ func Drop(c caller.Caller, p *project.Project, id string, approved bool) (*Messa
 	if err != nil {
 		return nil, err
 	}
-	if err := update(p, m.Peer, m.ID, func(x *Message) { x.State = StateDropped }); err != nil {
+	err = withStore(func(s *store) error {
+		if err := stillHeld(p, m); err != nil {
+			return err
+		}
+		s.unhold(p.Slug, m.Peer, m.ID)
+		return update(p, m.Peer, m.ID, func(x *Message) { x.State = StateDropped })
+	})
+	if err != nil {
 		return nil, err
 	}
 	m.State = StateDropped
 	p.Journal(c, "link.drop", m.Peer, approvedWords(c, m.ID))
 	doneHeld(p, m.ID)
 	return m, nil
+}
+
+// stillHeld refuses a held message another approve or drop handled
+// since it was read; the store is locked.
+func stillHeld(p *project.Project, m *Message) error {
+	cur, err := readFile(path(p, m.Peer, m.ID), m.Peer)
+	if err != nil || cur.State != StateHeld {
+		return refuse("not-held", "%s doesn't wait for the user's OK any more", m.ID)
+	}
+	return nil
 }
 
 // doneHeld moves the link-held items of message id to done.
@@ -663,6 +685,26 @@ func Paused(a, b string) bool {
 	paused := false
 	readStore(func(s *store) { paused = s.Pairs[pairKey(a, b)] != nil && s.Pairs[pairKey(a, b)].Paused })
 	return paused
+}
+
+// looked is what a look at the links needs from the store: which pairs
+// are paused and how many messages wait, by direction.
+type looked struct {
+	paused map[string]bool
+	held   map[string]int
+}
+
+func look() looked {
+	l := looked{paused: map[string]bool{}, held: map[string]int{}}
+	readStore(func(s *store) {
+		for k, p := range s.Pairs {
+			l.paused[k] = p.Paused
+		}
+		for k, ids := range s.Held {
+			l.held[k] = len(ids)
+		}
+	})
+	return l
 }
 
 // Set writes project slug's entry for other (config.SetLink) as the

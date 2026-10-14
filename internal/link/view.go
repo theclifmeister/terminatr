@@ -1,7 +1,9 @@
 package link
 
 import (
+	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/config"
@@ -82,6 +84,7 @@ func Rows(cfg *config.Config, p *project.Project) []Row {
 	slices.Sort(peers)
 	mine, _ := cfg.Links(p.Slug)
 	items, _ := p.Inbox()
+	st := look()
 	var out []Row
 	for _, o := range peers {
 		theirs, _ := cfg.Links(o)
@@ -90,38 +93,41 @@ func Rows(cfg *config.Config, p *project.Project) []Row {
 		r.Theirs, r.HasTheirs = theirs[p.Slug]
 		r.Send = r.Mine.Sends() && r.Theirs.Receives()
 		r.Receive = r.Mine.Receives() && r.Theirs.Sends()
-		r.Paused = Paused(p.Slug, o)
+		r.Paused = st.paused[pairKey(p.Slug, o)]
+		r.Held = st.held[p.Slug+">"+o]
 		for _, it := range items {
 			if it.Kind == KindMessage && it.Subject == o {
 				r.Unread++
 			}
 		}
-		if log, err := Log(p, o); err == nil {
-			for _, m := range log {
-				if m.Out && m.State == StateHeld {
-					r.Held++
-				}
-			}
-			if n := len(log); n > 0 {
-				r.Last, r.LastAt = log[n-1].ID, log[n-1].Created
-			}
+		if m := newest(p, o); m != nil {
+			r.Last, r.LastAt = m.ID, m.Created
 		}
 		out = append(out, r)
 	}
 	return out
 }
 
-// Pending are p's held messages, oldest first: what the dashboard's
-// NEEDS YOU lists for the user's OK.
-func Pending(p *project.Project) []*Message {
-	var out []*Message
-	for _, o := range Peers(p) {
-		log, _ := Log(p, o)
-		for _, m := range log {
-			if m.Out && m.State == StateHeld {
-				out = append(out, m)
-			}
+// newest is p's newest message with other, by id, read alone: a look
+// at the links parses no other message.
+func newest(p *project.Project, other string) *Message {
+	ents, _ := os.ReadDir(dir(p, other))
+	best, bestN := "", -1
+	for _, e := range ents {
+		id, ok := strings.CutSuffix(e.Name(), ".md")
+		if !ok || e.IsDir() || !ValidID(id) {
+			continue
+		}
+		if n := idNum(id); n > bestN {
+			best, bestN = id, n
 		}
 	}
-	return out
+	if best == "" {
+		return nil
+	}
+	m, err := readFile(path(p, other, best), other)
+	if err != nil {
+		return nil
+	}
+	return m
 }
