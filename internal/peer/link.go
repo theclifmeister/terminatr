@@ -39,7 +39,9 @@ type link struct {
 	cert  tls.Certificate
 	t     Transport
 	hello Hello
-	logf  func(string, ...any)
+	// methods answer the peer's requests (the peer dispatcher's).
+	methods map[string]handler
+	logf    func(string, ...any)
 	// backoff is the wait after n failures (a test shortens it).
 	backoff func(n int) time.Duration
 
@@ -160,11 +162,13 @@ func (l *link) once(ctx context.Context) (up bool, err error) {
 		return false, handshakeErr(err)
 	}
 	s := newSession(tc)
+	s.methods = l.methods
 	peer, err := s.hello(l.hello)
 	l.mu.Lock()
 	l.st.Version, l.st.LinkProtocol, l.st.Caps = peer.Version, peer.LinkProtocol, peer.Caps
 	l.mu.Unlock()
 	if err != nil {
+		s.cancel()
 		return false, err
 	}
 	l.mu.Lock()
@@ -182,6 +186,20 @@ func (l *link) once(ctx context.Context) (up bool, err error) {
 	l.sess = nil
 	l.mu.Unlock()
 	return true, err
+}
+
+// errNotUp: a call on a link that isn't up.
+var errNotUp = errors.New("the link isn't up")
+
+// call sends the peer a request over the live session.
+func (l *link) call(ctx context.Context, method string, params, result any) error {
+	l.mu.Lock()
+	s := l.sess
+	l.mu.Unlock()
+	if s == nil {
+		return errNotUp
+	}
+	return s.call(ctx, method, params, result)
 }
 
 // refusedError: the TLS handshake failed on the keys, not on the

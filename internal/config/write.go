@@ -215,13 +215,13 @@ func validKey(key string) bool {
 // ProjectKeys are the settings of a [projects.<slug>] table; all but
 // ProjectOnly are also those of [defaults], and DefaultsOnly are only
 // those of [defaults].
-var ProjectKeys = []string{"start_threads", "yolo", "coordinator_approves", "parallel_threads", "global_parallel_threads", "auto_close", "auto_close_days", "auto_resolve", "pr_followup", "pr_poll_seconds", "complete_tasks", "coordinator_remote_control", "auto_clear", "coordinator_merges", "fast_forward_checkout", "sandbox_escapes", "thread_agent", "coordinator_agent", "models", "coordinator_model", "active", "paused", "archived", "pinned",
+var ProjectKeys = []string{"start_threads", "yolo", "coordinator_approves", "parallel_threads", "global_parallel_threads", "auto_close", "auto_close_days", "auto_resolve", "pr_followup", "pr_poll_seconds", "complete_tasks", "coordinator_remote_control", "auto_clear", "coordinator_merges", "fast_forward_checkout", "sandbox_escapes", "thread_agent", "coordinator_agent", "models", "coordinator_model", "active", "paused", "archived", "pinned", "share",
 	"archive_tasks_days", "archive_threads_days", "archive_inbox_days", "archive_journal_days"}
 
 // ProjectOnly are a project's own state, never all projects': an
-// inactive, paused, archived or pinned [defaults] would stop, hide or
-// pin every project.
-var ProjectOnly = []string{"active", "paused", "archived", "pinned"}
+// inactive, paused, archived, pinned or shared [defaults] would stop,
+// hide, pin or share every project.
+var ProjectOnly = []string{"active", "paused", "archived", "pinned", "share"}
 
 // DefaultsOnly are all projects' settings, never a project's: the
 // global cap counts the threads of every project.

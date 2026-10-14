@@ -1607,3 +1607,40 @@ func TestGlobalThreadsSetting(t *testing.T) {
 		t.Fatalf("project's row:\n%s", out)
 	}
 }
+
+// TestProjectShareRow: the Settings tab's last row shares the project
+// with paired servers; turning it on asks first, off doesn't.
+func TestProjectShareRow(t *testing.T) {
+	src, m := popupData(t)
+	keyPress(m, "a")
+	keyPress(m, "4")
+	for range 10 {
+		keyPress(m, "pgdown")
+	}
+	if out := screen(m); !strings.Contains(lineWith(out, "Shared with paired servers"), "off") {
+		t.Fatalf("no Shared row, or on:\n%s", out)
+	}
+	act(m, src, "enter")
+	if _, ok := m.top().(*confirmView); !ok {
+		t.Fatalf("sharing didn't ask: %T", m.top())
+	}
+	act(m, src, "n")
+	if cfg, _ := config.Load(); must(cfg.Safety("alpha")).Share {
+		t.Fatal("n shared it")
+	}
+	act(m, src, "enter")
+	act(m, src, "y")
+	if cfg, _ := config.Load(); !must(cfg.Safety("alpha")).Share {
+		t.Fatal("y left it unshared")
+	}
+	if out := screen(m); !strings.Contains(lineWith(out, "Shared with paired servers"), "on") {
+		t.Fatalf("row after y:\n%s", out)
+	}
+	act(m, src, "enter")
+	if _, ok := m.top().(*confirmView); ok {
+		t.Fatal("unsharing asked")
+	}
+	if cfg, _ := config.Load(); must(cfg.Safety("alpha")).Share {
+		t.Fatal("enter left it shared")
+	}
+}

@@ -27,6 +27,12 @@ const (
 	// it. It has fewer rights than any agent, and is journaled as
 	// "mod:<id>".
 	Mod Kind = "mod"
+	// Peer is a paired server reading through a link (docs/SPEC.md
+	// §16.9). It never comes from the environment or the socket: the
+	// link's dispatcher names it, and it reaches only the peer.* methods.
+	// It has no rights beyond reading shared projects, and is journaled
+	// as "peer:<alias>".
+	Peer Kind = "peer"
 )
 
 // Caller is one tm invocation's identity.
@@ -35,6 +41,7 @@ type Caller struct {
 	Project string // the agent's project slug; empty for the human
 	Thread  string // the thread id, e.g. "t-0003", for Kind == Thread
 	Mod     string // the mod's id, e.g. "auto-labeller", for Kind == Mod
+	Alias   string // the paired server's alias, e.g. "mini", for Kind == Peer
 	// Session is the session the server's pid walk placed the caller in
 	// (any role, a shell's too), which session-addressed calls are scoped
 	// to (docs/SPEC.md §11.1). The environment never sets it.
@@ -44,9 +51,15 @@ type Caller struct {
 // ForMod is the caller for mod id's brokered calls.
 func ForMod(id string) Caller { return Caller{Kind: Mod, Mod: id} }
 
+// ForPeer is the caller for the paired server alias's link requests.
+func ForPeer(alias string) Caller { return Caller{Kind: Peer, Alias: alias} }
+
 // IsAgent reports whether the caller is not the human: a coordinator or
-// thread agent, or a mod. Every human-only check refuses all three.
-func (c Caller) IsAgent() bool { return c.Kind == Coordinator || c.Kind == Thread || c.Kind == Mod }
+// thread agent, a mod or a paired server. Every human-only check refuses
+// them all.
+func (c Caller) IsAgent() bool {
+	return c.Kind == Coordinator || c.Kind == Thread || c.Kind == Mod || c.Kind == Peer
+}
 
 // String is the name used in the journal: "human", "coordinator", the
 // thread id or "mod:<id>".
@@ -56,6 +69,8 @@ func (c Caller) String() string {
 		return c.Thread
 	case c.Kind == Mod:
 		return "mod:" + c.Mod
+	case c.Kind == Peer:
+		return "peer:" + c.Alias
 	}
 	return string(c.Kind)
 }
@@ -95,6 +110,8 @@ func FromLookup(getenv func(string) string) Caller {
 // rank orders kinds by how much they may do: the narrower, the higher.
 func rank(k Kind) int {
 	switch k {
+	case Peer:
+		return 4
 	case Mod:
 		return 3
 	case Thread:

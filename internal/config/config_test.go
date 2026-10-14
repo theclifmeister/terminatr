@@ -123,6 +123,8 @@ func TestBadSettings(t *testing.T) {
 		"[defaults]\npaused = false\n":                     "defaults can't set active, paused, archived or pinned",
 		"[defaults]\nactive = false\n":                     "defaults can't set active, paused, archived or pinned",
 		"[defaults]\npinned = true\n":                      "defaults can't set active, paused, archived or pinned",
+		"[defaults]\nshare = true\n":                       "defaults can't set share",
+		"[projects.demo]\nshare = \"yes\"\n":               "share",
 		"[defaults]\nparallel_threads = 100\n":             "defaults.parallel_threads must be 1 to 99",
 		"[defaults]\nglobal_parallel_threads = -1\n":       "defaults.global_parallel_threads must be 0 (no cap) to 999",
 		"[projects.demo]\nglobal_parallel_threads = 5\n":   "projects.demo can't set global_parallel_threads",
