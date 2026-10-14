@@ -1,10 +1,14 @@
 package tui
 
 import (
+	"errors"
+	"net"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/view"
@@ -199,7 +203,7 @@ func TestPeersTab(t *testing.T) {
 		"relay relay.example.net · shares 2 projects · tm 0.27.0",
 		"nas   A1B2-C3D4  ○ offline 4m · relay",
 		"relay relay.example.net:8443 · shares 1 project · dial: refused",
-		"p panes · x remove · ↑ ↓ move · ← → tabs · esc close",
+		"n pair · j join · p panes · x remove · ↑ ↓ move · ← → tabs · esc close",
 		"panes: off · it can't open this server's panes",
 	} {
 		if !strings.Contains(out, want) {
@@ -228,8 +232,8 @@ func TestPeersTab(t *testing.T) {
 	} {
 		src.peers = want
 		sv.peers.load(m)
-		if out := screen(m); !strings.Contains(out, list) {
-			t.Errorf("missing %q in\n%s", list, out)
+		if out := screen(m); !strings.Contains(out, list) || !strings.Contains(out, "No relay yet?") {
+			t.Errorf("missing %q or the relay hint in\n%s", list, out)
 		}
 	}
 }
@@ -268,5 +272,138 @@ func TestPeersTabPanes(t *testing.T) {
 	}
 	if !slices.Equal(src.panesSet, []string{"mini view", "mini type", "mini off"}) || sv.peers.list.Peers[0].Panes != "off" {
 		t.Fatalf("set %v, now %+v", src.panesSet, sv.peers.list.Peers[0])
+	}
+}
+
+// pairStep runs a pairing's waiting command and takes the step it
+// brings, returning the next one's.
+func pairStep(t *testing.T, m *dash, cmd tea.Cmd) tea.Cmd {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("no pairing step to wait for")
+	}
+	msg, ok := cmd().(pairMsg)
+	if !ok {
+		t.Fatalf("not a pairing step: %T", msg)
+	}
+	_, next := m.Update(msg)
+	return next
+}
+
+// TestPeersTabPair: n asks for the relay, starting from the last one
+// used; the code shows once it works, then the other server and its six
+// digits, and y pins it: the list reads it, selected, and the footer
+// says so without the code.
+func TestPeersTabPair(t *testing.T) {
+	m, src := remoteDash(t, "@mini/acme-api")
+	src.peers = peersList()
+	press(m, ",", "4")
+	screen(m)
+	press(m, "n")
+	in, ok := m.top().(*inputView)
+	if !ok || in.text != "wss://relay.example.net:8443" {
+		t.Fatalf("n: %T %+v", m.top(), m.top())
+	}
+	cmd := press(m, "enter")
+	if _, ok := m.top().(*pairView); !ok {
+		t.Fatalf("enter: %T", m.top())
+	}
+	cmd = pairStep(t, m, cmd)
+	out := screen(m)
+	for _, want := range []string{"Pair a server", "Pairing code (works once, for 10 minutes; 10:00 left)", "relay.example.net/7Q4M-K2XD-9HVA-PT3C", "Waiting for the other server"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in\n%s", want, out)
+		}
+	}
+	cmd = pairStep(t, m, cmd)
+	out = screen(m)
+	for _, want := range []string{"The other server: studio.local", "server id 77AB-91C3 · tm 0.27.0", "Check: 381 204", "Pair only if the other side shows the same six digits.", "y they match · n they don't · esc cancel"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in\n%s", want, out)
+		}
+	}
+	press(m, "y")
+	pairStep(t, m, cmd)
+	sv, ok := m.top().(*settingsView)
+	if !ok {
+		t.Fatalf("after: %T", m.top())
+	}
+	if !slices.Equal(src.pairs, []string{"pair wss://relay.example.net:8443"}) || m.msg != "paired with studio; its link comes up in a moment" {
+		t.Errorf("pairs %v, %q", src.pairs, m.msg)
+	}
+	if sv.peers.sel != 2 || !strings.Contains(screen(m), "studio  77AB-91C3") {
+		t.Errorf("sel %d:\n%s", sv.peers.sel, screen(m))
+	}
+}
+
+// TestPeersTabJoin: j takes a code, shows the six digits; n says no,
+// and the popup says why with enter to try again, which asks for the
+// code again as typed.
+func TestPeersTabJoin(t *testing.T) {
+	m, src := remoteDash(t, "@mini/acme-api")
+	press(m, ",", "4")
+	if out := screen(m); !strings.Contains(out, "Press n to pair") {
+		t.Errorf("empty tab:\n%s", out)
+	}
+	press(m, "j")
+	if in, ok := m.top().(*inputView); !ok || in.text != "" {
+		t.Fatalf("j: %T", m.top())
+	}
+	press(m, "r", "/", "x")
+	cmd := pairStep(t, m, press(m, "enter"))
+	if !strings.Contains(screen(m), "Check: 381 204") {
+		t.Fatalf("join:\n%s", screen(m))
+	}
+	press(m, "n")
+	pairStep(t, m, cmd)
+	out := screen(m)
+	if !strings.Contains(out, "Not paired: the digits weren't confirmed here") || !strings.Contains(out, "enter try again · esc close") {
+		t.Fatalf("after n:\n%s", out)
+	}
+	press(m, "enter")
+	if in, ok := m.top().(*inputView); !ok || in.text != "r/x" || in.title != "Join a server" {
+		t.Fatalf("enter: %T", m.top())
+	}
+	if !slices.Equal(src.pairs, []string{"join r/x"}) || len(src.peers.Peers) != 0 {
+		t.Errorf("pairs %v, peers %v", src.pairs, src.peers.Peers)
+	}
+}
+
+// TestPeersTabPairErrors: a relay that can't be reached says so in the
+// popup; esc while the code waits cancels the pairing and closes it.
+func TestPeersTabPairErrors(t *testing.T) {
+	m, src := remoteDash(t, "@mini/acme-api")
+	press(m, ",", "4")
+	screen(m)
+	src.pairErr = pairWords(&net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}, "wss://relay.example.net")
+	press(m, "n", "r", "e", "l", "a", "y")
+	pairStep(t, m, press(m, "enter"))
+	if out := screen(m); !strings.Contains(out, "Not paired: can't reach the relay relay.example.net") {
+		t.Fatalf("unreachable:\n%s", out)
+	}
+	press(m, "esc")
+	if _, ok := m.top().(*settingsView); !ok {
+		t.Fatalf("esc: %T", m.top())
+	}
+
+	src.pairErr = nil
+	press(m, "n", "r", "e", "l", "a", "y")
+	cmd := pairStep(t, m, press(m, "enter"))
+	pv := m.top().(*pairView)
+	press(m, "esc")
+	if _, ok := m.top().(*settingsView); !ok || m.msg != "not paired" {
+		t.Fatalf("esc: %T %q", m.top(), m.msg)
+	}
+	// The pairing ends unconfirmed; its steps find no popup.
+	msg := cmd().(pairMsg)
+	if msg.offer == nil {
+		t.Fatalf("step %+v", msg)
+	}
+	m.Update(msg)
+	if end := <-pv.events; !end.done || end.err == nil {
+		t.Fatalf("end %+v", end)
+	}
+	if strings.Contains(m.msg, "7Q4M") {
+		t.Errorf("the code in the footer: %q", m.msg)
 	}
 }

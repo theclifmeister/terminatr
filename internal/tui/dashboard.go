@@ -746,6 +746,8 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case pairMsg:
+		return m, msg.pv.step(m, msg)
 	case actionMsg:
 		m.busy = false
 		if msg.pick != "" {

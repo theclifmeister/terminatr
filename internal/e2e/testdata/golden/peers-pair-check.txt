@@ -1,0 +1,30 @@
+ PROJECTS                          │ tm dashboard                                     ● server ok · 0 sessions
+ no projects                       │  no projects; n creates one
+                                   │ OTHER SESSIONS ──────────────────────────────────────────────────────────
+           ╭─ Settings ───────────────────────────────────────────────────────────────────────────╮
+           │  1 General   2 All projects   3 Mods   4 Peers                                       │
+           │ About: tm dev · server dev · update check on                                         │
+           │                                                                                      │
+           │ This server isn't paired with another. Press n to pair: it shows a code to pass on,  │
+           │ and j on the other server takes it (or tm peer pair and tm peer join in a terminal); │
+           │ both of yo╭─ Pair a server ──────────────────────────────────────────────╮           │
+           │ No relay y│ The other server: <host> │ain NAME   │
+           │ (see the R│ server id <id> · tm <version> │           │
+           │           │                                                              │           │
+           │ Paired ser│ Check: <check>                                               │idebar;    │
+           │ you see th│                                                              │           │
+           │           │ Pair only if the other side shows the same six digits. Do    │           │
+           │           │ they match?                                                  │           │
+           │           │                                                              │           │
+           │           │                                                              │           │
+           │           │ y they match · n they don't · esc cancel                     │           │
+           │           ╰──────────────────────────────────────────────────────────────╯           │
+           │                                                                                      │
+           │                                                                                      │
+           │                                                                                      │
+           │                                                                                      │
+           │ n pair · j join · p panes · x remove · ↑ ↓ move · ← → tabs · esc close               │
+ ──────────╰──────────────────────────────────────────────────────────────────────────────────────╯
+                                   │──────────────────────────────────────────────────────────────────────────
+                                   │
+ tab sidebar · ? help              │

@@ -333,7 +333,7 @@ Behind your own reverse proxy (nginx, Traefik, the NAS's), run the relay with `-
 
 ### Pairing two servers
 
-With the relay up, pair the two servers once, each of you in your own terminal (an agent can't). On one (here `studio`):
+With the relay up, pair the two servers once, each of you in your own terminal or console (an agent can't). In the console it is the settings' Peers tab (`,`, then `4`): `n` on one server asks for the relay and shows the code, `j` on the other takes it, and both show the six digits to compare, with `y` or `n`; `esc` cancels. In a terminal, on one (here `studio`):
 
 ```
 $ tm peer pair --relay relay.example.net --as mini
@@ -353,7 +353,7 @@ $ tm peer join relay.example.net/7Q4M-K2XD-9HVA-PT3C --as studio
 
 Both terminals then show the other server's name and id and the same six digits, `Check: 418 207`. Compare them (read them aloud, or paste them in the chat) and answer `y` on both sides only when they match; different digits mean someone else is in between, so answer `n` and make a new code. Each side pins the other's key once both said yes. `--as` names the other server here (by default its host name); the code is the relay's host and 16 letters and digits, and case, hyphens, `O`/`0` and `I`/`L`/`1` don't matter when you type it. A code works once; a join that says nobody is pairing with it was mistyped, has expired or was used. Later pairings use the same relay without `--relay`.
 
-`tm peer list` shows this server's id and each paired server with its link; `tm peer remove mini` drops one at once (remove this server on the other side too). The console has the same list in its settings (`,`, then `4 Peers`): each server's name, id, link and relay, and `x` removes the selected one after asking. `tm peer rotate` gives this server a new key, for a key you think was copied: every paired server then refuses it until you pair again with each (`tm peer pair --as mini` here, `tm peer join` there).
+`tm peer list` shows this server's id and each paired server with its link; `tm peer remove mini` drops one at once (remove this server on the other side too). The console has the same list in its settings (`,`, then `4 Peers`): each server's name, id, link and relay; `x` removes the selected one after asking, and `n` and `j` pair as above. `tm peer rotate` gives this server a new key, for a key you think was copied: every paired server then refuses it until you pair again with each (`tm peer pair --as mini` here, `tm peer join` there).
 
 ### Sharing a project
 

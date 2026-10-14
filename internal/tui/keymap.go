@@ -69,6 +69,8 @@ var settingsKeys = []keyHelp{
 	{"+ -", "on a number: one step up / down"},
 	{"← → 1 2", "the , settings: General, or All projects (the settings every project follows unless it sets its own)"},
 	{"x", "on a project's setting it sets itself (its Settings tab): follow all projects again"},
+	{"n j", "on the , settings' Peers tab: pair with another server through a relay, or join the pairing code another shows; both compare six digits (j doesn't move there: ↓ does)"},
+	{"x p", "on the Peers tab: remove the selected server (asks first), or step its pane switch"},
 	{"esc", "close"},
 }
 
