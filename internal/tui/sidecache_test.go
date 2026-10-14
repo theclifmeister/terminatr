@@ -1,10 +1,20 @@
 package tui
 
 import (
+	"context"
 	"io"
 	"log"
+	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
+
+	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/plat/ipc"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -28,52 +38,121 @@ func cacheProject(t *testing.T) (*project.Project, *thread.Record) {
 	return p, r
 }
 
-// TestSideCacheChanges: a load with nothing changed reads nothing and
-// says so, keeping the same list; a thread's new status, a new thread,
-// a new project and an archive all show on the next load.
-func TestSideCacheChanges(t *testing.T) {
-	p, r := cacheProject(t)
-	var sc sideCache
-	paths := server.Paths{Sessions: t.TempDir() + "/sessions"}
-	list, changed := sc.load(paths)
-	if !changed || len(list) != 1 || len(list[0].Threads) != 1 {
-		t.Fatalf("first load: %v %+v", changed, list)
+// startServer runs a server for the test, under a fresh home and
+// socket, and stops it at the test's end.
+func startServer(t *testing.T) server.Paths {
+	t.Helper()
+	if os.Getenv("TERMINATR_HOME") == "" {
+		t.Setenv("TERMINATR_HOME", t.TempDir())
 	}
-	again, changed := sc.load(paths)
-	if changed || &again[0] != &list[0] {
-		t.Fatalf("an idle load changed: %v", changed)
-	}
-
-	if _, err := thread.UpdateStatus(p, r.ID, func(st *thread.Status) error { st.Activity = "testing the cache"; return nil }); err != nil {
+	sock, err := os.MkdirTemp(ipc.ShortDir(), "tmt")
+	if err != nil {
 		t.Fatal(err)
 	}
-	list, changed = sc.load(paths)
-	if !changed || list[0].Threads[0].Status == nil || list[0].Threads[0].Status.Activity != "testing the cache" {
-		t.Fatalf("the new status doesn't show: %v %+v", changed, list[0].Threads[0].Status)
+	t.Cleanup(func() { os.RemoveAll(sock) })
+	t.Setenv("TERMINATR_SOCKET", filepath.Join(sock, "tm.sock"))
+	t.Setenv("TERMINATR_LAUNCHD", "off")
+	t.Setenv(caller.EnvSession, "")
+	paths, err := server.ResolvePaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, stop := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- server.Run(ctx, server.Options{Paths: paths, Log: log.New(io.Discard, "", 0), Bin: "/nonexistent/tm",
+			Env: []string{"PATH=/usr/bin:/bin"}})
+	}()
+	t.Cleanup(func() { stop(); <-done })
+	for deadline := time.Now().Add(5 * time.Second); ; {
+		c, err := server.Dial(paths, proto.KindControl)
+		if err == nil {
+			c.Close()
+			return paths
+		}
+		if time.Now().After(deadline) {
+			t.Fatal(err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestSideFeed: the sidebar's projects come from the server's
+// projects.watch: the projects now at first, then a thread's new status,
+// a new thread, a new project and an archive as they happen, each taken
+// once.
+func TestSideFeed(t *testing.T) {
+	p, r := cacheProject(t)
+	t.Setenv("TERMINATR_WATCH_POLL", "50ms")
+	paths := startServer(t)
+	feed, list := watchSide(paths)
+	defer feed.close()
+	if len(list) != 1 || list[0].Slug != "demo" || len(list[0].Threads) != 1 || list[0].Threads[0].ID != r.ID {
+		t.Fatalf("first projects: %+v", list)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	ran := make(chan struct{})
+	go func() {
+		feed.run(ctx, paths)
+		close(ran)
+	}()
+	defer func() {
+		cancel()
+		<-ran
+	}()
+	await := func(what string, ok func([]ProjectData) bool) {
+		t.Helper()
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+			if list, fresh := feed.take(); fresh && ok(list) {
+				return
+			}
+		}
+		t.Fatalf("%s doesn't show", what)
+	}
+
+	if _, err := thread.UpdateStatus(p, r.ID, func(st *thread.Status) error { st.Activity = "testing the feed"; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	await("the new status", func(l []ProjectData) bool {
+		st := l[0].Threads[0].Status
+		return st != nil && st.Activity == "testing the feed"
+	})
+	if _, fresh := feed.take(); fresh {
+		t.Error("the same projects taken twice")
 	}
 
 	if _, err := thread.Create(p, thread.Record{Title: "more work"}); err != nil {
 		t.Fatal(err)
 	}
-	if list, changed = sc.load(paths); !changed || len(list[0].Threads) != 2 {
-		t.Fatalf("the new thread doesn't show: %v %d", changed, len(list[0].Threads))
-	}
+	await("the new thread", func(l []ProjectData) bool { return len(l[0].Threads) == 2 })
 
 	if _, err := project.New(project.Options{Slug: "other"}); err != nil {
 		t.Fatal(err)
 	}
-	if list, changed = sc.load(paths); !changed || len(list) != 2 || list[1].Slug != "other" {
-		t.Fatalf("the new project doesn't show: %v %+v", changed, list)
-	}
+	await("the new project", func(l []ProjectData) bool { return len(l) == 2 && l[1].Slug == "other" })
 
 	if err := config.SetProject("other", "archived", true); err != nil {
 		t.Fatal(err)
 	}
-	if list, changed = sc.load(paths); !changed || len(list) != 1 || list[0].Slug != "demo" {
-		t.Fatalf("the archived project still shows: %v %+v", changed, list)
+	await("the archive", func(l []ProjectData) bool { return len(l) == 1 && l[0].Slug == "demo" })
+}
+
+// TestSideProjects: the server's projects as the sidebar keeps them:
+// the tasks that need you as tasks, the threads with their PRs; none is
+// an empty list, not nil (no change).
+func TestSideProjects(t *testing.T) {
+	if got := sideProjects(nil); got == nil || len(got) != 0 {
+		t.Errorf("no projects: %#v", got)
 	}
-	if _, changed = sc.load(paths); changed {
-		t.Error("an idle load after the changes changed")
+	rec := &thread.Record{ID: "t-0001", Task: "T3"}
+	got := sideProjects([]server.SideProject{{Slug: "demo", Questions: 2, PRHostFails: 4,
+		NeedsYou: []server.SideTask{{ID: 3, Title: "Check", Status: tasks.Status("review"), Steps: []tasks.Step{{N: 1, Text: "a", Done: true}}}},
+		Threads:  []server.SideThread{{Record: rec, Checks: "fail", PR: 9}, {}}}})
+	want := []ProjectData{{Slug: "demo", Questions: 2, PRHostFails: 4,
+		NeedsYou: []*tasks.Task{{ID: 3, Title: "Check", Status: "review", Steps: []tasks.Step{{N: 1, Text: "a", Done: true}}}},
+		Threads:  []ThreadRow{{Record: rec, Checks: "fail", PR: 9}}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("sideProjects: %+v, want %+v", got, want)
 	}
 }
 
@@ -198,5 +277,53 @@ func TestInfoCache(t *testing.T) {
 	co := proto.SessionInfo{ID: "s-2", Role: proto.RoleCoordinator, Project: p.Slug}
 	if d := ic.load(server.Paths{}, co, []proto.SessionInfo{s, co}); d == nil || d.watch == nil || len(d.watch.Threads) != 1 {
 		t.Errorf("no coordinator watch: %+v", d)
+	}
+}
+
+// TestSlowCache: the dashboard's Load reads the mods and agents again
+// only when their files change: an unchanged look keeps the registry it
+// read, a mod installed in the mods folder or a manifest edited shows
+// at once.
+func TestSlowCache(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	modsDir, err := home.ModsDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := func(id, name string) {
+		t.Helper()
+		dir := filepath.Join(modsDir, id)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, mod.ManifestFile), []byte("id = \""+id+"\"\nname = \""+name+"\"\nversion = \"1.0.0\"\napi = \"1.0\"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	userMods := func(d slowData) map[string]string {
+		out := map[string]string{}
+		for _, m := range d.reg.Mods {
+			if !m.Builtin && m.Manifest != nil {
+				out[m.ID] = m.Manifest.Name
+			}
+		}
+		return out
+	}
+	var sc slowCache
+	agents := filepath.Join(t.TempDir(), "agents")
+	first := sc.load(agents)
+	if first.regErr != nil || first.reg == nil {
+		t.Fatalf("first load: %v", first.regErr)
+	}
+	if again := sc.load(agents); again.reg != first.reg {
+		t.Error("an unchanged load read the mods again")
+	}
+	manifest("alpha", "Alpha")
+	if got := userMods(sc.load(agents)); got["alpha"] != "Alpha" {
+		t.Fatalf("the new mod doesn't show: %v", got)
+	}
+	manifest("alpha", "Alpha Two")
+	if got := userMods(sc.load(agents)); got["alpha"] != "Alpha Two" {
+		t.Errorf("the edited manifest doesn't show: %v", got)
 	}
 }

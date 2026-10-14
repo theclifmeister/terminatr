@@ -207,7 +207,10 @@ func Attach(opts Options) (res Result, err error) {
 		so = &SidebarOptions{}
 	}
 	lay := ConsoleLayout(so.UIFile)
-	c.side = &sidebar{uiFile: so.UIFile, projects: loadSideProjects(c.paths), compact: lay.compact(), order: lay.sideSections, projOrder: lay.projSections}
+	feed, projects := watchSide(c.paths)
+	defer feed.close() // the watch, if pollState never took it
+	c.sideFeed = feed
+	c.side = &sidebar{uiFile: so.UIFile, projects: projects, compact: lay.compact(), order: lay.sideSections, projOrder: lay.projSections}
 	c.info = &infoPanel{coordOrder: lay.coordSections, detOrder: lay.detSections}
 	c.views = handedViews() // the dashboard's, for the sections it showed
 	c.setWindow(cols, rows)
@@ -377,7 +380,9 @@ type client struct {
 	statusBar bool     // the view's chrome has the status bar
 	dashboard bool     // there is a dashboard to go back to
 	side      *sidebar // the projects sidebar, nil for none
-	sideW     int      // its width, 0 without one
+	// sideFeed is the sidebar's projects from the server (pollState).
+	sideFeed *sideFeed
+	sideW    int // its width, 0 without one
 	// kb is the area with this console's keyboard (focus.go): the pane,
 	// the sidebar or the info panel. While another area has it the pane
 	// gets no keys, paste or prefix-twice.
@@ -2323,9 +2328,10 @@ type polled struct {
 // blocked, a thread reported; docs/SPEC.md §4). It polls session.list,
 // and mod.views while the info panel or the sidebar shows mod sections
 // (pollViewsNow); a lost server is noticed by the attach streams
-// themselves. What it reads from files it reads again only where they
-// changed (sidecache.go), and it draws again only when what it read
-// changed, or idleRedraw after the last time.
+// themselves. The sidebar's projects come from the server's
+// projects.watch (sideFeed); what it reads from files it reads again
+// only where they changed (sidecache.go), and it draws again only when
+// what it read changed, or idleRedraw after the last time.
 func (c *client) pollState(ctx context.Context) {
 	var ctl *server.Client
 	defer func() {
@@ -2341,7 +2347,13 @@ func (c *client) pollState(ctx context.Context) {
 	// what shows, sections the dashboard showed before it too.
 	sent, odd := "\x00", false
 	var conf configCache
-	side := sideCache{conf: &conf}
+	feed := c.sideFeed
+	if c.side != nil {
+		if feed == nil {
+			feed = &sideFeed{}
+		}
+		go feed.run(ctx, c.paths)
+	}
 	var info infoCache
 	stats := statusCache{}
 	tick := time.NewTicker(statePoll)
@@ -2366,7 +2378,7 @@ func (c *client) pollState(ctx context.Context) {
 		}
 		pl.ctxHint = config.DefaultContextHint
 		if c.side != nil {
-			if projects, changed := side.load(c.paths); changed {
+			if projects, changed := feed.take(); changed {
 				pl.projects = projects
 			}
 			pl.ctxHint, pl.needsFirst = conf.uiHints()

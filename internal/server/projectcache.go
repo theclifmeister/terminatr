@@ -44,6 +44,20 @@ type snapEntry struct {
 // watchers since (gen), when the files' stamp changed, or snapMaxAge
 // after the last read. tickerState is the ticker's state file.
 func (c *projectCache) get(slug, tickerState string, gen uint64) (*projectSnap, error) {
+	return c.look(slug, tickerState, gen, true)
+}
+
+// stamped is get read again on the stamp alone, not on a wake: what
+// the server changes itself is in the files, which a wake's look stats
+// at once. The sidebars' hub (sideprojects.go) reads every project
+// this way, so a wake about one project reads only that one again.
+func (c *projectCache) stamped(slug, tickerState string, gen uint64) (*projectSnap, error) {
+	return c.look(slug, tickerState, gen, false)
+}
+
+// look is get, with byGen whether a wake since the last read reads
+// again.
+func (c *projectCache) look(slug, tickerState string, gen uint64, byGen bool) (*projectSnap, error) {
 	c.mu.Lock()
 	if c.entries == nil {
 		c.entries = map[string]*snapEntry{}
@@ -60,7 +74,7 @@ func (c *projectCache) get(slug, tickerState string, gen uint64) (*projectSnap, 
 	var stamp uint64
 	if e.snap != nil {
 		stamp = snapStamp(e.snap, tickerState)
-		if e.gen == gen && e.stamp == stamp && e.state == tickerState && time.Since(e.at) < snapMaxAge {
+		if (e.gen == gen || !byGen) && e.stamp == stamp && e.state == tickerState && time.Since(e.at) < snapMaxAge {
 			return e.snap, nil
 		}
 	}

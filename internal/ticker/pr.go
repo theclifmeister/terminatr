@@ -69,6 +69,7 @@ type Timing struct {
 	PRPolled  time.Time // gh last asked about any PR
 	Synced    time.Time // repos last fetched
 	GHFailing bool      // PR polls are failing
+	GHFails   int       // how many in a row
 	// ThreadPolled is when each thread's PR was last checked, by id.
 	ThreadPolled map[string]time.Time
 }
@@ -109,7 +110,7 @@ func (s State) Project(slug string) (map[string]PR, Timing) {
 	prs, t := map[string]PR{}, Timing{ThreadPolled: map[string]time.Time{}}
 	st := s.st
 	if pm := st.Projects[slug]; pm != nil {
-		t.PRPolled, t.Synced, t.GHFailing = pm.PRPolled, pm.Synced, pm.GHFails > 0
+		t.PRPolled, t.Synced, t.GHFailing, t.GHFails = pm.PRPolled, pm.Synced, pm.GHFails > 0, pm.GHFails
 	}
 	for k, m := range st.Threads {
 		id, ok := strings.CutPrefix(k, slug+"/")
