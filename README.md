@@ -71,6 +71,21 @@ Newer Homebrew refuses formulas from a tap it doesn't trust, hence `brew trust` 
 3. Tell the coordinator what you want. It plans tasks and starts threads; open one with `enter` to read along.
 4. Press Ctrl+B then `d` to return to the dashboard. Sessions keep running when you close the terminal; `tm` brings you back. `?` lists the keys.
 
+## Connect your servers
+
+Run tm on more than one machine (a laptop and a server, say) and pair them: each one's dashboard then shows the projects the other shares, and you can open their panes. The two meet through a relay you run yourself, which both dial out to, so neither needs an open port. The relay sees only who connects and when, never what they say to each other.
+
+The relay needs a Linux server with a domain name pointing at it and port 443 open. On that server:
+
+```sh
+curl -fsSL https://github.com/theclifmeister/terminatr/releases/latest/download/install.sh | sh
+sudo ~/.local/bin/tm relay install --domain relay.example.net
+```
+
+The first line puts `tm` in `~/.local/bin`, which `sudo` doesn't search, hence the full path. Homebrew on Linux works too, but is heavy for a small server. The second line installs the relay as a service, gets its certificate from Let's Encrypt and prints the address to pair with. To update it later: `sudo tm relay update` (the relay runs its own copy in `/usr/local/bin`, which `brew upgrade` doesn't touch).
+
+Then pair two machines: in Settings (`,`), Peers tab, press `n` on one to get a code and `j` on the other to enter it, or in a terminal run `tm peer pair --relay wss://relay.example.net` on one and `tm peer join CODE` on the other. Both show six digits to compare. Docker, a NAS and other setups: [Running a relay in docs/OPERATIONS.md](docs/OPERATIONS.md#running-a-relay).
+
 ## Learn more
 
 - [terminatr.dev](https://terminatr.dev): the website

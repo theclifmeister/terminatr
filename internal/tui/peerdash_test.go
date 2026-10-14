@@ -228,8 +228,8 @@ func TestPeersTab(t *testing.T) {
 	} {
 		src.peers = want
 		sv.peers.load(m)
-		if out := screen(m); !strings.Contains(out, list) {
-			t.Errorf("missing %q in\n%s", list, out)
+		if out := screen(m); !strings.Contains(out, list) || !strings.Contains(out, "No relay yet?") {
+			t.Errorf("missing %q or the relay hint in\n%s", list, out)
 		}
 	}
 }

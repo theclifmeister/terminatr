@@ -40,6 +40,9 @@ type peersTab struct {
 // peersKeys are the Peers tab's action row.
 const peersKeys = "p panes · x remove · ↑ ↓ move · ← → tabs · esc close"
 
+// relayHint is the empty tab's last line: where a relay comes from.
+const relayHint = "No relay yet? On a Linux server with a domain: sudo tm relay install --domain NAME (see the README)."
+
 // load reads the paired servers again.
 func (pt *peersTab) load(m *dash) {
 	pt.list, pt.err = m.src.Peers()
@@ -64,7 +67,7 @@ func (pt *peersTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
 	case pt.err != nil:
 		return []string{th().Bad.Render("The paired servers can't be read: " + oneLine(pt.err.Error()))}, -1, nil
 	case l.ID == "":
-		return faintLines("This server isn't paired with another. Pairing is done in a terminal: tm peer pair --relay URL on one server, then tm peer join CODE on the other, and both of you compare six digits.", w), -1, nil
+		return append(faintLines("This server isn't paired with another. Pairing is done in a terminal: tm peer pair --relay URL on one server, then tm peer join CODE on the other, and both of you compare six digits.", w), faintLines(relayHint, w)...), -1, nil
 	}
 	out = append(out, th().Faint.Render("This server ")+l.Short)
 	if l.LinkErr != "" {
@@ -73,6 +76,7 @@ func (pt *peersTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
 	out = append(out, "")
 	if len(l.Peers) == 0 {
 		out = append(out, faintLines("No paired servers. Pair one in a terminal: tm peer pair --relay URL here, then tm peer join CODE on the other.", w)...)
+		out = append(out, faintLines(relayHint, w)...)
 		return out, -1, nil
 	}
 	nameW := 4
