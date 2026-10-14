@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/tls"
 	"encoding/json"
 	"net/http/httptest"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -208,4 +211,63 @@ func TestPeerJoinPinned(t *testing.T) {
 		t.Fatalf("join: %d %q %q", code, out, errs)
 	}
 	h.expect(3, "the relay at "+host+" has a different key than when you paired", human, "peer", "join", host+"#sha256="+strings.Repeat("ab", 32)+"/7Q4M-K2XD-9HVA-PT3C")
+}
+
+// tm peer relay-update asks the paired server's relay to update itself,
+// with this server's key, while its link through the relay is live.
+func TestPeerRelayUpdate(t *testing.T) {
+	h := newHarness(t)
+	stubPeerServer(t, nil)
+	file := filepath.Join(t.TempDir(), "update-request")
+	cfg := relay.DefaultConfig()
+	cfg.Version, cfg.UpdateFile = "v0.27.0", file
+	s := relay.New(cfg)
+	hs := httptest.NewServer(s)
+	t.Cleanup(func() { s.Shutdown(); hs.Close() })
+	url := "ws" + strings.TrimPrefix(hs.URL, "http")
+
+	dir, _ := peer.Dir()
+	id, _, err := peer.EnsureIdentity(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pk, k, _ := ed25519.GenerateKey(nil)
+	if err := peer.SavePeers(dir, []peer.Peer{{Alias: "mini", Key: pk, Relay: url}}); err != nil {
+		t.Fatal(err)
+	}
+	h.expect(2, "usage: tm peer pair", human, "peer", "relay-update")
+	h.expect(1, "unknown-peer", human, "peer", "relay-update", "nas")
+	h.expect(1, "human-only", coord, "peer", "relay-update", "mini")
+	h.expect(1, "only from a server whose link through it is up", human, "peer", "relay-update", "mini")
+
+	// The link, live: this server's key and mini's meet in their room.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	room := relay.LinkRoom(id.ID, relay.Fingerprint(pk))
+	done := make(chan *relay.Conn, 2)
+	for _, d := range []relay.Dialer{
+		{Key: id.Key, Kind: relay.KindLink, Room: room, Peer: relay.Fingerprint(pk)},
+		{Key: k, Kind: relay.KindLink, Room: room, Peer: id.ID},
+	} {
+		go func() {
+			c, err := d.Dial(ctx, url)
+			if err != nil {
+				t.Error(err)
+			}
+			done <- c
+		}()
+	}
+	for range 2 {
+		if c := <-done; c != nil {
+			defer c.Close()
+		}
+	}
+	out := h.ok(human, "peer", "relay-update", "mini")
+	if !strings.Contains(out, "updates to the latest release if it is newer") || !strings.Contains(out, "runs tm 0.27.0 now") {
+		t.Fatalf("out: %s", out)
+	}
+	if _, err := os.Stat(file); err != nil {
+		t.Fatal(err)
+	}
+	h.expect(1, "relay-update-too-soon", human, "peer", "relay-update", "mini")
 }
