@@ -243,7 +243,7 @@ What it needs:
 
 - **A public address and a DNS name.** Both servers dial `wss://<name>`, often from outside your home network (a laptop on hotel Wi-Fi). A VPS has both. A **NAS at home doesn't by default**: give it a DNS name (your own domain, or a dynamic DNS name that follows your home IP) and forward a public port on the router to it (443, or any port: the link then dials `wss://<name>:<port>`). Behind carrier-grade NAT (no public IPv4 on the router) port forwarding can't work: use a VPS, or IPv6 if both ends have it. Without a public port the relay only serves machines on your LAN.
 - **A certificate for that name**, from a CA (Let's Encrypt): the link checks it as any HTTPS client does. It protects the connection to the relay; what the servers trust in each other is their pinned keys, not this certificate.
-- **Port 443 open** (and 80 for ACME's HTTP challenge, with the Caddy setup).
+- **Port 443 open**, and port 80 while a certificate is issued or renewed: Caddy's ACME, `certbot --standalone` and `certbot --webroot` all answer the CA's HTTP challenge there.
 - A `tm` release that has `tm relay serve`.
 
 ### Docker (VPS or NAS)
@@ -272,7 +272,26 @@ sudoedit /etc/systemd/system/tm-relay.service    # the two LoadCredential lines:
 sudo systemctl daemon-reload && sudo systemctl enable --now tm-relay
 ```
 
+Install the unit before you issue the certificate. If certbot runs first with `--deploy-hook "systemctl restart tm-relay"`, the hook fails on the first issue with `Unit tm-relay.service not found`; that is harmless (the certificate is issued and saved), and the service starts with the `enable --now` above.
+
 The unit runs the relay as a throwaway user with only the right to bind 443; systemd hands it the certificate, so certbot's root-only key works. After a renewal restart it (`certbot renew --deploy-hook "systemctl restart tm-relay"`). Logs: `journalctl -u tm-relay`.
+
+### Updating a systemd relay
+
+Download the release tarball for the host's architecture (`amd64` or `arm64`) and `checksums.txt` into an empty folder, then:
+
+```sh
+ARCH=amd64                                       # or arm64
+V=vX.Y.Z                                         # the release tag
+curl -fLO https://github.com/theclifmeister/terminatr/releases/download/$V/tm_linux_$ARCH.tar.gz
+curl -fLO https://github.com/theclifmeister/terminatr/releases/download/$V/checksums.txt
+grep " tm_linux_$ARCH.tar.gz\$" checksums.txt | sha256sum -c -    # must say OK
+tar xzf tm_linux_$ARCH.tar.gz tm
+sudo install -m 755 tm /usr/local/bin/tm
+sudo systemctl restart tm-relay
+```
+
+Paired servers drop for a moment and reconnect by themselves; nothing to redo on them. (Docker: see the pinned release above.)
 
 ### Checking it
 
