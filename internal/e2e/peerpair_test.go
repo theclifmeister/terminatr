@@ -80,7 +80,7 @@ func TestSmokePeerPairSettings(t *testing.T) {
 		t.Fatalf("join: exit %d\n%s", c, out)
 	}
 	waitPeerState(t, studio, alias, proto.LinkUp, "")
-	w.WaitFor("◉ linked", wait)
+	w.WaitFor(" linked · ", wait)
 
 	// The other way: mini pairs, studio joins with j.
 	pair := startPairing(t, mini, "pair", "--relay", relayURL, "--as", "studio")

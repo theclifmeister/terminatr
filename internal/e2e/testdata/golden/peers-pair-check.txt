@@ -5,26 +5,26 @@
            │  1 General   2 All projects   3 Mods   4 Peers                                       │
            │ About: tm dev · server dev · update check on                                         │
            │                                                                                      │
-           │ This server isn't paired with another. Press n to pair: it shows a code to pass on,  │
-           │ and j on the other server takes it (or tm peer pair and tm peer join in a terminal); │
-           │ both of yo╭─ Pair a server ──────────────────────────────────────────────╮           │
-           │ No relay y│ The other server: <host> │ain NAME;  │
-           │ without on│ server id <id> · tm <version> │(see the   │
-           │ README).  │                                                              │           │
+           │ SHARED PROJECTS                                                                      │
+           │ No active project on this server to share.                                           │
+           │ A shared p╭─ Pair a server ──────────────────────────────────────────────╮what waits │
+           │ for you, t│ The other server: <host> │ its       │
+           │ files. Spa│ server id <id> · tm <version> │n Settings │
+           │ tab; shari│                                                              │           │
            │           │ Check: <check>                                               │           │
-           │ Paired ser│                                                              │idebar;    │
-           │ you see th│ Pair only if the other side shows the same six digits. Do    │           │
-           │           │ they match?                                                  │           │
-           │           │                                                              │           │
-           │           │                                                              │           │
-           │           │ y they match · n they don't · esc cancel                     │           │
-           │           ╰──────────────────────────────────────────────────────────────╯           │
+           │ PAIRED SER│                                                              │           │
+           │ This serve│ Pair only if the other side shows the same six digits. Do    │ pass on,  │
+           │ and j on t│ they match?                                                  │terminal); │
+           │ both of yo│                                                              │           │
+           │ No relay y│                                                              │ain NAME;  │
+           │ without on│ y they match · n they don't · esc cancel                     │(see the   │
+           │ README).  ╰──────────────────────────────────────────────────────────────╯           │
            │                                                                                      │
+           │ Paired servers see the projects you share with them, read-only, in their sidebar;    │
            │                                                                                      │
-           │                                                                                      │
-           │ n pair · j join · p panes · e relay · u update relay · x remove · ↑ ↓ move           │
-           │ ← → tabs · esc close                                                                 │
- ──────────╰──────────────────────────────────────────────────────────────────────────────────────╯
+           │ space toggle · ← → change · n pair · j join · e relay · u update relay · x remove    │
+           │ esc close                                                                            │
+ ──────────╰───────────────────────────────────────────────────────────────────────────── more ↓ ─╯
                                    │──────────────────────────────────────────────────────────────────────────
                                    │
  tab sidebar · ? help              │

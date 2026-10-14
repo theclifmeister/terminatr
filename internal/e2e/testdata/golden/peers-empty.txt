@@ -5,6 +5,14 @@
            │  1 General   2 All projects   3 Mods   4 Peers                                       │
            │ About: tm dev · server dev · update check on                                         │
            │                                                                                      │
+           │ SHARED PROJECTS                                                                      │
+           │ No active project on this server to share.                                           │
+           │ A shared project shows, read-only, in the sidebar of every paired server: what waits │
+           │ for you, the inbox, threads, tasks on deck and its sessions' states; never its       │
+           │ files. Space toggles it, as Shared with paired servers in the project's own Settings │
+           │ tab; sharing asks first.                                                             │
+           │                                                                                      │
+           │ PAIRED SERVERS                                                                       │
            │ This server isn't paired with another. Press n to pair: it shows a code to pass on,  │
            │ and j on the other server takes it (or tm peer pair and tm peer join in a terminal); │
            │ both of you then compare six digits.                                                 │
@@ -13,18 +21,10 @@
            │ README).                                                                             │
            │                                                                                      │
            │ Paired servers see the projects you share with them, read-only, in their sidebar;    │
-           │ you see theirs in yours. No agent can pair, share or remove a server.                │
            │                                                                                      │
-           │                                                                                      │
-           │                                                                                      │
-           │                                                                                      │
-           │                                                                                      │
-           │                                                                                      │
-           │                                                                                      │
-           │                                                                                      │
-           │ n pair · j join · p panes · e relay · u update relay · x remove · ↑ ↓ move           │
-           │ ← → tabs · esc close                                                                 │
- ──────────╰──────────────────────────────────────────────────────────────────────────────────────╯
+           │ space toggle · ← → change · n pair · j join · e relay · u update relay · x remove    │
+           │ esc close                                                                            │
+ ──────────╰───────────────────────────────────────────────────────────────────────────── more ↓ ─╯
                                    │──────────────────────────────────────────────────────────────────────────
                                    │
  tab sidebar · ? help              │

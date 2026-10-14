@@ -603,8 +603,7 @@ func (sv *settingsView) click(m *dash, item, col int, _ bool) tea.Cmd {
 		}
 		return nil
 	case tabPeers:
-		sv.peers.click(item)
-		return nil
+		return sv.peers.click(m, item, col)
 	}
 	return sv.tabs[sv.tab].click(m, item, col)
 }

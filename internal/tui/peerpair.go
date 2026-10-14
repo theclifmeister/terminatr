@@ -139,7 +139,7 @@ func (pv *pairView) step(m *dash, msg pairMsg) tea.Cmd {
 		for _, o := range m.stack {
 			if sv, ok := o.(*settingsView); ok {
 				sv.peers.load(m)
-				sv.peers.selectAlias(msg.alias)
+				sv.peers.selectAlias(m, msg.alias)
 			}
 		}
 		return m.load()

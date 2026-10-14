@@ -16,13 +16,18 @@ func TestPeersTabRelayUpdate(t *testing.T) {
 	m.data.Server = ServerInfo{Version: "v0.27.0", Latest: "v0.28.0"}
 	press(m, ",", "4")
 	out := screen(m)
-	if !strings.Contains(out, "relay relay.example.net · relay v0.27.0 · update available (u)") {
+	if !strings.Contains(out, "relay  relay.example.net · v0.27.0 · update available (u)") {
 		t.Fatalf("no relay version in\n%s", out)
 	}
 	if !strings.Contains(out, "u update relay") {
 		t.Errorf("no u in the keys:\n%s", out)
 	}
+	// u on a project does nothing; on mini's panes row it asks.
 	press(m, "u")
+	if _, ok := m.top().(*settingsView); !ok {
+		t.Fatalf("u on a project: %T", m.top())
+	}
+	press(m, "down", "down", "u")
 	cv, ok := m.top().(*confirmView)
 	if !ok || !strings.Contains(cv.question, "runs tm v0.27.0; v0.28.0 is out") {
 		t.Fatalf("u: %T %+v", m.top(), cv)
@@ -41,7 +46,7 @@ func TestPeersTabRelayUpdate(t *testing.T) {
 	m.data.Server = ServerInfo{Version: "v0.28.0"}
 	src.peers.Peers[0].Link.RelayVersion = "v0.28.0"
 	m.top().(*settingsView).peers.load(m)
-	if out := screen(m); !strings.Contains(out, "relay v0.28.0") || strings.Contains(out, "update available") {
+	if out := screen(m); !strings.Contains(out, "relay.example.net · v0.28.0") || strings.Contains(out, "update available") {
 		t.Fatalf("latest:\n%s", out)
 	}
 }
