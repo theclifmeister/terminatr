@@ -407,3 +407,22 @@ func TestPeersTabPairErrors(t *testing.T) {
 		t.Errorf("the code in the footer: %q", m.msg)
 	}
 }
+
+// TestPairDialogLongName: a long dotted host name stays on one line,
+// cut with … to the dialog's width, so the rows below don't move.
+func TestPairDialogLongName(t *testing.T) {
+	m, _ := remoteDash(t, "@mini/acme-api")
+	pv := &pairView{stage: pairCheck, offer: PairOffer{Name: "3a5a3800c87c-E2A37F3E8BF5.local.example.internal.lan", Short: "77AB-91C3", Version: "v0.27.0", Check: "381 204"}}
+	var line string
+	for _, l := range strings.Split(pv.render(m), "\n") {
+		if strings.Contains(l, "The other server: ") {
+			line = l
+		}
+	}
+	if line == "" || !strings.Contains(line, "…") || strings.Contains(pv.render(m), "internal.lan") {
+		t.Errorf("name not cut on one line:\n%s", pv.render(m))
+	}
+	if !strings.Contains(pv.render(m), "server id 77AB-91C3") || !strings.Contains(pv.render(m), "381 204") {
+		t.Errorf("rows missing:\n%s", pv.render(m))
+	}
+}
