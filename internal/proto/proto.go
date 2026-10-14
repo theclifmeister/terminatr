@@ -25,8 +25,10 @@ import (
 // hidden (view.Sidebar), on the view and view.sidebar; the status bar's
 // style (view.status, the view's StatusCompact). 15: the mods' sidebar
 // sections' folds (view.sections, view.Tree's SectionsFolded), added
-// fields and one method only.
-const Protocol = 15
+// fields and one method only. 16: remote panes (docs/SPEC.md §16.12): a
+// view's focus and view.attach may name a paired server's pane as
+// "<alias>/<session>", and SessionInfo has Server and ViewOnly.
+const Protocol = 16
 
 // Kind is what a connection is for.
 type Kind string

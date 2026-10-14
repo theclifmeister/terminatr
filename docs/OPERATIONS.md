@@ -325,6 +325,17 @@ and on `mini`, `tm project link api studio/acme`. The name is the other server's
 
 Messages wait in the sending server's outbox until the link is up, and `tm link log mini/api` shows each as `queued`, `sent` (the other server has it) or `read` (its coordinator handled it). One not taken within 72 hours is dropped with a `link-undelivered` item. Files don't cross servers; the text is at most 8 KB. The same rate limit and breaker apply on each server, and `tm link resume` lifts only this server's pause (SPEC §16.11).
 
+### Remote panes
+
+You can open a paired server's coordinator or thread in your console and type into it, as if it ran here. The other server decides: on `mini`,
+
+```
+$ tm peer panes studio type
+Panes type for studio: it can watch and type into the coordinator and thread panes of the projects this server shares; the first keys into a thread tell its coordinator.
+```
+
+(`view` lets `studio` watch without typing; `off`, the default, shows nothing.) Only projects `mini` shares cross. On `studio`, the sidebar's `mini` group then opens a remote coordinator or thread with `enter` or a click, and `tm attach mini/s-41` opens one by its id there. The status bar starts with `mini ›` and says `remote · 38 ms`. Typing into a thread tells `mini`'s coordinator, as typing into one of your own threads does. While the link is down the pane keeps its last screen, your keys are dropped (never sent later), and it comes back by itself. Actions on the session (stop, model, remote control) stay on `mini`. Both servers can run different tm releases, as long as both have remote panes (SPEC §16.12).
+
 ### The servers' side
 
 Each paired server keeps a link to the relay by itself; nothing to start. `tm server status` shows the server's id and each link:

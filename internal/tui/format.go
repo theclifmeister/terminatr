@@ -242,6 +242,10 @@ func statusBar(s proto.SessionInfo, ts *thread.Status, title string, pending boo
 		}
 		path = s.Project + " › " + pane
 	}
+	if s.Server != "" {
+		// A paired server's pane (docs/SPEC.md §16.12).
+		path = s.Server + " › " + path
+	}
 	// The progress, from the most to the least: the percent always
 	// stays.
 	pr := sessionProgress(s)

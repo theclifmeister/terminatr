@@ -68,7 +68,7 @@ One binary, several roles:
 | `internal/plat/sandbox` | The mod hosts' OS sandbox: seatbelt on macOS, landlock plus seccomp on Linux, a restricted token in a Job Object on Windows (§3.7, Supervisor) |
 | `internal/plat/shell` | Default interactive shell, quoting and hook command lines per shell kind, unwrapping shells and interpreters from an argv (§8.2) |
 | `internal/emu` | The only wrapper around libghostty-vt (go.mitchellh.com/libghostty) |
-| `internal/session` | One hosted process: PTY + emulator + agent + subscribers + merged state |
+| `internal/session` | One hosted process: PTY + emulator + agent + subscribers + merged state; a paired server's pane shown here (`Proxy`, §16.12) |
 | `internal/agent` | Agent interface, manifest format, registry, built-in manifests (`manifests/*.toml`) |
 | `internal/agent/<name>` | Optional Go code for one agent; `claude` is the reference |
 | `internal/detect` | Screen-rule engine (agent-neutral) |
@@ -99,7 +99,7 @@ One binary, several roles:
 | `internal/moddev` | The mod author's tools: `tm mod new`'s scaffolds, and the folder watch and log tail of `tm mod dev` and `tm mod logs` (§5.3) |
 | `internal/modbroker` | The broker for user mods: every `$` call checked against the mod's grants and done by the server; the path, host and program checks and the credential deny list (§5.3) |
 | `internal/relay` | `tm relay serve`, the meeting point of two linked servers, and the client side a server dials it with: the WebSocket subset, the signed hello, rooms, limits (§16) |
-| `internal/peer` | The server's identity key and paired servers, the pinned-TLS link to each (§16.7), pairing by one-time code (§16.8), the peer dispatcher that serves shared projects to paired servers (§16.9), and its `peer.message` for links across servers (§16.11) |
+| `internal/peer` | The server's identity key and paired servers, the pinned-TLS link to each (§16.7), pairing by one-time code (§16.8), the peer dispatcher that serves shared projects to paired servers (§16.9), its `peer.message` for links across servers (§16.11), and remote panes: `peer.attach` and its binary frames on the link (§16.12) |
 
 The dependency rule: `server`, `session`, `ticker`, `tui`, `project`, `thread` and `tasks` MUST NOT import `internal/agent/<name>` or mention any agent by name. They see only `internal/agent`.
 
@@ -201,7 +201,7 @@ So that this keeps working, every server of every future protocol keeps three pr
 | agents | `agent.list`, `agent.reload`, `agent.explain` (which signals and rules produced a session's state) |
 | peers | `peer.reload` (read the identity key and the paired servers again after `tm peer` changed them, answering the link status; the human's, §16.8), `peer.list` (the mirror of the paired servers' shared projects, for the consoles; the human's, §16.10) |
 | hooks | `hook.event` (from `tm hook`; also its own connection kind, §8.2) |
-| views | `view.subscribe` (join a view; the connection then streams `view.changed`), `view.attach`, `view.dashboard`, `view.project`, `view.select`, `view.sidesel`, `view.expand {project, on}` (expand or collapse an inactive project in the sidebar's tree, §4; since protocol 10), `view.tree {tree}` (what the sidebar's tree folds: active projects folded, inactive ones expanded, the inactive divider open, §4; since protocol 11; the view keeps its section folds whatever the tree sent says), `view.sections {sections, on}` (fold or unfold the mods' sections, by id: a sidebar section's `mod.view`, or `mod.view@slug` under a project, and a right-pane section's `panel:mod.view`, one id for every project and row, §4 **Mod sections**; at most 64 ids a call, and a view keeps at most 128 folded, the oldest going first; every console of the view follows, and `ui.json` keeps them with the tree; a console on a server of protocol 14 keeps them as its own; since protocol 15), `view.sidebar {sidebar}` (its width, slim; since protocol 14 also `side`, `share` and `hidden`, §4; a side other than left or right, or a share outside 10 % to 60 %, is refused), `view.info`, `view.status {compact}` (the status bar under a pane: one row without the rule above it, from the layout's `[status_bar] style`, §5.3; a layout change, as `view.sidebar`; since protocol 14), `view.columns {columns}` (the sidebar's column order, from the layout mod `[ui] layout` picks, §5.3; none for the built-in order; since protocol 12), `view.size`, `view.input` (below), `view.digest` (tests: a console's digest check, §15.2) |
+| views | `view.subscribe` (join a view; the connection then streams `view.changed`), `view.attach` (since protocol 16 also a paired server's pane, `<alias>/<session>`, §16.12), `view.dashboard`, `view.project`, `view.select`, `view.sidesel`, `view.expand {project, on}` (expand or collapse an inactive project in the sidebar's tree, §4; since protocol 10), `view.tree {tree}` (what the sidebar's tree folds: active projects folded, inactive ones expanded, the inactive divider open, §4; since protocol 11; the view keeps its section folds whatever the tree sent says), `view.sections {sections, on}` (fold or unfold the mods' sections, by id: a sidebar section's `mod.view`, or `mod.view@slug` under a project, and a right-pane section's `panel:mod.view`, one id for every project and row, §4 **Mod sections**; at most 64 ids a call, and a view keeps at most 128 folded, the oldest going first; every console of the view follows, and `ui.json` keeps them with the tree; a console on a server of protocol 14 keeps them as its own; since protocol 15), `view.sidebar {sidebar}` (its width, slim; since protocol 14 also `side`, `share` and `hidden`, §4; a side other than left or right, or a share outside 10 % to 60 %, is refused), `view.info`, `view.status {compact}` (the status bar under a pane: one row without the rule above it, from the layout's `[status_bar] style`, §5.3; a layout change, as `view.sidebar`; since protocol 14), `view.columns {columns}` (the sidebar's column order, from the layout mod `[ui] layout` picks, §5.3; none for the built-in order; since protocol 12), `view.size`, `view.input` (below), `view.digest` (tests: a console's digest check, §15.2) |
 | callers | `caller.who` (who the peer pid is: the hosted session it descends from, and its role, §11.1) |
 | projects | `project.active {project, active}` (the human activates or deactivates a project, §5.1: writes the setting, then stops the project's coordinator and threads keeping them to resume, or resumes them; refused for an agent caller, `human-only`; result `{changed, stopped, resumed}`), `cli.run {args, cwd, stdin}`: an agent's project command (`tm task`, `thread`, `report`, `status`, `done`, `inbox`, `context`, `project`) run inside the server with the caller from the peer pid (§11.1); its answer is the command's output and exit code |
 | mods | `mod.hosts` (the supervised code mods' hosts for the Mods tab (§4), `tm doctor` and `tm mod dev`: `{no_mods, hosts: [{id, state, since, pid, rss, restarts, next, err}]}`, `no_mods` in safe mode (§3.7), `state` one of `idle`, `starting`, `running`, `backoff`, `failed`), `mod.restart {id}` (starts a code mod's host again now, `Supervisor.Restart`: a failed mod gets a fresh count; reads the mods and `config.toml` again first, so a mod just enabled runs (`tm mod dev`); refused for an agent caller, `human-only`, for a mod that has no host, and for a user mod in safe mode (a built-in one runs there); answers as `mod.hosts`), `mod.views {shown}` (a console's poll of the views mods draw, §4 **Mod views**: it says which views it shows, `[{mod, view, slot, project, task, thread, width, height}]`, and gets `{views: [{mod, name, view, title, slot, state, err, log, projects, trees}], open}`; human-only), `mod.view.input {mod, view, project, kind, widget, row, key}` (a declared key or a click in a mod's view, to the mod as `ui.key` / `ui.click`; a key or a click answers `{after}`, as `mod.command` does, the Seq after which the mod's open requests follow it; human-only) |
@@ -470,7 +470,7 @@ Each enabled code mod runs in its own `tm mod host` child of the server: the sam
   - **Hidden** (`b`, or a layout's `sidebar.mode = "hidden"`): no sidebar at all, 0 columns on both screens; the pane and the dashboard get the whole window, `tab` (prefix then `tab`) skips it, and `b` brings it back. Since its needs-you column is gone, a `⚑ N` badge in the warning colour counts what NEEDS YOU counts (every project): on the dashboard at the right of the header, before the server's state, where a click selects NEEDS YOU's first row; while attached at the right end of the status bar, where a click opens the dashboard on that row. `ui.json` writes a hidden sidebar as `"mode": "hidden"` with `"slim": true`, so an older tm shows the strip.
   - **Mods' sections** (`internal/tui/sidesections.go`; **Mod sections**, below). A mod's `sidebar.section` is a section of the **band**, below the tree after a blank row (above it when the layout's `[sidebar] sections` lists it before `"tree"`, §5.3), for the current project, else the mod's tree for all projects; a `sidebar.project.section` is a section under each active, unfolded project, after its last thread (its coordinator when it has none), at thread depth, for that project: none under a folded or an inactive project or the inactive divider, and a project the filter leaves out takes its sections with it. A section's header is a row of the tree (`▾ TICKER ──── terminatr`: the fold mark, the title, in capitals in the band and as the mod wrote it under a project, the badge at the right end of the rule, or else the band's project in faint), its body the mod's lines, indented, which are no rows: `↑` `↓` skip them, and `w` `W`, `1`–`9` and the filter skip the headers. On a header `→` unfolds and `←` folds the section (on a folded per-project header `←` goes up to its project), `enter` opens the view the mod names (`opens`) or else folds or unfolds it, and `z` `Z` fold and unfold the sections with the projects; `space`, `p` and the preview do nothing there. The details line names the section and its mod (`Ticker · ticker mod (built in)`, the view's `description` under it) and the key bar its keys (`← fold · ⏎ open`). A click on a header or its body gives the sidebar the keyboard, puts the cursor on the header and does what `enter` does; the wheel scrolls the tree with its sections. Band sections ask 4 lines unless they say (at most 12), a per-project one 2 (at most 4). All sections take at most half the sidebar's body (its rows less the header and the footer), the band above the tree at most a quarter, the per-project ones together at most a quarter and the headers alone a quarter; a body under 12 rows shows none. Where they don't fit they give way so that every row with `⚑`, the cursor's row and the row you are on still show, and every tree row keeps its whole grid: per-project bodies first (the bottom project's first), then the band above's, then the band below's, each to its header, then headers, the last one shown saying `+N`; a section cut for room says `…` at its right and comes back when there is room, its fold untouched. While a band section is above the tree, the PROJECTS header (always just above the first project) counts what NEEDS YOU counts as `⚑ N` in the warning colour, as it does whenever a `⚑` row is scrolled off; a click on it goes to the first such row, as `w`. The slim strip and the hidden sidebar have no sections, and their mods hear `view.closed`. A section shows from the mod's first tree for it: until then it takes no row, not even its header. A failed mod's shows its header and one red `▲ mod failed: …` line (a per-project mod's once, in the band below the tree), never a stale tree.
   - **A failing PR host** is core's, whatever the ticker mod does: while the ticker's PR polls fail for a project that has a PR host (`gh_failing`, §7.5), its row shows a red `▲` right after the name (the name is cut before it; the grid is untouched), whose tooltip and details line say `PR host failing: its PR host CLI failed on 3 PR polls in a row · see the inbox`, and the slim strip draws its slug in red. Both screens read it from `ticker.json`, once a poll.
-  - **Paired servers** (`internal/tui/sidepeers.go`, §16): with a paired server the tree is in **server groups**: a header row per server, this one first (` ◉ studio · this server`, the host name), its projects under it as above, then each paired server by alias with the projects it shares from the server's mirror (`peer.list`, §16.10; `Data.Peers`, read on each poll by the dashboard and the attach view alike). With none no header is drawn and the sidebar is as above. A paired server's header says its link: `◉ mini · 38 ms` (linked, the last ping), `◌ mini · connecting`, `○ mini · offline 4m · relay` (how long, and why: `relay`, `peer`, `key refused`, `old tm`; `⊘` for the last two); its glyph is in the link's colour, its name bold, faint while offline. Its projects use the same grid, from the last snapshot: the count of open threads, the coordinator's state when folded, `⚑` when something there needs its user; unfolded, the coordinator (its context use and state) and the threads (task id, title, progress from the task's steps or the session's todos, PR checks, state) under it. A project whose link is down or whose last read failed is **stale**: its row alone, dimmed, its last values kept, `·` for its state; the details line says `last seen 14:02`. Remote rows are **view-only**: `enter`, a click and the preview open nothing (`acme-api is mini's: view-only here`), `space` and `p` do nothing there, `w` `W` skip them and `1`–`9` count this server's projects only. A paired server's header folds and unfolds with `enter`, `←` `→` or a click (`mini · 38 ms · 2 projects` while folded); a remote project with `←` `→` as a project does (`←` on it folded goes up to its server); `z` folds them too and `Z` unfolds them; the folds are the view's tree's (`folded`, as `@mini` and `@mini/acme-api`, which no slug can be). The filter narrows this server's projects only: the groups go while it shows. The slim strip draws each header as its glyph and a rule in the link's colour, no name, and each remote project as a project. The header `PROJECTS N` counts this server's. No key is added: messaging a remote coordinator and the link's status page come with links across servers and the Peers settings page.
+  - **Paired servers** (`internal/tui/sidepeers.go`, §16): with a paired server the tree is in **server groups**: a header row per server, this one first (` ◉ studio · this server`, the host name), its projects under it as above, then each paired server by alias with the projects it shares from the server's mirror (`peer.list`, §16.10; `Data.Peers`, read on each poll by the dashboard and the attach view alike). With none no header is drawn and the sidebar is as above. A paired server's header says its link: `◉ mini · 38 ms` (linked, the last ping), `◌ mini · connecting`, `○ mini · offline 4m · relay` (how long, and why: `relay`, `peer`, `key refused`, `old tm`; `⊘` for the last two); its glyph is in the link's colour, its name bold, faint while offline. Its projects use the same grid, from the last snapshot: the count of open threads, the coordinator's state when folded, `⚑` when something there needs its user; unfolded, the coordinator (its context use and state) and the threads (task id, title, progress from the task's steps or the session's todos, PR checks, state) under it. A project whose link is down or whose last read failed is **stale**: its row alone, dimmed, its last values kept, `·` for its state; the details line says `last seen 14:02`. Remote projects are **view-only**: `enter` and a click on one, and the preview on any remote row, open nothing (`acme-api is mini's: view-only here`). A remote **coordinator or thread** opens its **pane** with `enter` or a click when that server shares its panes with this one (§16.12): the view shows the session `mini/s-41`, and its details line says `its pane opens here` (or `its pane: view only`); otherwise `enter` says why in the status bar (`mini doesn't share panes with this server: on mini, tm peer panes <this server> view, or type`, `mini is offline: its panes open once it is back`, `mini runs tm 0.27.0, which has no remote panes; update it to open them`) and the details line says `panes off` or `view-only`. On remote rows `space` and `p` do nothing there, `w` `W` skip them and `1`–`9` count this server's projects only. A paired server's header folds and unfolds with `enter`, `←` `→` or a click (`mini · 38 ms · 2 projects` while folded); a remote project with `←` `→` as a project does (`←` on it folded goes up to its server); `z` folds them too and `Z` unfolds them; the folds are the view's tree's (`folded`, as `@mini` and `@mini/acme-api`, which no slug can be). The filter narrows this server's projects only: the groups go while it shows. The slim strip draws each header as its glyph and a rule in the link's colour, no name, and each remote project as a project. The header `PROJECTS N` counts this server's. No key is added: messaging a remote coordinator and the link's status page come with links across servers and the Peers settings page.
   - The pane and the dashboard get the window less the sidebar. A width change is a layout change: the pane the view shows is resized to its new rectangle (§3.3).
   - While a sidebar is shown, the attach view keeps the outer terminal's mouse reporting on (button events and drags; every motion, 1003, while the full sidebar shows, for its tooltip) so the sidebar can be clicked whatever the focused program wants; the program still only gets mouse events it asked for. The dashboard asks for every motion too while the full sidebar shows.
   - **Tooltip.** With the mouse over one of a row's glyphs, the sidebar says what it means (`working`, `PR checks fail`, `needs you: it waits on you`, `context use`), in its details line, the line under it saying `(hover)`, so there is nothing to close; off the glyphs or off the sidebar it goes. The slim strip has none. Selecting text natively in a pane then needs Shift (Option-drag in some macOS terminals, e.g. iTerm2), as on the dashboard. A plain drag over a pane whose program doesn't take the mouse (a shell) selects in tm instead (**Copying text**, below).
@@ -990,7 +990,7 @@ Threads are grouped as herdr-projects does: Waiting on you → Ready for review 
   - a task completed by the project's complete-tasks setting
   - auto-close holds a thread back for its unpushed work
 - Rows: the dashboard's Inbox tab and the /tm pane list a project's items as rows, one per kind per subject: the latest item with `×N` when N are unhandled, so a thread's repeated `idle` or `blocked` items read as one. A row leads with the kind, in words (`PR opened`, `checks failed`, `resolved`; the TUI's `kindWord` and the mod's `kindWord` agree) and in its own color (red for what went wrong, green for what finished, yellow for the rest), then the task's ref, what happened, and last the task's title, which is what a narrow row cuts. The parts come from the summary (`project.Parts`, sent in `tm watch --project --json` as `task`, `what`, `title`, `count`); a summary without a thread label is all `what`. `tm inbox list` still lists every item.
-- Kinds: `report`, `thread-resolved` and `needs-you` come from the `tm` commands, `takeover` from the attach client (the first input into a thread's pane during an attach, §4), `delegate`, `accept` and `send-back` from the task list (`D`, the user's go-ahead to delegate the task named in its subject; `A`, the user's acceptance of it; `x`, the user sending it back, the note in its summary; §4), `adopt` from the dashboard's `T` (the user asks to adopt the session in its subject, §4); the ticker adds `blocked` (`needs_user` unless it is a permission prompt the coordinator may approve; on a question its summary says to ask the user and relay the answer with `tm thread answer`), `idle` (once per report, and not while that report's own item is unhandled), `exited`, `server-restart`, and `pr-opened`, `pr-checks-failed`, `pr-review` (approved or changes requested), `pr-merged`, `pr-closed`, `pr-conflict` (main moved and a thread's open PR now conflicts with it; one that is only behind raises nothing), `task-done` (a task completed by `complete_tasks`), `close-held` (auto-close kept a thread open for its uncommitted or unpushed work, once per reason, below), `gh-failing` (`needs_user`: `gh` failed on 3 PR polls of the project in a row), and `slot-free` (a thread slot freed for a coordinator a cap refused, §9); `tm link` adds `link-message` (a linked project's coordinator, or the human for it, wrote: subject the other project, `message` the message's id, a fixed-word summary `demo wrote M-17 (1.1 KB, re M-15, 1 file); read it with tm link read M-17`), `link-held` (`needs_user`: one of this coordinator's messages waits for the user's OK), `link-paused` (`needs_user`, in both projects: the breaker paused a link), §7.9, and `link-undelivered` (a message to a paired server's project was refused there or not taken in 72 hours, the reason in fixed words, §16.11). An item's optional `message` field names the message a link item is about.
+- Kinds: `report`, `thread-resolved` and `needs-you` come from the `tm` commands, `takeover` from the attach client (the first input into a thread's pane during an attach, §4; from a paired server's console, raised by this server, §16.12), `delegate`, `accept` and `send-back` from the task list (`D`, the user's go-ahead to delegate the task named in its subject; `A`, the user's acceptance of it; `x`, the user sending it back, the note in its summary; §4), `adopt` from the dashboard's `T` (the user asks to adopt the session in its subject, §4); the ticker adds `blocked` (`needs_user` unless it is a permission prompt the coordinator may approve; on a question its summary says to ask the user and relay the answer with `tm thread answer`), `idle` (once per report, and not while that report's own item is unhandled), `exited`, `server-restart`, and `pr-opened`, `pr-checks-failed`, `pr-review` (approved or changes requested), `pr-merged`, `pr-closed`, `pr-conflict` (main moved and a thread's open PR now conflicts with it; one that is only behind raises nothing), `task-done` (a task completed by `complete_tasks`), `close-held` (auto-close kept a thread open for its uncommitted or unpushed work, once per reason, below), `gh-failing` (`needs_user`: `gh` failed on 3 PR polls of the project in a row), and `slot-free` (a thread slot freed for a coordinator a cap refused, §9); `tm link` adds `link-message` (a linked project's coordinator, or the human for it, wrote: subject the other project, `message` the message's id, a fixed-word summary `demo wrote M-17 (1.1 KB, re M-15, 1 file); read it with tm link read M-17`), `link-held` (`needs_user`: one of this coordinator's messages waits for the user's OK), `link-paused` (`needs_user`, in both projects: the breaker paused a link), §7.9, and `link-undelivered` (a message to a paired server's project was refused there or not taken in 72 hours, the reason in fixed words, §16.11). An item's optional `message` field names the message a link item is about.
 - A summary names its thread by its task and title, the thread id in brackets, e.g. `T10 Make needs-you tasks easy to find (t-0003) opened PR #53`, so the coordinator needs no lookup (`thread.Label`: the task's title from `TASKS.md`; a thread without a task by its id and own title, `t-0003 (title)`; one printable line of at most 60 runes).
 - What the ticker already reported (per-thread state, PR fields, the default-branch head each open PR was checked against, nudged item ids, each repo's last sync, its last remote control try) is kept in `state/ticker.json`, so a server restart repeats nothing. `TERMINATR_TICK_SWEEP`, `TERMINATR_TICK_PR`, `TERMINATR_TICK_NUDGE`, `TERMINATR_TICK_REMOTE` and `TERMINATR_TICK_REMOTE_GRACE` shorten the intervals for tests.
 - **PR polling.** For each unresolved thread with a repo, through the repo's host (below is GitHub's call; Azure DevOps asks the REST API through `az rest`: the PR by number or the repo's PRs by `searchCriteria.sourceRefName`, then for an open PR its policy evaluations (`artifactId` of the project's id and the PR, api-version `7.1-preview.1`) and its statuses at once, and maps the same fields: `completed` is merged, `abandoned` is closed, and a merge is told from the PR's state, so squash and merge commits both work, with or without build-validation policies; the host's merge subject on the default branch, `Merge pull request #N from …` or `Merged PR N: …`, and a default-branch head that already contains a PR's head ("Main moved" below) are only hints, the first for a PR the host can't answer for, the second to ask the PR at once), `gh pr view <report PR URL, else the branch> --json number,url,state,reviewDecision,statusCheckRollup,mergedAt,headRefOid,mergeCommit,baseRefName,mergeable,mergeStateStatus` in the repo, every `pr_poll_seconds` (§11.2; 2 minutes by default, 30 seconds at least), until the PR merged. Only those fields are kept, each checked against a strict pattern. A failed host call (no PR yet, no network) is retried at the next poll. The timers are on screen: `state/ticker.json` keeps when each thread's PR and, per project, any PR and the repos were last checked, and `project.watch` (§3.3) carries them as times, never ages, so a state only changes when the ticker acts: `ticker` (`pr_checked`, `synced`, `pr_poll_seconds`, `gh_failing`) and, per thread, `pr_checked`. The coordinator's info panel, `tm watch --project` and the /tm pane show one line, `ticker · PRs checked 40s ago, next 1m20s · synced 1m ago · PR host ok` (`PR host failing`, in red, while the last PR poll failed; `PR host none` when no repo has a PR host), and a thread's row adds `· checked 30s ago` to its PR (`PR #156 · checks running · checked 30s ago`); readers work out the ages on their own clocks. `tm thread list` and `tm context` read them from `state/ticker.json` (§7.4).
@@ -1685,7 +1685,7 @@ The server tells them apart by the caller's pid (§3.2). Every project command (
 
 A user mod is a third kind of caller, `caller.Mod`, journaled as `mod:<id>`. It never comes from a process: only the server's broker makes it, for the mod's brokered calls (§5.3). It has fewer rights than any agent, and every human-only check refuses it as it refuses an agent (`IsAgent`).
 
-A paired server is the narrowest caller, `caller.Peer`, journaled as `peer:<alias>`. Only a link's dispatcher makes it (§16.9), never the environment or a socket, and it reaches only the read-only `peer.*` methods and `peer.message`, which delivers a linked project's message (§16.11); every human-only check refuses it too.
+A paired server is the narrowest caller, `caller.Peer`, journaled as `peer:<alias>`. Only a link's dispatcher makes it (§16.9), never the environment or a socket, and it reaches only the read-only `peer.*` methods, `peer.message`, which delivers a linked project's message (§16.11), and `peer.attach`, whose stream types into a shared project's coordinator or thread while this server's pane switch for that peer is `type` (§16.12); every human-only check refuses it too.
 
 Agent calls of project commands (`tm task`, `thread`, `report`, `status`, `done`, `inbox`, `context`, `project`) run **inside the server** (`cli.run`): the CLI sees `TERMINATR_SESSION`, sends its arguments, cwd and (when the command reads it) stdin, and the server runs the command with the caller it derived from the peer pid's process tree. That also lets a sandboxed thread's `tm report` write the project folder it can't write itself (§5.2). Without a server, the command runs in the CLI with the caller from the environment.
 
@@ -2009,7 +2009,8 @@ This section is the relay's side, and the link that dials it (§16.7).
 Pairing, which makes the identity key and fills the peers, is §16.8;
 what a paired server may read of the projects the user shares, §16.9;
 what it keeps of theirs, §16.10; coordinator links to a paired server's
-projects, §16.11.
+projects, §16.11; a paired server's panes in this server's consoles,
+§16.12.
 
 ### 16.1 Transport
 
@@ -2168,7 +2169,7 @@ own goroutine; no local call waits on one.
   doesn't export. The peer's requests other than `link.ping` go to the
   peer dispatcher (§16.9), each in its own goroutine, at most 32 at
   once (more: `refused`), cancelled when the link ends. Binary frames
-  come with the peers' panes (phase 4).
+  carry remote panes between two lines (§16.12).
 - **Backoff**: a link that ends or fails dials again after 1 s doubling
   to 60 s, each wait between half and all of that; a link that came up
   starts again at 1 s. A link room the relay timed out (its hour) is no
@@ -2205,6 +2206,7 @@ asks a running server to read it again (`peer.reload`).
 | `tm peer list [--json]` | this server's id, then each peer: alias, id, relay, link state |
 | `tm peer remove ALIAS` | drops the peer and its link at once |
 | `tm peer rotate [--yes]` | a new identity key, after a `y`; every peer must pair again |
+| `tm peer panes ALIAS off\|view\|type` | what the peer may do with this server's panes (§16.12); off by default |
 
 - **Human only.** Every `tm peer` command refuses an agent (`human-only`,
   from the server's view of the caller as for `tm relay serve`), and
@@ -2264,7 +2266,9 @@ asks a running server to read it again (`peer.reload`).
   entries on both sides.
 - **Lines.** `tm peer list`, without a server: `link not running`;
   `--json`: `{"id", "short", "peers": [{"alias", "id", "short", "relay",
-  "link"}]}`, `link` as in `server.status` (§16.7). `tm doctor`'s `peers`
+  "link", "panes"}]}`, `link` as in `server.status` (§16.7), `panes` the
+  pane switch (§16.12); a switch that isn't off ends the peer's line
+  (`; panes: type`). `tm doctor`'s `peers`
   group: nothing for a server never paired; else one line, `ok` with
   each peer's state, a warning when a link is refused, on an old
   protocol or can't reach its relay, a failure when the key or
@@ -2414,3 +2418,90 @@ cross, each server checks its own side, and the text stays data.
   delivered: mini/api doesn't take messages from acme: …`), fixed words
   per code, never the other server's. A receipt that isn't taken goes
   quietly.
+
+### 16.12 Remote panes
+
+A paired server's coordinator and thread panes, shown in this server's
+consoles and typed into like this server's own. Both servers are the
+user's own (§16.8); the far server's human decides what crosses.
+
+- **The switch.** Per paired server, the human's: `"panes"` on its
+  entry in `peers.json` (§16.7), `off` (the default, no key), `view`
+  (watch) or `type` (watch and type), set with `tm peer panes ALIAS
+  off|view|type`, which asks the server to read the peers again. Pairing
+  again keeps it. It applies on top of sharing (§16.9): only the
+  coordinator and the threads of a shared project cross, never a shell
+  or another session. Lowering it acts at once: `off` closes the peer's
+  streams (`panes-off`), `view` drops their next keys. `peer.projects`
+  carries it (`panes`), so the far side's mirror knows it within 30 s
+  (`peer.list`: `pane`, the peer's hello lists `pane-vt`, and `panes`,
+  its switch for this server, with its `version`).
+- **`peer.attach`** `{"project", "session", "stream", "cols", "rows"}`
+  → `{"input", "session"}`: in the dispatcher's list (§16.9) when the
+  server has panes (its hello lists `pane-vt`). The caller picks the
+  stream id; `input` says the stream may type, `session` is the session
+  as `peer.watch` shows it. Refusals: `panes-off`, `not-shared` (as
+  §16.9), `unknown-session` (no such session, or not the project's
+  coordinator or one of its threads), `refused` (8 streams at once).
+- **Frames.** Once both hellos list `pane-vt`, either end may write a
+  binary frame between two lines: `0x00` (a line starts with `{`), the
+  stream (u32), the type (u8), the length (u32), big-endian, then at
+  most 64 KiB (16 KiB as this tm writes them). Far to near: `20`
+  repaint (u16 cols, u16 rows, then `emu.Repaint`'s bytes for a fresh
+  emulator of that size; output frames that follow continue it), `2`
+  output, `3` resize, `6` closed (a fixed word: `exited`, `not-shared`,
+  `panes-off`). Near to far: `10` keys, `22` size, `21` ack (u32: output
+  bytes taken), `23` repaint request, `13` detach. The type says the
+  direction, so each end's stream ids are its own; an unknown type or
+  stream is ignored. Pending lines go before frames, and frames take
+  turns across streams, so a busy pane never holds up a ping.
+- **The repaint** is plain VT (`emu.Repaint`): the active screen with its
+  styles, modes, cursor, scrolling region, origin mode, keyboard flags,
+  charsets and tab stops, and the last 200 rows of the scrollback, so
+  the two servers needn't run the same build (an attach's snapshot needs
+  it, §3.3). It loses the inactive screen, older scrollback, hyperlinks
+  and soft wraps.
+- **Slow links.** The far end keeps at most 256 KiB of a stream's output
+  unacked; the near end acks every 32 KiB it has fed. Past 1 MiB queued
+  (`session.AttachRemote`) the backlog is dropped for a fresh repaint, at
+  most one per 250 ms: the pane skips ahead rather than lag.
+- **Keys and who types.** On the far server the caller stays
+  `peer:<alias>`, an agent to every check, and its keys go to the PTY
+  only on a stream opened, and still allowed, at `type`. The first key
+  into a thread's pane on a stream raises a `takeover` item there for
+  its coordinator, `the user typed into T7's pane from the paired server
+  studio`, and the journal line `peer:studio thread.takeover t-0004`
+  (§4); a coordinator's pane raises nothing. A size frame is that
+  server's `view.input` from a console outside its views: the session
+  takes the near pane's size, and its own consoles crop or pad until
+  someone types there. Colours and the colour scheme don't cross.
+- **The near server** keeps a **proxy pane** (`session.Proxy`) per remote
+  session it shows: an emulator fed the stream, which consoles attach to
+  as to a session, with the identical-build snapshot (§3.3), so a
+  console's mirror, scrollback (from when the pane opened), selection,
+  digest check and OSC 52 work as for this server's panes. One stream
+  serves every console showing it and closes 10 s after the last leaves.
+  The pane is the session `<alias>/<id>` (no local id has a `/`): a
+  view's focus and `view.attach` may name it (since protocol 16), and
+  the console attaches it as any session; showing it never resizes it,
+  only a console's keys do (`view.input`). It has no info panel. Every
+  `session.*` method refuses it (`refused`: `not on mini's panes: open
+  it on mini`). Only the human's attach opens it; no command, method or
+  mod types into a remote pane, and `session.keys`, `session.read` and
+  `session.prompt` stay this server's.
+- **The console.** The status bar leads with the server
+  (`mini › acme › T7 Billing export`) and says `remote · 38 ms`, `view
+  only`, or `⚠ mini offline · keys aren't sent`; its keys go to the
+  program as in a local pane except on a view-only pane or while the
+  link is down, where they are dropped with that note. The near server
+  raises no takeover. `SessionInfo` has `server` (the alias) and
+  `view_only` for such a pane.
+- **The link drops.** The pane freezes on its last screen and keys are
+  dropped, never kept for later. While a console shows it the near
+  server tries again every second; once the link is back it finds the
+  session again by its project and thread (or the coordinator) in the
+  mirror, since a restarted server may run it as another session, and
+  the fresh repaint replaces the frozen screen. A stream that ends
+  otherwise closes the pane, in this server's words: `session exited on
+  mini`, `mini stopped sharing acme`, `mini turned its panes off for
+  this server`, `the session on mini is gone`.

@@ -31,7 +31,9 @@ import (
 //
 // The remote rows are kinds of their own (treePeerProject, …), drawn as
 // a project, coordinator and thread are, so no key, click or preview
-// meant for this server's projects reaches them. A paired server's
+// meant for this server's projects reaches them. Enter on a remote
+// coordinator or thread opens its pane (§16.12) when the paired server
+// shares its panes with this one: the session "<alias>/<id>". A paired server's
 // group folds as a project does, and so does each of its projects;
 // both are kept in the view's tree with the projects (view.Tree.Folded)
 // as "@alias" and "@alias/slug", which no slug can be.
@@ -52,6 +54,10 @@ type peerLink struct {
 	// synced is when this server last read the row's project, or the
 	// group's latest; zero for never.
 	synced time.Time
+	// pane: the peer has remote panes; panes is its switch for this
+	// server (proto.PanesOff …), version its tm's release.
+	pane           bool
+	panes, version string
 }
 
 // sideClock is the clock the server headers' ages are drawn by; tests
@@ -114,7 +120,62 @@ func withPeers(tree []treeRow, in treeIn) []treeRow {
 	for _, pm := range in.peers {
 		out = append(out, peerRows(pm, in.tree)...)
 	}
+	// A remote pane in the view is you are on its row.
+	if _, _, remote := strings.Cut(in.focus, "/"); remote {
+		for i, r := range out {
+			if (r.kind == treePeerCoord || r.kind == treePeerThread) && r.session != "" && in.focus == r.peer+"/"+r.session {
+				for j := range out {
+					out[j].here = false
+				}
+				out[i].here = true
+				break
+			}
+		}
+	}
 	return out
+}
+
+// peerTarget is where enter on a remote row goes: a coordinator's or a
+// thread's pane, when its server shares panes with this one; else why
+// not.
+func peerTarget(r treeRow) (t Target, ok bool, why string) {
+	if r.kind != treePeerCoord && r.kind != treePeerThread {
+		return t, false, peerWhy(r)
+	}
+	if why := paneWhyNot(r); why != "" {
+		return t, false, why
+	}
+	return Target{Session: r.peer + "/" + r.session}, true, ""
+}
+
+// paneWhyNot is why remote row r's pane doesn't open; "" when it does.
+func paneWhyNot(r treeRow) string {
+	l := r.link
+	switch {
+	case l.state != proto.LinkUp:
+		return r.peer + " is offline: its panes open once it is back"
+	case !l.pane:
+		return r.peer + " runs tm " + l.version + ", which has no remote panes; update it to open them"
+	case l.panes != proto.PanesView && l.panes != proto.PanesType:
+		return r.peer + " doesn't share panes with this server: on " + r.peer + ", tm peer panes <this server> view, or type"
+	case r.session == "":
+		return "nothing runs for it on " + r.peer
+	}
+	return ""
+}
+
+// paneWords are the footer's words on a remote coordinator's or thread's
+// pane: whether enter opens it, and how.
+func paneWords(r treeRow) string {
+	switch {
+	case paneWhyNot(r) != "" && r.link.state == proto.LinkUp && r.link.pane && r.session != "":
+		return "panes off"
+	case paneWhyNot(r) != "":
+		return "view-only"
+	case r.link.panes == proto.PanesView:
+		return "its pane: view only"
+	}
+	return "its pane opens here"
 }
 
 // peerRows are a paired server's group: its header, then unless it is
@@ -123,7 +184,8 @@ func withPeers(tree []treeRow, in treeIn) []treeRow {
 // (its link down, or its last read failed) shows its row alone, its
 // last values dimmed.
 func peerRows(pm proto.PeerMirror, t view.Tree) []treeRow {
-	link := peerLink{state: pm.State, reason: pm.Reason, since: pm.Since, rtt: pm.RTT, watch: pm.Watch}
+	link := peerLink{state: pm.State, reason: pm.Reason, since: pm.Since, rtt: pm.RTT, watch: pm.Watch,
+		pane: pm.Pane, panes: pm.Panes, version: pm.Version}
 	for _, p := range pm.Projects {
 		if p.Synced.After(link.synced) {
 			link.synced = p.Synced
@@ -171,7 +233,7 @@ func peerProjectRows(alias string, p proto.PeerMirrorProject, link *peerLink, t 
 	if p.Watch != nil {
 		for _, w := range p.Watch.Threads {
 			tr := treeRow{kind: treePeerThread, peer: alias, slug: p.Project, thread: w.ID, title: oneLine(w.Title),
-				pct: -1, link: link, stale: p.Stale, ci: w.PRChecks}
+				pct: -1, link: link, stale: p.Stale, ci: w.PRChecks, session: w.Session}
 			if w.Task != nil {
 				tr.name, tr.task = w.Task.ID, w.Task.ID
 				if w.Task.StepsTotal > 0 {
@@ -378,7 +440,7 @@ func peerDetails(r treeRow) (string, string) {
 		}
 		return strings.Join(bits, " · "), fmt.Sprintf("%s · coordinator %s", counted(r.threads, "thread"), running(r.state))
 	case treePeerCoord:
-		bits := []string{"view-only"}
+		bits := []string{paneWords(r)}
 		if r.ctx >= 0 {
 			bits = append(bits, fmt.Sprintf("context %d%%", r.ctx))
 		}
@@ -398,7 +460,7 @@ func peerDetails(r treeRow) (string, string) {
 	if r.pct >= 0 {
 		bits = append(bits, fmt.Sprintf("%d%%", r.pct))
 	}
-	return l1, strings.Join(append(bits, "view-only"), " · ")
+	return l1, strings.Join(append(bits, paneWords(r)), " · ")
 }
 
 // peerWhy is why a remote row opens nothing: the other server is only
@@ -482,6 +544,9 @@ func peerKeyBar(r *treeRow) []string {
 			return []string{barKey("side.unfold", "→") + " unfold"}
 		}
 		return []string{left + " fold"}
+	}
+	if paneWhyNot(*r) == "" {
+		return []string{enter + " open", left + " project"}
 	}
 	return []string{left + " project"}
 }

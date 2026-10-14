@@ -1148,7 +1148,7 @@ type Target struct {
 // running session, with why.
 func (r treeRow) target() (t Target, ok bool, why string) {
 	if r.kind == treeServer || r.isPeer() {
-		return t, false, peerWhy(r)
+		return peerTarget(r)
 	}
 	t.Project = r.slug
 	switch r.kind {
