@@ -278,11 +278,15 @@ The unit runs the relay as a throwaway user with only the right to bind 443; sys
 
 ### Updating a systemd relay
 
-Download the release tarball for the host's architecture and `checksums.txt` from the releases page into an empty folder, then:
+Download the release tarball for the host's architecture (`amd64` or `arm64`) and `checksums.txt` into an empty folder, then:
 
 ```sh
-sha256sum -c --ignore-missing checksums.txt     # the tarball must say OK
-tar xzf tm_*_linux_*.tar.gz tm
+ARCH=amd64                                       # or arm64
+V=vX.Y.Z                                         # the release tag
+curl -fLO https://github.com/theclifmeister/terminatr/releases/download/$V/tm_linux_$ARCH.tar.gz
+curl -fLO https://github.com/theclifmeister/terminatr/releases/download/$V/checksums.txt
+grep " tm_linux_$ARCH.tar.gz\$" checksums.txt | sha256sum -c -    # must say OK
+tar xzf tm_linux_$ARCH.tar.gz tm
 sudo install -m 755 tm /usr/local/bin/tm
 sudo systemctl restart tm-relay
 ```
