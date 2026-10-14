@@ -183,7 +183,7 @@ func (m *dash) mouse(msg tea.Msg) tea.Cmd {
 		case m.dragging:
 			m.dragTo(x, msg.Mouse().Y)
 		default:
-			m.hover(msg.Mouse())
+			m.hold = !m.hover(msg.Mouse())
 		}
 	case tea.MouseReleaseMsg:
 		if m.dragging || m.sideDrag {

@@ -673,10 +673,10 @@ func stateMeaning(state string) string {
 
 // hover follows the mouse over the dashboard: on a sidebar glyph, its
 // tooltip.
-func (m *dash) hover(mo tea.Mouse) {
+func (m *dash) hover(mo tea.Mouse) (changed bool) {
 	tip := ""
 	if g := m.geom(); g.side().hasX(mo.X) && m.top() == nil {
 		tip = sideTip(m.tree(), m.sideW(), m.h, m.sideFoot(), g.sideCol(mo.X), mo.Y)
 	}
-	setSideHover(tip)
+	return setSideHover(tip)
 }
