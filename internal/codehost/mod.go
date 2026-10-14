@@ -162,6 +162,7 @@ type ModPR struct {
 	Base       string `json:"base"`
 	Mergeable  string `json:"mergeable"`
 	MergeState string `json:"merge_state"`
+	Branch     string `json:"branch"`
 }
 
 func (m Mod) Kind() string { return m.Target.Kind }
@@ -291,6 +292,9 @@ func (m Mod) fixed(a ModPR) PR {
 	}
 	if branchRE.MatchString(a.Base) {
 		pr.Base = a.Base
+	}
+	if branchRE.MatchString(a.Branch) {
+		pr.Branch = a.Branch
 	}
 	return pr
 }

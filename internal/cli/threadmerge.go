@@ -8,6 +8,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/config"
@@ -49,13 +50,21 @@ func (e *Env) threadMerge(p *project.Project, id string) error {
 	if rep, _ := thread.ReadReport(p, id); rep != nil {
 		reportPR = rep.PR
 	}
+	// The PR is found by the thread's own branch; the report's PR line
+	// only has to agree with it.
 	host := pickHost(r.Repo, p.CodeHost())
-	pr, err := host.PR(r.Repo, codehost.Ref{URL: reportPR, Branch: r.Branch})
+	pr, err := host.PR(r.Repo, codehost.Ref{Branch: r.Branch})
 	switch {
 	case errors.Is(err, codehost.ErrNoPR), errors.Is(err, codehost.ErrNoRef):
-		return mergeRefusal("no-pr", "thread %s has no pull request yet (its report names none and its branch has none)", id)
+		return mergeRefusal("no-pr", "thread %s has no pull request yet (its branch has none)", id)
 	case err != nil:
 		return err
+	}
+	if pr.Branch != r.Branch || !codehost.InRepo(r.Repo, host, pr) {
+		return mergeRefusal("not-thread-pr", "%s is not from thread %s's branch in its repo", pr.Ref(), id)
+	}
+	if reportPR != "" && !samePR(host, reportPR, pr) {
+		return mergeRefusal("not-thread-pr", "thread %s's report names another PR than %s, the one of its branch", id, pr.Ref())
 	}
 	switch pr.State {
 	case "MERGED":
@@ -93,6 +102,17 @@ func (e *Env) threadMerge(p *project.Project, id string) error {
 	}
 	fmt.Fprintf(e.Stdout, "%s merged %s (merge commit, head %s, checks green)\n", id, pr.Ref(), head)
 	return nil
+}
+
+// samePR says whether the report's PR URL names pr: one of the host's
+// PR URLs of this repo with pr's number. Any github.com PR URL parses,
+// so GitHub's must be pr's URL itself.
+func samePR(host codehost.Host, reportPR string, pr codehost.PR) bool {
+	n, ok := host.ParsePRURL(reportPR)
+	if !ok || n != pr.Number {
+		return false
+	}
+	return host.Kind() != codehost.GitHubKind || strings.EqualFold(reportPR, pr.URL)
 }
 
 func baseOr(b string) string {

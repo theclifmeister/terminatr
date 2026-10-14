@@ -31,7 +31,7 @@
       },
       "result": {
         "code": 0,
-        "stdout": "{\"iid\": 7, \"web_url\": \"https://gitlab.com/acme/web/shop/-/merge_requests/7\", \"state\": \"opened\", \"source_branch\": \"feat\", \"target_branch\": \"main\", \"sha\": \"0123456789abcdef0123456789abcdef01234567\", \"merge_commit_sha\": null, \"squash_commit_sha\": null, \"merged_at\": null, \"has_conflicts\": false, \"detailed_merge_status\": \"mergeable\", \"head_pipeline\": {\"id\": 99, \"status\": \"failed\"}}",
+        "stdout": "{\"iid\": 7, \"web_url\": \"https://gitlab.com/acme/web/shop/-/merge_requests/7\", \"state\": \"opened\", \"source_branch\": \"feat\", \"target_branch\": \"main\", \"source_project_id\": 5, \"target_project_id\": 5, \"sha\": \"0123456789abcdef0123456789abcdef01234567\", \"merge_commit_sha\": null, \"squash_commit_sha\": null, \"merged_at\": null, \"has_conflicts\": false, \"detailed_merge_status\": \"mergeable\", \"head_pipeline\": {\"id\": 99, \"status\": \"failed\"}}",
         "stderr": ""
       }
     },
@@ -100,7 +100,8 @@
         "review": "APPROVED",
         "base": "main",
         "head": "0123456789abcdef0123456789abcdef01234567",
-        "mergeable": "MERGEABLE"
+        "mergeable": "MERGEABLE",
+        "branch": "feat"
       },
       {
         "state": "OPEN"

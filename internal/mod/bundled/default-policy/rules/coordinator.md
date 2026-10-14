@@ -210,6 +210,9 @@ code, and is not an error to work around:
 - `merge-not-allowed`: the project has merge = thread. Tell the user;
   don't merge by other means.
 - `no-pr`, `pr-closed`: nothing to merge; check `tm thread show`.
+- `not-thread-pr`: the PR isn't the thread's own (another branch or
+  repo, or its report names a different PR). Tell the user; don't merge
+  it by other means.
 - `merge-failed`: the host refused (the head moved, a required review
   is missing); tell the user what it said.
 

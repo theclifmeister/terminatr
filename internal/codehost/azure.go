@@ -391,7 +391,8 @@ func isStatusPolicy(p azPolicy) bool {
 //     REVIEW_REQUIRED (not for a draft, whose reviewers aren't asked
 //     yet); else any vote of 5 or 10 => APPROVED; else "".
 //   - closedDate => MergedAt, lastMergeCommit => Merge (both MERGED
-//     only), lastMergeSourceCommit => Head, targetRefName => Base.
+//     only), lastMergeSourceCommit => Head, targetRefName => Base,
+//     sourceRefName => Branch.
 func azurePR(t Target, pr, policies, statuses []byte) (PR, error) {
 	var a azPR
 	if err := json.Unmarshal(pr, &a); err != nil {
@@ -429,6 +430,9 @@ func azurePR(t Target, pr, policies, statuses []byte) (PR, error) {
 	}
 	if b, ok := strings.CutPrefix(a.TargetRefName, "refs/heads/"); ok && branchRE.MatchString(b) {
 		out.Base = b
+	}
+	if b, ok := strings.CutPrefix(a.SourceRefName, "refs/heads/"); ok && branchRE.MatchString(b) {
+		out.Branch = b
 	}
 
 	var pols []azPolicy

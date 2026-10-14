@@ -46,7 +46,7 @@ func RunGH(dir string, args ...string) ([]byte, error) {
 }
 
 // prFields is what `gh pr view --json` is asked for.
-const prFields = "number,url,state,reviewDecision,statusCheckRollup,mergedAt,headRefOid,mergeCommit,baseRefName,mergeable,mergeStateStatus"
+const prFields = "number,url,state,reviewDecision,statusCheckRollup,mergedAt,headRefOid,mergeCommit,baseRefName,mergeable,mergeStateStatus,headRefName,isCrossRepository"
 
 // ghNoPR matches the errors of a gh that works but found no PR.
 var ghNoPR = regexp.MustCompile(`(?i)no (open )?pull requests found|could not resolve to a pullrequest`)
@@ -88,6 +88,8 @@ type ghPR struct {
 		Oid string `json:"oid"`
 	} `json:"mergeCommit"`
 	BaseRefName string `json:"baseRefName"`
+	HeadRefName string `json:"headRefName"`
+	CrossRepo   bool   `json:"isCrossRepository"`
 	Mergeable   string `json:"mergeable"`
 	MergeState  string `json:"mergeStateStatus"`
 	Rollup      []struct {
@@ -137,6 +139,9 @@ func parseGitHubPR(data []byte) (PR, error) {
 	}
 	if branchRE.MatchString(g.BaseRefName) {
 		pr.Base = g.BaseRefName
+	}
+	if !g.CrossRepo && branchRE.MatchString(g.HeadRefName) {
+		pr.Branch = g.HeadRefName
 	}
 	if upperRE.MatchString(g.Mergeable) {
 		pr.Mergeable = g.Mergeable

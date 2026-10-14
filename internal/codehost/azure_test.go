@@ -44,25 +44,25 @@ func TestAzurePRFixtures(t *testing.T) {
 		// latest status succeeded, the coverage service's is
 		// notApplicable
 		{"pr-active.json", "policies-approved.json", "statuses.json",
-			PR{Number: 1, State: "OPEN", Checks: "pass", Review: "REVIEW_REQUIRED", Head: "f487d85c7bc862efcca47c4eed97232849a86168", Base: "main", Mergeable: "MERGEABLE"},
+			PR{Number: 1, State: "OPEN", Checks: "pass", Review: "REVIEW_REQUIRED", Head: "f487d85c7bc862efcca47c4eed97232849a86168", Base: "main", Mergeable: "MERGEABLE", Branch: "feature/pass"},
 			"#1 open, checks pass, review required"},
 		// the build policy rejected, lint failed; a vote of -5
 		{"pr-failed.json", "policies.json", "statuses-failed.json",
-			PR{Number: 2, State: "OPEN", Checks: "fail", Failed: 2, Review: "CHANGES_REQUESTED", Head: "b690915c44588901482bbea21bcab55a6a478b15", Base: "main", Mergeable: "MERGEABLE"},
+			PR{Number: 2, State: "OPEN", Checks: "fail", Failed: 2, Review: "CHANGES_REQUESTED", Head: "b690915c44588901482bbea21bcab55a6a478b15", Base: "main", Mergeable: "MERGEABLE", Branch: "feature/fail"},
 			"#2 open, 2 checks failed, changes requested"},
 		// a draft: its build policy queued with no build
 		{"pr-draft.json", "policies-draft.json", "",
-			PR{Number: 3, State: "OPEN", Head: "4c2918eb25297e3d7172c1bd00c0a61feb69c28b", Base: "main", Mergeable: "MERGEABLE"}, "#3 open"},
+			PR{Number: 3, State: "OPEN", Head: "4c2918eb25297e3d7172c1bd00c0a61feb69c28b", Base: "main", Mergeable: "MERGEABLE", Branch: "feature/draft"}, "#3 open"},
 		// abandoned: no mergeStatus at all
 		{"pr-abandoned.json", "", "",
-			PR{Number: 4, State: "CLOSED", Head: "c002a528a7c4ce4eb756a2f81a941c00dc4ca725", Base: "main", Mergeable: "UNKNOWN"}, "#4 closed"},
+			PR{Number: 4, State: "CLOSED", Head: "c002a528a7c4ce4eb756a2f81a941c00dc4ca725", Base: "main", Mergeable: "UNKNOWN", Branch: "feature/abandon"}, "#4 closed"},
 		// completed by hand, merge (no fast-forward), "Merged PR 5: …"
 		{"pr-completed.json", "", "",
 			PR{Number: 5, State: "MERGED", MergedAt: time.Date(2026, 10, 7, 12, 14, 12, 798581000, time.UTC), Head: "c5db4777afb846d0a8e258006b2778d7c4500d91",
-				Merge: "aa2ef614651f363bd8c383e119ff4fb884abf64a", Base: "main", Mergeable: "MERGEABLE"}, "#5 merged"},
+				Merge: "aa2ef614651f363bd8c383e119ff4fb884abf64a", Base: "main", Mergeable: "MERGEABLE", Branch: "feature/merge"}, "#5 merged"},
 		// conflicts with its target, another branch
 		{"pr-conflicts.json", "", "",
-			PR{Number: 6, State: "OPEN", Head: "74013a6fddf1ae08004511adfc0dfc107ce2c6e3", Base: "feature/base", Mergeable: "CONFLICTING", MergeState: "DIRTY"}, "#6 open, conflicts"},
+			PR{Number: 6, State: "OPEN", Head: "74013a6fddf1ae08004511adfc0dfc107ce2c6e3", Base: "feature/base", Mergeable: "CONFLICTING", MergeState: "DIRTY", Branch: "feature/conflict"}, "#6 open, conflicts"},
 	} {
 		var pol, st []byte
 		if c.policies != "" {
@@ -200,6 +200,11 @@ func TestAzurePRSanitising(t *testing.T) {
 	if pr != want {
 		t.Fatalf("got %+v", pr)
 	}
+	for ref, want := range map[string]string{"refs/heads/feature/x": "feature/x", "refs/heads/-x": "", "refs/pull/3/merge": ""} {
+		if pr, _ := azurePR(shop, []byte(`{"pullRequestId":3,"sourceRefName":"`+ref+`"}`), nil, nil); pr.Branch != want {
+			t.Fatalf("%s: branch %q, want %q", ref, pr.Branch, want)
+		}
+	}
 	if pr, _ := azurePR(shop, []byte(`{"pullRequestId":-4}`), nil, nil); pr.Number != 0 || pr.URL != "" {
 		t.Fatalf("negative id: %+v", pr)
 	}
@@ -219,7 +224,7 @@ func FuzzParseAzurePR(f *testing.F) {
 			return
 		}
 		if pr.Number < 0 || pr.URL != "" && pr.URL != AzurePRURL(shop, pr.Number) || !upperRE.MatchString(pr.State) || !upperRE.MatchString(pr.Review) ||
-			!upperRE.MatchString(pr.Mergeable) || !upperRE.MatchString(pr.MergeState) || pr.Base != "" && !branchRE.MatchString(pr.Base) ||
+			!upperRE.MatchString(pr.Mergeable) || !upperRE.MatchString(pr.MergeState) || pr.Base != "" && !branchRE.MatchString(pr.Base) || pr.Branch != "" && !branchRE.MatchString(pr.Branch) ||
 			pr.Merge != "" && !oidRE.MatchString(pr.Merge) || pr.Head != "" && !oidRE.MatchString(pr.Head) ||
 			pr.Failed < 0 || pr.Checks != "" && pr.Checks != "pass" && pr.Checks != "fail" && pr.Checks != "pending" {
 			t.Fatalf("unchecked field: %+v", pr)

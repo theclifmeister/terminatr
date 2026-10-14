@@ -215,6 +215,8 @@ export declare namespace TM {
     mergeable?: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
     /** The host's word on the merge, upper case: "DIRTY" for a conflict. */
     merge_state?: string;
+    /** The branch it comes from, of the repo itself: none for a fork's. */
+    branch?: string;
   }
 
   /** The code host methods, by name, to their answers. */
