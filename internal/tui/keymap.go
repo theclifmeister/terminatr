@@ -71,7 +71,7 @@ var settingsKeys = []keyHelp{
 	{"x", "on a project's setting it sets itself (its Settings tab): follow all projects again"},
 	{"n j", "on the , settings' Peers tab: pair with another server through a relay, or join the pairing code another shows; both compare six digits (j doesn't move there: ↓ does)"},
 	{"space ← →", "on the Peers tab: share or stop sharing the selected project (sharing asks first), or move the selected server's panes setting along off · view · write (more asks first)"},
-	{"x", "on the Peers tab: remove the selected server (asks first)"},
+	{"x e", "on the Peers tab: remove the selected server (asks first), or give it another relay (the relay moved, or has a new key)"},
 	{"esc", "close"},
 }
 

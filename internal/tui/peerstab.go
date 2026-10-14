@@ -26,7 +26,8 @@ import (
 //     two setting rows: panes, off · view · write side by side with the
 //     current one marked, which ← → or a click on a word changes as tm
 //     peer panes does (asking before it lets the server do more), and
-//     its relay.
+//     its relay, which e (or enter or a click on it) changes as tm peer
+//     relay does (the relay moved, or has a new key).
 //
 // x removes the selected server, asking first, as tm peer remove does;
 // n pairs with another server and j joins one's pairing (peerpair.go),
@@ -67,10 +68,10 @@ const (
 )
 
 // peersKeys are the Peers tab's action row.
-const peersKeys = "space toggle · ← → change · n pair · j join · x remove · ↑ ↓ move · esc close"
+const peersKeys = "space toggle · ← → change · n pair · j join · e relay · x remove · esc close"
 
 // relayHint ends the empty tab: where a relay comes from.
-const relayHint = "No relay yet? On a Linux server with a domain: sudo tm relay install --domain NAME (see the README)."
+const relayHint = "No relay yet? On a Linux server with a domain: sudo tm relay install --domain NAME; without one, on an address both servers reach: sudo tm relay install --ip (see the README)."
 
 // panesLevels are the pane switch's levels, in the order the row shows.
 var panesLevels = []string{proto.PanesOff, proto.PanesView, proto.PanesType}
@@ -219,6 +220,7 @@ func (pt *peersTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
 	}
 	add(noHit, "")
 	add(noHit, faintLines("panes sets what a server may do with this server's panes, the coordinators and threads of the projects you share: nothing, watch them, or watch and type into them. ← → or a click on a word changes it; more asks first, less applies at once.", w)...)
+	add(noHit, faintLines("e gives the selected server another relay, as tm peer relay does: when the relay moved or was set up again with a new key (its link refuses a relay whose key changed); set it on the other server too.", w)...)
 	add(noHit, faintLines("x removes the selected server, as tm peer remove does: its link closes and its projects leave the sidebar; remove this server there too.", w)...)
 	return out, sel, hits
 }
@@ -366,9 +368,13 @@ func (pt *peersTab) setPanes(m *dash, e PeerEntry, to string) tea.Cmd {
 	return nil
 }
 
-// relayWords is a relay as people read it: its host for wss://.
+// relayWords is a relay as people read it: its host for wss://, and
+// "(pinned)" for one taken by its key's pin.
 func relayWords(r string) string {
 	if u, err := url.Parse(r); err == nil && u.Scheme == "wss" && u.Path == "" && u.Host != "" {
+		if u.Fragment != "" {
+			return u.Host + " (pinned)"
+		}
 		return u.Host
 	}
 	return r
@@ -393,7 +399,7 @@ func (pt *peersTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 	it, ok := pt.selected(m)
 	switch {
 	case !ok:
-		return nil, s == "x" || s == "space" || s == " " || s == "enter"
+		return nil, s == "x" || s == "e" || s == "space" || s == " " || s == "enter"
 	case it.kind == itemShare && (s == "space" || s == " " || s == "enter"):
 		return pt.toggle(m, it.slug), true
 	case it.kind == itemPanes && (s == "left" || s == "right"):
@@ -403,8 +409,11 @@ func (pt *peersTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 	case it.kind != itemShare && s == "x":
 		pt.remove(m, pt.list.Peers[it.peer].Alias)
 		return nil, true
+	case it.kind != itemShare && s == "e", it.kind == itemRelay && s == "enter":
+		pt.relay(m, pt.list.Peers[it.peer])
+		return nil, true
 	}
-	return nil, s == "x" || s == "space" || s == " " || s == "enter"
+	return nil, s == "x" || s == "e" || s == "space" || s == " " || s == "enter"
 }
 
 // toggle flips slug's Shared with paired servers, as its Settings tab's
@@ -416,6 +425,25 @@ func (pt *peersTab) toggle(m *dash, slug string) tea.Cmd {
 		return nil
 	}
 	return run(m)
+}
+
+// relay asks for the selected server's new relay, starting from its
+// current one, and sets it as tm peer relay does.
+func (pt *peersTab) relay(m *dash, e PeerEntry) {
+	alias := e.Alias
+	m.push(&inputView{title: "Relay for " + alias, text: e.Relay, cancel: "relay unchanged for " + alias,
+		label: "The relay " + alias + "'s link goes through (a host name, or wss://…; a relay without a domain with its #sha256= pin). Set the same on " + alias + " for this server.",
+		submit: func(s string) tea.Cmd {
+			src := m.src
+			return m.act(func() actionMsg {
+				warn, err := src.SetPeerRelay(alias, s)
+				msg := "relay for " + alias + " set; set it on " + alias + " too"
+				if warn != "" {
+					msg += " · " + warn
+				}
+				return actionMsg{err: err, msg: msg, then: func(m *dash) { pt.load(m) }}
+			})
+		}})
 }
 
 // remove asks, then unpins alias and has the server close its link; the
@@ -462,6 +490,8 @@ func (pt *peersTab) click(m *dash, item, col int) tea.Cmd {
 	switch {
 	case it.kind == itemShare && was:
 		return pt.toggle(m, it.slug)
+	case it.kind == itemRelay && was:
+		pt.relay(m, pt.list.Peers[it.peer])
 	case it.kind == itemPanes:
 		e := pt.list.Peers[it.peer]
 		if to := panesAt(panesLevel(e), col); to != "" {

@@ -104,14 +104,22 @@ func NewCode(relayURL string) (Code, error) {
 }
 
 // String is the code to pass on: the relay's host when it is the usual
-// wss://host/v1, else its whole URL, then a slash and the secret.
+// wss://host/v1, else its whole URL, with its pin when it has one
+// (#sha256=…), then a slash and the secret. tm before pinned relays
+// refuses a code with a pin ("a host name, or a wss:// URL").
 func (c Code) String() string {
 	r := c.Relay
 	if u, err := url.Parse(r); err == nil && u.Scheme == "wss" && (u.Path == "" || u.Path == "/v1") {
 		r = u.Host
+		if u.Fragment != "" {
+			r += "#" + u.Fragment
+		}
 	}
 	return r + "/" + c.Secret.String()
 }
+
+// Pinned: the code's relay is taken by its key's pin.
+func (c Code) Pinned() bool { return strings.Contains(c.Relay, "#") }
 
 // ParseCode reads a code back.
 func ParseCode(s string) (Code, error) {
@@ -132,15 +140,28 @@ func ParseCode(s string) (Code, error) {
 }
 
 // RelayURL is s as the URL peers.json keeps: wss:// when s has no
-// scheme, without a trailing slash or the default /v1.
+// scheme, without a trailing slash or the default /v1. A relay without
+// a CA-signed certificate ends in its key's pin, #sha256=<64 hex digits>
+// (relay.PinPrefix), kept in lower case.
 func RelayURL(s string) (string, error) {
 	s = strings.TrimSpace(s)
 	if !strings.Contains(s, "://") {
 		s = "wss://" + s
 	}
 	u, err := url.Parse(s)
-	if err != nil || (u.Scheme != "wss" && u.Scheme != "ws") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+	if err != nil || (u.Scheme != "wss" && u.Scheme != "ws") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery {
 		return "", fmt.Errorf("relay %q: a host name, or a wss:// URL", strings.TrimPrefix(s, "wss://"))
+	}
+	pin, err := relay.ParsePin(u.Fragment)
+	if err != nil {
+		return "", fmt.Errorf("relay %s: %v", u.Host, err)
+	}
+	if pin != "" && u.Scheme != "wss" {
+		return "", fmt.Errorf("relay %s: a pin goes with wss:// only", u.Host)
+	}
+	u.Fragment, u.RawFragment = "", ""
+	if pin != "" {
+		u.Fragment = relay.PinPrefix + pin
 	}
 	u.Path = strings.TrimSuffix(u.Path, "/")
 	if u.Path == "/v1" {

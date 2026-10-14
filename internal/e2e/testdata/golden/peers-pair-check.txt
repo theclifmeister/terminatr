@@ -16,14 +16,14 @@
            │ This serve│ Pair only if the other side shows the same six digits. Do    │ pass on,  │
            │ and j on t│ they match?                                                  │terminal); │
            │ both of yo│                                                              │           │
-           │ No relay y│                                                              │ain NAME   │
-           │ (see the R│ y they match · n they don't · esc cancel                     │           │
-           │           ╰──────────────────────────────────────────────────────────────╯           │
+           │ No relay y│                                                              │ain NAME;  │
+           │ without on│ y they match · n they don't · esc cancel                     │(see the   │
+           │ README).  ╰──────────────────────────────────────────────────────────────╯           │
+           │                                                                                      │
            │ Paired servers see the projects you share with them, read-only, in their sidebar;    │
            │ you see theirs in yours. No agent can pair, share or remove a server.                │
            │                                                                                      │
-           │                                                                                      │
-           │ space toggle · ← → change · n pair · j join · x remove · ↑ ↓ move · esc close        │
+           │ space toggle · ← → change · n pair · j join · e relay · x remove · esc close         │
  ──────────╰──────────────────────────────────────────────────────────────────────────────────────╯
                                    │──────────────────────────────────────────────────────────────────────────
                                    │

@@ -28,11 +28,19 @@ type Dialer struct {
 // Dial connects to rawURL (wss://host[:port], or ws:// for a relay
 // behind a proxy on the same host and in tests), says hello and waits
 // in the room until the peer comes or ctx ends. The Conn carries the
-// peer's bytes.
+// peer's bytes. A wss:// URL ending in #sha256=<pin> takes the relay by
+// its key's pin alone (PinnedTLS), else by d.TLS (nil: the system's CAs).
 func (d *Dialer) Dial(ctx context.Context, rawURL string) (*Conn, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, err
+	}
+	pin, err := ParsePin(u.Fragment)
+	if err != nil {
+		return nil, fmt.Errorf("relay %s: %w", u.Host, err)
+	}
+	if pin != "" && u.Scheme != "wss" {
+		return nil, fmt.Errorf("relay: %s: a pin goes with wss:// only", rawURL)
 	}
 	host := u.Host
 	if u.Port() == "" {
@@ -54,6 +62,9 @@ func (d *Dialer) Dial(ctx context.Context, rawURL string) (*Conn, error) {
 	switch u.Scheme {
 	case "wss":
 		cfg := d.TLS.Clone()
+		if pin != "" {
+			cfg = PinnedTLS(d.TLS, u.Host, pin)
+		}
 		if cfg == nil {
 			cfg = &tls.Config{}
 		}

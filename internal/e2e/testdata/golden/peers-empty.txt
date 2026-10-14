@@ -16,14 +16,14 @@
            │ This server isn't paired with another. Press n to pair: it shows a code to pass on,  │
            │ and j on the other server takes it (or tm peer pair and tm peer join in a terminal); │
            │ both of you then compare six digits.                                                 │
-           │ No relay yet? On a Linux server with a domain: sudo tm relay install --domain NAME   │
-           │ (see the README).                                                                    │
+           │ No relay yet? On a Linux server with a domain: sudo tm relay install --domain NAME;  │
+           │ without one, on an address both servers reach: sudo tm relay install --ip (see the   │
+           │ README).                                                                             │
            │                                                                                      │
            │ Paired servers see the projects you share with them, read-only, in their sidebar;    │
            │ you see theirs in yours. No agent can pair, share or remove a server.                │
            │                                                                                      │
-           │                                                                                      │
-           │ space toggle · ← → change · n pair · j join · x remove · ↑ ↓ move · esc close        │
+           │ space toggle · ← → change · n pair · j join · e relay · x remove · esc close         │
  ──────────╰──────────────────────────────────────────────────────────────────────────────────────╯
                                    │──────────────────────────────────────────────────────────────────────────
                                    │

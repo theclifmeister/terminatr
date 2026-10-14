@@ -241,7 +241,7 @@ Two tm servers are joined through a relay that both dial out to (SPEC §16), so 
 
 What it needs:
 
-- **A public address and a DNS name.** Both servers dial `wss://<name>`, often from outside your home network (a laptop on hotel Wi-Fi). A VPS has both. A **NAS at home doesn't by default**: give it a DNS name (your own domain, or a dynamic DNS name that follows your home IP) and forward a public port on the router to it (443, or any port: the link then dials `wss://<name>:<port>`). Behind carrier-grade NAT (no public IPv4 on the router) port forwarding can't work: use a VPS, or IPv6 if both ends have it. Without a public port the relay only serves machines on your LAN.
+- **A public address and a DNS name**, or an IP address both servers reach (below: [Without a domain](#without-a-domain-an-ip-address)). Both servers dial `wss://<name>`, often from outside your home network (a laptop on hotel Wi-Fi). A VPS has both. A **NAS at home doesn't by default**: give it a DNS name (your own domain, or a dynamic DNS name that follows your home IP) and forward a public port on the router to it (443, or any port: the link then dials `wss://<name>:<port>`). Behind carrier-grade NAT (no public IPv4 on the router) port forwarding can't work: use a VPS, or IPv6 if both ends have it. Without a public port the relay only serves machines on your LAN.
 - **A certificate for that name**, from a CA: the link checks it as any HTTPS client does. The relay gets one from Let's Encrypt by itself (`--domain`); it protects the connection to the relay, while what the servers trust in each other is their pinned keys, not this certificate.
 - **Port 443 open**, inbound TCP. The alternatives with Caddy or certbot also need port 80 while a certificate is issued or renewed: Caddy's ACME, `certbot --standalone` and `certbot --webroot` all answer the CA's HTTP challenge there.
 - A `tm` release that has `tm relay serve`.
@@ -268,6 +268,37 @@ tm never changes the firewall. If `/healthz` doesn't answer, install says so, wi
 To move to a new release: `sudo tm relay update` downloads the latest one for this machine's architecture, checks it against the release's `checksums.txt`, replaces `/usr/local/bin/tm`, restarts the relay and checks `/healthz` again; linked servers drop for a moment and reconnect by themselves. `sudo tm relay uninstall` stops the service and removes it; `/usr/local/bin/tm` and the certificates stay (`sudo rm -r /var/lib/private/tm-relay`). Running install again (another `--domain`, say) rewrites the unit and restarts. Logs: `journalctl -u tm-relay`.
 
 Without systemd or on another system, `tm relay serve --domain relay.example.net` does the same in the foreground (certificates in `~/.terminatr/relay`, or `--state DIR`); it needs to bind 443, so as root or with `CAP_NET_BIND_SERVICE`.
+
+### Without a domain: an IP address
+
+A relay can run on an IP address with no DNS name and no certificate authority: a VPS's public IP, a home server's `192.168.x.x`, or a Tailscale `100.x` address. It makes its own key and a self-signed certificate for that address (valid ten years; nobody checks its dates), and the servers check it by its key alone: the relay's address ends in the SHA-256 of its public key, `wss://203.0.113.5#sha256=<64 hex digits>`, and a relay that shows another key is refused. On a Linux host with systemd:
+
+```sh
+sudo ~/.local/bin/tm relay install --ip 203.0.113.5
+```
+
+Without an address, `--ip` takes this host's own (the one it reaches the internet from), and says so: behind NAT, or for a tailnet, name the address the servers reach it at. Install makes the key in `/var/lib/private/tm-relay`, writes and starts the service (`tm relay serve --self-signed --ip 203.0.113.5`), checks `/healthz` by the key and ends with the address to pair with:
+
+```
+The relay is up. Its address, with its key's pin:
+
+    wss://203.0.113.5#sha256=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+
+Pair two servers through it, on one of them:
+
+    tm peer pair --relay wss://203.0.113.5#sha256=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+```
+
+The pairing code then carries the pin (`203.0.113.5#sha256=…/7Q4M-K2XD-9HVA-PT3C`), so the joining server learns it without typing it; it needs a tm that knows pinned relays (this release or later; an older one refuses the code as not a relay). Each server keeps the address with its pin in `peers.json`.
+
+What to know:
+
+- **Both servers must reach the IP on TCP port 443.** A private address works only where that network reaches: both on the same LAN, or both on the same tailnet. tm warns when you pair through one.
+- **Back up `/var/lib/private/tm-relay`.** It holds the key; `sudo tm relay update`, restarts and installing again keep it, and the certificate is issued again with the same key when it needs to be (a new address, or its end near), which changes nothing for the servers. A relay set up again with a new key, or a new address, is refused with *the relay at … has a different key than when you paired*: give both servers its new address with `tm peer relay ALIAS wss://…#sha256=…` (or `e` on the server in the settings' Peers tab), on each side.
+- The same `#sha256=` works with any name or address that reaches the relay: the servers check the key, not the name.
+- To check the fingerprint by hand: `sudo openssl pkey -in /var/lib/private/tm-relay/self-signed.key -pubout -outform der | sha256sum`.
+
+`tm relay serve --self-signed [--ip ADDR] [--state DIR]` does the same in the foreground (key in `~/.terminatr/relay`, or `--state DIR`) and logs the address with its pin when it starts. Without `--ip` it takes the address it listens on (`--listen 192.168.1.20:8443`), else this host's own.
 
 ### Alternatives
 
@@ -352,6 +383,8 @@ $ tm peer join relay.example.net/7Q4M-K2XD-9HVA-PT3C --as studio
 ```
 
 Both terminals then show the other server's name and id and the same six digits, `Check: 418 207`. Compare them (read them aloud, or paste them in the chat) and answer `y` on both sides only when they match; different digits mean someone else is in between, so answer `n` and make a new code. Each side pins the other's key once both said yes. `--as` names the other server here (by default its host name); the code is the relay's host and 16 letters and digits, and case, hyphens, `O`/`0` and `I`/`L`/`1` don't matter when you type it. A code works once; a join that says nobody is pairing with it was mistyped, has expired or was used. Later pairings use the same relay without `--relay`.
+
+A relay without a domain pairs the same way, with its whole address: `tm peer pair --relay wss://203.0.113.5#sha256=…` (see [Without a domain](#without-a-domain-an-ip-address)). When a relay moves or gets a new key, `tm peer relay mini wss://…` (or `e` in the Peers tab) gives a paired server the new one, on each side; nothing else changes.
 
 `tm peer list` shows this server's id and each paired server with its link; `tm peer remove mini` drops one at once (remove this server on the other side too). The console has the same list in its settings (`,`, then `4 Peers`): each server's name, id, link and relay; `x` removes the selected one after asking, and `n` and `j` pair as above. `tm peer rotate` gives this server a new key, for a key you think was copied: every paired server then refuses it until you pair again with each (`tm peer pair --as mini` here, `tm peer join` there).
 

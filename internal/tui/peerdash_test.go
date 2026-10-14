@@ -208,7 +208,7 @@ func TestPeersTab(t *testing.T) {
 		"relay  relay.example.net",
 		"○ nas  offline 4m · relay · shares 1 project · dial: refused",
 		"relay  relay.example.net:8443",
-		"space toggle · ← → change · n pair · j join · x remove · ↑ ↓ move · esc close",
+		"space toggle · ← → change · n pair · j join · e relay · x remove · esc close",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in\n%s", want, out)
@@ -382,6 +382,55 @@ func pairStep(t *testing.T, m *dash, cmd tea.Cmd) tea.Cmd {
 	}
 	_, next := m.Update(msg)
 	return next
+}
+
+// TestPeersTabRelay: e asks for the selected server's relay, starting
+// from its own, and sets it as tm peer relay does; a pinned relay shows
+// as its host, pinned.
+func TestPeersTabRelay(t *testing.T) {
+	m, src := remoteDash(t, "@mini/acme-api")
+	src.peers = peersList()
+	press(m, ",", "4")
+	screen(m)
+	// e on a project does nothing; on mini's panes row it asks.
+	press(m, "e")
+	if _, ok := m.top().(*settingsView); !ok {
+		t.Fatalf("e on a project: %T", m.top())
+	}
+	press(m, "down", "down", "e")
+	in, ok := m.top().(*inputView)
+	if !ok || in.text != "wss://relay.example.net" {
+		t.Fatalf("e: %T %+v", m.top(), m.top())
+	}
+	pinned := "wss://203.0.113.5#sha256=" + strings.Repeat("ab", 32)
+	in.text = pinned
+	run(m, press(m, "enter"))
+	if !slices.Equal(src.relaySet, []string{"mini " + pinned}) || m.msg != "relay for mini set; set it on mini too" {
+		t.Fatalf("set %v, %q", src.relaySet, m.msg)
+	}
+	// enter on the relay row asks too.
+	press(m, "down", "enter")
+	if in, ok := m.top().(*inputView); !ok || in.title != "Relay for mini" {
+		t.Fatalf("enter on the relay row: %T", m.top())
+	}
+	press(m, "esc")
+	if got := relayWords(pinned); got != "203.0.113.5 (pinned)" {
+		t.Errorf("relayWords %q", got)
+	}
+	for in, want := range map[string]string{
+		"192.168.1.20": "192.168.1.20 is a private address",
+		"wss://100.101.102.103#sha256=" + strings.Repeat("ab", 32): "100.101.102.103 is a private address",
+		"relay.example.net": "",
+	} {
+		pv := &pairView{input: in}
+		if got := pv.relayWarning(); !strings.HasPrefix(got, want) || (want == "" && got != "") {
+			t.Errorf("relayWarning(%q) = %q", in, got)
+		}
+	}
+	pv := &pairView{join: true, input: "10.0.0.2#sha256=" + strings.Repeat("ab", 32) + "/7Q4M-K2XD-9HVA-PT3C"}
+	if got := pv.relayWarning(); !strings.HasPrefix(got, "10.0.0.2 is a private address") {
+		t.Errorf("join relayWarning %q", got)
+	}
 }
 
 // TestPeersTabPair: n asks for the relay, starting from the last one

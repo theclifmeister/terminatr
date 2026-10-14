@@ -16,14 +16,14 @@
            │ This serve│ in; or tm peer join CODE. Pass it on yourself (a chat, a     │ pass on,  │
            │ and j on t│ call), never through the relay.                              │terminal); │
            │ both of yo│ Waiting for the other server…                                │           │
-           │ No relay y│                                                              │ain NAME   │
-           │ (see the R│ esc cancel                                                   │           │
-           │           ╰──────────────────────────────────────────────────────────────╯           │
+           │ No relay y│                                                              │ain NAME;  │
+           │ without on│ esc cancel                                                   │(see the   │
+           │ README).  ╰──────────────────────────────────────────────────────────────╯           │
+           │                                                                                      │
            │ Paired servers see the projects you share with them, read-only, in their sidebar;    │
            │ you see theirs in yours. No agent can pair, share or remove a server.                │
            │                                                                                      │
-           │                                                                                      │
-           │ space toggle · ← → change · n pair · j join · x remove · ↑ ↓ move · esc close        │
+           │ space toggle · ← → change · n pair · j join · e relay · x remove · esc close         │
  ──────────╰──────────────────────────────────────────────────────────────────────────────────────╯
                                    │──────────────────────────────────────────────────────────────────────────
                                    │
