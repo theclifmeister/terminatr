@@ -19,6 +19,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/relay"
 	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
@@ -28,7 +29,8 @@ const peerUsage = `usage: tm peer pair [--relay URL] [--as ALIAS]
        tm peer list [--json]
        tm peer remove ALIAS
        tm peer rotate [--yes]
-       tm peer panes ALIAS off|view|write`
+       tm peer panes ALIAS off|view|write
+       tm peer relay ALIAS ADDRESS`
 
 func init() {
 	commands["peer"] = runPeer
@@ -69,7 +71,7 @@ func runPeer(e *Env, args []string) error {
 			return usagef("tm peer %s takes no --%s\n%s", args[0], name, peerUsage)
 		}
 	}
-	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0, "panes": 2}
+	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0, "panes": 2, "relay": 2}
 	if n, ok := npos[args[0]]; !ok || len(pos) != n {
 		return usagef("%s", peerUsage)
 	}
@@ -100,6 +102,8 @@ func runPeer(e *Env, args []string) error {
 		return e.peerRemove(dir, pos[0])
 	case "panes":
 		return e.peerPanes(dir, pos[0], pos[1])
+	case "relay":
+		return e.peerRelay(dir, pos[0], pos[1])
 	default:
 		return e.peerRotate(dir, *yes)
 	}
@@ -177,10 +181,15 @@ func (e *Env) peerPair(dir, relayFlag, as string) error {
 	if err != nil {
 		return err
 	}
+	e.warnPrivate(relayURL)
 	o := e.pairOptions()
 	o.Waiting = func() {
 		fmt.Fprintf(e.Stdout, "Pairing code (works once, for 10 minutes):\n\n    %s\n\n", code)
-		fmt.Fprintf(e.Stdout, "On the other server: tm peer join %s\nPass it on yourself (a chat, a call), never through the relay. Waiting…\n", code)
+		fmt.Fprintf(e.Stdout, "On the other server: tm peer join %s\nPass it on yourself (a chat, a call), never through the relay.\n", code)
+		if code.Pinned() {
+			fmt.Fprintf(e.Stdout, "The code holds the relay's pin: the other server needs tm %s or later to read it.\n", version.Version)
+		}
+		fmt.Fprintln(e.Stdout, "Waiting…")
 	}
 	ctx, stop := proc.UntilStopped(context.Background())
 	defer stop()
@@ -202,6 +211,7 @@ func (e *Env) peerJoin(dir string, code peer.Code, as string) error {
 	defer stop()
 	ctx, cancel := context.WithTimeout(ctx, pairWait)
 	defer cancel()
+	e.warnPrivate(code.Relay)
 	fmt.Fprintf(e.Stdout, "Joining through %s…\n", relayHost(code.Relay))
 	p, err := peer.Join(ctx, id, code, e.pairOptions())
 	if err != nil {
@@ -273,12 +283,43 @@ func serverPeerLinks() (st *proto.LinkStatus, ok bool) {
 	return s.Link, true
 }
 
-// relayHost is the relay as people read it: its host for wss://.
+// relayHost is the relay as people read it: its host for wss://, and
+// "(pinned)" for one taken by its key's pin.
 func relayHost(r string) string {
 	if u, err := url.Parse(r); err == nil && u.Scheme == "wss" && u.Path == "" {
+		if u.Fragment != "" {
+			return u.Host + " (pinned)"
+		}
 		return u.Host
 	}
 	return r
+}
+
+// warnPrivate says when the relay is on a private address.
+func (e *Env) warnPrivate(relayURL string) {
+	if w := relay.PrivateWarning(relayURL); w != "" {
+		fmt.Fprintf(e.Stdout, "Note: %s.\n", w)
+	}
+}
+
+// peerRelay gives the paired server alias another relay: the relay
+// moved, or was set up again with a new key (docs/SPEC.md §16.2).
+func (e *Env) peerRelay(dir, alias, address string) error {
+	r, err := peer.RelayURL(address)
+	if err != nil {
+		return usagef("%v", err)
+	}
+	found, err := peer.SetRelay(dir, alias, r)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return &project.Error{Code: "unknown-peer", Msg: fmt.Sprintf("no peer %q (tm peer list)", alias)}
+	}
+	fmt.Fprintf(e.Stdout, "%s's link now goes through %s. Set the same relay on %s for this server too (tm peer relay ALIAS %s there).\n", alias, relayHost(r), alias, r)
+	e.warnPrivate(r)
+	e.reload()
+	return nil
 }
 
 // peerEntry is one paired server in tm peer list --json.

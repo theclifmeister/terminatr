@@ -31,6 +31,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/relay"
 	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -265,6 +266,10 @@ type Source interface {
 	// server's panes (proto.PanesOff, PanesView, PanesType; §16.12), as
 	// tm peer panes does, and has the server read the peers again.
 	SetPeerPanes(alias, level string) error
+	// SetPeerRelay gives the paired server alias another relay, as tm
+	// peer relay does, and has the server read the peers again; warn
+	// says when the relay is on a private address.
+	SetPeerRelay(alias, relay string) (warn string, err error)
 	// PairPeer pairs this server with another through relay, as tm peer
 	// pair does, and JoinPeer joins the pairing code names, as tm peer
 	// join does: both pin the other server and have the server read the
@@ -718,6 +723,28 @@ func (s *ServerSource) SetPeerPanes(alias, level string) error {
 	return nil
 }
 
+func (s *ServerSource) SetPeerRelay(alias, relayText string) (string, error) {
+	if s.Caller.IsAgent() {
+		return "", errHumanOnly
+	}
+	r, err := peer.RelayURL(relayText)
+	if err != nil {
+		return "", err
+	}
+	found, err := peer.SetRelay(peer.DirIn(s.Paths.Home), alias, r)
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "", fmt.Errorf("no paired server %s (tm peer list)", alias)
+	}
+	var st *proto.LinkStatus
+	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, server.ErrNotRunning) {
+		return "", fmt.Errorf("set, but the server didn't read the peers again (%v); tm server restart does", err)
+	}
+	return relay.PrivateWarning(r), nil
+}
+
 // PairEvents are what a pairing shows on the way: Waiting the code once
 // it works (pairing only), Confirm the other server and the six digits,
 // returning the person's answer.
@@ -804,14 +831,18 @@ func (s *ServerSource) pairing(ctx context.Context, code peer.Code, ev PairEvent
 
 // pairWords is a pairing's error in plain words: a relay that can't be
 // reached says so, with its name.
-func pairWords(err error, relay string) error {
+func pairWords(err error, relayURL string) error {
+	var pe *relay.PinError
+	if errors.As(err, &pe) {
+		return pe
+	}
 	var op *net.OpError
 	var dns *net.DNSError
 	var cert *tls.CertificateVerificationError
 	var unknown x509.UnknownAuthorityError
 	var host x509.HostnameError
 	if errors.As(err, &op) || errors.As(err, &dns) || errors.As(err, &cert) || errors.As(err, &unknown) || errors.As(err, &host) {
-		return fmt.Errorf("can't reach the relay %s: check its name, that it runs and that port 443 is open (%v)", relayWords(relay), err)
+		return fmt.Errorf("can't reach the relay %s: check its name, that it runs and that port 443 is open (%v)", relayWords(relayURL), err)
 	}
 	return err
 }

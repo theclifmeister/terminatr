@@ -2,8 +2,10 @@ package cli
 
 import (
 	"crypto/ed25519"
+	"crypto/tls"
 	"encoding/json"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
@@ -148,4 +150,62 @@ func TestPeerJoinNobody(t *testing.T) {
 	if ps, _ := peer.LoadPeers(dir); len(ps) != 0 {
 		t.Fatalf("pinned %+v", ps)
 	}
+}
+
+// tm peer relay gives a paired server another relay: a pinned one too.
+func TestPeerRelay(t *testing.T) {
+	h := newHarness(t)
+	reloads := stubPeerServer(t, nil)
+	dir, _ := peer.Dir()
+	if _, _, err := peer.EnsureIdentity(dir); err != nil {
+		t.Fatal(err)
+	}
+	k1, _, _ := ed25519.GenerateKey(nil)
+	if err := peer.SavePeers(dir, []peer.Peer{{Alias: "mini", Key: k1, Relay: "wss://r.example.net"}}); err != nil {
+		t.Fatal(err)
+	}
+	pin := strings.Repeat("ab", 32)
+	h.expect(2, "usage: tm peer pair", human, "peer", "relay", "mini")
+	h.expect(2, "64 hex digits", human, "peer", "relay", "mini", "203.0.113.5#sha256=12")
+	h.expect(1, "unknown-peer", human, "peer", "relay", "nas", "203.0.113.5#sha256="+pin)
+	h.expect(1, "human-only", coord, "peer", "relay", "mini", "203.0.113.5#sha256="+pin)
+	out := h.ok(human, "peer", "relay", "mini", "192.168.1.20#SHA256="+strings.ToUpper(pin))
+	if !strings.Contains(out, "through 192.168.1.20 (pinned)") || !strings.Contains(out, "tm peer relay ALIAS wss://192.168.1.20#sha256="+pin) ||
+		!strings.Contains(out, "192.168.1.20 is a private address") || *reloads != 1 {
+		t.Fatalf("relay: %q, %d reloads", out, *reloads)
+	}
+	if ps, _ := peer.LoadPeers(dir); ps[0].Relay != "wss://192.168.1.20#sha256="+pin || !ps[0].Key.Equal(k1) {
+		t.Fatalf("after: %+v", ps)
+	}
+	if out := h.ok(human, "peer", "list"); !strings.Contains(out, "192.168.1.20 (pinned)") {
+		t.Fatalf("list: %q", out)
+	}
+}
+
+// Joining through a self-signed relay on 127.0.0.1: its pin is taken
+// from the code, a private address is said, and a relay with another key
+// is refused in so many words.
+func TestPeerJoinPinned(t *testing.T) {
+	h := newHarness(t)
+	stubPeerServer(t, nil)
+	state := t.TempDir()
+	cert, key, pin, err := relay.SelfSigned(state, []netip.Addr{netip.MustParseAddr("127.0.0.1")}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := relay.New(relay.DefaultConfig())
+	hs := httptest.NewUnstartedServer(s)
+	c, err := tls.LoadX509KeyPair(cert, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hs.TLS = &tls.Config{Certificates: []tls.Certificate{c}}
+	hs.StartTLS()
+	t.Cleanup(func() { s.Shutdown(); hs.Close() })
+	host := strings.TrimPrefix(hs.URL, "https://")
+	code, out, errs := h.run(human, "", "peer", "join", host+"#sha256="+pin+"/7Q4M-K2XD-9HVA-PT3C")
+	if code != 1 || !strings.Contains(errs, "nobody is pairing with this code") || !strings.Contains(out, "127.0.0.1 is a private address") {
+		t.Fatalf("join: %d %q %q", code, out, errs)
+	}
+	h.expect(3, "the relay at "+host+" has a different key than when you paired", human, "peer", "join", host+"#sha256="+strings.Repeat("ab", 32)+"/7Q4M-K2XD-9HVA-PT3C")
 }
