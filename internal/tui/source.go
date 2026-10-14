@@ -178,12 +178,14 @@ type Source interface {
 	// a project's own value, so it follows all projects again. It is
 	// refused when tm runs inside an agent.
 	SetSetting(table, key string, value any) error
-	// SetLink sets project slug's link to other (link.Set), with mirror
-	// the other side's too; LinkLog reads the messages between them;
+	// SetLink links slug and other (link.Set): slug's direction allow,
+	// other's the mirror, off removing both; SetLinkAsk turns slug's ask
+	// switch for the link on or off (link.SetAsk). LinkLog reads the messages between them;
 	// LinkAct approves, drops (arg a message id) or resumes (arg the
 	// other project), or sends text to arg as the user. All are the
 	// human's, refused when tm runs inside an agent.
-	SetLink(slug, other string, l config.Link, mirror bool) error
+	SetLink(slug, other, allow string) error
+	SetLinkAsk(slug, other string, ask bool) error
 	LinkLog(slug, other string) ([]*link.Message, error)
 	LinkAct(slug, verb, arg, text string) (string, error)
 	// ApplyModDefaults applies the defaults an enabled mod suggests for
@@ -582,11 +584,18 @@ func (s *ServerSource) OpenProject(slug string, cols, rows int) (string, error) 
 // errHumanOnly refuses a settings change from inside an agent.
 var errHumanOnly = errors.New("human-only: settings are changed by the human")
 
-func (s *ServerSource) SetLink(slug, other string, l config.Link, mirror bool) error {
+func (s *ServerSource) SetLink(slug, other, allow string) error {
 	if s.Caller.IsAgent() {
 		return errHumanOnly
 	}
-	return link.Set(s.Caller, slug, other, l, mirror)
+	return link.Set(s.Caller, slug, other, allow, nil)
+}
+
+func (s *ServerSource) SetLinkAsk(slug, other string, ask bool) error {
+	if s.Caller.IsAgent() {
+		return errHumanOnly
+	}
+	return link.SetAsk(s.Caller, slug, other, ask)
 }
 
 func (s *ServerSource) LinkLog(slug, other string) ([]*link.Message, error) {

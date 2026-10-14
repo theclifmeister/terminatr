@@ -631,9 +631,6 @@ type confirmView struct {
 	yes             func() tea.Cmd
 	// no is the footer message on n or esc.
 	no string
-	// onNo, when set, runs on n (esc still cancels): a question whose no
-	// does something too (the Linked projects list saves this side only).
-	onNo func() tea.Cmd
 }
 
 // confirmKeys are a yes/no question's action row, the same everywhere.
@@ -656,9 +653,6 @@ func (cv *confirmView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "n", "esc":
 		m.pop()
 		m.msg = cv.no
-		if k.String() == "n" && cv.onNo != nil {
-			return cv.onNo()
-		}
 	}
 	return nil
 }

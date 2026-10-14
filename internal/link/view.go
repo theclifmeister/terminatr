@@ -33,8 +33,8 @@ type Row struct {
 	LastAt time.Time `json:"last_at,omitzero"`
 }
 
-// Words is a row's state: "linked both ways", "waits for web to accept",
-// "notes wants to link", "off".
+// Words is a row's state: "linked both ways", "linked, send only",
+// "half-linked: only notes has an entry", "off".
 func (r Row) Words() string {
 	var s string
 	switch {
@@ -44,19 +44,33 @@ func (r Row) Words() string {
 		s = "linked, send only"
 	case r.Receive:
 		s = "linked, receive only"
-	case r.HasMine && r.Mine.Sends() && !r.Theirs.Receives():
-		s = "waits for " + r.Peer + " to accept"
-	case r.HasMine && r.Mine.Receives() && !r.Theirs.Sends():
-		s = "waits for " + r.Peer + " to send"
-	case r.HasTheirs && !r.HasMine:
-		s = r.Peer + " wants to link"
+	case r.HasMine || r.HasTheirs:
+		s = "not linked"
 	default:
 		s = "off"
+	}
+	if r.Half() {
+		s += ", " + r.HalfWords()
 	}
 	if r.Paused {
 		s += ", paused"
 	}
 	return s
+}
+
+// Half reports a half-linked pair: the two entries don't mirror each
+// other, which only a hand edit of config.toml makes (config.Half).
+func (r Row) Half() bool { return config.Half(r.Mine, r.Theirs, r.HasMine, r.HasTheirs) }
+
+// HalfWords says what is half about a half-linked pair.
+func (r Row) HalfWords() string {
+	switch {
+	case !r.HasTheirs:
+		return "half-linked: " + r.Peer + " has no entry"
+	case !r.HasMine:
+		return "half-linked: only " + r.Peer + " has an entry"
+	}
+	return "half-linked: this side " + r.Mine.Allow + ", " + r.Peer + " " + r.Theirs.Allow
 }
 
 // Arrow is a row's direction as a mark: ⇄ → ← or · for none.

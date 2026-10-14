@@ -39,6 +39,31 @@ func Settings(d Deps) []Check {
 			}
 		}
 	}
+	// Linking is one act that writes both sides: entries that don't
+	// mirror each other come from a hand edit (§7.9).
+	var half []string
+	for _, a := range c.ProjectSlugs() {
+		mine, _ := c.Links(a)
+		for _, b := range slices.Sorted(maps.Keys(mine)) {
+			theirs, _ := c.Links(b)
+			t, has := theirs[a]
+			if (has && b < a) || !config.Half(mine[b], t, true, has) {
+				continue // each pair once
+			}
+			if _, err := project.Open(b); err != nil {
+				continue // dangling, below
+			}
+			if !has {
+				half = append(half, fmt.Sprintf("%s → %s (%s has no entry)", a, b, b))
+			} else {
+				half = append(half, fmt.Sprintf("%s %s / %s %s", a, mine[b].Allow, b, t.Allow))
+			}
+		}
+	}
+	if len(half) > 0 {
+		out = append(out, Check{Group: "settings", Name: "links", Status: Warn,
+			Detail: fmt.Sprintf("half-linked: %s; set the link again in Settings › Linked projects (or tm project link) to write both sides", strings.Join(half, ", "))})
+	}
 	if len(dangling) > 0 {
 		out = append(out, Check{Group: "settings", Name: "links", Status: Warn,
 			Detail: fmt.Sprintf("linked to a project that isn't there: %s; remove the link in Settings › Linked projects", strings.Join(dangling, ", "))})

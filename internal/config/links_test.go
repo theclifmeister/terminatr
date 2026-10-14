@@ -115,3 +115,51 @@ func TestRenameLinks(t *testing.T) {
 		t.Fatalf("got %q %v", got, err)
 	}
 }
+
+// TestSetLinkPair: one write links both sides, the other's entry the
+// mirror with its own ask kept; off removes both.
+func TestSetLinkPair(t *testing.T) {
+	write(t, "[projects.b.links]\na = { allow = \"both\", ask = true }\n")
+	if err := SetLinkPair("a", "b", Link{Allow: LinkSend}, true); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := c.Links("a")
+	b, _ := c.Links("b")
+	if a["b"] != (Link{Allow: LinkSend}) || b["a"] != (Link{Allow: LinkReceive, Ask: true}) {
+		t.Fatalf("a %v b %v", a, b)
+	}
+	if err := SetLinkPair("a", "b", Link{Allow: LinkOff}, false); err != nil {
+		t.Fatal(err)
+	}
+	c, _ = Load()
+	if a, _ := c.Links("a"); len(a) != 0 {
+		t.Fatalf("a after off %v", a)
+	}
+	if b, _ := c.Links("b"); len(b) != 0 {
+		t.Fatalf("b after off %v", b)
+	}
+}
+
+func TestHalf(t *testing.T) {
+	both, send, recv := Link{Allow: LinkBoth}, Link{Allow: LinkSend}, Link{Allow: LinkReceive}
+	for _, tc := range []struct {
+		mine, theirs       Link
+		hasMine, hasTheirs bool
+		half               bool
+	}{
+		{both, both, true, true, false},
+		{send, recv, true, true, false},
+		{both, send, true, true, true},
+		{both, Link{}, true, false, true},
+		{Link{}, both, false, true, true},
+		{Link{}, Link{}, false, false, false},
+	} {
+		if got := Half(tc.mine, tc.theirs, tc.hasMine, tc.hasTheirs); got != tc.half {
+			t.Errorf("%+v: %v", tc, got)
+		}
+	}
+}

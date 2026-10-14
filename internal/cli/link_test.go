@@ -23,13 +23,19 @@ func TestLinks(t *testing.T) {
 	modsCoord := caller.Caller{Kind: caller.Coordinator, Project: "mods"}
 
 	// Links are the human's.
-	h.expect(1, "human-only", coord, "project", "link", "mods", "both", "--project", "demo")
-	h.expect(1, "self-link", human, "project", "link", "demo", "both", "--project", "demo")
-	h.expect(1, "unknown-project", human, "project", "link", "nope", "both", "--project", "demo")
-	h.expect(2, "usage", human, "project", "link", "mods", "sometimes", "--project", "demo")
+	h.expect(1, "human-only", coord, "project", "link", "demo", "mods")
+	h.expect(1, "self-link", human, "project", "link", "demo", "demo")
+	h.expect(1, "unknown-project", human, "project", "link", "demo", "nope")
+	h.expect(2, "usage", human, "project", "link", "demo", "mods", "sometimes")
+	h.expect(2, "usage", human, "project", "link", "demo")
 
-	// One side only: the coordinator is refused with the other side's code.
-	if out := h.ok(human, "project", "link", "mods", "both", "--project", "demo"); !strings.Contains(out, "waits for mods to accept") {
+	// One side only, as only a hand edit of config.toml makes it: the
+	// coordinator is refused with the other side's code, and the list
+	// says it is half-linked.
+	if err := config.SetLink("demo", "mods", config.Link{Allow: config.LinkBoth}); err != nil {
+		t.Fatal(err)
+	}
+	if out := h.ok(coord, "link", "list", "--project", "demo"); !strings.Contains(out, "not linked, half-linked: mods has no entry") {
 		t.Fatalf("one side %q", out)
 	}
 	h.expect(1, "not-linked-back", coord, "link", "send", "mods", "hello", "--project", "demo")
@@ -38,8 +44,8 @@ func TestLinks(t *testing.T) {
 	h.expect(1, "self-link", coord, "link", "send", "demo", "hello", "--project", "demo")
 	h.expect(1, "unknown-project", coord, "link", "send", "nope", "hello", "--project", "demo")
 
-	// Both sides: a two-way link; the other side journals it too.
-	if out := h.ok(human, "project", "link", "demo", "both", "--project", "mods"); !strings.Contains(out, "linked both ways") {
+	// One act links both sides; the other side journals it too.
+	if out := h.ok(human, "project", "link", "mods", "demo"); out != "mods ⇄ demo: linked both ways\n" {
 		t.Fatalf("both %q", out)
 	}
 	h.expect(1, "coordinator-only", thr, "link", "send", "mods", "hello", "--project", "demo")
@@ -95,7 +101,10 @@ func TestLinks(t *testing.T) {
 	}
 
 	// Ask first: the coordinator's message waits for the user.
-	h.ok(human, "project", "link", "mods", "both", "--ask", "--project", "demo")
+	h.ok(human, "project", "link", "demo", "mods", "both", "--ask")
+	if cfg, _ := config.Load(); func() bool { l, _ := cfg.Links("mods"); return l["demo"].Ask }() {
+		t.Fatal("--ask reached the other side")
+	}
 	out = h.ok(coord, "link", "send", "mods", "Can I?", "--project", "demo")
 	if !strings.HasPrefix(out, "M-3 waits for the user's OK") {
 		t.Fatalf("held %q", out)
@@ -123,36 +132,48 @@ func TestLinks(t *testing.T) {
 	h.ok(human, "link", "drop", "M-5", "--project", "demo")
 	h.expect(1, "not-held", human, "link", "approve", "M-5", "--project", "demo")
 
-	// Off: the link is gone, the history stays.
-	h.ok(human, "project", "link", "mods", "off", "--project", "demo")
+	// Off removes both sides; the history stays.
+	h.ok(human, "project", "link", "demo", "mods", "off")
 	h.expect(1, "no-link", coord, "link", "send", "mods", "hi", "--project", "demo")
 	cfg, _ := config.Load()
-	if l, _ := cfg.Links("demo"); len(l) != 0 {
-		t.Fatalf("links after off %v", l)
+	if a, _ := cfg.Links("demo"); len(a) != 0 {
+		t.Fatalf("demo's links after off %v", a)
 	}
-	if out := h.ok(coord, "link", "list", "--project", "demo"); !strings.Contains(out, "mods wants to link") {
+	if b, _ := cfg.Links("mods"); len(b) != 0 {
+		t.Fatalf("mods' links after off %v", b)
+	}
+	if out := h.ok(coord, "link", "list", "--project", "demo"); !strings.Contains(out, "mods") || !strings.Contains(out, "off") {
 		t.Fatalf("list after off %q", out)
 	}
 	j, _ := os.ReadFile(mp.Path("JOURNAL.md"))
-	for _, w := range []string{"human settings.links demo mods both", "coordinator link.receive demo M-1 (", "coordinator link.send demo M-2"} {
+	for _, w := range []string{"human settings.links mods demo both (demo both)", "coordinator link.receive demo M-1 (", "coordinator link.send demo M-2"} {
 		if !strings.Contains(string(j), w) {
 			t.Errorf("mods journal lacks %q:\n%s", w, j)
 		}
 	}
 }
 
-// TestProjectLinkBothSides: --both-sides allows the link on the other
-// side too, as the settings popup offers.
-func TestProjectLinkBothSides(t *testing.T) {
+// TestProjectLinkMirror: tm project link writes both entries in one
+// call, the other side's the mirror: send here is receive there.
+func TestProjectLinkMirror(t *testing.T) {
 	h := newHarness(t)
 	h.ok(human, "project", "new", "demo")
 	h.ok(human, "project", "new", "mods")
-	if out := h.ok(human, "project", "link", "mods", "send", "--both-sides", "--project", "demo"); !strings.Contains(out, "linked, send only") {
+	if out := h.ok(human, "project", "link", "demo", "mods", "send"); !strings.Contains(out, "linked, send only") {
 		t.Fatalf("out %q", out)
 	}
 	cfg, _ := config.Load()
-	if l, _ := cfg.Links("mods"); l["demo"] != (config.Link{Allow: config.LinkReceive}) {
-		t.Fatalf("other side %v", l)
+	a, _ := cfg.Links("demo")
+	b, _ := cfg.Links("mods")
+	if a["mods"] != (config.Link{Allow: config.LinkSend}) || b["demo"] != (config.Link{Allow: config.LinkReceive}) {
+		t.Fatalf("entries %v %v", a, b)
+	}
+	// Changing it on the other side changes both.
+	h.ok(human, "project", "link", "mods", "demo", "send")
+	cfg, _ = config.Load()
+	a, _ = cfg.Links("demo")
+	if a["mods"] != (config.Link{Allow: config.LinkReceive}) {
+		t.Fatalf("demo after mods' change %v", a)
 	}
 }
 
@@ -162,7 +183,7 @@ func TestRenameLinked(t *testing.T) {
 	h := newHarness(t)
 	h.ok(human, "project", "new", "demo")
 	h.ok(human, "project", "new", "mods")
-	h.ok(human, "project", "link", "mods", "both", "--both-sides", "--project", "demo")
+	h.ok(human, "project", "link", "demo", "mods")
 	h.ok(coord, "link", "send", "mods", "hi", "--project", "demo")
 	h.ok(human, "project", "rename", "demo", "demo2")
 	cfg, _ := config.Load()

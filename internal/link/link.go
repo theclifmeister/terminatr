@@ -707,61 +707,78 @@ func look() looked {
 	return l
 }
 
-// Set writes project slug's entry for other (config.SetLink) as the
-// human, journaled in both projects. With mirror, the other side gets
-// the matching entry (config.Mirror) when it doesn't allow it yet, its
-// ask kept: the settings popup's "also allow it there?".
-func Set(c caller.Caller, slug, other string, l config.Link, mirror bool) error {
+// Set links projects a and b as the human (docs/SPEC.md §7.9): one act
+// writes both entries, a's direction as given and b's the mirror (send
+// here is receive there), off removes both. ask, when not nil, is a's
+// ask switch; otherwise a keeps its own, and b always does. Journaled in
+// both projects.
+func Set(c caller.Caller, a, b, allow string, ask *bool) error {
 	if c.IsAgent() {
 		return refuse("human-only", "links are the user's (Settings › Linked projects)")
 	}
-	if other == slug {
-		return refuse("self-link", "%s can't link to itself", slug)
+	if a == b {
+		return refuse("self-link", "%s can't link to itself", a)
 	}
-	p, err := project.Open(slug)
-	if err != nil {
-		return err
+	pa, err := project.Open(a)
+	if err != nil || !project.ValidSlug(a) {
+		return refuse("unknown-project", "no project named %s", a)
 	}
-	o, err := project.Open(other)
-	if err != nil || !project.ValidSlug(other) {
-		return refuse("unknown-project", "no project named %s", other)
+	pb, err := project.Open(b)
+	if err != nil || !project.ValidSlug(b) {
+		return refuse("unknown-project", "no project named %s", b)
 	}
-	if err := config.SetLink(slug, other, l); err != nil {
-		return err
-	}
-	words := l.Allow
-	if l.Ask && l.Allow != config.LinkOff {
-		words += " ask"
-	}
-	p.Journal(c, "settings.links", slug, other+" "+words)
-	o.Journal(c, "settings.links", slug, other+" "+words)
-	if !mirror || l.Allow == config.LinkOff {
-		return nil
+	if allow != config.LinkOff && !slices.Contains(config.LinkAllows, allow) {
+		return refuse("bad-direction", "a link is %s, %s, %s or %s", config.LinkBoth, config.LinkSend, config.LinkReceive, config.LinkOff)
 	}
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
-	theirs, _ := cfg.Links(other)
-	cur, has := theirs[slug]
-	want := config.Mirror(l.Allow)
-	if has && (cur.Allow == config.LinkBoth || cur.Allow == want) {
-		return nil
+	mine, _ := cfg.Links(a)
+	theirs, _ := cfg.Links(b)
+	la := config.Link{Allow: allow, Ask: mine[b].Ask}
+	if ask != nil {
+		la.Ask = *ask
 	}
-	next := config.Link{Allow: want, Ask: cur.Ask}
-	if has {
-		next.Allow = config.LinkBoth // it allowed the other way already
-	}
-	if err := config.SetLink(other, slug, next); err != nil {
+	if err := config.SetLinkPair(a, b, la, theirs[a].Ask); err != nil {
 		return err
 	}
-	words = next.Allow
-	if next.Ask {
-		words += " ask"
-	}
-	p.Journal(c, "settings.links", other, slug+" "+words)
-	o.Journal(c, "settings.links", other, slug+" "+words)
+	detail := fmt.Sprintf("%s %s (%s %s)", b, linkWords(la), b, config.Mirror(allow))
+	pa.Journal(c, "settings.links", a, detail)
+	pb.Journal(c, "settings.links", a, detail)
 	return nil
+}
+
+// SetAsk turns a's ask switch for its link to b on or off: the one part
+// of a link that is a side's own. The link must be there.
+func SetAsk(c caller.Caller, a, b string, ask bool) error {
+	if c.IsAgent() {
+		return refuse("human-only", "links are the user's (Settings › Linked projects)")
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	mine, _ := cfg.Links(a)
+	l, ok := mine[b]
+	if !ok {
+		return refuse("no-link", "%s has no link to %s", a, b)
+	}
+	l.Ask = ask
+	if err := config.SetLink(a, b, l); err != nil {
+		return err
+	}
+	if p, err := project.Open(a); err == nil {
+		p.Journal(c, "settings.links", a, b+" "+linkWords(l))
+	}
+	return nil
+}
+
+func linkWords(l config.Link) string {
+	if l.Ask && l.Allow != config.LinkOff {
+		return l.Allow + " ask"
+	}
+	return l.Allow
 }
 
 // now is the clock, for tests.

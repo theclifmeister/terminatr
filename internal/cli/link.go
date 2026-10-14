@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"cmp"
 	"fmt"
 	"os"
 	"time"
@@ -224,52 +223,56 @@ func rowCounts(r link.Row) string {
 	return s
 }
 
-const projectLinkUsage = `usage: tm project link <other> both|send|receive|off [--ask|--no-ask] [--both-sides] [--project <slug>]`
+const projectLinkUsage = `usage: tm project link <a> <b> [both|send|receive|off] [--ask|--no-ask]`
 
-// projectLink sets the project's link to another (config.Link), the
-// human's (docs/SPEC.md §7.9, §11.2). --both-sides also allows the link
-// on the other side, as the settings popup offers.
+// projectLink links two projects in one call, the human's (docs/SPEC.md
+// §7.9, §11.2): a's entry gets the direction (both by default), b's the
+// mirror (send for a is receive for b), off removes both. --ask holds
+// a's messages to b for the user's OK; b keeps its own ask.
 func projectLink(e *Env, args []string) error {
 	f := newFlags()
-	slug, ask, noAsk, both := f.String("project"), f.Bool("ask"), f.Bool("no-ask"), f.Bool("both-sides")
+	ask, noAsk := f.Bool("ask"), f.Bool("no-ask")
 	pos, err := f.Parse(args)
 	if err != nil {
 		return err
 	}
-	if len(pos) != 2 || (*ask && *noAsk) {
+	if len(pos) < 2 || len(pos) > 3 || (*ask && *noAsk) {
 		return usagef("%s", projectLinkUsage)
 	}
 	if e.Caller.IsAgent() {
 		return &project.Error{Code: "human-only", Msg: "links are the user's (Settings › Linked projects)"}
 	}
-	p, err := e.openProject(*slug)
-	if err != nil {
+	a, b, allow := pos[0], pos[1], config.LinkBoth
+	if len(pos) == 3 {
+		allow = pos[2]
+	}
+	switch allow {
+	case config.LinkBoth, config.LinkSend, config.LinkReceive, config.LinkOff:
+	default:
+		return usagef("%s", projectLinkUsage)
+	}
+	var askp *bool
+	if *ask || *noAsk {
+		askp = ask
+	}
+	if err := link.Set(e.Caller, a, b, allow, askp); err != nil {
 		return err
 	}
-	allow := pos[1]
-	if allow != config.LinkOff && allow != config.LinkBoth && allow != config.LinkSend && allow != config.LinkReceive {
-		return usagef("%s", projectLinkUsage)
+	p, err := project.Open(a)
+	if err != nil {
+		return err
 	}
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
-	mine, _ := cfg.Links(p.Slug)
-	l := config.Link{Allow: allow, Ask: cmp.Or(*ask, !*noAsk && mine[pos[0]].Ask)}
-	if err := link.Set(e.Caller, p.Slug, pos[0], l, *both); err != nil {
-		return err
-	}
-	cfg, err = config.Load()
-	if err != nil {
-		return err
-	}
 	for _, r := range link.Rows(cfg, p) {
-		if r.Peer == pos[0] {
-			fmt.Fprintf(e.Stdout, "%s %s %s: %s\n", p.Slug, r.Arrow(), r.Peer, r.Words())
+		if r.Peer == b {
+			fmt.Fprintf(e.Stdout, "%s %s %s: %s\n", a, r.Arrow(), b, r.Words())
 			return nil
 		}
 	}
-	fmt.Fprintf(e.Stdout, "%s has no link to %s\n", p.Slug, pos[0])
+	fmt.Fprintf(e.Stdout, "%s and %s are not linked\n", a, b)
 	return nil
 }
 

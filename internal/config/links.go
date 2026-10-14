@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"maps"
 	"regexp"
@@ -169,18 +170,53 @@ func Mirror(allow string) string {
 }
 
 // SetLink writes project slug's entry for other ([projects.<slug>.links]),
-// or removes it for LinkOff: the human's, from the settings popup and tm
-// project link. An entry without ask is written as its direction alone.
+// or removes it for LinkOff, leaving the other side as it is: only the
+// ask switch is one side's alone (SetLinkPair links the pair). An entry
+// without ask is written as its direction alone.
 func SetLink(slug, other string, l Link) error {
-	if !linkSlugRE.MatchString(other) || other == slug {
-		return fmt.Errorf("%q can't be linked from %s", other, slug)
+	return edit(func(data []byte) ([]byte, error) { return editLink(data, slug, other, l) })
+}
+
+// SetLinkPair links a and b in one write (docs/SPEC.md §7.9): a's entry
+// is la, b's the mirror of la's direction (Mirror) with b's ask askB;
+// LinkOff removes both. Linking is one act of the user's, never a side
+// at a time.
+func SetLinkPair(a, b string, la Link, askB bool) error {
+	lb := Link{Allow: Mirror(la.Allow), Ask: askB}
+	return edit(func(data []byte) ([]byte, error) {
+		out, err := editLink(data, a, b, la)
+		if err != nil {
+			return nil, err
+		}
+		return editLink(out, b, a, lb)
+	})
+}
+
+func editLink(data []byte, slug, other string, l Link) ([]byte, error) {
+	if !linkSlugRE.MatchString(other) || !linkSlugRE.MatchString(slug) || other == slug {
+		return nil, fmt.Errorf("%q can't be linked from %s", other, slug)
 	}
 	table := "projects." + slug + ".links"
 	if l.Allow == LinkOff || l.Allow == "" {
-		return Unset(table, other)
+		out := Remove(data, table, other)
+		if bytes.Equal(out, data) && sets(data, table, other) {
+			return nil, ErrForm
+		}
+		return out, nil
 	}
 	if !slices.Contains(LinkAllows, l.Allow) {
-		return fmt.Errorf("a link allows %q, %q or %q", LinkBoth, LinkSend, LinkReceive)
+		return nil, fmt.Errorf("a link allows %q, %q or %q", LinkBoth, LinkSend, LinkReceive)
 	}
-	return Set(table, other, l)
+	return Edit(data, table, other, l)
+}
+
+// Half reports whether an entry and the other side's for it don't
+// match: one side allows a direction the other doesn't, so the link
+// carries less than its entries say. Only a hand edit of config.toml
+// makes one; tm doctor and tm link list say so.
+func Half(mine, theirs Link, hasMine, hasTheirs bool) bool {
+	if !hasMine && !hasTheirs {
+		return false
+	}
+	return !hasMine || !hasTheirs || mine.Sends() != theirs.Receives() || mine.Receives() != theirs.Sends()
 }

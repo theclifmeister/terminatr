@@ -22,7 +22,7 @@ import (
 
 // linkRow is the Settings tab's Linked projects row of project slug.
 func linkRow(slug string) setting {
-	return setting{label: "Linked projects", help: "The other projects whose coordinators this one may write to and hear from (tm link). A link carries messages only when both projects allow it. Enter lists the projects.",
+	return setting{label: "Linked projects", help: "The other projects whose coordinators this one may write to and hear from (tm link). Linking sets both projects at once: send here is receive there. Enter lists the projects.",
 		value: func(m *dash) string { return linksWords(m.projectData(slug)) },
 		change: func(m *dash) tea.Cmd {
 			m.push(&linksView{slug: slug})
@@ -41,8 +41,8 @@ func linksWords(p *ProjectData) string {
 		switch {
 		case r.Send || r.Receive:
 			parts = append(parts, r.Peer+" "+r.Arrow())
-		case r.HasMine:
-			parts = append(parts, r.Peer+" (waits)")
+		case r.Half():
+			parts = append(parts, r.Peer+" (half-linked)")
 		}
 	}
 	if len(parts) == 0 {
@@ -52,9 +52,10 @@ func linksWords(p *ProjectData) string {
 }
 
 // linksView lists every other project with what each side allows:
-// enter steps this side through off, both, send and receive; a turns ask
-// first on or off. Allowing a link the other side doesn't asks once
-// whether to allow it there too.
+// enter steps the link through off, both, send and receive, writing both
+// sides at once (the other side's entry the mirror of this one's); a
+// turns this side's ask first on or off. A half-linked pair (a hand edit
+// of config.toml) shows as such, and enter makes it whole.
 type linksView struct {
 	slug string
 	sel  int
@@ -107,52 +108,40 @@ func (v *linksView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		m.pop()
 	case "up", "k", "down", "j":
 		v.sel = moveSel(v.sel, scrollKeys[s], len(others))
-	case "enter", "space", " ", "a":
+	case "enter", "space", " ":
 		if v.sel >= len(others) || m.busy {
 			break
 		}
-		other := others[v.sel]
-		r := v.entry(m, other)
-		l := config.Link{Allow: nextAllow(r.Mine.Allow, r.HasMine), Ask: r.Mine.Ask}
-		if s == "a" {
-			if !r.HasMine {
-				m.msg = "turn the link on first (enter)"
-				break
+		// One act sets both sides: this side's direction, the other's
+		// the mirror; off removes both.
+		other, r := others[v.sel], v.entry(m, others[v.sel])
+		allow := nextAllow(r.Mine.Allow, r.HasMine)
+		src, slug := m.src, v.slug
+		return m.act(func() actionMsg {
+			if err := src.SetLink(slug, other, allow); err != nil {
+				return actionMsg{err: settingsErr(err)}
 			}
-			l = config.Link{Allow: r.Mine.Allow, Ask: !r.Mine.Ask}
+			return actionMsg{msg: slug + " and " + other + ": " + linkAllowWords(config.Link{Allow: allow})}
+		})
+	case "a":
+		if v.sel >= len(others) || m.busy {
+			break
 		}
-		mirror := config.Mirror(l.Allow)
-		needs := l.Allow != config.LinkOff && s != "a" &&
-			!(r.HasTheirs && (r.Theirs.Allow == config.LinkBoth || r.Theirs.Allow == mirror))
-		save := func(both bool) tea.Cmd {
-			src, slug := m.src, v.slug
-			return m.act(func() actionMsg {
-				if err := src.SetLink(slug, other, l, both); err != nil {
-					return actionMsg{err: settingsErr(err)}
-				}
-				return actionMsg{msg: slug + "'s link to " + other + ": " + linkAllowWords(l)}
-			})
+		other, r := others[v.sel], v.entry(m, others[v.sel])
+		if !r.HasMine {
+			m.msg = "link " + other + " first (enter)"
+			break
 		}
-		if !needs {
-			return save(false)
-		}
-		q := fmt.Sprintf("Also let %s %s %s? Both sides must allow a link before it carries messages.", other, mirrorVerb(mirror), v.slug)
-		// y saves both sides, n this side only, esc nothing.
-		m.push(&confirmView{title: "Link " + v.slug + " and " + other, question: q, yes: func() tea.Cmd { return save(true) },
-			no: "unchanged", onNo: func() tea.Cmd { return save(false) }})
+		ask := !r.Mine.Ask
+		src, slug := m.src, v.slug
+		return m.act(func() actionMsg {
+			if err := src.SetLinkAsk(slug, other, ask); err != nil {
+				return actionMsg{err: settingsErr(err)}
+			}
+			return actionMsg{msg: slug + "'s messages to " + other + ": " + map[bool]string{true: "ask first", false: "sent freely"}[ask]}
+		})
 	}
 	return nil
-}
-
-// mirrorVerb says what the other side's entry would let it do.
-func mirrorVerb(allow string) string {
-	switch allow {
-	case config.LinkSend:
-		return "send messages to"
-	case config.LinkReceive:
-		return "accept messages from"
-	}
-	return "message"
 }
 
 // linkAllowWords is an entry in words: "both ways, ask first".
@@ -189,7 +178,7 @@ func (v *linksView) render(m *dash) string {
 		switch {
 		case r.Send || r.Receive:
 			st = th().Good
-		case r.HasMine || r.HasTheirs:
+		case r.Half():
 			st = th().Warn
 		}
 		lines = append(lines, l+st.Render(state))
@@ -197,8 +186,8 @@ func (v *linksView) render(m *dash) string {
 	if len(others) == 0 {
 		lines = append(lines, th().Faint.Render("no other projects"))
 	}
-	lines = append(lines, "", th().Faint.Render("Ask first holds each message this coordinator sends on the link until you approve it in the Messages tab."))
-	return m.popup(box{title: "Linked projects · " + v.slug, body: lines, sel: sel, keys: "enter allow: off › both › send › receive · a ask first · ↑ ↓ move · esc back"})
+	lines = append(lines, "", th().Faint.Render("A link is set on both sides at once: send here is receive there. Ask first holds each message this coordinator sends on the link until you approve it in the Messages tab."))
+	return m.popup(box{title: "Linked projects · " + v.slug, body: lines, sel: sel, keys: "enter link: off › both › send › receive · a ask first · ↑ ↓ move · esc back"})
 }
 
 func (v *linksView) wheel(m *dash, d int) { v.key(m, arrow(d)) }

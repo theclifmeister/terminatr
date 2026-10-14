@@ -59,7 +59,8 @@ type ProjectWatch struct {
 }
 
 // WatchLink is one link: its state in words ("linked both ways",
-// "waits for web to accept"), which way messages go, and the counts.
+// "half-linked: web has no entry"), which way messages go, and the
+// counts.
 type WatchLink struct {
 	Peer    string `json:"peer"`
 	State   string `json:"state"`

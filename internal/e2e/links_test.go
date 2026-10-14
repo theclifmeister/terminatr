@@ -31,7 +31,7 @@ func TestLinkMessages(t *testing.T) {
 	env, projDir, out := tickerEnv(t)
 	env.scripts(linkScripts)
 	other, _ := newProject(env, "other")
-	env.MustCLI("project", "link", other, "both", "--both-sides", "--project", "demo")
+	env.MustCLI("project", "link", "demo", other)
 
 	coord := &Session{ID: strings.TrimSpace(env.MustCLI("project", "open", "demo"))}
 	env.WaitState(coord, "idle", agentWait)

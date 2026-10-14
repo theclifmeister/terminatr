@@ -1065,3 +1065,19 @@ func TestSettingsDanglingLink(t *testing.T) {
 		t.Fatalf("%+v", cs)
 	}
 }
+
+// TestSettingsHalfLinked: entries that don't mirror each other (a hand
+// edit) are a warning naming the pair once.
+func TestSettingsHalfLinked(t *testing.T) {
+	d := testDeps(t)
+	for _, s := range []string{"demo", "mods", "web"} {
+		if _, err := project.New(project.Options{Slug: s}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	os.WriteFile(filepath.Join(d.Paths.Home, "config.toml"), []byte("[projects.demo.links]\nmods = \"both\"\nweb = \"both\"\n\n[projects.mods.links]\ndemo = \"send\"\n\n[projects.web.links]\ndemo = \"both\"\n"), 0o600)
+	cs := Settings(d)
+	if len(cs) != 1 || cs[0].Name != "links" || cs[0].Detail != "half-linked: demo both / mods send; set the link again in Settings › Linked projects (or tm project link) to write both sides" {
+		t.Fatalf("%+v", cs)
+	}
+}

@@ -26,9 +26,9 @@ func linkDash(t *testing.T) (*fakeSource, *dash) {
 	return src, m
 }
 
-// TestLinkedProjectsSetting: the Settings row lists the links, its list
-// steps this side through off › both › send › receive, and allowing a
-// link the other side doesn't asks whether to allow it there too.
+// TestLinkedProjectsSetting: the Settings row lists the links; its list
+// steps the link through off › both › send › receive, each one act that
+// sets both sides (no question), and a turns this side's ask first.
 func TestLinkedProjectsSetting(t *testing.T) {
 	src, m := linkDash(t)
 	m.openTab("alpha", tabSettings, 0)
@@ -41,33 +41,31 @@ func TestLinkedProjectsSetting(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "linked both ways") || !strings.Contains(out, "a ask first") {
 		t.Fatalf("list:\n%s", out)
 	}
-	// both → send: the other side already allows both, no question.
+	// both → send, at once: no question.
 	runAll(m, press(m, "enter"))
-	if len(src.links) != 1 || src.links[0] != "alpha beta send false false" {
-		t.Fatalf("links %v", src.links)
+	if _, asked := m.top().(*confirmView); asked || len(src.links) != 1 || src.links[0] != "alpha beta send" {
+		t.Fatalf("links %v (%T)", src.links, m.top())
 	}
-	// ask first on.
 	runAll(m, press(m, "a"))
-	if len(src.links) != 2 || src.links[1] != "alpha beta both true false" {
+	if len(src.links) != 2 || src.links[1] != "alpha beta ask true" {
 		t.Fatalf("ask %v", src.links)
 	}
-	// A link the other side has no entry for asks; y allows both sides.
+	// No link yet: enter links both ways; a says to link first.
 	src.data.Projects[0].Links = nil
 	m.setData(src.data)
-	press(m, "enter")
-	cv, ok := m.top().(*confirmView)
-	if !ok || !strings.Contains(cv.question, "Also let beta message alpha?") {
-		t.Fatalf("no question: %T", m.top())
+	press(m, "a")
+	if len(src.links) != 2 || !strings.Contains(m.msg, "link beta first") {
+		t.Fatalf("ask without a link: %v %q", src.links, m.msg)
 	}
-	runAll(m, press(m, "y"))
-	if got := src.links[len(src.links)-1]; got != "alpha beta both false true" {
-		t.Fatalf("mirror %v", src.links)
+	runAll(m, press(m, "enter"))
+	if got := src.links[len(src.links)-1]; got != "alpha beta both" {
+		t.Fatalf("link %v", src.links)
 	}
-	// n saves this side only.
-	press(m, "enter")
-	runAll(m, press(m, "n"))
-	if got := src.links[len(src.links)-1]; got != "alpha beta both false false" {
-		t.Fatalf("this side only %v", src.links)
+	// A half-linked pair (a hand edit) says so.
+	src.data.Projects[0].Links = []link.Row{{Peer: "beta", HasMine: true, Mine: config.Link{Allow: config.LinkBoth}}}
+	m.setData(src.data)
+	if out := screen(m); !strings.Contains(out, "half-linked: beta has no entry") {
+		t.Fatalf("half:\n%s", out)
 	}
 }
 
