@@ -95,7 +95,7 @@ func TestTrackerProject(t *testing.T) {
 		"thread.state {Project:p Thread:t-0002 Task:T11 State:working Reason: NeedsYou:}",
 		"report.stored {Project:p Thread:t-0001 Task: Report:1 Sections:{Report:did it Next:[] Check:[] Remember:[]} PR:}",
 		"pr.changed {Project:p Thread:t-0001 Number:7 URL: State:OPEN Checks:pending Review: Behind:false Conflict:false}",
-		"inbox.item {Project:p ID:i2 Kind:report Subject:t-0002 Summary: NeedsUser:false}",
+		"inbox.item {Project:p ID:i2 Kind:report Subject:t-0002 Summary: NeedsUser:false Message:}",
 	}
 	got := drain(t, s)
 	if fmt.Sprint(got) != fmt.Sprint(want) {
