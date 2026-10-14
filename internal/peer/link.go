@@ -63,14 +63,29 @@ func (l *link) panesLevel() string {
 }
 
 // setPanes changes the pane switch for the peer: at once for its open
-// streams, which off closes; view stops their keys at the next one.
+// streams, which off closes; view stops their keys at the next one, and
+// type lets them type. A peer that takes peer.panes hears of it now, so
+// its open panes follow (docs/SPEC.md §16.12).
 func (l *link) setPanes(level string) {
 	l.mu.Lock()
 	l.peer.Panes = level
-	s := l.sess
+	level = l.peer.PanesLevel()
+	s, tell := l.sess, slices.Contains(l.st.Caps, CapPaneLevel)
 	l.mu.Unlock()
-	if s != nil && (level == "" || level == proto.PanesOff) {
+	if s == nil {
+		return
+	}
+	if level == proto.PanesOff {
 		s.panes.closeServed(proto.PaneOff)
+	}
+	if tell {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), helloTimeout)
+			defer cancel()
+			if err := s.call(ctx, proto.MethodPeerPanes, proto.PeerPanesParams{Panes: level}, nil); err != nil && l.logf != nil {
+				l.logf("peer %s: peer.panes: %v", l.peer.Alias, err)
+			}
+		}()
 	}
 }
 

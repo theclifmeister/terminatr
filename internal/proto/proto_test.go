@@ -102,3 +102,22 @@ func TestQueueNote(t *testing.T) {
 		}
 	}
 }
+
+// TestPanesWords: users say write for the level the wire and peers.json
+// call type, which tm v0.27.0 sends and expects; both are read.
+func TestPanesWords(t *testing.T) {
+	if PanesType != "type" {
+		t.Fatalf("the wire's level is %q; tm v0.27.0 says type", PanesType)
+	}
+	for in, want := range map[string]string{"write": PanesType, "type": PanesType, "view": PanesView, "off": PanesOff} {
+		if got, ok := ParsePanes(in); !ok || got != want {
+			t.Errorf("ParsePanes(%q) = %q, %v", in, got, ok)
+		}
+	}
+	if _, ok := ParsePanes("talk"); ok || ValidPanes("") {
+		t.Error("took a level that isn't one")
+	}
+	if PanesWord(PanesType) != "write" || PanesWord(PanesView) != "view" {
+		t.Error("PanesWord")
+	}
+}

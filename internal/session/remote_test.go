@@ -174,3 +174,60 @@ func TestRemoteResync(t *testing.T) {
 		t.Fatalf("after Resync: frame %d", b[0])
 	}
 }
+
+// TestRemoteRepaintHistory: the stream's first repaint carries the whole
+// scrollback, and so does one asked for (prefix+R); one in place of a
+// backlog only the last RepaintHistory rows.
+func TestRemoteRepaintHistory(t *testing.T) {
+	oldMax, oldEvery := MaxRemotePending, RepaintEvery
+	MaxRemotePending, RepaintEvery = 4096, 50*time.Millisecond
+	defer func() { MaxRemotePending, RepaintEvery = oldMax, oldEvery }()
+
+	s := start(t, "/bin/sh")
+	s.Input([]byte("i=0; while [ $i -lt 600 ]; do echo old-$i; i=$((i+1)); done; echo done-$((6*7))\r"))
+	eventually(t, "the history", func() bool { return strings.Contains(screen(t, s), "done-42") })
+	history := func(m *remoteMirror) string {
+		text, err := m.term.PlainText()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return text
+	}
+
+	sub, err := s.AttachRemote()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub.Detach()
+	m := &remoteMirror{t: t}
+	b, _ := sub.Next()
+	m.apply(b)
+	if text := history(m); !strings.Contains(text, "old-0\n") || !strings.Contains(text, "old-599\n") {
+		t.Fatalf("the first repaint lacks the scrollback:\n%s", text)
+	}
+
+	// A lag: the backlog becomes a repaint with the last rows only.
+	s.Input([]byte("i=0; while [ $i -lt 2000 ]; do echo lag-$i; i=$((i+1)); done; echo end-$((7*8))\r"))
+	eventually(t, "the flood", func() bool { return strings.Contains(screen(t, s), "end-56") })
+	if sub.Resyncs() == 0 {
+		t.Fatal("the backlog was never dropped")
+	}
+	time.Sleep(2 * RepaintEvery)
+	m.repaints = 0
+	ch := pump(sub)
+	eventually(t, "the lag's repaint", func() bool {
+		m.drain(ch)
+		got, _ := m.term.Screen()
+		return m.repaints > 0 && got == screen(t, s)
+	})
+	if text := history(m); strings.Contains(text, "old-0\n") {
+		t.Errorf("a lag's repaint carried the whole scrollback")
+	}
+
+	// prefix+R: the whole scrollback again.
+	sub.Resync()
+	eventually(t, "the asked-for repaint", func() bool {
+		m.drain(ch)
+		return strings.Contains(history(m), "old-0\n")
+	})
+}

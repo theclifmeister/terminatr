@@ -14,15 +14,53 @@ const ErrPanesOff = "panes-off"
 
 // The pane switch's levels, per paired server: what it may do with this
 // server's panes. Off (the default) refuses peer.attach; view watches;
-// type watches and types.
+// type watches and types. These are the wire's and peers.json's values,
+// which tm v0.27.0 reads too; the user reads and may type PanesWrite for
+// PanesType (PanesWord, ParsePanes).
 const (
 	PanesOff  = "off"
 	PanesView = "view"
 	PanesType = "type"
+	// PanesWrite is PanesType as the user says it.
+	PanesWrite = "write"
 )
 
-// ValidPanes says whether s is a pane switch level.
-func ValidPanes(s string) bool { return s == PanesOff || s == PanesView || s == PanesType }
+// ValidPanes says whether s is a pane switch level, in either word.
+func ValidPanes(s string) bool {
+	_, ok := ParsePanes(s)
+	return ok
+}
+
+// ParsePanes reads a level as a user, a file or a peer gives it: write,
+// and type, its older name, are PanesType.
+func ParsePanes(s string) (string, bool) {
+	switch s {
+	case PanesOff, PanesView, PanesType:
+		return s, true
+	case PanesWrite:
+		return PanesType, true
+	}
+	return "", false
+}
+
+// PanesWord is level as the user reads it: write for PanesType.
+func PanesWord(level string) string {
+	if level == PanesType {
+		return PanesWrite
+	}
+	return level
+}
+
+// MethodPeerPanes tells the paired server its pane switch here changed
+// (PeerPanesParams), so its open panes follow at once (docs/SPEC.md
+// §16.12); sent only to a peer whose hello lists peer.CapPaneLevel.
+const MethodPeerPanes = "peer.panes"
+
+// PeerPanesParams are the params of peer.panes: the level now (PanesOff,
+// PanesView, PanesType).
+type PeerPanesParams struct {
+	Panes string `json:"panes"`
+}
 
 // PeerAttachParams are the params of peer.attach: the session (a
 // coordinator's or a thread's of the shared Project), the stream id the

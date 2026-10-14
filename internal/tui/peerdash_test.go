@@ -239,7 +239,7 @@ func TestPeersTab(t *testing.T) {
 }
 
 // TestPeersTabPanes: p steps the selected server's pane switch off →
-// view → type → off (docs/SPEC.md §16.12), asking before each step that
+// view → write → off (docs/SPEC.md §16.12), asking before each step that
 // lets it do more; n keeps it as it was.
 func TestPeersTabPanes(t *testing.T) {
 	m, src := remoteDash(t, "@mini/acme-api")
@@ -262,8 +262,8 @@ func TestPeersTabPanes(t *testing.T) {
 	}
 	press(m, "p")
 	run(m, press(m, "y"))
-	if out := screen(m); !strings.Contains(out, "panes: type · it can watch and type into") {
-		t.Errorf("after type:\n%s", out)
+	if out := screen(m); !strings.Contains(out, "panes: write · it can watch and type into") || !strings.Contains(m.msg, "panes write for mini") {
+		t.Errorf("after write (%q):\n%s", m.msg, out)
 	}
 	// Off goes at once.
 	run(m, press(m, "p"))

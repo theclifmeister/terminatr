@@ -3,6 +3,9 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"io"
+	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,6 +16,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
@@ -377,18 +381,29 @@ func TestRemoteStatus(t *testing.T) {
 	if why := c.remoteBlock(p); why != "" {
 		t.Errorf("up, type: %q", why)
 	}
-	if n := c.remoteNote(in); n != "remote · 38 ms" {
+	if n := c.remoteNote(p); n != "remote · 38 ms" {
 		t.Errorf("note %q", n)
 	}
 	p.info.ViewOnly = true
 	if why := c.remoteBlock(p); !strings.HasPrefix(why, "view only") {
 		t.Errorf("view only: %q", why)
 	}
+	// The peer's switch, as the mirror has it the moment it changes,
+	// decides whether the pane takes keys.
+	peers[0].Panes = proto.PanesView
+	if in := remoteInfo(peers, p.info); !in.ViewOnly {
+		t.Error("view in the mirror: the pane takes keys")
+	}
+	peers[0].Panes = proto.PanesType
+	if in := remoteInfo(peers, p.info); in.ViewOnly {
+		t.Error("raised to write in the mirror: the pane is still view only")
+	}
+	peers[0].Panes = proto.PanesView
 	p.info = proto.SessionInfo{ID: "nas/q-1", Server: "nas", Role: proto.RoleCoordinator}
 	if why := c.remoteBlock(p); why != "nas is offline: keys aren't sent" {
 		t.Errorf("offline: %q", why)
 	}
-	if n := c.remoteNote(p.info); !strings.Contains(n, "offline") {
+	if n := c.remoteNote(p); !strings.Contains(n, "offline") {
 		t.Errorf("offline note %q", n)
 	}
 	p.info = proto.SessionInfo{ID: "s-1"}
@@ -418,5 +433,39 @@ func TestPrefixRepaint(t *testing.T) {
 	c.focus.info = proto.SessionInfo{ID: "s-1", Role: proto.RoleCoordinator}
 	if has(c) {
 		t.Error("repaint in a local pane's menu")
+	}
+}
+
+// TestGoneWaitsForReason: the view can say the last session is gone
+// before its stream says why (they come on separate connections); the
+// console still ends with the stream's words, not "detached", when the
+// closed frame comes after (T416: panes turned off on mini).
+func TestGoneWaitsForReason(t *testing.T) {
+	c, err := newClient(server.Paths{}, log.New(io.Discard, "", 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.enc.Close()
+	near, far := net.Pipe()
+	defer far.Close()
+	p := &pane{conn: server.StreamOver(near), info: proto.SessionInfo{ID: "mini/s-1", Server: "mini"}}
+	c.panes[p.info.ID], c.focus = p, p
+	go c.readLoop(p)
+
+	const words = "mini turned its panes off for this server"
+	go func() {
+		time.Sleep(100 * time.Millisecond) // after the view's word
+		server.StreamOver(far).WriteFrame(proto.FrameClosed, []byte(words))
+	}()
+	if res := c.goneResult(); res.Reason != words || res.Detached {
+		t.Fatalf("result %+v, want %q", res, words)
+	}
+
+	// No stream to wait for: the result is at once.
+	c2, _ := newClient(server.Paths{}, log.New(io.Discard, "", 0))
+	defer c2.enc.Close()
+	t0 := time.Now()
+	if res := c2.goneResult(); !res.Detached || time.Since(t0) > time.Second {
+		t.Fatalf("no pane: %+v after %v", res, time.Since(t0))
 	}
 }

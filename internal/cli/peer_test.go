@@ -85,18 +85,29 @@ func TestPeerListRemoveRotate(t *testing.T) {
 		t.Fatalf("pairRelay: %q, %v", r, err)
 	}
 
-	// The pane switch (docs/SPEC.md §16.12).
-	h.expect(2, "off|view|type", human, "peer", "panes", "mini", "write")
+	// The pane switch (docs/SPEC.md §16.12): write, or type, its older
+	// name; peers.json keeps "type", which tm v0.27.0 reads too.
+	h.expect(2, "off|view|write", human, "peer", "panes", "mini", "talk")
 	h.expect(2, "usage: tm peer pair", human, "peer", "panes", "mini")
 	h.expect(1, "unknown-peer", human, "peer", "panes", "studio", "view")
-	if out := h.ok(human, "peer", "panes", "mini", "type"); !strings.Contains(out, "Panes type for mini") || *reloads != 1 {
+	if out := h.ok(human, "peer", "panes", "mini", "write"); !strings.Contains(out, "Panes write for mini") || *reloads != 1 {
 		t.Fatalf("panes: %q, %d reloads", out, *reloads)
 	}
-	if out := h.ok(human, "peer", "list"); !strings.Contains(out, "panes: type") {
+	if out := h.ok(human, "peer", "list"); !strings.Contains(out, "panes: write") {
 		t.Fatalf("list with panes: %q", out)
 	}
 	if ps, _ := peer.LoadPeers(dir); ps[0].Alias != "mini" || ps[0].Panes != proto.PanesType {
 		t.Fatalf("after panes: %+v", ps)
+	}
+	if out := h.ok(human, "peer", "list", "--json"); !strings.Contains(out, `"panes": "write"`) && !strings.Contains(out, `"panes":"write"`) {
+		t.Fatalf("list --json with panes: %q", out)
+	}
+	h.ok(human, "peer", "panes", "mini", "view")
+	if out := h.ok(human, "peer", "panes", "mini", "type"); !strings.Contains(out, "Panes write for mini") {
+		t.Fatalf("panes type: %q", out)
+	}
+	if ps, _ := peer.LoadPeers(dir); ps[0].Panes != proto.PanesType {
+		t.Fatalf("after panes type: %+v", ps)
 	}
 	h.ok(human, "peer", "panes", "mini", "off")
 	*reloads = 0

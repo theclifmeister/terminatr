@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -74,6 +75,8 @@ func (f *fakeSource) Close() {
 	f.cond.Broadcast()
 	f.mu.Unlock()
 }
+
+func (f *fakeSource) typed() string { f.mu.Lock(); defer f.mu.Unlock(); return string(f.input) }
 
 func (f *fakeSource) isClosed() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.closed }
 
@@ -368,7 +371,8 @@ func TestPaneThroughRelay(t *testing.T) {
 }
 
 // TestSetPanes: the switch is kept in peers.json, off when unset, and
-// pairing again keeps it.
+// pairing again keeps it. write is kept as "type", which tm v0.27.0
+// reads, and a peers.json that says write reads as type.
 func TestSetPanes(t *testing.T) {
 	a, b := newServer(t), newServer(t)
 	b.pair(t, "studio", a, "wss://relay.example.net")
@@ -376,8 +380,17 @@ func TestSetPanes(t *testing.T) {
 	if ps[0].PanesLevel() != proto.PanesOff {
 		t.Fatalf("default %q", ps[0].PanesLevel())
 	}
-	if _, err := SetPanes(b.dir, "studio", "write"); err == nil {
+	if _, err := SetPanes(b.dir, "studio", "talk"); err == nil {
 		t.Error("took a level that isn't one")
+	}
+	if ok, err := SetPanes(b.dir, "studio", proto.PanesWrite); !ok || err != nil {
+		t.Fatalf("write: %v %v", ok, err)
+	}
+	if ps, _ = LoadPeers(b.dir); ps[0].Panes != proto.PanesType {
+		t.Fatalf("write kept as %q", ps[0].Panes)
+	}
+	if p := (Peer{Panes: proto.PanesWrite}); p.PanesLevel() != proto.PanesType {
+		t.Errorf("a peers.json write reads as %q", p.PanesLevel())
 	}
 	if ok, _ := SetPanes(b.dir, "nobody", proto.PanesView); ok {
 		t.Error("set the switch of a peer that isn't paired")
@@ -389,5 +402,84 @@ func TestSetPanes(t *testing.T) {
 	ps, _ = LoadPeers(b.dir)
 	if len(ps) != 1 || ps[0].Panes != proto.PanesView {
 		t.Fatalf("after pairing again: %+v", ps)
+	}
+}
+
+// TestPaneRaiseTold: the far server tells the near one at once when its
+// pane switch changes (peer.panes), and a stream opened at view types
+// once raised to write; a near tm without peer.panes (v0.27.0) is never
+// sent it, and its stream types too once raised (docs/SPEC.md §16.12).
+func TestPaneRaiseTold(t *testing.T) {
+	for _, old := range []bool{false, true} {
+		t.Run(map[bool]string{false: "new", true: "v0.27.0"}[old], func(t *testing.T) {
+			_, _, url, tc := startRelay(t)
+			a, b := newServer(t), newServer(t)
+			a.pair(t, "mini", b, url)
+			b.pair(t, "studio", a, url)
+			SetPanes(b.dir, "studio", proto.PanesView)
+			var mu sync.Mutex
+			var told []string
+			var farLog []string
+			ma := Start(Options{Dir: a.dir, Version: "0.27.0", Logf: t.Logf, RelayTLS: tc, noPaneLevel: old,
+				Backoff: func(int) time.Duration { return 20 * time.Millisecond }})
+			t.Cleanup(ma.Close)
+			ma.OnPanes(func(_ ID, level string) { mu.Lock(); told = append(told, level); mu.Unlock() })
+			h := &fakeHost{}
+			mb := Start(Options{Dir: b.dir, Version: "0.28.0", RelayTLS: tc, Panes: h,
+				Logf:    func(f string, a ...any) { mu.Lock(); farLog = append(farLog, fmt.Sprintf(f, a...)); mu.Unlock() },
+				Backoff: func(int) time.Duration { return 20 * time.Millisecond }})
+			t.Cleanup(mb.Close)
+			pb := waitLink(t, mb, "studio", "up", isUp)
+			waitLink(t, ma, "mini", "up", isUp)
+			if slices.Contains(pb.Caps, CapPaneLevel) == old {
+				t.Fatalf("b sees caps %v", pb.Caps)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			c, err := ma.OpenPane(ctx, "mini", proto.PeerAttachParams{Project: "web", Session: "s-1"}, &sink{})
+			if err != nil || c.Result.Input {
+				t.Fatalf("OpenPane at view: %+v %v", c, err)
+			}
+			c.Input([]byte("at view"))
+
+			SetPanes(b.dir, "studio", proto.PanesWrite)
+			mb.Reload()
+			if !old {
+				eventually(t, "the raise told", func() bool {
+					mu.Lock()
+					defer mu.Unlock()
+					return slices.Equal(told, []string{proto.PanesType})
+				})
+			}
+			// The far end checks each key: the open stream types now.
+			eventually(t, "keys after the raise", func() bool {
+				c.Input([]byte("!"))
+				return strings.Contains(h.last().typed(), "!")
+			})
+			if in := h.last().typed(); strings.Contains(in, "at view") {
+				t.Errorf("a key at view went through: %q", in)
+			}
+
+			SetPanes(b.dir, "studio", proto.PanesView)
+			mb.Reload()
+			if !old {
+				eventually(t, "the lowering told", func() bool {
+					mu.Lock()
+					defer mu.Unlock()
+					return slices.Equal(told, []string{proto.PanesType, proto.PanesView})
+				})
+			}
+			time.Sleep(100 * time.Millisecond)
+			mu.Lock()
+			defer mu.Unlock()
+			if old && len(told) > 0 {
+				t.Errorf("an old tm heard %v", told)
+			}
+			for _, l := range farLog {
+				if strings.Contains(l, "peer.panes") {
+					t.Errorf("far logged %q", l)
+				}
+			}
+		})
 	}
 }

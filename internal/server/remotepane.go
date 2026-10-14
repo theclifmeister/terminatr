@@ -148,6 +148,26 @@ func (r *remotes) open(id string) (*remotePane, *proto.Error) {
 	return rp, nil
 }
 
+// setLevel takes the paired server alias's pane switch for this server:
+// its panes open here type, or stop typing, from now (the far server
+// checks each key too; docs/SPEC.md §16.12). Off closes them from there.
+// The mirror's: mustn't block.
+func (r *remotes) setLevel(alias, level string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, rp := range r.byID {
+		if rp.alias != alias {
+			continue
+		}
+		rp.mu.Lock()
+		if rp.conn != nil && rp.input != (level == proto.PanesType) {
+			rp.input = level == proto.PanesType
+			r.s.log.Printf("remote pane %s: now %s", rp.id, map[bool]string{true: "write", false: "view"}[rp.input])
+		}
+		rp.mu.Unlock()
+	}
+}
+
 // drop forgets rp and closes its proxy with reason ("" closes quietly).
 func (r *remotes) drop(rp *remotePane, reason string) {
 	r.mu.Lock()
@@ -222,7 +242,8 @@ func (rp *remotePane) open() *proto.Error {
 		rp.conn, rp.input, rp.down = conn, conn.Result.Input, false
 		rp.sid, rp.project, rp.role, rp.thread, rp.info = rs.s.ID, rs.project, rs.s.Role, rs.s.Thread, conn.Result.Session
 		rp.mu.Unlock()
-		rp.r.s.log.Printf("remote pane %s: open (%s)", rp.id, map[bool]string{true: "type", false: "view"}[conn.Result.Input])
+		rp.r.s.log.Printf("remote pane %s: open (%s)", rp.id, map[bool]string{true: "write", false: "view"}[conn.Result.Input])
+		rp.r.s.mirror.SetPanesOf(rp.alias, map[bool]string{true: proto.PanesType, false: proto.PanesView}[conn.Result.Input])
 	}
 	select {
 	case <-rp.proxy.Ready():
@@ -239,7 +260,7 @@ func (rp *remotePane) openError(err error) *proto.Error {
 	case errors.Is(err, peer.ErrNoPanes):
 		return proto.Errorf(proto.ErrRefused, "%s's tm has no remote panes; update it to open them", rp.alias)
 	case errors.As(err, &pe) && pe.Code == proto.ErrPanesOff:
-		return proto.Errorf(proto.ErrPanesOff, "%s doesn't share panes with this server: on %s, tm peer panes <this server> view, or type", rp.alias, rp.alias)
+		return proto.Errorf(proto.ErrPanesOff, "%s doesn't share panes with this server: on %s, tm peer panes <this server> view, or write", rp.alias, rp.alias)
 	case errors.As(err, &pe) && pe.Code == proto.ErrNotShared:
 		return proto.Errorf(proto.ErrNotShared, "%s doesn't share that project any more", rp.alias)
 	case errors.As(err, &pe):

@@ -15,7 +15,7 @@ import (
 // The Peers tab of the , popup (docs/SPEC.md §4, §16.8): the servers
 // paired with this one, as tm peer list has them (Source.Peers): each
 // one's alias, server id, link and relay, and its pane switch; p steps
-// the switch off → view → type → off (asking before it lets the server
+// the switch off → view → write → off (asking before it lets the server
 // do more), as tm peer panes does; x removes the selected one, asking
 // first, as tm peer remove does; n pairs with another server and j
 // joins one's pairing (peerpair.go), as tm peer pair and join do. A
@@ -25,7 +25,7 @@ import (
 //	""
 //	" mini    91C3-77AB  ◉ linked · 38 ms"
 //	"         relay relay.example.net · shares 2 projects · tm 0.27.0"
-//	"         panes: type · it can watch and type into this server's …"
+//	"         panes: write · it can watch and type into this server's …"
 //
 // Each server is a block of lines under its own: its settings go there.
 
@@ -167,10 +167,10 @@ func peerAbout(m *dash, e PeerEntry) string {
 
 // panesLevel is e's pane switch, off when unset.
 func panesLevel(e PeerEntry) string {
-	if e.Panes == "" {
-		return proto.PanesOff
+	if level, ok := proto.ParsePanes(e.Panes); ok {
+		return level
 	}
-	return e.Panes
+	return proto.PanesOff
 }
 
 // panesWords is a paired server's pane line: its switch and what that
@@ -181,7 +181,7 @@ func panesWords(e PeerEntry) string {
 		proto.PanesView: "it can watch the coordinators and threads of the projects you share, not type",
 		proto.PanesType: "it can watch and type into the coordinators and threads of the projects you share",
 	}[panesLevel(e)]
-	return "panes: " + panesLevel(e) + " · " + what
+	return "panes: " + proto.PanesWord(panesLevel(e)) + " · " + what
 }
 
 // nextPanes is the level p steps to from level.
@@ -203,7 +203,7 @@ func (pt *peersTab) panes(m *dash, e PeerEntry) tea.Cmd {
 		src, alias := m.src, e.Alias
 		return m.act(func() actionMsg {
 			err := src.SetPeerPanes(alias, to)
-			return actionMsg{err: err, msg: "panes " + to + " for " + alias, then: func(m *dash) { pt.load(m) }}
+			return actionMsg{err: err, msg: "panes " + proto.PanesWord(to) + " for " + alias, then: func(m *dash) { pt.load(m) }}
 		})
 	}
 	if to == proto.PanesOff {

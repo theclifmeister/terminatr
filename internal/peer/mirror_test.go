@@ -379,3 +379,19 @@ func TestMirrorThroughRelay(t *testing.T) {
 		return w != nil && w.Stale && w.Threads == 2 && peerOf(l, "mini").State != proto.LinkUp
 	})
 }
+
+// TestMirrorSetPanes: a peer's word on its pane switch (peer.panes, or a
+// stream it opened) is the mirror's at once and tells Panes, once per
+// change; write reads as type.
+func TestMirrorSetPanes(t *testing.T) {
+	var told []string
+	m := &Mirror{opts: MirrorOptions{Panes: func(alias, level string) { told = append(told, alias+" "+level) }},
+		peers: map[string]*mirrorPeer{"m": {link: proto.PeerLink{Alias: "mini", ID: "m"}, panes: proto.PanesView}}}
+	m.SetPanes("m", proto.PanesWrite)
+	m.SetPanes("m", proto.PanesType)
+	m.SetPanes("nobody", proto.PanesOff)
+	m.SetPanesOf("mini", proto.PanesView)
+	if !slices.Equal(told, []string{"mini type", "mini view"}) || m.gen != 2 {
+		t.Fatalf("told %v, gen %d", told, m.gen)
+	}
+}

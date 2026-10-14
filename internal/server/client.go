@@ -300,6 +300,10 @@ func (c *Client) CallWithin(d time.Duration, method string, params, result any) 
 // Close closes the connection.
 func (c *Client) Close() error { return c.conn.Close() }
 
+// StreamOver is a Client for an attach stream already past its reply on
+// conn: its frames (a test's pipe).
+func StreamOver(conn net.Conn) *Client { return &Client{conn: conn, br: bufio.NewReader(conn)} }
+
 // Attach turns a fresh attach connection into a frame stream: it sends the
 // attach request and returns the server's reply. Frames follow on Conn and
 // Reader.

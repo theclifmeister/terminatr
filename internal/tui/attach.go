@@ -57,6 +57,10 @@ const (
 	// endWait is how long the last pane's session may be gone before the
 	// view says so; then the attach ends anyway.
 	endWait = 3 * time.Second
+	// closeWait is how long the view may say the last pane's session is
+	// gone before its stream says why: the two come on separate
+	// connections, and the stream's words are what the console prints.
+	closeWait = 2 * time.Second
 )
 
 // enterScreen switches to the alternate screen.
@@ -433,6 +437,9 @@ type client struct {
 	endOnce sync.Once
 	end     chan struct{}
 	result  Result
+	// paneEnded is told when a pane's stream says its session ended
+	// (ended), for goneResult.
+	paneEnded chan struct{}
 }
 
 func newClient(p server.Paths, l *log.Logger) (*client, error) {
@@ -441,7 +448,7 @@ func newClient(p server.Paths, l *log.Logger) (*client, error) {
 		return nil, err
 	}
 	return &client{paths: p, log: l, enc: enc, outer: map[int]bool{}, panes: map[string]*pane{},
-		wake: make(chan struct{}, 1), end: make(chan struct{})}, nil
+		wake: make(chan struct{}, 1), end: make(chan struct{}), paneEnded: make(chan struct{}, 1)}, nil
 }
 
 // setWindow records the window's size. c.mu held, or no other goroutine
@@ -600,7 +607,13 @@ func (c *client) viewLoop(watch <-chan struct{}) {
 		if same {
 			continue
 		}
-		if v.Mode != view.ModeLayout || v.Focus == "" {
+		if v.Focus == "" {
+			// The session left the view: its stream says why (a remote
+			// pane's "mini turned its panes off …"), maybe just after.
+			c.finish(c.goneResult())
+			return
+		}
+		if v.Mode != view.ModeLayout {
 			c.finish(c.endResult())
 			return
 		}
@@ -642,6 +655,29 @@ func (c *client) endResult() Result {
 		return Result{Reason: reason}
 	}
 	return detached
+}
+
+// goneResult is endResult once the view says the last session is gone:
+// it waits, up to closeWait, for the pane's stream to say why first.
+func (c *client) goneResult() Result {
+	deadline := time.NewTimer(closeWait)
+	defer deadline.Stop()
+	for !c.detaching.Load() {
+		c.mu.Lock()
+		told := c.lastReason != "" || len(c.panes) == 0
+		c.mu.Unlock()
+		if told {
+			break
+		}
+		select {
+		case <-c.paneEnded:
+		case <-c.end:
+			return c.result
+		case <-deadline.C:
+			return c.endResult()
+		}
+	}
+	return c.endResult()
 }
 
 // close frees every pane. Goroutines still running see c.closed through
@@ -785,7 +821,9 @@ func (c *client) readLoop(p *pane) {
 		}
 		switch typ {
 		case proto.FrameSnapshot:
-			err = c.loadSnapshot(p, payload)
+			if err = c.loadSnapshot(p, payload); err == nil {
+				c.status() // a view-only remote pane's size note
+			}
 		case proto.FrameOutput:
 			p.mirror.Write(payload)
 		case proto.FrameResize:
@@ -793,6 +831,7 @@ func (c *client) readLoop(p *pane) {
 			if cols, rows, err = proto.ParseSize(payload); err == nil {
 				err = p.mirror.Resize(cols, rows)
 				p.r.Invalidate()
+				c.status() // a view-only remote pane's size note
 			}
 		case proto.FrameDigest:
 			mine, derr := p.mirror.Digest()
@@ -847,6 +886,10 @@ func (c *client) ended(p *pane, reason string) {
 		c.relayout()
 	}
 	c.mu.Unlock()
+	select {
+	case c.paneEnded <- struct{}{}:
+	default:
+	}
 	p.conn.Close()
 	if last {
 		time.AfterFunc(endWait, func() { c.finish(Result{Reason: reason}) })
@@ -1520,6 +1563,9 @@ func (c *client) typed(p *pane) {
 	}
 }
 
+// viewOnlyNote starts the note on a key dropped at a view-only pane.
+const viewOnlyNote = "view only: "
+
 // remoteBlock is why keys don't reach p, a paired server's pane: its
 // server lets this one watch only, or the link is down (keys typed then
 // are dropped, never kept for later; docs/SPEC.md §16.12). "" when they
@@ -1530,7 +1576,7 @@ func (c *client) remoteBlock(p *pane) string {
 		return ""
 	}
 	if p.info.ViewOnly {
-		return "view only: " + alias + " shares its panes without typing"
+		return viewOnlyNote + alias + " shares its panes without typing"
 	}
 	for _, pm := range c.side.peers {
 		if pm.Alias == alias && pm.State != proto.LinkUp {
@@ -1541,8 +1587,11 @@ func (c *client) remoteBlock(p *pane) string {
 }
 
 // remoteNote is the status bar's note on a paired server's pane: how it
-// is linked, or that keys don't go. c.mu held.
-func (c *client) remoteNote(in proto.SessionInfo) string {
+// is linked, or that keys don't go. A view-only pane keeps the far
+// session's size, drawn from the top left, cropped or padded: when that
+// isn't its rectangle's, the note says the size. c.mu held.
+func (c *client) remoteNote(p *pane) string {
+	in := p.info
 	for _, pm := range c.side.peers {
 		if pm.Alias != in.Server {
 			continue
@@ -1553,6 +1602,12 @@ func (c *client) remoteNote(in proto.SessionInfo) string {
 		note := "remote"
 		if in.ViewOnly {
 			note = "view only"
+			if p.mirror != nil {
+				cols, rows := p.mirror.Size()
+				if r := c.geo.Area; cols > 0 && (int(cols) != r.W || int(rows) != r.H) {
+					note += fmt.Sprintf(" · %d×%d on %s", cols, rows, in.Server)
+				}
+			}
 		}
 		if pm.RTT > 0 {
 			note += " · " + rttWords(pm.RTT)
@@ -1563,12 +1618,19 @@ func (c *client) remoteNote(in proto.SessionInfo) string {
 }
 
 // remoteInfo is a paired server's pane in, its state as the mirror
-// last had it.
+// last had it, and whether it takes keys: the peer's pane switch, which
+// it tells the moment it changes (docs/SPEC.md §16.12).
 func remoteInfo(peers []proto.PeerMirror, in proto.SessionInfo) proto.SessionInfo {
 	_, sid, _ := strings.Cut(in.ID, "/")
 	for _, pm := range peers {
 		if pm.Alias != in.Server {
 			continue
+		}
+		switch pm.Panes {
+		case proto.PanesView:
+			in.ViewOnly = true
+		case proto.PanesType:
+			in.ViewOnly = false
 		}
 		for _, pr := range pm.Projects {
 			for _, s := range pr.Sessions {
@@ -1625,7 +1687,7 @@ func (c *client) status() {
 		sw -= bw + 1
 	}
 	if where == "" && c.focus.info.Server != "" {
-		where = c.remoteNote(c.focus.info)
+		where = c.remoteNote(c.focus)
 	}
 	line, hits := statusBar(c.focus.info, c.focus.status, c.paneTitle(), c.pending, sw, where, c.cells)
 	line = plainUnder(line)
@@ -1731,6 +1793,10 @@ func (c *client) input(k uv.Key) {
 	}
 }
 
+// wheelRows is how far one turn of the wheel scrolls a pane's local
+// scrollback.
+const wheelRows = 3
+
 // mouse handles a mouse event (attachmouse.go): the open menu, a
 // question in the status bar, the sidebar and the status bar are tm's.
 // Over the pane, a click takes the keyboard back from the sidebar; the
@@ -1809,6 +1875,24 @@ func (c *client) mouse(ev uv.Event) {
 		c.kb = areaMain
 		c.status()
 		c.poke()
+	}
+	if c.remoteBlock(p) != "" {
+		// A paired server's pane that takes no keys (docs/SPEC.md
+		// §16.12): the mouse is tm's, whatever the program tracks. The
+		// wheel scrolls the local scrollback, a left drag selects.
+		switch {
+		case press && m.Button == emu.MouseRight:
+			c.openMenu(c.menuTitle(), c.sessionItems(), m.X, m.Y, false)
+		case m.Action == emu.MousePress && (m.Button == emu.MouseWheelUp || m.Button == emu.MouseWheelDown):
+			p.mirror.ScrollViewport(map[bool]int{true: -wheelRows, false: wheelRows}[m.Button == emu.MouseWheelUp])
+			p.scrolled = true
+			p.r.Invalidate()
+		case m.Button == emu.MouseLeft:
+			c.selMouse(p, m)
+		}
+		c.mu.Unlock()
+		c.poke()
+		return
 	}
 	if !p.mirror.Modes().MouseTracking() {
 		// tm's: the program doesn't take the mouse. A left drag selects.
@@ -1901,9 +1985,11 @@ func (c *client) outerModes() []byte {
 	case m.NormalMouse:
 		track = 1000
 	}
-	if c.side != nil && track < 1002 {
-		// The sidebar takes clicks and drags whatever the program wants;
-		// selecting text in a pane then needs Shift.
+	if (c.side != nil || c.focus != nil && c.remoteBlock(c.focus) != "") && track < 1002 {
+		// The sidebar takes clicks and drags whatever the program wants,
+		// and so does a remote pane that takes no keys (its wheel scrolls
+		// here); selecting text in a pane then needs Shift, or tm's own
+		// drag.
 		track = 1002
 	}
 	if c.side != nil && c.sideW > sideSlim {
@@ -2361,6 +2447,9 @@ func (c *client) applyPoll(pl *polled, now time.Time) bool {
 		}
 		if p.info.Server != "" {
 			if s := remoteInfo(c.side.peers, p.info); !reflect.DeepEqual(p.info, s) {
+				if p == c.focus && s.ViewOnly != p.info.ViewOnly && strings.HasPrefix(c.flash, viewOnlyNote) {
+					c.flash = "" // its server raised or lowered its switch
+				}
 				p.info, changed = s, true
 			}
 		}

@@ -37,6 +37,9 @@ type Options struct {
 	// Panes serves this server's panes to paired servers whose switch
 	// allows it (peer.attach); nil serves none and leaves out CapPane.
 	Panes PaneHost
+	// noPaneLevel plays tm v0.27.0 (tests): no CapPaneLevel, no
+	// peer.panes.
+	noPaneLevel bool
 }
 
 // Manager keeps a link to every paired server. Nothing local waits on
@@ -47,10 +50,11 @@ type Manager struct {
 	stop context.CancelFunc
 	wg   sync.WaitGroup
 
-	mu    sync.Mutex
-	id    *Identity
-	err   error
-	links map[ID]*running
+	mu      sync.Mutex
+	id      *Identity
+	err     error
+	links   map[ID]*running
+	onPanes func(id ID, level string)
 }
 
 type running struct {
@@ -117,7 +121,7 @@ func (m *Manager) Reload() error {
 		if p, ok := want[k]; !ok || p.Alias != r.l.peer.Alias || p.Relay != r.l.peer.Relay {
 			m.drop(k)
 		} else if p.PanesLevel() != r.l.panesLevel() {
-			r.l.setPanes(p.Panes)
+			r.l.setPanes(p.PanesLevel())
 		}
 	}
 	for k, p := range want {
@@ -139,7 +143,10 @@ func (m *Manager) add(id *Identity, cert tls.Certificate, p Peer) {
 		backoff: m.opts.Backoff,
 	}
 	d := &dispatcher{ex: m.opts.Export, msgs: m.opts.Messages, panes: m.opts.Panes, caller: caller.ForPeer(p.Alias),
-		peer: p.ID(), level: l.panesLevel}
+		peer: p.ID(), level: l.panesLevel, panesHere: func(level string) { m.panesHere(p.ID(), level) }}
+	if m.opts.noPaneLevel {
+		d.panesHere = nil
+	}
 	l.methods = d.methods()
 	l.st = proto.PeerLink{Alias: p.Alias, ID: p.ID().String(), Transport: l.t.String(), State: proto.LinkConnecting}
 	ctx, stop := context.WithCancel(m.ctx)
@@ -164,7 +171,27 @@ func (m *Manager) caps() []string {
 	if m.opts.Panes != nil {
 		caps = append(caps, CapPane)
 	}
-	return caps
+	if m.opts.noPaneLevel {
+		return caps
+	}
+	return append(caps, CapPaneLevel)
+}
+
+// OnPanes sets f to hear a paired server's word that its pane switch
+// for this server changed (peer.panes): the mirror's. f mustn't block.
+func (m *Manager) OnPanes(f func(id ID, level string)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.onPanes = f
+}
+
+func (m *Manager) panesHere(id ID, level string) {
+	m.mu.Lock()
+	f := m.onPanes
+	m.mu.Unlock()
+	if f != nil {
+		f(id, level)
+	}
 }
 
 // Call sends the paired server alias a request on its link and waits
