@@ -501,8 +501,10 @@ func TestBucket(t *testing.T) {
 	now := time.Unix(0, 0)
 	var b bucket
 	b.init(2, now)
-	if !b.allow(1, 2, now) || !b.allow(1, 2, now) || b.allow(1, 2, now) {
-		t.Fatal("burst of 2")
+	for i, want := range []bool{true, true, false} {
+		if b.allow(1, 2, now) != want {
+			t.Fatalf("burst of 2: take %d", i+1)
+		}
 	}
 	if !b.allow(1, 2, now.Add(time.Second)) {
 		t.Fatal("refill")

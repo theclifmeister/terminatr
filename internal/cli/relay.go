@@ -5,12 +5,10 @@ import (
 	"log"
 	"net"
 	"net/netip"
-	"os"
-	"os/signal"
 	"strconv"
-	"syscall"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/relay"
 )
@@ -95,7 +93,7 @@ func runRelay(e *Env, args []string) error {
 		addr = ":443"
 	}
 	cfg.Log = log.New(e.Stderr, "tm relay: ", log.LstdFlags)
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := proc.UntilStopped(context.Background())
 	defer stop()
 	mode := "TLS"
 	if *plain {
