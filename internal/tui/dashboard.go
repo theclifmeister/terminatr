@@ -245,6 +245,8 @@ type dash struct {
 	acts     int                     // actions started, so a poll knows whether one began since it did
 	queued   []func(m *dash) tea.Cmd // settings keys pressed while it runs, in order
 	catalogs []Catalog               // the agents' models, read when the , popup opens (catalog.go)
+	agents   []string                // the installed agents, read by agentList; nil until then or after a poll
+	agentsOK bool                    // agents is read
 	stack    []overlay               // views open on top of the list, topmost last
 	mv       modViews                // the views user mods draw (modviews.go)
 	// awaitView: over a session for a mod's view (Over.View), the popup
@@ -761,6 +763,7 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, msg.pv.step(m, msg)
 	case actionMsg:
 		m.busy = false
+		m.agentsOK = false // an action may have installed or removed one
 		if msg.pick != "" {
 			m.push(&agentPickView{slug: msg.pick, agents: m.src.Agents()})
 			return m, nil
@@ -937,6 +940,25 @@ func (m *dash) showProject(slug string) tea.Cmd {
 		_, err := vc.Do(proto.MethodViewProject, proto.ViewParams{Project: slug})
 		return viewDoneMsg{sel: true, err: err}
 	})
+}
+
+// agentList is the installed agents (Source.Agents), read once per poll:
+// the settings and the project's overview ask for them every frame, and
+// reading them lists the registry and probes the PATH (PERF-04).
+func (m *dash) agentList() []string {
+	if !m.agentsOK {
+		m.agents, m.agentsOK = m.src.Agents(), true
+	}
+	return m.agents
+}
+
+// catalogList is the agents' models, read on the first ask and again
+// when a refresh changes them (m.catalogs).
+func (m *dash) catalogList() []Catalog {
+	if m.catalogs == nil {
+		m.catalogs = m.src.Catalogs()
+	}
+	return m.catalogs
 }
 
 // tree is the sidebar's tree, from the last poll: the listed project is
@@ -1202,6 +1224,7 @@ func (m *dash) setPinned(slug string, on bool) tea.Cmd {
 // reported) since the last poll.
 func (m *dash) setData(d Data) tea.Cmd {
 	first := !m.loaded
+	m.agentsOK = false // read again, once, by the next frame that needs them
 	m.data, m.loaded = d, true
 	if m.out != nil {
 		m.out.loaded()
