@@ -25,8 +25,9 @@ const LinkProtocol = 1
 // MinLinkProtocol is the oldest link protocol this tm talks to.
 const MinLinkProtocol = 1
 
-// Caps are this tm's link capabilities. The link core has none: peer
-// views, panes and messages each add one when they're built.
+// Caps are this tm's link capabilities beside the link core: peer views
+// (CapWatch, when the server exports), panes and messages each add one
+// when they're built.
 var Caps = []string{}
 
 // Hello is the first line each end sends inside the TLS.
@@ -56,6 +57,9 @@ const (
 	idleAfter = 90 * time.Second
 	// maxLine bounds one NDJSON line.
 	maxLine = 1 << 20
+	// maxInFlight bounds the peer's requests being answered at once
+	// (each peer.watch waits); more are refused.
+	maxInFlight = 32
 )
 
 // versionError: the peer's link protocol is older than this tm talks.
@@ -84,6 +88,14 @@ type session struct {
 
 	wmu sync.Mutex
 
+	// methods answer the peer's requests beside link.ping: the peer
+	// dispatcher's, nil for none. Each runs in its own goroutine, at
+	// most maxInFlight at once, until ctx ends with the session.
+	methods  map[string]handler
+	inFlight chan struct{}
+	ctx      context.Context
+	cancel   context.CancelFunc
+
 	mu      sync.Mutex
 	next    int64
 	pending map[int64]chan line
@@ -93,7 +105,9 @@ type session struct {
 func newSession(c net.Conn) *session {
 	sc := bufio.NewScanner(c)
 	sc.Buffer(make([]byte, 0, 4096), maxLine)
-	return &session{c: c, sc: sc, ping: pingEvery, idle: idleAfter, pending: map[int64]chan line{}}
+	ctx, cancel := context.WithCancel(context.Background())
+	return &session{c: c, sc: sc, ping: pingEvery, idle: idleAfter, pending: map[int64]chan line{},
+		inFlight: make(chan struct{}, maxInFlight), ctx: ctx, cancel: cancel}
 }
 
 func (s *session) send(v any) error {
@@ -206,6 +220,7 @@ func (s *session) serve(rtt func(time.Duration)) error {
 		}
 	}()
 	err := s.loop()
+	s.cancel()
 	s.mu.Lock()
 	s.err = err
 	for id, ch := range s.pending {
@@ -237,16 +252,45 @@ func (s *session) loop() error {
 			continue
 		}
 		r := line{ID: l.ID}
-		switch l.Method {
-		case MethodPing:
+		h, ok := s.methods[l.Method]
+		switch {
+		case l.Method == MethodPing:
 			r.Result = json.RawMessage("{}")
+		case ok:
+			select {
+			case s.inFlight <- struct{}{}:
+				go s.answer(l, h)
+				continue
+			default:
+				r.Error = proto.Errorf(proto.ErrRefused, "too many requests at once")
+			}
 		default:
-			// A newer peer's method: it checks capabilities first, so
-			// this is only a peer that didn't.
+			// A newer peer's method, or one this server doesn't
+			// export: a peer checks capabilities first, so this is only
+			// a peer that didn't.
 			r.Error = proto.Errorf(proto.ErrUnknownMethod, "unknown link method %q", l.Method)
 		}
 		if err := s.send(r); err != nil {
 			return err
 		}
+	}
+}
+
+// answer runs h for the peer's request l and sends its response.
+func (s *session) answer(l line, h handler) {
+	defer func() { <-s.inFlight }()
+	r := line{ID: l.ID}
+	v, err := h(s.ctx, l.Params)
+	if s.ctx.Err() != nil {
+		return
+	}
+	if err == nil {
+		r.Result, err = json.Marshal(v)
+	}
+	if err != nil {
+		r.Result, r.Error = nil, asProtoError(err)
+	}
+	if s.send(r) != nil {
+		s.c.Close()
 	}
 }

@@ -37,3 +37,23 @@ func TestMod(t *testing.T) {
 		t.Errorf("a thread is narrower than a mod: %v", got)
 	}
 }
+
+func TestPeer(t *testing.T) {
+	p := ForPeer("mini")
+	if !p.IsAgent() {
+		t.Error("a paired server passes human-only checks")
+	}
+	if got := p.String(); got != "peer:mini" {
+		t.Errorf("String() = %q", got)
+	}
+	for _, k := range []Kind{Human, Coordinator, Thread, Mod} {
+		if got := Narrower(p, Caller{Kind: k}); got != p {
+			t.Errorf("%s is narrower than a paired server: %v", k, got)
+		}
+	}
+	// No environment names a paired server.
+	env := map[string]string{EnvSession: "s-1", EnvRole: "peer"}
+	if got := FromLookup(func(k string) string { return env[k] }); got.Kind == Peer {
+		t.Errorf("the environment made a peer: %v", got)
+	}
+}

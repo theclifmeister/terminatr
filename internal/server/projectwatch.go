@@ -31,11 +31,17 @@ import (
 // the project cache last read them), the ticker's state file and the
 // server's sessions.
 func (s *Server) projectWatchState(slug string) (proto.ProjectWatch, error) {
+	return s.projectWatchWith(slug, s.list().Sessions)
+}
+
+// projectWatchWith is projectWatchState with the server's sessions read
+// already.
+func (s *Server) projectWatchWith(slug string, sessions []proto.SessionInfo) (proto.ProjectWatch, error) {
 	snap, err := s.projects.get(slug, ticker.StatePath(s.opts.Paths.Sessions), s.watch.generation())
 	if err != nil {
 		return proto.ProjectWatch{}, err
 	}
-	w := snap.watch(s.list().Sessions)
+	w := snap.watch(sessions)
 	w.Cells = s.projectCells(slug)
 	return w, nil
 }

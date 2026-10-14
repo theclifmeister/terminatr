@@ -321,8 +321,9 @@ func Run(ctx context.Context, opts Options) error {
 		logger.Printf("sessions.json: %v", err)
 	}
 	// The links to paired servers: each its own goroutine, which no
-	// local call waits on (docs/SPEC.md §16.7).
-	s.peers = peer.Start(peer.Options{Dir: peer.DirIn(p.Home), Version: version.Version, Logf: logger.Printf})
+	// local call waits on (docs/SPEC.md §16.7). They read the shared
+	// projects through peerExport (§16.9), nothing else.
+	s.peers = peer.Start(peer.Options{Dir: peer.DirIn(p.Home), Version: version.Version, Logf: logger.Printf, Export: s.peerExport()})
 	defer s.peers.Close()
 	logger.Printf("server pid %d %s protocol %d listening on %s", os.Getpid(), s.build, proto.Protocol, p.Socket)
 	go func() {

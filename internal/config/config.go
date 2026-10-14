@@ -173,6 +173,10 @@ type Safety struct {
 	// Pinned puts the project at the top of the sidebar's active
 	// projects; it changes their order only (§4).
 	Pinned bool `json:"pinned"`
+	// Share offers the project to the paired servers (docs/SPEC.md
+	// §16.9): its state, read-only, never its files. Off until the user
+	// turns it on; a project's own, never all projects'.
+	Share bool `json:"share"`
 	// Merge is who merges a thread's PR: MergeCoordinator or MergeThread.
 	Merge string `json:"merge"`
 	// Guard turns the mod's guard on (docs/SPEC.md §8.6, Guard): it
@@ -259,6 +263,7 @@ type rawSafety struct {
 	Paused         *bool     `toml:"paused"`
 	Archived       *bool     `toml:"archived"`
 	Pinned         *bool     `toml:"pinned"`
+	Share          *bool     `toml:"share"`
 	Merge          *string   `toml:"merge"`
 	Guard          *bool     `toml:"guard"`
 	GuardOff       *[]string `toml:"guard_off"`
@@ -535,6 +540,11 @@ func (c *Config) AllProjects() (Safety, error) {
 	if c.defaults.Active != nil || c.defaults.Paused != nil || c.defaults.Archived != nil || c.defaults.Pinned != nil {
 		return s, fmt.Errorf("%s: defaults can't set active, paused, archived or pinned; they are each project's own", c.Path)
 	}
+	// Sharing is opted into project by project: all projects' share
+	// would offer every project, new ones too.
+	if c.defaults.Share != nil {
+		return s, fmt.Errorf("%s: defaults can't set share; each project is shared on its own", c.Path)
+	}
 	if c.defaults.Repos != nil {
 		return s, fmt.Errorf("%s: defaults can't set repos; each project's repos are its own", c.Path)
 	}
@@ -719,6 +729,9 @@ func (r rawSafety) apply(s *Safety, path, table string) error {
 	}
 	if r.Pinned != nil {
 		s.Pinned = *r.Pinned
+	}
+	if r.Share != nil {
+		s.Share = *r.Share
 	}
 	if r.Merge != nil {
 		switch *r.Merge {

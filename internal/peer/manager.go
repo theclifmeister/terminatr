@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io/fs"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -26,6 +28,9 @@ type Options struct {
 	RelayTLS *tls.Config
 	// Backoff replaces the wait between dials (tests).
 	Backoff func(n int) time.Duration
+	// Export is what paired servers may read of this one (peer.projects,
+	// peer.watch); nil exports nothing and leaves out CapWatch.
+	Export Exporter
 }
 
 // Manager keeps a link to every paired server. Nothing local waits on
@@ -116,12 +121,14 @@ func (m *Manager) Reload() error {
 }
 
 func (m *Manager) add(id *Identity, cert tls.Certificate, p Peer) {
+	d := &dispatcher{ex: m.opts.Export, caller: caller.ForPeer(p.Alias)}
 	l := &link{
 		peer:    p,
 		id:      id,
 		cert:    cert,
 		t:       RelayTransport(p.Relay, id, p.ID(), m.opts.RelayTLS),
-		hello:   Hello{LinkProtocol: LinkProtocol, Version: m.opts.Version, Caps: Caps},
+		hello:   Hello{LinkProtocol: LinkProtocol, Version: m.opts.Version, Caps: m.caps()},
+		methods: d.methods(),
 		logf:    m.opts.Logf,
 		backoff: m.opts.Backoff,
 	}
@@ -134,6 +141,36 @@ func (m *Manager) add(id *Identity, cert tls.Certificate, p Peer) {
 		defer m.wg.Done()
 		l.run(ctx)
 	}()
+}
+
+// caps are the capabilities this server's hello lists.
+func (m *Manager) caps() []string {
+	caps := slices.Clone(Caps)
+	if m.opts.Export != nil {
+		caps = append(caps, CapWatch)
+	}
+	return caps
+}
+
+// Call sends the paired server alias a request on its link and waits
+// for the answer (peer.projects, peer.watch where its hello lists
+// CapWatch).
+func (m *Manager) Call(ctx context.Context, alias, method string, params, result any) error {
+	if m == nil {
+		return errNotUp
+	}
+	m.mu.Lock()
+	var l *link
+	for _, r := range m.links {
+		if r.l.peer.Alias == alias {
+			l = r.l
+		}
+	}
+	m.mu.Unlock()
+	if l == nil {
+		return fmt.Errorf("no paired server %q", alias)
+	}
+	return l.call(ctx, method, params, result)
 }
 
 func (m *Manager) drop(k ID) {

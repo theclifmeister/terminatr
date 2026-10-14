@@ -96,7 +96,7 @@ func (p *Project) Trash(c caller.Caller, now time.Time) (string, error) {
 	if err := os.Rename(p.Dir, dst); err != nil {
 		return "", err
 	}
-	if err := config.ClearProject(p.Slug, "active", "archived", "paused", "pinned", "repos"); err != nil {
+	if err := config.ClearProject(p.Slug, "active", "archived", "paused", "pinned", "share", "repos"); err != nil {
 		return dst, fmt.Errorf("moved to %s, but its settings stay: %w", dst, err)
 	}
 	return dst, nil

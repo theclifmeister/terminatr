@@ -114,6 +114,44 @@ func TestSetProject(t *testing.T) {
 	}
 }
 
+// TestShare: share is off until a project's table turns it on, in a
+// header-line table that tm project rename moves; all projects can't
+// set it.
+func TestShare(t *testing.T) {
+	write(t, "[projects.demo]\nyolo = true\n")
+	c, _ := Load()
+	if s, _ := c.Safety("demo"); s.Share {
+		t.Fatal("shared by default")
+	}
+	if err := SetProject("demo", "share", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetProject("fresh", "share", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetDefaults("share", true); err == nil {
+		t.Error("all projects were shared")
+	}
+	path, _ := Path()
+	data, _ := os.ReadFile(path)
+	if want := "[projects.demo]\nyolo = true\nshare = true\n\n[projects.fresh]\nshare = true\n"; string(data) != want {
+		t.Fatalf("file:\n%s", data)
+	}
+	if err := RenameProject("demo", "demo2"); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := c.Safety("demo2"); !s.Share {
+		t.Error("the rename lost share")
+	}
+	if s, _ := c.Safety("other"); s.Share {
+		t.Error("a project without a table is shared")
+	}
+}
+
 // agents are slug's thread_agent and coordinator_agent.
 func agents(t *testing.T, slug string) (thread, coordinator string) {
 	t.Helper()
