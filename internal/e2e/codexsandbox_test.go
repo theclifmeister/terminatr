@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -152,8 +153,16 @@ func TestSmokeCodexSandbox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("codex sandbox: %v", err)
 	}
+	// Deleting a ref takes packed-refs.lock in the common dir. Seatbelt
+	// grants it by path; bubblewrap binds only paths that exist, and the
+	// lock never does until git takes it, so on Linux a thread can't
+	// delete a ref (the guard refuses most deletes anyway).
+	refDelete := "ok"
+	if runtime.GOOS == "linux" {
+		refDelete = "no"
+	}
 	want := map[string]string{
-		"worktree": "ok", "commit": "ok", "push": "ok", "ref-delete": "ok", "tmp": "ok", "tmpdir": "ok",
+		"worktree": "ok", "commit": "ok", "push": "ok", "ref-delete": refDelete, "tmp": "ok", "tmpdir": "ok",
 		"hooks": "no", "config": "no", "info": "no", "other-worktree": "no",
 		"outside": "no", "home": "no", "project-read": "ok", "project-write": "no",
 		"socket": "ok",
