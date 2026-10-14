@@ -6,7 +6,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
-	"slices"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -85,6 +85,8 @@ type RunOptions struct {
 // mod's commands grant names, by name only; it runs with no shell, the
 // scrubbed environment, in the mod's own folder or a folder its files
 // grant may read, and is killed (with what it started) at the timeout.
+// Its arguments may not name a file or folder the mod couldn't read
+// (Paths.CheckArgs), nor point git elsewhere (CheckRun).
 func run(ctx context.Context, c *Call) (any, error) {
 	var a struct {
 		Argv []string `json:"argv"`
@@ -97,25 +99,15 @@ func run(ctx context.Context, c *Call) (any, error) {
 	if a.Options != nil {
 		a.RunOptions = *a.Options
 	}
-	if len(a.Argv) == 0 || len(a.Argv) > MaxArgs {
-		return nil, BadParams("process.run: argv has 1 to %d strings", MaxArgs)
-	}
-	size := 0
-	for _, s := range a.Argv {
-		size += len(s)
-		if strings.ContainsRune(s, 0) {
-			return nil, BadParams("process.run: an argument has a NUL in it")
-		}
-	}
-	if size > MaxArgBytes || len(a.Stdin) > MaxRunOutput {
-		return nil, BadParams("process.run: the arguments or stdin are too long")
+	if len(a.Stdin) > MaxRunOutput {
+		return nil, BadParams("process.run: the stdin is too long")
 	}
 	var progs []string
 	if c.Mod.Manifest != nil {
 		progs = c.Mod.Manifest.Permissions.Commands
 	}
-	if !slices.Contains(progs, a.Argv[0]) {
-		return nil, Denied("process.run: %q isn't one of the mod's commands", a.Argv[0])
+	if err := CheckRun(a.Argv, progs); err != nil {
+		return nil, err
 	}
 	dir := c.Paths.Own
 	if a.Cwd != "" {
@@ -128,6 +120,9 @@ func run(ctx context.Context, c *Call) (any, error) {
 		}
 		dir = real
 	}
+	if err := c.Paths.CheckArgs(a.Argv[1:], dir); err != nil {
+		return nil, err
+	}
 	timeout := defaultRun
 	if a.TimeoutMS > 0 {
 		timeout = min(time.Duration(a.TimeoutMS)*time.Millisecond, maxRun)
@@ -139,6 +134,11 @@ func run(ctx context.Context, c *Call) (any, error) {
 	cmd := exec.CommandContext(ctx, a.Argv[0], a.Argv[1:]...)
 	cmd.Dir = dir
 	cmd.Env = ScrubbedEnv(os.Getenv)
+	if root := c.Paths.Root(dir); root != "" {
+		// git looks for its repository from dir up to the root it is
+		// in, never in a folder above it.
+		cmd.Env = append(cmd.Env, "GIT_CEILING_DIRECTORIES="+filepath.Dir(root))
+	}
 	cmd.Stdin = strings.NewReader(a.Stdin)
 	out, errOut := &capped{n: MaxRunOutput}, &capped{n: MaxRunOutput}
 	cmd.Stdout, cmd.Stderr = out, errOut

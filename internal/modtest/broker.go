@@ -2,14 +2,20 @@ package modtest
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 
+	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modapi"
+	"github.com/theclifmeister/terminatr/internal/modbroker"
 	"github.com/theclifmeister/terminatr/internal/modproto"
+	"github.com/theclifmeister/terminatr/internal/plat/caps"
 )
 
 // Broker is the fake broker: it answers a mod's $ API calls as the
@@ -22,8 +28,14 @@ import (
 // thread.get and report.get null; actions.available false;
 // project.get, http.fetch and process.run an error (the fixture must
 // say); everything else (the ui, annotate, inbox.raise) null.
+//
+// process.run is refused, answer or not, as the broker refuses it: a
+// program the commands don't name, an option the program may not have,
+// or an argument naming a path the mod couldn't read, by name only
+// (its folder and home are made up).
 type Broker struct {
 	grants  []string
+	perms   mod.Permissions
 	answers []Answer
 
 	mu    sync.Mutex
@@ -32,10 +44,10 @@ type Broker struct {
 	calls []Call
 }
 
-// NewBroker makes a broker for a mod granted grants, with the fixture's
-// answers, store and files.
-func NewBroker(grants []string, answers []Answer, store map[string]json.RawMessage, files map[string]string) *Broker {
-	b := &Broker{grants: grants, answers: answers, store: maps.Clone(store), files: maps.Clone(files)}
+// NewBroker makes a broker for a mod asking for perms and granted
+// grants, with the fixture's answers, store and files.
+func NewBroker(grants []string, perms mod.Permissions, answers []Answer, store map[string]json.RawMessage, files map[string]string) *Broker {
+	b := &Broker{grants: grants, perms: perms, answers: answers, store: maps.Clone(store), files: maps.Clone(files)}
 	if b.store == nil {
 		b.store = map[string]json.RawMessage{}
 	}
@@ -70,6 +82,11 @@ func (b *Broker) Answer(method string, params json.RawMessage) (json.RawMessage,
 	}
 	if m.Needs != "" && !slices.Contains(b.grants, m.Needs) {
 		return nil, &modproto.Error{Code: modproto.CodeDenied, Message: fmt.Sprintf("refused: %s needs the %s permission", method, m.Needs)}
+	}
+	if method == "process.run" {
+		if err := b.checkRun(params); err != nil {
+			return nil, err
+		}
 	}
 	for _, a := range b.answers {
 		if a.Method == method && Match(a.Params, params) {
@@ -141,3 +158,45 @@ func marshal(v any) json.RawMessage {
 	b, _ := json.Marshal(v)
 	return b
 }
+
+// fakeRoot is the made-up folder the mod's home and own folder are in.
+var fakeRoot = map[bool]string{false: "/fixture", true: `C:\fixture`}[caps.Windows]
+
+// checkRun refuses a process.run the broker would refuse.
+func (b *Broker) checkRun(params json.RawMessage) *modproto.Error {
+	var a struct {
+		Argv []string `json:"argv"`
+		modbroker.RunOptions
+		Options *modbroker.RunOptions `json:"options"`
+	}
+	if err := json.Unmarshal(params, &a); err != nil {
+		return &modproto.Error{Code: modproto.CodeInvalidParams, Message: "process.run: " + err.Error()}
+	}
+	if a.Options != nil {
+		a.RunOptions = *a.Options
+	}
+	home := filepath.Join(fakeRoot, "home")
+	p := modbroker.Paths{Home: home, TMHome: filepath.Join(home, ".terminatr"), Own: filepath.Join(home, ".terminatr", "state", "mods", "mod"),
+		Secrets: append(agent.Secrets(nil, home, noenv), modbroker.Keychains(home, noenv)...)}
+	if slices.Contains(b.grants, mod.PermFiles) {
+		p.Read, p.Write = b.perms.Files.Read, b.perms.Files.Write
+	}
+	p = p.Resolved()
+	err := modbroker.CheckRun(a.Argv, b.perms.Commands)
+	if err == nil {
+		dir := p.Own
+		if a.Cwd != "" {
+			dir, err = p.CheckName(a.Cwd, false)
+		}
+		if err == nil {
+			err = p.CheckArgsByName(a.Argv[1:], dir)
+		}
+	}
+	var e *modbroker.Error
+	if errors.As(err, &e) {
+		return &modproto.Error{Code: e.Code, Message: e.Message}
+	}
+	return nil
+}
+
+func noenv(string) string { return "" }
