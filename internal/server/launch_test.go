@@ -30,6 +30,12 @@ func slowLaunchServer(t *testing.T) (s *Server, entered chan struct{}, release c
 	if err := os.WriteFile(filepath.Join(bin, "claude"+testExe), []byte("#!"+testSh(t)+"\nexec sleep 30\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	// The pty finds the command on the server's own PATH: the fake one,
+	// never a real Claude.
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if err := os.MkdirAll(filepath.Dir(p.Sessions), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	reg, err := agent.Load("")
 	if err != nil {
 		t.Fatal(err)
