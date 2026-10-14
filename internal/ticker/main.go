@@ -22,7 +22,10 @@ import (
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
 
+// projectMemo is project slug's memo, made when it has none.
 func (t *Ticker) projectMemo(slug string) *projectMemo {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	pm := t.st.Projects[slug]
 	if pm == nil {
 		pm = &projectMemo{}
@@ -126,7 +129,9 @@ func (t *Ticker) followMain(p *project.Project, sessions []proto.SessionInfo, sa
 		return false
 	}
 	for _, r := range recs {
+		t.mu.Lock()
 		m := t.st.Threads[p.Slug+"/"+r.ID]
+		t.mu.Unlock()
 		if r.State == thread.Resolved || r.Repo == "" || m == nil || m.PR.State != "OPEN" {
 			continue
 		}

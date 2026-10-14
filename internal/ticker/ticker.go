@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -140,7 +141,15 @@ type Ticker struct {
 	o    Options
 	kick chan struct{}
 
-	mu sync.Mutex // one sweep at a time; guards st
+	// sweeping makes it one sweep at a time.
+	sweeping sync.Mutex
+	// mu guards st's maps (not the memos in them), gh, ghErr, projects
+	// and renames. It is held only while they are read or written, never
+	// across git or a code host call, so tm project rename doesn't wait
+	// for a sweep (PERF-07). A memo's fields are written by its project's
+	// sweep, under the project's lock (lockProjects), and saved by a
+	// sweep or with sweeping held.
+	mu sync.Mutex
 	st *state
 	// gh is what code host calls did in this sweep, by project slug: true
 	// once one worked, false while all failed; absent when none ran.
@@ -148,7 +157,14 @@ type Ticker struct {
 	// ghErr is the last failure of a project's code host calls in this
 	// sweep, for the gh-failing item's words.
 	ghErr map[string]error
-	// hosts are the repos' code hosts, picked once per sync (host).
+	// projects are the projects' locks, by slug: held while a sweep
+	// works on the project and while it is renamed.
+	projects map[string]*sync.Mutex
+	// renames counts the renames done: a sweep that overlapped one
+	// forgets no memo of a thread it didn't see.
+	renames int
+	// hosts are the repos' code hosts, picked once per sync (host); the
+	// sweep alone uses them.
 	hosts map[string]codehost.Host
 }
 
@@ -259,7 +275,8 @@ func New(o Options) *Ticker {
 	if o.Log == nil {
 		o.Log = log.New(os.Stderr, "", log.LstdFlags)
 	}
-	t := &Ticker{o: o, kick: make(chan struct{}, 1), gh: map[string]bool{}, ghErr: map[string]error{}, hosts: map[string]codehost.Host{}}
+	t := &Ticker{o: o, kick: make(chan struct{}, 1), gh: map[string]bool{}, ghErr: map[string]error{},
+		projects: map[string]*sync.Mutex{}, hosts: map[string]codehost.Host{}}
 	t.st = t.load()
 	return t
 }
@@ -318,11 +335,14 @@ func (t *Ticker) load() *state {
 	return st
 }
 
+// save writes the state file; a sweep, or sweeping held.
 func (t *Ticker) save() {
 	if t.o.State == "" {
 		return
 	}
+	t.mu.Lock()
 	b, err := json.MarshalIndent(t.st, "", "  ")
+	t.mu.Unlock()
 	if err == nil {
 		err = os.MkdirAll(filepath.Dir(t.o.State), 0o700)
 	}
@@ -374,10 +394,14 @@ func (t *Ticker) Run(ctx context.Context) {
 	}
 }
 
-// Sweep looks at every project once.
+// Sweep looks at every project once, one after the other, each under
+// its lock (lockProjects).
 func (t *Ticker) Sweep() {
+	t.sweeping.Lock()
+	defer t.sweeping.Unlock()
 	t.mu.Lock()
-	defer t.mu.Unlock()
+	renames := t.renames
+	t.mu.Unlock()
 	list, err := project.List()
 	if err != nil {
 		t.o.Log.Printf("ticker: %v", err)
@@ -396,56 +420,94 @@ func (t *Ticker) Sweep() {
 		if sum.Error != "" {
 			continue
 		}
-		p, err := project.Open(sum.Slug)
-		if err != nil {
-			continue
-		}
-		safety, err := cfg.Safety(p.Slug)
-		if err != nil {
-			safety = config.Defaults
-		}
-		if safety.Archived || !safety.Active {
-			// No ticker work at all (§5.1); what it knew is kept for an
-			// unarchive or an activation.
-			if recs, err := thread.List(p); err == nil {
-				for _, r := range recs {
-					seen[p.Slug+"/"+r.ID] = true
-				}
-			}
-			continue
-		}
-		if safety.Paused {
-			// State polling goes on; nothing is sent to its agents.
-			safety.PRFollowup = false
-		}
-		merged := t.sweepThreads(p, sessions, safety, now, seen)
-		if t.syncRepos(p, safety, now, merged) {
-			t.completeTasks(p, safety)
-		}
-		if t.followMain(p, sessions, safety, now) {
-			t.completeTasks(p, safety)
-		}
-		t.ghHealth(p)
-		if !safety.Paused {
-			t.nudge(p, sessions, now)
-		}
-		t.keepRemote(p, sessions, safety, now)
-		t.keepModel(p, sessions)
-		t.autoClear(p, sessions, safety, cfg.ContextHint, now)
-		if prune {
-			t.upkeep(p, safety, now)
-		}
+		t.sweepProject(sum.Slug, cfg, sessions, now, prune, seen)
 	}
 	t.slotFree(cfg, sessions, now)
 	if prune {
 		t.st.Pruned = now
 	}
-	for k := range t.st.Threads {
-		if !seen[k] {
-			delete(t.st.Threads, k)
+	t.mu.Lock()
+	// A project renamed during the sweep may have been missed under both
+	// names: its threads' memos are kept for the next sweep.
+	if t.renames == renames {
+		for k := range t.st.Threads {
+			if !seen[k] {
+				delete(t.st.Threads, k)
+			}
 		}
 	}
+	t.mu.Unlock()
 	t.save()
+}
+
+// sweepProject is Sweep's look at project slug, under its lock; it marks
+// the thread memos it saw in seen.
+func (t *Ticker) sweepProject(slug string, cfg *config.Config, sessions []proto.SessionInfo, now time.Time, prune bool, seen map[string]bool) {
+	defer t.lockProjects(slug)()
+	p, err := project.Open(slug)
+	if err != nil {
+		return
+	}
+	safety, err := cfg.Safety(p.Slug)
+	if err != nil {
+		safety = config.Defaults
+	}
+	if safety.Archived || !safety.Active {
+		// No ticker work at all (§5.1); what it knew is kept for an
+		// unarchive or an activation.
+		if recs, err := thread.List(p); err == nil {
+			for _, r := range recs {
+				seen[p.Slug+"/"+r.ID] = true
+			}
+		}
+		return
+	}
+	if safety.Paused {
+		// State polling goes on; nothing is sent to its agents.
+		safety.PRFollowup = false
+	}
+	merged := t.sweepThreads(p, sessions, safety, now, seen)
+	if t.syncRepos(p, safety, now, merged) {
+		t.completeTasks(p, safety)
+	}
+	if t.followMain(p, sessions, safety, now) {
+		t.completeTasks(p, safety)
+	}
+	t.ghHealth(p)
+	if !safety.Paused {
+		t.nudge(p, sessions, now)
+	}
+	t.keepRemote(p, sessions, safety, now)
+	t.keepModel(p, sessions)
+	t.autoClear(p, sessions, safety, cfg.ContextHint, now)
+	if prune {
+		t.upkeep(p, safety, now)
+	}
+}
+
+// lockProjects takes the locks of the projects slugs, in order, and
+// returns their unlock.
+func (t *Ticker) lockProjects(slugs ...string) func() {
+	slugs = slices.Clone(slugs)
+	slices.Sort(slugs)
+	slugs = slices.Compact(slugs)
+	t.mu.Lock()
+	locks := make([]*sync.Mutex, len(slugs))
+	for i, slug := range slugs {
+		if t.projects[slug] == nil {
+			t.projects[slug] = &sync.Mutex{}
+		}
+		locks[i] = t.projects[slug]
+	}
+	t.mu.Unlock()
+	for _, l := range locks {
+		l.Lock()
+	}
+	return func() {
+		for _, l := range locks {
+			l.Unlock()
+		}
+	}
 }
 
 // liveState is a thread's agent state as the ticker sees it.
@@ -515,11 +577,13 @@ func (t *Ticker) sweepThreads(p *project.Project, sessions []proto.SessionInfo, 
 		}
 		key := p.Slug + "/" + r.ID
 		seen[key] = true
+		t.mu.Lock()
 		m, ok := t.st.Threads[key]
 		if !ok {
 			m = &threadMemo{Reports: r.Reports}
 			t.st.Threads[key] = m
 		}
+		t.mu.Unlock()
 		cur, reason, info, live := liveState(r, sessions)
 		reason = word(reason)
 
@@ -743,11 +807,15 @@ func (t *Ticker) ghRan(slug string, err error) {
 		return
 	}
 	ok := err == nil || errors.Is(err, codehost.ErrNoPR)
+	t.mu.Lock()
 	if prev, seen := t.gh[slug]; !seen || !prev {
 		t.gh[slug] = ok
 	}
 	if !ok {
 		t.ghErr[slug] = err
+	}
+	t.mu.Unlock()
+	if !ok {
 		t.o.Log.Printf("ticker: %s: %v", slug, err)
 	}
 }
@@ -770,10 +838,12 @@ func (t *Ticker) noHosts(p *project.Project) bool {
 // and moves it to done once a poll works. The summary is fixed text
 // (codehost.Advice): the CLI's error goes to the server log only.
 func (t *Ticker) ghHealth(p *project.Project) {
+	t.mu.Lock()
 	ok, ran := t.gh[p.Slug]
 	last := t.ghErr[p.Slug]
 	delete(t.gh, p.Slug)
 	delete(t.ghErr, p.Slug)
+	t.mu.Unlock()
 	pm := t.projectMemo(p.Slug)
 	if !ran && (pm.GHFails > 0 || pm.GHItem != "") && t.noHosts(p) {
 		// Nothing to poll (no repo, or none with a PR host), so the count
@@ -875,11 +945,7 @@ func (t *Ticker) nudge(p *project.Project, sessions []proto.SessionInfo, now tim
 	if err != nil {
 		return
 	}
-	pm := t.st.Projects[p.Slug]
-	if pm == nil {
-		pm = &projectMemo{}
-		t.st.Projects[p.Slug] = pm
-	}
+	pm := t.projectMemo(p.Slug)
 	told := map[string]bool{}
 	for _, id := range pm.Nudged {
 		told[id] = true
