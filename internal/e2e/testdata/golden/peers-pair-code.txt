@@ -8,11 +8,11 @@
            │ This server isn't paired with another. Press n to pair: it shows a code to pass on,  │
            │ and j on the other server takes it (or tm peer pair and tm peer join in a terminal); │
            │ both of yo╭─ Pair a server ──────────────────────────────────────────────╮           │
-           │           │ Pairing code (works once, for 10 minutes; <left>): │           │
+           │ No relay y│ Pairing code (works once, for 10 minutes; <left>): │ain NAME   │
+           │ (see the R│                                                              │           │
+           │           │     ws://<port>/<code> │           │
            │ Paired ser│                                                              │idebar;    │
-           │ you see th│     ws://<port>/<code> │           │
-           │           │                                                              │           │
-           │           │ On the other server: , then the Peers tab, j, and type it    │           │
+           │ you see th│ On the other server: , then the Peers tab, j, and type it    │           │
            │           │ in; or tm peer join CODE. Pass it on yourself (a chat, a     │           │
            │           │ call), never through the relay.                              │           │
            │           │ Waiting for the other server…                                │           │

@@ -8,11 +8,11 @@
            │ This server isn't paired with another. Press n to pair: it shows a code to pass on,  │
            │ and j on the other server takes it (or tm peer pair and tm peer join in a terminal); │
            │ both of yo╭─ Pair a server ──────────────────────────────────────────────╮           │
-           │           │ The other server: <host> │           │
-           │ Paired ser│ server id <id> · tm <version> │idebar;    │
-           │ you see th│                                                              │           │
-           │           │ Check: <check>                                               │           │
+           │ No relay y│ The other server: <host> │ain NAME   │
+           │ (see the R│ server id <id> · tm <version> │           │
            │           │                                                              │           │
+           │ Paired ser│ Check: <check>                                               │idebar;    │
+           │ you see th│                                                              │           │
            │           │ Pair only if the other side shows the same six digits. Do    │           │
            │           │ they match?                                                  │           │
            │           │                                                              │           │
