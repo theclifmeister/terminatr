@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -57,6 +58,8 @@ type fakeSource struct {
 	peerErr     error
 	unpinned    []string // aliases removed from the Peers tab
 	panesSet    []string // "alias level" set from the Peers tab
+	pairs       []string // PairPeer's and JoinPeer's calls: "pair relay", "join code"
+	pairErr     error    // fails them before the code shows
 	agents      []string
 	remote      []string // "slug on" or "slug off"
 	lifecycle   []string // "slug verb"
@@ -264,6 +267,30 @@ func (f *fakeSource) SetPeerPanes(alias, level string) error {
 	}
 	return nil
 }
+func (f *fakeSource) PairPeer(ctx context.Context, relay string, ev PairEvents) (string, error) {
+	return f.pairing("pair "+relay, "relay.example.net/7Q4M-K2XD-9HVA-PT3C", ev)
+}
+func (f *fakeSource) JoinPeer(ctx context.Context, code string, ev PairEvents) (string, error) {
+	return f.pairing("join "+code, "", ev)
+}
+
+// pairing shows code (a pairing's), then studio's six digits, and pins
+// studio on a yes.
+func (f *fakeSource) pairing(call, code string, ev PairEvents) (string, error) {
+	f.pairs = append(f.pairs, call)
+	if f.pairErr != nil {
+		return "", f.pairErr
+	}
+	if code != "" {
+		ev.Waiting(code)
+	}
+	if !ev.Confirm(PairOffer{Name: "studio.local", Short: "77AB-91C3", Version: "v0.27.0", Check: "381 204"}) {
+		return "", errors.New("not paired: the digits weren't confirmed here")
+	}
+	f.peers.Peers = append(f.peers.Peers, PeerEntry{Alias: "studio", ID: "s", Short: "77AB-91C3", Relay: "wss://relay.example.net"})
+	return "studio", nil
+}
+
 func (f *fakeSource) RemovePeer(alias string) error {
 	f.unpinned = append(f.unpinned, alias)
 	f.peers.Peers = slices.DeleteFunc(f.peers.Peers, func(e PeerEntry) bool { return e.Alias == alias })

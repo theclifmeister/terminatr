@@ -17,9 +17,9 @@ import (
 // one's alias, server id, link and relay, and its pane switch; p steps
 // the switch off → view → type → off (asking before it lets the server
 // do more), as tm peer panes does; x removes the selected one, asking
-// first, as tm peer remove does. Pairing stays in a terminal (tm
-// peer pair, tm peer join): it shows a code to pass on and asks to
-// compare six digits. A project is shared from its own Settings tab.
+// first, as tm peer remove does; n pairs with another server and j
+// joins one's pairing (peerpair.go), as tm peer pair and join do. A
+// project is shared from its own Settings tab.
 //
 //	" This server 4F2A-91C3"
 //	""
@@ -38,7 +38,7 @@ type peersTab struct {
 }
 
 // peersKeys are the Peers tab's action row.
-const peersKeys = "p panes · x remove · ↑ ↓ move · ← → tabs · esc close"
+const peersKeys = "n pair · j join · p panes · x remove · ↑ ↓ move · ← → tabs · esc close"
 
 // load reads the paired servers again.
 func (pt *peersTab) load(m *dash) {
@@ -64,7 +64,7 @@ func (pt *peersTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
 	case pt.err != nil:
 		return []string{th().Bad.Render("The paired servers can't be read: " + oneLine(pt.err.Error()))}, -1, nil
 	case l.ID == "":
-		return faintLines("This server isn't paired with another. Pairing is done in a terminal: tm peer pair --relay URL on one server, then tm peer join CODE on the other, and both of you compare six digits.", w), -1, nil
+		return faintLines("This server isn't paired with another. Press n to pair: it shows a code to pass on, and j on the other server takes it (or tm peer pair and tm peer join in a terminal); both of you then compare six digits.", w), -1, nil
 	}
 	out = append(out, th().Faint.Render("This server ")+l.Short)
 	if l.LinkErr != "" {
@@ -72,7 +72,7 @@ func (pt *peersTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
 	}
 	out = append(out, "")
 	if len(l.Peers) == 0 {
-		out = append(out, faintLines("No paired servers. Pair one in a terminal: tm peer pair --relay URL here, then tm peer join CODE on the other.", w)...)
+		out = append(out, faintLines("No paired servers. Press n to pair with one, or j to join the code another shows.", w)...)
 		return out, -1, nil
 	}
 	nameW := 4
@@ -224,6 +224,14 @@ func relayWords(r string) string {
 // key runs a key on the tab; ok is false for one it doesn't take.
 func (pt *peersTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 	s := k.String()
+	switch s {
+	case "n":
+		m.pairPrompt(pt.lastRelay())
+		return nil, true
+	case "j":
+		m.joinPrompt("")
+		return nil, true
+	}
 	if d, ok := scrollKeys[s]; ok {
 		pt.sel = moveSel(pt.sel, d, len(pt.list.Peers))
 		return nil, true
@@ -253,6 +261,24 @@ func (pt *peersTab) remove(m *dash, alias string) {
 				then: func(m *dash) { pt.load(m) }}
 		})
 	})
+}
+
+// lastRelay is the relay of the server paired last (peers.json keeps
+// them in that order), for n to start from.
+func (pt *peersTab) lastRelay() string {
+	if n := len(pt.list.Peers); n > 0 {
+		return pt.list.Peers[n-1].Relay
+	}
+	return ""
+}
+
+// selectAlias selects the server called alias.
+func (pt *peersTab) selectAlias(alias string) {
+	for i, e := range pt.list.Peers {
+		if e.Alias == alias {
+			pt.sel = i
+		}
+	}
 }
 
 // click selects the server under a click.

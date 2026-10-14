@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -32,6 +35,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
+	"github.com/theclifmeister/terminatr/internal/version"
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
 
@@ -261,6 +265,13 @@ type Source interface {
 	// server's panes (proto.PanesOff, PanesView, PanesType; §16.12), as
 	// tm peer panes does, and has the server read the peers again.
 	SetPeerPanes(alias, level string) error
+	// PairPeer pairs this server with another through relay, as tm peer
+	// pair does, and JoinPeer joins the pairing code names, as tm peer
+	// join does: both pin the other server and have the server read the
+	// peers again, and return its alias. ev shows the code and asks
+	// for the six digits; ctx cancels. The human's, as above.
+	PairPeer(ctx context.Context, relay string, ev PairEvents) (string, error)
+	JoinPeer(ctx context.Context, code string, ev PairEvents) (string, error)
 	// Lifecycle activates, deactivates, pauses, resumes, archives,
 	// deletes, pins or unpins a project (verb "activate", "deactivate",
 	// "pause", "resume", "archive", "delete", "pin", "unpin"), saying
@@ -705,6 +716,104 @@ func (s *ServerSource) SetPeerPanes(alias, level string) error {
 		return fmt.Errorf("set, but the server didn't read the peers again (%v); tm server restart does", err)
 	}
 	return nil
+}
+
+// PairEvents are what a pairing shows on the way: Waiting the code once
+// it works (pairing only), Confirm the other server and the six digits,
+// returning the person's answer.
+type PairEvents struct {
+	Waiting func(code string)
+	Confirm func(PairOffer) bool
+}
+
+// PairOffer is the other server as a pairing shows it.
+type PairOffer struct {
+	Name, Short, Version, Check string
+}
+
+func (s *ServerSource) PairPeer(ctx context.Context, relay string, ev PairEvents) (string, error) {
+	if s.Caller.IsAgent() {
+		return "", errHumanOnly
+	}
+	r, err := peer.RelayURL(relay)
+	if err != nil {
+		return "", err
+	}
+	code, err := peer.NewCode(r)
+	if err != nil {
+		return "", err
+	}
+	return s.pairing(ctx, code, ev, true)
+}
+
+func (s *ServerSource) JoinPeer(ctx context.Context, text string, ev PairEvents) (string, error) {
+	if s.Caller.IsAgent() {
+		return "", errHumanOnly
+	}
+	code, err := peer.ParseCode(text)
+	if err != nil {
+		// Its words quote what was typed: not the code, which stays
+		// out of messages.
+		return "", errors.New("that isn't a pairing code: it is the relay, a slash and 16 digits and letters, as the other server shows it")
+	}
+	return s.pairing(ctx, code, ev, false)
+}
+
+// pairWait bounds a pairing: the relay's 10 minutes for a pair room,
+// and a little more for the exchange once the other side joined (as tm
+// peer pair).
+const pairWait = 13 * time.Minute
+
+// pairing runs tm peer pair's or join's exchange through code, then
+// pins the other server as tm peer does.
+func (s *ServerSource) pairing(ctx context.Context, code peer.Code, ev PairEvents, pair bool) (string, error) {
+	dir := peer.DirIn(s.Paths.Home)
+	id, _, err := peer.EnsureIdentity(dir)
+	if err != nil {
+		return "", err
+	}
+	host, _ := os.Hostname()
+	o := peer.PairOptions{
+		Name: host, Version: version.Version,
+		Confirm: func(of peer.Offer) (bool, error) {
+			return ev.Confirm(PairOffer{Name: of.Name, Short: of.ID.Short(), Version: of.Version, Check: of.Check}), nil
+		},
+		Waiting: func() { ev.Waiting(code.String()) },
+	}
+	ctx, cancel := context.WithTimeout(ctx, pairWait)
+	defer cancel()
+	var p *peer.Paired
+	if pair {
+		p, err = peer.Pair(ctx, id, code, o)
+	} else {
+		p, err = peer.Join(ctx, id, code, o)
+	}
+	if err != nil {
+		return "", pairWords(err, code.Relay)
+	}
+	got, err := peer.Pin(dir, p.Key, code.Relay, p.Name, "")
+	if err != nil {
+		return "", err
+	}
+	var st *proto.LinkStatus
+	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, server.ErrNotRunning) {
+		return got.Alias, fmt.Errorf("paired with %s, but the server didn't read the peers again (%v); tm server restart does", got.Alias, err)
+	}
+	return got.Alias, nil
+}
+
+// pairWords is a pairing's error in plain words: a relay that can't be
+// reached says so, with its name.
+func pairWords(err error, relay string) error {
+	var op *net.OpError
+	var dns *net.DNSError
+	var cert *tls.CertificateVerificationError
+	var unknown x509.UnknownAuthorityError
+	var host x509.HostnameError
+	if errors.As(err, &op) || errors.As(err, &dns) || errors.As(err, &cert) || errors.As(err, &unknown) || errors.As(err, &host) {
+		return fmt.Errorf("can't reach the relay %s: check its name, that it runs and that port 443 is open (%v)", relayWords(relay), err)
+	}
+	return err
 }
 
 func (s *ServerSource) SetLink(slug, other, allow string) error {
