@@ -87,33 +87,38 @@ func (m *dash) askCoordinator(slug string, t *tasks.Task, kind, note, done strin
 	})
 }
 
+// askAfterConfirm asks the user to confirm, then has askCoordinator drop
+// kind's item for slug's task t. hint is canAsk's refusal key hint; title
+// and question word the confirmation, no the footer after a no, done the
+// footer after the ask. b is the mod binding pressed, nil for the core's
+// own key.
+func (m *dash) askAfterConfirm(slug string, t *tasks.Task, b *binding, kind, hint, title, question, no, done string) tea.Cmd {
+	if !m.canAsk(slug, t, kind, hint) {
+		return nil
+	}
+	m.confirmNo(title, question, no, func() tea.Cmd {
+		return m.askCoordinator(slug, t, kind, "", done, b)
+	})
+	return nil
+}
+
 // delegate asks, then has the coordinator delegate slug's task t. b is
 // the mod binding pressed, nil for the core's own D (and so for accept
 // and sendBack).
 func (m *dash) delegate(slug string, t *tasks.Task, b *binding) tea.Cmd {
-	if !m.canAsk(slug, t, project.KindDelegate, "D delegates open, ready and blocked tasks") {
-		return nil
-	}
 	ref := t.Ref()
-	question := "Delegate " + ref + " to the coordinator? It starts a thread for " + ref + " " + oneLine(t.Title) + "."
-	m.confirmNo("Delegate "+ref, question, ref+" not delegated", func() tea.Cmd {
-		return m.askCoordinator(slug, t, project.KindDelegate, "", "asked the coordinator to delegate "+ref+"; it starts a thread for it", b)
-	})
-	return nil
+	return m.askAfterConfirm(slug, t, b, project.KindDelegate, "D delegates open, ready and blocked tasks",
+		"Delegate "+ref, "Delegate "+ref+" to the coordinator? It starts a thread for "+ref+" "+oneLine(t.Title)+".",
+		ref+" not delegated", "asked the coordinator to delegate "+ref+"; it starts a thread for it")
 }
 
 // accept asks, then tells the coordinator the user accepts slug's task
 // t in review: it marks the task done.
 func (m *dash) accept(slug string, t *tasks.Task, b *binding) tea.Cmd {
-	if !m.canAsk(slug, t, project.KindAccept, "A accepts tasks in review") {
-		return nil
-	}
 	ref := t.Ref()
-	question := "Accept " + ref + "? The coordinator marks " + ref + " " + oneLine(t.Title) + " done."
-	m.confirmNo("Accept "+ref, question, ref+" not accepted", func() tea.Cmd {
-		return m.askCoordinator(slug, t, project.KindAccept, "", "told the coordinator you accept "+ref+"; it marks it done", b)
-	})
-	return nil
+	return m.askAfterConfirm(slug, t, b, project.KindAccept, "A accepts tasks in review",
+		"Accept "+ref, "Accept "+ref+"? The coordinator marks "+ref+" "+oneLine(t.Title)+" done.",
+		ref+" not accepted", "told the coordinator you accept "+ref+"; it marks it done")
 }
 
 // sendBack asks for a note, then has the coordinator send slug's task t

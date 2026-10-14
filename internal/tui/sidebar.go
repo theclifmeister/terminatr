@@ -2033,7 +2033,7 @@ func (c *client) sideGo(t Target) {
 // prefix+tab in a session, gives it the focus; these keys then move its
 // cursor (the view's SideSel), and the view previews what the cursor
 // rests on (previewDelay) while the keyboard stays here; enter or →
-// takes it into the pane. One table drives the keys and the help.
+// takes it into the pane. One table drives the keys and the help (sideExtras adds its own).
 
 // Sidebar key operations.
 const (

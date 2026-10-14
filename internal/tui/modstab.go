@@ -527,8 +527,7 @@ func (cv *consentView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	name := modName(md)
-	if d, ok := scrollKeys[k.String()]; ok {
-		cv.scroll = clampScroll(cv.scroll+d, len(cv.lines(m, md, m.inner(viewWidth))))
+	if scrollKey(&cv.scroll, k, len(cv.lines(m, md, m.inner(viewWidth)))) {
 		return nil
 	}
 	switch k.String() {
@@ -615,8 +614,7 @@ func (dv *modDefaultsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		m.pop()
 		return nil
 	}
-	if d, ok := scrollKeys[k.String()]; ok {
-		dv.scroll = clampScroll(dv.scroll+d, len(dv.lines(md, m.inner(viewWidth))))
+	if scrollKey(&dv.scroll, k, len(dv.lines(md, m.inner(viewWidth)))) {
 		return nil
 	}
 	switch k.String() {
@@ -877,16 +875,8 @@ func (v *modSettingsView) wheel(m *dash, d int) { v.list.key(m, arrow(d)) }
 // modLogMax is how much of a mod's log l shows: its end.
 const modLogMax = 64 << 10
 
-// textView is read-only text over the popup, scrollable; it opens at
-// its end when bottom is set (a log).
-type textView struct {
-	title, body, note string
-	scroll            int
-	bottom            bool
-}
-
 func (m *dash) openModLog(md mod.Mod) {
-	tv := &textView{title: modName(md) + " · log", bottom: true}
+	tv := &textView{title: modName(md) + " · log", bottom: true, quit: true}
 	text, cut, err := m.src.ModLog(md.ID, modLogMax)
 	switch {
 	case err != nil:
@@ -900,47 +890,6 @@ func (m *dash) openModLog(md mod.Mod) {
 		}
 	}
 	m.push(tv)
-}
-
-func (tv *textView) lines(w int) []string {
-	var out []string
-	if tv.body != "" {
-		for _, l := range strings.Split(strings.TrimRight(tv.body, "\n"), "\n") {
-			out = append(out, strings.Split(ansi.Hardwrap(l, max(w, 10), true), "\n")...)
-		}
-	}
-	if tv.note != "" {
-		if len(out) > 0 {
-			out = append(out, "")
-		}
-		out = append(out, th().Faint.Render(tv.note))
-	}
-	return out
-}
-
-func (tv *textView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
-	if d, ok := scrollKeys[k.String()]; ok {
-		tv.scroll = clampScroll(tv.scroll+d, len(tv.lines(m.inner(viewWidth))))
-		tv.bottom = false
-		return nil
-	}
-	if s := k.String(); s == "esc" || s == "q" {
-		m.pop()
-	}
-	return nil
-}
-
-func (tv *textView) wheel(m *dash, d int) { tv.key(m, arrow(d)) }
-
-func (tv *textView) render(m *dash) string {
-	lines := tv.lines(m.inner(viewWidth))
-	b := box{title: tv.title, body: lines, sel: -1, scroll: tv.scroll, keys: "↑ ↓ scroll · esc back"}
-	if tv.bottom {
-		// From the end: as many lines as the box shows.
-		tv.scroll = max(len(lines)-m.boxRows(b), 0)
-		b.scroll = tv.scroll
-	}
-	return m.popup(b)
 }
 
 // modUpdate fetches the mod's update in the background; one that asks
@@ -998,8 +947,7 @@ func (uv *updateView) lines(w int) []string {
 }
 
 func (uv *updateView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
-	if d, ok := scrollKeys[k.String()]; ok {
-		uv.scroll = clampScroll(uv.scroll+d, len(uv.lines(m.inner(viewWidth))))
+	if scrollKey(&uv.scroll, k, len(uv.lines(m.inner(viewWidth)))) {
 		return nil
 	}
 	switch k.String() {

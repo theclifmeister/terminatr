@@ -330,21 +330,6 @@ func (vc *ViewConn) dropCtl() {
 	}
 }
 
-// WaitChange waits up to d for a version newer than seq, or for the
-// server to go away.
-func (vc *ViewConn) WaitChange(seq uint64, d time.Duration) {
-	deadline := time.Now().Add(d)
-	for time.Now().Before(deadline) {
-		vc.mu.Lock()
-		done := vc.v.Seq != seq || !vc.up
-		vc.mu.Unlock()
-		if done {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
 // Close leaves the view.
 func (vc *ViewConn) Close() {
 	vc.mu.Lock()

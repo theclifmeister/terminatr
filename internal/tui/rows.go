@@ -25,7 +25,7 @@ import (
 // an item with columns.
 type row struct {
 	key      string // selection identity, stable across refreshes
-	head     string // a section header: NEEDS YOU, the project, SESSIONS
+	head     string // a section header: NEEDS YOU, the project, OTHER SESSIONS
 	headNote string // a project header's state label: active or inactive
 	paused   bool   // a project header: the project is paused
 	note     string // an unselectable line: task counts, "no projects; …"
@@ -266,7 +266,7 @@ func shownProject(d Data, current string) string {
 	return listProject(d, current)
 }
 
-// buildRows lays out NEEDS YOU, the project's own section and SESSIONS.
+// buildRows lays out NEEDS YOU, the project's own section and OTHER SESSIONS.
 // The sidebar's tree lists every project; the list shows one, project
 // (listProject): what of it needs you, its coordinator, threads,
 // sessions and task counts. NEEDS YOU holds only what waits on the
