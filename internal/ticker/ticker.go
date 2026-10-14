@@ -163,6 +163,9 @@ type Ticker struct {
 	// renames counts the renames done: a sweep that overlapped one
 	// forgets no memo of a thread it didn't see.
 	renames int
+	// unsaved says a rename during a sweep left the state file to it:
+	// the sweep saves again before it ends (endSweep).
+	unsaved bool
 	// hosts are the repos' code hosts, picked once per sync (host); the
 	// sweep alone uses them.
 	hosts map[string]codehost.Host
@@ -398,7 +401,27 @@ func (t *Ticker) Run(ctx context.Context) {
 // its lock (lockProjects).
 func (t *Ticker) Sweep() {
 	t.sweeping.Lock()
-	defer t.sweeping.Unlock()
+	t.sweep()
+	t.endSweep()
+}
+
+// endSweep saves what a rename left unsaved and ends the sweep. It
+// checks and lets go of sweeping under mu, so a rename either sees the
+// sweep under way and leaves the save to it, or saves itself.
+func (t *Ticker) endSweep() {
+	t.mu.Lock()
+	for t.unsaved {
+		t.unsaved = false
+		t.mu.Unlock()
+		t.save()
+		t.mu.Lock()
+	}
+	t.sweeping.Unlock()
+	t.mu.Unlock()
+}
+
+// sweep is Sweep's work, sweeping held.
+func (t *Ticker) sweep() {
 	t.mu.Lock()
 	renames := t.renames
 	t.mu.Unlock()

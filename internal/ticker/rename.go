@@ -30,19 +30,16 @@ func (t *Ticker) RenameProject(from, to string, move func() error) error {
 	delete(t.gh, from)
 	delete(t.ghErr, from)
 	t.renames++
-	t.mu.Unlock()
-	// The state file is written with no sweep writing memos: now, or as
-	// the sweep under way ends.
-	if t.sweeping.TryLock() {
-		t.save()
-		t.sweeping.Unlock()
+	// The state file is written with no sweep writing memos: now, or by
+	// the sweep under way before it ends (endSweep).
+	if !t.sweeping.TryLock() {
+		t.unsaved = true
+		t.mu.Unlock()
 		return nil
 	}
-	go func() {
-		t.sweeping.Lock()
-		defer t.sweeping.Unlock()
-		t.save()
-	}()
+	t.mu.Unlock()
+	t.save()
+	t.sweeping.Unlock()
 	return nil
 }
 
