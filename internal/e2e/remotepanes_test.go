@@ -2,6 +2,9 @@ package e2e
 
 import (
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -51,22 +54,58 @@ func TestSmokeRemotePanes(t *testing.T) {
 		t.Fatalf("attach with panes off:\n%s", last)
 	}
 
+	// View (T416): the pane shows at mini's size, which the status bar
+	// says, and never resizes it; keys are dropped with the note, while
+	// the wheel and a drag are studio's own: the drag copies.
+	if out := mini.MustCLI("peer", "panes", "studio", "view"); !strings.Contains(out, "Panes view for studio") {
+		t.Fatalf("peer panes: %s", out)
+	}
+	w := studio.Attach(100, 30, remote)
+	w.WaitFor("Fake Claude Code", agentWait)
+	sizeNote := regexp.MustCompile(`view only · \d+×\d+ on mini`)
+	w.WaitUntil("the status bar says view only and mini's size", wait, func(sc string) bool {
+		return lastLine(sc, "mini › demo › ") && sizeNote.MatchString(sc)
+	})
+	cols := func() uint16 { info, _ := mini.Info(th); return info.Cols }
+	farCols := cols()
+	w.Paste("dropped at view")
+	w.WaitUntil("the view-only note", wait, func(sc string) bool { return strings.Contains(sc, "view only: mini shares") })
+	x, y := w.TextAt("Fake Claude Code", 0)
+	w.Wheel(true, x, y)
+	w.Drag(x, x+3, y)
+	w.WaitUntil("the copy", wait, func(sc string) bool { return strings.Contains(sc, "copied 1 line") })
+	if !strings.Contains(string(w.Raw()), "\x1b]52;c;") {
+		t.Fatal("the drag put nothing on the clipboard")
+	}
+	if c := cols(); c != farCols {
+		t.Fatalf("a view-only console resized mini's pane: %d columns, was %d", c, farCols)
+	}
+	w.Quit()
+	w.WaitExit(wait)
+
 	if out := mini.MustCLI("peer", "panes", "studio", "type"); !strings.Contains(out, "Panes type for studio") {
 		t.Fatalf("peer panes: %s", out)
 	}
-	// The mirror hears of the switch with peer.projects, every 30 s at
-	// most; peer.attach itself answers at once.
-	w := studio.Attach(120, 40, remote)
+	// studio's view-only stream closes 10 s after its last console
+	// left; the next opens at type. The mirror hears of the switch with
+	// peer.projects, every 30 s at most; peer.attach itself answers at
+	// once.
+	if !Poll(30*time.Second, func() bool {
+		b, _ := os.ReadFile(filepath.Join(studio.Home, "logs", "server.log"))
+		return strings.Contains(string(b), "remote pane "+remote+": closed, nobody shows it")
+	}) {
+		t.Fatal("studio's view-only stream never closed")
+	}
+	w = studio.Attach(120, 40, remote)
 	w.WaitFor("Fake Claude Code", agentWait)
 	w.WaitUntil("the status bar names the server", wait, func(sc string) bool {
 		return lastLine(sc, "mini › demo › ") && strings.Contains(sc, "remote")
 	})
-	// The pane is mini's screen: its first rows, as the far server has
-	// them.
-	far := strings.Split(strings.TrimSpace(mini.Screen(th)), "\n")
-	w.WaitFor(strings.TrimSpace(far[0]), wait)
-
-	// Typing goes to mini's agent, and tells mini's coordinator.
+	// Typing goes to mini's agent, and tells mini's coordinator; what
+	// was typed at view never reached it.
+	if slices.ContainsFunc(mini.FakeRecords("prompt"), func(r FakeRecord) bool { return strings.Contains(r.Str("text"), "dropped at view") }) {
+		t.Fatal("a key typed at view reached mini's agent")
+	}
 	w.Paste("hello from studio")
 	w.Key(emu.Key{Special: emu.KeyEnter})
 	mini.WaitFake("prompt", agentWait, func(r FakeRecord) bool { return strings.Contains(r.Str("text"), "hello from studio") })

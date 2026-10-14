@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"fmt"
 	"io"
 	"log"
+	"strings"
 	"testing"
 
 	uv "github.com/charmbracelet/ultraviolet"
@@ -124,5 +126,61 @@ func TestPaneClipboardForwarded(t *testing.T) {
 	p.mirror.Write([]byte("\x1b]52;p;aGk=\x1b\\"))
 	if want := string(emu.OSC52('p', []byte("hi"))); string(c.clip) != want {
 		t.Fatalf("clip %q, want %q", c.clip, want)
+	}
+}
+
+// TestViewOnlyRemoteMouse: on a paired server's pane that takes no keys,
+// the mouse is tm's even though the program tracks it: the wheel
+// scrolls the local scrollback, a left drag selects and copies, and
+// keys are still dropped with the note. The status bar says the far
+// pane's size when it isn't the rectangle's (docs/SPEC.md §16.12).
+func TestViewOnlyRemoteMouse(t *testing.T) {
+	var out strings.Builder
+	for i := range 60 {
+		fmt.Fprintf(&out, "line-%d\r\n", i)
+	}
+	out.WriteString("\x1b[?1000h\x1b[?1006h") // the program tracks the mouse
+	c, p := selClient(t, out.String())
+	_, _, peers := peerData()
+	c.side.peers = peers
+	p.info = proto.SessionInfo{ID: "mini/r-1", Role: proto.RoleCoordinator, Project: "acme-api", Server: "mini", ViewOnly: true}
+	x, y := p.rect.X, p.rect.Y
+
+	c.mouse(uv.MouseWheelEvent{X: x + 1, Y: y + 1, Button: uv.MouseWheelUp})
+	c.mouse(uv.MouseWheelEvent{X: x + 1, Y: y + 1, Button: uv.MouseWheelUp})
+	if !p.scrolled {
+		t.Fatal("the wheel didn't scroll the local scrollback")
+	}
+	c.mouse(uv.MouseClickEvent{X: x, Y: y, Button: uv.MouseLeft})
+	c.mouse(uv.MouseMotionEvent{X: x + 6, Y: y, Button: uv.MouseLeft})
+	c.mouse(uv.MouseReleaseEvent{X: x + 6, Y: y, Button: uv.MouseLeft})
+	got, _ := p.mirror.SelectionText()
+	first := 60 - p.rect.H + 1 - 2*wheelRows // the top row, scrolled back
+	if want := fmt.Sprintf("line-%d", first); !strings.HasPrefix(got, want) {
+		t.Fatalf("selected %q, want %q at the top", got, want)
+	}
+	if !strings.Contains(string(c.clip), "\x1b]52;c;") {
+		t.Fatalf("not copied: clip %q", c.clip)
+	}
+
+	// Keys don't go (the pane has no connection: one sent would panic).
+	c.input(uv.Key{Code: 'x', Text: "x"})
+	if !strings.HasPrefix(c.flash, "view only") {
+		t.Fatalf("a key: flash %q", c.flash)
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if n := c.remoteNote(p); n != "view only · 38 ms" {
+		t.Errorf("same size: note %q", n)
+	}
+	if err := p.mirror.Resize(120, 40); err != nil {
+		t.Fatal(err)
+	}
+	if n := c.remoteNote(p); n != "view only · 120×40 on mini · 38 ms" {
+		t.Errorf("other size: note %q", n)
+	}
+	if got := string(c.outerModes()); !strings.Contains(got, "\x1b[?1002h") && !strings.Contains(got, "\x1b[?1003h") {
+		t.Errorf("the outer terminal doesn't report the mouse: %q", got)
 	}
 }

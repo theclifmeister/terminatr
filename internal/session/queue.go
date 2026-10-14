@@ -13,6 +13,9 @@ type frameQueue struct {
 	cond    *sync.Cond
 	pending []byte
 	lastOut int // offset of a trailing FrameOutput in pending, or -1
+	// head is the length of the snapshot or repaint pending starts with,
+	// which a lag isn't: a big one mustn't count as falling behind.
+	head    int
 	closed  bool
 	resyncs int
 }
@@ -26,7 +29,16 @@ func newFrameQueue() *frameQueue {
 func (q *frameQueue) wouldOverflow(n, max int) bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	return len(q.pending)+n > max
+	return len(q.pending)-q.head+n > max
+}
+
+// state queues the stream's first frame, the pane's state.
+func (q *frameQueue) state(typ proto.FrameType, payload []byte) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.pending = proto.AppendFrame(q.pending[:0], typ, payload)
+	q.head, q.lastOut = len(q.pending), -1
+	q.cond.Signal()
 }
 
 func (q *frameQueue) push(typ proto.FrameType, payload []byte) {
@@ -63,7 +75,7 @@ func (q *frameQueue) reset(typ proto.FrameType, payload []byte) {
 	if typ != 0 {
 		q.pending = proto.AppendFrame(q.pending, typ, payload)
 	}
-	q.lastOut = -1
+	q.head, q.lastOut = len(q.pending), -1
 	q.cond.Signal()
 	q.mu.Unlock()
 }
@@ -79,7 +91,7 @@ func (q *frameQueue) next() ([]byte, bool) {
 	}
 	b := q.pending
 	q.pending = nil
-	q.lastOut = -1
+	q.head, q.lastOut = 0, -1
 	return b, true
 }
 

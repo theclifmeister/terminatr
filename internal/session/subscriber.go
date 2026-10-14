@@ -14,15 +14,16 @@ var MaxPending = 4 << 20
 
 // Remote panes (docs/SPEC.md §16.12): a paired server's stream lags at
 // most MaxRemotePending behind before its backlog becomes a repaint, and
-// gets at most one repaint per RepaintEvery; a repaint carries the last
-// RepaintHistory rows of the scrollback.
+// gets at most one repaint per RepaintEvery. The stream's first repaint,
+// and one asked for (Resync), carry the whole scrollback; one in place of
+// a backlog the last RepaintHistory rows of it.
 var (
 	MaxRemotePending = 1 << 20
 	RepaintEvery     = 250 * time.Millisecond
 )
 
-// RepaintHistory is how many scrollback rows a remote pane's repaint
-// carries.
+// RepaintHistory is how many scrollback rows a remote pane's repaint in
+// place of a backlog carries: the pane skips ahead rather than lag.
 const RepaintHistory = 200
 
 // pane is what a subscriber follows: a session's emulator, or a proxy's.
@@ -50,6 +51,9 @@ type Subscriber struct {
 	// a repaint waits for RepaintEvery to pass. Both under the pane's mu.
 	repainted time.Time
 	dirty     bool
+	// full: the next repaint carries the whole scrollback. Under the
+	// pane's mu.
+	full bool
 }
 
 // Attach registers a subscriber. Its stream starts with a FrameSnapshot
@@ -79,7 +83,7 @@ func (s *Session) AttachRemote() (*Subscriber, error) {
 	if s.term == nil {
 		return nil, ErrExited
 	}
-	sub := &Subscriber{p: s, q: newFrameQueue(), remote: true, max: MaxRemotePending}
+	sub := &Subscriber{p: s, q: newFrameQueue(), remote: true, max: MaxRemotePending, full: true}
 	if !sub.start() {
 		return nil, ErrExited
 	}
@@ -94,7 +98,7 @@ func (sub *Subscriber) start() bool {
 		sub.p.logf("attach: %v", err)
 		return false
 	}
-	sub.q.push(typ, b)
+	sub.q.state(typ, b)
 	return true
 }
 
@@ -110,7 +114,11 @@ func (sub *Subscriber) state() (proto.FrameType, []byte, error) {
 		return proto.FrameSnapshot, b, err
 	}
 	sub.repainted = time.Now()
-	vt, err := t.Repaint(RepaintHistory)
+	history := RepaintHistory
+	if sub.full {
+		history, sub.full = emu.DefaultScrollback, false
+	}
+	vt, err := t.Repaint(history)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -147,10 +155,12 @@ func (sub *Subscriber) End(reason string) {
 func (sub *Subscriber) Resyncs() int { return sub.q.resyncCount() }
 
 // Resync drops the backlog and queues the pane's state now: a remote
-// pane's prefix+R (docs/SPEC.md §16.12), at most once per RepaintEvery.
+// pane's prefix+R (docs/SPEC.md §16.12), at most once per RepaintEvery,
+// with the whole scrollback.
 func (sub *Subscriber) Resync() {
 	sub.p.lock()
 	defer sub.p.unlock()
+	sub.full = true
 	sub.resyncLocked()
 }
 

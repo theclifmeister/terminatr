@@ -377,7 +377,7 @@ func TestRemoteStatus(t *testing.T) {
 	if why := c.remoteBlock(p); why != "" {
 		t.Errorf("up, type: %q", why)
 	}
-	if n := c.remoteNote(in); n != "remote · 38 ms" {
+	if n := c.remoteNote(p); n != "remote · 38 ms" {
 		t.Errorf("note %q", n)
 	}
 	p.info.ViewOnly = true
@@ -388,7 +388,7 @@ func TestRemoteStatus(t *testing.T) {
 	if why := c.remoteBlock(p); why != "nas is offline: keys aren't sent" {
 		t.Errorf("offline: %q", why)
 	}
-	if n := c.remoteNote(p.info); !strings.Contains(n, "offline") {
+	if n := c.remoteNote(p); !strings.Contains(n, "offline") {
 		t.Errorf("offline note %q", n)
 	}
 	p.info = proto.SessionInfo{ID: "s-1"}

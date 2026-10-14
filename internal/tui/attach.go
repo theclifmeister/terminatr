@@ -785,7 +785,9 @@ func (c *client) readLoop(p *pane) {
 		}
 		switch typ {
 		case proto.FrameSnapshot:
-			err = c.loadSnapshot(p, payload)
+			if err = c.loadSnapshot(p, payload); err == nil {
+				c.status() // a view-only remote pane's size note
+			}
 		case proto.FrameOutput:
 			p.mirror.Write(payload)
 		case proto.FrameResize:
@@ -793,6 +795,7 @@ func (c *client) readLoop(p *pane) {
 			if cols, rows, err = proto.ParseSize(payload); err == nil {
 				err = p.mirror.Resize(cols, rows)
 				p.r.Invalidate()
+				c.status() // a view-only remote pane's size note
 			}
 		case proto.FrameDigest:
 			mine, derr := p.mirror.Digest()
@@ -1541,8 +1544,11 @@ func (c *client) remoteBlock(p *pane) string {
 }
 
 // remoteNote is the status bar's note on a paired server's pane: how it
-// is linked, or that keys don't go. c.mu held.
-func (c *client) remoteNote(in proto.SessionInfo) string {
+// is linked, or that keys don't go. A view-only pane keeps the far
+// session's size, drawn from the top left, cropped or padded: when that
+// isn't its rectangle's, the note says the size. c.mu held.
+func (c *client) remoteNote(p *pane) string {
+	in := p.info
 	for _, pm := range c.side.peers {
 		if pm.Alias != in.Server {
 			continue
@@ -1553,6 +1559,12 @@ func (c *client) remoteNote(in proto.SessionInfo) string {
 		note := "remote"
 		if in.ViewOnly {
 			note = "view only"
+			if p.mirror != nil {
+				cols, rows := p.mirror.Size()
+				if r := c.geo.Area; cols > 0 && (int(cols) != r.W || int(rows) != r.H) {
+					note += fmt.Sprintf(" · %d×%d on %s", cols, rows, in.Server)
+				}
+			}
 		}
 		if pm.RTT > 0 {
 			note += " · " + rttWords(pm.RTT)
@@ -1625,7 +1637,7 @@ func (c *client) status() {
 		sw -= bw + 1
 	}
 	if where == "" && c.focus.info.Server != "" {
-		where = c.remoteNote(c.focus.info)
+		where = c.remoteNote(c.focus)
 	}
 	line, hits := statusBar(c.focus.info, c.focus.status, c.paneTitle(), c.pending, sw, where, c.cells)
 	line = plainUnder(line)
@@ -1731,6 +1743,10 @@ func (c *client) input(k uv.Key) {
 	}
 }
 
+// wheelRows is how far one turn of the wheel scrolls a pane's local
+// scrollback.
+const wheelRows = 3
+
 // mouse handles a mouse event (attachmouse.go): the open menu, a
 // question in the status bar, the sidebar and the status bar are tm's.
 // Over the pane, a click takes the keyboard back from the sidebar; the
@@ -1809,6 +1825,24 @@ func (c *client) mouse(ev uv.Event) {
 		c.kb = areaMain
 		c.status()
 		c.poke()
+	}
+	if c.remoteBlock(p) != "" {
+		// A paired server's pane that takes no keys (docs/SPEC.md
+		// §16.12): the mouse is tm's, whatever the program tracks. The
+		// wheel scrolls the local scrollback, a left drag selects.
+		switch {
+		case press && m.Button == emu.MouseRight:
+			c.openMenu(c.menuTitle(), c.sessionItems(), m.X, m.Y, false)
+		case m.Action == emu.MousePress && (m.Button == emu.MouseWheelUp || m.Button == emu.MouseWheelDown):
+			p.mirror.ScrollViewport(map[bool]int{true: -wheelRows, false: wheelRows}[m.Button == emu.MouseWheelUp])
+			p.scrolled = true
+			p.r.Invalidate()
+		case m.Button == emu.MouseLeft:
+			c.selMouse(p, m)
+		}
+		c.mu.Unlock()
+		c.poke()
+		return
 	}
 	if !p.mirror.Modes().MouseTracking() {
 		// tm's: the program doesn't take the mouse. A left drag selects.
@@ -1901,9 +1935,11 @@ func (c *client) outerModes() []byte {
 	case m.NormalMouse:
 		track = 1000
 	}
-	if c.side != nil && track < 1002 {
-		// The sidebar takes clicks and drags whatever the program wants;
-		// selecting text in a pane then needs Shift.
+	if (c.side != nil || c.focus != nil && c.remoteBlock(c.focus) != "") && track < 1002 {
+		// The sidebar takes clicks and drags whatever the program wants,
+		// and so does a remote pane that takes no keys (its wheel scrolls
+		// here); selecting text in a pane then needs Shift, or tm's own
+		// drag.
 		track = 1002
 	}
 	if c.side != nil && c.sideW > sideSlim {

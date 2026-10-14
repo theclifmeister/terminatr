@@ -2493,14 +2493,17 @@ user's own (§16.8); the far server's human decides what crosses.
   turns across streams, so a busy pane never holds up a ping.
 - **The repaint** is plain VT (`emu.Repaint`): the active screen with its
   styles, modes, cursor, scrolling region, origin mode, keyboard flags,
-  charsets and tab stops, and the last 200 rows of the scrollback, so
-  the two servers needn't run the same build (an attach's snapshot needs
-  it, §3.3). It loses the inactive screen, older scrollback, hyperlinks
-  and soft wraps.
+  charsets and tab stops, and the scrollback, so the two servers needn't
+  run the same build (an attach's snapshot needs it, §3.3). The stream's
+  first repaint, and one asked for (`23`), carry the whole scrollback (up
+  to its 10,000-line limit), sent through the flow control below like
+  output; one in place of a backlog (**Slow links**) only its last 200
+  rows. It loses the inactive screen, hyperlinks and soft wraps.
 - **Slow links.** The far end keeps at most 256 KiB of a stream's output
   unacked; the near end acks every 32 KiB it has fed. Past 1 MiB queued
-  (`session.AttachRemote`) the backlog is dropped for a fresh repaint, at
-  most one per 250 ms: the pane skips ahead rather than lag.
+  (`session.AttachRemote`; a repaint waiting at the head doesn't count)
+  the backlog is dropped for a fresh repaint, at most one per 250 ms: the
+  pane skips ahead rather than lag.
 - **Keys and who types.** On the far server the caller stays
   `peer:<alias>`, an agent to every check, and its keys go to the PTY
   only on a stream opened, and still allowed, at `type`. The first key
@@ -2514,7 +2517,7 @@ user's own (§16.8); the far server's human decides what crosses.
 - **The near server** keeps a **proxy pane** (`session.Proxy`) per remote
   session it shows: an emulator fed the stream, which consoles attach to
   as to a session, with the identical-build snapshot (§3.3), so a
-  console's mirror, scrollback (from when the pane opened), selection,
+  console's mirror, scrollback (the far pane's, from the repaint), selection,
   digest check and OSC 52 work as for this server's panes. One stream
   serves every console showing it and closes 10 s after the last leaves.
   The pane is the session `<alias>/<id>` (no local id has a `/`): a
@@ -2529,8 +2532,15 @@ user's own (§16.8); the far server's human decides what crosses.
   (`mini › acme › T7 Billing export`) and says `remote · 38 ms`, `view
   only`, or `⚠ mini offline · keys aren't sent`; its keys go to the
   program as in a local pane except on a view-only pane or while the
-  link is down, where they are dropped with that note. The near server
-  raises no takeover. `SessionInfo` has `server` (the alias) and
+  link is down, where they are dropped with that note (tm's own, the
+  prefix commands, still work). There the mouse is tm's whatever the
+  program tracks: the wheel scrolls the local scrollback (3 rows a turn)
+  and a left drag selects, copied on release with OSC 52, as over a
+  local pane whose program doesn't take the mouse (§4). A view-only pane
+  keeps the far session's size, drawn from the top left, cropped or
+  padded as a local pane at another size is (§3.3); when that isn't its
+  rectangle's, the note says it: `view only · 120×40 on mini · 38 ms`.
+  The near server raises no takeover. `SessionInfo` has `server` (the alias) and
   `view_only` for such a pane.
 - **The link drops.** The pane freezes on its last screen and keys are
   dropped, never kept for later. While a console shows it the near
