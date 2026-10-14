@@ -22,8 +22,8 @@
            │                                                                                      │
            │                                                                                      │
            │                                                                                      │
-           │                                                                                      │
-           │ n pair · j join · p panes · e relay · x remove · ↑ ↓ move · ← → tabs · esc close     │
+           │ n pair · j join · p panes · e relay · u update relay · x remove · ↑ ↓ move           │
+           │ ← → tabs · esc close                                                                 │
  ──────────╰──────────────────────────────────────────────────────────────────────────────────────╯
                                    │──────────────────────────────────────────────────────────────────────────
                                    │

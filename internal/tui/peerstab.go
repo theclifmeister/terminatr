@@ -20,8 +20,8 @@ import (
 // first, as tm peer remove does; n pairs with another server and j
 // joins one's pairing (peerpair.go), as tm peer pair and join do; e
 // gives the selected one another relay, as tm peer relay does (the relay
-// moved, or has a new key). A project is shared from its own Settings
-// tab.
+// moved, or has a new key); u asks its relay to update itself
+// (peerrelay.go). A project is shared from its own Settings tab.
 //
 //	" This server 4F2A-91C3"
 //	""
@@ -40,7 +40,7 @@ type peersTab struct {
 }
 
 // peersKeys are the Peers tab's action row.
-const peersKeys = "n pair · j join · p panes · e relay · x remove · ↑ ↓ move · ← → tabs · esc close"
+const peersKeys = "n pair · j join · p panes · e relay · u update relay · x remove · ↑ ↓ move · ← → tabs · esc close"
 
 // relayHint ends the empty tab: where a relay comes from.
 const relayHint = "No relay yet? On a Linux server with a domain: sudo tm relay install --domain NAME; without one, on an address both servers reach: sudo tm relay install --ip (see the README)."
@@ -111,6 +111,7 @@ func (pt *peersTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
 	}
 	out = append(out, faintLines("p sets what the selected server may do with this server's panes, the coordinators and threads of the projects you share: nothing, watch them, or watch and type into them.", w)...)
 	out = append(out, faintLines("e gives the selected server another relay, as tm peer relay does: when the relay moved or was set up again with a new key (its link refuses a relay whose key changed); set it on the other server too.", w)...)
+	out = append(out, faintLines("u asks the selected server's relay to update itself to the latest official release, as tm peer relay-update does: it restarts only for a newer one, and takes one request an hour from any server linked through it.", w)...)
 	out = append(out, faintLines("x removes the selected server, as tm peer remove does: its link closes and its projects leave the sidebar; remove this server there too. A project is shared from its own Settings tab (a on the dashboard).", w)...)
 	return out, sel, hits
 }
@@ -154,6 +155,9 @@ func peerLinkWords(m *dash, e PeerEntry, l PeerList) (string, lipgloss.Style, st
 // with this server and its tm, as far as known.
 func peerAbout(m *dash, e PeerEntry) string {
 	bits := []string{"relay " + relayWords(e.Relay)}
+	if v := relayVersionWords(m, e); v != "" {
+		bits = append(bits, v)
+	}
 	for _, pm := range m.data.Peers {
 		if pm.ID == e.ID && pm.Watch {
 			bits = append(bits, "shares "+counted(len(pm.Projects), "project"))
@@ -247,7 +251,7 @@ func (pt *peersTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 		pt.sel = moveSel(pt.sel, d, len(pt.list.Peers))
 		return nil, true
 	}
-	if s != "x" && s != "p" && s != "e" {
+	if s != "x" && s != "p" && s != "e" && s != "u" {
 		return nil, false
 	}
 	if pt.sel >= len(pt.list.Peers) {
@@ -258,6 +262,9 @@ func (pt *peersTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 		return pt.panes(m, pt.list.Peers[pt.sel]), true
 	case "e":
 		pt.relay(m, pt.list.Peers[pt.sel])
+		return nil, true
+	case "u":
+		pt.relayUpdate(m, pt.list.Peers[pt.sel])
 		return nil, true
 	}
 	pt.remove(m, pt.list.Peers[pt.sel].Alias)

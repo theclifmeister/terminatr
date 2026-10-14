@@ -30,7 +30,8 @@ const peerUsage = `usage: tm peer pair [--relay URL] [--as ALIAS]
        tm peer remove ALIAS
        tm peer rotate [--yes]
        tm peer panes ALIAS off|view|write
-       tm peer relay ALIAS ADDRESS`
+       tm peer relay ALIAS ADDRESS
+       tm peer relay-update ALIAS`
 
 func init() {
 	commands["peer"] = runPeer
@@ -71,7 +72,7 @@ func runPeer(e *Env, args []string) error {
 			return usagef("tm peer %s takes no --%s\n%s", args[0], name, peerUsage)
 		}
 	}
-	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0, "panes": 2, "relay": 2}
+	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0, "panes": 2, "relay": 2, "relay-update": 1}
 	if n, ok := npos[args[0]]; !ok || len(pos) != n {
 		return usagef("%s", peerUsage)
 	}
@@ -104,6 +105,8 @@ func runPeer(e *Env, args []string) error {
 		return e.peerPanes(dir, pos[0], pos[1])
 	case "relay":
 		return e.peerRelay(dir, pos[0], pos[1])
+	case "relay-update":
+		return e.peerRelayUpdate(dir, pos[0])
 	default:
 		return e.peerRotate(dir, *yes)
 	}
@@ -319,6 +322,32 @@ func (e *Env) peerRelay(dir, alias, address string) error {
 	fmt.Fprintf(e.Stdout, "%s's link now goes through %s. Set the same relay on %s for this server too (tm peer relay ALIAS %s there).\n", alias, relayHost(r), alias, r)
 	e.warnPrivate(r)
 	e.reload()
+	return nil
+}
+
+// peerRelayUpdate asks the relay of the paired server alias to update
+// itself to the latest official release (docs/SPEC.md §16.2).
+func (e *Env) peerRelayUpdate(dir, alias string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	p, res, err := peer.RequestRelayUpdate(ctx, dir, alias, pairRelayTLS())
+	var unknown *peer.UnknownPeerError
+	switch {
+	case errors.As(err, &unknown):
+		return &project.Error{Code: "unknown-peer", Msg: err.Error()}
+	case err != nil && p.Alias == "":
+		return err
+	case err != nil:
+		return fmt.Errorf("the relay %s: %w", relayHost(p.Relay), err)
+	}
+	words, ok := peer.RelayUpdateWords(relayHost(p.Relay), res)
+	if !ok {
+		return &project.Error{Code: "relay-update-" + res.Result, Msg: words}
+	}
+	if res.Version != "" {
+		words += " (it runs tm " + strings.TrimPrefix(res.Version, "v") + " now)"
+	}
+	fmt.Fprintln(e.Stdout, strings.ToUpper(words[:1])+words[1:]+".")
 	return nil
 }
 
