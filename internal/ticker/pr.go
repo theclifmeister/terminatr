@@ -30,22 +30,8 @@ func Summaries(path, slug string) map[string]string {
 // the threads of project slug, by thread id. A missing or unreadable
 // file gives none: the ticker hasn't polled yet.
 func PRs(path, slug string) map[string]PR {
-	out := map[string]PR{}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return out
-	}
-	var st state
-	if json.Unmarshal(b, &st) != nil {
-		return out
-	}
-	for k, m := range st.Threads {
-		id, ok := strings.CutPrefix(k, slug+"/")
-		if ok && m != nil && m.PR.Number > 0 && !strings.Contains(id, "/") {
-			out[id] = m.PR
-		}
-	}
-	return out
+	prs, _ := ReadProject(path, slug)
+	return prs
 }
 
 // Timing is when the ticker last did its slow work for a project.
@@ -81,23 +67,35 @@ func HostFails(path string) map[string]int {
 // ReadTiming reads project slug's Timing from the ticker's state file at path;
 // zero when there is none.
 func ReadTiming(path, slug string) Timing {
-	t := Timing{ThreadPolled: map[string]time.Time{}}
+	_, t := ReadProject(path, slug)
+	return t
+}
+
+// ReadProject is PRs and ReadTiming from one read of the state file.
+func ReadProject(path, slug string) (map[string]PR, Timing) {
+	prs, t := map[string]PR{}, Timing{ThreadPolled: map[string]time.Time{}}
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return t
+		return prs, t
 	}
 	var st state
 	if json.Unmarshal(b, &st) != nil {
-		return t
+		return prs, t
 	}
 	if pm := st.Projects[slug]; pm != nil {
 		t.PRPolled, t.Synced, t.GHFailing = pm.PRPolled, pm.Synced, pm.GHFails > 0
 	}
 	for k, m := range st.Threads {
 		id, ok := strings.CutPrefix(k, slug+"/")
-		if ok && m != nil && !m.PRPolled.IsZero() && !strings.Contains(id, "/") {
+		if !ok || m == nil || strings.Contains(id, "/") {
+			continue
+		}
+		if m.PR.Number > 0 {
+			prs[id] = m.PR
+		}
+		if !m.PRPolled.IsZero() {
 			t.ThreadPolled[id] = m.PRPolled
 		}
 	}
-	return t
+	return prs, t
 }

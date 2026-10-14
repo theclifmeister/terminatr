@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -67,18 +68,18 @@ func TestContextOf(t *testing.T) {
 		{ID: "s-1", Role: proto.RoleCoordinator, Project: "demo", Context: 84_000, ContextWindow: 200_000},
 		{ID: "s-2", Role: proto.RoleCoordinator, Project: "other"},
 	}
-	c := contextOf("demo", sessions)
+	c := contextOf("demo", sessions, config.DefaultContextHint)
 	if c == nil || c.Percent != 42 || c.Threshold != 40 || !c.Hint || c.Tokens != 84_000 || c.Window != 200_000 {
 		t.Fatalf("demo: %+v", c)
 	}
 	sessions[0].Context = 20_000
-	if c := contextOf("demo", sessions); c == nil || c.Percent != 10 || c.Hint {
+	if c := contextOf("demo", sessions, config.DefaultContextHint); c == nil || c.Percent != 10 || c.Hint {
 		t.Fatalf("low: %+v", c)
 	}
-	if c := contextOf("other", sessions); c != nil {
+	if c := contextOf("other", sessions, config.DefaultContextHint); c != nil {
 		t.Fatalf("no report yet: %+v", c)
 	}
-	if c := contextOf("none", sessions); c != nil {
+	if c := contextOf("none", sessions, config.DefaultContextHint); c != nil {
 		t.Fatalf("no coordinator: %+v", c)
 	}
 }
