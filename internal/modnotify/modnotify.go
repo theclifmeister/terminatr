@@ -18,9 +18,9 @@ import (
 	"sync"
 	"time"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/theclifmeister/terminatr/internal/modaction"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // Limits on what a mod sends.
@@ -99,22 +99,8 @@ type Request struct {
 	Buttons            []Button
 }
 
-// Line makes s one line of at most n runes: control characters (escape
-// sequences included) become spaces, runs of spaces one, and a cut ends in
-// an ellipsis.
-func Line(s string, n int) string {
-	s = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) || r == utf8.RuneError || unicode.Is(unicode.Cf, r) {
-			return ' '
-		}
-		return r
-	}, s)
-	s = strings.Join(strings.Fields(s), " ")
-	if r := []rune(s); len(r) > n {
-		s = strings.TrimSpace(string(r[:n-1])) + "…"
-	}
-	return s
-}
+// Line makes s one line of at most n runes (textsafe.Line).
+func Line(s string, n int) string { return textsafe.Line(s, n) }
 
 // Errors Post answers with.
 var (

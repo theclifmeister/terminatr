@@ -25,6 +25,7 @@ import (
 	"github.com/rivo/uniseg"
 
 	"github.com/theclifmeister/terminatr/internal/modaction"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // The kinds of widget.
@@ -633,28 +634,10 @@ func (c *checker) text(s *string, at string, limit int) {
 	*s = Narrow(Clean(*s))
 }
 
-// Clean strips what could reach the terminal as other than text: control
-// characters (escape sequences start with one) and Unicode format
-// characters (bidi overrides, zero-width joiners). A newline stays, for a
-// text widget to break on; a tab becomes a space.
-func Clean(s string) string {
-	if strings.IndexFunc(s, func(r rune) bool { return r != '\n' && (unicode.IsControl(r) || unicode.Is(unicode.Cf, r)) }) < 0 {
-		return s
-	}
-	var b strings.Builder
-	for _, r := range s {
-		switch {
-		case r == '\t':
-			b.WriteByte(' ')
-		case r == '\n':
-			b.WriteRune(r)
-		case unicode.IsControl(r), unicode.Is(unicode.Cf, r):
-		default:
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
+// Clean replaces what could reach the terminal as other than text with
+// spaces (textsafe.Clean). A newline stays, for a text widget to break
+// on.
+func Clean(s string) string { return textsafe.Clean(s, true) }
 
 // Narrow replaces each grapheme of s wider than one cell, an emoji or a
 // CJK character, with a ?: terminals disagree on how wide they draw, so

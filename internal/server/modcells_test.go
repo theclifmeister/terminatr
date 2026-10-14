@@ -112,7 +112,7 @@ func TestModCells(t *testing.T) {
 	if st := res.Mods.Status; len(st) != 1 || st[0].Name != "Review age" {
 		t.Fatalf("status %+v", st)
 	}
-	if ts := res.Mods.Toasts; len(ts) != 2 || ts[0] != (proto.ModToast{Seq: 1, Mod: "review-age", Name: "Review age", Text: "T1 is ready [2J", Level: "warn"}) ||
+	if ts := res.Mods.Toasts; len(ts) != 2 || ts[0] != (proto.ModToast{Seq: 1, Mod: "review-age", Name: "Review age", Text: "T1 is ready[2J", Level: "warn"}) ||
 		ts[1].Seq != 2 || ts[1].Level != "info" {
 		t.Fatalf("toasts %+v", ts)
 	}

@@ -19,8 +19,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
@@ -32,6 +30,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modproto"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -433,7 +432,7 @@ func (s *Server) modRaise(_ context.Context, c *modbroker.Call) (any, error) {
 	if a.Item != nil {
 		a.text = *a.Item
 	}
-	subject, summary := modLine(a.Subject, modSubjectMax), modLine(a.Summary, modSummaryMax)
+	subject, summary := textsafe.Line(a.Subject, modSubjectMax), textsafe.Line(a.Summary, modSummaryMax)
 	if subject == "" {
 		return nil, modbroker.BadParams("inbox.raise: no subject")
 	}
@@ -460,17 +459,6 @@ func (s *Server) modRaise(_ context.Context, c *modbroker.Call) (any, error) {
 	}
 	s.modEv.wake()
 	return map[string]string{"id": it.ID}, nil
-}
-
-// modLine is a mod's text as one line of at most n runes, its control
-// characters (escape sequences included) made spaces.
-func modLine(s string, n int) string {
-	return oneLine(strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) || r == utf8.RuneError {
-			return ' '
-		}
-		return r
-	}, s), n)
 }
 
 // modTasks is $.tasks.list's answer: board's tasks, in board order, with
