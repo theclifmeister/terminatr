@@ -99,7 +99,12 @@ const KindTakeover = "takeover"
 // item for the coordinator and a journal line. name is how the item names
 // the thread (thread.Label).
 func (p *Project) TookOver(c caller.Caller, id, name string) error {
-	if _, err := p.AddItem(KindTakeover, id, "the user typed into "+name+"'s pane", false); err != nil {
+	summary := "the user typed into " + name + "'s pane"
+	if c.Kind == caller.Peer {
+		// From a console of a paired server (docs/SPEC.md §16.12).
+		summary += " from the paired server " + c.Alias
+	}
+	if _, err := p.AddItem(KindTakeover, id, summary, false); err != nil {
 		return err
 	}
 	return p.Journal(c, "thread.takeover", id, "")

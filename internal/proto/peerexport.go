@@ -21,6 +21,10 @@ const ErrNotShared = "not-shared"
 // PeerProjects is the answer of peer.projects.
 type PeerProjects struct {
 	Projects []PeerProject `json:"projects"`
+	// Panes is the answering server's pane switch for the caller
+	// (PanesOff, PanesView, PanesType; docs/SPEC.md §16.12), from a
+	// server whose hello lists pane-vt.
+	Panes string `json:"panes,omitempty"`
 	// Now is the peer's clock as it answered: the reader's mirror
 	// measures the offset between the two clocks from it.
 	Now time.Time `json:"now,omitzero"`

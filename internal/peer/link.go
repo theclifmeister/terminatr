@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/rand/v2"
 	"net"
+	"slices"
 	"sync"
 	"time"
 
@@ -53,6 +54,44 @@ type link struct {
 	// sess is the live session while up.
 	sess *session
 }
+
+// panesLevel is this server's pane switch for the peer now.
+func (l *link) panesLevel() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.peer.PanesLevel()
+}
+
+// setPanes changes the pane switch for the peer: at once for its open
+// streams, which off closes; view stops their keys at the next one.
+func (l *link) setPanes(level string) {
+	l.mu.Lock()
+	l.peer.Panes = level
+	s := l.sess
+	l.mu.Unlock()
+	if s != nil && (level == "" || level == proto.PanesOff) {
+		s.panes.closeServed(proto.PaneOff)
+	}
+}
+
+// openPane opens a stream on the peer's pane p.Session (docs/SPEC.md
+// §16.12), frames to sink.
+func (l *link) openPane(ctx context.Context, p proto.PeerAttachParams, sink PaneSink) (*PaneConn, error) {
+	l.mu.Lock()
+	s, caps := l.sess, l.st.Caps
+	l.mu.Unlock()
+	if s == nil {
+		return nil, errNotUp
+	}
+	if !slices.Contains(caps, CapPane) {
+		return nil, ErrNoPanes
+	}
+	return s.panes.open(ctx, p, sink)
+}
+
+// ErrNoPanes: the peer's tm has no remote panes (its hello doesn't list
+// CapPane).
+var ErrNoPanes = errors.New("the paired server's tm has no remote panes")
 
 func (l *link) status() proto.PeerLink {
 	l.mu.Lock()

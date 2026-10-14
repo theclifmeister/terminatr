@@ -66,7 +66,10 @@ type mirrorPeer struct {
 	// offset is its clock minus ours, set once an answer carried it.
 	offset    time.Duration
 	hasOffset bool
-	projects  map[string]*mirrorProject
+	// panes is the peer's pane switch for this server, as its last
+	// peer.projects said.
+	panes    string
+	projects map[string]*mirrorProject
 	// ctx is the reading's while the link is up and the peer exports,
 	// nil otherwise; stop ends it and every watch under it.
 	ctx  context.Context
@@ -243,6 +246,9 @@ func (m *Mirror) setProjects(ctx context.Context, id, alias string, ps proto.Pee
 		return
 	}
 	changed := m.measure(p, ps.Now, recv)
+	if p.panes != ps.Panes {
+		p.panes, changed = ps.Panes, true
+	}
 	want := map[string]proto.PeerProject{}
 	for _, line := range ps.Projects {
 		want[line.Project] = line
@@ -405,8 +411,12 @@ func (m *Mirror) List() proto.PeerList {
 	}
 	for _, l := range st.Peers {
 		pm := proto.PeerMirror{Alias: l.Alias, ID: l.ID, State: l.State, Reason: l.Reason, Since: l.Since, RTT: l.RTT,
-			Watch: slices.Contains(l.Caps, CapWatch), Projects: []proto.PeerMirrorProject{}}
+			Watch: slices.Contains(l.Caps, CapWatch), Pane: slices.Contains(l.Caps, CapPane), Version: l.Version,
+			Projects: []proto.PeerMirrorProject{}}
 		if p := m.peers[l.ID]; p != nil {
+			if pm.Pane {
+				pm.Panes = p.panes
+			}
 			if p.hasOffset {
 				pm.Offset = p.offset.Milliseconds()
 			}

@@ -151,6 +151,11 @@ func init() {
 			run: (*dash).toggleDetails},
 		{id: "settings.open", keys: []string{","}, label: ",", help: "settings for every project: the prefix key, the default agent, the layout (a project's own are under a)", menu: "settings",
 			foot: always("settings"), run: func(m *dash, _ string) tea.Cmd { m.openSettings(); return nil }},
+		{id: "pane.repaint", keys: []string{"R"}, help: "a paired server's pane: repaint from its server (prefix+R; listed with the prefix commands)", mouse: "the session's " + menuButton + " menu in a paired server's pane: repaint from its server",
+			run: func(m *dash, _ string) tea.Cmd {
+				m.msg = "prefix+" + keyShown(boundKey("R")) + " repaints a paired server's pane: open one first"
+				return nil
+			}},
 		{id: "help.open", keys: []string{"?"}, label: "?", help: "help", menu: "help: keys and mouse",
 			foot: always("help"), run: func(m *dash, _ string) tea.Cmd { m.push(&helpView{}); return nil }},
 		{id: "console.quit", keys: []string{"prefix+q"}, fixed: true, label: "prefix+q", help: "quit this console, from anywhere (the server, the sessions and other consoles keep running)", menu: "quit",

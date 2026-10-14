@@ -14,6 +14,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/plat/flock"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // PeersFile is the paired servers' list in the peer state directory.
@@ -25,6 +26,18 @@ type Peer struct {
 	Alias string            `json:"alias"`
 	Key   ed25519.PublicKey `json:"key"`   // base64
 	Relay string            `json:"relay"` // wss://host[:port]
+	// Panes is what the peer may do with this server's panes
+	// (proto.PanesOff, the default when empty, PanesView, PanesType;
+	// docs/SPEC.md §16.12).
+	Panes string `json:"panes,omitempty"`
+}
+
+// PanesLevel is p's pane switch, off when unset.
+func (p Peer) PanesLevel() string {
+	if p.Panes == "" {
+		return proto.PanesOff
+	}
+	return p.Panes
 }
 
 // ID is the peer's server id.
@@ -36,6 +49,9 @@ func (p Peer) check() error {
 	}
 	if len(p.Key) != ed25519.PublicKeySize {
 		return fmt.Errorf("peer %s: the key is %d bytes, want %d", p.Alias, len(p.Key), ed25519.PublicKeySize)
+	}
+	if p.Panes != "" && !proto.ValidPanes(p.Panes) {
+		return fmt.Errorf("peer %s: panes %q is not off, view or type", p.Alias, p.Panes)
 	}
 	u, err := url.Parse(p.Relay)
 	if err != nil || (u.Scheme != "wss" && u.Scheme != "ws") || u.Host == "" {
@@ -183,6 +199,8 @@ func Pin(dir string, key ed25519.PublicKey, relayURL, name, as string) (Peer, er
 				if as == "" {
 					p.Alias = q.Alias
 				}
+				// Pairing again keeps the pane switch.
+				p.Panes = q.Panes
 			case q.Alias == as:
 			default:
 				kept = append(kept, q)
@@ -201,6 +219,28 @@ func Pin(dir string, key ed25519.PublicKey, relayURL, name, as string) (Peer, er
 		return append(kept, p), nil
 	})
 	return p, err
+}
+
+// SetPanes sets the pane switch for the peer called alias (docs/SPEC.md
+// §16.12); false when there is none.
+func SetPanes(dir, alias, level string) (bool, error) {
+	if !proto.ValidPanes(level) {
+		return false, fmt.Errorf("panes %q: off, view or type", level)
+	}
+	found := false
+	err := change(dir, func(peers []Peer) ([]Peer, error) {
+		for i := range peers {
+			if peers[i].Alias == alias {
+				found = true
+				peers[i].Panes = level
+				if level == proto.PanesOff {
+					peers[i].Panes = ""
+				}
+			}
+		}
+		return peers, nil
+	})
+	return found, err
 }
 
 // Unpin drops the peer called alias; false when there is none.

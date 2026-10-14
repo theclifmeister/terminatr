@@ -25,8 +25,10 @@ import (
 // hidden (view.Sidebar), on the view and view.sidebar; the status bar's
 // style (view.status, the view's StatusCompact). 15: the mods' sidebar
 // sections' folds (view.sections, view.Tree's SectionsFolded), added
-// fields and one method only.
-const Protocol = 15
+// fields and one method only. 16: remote panes (docs/SPEC.md §16.12): a
+// view's focus and view.attach may name a paired server's pane as
+// "<alias>/<session>", and SessionInfo has Server and ViewOnly.
+const Protocol = 16
 
 // Kind is what a connection is for.
 type Kind string
@@ -102,6 +104,10 @@ const (
 	FrameDigest   FrameType = 4 // emulator state digest at this point (consistency check)
 	// 5 was FrameState, never sent.
 	FrameClosed FrameType = 6 // UTF-8 reason: the session exited or the server is stopping
+	// FrameRepaint is a remote pane's state (docs/SPEC.md §16.12): u16
+	// cols, u16 rows, then emu.Repaint's bytes for a fresh emulator of
+	// that size. Only a paired server's stream has it, never an attach.
+	FrameRepaint FrameType = 20
 
 	// client → server
 	// Consoles size panes through their view (view.size, view.input);
@@ -117,6 +123,10 @@ const (
 	// answers to OSC 10, 11 and 4 gave them (emu.Colors.Encode). The
 	// pane's OSC 10/11/4 queries are answered with them.
 	FrameColors FrameType = 16
+	// FrameRepaintReq asks a paired server's pane (docs/SPEC.md §16.12)
+	// for a fresh repaint from its server: prefix+R. A session of this
+	// server ignores it.
+	FrameRepaintReq FrameType = 17
 )
 
 // MaxFrame bounds a frame's payload.

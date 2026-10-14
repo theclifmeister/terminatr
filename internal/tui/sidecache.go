@@ -261,7 +261,7 @@ func (sc statusCache) statuses(sessions []proto.SessionInfo) map[string]*thread.
 		sc[k] = e
 	}
 	for _, s := range sessions {
-		if s.Role != proto.RoleThread || s.Project == "" || !thread.ValidID(s.Thread) {
+		if s.Role != proto.RoleThread || s.Project == "" || !thread.ValidID(s.Thread) || s.Server != "" {
 			continue
 		}
 		dir, err := project.Dir(s.Project)

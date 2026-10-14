@@ -176,7 +176,7 @@ const pendingHead = " prefix ▸ "
 func pendingList() string {
 	return "d dashboard · q quit · " + boundKey("a") + " project · " + boundKey("n") + " new · p " + boundKeys("]", "[") +
 		" projects · " + boundKeys("i", "t", ",", "?") + " · " + boundKeys("{", "}", "b") + " sidebar · " + boundKey("|") +
-		" info · tab sidebar keys · " + boundKey(";") + " last place · r remote control"
+		" info · tab sidebar keys · " + boundKey(";") + " last place · r remote control · " + boundKey("R") + " repaint"
 }
 
 // The status bar's notes while the sidebar's cursor previews a row:
@@ -241,6 +241,10 @@ func statusBar(s proto.SessionInfo, ts *thread.Status, title string, pending boo
 			pane += " " + oneLine(title)
 		}
 		path = s.Project + " › " + pane
+	}
+	if s.Server != "" {
+		// A paired server's pane (docs/SPEC.md §16.12).
+		path = s.Server + " › " + path
 	}
 	// The progress, from the most to the least: the percent always
 	// stays.

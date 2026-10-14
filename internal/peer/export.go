@@ -47,15 +47,20 @@ var watchPoll = 2 * time.Second
 type dispatcher struct {
 	ex     Exporter
 	msgs   Messages
+	panes  PaneHost
 	caller caller.Caller
 	peer   ID
+	// level is this server's pane switch for the peer now
+	// (proto.PanesOff …).
+	level func() string
 }
 
 // methods are the peer.* methods a paired server may call: nothing
 // else is reachable from a link. All of them read but peer.message,
-// which delivers a message to a linked project (§16.11).
+// which delivers a message to a linked project (§16.11), and peer.attach,
+// whose stream may type while the pane switch says so (§16.12).
 func (d *dispatcher) methods() map[string]handler {
-	if d == nil || (d.ex == nil && d.msgs == nil) {
+	if d == nil || (d.ex == nil && d.msgs == nil && d.panes == nil) {
 		return nil
 	}
 	m := map[string]handler{}
@@ -65,6 +70,9 @@ func (d *dispatcher) methods() map[string]handler {
 	}
 	if d.msgs != nil {
 		m[proto.MethodPeerMessage] = d.message
+	}
+	if d.panes != nil {
+		m[proto.MethodPeerAttach] = d.attach
 	}
 	return m
 }
@@ -77,7 +85,11 @@ func (d *dispatcher) projects(ctx context.Context, _ json.RawMessage) (any, erro
 	if ps == nil {
 		ps = []proto.PeerProject{}
 	}
-	return proto.PeerProjects{Projects: ps, Now: time.Now()}, nil
+	out := proto.PeerProjects{Projects: ps, Now: time.Now()}
+	if d.panes != nil && d.level != nil {
+		out.Panes = d.level()
+	}
+	return out, nil
 }
 
 func (d *dispatcher) watch(ctx context.Context, raw json.RawMessage) (any, error) {

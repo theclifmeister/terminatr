@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -212,7 +213,9 @@ func Attach(opts Options) (res Result, err error) {
 		return res, err
 	}
 	if c.empty() {
-		return Result{Reason: "no session to show", Detached: true}, nil
+		// Why the pane didn't open, when the server said: a paired
+		// server's pane it doesn't share, say (docs/SPEC.md §16.12).
+		return Result{Reason: cmp.Or(c.flash, "no session to show"), Detached: true}, nil
 	}
 	if so.Focus && c.sideW > 0 {
 		// The sidebar keeps the keyboard it had on the dashboard; its
@@ -271,6 +274,8 @@ func Attach(opts Options) (res Result, err error) {
 	switch opts.Command {
 	case "r":
 		go c.askRemote()
+	case "R":
+		go c.repaint()
 	case "tab", "|":
 		go c.paneCommand(opts.Command)
 	case "":
@@ -521,6 +526,9 @@ func (c *client) sync(v view.View) error {
 		case err != nil:
 			c.log.Printf("view %s: %s: %v", v.Name, id, err)
 			note = id + ": " + err.Error()
+			if perr := (*proto.Error)(nil); errors.As(err, &perr) {
+				note = id + ": " + perr.Message
+			}
 		default:
 			opened = append(opened, p)
 		}
@@ -969,6 +977,10 @@ func (c *client) needClaim() bool {
 	}
 	need := c.v.Latest != c.me
 	for _, p := range c.visible() {
+		if c.remoteBlock(p) != "" {
+			// Keys don't go there, so they size nothing.
+			return false
+		}
 		r := c.geo.Area
 		if cols, rows := p.mirror.Size(); int(cols) != r.W || int(rows) != r.H {
 			need = true
@@ -1121,6 +1133,13 @@ func (c *client) handle(ev uv.Event) {
 			c.mu.Unlock()
 			return
 		}
+		if why := c.remoteBlock(p); why != "" {
+			c.flash = why
+			c.status()
+			c.mu.Unlock()
+			c.poke()
+			return
+		}
 		b, err := emu.Paste(p.mirror, []byte(e.Content))
 		c.typed(p)
 		claim := c.needClaim()
@@ -1260,7 +1279,31 @@ func (c *client) run(do prefixDo) {
 		c.paneCommand(do.pane)
 	case do.remote:
 		c.askRemote()
+	case do.repaint:
+		c.repaint()
 	}
+}
+
+// repaint asks the focused pane, a paired server's, for a fresh repaint
+// from that server (docs/SPEC.md §16.12); this server's own panes are
+// always current.
+func (c *client) repaint() {
+	if !c.lock() {
+		return
+	}
+	p := c.focus
+	if p == nil || p.info.Server == "" {
+		c.flash = "prefix+" + keyShown(boundKey("R")) + " repaints a paired server's pane; this one is this server's"
+		c.status()
+		c.mu.Unlock()
+		c.poke()
+		return
+	}
+	c.flash = "repainting from " + p.info.Server
+	c.status()
+	c.mu.Unlock()
+	c.poke()
+	c.send(p, proto.FrameRepaintReq, nil)
 }
 
 // prefixDo is what a key does given whether the prefix came before it.
@@ -1275,6 +1318,8 @@ type prefixDo struct {
 	// remote asks to turn the focused coordinator's remote control on
 	// or off.
 	remote bool
+	// repaint asks a paired server's pane for a fresh repaint (prefix+R).
+	repaint bool
 	// command: a mod's command has the key (attachcommands.go).
 	command bool
 }
@@ -1320,6 +1365,8 @@ func prefixStep(prefix chord, pending bool, k uv.Key, dashboard bool) prefixDo {
 		return prefixDo{detach: true}
 	case name == "r":
 		return prefixDo{remote: true}
+	case name == "R":
+		return prefixDo{repaint: true}
 	case popupCommands[name] && dashboard:
 		return prefixDo{popup: name}
 	case prefixCommands[name] && dashboard:
@@ -1458,7 +1505,9 @@ func (c *client) paneCommand(cmd string) {
 // pane during this attach tells its coordinator, without asking
 // (docs/SPEC.md §4). c.mu held.
 func (c *client) typed(p *pane) {
-	if p.info.Role != proto.RoleThread || c.told[p.info.ID] {
+	// A paired server's pane: that server tells its coordinator
+	// (docs/SPEC.md §16.12).
+	if p.info.Role != proto.RoleThread || c.told[p.info.ID] || p.info.Server != "" {
 		return
 	}
 	c.told[p.info.ID] = true
@@ -1469,6 +1518,69 @@ func (c *client) typed(p *pane) {
 			}
 		}()
 	}
+}
+
+// remoteBlock is why keys don't reach p, a paired server's pane: its
+// server lets this one watch only, or the link is down (keys typed then
+// are dropped, never kept for later; docs/SPEC.md §16.12). "" when they
+// go, and for this server's own panes. c.mu held.
+func (c *client) remoteBlock(p *pane) string {
+	alias := p.info.Server
+	if alias == "" {
+		return ""
+	}
+	if p.info.ViewOnly {
+		return "view only: " + alias + " shares its panes without typing"
+	}
+	for _, pm := range c.side.peers {
+		if pm.Alias == alias && pm.State != proto.LinkUp {
+			return alias + " is offline: keys aren't sent"
+		}
+	}
+	return ""
+}
+
+// remoteNote is the status bar's note on a paired server's pane: how it
+// is linked, or that keys don't go. c.mu held.
+func (c *client) remoteNote(in proto.SessionInfo) string {
+	for _, pm := range c.side.peers {
+		if pm.Alias != in.Server {
+			continue
+		}
+		if pm.State != proto.LinkUp {
+			return "⚠ " + in.Server + " offline · keys aren't sent"
+		}
+		note := "remote"
+		if in.ViewOnly {
+			note = "view only"
+		}
+		if pm.RTT > 0 {
+			note += " · " + rttWords(pm.RTT)
+		}
+		return note
+	}
+	return "remote"
+}
+
+// remoteInfo is a paired server's pane in, its state as the mirror
+// last had it.
+func remoteInfo(peers []proto.PeerMirror, in proto.SessionInfo) proto.SessionInfo {
+	_, sid, _ := strings.Cut(in.ID, "/")
+	for _, pm := range peers {
+		if pm.Alias != in.Server {
+			continue
+		}
+		for _, pr := range pm.Projects {
+			for _, s := range pr.Sessions {
+				if s.ID == sid {
+					in.State, in.Reason, in.TodosDone, in.TodosTotal, in.Current = s.State, s.Reason, s.TodosDone, s.TodosTotal, s.Current
+					in.Model, in.Context, in.ContextWindow, in.Task = s.Model, s.Context, s.ContextWindow, s.Task
+					return in
+				}
+			}
+		}
+	}
+	return in
 }
 
 // paneName is how the status bar names a session: its thread's name
@@ -1512,6 +1624,9 @@ func (c *client) status() {
 	if bw > 0 {
 		sw -= bw + 1
 	}
+	if where == "" && c.focus.info.Server != "" {
+		where = c.remoteNote(c.focus.info)
+	}
 	line, hits := statusBar(c.focus.info, c.focus.status, c.paneTitle(), c.pending, sw, where, c.cells)
 	line = plainUnder(line)
 	if bw > 0 {
@@ -1529,6 +1644,21 @@ func (c *client) status() {
 func (c *client) paneTitle() string {
 	in := c.focus.info
 	if c.side == nil || in.Thread == "" {
+		return ""
+	}
+	if in.Server != "" {
+		for _, pm := range c.side.peers {
+			for _, pr := range pm.Projects {
+				if pm.Alias != in.Server || pr.Project != in.Project || pr.Watch == nil {
+					continue
+				}
+				for _, t := range pr.Watch.Threads {
+					if t.ID == in.Thread {
+						return t.Title
+					}
+				}
+			}
+		}
 		return ""
 	}
 	for _, p := range c.side.projects {
@@ -1564,6 +1694,13 @@ func (c *client) input(k uv.Key) {
 		}
 		p.mirror.ScrollViewport(d)
 		p.scrolled = true
+		c.mu.Unlock()
+		c.poke()
+		return
+	}
+	if why := c.remoteBlock(p); why != "" {
+		c.flash = why
+		c.status()
 		c.mu.Unlock()
 		c.poke()
 		return
@@ -1690,6 +1827,11 @@ func (c *client) mouse(ev uv.Event) {
 		c.poke()
 		return
 	}
+	if c.remoteBlock(p) != "" {
+		c.mu.Unlock()
+		c.poke()
+		return
+	}
 	claim := false
 	if _, wheel := ev.(uv.MouseWheelEvent); click || wheel {
 		claim = c.needClaim()
@@ -1720,7 +1862,7 @@ func (c *client) focusReport(gained bool) {
 		return
 	}
 	p := c.focus
-	if p == nil {
+	if p == nil || c.remoteBlock(p) != "" {
 		c.mu.Unlock()
 		return
 	}
@@ -2215,6 +2357,11 @@ func (c *client) applyPoll(pl *polled, now time.Time) bool {
 		for _, s := range res.Sessions {
 			if s.ID == p.info.ID && (p.status != pl.statuses[s.ID] || !reflect.DeepEqual(p.info, s)) {
 				p.info, p.status, changed = s, pl.statuses[s.ID], true
+			}
+		}
+		if p.info.Server != "" {
+			if s := remoteInfo(c.side.peers, p.info); !reflect.DeepEqual(p.info, s) {
+				p.info, changed = s, true
 			}
 		}
 	}

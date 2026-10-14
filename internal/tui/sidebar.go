@@ -1218,7 +1218,7 @@ func (r treeRow) target() (t Target, ok bool, why string) {
 		return Target{Project: peerFold(r.peer, r.slug)}, true, ""
 	}
 	if r.kind == treeServer || r.isPeer() {
-		return t, false, peerWhy(r)
+		return peerTarget(r)
 	}
 	t.Project = r.slug
 	switch r.kind {

@@ -27,7 +27,8 @@ const peerUsage = `usage: tm peer pair [--relay URL] [--as ALIAS]
        tm peer join CODE [--as ALIAS]
        tm peer list [--json]
        tm peer remove ALIAS
-       tm peer rotate [--yes]`
+       tm peer rotate [--yes]
+       tm peer panes ALIAS off|view|type`
 
 func init() {
 	commands["peer"] = runPeer
@@ -68,7 +69,7 @@ func runPeer(e *Env, args []string) error {
 			return usagef("tm peer %s takes no --%s\n%s", args[0], name, peerUsage)
 		}
 	}
-	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0}
+	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0, "panes": 2}
 	if n, ok := npos[args[0]]; !ok || len(pos) != n {
 		return usagef("%s", peerUsage)
 	}
@@ -97,6 +98,8 @@ func runPeer(e *Env, args []string) error {
 		return e.peerList(dir, *asJSON)
 	case "remove":
 		return e.peerRemove(dir, pos[0])
+	case "panes":
+		return e.peerPanes(dir, pos[0], pos[1])
 	default:
 		return e.peerRotate(dir, *yes)
 	}
@@ -285,6 +288,9 @@ type peerEntry struct {
 	Short string          `json:"short"`
 	Relay string          `json:"relay"`
 	Link  *proto.PeerLink `json:"link,omitempty"`
+	// Panes is this server's pane switch for the peer (docs/SPEC.md
+	// §16.12).
+	Panes string `json:"panes"`
 }
 
 func (e *Env) peerList(dir string, asJSON bool) error {
@@ -305,7 +311,7 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 	}
 	entries := []peerEntry{}
 	for _, p := range peers {
-		pe := peerEntry{Alias: p.Alias, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay}
+		pe := peerEntry{Alias: p.Alias, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: p.PanesLevel()}
 		if l, ok := links[pe.ID]; ok {
 			pe.Link = &l
 		}
@@ -339,6 +345,9 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 		case running:
 			state = "no link yet"
 		}
+		if pe.Panes != proto.PanesOff {
+			state += "; panes: " + pe.Panes
+		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", pe.Alias, pe.Short, relayHost(pe.Relay), state)
 	}
 	return tw.Flush()
@@ -353,6 +362,32 @@ func (e *Env) peerRemove(dir, alias string) error {
 		return &project.Error{Code: "unknown-peer", Msg: fmt.Sprintf("no peer %q (tm peer list)", alias)}
 	}
 	fmt.Fprintf(e.Stdout, "Removed %s; its link closes. Remove this server on the other side too.\n", alias)
+	e.reload()
+	return nil
+}
+
+// peerPanes sets what the paired server alias may do with this server's
+// panes (docs/SPEC.md §16.12): off, view (watch the shared projects'
+// coordinator and thread panes) or type (watch and type into them).
+func (e *Env) peerPanes(dir, alias, level string) error {
+	if !proto.ValidPanes(level) {
+		return usagef("tm peer panes ALIAS off|view|type: %q isn't one", level)
+	}
+	found, err := peer.SetPanes(dir, alias, level)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return &project.Error{Code: "unknown-peer", Msg: fmt.Sprintf("no peer %q (tm peer list)", alias)}
+	}
+	switch level {
+	case proto.PanesOff:
+		fmt.Fprintf(e.Stdout, "Panes off for %s: it can't open this server's panes, and those it has open close.\n", alias)
+	case proto.PanesView:
+		fmt.Fprintf(e.Stdout, "Panes view for %s: it can watch the coordinator and thread panes of the projects this server shares, without typing.\n", alias)
+	default:
+		fmt.Fprintf(e.Stdout, "Panes type for %s: it can watch and type into the coordinator and thread panes of the projects this server shares; the first keys into a thread tell its coordinator.\n", alias)
+	}
 	e.reload()
 	return nil
 }

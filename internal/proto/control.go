@@ -342,6 +342,12 @@ type SessionInfo struct {
 	// before the first turn.
 	Context       int64 `json:"context,omitempty"`
 	ContextWindow int64 `json:"context_window,omitempty"`
+	// Server is the paired server's alias for one of its panes this
+	// server shows (docs/SPEC.md §16.12): the id is "<alias>/<its id>";
+	// "" for this server's own. ViewOnly: its switch lets this server
+	// watch it, not type (since protocol 16).
+	Server   string `json:"server,omitempty"`
+	ViewOnly bool   `json:"view_only,omitempty"`
 	// Cells are the mods' cells for this session (a target of Session
 	// alone), since protocol 13.
 	Cells []ModCell `json:"cells,omitempty"`

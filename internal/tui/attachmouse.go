@@ -41,6 +41,7 @@ var sessionMenu = []struct{ label, key string }{
 	{"keyboard to the sidebar", "tab"},
 	{"back to the last place", ";"},
 	{"remote control on / off…", "r"},
+	{"repaint from its server", "R"},
 	{"send the prefix key", "prefix"},
 }
 
@@ -302,7 +303,9 @@ func (c *client) sessionItems() []aitem {
 		switch {
 		case prefixCommands[key] && !c.dashboard:
 			continue
-		case key == "r" && (c.focus == nil || c.focus.info.Role != proto.RoleCoordinator):
+		case key == "r" && (c.focus == nil || c.focus.info.Role != proto.RoleCoordinator || c.focus.info.Server != ""):
+			continue
+		case key == "R" && (c.focus == nil || c.focus.info.Server == ""):
 			continue
 		case key == "d" && c.bare:
 			label = "leave"

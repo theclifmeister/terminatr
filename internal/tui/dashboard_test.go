@@ -56,6 +56,7 @@ type fakeSource struct {
 	peers       PeerList
 	peerErr     error
 	unpinned    []string // aliases removed from the Peers tab
+	panesSet    []string // "alias level" set from the Peers tab
 	agents      []string
 	remote      []string // "slug on" or "slug off"
 	lifecycle   []string // "slug verb"
@@ -254,6 +255,15 @@ func (f *fakeSource) OpenProject(slug string, c, r int) (string, error) {
 }
 
 func (f *fakeSource) Peers() (PeerList, error) { return f.peers, f.peerErr }
+func (f *fakeSource) SetPeerPanes(alias, level string) error {
+	f.panesSet = append(f.panesSet, alias+" "+level)
+	for i := range f.peers.Peers {
+		if f.peers.Peers[i].Alias == alias {
+			f.peers.Peers[i].Panes = level
+		}
+	}
+	return nil
+}
 func (f *fakeSource) RemovePeer(alias string) error {
 	f.unpinned = append(f.unpinned, alias)
 	f.peers.Peers = slices.DeleteFunc(f.peers.Peers, func(e PeerEntry) bool { return e.Alias == alias })

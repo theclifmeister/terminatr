@@ -284,3 +284,139 @@ func TestLoadPeers(t *testing.T) {
 		t.Errorf("one peer %+v", p)
 	}
 }
+
+// peerTreeWith is peerData's tree with mini's pane switch for this
+// server at panes (docs/SPEC.md §16.12), and the view showing focus.
+func peerTreeWith(panes, focus string) []treeRow {
+	ps, sessions, peers := peerData()
+	peers[0].Pane, peers[0].Panes, peers[0].Version = true, panes, "0.28.0"
+	return buildTree(ps, sessions, treeIn{current: "terminatr", focus: focus, peers: peers, host: "studio"})
+}
+
+func rowOf(rows []treeRow, key string) treeRow {
+	for _, r := range rows {
+		if r.key() == key {
+			return r
+		}
+	}
+	return treeRow{}
+}
+
+// TestPeerRowsOpenPanes: with mini sharing its panes, enter on its
+// coordinator's or a thread's row opens the pane, the session
+// mini/<id>; its project stays view-only. Off, or without remote panes
+// in its tm, enter says why.
+func TestPeerRowsOpenPanes(t *testing.T) {
+	for _, panes := range []string{proto.PanesType, proto.PanesView} {
+		rows := peerTreeWith(panes, "")
+		for key, want := range map[string]string{"rc:mini/acme-api": "mini/r-1", "rt:mini/acme-api/t-0041": "mini/r-2"} {
+			r := rowOf(rows, key)
+			tg, ok, why := r.target()
+			if !ok || tg.Session != want || tg.Project != "@mini/acme-api" || why != "" {
+				t.Errorf("%s %s: %+v %v %q", panes, key, tg, ok, why)
+			}
+			if st := sideKeyStep(rows, sideDefault, key, sideEnter); st.target == nil || st.target.Session != want || !st.into {
+				t.Errorf("%s %s: enter %+v", panes, key, st)
+			}
+			if _, ok := r.preview(); ok {
+				t.Errorf("%s previews", key)
+			}
+		}
+		_, d2 := rowOf(rows, "rc:mini/acme-api").details()
+		if word := map[string]string{proto.PanesType: "its pane opens here", proto.PanesView: "its pane: view only"}[panes]; !strings.HasPrefix(d2, word) {
+			t.Errorf("%s: coordinator's details %q", panes, d2)
+		}
+		// The project opens its read-only dashboard, never a pane.
+		if tg, ok, _ := rowOf(rows, "r:mini/acme-api").target(); !ok || tg.Session != "" || tg.Project != "@mini/acme-api" {
+			t.Errorf("%s: the remote project's target %+v %v", panes, tg, ok)
+		}
+	}
+	rows := peerTreeWith(proto.PanesOff, "")
+	if _, ok, why := rowOf(rows, "rc:mini/acme-api").target(); ok || !strings.Contains(why, "mini doesn't share panes with this server") {
+		t.Errorf("off: %v %q", ok, why)
+	}
+	if _, d2 := rowOf(rows, "rc:mini/acme-api").details(); !strings.HasPrefix(d2, "panes off") {
+		t.Errorf("off: details %q", d2)
+	}
+	ps, sessions, peers := peerData()
+	peers[0].Panes = proto.PanesType // no pane-vt in its hello
+	rows = buildTree(ps, sessions, treeIn{current: "terminatr", peers: peers, host: "studio"})
+	if _, ok, why := rowOf(rows, "rt:mini/acme-api/t-0041").target(); ok || !strings.Contains(why, "has no remote panes") {
+		t.Errorf("old tm: %v %q", ok, why)
+	}
+}
+
+// TestPeerRowHere: a view showing a remote pane is on its row, and on
+// no row of this server's.
+func TestPeerRowHere(t *testing.T) {
+	rows := peerTreeWith(proto.PanesType, "mini/r-2")
+	var here []string
+	for _, r := range rows {
+		if r.here {
+			here = append(here, r.key())
+		}
+	}
+	if !slices.Equal(here, []string{"rt:mini/acme-api/t-0041"}) {
+		t.Errorf("here: %v", here)
+	}
+}
+
+// TestRemoteStatus: a remote pane's status bar leads with its server
+// and says how it is linked; keys don't go to a view-only pane, nor
+// while the link is down.
+func TestRemoteStatus(t *testing.T) {
+	setIcons(IconsUnicode)
+	in := proto.SessionInfo{ID: "mini/r-1", Role: proto.RoleCoordinator, Project: "acme-api", Server: "mini"}
+	line, _ := statusBar(in, nil, "", false, 160, "remote · 38 ms", nil)
+	if l := ansi.Strip(line); !strings.Contains(l, "mini › acme-api › coordinator") || !strings.Contains(l, "remote · 38 ms") {
+		t.Errorf("status bar %q", l)
+	}
+	_, _, peers := peerData()
+	c := &client{side: &sidebar{peers: peers}}
+	p := &pane{info: in}
+	if why := c.remoteBlock(p); why != "" {
+		t.Errorf("up, type: %q", why)
+	}
+	if n := c.remoteNote(in); n != "remote · 38 ms" {
+		t.Errorf("note %q", n)
+	}
+	p.info.ViewOnly = true
+	if why := c.remoteBlock(p); !strings.HasPrefix(why, "view only") {
+		t.Errorf("view only: %q", why)
+	}
+	p.info = proto.SessionInfo{ID: "nas/q-1", Server: "nas", Role: proto.RoleCoordinator}
+	if why := c.remoteBlock(p); why != "nas is offline: keys aren't sent" {
+		t.Errorf("offline: %q", why)
+	}
+	if n := c.remoteNote(p.info); !strings.Contains(n, "offline") {
+		t.Errorf("offline note %q", n)
+	}
+	p.info = proto.SessionInfo{ID: "s-1"}
+	if why := c.remoteBlock(p); why != "" {
+		t.Errorf("a local pane: %q", why)
+	}
+}
+
+// TestPrefixRepaint: prefix+R asks for a repaint, rebound with
+// pane.repaint like any action; the session's menu offers it on a paired
+// server's pane only.
+func TestPrefixRepaint(t *testing.T) {
+	prefix, _ := parseChord(DefaultPrefixKey)
+	if do := prefixStep(prefix, true, cmdKey("R"), false); !do.repaint {
+		t.Fatalf("prefix+R: %+v", do)
+	}
+	if do := prefixStep(prefix, false, cmdKey("R"), false); !do.input {
+		t.Fatalf("plain R goes to the program: %+v", do)
+	}
+	has := func(c *client) bool {
+		return slices.ContainsFunc(c.sessionItems(), func(it aitem) bool { return it.key == "prefix+R" })
+	}
+	c := &client{side: &sidebar{}, focus: &pane{info: proto.SessionInfo{ID: "mini/r-1", Server: "mini", Role: proto.RoleCoordinator}}}
+	if !has(c) {
+		t.Error("no repaint in a remote pane's menu")
+	}
+	c.focus.info = proto.SessionInfo{ID: "s-1", Role: proto.RoleCoordinator}
+	if has(c) {
+		t.Error("repaint in a local pane's menu")
+	}
+}

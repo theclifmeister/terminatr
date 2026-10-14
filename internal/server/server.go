@@ -206,6 +206,9 @@ type Server struct {
 	// mirror is what the links last read of the paired servers' shared
 	// projects (peer.list); set before Run serves.
 	mirror *peer.Mirror
+	// remotes are the paired servers' panes this server shows
+	// (docs/SPEC.md §16.12).
+	remotes *remotes
 
 	// protocol is the protocol the hello claims, and deaf hangs up on
 	// every hello: test hooks (testhooks.go).
@@ -329,11 +332,13 @@ func Run(ctx context.Context, opts Options) error {
 	// The links to paired servers: each its own goroutine, which no
 	// local call waits on (docs/SPEC.md §16.7). They read the shared
 	// projects through peerExport (§16.9), nothing else.
-	s.peers = peer.Start(peer.Options{Dir: peer.DirIn(p.Home), Version: version.Version, Logf: logger.Printf, Export: s.peerExport(), Messages: peerMessages{}})
+	s.peers = peer.Start(peer.Options{Dir: peer.DirIn(p.Home), Version: version.Version, Logf: logger.Printf, Export: s.peerExport(), Messages: peerMessages{}, Panes: peerPanes{s}})
 	defer s.peers.Close()
 	// What they share, for the consoles (§16.10).
 	s.mirror = peer.StartMirror(s.peers, peer.MirrorOptions{Logf: logger.Printf, Changed: s.watch.wake})
 	defer s.mirror.Close()
+	s.remotes = newRemotes(s)
+	defer s.remotes.closeAll()
 	// Messages to linked projects on paired servers wait in the outbox
 	// until their link is up (§16.11).
 	outboxCtx, stopOutbox := context.WithCancel(context.Background())
@@ -1095,6 +1100,9 @@ func (s *Server) taskRef(slug, id string) string {
 }
 
 func (s *Server) session(id string) (*session.Session, *proto.Error) {
+	if _, _, ok := remoteID(id); ok {
+		return nil, remoteRefusal(id)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sess, ok := s.sessions[id]
@@ -1304,6 +1312,10 @@ func (s *Server) serveAttach(c net.Conn, br *bufio.Reader, peerPID int, human bo
 	// like session.keys.
 	if perr := mayCall(attachMethod, human, s.whoFor(peerPID)); perr != nil {
 		writeJSONLine(c, proto.AttachReply{Error: perr})
+		return
+	}
+	if _, _, ok := remoteID(req.Attach.Session); ok {
+		s.serveRemoteAttach(c, br, req.Attach.Session)
 		return
 	}
 	sess, perr := s.session(req.Attach.Session)

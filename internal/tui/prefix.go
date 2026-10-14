@@ -20,7 +20,7 @@ import (
 func prefixHint() string {
 	return "prefix ▸ d dashboard · q quit · " + boundKeys("a", "i", "t", ",", "?", "n") + " popups · p " + boundKeys("]", "[") +
 		" projects · " + boundKeys("{", "}", "b") + " sidebar · " + boundKey("|") + " details · tab area · " + boundKey(";") +
-		" last place · r remote · esc cancel"
+		" last place · r remote · " + boundKey("R") + " repaint · esc cancel"
 }
 
 // prefixCommand runs the key typed after the prefix: a bound key runs as
@@ -45,7 +45,7 @@ func (m *dash) prefixCommand(key string) tea.Cmd {
 		// Already here: back to the bare list.
 		m.stack, m.focus = nil, areaMain
 		return nil
-	case m.over != nil && (key == "r" || key == "tab" || key == "|" || key == ";"):
+	case m.over != nil && (key == "r" || key == "R" || key == "tab" || key == "|" || key == ";"):
 		// The session's own: back to it, which runs the command (the
 		// remote control question, the sidebar's keyboard, its info
 		// panel, the last place).
@@ -54,6 +54,9 @@ func (m *dash) prefixCommand(key string) tea.Cmd {
 	case key == "r":
 		m.stack = nil
 		return m.askRemote()
+	case key == "R":
+		m.stack = nil
+		return m.listKey(key)
 	case paneCommands[key] && key != "tab":
 		// The sidebar's width and slim strip; the popup stays.
 		return m.listKey(key)

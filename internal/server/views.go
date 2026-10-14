@@ -46,6 +46,9 @@ type paneInfo struct {
 	// panel: the session is a thread's or a coordinator's, so a view
 	// showing it has the info panel (view.View.Panel).
 	panel bool
+	// remote: a paired server's pane (docs/SPEC.md §16.12): only typing
+	// sizes it, never showing it or a layout.
+	remote bool
 }
 
 type views struct {
@@ -359,8 +362,9 @@ func (vs *views) tag(v *view.View) {
 
 // resize sizes the session lv shows to its pane at its size. With claim
 // set (a claim from typing) only a session that follows typing is
-// resized. vs.mu held.
-func (vs *views) resize(lv *liveView, claim bool) {
+// resized; typed says the claim is a console's keys, the only one that
+// sizes a remote pane. vs.mu held.
+func (vs *views) resize(lv *liveView, claim, typed bool) {
 	v := &lv.v
 	if v.Mode != view.ModeLayout || v.Cols == 0 || v.Rows == 0 {
 		return
@@ -368,7 +372,7 @@ func (vs *views) resize(lv *liveView, claim bool) {
 	g := v.Lay(int(v.Cols), int(v.Rows))
 	r := g.Area
 	info, alive := vs.host.pane(g.Pane)
-	if g.Pane == "" || !alive || r.W < 1 || r.H < 1 || claim && !info.follows {
+	if g.Pane == "" || !alive || r.W < 1 || r.H < 1 || claim && !info.follows || info.remote && !typed {
 		return
 	}
 	vs.host.resizePane(g.Pane, uint16(r.W), uint16(r.H))
@@ -521,7 +525,7 @@ func (vs *views) do(method string, p proto.ViewParams) (view.View, *proto.Error)
 	v.Normalize()
 	vs.tag(v)
 	if resize {
-		vs.resize(lv, claim)
+		vs.resize(lv, claim, method == proto.MethodViewInput)
 	}
 	vs.fill(lv)
 	if !view.Equal(before, *v) {
@@ -533,6 +537,11 @@ func (vs *views) do(method string, p proto.ViewParams) (view.View, *proto.Error)
 // The server is the views' host.
 
 func (s *Server) pane(id string) (paneInfo, bool) {
+	if _, _, ok := remoteID(id); ok {
+		// Sized: no view gives it a size; no info panel, whose data is
+		// this server's own projects'.
+		return paneInfo{follows: true, sized: true, remote: true}, s.remotes != nil && s.remotes.alive(id)
+	}
 	sess, perr := s.session(id)
 	if perr != nil {
 		return paneInfo{}, false
@@ -541,6 +550,17 @@ func (s *Server) pane(id string) (paneInfo, bool) {
 }
 
 func (s *Server) resizePane(id string, cols, rows uint16) {
+	if _, _, ok := remoteID(id); ok {
+		if s.remotes != nil {
+			s.remotes.mu.Lock()
+			rp := s.remotes.byID[id]
+			s.remotes.mu.Unlock()
+			if rp != nil {
+				rp.size(cols, rows)
+			}
+		}
+		return
+	}
 	sess, perr := s.session(id)
 	if perr != nil {
 		return

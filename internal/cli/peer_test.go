@@ -37,7 +37,7 @@ func TestPeerUsageAndGuard(t *testing.T) {
 	h.expect(2, "--relay URL", human, "peer", "pair")
 	h.expect(2, "--relay: relay", human, "peer", "pair", "--relay", "https://r.example.net")
 	h.expect(2, "16 digits", human, "peer", "join", "r.example.net/1234")
-	for _, c := range [][]string{{"pair", "--relay", "r.example.net"}, {"join", "r.example.net/7Q4M-K2XD-9HVA-PT3C"}, {"list"}, {"remove", "mini"}, {"rotate", "--yes"}} {
+	for _, c := range [][]string{{"pair", "--relay", "r.example.net"}, {"join", "r.example.net/7Q4M-K2XD-9HVA-PT3C"}, {"list"}, {"remove", "mini"}, {"rotate", "--yes"}, {"panes", "mini", "type"}} {
 		h.expect(1, "human-only", coord, append([]string{"peer"}, c...)...)
 		h.expect(1, "human-only", thr, append([]string{"peer"}, c...)...)
 	}
@@ -84,6 +84,22 @@ func TestPeerListRemoveRotate(t *testing.T) {
 	if r, err := pairRelay(dir, ""); err != nil || r != "wss://r.example.net" {
 		t.Fatalf("pairRelay: %q, %v", r, err)
 	}
+
+	// The pane switch (docs/SPEC.md §16.12).
+	h.expect(2, "off|view|type", human, "peer", "panes", "mini", "write")
+	h.expect(2, "usage: tm peer pair", human, "peer", "panes", "mini")
+	h.expect(1, "unknown-peer", human, "peer", "panes", "studio", "view")
+	if out := h.ok(human, "peer", "panes", "mini", "type"); !strings.Contains(out, "Panes type for mini") || *reloads != 1 {
+		t.Fatalf("panes: %q, %d reloads", out, *reloads)
+	}
+	if out := h.ok(human, "peer", "list"); !strings.Contains(out, "panes: type") {
+		t.Fatalf("list with panes: %q", out)
+	}
+	if ps, _ := peer.LoadPeers(dir); ps[0].Alias != "mini" || ps[0].Panes != proto.PanesType {
+		t.Fatalf("after panes: %+v", ps)
+	}
+	h.ok(human, "peer", "panes", "mini", "off")
+	*reloads = 0
 
 	h.expect(1, "unknown-peer", human, "peer", "remove", "studio")
 	if out := h.ok(human, "peer", "remove", "nas"); !strings.Contains(out, "Removed nas") || *reloads != 1 {

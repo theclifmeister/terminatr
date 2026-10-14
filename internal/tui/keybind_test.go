@@ -26,7 +26,7 @@ var wantIDs = []string{
 	"list.up", "list.down", "list.page-up", "list.page-down", "focus.next", "focus.prev", "place.last", "row.open",
 	"session.adopt", "project.activate", "card.fold", "project.new", "project.popup", "project.tasks", "project.inbox",
 	"project.next", "project.prev", "list.narrower", "list.wider", "sidebar.narrower", "sidebar.wider",
-	"sidebar.slim", "details.toggle", "settings.open", "help.open", "console.quit",
+	"sidebar.slim", "details.toggle", "settings.open", "pane.repaint", "help.open", "console.quit",
 	"side.up", "side.down", "side.enter", "side.unfold", "side.fold", "side.back", "side.activate",
 	"side.fold-all", "side.unfold-all", "side.pin", "side.first", "side.last", "side.page-up", "side.page-down",
 	"side.nth", "side.needs-next", "side.needs-prev", "side.filter", "side.help",
