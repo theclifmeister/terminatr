@@ -12,10 +12,10 @@ import (
 	"cmp"
 	"context"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
-	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modsup"
@@ -50,15 +50,19 @@ func (s *Server) newModHosts() *modsup.Supervisor {
 }
 
 // runModHosts gives the supervisor the enabled code mods now and after
-// every change, until ctx ends; it then stops their hosts.
+// every change, until ctx ends; it then stops their hosts. Each poll
+// only stats the mods' files (s.installedMods): the specs are worked out again
+// when the registry was read anew.
 func (s *Server) runModHosts(ctx context.Context, sup *modsup.Supervisor) {
 	defer sup.Close()
 	poll := cmp.Or(envDuration(envModsPoll), defaultModsPoll)
 	t := time.NewTicker(poll)
 	defer t.Stop()
+	var applied *mod.Registry
 	for {
-		if specs, ok := s.modSpecs(); ok {
-			sup.Set(specs)
+		if reg, ok, _ := s.installedMods(0); ok && reg != nil && reg != applied {
+			sup.Set(s.specsOf(reg))
+			applied = reg
 		}
 		s.expireModViews()
 		select {
@@ -73,19 +77,20 @@ func (s *Server) runModHosts(ctx context.Context, sup *modsup.Supervisor) {
 // enabled, and bundled in safe mode. A config.toml that doesn't load
 // changes nothing (ok false).
 func (s *Server) modSpecs() ([]modsup.Spec, bool) {
-	cfg, err := config.Load()
-	if err != nil {
+	// The broker answers the hosts started from reg by reg (one reader,
+	// s.installedMods), not by a registry it read before the mod was installed or
+	// enabled: that one would refuse every call of a new host's first
+	// second (T301 B7).
+	reg, ok, _ := s.installedMods(0)
+	if !ok || reg == nil {
 		return nil, false
 	}
-	reg, err := mod.Load(cfg)
-	if err != nil {
-		return nil, false
-	}
+	return s.specsOf(reg), true
+}
+
+// specsOf is modSpecs from registry reg.
+func (s *Server) specsOf(reg *mod.Registry) []modsup.Spec {
 	s.noteMods(reg)
-	// The broker answers the hosts started from reg by reg, not by a
-	// registry it read before the mod was installed or enabled: that
-	// one would refuse every call of a new host's first second (T301 B7).
-	s.shareModRegistry(reg)
 	var specs []modsup.Spec
 	for _, m := range reg.Mods {
 		if m.State != mod.Enabled || m.Manifest == nil || !m.Manifest.IsCode() || s.noMods && !m.Builtin {
@@ -100,7 +105,7 @@ func (s *Server) modSpecs() ([]modsup.Spec, bool) {
 		if m.Builtin {
 			// Precompiled into tm (go generate ./internal/mod): it
 			// runs without esbuild.
-			b, err := m.ReadFile(m.Manifest.Provides.Main)
+			b, err := builtinBundle(m)
 			if err != nil {
 				s.log.Printf("mods: built-in %s: %v", m.ID, err)
 				continue
@@ -111,7 +116,24 @@ func (s *Server) modSpecs() ([]modsup.Spec, bool) {
 		}
 		specs = append(specs, sp)
 	}
-	return specs, true
+	return specs
+}
+
+// builtinBundles are the built-in code mods' bundles, by mod id, read
+// once: they are part of tm.
+var builtinBundles sync.Map
+
+// builtinBundle is built-in mod m's precompiled bundle.
+func builtinBundle(m mod.Mod) ([]byte, error) {
+	if b, ok := builtinBundles.Load(m.ID); ok {
+		return b.([]byte), nil
+	}
+	b, err := m.ReadFile(m.Manifest.Provides.Main)
+	if err != nil {
+		return nil, err
+	}
+	builtinBundles.Store(m.ID, b)
+	return b, nil
 }
 
 // ModHosts is the supervised code mods' state (the Mods tab, tm mod
