@@ -274,6 +274,8 @@ func Attach(opts Options) (res Result, err error) {
 	switch opts.Command {
 	case "r":
 		go c.askRemote()
+	case "R":
+		go c.repaint()
 	case "tab", "|":
 		go c.paneCommand(opts.Command)
 	case "":
@@ -1277,7 +1279,31 @@ func (c *client) run(do prefixDo) {
 		c.paneCommand(do.pane)
 	case do.remote:
 		c.askRemote()
+	case do.repaint:
+		c.repaint()
 	}
+}
+
+// repaint asks the focused pane, a paired server's, for a fresh repaint
+// from that server (docs/SPEC.md §16.12); this server's own panes are
+// always current.
+func (c *client) repaint() {
+	if !c.lock() {
+		return
+	}
+	p := c.focus
+	if p == nil || p.info.Server == "" {
+		c.flash = "prefix+" + keyShown(boundKey("R")) + " repaints a paired server's pane; this one is this server's"
+		c.status()
+		c.mu.Unlock()
+		c.poke()
+		return
+	}
+	c.flash = "repainting from " + p.info.Server
+	c.status()
+	c.mu.Unlock()
+	c.poke()
+	c.send(p, proto.FrameRepaintReq, nil)
 }
 
 // prefixDo is what a key does given whether the prefix came before it.
@@ -1292,6 +1318,8 @@ type prefixDo struct {
 	// remote asks to turn the focused coordinator's remote control on
 	// or off.
 	remote bool
+	// repaint asks a paired server's pane for a fresh repaint (prefix+R).
+	repaint bool
 	// command: a mod's command has the key (attachcommands.go).
 	command bool
 }
@@ -1337,6 +1365,8 @@ func prefixStep(prefix chord, pending bool, k uv.Key, dashboard bool) prefixDo {
 		return prefixDo{detach: true}
 	case name == "r":
 		return prefixDo{remote: true}
+	case name == "R":
+		return prefixDo{repaint: true}
 	case popupCommands[name] && dashboard:
 		return prefixDo{popup: name}
 	case prefixCommands[name] && dashboard:

@@ -176,7 +176,7 @@ const pendingHead = " prefix ▸ "
 func pendingList() string {
 	return "d dashboard · q quit · " + boundKey("a") + " project · " + boundKey("n") + " new · p " + boundKeys("]", "[") +
 		" projects · " + boundKeys("i", "t", ",", "?") + " · " + boundKeys("{", "}", "b") + " sidebar · " + boundKey("|") +
-		" info · tab sidebar keys · " + boundKey(";") + " last place · r remote control"
+		" info · tab sidebar keys · " + boundKey(";") + " last place · r remote control · " + boundKey("R") + " repaint"
 }
 
 // The status bar's notes while the sidebar's cursor previews a row:

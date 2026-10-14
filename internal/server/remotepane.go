@@ -375,6 +375,16 @@ func (rp *remotePane) size(cols, rows uint16) {
 	}
 }
 
+// repaint asks the far server for a fresh repaint (prefix+R).
+func (rp *remotePane) repaint() {
+	rp.mu.Lock()
+	conn := rp.conn
+	rp.mu.Unlock()
+	if conn != nil {
+		conn.Repaint()
+	}
+}
+
 // sessionInfo is the pane as a SessionInfo for the console.
 func (rp *remotePane) sessionInfo() proto.SessionInfo {
 	rp.mu.Lock()
@@ -436,6 +446,8 @@ loop:
 			rp.keys(payload)
 		case proto.FrameDigestReq:
 			rp.proxy.RequestDigest(sub)
+		case proto.FrameRepaintReq:
+			rp.repaint()
 		case proto.FrameDetach:
 			reason = "detach"
 			break loop

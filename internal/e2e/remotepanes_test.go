@@ -83,6 +83,11 @@ func TestSmokeRemotePanes(t *testing.T) {
 	if r := studio.CLI("inbox", "list", "--project", "demo"); r.Code == 0 && strings.Contains(r.Stdout, "takeover") {
 		t.Fatalf("studio raised a takeover: %s", r.Stdout)
 	}
+	// prefix+R asks mini for a fresh repaint; the pane stays mini's.
+	w.Prefix("R")
+	w.WaitUntil("the repaint note", wait, func(sc string) bool { return strings.Contains(sc, "repainting from mini") })
+	w.WaitFor("hello from studio", wait)
+
 	// Session actions don't cross.
 	if r := studio.CLI("session", "stop", remote); r.Code == 0 || !strings.Contains(r.Stdout+r.Stderr, "open it on mini") {
 		t.Fatalf("session stop on a remote pane: %d %s %s", r.Code, r.Stdout, r.Stderr)

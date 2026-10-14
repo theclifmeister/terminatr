@@ -396,3 +396,27 @@ func TestRemoteStatus(t *testing.T) {
 		t.Errorf("a local pane: %q", why)
 	}
 }
+
+// TestPrefixRepaint: prefix+R asks for a repaint, rebound with
+// pane.repaint like any action; the session's menu offers it on a paired
+// server's pane only.
+func TestPrefixRepaint(t *testing.T) {
+	prefix, _ := parseChord(DefaultPrefixKey)
+	if do := prefixStep(prefix, true, cmdKey("R"), false); !do.repaint {
+		t.Fatalf("prefix+R: %+v", do)
+	}
+	if do := prefixStep(prefix, false, cmdKey("R"), false); !do.input {
+		t.Fatalf("plain R goes to the program: %+v", do)
+	}
+	has := func(c *client) bool {
+		return slices.ContainsFunc(c.sessionItems(), func(it aitem) bool { return it.key == "prefix+R" })
+	}
+	c := &client{side: &sidebar{}, focus: &pane{info: proto.SessionInfo{ID: "mini/r-1", Server: "mini", Role: proto.RoleCoordinator}}}
+	if !has(c) {
+		t.Error("no repaint in a remote pane's menu")
+	}
+	c.focus.info = proto.SessionInfo{ID: "s-1", Role: proto.RoleCoordinator}
+	if has(c) {
+		t.Error("repaint in a local pane's menu")
+	}
+}

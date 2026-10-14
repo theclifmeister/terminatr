@@ -123,6 +123,10 @@ const (
 	// answers to OSC 10, 11 and 4 gave them (emu.Colors.Encode). The
 	// pane's OSC 10/11/4 queries are answered with them.
 	FrameColors FrameType = 16
+	// FrameRepaintReq asks a paired server's pane (docs/SPEC.md §16.12)
+	// for a fresh repaint from its server: prefix+R. A session of this
+	// server ignores it.
+	FrameRepaintReq FrameType = 17
 )
 
 // MaxFrame bounds a frame's payload.

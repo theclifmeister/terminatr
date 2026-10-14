@@ -26,6 +26,7 @@
 "details.toggle" = ["|"]
 "settings.open" = [","]
 "help.open" = ["?"]
+"pane.repaint" = ["R"]
 "side.up" = ["up", "k"]
 "side.down" = ["down", "j"]
 "side.enter" = ["enter"]

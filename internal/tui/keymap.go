@@ -36,6 +36,7 @@ func sessionKeys() []keyHelp {
 		{"prefix+tab", "the keyboard to the next area: in a session the projects sidebar (its keys below), the info panel (↑ ↓ scroll, enter its task) and back to the pane, which gets no keys meanwhile; on the dashboard as tab"},
 		{"prefix+" + boundKey(";"), "back to the last place: the area, sidebar row and session the keyboard was in before, such as the thread you were typing in; again goes back"},
 		{"prefix+r", "turn remote control of a coordinator on or off, to continue it from another device (asks first): the session's, or on the dashboard the selected project's; ⌁ beside the coordinator's state in the sidebar while it is on. With the project's setting on, tm turns it back on when it drops, but your off holds until the coordinator is started anew"},
+		{"prefix+" + boundKey("R"), "in a paired server's pane (docs: remote panes): ask that server for a fresh repaint, when the pane looks off; the pane repaints by itself after a slow link or a dropped one"},
 		{"prefix+<key>", "a mod's command on that key (Mod commands): in a session it runs in the session's project with the session selected, and a view it opens shows over the session; the plain key still goes to the program"},
 		{"prefix+prefix", "send the prefix key itself to the program"},
 	}
