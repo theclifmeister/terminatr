@@ -235,6 +235,55 @@ The coordinator opens merge requests with `glab mr create`, threads report their
 
 Without the CLI and a login (or a PAT for Azure DevOps), that host's PRs are not followed: no follow-up prompts, no auto-close on merge, no completing tasks on merge, and after 3 failed polls the project's inbox gets a "PR host failing" item. Threads, tasks and reports are unaffected. The full table is in SPEC §3. terminatr's own release flow (below) is GitHub-only and unrelated to the hosts of your projects.
 
+## Running a relay
+
+Two tm servers are joined through a relay that both dial out to (SPEC §16), so neither machine needs an open port. You run the relay yourself, on a host both machines can reach: a small VPS, or a NAS at home. It is `tm relay serve` from the same binary; it stores nothing and sees only key fingerprints, IP addresses, sizes and timing, never what the servers say to each other (that is TLS with keys pinned at pairing, inside the stream).
+
+What it needs:
+
+- **A public address and a DNS name.** Both servers dial `wss://<name>`, often from outside your home network (a laptop on hotel Wi-Fi). A VPS has both. A **NAS at home doesn't by default**: give it a DNS name (your own domain, or a dynamic DNS name that follows your home IP) and forward a public port on the router to it (443, or any port: the link then dials `wss://<name>:<port>`). Behind carrier-grade NAT (no public IPv4 on the router) port forwarding can't work: use a VPS, or IPv6 if both ends have it. Without a public port the relay only serves machines on your LAN.
+- **A certificate for that name**, from a CA (Let's Encrypt): the link checks it as any HTTPS client does. It protects the connection to the relay; what the servers trust in each other is their pinned keys, not this certificate.
+- **Port 443 open** (and 80 for ACME's HTTP challenge, with the Caddy setup).
+- A `tm` release that has `tm relay serve`.
+
+### Docker (VPS or NAS)
+
+`deploy/relay/` in the repository has everything; copy that folder to the host.
+
+With Caddy getting the certificate by ACME (simplest; needs ports 80 and 443 and the DNS name pointing at the host):
+
+```sh
+cd deploy/relay
+RELAY_HOST=relay.example.net docker compose -f compose.acme.yaml up -d --build
+```
+
+With certificate files you already have (certbot, your NAS's own Let's Encrypt, a wildcard): put `fullchain.pem` and `privkey.pem` in `deploy/relay/certs/`, readable by uid 65532 (the image's non-root user), then `docker compose up -d --build`. The relay reads the files again when they change, so a renewal needs no restart; copy renewed files in from your ACME client's deploy hook (certbot's `live/` files are symlinks with a root-only key, so copy, don't mount them).
+
+Pin the release: set `TM_VERSION` in the compose file's build args to a tag (e.g. `v0.27.0`); the Dockerfile checks the download against the release's `checksums.txt`. To upgrade, change the tag and run `docker compose up -d --build`; connected servers drop and reconnect by themselves. The image has amd64 and arm64 builds (most NAS boxes are one of them); it listens on 8443 inside and is published as 443.
+
+On a NAS (Synology Container Manager, QNAP Container Station, Unraid, TrueNAS apps): create a project from `compose.yaml` or `compose.acme.yaml`. If the NAS's own web interface already holds ports 80 and 443, publish the relay on another port (`"8443:8443"`, forwarded on the router as 8443) and use the NAS's reverse proxy or your own certificate files instead of Caddy.
+
+### systemd (a VPS without Docker)
+
+```sh
+sudo install -m 755 tm /usr/local/bin/tm        # from the release tarball
+sudo cp deploy/relay/tm-relay.service /etc/systemd/system/
+sudoedit /etc/systemd/system/tm-relay.service    # the two LoadCredential lines: your certificate's files
+sudo systemctl daemon-reload && sudo systemctl enable --now tm-relay
+```
+
+The unit runs the relay as a throwaway user with only the right to bind 443; systemd hands it the certificate, so certbot's root-only key works. After a renewal restart it (`certbot renew --deploy-hook "systemctl restart tm-relay"`). Logs: `journalctl -u tm-relay`.
+
+### Checking it
+
+```sh
+curl https://relay.example.net/healthz     # ok
+```
+
+The log (`docker compose logs relay`, or the journal) shows `serving on …`, rooms as they mate and connections as they leave, by room kind and a short room id, with bytes and duration; client addresses only if you add `--log-ips`. Limits (SPEC §16.4) can be raised with `--max-conns`, `--max-per-ip` and `--bandwidth` (MiB/s per address); the defaults are generous for two servers.
+
+Behind your own reverse proxy (nginx, Traefik, the NAS's), run the relay with `--plain --listen :8080` on a private address, have the proxy pass WebSockets to it, and name the proxy with `--trusted-proxy <its address or subnet>`, so the relay's limits count real clients and not the proxy.
+
 ## Checking an installation: tm doctor
 
 `tm doctor` checks your installation and changes nothing:

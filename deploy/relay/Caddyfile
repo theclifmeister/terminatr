@@ -1,0 +1,6 @@
+# Caddy in front of tm relay (compose.acme.yaml): automatic HTTPS for
+# RELAY_HOST, WebSockets passed to the relay. Caddy replaces any
+# X-Forwarded-For a client sends with what it saw.
+{$RELAY_HOST} {
+	reverse_proxy relay:8080
+}

@@ -1,0 +1,52 @@
+# tm relay as a systemd service (docs/OPERATIONS.md, Running a relay).
+#
+#   sudo install -m 755 tm /usr/local/bin/tm
+#   sudo cp tm-relay.service /etc/systemd/system/
+#   # edit the two LoadCredential lines to your certificate's files
+#   sudo systemctl daemon-reload && sudo systemctl enable --now tm-relay
+#
+# The relay runs as a throwaway user with only the right to bind 443. The
+# certificate is handed to it by systemd (LoadCredential, read as root,
+# so certbot's 0600 privkey.pem works). After a renewal, restart it:
+#   certbot ... --deploy-hook "systemctl restart tm-relay"
+# Restarting drops the links for a moment; they reconnect by themselves.
+
+[Unit]
+Description=terminatr relay (tm relay serve)
+Documentation=https://github.com/theclifmeister/terminatr/blob/main/docs/OPERATIONS.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/tm relay serve --listen :443 --cert ${CREDENTIALS_DIRECTORY}/fullchain.pem --key ${CREDENTIALS_DIRECTORY}/privkey.pem
+LoadCredential=fullchain.pem:/etc/letsencrypt/live/relay.example.net/fullchain.pem
+LoadCredential=privkey.pem:/etc/letsencrypt/live/relay.example.net/privkey.pem
+Restart=on-failure
+RestartSec=2s
+
+DynamicUser=yes
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+LimitNOFILE=8192
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

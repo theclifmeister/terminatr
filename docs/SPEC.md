@@ -98,6 +98,7 @@ One binary, several roles:
 | `internal/modtest` | `tm mod test`: replays a mod's event fixtures against it in an in-process host with a fake broker (§5.3) |
 | `internal/moddev` | The mod author's tools: `tm mod new`'s scaffolds, and the folder watch and log tail of `tm mod dev` and `tm mod logs` (§5.3) |
 | `internal/modbroker` | The broker for user mods: every `$` call checked against the mod's grants and done by the server; the path, host and program checks and the credential deny list (§5.3) |
+| `internal/relay` | `tm relay serve`, the meeting point of two linked servers, and the client side a server dials it with: the WebSocket subset, the signed hello, rooms, limits (§16) |
 
 The dependency rule: `server`, `session`, `ticker`, `tui`, `project`, `thread` and `tasks` MUST NOT import `internal/agent/<name>` or mention any agent by name. They see only `internal/agent`.
 
@@ -1641,6 +1642,7 @@ These commands are used by the human, the coordinator and threads alike. Exit co
 | `tm doctor [--fix [--yes]] [--json]` | human | checks and changes nothing; `--fix` offers to remove leftovers and restart an old server after a `y` on a terminal (`--yes` instead, needed without one); `--json` for scripts; exit 1 only when a check fails. Checks: toolchain (with `gh auth status`: a warning when `gh` isn't logged in or can't read its token, since the ticker's PR polls need it, §7.5; the code-host lines (`gh`, `gh auth`, the `az` lines, `git origin`) are the running server's, from `server.codehost`, since over SSH on a Mac this shell has no login keychain while the server's sessions do: each carries `source` "server" in `--json` (a field added to every check, empty for the others) and `[server]` in the text; where this shell fails a check the server passes, a `local shell` note (ok, source "local") says so instead of a warning; with no server, or an older one, the checks run in this shell and are labelled `local`), install method and newer release, server (a server of an older protocol is a warning whose fix is `tm server restart`; on macOS, a server whose sessions can't reach the keychain is a warning whose fix is a restart from the Mac, §3.1; a session whose queued prompts are held while its agent is idle is a `prompt queue` warning, §8.6), sockets, manifests, hooks, enabled Claude plugins known to be unsafe in tm sessions (`claude plugin list --json`; a warning naming the reason and `claude plugin disable <id>`, no fix; the list is `unsafePlugins` in `internal/doctor/plugins.go`, today `worktrees@supermods`, whose "Remove N finished" removes clean worktrees with no commits ahead, which includes a fresh thread's), leftovers, settings tm no longer has (`complete_tasks = "released"`, read as `user`, in a project's table or `[defaults]`), and the installed agents and their models (§8.2 **Models**; doctor asks each installed agent again: a fail `agent` line when none is installed, naming the agents tm knows; per installed agent an ok `<agent> models` line, `12 models, asked 2.1.296 today (Claude Max, firstParty)`, with the models the user hid, added and the account refused, or a warning `unknown: <reason>` (logged out, with the login to run; probe failed; no lister); a fail for a `thread_agent` / `coordinator_agent` that isn't installed or tm doesn't know, naming who sets it; and warnings for several agents installed with none chosen for all projects, a `default_model` the agent doesn't offer now, the older `[agents.<name>] models` list, `[agents.<name>]` of an agent tm doesn't know, a manifest's ignored `[[models]]`, a `coordinator_model` its agent doesn't offer, and each model in a project's scope no installed agent offers, naming who allows it) |
 | `tm mod list [--outdated] [--json] \| install <path\|git-url[//subfolder][@tag]\|github-tree-url> [--yes] \| enable <id> [--project <slug>] [--yes] \| disable <id> [--project <slug>] \| remove <id> [--purge] [--yes] \| update [<id>] [--yes] \| validate [<dir>…] [--json]` | human; list and validate: anyone | user mods, §5.3: install by path or git URL only, consent on a terminal (`--yes` without one) |
 | `tm mod new <id> [--kind column\|hook\|theme\|icons\|keymap\|rules] [--dir <dir>] \| dev <dir> [--yes] \| test [<dir>…] [--json] \| logs <id> [--follow\|-f] [--lines\|-n N]` | dev: human; the rest: anyone | the mod author's tools, §5.3: scaffold, run from a folder with a restart on every save, replay fixtures with a fake broker, read a mod's log |
+| `tm relay serve [--listen ADDR] (--cert FILE --key FILE \| --plain) [--trusted-proxy CIDR]… [--max-conns N] [--max-per-ip N] [--bandwidth MiB/s] [--log-ips]` | human (`human-only` for an agent) | the relay two linked servers meet through, on the user's own host (§16): `--listen` defaults to `:443`; TLS from the certificate files, reloaded when they change, or `--plain` for a TLS proxy in front, whose `X-Forwarded-For` counts only from a `--trusted-proxy`; runs until SIGINT or SIGTERM |
 | `tm update [--check [--json]] [--yes] [--restart]` | human | §10.1 |
 | `tm version` (or `--version`), `tm selftest`, `tm help` | anyone | the version and build id; `selftest` writes a line through libghostty-vt to show it is linked; `help` (or `-h`, `--help`) lists the commands |
 
@@ -1959,6 +1961,7 @@ Lives in `internal/e2e/fakeagent`, a small Go TUI. It behaves like Claude Code 2
   | `mdfile` front matter; the `TASKS.md` parser with the property `parse(render(x)) == x` | exists |
   | the `REPORT.md` validator; `STATUS.md` | exists |
   | inbox items (`project.FuzzParseItem`), `gh` PR JSON (`ticker.FuzzParsePR`), nudge text (`ticker.FuzzNudgeText`) | exists |
+  | the relay's WebSocket reader (`relay.FuzzReadMessage`) and hello check (`relay.FuzzCheckHello`, never accepts an unsigned hello) | exists |
 
 - **Crashers.** Every crasher found by the weekly run is committed under `testdata/fuzz/<Target>/`, which makes it a regression test on every PR.
 
@@ -1975,3 +1978,135 @@ Lives in `internal/e2e/fakeagent`, a small Go TUI. It behaves like Claude Code 2
 - **Arbitration table:** every row of §8.4 and of the spike's stale-case table (§8.6) is a unit test.
 - **Data never becomes instructions:** fuzzed report and PR text never shows up in an injected prompt (§11.2).
 - **Task rules:** agents can never set `done`, and threads can only touch their own task's steps. These run against a real server, with agent and human callers (§6.4, §11.1).
+
+---
+
+## 16. The relay
+
+Two tm servers are joined through a relay (the T233 design, phase 1):
+both dial out to it, so neither listens on the network, and TLS 1.3
+with keys pinned at pairing runs inside the stream it copies. The relay
+is `tm relay serve`, the same binary, which the user runs on their own
+host: a VPS or a NAS, usually in Docker (`deploy/relay/`,
+docs/OPERATIONS.md, **Running a relay**). It stores nothing and sees
+only key fingerprints, IP addresses, sizes and timing; never aliases,
+project slugs, messages, pane content or a pairing code. It can drop or
+delay traffic; it can't read or forge it, nor join a room without a key.
+
+This section is the relay's side. The link that dials it (identity key,
+pinned TLS, backoff, `tm link pair`) is relay 2/7 and 3/7.
+
+### 16.1 Transport
+
+- **WebSocket** on `/v1`, over TLS (`wss://`, port 443): a request with
+  `Upgrade: websocket`, `Sec-WebSocket-Version: 13` and
+  `Sec-WebSocket-Protocol: tm-relay.1`, else HTTP 400 or 426. No
+  extensions. `GET /healthz` answers `ok`; any other path is 404.
+- **Our own framing.** tm implements the RFC 6455 subset it uses
+  (`internal/relay/ws.go`, both ends); there is no WebSocket module. Clients
+  mask their frames, the relay doesn't; reserved bits are refused;
+  fragments are reassembled; control frames are at most 125 bytes. A
+  message is at most **64 KiB** (close 1009 `too-big`); the client splits
+  a longer write.
+- **Standard library crypto only:** `crypto/ed25519` for the hello,
+  `crypto/sha256` for fingerprints and rooms, `crypto/tls` for the outer
+  TLS, `crypto/rand` for nonces and masks, `crypto/sha1` for the
+  handshake's accept value. No new module.
+- **TLS** is the outer layer only (TLS 1.2 or later, a CA certificate for
+  the relay's name); what the servers trust is the pinned TLS inside.
+  Certificate files are read again when either changes in size or time,
+  so an ACME client renewing them needs no restart; a pair that fails to
+  load keeps the last good one. tm has no ACME client of its own (the
+  standard library has none): a proxy in front does it (Caddy in
+  `deploy/relay/compose.acme.yaml`) or certbot writes the files.
+- **Behind a TLS proxy** (`--plain`), the client address is the direct
+  peer's, unless that peer is in a `--trusted-proxy` prefix: then it is the
+  last `X-Forwarded-For` entry not itself trusted. A header from anyone
+  else is ignored.
+
+### 16.2 Hello
+
+Text messages, JSON, before a room is joined; bytes are base64, ids hex.
+
+1. relay → client: `{"t":"challenge","v":1,"nonce":"<32 bytes>","max":65536}`.
+2. client → relay: `{"t":"hello","kind":"link"|"pair","key":"<Ed25519 public key>","room":"<64 hex>","peer":"<64 hex>","sig":"<signature>"}`
+   within 10 s of the upgrade (close 4408 `timeout`). `peer` is for
+   `link` only.
+   - `sig` is Ed25519 over `"tm-relay hello v1\n" ‖ nonce ‖ kind ‖ 0x00 ‖
+     room ‖ peer`: a fresh nonce per connection, so a hello can't be
+     replayed, and every field signed (close 4403 `bad-signature`).
+   - A key's **fingerprint** is SHA-256 of the public key.
+   - **link** rooms: `room` MUST be `SHA-256("tm-relay room v1\n" ‖
+     min(fp, peer) ‖ max(fp, peer))` and `peer ≠ fp` (close 4403
+     `bad-room`). Both servers compute the same room; the relay checks it
+     from the key it just verified, so only the two key holders can sit in
+     a link room, and the relay is no open pipe.
+   - **pair** rooms: `room` comes from the one-time pairing code, which
+     the relay never sees, so it can't check it. Pair rooms are capped
+     instead (§16.4).
+   - Anything else malformed: close 4400 `bad-hello`.
+3. relay → client: `{"t":"wait"}` while the peer isn't there (the relay
+   is up, the peer is not: the link shows "offline · peer"), then
+   `{"t":"mated"}` once it is. "mated" always comes before the first
+   byte from the peer.
+4. Then **binary messages only**, copied unchanged to the other side, in
+   order. Binary before "mated", or text after it, closes the connection
+   (1002 `protocol`).
+
+`v` is the relay wire version; an incompatible change gets a new
+subprotocol and version, and a client refuses a version it doesn't
+speak.
+
+### 16.3 Rooms
+
+- Kept in memory, keyed by kind and room id; one waiting connection per room.
+- A connection with a **different key** mates with the waiting one.
+- The **same key** again replaces the waiting connection (a server
+  reconnecting after a dropped link); the old one is closed 4409
+  `replaced`. In a mated room it ends the old pair: the old connection
+  gets `replaced`, its partner 4410 `peer-gone`, and the newcomer waits.
+- Another key in a mated pair room: 4409 `room-full`. (A link room only
+  ever admits its two keys.)
+- When one side leaves, the relay closes the other with 4410 `peer-gone`.
+- On SIGINT or SIGTERM every connection gets 1001 `shutdown`.
+
+### 16.4 Limits
+
+Per address (an IPv6 address counts by its /64):
+
+| Limit | Default | Over it |
+|---|---|---|
+| connections from one address | 16 (`--max-per-ip`) | HTTP 429 |
+| new connections from one address | 30 a minute, burst 10 | HTTP 429 |
+| connections in all | 1024 (`--max-conns`) | HTTP 429 |
+| bytes one address sends | 4 MiB/s, burst 8 MiB (`--bandwidth`) | slowed, never dropped |
+| a link room waiting | 1 h | 4408 `timeout`; the client dials again |
+| a pair room waiting | 10 min | 4408 `timeout` |
+| a mated pair room | 2 min and 256 KiB in all | 4429 `pair-limit` |
+| a frame | the relay pings every 30 s; 90 s without a frame closes | closed |
+| the HTTP request | headers in 10 s, at most 8 KiB | closed |
+
+### 16.5 What it logs and keeps
+
+Nothing on disk. Its log (standard error) has the start and stop, refused
+hellos, rooms mated and connections left, by room kind and the first four
+bytes of the room id, with duration and bytes in. Client addresses only
+with `--log-ips`. Address counters are forgotten ten minutes after an
+address's last connection.
+
+### 16.6 Packaging
+
+- `deploy/relay/Dockerfile`: the released Linux binary for the image's
+  architecture (amd64, arm64), checked against the release's
+  `checksums.txt` as `scripts/install.sh` does, on `distroless/cc`
+  (glibc and nothing else), as uid 65532, listening on 8443 (published
+  as 443, so it needs no capability). `TM_VERSION` pins the release.
+- `deploy/relay/compose.yaml`: certificate files mounted read-only.
+  `compose.acme.yaml` with `Caddyfile`: Caddy gets the certificate by
+  ACME and passes the WebSocket to a `--plain` relay on an internal
+  network, trusting only that network's `X-Forwarded-For`.
+- `deploy/relay/tm-relay.service`: a systemd unit with a throwaway user
+  (`DynamicUser`), only `CAP_NET_BIND_SERVICE`, the certificate handed
+  over by `LoadCredential`, and a strict sandbox.
+- `TestRelayDeployFilesUseRealFlags` runs each file's command line
+  through `tm relay serve`'s parser.

@@ -14,8 +14,11 @@
 package proc
 
 import (
+	"context"
 	"errors"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -58,4 +61,10 @@ type Spec struct {
 	// Stdin, Stdout and Stderr are its standard files; nil for the null
 	// device.
 	Stdin, Stdout, Stderr *os.File
+}
+
+// UntilStopped returns a context that ends when this process is asked to
+// stop: SIGINT or SIGTERM (on Windows, Ctrl-C or the console closing).
+func UntilStopped(parent context.Context) (context.Context, context.CancelFunc) {
+	return signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 }

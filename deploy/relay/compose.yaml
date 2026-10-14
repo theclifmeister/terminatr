@@ -1,0 +1,25 @@
+# tm relay with certificate files you provide (docs/OPERATIONS.md,
+# Running a relay). Put fullchain.pem and privkey.pem in ./certs,
+# readable by uid 65532; the relay reloads them when they change.
+#
+#   docker compose up -d --build
+#
+# For a certificate obtained and renewed automatically (ACME), use
+# compose.acme.yaml instead.
+services:
+  relay:
+    build:
+      context: .
+      args:
+        TM_VERSION: latest # pin a tag, e.g. v0.27.0
+    image: tm-relay
+    restart: unless-stopped
+    ports:
+      - "443:8443"
+    volumes:
+      - ./certs:/certs:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    pids_limit: 256
