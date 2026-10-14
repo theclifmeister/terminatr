@@ -14,11 +14,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/worktree"
@@ -203,8 +203,8 @@ func Project(o Options) (*Result, error) {
 
 // under reports path's place below dir, when it is below it.
 func under(dir, path string) (string, bool) {
-	rel, err := filepath.Rel(dir, filepath.Clean(path))
-	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	rel, ok := fsx.Within(dir, filepath.Clean(path))
+	if !ok || rel == "." {
 		return "", false
 	}
 	return rel, true

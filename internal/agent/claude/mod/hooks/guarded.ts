@@ -21,6 +21,7 @@ import type { EngineInterface, On } from 'claude-code'
 
 import { judge, off, rulesOf } from './guard'
 import type { Denial, Rules } from './guard'
+import { failed, postInit, refused, socketURL } from './socket'
 
 // RULES_TTL_MS is how long fetched rules hold; FETCH_MS bounds a fetch.
 const RULES_TTL_MS = 1_000
@@ -69,7 +70,7 @@ async function rulesNow($: EngineInterface): Promise<Rules> {
 
 async function fetchRules($: EngineInterface, socket: string): Promise<Rules> {
   const got = await Promise.race([
-    $.http.fetch('http://terminatr/v1/rules', { socketPath: socket }),
+    $.http.fetch(socketURL('/v1/rules'), { socketPath: socket }),
     $.clock.sleep(FETCH_MS).then(() => null),
   ])
   if (got && got.ok) return rulesOf(got.text)
@@ -83,13 +84,10 @@ async function reportDenial($: EngineInterface, tool: string, d: Denial) {
   const socket = (await $.env.get('TERMINATR_MOD_SOCKET')) ?? ''
   if (!socket) return
   try {
-    const r = await $.http.fetch('http://terminatr/v1/denied', {
-      method: 'POST', socketPath: socket, headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ rule: d.rule, tool, summary: d.summary }),
-    })
-    if (!r.ok) log($, `terminatr: guard report: ${r.status} ${r.text}`)
+    const r = await $.http.fetch(socketURL('/v1/denied'), postInit(socket, JSON.stringify({ rule: d.rule, tool, summary: d.summary })))
+    if (!r.ok) log($, refused('guard report', r.status, r.text))
   } catch (err) {
-    log($, `terminatr: guard report: ${String(err)}`)
+    log($, failed('guard report', err))
   }
 }
 

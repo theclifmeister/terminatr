@@ -86,3 +86,24 @@ func (pr PR) Summary() string {
 	}
 	return strings.Join(parts, ", ")
 }
+
+// setRefs sets the PR's MergedAt, Head, Merge and Base from a host's
+// answer, each only when it has the shape tm keeps: mergedAt an RFC 3339
+// time after 2000 and merge a commit id, both only once pr.State is
+// MERGED; head a commit id; base a branch name. A field that fails is
+// left as it was. Every host maps its answer through it, so the rule is
+// one place.
+func (pr *PR) setRefs(mergedAt, head, merge, base string) {
+	if at, err := time.Parse(time.RFC3339Nano, mergedAt); err == nil && pr.State == "MERGED" && at.Year() > 2000 {
+		pr.MergedAt = at.UTC()
+	}
+	if oidRE.MatchString(head) {
+		pr.Head = head
+	}
+	if pr.State == "MERGED" && oidRE.MatchString(merge) {
+		pr.Merge = merge
+	}
+	if branchRE.MatchString(base) {
+		pr.Base = base
+	}
+}

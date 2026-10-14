@@ -13,6 +13,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/mdfile"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
 var now = time.Now
@@ -305,7 +306,7 @@ type Row struct {
 
 // labelled matches a summary that starts with a thread's label
 // (thread.Label): "T12 Title (t-0001) what happened".
-var labelled = regexp.MustCompile(`^(T[0-9]{1,9}) (.+?) \(t-[0-9]{4,}\)(.*)$`)
+var labelled = regexp.MustCompile(`^(` + tasks.RefPattern + `) (.+?) \(` + tasks.ThreadIDPattern + `\)(.*)$`)
 
 // Parts splits a summary into the task ref, what happened and the task
 // title. A summary without a label is all "what".

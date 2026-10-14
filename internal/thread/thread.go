@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -97,10 +96,9 @@ func refuse(code, format string, a ...any) error {
 	return &Error{Code: code, Msg: fmt.Sprintf(format, a...)}
 }
 
-var idRE = regexp.MustCompile(`^t-[0-9]{4,}$`)
-
-// ValidID reports whether s looks like a thread id ("t-0003").
-func ValidID(s string) bool { return idRE.MatchString(s) }
+// ValidID reports whether s looks like a thread id ("t-0003",
+// tasks.ValidThreadID).
+func ValidID(s string) bool { return tasks.ValidThreadID(s) }
 
 // Dir is threads/<id>/ of a project.
 func Dir(p *project.Project, id string) string { return p.Path("threads", id) }
@@ -214,8 +212,8 @@ func Create(p *project.Project, rec Record) (*Record, error) {
 		}
 	}
 	for _, name := range names {
-		if n, ok := strings.CutPrefix(name, "t-"); ok {
-			if v, err := strconv.Atoi(n); err == nil && v >= next {
+		if ValidID(name) {
+			if v, err := strconv.Atoi(name[len("t-"):]); err == nil && v >= next {
 				next = v + 1
 			}
 		}

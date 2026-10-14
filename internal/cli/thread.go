@@ -18,7 +18,6 @@ import (
 	"strings"
 	"text/tabwriter"
 	"time"
-	"unicode"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
@@ -29,6 +28,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
 	"github.com/theclifmeister/terminatr/internal/worktree"
@@ -1264,12 +1264,7 @@ func (e *Env) threadAnswer(p *project.Project, id string, a answerArgs) error {
 	if err != nil {
 		return err
 	}
-	a.text = strings.TrimSpace(strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
-			return ' '
-		}
-		return r
-	}, a.text))
+	a.text = strings.TrimSpace(textsafe.Clean(a.text, false))
 	if info.Question != nil {
 		return e.answerByMod(p, id, r.Session, info.Question, a)
 	}

@@ -415,18 +415,17 @@ func azurePR(t Target, pr, policies, statuses []byte) (PR, error) {
 	default:
 		out.Mergeable = "UNKNOWN"
 	}
-	if at, err := time.Parse(time.RFC3339Nano, a.ClosedDate); err == nil && out.State == "MERGED" && at.Year() > 2000 {
-		out.MergedAt = at.UTC()
+	var head, merge, base string
+	if c := a.LastMergeSourceCommit; c != nil {
+		head = c.CommitID
 	}
-	if c := a.LastMergeSourceCommit; c != nil && oidRE.MatchString(c.CommitID) {
-		out.Head = c.CommitID
+	if c := a.LastMergeCommit; c != nil {
+		merge = c.CommitID
 	}
-	if c := a.LastMergeCommit; c != nil && out.State == "MERGED" && oidRE.MatchString(c.CommitID) {
-		out.Merge = c.CommitID
+	if b, ok := strings.CutPrefix(a.TargetRefName, "refs/heads/"); ok {
+		base = b
 	}
-	if b, ok := strings.CutPrefix(a.TargetRefName, "refs/heads/"); ok && branchRE.MatchString(b) {
-		out.Base = b
-	}
+	out.setRefs(a.ClosedDate, head, merge, base)
 	if b, ok := strings.CutPrefix(a.SourceRefName, "refs/heads/"); ok && branchRE.MatchString(b) {
 		out.Branch = b
 	}

@@ -6,9 +6,7 @@ package ticker
 // head.
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -241,23 +239,22 @@ func headState(repo string, pr PR, base string) (state string, ok bool) {
 // Seen is what the ticker last saw for project slug, from its state
 // file at path, for project.Context: PR state lines and checkout notes.
 func Seen(path, slug string) project.Ticked {
-	return project.Ticked{PRs: Summaries(path, slug), Checkouts: Checkouts(path, slug)}
+	s := Load(path)
+	return project.Ticked{PRs: s.Summaries(slug), Checkouts: s.Checkouts(slug)}
 }
 
 // Checkouts are the notes on project slug's checkouts that are behind
 // origin (worktree.Checkout's Note), by repo path, from the state file
 // at path. A missing file gives none.
 func Checkouts(path, slug string) map[string]string {
+	return Load(path).Checkouts(slug)
+}
+
+// Checkouts are the notes on project slug's checkouts that are behind
+// origin, by repo path.
+func (s State) Checkouts(slug string) map[string]string {
 	out := map[string]string{}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return out
-	}
-	var st state
-	if json.Unmarshal(b, &st) != nil {
-		return out
-	}
-	pm := st.Projects[slug]
+	pm := s.st.Projects[slug]
 	if pm == nil {
 		return out
 	}

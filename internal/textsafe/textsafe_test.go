@@ -1,0 +1,63 @@
+package textsafe
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestClean(t *testing.T) {
+	for _, c := range []struct{ in, one, lines string }{
+		{"plain text", "plain text", "plain text"},
+		{"a\nb", "a b", "a\nb"},
+		{"a\tb\vc\fd", "a b c d", "a b c d"},
+		{"a\r\nb", "a  b", "a \nb"},
+		{"a\u0085b", "a b", "a b"},
+		// escapes and other controls are dropped
+		{"\x1b[31mred\x1b[0m", "[31mred[0m", "[31mred[0m"},
+		{"a\x00b\x7fc\u009bd", "abcd", "abcd"},
+		// bidi overrides, isolates and marks
+		{"abc\u202edcba", "abcdcba", "abcdcba"},
+		{"\u2066x\u2069\u200e\u200f\u061c", "x", "x"},
+		// zero-width characters, the soft hyphen and the BOM
+		{"a\u200bb\u200cc\u200dd\u2060e\u00adf\ufeffg", "abcdefg", "abcdefg"},
+		// tag characters
+		{"x\U000e0041\U000e007fy", "xy", "xy"},
+		// line and paragraph separators are white space
+		{"a\u2028b\u2029c", "a b c", "a b c"},
+		// not UTF-8, and the replacement character itself
+		{"a\xffb\ufffdc", "abc", "abc"},
+		// wide text is text
+		{"日本 ✓ é", "日本 ✓ é", "日本 ✓ é"},
+	} {
+		if got := Clean(c.in, false); got != c.one {
+			t.Errorf("Clean(%q, false) = %q, want %q", c.in, got, c.one)
+		}
+		if got := Clean(c.in, true); got != c.lines {
+			t.Errorf("Clean(%q, true) = %q, want %q", c.in, got, c.lines)
+		}
+		if Safe(c.in) != (c.in == c.one) {
+			t.Errorf("Safe(%q) = %v", c.in, Safe(c.in))
+		}
+	}
+}
+
+func TestLine(t *testing.T) {
+	for _, c := range []struct {
+		in   string
+		n    int
+		want string
+	}{
+		{"  one\n\ttwo   three ", 80, "one two three"},
+		{"abc\u202edef", 80, "abcdef"},
+		{"a\u200b\u200bb", 80, "ab"},
+		{"a\u2028\u2029b", 80, "a b"},
+		{"abcdefghij", 5, "abcd…"},
+		{"abc   defgh", 5, "abc…"},
+		{strings.Repeat("é", 10), 10, strings.Repeat("é", 10)},
+		{"x", 0, "x"},
+	} {
+		if got := Line(c.in, c.n); got != c.want {
+			t.Errorf("Line(%q, %d) = %q, want %q", c.in, c.n, got, c.want)
+		}
+	}
+}

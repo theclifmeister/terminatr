@@ -17,10 +17,34 @@ var oidRE = regexp.MustCompile(`^[0-9a-f]{40}$`)
 // (codehost.PR, docs/SPEC.md §7.5).
 type PR = codehost.PR
 
+// State is the ticker's state file as read once, for the callers that
+// want several things of it (PRs, Timing, Checkouts, HostFails) without
+// parsing it for each. A missing or unreadable file is the zero State,
+// which has none of anything: the ticker hasn't polled yet.
+type State struct{ st state }
+
+// Load reads the ticker's state file at path.
+func Load(path string) State {
+	var s State
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return s
+	}
+	if json.Unmarshal(b, &s.st) != nil {
+		return State{}
+	}
+	return s
+}
+
 // Summaries is PRs as Summary lines, for project.Context.
 func Summaries(path, slug string) map[string]string {
+	return Load(path).Summaries(slug)
+}
+
+// Summaries is PRs(slug) as Summary lines.
+func (s State) Summaries(slug string) map[string]string {
 	out := map[string]string{}
-	for id, pr := range PRs(path, slug) {
+	for id, pr := range s.PRs(slug) {
 		out[id] = pr.Summary()
 	}
 	return out
@@ -30,7 +54,13 @@ func Summaries(path, slug string) map[string]string {
 // the threads of project slug, by thread id. A missing or unreadable
 // file gives none: the ticker hasn't polled yet.
 func PRs(path, slug string) map[string]PR {
-	prs, _ := ReadProject(path, slug)
+	return Load(path).PRs(slug)
+}
+
+// PRs is the PR fields kept for the threads of project slug, by thread
+// id.
+func (s State) PRs(slug string) map[string]PR {
+	prs, _ := s.Project(slug)
 	return prs
 }
 
@@ -47,16 +77,14 @@ type Timing struct {
 // whose PR polls fail: how many failed in a row, by slug (Timing's
 // GHFailing for each). One read for all projects, as the sidebars poll.
 func HostFails(path string) map[string]int {
+	return Load(path).HostFails()
+}
+
+// HostFails is how many PR polls failed in a row, by project slug, for
+// the projects whose polls fail.
+func (s State) HostFails() map[string]int {
 	out := map[string]int{}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return out
-	}
-	var st state
-	if json.Unmarshal(b, &st) != nil {
-		return out
-	}
-	for slug, pm := range st.Projects {
+	for slug, pm := range s.st.Projects {
 		if pm != nil && pm.GHFails > 0 {
 			out[slug] = pm.GHFails
 		}
@@ -67,21 +95,19 @@ func HostFails(path string) map[string]int {
 // ReadTiming reads project slug's Timing from the ticker's state file at path;
 // zero when there is none.
 func ReadTiming(path, slug string) Timing {
-	_, t := ReadProject(path, slug)
+	_, t := Load(path).Project(slug)
 	return t
 }
 
 // ReadProject is PRs and ReadTiming from one read of the state file.
 func ReadProject(path, slug string) (map[string]PR, Timing) {
+	return Load(path).Project(slug)
+}
+
+// Project is project slug's PRs and Timing.
+func (s State) Project(slug string) (map[string]PR, Timing) {
 	prs, t := map[string]PR{}, Timing{ThreadPolled: map[string]time.Time{}}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return prs, t
-	}
-	var st state
-	if json.Unmarshal(b, &st) != nil {
-		return prs, t
-	}
+	st := s.st
 	if pm := st.Projects[slug]; pm != nil {
 		t.PRPolled, t.Synced, t.GHFailing = pm.PRPolled, pm.Synced, pm.GHFails > 0
 	}

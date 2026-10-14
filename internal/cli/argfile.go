@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
@@ -31,8 +30,8 @@ func (e *Env) openArg(path string) (*os.File, error) {
 	roots, private := e.argRoots()
 	var lastErr error
 	for _, root := range roots {
-		rel, err := filepath.Rel(root, path)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		rel, ok := fsx.Within(root, path)
+		if !ok {
 			continue
 		}
 		r, err := os.OpenRoot(root)
@@ -163,7 +162,7 @@ func holdsHome(dir string) bool {
 	}
 	for _, d := range []string{filepath.Clean(dir), realPath(dir)} {
 		for _, hd := range []string{filepath.Clean(h), realPath(h)} {
-			if rel, err := filepath.Rel(d, hd); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			if _, ok := fsx.Within(d, hd); ok {
 				return true
 			}
 		}
@@ -197,14 +196,14 @@ func agentFileOK(f *os.File, private []string) error {
 	h, _ := os.UserHomeDir()
 	for _, p := range private {
 		for _, pp := range []string{filepath.Clean(p), realPath(p)} {
-			if rel, err := filepath.Rel(pp, real); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			if _, ok := fsx.Within(pp, real); ok {
 				return &tasks.Error{Code: "outside-roots", Msg: fmt.Sprintf("%s is in a folder its agent's sandbox keeps from it", f.Name())}
 			}
 		}
 	}
 	for _, sec := range agent.Secrets(nil, h, os.Getenv) {
 		for _, sp := range []string{filepath.Clean(sec), realPath(sec)} {
-			if rel, err := filepath.Rel(sp, real); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			if _, ok := fsx.Within(sp, real); ok {
 				return &tasks.Error{Code: "outside-roots", Msg: fmt.Sprintf("%s is in a credential store", f.Name())}
 			}
 		}

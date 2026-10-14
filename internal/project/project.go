@@ -421,8 +421,8 @@ func Resolve(flag string, getenv func(string) string, cwd string) (string, error
 		if err != nil {
 			return "", err
 		}
-		rel, err := filepath.Rel(real(root), cwd)
-		if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		rel, ok := fsx.Within(real(root), cwd)
+		if !ok || rel == "." {
 			continue
 		}
 		slug, _, _ := strings.Cut(rel, string(filepath.Separator))

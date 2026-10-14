@@ -234,7 +234,7 @@ func (s *Server) modViews(p proto.ModViewsParams, pid int, c caller.Caller) (any
 		failed := ok && (st.State == modsup.Failed || st.State == modsup.Backoff)
 		for _, v := range m.Manifest.Provides.Views {
 			mv.View, mv.Title, mv.Slot = v.ID, mod.Clean(v.Title, false), v.Slot
-			mv.Description, mv.Opens = oneLine(mod.Clean(v.Description, false), mod.MaxViewDescription), v.Opens
+			mv.Description, mv.Opens = oneLine(v.Description, mod.MaxViewDescription), v.Opens
 			mv.State, mv.Err, mv.Log, mv.Trees = "", "", "", nil
 			if failed {
 				mv.State, mv.Err = proto.ModViewFailed, oneLine(st.Err, 200)

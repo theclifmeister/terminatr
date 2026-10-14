@@ -54,13 +54,10 @@ func CheckedOutIn(repo, branch string) string {
 // branch as last fetched ("origin/main"), else the repo's checked-out
 // branch; "" when there is neither. No fetch.
 func DefaultRef(repo string) string {
-	if ref, err := git(repo, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"); err == nil && ref != "" {
+	if ref := originHead(repo, false); ref != "" {
 		return ref
 	}
-	if ref, err := git(repo, "symbolic-ref", "--quiet", "--short", "HEAD"); err == nil && ref != "" {
-		return ref
-	}
-	return ""
+	return headBranch(repo)
 }
 
 // PruneBranch deletes a local branch only when that loses nothing: it is

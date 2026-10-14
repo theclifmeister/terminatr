@@ -97,21 +97,11 @@ func Probe(ctx context.Context, path string, l *agent.ModelLister, env []string)
 }
 
 // Version runs the agent's version_args and returns the version they
-// print, "" when the manifest has none or the agent doesn't say.
+// print, "" when the manifest has none or the agent doesn't say
+// (agent.Version, cached per binary).
 func Version(ctx context.Context, path string, m *agent.Manifest, env []string) string {
-	if len(m.Identify.VersionArgs) == 0 {
-		return ""
-	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, path, m.Identify.VersionArgs...)
-	cmd.Env = env
-	cmd.WaitDelay = time.Second
-	out, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	return agent.ParseVersion(string(out))
+	v, _ := agent.Version(ctx, path, m, env)
+	return v
 }
 
 // tail keeps the last line of what a probe wrote to stderr, for its

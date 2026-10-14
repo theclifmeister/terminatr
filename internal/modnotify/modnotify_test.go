@@ -14,7 +14,7 @@ func TestLineStripsControlAndClips(t *testing.T) {
 	if got := Line(strings.Repeat("x", 100), 10); got != "xxxxxxxxx…" {
 		t.Fatalf("clip = %q", got)
 	}
-	if got := Line("a\u202eb\u200bc", 10); got != "a b c" {
+	if got := Line("a\u202eb\u200bc", 10); got != "abc" {
 		t.Fatalf("format characters: %q", got)
 	}
 }

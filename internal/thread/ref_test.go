@@ -26,7 +26,10 @@ func TestByRef(t *testing.T) {
 	Create(p, Record{Title: "b", Task: "T2", State: Running})      // t-0003
 	Create(p, Record{Title: "b too", Task: "T2", State: Stopped})  // t-0004
 	Create(p, Record{Title: "c", Task: "T3", State: Resolved})     // t-0005
-	for ref, want := range map[string]string{"T1": "t-0002", "t1": "t-0002", "t-0001": "t-0001", "t-0099": "t-0099"} {
+	// A task ref is written as tm writes it (tasks.ValidRef): "t1",
+	// "T01" and "T0" aren't, and pass on as thread ids, for Load to
+	// refuse.
+	for ref, want := range map[string]string{"T1": "t-0002", "t1": "t1", "T01": "T01", "T0": "T0", "t-0001": "t-0001", "t-0099": "t-0099"} {
 		if got, err := ByRef(p, ref); err != nil || got != want {
 			t.Errorf("ByRef(%s) = %q, %v; want %q", ref, got, err, want)
 		}

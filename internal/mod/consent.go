@@ -8,9 +8,9 @@ import (
 	"path"
 	"slices"
 	"strings"
-	"unicode"
 
 	"github.com/theclifmeister/terminatr/internal/modaction"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // What the human sees before a mod is installed, enabled or updated
@@ -143,19 +143,9 @@ func (p Permissions) Words(perms []string) []string {
 	return out
 }
 
-// Clean is s without control characters (escape sequences, carriage
-// returns), each a space; newlines and tabs stay when lines.
-func Clean(s string, lines bool) string {
-	return strings.Map(func(r rune) rune {
-		switch {
-		case lines && (r == '\n' || r == '\t'):
-			return r
-		case unicode.IsControl(r) || r == ' ' || r == ' ' || unicode.Is(unicode.Bidi_Control, r):
-			return ' '
-		}
-		return r
-	}, s)
-}
+// Clean is s with what could be read as other than text each a space
+// (textsafe.Clean); newlines stay when lines.
+func Clean(s string, lines bool) string { return textsafe.Clean(s, lines) }
 
 // Headline is "Review age 0.3.1 (review-age) by Ada".
 func (m *Manifest) Headline() string {

@@ -180,6 +180,40 @@ func TestRel(t *testing.T) {
 	}
 }
 
+func TestWithin(t *testing.T) {
+	for _, c := range []struct {
+		dir, p, rel string
+		ok          bool
+	}{
+		{"/home/u", "/home/u", ".", true},
+		{"/home/u", "/home/u/", ".", true},
+		{"/home/u/", "/home/u/src/x", "src/x", true},
+		{"/home/u", "/home/u/..foo", "..foo", true},
+		{"/home/u", "/home/u2/x", "", false},
+		{"/home/u", "/home/..foo", "", false},
+		{"/home/u", "/home", "", false},
+		{"/home/u", "/home/u/../v", "", false},
+		{"/", "/etc", "etc", true},
+		{"/home/u", "rel/x", "", false},
+		{"rel", "/home/u", "", false},
+	} {
+		rel, ok := Within(filepath.FromSlash(c.dir), filepath.FromSlash(c.p))
+		if ok != c.ok || rel != filepath.FromSlash(c.rel) {
+			t.Errorf("Within(%q, %q) = %q, %v; want %q, %v", c.dir, c.p, rel, ok, c.rel, c.ok)
+		}
+	}
+	// Case is compared as filepath.Rel compares it: folded on Windows
+	// only, whatever the file system does.
+	if _, ok := Within("/home/u", "/Home/U/x"); ok != (runtime.GOOS == "windows") {
+		t.Errorf("Within across case = %v", ok)
+	}
+	if runtime.GOOS == "windows" {
+		if _, ok := Within(`C:\x`, `D:\x\y`); ok {
+			t.Error("Within across volumes")
+		}
+	}
+}
+
 func TestSamePath(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "f")

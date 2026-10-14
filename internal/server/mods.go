@@ -9,20 +9,12 @@ package server
 import (
 	"context"
 	"errors"
-	"os"
-	"os/exec"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/plat/shell"
 )
-
-// versionTimeout bounds `<agent> --version`, run with s.mu held, once per
-// agent binary (versions caches it).
-const versionTimeout = 5 * time.Second
 
 // modsSetting is [agent_mod] enabled; a config.toml that doesn't load leaves
 // mods off.
@@ -60,7 +52,7 @@ func (s *Server) modsFor(a agent.Agent, id string) bool {
 	if !ok || (!m.ModRequired() && !modsSetting()) {
 		return false
 	}
-	v, err := s.versions.of(a, s.baseEnv())
+	v, err := s.versionOf(a, s.baseEnv())
 	if err != nil {
 		s.log.Printf("session %s: no mod: %s version: %v", id, a.Name(), err)
 		return false
@@ -72,24 +64,10 @@ func (s *Server) modsFor(a agent.Agent, id string) bool {
 	return true
 }
 
-// versions caches each agent binary's version by its path, size and
-// modification time, so an upgrade is seen at the next launch.
-type versions struct {
-	mu   sync.Mutex
-	seen map[string]versionSeen
-	// run runs the binary with args under env (exec by default; tests).
-	run func(ctx context.Context, path string, args, env []string) ([]byte, error)
-}
-
-type versionSeen struct {
-	size    int64
-	mod     time.Time
-	version string
-}
-
-// of returns a's version as its version_args print it, the binary found
-// on env's PATH as a session would find it.
-func (vs *versions) of(a agent.Agent, env []string) (string, error) {
+// versionOf returns a's version as its version_args print it, the
+// binary found on env's PATH as a session would find it (agent.Versions
+// caches it per binary).
+func (s *Server) versionOf(a agent.Agent, env []string) (string, error) {
 	m := agent.ManifestOf(a)
 	if m == nil || len(m.Identify.VersionArgs) == 0 {
 		return "", errors.New("the manifest has no version_args")
@@ -98,40 +76,10 @@ func (vs *versions) of(a agent.Agent, env []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fi, err := os.Stat(path)
-	if err != nil {
-		return "", err
+	if s.versions == nil {
+		return agent.Version(context.Background(), path, m, env)
 	}
-	vs.mu.Lock()
-	defer vs.mu.Unlock()
-	if c, ok := vs.seen[path]; ok && c.size == fi.Size() && c.mod.Equal(fi.ModTime()) {
-		return c.version, nil
-	}
-	run := vs.run
-	if run == nil {
-		run = runVersion
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), versionTimeout)
-	defer cancel()
-	out, err := run(ctx, path, m.Identify.VersionArgs, env)
-	if err != nil {
-		return "", err
-	}
-	v := agent.ParseVersion(string(out))
-	if v == "" {
-		return "", errors.New("no version in " + strings.TrimSpace(string(out)))
-	}
-	if vs.seen == nil {
-		vs.seen = map[string]versionSeen{}
-	}
-	vs.seen[path] = versionSeen{size: fi.Size(), mod: fi.ModTime(), version: v}
-	return v, nil
-}
-
-func runVersion(ctx context.Context, path string, args, env []string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, path, args...)
-	cmd.Env = env
-	return cmd.Output()
+	return s.versions.Of(context.Background(), path, m, env)
 }
 
 // envValue is the value of key in env (KEY=VALUE entries), the last one

@@ -34,9 +34,6 @@ func (a Azure) Merge(repo string, pr PR) error {
 	})
 	args := []string{"rest", "--method", "patch", "--resource", azResource, "--url", a.prURL(pr.Number),
 		"--headers", "Content-Type=application/json", "--body", string(body)}
-	if sub, ok := azSubs.Load(a.Target.OrgURL); ok {
-		args = append(args, "--subscription", sub.(string))
-	}
-	_, err := a.az(repo, args...)
+	_, err := a.az(repo, a.withSub(args)...)
 	return err
 }

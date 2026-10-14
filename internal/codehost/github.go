@@ -128,18 +128,11 @@ func parseGitHubPR(data []byte) (PR, error) {
 	if upperRE.MatchString(g.ReviewDecision) {
 		pr.Review = g.ReviewDecision
 	}
-	if at, err := time.Parse(time.RFC3339, g.MergedAt); err == nil && pr.State == "MERGED" && at.Year() > 2000 {
-		pr.MergedAt = at.UTC()
+	var merge string
+	if g.MergeCommit != nil {
+		merge = g.MergeCommit.Oid
 	}
-	if oidRE.MatchString(g.HeadRefOid) {
-		pr.Head = g.HeadRefOid
-	}
-	if g.MergeCommit != nil && pr.State == "MERGED" && oidRE.MatchString(g.MergeCommit.Oid) {
-		pr.Merge = g.MergeCommit.Oid
-	}
-	if branchRE.MatchString(g.BaseRefName) {
-		pr.Base = g.BaseRefName
-	}
+	pr.setRefs(g.MergedAt, g.HeadRefOid, merge, g.BaseRefName)
 	if !g.CrossRepo && branchRE.MatchString(g.HeadRefName) {
 		pr.Branch = g.HeadRefName
 	}

@@ -63,7 +63,7 @@ func slowLaunchServer(t *testing.T) (s *Server, entered chan struct{}, release c
 	}
 	s.views = newViews(s, filepath.Join(t.TempDir(), "views.json"), t.Logf)
 	entered, release = make(chan struct{}, 16), make(chan struct{})
-	s.versions.run = func(ctx context.Context, _ string, _, _ []string) ([]byte, error) {
+	s.versions = &agent.Versions{Run: func(ctx context.Context, _ string, _, _ []string) ([]byte, error) {
 		entered <- struct{}{}
 		select {
 		case <-release:
@@ -71,7 +71,7 @@ func slowLaunchServer(t *testing.T) (s *Server, entered chan struct{}, release c
 			return nil, ctx.Err()
 		}
 		return []byte("9.9.9 (Claude Code)\n"), nil
-	}
+	}}
 	s.modelsCtx, s.modelsStop = context.WithCancel(context.Background())
 	t.Cleanup(s.shutdown)
 	return s, entered, release

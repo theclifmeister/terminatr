@@ -702,7 +702,7 @@ func (s *Server) commitLaunchLocked(p *preparedLaunch) (*session.Session, *proto
 	// The version is information for the drift notes and the log, never
 	// a gate (docs/SPEC.md §8.8). Cached per binary; off the launch path.
 	go func(env []string) {
-		v, err := s.versions.of(a, env)
+		v, err := s.versionOf(a, env)
 		if err != nil {
 			return
 		}

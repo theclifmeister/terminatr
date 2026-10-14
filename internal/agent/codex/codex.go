@@ -100,7 +100,7 @@ func (a *Agent) Launch(spec agent.LaunchSpec) (agent.Launch, error) {
 	}
 	l.Argv = append(l.Argv[:at:at], append(extra, l.Argv[at:]...)...)
 	if spec.Role == "coordinator" {
-		l = sandboxed(l, spec) // probe.go
+		l = sandboxed(l, spec, a.m) // probe.go
 	}
 	return l, nil
 }

@@ -43,13 +43,13 @@ func modsServer(t *testing.T, enabled bool, version string) (*Server, agent.Agen
 	runs := new(int)
 	var buf bytes.Buffer
 	s := &Server{opts: Options{Env: []string{"PATH=" + nowhere + bin}}, log: log.New(&buf, "", 0)}
-	s.versions.run = func(_ context.Context, path string, args, _ []string) ([]byte, error) {
+	s.versions = &agent.Versions{Run: func(_ context.Context, path string, args, _ []string) ([]byte, error) {
 		*runs++
 		if path != filepath.Join(bin, "claude"+testExe) || strings.Join(args, " ") != "--version" {
 			t.Errorf("ran %s %v", path, args)
 		}
 		return []byte(version + " (Claude Code)\n"), nil
-	}
+	}}
 	return s, modder{agent.FromManifest(m), m}, runs, &buf
 }
 

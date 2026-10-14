@@ -111,7 +111,7 @@ func TestModBroker(t *testing.T) {
 		t.Fatal(err)
 	}
 	items, _ := p.Inbox()
-	if len(items) != 1 || items[0].Kind != project.KindMod || items[0].Subject != "mod:lab label [31m T1 now" ||
+	if len(items) != 1 || items[0].Kind != project.KindMod || items[0].Subject != "mod:lab label[31m T1 now" ||
 		items[0].ID != got.(map[string]string)["id"] {
 		t.Fatalf("items = %+v", items)
 	}

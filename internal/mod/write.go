@@ -4,12 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // Writing [mods.<id>] (mods design §7, Where grants live). Enabling a
@@ -126,8 +125,8 @@ func checkText(v any) error {
 	if utf8.RuneCountInString(str) > MaxTextSetting {
 		return fmt.Errorf("must be at most %d characters", MaxTextSetting)
 	}
-	if strings.ContainsFunc(str, unicode.IsControl) {
-		return fmt.Errorf("must be one line, without control characters")
+	if !textsafe.Safe(str) {
+		return fmt.Errorf("must be one line, without control or format characters")
 	}
 	return nil
 }

@@ -31,6 +31,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
 
@@ -397,11 +398,6 @@ func (s *Server) guardDenied(r SessionRecord, d GuardDenial) {
 	}
 }
 
-// oneLine is s folded to one line of at most n runes.
-func oneLine(s string, n int) string {
-	s = strings.Join(strings.Fields(s), " ")
-	if r := []rune(s); len(r) > n {
-		s = string(r[:n-1]) + "…"
-	}
-	return s
-}
+// oneLine is s folded to one line of at most n runes, cleaned
+// (textsafe.Line): what it folds comes from agents and mods.
+func oneLine(s string, n int) string { return textsafe.Line(s, n) }

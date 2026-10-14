@@ -55,15 +55,36 @@ func DefaultBase(repo string) (string, error) {
 	if _, err := git(repo, "fetch", "--quiet", "origin"); err != nil {
 		return "", err
 	}
-	ref, err := git(repo, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
-	if err != nil || ref == "" {
-		// origin/HEAD isn't set in every clone; ask the remote.
-		git(repo, "remote", "set-head", "origin", "--auto")
-		if ref, err = git(repo, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"); err != nil || ref == "" {
-			return "", fmt.Errorf("%s: can't tell origin's default branch; pass --base", repo)
-		}
+	ref := originHead(repo, true)
+	if ref == "" {
+		return "", fmt.Errorf("%s: can't tell origin's default branch; pass --base", repo)
 	}
 	return ref, nil
+}
+
+// originHead is origin's default branch as last fetched ("origin/main"),
+// "" when origin/HEAD isn't set. origin/HEAD isn't set in every clone:
+// with ask, an unset one is first asked of the remote (git remote
+// set-head origin --auto), which needs the network.
+func originHead(repo string, ask bool) string {
+	ref, err := git(repo, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
+	if (err != nil || ref == "") && ask {
+		git(repo, "remote", "set-head", "origin", "--auto")
+		ref, err = git(repo, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
+	}
+	if err != nil {
+		return ""
+	}
+	return ref
+}
+
+// headBranch is the branch checked out in repo, "" when HEAD is detached.
+func headBranch(repo string) string {
+	ref, err := git(repo, "symbolic-ref", "--quiet", "--short", "HEAD")
+	if err != nil {
+		return ""
+	}
+	return ref
 }
 
 // Create adds a worktree at dir on a new branch from base. base "" means
@@ -207,10 +228,10 @@ func DeleteBranch(repo, branch string) error {
 // only the remote knows about is left to the PR check.
 func MergedBase(repo, branch string) string {
 	var bases []string
-	if ref, err := git(repo, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"); err == nil && ref != "" {
+	if ref := originHead(repo, false); ref != "" {
 		bases = append(bases, ref)
 	}
-	if ref, err := git(repo, "symbolic-ref", "--quiet", "--short", "HEAD"); err == nil && ref != "" && ref != branch {
+	if ref := headBranch(repo); ref != "" && ref != branch {
 		bases = append(bases, ref)
 	}
 	for _, b := range bases {
