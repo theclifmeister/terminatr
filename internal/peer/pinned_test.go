@@ -57,7 +57,7 @@ func TestRelayURLPin(t *testing.T) {
 		}
 	}
 	// peers.json takes a pinned relay, and refuses a bad pin.
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "peer")
 	key := pub(newKey(t))
 	if err := SavePeers(dir, []Peer{{Alias: "nas", Key: key, Relay: "wss://203.0.113.5#sha256=" + pin}}); err != nil {
 		t.Fatal(err)
