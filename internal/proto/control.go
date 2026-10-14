@@ -890,7 +890,7 @@ type ModView struct {
 	Trees []modview.Tree `json:"trees,omitempty"`
 }
 
-// The view states of ModView.
+// ModViewFailed is a ModView state; the view failed.
 const ModViewFailed = "failed"
 
 // MethodModCommand runs one of a mod's commands (mods design §2 tier 4):

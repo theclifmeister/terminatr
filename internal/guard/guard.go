@@ -100,7 +100,7 @@ type Tool struct {
 	Fields []string `json:"fields" toml:"fields"`
 }
 
-// SyntaxPowerShell: a shell tool whose command lines are PowerShell.
+// SyntaxPowerShell marks a shell tool whose command lines are PowerShell.
 const SyntaxPowerShell = "powershell"
 
 // Syntaxes are the syntaxes a manifest may give a shell tool.

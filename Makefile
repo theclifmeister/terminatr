@@ -39,9 +39,8 @@ GO           ?= go
 ZIG_MIN      := 0.16.0
 # staticcheck, pinned; `make vet` runs it after go vet.
 STATICCHECK  ?= honnef.co/go/tools/cmd/staticcheck@v0.8.1
-# every check but the doc-comment forms (ST1020-22), which ~18 exported names
-# elsewhere in the tree still fail; the TUI passes all of them.
-SC_CHECKS    ?= all,-ST1020,-ST1021,-ST1022
+# every check.
+SC_CHECKS    ?= all
 # staticcheck reads export data of the Go it runs under, and the pinned one
 # lags new Go releases (it fails on a newer local Go). So it runs under the
 # toolchain go.mod names. With GOTOOLCHAIN=local (CI) nothing is overridden:

@@ -17,7 +17,8 @@ import (
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
-// KindTaskDone: the ticker marked a task done by complete_tasks.
+// KindTaskDone is the kind of the entry for a task the ticker marked done
+// by complete_tasks.
 const KindTaskDone = "task-done"
 
 // mergeMemo is a thread's merged PR: kept past the thread's resolve, so

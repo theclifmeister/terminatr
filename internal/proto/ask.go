@@ -23,7 +23,7 @@ const (
 	EventAskClosed = "ask.closed"
 )
 
-// ErrNoQuestion: the session has no open question (no mod, or the menu
+// ErrNoQuestion means the session has no open question (no mod, or the menu
 // is gone).
 const ErrNoQuestion = "no-question"
 

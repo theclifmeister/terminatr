@@ -27,8 +27,8 @@ import (
 // as they were; the result is parsed before it replaces the file, which
 // happens atomically under the file's lock.
 
-// ErrForm: the file sets the setting in a form the line editor doesn't
-// change (a dotted key, an inline table); the user edits it by hand.
+// ErrForm means the file sets the setting in a form the line editor
+// doesn't change (a dotted key, an inline table); the user edits it by hand.
 var ErrForm = errors.New("this setting is set in a form tm can't change here")
 
 // SetProject sets one of a project's safety settings by its key
@@ -647,7 +647,7 @@ func UpdateRepos(slug string, fn func(old []string, set bool) ([]string, error))
 	})
 }
 
-// ErrProjectSet: config.toml already has settings for the new slug.
+// ErrProjectSet means config.toml already has settings for the new slug.
 var ErrProjectSet = errors.New("config.toml already has settings for that project")
 
 // RenameProject moves a project's settings, [projects.<from>] and any
