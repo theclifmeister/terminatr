@@ -124,6 +124,9 @@ type Item struct {
 	Subject   string `json:"subject"`
 	Summary   string `json:"summary"`
 	NeedsUser bool   `json:"needs_user"`
+	// Message is a link item's message id (docs/SPEC.md §7.9): a
+	// link-message item is how a mod hears that a linked project wrote.
+	Message string `json:"message,omitempty"`
 }
 
 // PR is pr.changed: what the ticker's poll learnt of a thread's PR.

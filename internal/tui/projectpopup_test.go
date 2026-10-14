@@ -1014,6 +1014,10 @@ func TestMemoryTab(t *testing.T) {
 		t.Fatalf("right from Memory: %d", pv.tab)
 	}
 	keyPress(m, "right")
+	if pv.tab != tabMessages {
+		t.Fatalf("right from Library: %d", pv.tab)
+	}
+	keyPress(m, "right")
 	if pv.tab != tabOverview {
 		t.Fatalf("right from the last tab: %d", pv.tab)
 	}

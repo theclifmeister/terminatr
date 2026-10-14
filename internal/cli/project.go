@@ -13,6 +13,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -34,7 +35,8 @@ const projectUsage = `usage: tm project new <slug> [--goal "…"] [--repo PATH].
        tm project pause|resume [<slug>]    (no nudges, PR follow-up or new threads while paused)
        tm project archive|unarchive <slug> (hidden from the sidebar; the ticker leaves it alone)
        tm project delete <slug> [--yes]    (moves it to the trash; asks first)
-       tm project rename <slug> <new-slug> [--json]   (no thread may run; restarts its coordinator)`
+       tm project rename <slug> <new-slug> [--json]   (no thread may run; restarts its coordinator)
+       tm project link <a> <b> [both|send|receive|off] [--ask|--no-ask]   (links both sides at once)`
 
 func runProject(e *Env, args []string) error {
 	if len(args) == 0 {
@@ -53,6 +55,8 @@ func runProject(e *Env, args []string) error {
 		return projectLifecycle(e, args[0], args[1:])
 	case "rename", "mv":
 		return projectRename(e, args[1:])
+	case "link":
+		return projectLink(e, args[1:])
 	case "open":
 		f := newFlags()
 		agentName := f.String("agent")
@@ -400,6 +404,7 @@ func runContext(e *Env, args []string) error {
 		return err
 	}
 	seen := ticker.Seen(tickerState(), p.Slug)
+	seen.Links = linkLines(p)
 	sessions, live := liveSessions()
 	if live {
 		seen.Working = thread.WorkingAll(sessions)
@@ -499,11 +504,17 @@ func runInbox(e *Env, args []string) error {
 			return err
 		}
 		var failed error
+		items, _ := p.Inbox()
 		for _, id := range pos {
 			if err := p.DoneItem(id); err != nil {
 				fmt.Fprintf(e.Stderr, "tm inbox: %v\n", err)
 				failed = &exitError{ExitRefused}
 				continue
+			}
+			for _, it := range items {
+				if it.ID == id {
+					link.Handled(p, it) // the sender sees it read
+				}
 			}
 			fmt.Fprintf(e.Stdout, "done %s\n", id)
 		}

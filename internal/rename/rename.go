@@ -131,6 +131,23 @@ func Project(o Options) (*Result, error) {
 	if err := config.RenameProject(o.From, o.To); err != nil {
 		note("config.toml still has [projects.%s]: %v (rename it to [projects.%s] by hand)", o.From, err, o.To)
 	}
+	// Linked projects keep their messages with it in messages/<slug>/
+	// (docs/SPEC.md §7.9).
+	if list, err := project.List(); err == nil {
+		for _, sum := range list {
+			other, err := project.Open(sum.Slug)
+			if err != nil || sum.Slug == o.To {
+				continue
+			}
+			from, to := other.Path("messages", o.From), other.Path("messages", o.To)
+			if _, err := os.Lstat(from); err != nil {
+				continue
+			}
+			if err := os.Rename(from, to); err != nil {
+				note("%s: messages with %s not moved to messages/%s: %v", sum.Slug, o.From, o.To, err)
+			}
+		}
+	}
 	p, err := project.Open(o.To)
 	if err != nil {
 		return res, err

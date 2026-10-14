@@ -271,6 +271,9 @@ type rawSafety struct {
 	// PROJECT.md, which the coordinator writes. Not a setting: neither
 	// the settings popups nor [defaults] have it.
 	Repos *[]string `toml:"repos"`
+	// Links are the project's links to other projects' coordinators
+	// (links.go): a project's own, never [defaults]'s.
+	Links map[string]any `toml:"links"`
 }
 
 // CheckAgent checks an agent name's shape: one word. Whether the
@@ -440,6 +443,8 @@ func Load() (*Config, error) {
 	c.Unknown = unknownMods
 	for _, k := range md.Undecoded() {
 		switch {
+		case len(k) >= 4 && k[0] == "projects" && k[2] == "links", len(k) >= 3 && k[0] == "defaults" && k[1] == "links":
+			// A link entry's table, read and checked by Links.
 		case len(k) >= 3 && k[0] == "projects", len(k) >= 2 && k[0] == "defaults":
 			return c, fmt.Errorf("%s: unknown setting %s", path, k.String())
 		case len(k) >= 2 && (k[0] == "keys" || k[0] == "ui" || k[0] == "mods" || k[0] == "agent_mod"),
@@ -453,6 +458,9 @@ func Load() (*Config, error) {
 	}
 	for slug := range raw.Projects {
 		if _, err := c.Safety(slug); err != nil {
+			return c, err
+		}
+		if _, err := c.Links(slug); err != nil {
 			return c, err
 		}
 	}
@@ -529,6 +537,9 @@ func (c *Config) AllProjects() (Safety, error) {
 	}
 	if c.defaults.Repos != nil {
 		return s, fmt.Errorf("%s: defaults can't set repos; each project's repos are its own", c.Path)
+	}
+	if c.defaults.Links != nil {
+		return s, fmt.Errorf("%s: defaults.links: links are per project", c.Path)
 	}
 	return s, c.defaults.apply(&s, c.Path, "defaults")
 }

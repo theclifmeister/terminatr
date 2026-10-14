@@ -126,6 +126,8 @@ func TestGlobalThreadCap(t *testing.T) {
 	readTOML(t, filepath.Join(projDir, "threads", "t-0003", "thread.toml"), &rec)
 	env.WaitState(&Session{ID: rec.Session}, "idle", agentWait)
 	env.MustCLI("thread", "stop", "t-0001", "--project", other) // stopped: a slot frees
+	// demo's coordinator, refused above, is told (T364).
+	waitInbox(t, env, "slot-free: a thread slot is free")
 	env.MustCLI("thread", "start", "Fourth", "--project", "demo")
 }
 

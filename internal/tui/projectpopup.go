@@ -42,10 +42,11 @@ const (
 	tabKeys
 	tabMemory
 	tabLibrary
+	tabMessages
 	tabCount
 )
 
-var tabNames = [tabCount]string{"overview", "inbox", "tasks", "settings", "keys", "memory", "library"}
+var tabNames = [tabCount]string{"overview", "inbox", "tasks", "settings", "keys", "memory", "library", "messages"}
 
 type projectView struct {
 	slug string
@@ -193,6 +194,10 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		return pv.repoKey(m, k)
 	case tabLibrary:
 		return pv.libraryKey(m, k)
+	case tabMessages:
+		if ls := pv.data(m).Links; (s == "enter" || s == "space") && pv.sel[tabMessages] < len(ls) {
+			return m.openConversation(pv.slug, ls[pv.sel[tabMessages]].Peer)
+		}
 	}
 	return nil
 }
@@ -266,6 +271,8 @@ func (pv *projectView) count(m *dash) int {
 		return len(project.Rows(pv.data(m).Items))
 	case tabLibrary:
 		return len(pv.library)
+	case tabMessages:
+		return len(pv.data(m).Links)
 	}
 	return 0
 }
@@ -357,6 +364,12 @@ func (pv *projectView) box(m *dash) box {
 		if len(pv.library) > 0 {
 			keys = "enter read · d delete · D delete the thread's · " + keys
 		}
+	case tabMessages:
+		body, sel, hits = messagesLines(p, pv.sel[tabMessages], w)
+		body = append(body, "", th().Faint.Render("Messages between this project's coordinator and linked projects' (tm link)."))
+		if len(p.Links) > 0 {
+			keys = "enter open · " + keys
+		}
 	}
 	head := []string{pv.tabBar(m, p), ""}
 	all := append([]int{tabHit, noHit}, hits...)
@@ -405,6 +418,11 @@ func (pv *projectView) click(m *dash, item, col int, double bool) tea.Cmd {
 		return pv.settings.click(m, item, col)
 	}
 	pv.sel[pv.tab] = item
+	if double && pv.tab == tabMessages {
+		if ls := pv.data(m).Links; item >= 0 && item < len(ls) {
+			return m.openConversation(pv.slug, ls[item].Peer)
+		}
+	}
 	if double && pv.tab == tabLibrary {
 		if f, ok := pv.selLib(); ok {
 			return m.openLibFile(pv, f)
@@ -470,6 +488,9 @@ func (pv *projectView) tabLabel(m *dash, p ProjectData, i int) string {
 	label := fmt.Sprintf("%d %s", i+1, tabNames[i])
 	if i == tabInbox && len(p.Items) > 0 {
 		label += fmt.Sprintf(" %d", len(p.Items))
+	}
+	if i == tabMessages && p.LinkWaits > 0 {
+		label += fmt.Sprintf(" %d", p.LinkWaits)
 	}
 	return label
 }
@@ -618,6 +639,10 @@ var kindWords = map[string]string{
 	"pr-conflict":      "PR conflict",
 	"close-held":       "kept open",
 	"gh-failing":       "PR host failing",
+	"link-message":     "message",
+	"link-held":        "message held",
+	"link-paused":      "link paused",
+	"slot-free":        "slot free",
 	"guard":            "guard refused",
 	"model-refused":    "model refused",
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"reflect"
 	"regexp"
@@ -362,6 +363,12 @@ func Edit(data []byte, table, key string, value any) ([]byte, error) {
 		}
 		return res, nil
 	}
+	if want, ok := value.(Link); ok {
+		if got, err := parseLink(v); err != nil || got != want {
+			return nil, ErrForm
+		}
+		return res, nil
+	}
 	if want, ok := value.([]string); ok {
 		// A TOML array decodes as []any.
 		arr, _ := v.([]any)
@@ -451,6 +458,12 @@ func tomlValue(v any) (string, error) {
 			parts[i] = "{ name = " + n + ", about = " + a + " }"
 		}
 		return "[" + strings.Join(parts, ", ") + "]", nil
+	case Link:
+		allow, _ := tomlValue(v.Allow)
+		if !v.Ask {
+			return allow, nil
+		}
+		return "{ allow = " + allow + ", ask = true }", nil
 	case []string:
 		parts := make([]string, len(v))
 		for i, x := range v {
@@ -634,13 +647,23 @@ func RenameTable(data []byte, from, to string) ([]byte, error) {
 	if _, ok := projects[to]; ok {
 		return nil, ErrProjectSet
 	}
-	if _, ok := projects[from]; !ok {
+	if _, ok := projects[from]; !ok && !linkedTo(projects, from) {
 		return data, nil
 	}
 	lines := strings.SplitAfter(string(data), "\n")
+	inLinks := false
 	for i, l := range lines {
 		h, ok := header(l)
-		if !ok || len(h) < 2 || h[0] != "projects" || h[1] != from {
+		if !ok {
+			// Other projects' links name the project by its slug: the key
+			// line follows it (docs/SPEC.md §7.9).
+			if _, _, isKey := setting(l, from); inLinks && isKey {
+				lines[i] = strings.Replace(l, from, to, 1)
+			}
+			continue
+		}
+		inLinks = len(h) == 3 && h[0] == "projects" && h[2] == "links"
+		if len(h) < 2 || h[0] != "projects" || h[1] != from {
 			continue
 		}
 		m := headerRE.FindStringSubmatchIndex(strings.TrimRight(l, "\r\n"))
@@ -658,13 +681,38 @@ func RenameTable(data []byte, from, to string) ([]byte, error) {
 	}
 	moved := map[string]any{}
 	for k, v := range projects {
+		if t, ok := v.(map[string]any); ok {
+			if links, ok := t["links"].(map[string]any); ok {
+				if lv, ok := links[from]; ok {
+					nt, nl := maps.Clone(t), maps.Clone(links)
+					nl[to] = lv
+					delete(nl, from)
+					nt["links"] = nl
+					v = nt
+				}
+			}
+		}
 		moved[k] = v
 	}
-	moved[to] = moved[from]
-	delete(moved, from)
+	if v, ok := moved[from]; ok {
+		moved[to] = v
+		delete(moved, from)
+	}
 	want["projects"] = moved
 	if !reflect.DeepEqual(after, want) {
 		return nil, ErrForm
 	}
 	return res, nil
+}
+
+// linkedTo reports whether a project's links name slug.
+func linkedTo(projects map[string]any, slug string) bool {
+	for _, v := range projects {
+		t, _ := v.(map[string]any)
+		links, _ := t["links"].(map[string]any)
+		if _, ok := links[slug]; ok {
+			return true
+		}
+	}
+	return false
 }

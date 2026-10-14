@@ -301,6 +301,7 @@ export declare namespace TM {
     subject: string;
     summary: string;
     needs_user: boolean;
+    message?: string;
   }
 
   interface InboxRaise {
@@ -370,6 +371,7 @@ export declare namespace TM {
     questions?: number;
     ticker?: WatchTicker;
     cells?: ModCell[];
+    links?: WatchLink[];
   }
 
   interface Question {
@@ -540,6 +542,17 @@ export declare namespace TM {
     task?: string;
     what: string;
     title?: string;
+  }
+
+  interface WatchLink {
+    peer: string;
+    state: string;
+    send?: boolean;
+    receive?: boolean;
+    paused?: boolean;
+    unread?: number;
+    held?: number;
+    last?: string;
   }
 
   interface WatchNeed {

@@ -62,6 +62,10 @@ type Ticked struct {
 	// across projects, by slug (thread.WorkingAll); nil when no server
 	// answered.
 	Working map[string]int
+	// Links are the project's links to other projects' coordinators, a
+	// line each (internal/link, which reads this package): none hides
+	// the section.
+	Links []string
 }
 
 // OpenQuestion is one session's open question menu, its Lines as tm
@@ -211,6 +215,9 @@ func (p *Project) Context(seen Ticked) ([]Section, error) {
 		inbox.Lines = append(inbox.Lines, fmt.Sprintf("%s  %s%s: %s", it.ID, it.Kind, flag, it.Summary))
 	}
 	out = append(out, inbox)
+	if len(seen.Links) > 0 {
+		out = append(out, Section{Title: "Links (tm link)", Lines: seen.Links})
+	}
 
 	lines, total, err := p.JournalTail(capJournal)
 	if err != nil {
