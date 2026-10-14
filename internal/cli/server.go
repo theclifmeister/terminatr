@@ -291,6 +291,9 @@ func serverStatus(e *Env, args []string) int {
 	fmt.Fprintf(e.Stdout, "sessions  %d\n", st.Sessions)
 	fmt.Fprintf(e.Stdout, "socket    %s\n", st.Socket)
 	fmt.Fprintf(e.Stdout, "home      %s\n", st.Home)
+	for _, l := range peerLines(st.Link, time.Now()) {
+		fmt.Fprintln(e.Stdout, l)
+	}
 	if st.PreviousShutdown == "crash" {
 		fmt.Fprintf(e.Stdout, "note      the previous server crashed; lost sessions: %s\n", strings.Join(st.Lost, " "))
 	}
@@ -310,4 +313,52 @@ func unloadJob() {
 	if c, err := server.LaunchdConfig(p); err == nil {
 		c.Unload()
 	}
+}
+
+// peerLines are server status's lines for the server id and each link
+// to a paired server; none before the server has an identity key.
+func peerLines(st *proto.LinkStatus, now time.Time) []string {
+	if st == nil {
+		return nil
+	}
+	var out []string
+	if st.ID != "" {
+		out = append(out, fmt.Sprintf("server id %s (%s)", st.Short, st.ID))
+	}
+	if st.Error != "" {
+		out = append(out, "peers     "+st.Error)
+	}
+	for _, p := range st.Peers {
+		parts := []string{p.State}
+		switch p.State {
+		case proto.LinkUp:
+			parts[0] += " " + ago(now, p.Since)
+			if p.RTT > 0 {
+				parts = append(parts, fmt.Sprintf("%.0f ms", max(p.RTT, 1)))
+			}
+			if p.Version != "" {
+				parts = append(parts, "tm "+p.Version)
+			}
+		case proto.LinkOffline:
+			parts[0] += " " + ago(now, p.Since)
+			if p.Reason != "" {
+				parts = append(parts, p.Reason)
+			}
+			if !p.Retry.IsZero() {
+				parts = append(parts, "dials again in "+p.Retry.Sub(now).Round(time.Second).String())
+			}
+		}
+		parts = append(parts, p.Transport)
+		line := fmt.Sprintf("peer      %s  %s", p.Alias, strings.Join(parts, " · "))
+		if p.State != proto.LinkUp && p.Error != "" {
+			line += "\n            " + p.Error
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
+// ago is how long ago t was, to the second.
+func ago(now, t time.Time) string {
+	return now.Sub(t).Round(time.Second).String()
 }

@@ -185,6 +185,55 @@ type ServerStatus struct {
 	// Resumed lists agent sessions of the previous server that were
 	// relaunched with their agent session ids (docs/SPEC.md §3.6).
 	Resumed []string `json:"resumed,omitempty"`
+	// Link is this server's links to its paired servers (docs/SPEC.md
+	// §16.7); nil until it has an identity key.
+	Link *LinkStatus `json:"link,omitempty"`
+}
+
+// LinkStatus is this server's identity and its links.
+type LinkStatus struct {
+	// ID is this server's id, 64 hex digits; Short the 8 people read.
+	ID    string `json:"id"`
+	Short string `json:"short"`
+	// Error is why the identity key or the peers can't be read.
+	Error string     `json:"error,omitempty"`
+	Peers []PeerLink `json:"peers,omitempty"`
+}
+
+// Link states.
+const (
+	LinkConnecting = "connecting" // dialling, or proving keys
+	LinkUp         = "up"
+	LinkOffline    = "offline" // Reason says why; Retry is the next dial
+)
+
+// Why a link is offline.
+const (
+	LinkReasonRelay   = "relay"   // the transport is down or closed the link
+	LinkReasonPeer    = "peer"    // the relay is up; the peer isn't in the room
+	LinkReasonRefused = "refused" // the other end's key isn't the paired one, or it refused ours
+	LinkReasonVersion = "version" // the peer's link protocol is too old
+)
+
+// PeerLink is the link to one paired server.
+type PeerLink struct {
+	Alias     string `json:"alias"`
+	ID        string `json:"id"`
+	Transport string `json:"transport"` // "relay relay.example.net"
+	State     string `json:"state"`
+	Reason    string `json:"reason,omitempty"`
+	// Since is when the link went into its state.
+	Since time.Time `json:"since"`
+	// Error is the last failure, for people.
+	Error string `json:"error,omitempty"`
+	// Retry is the next dial, when offline.
+	Retry time.Time `json:"retry,omitzero"`
+	// RTT is the last ping's round trip in milliseconds, when up.
+	RTT float64 `json:"rtt_ms,omitempty"`
+	// The peer's hello, from when the link was last up.
+	Version      string   `json:"version,omitempty"`
+	LinkProtocol int      `json:"link_protocol,omitempty"`
+	Caps         []string `json:"caps,omitempty"`
 }
 
 // KeychainStatus is the result of server.keychain.

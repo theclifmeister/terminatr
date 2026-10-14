@@ -29,6 +29,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modnotify"
 	"github.com/theclifmeister/terminatr/internal/modsup"
 	"github.com/theclifmeister/terminatr/internal/modview"
+	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/plat/shell"
@@ -196,6 +197,10 @@ type Server struct {
 	modelsCtx  context.Context
 	modelsStop context.CancelFunc
 
+	// peers are the links to paired servers (internal/peer); set before
+	// Run serves.
+	peers *peer.Manager
+
 	// protocol is the protocol the hello claims, and deaf hangs up on
 	// every hello: test hooks (testhooks.go).
 	protocol int
@@ -315,6 +320,10 @@ func Run(ctx context.Context, opts Options) error {
 	if err := s.saveLocked(""); err != nil {
 		logger.Printf("sessions.json: %v", err)
 	}
+	// The links to paired servers: each its own goroutine, which no
+	// local call waits on (docs/SPEC.md §16.7).
+	s.peers = peer.Start(peer.Options{Dir: peer.DirIn(p.Home), Version: version.Version, Logf: logger.Printf})
+	defer s.peers.Close()
 	logger.Printf("server pid %d %s protocol %d listening on %s", os.Getpid(), s.build, proto.Protocol, p.Socket)
 	go func() {
 		if st := keychain.Probe(runtime.GOOS, os.Getenv, keychain.Run); st.Checked && !st.OK {
@@ -373,6 +382,7 @@ func Run(ctx context.Context, opts Options) error {
 		logger.Printf("stopping: requested by a client")
 	}
 	s.modelsStop()
+	s.peers.Close()
 	// The mod hosts go first: nothing waits on them.
 	stopEvents()
 	<-hostsDone
@@ -962,6 +972,7 @@ func (s *Server) dispatch(req proto.Request, peerPID int, human bool, who func()
 }
 
 func (s *Server) status() proto.ServerStatus {
+	link := s.peers.Status()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return proto.ServerStatus{
@@ -976,6 +987,7 @@ func (s *Server) status() proto.ServerStatus {
 		PreviousShutdown: s.prevShut,
 		Lost:             s.lost,
 		Resumed:          s.resumed,
+		Link:             link,
 	}
 }
 
