@@ -474,7 +474,7 @@ func TestGoneWaitsForReason(t *testing.T) {
 // TestPeerGapsAndInactivePinned: a blank line above each paired
 // server's header; this server's inactive block comes after the groups
 // in the rows, and is drawn at the bottom of the tree with room to
-// spare, directly above the footer, else right after the last group.
+// spare, directly above the footer, else after the last group with a blank line between.
 func TestPeerGapsAndInactivePinned(t *testing.T) {
 	pinPeersClock(t)
 	defer setIcons(IconsUnicode)
@@ -510,10 +510,10 @@ func TestPeerGapsAndInactivePinned(t *testing.T) {
 			}
 		}
 	}
-	// Exactly full: 1 header + 15 tree rows + the divider's 2 + footer 2.
-	lines = text(1 + len(rows) + 2 + 1)
+	// Exactly full, the blank line above the divider included.
+	lines = text(len(rows) + 6)
 	i := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "inactive (1)") })
-	if i < 0 || !strings.Contains(lines[i-1], "media") {
+	if i < 0 || strings.TrimSpace(lines[i-1]) != "" || !strings.Contains(lines[i-2], "media") {
 		t.Errorf("without room the divider follows the last group:\n%s", strings.Join(lines, "\n"))
 	}
 }

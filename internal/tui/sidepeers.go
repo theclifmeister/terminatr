@@ -107,7 +107,7 @@ func (r treeRow) isPeer() bool { return r.peer != "" }
 // withPeers puts the server groups round tree, this server's rows: none
 // without peers; else this server's header above them and each paired
 // server's group after them, by alias, each with a blank line above its
-// header (treeRow.gap). This server's inactive block (the divider and
+// header (treeRow.gap), and above the divider. This server's inactive block (the divider and
 // the projects under it) goes after the groups instead: the layout pins
 // it to the bottom of the tree (sideLayout).
 func withPeers(tree []treeRow, in treeIn) []treeRow {
@@ -129,6 +129,9 @@ func withPeers(tree []treeRow, in treeIn) []treeRow {
 		rows := peerRows(pm, in.tree, in.current)
 		rows[0].gap = true
 		out = append(out, rows...)
+	}
+	if len(tail) > 0 {
+		tail[0].gap = true // not a part of the last group
 	}
 	out = append(out, tail...)
 	// A remote pane in the view is you are on its row.
