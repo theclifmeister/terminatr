@@ -111,7 +111,9 @@ template = '''
 # C:\Users\a is written //c/Users/a (the rules function converts it). Only Edit(...) deny rules: they cover Write, Edit
 # and NotebookEdit, while Write(...) rules aren't matched by file checks.
 # Edit(...) allow rules also open the Bash sandbox for writing (a thread's
-# commits go to the main repo's git dir).
+# commits go to the parts of the main repo's git dir they need), and
+# Edit(...) deny rules close it, within a broader grant too (the main
+# repo's git hooks, config and info, the other worktrees' git dirs).
 # Never put statusLine here: --settings would replace the user's own.
 # Outside safe mode Claude draws with tm's own theme in its config dir
 # ([theme] below, docs/SPEC.md §8.6), which the server rewrites on every
@@ -133,7 +135,7 @@ template = '''
   "theme": {{json (printf "%s-ansi" .PaneScheme)}},
   {{- end}}
   "permissions": {
-    "allow": {{json (concat (rules "Read(/%s/**)" .Access.Read) (rules "Edit(/%s/**)" .Access.Write) (rules "Bash(%s:*)" .Access.Commands))}},
+    "allow": {{json (concat (rules "Read(/%s/**)" .Access.Read) (rules "Edit(/%s/**)" .Access.Write) (rules "Edit(/%s)" .Access.WriteFiles) (rules "Bash(%s:*)" .Access.Commands))}},
     "deny": {{json (concat (rules "Edit(/%s/**)" .Access.NoWrite) (rules "Edit(/%s)" .Access.NoWriteFiles))}}
   },
   "sandbox": {

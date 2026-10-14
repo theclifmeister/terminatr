@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -283,34 +284,86 @@ func TestAccessMergeCommands(t *testing.T) {
 	}
 }
 
-// TestAccessThreadGitDirs: a thread in a linked worktree may write the
-// main repo's git dir and, by name, the worktree's own git dir below it.
+// TestAccessThreadGitDirs: a thread in a linked worktree may write what
+// its commits and pushes need in the main repo's git dir and, by name,
+// the worktree's own git dir below it; never the git dir's hooks,
+// config or info, nor another worktree's git dir, which its deny rules
+// name, and the guard keeps its commands off them too.
 func TestAccessThreadGitDirs(t *testing.T) {
 	testPaths(t)
 	p := newWatchProject(t)
 	s := &Server{opts: Options{Paths: Paths{Home: os.Getenv("TERMINATR_HOME")}}}
 	root := realPath(t.TempDir())
-	repo, wt := filepath.Join(root, "repo"), filepath.Join(root, "wt")
+	repo, wt, other := filepath.Join(root, "repo"), filepath.Join(root, "wt"), filepath.Join(root, "other")
 	for _, args := range [][]string{
 		{"init", "-q", repo},
 		{"-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "c"},
 		{"-C", repo, "worktree", "add", "-q", "-b", "x", wt},
+		{"-C", repo, "worktree", "add", "-q", "-b", "y", other},
 	} {
 		if b, err := exec.Command("git", args...).CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, b)
 		}
 	}
+	common := filepath.Join(repo, ".git")
+	in := func(names ...string) []string {
+		var out []string
+		for _, n := range names {
+			out = append(out, filepath.Join(common, n))
+		}
+		return out
+	}
 	a, err := s.accessFor(proto.RoleThread, p.Slug, wt)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{filepath.Join(repo, ".git"), filepath.Join(repo, ".git", "worktrees", "wt")}
-	if !slices.Equal(a.Write, want) {
+	if want := in("objects", "refs", "logs", "worktrees/wt"); !slices.Equal(a.Write, want) {
 		t.Errorf("worktree: write %q, want %q", a.Write, want)
 	}
-	if a, _ := s.accessFor(proto.RoleThread, p.Slug, repo); !slices.Equal(a.Write, want[:1]) {
-		t.Errorf("main checkout: write %q, want %q", a.Write, want[:1])
+	if want := in("packed-refs", "packed-refs.lock"); !slices.Equal(a.WriteFiles, want) {
+		t.Errorf("worktree: write files %q, want %q", a.WriteFiles, want)
 	}
+	for _, n := range []string{"hooks", "info", "worktrees/other"} {
+		if !slices.Contains(a.NoWrite, filepath.Join(common, n)) {
+			t.Errorf("worktree: %s not in no-write %q", n, a.NoWrite)
+		}
+	}
+	for _, n := range []string{"config", "config.lock"} {
+		if !slices.Contains(a.NoWriteFiles, filepath.Join(common, n)) {
+			t.Errorf("worktree: %s not in no-write files %q", n, a.NoWriteFiles)
+		}
+	}
+	if slices.Contains(a.NoWrite, filepath.Join(common, "worktrees", "wt")) {
+		t.Errorf("worktree: its own git dir in no-write %q", a.NoWrite)
+	}
+	// The main checkout: the same, without a git dir of its own to add.
+	m, _ := s.accessFor(proto.RoleThread, p.Slug, repo)
+	if want := in("objects", "refs", "logs"); !slices.Equal(m.Write, want) {
+		t.Errorf("main checkout: write %q, want %q", m.Write, want)
+	}
+	// Nothing written is the git dir or holds what git runs or reads
+	// as configuration.
+	for _, a := range []agent.Access{a, m} {
+		for _, w := range append(slices.Clone(a.Write), a.WriteFiles...) {
+			for _, n := range []string{"", "hooks", "config", "info", "hooks/pre-commit"} {
+				if pathUnder(filepath.Join(common, n), w) {
+					t.Errorf("write %s covers %s", w, filepath.Join(common, n))
+				}
+			}
+		}
+	}
+	// The guard keeps a thread's commands off them too.
+	g := s.guardRulesFor(SessionRecord{ID: "s-1", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Cwd: wt})
+	for _, n := range []string{"hooks", "info", "config"} {
+		if !slices.Contains(g.GitConfig, filepath.Join(common, n)) {
+			t.Errorf("guard: %s not in %q", n, g.GitConfig)
+		}
+	}
+}
+
+// pathUnder: p is root or below it.
+func pathUnder(p, root string) bool {
+	return p == root || strings.HasPrefix(p, root+string(filepath.Separator))
 }
 
 // TestGuardSecrets: the agents' paths come from their manifests. Codex's

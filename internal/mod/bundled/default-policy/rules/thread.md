@@ -9,7 +9,7 @@
   task steps T<n> check <N>`. With no steps, first add your plan, one
   call per step (`tm task steps T<n> add "…"`), before you change
   anything, so it survives if your session ends.
-- Commit your work and push your branch (`git push -u origin HEAD`);
+- Commit your work and push your branch (`git push origin HEAD`);
   don't open the pull request: the coordinator does, from your report.
   Put the PR's title and body in the report (the first lines of `##
   Report`, or an attached file: `tm report --attach FILE`). Later

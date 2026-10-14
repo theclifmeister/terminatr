@@ -111,6 +111,10 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		dirs := append([]string{r.Cwd}, fsx.TempRoots()...)
 		dirs = append(dirs, agent.GuardWritable(reg, r.Agent, home, os.Getenv)...)
 		g.Writable = withReal(dirs)
+		if d, err := worktree.GitDirs(r.Cwd); err == nil {
+			dirs, files := gitConfig(realPath(d.CommonDir))
+			g.GitConfig = withReal(append(dirs, files...))
+		}
 	}
 	g.Tools = agent.GuardTools(reg, r.Agent)
 	g.Protected = []string{"main", "master"}

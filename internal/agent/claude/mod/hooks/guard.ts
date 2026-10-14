@@ -27,6 +27,11 @@ export type Rules = {
   home?: string
   cwd?: string
   writable?: readonly string[]
+  // What git runs or reads as configuration in the main repo's git dir
+  // (hooks, config, info): under worktree-only, no shell command names
+  // them but to view them. The thread's sandbox refuses writing them
+  // too; this says why sooner.
+  gitConfig?: readonly string[]
   worktrees?: string
   protected?: readonly string[]
   secrets?: readonly string[]
@@ -196,6 +201,8 @@ function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Den
     const args = argv.slice(1)
     const md = judgeMods(r, cmd, args, false)
     if (md) return md
+    const gd = judgeGitConfig(r, has, cmd, words)
+    if (gd) return gd
     if (cmd === 'git') {
       const d = judgeGit(r, has, args)
       if (d) return d
@@ -218,6 +225,24 @@ function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Den
       const d = judgeSecret(r, cmd, args, words, READERS.has(cmd), PRINTERS.has(cmd))
       if (d) return d
     }
+  }
+  return null
+}
+
+// The commands that only show the files they are given.
+const VIEWERS = new Set('cat head tail less more bat nl grep egrep fgrep rg ls stat file wc diff cmp'.split(' '))
+
+// judgeGitConfig: under worktree-only, cmd naming the main repo's git
+// hooks, config or info other than to view them, or redirecting into
+// them.
+function judgeGitConfig(r: Rules, has: (id: string) => boolean, cmd: string, words: string[]): Denial | null {
+  if (!has('worktree-only') || !r.gitConfig?.length) return null
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i]
+    if (w === '<' || w === '>' || w.startsWith('-')) continue
+    const out = i > 0 && words[i - 1] === '>'
+    const p = abs(r, w)
+    if (r.gitConfig.some(g => under(r, p, g)) && (out || !VIEWERS.has(cmd))) return deny(r, 'worktree-only', `${cmd} of ${safe(p)}`)
   }
   return null
 }

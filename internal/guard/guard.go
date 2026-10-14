@@ -41,6 +41,11 @@ type Rules struct {
 	// folders and Claude's own (plans, memory). Each as given and
 	// with its symlinks resolved.
 	Writable []string `json:"writable,omitempty"`
+	// GitConfig are what git runs or reads as configuration in the main
+	// repo's git dir (hooks, config, info): under worktree-only, no
+	// shell command names them but to view them. The thread's sandbox
+	// refuses writing them too; this says why sooner.
+	GitConfig []string `json:"gitConfig,omitempty"`
 	// Worktrees is tm's worktrees folder: under delete-branch, no rm -r
 	// takes it, a project's folder in it or a worktree.
 	Worktrees string `json:"worktrees,omitempty"`
@@ -315,6 +320,9 @@ func (r Rules) judgeBash(command string) *Denial {
 		cmd := base(argv[0])
 		args := argv[1:]
 		if d := r.judgeMods(cmd, args, false); d != nil {
+			return d
+		}
+		if d := r.judgeGitConfig(cmd, words); d != nil {
 			return d
 		}
 		var d *Denial
@@ -759,6 +767,35 @@ func (r Rules) judgeSecret(cmd string, args, words []string, reader, printer boo
 		}
 		if (reader || redirected) && !strings.HasPrefix(path, "-") && path != "<" && r.isSecret(r.abs(path)) {
 			return r.deny("credentials", cmd+" of "+safe(r.abs(path)), "")
+		}
+	}
+	return nil
+}
+
+// viewers are the commands that only show the files they are given.
+var viewers = map[string]bool{}
+
+func init() {
+	for _, c := range strings.Fields(`cat head tail less more bat nl grep egrep fgrep rg ls stat file wc diff cmp`) {
+		viewers[c] = true
+	}
+}
+
+// judgeGitConfig: under worktree-only, cmd naming the main repo's git
+// hooks, config or info other than to view them, or redirecting into
+// them.
+func (r Rules) judgeGitConfig(cmd string, words []string) *Denial {
+	if !r.has("worktree-only") || len(r.GitConfig) == 0 {
+		return nil
+	}
+	for i, w := range words {
+		if w == "<" || w == ">" || strings.HasPrefix(w, "-") {
+			continue
+		}
+		out := i > 0 && words[i-1] == ">"
+		p := r.abs(w)
+		if slices.ContainsFunc(r.GitConfig, func(g string) bool { return r.under(p, g) }) && (out || !viewers[cmd]) {
+			return r.deny("worktree-only", cmd+" of "+safe(p), "")
 		}
 	}
 	return nil

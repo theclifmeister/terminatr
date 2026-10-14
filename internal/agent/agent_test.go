@@ -120,6 +120,24 @@ func TestClaudeLaunch(t *testing.T) {
 	if want := []string{"Edit(//h/.terminatr/projects/p/**)"}; !reflect.DeepEqual(settings.Permissions.Deny, want) {
 		t.Fatalf("deny = %q, want %q (Edit rules only)", settings.Permissions.Deny, want)
 	}
+	// A worktree's git paths: directories and files as allow rules, the
+	// git dir's configuration as deny rules (docs/SPEC.md §8.6, Access).
+	git := spec
+	git.Access.Write = []string{"/r/.git/objects", "/r/.git/worktrees/w"}
+	git.Access.WriteFiles = []string{"/r/.git/packed-refs"}
+	git.Access.NoWrite = append(slices.Clone(git.Access.NoWrite), "/r/.git/hooks")
+	git.Access.NoWriteFiles = []string{"/r/.git/config"}
+	if l, err := a.Launch(git); err != nil {
+		t.Fatal(err)
+	} else {
+		s := parseSettings(t, l.Files["claude-settings.json"])
+		if want := []string{"Read(//h/.terminatr/projects/p/**)", "Edit(//r/.git/objects/**)", "Edit(//r/.git/worktrees/w/**)", "Edit(//r/.git/packed-refs)"}; !reflect.DeepEqual(s.Permissions.Allow, want) {
+			t.Fatalf("git: allow = %q, want %q", s.Permissions.Allow, want)
+		}
+		if want := []string{"Edit(//h/.terminatr/projects/p/**)", "Edit(//r/.git/hooks/**)", "Edit(//r/.git/config)"}; !reflect.DeepEqual(s.Permissions.Deny, want) {
+			t.Fatalf("git: deny = %q, want %q", s.Permissions.Deny, want)
+		}
+	}
 	if !settings.Sandbox.Enabled || !reflect.DeepEqual(settings.Sandbox.Network.AllowUnixSockets, []string{"/run/tm.sock"}) {
 		t.Fatalf("thread sandbox = %+v", settings.Sandbox)
 	}
