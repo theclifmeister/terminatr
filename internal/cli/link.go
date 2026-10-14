@@ -11,7 +11,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/project"
 )
 
-const linkUsage = `usage: tm link send <project> "text" | --file F|- [--re M-12] [--attach <thread>/<file>]…
+const linkUsage = `usage: tm link send <project>|<server>/<project> "text" | --file F|- [--re M-12] [--attach <thread>/<file>]…
        tm link read M-12 [--file NAME]
        tm link log <project> [--last N] [--json]
        tm link list [--json]
@@ -71,7 +71,7 @@ func runLink(e *Env, args []string) error {
 			fmt.Fprintf(e.Stdout, "%s waits for the user's OK (the link to %s asks first): tell the user; they approve it in the Messages tab, or you run tm link approve %s --approved-by-user once they agree in chat\n", m.ID, m.Peer, m.ID)
 			return nil
 		}
-		fmt.Fprintf(e.Stdout, "sent %s to %s (%s%s)\n", m.ID, m.Peer, link.KB(m.Bytes), reWords(m.Re))
+		fmt.Fprintln(e.Stdout, sentWords(m))
 		return nil
 	case "read":
 		id, err := one()
@@ -180,7 +180,7 @@ func runLink(e *Env, args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(e.Stdout, "sent %s to %s (%s%s)\n", m.ID, m.Peer, link.KB(m.Bytes), reWords(m.Re))
+		fmt.Fprintln(e.Stdout, sentWords(m))
 		return nil
 	case "resume":
 		other, err := one()
@@ -199,6 +199,15 @@ func runLink(e *Env, args []string) error {
 		return nil
 	}
 	return usagef("unknown subcommand %q\n%s", args[0], linkUsage)
+}
+
+// sentWords is what send and approve say of a message that went: sent
+// here, or queued for a paired server.
+func sentWords(m *link.Message) string {
+	if m.State == link.StateQueued {
+		return fmt.Sprintf("queued %s for %s (%s%s): it goes when the link to that server is up; tm link log %s shows sent, then read", m.ID, m.Peer, link.KB(m.Bytes), reWords(m.Re), m.Peer)
+	}
+	return fmt.Sprintf("sent %s to %s (%s%s)", m.ID, m.Peer, link.KB(m.Bytes), reWords(m.Re))
 }
 
 func reWords(re string) string {
@@ -223,12 +232,14 @@ func rowCounts(r link.Row) string {
 	return s
 }
 
-const projectLinkUsage = `usage: tm project link <a> <b> [both|send|receive|off] [--ask|--no-ask]`
+const projectLinkUsage = `usage: tm project link <a> <b>|<server>/<b> [both|send|receive|off] [--ask|--no-ask]`
 
 // projectLink links two projects in one call, the human's (docs/SPEC.md
 // §7.9, §11.2): a's entry gets the direction (both by default), b's the
 // mirror (send for a is receive for b), off removes both. --ask holds
-// a's messages to b for the user's OK; b keeps its own ask.
+// a's messages to b for the user's OK; b keeps its own ask. b on a paired
+// server ("mini/acme-api") gets only a's entry, which asks unless
+// --no-ask: the other side is that server's user's (§16.10).
 func projectLink(e *Env, args []string) error {
 	f := newFlags()
 	ask, noAsk := f.Bool("ask"), f.Bool("no-ask")

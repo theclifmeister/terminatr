@@ -642,6 +642,7 @@ var kindWords = map[string]string{
 	"link-message":     "message",
 	"link-held":        "message held",
 	"link-paused":      "link paused",
+	"link-undelivered": "not delivered",
 	"slot-free":        "slot free",
 	"guard":            "guard refused",
 	"model-refused":    "model refused",

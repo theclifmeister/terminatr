@@ -25,6 +25,10 @@ type Row struct {
 	Send    bool `json:"send"`
 	Receive bool `json:"receive"`
 	Paused  bool `json:"paused,omitempty"`
+	// Remote: the other side is a project on a paired server
+	// ("mini/acme-api"); Theirs is unknown here, Send and Receive are
+	// this side's, and that server checks its own.
+	Remote bool `json:"remote,omitempty"`
 	// Unread counts received messages whose item isn't handled; Held
 	// this side's messages waiting for the user's OK.
 	Unread int       `json:"unread"`
@@ -49,6 +53,9 @@ func (r Row) Words() string {
 	default:
 		s = "off"
 	}
+	if r.Remote && (r.Send || r.Receive) {
+		s += " on this side"
+	}
 	if r.Half() {
 		s += ", " + r.HalfWords()
 	}
@@ -60,7 +67,9 @@ func (r Row) Words() string {
 
 // Half reports a half-linked pair: the two entries don't mirror each
 // other, which only a hand edit of config.toml makes (config.Half).
-func (r Row) Half() bool { return config.Half(r.Mine, r.Theirs, r.HasMine, r.HasTheirs) }
+func (r Row) Half() bool {
+	return !r.Remote && config.Half(r.Mine, r.Theirs, r.HasMine, r.HasTheirs)
+}
 
 // HalfWords says what is half about a half-linked pair.
 func (r Row) HalfWords() string {
@@ -101,12 +110,17 @@ func Rows(cfg *config.Config, p *project.Project) []Row {
 	st := look()
 	var out []Row
 	for _, o := range peers {
-		theirs, _ := cfg.Links(o)
 		r := Row{Peer: o}
 		r.Mine, r.HasMine = mine[o]
-		r.Theirs, r.HasTheirs = theirs[p.Slug]
-		r.Send = r.Mine.Sends() && r.Theirs.Receives()
-		r.Receive = r.Mine.Receives() && r.Theirs.Sends()
+		if _, _, remote := config.Remote(o); remote {
+			r.Remote = true
+			r.Send, r.Receive = r.Mine.Sends(), r.Mine.Receives()
+		} else {
+			theirs, _ := cfg.Links(o)
+			r.Theirs, r.HasTheirs = theirs[p.Slug]
+			r.Send = r.Mine.Sends() && r.Theirs.Receives()
+			r.Receive = r.Mine.Receives() && r.Theirs.Sends()
+		}
 		r.Paused = st.paused[pairKey(p.Slug, o)]
 		r.Held = st.held[p.Slug+">"+o]
 		for _, it := range items {

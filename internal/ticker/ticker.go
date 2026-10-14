@@ -821,12 +821,14 @@ var verbs = map[string]string{
 	project.KindDelegate: "to delegate (the user's go-ahead)", project.KindAccept: "accepted by the user",
 	project.KindSendBack: "sent back by the user", project.KindMod: "from a mod",
 	"link-message": "wrote to you (tm link read)", "link-held": "a message of yours waits for the user's OK",
-	"link-paused": "link paused (ask the user)", KindSlotFree: "a thread slot is free",
+	"link-paused": "link paused (ask the user)", "link-undelivered": "a message of yours wasn't delivered",
+	KindSlotFree: "a thread slot is free",
 }
 
 // linkKinds name a linked project in their subject: the nudge says its
-// slug, which only the user and tm write.
-var linkKinds = map[string]bool{"link-message": true, "link-held": true, "link-paused": true}
+// slug (or "<server>/<slug>" on a paired server), which only the user
+// and tm write.
+var linkKinds = map[string]bool{"link-message": true, "link-held": true, "link-paused": true, "link-undelivered": true}
 
 // NudgeText is the one line an idle coordinator gets (§7.5). It holds
 // only fixed words, ids and what label makes of an id (thread.Label: the
@@ -845,7 +847,7 @@ func NudgeText(items []project.Item, label func(id string) string) string {
 		if !ok {
 			verb = "new item"
 		}
-		if linkKinds[it.Kind] && project.ValidSlug(it.Subject) {
+		if linkKinds[it.Kind] && config.ValidLinkKey(it.Subject) {
 			parts = append(parts, it.Subject+" "+verb)
 		} else if subjectRE.MatchString(it.Subject) {
 			name := it.Subject
