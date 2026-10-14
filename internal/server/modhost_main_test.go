@@ -3,6 +3,7 @@ package server
 import (
 	"flag"
 	"fmt"
+	"github.com/theclifmeister/terminatr/internal/home/hometest"
 	"github.com/theclifmeister/terminatr/internal/service/servicetest"
 	"os"
 	"testing"
@@ -23,7 +24,7 @@ func TestMain(m *testing.M) {
 	if len(os.Args) == 4 && os.Args[1] == "scope-probe" {
 		os.Exit(scopeProbe(os.Args[2], os.Args[3]))
 	}
-	os.Exit(servicetest.Run(m))
+	os.Exit(hometest.Run(func() int { return servicetest.Run(m) }))
 }
 
 func testHostMain(args []string) int {
