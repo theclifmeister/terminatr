@@ -136,7 +136,7 @@ func (m *Mod) Run(f *Fixture, file string) (r Result) {
 		return r
 	}
 
-	b := NewBroker(grants, f.Answers, f.Store, f.Files)
+	b := NewBroker(grants, m.Manifest.Permissions, f.Answers, f.Store, f.Files)
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 	exited := make(chan int, 1)

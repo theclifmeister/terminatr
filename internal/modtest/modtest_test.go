@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/theclifmeister/terminatr/internal/mod"
 )
 
 const manifest = `id = "age"
@@ -153,7 +155,7 @@ func TestRunChecksTheFixture(t *testing.T) {
 }
 
 func TestBrokerRefusesWhatIsNotGranted(t *testing.T) {
-	b := NewBroker(nil, nil, nil, map[string]string{"a.txt": "hi"})
+	b := NewBroker(nil, mod.Permissions{}, nil, nil, map[string]string{"a.txt": "hi"})
 	if _, e := b.Answer("tasks.list", json.RawMessage(`{"slug":"x"}`)); e == nil || !strings.Contains(e.Message, "project_read") {
 		t.Errorf("tasks.list without project_read: %v", e)
 	}
@@ -212,7 +214,7 @@ func TestExamples(t *testing.T) {
 // TestBrokerToast: the fake takes ui.toast as the server does, and
 // refuses what the server refuses.
 func TestBrokerToast(t *testing.T) {
-	b := NewBroker(nil, nil, nil, nil)
+	b := NewBroker(nil, mod.Permissions{}, nil, nil, nil)
 	for params, ok := range map[string]bool{
 		`{"text":"hi"}`:                true,
 		`{"text":"hi","level":"warn"}`: true,
@@ -222,5 +224,40 @@ func TestBrokerToast(t *testing.T) {
 		if _, err := b.Answer("ui.toast", json.RawMessage(params)); (err == nil) != ok {
 			t.Errorf("%s: %v", params, err)
 		}
+	}
+}
+
+// TestBrokerRun: the fake refuses a process.run the broker refuses,
+// even when the fixture answers it.
+func TestBrokerRun(t *testing.T) {
+	perms := mod.Permissions{Commands: []string{"git", "cat"}, Files: mod.Files{Read: []string{"~/notes"}}}
+	answers := []Answer{{Method: "process.run", Result: json.RawMessage(`{"code":0}`)}}
+	b := NewBroker([]string{mod.PermCommands, mod.PermFiles}, perms, answers, nil, nil)
+	for params, ok := range map[string]bool{
+		`{"argv":["git","status"]}`:                                       true,
+		`{"argv":["git","log","-n5"],"options":{"cwd":"~/notes"}}`:        true,
+		`{"argv":["cat","~/notes/a.txt"]}`:                                true,
+		`{"argv":["cat","a.txt","../notes"],"cwd":"~/notes/sub"}`:         true,
+		`{"argv":["sh","-c","git status"]}`:                               false,
+		`{"argv":["git","-C","../../../../notes","status"]}`:              false,
+		`{"argv":["git","--git-dir=x","status"]}`:                         false,
+		`{"argv":["git","-c","core.pager=x","log"]}`:                      false,
+		`{"argv":["git","fetch","--upload-pack=x"]}`:                      false,
+		`{"argv":["git","config","core.pager","x"]}`:                      false,
+		`{"argv":["cat","~/.ssh/id_rsa"]}`:                                false,
+		`{"argv":["cat","/etc/passwd"]}`:                                  false,
+		`{"argv":["cat","../../../../elsewhere/x"]}`:                      false,
+		`{"argv":["cat","--file=~/elsewhere"]}`:                           false,
+		`{"argv":["cat","a.txt"],"cwd":"~/elsewhere"}`:                    false,
+		`{"argv":["cat","../../.terminatr/config.toml"],"cwd":"~/notes"}`: false,
+		`{"argv":["cat","x/.git/config"],"cwd":"~/notes"}`:                false,
+	} {
+		if _, err := b.Answer("process.run", json.RawMessage(params)); (err == nil) != ok {
+			t.Errorf("%s: %v", params, err)
+		}
+	}
+	b = NewBroker([]string{mod.PermCommands}, perms, answers, nil, nil)
+	if _, err := b.Answer("process.run", json.RawMessage(`{"argv":["cat","~/notes/a.txt"]}`)); err == nil {
+		t.Error("a files root without the files grant")
 	}
 }

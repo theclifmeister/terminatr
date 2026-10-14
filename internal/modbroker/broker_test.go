@@ -31,7 +31,7 @@ type testBroker struct {
 func newTestBroker(t *testing.T, grants ...string) *testBroker {
 	f := newFixture(t)
 	man := &mod.Manifest{ID: "m", Permissions: mod.Permissions{
-		ProjectRead: true, Inbox: true, Net: []string{"example.com"}, Commands: []string{"env", "sleep"},
+		ProjectRead: true, Inbox: true, Net: []string{"example.com"}, Commands: []string{"env", "sleep", "echo", "git"},
 		Files: mod.Files{Read: []string{"~/notes"}, Write: []string{"~/out"}},
 	}}
 	tb := &testBroker{f: f, m: &mod.Mod{ID: "m", State: mod.Enabled, Manifest: man, Grants: grants,
