@@ -29,16 +29,13 @@ import (
 // The methods a code host mod answers, as $.codehost.handle names them
 // after "codehost.".
 const (
-	MethodPR        = "codehost.pr"        // ModRef → ModPR, or null for no PR
+	MethodPR        = "codehost.pr"        // ModRef → modPR, or null for no PR
 	MethodPRState   = "codehost.prState"   // ModRef (branch) → {state}
 	MethodPRHead    = "codehost.prHead"    // ModRef (url) → {state, number, head}
 	MethodFailedLog = "codehost.failedLog" // ModRef (number, head) → {job, log}
 	MethodMerge     = "codehost.merge"     // ModRef (number, head) → anything
 	MethodDoctor    = "codehost.doctor"    // ModRef (remote only) → {checks: [{name, ok, detail}]}
 )
-
-// ModMethods are the codehost.* methods, in the order of the Host's.
-var ModMethods = []string{MethodPR, MethodPRState, MethodPRHead, MethodFailedLog, MethodMerge, MethodDoctor}
 
 // modKindRE is a code host mod's kind: lower case, as code_host names it.
 var modKindRE = regexp.MustCompile(`^[a-z][a-z0-9-]{1,31}$`)
@@ -50,11 +47,11 @@ func ModKind(kind string) bool {
 	return modKindRE.MatchString(kind) && kind != GitHubKind && kind != AzureKind
 }
 
-// ModRemote is the server and project path of a remote URL, as a code
+// modRemote is the server and project path of a remote URL, as a code
 // host mod is asked about it: Target.OrgURL "https://<host>", Target.Repo
 // "group/subgroup/project" (no .git, percent-decoded). ok is false for no
 // URL, a local one or a path tm can't read.
-func ModRemote(remote string) (t Target, ok bool) {
+func modRemote(remote string) (t Target, ok bool) {
 	if strings.HasPrefix(strings.TrimSpace(remote), "file://") {
 		return Target{}, false
 	}
@@ -79,17 +76,17 @@ var (
 // the server's supervisor in the server, a test's host in tests.
 type ModCall func(ctx context.Context, method string, params any) (json.RawMessage, error)
 
-// ModProvider finds the mod that serves kind for project ("" for any):
+// modProvider finds the mod that serves kind for project ("" for any):
 // its id and how to call it, or why there is none (a *CLIError naming
 // the fix).
-type ModProvider func(kind, project string) (id string, call ModCall, err error)
+type modProvider func(kind, project string) (id string, call ModCall, err error)
 
-var provider atomic.Pointer[ModProvider]
+var provider atomic.Pointer[modProvider]
 
 // Provide sets how Pick reaches code host mods; nil takes it away. Only
 // the server sets one: it runs the mods (a command run outside it has
-// none, and gets Unserved).
-func Provide(p ModProvider) {
+// none, and gets unserved).
+func Provide(p modProvider) {
 	if p == nil {
 		provider.Store(nil)
 		return
@@ -97,29 +94,29 @@ func Provide(p ModProvider) {
 	provider.Store(&p)
 }
 
-// pickMod is the Mod for t from the provider, or Unserved.
+// pickMod is the Mod for t from the provider, or unserved.
 func pickMod(t Target, project string) Host {
 	p := provider.Load()
 	if p == nil {
-		return Unserved{Target: t, Err: &CLIError{CLI: t.Kind, Problem: "no tm server runs its code host mod here",
+		return unserved{Target: t, Err: &CLIError{CLI: t.Kind, Problem: "no tm server runs its code host mod here",
 			Advice: "the user starts the tm server (tm doctor)", Err: fmt.Errorf("code host %s: served by a mod, which only the tm server runs", t.Kind)}}
 	}
 	id, call, err := (*p)(t.Kind, project)
 	if err != nil {
-		return Unserved{Target: t, Err: err}
+		return unserved{Target: t, Err: err}
 	}
 	return Mod{Target: t, ID: id, Call: call}
 }
 
-// Mod is a Host served by a code host mod (ModProvider).
+// Mod is a Host served by a code host mod (modProvider).
 type Mod struct {
 	// Target is the repo's: the mod's kind, its server and project path
-	// (ModRemote of its origin).
+	// (modRemote of its origin).
 	Target Target
 	// ID is the mod's id, for errors and tm doctor.
 	ID   string
 	Call ModCall
-	// Timeout bounds each call; zero is ModTimeout (ModMergeTimeout for
+	// Timeout bounds each call; zero is modTimeout (modMergeTimeout for
 	// a merge).
 	Timeout time.Duration
 }
@@ -127,12 +124,12 @@ type Mod struct {
 // Timeouts of a mod's calls: the mod runs its CLI, which may run a few
 // requests, under the broker's own limit on each program.
 const (
-	ModTimeout      = 60 * time.Second
-	ModMergeTimeout = 120 * time.Second
+	modTimeout      = 60 * time.Second
+	modMergeTimeout = 120 * time.Second
 )
 
-// ModRemoteRef is the repo as a code host mod gets it.
-type ModRemoteRef struct {
+// modRemoteRef is the repo as a code host mod gets it.
+type modRemoteRef struct {
 	Kind string `json:"kind"`
 	Host string `json:"host"` // gitlab.com, or a server's host[:port]
 	Path string `json:"path"` // group/subgroup/project
@@ -141,15 +138,15 @@ type ModRemoteRef struct {
 // ModRef is every codehost.* method's params: the repo's remote, and
 // what the method asks about.
 type ModRef struct {
-	Remote ModRemoteRef `json:"remote"`
+	Remote modRemoteRef `json:"remote"`
 	URL    string       `json:"url,omitempty"`
 	Branch string       `json:"branch,omitempty"`
 	Number int          `json:"number,omitempty"`
 	Head   string       `json:"head,omitempty"`
 }
 
-// ModPR is codehost.pr's answer, PR's fields by their state-file names.
-type ModPR struct {
+// modPR is codehost.pr's answer, PR's fields by their state-file names.
+type modPR struct {
 	Number     int    `json:"number"`
 	URL        string `json:"url"`
 	State      string `json:"state"`
@@ -169,7 +166,7 @@ func (m Mod) Kind() string { return m.Target.Kind }
 
 func (m Mod) ref() ModRef {
 	host := strings.TrimPrefix(m.Target.OrgURL, "https://")
-	return ModRef{Remote: ModRemoteRef{Kind: m.Target.Kind, Host: host, Path: m.Target.Repo}}
+	return ModRef{Remote: modRemoteRef{Kind: m.Target.Kind, Host: host, Path: m.Target.Repo}}
 }
 
 // call sends method; an error is a failed call (CLIError of the kind).
@@ -180,9 +177,9 @@ func (m Mod) call(method string, params ModRef, out any) error {
 	}
 	d := m.Timeout
 	if d <= 0 {
-		d = ModTimeout
+		d = modTimeout
 		if method == MethodMerge {
-			d = ModMergeTimeout
+			d = modMergeTimeout
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), d)
@@ -231,7 +228,7 @@ func (m Mod) PR(repo string, ref Ref) (PR, error) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return PR{}, ErrNoPR
 	}
-	var a ModPR
+	var a modPR
 	if err := json.Unmarshal(raw, &a); err != nil {
 		return PR{}, m.failed(MethodPR, fmt.Errorf("its answer isn't a PR: %v", err))
 	}
@@ -262,7 +259,7 @@ func oneOf(s string, words []string) string {
 // fixed keeps what a mod's answer may say: the fixed words, a number, a
 // commit id, a branch, and a URL that is one of this repo's PR URLs with
 // the same number.
-func (m Mod) fixed(a ModPR) PR {
+func (m Mod) fixed(a modPR) PR {
 	pr := PR{
 		State:     oneOf(a.State, modStates),
 		Checks:    oneOf(a.Checks, modChecks),
@@ -459,10 +456,10 @@ func (m Mod) Doctor(DoctorDeps) []Check {
 	return out
 }
 
-// ParsePRURL is the number of one of this repo's PR URLs (OwnsPRURL);
+// ParsePRURL is the number of one of this repo's PR URLs (ownsPRURL);
 // a kind tm knows no URLs of has none.
 func (m Mod) ParsePRURL(s string) (int, bool) {
-	if !OwnsPRURL(m.Target, s) {
+	if !ownsPRURL(m.Target, s) {
 		return 0, false
 	}
 	l, _ := ParsePR(s)
@@ -476,30 +473,30 @@ func clip(s string, n int) string {
 	return strings.ToValidUTF8(s[:n], "") + "…"
 }
 
-// Unserved is the Host of a code host mod's kind that no mod serves here
+// unserved is the Host of a code host mod's kind that no mod serves here
 // (no server, no enabled mod for the project, no commands grant): every
 // lookup fails with Err, which says what to do, and nothing destructive
 // is ever allowed by it. Merge detection by git still works.
-type Unserved struct {
+type unserved struct {
 	Target Target
 	Err    error
 }
 
-func (u Unserved) Kind() string                              { return u.Target.Kind }
-func (u Unserved) PR(string, Ref) (PR, error)                { return PR{}, u.Err }
-func (Unserved) FailedLog(string, PR) (job, log string)      { return "", "" }
-func (Unserved) PRState(string, string) string               { return "" }
-func (Unserved) PRHead(string, string) (string, int, string) { return "", 0, "" }
-func (u Unserved) MergeCommit(repo string, n int) string {
+func (u unserved) Kind() string                              { return u.Target.Kind }
+func (u unserved) PR(string, Ref) (PR, error)                { return PR{}, u.Err }
+func (unserved) FailedLog(string, PR) (job, log string)      { return "", "" }
+func (unserved) PRState(string, string) string               { return "" }
+func (unserved) PRHead(string, string) (string, int, string) { return "", 0, "" }
+func (u unserved) MergeCommit(repo string, n int) string {
 	return Mod{Target: u.Target}.MergeCommit(repo, n)
 }
-func (u Unserved) MergedPR(repo, commit string) int {
+func (u unserved) MergedPR(repo, commit string) int {
 	return Mod{Target: u.Target}.MergedPR(repo, commit)
 }
-func (u Unserved) Merge(string, PR) error          { return u.Err }
-func (u Unserved) Hints(n int) Hints               { return Mod{Target: u.Target}.Hints(n) }
-func (u Unserved) ParsePRURL(s string) (int, bool) { return Mod{Target: u.Target}.ParsePRURL(s) }
-func (u Unserved) Doctor(DoctorDeps) []Check {
+func (u unserved) Merge(string, PR) error          { return u.Err }
+func (u unserved) Hints(n int) Hints               { return Mod{Target: u.Target}.Hints(n) }
+func (u unserved) ParsePRURL(s string) (int, bool) { return Mod{Target: u.Target}.ParsePRURL(s) }
+func (u unserved) Doctor(DoctorDeps) []Check {
 	return []Check{{Name: u.Target.Kind, Detail: clip(u.Err.Error(), 200)}}
 }
 
@@ -508,7 +505,7 @@ func (u Unserved) Doctor(DoctorDeps) []Check {
 // or a worktree by itself. Git must find the commits on the remote.
 func External(h Host) bool {
 	switch h.(type) {
-	case Mod, Unserved:
+	case Mod, unserved:
 		return true
 	}
 	return false

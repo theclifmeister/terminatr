@@ -1,5 +1,5 @@
 // Package codehost is where a repo's pull requests live (docs/SPEC.md
-// §7.5): GitHub through gh today, Azure DevOps through az next. The
+// §7.5): GitHub through gh, Azure DevOps through az rest. The
 // ticker, resolve and doctor ask a Host, picked per repo from its origin
 // URL (Pick), so the rest of tm keeps one set of fixed words for a PR
 // (PR) whatever the host. It imports no other tm package, so worktree,
@@ -137,11 +137,11 @@ type Target struct {
 // URL (ParseRemote); GitHub when neither says Azure DevOps, unless the
 // repo has no origin or one on a host with no PRs to poll (NoKind). A
 // code host mod's kind in cfg is taken as it is, with the server and
-// project path of the origin (ModRemote).
+// project path of the origin (modRemote).
 func Detect(repo string, cfg Config) Target {
 	url := origin(repo)
 	if ModKind(cfg.CodeHost) {
-		t, _ := ModRemote(url)
+		t, _ := modRemote(url)
 		t.Kind = cfg.CodeHost
 		return t
 	}
@@ -185,10 +185,8 @@ func pollable(url string) bool {
 	return ok && !otherHosts[host]
 }
 
-// Pick is the Host for repo (Detect). A repo on Azure DevOps gets GitHub
-// too until the Azure DevOps host is registered (newAzure), as before. A
-// code host mod's kind gets that mod (Provide), or a host that says why
-// there is none (Unserved).
+// Pick is the Host for repo (Detect). A code host mod's kind gets that
+// mod (Provide), or a host that says why there is none (unserved).
 func Pick(repo string, cfg Config) Host {
 	t := Detect(repo, cfg)
 	if ModKind(t.Kind) {
@@ -197,15 +195,11 @@ func Pick(repo string, cfg Config) Host {
 	if t.Kind == NoKind {
 		return NoHost{}
 	}
-	if newAzure != nil && t.Kind == AzureKind {
-		return newAzure(t)
+	if t.Kind == AzureKind {
+		return Azure{Target: t}
 	}
 	return GitHub{}
 }
-
-// newAzure makes the Azure DevOps host for a target; nil while there is
-// none.
-var newAzure func(Target) Host
 
 // origin is repo's origin URL as configured, "" for none: before any
 // url.<base>.insteadOf rewrite, which says how to reach the repo, not

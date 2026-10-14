@@ -27,7 +27,7 @@ export function questions(w: TerminatrWatch | null): number {
 
 // questionsText is "2 questions · /answer": the status entry has no
 // button, so the slash command that opens them is named.
-export function questionsText(n: number): string {
+function questionsText(n: number): string {
   return `${n} ${n === 1 ? 'question' : 'questions'} · /answer`
 }
 

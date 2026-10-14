@@ -38,7 +38,7 @@ func TestCheckURL(t *testing.T) {
 		{"https://api.example.com%00.evil.com/", ""},
 		{"https://аpi.example.com/", ""}, // a Cyrillic a
 		{"file:///etc/passwd", ""},
-		{"https://api.example.com/" + strings.Repeat("a", MaxURL), ""},
+		{"https://api.example.com/" + strings.Repeat("a", maxURL), ""},
 	}
 	for _, c := range cases {
 		u, err := CheckURL(c.raw, testHosts)

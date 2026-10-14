@@ -193,18 +193,13 @@ type ProjectWatchEvent struct {
 	Watch ProjectWatch `json:"watch"`
 }
 
-// AgeWords writes how long ago something was, short: "40s", "1m20s",
-// "2h5m". Negative or tiny spans are "0s". It is the widget set's, which
-// draws a mod's time spans the same way.
-func AgeWords(d time.Duration) string { return widget.AgeWords(d) }
-
 // CheckedWords is "checked 30s ago" for a PR last checked at t, "" for
 // never.
 func CheckedWords(t, now time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	return "checked " + AgeWords(now.Sub(t)) + " ago"
+	return "checked " + widget.AgeWords(now.Sub(t)) + " ago"
 }
 
 // TickerRow is one row of the ticker's section: a label and its value.
@@ -220,11 +215,11 @@ type TickerRow struct {
 func (t WatchTicker) Rows(now time.Time) []TickerRow {
 	var rows []TickerRow
 	if !t.PRChecked.IsZero() {
-		v := AgeWords(now.Sub(t.PRChecked)) + " ago"
+		v := widget.AgeWords(now.Sub(t.PRChecked)) + " ago"
 		if t.PRPollSeconds > 0 {
 			next := t.PRChecked.Add(time.Duration(t.PRPollSeconds) * time.Second).Sub(now)
 			if next > 0 {
-				v += " · next " + AgeWords(next)
+				v += " · next " + widget.AgeWords(next)
 			} else {
 				v += " · due"
 			}
@@ -232,7 +227,7 @@ func (t WatchTicker) Rows(now time.Time) []TickerRow {
 		rows = append(rows, TickerRow{Label: "PRs", Value: v})
 	}
 	if !t.Synced.IsZero() {
-		rows = append(rows, TickerRow{Label: "synced", Value: AgeWords(now.Sub(t.Synced)) + " ago"})
+		rows = append(rows, TickerRow{Label: "synced", Value: widget.AgeWords(now.Sub(t.Synced)) + " ago"})
 	}
 	if t.NoPRHost {
 		rows = append(rows, TickerRow{Label: "PR host", Value: "none"})

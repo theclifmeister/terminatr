@@ -15,8 +15,8 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 )
 
-// MaxFile is the most fs.read returns and fs.write takes.
-const MaxFile = 8 << 20
+// maxFile is the most fs.read returns and fs.write takes.
+const maxFile = 8 << 20
 
 // Keychains are the credential stores agent.Secrets doesn't list: the
 // OS keychains, and the token files of common command-line tools. No mod
@@ -371,8 +371,8 @@ func fsRead(_ context.Context, c *Call) (any, error) {
 		return nil, err
 	case !fi.Mode().IsRegular():
 		return nil, BadParams("%s isn't a file", a.Path)
-	case fi.Size() > MaxFile:
-		return nil, Denied("%s is over %d bytes", a.Path, MaxFile)
+	case fi.Size() > maxFile:
+		return nil, Denied("%s is over %d bytes", a.Path, maxFile)
 	}
 	b, err := os.ReadFile(real)
 	if err != nil {
@@ -392,8 +392,8 @@ func fsWrite(_ context.Context, c *Call) (any, error) {
 	if err := c.Decode(&a); err != nil {
 		return nil, err
 	}
-	if len(a.Text) > MaxFile {
-		return nil, Denied("%s: over %d bytes", a.Path, MaxFile)
+	if len(a.Text) > maxFile {
+		return nil, Denied("%s: over %d bytes", a.Path, maxFile)
 	}
 	real, err := c.Paths.Check(a.Path, true)
 	if err != nil {

@@ -6,6 +6,9 @@ import (
 	"testing"
 )
 
+// kinds are every kind, in a stable order.
+var kinds = []kind{kindSh, kindBash, kindZsh, kindPwsh, kindPowerShell, kindCmd}
+
 func TestInteractive(t *testing.T) {
 	env := func(m map[string]string) func(string) string {
 		return func(k string) string { return m[k] }
@@ -42,18 +45,18 @@ func TestInteractive(t *testing.T) {
 
 func TestQuote(t *testing.T) {
 	in := []string{"", "a b", "it's", `say "hi"`, "100%", "x’y"}
-	want := map[Kind][]string{
-		Sh:         {`''`, `'a b'`, `'it'\''s'`, `'say "hi"'`, `'100%'`, `'x’y'`},
-		Bash:       {`''`, `'a b'`, `'it'\''s'`, `'say "hi"'`, `'100%'`, `'x’y'`},
-		Zsh:        {`''`, `'a b'`, `'it'\''s'`, `'say "hi"'`, `'100%'`, `'x’y'`},
-		Pwsh:       {`''`, `'a b'`, `'it''s'`, `'say "hi"'`, `'100%'`, `'x’’y'`},
-		PowerShell: {`''`, `'a b'`, `'it''s'`, `'say "hi"'`, `'100%'`, `'x’’y'`},
-		Cmd:        {`""`, `"a b"`, `"it's"`, `"say ""hi"""`, `"100%"`, `"x’y"`},
+	want := map[kind][]string{
+		kindSh:         {`''`, `'a b'`, `'it'\''s'`, `'say "hi"'`, `'100%'`, `'x’y'`},
+		kindBash:       {`''`, `'a b'`, `'it'\''s'`, `'say "hi"'`, `'100%'`, `'x’y'`},
+		kindZsh:        {`''`, `'a b'`, `'it'\''s'`, `'say "hi"'`, `'100%'`, `'x’y'`},
+		kindPwsh:       {`''`, `'a b'`, `'it''s'`, `'say "hi"'`, `'100%'`, `'x’’y'`},
+		kindPowerShell: {`''`, `'a b'`, `'it''s'`, `'say "hi"'`, `'100%'`, `'x’’y'`},
+		kindCmd:        {`""`, `"a b"`, `"it's"`, `"say ""hi"""`, `"100%"`, `"x’y"`},
 	}
-	for _, k := range Kinds {
+	for _, k := range kinds {
 		for i, s := range in {
-			if got := Quote(k, s); got != want[k][i] {
-				t.Errorf("Quote(%s, %q) = %s, want %s", k, s, got, want[k][i])
+			if got := quote(k, s); got != want[k][i] {
+				t.Errorf("quote(%s, %q) = %s, want %s", k, s, got, want[k][i])
 			}
 		}
 	}
@@ -62,11 +65,11 @@ func TestQuote(t *testing.T) {
 func TestCommand(t *testing.T) {
 	type c struct {
 		goos, exe string
-		want      map[Kind]string
+		want      map[kind]string
 	}
-	all := func(s string) map[Kind]string {
-		m := map[Kind]string{}
-		for _, k := range Kinds {
+	all := func(s string) map[kind]string {
+		m := map[kind]string{}
+		for _, k := range kinds {
 			m[k] = s
 		}
 		return m
@@ -74,51 +77,51 @@ func TestCommand(t *testing.T) {
 	args := []string{"hook", "--agent", "claude"}
 	for _, c := range []c{
 		{"darwin", "/usr/local/bin/tm", all("/usr/local/bin/tm hook --agent claude")},
-		{"linux", "/home/me/my tools/tm", map[Kind]string{
-			Sh:         `'/home/me/my tools/tm' hook --agent claude`,
-			Bash:       `'/home/me/my tools/tm' hook --agent claude`,
-			Zsh:        `'/home/me/my tools/tm' hook --agent claude`,
-			Pwsh:       `& '/home/me/my tools/tm' hook --agent claude`,
-			PowerShell: `& '/home/me/my tools/tm' hook --agent claude`,
-			Cmd:        `"/home/me/my tools/tm" hook --agent claude`,
+		{"linux", "/home/me/my tools/tm", map[kind]string{
+			kindSh:         `'/home/me/my tools/tm' hook --agent claude`,
+			kindBash:       `'/home/me/my tools/tm' hook --agent claude`,
+			kindZsh:        `'/home/me/my tools/tm' hook --agent claude`,
+			kindPwsh:       `& '/home/me/my tools/tm' hook --agent claude`,
+			kindPowerShell: `& '/home/me/my tools/tm' hook --agent claude`,
+			kindCmd:        `"/home/me/my tools/tm" hook --agent claude`,
 		}},
 		// herdr t-0012: an unquoted forward-slash exe runs in every shell.
 		{"windows", `C:\Users\me\.terminatr\bin\tm.exe`, all("C:/Users/me/.terminatr/bin/tm.exe hook --agent claude")},
 		// The 8.3 form of a folder with a space (ShortPath) stays bare.
 		{"windows", `C:\PROGRA~1\tm\tm.exe`, all("C:/PROGRA~1/tm/tm.exe hook --agent claude")},
 		// Without short names: quoted, and & in PowerShell.
-		{"windows", `C:\Program Files\tm\tm.exe`, map[Kind]string{
-			Sh:         `'C:/Program Files/tm/tm.exe' hook --agent claude`,
-			Bash:       `'C:/Program Files/tm/tm.exe' hook --agent claude`,
-			Zsh:        `'C:/Program Files/tm/tm.exe' hook --agent claude`,
-			Pwsh:       `& 'C:/Program Files/tm/tm.exe' hook --agent claude`,
-			PowerShell: `& 'C:/Program Files/tm/tm.exe' hook --agent claude`,
-			Cmd:        `"C:/Program Files/tm/tm.exe" hook --agent claude`,
+		{"windows", `C:\Program Files\tm\tm.exe`, map[kind]string{
+			kindSh:         `'C:/Program Files/tm/tm.exe' hook --agent claude`,
+			kindBash:       `'C:/Program Files/tm/tm.exe' hook --agent claude`,
+			kindZsh:        `'C:/Program Files/tm/tm.exe' hook --agent claude`,
+			kindPwsh:       `& 'C:/Program Files/tm/tm.exe' hook --agent claude`,
+			kindPowerShell: `& 'C:/Program Files/tm/tm.exe' hook --agent claude`,
+			kindCmd:        `"C:/Program Files/tm/tm.exe" hook --agent claude`,
 		}},
 		// The exe an environment variable names (Codex's hook).
-		{"linux", "$TERMINATR_BIN", map[Kind]string{
-			Sh:         `"$TERMINATR_BIN" hook --agent claude`,
-			Bash:       `"$TERMINATR_BIN" hook --agent claude`,
-			Zsh:        `"$TERMINATR_BIN" hook --agent claude`,
-			Pwsh:       `& $env:TERMINATR_BIN hook --agent claude`,
-			PowerShell: `& $env:TERMINATR_BIN hook --agent claude`,
-			Cmd:        `"%TERMINATR_BIN%" hook --agent claude`,
+		{"linux", "$TERMINATR_BIN", map[kind]string{
+			kindSh:         `"$TERMINATR_BIN" hook --agent claude`,
+			kindBash:       `"$TERMINATR_BIN" hook --agent claude`,
+			kindZsh:        `"$TERMINATR_BIN" hook --agent claude`,
+			kindPwsh:       `& $env:TERMINATR_BIN hook --agent claude`,
+			kindPowerShell: `& $env:TERMINATR_BIN hook --agent claude`,
+			kindCmd:        `"%TERMINATR_BIN%" hook --agent claude`,
 		}},
 	} {
-		for _, k := range Kinds {
-			if got := Command(k, c.goos, c.exe, args...); got != c.want[k] {
-				t.Errorf("Command(%s, %s, %q) = %s, want %s", k, c.goos, c.exe, got, c.want[k])
+		for _, k := range kinds {
+			if got := command(k, c.goos, c.exe, args...); got != c.want[k] {
+				t.Errorf("command(%s, %s, %q) = %s, want %s", k, c.goos, c.exe, got, c.want[k])
 			}
 		}
 	}
 	// Arguments are quoted only when they need it; backslashes in them stay.
-	for k, want := range map[Kind]string{
-		Sh:   `tm run 'a b' '' 'C:\x'`,
-		Pwsh: `tm run 'a b' '' 'C:\x'`,
-		Cmd:  `tm run "a b" "" "C:\x"`,
+	for k, want := range map[kind]string{
+		kindSh:   `tm run 'a b' '' 'C:\x'`,
+		kindPwsh: `tm run 'a b' '' 'C:\x'`,
+		kindCmd:  `tm run "a b" "" "C:\x"`,
 	} {
-		if got := Command(k, "windows", "tm", "run", "a b", "", `C:\x`); got != want {
-			t.Errorf("Command(%s) args = %s, want %s", k, got, want)
+		if got := command(k, "windows", "tm", "run", "a b", "", `C:\x`); got != want {
+			t.Errorf("command(%s) args = %s, want %s", k, got, want)
 		}
 	}
 }
@@ -149,16 +152,16 @@ func TestUnwrap(t *testing.T) {
 		{[]string{"cmd.exe", "/q"}, []string{"cmd", "/q"}},
 
 		// pwsh / powershell
-		{[]string{"pwsh.exe", "-NoLogo", "-NoProfile", "-Command", "& 'C:\\x y\\claude.exe' --resume"}, []string{`C:\x y\claude`, "--resume"}},
+		{[]string{"pwsh.exe", "-NoLogo", "-NoProfile", "-command", "& 'C:\\x y\\claude.exe' --resume"}, []string{`C:\x y\claude`, "--resume"}},
 		{[]string{"pwsh", "-c", "claude", "-p"}, []string{"claude", "-p"}},
 		{[]string{"PowerShell.exe", "-ExecutionPolicy", "Bypass", "-File", `C:\x\claude.ps1`, "-p"}, []string{`C:\x\claude.ps1`, "-p"}},
 		{[]string{"pwsh", "-nop", `C:\x\run.ps1`, "a"}, []string{`C:\x\run.ps1`, "a"}},
 		{[]string{"powershell", "-NoProfile", "codex", "exec"}, []string{"codex", "exec"}},
 		{[]string{"pwsh", "-NoLogo"}, []string{"pwsh", "-NoLogo"}},
-		{[]string{"pwsh.exe", "-wd", `C:\x`, "-Command", "node cli.js"}, []string{"cli.js"}},
+		{[]string{"pwsh.exe", "-wd", `C:\x`, "-command", "node cli.js"}, []string{"cli.js"}},
 
 		// Nested: cmd running pwsh running claude.
-		{[]string{"cmd", "/c", "pwsh -NoProfile -Command claude"}, []string{"claude"}},
+		{[]string{"cmd", "/c", "pwsh -NoProfile -command claude"}, []string{"claude"}},
 	} {
 		if got := Unwrap(c.in); !slices.Equal(got, c.want) {
 			t.Errorf("Unwrap(%q) = %q, want %q", c.in, got, c.want)
@@ -175,8 +178,8 @@ func TestSplit(t *testing.T) {
 		`'it"s' ""`:         {`it"s`, ""},
 		"exec claude --x=1": {"exec", "claude", "--x=1"},
 	} {
-		if got := Split(in); !slices.Equal(got, want) {
-			t.Errorf("Split(%q) = %q, want %q", in, got, want)
+		if got := split(in); !slices.Equal(got, want) {
+			t.Errorf("split(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
@@ -189,7 +192,7 @@ func TestHookShell(t *testing.T) {
 		"windows": `& $env:TERMINATR_BIN hook --agent codex`,
 	} {
 		k, g := hookShell(goos)
-		if got := Command(k, g, "$TERMINATR_BIN", "hook", "--agent", "codex"); got != want {
+		if got := command(k, g, "$TERMINATR_BIN", "hook", "--agent", "codex"); got != want {
 			t.Errorf("%s: %s, want %s", goos, got, want)
 		}
 	}

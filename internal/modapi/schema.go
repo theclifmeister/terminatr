@@ -29,7 +29,6 @@ const (
 	GrantInbox       = "inbox"
 	GrantNet         = "net"
 	GrantCommands    = "commands"
-	GrantFiles       = "files"
 )
 
 // Event is one event of the API.

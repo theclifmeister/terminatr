@@ -74,8 +74,6 @@ const (
 
 // Error codes: JSON-RPC's own, and the host's.
 const (
-	CodeParse          = -32700
-	CodeInvalidRequest = -32600
 	CodeMethodNotFound = -32601
 	CodeInvalidParams  = -32602
 	CodeInternal       = -32603

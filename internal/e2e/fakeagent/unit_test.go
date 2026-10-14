@@ -1,9 +1,11 @@
 package main
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -108,4 +110,16 @@ func TestProjectDirName(t *testing.T) {
 	if got := projectDirName("/Users/me/.terminatr/w.1"); got != "-Users-me--terminatr-w-1" {
 		t.Fatal(got)
 	}
+}
+
+// embeddedScripts lists the shipped script names.
+func embeddedScripts() []string {
+	var names []string
+	_ = fs.WalkDir(embedded, "scripts", func(p string, d fs.DirEntry, err error) error {
+		if err == nil && strings.HasSuffix(p, ".toml") {
+			names = append(names, strings.TrimSuffix(filepath.Base(p), ".toml"))
+		}
+		return nil
+	})
+	return names
 }

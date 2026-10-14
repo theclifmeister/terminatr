@@ -362,16 +362,16 @@ func (s SessionInfo) ContextPercent() int {
 	return int(s.Context * 100 / s.ContextWindow)
 }
 
-// QueueNotice is how long a queued prompt must be held while its agent is
+// queueNotice is how long a queued prompt must be held while its agent is
 // idle before listings, tm doctor and tm context call it out: shorter
 // holds are a box being typed into or a screen not yet re-read.
-const QueueNotice = time.Minute
+const queueNotice = time.Minute
 
 // QueueNote says why the session's next queued prompt is held, e.g.
-// "held 12m: prompt box not empty", once it has been for QueueNotice;
+// "held 12m: prompt box not empty", once it has been for queueNotice;
 // "" otherwise.
 func (s SessionInfo) QueueNote(now time.Time) string {
-	if s.Queued == 0 || s.QueueHeld == "" || now.Sub(s.QueueHeldSince) < QueueNotice {
+	if s.Queued == 0 || s.QueueHeld == "" || now.Sub(s.QueueHeldSince) < queueNotice {
 		return ""
 	}
 	return fmt.Sprintf("held %s: %s", now.Sub(s.QueueHeldSince).Truncate(time.Second), s.QueueHeld)
@@ -549,8 +549,6 @@ type HookEventParams struct {
 	Session string         `json:"session"`
 	Agent   string         `json:"agent"`
 	Event   string         `json:"event"`
-	PPID    int            `json:"ppid,omitempty"`
-	At      time.Time      `json:"at"`
 	Payload map[string]any `json:"payload"`
 	// Token is the agent's prompt-channel token from the hook's
 	// environment (the manifest's inject.token_env), when it has one.

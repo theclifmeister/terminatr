@@ -27,15 +27,15 @@ import (
 const (
 	MaxTitle   = 60
 	MaxText    = 240
-	MaxButtons = 3
-	// MaxQuestion bounds a question.answer button's question text.
-	MaxQuestion = 1024
-	// PerMinute is how many notifications one mod may send a minute, and
-	// MaxKept how many of one mod's stay in the tray (older ones go).
-	PerMinute = 6
-	MaxKept   = 5
-	// MaxAll bounds the tray over all mods.
-	MaxAll = 20
+	maxButtons = 3
+	// maxQuestion bounds a question.answer button's question text.
+	maxQuestion = 1024
+	// perMinute is how many notifications one mod may send a minute, and
+	// maxKept how many of one mod's stay in the tray (older ones go).
+	perMinute = 6
+	maxKept   = 5
+	// maxAll bounds the tray over all mods.
+	maxAll = 20
 	// TTL is how long a notification stays in the tray.
 	TTL = 30 * time.Minute
 )
@@ -120,7 +120,7 @@ func Line(s string, n int) string {
 var (
 	// ErrNoTray: there is no Hub (a bare Server in a test).
 	ErrNoTray = errors.New("there is no notification tray")
-	ErrRate   = errors.New("notifications are limited to " + fmt.Sprint(PerMinute) + " a minute")
+	ErrRate   = errors.New("notifications are limited to " + fmt.Sprint(perMinute) + " a minute")
 )
 
 // Hub is the tray (the methods of a nil Hub hold nothing and refuse): the notifications mods sent that are neither dismissed
@@ -163,8 +163,8 @@ func (h *Hub) Post(mod string, req Request) (Notice, error) {
 	if !ok {
 		return Notice{}, fmt.Errorf("level must be one of %s", strings.Join(Levels, ", "))
 	}
-	if len(req.Buttons) > MaxButtons {
-		return Notice{}, fmt.Errorf("a notification has at most %d buttons", MaxButtons)
+	if len(req.Buttons) > maxButtons {
+		return Notice{}, fmt.Errorf("a notification has at most %d buttons", maxButtons)
 	}
 	n := Notice{Mod: mod, Title: title, Text: Line(req.Text, MaxText), Level: level}
 	for _, b := range req.Buttons {
@@ -177,7 +177,7 @@ func (h *Hub) Post(mod string, req Request) (Notice, error) {
 			if why := modaction.TargetWhy(a, t); why != "" || b.Project != "" || b.Task != 0 {
 				return Notice{}, fmt.Errorf("%s needs a target with a session, a question and an option", b.ID)
 			}
-			if len(b.Session) > 256 || len(b.Question) > MaxQuestion || len(b.Option) > 256 ||
+			if len(b.Session) > 256 || len(b.Question) > maxQuestion || len(b.Option) > 256 ||
 				strings.IndexFunc(b.Session+b.Question+b.Option, unicode.IsControl) >= 0 {
 				return Notice{}, fmt.Errorf("%s: a session, question or option too long, or with control characters", b.ID)
 			}
@@ -200,7 +200,7 @@ func (h *Hub) Post(mod string, req Request) (Notice, error) {
 			recent = append(recent, t)
 		}
 	}
-	if len(recent) >= PerMinute {
+	if len(recent) >= perMinute {
 		h.sent[mod] = recent
 		return Notice{}, ErrRate
 	}
@@ -224,8 +224,8 @@ func ActionIDs() string {
 	return strings.Join(ids, ", ")
 }
 
-// trim drops mod's oldest beyond MaxKept and the oldest of all beyond
-// MaxAll; h.mu held.
+// trim drops mod's oldest beyond maxKept and the oldest of all beyond
+// maxAll; h.mu held.
 func (h *Hub) trim(mod string) {
 	n := 0
 	for _, x := range h.list {
@@ -233,7 +233,7 @@ func (h *Hub) trim(mod string) {
 			n++
 		}
 	}
-	for i := 0; i < len(h.list) && n > MaxKept; {
+	for i := 0; i < len(h.list) && n > maxKept; {
 		if h.list[i].Mod == mod {
 			h.list = append(h.list[:i], h.list[i+1:]...)
 			n--
@@ -241,8 +241,8 @@ func (h *Hub) trim(mod string) {
 		}
 		i++
 	}
-	if len(h.list) > MaxAll {
-		h.list = h.list[len(h.list)-MaxAll:]
+	if len(h.list) > maxAll {
+		h.list = h.list[len(h.list)-maxAll:]
 	}
 }
 

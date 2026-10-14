@@ -101,19 +101,19 @@ func TestSectionNullKept(t *testing.T) {
 		t.Fatalf("card trees %+v", got)
 	}
 	// Full: the oldest null goes first, for a tree or another null.
-	for i := 2; i < MaxTrees; i++ {
+	for i := 2; i < maxTrees; i++ {
 		s.Set("m", "band", mod.SlotSidebarSection, Tree{Project: fmt.Sprintf("p%d", i), Tree: text("x")}, 1)
 	}
 	if err := s.Set("m", "band", mod.SlotSidebarSection, Tree{Project: "new", Tree: text("n")}, 1); err != nil {
 		t.Fatal(err)
 	}
-	if got := s.Trees("m", "band"); len(got) != MaxTrees || got[0].Project != "alpha" || got[len(got)-1].Project != "new" {
+	if got := s.Trees("m", "band"); len(got) != maxTrees || got[0].Project != "alpha" || got[len(got)-1].Project != "new" {
 		t.Fatalf("full: %d trees, first %+v", len(got), got[0])
 	}
 	if err := s.Set("m", "band", mod.SlotSidebarSection, Tree{Project: "x"}, 4); err != nil {
 		t.Fatal(err)
 	}
-	if got := s.Trees("m", "band"); len(got) != MaxTrees || got[len(got)-1].Project != "x" {
+	if got := s.Trees("m", "band"); len(got) != maxTrees || got[len(got)-1].Project != "x" {
 		t.Fatalf("a null for a full view: %d, last %+v", len(got), got[len(got)-1])
 	}
 	if err := s.Set("m", "band", mod.SlotSidebarSection, Tree{Project: "y", Tree: text("y")}, 1); err != nil {
@@ -123,7 +123,7 @@ func TestSectionNullKept(t *testing.T) {
 		t.Fatal("a view full of trees took another")
 	}
 	s.Set("m", "band", mod.SlotSidebarSection, Tree{Project: "z"}, 4)
-	if got := s.Trees("m", "band"); len(got) != MaxTrees || slices.ContainsFunc(got, func(o Tree) bool { return o.Project == "z" }) {
+	if got := s.Trees("m", "band"); len(got) != maxTrees || slices.ContainsFunc(got, func(o Tree) bool { return o.Project == "z" }) {
 		t.Fatal("a null went into a view full of trees")
 	}
 }
@@ -207,10 +207,10 @@ func TestHeightsAndBadge(t *testing.T) {
 			t.Errorf("%s: height %d, want %d", slot, got, want)
 		}
 	}
-	if d, m := Heights("sidebar.project.section"); d != DefaultProjectSectionHeight || m != MaxProjectSectionHeight {
+	if d, m := Heights("sidebar.project.section"); d != defaultProjectSectionHeight || m != MaxProjectSectionHeight {
 		t.Errorf("heights %d %d", d, m)
 	}
-	if d, m := Heights("coordinator.section"); d != DefaultSidebarHeight || m != MaxSidebarHeight {
+	if d, m := Heights("coordinator.section"); d != defaultSidebarHeight || m != MaxSidebarHeight {
 		t.Errorf("panel heights %d %d", d, m)
 	}
 	old, cur := &mod.Manifest{API: "1.6"}, &mod.Manifest{API: "1.7"}

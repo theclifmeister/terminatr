@@ -88,7 +88,7 @@ func TestHookDelivers(t *testing.T) {
 	fakeServer(t, sock, 0, `{"ctx":1}`, got)
 	runHookTimed(t, e, "--agent", "claude")
 	p := <-got
-	if p.Session != "s-1" || p.Agent != "claude" || p.Event != "SessionStart" || p.PPID == 0 {
+	if p.Session != "s-1" || p.Agent != "claude" || p.Event != "SessionStart" {
 		t.Fatalf("envelope %+v", p)
 	}
 	// The manifest's inject.token_env goes along, outside the payload.

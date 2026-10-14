@@ -29,7 +29,7 @@ export function askLine(kind: AskKind, task: string, extra: { note?: string; pr?
 
 // MAX_NOTE is the longest send-back note, in characters, as the Go
 // dashboard's (project.MaxSendBackNote).
-export const MAX_NOTE = 200
+const MAX_NOTE = 200
 
 // oneLine folds a note to one line of at most MAX_NOTE characters.
 export function oneLine(note: string): string {
@@ -129,7 +129,7 @@ export function needDetail(n: TerminatrNeed): { text: string; tone: 'question' |
 }
 
 // isBad reports a PR the thread has to act on, in the ticker's words.
-export function isBad(pr: string): boolean {
+function isBad(pr: string): boolean {
   return /failed|conflicts|changes requested|behind/.test(pr)
 }
 
@@ -153,7 +153,7 @@ export function threadLine(t: TerminatrThread, now = Date.now()): string {
 }
 
 // ageWords writes a span in ms short: "40s", "1m20s", "2h5m".
-export function ageWords(ms: number): string {
+function ageWords(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000))
   if (s < 60) return `${s}s`
   const m = Math.floor(s / 60)
@@ -162,7 +162,7 @@ export function ageWords(ms: number): string {
 }
 
 // TickerRow is one row of the ticker's section; bad is red.
-export interface TickerRow { label: string; value: string; bad: boolean }
+interface TickerRow { label: string; value: string; bad: boolean }
 
 // tickerRows are the ticker's timers, a row each: "PRs  40s ago · next
 // 1m20s", "synced  1m ago", "PR host  ok". A timer not known yet has no row.
@@ -181,7 +181,7 @@ export function tickerRows(t: TerminatrTicker, now = Date.now()): TickerRow[] {
 
 // threadState is a thread's state in a word: the session's, "done" for a
 // thread that called tm done, "stopped" for one with no session.
-export function threadState(t: TerminatrThread): string {
+function threadState(t: TerminatrThread): string {
   if (t.done) return 'done'
   if (!t.session) return 'stopped'
   if (t.state === 'blocked') return t.reason === 'question' ? 'asks you' : 'blocked'

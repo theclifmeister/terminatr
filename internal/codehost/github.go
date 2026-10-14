@@ -15,7 +15,7 @@ import (
 
 // GitHub is the GitHub host, through the gh CLI.
 type GitHub struct {
-	// Run runs gh in dir; nil runs the real one (RunGH).
+	// Run runs gh in dir; nil runs the real one (runGH).
 	Run func(dir string, args ...string) ([]byte, error)
 }
 
@@ -25,12 +25,12 @@ func (g GitHub) gh(dir string, args ...string) ([]byte, error) {
 	if g.Run != nil {
 		return g.Run(dir, args...)
 	}
-	return RunGH(dir, args...)
+	return runGH(dir, args...)
 }
 
-// RunGH runs the real gh in dir, without prompts or colour, for at most
+// runGH runs the real gh in dir, without prompts or colour, for at most
 // 30 seconds.
-func RunGH(dir string, args ...string) ([]byte, error) {
+func runGH(dir string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := shell.CLICommand(ctx, "gh", args...)

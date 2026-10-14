@@ -24,16 +24,12 @@ import (
 // would detect from the checkout.
 type Azure struct {
 	Target Target
-	// Run runs az in dir; nil runs the real one (RunAZ).
+	// Run runs az in dir; nil runs the real one (runAZ).
 	Run func(dir string, args ...string) ([]byte, error)
 	// PATGet asks a URL with a PAT; nil runs PATGet.
 	PATGet func(url, pat string) ([]byte, error)
 	// Getenv reads the environment; nil is os.Getenv.
 	Getenv func(string) string
-}
-
-func init() {
-	newAzure = func(t Target) Host { return Azure{Target: t} }
 }
 
 func (Azure) Kind() string { return AzureKind }
@@ -42,7 +38,7 @@ func (a Azure) az(dir string, args ...string) ([]byte, error) {
 	if a.Run != nil {
 		return a.Run(dir, args...)
 	}
-	return RunAZ(dir, args...)
+	return runAZ(dir, args...)
 }
 
 // azSlots bounds the az processes running at once: each is a Python
@@ -52,10 +48,10 @@ var azSlots = make(chan struct{}, 4)
 // azTimeout is how long one az call may take.
 const azTimeout = 45 * time.Second
 
-// RunAZ runs the real az in dir with JSON output, without prompts,
+// runAZ runs the real az in dir with JSON output, without prompts,
 // colour, warnings or installing a missing extension, for at most
 // azTimeout and at most cap(azSlots) at once. Its errors are CLIErrors.
-func RunAZ(dir string, args ...string) ([]byte, error) {
+func runAZ(dir string, args ...string) ([]byte, error) {
 	azSlots <- struct{}{}
 	defer func() { <-azSlots }()
 	ctx, cancel := context.WithTimeout(context.Background(), azTimeout)
@@ -401,7 +397,7 @@ func azurePR(t Target, pr, policies, statuses []byte) (PR, error) {
 	var out PR
 	if a.ID > 0 && a.ID < 1e9 {
 		out.Number = a.ID
-		out.URL = AzurePRURL(t, a.ID)
+		out.URL = azurePRURL(t, a.ID)
 	}
 	switch a.Status {
 	case "active":
@@ -539,16 +535,16 @@ func azurePR(t Target, pr, policies, statuses []byte) (PR, error) {
 	return out, nil
 }
 
-// AzurePRURL is the web URL of PR n of t's repo,
+// azurePRURL is the web URL of PR n of t's repo,
 // https://dev.azure.com/org/project/_git/repo/pullrequest/n.
-func AzurePRURL(t Target, n int) string {
+func azurePRURL(t Target, n int) string {
 	return fmt.Sprintf("%s/%s/_git/%s/pullrequest/%d", t.OrgURL, url.PathEscape(t.Project), url.PathEscape(t.Repo), n)
 }
 
-// ParsePRURL is the number of a PR URL of this repo (OwnsPRURL); a PR
+// ParsePRURL is the number of a PR URL of this repo (ownsPRURL); a PR
 // URL of any other organization, project or repo is not this host's.
 func (a Azure) ParsePRURL(s string) (int, bool) {
-	if !OwnsPRURL(a.Target, s) {
+	if !ownsPRURL(a.Target, s) {
 		return 0, false
 	}
 	l, _ := ParsePR(s)

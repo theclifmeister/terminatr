@@ -201,7 +201,7 @@ func TestParseTemplate(t *testing.T) {
 		{"x", "no title\n", "first line is the title"},
 		{"x", "# Bug\n", "needs {title} once"},
 		{"x", "# {title}\n## Steps\nnot an item\n", "isn't a list item"},
-		{"x", "# {title}\n## Steps\n" + strings.Repeat("- s\n", MaxTemplateSteps+1), "at most"},
+		{"x", "# {title}\n## Steps\n" + strings.Repeat("- s\n", maxTemplateSteps+1), "at most"},
 	} {
 		if _, err := ParseTemplate(tc.name, []byte(tc.body)); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%q: %v, want %q", tc.body, err, tc.want)

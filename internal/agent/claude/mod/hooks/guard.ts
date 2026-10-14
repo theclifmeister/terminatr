@@ -52,7 +52,7 @@ export type Rules = {
 // arguments include in that order; a word ending in * matches any word
 // it starts) and the files no file tool may write or read, with the
 // mod's sentence. Judged on each simple command before the core's rules.
-export type ModRule = {
+type ModRule = {
   mod: string
   id: string
   commands?: readonly (readonly string[])[]
@@ -65,7 +65,7 @@ export type ModRule = {
 // glob) and the fields of its input that kind reads. A shell tool's
 // syntax is how its command lines are read: none for a POSIX shell,
 // 'powershell' for PowerShell.
-export type Tool = { kind: string; syntax?: string; fields: readonly string[] }
+type Tool = { kind: string; syntax?: string; fields: readonly string[] }
 
 // A refusal: the rule, what the model reads, and a short account for
 // the journal that carries no text of the call beyond a path or branch.
@@ -143,7 +143,7 @@ export function judge(r: Rules, tool: string, input: Record<string, unknown>): D
 }
 
 // patchPaths are the files a Codex patch (*** Begin Patch …) writes.
-export function patchPaths(patch: string): string[] {
+function patchPaths(patch: string): string[] {
   return [...patch.matchAll(/^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+?)\s*$/gm)].map(m => m[1])
 }
 
@@ -615,7 +615,7 @@ function slash(p: string): string {
 // abs is p made absolute and clean: ~ is home, a relative path is from
 // the session's folder. A Windows path keeps its drive (C:/Users/me);
 // backslashes are slashes.
-export function abs(r: Rules, p: string): string {
+function abs(r: Rules, p: string): string {
   p = slash(p)
   const h = HOMES.find(h => p.slice(0, h.length).toLowerCase() === h && (p.length === h.length || p[h.length] === '/'))
   if (h !== undefined) p = slash(r.home ?? '') + p.slice(h.length)
