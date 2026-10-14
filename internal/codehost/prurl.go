@@ -124,3 +124,26 @@ func OwnsPRURL(t Target, s string) bool {
 	}
 	return SameRepo(t, l.Target)
 }
+
+// InRepo says whether pr is one of repo's own PRs, as tm thread merge
+// asks before merging it. A GitHub PR's URL must name the owner and repo
+// of repo's origin (gh may be asking another repo of its choice); the
+// server isn't compared, as an origin may name it by an ssh alias. Azure
+// DevOps and code host mods are only ever asked about the origin's repo
+// and keep no PR of another, so theirs are.
+func InRepo(repo string, h Host, pr PR) bool {
+	if h.Kind() != GitHubKind {
+		return true
+	}
+	if !urlRE.MatchString(pr.URL) {
+		return false
+	}
+	_, path, ok := splitRemote(origin(repo))
+	if !ok {
+		return false
+	}
+	path = strings.TrimSuffix(strings.Trim(path, "/"), ".git")
+	want := "/" + path + "/pull/" + strconv.Itoa(pr.Number)
+	_, got, _ := strings.Cut(strings.TrimPrefix(pr.URL, "https://"), "/")
+	return path != "" && strings.EqualFold("/"+got, want)
+}

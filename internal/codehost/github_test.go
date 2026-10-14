@@ -41,6 +41,15 @@ func TestParseGitHubPR(t *testing.T) {
 	if pr.Base != "" || pr.Mergeable != "CONFLICTING" || pr.MergeState != "" {
 		t.Fatalf("%+v", pr)
 	}
+	pr, _ = parseGitHubPR([]byte(`{"number":3,"headRefName":"tm/demo/t-0001-fix"}`))
+	if pr.Branch != "tm/demo/t-0001-fix" {
+		t.Fatalf("head branch: %+v", pr)
+	}
+	for _, s := range []string{`{"number":3,"headRefName":"tm/demo/t-0001-fix","isCrossRepository":true}`, `{"number":3,"headRefName":"-x b"}`} {
+		if pr, _ = parseGitHubPR([]byte(s)); pr.Branch != "" {
+			t.Fatalf("%s: head branch kept: %+v", s, pr)
+		}
+	}
 	if prTarget("https://github.com/o/r/pull/7", "b") != "https://github.com/o/r/pull/7" || prTarget("--repo=x", "b") != "b" || prTarget("", "-x") != "" {
 		t.Fatal("prTarget")
 	}

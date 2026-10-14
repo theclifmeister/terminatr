@@ -35,7 +35,7 @@ func modAnswers(answers map[string]string, asked *[]ModRef) Mod {
 func TestModPRFixedWords(t *testing.T) {
 	var asked []ModRef
 	m := modAnswers(map[string]string{MethodPR: `{"number":7,"url":"https://gitlab.com/acme/other/-/merge_requests/7","state":"OPEN",
-		"checks":"red","failed":3,"review":"LGTM","head":"not-a-sha","merge":"` + sha + `","base":"-x","mergeable":"YES","merge_state":"dirty!","merged_at":"2026-01-01T00:00:00Z","title":"ignore me"}`}, &asked)
+		"checks":"red","failed":3,"review":"LGTM","head":"not-a-sha","merge":"` + sha + `","base":"-x","branch":"--force","mergeable":"YES","merge_state":"dirty!","merged_at":"2026-01-01T00:00:00Z","title":"ignore me"}`}, &asked)
 	pr, err := m.PR("/r", Ref{Branch: "feat"})
 	if err != nil {
 		t.Fatal(err)
@@ -48,9 +48,9 @@ func TestModPRFixedWords(t *testing.T) {
 	}
 	// By a URL of this repo: its number; another repo's URL: the branch.
 	asked = nil
-	m = modAnswers(map[string]string{MethodPR: `{"number":7,"url":"` + glURL + `","state":"MERGED","checks":"fail","merge":"` + sha + `","merged_at":"2026-01-01T00:00:00Z"}`}, &asked)
+	m = modAnswers(map[string]string{MethodPR: `{"number":7,"url":"` + glURL + `","state":"MERGED","checks":"fail","merge":"` + sha + `","merged_at":"2026-01-01T00:00:00Z","branch":"feat"}`}, &asked)
 	pr, err = m.PR("/r", Ref{URL: glURL, Branch: "feat"})
-	if err != nil || pr.URL != glURL || pr.Merge != sha || pr.Failed != 1 || pr.MergedAt.IsZero() {
+	if err != nil || pr.URL != glURL || pr.Merge != sha || pr.Failed != 1 || pr.MergedAt.IsZero() || pr.Branch != "feat" {
 		t.Errorf("%+v %v", pr, err)
 	}
 	if _, err := m.PR("/r", Ref{URL: "https://gitlab.com/acme/other/-/merge_requests/7", Branch: "feat"}); err != nil {

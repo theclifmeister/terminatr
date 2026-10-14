@@ -1,6 +1,9 @@
 package codehost
 
-import "testing"
+import (
+	"os/exec"
+	"testing"
+)
 
 func TestParsePRURL(t *testing.T) {
 	for _, c := range []struct {
@@ -73,4 +76,41 @@ func FuzzParsePRURL(f *testing.F) {
 			t.Fatalf("ParsePRURL(%q) = %d, %q, false", s, n, kind)
 		}
 	})
+}
+
+func TestInRepo(t *testing.T) {
+	repo := t.TempDir()
+	git := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	git("init", "-q")
+	pr := PR{Number: 7, URL: "https://github.com/acme/shop/pull/7"}
+	if InRepo(repo, GitHub{}, pr) {
+		t.Fatal("no origin: in repo")
+	}
+	git("remote", "add", "origin", "git@github.com:acme/shop.git")
+	for url, want := range map[string]bool{
+		"https://github.com/acme/shop/pull/7":  true,
+		"https://github.com/Acme/Shop/pull/7":  true,
+		"https://github.com/acme/shop/pull/8":  false, // not pr's number
+		"https://github.com/other/shop/pull/7": false,
+		"https://github.com/acme/shopx/pull/7": false,
+		"":                                     false,
+	} {
+		if got := InRepo(repo, GitHub{}, PR{Number: 7, URL: url}); got != want {
+			t.Errorf("%q: %v, want %v", url, got, want)
+		}
+	}
+	git("remote", "set-url", "origin", "https://github.com/acme/shop")
+	if !InRepo(repo, GitHub{}, pr) {
+		t.Error("https origin without .git")
+	}
+	// Azure DevOps and mods are only asked about the origin's repo.
+	if !InRepo(repo, Azure{}, PR{Number: 7}) {
+		t.Error("azure")
+	}
 }

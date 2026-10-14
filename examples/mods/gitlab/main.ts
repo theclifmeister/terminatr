@@ -24,6 +24,8 @@ interface MR {
   state: string; // opened, closed, locked, merged
   source_branch: string;
   target_branch: string;
+  source_project_id?: number;
+  target_project_id?: number;
   sha: string | null;
   merge_commit_sha: string | null;
   squash_commit_sha: string | null;
@@ -130,6 +132,7 @@ async function pr(r: Remote, mr: MR): Promise<TM.CodeHostPR> {
     head: mr.sha ?? undefined,
     mergeable: "UNKNOWN",
   };
+  if (mr.source_project_id === mr.target_project_id) out.branch = mr.source_branch; // not a fork's
   if (out.checks === "fail") out.failed = 1; // one pipeline
   if (st === "MERGED") {
     out.merge = mr.merge_commit_sha ?? mr.squash_commit_sha ?? undefined;

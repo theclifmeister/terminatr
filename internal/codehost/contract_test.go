@@ -14,7 +14,8 @@ type hostFake struct {
 	make func(s scenario) Host
 }
 
-// scenario is one PR situation as each host's CLI would answer it.
+// scenario is one PR situation, of a PR from branch b, as each host's
+// CLI would answer it.
 type scenario struct {
 	name string
 	gh   string // `gh pr view --json`; "!" prefix => error text
@@ -33,7 +34,7 @@ var errCLI = errors.New("a CLI failure")
 const sha = "0123456789abcdef0123456789abcdef01234567"
 
 func azList(status, mergeStatus, extra string) string {
-	return fmt.Sprintf(`[{"pullRequestId":7,"status":%q,"mergeStatus":%q,"targetRefName":"refs/heads/main",`+
+	return fmt.Sprintf(`[{"pullRequestId":7,"status":%q,"mergeStatus":%q,"sourceRefName":"refs/heads/b","targetRefName":"refs/heads/main",`+
 		`"lastMergeSourceCommit":{"commitId":%q},"repository":{"name":"web","project":{"id":"`+shopPID+`","name":"Shop"}}%s}]`, status, mergeStatus, sha, extra)
 }
 
@@ -54,50 +55,50 @@ var buildPolicy = func(status string) string {
 
 var scenarios = []scenario{
 	{name: "opened, checks running",
-		gh: `{"number":7,"state":"OPEN","baseRefName":"main","mergeable":"MERGEABLE","statusCheckRollup":[{"status":"IN_PROGRESS"}]}`,
+		gh: `{"number":7,"headRefName":"b","state":"OPEN","baseRefName":"main","mergeable":"MERGEABLE","statusCheckRollup":[{"status":"IN_PROGRESS"}]}`,
 		az: azList("active", "succeeded", ""), pol: buildPolicy("running"),
 		gl:   glMR("opened", `"detailed_merge_status":"ci_still_running","head_pipeline":{"id":9,"status":"running"}`),
-		want: PR{Number: 7, State: "OPEN", Checks: "pending", Base: "main", Mergeable: "MERGEABLE"}},
+		want: PR{Number: 7, Branch: "b", State: "OPEN", Checks: "pending", Base: "main", Mergeable: "MERGEABLE"}},
 	{name: "checks failed",
-		gh: `{"number":7,"state":"OPEN","baseRefName":"main","mergeable":"MERGEABLE","statusCheckRollup":[{"status":"COMPLETED","conclusion":"FAILURE"}]}`,
+		gh: `{"number":7,"headRefName":"b","state":"OPEN","baseRefName":"main","mergeable":"MERGEABLE","statusCheckRollup":[{"status":"COMPLETED","conclusion":"FAILURE"}]}`,
 		az: azList("active", "succeeded", ""), pol: buildPolicy("rejected"),
 		gl:   glMR("opened", `"detailed_merge_status":"ci_must_pass","head_pipeline":{"id":9,"status":"failed"}`),
-		want: PR{Number: 7, State: "OPEN", Checks: "fail", Failed: 1, Base: "main", Mergeable: "MERGEABLE"}},
+		want: PR{Number: 7, Branch: "b", State: "OPEN", Checks: "fail", Failed: 1, Base: "main", Mergeable: "MERGEABLE"}},
 	{name: "checks passed, external status failed",
-		gh: `{"number":7,"state":"OPEN","baseRefName":"main","mergeable":"MERGEABLE","statusCheckRollup":[{"status":"COMPLETED","conclusion":"SUCCESS"},{"state":"FAILURE"}]}`,
+		gh: `{"number":7,"headRefName":"b","state":"OPEN","baseRefName":"main","mergeable":"MERGEABLE","statusCheckRollup":[{"status":"COMPLETED","conclusion":"SUCCESS"},{"state":"FAILURE"}]}`,
 		az: azList("active", "succeeded", ""), pol: buildPolicy("approved"), sts: `{"value":[{"id":1,"state":"failed","context":{"name":"x"}}]}`,
 		gl:   glMR("opened", `"detailed_merge_status":"mergeable","head_pipeline":{"id":9,"status":"failed"}`),
-		want: PR{Number: 7, State: "OPEN", Checks: "fail", Failed: 1, Base: "main", Mergeable: "MERGEABLE"}},
+		want: PR{Number: 7, Branch: "b", State: "OPEN", Checks: "fail", Failed: 1, Base: "main", Mergeable: "MERGEABLE"}},
 	{name: "changes requested",
-		gh: `{"number":7,"state":"OPEN","reviewDecision":"CHANGES_REQUESTED","baseRefName":"main","mergeable":"MERGEABLE","statusCheckRollup":[{"status":"COMPLETED","conclusion":"SUCCESS"}]}`,
+		gh: `{"number":7,"headRefName":"b","state":"OPEN","reviewDecision":"CHANGES_REQUESTED","baseRefName":"main","mergeable":"MERGEABLE","statusCheckRollup":[{"status":"COMPLETED","conclusion":"SUCCESS"}]}`,
 		az: azList("active", "succeeded", `,"reviewers":[{"vote":-10}]`), pol: buildPolicy("approved"),
 		gl:   glMR("opened", `"detailed_merge_status":"requested_changes","head_pipeline":{"id":9,"status":"success"}`),
-		want: PR{Number: 7, State: "OPEN", Checks: "pass", Review: "CHANGES_REQUESTED", Base: "main", Mergeable: "MERGEABLE"}},
+		want: PR{Number: 7, Branch: "b", State: "OPEN", Checks: "pass", Review: "CHANGES_REQUESTED", Base: "main", Mergeable: "MERGEABLE"}},
 	{name: "approved, no CI",
-		gh: `{"number":7,"state":"OPEN","reviewDecision":"APPROVED","baseRefName":"main","mergeable":"MERGEABLE","statusCheckRollup":[]}`,
+		gh: `{"number":7,"headRefName":"b","state":"OPEN","reviewDecision":"APPROVED","baseRefName":"main","mergeable":"MERGEABLE","statusCheckRollup":[]}`,
 		az: azList("active", "succeeded", `,"reviewers":[{"vote":10,"isRequired":true}]`), pol: `[]`,
 		gl: glMR("opened", `"detailed_merge_status":"mergeable","head_pipeline":null`), gla: `{"approved":true,"approvals_left":0,"approved_by":[{"user":{"username":"ada"}}]}`,
-		want: PR{Number: 7, State: "OPEN", Review: "APPROVED", Base: "main", Mergeable: "MERGEABLE"}},
+		want: PR{Number: 7, Branch: "b", State: "OPEN", Review: "APPROVED", Base: "main", Mergeable: "MERGEABLE"}},
 	{name: "conflict",
-		gh: `{"number":7,"state":"OPEN","baseRefName":"main","mergeable":"CONFLICTING","mergeStateStatus":"DIRTY"}`,
+		gh: `{"number":7,"headRefName":"b","state":"OPEN","baseRefName":"main","mergeable":"CONFLICTING","mergeStateStatus":"DIRTY"}`,
 		az: azList("active", "conflicts", ""), pol: `[]`,
 		gl:   glMR("opened", `"has_conflicts":true,"detailed_merge_status":"conflict"`),
-		want: PR{Number: 7, State: "OPEN", Base: "main", Mergeable: "CONFLICTING", MergeState: "DIRTY"}},
+		want: PR{Number: 7, Branch: "b", State: "OPEN", Base: "main", Mergeable: "CONFLICTING", MergeState: "DIRTY"}},
 	{name: "merge state not computed yet",
-		gh: `{"number":7,"state":"OPEN","baseRefName":"main","mergeable":"UNKNOWN"}`,
+		gh: `{"number":7,"headRefName":"b","state":"OPEN","baseRefName":"main","mergeable":"UNKNOWN"}`,
 		az: azList("active", "queued", ""), pol: `[]`,
 		gl:   glMR("opened", `"detailed_merge_status":"checking"`),
-		want: PR{Number: 7, State: "OPEN", Base: "main", Mergeable: "UNKNOWN"}},
+		want: PR{Number: 7, Branch: "b", State: "OPEN", Base: "main", Mergeable: "UNKNOWN"}},
 	{name: "merged (squash)",
-		gh:   `{"number":7,"state":"MERGED","baseRefName":"main","mergeable":"UNKNOWN","mergeCommit":{"oid":"` + strings.Repeat("ab", 20) + `"}}`,
+		gh:   `{"number":7,"headRefName":"b","state":"MERGED","baseRefName":"main","mergeable":"UNKNOWN","mergeCommit":{"oid":"` + strings.Repeat("ab", 20) + `"}}`,
 		az:   azList("completed", "notSet", `,"lastMergeCommit":{"commitId":"`+strings.Repeat("ab", 20)+`"}`),
 		gl:   glMR("merged", `"squash_commit_sha":"`+strings.Repeat("ab", 20)+`"`),
-		want: PR{Number: 7, State: "MERGED", Base: "main", Mergeable: "UNKNOWN", Merge: strings.Repeat("ab", 20)}},
+		want: PR{Number: 7, Branch: "b", State: "MERGED", Base: "main", Mergeable: "UNKNOWN", Merge: strings.Repeat("ab", 20)}},
 	{name: "closed",
-		gh:   `{"number":7,"state":"CLOSED","baseRefName":"main","mergeable":"UNKNOWN"}`,
+		gh:   `{"number":7,"headRefName":"b","state":"CLOSED","baseRefName":"main","mergeable":"UNKNOWN"}`,
 		az:   azList("abandoned", "notSet", ""),
 		gl:   glMR("closed", ""),
-		want: PR{Number: 7, State: "CLOSED", Base: "main", Mergeable: "UNKNOWN"}},
+		want: PR{Number: 7, Branch: "b", State: "CLOSED", Base: "main", Mergeable: "UNKNOWN"}},
 	{name: "no PR",
 		gh:  `!no pull requests found for branch "b"`,
 		az:  `[]`,

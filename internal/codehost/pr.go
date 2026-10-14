@@ -29,6 +29,9 @@ type PR struct {
 	Base       string `json:"base,omitempty"`
 	Mergeable  string `json:"mergeable,omitempty"`
 	MergeState string `json:"merge_state,omitempty"`
+	// Branch is the branch it comes from, of the repo itself: "" for a
+	// PR from a fork, or when the host doesn't say.
+	Branch string `json:"branch,omitempty"`
 }
 
 // Ref is how items and prompts name a PR: "PR #12".
