@@ -21,6 +21,9 @@ const ErrNotShared = "not-shared"
 // PeerProjects is the answer of peer.projects.
 type PeerProjects struct {
 	Projects []PeerProject `json:"projects"`
+	// Now is the peer's clock as it answered: the reader's mirror
+	// measures the offset between the two clocks from it.
+	Now time.Time `json:"now,omitzero"`
 }
 
 // PeerProject is one shared project as the list shows it: its goal line,
@@ -50,9 +53,11 @@ const PeerWatchMaxWait = 50
 
 // PeerWatch is a shared project's state: its ProjectWatch as the /tm
 // pane has it, links only to other shared projects, and its sessions,
-// trimmed. Rev names the state.
+// trimmed. Rev names the state; Now is the peer's clock as it answered,
+// outside the state Rev names.
 type PeerWatch struct {
 	Rev      string        `json:"rev"`
+	Now      time.Time     `json:"now,omitzero"`
 	Watch    ProjectWatch  `json:"watch"`
 	Sessions []PeerSession `json:"sessions"`
 }

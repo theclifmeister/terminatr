@@ -68,7 +68,7 @@ func (d *dispatcher) projects(ctx context.Context, _ json.RawMessage) (any, erro
 	if ps == nil {
 		ps = []proto.PeerProject{}
 	}
-	return proto.PeerProjects{Projects: ps}, nil
+	return proto.PeerProjects{Projects: ps, Now: time.Now()}, nil
 }
 
 func (d *dispatcher) watch(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -98,12 +98,14 @@ func (d *dispatcher) watch(ctx context.Context, raw json.RawMessage) (any, error
 		}
 		w.Rev = rev(w)
 		if w.Rev != p.Rev {
+			w.Now = time.Now()
 			return w, nil
 		}
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-deadline.C:
+			w.Now = time.Now()
 			return w, nil
 		case <-ch:
 		case <-t.C:
@@ -111,9 +113,9 @@ func (d *dispatcher) watch(ctx context.Context, raw json.RawMessage) (any, error
 	}
 }
 
-// rev names a state: the hash of its JSON without the rev.
+// rev names a state: the hash of its JSON without the rev or the time.
 func rev(w proto.PeerWatch) string {
-	w.Rev = ""
+	w.Rev, w.Now = "", time.Time{}
 	b, _ := json.Marshal(w)
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:12])

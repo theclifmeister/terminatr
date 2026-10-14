@@ -147,7 +147,7 @@ The dependency rule: `server`, `session`, `ticker`, `tui`, `project`, `thread` a
   - The run directory is `$XDG_RUNTIME_DIR/terminatr` on Linux when that is set, and `~/.terminatr/run` otherwise.
   - If `<run dir>/tm.sock` would be over 100 bytes, the run directory falls back to `/tmp/terminatr-<uid>-<hash>`, where `<hash>` is 8 hex digits of the SHA-256 of `TERMINATR_HOME` (cleaned, with the symlinks in its existing part resolved). Every home keeps its own server even with the fallback; the default `~/.terminatr` is unaffected unless its own path is that long.
   - `$TERMINATR_SOCKET` overrides the socket path, and an override over 100 bytes is refused, not truncated. The human socket is always `human` beside it (no longer than `tm.sock`, so it fits wherever that does).
-- **The human socket.** The server listens on a second socket, `human` beside `tm.sock` (mode 0600, same user, same protocol), for the human's console and CLI. Every control and attach connection (`tm`, the TUI) dials it first and falls back to `tm.sock` where it can't connect: an older server without one, a sandbox that refuses it. A process with a coordinator's or thread's session environment doesn't try (its sandbox would report each refused connect to the agent as a reason to leave the sandbox); the sandbox, not that choice, is the gate. No agent's sandbox allows it (§5.2), so the human-only methods (`project.rename`, `project.active`, `mod.views`, `mod.view.input`, `mod.command`, `mod.restart`, `notify.claim`, `notify.dismiss`, `mod.action.check`, `mod.action.done`, `session.clear`, what starts, stops or types into a session (`session.start`, `session.stop`, `session.keys`, `session.prompt`, `session.adopt`, `session.adopt.ask`, `session.remote`, `questions.open`), `session.model`, the console's `view.*` but `view.digest`, `server.stop`, `agent.reload` and `peer.reload`: `proto.HumanOnly`) and attach answer only there; on `tm.sock` they come back `human-only` and a control connection stays open. On the human socket they still refuse a caller the pid walk places in an agent's session (§11.1). `cli.run` is the other way round: on `tm.sock` it answers only a caller the pid walk places in an agent's session, since one it calls the human (a process that left its session's tree) would run project commands as the human; the human's own `tm` uses the human socket. An agent's own uses of the human-only session methods (`tm thread start`, `prompt`, `stop`, …) run inside the server through `cli.run`, after the command's own caller check, and the server's calls come in on the human socket (a server started from inside a session drops its `TERMINATR_SESSION`, `ROLE`, `PROJECT` and `THREAD`). Hooks use `tm.sock`.
+- **The human socket.** The server listens on a second socket, `human` beside `tm.sock` (mode 0600, same user, same protocol), for the human's console and CLI. Every control and attach connection (`tm`, the TUI) dials it first and falls back to `tm.sock` where it can't connect: an older server without one, a sandbox that refuses it. A process with a coordinator's or thread's session environment doesn't try (its sandbox would report each refused connect to the agent as a reason to leave the sandbox); the sandbox, not that choice, is the gate. No agent's sandbox allows it (§5.2), so the human-only methods (`project.rename`, `project.active`, `mod.views`, `mod.view.input`, `mod.command`, `mod.restart`, `notify.claim`, `notify.dismiss`, `mod.action.check`, `mod.action.done`, `session.clear`, what starts, stops or types into a session (`session.start`, `session.stop`, `session.keys`, `session.prompt`, `session.adopt`, `session.adopt.ask`, `session.remote`, `questions.open`), `session.model`, the console's `view.*` but `view.digest`, `server.stop`, `agent.reload`, `peer.reload` and `peer.list`: `proto.HumanOnly`) and attach answer only there; on `tm.sock` they come back `human-only` and a control connection stays open. On the human socket they still refuse a caller the pid walk places in an agent's session (§11.1). `cli.run` is the other way round: on `tm.sock` it answers only a caller the pid walk places in an agent's session, since one it calls the human (a process that left its session's tree) would run project commands as the human; the human's own `tm` uses the human socket. An agent's own uses of the human-only session methods (`tm thread start`, `prompt`, `stop`, …) run inside the server through `cli.run`, after the command's own caller check, and the server's calls come in on the human socket (a server started from inside a session drops its `TERMINATR_SESSION`, `ROLE`, `PROJECT` and `THREAD`). Hooks use `tm.sock`.
   - `TERMINATR_HOME` (default `~/.terminatr`) moves everything else, which is how tests run isolated servers. (Terminatr was called Termilator up to v0.6.2 and Termalator up to v0.1.0; no release reads the old variables or moves the old directories: docs/OPERATIONS.md, "Upgrading from Termilator".) A custom `TERMINATR_HOME` ignores `$XDG_RUNTIME_DIR`, so a test server never shares a run directory with the user's.
   - `server.lock` and `server.pid` sit next to the socket, in the run directory. A `$TERMINATR_SOCKET` override therefore isolates the lock too (`server.ResolvePaths`).
 - **Permissions.**
@@ -199,7 +199,7 @@ So that this keeps working, every server of every future protocol keeps three pr
 | server | `ping`, `server.status`, `server.stop`, `server.keychain` (macOS: can the server's sessions reach the login keychain, §3.1; a server without it answers `unknown-method`, which `tm doctor` skips), `server.codehost` (runs tm doctor's code-host checks, `gh auth status`, `az` login and repo access, `git ls-remote origin`, in the server's own context, the one its sessions' `gh`, `az` and git have; result `{checks: [{name, ok, detail}]}`; a server without it answers `unknown-method` and doctor checks locally) |
 | sessions | `session.list` (since protocol 13 also the mods' cells: `mods {columns, cells, status}` and each session's `cells`, §5.3 **Cells**; with mod API 1.7 also `mods.sections [{mod, view, title, slot, builtin}]`, the `sidebar.section` and `sidebar.project.section` views consoles show, the built-in mods' alone in safe mode, so an attached console asks `mod.views` only when there are some), `session.start`, `session.stop`, `session.read` (screen text), `session.prompt` (queued, pasted once the agent is idle; the answer's `via` says how it went), `questions.open {project}` (the project's coordinator opens its open questions, §7.5 **Questions**; refused with none open or no coordinator running; result `{session, via, open}`), `session.keys`, `session.wait` (until a state), `session.model {id}` (applies the project's `coordinator_model` to its running coordinator, §8.2 **Models**; `how`: `unchanged`, `switched`, `next-start`), `session.remote {id, on}` (a coordinator's remote control, §11.2), `session.adopt {id, project, thread, brief, asked}` (a plain agent session becomes a thread's, §9 **Adopt**; refused unless it is a live shell-role session with an agent, and with `asked` unless the user's go-ahead waits, which it uses up), `session.adopt.ask {id, project, check, withdraw}` (human-only: records the user's go-ahead to adopt the session into the project for an hour, or with `check` answers `{asked}`, recording nothing, or with `withdraw` drops it; §9 **Adopt**), `session.watch {id}` (the session's state; the connection then streams `watch.changed`, below; a server without it answers `unknown-method`), `project.watch {project}` (a project's dashboard for the coordinator's /tm pane; the connection then streams `project.changed`, **Watch** below), `session.ask {id, question}` (a mod's open question menu; the connection then waits for its answers, **Ask** below), `session.answer {id, index, answer, question}` (one question of it, from `tm thread answer`; `no-question` when none is open; with `question`, from a console's `question.answer` binding, refused unless question `index` still asks it, unanswered and single-select, and `answer` is one of its options' labels), `session.clear {id}` (human-only: pastes the agent's clear prompt once it is idle, journaled; refused for an agent without `[inject] clear`; §5.3 **Action binding**) |
 | agents | `agent.list`, `agent.reload`, `agent.explain` (which signals and rules produced a session's state) |
-| peers | `peer.reload` (read the identity key and the paired servers again after `tm peer` changed them, answering the link status; the human's, §16.8) |
+| peers | `peer.reload` (read the identity key and the paired servers again after `tm peer` changed them, answering the link status; the human's, §16.8), `peer.list` (the mirror of the paired servers' shared projects, for the consoles; the human's, §16.10) |
 | hooks | `hook.event` (from `tm hook`; also its own connection kind, §8.2) |
 | views | `view.subscribe` (join a view; the connection then streams `view.changed`), `view.attach`, `view.dashboard`, `view.project`, `view.select`, `view.sidesel`, `view.expand {project, on}` (expand or collapse an inactive project in the sidebar's tree, §4; since protocol 10), `view.tree {tree}` (what the sidebar's tree folds: active projects folded, inactive ones expanded, the inactive divider open, §4; since protocol 11; the view keeps its section folds whatever the tree sent says), `view.sections {sections, on}` (fold or unfold the mods' sections, by id: a sidebar section's `mod.view`, or `mod.view@slug` under a project, and a right-pane section's `panel:mod.view`, one id for every project and row, §4 **Mod sections**; at most 64 ids a call, and a view keeps at most 128 folded, the oldest going first; every console of the view follows, and `ui.json` keeps them with the tree; a console on a server of protocol 14 keeps them as its own; since protocol 15), `view.sidebar {sidebar}` (its width, slim; since protocol 14 also `side`, `share` and `hidden`, §4; a side other than left or right, or a share outside 10 % to 60 %, is refused), `view.info`, `view.status {compact}` (the status bar under a pane: one row without the rule above it, from the layout's `[status_bar] style`, §5.3; a layout change, as `view.sidebar`; since protocol 14), `view.columns {columns}` (the sidebar's column order, from the layout mod `[ui] layout` picks, §5.3; none for the built-in order; since protocol 12), `view.size`, `view.input` (below), `view.digest` (tests: a console's digest check, §15.2) |
 | callers | `caller.who` (who the peer pid is: the hosted session it descends from, and its role, §11.1) |
@@ -2284,14 +2284,16 @@ user shares a project, and nothing that crosses can act here.
   exports lists `watch` in its hello; an error that isn't a protocol
   error crosses as `internal`, without its words.
 - **`peer.projects`** → `{"projects": [{"project", "goal", "paused",
-  "needs_you", "threads", "ready"}]}`: the shared projects, by slug,
-  with the goal line and counts from their `ProjectWatch`.
-- **`peer.watch`** `{"project", "rev", "wait"}` → `{"rev", "watch",
+  "needs_you", "threads", "ready"}], "now"}`: the shared projects, by
+  slug, with the goal line and counts from their `ProjectWatch`. `now`
+  is the server's clock as it answers, here and in `peer.watch`, for the
+  reader's clock offset (§16.10).
+- **`peer.watch`** `{"project", "rev", "wait"}` → `{"rev", "now", "watch",
   "sessions"}`: a long poll. It answers at once when the project's state
   differs from `rev` (none: at once), else when it changes (the
   server's own wakes, or a re-read every 2 s), else after `wait`
   seconds (at most and by default 50) with the same state. `rev` names
-  a state (a hash of its JSON). `watch` is the project's `ProjectWatch`
+  a state (a hash of its JSON, without `rev` and `now`). `watch` is the project's `ProjectWatch`
   as `project.watch` gives it (§3.3, **Watch**), its `links` only to
   other shared projects. `sessions` are the project's sessions, each
   `{"id", "role", "agent", "project", "thread", "task", "created",
@@ -2307,3 +2309,43 @@ user shares a project, and nothing that crosses can act here.
 - **Never crosses**: `config.toml`, `ui.json`, keys, tokens, `state/`,
   `run/`, paths, repos, worktrees, briefs, reports' bodies, library
   files, uploads, memory, the journal. No method reads them.
+
+### 16.10 The peer mirror
+
+What a server keeps of its paired servers' shared projects, for its own
+consoles: a remote project has no folder here, so a console can't read it
+from disk as it reads a local one (`tui.ServerSource.Load`) and asks its
+own server instead. The console never talks to a link.
+
+- **Reading.** `peer.Mirror` follows the links (§16.7) every 0.5 s.
+  While a link is up and the peer's hello lists `watch`, it calls
+  `peer.projects` (at once, then every 30 s: a project shared or unshared
+  there shows within it) and long-polls `peer.watch` on each shared
+  project, with the `rev` it has. A project whose watch answers
+  `not-shared`, or that the list leaves out, goes. A failed read waits
+  2 s; the server's log has the first failure of a run, not each.
+- **Memory only.** The mirror is the latest answer per server id and
+  slug, rebuilt after every restart and every link up; nothing of a peer
+  is written to disk. The same slug on two servers is two entries.
+- **Stale.** A link that leaves `up` keeps its projects' last snapshots
+  and marks them stale, as does a failed read; the first watch after it
+  comes back asks with no `rev`, so it answers at once and clears stale
+  without waiting for a change. `synced` is when this server last read
+  the project, on its own clock.
+- **Clock offset.** Each answer carries the peer's `now`. The offset is
+  `now − received + rtt/2` (the link's last ping), the peer's clock
+  minus this one; the peer's own times (a session's `created`, the
+  ticker's) less the offset are this server's. Nothing compares the two
+  clocks for any decision.
+- **`peer.list`** (the human's: the human socket, §3.2; a link never
+  reaches it) → `{"gen", "peers": [{"alias", "id", "state", "reason",
+  "since", "watch", "offset_ms", "projects": [{"project", "goal",
+  "paused", "needs_you", "threads", "ready", "stale", "synced", "rev",
+  "watch", "sessions"}]}]}`: every paired server by alias, its link as it
+  is now (`watch`: its hello lists the capability; without, no
+  projects), and its projects by slug, the counts from the last
+  snapshot, `watch` and `sessions` as `peer.watch` gave them (none before
+  the first). A project is stale while its link isn't up. `gen` counts
+  the mirror's changes, so a console that sees the same `gen` has
+  nothing new; each change also wakes the server's watches. A server
+  without an identity key answers `{"gen": 0, "peers": []}`.
