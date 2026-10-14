@@ -631,6 +631,9 @@ type confirmView struct {
 	yes             func() tea.Cmd
 	// no is the footer message on n or esc.
 	no string
+	// onNo, when set, runs on n (esc still cancels): a question whose no
+	// does something too (the Linked projects list saves this side only).
+	onNo func() tea.Cmd
 }
 
 // confirmKeys are a yes/no question's action row, the same everywhere.
@@ -653,6 +656,9 @@ func (cv *confirmView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "n", "esc":
 		m.pop()
 		m.msg = cv.no
+		if k.String() == "n" && cv.onNo != nil {
+			return cv.onNo()
+		}
 	}
 	return nil
 }
@@ -662,7 +668,7 @@ func (cv *confirmView) render(m *dash) string {
 }
 
 // projectSettings are a project's own settings (§11.2), for its popup.
-func projectSettings(slug string) []setting { return safetySettings(slug) }
+func projectSettings(slug string) []setting { return append(safetySettings(slug), linkRow(slug)) }
 
 // allProjectsSettings are the settings every project follows unless it
 // sets its own (§11.2 All projects), for the , popup.

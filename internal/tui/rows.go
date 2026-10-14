@@ -57,6 +57,9 @@ type row struct {
 	// questions is the coordinator's open questions on its row in NEEDS
 	// YOU: enter has it open them.
 	questions int
+	// links is the project's held messages and paused links on its row
+	// in NEEDS YOU: enter opens the Messages tab.
+	links int
 	// card: the row is a mod's dashboard card's header (modviews.go),
 	// its key the card's.
 	card bool
@@ -293,6 +296,11 @@ func buildRows(d Data, project string, sections []string, cards []row) []row {
 				mark: markNeeds, who: p.Slug, what: questionsWaiting(p.Questions), state: "blocked",
 				rest: "enter answers them", pct: -1})
 		}
+		if p.LinkWaits > 0 {
+			needs = append(needs, row{key: "nl:" + p.Slug, project: p.Slug, links: p.LinkWaits,
+				mark: markNeeds, who: p.Slug, what: linkWaitWords(p.LinkWaits), state: "blocked",
+				rest: "enter opens Messages", pct: -1})
+		}
 		for _, t := range p.NeedsYou {
 			r := row{key: fmt.Sprintf("nt:%s:%d", p.Slug, t.ID), project: p.Slug, task: t,
 				mark: markNeeds, who: p.Slug, what: t.Ref() + " " + oneLine(t.Title), state: string(t.Status), rest: t.Thread, pct: -1}
@@ -485,6 +493,9 @@ func needsYouCount(ps []ProjectData, sessions []proto.SessionInfo) int {
 		if p.Questions > 0 {
 			n++
 		}
+		if p.LinkWaits > 0 {
+			n++
+		}
 	}
 	return n
 }
@@ -598,4 +609,13 @@ func joinSp(parts ...string) string {
 		}
 	}
 	return strings.Join(out, "  ")
+}
+
+// linkWaitWords is a NEEDS YOU row's words for n held messages and
+// paused links.
+func linkWaitWords(n int) string {
+	if n == 1 {
+		return "1 message waits"
+	}
+	return fmt.Sprintf("%d messages wait", n)
 }

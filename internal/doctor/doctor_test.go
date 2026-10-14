@@ -1051,3 +1051,17 @@ func fakeServer(ln net.Listener, answers map[string]any) {
 		}()
 	}
 }
+
+// TestSettingsDanglingLink: a link to a project that isn't there is a
+// warning naming it.
+func TestSettingsDanglingLink(t *testing.T) {
+	d := testDeps(t)
+	if _, err := project.New(project.Options{Slug: "demo"}); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(d.Paths.Home, "config.toml"), []byte("[projects.demo.links]\ngone = \"both\"\n"), 0o600)
+	cs := Settings(d)
+	if len(cs) != 1 || cs[0].Status != Warn || cs[0].Name != "links" || !strings.Contains(cs[0].Detail, "demo → gone") {
+		t.Fatalf("%+v", cs)
+	}
+}

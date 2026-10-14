@@ -55,10 +55,18 @@ type Item struct {
 	Created   time.Time `toml:"created" json:"created"`
 	Summary   string    `toml:"summary" json:"summary"`
 	NeedsUser bool      `toml:"needs_user" json:"needs_user"`
+	// Message is the id of the message a link item is about
+	// (internal/link), "" on other kinds.
+	Message string `toml:"message,omitempty" json:"message,omitempty"`
 }
 
 // AddItem writes inbox/<ts>-<kind>-<subject>.md.
 func (p *Project) AddItem(kind, subject, summary string, needsUser bool) (*Item, error) {
+	return p.AddMessageItem(kind, subject, summary, needsUser, "")
+}
+
+// AddMessageItem is AddItem for a link item about message id (Item.Message).
+func (p *Project) AddMessageItem(kind, subject, summary string, needsUser bool, message string) (*Item, error) {
 	t := now().UTC().Truncate(time.Second)
 	base := fmt.Sprintf("%s-%s-%s", t.Format("20060102T150405Z"), kind, Slugify(subject))
 	id := base
@@ -68,7 +76,7 @@ func (p *Project) AddItem(kind, subject, summary string, needsUser bool) (*Item,
 		}
 		id = fmt.Sprintf("%s-%d", base, i)
 	}
-	it := &Item{ID: id, Kind: kind, Subject: subject, Created: t, Summary: summary, NeedsUser: needsUser}
+	it := &Item{ID: id, Kind: kind, Subject: subject, Created: t, Summary: summary, NeedsUser: needsUser, Message: message}
 	if err := os.MkdirAll(p.Path("inbox"), 0o755); err != nil {
 		return nil, err
 	}
@@ -246,6 +254,7 @@ func ParseItem(id string, data []byte) (Item, error) {
 	it.Kind = strings.Join(strings.Fields(it.Kind), "-")
 	it.Subject = strings.Join(strings.Fields(it.Subject), " ")
 	it.Summary = strings.Join(strings.Fields(it.Summary), " ")
+	it.Message = strings.Join(strings.Fields(it.Message), "")
 	return it, nil
 }
 
