@@ -9,7 +9,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
+	"github.com/theclifmeister/terminatr/internal/plat/flock"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 )
 
@@ -95,4 +98,121 @@ func checkPeers(peers []Peer) error {
 		alias[p.Alias], key[p.ID()] = true, true
 	}
 	return nil
+}
+
+// lockFile serializes changes to the peers: two tm peer commands at once
+// would otherwise lose one's change.
+const lockFile = "peers.lock"
+
+// change runs f on the peers in dir under the lock and saves what it
+// returns.
+func change(dir string, f func([]Peer) ([]Peer, error)) error {
+	if err := fsx.EnsurePrivateDir(dir); err != nil {
+		return err
+	}
+	lk, err := flock.Wait(filepath.Join(dir, lockFile))
+	if err != nil {
+		return err
+	}
+	defer lk.Unlock()
+	peers, err := LoadPeers(dir)
+	if err != nil {
+		return err
+	}
+	if peers, err = f(peers); err != nil {
+		return err
+	}
+	return SavePeers(dir, peers)
+}
+
+// MaxAlias is the longest alias.
+const MaxAlias = 32
+
+// CheckAlias says why s can't be an alias: 1 to 32 of a-z, 0-9 and -,
+// not starting with -.
+func CheckAlias(s string) error {
+	ok := s != "" && len(s) <= MaxAlias && s[0] != '-'
+	for _, r := range s {
+		ok = ok && (r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-')
+	}
+	if !ok {
+		return fmt.Errorf("alias %q: 1 to %d of a-z, 0-9 and -, not starting with -", s, MaxAlias)
+	}
+	return nil
+}
+
+// DefaultAlias is the alias for a server named name (its host name): the
+// first label in lower case, other characters as -; "peer" when nothing
+// is left.
+func DefaultAlias(name string) string {
+	name, _, _ = strings.Cut(strings.ToLower(strings.TrimSpace(name)), ".")
+	var b strings.Builder
+	for _, r := range name {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		} else if b.Len() > 0 && !strings.HasSuffix(b.String(), "-") {
+			b.WriteByte('-')
+		}
+	}
+	s := strings.Trim(b.String(), "-")
+	if len(s) > MaxAlias-3 {
+		s = strings.TrimRight(s[:MaxAlias-3], "-")
+	}
+	if s == "" {
+		return "peer"
+	}
+	return s
+}
+
+// Pin keeps key as a peer through relayURL, after a pairing with the
+// server called name. as, when set, is the alias, and replaces a peer
+// already called that; else a key already pinned keeps its alias, and a
+// new one gets DefaultAlias(name), with -2, -3 … when that is taken.
+func Pin(dir string, key ed25519.PublicKey, relayURL, name, as string) (Peer, error) {
+	if as != "" {
+		if err := CheckAlias(as); err != nil {
+			return Peer{}, err
+		}
+	}
+	p := Peer{Key: key, Relay: relayURL}
+	err := change(dir, func(peers []Peer) ([]Peer, error) {
+		var kept []Peer
+		for _, q := range peers {
+			switch {
+			case q.ID() == p.ID():
+				if as == "" {
+					p.Alias = q.Alias
+				}
+			case q.Alias == as:
+			default:
+				kept = append(kept, q)
+			}
+		}
+		if as != "" {
+			p.Alias = as
+		}
+		if p.Alias == "" {
+			base := DefaultAlias(name)
+			p.Alias = base
+			for n := 2; slices.ContainsFunc(kept, func(q Peer) bool { return q.Alias == p.Alias }); n++ {
+				p.Alias = fmt.Sprintf("%s-%d", base, n)
+			}
+		}
+		return append(kept, p), nil
+	})
+	return p, err
+}
+
+// Unpin drops the peer called alias; false when there is none.
+func Unpin(dir, alias string) (bool, error) {
+	found := false
+	err := change(dir, func(peers []Peer) ([]Peer, error) {
+		return slices.DeleteFunc(peers, func(q Peer) bool {
+			if q.Alias == alias {
+				found = true
+			}
+			return q.Alias == alias
+		}), nil
+	})
+	return found, err
 }

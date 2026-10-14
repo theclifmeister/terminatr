@@ -190,6 +190,12 @@ type ServerStatus struct {
 	Link *LinkStatus `json:"link,omitempty"`
 }
 
+// MethodPeerReload has the server read its identity key and peers again
+// (docs/SPEC.md §16.8): tm peer pair, join, remove and rotate call it
+// after changing them. The result is the LinkStatus after the reload
+// (null without an identity key). The human's.
+const MethodPeerReload = "peer.reload"
+
 // LinkStatus is this server's identity and its links.
 type LinkStatus struct {
 	// ID is this server's id, 64 hex digits; Short the 8 people read.
@@ -577,7 +583,7 @@ func HumanOnly(m string) bool {
 		MethodModActionCheck, MethodModActionDone, MethodSessionClear,
 		MethodSessionStart, MethodSessionStop, MethodSessionKeys, MethodSessionPrompt,
 		MethodSessionAdopt, MethodSessionAdoptAsk, MethodSessionRemote, MethodSessionModel, MethodQuestionsOpen,
-		MethodServerStop, MethodAgentReload:
+		MethodServerStop, MethodAgentReload, MethodPeerReload:
 		return true
 	}
 	return strings.HasPrefix(m, "view.") && m != MethodViewDigest

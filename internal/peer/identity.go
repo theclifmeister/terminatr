@@ -106,20 +106,31 @@ func EnsureIdentity(dir string) (id *Identity, created bool, err error) {
 	if !errors.Is(err, fs.ErrNotExist) {
 		return id, false, err
 	}
+	id, err = writeIdentity(dir)
+	return id, err == nil, err
+}
+
+// RotateIdentity replaces the identity key in dir with a new one, even
+// one that can't be read: the human asked. Every peer has the old one
+// pinned, so each must pair again.
+func RotateIdentity(dir string) (*Identity, error) { return writeIdentity(dir) }
+
+// writeIdentity makes a new key and writes it to dir.
+func writeIdentity(dir string) (*Identity, error) {
 	if err := fsx.EnsurePrivateDir(dir); err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	_, k, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	der, err := x509.MarshalPKCS8PrivateKey(k)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	b := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
 	if err := fsx.WriteAtomic(filepath.Join(dir, IdentityFile), b, 0o600); err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	return newIdentity(k), true, nil
+	return newIdentity(k), nil
 }
