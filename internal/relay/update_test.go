@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -34,9 +35,14 @@ func TestUpdateRequest(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Version, cfg.UpdateFile = "v0.27.0", file
 	s, url, tc := relayFor(t, cfg)
+	// The relay reads the clock on its own goroutines, so the test moves
+	// it under a lock.
+	var clock sync.Mutex
 	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	nowFn := func() time.Time { clock.Lock(); defer clock.Unlock(); return now }
+	advance := func(d time.Duration) { clock.Lock(); now = now.Add(d); clock.Unlock() }
 	s.mu.Lock()
-	s.now = func() time.Time { return now }
+	s.now = nowFn
 	s.mu.Unlock()
 	ctx := context.Background()
 
@@ -72,19 +78,19 @@ func TestUpdateRequest(t *testing.T) {
 		t.Fatalf("request file %q %v", body, err)
 	}
 	// Once an hour, from either side.
-	now = now.Add(59 * time.Minute)
+	advance(59 * time.Minute)
 	res, err = linkDialer(a, b, tc).RequestUpdate(ctx, url)
-	if err != nil || res.Result != UpdateTooSoon || !res.Next.Equal(now.Add(time.Minute)) {
+	if err != nil || res.Result != UpdateTooSoon || !res.Next.Equal(nowFn().Add(time.Minute)) {
 		t.Fatalf("too soon: %+v %v", res, err)
 	}
 	// The limit outlives the relay: a new one reads the last request's time.
 	os.Remove(file)
 	s2 := New(cfg)
-	s2.now = func() time.Time { return now }
-	if !s2.updated.Equal(now.Add(-59 * time.Minute)) {
+	s2.now = nowFn
+	if !s2.updated.Equal(nowFn().Add(-59 * time.Minute)) {
 		t.Fatalf("restarted relay's last request %v", s2.updated)
 	}
-	now = now.Add(time.Minute)
+	advance(time.Minute)
 	if res, _ := linkDialer(a, b, tc).RequestUpdate(ctx, url); res.Result != UpdateQueued {
 		t.Fatalf("an hour later: %+v", res)
 	}
