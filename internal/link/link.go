@@ -748,4 +748,3 @@ func Frame(self string, m *Message) string {
 	fmt.Fprintf(&b, "%s\n----- end message %s -----\n", strings.Join(meta, " · "), m.ID)
 	return b.String()
 }
-
