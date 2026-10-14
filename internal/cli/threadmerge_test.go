@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/codehost"
+	"github.com/theclifmeister/terminatr/internal/worktree"
 )
 
 // fakeHost answers PR with pr (or err) and records what Merge got.
@@ -89,5 +90,44 @@ func TestThreadMerge(t *testing.T) {
 	h.expect(1, "merge-not-allowed", coord, args()...)
 	if len(fh.merged) != 0 {
 		t.Fatal("merged with merge = thread")
+	}
+}
+
+// prStateHost answers every PRState with state.
+type prStateHost struct {
+	codehost.NoHost
+	state string
+}
+
+func (p prStateHost) PRState(string, string) string { return p.state }
+
+// BUG-01: a merged PR on a built-in host keeps the branch when it has a
+// commit pushed nowhere, and deletes it when the remote has everything.
+func TestResolveMergedKeepsUnpushed(t *testing.T) {
+	old := pickHost
+	pickHost = func(string, codehost.Config) codehost.Host { return prStateHost{state: "MERGED"} }
+	t.Cleanup(func() { pickHost = old })
+	for _, pushed := range []bool{false, true} {
+		h := newHarness(t)
+		h.ok(human, "project", "new", "demo")
+		repo, rec := threadWithWorktree(t, h, "demo")
+		bare := filepath.Join(t.TempDir(), "shop.git")
+		git(t, repo, "init", "-q", "--bare", bare)
+		git(t, repo, "remote", "add", "origin", bare)
+		git(t, repo, "push", "-q", "origin", "HEAD")
+		os.WriteFile(filepath.Join(rec.Worktree, "late.md"), []byte("late"), 0o644)
+		git(t, rec.Worktree, "add", ".")
+		git(t, rec.Worktree, "commit", "-q", "-m", "after the merge")
+		if pushed {
+			git(t, rec.Worktree, "push", "-q", "origin", rec.Branch)
+		}
+		out := h.ok(coord, "thread", "resolve", rec.ID, "--project", "demo")
+		exists := worktree.BranchExists(repo, rec.Branch)
+		switch {
+		case !pushed && (!exists || !strings.Contains(out, "kept branch "+rec.Branch+" (PR merged, but 1 unpushed commit")):
+			t.Errorf("unpushed: exists=%v %q", exists, out)
+		case pushed && (exists || !strings.Contains(out, "deleted branch "+rec.Branch+" (PR merged)")):
+			t.Errorf("pushed: exists=%v %q", exists, out)
+		}
 	}
 }
