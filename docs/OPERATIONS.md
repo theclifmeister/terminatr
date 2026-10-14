@@ -284,6 +284,19 @@ The log (`docker compose logs relay`, or the journal) shows `serving on …`, ro
 
 Behind your own reverse proxy (nginx, Traefik, the NAS's), run the relay with `--plain --listen :8080` on a private address, have the proxy pass WebSockets to it, and name the proxy with `--trusted-proxy <its address or subnet>`, so the relay's limits count real clients and not the proxy.
 
+### The servers' side
+
+Each paired server keeps a link to the relay by itself; nothing to start. `tm server status` shows the server's id and each link:
+
+```
+server id 4F2A-91C3 (4f2a91c3…)
+peer      mini  up 3m0s · 42 ms · tm 0.27.0 · relay relay.example.net
+peer      nas  offline 4m0s · relay · dials again in 30s · relay relay.example.net
+            dial tcp: connection refused
+```
+
+`offline · peer` means the relay is fine and the other server isn't connected (stopped, asleep, or not paired back); `offline · relay` that the relay can't be reached or closed the link (check `/healthz` and its log); `refused` that the keys don't match (pair again). A link dials again by itself, from 1 s up to once a minute. `--json` has the same as fields (SPEC §16.7).
+
 ## Checking an installation: tm doctor
 
 `tm doctor` checks your installation and changes nothing:

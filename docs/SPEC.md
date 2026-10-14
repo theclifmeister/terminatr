@@ -131,7 +131,7 @@ The dependency rule: `server`, `session`, `ticker`, `tui`, `project`, `thread` a
   - `tm server stop` refuses while agent sessions are running unless you pass `--yes`, or confirm on a TTY.
   - `tm server stop` and `tm server restart` work whatever protocol the running server speaks, older or newer (§3.3, Stopping across protocols). Restart is how a server of another version is replaced, so it never refuses on version.
   - `tm server stop --force` SIGKILLs a hung server (the pid that holds the lock).
-- **Other commands.** `tm server status` prints the pid, uptime, version, protocol and session count. `tm server restart` is stop, then start, then resume (§3.6).
+- **Other commands.** `tm server status` prints the pid, uptime, version, protocol and session count, and once the server has an identity key its server id and each link to a paired server (§16.7). `tm server restart` is stop, then start, then resume (§3.6).
 - **Foreground mode.** `tm server run` without `--detached` stays in the foreground and logs to stderr. Tests and service managers use this mode.
 - **Start at login (optional).** `tm server service install|uninstall` writes and loads a service file:
   - macOS: a launchd agent, `~/Library/LaunchAgents/<label>.plist`, with `KeepAlive=false` and `RunAtLoad=true`. It is the same job every start uses (above): it runs `tm server run --launchd`, and installing it over a server the on-demand job runs restarts that server (agents are resumed);
@@ -568,6 +568,8 @@ Each enabled code mod runs in its own `tm mod host` child of the server: the sam
   state/sessions.json                  live sessions, for resume (§3.6)              [server]
   state/views.json                     the server-owned views but own ones: screen, the session shown, selection, current project, sidebar (§3.3)  [server]
   state/mods/<id>/                     a user mod's own data, and store.json, its $.store (§5.3)  [the mod, through the broker]
+  state/peer/identity.key              the server's Ed25519 identity key, PKCS #8 PEM, 0600; its SHA-256 is the server id (§16.7)  [server, made at the first pairing]
+  state/peer/peers.json                the paired servers: alias, pinned public key, relay URL (§16.7)  [server, on the human's pairing]
   cache/mods/<id>/                     a code mod's bundle, bundle.json and host.json (§3.7, Supervisor)  [server]
   state/repos-moved                    the mark that the projects' repo lists have moved from PROJECT.md to config.toml (below)  [server]
   state/ticker.json                    what the ticker already reported: thread states, PRs, nudges, syncs (§7.5)  [server]
@@ -1993,8 +1995,8 @@ only key fingerprints, IP addresses, sizes and timing; never aliases,
 project slugs, messages, pane content or a pairing code. It can drop or
 delay traffic; it can't read or forge it, nor join a room without a key.
 
-This section is the relay's side. The link that dials it (identity key,
-pinned TLS, backoff, `tm link pair`) is relay 2/7 and 3/7.
+This section is the relay's side, and the link that dials it (§16.7).
+Pairing, which makes the identity key and fills the peers, is relay 3/7.
 
 ### 16.1 Transport
 
@@ -2110,3 +2112,63 @@ address's last connection.
   over by `LoadCredential`, and a strict sandbox.
 - `TestRelayDeployFilesUseRealFlags` runs each file's command line
   through `tm relay serve`'s parser.
+
+### 16.7 The link
+
+`internal/peer`: the server's side, one link per paired server, each its
+own goroutine; no local call waits on one.
+
+- **Identity.** `state/peer/identity.key`: an Ed25519 key (PKCS #8 PEM,
+  0600, in a 0700 directory). The **server id** is SHA-256 of the public
+  key (the relay's fingerprint), 64 hex digits, shown to people as its
+  first eight upper case in two groups (`4F2A-91C3`). Pairing makes the
+  key; a server without one has no links. A key that can't be read is an
+  error and is never replaced: the peers have it pinned.
+- **Peers.** `state/peer/peers.json`: `{"peers": [{"alias", "key", "relay"}]}`,
+  the key the peer's Ed25519 public key (base64), the relay a `wss://`
+  URL; aliases and keys unique. Read at start and on `Manager.Reload`
+  (pairing calls it): a new peer gets a link, a removed or changed one
+  loses or redials it, a new identity key redials them all. A file that
+  doesn't parse keeps the links as they are and shows its error.
+- **Transport.** An interface: `Dial(ctx, wait) (net.Conn, error)`. The
+  relay transport joins the link room `LinkRoom(own id, peer id)` with
+  `relay.Dialer` (§16.2) and calls `wait` on the relay's "wait". A direct
+  or tunnelled address (phase 5) is another transport under the same TLS.
+- **TLS 1.3** inside the stream, nothing older, no resumption. Each end
+  presents a self-signed certificate for its identity key and accepts
+  exactly one certificate whose key is the peer's pinned key, never a
+  CA's, and no names or dates are checked (no clock or expiry can break
+  a link). The end with the lower server id is the TLS client.
+- **Hello**: each end sends one NDJSON line, `{"link_protocol": 1,
+  "version": "<tm release>", "caps": []}`, within 10 s. `LinkProtocol`
+  is separate from the control protocol: two servers may run different
+  releases. Methods and fields are only added; a capability names each
+  feature (`watch`, `pane-vt`, `msg` as they are built; none yet), and a
+  server uses a feature only when the peer's hello lists it. A peer below
+  `MinLinkProtocol` (1) is refused (`version`).
+- **Then NDJSON** both ways: a request `{"id", "method", "params"}`, a
+  response `{"id", "result" | "error"}`, either end calling. `link.ping`
+  every 30 s keeps the link's time and measures the round trip; 90 s
+  without a line ends the link, whatever the transport says. An unknown
+  method answers `unknown-method`. Binary frames come with the peers'
+  panes (phase 4).
+- **Backoff**: a link that ends or fails dials again after 1 s doubling
+  to 60 s, each wait between half and all of that; a link that came up
+  starts again at 1 s. A link room the relay timed out (its hour) is no
+  failure.
+- **State**, in `server.status` as `link: {id, short, error, peers: [{alias,
+  id, transport, state, reason, since, error, retry, rtt_ms, version,
+  link_protocol, caps}]}` (none without an identity key) and in `tm
+  server status`:
+
+| state | reason | when |
+|---|---|---|
+| `connecting` | | dialling, or proving keys and saying hello |
+| `up` | | the hellos are through; `rtt_ms` the last ping |
+| `offline` | `peer` | the relay is up and the peer isn't in the room (waiting, or it left: 4410) |
+| `offline` | `relay` | the relay can't be reached, refused us or closed (shutdown) |
+| `offline` | `refused` | the other end's key isn't the pinned one, or it refused ours |
+| `offline` | `version` | the peer's link protocol is too old |
+
+  `since` is when the state began, `retry` the next dial, `error` the last
+  failure in words. The server's log has each change.
