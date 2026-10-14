@@ -5,25 +5,25 @@
            │  1 General   2 All projects   3 Mods   4 Peers                                       │
            │ About: tm dev · server dev · update check on                                         │
            │                                                                                      │
-           │ This server isn't paired with another. Press n to pair: it shows a code to pass on,  │
-           │ and j on the other server takes it (or tm peer pair and tm peer join in a terminal); │
-           │ both of yo╭─ Pair a server ──────────────────────────────────────────────╮           │
-           │ No relay y│ Pairing code (works once, for 10 minutes; <left>): │ain NAME   │
-           │ (see the R│                                                              │           │
-           │           │     ws://<port>/<code> │           │
-           │ Paired ser│                                                              │idebar;    │
-           │ you see th│ On the other server: , then the Peers tab, j, and type it    │           │
-           │           │ in; or tm peer join CODE. Pass it on yourself (a chat, a     │           │
-           │           │ call), never through the relay.                              │           │
-           │           │ Waiting for the other server…                                │           │
+           │ SHARED PROJECTS                                                                      │
+           │ No active project on this server to share.                                           │
+           │ A shared p╭─ Pair a server ──────────────────────────────────────────────╮what waits │
+           │ for you, t│ Pairing code (works once, for 10 minutes; <left>): │ its       │
+           │ files. Spa│                                                              │n Settings │
+           │ tab; shari│     ws://<port>/<code> │           │
            │           │                                                              │           │
-           │           │ esc cancel                                                   │           │
+           │ PAIRED SER│ On the other server: , then the Peers tab, j, and type it    │           │
+           │ This serve│ in; or tm peer join CODE. Pass it on yourself (a chat, a     │ pass on,  │
+           │ and j on t│ call), never through the relay.                              │terminal); │
+           │ both of yo│ Waiting for the other server…                                │           │
+           │ No relay y│                                                              │ain NAME   │
+           │ (see the R│ esc cancel                                                   │           │
            │           ╰──────────────────────────────────────────────────────────────╯           │
+           │ Paired servers see the projects you share with them, read-only, in their sidebar;    │
+           │ you see theirs in yours. No agent can pair, share or remove a server.                │
            │                                                                                      │
            │                                                                                      │
-           │                                                                                      │
-           │                                                                                      │
-           │ n pair · j join · p panes · x remove · ↑ ↓ move · ← → tabs · esc close               │
+           │ space toggle · ← → change · n pair · j join · x remove · ↑ ↓ move · esc close        │
  ──────────╰──────────────────────────────────────────────────────────────────────────────────────╯
                                    │──────────────────────────────────────────────────────────────────────────
                                    │

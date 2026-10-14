@@ -183,10 +183,10 @@ func peersList() PeerList {
 	}}
 }
 
-// TestPeersTab: the settings' Peers tab lists the paired servers as tm
-// peer list does (alias, server id, link, relay) with what the mirror
-// adds; x removes the selected one after asking, and the list is read
-// again; n keeps it.
+// TestPeersTab: the settings' Peers tab lists the active projects to
+// share first, then the paired servers as tm peer list does (alias,
+// link, tm, relay) with what the mirror adds; x on a server's row
+// removes it after asking, and the list is read again; n keeps it.
 func TestPeersTab(t *testing.T) {
 	m, src := remoteDash(t, "@mini/acme-api")
 	src.peers = peersList()
@@ -198,19 +198,29 @@ func TestPeersTab(t *testing.T) {
 	out := screen(m)
 	for _, want := range []string{
 		"4 Peers",
-		"This server 4F2A-91C3",
-		"mini  91C3-77AB  ◉ linked · 38 ms",
-		"relay relay.example.net · shares 2 projects · tm 0.27.0",
-		"nas   A1B2-C3D4  ○ offline 4m · relay",
-		"relay relay.example.net:8443 · shares 1 project · dial: refused",
-		"n pair · j join · p panes · x remove · ↑ ↓ move · ← → tabs · esc close",
-		"panes: off · it can't open this server's panes",
+		"SHARED PROJECTS",
+		"[ ] terminatr",
+		"[ ] web",
+		"PAIRED SERVERS · this server 4F2A-91C3",
+		"◉ mini  linked · 38 ms · tm 0.27.0 · shares 2 projects",
+		"panes  [off] · view · write",
+		"it can't open this server's panes",
+		"relay  relay.example.net",
+		"○ nas  offline 4m · relay · shares 1 project · dial: refused",
+		"relay  relay.example.net:8443",
+		"space toggle · ← → change · n pair · j join · x remove · ↑ ↓ move · esc close",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in\n%s", want, out)
 		}
 	}
-	press(m, "down", "x")
+	// x on a project's row does nothing.
+	press(m, "x")
+	if _, ok := m.top().(*settingsView); !ok {
+		t.Fatalf("x on a project: %T", m.top())
+	}
+	// Past the two projects and mini's panes and relay rows: nas's panes.
+	press(m, "down", "down", "down", "down", "x")
 	if _, ok := m.top().(*confirmView); !ok {
 		t.Fatalf("x: %T", m.top())
 	}
@@ -218,7 +228,7 @@ func TestPeersTab(t *testing.T) {
 	if len(src.unpinned) != 0 || m.msg != "nas kept" {
 		t.Fatalf("n removed %v, %q", src.unpinned, m.msg)
 	}
-	press(m, "x")
+	press(m, "down", "x")
 	run(m, press(m, "y"))
 	if !slices.Equal(src.unpinned, []string{"nas"}) {
 		t.Fatalf("removed %v", src.unpinned)
@@ -232,46 +242,130 @@ func TestPeersTab(t *testing.T) {
 	} {
 		src.peers = want
 		sv.peers.load(m)
-		if out := screen(m); !strings.Contains(out, list) || !strings.Contains(out, "No relay yet?") {
+		out := screen(m)
+		if !strings.Contains(out, list) || !strings.Contains(out, "No relay yet?") {
 			t.Errorf("missing %q or the relay hint in\n%s", list, out)
+		}
+		// The projects to share show with nothing paired too.
+		if !strings.Contains(out, "[ ] terminatr") {
+			t.Errorf("no projects to share with %q:\n%s", list, out)
 		}
 	}
 }
 
-// TestPeersTabPanes: p steps the selected server's pane switch off →
-// view → write → off (docs/SPEC.md §16.12), asking before each step that
-// lets it do more; n keeps it as it was.
+// TestPeersTabShare: space on a project toggles its Shared with paired
+// servers, the setting its own Settings tab shows: sharing asks first
+// (n keeps it), unsharing goes at once; a click selects a project and a
+// click on the selected one toggles it.
+func TestPeersTabShare(t *testing.T) {
+	m, src := remoteDash(t, "@mini/acme-api")
+	src.peers = peersList()
+	press(m, ",", "4")
+	screen(m)
+	press(m, "space")
+	if cv, ok := m.top().(*confirmView); !ok || cv.title != "Share terminatr" {
+		t.Fatalf("space: %T", m.top())
+	}
+	press(m, "n")
+	if len(src.settings) != 0 || m.msg != "not shared" {
+		t.Fatalf("n: %v %q", src.settings, m.msg)
+	}
+	press(m, "space")
+	run(m, press(m, "y"))
+	if !slices.Equal(src.settings, []string{"projects.terminatr.share=true"}) || !strings.Contains(screen(m), "[x] terminatr") {
+		t.Fatalf("y: %v\n%s", src.settings, screen(m))
+	}
+	run(m, press(m, "space"))
+	if _, ok := m.top().(*settingsView); !ok {
+		t.Fatalf("unsharing asked: %T", m.top())
+	}
+	if !slices.Equal(src.settings, []string{"projects.terminatr.share=true", "projects.terminatr.share=false"}) || !strings.Contains(screen(m), "[ ] terminatr") {
+		t.Fatalf("off: %v\n%s", src.settings, screen(m))
+	}
+	clickOn(t, m, "[ ] web")
+	sv := m.top().(*settingsView)
+	if sv.peers.sel != 1 {
+		t.Fatalf("click selects: sel %d", sv.peers.sel)
+	}
+	clickOn(t, m, "[ ] web")
+	if cv, ok := m.top().(*confirmView); !ok || cv.title != "Share web" {
+		t.Fatalf("click on the selected: %T", m.top())
+	}
+}
+
+// TestPeersTabPanes: ← → on a server's panes row move its pane switch
+// along off · view · write (docs/SPEC.md §16.12), asking before each
+// step that lets it do more; n keeps it as it was; lowering applies at
+// once. A click on a word sets that level.
 func TestPeersTabPanes(t *testing.T) {
 	m, src := remoteDash(t, "@mini/acme-api")
 	src.peers = peersList()
 	press(m, ",", "4")
 	sv := m.top().(*settingsView)
 	screen(m) // the tab reads the list as it draws
-	press(m, "p")
+	press(m, "down", "down")
+	press(m, "right")
 	if _, ok := m.top().(*confirmView); !ok {
-		t.Fatalf("p: %T", m.top())
+		t.Fatalf("→: %T", m.top())
 	}
 	press(m, "n")
 	if len(src.panesSet) != 0 || m.msg != "panes unchanged for mini" {
 		t.Fatalf("n: %v %q", src.panesSet, m.msg)
 	}
-	press(m, "p")
+	press(m, "right")
 	run(m, press(m, "y"))
-	if !strings.Contains(screen(m), "panes: view · it can watch the coordinators and threads") {
-		t.Errorf("after view:\n%s", screen(m))
+	if out := screen(m); !strings.Contains(out, "off · [view] · write") || !strings.Contains(out, "it can watch the coordinators and threads") {
+		t.Errorf("after view:\n%s", out)
 	}
-	press(m, "p")
+	press(m, "right")
 	run(m, press(m, "y"))
-	if out := screen(m); !strings.Contains(out, "panes: write · it can watch and type into") || !strings.Contains(m.msg, "panes write for mini") {
+	if out := screen(m); !strings.Contains(out, "off · view · [write]") || !strings.Contains(m.msg, "panes write for mini") {
 		t.Errorf("after write (%q):\n%s", m.msg, out)
 	}
-	// Off goes at once.
-	run(m, press(m, "p"))
+	// Past write → stays; ← lowers at once.
+	press(m, "right")
+	if sv.tab != tabPeers || len(src.panesSet) != 2 {
+		t.Fatalf("→ at write: tab %d, set %v", sv.tab, src.panesSet)
+	}
+	run(m, press(m, "left"))
+	if _, ok := m.top().(*confirmView); ok {
+		t.Fatal("lowering asked")
+	}
+	// A click on off lowers at once.
+	x, y := at(t, m, "off · [view] · write")
+	mouseAt(m, tea.MouseLeft, x, y)
 	if _, ok := m.top().(*confirmView); ok {
 		t.Fatal("off asked")
 	}
-	if !slices.Equal(src.panesSet, []string{"mini view", "mini type", "mini off"}) || sv.peers.list.Peers[0].Panes != "off" {
+	if !slices.Equal(src.panesSet, []string{"mini view", "mini type", "mini view", "mini off"}) || sv.peers.list.Peers[0].Panes != "off" {
 		t.Fatalf("set %v, now %+v", src.panesSet, sv.peers.list.Peers[0])
+	}
+	// A click on write asks.
+	x, y = at(t, m, "[off] · view · write")
+	mouseAt(m, tea.MouseLeft, x+len("[off] · view · "), y)
+	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "Let mini type into") {
+		t.Fatalf("click on write: %T", m.top())
+	}
+	press(m, "esc")
+	// ← → off a panes row switch tabs, as on the other tabs.
+	press(m, "up", "up", "left")
+	if sv.tab != tabMods {
+		t.Errorf("← on a project: tab %d", sv.tab)
+	}
+}
+
+// TestPeersTabLongName: a long host name as a server's alias is cut on
+// its link line, so the link's words still show; its rows stay put.
+func TestPeersTabLongName(t *testing.T) {
+	m, src := remoteDash(t, "@mini/acme-api")
+	src.peers = peersList()
+	src.peers.Peers[0].Alias = "3a5a3800c87c-E2A37F3E8BF5.local.example.internal.lan"
+	press(m, ",", "4")
+	out := screen(m)
+	for _, want := range []string{"◉ 3a5a3800c87c-E2A37F3E8B…  linked · 38 ms", "panes  [off] · view · write"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in\n%s", want, out)
+		}
 	}
 }
 
@@ -331,7 +425,7 @@ func TestPeersTabPair(t *testing.T) {
 	if !slices.Equal(src.pairs, []string{"pair wss://relay.example.net:8443"}) || m.msg != "paired with studio; its link comes up in a moment" {
 		t.Errorf("pairs %v, %q", src.pairs, m.msg)
 	}
-	if sv.peers.sel != 2 || !strings.Contains(screen(m), "studio  77AB-91C3") {
+	if it, _ := sv.peers.selected(m); it.kind != itemPanes || it.peer != 2 || !strings.Contains(screen(m), "○ studio  no link yet") {
 		t.Errorf("sel %d:\n%s", sv.peers.sel, screen(m))
 	}
 }

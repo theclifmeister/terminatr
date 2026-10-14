@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -12,24 +13,37 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
-// The Peers tab of the , popup (docs/SPEC.md §4, §16.8): the servers
-// paired with this one, as tm peer list has them (Source.Peers): each
-// one's alias, server id, link and relay, and its pane switch; p steps
-// the switch off → view → write → off (asking before it lets the server
-// do more), as tm peer panes does; x removes the selected one, asking
-// first, as tm peer remove does; n pairs with another server and j
-// joins one's pairing (peerpair.go), as tm peer pair and join do. A
-// project is shared from its own Settings tab.
+// The Peers tab of the , popup (docs/SPEC.md §4, §16.8, §16.9), laid
+// out as the other settings tabs are, in two sections the cursor moves
+// over as one list:
 //
-//	" This server 4F2A-91C3"
+//   - SHARED PROJECTS: every active project on this server, with its
+//     Shared with paired servers setting (shareRow, the same as its own
+//     Settings tab's) as a box space or a click toggles; sharing asks
+//     first. It shows with nothing paired too.
+//   - PAIRED SERVERS: this server's id, then per server as tm peer list
+//     has them (Source.Peers) its link line (glyph, alias, link, tm) and
+//     two setting rows: panes, off · view · write side by side with the
+//     current one marked, which ← → or a click on a word changes as tm
+//     peer panes does (asking before it lets the server do more), and
+//     its relay.
+//
+// x removes the selected server, asking first, as tm peer remove does;
+// n pairs with another server and j joins one's pairing (peerpair.go),
+// as tm peer pair and join do.
+//
+//	"SHARED PROJECTS"
+//	"[x] acme-api"
+//	"[ ] blog"
 //	""
-//	" mini    91C3-77AB  ◉ linked · 38 ms"
-//	"         relay relay.example.net · shares 2 projects · tm 0.27.0"
-//	"         panes: write · it can watch and type into this server's …"
-//
-// Each server is a block of lines under its own: its settings go there.
+//	"PAIRED SERVERS · this server 4F2A-91C3"
+//	"◉ mini  linked · 38 ms · tm 0.27.0 · shares 2 projects"
+//	"    panes  off · view · [write]"
+//	"           it can watch and type into …"
+//	"    relay  relay.example.net"
 
-// peersTab is the Peers tab: the list as last read, and the selection.
+// peersTab is the Peers tab: the list as last read, and the selection,
+// an index into its items.
 type peersTab struct {
 	list   PeerList
 	err    error
@@ -37,79 +51,224 @@ type peersTab struct {
 	sel    int
 }
 
+// peerItem is a row the cursor stops on: a project's share box, or a
+// paired server's panes or relay row.
+type peerItem struct {
+	kind int
+	slug string // itemShare
+	peer int    // itemPanes, itemRelay: the index in list.Peers
+}
+
+// The kinds of peerItem.
+const (
+	itemShare = iota
+	itemPanes
+	itemRelay
+)
+
 // peersKeys are the Peers tab's action row.
-const peersKeys = "n pair · j join · p panes · x remove · ↑ ↓ move · ← → tabs · esc close"
+const peersKeys = "space toggle · ← → change · n pair · j join · x remove · ↑ ↓ move · esc close"
 
 // relayHint ends the empty tab: where a relay comes from.
 const relayHint = "No relay yet? On a Linux server with a domain: sudo tm relay install --domain NAME (see the README)."
+
+// panesLevels are the pane switch's levels, in the order the row shows.
+var panesLevels = []string{proto.PanesOff, proto.PanesView, proto.PanesType}
 
 // load reads the paired servers again.
 func (pt *peersTab) load(m *dash) {
 	pt.list, pt.err = m.src.Peers()
 	pt.loaded = true
-	pt.sel = min(pt.sel, max(len(pt.list.Peers)-1, 0))
+	pt.sel = moveSel(pt.sel, 0, len(pt.items(m)))
 }
 
-// lines draws the tab w cells wide: its lines, the selected server's
-// first line, and what a click on each line picks (a server's index).
+// shareable are the projects the tab offers to share: the active ones
+// (the dashboard's data has no archived one).
+func shareable(m *dash) []string {
+	var out []string
+	for _, p := range m.data.Projects {
+		if p.Safety == nil || p.Safety.Active {
+			out = append(out, p.Slug)
+		}
+	}
+	return out
+}
+
+// items are the rows the cursor stops on, in order.
+func (pt *peersTab) items(m *dash) []peerItem {
+	var out []peerItem
+	for _, slug := range shareable(m) {
+		out = append(out, peerItem{kind: itemShare, slug: slug})
+	}
+	if pt.err == nil {
+		for i := range pt.list.Peers {
+			out = append(out, peerItem{kind: itemPanes, peer: i}, peerItem{kind: itemRelay, peer: i})
+		}
+	}
+	return out
+}
+
+// selected is the item under the cursor; ok false with none.
+func (pt *peersTab) selected(m *dash) (peerItem, bool) {
+	items := pt.items(m)
+	if pt.sel < 0 || pt.sel >= len(items) {
+		return peerItem{}, false
+	}
+	return items[pt.sel], true
+}
+
+// panesIndent is how far a server's setting rows sit in; panesLabel
+// their labels' width.
+const (
+	panesIndent = 4
+	panesLabel  = 5
+)
+
+// aliasMax is the most of a server's alias its link line shows.
+const aliasMax = 24
+
+// lines draws the tab w cells wide: its lines, the selected item's
+// last line, and what a click on each line picks (an item's index).
 func (pt *peersTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
 	sel = -1
 	if !pt.loaded {
 		pt.load(m)
 	}
-	defer func() {
-		for len(hits) < len(out) {
-			hits = append(hits, noHit)
+	pt.sel = moveSel(pt.sel, 0, len(pt.items(m)))
+	add := func(hit int, lines ...string) {
+		for _, l := range lines {
+			out = append(out, l)
+			hits = append(hits, hit)
 		}
-	}()
+	}
+	item := 0 // the next item's index
+	row := func(text string, styled string) {
+		if item == pt.sel {
+			sel = len(out)
+			add(item, th().Sel.Render(fit(text, w)))
+		} else {
+			add(item, styled)
+		}
+		item++
+	}
+
+	add(noHit, th().Head.Render("SHARED PROJECTS"))
+	slugs := shareable(m)
+	if len(slugs) == 0 {
+		add(noHit, faintLines("No active project on this server to share.", w)...)
+	}
+	for _, slug := range slugs {
+		box := "[ ]"
+		if p := m.projectData(slug); p != nil && p.Safety != nil && p.Safety.Share {
+			box = "[x]"
+		}
+		row(box+" "+slug, th().Accent.Render(box)+" "+fit(slug, max(w-4, 1)))
+	}
+	add(noHit, faintLines("A shared project shows, read-only, in the sidebar of every paired server: what waits for you, the inbox, threads, tasks on deck and its sessions' states; never its files. Space toggles it, as Shared with paired servers in the project's own Settings tab; sharing asks first.", w)...)
+	add(noHit, "")
+
 	l := pt.list
+	head := "PAIRED SERVERS"
+	if pt.err == nil && l.ID != "" {
+		head += th().Faint.Render(" · this server " + l.Short)
+	}
+	add(noHit, th().Head.Render(head))
 	switch {
 	case pt.err != nil:
-		return []string{th().Bad.Render("The paired servers can't be read: " + oneLine(pt.err.Error()))}, -1, nil
+		add(noHit, th().Bad.Render(fit("The paired servers can't be read: "+oneLine(pt.err.Error()), w)))
+		return out, sel, hits
 	case l.ID == "":
-		return append(faintLines("This server isn't paired with another. Press n to pair: it shows a code to pass on, and j on the other server takes it (or tm peer pair and tm peer join in a terminal); both of you then compare six digits.", w), faintLines(relayHint, w)...), -1, nil
+		add(noHit, faintLines("This server isn't paired with another. Press n to pair: it shows a code to pass on, and j on the other server takes it (or tm peer pair and tm peer join in a terminal); both of you then compare six digits.", w)...)
+		add(noHit, faintLines(relayHint, w)...)
+		return out, sel, hits
 	}
-	out = append(out, th().Faint.Render("This server ")+l.Short)
 	if l.LinkErr != "" {
-		out = append(out, th().Bad.Render("The server can't link: "+oneLine(l.LinkErr)))
+		add(noHit, th().Bad.Render(fit("The server can't link: "+oneLine(l.LinkErr), w)))
 	}
-	out = append(out, "")
 	if len(l.Peers) == 0 {
-		out = append(out, faintLines("No paired servers. Press n to pair with one, or j to join the code another shows.", w)...)
-		out = append(out, faintLines(relayHint, w)...)
-		return out, -1, nil
+		add(noHit, faintLines("No paired servers. Press n to pair with one, or j to join the code another shows.", w)...)
+		add(noHit, faintLines(relayHint, w)...)
+		return out, sel, hits
 	}
-	nameW := 4
-	for _, e := range l.Peers {
-		nameW = max(nameW, ansi.StringWidth(e.Alias))
-	}
-	nameW = min(nameW, 20)
+	pad := strings.Repeat(" ", panesIndent)
 	for i, e := range l.Peers {
-		for len(hits) < len(out) {
-			hits = append(hits, noHit)
+		if i > 0 {
+			add(noHit, "")
 		}
 		g, gst, words := peerLinkWords(m, e, l)
-		head := fit(e.Alias, nameW) + "  " + e.Short + "  "
-		if i == pt.sel {
-			sel = len(out)
-			out = append(out, th().Sel.Render(fit(head+g+" "+words, max(w-1, 1))))
-		} else {
-			out = append(out, th().Head.Render(fit(e.Alias, nameW))+"  "+th().Faint.Render(e.Short)+"  "+gst.Render(g)+" "+words)
+		about := peerAbout(m, e)
+		// A long host name is cut, so the link's words still show.
+		line := gst.Render(g) + " " + th().Head.Render(fit(e.Alias, min(ansi.StringWidth(e.Alias), aliasMax))) + "  " + words
+		if about != "" {
+			line += th().Faint.Render(" · " + about)
 		}
-		hits = append(hits, i)
-		for _, d := range faintLines(peerAbout(m, e), max(w-nameW-2, 8)) {
-			out = append(out, strings.Repeat(" ", nameW+2)+d)
-			hits = append(hits, i)
+		// A click on the link line selects the server's panes row.
+		add(item, fitANSI(line, w))
+		level := panesLevel(e)
+		row(pad+fit("panes", panesLabel)+"  "+panesChoices(level, false),
+			pad+th().Head.Render(fit("panes", panesLabel))+"  "+panesChoices(level, true))
+		for _, d := range faintLines(panesWhat(level), max(w-panesIndent-panesLabel-2, 8)) {
+			add(item-1, strings.Repeat(" ", panesIndent+panesLabel+2)+d)
 		}
-		for _, d := range faintLines(panesWords(e), max(w-nameW-2, 8)) {
-			out = append(out, strings.Repeat(" ", nameW+2)+d)
-			hits = append(hits, i)
+		if item-1 == pt.sel {
+			sel = len(out) - 1
 		}
-		out = append(out, "")
+		relay := relayWords(e.Relay)
+		row(pad+fit("relay", panesLabel)+"  "+relay,
+			pad+th().Head.Render(fit("relay", panesLabel))+"  "+fit(relay, max(w-panesIndent-panesLabel-2, 1)))
 	}
-	out = append(out, faintLines("p sets what the selected server may do with this server's panes, the coordinators and threads of the projects you share: nothing, watch them, or watch and type into them.", w)...)
-	out = append(out, faintLines("x removes the selected server, as tm peer remove does: its link closes and its projects leave the sidebar; remove this server there too. A project is shared from its own Settings tab (a on the dashboard).", w)...)
+	add(noHit, "")
+	add(noHit, faintLines("panes sets what a server may do with this server's panes, the coordinators and threads of the projects you share: nothing, watch them, or watch and type into them. ← → or a click on a word changes it; more asks first, less applies at once.", w)...)
+	add(noHit, faintLines("x removes the selected server, as tm peer remove does: its link closes and its projects leave the sidebar; remove this server there too.", w)...)
 	return out, sel, hits
+}
+
+// fitANSI cuts a styled line to w cells.
+func fitANSI(s string, w int) string {
+	if ansi.StringWidth(s) <= w {
+		return s
+	}
+	return ansi.Truncate(s, max(w-1, 0), "…")
+}
+
+// panesChoices is the panes row's words, off · view · write, the
+// current one in brackets (and, styled, in the accent).
+func panesChoices(level string, styled bool) string {
+	var parts []string
+	for _, l := range panesLevels {
+		word := proto.PanesWord(l)
+		switch {
+		case l == level && styled:
+			word = th().Accent.Render("[" + word + "]")
+		case l == level:
+			word = "[" + word + "]"
+		case styled:
+			word = th().Faint.Render(word)
+		}
+		parts = append(parts, word)
+	}
+	sep := " · "
+	if styled {
+		sep = th().Faint.Render(sep)
+	}
+	return strings.Join(parts, sep)
+}
+
+// panesAt is the level whose word a click at col of a panes row is on,
+// "" for none.
+func panesAt(level string, col int) string {
+	x := panesIndent + panesLabel + 2
+	for _, l := range panesLevels {
+		n := ansi.StringWidth(proto.PanesWord(l))
+		if l == level {
+			n += 2
+		}
+		if col >= x && col < x+n {
+			return l
+		}
+		x += n + 3
+	}
+	return ""
 }
 
 // peerLinkWords are a paired server's link glyph, its look and its
@@ -147,17 +306,17 @@ func peerLinkWords(m *dash, e PeerEntry, l PeerList) (string, lipgloss.Style, st
 	return g, st, words
 }
 
-// peerAbout is a paired server's second line: its relay, what it shares
-// with this server and its tm, as far as known.
+// peerAbout ends a paired server's link line: its tm, what it shares
+// with this server and the link's last error, as far as known.
 func peerAbout(m *dash, e PeerEntry) string {
-	bits := []string{"relay " + relayWords(e.Relay)}
+	var bits []string
+	if e.Link != nil && e.Link.Version != "" {
+		bits = append(bits, "tm "+strings.TrimPrefix(e.Link.Version, "v"))
+	}
 	for _, pm := range m.data.Peers {
 		if pm.ID == e.ID && pm.Watch {
 			bits = append(bits, "shares "+counted(len(pm.Projects), "project"))
 		}
-	}
-	if e.Link != nil && e.Link.Version != "" {
-		bits = append(bits, "tm "+strings.TrimPrefix(e.Link.Version, "v"))
 	}
 	if e.Link != nil && e.Link.Error != "" && e.Link.State != proto.LinkUp {
 		bits = append(bits, oneLine(e.Link.Error))
@@ -173,32 +332,22 @@ func panesLevel(e PeerEntry) string {
 	return proto.PanesOff
 }
 
-// panesWords is a paired server's pane line: its switch and what that
-// lets it do.
-func panesWords(e PeerEntry) string {
-	what := map[string]string{
+// panesWhat says what a pane switch at level lets the server do.
+func panesWhat(level string) string {
+	return map[string]string{
 		proto.PanesOff:  "it can't open this server's panes",
 		proto.PanesView: "it can watch the coordinators and threads of the projects you share, not type",
 		proto.PanesType: "it can watch and type into the coordinators and threads of the projects you share",
-	}[panesLevel(e)]
-	return "panes: " + proto.PanesWord(panesLevel(e)) + " · " + what
+	}[level]
 }
 
-// nextPanes is the level p steps to from level.
-func nextPanes(level string) string {
-	switch level {
-	case proto.PanesView:
-		return proto.PanesType
-	case proto.PanesType:
-		return proto.PanesOff
-	}
-	return proto.PanesView
-}
-
-// panes steps the selected server's pane switch: asking first when it
+// setPanes sets server e's pane switch to level: asking first when it
 // lets that server do more, at once when less.
-func (pt *peersTab) panes(m *dash, e PeerEntry) tea.Cmd {
-	to := nextPanes(panesLevel(e))
+func (pt *peersTab) setPanes(m *dash, e PeerEntry, to string) tea.Cmd {
+	from := panesLevel(e)
+	if to == from {
+		return nil
+	}
 	set := func() tea.Cmd {
 		src, alias := m.src, e.Alias
 		return m.act(func() actionMsg {
@@ -206,7 +355,7 @@ func (pt *peersTab) panes(m *dash, e PeerEntry) tea.Cmd {
 			return actionMsg{err: err, msg: "panes " + proto.PanesWord(to) + " for " + alias, then: func(m *dash) { pt.load(m) }}
 		})
 	}
-	if to == proto.PanesOff {
+	if slices.Index(panesLevels, to) < slices.Index(panesLevels, from) {
 		return set()
 	}
 	q := map[string]string{
@@ -225,7 +374,8 @@ func relayWords(r string) string {
 	return r
 }
 
-// key runs a key on the tab; ok is false for one it doesn't take.
+// key runs a key on the tab; ok is false for one it doesn't take (← →
+// off a panes row switch tabs).
 func (pt *peersTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 	s := k.String()
 	switch s {
@@ -237,20 +387,35 @@ func (pt *peersTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 		return nil, true
 	}
 	if d, ok := scrollKeys[s]; ok {
-		pt.sel = moveSel(pt.sel, d, len(pt.list.Peers))
+		pt.sel = moveSel(pt.sel, d, len(pt.items(m)))
 		return nil, true
 	}
-	if s != "x" && s != "p" {
-		return nil, false
-	}
-	if pt.sel >= len(pt.list.Peers) {
+	it, ok := pt.selected(m)
+	switch {
+	case !ok:
+		return nil, s == "x" || s == "space" || s == " " || s == "enter"
+	case it.kind == itemShare && (s == "space" || s == " " || s == "enter"):
+		return pt.toggle(m, it.slug), true
+	case it.kind == itemPanes && (s == "left" || s == "right"):
+		e := pt.list.Peers[it.peer]
+		i := slices.Index(panesLevels, panesLevel(e)) + map[string]int{"left": -1, "right": 1}[s]
+		return pt.setPanes(m, e, panesLevels[min(max(i, 0), len(panesLevels)-1)]), true
+	case it.kind != itemShare && s == "x":
+		pt.remove(m, pt.list.Peers[it.peer].Alias)
 		return nil, true
 	}
-	if s == "p" {
-		return pt.panes(m, pt.list.Peers[pt.sel]), true
+	return nil, s == "x" || s == "space" || s == " " || s == "enter"
+}
+
+// toggle flips slug's Shared with paired servers, as its Settings tab's
+// row does (asking before it shares), waiting its turn behind a save.
+func (pt *peersTab) toggle(m *dash, slug string) tea.Cmd {
+	run := shareRow(slug).change
+	if m.busy {
+		m.queued = append(m.queued, run)
+		return nil
 	}
-	pt.remove(m, pt.list.Peers[pt.sel].Alias)
-	return nil, true
+	return run(m)
 }
 
 // remove asks, then unpins alias and has the server close its link; the
@@ -276,18 +441,32 @@ func (pt *peersTab) lastRelay() string {
 	return ""
 }
 
-// selectAlias selects the server called alias.
-func (pt *peersTab) selectAlias(alias string) {
-	for i, e := range pt.list.Peers {
-		if e.Alias == alias {
+// selectAlias selects the panes row of the server called alias.
+func (pt *peersTab) selectAlias(m *dash, alias string) {
+	for i, it := range pt.items(m) {
+		if it.kind == itemPanes && pt.list.Peers[it.peer].Alias == alias {
 			pt.sel = i
 		}
 	}
 }
 
-// click selects the server under a click.
-func (pt *peersTab) click(item int) {
-	if item >= 0 && item < len(pt.list.Peers) {
-		pt.sel = item
+// click selects the item under a click; on the selected share box it
+// toggles it, and on a panes row's word it sets that level.
+func (pt *peersTab) click(m *dash, item, col int) tea.Cmd {
+	items := pt.items(m)
+	if item < 0 || item >= len(items) {
+		return nil
 	}
+	it, was := items[item], item == pt.sel
+	pt.sel = item
+	switch {
+	case it.kind == itemShare && was:
+		return pt.toggle(m, it.slug)
+	case it.kind == itemPanes:
+		e := pt.list.Peers[it.peer]
+		if to := panesAt(panesLevel(e), col); to != "" {
+			return pt.setPanes(m, e, to)
+		}
+	}
+	return nil
 }
