@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"net/http/httptest"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -9,7 +10,31 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/relay"
+	"github.com/theclifmeister/terminatr/internal/view"
 )
+
+// remotePanelMasks hide what differs between runs in a remote pane's
+// info panel: the link's last ping (how long ago the mirror read the
+// project is a duration, DefaultMasks').
+var remotePanelMasks = []Mask{
+	{Name: "rtt", Re: regexp.MustCompile(`linked (<1|\d+) ms`), Repl: "linked <rtt>"},
+}
+
+// infoPanelScreen is the info panel of window w at the default layout:
+// its columns at the right edge, above the status bar. The sidebar,
+// whose header names this machine, is left out.
+func infoPanelScreen(w *Window) string {
+	w.mu.Lock()
+	x := w.cols - view.InfoDefault
+	w.mu.Unlock()
+	lines := strings.Split(w.Screen(), "\n")
+	lines = lines[:max(len(lines)-statusRows, 0)]
+	for i, l := range lines {
+		r := []rune(l)
+		lines[i] = string(r[min(x, len(r)):])
+	}
+	return TrimScreen(strings.Join(lines, "\n"))
+}
 
 // TestSmokeRemotePanes (T402, relay phases 4 and 5): studio and mini,
 // two installations paired through an in-process relay; mini shares
@@ -65,6 +90,14 @@ func TestSmokeRemotePanes(t *testing.T) {
 	// them.
 	far := strings.Split(strings.TrimSpace(mini.Screen(th)), "\n")
 	w.WaitFor(strings.TrimSpace(far[0]), wait)
+
+	// In a window with room for it, the info panel beside the pane,
+	// from studio's mirror of mini: the server and its link, the
+	// thread, read-only.
+	wide := studio.Attach(160, 40, remote)
+	wide.WaitFor("Read-only: nothing here acts on mini.", wait)
+	WaitGolden(t, wait, func() string { return infoPanelScreen(wide) }, "remote-info-panel.txt", remotePanelMasks...)
+	wide.CloseWindow()
 
 	// Typing goes to mini's agent, and tells mini's coordinator.
 	w.Paste("hello from studio")
