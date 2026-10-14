@@ -15,6 +15,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/flock"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/relay"
 )
 
 // PeersFile is the paired servers' list in the peer state directory.
@@ -25,7 +26,7 @@ const PeersFile = "peers.json"
 type Peer struct {
 	Alias string            `json:"alias"`
 	Key   ed25519.PublicKey `json:"key"`   // base64
-	Relay string            `json:"relay"` // wss://host[:port]
+	Relay string            `json:"relay"` // wss://host[:port][#sha256=<pin>]
 	// Panes is what the peer may do with this server's panes
 	// (proto.PanesOff, the default when empty, PanesView, PanesType;
 	// docs/SPEC.md §16.12). tm writes "type", which tm v0.27.0 reads too,
@@ -57,6 +58,9 @@ func (p Peer) check() error {
 	u, err := url.Parse(p.Relay)
 	if err != nil || (u.Scheme != "wss" && u.Scheme != "ws") || u.Host == "" {
 		return fmt.Errorf("peer %s: relay %q is not a wss:// URL", p.Alias, p.Relay)
+	}
+	if pin, err := relay.ParsePin(u.Fragment); err != nil || (pin != "" && u.Scheme != "wss") {
+		return fmt.Errorf("peer %s: relay %q: a pin is #sha256= and 64 hex digits, on a wss:// URL", p.Alias, p.Relay)
 	}
 	return nil
 }
@@ -262,6 +266,23 @@ func Unpin(dir, alias string) (bool, error) {
 			}
 			return q.Alias == alias
 		}), nil
+	})
+	return found, err
+}
+
+// SetRelay sets the relay of the peer called alias to relayURL
+// (RelayURL's form): the relay moved, or has a new key; false when there
+// is no such peer.
+func SetRelay(dir, alias, relayURL string) (bool, error) {
+	found := false
+	err := change(dir, func(peers []Peer) ([]Peer, error) {
+		for i := range peers {
+			if peers[i].Alias == alias {
+				found = true
+				peers[i].Relay = relayURL
+			}
+		}
+		return peers, nil
 	})
 	return found, err
 }

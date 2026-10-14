@@ -9,6 +9,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/theclifmeister/terminatr/internal/peer"
+	"github.com/theclifmeister/terminatr/internal/relay"
+	"github.com/theclifmeister/terminatr/internal/version"
 )
 
 // Pairing from the Peers tab (docs/SPEC.md §16.8): n asks for the relay
@@ -172,6 +176,20 @@ func (pv *pairView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
+// relayWarning says when the pairing's relay is on a private address.
+func (pv *pairView) relayWarning() string {
+	r, err := peer.RelayURL(pv.input)
+	if pv.join {
+		var c peer.Code
+		c, err = peer.ParseCode(pv.input)
+		r = c.Relay
+	}
+	if err != nil {
+		return ""
+	}
+	return relay.PrivateWarning(r)
+}
+
 func (pv *pairView) render(m *dash) string {
 	w := m.inner(dialogWidth)
 	title := "Pair a server"
@@ -196,7 +214,15 @@ func (pv *pairView) render(m *dash) string {
 		}
 		body = append(body, "")
 		body = append(body, faintLines("On the other server: , then the Peers tab, j, and type it in; or tm peer join CODE. Pass it on yourself (a chat, a call), never through the relay.", w)...)
+		if strings.Contains(pv.code, "#") {
+			body = append(body, faintLines("The code holds the relay's pin: the other server needs tm "+strings.TrimPrefix(version.Version, "v")+" or later to read it.", w)...)
+		}
 		body = append(body, wrapLines("Waiting for the other server…", w)...)
+	}
+	if note := pv.relayWarning(); note != "" && (pv.stage == pairDialing || pv.stage == pairWaiting) {
+		body = append(body, faintLines("Note: "+note+".", w)...)
+	}
+	switch pv.stage {
 	case pairCheck, pairAnswered:
 		name := pv.offer.Name
 		if name == "" {

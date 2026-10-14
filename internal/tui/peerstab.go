@@ -18,8 +18,10 @@ import (
 // the switch off → view → write → off (asking before it lets the server
 // do more), as tm peer panes does; x removes the selected one, asking
 // first, as tm peer remove does; n pairs with another server and j
-// joins one's pairing (peerpair.go), as tm peer pair and join do. A
-// project is shared from its own Settings tab.
+// joins one's pairing (peerpair.go), as tm peer pair and join do; e
+// gives the selected one another relay, as tm peer relay does (the relay
+// moved, or has a new key). A project is shared from its own Settings
+// tab.
 //
 //	" This server 4F2A-91C3"
 //	""
@@ -38,10 +40,10 @@ type peersTab struct {
 }
 
 // peersKeys are the Peers tab's action row.
-const peersKeys = "n pair · j join · p panes · x remove · ↑ ↓ move · ← → tabs · esc close"
+const peersKeys = "n pair · j join · p panes · e relay · x remove · ↑ ↓ move · ← → tabs · esc close"
 
 // relayHint ends the empty tab: where a relay comes from.
-const relayHint = "No relay yet? On a Linux server with a domain: sudo tm relay install --domain NAME (see the README)."
+const relayHint = "No relay yet? On a Linux server with a domain: sudo tm relay install --domain NAME; without one, on an address both servers reach: sudo tm relay install --ip (see the README)."
 
 // load reads the paired servers again.
 func (pt *peersTab) load(m *dash) {
@@ -108,6 +110,7 @@ func (pt *peersTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
 		out = append(out, "")
 	}
 	out = append(out, faintLines("p sets what the selected server may do with this server's panes, the coordinators and threads of the projects you share: nothing, watch them, or watch and type into them.", w)...)
+	out = append(out, faintLines("e gives the selected server another relay, as tm peer relay does: when the relay moved or was set up again with a new key (its link refuses a relay whose key changed); set it on the other server too.", w)...)
 	out = append(out, faintLines("x removes the selected server, as tm peer remove does: its link closes and its projects leave the sidebar; remove this server there too. A project is shared from its own Settings tab (a on the dashboard).", w)...)
 	return out, sel, hits
 }
@@ -217,9 +220,13 @@ func (pt *peersTab) panes(m *dash, e PeerEntry) tea.Cmd {
 	return nil
 }
 
-// relayWords is a relay as people read it: its host for wss://.
+// relayWords is a relay as people read it: its host for wss://, and
+// "(pinned)" for one taken by its key's pin.
 func relayWords(r string) string {
 	if u, err := url.Parse(r); err == nil && u.Scheme == "wss" && u.Path == "" && u.Host != "" {
+		if u.Fragment != "" {
+			return u.Host + " (pinned)"
+		}
 		return u.Host
 	}
 	return r
@@ -240,17 +247,40 @@ func (pt *peersTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 		pt.sel = moveSel(pt.sel, d, len(pt.list.Peers))
 		return nil, true
 	}
-	if s != "x" && s != "p" {
+	if s != "x" && s != "p" && s != "e" {
 		return nil, false
 	}
 	if pt.sel >= len(pt.list.Peers) {
 		return nil, true
 	}
-	if s == "p" {
+	switch s {
+	case "p":
 		return pt.panes(m, pt.list.Peers[pt.sel]), true
+	case "e":
+		pt.relay(m, pt.list.Peers[pt.sel])
+		return nil, true
 	}
 	pt.remove(m, pt.list.Peers[pt.sel].Alias)
 	return nil, true
+}
+
+// relay asks for the selected server's new relay, starting from its
+// current one, and sets it as tm peer relay does.
+func (pt *peersTab) relay(m *dash, e PeerEntry) {
+	alias := e.Alias
+	m.push(&inputView{title: "Relay for " + alias, text: e.Relay, cancel: "relay unchanged for " + alias,
+		label: "The relay " + alias + "'s link goes through (a host name, or wss://…; a relay without a domain with its #sha256= pin). Set the same on " + alias + " for this server.",
+		submit: func(s string) tea.Cmd {
+			src := m.src
+			return m.act(func() actionMsg {
+				warn, err := src.SetPeerRelay(alias, s)
+				msg := "relay for " + alias + " set; set it on " + alias + " too"
+				if warn != "" {
+					msg += " · " + warn
+				}
+				return actionMsg{err: err, msg: msg, then: func(m *dash) { pt.load(m) }}
+			})
+		}})
 }
 
 // remove asks, then unpins alias and has the server close its link; the

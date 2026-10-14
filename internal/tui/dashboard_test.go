@@ -58,6 +58,7 @@ type fakeSource struct {
 	peerErr     error
 	unpinned    []string // aliases removed from the Peers tab
 	panesSet    []string // "alias level" set from the Peers tab
+	relaySet    []string // "alias relay" set from the Peers tab
 	pairs       []string // PairPeer's and JoinPeer's calls: "pair relay", "join code"
 	pairErr     error    // fails them before the code shows
 	agents      []string
@@ -266,6 +267,10 @@ func (f *fakeSource) SetPeerPanes(alias, level string) error {
 		}
 	}
 	return nil
+}
+func (f *fakeSource) SetPeerRelay(alias, relay string) (string, error) {
+	f.relaySet = append(f.relaySet, alias+" "+relay)
+	return "", nil
 }
 func (f *fakeSource) PairPeer(ctx context.Context, relay string, ev PairEvents) (string, error) {
 	return f.pairing("pair "+relay, "relay.example.net/7Q4M-K2XD-9HVA-PT3C", ev)
