@@ -82,7 +82,7 @@ func TestParsePin(t *testing.T) {
 
 func TestPrivateWarning(t *testing.T) {
 	for in, private := range map[string]bool{
-		"wss://192.168.1.20#sha256=x": true, "wss://10.0.0.2": true, "wss://100.101.102.103": true, "wss://127.0.0.1:8443": true,
+		"wss://192.168.1.20#sha256=x": true, "wss://10.0.0.2": true, "wss://100.101.102.103": true, "wss://127.0.0.1:8443": false,
 		"wss://[fd7a:115c:a1e0::1]": true, "wss://203.0.113.5": false, "wss://relay.example.net": false, "wss://[2001:db8::7]": false,
 	} {
 		if got := PrivateWarning(in); (got != "") != private {

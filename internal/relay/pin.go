@@ -111,8 +111,8 @@ func PinnedTLS(base *tls.Config, host, pin string) *tls.Config {
 var cgnat = netip.MustParsePrefix("100.64.0.0/10")
 
 // PrivateWarning says, for a relay on a private address (a LAN, a VPN
-// or tailnet, this host), that only servers on that network reach it;
-// "" for any other relay.
+// or tailnet), that only servers on that network reach it; "" for any
+// other relay, loopback too (a test's).
 func PrivateWarning(rawURL string) string {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -123,7 +123,7 @@ func PrivateWarning(rawURL string) string {
 		return ""
 	}
 	ip = ip.Unmap()
-	if !ip.IsPrivate() && !ip.IsLoopback() && !ip.IsLinkLocalUnicast() && !cgnat.Contains(ip) {
+	if !ip.IsPrivate() && !ip.IsLinkLocalUnicast() && !cgnat.Contains(ip) {
 		return ""
 	}
 	return fmt.Sprintf("%s is a private address: pairing and links through this relay only work where that network reaches (the same LAN, VPN or tailnet)", ip)

@@ -84,6 +84,14 @@ sudo ~/.local/bin/tm relay install --domain relay.example.net
 
 The first line puts `tm` in `~/.local/bin`, which `sudo` doesn't search, hence the full path. Homebrew on Linux works too, but is heavy for a small server. The second line installs the relay as a service, gets its certificate from Let's Encrypt and prints the address to pair with. To update it later: `sudo tm relay update` (the relay runs its own copy in `/usr/local/bin`, which `brew upgrade` doesn't touch).
 
+No domain? The relay can run on an IP address instead, public or private (a home network's `192.168.x.x`, a Tailscale `100.x`), with a certificate it makes itself:
+
+```sh
+sudo ~/.local/bin/tm relay install --ip 203.0.113.5
+```
+
+It prints the address to pair with, which ends in the relay key's fingerprint: `wss://203.0.113.5#sha256=…`. Use that whole address: the servers check the relay by that key instead of by a certificate authority, and the pairing code carries it to the other side. Both servers must reach that IP on port 443, so a private address only works where that network reaches. Back up the relay's state directory (`/var/lib/private/tm-relay`): it holds the key, and a relay set up again with a new key is refused until you give both servers its new address (`tm peer relay ALIAS ADDRESS`, or `e` in the Peers tab).
+
 Then pair two machines: in Settings (`,`), Peers tab, press `n` on one to get a code and `j` on the other to enter it, or in a terminal run `tm peer pair --relay wss://relay.example.net` on one and `tm peer join CODE` on the other. Both show six digits to compare. Docker, a NAS and other setups: [Running a relay in docs/OPERATIONS.md](docs/OPERATIONS.md#running-a-relay).
 
 ## Learn more

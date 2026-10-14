@@ -8,12 +8,12 @@
            │ This server isn't paired with another. Press n to pair: it shows a code to pass on,  │
            │ and j on the other server takes it (or tm peer pair and tm peer join in a terminal); │
            │ both of yo╭─ Pair a server ──────────────────────────────────────────────╮           │
-           │ No relay y│ Pairing code (works once, for 10 minutes; <left>): │ain NAME   │
-           │ (see the R│                                                              │           │
-           │           │     ws://<port>/<code> │           │
-           │ Paired ser│                                                              │idebar;    │
-           │ you see th│ On the other server: , then the Peers tab, j, and type it    │           │
-           │           │ in; or tm peer join CODE. Pass it on yourself (a chat, a     │           │
+           │ No relay y│ Pairing code (works once, for 10 minutes; <left>): │ain NAME;  │
+           │ without on│                                                              │(see the   │
+           │ README).  │     ws://<port>/<code> │           │
+           │           │                                                              │           │
+           │ Paired ser│ On the other server: , then the Peers tab, j, and type it    │idebar;    │
+           │ you see th│ in; or tm peer join CODE. Pass it on yourself (a chat, a     │           │
            │           │ call), never through the relay.                              │           │
            │           │ Waiting for the other server…                                │           │
            │           │                                                              │           │
@@ -23,7 +23,7 @@
            │                                                                                      │
            │                                                                                      │
            │                                                                                      │
-           │ n pair · j join · p panes · x remove · ↑ ↓ move · ← → tabs · esc close               │
+           │ n pair · j join · p panes · e relay · x remove · ↑ ↓ move · ← → tabs · esc close     │
  ──────────╰──────────────────────────────────────────────────────────────────────────────────────╯
                                    │──────────────────────────────────────────────────────────────────────────
                                    │

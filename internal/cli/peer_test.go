@@ -183,8 +183,8 @@ func TestPeerRelay(t *testing.T) {
 }
 
 // Joining through a self-signed relay on 127.0.0.1: its pin is taken
-// from the code, a private address is said, and a relay with another key
-// is refused in so many words.
+// from the code, and a relay with another key is refused in so many
+// words.
 func TestPeerJoinPinned(t *testing.T) {
 	h := newHarness(t)
 	stubPeerServer(t, nil)
@@ -204,7 +204,7 @@ func TestPeerJoinPinned(t *testing.T) {
 	t.Cleanup(func() { s.Shutdown(); hs.Close() })
 	host := strings.TrimPrefix(hs.URL, "https://")
 	code, out, errs := h.run(human, "", "peer", "join", host+"#sha256="+pin+"/7Q4M-K2XD-9HVA-PT3C")
-	if code != 1 || !strings.Contains(errs, "nobody is pairing with this code") || !strings.Contains(out, "127.0.0.1 is a private address") {
+	if code != 1 || !strings.Contains(errs, "nobody is pairing with this code") || strings.Contains(out, "private address") {
 		t.Fatalf("join: %d %q %q", code, out, errs)
 	}
 	h.expect(3, "the relay at "+host+" has a different key than when you paired", human, "peer", "join", host+"#sha256="+strings.Repeat("ab", 32)+"/7Q4M-K2XD-9HVA-PT3C")
