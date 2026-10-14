@@ -1654,7 +1654,8 @@ These commands are used by the human, the coordinator and threads alike. Exit co
 | `tm doctor [--fix [--yes]] [--json]` | human | checks and changes nothing; `--fix` offers to remove leftovers and restart an old server after a `y` on a terminal (`--yes` instead, needed without one); `--json` for scripts; exit 1 only when a check fails. Checks: toolchain (with `gh auth status`: a warning when `gh` isn't logged in or can't read its token, since the ticker's PR polls need it, §7.5; the code-host lines (`gh`, `gh auth`, the `az` lines, `git origin`) are the running server's, from `server.codehost`, since over SSH on a Mac this shell has no login keychain while the server's sessions do: each carries `source` "server" in `--json` (a field added to every check, empty for the others) and `[server]` in the text; where this shell fails a check the server passes, a `local shell` note (ok, source "local") says so instead of a warning; with no server, or an older one, the checks run in this shell and are labelled `local`), install method and newer release, server (a server of an older protocol is a warning whose fix is `tm server restart`; on macOS, a server whose sessions can't reach the keychain is a warning whose fix is a restart from the Mac, §3.1; a session whose queued prompts are held while its agent is idle is a `prompt queue` warning, §8.6), sockets, manifests, hooks, enabled Claude plugins known to be unsafe in tm sessions (`claude plugin list --json`; a warning naming the reason and `claude plugin disable <id>`, no fix; the list is `unsafePlugins` in `internal/doctor/plugins.go`, today `worktrees@supermods`, whose "Remove N finished" removes clean worktrees with no commits ahead, which includes a fresh thread's), leftovers, settings tm no longer has (`complete_tasks = "released"`, read as `user`, in a project's table or `[defaults]`), and the installed agents and their models (§8.2 **Models**; doctor asks each installed agent again: a fail `agent` line when none is installed, naming the agents tm knows; per installed agent an ok `<agent> models` line, `12 models, asked 2.1.296 today (Claude Max, firstParty)`, with the models the user hid, added and the account refused, or a warning `unknown: <reason>` (logged out, with the login to run; probe failed; no lister); a fail for a `thread_agent` / `coordinator_agent` that isn't installed or tm doesn't know, naming who sets it; and warnings for several agents installed with none chosen for all projects, a `default_model` the agent doesn't offer now, the older `[agents.<name>] models` list, `[agents.<name>]` of an agent tm doesn't know, a manifest's ignored `[[models]]`, a `coordinator_model` its agent doesn't offer, and each model in a project's scope no installed agent offers, naming who allows it), and the paired servers (§16.8: nothing for a server never paired, else one `peers` line with each link's state, a warning for a refused link, an old protocol or an unreachable relay) |
 | `tm mod list [--outdated] [--json] \| install <path\|git-url[//subfolder][@tag]\|github-tree-url> [--yes] \| enable <id> [--project <slug>] [--yes] \| disable <id> [--project <slug>] \| remove <id> [--purge] [--yes] \| update [<id>] [--yes] \| validate [<dir>…] [--json]` | human; list and validate: anyone | user mods, §5.3: install by path or git URL only, consent on a terminal (`--yes` without one) |
 | `tm mod new <id> [--kind column\|hook\|theme\|icons\|keymap\|rules] [--dir <dir>] \| dev <dir> [--yes] \| test [<dir>…] [--json] \| logs <id> [--follow\|-f] [--lines\|-n N]` | dev: human; the rest: anyone | the mod author's tools, §5.3: scaffold, run from a folder with a restart on every save, replay fixtures with a fake broker, read a mod's log |
-| `tm relay serve [--listen ADDR] (--cert FILE --key FILE \| --plain) [--trusted-proxy CIDR]… [--max-conns N] [--max-per-ip N] [--bandwidth MiB/s] [--log-ips]` | human (`human-only` for an agent) | the relay two linked servers meet through, on the user's own host (§16): `--listen` defaults to `:443`; TLS from the certificate files, reloaded when they change, or `--plain` for a TLS proxy in front, whose `X-Forwarded-For` counts only from a `--trusted-proxy`; runs until SIGINT or SIGTERM |
+| `tm relay serve [--listen ADDR] (--domain NAME [--state DIR] [--email ADDR] \| --cert FILE --key FILE \| --plain) [--trusted-proxy CIDR]… [--max-conns N] [--max-per-ip N] [--bandwidth MiB/s] [--log-ips]` | human (`human-only` for an agent) | the relay two linked servers meet through, on the user's own host (§16): `--listen` defaults to `:443`; TLS from Let's Encrypt for `--domain` (TLS-ALPN-01, cached in the state directory, renewed by itself), from the certificate files, reloaded when they change, or `--plain` for a TLS proxy in front, whose `X-Forwarded-For` counts only from a `--trusted-proxy`; runs until SIGINT or SIGTERM |
+| `tm relay install --domain NAME [--email ADDR] \| update \| uninstall` | human, as root on Linux with systemd (`human-only` for an agent) | the relay as the `tm-relay` systemd service: install, update to the latest release (sha256 checked) and restart, remove (§16.6) |
 | `tm peer pair [--relay URL] [--as ALIAS] \| join CODE [--as ALIAS] \| list [--json] \| remove ALIAS \| rotate [--yes]` | human (`human-only` for an agent) | pairing this server with another through a relay by a one-time code and a six-digit check, and the paired servers (§16.8) |
 | `tm update [--check [--json]] [--yes] [--restart]` | human | §10.1 |
 | `tm version` (or `--version`), `tm selftest`, `tm help` | anyone | the version and build id; `selftest` writes a line through libghostty-vt to show it is linked; `help` (or `-h`, `--help`) lists the commands |
@@ -2031,14 +2032,21 @@ projects, §16.11; a paired server's panes in this server's consoles,
 - **Standard library crypto only:** `crypto/ed25519` for the hello,
   `crypto/sha256` for fingerprints and rooms, `crypto/tls` for the outer
   TLS, `crypto/rand` for nonces and masks, `crypto/sha1` for the
-  handshake's accept value. No new module.
+  handshake's accept value. The one module is `golang.org/x/crypto`'s
+  `acme/autocert`, for the relay's own certificate (`--domain`) and
+  nothing else: pairing and the link stay on the standard library.
 - **TLS** is the outer layer only (TLS 1.2 or later, a CA certificate for
   the relay's name); what the servers trust is the pinned TLS inside.
   Certificate files are read again when either changes in size or time,
   so an ACME client renewing them needs no restart; a pair that fails to
-  load keeps the last good one. tm has no ACME client of its own (the
-  standard library has none): a proxy in front does it (Caddy in
-  `deploy/relay/compose.acme.yaml`) or certbot writes the files.
+  load keeps the last good one. With `--domain NAME` the relay gets the
+  certificate itself from Let's Encrypt (autocert) by TLS-ALPN-01 on its
+  own port (the CA connects to 443 with ALPN `acme-tls/1`; no port 80, no
+  certbot), only for that name, on the first connection that asks for
+  it; it keeps key and certificate in its state directory (`--state`,
+  else systemd's `$STATE_DIRECTORY`, else `~/.terminatr/relay`) and
+  renews them 30 days before they expire, without a restart. The relay
+  offers ALPN `http/1.1` (and `acme-tls/1` with `--domain`), never `h2`.
 - **Behind a TLS proxy** (`--plain`), the client address is the direct
   peer's, unless that peer is in a `--trusted-proxy` prefix: then it is the
   last `X-Forwarded-For` entry not itself trusted. A header from anyone
@@ -2108,7 +2116,8 @@ Per address (an IPv6 address counts by its /64):
 
 ### 16.5 What it logs and keeps
 
-Nothing on disk. Its log (standard error) has the start and stop, refused
+Nothing on disk, but with `--domain` its certificate, key and ACME
+account key in the state directory. Its log (standard error) has the start and stop, refused
 hellos, rooms mated and connections left, by room kind and the first four
 bytes of the room id, with duration and bytes in. Client addresses only
 with `--log-ips`. Address counters are forgotten ten minutes after an
@@ -2126,10 +2135,30 @@ address's last connection.
   ACME and passes the WebSocket to a `--plain` relay on an internal
   network, trusting only that network's `X-Forwarded-For`.
 - `deploy/relay/tm-relay.service`: a systemd unit with a throwaway user
-  (`DynamicUser`), only `CAP_NET_BIND_SERVICE`, the certificate handed
-  over by `LoadCredential`, and a strict sandbox.
+  (`DynamicUser`), only `CAP_NET_BIND_SERVICE`, `--domain` with its
+  `StateDirectory=tm-relay` for the ACME cache, and a strict sandbox.
+  It is the unit `tm relay install` writes, for another name
+  (`TestRelayUnitIsTheDeployFile`).
 - `TestRelayDeployFilesUseRealFlags` runs each file's command line
   through `tm relay serve`'s parser.
+- **`sudo tm relay install --domain NAME [--email ADDR]`** (Linux with
+  systemd, as root; else it refuses and names Docker): copies the running
+  tm to `/usr/local/bin/tm` (unless it is that file), writes
+  `/etc/systemd/system/tm-relay.service`, runs `systemctl daemon-reload`,
+  `enable` and `restart tm-relay`, then asks `https://NAME/healthz` for up
+  to two minutes. Then it prints `tm peer pair --relay wss://NAME`. It
+  never changes a firewall: when `/healthz` doesn't answer it says to open
+  TCP 443 and what NAME resolves to (or, when the service died, to read
+  `journalctl -u tm-relay`), exit 3. Running it again rewrites the unit
+  and restarts.
+- **`sudo tm relay update`**: the latest release (§10.1's client), its
+  `tm_linux_<arch>.tar.gz` checked against `checksums.txt`, swapped in
+  for `/usr/local/bin/tm` by a rename, then `systemctl restart tm-relay`
+  and the `/healthz` check for the unit's `--domain`. Nothing changes on
+  a mismatch; a tm that is already the latest does nothing.
+- **`sudo tm relay uninstall`**: `systemctl disable --now tm-relay`,
+  removes the unit, `daemon-reload`; keeps `/usr/local/bin/tm` and the
+  certificates in `/var/lib/private/tm-relay`.
 
 ### 16.7 The link
 

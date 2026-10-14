@@ -1,15 +1,15 @@
 # tm relay as a systemd service (docs/OPERATIONS.md, Running a relay).
 #
+# sudo tm relay install --domain <name> writes this file and does the
+# rest. By hand: set your DNS name below, then
 #   sudo install -m 755 tm /usr/local/bin/tm
 #   sudo cp tm-relay.service /etc/systemd/system/
-#   # edit the two LoadCredential lines to your certificate's files
 #   sudo systemctl daemon-reload && sudo systemctl enable --now tm-relay
 #
-# The relay runs as a throwaway user with only the right to bind 443. The
-# certificate is handed to it by systemd (LoadCredential, read as root,
-# so certbot's 0600 privkey.pem works). After a renewal, restart it:
-#   certbot ... --deploy-hook "systemctl restart tm-relay"
-# Restarting drops the links for a moment; they reconnect by themselves.
+# The relay runs as a throwaway user with only the right to bind 443. It
+# gets its own certificate from Let's Encrypt (TLS-ALPN-01, on 443: no
+# port 80, no certbot), keeps it in its state directory
+# (/var/lib/private/tm-relay) and renews it before it expires.
 
 [Unit]
 Description=terminatr relay (tm relay serve)
@@ -18,9 +18,9 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
-ExecStart=/usr/local/bin/tm relay serve --listen :443 --cert ${CREDENTIALS_DIRECTORY}/fullchain.pem --key ${CREDENTIALS_DIRECTORY}/privkey.pem
-LoadCredential=fullchain.pem:/etc/letsencrypt/live/relay.example.net/fullchain.pem
-LoadCredential=privkey.pem:/etc/letsencrypt/live/relay.example.net/privkey.pem
+ExecStart=/usr/local/bin/tm relay serve --listen :443 --domain relay.example.net --state ${STATE_DIRECTORY}
+StateDirectory=tm-relay
+StateDirectoryMode=0700
 Restart=on-failure
 RestartSec=2s
 

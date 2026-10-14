@@ -22,6 +22,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -630,7 +631,7 @@ func TestServeReloadsTheCertificate(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- Serve(ctx, ln, New(DefaultConfig()), cf, kf) }()
+	go func() { done <- Serve(ctx, ln, New(DefaultConfig()), TLS{CertFile: cf, KeyFile: kf}) }()
 	url := "wss://" + ln.Addr().String()
 
 	served := func() *x509.Certificate {
@@ -655,6 +656,82 @@ func TestServeReloadsTheCertificate(t *testing.T) {
 	pool.AddCert(second)
 	_, w := dialAsync(ctx, linkDialer(newKey(t), newKey(t), &tls.Config{RootCAs: pool}), url)
 	waitFor(t, w, "wait")
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Serve didn't return")
+	}
+}
+
+// Serve with --domain: the certificate comes from autocert's cache in
+// the state directory (where a renewal also lands), only for that name,
+// and the CA's TLS-ALPN-01 challenge protocol is offered.
+func TestServeACMEFromTheStateDirectory(t *testing.T) {
+	dir := t.TempDir()
+	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(7), Subject: pkix.Name{CommonName: "relay.test"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(90 * 24 * time.Hour),
+		DNSNames: []string{"relay.test"},
+		KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IsCA: true, BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &k.PublicKey, k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kd, _ := x509.MarshalECPrivateKey(k)
+	// autocert's cache entry for an ECDSA certificate: the key, then the chain.
+	entry := append(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kd}),
+		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})...)
+	if err := os.WriteFile(filepath.Join(dir, "relay.test"), entry, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cert, _ := x509.ParseCertificate(der)
+
+	tc, err := TLS{Domain: "relay.test", CacheDir: dir}.config(t.Logf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(tc.NextProtos, "acme-tls/1") || slices.Contains(tc.NextProtos, "h2") {
+		t.Fatalf("NextProtos %v", tc.NextProtos)
+	}
+	if _, err := (TLS{Domain: "relay.test"}).config(t.Logf); err == nil {
+		t.Fatal("no state directory accepted")
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	// The directory is a closed port: any attempt to reach a CA fails.
+	go func() {
+		done <- Serve(ctx, ln, New(DefaultConfig()), TLS{Domain: "relay.test", CacheDir: dir, Directory: "https://127.0.0.1:1/dir"})
+	}()
+	pool := x509.NewCertPool()
+	pool.AddCert(cert)
+	hc := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, ServerName: "relay.test"}}}
+	resp, err := hc.Get("https://" + ln.Addr().String() + "/healthz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !resp.TLS.PeerCertificates[0].Equal(cert) {
+		t.Fatalf("healthz %d %q", resp.StatusCode, body)
+	}
+	if _, err := tls.Dial("tcp", ln.Addr().String(), &tls.Config{InsecureSkipVerify: true, ServerName: "other.test"}); err == nil {
+		t.Fatal("served a certificate for another name")
+	}
 	cancel()
 	select {
 	case err := <-done:
