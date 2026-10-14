@@ -90,13 +90,13 @@ func (s *Server) modelsVersion(a agent.Agent, version string, env []string) {
 // launchModel is the model a session launches with when none is chosen:
 // a coordinator's coordinator_model while its agent offers it in the
 // project's scope, else the user's default_model for the agent on the
-// same terms; "" is the agent's own default.
-func launchModel(a agent.Agent, project string, coordinator bool) string {
+// same terms; "" is the agent's own default. cfg is config.toml as the
+// launch read it.
+func launchModel(a agent.Agent, project string, coordinator bool, cfg *config.Config) string {
 	m := agent.ManifestOf(a)
 	if m == nil {
 		return ""
 	}
-	cfg, _ := config.Load()
 	var safety config.Safety
 	if project != "" {
 		safety, _ = cfg.Safety(project)
