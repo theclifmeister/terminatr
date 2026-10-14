@@ -24,6 +24,9 @@ const (
 	// TickerChanged (mod API 1.7): a project's ticker polled PRs or
 	// synced, or its PR host began or stopped failing.
 	TickerChanged = "ticker.changed"
+	// ThreadChanges (mod API 1.8): what a live thread's worktree
+	// changed (its HEAD, its status, its pushed branch) moved.
+	ThreadChanges = "thread.changes"
 	ClockMinute   = "clock.minute"
 	// Published by the console, action and view parts of the API.
 	UIClick     = "ui.click"
@@ -48,7 +51,7 @@ const (
 // Needs is the grant a mod needs to get event name; "" for none.
 func Needs(name string) string {
 	switch name {
-	case TaskChanged, TasksChanged, ThreadState, ThreadStarted, ThreadResolved, ReportStored, InboxItem, PRChanged, TickerChanged, SessionQuestion:
+	case TaskChanged, TasksChanged, ThreadState, ThreadStarted, ThreadResolved, ReportStored, InboxItem, PRChanged, TickerChanged, ThreadChanges, SessionQuestion:
 		return GrantProjectRead
 	case ViewOpened, ViewClosed:
 		return GrantViews
@@ -140,6 +143,26 @@ type PR struct {
 	Review   string `json:"review,omitempty"` // APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED, ""
 	Behind   bool   `json:"behind,omitempty"`
 	Conflict bool   `json:"conflict,omitempty"`
+}
+
+// Changes is thread.changes (mod API 1.8): a thread whose session is
+// live changed its worktree. Its HEAD, whether it has uncommitted work,
+// its commits since its base (ahead), how many of them origin/<branch>
+// lacks (unpushed), whether that branch exists, and the files and lines
+// changed since the base, uncommitted ones included: the totals
+// $.thread.changes answers.
+type Changes struct {
+	Project  string `json:"project"`
+	Thread   string `json:"thread"`
+	Head     string `json:"head,omitempty"`
+	Branch   string `json:"branch,omitempty"`
+	Dirty    bool   `json:"dirty"`
+	Ahead    int    `json:"ahead"`
+	Unpushed int    `json:"unpushed"`
+	Pushed   bool   `json:"pushed"`
+	Files    int    `json:"files"`
+	Add      int    `json:"add"`
+	Del      int    `json:"del"`
 }
 
 // Ticker is ticker.changed (mod API 1.7): a project's ticker as

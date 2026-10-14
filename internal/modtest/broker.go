@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/changes"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modapi"
 	"github.com/theclifmeister/terminatr/internal/modbroker"
@@ -25,7 +26,8 @@ import (
 //
 // Without an answer: store.* and fs.* use the broker's own store and
 // files; projects.list, tasks.list and actions.list are empty;
-// thread.get and report.get null; actions.available false;
+// thread.get and report.get null; thread.changes a worktree with no
+// changes (state none); actions.available false;
 // project.get, http.fetch and process.run an error (the fixture must
 // say); everything else (the ui, annotate, inbox.raise) null.
 //
@@ -144,6 +146,8 @@ func (b *Broker) Answer(method string, params json.RawMessage) (json.RawMessage,
 		return json.RawMessage("[]"), nil
 	case "actions.available":
 		return json.RawMessage("false"), nil
+	case "thread.changes":
+		return marshal(changes.Changeset{State: changes.StateNone, Mode: changes.ModeBase, Files: []changes.File{}}), nil
 	case "project.get":
 		return nil, &modproto.Error{Code: modproto.CodeInternal, Message: fmt.Sprintf("no project %q: the fixture answers project.get", p.Slug)}
 	case "memory.read":

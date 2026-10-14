@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -197,6 +198,49 @@ func (p Paths) Root(real string) string {
 		}
 	}
 	return best
+}
+
+// CheckIn checks rel, a path relative to root (a thread's worktree,
+// which tm reads for the mod: thread.changes), with slashes: it must
+// stay inside root, symlinks resolved, and name no .git folder, .env
+// file or credential store, nor tm's own folder unless root is in it.
+// It returns rel cleaned.
+func (p Paths) CheckIn(root, rel string) (string, error) {
+	if rel == "" || strings.ContainsRune(rel, 0) || !utf8.ValidString(rel) || strings.Contains(rel, `\`) {
+		return "", BadParams("%q isn't a path", rel)
+	}
+	clean := path.Clean(rel)
+	if path.IsAbs(clean) || filepath.IsAbs(filepath.FromSlash(clean)) || clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || filepath.VolumeName(filepath.FromSlash(clean)) != "" {
+		return "", Denied("%s isn't inside the worktree", rel)
+	}
+	for _, c := range strings.Split(clean, "/") {
+		switch {
+		case fold(c) == ".git":
+			return "", Denied("%s is in a .git folder", rel)
+		case isEnvFile(c):
+			return "", Denied("%s is a .env file, which holds secrets", rel)
+		}
+	}
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", NotFound("the worktree: %v", err)
+	}
+	real, err := realPath(filepath.Join(realRoot, filepath.FromSlash(clean)))
+	if err != nil {
+		return "", Denied("%s: %v", rel, err)
+	}
+	if !fsx.Under(real, realRoot) {
+		return "", Denied("%s isn't inside the worktree", rel)
+	}
+	if why := p.denied(real); why != "" && why != "is tm's own folder" {
+		return "", Denied("%s %s", rel, why)
+	}
+	for _, t := range p.tm {
+		if fsx.Under(real, t) && !fsx.Under(realRoot, t) {
+			return "", Denied("%s is tm's own folder", rel)
+		}
+	}
+	return clean, nil
 }
 
 // rootless says whether a Windows path is rooted but names no drive

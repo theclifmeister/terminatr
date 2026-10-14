@@ -1,0 +1,23 @@
+# Each thread's git changes in a sidebar column, before its pull request
+# exists (mod API 1.8): tm reads the worktree with git itself
+# ($.thread.changes) and says when it moved (thread.changes), so the mod
+# needs no commands grant and never learns where the worktree is.
+id = "changes-column"
+name = "Changes column"
+version = "1.0.0"
+api = "1.8"
+description = "Each thread's changed lines in a sidebar column: +added -deleted, a dot while it has uncommitted work."
+authors = ["terminatr"]
+homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/changes-column"
+
+[provides]
+main = "main.ts"
+
+[[provides.columns]]
+id = "changes"
+title = "+/-"
+width = 10
+where = ["sidebar.thread"]
+
+[permissions]
+project_read = true

@@ -99,6 +99,25 @@ func (b *Bus) Active() bool {
 	return len(b.subs) > 0
 }
 
+// Wants says whether some subscribed mod would get event name about
+// project: a source whose events cost work (thread.changes runs git)
+// skips it while none would.
+func (b *Bus) Wants(name, project string) bool {
+	b.mu.Lock()
+	subs := make([]*Sub, 0, len(b.subs))
+	for _, s := range b.subs {
+		subs = append(subs, s)
+	}
+	b.mu.Unlock()
+	ev := Event{Name: name, Project: project}
+	for _, s := range subs {
+		if s.wants(ev) {
+			return true
+		}
+	}
+	return false
+}
+
 // Publish queues an event for every mod it is for. It never blocks.
 func (b *Bus) Publish(name, project string, data any) {
 	b.mu.Lock()

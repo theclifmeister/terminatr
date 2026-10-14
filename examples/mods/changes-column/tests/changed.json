@@ -1,0 +1,17 @@
+{
+  "name": "thread.changes redraws the thread's cell, and thread.resolved clears it",
+  "events": [
+    { "name": "thread.changes", "project": "demo",
+      "data": { "project": "demo", "thread": "t-0001", "head": "abc123", "dirty": false, "ahead": 2, "unpushed": 0, "pushed": true, "files": 2, "add": 30, "del": 7 } },
+    { "name": "thread.resolved", "project": "demo",
+      "data": { "project": "demo", "thread": "t-0001", "agent": "claude" } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.cell.set", "params": { "column": "changes", "target": { "project": "demo", "thread": "t-0001" },
+        "spans": [{ "text": "+30", "role": "good" }, { "text": " -7", "role": "bad" }] } },
+      { "method": "ui.cell.set", "params": { "column": "changes", "target": { "project": "demo", "thread": "t-0001" }, "spans": null } }
+    ],
+    "no_calls": ["thread.changes"]
+  }
+}

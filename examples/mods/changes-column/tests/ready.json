@@ -1,0 +1,28 @@
+{
+  "name": "at the start each thread's changes since its base get a cell; a thread without a repo gets none",
+  "answers": [
+    { "method": "thread.changes", "params": { "project": "demo", "thread": "t-0001" },
+      "result": { "state": "dirty", "mode": "base", "ahead": 1, "unpushed": 1, "pushed": false, "files": [],
+        "totals": { "files": 3, "add": 1200, "del": 4 },
+        "buckets": { "uncommitted": { "files": 1, "add": 2, "del": 0 }, "unpushed": { "files": 2, "add": 1198, "del": 4 }, "pushed": { "files": 0, "add": 0, "del": 0 } } } },
+    { "method": "thread.changes", "params": { "project": "demo", "thread": "t-0002" },
+      "result": { "state": "none", "mode": "base", "ahead": 0, "unpushed": 0, "pushed": false, "files": [],
+        "totals": { "files": 0, "add": 0, "del": 0 },
+        "buckets": { "uncommitted": { "files": 0, "add": 0, "del": 0 }, "unpushed": { "files": 0, "add": 0, "del": 0 }, "pushed": { "files": 0, "add": 0, "del": 0 } } } }
+  ],
+  "events": [
+    { "name": "mod.ready", "data": { "projects": [
+      { "project": "demo", "needs_you": [], "inbox": [], "ready": [], "threads": [
+        { "id": "t-0001", "title": "Login" },
+        { "id": "t-0002", "title": "Notes" } ] } ] } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "thread.changes", "params": { "project": "demo", "thread": "t-0001" } },
+      { "method": "ui.cell.set", "params": { "column": "changes", "target": { "project": "demo", "thread": "t-0001" },
+        "spans": [{ "text": "• ", "role": "warn" }, { "text": "+1k", "role": "good" }, { "text": " -4", "role": "bad" }] } },
+      { "method": "thread.changes", "params": { "project": "demo", "thread": "t-0002" } },
+      { "method": "ui.cell.set", "params": { "column": "changes", "target": { "project": "demo", "thread": "t-0002" }, "spans": null } }
+    ]
+  }
+}

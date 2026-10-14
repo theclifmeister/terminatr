@@ -257,3 +257,46 @@ func TestRootless(t *testing.T) {
 		}
 	}
 }
+
+// TestPathsCheckIn: a path in a thread's worktree (thread.changes) is
+// relative and stays inside it, and names no .git, .env, credential
+// store, or tm's own folder unless the worktree is in it.
+func TestPathsCheckIn(t *testing.T) {
+	f := newFixture(t)
+	wt := filepath.Join(f.home, ".terminatr", "worktrees", "p", "t-0001-x")
+	for _, name := range []string{"a.go", "sub/b.go", ".git/config", ".env"} {
+		p := filepath.Join(wt, filepath.FromSlash(name))
+		os.MkdirAll(filepath.Dir(p), 0o700)
+		os.WriteFile(p, []byte("x"), 0o600)
+	}
+	os.Symlink(filepath.Join(f.home, ".ssh"), filepath.Join(wt, "ssh"))
+	os.Symlink(filepath.Join(f.home, "notes"), filepath.Join(wt, "notes"))
+	cases := []struct {
+		root, path, want string
+	}{
+		{wt, "a.go", "a.go"},
+		{wt, "sub/../sub/b.go", "sub/b.go"},
+		{wt, "gone.go", "gone.go"}, // deleted files have patches too
+		{wt, "../t-0002-y/a.go", ""},
+		{wt, "/etc/passwd", ""},
+		{wt, "..", ""},
+		{wt, ".", ""},
+		{wt, "", ""},
+		{wt, "a\x00.go", ""},
+		{wt, `sub\b.go`, ""},
+		{wt, ".git/config", ""},
+		{wt, "sub/.ENV", map[bool]string{true: "", false: "sub/.ENV"}[caps.CaseFold]},
+		{wt, ".env", ""},
+		{wt, "ssh/id_rsa", ""},                 // a link out of the worktree
+		{wt, "notes/a.txt", ""},                // also out
+		{f.home, ".ssh/id_rsa", ""},            // a repository at ~ still reaches no secret
+		{f.home, ".terminatr/config.toml", ""}, // nor tm's folder
+		{f.home, "notes/a.txt", "notes/a.txt"},
+	}
+	for _, c := range cases {
+		got, err := f.p.CheckIn(c.root, c.path)
+		if got != c.want || (err == nil) != (c.want != "") {
+			t.Errorf("CheckIn(%s, %q) = %q, %v; want %q", c.root, c.path, got, err, c.want)
+		}
+	}
+}
