@@ -42,6 +42,8 @@ const (
 type modEvents struct {
 	bus  *modbus.Bus
 	kick chan struct{}
+	// changes are the live threads' worktree changes (thread.changes).
+	changes modChanges
 	// hold, when set, runs before each look and the func it returns
 	// after it (tests: changes made while it holds land in one look).
 	hold func() (release func())
@@ -132,6 +134,7 @@ func (s *Server) runModEvents(ctx context.Context) {
 		if !e.bus.Active() {
 			if looked {
 				tr.Reset()
+				e.changes.reset()
 				looked = false
 			}
 			continue
@@ -178,8 +181,9 @@ func (s *Server) lookModEvents(tr *modbus.Tracker) {
 		if err != nil {
 			continue
 		}
-		tr.Project(p.Slug, projectState(p, sessions, statePath))
+		tr.Project(p.Slug, projectState(p, sessions, statePath, s.liveChanges(p)))
 	}
+	s.modEv.changes.sweep()
 }
 
 // sessionUsage is what session info's thread has used so far: its
@@ -244,8 +248,10 @@ func sessionNeedsYou(info proto.SessionInfo) string {
 }
 
 // projectState is project p's state for the tracker, with sessions the
-// server's and tickerState the ticker's state file.
-func projectState(p *project.Project, sessions []proto.SessionInfo, tickerState string) *modbus.ProjectState {
+// server's and tickerState the ticker's state file. live, when set,
+// gives the worktree changes of each unresolved thread whose session is
+// live (thread.changes).
+func projectState(p *project.Project, sessions []proto.SessionInfo, tickerState string, live func(*thread.Record) *modbus.Changes) *modbus.ProjectState {
 	st := &modbus.ProjectState{Tasks: map[string]modbus.Task{}, Threads: map[string]modbus.ThreadSnap{},
 		Inbox: map[string]modbus.Item{}, PRs: map[string]modbus.PR{}}
 	items, itemsErr := p.Inbox()
@@ -274,6 +280,9 @@ func projectState(p *project.Project, sessions []proto.SessionInfo, tickerState 
 			if info, ok := byThread[r.ID]; ok && info.State != "" {
 				ts.State.State, ts.State.Reason = info.State, info.Reason
 				ts.State.NeedsYou = sessionNeedsYou(info)
+			}
+			if info, ok := byThread[r.ID]; ok && live != nil && info.State != "exited" {
+				ts.Changes = live(r)
 			}
 			if sst, _ := thread.ReadStatus(p, r.ID); sst != nil && sst.NeedsYou != "" {
 				ts.State.NeedsYou = sst.NeedsYou

@@ -15,6 +15,7 @@ package modapi
 import (
 	"reflect"
 
+	"github.com/theclifmeister/terminatr/internal/changes"
 	"github.com/theclifmeister/terminatr/internal/modbus"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/widget"
@@ -214,6 +215,26 @@ type FetchResponse struct {
 	Body    string            `json:"body"`
 }
 
+// ChangesOptions are $.thread.changes' options (mod API 1.8): mode
+// "base" (the default: since the merge base with the thread's base,
+// uncommitted work included) or "uncommitted" (since HEAD); path, a
+// file of the worktree (relative, with slashes) to answer alone, with
+// its unified diff when patch is true.
+type ChangesOptions struct {
+	Mode  ChangesMode `json:"mode,omitempty"`
+	Path  string      `json:"path,omitempty"`
+	Patch bool        `json:"patch,omitempty"`
+}
+
+// ChangesMode is what $.thread.changes counts from.
+type ChangesMode string
+
+// ChangesModes are the modes.
+var ChangesModes = []string{changes.ModeBase, changes.ModeUncommitted}
+
+// Changeset is $.thread.changes' answer (changes.Changeset).
+type Changeset = changes.Changeset
+
 // RunOptions are $.process.run's options.
 type RunOptions struct {
 	Cwd       string `json:"cwd,omitempty"`
@@ -240,6 +261,7 @@ var Events = []Event{
 	{Name: modbus.InboxItem, Data: typ[modbus.Item](), Needs: GrantProjectRead, Doc: "A new item in the coordinator's inbox."},
 	{Name: modbus.PRChanged, Data: typ[modbus.PR](), Needs: GrantProjectRead, Doc: "The ticker learnt something new of a thread's PR."},
 	{Name: modbus.TickerChanged, Data: typ[modbus.Ticker](), Needs: GrantProjectRead, Doc: "A project's ticker polled PRs or synced its repos, or its PR host began or stopped failing (mod API 1.7): the ticker as $.project.get gives it. Draw its times as ago and until spans, which move by themselves."},
+	{Name: modbus.ThreadChanges, Data: typ[modbus.Changes](), Needs: GrantProjectRead, Doc: "A thread whose session is live changed its worktree (mod API 1.8): an edit, a commit or a push moved its HEAD, its status or origin/<branch>. Seen by the server's look within seconds, at most once a look; the totals are $.thread.changes' (mode base). Looked for only while a mod listens to it."},
 	{Name: modbus.SessionState, Data: typ[modbus.Session](), Doc: "A session's agent state or context use changed, or it exited."},
 	{Name: modbus.SessionQuestion, Data: typ[modbus.Question](), Needs: GrantProjectRead, Doc: "The question a thread's or coordinator's open question menu asks changed (mod API 1.3): its first unanswered question, none once it is answered or gone. Its options can be offered as question.answer bindings."},
 	{Name: modbus.ClockMinute, Data: typ[modbus.Clock](), Doc: "Every minute."},
@@ -267,6 +289,8 @@ var Methods = []Method{
 		Doc: "A thread of a project; null when there is none."},
 	{Name: "report.get", Params: []Param{{Name: "project", Type: typ[string]()}, {Name: "thread", Type: typ[string]()}}, Result: typ[*modbus.Report](), Needs: GrantProjectRead,
 		Doc: "A thread's latest report; null when it has none."},
+	{Name: "thread.changes", Params: []Param{{Name: "project", Type: typ[string]()}, {Name: "thread", Type: typ[string]()}, {Name: "options", Type: typ[ChangesOptions](), Optional: true}}, Result: typ[Changeset](), Needs: GrantProjectRead,
+		Doc: "What a thread's worktree changed (mod API 1.8), read by tm with git, read-only: the files changed since its base (or, mode uncommitted, since HEAD), each with its +/- lines and its newest bucket (uncommitted, unpushed: in a commit origin/<branch> lacks, pushed), the totals and each bucket's, the commits ahead of the base and unpushed. state none: no repo or worktree. options.path answers that one file (inside the worktree; never .git, .env or a credential store), with its unified diff when options.patch (at most 256 KiB). Paths are relative to the worktree; paths and diffs are data, cleaned of control characters. At most 2000 files, 1 MiB per git output (truncated) and 30 s."},
 	{Name: "memory.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]MemoryFile](), Needs: GrantProjectRead,
 		Doc: "A project's memory files: CONTEXT.md, MEMORY.md and the notes in memory/, by title."},
 	{Name: "memory.read", Params: []Param{{Name: "slug", Type: typ[string]()}, {Name: "path", Type: typ[string]()}}, Result: typ[string](), Needs: GrantProjectRead,

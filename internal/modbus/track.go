@@ -42,6 +42,9 @@ type ThreadSnap struct {
 	Life    ThreadLife
 	Record  string // its record's state: running, stopped, resolved
 	Reports int    // reports stored
+	// Changes is its worktree's changes while its session is live and
+	// a mod listens to thread.changes; nil otherwise.
+	Changes *Changes
 }
 
 // Tracker turns successive states into events. Its first sight of a
@@ -76,7 +79,7 @@ func (t *Tracker) Reset() {
 
 // Project publishes what changed in project slug since its last state.
 // Events of one project go out in the order of the design's table:
-// threads started, tasks (each task, then the board), thread states, reports, PRs, the ticker,
+// threads started, tasks (each task, then the board), thread states, thread changes, reports, PRs, the ticker,
 // inbox items, threads resolved; each kind in id order.
 func (t *Tracker) Project(slug string, cur *ProjectState) {
 	old := t.projects[slug]
@@ -107,6 +110,12 @@ func (t *Tracker) Project(slug string, cur *ProjectState) {
 		n, o := cur.Threads[id], old.Threads[id]
 		if n.State != o.State && n.Record != "resolved" {
 			pub(ThreadState, n.State)
+		}
+	}
+	for _, id := range threads {
+		n, o := cur.Threads[id].Changes, old.Threads[id].Changes
+		if n != nil && (o == nil || *n != *o) {
+			pub(ThreadChanges, *n)
 		}
 	}
 	for _, id := range threads {

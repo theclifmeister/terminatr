@@ -104,6 +104,30 @@ func TestGrantsEventsProjects(t *testing.T) {
 	}
 }
 
+// TestWants: a source asks whether any mod would get an event: one
+// that listens to it, has its grant and runs for its project.
+func TestWants(t *testing.T) {
+	b := New()
+	if b.Wants(ThreadChanges, "a") {
+		t.Fatal("no mod, yet wanted")
+	}
+	b.Subscribe("nogrant", Options{Events: []string{ThreadChanges}})
+	b.Subscribe("other", Options{Grants: all, Events: []string{TaskChanged}})
+	if b.Wants(ThreadChanges, "a") {
+		t.Fatal("wanted without the grant or the event")
+	}
+	s := b.Subscribe("some", Options{Grants: all, Events: []string{ThreadChanges},
+		Project: func(slug string) bool { return slug == "a" }})
+	if !b.Wants(ThreadChanges, "a") || b.Wants(ThreadChanges, "b") {
+		t.Fatal("wants follows the events and projects")
+	}
+	s.Close()
+	b.Subscribe("all", Options{Grants: all})
+	if !b.Wants(ThreadChanges, "b") {
+		t.Fatal("a mod listening to everything wants it")
+	}
+}
+
 func TestResubscribeStartsOver(t *testing.T) {
 	b := New()
 	old := b.Subscribe("m", Options{Grants: all})

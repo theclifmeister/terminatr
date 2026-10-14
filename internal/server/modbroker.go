@@ -304,6 +304,7 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 		}
 		return nil, nil
 	})
+	b.Handle("thread.changes", mod.PermProjectRead, s.modThreadChanges)
 	b.Handle("memory.list", mod.PermProjectRead, func(_ context.Context, c *modbroker.Call) (any, error) {
 		p, err := modProject(c, &struct{}{})
 		if err != nil {

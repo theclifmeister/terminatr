@@ -213,6 +213,41 @@ func TestTrackerTicker(t *testing.T) {
 	}
 }
 
+// TestTrackerChanges: thread.changes when a thread's changes appear
+// (its session went live) or differ; not when they are the same, nor
+// when they go (its session ended).
+func TestTrackerChanges(t *testing.T) {
+	b := New()
+	s := b.Subscribe("m", Options{Grants: all})
+	tr := NewTracker(b, nil)
+	look := func(c *Changes) {
+		st := state()
+		ts := st.Threads["t-0001"]
+		ts.Changes = c
+		st.Threads["t-0001"] = ts
+		tr.Project("p", st)
+	}
+	c := Changes{Project: "p", Thread: "t-0001", Head: "abc", Dirty: true, Files: 1, Add: 2}
+	look(&c)
+	if got := drain(t, s); len(got) != 0 {
+		t.Fatalf("baseline %v", got)
+	}
+	same := c
+	look(&same)
+	c2 := c
+	c2.Dirty, c2.Ahead, c2.Unpushed = false, 1, 1
+	look(&c2)
+	look(nil)
+	look(&c2)
+	want := []string{
+		"thread.changes {Project:p Thread:t-0001 Head:abc Branch: Dirty:false Ahead:1 Unpushed:1 Pushed:false Files:1 Add:2 Del:0}",
+		"thread.changes {Project:p Thread:t-0001 Head:abc Branch: Dirty:false Ahead:1 Unpushed:1 Pushed:false Files:1 Add:2 Del:0}",
+	}
+	if got := drain(t, s); fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("got %v\nwant %v", got, want)
+	}
+}
+
 func nonEmpty(s string) []string {
 	if s == "" {
 		return nil

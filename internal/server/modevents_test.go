@@ -226,7 +226,7 @@ func TestNeedsYouWithoutAgentMod(t *testing.T) {
 	}
 	info := proto.SessionInfo{ID: "s-3", Project: "demo", Thread: rec.ID, Role: proto.RoleThread, State: "blocked", Reason: "question"}
 	needs := func(info proto.SessionInfo) string {
-		return projectState(pr, []proto.SessionInfo{info}, "").Threads[rec.ID].State.NeedsYou
+		return projectState(pr, []proto.SessionInfo{info}, "", nil).Threads[rec.ID].State.NeedsYou
 	}
 	if got := needs(info); got != questionNoText {
 		t.Fatalf("no menu: needs_you %q", got)
