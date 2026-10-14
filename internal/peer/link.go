@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"math/rand/v2"
 	"net"
@@ -44,6 +45,9 @@ type link struct {
 
 	mu sync.Mutex
 	st proto.PeerLink
+	// logged is the last offline line logged: a link that keeps failing
+	// the same way logs it once, not every minute.
+	logged string
 	// sess is the live session while up.
 	sess *session
 }
@@ -58,6 +62,13 @@ func (l *link) status() proto.PeerLink {
 
 // set moves the link to state for reason, logging a change.
 func (l *link) set(state, reason string, err error, retry time.Time) {
+	var line string
+	switch {
+	case state == proto.LinkOffline && err != nil:
+		line = fmt.Sprintf("offline (%s): %v", reason, err)
+	case state == proto.LinkOffline:
+		line = fmt.Sprintf("offline (%s)", reason)
+	}
 	l.mu.Lock()
 	changed := l.st.State != state || l.st.Reason != reason
 	if changed {
@@ -73,17 +84,22 @@ func (l *link) set(state, reason string, err error, retry time.Time) {
 		l.st.RTT = 0
 	}
 	version, lp := l.st.Version, l.st.LinkProtocol
+	repeat := line != "" && line == l.logged
+	switch state {
+	case proto.LinkUp:
+		l.logged = ""
+	case proto.LinkOffline:
+		l.logged = line
+	}
 	l.mu.Unlock()
-	if !changed || l.logf == nil {
+	if !changed || repeat || l.logf == nil {
 		return
 	}
-	switch {
-	case state == proto.LinkUp:
+	switch state {
+	case proto.LinkUp:
 		l.logf("peer %s: up (tm %s, link protocol %d)", l.peer.Alias, version, lp)
-	case state == proto.LinkOffline && err != nil:
-		l.logf("peer %s: offline (%s): %v; dialling again in %s", l.peer.Alias, reason, err, time.Until(retry).Round(time.Second))
-	case state == proto.LinkOffline:
-		l.logf("peer %s: offline (%s)", l.peer.Alias, reason)
+	case proto.LinkOffline:
+		l.logf("peer %s: %s", l.peer.Alias, line)
 	}
 }
 
