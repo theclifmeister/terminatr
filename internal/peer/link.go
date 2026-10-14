@@ -1,0 +1,223 @@
+package peer
+
+import (
+	"context"
+	"crypto/tls"
+	"errors"
+	"io"
+	"math/rand/v2"
+	"net"
+	"sync"
+	"time"
+
+	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/relay"
+)
+
+// Backoff between dials: 1 s doubling to 60 s, with jitter. A link that
+// came up starts again from 1 s.
+const (
+	backoffMin = time.Second
+	backoffMax = 60 * time.Second
+)
+
+// backoff is the wait before dial number n+1 after n failures in a row:
+// between half and all of min(backoffMax, backoffMin·2ⁿ).
+func backoff(n int) time.Duration {
+	d := backoffMax
+	if n < 6 {
+		d = min(backoffMax, backoffMin<<n)
+	}
+	return d/2 + rand.N(d/2+1)
+}
+
+// link keeps one peer's link up: dial, TLS, hello, serve, and again.
+type link struct {
+	peer  Peer
+	id    *Identity
+	cert  tls.Certificate
+	t     Transport
+	hello Hello
+	logf  func(string, ...any)
+	// backoff is the wait after n failures (a test shortens it).
+	backoff func(n int) time.Duration
+
+	mu sync.Mutex
+	st proto.PeerLink
+	// sess is the live session while up.
+	sess *session
+}
+
+func (l *link) status() proto.PeerLink {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	st := l.st
+	st.Caps = append([]string(nil), st.Caps...)
+	return st
+}
+
+// set moves the link to state for reason, logging a change.
+func (l *link) set(state, reason string, err error, retry time.Time) {
+	l.mu.Lock()
+	changed := l.st.State != state || l.st.Reason != reason
+	if changed {
+		l.st.Since = time.Now()
+	}
+	l.st.State, l.st.Reason, l.st.Retry = state, reason, retry
+	if err != nil {
+		l.st.Error = err.Error()
+	} else if state == proto.LinkUp {
+		l.st.Error = ""
+	}
+	if state != proto.LinkUp {
+		l.st.RTT = 0
+	}
+	version, lp := l.st.Version, l.st.LinkProtocol
+	l.mu.Unlock()
+	if !changed || l.logf == nil {
+		return
+	}
+	switch {
+	case state == proto.LinkUp:
+		l.logf("peer %s: up (tm %s, link protocol %d)", l.peer.Alias, version, lp)
+	case state == proto.LinkOffline && err != nil:
+		l.logf("peer %s: offline (%s): %v; dialling again in %s", l.peer.Alias, reason, err, time.Until(retry).Round(time.Second))
+	case state == proto.LinkOffline:
+		l.logf("peer %s: offline (%s)", l.peer.Alias, reason)
+	}
+}
+
+// run keeps the link until ctx ends.
+func (l *link) run(ctx context.Context) {
+	fails := 0
+	for {
+		l.set(proto.LinkConnecting, "", nil, time.Time{})
+		up, err := l.once(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		if up {
+			fails = 0
+		}
+		reason := reasonOf(err)
+		wait := l.backoff(fails)
+		if isRoomTimeout(err) {
+			// The relay's room waited its hour: no failure, dial again.
+			wait = l.backoff(0)
+		} else {
+			fails++
+		}
+		l.set(proto.LinkOffline, reason, err, time.Now().Add(wait))
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+	}
+}
+
+// once dials, proves keys, says hello and serves until the link ends.
+// up says it got as far as the hellos.
+func (l *link) once(ctx context.Context) (up bool, err error) {
+	c, err := l.t.Dial(ctx, func() {
+		l.set(proto.LinkOffline, proto.LinkReasonPeer, nil, time.Time{})
+	})
+	if err != nil {
+		return false, err
+	}
+	// ctx ends the link at any point from here.
+	stop := context.AfterFunc(ctx, func() { c.Close() })
+	defer stop()
+	defer c.Close()
+	l.set(proto.LinkConnecting, "", nil, time.Time{})
+	cfg := tlsConfig(l.cert, l.peer.Key)
+	var tc *tls.Conn
+	if tlsClient(l.id.ID, l.peer.ID()) {
+		tc = tls.Client(c, cfg)
+	} else {
+		tc = tls.Server(c, cfg)
+	}
+	hctx, cancel := context.WithTimeout(ctx, helloTimeout)
+	err = tc.HandshakeContext(hctx)
+	cancel()
+	if err != nil {
+		return false, handshakeErr(err)
+	}
+	s := newSession(tc)
+	peer, err := s.hello(l.hello)
+	l.mu.Lock()
+	l.st.Version, l.st.LinkProtocol, l.st.Caps = peer.Version, peer.LinkProtocol, peer.Caps
+	l.mu.Unlock()
+	if err != nil {
+		return false, err
+	}
+	l.mu.Lock()
+	l.sess = s
+	l.mu.Unlock()
+	l.set(proto.LinkUp, "", nil, time.Time{})
+	err = s.serve(func(d time.Duration) {
+		l.mu.Lock()
+		if l.sess == s {
+			l.st.RTT = float64(d.Microseconds()) / 1000
+		}
+		l.mu.Unlock()
+	})
+	l.mu.Lock()
+	l.sess = nil
+	l.mu.Unlock()
+	return true, err
+}
+
+// refusedError: the TLS handshake failed on the keys, not on the
+// stream under it.
+type refusedError struct{ err error }
+
+func (e *refusedError) Error() string { return "the keys don't match: " + e.err.Error() }
+func (e *refusedError) Unwrap() error { return e.err }
+
+// handshakeErr marks a TLS handshake failure that isn't the stream's:
+// the other end's key isn't the pinned one, it refused ours, or it
+// isn't a tm link at all.
+func handshakeErr(err error) error {
+	var ce *relay.CloseError
+	var ne net.Error
+	if errors.As(err, &ce) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, net.ErrClosed) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) ||
+		(errors.As(err, &ne) && !isRemoteAlert(err)) {
+		return err
+	}
+	return &refusedError{err}
+}
+
+// isRemoteAlert: the other end sent a TLS alert, as crypto/tls reports
+// it. Once TLS 1.3 is up, that is the server refusing the client's key.
+func isRemoteAlert(err error) bool {
+	var oe *net.OpError
+	return errors.As(err, &oe) && oe.Op == "remote error"
+}
+
+// reasonOf says why a link failed with err.
+func reasonOf(err error) string {
+	var ce *relay.CloseError
+	var re *refusedError
+	var ve *versionError
+	switch {
+	case errors.As(err, &ce):
+		if ce.Reason == relay.ErrPeerGone || ce.Reason == relay.ErrTimeout {
+			return proto.LinkReasonPeer
+		}
+		return proto.LinkReasonRelay
+	case errors.As(err, &re), errors.Is(err, errNotPinned), isRemoteAlert(err):
+		return proto.LinkReasonRefused
+	case errors.As(err, &ve):
+		return proto.LinkReasonVersion
+	}
+	return proto.LinkReasonRelay
+}
+
+// isRoomTimeout: the relay closed a link room that waited its time out
+// before the peer came.
+func isRoomTimeout(err error) bool {
+	var ce *relay.CloseError
+	return errors.As(err, &ce) && ce.Reason == relay.ErrTimeout
+}
