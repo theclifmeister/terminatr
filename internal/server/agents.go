@@ -157,19 +157,55 @@ func (s *Server) accessFor(role, slug, cwd string) (agent.Access, error) {
 		return a, nil
 	case proto.RoleThread:
 		a := agent.Access{Read: []string{dir}, NoWrite: []string{dir}, NoWriteFiles: []string{cfg}}
-		// A worktree's commits go to the main repo's git dir, outside
-		// the cwd the sandbox allows; its HEAD and index are in its own
-		// git dir below it, granted by name too, for sandboxes that carve
-		// git dirs out of any broader grant (Codex's).
 		if d, err := worktree.GitDirs(cwd); err == nil {
-			a.Write = []string{realPath(d.CommonDir)}
-			if gd := realPath(d.GitDir); gd != a.Write[0] {
-				a.Write = append(a.Write, gd)
-			}
+			g := threadGitAccess(realPath(d.CommonDir), realPath(d.GitDir))
+			a.Write, a.WriteFiles = g.Write, g.WriteFiles
+			a.NoWrite = append(a.NoWrite, g.NoWrite...)
+			a.NoWriteFiles = append(a.NoWriteFiles, g.NoWriteFiles...)
 		}
 		return a, nil
 	}
 	return agent.Access{}, fmt.Errorf("unknown role %q", role)
+}
+
+// threadGitAccess is what a thread's git may write in its checkout's
+// git dirs (docs/SPEC.md §5.2), common the main repo's and own the
+// checkout's own (the same for the main checkout). A worktree's commits
+// and pushes go to the common dir, outside the cwd the sandbox allows:
+// its objects, refs and reflogs, and packed-refs when a ref goes. HEAD
+// and index are in the worktree's own git dir, granted by name for
+// sandboxes that carve git dirs out of any broader grant (Codex's).
+// What git runs or reads as configuration (hooks, config, info) and
+// the other worktrees' git dirs are never written: the human's git and
+// the server use them outside any sandbox. They are named NoWrite so
+// that a broader grant (the main checkout as cwd, a user's own rule)
+// doesn't open them either. A worktree added later is in no grant.
+func threadGitAccess(common, own string) agent.Access {
+	dirs, files := gitConfig(common)
+	a := agent.Access{
+		Write:        []string{filepath.Join(common, "objects"), filepath.Join(common, "refs"), filepath.Join(common, "logs")},
+		WriteFiles:   []string{filepath.Join(common, "packed-refs"), filepath.Join(common, "packed-refs.lock")},
+		NoWrite:      dirs,
+		NoWriteFiles: append(files, filepath.Join(common, "config.lock")),
+	}
+	wts := filepath.Join(common, "worktrees")
+	if own != common {
+		a.Write = append(a.Write, own)
+	}
+	if es, err := os.ReadDir(wts); err == nil {
+		for _, e := range es {
+			if p := filepath.Join(wts, e.Name()); e.IsDir() && p != own {
+				a.NoWrite = append(a.NoWrite, p)
+			}
+		}
+	}
+	return a
+}
+
+// gitConfig are what git runs or reads as configuration in git dir
+// common: its hooks and info folders and its config file.
+func gitConfig(common string) (dirs, files []string) {
+	return []string{filepath.Join(common, "hooks"), filepath.Join(common, "info")}, []string{filepath.Join(common, "config")}
 }
 
 // mergeCommands are the commands the opt-in coordinator_merges setting

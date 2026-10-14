@@ -85,9 +85,16 @@ func TestSmokeCodexSandbox(t *testing.T) {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}
 	}
+	// origin in the temporary folder, which the profile makes writable:
+	// a push then writes only what a push to a real remote writes here.
+	origin, other := filepath.Join(t.TempDir(), "origin.git"), filepath.Join(root, "other")
+	git(root, "init", "-q", "--bare", "-b", "main", origin)
 	git(repo, "init", "-q", "-b", "main")
 	git(repo, "commit", "-q", "--allow-empty", "-m", "first")
+	git(repo, "remote", "add", "origin", origin)
+	git(repo, "push", "-q", "origin", "main")
 	git(repo, "worktree", "add", "-q", "-b", "wt", wt)
+	git(repo, "worktree", "add", "-q", "-b", "other", other)
 
 	// The server on a socket the profile doesn't make writable.
 	env.Socket = filepath.Join(run, "tm.sock")
@@ -97,8 +104,14 @@ func TestSmokeCodexSandbox(t *testing.T) {
 	t.Cleanup(func() { env.CLI("server", "stop") })
 
 	// The thread's access policy (internal/server accessFor).
-	access := agent.Access{Read: []string{proj}, NoWrite: []string{proj},
-		Write: []string{filepath.Join(repo, ".git"), filepath.Join(repo, ".git", "worktrees", "wt")}}
+	common := filepath.Join(repo, ".git")
+	access := agent.Access{Read: []string{proj},
+		Write: []string{filepath.Join(common, "objects"), filepath.Join(common, "refs"), filepath.Join(common, "logs"),
+			filepath.Join(common, "worktrees", "wt")},
+		WriteFiles: []string{filepath.Join(common, "packed-refs"), filepath.Join(common, "packed-refs.lock")},
+		NoWrite: []string{proj, filepath.Join(common, "hooks"), filepath.Join(common, "info"),
+			filepath.Join(common, "worktrees", "other")},
+		NoWriteFiles: []string{filepath.Join(common, "config"), filepath.Join(common, "config.lock")}}
 	args := append([]string{"sandbox", "-P", "tm", "-C", wt}, sandboxArgs(t, agent.LaunchSpec{
 		Role: agent.RoleThread, SessionID: "s-1", Cwd: wt, RepoRoot: repo,
 		GitDir: filepath.Join(repo, ".git", "worktrees", "wt"), RuntimeDir: run,
@@ -116,6 +129,12 @@ func TestSmokeCodexSandbox(t *testing.T) {
 	script := strings.Join([]string{
 		probe("worktree", "echo x > "+filepath.Join(wt, "f")),
 		probe("commit", "git -c user.name=t -c user.email=t@t -C "+wt+" add f && git -c user.name=t -c user.email=t@t -C "+wt+" commit -qm f"),
+		probe("push", "git -C "+wt+" push -q origin HEAD"),
+		probe("hooks", "echo x > "+filepath.Join(common, "hooks", "pre-commit")),
+		probe("config", "git -C "+wt+" config tm.probe x"),
+		probe("info", "echo x >> "+filepath.Join(common, "info", "exclude")),
+		probe("other-worktree", "echo x > "+filepath.Join(common, "worktrees", "other", "HEAD")),
+		probe("ref-delete", "git -C "+wt+" branch -q gone && git -C "+wt+" branch -q -d gone"),
 		probe("tmp", "echo x > /tmp/tmcxs-$$ && rm /tmp/tmcxs-$$"),
 		probe("tmpdir", "echo x > "+filepath.Join(tmpdir, "tmcxs-$$")+" && rm "+filepath.Join(tmpdir, "tmcxs-$$")),
 		probe("outside", "echo x > "+filepath.Join(outside, "f")),
@@ -134,7 +153,8 @@ func TestSmokeCodexSandbox(t *testing.T) {
 		t.Fatalf("codex sandbox: %v", err)
 	}
 	want := map[string]string{
-		"worktree": "ok", "commit": "ok", "tmp": "ok", "tmpdir": "ok",
+		"worktree": "ok", "commit": "ok", "push": "ok", "ref-delete": "ok", "tmp": "ok", "tmpdir": "ok",
+		"hooks": "no", "config": "no", "info": "no", "other-worktree": "no",
 		"outside": "no", "home": "no", "project-read": "ok", "project-write": "no",
 		"socket": "ok",
 	}

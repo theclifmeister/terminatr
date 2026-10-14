@@ -921,8 +921,8 @@ func posixPath(d string) string {
 }
 
 // pathModes renders a's paths as {"/p"="read","/q"="write",…}: Read
-// is read, Write and the write dirs (by real path, as the policy names
-// them) are write, NoWrite and NoWriteFiles are read and win over a
+// is read, Write, WriteFiles and the write dirs (by real path, as the
+// policy names them) are write, NoWrite and NoWriteFiles are read and win over a
 // write of the same path. Each path appears once, in policy order.
 func pathModes(a Access, write ...string) string {
 	var order []string
@@ -940,6 +940,7 @@ func pathModes(a Access, write ...string) string {
 	}
 	set(a.Read, "read", false)
 	set(a.Write, "write", false)
+	set(a.WriteFiles, "write", false)
 	for _, d := range write {
 		if r, err := filepath.EvalSymlinks(d); err == nil {
 			d = r

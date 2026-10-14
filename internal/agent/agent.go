@@ -81,9 +81,12 @@ type LaunchSpec struct {
 // Access is a harness-neutral file access policy (docs/SPEC.md §5.2).
 // Paths are absolute directories; each grant covers everything below it.
 type Access struct {
-	Read    []string // readable without a prompt
-	Write   []string // writable besides the cwd, e.g. a worktree's git dir
-	NoWrite []string // must never be written, even where a broader rule would allow it
+	Read  []string // readable without a prompt
+	Write []string // writable besides the cwd, e.g. a worktree's git dir
+	// WriteFiles are single files writable besides the cwd, e.g. the
+	// main repo's packed-refs and its lock.
+	WriteFiles []string
+	NoWrite    []string // must never be written, even where a broader rule would allow it
 	// NoWriteFiles are single files that must never be written, e.g.
 	// config.toml, which holds the human's safety settings.
 	NoWriteFiles []string

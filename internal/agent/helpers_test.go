@@ -84,10 +84,10 @@ func TestTOMLString(t *testing.T) {
 // beats a Read.
 func TestPathModes(t *testing.T) {
 	a := Access{
-		Read: []string{"/p", "/g"}, Write: []string{"/g", "/w", "/n"},
-		NoWrite: []string{"/p", "/n"}, NoWriteFiles: []string{`/c "x".toml`},
+		Read: []string{"/p", "/g"}, Write: []string{"/g", "/w", "/n"}, WriteFiles: []string{"/f", "/c"},
+		NoWrite: []string{"/p", "/n"}, NoWriteFiles: []string{`/c "x".toml`, "/c"},
 	}
-	want := `{"/p"="read","/g"="write","/w"="write","/n"="read","/c \"x\".toml"="read"}`
+	want := `{"/p"="read","/g"="write","/w"="write","/n"="read","/f"="write","/c"="read","/c \"x\".toml"="read"}`
 	if got := pathModes(a); got != want {
 		t.Errorf("pathModes = %s, want %s", got, want)
 	}
