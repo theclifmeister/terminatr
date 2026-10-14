@@ -65,6 +65,7 @@ import type { Ack, Offer } from './deliver'
 import { feed } from './feed'
 import { guard } from './guarded'
 import { registerPane, sawViewport } from './pane'
+import { debug, get, modSocket, post } from './socket'
 import { answer, body, MOD_TOOL, modTools, toolName, TOOLS } from './tools'
 import type { ThreadTool } from './tools'
 import { initialTurn, stateOf, step, waitKey } from './turn'
@@ -141,17 +142,7 @@ export const register: Register = on => {
   // reporting. They are listed up front, not behind ToolSearch.
   for (const t of TOOLS) {
     const tool = toolName(t)
-    on('tool.call', { tool }, async ($, e) => {
-      if (!socket) return { deny: `terminatr: this session has no mod socket; run tm ${t.name} in the shell` }
-      try {
-        const r = await $.http.fetch(`http://terminatr/v1/tools/${t.name}`, {
-          method: 'POST', socketPath: socket, headers: { 'content-type': 'application/json' }, body: body(t, e),
-        })
-        return answer(r.status, r.text)
-      } catch (err) {
-        return { deny: `terminatr: the server didn't answer (${String(err)}); run tm ${t.name} in the shell` }
-      }
-    })
+    on('tool.call', { tool }, async ($, e) => callTool($, t, e, `; run tm ${t.name} in the shell`))
     on('tool.check', { tool }, async ($, e, next) => {
       const v = await next(e)
       return v.decision === 'deny' ? v : { decision: 'allow' }
@@ -166,15 +157,7 @@ export const register: Register = on => {
   on('tool.call', { tool: MOD_TOOL }, async ($, e, next) => {
     const t = offered.get(e.tool)
     if (!t) return next(e)
-    if (!socket) return { deny: 'terminatr: this session has no mod socket' }
-    try {
-      const r = await $.http.fetch(`http://terminatr/v1/tools/${t.name}`, {
-        method: 'POST', socketPath: socket, headers: { 'content-type': 'application/json' }, body: body(t, e),
-      })
-      return answer(r.status, r.text)
-    } catch (err) {
-      return { deny: `terminatr: the server didn't answer (${String(err)})` }
-    }
+    return callTool($, t, e, '')
   })
   on('tool.check', { tool: MOD_TOOL }, async ($, e, next) => {
     const v = await next(e)
@@ -308,41 +291,48 @@ async function answerQuestions($: EngineInterface) {
   }
 }
 
+// callTool runs tool t's call e on the server (POST /v1/tools/<name>):
+// what the command printed, or why it refused, is the tool's answer.
+// Without the server, the deny says so, then hint.
+async function callTool($: EngineInterface, t: ThreadTool, e: Record<string, unknown>, hint: string) {
+  if (!socket) return { deny: `terminatr: this session has no mod socket${hint}` }
+  try {
+    const r = await $.http.fetch(`http://terminatr/v1/tools/${t.name}`, {
+      method: 'POST', socketPath: socket, headers: { 'content-type': 'application/json' }, body: body(t, e),
+    })
+    return answer(r.status, r.text)
+  } catch (err) {
+    return { deny: `terminatr: the server didn't answer (${String(err)})${hint}` }
+  }
+}
+
 // clearedContext tells the server the context is gone after /clear, so
 // the panes show it at once; failures are logged and dropped.
 async function clearedContext($: EngineInterface) {
-  if (!socket) return
-  try {
-    const r = await $.http.fetch('http://terminatr/v1/context/clear', { method: 'POST', socketPath: socket })
-    if (!r.ok) $.ui.log(`terminatr: context clear: ${r.status} ${r.text}`, { to: 'debug' })
-  } catch (err) {
-    $.ui.log(`terminatr: context clear: ${String(err)}`, { to: 'debug' })
-  }
+  await post($, socket, '/v1/context/clear', 'context clear')
 }
 
 // spent sends what the turn cost, numbers only, a subagent's turns
 // included: they are spend too (but not context: that is the session's). Failures are logged and dropped.
 async function spent($: EngineInterface, turnId: string, u: TurnUsageIn | undefined, subagent: boolean) {
   if (!socket || !u) return
+  let out: UsageReport | null = null
   try {
     const su = await $.session.usage()
     const ledger = su.cost?.usd
-    let out: UsageReport | null = null
     await update($, usage, before => {
       const r = reportOf(turnId, u, ledger, before, su.context)
       out = r.report
       return r.now
     })
-    if (!out) return
-    // A subagent's context is its own, not the session's.
-    if (subagent) (out as UsageReport).context = (out as UsageReport).context_window = 0
-    const r = await $.http.fetch('http://terminatr/v1/usage', {
-      method: 'POST', socketPath: socket, headers: { 'content-type': 'application/json' }, body: JSON.stringify(out),
-    })
-    if (!r.ok) $.ui.log(`terminatr: usage report: ${r.status} ${r.text}`, { to: 'debug' })
   } catch (err) {
-    $.ui.log(`terminatr: usage report: ${String(err)}`, { to: 'debug' })
+    debug($, `terminatr: usage report: ${String(err)}`)
+    return
   }
+  if (!out) return
+  // A subagent's context is its own, not the session's.
+  if (subagent) (out as UsageReport).context = (out as UsageReport).context_window = 0
+  await post($, socket, '/v1/usage', 'usage report', JSON.stringify(out))
 }
 
 // The channel: the socket, and one report in flight at a time, the
@@ -366,7 +356,7 @@ let loopGone = false
 // socket: it reports the state the turn is in (a reload carries on),
 // then beats.
 async function startReports($: EngineInterface) {
-  socket = (await $.env.get('TERMINATR_MOD_SOCKET')) ?? ''
+  socket = await modSocket($)
   if (!socket) return
   last = ''
   let now = initialTurn
@@ -526,43 +516,23 @@ async function handOn($: EngineInterface, offer: Offer): Promise<Ack> {
 
 // ack tells the server what became of prompt id; true when it took it.
 async function ack($: EngineInterface, id: string, a: Ack): Promise<boolean> {
-  try {
-    const r = await $.http.fetch(`http://terminatr/v1/prompts/${encodeURIComponent(id)}/ack`, {
-      method: 'POST', socketPath: socket, headers: { 'content-type': 'application/json' }, body: JSON.stringify(a),
-    })
-    if (!r.ok) $.ui.log(`terminatr: prompt ${id} ${a.result}: ${r.status} ${r.text}`, { to: 'debug' })
-    return r.ok
-  } catch (err) {
-    $.ui.log(`terminatr: prompt ${id} ${a.result}: ${String(err)}`, { to: 'debug' })
-    return false
-  }
+  return post($, socket, `/v1/prompts/${encodeURIComponent(id)}/ack`, `prompt ${id} ${a.result}`, JSON.stringify(a))
 }
 
 // modLog puts a line in the server's log for this session (POST
 // /v1/log); a failure goes to the debug log.
 async function modLog($: EngineInterface, text: string) {
   $.ui.log(`terminatr: ${text}`, { to: 'debug' })
-  if (!socket) return
-  try {
-    const r = await $.http.fetch('http://terminatr/v1/log', {
-      method: 'POST', socketPath: socket, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }),
-    })
-    if (!r.ok) $.ui.log(`terminatr: log: ${r.status} ${r.text}`, { to: 'debug' })
-  } catch (err) {
-    $.ui.log(`terminatr: log: ${String(err)}`, { to: 'debug' })
-  }
+  await post($, socket, '/v1/log', 'log', JSON.stringify({ text }))
 }
 
 // fetchContext is the role's context from the server: "" for a session
 // outside a project, null when it can't be had.
 async function fetchContext($: EngineInterface): Promise<string | null> {
-  const sock = socket || ((await $.env.get('TERMINATR_MOD_SOCKET')) ?? '')
+  const sock = socket || (await modSocket($))
   if (!sock) return null
   try {
-    const r = await Promise.race([
-      $.http.fetch('http://terminatr/v1/context', { socketPath: sock }),
-      $.clock.sleep(CONTEXT_WAIT_MS).then(() => null),
-    ])
+    const r = await get($, sock, '/v1/context', CONTEXT_WAIT_MS)
     if (!r) throw new Error('no answer')
     if (r.status === 204) return ''
     if (r.ok) return r.text
@@ -596,7 +566,7 @@ function report($: EngineInterface, t: TerminatrTurn, event: string): Promise<vo
       while (pending) {
         const body = pending
         pending = null
-        await post($, body)
+        await postState($, body)
       }
       sending = null
     })()
@@ -604,15 +574,8 @@ function report($: EngineInterface, t: TerminatrTurn, event: string): Promise<vo
   return sending
 }
 
-async function post($: EngineInterface, body: string) {
-  try {
-    const r = await $.http.fetch('http://terminatr/v1/state', {
-      method: 'POST', socketPath: socket, headers: { 'content-type': 'application/json' }, body,
-    })
-    if (!r.ok) $.ui.log(`terminatr: state report: ${r.status} ${r.text}`, { to: 'debug' })
-  } catch (err) {
-    $.ui.log(`terminatr: state report: ${String(err)}`, { to: 'debug' })
-  }
+async function postState($: EngineInterface, body: string) {
+  await post($, socket, '/v1/state', 'state report', body)
 }
 
 // follow keeps the latest line of the feed, and the status entry and CI
