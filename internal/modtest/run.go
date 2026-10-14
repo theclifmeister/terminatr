@@ -136,13 +136,23 @@ func (m *Mod) Run(f *Fixture, file string) (r Result) {
 		return r
 	}
 
+	clock := time.Now
+	if f.Now != "" {
+		at, err := time.Parse(time.RFC3339, f.Now)
+		if err != nil {
+			bad("now: %q is not an RFC 3339 time like \"2026-10-13T12:00:00Z\"", f.Now)
+			return r
+		}
+		clock = func() time.Time { return at }
+	}
+
 	b := NewBroker(grants, m.Manifest.Permissions, f.Answers, f.Store, f.Files)
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 	exited := make(chan int, 1)
 	go func() {
 		exited <- modhost.Run(modhost.Options{Name: m.Manifest.Provides.Main, Script: m.Script, Budget: m.Budget,
-			In: inR, Out: outW, Bind: modapi.Bind})
+			In: inR, Out: outW, Bind: modapi.Bind, Now: clock})
 		// Writes to a host that is gone fail, not hang.
 		inR.CloseWithError(io.EOF)
 		outW.Close()
@@ -189,8 +199,12 @@ func (m *Mod) Run(f *Fixture, file string) (r Result) {
 			cancel()
 			continue
 		}
+		data := s.Data
+		if f.Now != "" && s.Name == modbus.ClockMinute {
+			data = withNow(data, clock().Truncate(time.Minute))
+		}
 		_, err = d.call(ctx, modproto.MethodEvent, modproto.Event{Name: s.Name, Project: s.Project,
-			Seq: uint64(i + 1), Time: time.Now(), Data: s.Data})
+			Seq: uint64(i + 1), Time: clock(), Data: data})
 		cancel()
 		if err != nil {
 			bad("events[%d] %s: %v", i, s.Name, err)
@@ -454,4 +468,18 @@ func (d *driver) failures() []modproto.HandlerFailed {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return slices.Clone(d.failed)
+}
+
+// withNow gives a clock.minute event's data the "now" it lacks.
+func withNow(data json.RawMessage, now time.Time) json.RawMessage {
+	m := map[string]json.RawMessage{}
+	if len(data) > 0 && json.Unmarshal(data, &m) != nil {
+		return data
+	}
+	if _, ok := m["now"]; ok {
+		return data
+	}
+	m["now"], _ = json.Marshal(now.Format(time.RFC3339))
+	out, _ := json.Marshal(m)
+	return out
 }
