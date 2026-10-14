@@ -69,7 +69,10 @@ and how to turn it on (`,` then `3`), and the column takes no room.
 ## How they are kept working
 
 Each code mod has fixtures in its `tests/` folder: events to send, what
-the fake broker answers, and the calls the mod must make. `tm mod test
+the fake broker answers, and the calls the mod must make. A fixture can pin the clock with a
+top-level `"now": "2026-10-13T12:00:00Z"` (RFC 3339): events, a
+`clock.minute` step's `now` and the script's `Date` then read that time,
+so a test that counts "today" doesn't break tomorrow. `tm mod test
 <folder>` replays them, and CI runs every example's fixtures
 (`internal/modtest`'s `TestExamples`) and checks every example loads as
 the console reads it (`internal/tui`'s `TestExampleMods`), and type-checks

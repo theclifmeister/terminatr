@@ -60,6 +60,9 @@ type Options struct {
 	Bind func(h *Host) error
 	// Started is when the process started, for HelloResult.StartMS.
 	Started time.Time
+	// Now is the clock the script's Date reads; nil is the real one
+	// (tm mod test pins it).
+	Now func() time.Time
 }
 
 // Host is one mod's VM and its connection. Everything but Run is for the
@@ -121,6 +124,9 @@ func Run(opt Options) int {
 		pending:   map[int64]pendingCall{},
 		timers:    map[int64]*timer{},
 		unhandled: map[*goja.Promise]struct{}{},
+	}
+	if opt.Now != nil {
+		h.vm.SetTimeSource(opt.Now)
 	}
 	h.setupVM()
 	go h.read()

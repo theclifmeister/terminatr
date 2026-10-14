@@ -261,3 +261,46 @@ func TestBrokerRun(t *testing.T) {
 		t.Error("a files root without the files grant")
 	}
 }
+
+const clockScript = `
+$.on("clock.minute", async (e: any, meta: any) => { $.log("tick " + e.now + " meta " + meta.time); });
+$.on("task.changed", async (_e: any, meta: any) => { $.log("opened " + meta.time + " date " + new Date().toISOString() + " " + Date.now()); });
+`
+
+func TestPinnedNow(t *testing.T) {
+	dir := writeMod(t, map[string]string{
+		"pinned.json": `{
+  "now": "2026-10-13T12:00:30Z",
+  "events": [
+    {"name": "clock.minute"},
+    {"name": "clock.minute", "data": {"now": "2020-01-01T00:00:00Z"}},
+    {"name": "task.changed", "project": "demo", "data": {"project": "demo", "id": "T1"}}
+  ],
+  "expect": {"logs": [
+    "tick 2026-10-13T12:00:00Z meta 2026-10-13T12:00:30Z",
+    "tick 2020-01-01T00:00:00Z meta 2026-10-13T12:00:30Z",
+    "opened 2026-10-13T12:00:30Z date 2026-10-13T12:00:30.000Z 1791892830000"
+  ]}
+}`,
+		"bad.json": `{"now": "yesterday", "events": [{"name": "clock.minute"}]}`,
+	})
+	if err := os.WriteFile(filepath.Join(dir, "main.ts"), []byte(clockScript), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := RunDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range res {
+		switch r.File {
+		case "tests/pinned.json":
+			if !r.OK {
+				t.Errorf("pinned.json: %q, logs %q", r.Problems, r.Logs)
+			}
+		case "tests/bad.json":
+			if r.OK || !strings.Contains(strings.Join(r.Problems, "\n"), `now "yesterday" is not an RFC 3339 time`) {
+				t.Errorf("bad.json: ok %v, problems %q", r.OK, r.Problems)
+			}
+		}
+	}
+}

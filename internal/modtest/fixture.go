@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 )
 
 // TestsDir is the folder of a mod's fixtures.
@@ -28,6 +29,11 @@ type Fixture struct {
 	// Grants are the permissions the mod runs with; nil is all it asks
 	// for. Each must be one it asks for.
 	Grants *[]string `json:"grants,omitempty"`
+	// Now pins the clock, RFC 3339 ("2026-10-13T12:00:00Z"): the time
+	// stamped on every event (meta.time), the "now" of a clock.minute
+	// step whose data has none (the minute it falls in), and the
+	// script's Date. Empty is the real clock.
+	Now string `json:"now,omitempty"`
 	// Settings overlay the manifest's defaults.
 	Settings map[string]any `json:"settings,omitempty"`
 	// Store and Files are the broker's store ($.store) and the files
@@ -132,6 +138,11 @@ func ReadFixture(path string) (*Fixture, error) {
 	var f Fixture
 	if err := strictJSON(b, &f); err != nil {
 		return nil, fmt.Errorf("%s: %w", filepath.Base(path), err)
+	}
+	if f.Now != "" {
+		if _, err := time.Parse(time.RFC3339, f.Now); err != nil {
+			return nil, fmt.Errorf("%s: now %q is not an RFC 3339 time like \"2026-10-13T12:00:00Z\"", filepath.Base(path), f.Now)
+		}
 	}
 	if len(f.Events) == 0 {
 		return nil, fmt.Errorf("%s: no events", filepath.Base(path))
