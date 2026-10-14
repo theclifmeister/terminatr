@@ -774,7 +774,7 @@ func (s *ServerSource) pairing(ctx context.Context, code peer.Code, ev PairEvent
 	}
 	host, _ := os.Hostname()
 	o := peer.PairOptions{
-		Name: host, Version: version.Version,
+		Name: peer.HostLabel(host), Version: version.Version,
 		Confirm: func(of peer.Offer) (bool, error) {
 			return ev.Confirm(PairOffer{Name: of.Name, Short: of.ID.Short(), Version: of.Version, Check: of.Check}), nil
 		},
