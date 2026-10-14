@@ -72,49 +72,62 @@ func idle(call callFn, slug, what string) error {
 	return nil
 }
 
-// PauseProject pauses or resumes a project: while paused the ticker
-// sends nothing to its agents (no nudges, no pull request follow-up) and
-// tm thread start refuses with project-paused; state polling goes on.
-func PauseProject(c caller.Caller, slug string, on bool) (string, error) {
-	if err := humanOnly(c, "pauses and resumes projects"); err != nil {
+// flagWords are the words a project flag's messages use; {slug} in the
+// two done messages is the project.
+type flagWords struct {
+	what          string    // what humanOnly refuses to let an agent do
+	already       [2]string // the state when it is already off, on
+	onMsg, offMsg string
+}
+
+// setProjectFlag sets a project's flag to on (humans only), after guard
+// (nil for none) passes; it says what changed, or that nothing did.
+func setProjectFlag(c caller.Caller, slug, flag string, on bool, w flagWords, guard func() error) (string, error) {
+	if err := humanOnly(c, w.what); err != nil {
 		return "", err
 	}
 	p, err := project.Open(slug)
 	if err != nil {
 		return "", err
 	}
-	changed, err := p.SetFlag(c, "paused", on)
+	if guard != nil {
+		if err := guard(); err != nil {
+			return "", err
+		}
+	}
+	changed, err := p.SetFlag(c, flag, on)
 	switch {
 	case err != nil:
 		return "", err
 	case !changed:
-		return slug + " is already " + map[bool]string{true: "paused", false: "running"}[on], nil
+		return slug + " is already " + map[bool]string{true: w.already[1], false: w.already[0]}[on], nil
 	case on:
-		return "paused " + slug + ": no nudges, pull request follow-up or new threads until you resume it", nil
+		return strings.ReplaceAll(w.onMsg, "{slug}", slug), nil
 	}
-	return "resumed " + slug, nil
+	return strings.ReplaceAll(w.offMsg, "{slug}", slug), nil
+}
+
+// PauseProject pauses or resumes a project: while paused the ticker
+// sends nothing to its agents (no nudges, no pull request follow-up) and
+// tm thread start refuses with project-paused; state polling goes on.
+func PauseProject(c caller.Caller, slug string, on bool) (string, error) {
+	return setProjectFlag(c, slug, "paused", on, flagWords{
+		what:    "pauses and resumes projects",
+		already: [2]string{"running", "paused"},
+		onMsg:   "paused {slug}: no nudges, pull request follow-up or new threads until you resume it",
+		offMsg:  "resumed {slug}",
+	}, nil)
 }
 
 // PinProject pins a project to the top of the sidebar's active
 // projects, or unpins it: its order only, kept in its settings.
 func PinProject(c caller.Caller, slug string, on bool) (string, error) {
-	if err := humanOnly(c, "pins and unpins projects"); err != nil {
-		return "", err
-	}
-	p, err := project.Open(slug)
-	if err != nil {
-		return "", err
-	}
-	changed, err := p.SetFlag(c, "pinned", on)
-	switch {
-	case err != nil:
-		return "", err
-	case !changed:
-		return slug + " is already " + map[bool]string{true: "pinned", false: "not pinned"}[on], nil
-	case on:
-		return "pinned " + slug + " to the top of the sidebar", nil
-	}
-	return "unpinned " + slug, nil
+	return setProjectFlag(c, slug, "pinned", on, flagWords{
+		what:    "pins and unpins projects",
+		already: [2]string{"not pinned", "pinned"},
+		onMsg:   "pinned {slug} to the top of the sidebar",
+		offMsg:  "unpinned {slug}",
+	}, nil)
 }
 
 // DeactivateQuestion is the confirmation deactivating a project asks
@@ -194,28 +207,16 @@ func sessionNames(p *project.Project, labels []string) []string {
 // is hidden from the sidebar, and the ticker leaves it
 // alone; archiving is refused while its agents run.
 func ArchiveProject(call callFn, c caller.Caller, slug string, on bool) (string, error) {
-	if err := humanOnly(c, "archives projects"); err != nil {
-		return "", err
-	}
-	p, err := project.Open(slug)
-	if err != nil {
-		return "", err
-	}
+	var guard func() error
 	if on {
-		if err := idle(call, slug, "archive"); err != nil {
-			return "", err
-		}
+		guard = func() error { return idle(call, slug, "archive") }
 	}
-	changed, err := p.SetFlag(c, "archived", on)
-	switch {
-	case err != nil:
-		return "", err
-	case !changed:
-		return slug + " is already " + map[bool]string{true: "archived", false: "not archived"}[on], nil
-	case on:
-		return "archived " + slug + ": hidden from the sidebar, and the ticker leaves it alone (tm project unarchive " + slug + ")", nil
-	}
-	return "unarchived " + slug, nil
+	return setProjectFlag(c, slug, "archived", on, flagWords{
+		what:    "archives projects",
+		already: [2]string{"not archived", "archived"},
+		onMsg:   "archived {slug}: hidden from the sidebar, and the ticker leaves it alone (tm project unarchive {slug})",
+		offMsg:  "unarchived {slug}",
+	}, guard)
 }
 
 // DeleteProject moves a project's folder to the trash, after the

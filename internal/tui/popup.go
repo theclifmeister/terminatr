@@ -77,7 +77,7 @@ func (g *boxGeo) line(y int) int {
 	if r < g.head {
 		return r
 	}
-	return g.head + g.top + r - g.head
+	return g.top + r
 }
 
 // action is the key of the action row's button at body cell (x, y), ""

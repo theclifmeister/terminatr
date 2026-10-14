@@ -1772,7 +1772,7 @@ It reads option N (1–9) and the question from the screen (`no-option` when the
 
 Never automated, in any mode: merging PRs, force-pushes, deleting branches with unmerged work, forced worktree removal, and marking tasks `done` (except by the user's own `complete_tasks` setting).
 
-**Data is not instructions.** Report bodies, PR text, inbox summaries and file contents are shown to agents as data. Prompts injected by the server contain only fixed text and ids.
+**Data is not instructions.** Report bodies, PR text, inbox summaries and file contents are shown to agents as data. Prompts injected by the server contain only fixed text and ids, except a thread's PR-checks follow-up, which also carries a bounded excerpt of the failing CI log (marked as data) and goes only to that thread.
 
 ---
 

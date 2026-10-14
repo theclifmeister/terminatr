@@ -151,25 +151,35 @@ func (m *dash) libRemove(slug, id, name, msg string) tea.Cmd {
 // libMax is how much of a file the viewer reads.
 const libMax = 1 << 20
 
-// libView is one library file, read-only and scrollable over the popup.
-type libView struct {
-	pv     *projectView
-	f      thread.LibFile
-	body   string // text to show, "" for a file shown by name and size
-	note   string
-	scroll int
+// textView is read-only text over the popup, scrollable; it opens at
+// its end when bottom is set (a log). esc closes it, and q too when
+// quit is set.
+type textView struct {
+	title, body, note string
+	scroll            int
+	bottom, quit      bool
+}
+
+// scrollKey scrolls *scroll for key k over n lines; it says whether k
+// was a scroll key.
+func scrollKey(scroll *int, k tea.KeyPressMsg, n int) bool {
+	d, ok := scrollKeys[k.String()]
+	if ok {
+		*scroll = clampScroll(*scroll+d, n)
+	}
+	return ok
 }
 
 func (m *dash) openLibFile(pv *projectView, f thread.LibFile) tea.Cmd {
-	lv := &libView{pv: pv, f: f}
+	tv := &textView{title: f.Name + " · " + sizeWords(f.Size)}
 	data, truncated, err := m.src.LibraryRead(pv.slug, f.Thread, f.Name, libMax)
 	switch {
 	case err != nil:
-		lv.note = "can't read it: " + oneLine(err.Error())
+		tv.note = "can't read it: " + oneLine(err.Error())
 	default:
-		lv.body, lv.note = libText(f.Name, data, truncated)
+		tv.body, tv.note = libText(f.Name, data, truncated)
 	}
-	m.push(lv)
+	m.push(tv)
 	return nil
 }
 
@@ -212,37 +222,42 @@ func trimPartial(b []byte) []byte {
 	return b
 }
 
-func (lv *libView) lines(w int) []string {
+func (tv *textView) lines(w int) []string {
 	var out []string
-	if lv.body != "" {
-		for _, l := range strings.Split(strings.TrimRight(lv.body, "\n"), "\n") {
+	if tv.body != "" {
+		for _, l := range strings.Split(strings.TrimRight(tv.body, "\n"), "\n") {
 			out = append(out, strings.Split(ansi.Hardwrap(l, max(w, 10), true), "\n")...)
 		}
 	}
-	if lv.note != "" {
+	if tv.note != "" {
 		if len(out) > 0 {
 			out = append(out, "")
 		}
-		out = append(out, th().Faint.Render(lv.note))
+		out = append(out, th().Faint.Render(tv.note))
 	}
 	return out
 }
 
-func (lv *libView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
-	if d, ok := scrollKeys[k.String()]; ok {
-		lv.scroll = clampScroll(lv.scroll+d, len(lv.lines(m.inner(viewWidth))))
+func (tv *textView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
+	if scrollKey(&tv.scroll, k, len(tv.lines(m.inner(viewWidth)))) {
+		tv.bottom = false
 		return nil
 	}
-	if k.String() == "esc" {
+	if s := k.String(); s == "esc" || s == "q" && tv.quit {
 		m.pop()
 	}
 	return nil
 }
 
-func (lv *libView) wheel(m *dash, d int) { lv.key(m, arrow(d)) }
+func (tv *textView) wheel(m *dash, d int) { tv.key(m, arrow(d)) }
 
-func (lv *libView) render(m *dash) string {
-	title := lv.f.Name + " · " + sizeWords(lv.f.Size)
-	return m.popup(box{title: title, body: lv.lines(m.inner(viewWidth)), sel: -1, scroll: lv.scroll,
-		keys: "↑ ↓ scroll · esc back"})
+func (tv *textView) render(m *dash) string {
+	lines := tv.lines(m.inner(viewWidth))
+	b := box{title: tv.title, body: lines, sel: -1, scroll: tv.scroll, keys: "↑ ↓ scroll · esc back"}
+	if tv.bottom {
+		// From the end: as many lines as the box shows.
+		tv.scroll = max(len(lines)-m.boxRows(b), 0)
+		b.scroll = tv.scroll
+	}
+	return m.popup(b)
 }

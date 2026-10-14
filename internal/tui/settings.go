@@ -1191,8 +1191,6 @@ func joinNotes(a, b func(m *dash) []string) func(m *dash) []string {
 	return func(m *dash) []string { return append(a(m), b(m)...) }
 }
 
-// lifecycle pauses, resumes, archives or deletes a project in the
-// background, then reloads.
 // toggleActive activates or deactivates a project (the sidebar's space,
 // the Active row): deactivating asks first while its coordinator or
 // threads run, which it stops, to resume at its activation (§5.1).
@@ -1225,6 +1223,8 @@ func (m *dash) toggleActiveVia(slug string, on bool, b *binding) tea.Cmd {
 	return set()
 }
 
+// lifecycle pauses, resumes, archives or deletes a project in the
+// background, then reloads.
 func (m *dash) lifecycle(slug, verb string) tea.Cmd { return m.lifecycleVia(slug, verb, nil) }
 
 func (m *dash) lifecycleVia(slug, verb string, b *binding) tea.Cmd {
@@ -1260,7 +1260,6 @@ func nextStep(steps []int, cur int) int {
 	return steps[0]
 }
 
-// modelWords is the models setting as the popup shows it.
 // agentWords is an agent setting's value: the agent it names, or, unset,
 // the one installed agent (auto), or that none or several are installed.
 func agentWords(setting string, installed []string) string {
@@ -1290,6 +1289,7 @@ func resolvedAgent(setting string, installed []string) (string, string) {
 	return "", "not chosen (" + strings.Join(installed, ", ") + ")"
 }
 
+// modelWords is the models setting as the popup shows it.
 func modelWords(allow []string) string {
 	if len(allow) == 0 {
 		return "any"
