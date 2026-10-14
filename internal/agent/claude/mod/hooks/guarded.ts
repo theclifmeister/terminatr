@@ -21,7 +21,7 @@ import type { EngineInterface, On } from 'claude-code'
 
 import { judge, off, rulesOf } from './guard'
 import type { Denial, Rules } from './guard'
-import { debug, get, modSocket, post } from './socket'
+import { failed, postInit, refused, socketURL } from './socket'
 
 // RULES_TTL_MS is how long fetched rules hold; FETCH_MS bounds a fetch.
 const RULES_TTL_MS = 1_000
@@ -57,7 +57,7 @@ export function guard(on: On) {
 // never a refusal of every call.
 async function rulesNow($: EngineInterface): Promise<Rules> {
   try {
-    const socket = await modSocket($)
+    const socket = (await $.env.get('TERMINATR_MOD_SOCKET')) ?? ''
     if (!socket) return off
     const now = await $.clock.now()
     if (!cached || now - cached.at > RULES_TTL_MS) cached = { at: now, rules: fetchRules($, socket) }
@@ -69,14 +69,32 @@ async function rulesNow($: EngineInterface): Promise<Rules> {
 }
 
 async function fetchRules($: EngineInterface, socket: string): Promise<Rules> {
-  const got = await get($, socket, '/v1/rules', FETCH_MS)
+  const got = await Promise.race([
+    $.http.fetch(socketURL('/v1/rules'), { socketPath: socket }),
+    $.clock.sleep(FETCH_MS).then(() => null),
+  ])
   if (got && got.ok) return rulesOf(got.text)
   // Asked again at the next call, not after the TTL.
   cached = null
-  debug($, `terminatr: guard rules: ${got ? `${got.status} ${got.text}` : 'no answer'}`)
+  log($, `terminatr: guard rules: ${got ? `${got.status} ${got.text}` : 'no answer'}`)
   return off
 }
 
 async function reportDenial($: EngineInterface, tool: string, d: Denial) {
-  await post($, await modSocket($), '/v1/denied', 'guard report', JSON.stringify({ rule: d.rule, tool, summary: d.summary }))
+  const socket = (await $.env.get('TERMINATR_MOD_SOCKET')) ?? ''
+  if (!socket) return
+  try {
+    const r = await $.http.fetch(socketURL('/v1/denied'), postInit(socket, JSON.stringify({ rule: d.rule, tool, summary: d.summary })))
+    if (!r.ok) log($, refused('guard report', r.status, r.text))
+  } catch (err) {
+    log($, failed('guard report', err))
+  }
+}
+
+function log($: EngineInterface, text: string) {
+  try {
+    $.ui.log(text, { to: 'debug' })
+  } catch {
+    // Nowhere to say it.
+  }
 }

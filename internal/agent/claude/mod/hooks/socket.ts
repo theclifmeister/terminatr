@@ -1,48 +1,27 @@
 // The mod socket (TERMINATR_MOD_SOCKET): a Unix socket that speaks HTTP
-// to the server, the one way the hooks talk to it. modSocket reads where
-// it is, post sends a report and logs what came of it, get asks with a
-// deadline.
+// to the server, the one way the hooks talk to it. What a request over
+// it looks like and what a failed one logs are here; the calls stay in
+// each hooks file, since $ is followed only into functions of the file
+// that uses it (claude plugin validate).
 
-import type { EngineInterface } from 'claude-code'
-
-type Answer = Awaited<ReturnType<EngineInterface['http']['fetch']>>
-
-// modSocket is the session's mod socket, '' outside a terminatr session.
-export async function modSocket($: EngineInterface): Promise<string> {
-  return (await $.env.get('TERMINATR_MOD_SOCKET')) ?? ''
+// socketURL is the server's URL for path ("/v1/state").
+export function socketURL(path: string): string {
+  return `http://terminatr${path}`
 }
 
-// post sends body, JSON, to path over socket (no body: an empty POST)
-// and answers whether the server took it. A refusal or failure goes to
-// the debug log as what and is dropped: a report never holds a hook up.
-export async function post($: EngineInterface, socket: string, path: string, what: string, body?: string): Promise<boolean> {
-  if (!socket) return false
-  try {
-    const r = await $.http.fetch(`http://terminatr${path}`, body === undefined
-      ? { method: 'POST', socketPath: socket }
-      : { method: 'POST', socketPath: socket, headers: { 'content-type': 'application/json' }, body })
-    if (!r.ok) debug($, `terminatr: ${what}: ${r.status} ${r.text}`)
-    return r.ok
-  } catch (err) {
-    debug($, `terminatr: ${what}: ${String(err)}`)
-    return false
-  }
+// postInit is a POST over socket: body as JSON, or no body at all.
+export function postInit(socket: string, body?: string) {
+  return body === undefined
+    ? { method: 'POST' as const, socketPath: socket }
+    : { method: 'POST' as const, socketPath: socket, headers: { 'content-type': 'application/json' }, body }
 }
 
-// get asks path over socket and answers what the server said, null when
-// it didn't within ms.
-export function get($: EngineInterface, socket: string, path: string, ms: number): Promise<Answer | null> {
-  return Promise.race([
-    $.http.fetch(`http://terminatr${path}`, { socketPath: socket }),
-    $.clock.sleep(ms).then(() => null),
-  ])
+// refused is the debug line for an answer that isn't 2xx.
+export function refused(what: string, status: number, text: string): string {
+  return `terminatr: ${what}: ${status} ${text}`
 }
 
-// debug puts text in the debug log, if there is one to put it in.
-export function debug($: EngineInterface, text: string) {
-  try {
-    $.ui.log(text, { to: 'debug' })
-  } catch {
-    // Nowhere to say it.
-  }
+// failed is the debug line for a request that didn't get an answer.
+export function failed(what: string, err: unknown): string {
+  return `terminatr: ${what}: ${String(err)}`
 }

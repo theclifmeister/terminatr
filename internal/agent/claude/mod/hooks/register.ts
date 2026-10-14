@@ -65,7 +65,7 @@ import type { Ack, Offer } from './deliver'
 import { feed } from './feed'
 import { guard } from './guarded'
 import { registerPane, sawViewport } from './pane'
-import { debug, get, modSocket, post } from './socket'
+import { failed, postInit, refused, socketURL } from './socket'
 import { answer, body, MOD_TOOL, modTools, toolName, TOOLS } from './tools'
 import type { ThreadTool } from './tools'
 import { initialTurn, stateOf, step, waitKey } from './turn'
@@ -356,7 +356,7 @@ let loopGone = false
 // socket: it reports the state the turn is in (a reload carries on),
 // then beats.
 async function startReports($: EngineInterface) {
-  socket = await modSocket($)
+  socket = (await $.env.get('TERMINATR_MOD_SOCKET')) ?? ''
   if (!socket) return
   last = ''
   let now = initialTurn
@@ -529,10 +529,13 @@ async function modLog($: EngineInterface, text: string) {
 // fetchContext is the role's context from the server: "" for a session
 // outside a project, null when it can't be had.
 async function fetchContext($: EngineInterface): Promise<string | null> {
-  const sock = socket || (await modSocket($))
+  const sock = socket || ((await $.env.get('TERMINATR_MOD_SOCKET')) ?? '')
   if (!sock) return null
   try {
-    const r = await get($, sock, '/v1/context', CONTEXT_WAIT_MS)
+    const r = await Promise.race([
+      $.http.fetch(socketURL('/v1/context'), { socketPath: sock }),
+      $.clock.sleep(CONTEXT_WAIT_MS).then(() => null),
+    ])
     if (!r) throw new Error('no answer')
     if (r.status === 204) return ''
     if (r.ok) return r.text
@@ -576,6 +579,31 @@ function report($: EngineInterface, t: TerminatrTurn, event: string): Promise<vo
 
 async function postState($: EngineInterface, body: string) {
   await post($, socket, '/v1/state', 'state report', body)
+}
+
+// post sends body, JSON, to path over sock (no body: an empty POST;
+// hooks/socket.ts) and answers whether the server took it. A refusal or
+// failure goes to the debug log as what and is dropped: a report never
+// holds a hook up.
+async function post($: EngineInterface, sock: string, path: string, what: string, body?: string): Promise<boolean> {
+  if (!sock) return false
+  try {
+    const r = await $.http.fetch(socketURL(path), postInit(sock, body))
+    if (!r.ok) debug($, refused(what, r.status, r.text))
+    return r.ok
+  } catch (err) {
+    debug($, failed(what, err))
+    return false
+  }
+}
+
+// debug puts text in the debug log, if there is one to put it in.
+function debug($: EngineInterface, text: string) {
+  try {
+    $.ui.log(text, { to: 'debug' })
+  } catch {
+    // Nowhere to say it.
+  }
 }
 
 // follow keeps the latest line of the feed, and the status entry and CI
