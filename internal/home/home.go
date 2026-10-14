@@ -6,7 +6,9 @@ package home
 import (
 	"errors"
 	"os"
+	"os/user"
 	"path/filepath"
+	"testing"
 )
 
 // Env is the variable that overrides the state directory.
@@ -25,7 +27,27 @@ func Dir() (string, error) {
 	if h == "" {
 		return "", errors.New("no home directory; set " + Env)
 	}
-	return filepath.Join(h, ".terminatr"), nil
+	d := filepath.Join(h, ".terminatr")
+	if testing.Testing() {
+		// A test binary that falls through to the user's real home would
+		// read and write their live state (models cache, config, links).
+		// Tests set TERMINATR_HOME (or HOME) to a temp dir.
+		if real, ok := realUserHome(); ok && h == real {
+			panic("home: a test resolved the real state directory " + d + "; set " + Env + " to t.TempDir()")
+		}
+	}
+	return d, nil
+}
+
+// realUserHome is the account's home from the password database, which
+// $HOME in a test cannot move: a test that sets HOME to a temp dir is
+// isolated, one that leaves it is not.
+func realUserHome() (string, bool) {
+	u, err := user.Current()
+	if err != nil || u.HomeDir == "" {
+		return "", false
+	}
+	return u.HomeDir, true
 }
 
 // ProjectsDir is <home>/projects.
