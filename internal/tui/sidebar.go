@@ -18,12 +18,8 @@ import (
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modview"
-	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
-	"github.com/theclifmeister/terminatr/internal/tasks"
-	"github.com/theclifmeister/terminatr/internal/thread"
-	"github.com/theclifmeister/terminatr/internal/ticker"
 	"github.com/theclifmeister/terminatr/internal/view"
 	"github.com/theclifmeister/terminatr/internal/widget"
 )
@@ -1194,48 +1190,6 @@ func OpenTarget(p server.Paths, vc *ViewConn, t Target) error {
 	}
 	_, err := vc.Do(proto.MethodViewProject, proto.ViewParams{Project: t.Project})
 	return err
-}
-
-// loadSideProjects reads the projects and their open threads, with their
-// STATUS.md and their PRs' checks (the ticker's), and what needs you,
-// from the project folders:
-// what the attach client polls for
-// its sidebar.
-func loadSideProjects(paths server.Paths) []ProjectData {
-	list, _ := project.List()
-	out := make([]ProjectData, 0, len(list))
-	fails := ticker.HostFails(ticker.StatePath(paths.Sessions))
-	for _, sum := range list {
-		if sum.Safety != nil && sum.Safety.Archived {
-			continue
-		}
-		pd := ProjectData{Slug: sum.Slug, Safety: sum.Safety}
-		if p, err := project.Open(sum.Slug); err == nil {
-			// What NEEDS YOU counts, for the badge of a hidden sidebar.
-			if b, err := p.Tasks().Load(); err == nil {
-				for _, t := range b.Tasks {
-					if tasks.GroupOf(t.Status) == tasks.NeedsYou {
-						pd.NeedsYou = append(pd.NeedsYou, t)
-					}
-				}
-			}
-			qs, _ := p.Questions()
-			pd.Questions = len(qs)
-			recs, _ := thread.List(p)
-			prs := ticker.PRs(ticker.StatePath(paths.Sessions), sum.Slug)
-			for _, r := range recs {
-				if r.State == thread.Resolved {
-					continue
-				}
-				tr := ThreadRow{Record: r, Checks: prs[r.ID].Checks, PR: prs[r.ID].Number}
-				tr.Status, _ = thread.ReadStatus(p, r.ID)
-				pd.Threads = append(pd.Threads, tr)
-			}
-			pd.PRHostFails = hostFails(fails, p)
-		}
-		out = append(out, pd)
-	}
-	return out
 }
 
 // sidebar is the attach client's sidebar: what it shows. Its layout and
