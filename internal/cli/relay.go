@@ -24,7 +24,7 @@ const relayUsage = `usage: tm relay serve [--listen ADDR] (--domain NAME [--stat
     | --cert FILE --key FILE | --plain)
     [--trusted-proxy CIDR]... [--max-conns N] [--max-per-ip N] [--bandwidth MiB/s] [--log-ips] [--update-request FILE]
        sudo tm relay install (--domain NAME [--email ADDR] | --ip [ADDR]) [--auto-update=on|off]
-       sudo tm relay update
+       sudo tm relay update [--force]
        sudo tm relay uninstall`
 
 func init() {
