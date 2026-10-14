@@ -164,7 +164,7 @@ func (s *Server) wake(p *project.Project) (resumed, lost []string) {
 		}
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	var wake []SessionRecord
 	for id, r := range s.dormant {
 		if r.Project != p.Slug {
 			continue
@@ -177,13 +177,20 @@ func (s *Server) wake(p *project.Project) (resumed, lost []string) {
 		if _, live := s.sessions[id]; live {
 			continue
 		}
-		o := s.resumeLocked(r)
+		wake = append(wake, r)
+	}
+	s.mu.Unlock()
+	// Without s.mu: each launch takes it only to start its session.
+	for _, r := range wake {
+		o := s.resumeOne(r)
 		if o.how == "lost" {
 			lost = append(lost, restartLabel(r))
 			continue
 		}
 		resumed = append(resumed, restartLabel(r))
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if err := s.saveLocked(""); err != nil {
 		s.log.Printf("sessions.json: %v", err)
 	}
