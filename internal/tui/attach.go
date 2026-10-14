@@ -2080,6 +2080,7 @@ type polled struct {
 	ring       bool
 	osc        []byte
 	projects   []ProjectData // nil: unchanged since the last tick
+	peers      []proto.PeerMirror
 	ctxHint    int
 	needsFirst bool
 	statuses   map[string]*thread.Status
@@ -2141,6 +2142,9 @@ func (c *client) pollState(ctx context.Context) {
 				pl.projects = projects
 			}
 			pl.ctxHint, pl.needsFirst = conf.uiHints()
+			if ctl != nil {
+				pl.peers = loadPeers(ctl.Call)
+			}
 		}
 		pl.statuses = stats.statuses(res.Sessions)
 		var shown []modview.Shown
@@ -2191,6 +2195,9 @@ func (c *client) applyPoll(pl *polled, now time.Time) bool {
 		}
 		if !reflect.DeepEqual(c.side.sessions, res.Sessions) {
 			c.side.sessions, changed = res.Sessions, true
+		}
+		if !reflect.DeepEqual(c.side.peers, pl.peers) {
+			c.side.peers, changed = pl.peers, true
 		}
 		if c.side.ctxHint != pl.ctxHint || c.side.needsFirst != pl.needsFirst {
 			c.side.ctxHint, c.side.needsFirst, changed = pl.ctxHint, pl.needsFirst, true

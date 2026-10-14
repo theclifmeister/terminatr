@@ -91,6 +91,11 @@ type Data struct {
 	// Toasts are the mods' toasts of the last few seconds (session.list's
 	// Mods), oldest first.
 	Toasts []proto.ModToast
+	// Peers are the paired servers and their shared projects as the
+	// server's mirror has them (peer.list, docs/SPEC.md §16.10); none
+	// without any, or from a server that doesn't say. With any the
+	// sidebar shows server groups (sidepeers.go).
+	Peers []proto.PeerMirror
 }
 
 // ServerInfo is the running server's identity, from session.list.
@@ -400,6 +405,7 @@ func (s *ServerSource) Load() Data {
 		d.Mods, d.ModData, d.ModCommands = reg.Mods, modData(reg.Mods), reg.Commands()
 	}
 	if d.ServerOK {
+		d.Peers = loadPeers(s.call)
 		var hosts proto.ModHostsResult
 		if err := s.call(proto.MethodModHosts, nil, &hosts); err == nil {
 			d.NoMods = hosts.NoMods
@@ -479,6 +485,17 @@ func (s *ServerSource) Load() Data {
 		d.Projects = append(d.Projects, pd)
 	}
 	return d
+}
+
+// loadPeers asks the server for its mirror of the paired servers
+// (peer.list) by call: none when it has none, or can't say (an older
+// server, or a caller that isn't the human).
+func loadPeers(call func(method string, params, result any) error) []proto.PeerMirror {
+	var l proto.PeerList
+	if err := call(proto.MethodPeerList, nil, &l); err != nil || len(l.Peers) == 0 {
+		return nil
+	}
+	return l.Peers
 }
 
 // hostFails is project p's PRHostFails, of the ticker's fails by slug
