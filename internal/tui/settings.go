@@ -250,6 +250,7 @@ const (
 )
 
 func (m *dash) openSettings() {
+	m.agentsOK = false
 	m.catalogs = m.src.Catalogs()
 	rows := globalSettings(m.src.ModsNote())
 	if safeMode() {
@@ -792,7 +793,7 @@ func safetySettings(slug string) []setting {
 	// (tm agent list), so the file only ever names a known one.
 	agentRow := func(label, help, key string, get func(config.Safety) string, put func(*config.Safety, string), msg string) setting {
 		return setting{label: label, help: help,
-			value: func(m *dash) string { return agentWords(get(safety(m)), m.src.Agents()) },
+			value: func(m *dash) string { return agentWords(get(safety(m)), m.agentList()) },
 			change: func(m *dash) tea.Cmd {
 				names := m.src.Agents() // the installed ones
 				cur := get(safety(m))
@@ -808,7 +809,7 @@ func safetySettings(slug string) []setting {
 				return set(m, key, next, msg+next, func(s *config.Safety) { put(s, next) })
 			},
 			note: func(m *dash) []string {
-				if cur, names := get(safety(m)), m.src.Agents(); cur != "" && !slices.Contains(names, cur) {
+				if cur, names := get(safety(m)), m.agentList(); cur != "" && !slices.Contains(names, cur) {
 					return []string{th().Warn.Render(cur + " isn't installed: nothing starts with it; enter picks an installed agent")}
 				}
 				return nil
@@ -818,11 +819,11 @@ func safetySettings(slug string) []setting {
 	// agent's, in the project's scope.
 	coordModels := func(m *dash) (string, []string, string) {
 		s := safety(m)
-		name, why := resolvedAgent(s.CoordinatorAgent, m.src.Agents())
+		name, why := resolvedAgent(s.CoordinatorAgent, m.agentList())
 		if name == "" {
 			return "", nil, why
 		}
-		for _, c := range m.src.Catalogs() {
+		for _, c := range m.catalogList() {
 			if c.Agent != name {
 				continue
 			}

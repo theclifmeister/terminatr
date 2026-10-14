@@ -40,12 +40,13 @@ func statusLine(s proto.SessionInfo, ts *thread.Status, pending bool, cols int, 
 // settings file under the test's TERMINATR_HOME, and Load reads them
 // back once one was set.
 type fakeSource struct {
-	data     Data
-	board    *tasks.Board
-	opened   []string
-	started  []string
-	settings []string // table.key=value
-	repos    []string // +path or -path
+	agentCalls int // Agents() calls (perf_render_test.go)
+	data       Data
+	board      *tasks.Board
+	opened     []string
+	started    []string
+	settings   []string // table.key=value
+	repos      []string // +path or -path
 	// delegated are the tasks asked to be delegated: "slug T12"; asked
 	// the other asks: "accept slug T12", "send-back slug T12 note".
 	delegated    []string
@@ -247,6 +248,7 @@ func (f *fakeSource) LibraryRemove(_, id, name string) (int, error) {
 }
 func (f *fakeSource) Review(slug string, t *tasks.Task) Review { return f.reviews[t.ID] }
 func (f *fakeSource) Agents() []string {
+	f.agentCalls++
 	if f.agents == nil {
 		return []string{"claude"} // one agent installed
 	}

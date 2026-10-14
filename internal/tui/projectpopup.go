@@ -608,9 +608,9 @@ func (pv *projectView) coordinatorLine(m *dash, p ProjectData) string {
 	if p.Safety != nil {
 		s = *p.Safety
 	}
-	name, why := resolvedAgent(s.CoordinatorAgent, m.src.Agents())
+	name, why := resolvedAgent(s.CoordinatorAgent, m.agentList())
 	switch {
-	case name == "" && len(m.src.Agents()) > 1 && s.CoordinatorAgent == "":
+	case name == "" && len(m.agentList()) > 1 && s.CoordinatorAgent == "":
 		return th().Warn.Render(why) + th().Faint.Render(" · not running; enter on the project asks which agent")
 	case name == "":
 		return th().Warn.Render(why) + th().Faint.Render(" · nothing can start")

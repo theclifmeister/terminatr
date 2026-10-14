@@ -204,11 +204,16 @@ func Dashboard(opts DashOptions) (DashResult, error) {
 }
 
 type dash struct {
-	src  Source
-	out  *dashOut // nil in tests
-	cwd  string
-	w, h int // the dashboard's own area: the window less the sidebar
-	winW int // the window's width
+	treeMemo []treeRow // tree's rows while only the mouse hovers (treeHold)
+	treeHold bool      // the last message was a hover: tree may be reused
+	lastView tea.View  // the last View, reused while hold says nothing changed
+	lastOK   bool      // lastView is set
+	hold     bool      // the last message was a hover that changed nothing
+	src      Source
+	out      *dashOut // nil in tests
+	cwd      string
+	w, h     int // the dashboard's own area: the window less the sidebar
+	winW     int // the window's width
 
 	data    Data
 	loaded  bool
@@ -240,6 +245,8 @@ type dash struct {
 	acts     int                     // actions started, so a poll knows whether one began since it did
 	queued   []func(m *dash) tea.Cmd // settings keys pressed while it runs, in order
 	catalogs []Catalog               // the agents' models, read when the , popup opens (catalog.go)
+	agents   []string                // the installed agents, read by agentList; nil until then or after a poll
+	agentsOK bool                    // agents is read
 	stack    []overlay               // views open on top of the list, topmost last
 	mv       modViews                // the views user mods draw (modviews.go)
 	// awaitView: over a session for a mod's view (Over.View), the popup
@@ -668,6 +675,12 @@ func (m *dash) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Hovering changes nothing the tree is built from: the motions that
+	// only hover, and the frames between them, share one tree (PERF-03).
+	_, motion := msg.(tea.MouseMotionMsg)
+	m.treeHold = motion && !m.sideDrag && !m.dragging
+	m.hold = false
+	m.treeMemo = nil
 	switch msg := msg.(type) {
 	case tea.BackgroundColorMsg:
 		setScheme(msg.IsDark())
@@ -750,6 +763,7 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, msg.pv.step(m, msg)
 	case actionMsg:
 		m.busy = false
+		m.agentsOK = false // an action may have installed or removed one
 		if msg.pick != "" {
 			m.push(&agentPickView{slug: msg.pick, agents: m.src.Agents()})
 			return m, nil
@@ -928,10 +942,41 @@ func (m *dash) showProject(slug string) tea.Cmd {
 	})
 }
 
+// agentList is the installed agents (Source.Agents), read once per poll:
+// the settings and the project's overview ask for them every frame, and
+// reading them lists the registry and probes the PATH (PERF-04).
+func (m *dash) agentList() []string {
+	if !m.agentsOK {
+		m.agents, m.agentsOK = m.src.Agents(), true
+	}
+	return m.agents
+}
+
+// catalogList is the agents' models, read on the first ask and again
+// when a refresh changes them (m.catalogs).
+func (m *dash) catalogList() []Catalog {
+	if m.catalogs == nil {
+		m.catalogs = m.src.Catalogs()
+	}
+	return m.catalogs
+}
+
 // tree is the sidebar's tree, from the last poll: the listed project is
 // current, and its row the one you are on; the keyboard's row is marked
 // while the sidebar has the focus.
 func (m *dash) tree() []treeRow {
+	if m.treeMemo != nil {
+		return m.treeMemo
+	}
+	rows := m.buildSideTree()
+	if m.treeHold {
+		m.treeMemo = rows
+	}
+	return rows
+}
+
+// buildSideTree builds tree's rows afresh.
+func (m *dash) buildSideTree() []treeRow {
 	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: m.treeCurrent(), ctxHint: m.data.ContextHint,
 		tree: sideTree(m.data.Projects, m.folds), cols: m.sideCols, cells: m.data.Cells, peers: m.data.Peers})
 	rows = sideRows(rows, m.data.NeedsFirst)
@@ -1179,6 +1224,7 @@ func (m *dash) setPinned(slug string, on bool) tea.Cmd {
 // reported) since the last poll.
 func (m *dash) setData(d Data) tea.Cmd {
 	first := !m.loaded
+	m.agentsOK = false // read again, once, by the next frame that needs them
 	m.data, m.loaded = d, true
 	if m.out != nil {
 		m.out.loaded()
@@ -1579,6 +1625,15 @@ func sectionStyle(title string) lipgloss.Style {
 }
 
 func (m *dash) View() tea.View {
+	if m.hold && m.lastOK {
+		return m.lastView
+	}
+	m.lastView, m.lastOK = m.draw(), true
+	return m.lastView
+}
+
+// draw is View's frame.
+func (m *dash) draw() tea.View {
 	// With a pane palette, every cell in the palette's colours (theme.go).
 	v := tea.NewView(th().paintWindow(m.render(), m.w, m.h))
 	v.AltScreen = true
@@ -1973,9 +2028,26 @@ func consoleOlder(s ServerInfo) bool {
 	if s.Build == "" || s.Build == version.BuildID() {
 		return false
 	}
+	// The sidebar asks several times a frame; the answer is the same
+	// while the server's build and version are (PERF-08).
+	k := olderKey{s.Build, s.Version}
+	if c := olderMemo.Load(); c != nil && c.key == k {
+		return c.older
+	}
 	newer, ok := update.Newer(s.Version, version.Version)
+	olderMemo.Store(&olderAns{key: k, older: ok && newer})
 	return ok && newer
 }
+
+type olderKey struct{ build, version string }
+
+type olderAns struct {
+	key   olderKey
+	older bool
+}
+
+// olderMemo is consoleOlder's last answer.
+var olderMemo atomic.Pointer[olderAns]
 
 // oldConsoleSaid: this console said it is older than the server, once.
 var oldConsoleSaid atomic.Bool

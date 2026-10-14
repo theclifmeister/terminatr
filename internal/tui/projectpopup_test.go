@@ -1503,6 +1503,7 @@ func TestAgentSettings(t *testing.T) {
 
 	// An agent that isn't installed (uninstalled, a hand edit).
 	src.agents = []string{"claude"}
+	m.setData(src.data) // the next poll reads the agents again
 	keyPress(m, "4")
 	for range at(projectSettings("alpha"), "Coordinator agent") {
 		keyPress(m, "down")
