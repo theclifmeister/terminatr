@@ -43,12 +43,37 @@ func (l Link) Sends() bool { return l.Allow == LinkBoth || l.Allow == LinkSend }
 // Receives reports whether this side accepts messages on the link.
 func (l Link) Receives() bool { return l.Allow == LinkBoth || l.Allow == LinkReceive }
 
-// linkSlugRE is a project slug's shape (project.ValidSlug).
-var linkSlugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
+// linkSlugRE is a project slug's shape (project.ValidSlug); remoteRE a
+// project on a paired server, "<alias>/<slug>" (docs/SPEC.md §16.11),
+// the alias as tm peer names the server (peer.CheckAlias).
+var (
+	linkSlugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
+	remoteRE   = regexp.MustCompile(`^([a-z0-9][a-z0-9-]{0,31})/([a-z0-9][a-z0-9-]{0,63})$`)
+)
+
+// Remote splits a link key naming a project on a paired server,
+// "mini/acme-api", into the server's alias and the project's slug; ok
+// is false for any other key.
+func Remote(key string) (alias, slug string, ok bool) {
+	m := remoteRE.FindStringSubmatch(key)
+	if m == nil {
+		return "", "", false
+	}
+	return m[1], m[2], true
+}
+
+// ValidLinkKey reports whether key can name the other side of a link: a
+// project slug here, or "<alias>/<slug>" on a paired server.
+func ValidLinkKey(key string) bool {
+	_, _, remote := Remote(key)
+	return remote || linkSlugRE.MatchString(key)
+}
 
 // Links returns project slug's links by the other project's slug,
-// checked: each key a slug other than its own, each value a direction
-// ("both") or a table { allow = "send", ask = true }.
+// checked: each key a slug other than its own, or "<alias>/<slug>" for
+// a project on a paired server, each value a direction ("both") or a
+// table { allow = "send", ask = true }. A paired server's project asks
+// unless its entry says ask = false.
 func (c *Config) Links(slug string) (map[string]Link, error) {
 	if c == nil {
 		return nil, nil
@@ -63,59 +88,64 @@ func (c *Config) Links(slug string) (map[string]Link, error) {
 func parseLinks(raw map[string]any, path, table, self string) (map[string]Link, error) {
 	out := map[string]Link{}
 	for _, other := range slices.Sorted(maps.Keys(raw)) {
-		if !linkSlugRE.MatchString(other) {
-			return nil, fmt.Errorf("%s: %s: %q is not a project slug", path, table, other)
+		if !ValidLinkKey(other) {
+			return nil, fmt.Errorf("%s: %s: %q is not a project slug (or <server>/<slug>)", path, table, other)
 		}
 		if other == self {
 			return nil, fmt.Errorf("%s: %s.%s: a project can't link to itself", path, table, other)
 		}
-		l, err := parseLink(raw[other])
+		l, askSet, err := parseLink(raw[other])
 		if err != nil {
 			return nil, fmt.Errorf("%s: %s.%s %w", path, table, other, err)
+		}
+		if _, _, remote := Remote(other); remote && !askSet {
+			l.Ask = true
 		}
 		out[other] = l
 	}
 	return out, nil
 }
 
-func parseLink(v any) (Link, error) {
+// parseLink reads an entry; askSet says it gives ask.
+func parseLink(v any) (l Link, askSet bool, err error) {
 	switch v := v.(type) {
 	case string:
 		if !slices.Contains(LinkAllows, v) {
-			return Link{}, fmt.Errorf("must be %q, %q or %q, not %q", LinkBoth, LinkSend, LinkReceive, v)
+			return Link{}, false, fmt.Errorf("must be %q, %q or %q, not %q", LinkBoth, LinkSend, LinkReceive, v)
 		}
-		return Link{Allow: v}, nil
+		return Link{Allow: v}, false, nil
 	case map[string]any:
-		var l Link
 		for _, k := range slices.Sorted(maps.Keys(v)) {
 			switch k {
 			case "allow":
 				s, ok := v[k].(string)
 				if !ok || !slices.Contains(LinkAllows, s) {
-					return Link{}, fmt.Errorf("allow must be %q, %q or %q", LinkBoth, LinkSend, LinkReceive)
+					return Link{}, false, fmt.Errorf("allow must be %q, %q or %q", LinkBoth, LinkSend, LinkReceive)
 				}
 				l.Allow = s
 			case "ask":
 				b, ok := v[k].(bool)
 				if !ok {
-					return Link{}, fmt.Errorf("ask must be true or false")
+					return Link{}, false, fmt.Errorf("ask must be true or false")
 				}
-				l.Ask = b
+				l.Ask, askSet = b, true
 			default:
-				return Link{}, fmt.Errorf("has an unknown key %q (allow, ask)", k)
+				return Link{}, false, fmt.Errorf("has an unknown key %q (allow, ask)", k)
 			}
 		}
 		if l.Allow == "" {
-			return Link{}, fmt.Errorf("needs allow = %q, %q or %q", LinkBoth, LinkSend, LinkReceive)
+			return Link{}, false, fmt.Errorf("needs allow = %q, %q or %q", LinkBoth, LinkSend, LinkReceive)
 		}
-		return l, nil
+		return l, askSet, nil
 	}
-	return Link{}, fmt.Errorf("must be %q, %q, %q or a table { allow = …, ask = … }", LinkBoth, LinkSend, LinkReceive)
+	return Link{}, false, fmt.Errorf("must be %q, %q, %q or a table { allow = …, ask = … }", LinkBoth, LinkSend, LinkReceive)
 }
 
 // LinkRefusal says why from's coordinator may not write to to's: "" when
 // the link allows it, else a refusal code and its words. The settings
-// are read, not the projects: callers check that both exist.
+// are read, not the projects: callers check that both exist. For a
+// project on a paired server only from's side is here: that server
+// checks its own when the message arrives.
 func (c *Config) LinkRefusal(from, to string) (code, msg string) {
 	if from == to {
 		return "self-link", from + " can't message itself"
@@ -123,6 +153,9 @@ func (c *Config) LinkRefusal(from, to string) (code, msg string) {
 	mine, _ := c.Links(from)
 	if !mine[to].Sends() {
 		return "no-link", fmt.Sprintf("%s has no link to %s; links are the user's (Settings › Linked projects)", from, to)
+	}
+	if _, _, remote := Remote(to); remote {
+		return "", ""
 	}
 	theirs, _ := c.Links(to)
 	if !theirs[from].Receives() {
@@ -193,7 +226,7 @@ func SetLinkPair(a, b string, la Link, askB bool) error {
 }
 
 func editLink(data []byte, slug, other string, l Link) ([]byte, error) {
-	if !linkSlugRE.MatchString(other) || !linkSlugRE.MatchString(slug) || other == slug {
+	if !ValidLinkKey(other) || !linkSlugRE.MatchString(slug) || other == slug {
 		return nil, fmt.Errorf("%q can't be linked from %s", other, slug)
 	}
 	table := "projects." + slug + ".links"
@@ -207,8 +240,15 @@ func editLink(data []byte, slug, other string, l Link) ([]byte, error) {
 	if !slices.Contains(LinkAllows, l.Allow) {
 		return nil, fmt.Errorf("a link allows %q, %q or %q", LinkBoth, LinkSend, LinkReceive)
 	}
+	if _, _, remote := Remote(other); remote {
+		return Edit(data, table, other, remoteLink(l))
+	}
 	return Edit(data, table, other, l)
 }
+
+// remoteLink is an entry for a paired server's project as it is
+// written: ask is on unless it says ask = false.
+type remoteLink Link
 
 // Half reports whether an entry and the other side's for it don't
 // match: one side allows a direction the other doesn't, so the link

@@ -99,7 +99,7 @@ One binary, several roles:
 | `internal/moddev` | The mod author's tools: `tm mod new`'s scaffolds, and the folder watch and log tail of `tm mod dev` and `tm mod logs` (§5.3) |
 | `internal/modbroker` | The broker for user mods: every `$` call checked against the mod's grants and done by the server; the path, host and program checks and the credential deny list (§5.3) |
 | `internal/relay` | `tm relay serve`, the meeting point of two linked servers, and the client side a server dials it with: the WebSocket subset, the signed hello, rooms, limits (§16) |
-| `internal/peer` | The server's identity key and paired servers, the pinned-TLS link to each (§16.7), pairing by one-time code (§16.8), and the peer dispatcher that serves shared projects to paired servers (§16.9) |
+| `internal/peer` | The server's identity key and paired servers, the pinned-TLS link to each (§16.7), pairing by one-time code (§16.8), the peer dispatcher that serves shared projects to paired servers (§16.9), and its `peer.message` for links across servers (§16.11) |
 
 The dependency rule: `server`, `session`, `ticker`, `tui`, `project`, `thread` and `tasks` MUST NOT import `internal/agent/<name>` or mention any agent by name. They see only `internal/agent`.
 
@@ -576,7 +576,8 @@ Each enabled code mod runs in its own `tm mod host` child of the server: the sam
   cache/mods/<id>/                     a code mod's bundle, bundle.json and host.json (§3.7, Supervisor)  [server]
   state/repos-moved                    the mark that the projects' repo lists have moved from PROJECT.md to config.toml (below)  [server]
   state/ticker.json                    what the ticker already reported: thread states, PRs, nudges, syncs (§7.5)  [server]
-  state/links.json                     the message counter, each link direction's rate bucket and each pair's breaker (§7.9)  [tm]
+  state/links.json                     the message counter, each link direction's rate bucket and each pair's breaker (§7.9); the outbox epoch and sequences (§16.11)  [tm]
+  state/link/outbox/<alias>/<seq>.json a message or receipt waiting for the paired server <alias> (§16.11)  [tm]
   state/slots.json                     the coordinators a thread cap refused, waiting for a slot (§9)  [tm, ticker]
   logs/server.log                      rotated at 10 MB, 3 kept                      [server]
   logs/mods/<id>.log                   a user mod's log, rotated at 1 MiB, and the broker's audit lines about it (§3.7, Supervisor; §5.3)  [server, from the mod host and the broker]
@@ -594,6 +595,7 @@ Each enabled code mod runs in its own `tm mod host` child of the server: the sam
     inbox/*.md, inbox/done/*.md        events for the coordinator (§7.5)             [tm]
     questions.json                     the coordinator's open questions to the user (§7.5, **Questions**)  [tm, on the coordinator's calls]
     messages/<other>/M-<n>.md          messages with linked project <other>, both ways: TOML front matter + the text (§7.9)  [tm]
+    messages/@<alias>/<other>/M-<fp>-<n>.md   the same with project <other> on the paired server <alias> (§16.11)  [tm]
     messages/<other>/M-<n>/            a message's attached files                     [tm]
     inbox/done/<yyyy-mm>.tar.gz        handled items older than archive_inbox_days, by the month they were raised  [ticker]
     threads/archive/<id>.tar.gz        a resolved thread's folder, packed archive_threads_days after resolve  [ticker]
@@ -987,7 +989,7 @@ Threads are grouped as herdr-projects does: Waiting on you → Ready for review 
   - a task completed by the project's complete-tasks setting
   - auto-close holds a thread back for its unpushed work
 - Rows: the dashboard's Inbox tab and the /tm pane list a project's items as rows, one per kind per subject: the latest item with `×N` when N are unhandled, so a thread's repeated `idle` or `blocked` items read as one. A row leads with the kind, in words (`PR opened`, `checks failed`, `resolved`; the TUI's `kindWord` and the mod's `kindWord` agree) and in its own color (red for what went wrong, green for what finished, yellow for the rest), then the task's ref, what happened, and last the task's title, which is what a narrow row cuts. The parts come from the summary (`project.Parts`, sent in `tm watch --project --json` as `task`, `what`, `title`, `count`); a summary without a thread label is all `what`. `tm inbox list` still lists every item.
-- Kinds: `report`, `thread-resolved` and `needs-you` come from the `tm` commands, `takeover` from the attach client (the first input into a thread's pane during an attach, §4), `delegate`, `accept` and `send-back` from the task list (`D`, the user's go-ahead to delegate the task named in its subject; `A`, the user's acceptance of it; `x`, the user sending it back, the note in its summary; §4), `adopt` from the dashboard's `T` (the user asks to adopt the session in its subject, §4); the ticker adds `blocked` (`needs_user` unless it is a permission prompt the coordinator may approve; on a question its summary says to ask the user and relay the answer with `tm thread answer`), `idle` (once per report, and not while that report's own item is unhandled), `exited`, `server-restart`, and `pr-opened`, `pr-checks-failed`, `pr-review` (approved or changes requested), `pr-merged`, `pr-closed`, `pr-conflict` (main moved and a thread's open PR now conflicts with it; one that is only behind raises nothing), `task-done` (a task completed by `complete_tasks`), `close-held` (auto-close kept a thread open for its uncommitted or unpushed work, once per reason, below), `gh-failing` (`needs_user`: `gh` failed on 3 PR polls of the project in a row), and `slot-free` (a thread slot freed for a coordinator a cap refused, §9); `tm link` adds `link-message` (a linked project's coordinator, or the human for it, wrote: subject the other project, `message` the message's id, a fixed-word summary `demo wrote M-17 (1.1 KB, re M-15, 1 file); read it with tm link read M-17`), `link-held` (`needs_user`: one of this coordinator's messages waits for the user's OK) and `link-paused` (`needs_user`, in both projects: the breaker paused a link), §7.9. An item's optional `message` field names the message a link item is about.
+- Kinds: `report`, `thread-resolved` and `needs-you` come from the `tm` commands, `takeover` from the attach client (the first input into a thread's pane during an attach, §4), `delegate`, `accept` and `send-back` from the task list (`D`, the user's go-ahead to delegate the task named in its subject; `A`, the user's acceptance of it; `x`, the user sending it back, the note in its summary; §4), `adopt` from the dashboard's `T` (the user asks to adopt the session in its subject, §4); the ticker adds `blocked` (`needs_user` unless it is a permission prompt the coordinator may approve; on a question its summary says to ask the user and relay the answer with `tm thread answer`), `idle` (once per report, and not while that report's own item is unhandled), `exited`, `server-restart`, and `pr-opened`, `pr-checks-failed`, `pr-review` (approved or changes requested), `pr-merged`, `pr-closed`, `pr-conflict` (main moved and a thread's open PR now conflicts with it; one that is only behind raises nothing), `task-done` (a task completed by `complete_tasks`), `close-held` (auto-close kept a thread open for its uncommitted or unpushed work, once per reason, below), `gh-failing` (`needs_user`: `gh` failed on 3 PR polls of the project in a row), and `slot-free` (a thread slot freed for a coordinator a cap refused, §9); `tm link` adds `link-message` (a linked project's coordinator, or the human for it, wrote: subject the other project, `message` the message's id, a fixed-word summary `demo wrote M-17 (1.1 KB, re M-15, 1 file); read it with tm link read M-17`), `link-held` (`needs_user`: one of this coordinator's messages waits for the user's OK), `link-paused` (`needs_user`, in both projects: the breaker paused a link), §7.9, and `link-undelivered` (a message to a paired server's project was refused there or not taken in 72 hours, the reason in fixed words, §16.11). An item's optional `message` field names the message a link item is about.
 - A summary names its thread by its task and title, the thread id in brackets, e.g. `T10 Make needs-you tasks easy to find (t-0003) opened PR #53`, so the coordinator needs no lookup (`thread.Label`: the task's title from `TASKS.md`; a thread without a task by its id and own title, `t-0003 (title)`; one printable line of at most 60 runes).
 - What the ticker already reported (per-thread state, PR fields, the default-branch head each open PR was checked against, nudged item ids, each repo's last sync, its last remote control try) is kept in `state/ticker.json`, so a server restart repeats nothing. `TERMINATR_TICK_SWEEP`, `TERMINATR_TICK_PR`, `TERMINATR_TICK_NUDGE`, `TERMINATR_TICK_REMOTE` and `TERMINATR_TICK_REMOTE_GRACE` shorten the intervals for tests.
 - **PR polling.** For each unresolved thread with a repo, through the repo's host (below is GitHub's call; Azure DevOps asks the REST API through `az rest`: the PR by number or the repo's PRs by `searchCriteria.sourceRefName`, then for an open PR its policy evaluations (`artifactId` of the project's id and the PR, api-version `7.1-preview.1`) and its statuses at once, and maps the same fields: `completed` is merged, `abandoned` is closed, and a merge is told from the PR's state, so squash and merge commits both work, with or without build-validation policies; the host's merge subject on the default branch, `Merge pull request #N from …` or `Merged PR N: …`, and a default-branch head that already contains a PR's head ("Main moved" below) are only hints, the first for a PR the host can't answer for, the second to ask the PR at once), `gh pr view <report PR URL, else the branch> --json number,url,state,reviewDecision,statusCheckRollup,mergedAt,headRefOid,mergeCommit,baseRefName,mergeable,mergeStateStatus` in the repo, every `pr_poll_seconds` (§11.2; 2 minutes by default, 30 seconds at least), until the PR merged. Only those fields are kept, each checked against a strict pattern. A failed host call (no PR yet, no network) is retried at the next poll. The timers are on screen: `state/ticker.json` keeps when each thread's PR and, per project, any PR and the repos were last checked, and `project.watch` (§3.3) carries them as times, never ages, so a state only changes when the ticker acts: `ticker` (`pr_checked`, `synced`, `pr_poll_seconds`, `gh_failing`) and, per thread, `pr_checked`. The coordinator's info panel, `tm watch --project` and the /tm pane show one line, `ticker · PRs checked 40s ago, next 1m20s · synced 1m ago · PR host ok` (`PR host failing`, in red, while the last PR poll failed; `PR host none` when no repo has a PR host), and a thread's row adds `· checked 30s ago` to its PR (`PR #156 · checks running · checked 30s ago`); readers work out the ages on their own clocks. `tm thread list` and `tm context` read them from `state/ticker.json` (§7.4).
@@ -1129,7 +1131,7 @@ terminatr = "both"
 
 **Seeing the conversation.** `tm link list` lists the project's links (every project either side's entry names, and any it has messages with): `terminatr-mods  ⇄ linked both ways · 1 unread · last M-17 2026-10-14 15:12`, `web  · not linked, half-linked: web has no entry`, with `paused` and held counts; `tm link log <project> [--last N] [--json]` the messages both ways, oldest first, each framed. `tm context` has a **Links** section with the same lines, never a text. `project.watch` carries `links` (`peer`, `state`, `send`, `receive`, `paused`, `unread`, `held`, `last`), and a mod's `inbox.item` event the item's `message`. The project popup's Messages tab (§4) shows the conversation to the human.
 
-**Relay alignment** (T233). The cross-server relay reuses all of this: the same `links` table with a qualified key (`"mini/acme-api" = { allow = "both" }`, valid once the server is paired), `ask` defaulting to true there, the same `tm link` commands (replacing T233's `tm peer`), the same `link-message` item and limits; it adds a second deliverer behind `internal/link` (an outbox, delivered and read receipts, 72 h expiry) and an async `link-undelivered` for a link the other side doesn't accept, which a sender can't see across servers.
+**Across servers** (§16.11). A link may name a project on a paired server, `"mini/acme-api" = "both"`: the same table, commands, item and limits, with `ask` on by default, each server checking its own side, an outbox in place of the synchronous write, and a `link-undelivered` item when the other server doesn't take the message.
 
 ## 8. Agents
 
@@ -1629,8 +1631,8 @@ These commands are used by the human, the coordinator and threads alike. Exit co
 | `tm report [--file F] [--attach F]… \| --show` | threads | hand in the report (stdin or file), §7.2 |
 | `tm done ["summary"]` | threads | §7.3. `tm status`, `tm report` and `tm done` also take `--project <slug> --thread <id>`, for a human acting for a thread outside its session (a thread's own call always means its own thread) |
 | `tm inbox list [--json] \| done <id>…` (`--project <slug>`) | coordinator | §7.5; handling a `link-message` item marks its message read in both projects |
-| `tm link send <project> "text" \| --file F\|- [--re M-12] [--attach <thread>/<file>]… \| read M-12 [--file NAME] [--json] \| log <project> [--last N] [--json] \| list [--json] \| approve\|drop M-12 [--approved-by-user] \| resume <project> [--approved-by-user]` (`--project <slug>`) | coordinator (its own project), human; threads refused (`coordinator-only`) | messages to linked projects' coordinators, §7.9 |
-| `tm project link <a> <b> [both\|send\|receive\|off] [--ask\|--no-ask]` | human (`human-only` for an agent) | links two projects in one call (§7.9, §11.2): a's entry as given (both by default), b's the mirror, off removes both; `--ask` is a's ask switch |
+| `tm link send <project>\|<server>/<project> "text" \| --file F\|- [--re M-12] [--attach <thread>/<file>]… \| read M-12 [--file NAME] [--json] \| log <project> [--last N] [--json] \| list [--json] \| approve\|drop M-12 [--approved-by-user] \| resume <project> [--approved-by-user]` (`--project <slug>`) | coordinator (its own project), human; threads refused (`coordinator-only`) | messages to linked projects' coordinators, §7.9 |
+| `tm project link <a> <b>\|<server>/<b> [both\|send\|receive\|off] [--ask\|--no-ask]` | human (`human-only` for an agent) | links two projects in one call (§7.9, §11.2): a's entry as given (both by default), b's the mirror, off removes both; `--ask` is a's ask switch. For a paired server's project only a's entry, asking unless `--no-ask` (§16.11) |
 | `tm ask add "question" [--task T12] [--header H] --option "Label[: description]"… [--multi] [--recommend LABEL] \| add --file F\|- \| list [--json] \| done Q3… \| open` (`--project <slug>`) | coordinator, human; threads refused (`coordinator-only`) | the coordinator's open questions, §7.5 **Questions** |
 | `tm library list [--json] \| rm <thread> <file>\|--all` (`--project <slug>`) | list: human, coordinator; rm: human, and the coordinator only on the user's word in chat; threads refused (`coordinator-only`) | §7.2, §4 |
 | `tm session list [--json]` | human (an agent: its own session, a coordinator also its project's, §11.1) | the sessions in the server, with their role, project, agent and state |
@@ -1682,7 +1684,7 @@ The server tells them apart by the caller's pid (§3.2). Every project command (
 
 A user mod is a third kind of caller, `caller.Mod`, journaled as `mod:<id>`. It never comes from a process: only the server's broker makes it, for the mod's brokered calls (§5.3). It has fewer rights than any agent, and every human-only check refuses it as it refuses an agent (`IsAgent`).
 
-A paired server is the narrowest caller, `caller.Peer`, journaled as `peer:<alias>`. Only a link's dispatcher makes it (§16.9), never the environment or a socket, and it reaches only the read-only `peer.*` methods; every human-only check refuses it too.
+A paired server is the narrowest caller, `caller.Peer`, journaled as `peer:<alias>`. Only a link's dispatcher makes it (§16.9), never the environment or a socket, and it reaches only the read-only `peer.*` methods and `peer.message`, which delivers a linked project's message (§16.11); every human-only check refuses it too.
 
 Agent calls of project commands (`tm task`, `thread`, `report`, `status`, `done`, `inbox`, `context`, `project`) run **inside the server** (`cli.run`): the CLI sees `TERMINATR_SESSION`, sends its arguments, cwd and (when the command reads it) stdin, and the server runs the command with the caller it derived from the peer pid's process tree. That also lets a sandboxed thread's `tm report` write the project folder it can't write itself (§5.2). Without a server, the command runs in the CLI with the caller from the environment.
 
@@ -1737,7 +1739,7 @@ The human changes these in the project popup's Settings tab, or for every projec
 | `auto_clear` | bool | `false` | the ticker clears the coordinator's conversation once its context reaches `[ui] context_hint`, only while it is idle with nothing waiting on it: no prompt queued, no question open, an empty inbox, no thread with a question or blocked (§7.5). Each clear is journaled. The project's state lives in files, so the coordinator reads it back with `tm context` |
 | `merge` | `coordinator` / `thread` | `coordinator` | who merges a thread's PR. Under `coordinator` the mod's guard refuses a thread's `gh pr merge` or its Azure DevOps equivalent (§8.6, **Guard**); under `thread` it leaves the call to the agent's own permission check. Not in the popups: set in the file |
 | `guard` | bool | `true` | the mod's guard checks each tool call of the project's agents against the standing rules (§8.6, **Guard**); off, they have the permission rules they have without the mod. Not in the popups: set in the file |
-| `links` | table: other project's slug = `"both"` / `"send"` / `"receive"`, or `{ allow = …, ask = true }` | none | `[projects.<slug>.links]` only (`defaults.links` is an error): the other projects whose coordinators this one may write to (`send`), hear from (`receive`) or both; a message goes only when both sides allow it. The Settings tab's Linked projects list and `tm project link <a> <b>` always write both entries at once (the other's the mirror); a one-sided entry comes only from a hand edit and shows as half-linked (`tm doctor` warns). `ask = true` holds each message this coordinator sends there for the user's OK; §7.9 |
+| `links` | table: other project's slug = `"both"` / `"send"` / `"receive"`, or `{ allow = …, ask = true }` | none | `[projects.<slug>.links]` only (`defaults.links` is an error): the other projects whose coordinators this one may write to (`send`), hear from (`receive`) or both; a message goes only when both sides allow it. The Settings tab's Linked projects list and `tm project link <a> <b>` always write both entries at once (the other's the mirror); a one-sided entry comes only from a hand edit and shows as half-linked (`tm doctor` warns). `ask = true` holds each message this coordinator sends there for the user's OK; §7.9. A key `"<server>/<slug>"` names a project on a paired server: only this side is here, and its `ask` is on unless it says `ask = false`; §16.11 |
 | `guard_off` | list of rule ids | `[]` | guard rules left out: `force-push`, `push-default`, `worktree-only`, `delete-branch`, `merge`, `credentials`; an unknown id is an error. Not in the popups: set in the file |
 
 **All projects**. `[defaults]` in `config.toml` takes the same keys as a `[projects.<slug>]` table, with the same values and checks (an unknown key or a bad value is an error naming `defaults.<key>`). Each setting of a project resolves key by key: the project's own value when its table sets the key, else the `[defaults]` value, else the default in the table above. A new project has no table, so it starts from All projects; so does every setting a project leaves unset, and changing All projects changes each project that doesn't set that setting itself, from the next read (the ticker's next sweep, the next `tm thread start`, a new coordinator). `tm` never copies the defaults into a project's table: a project's table holds only what the human set for that project. `active`, `paused`, `archived`, `pinned` and `share` are each project's own state, never all projects': `[defaults]` setting any of them is an error, and the All projects tab has no Active, Paused, Archive or Delete rows. The other way round, `global_parallel_threads` is all projects' only: a `[projects.<slug>]` table setting it is an error, and a project's Settings tab has no row for it. The older `auto_resolve` reads in `[defaults]` as in a project's table, and a project's own `auto_resolve` (or `auto_close`) overrides the defaults' `auto_close`. Settings popups write the table they show: the `,` popup's All projects tab writes `[defaults]`, a project's Settings tab writes `[projects.<slug>]`; `x` on a project's setting removes its line (and, for auto-close, the project's `auto_resolve` line), and refuses with the usual message when the file sets it in another form. A change to All projects is journaled in each project that follows it (`human settings.yolo <slug> true (all projects)`). The defaults are as much the human's as the projects' tables: the same write rules, no CLI command or socket method, and the coordinators' `Edit` deny rule covers the file.
@@ -2004,7 +2006,9 @@ delay traffic; it can't read or forge it, nor join a room without a key.
 
 This section is the relay's side, and the link that dials it (§16.7).
 Pairing, which makes the identity key and fills the peers, is §16.8;
-what a paired server may read of the projects the user shares, §16.9.
+what a paired server may read of the projects the user shares, §16.9;
+what it keeps of theirs, §16.10; coordinator links to a paired server's
+projects, §16.11.
 
 ### 16.1 Transport
 
@@ -2349,3 +2353,62 @@ own server instead. The console never talks to a link.
   the mirror's changes, so a console that sees the same `gen` has
   nothing new; each change also wakes the server's watches. A server
   without an identity key answers `{"gen": 0, "peers": []}`.
+
+### 16.11 Links across servers
+
+Coordinator links (§7.9) to a project on a paired server. Only messages
+cross, each server checks its own side, and the text stays data.
+
+- **The key.** `[projects.acme.links] "mini/api" = "both"`: the paired
+  server's alias (§16.8) and the project's slug there, quoted. `ask`
+  is on unless the entry says `ask = false`, so a coordinator's message
+  waits for the user's OK by default. `tm project link acme mini/api
+  [both|send|receive|off] [--ask|--no-ask]` writes only this side (the
+  other is that server's user's) and refuses an alias that isn't paired
+  (`unknown-server`); `tm doctor` warns about an entry whose server
+  isn't paired. Messages live in `messages/@mini/api/` (no slug has an
+  `@`).
+- **Both sides.** The sender checks its entry sends; the receiving
+  server checks its own entry for `<its alias for the sender>/<sending
+  slug>` receives, the alias taken from the link, never the message. A
+  project there that doesn't exist, is archived, or doesn't receive
+  answers alike, `not-linked`.
+- **Ids.** `M-<fp>-<n>`: `fp` the first four hex digits of the sending
+  server's id (§16.7), `n` the server-wide message counter. The
+  receiver refuses an id whose `fp` isn't the sending peer's.
+- **Outbox.** Sending (or approving a held message) keeps the sender's
+  copy as `queued` and writes the message to
+  `state/link/outbox/<alias>/<seq>.json`; the rate token and the breaker
+  count are spent then. `send` says `queued M-4F2A-17 for mini/api …`.
+  Attachments don't cross: `--attach` on such a link is
+  `bad-attachment`. The server's flusher wakes on a send and every 3 s,
+  and delivers each peer's entries in sequence order with
+  `peer.message` while its link is up and lists `msg`; a failed call or
+  a `retry` answer stops that peer until the next wake.
+- **`peer.message`** `{"epoch", "seq", "kind", "from", "to", "id",
+  "created", "re", "by", "text"}` → `{"status", "code"}`: `kind` is
+  `message` or `read`; `status` `ok` (taken: the delivered receipt),
+  `duplicate`, `retry` or `refused`, with `code` one of `not-linked`,
+  `link-paused`, `bad-message`, `rate-limited`. It is in the peer
+  dispatcher's list (§16.9) only when the server takes messages, under
+  the caller `peer:<alias>`; the hello lists `msg`. Each `seq` of an
+  `epoch` (a random value per sending store) is taken once: one at or
+  below the highest taken answers `duplicate` and writes nothing.
+- **Arrival.** The text is cleaned and checked (8 KB) again and written
+  to the receiver's copy only; the item is a `link-message` with
+  subject `studio/acme` and the fixed summary (`studio/acme wrote
+  M-4F2A-17 (1.1 KB); read it with tm link read M-4F2A-17`); the read
+  frame says `(a project on the paired server studio)`. The receiver
+  keeps its own bucket for the direction (over it: `retry`) and its own
+  breaker (paused: `refused`, `link-paused`); `tm link resume
+  studio/acme` lifts this server's pause only.
+- **Receipts.** `ok` moves the sender's copy to `sent`. Handling the
+  item there (`tm inbox done`) marks the receiver's copy `read` and
+  queues a `read` entry back, which marks the sender's copy `read`. No
+  item on either side.
+- **Undelivered.** An entry refused there, or still in the outbox after
+  72 hours, goes: the sender's copy becomes `undelivered` and its inbox
+  gets `link-undelivered` (`your message M-4F2A-17 to mini/api wasn't
+  delivered: mini/api doesn't take messages from acme: …`), fixed words
+  per code, never the other server's. A receipt that isn't taken goes
+  quietly.

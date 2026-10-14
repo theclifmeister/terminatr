@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/project"
 )
 
@@ -29,11 +30,23 @@ func Settings(d Deps) []Check {
 			Detail: fmt.Sprintf("\"when released\" was removed, so tasks complete by you in %s: pick again in Settings (by you or when merged)", strings.Join(slugs, ", "))})
 	}
 	// A link names another project by its slug: one that isn't there
-	// (deleted, or a typo) carries nothing (docs/SPEC.md §7.9).
+	// (deleted, or a typo) carries nothing (docs/SPEC.md §7.9). One on a
+	// paired server, "<alias>/<slug>", needs the server paired (§16.11).
 	var dangling []string
+	paired := map[string]bool{}
+	peers, _ := peer.LoadPeers(peer.DirIn(d.Paths.Home))
+	for _, p := range peers {
+		paired[p.Alias] = true
+	}
 	for _, slug := range c.ProjectSlugs() {
 		links, _ := c.Links(slug)
 		for _, other := range slices.Sorted(maps.Keys(links)) {
+			if alias, _, ok := config.Remote(other); ok {
+				if !paired[alias] {
+					dangling = append(dangling, slug+" → "+other+" (no paired server "+alias+")")
+				}
+				continue
+			}
 			if _, err := project.Open(other); err != nil {
 				dangling = append(dangling, slug+" → "+other)
 			}
@@ -45,6 +58,9 @@ func Settings(d Deps) []Check {
 	for _, a := range c.ProjectSlugs() {
 		mine, _ := c.Links(a)
 		for _, b := range slices.Sorted(maps.Keys(mine)) {
+			if _, _, ok := config.Remote(b); ok {
+				continue // the other side is its server's
+			}
 			theirs, _ := c.Links(b)
 			t, has := theirs[a]
 			if (has && b < a) || !config.Half(mine[b], t, true, has) {
