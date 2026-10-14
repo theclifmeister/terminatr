@@ -377,8 +377,9 @@ func (vs *views) resize(lv *liveView, claim bool) {
 // fill gives the session lv shows, if no console has sized it yet, its
 // pane's size: a new pane fills the console that shows it
 // first. Panes already sized, and agents whose manifest says
-// screen.resize = "explicit", are left alone: showing a pane never
-// resizes it after that (docs/SPEC.md §3.3). vs.mu held.
+// screen.resize = "explicit", are left alone: joining a view or another
+// console's switch never resizes a pane after that (docs/SPEC.md §3.3).
+// vs.mu held.
 func (vs *views) fill(lv *liveView) {
 	v := &lv.v
 	if v.Mode != view.ModeLayout || v.Cols == 0 || v.Rows == 0 {
@@ -422,6 +423,11 @@ func (vs *views) do(method string, p proto.ViewParams) (view.View, *proto.Error)
 			return before, proto.Errorf(proto.ErrUnknownSession, "no session %q", p.Session)
 		}
 		v.Attach(p.Session, p.Project)
+		// Showing a session from a console is the user's, as typing is:
+		// the console becomes the latest and the pane takes its
+		// rectangle there (docs/SPEC.md §3.3).
+		layout()
+		resize, claim = true, true
 	case proto.MethodViewDashboard:
 		v.Dashboard()
 	case proto.MethodViewProject:

@@ -71,6 +71,20 @@ func TestSmokeViewsShared(t *testing.T) {
 	w1.Type("\x1b[I")
 	waitPaneSize(t, env, a, threadCols(120), 28)
 
+	// Switching claims too: w2 opening the coordinator again from the
+	// dashboard, with no key or click into the pane, sizes it to w2's
+	// rectangle, and w1 doing the same takes it back (T381).
+	for _, sw := range []struct {
+		w          *Window
+		cols, rows uint16
+	}{{w2, threadCols(100), 24}, {w1, threadCols(120), 28}} {
+		sw.w.Prefix("d")
+		sw.w.WaitFor("tm dashboard", wait)
+		clickCoordinator(t, sw.w, alpha)
+		sw.w.WaitUntil("back on alpha", agentWait, func(sc string) bool { return lastLine(sc, alpha+" › coordinator") })
+		waitPaneSize(t, env, a, sw.cols, sw.rows)
+	}
+
 	// The sidebar: prefix } in w2 widens it in w1 too, by 2 columns.
 	w2.Prefix("}")
 	wider := SideCols(120) + 1 // the widened border's column

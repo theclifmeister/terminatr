@@ -171,6 +171,7 @@ func TestViewsClaimSkipsExplicit(t *testing.T) {
 	a, _ := join(t, vs, proto.ViewSubscribeParams{View: "x", Cols: 120, Rows: 40})
 	b, _ := join(t, vs, proto.ViewSubscribeParams{View: "x", Cols: 100, Rows: 30})
 	mustDo(t, vs, proto.MethodViewAttach, proto.ViewParams{Client: a.id, Session: "co"})
+	h.takeResizes() // A's switch claimed it
 
 	// B types into the coordinator: it is resized.
 	mustDo(t, vs, proto.MethodViewInput, proto.ViewParams{Client: b.id, Session: "co"})
@@ -179,6 +180,7 @@ func TestViewsClaimSkipsExplicit(t *testing.T) {
 	}
 	// Typing into a thread resizes it like any other pane.
 	mustDo(t, vs, proto.MethodViewAttach, proto.ViewParams{Client: a.id, Session: "th"})
+	h.takeResizes()
 	mustDo(t, vs, proto.MethodViewInput, proto.ViewParams{Client: b.id, Session: "th"})
 	if r := h.takeResizes(); len(r) != 1 || r[0][:3] != "th " {
 		t.Fatalf("claim from the thread resized %v", r)
@@ -198,8 +200,8 @@ func TestViewsClaimSkipsExplicit(t *testing.T) {
 
 // TestViewsFirstShowFills: a pane no console has sized yet takes its
 // rectangle in the first view that shows it, threads too;
-// after that, showing it in another view or console never resizes it,
-// and agents that resize only explicitly are never filled.
+// after that, joining another view showing it never resizes it, and
+// agents that resize only explicitly are never filled.
 func TestViewsFirstShowFills(t *testing.T) {
 	h := newFakeHost("co", "th", "inl")
 	h.panes["th"] = paneInfo{follows: true}
@@ -215,22 +217,85 @@ func TestViewsFirstShowFills(t *testing.T) {
 	if r := h.takeResizes(); !slices.Equal(r, []string{"th 100×38"}) {
 		t.Fatalf("the thread's first showing resized %v", r)
 	}
-	// Showing it again, from another console of its own size, doesn't.
+	// Joining a view that shows it, from another console of its own
+	// size, doesn't.
 	b, _ := join(t, vs, proto.ViewSubscribeParams{Own: true, Session: "th", Cols: 80, Rows: 24})
-	mustDo(t, vs, proto.MethodViewAttach, proto.ViewParams{Client: b.id, Session: "co"})
-	mustDo(t, vs, proto.MethodViewAttach, proto.ViewParams{Client: a.id, Session: "co"})
 	if r := h.takeResizes(); len(r) != 0 {
-		t.Fatalf("showing sized panes resized %v", r)
+		t.Fatalf("joining resized %v", r)
 	}
 	// An agent that resizes only explicitly is never filled.
 	mustDo(t, vs, proto.MethodViewAttach, proto.ViewParams{Client: a.id, Session: "inl"})
 	if r := h.takeResizes(); len(r) != 0 {
 		t.Fatalf("an explicit agent was filled: %v", r)
 	}
-	// After that, typing claims as before: B types into the coordinator.
-	mustDo(t, vs, proto.MethodViewInput, proto.ViewParams{Client: b.id, Session: "co"})
-	if r := h.takeResizes(); !slices.Equal(r, []string{"co 69×22"}) {
+	// After that, typing claims as before: B types into the thread.
+	mustDo(t, vs, proto.MethodViewInput, proto.ViewParams{Client: b.id, Session: "th"})
+	if r := h.takeResizes(); !slices.Equal(r, []string{"th 69×22"}) {
 		t.Fatalf("B's claim resized %v", r)
+	}
+}
+
+// TestViewsSwitchClaims: two consoles of different sizes; the one that
+// switches to a session sizes it, as typing would, and the other one
+// takes it back only by switching or typing itself (T381).
+func TestViewsSwitchClaims(t *testing.T) {
+	h := newFakeHost("co", "th", "inl")
+	h.panes["co"] = paneInfo{follows: true, sized: true}
+	h.panes["th"] = paneInfo{follows: true, sized: true}
+	h.panes["inl"] = paneInfo{follows: false, sized: true}
+	vs := newViews(h, "", nil)
+	side := &view.Sidebar{Width: 20}
+	big, _ := join(t, vs, proto.ViewSubscribeParams{Cols: 120, Rows: 40, Sidebar: side})
+	small, _ := join(t, vs, proto.ViewSubscribeParams{Cols: 80, Rows: 24})
+
+	// The big console shows the thread: it takes the big console's size.
+	mustDo(t, vs, proto.MethodViewAttach, proto.ViewParams{Client: big.id, Session: "th", Project: "p"})
+	if r := h.takeResizes(); !slices.Equal(r, []string{"th 100×38"}) {
+		t.Fatalf("big's switch resized %v", r)
+	}
+	// The small one switches to the coordinator: it becomes the latest
+	// and the coordinator takes its size, with no click or key.
+	v := mustDo(t, vs, proto.MethodViewAttach, proto.ViewParams{Client: small.id, Session: "co", Project: "p"})
+	if v.Latest != small.id || v.Cols != 80 || v.Rows != 24 {
+		t.Fatalf("after small's switch: %+v", v)
+	}
+	if r := h.takeResizes(); !slices.Equal(r, []string{"co 60×22"}) {
+		t.Fatalf("small's switch resized %v", r)
+	}
+	// And back to the thread, sized by the big console before: it
+	// follows the small one now.
+	mustDo(t, vs, proto.MethodViewAttach, proto.ViewParams{Client: small.id, Session: "th", Project: "p"})
+	if r := h.takeResizes(); !slices.Equal(r, []string{"th 60×22"}) {
+		t.Fatalf("small's switch back resized %v", r)
+	}
+	// The big console only looks (selects a row, reports its size): the
+	// small one keeps the size, no fight.
+	mustDo(t, vs, proto.MethodViewSelect, proto.ViewParams{Client: big.id, Key: "p:x"})
+	mustDo(t, vs, proto.MethodViewSize, proto.ViewParams{Client: big.id, Cols: 120, Rows: 40})
+	if v, _ = vs.get(view.Main); v.Latest != small.id || len(h.takeResizes()) != 0 {
+		t.Fatalf("looking took the size: %+v", v)
+	}
+	// The dashboard shows no pane: switching to it resizes nothing.
+	mustDo(t, vs, proto.MethodViewDashboard, proto.ViewParams{Client: big.id})
+	mustDo(t, vs, proto.MethodViewProject, proto.ViewParams{Client: big.id, Project: "p"})
+	if r := h.takeResizes(); len(r) != 0 {
+		t.Fatalf("the dashboard resized %v", r)
+	}
+	// The big console switches to the thread: it takes it back.
+	mustDo(t, vs, proto.MethodViewAttach, proto.ViewParams{Client: big.id, Session: "th", Project: "p"})
+	if r := h.takeResizes(); !slices.Equal(r, []string{"th 100×38"}) {
+		t.Fatalf("big's switch back resized %v", r)
+	}
+	// A console of its own view switching to the thread sizes it too.
+	own, _ := join(t, vs, proto.ViewSubscribeParams{Own: true, Cols: 90, Rows: 30})
+	mustDo(t, vs, proto.MethodViewAttach, proto.ViewParams{Client: own.id, Session: "th"})
+	if r := h.takeResizes(); !slices.Equal(r, []string{"th 79×28"}) {
+		t.Fatalf("the own view's switch resized %v", r)
+	}
+	// An agent that resizes only explicitly is left alone.
+	mustDo(t, vs, proto.MethodViewAttach, proto.ViewParams{Client: small.id, Session: "inl"})
+	if r := h.takeResizes(); len(r) != 0 {
+		t.Fatalf("switching to the explicit agent resized %v", r)
 	}
 }
 
