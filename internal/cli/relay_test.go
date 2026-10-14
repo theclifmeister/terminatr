@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -347,5 +348,132 @@ func TestRelayUpdate(t *testing.T) {
 	r.s.Version, r.calls = "v0.28.0", nil
 	if out := h.ok(human, "relay", "update"); !strings.Contains(out, "nothing to update") || len(r.calls) != 0 {
 		t.Fatalf("latest: %v %s", r.calls, out)
+	}
+}
+
+// --self-signed makes a key and a certificate in the state directory,
+// keeps the key across runs and logs the address with its pin.
+func TestRelayServeSelfSigned(t *testing.T) {
+	h := newHarness(t)
+	h.expect(2, "--ip goes with --self-signed", human, "relay", "serve", "--plain", "--ip", "203.0.113.5")
+	h.expect(2, "--ip nope", human, "relay", "serve", "--self-signed", "--ip", "nope")
+	h.expect(2, "or --plain", human, "relay", "serve", "--self-signed", "--domain", "relay.example.net")
+	var got relay.TLS
+	defer func(old func(context.Context, string, *relay.Server, relay.TLS) error) { relayServe = old }(relayServe)
+	relayServe = func(ctx context.Context, addr string, s *relay.Server, t relay.TLS) error { got = t; return nil }
+	state := filepath.Join(t.TempDir(), "state")
+	_, _, errs := h.run(human, "", "relay", "serve", "--self-signed", "--ip", "203.0.113.5", "--state", state)
+	pin, err := relay.SelfSignedPin(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.CertFile != filepath.Join(state, relay.SelfSignedCert) || got.KeyFile != filepath.Join(state, relay.SelfSignedKey) || got.Domain != "" {
+		t.Fatalf("TLS %+v", got)
+	}
+	if !strings.Contains(errs, "wss://203.0.113.5#sha256="+pin) {
+		t.Fatalf("no address with the pin: %s", errs)
+	}
+	// Another address, another port: the same key, so the same pin.
+	_, _, errs = h.run(human, "", "relay", "serve", "--self-signed", "--listen", "192.168.1.20:8443", "--state", state)
+	if !strings.Contains(errs, "wss://192.168.1.20:8443#sha256="+pin) || !strings.Contains(errs, "private address") {
+		t.Fatalf("second run: %s", errs)
+	}
+	// No --ip and no address to listen on: this host's own.
+	defer func(old func() (netip.Addr, error)) { localIP = old }(localIP)
+	localIP = func() (netip.Addr, error) { return netip.MustParseAddr("2001:db8::7"), nil }
+	h.env["STATE_DIRECTORY"] = state
+	_, _, errs = h.run(human, "", "relay", "serve", "--self-signed")
+	if !strings.Contains(errs, "wss://[2001:db8::7]#sha256="+pin) {
+		t.Fatalf("detected: %s", errs)
+	}
+}
+
+func TestRelayInstallIP(t *testing.T) {
+	h := newHarness(t)
+	r := newRelayRig(t)
+	h.expect(2, "not both", human, "relay", "install", "--ip", "--domain", "relay.example.net")
+	h.expect(2, "--ip relay.example.net", human, "relay", "install", "--ip", "relay.example.net")
+	h.expect(2, "usage", human, "relay", "install", "203.0.113.5")
+	h.expect(2, "usage", human, "relay", "update", "--ip")
+
+	out := h.ok(human, "relay", "install", "--ip", "203.0.113.5")
+	unit, err := os.ReadFile(filepath.Join(r.s.Root, "etc", "systemd", "system", "tm-relay.service"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(unit) != relayIPUnit("203.0.113.5") || !strings.Contains(string(unit), "--self-signed --ip 203.0.113.5 --state ${STATE_DIRECTORY}\n") {
+		t.Fatalf("unit:\n%s", unit)
+	}
+	state := filepath.Join(r.s.Root, "var", "lib", "private", "tm-relay")
+	pin, err := relay.SelfSignedPin(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi, _ := os.Stat(filepath.Join(state, relay.SelfSignedKey)); fi.Mode().Perm() != 0o600 {
+		t.Fatalf("key mode %v", fi.Mode())
+	}
+	address := "wss://203.0.113.5#sha256=" + pin
+	if len(r.asked) != 1 || r.asked[0] != "https://203.0.113.5/healthz#sha256="+pin {
+		t.Fatalf("healthz: %v", r.asked)
+	}
+	if !strings.Contains(out, "tm peer pair --relay "+address) || !strings.Contains(out, "Back up /var/lib/private/tm-relay") || strings.Contains(out, "this host's own") {
+		t.Fatalf("out: %s", out)
+	}
+	// The unit runs a serve that takes its flags.
+	defer func(old func(context.Context, string, *relay.Server, relay.TLS) error) { relayServe = old }(relayServe)
+	relayServe = func(context.Context, string, *relay.Server, relay.TLS) error { return nil }
+	args := strings.Fields(strings.ReplaceAll(unitExec(t, string(unit)), "${STATE_DIRECTORY}", state))
+	h.ok(human, args...)
+	if p, _ := relay.SelfSignedPin(state); p != pin {
+		t.Fatal("serve changed the key")
+	}
+
+	// Detected, private: says so, and installing again keeps the key.
+	defer func(old func() (netip.Addr, error)) { localIP = old }(localIP)
+	localIP = func() (netip.Addr, error) { return netip.MustParseAddr("192.168.1.20"), nil }
+	out = h.ok(human, "relay", "install", "--ip")
+	if !strings.Contains(out, "wss://192.168.1.20#sha256="+pin) || !strings.Contains(out, "this host's own") || !strings.Contains(out, "private address") {
+		t.Fatalf("detected: %s", out)
+	}
+
+	// Update restarts it and checks it serves the same key.
+	relayRelease(t, r.s, "v0.28.0", false)
+	r.asked = nil
+	out = h.ok(human, "relay", "update")
+	if len(r.asked) != 1 || r.asked[0] != "https://192.168.1.20/healthz#sha256="+pin || !strings.Contains(out, "same key: wss://192.168.1.20#sha256="+pin) {
+		t.Fatalf("update: %v %s", r.asked, out)
+	}
+	// Something else answering there: said so.
+	r.health = []error{&relay.PinError{Host: "192.168.1.20", Want: pin, Got: strings.Repeat("0", 64)}}
+	r.s.Wait = 0
+	h.expect(3, "another key than tm-relay's", human, "relay", "install", "--ip=192.168.1.20")
+}
+
+// unitExec is the tm command line of a unit's ExecStart.
+func unitExec(t *testing.T, unit string) string {
+	t.Helper()
+	for _, l := range strings.Split(unit, "\n") {
+		if rest, ok := strings.CutPrefix(l, "ExecStart="+relayBin+" "); ok {
+			return rest
+		}
+	}
+	t.Fatalf("no ExecStart in\n%s", unit)
+	return ""
+}
+
+// relayHealth takes a pinned relay by its key alone.
+func TestRelayHealthPinned(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprintln(w, "ok") }))
+	defer srv.Close()
+	pin := relay.CertPin(srv.Certificate())
+	if err := relayHealth(context.Background(), srv.URL+"/healthz"); err == nil {
+		t.Fatal("trusted a self-signed certificate without a pin")
+	}
+	if err := relayHealth(context.Background(), srv.URL+"/healthz#sha256="+pin); err != nil {
+		t.Fatal(err)
+	}
+	var pe *relay.PinError
+	if err := relayHealth(context.Background(), srv.URL+"/healthz#sha256="+strings.Repeat("ab", 32)); !errors.As(err, &pe) {
+		t.Fatalf("wrong pin: %v", err)
 	}
 }
