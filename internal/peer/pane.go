@@ -23,6 +23,11 @@ import (
 // CapPane is the link capability of peer.attach and its frames.
 const CapPane = "pane-vt"
 
+// CapPaneLevel is the link capability of peer.panes: the server takes
+// the peer's word that its pane switch changed, so its open panes follow
+// at once rather than at the mirror's next read.
+const CapPaneLevel = "pane-level"
+
 // Link frame types. Far to near:
 const (
 	frameOutput  = byte(proto.FrameOutput) // PTY bytes, in order

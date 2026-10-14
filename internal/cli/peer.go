@@ -28,7 +28,7 @@ const peerUsage = `usage: tm peer pair [--relay URL] [--as ALIAS]
        tm peer list [--json]
        tm peer remove ALIAS
        tm peer rotate [--yes]
-       tm peer panes ALIAS off|view|type`
+       tm peer panes ALIAS off|view|write`
 
 func init() {
 	commands["peer"] = runPeer
@@ -289,7 +289,7 @@ type peerEntry struct {
 	Relay string          `json:"relay"`
 	Link  *proto.PeerLink `json:"link,omitempty"`
 	// Panes is this server's pane switch for the peer (docs/SPEC.md
-	// §16.12).
+	// §16.12), as the user says it: off, view or write.
 	Panes string `json:"panes"`
 }
 
@@ -311,7 +311,7 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 	}
 	entries := []peerEntry{}
 	for _, p := range peers {
-		pe := peerEntry{Alias: p.Alias, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: p.PanesLevel()}
+		pe := peerEntry{Alias: p.Alias, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: proto.PanesWord(p.PanesLevel())}
 		if l, ok := links[pe.ID]; ok {
 			pe.Link = &l
 		}
@@ -368,10 +368,11 @@ func (e *Env) peerRemove(dir, alias string) error {
 
 // peerPanes sets what the paired server alias may do with this server's
 // panes (docs/SPEC.md §16.12): off, view (watch the shared projects'
-// coordinator and thread panes) or type (watch and type into them).
+// coordinator and thread panes) or write (watch and type into them;
+// type is its older name, still taken).
 func (e *Env) peerPanes(dir, alias, level string) error {
 	if !proto.ValidPanes(level) {
-		return usagef("tm peer panes ALIAS off|view|type: %q isn't one", level)
+		return usagef("tm peer panes ALIAS off|view|write: %q isn't one", level)
 	}
 	found, err := peer.SetPanes(dir, alias, level)
 	if err != nil {
@@ -386,7 +387,7 @@ func (e *Env) peerPanes(dir, alias, level string) error {
 	case proto.PanesView:
 		fmt.Fprintf(e.Stdout, "Panes view for %s: it can watch the coordinator and thread panes of the projects this server shares, without typing.\n", alias)
 	default:
-		fmt.Fprintf(e.Stdout, "Panes type for %s: it can watch and type into the coordinator and thread panes of the projects this server shares; the first keys into a thread tell its coordinator.\n", alias)
+		fmt.Fprintf(e.Stdout, "Panes write for %s: it can watch and type into the coordinator and thread panes of the projects this server shares; the first keys into a thread tell its coordinator.\n", alias)
 	}
 	e.reload()
 	return nil

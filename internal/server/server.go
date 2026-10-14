@@ -334,10 +334,11 @@ func Run(ctx context.Context, opts Options) error {
 	// projects through peerExport (§16.9), nothing else.
 	s.peers = peer.Start(peer.Options{Dir: peer.DirIn(p.Home), Version: version.Version, Logf: logger.Printf, Export: s.peerExport(), Messages: peerMessages{}, Panes: peerPanes{s}})
 	defer s.peers.Close()
-	// What they share, for the consoles (§16.10).
-	s.mirror = peer.StartMirror(s.peers, peer.MirrorOptions{Logf: logger.Printf, Changed: s.watch.wake})
-	defer s.mirror.Close()
+	// What they share, for the consoles (§16.10); a peer's pane switch
+	// reaches the remote panes open here at once (§16.12).
 	s.remotes = newRemotes(s)
+	s.mirror = peer.StartMirror(s.peers, peer.MirrorOptions{Logf: logger.Printf, Changed: s.watch.wake, Panes: s.remotes.setLevel})
+	defer s.mirror.Close()
 	defer s.remotes.closeAll()
 	// Messages to linked projects on paired servers wait in the outbox
 	// until their link is up (§16.11).

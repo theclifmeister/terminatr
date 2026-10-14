@@ -1523,6 +1523,9 @@ func (c *client) typed(p *pane) {
 	}
 }
 
+// viewOnlyNote starts the note on a key dropped at a view-only pane.
+const viewOnlyNote = "view only: "
+
 // remoteBlock is why keys don't reach p, a paired server's pane: its
 // server lets this one watch only, or the link is down (keys typed then
 // are dropped, never kept for later; docs/SPEC.md §16.12). "" when they
@@ -1533,7 +1536,7 @@ func (c *client) remoteBlock(p *pane) string {
 		return ""
 	}
 	if p.info.ViewOnly {
-		return "view only: " + alias + " shares its panes without typing"
+		return viewOnlyNote + alias + " shares its panes without typing"
 	}
 	for _, pm := range c.side.peers {
 		if pm.Alias == alias && pm.State != proto.LinkUp {
@@ -1575,12 +1578,19 @@ func (c *client) remoteNote(p *pane) string {
 }
 
 // remoteInfo is a paired server's pane in, its state as the mirror
-// last had it.
+// last had it, and whether it takes keys: the peer's pane switch, which
+// it tells the moment it changes (docs/SPEC.md §16.12).
 func remoteInfo(peers []proto.PeerMirror, in proto.SessionInfo) proto.SessionInfo {
 	_, sid, _ := strings.Cut(in.ID, "/")
 	for _, pm := range peers {
 		if pm.Alias != in.Server {
 			continue
+		}
+		switch pm.Panes {
+		case proto.PanesView:
+			in.ViewOnly = true
+		case proto.PanesType:
+			in.ViewOnly = false
 		}
 		for _, pr := range pm.Projects {
 			for _, s := range pr.Sessions {
@@ -2397,6 +2407,9 @@ func (c *client) applyPoll(pl *polled, now time.Time) bool {
 		}
 		if p.info.Server != "" {
 			if s := remoteInfo(c.side.peers, p.info); !reflect.DeepEqual(p.info, s) {
+				if p == c.focus && s.ViewOnly != p.info.ViewOnly && strings.HasPrefix(c.flash, viewOnlyNote) {
+					c.flash = "" // its server raised or lowered its switch
+				}
 				p.info, changed = s, true
 			}
 		}

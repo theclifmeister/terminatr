@@ -384,6 +384,17 @@ func TestRemoteStatus(t *testing.T) {
 	if why := c.remoteBlock(p); !strings.HasPrefix(why, "view only") {
 		t.Errorf("view only: %q", why)
 	}
+	// The peer's switch, as the mirror has it the moment it changes,
+	// decides whether the pane takes keys.
+	peers[0].Panes = proto.PanesView
+	if in := remoteInfo(peers, p.info); !in.ViewOnly {
+		t.Error("view in the mirror: the pane takes keys")
+	}
+	peers[0].Panes = proto.PanesType
+	if in := remoteInfo(peers, p.info); in.ViewOnly {
+		t.Error("raised to write in the mirror: the pane is still view only")
+	}
+	peers[0].Panes = proto.PanesView
 	p.info = proto.SessionInfo{ID: "nas/q-1", Server: "nas", Role: proto.RoleCoordinator}
 	if why := c.remoteBlock(p); why != "nas is offline: keys aren't sent" {
 		t.Errorf("offline: %q", why)

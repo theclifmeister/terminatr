@@ -2,8 +2,6 @@ package e2e
 
 import (
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -68,8 +66,6 @@ func TestSmokeRemotePanes(t *testing.T) {
 	})
 	cols := func() uint16 { info, _ := mini.Info(th); return info.Cols }
 	farCols := cols()
-	w.Paste("dropped at view")
-	w.WaitUntil("the view-only note", wait, func(sc string) bool { return strings.Contains(sc, "view only: mini shares") })
 	x, y := w.TextAt("Fake Claude Code", 0)
 	w.Wheel(true, x, y)
 	w.Drag(x, x+3, y)
@@ -77,29 +73,20 @@ func TestSmokeRemotePanes(t *testing.T) {
 	if !strings.Contains(string(w.Raw()), "\x1b]52;c;") {
 		t.Fatal("the drag put nothing on the clipboard")
 	}
+	w.Paste("dropped at view")
+	w.WaitUntil("the view-only note", wait, func(sc string) bool { return strings.Contains(sc, "view only: mini shares") })
 	if c := cols(); c != farCols {
 		t.Fatalf("a view-only console resized mini's pane: %d columns, was %d", c, farCols)
 	}
-	w.Quit()
-	w.WaitExit(wait)
 
-	if out := mini.MustCLI("peer", "panes", "studio", "type"); !strings.Contains(out, "Panes type for studio") {
+	// Raised to write (T416), the open pane types at once: mini tells
+	// studio on the link, not at the mirror's next read 30 s on, and the
+	// view-only note goes.
+	if out := mini.MustCLI("peer", "panes", "studio", "write"); !strings.Contains(out, "Panes write for studio") {
 		t.Fatalf("peer panes: %s", out)
 	}
-	// studio's view-only stream closes 10 s after its last console
-	// left; the next opens at type. The mirror hears of the switch with
-	// peer.projects, every 30 s at most; peer.attach itself answers at
-	// once.
-	if !Poll(30*time.Second, func() bool {
-		b, _ := os.ReadFile(filepath.Join(studio.Home, "logs", "server.log"))
-		return strings.Contains(string(b), "remote pane "+remote+": closed, nobody shows it")
-	}) {
-		t.Fatal("studio's view-only stream never closed")
-	}
-	w = studio.Attach(120, 40, remote)
-	w.WaitFor("Fake Claude Code", agentWait)
-	w.WaitUntil("the status bar names the server", wait, func(sc string) bool {
-		return lastLine(sc, "mini › demo › ") && strings.Contains(sc, "remote")
+	w.WaitUntil("the status bar drops view only", wait, func(sc string) bool {
+		return lastLine(sc, "mini › demo › ") && strings.Contains(sc, "remote") && !strings.Contains(sc, "view only")
 	})
 	// Typing goes to mini's agent, and tells mini's coordinator; what
 	// was typed at view never reached it.

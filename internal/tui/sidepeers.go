@@ -157,7 +157,7 @@ func paneWhyNot(r treeRow) string {
 	case !l.pane:
 		return r.peer + " runs tm " + l.version + ", which has no remote panes; update it to open them"
 	case l.panes != proto.PanesView && l.panes != proto.PanesType:
-		return r.peer + " doesn't share panes with this server: on " + r.peer + ", tm peer panes <this server> view, or type"
+		return r.peer + " doesn't share panes with this server: on " + r.peer + ", tm peer panes <this server> view, or write"
 	case r.session == "":
 		return "nothing runs for it on " + r.peer
 	}

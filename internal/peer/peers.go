@@ -28,16 +28,17 @@ type Peer struct {
 	Relay string            `json:"relay"` // wss://host[:port]
 	// Panes is what the peer may do with this server's panes
 	// (proto.PanesOff, the default when empty, PanesView, PanesType;
-	// docs/SPEC.md §16.12).
+	// docs/SPEC.md §16.12). tm writes "type", which tm v0.27.0 reads too,
+	// and reads "write" as well.
 	Panes string `json:"panes,omitempty"`
 }
 
 // PanesLevel is p's pane switch, off when unset.
 func (p Peer) PanesLevel() string {
-	if p.Panes == "" {
-		return proto.PanesOff
+	if level, ok := proto.ParsePanes(p.Panes); ok {
+		return level
 	}
-	return p.Panes
+	return proto.PanesOff
 }
 
 // ID is the peer's server id.
@@ -51,7 +52,7 @@ func (p Peer) check() error {
 		return fmt.Errorf("peer %s: the key is %d bytes, want %d", p.Alias, len(p.Key), ed25519.PublicKeySize)
 	}
 	if p.Panes != "" && !proto.ValidPanes(p.Panes) {
-		return fmt.Errorf("peer %s: panes %q is not off, view or type", p.Alias, p.Panes)
+		return fmt.Errorf("peer %s: panes %q is not off, view or write", p.Alias, p.Panes)
 	}
 	u, err := url.Parse(p.Relay)
 	if err != nil || (u.Scheme != "wss" && u.Scheme != "ws") || u.Host == "" {
@@ -223,9 +224,10 @@ func Pin(dir string, key ed25519.PublicKey, relayURL, name, as string) (Peer, er
 
 // SetPanes sets the pane switch for the peer called alias (docs/SPEC.md
 // §16.12); false when there is none.
-func SetPanes(dir, alias, level string) (bool, error) {
-	if !proto.ValidPanes(level) {
-		return false, fmt.Errorf("panes %q: off, view or type", level)
+func SetPanes(dir, alias, word string) (bool, error) {
+	level, ok := proto.ParsePanes(word)
+	if !ok {
+		return false, fmt.Errorf("panes %q: off, view or write", word)
 	}
 	found := false
 	err := change(dir, func(peers []Peer) ([]Peer, error) {

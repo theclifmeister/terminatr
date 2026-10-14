@@ -34,6 +34,10 @@ type MirrorOptions struct {
 	Changed func()
 	// Logf logs what the mirror couldn't read; nil logs nothing.
 	Logf func(format string, a ...any)
+	// Panes is told when a peer's pane switch for this server changes
+	// (proto.PanesOff …), from its peer.projects or its peer.panes; it
+	// must not block. Nil tells nothing.
+	Panes func(alias, level string)
 }
 
 // Mirror timing.
@@ -90,7 +94,48 @@ type mirrorProject struct {
 // StartMirror mirrors the shared projects of l's paired servers until
 // Close.
 func StartMirror(l *Manager, opts MirrorOptions) *Mirror {
-	return startMirror(l, opts)
+	m := startMirror(l, opts)
+	l.OnPanes(func(id ID, level string) { m.SetPanes(id.String(), level) })
+	return m
+}
+
+// SetPanes takes the peer id's word that its pane switch for this server
+// is level now (peer.panes), ahead of its next peer.projects.
+func (m *Mirror) SetPanes(id, level string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if p := m.peers[id]; p != nil {
+		m.setPanes(p, level)
+	}
+}
+
+// SetPanesOf is SetPanes for the peer called alias: what a stream it
+// just opened says (peer.attach's input), which a tm without peer.panes
+// would otherwise only tell at its next peer.projects.
+func (m *Mirror) SetPanesOf(alias, level string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, p := range m.peers {
+		if p.link.Alias == alias {
+			m.setPanes(p, level)
+		}
+	}
+}
+
+// setPanes records p's pane switch for this server and tells; mu held.
+func (m *Mirror) setPanes(p *mirrorPeer, level string) bool {
+	if l, ok := proto.ParsePanes(level); ok {
+		level = l
+	}
+	if p.panes == level {
+		return false
+	}
+	p.panes = level
+	m.changed()
+	if m.opts.Panes != nil {
+		m.opts.Panes(p.link.Alias, level)
+	}
+	return true
 }
 
 func startMirror(l links, opts MirrorOptions) *Mirror {
@@ -246,9 +291,7 @@ func (m *Mirror) setProjects(ctx context.Context, id, alias string, ps proto.Pee
 		return
 	}
 	changed := m.measure(p, ps.Now, recv)
-	if p.panes != ps.Panes {
-		p.panes, changed = ps.Panes, true
-	}
+	m.setPanes(p, ps.Panes)
 	want := map[string]proto.PeerProject{}
 	for _, line := range ps.Projects {
 		want[line.Project] = line

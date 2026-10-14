@@ -53,6 +53,9 @@ type dispatcher struct {
 	// level is this server's pane switch for the peer now
 	// (proto.PanesOff …).
 	level func() string
+	// panesHere takes the peer's pane switch for this server, which it
+	// says when it changes (peer.panes).
+	panesHere func(level string)
 }
 
 // methods are the peer.* methods a paired server may call: nothing
@@ -60,10 +63,13 @@ type dispatcher struct {
 // which delivers a message to a linked project (§16.11), and peer.attach,
 // whose stream may type while the pane switch says so (§16.12).
 func (d *dispatcher) methods() map[string]handler {
-	if d == nil || (d.ex == nil && d.msgs == nil && d.panes == nil) {
+	if d == nil || (d.ex == nil && d.msgs == nil && d.panes == nil && d.panesHere == nil) {
 		return nil
 	}
 	m := map[string]handler{}
+	if d.panesHere != nil {
+		m[proto.MethodPeerPanes] = d.panesChanged
+	}
 	if d.ex != nil {
 		m[proto.MethodPeerProjects] = d.projects
 		m[proto.MethodPeerWatch] = d.watch
@@ -150,4 +156,19 @@ func asProtoError(err error) *proto.Error {
 		return pe
 	}
 	return proto.Errorf(proto.ErrInternal, "the peer couldn't answer")
+}
+
+// panesChanged takes peer.panes: the peer's pane switch for this server
+// changed (docs/SPEC.md §16.12).
+func (d *dispatcher) panesChanged(_ context.Context, params json.RawMessage) (any, error) {
+	var p proto.PeerPanesParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, proto.Errorf(proto.ErrBadParams, "peer.panes: %v", err)
+	}
+	level, ok := proto.ParsePanes(p.Panes)
+	if !ok {
+		return nil, proto.Errorf(proto.ErrBadParams, "peer.panes: %q is no level", p.Panes)
+	}
+	d.panesHere(level)
+	return struct{}{}, nil
 }
