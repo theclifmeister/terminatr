@@ -227,7 +227,7 @@ Threads push their branch and report the PR's title and body; the coordinator op
 **GitLab** is served by a code host mod, not by tm itself (SPEC §3, **Code host**). terminatr's `examples/mods/gitlab` is one, through `glab`:
 
 1. Install glab (`brew install glab`) and `glab auth login` (for a self-managed server, `glab auth login --hostname gitlab.example.com`). The mod runs glab on that login; it never sees a token.
-2. `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.27.1/examples/mods/gitlab` (or a later release's tag), read the consent screen (it asks only to run `glab`), and enable it in the Mods tab with the `commands` grant, for the projects that use GitLab or all.
+2. `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.27.2/examples/mods/gitlab` (or a later release's tag), read the consent screen (it asks only to run `glab`), and enable it in the Mods tab with the `commands` grant, for the projects that use GitLab or all.
 3. Put `code_host = "gitlab"` in each such project's `PROJECT.md` front matter. Without it a `gitlab.com` remote has no PR host, as before.
 4. Run `tm doctor`: under `code host` it names the mod that serves `gitlab`, then glab and its login.
 
@@ -325,7 +325,7 @@ RELAY_HOST=relay.example.net docker compose -f compose.acme.yaml up -d --build
 
 With certificate files you already have (certbot, your NAS's own Let's Encrypt, a wildcard): put `fullchain.pem` and `privkey.pem` in `deploy/relay/certs/`, readable by uid 65532 (the image's non-root user), then `docker compose up -d --build`. The relay reads the files again when they change, so a renewal needs no restart; copy renewed files in from your ACME client's deploy hook (certbot's `live/` files are symlinks with a root-only key, so copy, don't mount them).
 
-Pin the release: set `TM_VERSION` in the compose file's build args to a tag (e.g. `v0.27.1`); the Dockerfile checks the download against the release's `checksums.txt`. To upgrade, change the tag and run `docker compose up -d --build`; connected servers drop and reconnect by themselves. The image has amd64 and arm64 builds (most NAS boxes are one of them); it listens on 8443 inside and is published as 443.
+Pin the release: set `TM_VERSION` in the compose file's build args to a tag (e.g. `v0.27.2`); the Dockerfile checks the download against the release's `checksums.txt`. To upgrade, change the tag and run `docker compose up -d --build`; connected servers drop and reconnect by themselves. The image has amd64 and arm64 builds (most NAS boxes are one of them); it listens on 8443 inside and is published as 443.
 
 On a NAS (Synology Container Manager, QNAP Container Station, Unraid, TrueNAS apps): create a project from `compose.yaml` or `compose.acme.yaml`. If the NAS's own web interface already holds ports 80 and 443, publish the relay on another port (`"8443:8443"`, forwarded on the router as 8443) and use the NAS's reverse proxy or your own certificate files instead of Caddy.
 
