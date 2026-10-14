@@ -47,7 +47,8 @@ func TestRenameDuringSlowSweep(t *testing.T) {
 		t.Fatal(err)
 	}
 	entered, release := make(chan struct{}), make(chan struct{})
-	var once sync.Once
+	var once, releaseOnce sync.Once
+	let := func() { releaseOnce.Do(func() { close(release) }) }
 	run := r.run
 	r.run = func(dir string, args ...string) ([]byte, error) {
 		once.Do(func() {
@@ -56,38 +57,51 @@ func TestRenameDuringSlowSweep(t *testing.T) {
 		})
 		return run(dir, args...)
 	}
+	// Every goroutine ends before the test's folders go, failed or not:
+	// this cleanup runs before t.TempDir's.
+	var wg sync.WaitGroup
+	t.Cleanup(func() {
+		let()
+		wg.Wait()
+	})
+	goT := func(f func()) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			f()
+		}()
+	}
 	swept := make(chan struct{})
-	go func() {
+	goT(func() {
 		r.tk.Sweep()
 		close(swept)
-	}()
+	})
 	<-entered // the sweep waits on gh, in demo
 
 	done := make(chan error, 1)
-	go func() { done <- r.tk.RenameProject("other", "other2", func() error { return nil }) }()
+	goT(func() { done <- r.tk.RenameProject("other", "other2", func() error { return nil }) })
 	select {
 	case err := <-done:
 		if err != nil {
 			t.Fatal(err)
 		}
 	case <-time.After(5 * time.Second):
-		close(release)
 		t.Fatal("renaming another project waited for the sweep")
 	}
 
 	moved := make(chan error, 1)
-	go func() { moved <- r.tk.RenameProject("demo", "demo2", func() error { return nil }) }()
+	goT(func() { moved <- r.tk.RenameProject("demo", "demo2", func() error { return nil }) })
 	select {
 	case <-moved:
-		close(release)
 		t.Fatal("demo was renamed while its sweep ran")
 	case <-time.After(100 * time.Millisecond):
 	}
-	close(release)
+	let()
 	if err := <-moved; err != nil {
 		t.Fatal(err)
 	}
 	<-swept
+	wg.Wait()
 	r.tk.mu.Lock()
 	defer r.tk.mu.Unlock()
 	if r.tk.st.Threads["demo2/t-0001"] == nil || r.tk.st.Threads["demo/t-0001"] != nil {
