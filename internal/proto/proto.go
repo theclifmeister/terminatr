@@ -27,8 +27,9 @@ import (
 // sections' folds (view.sections, view.Tree's SectionsFolded), added
 // fields and one method only. 16: remote panes (docs/SPEC.md §16.12): a
 // view's focus and view.attach may name a paired server's pane as
-// "<alias>/<session>", and SessionInfo has Server and ViewOnly.
-const Protocol = 16
+// "<alias>/<session>", and SessionInfo has Server and ViewOnly. 17:
+// projects.watch, the sidebars' data of every project from the server.
+const Protocol = 17
 
 // Kind is what a connection is for.
 type Kind string

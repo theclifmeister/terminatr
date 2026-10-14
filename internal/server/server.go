@@ -160,6 +160,8 @@ type Server struct {
 	watch watchers
 	// projects is what project watches read from files, per project.
 	projects projectCache
+	// sides is what the projects watches send (sideprojects.go).
+	sides sideHub
 	// modEv is the user mods' event bus (modevents.go).
 	modEv *modEvents
 	// modSup runs the code mods' hosts (modhosts.go); set before Run
@@ -674,6 +676,9 @@ func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human b
 			return
 		case proto.MethodProjectWatch:
 			s.serveProjectWatch(c, br, req)
+			return
+		case proto.MethodProjectsWatch:
+			s.serveProjectsWatch(c, br, req)
 			return
 		case proto.MethodSessionAsk:
 			s.serveAsk(c, br, req)

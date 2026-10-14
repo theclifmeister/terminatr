@@ -21,7 +21,7 @@ var humanOnlyMethods = []string{
 	proto.MethodModActionCheck, proto.MethodModActionDone, proto.MethodSessionClear,
 	proto.MethodSessionStart, proto.MethodSessionStop, proto.MethodSessionKeys, proto.MethodSessionPrompt,
 	proto.MethodSessionAdopt, proto.MethodSessionAdoptAsk, proto.MethodSessionRemote, proto.MethodSessionModel, proto.MethodQuestionsOpen,
-	proto.MethodServerStop, proto.MethodAgentReload, proto.MethodPeerReload, proto.MethodPeerList,
+	proto.MethodServerStop, proto.MethodAgentReload, proto.MethodPeerReload, proto.MethodPeerList, proto.MethodProjectsWatch,
 	proto.MethodViewSubscribe, proto.MethodViewAttach, proto.MethodViewDashboard, proto.MethodViewProject,
 	proto.MethodViewSelect, proto.MethodViewSideSel, proto.MethodViewExpand, proto.MethodViewTree, proto.MethodViewSections,
 	proto.MethodViewSidebar, proto.MethodViewInfo, proto.MethodViewColumns, proto.MethodViewSize,
@@ -34,6 +34,7 @@ var humanOnlyMethods = []string{
 // into a view stream.
 var handledElsewhere = map[string]bool{
 	proto.MethodServerStop: true, proto.MethodSessionStart: true, proto.MethodViewSubscribe: true,
+	proto.MethodProjectsWatch: true,
 }
 
 // onHumanSocketOnly reports whether err is the server socket's refusal

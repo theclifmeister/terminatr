@@ -19,6 +19,20 @@ const (
 	EventProjectChanged = "project.changed"
 )
 
+// Watching the projects (docs/SPEC.md §3.3, Watch): projects.watch
+// answers what the consoles' sidebars show of every project, then turns
+// its control connection into a stream of projects.changed events, the
+// projects' new state each time it changes, until the client hangs up.
+// The answer and the events are server.ProjectsWatch and
+// server.ProjectsWatchEvent: they carry the thread and task records.
+// The human's (since protocol 17).
+const (
+	// MethodProjectsWatch watches the projects (no params).
+	MethodProjectsWatch = "projects.watch"
+	// EventProjectsChanged carries the projects' new state.
+	EventProjectsChanged = "projects.changed"
+)
+
 // ProjectWatchParams are the params of project.watch.
 type ProjectWatchParams struct {
 	Project string `json:"project"`
