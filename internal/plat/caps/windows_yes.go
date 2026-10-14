@@ -2,5 +2,5 @@
 
 package caps
 
-// Windows: tm runs on Windows.
+// Windows is whether tm runs on Windows.
 const Windows = true
