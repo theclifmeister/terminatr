@@ -165,6 +165,9 @@ type treeRow struct {
 	// stale: a remote row whose link is down or whose last read failed:
 	// its last values, dimmed, no live state.
 	stale bool
+	// gap: a blank line is drawn above the row (a paired server's
+	// header); the row itself starts the group.
+	gap bool
 }
 
 // folded says a project row hides its coordinator and threads, or the

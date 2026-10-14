@@ -15,6 +15,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -467,5 +468,52 @@ func TestGoneWaitsForReason(t *testing.T) {
 	t0 := time.Now()
 	if res := c2.goneResult(); !res.Detached || time.Since(t0) > time.Second {
 		t.Fatalf("no pane: %+v after %v", res, time.Since(t0))
+	}
+}
+
+// TestPeerGapsAndInactivePinned: a blank line above each paired
+// server's header; this server's inactive block comes after the groups
+// in the rows, and is drawn at the bottom of the tree with room to
+// spare, directly above the footer, else after the last group with a blank line between.
+func TestPeerGapsAndInactivePinned(t *testing.T) {
+	pinPeersClock(t)
+	defer setIcons(IconsUnicode)
+	setIcons(IconsUnicode)
+	ps, sessions, peers := peerData()
+	off := config.Defaults
+	off.Active = false
+	ps = append(ps, ProjectData{Slug: "old", Safety: &off})
+	rows := buildTree(ps, sessions, treeIn{current: "terminatr", peers: peers, host: "studio", tree: view.Tree{InactiveOpen: true}})
+	var keys []string
+	for _, r := range rows {
+		keys = append(keys, r.key())
+	}
+	if n := len(keys); keys[n-2] != dividerKey || keys[n-1] != "p:old" || keys[n-3] != "r:nas/media" {
+		t.Fatalf("keys %q: the inactive block should follow the groups", keys)
+	}
+	text := func(h int) []string {
+		var out []string
+		for _, l := range sidebarLines(rows, sideDefault, h, []string{"──", "details"}) {
+			out = append(out, strings.TrimRight(ansi.Strip(l), " │"))
+		}
+		return out
+	}
+	lines := text(30)
+	n := len(lines)
+	if !strings.Contains(lines[n-4], "inactive (1)") || !strings.Contains(lines[n-3], "old") || lines[n-2] != "──" {
+		t.Errorf("not pinned above the footer:\n%s", strings.Join(lines, "\n"))
+	}
+	for i, l := range lines {
+		if strings.Contains(l, "mini ·") || strings.Contains(l, "nas ·") {
+			if strings.TrimSpace(lines[i-1]) != "" {
+				t.Errorf("no blank line above %q:\n%s", l, strings.Join(lines, "\n"))
+			}
+		}
+	}
+	// Exactly full, the blank line above the divider included.
+	lines = text(len(rows) + 6)
+	i := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "inactive (1)") })
+	if i < 0 || strings.TrimSpace(lines[i-1]) != "" || !strings.Contains(lines[i-2], "media") {
+		t.Errorf("without room the divider follows the last group:\n%s", strings.Join(lines, "\n"))
 	}
 }

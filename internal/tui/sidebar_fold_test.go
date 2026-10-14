@@ -100,7 +100,11 @@ func TestDividerKeys(t *testing.T) {
 		t.Fatalf("space on the divider: lifecycle %v msg %q", src.lifecycle, m.msg)
 	}
 	// A click on it toggles it.
-	y := slices.Index(rowKeys(m.tree()), dividerKey) + 1
+	// The divider is pinned to the bottom of the tree: find its line.
+	lay := sideLayout(m.tree(), m.sideW(), m.h, m.sideFoot())
+	y := len(lay.above) + lay.head + slices.IndexFunc(lay.slots, func(s sideSlot) bool {
+		return s.row >= 0 && lay.rows[s.row].key() == dividerKey
+	})
 	run(m, m.sideClick(tea.Mouse{X: 5, Y: y, Button: tea.MouseLeft}))
 	if !open() || len(src.opened) != 0 {
 		t.Fatalf("click: open %v, opened %v", open(), src.opened)

@@ -730,7 +730,13 @@ func sideLayout(all []treeRow, w, h, foot int) sideLay {
 		}
 	}
 	cur, keep := bandKeep(trees, keepH)
-	lay.fit = fitBand(body, len(trees), cur, keep, asks)
+	gaps := 0 // the blank lines above the server headers
+	for _, r := range trees {
+		if r.gap {
+			gaps++
+		}
+	}
+	lay.fit = fitBand(body, len(trees)+gaps, cur, keep, asks)
 	section := func(j int) []sideSlot {
 		if !lay.fit.show[j] {
 			return nil
@@ -747,6 +753,9 @@ func sideLayout(all []treeRow, w, h, foot int) sideLay {
 	var hints []int // the slots of the rows with ⚑
 	for j, i := 0, 0; i < len(lay.rows); i++ {
 		if lay.rows[i].kind != treeSection {
+			if lay.rows[i].gap {
+				slots = append(slots, sideSlot{row: -1, line: -1})
+			}
 			if lay.rows[i].hint {
 				hints = append(hints, len(slots))
 			}
@@ -764,6 +773,41 @@ func sideLayout(all []treeRow, w, h, foot int) sideLay {
 		j++
 	}
 	top := min(lay.fit.top, len(slots))
+	if gaps > 0 {
+		// The blank lines are slots the fit doesn't know: scroll to the
+		// cursor's row, else the one you are on, among them.
+		at := -1
+		for k, s := range slots {
+			if s.row < 0 || lay.rows[s.row].kind == treeSection {
+				continue
+			}
+			if r := lay.rows[s.row]; r.cursor || r.here && at < 0 {
+				at = k
+				if r.cursor {
+					break
+				}
+			}
+		}
+		if at >= 0 && !slices.ContainsFunc(asks, func(a bandAsk) bool { return a.proj && a.cursor }) {
+			top = scrollTop(at, max(lay.fit.treeH, 1), len(slots))
+		}
+	}
+	// The inactive block (the divider and the projects under it) is the
+	// tree's last rows: with room to spare it sits at the bottom of the
+	// tree, just above what is under it, the free rows before it.
+	if spare := lay.fit.treeH - (len(slots) - top); top == 0 && spare > 0 {
+		if d := slices.IndexFunc(slots, func(s sideSlot) bool { return s.row >= 0 && lay.rows[s.row].kind == treeDivider }); d >= 0 {
+			slots = slices.Insert(slots, d, make([]sideSlot, spare)...)
+			for k := d; k < d+spare; k++ {
+				slots[k] = sideSlot{row: -1, line: -1}
+			}
+			for i, h := range hints {
+				if h >= d {
+					hints[i] += spare
+				}
+			}
+		}
+	}
 	lay.slots = slots[top:min(top+lay.fit.treeH, len(slots))]
 	for _, s := range hints {
 		if s < top || s >= top+lay.fit.treeH {
