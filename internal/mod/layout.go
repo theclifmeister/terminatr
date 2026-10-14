@@ -108,7 +108,7 @@ func (s Size) String() string {
 	return strconv.Itoa(s.Cells)
 }
 
-// Dashboard section ids, dashboard.sections' values.
+// LayoutSections are the dashboard section ids, dashboard.sections' values.
 var LayoutSections = []string{"needs", "project", "other", "cards"}
 
 // layoutTables are the v2 tables and their keys, in the order they are

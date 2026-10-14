@@ -101,7 +101,8 @@ type Message struct {
 	Error   *Error          `json:"error,omitempty"`
 }
 
-// IsRequest, IsNotification and IsResponse tell the three kinds apart.
+// IsRequest reports whether m is a request; IsNotification and IsResponse
+// tell the other two kinds apart.
 func (m *Message) IsRequest() bool      { return m.Method != "" && m.ID != nil }
 func (m *Message) IsNotification() bool { return m.Method != "" && m.ID == nil }
 func (m *Message) IsResponse() bool     { return m.Method == "" && m.ID != nil }

@@ -14,7 +14,7 @@ const (
 	MethodPeerWatch = "peer.watch"
 )
 
-// ErrNotShared: no shared project has that slug. A project that isn't
+// ErrNotShared means no shared project has that slug. A project that isn't
 // shared and one that doesn't exist answer alike.
 const ErrNotShared = "not-shared"
 

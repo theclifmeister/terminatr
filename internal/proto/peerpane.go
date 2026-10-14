@@ -8,7 +8,7 @@ package proto
 // a PeerAttachResult, then the stream's frames.
 const MethodPeerAttach = "peer.attach"
 
-// ErrPanesOff: the server doesn't share panes with the caller (its pane
+// ErrPanesOff means the server doesn't share panes with the caller (its pane
 // switch for that peer is off).
 const ErrPanesOff = "panes-off"
 

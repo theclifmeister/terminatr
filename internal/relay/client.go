@@ -50,7 +50,7 @@ type UpdateResult struct {
 	Version string
 }
 
-// ErrNoUpdates: the relay's tm is older than update requests.
+// ErrNoUpdates means the relay's tm is older than update requests.
 var ErrNoUpdates = errors.New("the relay's tm takes no update requests; update it on its host (sudo tm relay update)")
 
 // RequestUpdate asks the relay at rawURL to update itself to the latest

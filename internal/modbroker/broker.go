@@ -50,7 +50,8 @@ type Error struct {
 
 func (e *Error) Error() string { return e.Message }
 
-// Denied, BadParams, NotFound and Failed make the Error of each kind.
+// Denied makes the Error of kind CodeDenied; BadParams, NotFound and Failed
+// do the same for theirs.
 func Denied(format string, a ...any) *Error { return &Error{CodeDenied, fmt.Sprintf(format, a...)} }
 func BadParams(format string, a ...any) *Error {
 	return &Error{CodeBadParams, fmt.Sprintf(format, a...)}

@@ -118,7 +118,7 @@ func (c Code) String() string {
 	return r + "/" + c.Secret.String()
 }
 
-// Pinned: the code's relay is taken by its key's pin.
+// Pinned reports whether the code's relay is taken by its key's pin.
 func (c Code) Pinned() bool { return strings.Contains(c.Relay, "#") }
 
 // ParseCode reads a code back.

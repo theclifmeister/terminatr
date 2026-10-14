@@ -104,7 +104,7 @@ func (l *link) openPane(ctx context.Context, p proto.PeerAttachParams, sink Pane
 	return s.panes.open(ctx, p, sink)
 }
 
-// ErrNoPanes: the peer's tm has no remote panes (its hello doesn't list
+// ErrNoPanes means the peer's tm has no remote panes (its hello doesn't list
 // CapPane).
 var ErrNoPanes = errors.New("the paired server's tm has no remote panes")
 

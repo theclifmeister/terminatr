@@ -33,7 +33,7 @@ func RequestRelayUpdate(ctx context.Context, dir, alias string, tc *tls.Config) 
 	return Peer{}, relay.UpdateResult{}, &UnknownPeerError{alias}
 }
 
-// UnknownPeerError: no paired server has the alias.
+// UnknownPeerError means no paired server has the alias.
 type UnknownPeerError struct{ Alias string }
 
 func (e *UnknownPeerError) Error() string {
