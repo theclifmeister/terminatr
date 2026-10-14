@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/modbroker"
 	"github.com/theclifmeister/terminatr/internal/modbus"
 	"github.com/theclifmeister/terminatr/internal/modhost"
 	"github.com/theclifmeister/terminatr/internal/modproto"
@@ -44,7 +45,7 @@ func TestEventsMatchBus(t *testing.T) {
 		modbus.TaskChanged, modbus.TasksChanged, modbus.ThreadState, modbus.ThreadStarted, modbus.ThreadResolved,
 		modbus.ReportStored, modbus.InboxItem, modbus.PRChanged, modbus.TickerChanged, modbus.ThreadChanges, modbus.SessionState, modbus.SessionQuestion, modbus.ClockMinute,
 		modbus.UIClick, modbus.UIKey, modbus.UICursor, modbus.ActionDone, modbus.ViewOpened, modbus.ViewClosed,
-		modbus.CommandRun, modbus.ModSettings, modbus.ModReady,
+		modbus.CommandRun, modbus.ModReady,
 	}
 	var names []string
 	for _, e := range Events {
@@ -379,5 +380,41 @@ func TestSpanIsWidgetSpan(t *testing.T) {
 	}
 	if !slices.Equal(Roles, widget.Roles) || !slices.Equal(Icons, widget.Icons) {
 		t.Error("roles or icons differ")
+	}
+}
+
+// jsonFields are the JSON names of t's fields, with the embedded structs'
+// promoted.
+func jsonFields(t reflect.Type) []string {
+	var names []string
+	for f := range t.Fields() {
+		if f.Anonymous {
+			names = append(names, jsonFields(f.Type)...)
+			continue
+		}
+		if name, _, _ := strings.Cut(f.Tag.Get("json"), ","); name != "" && name != "-" {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
+// The schema's types for the broker's calls carry the fields the broker
+// reads and answers with, so tm.d.ts can't hide one (it hid timeout_ms,
+// url, truncated and timed_out).
+func TestSchemaMatchesBroker(t *testing.T) {
+	for _, c := range []struct {
+		name           string
+		schema, broker reflect.Type
+	}{
+		{"http.fetch options", reflect.TypeFor[FetchOptions](), reflect.TypeFor[modbroker.FetchOptions]()},
+		{"http.fetch result", reflect.TypeFor[FetchResponse](), reflect.TypeFor[modbroker.FetchResult]()},
+		{"process.run options", reflect.TypeFor[RunOptions](), reflect.TypeFor[modbroker.RunOptions]()},
+		{"process.run result", reflect.TypeFor[RunResult](), reflect.TypeFor[modbroker.RunResult]()},
+	} {
+		if a, b := jsonFields(c.schema), jsonFields(c.broker); !slices.Equal(a, b) {
+			t.Errorf("%s: schema has %v, the broker %v", c.name, a, b)
+		}
 	}
 }

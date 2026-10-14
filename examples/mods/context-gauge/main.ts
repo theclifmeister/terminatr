@@ -76,6 +76,10 @@ async function save() {
 $.on("mod.ready", async () => {
   const stored = await $.store.get(SEEN);
   sessions = stored && typeof stored === "object" ? (stored as Record<string, Seen>) : {};
+  // A settings change restarts the mod, so the warning may have moved:
+  // redraw every cell and card with it.
+  await Promise.all(Object.keys(sessions).map((id) => $.ui.cell.set(COLUMN, { session: id }, cell(sessions[id].context))));
+  await drawCards();
 });
 
 $.on("session.state", async (e) => {
@@ -102,12 +106,6 @@ $.on("view.opened", async (e) => {
 
 $.on("view.closed", async (e) => {
   shown.delete(e.project ?? "");
-});
-
-// The warning moved: every cell's role may change.
-$.on("mod.settings", async () => {
-  await Promise.all(Object.keys(sessions).map((id) => $.ui.cell.set(COLUMN, { session: id }, cell(sessions[id].context))));
-  await drawCards();
 });
 
 $.on("action.done", async (e) => {

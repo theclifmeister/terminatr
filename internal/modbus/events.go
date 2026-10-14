@@ -29,14 +29,13 @@ const (
 	ThreadChanges = "thread.changes"
 	ClockMinute   = "clock.minute"
 	// Published by the console, action and view parts of the API.
-	UIClick     = "ui.click"
-	UIKey       = "ui.key"
-	UICursor    = "ui.cursor"
-	ActionDone  = "action.done"
-	ViewOpened  = "view.opened"
-	ViewClosed  = "view.closed"
-	CommandRun  = "command.run"
-	ModSettings = "mod.settings"
+	UIClick    = "ui.click"
+	UIKey      = "ui.key"
+	UICursor   = "ui.cursor"
+	ActionDone = "action.done"
+	ViewOpened = "view.opened"
+	ViewClosed = "view.closed"
+	CommandRun = "command.run"
 	// ModReady is a mod's first event after every (re)start, with a
 	// snapshot (Ready).
 	ModReady = "mod.ready"
