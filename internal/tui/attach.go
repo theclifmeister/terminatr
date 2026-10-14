@@ -2290,7 +2290,7 @@ func (c *client) pollState(ctx context.Context) {
 		}
 		pl.statuses = stats.statuses(res.Sessions)
 		var shown []modview.Shown
-		pl.info, shown = c.pollInfo(&info, res.Sessions)
+		pl.info, shown = c.pollInfo(&info, res.Sessions, pl.peers)
 		var secs []proto.ModSection
 		if res.Mods != nil {
 			secs = res.Mods.Sections

@@ -96,30 +96,12 @@ func remoteLines(peers []proto.PeerMirror, alias, slug string, w int, now time.T
 		add(th().Faint.Render(alias + " isn't paired with this server any more (tm peer list)."))
 		return out
 	}
-	link := &peerLink{state: pm.State, reason: pm.Reason, since: pm.Since, rtt: pm.RTT, watch: pm.Watch}
-	g, gst := linkLook(link)
-	words := linkWords(link, now)
-	if pm.State == proto.LinkUp && pm.RTT > 0 {
-		words = "linked " + words
-	}
-	bits := []string{words}
-	switch {
-	case p == nil:
-	case p.Stale || pm.State != proto.LinkUp:
-		if !p.Synced.IsZero() {
-			bits = append(bits, "last seen "+p.Synced.Local().Format("15:04"))
-		}
-	case p.Synced.IsZero():
-		bits = append(bits, "not read yet")
-	default:
-		bits = append(bits, "synced "+age(max(now.Sub(p.Synced), 0))+" ago")
-	}
-	bits = append(bits, "view-only")
+	g, gst, words := remoteHead(pm, p, now)
 	look := th().Title
 	if pm.State != proto.LinkUp {
 		look = th().Faint
 	}
-	add(gst.Render(g) + " " + look.Render(alias) + th().Faint.Render(" · "+strings.Join(bits, " · ")))
+	add(gst.Render(g) + " " + look.Render(alias) + th().Faint.Render(" · "+words+" · view-only"))
 	if p == nil {
 		out = append(out, "")
 		add(th().Faint.Render(alias + " doesn't share " + slug + " with this server any more."))
