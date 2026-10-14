@@ -72,3 +72,12 @@ on purpose, since that is what most users run (CI sets it to 0). So
 bubblewrap cannot create user namespaces and `tm doctor` warns about
 user namespaces/bwrap, and that a Codex coordinator's sandbox doesn't hold.
 These warnings are expected there. Don't change the sysctl.
+
+## Scratch tm installs from an agent session
+
+Inside an agent session `TERMINATR_SOCKET` overrides `TERMINATR_HOME`, so a
+scratch `tm` with its own home would still talk to the live server. Unset the
+session's variables first:
+
+    unset TERMINATR_SOCKET TERMINATR_SESSION TERMINATR_ROLE TERMINATR_PROJECT TERMINATR_THREAD
+    export TERMINATR_HOME=$(mktemp -d)

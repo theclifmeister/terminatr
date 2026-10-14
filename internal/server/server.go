@@ -190,10 +190,11 @@ type Server struct {
 	// agent's own default), and refusedSeen the sessions whose refusal
 	// was learnt, both under mu; modelsBusy are the agents being asked
 	// for their models, under modelsMu (models.go).
-	launched    map[string]string
-	refusedSeen map[string]bool
-	modelsMu    sync.Mutex
-	modelsBusy  map[string]bool
+	launched     map[string]string
+	refusedSeen  map[string]bool
+	modelsMu     sync.Mutex
+	modelsBusy   map[string]bool
+	modelUnknown map[string]string // session -> why its models were unknown when last logged, under mu
 	// modelsCtx ends the agents' models probes when the server stops.
 	modelsCtx  context.Context
 	modelsStop context.CancelFunc

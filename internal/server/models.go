@@ -202,7 +202,16 @@ func (s *Server) syncModel(id string) (any, *proto.Error) {
 	if err != nil {
 		return nil, proto.Errorf(proto.ErrRefused, "%v", err)
 	}
-	want := models.Get(m, cfg, true).CoordinatorModel(safety)
+	cat := models.Get(m, cfg, true)
+	if !cat.Known {
+		// Never switch because the catalog is unknown, failed or stale:
+		// the wanted model would fall back to the agent's default, and the
+		// ticker would flip every coordinator to it and back as the cache
+		// changes. Keep the running model until the catalog is known.
+		s.modelUnknownLog(id, cat, running)
+		return proto.SessionModelResult{Model: running, How: proto.ModelUnchanged}, nil
+	}
+	want := cat.CoordinatorModel(safety)
 	set := func(model, next string, pending bool) {
 		s.mu.Lock()
 		rec := s.records[id]
@@ -237,6 +246,21 @@ func (s *Server) syncModel(id string) (any, *proto.Error) {
 	set(want, "", false)
 	s.log.Printf("session %s: coordinator model %s -> %s (%q, queued until idle)", id, cmpOr(running, "default"), cmpOr(want, "default"), text)
 	return proto.SessionModelResult{Model: want, How: proto.ModelSwitched}, nil
+}
+
+// modelUnknownLog says once per session and reason that the coordinator
+// keeps its model because its agent's models are unknown.
+func (s *Server) modelUnknownLog(id string, c models.Catalog, running string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.modelUnknown == nil {
+		s.modelUnknown = map[string]string{}
+	}
+	if s.modelUnknown[id] == c.Reason {
+		return
+	}
+	s.modelUnknown[id] = c.Reason
+	s.log.Printf("session %s: coordinator keeps model %s: %s's models are unknown (%s)", id, cmpOr(running, "default"), c.Agent, c.Reason)
 }
 
 func cmpOr(s, alt string) string {
