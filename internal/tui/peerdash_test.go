@@ -203,7 +203,7 @@ func TestPeersTab(t *testing.T) {
 		"relay relay.example.net · shares 2 projects · tm 0.27.0",
 		"nas   A1B2-C3D4  ○ offline 4m · relay",
 		"relay relay.example.net:8443 · shares 1 project · dial: refused",
-		"n pair · j join · p panes · e relay · x remove · ↑ ↓ move · ← → tabs · esc close",
+		"n pair · j join · p panes · e relay · u update relay · x remove · ↑ ↓ move · ← → tabs · esc close",
 		"panes: off · it can't open this server's panes",
 	} {
 		if !strings.Contains(out, want) {

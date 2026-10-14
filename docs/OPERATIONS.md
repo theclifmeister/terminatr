@@ -265,9 +265,19 @@ The relay is up at wss://relay.example.net. Pair two servers through it, on one 
 
 tm never changes the firewall. If `/healthz` doesn't answer, install says so, with what the name resolves to: open TCP port 443 to the host (your provider's firewall, and `sudo ufw allow 443/tcp` or firewalld if the host runs one), fix the DNS, and the relay gets its certificate on the next try by itself (`curl https://relay.example.net/healthz`, `journalctl -u tm-relay`).
 
-To move to a new release: `sudo tm relay update` downloads the latest one for this machine's architecture, checks it against the release's `checksums.txt`, replaces `/usr/local/bin/tm`, restarts the relay and checks `/healthz` again; linked servers drop for a moment and reconnect by themselves. `sudo tm relay uninstall` stops the service and removes it; `/usr/local/bin/tm` and the certificates stay (`sudo rm -r /var/lib/private/tm-relay`). Running install again (another `--domain`, say) rewrites the unit and restarts. Logs: `journalctl -u tm-relay`.
+To move to a new release: `sudo tm relay update` downloads the latest one for this machine's architecture, checks it against the release's `checksums.txt`, replaces `/usr/local/bin/tm`, restarts the relay and checks `/healthz` again; linked servers drop for a moment and reconnect by themselves. A tm that is already the latest changes nothing and isn't restarted. `sudo tm relay uninstall` stops the service and removes it and its update units; `/usr/local/bin/tm` and the certificates stay (`sudo rm -r /var/lib/private/tm-relay`). Running install again (another `--domain`, say) rewrites the unit and restarts. Logs: `journalctl -u tm-relay`.
 
 Without systemd or on another system, `tm relay serve --domain relay.example.net` does the same in the foreground (certificates in `~/.terminatr/relay`, or `--state DIR`); it needs to bind 443, so as root or with `CAP_NET_BIND_SERVICE`.
+
+### Keeping the relay up to date
+
+Install also sets up three systemd units next to `tm-relay` (`deploy/relay/tm-relay-update.*`):
+
+- `tm-relay-update.service` runs `tm relay update` as root, as above.
+- `tm-relay-update.timer` starts it **daily** (at a random time within the hour after midnight; a day the host was off is caught up at boot). This is **on by default**; `sudo tm relay install … --auto-update=off` leaves the timer disabled, and installing again with `--auto-update=on` turns it back on. A relay installed before this release has no timer until you run install again.
+- `tm-relay-update.path` starts it when **a linked server asks**: in the settings' Peers tab, each server's line shows its relay's version (`relay v0.27.0 · update available (u)` when the server knows of a newer release), and `u` asks that relay to update to the latest official release; `tm peer relay-update ALIAS` does the same from a terminal.
+
+How a request works, and who may make one: the server signs it with its own identity key, as it does its link's hello, and the relay takes it only from a key whose link through it is up at that moment. **So anyone who can use the relay (any server linked through it) can trigger an update**, at most once an hour (more often is refused with when the next is taken). A request can only mean "update to the latest official release": it carries no version and no URL, and the update checks the release's checksums and restarts only for a newer release, so it can't be used to install something else or to restart the relay in a loop. The relay itself stays an unprivileged throwaway user: all it does is write `update-request` into its state directory, and root's path unit does the rest; `tm relay update` removes the file first, so a failing update isn't retried until someone asks again. `journalctl -u tm-relay` logs each request (the first bytes of the asking key's fingerprint and what came of it), `journalctl -u tm-relay-update` each update. Don't want remote requests? `sudo systemctl disable --now tm-relay-update.path` (installing again turns it back on).
 
 ### Without a domain: an IP address
 

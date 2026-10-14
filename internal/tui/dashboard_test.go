@@ -48,30 +48,31 @@ type fakeSource struct {
 	repos    []string // +path or -path
 	// delegated are the tasks asked to be delegated: "slug T12"; asked
 	// the other asks: "accept slug T12", "send-back slug T12 note".
-	delegated   []string
-	asked       []string
-	adopted     []string // "slug s-3"
-	withdrawn   []string // "slug s-3"
-	answered    []string // slugs whose questions were opened
-	reviews     map[int]Review
-	peers       PeerList
-	peerErr     error
-	unpinned    []string // aliases removed from the Peers tab
-	panesSet    []string // "alias level" set from the Peers tab
-	relaySet    []string // "alias relay" set from the Peers tab
-	pairs       []string // PairPeer's and JoinPeer's calls: "pair relay", "join code"
-	pairErr     error    // fails them before the code shows
-	agents      []string
-	remote      []string // "slug on" or "slug off"
-	lifecycle   []string // "slug verb"
-	library     []thread.LibFile
-	libFiles    map[string]string // "t-0001/name" -> content
-	libRemoved  []string          // "t-0001/name", "t-0001/" for all
-	done        []string          // action.done: "mod action project/task ok"
-	restarted   []string          // mod ids
-	fetchedMods []string          // what FetchMod was asked for
-	templates   []mod.Template
-	added       []string // "slug title|notes|step;step"
+	delegated    []string
+	asked        []string
+	adopted      []string // "slug s-3"
+	withdrawn    []string // "slug s-3"
+	answered     []string // slugs whose questions were opened
+	reviews      map[int]Review
+	peers        PeerList
+	peerErr      error
+	unpinned     []string // aliases removed from the Peers tab
+	panesSet     []string // "alias level" set from the Peers tab
+	relaySet     []string // "alias relay" set from the Peers tab
+	relayUpdates []string // aliases whose relay u asked to update
+	pairs        []string // PairPeer's and JoinPeer's calls: "pair relay", "join code"
+	pairErr      error    // fails them before the code shows
+	agents       []string
+	remote       []string // "slug on" or "slug off"
+	lifecycle    []string // "slug verb"
+	library      []thread.LibFile
+	libFiles     map[string]string // "t-0001/name" -> content
+	libRemoved   []string          // "t-0001/name", "t-0001/" for all
+	done         []string          // action.done: "mod action project/task ok"
+	restarted    []string          // mod ids
+	fetchedMods  []string          // what FetchMod was asked for
+	templates    []mod.Template
+	added        []string // "slug title|notes|step;step"
 	// links are SetLink's and SetLinkAsk's calls ("slug other both",
 	// "slug other ask true"), linkActs
 	// LinkAct's ("slug verb arg text"); linkLog is what LinkLog gives.
@@ -267,6 +268,10 @@ func (f *fakeSource) SetPeerPanes(alias, level string) error {
 		}
 	}
 	return nil
+}
+func (f *fakeSource) RelayUpdate(alias string) (string, error) {
+	f.relayUpdates = append(f.relayUpdates, alias)
+	return "the relay updates", nil
 }
 func (f *fakeSource) SetPeerRelay(alias, relay string) (string, error) {
 	f.relaySet = append(f.relaySet, alias+" "+relay)

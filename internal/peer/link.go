@@ -197,6 +197,11 @@ func (l *link) once(ctx context.Context) (up bool, err error) {
 	if err != nil {
 		return false, err
 	}
+	if rc, ok := c.(interface{ RelayVersion() string }); ok {
+		l.mu.Lock()
+		l.st.RelayVersion = rc.RelayVersion()
+		l.mu.Unlock()
+	}
 	// ctx ends the link at any point from here.
 	stop := context.AfterFunc(ctx, func() { c.Close() })
 	defer stop()

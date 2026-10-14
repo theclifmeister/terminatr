@@ -1,0 +1,15 @@
+# tm relay install writes this file.
+#
+# A server linked through the relay may ask it to update itself to the
+# latest official release (the Peers tab's u, tm peer relay-update). The
+# relay runs unprivileged and only writes this request file; tm relay
+# update, as root, removes it and does the update.
+
+[Unit]
+Description=terminatr relay update, when a linked server asks
+
+[Path]
+PathExists=/var/lib/private/tm-relay/update-request
+
+[Install]
+WantedBy=paths.target

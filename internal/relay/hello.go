@@ -23,6 +23,10 @@ const (
 	// code, which the relay never sees, so it can't check it; pair rooms
 	// are capped in time and bytes.
 	KindPair = "pair"
+	// KindUpdate asks the relay to update itself to the latest official
+	// release (update.go): a hello like a link's, from a server whose
+	// link through the relay is live.
+	KindUpdate = "update"
 )
 
 // Message types (the "t" field).
@@ -31,6 +35,7 @@ const (
 	msgHello     = "hello"
 	msgWait      = "wait"
 	msgMated     = "mated"
+	msgUpdate    = "update"
 )
 
 // Error words: the close reason the relay sends.
@@ -54,6 +59,8 @@ type challenge struct {
 	V     int    `json:"v"`
 	Nonce []byte `json:"nonce"` // 32 random bytes, base64
 	Max   int    `json:"max"`   // the largest message the relay takes
+	// TM is the relay's tm release ("v0.28.0"); older relays leave it out.
+	TM string `json:"tm,omitempty"`
 }
 
 // hello is the client's answer.
@@ -62,7 +69,7 @@ type hello struct {
 	Kind string `json:"kind"`
 	Key  []byte `json:"key"`            // Ed25519 public key, base64
 	Room string `json:"room"`           // 64 hex digits
-	Peer string `json:"peer,omitempty"` // link: the peer's fingerprint, 64 hex digits
+	Peer string `json:"peer,omitempty"` // link, update: the peer's fingerprint, 64 hex digits
 	Sig  []byte `json:"sig"`            // Ed25519 over helloSigned, base64
 }
 
@@ -114,7 +121,7 @@ type checked struct {
 // error word to close with.
 func checkHello(h *hello, nonce []byte) (checked, string) {
 	var c checked
-	if h.T != msgHello || (h.Kind != KindLink && h.Kind != KindPair) || len(h.Key) != ed25519.PublicKeySize {
+	if h.T != msgHello || (h.Kind != KindLink && h.Kind != KindPair && h.Kind != KindUpdate) || len(h.Key) != ed25519.PublicKeySize {
 		return c, ErrBadHello
 	}
 	room, ok := hex32(h.Room)
@@ -122,7 +129,7 @@ func checkHello(h *hello, nonce []byte) (checked, string) {
 		return c, ErrBadHello
 	}
 	var peer []byte
-	if h.Kind == KindLink {
+	if h.Kind != KindPair {
 		p, ok := hex32(h.Peer)
 		if !ok {
 			return c, ErrBadHello
@@ -135,7 +142,7 @@ func checkHello(h *hello, nonce []byte) (checked, string) {
 		return c, ErrBadSignature
 	}
 	c.kind, c.fp, c.room = h.Kind, Fingerprint(h.Key), room
-	if h.Kind == KindLink {
+	if h.Kind != KindPair {
 		p := [32]byte(peer)
 		if p == c.fp || LinkRoom(c.fp, p) != room {
 			return c, ErrBadRoom
