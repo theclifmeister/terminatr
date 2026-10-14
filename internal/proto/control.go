@@ -240,6 +240,9 @@ type PeerLink struct {
 	Version      string   `json:"version,omitempty"`
 	LinkProtocol int      `json:"link_protocol,omitempty"`
 	Caps         []string `json:"caps,omitempty"`
+	// RelayVersion is the relay's tm release, as it said when the link
+	// last went through it ("" for a relay older than that).
+	RelayVersion string `json:"relay_version,omitempty"`
 }
 
 // KeychainStatus is the result of server.keychain.

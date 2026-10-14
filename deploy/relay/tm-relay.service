@@ -3,8 +3,11 @@
 # sudo tm relay install --domain <name> writes this file and does the
 # rest. By hand: set your DNS name below, then
 #   sudo install -m 755 tm /usr/local/bin/tm
-#   sudo cp tm-relay.service /etc/systemd/system/
+#   sudo cp tm-relay.service tm-relay-update.* /etc/systemd/system/
 #   sudo systemctl daemon-reload && sudo systemctl enable --now tm-relay
+#   sudo systemctl enable --now tm-relay-update.path tm-relay-update.timer
+# (the timer updates the relay daily; the path unit when a linked
+# server asks: drop either to do without).
 #
 # The relay runs as a throwaway user with only the right to bind 443. It
 # gets its own certificate from Let's Encrypt (TLS-ALPN-01, on 443: no
@@ -18,7 +21,7 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
-ExecStart=/usr/local/bin/tm relay serve --listen :443 --domain relay.example.net --state ${STATE_DIRECTORY}
+ExecStart=/usr/local/bin/tm relay serve --listen :443 --domain relay.example.net --state ${STATE_DIRECTORY} --update-request ${STATE_DIRECTORY}/update-request
 StateDirectory=tm-relay
 StateDirectoryMode=0700
 Restart=on-failure

@@ -270,6 +270,10 @@ type Source interface {
 	// peer relay does, and has the server read the peers again; warn
 	// says when the relay is on a private address.
 	SetPeerRelay(alias, relay string) (warn string, err error)
+	// RelayUpdate asks the relay of the paired server alias to update
+	// itself to the latest official release, as tm peer relay-update
+	// does (§16.2), saying what came of it.
+	RelayUpdate(alias string) (string, error)
 	// PairPeer pairs this server with another through relay, as tm peer
 	// pair does, and JoinPeer joins the pairing code names, as tm peer
 	// join does: both pin the other server and have the server read the
@@ -743,6 +747,23 @@ func (s *ServerSource) SetPeerRelay(alias, relayText string) (string, error) {
 		return "", fmt.Errorf("set, but the server didn't read the peers again (%v); tm server restart does", err)
 	}
 	return relay.PrivateWarning(r), nil
+}
+
+func (s *ServerSource) RelayUpdate(alias string) (string, error) {
+	if s.Caller.IsAgent() {
+		return "", errHumanOnly
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	p, res, err := peer.RequestRelayUpdate(ctx, peer.DirIn(s.Paths.Home), alias, nil)
+	if err != nil {
+		return "", err
+	}
+	words, ok := peer.RelayUpdateWords(relayWords(p.Relay), res)
+	if !ok {
+		return "", errors.New(words)
+	}
+	return words, nil
 }
 
 // PairEvents are what a pairing shows on the way: Waiting the code once

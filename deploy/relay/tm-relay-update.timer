@@ -1,0 +1,12 @@
+# tm relay install writes this file; --auto-update=off leaves it disabled.
+
+[Unit]
+Description=terminatr relay update, daily
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

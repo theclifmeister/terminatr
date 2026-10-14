@@ -49,6 +49,15 @@ type Config struct {
 	TrustedProxies []netip.Prefix
 	LogIPs         bool
 	Log            *log.Logger // nil: no log
+
+	// Version is the relay's tm release, told to every client in the
+	// challenge; "" tells none.
+	Version string
+	// UpdateFile is where an update request is written (update.go), in
+	// the relay's state directory; "" takes none.
+	UpdateFile string
+	// UpdateEvery is the least time between two requests taken.
+	UpdateEvery time.Duration
 }
 
 // DefaultConfig is the relay's limits unless flags say otherwise.
@@ -64,6 +73,7 @@ func DefaultConfig() Config {
 		PairBytes:    256 << 10,
 		Ping:         30 * time.Second,
 		Idle:         90 * time.Second,
+		UpdateEvery:  time.Hour,
 	}
 }
 
@@ -99,6 +109,7 @@ type Server struct {
 	busy    map[roomKey]*mated
 	ips     map[string]*ipState
 	swept   time.Time
+	updated time.Time // the last update request taken
 
 	now func() time.Time // tests
 }
@@ -111,6 +122,7 @@ func New(cfg Config) *Server {
 		waiting: map[roomKey]*conn{},
 		busy:    map[roomKey]*mated{},
 		ips:     map[string]*ipState{},
+		updated: lastUpdate(cfg.UpdateFile),
 	}
 }
 
@@ -327,7 +339,7 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 		c.shut()
 	}
 	s.release(c, key)
-	if c.chk.kind != "" {
+	if c.chk.kind != "" && c.chk.kind != KindUpdate {
 		got, _ := c.reason.Load().(string)
 		s.logf("%sleft %s after %s: %d bytes in (%s)", c.who(), roomKey{c.chk.kind, c.chk.room},
 			s.now().Sub(c.start).Round(time.Second), c.in.Load(), got)
@@ -415,7 +427,7 @@ func (c *conn) run() string {
 		return ErrShutdown
 	}
 	helloTimer := time.AfterFunc(s.cfg.HelloTimeout, func() { c.closeWith(CloseTimeout, ErrTimeout) })
-	if c.send(challenge{T: msgChallenge, V: Version, Nonce: nonce, Max: maxMessage}) != nil {
+	if c.send(challenge{T: msgChallenge, V: Version, Nonce: nonce, Max: maxMessage, TM: s.cfg.Version}) != nil {
 		return ""
 	}
 	op, msg, err := c.ws.ReadMessage()
@@ -435,6 +447,9 @@ func (c *conn) run() string {
 		return bad
 	}
 	c.chk = chk
+	if chk.kind == KindUpdate {
+		return s.update(c)
+	}
 	if why := s.join(c); why != "" {
 		return why
 	}

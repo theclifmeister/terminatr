@@ -1,11 +1,11 @@
  PROJECTS                      2   │
  ■ beta             0              │
  └─ coordinator         ·          │
+                                   │
+                                   │
+                                   │
+                                   │
  ── ▸ inactive (1) ─────────────── │
-                                   │
-                                   │
-                                   │
-                                   │
  ───────────────────────────────── │
  beta · active                     │
  0 threads · coordinator not runn… │

@@ -208,7 +208,7 @@ func TestPeersTab(t *testing.T) {
 		"relay  relay.example.net",
 		"○ nas  offline 4m · relay · shares 1 project · dial: refused",
 		"relay  relay.example.net:8443",
-		"space toggle · ← → change · n pair · j join · e relay · x remove · esc close",
+		"space toggle · ← → change · n pair · j join · e relay · u update relay · x remove · esc close",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in\n%s", want, out)

@@ -206,11 +206,14 @@ type FetchOptions struct {
 	Method  string            `json:"method,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
 	Body    string            `json:"body,omitempty"`
+	// TimeoutMS bounds the request.
+	TimeoutMS int `json:"timeout_ms,omitempty"`
 }
 
 // FetchResponse is $.http.fetch's answer.
 type FetchResponse struct {
 	Status  int               `json:"status"`
+	URL     string            `json:"url"` // after redirects
 	Headers map[string]string `json:"headers"`
 	Body    string            `json:"body"`
 }
@@ -247,6 +250,10 @@ type RunResult struct {
 	Code   int    `json:"code"`
 	Stdout string `json:"stdout"`
 	Stderr string `json:"stderr"`
+	// Truncated says output over the broker's cap was dropped.
+	Truncated bool `json:"truncated,omitempty"`
+	// TimedOut says the run was killed at its timeout.
+	TimedOut bool `json:"timed_out,omitempty"`
 }
 
 // Events are the API's events, which $.on subscribes to.
@@ -272,7 +279,6 @@ var Events = []Event{
 	{Name: modbus.ViewOpened, Data: typ[modbus.View](), Needs: GrantViews, Doc: "One of the mod's views is shown: publish it with $.ui.view.set. A details.section names the task or thread the details panel shows, on the dashboard or beside that thread's pane: publish for that one, and clear it on view.closed. A project.tab opened to show a task picked elsewhere names it (mod API 1.4): list its row, and the console puts the cursor on the row that binds an action on it. A sidebar.section is for the project the sidebar's tree is for; a sidebar.project.section opens once for each project whose rows show (mod API 1.7): publish for each, or one tree for all, and a null tree for a project shows no section under it."},
 	{Name: modbus.ViewClosed, Data: typ[modbus.View](), Needs: GrantViews, Doc: "One of the mod's views is no longer shown."},
 	{Name: modbus.CommandRun, Data: typ[modbus.Command](), Doc: "The human ran one of the commands in the manifest's [provides].commands: by its key (on the dashboard, or prefix+key in a session: the selection is then that session), or ≡ menu entry (then the mod may open a view), or with tm mod run."},
-	{Name: modbus.ModSettings, Data: typ[Settings](), Doc: "The user changed the mod's settings: these are the new ones."},
 }
 
 // Methods are $'s methods, besides $.on, $.log, $.tool.handle and

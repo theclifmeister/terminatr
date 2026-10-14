@@ -65,11 +65,12 @@ func TestPeerDashboard(t *testing.T) {
 
 	w.Type(",")
 	w.Type("4")
-	w.WaitFor("This server ", wait)
-	screen = w.WaitFor("◉ linked", wait)
-	if !strings.Contains(screen, "mini ") || !strings.Contains(screen, "shares 1 project") {
+	w.WaitFor("PAIRED SERVERS · this server ", wait)
+	screen = w.WaitFor("◉ mini  linked · ", wait)
+	if !strings.Contains(screen, "shares 1 project") || !strings.Contains(screen, "panes  [off] · view · write") {
 		t.Fatalf("Peers tab:\n%s", screen)
 	}
+	// studio has no project to share: the cursor starts on mini's panes.
 	w.Type("x")
 	w.WaitFor("Remove mini?", wait)
 	w.Type("y")

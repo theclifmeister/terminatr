@@ -6,14 +6,14 @@ nerd, width 36, folded []
     └╴  T232 Sid…                │
    web               0            │
  └╴󰚩  coordinator       ·          │
+                                   │
   mini · 38 ms                    │
    acme-api          1           │
  └╴󰚩  coordinator   22%           │
     └╴  T41 Bill… 100%          │
    infra             0            │
  └╴󰚩  coordinator       ·          │
-  nas · offline 4m · relay        │
-   media             2 ·         │
+                                   │
 
 nerd, width 24, folded []
  PROJECTS          2   │
@@ -23,27 +23,27 @@ nerd, width 24, folded []
     └╴               │
    web                │
  └╴󰚩  coor… ·          │
+                       │
   mini · 38 ms        │
    acme-a…           │
  └╴󰚩  coor…           │
     └╴              │
    infra              │
  └╴󰚩  coor… ·          │
-  nas · offline 4m…   │
-   media   ·         │
+                       │
 
 nerd, width 11, folded []
  PROJECTS │
   ────── │
   term…  │
  · web    │
+          │
   ────── │
   acme… │
  · infra  │
+          │
   ────── │
  · media │
-          │
-          │
           │
           │
           │
@@ -57,9 +57,9 @@ nerd, width 36, folded [@mini]
     └╴  T232 Sid…                │
    web               0            │
  └╴󰚩  coordinator       ·          │
+                                   │
   mini · 38 ms · 2 projects      │
-  nas · offline 4m · relay        │
-   media             2 ·         │
+                                   │
 
 nerd, width 24, folded [@mini]
  PROJECTS          2   │
@@ -69,20 +69,20 @@ nerd, width 24, folded [@mini]
     └╴               │
    web                │
  └╴󰚩  coor… ·          │
+                       │
   mini · 38 ms · 2…  │
-  nas · offline 4m…   │
-   media   ·         │
+                       │
 
 nerd, width 11, folded [@mini]
  PROJECTS │
   ────── │
   term…  │
  · web    │
+          │
   ────── │
+          │
   ────── │
  · media │
-          │
-          │
           │
 
 unicode, width 36, folded []
@@ -93,14 +93,14 @@ unicode, width 36, folded []
     └─ T232 Sideb…      ●          │
  ■ web                0            │
  └─ coordinator         ·          │
+                                   │
  ◉ mini · 38 ms                    │
  ■ acme-api           1         ⚑  │
  └─ coordinator     22% ●          │
     └─ T41 Billing 100% ◆       ⚑  │
  ■ infra              0            │
  └─ coordinator         ·          │
- ○ nas · offline 4m · relay        │
- ■ media              2 ·       ⚑  │
+                                   │
 
 unicode, width 24, folded []
  PROJECTS          2   │
@@ -110,27 +110,27 @@ unicode, width 24, folded []
     └─ T232 ●          │
  ■ web                 │
  └─ coordi… ·          │
+                       │
  ◉ mini · 38 ms        │
  ■ acme-api         ⚑  │
  └─ coordi… ●          │
     └─ T41  ◆       ⚑  │
  ■ infra               │
  └─ coordi… ·          │
- ○ nas · offline 4m…   │
- ■ media    ·       ⚑  │
+                       │
 
 unicode, width 11, folded []
  PROJECTS │
  ◉ ────── │
  ● term…  │
  · web    │
+          │
  ◉ ────── │
  ● acme…⚑ │
  · infra  │
+          │
  ○ ────── │
  · media⚑ │
-          │
-          │
           │
           │
           │
@@ -144,9 +144,9 @@ unicode, width 36, folded [@mini]
     └─ T232 Sideb…      ●          │
  ■ web                0            │
  └─ coordinator         ·          │
+                                   │
  ◉ mini · 38 ms · 2 projects    ⚑  │
- ○ nas · offline 4m · relay        │
- ■ media              2 ·       ⚑  │
+                                   │
 
 unicode, width 24, folded [@mini]
  PROJECTS          2   │
@@ -156,20 +156,20 @@ unicode, width 24, folded [@mini]
     └─ T232 ●          │
  ■ web                 │
  └─ coordi… ·          │
+                       │
  ◉ mini · 38 ms · 2…⚑  │
- ○ nas · offline 4m…   │
- ■ media    ·       ⚑  │
+                       │
 
 unicode, width 11, folded [@mini]
  PROJECTS │
  ◉ ────── │
  ● term…  │
  · web    │
+          │
  ◉ ────── │
+          │
  ○ ────── │
  · media⚑ │
-          │
-          │
           │
 
 ascii, width 36, folded []
@@ -180,14 +180,14 @@ ascii, width 36, folded []
     `- T232 Sideb…      *          │
  + web                0            │
  `- coordinator         .          │
+                                   │
  O mini · 38 ms                    │
  + acme-api           1         ?  │
  `- coordinator     22% *          │
     `- T41 Billing 100% #       ?  │
  + infra              0            │
  `- coordinator         .          │
- o nas · offline 4m · relay        │
- + media              2 .       ?  │
+                                   │
 
 ascii, width 24, folded []
  PROJECTS          2   │
@@ -197,27 +197,27 @@ ascii, width 24, folded []
     `- T232 *          │
  + web                 │
  `- coordi… .          │
+                       │
  O mini · 38 ms        │
  + acme-api         ?  │
  `- coordi… *          │
     `- T41  #       ?  │
  + infra               │
  `- coordi… .          │
- o nas · offline 4m…   │
- + media    .       ?  │
+                       │
 
 ascii, width 11, folded []
  PROJECTS │
  O ────── │
  * term…  │
  . web    │
+          │
  O ────── │
  * acme…? │
  . infra  │
+          │
  o ────── │
  . media? │
-          │
-          │
           │
           │
           │
@@ -231,9 +231,9 @@ ascii, width 36, folded [@mini]
     `- T232 Sideb…      *          │
  + web                0            │
  `- coordinator         .          │
+                                   │
  O mini · 38 ms · 2 projects    ?  │
- o nas · offline 4m · relay        │
- + media              2 .       ?  │
+                                   │
 
 ascii, width 24, folded [@mini]
  PROJECTS          2   │
@@ -243,19 +243,19 @@ ascii, width 24, folded [@mini]
     `- T232 *          │
  + web                 │
  `- coordi… .          │
+                       │
  O mini · 38 ms · 2…?  │
- o nas · offline 4m…   │
- + media    .       ?  │
+                       │
 
 ascii, width 11, folded [@mini]
  PROJECTS │
  O ────── │
  * term…  │
  . web    │
+          │
  O ────── │
+          │
  o ────── │
  . media? │
-          │
-          │
           │
 

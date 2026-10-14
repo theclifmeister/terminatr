@@ -27,7 +27,8 @@ import (
 //     current one marked, which ← → or a click on a word changes as tm
 //     peer panes does (asking before it lets the server do more), and
 //     its relay, which e (or enter or a click on it) changes as tm peer
-//     relay does (the relay moved, or has a new key).
+//     relay does (the relay moved, or has a new key), with the relay's
+//     tm once known; u asks that relay to update itself (peerrelay.go).
 //
 // x removes the selected server, asking first, as tm peer remove does;
 // n pairs with another server and j joins one's pairing (peerpair.go),
@@ -41,7 +42,7 @@ import (
 //	"◉ mini  linked · 38 ms · tm 0.27.0 · shares 2 projects"
 //	"    panes  off · view · [write]"
 //	"           it can watch and type into …"
-//	"    relay  relay.example.net"
+//	"    relay  relay.example.net · v0.27.0 · update available (u)"
 
 // peersTab is the Peers tab: the list as last read, and the selection,
 // an index into its items.
@@ -68,7 +69,7 @@ const (
 )
 
 // peersKeys are the Peers tab's action row.
-const peersKeys = "space toggle · ← → change · n pair · j join · e relay · x remove · esc close"
+const peersKeys = "space toggle · ← → change · n pair · j join · e relay · u update relay · x remove · esc close"
 
 // relayHint ends the empty tab: where a relay comes from.
 const relayHint = "No relay yet? On a Linux server with a domain: sudo tm relay install --domain NAME; without one, on an address both servers reach: sudo tm relay install --ip (see the README)."
@@ -215,12 +216,16 @@ func (pt *peersTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
 			sel = len(out) - 1
 		}
 		relay := relayWords(e.Relay)
+		if v := relayVersionWords(m, e); v != "" {
+			relay += " · " + strings.TrimPrefix(v, "relay ")
+		}
 		row(pad+fit("relay", panesLabel)+"  "+relay,
 			pad+th().Head.Render(fit("relay", panesLabel))+"  "+fit(relay, max(w-panesIndent-panesLabel-2, 1)))
 	}
 	add(noHit, "")
 	add(noHit, faintLines("panes sets what a server may do with this server's panes, the coordinators and threads of the projects you share: nothing, watch them, or watch and type into them. ← → or a click on a word changes it; more asks first, less applies at once.", w)...)
 	add(noHit, faintLines("e gives the selected server another relay, as tm peer relay does: when the relay moved or was set up again with a new key (its link refuses a relay whose key changed); set it on the other server too.", w)...)
+	add(noHit, faintLines("u asks the selected server's relay to update itself to the latest official release, as tm peer relay-update does: it restarts only for a newer one, and takes one request an hour from any server linked through it.", w)...)
 	add(noHit, faintLines("x removes the selected server, as tm peer remove does: its link closes and its projects leave the sidebar; remove this server there too.", w)...)
 	return out, sel, hits
 }
@@ -399,7 +404,7 @@ func (pt *peersTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 	it, ok := pt.selected(m)
 	switch {
 	case !ok:
-		return nil, s == "x" || s == "e" || s == "space" || s == " " || s == "enter"
+		return nil, s == "x" || s == "e" || s == "u" || s == "space" || s == " " || s == "enter"
 	case it.kind == itemShare && (s == "space" || s == " " || s == "enter"):
 		return pt.toggle(m, it.slug), true
 	case it.kind == itemPanes && (s == "left" || s == "right"):
@@ -412,8 +417,11 @@ func (pt *peersTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 	case it.kind != itemShare && s == "e", it.kind == itemRelay && s == "enter":
 		pt.relay(m, pt.list.Peers[it.peer])
 		return nil, true
+	case it.kind != itemShare && s == "u":
+		pt.relayUpdate(m, pt.list.Peers[it.peer])
+		return nil, true
 	}
-	return nil, s == "x" || s == "e" || s == "space" || s == " " || s == "enter"
+	return nil, s == "x" || s == "e" || s == "u" || s == "space" || s == " " || s == "enter"
 }
 
 // toggle flips slug's Shared with paired servers, as its Settings tab's

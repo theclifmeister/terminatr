@@ -21,10 +21,10 @@
            │ README).                                                                             │
            │                                                                                      │
            │ Paired servers see the projects you share with them, read-only, in their sidebar;    │
-           │ you see theirs in yours. No agent can pair, share or remove a server.                │
            │                                                                                      │
-           │ space toggle · ← → change · n pair · j join · e relay · x remove · esc close         │
- ──────────╰──────────────────────────────────────────────────────────────────────────────────────╯
+           │ space toggle · ← → change · n pair · j join · e relay · u update relay · x remove    │
+           │ esc close                                                                            │
+ ──────────╰───────────────────────────────────────────────────────────────────────────── more ↓ ─╯
                                    │──────────────────────────────────────────────────────────────────────────
                                    │
  tab sidebar · ? help              │

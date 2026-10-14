@@ -1,0 +1,18 @@
+# tm relay install writes this file (docs/OPERATIONS.md, Running a relay).
+#
+# tm relay update, as root: it removes the relay's update request, gets
+# the latest official release, checks its sha256 against the release's
+# checksums.txt and restarts tm-relay only when the release is newer.
+# Started by tm-relay-update.timer (daily, unless installed with
+# --auto-update=off) and by tm-relay-update.path (a linked server asked).
+
+[Unit]
+Description=terminatr relay update (tm relay update)
+Documentation=https://github.com/theclifmeister/terminatr/blob/main/docs/OPERATIONS.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/tm relay update
+TimeoutStartSec=15min
