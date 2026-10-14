@@ -14,6 +14,7 @@ require (
 	github.com/evanw/esbuild v0.28.2
 	github.com/rivo/uniseg v0.4.7
 	go.mitchellh.com/libghostty v0.0.0-20261001181910-76867c77a212
+	golang.org/x/crypto v0.57.0
 	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.46.0
 )
@@ -31,6 +32,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.30 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 )

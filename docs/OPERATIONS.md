@@ -242,15 +242,40 @@ Two tm servers are joined through a relay that both dial out to (SPEC §16), so 
 What it needs:
 
 - **A public address and a DNS name.** Both servers dial `wss://<name>`, often from outside your home network (a laptop on hotel Wi-Fi). A VPS has both. A **NAS at home doesn't by default**: give it a DNS name (your own domain, or a dynamic DNS name that follows your home IP) and forward a public port on the router to it (443, or any port: the link then dials `wss://<name>:<port>`). Behind carrier-grade NAT (no public IPv4 on the router) port forwarding can't work: use a VPS, or IPv6 if both ends have it. Without a public port the relay only serves machines on your LAN.
-- **A certificate for that name**, from a CA (Let's Encrypt): the link checks it as any HTTPS client does. It protects the connection to the relay; what the servers trust in each other is their pinned keys, not this certificate.
-- **Port 443 open** (and 80 for ACME's HTTP challenge, with the Caddy setup).
+- **A certificate for that name**, from a CA: the link checks it as any HTTPS client does. The relay gets one from Let's Encrypt by itself (`--domain`); it protects the connection to the relay, while what the servers trust in each other is their pinned keys, not this certificate.
+- **Port 443 open**, inbound TCP (the Caddy alternative also needs 80).
 - A `tm` release that has `tm relay serve`.
 
-### Docker (VPS or NAS)
+### One command (a Linux VPS)
+
+On a Linux host with systemd (a VPS from any provider), with the DNS name pointing at it and port 443 open in its firewall:
+
+```sh
+curl -fsSL https://github.com/theclifmeister/terminatr/releases/latest/download/install.sh | sh
+sudo ~/.local/bin/tm relay install --domain relay.example.net --email you@example.net
+```
+
+The first line is tm's usual install (into `~/.local/bin`, which `sudo` doesn't search, hence the full path); skip it if `tm` is already there. The second copies `tm` to `/usr/local/bin/tm`, writes and starts the `tm-relay` systemd service (`deploy/relay/tm-relay.service`: a throwaway user with only the right to bind 443, and a strict sandbox), and waits for `https://relay.example.net/healthz`. The relay gets its certificate from Let's Encrypt itself, by TLS-ALPN-01 on port 443 (no port 80, no certbot), keeps it in `/var/lib/private/tm-relay` and renews it before it expires; `--email` (optional) is where Let's Encrypt sends expiry warnings, and using it means accepting their [subscriber agreement](https://letsencrypt.org/repository/). It ends with the line to pair with:
+
+```
+The relay is up at wss://relay.example.net. Pair two servers through it, on one of them:
+
+    tm peer pair --relay wss://relay.example.net
+```
+
+tm never changes the firewall. If `/healthz` doesn't answer, install says so, with what the name resolves to: open TCP port 443 to the host (your provider's firewall, and `sudo ufw allow 443/tcp` or firewalld if the host runs one), fix the DNS, and the relay gets its certificate on the next try by itself (`curl https://relay.example.net/healthz`, `journalctl -u tm-relay`).
+
+To move to a new release: `sudo tm relay update` downloads the latest one for this machine's architecture, checks it against the release's `checksums.txt`, replaces `/usr/local/bin/tm`, restarts the relay and checks `/healthz` again; linked servers drop for a moment and reconnect by themselves. `sudo tm relay uninstall` stops the service and removes it; `/usr/local/bin/tm` and the certificates stay (`sudo rm -r /var/lib/private/tm-relay`). Running install again (another `--domain`, say) rewrites the unit and restarts. Logs: `journalctl -u tm-relay`.
+
+Without systemd or on another system, `tm relay serve --domain relay.example.net` does the same in the foreground (certificates in `~/.terminatr/relay`, or `--state DIR`); it needs to bind 443, so as root or with `CAP_NET_BIND_SERVICE`.
+
+### Alternatives
+
+#### Docker (VPS or NAS)
 
 `deploy/relay/` in the repository has everything; copy that folder to the host.
 
-With Caddy getting the certificate by ACME (simplest; needs ports 80 and 443 and the DNS name pointing at the host):
+With Caddy getting the certificate by ACME (needs ports 80 and 443 and the DNS name pointing at the host):
 
 ```sh
 cd deploy/relay
@@ -263,16 +288,19 @@ Pin the release: set `TM_VERSION` in the compose file's build args to a tag (e.g
 
 On a NAS (Synology Container Manager, QNAP Container Station, Unraid, TrueNAS apps): create a project from `compose.yaml` or `compose.acme.yaml`. If the NAS's own web interface already holds ports 80 and 443, publish the relay on another port (`"8443:8443"`, forwarded on the router as 8443) and use the NAS's reverse proxy or your own certificate files instead of Caddy.
 
-### systemd (a VPS without Docker)
+#### systemd with certbot's certificate
 
-```sh
-sudo install -m 755 tm /usr/local/bin/tm        # from the release tarball
-sudo cp deploy/relay/tm-relay.service /etc/systemd/system/
-sudoedit /etc/systemd/system/tm-relay.service    # the two LoadCredential lines: your certificate's files
-sudo systemctl daemon-reload && sudo systemctl enable --now tm-relay
+If certbot already manages a certificate for the name, install the service as above, then hand it certbot's files instead (`sudo systemctl edit tm-relay`):
+
+```ini
+[Service]
+ExecStart=
+ExecStart=/usr/local/bin/tm relay serve --listen :443 --cert ${CREDENTIALS_DIRECTORY}/fullchain.pem --key ${CREDENTIALS_DIRECTORY}/privkey.pem
+LoadCredential=fullchain.pem:/etc/letsencrypt/live/relay.example.net/fullchain.pem
+LoadCredential=privkey.pem:/etc/letsencrypt/live/relay.example.net/privkey.pem
 ```
 
-The unit runs the relay as a throwaway user with only the right to bind 443; systemd hands it the certificate, so certbot's root-only key works. After a renewal restart it (`certbot renew --deploy-hook "systemctl restart tm-relay"`). Logs: `journalctl -u tm-relay`.
+systemd hands the relay the certificate (read as root, so certbot's root-only key works). After a renewal restart it: `certbot renew --deploy-hook "systemctl restart tm-relay"`.
 
 ### Checking it
 
