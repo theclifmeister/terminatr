@@ -112,7 +112,7 @@ func withPeers(tree []treeRow, in treeIn) []treeRow {
 	out = append(out, treeRow{kind: treeServer, pct: -1, link: &peerLink{local: true, host: host, state: proto.LinkUp}})
 	out = append(out, tree...)
 	for _, pm := range in.peers {
-		out = append(out, peerRows(pm, in.tree)...)
+		out = append(out, peerRows(pm, in.tree, in.current)...)
 	}
 	return out
 }
@@ -121,8 +121,9 @@ func withPeers(tree []treeRow, in treeIn) []treeRow {
 // folded each shared project's row, and under a project that is up to
 // date and not folded its coordinator and threads. A stale project
 // (its link down, or its last read failed) shows its row alone, its
-// last values dimmed.
-func peerRows(pm proto.PeerMirror, t view.Tree) []treeRow {
+// last values dimmed. The project whose dashboard shows (current, its
+// peerFold) is the row you are on.
+func peerRows(pm proto.PeerMirror, t view.Tree, current string) []treeRow {
 	link := peerLink{state: pm.State, reason: pm.Reason, since: pm.Since, rtt: pm.RTT, watch: pm.Watch}
 	for _, p := range pm.Projects {
 		if p.Synced.After(link.synced) {
@@ -136,6 +137,11 @@ func peerRows(pm proto.PeerMirror, t view.Tree) []treeRow {
 		pl := link
 		pl.synced = p.Synced
 		rows = append(rows, peerProjectRows(pm.Alias, p, &pl, t)...)
+	}
+	for i := range rows {
+		if rows[i].kind == treePeerProject && peerFold(pm.Alias, rows[i].slug) == current {
+			rows[i].current, rows[i].here = true, true
+		}
 	}
 	for _, r := range rows {
 		head.hint = head.hint || r.kind == treePeerProject && r.hint
@@ -475,13 +481,14 @@ func peerKeyBar(r *treeRow) []string {
 		}
 		return []string{enter + " fold"}
 	case treePeerProject:
+		// enter shows its read-only dashboard (peerdash.go).
 		switch {
 		case r.stale:
-			return []string{left + " server"}
+			return []string{enter + " open", left + " server"}
 		case r.fold:
-			return []string{barKey("side.unfold", "→") + " unfold"}
+			return []string{enter + " open", barKey("side.unfold", "→") + " unfold"}
 		}
-		return []string{left + " fold"}
+		return []string{enter + " open", left + " fold"}
 	}
 	return []string{left + " project"}
 }

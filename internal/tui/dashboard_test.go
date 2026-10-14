@@ -53,6 +53,9 @@ type fakeSource struct {
 	withdrawn   []string // "slug s-3"
 	answered    []string // slugs whose questions were opened
 	reviews     map[int]Review
+	peers       PeerList
+	peerErr     error
+	unpinned    []string // aliases removed from the Peers tab
 	agents      []string
 	remote      []string // "slug on" or "slug off"
 	lifecycle   []string // "slug verb"
@@ -248,6 +251,13 @@ func (f *fakeSource) NewProject(name string) (string, error) { return name, nil 
 func (f *fakeSource) OpenProject(slug string, c, r int) (string, error) {
 	f.opened = append(f.opened, slug)
 	return "s-" + slug, nil
+}
+
+func (f *fakeSource) Peers() (PeerList, error) { return f.peers, f.peerErr }
+func (f *fakeSource) RemovePeer(alias string) error {
+	f.unpinned = append(f.unpinned, alias)
+	f.peers.Peers = slices.DeleteFunc(f.peers.Peers, func(e PeerEntry) bool { return e.Alias == alias })
+	return nil
 }
 
 // Catalogs are the installed (Agents) built-in agents' models as the

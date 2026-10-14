@@ -1134,6 +1134,9 @@ func sideLocal(x, at, w int, right bool) int {
 // Target is where a click on the sidebar goes: a project's dashboard, its
 // coordinator (started when none runs), or a thread's session.
 type Target struct {
+	// Project is the project's slug, or a paired server's project as
+	// "@alias/slug" (peerFold), whose read-only dashboard shows
+	// (peerdash.go).
 	Project string
 	// Coordinator opens the project's coordinator; Session shows that
 	// session; neither shows the project's dashboard.
@@ -1147,6 +1150,10 @@ type Target struct {
 // target is where a click on r goes; ok is false for a thread without a
 // running session, with why.
 func (r treeRow) target() (t Target, ok bool, why string) {
+	if r.kind == treePeerProject {
+		// Its read-only dashboard (peerdash.go).
+		return Target{Project: peerFold(r.peer, r.slug)}, true, ""
+	}
 	if r.kind == treeServer || r.isPeer() {
 		return t, false, peerWhy(r)
 	}
@@ -1182,6 +1189,9 @@ const previewDelay = 200 * time.Millisecond
 // anything. ok is false on the row you are on, which already shows, and
 // on the inactive divider, which shows nothing.
 func (r treeRow) preview() (t Target, ok bool) {
+	if r.kind == treePeerProject && !r.here {
+		return Target{Project: peerFold(r.peer, r.slug)}, true
+	}
 	if r.here || r.kind == treeDivider || r.kind == treeSection || r.kind == treeServer || r.isPeer() {
 		return t, false
 	}

@@ -180,6 +180,9 @@ func (m *dash) listKey(key string) tea.Cmd {
 // footKeys is the footer's key list: the ≡ menu, then the actions that
 // apply to the selected row. Each is a button for the mouse too.
 func (m *dash) footKeys() string {
+	if m.remoteHere() {
+		return m.remoteFootKeys()
+	}
 	r, ok := m.selected()
 	out := []string{menuButton + " menu"}
 	for _, a := range actions {
