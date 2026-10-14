@@ -125,12 +125,12 @@ func checkEmail(m string) error {
 
 // relayUnit is the systemd unit tm relay install --domain writes, and
 // deploy/relay/tm-relay.service for relay.example.net.
-func relayUnit(domain, email string) string {
+func relayUnit(domain, email string, auto bool) string {
 	exec := "ExecStart=" + relayBin + " relay serve --listen :443 --domain " + domain + " --state ${STATE_DIRECTORY}"
 	if email != "" {
 		exec += " --email " + email
 	}
-	exec += relayRequestFlag
+	exec += relayRequestFlag + relayAutoFlag(auto)
 	return relayUnitFor(exec, `# sudo tm relay install --domain <name> writes this file and does the
 # rest. By hand: set your DNS name below, then
 #   sudo install -m 755 tm /usr/local/bin/tm
@@ -148,8 +148,8 @@ func relayUnit(domain, email string) string {
 }
 
 // relayIPUnit is the systemd unit tm relay install --ip writes.
-func relayIPUnit(ip string) string {
-	return relayUnitFor("ExecStart="+relayBin+" relay serve --listen :443 --self-signed --ip "+ip+" --state ${STATE_DIRECTORY}"+relayRequestFlag,
+func relayIPUnit(ip string, auto bool) string {
+	return relayUnitFor("ExecStart="+relayBin+" relay serve --listen :443 --self-signed --ip "+ip+" --state ${STATE_DIRECTORY}"+relayRequestFlag+relayAutoFlag(auto),
 		`# sudo tm relay install --ip <address> writes this file and does the rest.
 #
 # The relay runs as a throwaway user with only the right to bind 443. It
@@ -163,6 +163,15 @@ func relayIPUnit(ip string) string {
 // relayRequestFlag has the relay write update requests where
 // tm-relay-update.path looks.
 const relayRequestFlag = " --update-request ${STATE_DIRECTORY}/" + relayRequestName
+
+// relayAutoFlag tells the relay whether the update timer is on, for
+// /healthz's Tm-Auto-Update header (tm doctor shows it).
+func relayAutoFlag(auto bool) string {
+	if auto {
+		return " --auto-update on"
+	}
+	return " --auto-update off"
+}
 
 // relayUpdateServiceUnit is tm-relay-update.service: tm relay update as
 // root, started by the timer and the path unit.
@@ -363,7 +372,7 @@ func (h *relayService) install(ctx context.Context, e *Env, domain, email string
 	if err := h.installBinary(); err != nil {
 		return err
 	}
-	if err := h.installUnits(relayUnit(domain, email), auto); err != nil {
+	if err := h.installUnits(relayUnit(domain, email, auto), auto); err != nil {
 		return err
 	}
 	fmt.Fprintf(e.Stdout, "Installed %s and %s; tm-relay is starting.\nIt gets its certificate from Let's Encrypt, under their subscriber agreement (https://letsencrypt.org/repository/).\nWaiting for https://%s/healthz (the first certificate takes a few seconds)…\n", relayBin, relayUnitPath, domain)
@@ -434,7 +443,7 @@ func (h *relayService) installIP(ctx context.Context, e *Env, ip netip.Addr, det
 	if err != nil {
 		return err
 	}
-	if err := h.installUnits(relayIPUnit(ip.String()), auto); err != nil {
+	if err := h.installUnits(relayIPUnit(ip.String(), auto), auto); err != nil {
 		return err
 	}
 	address := relayAddress(ip, "", pin)

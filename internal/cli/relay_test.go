@@ -30,6 +30,7 @@ func TestRelayServeFlags(t *testing.T) {
 	h.expect(2, "or --plain", human, "relay", "serve", "--plain", "--cert", "c", "--key", "k")
 	h.expect(2, "--trusted-proxy nope", human, "relay", "serve", "--plain", "--trusted-proxy", "nope")
 	h.expect(2, "--max-per-ip 0", human, "relay", "serve", "--plain", "--max-per-ip", "0")
+	h.expect(2, "--auto-update on or --auto-update off", human, "relay", "serve", "--plain", "--auto-update", "maybe")
 	h.expect(1, "human-only", coord, "relay", "serve", "--plain")
 	h.expect(1, "human-only", thr, "relay", "serve", "--plain")
 
@@ -125,7 +126,7 @@ func TestRelayUnitIsTheDeployFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := relayUnit("relay.example.net", ""); string(b) != want {
+	if want := relayUnit("relay.example.net", "", true); string(b) != want {
 		t.Fatalf("deploy/relay/tm-relay.service differs from relayUnit; write it as:\n%s", want)
 	}
 	for _, want := range []string{"DynamicUser=yes", "AmbientCapabilities=CAP_NET_BIND_SERVICE", "StateDirectory=tm-relay", "ProtectSystem=strict"} {
@@ -136,7 +137,7 @@ func TestRelayUnitIsTheDeployFile(t *testing.T) {
 	if strings.Contains(string(b), "LoadCredential") {
 		t.Error("LoadCredential in the ACME unit")
 	}
-	if d := unitDomain(relayUnit("r.example.org", "me@example.org")); d != "r.example.org" {
+	if d := unitDomain(relayUnit("r.example.org", "me@example.org", true)); d != "r.example.org" {
 		t.Errorf("unitDomain %q", d)
 	}
 }
@@ -200,8 +201,8 @@ func TestRelayInstall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(unit) != relayUnit("relay.example.net", "me@example.net") ||
-		!strings.Contains(string(unit), "--domain relay.example.net --state ${STATE_DIRECTORY} --email me@example.net --update-request ${STATE_DIRECTORY}/update-request\n") {
+	if string(unit) != relayUnit("relay.example.net", "me@example.net", true) ||
+		!strings.Contains(string(unit), "--domain relay.example.net --state ${STATE_DIRECTORY} --email me@example.net --update-request ${STATE_DIRECTORY}/update-request --auto-update on\n") {
 		t.Fatalf("unit:\n%s", unit)
 	}
 	if b, _ := os.ReadFile(filepath.Join(r.s.Root, "usr", "local", "bin", "tm")); string(b) != "tm v0.27.0" {
@@ -427,7 +428,7 @@ func TestRelayInstallIP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(unit) != relayIPUnit("203.0.113.5") || !strings.Contains(string(unit), "--self-signed --ip 203.0.113.5 --state ${STATE_DIRECTORY} --update-request ${STATE_DIRECTORY}/update-request\n") {
+	if string(unit) != relayIPUnit("203.0.113.5", true) || !strings.Contains(string(unit), "--self-signed --ip 203.0.113.5 --state ${STATE_DIRECTORY} --update-request ${STATE_DIRECTORY}/update-request --auto-update on\n") {
 		t.Fatalf("unit:\n%s", unit)
 	}
 	state := filepath.Join(r.s.Root, "var", "lib", "private", "tm-relay")
@@ -520,6 +521,9 @@ func TestRelayInstallAutoUpdateOff(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(r.s.Root, "etc", "systemd", "system", "tm-relay-update.timer")); err != nil {
 		t.Fatal(err)
+	}
+	if unit, _ := os.ReadFile(filepath.Join(r.s.Root, "etc", "systemd", "system", "tm-relay.service")); string(unit) != relayIPUnit("203.0.113.5", false) || !strings.HasSuffix(string(unit), "update-request --auto-update off\n") && !strings.Contains(string(unit), "update-request --auto-update off\n") {
+		t.Fatalf("unit:\n%s", unit)
 	}
 	r.calls = nil
 	h.ok(human, "relay", "install", "--ip", "203.0.113.5", "--auto-update", "on")

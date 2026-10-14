@@ -22,7 +22,7 @@ import (
 
 const relayUsage = `usage: tm relay serve [--listen ADDR] (--domain NAME [--state DIR] [--email ADDR] | --self-signed [--ip ADDR] [--state DIR]
     | --cert FILE --key FILE | --plain)
-    [--trusted-proxy CIDR]... [--max-conns N] [--max-per-ip N] [--bandwidth MiB/s] [--log-ips] [--update-request FILE]
+    [--trusted-proxy CIDR]... [--max-conns N] [--max-per-ip N] [--bandwidth MiB/s] [--log-ips] [--update-request FILE] [--auto-update on|off]
        sudo tm relay install (--domain NAME [--email ADDR] | --ip [ADDR]) [--auto-update=on|off]
        sudo tm relay update
        sudo tm relay uninstall`
@@ -62,7 +62,7 @@ func relayServeCmd(e *Env, args []string) error {
 	listen, cert, key := f.String("listen"), f.String("cert"), f.String("key")
 	domain, state, email, acmeDir := f.String("domain"), f.String("state"), f.String("email"), f.String("acme-directory")
 	plain, logIPs, selfSigned, ipFlag := f.Bool("plain"), f.Bool("log-ips"), f.Bool("self-signed"), f.String("ip")
-	proxies, updateFile := f.List("trusted-proxy"), f.String("update-request")
+	proxies, updateFile, autoUpdate := f.List("trusted-proxy"), f.String("update-request"), f.String("auto-update")
 	maxConns, maxPerIP, bandwidth := f.String("max-conns"), f.String("max-per-ip"), f.String("bandwidth")
 	pos, err := f.Parse(args)
 	if err != nil {
@@ -109,6 +109,13 @@ func relayServeCmd(e *Env, args []string) error {
 	cfg.LogIPs, cfg.Version = *logIPs, version.Version
 	// Linked servers' update requests go here, for tm-relay-update.path.
 	cfg.UpdateFile = *updateFile
+	// Whether the host's update timer is on, told in /healthz.
+	switch *autoUpdate {
+	case "", "on", "off":
+		cfg.AutoUpdate = *autoUpdate
+	default:
+		return usagef("--auto-update on or --auto-update off, not %q", *autoUpdate)
+	}
 	for _, p := range *proxies {
 		pr, err := netip.ParsePrefix(p)
 		if err != nil {

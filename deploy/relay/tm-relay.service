@@ -21,7 +21,7 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
-ExecStart=/usr/local/bin/tm relay serve --listen :443 --domain relay.example.net --state ${STATE_DIRECTORY} --update-request ${STATE_DIRECTORY}/update-request
+ExecStart=/usr/local/bin/tm relay serve --listen :443 --domain relay.example.net --state ${STATE_DIRECTORY} --update-request ${STATE_DIRECTORY}/update-request --auto-update on
 StateDirectory=tm-relay
 StateDirectoryMode=0700
 Restart=on-failure
