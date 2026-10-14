@@ -3,7 +3,7 @@
  └─ coordi…             ·          │  coordinator                      —           not running; enter starts it  3 inbox
     ├─ T1    50% ☐      ○          │  T1 Fix the login              ○ idle             report new  50% 1/2 ▸ Fix it  <duration>…
     └─ T2   ╭─ Settings ───────────────────────────────────────────────────────────────────────────────────╮
-            │  1 General   2 All projects   3 Mods                                                         │
+            │  1 General   2 All projects   3 Mods   4 Peers                                               │
             │ About: tm dev · server dev · update check on                                                 │
             │                                                                                              │
             │ ● Context gauge      code · column · view      1.0.0  reads your projects · draws its own p… │
@@ -20,12 +20,12 @@
             │ ● Nerd Font icons    icons · built in          1.0.0  built in · safe                        │
             │ ● PR/CI column       code · column · built in  1.0.0  built in · reads your projects         │
             │ ● Tasks tab          code · view · built in    1.0.0  built in · reads your projects · draw… │
+            │ ● Ticker             code · view · built in    1.0.0  built in · reads your projects · draw… │
             │ ● Unicode icons      icons · built in          1.0.0  built in · safe                        │
             │                                                                                              │
             │ Context gauge: How full each session's context window is, by its row; a card lists the ones  │
             │ past the warning, where C clears one (tm asks first) and enter attaches to it. For Claude    │
             │ sessions it needs the Agent mod on (early access, off by default: Settings, Agent mod, or    │
-            │ [agent_mod] enabled = true), which reports their context and use. By terminatr.              │
             │                                                                                              │
             │ enter on/off · i install · p permissions · s settings · d defaults · l log · r restart       │
             │ u update · x remove · e examples · ← → tabs · esc close                                      │

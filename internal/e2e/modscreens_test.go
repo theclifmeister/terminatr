@@ -15,6 +15,11 @@ import (
 	"time"
 )
 
+// cutDuration masks a session row's duration the settings popup cuts
+// short at its right edge (its unit hidden, only "15…" left), which
+// DefaultMasks can't match.
+var cutDuration = Mask{Name: "duration", Re: regexp.MustCompile(`\b\d+…`), Repl: "<duration>…"}
+
 func TestModScreens(t *testing.T) {
 	env, _, _ := tickerEnv(t)
 	state := fakeGH(t, env)
@@ -96,7 +101,7 @@ cmd = 'printf "PR: https://github.com/o/r/pull/7\n\n## Report\nFixed the login r
 	w.Type("3")
 	w.WaitFor("Tasks tab", wait)
 	w.WaitFor("● Standup", wait)
-	w.Golden("mods-settings.txt", popupMasks...)
+	w.Golden("mods-settings.txt", append(popupMasks, cutDuration)...)
 	w.Key(keyEsc)
 	w.WaitUntil("settings closed", wait, func(sc string) bool { return !strings.Contains(sc, "1 General") })
 
