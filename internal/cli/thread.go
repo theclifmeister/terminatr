@@ -1720,20 +1720,19 @@ func (e *Env) threadResolve(p *project.Project, id string, discard bool) error {
 				deleted = append(deleted, r.Branch+" (discarded)")
 			}
 		} else if r.Branch != "" && worktree.BranchExists(r.Repo, r.Branch) {
-			host := codehost.Pick(r.Repo, p.CodeHost())
+			host := pickHost(r.Repo, p.CodeHost())
 			switch st := host.PRState(r.Repo, r.Branch); st {
 			case "MERGED":
-				if codehost.External(host) {
-					// A code host mod's word deletes nothing by itself:
-					// git must find the branch's commits on the remote.
-					if unsaved, err := worktree.BranchUnsaved(r.Repo, r.Branch); err != nil || unsaved != "" {
-						why := unsaved
-						if err != nil {
-							why = oneLine(err.Error(), 120)
-						}
-						did = append(did, "kept branch "+r.Branch+" (PR merged, but "+why+")")
-						break
+				// The host's word deletes nothing by itself: commits made
+				// after the merge and pushed nowhere would be lost, so git
+				// must find the branch's commits on the remote.
+				if unsaved, err := worktree.BranchUnsaved(r.Repo, r.Branch); err != nil || unsaved != "" {
+					why := unsaved
+					if err != nil {
+						why = oneLine(err.Error(), 120)
 					}
+					did = append(did, "kept branch "+r.Branch+" (PR merged, but "+why+")")
+					break
 				}
 				if err := worktree.DeleteBranch(r.Repo, r.Branch); err != nil {
 					did = append(did, "kept branch "+r.Branch+" ("+oneLine(err.Error(), 120)+")")
