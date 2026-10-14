@@ -3,6 +3,7 @@ package peer
 import (
 	"bufio"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,8 +27,8 @@ const LinkProtocol = 1
 const MinLinkProtocol = 1
 
 // Caps are this tm's link capabilities beside the link core: peer views
-// (CapWatch, when the server exports), panes and messages each add one
-// when they're built.
+// (CapWatch, when the server exports), messages (CapMsg) and panes
+// (CapPane) each add one when the server offers them.
 var Caps = []string{}
 
 // Hello is the first line each end sends inside the TLS.
@@ -57,6 +58,10 @@ const (
 	idleAfter = 90 * time.Second
 	// maxLine bounds one NDJSON line.
 	maxLine = 1 << 20
+	// maxFrame bounds one binary frame's payload read; frameChunk is the
+	// most this tm puts in one, so a frame holds the writer only briefly.
+	maxFrame   = 64 << 10
+	frameChunk = 16 << 10
 	// maxInFlight bounds the peer's requests being answered at once
 	// (each peer.watch waits); more are refused.
 	maxInFlight = 32
@@ -79,10 +84,16 @@ type line struct {
 	Error  *proto.Error    `json:"error,omitempty"`
 }
 
-// session is a link once TLS is up: hellos, then NDJSON both ways.
+// Binary frames (docs/SPEC.md §16.12) go between two lines once both
+// hellos list CapPane: a 0 byte (a line starts with "{"), the stream u32,
+// the type u8 and the length u32, big-endian, then the payload.
+const frameHeader = 10
+
+// session is a link once TLS is up: hellos, then NDJSON both ways, and
+// binary frames for the panes.
 type session struct {
 	c    net.Conn
-	sc   *bufio.Scanner
+	br   *bufio.Reader
 	ping time.Duration
 	idle time.Duration
 
@@ -96,18 +107,32 @@ type session struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 
+	// panes are the session's pane streams, both ways.
+	panes *paneMux
+
 	mu      sync.Mutex
 	next    int64
 	pending map[int64]chan line
 	err     error // set when the session ended
 }
 
+// sessionKey finds the session in its ctx: a handler's ctx is the
+// session's.
+type sessionKey struct{}
+
 func newSession(c net.Conn) *session {
-	sc := bufio.NewScanner(c)
-	sc.Buffer(make([]byte, 0, 4096), maxLine)
 	ctx, cancel := context.WithCancel(context.Background())
-	return &session{c: c, sc: sc, ping: pingEvery, idle: idleAfter, pending: map[int64]chan line{},
-		inFlight: make(chan struct{}, maxInFlight), ctx: ctx, cancel: cancel}
+	s := &session{c: c, br: bufio.NewReaderSize(c, 64<<10), ping: pingEvery, idle: idleAfter, pending: map[int64]chan line{},
+		inFlight: make(chan struct{}, maxInFlight), cancel: cancel}
+	s.ctx = context.WithValue(ctx, sessionKey{}, s)
+	s.panes = newPaneMux(s)
+	return s
+}
+
+// sessionOf is the session whose ctx ctx is; nil for none.
+func sessionOf(ctx context.Context) *session {
+	s, _ := ctx.Value(sessionKey{}).(*session)
+	return s
 }
 
 func (s *session) send(v any) error {
@@ -122,14 +147,68 @@ func (s *session) send(v any) error {
 	return err
 }
 
+// sendFrame writes one binary frame, payload at most maxFrame.
+func (s *session) sendFrame(stream uint32, typ byte, payload []byte) error {
+	b := make([]byte, frameHeader, frameHeader+len(payload))
+	binary.BigEndian.PutUint32(b[1:], stream)
+	b[5] = typ
+	binary.BigEndian.PutUint32(b[6:], uint32(len(payload)))
+	b = append(b, payload...)
+	s.wmu.Lock()
+	defer s.wmu.Unlock()
+	s.c.SetWriteDeadline(time.Now().Add(s.idle))
+	_, err := s.c.Write(b)
+	return err
+}
+
 func (s *session) read(v any) error {
-	if !s.sc.Scan() {
-		if err := s.sc.Err(); err != nil {
-			return err
-		}
-		return io.EOF
+	b, err := s.readLine()
+	if err != nil {
+		return err
 	}
-	return json.Unmarshal(s.sc.Bytes(), v)
+	return json.Unmarshal(b, v)
+}
+
+// readLine reads one line, without its newline, of at most maxLine.
+func (s *session) readLine() ([]byte, error) {
+	var line []byte
+	for {
+		b, err := s.br.ReadSlice('\n')
+		if len(line)+len(b) > maxLine+1 {
+			return nil, bufio.ErrTooLong
+		}
+		switch {
+		case err == nil:
+			if line == nil {
+				return b[:len(b)-1], nil
+			}
+			line = append(line, b...)
+			return line[:len(line)-1], nil
+		case errors.Is(err, bufio.ErrBufferFull):
+			line = append(line, b...)
+		case errors.Is(err, io.EOF) && len(line)+len(b) > 0:
+			return nil, io.ErrUnexpectedEOF
+		default:
+			return nil, err
+		}
+	}
+}
+
+// readFrame reads a binary frame after its 0 byte.
+func (s *session) readFrame() (stream uint32, typ byte, payload []byte, err error) {
+	var h [frameHeader]byte
+	if _, err := io.ReadFull(s.br, h[:]); err != nil {
+		return 0, 0, nil, err
+	}
+	n := binary.BigEndian.Uint32(h[6:])
+	if n > maxFrame {
+		return 0, 0, nil, fmt.Errorf("link: a frame of %d bytes, over %d", n, maxFrame)
+	}
+	payload = make([]byte, n)
+	if _, err := io.ReadFull(s.br, payload); err != nil {
+		return 0, 0, nil, err
+	}
+	return binary.BigEndian.Uint32(h[1:]), h[5], payload, nil
 }
 
 // hello sends own and reads the peer's, within helloTimeout.
@@ -221,6 +300,7 @@ func (s *session) serve(rtt func(time.Duration)) error {
 	}()
 	err := s.loop()
 	s.cancel()
+	s.panes.end()
 	s.mu.Lock()
 	s.err = err
 	for id, ch := range s.pending {
@@ -234,6 +314,14 @@ func (s *session) serve(rtt func(time.Duration)) error {
 func (s *session) loop() error {
 	for {
 		s.c.SetReadDeadline(time.Now().Add(s.idle))
+		if b, err := s.br.Peek(1); err == nil && b[0] == 0 {
+			stream, typ, payload, err := s.readFrame()
+			if err != nil {
+				return err
+			}
+			s.panes.frame(stream, typ, payload)
+			continue
+		}
 		var l line
 		if err := s.read(&l); err != nil {
 			var se *json.SyntaxError

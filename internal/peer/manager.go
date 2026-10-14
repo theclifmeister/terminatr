@@ -34,6 +34,9 @@ type Options struct {
 	// Messages takes paired servers' messages (peer.message); nil takes
 	// none and leaves out CapMsg.
 	Messages Messages
+	// Panes serves this server's panes to paired servers whose switch
+	// allows it (peer.attach); nil serves none and leaves out CapPane.
+	Panes PaneHost
 }
 
 // Manager keeps a link to every paired server. Nothing local waits on
@@ -113,6 +116,8 @@ func (m *Manager) Reload() error {
 	for k, r := range m.links {
 		if p, ok := want[k]; !ok || p.Alias != r.l.peer.Alias || p.Relay != r.l.peer.Relay {
 			m.drop(k)
+		} else if p.PanesLevel() != r.l.panesLevel() {
+			r.l.setPanes(p.Panes)
 		}
 	}
 	for k, p := range want {
@@ -124,17 +129,18 @@ func (m *Manager) Reload() error {
 }
 
 func (m *Manager) add(id *Identity, cert tls.Certificate, p Peer) {
-	d := &dispatcher{ex: m.opts.Export, msgs: m.opts.Messages, caller: caller.ForPeer(p.Alias), peer: p.ID()}
 	l := &link{
 		peer:    p,
 		id:      id,
 		cert:    cert,
 		t:       RelayTransport(p.Relay, id, p.ID(), m.opts.RelayTLS),
 		hello:   Hello{LinkProtocol: LinkProtocol, Version: m.opts.Version, Caps: m.caps()},
-		methods: d.methods(),
 		logf:    m.opts.Logf,
 		backoff: m.opts.Backoff,
 	}
+	d := &dispatcher{ex: m.opts.Export, msgs: m.opts.Messages, panes: m.opts.Panes, caller: caller.ForPeer(p.Alias),
+		peer: p.ID(), level: l.panesLevel}
+	l.methods = d.methods()
 	l.st = proto.PeerLink{Alias: p.Alias, ID: p.ID().String(), Transport: l.t.String(), State: proto.LinkConnecting}
 	ctx, stop := context.WithCancel(m.ctx)
 	r := &running{l: l, stop: stop}
@@ -154,6 +160,9 @@ func (m *Manager) caps() []string {
 	}
 	if m.opts.Messages != nil {
 		caps = append(caps, CapMsg)
+	}
+	if m.opts.Panes != nil {
+		caps = append(caps, CapPane)
 	}
 	return caps
 }
@@ -177,6 +186,32 @@ func (m *Manager) Call(ctx context.Context, alias, method string, params, result
 		return fmt.Errorf("no paired server %q", alias)
 	}
 	return l.call(ctx, method, params, result)
+}
+
+// OpenPane opens a stream on the pane p.Session of the paired server
+// alias (docs/SPEC.md §16.12), its frames to sink: ErrNoPanes when that
+// server's tm has none, else peer.attach's error (proto.ErrPanesOff …).
+func (m *Manager) OpenPane(ctx context.Context, alias string, p proto.PeerAttachParams, sink PaneSink) (*PaneConn, error) {
+	if m == nil {
+		return nil, errNotUp
+	}
+	l := m.link(alias)
+	if l == nil {
+		return nil, fmt.Errorf("no paired server %q", alias)
+	}
+	return l.openPane(ctx, p, sink)
+}
+
+// link is the link to the paired server alias; nil for none.
+func (m *Manager) link(alias string) *link {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, r := range m.links {
+		if r.l.peer.Alias == alias {
+			return r.l
+		}
+	}
+	return nil
 }
 
 func (m *Manager) drop(k ID) {

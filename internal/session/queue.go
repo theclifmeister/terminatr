@@ -23,10 +23,10 @@ func newFrameQueue() *frameQueue {
 	return q
 }
 
-func (q *frameQueue) wouldOverflow(n int) bool {
+func (q *frameQueue) wouldOverflow(n, max int) bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	return len(q.pending)+n > MaxPending
+	return len(q.pending)+n > max
 }
 
 func (q *frameQueue) push(typ proto.FrameType, payload []byte) {
@@ -50,7 +50,8 @@ func (q *frameQueue) push(typ proto.FrameType, payload []byte) {
 	q.cond.Signal()
 }
 
-// reset drops the backlog and queues a single frame in its place.
+// reset drops the backlog and queues a single frame in its place; type 0
+// queues nothing.
 func (q *frameQueue) reset(typ proto.FrameType, payload []byte) {
 	q.mu.Lock()
 	if q.closed {
@@ -58,7 +59,10 @@ func (q *frameQueue) reset(typ proto.FrameType, payload []byte) {
 		return
 	}
 	q.resyncs++
-	q.pending = proto.AppendFrame(q.pending[:0], typ, payload)
+	q.pending = q.pending[:0]
+	if typ != 0 {
+		q.pending = proto.AppendFrame(q.pending, typ, payload)
+	}
 	q.lastOut = -1
 	q.cond.Signal()
 	q.mu.Unlock()

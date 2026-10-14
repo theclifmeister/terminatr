@@ -23,6 +23,7 @@ type fakeLinks struct {
 	threads map[string]int // by slug: the shared projects
 	calls   []string
 	changes chan struct{}
+	panes   string // the peers' pane switch, in peer.projects
 }
 
 func newFakeLinks(skew time.Duration, threads map[string]int, peers ...proto.PeerLink) *fakeLinks {
@@ -100,7 +101,7 @@ func (f *fakeLinks) Call(ctx context.Context, alias, method string, params, resu
 			for _, slug := range slices.Sorted(maps.Keys(f.threads)) {
 				ps.Projects = append(ps.Projects, proto.PeerProject{Project: slug, Goal: "goal of " + slug, Threads: f.threads[slug]})
 			}
-			ps.Now = now
+			ps.Now, ps.Panes = now, f.panes
 			f.mu.Unlock()
 			return roundTrip(ps, result)
 		case proto.MethodPeerWatch:
@@ -257,6 +258,28 @@ func TestMirrorFollowsPeer(t *testing.T) {
 // TestMirrorProjectsComeAndGo: a project the peer stops sharing leaves
 // the mirror (its watch answers not-shared), one it starts sharing
 // shows at the next list, and a peer unpaired leaves with its projects.
+// TestMirrorPanes: peer.list says whether a peer has remote panes, its
+// switch for this server and its release (docs/SPEC.md §16.12).
+func TestMirrorPanes(t *testing.T) {
+	fastMirror(t)
+	panes := upLink("mini", CapWatch, CapPane)
+	panes.Version, panes.RTT = "0.28.0", 12.5
+	f := newFakeLinks(0, map[string]int{"web": 1}, panes, upLink("old", CapWatch))
+	f.panes = proto.PanesView
+	m := startMirror(f, MirrorOptions{})
+	defer m.Close()
+	l := waitList(t, m, "both synced", func(l proto.PeerList) bool {
+		w, o := projectOf(l, "mini", "web"), projectOf(l, "old", "web")
+		return w != nil && o != nil && !w.Stale && !o.Stale
+	})
+	if p := peerOf(l, "mini"); !p.Pane || p.Panes != proto.PanesView || p.Version != "0.28.0" || p.RTT != 12.5 {
+		t.Errorf("mini %+v", p)
+	}
+	if p := peerOf(l, "old"); p.Pane || p.Panes != "" {
+		t.Errorf("a peer without pane-vt: %+v", p)
+	}
+}
+
 func TestMirrorProjectsComeAndGo(t *testing.T) {
 	fastMirror(t)
 	f := newFakeLinks(0, map[string]int{"web": 1}, upLink("mini", CapWatch))

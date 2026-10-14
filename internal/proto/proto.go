@@ -102,6 +102,10 @@ const (
 	FrameDigest   FrameType = 4 // emulator state digest at this point (consistency check)
 	// 5 was FrameState, never sent.
 	FrameClosed FrameType = 6 // UTF-8 reason: the session exited or the server is stopping
+	// FrameRepaint is a remote pane's state (docs/SPEC.md §16.12): u16
+	// cols, u16 rows, then emu.Repaint's bytes for a fresh emulator of
+	// that size. Only a paired server's stream has it, never an attach.
+	FrameRepaint FrameType = 20
 
 	// client → server
 	// Consoles size panes through their view (view.size, view.input);

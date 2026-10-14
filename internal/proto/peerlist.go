@@ -28,6 +28,14 @@ type PeerMirror struct {
 	// Watch: the peer exports (its hello lists the watch capability).
 	// A peer that doesn't has no projects here.
 	Watch bool `json:"watch,omitempty"`
+	// Pane: the peer has remote panes (its hello lists pane-vt), and
+	// Panes is its switch for this server as it last said (PanesOff,
+	// PanesView, PanesType; docs/SPEC.md §16.12). Version is its tm's
+	// release, RTT the link's last round trip in milliseconds.
+	Pane    bool    `json:"pane,omitempty"`
+	Panes   string  `json:"panes,omitempty"`
+	Version string  `json:"version,omitempty"`
+	RTT     float64 `json:"rtt_ms,omitempty"`
 	// Offset is the peer's clock minus this server's, in milliseconds,
 	// as last measured; the peer's times (a session's created, the
 	// ticker's) less Offset are this server's. Unset (and 0) until a

@@ -438,6 +438,39 @@ func TestAskDelegate(t *testing.T) {
 	}
 }
 
+// TestTookOver: the user's keys into a thread's pane make a takeover
+// item and a journal line; from a paired server's console the item says
+// which (docs/SPEC.md §16.12) and the journal names the peer.
+func TestTookOver(t *testing.T) {
+	setup(t)
+	p, err := New(Options{Slug: "takeover"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.TookOver(human, "t-0004", "T7"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.TookOver(caller.ForPeer("studio"), "t-0004", "T7"); err != nil {
+		t.Fatal(err)
+	}
+	items, _ := p.Inbox()
+	var summaries []string
+	for _, it := range items {
+		if it.Kind != KindTakeover || it.Subject != "t-0004" {
+			t.Errorf("item %+v", it)
+		}
+		summaries = append(summaries, it.Summary)
+	}
+	slices.Sort(summaries)
+	if want := []string{"the user typed into T7's pane", "the user typed into T7's pane from the paired server studio"}; !slices.Equal(summaries, want) {
+		t.Errorf("summaries %q", summaries)
+	}
+	lines, _, _ := p.JournalTail(5)
+	if j := strings.Join(lines, "\n"); !strings.Contains(j, "human thread.takeover t-0004") || !strings.Contains(j, "peer:studio thread.takeover t-0004") {
+		t.Errorf("journal %q", j)
+	}
+}
+
 func TestAskAcceptSendBack(t *testing.T) {
 	setup(t)
 	p, err := New(Options{Slug: "review"})
