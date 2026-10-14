@@ -81,6 +81,8 @@ func init() {
 					return "open"
 				case r.questions > 0:
 					return "answer"
+				case r.links > 0:
+					return "open"
 				case r.session != "":
 					return "attach"
 				case r.thread == nil && r.project != "":
@@ -201,6 +203,8 @@ func (m *dash) enter(string) tea.Cmd {
 		return m.openCard(r.key)
 	case r.questions > 0:
 		return m.answerQuestions(r.project)
+	case r.links > 0:
+		return m.showTab(r.project, tabMessages)
 	case r.session != "":
 		return m.act(func() actionMsg { return actionMsg{attach: r.session, current: r.project} })
 	case r.thread != nil:

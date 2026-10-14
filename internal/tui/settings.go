@@ -662,7 +662,7 @@ func (cv *confirmView) render(m *dash) string {
 }
 
 // projectSettings are a project's own settings (§11.2), for its popup.
-func projectSettings(slug string) []setting { return safetySettings(slug) }
+func projectSettings(slug string) []setting { return append(safetySettings(slug), linkRow(slug)) }
 
 // allProjectsSettings are the settings every project follows unless it
 // sets its own (§11.2 All projects), for the , popup.

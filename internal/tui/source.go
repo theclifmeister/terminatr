@@ -19,6 +19,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modannot"
 	"github.com/theclifmeister/terminatr/internal/models"
@@ -136,7 +137,12 @@ type ProjectData struct {
 	// host failed, as the ticker last saw them; 0 while they work, or
 	// when it has no PR host. The sidebar marks its name red (▲).
 	PRHostFails int
-	Err         string
+	// Links are the project's links to other projects' coordinators
+	// (link.Rows); LinkWaits counts its messages waiting for the user's
+	// OK and its links the breaker paused, a NEEDS YOU row.
+	Links     []link.Row
+	LinkWaits int
+	Err       string
 }
 
 // ThreadRow is one thread: its record (thread.toml) and its STATUS.md,
@@ -172,6 +178,16 @@ type Source interface {
 	// a project's own value, so it follows all projects again. It is
 	// refused when tm runs inside an agent.
 	SetSetting(table, key string, value any) error
+	// SetLink links slug and other (link.Set): slug's direction allow,
+	// other's the mirror, off removing both; SetLinkAsk turns slug's ask
+	// switch for the link on or off (link.SetAsk). LinkLog reads the messages between them;
+	// LinkAct approves, drops (arg a message id) or resumes (arg the
+	// other project), or sends text to arg as the user. All are the
+	// human's, refused when tm runs inside an agent.
+	SetLink(slug, other, allow string) error
+	SetLinkAsk(slug, other string, ask bool) error
+	LinkLog(slug, other string) ([]*link.Message, error)
+	LinkAct(slug, verb, arg, text string) (string, error)
 	// ApplyModDefaults applies the defaults an enabled mod suggests for
 	// all projects, on the human's keypress (ApplyModDefaults).
 	ApplyModDefaults(id string) ([]mod.Suggestion, error)
@@ -450,6 +466,15 @@ func (s *ServerSource) Load() Data {
 			pd.Questions = len(qs)
 			pd.Badges = badgesOf(badgers, sum.Slug)
 			pd.PRHostFails = hostFails(fails, p)
+			if cfg != nil {
+				pd.Links = link.Rows(cfg, p)
+				for _, r := range pd.Links {
+					pd.LinkWaits += r.Held
+					if r.Paused {
+						pd.LinkWaits++
+					}
+				}
+			}
 		}
 		d.Projects = append(d.Projects, pd)
 	}
@@ -558,6 +583,61 @@ func (s *ServerSource) OpenProject(slug string, cols, rows int) (string, error) 
 
 // errHumanOnly refuses a settings change from inside an agent.
 var errHumanOnly = errors.New("human-only: settings are changed by the human")
+
+func (s *ServerSource) SetLink(slug, other, allow string) error {
+	if s.Caller.IsAgent() {
+		return errHumanOnly
+	}
+	return link.Set(s.Caller, slug, other, allow, nil)
+}
+
+func (s *ServerSource) SetLinkAsk(slug, other string, ask bool) error {
+	if s.Caller.IsAgent() {
+		return errHumanOnly
+	}
+	return link.SetAsk(s.Caller, slug, other, ask)
+}
+
+func (s *ServerSource) LinkLog(slug, other string) ([]*link.Message, error) {
+	p, err := project.Open(slug)
+	if err != nil {
+		return nil, err
+	}
+	return link.Log(p, other)
+}
+
+func (s *ServerSource) LinkAct(slug, verb, arg, text string) (string, error) {
+	if s.Caller.IsAgent() {
+		return "", errHumanOnly
+	}
+	p, err := project.Open(slug)
+	if err != nil {
+		return "", err
+	}
+	switch verb {
+	case "approve":
+		m, err := link.Approve(s.Caller, p, arg, false)
+		if err != nil {
+			return "", err
+		}
+		return "sent " + m.ID + " to " + m.Peer, nil
+	case "drop":
+		m, err := link.Drop(s.Caller, p, arg, false)
+		if err != nil {
+			return "", err
+		}
+		return "dropped " + m.ID, nil
+	case "resume":
+		return "resumed the link with " + arg, link.Resume(s.Caller, p, arg, false)
+	case "send":
+		m, err := link.Send(s.Caller, p, arg, link.Opts{Text: text})
+		if err != nil {
+			return "", err
+		}
+		return "sent " + m.ID + " to " + m.Peer, nil
+	}
+	return "", fmt.Errorf("unknown link action %q", verb)
+}
 
 func (s *ServerSource) SetSetting(table, key string, value any) error {
 	if s.Caller.IsAgent() {

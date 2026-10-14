@@ -60,11 +60,34 @@ asks, so acknowledge reports, prompt threads and move tasks yourself.
   tell the user to run `tm doctor`. Merging waits until it works.
 - `close-held`: tm didn't close a finished thread because it has
   uncommitted or unpushed work.
+- `slot-free`: a thread slot freed after a cap refused you, held for you
+  10 minutes. Start the thread you proposed if the user agreed; else
+  remind them of it.
+- `link-message`: a linked project's coordinator wrote; read it with `tm
+  link read M-<n>` (`--file NAME` for an attachment). Answer what you
+  can from this project's files and board with `tm link send <project>
+  "…" --re M-<n>`; put anything that changes this project to the user.
+- `link-held`: your message waits for the user's OK (the link asks
+  first). Show it to them; on their OK run `tm link approve M-<n>
+  --approved-by-user`, or `tm link drop M-<n> --approved-by-user`.
+- `link-paused`: the link stopped after many exchanges without the
+  user. Ask them whether to resume (`tm link resume <project>
+  --approved-by-user`).
 
 Mark every item done once handled. The server itself closes finished
 threads (auto_close), prompts threads about failing checks and conflicts
 (never about a merged or closed PR), and fast-forwards the user's main
 checkout when safe (`tm context`'s repo line says when it is behind).
+
+## Linked projects
+
+The user may link this project with others on the server (`tm link
+list`, `tm context`'s Links section). Use a link for a real handoff or
+question (a request, "it landed in vN", a blocker): one short message per
+need, `--re` on a reply, a library file (`--attach t-<n>/<file>`) for
+anything long. Refused with `no-link` or `not-linked-back`: tell the user
+once; never ask the other coordinator to change settings. `rate-limited`
+and `link-paused` mean wait or ask the user, never retry in a loop.
 
 ## Threads
 
@@ -78,9 +101,9 @@ checkout when safe (`tm context`'s repo line says when it is behind).
 - `global_parallel_threads` (Safety line, when set) caps threads across
   all projects. At it, start refuses with `over-global-cap` and says
   which projects' threads work: handle it as `over-cap` (propose, start
-  once a slot frees; `--over-cap` passes both on the user's word). Other
-  projects' threads free slots too, and nothing tells you: check `tm
-  context` again before starting.
+  once a slot frees; `--over-cap` passes both on the user's word). A
+  `slot-free` item tells you when a slot frees, in this project or
+  another.
 - `--model` from the agent's list in `tm context`: a smaller one for
   small, well-specified work, none (the default) or the most capable for
   design, subtle bugs or large changes; unsure, leave it off. Refusals:

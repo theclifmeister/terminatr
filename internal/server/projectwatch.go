@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -64,6 +65,9 @@ type projectSnap struct {
 	hint      int  // the config's context hint
 	prPoll    int  // the project's PR poll, in seconds
 	noPRHost  bool // NoPRHost
+	// links are the project's links to other projects' coordinators
+	// (docs/SPEC.md §7.9).
+	links []proto.WatchLink
 }
 
 // readProjectSnap reads project p's files, the ticker's state file at
@@ -93,6 +97,10 @@ func readProjectSnap(p *project.Project, tickerState string) *projectSnap {
 		sn.hint = cfg.ContextHint
 		if s, err := cfg.Safety(p.Slug); err == nil && s.PRPollSeconds > 0 {
 			sn.prPoll = s.PRPollSeconds
+		}
+		for _, r := range link.Rows(cfg, p) {
+			sn.links = append(sn.links, proto.WatchLink{Peer: r.Peer, State: r.Words(), Send: r.Send, Receive: r.Receive,
+				Paused: r.Paused, Unread: r.Unread, Held: r.Held, Last: r.Last})
 		}
 	}
 	sn.noPRHost = NoPRHost(p)
@@ -212,6 +220,7 @@ func (sn *projectSnap) watch(sessions []proto.SessionInfo) proto.ProjectWatch {
 			Title: queueTitle(info, note)})
 	}
 	w.Context = contextOf(p.Slug, sessions, sn.hint)
+	w.Links = sn.links
 	if t := watchTicker(timing, sn.prPoll, sn.noPRHost); !t.PRChecked.IsZero() || !t.Synced.IsZero() || t.NoPRHost {
 		w.Ticker = &t
 	}

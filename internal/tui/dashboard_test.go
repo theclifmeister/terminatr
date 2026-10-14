@@ -17,6 +17,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/modview"
@@ -63,7 +64,13 @@ type fakeSource struct {
 	fetchedMods []string          // what FetchMod was asked for
 	templates   []mod.Template
 	added       []string // "slug title|notes|step;step"
-	modViews    proto.ModViewsResult
+	// links are SetLink's and SetLinkAsk's calls ("slug other both",
+	// "slug other ask true"), linkActs
+	// LinkAct's ("slug verb arg text"); linkLog is what LinkLog gives.
+	links    []string
+	linkActs []string
+	linkLog  []*link.Message
+	modViews proto.ModViewsResult
 	// tasksTab: ModViews lists the Tasks tab mod's view, drawn from the
 	// board (taskstab_test.go), its done tasks listed with tasksDoneAll.
 	tasksTab     bool
@@ -141,6 +148,19 @@ func (f *fakeSource) SetSetting(table, key string, value any) error {
 		return config.Unset(table, key)
 	}
 	return config.Set(table, key, value)
+}
+func (f *fakeSource) SetLink(slug, other, allow string) error {
+	f.links = append(f.links, fmt.Sprintf("%s %s %s", slug, other, allow))
+	return nil
+}
+func (f *fakeSource) SetLinkAsk(slug, other string, ask bool) error {
+	f.links = append(f.links, fmt.Sprintf("%s %s ask %v", slug, other, ask))
+	return nil
+}
+func (f *fakeSource) LinkLog(slug, other string) ([]*link.Message, error) { return f.linkLog, nil }
+func (f *fakeSource) LinkAct(slug, verb, arg, text string) (string, error) {
+	f.linkActs = append(f.linkActs, strings.TrimSpace(strings.Join([]string{slug, verb, arg, text}, " ")))
+	return verb + " done", nil
 }
 func (f *fakeSource) SetRepo(slug, path string, add bool) error {
 	sign := map[bool]string{true: "+", false: "-"}[add]

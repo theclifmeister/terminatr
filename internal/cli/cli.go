@@ -72,6 +72,7 @@ var commands = map[string]command{
 	"inbox":   runInbox,
 	"ask":     runAsk,
 	"library": runLibrary,
+	"link":    runLink,
 	"skill":   runSkill,
 	"thread":  runThread,
 	"report":  runReport,

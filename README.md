@@ -18,7 +18,7 @@ Every agent runs in its own session. Open one and tm keeps the project tree on t
 
 ![A thread's session: the agent's conversation in the middle, the project sidebar on the left, and the thread's info panel on the right with its steps, PR and last report.](docs/images/session.svg)
 
-`a` opens the project popup: its overview, inbox, tasks, settings, keys, memory and library. The Tasks tab shows the board by state, with the selected task's steps; `+` adds a task, from a template if you like.
+`a` opens the project popup: its overview, inbox, tasks, settings, keys, memory, library and messages (what its coordinator and linked projects' coordinators wrote each other, `tm link`). The Tasks tab shows the board by state, with the selected task's steps; `+` adds a task, from a template if you like.
 
 ![The project popup's Tasks tab: the board grouped by state, with a task in motion showing its steps and one on deck.](docs/images/tasks.svg)
 
