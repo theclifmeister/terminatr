@@ -87,7 +87,7 @@ func TestCommand(t *testing.T) {
 		}},
 		// herdr t-0012: an unquoted forward-slash exe runs in every shell.
 		{"windows", `C:\Users\me\.terminatr\bin\tm.exe`, all("C:/Users/me/.terminatr/bin/tm.exe hook --agent claude")},
-		// The 8.3 form of a folder with a space (ShortPath) stays bare.
+		// The 8.3 form of a folder with a space stays bare.
 		{"windows", `C:\PROGRA~1\tm\tm.exe`, all("C:/PROGRA~1/tm/tm.exe hook --agent claude")},
 		// Without short names: quoted, and & in PowerShell.
 		{"windows", `C:\Program Files\tm\tm.exe`, map[kind]string{
