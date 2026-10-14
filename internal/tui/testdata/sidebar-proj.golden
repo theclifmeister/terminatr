@@ -120,6 +120,13 @@ an inactive project, expanded: none (156×34, sidebar 36)
     ▾ ci status ──────────── 1 ☒   │
       ☑ #412 beta docs             │
       ☒ #415 beta release          │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
+                                   │
  ── ▾ inactive (1) ─────────────── │
  ■ gamma              0       ⊘    │
  └─ coordinator         ·     ⊘    │
@@ -130,13 +137,6 @@ an inactive project, expanded: none (156×34, sidebar 36)
    PR host  ok                     │
  ▾ CI STATUS ─────────────── 1 ☒   │
    #412 passes                     │
-                                   │
-                                   │
-                                   │
-                                   │
-                                   │
-                                   │
-                                   │
  ───────────────────────────────── │
  beta · active                     │
  2 threads · coordinator not runn… │
