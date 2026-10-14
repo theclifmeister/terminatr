@@ -156,6 +156,8 @@ type Server struct {
 	views *views
 	// watch wakes the session watches (watch.go).
 	watch watchers
+	// projects is what project watches read from files, per project.
+	projects projectCache
 	// modEv is the user mods' event bus (modevents.go).
 	modEv *modEvents
 	// modSup runs the code mods' hosts (modhosts.go); set before Run

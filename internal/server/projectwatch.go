@@ -26,15 +26,16 @@ import (
 	"github.com/theclifmeister/terminatr/internal/ticker"
 )
 
-// projectWatchState is project slug's state now, from its files, the
-// ticker's state file and the server's sessions.
+// projectWatchState is project slug's state now, from its files (as
+// the project cache last read them), the ticker's state file and the
+// server's sessions.
 func (s *Server) projectWatchState(slug string) (proto.ProjectWatch, error) {
-	p, err := project.Open(slug)
+	snap, err := s.projects.get(slug, ticker.StatePath(s.opts.Paths.Sessions), s.watch.generation())
 	if err != nil {
 		return proto.ProjectWatch{}, err
 	}
-	w := ProjectWatchOf(p, s.list().Sessions, ticker.StatePath(s.opts.Paths.Sessions))
-	w.Cells = s.projectCells(p.Slug)
+	w := snap.watch(s.list().Sessions)
+	w.Cells = s.projectCells(slug)
 	return w, nil
 }
 
@@ -42,28 +43,83 @@ func (s *Server) projectWatchState(slug string) (proto.ProjectWatch, error) {
 // and tickerState the ticker's state file. The TUI's coordinator info
 // panel reads it too, with the sessions of its poll (T90).
 func ProjectWatchOf(p *project.Project, sessions []proto.SessionInfo, tickerState string) proto.ProjectWatch {
+	return readProjectSnap(p, tickerState).watch(sessions)
+}
+
+// projectSnap is what a project watch reads from files: the project's,
+// the ticker's state file and the config. A ProjectWatch is built from
+// it and the sessions without reading anything.
+type projectSnap struct {
+	p      *project.Project
+	items  []project.Item
+	board  *tasks.Board
+	recs   []*thread.Record
+	status map[string]*thread.Status // by thread id; nil for unreadable
+	// reportPR is a thread's report's PR link, for the threads the
+	// ticker knows no PR URL of.
+	reportPR  map[string]string
+	prs       map[string]ticker.PR
+	timing    ticker.Timing
+	questions int
+	hint      int  // the config's context hint
+	prPoll    int  // the project's PR poll, in seconds
+	noPRHost  bool // NoPRHost
+}
+
+// readProjectSnap reads project p's files, the ticker's state file at
+// tickerState and the config, each once.
+func readProjectSnap(p *project.Project, tickerState string) *projectSnap {
+	sn := &projectSnap{p: p, status: map[string]*thread.Status{}, reportPR: map[string]string{},
+		hint: config.DefaultContextHint, prPoll: config.DefaultPRPollSeconds}
+	sn.items, _ = p.Inbox()
+	sn.board, _ = p.Tasks().Load()
+	sn.prs, sn.timing = ticker.ReadProject(tickerState, p.Slug)
+	sn.recs, _ = thread.List(p)
+	for _, r := range sn.recs {
+		if r.State == thread.Resolved {
+			continue
+		}
+		sn.status[r.ID], _ = thread.ReadStatus(p, r.ID)
+		if sn.prs[r.ID].URL == "" {
+			if rep, _ := thread.ReadReport(p, r.ID); rep != nil {
+				sn.reportPR[r.ID] = rep.PR
+			}
+		}
+	}
+	if qs, err := p.Questions(); err == nil {
+		sn.questions = len(qs)
+	}
+	if cfg, err := config.Load(); err == nil {
+		sn.hint = cfg.ContextHint
+		if s, err := cfg.Safety(p.Slug); err == nil && s.PRPollSeconds > 0 {
+			sn.prPoll = s.PRPollSeconds
+		}
+	}
+	sn.noPRHost = NoPRHost(p)
+	return sn
+}
+
+// watch is the project's ProjectWatch with sessions the server's.
+func (sn *projectSnap) watch(sessions []proto.SessionInfo) proto.ProjectWatch {
+	p, items, b := sn.p, sn.items, sn.board
 	w := proto.ProjectWatch{Project: p.Slug, NeedsYou: []proto.WatchNeed{}, Inbox: []proto.WatchItem{},
 		Threads: []proto.WatchThread{}, Ready: []proto.WatchTodo{}}
-	items, _ := p.Inbox()
 	for _, r := range project.Rows(items) {
 		w.Inbox = append(w.Inbox, proto.WatchItem{ID: r.ID, Kind: r.Kind, Subject: r.Subject, Summary: r.Summary, NeedsUser: r.NeedsUser,
 			Count: r.Count, Task: r.Task, What: r.What, Title: r.Title})
 	}
-	b, _ := p.Tasks().Load()
 	byThread := map[string]proto.SessionInfo{}
 	for _, info := range sessions {
 		if info.Project == p.Slug && info.Role == proto.RoleThread && info.Thread != "" {
 			byThread[info.Thread] = info
 		}
 	}
-	prs := ticker.PRs(tickerState, p.Slug)
-	timing := ticker.ReadTiming(tickerState, p.Slug)
+	prs, timing := sn.prs, sn.timing
 
 	// The threads, and per task the latest one working on it.
 	byTask := map[string]int{} // index in w.Threads
 	prOf := map[string]ticker.PR{}
-	recs, _ := thread.List(p)
-	for _, r := range recs {
+	for _, r := range sn.recs {
 		if r.State == thread.Resolved {
 			continue
 		}
@@ -72,7 +128,7 @@ func ProjectWatchOf(p *project.Project, sessions []proto.SessionInfo, tickerStat
 			wt.Session, wt.State, wt.Reason = info.ID, info.State, info.Reason
 			wt.NeedsYou = sessionNeedsYou(info)
 		}
-		st, _ := thread.ReadStatus(p, r.ID)
+		st := sn.status[r.ID]
 		if st != nil && st.NeedsYou != "" {
 			wt.NeedsYou = st.NeedsYou
 		}
@@ -91,9 +147,7 @@ func ProjectWatchOf(p *project.Project, sessions []proto.SessionInfo, tickerStat
 			wt.PRChecked = timing.ThreadPolled[r.ID]
 		}
 		if wt.PRURL == "" {
-			if rep, _ := thread.ReadReport(p, r.ID); rep != nil {
-				wt.PRURL = rep.PR
-			}
+			wt.PRURL = sn.reportPR[r.ID]
 		}
 		prOf[r.ID] = pr
 		if wt.Task != nil {
@@ -157,13 +211,11 @@ func ProjectWatchOf(p *project.Project, sessions []proto.SessionInfo, tickerStat
 		w.NeedsYou = append(w.NeedsYou, proto.WatchNeed{Why: proto.WhyQueue, Thread: info.Thread, Session: info.ID,
 			Title: queueTitle(info, note)})
 	}
-	w.Context = contextOf(p.Slug, sessions)
-	if t := watchTicker(p, timing); !t.PRChecked.IsZero() || !t.Synced.IsZero() || t.NoPRHost {
+	w.Context = contextOf(p.Slug, sessions, sn.hint)
+	if t := watchTicker(timing, sn.prPoll, sn.noPRHost); !t.PRChecked.IsZero() || !t.Synced.IsZero() || t.NoPRHost {
 		w.Ticker = &t
 	}
-	if qs, err := p.Questions(); err == nil {
-		w.Questions = len(qs)
-	}
+	w.Questions = sn.questions
 	slices.SortStableFunc(w.NeedsYou, func(a, b proto.WatchNeed) int {
 		if c := cmp.Compare(whyRank(a.Why), whyRank(b.Why)); c != 0 {
 			return c
@@ -328,8 +380,8 @@ func (s *ProjectWatchStream) Next() (proto.ProjectWatch, error) {
 func (s *ProjectWatchStream) Close() error { return s.c.Close() }
 
 // contextOf is the context use of project slug's coordinator, nil when
-// none runs or none reported a turn.
-func contextOf(slug string, sessions []proto.SessionInfo) *proto.WatchContext {
+// none runs or none reported a turn; hint is the config's ContextHint.
+func contextOf(slug string, sessions []proto.SessionInfo, hint int) *proto.WatchContext {
 	for _, info := range sessions {
 		if info.Project != slug || info.Role != proto.RoleCoordinator {
 			continue
@@ -338,29 +390,28 @@ func contextOf(slug string, sessions []proto.SessionInfo) *proto.WatchContext {
 		if pct < 0 {
 			return nil
 		}
-		hint := 0
-		if cfg, err := config.Load(); err == nil {
-			hint = cfg.ContextHint
-		} else {
-			hint = config.DefaultContextHint
-		}
 		return &proto.WatchContext{Tokens: info.Context, Window: info.ContextWindow, Percent: pct,
 			Threshold: hint, Hint: hint > 0 && pct >= hint}
 	}
 	return nil
 }
 
-// watchTicker is project p's ticker as its dashboard shows it, from the
-// ticker's timing: its times, its poll interval, whether its PR host
-// fails or it has none.
-func watchTicker(p *project.Project, timing ticker.Timing) proto.WatchTicker {
-	noHost := NoPRHost(p)
+// projectTicker is project p's ticker as its dashboard shows it, with
+// its poll interval from the config.
+func projectTicker(p *project.Project, timing ticker.Timing) proto.WatchTicker {
 	secs := config.DefaultPRPollSeconds
 	if cfg, err := config.Load(); err == nil {
 		if s, err := cfg.Safety(p.Slug); err == nil && s.PRPollSeconds > 0 {
 			secs = s.PRPollSeconds
 		}
 	}
+	return watchTicker(timing, secs, NoPRHost(p))
+}
+
+// watchTicker is a project's ticker as its dashboard shows it, from the
+// ticker's timing: its times, its poll interval (secs), whether its PR
+// host fails or it has none (noHost).
+func watchTicker(timing ticker.Timing, secs int, noHost bool) proto.WatchTicker {
 	return proto.WatchTicker{PRChecked: timing.PRPolled, Synced: timing.Synced, PRPollSeconds: secs, GHFailing: timing.GHFailing && !noHost, NoPRHost: noHost}
 }
 

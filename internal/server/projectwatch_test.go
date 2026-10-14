@@ -212,3 +212,161 @@ func TestProjectWatchNoPRHost(t *testing.T) {
 		t.Fatalf("github origin: ticker %+v", w.Ticker)
 	}
 }
+
+// TestProjectWatchSeesChanges: every watcher of a project, sharing one
+// cached state, sees each kind of change made behind the server's back:
+// a new thread, its status, its report, the ticker's PR poll, the inbox
+// and the questions.
+func TestProjectWatchSeesChanges(t *testing.T) {
+	paths := testPaths(t)
+	p := newWatchProject(t)
+	t.Setenv(envWatchPoll, "50ms")
+	startServer(t, paths)
+	var streams []chan proto.ProjectWatch
+	for range 2 {
+		st, _, err := WatchProject(paths, p.Slug)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer st.Close()
+		ch := make(chan proto.ProjectWatch, 16)
+		go func() {
+			defer close(ch)
+			for {
+				w, err := st.Next()
+				if err != nil {
+					return
+				}
+				ch <- w
+			}
+		}()
+		streams = append(streams, ch)
+	}
+	thread1 := func(w proto.ProjectWatch) proto.WatchThread {
+		if len(w.Threads) == 0 {
+			return proto.WatchThread{}
+		}
+		return w.Threads[0]
+	}
+	await := func(what string, ok func(proto.ProjectWatch) bool) {
+		t.Helper()
+		for i, ch := range streams {
+			deadline := time.After(3 * time.Second)
+			for done := false; !done; {
+				select {
+				case w, open := <-ch:
+					if !open {
+						t.Fatalf("watcher %d: stream ended waiting for %s", i, what)
+					}
+					done = ok(w)
+				case <-deadline:
+					t.Fatalf("watcher %d never saw %s", i, what)
+				}
+			}
+		}
+	}
+
+	if _, err := p.Tasks().Add(human, []tasks.NewTask{{Title: "Work", Status: "started"}}); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := thread.Create(p, thread.Record{Title: "work on T1", Task: "T1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	await("the new thread", func(w proto.ProjectWatch) bool { return thread1(w).ID == rec.ID })
+
+	if _, err := thread.UpdateStatus(p, rec.ID, func(st *thread.Status) error {
+		st.NeedsYou = "which port?"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	await("the thread's question", func(w proto.ProjectWatch) bool { return thread1(w).NeedsYou == "which port?" })
+
+	report := "PR: https://github.com/o/r/pull/7\n## Report\nDone.\n## Next\nMerge it\n"
+	if _, err := thread.StoreReport(p, rec.ID, report, nil, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	await("the report's PR", func(w proto.ProjectWatch) bool { return thread1(w).PRURL == "https://github.com/o/r/pull/7" })
+
+	ts := filepath.Join(filepath.Dir(paths.Sessions), "ticker.json")
+	if err := os.WriteFile(ts, []byte(`{"threads": {"`+p.Slug+`/`+rec.ID+`": {"pr": {"number": 8, "url": "https://x/8", "state": "OPEN", "checks": "fail"}}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	await("the ticker's PR", func(w proto.ProjectWatch) bool { return thread1(w).PRURL == "https://x/8" && thread1(w).PRBad })
+
+	if _, err := p.AddItem("note", "T1", "a note", true); err != nil {
+		t.Fatal(err)
+	}
+	await("the inbox item", func(w proto.ProjectWatch) bool { return len(w.Inbox) == 1 })
+
+	if _, err := p.AddQuestion(project.Question{Header: "Ship", Question: "ship?", Options: []project.QuestionOption{{Label: "yes"}, {Label: "no"}}}); err != nil {
+		t.Fatal(err)
+	}
+	await("the question", func(w proto.ProjectWatch) bool { return w.Questions == 1 })
+}
+
+// TestProjectWatchIdleNoGit: an idle project watch forks no git, however
+// often it looks; a new origin still shows.
+func TestProjectWatchIdleNoGit(t *testing.T) {
+	paths := testPaths(t)
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("no git")
+	}
+	repo := t.TempDir()
+	for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", "https://github.com/o/r.git"}} {
+		if out, err := exec.Command(real, append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	p, err := project.New(project.Options{Slug: "demo", Repos: []string{repo}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A git that counts its runs.
+	bin, log := t.TempDir(), filepath.Join(t.TempDir(), "git.log")
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte("#!/bin/sh\necho x >> '"+log+"'\nexec '"+real+"' \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv(envWatchPoll, "20ms")
+	startServer(t, paths)
+	st, _, err := WatchProject(paths, p.Slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	time.Sleep(200 * time.Millisecond)
+	os.Remove(log)
+	time.Sleep(time.Second)
+	if b, _ := os.ReadFile(log); len(b) > 0 {
+		t.Fatalf("an idle watch ran git %d times in a second", len(b)/2)
+	}
+
+	got := make(chan proto.ProjectWatch, 16)
+	go func() {
+		for {
+			w, err := st.Next()
+			if err != nil {
+				close(got)
+				return
+			}
+			got <- w
+		}
+	}()
+	if out, err := exec.Command(real, "-C", repo, "remote", "set-url", "origin", "https://gitlab.com/o/r.git").CombinedOutput(); err != nil {
+		t.Fatalf("set-url: %v %s", err, out)
+	}
+	deadline := time.After(3 * time.Second)
+	for {
+		select {
+		case w := <-got:
+			if w.Ticker != nil && w.Ticker.NoPRHost {
+				return
+			}
+		case <-deadline:
+			t.Fatal("a gitlab origin never showed as no PR host")
+		}
+	}
+}

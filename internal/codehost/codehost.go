@@ -12,8 +12,10 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -208,15 +210,53 @@ var newAzure func(Target) Host
 // origin is repo's origin URL as configured, "" for none: before any
 // url.<base>.insteadOf rewrite, which says how to reach the repo, not
 // whose PRs it has.
+//
+// It is kept per repo while the repo's .git/config is the same file with
+// the same mtime and size, for at most originTTL, so the dashboards that
+// ask every second fork no git while nothing changes. A repo whose .git
+// is not a folder (a linked worktree) asks git every time.
 func origin(repo string) string {
 	if repo == "" {
 		return ""
 	}
-	out, err := git(repo, "config", "--get", "remote.origin.url")
-	if err != nil {
-		return ""
+	fi, err := os.Stat(filepath.Join(repo, ".git", "config"))
+	if err == nil {
+		origins.Lock()
+		o, ok := origins.m[repo]
+		origins.Unlock()
+		if ok && os.SameFile(o.fi, fi) && o.fi.ModTime().Equal(fi.ModTime()) && o.fi.Size() == fi.Size() &&
+			time.Since(o.at) < originTTL {
+			return o.url
+		}
+	}
+	out, gerr := git(repo, "config", "--get", "remote.origin.url")
+	if gerr != nil {
+		out = ""
+	}
+	if err == nil {
+		origins.Lock()
+		origins.m[repo] = originOf{url: out, fi: fi, at: time.Now()}
+		origins.Unlock()
 	}
 	return out
+}
+
+// origins is origin's cache, by repo.
+var origins = struct {
+	sync.Mutex
+	m map[string]originOf
+}{m: map[string]originOf{}}
+
+// originTTL bounds how long origin keeps a URL: a rewrite of
+// .git/config its stat can't tell apart still shows.
+const originTTL = time.Minute
+
+// originOf is a repo's origin URL, the .git/config it was read from and
+// when.
+type originOf struct {
+	url string
+	fi  os.FileInfo
+	at  time.Time
 }
 
 // gitTimeout bounds git: local reads only, but a log --grep that finds
