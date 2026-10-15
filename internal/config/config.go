@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -197,31 +196,10 @@ type Safety struct {
 // ArchiveDays is the retention setting key names (ArchiveKeys), 0 for
 // another key.
 func (s Safety) ArchiveDays(key string) int {
-	switch key {
-	case "archive_tasks_days":
-		return s.ArchiveTasksDays
-	case "archive_threads_days":
-		return s.ArchiveThreadsDays
-	case "archive_inbox_days":
-		return s.ArchiveInboxDays
-	case "archive_journal_days":
-		return s.ArchiveJournalDays
+	if !slices.Contains(ArchiveKeys, key) {
+		return 0
 	}
-	return 0
-}
-
-// SetArchiveDays sets the retention setting key names (ArchiveKeys).
-func (s *Safety) SetArchiveDays(key string, n int) {
-	switch key {
-	case "archive_tasks_days":
-		s.ArchiveTasksDays = n
-	case "archive_threads_days":
-		s.ArchiveThreadsDays = n
-	case "archive_inbox_days":
-		s.ArchiveInboxDays = n
-	case "archive_journal_days":
-		s.ArchiveJournalDays = n
-	}
+	return s.Value(key).(int)
 }
 
 // LegacyAgent is what a session or thread record without an agent ran:
@@ -575,196 +553,6 @@ func (c *Config) OwnDefaults() []string {
 		return nil
 	}
 	return c.defaults.own()
-}
-
-// own lists the keys r sets (ProjectKeys order), auto_resolve as
-// auto_close.
-func (r rawSafety) own() []string {
-	set := map[string]bool{
-		"start_threads": r.StartThreads != nil, "yolo": r.Yolo != nil,
-		"coordinator_approves": r.CoordinatorApproves != nil, "parallel_threads": r.ParallelThreads != nil,
-		"global_parallel_threads": r.GlobalThreads != nil,
-		"auto_close":              r.AutoClose != nil || r.AutoResolve != nil, "auto_close_days": r.AutoCloseDays != nil,
-		"pr_followup": r.PRFollowup != nil, "pr_poll_seconds": r.PRPoll != nil, "complete_tasks": r.CompleteTasks != nil,
-		"coordinator_remote_control": r.CoordinatorRC != nil, "auto_clear": r.AutoClear != nil, "coordinator_merges": r.CoordMerges != nil, "fast_forward_checkout": r.FastForward != nil, "sandbox_escapes": r.SandboxEsc != nil,
-		"thread_agent": r.ThreadAgent != nil, "coordinator_agent": r.CoordAgent != nil, "models": r.Models != nil, "coordinator_model": r.CoordModel != nil, "archive_tasks_days": r.ArchiveTasks != nil, "archive_threads_days": r.ArchiveThreads != nil,
-		"archive_inbox_days": r.ArchiveInbox != nil, "archive_journal_days": r.ArchiveJournal != nil,
-	}
-	var out []string
-	for _, k := range ProjectKeys {
-		if set[k] {
-			out = append(out, k)
-		}
-	}
-	return out
-}
-
-// Value is the setting key's value in s (a bool, an int, a string or a
-// []string), nil for a key Safety doesn't have.
-func (s Safety) Value(key string) any {
-	v := reflect.ValueOf(s)
-	for i := range v.NumField() {
-		if tag, _, _ := strings.Cut(v.Type().Field(i).Tag.Get("json"), ","); tag == key {
-			return v.Field(i).Interface()
-		}
-	}
-	return nil
-}
-
-// apply sets in s every setting r names, checked; table names it in
-// errors ("projects.demo", "defaults").
-func (r rawSafety) apply(s *Safety, path, table string) error {
-	if r.StartThreads != nil {
-		switch *r.StartThreads {
-		case StartPropose, StartAuto:
-			s.StartThreads = *r.StartThreads
-		default:
-			return fmt.Errorf("%s: %s.start_threads must be %q or %q, not %q", path, table, StartPropose, StartAuto, *r.StartThreads)
-		}
-	}
-	if r.Yolo != nil {
-		s.Yolo = *r.Yolo
-	}
-	if r.CoordinatorApproves != nil {
-		s.CoordinatorApproves = *r.CoordinatorApproves
-	}
-	if r.ParallelThreads != nil {
-		if n := *r.ParallelThreads; n < 1 || n > MaxParallelThreads {
-			return fmt.Errorf("%s: %s.parallel_threads must be 1 to %d, not %d", path, table, MaxParallelThreads, n)
-		}
-		s.ParallelThreads = *r.ParallelThreads
-	}
-	if r.GlobalThreads != nil {
-		if n := *r.GlobalThreads; n < 0 || n > MaxGlobalThreads {
-			return fmt.Errorf("%s: %s.global_parallel_threads must be 0 (no cap) to %d, not %d", path, table, MaxGlobalThreads, n)
-		}
-		s.GlobalParallelThreads = *r.GlobalThreads
-	}
-	if r.AutoResolve != nil {
-		s.AutoClose = map[bool]string{true: CloseMerged, false: CloseOff}[*r.AutoResolve]
-	}
-	if r.AutoClose != nil {
-		switch *r.AutoClose {
-		case CloseOff, CloseMerged, CloseDays:
-			s.AutoClose = *r.AutoClose
-		default:
-			return fmt.Errorf("%s: %s.auto_close must be %q, %q or %q, not %q", path, table, CloseOff, CloseMerged, CloseDays, *r.AutoClose)
-		}
-	}
-	if r.AutoCloseDays != nil {
-		if n := *r.AutoCloseDays; n < 1 || n > MaxAutoCloseDays {
-			return fmt.Errorf("%s: %s.auto_close_days must be 1 to %d, not %d", path, table, MaxAutoCloseDays, n)
-		}
-		s.AutoCloseDays = *r.AutoCloseDays
-	}
-	if r.PRFollowup != nil {
-		s.PRFollowup = *r.PRFollowup
-	}
-	if r.PRPoll != nil {
-		if n := *r.PRPoll; n < MinPRPollSeconds || n > MaxPRPollSeconds {
-			return fmt.Errorf("%s: %s.pr_poll_seconds must be %d to %d, not %d", path, table, MinPRPollSeconds, MaxPRPollSeconds, n)
-		}
-		s.PRPollSeconds = *r.PRPoll
-	}
-	if r.CompleteTasks != nil {
-		switch *r.CompleteTasks {
-		case CompleteUser, CompleteMerged:
-			s.CompleteTasks = *r.CompleteTasks
-		case CompleteRemoved:
-			s.CompleteTasks = CompleteUser
-		default:
-			return fmt.Errorf("%s: %s.complete_tasks must be %q or %q, not %q", path, table, CompleteUser, CompleteMerged, *r.CompleteTasks)
-		}
-	}
-	if r.CoordinatorRC != nil {
-		s.CoordinatorRemoteControl = *r.CoordinatorRC
-	}
-	if r.AutoClear != nil {
-		s.AutoClear = *r.AutoClear
-	}
-	if r.CoordMerges != nil {
-		s.CoordinatorMerges = *r.CoordMerges
-	}
-	if r.FastForward != nil {
-		s.FastForwardCheckout = *r.FastForward
-	}
-	if r.SandboxEsc != nil {
-		s.SandboxEscapes = *r.SandboxEsc
-	}
-	for _, a := range []struct {
-		key string
-		v   *string
-		to  *string
-	}{{"thread_agent", r.ThreadAgent, &s.ThreadAgent}, {"coordinator_agent", r.CoordAgent, &s.CoordinatorAgent}} {
-		if a.v == nil {
-			continue
-		}
-		if err := CheckAgent(*a.v); err != nil {
-			return fmt.Errorf("%s: %s.%s %w", path, table, a.key, err)
-		}
-		*a.to = *a.v
-	}
-	if r.Models != nil {
-		if err := CheckModels(*r.Models); err != nil {
-			return fmt.Errorf("%s: %s.models %w", path, table, err)
-		}
-		s.Models = slices.Clone(*r.Models)
-	}
-	if r.CoordModel != nil {
-		if *r.CoordModel != "" {
-			if err := CheckModelName(*r.CoordModel); err != nil {
-				return fmt.Errorf("%s: %s.coordinator_model: %w", path, table, err)
-			}
-		}
-		s.CoordinatorModel = *r.CoordModel
-	}
-	if r.Active != nil {
-		s.Active = *r.Active
-	}
-	if r.Paused != nil {
-		s.Paused = *r.Paused
-	}
-	if r.Archived != nil {
-		s.Archived = *r.Archived
-	}
-	if r.Pinned != nil {
-		s.Pinned = *r.Pinned
-	}
-	if r.Share != nil {
-		s.Share = *r.Share
-	}
-	if r.Merge != nil {
-		switch *r.Merge {
-		case MergeCoordinator, MergeThread:
-			s.Merge = *r.Merge
-		default:
-			return fmt.Errorf("%s: %s.merge must be %q or %q, not %q", path, table, MergeCoordinator, MergeThread, *r.Merge)
-		}
-	}
-	if r.Guard != nil {
-		s.Guard = *r.Guard
-	}
-	if r.GuardOff != nil {
-		for _, id := range *r.GuardOff {
-			if !slices.Contains(GuardRules, id) {
-				return fmt.Errorf("%s: %s.guard_off: unknown rule %q (rules: %s)", path, table, id, strings.Join(GuardRules, ", "))
-			}
-		}
-		s.GuardOff = slices.Clone(*r.GuardOff)
-	}
-	for _, a := range []struct {
-		key string
-		v   *int
-	}{{"archive_tasks_days", r.ArchiveTasks}, {"archive_threads_days", r.ArchiveThreads}, {"archive_inbox_days", r.ArchiveInbox}, {"archive_journal_days", r.ArchiveJournal}} {
-		if a.v == nil {
-			continue
-		}
-		if n := *a.v; n < 1 || n > MaxArchiveDays {
-			return fmt.Errorf("%s: %s.%s must be 1 to %d, not %d", path, table, a.key, MaxArchiveDays, n)
-		}
-		s.SetArchiveDays(a.key, *a.v)
-	}
-	return nil
 }
 
 // Removed lists, sorted, the projects whose complete_tasks still names

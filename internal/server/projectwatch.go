@@ -57,23 +57,31 @@ func ProjectWatchOf(p *project.Project, sessions []proto.SessionInfo, tickerStat
 // the ticker's state file and the config. A ProjectWatch is built from
 // it and the sessions without reading anything.
 type projectSnap struct {
-	p      *project.Project
-	items  []project.Item
-	board  *tasks.Board
-	recs   []*thread.Record
-	status map[string]*thread.Status // by thread id; nil for unreadable
-	// reportPR is a thread's report's PR link, for the threads the
-	// ticker knows no PR URL of.
-	reportPR  map[string]string
+	p     *project.Project
+	items []project.Item
+	board *tasks.Board
+	// boardErr is why the board didn't load (board nil).
+	boardErr error
+	recs     []*thread.Record
+	status   map[string]*thread.Status // by thread id; nil for unreadable
+	// reportPR is an unresolved thread's report's PR link, "" for none.
+	reportPR map[string]string
+	// usage is what all the threads used, resolved ones included;
+	// taskUsage splits it by task number (thread.TaskUsage).
+	usage     thread.Usage
+	taskUsage map[int]thread.Usage
 	prs       map[string]ticker.PR
 	timing    ticker.Timing
+	// checkouts are the ticker's notes on the repos behind origin, by
+	// repo path.
+	checkouts map[string]string
 	questions int
 	hint      int  // the config's context hint
 	prPoll    int  // the project's PR poll, in seconds
 	noPRHost  bool // NoPRHost
 	// links are the project's links to other projects' coordinators
 	// (docs/SPEC.md §7.9).
-	links []proto.WatchLink
+	links []link.Row
 }
 
 // readProjectSnap reads project p's files, the ticker's state file at
@@ -82,18 +90,21 @@ func readProjectSnap(p *project.Project, tickerState string) *projectSnap {
 	sn := &projectSnap{p: p, status: map[string]*thread.Status{}, reportPR: map[string]string{},
 		hint: config.DefaultContextHint, prPoll: config.DefaultPRPollSeconds}
 	sn.items, _ = p.Inbox()
-	sn.board, _ = p.Tasks().Load()
-	sn.prs, sn.timing = ticker.ReadProject(tickerState, p.Slug)
+	if sn.board, sn.boardErr = p.Tasks().Load(); sn.boardErr != nil {
+		sn.board = nil
+	}
+	tick := ticker.Load(tickerState)
+	sn.prs, sn.timing = tick.Project(p.Slug)
+	sn.checkouts = tick.Checkouts(p.Slug)
 	sn.recs, _ = thread.List(p)
+	sn.taskUsage, sn.usage = thread.TaskUsage(sn.recs)
 	for _, r := range sn.recs {
 		if r.State == thread.Resolved {
 			continue
 		}
 		sn.status[r.ID], _ = thread.ReadStatus(p, r.ID)
-		if sn.prs[r.ID].URL == "" {
-			if rep, _ := thread.ReadReport(p, r.ID); rep != nil {
-				sn.reportPR[r.ID] = rep.PR
-			}
+		if rep, _ := thread.ReadReport(p, r.ID); rep != nil && rep.PR != "" {
+			sn.reportPR[r.ID] = rep.PR
 		}
 	}
 	if qs, err := p.Questions(); err == nil {
@@ -104,10 +115,7 @@ func readProjectSnap(p *project.Project, tickerState string) *projectSnap {
 		if s, err := cfg.Safety(p.Slug); err == nil && s.PRPollSeconds > 0 {
 			sn.prPoll = s.PRPollSeconds
 		}
-		for _, r := range link.Rows(cfg, p) {
-			sn.links = append(sn.links, proto.WatchLink{Peer: r.Peer, State: r.Words(), Send: r.Send, Receive: r.Receive,
-				Paused: r.Paused, Unread: r.Unread, Held: r.Held, Last: r.Last})
-		}
+		sn.links = link.Rows(cfg, p)
 	}
 	sn.noPRHost = NoPRHost(p)
 	return sn
@@ -226,7 +234,10 @@ func (sn *projectSnap) watch(sessions []proto.SessionInfo) proto.ProjectWatch {
 			Title: queueTitle(info, note)})
 	}
 	w.Context = contextOf(p.Slug, sessions, sn.hint)
-	w.Links = sn.links
+	for _, r := range sn.links {
+		w.Links = append(w.Links, proto.WatchLink{Peer: r.Peer, State: r.Words(), Send: r.Send, Receive: r.Receive,
+			Paused: r.Paused, Unread: r.Unread, Held: r.Held, Last: r.Last})
+	}
 	if t := watchTicker(timing, sn.prPoll, sn.noPRHost); !t.PRChecked.IsZero() || !t.Synced.IsZero() || t.NoPRHost {
 		w.Ticker = &t
 	}

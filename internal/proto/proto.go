@@ -29,7 +29,8 @@ import (
 // view's focus and view.attach may name a paired server's pane as
 // "<alias>/<session>", and SessionInfo has Server and ViewOnly. 17:
 // projects.watch, the sidebars' data of every project from the server.
-const Protocol = 17
+// 18: projects.watch {detail}, the dashboard's data of every project.
+const Protocol = 18
 
 // Kind is what a connection is for.
 type Kind string

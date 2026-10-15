@@ -31,7 +31,7 @@ func TestProjectsWatch(t *testing.T) {
 	startServer(t, paths)
 	var streams []chan []SideProject
 	for i := range 2 {
-		st, first, err := WatchProjects(paths)
+		st, first, err := WatchProjects(paths, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -155,7 +155,7 @@ func TestSideHubShared(t *testing.T) {
 	paths := testPaths(t)
 	newWatchProject(t)
 	s := &Server{opts: Options{Paths: paths}}
-	b, v := s.sideProjects(0, time.Hour)
+	b, v := s.sideProjects(0, time.Hour, false)
 	var ps []SideProject
 	if err := json.Unmarshal(b, &ps); err != nil || len(ps) != 1 {
 		t.Fatalf("first look: %s, %v", b, err)
@@ -163,14 +163,14 @@ func TestSideHubShared(t *testing.T) {
 	if _, err := project.New(project.Options{Slug: "next"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, v2 := s.sideProjects(0, time.Hour); v2 != v {
+	if _, v2 := s.sideProjects(0, time.Hour, false); v2 != v {
 		t.Errorf("a look within the poll: version %d, want the last look's %d", v2, v)
 	}
-	b, v2 := s.sideProjects(1, time.Hour)
+	b, v2 := s.sideProjects(1, time.Hour, false)
 	if v2 == v {
 		t.Fatalf("a wake didn't look: %s", b)
 	}
-	if _, v3 := s.sideProjects(1, time.Hour); v3 != v2 {
+	if _, v3 := s.sideProjects(1, time.Hour, false); v3 != v2 {
 		t.Errorf("an unchanged look: version %d, want %d", v3, v2)
 	}
 
@@ -187,5 +187,45 @@ func TestSideHubShared(t *testing.T) {
 	}
 	if again, _ := s.projects.stamped("demo", ts, 2); again == snap {
 		t.Error("a changed project wasn't read again")
+	}
+}
+
+// TestSideHubDetail: the dashboard's look (detail) carries the
+// project's goal, counts, inbox, usage and its threads' report PR and
+// task; the sidebars' look carries none of it.
+func TestSideHubDetail(t *testing.T) {
+	paths := testPaths(t)
+	p := newWatchProject(t)
+	if _, err := p.Tasks().Add(human, []tasks.NewTask{{Title: "Work", Status: "started", Steps: []string{"a"}}}); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := thread.Create(p, thread.Record{Title: "work", Task: "T1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := thread.StoreReport(p, rec.ID, "PR: https://github.com/o/r/pull/3\n## Report\nDone.\n## Next\nMerge it\n", nil, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.AddItem("report", rec.ID, "T1: reported", false); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{opts: Options{Paths: paths}}
+	look := func(detail bool) SideProject {
+		t.Helper()
+		b, _ := s.sideProjects(0, time.Hour, detail)
+		var ps []SideProject
+		if err := json.Unmarshal(b, &ps); err != nil || len(ps) != 1 {
+			t.Fatalf("look: %s, %v", b, err)
+		}
+		return ps[0]
+	}
+	d := look(true)
+	if d.Counts["in_motion"] != 1 || len(d.Items) != 1 || len(d.Threads) != 1 ||
+		d.Threads[0].ReportPR != "https://github.com/o/r/pull/3" || d.Threads[0].Task == nil || len(d.Threads[0].Task.Steps) != 1 {
+		t.Errorf("detail: %+v", d)
+	}
+	sp := look(false)
+	if sp.Counts != nil || sp.Items != nil || len(sp.Threads) != 1 || sp.Threads[0].ReportPR != "" || sp.Threads[0].Task != nil {
+		t.Errorf("the sidebars' look has the dashboard's: %+v", sp)
 	}
 }

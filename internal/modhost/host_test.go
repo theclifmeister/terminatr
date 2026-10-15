@@ -556,3 +556,33 @@ func TestTune(t *testing.T) {
 		t.Errorf("after Tune with GOMAXPROCS and GOMEMLIMIT set: GOMAXPROCS %d, GC %d%%, limit %d", p, g, l)
 	}
 }
+
+func TestCallsInFlightAreBounded(t *testing.T) {
+	s := startHost(t, `
+		$.on("x", () => {
+			for (let i = 0; i <= 64; i++) {
+				$.call("a").catch((e) => $.log("refused", i, e.code));
+			}
+		});
+		$.on("y", () => { $.call("b"); });
+	`, time.Second)
+	s.hello()
+	ev := s.event("x", nil)
+	if got := logText(s.method(modproto.MethodLog)); got != fmt.Sprintf("refused %d %d", CallsInFlight, modproto.CodeFailed) {
+		t.Fatalf("log %q", got)
+	}
+	s.eventResult(ev)
+	var first int64
+	for i := range CallsInFlight {
+		m := s.method("a")
+		if i == 0 {
+			first = *m.ID
+		}
+	}
+	// One answered, the next call goes out.
+	_ = s.conn.Reply(first, nil)
+	s.event("y", nil)
+	if m := s.method("b"); !m.IsRequest() {
+		t.Fatalf("call %+v", m)
+	}
+}

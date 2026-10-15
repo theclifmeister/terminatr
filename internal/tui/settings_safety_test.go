@@ -1,0 +1,81 @@
+package tui
+
+import (
+	"slices"
+	"testing"
+
+	"github.com/theclifmeister/terminatr/internal/config"
+)
+
+// TestSafetyRowKeys: each safety row carries its own keys and value
+// words (what scope reads, once zipped by position), and together they
+// cover every setting the popups write.
+func TestSafetyRowKeys(t *testing.T) {
+	want := map[string][]string{
+		"Start threads": {"start_threads"}, "Yolo mode": {"yolo"}, "Coordinator approves": {"coordinator_approves"},
+		"Parallel threads": {"parallel_threads"}, "Auto-close finished threads": {"auto_close", "auto_close_days"},
+		"Complete tasks": {"complete_tasks"}, "Pull request follow-up": {"pr_followup"}, "Remote control": {"coordinator_remote_control"},
+		"Auto-clear coordinator": {"auto_clear"}, "Coordinator may merge": {"coordinator_merges"}, "Keep my checkout current": {"fast_forward_checkout"},
+		"Thread agent": {"thread_agent"}, "Coordinator agent": {"coordinator_agent"}, "Thread models": {"models"},
+		"Coordinator model": {"coordinator_model"}, "Keep history": config.ArchiveKeys,
+	}
+	for _, slug := range []string{"demo", ""} {
+		rows := safetySettings(slug)
+		// auto_resolve is auto_close's older form; the popups leave
+		// pr_poll_seconds and sandbox_escapes to the file.
+		covered := map[string]bool{"auto_resolve": true, "pr_poll_seconds": true, "sandbox_escapes": true}
+		for _, r := range rows {
+			if r.keys == nil {
+				continue
+			}
+			if !slices.Equal(r.keys, want[r.label]) {
+				t.Errorf("%q %s: keys %v, want %v", slug, r.label, r.keys, want[r.label])
+			}
+			if r.word == nil || r.word(config.Defaults) == "" {
+				t.Errorf("%q %s: no value words", slug, r.label)
+			}
+			if slug == "" && (r.from != nil || r.unset != nil) || slug != "" && (r.from == nil || r.unset == nil) {
+				t.Errorf("%q %s: scope not filled in", slug, r.label)
+			}
+			for _, k := range r.keys {
+				covered[k] = true
+			}
+		}
+		for _, r := range newSafetyRows(slug).historyRows() {
+			if len(r.keys) != 1 || !slices.Contains(config.ArchiveKeys, r.keys[0]) || r.word == nil {
+				t.Errorf("%q history %s: keys %v", slug, r.label, r.keys)
+			}
+		}
+		for _, k := range config.ProjectKeys {
+			if !covered[k] && !slices.Contains(config.ProjectOnly, k) && !slices.Contains(config.DefaultsOnly, k) {
+				t.Errorf("%q: no row writes %s", slug, k)
+			}
+		}
+		labels := map[string]bool{}
+		for _, r := range rows {
+			labels[r.label] = true
+		}
+		for _, l := range []string{"Threads across projects"} {
+			if labels[l] != (slug == "") {
+				t.Errorf("%q: %s shown %v", slug, l, labels[l])
+			}
+		}
+		for _, l := range []string{"Active", "Paused", "Archive", "Delete"} {
+			if labels[l] != (slug != "") {
+				t.Errorf("%q: %s shown %v", slug, l, labels[l])
+			}
+		}
+	}
+}
+
+// TestToggles: the on/off table names bool settings only.
+func TestToggles(t *testing.T) {
+	for k, tg := range toggles {
+		if _, ok := config.Defaults.Value(k).(bool); !ok {
+			t.Errorf("%s isn't an on/off setting", k)
+		}
+		if tg.label == "" || tg.help == "" || tg.what == "" {
+			t.Errorf("%s: %+v", k, tg)
+		}
+	}
+}

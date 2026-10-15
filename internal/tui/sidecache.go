@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -59,20 +60,25 @@ func (cc *configCache) uiHints() (ctxHint int, needsFirst bool) {
 // sideFeed is the sidebar's projects as the server's projects.watch
 // sends them (server.WatchProjects): every console's sidebar from the
 // one look the server takes for all, not a stat pass of its own. run
-// keeps the latest; the poll takes it once.
+// keeps the latest; the poll takes it once. The dashboard's feed is
+// the watch with detail (ServerSource.watched).
 type sideFeed struct {
-	mu    sync.Mutex
-	st    *server.ProjectsWatchStream // the stream run starts with; nil to dial
-	list  []ProjectData
-	fresh bool // list not taken yet
+	mu     sync.Mutex
+	detail bool
+	st     *server.ProjectsWatchStream // the stream run starts with; nil to dial
+	list   []ProjectData
+	fresh  bool // list not taken yet
+	// live: the watch runs and list is what it sent last, at at.
+	live bool
+	at   time.Time
 }
 
 // watchSide is a sideFeed with the projects now, watched from then on
 // by its run: nil projects when the server doesn't answer, which run
-// asks again.
-func watchSide(paths server.Paths) (*sideFeed, []ProjectData) {
-	f := &sideFeed{}
-	st, ps, err := server.WatchProjects(paths)
+// asks again. With detail it watches what the dashboard shows.
+func watchSide(paths server.Paths, detail bool) (*sideFeed, []ProjectData) {
+	f := &sideFeed{detail: detail}
+	st, ps, err := server.WatchProjects(paths, detail)
 	if err != nil {
 		return f, nil
 	}
@@ -91,7 +97,7 @@ func (f *sideFeed) run(ctx context.Context, paths server.Paths) {
 		if st == nil {
 			var ps []server.SideProject
 			var err error
-			if st, ps, err = server.WatchProjects(paths); err == nil {
+			if st, ps, err = server.WatchProjects(paths, f.detail); err == nil {
 				f.put(ps)
 			}
 		}
@@ -108,6 +114,9 @@ func (f *sideFeed) run(ctx context.Context, paths server.Paths) {
 				st.Close()
 			}
 			st = nil
+			f.mu.Lock()
+			f.live = false
+			f.mu.Unlock()
 		}
 		select {
 		case <-ctx.Done():
@@ -129,10 +138,28 @@ func (f *sideFeed) close() {
 
 // put keeps ps, the projects the server sent, for take.
 func (f *sideFeed) put(ps []server.SideProject) {
-	list := sideProjects(ps)
+	f.putList(sideProjects(ps))
+}
+
+// putList keeps list, the projects the server sent as the sidebar keeps
+// them, for take.
+func (f *sideFeed) putList(list []ProjectData) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.list, f.fresh = list, true
+	f.list, f.fresh, f.live, f.at = list, true, true, time.Now()
+}
+
+// current is a copy of the projects the live watch sent last, and false
+// while no watch runs. A list sent before since, the time its reader
+// changed project files itself, is false too for up to wait after
+// since: the server sees the change in its next poll.
+func (f *sideFeed) current(since time.Time, wait time.Duration) ([]ProjectData, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.live || f.at.Before(since) && time.Since(since) < wait {
+		return nil, false
+	}
+	return slices.Clone(f.list), true
 }
 
 // take is the projects the server sent since the last take, and
@@ -148,11 +175,15 @@ func (f *sideFeed) take() ([]ProjectData, bool) {
 }
 
 // sideProjects are the projects as the server sent them, as the sidebar
-// keeps them; never nil.
+// keeps them, with what the dashboard shows besides when the watch has
+// detail; never nil.
 func sideProjects(ps []server.SideProject) []ProjectData {
 	out := make([]ProjectData, 0, len(ps))
 	for _, sp := range ps {
-		pd := ProjectData{Slug: sp.Slug, Safety: sp.Safety, Questions: sp.Questions, PRHostFails: sp.PRHostFails}
+		pd := ProjectData{Slug: sp.Slug, Safety: sp.Safety, Questions: sp.Questions, PRHostFails: sp.PRHostFails,
+			Goal: sp.Goal, Repos: sp.Repos, Own: sp.Own, Counts: sp.Counts, Err: sp.Error,
+			Unread: len(sp.Items), Items: sp.Items, Usage: sp.Usage, TaskUsage: sp.TaskUsage,
+			Checkouts: sp.Checkouts, Badges: sp.Badges, Links: sp.Links}
 		for _, t := range sp.NeedsYou {
 			pd.NeedsYou = append(pd.NeedsYou, t.Task())
 		}
@@ -160,7 +191,20 @@ func sideProjects(ps []server.SideProject) []ProjectData {
 			if th.Record == nil {
 				continue
 			}
-			pd.Threads = append(pd.Threads, ThreadRow{Record: th.Record, Status: th.Status, Checks: th.Checks, PR: th.PR})
+			tr := ThreadRow{Record: th.Record, Status: th.Status, Checks: th.Checks, PR: th.PR}
+			if th.ReportPR != "" {
+				tr.Report = &thread.Report{PR: th.ReportPR}
+			}
+			if th.Task != nil {
+				tr.TaskRec = th.Task.Task()
+			}
+			pd.Threads = append(pd.Threads, tr)
+		}
+		for _, r := range pd.Links {
+			pd.LinkWaits += r.Held
+			if r.Paused {
+				pd.LinkWaits++
+			}
 		}
 		out = append(out, pd)
 	}
