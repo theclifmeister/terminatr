@@ -1,4 +1,4 @@
-package modcell
+package modstore
 
 import (
 	"os"
@@ -32,7 +32,7 @@ func TestTargets(t *testing.T) {
 		{proto.CellTarget{Project: "de mo"}, false},
 		{proto.CellTarget{Project: "demo\x1b"}, false},
 	} {
-		if err := CheckTarget(tc.t); (err == nil) != tc.ok {
+		if err := CheckCellTarget(tc.t); (err == nil) != tc.ok {
 			t.Errorf("%+v: %v", tc.t, err)
 		}
 	}
@@ -40,22 +40,22 @@ func TestTargets(t *testing.T) {
 
 func TestCheck(t *testing.T) {
 	ss := []widget.Span{{Text: "3d\x1b[31m", Role: "warn"}, {Icon: "review"}, {Text: "🚀 go"}}
-	if err := Check(ss); err != nil || ss[0].Text != "3d[31m" || ss[2].Text != "? go" {
+	if err := CheckCell(ss); err != nil || ss[0].Text != "3d[31m" || ss[2].Text != "? go" {
 		t.Errorf("%v %q %q", err, ss[0].Text, ss[2].Text)
 	}
 	for _, bad := range [][]widget.Span{
 		{{Text: "x", Role: "blink"}},
 		{{Icon: "rocket"}},
-		{{Text: strings.Repeat("x", MaxText+1)}},
+		{{Text: strings.Repeat("x", MaxCellText+1)}},
 	} {
-		if Check(bad) == nil {
+		if CheckCell(bad) == nil {
 			t.Errorf("%+v passed", bad)
 		}
 	}
 }
 
 func TestSetClearKeep(t *testing.T) {
-	s := Open("")
+	s := OpenCells("")
 	age := []widget.Span{{Text: "3d", Role: "warn"}}
 	if ok, err := s.Set("review-age", "age", t12, age); !ok || err != nil {
 		t.Fatal(ok, err)
@@ -85,7 +85,7 @@ func TestSetClearKeep(t *testing.T) {
 }
 
 func TestMaxCells(t *testing.T) {
-	s := Open("")
+	s := OpenCells("")
 	span := []widget.Span{{Text: "x"}}
 	for i := range maxCells {
 		if _, err := s.Set("m", "c", proto.CellTarget{Project: "p", Task: "T" + string(rune('a'+i%26)) + strings.Repeat("x", i/26)}, span); err != nil {
@@ -110,13 +110,13 @@ func TestMaxCells(t *testing.T) {
 // check is left out.
 func TestRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cells.json")
-	s := Open(path)
+	s := OpenCells(path)
 	s.Set("review-age", "age", t12, []widget.Span{{Text: "3d", Role: "warn"}})
 	s.SetStatus("review-age", []widget.Span{{Text: "2 waiting"}})
 	if err := s.Flush(); err != nil {
 		t.Fatal(err)
 	}
-	r := Open(path)
+	r := OpenCells(path)
 	if c := r.Cells(nil, nil); len(c) != 1 || c[0].Spans[0].Text != "3d" || c[0].Target != t12 {
 		t.Errorf("reopened %+v", c)
 	}
@@ -129,13 +129,13 @@ func TestRestart(t *testing.T) {
 	if err := os.WriteFile(path, []byte(bad), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if c := Open(path).Cells(nil, nil); len(c) != 1 || c[0].Spans[0].Text != "ok" {
+	if c := OpenCells(path).Cells(nil, nil); len(c) != 1 || c[0].Spans[0].Text != "ok" {
 		t.Errorf("checked on load %+v", c)
 	}
 	if err := os.WriteFile(path, []byte("{"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if c := Open(path).Cells(nil, nil); len(c) != 0 {
+	if c := OpenCells(path).Cells(nil, nil); len(c) != 0 {
 		t.Errorf("a broken file %+v", c)
 	}
 }

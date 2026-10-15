@@ -494,7 +494,7 @@ func runInbox(e *Env, args []string) error {
 			if it.NeedsUser {
 				flag = " [needs user]"
 			}
-			fmt.Fprintf(e.Stdout, "%s  %s%s: %s\n", it.ID, it.Kind, flag, it.Summary)
+			fmt.Fprintf(e.Stdout, "%s  %s%s: %s\n", it.ID, shown(it.Kind), flag, shown(it.Summary))
 		}
 		return nil
 	case "done":

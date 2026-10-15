@@ -7,7 +7,6 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modapi"
-	"github.com/theclifmeister/terminatr/internal/modtest"
 )
 
 // TestScaffoldsValidateAndPass: every kind's scaffold is a valid mod, and
@@ -36,7 +35,7 @@ func TestScaffoldsValidateAndPass(t *testing.T) {
 			if files["types/tm.d.ts"] != modapi.TS() {
 				t.Error("types/tm.d.ts isn't this tm's")
 			}
-			res, err := modtest.RunDir(dir)
+			res, err := RunDir(dir)
 			if err != nil || len(res) != 1 || !res[0].OK {
 				t.Fatalf("tm mod test: %v %+v", err, res)
 			}

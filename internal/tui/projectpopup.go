@@ -14,7 +14,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/modaction"
-	"github.com/theclifmeister/terminatr/internal/modannot"
+	"github.com/theclifmeister/terminatr/internal/modstore"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -254,7 +254,7 @@ func (tv *taskView) render(m *dash) string {
 	if r, ok := tv.pv.reviews[t.ID]; ok {
 		rv = &r
 	}
-	taskPanelWith(d, t, rv, m.asked(tv.pv.slug, t), m.taskUsage(tv.pv.slug, t.ID), m.badges(tv.pv.slug, modannot.Task(t.Ref())))
+	taskPanelWith(d, t, rv, m.asked(tv.pv.slug, t), m.taskUsage(tv.pv.slug, t.ID), m.badges(tv.pv.slug, modstore.Task(t.Ref())))
 	for i, l := range d.lines {
 		// The box has its own gutters.
 		d.lines[i] = strings.TrimRight(strings.TrimSuffix(strings.TrimPrefix(l, " "), reset), " ") + reset

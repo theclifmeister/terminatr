@@ -117,7 +117,7 @@ func runAsk(e *Env, args []string) error {
 			return e.printJSON(qs)
 		}
 		for _, q := range qs {
-			fmt.Fprintln(e.Stdout, project.QuestionLine(q))
+			fmt.Fprintln(e.Stdout, shown(project.QuestionLine(q)))
 		}
 		return nil
 	case "done":

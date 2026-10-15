@@ -25,3 +25,20 @@ func TestLinesAlign(t *testing.T) {
 		t.Fatalf("trailing columns not trimmed: %q", lines[2])
 	}
 }
+
+// TestTextPlain: Lines and Detail show what agents wrote without its
+// control characters; notes keep their lines.
+func TestTextPlain(t *testing.T) {
+	const esc = "x\x1b]52;c;aGk=\x07y\u009b2Jz"
+	tk := &Task{ID: 1, Status: Started, Title: esc, Thread: "t-0001", Owner: esc, Notes: esc + "\nsecond",
+		Steps: []Step{{N: 1, Text: esc + "\nforged"}}}
+	out := Detail(tk) + strings.Join(Lines([]*Task{tk}), "\n")
+	if strings.ContainsAny(out, "\x1b\x07\u009b") {
+		t.Fatalf("control characters printed: %q", out)
+	}
+	for _, want := range []string{"T1 x]52;c;aGk=y2Jz\n", esc[:1] + "]52;c;aGk=y2Jz\nsecond\n", "[ ] x]52;c;aGk=y2Jz forged\n", "owner:x]52"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q:\n%s", want, out)
+		}
+	}
+}

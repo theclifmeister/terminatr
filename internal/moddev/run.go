@@ -1,4 +1,4 @@
-package modtest
+package moddev
 
 import (
 	"cmp"
