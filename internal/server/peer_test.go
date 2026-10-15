@@ -51,6 +51,7 @@ func TestServerStatusShowsLinks(t *testing.T) {
 		t.Helper()
 		var st proto.ServerStatus
 		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+			st = proto.ServerStatus{} // decoding into the last answer keeps what this one leaves out
 			call(t, c, proto.MethodServerStatus, nil, &st)
 			if st.Link != nil && len(st.Link.Peers) == 1 && ok(st.Link.Peers[0]) {
 				return st
