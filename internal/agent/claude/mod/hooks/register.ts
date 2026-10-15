@@ -65,7 +65,7 @@ import type { Ack, Offer } from './deliver'
 import { feed } from './feed'
 import { guard } from './guarded'
 import { registerPane, sawViewport } from './pane'
-import { failed, postInit, refused, socketURL } from './socket'
+import { failed, POST_MS, postInit, refused, socketURL, timedOut, TOOL_MS, within } from './socket'
 import { answer, body, MOD_TOOL, modTools, toolName, TOOLS } from './tools'
 import type { ThreadTool } from './tools'
 import { initialTurn, stateOf, step, waitKey } from './turn'
@@ -297,9 +297,13 @@ async function answerQuestions($: EngineInterface) {
 async function callTool($: EngineInterface, t: ThreadTool, e: Record<string, unknown>, hint: string) {
   if (!socket) return { deny: `terminatr: this session has no mod socket${hint}` }
   try {
-    const r = await $.http.fetch(`http://terminatr/v1/tools/${t.name}`, {
-      method: 'POST', socketPath: socket, headers: { 'content-type': 'application/json' }, body: body(t, e),
-    })
+    const r = await within(
+      $.http.fetch(`http://terminatr/v1/tools/${t.name}`, {
+        method: 'POST', socketPath: socket, headers: { 'content-type': 'application/json' }, body: body(t, e),
+      }),
+      $.clock.sleep(TOOL_MS),
+    )
+    if (!r) return { deny: `terminatr: the server didn't answer in ${TOOL_MS / 1000} s${hint}` }
     return answer(r.status, r.text)
   } catch (err) {
     return { deny: `terminatr: the server didn't answer (${String(err)})${hint}` }
@@ -403,8 +407,9 @@ async function registerTools($: EngineInterface, role: string) {
   if (role === 'thread') for (const t of TOOLS) await reg(t)
   let listed: ThreadTool[] = []
   try {
-    const r = await $.http.fetch('http://terminatr/v1/tools', { method: 'GET', socketPath: socket })
-    listed = modTools(r.status, r.text)
+    const r = await within($.http.fetch('http://terminatr/v1/tools', { method: 'GET', socketPath: socket }), $.clock.sleep(POST_MS))
+    if (r) listed = modTools(r.status, r.text)
+    else $.ui.log(timedOut("listing the mods' tools"), { to: 'debug' })
   } catch (err) {
     $.ui.log(`terminatr: listing the mods' tools: ${String(err)}`, { to: 'debug' })
   }
@@ -588,7 +593,11 @@ async function postState($: EngineInterface, body: string) {
 async function post($: EngineInterface, sock: string, path: string, what: string, body?: string): Promise<boolean> {
   if (!sock) return false
   try {
-    const r = await $.http.fetch(socketURL(path), postInit(sock, body))
+    const r = await within($.http.fetch(socketURL(path), postInit(sock, body)), $.clock.sleep(POST_MS))
+    if (!r) {
+      debug($, timedOut(what))
+      return false
+    }
     if (!r.ok) debug($, refused(what, r.status, r.text))
     return r.ok
   } catch (err) {

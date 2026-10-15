@@ -25,3 +25,21 @@ export function refused(what: string, status: number, text: string): string {
 export function failed(what: string, err: unknown): string {
   return `terminatr: ${what}: ${String(err)}`
 }
+
+// Deadlines on the socket: a server that is alive but stuck must not hold
+// a hook, a tool call or the report queue up. A tool call may take a
+// while (the server runs tm behind it); an ack, state, log or usage post
+// answers at once or not at all.
+export const TOOL_MS = 30_000
+export const POST_MS = 4_000
+export const FETCH_MS = 2_000
+
+// within is work, or null when wait (a $.clock.sleep) is over first.
+export function within<T>(work: Promise<T>, wait: Promise<unknown>): Promise<T | null> {
+  return Promise.race([work, wait.then(() => null)])
+}
+
+// timedOut is the debug line for a request that got no answer in time.
+export function timedOut(what: string): string {
+  return `terminatr: ${what}: no answer in time`
+}

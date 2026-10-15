@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/plat/flock"
 )
 
 // stub is an environment whose PATH has a made-up agent, gem, running
@@ -241,5 +243,63 @@ func TestResolve(t *testing.T) {
 	}
 	if err := NoAgent(reg); !strings.Contains(err.Error(), "Claude Code (claude), Codex (codex)") {
 		t.Errorf("no agent: %v", err)
+	}
+}
+
+// TestFailedProbeKeepsRefusals: a probe that crashes drops the models but
+// not what the account refused.
+func TestFailedProbeKeepsRefusals(t *testing.T) {
+	good := `{"id":1,"result":{"account":{"plan":"gold"},"models":[{"id":"alpha"},{"id":"beta"}]}}`
+	m, env := lister(t, answer(good))
+	if _, err := Refresh(context.Background(), m, env); err != nil {
+		t.Fatal(err)
+	}
+	if err := MarkRefused("gem", "beta", "no access"); err != nil {
+		t.Fatal(err)
+	}
+	dead := stub(t, `echo "boom" >&2; exit 3`)
+	if c, err := Refresh(context.Background(), m, dead); err == nil || c.Status != StatusFailed {
+		t.Fatalf("crash: %v %+v", err, c)
+	}
+	if c, _ := Load("gem"); c.Refused["beta"].Reason != "no access" {
+		t.Fatalf("refusals after a failed probe: %+v", c.Refused)
+	}
+	// The next good answer from the same account keeps them.
+	c, err := Refresh(context.Background(), m, env)
+	if err != nil || c.Refused["beta"].Reason != "no access" {
+		t.Fatalf("after recovery: %v %+v", err, c.Refused)
+	}
+}
+
+// TestCacheLockAcrossProcesses: a write waits for another holder of the
+// agent's lock file (as the server, the TUI or tm doctor would be).
+func TestCacheLockAcrossProcesses(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	dir, err := Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	l, err := flock.Wait(filepath.Join(dir, "gem.lock"))
+	if err != nil {
+		t.Skipf("no flock here: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- MarkRefused("gem", "beta", "no access") }()
+	select {
+	case err := <-done:
+		t.Fatalf("MarkRefused did not wait for the lock: %v", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+	l.Unlock()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("MarkRefused still waits after the unlock")
 	}
 }

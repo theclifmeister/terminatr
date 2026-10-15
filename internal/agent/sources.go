@@ -46,6 +46,9 @@ type SourceVars struct {
 	Home     string
 	PID      int
 	AgentSID string
+	// ConfigDir is the agent's config folder (a ConfigDirer's answer,
+	// else empty).
+	ConfigDir string
 }
 
 // ErrUntestedVersion means a status file reports an agent version outside

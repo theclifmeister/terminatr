@@ -407,7 +407,11 @@ func (rt *agentRT) setTail(p string) {
 }
 
 func (rt *agentRT) vars() agent.SourceVars {
-	return agent.SourceVars{Home: rt.cfg.Home, PID: rt.pid, AgentSID: rt.tr.AgentSID()}
+	v := agent.SourceVars{Home: rt.cfg.Home, PID: rt.pid, AgentSID: rt.tr.AgentSID()}
+	if c, ok := rt.a.(agent.ConfigDirer); ok {
+		v.ConfigDir = c.ConfigDir(rt.cfg.Home)
+	}
+	return v
 }
 
 // healTodos re-reads the agent's own copy of its todo list. An empty or
