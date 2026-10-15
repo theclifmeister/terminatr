@@ -10,6 +10,9 @@
 // (a PowerShell command it can't read) has rule "unknown" and "ask": true.
 // The thread-mods and mods-only sets carry rules a mod adds (mods design
 // §7, Tighten only): the core's and the mod's, and the mod's alone.
+// A case with links judges file writes where they land: each link (an
+// absolute path) leads to its target, and a write under a link to the
+// same place under the target (the server's POST /v1/resolve, faked).
 // Everything after "export default " is JSON, for the Go test: keep it
 // so (double quotes, no trailing commas, no comments). One case a line.
 export default {
@@ -175,6 +178,15 @@ export default {
  {"rules": "thread", "tool": "apply_patch", "input": {"command": "*** Begin Patch\n*** Update File: a.go\n*** Move to: ../other/a.go\n@@\n-a\n+b\n*** End Patch"}, "rule": "worktree-only", "summary": "apply_patch of /h/.terminatr/worktrees/demo/other/a.go"},
  {"rules": "thread", "tool": "apply_patch", "input": {"command": "*** Begin Patch\n*** Delete File: ~/.zshrc\n*** End Patch"}, "rule": "worktree-only", "summary": "apply_patch of /h/.zshrc"},
  {"rules": "coordinator", "tool": "apply_patch", "input": {"command": "*** Begin Patch\n*** Update File: /h/.terminatr/projects/demo/TASKS.md\n@@\n-a\n+b\n*** End Patch"}, "rule": null},
+ {"rules": "thread", "tool": "Write", "input": {"file_path": "link/hosts"}, "links": {"/h/.terminatr/worktrees/demo/t-0001-fix/link": "/etc"}, "rule": "worktree-only", "summary": "Write of /h/.terminatr/worktrees/demo/t-0001-fix/link/hosts"},
+ {"rules": "thread", "tool": "Edit", "input": {"file_path": "/h/.terminatr/worktrees/demo/t-0001-fix/link/a/../b"}, "links": {"/h/.terminatr/worktrees/demo/t-0001-fix/link": "/h/.terminatr/projects/demo"}, "rule": "worktree-only", "summary": "Edit of /h/.terminatr/worktrees/demo/t-0001-fix/link/b"},
+ {"rules": "thread", "tool": "Write", "input": {"file_path": "vendor/lib/x.go"}, "links": {"/h/.terminatr/worktrees/demo/t-0001-fix/vendor/lib": "/h/.terminatr/worktrees/demo/t-0001-fix/third_party/lib"}, "rule": null},
+ {"rules": "thread", "tool": "Write", "input": {"file_path": "/tmp/wt/x.go"}, "links": {"/tmp/wt": "/h/.terminatr/worktrees/demo/t-0001-fix"}, "rule": null},
+ {"rules": "thread", "tool": "apply_patch", "input": {"command": "*** Begin Patch\n*** Add File: ok.txt\n+hi\n*** Update File: link/zshrc\n@@\n-a\n+b\n*** End Patch"}, "links": {"/h/.terminatr/worktrees/demo/t-0001-fix/link": "/h"}, "rule": "worktree-only", "summary": "apply_patch of /h/.terminatr/worktrees/demo/t-0001-fix/link/zshrc"},
+ {"rules": "thread", "tool": "Read", "input": {"file_path": "link/hosts"}, "links": {"/h/.terminatr/worktrees/demo/t-0001-fix/link": "/etc"}, "rule": null},
+ {"rules": "coordinator", "tool": "Write", "input": {"file_path": "link/x"}, "links": {"/h/.terminatr/projects/demo/link": "/etc"}, "rule": null},
+ {"rules": "mods-only", "tool": "Write", "input": {"file_path": "infra/main.tf"}, "links": {"/h/.terminatr/worktrees/demo/t-0001-fix/infra": "/h/infra/prod"}, "rule": "mod:infra.no-destroy", "summary": "Write of /h/.terminatr/worktrees/demo/t-0001-fix/infra/main.tf"},
+ {"rules": "thread-windows", "tool": "Write", "input": {"file_path": "j\\x.txt"}, "links": {"C:/Users/me/.terminatr/worktrees/demo/t-0001-fix/j": "D:\\data"}, "rule": "worktree-only", "summary": "Write of C:/Users/me/.terminatr/worktrees/demo/t-0001-fix/j/x.txt"},
  {"rules": "thread", "tool": "Read", "input": {"file_path": "/h/.ssh/id_ed25519"}, "rule": "credentials", "summary": "Read of /h/.ssh/id_ed25519"},
  {"rules": "coordinator", "tool": "Grep", "input": {"pattern": "token", "path": "/h/.config/gh"}, "rule": "credentials", "summary": "Grep of /h/.config/gh"},
  {"rules": "thread", "tool": "Glob", "input": {"pattern": "/h/.aws/*"}, "rule": "credentials", "summary": "Glob of /h/.aws/?"},

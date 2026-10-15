@@ -6,8 +6,9 @@ package server
 // guard_off, merge) and the session's role, adds the rules the user's
 // enabled mods add (they only refuse: mods design §7, Tighten only), and
 // serves them on the mod socket as GET /v1/rules; the mod matches each call itself
-// (hooks/guard.ts) and reports a refusal with POST /v1/denied, which the
-// server journals (and puts in the project's inbox only when a session is refused repeatedly).
+// (hooks/guard.ts), asking POST /v1/resolve where a file tool's writes
+// land (realTarget: the mod has no file system), and reports a refusal
+// with POST /v1/denied, which the server journals (and puts in the project's inbox only when a session is refused repeatedly).
 
 import (
 	"encoding/json"
@@ -227,8 +228,42 @@ func realTarget(p string) string {
 	return cur
 }
 
-// guardRoutes adds the guard's two routes to session id's mod handler.
+// GuardResolve is POST /v1/resolve's body and answer: the paths a file
+// tool writes, absolute but not cleaned, and where each lands
+// (realTarget), in the same order.
+type GuardResolve struct {
+	Paths []string `json:"paths"`
+}
+
+// maxResolve bounds how many paths one POST /v1/resolve may ask about.
+const maxResolve = 256
+
+// guardRoutes adds the guard's routes to session id's mod handler.
 func (s *Server) guardRoutes(mux *http.ServeMux, id string) {
+	mux.HandleFunc("POST /v1/resolve", func(w http.ResponseWriter, r *http.Request) {
+		var q GuardResolve
+		b, err := io.ReadAll(io.LimitReader(r.Body, 64<<10))
+		if err == nil {
+			err = json.Unmarshal(b, &q)
+		}
+		if err == nil && len(q.Paths) > maxResolve {
+			err = fmt.Errorf("more than %d paths", maxResolve)
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		out := GuardResolve{Paths: make([]string, len(q.Paths))}
+		for i, p := range q.Paths {
+			// Only an absolute path is followed; the mod sends no other.
+			out.Paths[i] = p
+			if filepath.IsAbs(filepath.FromSlash(p)) {
+				out.Paths[i] = realTarget(p)
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(out)
+	})
 	mux.HandleFunc("GET /v1/rules", func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		rec, ok := s.records[id]

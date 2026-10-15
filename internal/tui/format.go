@@ -346,7 +346,11 @@ func statusBar(s proto.SessionInfo, ts *thread.Status, title string, pending boo
 	if seg, sw := statusMods(mods); sw > 0 && ansi.StringWidth(left)+2+sw <= w-2 {
 		left += "  " + seg
 	}
-	hs := []hint{{w, w + 13, "?"}, {w + 16, w + 34, "d"}, {w + 37, w + 43, "menu"}}
+	// The buttons follow the text, whatever help.open is bound to.
+	help := ansi.StringWidth("prefix+" + boundKey("?") + " help")
+	dash := ansi.StringWidth("prefix+d dashboard")
+	menu := ansi.StringWidth(menuButton + " menu")
+	hs := []hint{{w, w + help, "?"}, {w + help + 3, w + help + 3 + dash, "d"}, {w + help + dash + 6, w + help + dash + 6 + menu, "menu"}}
 	return fit(left, w) + reset + right, hs
 }
 

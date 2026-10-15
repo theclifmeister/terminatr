@@ -47,6 +47,11 @@ export type Rules = {
   // The rules the user's enabled mods add: they only refuse, in force
   // whichever core rules the human turned off.
   mods?: readonly ModRule[]
+  // Where a write to a path lands: the path made absolute but not yet
+  // cleaned (writeTargets), with the links of its longest existing
+  // prefix followed. The matcher has no file system of its own: the
+  // hook asks the server (POST /v1/resolve) before judging. Not served.
+  resolve?: (p: string) => string
 }
 
 // A guard rule a mod adds (mods design §7, Tighten only): the commands a
@@ -98,11 +103,14 @@ export function judge(r: Rules, tool: string, input: Record<string, unknown>): D
   const has = (id: string) => r.rules?.includes(id) ?? false
   const values = (t.fields ?? []).map(f => input[f]).filter((v): v is string => typeof v === 'string' && v !== '')
   const writable = (p: string) => (r.writable ?? []).some(w => under(r, p, w))
-  // A file tool writing p (absolute).
-  const judgeWrite = (p: string): Denial | null => {
-    if (has('worktree-only') && !writable(p)) return deny(r, 'worktree-only', `${tool} of ${safe(p)}`)
+  // A file tool writing p (as the call gave it), judged where the write
+  // lands and named as given.
+  const judgeWrite = (given: string): Denial | null => {
+    const shown = abs(r, given)
+    const p = r.resolve ? abs(r, r.resolve(joined(r, given))) : shown
+    if (has('worktree-only') && !writable(p)) return deny(r, 'worktree-only', `${tool} of ${safe(shown)}`)
     const m = (r.mods ?? []).find(m => (m.writes ?? []).some(w => under(r, p, w)))
-    return m ? denyMod(m, `${tool} of ${safe(p)}`) : null
+    return m ? denyMod(m, `${tool} of ${safe(shown)}`) : null
   }
   switch (t.kind) {
     case 'shell': {
@@ -116,7 +124,7 @@ export function judge(r: Rules, tool: string, input: Record<string, unknown>): D
     }
     case 'write':
       for (const p of values) {
-        const d = judgeWrite(abs(r, p))
+        const d = judgeWrite(p)
         if (d) return d
       }
       return null
@@ -124,7 +132,7 @@ export function judge(r: Rules, tool: string, input: Record<string, unknown>): D
       // Each file the patch adds, updates, deletes or moves to is a write.
       for (const patch of values) {
         for (const p of patchPaths(patch)) {
-          const d = judgeWrite(abs(r, p))
+          const d = judgeWrite(p)
           if (d) return d
         }
       }
@@ -142,6 +150,18 @@ export function judge(r: Rules, tool: string, input: Record<string, unknown>): D
       return null
   }
   return null
+}
+
+// writeTargets are the files the call of tool with input writes, made
+// absolute but not cleaned: what r.resolve is asked about. None when no
+// rule judges a write.
+export function writeTargets(r: Rules, tool: string, input: Record<string, unknown>): string[] {
+  if (!r.on || (!r.rules?.includes('worktree-only') && !(r.mods ?? []).some(m => m.writes?.length))) return []
+  const t = r.tools && Object.hasOwn(r.tools, tool) ? r.tools[tool] : undefined
+  if (!t || (t.kind !== 'write' && t.kind !== 'patch')) return []
+  const values = (t.fields ?? []).map(f => input[f]).filter((v): v is string => typeof v === 'string' && v !== '')
+  const paths = t.kind === 'write' ? values : values.flatMap(patchPaths)
+  return [...new Set(paths.map(p => joined(r, p)))]
 }
 
 // patchPaths are the files a Codex patch (*** Begin Patch …) writes.
@@ -992,14 +1012,21 @@ function slash(p: string): string {
   return p.replaceAll('\\', '/')
 }
 
-// abs is p made absolute and clean: ~ is home, a relative path is from
-// the session's folder. A Windows path keeps its drive (C:/Users/me);
-// backslashes are slashes.
-function abs(r: Rules, p: string): string {
+// joined is p made absolute, not cleaned: ~ is home, a relative path is
+// from the session's folder; backslashes are slashes.
+function joined(r: Rules, p: string): string {
   p = slash(p)
   const h = HOMES.find(h => p.slice(0, h.length).toLowerCase() === h && (p.length === h.length || p[h.length] === '/'))
   if (h !== undefined) p = slash(r.home ?? '') + p.slice(h.length)
   if (!p.startsWith('/') && !DRIVE.test(p)) p = slash(r.cwd || r.writable?.[0] || '/') + '/' + p
+  return p
+}
+
+// abs is p made absolute and clean: ~ is home, a relative path is from
+// the session's folder. A Windows path keeps its drive (C:/Users/me);
+// backslashes are slashes.
+function abs(r: Rules, p: string): string {
+  p = joined(r, p)
   let root = '/'
   if (DRIVE.test(p)) {
     root = p.slice(0, 2) + '/'

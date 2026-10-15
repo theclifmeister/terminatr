@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"log"
@@ -312,6 +313,54 @@ func TestRealTarget(t *testing.T) {
 		if got := realTarget(dir + "/" + in); got != filepath.Join(dir, want) {
 			t.Errorf("%s: got %s, want %s", in, got, filepath.Join(dir, want))
 		}
+	}
+}
+
+// TestModResolve: the mod's POST /v1/resolve answers where each write
+// lands, through a link out of the worktree, in order; a relative path
+// comes back as sent, and too many paths are refused.
+func TestModResolve(t *testing.T) {
+	rt, err := os.MkdirTemp(ipc.ShortDir(), "tmresolve")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(rt) })
+	rt, _ = filepath.EvalSymlinks(rt)
+	wt, out := filepath.Join(rt, "wt"), filepath.Join(rt, "out")
+	for _, d := range []string{wt, out} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(out, filepath.Join(wt, "link")); err != nil {
+		t.Skip(err)
+	}
+	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
+	s.mu.Lock()
+	s.inSession = testInSession
+	sock, err := s.listenMod("s-3", rt)
+	s.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.closeMods)
+	c := modClient(sock)
+
+	q, _ := json.Marshal(GuardResolve{Paths: []string{wt + "/link/x", wt + "/new/y", "rel/z"}})
+	resp, err := c.Post("http://terminatr/v1/resolve", "application/json", bytes.NewReader(q))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got GuardResolve
+	err = json.NewDecoder(resp.Body).Decode(&got)
+	resp.Body.Close()
+	want := []string{filepath.Join(out, "x"), filepath.Join(wt, "new", "y"), "rel/z"}
+	if err != nil || !slices.Equal(got.Paths, want) {
+		t.Errorf("got %q, %v; want %q", got.Paths, err, want)
+	}
+	q, _ = json.Marshal(GuardResolve{Paths: make([]string, maxResolve+1)})
+	if code := postMod(t, c, "/v1/resolve", string(q)); code != http.StatusBadRequest {
+		t.Errorf("too many: %d", code)
 	}
 }
 
