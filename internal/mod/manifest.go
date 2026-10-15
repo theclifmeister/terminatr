@@ -921,11 +921,14 @@ func (m *Manifest) checkPermissions() []error {
 	if len(perm.Actions) > 0 && !perm.ProjectRead {
 		ps.add("permissions.actions needs permissions.project_read: a binding is checked against the projects it acts in")
 	}
+	home := userHome()
 	for _, r := range slices.Concat(perm.Files.Read, perm.Files.Write) {
 		if !strings.HasPrefix(r, "~/") && !filepath.IsAbs(r) {
 			ps.add("permissions.files: %q must be absolute or start with ~/", r)
 		} else if slices.Contains(strings.Split(filepath.ToSlash(r), "/"), "..") {
 			ps.add("permissions.files: %q has a .. in it", r)
+		} else if holdsHome(r, home) {
+			ps.add("permissions.files: %q is the home folder, holds it or is a disk's root; name the folder the mod needs", r)
 		}
 	}
 	return ps
@@ -953,6 +956,16 @@ func (m *Manifest) checkSettings() []error {
 			ps.add("%s: has no default", at)
 		} else if _, err := s.Check(s.Default); err != nil {
 			ps.add("%s: default %v", at, err)
+		} else if err := checkText(s.Default); err != nil {
+			ps.add("%s: default %v", at, err)
+		}
+		if err := checkText(s.Label); err != nil {
+			ps.add("%s: label %v", at, err)
+		}
+		for _, o := range s.Options {
+			if err := checkText(o); err != nil {
+				ps.add("%s: option %q %v", at, o, err)
+			}
 		}
 	}
 	return ps

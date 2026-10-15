@@ -26,6 +26,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/plat/sandbox"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // startSandboxed is sandbox.Start; tests replace it.
@@ -677,7 +678,11 @@ func (r *runner) notified(m *modproto.Message, ev *hostEvents) {
 		if json.Unmarshal(m.Params, &f) == nil {
 			r.log.Printf("handler %s %s after %.0f ms: %s", clip(f.Where), clip(f.Kind), f.AfterMS, clip(f.Error))
 			if f.Stack != "" {
-				r.log.Printf("  %s", strings.ReplaceAll(clip(f.Stack), "\n", "\n  "))
+				// Each line of the stack its own, indented, so none
+				// passes for a line of tm's.
+				for _, line := range strings.Split(textsafe.Cut(f.Stack, maxText), "\n") {
+					r.log.Printf("  %s", textsafe.Escape(line))
+				}
 			}
 		}
 	case modproto.MethodSubscribe:
@@ -735,11 +740,12 @@ func cleanLevel(l string) string {
 // maxText caps a line a host gives the log.
 const maxText = 8 << 10
 
+// clip is text a host gives the log as one line of at most maxText
+// bytes: what would break the line or reach a terminal as other than
+// text escaped (textsafe.Escape), so a mod's line can't pass for tm's
+// nor move the cursor of whoever reads the log.
 func clip(s string) string {
-	if len(s) > maxText {
-		s = s[:maxText] + "…"
-	}
-	return s
+	return textsafe.Escape(textsafe.Cut(s, maxText))
 }
 
 // writeAtomic replaces path with b, mode 0600, making its folder first.

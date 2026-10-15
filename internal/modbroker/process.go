@@ -26,8 +26,9 @@ const (
 // runEnv are the only variables a program a mod runs gets, from the
 // server's own environment: where programs and the user's files are, the
 // language, and Windows' system folders. No token, key or agent session
-// variable is among them, so a gh or glab grant runs on that tool's own
-// login, which the mod never sees.
+// variable is among them. A gh or glab grant runs on that tool's own
+// login, so with the human's access; CheckRun refuses the commands that
+// would print or change that login.
 var runEnv = []string{
 	"PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "TMPDIR",
 	"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME",

@@ -42,8 +42,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Full history: the formula bump pushes a branch, which git refuses
-          # from a shallow clone.
+          # Full history: goreleaser's changelog, and the formula bump pushes
+          # a branch, which git refuses from a shallow clone.
           fetch-depth: 0
 
       - name: Derive version
@@ -56,16 +56,6 @@ jobs:
           *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
           *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
           esac
-
-      # The release notes are written by hand, one file per tag; fail now,
-      # not after the build, when this tag has none (docs/OPERATIONS.md, Releasing).
-      - name: Release notes
-        run: |
-          notes="docs/releases/${GITHUB_REF_NAME}.md"
-          if [ ! -s "$notes" ]; then
-            echo "::error::$notes is missing or empty: write the release notes for $GITHUB_REF_NAME there, commit it, and tag that commit (docs/OPERATIONS.md, Releasing)"
-            exit 1
-          fi
 
       - uses: actions/setup-go@v7
         with:
@@ -167,28 +157,12 @@ jobs:
           export TM_NOTARY_KEY="$RUNNER_TEMP/notary.p8"
           trap 'rm -f "$TM_NOTARY_KEY"' EXIT
           echo "$NOTARY_KEY_P8_BASE64" | base64 --decode > "$TM_NOTARY_KEY"
-          make release RELEASE_NOTES="docs/releases/${GITHUB_REF_NAME}.md"
+          make release
 
       # What was uploaded is what dist/ holds: checksums, contents, and now
       # the Developer ID signature, hardened runtime and notarisation.
       - name: Check the signed archives
         run: scripts/release/check.sh --signed dist
-
-      # goreleaser must have put the hand-written notes in the draft's body
-      # (it once did not: v0.28.0 went out empty). Compare, and fail rather
-      # than publish a release whose body differs from docs/releases/<tag>.md.
-      - name: Check the release notes
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          want=$(cat "docs/releases/${GITHUB_REF_NAME}.md")
-          got=$(gh release view "$GITHUB_REF_NAME" --json body -q .body | tr -d '\r')
-          if [ "$got" != "$want" ]; then
-            echo "::error::the draft release body for $GITHUB_REF_NAME differs from docs/releases/${GITHUB_REF_NAME}.md; not publishing"
-            printf 'body:\n%s\n' "$got" >&2
-            exit 1
-          fi
 
       - name: Publish
         id: publish

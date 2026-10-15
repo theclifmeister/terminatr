@@ -226,7 +226,7 @@ Threads push their branch and report the PR's title and body; the coordinator op
 
 **GitLab** is served by a code host mod, not by tm itself (SPEC §3, **Code host**). terminatr's `examples/mods/gitlab` is one, through `glab`:
 
-1. Install glab (`brew install glab`) and `glab auth login` (for a self-managed server, `glab auth login --hostname gitlab.example.com`). The mod runs glab on that login; it never sees a token.
+1. Install glab (`brew install glab`) and `glab auth login` (for a self-managed server, `glab auth login --hostname gitlab.example.com`). The mod runs glab on that login, so with your GitLab access; tm refuses the glab commands that would show or change the login (`auth`, but `auth status` without `-t`, `config`, `alias`).
 2. `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.28.1/examples/mods/gitlab` (or a later release's tag), read the consent screen (it asks only to run `glab`), and enable it in the Mods tab with the `commands` grant, for the projects that use GitLab or all.
 3. Put `code_host = "gitlab"` in each such project's `PROJECT.md` front matter. Without it a `gitlab.com` remote has no PR host, as before.
 4. Run `tm doctor`: under `code host` it names the mod that serves `gitlab`, then glab and its login.
@@ -589,7 +589,7 @@ Thread branches (`tm/<project>/…`) live in your repositories and are not remov
 
 ## Releasing
 
-Write the release notes first: `docs/releases/v0.2.0.md`, in end-user words (no task or thread ids), starting with a "Before you update" section when users must do something. It is the release's body (goreleaser's commit changelog is not used, but its pipe must stay enabled: it loads the file; the workflow compares the draft's body with the file before publishing), and the workflow fails before building if the tag has no such file, so commit it and tag that commit. Then push a `v*` tag (`git tag v0.2.0 && git push origin v0.2.0`). `.github/workflows/release.yml` then, on one macOS runner:
+Push a `v*` tag (`git tag v0.2.0 && git push origin v0.2.0`). `.github/workflows/release.yml` then, on one macOS runner:
 
 1. imports the Developer ID certificate into a temporary keychain;
 2. builds and checks a snapshot (`make release-snapshot`, `scripts/release/check.sh`), unsigned;

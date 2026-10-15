@@ -377,5 +377,24 @@ func TestPathsCheckPrivate(t *testing.T) {
 	}
 	if _, err := p.Check("~/docs/ok.txt", false); err != nil {
 		t.Errorf("~/docs/ok.txt: %v", err)
+
+}
+// TestPathsHomeRoots: a root that is the home folder, holds it or is a
+// file system's root, or a link to one, opens nothing.
+func TestPathsHomeRoots(t *testing.T) {
+	f := newFixture(t)
+	p := f.p
+	p.Read, p.Write = []string{"~/", "~", "/", f.home, filepath.Dir(f.home), "~/notes/link-up"}, []string{"~/."}
+	p = p.resolve()
+	for _, path := range []string{"~/elsewhere/c.txt", "~/out/keep.txt", filepath.Join(f.home, "elsewhere", "c.txt")} {
+		if _, err := p.Check(path, false); code(err) != CodeDenied {
+			t.Errorf("Check(%q) = %v", path, err)
+		}
+	}
+	if _, err := p.Check("~/out/new.txt", true); code(err) != CodeDenied {
+		t.Errorf("write under ~/.: %v", err)
+	}
+	if _, err := p.Check("own.txt", false); err != nil {
+		t.Errorf("own folder: %v", err)
 	}
 }
