@@ -593,3 +593,23 @@ func TestAgentThreadLimits(t *testing.T) {
 	}
 	h.ok(coord, "project", "repo", "remove", other, "--project", "demo")
 }
+
+// TestHelpFlagEverywhere checks -h and --help print usage on stdout and
+// exit 0 in every command family, down to the subcommands.
+func TestHelpFlagEverywhere(t *testing.T) {
+	for _, args := range [][]string{
+		{"session", "keys"}, {"session", "list"}, {"session", "start"}, {"mod", "install"},
+		{"report"}, {"status"}, {"done"}, {"task", "add"}, {"task", "steps", "T1"},
+		{"project", "new"}, {"library", "list"}, {"server", "status"}, {"thread", "list"},
+		{"agent", "list"}, {"doctor"}, {"update"}, {"watch"}, {"attach"}, {"ask"}, {"link", "send"},
+	} {
+		for _, h := range []string{"--help", "-h"} {
+			var out, errs strings.Builder
+			e := &Env{Stdout: &out, Stderr: &errs, Getenv: func(string) string { return "" }}
+			code, ok := e.Run(append(append([]string{}, args...), h))
+			if !ok || code != ExitOK || !strings.HasPrefix(out.String(), "usage: tm "+args[0]) || errs.Len() != 0 {
+				t.Errorf("tm %v %s: handled=%v exit %d stdout %q stderr %q", args, h, ok, code, out.String(), errs.String())
+			}
+		}
+	}
+}

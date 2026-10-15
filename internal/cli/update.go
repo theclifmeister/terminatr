@@ -118,7 +118,11 @@ func updateCmd(e *Env, args []string, u *updater) error {
 	yes := f.Bool("yes")         // install without asking
 	restart := f.Bool("restart") // restart the server afterwards (agents are resumed)
 	asJSON := f.Bool("json")     // with --check: print JSON
-	if pos, err := f.Parse(args); err != nil || len(pos) > 0 || *asJSON && !*check {
+	pos, err := f.Parse(args)
+	if isHelp(err) {
+		return err
+	}
+	if err != nil || len(pos) > 0 || *asJSON && !*check {
 		return srvUsage("update", updateUsage)
 	}
 	in := update.Detect(u.Exe, u.Channel)

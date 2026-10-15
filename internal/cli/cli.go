@@ -112,7 +112,77 @@ func (e *Env) Run(args []string) (code int, handled bool) {
 			e.Caller = caller.Narrower(e.Caller, c)
 		}
 	}
-	return e.report("tm "+args[0], cmd(e, args[1:])), true
+	err := cmd(e, args[1:])
+	if isHelp(err) {
+		fmt.Fprintln(e.Stdout, commandUsage(args[0]))
+		return ExitOK, true
+	}
+	return e.report("tm "+args[0], err), true
+}
+
+// helpError is -h or --help on a command line: a request for usage, not
+// a mistake. Run prints the command's usage on stdout and exits 0.
+type helpError struct{}
+
+func isHelp(err error) bool {
+	var h *helpError
+	return errors.As(err, &h)
+}
+
+func (*helpError) Error() string { return "usage requested" }
+
+// commandUsage is the usage text of command name, the same a bare
+// command prints.
+func commandUsage(name string) string {
+	switch name {
+	case "agent":
+		return agentUsage
+	case "ask":
+		return askUsage
+	case "attach":
+		return attachUsage
+	case "context":
+		return contextUsage
+	case "done":
+		return `usage: tm done ["summary"] [--project <slug>] [--thread <id>]`
+	case "doctor":
+		return doctorUsage
+	case "inbox":
+		return inboxUsage
+	case "library":
+		return libraryUsage
+	case "link":
+		return linkUsage
+	case "mcp":
+		return "usage: tm mcp   (an MCP server on stdio: a thread's tools)"
+	case "mod":
+		return modUsage
+	case "peer":
+		return peerUsage
+	case "project":
+		return projectUsage
+	case "relay":
+		return relayUsage
+	case "report":
+		return reportUsage
+	case "server":
+		return serverUsage
+	case "session":
+		return sessionUsage
+	case "skill":
+		return skillUsage
+	case "status":
+		return statusUsage
+	case "task":
+		return taskUsage
+	case "thread":
+		return threadUsage
+	case "update":
+		return updateUsage
+	case "watch":
+		return watchUsage
+	}
+	return "usage: tm " + name + " [--help]"
 }
 
 // usageError is exit 2: the command line was wrong and nothing was saved.
@@ -217,6 +287,9 @@ func (f *flagSet) Parse(args []string) ([]string, error) {
 		s, isStr := f.strs[name]
 		l, isList := f.lists[name]
 		if !isStr && !isList {
+			if name == "h" || name == "help" {
+				return nil, &helpError{}
+			}
 			return nil, usagef("unknown flag %s", a)
 		}
 		if !hasVal {

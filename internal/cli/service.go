@@ -35,7 +35,11 @@ func serverService(e *Env, args []string) error {
 	f := newFlags()
 	printArg := f.Bool("print") // print the service file instead of installing it
 	dryRun := f.Bool("dry-run") // same as --print
-	if pos, err := f.Parse(args[1:]); err != nil || len(pos) > 0 {
+	pos, err := f.Parse(args[1:])
+	if isHelp(err) {
+		return err
+	}
+	if err != nil || len(pos) > 0 {
 		return srvUsage("server service", serviceUsage)
 	}
 	print := *printArg || *dryRun

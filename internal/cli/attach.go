@@ -37,6 +37,9 @@ func init() { commands["attach"] = attachCmd }
 // attachCmd implements `tm attach [SESSION]` (docs/SPEC.md §3.3).
 func attachCmd(e *Env, args []string) error {
 	pos, err := newFlags().Parse(args)
+	if isHelp(err) {
+		return err
+	}
 	if err != nil {
 		return srvUsage("attach", err.Error()+"\n"+attachUsage)
 	}

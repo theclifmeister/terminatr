@@ -161,7 +161,11 @@ func serverStart(e *Env, args []string) error {
 	// macOS: start the server from this session, not launchd's (no
 	// keychain over SSH).
 	direct := f.Bool("no-launchd")
-	if pos, err := f.Parse(args); err != nil || len(pos) > 0 {
+	pos, err := f.Parse(args)
+	if isHelp(err) {
+		return err
+	}
+	if err != nil || len(pos) > 0 {
 		return srvUsage("server start", serverUsage)
 	}
 	c, p, err := connect(false)
