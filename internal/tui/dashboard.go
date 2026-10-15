@@ -551,14 +551,19 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.then != nil {
 			msg.then(m)
 		}
-		if cmd := m.runQueued(); cmd != nil {
-			// Keys waited for this save: they build on it, and one
-			// reload follows the last.
-			m.msg = msg.msg
-			return m, cmd
-		}
 		if msg.sel != "" {
 			m.sel, m.userSel = msg.sel, true
+		}
+		// An attach is never dropped for a key that waited: the action
+		// asked to leave for it (the keys stay queued, and run if the
+		// dashboard is still there when the view answers).
+		if msg.attach == "" {
+			if cmd := m.runQueued(); cmd != nil {
+				// Keys waited for this save: they build on it, and one
+				// reload follows the last.
+				m.msg = msg.msg
+				return m, cmd
+			}
 		}
 		m.msg = msg.msg
 		if msg.attach != "" {

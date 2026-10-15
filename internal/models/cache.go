@@ -13,6 +13,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/plat/flock"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 )
 
@@ -60,6 +61,23 @@ func Dir() (string, error) {
 
 var mu sync.Mutex // this process's writes; each write is atomic
 
+// locked runs fn with the agent's cache held against every other
+// process (the server, the TUI, tm doctor and tm thread start all write
+// it): a read-modify-write of it must not interleave with another's. The
+// lock is <dir>/<name>.lock; where it can't be had (a platform without
+// flock, a folder that can't be made) fn runs under this process's mutex
+// alone.
+func locked(name string, fn func() error) error {
+	mu.Lock()
+	defer mu.Unlock()
+	if dir, err := Dir(); err == nil && os.MkdirAll(dir, 0o700) == nil {
+		if l, err := flock.Wait(filepath.Join(dir, name+".lock")); err == nil {
+			defer l.Unlock()
+		}
+	}
+	return fn()
+}
+
 // Load reads the agent's cache; ok false when it was never asked.
 func Load(name string) (Cache, bool) {
 	dir, err := Dir()
@@ -102,8 +120,10 @@ var ErrNoLister = errors.New("no list_models in its manifest")
 // answer. env is the environment sessions get (nil: tm's own); its
 // PATH finds the agent. A probe that times out keeps the last answer
 // while the agent's version is the same (Note says so); any other
-// failure leaves none, since it may be another login's. Refusals
-// carry over only while the account and the version are the same.
+// failure leaves no models, since they may be another login's; the
+// refusals stay then, and otherwise carry over only while the account
+// and the version are the same. The load..save runs under the cache's
+// cross-process lock.
 func Refresh(ctx context.Context, m *agent.Manifest, env []string) (Cache, error) {
 	if env == nil {
 		env = os.Environ()
@@ -117,65 +137,70 @@ func Refresh(ctx context.Context, m *agent.Manifest, env []string) (Cache, error
 	}
 	version := Version(ctx, path, m, env)
 	listing, perr := Probe(ctx, path, m.ListModels, env)
-	mu.Lock()
-	defer mu.Unlock()
-	old, had := Load(m.Name)
-	now := time.Now()
-	if perr != nil {
-		if errors.Is(perr, ErrTimeout) && had && old.Status == StatusOK && old.Version == version {
-			old.Note = fmt.Sprintf("last asked %s; then it didn't answer in time", old.Asked.Local().Format("2006-01-02"))
-			return old, save(old)
-		}
-		c := Cache{Agent: m.Name, Version: version, Asked: now, Status: StatusFailed, Reason: perr.Error()}
-		return c, errors.Join(perr, save(c))
-	}
-	c := Cache{Agent: m.Name, Version: version, Asked: now, Status: StatusOK, Account: listing.Account, Fingerprint: listing.Fingerprint}
-	if listing.LoggedOut {
-		c.Status = StatusLoggedOut
-	} else {
-		c.Models = listing.Models
-	}
-	for name, r := range old.Refused {
-		if r.Fingerprint == c.Fingerprint && r.Version == c.Version {
-			if c.Refused == nil {
-				c.Refused = map[string]Refusal{}
+	var c Cache
+	err = locked(m.Name, func() error {
+		old, had := Load(m.Name)
+		now := time.Now()
+		if perr != nil {
+			if errors.Is(perr, ErrTimeout) && had && old.Status == StatusOK && old.Version == version {
+				old.Note = fmt.Sprintf("last asked %s; then it didn't answer in time", old.Asked.Local().Format("2006-01-02"))
+				c = old
+				return save(old)
 			}
-			c.Refused[name] = r
+			// The refusals stay: they are keyed by account and version,
+			// and the next answer drops the ones that no longer match.
+			c = Cache{Agent: m.Name, Version: version, Asked: now, Status: StatusFailed, Reason: perr.Error(), Refused: old.Refused}
+			return errors.Join(perr, save(c))
 		}
-	}
-	return c, save(c)
+		c = Cache{Agent: m.Name, Version: version, Asked: now, Status: StatusOK, Account: listing.Account, Fingerprint: listing.Fingerprint}
+		if listing.LoggedOut {
+			c.Status = StatusLoggedOut
+		} else {
+			c.Models = listing.Models
+		}
+		for name, r := range old.Refused {
+			if r.Fingerprint == c.Fingerprint && r.Version == c.Version {
+				if c.Refused == nil {
+					c.Refused = map[string]Refusal{}
+				}
+				c.Refused[name] = r
+			}
+		}
+		return save(c)
+	})
+	return c, err
 }
 
 // MarkRefused records that the account refused the agent's model, with
 // the agent's message, against the account and version last asked.
 func MarkRefused(name, model, reason string) error {
-	mu.Lock()
-	defer mu.Unlock()
-	c, ok := Load(name)
-	if !ok {
-		c = Cache{Agent: name, Status: StatusFailed, Reason: "not asked yet"}
-	}
-	if c.Refused == nil {
-		c.Refused = map[string]Refusal{}
-	}
-	c.Refused[model] = Refusal{Reason: reason, At: time.Now(), Fingerprint: c.Fingerprint, Version: c.Version}
-	return save(c)
+	return locked(name, func() error {
+		c, ok := Load(name)
+		if !ok {
+			c = Cache{Agent: name, Status: StatusFailed, Reason: "not asked yet"}
+		}
+		if c.Refused == nil {
+			c.Refused = map[string]Refusal{}
+		}
+		c.Refused[model] = Refusal{Reason: reason, At: time.Now(), Fingerprint: c.Fingerprint, Version: c.Version}
+		return save(c)
+	})
 }
 
 // Unrefuse forgets that the account refused the agent's model (the user
 // enabled it, say on Bedrock).
 func Unrefuse(name, model string) error {
-	mu.Lock()
-	defer mu.Unlock()
-	c, ok := Load(name)
-	if !ok {
-		return nil
-	}
-	if _, ok := c.Refused[model]; !ok {
-		return nil
-	}
-	delete(c.Refused, model)
-	return save(c)
+	return locked(name, func() error {
+		c, ok := Load(name)
+		if !ok {
+			return nil
+		}
+		if _, ok := c.Refused[model]; !ok {
+			return nil
+		}
+		delete(c.Refused, model)
+		return save(c)
+	})
 }
 
 // Forget removes the agent's cache, for tests and a reinstall.
@@ -193,7 +218,5 @@ func Forget(name string) error {
 
 // SaveForTest writes c as its agent's cache (modelstest).
 func SaveForTest(c Cache) error {
-	mu.Lock()
-	defer mu.Unlock()
-	return save(c)
+	return locked(c.Agent, func() error { return save(c) })
 }

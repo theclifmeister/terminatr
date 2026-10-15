@@ -21,11 +21,10 @@ import type { EngineInterface, On } from 'claude-code'
 
 import { judge, off, rulesOf } from './guard'
 import type { Denial, Rules } from './guard'
-import { failed, postInit, refused, socketURL } from './socket'
+import { failed, FETCH_MS, postInit, refused, socketURL, timedOut, within } from './socket'
 
 // RULES_TTL_MS is how long fetched rules hold; FETCH_MS bounds a fetch.
 const RULES_TTL_MS = 1_000
-const FETCH_MS = 2_000
 
 let cached: { at: number; rules: Promise<Rules> } | null = null
 
@@ -84,8 +83,9 @@ async function reportDenial($: EngineInterface, tool: string, d: Denial) {
   const socket = (await $.env.get('TERMINATR_MOD_SOCKET')) ?? ''
   if (!socket) return
   try {
-    const r = await $.http.fetch(socketURL('/v1/denied'), postInit(socket, JSON.stringify({ rule: d.rule, tool, summary: d.summary })))
-    if (!r.ok) log($, refused('guard report', r.status, r.text))
+    const r = await within($.http.fetch(socketURL('/v1/denied'), postInit(socket, JSON.stringify({ rule: d.rule, tool, summary: d.summary }))), $.clock.sleep(FETCH_MS))
+    if (!r) log($, timedOut('guard report'))
+    else if (!r.ok) log($, refused('guard report', r.status, r.text))
   } catch (err) {
     log($, failed('guard report', err))
   }

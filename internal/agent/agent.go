@@ -319,6 +319,13 @@ type Typist interface {
 	Typed(target PromptTarget, line string, exact bool)
 }
 
+// ConfigDirer is an Agent whose own config folder may move (Claude's
+// CLAUDE_CONFIG_DIR); it fills {{.ConfigDir}} in the manifest's path
+// templates. An agent without it gets home's default of "".
+type ConfigDirer interface {
+	ConfigDir(home string) string
+}
+
 // Truster is an Agent that can mark a directory as trusted ahead of
 // launch, so its folder-trust screen never shows there (docs/SPEC.md
 // §8.6). The core calls it only for a thread's own worktree, which tm

@@ -145,8 +145,12 @@ test("a wedged server holds no hook up, and the exit waits half a second for it"
   await end
   // Behind the first report in flight, only the latest state waited.
   expect(states(reports)).toEqual(['idle'])
+  // A post gives up after its deadline, so the queue moves on and the
+  // beats go on: the server is not left on the screen sources for good.
   await clock.advance(60_000)
-  expect(states(reports)).toEqual(['idle', 'exited'])
+  const got = states(reports)
+  expect(got.slice(0, 2)).toEqual(['idle', 'exited'])
+  expect(got.length).toBeGreaterThan(2)
 })
 
 test('outside a session with the mod socket it reports nothing', async ($, on) => {

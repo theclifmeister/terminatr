@@ -18,10 +18,7 @@ import (
 
 // projectsDir is where Claude keeps conversations by folder.
 func projectsDir(home string) string {
-	if d := os.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
-		return filepath.Join(d, "projects")
-	}
-	return filepath.Join(home, ".claude", "projects")
+	return filepath.Join(configDir(home), "projects")
 }
 
 // folderKey is Claude's name for a folder under projectsDir.

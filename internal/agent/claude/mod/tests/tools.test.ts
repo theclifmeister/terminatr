@@ -12,7 +12,7 @@ type Call = { url: string; body: unknown }
 // mod's socket, answering POST /v1/tools/<name> with reply, and records
 // the tools registered and the calls; beneath stands for the user's
 // rules, and the tool's description as the engine has it.
-async function start($: Engine, on: On, role: string, reply: (name: string) => { status: number; text: string } | Error, listed = '') {
+async function start($: Engine, on: On, role: string, reply: (name: string) => { status: number; text: string } | Error, listed = '', stallMs = 0) {
   const clock = mock.clock(on)
   mock.env(on, { TERMINATR_SESSION: 's-7', TERMINATR_MOD_SOCKET: SOCKET, TERMINATR_ROLE: role })
   const calls: Call[] = []
@@ -30,6 +30,7 @@ async function start($: Engine, on: On, role: string, reply: (name: string) => {
     const m = /\/v1\/tools\/([a-z0-9_-]+)$/.exec(e.url)
     if (!m) return { value: { status: e.url.includes('/v1/prompts') ? 410 : 204, ok: true, headers: {}, text: '' } }
     calls.push({ url: e.url, body: JSON.parse(e.init?.body ?? 'null') })
+    if (stallMs) await clock.sleep(stallMs)
     const r = reply(m[1])
     if (r instanceof Error) return { deny: r.message }
     return { value: { status: r.status, ok: r.status < 300, headers: {}, text: r.text } }
@@ -37,7 +38,7 @@ async function start($: Engine, on: On, role: string, reply: (name: string) => {
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await clock.settle()
-  return { calls, tools: () => [...tools].sort() }
+  return { clock, calls, tools: () => [...tools].sort() }
 }
 
 test("a thread gets its tools; each call goes to the server and answers what it said", async ($, on) => {
@@ -72,6 +73,16 @@ test("the server not answering is the tool's error, naming the shell command", a
   await start($, on, 'thread', () => new Error('connect ENOENT'))
   const r = await $.tool.call({ tool: 'mcp__terminatr__status', needs_you: 'which port?' })
   expect(r.deny).toContain('connect ENOENT')
+  expect(r.deny).toContain('tm status')
+})
+
+test("a stalled server is the tool's error after 30 s, naming the shell command", async ($, on) => {
+  const { clock } = await start($, on, 'thread', () => ({ status: 200, text: '{"text":"late"}' }), '', 120_000)
+  const call = $.tool.call({ tool: 'mcp__terminatr__status', needs_you: 'which port?' })
+  await clock.advance(29_999)
+  await clock.advance(1)
+  const r = await call
+  expect(r.deny).toContain("didn't answer in 30 s")
   expect(r.deny).toContain('tm status')
 })
 

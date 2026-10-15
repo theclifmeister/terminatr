@@ -25,6 +25,10 @@ import (
 // in the folder is touched; the user's settings and themes are only
 // read.
 
+// ConfigDir is Claude's config folder for home: the status file, task
+// snapshots, themes and projects live under it.
+func (a *Agent) ConfigDir(home string) string { return configDir(home) }
+
 // configDir is Claude's config folder for home.
 func configDir(home string) string {
 	if d := os.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
