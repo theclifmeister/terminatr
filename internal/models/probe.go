@@ -16,12 +16,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
+	"github.com/theclifmeister/terminatr/internal/plat/shell"
 )
 
 // ErrTimeout is a probe the agent didn't answer in time.
@@ -34,8 +34,8 @@ var ErrTimeout = errors.New("the agent didn't answer in time")
 func Probe(ctx context.Context, path string, l *agent.ModelLister, env []string) (agent.Listing, error) {
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(l.TimeoutSeconds())*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, path, l.Args...)
-	cmd.Env = env
+	cmd := shell.CLICommand(ctx, path, l.Args...)
+	shell.SetEnv(cmd, env)
 	cmd.Dir = os.TempDir() // no project's files
 	cmd.WaitDelay = time.Second
 	// Its own process group, so what the agent started stops with it.

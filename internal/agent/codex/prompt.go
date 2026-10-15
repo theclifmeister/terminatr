@@ -5,12 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/plat/shell"
 )
 
 // queueTimeout bounds one `codex queue`; it took 20-100 ms on 0.160,
@@ -90,6 +90,9 @@ func subsequence(s, t string) bool {
 // (/clear) so is every prompt until the hooks report the new thread's
 // id, at its first prompt.
 //
+// On Windows a text with a quote or a line break can't go through an
+// npm shim (codex.cmd) and is pasted too.
+//
 // A timeout that kills `codex queue` after it wrote the queue may get
 // the prompt delivered twice, once queued and once pasted.
 func (a *Agent) Prompt(ctx context.Context, t agent.PromptTarget, text string) error {
@@ -108,7 +111,10 @@ func (a *Agent) Prompt(ctx context.Context, t agent.PromptTarget, text string) e
 	ctx, cancel := context.WithTimeout(ctx, queueTimeout)
 	defer cancel()
 	// The = forms keep a text starting with "-" from reading as a flag.
-	cmd := exec.CommandContext(ctx, a.m.Launch.Command, "queue", "--thread="+t.AgentSID, "--message="+text)
+	// On Windows an npm shim (codex.cmd) runs through cmd.exe: CLICommand
+	// quotes for it, and refuses a text it can't pass (a quote, a line
+	// break), which is then pasted.
+	cmd := shell.CLICommand(ctx, a.m.Launch.Command, "queue", "--thread="+t.AgentSID, "--message="+text)
 	cmd.WaitDelay = 100 * time.Millisecond
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out

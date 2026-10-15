@@ -99,9 +99,9 @@ func (r Rules) judgePSCommand(words []string) *Denial {
 		if strings.HasPrefix(argv[0], "$") {
 			return r.ask(op + " of a variable")
 		}
-	} else if strings.HasPrefix(argv[0], "$") {
+	} else if e := psExpr(argv); strings.HasPrefix(e, "$") {
 		// An expression: printed unless assigned.
-		if v := patVar(argv[0]); v != "" && !assigned && r.has("credentials") {
+		if v := patVar(e); v != "" && !assigned && r.has("credentials") {
 			return r.deny("credentials", "output of "+safe(v), "")
 		}
 		return nil
@@ -164,6 +164,19 @@ func (r Rules) judgePSCommand(words []string) *Denial {
 		return r.judgeSecret(cmd, paths, append([]string{argv[0]}, paths...), readers[cmd] || psReaders[cmd], printers[cmd] || psPrinter[cmd])
 	}
 	return nil
+}
+
+// psCast: the casts a value starts with ([string]$x, [string] $x).
+var psCast = regexp.MustCompile(`^(?:\[[^\]]*\])+`)
+
+// psExpr is a command's first word without the casts before it: the
+// next word when it is casts alone.
+func psExpr(argv []string) string {
+	e := psCast.ReplaceAllString(argv[0], "")
+	if e == "" && len(argv) > 1 && argv[0] != "" {
+		e = argv[1]
+	}
+	return e
 }
 
 var shellC = regexp.MustCompile(`^-[a-zA-Z]*c[a-zA-Z]*$`)
@@ -496,6 +509,19 @@ func PSCommands(line string) [][]string {
 			if j := psSkipBlank(s, i+1); j < len(s) && !strings.ContainsRune(";|\n\r)}&{", s[j]) {
 				words = append(words, ".")
 			}
+		case c == '$' && i+1 < len(s) && s[i+1] == '{':
+			// A braced variable, ${env:NAME}: one word to its }, which a
+			// backtick escapes.
+			j := i + 2
+			for j < len(s) && s[j] != '}' {
+				if s[j] == '`' {
+					j++
+				}
+				j++
+			}
+			word.WriteString(string(s[i:min(j+1, len(s))]))
+			inWord = true
+			i = j
 		case strings.ContainsRune(";|\n(){}", c):
 			endCommand()
 		case (c == '$' || c == '@') && i+1 < len(s) && (s[i+1] == '(' || (c == '@' && s[i+1] == '{')):

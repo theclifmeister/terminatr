@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/theclifmeister/terminatr/internal/plat/shell"
 )
 
 // VersionTimeout bounds one `<agent> --version` (the manifest's
@@ -80,8 +81,8 @@ func (vs *Versions) Of(ctx context.Context, path string, m *Manifest, env []stri
 }
 
 func runVersion(ctx context.Context, path string, args, env []string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, path, args...)
-	cmd.Env = env
+	cmd := shell.CLICommand(ctx, path, args...)
+	shell.SetEnv(cmd, env)
 	cmd.WaitDelay = time.Second
 	return cmd.Output()
 }

@@ -115,6 +115,20 @@ func TestCommands(t *testing.T) {
 	if got := Commands("cat < ~/.ssh/id_rsa"); !reflect.DeepEqual(got, [][]string{{"cat", "<", "~/.ssh/id_rsa"}}) {
 		t.Errorf("got %q", got)
 	}
+	// ${...} is part of its word; a $( ) in it is read too.
+	got = Commands(`echo ${A}x ${B:-"}"} ${C:-$(gh pr merge 3)}; { ls; }`)
+	want = [][]string{{"gh", "pr", "merge", "3"}, {"echo", "${A}x", `${B:-"}"}`, "${C:-$(gh pr merge 3)}"}, {"ls"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestPSCommandsBracedVariable(t *testing.T) {
+	got := PSCommands("Write-Host ${env:A`}B}x; [string] ${env:C}")
+	want := [][]string{{"Write-Host", "${env:A`}B}x"}, {"[string]", "${env:C}"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q", got)
+	}
 }
 
 func TestPatchPaths(t *testing.T) {

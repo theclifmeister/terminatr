@@ -546,6 +546,15 @@ export function commands(line: string): string[][] {
       i = j
     } else if (c === ' ' || c === '\t') {
       endWord()
+    } else if (c === '$' && line[i + 1] === '{' && i + 2 < line.length && !' \t\n|'.includes(line[i + 2])) {
+      // A parameter expansion, ${NAME} or ${NAME:-word}, is part of the
+      // word (${ cmd; } runs commands: read below as { }). A $( ) or
+      // backtick in it still runs.
+      const end = braceClose(line, i + 2)
+      for (const m of line.slice(i + 2, end).matchAll(/\$\(([^)]*)\)|`([^`]*)`/g)) out.push(...commands(m[1] ?? m[2] ?? ''))
+      word += line.slice(i, end + 1)
+      inWord = true
+      i = end
     } else if (c === ';' || c === '&' || c === '|' || c === '\n' || c === '(' || c === ')' || c === '`' || c === '{' || c === '}') {
       endCommand()
     } else if (c === '$' && line[i + 1] === '(') {
@@ -561,6 +570,27 @@ export function commands(line: string): string[][] {
   }
   endCommand()
   return out
+}
+
+// braceClose is the index of the } that closes a { opened before i,
+// skipping quoted strings and escapes, or s.length.
+function braceClose(s: string, i: number): number {
+  let depth = 1
+  for (; i < s.length; i++) {
+    const c = s[i]
+    if (c === '\\') i++
+    else if (c === "'") {
+      const j = s.indexOf("'", i + 1)
+      if (j < 0) return s.length
+      i = j
+    } else if (c === '"') {
+      for (i++; i < s.length && s[i] !== '"'; i++) if (s[i] === '\\') i++
+    } else if (c === '{') depth++
+    else if (c === '}') {
+      if (--depth === 0) return i
+    }
+  }
+  return s.length
 }
 
 // strip drops what runs a command without being it: env assignments,
@@ -733,6 +763,13 @@ const PS_PRINTERS = setOf('write-output write write-host write-information out-h
 const PS_LISTER = setOf('get-childitem gci ls dir get-item gi get-itemproperty gp')
 const PS_HTTP = setOf('invoke-webrequest iwr invoke-restmethod irm')
 
+// psExpr is a command's first word without the casts it starts with
+// ([string]$x): the next word when it is casts alone ([string] $x).
+function psExpr(argv: string[]): string {
+  const e = argv[0].replace(/^(?:\[[^\]]*\])+/, '')
+  return e === '' && argv.length > 1 && argv[0] !== '' ? argv[1] : e
+}
+
 // judgePSCommand judges one simple command of a PowerShell line.
 function judgePSCommand(r: Rules, has: (id: string) => boolean, words: string[]): Denial | null {
   const [stripped, assigned] = psStrip(words)
@@ -743,9 +780,9 @@ function judgePSCommand(r: Rules, has: (id: string) => boolean, words: string[])
     if (argv.length === 1) return askOf(`${op} of an expression`)
     argv = argv.slice(1)
     if (argv[0].startsWith('$')) return askOf(`${op} of a variable`)
-  } else if (argv[0].startsWith('$')) {
+  } else if (psExpr(argv).startsWith('$')) {
     // An expression: printed unless assigned.
-    const v = patVar(argv[0])
+    const v = patVar(psExpr(argv))
     if (v && !assigned && has('credentials')) return deny(r, 'credentials', `output of ${safe(v)}`)
     return null
   }
@@ -1029,6 +1066,14 @@ export function psCommands(line: string): string[][] {
     } else if (c === '.' && !inWord && words.length === 0 && (s[i + 1] === ' ' || s[i + 1] === '\t')) {
       // Dot-sourcing, as & is read.
       if (calls(i + 1)) words.push('.')
+    } else if (c === '$' && s[i + 1] === '{') {
+      // A braced variable, ${env:NAME}: one word to its }, which a
+      // backtick escapes.
+      let j = i + 2
+      while (j < s.length && s[j] !== '}') j += s[j] === '`' ? 2 : 1
+      word += s.slice(i, j + 1)
+      inWord = true
+      i = j
     } else if (';|\n(){}'.includes(c)) {
       endCommand()
     } else if ((c === '$' || c === '@') && (s[i + 1] === '(' || (c === '@' && s[i + 1] === '{'))) {
