@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -227,5 +228,34 @@ func TestGuard(t *testing.T) {
 	}
 	if p := a.Sources().Hook.Trim(map[string]any{"hook_event_name": "PostToolUse", "tool_input": map[string]any{}}); p["tool_input"] != nil {
 		t.Error("tool_input kept beyond PreToolUse")
+	}
+}
+
+// TestConfigDirSources: with CLAUDE_CONFIG_DIR set, the status file, the
+// task snapshots and the guard's writable folders follow it; without, they
+// are under ~/.claude.
+func TestConfigDirSources(t *testing.T) {
+	a := load(t)
+	r, err := agent.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ env, dir string }{{"", "/h/.claude"}, {"/cfg", "/cfg"}} {
+		t.Setenv("CLAUDE_CONFIG_DIR", tc.env)
+		v := agent.SourceVars{Home: "/h", PID: 42, AgentSID: "s9", ConfigDir: a.(agent.ConfigDirer).ConfigDir("/h")}
+		if v.ConfigDir != tc.dir {
+			t.Fatalf("ConfigDir = %q, want %q", v.ConfigDir, tc.dir)
+		}
+		src := a.Sources()
+		if p, err := src.StatusFile.PathFor(v); err != nil || p != tc.dir+"/sessions/42.json" {
+			t.Errorf("status file = %q, %v", p, err)
+		}
+		if d, err := src.TodoSnapshot.DirFor(v); err != nil || d != tc.dir+"/tasks/s9" {
+			t.Errorf("todo snapshot = %q, %v", d, err)
+		}
+		w := agent.GuardWritable(r, "claude", "/h", os.Getenv)
+		if !slices.Contains(w, tc.dir+"/plans") || !slices.Contains(w, tc.dir+"/projects") {
+			t.Errorf("writable = %q lacks %s/plans, projects", w, tc.dir)
+		}
 	}
 }
