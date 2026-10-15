@@ -671,6 +671,9 @@ func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human b
 			perr = s.mayAddress(req, m, human, who)
 		}
 		if perr != nil {
+			if req.Method == proto.MethodHookEvent {
+				s.log.Printf("hook event from pid %d (caller %s) refused: %s", peerPID, who(), perr.Message)
+			}
 			if err := proto.WriteLine(c, proto.Response{ID: req.ID, Error: perr}); err != nil {
 				return
 			}

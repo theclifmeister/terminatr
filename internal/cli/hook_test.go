@@ -244,3 +244,26 @@ respond = "{{json .Context}}"
 		t.Errorf("slow context lost: %q", out)
 	}
 }
+
+// TestHookLog: an event tm hook couldn't deliver is logged to
+// $TERMINATR_HOOK_LOG, still silently for the agent; a delivered one
+// isn't (T491: a lost SessionStart left no trace).
+func TestHookLog(t *testing.T) {
+	e, out, errb, sock := hookEnv(t, `{"hook_event_name":"SessionStart","session_id":"a"}`)
+	log := filepath.Join(t.TempDir(), "hook.log")
+	vars := map[string]string{"TERMINATR_SESSION": "s-1", "TERMINATR_HOOK_LOG": log}
+	e.Getenv = func(k string) string { return vars[k] }
+	runHookTimed(t, e, "--agent", "claude")
+	b, _ := os.ReadFile(log)
+	if !strings.Contains(string(b), "s-1 SessionStart: dial: ") || out.Len() != 0 || errb.Len() != 0 {
+		t.Fatalf("log %q stdout %q stderr %q", b, out, errb)
+	}
+
+	os.Remove(log)
+	fakeServer(t, sock, 0, "", nil)
+	e.Stdin = strings.NewReader(`{"hook_event_name":"Stop","session_id":"a"}`)
+	runHookTimed(t, e, "--agent", "claude")
+	if b, err := os.ReadFile(log); err == nil {
+		t.Fatalf("a delivered event was logged: %q", b)
+	}
+}
