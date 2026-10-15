@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	_ "github.com/theclifmeister/terminatr/internal/agent/claude"
@@ -345,5 +347,86 @@ func TestThemeChangeReachesClaude(t *testing.T) {
 	s.mu.Unlock()
 	if ct := read(); ct.Base != "dark-ansi" {
 		t.Fatalf("follow terminal, dark: %+v", ct)
+	}
+}
+
+// TestThemePickReachesClaude: picking the built-in theme after a theme
+// mod without a pane palette changes no colour a console reports, yet
+// the running Claude panes follow the terminal from the next look at
+// config.toml.
+func TestThemePickReachesClaude(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	t.Setenv(envModsPoll, "20ms")
+	cfgDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", cfgDir)
+	writeNordMod(t)
+	dir, err := home.ModsDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Nord without a pane palette: Claude keeps the user's own theme.
+	if err := os.WriteFile(filepath.Join(dir, "nord", "theme.toml"), []byte("[dark]\naccent = { fg = [\"cyan\", \"#88c0d0\"] }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "settings.json"), []byte(`{"theme": "light"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfgPath, _ := config.Path()
+	if err := os.WriteFile(cfgPath, []byte("[ui]\ntheme = \"nord\"\n[mods.nord]\nenabled = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reg, err := agent.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	claude, _ := reg.Get("claude")
+	p, err := client.ResolvePaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{opts: Options{Paths: p, Bin: "/nonexistent/tm"}, log: log.New(io.Discard, "", 0), agents: reg,
+		sessions: map[string]*session.Session{}, modEv: newModEvents()}
+	base := func() string {
+		t.Helper()
+		var ct struct{ Base string }
+		b, err := os.ReadFile(filepath.Join(cfgDir, "themes", "terminatr.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(b, &ct); err != nil {
+			t.Fatalf("%v\n%s", err, b)
+		}
+		return ct.Base
+	}
+	s.mu.Lock()
+	ok := s.writeLiveTheme(claude)
+	s.mu.Unlock()
+	if !ok || base() != "light" {
+		t.Fatalf("under nord without a pane palette: %v %q", ok, base())
+	}
+
+	sup := s.newModHosts()
+	s.modSup.Store(sup)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.runModHosts(ctx, sup)
+	}()
+	defer func() {
+		cancel()
+		<-done
+	}()
+	// Let the loop read nord's config first, so the pick below is a change.
+	time.Sleep(100 * time.Millisecond)
+	if err := os.WriteFile(cfgPath, []byte("[ui]\ntheme = \"default\"\n[mods.nord]\nenabled = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for base() != "dark-ansi" {
+		if time.Now().After(deadline) {
+			t.Fatalf("follow terminal didn't reach the running Claude: base %q", base())
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
