@@ -13,6 +13,10 @@ import (
 // a thread shows its pane and a click on a task opens the task view.
 func TestSmokeCoordinatorPanel(t *testing.T) {
 	env, _, _ := threadEnv(t)
+	// The ticker mod's section (ages, so never the same twice) shows
+	// once the ticker has synced, which a slow run (-race) reaches
+	// before the golden: off here, the unit tests cover it.
+	env.MustCLI("mod", "disable", "ticker")
 	env.MustCLI("task", "add", "Fix the login", "--status", "ready", "--project", "demo")
 	env.MustCLI("task", "steps", "T1", "add", "Find the bug", "--project", "demo")
 	env.MustCLI("task", "steps", "T1", "add", "Fix it", "--project", "demo")
@@ -40,39 +44,9 @@ func TestSmokeCoordinatorPanel(t *testing.T) {
 	panelOnly := func() string {
 		clearInbox(env)
 		var out []string
-		// The ticker's section (ages, so never the same twice), the
-		// blank row before it included, is left out, from its heading to
-		// the blank row that ends it; the unit tests cover it.
-		skip, dropped, at := false, 0, 0
 		for _, l := range strings.Split(w.Screen(), "\n") {
 			r := []rune(l)
-			cut := strings.TrimSpace(string(r[min(cols-panel, len(r)):]))
-			cut = strings.TrimPrefix(cut, "│ ")
-			if strings.HasPrefix(cut, "TICKER") {
-				skip = true
-				at = len(out)
-				if n := len(out); n > 0 && strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(out[n-1]), "│")) == "" {
-					out = out[:n-1]
-					at--
-					dropped++
-				}
-			}
-			if skip {
-				skip = cut != "" && cut != "│"
-				dropped++
-				continue
-			}
 			out = append(out, string(r[min(cols-panel, len(r)):]))
-		}
-		// Its rows (its wrapping depends on the ages) are given back as
-		// empty ones where it was, so the rule and the status bar stay
-		// on their rows.
-		if dropped > 0 {
-			pad := make([]string, dropped)
-			for i := range pad {
-				pad[i] = "│"
-			}
-			out = append(out[:at], append(pad, out[at:]...)...)
 		}
 		return strings.Join(out, "\n")
 	}
