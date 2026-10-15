@@ -14,15 +14,17 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 var now = time.Now
 
 // Journal appends one line to JOURNAL.md:
-// "<time> <who> <action> <ref> <detail>".
+// "<time> <who> <action> <ref> <detail>", as plain text (textsafe.Line):
+// the detail is often an agent's words.
 func (p *Project) Journal(c caller.Caller, action, ref, detail string) error {
-	line := strings.Join(strings.Fields(fmt.Sprintf("%s %s %s %s %s",
-		now().UTC().Format(time.RFC3339), c.String(), action, ref, detail)), " ")
+	line := textsafe.Line(fmt.Sprintf("%s %s %s %s %s",
+		now().UTC().Format(time.RFC3339), c.String(), action, ref, detail), 0)
 	return mdfile.Append(p.Path("JOURNAL.md"), []byte(line+"\n"))
 }
 
