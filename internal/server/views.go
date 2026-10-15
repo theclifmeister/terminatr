@@ -362,9 +362,10 @@ func (vs *views) tag(v *view.View) {
 
 // resize sizes the session lv shows to its pane at its size. With claim
 // set (a claim from typing) only a session that follows typing is
-// resized; typed says the claim is a console's keys, the only one that
-// sizes a remote pane. vs.mu held.
-func (vs *views) resize(lv *liveView, claim, typed bool) {
+// resized. A paired server's pane is sized like a local one, by a switch
+// or a focus-in as by keys; the stream sends the size only while it may
+// type. vs.mu held.
+func (vs *views) resize(lv *liveView, claim bool) {
 	v := &lv.v
 	if v.Mode != view.ModeLayout || v.Cols == 0 || v.Rows == 0 {
 		return
@@ -372,7 +373,7 @@ func (vs *views) resize(lv *liveView, claim, typed bool) {
 	g := v.Lay(int(v.Cols), int(v.Rows))
 	r := g.Area
 	info, alive := vs.host.pane(g.Pane)
-	if g.Pane == "" || !alive || r.W < 1 || r.H < 1 || claim && !info.follows || info.remote && !typed {
+	if g.Pane == "" || !alive || r.W < 1 || r.H < 1 || claim && !info.follows {
 		return
 	}
 	vs.host.resizePane(g.Pane, uint16(r.W), uint16(r.H))
@@ -525,7 +526,7 @@ func (vs *views) do(method string, p proto.ViewParams) (view.View, *proto.Error)
 	v.Normalize()
 	vs.tag(v)
 	if resize {
-		vs.resize(lv, claim, method == proto.MethodViewInput)
+		vs.resize(lv, claim)
 	}
 	vs.fill(lv)
 	if !view.Equal(before, *v) {
