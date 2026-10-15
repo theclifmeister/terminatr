@@ -3,7 +3,9 @@
 package server
 
 import (
+	"bufio"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -166,11 +168,18 @@ func TestRemoveLegacyPins(t *testing.T) {
 	}
 	cmd := exec.Command(live, "-test.run=^TestPinHelperSleep$")
 	cmd.Env = append(os.Environ(), "TM_PIN_HELPER=1")
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := cmd.Start(); err != nil {
 		t.Skip("cannot run copied test binary: ", err)
 	}
 	defer func() { cmd.Process.Kill(); cmd.Wait() }()
-	time.Sleep(200 * time.Millisecond)
+	// The helper prints once it runs; the pin is then a running binary.
+	if line, err := bufio.NewReader(out).ReadString('\n'); line != "pin helper running\n" {
+		t.Fatalf("helper said %q (%v)", line, err)
+	}
 	removeLegacyPins(home)
 	if _, err := os.Stat(live); err != nil {
 		t.Fatalf("running binary removed: %v", err)
@@ -183,6 +192,7 @@ func TestRemoveLegacyPins(t *testing.T) {
 // TestPinHelperSleep is the process TestRemoveLegacyPins keeps running.
 func TestPinHelperSleep(t *testing.T) {
 	if os.Getenv("TM_PIN_HELPER") == "1" {
+		fmt.Println("pin helper running")
 		time.Sleep(time.Minute)
 	}
 }

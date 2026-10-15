@@ -196,7 +196,7 @@ func TestHeldPromptChannel(t *testing.T) {
 // waits its turn, however long; the bound only counts idle time.
 func TestPromptNotHeldWhileWorking(t *testing.T) {
 	resolved := make(chan PromptResolution, 1)
-	s := startBox(t, claudeLike(t), "draft", 300*time.Millisecond, resolved)
+	s := startBox(t, claudeLike(t), "draft", 50*time.Millisecond, resolved)
 	if _, err := s.Hook("UserPromptSubmit", map[string]any{"prompt": "go"}); err != nil {
 		t.Fatal(err)
 	}
@@ -207,15 +207,12 @@ func TestPromptNotHeldWhileWorking(t *testing.T) {
 	if _, err := s.Prompt("later"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(time.Second)
-	select {
-	case r := <-resolved:
-		t.Fatalf("resolved while working: %+v", r)
-	default:
-	}
-	if st, _ := s.AgentState(); st.Queued != 1 || st.Held != "" {
-		t.Fatalf("while working: %+v", st)
-	}
+	// Many times PromptHold (50ms): were the hold counting working time,
+	// the prompt would have been held or resolved by now.
+	never(t, 500*time.Millisecond, "the prompt resolved, held or pasted while working", func() bool {
+		st, _ := s.AgentState()
+		return len(resolved) > 0 || st.Queued != 1 || st.Held != ""
+	})
 }
 
 // TestPromptRefresh: Refresh runs at delivery; its text is what is
@@ -393,7 +390,9 @@ func TestPromptStallLogged(t *testing.T) {
 		t.Fatal(err)
 	}
 	eventually(t, "the stall log", func() bool { n, _ := stalls(); return n > 0 })
-	time.Sleep(500 * time.Millisecond)
+	// Further stall lines, were each check to log one, come with the
+	// checks: give them a few.
+	never(t, 300*time.Millisecond, "a second stall line", func() bool { n, _ := stalls(); return n > 1 })
 	n, line := stalls()
 	if n != 1 || !strings.Contains(line, "agent working (hooks), last hook event UserPromptSubmit at ") ||
 		!strings.Contains(line, "tm agent explain s-test") {

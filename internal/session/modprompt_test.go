@@ -105,10 +105,10 @@ func TestModPromptBusyComposer(t *testing.T) {
 	if err := s.ModState(agent.StateIdle, "", "turn.complete"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(300 * time.Millisecond)
-	if sc := screen(t, s); !strings.Contains(sc, "half typed draft") || strings.Contains(sc, "step 2") || strings.Contains(sc, "remote-control") {
-		t.Fatalf("screen:\n%s", sc)
-	}
+	never(t, 300*time.Millisecond, "the draft replaced or a prompt pasted over it", func() bool {
+		sc := screen(t, s)
+		return !strings.Contains(sc, "half typed draft") || strings.Contains(sc, "step 2") || strings.Contains(sc, "remote-control")
+	})
 }
 
 // TestModPromptRestart: a mod that restarts after taking a prompt is
@@ -172,7 +172,7 @@ func TestModPromptFallback(t *testing.T) {
 // longer than that still gets what is queued meanwhile.
 func TestModPromptNotPolled(t *testing.T) {
 	old := ModPollTimeout
-	ModPollTimeout = 300 * time.Millisecond
+	ModPollTimeout = 100 * time.Millisecond
 	t.Cleanup(func() { ModPollTimeout = old })
 	s := startMod(t, "", true, make(chan PromptResolution, 1))
 
@@ -185,7 +185,14 @@ func TestModPromptNotPolled(t *testing.T) {
 			got <- p
 		}
 	}()
-	time.Sleep(500 * time.Millisecond)
+	// Once the poll is waiting, let it outlast the bound.
+	eventually(t, "the poll waiting", func() bool {
+		rt := s.agentRT()
+		rt.mu.Lock()
+		defer rt.mu.Unlock()
+		return rt.modPolls > 0
+	})
+	time.Sleep(2 * ModPollTimeout)
 	s.Prompt("polled-for")
 	if p := <-got; p.Text != "polled-for" {
 		t.Fatalf("offer %+v", p)
@@ -226,13 +233,13 @@ func TestModPromptTakenNotRun(t *testing.T) {
 	s.ModState(agent.StateWorking, "", "turn.start")
 	s.Prompt("taken-again")
 	ack(t, s, nextMod(t, s).ID, ModTaken)
-	time.Sleep(300 * time.Millisecond)
-	if st, _ := s.AgentState(); st.Held != "" || st.Queued != 1 {
-		t.Fatalf("working: %+v", st)
-	}
+	never(t, 300*time.Millisecond, "a held or pasted prompt while working", func() bool {
+		st, _ := s.AgentState()
+		return st.Held != "" || st.Queued != 1
+	})
 	rt := s.agentRT()
 	rt.mu.Lock()
-	rt.cfg.PromptHold = 300 * time.Millisecond
+	rt.cfg.PromptHold = 50 * time.Millisecond
 	rt.mu.Unlock()
 	s.ModState(agent.StateIdle, "", "turn.complete")
 	eventually(t, "the paste after PromptHold", func() bool { return strings.Contains(screen(t, s), "taken-again") })
