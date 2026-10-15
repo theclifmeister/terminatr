@@ -13,7 +13,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/mod"
-	"github.com/theclifmeister/terminatr/internal/modannot"
+	"github.com/theclifmeister/terminatr/internal/modstore"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -81,7 +81,7 @@ func dashProjects(t *testing.T) *project.Project {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := modannot.Set(filepath.Join(state, "look"), "alpha", modannot.Task("T1"), "ci", []widget.Span{{Text: "green"}}); err != nil {
+	if _, err := modstore.Annotate(filepath.Join(state, "look"), "alpha", modstore.Task("T1"), "ci", []widget.Span{{Text: "green"}}); err != nil {
 		t.Fatal(err)
 	}
 	return alpha
@@ -150,7 +150,7 @@ func TestDashboardWatch(t *testing.T) {
 	}
 	a := d.Projects[0]
 	if a.Goal != "Ship it" || a.Counts["needs_you"] != 1 || a.Unread != 2 || a.Questions != 1 ||
-		a.Usage.Turns != 3 || len(a.Badges[modannot.Task("T1")]) != 1 || len(a.Links) != 1 || a.Links[0].Unread != 1 {
+		a.Usage.Turns != 3 || len(a.Badges[modstore.Task("T1")]) != 1 || len(a.Links) != 1 || a.Links[0].Unread != 1 {
 		t.Errorf("Load's alpha: %+v", a)
 	}
 	if len(a.Threads) != 1 || a.Threads[0].Report == nil || a.Threads[0].Report.PR != "https://github.com/o/r/pull/7" ||
@@ -169,7 +169,7 @@ func TestDashboardWatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := modannot.Set(filepath.Join(state, "look"), "alpha", modannot.Task("T2"), "ci", []widget.Span{{Text: "red"}}); err != nil {
+	if _, err := modstore.Annotate(filepath.Join(state, "look"), "alpha", modstore.Task("T2"), "ci", []widget.Span{{Text: "red"}}); err != nil {
 		t.Fatal(err)
 	}
 	await("a task, a link and a badge changed")

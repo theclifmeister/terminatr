@@ -1,6 +1,6 @@
 package server
 
-// The mods' cells (docs/SPEC.md §5.3, Cells; package modcell): what code
+// The mods' cells (docs/SPEC.md §5.3, Cells; package modstore): what code
 // mods publish into their columns ($.ui.cell.set) and the status bar
 // ($.ui.status.set), kept by the server and sent with the rows consoles
 // already ask for: session.list's Mods and each session's Cells, and a
@@ -17,7 +17,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modbroker"
-	"github.com/theclifmeister/terminatr/internal/modcell"
+	"github.com/theclifmeister/terminatr/internal/modstore"
 	"github.com/theclifmeister/terminatr/internal/modsup"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/widget"
@@ -29,7 +29,7 @@ const cellsFile = "cells.json"
 // modCells are the store and the mods whose cells show.
 type modCells struct {
 	once  sync.Once
-	store *modcell.Store
+	store *modstore.CellStore
 	// shown are the enabled code mods, by id, as the registry last had
 	// them (noteMods); nil before it was first read.
 	shown atomic.Pointer[map[string]shownMod]
@@ -42,13 +42,13 @@ type shownMod struct {
 }
 
 // cells is the store, opened on first use.
-func (s *Server) cells() *modcell.Store {
+func (s *Server) cells() *modstore.CellStore {
 	s.modCl.once.Do(func() {
 		path := ""
 		if dir, err := home.ModCacheDir(); err == nil {
 			path = filepath.Join(dir, cellsFile)
 		}
-		s.modCl.store = modcell.Open(path)
+		s.modCl.store = modstore.OpenCells(path)
 	})
 	return s.modCl.store
 }
@@ -176,7 +176,7 @@ func (s *Server) modCellSet(_ context.Context, c *modbroker.Call) (any, error) {
 	if c.Mod.Manifest == nil || !declares(c.Mod.Manifest.Provides.Columns, a.Column) {
 		return nil, modbroker.BadParams("ui.cell.set: %q is not one of %s's columns", a.Column, c.Mod.ID)
 	}
-	if err := modcell.CheckTarget(a.Target); err != nil {
+	if err := modstore.CheckCellTarget(a.Target); err != nil {
 		return nil, modbroker.BadParams("ui.cell.set: %v", err)
 	}
 	slug := a.Target.Project
@@ -194,7 +194,7 @@ func (s *Server) modCellSet(_ context.Context, c *modbroker.Call) (any, error) {
 	} else if len(c.Mod.Projects) > 0 {
 		return nil, modbroker.Denied("%s runs for some projects only, and session %s has none", c.Mod.ID, a.Target.Session)
 	}
-	if err := modcell.Check(a.Spans); err != nil {
+	if err := modstore.CheckCell(a.Spans); err != nil {
 		return nil, modbroker.BadParams("ui.cell.set: %v", err)
 	}
 	if _, err := s.cells().Set(c.Mod.ID, a.Column, a.Target, a.Spans); err != nil {
@@ -212,7 +212,7 @@ func (s *Server) modStatusSet(_ context.Context, c *modbroker.Call) (any, error)
 	if err := c.Decode(&a); err != nil {
 		return nil, err
 	}
-	if err := modcell.Check(a.Spans); err != nil {
+	if err := modstore.CheckCell(a.Spans); err != nil {
 		return nil, modbroker.BadParams("ui.status.set: %v", err)
 	}
 	s.cells().SetStatus(c.Mod.ID, a.Spans)

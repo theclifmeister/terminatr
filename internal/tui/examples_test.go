@@ -14,7 +14,7 @@ import (
 // folder for each of mod.Examples and no other, asking for the
 // permissions it lists; a keymap applies with nothing refused, also as
 // the console loads it enabled, and an icon set or theme loads as the
-// dashboard reads it. Their code runs in internal/modtest's TestExamples.
+// dashboard reads it. Their code runs in internal/moddev's TestExamples.
 func TestExampleMods(t *testing.T) {
 	root := filepath.Join("..", "..", "examples", "mods")
 	dirs, err := os.ReadDir(root)

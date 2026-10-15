@@ -1,14 +1,14 @@
-// Package modcell is the server's cell store (mods design §4: events are
-// pushed, cells are published): the latest cell each code mod published
-// per column and target ($.ui.cell.set) and its status-bar segment
-// ($.ui.status.set). Consoles get them with the rows they already ask
+// The server's cell store (mods design §4: events are pushed, cells are
+// published): the latest cell each code mod published per column and
+// target ($.ui.cell.set) and its status-bar segment ($.ui.status.set). Consoles get them with the rows they already ask
 // for (proto.ModCells), so a mod is never called while a frame is drawn
 // and a slow mod shows a stale cell, never a slow sidebar.
 //
 // The store is written to a file, so the last cells show again after the
 // server restarts, before the mods' hosts have published anew. What it
 // reads back is checked as a mod's call is.
-package modcell
+
+package modstore
 
 import (
 	"cmp"
@@ -33,9 +33,9 @@ const (
 	// maxCells is how many cells a mod keeps; past it a new target is
 	// refused (a cell set again, or cleared, still is).
 	maxCells = 2000
-	// MaxText is the bytes of all the spans' text of one cell or status
+	// MaxCellText is the bytes of all the spans' text of one cell or status
 	// segment: a column is at most view.MaxModColumnWidth cells wide.
-	MaxText = 256
+	MaxCellText = 256
 )
 
 // saveDelay gathers a burst of sets into one write of the file.
@@ -49,8 +49,8 @@ type key struct {
 	target      proto.CellTarget
 }
 
-// Store is the cells and status segments, by mod.
-type Store struct {
+// CellStore is the cells and status segments, by mod.
+type CellStore struct {
 	path string
 
 	mu     sync.Mutex
@@ -69,10 +69,10 @@ type file struct {
 	Status  []proto.ModStatus `json:"status"`
 }
 
-// Open is the store kept in path ("" for none: tests), with the cells the
+// OpenCells is the store kept in path ("" for none: tests), with the cells the
 // file holds. A file that doesn't read is a store with none.
-func Open(path string) *Store {
-	s := &Store{path: path, cells: map[key][]widget.Span{}, count: map[string]int{}, status: map[string][]widget.Span{}}
+func OpenCells(path string) *CellStore {
+	s := &CellStore{path: path, cells: map[key][]widget.Span{}, count: map[string]int{}, status: map[string][]widget.Span{}}
 	if path == "" {
 		return s
 	}
@@ -85,7 +85,7 @@ func Open(path string) *Store {
 		return s
 	}
 	for _, c := range f.Cells {
-		if CheckTarget(c.Target) == nil && Check(c.Spans) == nil && c.Mod != "" && c.Column != "" && len(c.Spans) > 0 {
+		if CheckCellTarget(c.Target) == nil && CheckCell(c.Spans) == nil && c.Mod != "" && c.Column != "" && len(c.Spans) > 0 {
 			k := key{c.Mod, c.Column, c.Target}
 			if _, ok := s.cells[k]; !ok && s.count[c.Mod] < maxCells {
 				s.cells[k] = c.Spans
@@ -94,15 +94,15 @@ func Open(path string) *Store {
 		}
 	}
 	for _, st := range f.Status {
-		if st.Mod != "" && len(st.Spans) > 0 && Check(st.Spans) == nil {
+		if st.Mod != "" && len(st.Spans) > 0 && CheckCell(st.Spans) == nil {
 			s.status[st.Mod] = st.Spans
 		}
 	}
 	return s
 }
 
-// CheckTarget checks a cell's target is one of its four shapes.
-func CheckTarget(t proto.CellTarget) error {
+// CheckCellTarget checks a cell's target is one of its four shapes.
+func CheckCellTarget(t proto.CellTarget) error {
 	switch {
 	case t.Session != "":
 		if t.Project != "" || t.Task != "" || t.Thread != "" {
@@ -121,9 +121,9 @@ func CheckTarget(t proto.CellTarget) error {
 	return nil
 }
 
-// Check checks a cell's or status segment's spans in place, as
-// widget.CheckSpans does, and bounds their text (MaxText).
-func Check(ss []widget.Span) error {
+// CheckCell checks a cell's or status segment's spans in place, as
+// widget.CheckSpans does, and bounds their text (MaxCellText).
+func CheckCell(ss []widget.Span) error {
 	if err := widget.CheckSpans(ss); err != nil {
 		return err
 	}
@@ -131,16 +131,16 @@ func Check(ss []widget.Span) error {
 	for _, s := range ss {
 		n += len(s.Text)
 	}
-	if n > MaxText {
-		return fmt.Errorf("%d bytes of text, over %d", n, MaxText)
+	if n > MaxCellText {
+		return fmt.Errorf("%d bytes of text, over %d", n, MaxCellText)
 	}
 	return nil
 }
 
 // Set publishes mod's cell in its column for target t; empty spans clear
-// it. The caller has checked t (CheckTarget), the spans (Check) and that
+// it. The caller has checked t (CheckCellTarget), the spans (Check) and that
 // the column is the mod's. It reports whether anything changed.
-func (s *Store) Set(mod, column string, t proto.CellTarget, spans []widget.Span) (bool, error) {
+func (s *CellStore) Set(mod, column string, t proto.CellTarget, spans []widget.Span) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	k := key{mod, column, t}
@@ -168,7 +168,7 @@ func (s *Store) Set(mod, column string, t proto.CellTarget, spans []widget.Span)
 }
 
 // SetStatus publishes mod's status-bar segment; empty spans clear it.
-func (s *Store) SetStatus(mod string, spans []widget.Span) bool {
+func (s *CellStore) SetStatus(mod string, spans []widget.Span) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	old, had := s.status[mod]
@@ -187,7 +187,7 @@ func (s *Store) SetStatus(mod string, spans []widget.Span) bool {
 // Keep drops the cells and segments of every mod keep refuses (removed or
 // turned off) and, for the rest, the cells of columns keep no longer
 // lists (columns(mod) false; an updated manifest dropped them).
-func (s *Store) Keep(keep func(mod string) bool, column func(mod, column string) bool) {
+func (s *CellStore) Keep(keep func(mod string) bool, column func(mod, column string) bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	dropped := false
@@ -212,7 +212,7 @@ func (s *Store) Keep(keep func(mod string) bool, column func(mod, column string)
 }
 
 // changed counts a change and has the file written soon. s.mu is held.
-func (s *Store) changed() {
+func (s *CellStore) changed() {
 	s.gen++
 	if s.path != "" && s.timer == nil {
 		s.timer = time.AfterFunc(saveDelay, func() { _ = s.Flush() })
@@ -221,7 +221,7 @@ func (s *Store) changed() {
 
 // Flush writes the store's file now if it changed since it was last
 // written (the server stopping).
-func (s *Store) Flush() error {
+func (s *CellStore) Flush() error {
 	s.mu.Lock()
 	if s.timer != nil {
 		s.timer.Stop()
@@ -249,7 +249,7 @@ func (s *Store) Flush() error {
 
 // Cells are the cells of the mods show allows (nil: every mod) whose
 // target where accepts, sorted by mod, column and target.
-func (s *Store) Cells(show func(mod string) bool, where func(proto.CellTarget) bool) []proto.ModCell {
+func (s *CellStore) Cells(show func(mod string) bool, where func(proto.CellTarget) bool) []proto.ModCell {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := s.list(show)
@@ -260,13 +260,13 @@ func (s *Store) Cells(show func(mod string) bool, where func(proto.CellTarget) b
 }
 
 // Status is the status segments of the mods show allows, by mod.
-func (s *Store) Status(show func(mod string) bool) []proto.ModStatus {
+func (s *CellStore) Status(show func(mod string) bool) []proto.ModStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.statusList(show)
 }
 
-func (s *Store) list(show func(string) bool) []proto.ModCell {
+func (s *CellStore) list(show func(string) bool) []proto.ModCell {
 	var out []proto.ModCell
 	for k, ss := range s.cells {
 		if show == nil || show(k.mod) {
@@ -281,7 +281,7 @@ func (s *Store) list(show func(string) bool) []proto.ModCell {
 	return out
 }
 
-func (s *Store) statusList(show func(string) bool) []proto.ModStatus {
+func (s *CellStore) statusList(show func(string) bool) []proto.ModStatus {
 	var out []proto.ModStatus
 	for m, ss := range s.status {
 		if show == nil || show(m) {

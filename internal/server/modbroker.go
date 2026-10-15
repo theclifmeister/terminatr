@@ -24,10 +24,10 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
-	"github.com/theclifmeister/terminatr/internal/modannot"
 	"github.com/theclifmeister/terminatr/internal/modapi"
 	"github.com/theclifmeister/terminatr/internal/modbroker"
 	"github.com/theclifmeister/terminatr/internal/modproto"
+	"github.com/theclifmeister/terminatr/internal/modstore"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
@@ -439,7 +439,7 @@ func (s *Server) modAnnotate(_ context.Context, c *modbroker.Call) (any, error) 
 			Thread  string `json:"thread"`
 		} `json:"target"`
 		Key   string          `json:"key"`
-		Spans []modannot.Span `json:"spans"`
+		Spans []modstore.Span `json:"spans"`
 	}
 	if err := c.Decode(&a); err != nil {
 		return nil, err
@@ -450,10 +450,10 @@ func (s *Server) modAnnotate(_ context.Context, c *modbroker.Call) (any, error) 
 	if (a.Target.Task == "") == (a.Target.Thread == "") {
 		return nil, modbroker.BadParams("annotate: the target is a task or a thread")
 	}
-	if err := modannot.CheckKey(a.Key); err != nil {
+	if err := modstore.CheckKey(a.Key); err != nil {
 		return nil, modbroker.BadParams("annotate: %v", err)
 	}
-	spans, err := modannot.Clean(a.Spans)
+	spans, err := modstore.CleanBadge(a.Spans)
 	if err != nil {
 		return nil, modbroker.BadParams("annotate: %v", err)
 	}
@@ -475,7 +475,7 @@ func (s *Server) modAnnotate(_ context.Context, c *modbroker.Call) (any, error) 
 		if t == nil {
 			return nil, modbroker.NotFound("no task %s in %s", a.Target.Task, p.Slug)
 		}
-		target = modannot.Task(t.Ref())
+		target = modstore.Task(t.Ref())
 	} else {
 		recs, err := thread.List(p)
 		if err != nil {
@@ -484,9 +484,9 @@ func (s *Server) modAnnotate(_ context.Context, c *modbroker.Call) (any, error) 
 		if !slices.ContainsFunc(recs, func(r *thread.Record) bool { return r.ID == a.Target.Thread }) {
 			return nil, modbroker.NotFound("no thread %s in %s", a.Target.Thread, p.Slug)
 		}
-		target = modannot.Thread(a.Target.Thread)
+		target = modstore.Thread(a.Target.Thread)
 	}
-	changed, err := modannot.Set(s.broker().OwnDir(c.Mod.ID), p.Slug, target, a.Key, spans)
+	changed, err := modstore.Annotate(s.broker().OwnDir(c.Mod.ID), p.Slug, target, a.Key, spans)
 	if err != nil {
 		return nil, modbroker.Denied("annotate: %v", err)
 	}
