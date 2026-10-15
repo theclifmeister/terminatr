@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"cmp"
 	"fmt"
 	"regexp"
 	"slices"
@@ -44,6 +43,11 @@ type setting struct {
 	// unset runs on x: a project's own value goes,
 	// so it follows all projects again.
 	unset func(m *dash) tea.Cmd
+	// keys are the settings-file keys a project's row follows all
+	// projects in, and word their all-projects value in words: the
+	// safety rows' scope fills in from, unset and note from them.
+	keys []string
+	word func(config.Safety) string
 }
 
 // settingsList is a list of settings with a selection.
@@ -388,33 +392,30 @@ func globalSettings(note string) []setting {
 				}
 				return m.setSetting("agent_mod", "enabled", on, msg)
 			}},
-		{label: "Agent mod band", help: "The band, status entry and toast in the pane; the feed still runs. Only matters while Agent mod is on. Applies to sessions launched after the change.",
-			value: func(m *dash) string { return onOff(m.data.AgentModBand) },
-			from: func(m *dash) string {
-				if !m.data.AgentMod {
-					return "needs Agent mod on"
-				}
-				return ""
-			},
-			change: func(m *dash) tea.Cmd {
-				on := !m.data.AgentModBand
-				m.data.AgentModBand = on
-				return m.setSetting("agent_mod", "band", on, "agent mod band "+onOff(on)+"; sessions launched from now on follow it")
-			}},
-		{label: "Agent mod pane", help: "Open the /tm dashboard pane beside the coordinator when it starts, where it docks as a sidebar (fullscreen, 144+ columns). Off by default: in tm the info panel beside the coordinator shows the same; /tm is for Claude desktop and Remote Control, and opens or closes it either way. Only matters while Agent mod is on. Applies to coordinators launched after the change.",
-			value: func(m *dash) string { return onOff(m.data.AgentModPane) },
-			from: func(m *dash) string {
-				if !m.data.AgentMod {
-					return "needs Agent mod on"
-				}
-				return ""
-			},
-			change: func(m *dash) tea.Cmd {
-				on := !m.data.AgentModPane
-				m.data.AgentModPane = on
-				return m.setSetting("agent_mod", "pane", on, "agent mod pane "+onOff(on)+"; coordinators launched from now on follow it")
-			}},
+		agentModRow("Agent mod band", "The band, status entry and toast in the pane; the feed still runs. Only matters while Agent mod is on. Applies to sessions launched after the change.",
+			"band", func(m *dash) *bool { return &m.data.AgentModBand }, "sessions launched from now on follow it"),
+		agentModRow("Agent mod pane", "Open the /tm dashboard pane beside the coordinator when it starts, where it docks as a sidebar (fullscreen, 144+ columns). Off by default: in tm the info panel beside the coordinator shows the same; /tm is for Claude desktop and Remote Control, and opens or closes it either way. Only matters while Agent mod is on. Applies to coordinators launched after the change.",
+			"pane", func(m *dash) *bool { return &m.data.AgentModPane }, "coordinators launched from now on follow it"),
 	}
+}
+
+// agentModRow is an [agent_mod] key's on/off row that matters only
+// while Agent mod is on; field is the console's copy, msg follows the
+// new value in the footer.
+func agentModRow(label, help, key string, field func(m *dash) *bool, msg string) setting {
+	return setting{label: label, help: help,
+		value: func(m *dash) string { return onOff(*field(m)) },
+		from: func(m *dash) string {
+			if !m.data.AgentMod {
+				return "needs Agent mod on"
+			}
+			return ""
+		},
+		change: func(m *dash) tea.Cmd {
+			on := !*field(m)
+			*field(m) = on
+			return m.setSetting("agent_mod", key, on, "agent mod "+key+" "+onOff(on)+"; "+msg)
+		}}
 }
 
 // pickMod saves a [ui] pick of a built-in or a mod's theme, icons or
@@ -693,439 +694,6 @@ func projectSettings(slug string) []setting {
 // allProjectsSettings are the settings every project follows unless it
 // sets its own (§11.2 All projects), for the , popup.
 func allProjectsSettings() []setting { return safetySettings("") }
-
-// safetySettings are slug's settings, or with slug "" the all-projects
-// ones: the same rows, written to the project's table or to [defaults].
-func safetySettings(slug string) []setting {
-	all := slug == ""
-	table, forWho, ofWho := "projects."+slug, "for "+slug, "of "+slug
-	if all {
-		table, forWho, ofWho = config.DefaultsTable, "for all projects", "of each project"
-	}
-	safety := func(m *dash) config.Safety {
-		if all {
-			if m.data.Defaults != nil {
-				return *m.data.Defaults
-			}
-		} else if p := m.projectData(slug); p != nil && p.Safety != nil {
-			return *p.Safety
-		}
-		return config.Defaults
-	}
-	// set saves a setting and shows it at once, before the next poll, so
-	// quick presses of + build on each other.
-	set := func(m *dash, key string, value any, msg string, apply func(*config.Safety)) tea.Cmd {
-		s := safety(m)
-		apply(&s)
-		if all {
-			m.data.Defaults = &s
-		} else if p := m.projectData(slug); p != nil {
-			p.Safety = &s
-			if !slices.Contains(p.Own, key) {
-				p.Own = append(slices.Clip(p.Own), key)
-			}
-		}
-		return m.setSetting(table, key, value, msg)
-	}
-	toggle := func(key string, get func(config.Safety) bool, put func(*config.Safety, bool), what string) func(m *dash) tea.Cmd {
-		return func(m *dash) tea.Cmd {
-			on := !get(safety(m))
-			return set(m, key, on, what+" "+onOff(on)+" "+forWho, func(s *config.Safety) { put(s, on) })
-		}
-	}
-	// scope fills in where each row's value comes from: on a project, its
-	// own value or all projects', which x goes back to; on all projects,
-	// the projects that set their own.
-	scope := func(rows []setting, keys [][]string, words []func(config.Safety) string) []setting {
-		for i := range rows {
-			keys := keys[i]
-			if all {
-				rows[i].note = joinNotes(rows[i].note, func(m *dash) []string { return ownNote(m, keys) })
-				continue
-			}
-			word := words[i]
-			rows[i].from = func(m *dash) string {
-				if p := m.projectData(slug); p != nil && !ownsAny(p.Own, keys) {
-					return config.AllProjectsName
-				}
-				return ""
-			}
-			rows[i].unset = func(m *dash) tea.Cmd {
-				p := m.projectData(slug)
-				if p == nil || !ownsAny(p.Own, keys) {
-					m.msg = "this setting of " + slug + " already follows all projects"
-					return nil
-				}
-				msg := slug + " follows all projects in " + strings.ToLower(rows[i].label)
-				if m.data.Defaults != nil {
-					msg += ": " + word(*m.data.Defaults)
-				}
-				src := m.src
-				return m.act(func() actionMsg {
-					for _, k := range keys {
-						if err := src.SetSetting(table, k, nil); err != nil {
-							return actionMsg{err: settingsErr(err)}
-						}
-					}
-					return actionMsg{msg: msg}
-				})
-			}
-		}
-		return rows
-	}
-	threads := func(m *dash) string {
-		if all {
-			return ""
-		}
-		out := fmt.Sprintf(" · %d working now", m.workingThreads(slug))
-		if g := safety(m).GlobalParallelThreads; g > 0 {
-			out += fmt.Sprintf(" · %d of %d across projects", m.workingAll(), g)
-		}
-		return out
-	}
-	startWords := func(s config.Safety) string {
-		if s.StartThreads == config.StartAuto {
-			return "automatically"
-		}
-		return "ask first"
-	}
-	// agentRow is an agent setting: enter picks the next agent tm knows
-	// (tm agent list), so the file only ever names a known one.
-	agentRow := func(label, help, key string, get func(config.Safety) string, put func(*config.Safety, string), msg string) setting {
-		return setting{label: label, help: help,
-			value: func(m *dash) string { return agentWords(get(safety(m)), m.agentList()) },
-			change: func(m *dash) tea.Cmd {
-				names := m.src.Agents() // the installed ones
-				cur := get(safety(m))
-				switch {
-				case len(names) == 0:
-					m.msg = "no agent is installed: install one tm knows (tm agent list), then tm doctor"
-					return nil
-				case len(names) == 1 && names[0] == cur:
-					m.msg = "only " + cur + " is installed; install another to choose between them (tm agent list)"
-					return nil
-				}
-				next := names[(slices.Index(names, cur)+1)%len(names)]
-				return set(m, key, next, msg+next, func(s *config.Safety) { put(s, next) })
-			},
-			note: func(m *dash) []string {
-				if cur, names := get(safety(m)), m.agentList(); cur != "" && !slices.Contains(names, cur) {
-					return []string{th().Warn.Render(cur + " isn't installed: nothing starts with it; enter picks an installed agent")}
-				}
-				return nil
-			}}
-	}
-	// coordModels are the models the project's coordinator may run: its
-	// agent's, in the project's scope.
-	coordModels := func(m *dash) (string, []string, string) {
-		s := safety(m)
-		name, why := resolvedAgent(s.CoordinatorAgent, m.agentList())
-		if name == "" {
-			return "", nil, why
-		}
-		for _, c := range m.catalogList() {
-			if c.Agent != name {
-				continue
-			}
-			if !c.Known {
-				return name, nil, name + "'s models are unknown (" + c.Reason + ")"
-			}
-			var out []string
-			for _, x := range c.InScope(s.Models) {
-				out = append(out, x.Name)
-			}
-			return name, out, ""
-		}
-		return name, nil, name + " isn't installed"
-	}
-	yoloQ := "Turn yolo mode on for " + slug + "? Threads started from now on skip the agent's permission prompts (the file rules and the sandbox still hold)."
-	rows := []setting{
-		{label: "Start threads", help: "Ask first: the coordinator proposes threads and starts them after your go-ahead. Automatically: it starts them itself.",
-			value: func(m *dash) string { return startWords(safety(m)) },
-			change: func(m *dash) tea.Cmd {
-				next, word := config.StartAuto, "automatically"
-				if safety(m).StartThreads == config.StartAuto {
-					next, word = config.StartPropose, "after asking you"
-				}
-				return set(m, "start_threads", next, "threads "+ofWho+" start "+word, func(s *config.Safety) { s.StartThreads = next })
-			}},
-		{label: "Yolo mode", help: "New threads skip the agent's permission prompts; the file rules and the sandbox still hold. Turning it on asks first.",
-			value: func(m *dash) string { return onOff(safety(m).Yolo) },
-			change: func(m *dash) tea.Cmd {
-				if safety(m).Yolo {
-					return set(m, "yolo", false, "yolo mode off "+forWho, func(s *config.Safety) { s.Yolo = false })
-				}
-				q := yoloQ
-				if all {
-					q = "Turn yolo mode on for all projects? Threads started from now on skip the agent's permission prompts in " + followers(m, []string{"yolo"}) + " (the file rules and the sandbox still hold)."
-				}
-				m.confirm("Turn on yolo mode", q, func() tea.Cmd {
-					return set(m, "yolo", true, "yolo mode on "+forWho+": new threads skip permission prompts", func(s *config.Safety) { s.Yolo = true })
-				})
-				return nil
-			}},
-		{label: "Coordinator approves", help: "The coordinator may answer its threads' in-scope permission prompts (allow once, never always).",
-			value: func(m *dash) string { return onOff(safety(m).CoordinatorApproves) },
-			change: toggle("coordinator_approves", func(s config.Safety) bool { return s.CoordinatorApproves },
-				func(s *config.Safety, on bool) { s.CoordinatorApproves = on }, "coordinator approvals")},
-		{label: "Parallel threads", help: "The most threads working at once; beyond it the coordinator proposes and waits. Idle and done threads don't count. Enter or + and - change it.",
-			value: func(m *dash) string {
-				return fmt.Sprintf("%d", safety(m).ParallelThreads) + threads(m)
-			},
-			change: func(m *dash) tea.Cmd {
-				n := nextStep(capSteps, safety(m).ParallelThreads)
-				return set(m, "parallel_threads", n, fmt.Sprintf("up to %d threads %s work at once", n, ofWho), func(s *config.Safety) { s.ParallelThreads = n })
-			},
-			adjust: func(m *dash, d int) tea.Cmd {
-				n := min(max(safety(m).ParallelThreads+d, 1), config.MaxParallelThreads)
-				return set(m, "parallel_threads", n, fmt.Sprintf("up to %d threads %s work at once", n, ofWho), func(s *config.Safety) { s.ParallelThreads = n })
-			}},
-		{label: "Auto-close finished threads", help: "Close a thread when its pull request merges, or some days after it finishes (done, or its pull request merged); + and - change the days. One with uncommitted or unpushed work stays open, and the coordinator is told.",
-			value: func(m *dash) string { return closeWords(safety(m)) },
-			change: func(m *dash) tea.Cmd {
-				next := map[string]string{config.CloseOff: config.CloseMerged, config.CloseMerged: config.CloseDays}[safety(m).AutoClose]
-				if next == "" {
-					next = config.CloseOff
-				}
-				s := safety(m)
-				s.AutoClose = next
-				return set(m, "auto_close", next, "auto-close "+forWho+": "+closeWords(s), func(x *config.Safety) { x.AutoClose = next })
-			},
-			adjust: func(m *dash, d int) tea.Cmd {
-				s := safety(m)
-				n := min(max(s.AutoCloseDays+d, 1), config.MaxAutoCloseDays)
-				msg := fmt.Sprintf("threads %s close %s after they finish", ofWho, days(n))
-				if s.AutoClose != config.CloseDays {
-					msg = fmt.Sprintf("%s once auto-close is set to days after it finishes (enter)", days(n))
-				}
-				return set(m, "auto_close_days", n, msg, func(x *config.Safety) { x.AutoCloseDays = n })
-			}},
-		{label: "Complete tasks", help: "By you, or on your standing acceptance: a task in review is done once its pull request merges. x sends it back.",
-			value: func(m *dash) string { return completeWords(safety(m).CompleteTasks) },
-			change: func(m *dash) tea.Cmd {
-				next := config.CompleteMerged
-				if safety(m).CompleteTasks == config.CompleteMerged {
-					next = config.CompleteUser
-				}
-				msg := "tasks " + ofWho + " are done " + completeWords(next)
-				if next == config.CompleteUser {
-					msg = "tasks " + ofWho + " are done when you accept them"
-				}
-				return set(m, "complete_tasks", next, msg, func(x *config.Safety) { x.CompleteTasks = next })
-			}},
-		{label: "Pull request follow-up", help: "Prompt a thread when its pull request's checks fail, a reviewer asks for changes, or main moves past it.",
-			value: func(m *dash) string { return onOff(safety(m).PRFollowup) },
-			change: toggle("pr_followup", func(s config.Safety) bool { return s.PRFollowup },
-				func(s *config.Safety, on bool) { s.PRFollowup = on }, "pull request follow-up")},
-		{label: "Remote control", help: "Coordinators keep remote control on, so you can continue them from another device: a new one starts with it, and tm turns it back on when it drops. prefix+r changes the running one; your off holds until it is started anew.",
-			value: func(m *dash) string { return onOff(safety(m).CoordinatorRemoteControl) },
-			change: toggle("coordinator_remote_control", func(s config.Safety) bool { return s.CoordinatorRemoteControl },
-				func(s *config.Safety, on bool) { s.CoordinatorRemoteControl = on }, "remote control for coordinators"),
-			note: func(m *dash) []string {
-				if all {
-					return nil
-				}
-				return remoteNote(safety(m).CoordinatorRemoteControl, m.data.Sessions, slug)
-			}},
-		{label: "Auto-clear coordinator", help: "Clear the coordinator's conversation once its context reaches the hint (context_hint), only while it is idle with nothing waiting: no inbox item, queued prompt, open question or blocked thread. The project lives in files, so it reads tm context again. Off by default; each clear is journaled.",
-			value: func(m *dash) string { return onOff(safety(m).AutoClear) },
-			change: toggle("auto_clear", func(s config.Safety) bool { return s.AutoClear },
-				func(s *config.Safety, on bool) { s.AutoClear = on }, "auto-clear for coordinators")},
-		{label: "Coordinator may merge", help: "Let the coordinator merge pull requests with tm thread merge without the agent's auto mode refusing it: tm adds a permission allow rule for that command to the coordinator only. It merges only a PR whose checks are green on its current head and that the host calls mergeable, with a regular merge commit, on GitHub and Azure DevOps. Threads never get it, and the guard still refuses their merges. Only has an effect while merge is coordinator (the default). Off by default.",
-			value: func(m *dash) string { return onOff(safety(m).CoordinatorMerges) },
-			change: toggle("coordinator_merges", func(s config.Safety) bool { return s.CoordinatorMerges },
-				func(s *config.Safety, on bool) { s.CoordinatorMerges = on }, "the coordinator merging")},
-		{label: "Keep my checkout current", help: "Fast-forward your own checkout of each repository when its default branch is checked out, clean and only behind origin; else the overview says how far behind.",
-			value: func(m *dash) string { return onOff(safety(m).FastForwardCheckout) },
-			change: toggle("fast_forward_checkout", func(s config.Safety) bool { return s.FastForwardCheckout },
-				func(s *config.Safety, on bool) { s.FastForwardCheckout = on }, "keeping your checkout current")},
-		agentRow("Thread agent", "The agent new threads run; the coordinator may still name another for one thread. Enter picks the next one tm knows.",
-			"thread_agent", func(s config.Safety) string { return s.ThreadAgent }, func(s *config.Safety, a string) { s.ThreadAgent = a }, "new threads "+ofWho+" run "),
-		agentRow("Coordinator agent", "The agent a new coordinator runs; a running one keeps its agent until it is started anew. Enter picks the next one tm knows.",
-			"coordinator_agent", func(s config.Safety) string { return s.CoordinatorAgent }, func(s *config.Safety, a string) { s.CoordinatorAgent = a }, "new coordinators "+ofWho+" run "),
-		{label: "Thread models", help: "The models the coordinator may pick for a thread, from the ones the installed agents offer (General: Models). Enter lists them to allow or leave out; with none left out it chooses from all, new ones too. A model it may not pick is refused.",
-			value: func(m *dash) string { return modelWords(safety(m).Models) },
-			change: func(m *dash) tea.Cmd {
-				names := catalogNames(m.src.Catalogs())
-				m.push(&modelsView{all: names, allow: slices.Clone(safety(m).Models),
-					save: func(m *dash, list []string) tea.Cmd {
-						// Every model allowed: all projects drops the line,
-						// a project keeps the explicit list (x follows all).
-						if all && len(list) == len(names) && !slices.ContainsFunc(list, func(n string) bool { return !slices.Contains(names, n) }) {
-							s := safety(m)
-							s.Models = nil
-							m.data.Defaults = &s
-							return m.setSetting(table, "models", nil, "the coordinator may pick any model "+forWho)
-						}
-						return set(m, "models", list, "the coordinator may pick "+strings.Join(list, ", ")+" "+forWho, func(s *config.Safety) { s.Models = list })
-					}})
-				return nil
-			}},
-		{label: "Coordinator model", help: "The model a new coordinator runs, from its agent's models in Thread models; a running one keeps its model until it is started anew. Enter picks the next one; the agent's default is the first.",
-			value: func(m *dash) string {
-				if cur := safety(m).CoordinatorModel; cur != "" {
-					return cur
-				}
-				return "agent's default"
-			},
-			change: func(m *dash) tea.Cmd {
-				name, list, why := coordModels(m)
-				if len(list) == 0 {
-					m.msg = cmp.Or(why, "the coordinator's agent offers no models here") + ": the coordinator runs its agent's default"
-					return nil
-				}
-				choices := append([]string{""}, list...)
-				next := choices[(slices.Index(choices, safety(m).CoordinatorModel)+1)%len(choices)]
-				msg := "new coordinators " + ofWho + " run " + next
-				if next == "" {
-					msg = "new coordinators " + ofWho + " run " + name + "'s default"
-				}
-				save := set(m, "coordinator_model", next, msg, func(s *config.Safety) { s.CoordinatorModel = next })
-				// The running coordinators it reaches switch now, live
-				// where their agent can (session.model); the ticker
-				// catches any this misses.
-				var ids []string
-				for _, s := range m.data.Sessions {
-					if s.Role == proto.RoleCoordinator && s.Agent != "" && (s.Project == slug || all && !ownsModel(m, s.Project)) {
-						ids = append(ids, s.ID)
-					}
-				}
-				src := m.src
-				return tea.Sequence(save, func() tea.Msg {
-					for _, id := range ids {
-						src.SyncModel(id)
-					}
-					return nil
-				})
-			},
-			note: func(m *dash) []string {
-				if !all {
-					for _, s := range m.data.Sessions {
-						if s.Role == proto.RoleCoordinator && s.Project == slug && s.ModelPending {
-							return []string{th().Warn.Render("the running coordinator runs " + modelWord(s.Model) + "; " + modelWord(s.ModelNext) + " on its next start (" + s.Agent + " can't switch models live)")}
-						}
-					}
-				}
-				cur := safety(m).CoordinatorModel
-				if cur == "" {
-					return nil
-				}
-				name, list, why := coordModels(m)
-				switch {
-				case why != "":
-					return []string{th().Warn.Render(why + ": the coordinator runs its agent's default")}
-				case !slices.Contains(list, cur):
-					return []string{th().Warn.Render(name + " doesn't offer " + cur + " in this project's models now: the coordinator runs " + name + "'s default")}
-				}
-				return nil
-			}},
-	}
-	onOffOf := func(get func(config.Safety) bool) func(config.Safety) string {
-		return func(s config.Safety) string { return onOff(get(s)) }
-	}
-	// Keep history opens the retention ages (archiveSettings), each its
-	// own setting with its own scope.
-	var ages []setting
-	for _, a := range archiveAges {
-		ages = append(ages, setting{label: a.label, help: a.help,
-			value: func(m *dash) string { return days(safety(m).ArchiveDays(a.key)) },
-			change: func(m *dash) tea.Cmd {
-				n := nextStep(archiveSteps, safety(m).ArchiveDays(a.key))
-				return set(m, a.key, n, fmt.Sprintf("%s %s after %s", a.verb, ofWho, days(n)), func(s *config.Safety) { s.SetArchiveDays(a.key, n) })
-			},
-			adjust: func(m *dash, d int) tea.Cmd {
-				n := min(max(safety(m).ArchiveDays(a.key)+d, 1), config.MaxArchiveDays)
-				return set(m, a.key, n, fmt.Sprintf("%s %s after %s", a.verb, ofWho, days(n)), func(s *config.Safety) { s.SetArchiveDays(a.key, n) })
-			}})
-	}
-	var ageKeys [][]string
-	var ageWords []func(config.Safety) string
-	for _, a := range archiveAges {
-		ageKeys = append(ageKeys, []string{a.key})
-		ageWords = append(ageWords, func(s config.Safety) string { return days(s.ArchiveDays(a.key)) })
-	}
-	ages = scope(ages, ageKeys, ageWords)
-	rows = append(rows, setting{label: "Keep history", help: "How long done tasks, resolved threads, handled inbox items and journal lines stay before they move to compressed archives beside them; nothing is deleted, and a thread with unsaved work stays. Enter lists them.",
-		value: func(m *dash) string { return historyWords(safety(m)) },
-		change: func(m *dash) tea.Cmd {
-			m.push(&historyView{title: "keep history " + forWho, list: settingsList{rows: ages}, all: all})
-			return nil
-		}})
-	rows = scope(rows,
-		[][]string{{"start_threads"}, {"yolo"}, {"coordinator_approves"}, {"parallel_threads"}, {"auto_close", "auto_close_days"},
-			{"complete_tasks"}, {"pr_followup"}, {"coordinator_remote_control"}, {"auto_clear"}, {"coordinator_merges"}, {"fast_forward_checkout"}, {"thread_agent"}, {"coordinator_agent"}, {"models"}, {"coordinator_model"}, config.ArchiveKeys},
-		[]func(config.Safety) string{startWords, onOffOf(func(s config.Safety) bool { return s.Yolo }),
-			onOffOf(func(s config.Safety) bool { return s.CoordinatorApproves }),
-			func(s config.Safety) string { return fmt.Sprint(s.ParallelThreads) }, closeWords,
-			func(s config.Safety) string { return completeWords(s.CompleteTasks) },
-			onOffOf(func(s config.Safety) bool { return s.PRFollowup }),
-			onOffOf(func(s config.Safety) bool { return s.CoordinatorRemoteControl }),
-			onOffOf(func(s config.Safety) bool { return s.AutoClear }),
-			onOffOf(func(s config.Safety) bool { return s.CoordinatorMerges }),
-			onOffOf(func(s config.Safety) bool { return s.FastForwardCheckout }),
-			func(s config.Safety) string { return cmp.Or(s.ThreadAgent, "auto") }, func(s config.Safety) string { return cmp.Or(s.CoordinatorAgent, "auto") },
-			func(s config.Safety) string { return modelWords(s.Models) }, func(s config.Safety) string { return cmp.Or(s.CoordinatorModel, "agent's default") }, historyWords})
-	if all {
-		// The cap across every project is all projects' only: no
-		// project sets its own (config.DefaultsOnly). Under Parallel
-		// threads.
-		global := func(m *dash, n int) tea.Cmd {
-			msg := fmt.Sprintf("up to %d threads work at once across all projects", n)
-			if n == 0 {
-				msg = "no cap on threads across all projects"
-			}
-			return set(m, "global_parallel_threads", n, msg, func(s *config.Safety) { s.GlobalParallelThreads = n })
-		}
-		row := setting{label: "Threads across projects", help: "The most threads working at once in all projects together, beside each project's own cap; beyond it coordinators propose and wait. Off is no such cap. Idle and done threads don't count. Enter or + and - change it.",
-			value: func(m *dash) string {
-				return globalCapWords(safety(m).GlobalParallelThreads) + fmt.Sprintf(" · %d working now", m.workingAll())
-			},
-			change: func(m *dash) tea.Cmd { return global(m, nextStep(globalCapSteps, safety(m).GlobalParallelThreads)) },
-			adjust: func(m *dash, d int) tea.Cmd {
-				return global(m, min(max(safety(m).GlobalParallelThreads+d, 0), config.MaxGlobalThreads))
-			}}
-		return slices.Insert(rows, 4, row)
-	}
-	// The project's own state, never all projects': activate, pause,
-	// archive, delete.
-	return append(rows, []setting{
-		{label: "Active", help: "Only an active project's coordinator and threads run, and only they come back when the server restarts. Turning it off stops them now, to resume when you turn it on again; asks first while they run. Space in the sidebar does the same.",
-			value:  func(m *dash) string { return onOff(safety(m).Active) },
-			change: func(m *dash) tea.Cmd { return m.toggleActive(slug, !safety(m).Active) }},
-		{label: "Paused", help: "While paused the coordinator gets no nudges, threads get no pull request follow-up, and no new thread starts; the dashboard still follows their state.",
-			value: func(m *dash) string { return onOff(safety(m).Paused) },
-			change: func(m *dash) tea.Cmd {
-				verb := "pause"
-				if safety(m).Paused {
-					verb = "resume"
-				}
-				if p := m.projectData(slug); p != nil {
-					s := safety(m)
-					s.Paused = verb == "pause"
-					p.Safety = &s
-				}
-				return m.lifecycle(slug, verb)
-			}},
-		{label: "Archive", help: "Hide the project from the sidebar, and stop all background work for it; tm project unarchive brings it back. Not while its coordinator or threads run. Asks first.",
-			value: func(m *dash) string { return "enter archives" },
-			change: func(m *dash) tea.Cmd {
-				m.confirmNo("Archive "+slug, "Archive "+slug+"? It leaves the sidebar, and nothing runs for it until tm project unarchive "+slug+".", "not archived", func() tea.Cmd {
-					m.pop() // the project popup
-					return m.lifecycle(slug, "archive")
-				})
-				return nil
-			}},
-		{label: "Delete", help: "Move the project's folder to the trash; its worktrees and branches stay. Not while its coordinator or threads run. Asks first.",
-			value: func(m *dash) string { return "enter deletes" },
-			change: func(m *dash) tea.Cmd {
-				m.confirmNo("Delete "+slug, "Delete "+slug+"? Its folder (tasks, memory, threads' reports) moves to the trash; its worktrees and branches stay.", "not deleted", func() tea.Cmd {
-					m.pop() // the project popup
-					return m.lifecycle(slug, "delete")
-				})
-				return nil
-			}},
-	}...)
-}
 
 // ownsModel reports whether project slug sets its own coordinator_model.
 func ownsModel(m *dash, slug string) bool {
