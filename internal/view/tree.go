@@ -99,9 +99,16 @@ func (t *Tree) Fold(slug string, on bool) bool { return setIn(&t.Folded, slug, o
 // Rename follows a renamed project, its sections' folds included; it
 // says whether that changed anything.
 func (t *Tree) Rename(from, to string) bool {
-	moved := t.IsExpanded(from) && t.Expand(from, false) && t.Expand(to, true)
-	moved = t.renameSections(from, to) || moved
-	return t.IsFolded(from) && t.Fold(from, false) && t.Fold(to, true) || moved
+	moved := t.renameSections(from, to)
+	if t.IsExpanded(from) {
+		a, b := t.Expand(from, false), t.Expand(to, true)
+		moved = moved || a || b
+	}
+	if t.IsFolded(from) {
+		a, b := t.Fold(from, false), t.Fold(to, true)
+		moved = moved || a || b
+	}
+	return moved
 }
 
 // renameSections moves the folds of project from's sections to to's.
