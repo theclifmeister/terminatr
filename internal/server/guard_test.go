@@ -249,6 +249,72 @@ func TestHookGuard(t *testing.T) {
 	}
 }
 
+// TestHookGuardFollowsLinks: a write through a link in the worktree is
+// judged where it lands; one that stays in the worktree is not refused.
+func TestHookGuardFollowsLinks(t *testing.T) {
+	testPaths(t)
+	p := newWatchProject(t)
+	wt := t.TempDir()
+	out := filepath.Join(os.Getenv("HOME"), "outside")
+	if err := os.Symlink(filepath.Dir(out), filepath.Join(wt, "up")); err != nil {
+		t.Skip(err)
+	}
+	if err := os.Mkdir(filepath.Join(wt, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("sub", filepath.Join(wt, "in")); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
+	s.records["s-2"] = SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "codex", Project: p.Slug, Thread: "t-0001", Cwd: wt}
+	judge := s.hookGuardOf("s-2", false)
+	patch := func(path string) map[string]any {
+		return map[string]any{"command": "*** Begin Patch\n*** Add File: " + path + "\n+x\n*** End Patch"}
+	}
+	for _, path := range []string{"up/outside/x", filepath.Join(wt, "up", "outside"), "in/../up/x"} {
+		if d := judge("apply_patch", patch(path)); d == nil || d.Rule != "worktree-only" {
+			t.Errorf("%s: %+v", path, d)
+		}
+	}
+	for _, path := range []string{"in/x.go", "sub/new/x.go", "x.go"} {
+		if d := judge("apply_patch", patch(path)); d != nil {
+			t.Errorf("%s: %+v", path, d)
+		}
+	}
+}
+
+// TestRealTarget: links are followed, a .. after one leaves its target,
+// and what doesn't exist is joined on.
+func TestRealTarget(t *testing.T) {
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	for _, d := range []string{"a/b", "c"} {
+		if err := os.MkdirAll(filepath.Join(dir, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(filepath.Join(dir, "a", "b"), filepath.Join(dir, "c", "abs")); err != nil {
+		t.Skip(err)
+	}
+	if err := os.Symlink("../a", filepath.Join(dir, "c", "rel")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "nowhere"), filepath.Join(dir, "c", "dangling")); err != nil {
+		t.Fatal(err)
+	}
+	for in, want := range map[string]string{
+		"c/abs/x":       "a/b/x",
+		"c/abs/../y":    "a/y",
+		"c/rel/b/new/z": "a/b/new/z",
+		"c/dangling/f":  "nowhere/f",
+		"c/./new/../q":  "c/q",
+		"a/b":           "a/b",
+	} {
+		if got := realTarget(dir + "/" + in); got != filepath.Join(dir, want) {
+			t.Errorf("%s: got %s, want %s", in, got, filepath.Join(dir, want))
+		}
+	}
+}
+
 // TestAccessMergeCommands: coordinator_merges (off by default) // coordinator tm thread merge, only while merge = coordinator, and a
 // thread never gets them.
 func TestAccessMergeCommands(t *testing.T) {

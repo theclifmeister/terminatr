@@ -7,9 +7,11 @@
 // permission check, as without the mod.
 //
 // Bash commands are split into simple commands on ; & | && || newlines,
-// $( ) and backticks, and read shell-style (quotes, env assignments,
-// sudo, git -C). That catches what agents type; the sandbox and the
-// permission rules stay the backstop for what is written to hide.
+// ( ) and { }, the inside of a $( ) or backticks read as commands too,
+// and read shell-style (quotes, comments, env assignments, wrappers such
+// as sudo and timeout, bash -c, heredocs, git -C). That catches what
+// agents type; the sandbox and the permission rules stay the backstop
+// for what is written to hide.
 // PowerShell commands (Claude's PowerShell tool on Windows, below) have
 // no sandbox behind them, so what names its command by an expression, or
 // evaluates a string, is put to the human (or auto mode's classifier).
@@ -213,7 +215,18 @@ function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Den
       const d = judgeAz(r, has, args)
       if (d) return d
     } else if (HTTP_CLIENTS.has(cmd)) {
-      const d = judgeHttp(r, has, args)
+      const d = judgeHttp(r, has, cmd, args)
+      if (d) return d
+    } else if (SHELLS.has(cmd)) {
+      // bash -c STRING runs the string.
+      const i = args.findIndex(a => SHELL_C.test(a))
+      const d = i >= 0 && i + 1 < args.length ? judgeBash(r, has, args[i + 1]) : null
+      if (d) return d
+    } else if (cmd === 'eval') {
+      const d = judgeBash(r, has, args.join(' '))
+      if (d) return d
+    } else if (cmd === 'pwsh' || cmd === 'powershell') {
+      const d = judgePwsh(r, has, args)
       if (d) return d
     } else if (cmd === 'rm' && has('delete-branch') && args.some(a => /^-[a-zA-Z]*[rR]/.test(a) || a === '--recursive')) {
       for (const a of args) {
@@ -228,6 +241,12 @@ function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Den
   }
   return null
 }
+
+// SHELLS run a command line given with -c; STDIN_SHELLS (them and more)
+// run the commands a heredoc gives them.
+const SHELLS = new Set('bash sh zsh dash ksh mksh ash'.split(' '))
+const STDIN_SHELLS = new Set('bash sh zsh dash ksh mksh ash fish csh tcsh pwsh powershell source . eval xargs ssh sudo doas su'.split(' '))
+const SHELL_C = /^-[a-zA-Z]*c[a-zA-Z]*$/
 
 // The commands that only show the files they are given.
 const VIEWERS = new Set('cat head tail less more bat nl grep egrep fgrep rg ls stat file wc diff cmp'.split(' '))
@@ -257,9 +276,10 @@ function judgeGit(r: Rules, has: (id: string) => boolean, args: string[]): Denia
   const sub = args[i]
   const rest = args.slice(i + 1)
   // long: one of the long options, with or without a value; flag: that
-  // or the short one, alone or among others (-fu).
+  // or the short one, alone or among others (-fu; digits too: -4 is
+  // --ipv4).
   const long = (...names: string[]) => rest.some(a => names.some(l => a === l || a.startsWith(l + '=')))
-  const flag = (short: string, ...names: string[]) => long(...names) || rest.some(a => /^-[a-zA-Z]+$/.test(a) && a.includes(short))
+  const flag = (short: string, ...names: string[]) => long(...names) || rest.some(a => /^-[a-zA-Z0-9]+$/.test(a) && a.includes(short))
   switch (sub) {
     case 'push': {
       if (has('force-push') && (flag('f', '--force', '--force-with-lease', '--force-if-includes', '--mirror') || rest.some(a => a.startsWith('+')))) {
@@ -280,7 +300,7 @@ function judgeGit(r: Rules, has: (id: string) => boolean, args: string[]): Denia
     }
     case 'branch':
       if (has('delete-branch') && flag('d', '--delete')) return deny(r, 'delete-branch', 'git branch --delete')
-      if (has('delete-branch') && rest.some(a => /^-[a-zA-Z]*D/.test(a))) return deny(r, 'delete-branch', 'git branch -D')
+      if (has('delete-branch') && rest.some(a => /^-[a-zA-Z0-9]*D/.test(a))) return deny(r, 'delete-branch', 'git branch -D')
       return null
     case 'worktree':
       if (has('delete-branch') && (rest[0] === 'remove' || rest[0] === 'prune')) return deny(r, 'delete-branch', `git worktree ${rest[0]}`)
@@ -295,16 +315,37 @@ function judgeGit(r: Rules, has: (id: string) => boolean, args: string[]): Denia
   return null
 }
 
+// gh's options that take a value, which may come before or between the
+// command words (gh pr -R o/r merge).
+const GH_VALUED = new Set(['-R', '--repo', '--hostname'])
+
 function judgeGh(r: Rules, has: (id: string) => boolean, args: string[]): Denial | null {
-  const [a, b] = args
+  // The command words, flags among them aside.
+  const words: string[] = []
+  let api = -1
+  for (let i = 0; i < args.length && words.length < 2; i++) {
+    if (args[i].startsWith('-')) {
+      if (GH_VALUED.has(args[i])) i++
+      continue
+    }
+    if (words.length === 0 && args[i] === 'api') api = i
+    words.push(args[i])
+  }
+  const [a, b] = words
   if (a === 'pr' && b === 'merge' && has('merge')) return deny(r, 'merge', 'gh pr merge')
   if (a === 'repo' && b === 'delete' && has('delete-branch')) return deny(r, 'delete-branch', 'gh repo delete')
   if (a === 'auth' && has('credentials') && (b === 'token' || args.includes('--show-token') || args.includes('-t'))) {
     return deny(r, 'credentials', `gh auth ${b === 'token' ? 'token' : 'status --show-token'}`)
   }
   if (a === 'api') {
-    const paths = args.slice(1).filter(x => !x.startsWith('-'))
+    // Each path without its query or fragment, which GitHub ignores.
+    const paths = args.slice(api + 1).filter(x => !x.startsWith('-')).map(x => x.split(/[?#]/)[0])
     if (has('merge') && paths.some(p => /pulls\/[^/]+\/merge\/?$/.test(p))) return deny(r, 'merge', 'gh api merging a PR')
+    if (paths.some(p => p.replace(/^\/+|\/+$/g, '') === 'graphql')) {
+      // The GraphQL mutations that merge a PR, and that delete a branch.
+      if (has('merge') && args.some(x => /mergePullRequest|enablePullRequestAutoMerge|enqueuePullRequest/i.test(x))) return deny(r, 'merge', 'gh api graphql merging a PR')
+      if (has('delete-branch') && args.some(x => /deleteRef/i.test(x))) return deny(r, 'delete-branch', 'gh api graphql deleting a branch')
+    }
     const method = args.find((x, i) => i > 0 && (args[i - 1] === '-X' || args[i - 1] === '--method'))?.toUpperCase()
       ?? args.find(x => /^(-X|--method=)/.test(x) && x.length > 2)?.replace(/^(-X|--method=)/, '').toUpperCase()
     if (has('delete-branch') && method === 'DELETE' && paths.some(p => /git\/refs\/heads\//.test(p))) return deny(r, 'delete-branch', 'gh api deleting a branch')
@@ -368,20 +409,86 @@ const HTTP_CLIENTS = new Set(['curl', 'wget', 'http', 'https', 'xh'])
 
 const AZURE_HOST = /(^|[/@.])(dev\.azure\.com|[a-z0-9-]+\.visualstudio\.com|vssps\.dev\.azure\.com)([/:?#]|$)/i
 
-function judgeHttp(r: Rules, has: (id: string) => boolean, args: string[]): Denial | null {
-  const url = args.find(a => AZURE_HOST.test(a))
-  if (!url) return null
+function judgeHttp(r: Rules, has: (id: string) => boolean, cmd: string, args: string[]): Denial | null {
+  const i = args.findIndex(a => AZURE_HOST.test(a))
+  if (i < 0) return null
   if (has('credentials') && args.some(a => /^(-u.*|--user(=.*)?|--oauth2-bearer(=.*)?)$/.test(a) || /authorization:|AZURE_DEVOPS_EXT_PAT/i.test(a))) {
     return deny(r, 'credentials', 'an HTTP call to Azure DevOps with credentials')
   }
+  return judgeRoute(r, has, httpMethod(cmd, args, i), args[i])
+}
+
+// curl's short options that take a value; the methods HTTPie and xh take
+// as a word before the URL; an HTTPie request item that sends data (a=b,
+// a:=1, a@file), not a query (a==b) or a header (A:b).
+const CURL_VALUED = 'AbcCdDeEFHKmoPQrtTuUwxXyYz'
+const HTTP_METHODS = new Set('GET POST PUT PATCH DELETE HEAD OPTIONS'.split(' '))
+const HTTPIE_DATA = /^[^=:@]+(?:=[^=]|=$|:=|@)/
+
+// httpMethod is the method an HTTP client's arguments send, the URL at
+// args[url]: the one they name, else what the data they send makes it
+// (curl -d is a POST, -T a PUT), else GET.
+function httpMethod(cmd: string, args: string[], url: number): string {
   let method = ''
+  let implied = ''
+  const imply = (m: string) => {
+    if (implied !== 'PUT') implied = m
+  }
   for (let i = 0; i < args.length; i++) {
     const a = args[i]
     if (a === '-X' || a === '--request') method = args[i + 1] ?? ''
     else if (a.startsWith('--request=')) method = a.slice(10)
     else if (/^-X./.test(a)) method = a.slice(2)
   }
-  return judgeRoute(r, has, method || 'GET', url)
+  const cut = (a: string): [string, string, boolean] => {
+    const k = a.indexOf('=')
+    return k < 0 ? [a, '', false] : [a.slice(0, k), a.slice(k + 1), true]
+  }
+  if (cmd === 'curl') {
+    let get = false
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i]
+      if (a.startsWith('--')) {
+        let [name, val, eq] = cut(a)
+        if (name === '--request') {
+          if (!eq) val = args[++i] ?? ''
+          method = val
+        } else if (name === '--get') get = true
+        else if (name === '--upload-file') imply('PUT')
+        else if (name.startsWith('--data') || name === '--json' || name === '--form' || name === '--form-string') imply('POST')
+        continue
+      }
+      if (!a.startsWith('-')) continue
+      // A bundle of short options (-sSd @b.json): the first that takes a
+      // value takes the rest of the word, or the next one.
+      for (let k = 1; k < a.length; k++) {
+        const c = a[k]
+        let rest = a.slice(k + 1)
+        if (c === 'G') {
+          get = true
+          continue
+        }
+        if (c === 'd' || c === 'F') imply('POST')
+        else if (c === 'T') imply('PUT')
+        else if (!CURL_VALUED.includes(c)) continue
+        if (rest === '') rest = args[++i] ?? ''
+        if (c === 'X') method = rest
+        break
+      }
+    }
+    if (get && implied === 'POST') implied = ''
+  } else if (cmd === 'wget') {
+    for (let i = 0; i < args.length; i++) {
+      const [name, val, eq] = cut(args[i])
+      if (name === '--method') method = eq ? val : (args[i + 1] ?? '')
+      else if (name === '--post-data' || name === '--post-file') imply('POST')
+    }
+  } else if (cmd === 'http' || cmd === 'https' || cmd === 'xh') {
+    if (url > 0 && HTTP_METHODS.has(args[url - 1].toUpperCase())) method = args[url - 1]
+    if (args.some(a => a === '-f' || a === '--form' || a === '--multipart' || a === '--raw' || a.startsWith('--raw='))) imply('POST')
+    if (args.slice(url + 1).some(a => !a.startsWith('-') && HTTPIE_DATA.test(a))) imply('POST')
+  }
+  return method || implied || 'GET'
 }
 
 // judgeRoute: a write method on an Azure DevOps Git route that completes
@@ -439,8 +546,10 @@ function truthy(args: string[], name: string): boolean {
   return opts(args, name).some(v => !['false', 'no', 'n', '0', 'off'].includes(v.toLowerCase()))
 }
 
-// Commands that print their arguments.
+// Commands that print their arguments; ENV_PRINTERS print the variables
+// when given no names.
 const PRINTERS = new Set(['echo', 'printf', 'print'])
+const ENV_PRINTERS = new Set(['export', 'declare', 'typeset'])
 
 // Commands that print or copy what they are given.
 const READERS = new Set([
@@ -460,13 +569,18 @@ function judgeSecret(r: Rules, cmd: string, args: string[], words: string[], rea
   }
   if (cmd === 'printenv') {
     // printenv NAME... prints only what it is asked for: fine unless a
-    // name looks secret. With no name it prints everything.
-    const names = args.filter(a => !a.startsWith('-'))
+    // name looks secret. With no name (or only substitutions) it prints
+    // everything.
+    const names = unredirected(args).filter(a => !a.startsWith('-') && !substituted(a))
     if (!names.length) return deny(r, 'credentials', 'printenv printing the environment')
     const secret = names.find(n => SECRET_NAME.test(n))
     if (secret) return deny(r, 'credentials', `printenv ${safe(secret)}`)
-  } else if (cmd === 'env' && args.every(a => a.startsWith('-'))) {
+  } else if (cmd === 'env' && unredirected(args).every(a => a.startsWith('-') || substituted(a))) {
     return deny(r, 'credentials', 'env printing the environment')
+  } else if ((ENV_PRINTERS.has(cmd) && args.every(a => a.startsWith('-') && !/[fF]/.test(a))) || (cmd === 'set' && args.length === 0)) {
+    // export, declare -x and the like with no names print the variables
+    // (with -f, the functions); set alone prints them all.
+    return deny(r, 'credentials', `${cmd} printing the environment`)
   }
   // echo and the like given a secret variable ($AZURE_DEVOPS_EXT_PAT).
   if (printer || reader) {
@@ -487,6 +601,26 @@ function judgeSecret(r: Rules, cmd: string, args: string[], words: string[], rea
   return null
 }
 
+// unredirected is args without their redirections (> f, < f, << EOF).
+function unredirected(args: string[]): string[] {
+  const out: string[] = []
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '<' || args[i] === '>') {
+      while (args[i + 1] === '<' || args[i + 1] === '>') i++
+      i++
+      continue
+    }
+    out.push(args[i])
+  }
+  return out
+}
+
+// substituted: word a is a substitution alone, $( ), backticks or a
+// PowerShell expression, which may give no word at all.
+function substituted(a: string): boolean {
+  return a.startsWith('$(') || a.startsWith('`') || psExprArg(a)
+}
+
 // patVar is the Azure DevOps token variable w names ($AZURE_DEVOPS_EXT_PAT,
 // $env:AZURE_DEVOPS_EXT_PAT), or ''.
 function patVar(w: string): string {
@@ -496,36 +630,61 @@ function patVar(w: string): string {
   return ''
 }
 
+// A here-document a command line opens (<<WORD, <<-WORD): the word that
+// ends it, whether its lines lose their leading tabs, and whether the
+// word was quoted (then nothing in it expands); then its body once read.
+type Heredoc = { delim: string; tabs: boolean; quoted: boolean; body: string }
+
 // commands splits a command line into simple commands, each a list of
-// words with quotes removed; redirections stay words ("<", ">").
-export function commands(line: string): string[][] {
+// words with quotes removed; redirections stay words ("<", ">"). A $( )
+// or backtick is a word of its command, its inside read as commands too.
+// A heredoc's body is read as commands when the line has a shell to run
+// it; otherwise only what it substitutes is. In arithmetic (arith) << is
+// a shift, no heredoc.
+export function commands(line: string, arith = false): string[][] {
   const out: string[][] = []
+  let inner: string[][] = []
   let words: string[] = []
+  // word is the word as written; lit the same without its unquoted
+  // substitutions, what the word is when they print nothing (printenv$(x)
+  // is printenv): the word, unless it is substitutions alone.
   let word = ''
+  let lit = ''
   let inWord = false
+  let hasLit = false
+  let open: Heredoc[] = []
+  const docs: Heredoc[] = []
   const endWord = () => {
-    if (inWord) words.push(word)
+    if (inWord) words.push(hasLit ? lit : word)
     word = ''
+    lit = ''
     inWord = false
+    hasLit = false
+  }
+  // text is literal text of the word.
+  const text = (t: string) => {
+    word += t
+    lit += t
+    inWord = true
+    hasLit = true
   }
   const endCommand = () => {
     endWord()
     if (words.length) out.push(words)
+    // What the command substitutes, after it.
+    out.push(...inner)
     words = []
+    inner = []
   }
   for (let i = 0; i < line.length; i++) {
     const c = line[i]
     if (c === '\\' && i + 1 < line.length) {
-      if (line[i + 1] !== '\n') {
-        word += line[i + 1]
-        inWord = true
-      }
+      if (line[i + 1] !== '\n') text(line[i + 1])
       i++
     } else if (c === "'") {
       const j = line.indexOf("'", i + 1)
       const end = j < 0 ? line.length : j
-      word += line.slice(i + 1, end)
-      inWord = true
+      text(line.slice(i + 1, end))
       i = end
     } else if (c === '"') {
       // Inside double quotes a $( ) or backtick still runs: its inside
@@ -536,45 +695,158 @@ export function commands(line: string): string[][] {
         if (line[j] === '\\' && j + 1 < line.length) {
           s += line[j + 1]
           j += 2
-          continue
-        }
-        s += line[j++]
+        } else if (line[j] === '$' && line[j + 1] === '(') {
+          const end = closing(line, j + 2, '(', ')')
+          out.push(...commands(line.slice(j + 2, end)))
+          s += line.slice(j, end + 1)
+          j = end + 1
+        } else if (line[j] === '`') {
+          const end = tickClose(line, j + 1)
+          out.push(...commands(line.slice(j + 1, end)))
+          s += line.slice(j, end + 1)
+          j = end + 1
+        } else s += line[j++]
       }
-      for (const m of s.matchAll(/\$\(([^)]*)\)|`([^`]*)`/g)) out.push(...commands(m[1] ?? m[2] ?? ''))
-      word += s
-      inWord = true
+      text(s)
       i = j
     } else if (c === ' ' || c === '\t') {
       endWord()
+    } else if (c === '#' && !inWord) {
+      // A comment, to the end of the line.
+      while (i + 1 < line.length && line[i + 1] !== '\n') i++
+    } else if (c === '(' && line[i + 1] === '(') {
+      // Arithmetic, (( … )), whose << is a shift, not a heredoc: read on
+      // its own, as commands (bash takes ((a; b)) for subshells).
+      const end = closing(line, i + 1, '(', ')')
+      endCommand()
+      out.push(...commands(line.slice(i + 2, end), true))
+      i = end
+    } else if (c === '$' && line[i + 1] === '[' && closing(line, i + 2, '[', ']') < line.length) {
+      // Arithmetic, $[ … ], a part of its word: its inside read on its
+      // own, as commands.
+      const end = closing(line, i + 2, '[', ']')
+      inner.push(...commands(line.slice(i + 2, end), true))
+      text(line.slice(i, end + 1))
+      i = end
     } else if (c === '$' && line[i + 1] === '{' && i + 2 < line.length && !' \t\n|'.includes(line[i + 2])) {
       // A parameter expansion, ${NAME} or ${NAME:-word}, is part of the
       // word (${ cmd; } runs commands: read below as { }). A $( ) or
       // backtick in it still runs.
-      const end = braceClose(line, i + 2)
-      for (const m of line.slice(i + 2, end).matchAll(/\$\(([^)]*)\)|`([^`]*)`/g)) out.push(...commands(m[1] ?? m[2] ?? ''))
+      const end = closing(line, i + 2, '{', '}')
+      for (const s of substitutions(line.slice(i + 2, end))) out.push(...commands(s))
+      text(line.slice(i, end + 1))
+      i = end
+    } else if (c === '$' && line[i + 1] === '(') {
+      // A command substitution is a word of the command it is in.
+      const end = closing(line, i + 2, '(', ')')
+      inner.push(...commands(line.slice(i + 2, end)))
       word += line.slice(i, end + 1)
       inWord = true
       i = end
-    } else if (c === ';' || c === '&' || c === '|' || c === '\n' || c === '(' || c === ')' || c === '`' || c === '{' || c === '}') {
+    } else if (c === '`') {
+      const end = tickClose(line, i + 1)
+      inner.push(...commands(line.slice(i + 1, end)))
+      word += line.slice(i, end + 1)
+      inWord = true
+      i = end
+    } else if (c === '\n' && open.length) {
+      // The bodies of the heredocs the line opened.
       endCommand()
-    } else if (c === '$' && line[i + 1] === '(') {
+      let j = i + 1
+      for (const h of open) {
+        let body = ''
+        while (j < line.length) {
+          let k = line.indexOf('\n', j)
+          if (k < 0) k = line.length
+          let l = line.slice(j, k)
+          if (h.tabs) l = l.replace(/^\t+/, '')
+          j = k + 1
+          if (l === h.delim) break
+          body += l + '\n'
+        }
+        docs.push({ ...h, body })
+      }
+      open = []
+      i = j - 1
+    } else if (c === ';' || c === '&' || c === '|' || c === '\n' || c === '(' || c === ')' || c === '{' || c === '}') {
       endCommand()
-      i++
+    } else if (c === '<' && !arith && line[i + 1] === '<' && line[i + 2] !== '<' && line[i - 1] !== '<') {
+      // A heredoc: <<WORD or <<-WORD.
+      endWord()
+      words.push('<', '<')
+      let j = i + 2
+      const h: Heredoc = { delim: '', tabs: false, quoted: false, body: '' }
+      if (line[j] === '-') {
+        h.tabs = true
+        j++
+      }
+      while (line[j] === ' ' || line[j] === '\t') j++
+      while (j < line.length && !' \t\n;&|<>()'.includes(line[j])) {
+        const q = line[j]
+        if (q === "'" || q === '"') {
+          h.quoted = true
+          let end = line.indexOf(q, j + 1)
+          if (end < 0) end = line.length
+          h.delim += line.slice(j + 1, end)
+          j = end + 1
+        } else if (q === '\\') {
+          h.quoted = true
+          h.delim += line[j + 1] ?? ''
+          j += 2
+        } else {
+          h.delim += q
+          j++
+        }
+      }
+      if (h.delim !== '' || h.quoted) {
+        words.push(h.delim)
+        open.push(h)
+      }
+      i = j - 1
     } else if (c === '<' || c === '>') {
       endWord()
       words.push(c)
-    } else {
-      word += c
-      inWord = true
-    }
+    } else text(c)
   }
   endCommand()
+  if (docs.length) {
+    // A shell anywhere on the line (ssh host bash, docker exec -i c sh)
+    // may run what a heredoc gives it.
+    const shell = out.some(w => {
+      const argv = strip(w)
+      return (argv.length > 0 && STDIN_SHELLS.has(base(argv[0]))) || w.some(a => SHELLS.has(base(a)))
+    })
+    for (const h of docs) {
+      // The line's own shell expands an unquoted body first.
+      if (!h.quoted) for (const s of substitutions(h.body)) out.push(...commands(s))
+      if (shell) out.push(...commands(h.body))
+    }
+  }
   return out
 }
 
-// braceClose is the index of the } that closes a { opened before i,
-// skipping quoted strings and escapes, or s.length.
-function braceClose(s: string, i: number): number {
+// substitutions are the insides of the $( ) and backticks in s, which run
+// where s is expanded.
+function substitutions(s: string): string[] {
+  const out: string[] = []
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '\\') i++
+    else if (s[i] === '$' && s[i + 1] === '(') {
+      const end = closing(s, i + 2, '(', ')')
+      out.push(s.slice(i + 2, end))
+      i = end
+    } else if (s[i] === '`') {
+      const end = tickClose(s, i + 1)
+      out.push(s.slice(i + 1, end))
+      i = end
+    }
+  }
+  return out
+}
+
+// closing is the index of the close that closes an open before i ({ },
+// ( )), skipping quoted strings, backticks and escapes, or s.length.
+function closing(s: string, i: number, open: string, close: string): number {
   let depth = 1
   for (; i < s.length; i++) {
     const c = s[i]
@@ -584,30 +856,108 @@ function braceClose(s: string, i: number): number {
       if (j < 0) return s.length
       i = j
     } else if (c === '"') {
-      for (i++; i < s.length && s[i] !== '"'; i++) if (s[i] === '\\') i++
-    } else if (c === '{') depth++
-    else if (c === '}') {
+      for (i++; i < s.length && s[i] !== '"'; i++) {
+        if (s[i] === '\\') i++
+        else if (s[i] === '$' && s[i + 1] === '(') i = closing(s, i + 2, '(', ')')
+        else if (s[i] === '`') i = tickClose(s, i + 1)
+      }
+    } else if (c === '`') i = tickClose(s, i + 1)
+    else if (c === open) depth++
+    else if (c === close) {
       if (--depth === 0) return i
     }
   }
   return s.length
 }
 
-// strip drops what runs a command without being it: env assignments,
-// sudo, command, exec, nohup, time, env with assignments.
+// tickClose is the index of the backtick that closes one opened before
+// i, or s.length.
+function tickClose(s: string, i: number): number {
+  for (; i < s.length; i++) {
+    if (s[i] === '\\') i++
+    else if (s[i] === '`') return i
+  }
+  return s.length
+}
+
+// How a command that runs another reads its own options: the short ones
+// that take a value (-n 5, -n5), the long ones that do (--x v; --x=v is
+// one word), and how many words come before the command (timeout's
+// duration). The shell's keywords come before a command too.
+type Wrapper = { short?: string; long?: string[]; skip?: number }
+const WRAPPERS: Record<string, Wrapper> = {
+  sudo: { short: 'ughpCDrtTU', long: ['--user', '--group', '--host', '--prompt', '--close-from', '--chdir', '--role', '--type', '--command-timeout', '--other-user'] },
+  doas: { short: 'uC' },
+  env: { short: 'uCSP', long: ['--unset', '--chdir', '--split-string'] },
+  timeout: { short: 'sk', long: ['--signal', '--kill-after'], skip: 1 },
+  nice: { short: 'n', long: ['--adjustment'] },
+  ionice: { short: 'cnpPu', long: ['--class', '--classdata', '--pid', '--pgid', '--uid'] },
+  xargs: { short: 'ILnPsdEa', long: ['--arg-file', '--delimiter', '--max-args', '--max-procs', '--max-chars', '--max-lines', '--process-slot-var'] },
+  stdbuf: { short: 'ioe', long: ['--input', '--output', '--error'] },
+  time: { short: 'fo', long: ['--format', '--output'] },
+  exec: { short: 'a' },
+  caffeinate: { short: 'tw' },
+  command: {}, builtin: {}, nohup: {}, unbuffer: {}, setsid: {}, chronic: {},
+  if: {}, then: {}, else: {}, elif: {}, while: {}, until: {}, do: {}, '!': {},
+}
+
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
+
+// strip drops what runs a command without being it: env assignments, the
+// wrappers (sudo, env, timeout 5, xargs …) with their options, and the
+// keywords before a command (if, then, do …), and redirections before
+// it (> f git …). A wrapper with no command after it is the command (env
+// alone prints the environment).
 function strip(words: string[]): string[] {
   let i = 0
-  for (;;) {
+  let from = -1
+  while (i < words.length) {
     const w = words[i]
-    if (w === undefined) return []
-    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(w)) i++
-    else if (['sudo', 'command', 'exec', 'nohup', 'time', 'builtin'].includes(w)) i++
-    else if (w === 'env' && words[i + 1] !== undefined && (/=/.test(words[i + 1]) || words[i + 1].startsWith('-'))) {
+    if (ASSIGNMENT.test(w)) {
       i++
-      while (words[i] !== undefined && (/=/.test(words[i]) || words[i].startsWith('-'))) i++
-    } else break
+      continue
+    }
+    if (w === '<' || w === '>') {
+      while (words[i + 1] === '<' || words[i + 1] === '>') i++
+      i += 2
+      continue
+    }
+    const wr = Object.hasOwn(WRAPPERS, w) ? WRAPPERS[w] : undefined
+    if (!wr) return words.slice(i)
+    from = i
+    i++
+    while (i < words.length && words[i].startsWith('-') && words[i] !== '-') {
+      const o = words[i++]
+      if (o === '--') break
+      let name = o
+      let val = ''
+      if (o.startsWith('--')) {
+        const k = o.indexOf('=')
+        if (k >= 0) {
+          name = o.slice(0, k)
+          val = o.slice(k + 1)
+        } else if ((wr.long ?? []).includes(o) && i < words.length) val = words[i++]
+      } else {
+        let k = 1
+        while (k < o.length && !(wr.short ?? '').includes(o[k])) k++
+        if (k < o.length) {
+          name = '-' + o[k]
+          val = o.slice(k + 1)
+          if (val === '' && i < words.length) val = words[i++]
+        }
+      }
+      if (w === 'env' && (name === '-S' || name === '--split-string')) {
+        // env -S 'a b': the string is words.
+        words = [...val.split(/\s+/).filter(Boolean), ...words.slice(i)]
+        from = 0
+        i = 0
+        break
+      }
+    }
+    if (w === 'env') while (i < words.length && ASSIGNMENT.test(words[i])) i++
+    i += wr.skip ?? 0
   }
-  return words.slice(i)
+  return from >= 0 && from < words.length ? words.slice(from) : []
 }
 
 // positionals are args without their options, valued options skipping
@@ -770,7 +1120,9 @@ function psExpr(argv: string[]): string {
   return e === '' && argv.length > 1 && argv[0] !== '' ? argv[1] : e
 }
 
-// judgePSCommand judges one simple command of a PowerShell line.
+// judgePSCommand judges one simple command of a PowerShell line. One the
+// guard judges by its arguments, given an expression as one ((…), $(…),
+// @(…)), is asked unless refused.
 function judgePSCommand(r: Rules, has: (id: string) => boolean, words: string[]): Denial | null {
   const [stripped, assigned] = psStrip(words)
   let argv = stripped
@@ -788,6 +1140,20 @@ function judgePSCommand(r: Rules, has: (id: string) => boolean, words: string[])
   }
   const cmd = psName(argv[0])
   const args = argv.slice(1)
+  const d = judgePSArgs(r, has, cmd, argv, args)
+  if (!d && args.some(psExprArg) && psJudged(r, cmd)) return askOf('an expression as an argument')
+  return d
+}
+
+// psJudged: cmd is one the guard judges by its arguments.
+function psJudged(r: Rules, cmd: string): boolean {
+  return ['git', 'gh', 'az', 'pwsh', 'powershell', 'cmd'].includes(cmd) || SHELLS.has(cmd) || HTTP_CLIENTS.has(cmd) || PS_HTTP.has(cmd) ||
+    PS_REMOVE.has(cmd) || READERS.has(cmd) || PS_READERS.has(cmd) || PS_LISTER.has(cmd) ||
+    (r.mods ?? []).some(m => (m.commands ?? []).some(c => c.length > 0 && modWord(c[0], cmd, true)))
+}
+
+// judgePSArgs judges command cmd, of argv, by its arguments.
+function judgePSArgs(r: Rules, has: (id: string) => boolean, cmd: string, argv: string[], args: string[]): Denial | null {
   const md = judgeMods(r, cmd, args, true)
   if (md) return md
   let d: Denial | null = null
@@ -797,8 +1163,8 @@ function judgePSCommand(r: Rules, has: (id: string) => boolean, words: string[])
     const i = args.findIndex(a => ['/c', '/k', '/r'].includes(a.toLowerCase()))
     return i >= 0 ? judgeBash(r, has, args.slice(i + 1).join(' ')) : null
   }
-  if (cmd === 'bash' || cmd === 'sh') {
-    const i = args.findIndex(a => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a))
+  if (SHELLS.has(cmd)) {
+    const i = args.findIndex(a => SHELL_C.test(a))
     return i >= 0 && i + 1 < args.length ? judgeBash(r, has, args[i + 1]) : null
   }
   if (cmd === 'git') d = judgeGit(r, has, args)
@@ -806,7 +1172,7 @@ function judgePSCommand(r: Rules, has: (id: string) => boolean, words: string[])
   else if (cmd === 'az') d = judgeAz(r, has, args)
   else if (HTTP_CLIENTS.has(cmd) || PS_HTTP.has(cmd)) {
     // In Windows PowerShell curl and wget are Invoke-WebRequest.
-    if (HTTP_CLIENTS.has(cmd)) d = judgeHttp(r, has, args)
+    if (HTTP_CLIENTS.has(cmd)) d = judgeHttp(r, has, cmd, args)
     if (!d && cmd !== 'http' && cmd !== 'https' && cmd !== 'xh') d = judgeWebRequest(r, has, args)
   } else if (PS_REMOVE.has(cmd) && has('delete-branch') && args.some(psRecursive)) {
     for (const p of psPaths(args)) {
@@ -950,9 +1316,11 @@ const isDQuote = (c: string | undefined) => c === '"' || c === '\u201c' || c ===
 // calling a command stays its first word ("&"); one calling a script
 // block is dropped, the block's commands read in its place. Comments
 // are skipped; redirections stay words (">"), their stream number
-// dropped.
+// dropped. An expression given as an argument ((…), $(…), @(…)) is a
+// word of its command, marked (PS_EXPR_MARK), its commands read after it.
 export function psCommands(line: string): string[][] {
   const out: string[][] = []
+  let inner: string[][] = []
   let words: string[] = []
   let word = ''
   let inWord = false
@@ -964,7 +1332,10 @@ export function psCommands(line: string): string[][] {
   const endCommand = () => {
     endWord()
     if (words.length) out.push(words)
+    // What its arguments evaluate, after it.
+    out.push(...inner)
     words = []
+    inner = []
   }
   const s = line
   // expandable is the inside of a double-quoted string from i, to its
@@ -1074,6 +1445,17 @@ export function psCommands(line: string): string[][] {
       word += s.slice(i, j + 1)
       inWord = true
       i = j
+    } else if ((c === '(' || ((c === '$' || c === '@') && s[i + 1] === '(' && !(inWord && words.length === 0))) && psArgument(words, word, inWord)) {
+      // An expression as an argument: a word of its own (marked), its
+      // commands read too.
+      endWord()
+      const start = c === '(' ? i + 1 : i + 2
+      const end = psClose(s, start)
+      inner.push(...psCommands(s.slice(start, end)))
+      word += PS_EXPR_MARK + s.slice(i, end + 1)
+      inWord = true
+      endWord()
+      i = end
     } else if (';|\n(){}'.includes(c)) {
       endCommand()
     } else if ((c === '$' || c === '@') && (s[i + 1] === '(' || (c === '@' && s[i + 1] === '{'))) {
@@ -1105,6 +1487,29 @@ export function psCommands(line: string): string[][] {
   return out
 }
 
+// PS_EXPR_MARK starts the word psCommands makes of an expression given
+// as an argument ((…), $(…), @(…)): no text a command line holds.
+const PS_EXPR_MARK = '\u0000'
+
+// psExprArg: a is an expression given as an argument.
+const psExprArg = (a: string) => a.startsWith(PS_EXPR_MARK)
+
+// PS_KEYWORDS take a condition or a value in parentheses, not arguments.
+const PS_KEYWORDS = setOf('if elseif else while for foreach switch until do function filter param return throw trap catch finally exit')
+
+// psArgument: a ( after words (and the word being read, when inWord) is
+// in argument position: there is a command it is an argument of, not an
+// expression, a keyword or a bare & or . before it. (A $( or @( glued to
+// the command's name may be part of the name: psCommands reads it as
+// before, a command of its own.)
+function psArgument(words: string[], word: string, inWord: boolean): boolean {
+  let [argv] = psStrip(inWord ? [...words, word] : words)
+  if (argv.length > 0 && (argv[0] === '&' || argv[0] === '.')) argv = argv.slice(1)
+  if (argv.length === 0) return false
+  const head = argv[0]
+  return !head.startsWith('$') && !head.startsWith('[') && !head.startsWith('(') && !psExprArg(head) && !PS_KEYWORDS.has(head.toLowerCase())
+}
+
 // psHereStart is where a here-string's body starts when its opening
 // quote ends a line (from i, after @' or @"), or 0.
 function psHereStart(s: string, i: number): number {
@@ -1131,6 +1536,8 @@ function psClose(s: string, i: number): number {
     } else if (isSQuote(c) || isDQuote(c)) {
       for (i++; i < s.length && !((isSQuote(c) && isSQuote(s[i])) || (isDQuote(c) && isDQuote(s[i]))); i++) {
         if (s[i] === '`' && isDQuote(c)) i++
+        // A $( ) in the string: its quotes are its own.
+        else if (s[i] === '$' && isDQuote(c) && s[i + 1] === '(') i = psClose(s, i + 2)
       }
     }
   }
