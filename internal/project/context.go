@@ -16,6 +16,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // Caps on `tm context` sections (§7.6). Each section says what it left
@@ -505,7 +506,8 @@ func isReportPR(t string) bool {
 	return ok
 }
 
-// RenderContext prints sections as plain text.
+// RenderContext prints sections as plain text: each line without what a
+// terminal would act on (textsafe.Clean), whoever wrote it.
 func RenderContext(sections []Section) string {
 	var b strings.Builder
 	for i, s := range sections {
@@ -514,7 +516,7 @@ func RenderContext(sections []Section) string {
 		}
 		fmt.Fprintf(&b, "## %s\n", s.Title)
 		for _, l := range s.Lines {
-			b.WriteString(l + "\n")
+			b.WriteString(textsafe.Clean(l, false) + "\n")
 		}
 		if len(s.Lines) == 0 {
 			b.WriteString("(empty)\n")

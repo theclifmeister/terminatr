@@ -71,7 +71,7 @@ func sessionList(e *Env, args []string) int {
 	}
 	tw := tabwriter.NewWriter(e.Stdout, 0, 0, 2, ' ', 0)
 	for _, s := range res.Sessions {
-		what := strings.Join(s.Argv, " ")
+		what := shown(strings.Join(s.Argv, " "))
 		if s.Agent != "" {
 			what = s.Agent + " " + stateLine(s)
 		}
@@ -83,8 +83,8 @@ func sessionList(e *Env, args []string) int {
 		case s.Thread != "":
 			role += " " + s.Thread
 		}
-		fmt.Fprintf(tw, "%s\t%s\tpid %d\t%d×%d\t%s\t%s\t%s\n", s.ID, role, s.PID, s.Cols, s.Rows,
-			time.Since(s.Created).Round(time.Second), what, s.Cwd)
+		fmt.Fprintf(tw, "%s\t%s\tpid %d\t%d×%d\t%s\t%s\t%s\n", s.ID, shown(role), s.PID, s.Cols, s.Rows,
+			time.Since(s.Created).Round(time.Second), what, shown(s.Cwd))
 	}
 	tw.Flush()
 	return ExitOK
@@ -277,7 +277,7 @@ func stateLine(s proto.SessionInfo) string {
 			st += " (" + n + ")"
 		}
 	}
-	return st
+	return shown(st)
 }
 
 func sessionPrompt(e *Env, args []string) int {

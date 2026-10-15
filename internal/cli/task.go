@@ -297,7 +297,7 @@ func taskAdd(e *Env, s *tasks.Store, pos []string, asJSON bool, f *flagSet, note
 			case "failed":
 				fmt.Fprintf(e.Stderr, "tm task: failed %q: %s: %s\n", r.Title, r.Code, r.Error)
 			default:
-				fmt.Fprintf(e.Stdout, "%s %s %s\n", r.Result, r.ID, r.Title)
+				fmt.Fprintf(e.Stdout, "%s %s %s\n", r.Result, r.ID, shown(r.Title))
 			}
 		}
 	}
