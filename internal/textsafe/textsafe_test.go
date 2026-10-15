@@ -61,3 +61,24 @@ func TestLine(t *testing.T) {
 		}
 	}
 }
+
+func TestHidden(t *testing.T) {
+	for _, c := range []struct {
+		in string
+		r  rune
+		at int
+	}{
+		{"plain\ttext\r\nlines\n", 0, -1},
+		{"日本 ✓ é", 0, -1},
+		{"a\u200bb", '\u200b', 1},
+		{"ab\U000e0049", '\U000e0049', 2},
+		{"a\u202eb", '\u202e', 1},
+		{"\x1b[31m", '\x1b', 0},
+		{"a\xffb", 0xff, 1},
+		{"a\ufeff", '\ufeff', 1},
+	} {
+		if r, at := Hidden(c.in); r != c.r || at != c.at {
+			t.Errorf("Hidden(%q) = %q, %d, want %q, %d", c.in, r, at, c.r, c.at)
+		}
+	}
+}

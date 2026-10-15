@@ -15,6 +15,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
+	"github.com/theclifmeister/terminatr/internal/plat/shell"
 )
 
 // The coordinator's sandbox (docs/SPEC.md §8.6, Codex) rests on Codex's
@@ -194,8 +195,8 @@ const probeTimeout = 15 * time.Second
 func run(path string, env []string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, path, args...)
-	cmd.Env = env
+	cmd := shell.CLICommand(ctx, path, args...)
+	shell.SetEnv(cmd, env)
 	var b bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &b, &b
 	err := cmd.Run()

@@ -1103,7 +1103,8 @@ func TestGuardToolVectors(t *testing.T) {
 
 // TestModAgents: an enabled mod's agents/<name>.toml loads as if in the
 // user's agents folder; the user's own file of that name wins; a mod
-// that is off adds nothing; a link out of the mod's folder is refused.
+// that is off adds nothing; a link out of the mod's folder, or a
+// manifest with a character that doesn't show, is refused.
 func TestModAgents(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("TERMINATR_HOME", root)
@@ -1125,6 +1126,7 @@ func TestModAgents(t *testing.T) {
 	write("mods/pi/agents/aider.toml", manifest("aider", "aider-from-mod"))
 	write("mods/off/mod.toml", modToml("off"))
 	write("mods/off/agents/off.toml", manifest("off", "off"))
+	write("mods/pi/agents/hid.toml", manifest("hid", "hid\u200b"))
 	write("agents/aider.toml", manifest("aider", "aider-mine"))
 	write("config.toml", "[mods.pi]\nenabled = true\n")
 	outside := filepath.Join(t.TempDir(), "evil.toml")
@@ -1137,13 +1139,16 @@ func TestModAgents(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "mod pi: evil.toml: leads out") {
 		t.Fatalf("link out: %v", err)
 	}
+	if !strings.Contains(err.Error(), "mod pi: hid.toml: line 4: holds a character that doesn't show (U+200B)") {
+		t.Fatalf("hidden character: %v", err)
+	}
 	if _, ok := r.Get("pi"); !ok || !strings.Contains(r.Source["pi"], filepath.Join("mods", "pi", "agents")) {
 		t.Fatalf("pi from the mod: %v", r.Source)
 	}
 	if !strings.HasSuffix(r.Source["aider"], filepath.Join("agents", "aider.toml")) || strings.Contains(r.Source["aider"], "mods") {
 		t.Fatalf("the user's aider: %s", r.Source["aider"])
 	}
-	for _, n := range []string{"off", "evil"} {
+	for _, n := range []string{"off", "evil", "hid"} {
 		if _, ok := r.Get(n); ok {
 			t.Fatalf("%s loaded", n)
 		}

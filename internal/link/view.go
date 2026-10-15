@@ -159,3 +159,18 @@ func newest(p *project.Project, other string) *Message {
 	}
 	return m
 }
+
+// StampPaths are the files and folders Rows read for project p, with
+// rows what it gave: the links' store, p's messages folder and each
+// link's, for a stat stamp (fsx.StatStamp) that says the rows may have
+// changed. The config, which Rows reads too, is the caller's to stamp.
+func StampPaths(p *project.Project, rows []Row) []string {
+	paths := []string{p.Path("messages")}
+	if file, err := storePath(); err == nil {
+		paths = append(paths, file)
+	}
+	for _, r := range rows {
+		paths = append(paths, dir(p, r.Peer))
+	}
+	return paths
+}

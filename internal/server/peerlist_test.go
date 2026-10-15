@@ -73,6 +73,9 @@ func TestPeerList(t *testing.T) {
 		t.Helper()
 		var l proto.PeerList
 		for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+			// A fresh value each time: decoding into the last one keeps
+			// what this answer leaves out (stale is omitempty).
+			l = proto.PeerList{}
 			call(t, c, proto.MethodPeerList, nil, &l)
 			if len(l.Peers) == 1 && ok(l.Peers[0]) {
 				return l.Peers[0]

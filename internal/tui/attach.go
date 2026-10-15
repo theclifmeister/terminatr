@@ -207,7 +207,7 @@ func Attach(opts Options) (res Result, err error) {
 		so = &SidebarOptions{}
 	}
 	lay := ConsoleLayout(so.UIFile)
-	feed, projects := watchSide(c.paths)
+	feed, projects := watchSide(c.paths, false)
 	defer feed.close() // the watch, if pollState never took it
 	c.sideFeed = feed
 	c.side = &sidebar{uiFile: so.UIFile, projects: projects, compact: lay.compact(), order: lay.sideSections, projOrder: lay.projSections}

@@ -29,6 +29,11 @@ test('commands splits a command line shell-style', () => {
     ['cd', 'x'], ['git', 'push', '-f', 'origin', 'my branch'], ['gh', 'pr', 'merge', '3'], ['echo', 'a $(gh pr merge 3) b'], ['cat'],
   ])
   expect(commands('cat < ~/.ssh/id_rsa')).toEqual([['cat', '<', '~/.ssh/id_rsa']])
+  // ${...} is part of its word; a $( ) in it is read too.
+  expect(commands('echo ${A}x ${B:-"}"} ${C:-$(gh pr merge 3)}; { ls; }')).toEqual([
+    ['gh', 'pr', 'merge', '3'], ['echo', '${A}x', '${B:-"}"}', '${C:-$(gh pr merge 3)}'], ['ls'],
+  ])
+  expect(psCommands('Write-Host ${env:A`}B}x; [string] ${env:C}')).toEqual([['Write-Host', '${env:A`}B}x'], ['[string]', '${env:C}']])
 })
 
 // The shared vectors (guard-vectors.ts): the Go port in the server

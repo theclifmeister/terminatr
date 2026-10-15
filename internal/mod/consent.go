@@ -14,12 +14,12 @@ import (
 )
 
 // What the human sees before a mod is installed, enabled or updated
-// (mods design §7 and §9, Consent): each permission in plain words,
-// every rules addendum, agent manifest, agent tool and guard rule in
-// full (text an agent obeys or reads, and commands tm runs), then a y/n
-// question. A mod's own text is shown with control characters removed,
-// so it can't drive the terminal, and its files inside a delimited
-// block.
+// (mods design §7 and §9, Consent): what it changes in what agents run
+// or read, each permission in plain words, every rules addendum, agent
+// manifest, task template, agent tool and guard rule in full (text an
+// agent obeys or reads, and commands tm runs), then a y/n question. A
+// mod's own text is shown with control characters removed, so it can't
+// drive the terminal, and its files inside a delimited block.
 
 // Kinds names what the mod provides, for tm mod list and the Mods tab:
 // code, column, view, tools, code host, commands, theme, icons, keymap,
@@ -143,6 +143,53 @@ func (p Permissions) Words(perms []string) []string {
 	return out
 }
 
+// BuiltinAgents are the names of the agents tm has built in (claude,
+// codex), set by the agent package: a mod's agent manifest of one of
+// these names replaces it.
+var BuiltinAgents []string
+
+// AgentChange is something a mod changes in what agents run or read
+// without a permission (its data): a rules file, an agent manifest,
+// task templates. Short is for one line (tm mod list), Long for the
+// consent screen.
+type AgentChange struct {
+	Short, Long string
+}
+
+// AgentChanges are what the installed mod changes in what agents run
+// or read, each shown in full on its consent screen; none for a
+// built-in one, which is tm's own.
+func (m Mod) AgentChanges() []AgentChange {
+	if m.Builtin || m.Manifest == nil {
+		return nil
+	}
+	return m.Manifest.agentChanges(m.files())
+}
+
+func (m *Manifest) agentChanges(fsys fs.FS) []AgentChange {
+	var out []AgentChange
+	for _, role := range sortedKeys(m.Provides.Rules) {
+		rel := Clean(m.Provides.Rules[role], false)
+		if r, ok := strings.CutSuffix(role, "_policy"); ok {
+			out = append(out, AgentChange{"replaces the " + r + " policy", "replaces tm's own " + r + " policy, the rules every " + r + " follows, with " + rel + " (below)"})
+		} else {
+			out = append(out, AgentChange{"adds " + role + " rules", "adds rules every " + role + " reads: " + rel + " (below)"})
+		}
+	}
+	for _, rel := range m.agentFiles(fsys) {
+		name := Clean(strings.TrimSuffix(path.Base(rel), ".toml"), false)
+		if slices.Contains(BuiltinAgents, name) {
+			out = append(out, AgentChange{"replaces how tm starts " + name, "replaces how tm starts every " + name + " session, in every project: the command, arguments and environment in " + Clean(rel, false) + " (below)"})
+		} else {
+			out = append(out, AgentChange{"adds the agent " + name, "adds the agent " + name + ", which tm starts, in any project, with the command in " + Clean(rel, false) + " (below)"})
+		}
+	}
+	if m.Provides.Templates != "" {
+		out = append(out, AgentChange{"adds task templates", "adds task templates: their notes and steps go into tasks agents read (below)"})
+	}
+	return out
+}
+
 // Clean is s with what could be read as other than text each a space
 // (textsafe.Clean); newlines stay when lines.
 func Clean(s string, lines bool) string { return textsafe.Clean(s, lines) }
@@ -196,10 +243,20 @@ func consent(m *Manifest, fsys fs.FS) string {
 	if c := m.CommandWords(); len(c) > 0 {
 		fmt.Fprintf(&b, "Commands you can run: %s\n", strings.Join(c, " · "))
 	}
+	changes := m.agentChanges(fsys)
+	if len(changes) > 0 {
+		fmt.Fprintln(&b, "What agents run or read that it changes:")
+		for _, c := range changes {
+			fmt.Fprintf(&b, "  - %s\n", c.Long)
+		}
+	}
 	asked := m.Permissions.Requested()
-	if len(asked) == 0 {
+	switch {
+	case len(asked) == 0 && len(changes) > 0:
+		fmt.Fprintln(&b, "Permissions: none")
+	case len(asked) == 0:
 		fmt.Fprintln(&b, "Permissions: none (safe)")
-	} else {
+	default:
 		fmt.Fprintln(&b, "Permissions it asks for:")
 		for _, w := range m.Permissions.Words(asked) {
 			fmt.Fprintf(&b, "  - %s\n", w)
@@ -246,9 +303,9 @@ func SettingWords(v any) string {
 	return fmt.Sprint(v)
 }
 
-// Shown is every rules addendum, agent manifest, agent tool and guard
-// rule of m, in folder dir, in full, as the consent screen shows them;
-// "" when it has none.
+// Shown is every rules addendum, agent manifest, task template, agent
+// tool and guard rule of m, in folder dir, in full, as the consent
+// screen shows them; "" when it has none.
 func (m *Manifest) Shown(dir string) string { return m.shown(os.DirFS(dir)) }
 
 func (m *Manifest) shown(fsys fs.FS) string {
@@ -265,9 +322,10 @@ type shownFile struct {
 }
 
 // agentText lists the text of m that agents obey or read, or tm runs:
-// its rules addenda by role, its agent manifests, then its tools (the
-// description and input an agent is given) and its guard rules (what
-// each refuses, and the message an agent reads), each with its text.
+// its rules addenda by role, its agent manifests, its task templates,
+// then its tools (the description and input an agent is given) and its
+// guard rules (what each refuses, and the message an agent reads), each
+// with its text.
 func (m *Manifest) agentText(fsys fs.FS) []shownFile {
 	var out []shownFile
 	for _, role := range sortedKeys(m.Provides.Rules) {
@@ -282,6 +340,13 @@ func (m *Manifest) agentText(fsys fs.FS) []shownFile {
 			out = append(out, shownFile{"Agent manifest (tm runs what it says)", rel, readText(fsys, rel)})
 			return nil
 		})
+	}
+	if d := path.Clean(m.Provides.Templates); m.Provides.Templates != "" && fs.ValidPath(d) {
+		files, _ := fs.Glob(fsys, path.Join(d, "*.md"))
+		slices.Sort(files)
+		for _, rel := range files {
+			out = append(out, shownFile{"Task template (agents read its notes and steps)", rel, readText(fsys, rel)})
+		}
 	}
 	for _, t := range m.Provides.Tools {
 		out = append(out, shownFile{"Tool it offers your " + toolRoles(t) + " (they read its description)", ToolName(m.ID, t.ID), toolText(t)})
@@ -374,13 +439,18 @@ type Changes struct {
 	// old one didn't, or asks for more of (another host, command or
 	// root), in Perms order.
 	NewPerms []string
-	// Text are its rules addenda and agent manifests that are new or
-	// changed, in full.
+	// NewAgentChanges are what it changes in what agents run or read
+	// that the old version didn't (AgentChanges), in the consent's words.
+	NewAgentChanges []string
+	// Text are its rules addenda, agent manifests, task templates, tools
+	// and guard rules that are new or changed, in full.
 	Text []shownFile
 }
 
 // Asks reports whether the update needs the human's consent again.
-func (c Changes) Asks() bool { return len(c.NewPerms) > 0 || len(c.Text) > 0 }
+func (c Changes) Asks() bool {
+	return len(c.NewPerms) > 0 || len(c.NewAgentChanges) > 0 || len(c.Text) > 0
+}
 
 // Diff compares the installed mod (old, in oldDir) with its update (new,
 // in newDir).
@@ -398,8 +468,15 @@ func Diff(old *Manifest, oldDir string, new *Manifest, newDir string) Changes {
 		}
 	}
 	var before []shownFile
+	var hadChanges []AgentChange
 	if old != nil {
 		before = old.agentText(os.DirFS(oldDir))
+		hadChanges = old.agentChanges(os.DirFS(oldDir))
+	}
+	for _, a := range new.agentChanges(os.DirFS(newDir)) {
+		if !slices.Contains(hadChanges, a) {
+			c.NewAgentChanges = append(c.NewAgentChanges, a.Long)
+		}
 	}
 	for _, f := range new.agentText(os.DirFS(newDir)) {
 		if !slices.ContainsFunc(before, func(o shownFile) bool { return o.Title == f.Title && o.Rel == f.Rel && o.Text == f.Text }) {
@@ -415,6 +492,12 @@ func (c Changes) Describe(m *Manifest) string {
 	if len(c.NewPerms) > 0 {
 		fmt.Fprintln(&b, "It now asks for:")
 		for _, w := range m.Permissions.Words(c.NewPerms) {
+			fmt.Fprintf(&b, "  - %s\n", w)
+		}
+	}
+	if len(c.NewAgentChanges) > 0 {
+		fmt.Fprintln(&b, "It now also:")
+		for _, w := range c.NewAgentChanges {
 			fmt.Fprintf(&b, "  - %s\n", w)
 		}
 	}
@@ -444,6 +527,13 @@ func (m Mod) Status() string {
 		s = "off"
 	default:
 		s = strings.Join(m.Manifest.Permissions.Words(m.Grants), " · ")
+		if a := m.AgentChanges(); len(m.Grants) == 0 && len(a) > 0 {
+			// Not "safe": it changes what agents run or read.
+			s = "no permissions"
+			for _, c := range a {
+				s += " · " + c.Short
+			}
+		}
 		if len(m.WantsMore) > 0 {
 			s += " · wants more: " + strings.Join(m.Manifest.Permissions.Words(m.WantsMore), " · ")
 		}

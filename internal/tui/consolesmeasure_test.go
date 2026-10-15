@@ -127,6 +127,16 @@ func TestDashboardLoadCost(t *testing.T) {
 		src.Load()
 	}
 	t.Logf("dashboard Load, 4 projects of 20 threads, 6 mods: %v CPU per Load", (cpu()-c0)/n)
+	// The dashboard as it runs: a Load a second, with the server's
+	// share of it.
+	const window = 10 * time.Second
+	c0 = cpu()
+	for range int(window / time.Second) {
+		time.Sleep(time.Second)
+		src.Load()
+	}
+	used := cpu() - c0
+	t.Logf("server and dashboard, a Load a second: CPU %.2f%% (%v per s)", 100*used.Seconds()/window.Seconds(), used/time.Duration(window.Seconds()))
 }
 
 // modFolderAt installs mod id in the mods folder with files.

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -93,7 +94,8 @@ func (c *projectCache) look(slug, tickerState string, gen uint64, byGen bool) (*
 // snapStamp is the stat stamp (fsx.StatStamp) of what snap was read
 // from: the project's files and folders, each of its threads' (a new
 // thread changes the threads folder), the ticker's state file, the
-// config and the repos' .git/config (their origin).
+// config, the repos' .git/config (their origin) and the links' files
+// (link.StampPaths).
 func snapStamp(snap *projectSnap, tickerState string) uint64 {
 	p := snap.p
 	var paths []string
@@ -113,6 +115,7 @@ func snapStamp(snap *projectSnap, tickerState string) uint64 {
 	for _, repo := range p.Repos {
 		paths = append(paths, filepath.Join(repo, ".git", "config"))
 	}
+	paths = append(paths, link.StampPaths(p, snap.links)...)
 	return fsx.StatStamp(paths...)
 }
 

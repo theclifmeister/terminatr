@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -18,6 +19,15 @@ import (
 
 //go:embed manifests/*.toml
 var builtin embed.FS
+
+// The consent screen names a mod's agent manifest that replaces a
+// built-in agent (mod.BuiltinAgents).
+func init() {
+	names, _ := fs.Glob(builtin, "manifests/*.toml")
+	for _, n := range names {
+		mod.BuiltinAgents = append(mod.BuiltinAgents, strings.TrimSuffix(path.Base(n), ".toml"))
+	}
+}
 
 // goAgents holds agents that need Go code. A Go agent registers a
 // constructor that receives its manifest and wraps FromManifest.
@@ -104,7 +114,8 @@ func modAgentDirs(userDir string) []mod.AgentDir {
 }
 
 // readManifest reads a mod's agent manifest in its folder dir: a file
-// there, not a link out of it, at most mod.MaxDataFile.
+// there, not a link out of it, at most mod.MaxDataFile, plain text
+// (mod.AgentText).
 func readManifest(dir, path string) ([]byte, error) {
 	root, err := filepath.EvalSymlinks(dir)
 	if err != nil {
@@ -124,7 +135,11 @@ func readManifest(dir, path string) ([]byte, error) {
 	if fi.Size() > mod.MaxDataFile {
 		return nil, fmt.Errorf("over %d KiB", mod.MaxDataFile>>10)
 	}
-	return os.ReadFile(path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return mod.AgentText("", data)
 }
 
 func (r *Registry) add(data []byte, source string) error {
