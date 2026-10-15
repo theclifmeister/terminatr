@@ -30,7 +30,8 @@ type method struct {
 type gate int
 
 const (
-	gateAny gate = iota
+	// The zero value, an entry without a gate: anyone.
+	_ gate = iota
 	// gateHuman: the human only, on the human socket (ipc.HumanName,
 	// docs/SPEC.md §11.1), and still not a caller the pid walk places in
 	// an agent's session. An agent's own uses of these (tm thread start,

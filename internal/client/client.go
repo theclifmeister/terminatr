@@ -90,7 +90,8 @@ func dial(p Paths, kind proto.Kind, protocol int) (*Client, error) {
 	return DialAt(p.Socket, kind, protocol)
 }
 
-// dialAt connects to the socket at sock and performs the handshake.
+// DialAt connects to the socket at sock, claiming protocol, and
+// performs the handshake: Dial at one socket.
 func DialAt(sock string, kind proto.Kind, protocol int) (*Client, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), UnresponsiveTimeout)
 	conn, err := ipc.Dial(ctx, ipc.Addr(sock))
