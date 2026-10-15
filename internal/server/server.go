@@ -191,6 +191,8 @@ type Server struct {
 	versions *agent.Versions
 	// asks are the sessions' open questions (ask.go).
 	asks asks
+	// guard is the guard's memory of the sessions (guard.go).
+	guard guardState
 	// mods are the sessions' mod listeners by session id (modchan.go).
 	mods map[string]*http.Server
 	// launched is the model each agent session was launched with ("" its
@@ -1264,6 +1266,7 @@ func (s *Server) sessionExited(sess *session.Session) {
 	delete(s.sessions, sess.ID())
 	delete(s.blocked, sess.ID())
 	delete(s.adoptAsks, sess.ID())
+	s.guard.forget(sess.ID())
 	s.closeModLocked(sess.ID())
 	if s.tick != nil {
 		s.tick.Kick()

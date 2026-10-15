@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/session"
 )
 
 // TestGuardRulesFor: a thread gets every rule, a coordinator all but
@@ -582,5 +584,48 @@ func TestGuardModLive(t *testing.T) {
 	}
 	if refused("pulumi destroy --yes") {
 		t.Fatal("removed: still refused")
+	}
+}
+
+// TestGuardStateOfServer: the guard's memory of a session (its hook
+// rules, its refusals) is its server's, and goes when the session exits:
+// a new session under the same id, on this server or another in the
+// process, starts afresh.
+func TestGuardStateOfServer(t *testing.T) {
+	clock := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	guardNow = func() time.Time { return clock }
+	t.Cleanup(func() { guardNow = time.Now })
+	a := &Server{log: log.New(io.Discard, "", 0), stopping: true}
+	b := &Server{log: log.New(io.Discard, "", 0)}
+	for range guardInboxCount - 1 {
+		if a.guard.repeated("s-1") {
+			t.Fatal("repeated too soon")
+		}
+	}
+	if b.guard.repeated("s-1") {
+		t.Fatal("another server's refusals counted")
+	}
+	a.guard.rules = map[string]hookRulesEntry{"s-1": {at: clock}, "s-2": {at: clock}}
+
+	done := make(chan struct{})
+	sess, err := session.Start(session.Config{ID: "s-1", Argv: []string{testSh(t), "-c", "exit 0"}, Cwd: t.TempDir(),
+		Logf: t.Logf, OnExit: func(sess *session.Session) { a.sessionExited(sess); close(done) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Stop(StopGrace)
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the session did not exit")
+	}
+	if _, ok := a.guard.rules["s-1"]; ok {
+		t.Error("the exited session's rules are kept")
+	}
+	if _, ok := a.guard.rules["s-2"]; !ok {
+		t.Error("another session's rules went")
+	}
+	if a.guard.repeated("s-1") {
+		t.Error("the exited session's refusals are kept")
 	}
 }
