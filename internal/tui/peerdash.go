@@ -13,7 +13,7 @@ import (
 
 // The remote dashboard (docs/SPEC.md §4, **Paired servers**): enter, a
 // click or the preview on a paired server's project in the sidebar
-// shows its dashboard, read-only, built from the server's mirror of it
+// shows its dashboard, built from the server's mirror of it
 // (peer.list, §16.10: its ProjectWatch and sessions), as the
 // coordinator's info panel draws one of this server's (coordpanel.go).
 // The view's current project is then "@alias/slug" (peerFold), which no

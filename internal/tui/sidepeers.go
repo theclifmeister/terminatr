@@ -208,7 +208,7 @@ func paneWords(r treeRow) string {
 	case paneWhyNot(r) != "":
 		return "view-only"
 	case r.link.panes == proto.PanesView:
-		return "its pane: view only"
+		return "its pane: view-only"
 	}
 	return "its pane opens here"
 }
@@ -581,7 +581,7 @@ func peerKeyBar(r *treeRow) []string {
 		}
 		return []string{enter + " fold"}
 	case treePeerProject:
-		// enter shows its read-only dashboard (peerdash.go).
+		// enter shows its remote dashboard (peerdash.go).
 		switch {
 		case r.stale:
 			return []string{enter + " open", left + " server"}

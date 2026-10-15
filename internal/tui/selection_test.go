@@ -165,19 +165,19 @@ func TestViewOnlyRemoteMouse(t *testing.T) {
 
 	// Keys don't go (the pane has no connection: one sent would panic).
 	c.input(uv.Key{Code: 'x', Text: "x"})
-	if !strings.HasPrefix(c.flash, "view only") {
+	if !strings.HasPrefix(c.flash, "view-only") {
 		t.Fatalf("a key: flash %q", c.flash)
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if n := c.remoteNote(p); n != "view only · 38 ms" {
+	if n := c.remoteNote(p); n != "view-only · 38 ms" {
 		t.Errorf("same size: note %q", n)
 	}
 	if err := p.mirror.Resize(120, 40); err != nil {
 		t.Fatal(err)
 	}
-	if n := c.remoteNote(p); n != "view only · 120×40 on mini · 38 ms" {
+	if n := c.remoteNote(p); n != "view-only · 120×40 on mini · 38 ms" {
 		t.Errorf("other size: note %q", n)
 	}
 	if got := string(c.outerModes()); !strings.Contains(got, "\x1b[?1002h") && !strings.Contains(got, "\x1b[?1003h") {

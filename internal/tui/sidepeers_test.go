@@ -334,7 +334,7 @@ func TestPeerRowsOpenPanes(t *testing.T) {
 			}
 		}
 		_, d2 := rowOf(rows, "rc:mini/acme-api").details()
-		if word := map[string]string{proto.PanesType: "its pane opens here", proto.PanesView: "its pane: view only"}[panes]; !strings.HasPrefix(d2, word) {
+		if word := map[string]string{proto.PanesType: "its pane opens here", proto.PanesView: "its pane: view-only"}[panes]; !strings.HasPrefix(d2, word) {
 			t.Errorf("%s: coordinator's details %q", panes, d2)
 		}
 		// The project opens its read-only dashboard, never a pane.
@@ -392,8 +392,8 @@ func TestRemoteStatus(t *testing.T) {
 		t.Errorf("note %q", n)
 	}
 	p.info.ViewOnly = true
-	if why := c.remoteBlock(p); !strings.HasPrefix(why, "view only") {
-		t.Errorf("view only: %q", why)
+	if why := c.remoteBlock(p); !strings.HasPrefix(why, "view-only") {
+		t.Errorf("view-only: %q", why)
 	}
 	// The peer's switch, as the mirror has it the moment it changes,
 	// decides whether the pane takes keys.
@@ -403,7 +403,7 @@ func TestRemoteStatus(t *testing.T) {
 	}
 	peers[0].Panes = proto.PanesType
 	if in := remoteInfo(peers, p.info); in.ViewOnly {
-		t.Error("raised to write in the mirror: the pane is still view only")
+		t.Error("raised to write in the mirror: the pane is still view-only")
 	}
 	peers[0].Panes = proto.PanesView
 	p.info = proto.SessionInfo{ID: "nas/q-1", Server: "nas", Role: proto.RoleCoordinator}

@@ -424,7 +424,7 @@ var coreActions = []struct {
 type KeyAction struct {
 	// ID is its stable name; Area where it works ("list", "sidebar",
 	// "panel" (the info and details panels), "popup", "view" (a mod's
-	// view only) or "session"); Keys its keys now; Help its line in the help ("" for
+	// view-only) or "session"); Keys its keys now; Help its line in the help ("" for
 	// one that shares the line above); Fixed that it can't be rebound.
 	ID, Area string
 	Keys     []string

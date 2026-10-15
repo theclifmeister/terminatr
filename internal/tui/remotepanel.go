@@ -19,7 +19,7 @@ import (
 // drawn from the server's mirror of that server (peer.list, §16.10), the
 // project's ProjectWatch and its trimmed sessions, never from a request
 // to the far server. A coordinator's shows its project as the remote
-// dashboard does (watchPanel, read-only); a thread's its task, steps,
+// dashboard does (watchPanel); a thread's its task, steps,
 // state and PR. Its head names the server and the link; while the link
 // is down, or the last read failed, the rest keeps its last values,
 // dimmed, with when they were read. Nothing in it acts on that server:
@@ -33,7 +33,6 @@ import (
 //	" ● in-progress"
 //	" STEPS ───"
 //	" …"
-//	" Read-only: nothing here acts on mini."
 
 // remoteData is what the panel shows of a paired server's pane: the
 // server as the mirror has it, and the pane's project and session there.
