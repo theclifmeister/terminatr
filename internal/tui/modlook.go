@@ -132,6 +132,18 @@ func setScheme(dark bool) bool {
 // background.
 func themed() bool { return themeTab.Load() != &builtinTheme }
 
+// ThemeTerminal is how Settings names the built-in theme: it draws with
+// the terminal's own colours, and Claude panes follow them too.
+const ThemeTerminal = "follow terminal"
+
+// themeLabel is a theme pick as Settings shows it.
+func themeLabel(v string) string {
+	if v == ThemeDefault {
+		return ThemeTerminal
+	}
+	return v
+}
+
 // themeSetting is the theme setting's value this console uses.
 func themeSetting() string {
 	if v := themeValue.Load().(string); v != "" {

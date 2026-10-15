@@ -52,7 +52,11 @@ func (s *Server) newModHosts() *modsup.Supervisor {
 // runModHosts gives the supervisor the enabled code mods now and after
 // every change, until ctx ends; it then stops their hosts. Each poll
 // only stats the mods' files (s.installedMods): the specs are worked out again
-// when the registry was read anew.
+// when the registry was read anew. A new registry (config.toml or a
+// mod changed) also rewrites the agents' live themes, which follow
+// [ui] theme (§8.6): a pick the console's colours don't show, such as
+// the built-in theme after a mod's without a pane palette, still
+// reaches the running Claude panes.
 func (s *Server) runModHosts(ctx context.Context, sup *modsup.Supervisor) {
 	defer sup.Close()
 	poll := cmp.Or(envDuration(envModsPoll), defaultModsPoll)
@@ -63,6 +67,9 @@ func (s *Server) runModHosts(ctx context.Context, sup *modsup.Supervisor) {
 		if reg, ok, _ := s.installedMods(0); ok && reg != nil && reg != applied {
 			sup.Set(s.specsOf(reg))
 			applied = reg
+			s.mu.Lock()
+			s.themeChangedLocked()
+			s.mu.Unlock()
 		}
 		s.expireModViews()
 		select {

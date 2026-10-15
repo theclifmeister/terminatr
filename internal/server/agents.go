@@ -389,7 +389,7 @@ func (s *Server) launchThemeOf(scheme string, cfg *config.Config) *theme.Agent {
 	if scheme == "" || s.noMods {
 		return nil
 	}
-	if cfg == nil || cfg.Theme == "" || cfg.Theme == mod.BundledTheme || cfg.Theme == "default" {
+	if cfg == nil || followsTerminal(cfg) {
 		return nil
 	}
 	reg := s.modRegistry()
@@ -402,6 +402,13 @@ func (s *Server) launchThemeOf(scheme string, cfg *config.Config) *theme.Agent {
 		return nil
 	}
 	return theme.AgentColors(tt, scheme == "dark")
+}
+
+// followsTerminal says [ui] theme is the built-in one (cfg not nil),
+// which draws with the terminal's own colours: an agent that keeps a
+// live theme then follows them too, Claude with its ANSI theme (§8.6).
+func followsTerminal(cfg *config.Config) bool {
+	return cfg.Theme == "" || cfg.Theme == mod.BundledTheme || cfg.Theme == "default"
 }
 
 // schemeName is the terminal's scheme a console last reported, "" for
@@ -423,7 +430,8 @@ func (s *Server) writeLiveTheme(a agent.Agent) bool {
 	if _, ok := a.(agent.LiveThemer); !ok || s.noMods {
 		return false
 	}
-	if !s.writeThemeFile(a, s.launchTheme(s.paneScheme()), s.schemeName()) {
+	cfg, _ := config.Load()
+	if !s.writeThemeFile(a, s.launchThemeOf(s.paneScheme(), cfg), s.schemeName(), cfg != nil && followsTerminal(cfg)) {
 		return false
 	}
 	s.markLiveThemed(a)
@@ -431,10 +439,11 @@ func (s *Server) writeLiveTheme(a agent.Agent) bool {
 }
 
 // writeThemeFile writes a's own theme file with the colours th (the
-// pane scheme's: launchTheme) and the terminal's scheme, when a keeps
-// one, outside safe mode; false when it isn't in place. It reads no
-// server state: s.mu needn't be held.
-func (s *Server) writeThemeFile(a agent.Agent, th *theme.Agent, scheme string) bool {
+// pane scheme's: launchTheme), the terminal's scheme and whether the tm
+// theme follows the terminal (followsTerminal), when a keeps one,
+// outside safe mode; false when it isn't in place. It reads no server
+// state: s.mu needn't be held.
+func (s *Server) writeThemeFile(a agent.Agent, th *theme.Agent, scheme string, terminal bool) bool {
 	lt, ok := a.(agent.LiveThemer)
 	if !ok || s.noMods {
 		return false
@@ -443,7 +452,7 @@ func (s *Server) writeThemeFile(a agent.Agent, th *theme.Agent, scheme string) b
 	if err != nil {
 		return false
 	}
-	if err := lt.WriteTheme(home, th, scheme); err != nil {
+	if err := lt.WriteTheme(home, th, scheme, terminal); err != nil {
 		s.log.Printf("agent %s: theme: %v", a.Name(), err)
 		return false
 	}
@@ -605,7 +614,7 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		spec.Model = launchModel(a, r.Project, r.Role == proto.RoleCoordinator, lc.cfg)
 	}
 	spec.Theme = s.launchThemeOf(spec.PaneScheme, lc.cfg)
-	spec.LiveTheme = s.writeThemeFile(a, spec.Theme, v.schemeName)
+	spec.LiveTheme = s.writeThemeFile(a, spec.Theme, v.schemeName, lc.cfg != nil && followsTerminal(lc.cfg))
 	launch, err := a.Launch(spec)
 	if err != nil {
 		p.abandon()

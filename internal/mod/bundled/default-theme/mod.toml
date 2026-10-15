@@ -5,7 +5,7 @@ id          = "default-theme"
 name        = "Default theme"
 version     = "1.0.0"
 api         = "1.0"
-description = "tm's own look: the terminal's 16 ANSI colours, so it follows your terminal's theme."
+description = "Follow terminal: tm draws with the terminal's 16 ANSI colours and Claude panes take Claude's ANSI theme, so all of it follows your terminal's theme (Ghostty's, say)."
 authors     = ["terminatr"]
 
 [provides]
