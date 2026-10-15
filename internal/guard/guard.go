@@ -879,6 +879,22 @@ func Commands(line string) [][]string {
 			i = j
 		case c == ' ' || c == '\t':
 			endWord()
+		case c == '$' && i+2 < len(s) && s[i+1] == '{' && !strings.ContainsRune(" \t\n|", s[i+2]):
+			// A parameter expansion, ${NAME} or ${NAME:-word}, is part of
+			// the word (${ cmd; } runs commands: read below as { }). A $( )
+			// or backtick in it still runs.
+			end := braceClose(s, i+2)
+			inner := string(s[i+2 : end])
+			for _, m := range substitution.FindAllStringSubmatch(inner, -1) {
+				in := m[1]
+				if in == "" {
+					in = m[2]
+				}
+				out = append(out, Commands(in)...)
+			}
+			word.WriteString(string(s[i:min(end+1, len(s))]))
+			inWord = true
+			i = end
 		case strings.ContainsRune(";&|\n()`{}", c):
 			endCommand()
 		case c == '$' && i+1 < len(s) && s[i+1] == '(':
@@ -894,6 +910,37 @@ func Commands(line string) [][]string {
 	}
 	endCommand()
 	return out
+}
+
+// braceClose is the index of the } that closes a { opened before i,
+// skipping quoted strings and escapes, or len(s).
+func braceClose(s []rune, i int) int {
+	depth := 1
+	for ; i < len(s); i++ {
+		switch s[i] {
+		case '\\':
+			i++
+		case '\'':
+			if j := slices.Index(s[i+1:], '\''); j >= 0 {
+				i += 1 + j
+			} else {
+				return len(s)
+			}
+		case '"':
+			for i++; i < len(s) && s[i] != '"'; i++ {
+				if s[i] == '\\' {
+					i++
+				}
+			}
+		case '{':
+			depth++
+		case '}':
+			if depth--; depth == 0 {
+				return i
+			}
+		}
+	}
+	return len(s)
 }
 
 var assignment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
