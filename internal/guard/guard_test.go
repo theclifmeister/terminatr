@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -123,6 +124,56 @@ func TestCommands(t *testing.T) {
 	}
 }
 
+// TestCommandsArguments: a substitution is a word of its command, read
+// after it; a heredoc's body is commands only with a shell on the line.
+func TestCommandsArguments(t *testing.T) {
+	got := Commands("git push $(echo -f) `x` origin main")
+	want := [][]string{{"git", "push", "$(echo -f)", "`x`", "origin", "main"}, {"echo", "-f"}, {"x"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q", got)
+	}
+	got = Commands("cat > a <<-'EOF' # c\n\tgit push -f\n\tEOF\nls")
+	want = [][]string{{"cat", ">", "a", "<", "<", "EOF"}, {"ls"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q", got)
+	}
+	got = Commands("cat <<EOF | bash\ngh pr view $(x)\nEOF")
+	want = [][]string{{"cat", "<", "<", "EOF"}, {"bash"}, {"x"}, {"gh", "pr", "view", "$(x)"}, {"x"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q", got)
+	}
+}
+
+// TestPSCommandsExpression: an expression given as an argument is a
+// marked word of its command, its commands read after it.
+func TestPSCommandsExpression(t *testing.T) {
+	got := PSCommands("git push ('-f') origin; if ($x) { ls }")
+	want := [][]string{{"git", "push", psExprMark + "('-f')", "origin"}, {"-f"}, {"if"}, {"$x"}, {"ls"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q", got)
+	}
+}
+
+// TestResolve: with Resolve, a write is judged where it lands and named
+// as given.
+func TestResolve(t *testing.T) {
+	r := loadVectors(t).Rules["thread"]
+	r.Resolve = func(p string) string { return "/etc/" + p[strings.LastIndex(p, "/link/")+len("/link/"):] }
+	d := r.Judge("Write", map[string]any{"file_path": "link/hosts"})
+	if d == nil || d.Rule != "worktree-only" || d.Summary != "Write of /h/.terminatr/worktrees/demo/t-0001-fix/link/hosts" {
+		t.Errorf("got %+v", d)
+	}
+	r.Resolve = func(p string) string {
+		if p != "/h/.terminatr/worktrees/demo/t-0001-fix/a/../b" {
+			t.Errorf("resolved %q", p)
+		}
+		return p
+	}
+	if d := r.Judge("Edit", map[string]any{"file_path": "a/../b"}); d != nil {
+		t.Errorf("got %+v", d)
+	}
+}
+
 func TestPSCommandsBracedVariable(t *testing.T) {
 	got := PSCommands("Write-Host ${env:A`}B}x; [string] ${env:C}")
 	want := [][]string{{"Write-Host", "${env:A`}B}x"}, {"[string]", "${env:C}"}}
@@ -143,6 +194,8 @@ func FuzzJudge(f *testing.F) {
 	f.Add("git push -f origin 'x' && echo \"$(gh pr merge 1)\" `x` \\")
 	f.Add("rm -rf ~/.terminatr/worktrees/../x; cat <~/.ssh/k")
 	f.Add("& { git push -f }; $x = @\"\n$(gh pr merge 1)\n\"@ <# c #> 'a''b' \"`\"$(\" 2>&1 &")
+	f.Add("cat <<-'E' <<F | sudo -u x env -S 'bash -c' # c\n\tE\n$((1<<2)) `y\nF\ngit push ('-f') @(1) $[2]")
+	f.Add("timeout -s 9 5 xargs -I{} nice -n gh -R o api graphql \"$(x \"(\")\" <<")
 	r := Rules{On: true, Role: "thread", Rules: []string{"force-push", "push-default", "worktree-only", "delete-branch", "merge", "credentials"},
 		Home: "/h", Cwd: "/w", Writable: []string{"/w"}, Worktrees: "/h/wt", Protected: []string{"main"}, Secrets: []string{"/h/.ssh"},
 		Tools: map[string]Tool{"Bash": {Kind: KindShell, Fields: []string{"command"}}, "PowerShell": {Kind: KindShell, Syntax: SyntaxPowerShell, Fields: []string{"command"}},

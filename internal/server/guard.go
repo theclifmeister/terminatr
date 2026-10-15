@@ -176,6 +176,57 @@ func withReal(paths []string) []string {
 	return out
 }
 
+// realTarget is where a write to p (absolute, not cleaned) lands: p with
+// the symlinks and junctions of its longest existing prefix followed, a
+// .. after one leaving the link's target as the file system does; what
+// doesn't exist yet is joined on as written. A link a thread makes inside
+// its worktree doesn't carry a write out of it.
+func realTarget(p string) string {
+	p = filepath.FromSlash(p)
+	split := func(p string) []string {
+		return strings.FieldsFunc(p, func(c rune) bool { return c == '/' || c == filepath.Separator })
+	}
+	vol := filepath.VolumeName(p)
+	cur := vol + string(filepath.Separator)
+	parts := split(p[len(vol):])
+	for hops := 0; len(parts) > 0; {
+		c := parts[0]
+		parts = parts[1:]
+		switch c {
+		case ".":
+			continue
+		case "..":
+			cur = filepath.Dir(cur)
+			continue
+		}
+		next := filepath.Join(cur, c)
+		fi, err := os.Lstat(next)
+		if err != nil {
+			return filepath.Join(append([]string{next}, parts...)...)
+		}
+		// A junction is no symlink to Lstat, but Readlink reads it.
+		if fi.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 && hops < 40 {
+			if t, err := os.Readlink(next); err == nil {
+				hops++
+				switch {
+				case filepath.IsAbs(t):
+				case t != "" && filepath.VolumeName(t) == "" && strings.ContainsRune(`/`+string(filepath.Separator), rune(t[0])):
+					// Rooted on the link's own drive (Windows' \x).
+					t = filepath.VolumeName(cur) + t
+				default:
+					t = cur + string(filepath.Separator) + t
+				}
+				vol := filepath.VolumeName(t)
+				cur = vol + string(filepath.Separator)
+				parts = append(split(t[len(vol):]), parts...)
+				continue
+			}
+		}
+		cur = next
+	}
+	return cur
+}
+
 // guardRoutes adds the guard's two routes to session id's mod handler.
 func (s *Server) guardRoutes(mux *http.ServeMux, id string) {
 	mux.HandleFunc("GET /v1/rules", func(w http.ResponseWriter, r *http.Request) {
@@ -223,8 +274,9 @@ func (s *Server) guardRoutes(mux *http.ServeMux, id string) {
 // hookGuardOf judges the tool calls session id's hooks report against
 // its rules (agent.HookEnv.Guard: agents without a mod, which answer
 // PreToolUse with the refusal, or an ask) and records a refusal as POST
-// /v1/denied does; an ask is not recorded. With a mod, the mod judges:
-// nil.
+// /v1/denied does; an ask is not recorded. A file tool's write is judged
+// where it lands, through the links on its path (realTarget). With a
+// mod, the mod judges: nil.
 func (s *Server) hookGuardOf(id string, mod bool) func(string, map[string]any) *guard.Denial {
 	if mod {
 		return nil
@@ -236,7 +288,9 @@ func (s *Server) hookGuardOf(id string, mod bool) func(string, map[string]any) *
 		if !ok {
 			return nil
 		}
-		d := s.hookRules(rec).Judge(tool, input)
+		rules := s.hookRules(rec)
+		rules.Resolve = realTarget
+		d := rules.Judge(tool, input)
 		if d != nil && !d.Ask {
 			s.guardDenied(rec, GuardDenial{Rule: d.Rule, Tool: tool, Summary: d.Summary})
 		}

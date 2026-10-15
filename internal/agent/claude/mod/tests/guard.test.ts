@@ -34,6 +34,13 @@ test('commands splits a command line shell-style', () => {
     ['gh', 'pr', 'merge', '3'], ['echo', '${A}x', '${B:-"}"}', '${C:-$(gh pr merge 3)}'], ['ls'],
   ])
   expect(psCommands('Write-Host ${env:A`}B}x; [string] ${env:C}')).toEqual([['Write-Host', '${env:A`}B}x'], ['[string]', '${env:C}']])
+  // A substitution is a word of its command, read after it; a heredoc's
+  // body is commands only with a shell on the line.
+  expect(commands('git push $(echo -f) `x` origin main')).toEqual([['git', 'push', '$(echo -f)', '`x`', 'origin', 'main'], ['echo', '-f'], ['x']])
+  expect(commands("cat > a <<-'EOF' # c\n\tgit push -f\n\tEOF\nls")).toEqual([['cat', '>', 'a', '<', '<', 'EOF'], ['ls']])
+  expect(commands('cat <<EOF | bash\ngh pr view $(x)\nEOF')).toEqual([['cat', '<', '<', 'EOF'], ['bash'], ['x'], ['gh', 'pr', 'view', '$(x)'], ['x']])
+  // An expression given as an argument is a marked word of its command.
+  expect(psCommands("git push ('-f') origin; if ($x) { ls }")).toEqual([['git', 'push', "\u0000('-f')", 'origin'], ['-f'], ['if'], ['$x'], ['ls']])
 })
 
 // The shared vectors (guard-vectors.ts): the Go port in the server

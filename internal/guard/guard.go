@@ -9,10 +9,12 @@
 //
 // It refuses, or for a PowerShell command it can't read, asks: a call no
 // rule matches goes on to the agent's own permission check. Bash
-// commands are split into simple commands on ; & | && || newlines, $( )
-// and backticks, and read shell-style (quotes, env assignments, sudo,
-// git -C). That catches what agents type; the sandbox and the permission
-// rules stay the backstop for what is written to hide. PowerShell
+// commands are split into simple commands on ; & | && || newlines, ( )
+// and { }, the inside of a $( ) or backticks read as commands too, and
+// read shell-style (quotes, comments, env assignments, wrappers such as
+// sudo and timeout, bash -c, heredocs, git -C). That catches what agents
+// type; the sandbox and the permission rules stay the backstop for what
+// is written to hide. PowerShell
 // commands (powershell.go) have no sandbox behind them on Windows, so
 // what names its command by an expression, or evaluates a string, is put
 // to the human (or auto mode's classifier) instead.
@@ -65,6 +67,11 @@ type Rules struct {
 	// Mods are the rules the user's enabled mods add: they only refuse,
 	// in force whichever core rules the human turned off.
 	Mods []ModRule `json:"mods,omitempty"`
+	// Resolve, when set, is where a write to a path lands: the path made
+	// absolute but not yet cleaned, with the links of its longest existing
+	// prefix followed. The matcher has no file system of its own; the
+	// server, which judges the hooks' calls, gives it one. Not served.
+	Resolve func(string) string `json:"-"`
 }
 
 // ModRule is a guard rule a mod adds (mods design §7, Tighten only): the
@@ -176,14 +183,14 @@ func (r Rules) Judge(tool string, input map[string]any) *Denial {
 		return ask
 	case KindWrite:
 		for _, p := range values {
-			if d := r.judgeWrite(tool, r.abs(p)); d != nil {
+			if d := r.judgeWrite(tool, r.abs(p), r.target(p)); d != nil {
 				return d
 			}
 		}
 	case KindPatch:
 		for _, patch := range values {
 			for _, p := range PatchPaths(patch) {
-				if d := r.judgeWrite(tool, r.abs(p)); d != nil {
+				if d := r.judgeWrite(tool, r.abs(p), r.target(p)); d != nil {
 					return d
 				}
 			}
@@ -204,14 +211,24 @@ func (r Rules) Judge(tool string, input map[string]any) *Denial {
 	return nil
 }
 
-// judgeWrite judges a file tool writing p (absolute).
-func (r Rules) judgeWrite(tool, p string) *Denial {
+// target is where a file tool writing p writes: p made absolute, through
+// Resolve when there is one.
+func (r Rules) target(p string) string {
+	if r.Resolve == nil {
+		return r.abs(p)
+	}
+	return r.abs(r.Resolve(r.joined(p)))
+}
+
+// judgeWrite judges a file tool writing p (absolute, where the write
+// lands), named in a refusal as shown (as the call gave it).
+func (r Rules) judgeWrite(tool, shown, p string) *Denial {
 	if r.has("worktree-only") && !r.writable(p) {
-		return r.deny("worktree-only", tool+" of "+safe(p), "")
+		return r.deny("worktree-only", tool+" of "+safe(shown), "")
 	}
 	for _, m := range r.Mods {
 		if slices.ContainsFunc(m.Writes, func(w string) bool { return r.under(p, w) }) {
-			return r.denyMod(m, tool+" of "+safe(p))
+			return r.denyMod(m, tool+" of "+safe(shown))
 		}
 	}
 	return nil
@@ -334,7 +351,16 @@ func (r Rules) judgeBash(command string) *Denial {
 		case cmd == "az":
 			d = r.judgeAz(args)
 		case httpClients[cmd]:
-			d = r.judgeHTTP(args)
+			d = r.judgeHTTP(cmd, args)
+		case shells[cmd]:
+			// bash -c STRING runs the string.
+			if i := slices.IndexFunc(args, shellC.MatchString); i >= 0 && i+1 < len(args) {
+				d = r.judgeBash(args[i+1])
+			}
+		case cmd == "eval":
+			d = r.judgeBash(strings.Join(args, " "))
+		case cmd == "pwsh" || cmd == "powershell":
+			d = r.judgePwsh(args)
 		case cmd == "rm" && r.has("delete-branch") && slices.ContainsFunc(args, func(a string) bool { return rmRecursive.MatchString(a) || a == "--recursive" }):
 			for _, a := range args {
 				if strings.HasPrefix(a, "-") {
@@ -360,8 +386,17 @@ func (r Rules) judgeBash(command string) *Denial {
 
 var (
 	rmRecursive = regexp.MustCompile(`^-[a-zA-Z]*[rR]`)
-	shortFlags  = regexp.MustCompile(`^-[a-zA-Z]+$`)
-	branchUpper = regexp.MustCompile(`^-[a-zA-Z]*D`)
+	// A bundle of short options may hold digits (git push -4f: -4 is
+	// --ipv4).
+	shortFlags  = regexp.MustCompile(`^-[a-zA-Z0-9]+$`)
+	branchUpper = regexp.MustCompile(`^-[a-zA-Z0-9]*D`)
+)
+
+// shells run a command line given with -c; stdinShells (them and more)
+// run the commands a heredoc gives them.
+var (
+	shells      = setOf("bash sh zsh dash ksh mksh ash")
+	stdinShells = setOf("bash sh zsh dash ksh mksh ash fish csh tcsh pwsh powershell source . eval xargs ssh sudo doas su")
 )
 
 func (r Rules) judgeGit(args []string) *Denial {
@@ -440,10 +475,32 @@ var (
 	ghMerge     = regexp.MustCompile(`pulls/[^/]+/merge/?$`)
 	ghRefs      = regexp.MustCompile(`git/refs/heads/`)
 	ghMethodOpt = regexp.MustCompile(`^(-X|--method=)`)
+	// The GraphQL mutations that merge a PR, and that delete a branch.
+	ghMergeMutation  = regexp.MustCompile(`(?i)mergePullRequest|enablePullRequestAutoMerge|enqueuePullRequest`)
+	ghDeleteMutation = regexp.MustCompile(`(?i)deleteRef`)
 )
 
+// ghValued are gh's options that take a value, which may come before or
+// between the command words (gh pr -R o/r merge).
+var ghValued = map[string]bool{"-R": true, "--repo": true, "--hostname": true}
+
 func (r Rules) judgeGh(args []string) *Denial {
-	a, b := at(args, 0), at(args, 1)
+	// The command words, flags among them aside.
+	var words []string
+	api := -1
+	for i := 0; i < len(args) && len(words) < 2; i++ {
+		if strings.HasPrefix(args[i], "-") {
+			if ghValued[args[i]] {
+				i++
+			}
+			continue
+		}
+		if len(words) == 0 && args[i] == "api" {
+			api = i
+		}
+		words = append(words, args[i])
+	}
+	a, b := at(words, 0), at(words, 1)
 	if a == "pr" && b == "merge" && r.has("merge") {
 		return r.deny("merge", "gh pr merge", "")
 	}
@@ -457,14 +514,23 @@ func (r Rules) judgeGh(args []string) *Denial {
 		return r.deny("credentials", "gh auth status --show-token", "")
 	}
 	if a == "api" {
+		// Each path without its query or fragment, which GitHub ignores.
 		var paths []string
-		for _, x := range args[1:] {
+		for _, x := range args[api+1:] {
 			if !strings.HasPrefix(x, "-") {
-				paths = append(paths, x)
+				paths = append(paths, routeSplit.Split(x, 2)[0])
 			}
 		}
 		if r.has("merge") && slices.ContainsFunc(paths, ghMerge.MatchString) {
 			return r.deny("merge", "gh api merging a PR", "")
+		}
+		if slices.ContainsFunc(paths, func(p string) bool { return strings.Trim(p, "/") == "graphql" }) {
+			if r.has("merge") && slices.ContainsFunc(args, ghMergeMutation.MatchString) {
+				return r.deny("merge", "gh api graphql merging a PR", "")
+			}
+			if r.has("delete-branch") && slices.ContainsFunc(args, ghDeleteMutation.MatchString) {
+				return r.deny("delete-branch", "gh api graphql deleting a branch", "")
+			}
 		}
 		method, found := "", false
 		for i := 1; i < len(args); i++ {
@@ -586,7 +652,7 @@ var (
 	shortX    = regexp.MustCompile(`^-X.`)
 )
 
-func (r Rules) judgeHTTP(args []string) *Denial {
+func (r Rules) judgeHTTP(cmd string, args []string) *Denial {
 	i := slices.IndexFunc(args, azureHost.MatchString)
 	if i < 0 {
 		return nil
@@ -595,7 +661,30 @@ func (r Rules) judgeHTTP(args []string) *Denial {
 	if r.has("credentials") && slices.ContainsFunc(args, func(a string) bool { return httpUser.MatchString(a) || httpAuth.MatchString(a) }) {
 		return r.deny("credentials", "an HTTP call to Azure DevOps with credentials", "")
 	}
-	method := ""
+	return r.judgeRoute(httpMethod(cmd, args, i), url)
+}
+
+var (
+	// curlValued are curl's short options that take a value.
+	curlValued = "AbcCdDeEFHKmoPQrtTuUwxXyYz"
+	// httpMethods are the methods HTTPie and xh take as a word before
+	// the URL.
+	httpMethods = setOf("GET POST PUT PATCH DELETE HEAD OPTIONS")
+	// httpieData is an HTTPie request item that sends data (a=b, a:=1,
+	// a@file), not a query (a==b) or a header (A:b).
+	httpieData = regexp.MustCompile(`^[^=:@]+(?:=[^=]|=$|:=|@)`)
+)
+
+// httpMethod is the method an HTTP client's arguments send, the URL at
+// args[url]: the one they name, else what the data they send makes it
+// (curl -d is a POST, -T a PUT), else GET.
+func httpMethod(cmd string, args []string, url int) string {
+	method, implied := "", ""
+	imply := func(m string) {
+		if implied != "PUT" {
+			implied = m
+		}
+	}
 	for i, a := range args {
 		switch {
 		case a == "-X" || a == "--request":
@@ -606,10 +695,94 @@ func (r Rules) judgeHTTP(args []string) *Denial {
 			method = a[2:]
 		}
 	}
-	if method == "" {
-		method = "GET"
+	switch cmd {
+	case "curl":
+		get := false
+		for i := 0; i < len(args); i++ {
+			a := args[i]
+			if name, val, eq := strings.Cut(a, "="); strings.HasPrefix(a, "--") {
+				switch {
+				case name == "--request":
+					if !eq {
+						i++
+						val = at(args, i)
+					}
+					method = val
+				case name == "--get":
+					get = true
+				case name == "--upload-file":
+					imply("PUT")
+				case strings.HasPrefix(name, "--data") || name == "--json" || name == "--form" || name == "--form-string":
+					imply("POST")
+				}
+				continue
+			}
+			if !strings.HasPrefix(a, "-") {
+				continue
+			}
+			// A bundle of short options (-sSd @b.json): the first that
+			// takes a value takes the rest of the word, or the next one.
+		bundle:
+			for k, c := range a[1:] {
+				rest := a[2+k:]
+				switch {
+				case c == 'G':
+					get = true
+					continue
+				case c == 'd' || c == 'F':
+					imply("POST")
+				case c == 'T':
+					imply("PUT")
+				case !strings.ContainsRune(curlValued, c):
+					continue
+				}
+				if rest == "" {
+					i++
+					rest = at(args, i)
+				}
+				if c == 'X' {
+					method = rest
+				}
+				break bundle
+			}
+		}
+		if get && implied == "POST" {
+			implied = ""
+		}
+	case "wget":
+		for i, a := range args {
+			switch name, val, eq := strings.Cut(a, "="); name {
+			case "--method":
+				if !eq {
+					val = at(args, i+1)
+				}
+				method = val
+			case "--post-data", "--post-file":
+				imply("POST")
+			}
+		}
+	case "http", "https", "xh":
+		if url > 0 && httpMethods[strings.ToUpper(args[url-1])] {
+			method = args[url-1]
+		}
+		for _, a := range args {
+			if a == "-f" || a == "--form" || a == "--multipart" || a == "--raw" || strings.HasPrefix(a, "--raw=") {
+				imply("POST")
+			}
+		}
+		for _, a := range args[url+1:] {
+			if !strings.HasPrefix(a, "-") && httpieData.MatchString(a) {
+				imply("POST")
+			}
+		}
 	}
-	return r.judgeRoute(method, url)
+	switch {
+	case method != "":
+		return method
+	case implied != "":
+		return implied
+	}
+	return "GET"
 }
 
 var (
@@ -706,6 +879,8 @@ func truthy(args []string, name string) bool {
 var (
 	readers  = map[string]bool{}
 	printers = map[string]bool{"echo": true, "printf": true, "print": true}
+	// envPrinters print the variables when given no names.
+	envPrinters = setOf("export declare typeset")
 )
 
 func init() {
@@ -734,10 +909,11 @@ func (r Rules) judgeSecret(cmd string, args, words []string, reader, printer boo
 	}
 	if cmd == "printenv" {
 		// printenv NAME... prints only what it is asked for: fine unless a
-		// name looks secret. With no name it prints everything.
+		// name looks secret. With no name (or only substitutions) it prints
+		// everything.
 		var names []string
-		for _, a := range args {
-			if !strings.HasPrefix(a, "-") {
+		for _, a := range unredirected(args) {
+			if !strings.HasPrefix(a, "-") && !substituted(a) {
 				names = append(names, a)
 			}
 		}
@@ -747,8 +923,13 @@ func (r Rules) judgeSecret(cmd string, args, words []string, reader, printer boo
 		if i := slices.IndexFunc(names, secretName.MatchString); i >= 0 {
 			return r.deny("credentials", "printenv "+safe(names[i]), "")
 		}
-	} else if cmd == "env" && !slices.ContainsFunc(args, func(a string) bool { return !strings.HasPrefix(a, "-") }) {
+	} else if cmd == "env" && !slices.ContainsFunc(unredirected(args), func(a string) bool { return !strings.HasPrefix(a, "-") && !substituted(a) }) {
 		return r.deny("credentials", "env printing the environment", "")
+	} else if envPrinters[cmd] && !slices.ContainsFunc(args, func(a string) bool { return !strings.HasPrefix(a, "-") || strings.ContainsAny(a, "fF") }) ||
+		cmd == "set" && len(args) == 0 {
+		// export, declare -x and the like with no names print the
+		// variables (with -f, the functions); set alone prints them all.
+		return r.deny("credentials", cmd+" printing the environment", "")
 	}
 	// echo and the like given a secret variable ($AZURE_DEVOPS_EXT_PAT).
 	if printer || reader {
@@ -770,6 +951,28 @@ func (r Rules) judgeSecret(cmd string, args, words []string, reader, printer boo
 		}
 	}
 	return nil
+}
+
+// unredirected is args without their redirections (> f, < f, << EOF).
+func unredirected(args []string) []string {
+	var out []string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "<" || args[i] == ">" {
+			for i+1 < len(args) && (args[i+1] == "<" || args[i+1] == ">") {
+				i++
+			}
+			i++
+			continue
+		}
+		out = append(out, args[i])
+	}
+	return out
+}
+
+// substituted: word a is a substitution alone, $( ), backticks or a
+// PowerShell expression, which may give no word at all.
+func substituted(a string) bool {
+	return strings.HasPrefix(a, "$(") || strings.HasPrefix(a, "`") || psExprArg(a)
 }
 
 // viewers are the commands that only show the files they are given.
@@ -812,28 +1015,57 @@ func patVar(w string) string {
 	return ""
 }
 
-var substitution = regexp.MustCompile("\\$\\(([^)]*)\\)|`([^`]*)`")
+// heredoc is a here-document a command line opens (<<WORD, <<-WORD):
+// the word that ends it, whether its lines lose their leading tabs, and
+// whether the word was quoted (then nothing in it expands); then its
+// body once read.
+type heredoc struct {
+	delim        string
+	tabs, quoted bool
+	body         string
+}
 
 // Commands splits a command line into simple commands, each a list of
-// words with quotes removed; redirections stay words ("<", ">").
-func Commands(line string) [][]string {
-	var out [][]string
+// words with quotes removed; redirections stay words ("<", ">"). A $( )
+// or backtick is a word of its command, its inside read as commands too.
+// A heredoc's body is read as commands when the line has a shell to run
+// it; otherwise only what it substitutes is.
+func Commands(line string) [][]string { return commands(line, false) }
+
+// commands is Commands; in arithmetic (arith) << is a shift, no heredoc.
+func commands(line string, arith bool) [][]string {
+	var out, inner [][]string
 	var words []string
-	var word strings.Builder
-	inWord := false
+	// word is the word as written; lit the same without its unquoted
+	// substitutions, what the word is when they print nothing (printenv$(x)
+	// is printenv): the word, unless it is substitutions alone.
+	var word, lit strings.Builder
+	inWord, hasLit := false, false
+	var open, docs []heredoc
 	endWord := func() {
-		if inWord {
+		if inWord && hasLit {
+			words = append(words, lit.String())
+		} else if inWord {
 			words = append(words, word.String())
 		}
 		word.Reset()
-		inWord = false
+		lit.Reset()
+		inWord, hasLit = false, false
+	}
+	// text is literal text of the word.
+	text := func(t string) {
+		word.WriteString(t)
+		lit.WriteString(t)
+		inWord, hasLit = true, true
 	}
 	endCommand := func() {
 		endWord()
 		if len(words) > 0 {
 			out = append(out, words)
 		}
-		words = nil
+		// What the command substitutes, after it.
+		out = append(out, inner...)
+		words, inner = nil, nil
 	}
 	s := []rune(line)
 	for i := 0; i < len(s); i++ {
@@ -841,8 +1073,7 @@ func Commands(line string) [][]string {
 		switch {
 		case c == '\\' && i+1 < len(s):
 			if s[i+1] != '\n' {
-				word.WriteRune(s[i+1])
-				inWord = true
+				text(string(s[i+1]))
 			}
 			i++
 		case c == '\'':
@@ -850,8 +1081,7 @@ func Commands(line string) [][]string {
 			if j := slices.Index(s[i+1:], '\''); j >= 0 {
 				end = i + 1 + j
 			}
-			word.WriteString(string(s[i+1 : end]))
-			inWord = true
+			text(string(s[i+1 : end]))
 			i = end
 		case c == '"':
 			// Inside double quotes a $( ) or backtick still runs: its
@@ -859,62 +1089,195 @@ func Commands(line string) [][]string {
 			j := i + 1
 			var q strings.Builder
 			for j < len(s) && s[j] != '"' {
-				if s[j] == '\\' && j+1 < len(s) {
+				switch {
+				case s[j] == '\\' && j+1 < len(s):
 					q.WriteRune(s[j+1])
 					j += 2
-					continue
+				case s[j] == '$' && j+1 < len(s) && s[j+1] == '(':
+					end := closing(s, j+2, '(', ')')
+					out = append(out, Commands(string(s[j+2:end]))...)
+					q.WriteString(string(s[j:min(end+1, len(s))]))
+					j = end + 1
+				case s[j] == '`':
+					end := tickClose(s, j+1)
+					out = append(out, Commands(string(s[j+1:end]))...)
+					q.WriteString(string(s[j:min(end+1, len(s))]))
+					j = end + 1
+				default:
+					q.WriteRune(s[j])
+					j++
 				}
-				q.WriteRune(s[j])
-				j++
 			}
-			for _, m := range substitution.FindAllStringSubmatch(q.String(), -1) {
-				inner := m[1]
-				if inner == "" {
-					inner = m[2]
-				}
-				out = append(out, Commands(inner)...)
-			}
-			word.WriteString(q.String())
-			inWord = true
+			text(q.String())
 			i = j
 		case c == ' ' || c == '\t':
 			endWord()
+		case c == '#' && !inWord:
+			// A comment, to the end of the line.
+			for i+1 < len(s) && s[i+1] != '\n' {
+				i++
+			}
+		case c == '(' && i+1 < len(s) && s[i+1] == '(':
+			// Arithmetic, (( … )), whose << is a shift, not a heredoc: read
+			// on its own, as commands (bash takes ((a; b)) for subshells).
+			end := closing(s, i+1, '(', ')')
+			endCommand()
+			out = append(out, commands(string(s[i+2:min(end, len(s))]), true)...)
+			i = end
+		case c == '$' && i+1 < len(s) && s[i+1] == '[' && closing(s, i+2, '[', ']') < len(s):
+			// Arithmetic, $[ … ], a part of its word: its inside read on
+			// its own, as commands.
+			end := closing(s, i+2, '[', ']')
+			inner = append(inner, commands(string(s[i+2:end]), true)...)
+			text(string(s[i : end+1]))
+			i = end
 		case c == '$' && i+2 < len(s) && s[i+1] == '{' && !strings.ContainsRune(" \t\n|", s[i+2]):
 			// A parameter expansion, ${NAME} or ${NAME:-word}, is part of
 			// the word (${ cmd; } runs commands: read below as { }). A $( )
 			// or backtick in it still runs.
-			end := braceClose(s, i+2)
-			inner := string(s[i+2 : end])
-			for _, m := range substitution.FindAllStringSubmatch(inner, -1) {
-				in := m[1]
-				if in == "" {
-					in = m[2]
-				}
+			end := closing(s, i+2, '{', '}')
+			for _, in := range substitutions(string(s[i+2 : end])) {
 				out = append(out, Commands(in)...)
 			}
+			text(string(s[i:min(end+1, len(s))]))
+			i = end
+		case c == '$' && i+1 < len(s) && s[i+1] == '(':
+			// A command substitution is a word of the command it is in.
+			end := closing(s, i+2, '(', ')')
+			inner = append(inner, Commands(string(s[i+2:end]))...)
 			word.WriteString(string(s[i:min(end+1, len(s))]))
 			inWord = true
 			i = end
-		case strings.ContainsRune(";&|\n()`{}", c):
+		case c == '`':
+			end := tickClose(s, i+1)
+			inner = append(inner, Commands(string(s[i+1:end]))...)
+			word.WriteString(string(s[i:min(end+1, len(s))]))
+			inWord = true
+			i = end
+		case c == '\n' && len(open) > 0:
+			// The bodies of the heredocs the line opened.
 			endCommand()
-		case c == '$' && i+1 < len(s) && s[i+1] == '(':
+			j := i + 1
+			for _, h := range open {
+				var body strings.Builder
+				for j < len(s) {
+					k := j
+					for k < len(s) && s[k] != '\n' {
+						k++
+					}
+					l := string(s[j:k])
+					if h.tabs {
+						l = strings.TrimLeft(l, "\t")
+					}
+					j = k + 1
+					if l == h.delim {
+						break
+					}
+					body.WriteString(l + "\n")
+				}
+				h.body = body.String()
+				docs = append(docs, h)
+			}
+			open = nil
+			i = j - 1
+		case strings.ContainsRune(";&|\n(){}", c):
 			endCommand()
-			i++
+		case c == '<' && !arith && i+1 < len(s) && s[i+1] == '<' && (i+2 >= len(s) || s[i+2] != '<') && (i == 0 || s[i-1] != '<'):
+			// A heredoc: <<WORD or <<-WORD.
+			endWord()
+			words = append(words, "<", "<")
+			j := i + 2
+			h := heredoc{}
+			if j < len(s) && s[j] == '-' {
+				h.tabs = true
+				j++
+			}
+			for j < len(s) && (s[j] == ' ' || s[j] == '\t') {
+				j++
+			}
+			var d strings.Builder
+			for j < len(s) && !strings.ContainsRune(" \t\n;&|<>()", s[j]) {
+				switch s[j] {
+				case '\'', '"':
+					h.quoted = true
+					end := len(s)
+					if k := slices.Index(s[j+1:], s[j]); k >= 0 {
+						end = j + 1 + k
+					}
+					d.WriteString(string(s[j+1 : end]))
+					j = end + 1
+				case '\\':
+					h.quoted = true
+					if j+1 < len(s) {
+						d.WriteRune(s[j+1])
+					}
+					j += 2
+				default:
+					d.WriteRune(s[j])
+					j++
+				}
+			}
+			h.delim = d.String()
+			if h.delim != "" || h.quoted {
+				words = append(words, h.delim)
+				open = append(open, h)
+			}
+			i = j - 1
 		case c == '<' || c == '>':
 			endWord()
 			words = append(words, string(c))
 		default:
-			word.WriteRune(c)
-			inWord = true
+			text(string(c))
 		}
 	}
 	endCommand()
+	if len(docs) > 0 {
+		// A shell anywhere on the line (ssh host bash, docker exec -i c
+		// sh) may run what a heredoc gives it.
+		shell := slices.ContainsFunc(out, func(w []string) bool {
+			argv := strip(w)
+			return len(argv) > 0 && stdinShells[base(argv[0])] || slices.ContainsFunc(w, func(a string) bool { return shells[base(a)] })
+		})
+		for _, h := range docs {
+			if !h.quoted {
+				// The line's own shell expands it first.
+				for _, in := range substitutions(h.body) {
+					out = append(out, Commands(in)...)
+				}
+			}
+			if shell {
+				out = append(out, Commands(h.body)...)
+			}
+		}
+	}
 	return out
 }
 
-// braceClose is the index of the } that closes a { opened before i,
-// skipping quoted strings and escapes, or len(s).
-func braceClose(s []rune, i int) int {
+// substitutions are the insides of the $( ) and backticks in s, which run
+// where s is expanded.
+func substitutions(text string) []string {
+	var out []string
+	s := []rune(text)
+	for i := 0; i < len(s); i++ {
+		switch {
+		case s[i] == '\\':
+			i++
+		case s[i] == '$' && i+1 < len(s) && s[i+1] == '(':
+			end := closing(s, i+2, '(', ')')
+			out = append(out, string(s[i+2:end]))
+			i = end
+		case s[i] == '`':
+			end := tickClose(s, i+1)
+			out = append(out, string(s[i+1:end]))
+			i = end
+		}
+	}
+	return out
+}
+
+// closing is the index of the close that closes an open before i
+// ({ }, ( )), skipping quoted strings, backticks and escapes, or len(s).
+func closing(s []rune, i int, open, close rune) int {
 	depth := 1
 	for ; i < len(s); i++ {
 		switch s[i] {
@@ -928,13 +1291,20 @@ func braceClose(s []rune, i int) int {
 			}
 		case '"':
 			for i++; i < len(s) && s[i] != '"'; i++ {
-				if s[i] == '\\' {
+				switch {
+				case s[i] == '\\':
 					i++
+				case s[i] == '$' && i+1 < len(s) && s[i+1] == '(':
+					i = closing(s, i+2, '(', ')')
+				case s[i] == '`':
+					i = tickClose(s, i+1)
 				}
 			}
-		case '{':
+		case '`':
+			i = tickClose(s, i+1)
+		case open:
 			depth++
-		case '}':
+		case close:
 			if depth--; depth == 0 {
 				return i
 			}
@@ -943,31 +1313,116 @@ func braceClose(s []rune, i int) int {
 	return len(s)
 }
 
-var assignment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
-
-// strip drops what runs a command without being it: env assignments,
-// sudo, command, exec, nohup, time, env with assignments.
-func strip(words []string) []string {
-	i := 0
-	for {
-		if i >= len(words) {
-			return nil
-		}
-		w := words[i]
-		switch {
-		case assignment.MatchString(w):
+// tickClose is the index of the backtick that closes one opened before
+// i, or len(s).
+func tickClose(s []rune, i int) int {
+	for ; i < len(s); i++ {
+		switch s[i] {
+		case '\\':
 			i++
-		case w == "sudo" || w == "command" || w == "exec" || w == "nohup" || w == "time" || w == "builtin":
-			i++
-		case w == "env" && i+1 < len(words) && (strings.Contains(words[i+1], "=") || strings.HasPrefix(words[i+1], "-")):
-			i++
-			for i < len(words) && (strings.Contains(words[i], "=") || strings.HasPrefix(words[i], "-")) {
-				i++
-			}
-		default:
-			return words[i:]
+		case '`':
+			return i
 		}
 	}
+	return len(s)
+}
+
+var assignment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
+
+// wrapper is how a command that runs another reads its own options: the
+// short ones that take a value (-n 5, -n5), the long ones that do (--x v;
+// --x=v is one word), and how many words come before the command
+// (timeout's duration).
+type wrapper struct {
+	short string
+	long  []string
+	skip  int
+}
+
+// wrappers run the command after them; the shell's keywords come before
+// one too.
+var wrappers = map[string]wrapper{
+	"sudo":       {short: "ughpCDrtTU", long: []string{"--user", "--group", "--host", "--prompt", "--close-from", "--chdir", "--role", "--type", "--command-timeout", "--other-user"}},
+	"doas":       {short: "uC"},
+	"env":        {short: "uCSP", long: []string{"--unset", "--chdir", "--split-string"}},
+	"timeout":    {short: "sk", long: []string{"--signal", "--kill-after"}, skip: 1},
+	"nice":       {short: "n", long: []string{"--adjustment"}},
+	"ionice":     {short: "cnpPu", long: []string{"--class", "--classdata", "--pid", "--pgid", "--uid"}},
+	"xargs":      {short: "ILnPsdEa", long: []string{"--arg-file", "--delimiter", "--max-args", "--max-procs", "--max-chars", "--max-lines", "--process-slot-var"}},
+	"stdbuf":     {short: "ioe", long: []string{"--input", "--output", "--error"}},
+	"time":       {short: "fo", long: []string{"--format", "--output"}},
+	"exec":       {short: "a"},
+	"caffeinate": {short: "tw"},
+	"command":    {}, "builtin": {}, "nohup": {}, "unbuffer": {}, "setsid": {}, "chronic": {},
+	"if": {}, "then": {}, "else": {}, "elif": {}, "while": {}, "until": {}, "do": {}, "!": {},
+}
+
+// strip drops what runs a command without being it: env assignments, the
+// wrappers (sudo, env, timeout 5, xargs …) with their options, and the
+// keywords before a command (if, then, do …), and redirections before
+// it (> f git …). A wrapper with no command after it is the command (env
+// alone prints the environment).
+func strip(words []string) []string {
+	i, from := 0, -1
+	for i < len(words) {
+		w := words[i]
+		if assignment.MatchString(w) {
+			i++
+			continue
+		}
+		if w == "<" || w == ">" {
+			for i+1 < len(words) && (words[i+1] == "<" || words[i+1] == ">") {
+				i++
+			}
+			i += 2
+			continue
+		}
+		wr, ok := wrappers[w]
+		if !ok {
+			return words[i:]
+		}
+		from = i
+		i++
+	options:
+		for i < len(words) && strings.HasPrefix(words[i], "-") && words[i] != "-" {
+			o := words[i]
+			i++
+			if o == "--" {
+				break
+			}
+			name, val := o, ""
+			if strings.HasPrefix(o, "--") {
+				var eq bool
+				name, val, eq = strings.Cut(o, "=")
+				if !eq && slices.Contains(wr.long, name) && i < len(words) {
+					val = words[i]
+					i++
+				}
+			} else if k := strings.IndexFunc(o[1:], func(c rune) bool { return strings.ContainsRune(wr.short, c) }); k >= 0 {
+				name, val = "-"+o[1+k:2+k], o[2+k:]
+				if val == "" && i < len(words) {
+					val = words[i]
+					i++
+				}
+			}
+			if w == "env" && (name == "-S" || name == "--split-string") {
+				// env -S 'a b': the string is words.
+				words = append(strings.Fields(val), words[i:]...)
+				from, i = 0, 0
+				break options
+			}
+		}
+		if w == "env" {
+			for i < len(words) && assignment.MatchString(words[i]) {
+				i++
+			}
+		}
+		i += wr.skip
+	}
+	if from >= 0 && from < len(words) {
+		return words[from:]
+	}
+	return nil
 }
 
 // positionals are args without their options, valued options skipping
@@ -1021,10 +1476,9 @@ var (
 // slash is p with Windows' backslashes as slashes.
 func slash(p string) string { return strings.ReplaceAll(p, `\`, "/") }
 
-// abs is p made absolute and clean: ~ is home, a relative path is from
-// the session's folder. A Windows path keeps its drive (C:/Users/me);
-// backslashes are slashes.
-func (r Rules) abs(p string) string {
+// joined is p made absolute, not cleaned: ~ is home, a relative path is
+// from the session's folder; backslashes are slashes.
+func (r Rules) joined(p string) string {
 	p = slash(p)
 	for _, h := range homes {
 		if len(p) >= len(h) && strings.EqualFold(p[:len(h)], h) && (len(p) == len(h) || p[len(h)] == '/') {
@@ -1042,6 +1496,14 @@ func (r Rules) abs(p string) string {
 		}
 		p = slash(dir) + "/" + p
 	}
+	return p
+}
+
+// abs is p made absolute and clean: ~ is home, a relative path is from
+// the session's folder. A Windows path keeps its drive (C:/Users/me);
+// backslashes are slashes.
+func (r Rules) abs(p string) string {
+	p = r.joined(p)
 	root := "/"
 	if drive.MatchString(p) {
 		root, p = p[:2]+"/", p[2:]

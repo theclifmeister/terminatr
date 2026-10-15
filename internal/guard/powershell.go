@@ -85,7 +85,9 @@ func setOf(names string) map[string]bool {
 	return m
 }
 
-// judgePSCommand judges one simple command of a PowerShell line.
+// judgePSCommand judges one simple command of a PowerShell line. One
+// the guard judges by its arguments, given an expression as one ((…),
+// $(…), @(…)), is asked unless refused.
 func (r Rules) judgePSCommand(words []string) *Denial {
 	argv, assigned := psStrip(words)
 	if len(argv) == 0 {
@@ -108,6 +110,27 @@ func (r Rules) judgePSCommand(words []string) *Denial {
 	}
 	cmd := psName(argv[0])
 	args := argv[1:]
+	d := r.judgePSArgs(cmd, argv, args)
+	if d == nil && slices.ContainsFunc(args, psExprArg) && r.psJudged(cmd) {
+		return r.ask("an expression as an argument")
+	}
+	return d
+}
+
+// psJudged: cmd is one the guard judges by its arguments.
+func (r Rules) psJudged(cmd string) bool {
+	switch {
+	case cmd == "git", cmd == "gh", cmd == "az", cmd == "pwsh", cmd == "powershell", cmd == "cmd", shells[cmd],
+		httpClients[cmd], psHTTP[cmd], psRemove[cmd], readers[cmd], psReaders[cmd], psLister[cmd]:
+		return true
+	}
+	return slices.ContainsFunc(r.Mods, func(m ModRule) bool {
+		return slices.ContainsFunc(m.Commands, func(c []string) bool { return len(c) > 0 && modWord(c[0], cmd, true) })
+	})
+}
+
+// judgePSArgs judges command cmd, of argv, by its arguments.
+func (r Rules) judgePSArgs(cmd string, argv, args []string) *Denial {
 	if d := r.judgeMods(cmd, args, true); d != nil {
 		return d
 	}
@@ -125,7 +148,7 @@ func (r Rules) judgePSCommand(words []string) *Denial {
 			return r.judgeBash(strings.Join(args[i+1:], " "))
 		}
 		return nil
-	case cmd == "bash" || cmd == "sh":
+	case shells[cmd]:
 		if i := slices.IndexFunc(args, shellC.MatchString); i >= 0 && i+1 < len(args) {
 			return r.judgeBash(args[i+1])
 		}
@@ -139,7 +162,7 @@ func (r Rules) judgePSCommand(words []string) *Denial {
 	case httpClients[cmd] || psHTTP[cmd]:
 		// In Windows PowerShell curl and wget are Invoke-WebRequest.
 		if httpClients[cmd] {
-			d = r.judgeHTTP(args)
+			d = r.judgeHTTP(cmd, args)
 		}
 		if d == nil && cmd != "http" && cmd != "https" && cmd != "xh" {
 			d = r.judgeWebRequest(args)
@@ -362,9 +385,10 @@ func isDQuote(c rune) bool { return c == '"' || c == '“' || c == '”' || c ==
 // calling a command stays its first word ("&"); one calling a script
 // block is dropped, the block's commands read in its place. Comments
 // are skipped; redirections stay words (">"), their stream number
-// dropped.
+// dropped. An expression given as an argument ((…), $(…), @(…)) is a
+// word of its command, marked (psExprMark), its commands read after it.
 func PSCommands(line string) [][]string {
-	var out [][]string
+	var out, inner [][]string
 	var words []string
 	var word strings.Builder
 	inWord := false
@@ -380,7 +404,9 @@ func PSCommands(line string) [][]string {
 		if len(words) > 0 {
 			out = append(out, words)
 		}
-		words = nil
+		// What its arguments evaluate, after it.
+		out = append(out, inner...)
+		words, inner = nil, nil
 	}
 	s := []rune(line)
 	// expandable is the inside of a double-quoted string from i, to its
@@ -522,6 +548,20 @@ func PSCommands(line string) [][]string {
 			word.WriteString(string(s[i:min(j+1, len(s))]))
 			inWord = true
 			i = j
+		case (c == '(' || (c == '$' || c == '@') && i+1 < len(s) && s[i+1] == '(' && !(inWord && len(words) == 0)) && psArgument(words, word.String(), inWord):
+			// An expression as an argument: a word of its own (marked), its
+			// commands read too.
+			endWord()
+			start := i + 1
+			if c != '(' {
+				start = i + 2
+			}
+			end := psClose(s, start)
+			inner = append(inner, PSCommands(string(s[start:end]))...)
+			word.WriteString(psExprMark + string(s[i:min(end+1, len(s))]))
+			inWord = true
+			endWord()
+			i = end
 		case strings.ContainsRune(";|\n(){}", c):
 			endCommand()
 		case (c == '$' || c == '@') && i+1 < len(s) && (s[i+1] == '(' || (c == '@' && s[i+1] == '{')):
@@ -555,6 +595,36 @@ func PSCommands(line string) [][]string {
 	}
 	endCommand()
 	return out
+}
+
+// psExprMark starts the word PSCommands makes of an expression given as
+// an argument ((…), $(…), @(…)): no text a command line holds.
+const psExprMark = "\x00"
+
+// psExprArg: a is an expression given as an argument.
+func psExprArg(a string) bool { return strings.HasPrefix(a, psExprMark) }
+
+// psKeywords take a condition or a value in parentheses, not arguments.
+var psKeywords = setOf("if elseif else while for foreach switch until do function filter param return throw trap catch finally exit")
+
+// psArgument: a ( after words (and the word being read, when inWord) is
+// in argument position: there is a command it is an argument of, not
+// an expression, a keyword or a bare & or . before it. (A $( or @( glued
+// to the command's name may be part of the name: PSCommands reads it as
+// before, a command of its own.)
+func psArgument(words []string, word string, inWord bool) bool {
+	if inWord {
+		words = append(slices.Clone(words), word)
+	}
+	argv, _ := psStrip(words)
+	if len(argv) > 0 && (argv[0] == "&" || argv[0] == ".") {
+		argv = argv[1:]
+	}
+	if len(argv) == 0 {
+		return false
+	}
+	head := argv[0]
+	return !strings.HasPrefix(head, "$") && !strings.HasPrefix(head, "[") && !strings.HasPrefix(head, "(") && !psExprArg(head) && !psKeywords[strings.ToLower(head)]
 }
 
 // psHereStart is where a here-string's body starts when its opening
@@ -593,8 +663,12 @@ func psClose(s []rune, i int) int {
 			}
 		case isSQuote(c) || isDQuote(c):
 			for i++; i < len(s) && !(isSQuote(c) && isSQuote(s[i]) || isDQuote(c) && isDQuote(s[i])); i++ {
-				if s[i] == '`' && isDQuote(c) {
+				switch {
+				case s[i] == '`' && isDQuote(c):
 					i++
+				case s[i] == '$' && isDQuote(c) && i+1 < len(s) && s[i+1] == '(':
+					// A $( ) in the string: its quotes are its own.
+					i = psClose(s, i+2)
 				}
 			}
 		}
