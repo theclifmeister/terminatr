@@ -1,11 +1,12 @@
-// Package modannot is the annotation store of user mods (the mods design
-// §5, Annotations): badges a mod shows by a task or a thread, kept in the
-// mod's own folder, never in TASKS.md. $.annotate writes it through the
-// broker; the consoles read it to draw the badges.
+// The annotation store of user mods (the mods design §5, Annotations):
+// badges a mod shows by a task or a thread, kept in the mod's own
+// folder, never in TASKS.md. $.annotate writes it through the broker;
+// the consoles read it to draw the badges.
 //
-// The file is the mod's, so a reader trusts none of it: Read cleans every
-// span again and keeps the limits.
-package modannot
+// The file is the mod's, so a reader trusts none of it: ReadBadges
+// cleans every span again and keeps the limits.
+
+package modstore
 
 import (
 	"encoding/json"
@@ -23,17 +24,17 @@ import (
 	"github.com/theclifmeister/terminatr/internal/widget"
 )
 
-// File is the store's name in a mod's own folder.
-const File = "annotations.json"
+// AnnotationsFile is the store's name in a mod's own folder.
+const AnnotationsFile = "annotations.json"
 
 // The limits of one mod's annotations.
 const (
-	MaxKey     = 32   // bytes of a key
-	MaxSpans   = 6    // spans in one annotation
-	MaxText    = 32   // runes in one span
-	MaxKeys    = 8    // annotations on one target
-	MaxTargets = 2000 // targets with an annotation, in all projects
-	MaxBytes   = 1 << 20
+	MaxKey       = 32   // bytes of a key
+	MaxSpans     = 6    // spans in one annotation
+	MaxBadgeText = 32   // runes in one span
+	MaxKeys      = 8    // annotations on one target
+	MaxTargets   = 2000 // targets with an annotation, in all projects
+	MaxBytes     = 1 << 20
 )
 
 // Span is a run of text in a theme role: the widget set's span, whose
@@ -71,19 +72,19 @@ func CheckKey(key string) error {
 	return nil
 }
 
-// Clean makes spans safe to draw: each text one line of at most MaxText
-// runes (widget.Clean strips control characters, escape sequences
-// included), an unknown role plain, icons dropped, empty spans dropped. It refuses more than
-// MaxSpans.
-func Clean(spans []Span) ([]Span, error) {
+// CleanBadge makes spans safe to draw: each text one line of at most
+// MaxBadgeText runes (widget.Clean strips control characters, escape
+// sequences included), an unknown role plain, icons dropped, empty spans
+// dropped. It refuses more than MaxSpans.
+func CleanBadge(spans []Span) ([]Span, error) {
 	if len(spans) > MaxSpans {
 		return nil, fmt.Errorf("%d spans, over %d", len(spans), MaxSpans)
 	}
 	var out []Span
 	for _, s := range spans {
 		t := strings.Join(strings.Fields(strings.ReplaceAll(widget.Clean(s.Text), "\n", " ")), " ")
-		if rs := []rune(t); len(rs) > MaxText {
-			t = string(rs[:MaxText-1]) + "…"
+		if rs := []rune(t); len(rs) > MaxBadgeText {
+			t = string(rs[:MaxBadgeText-1]) + "…"
 		}
 		if t == "" {
 			continue
@@ -99,7 +100,7 @@ func Clean(spans []Span) ([]Span, error) {
 
 func read(dir string) (data, error) {
 	d := data{Projects: map[string]map[string]map[string][]Span{}}
-	b, err := os.ReadFile(filepath.Join(dir, File))
+	b, err := os.ReadFile(filepath.Join(dir, AnnotationsFile))
 	if errors.Is(err, fs.ErrNotExist) {
 		return d, nil
 	}
@@ -107,10 +108,10 @@ func read(dir string) (data, error) {
 		return d, err
 	}
 	if len(b) > MaxBytes {
-		return d, fmt.Errorf("%s is over %d bytes", File, MaxBytes)
+		return d, fmt.Errorf("%s is over %d bytes", AnnotationsFile, MaxBytes)
 	}
 	if err := json.Unmarshal(b, &d); err != nil {
-		return data{Projects: map[string]map[string]map[string][]Span{}}, fmt.Errorf("%s: %w", File, err)
+		return data{Projects: map[string]map[string]map[string][]Span{}}, fmt.Errorf("%s: %w", AnnotationsFile, err)
 	}
 	if d.Projects == nil {
 		d.Projects = map[string]map[string]map[string][]Span{}
@@ -118,10 +119,10 @@ func read(dir string) (data, error) {
 	return d, nil
 }
 
-// Set puts mod folder dir's annotation key on target of project: spans
+// Annotate puts mod folder dir's annotation key on target of project: spans
 // replace the old ones, and none (or only empty ones) removes the
 // annotation. It reports whether the store changed. Spans must be Clean.
-func Set(dir, project, target, key string, spans []Span) (bool, error) {
+func Annotate(dir, project, target, key string, spans []Span) (bool, error) {
 	if err := CheckKey(key); err != nil {
 		return false, err
 	}
@@ -176,7 +177,7 @@ func Set(dir, project, target, key string, spans []Span) (bool, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return false, err
 	}
-	return true, fsx.WriteAtomic(filepath.Join(dir, File), b, 0o600)
+	return true, fsx.WriteAtomic(filepath.Join(dir, AnnotationsFile), b, 0o600)
 }
 
 func count(d data) int {
@@ -187,10 +188,10 @@ func count(d data) int {
 	return n
 }
 
-// Read is mod id's annotations in project, by target (Task, Thread),
+// ReadBadges is mod id's annotations in project, by target (Task, Thread),
 // from mod folder dir; a missing or broken file has none. Everything is
 // cleaned again, and what is over the limits is dropped.
-func Read(dir, id, project string) map[string][]Badge {
+func ReadBadges(dir, id, project string) map[string][]Badge {
 	d, err := read(dir)
 	if err != nil {
 		return nil
@@ -208,7 +209,7 @@ func Read(dir, id, project string) map[string][]Badge {
 			if len(out[target]) >= MaxKeys {
 				break
 			}
-			spans, err := Clean(keys[k])
+			spans, err := CleanBadge(keys[k])
 			if err != nil || len(spans) == 0 {
 				continue
 			}

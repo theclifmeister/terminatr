@@ -1,11 +1,12 @@
-// Package modtest is tm mod test (mods design §8, Dev workflow): it
-// replays a code mod's event fixtures, tests/*.json in its folder,
-// against the mod in a host run in-process, with a fake broker in place
-// of the server's. The broker answers the $ API from the fixture and
-// from a store and files of its own, refuses what the mod wasn't
-// granted, and records every call, which the fixture's expectations are
-// checked against. Nothing reaches the real server, projects or network.
-package modtest
+// tm mod test (mods design §8, Dev workflow) replays a code mod's event
+// fixtures, tests/*.json in its folder, against the mod in a host run
+// in-process, with a fake broker in place of the server's. The broker
+// answers the $ API from the fixture and from a store and files of its
+// own, refuses what the mod wasn't granted, and records every call,
+// which the fixture's expectations are checked against. Nothing reaches
+// the real server, projects or network.
+
+package moddev
 
 import (
 	"bytes"

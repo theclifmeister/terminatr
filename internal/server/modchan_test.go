@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -78,6 +81,7 @@ func TestModChannel(t *testing.T) {
 	var logged lockedBuffer
 	s := &Server{log: log.New(&logged, "", 0), sessions: map[string]*session.Session{}}
 	s.mu.Lock()
+	s.inSession = testInSession
 	sock, err := s.listenMod("s-1", rt)
 	s.mu.Unlock()
 	if err != nil {
@@ -220,6 +224,7 @@ func TestModPrompts(t *testing.T) {
 	}
 	s := &Server{log: log.New(os.Stderr, "", 0), sessions: map[string]*session.Session{}}
 	s.mu.Lock()
+	s.inSession = testInSession
 	sock, err := s.listenMod("s-1", rt)
 	s.mu.Unlock()
 	if err != nil {
@@ -419,5 +424,93 @@ func TestAgentUsage(t *testing.T) {
 	}
 	if v, ok := s.ctxOf.Load("s-1"); !ok || v.(ctxUse) != (ctxUse{12856, 258400}) {
 		t.Fatalf("context %+v %v", v, ok)
+	}
+}
+
+// testInSession counts the test's own process as every session's, so
+// the test can talk to a mod socket.
+func testInSession(_ string, pid int) bool { return pid == os.Getpid() }
+
+// modProbe, run as a session's process, posts a bad report to its own
+// session's mod socket until the session is known there, then to
+// another's, and writes the two statuses to out.
+func modProbe(own, other, out string) int {
+	post := func(sock string) int {
+		resp, err := modClient(sock).Post("http://terminatr/v1/state", "application/json", strings.NewReader("not json"))
+		if err != nil {
+			return 0
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	code := 0
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if code = post(own); code != http.StatusForbidden {
+			break
+		}
+	}
+	text := fmt.Sprintf("own=%d other=%d", code, post(other))
+	if err := os.WriteFile(out, []byte(text), 0o600); err != nil {
+		return 1
+	}
+	return 0
+}
+
+// TestModSocketPeer: a session's mod socket answers that session's
+// processes only: not another session's, nor one in no session.
+func TestModSocketPeer(t *testing.T) {
+	if _, err := ipc.PeerOf(nil); errors.Is(err, errors.ErrUnsupported) {
+		t.Skip("no peer credentials here")
+	}
+	rt, err := os.MkdirTemp(ipc.ShortDir(), "tmmod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(rt) })
+	s := &Server{log: log.New(io.Discard, "", 0), sessions: map[string]*session.Session{}, records: map[string]SessionRecord{}}
+	socks := map[string]string{}
+	s.mu.Lock()
+	for _, id := range []string{"s-1", "s-2"} {
+		dir := filepath.Join(rt, id)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if socks[id], err = s.listenMod(id, dir); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.mu.Unlock()
+	t.Cleanup(s.closeMods)
+
+	// The test's own process is in no session.
+	if code := postMod(t, modClient(socks["s-1"]), "/v1/state", "not json"); code != http.StatusForbidden {
+		t.Fatalf("from no session: %d, want 403", code)
+	}
+
+	out := filepath.Join(rt, "probe")
+	for _, id := range []string{"s-2", "s-1"} {
+		argv := []string{testSh(t), "-c", "exec cat"}
+		if id == "s-1" {
+			argv = []string{os.Args[0], "mod-probe", socks["s-1"], socks["s-2"], out}
+		}
+		sess, err := session.Start(session.Config{ID: id, Argv: argv, Cwd: rt,
+			Env: []string{"PATH=/usr/bin:/bin"}, Cols: 80, Rows: 24, Logf: t.Logf})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { sess.Stop(time.Second) })
+		s.mu.Lock()
+		s.sessions[id] = sess
+		s.mu.Unlock()
+	}
+	want := fmt.Sprintf("own=%d other=%d", http.StatusBadRequest, http.StatusForbidden)
+	var got []byte
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if got, err = os.ReadFile(out); err == nil && len(got) > 0 {
+			break
+		}
+	}
+	if string(got) != want {
+		t.Fatalf("probe: %q, want %q", got, want)
 	}
 }

@@ -83,6 +83,7 @@ func TestGuardRoutes(t *testing.T) {
 	t.Cleanup(func() { os.RemoveAll(rt) })
 	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
 	s.mu.Lock()
+	s.inSession = testInSession
 	sock, err := s.listenMod("s-2", rt)
 	s.mu.Unlock()
 	if err != nil {
@@ -492,6 +493,7 @@ message = "prod secrets\nstay with the human."
 
 	config("[mods.infra]\nenabled = true\n")
 	s.mu.Lock()
+	s.inSession = testInSession
 	sock, err := s.listenMod("s-2", rt)
 	s.records["s-2"] = thread
 	s.mu.Unlock()

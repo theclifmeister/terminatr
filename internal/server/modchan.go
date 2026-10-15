@@ -17,16 +17,22 @@ package server
 //
 // GET /v1/tools lists the session's tools, and the mod's tools call POST /v1/tools/{name}
 // (modtools.go).
+//
+// Only the session's own processes are answered: the peer's pid, walked
+// up the process tree as for the control socket (callerOf), must lead to
+// the session; anything else gets 403 (modGate).
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
@@ -124,9 +130,65 @@ func (s *Server) openMod(id, rt string) (*http.Server, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	srv := &http.Server{Handler: s.modHandler(id), ReadHeaderTimeout: 5 * time.Second}
+	srv := &http.Server{Handler: s.modGate(id, s.modHandler(id)), ReadHeaderTimeout: 5 * time.Second,
+		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+			return context.WithValue(ctx, modPeerKey{}, &modPeer{conn: c})
+		}}
 	go srv.Serve(ln)
 	return srv, string(path), nil
+}
+
+// modPeerKey keys a mod connection's modPeer in its requests' context.
+type modPeerKey struct{}
+
+// modPeer is one connection to a mod socket; ok, once true, says its
+// peer is in the socket's session.
+type modPeer struct {
+	conn net.Conn
+	mu   sync.Mutex
+	ok   bool
+}
+
+// modGate answers with h only a connection whose peer is a process of
+// session id (modPeerIn); the rest get 403. A peer found in it is
+// trusted for the connection's later requests; one not found is looked
+// at again with each request (a hook that came before the session was
+// known).
+func (s *Server) modGate(id string, h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p, _ := r.Context().Value(modPeerKey{}).(*modPeer)
+		ok := false
+		if p != nil {
+			p.mu.Lock()
+			if !p.ok {
+				p.ok = s.modPeerIn(id, p.conn)
+			}
+			ok = p.ok
+			p.mu.Unlock()
+		}
+		if !ok {
+			http.Error(w, "only session "+id+"'s processes use this socket", http.StatusForbidden)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
+// modPeerIn says whether conn's peer is the same user and one of
+// session id's processes.
+func (s *Server) modPeerIn(id string, conn net.Conn) bool {
+	peer, err := ipc.PeerOf(conn)
+	if err != nil {
+		s.log.Printf("session %s: mod socket: peer credentials: %v", id, err)
+		return false
+	}
+	if !peer.SameUser {
+		return false
+	}
+	if s.inSession != nil {
+		return s.inSession(id, peer.PID)
+	}
+	return s.callerOf(peer.PID).Session == id
 }
 
 // closeModLocked closes session id's mod listener, if any; s.mu held.

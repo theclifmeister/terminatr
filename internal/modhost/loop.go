@@ -7,7 +7,8 @@ import (
 
 // loop runs jobs one at a time on its own goroutine: the only goroutine
 // that touches the VM. Other goroutines (the reader, timers) post jobs.
-// The queue is unbounded; the server's per-mod queue bounds what arrives.
+// The queue is unbounded; Host.Call (CallsInFlight) bounds the answers
+// that arrive.
 type loop struct {
 	mu   sync.Mutex
 	jobs []func()

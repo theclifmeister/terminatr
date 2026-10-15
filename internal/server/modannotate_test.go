@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/theclifmeister/terminatr/internal/modannot"
 	"github.com/theclifmeister/terminatr/internal/modbroker"
+	"github.com/theclifmeister/terminatr/internal/modstore"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
@@ -48,7 +48,7 @@ func TestModAnnotate(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := filepath.Join(tmHome, "state", "mods", "lab")
-	if got := modannot.Read(st, "lab", "demo")["task:T1"]; len(got) != 1 || got[0].Spans[0].Text != "docs" {
+	if got := modstore.ReadBadges(st, "lab", "demo")["task:T1"]; len(got) != 1 || got[0].Spans[0].Text != "docs" {
 		t.Fatalf("badges = %+v", got)
 	}
 	for name, m := range map[string]map[string]string{
@@ -68,7 +68,7 @@ func TestModAnnotate(t *testing.T) {
 	if err := call(map[string]any{"target": map[string]string{"project": "demo", "task": "T1"}, "key": "labels", "spans": nil}); err != nil {
 		t.Fatal(err)
 	}
-	if len(modannot.Read(st, "lab", "demo")) != 0 {
+	if len(modstore.ReadBadges(st, "lab", "demo")) != 0 {
 		t.Fatal("null did not remove")
 	}
 	lines, _, _ := p.JournalTail(5)

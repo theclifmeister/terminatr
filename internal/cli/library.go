@@ -56,7 +56,7 @@ func runLibrary(e *Env, args []string) error {
 			if task == "" {
 				task = "-"
 			}
-			fmt.Fprintf(e.Stdout, "%s  %s  %s  %s  %d bytes  %s\n", l.Time.Local().Format(time.DateOnly), task, l.Thread, l.Name, l.Size, l.State)
+			fmt.Fprintln(e.Stdout, shown(fmt.Sprintf("%s  %s  %s  %s  %d bytes  %s", l.Time.Local().Format(time.DateOnly), task, l.Thread, l.Name, l.Size, l.State)))
 		}
 		return nil
 	case "rm":

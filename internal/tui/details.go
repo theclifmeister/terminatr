@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/mod"
-	"github.com/theclifmeister/terminatr/internal/modannot"
+	"github.com/theclifmeister/terminatr/internal/modstore"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -31,7 +31,7 @@ func (m *dash) detailsLay(r row, w, h int) panelLay {
 	d := &panel{w: w}
 	switch {
 	case r.task != nil:
-		taskPanelWith(d, r.task, nil, m.asked(r.project, r.task), m.taskUsage(r.project, r.task.ID), m.badges(r.project, modannot.Task(r.task.Ref())))
+		taskPanelWith(d, r.task, nil, m.asked(r.project, r.task), m.taskUsage(r.project, r.task.ID), m.badges(r.project, modstore.Task(r.task.Ref())))
 	case r.thread != nil:
 		m.threadPanel(d, r)
 	case strings.HasPrefix(r.key, "p:"):
@@ -148,7 +148,7 @@ func (d *panel) title(text, state string) {
 // badges shows the mods' annotations under the title: per mod one line
 // of its badges. Spans are drawn in their theme role; the
 // text was cleaned by the store.
-func (d *panel) badges(bs []modannot.Badge) {
+func (d *panel) badges(bs []modstore.Badge) {
 	for i := 0; i < len(bs); {
 		j := i
 		for j < len(bs) && bs[j].Mod == bs[i].Mod {
@@ -192,7 +192,7 @@ func roleStyle(name string) lipgloss.Style {
 }
 
 // badges are the mods' annotations of target in project slug.
-func (m *dash) badges(slug, target string) []modannot.Badge {
+func (m *dash) badges(slug, target string) []modstore.Badge {
 	if p := m.projectData(slug); p != nil {
 		return p.Badges[target]
 	}
@@ -239,7 +239,7 @@ func (m *dash) threadPanel(d *panel, r row) {
 		}
 	}
 	d.title(threadName(t.Task, t.ID)+" "+t.Title, state)
-	d.badges(m.badges(r.project, modannot.Thread(t.ID)))
+	d.badges(m.badges(r.project, modstore.Thread(t.ID)))
 	d.field("project", r.project)
 	d.field("thread", t.ID)
 	d.field("session", t.Session)
@@ -298,7 +298,7 @@ func (m *dash) taskUsage(slug string, id int) thread.Usage {
 // what it is blocked on; for a task in review, how to check it and
 // whether its change shipped (rv, when known); and what the coordinator
 // was asked about it (asked, an item kind, "" for nothing).
-func taskPanelWith(d *panel, t *tasks.Task, rv *Review, asked string, usage thread.Usage, badges []modannot.Badge) {
+func taskPanelWith(d *panel, t *tasks.Task, rv *Review, asked string, usage thread.Usage, badges []modstore.Badge) {
 	d.title(t.Ref()+" "+t.Title, string(t.Status))
 	d.badges(badges)
 	d.field("thread", t.Thread)

@@ -134,8 +134,8 @@ type Options struct {
 	// mod.ready, never with what the old one held.
 	Subscribe func(id string, grants []string, projects func(slug string) bool) *modbus.Sub
 	// Broker answers a host's $ API request on conn; nil answers
-	// method-not-found.
-	Broker func(id string, conn *modproto.Conn, m *modproto.Message)
+	// method-not-found. ctx ends when the host does.
+	Broker func(ctx context.Context, id string, conn *modproto.Conn, m *modproto.Message)
 	// Logf is the server's log.
 	Logf func(format string, args ...any)
 	// Hello fills a hello's tm and API versions.

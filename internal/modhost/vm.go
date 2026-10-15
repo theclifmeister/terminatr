@@ -3,6 +3,7 @@ package modhost
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -203,15 +204,32 @@ func (h *Host) Dollar() *goja.Object { return h.dollar }
 // Hello is the server's hello: the mod's id, grants and settings.
 func (h *Host) Hello() modproto.Hello { return *h.hello }
 
+// CallsInFlight is how many calls a mod may have waiting for the
+// broker's answer; Call refuses the next until one is answered. The
+// server keeps its own limit (modCallsAtOnce plus those waiting).
+const CallsInFlight = 64
+
 // Call sends method to the server's broker with params (a JS value sent
 // as JSON; undefined sends none) and returns a promise of its result. A
-// broker error rejects it with an Error whose code is the JSON-RPC code.
+// broker error rejects it with an Error whose code is the JSON-RPC code;
+// a call past CallsInFlight is rejected with CodeFailed, unsent.
 func (h *Host) Call(method string, params goja.Value) *goja.Promise {
 	raw, err := h.toJSON(params)
 	if err != nil {
 		panic(h.vm.NewTypeError(method + ": params are not JSON: " + err.Error()))
 	}
 	p, resolve, reject := h.vm.NewPromise()
+	if len(h.pending) >= CallsInFlight {
+		obj, err := h.vm.New(h.errCtr, h.vm.ToValue(fmt.Sprintf("%s: too many calls in flight (%d); await their answers", method, CallsInFlight)))
+		if err != nil {
+			panic(err)
+		}
+		_ = obj.Set("code", modproto.CodeFailed)
+		if err := reject(obj); err != nil {
+			panic(err)
+		}
+		return p
+	}
 	h.nextID++
 	id := h.nextID
 	h.pending[id] = pendingCall{method: method, settle: func(res json.RawMessage, e *modproto.Error) error {

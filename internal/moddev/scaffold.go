@@ -1,6 +1,6 @@
 // Package moddev holds the mod author's tools (mods design §8, Dev
 // workflow): tm mod new's scaffolds, and the folder watch and log tail
-// of tm mod dev and tm mod logs. tm mod test is package modtest.
+// of tm mod dev and tm mod logs, and tm mod test's fixture runner.
 package moddev
 
 import (

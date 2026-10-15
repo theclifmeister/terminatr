@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // maxTitle caps the title column; longer titles end in "…".
@@ -12,34 +14,37 @@ const maxTitle = 60
 // Lines are the tasks' one-line forms ("T12  started  Fix login redirect
 // 2/3  t-0005  owner:claude") with their columns aligned, for
 // `tm task list` and `tm context`: id, status, title, steps, thread,
-// owner. A column no task has takes no room.
+// owner. A column no task has takes no room. What agents wrote is shown
+// as plain text (textsafe.Clean).
 func Lines(ts []*Task) []string {
 	// The id and status keep their old minimum widths, so a short list
 	// reads as it always did.
 	wRef, wStatus := 3, 7
 	var wTitle, wSteps, wThread int
 	steps := make([]string, len(ts))
+	titles, threads := make([]string, len(ts)), make([]string, len(ts))
 	for i, t := range ts {
+		titles[i], threads[i] = textsafe.Clean(t.Title, false), textsafe.Clean(t.Thread, false)
 		wRef = max(wRef, width(t.Ref()))
 		wStatus = max(wStatus, width(string(t.Status)))
-		wTitle = max(wTitle, min(width(t.Title), maxTitle))
+		wTitle = max(wTitle, min(width(titles[i]), maxTitle))
 		if len(t.Steps) > 0 {
 			steps[i] = fmt.Sprintf("%d/%d", t.StepsDone(), len(t.Steps))
 		}
 		wSteps = max(wSteps, width(steps[i]))
-		wThread = max(wThread, width(t.Thread))
+		wThread = max(wThread, width(threads[i]))
 	}
 	out := make([]string, len(ts))
 	for i, t := range ts {
-		cols := []string{pad(t.Ref(), wRef), pad(string(t.Status), wStatus), pad(clip(t.Title, maxTitle), wTitle)}
+		cols := []string{pad(t.Ref(), wRef), pad(string(t.Status), wStatus), pad(clip(titles[i], maxTitle), wTitle)}
 		if wSteps > 0 {
 			cols = append(cols, strings.Repeat(" ", wSteps-width(steps[i]))+steps[i])
 		}
 		if wThread > 0 {
-			cols = append(cols, pad(t.Thread, wThread))
+			cols = append(cols, pad(threads[i], wThread))
 		}
 		if t.Owner != "" {
-			cols = append(cols, "owner:"+t.Owner)
+			cols = append(cols, "owner:"+textsafe.Clean(t.Owner, false))
 		}
 		if t.Archived {
 			cols = append(cols, "(archived)")
@@ -61,14 +66,16 @@ func clip(s string, w int) string {
 	return string([]rune(s)[:w-1]) + "…"
 }
 
-// Detail is a task in full, for `tm task show`.
+// Detail is a task in full, for `tm task show`, what agents wrote shown
+// as plain text (textsafe.Clean).
 func Detail(t *Task) string {
+	one := func(s string) string { return textsafe.Clean(s, false) }
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s %s\n", t.Ref(), t.Title)
+	fmt.Fprintf(&b, "%s %s\n", t.Ref(), one(t.Title))
 	meta := []string{"status: " + string(t.Status)}
 	for _, kv := range [][2]string{{"owner", t.Owner}, {"thread", t.Thread}, {"created", t.Created}, {"updated", t.Updated}} {
 		if kv[1] != "" {
-			meta = append(meta, kv[0]+": "+kv[1])
+			meta = append(meta, kv[0]+": "+one(kv[1]))
 		}
 	}
 	if t.Archived {
@@ -76,7 +83,7 @@ func Detail(t *Task) string {
 	}
 	b.WriteString(strings.Join(meta, sep) + "\n")
 	if t.Notes != "" {
-		b.WriteString("\n" + t.Notes + "\n")
+		b.WriteString("\n" + textsafe.Clean(t.Notes, true) + "\n")
 	}
 	if len(t.Steps) > 0 {
 		fmt.Fprintf(&b, "\nSteps (%d/%d):\n", t.StepsDone(), len(t.Steps))
@@ -85,7 +92,7 @@ func Detail(t *Task) string {
 			if s.Done {
 				mark = "x"
 			}
-			fmt.Fprintf(&b, "%3d. [%s] %s\n", s.N, mark, s.Text)
+			fmt.Fprintf(&b, "%3d. [%s] %s\n", s.N, mark, one(s.Text))
 		}
 	}
 	return b.String()

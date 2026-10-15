@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
@@ -45,8 +46,14 @@ func (e *UnresponsiveError) Error() string {
 
 // Client is one connection to the server.
 type Client struct {
-	conn   net.Conn
-	br     *bufio.Reader
+	conn net.Conn
+	br   *bufio.Reader
+	// mu makes calls one at a time; broken, once set, is what every
+	// later call returns: a call whose answer didn't come whole (a
+	// timeout, an I/O error, another request's answer) leaves the
+	// connection mid-stream.
+	mu     sync.Mutex
+	broken error
 	nextID int64
 	// frameBuf is reused by ReadFrame.
 	frameBuf []byte
@@ -261,8 +268,30 @@ func waitUp(p Paths, exited <-chan error, logs string) error {
 }
 
 // Call sends one request and decodes its result into result (which may be
-// nil). A server-side failure is returned as *proto.Error.
+// nil). A server-side failure is returned as *proto.Error. Calls are one
+// at a time; after one fails other than with *proto.Error (the
+// connection's, or a timeout) the Client is broken and every later Call
+// fails with an error that wraps it: dial again.
 func (c *Client) Call(method string, params, result any) error {
+	return c.call(time.Time{}, method, params, result)
+}
+
+// CallWithin is Call that gives up after d: Dial clears the
+// connection's deadline after the handshake, so a plain Call waits as
+// long as the server takes. The deadline is cleared again after. A
+// Client that gave up is broken (Call): its answer may still come.
+func (c *Client) CallWithin(d time.Duration, method string, params, result any) error {
+	return c.call(time.Now().Add(d), method, params, result)
+}
+
+// call is Call with the connection's deadline set to deadline unless it
+// is zero.
+func (c *Client) call(deadline time.Time, method string, params, result any) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.broken != nil {
+		return c.broken
+	}
 	c.nextID++
 	req := proto.Request{ID: c.nextID, Method: method}
 	if params != nil {
@@ -272,11 +301,20 @@ func (c *Client) Call(method string, params, result any) error {
 		}
 		req.Params = b
 	}
-	if err := writeJSONLine(c.conn, req); err != nil {
-		return err
+	if !deadline.IsZero() {
+		c.conn.SetDeadline(deadline)
+		defer c.conn.SetDeadline(time.Time{})
 	}
 	var resp proto.Response
-	if err := readJSONLine(c.br, &resp); err != nil {
+	err := writeJSONLine(c.conn, req)
+	if err == nil {
+		err = readJSONLine(c.br, &resp)
+	}
+	if err == nil && resp.ID != req.ID {
+		err = fmt.Errorf("%s: the answer is to request %d, not %d", method, resp.ID, req.ID)
+	}
+	if err != nil {
+		c.broken = fmt.Errorf("the connection is unusable after %s failed (%w); dial again", method, err)
 		return err
 	}
 	if resp.Error != nil {
@@ -286,15 +324,6 @@ func (c *Client) Call(method string, params, result any) error {
 		return json.Unmarshal(resp.Result, result)
 	}
 	return nil
-}
-
-// CallWithin is Call that gives up after d: Dial clears the
-// connection's deadline after the handshake, so a plain Call waits as
-// long as the server takes. The deadline is cleared again after.
-func (c *Client) CallWithin(d time.Duration, method string, params, result any) error {
-	c.conn.SetDeadline(time.Now().Add(d))
-	defer c.conn.SetDeadline(time.Time{})
-	return c.Call(method, params, result)
 }
 
 // Close closes the connection.
