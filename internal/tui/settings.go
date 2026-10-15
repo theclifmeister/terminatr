@@ -328,8 +328,8 @@ func globalSettings(note string) []setting {
 		{label: "Sidebar", help: "The projects sidebar: full, the slim strip or hidden (⚑ N in the header counts what needs you; b on the dashboard). Every console of this view follows.",
 			value:  func(m *dash) string { return m.layout.mode() },
 			change: func(m *dash) tea.Cmd { return m.sideKey("b") }},
-		{label: "Theme", help: "The colours of every part of tm: the built-in one, on your terminal's own 16 colours, or a theme from a mod that is on, which may differ light and dark. Each console follows its terminal's light or dark scheme.",
-			value: func(m *dash) string { return themeSetting() },
+		{label: "Theme", help: "The colours of every part of tm: follow terminal, the built-in one, which uses your terminal's own theme (Ghostty's, say) in tm and in the panes, Claude's too, or a theme from a mod that is on, which may differ light and dark. Each console follows its terminal's light or dark scheme.",
+			value: func(m *dash) string { return themeLabel(themeSetting()) },
 			change: func(m *dash) tea.Cmd {
 				choices := modChoices([]string{ThemeDefault}, mod.KindTheme)
 				next := choices[(slices.Index(choices, themeSetting())+1)%len(choices)]
@@ -428,12 +428,16 @@ func agentModRow(label, help, key string, field func(m *dash) *bool, msg string)
 // unset. err says why a mod's didn't load, and so the built-in
 // one is in use.
 func (m *dash) pickMod(key, value string, err error) tea.Cmd {
-	msg := key + ": " + value + "; consoles started earlier pick it up when they next open"
+	shown := value
+	if key == "theme" {
+		shown = themeLabel(value)
+	}
+	msg := key + ": " + shown + "; consoles started earlier pick it up when they next open"
 	if key == "layout" {
 		msg = key + ": " + value
 	}
 	if err != nil {
-		msg = key + ": " + value + " doesn't load (" + oneLine(err.Error()) + "); the built-in one is used"
+		msg = key + ": " + shown + " doesn't load (" + oneLine(err.Error()) + "); the built-in one is used"
 	}
 	var v any = value
 	if value == ThemeDefault {

@@ -328,4 +328,22 @@ func TestThemeChangeReachesClaude(t *testing.T) {
 	if ct := read(); ct.Base != "light" || len(ct.Overrides) != 0 {
 		t.Fatalf("no pane palette: %+v", ct)
 	}
+	// The built-in theme follows the terminal: Claude's ANSI theme for
+	// the scheme over the user's own, live.
+	if err := os.WriteFile(cfgPath, []byte("[ui]\ntheme = \"default\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.mu.Lock()
+	s.themeChangedLocked()
+	s.mu.Unlock()
+	if ct := read(); ct.Base != "light-ansi" || len(ct.Overrides) != 0 {
+		t.Fatalf("follow terminal, light: %+v", ct)
+	}
+	s.mu.Lock()
+	s.scheme = emu.SchemeDark
+	s.themeChangedLocked()
+	s.mu.Unlock()
+	if ct := read(); ct.Base != "dark-ansi" {
+		t.Fatalf("follow terminal, dark: %+v", ct)
+	}
 }

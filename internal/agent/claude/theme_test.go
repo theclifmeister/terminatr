@@ -49,7 +49,7 @@ func TestWriteTheme(t *testing.T) {
 	}
 	write := func(t0 *theme.Agent, scheme string) claudeTheme {
 		t.Helper()
-		if err := lt.WriteTheme("/no/home", t0, scheme); err != nil {
+		if err := lt.WriteTheme("/no/home", t0, scheme, false); err != nil {
 			t.Fatal(err)
 		}
 		return read()
@@ -111,6 +111,23 @@ func TestWriteTheme(t *testing.T) {
 	if ct := write(nil, "dark"); ct.Base != "light-ansi" || ct.Overrides["claude"] != "#010203" {
 		t.Fatalf("palette gone: %+v", ct)
 	}
+	// The built-in tm theme follows the terminal: Claude's ANSI theme
+	// for the scheme, whatever the user's own, dark for an unknown one.
+	for scheme, want := range map[string]string{"dark": "dark-ansi", "light": "light-ansi", "": "dark-ansi"} {
+		if err := lt.WriteTheme("/no/home", nil, scheme, true); err != nil {
+			t.Fatal(err)
+		}
+		if ct := read(); ct.Base != want || len(ct.Overrides) != 0 {
+			t.Fatalf("follow terminal, scheme %q: %+v", scheme, ct)
+		}
+	}
+	// A pane palette wins over it.
+	if err := lt.WriteTheme("/no/home", th, "light", true); err != nil {
+		t.Fatal(err)
+	}
+	if ct := read(); ct.Base != "dark-ansi" || ct.Overrides["claude"] != "#88c0d0" {
+		t.Fatalf("pane palette under follow terminal: %+v", ct)
+	}
 
 	entries, _ := os.ReadDir(filepath.Join(cfg, "themes"))
 	var names []string
@@ -130,7 +147,7 @@ func TestWriteTheme(t *testing.T) {
 func TestWriteThemeHome(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	home := t.TempDir()
-	if err := load(t).(agent.LiveThemer).WriteTheme(home, nil, "dark"); err != nil {
+	if err := load(t).(agent.LiveThemer).WriteTheme(home, nil, "dark", false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(home, ".claude", "themes", "terminatr.json")); err != nil {
@@ -167,7 +184,7 @@ func TestLiveThemeRender(t *testing.T) {
 				"bad": "", "warn": "", "good": "", "info": "", "plain": ""},
 			Bg: map[string]string{"sel": ""}}
 	}
-	if err := lt.WriteTheme("", accent("dark", "#010203"), "dark"); err != nil {
+	if err := lt.WriteTheme("", accent("dark", "#010203"), "dark", false); err != nil {
 		t.Fatal(err)
 	}
 	cmd := exec.Command(claude, "--settings", `{"theme": "custom:terminatr"}`)
@@ -217,11 +234,11 @@ func TestLiveThemeRender(t *testing.T) {
 		return 0
 	}
 	at := waitFor("1;2;3", 0)
-	if err := lt.WriteTheme("", accent("dark", "#040506"), "dark"); err != nil {
+	if err := lt.WriteTheme("", accent("dark", "#040506"), "dark", false); err != nil {
 		t.Fatal(err)
 	}
 	at = waitFor("4;5;6", at)
-	if err := lt.WriteTheme("", accent("light", "#070809"), "light"); err != nil {
+	if err := lt.WriteTheme("", accent("light", "#070809"), "light", false); err != nil {
 		t.Fatal(err)
 	}
 	waitFor("7;8;9", at)

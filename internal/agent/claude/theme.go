@@ -49,15 +49,20 @@ type themeData struct {
 	Overrides map[string]json.RawMessage
 }
 
-// WriteTheme writes Claude's tm theme for t (nil: the user's own theme)
-// into its config folder, when its content changes.
-func (a *Agent) WriteTheme(home string, t *theme.Agent, scheme string) error {
+// WriteTheme writes Claude's tm theme for t into its config folder,
+// when its content changes. With t nil it is Claude's ANSI theme for
+// the scheme when terminal (the built-in tm theme, which follows the
+// terminal's colours), else the user's own theme.
+func (a *Agent) WriteTheme(home string, t *theme.Agent, scheme string, terminal bool) error {
 	if a.m.Theme.Path == "" {
 		return errors.New("claude: the manifest has no theme")
 	}
 	dir := configDir(home)
 	data := themeData{Theme: t}
-	if t == nil {
+	switch {
+	case t == nil && terminal:
+		data.Base, data.Overrides = ansiTheme(scheme), map[string]json.RawMessage{}
+	case t == nil:
 		data.Base, data.Overrides = userTheme(dir, strings.TrimSuffix(a.m.Theme.Path, ".json"), scheme)
 	}
 	s, err := a.m.RenderTheme(data)
@@ -72,6 +77,16 @@ func (a *Agent) WriteTheme(home string, t *theme.Agent, scheme string) error {
 		return err
 	}
 	return fsx.WriteAtomic(path, []byte(s), 0o644)
+}
+
+// ansiTheme is Claude's theme over the terminal's 16 ANSI colours for
+// the scheme, dark when it is unknown: the panes then draw it in the
+// terminal's own palette, as they do the shell's.
+func ansiTheme(scheme string) string {
+	if scheme == "light" {
+		return "light-ansi"
+	}
+	return "dark-ansi"
 }
 
 // userTheme is the user's own Claude theme, as a base and overrides: the

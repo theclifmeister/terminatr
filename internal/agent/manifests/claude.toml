@@ -161,9 +161,11 @@ template = '''
 # states, faint for what's dimmed, and backgrounds a shade off the
 # pane's (the selection's too: Claude draws its text over it, not sel's
 # fg). A colour the theme doesn't give is left out (the base's).
-# Without one it is the user's own Claude theme (.Base, .Overrides,
-# which the server reads from their settings and themes), so the panes
-# look as they would without tm. Claude ignores a token or colour it
+# Without one it is Claude's ANSI theme for the scheme under the
+# built-in tm theme (follow terminal: .Base dark-ansi or light-ansi), so
+# Claude takes the terminal's own colours, else the user's own Claude
+# theme (.Base, .Overrides, which the server reads from their settings
+# and themes), so the panes look as they would without tm. Claude ignores a token or colour it
 # doesn't know.
 [theme]
 path = "themes/terminatr.json"

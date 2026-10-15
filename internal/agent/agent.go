@@ -346,11 +346,14 @@ type Truster interface {
 // (docs/SPEC.md §8.6): the core writes it before each launch and again
 // on every change of the tm theme or the scheme. t is the tm theme's
 // colours for the pane palette's scheme, nil without one; scheme is
-// the terminal's, "dark", "light" or "" when unknown. home is the
+// the terminal's, "dark", "light" or "" when unknown; terminal says the
+// tm theme is the built-in one, which follows the terminal's own
+// colours, so with t nil the agent follows them too (its theme over the
+// 16 ANSI colours) rather than keeping the user's own. home is the
 // user's home directory. It writes only when the content changes, and
 // reports whether the file is in place.
 type LiveThemer interface {
-	WriteTheme(home string, t *theme.Agent, scheme string) error
+	WriteTheme(home string, t *theme.Agent, scheme string, terminal bool) error
 }
 
 // Mover is an Agent that keeps state by folder path (conversations to
