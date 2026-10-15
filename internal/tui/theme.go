@@ -290,6 +290,14 @@ func keysLine(keys string) string {
 	return strings.Join(parts, th().Faint.Render(" · "))
 }
 
+// stepStatus is a plan step's status for todoGlyph.
+func stepStatus(done bool) string {
+	if done {
+		return "done"
+	}
+	return ""
+}
+
 // todoGlyph is a todo or step's box: ✓ done, ◐ in progress, ○ to do.
 func todoGlyph(status string) string {
 	switch status {

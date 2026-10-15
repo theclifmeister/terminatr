@@ -201,7 +201,12 @@ func (l *settingsList) click(m *dash, item, col int) tea.Cmd {
 }
 
 // onOff is a bool as the settings show it.
-func onOff(b bool) string { return map[bool]string{true: "on", false: "off"}[b] }
+func onOff(b bool) string {
+	if b {
+		return "on"
+	}
+	return "off"
+}
 
 // setSetting changes a setting in the background, then reloads.
 func (m *dash) setSetting(table, key string, value any, msg string) tea.Cmd {

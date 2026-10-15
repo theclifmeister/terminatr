@@ -322,7 +322,7 @@ func taskPanelWith(d *panel, t *tasks.Task, rv *Review, asked string, usage thre
 		d.section("STEPS", "")
 		d.add(progressLine(thread.Progress{Percent: pctOf(t.StepsDone(), len(t.Steps)), Done: t.StepsDone(), Total: len(t.Steps)}))
 		for _, s := range t.Steps {
-			d.add(fmt.Sprintf("%s %d %s", todoGlyph(map[bool]string{true: "done"}[s.Done]), s.N, oneLine(s.Text)))
+			d.add(fmt.Sprintf("%s %d %s", todoGlyph(stepStatus(s.Done)), s.N, oneLine(s.Text)))
 		}
 	}
 	if notes := strings.TrimSpace(t.Notes); notes != "" {
@@ -334,12 +334,7 @@ func taskPanelWith(d *panel, t *tasks.Task, rv *Review, asked string, usage thre
 }
 
 func (m *dash) projectPanel(d *panel, r row) {
-	var p *ProjectData
-	for i := range m.data.Projects {
-		if m.data.Projects[i].Slug == r.project {
-			p = &m.data.Projects[i]
-		}
-	}
+	p := m.projectData(r.project)
 	if p == nil {
 		return
 	}
