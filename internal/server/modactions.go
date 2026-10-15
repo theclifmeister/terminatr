@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modaction"
 	"github.com/theclifmeister/terminatr/internal/modapi"
@@ -181,9 +182,9 @@ func (l *liveActions) Session(id string) bool {
 // modBinding checks, for a console, that enabled mod id may bind action
 // on target: the action is bindable, the target of its shape and in the
 // mod's reach (modActionScope). Human-only: only a human's console asks.
-func (s *Server) modBinding(id, action string, target map[string]string, peerPID int) (modaction.Target, *proto.Error) {
+func (s *Server) modBinding(id, action string, target map[string]string, who caller.Caller) (modaction.Target, *proto.Error) {
 	t := modaction.TargetOf(target)
-	if s.callerOf(peerPID).IsAgent() {
+	if who.IsAgent() {
 		return t, proto.Errorf("human-only", "only a human's console presses a mod's binding")
 	}
 	m, ok := s.modNamed(id)
@@ -207,8 +208,8 @@ func (s *Server) modBinding(id, action string, target map[string]string, peerPID
 // its mod's reach, asked before the console runs it. In reach, it
 // answers a press token for that console and binding, which the
 // console's mod.action.done must present.
-func (s *Server) modActionCheck(p proto.ModActionParams, peerPID int) (any, *proto.Error) {
-	t, perr := s.modBinding(p.Mod, p.Action, p.Target, peerPID)
+func (s *Server) modActionCheck(p proto.ModActionParams, peerPID int, who caller.Caller) (any, *proto.Error) {
+	t, perr := s.modBinding(p.Mod, p.Action, p.Target, who)
 	if perr != nil {
 		return nil, perr
 	}
@@ -222,8 +223,8 @@ func (s *Server) modActionCheck(p proto.ModActionParams, peerPID int) (any, *pro
 // console's mod.action.check gave for it, used once: so a done follows
 // a check for that very press, and one check makes at most one done.
 // The event goes to that mod alone.
-func (s *Server) modActionDone(p proto.ModActionDoneParams, peerPID int) (any, *proto.Error) {
-	t, perr := s.modBinding(p.Mod, p.Action, p.Target, peerPID)
+func (s *Server) modActionDone(p proto.ModActionDoneParams, peerPID int, who caller.Caller) (any, *proto.Error) {
+	t, perr := s.modBinding(p.Mod, p.Action, p.Target, who)
 	if perr != nil {
 		return nil, perr
 	}

@@ -278,8 +278,11 @@ const viewRejoinWait = 10 * time.Second
 // than old, and returns it, or "" when it did not happen or the
 // connection was closed.
 func (vc *ViewConn) waitRejoin(old string, d time.Duration) string {
-	deadline := time.Now().Add(d)
-	for time.Now().Before(deadline) {
+	ch, stop := vc.Watch()
+	defer stop()
+	timeout := time.NewTimer(d)
+	defer timeout.Stop()
+	for {
 		vc.mu.Lock()
 		client, up, closed := vc.client, vc.up, vc.closed
 		vc.mu.Unlock()
@@ -289,9 +292,12 @@ func (vc *ViewConn) waitRejoin(old string, d time.Duration) string {
 		if up && client != old {
 			return client
 		}
-		time.Sleep(20 * time.Millisecond)
+		select {
+		case <-ch:
+		case <-timeout.C:
+			return ""
+		}
 	}
-	return ""
 }
 
 // call makes one call on the call connection.

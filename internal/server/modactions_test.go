@@ -139,7 +139,7 @@ func TestModActionDone(t *testing.T) {
 	target := map[string]string{"project": "demo", "task": "T2"}
 	press := proto.ModActionParams{Mod: "lab", Action: "task.accept", Target: target}
 	tok := checkToken(t, s, press, pid)
-	if _, perr := s.modActionDone(proto.ModActionDoneParams{ModActionParams: press, OK: true, Token: tok}, pid); perr != nil {
+	if _, perr := s.modActionDone(proto.ModActionDoneParams{ModActionParams: press, OK: true, Token: tok}, pid, s.callerOf(pid)); perr != nil {
 		t.Fatal(perr)
 	}
 	ev, err := sub.Next(ctx)
@@ -157,22 +157,22 @@ func TestModActionDone(t *testing.T) {
 		{ModActionParams: proto.ModActionParams{Mod: "lab", Action: "task.accept", Target: map[string]string{"project": "other", "task": "T1"}}},
 		{ModActionParams: proto.ModActionParams{Mod: "lab", Action: "session.attach", Target: map[string]string{"session": "s-none"}}},
 	} {
-		if _, perr := s.modActionDone(p, pid); perr == nil {
+		if _, perr := s.modActionDone(p, pid, s.callerOf(pid)); perr == nil {
 			t.Errorf("%+v accepted", p)
 		}
 		// The console's check before it runs a binding refuses the same.
-		if _, perr := s.modActionCheck(p.ModActionParams, pid); perr == nil {
+		if _, perr := s.modActionCheck(p.ModActionParams, pid, s.callerOf(pid)); perr == nil {
 			t.Errorf("check %+v accepted", p)
 		}
 	}
-	if _, perr := s.modActionCheck(press, pid); perr != nil {
+	if _, perr := s.modActionCheck(press, pid, s.callerOf(pid)); perr != nil {
 		t.Errorf("check of a binding in reach: %v", perr)
 	}
 }
 
 func checkToken(t *testing.T, s *Server, p proto.ModActionParams, pid int) string {
 	t.Helper()
-	res, perr := s.modActionCheck(p, pid)
+	res, perr := s.modActionCheck(p, pid, s.callerOf(pid))
 	r, _ := res.(proto.ModActionCheckResult)
 	if perr != nil || r.Token == "" {
 		t.Fatalf("check %+v = %+v, %v", p, res, perr)
@@ -196,7 +196,7 @@ func TestModActionDoneToken(t *testing.T) {
 	accept := proto.ModActionParams{Mod: "lab", Action: "task.accept", Target: map[string]string{"project": "demo", "task": "T2"}}
 	show := proto.ModActionParams{Mod: "lab", Action: "task.show", Target: map[string]string{"project": "demo", "task": "T2"}}
 	done := func(p proto.ModActionParams, tok string, pid int) *proto.Error {
-		_, perr := s.modActionDone(proto.ModActionDoneParams{ModActionParams: p, OK: true, Token: tok}, pid)
+		_, perr := s.modActionDone(proto.ModActionDoneParams{ModActionParams: p, OK: true, Token: tok}, pid, s.callerOf(pid))
 		return perr
 	}
 	if done(accept, "", pid) == nil {

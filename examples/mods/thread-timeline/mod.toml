@@ -5,7 +5,7 @@
 id = "thread-timeline"
 name = "Thread timeline"
 version = "1.0.0"
-api = "1.0"
+api = "1.7"
 description = "Each thread as a row of its state changes over time (working, waiting, review), with a chart of the changes per hour."
 authors = ["terminatr"]
 homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/thread-timeline"
