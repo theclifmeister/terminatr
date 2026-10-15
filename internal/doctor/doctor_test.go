@@ -940,8 +940,13 @@ func TestSandboxCheck(t *testing.T) {
 		t.Errorf("%+v", c)
 	}
 	d.SandboxProbe = func(agent.SandboxProber) (string, error) { return "0.160.0", nil }
-	if c = sandboxCheck(d, "codex", m, fakeProber{}); c.Status != OK || !strings.Contains(c.Detail, "codex 0.160.0") {
+	if c = sandboxCheck(d, "codex", m, fakeProber{}); c.Status != OK || !strings.Contains(c.Detail, "codex 0.160.0: the network reaches only tm's socket") {
 		t.Errorf("%+v", c)
+	}
+	// On Windows the network is off, not limited to tm's socket.
+	d.GOOS = "windows"
+	if c = sandboxCheck(d, "codex", m, fakeProber{}); c.Status != OK || !strings.Contains(c.Detail, "reach tm's socket; its network is off only through proxy settings") {
+		t.Errorf("windows: %+v", c)
 	}
 }
 
