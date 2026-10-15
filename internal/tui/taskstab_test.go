@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modview"
@@ -176,7 +177,7 @@ func tasksCursor(m *dash, f *fakeSource) string {
 
 // pressKey presses a key and runs what it starts, a bound action's
 // check and run included.
-func pressKey(m *dash, name string) { runAll(m, keyPress(m, name)) }
+func pressKey(t testing.TB, m *dash, name string) { drain(t, m, keyPress(m, name)) }
 
 // feed runs cmd, each of a batch's, and gives m what it came to, as the
 // program would (without following what that returns): a key that opens

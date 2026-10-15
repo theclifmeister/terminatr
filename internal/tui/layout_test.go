@@ -370,12 +370,12 @@ func TestDetailsBottom(t *testing.T) {
 
 	// The wheel over the panel scrolls it; over the list it moves.
 	first := screen(m)
-	mouseAt(m, tea.MouseWheelDown, g.details().x+5, g.details().y+2)
+	mouseAt(t, m, tea.MouseWheelDown, g.details().x+5, g.details().y+2)
 	if m.sel != "th:beta:t-0005" || screen(m) == first || m.detailTop != 3 {
 		t.Fatalf("the wheel over the panel: sel %s top %d", m.sel, m.detailTop)
 	}
 	// The keys too, once it has the keyboard.
-	mouseAt(m, tea.MouseLeft, g.details().x+5, g.details().y+2)
+	mouseAt(t, m, tea.MouseLeft, g.details().x+5, g.details().y+2)
 	if m.focus != areaDetails {
 		t.Fatalf("a click on the panel: focus %d", m.focus)
 	}
@@ -384,7 +384,7 @@ func TestDetailsBottom(t *testing.T) {
 		t.Fatalf("up in the panel: top %d sel %s", m.detailTop, m.sel)
 	}
 	keyPress(m, "esc")
-	mouseAt(m, tea.MouseWheelDown, g.list().x+5, g.list().y+2)
+	mouseAt(t, m, tea.MouseWheelDown, g.list().x+5, g.list().y+2)
 	if m.sel == "th:beta:t-0005" {
 		t.Fatal("the wheel over the list didn't move")
 	}

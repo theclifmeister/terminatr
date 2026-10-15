@@ -58,7 +58,7 @@ func TestDashboardSidebar(t *testing.T) {
 	// A thread row attaches its session, even from under a popup; one
 	// without a session says why.
 	press(m, "?")
-	run(m, m.sideClick(tea.Mouse{X: 5, Y: 5, Button: tea.MouseLeft}))
+	drain(t, m, m.sideClick(tea.Mouse{X: 5, Y: 5, Button: tea.MouseLeft}))
 	if m.top() != nil || m.result.Attach != "s-5" {
 		t.Fatalf("thread click: attach %q", m.result.Attach)
 	}
@@ -76,7 +76,7 @@ func TestDashboardSidebar(t *testing.T) {
 		t.Fatalf("project click: current %q sel %q opened %v:\n%s", m.current, m.sel, src.opened, whole(m))
 	}
 	// Its coordinator row opens the coordinator.
-	run(m, m.sideClick(tea.Mouse{X: 5, Y: 2, Button: tea.MouseLeft}))
+	drain(t, m, m.sideClick(tea.Mouse{X: 5, Y: 2, Button: tea.MouseLeft}))
 	if len(src.opened) != 1 || src.opened[0] != "alpha" || m.result.Attach != "s-alpha" {
 		t.Fatalf("coordinator click opened %v, attach %q", src.opened, m.result.Attach)
 	}
@@ -316,17 +316,17 @@ func TestDashboardSidebarKeys(t *testing.T) {
 	}
 	// A preview the cursor moved on from shows nothing; the last one
 	// shows the thread's session, the keyboard still in the sidebar.
-	run(m, m.preview(m.previewSeq-1))
+	drain(t, m, m.preview(m.previewSeq-1))
 	if m.result.Attach != "" {
 		t.Fatalf("a stale preview attached %q", m.result.Attach)
 	}
-	run(m, m.preview(m.previewSeq))
+	drain(t, m, m.preview(m.previewSeq))
 	if m.result.Attach != "s-5" || m.focus != areaSide {
 		t.Fatalf("preview of t-0005: attach %q, focus %d", m.result.Attach, m.focus)
 	}
 	// enter on a thread attaches it, and the keyboard goes with it.
 	m.result, m.busy = DashResult{}, false
-	run(m, keyPress(m, "enter"))
+	drain(t, m, keyPress(m, "enter"))
 	if m.result.Attach != "s-5" || m.focus != areaMain {
 		t.Fatalf("enter on t-0005: attach %q, focus %d", m.result.Attach, m.focus)
 	}
@@ -347,7 +347,7 @@ func TestDashboardSidebarKeys(t *testing.T) {
 	if cursor() != "p:alpha" {
 		t.Fatalf("cursor %q", cursor())
 	}
-	run(m, m.preview(m.previewSeq))
+	drain(t, m, m.preview(m.previewSeq))
 	if m.current != "alpha" || m.focus != areaSide {
 		t.Fatalf("preview of alpha: current %q, focus %d", m.current, m.focus)
 	}
@@ -408,14 +408,14 @@ func TestEverySidebarClickHasKey(t *testing.T) {
 	for i, r := range rows {
 		for what, x := range map[string]int{"row": 5, "first column": 0} {
 			m, src := fresh()
-			run(m, m.sideClick(tea.Mouse{X: x, Y: i + 1, Button: tea.MouseLeft}))
+			drain(t, m, m.sideClick(tea.Mouse{X: x, Y: i + 1, Button: tea.MouseLeft}))
 			byMouse := of(m, src)
 
 			k, ksrc := fresh()
 			keyPress(k, "tab")
 			k.sideSel = r.key()
 			key := "enter"
-			run(k, keyPress(k, key))
+			drain(t, k, keyPress(k, key))
 			byKey := of(k, ksrc)
 			byKey.sel, byMouse.sel = "", "" // the cursor isn't the list's selection
 			if fmt.Sprint(byKey) != fmt.Sprint(byMouse) {
@@ -640,7 +640,7 @@ func TestClickFocus(t *testing.T) {
 
 	// A thread row attaches its session and keeps the sidebar's keyboard,
 	// cursor on the thread.
-	run(m, m.sideClick(tea.Mouse{X: 5, Y: 5, Button: tea.MouseLeft}))
+	drain(t, m, m.sideClick(tea.Mouse{X: 5, Y: 5, Button: tea.MouseLeft}))
 	if m.result.Attach != "s-5" || m.focus != areaSide || cursor() != "t:beta/t-0005" {
 		t.Fatalf("thread click: attach %q focus %d cursor %q", m.result.Attach, m.focus, cursor())
 	}
@@ -653,7 +653,7 @@ func TestClickFocus(t *testing.T) {
 	}
 	// enter on the thread gives the session the keyboard.
 	keyPress(m, "up")
-	run(m, keyPress(m, "enter"))
+	drain(t, m, keyPress(m, "enter"))
 	if m.result.Attach != "s-5" || m.focus != areaMain {
 		t.Fatalf("enter on t-0005: attach %q focus %d", m.result.Attach, m.focus)
 	}
@@ -895,7 +895,7 @@ func TestSidebarProjectsHeader(t *testing.T) {
 	if foot := strings.Join(sidebarOf(m), "\n"); !strings.Contains(foot, "all projects") || !strings.Contains(foot, "show all") {
 		t.Errorf("the footer says nothing of the header:\n%s", foot)
 	}
-	runAll(m, keyPress(m, "enter"))
+	drain(t, m, keyPress(m, "enter"))
 	if !m.allShown() || m.focus != areaMain || !strings.Contains(screen(m), "tm dashboard · all projects") {
 		t.Fatalf("enter on PROJECTS: current %q focus %v\n%s", m.current, m.focus, screen(m))
 	}

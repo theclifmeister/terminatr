@@ -65,7 +65,7 @@ func TestCatalogPage(t *testing.T) {
 	// Add one the agent doesn't list; one it offers, or not one word,
 	// is refused.
 	keyPress(m, "a")
-	run(m, typeLine(m, "mine-1"))
+	drain(t, m, typeLine(m, "mine-1"))
 	if got := saved(t); !slices.Equal(got.Add, []string{"mine-1"}) {
 		t.Fatalf("after add: %+v", got)
 	}
@@ -85,11 +85,11 @@ func TestCatalogPage(t *testing.T) {
 
 	// The default, on and off again.
 	v.sel = 1 // alpha
-	run(m, keyPress(m, "*"))
+	drain(t, m, keyPress(m, "*"))
 	if got := saved(t); got.DefaultModel != "alpha" {
 		t.Fatalf("after default: %+v", got)
 	}
-	run(m, keyPress(m, "*"))
+	drain(t, m, keyPress(m, "*"))
 	if got := saved(t); got.DefaultModel != "" {
 		t.Fatalf("after default off: %+v", got)
 	}
@@ -100,7 +100,7 @@ func TestCatalogPage(t *testing.T) {
 	if !strings.Contains(m.msg, "h hides it") {
 		t.Fatalf("d on a listed model: %q", m.msg)
 	}
-	run(m, keyPress(m, "h"))
+	drain(t, m, keyPress(m, "h"))
 	if got := saved(t); !slices.Equal(got.Hide, []string{"beta"}) {
 		t.Fatalf("after hide: %+v", got)
 	}
@@ -109,7 +109,7 @@ func TestCatalogPage(t *testing.T) {
 	}
 	// Remove mine-1, the one added.
 	v.sel = slices.IndexFunc(v.items(), func(it catalogItem) bool { x, ok := v.model(it); return ok && x.Name == "mine-1" })
-	run(m, keyPress(m, "d"))
+	drain(t, m, keyPress(m, "d"))
 	if got := saved(t); len(got.Add) != 0 {
 		t.Fatalf("after remove: %+v", got)
 	}
@@ -123,17 +123,17 @@ func TestCatalogPage(t *testing.T) {
 		t.Fatalf("refused:\n%s", screen(m))
 	}
 	v.sel = slices.IndexFunc(v.items(), func(it catalogItem) bool { x, ok := v.model(it); return ok && x.Name == "alpha" })
-	run(m, keyPress(m, "u"))
+	drain(t, m, keyPress(m, "u"))
 	if c, _ := models.Load("claude"); len(c.Refused) != 0 {
 		t.Fatalf("still refused: %+v", c.Refused)
 	}
 
 	// R asks again; r goes back to what the agent lists.
-	run(m, keyPress(m, "R"))
+	drain(t, m, keyPress(m, "R"))
 	if !slices.Contains(src.settings, "refresh claude") {
 		t.Fatalf("no refresh: %v", src.settings)
 	}
-	run(m, keyPress(m, "r"))
+	drain(t, m, keyPress(m, "r"))
 	if got := saved(t); !got.Empty() {
 		t.Fatalf("after reset: %+v", got)
 	}
@@ -188,7 +188,7 @@ func TestModelsSettingStale(t *testing.T) {
 	for range 3 {
 		keyPress(m, "down")
 	}
-	run(m, keyPress(m, "enter"))
+	drain(t, m, keyPress(m, "enter"))
 	cfg, _ := config.Load()
 	if s, _ := cfg.AllProjects(); !slices.Equal(s.Models, []string{"alpha"}) {
 		t.Fatalf("saved %v", s.Models)

@@ -71,24 +71,24 @@ func TestDetailsSectionKeys(t *testing.T) {
 		t.Fatalf("[ round the top: %q", m.detSel)
 	}
 	keyPress(m, "[")
-	runAll(m, keyPress(m, "left"))
+	drain(t, m, keyPress(m, "left"))
 	if !m.folds.IsSectionFolded("panel:ci.checks") || !strings.Contains(whole(m), "▸ CHECKS") || strings.Contains(whole(m), "#408") {
 		t.Fatalf("← didn't fold checks: %v\n%s", m.folds.SectionsFolded, whole(m))
 	}
 	if !strings.Contains(whole(m), "1 ☒") {
 		t.Fatalf("a folded header keeps its badge:\n%s", whole(m))
 	}
-	runAll(m, keyPress(m, "right"))
+	drain(t, m, keyPress(m, "right"))
 	if m.folds.IsSectionFolded("panel:ci.checks") {
 		t.Fatal("→ didn't unfold it")
 	}
-	runAll(m, keyPress(m, "enter"))
+	drain(t, m, keyPress(m, "enter"))
 	want := proto.ModViewInputParams{Mod: "ci", View: "checks", Project: "beta", Kind: widget.EventClick}
 	if len(src.inputs) != 1 || src.inputs[0] != want || m.result.Attach != "" {
 		t.Fatalf("enter sent %+v, attach %q", src.inputs, m.result.Attach)
 	}
 	keyPress(m, "]") // notes: no view to open, so enter folds it
-	runAll(m, keyPress(m, "enter"))
+	drain(t, m, keyPress(m, "enter"))
 	if !m.folds.IsSectionFolded("panel:notes.n") || len(src.inputs) != 1 {
 		t.Fatalf("enter on notes: %v %+v", m.folds.SectionsFolded, src.inputs)
 	}
@@ -112,7 +112,7 @@ func TestDetailsSectionKeys(t *testing.T) {
 	// No sections: ] and enter are the list's.
 	src, m = detailsDash(t, nil)
 	m.current = "alpha"
-	run(m, press(m, "]"))
+	drain(t, m, press(m, "]"))
 	if got := strings.Join(src.opened, ","); got != "beta" || m.detSel != "" {
 		t.Fatalf("] without sections: opened %q, selection %q", got, m.detSel)
 	}
@@ -140,7 +140,7 @@ func TestDetailsSectionMouse(t *testing.T) {
 	}
 	click := func(x, y int) {
 		_, cmd := m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
-		runAll(m, cmd)
+		drain(t, m, cmd)
 	}
 	click(dr.x+1, lineOf("CHECKS"))
 	if !m.folds.IsSectionFolded("panel:ci.checks") || m.detSel != "panel:ci.checks" || m.focus != areaDetails || len(src.inputs) != 0 {

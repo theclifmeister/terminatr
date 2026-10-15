@@ -59,8 +59,8 @@ func keyPress(m *dash, name string) tea.Cmd {
 
 // act presses a key and runs the action it starts, then polls again;
 // the Tasks tab mod draws the board again.
-func act(m *dash, src *fakeSource, name string) {
-	run(m, keyPress(m, name))
+func act(t testing.TB, m *dash, src *fakeSource, name string) {
+	drain(t, m, keyPress(m, name))
 	m.setData(src.Load())
 	tasksTabNow(m, src)
 }
@@ -159,7 +159,7 @@ func TestProjectSettingsToggle(t *testing.T) {
 	src, m := popupData(t)
 	keyPress(m, "a")
 	keyPress(m, "4")
-	act(m, src, "enter") // start threads
+	act(t, m, src, "enter") // start threads
 	if !strings.Contains(screen(m), "automatically") {
 		t.Fatalf("start threads didn't change:\n%s", screen(m))
 	}
@@ -173,16 +173,16 @@ func TestProjectSettingsToggle(t *testing.T) {
 
 	// Yolo asks first: n keeps it off, y turns it on.
 	keyPress(m, "down")
-	act(m, src, "space")
+	act(t, m, src, "space")
 	if _, ok := m.top().(*confirmView); !ok {
 		t.Fatalf("yolo didn't ask: %T", m.top())
 	}
-	act(m, src, "n")
+	act(t, m, src, "n")
 	if cfg, _ := config.Load(); must(cfg.Safety("alpha")).Yolo {
 		t.Fatal("n turned yolo on")
 	}
-	act(m, src, "space")
-	act(m, src, "y")
+	act(t, m, src, "space")
+	act(t, m, src, "y")
 	if cfg, _ := config.Load(); !must(cfg.Safety("alpha")).Yolo {
 		t.Fatal("y left yolo off")
 	}
@@ -197,7 +197,7 @@ func TestProjectSettingsToggle(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "the running coordinator has it on (prefix+r)") {
 		t.Fatalf("no running note:\n%s", out)
 	}
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if cfg, _ := config.Load(); !must(cfg.Safety("alpha")).CoordinatorRemoteControl {
 		t.Fatal("remote control not saved")
 	}
@@ -215,7 +215,7 @@ func TestProjectSettingsToggle(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "Auto-clear coordinator       off") {
 		t.Fatalf("auto-clear row:\n%s", out)
 	}
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if cfg, _ := config.Load(); !must(cfg.Safety("alpha")).AutoClear {
 		t.Fatal("auto-clear not saved")
 	}
@@ -225,7 +225,7 @@ func TestProjectSettingsToggle(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "Coordinator may merge        off") {
 		t.Fatalf("coordinator merge row:\n%s", out)
 	}
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if cfg, _ := config.Load(); !must(cfg.Safety("alpha")).CoordinatorMerges {
 		t.Fatal("coordinator merge not saved")
 	}
@@ -235,7 +235,7 @@ func TestProjectSettingsToggle(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "Keep my checkout current     on") {
 		t.Fatalf("checkout row:\n%s", out)
 	}
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if cfg, _ := config.Load(); must(cfg.Safety("alpha")).FastForwardCheckout {
 		t.Fatal("fast-forward still on")
 	}
@@ -268,7 +268,7 @@ func TestProjectLifecycleRows(t *testing.T) {
 		return must(cfg.Safety("alpha")).Paused
 	}
 	pick("Paused")
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if !paused() {
 		t.Fatal("not paused")
 	}
@@ -277,22 +277,22 @@ func TestProjectLifecycleRows(t *testing.T) {
 	if !rows[0].paused || gridCol(full, gridPaused) != ic().paused || gridCol(full, gridNeeds) != "⚑" {
 		t.Fatalf("sidebar lacks the paused mark: %+v %q", rows[0], treeCells(rows[0], 30, false, false))
 	}
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if paused() {
 		t.Fatal("still paused")
 	}
 
 	pick("Archive")
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if _, ok := m.top().(*confirmView); !ok {
 		t.Fatalf("archive didn't ask: %T", m.top())
 	}
-	act(m, src, "n")
+	act(t, m, src, "n")
 	if len(src.lifecycle) != 2 || m.projectPopupView() == nil {
 		t.Fatalf("n archived: %v", src.lifecycle)
 	}
-	act(m, src, "enter")
-	act(m, src, "y")
+	act(t, m, src, "enter")
+	act(t, m, src, "y")
 	if got := src.lifecycle[len(src.lifecycle)-1]; got != "alpha archive" || m.projectPopupView() != nil {
 		t.Fatalf("archive: %v, popup %v", src.lifecycle, m.projectPopupView())
 	}
@@ -300,8 +300,8 @@ func TestProjectLifecycleRows(t *testing.T) {
 	keyPress(m, "a")
 	keyPress(m, "4")
 	pick("Delete")
-	act(m, src, "enter")
-	act(m, src, "y")
+	act(t, m, src, "enter")
+	act(t, m, src, "y")
 	if got := src.lifecycle[len(src.lifecycle)-1]; got != "alpha delete" || m.projectPopupView() != nil {
 		t.Fatalf("delete: %v", src.lifecycle)
 	}
@@ -316,29 +316,29 @@ func TestProjectSettingsNumbers(t *testing.T) {
 	for range 3 {
 		keyPress(m, "down")
 	}
-	act(m, src, "enter") // 10 → 15
-	act(m, src, "-")
-	act(m, src, "-")
+	act(t, m, src, "enter") // 10 → 15
+	act(t, m, src, "-")
+	act(t, m, src, "-")
 	if out := screen(m); !strings.Contains(out, "13 · 1 working now") {
 		t.Fatalf("parallel threads:\n%s", out)
 	}
 	keyPress(m, "down")
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if out := screen(m); !strings.Contains(out, "7 days after it finishes") {
 		t.Fatalf("auto-close days:\n%s", out)
 	}
-	act(m, src, "+")
-	act(m, src, "+")
+	act(t, m, src, "+")
+	act(t, m, src, "+")
 	if out := screen(m); !strings.Contains(out, "9 days after it finishes") {
 		t.Fatalf("auto-close +:\n%s", out)
 	}
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if out := screen(m); !strings.Contains(out, "Auto-close finished threads  off") {
 		t.Fatalf("auto-close off:\n%s", out)
 	}
 	keyPress(m, "down")
 	for _, want := range []string{"when merged", "by you", "when merged"} {
-		act(m, src, "enter")
+		act(t, m, src, "enter")
 		if out := screen(m); !regexp.MustCompile(`Complete tasks +` + want).MatchString(out) {
 			t.Fatalf("complete tasks, want %q:\n%s", want, out)
 		}
@@ -371,7 +371,7 @@ func TestProjectRepos(t *testing.T) {
 		t.Fatalf("+ opened %T", m.top())
 	}
 	in.text = dir
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	real, _ := filepath.EvalSymlinks(dir)
 	if len(src.repos) != 1 || src.repos[0] != "+"+real {
 		t.Fatalf("repos %v", src.repos)
@@ -380,7 +380,7 @@ func TestProjectRepos(t *testing.T) {
 		t.Fatalf("added repo not shown:\n%s", screen(m))
 	}
 	keyPress(m, "x")
-	act(m, src, "y")
+	act(t, m, src, "y")
 	if len(src.repos) != 2 || src.repos[1] != "-/src/alpha" {
 		t.Fatalf("repos %v", src.repos)
 	}
@@ -394,12 +394,12 @@ func TestDelegateTask(t *testing.T) {
 	feed(m, keyPress(m, "a"))
 	keyPress(m, "3")
 	// T1 is started: d says why it does nothing.
-	pressKey(m, "D")
+	pressKey(t, m, "D")
 	if m.top() != m.projectPopupView() || !strings.Contains(m.msg, "T1 is started") || len(src.delegated) != 0 {
 		t.Fatalf("d on a started task: %T, %q, %v", m.top(), m.msg, src.delegated)
 	}
 	keyPress(m, "down")
-	pressKey(m, "D")
+	pressKey(t, m, "D")
 	cv, ok := m.top().(*confirmView)
 	if !ok || !strings.HasPrefix(cv.question, "Delegate T2 to the coordinator?") {
 		t.Fatalf("d on T2 opened %T", m.top())
@@ -408,8 +408,8 @@ func TestDelegateTask(t *testing.T) {
 	if m.msg != "T2 not delegated" || len(src.delegated) != 0 {
 		t.Fatalf("n: %q, %v", m.msg, src.delegated)
 	}
-	pressKey(m, "D")
-	act(m, src, "y")
+	pressKey(t, m, "D")
+	act(t, m, src, "y")
 	if len(src.delegated) != 1 || src.delegated[0] != "alpha T2" {
 		t.Fatalf("delegated %v", src.delegated)
 	}
@@ -417,7 +417,7 @@ func TestDelegateTask(t *testing.T) {
 	if !strings.Contains(lineWith(out, "Ship it"), "asked the coordinator") || !strings.Contains(out, "asked the coordinator to delegate T2") {
 		t.Fatalf("after y:\n%s", out)
 	}
-	pressKey(m, "D")
+	pressKey(t, m, "D")
 	if m.top() != m.projectPopupView() || m.msg != "not available: T2 is already waiting on the coordinator" || len(src.delegated) != 1 {
 		t.Fatalf("d again: %T, %q", m.top(), m.msg)
 	}
@@ -431,18 +431,18 @@ func TestDelegateFromBoard(t *testing.T) {
 	tasksTabNow(m, src)
 	feed(m, keyPress(m, "t"))
 	// Needs you first: T3 (review).
-	pressKey(m, "D")
+	pressKey(t, m, "D")
 	if _, ok := m.top().(*projectView); !ok || !strings.Contains(m.msg, "T3 is in review") {
 		t.Fatalf("d on review: %T, %q", m.top(), m.msg)
 	}
 	keyPress(m, "down")
 	keyPress(m, "down")
-	pressKey(m, "enter") // T2, shown
+	pressKey(t, m, "enter") // T2, shown
 	if out := screen(m); !strings.Contains(out, "D delegate") {
 		t.Fatalf("shown task lacks d:\n%s", out)
 	}
 	keyPress(m, "D")
-	act(m, src, "y")
+	act(t, m, src, "y")
 	if len(src.delegated) != 1 || src.delegated[0] != "alpha T2" {
 		t.Fatalf("delegated %v", src.delegated)
 	}
@@ -558,7 +558,7 @@ func TestPrefixCapture(t *testing.T) {
 	if !strings.Contains(screen(m), "can't be the prefix") {
 		t.Fatalf("x taken as the prefix:\n%s", screen(m))
 	}
-	act(m, src, "ctrl+a")
+	act(t, m, src, "ctrl+a")
 	if m.prefix != "ctrl+a" {
 		t.Fatalf("prefix %q", m.prefix)
 	}
@@ -620,7 +620,7 @@ func TestProjectPopupFixed(t *testing.T) {
 		t.Fatalf("click on 5 keys: tab %d", pv.tab)
 	}
 	for range 3 {
-		mouseAt(m, tea.MouseWheelDown, x, y)
+		mouseAt(t, m, tea.MouseWheelDown, x, y)
 	}
 	if out = screen(m); pv.top[tabKeys] != 9 || !strings.Contains(out, "1 overview") {
 		t.Fatalf("wheel on the keys: top %d:\n%s", pv.top[tabKeys], out)
@@ -653,7 +653,7 @@ func TestAcceptTask(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "enter show · A accept · x send back · + new task") {
 		t.Fatalf("review keys:\n%s", out)
 	}
-	pressKey(m, "A")
+	pressKey(t, m, "A")
 	cv, ok := m.top().(*confirmView)
 	if !ok || cv.question != "Accept T3? The coordinator marks T3 Check it done." {
 		t.Fatalf("a opened %T", m.top())
@@ -662,8 +662,8 @@ func TestAcceptTask(t *testing.T) {
 	if m.msg != "T3 not accepted" || len(src.asked) != 0 {
 		t.Fatalf("n: %q, %v", m.msg, src.asked)
 	}
-	pressKey(m, "A")
-	act(m, src, "y")
+	pressKey(t, m, "A")
+	act(t, m, src, "y")
 	if len(src.asked) != 1 || src.asked[0] != "accept alpha T3" {
 		t.Fatalf("asked %v", src.asked)
 	}
@@ -672,7 +672,7 @@ func TestAcceptTask(t *testing.T) {
 		t.Fatalf("after y:\n%s", out)
 	}
 	for _, k := range []string{"A", "x"} {
-		pressKey(m, k)
+		pressKey(t, m, k)
 		if m.top() != m.projectPopupView() || m.msg != "not available: T3 is already waiting on the coordinator" || len(src.asked) != 1 {
 			t.Fatalf("%s again: %T, %q, %v", k, m.top(), m.msg, src.asked)
 		}
@@ -680,7 +680,7 @@ func TestAcceptTask(t *testing.T) {
 	// T1 is started: a says why, and the popup stays.
 	keyPress(m, "down")
 	keyPress(m, "down")
-	pressKey(m, "A")
+	pressKey(t, m, "A")
 	if m.top() != m.projectPopupView() || m.msg != "not available: T1 is started, not in review" {
 		t.Fatalf("a on started: %T, %q", m.top(), m.msg)
 	}
@@ -697,7 +697,7 @@ func TestAcceptTask(t *testing.T) {
 func TestSendBack(t *testing.T) {
 	src, m := needsYouData(t, 86+sideDefault)
 	feed(m, keyPress(m, "t"))
-	pressKey(m, "x")
+	pressKey(t, m, "x")
 	if _, ok := m.top().(*inputView); !ok {
 		t.Fatalf("x opened %T", m.top())
 	}
@@ -705,19 +705,19 @@ func TestSendBack(t *testing.T) {
 	if _, ok := m.top().(*projectView); !ok || m.msg != "T3 not sent back" {
 		t.Fatalf("esc: %T, %q", m.top(), m.msg)
 	}
-	pressKey(m, "x")
+	pressKey(t, m, "x")
 	keyPress(m, "enter")
 	if m.msg != "T3 not sent back" || len(src.asked) != 0 {
 		t.Fatalf("empty note: %q, %v", m.msg, src.asked)
 	}
-	pressKey(m, "x")
+	pressKey(t, m, "x")
 	if out := screen(m); !strings.Contains(out, "Send T3 back") || !strings.Contains(out, "What should change?") || strings.Contains(out, "/200") {
 		t.Fatalf("prompt:\n%s", out)
 	}
 	for _, r := range "bell cut" {
 		keyPress(m, string(r))
 	}
-	run(m, keyPress(m, "enter"))
+	drain(t, m, keyPress(m, "enter"))
 	m.setData(src.Load())
 	tasksTabNow(m, src)
 	if len(src.asked) != 1 || src.asked[0] != "send-back alpha T3 bell cut" || m.msg != "sent T3 back with your note; the coordinator passes it on" {
@@ -728,7 +728,7 @@ func TestSendBack(t *testing.T) {
 	}
 	// x on a task not in review or done only says why.
 	keyPress(m, "down")
-	pressKey(m, "x")
+	pressKey(t, m, "x")
 	if _, ok := m.top().(*projectView); !ok || m.msg != "not available: T4 is blocked, not in review or done" {
 		t.Fatalf("x on blocked: %T, %q", m.top(), m.msg)
 	}
@@ -758,19 +758,19 @@ func TestSendBackDone(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "enter show · x send back · + new task") || !strings.Contains(out, "b hide done") {
 		t.Fatalf("done keys:\n%s", out)
 	}
-	pressKey(m, "A")
+	pressKey(t, m, "A")
 	if m.msg != "not available: T5 is done, not in review" {
 		t.Fatalf("A on done: %q", m.msg)
 	}
 	time.Sleep(modaction.Stable + 20*time.Millisecond) // T5's row is new
-	pressKey(m, "x")
+	pressKey(t, m, "x")
 	if out := screen(m); !strings.Contains(out, "Send T5 back") || !strings.Contains(out, "What should change?") {
 		t.Fatalf("prompt:\n%s", out)
 	}
 	for _, r := range "still broken" {
 		keyPress(m, string(r))
 	}
-	run(m, keyPress(m, "enter"))
+	drain(t, m, keyPress(m, "enter"))
 	if len(src.asked) != 1 || src.asked[0] != "send-back alpha T5 still broken" {
 		t.Fatalf("asked %v, %q", src.asked, m.msg)
 	}
@@ -782,7 +782,7 @@ func TestSendBackDone(t *testing.T) {
 func TestReviewDetail(t *testing.T) {
 	src, m := needsYouData(t, 86+sideDefault)
 	feed(m, keyPress(m, "t"))
-	pressKey(m, "enter")
+	pressKey(t, m, "enter")
 	out := screen(m)
 	for _, want := range []string{"PR #61 merged",
 		"HOW TO CHECK", "• Run tm, press t", "• the bell shows whole", "A accept · x send back · esc back"} {
@@ -791,7 +791,7 @@ func TestReviewDetail(t *testing.T) {
 		}
 	}
 	keyPress(m, "A")
-	act(m, src, "y")
+	act(t, m, src, "y")
 	if out := screen(m); !strings.Contains(out, "waiting on the coordinator to accept it") {
 		t.Fatalf("shown task after a:\n%s", out)
 	}
@@ -811,7 +811,7 @@ func TestReviewDetail(t *testing.T) {
 	feed(m, keyPress(m, "a"))
 	keyPress(m, "3")
 	time.Sleep(modaction.Stable + 20*time.Millisecond) // T3's row changed with the ask
-	pressKey(m, "enter")
+	pressKey(t, m, "enter")
 	_, ok := m.top().(*taskView)
 	if !ok || !strings.Contains(screen(m), "PR #61 merged") {
 		t.Fatalf("enter in the Tasks tab: %T\n%s", m.top(), screen(m))
@@ -832,12 +832,12 @@ func TestBlockedTask(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "enter show · c coordinator · D delegate · + new task") {
 		t.Fatalf("blocked keys:\n%s", out)
 	}
-	pressKey(m, "enter")
+	pressKey(t, m, "enter")
 	out := screen(m)
 	if !strings.Contains(out, "Blocked on: which licence, MIT or Apache?") || !strings.Contains(out, "c coordinator · D delegate · esc back") {
 		t.Fatalf("blocked detail:\n%s", out)
 	}
-	run(m, keyPress(m, "c"))
+	drain(t, m, keyPress(m, "c"))
 	if len(src.opened) != 1 || src.opened[0] != "alpha" {
 		t.Fatalf("c opened %v", src.opened)
 	}
@@ -860,13 +860,13 @@ func TestNeedsYouNarrow(t *testing.T) {
 	if f := foot(); !strings.Contains(f, "enter show · A accept · x send back · + new task") {
 		t.Fatalf("t list keys:\n%s", f)
 	}
-	pressKey(m, "A")
-	act(m, src, "y")
+	pressKey(t, m, "A")
+	act(t, m, src, "y")
 	if out := screen(m); !strings.Contains(out, "asked the coordinator") {
 		t.Fatalf("t list row:\n%s", out)
 	}
 	time.Sleep(modaction.Stable + 20*time.Millisecond) // T3's row changed
-	pressKey(m, "enter")
+	pressKey(t, m, "enter")
 	if f := foot(); !strings.Contains(f, "A accept · x send back · esc back") {
 		t.Fatalf("shown task keys:\n%s", f)
 	}
@@ -875,7 +875,7 @@ func TestNeedsYouNarrow(t *testing.T) {
 	if f := foot(); !strings.Contains(f, "enter show · c coordinator · D delegate · + new task") {
 		t.Fatalf("blocked keys:\n%s", f)
 	}
-	pressKey(m, "enter")
+	pressKey(t, m, "enter")
 	if f := foot(); !strings.Contains(f, "c coordinator · D delegate · esc back") {
 		t.Fatalf("blocked shown keys:\n%s", f)
 	}
@@ -912,7 +912,7 @@ func TestAllProjectsSettings(t *testing.T) {
 	for range 3 {
 		keyPress(m, "down")
 	}
-	act(m, src, "enter") // 10 → 15
+	act(t, m, src, "enter") // 10 → 15
 	if out := screen(m); !strings.Contains(out, "Parallel threads             15") || strings.Contains(lineWith(out, "Parallel threads"), "working now") {
 		t.Fatalf("all projects' parallel threads:\n%s", out)
 	}
@@ -931,7 +931,7 @@ func TestAllProjectsSettings(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "15 · 1 working now  −  + · all projects") {
 		t.Fatalf("project follows all projects:\n%s", out)
 	}
-	act(m, src, "-")
+	act(t, m, src, "-")
 	if out := screen(m); !strings.Contains(out, "14 · 1 working now  −  +") || strings.Contains(lineWith(out, "Parallel threads"), "all projects") || !strings.Contains(out, "x follow all projects") {
 		t.Fatalf("project's own value:\n%s", out)
 	}
@@ -951,7 +951,7 @@ func TestAllProjectsSettings(t *testing.T) {
 	// x: alpha follows all projects again.
 	keyPress(m, "a")
 	keyPress(m, "4")
-	act(m, src, "x")
+	act(t, m, src, "x")
 	if !strings.Contains(m.msg, "already follows all projects") {
 		t.Fatalf("x on a following setting: %q", m.msg)
 	}
@@ -959,12 +959,12 @@ func TestAllProjectsSettings(t *testing.T) {
 		keyPress(m, "down")
 	}
 	// Only x: delete and backspace aren't its aliases.
-	act(m, src, "delete")
-	act(m, src, "backspace")
+	act(t, m, src, "delete")
+	act(t, m, src, "backspace")
 	if cfg, _ := config.Load(); must(cfg.Safety("alpha")).ParallelThreads != 14 {
 		t.Fatal("delete or backspace dropped alpha's own value")
 	}
-	act(m, src, "x")
+	act(t, m, src, "x")
 	if !strings.Contains(m.msg, "alpha follows all projects in parallel threads: 15") {
 		t.Fatalf("x message: %q", m.msg)
 	}
@@ -982,12 +982,12 @@ func TestAllProjectsSettings(t *testing.T) {
 	keyPress(m, ",")
 	keyPress(m, "2")
 	keyPress(m, "down")
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	cv, ok := m.top().(*confirmView)
 	if !ok || !strings.Contains(cv.question, "alpha, beta") && !strings.Contains(cv.question, "alpha and beta") {
 		t.Fatalf("yolo for all projects didn't ask: %T %+v", m.top(), cv)
 	}
-	act(m, src, "y")
+	act(t, m, src, "y")
 	if cfg, _ := config.Load(); !must(cfg.Safety("beta")).Yolo {
 		t.Fatal("yolo for all projects not saved")
 	}
@@ -1040,11 +1040,11 @@ func TestNoKeyAliases(t *testing.T) {
 	keyPress(m, "down")
 	keyPress(m, "down")
 	keyPress(m, "down") // Parallel threads
-	run(m, keyPress(m, "="))
+	drain(t, m, keyPress(m, "="))
 	if len(src.settings) != 0 {
 		t.Errorf("= stepped a number: %v", src.settings)
 	}
-	run(m, keyPress(m, "+"))
+	drain(t, m, keyPress(m, "+"))
 	if len(src.settings) != 1 {
 		t.Errorf("+ didn't step the number: %v", src.settings)
 	}
@@ -1103,7 +1103,7 @@ func TestSettingsKeysQueueDuringSave(t *testing.T) {
 	for range 3 {
 		keyPress(m, "down")
 	}
-	run(m, keyPress(m, "enter")) // 10 → 15, saved
+	drain(t, m, keyPress(m, "enter")) // 10 → 15, saved
 	m.setData(src.Load())
 	cmd := keyPress(m, "-") // 14, in flight
 	if !m.busy || cmd == nil {
@@ -1149,7 +1149,7 @@ func TestSettingsQueueOutlivesStalePoll(t *testing.T) {
 	for range 3 {
 		keyPress(m, "down")
 	}
-	run(m, keyPress(m, "enter")) // 10 → 15, saved
+	drain(t, m, keyPress(m, "enter")) // 10 → 15, saved
 	m.setData(src.Load())
 	poll := m.load()() // a tick's poll: it reads 15
 	d := poll.(dataMsg)
@@ -1200,7 +1200,7 @@ func TestModelsSetting(t *testing.T) {
 	}
 	keyPress(m, "j")
 	keyPress(m, "j")
-	run(m, keyPress(m, "enter")) // gamma out
+	drain(t, m, keyPress(m, "enter")) // gamma out
 	if n := len(src.settings); n != 1 || src.settings[0] != "projects.alpha.models=[alpha beta]" {
 		t.Fatalf("settings %v", src.settings)
 	}
@@ -1212,9 +1212,9 @@ func TestModelsSetting(t *testing.T) {
 		t.Fatalf("saved %v", s.Models)
 	}
 	keyPress(m, "k")
-	run(m, keyPress(m, "enter")) // beta out
+	drain(t, m, keyPress(m, "enter")) // beta out
 	keyPress(m, "k")
-	run(m, keyPress(m, "enter")) // the last one stays
+	drain(t, m, keyPress(m, "enter")) // the last one stays
 	mv := m.top().(*modelsView)
 	if mv.err == "" || !slices.Equal(mv.allow, []string{"alpha"}) {
 		t.Fatalf("last model left out: %q %v", mv.err, mv.allow)
@@ -1250,8 +1250,8 @@ func TestHistorySetting(t *testing.T) {
 		}
 	}
 	keyPress(m, "down")
-	act(m, src, "enter") // resolved threads 30 → 60
-	act(m, src, "-")     // 59
+	act(t, m, src, "enter") // resolved threads 30 → 60
+	act(t, m, src, "-")     // 59
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatal(err)
@@ -1262,7 +1262,7 @@ func TestHistorySetting(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "59 days") {
 		t.Fatalf("view after -:\n%s", out)
 	}
-	act(m, src, "x")
+	act(t, m, src, "x")
 	if cfg, _ := config.Load(); must(cfg.Safety("alpha")).ArchiveThreadsDays != 30 {
 		t.Fatal("x left the project's own value")
 	}
@@ -1301,7 +1301,7 @@ func TestTasksTabBacklogEnter(t *testing.T) {
 	if c := tasksCursor(m, src); c != "T7" {
 		t.Fatalf("cursor on %q", c)
 	}
-	runAll(m, keyPress(m, "enter"))
+	drain(t, m, keyPress(m, "enter"))
 	tv, ok := m.top().(*taskView)
 	if !ok || tv.id != 7 {
 		t.Fatalf("enter on the backlog task: %#v", m.top())
@@ -1408,7 +1408,7 @@ func TestLibraryTab(t *testing.T) {
 		t.Fatalf("n deleted: %v", src.libRemoved)
 	}
 	keyPress(m, "d")
-	run(m, keyPress(m, "y"))
+	drain(t, m, keyPress(m, "y"))
 	if !slices.Equal(src.libRemoved, []string{"t-0001/data.json"}) {
 		t.Fatalf("y: %v", src.libRemoved)
 	}
@@ -1418,7 +1418,7 @@ func TestLibraryTab(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "Delete all 1 library files of thread t-0001?") {
 		t.Fatalf("D:\n%s", out)
 	}
-	run(m, keyPress(m, "y"))
+	drain(t, m, keyPress(m, "y"))
 	if !slices.Equal(src.libRemoved, []string{"t-0001/data.json", "t-0001/"}) {
 		t.Fatalf("after D: %v", src.libRemoved)
 	}
@@ -1464,11 +1464,11 @@ func TestAgentSettings(t *testing.T) {
 	if out := screen(m); !strings.Contains(lineWith(out, "Thread agent"), "not chosen (claude, pi)") {
 		t.Fatalf("thread agent row:\n%s", out)
 	}
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if th, co := agentsOf(t, "alpha"); th != "claude" || co != "" {
 		t.Fatalf("alpha's agents %q %q", th, co)
 	}
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if th, _ := agentsOf(t, "alpha"); th != "pi" {
 		t.Fatalf("alpha's thread agent %q", th)
 	}
@@ -1478,7 +1478,7 @@ func TestAgentSettings(t *testing.T) {
 	if !strings.Contains(m.msg, "new threads of alpha run pi") {
 		t.Fatalf("message %q", m.msg)
 	}
-	act(m, src, "enter") // and back round to claude
+	act(t, m, src, "enter") // and back round to claude
 	if th, _ := agentsOf(t, "alpha"); th != "claude" {
 		t.Fatalf("alpha's thread agent after three presses %q", th)
 	}
@@ -1490,8 +1490,8 @@ func TestAgentSettings(t *testing.T) {
 	for range at(allProjectsSettings(), "Coordinator agent") {
 		keyPress(m, "down")
 	}
-	act(m, src, "enter")
-	act(m, src, "enter")
+	act(t, m, src, "enter")
+	act(t, m, src, "enter")
 	if _, co := agentsOf(t, "beta"); co != "pi" {
 		t.Fatalf("beta's coordinator agent %q", co)
 	}
@@ -1511,7 +1511,7 @@ func TestAgentSettings(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "pi isn't installed") {
 		t.Fatalf("unknown agent not flagged:\n%s", out)
 	}
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if _, co := agentsOf(t, "alpha"); co != "claude" {
 		t.Fatalf("enter didn't pick a known agent: %q", co)
 	}
@@ -1533,7 +1533,7 @@ func TestNewTaskPrompt(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "+ new task") {
 		t.Fatalf("no + in the Tasks tab's keys:\n%s", out)
 	}
-	pressKey(m, "+")
+	pressKey(t, m, "+")
 	out := screen(m)
 	for _, want := range []string{"New task · alpha", "no template", "bug · Bug: …", "spike · Spike: …", "chore · Chore: …"} {
 		if !strings.Contains(out, want) {
@@ -1548,7 +1548,7 @@ func TestNewTaskPrompt(t *testing.T) {
 	for _, r := range "crash on start" {
 		keyPress(m, string(r))
 	}
-	run(m, keyPress(m, "enter"))
+	drain(t, m, keyPress(m, "enter"))
 	if len(src.added) != 1 || !strings.HasPrefix(src.added[0], "alpha Bug: crash on start|What happens") || !strings.Contains(src.added[0], "Reproduce it in a failing test;") {
 		t.Fatalf("added %v, %q", src.added, m.msg)
 	}
@@ -1557,14 +1557,14 @@ func TestNewTaskPrompt(t *testing.T) {
 	}
 
 	src.templates = nil
-	pressKey(m, "+")
+	pressKey(t, m, "+")
 	if out := screen(m); !strings.Contains(out, "Its title:") || strings.Contains(out, "no template") {
 		t.Fatalf("no templates, straight to the title:\n%s", out)
 	}
 	for _, r := range "plain" {
 		keyPress(m, string(r))
 	}
-	run(m, keyPress(m, "enter"))
+	drain(t, m, keyPress(m, "enter"))
 	if len(src.added) != 2 || src.added[1] != "alpha plain||" {
 		t.Fatalf("added %v", src.added)
 	}
@@ -1585,8 +1585,8 @@ func TestGlobalThreadsSetting(t *testing.T) {
 	for range 4 {
 		keyPress(m, "down")
 	}
-	act(m, src, "enter") // off → 5
-	act(m, src, "+")
+	act(t, m, src, "enter") // off → 5
+	act(t, m, src, "+")
 	if out := screen(m); !strings.Contains(lineWith(out, "Threads across projects"), "6 · 2 working now") {
 		t.Fatalf("after enter and +:\n%s", out)
 	}
@@ -1621,23 +1621,23 @@ func TestProjectShareRow(t *testing.T) {
 	if out := screen(m); !strings.Contains(lineWith(out, "Shared with paired servers"), "off") {
 		t.Fatalf("no Shared row, or on:\n%s", out)
 	}
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if _, ok := m.top().(*confirmView); !ok {
 		t.Fatalf("sharing didn't ask: %T", m.top())
 	}
-	act(m, src, "n")
+	act(t, m, src, "n")
 	if cfg, _ := config.Load(); must(cfg.Safety("alpha")).Share {
 		t.Fatal("n shared it")
 	}
-	act(m, src, "enter")
-	act(m, src, "y")
+	act(t, m, src, "enter")
+	act(t, m, src, "y")
 	if cfg, _ := config.Load(); !must(cfg.Safety("alpha")).Share {
 		t.Fatal("y left it unshared")
 	}
 	if out := screen(m); !strings.Contains(lineWith(out, "Shared with paired servers"), "on") {
 		t.Fatalf("row after y:\n%s", out)
 	}
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if _, ok := m.top().(*confirmView); ok {
 		t.Fatal("unsharing asked")
 	}

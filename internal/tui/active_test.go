@@ -52,7 +52,7 @@ func TestInactiveProjectCollapsed(t *testing.T) {
 	m := newDash(DashOptions{Source: src, Width: 120, Height: 30, State: DashState{Current: "alpha"}})
 	m.folds.InactiveOpen = true
 	m.setData(src.data)
-	run(m, keyPress(m, "]"))
+	drain(t, m, keyPress(m, "]"))
 	if !slices.Equal(src.opened, []string{"alpha"}) {
 		t.Errorf("] opened %v; it skips the inactive beta, back to alpha", src.opened)
 	}
@@ -61,9 +61,9 @@ func TestInactiveProjectCollapsed(t *testing.T) {
 	// runs, it asks, and n keeps it.
 	keyPress(m, "tab")
 	m.sideSel = "p:beta"
-	run(m, keyPress(m, "space"))
+	drain(t, m, keyPress(m, "space"))
 	m.sideSel = "p:alpha"
-	run(m, keyPress(m, "space"))
+	drain(t, m, keyPress(m, "space"))
 	if len(src.lifecycle) != 1 || src.lifecycle[0] != "beta activate" {
 		t.Fatalf("lifecycle %v, want beta activated and alpha asked", src.lifecycle)
 	}
@@ -72,8 +72,8 @@ func TestInactiveProjectCollapsed(t *testing.T) {
 	}
 	keyPress(m, "n")
 	m.sideSel = "p:alpha"
-	run(m, keyPress(m, "space"))
-	run(m, keyPress(m, "y"))
+	drain(t, m, keyPress(m, "space"))
+	drain(t, m, keyPress(m, "y"))
 	if want := []string{"beta activate", "alpha deactivate"}; !slices.Equal(src.lifecycle, want) {
 		t.Errorf("lifecycle %v, want %v", src.lifecycle, want)
 	}
@@ -94,9 +94,9 @@ func TestExpandInactiveProject(t *testing.T) {
 	keyPress(m, "tab")
 	// → on the divider unfolds it, then on beta expands beta.
 	m.sideSel = dividerKey
-	run(m, keyPress(m, "right"))
+	drain(t, m, keyPress(m, "right"))
 	m.sideSel = "p:beta"
-	run(m, keyPress(m, "right"))
+	drain(t, m, keyPress(m, "right"))
 	var keys []string
 	for _, r := range m.tree() {
 		keys = append(keys, r.key())
@@ -115,26 +115,26 @@ func TestExpandInactiveProject(t *testing.T) {
 	}
 	// A dormant thread says why it doesn't attach.
 	m.sideSel = "t:beta/t-0005"
-	run(m, keyPress(m, "enter"))
+	drain(t, m, keyPress(m, "enter"))
 	if !strings.Contains(m.msg, "t-0005 is dormant") || m.result.Attach != "" {
 		t.Fatalf("enter on a dormant thread: msg %q attach %q", m.msg, m.result.Attach)
 	}
 	// ← on the project folds it.
 	m.sideSel = "p:beta"
-	run(m, keyPress(m, "left"))
+	drain(t, m, keyPress(m, "left"))
 	if slices.ContainsFunc(m.tree(), func(r treeRow) bool { return r.key() == "c:beta" }) {
 		t.Fatal("← didn't fold beta")
 	}
 	// ← on it folded goes up to the divider.
-	run(m, keyPress(m, "left"))
+	drain(t, m, keyPress(m, "left"))
 	if m.sideSel != dividerKey {
 		t.Fatalf("← on folded beta: cursor %q, want the divider", m.sideSel)
 	}
 	// Expanded again, enter on its coordinator activates it and opens it.
 	m.sideSel = "p:beta"
-	run(m, keyPress(m, "right"))
+	drain(t, m, keyPress(m, "right"))
 	m.sideSel = "c:beta"
-	run(m, keyPress(m, "enter"))
+	drain(t, m, keyPress(m, "enter"))
 	if !slices.Equal(src.lifecycle, []string{"beta activate"}) || !slices.Contains(src.opened, "beta") {
 		t.Fatalf("lifecycle %v, opened %v: want beta activated and its coordinator opened", src.lifecycle, src.opened)
 	}
@@ -167,7 +167,7 @@ func TestDashboardActiveToggle(t *testing.T) {
 	if label < 0 || m.stateAt(2, label) != "" {
 		t.Fatalf("the state label is at row %d", label)
 	}
-	run(m, m.click(m.w-3, label, false))
+	drain(t, m, m.click(m.w-3, label, false))
 	if !slices.Equal(src.lifecycle, []string{"beta activate"}) {
 		t.Fatalf("lifecycle %v, want beta activated", src.lifecycle)
 	}
@@ -178,11 +178,11 @@ func TestDashboardActiveToggle(t *testing.T) {
 	m.rebuild()
 	on := config.Defaults
 	m.projectData("alpha").Safety = &on
-	run(m, keyPress(m, "space"))
+	drain(t, m, keyPress(m, "space"))
 	if len(src.lifecycle) != 1 || !strings.Contains(whole(m), "Deactivate alpha?") {
 		t.Fatalf("alpha runs sessions: want a question, lifecycle %v:\n%s", src.lifecycle, whole(m))
 	}
-	run(m, keyPress(m, "y"))
+	drain(t, m, keyPress(m, "y"))
 	if !slices.Equal(src.lifecycle, []string{"beta activate", "alpha deactivate"}) {
 		t.Errorf("lifecycle %v", src.lifecycle)
 	}

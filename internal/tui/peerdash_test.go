@@ -122,7 +122,7 @@ func TestRemoteDashboardKeys(t *testing.T) {
 	m, src := remoteDash(t, "@mini/acme-api")
 	m.h = 12 // so it scrolls
 	for _, k := range []string{"enter", "a", "t", "i", " ", "T", "|"} {
-		run(m, press(m, k))
+		drain(t, m, press(m, k))
 		if m.top() != nil || len(src.lifecycle) > 0 || len(src.opened) > 0 || len(src.adopted) > 0 {
 			t.Fatalf("%q acted: %+v %v %v", k, m.top(), src.lifecycle, src.opened)
 		}
@@ -247,7 +247,7 @@ func TestPeersTab(t *testing.T) {
 		t.Fatalf("n removed %v, %q", src.unpinned, m.msg)
 	}
 	press(m, "down", "x")
-	run(m, press(m, "y"))
+	drain(t, m, press(m, "y"))
 	if !slices.Equal(src.unpinned, []string{"nas"}) {
 		t.Fatalf("removed %v", src.unpinned)
 	}
@@ -289,11 +289,11 @@ func TestPeersTabShare(t *testing.T) {
 		t.Fatalf("n: %v %q", src.settings, m.msg)
 	}
 	press(m, "space")
-	run(m, press(m, "y"))
+	drain(t, m, press(m, "y"))
 	if !slices.Equal(src.settings, []string{"projects.terminatr.share=true"}) || !strings.Contains(screen(m), "[x] terminatr") {
 		t.Fatalf("y: %v\n%s", src.settings, screen(m))
 	}
-	run(m, press(m, "space"))
+	drain(t, m, press(m, "space"))
 	if _, ok := m.top().(*settingsView); !ok {
 		t.Fatalf("unsharing asked: %T", m.top())
 	}
@@ -331,12 +331,12 @@ func TestPeersTabPanes(t *testing.T) {
 		t.Fatalf("n: %v %q", src.panesSet, m.msg)
 	}
 	press(m, "right")
-	run(m, press(m, "y"))
+	drain(t, m, press(m, "y"))
 	if out := screen(m); !strings.Contains(out, "off · [view] · write") || !strings.Contains(out, "it can watch the coordinators and threads") {
 		t.Errorf("after view:\n%s", out)
 	}
 	press(m, "right")
-	run(m, press(m, "y"))
+	drain(t, m, press(m, "y"))
 	if out := screen(m); !strings.Contains(out, "off · view · [write]") || !strings.Contains(m.msg, "panes write for mini") {
 		t.Errorf("after write (%q):\n%s", m.msg, out)
 	}
@@ -345,13 +345,13 @@ func TestPeersTabPanes(t *testing.T) {
 	if sv.tab != tabPeers || len(src.panesSet) != 2 {
 		t.Fatalf("→ at write: tab %d, set %v", sv.tab, src.panesSet)
 	}
-	run(m, press(m, "left"))
+	drain(t, m, press(m, "left"))
 	if _, ok := m.top().(*confirmView); ok {
 		t.Fatal("lowering asked")
 	}
 	// A click on off lowers at once.
 	x, y := at(t, m, "off · [view] · write")
-	mouseAt(m, tea.MouseLeft, x, y)
+	mouseAt(t, m, tea.MouseLeft, x, y)
 	if _, ok := m.top().(*confirmView); ok {
 		t.Fatal("off asked")
 	}
@@ -360,7 +360,7 @@ func TestPeersTabPanes(t *testing.T) {
 	}
 	// A click on write asks.
 	x, y = at(t, m, "[off] · view · write")
-	mouseAt(m, tea.MouseLeft, x+len("[off] · view · "), y)
+	mouseAt(t, m, tea.MouseLeft, x+len("[off] · view · "), y)
 	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "Let mini type into") {
 		t.Fatalf("click on write: %T", m.top())
 	}
@@ -422,7 +422,7 @@ func TestPeersTabRelay(t *testing.T) {
 	}
 	pinned := "wss://203.0.113.5#sha256=" + strings.Repeat("ab", 32)
 	in.text = pinned
-	run(m, press(m, "enter"))
+	drain(t, m, press(m, "enter"))
 	if !slices.Equal(src.relaySet, []string{"mini " + pinned}) || m.msg != "relay for mini set; set it on mini too" {
 		t.Fatalf("set %v, %q", src.relaySet, m.msg)
 	}

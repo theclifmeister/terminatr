@@ -46,11 +46,11 @@ func TestLinkedProjectsSetting(t *testing.T) {
 		t.Fatalf("list:\n%s", out)
 	}
 	// both → send, at once: no question.
-	runAll(m, press(m, "enter"))
+	drain(t, m, press(m, "enter"))
 	if _, asked := m.top().(*confirmView); asked || len(src.links) != 1 || src.links[0] != "alpha beta send" {
 		t.Fatalf("links %v (%T)", src.links, m.top())
 	}
-	runAll(m, press(m, "a"))
+	drain(t, m, press(m, "a"))
 	if len(src.links) != 2 || src.links[1] != "alpha beta ask true" {
 		t.Fatalf("ask %v", src.links)
 	}
@@ -61,7 +61,7 @@ func TestLinkedProjectsSetting(t *testing.T) {
 	if len(src.links) != 2 || !strings.Contains(m.msg, "link beta first") {
 		t.Fatalf("ask without a link: %v %q", src.links, m.msg)
 	}
-	runAll(m, press(m, "enter"))
+	drain(t, m, press(m, "enter"))
 	if got := src.links[len(src.links)-1]; got != "alpha beta both" {
 		t.Fatalf("link %v", src.links)
 	}
@@ -97,7 +97,7 @@ func TestMessagesTab(t *testing.T) {
 			t.Errorf("conversation lacks %q:\n%s", want, out)
 		}
 	}
-	runAll(m, press(m, "A"))
+	drain(t, m, press(m, "A"))
 	if len(src.linkActs) != 1 || src.linkActs[0] != "alpha approve M-3" {
 		t.Fatalf("acts %v", src.linkActs)
 	}
@@ -165,12 +165,12 @@ func TestLinkedProjectsRemote(t *testing.T) {
 	// asks first for a new remote entry); a on mini/acme-api turns its
 	// ask off.
 	v.sel = 2
-	runAll(m, press(m, "enter"))
+	drain(t, m, press(m, "enter"))
 	if got := src.links[len(src.links)-1]; got != "alpha nas/media both" || !strings.Contains(m.msg, "nas decides its side") || !strings.Contains(m.msg, "ask first") {
 		t.Fatalf("link %v %q", src.links, m.msg)
 	}
 	v.sel = 1
-	runAll(m, press(m, "a"))
+	drain(t, m, press(m, "a"))
 	if got := src.links[len(src.links)-1]; got != "alpha mini/acme-api ask false" {
 		t.Fatalf("ask %v", src.links)
 	}
@@ -223,7 +223,7 @@ func TestLinkRequests(t *testing.T) {
 	if !ok || !strings.Contains(cv.question, "both ways on this side") {
 		t.Fatalf("r without an entry: %T", m.top())
 	}
-	runAll(m, press(m, "y"))
+	drain(t, m, press(m, "y"))
 	if len(src.linkActs) != 1 || src.linkActs[0] != "alpha request nas/media both" {
 		t.Fatalf("request %v", src.linkActs)
 	}
@@ -239,7 +239,7 @@ func TestLinkRequests(t *testing.T) {
 	if !ok || mv.items[0].label != "receive only, ask first" || len(mv.items) != 6 {
 		t.Fatalf("A: %T %+v", m.top(), mv)
 	}
-	runAll(m, press(m, "enter"))
+	drain(t, m, press(m, "enter"))
 	if got := src.linkActs[len(src.linkActs)-1]; got != "alpha accept R-9C1B-3 receive ask" {
 		t.Fatalf("accept %v", src.linkActs)
 	}
@@ -247,7 +247,7 @@ func TestLinkRequests(t *testing.T) {
 	if _, ok := m.top().(*confirmView); !ok {
 		t.Fatalf("x: %T", m.top())
 	}
-	runAll(m, press(m, "y"))
+	drain(t, m, press(m, "y"))
 	if got := src.linkActs[len(src.linkActs)-1]; got != "alpha decline R-9C1B-3" {
 		t.Fatalf("decline %v", src.linkActs)
 	}

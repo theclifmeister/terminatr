@@ -33,7 +33,7 @@ func commandDash(t *testing.T) (*fakeSource, *dash) {
 func TestModCommandKeys(t *testing.T) {
 	src, m := commandDash(t)
 	sel := m.sel
-	run(m, press(m, "g"))
+	drain(t, m, press(m, "g"))
 	if len(src.commands) != 1 {
 		t.Fatalf("commands %+v", src.commands)
 	}
@@ -83,7 +83,7 @@ func TestModCommandMenuAndHelp(t *testing.T) {
 	}
 	for _, it := range m.dashItems() {
 		if it.label == "Relabel · lab" {
-			run(m, it.run(m))
+			drain(t, m, it.run(m))
 		}
 	}
 	if len(src.commands) != 1 || src.commands[0].Command != "relabel" {

@@ -169,49 +169,49 @@ func TestSideBandKeys(t *testing.T) {
 	}
 	keyPress(m, "up")
 
-	runAll(m, keyPress(m, "left"))
+	drain(t, m, keyPress(m, "left"))
 	if !m.folds.IsSectionFolded("ticker.ticker") || !strings.Contains(whole(m), "▸ TICKER") || strings.Contains(whole(m), "PR host") {
 		t.Fatalf("← didn't fold the ticker: %v\n%s", m.folds.SectionsFolded, whole(m))
 	}
-	runAll(m, keyPress(m, "left")) // folded already: nothing
+	drain(t, m, keyPress(m, "left")) // folded already: nothing
 	if !m.folds.IsSectionFolded("ticker.ticker") || m.sideSel != "s:ticker.ticker" {
 		t.Fatalf("← on a folded header: %v %q", m.folds.SectionsFolded, m.sideSel)
 	}
-	runAll(m, keyPress(m, "right"))
+	drain(t, m, keyPress(m, "right"))
 	if m.folds.IsSectionFolded("ticker.ticker") {
 		t.Fatalf("→ didn't unfold it")
 	}
-	runAll(m, keyPress(m, "enter")) // no view to open: it folds
+	drain(t, m, keyPress(m, "enter")) // no view to open: it folds
 	if !m.folds.IsSectionFolded("ticker.ticker") || len(src.inputs) != 0 || m.area() != areaSide {
 		t.Fatalf("enter on the ticker: %v %+v", m.folds.SectionsFolded, src.inputs)
 	}
 	for _, k := range []string{"space", "p"} {
 		before := whole(m)
-		runAll(m, keyPress(m, k))
+		drain(t, m, keyPress(m, k))
 		if whole(m) != before || len(src.lifecycle) > 0 {
 			t.Errorf("%s on a header did something", k)
 		}
 	}
 
 	keyPress(m, "down")
-	runAll(m, keyPress(m, "enter"))
+	drain(t, m, keyPress(m, "enter"))
 	want := proto.ModViewInputParams{Mod: "ci", View: "status", Project: "beta", Kind: widget.EventClick}
 	if len(src.inputs) != 1 || src.inputs[0] != want || m.folds.IsSectionFolded("ci.status") {
 		t.Fatalf("enter on CI status sent %+v", src.inputs)
 	}
 
-	runAll(m, keyPress(m, "Z"))
+	drain(t, m, keyPress(m, "Z"))
 	if len(m.folds.SectionsFolded) != 0 {
 		t.Fatalf("Z left %v folded", m.folds.SectionsFolded)
 	}
-	runAll(m, keyPress(m, "z"))
+	drain(t, m, keyPress(m, "z"))
 	if !m.folds.IsSectionFolded("ticker.ticker") || !m.folds.IsSectionFolded("ci.status") || !m.folds.IsFolded("beta") {
 		t.Fatalf("z folded %+v", m.folds)
 	}
 	if m.sideSel != "s:ci.status" {
 		t.Fatalf("z moved the cursor off its header: %q", m.sideSel)
 	}
-	runAll(m, keyPress(m, "Z"))
+	drain(t, m, keyPress(m, "Z"))
 	if len(m.folds.SectionsFolded) != 0 || m.folds.IsFolded("beta") {
 		t.Fatalf("Z folded %+v", m.folds)
 	}
@@ -234,11 +234,11 @@ func TestSideBandMouse(t *testing.T) {
 		return -1
 	}
 	src, m := bandDash(t, 120+sideDefault, 30, bandTestViews())
-	runAll(m, m.sideClick(tea.Mouse{X: 5, Y: lineOf(m, "synced"), Button: tea.MouseLeft}))
+	drain(t, m, m.sideClick(tea.Mouse{X: 5, Y: lineOf(m, "synced"), Button: tea.MouseLeft}))
 	if m.focus != areaSide || m.sideSel != "s:ticker.ticker" || !m.folds.IsSectionFolded("ticker.ticker") {
 		t.Fatalf("a click on the ticker's body: focus %v sel %q folds %v", m.focus, m.sideSel, m.folds.SectionsFolded)
 	}
-	runAll(m, m.sideClick(tea.Mouse{X: 5, Y: lineOf(m, "CI STATUS"), Button: tea.MouseLeft}))
+	drain(t, m, m.sideClick(tea.Mouse{X: 5, Y: lineOf(m, "CI STATUS"), Button: tea.MouseLeft}))
 	if m.sideSel != "s:ci.status" || len(src.inputs) != 1 || src.inputs[0].Mod != "ci" {
 		t.Fatalf("a click on CI status's header: %q %+v", m.sideSel, src.inputs)
 	}
@@ -253,7 +253,7 @@ func TestSideBandMouse(t *testing.T) {
 	ksrc, k := bandDash(t, 120+sideDefault, 30, bandTestViews())
 	keyPress(k, "tab")
 	k.sideSel = "s:ci.status"
-	runAll(k, keyPress(k, "enter"))
+	drain(t, k, keyPress(k, "enter"))
 	if fmt.Sprint(ksrc.inputs) != fmt.Sprint(src.inputs) {
 		t.Errorf("enter sent %+v, the click %+v", ksrc.inputs, src.inputs)
 	}

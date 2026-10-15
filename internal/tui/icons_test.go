@@ -140,7 +140,7 @@ func TestIconsSetting(t *testing.T) {
 		}
 	}
 	for _, want := range []string{IconsNerd, IconsUnicode, IconsASCII, IconsAuto} {
-		run(m, press(m, "enter"))
+		drain(t, m, press(m, "enter"))
 		if iconsSetting() != want || fileIcons() != want {
 			t.Fatalf("enter: %s, file %s, want %s (%v)", iconsSetting(), fileIcons(), want, src.settings)
 		}
@@ -149,7 +149,7 @@ func TestIconsSetting(t *testing.T) {
 		t.Fatal("the popup names the file's keys")
 	}
 	for range 3 { // to ascii
-		run(m, press(m, "enter"))
+		drain(t, m, press(m, "enter"))
 	}
 	setIcons(IconsUnicode)
 	if loadIcons() != IconsASCII || ic().name != IconsASCII {
