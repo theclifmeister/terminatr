@@ -284,6 +284,13 @@ h3.sub + .lede { margin-top: 0.8rem; }
 @media (min-width: 900px) { .installs.mods-cmds { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
 @media (max-width: 560px) { .examples tbody th { white-space: normal; } }
 
+/* Servers */
+
+.pair-cmds, .relay-cmds { margin-top: 1rem; }
+@media (min-width: 900px) { .installs.pair-cmds, .installs.relay-cmds { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
+#servers .os .note code { overflow-wrap: anywhere; }
+#servers .os .note strong { color: var(--fg); }
+
 /* Install */
 
 .steps { list-style: none; counter-reset: step; padding: 0; margin: 0; display: grid; gap: 0.9rem; }

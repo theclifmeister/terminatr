@@ -25,6 +25,7 @@
     <a href="#features">features</a>
     <a href="#screens">screens</a>
     <a href="#mods">mods</a>
+    <a href="#servers">servers</a>
     <a href="#install">install</a>
     <a href="https://github.com/theclifmeister/terminatr">github</a>
   </nav>
@@ -749,7 +750,7 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
     <div class="os">
       <h3>Try one</h3>
       <div class="cmdline"><code>git clone https://github.com/theclifmeister/terminatr</code><button class="copy" type="button" aria-label="Copy the clone command">copy</button></div>
-      <div class="cmdline"><code>tm mod install https://github.com/theclifmeister/terminatr/tree/v0.27.3/examples/mods/standup</code><button class="copy" type="button" aria-label="Copy the mod install command">copy</button></div>
+      <div class="cmdline"><code>tm mod install https://github.com/theclifmeister/terminatr/tree/v0.28.1/examples/mods/standup</code><button class="copy" type="button" aria-label="Copy the mod install command">copy</button></div>
       <p class="note">Then turn it on in the Mods tab (<kbd>,</kbd> then <kbd>3</kbd>) or with <code>tm mod enable standup</code>. Or skip the shell: in the Mods tab, <kbd>e</kbd> lists the examples and <kbd>i</kbd> installs the selected one. <code>tm mod install</code> also takes a folder, a git URL or a repository's subfolder (<code>&lt;git-url&gt;//&lt;folder&gt;@&lt;tag&gt;</code>). The <a href="https://github.com/theclifmeister/terminatr/tree/main/examples/mods">examples</a> have one of each kind.</p>
     </div>
     <div class="os">
@@ -763,8 +764,86 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
   </div>
 </section>
 
+<section id="servers" aria-labelledby="servers-title">
+  <h2 id="servers-title"><span class="num">04</span> Servers working together</h2>
+  <p class="lede">Pair your tm server with a colleague's, or with your own on another machine. Both dial out to a relay you run, so neither machine needs an open port. A paired server sees the projects you choose to share, can watch or type into their agents' panes if you let it, and its coordinator can write to yours once you both link the projects.</p>
+
+  <ul class="features">
+    <li>
+      <h3><span class="glyph" aria-hidden="true">⇄</span> Pair with a code</h3>
+      <p><code>tm peer pair</code> on one server shows a one-time code; <code>tm peer join</code> takes it on the other. Both then show the same six digits to compare before either says yes. Each server pins the other's key, so nobody can step in later, the relay included.</p>
+    </li>
+    <li>
+      <h3><span class="glyph" aria-hidden="true">◉</span> Share a project, read-only</h3>
+      <p>Pairing alone shows nothing. Turn on <strong>Shared with paired servers</strong> for a project and it appears in the other server's sidebar: its dashboard, what waits for you, inbox, threads and tasks, <em>view-only</em>. Never its files, settings, repos or worktrees.</p>
+    </li>
+    <li>
+      <h3><span class="glyph" aria-hidden="true">▢</span> Remote panes</h3>
+      <p>Let a paired server <em>view</em> or <em>write</em> to the panes of what you share, and it opens your coordinator or a thread in its own console, as if it ran there. You decide on your side; <em>off</em> is the default. While the link is down the pane keeps its last screen.</p>
+    </li>
+    <li>
+      <h3><span class="glyph" aria-hidden="true">✉</span> Coordinators that talk</h3>
+      <p>Link a project to one on the other server and the two coordinators can write to each other. Ask from tm instead of explaining what to type: the other user sees the link request under <strong>NEEDS YOU</strong> and accepts or declines it. Each message waits for your OK unless you say otherwise.</p>
+    </li>
+  </ul>
+
+  <h3 class="sub">Pair two servers</h3>
+  <p class="lede">Once, each of you in your own terminal, or in the settings' Peers tab (<kbd>,</kbd> then <kbd>4</kbd>): <kbd>n</kbd> shows a code, <kbd>j</kbd> takes one.</p>
+  <div class="installs pair-cmds">
+    <div class="os">
+      <h3>On one server</h3>
+      <div class="cmdline"><code>tm peer pair --relay relay.example.net --as mini</code><button class="copy" type="button" aria-label="Copy the pair command">copy</button></div>
+      <p class="note">Prints a code like <code>relay.example.net/7Q4M-K2XD-9HVA-PT3C</code>. It works once, for 10 minutes. Pass it on yourself, in a chat or a call; the relay never sees it.</p>
+    </div>
+    <div class="os">
+      <h3>On the other</h3>
+      <div class="cmdline"><code>tm peer join relay.example.net/7Q4M-K2XD-9HVA-PT3C --as studio</code><button class="copy" type="button" aria-label="Copy the join command">copy</button></div>
+      <p class="note">Both terminals show <code>Check: 418 207</code>. Answer <kbd>y</kbd> on both sides only when the digits match; different digits mean someone is in between.</p>
+    </div>
+    <div class="os">
+      <h3>Link two projects</h3>
+      <div class="cmdline"><code>tm project link acme mini/api --request</code><button class="copy" type="button" aria-label="Copy the link command">copy</button></div>
+      <p class="note">Sets your side and asks <code>mini</code>'s user to link back. They accept or decline it there, in <code>api</code>'s Messages tab; the answer comes back to your inbox. Or link from the project's Settings tab, under <strong>Linked projects</strong>.</p>
+    </div>
+    <div class="os">
+      <h3>Let it see your panes</h3>
+      <div class="cmdline"><code>tm peer panes studio write</code><button class="copy" type="button" aria-label="Copy the panes command">copy</button></div>
+      <p class="note"><code>view</code> lets <code>studio</code> watch without typing, <code>off</code> shows nothing. There, <code>tm attach mini/s-41</code> or the sidebar's <code>mini</code> group opens one.</p>
+    </div>
+  </div>
+
+  <h3 class="sub">Run your own relay</h3>
+  <p class="lede">The relay is <code>tm relay serve</code>, from the same binary, on a host both servers reach: a small VPS, or a NAS at home. It stores nothing and only copies an encrypted stream between the two servers. It can see which servers connect and when, never names, projects, messages or panes. A bad relay can cut your link; it can't read it, change it or pair a stranger in.</p>
+  <div class="installs relay-cmds">
+    <div class="os">
+      <h3>A Linux VPS <span class="or">with a domain</span></h3>
+      <div class="cmdline"><code>sudo ~/.local/bin/tm relay install --domain relay.example.net</code><button class="copy" type="button" aria-label="Copy the relay install command">copy</button></div>
+      <p class="note">Point the name at the host and open port 443. It installs a sandboxed systemd service, gets its own Let's Encrypt certificate and renews it, updates itself daily, and ends with the <code>tm peer pair</code> line to use.</p>
+    </div>
+    <div class="os">
+      <h3>An IP address <span class="or">no domain</span></h3>
+      <div class="cmdline"><code>sudo ~/.local/bin/tm relay install --ip 203.0.113.5</code><button class="copy" type="button" aria-label="Copy the relay install command for an IP address">copy</button></div>
+      <p class="note">For a public IP, a home server on your LAN or a tailnet address. The relay makes its own key and a self-signed certificate; servers check it by that key's pin, carried in its address (<code>wss://203.0.113.5#sha256=…</code>) and in the pairing code, so nobody types it.</p>
+    </div>
+    <div class="os">
+      <h3>Docker <span class="or">VPS or NAS</span></h3>
+      <div class="cmdline"><code>curl -fLO https://github.com/theclifmeister/terminatr/releases/latest/download/tm-relay-docker.tar.gz</code><button class="copy" type="button" aria-label="Copy the relay compose download command">copy</button></div>
+      <div class="cmdline"><code>tar xzf tm-relay-docker.tar.gz &amp;&amp; cd tm-relay-docker</code><button class="copy" type="button" aria-label="Copy the unpack command">copy</button></div>
+      <p class="note">The image is <code>ghcr.io/theclifmeister/tm-relay</code>, for amd64 and arm64, running as a non-root user. The folder has three compose files: <code>compose.selfsigned.yaml</code> for an IP address, <code>compose.acme.yaml</code> with Caddy getting the certificate, and <code>compose.yaml</code> for certificate files you already have.</p>
+    </div>
+    <div class="os">
+      <h3>On a NAS <span class="or">port 8443</span></h3>
+      <div class="cmdline"><code>mkdir state &amp;&amp; sudo chown 65532:65532 state</code><button class="copy" type="button" aria-label="Copy the state folder command">copy</button></div>
+      <div class="cmdline"><code>echo RELAY_IP=192.168.1.20 &gt; .env</code><button class="copy" type="button" aria-label="Copy the relay address command">copy</button></div>
+      <div class="cmdline"><code>docker compose -f compose.selfsigned.yaml up -d</code><button class="copy" type="button" aria-label="Copy the compose up command">copy</button></div>
+      <p class="note">Runs on 8443, so the NAS keeps its own 443; <code>docker compose -f compose.selfsigned.yaml logs relay</code> shows the address to pair with, <code>wss://192.168.1.20:8443#sha256=…</code>. Back up <code>state/</code>: it holds the key. Where the folder is your own user's (Synology's File Station), skip the <code>chown</code> and add <code>RELAY_USER=uid:gid</code> to <code>.env</code>. Synology Container Manager, QNAP Container Station, Unraid and TrueNAS can run the same file as a project.</p>
+    </div>
+  </div>
+  <p class="after">The <a href="https://github.com/theclifmeister/terminatr/blob/main/docs/OPERATIONS.md#running-a-relay">operations guide</a> has the rest: certbot or your own reverse proxy, limits, upgrades, and what each server's link status means.</p>
+</section>
+
 <section id="install" aria-labelledby="install-title">
-  <h2 id="install-title"><span class="num">04</span> Install</h2>
+  <h2 id="install-title"><span class="num">05</span> Install</h2>
   <p class="lede">macOS 13+, Linux (glibc 2.28+) or Windows, with Claude Code or Codex. Pick your system.</p>
   <div class="installs">
     <div class="os">
