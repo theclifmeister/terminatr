@@ -43,7 +43,8 @@ import (
 
 // Data is one poll of everything the dashboard shows. The dashboard holds
 // no state of its own (docs/SPEC.md §4): every refresh asks the server
-// for sessions and reads the project files.
+// for sessions, and takes the projects as the server's projects.watch
+// last sent them, or reads the project files without it.
 type Data struct {
 	ServerOK bool
 	Sessions []proto.SessionInfo
@@ -383,7 +384,21 @@ type ServerSource struct {
 	// slow is what Load reads that an install, a setting or an edit
 	// changes (slowCache).
 	slow slowCache
+
+	// feed is the projects as the server's projects.watch with detail
+	// sends them, which Load shows (watched); stopFeed ends its run.
+	// touched is when an action of this source last changed project
+	// files itself.
+	feedMu   sync.Mutex
+	feed     *sideFeed
+	stopFeed context.CancelFunc
+	touched  time.Time
 }
+
+// touchWait is how long after an action Load reads the projects itself
+// while the watch hasn't sent what came after it: the server looks once
+// a watch poll.
+const touchWait = 3 * time.Second
 
 // slowMaxAge is how long what slowCache read serves at most, for what
 // its stamp doesn't see: a mod's data file edited in its folder's
@@ -405,7 +420,8 @@ type slowCache struct {
 
 // slowData is what slowCache read. Its callers only read it.
 type slowData struct {
-	cfg     *config.Config // nil when it doesn't load
+	cfg     *config.Config // nil when it doesn't load, and cfgErr says why
+	cfgErr  error
 	reg     *mod.Registry
 	regErr  error
 	modData map[string]string
@@ -425,7 +441,7 @@ func (sc *slowCache) load(agentsDir string) slowData {
 	if err != nil {
 		cfg = nil
 	}
-	sc.cfg = cfg
+	sc.cfg, sc.cfgErr = cfg, err
 	sc.reg, sc.regErr = mod.Load(cfg)
 	sc.modData = nil
 	if sc.regErr == nil {
@@ -486,14 +502,49 @@ func (s *ServerSource) call(method string, params, result any) error {
 	}
 }
 
-// Close drops the control connection.
+// Close drops the control connection and ends the projects' watch.
 func (s *ServerSource) Close() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.ctl != nil {
 		s.ctl.Close()
 		s.ctl = nil
 	}
+	s.mu.Unlock()
+	s.feedMu.Lock()
+	defer s.feedMu.Unlock()
+	if s.stopFeed != nil {
+		s.stopFeed()
+		s.feed.close()
+		s.feed, s.stopFeed = nil, nil
+	}
+}
+
+// watched is the projects as the server's projects.watch with detail
+// last sent them, the watch started at the first ask; false while it
+// doesn't run (no server, or one of an older protocol), or for a while
+// after an action of this source changed project files (touch).
+func (s *ServerSource) watched() ([]ProjectData, bool) {
+	s.feedMu.Lock()
+	if s.feed == nil {
+		f, list := watchSide(s.Paths, true)
+		if f.st != nil {
+			f.putList(list)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		s.feed, s.stopFeed = f, cancel
+		go f.run(ctx, s.Paths)
+	}
+	f, touched := s.feed, s.touched
+	s.feedMu.Unlock()
+	return f.current(touched, touchWait)
+}
+
+// touch notes that an action changed project files: Load reads them
+// itself until the watch sends what came after.
+func (s *ServerSource) touch() {
+	s.feedMu.Lock()
+	defer s.feedMu.Unlock()
+	s.touched = time.Now()
 }
 
 func (s *ServerSource) Load() Data {
@@ -535,6 +586,21 @@ func (s *ServerSource) Load() Data {
 		}
 	}
 	d.NoAgent = sc.noAgent
+	if ps, ok := s.watched(); ok {
+		d.Projects = ps
+		if sc.cfgErr != nil && d.Err == "" {
+			d.Err = sc.cfgErr.Error() // project.List's
+		}
+		return d
+	}
+	s.loadProjects(&d, cfg)
+	return d
+}
+
+// loadProjects reads every project's rows from its files into d, cfg
+// the config (nil when it doesn't load): what the server's watch sends
+// when it runs.
+func (s *ServerSource) loadProjects(d *Data, cfg *config.Config) {
 	list, err := project.List()
 	if err != nil && d.Err == "" {
 		d.Err = err.Error()
@@ -595,7 +661,6 @@ func (s *ServerSource) Load() Data {
 		}
 		d.Projects = append(d.Projects, pd)
 	}
-	return d
 }
 
 // loadPeers asks the server for its mirror of the paired servers
@@ -690,6 +755,7 @@ func (s *ServerSource) LibraryRemove(slug, id, name string) (int, error) {
 }
 
 func (s *ServerSource) NewProject(slug string) (string, error) {
+	defer s.touch()
 	if s.Caller.IsAgent() {
 		return "", errors.New("human-only: only the human creates projects")
 	}
@@ -949,6 +1015,7 @@ func pairWords(err error, relayURL string) error {
 }
 
 func (s *ServerSource) SetLink(slug, other, allow string) error {
+	defer s.touch()
 	if s.Caller.IsAgent() {
 		return errHumanOnly
 	}
@@ -956,6 +1023,7 @@ func (s *ServerSource) SetLink(slug, other, allow string) error {
 }
 
 func (s *ServerSource) SetLinkAsk(slug, other string, ask bool) error {
+	defer s.touch()
 	if s.Caller.IsAgent() {
 		return errHumanOnly
 	}
@@ -971,6 +1039,7 @@ func (s *ServerSource) LinkLog(slug, other string) ([]*link.Message, error) {
 }
 
 func (s *ServerSource) LinkAct(slug, verb, arg, text string) (string, error) {
+	defer s.touch()
 	if s.Caller.IsAgent() {
 		return "", errHumanOnly
 	}
@@ -1004,6 +1073,7 @@ func (s *ServerSource) LinkAct(slug, verb, arg, text string) (string, error) {
 }
 
 func (s *ServerSource) SetSetting(table, key string, value any) error {
+	defer s.touch()
 	if s.Caller.IsAgent() {
 		return errHumanOnly
 	}
@@ -1082,6 +1152,7 @@ func ApplyModDefaults(c caller.Caller, id string) ([]mod.Suggestion, error) {
 }
 
 func (s *ServerSource) ApplyModDefaults(id string) ([]mod.Suggestion, error) {
+	defer s.touch()
 	return ApplyModDefaults(s.Caller, id)
 }
 
@@ -1108,6 +1179,7 @@ func journalAll(c caller.Caller, key string, value any, why string) {
 }
 
 func (s *ServerSource) Lifecycle(slug, verb string) (string, error) {
+	defer s.touch()
 	switch verb {
 	case "activate", "deactivate":
 		return ActivateProject(s.call, s.Caller, slug, verb == "activate")
@@ -1137,6 +1209,7 @@ func (s *ServerSource) Templates(slug string) []mod.Template {
 }
 
 func (s *ServerSource) AddTask(slug, title string, tpl *mod.Template) (string, error) {
+	defer s.touch()
 	if s.Caller.IsAgent() {
 		return "", errHumanOnly
 	}
@@ -1163,6 +1236,7 @@ func (s *ServerSource) AddTask(slug, title string, tpl *mod.Template) (string, e
 }
 
 func (s *ServerSource) SetRepo(slug, path string, add bool) error {
+	defer s.touch()
 	if s.Caller.IsAgent() {
 		return errHumanOnly
 	}
@@ -1179,6 +1253,7 @@ func (s *ServerSource) SetRepo(slug, path string, add bool) error {
 }
 
 func (s *ServerSource) Ask(slug string, id int, kind, note string) (bool, error) {
+	defer s.touch()
 	if s.Caller.IsAgent() {
 		return false, errors.New("human-only: only the human asks the coordinator about a task")
 	}
@@ -1227,6 +1302,7 @@ func (s *ServerSource) OpenQuestions(slug string) (proto.QuestionsOpenResult, er
 }
 
 func (s *ServerSource) AskAdopt(slug string, sess proto.SessionInfo) (bool, error) {
+	defer s.touch()
 	if s.Caller.IsAgent() {
 		return false, errors.New("human-only: only the human asks the coordinator to adopt a session")
 	}
@@ -1247,6 +1323,7 @@ func (s *ServerSource) AskAdopt(slug string, sess proto.SessionInfo) (bool, erro
 // project slug: the server's, which the coordinator's tm thread adopt
 // needs, and the inbox item that told it.
 func (s *ServerSource) WithdrawAdopt(slug, id string) error {
+	defer s.touch()
 	if s.Caller.IsAgent() {
 		return errHumanOnly
 	}
@@ -1337,6 +1414,7 @@ func (s *ServerSource) ModsNote() string {
 }
 
 func (s *ServerSource) ModAct(id, verb string) error {
+	defer s.touch()
 	switch verb {
 	case "enable":
 		return mod.Enable(s.Caller, id, "")
@@ -1350,6 +1428,7 @@ func (s *ServerSource) ModAct(id, verb string) error {
 }
 
 func (s *ServerSource) SetModGrants(id string, grants []string) error {
+	defer s.touch()
 	return mod.SetGrants(s.Caller, id, grants)
 }
 

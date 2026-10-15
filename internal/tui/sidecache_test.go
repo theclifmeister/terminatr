@@ -85,7 +85,7 @@ func TestSideFeed(t *testing.T) {
 	p, r := cacheProject(t)
 	t.Setenv("TERMINATR_WATCH_POLL", "50ms")
 	paths := startServer(t)
-	feed, list := watchSide(paths)
+	feed, list := watchSide(paths, false)
 	defer feed.close()
 	if len(list) != 1 || list[0].Slug != "demo" || len(list[0].Threads) != 1 || list[0].Threads[0].ID != r.ID {
 		t.Fatalf("first projects: %+v", list)
