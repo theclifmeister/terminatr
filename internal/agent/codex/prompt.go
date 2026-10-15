@@ -111,9 +111,9 @@ func (a *Agent) Prompt(ctx context.Context, t agent.PromptTarget, text string) e
 	ctx, cancel := context.WithTimeout(ctx, queueTimeout)
 	defer cancel()
 	// The = forms keep a text starting with "-" from reading as a flag.
-	// On Windows an npm shim (codex.cmd) runs through cmd.exe: CLICommand
-	// quotes for it, and refuses a text it can't pass (a quote, a line
-	// break), which is then pasted.
+	// On Windows CLICommand runs an npm shim (codex.cmd) as node <script>;
+	// another batch file runs through cmd.exe, quoted for it, and a text it
+	// can't pass (a quote, a line break) is refused, and then pasted.
 	cmd := shell.CLICommand(ctx, a.m.Launch.Command, "queue", "--thread="+t.AgentSID, "--message="+text)
 	cmd.WaitDelay = 100 * time.Millisecond
 	var out bytes.Buffer
