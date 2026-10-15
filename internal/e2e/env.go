@@ -23,6 +23,7 @@ package e2e
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -34,6 +35,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -485,6 +487,13 @@ func (e *Env) saveArtifacts() string {
 	for i, w := range e.windows {
 		os.WriteFile(filepath.Join(dir, fmt.Sprintf("window-%d.txt", i+1)), []byte(w.Screen()+"\n"), 0o644)
 		os.WriteFile(filepath.Join(dir, fmt.Sprintf("window-%d.raw", i+1)), w.Raw(), 0o644)
+	}
+	if pid := e.ServerPID(); Alive(pid) && caps.Darwin {
+		// Where a stalled server is stuck: every thread's native stack
+		// (T468: a server that logged nothing after it listened).
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		exec.CommandContext(ctx, "sample", strconv.Itoa(pid), "1", "-file", filepath.Join(dir, "server-sample.txt")).Run()
+		cancel()
 	}
 	if Alive(e.ServerPID()) {
 		for _, s := range e.agentSessions() {

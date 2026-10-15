@@ -5,8 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/BurntSushi/toml"
+
+	"github.com/theclifmeister/terminatr/internal/agent"
 )
 
 // TestProbeVerdicts: what the sandbox run says becomes a reason to fall
@@ -29,10 +34,72 @@ func TestProbeVerdicts(t *testing.T) {
 	for _, tc := range cases {
 		codex := filepath.Join(t.TempDir(), "codex")
 		os.WriteFile(codex, []byte("#!/bin/sh\n"+tc.script+"\n"), 0o700)
-		err := probeOnce(codex, "/bin/tm", t.TempDir(), "/run/tm.sock", "tm", []string{"-c", "features.network_proxy=true"})
+		err := probeOnce(codex, "/bin/tm", t.TempDir(), "/run/tm.sock", "tm", []string{"-c", "features.network_proxy=true"}, false)
 		if tc.want == "" && err != nil || tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)) {
 			t.Errorf("%s: %v, want %q", tc.script, err, tc.want)
 		}
+	}
+	// On Windows the network can't be limited: the probe holds when tm's
+	// socket connects, whatever TCP does.
+	windows := []struct {
+		script, want string
+	}{
+		{`echo "unix=ok tcp=ok"`, ""},
+		{`echo "unix=ok tcp=refused"`, ""},
+		{`echo "unix=refused tcp=ok"`, "the profile wasn't applied"},
+		{`echo "error: bad" >&2; exit 2`, "codex sandbox refused it: error: bad"},
+		{`echo something else`, "unexpected probe output"},
+	}
+	for _, tc := range windows {
+		codex := filepath.Join(t.TempDir(), "codex")
+		os.WriteFile(codex, []byte("#!/bin/sh\n"+tc.script+"\n"), 0o700)
+		err := probeOnce(codex, "/bin/tm", t.TempDir(), "/run/tm.sock", "tm", []string{"-c", "permissions={tm={}}"}, true)
+		if tc.want == "" && err != nil || tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)) {
+			t.Errorf("windows %s: %v, want %q", tc.script, err, tc.want)
+		}
+	}
+}
+
+// TestWindowsCoordinator: on Windows a coordinator's profile turns the
+// network off instead of limiting it to the proxy, and keeps tm's socket.
+func TestWindowsCoordinator(t *testing.T) {
+	prof := `permissions={tm={extends=":workspace",filesystem={"/p"="write"},network={enabled=true,mode="limited",unix_sockets={"/run/tm.sock"="allow"}}}}`
+	argv := []string{"codex", "-c", `default_permissions="tm"`, "-c", "features.network_proxy=true", "--approve-for-me", "-c", prof, "-c", "hooks={}"}
+	want := []string{"codex", "-c", `default_permissions="tm"`, "--approve-for-me",
+		"-c", `permissions={tm={extends=":workspace",filesystem={"/p"="write"},network={enabled=false,unix_sockets={"/run/tm.sock"="allow"}}}}`,
+		"-c", "hooks={}"}
+	got := windowsCoordinator(argv)
+	if !slices.Equal(got, want) {
+		t.Errorf("windowsCoordinator\n%q\nwant\n%q", got, want)
+	}
+	var v struct {
+		Permissions map[string]struct {
+			Network struct {
+				Enabled     bool
+				Mode        string
+				UnixSockets map[string]string `toml:"unix_sockets"`
+			}
+		}
+	}
+	if _, err := toml.Decode(got[5], &v); err != nil || v.Permissions["tm"].Network.Enabled || v.Permissions["tm"].Network.Mode != "" ||
+		v.Permissions["tm"].Network.UnixSockets["/run/tm.sock"] != "allow" {
+		t.Errorf("windows profile %s: %v %+v", got[5], err, v)
+	}
+	if got := windowsCoordinator([]string{"codex", "--approve-for-me"}); !slices.Equal(got, []string{"codex", "--approve-for-me"}) {
+		t.Errorf("no profile: %q", got)
+	}
+
+	// The launch probes and keeps the Windows form.
+	var probed []string
+	var onWindows bool
+	probeFunc = func(_ *agent.Manifest, _, _, _, _, _ string, flags []string, w bool) (string, error) {
+		probed, onWindows = flags, w
+		return "0.162.1", nil
+	}
+	defer func() { probeFunc = probeProfile }()
+	l := sandboxed(agent.Launch{Argv: argv}, agent.LaunchSpec{Cwd: "/p", TMBin: "/bin/tm", Socket: "/run/tm.sock"}, nil, true)
+	if !slices.Equal(l.Argv, want) || len(l.Warnings) > 0 || !onWindows || !slices.Equal(probed, []string{"-c", want[5]}) {
+		t.Errorf("sandboxed on windows: %q %q, probed %q (windows %v)", l.Argv, l.Warnings, probed, onWindows)
 	}
 }
 

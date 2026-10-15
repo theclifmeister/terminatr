@@ -197,7 +197,7 @@ func TestLaunch(t *testing.T) {
 	// profile tm with its cwd written by name and the network limited to
 	// the socket, kept when the probe says it holds.
 	var probed []string
-	probeFunc = func(_ *agent.Manifest, codex, tmBin, cwd, sock, name string, flags []string) (string, error) {
+	probeFunc = func(_ *agent.Manifest, codex, tmBin, cwd, sock, name string, flags []string, _ bool) (string, error) {
 		probed = append([]string{codex, tmBin, cwd, sock, name}, flags...)
 		return "0.170.0", nil
 	}
@@ -232,7 +232,7 @@ func TestLaunch(t *testing.T) {
 
 	// When it doesn't hold (a newer Codex renamed the proxy, say), the
 	// coordinator runs as before the profile, and the launch says why.
-	probeFunc = func(*agent.Manifest, string, string, string, string, string, []string) (string, error) {
+	probeFunc = func(*agent.Manifest, string, string, string, string, string, []string, bool) (string, error) {
 		return "0.170.0", errors.New("the network isn't limited to tm's socket: features.network_proxy or network.mode was ignored")
 	}
 	l, err = a.Launch(spec)
@@ -259,7 +259,7 @@ func TestLaunch(t *testing.T) {
 	}
 	// A thread is never probed.
 	probed = nil
-	probeFunc = func(_ *agent.Manifest, codex, tmBin, cwd, sock, name string, flags []string) (string, error) {
+	probeFunc = func(_ *agent.Manifest, codex, tmBin, cwd, sock, name string, flags []string, _ bool) (string, error) {
 		probed = []string{name}
 		return "", errors.New("no")
 	}
