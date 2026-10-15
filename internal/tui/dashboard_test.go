@@ -1355,3 +1355,19 @@ func TestStatusBarButtonsFollowRebind(t *testing.T) {
 		}
 	}
 }
+
+// TestActWaitsForTheRunningOne: an action asked for while another runs
+// is queued, not started beside it.
+func TestActWaitsForTheRunningOne(t *testing.T) {
+	m := &dash{}
+	if m.act(func() actionMsg { return actionMsg{} }) == nil || !m.busy {
+		t.Fatal("the first action didn't start")
+	}
+	if m.act(func() actionMsg { return actionMsg{} }) != nil || len(m.queued) != 1 || m.acts != 1 {
+		t.Fatalf("the second ran beside the first: %d queued, %d started", len(m.queued), m.acts)
+	}
+	m.busy = false
+	if m.runQueued() == nil || !m.busy || len(m.queued) != 0 || m.acts != 2 {
+		t.Fatalf("the queued action didn't run in its turn: busy %v, %d started", m.busy, m.acts)
+	}
+}

@@ -927,8 +927,13 @@ func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 // fail shows err in the footer, as a failure.
 func (m *dash) fail(err error) { m.msg = err.Error(); m.errMsg = m.msg }
 
-// act runs an action in the background; one at a time.
+// act runs an action in the background; one at a time: one asked for
+// while another runs waits its turn (m.queued), as a settings key does.
 func (m *dash) act(fn func() actionMsg) tea.Cmd {
+	if m.busy {
+		m.queued = append(m.queued, func(m *dash) tea.Cmd { return m.act(fn) })
+		return nil
+	}
 	m.busy = true
 	m.acts++
 	return func() tea.Msg { return fn() }
