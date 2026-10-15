@@ -316,7 +316,7 @@ func TestPairRoomIsCapped(t *testing.T) {
 
 func TestWaitTimesOut(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.LinkWait = 100 * time.Millisecond
+	cfg.NewLinkWait = 100 * time.Millisecond
 	_, url, tc := relayFor(t, cfg)
 	a, b := newKey(t), newKey(t)
 	_, err := linkDialer(a, b, tc).Dial(context.Background(), url)

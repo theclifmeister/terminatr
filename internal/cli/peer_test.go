@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/tls"
 	"encoding/json"
+	"io"
 	"net/http/httptest"
 	"net/netip"
 	"os"
@@ -221,6 +222,7 @@ func TestPeerRelayUpdate(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "update-request")
 	cfg := relay.DefaultConfig()
 	cfg.Version, cfg.UpdateFile = "v0.27.0", file
+	cfg.UpdateAfter = 0 // the link may ask once it has carried bytes
 	s := relay.New(cfg)
 	hs := httptest.NewServer(s)
 	t.Cleanup(func() { s.Shutdown(); hs.Close() })
@@ -257,9 +259,21 @@ func TestPeerRelayUpdate(t *testing.T) {
 			done <- c
 		}()
 	}
+	var ends []*relay.Conn
 	for range 2 {
 		if c := <-done; c != nil {
 			defer c.Close()
+			ends = append(ends, c)
+		}
+	}
+	if len(ends) != 2 {
+		t.FailNow()
+	}
+	// A byte each way, as the link's TLS handshake would send.
+	for _, p := range [][2]*relay.Conn{{ends[0], ends[1]}, {ends[1], ends[0]}} {
+		p[0].Write([]byte{1})
+		if _, err := io.ReadFull(p[1], make([]byte, 1)); err != nil {
+			t.Fatal(err)
 		}
 	}
 	out := h.ok(human, "peer", "relay-update", "mini")

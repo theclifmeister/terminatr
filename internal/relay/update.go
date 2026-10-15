@@ -3,7 +3,9 @@ package relay
 // An update request (docs/SPEC.md §16.2): a server whose link through
 // the relay is live asks it to update itself to the latest official
 // release. The relay stays unprivileged: it only writes a request file
-// in its state directory, at most once per UpdateEvery; a root systemd
+// in its state directory, at most once per UpdateEvery from any key and
+// once per UpdateKeyEvery from one key, and only for a key whose link
+// room has been mated UpdateAfter with bytes sent both ways; a root systemd
 // path unit (tm-relay-update.path, from tm relay install) sees the file
 // and runs tm relay update, which removes it, checks the release's
 // checksums and restarts the relay only for a newer release. A request
@@ -23,7 +25,7 @@ const (
 	UpdateQueued    = "queued"     // the request file is written
 	UpdateOff       = "off"        // this relay takes no requests (no --update-request)
 	UpdateNotLinked = "not-linked" // the key has no live link through this relay
-	UpdateTooSoon   = "too-soon"   // one was queued less than UpdateEvery ago; Next says when
+	UpdateTooSoon   = "too-soon"   // asked too soon (see update); Next says when
 	UpdateFailed    = "failed"     // the request file couldn't be written
 )
 
@@ -52,27 +54,42 @@ func lastUpdate(file string) time.Time {
 }
 
 // update answers an update hello: the key must be one side of a link
-// room that is mated now, and the room the one it signed.
+// room that is mated now, the room the one it signed, with bytes sent
+// both ways. It is too soon until the room has been mated UpdateAfter,
+// UpdateKeyEvery after this key's last request taken and UpdateEvery
+// after anyone's.
 func (s *Server) update(c *conn) string {
 	r := updateReply{T: msgUpdate}
 	k := roomKey{KindLink, c.chk.room}
 	now := s.now()
 	s.mu.Lock()
 	m := s.busy[k]
-	linked := m != nil && (m.a.chk.fp == c.chk.fp || m.b.chk.fp == c.chk.fp)
+	linked := m != nil && (m.a.chk.fp == c.chk.fp || m.b.chk.fp == c.chk.fp) &&
+		m.a.in.Load() > 0 && m.b.in.Load() > 0
+	var next time.Time
+	if linked {
+		next = m.since.Add(s.cfg.UpdateAfter)
+		if t, ok := s.keyUpd[c.chk.fp]; ok {
+			next = later(next, t.Add(s.cfg.UpdateKeyEvery))
+		}
+		if !s.updated.IsZero() {
+			next = later(next, s.updated.Add(s.cfg.UpdateEvery))
+		}
+	}
 	switch {
 	case !linked:
 		r.Result = UpdateNotLinked
 	case s.cfg.UpdateFile == "":
 		r.Result = UpdateOff
-	case !s.updated.IsZero() && now.Sub(s.updated) < s.cfg.UpdateEvery:
-		r.Result, r.Next = UpdateTooSoon, s.updated.Add(s.cfg.UpdateEvery)
+	case now.Before(next):
+		r.Result, r.Next = UpdateTooSoon, next
 	default:
 		if err := writeUpdateRequest(s.cfg.UpdateFile, now); err != nil {
 			s.logf("update request: %v", err)
 			r.Result = UpdateFailed
 		} else {
 			s.updated, r.Result = now, UpdateQueued
+			s.keyUpd[c.chk.fp] = now
 		}
 	}
 	s.mu.Unlock()
@@ -80,6 +97,13 @@ func (s *Server) update(c *conn) string {
 	c.send(r)
 	c.closeWith(CloseNormal, "")
 	return ""
+}
+
+func later(a, b time.Time) time.Time {
+	if b.After(a) {
+		return b
+	}
+	return a
 }
 
 // writeUpdateRequest writes the request file (the path unit's trigger)

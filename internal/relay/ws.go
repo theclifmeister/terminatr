@@ -75,6 +75,10 @@ type wsConn struct {
 	client bool          // mask what we send
 	max    int           // largest message accepted
 	idle   time.Duration // read deadline per frame; 0 none
+	// control, when set, is told of each ping or pong read (its payload
+	// size) before it is answered; false ends ReadMessage with
+	// errControl.
+	control func(n int) bool
 
 	wmu    sync.Mutex
 	closed bool // a close frame was sent
@@ -246,7 +250,10 @@ func (w *wsConn) readFrame() (fin bool, op byte, payload []byte, err error) {
 	return
 }
 
-var errTooBig = errors.New("websocket message too big")
+var (
+	errTooBig  = errors.New("websocket message too big")
+	errControl = errors.New("websocket control frames over the limit")
+)
 
 // ReadMessage returns the next text or binary message, reassembled. Pings
 // are answered here; a close frame is answered and returned as a
@@ -264,6 +271,9 @@ func (w *wsConn) ReadMessage() (op byte, msg []byte, err error) {
 		fin, fop, payload, err := w.readFrame()
 		if err != nil {
 			return 0, nil, err
+		}
+		if (fop == opPing || fop == opPong) && w.control != nil && !w.control(len(payload)) {
+			return 0, nil, errControl
 		}
 		switch fop {
 		case opPing:

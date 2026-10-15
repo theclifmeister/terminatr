@@ -22,7 +22,7 @@ import (
 
 const relayUsage = `usage: tm relay serve [--listen ADDR] (--domain NAME [--state DIR] [--email ADDR] | --self-signed [--ip ADDR] [--state DIR]
     | --cert FILE --key FILE | --plain)
-    [--trusted-proxy CIDR]... [--max-conns N] [--max-per-ip N] [--bandwidth MiB/s] [--log-ips] [--update-request FILE] [--auto-update on|off]
+    [--trusted-proxy CIDR]... [--max-conns N] [--max-per-ip N] [--bandwidth MiB/s] [--total-bandwidth MiB/s] [--log-ips] [--update-request FILE] [--auto-update on|off]
        sudo tm relay install (--domain NAME [--email ADDR] | --ip [ADDR]) [--auto-update=on|off]
        sudo tm relay update [--force]
        sudo tm relay uninstall`
@@ -64,6 +64,7 @@ func relayServeCmd(e *Env, args []string) error {
 	plain, logIPs, selfSigned, ipFlag := f.Bool("plain"), f.Bool("log-ips"), f.Bool("self-signed"), f.String("ip")
 	proxies, updateFile, autoUpdate := f.List("trusted-proxy"), f.String("update-request"), f.String("auto-update")
 	maxConns, maxPerIP, bandwidth := f.String("max-conns"), f.String("max-per-ip"), f.String("bandwidth")
+	totalBandwidth := f.String("total-bandwidth")
 	pos, err := f.Parse(args)
 	if err != nil {
 		return err
@@ -135,6 +136,7 @@ func relayServeCmd(e *Env, args []string) error {
 		{"max-conns", *maxConns, func(v float64) { cfg.MaxConns = int(v) }},
 		{"max-per-ip", *maxPerIP, func(v float64) { cfg.MaxPerIP = int(v) }},
 		{"bandwidth", *bandwidth, func(v float64) { cfg.BytesRate, cfg.BytesBurst = v*(1<<20), 2*v*(1<<20) }},
+		{"total-bandwidth", *totalBandwidth, func(v float64) { cfg.TotalBytesRate, cfg.TotalBytesBurst = v*(1<<20), 2*v*(1<<20) }},
 	} {
 		if n.val == "" {
 			continue

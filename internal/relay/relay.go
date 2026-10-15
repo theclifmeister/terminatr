@@ -36,8 +36,22 @@ type Config struct {
 	BytesRate  float64 // bytes per second one address may send
 	BytesBurst float64
 
+	// MaxWaiting is how many connections may wait in rooms at once, so
+	// that waiting can't take every connection; 0 is half of MaxConns.
+	MaxWaiting int
+	// MaxWaitingPerIP is how many of them may come from one address (an
+	// IPv6 address counts by its /48).
+	MaxWaitingPerIP int
+	TotalBytesRate  float64 // bytes per second all connections may send together
+	TotalBytesBurst float64
+	RoomBytesRate   float64 // bytes per second one mated room may carry, both ways
+	RoomBytesBurst  float64
+	ControlRate     float64 // pings and pongs per second one connection may send
+	ControlBurst    float64
+
 	HelloTimeout time.Duration // from upgrade to a valid hello
-	LinkWait     time.Duration // how long a link room waits for its peer
+	LinkWait     time.Duration // how long a link room that mated here before waits for its peer
+	NewLinkWait  time.Duration // how long a link room that never mated here waits
 	PairWait     time.Duration // how long a pair room waits
 	PairLife     time.Duration // how long a mated pair room lasts
 	PairBytes    int64         // bytes a mated pair room may carry in all
@@ -59,8 +73,13 @@ type Config struct {
 	// UpdateFile is where an update request is written (update.go), in
 	// the relay's state directory; "" takes none.
 	UpdateFile string
-	// UpdateEvery is the least time between two requests taken.
-	UpdateEvery time.Duration
+	// UpdateEvery is the least time between two requests taken, from
+	// any key; UpdateKeyEvery the least between two from one key.
+	UpdateEvery    time.Duration
+	UpdateKeyEvery time.Duration
+	// UpdateAfter is how long a link room must have been mated, with
+	// bytes sent both ways, before its keys may ask for an update.
+	UpdateAfter time.Duration
 }
 
 // DefaultConfig is the relay's limits unless flags say otherwise.
@@ -69,14 +88,21 @@ func DefaultConfig() Config {
 		MaxConns: 1024, MaxPerIP: 16,
 		ConnRate: 0.5, ConnBurst: 10,
 		BytesRate: 4 << 20, BytesBurst: 8 << 20,
-		HelloTimeout: 10 * time.Second,
-		LinkWait:     time.Hour,
-		PairWait:     10 * time.Minute,
-		PairLife:     2 * time.Minute,
-		PairBytes:    256 << 10,
-		Ping:         30 * time.Second,
-		Idle:         90 * time.Second,
-		UpdateEvery:  time.Hour,
+		MaxWaitingPerIP: 4,
+		TotalBytesRate:  16 << 20, TotalBytesBurst: 32 << 20,
+		RoomBytesRate: 2 << 20, RoomBytesBurst: 64 << 20,
+		ControlRate: 0.2, ControlBurst: 10,
+		HelloTimeout:   10 * time.Second,
+		LinkWait:       time.Hour,
+		NewLinkWait:    5 * time.Minute,
+		PairWait:       10 * time.Minute,
+		PairLife:       2 * time.Minute,
+		PairBytes:      256 << 10,
+		Ping:           30 * time.Second,
+		Idle:           90 * time.Second,
+		UpdateEvery:    10 * time.Minute,
+		UpdateKeyEvery: time.Hour,
+		UpdateAfter:    10 * time.Minute,
 	}
 }
 
@@ -90,7 +116,9 @@ func (k roomKey) String() string { return k.kind + " room " + hex.EncodeToString
 // mated is a room whose two connections are joined.
 type mated struct {
 	a, b  *conn
+	since time.Time
 	bytes atomic.Int64 // carried so far, for pair rooms
+	room  bucket       // bytes it may carry; under Server.mu
 }
 
 // ipState is one address's connections and buckets.
@@ -111,22 +139,32 @@ type Server struct {
 	waiting map[roomKey]*conn
 	busy    map[roomKey]*mated
 	ips     map[string]*ipState
+	total   bucket                 // all connections' bytes
+	known   map[[32]byte]time.Time // link rooms that mated here, when last
 	swept   time.Time
-	updated time.Time // the last update request taken
+	updated time.Time              // the last update request taken
+	keyUpd  map[[32]byte]time.Time // the last taken from each key
 
 	now func() time.Time // tests
 }
 
 // New returns a relay with cfg's limits.
 func New(cfg Config) *Server {
-	return &Server{
+	if cfg.MaxWaiting <= 0 {
+		cfg.MaxWaiting = max(cfg.MaxConns/2, 1)
+	}
+	s := &Server{
 		cfg: cfg, now: time.Now,
 		all:     map[*conn]struct{}{},
 		waiting: map[roomKey]*conn{},
 		busy:    map[roomKey]*mated{},
 		ips:     map[string]*ipState{},
+		known:   map[[32]byte]time.Time{},
 		updated: lastUpdate(cfg.UpdateFile),
+		keyUpd:  map[[32]byte]time.Time{},
 	}
+	s.total.init(cfg.TotalBytesBurst, s.now())
+	return s
 }
 
 func (s *Server) logf(format string, a ...any) {
@@ -211,6 +249,16 @@ func ipKey(ip netip.Addr) string {
 	return ip.String()
 }
 
+// waitKey groups addresses for the waiting limits: IPv6 by /48, the
+// least a site is usually given.
+func waitKey(ip netip.Addr) string {
+	if ip.Is6() {
+		p, _ := ip.Prefix(48)
+		return p.String()
+	}
+	return ip.String()
+}
+
 // admit counts a new connection from key, or says why not.
 func (s *Server) admit(key string) bool {
 	s.mu.Lock()
@@ -235,7 +283,9 @@ func (s *Server) admit(key string) bool {
 	return true
 }
 
-// sweep forgets addresses with no connection whose buckets have refilled.
+// sweep forgets addresses with no connection whose buckets have
+// refilled, rooms that last mated over knownFor ago and keys' update
+// times that no longer limit them.
 func (s *Server) sweep(now time.Time) {
 	if now.Sub(s.swept) < time.Minute {
 		return
@@ -246,19 +296,83 @@ func (s *Server) sweep(now time.Time) {
 			delete(s.ips, k)
 		}
 	}
+	for k, t := range s.known {
+		if now.Sub(t) > knownFor {
+			delete(s.known, k)
+		}
+	}
+	for k, t := range s.keyUpd {
+		if now.Sub(t) >= s.cfg.UpdateKeyEvery {
+			delete(s.keyUpd, k)
+		}
+	}
 }
 
-// debit takes n bytes from key's bucket and says how long to wait.
-func (s *Server) debit(key string, n int) time.Duration {
+// knownFor is how long the relay remembers a link room that mated, for
+// the longer LinkWait; at most 4×MaxConns rooms.
+const knownFor = 24 * time.Hour
+
+// remember notes that link room id mated (under s.mu).
+func (s *Server) remember(id [32]byte, now time.Time) {
+	if _, ok := s.known[id]; !ok && len(s.known) >= 4*s.cfg.MaxConns {
+		var oldest [32]byte
+		var at time.Time
+		for k, t := range s.known {
+			if at.IsZero() || t.Before(at) {
+				oldest, at = k, t
+			}
+		}
+		delete(s.known, oldest)
+	}
+	s.known[id] = now
+}
+
+// debit takes n bytes c sent from its address's bucket, the relay's
+// and, with m, its room's, and says how long to wait.
+func (s *Server) debit(c *conn, m *mated, n int) time.Duration {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	st := s.ips[key]
-	if st == nil {
-		return 0
-	}
 	now := s.now()
-	st.seen = now
-	return st.bytes.debit(float64(n), s.cfg.BytesRate, s.cfg.BytesBurst, now)
+	var wait time.Duration
+	if st := s.ips[c.ipKey]; st != nil {
+		st.seen = now
+		wait = st.bytes.debit(float64(n), s.cfg.BytesRate, s.cfg.BytesBurst, now)
+	}
+	wait = max(wait, s.total.debit(float64(n), s.cfg.TotalBytesRate, s.cfg.TotalBytesBurst, now))
+	if m != nil {
+		wait = max(wait, m.room.debit(float64(n), s.cfg.RoomBytesRate, s.cfg.RoomBytesBurst, now))
+	}
+	return wait
+}
+
+// pause waits d, or until c is closed (false).
+func (c *conn) pause(d time.Duration) bool {
+	if d <= 0 {
+		return true
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return true
+	case <-c.done:
+		return false
+	}
+}
+
+// controlOverhead is a control frame's header as a client sends it.
+const controlOverhead = 6
+
+// control meters a ping or pong from the client: its bytes count
+// against the address and the relay like data, and more than
+// ControlRate a second (after ControlBurst) closes the connection.
+func (c *conn) control(n int) bool {
+	s := c.s
+	if !c.ctl.allow(s.cfg.ControlRate, s.cfg.ControlBurst, s.now()) {
+		c.closeWith(CloseRateLimit, ErrRateLimited)
+		return false
+	}
+	return c.pause(s.debit(c, nil, n+controlOverhead))
 }
 
 // conn is one relay client.
@@ -267,12 +381,15 @@ type conn struct {
 	ws    *wsConn
 	ip    netip.Addr
 	ipKey string
+	wKey  string // waitKey(ip)
 	start time.Time
+	ctl   bucket    // control frames; the reading goroutine's
+	since time.Time // waiting since; under Server.mu
 
 	chk  checked
 	peer atomic.Pointer[conn]
-	pair atomic.Pointer[mated]
-	in   atomic.Int64 // bytes this client sent
+	room atomic.Pointer[mated] // set before peer
+	in   atomic.Int64          // bytes this client sent
 
 	done      chan struct{}
 	closeOnce sync.Once
@@ -330,8 +447,10 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 		s.release(nil, key)
 		return
 	}
-	c := &conn{s: s, ws: ws, ip: ip, ipKey: key, start: s.now(), done: make(chan struct{})}
+	c := &conn{s: s, ws: ws, ip: ip, ipKey: key, wKey: waitKey(ip), start: s.now(), done: make(chan struct{})}
+	c.ctl.init(s.cfg.ControlBurst, c.start)
 	ws.idle = s.cfg.Idle
+	ws.control = c.control
 	s.mu.Lock()
 	if s.closing {
 		s.mu.Unlock()
@@ -374,6 +493,9 @@ func (s *Server) release(c *conn, key string) {
 		}
 		if m := s.busy[k]; m != nil && (m.a == c || m.b == c) {
 			delete(s.busy, k)
+			if k.kind == KindLink {
+				s.remember(k.id, s.now())
+			}
 		}
 		peer = c.peer.Load()
 	}
@@ -472,18 +594,13 @@ func (c *conn) run() string {
 			return ErrProtocol // data before "mated", or text after it
 		}
 		c.in.Add(int64(len(msg)))
-		if m := c.pair.Load(); m != nil && m.bytes.Add(int64(len(msg))) > s.cfg.PairBytes {
+		m := c.room.Load()
+		if c.chk.kind == KindPair && m.bytes.Add(int64(len(msg))) > s.cfg.PairBytes {
 			peer.closeWith(CloseRateLimit, ErrPairLimit)
 			return ErrPairLimit
 		}
-		if wait := s.debit(c.ipKey, len(msg)); wait > 0 {
-			t := time.NewTimer(wait)
-			select {
-			case <-t.C:
-			case <-c.done:
-				t.Stop()
-				return ""
-			}
+		if !c.pause(s.debit(c, m, len(msg))) {
+			return ""
 		}
 		peer.status(msgMated) // the peer hears "mated" before any data
 		if peer.ws.WriteMessage(opBinary, msg) != nil {
@@ -510,23 +627,36 @@ func (s *Server) join(c *conn) string {
 	}
 	w := s.waiting[k]
 	if w != nil && w.chk.fp == c.chk.fp {
+		delete(s.waiting, k)
 		drop = append(drop, w)
 		w = nil
 	}
 	if w == nil {
+		evict, why := s.roomToWait(c)
+		if why != "" {
+			s.mu.Unlock()
+			closeDropped(drop, c)
+			return why
+		}
+		if evict != nil {
+			delete(s.waiting, roomKey{evict.chk.kind, evict.chk.room})
+		}
+		now := s.now()
+		c.since = now
 		s.waiting[k] = c
-		s.mu.Unlock()
-		for _, d := range drop {
-			if d.chk.fp == c.chk.fp {
-				d.closeWith(CloseConflict, ErrReplaced)
-			} else {
-				d.closeWith(ClosePeerGone, ErrPeerGone)
+		wait := s.cfg.PairWait
+		if k.kind == KindLink {
+			wait = s.cfg.NewLinkWait
+			if _, ok := s.known[k.id]; ok {
+				wait = s.cfg.LinkWait
 			}
 		}
-		wait := s.cfg.LinkWait
-		if c.chk.kind == KindPair {
-			wait = s.cfg.PairWait
+		s.mu.Unlock()
+		if evict != nil {
+			s.logf("%sclosed the oldest waiting %s to make room", evict.who(), roomKey{evict.chk.kind, evict.chk.room})
+			evict.closeWith(CloseTimeout, ErrTimeout)
 		}
+		closeDropped(drop, c)
 		t := time.AfterFunc(wait, func() {
 			s.mu.Lock()
 			still := s.waiting[k] == c
@@ -545,14 +675,17 @@ func (s *Server) join(c *conn) string {
 		return ""
 	}
 	delete(s.waiting, k)
-	m := &mated{a: w, b: c}
+	now := s.now()
+	m := &mated{a: w, b: c, since: now}
+	m.room.init(s.cfg.RoomBytesBurst, now)
 	s.busy[k] = m
+	if k.kind == KindLink {
+		s.remember(k.id, now)
+	}
+	w.room.Store(m)
+	c.room.Store(m)
 	w.peer.Store(c)
 	c.peer.Store(w)
-	if k.kind == KindPair {
-		w.pair.Store(m)
-		c.pair.Store(m)
-	}
 	s.mu.Unlock()
 	for _, d := range drop {
 		d.closeWith(CloseConflict, ErrReplaced)
@@ -572,6 +705,53 @@ func (s *Server) join(c *conn) string {
 	return ""
 }
 
+// closeDropped closes the connections c's join ended: its own older
+// one replaced, the partner of that one gone.
+func closeDropped(drop []*conn, c *conn) {
+	for _, d := range drop {
+		if d.chk.fp == c.chk.fp {
+			d.closeWith(CloseConflict, ErrReplaced)
+		} else {
+			d.closeWith(ClosePeerGone, ErrPeerGone)
+		}
+	}
+}
+
+// roomToWait says whether c may wait (under s.mu): at most
+// MaxWaitingPerIP from its address, else rate-limited; at most
+// MaxWaiting in all. A full relay makes room by closing the oldest
+// waiter of the address with the most waiting, when that address has at
+// least two more than c's (so evictions even out and end); else c is
+// rate-limited.
+func (s *Server) roomToWait(c *conn) (evict *conn, why string) {
+	per := map[string]int{}
+	for _, w := range s.waiting {
+		per[w.wKey]++
+	}
+	mine := per[c.wKey]
+	if mine >= s.cfg.MaxWaitingPerIP {
+		return nil, ErrRateLimited
+	}
+	if len(s.waiting) < s.cfg.MaxWaiting {
+		return nil, ""
+	}
+	most, n := "", 0
+	for k, v := range per {
+		if v > n || (v == n && k < most) {
+			most, n = k, v
+		}
+	}
+	if n < mine+2 {
+		return nil, ErrRateLimited
+	}
+	for _, w := range s.waiting {
+		if w.wKey == most && (evict == nil || w.since.Before(evict.since)) {
+			evict = w
+		}
+	}
+	return evict, ""
+}
+
 // bucket is a token bucket. Debt is allowed for bytes (the sender
 // waits it off); new connections need a whole token.
 type bucket struct {
@@ -582,6 +762,9 @@ type bucket struct {
 func (b *bucket) init(burst float64, now time.Time) { b.tokens, b.last = burst, now }
 
 func (b *bucket) refill(rate, burst float64, now time.Time) {
+	if now.Before(b.last) {
+		return
+	}
 	b.tokens += now.Sub(b.last).Seconds() * rate
 	if b.tokens > burst {
 		b.tokens = burst
