@@ -2,9 +2,11 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
@@ -440,4 +442,95 @@ func shipLine(rv Review) string {
 		return th().Bad.Render(pr + " closed without merging")
 	}
 	return pr
+}
+
+// detailsState is where the details panel is scrolled and what it selects.
+type detailsState struct {
+	// detailTop is the details panel's first line, scrolled with the
+	// wheel, for the row detailKey (another row shows from the top).
+	detailTop int
+	detailKey string
+	// detSel is the details panel's selected mod section header (its fold
+	// id), for the row detSelKey; "" for none.
+	detSel, detSelKey string
+}
+
+// detailsKey runs a key while the details panel has the focus, by the
+// panel's key table (panelActions): the arrows scroll it, ] and [
+// select a mod section's header, ← → and enter fold, unfold or open the
+// selected one, esc drops the selection, then goes back to the list. ok
+// is false for the other keys, and for ] [ ← → enter where they find no
+// section, which go to the list's actions.
+func (m *dash) detailsKey(key string) (tea.Cmd, bool) {
+	op, ok := panelOp(key)
+	if !ok {
+		return nil, false
+	}
+	switch op {
+	case panelUp:
+		m.scrollDetails(-1)
+	case panelDown:
+		m.scrollDetails(1)
+	case panelPageUp:
+		m.scrollDetails(scrollKeys["pgup"])
+	case panelPageDown:
+		m.scrollDetails(scrollKeys["pgdown"])
+	case panelFirst:
+		m.scrollDetails(-1 << 20)
+	case panelLast:
+		m.scrollDetails(1 << 20)
+	case panelBack:
+		if m.detSelNow() != "" {
+			m.detSel = ""
+		} else {
+			m.focus = areaMain
+		}
+	default:
+		lay, shows := m.detailsNow()
+		if !shows {
+			return nil, false
+		}
+		st, next, took := panelStep(lay, m.detSelNow(), op)
+		switch {
+		case !took:
+			return nil, false
+		case next != m.detSelNow():
+			m.detSel, m.detSelKey = next, m.sel
+			m.revealDetails()
+			return nil, true
+		}
+		return m.sectionCmd(st), true
+	}
+	return nil, true
+}
+
+// detSelNow is the details panel's selected header for the row shown.
+func (m *dash) detSelNow() string {
+	if m.detSelKey != m.sel {
+		return ""
+	}
+	return m.detSel
+}
+
+// revealDetails scrolls the details panel so its selected header shows.
+func (m *dash) revealDetails() {
+	lay, ok := m.detailsNow()
+	if !ok {
+		return
+	}
+	i := slices.IndexFunc(lay.secs, func(s *sideSection) bool { return s.id == m.detSelNow() })
+	if i < 0 || lay.heads[i] < 0 {
+		return
+	}
+	if m.detailKey != m.sel {
+		m.detailKey, m.detailTop = m.sel, 0
+	}
+	h, rows := lay.heads[i], m.geom().details().h
+	switch {
+	case h < m.detailTop:
+		m.detailTop = h
+	case h >= m.detailTop+rows:
+		m.detailTop = h - rows + 1
+	}
+	m.detailTop = min(max(m.detailTop, 0), max(len(lay.lines)-rows, 0))
 }

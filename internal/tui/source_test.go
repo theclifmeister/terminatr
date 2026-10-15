@@ -4,8 +4,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/theclifmeister/terminatr/internal/ticker"
 )
 
@@ -53,5 +55,42 @@ func TestShipped(t *testing.T) {
 		if got := ticker.PRNumber(url); got != want {
 			t.Errorf("PRNumber(%q) = %d", url, got)
 		}
+	}
+}
+
+// sourceStub is a Source whose every method panics (its Source is nil):
+// a fake embeds it and implements only the concerns its test needs.
+type sourceStub struct{ Source }
+
+// The real source implements every concern.
+var (
+	_ PollSource     = (*ServerSource)(nil)
+	_ ProjectSource  = (*ServerSource)(nil)
+	_ SettingsSource = (*ServerSource)(nil)
+	_ LinkSource     = (*ServerSource)(nil)
+	_ PeerSource     = (*ServerSource)(nil)
+	_ ModSource      = (*ServerSource)(nil)
+	_ ModViewSource  = (*ServerSource)(nil)
+	_ SessionSource  = (*ServerSource)(nil)
+)
+
+// TestDashboardPollsOnlyReads: a dashboard that only polls and draws
+// needs nothing of the Source but its reads and the mods' views; a
+// fake of those two concerns is enough, any other call panics.
+func TestDashboardPollsOnlyReads(t *testing.T) {
+	f := &fakeSource{data: testData()}
+	src := struct {
+		sourceStub
+		PollSource
+		ModViewSource
+	}{PollSource: f, ModViewSource: f}
+	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 30, State: DashState{Current: "beta"}})
+	for _, cmd := range []tea.Cmd{m.load(), m.pollModViews()} {
+		if cmd != nil {
+			m.Update(cmd())
+		}
+	}
+	if out := screen(m); !strings.Contains(out, "NEEDS YOU") || !strings.Contains(out, "server ok") {
+		t.Fatalf("the poll didn't draw the data:\n%s", out)
 	}
 }
