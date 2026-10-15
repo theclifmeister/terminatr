@@ -37,7 +37,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -45,6 +44,8 @@ import (
 	"unicode"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/theclifmeister/terminatr/internal/plat/caps"
 )
 
 const (
@@ -945,7 +946,7 @@ func sandboxCmd(logPath string, args []string) int {
 	}
 	// On Windows the socket's folder, not the network, lets it connect
 	// (Codex 0.162): tm's coordinator profile there has the network off.
-	if socks, _ := netw["unix_sockets"].(map[string]any); socks[sock] == "allow" && (netw["enabled"] == true || runtime.GOOS == "windows") {
+	if socks, _ := netw["unix_sockets"].(map[string]any); socks[sock] == "allow" && (netw["enabled"] == true || caps.Windows) {
 		unix = "ok"
 		features, _ := cfg["features"].(map[string]any)
 		limited := netw["mode"] == "limited" && features["network_proxy"] == true
