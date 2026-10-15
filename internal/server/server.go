@@ -663,9 +663,10 @@ func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human b
 			return
 		}
 		who := s.whoFor(peerPID)
-		perr := mayCall(req.Method, human, who)
+		m, known := methodOf(req.Method)
+		perr := mayCall(req.Method, m.gate, human, who)
 		if perr == nil {
-			perr = s.mayAddress(req, human, who)
+			perr = s.mayAddress(req, m, human, who)
 		}
 		if perr != nil {
 			if err := writeJSONLine(c, proto.Response{ID: req.ID, Error: perr}); err != nil {
@@ -673,24 +674,16 @@ func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human b
 			}
 			continue
 		}
-		switch req.Method {
-		case proto.MethodViewSubscribe:
-			s.serveViewStream(c, br, req, peerPID)
-			return
-		case proto.MethodSessionWatch:
-			s.serveWatch(c, br, req)
-			return
-		case proto.MethodProjectWatch:
-			s.serveProjectWatch(c, br, req)
-			return
-		case proto.MethodProjectsWatch:
-			s.serveProjectsWatch(c, br, req)
-			return
-		case proto.MethodSessionAsk:
-			s.serveAsk(c, br, req)
+		if m.stream != nil {
+			m.stream(s, c, br, req, peerPID)
 			return
 		}
-		result, perr := s.dispatch(req, peerPID, human, who)
+		var result any
+		if known {
+			result, perr = m.call(s, req, callCtx{method: req.Method, peerPID: peerPID, human: human, who: who})
+		} else {
+			perr = proto.Errorf(proto.ErrUnknownMethod, "unknown method %q", req.Method)
+		}
 		resp := proto.Response{ID: req.ID, Error: perr}
 		if perr == nil {
 			b, err := json.Marshal(result)
@@ -725,27 +718,18 @@ func (s *Server) mayAnswer(in proto.SessionInfo, c caller.Caller, human bool) *p
 	return proto.Errorf("human-only", "only the human, on the human socket (%s), or project %s's coordinator answers session %s's questions", ipc.HumanName, in.Project, in.ID)
 }
 
-// mayCall is the gate of method m before it runs, who telling the
-// caller from the peer pid (asked only when needed: it walks the process
-// tree). A human-only method answers only on the human socket, and there
-// only to a caller the pid walk doesn't place in an agent's session (an
-// agent without an OS sandbox can reach the socket). cli.run on the server
-// socket must come from an agent the pid walk finds: one it calls the
-// human (a process that left its session's tree) would run project
-// commands as the human, whose own CLI uses the human socket.
-// view.digest, a test's poke at the console of a pid, answers on either
-// socket (an e2e run from inside a thread has no human socket) but never
-// to a caller in an agent's session.
-func mayCall(m string, human bool, who func() caller.Caller) *proto.Error {
-	humanOnly := proto.HumanOnly(m) || m == attachMethod
+// mayCall is gate g of method m before it runs (method.gate), who
+// telling the caller from the peer pid (asked only when needed: it walks
+// the process tree). A human-only method answers only on the human
+// socket, and there only to a caller the pid walk doesn't place in an
+// agent's session (an agent without an OS sandbox can reach the socket).
+func mayCall(m string, g gate, human bool, who func() caller.Caller) *proto.Error {
 	switch {
-	case humanOnly && !human:
+	case g == gateHuman && !human:
 		return humanSocketOnly(m)
-	case humanOnly && who().IsAgent():
+	case (g == gateHuman || g == gateNotAgent) && who().IsAgent():
 		return proto.Errorf("human-only", "%s is the human's; an agent's session doesn't call it", m)
-	case m == proto.MethodViewDigest && who().IsAgent():
-		return proto.Errorf("human-only", "%s is the human's; an agent's session doesn't call it", m)
-	case m == proto.MethodCLIRun && !human && !who().IsAgent():
+	case g == gateAgentOrHuman && !human && !who().IsAgent():
 		return proto.Errorf("human-only", "%s from outside every agent's session answers only on the human socket (%s)", m, ipc.HumanName)
 	}
 	return nil
@@ -769,249 +753,48 @@ func humanSocketOnly(m string) *proto.Error {
 	return proto.Errorf("human-only", "%s answers only on the human socket (%s), which no agent's sandbox allows", m, ipc.HumanName)
 }
 
-func (s *Server) dispatch(req proto.Request, peerPID int, human bool, who func() caller.Caller) (any, *proto.Error) {
-	if req.Method == proto.MethodViewDigest {
-		var p proto.ViewDigestParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		n := s.views.askDigest(p.PID)
-		if n == 0 {
-			return nil, proto.Errorf(proto.ErrBadParams, "no console of pid %d", p.PID)
-		}
-		return proto.ViewDigestResult{Consoles: n}, nil
+// read is session.read's answer.
+func (s *Server) read(p proto.SessionReadParams) (any, *proto.Error) {
+	sess, perr := s.session(p.ID)
+	if perr != nil {
+		return nil, perr
 	}
-	if strings.HasPrefix(req.Method, "view.") {
-		var p proto.ViewParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.views.do(req.Method, p)
+	r, err := sess.Read(p.Scrollback)
+	if err != nil {
+		return nil, sessionError(p.ID, err)
 	}
-	switch req.Method {
-	case proto.MethodCallerWho:
-		return s.whoIs(peerPID), nil
-	case proto.MethodCLIRun:
-		var p proto.CLIRunParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		res, perr := s.cliRun(p, peerPID)
-		s.kick()
-		return res, perr
-	case proto.MethodToolRun:
-		var p proto.ToolRunParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.toolRunRPC(p, peerPID)
-	case proto.MethodToolList:
-		return s.toolListRPC(peerPID)
-	case proto.MethodProjectRename:
-		var p proto.ProjectRenameParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.renameProject(p, who())
-	case proto.MethodProjectActive:
-		var p proto.ProjectActiveParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		res, perr := s.setActive(p, who())
-		s.kick()
-		return res, perr
-	case proto.MethodModHosts:
-		return s.modHosts(), nil
-	case proto.MethodModViews:
-		var p proto.ModViewsParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.modViews(p, peerPID, who())
-	case proto.MethodModViewInput:
-		var p proto.ModViewInputParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.modViewInput(p, peerPID, who())
-	case proto.MethodModCommand:
-		var p proto.ModCommandParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.modCommand(p, peerPID, who())
-	case proto.MethodModRestart:
-		var p proto.ModRestartParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.restartMod(p.ID, who())
-	case proto.MethodPing:
-		return map[string]bool{"pong": true}, nil
-	case proto.MethodServerStatus:
-		return s.status(), nil
-	case proto.MethodServerKeychain:
-		return keychain.Probe(runtime.GOOS, os.Getenv, keychain.Run), nil
-	case proto.MethodServerCodeHost:
-		return codeHostStatus(), nil
-	case proto.MethodServerStop:
-		var p proto.ServerStopParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.stop(p)
-	case proto.MethodSessionList:
-		return s.listFor(who(), human), nil
-	case proto.MethodNotifyClaim, proto.MethodNotifyDismiss:
-		var p proto.NoticeParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.noticeCall(req.Method, p, who())
-	case proto.MethodSessionStart:
-		var p proto.SessionStartParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.startSession(p)
-	case proto.MethodSessionStop:
-		var p proto.SessionIDParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.stopSession(p.ID)
-	case proto.MethodSessionRead:
-		var p proto.SessionReadParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		sess, perr := s.session(p.ID)
-		if perr != nil {
-			return nil, perr
-		}
-		r, err := sess.Read(p.Scrollback)
-		if err != nil {
-			return nil, sessionError(p.ID, err)
-		}
-		return r, nil
-	case proto.MethodSessionKeys:
-		var p proto.SessionKeysParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		sess, perr := s.session(p.ID)
-		if perr != nil {
-			return nil, perr
-		}
-		if err := sess.Input([]byte(p.Data)); err != nil {
-			return nil, sessionError(p.ID, err)
-		}
-		return struct{}{}, nil
-	case proto.MethodSessionPrompt:
-		var p proto.SessionPromptParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.prompt(p)
-	case proto.MethodSessionWait:
-		var p proto.SessionWaitParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.wait(p)
-	case proto.MethodHookEvent:
-		var p proto.HookEventParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.hookEvent(p), nil
-	case proto.MethodSessionAnswer:
-		var p proto.SessionAnswerParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		sess, perr := s.session(p.ID)
-		if perr != nil {
-			return nil, perr
-		}
-		c := who()
-		if perr := s.mayAnswer(sess.Info(), c, human); perr != nil {
-			return nil, perr
-		}
-		res, perr := s.asks.answer(p.ID, p.Index, p.Answer, p.Question)
-		if perr == nil && p.Question != "" {
-			s.journalAnswer(p, c)
-		}
-		s.watch.wake()
-		s.modEv.wake()
-		return res, perr
-	case proto.MethodModActionDone:
-		var p proto.ModActionDoneParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.modActionDone(p, peerPID)
-	case proto.MethodSessionClear:
-		var p proto.SessionIDParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.clearSession(p.ID, who())
-	case proto.MethodModActionCheck:
-		var p proto.ModActionParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.modActionCheck(p, peerPID)
-	case proto.MethodQuestionsOpen:
-		var p proto.QuestionsOpenParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.openQuestions(p)
-	case proto.MethodSessionRemote:
-		var p proto.SessionRemoteParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.remote(p)
-	case proto.MethodSessionModel:
-		var p proto.SessionModelParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.syncModel(p.ID)
-	case proto.MethodSessionAdopt:
-		var p proto.SessionAdoptParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.adopt(p)
-	case proto.MethodSessionAdoptAsk:
-		var p proto.SessionAdoptAskParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.adoptAsk(p)
-	case proto.MethodAgentList:
-		return s.agentList(), nil
-	case proto.MethodAgentReload:
-		s.loadAgents()
-		return s.agentList(), nil
-	case proto.MethodPeerReload:
-		s.peers.Reload()
-		return s.peers.Status(), nil
-	case proto.MethodPeerList:
-		return s.mirror.List(), nil
-	case proto.MethodAgentExplain:
-		var p proto.SessionIDParams
-		if err := decodeParams(req.Params, &p); err != nil {
-			return nil, err
-		}
-		return s.explain(p.ID)
+	return r, nil
+}
+
+// keys is session.keys's answer.
+func (s *Server) keys(p proto.SessionKeysParams) (any, *proto.Error) {
+	sess, perr := s.session(p.ID)
+	if perr != nil {
+		return nil, perr
 	}
-	return nil, proto.Errorf(proto.ErrUnknownMethod, "unknown method %q", req.Method)
+	if err := sess.Input([]byte(p.Data)); err != nil {
+		return nil, sessionError(p.ID, err)
+	}
+	return struct{}{}, nil
+}
+
+// answer is session.answer's, gated by mayAnswer.
+func (s *Server) answer(p proto.SessionAnswerParams, cc callCtx) (any, *proto.Error) {
+	sess, perr := s.session(p.ID)
+	if perr != nil {
+		return nil, perr
+	}
+	c := cc.who()
+	if perr := s.mayAnswer(sess.Info(), c, cc.human); perr != nil {
+		return nil, perr
+	}
+	res, perr := s.asks.answer(p.ID, p.Index, p.Answer, p.Question)
+	if perr == nil && p.Question != "" {
+		s.journalAnswer(p, c)
+	}
+	s.watch.wake()
+	s.modEv.wake()
+	return res, perr
 }
 
 func (s *Server) status() proto.ServerStatus {
@@ -1324,7 +1107,7 @@ func (s *Server) serveAttach(c net.Conn, br *bufio.Reader, peerPID int, human bo
 	c.SetReadDeadline(time.Time{})
 	// Attach types into a session as the human would: the human's alone,
 	// like session.keys.
-	if perr := mayCall(attachMethod, human, s.whoFor(peerPID)); perr != nil {
+	if perr := mayCall(attachMethod, gateHuman, human, s.whoFor(peerPID)); perr != nil {
 		writeJSONLine(c, proto.AttachReply{Error: perr})
 		return
 	}

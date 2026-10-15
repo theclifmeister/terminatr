@@ -3,7 +3,6 @@ package proto
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/modnotify"
@@ -572,29 +571,6 @@ const (
 	// thread lacks (§5.2).
 	MethodCLIRun = "cli.run"
 )
-
-// HumanOnly reports whether method m is one only the human calls: the
-// server answers it on the human socket alone (ipc.HumanName, docs/SPEC.md
-// §11.1), and still refuses an agent caller there. The press tokens of
-// mod.action.check and mod.action.done are among them, and so is what
-// starts, stops or types into a session, or steers the human's console
-// (view.*, but view.digest, a test's request that a console check its
-// mirror): an agent's own uses of those (tm thread start, prompt, …) run
-// inside the server through cli.run, whose calls come in on the human
-// socket after the command's own caller check.
-func HumanOnly(m string) bool {
-	switch m {
-	case MethodProjectRename, MethodProjectActive,
-		MethodModViews, MethodModViewInput, MethodModCommand, MethodModRestart,
-		MethodNotifyClaim, MethodNotifyDismiss,
-		MethodModActionCheck, MethodModActionDone, MethodSessionClear,
-		MethodSessionStart, MethodSessionStop, MethodSessionKeys, MethodSessionPrompt,
-		MethodSessionAdopt, MethodSessionAdoptAsk, MethodSessionRemote, MethodSessionModel, MethodQuestionsOpen,
-		MethodServerStop, MethodAgentReload, MethodPeerReload, MethodPeerList, MethodProjectsWatch:
-		return true
-	}
-	return strings.HasPrefix(m, "view.") && m != MethodViewDigest
-}
 
 // MethodProjectRename renames a project's slug (tm project rename,
 // docs/SPEC.md §5.1): the server checks no thread of it runs, stops its

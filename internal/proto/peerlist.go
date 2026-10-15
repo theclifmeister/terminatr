@@ -5,7 +5,7 @@ import "time"
 // MethodPeerList is the server's mirror of its paired servers' shared
 // projects (docs/SPEC.md §16.10), for its own consoles: a PeerList. A
 // remote project has no folder here, so a console reads it from this
-// and never from disk. The human's (HumanOnly); a link never reaches it.
+// and never from disk. The human's (a human-only method); a link never reaches it.
 const MethodPeerList = "peer.list"
 
 // PeerList is the answer of peer.list: every paired server, by alias,

@@ -13,7 +13,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
-// humanOnlyMethods are the methods proto.HumanOnly names.
+// humanOnlyMethods are the methods whose gate is gateHuman.
 var humanOnlyMethods = []string{
 	proto.MethodProjectRename, proto.MethodProjectActive,
 	proto.MethodModViews, proto.MethodModViewInput, proto.MethodModCommand, proto.MethodModRestart,
@@ -26,6 +26,15 @@ var humanOnlyMethods = []string{
 	proto.MethodViewSelect, proto.MethodViewSideSel, proto.MethodViewExpand, proto.MethodViewTree, proto.MethodViewSections,
 	proto.MethodViewSidebar, proto.MethodViewInfo, proto.MethodViewColumns, proto.MethodViewSize,
 	proto.MethodViewInput,
+}
+
+// gateOf is method m's gate, an attach connection's among them.
+func gateOf(m string) gate {
+	if m == attachMethod {
+		return gateHuman
+	}
+	e, _ := methodOf(m)
+	return e.gate
 }
 
 // handledElsewhere are human-only methods the loop of TestHumanSocket
@@ -70,8 +79,8 @@ func TestHumanSocket(t *testing.T) {
 	}
 
 	for _, m := range humanOnlyMethods {
-		if !proto.HumanOnly(m) {
-			t.Errorf("proto.HumanOnly(%q) = false", m)
+		if gateOf(m) != gateHuman {
+			t.Errorf("%s isn't human-only", m)
 		}
 		if err := srv.Call(m, struct{}{}, nil); !onHumanSocketOnly(err) {
 			t.Errorf("%s on the server socket: %v, want the human-only refusal", m, err)
@@ -117,7 +126,7 @@ func TestHumanSocket(t *testing.T) {
 	for _, m := range []string{proto.MethodCLIRun, proto.MethodCallerWho, proto.MethodHookEvent,
 		proto.MethodSessionList, proto.MethodSessionRead, proto.MethodSessionWait, proto.MethodSessionAsk,
 		proto.MethodToolRun, proto.MethodToolList, proto.MethodViewDigest} {
-		if proto.HumanOnly(m) {
+		if gateOf(m) == gateHuman {
 			t.Errorf("an agent's own method %s is human-only", m)
 		}
 	}
@@ -227,7 +236,7 @@ func TestMayCall(t *testing.T) {
 		{proto.MethodViewDigest, true, coord, false},
 	} {
 		who := func() caller.Caller { return c.c }
-		if perr := mayCall(c.m, c.humanS, who); (perr == nil) != c.ok {
+		if perr := mayCall(c.m, gateOf(c.m), c.humanS, who); (perr == nil) != c.ok {
 			t.Errorf("%s (human socket %v) from %v: %v, want ok %v", c.m, c.humanS, c.c.Kind, perr, c.ok)
 		}
 	}
@@ -325,5 +334,32 @@ template = "{{.NoSandboxEscapes}}"
 		if err != nil || string(b) != strconv.FormatBool(off) {
 			t.Errorf("no_sandbox_escapes %v: launch file %q, %v", off, b, err)
 		}
+	}
+}
+
+// TestMethodTable: every method the table names is either answered or
+// streamed, a scoped one says what names its scope, and the human-only
+// ones are the ones TestHumanSocket checks on both sockets.
+func TestMethodTable(t *testing.T) {
+	listed := map[string]bool{}
+	for _, m := range humanOnlyMethods {
+		listed[m] = true
+	}
+	for name, m := range methods {
+		if (m.call == nil) == (m.stream == nil) {
+			t.Errorf("%s: call %v, stream %v: want one", name, m.call != nil, m.stream != nil)
+		}
+		if (m.scope == scopeNone) != (m.name == nil) {
+			t.Errorf("%s: scope %d with name %v", name, m.scope, m.name != nil)
+		}
+		if m.gate == gateHuman && !listed[name] {
+			t.Errorf("human-only %s is missing from humanOnlyMethods", name)
+		}
+	}
+	if m, ok := methodOf("view.nosuch"); !ok || m.gate != gateHuman {
+		t.Errorf("an unknown view method: %+v %v, want the human's", m, ok)
+	}
+	if _, ok := methodOf("no.such.method"); ok {
+		t.Error("an unknown method is known")
 	}
 }
