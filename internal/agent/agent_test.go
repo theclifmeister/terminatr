@@ -548,7 +548,7 @@ func TestClaudeTodos(t *testing.T) {
 func TestStatusFile(t *testing.T) {
 	src := claude(t).Sources()
 	f := src.StatusFile
-	path, err := f.PathFor(SourceVars{Home: "/h", PID: 4242})
+	path, err := f.PathFor(SourceVars{Home: "/h", PID: 4242, ConfigDir: "/h/.claude"})
 	if err != nil || path != "/h/.claude/sessions/4242.json" {
 		t.Fatalf("path = %q, %v", path, err)
 	}
@@ -627,7 +627,7 @@ func TestJSONLTail(t *testing.T) {
 
 func TestTodoSnapshot(t *testing.T) {
 	snap := claude(t).Sources().TodoSnapshot
-	dir, _ := snap.DirFor(SourceVars{Home: "/h", AgentSID: "s9"})
+	dir, _ := snap.DirFor(SourceVars{Home: "/h", AgentSID: "s9", ConfigDir: "/h/.claude"})
 	if dir != "/h/.claude/tasks/s9" {
 		t.Fatalf("dir = %q", dir)
 	}
