@@ -32,7 +32,11 @@ func doctorCmd(e *Env, args []string) error {
 	fix := f.Bool("fix") // remove what the checks found left over, after confirmation
 	yes := f.Bool("yes") // with --fix: don't ask
 	asJSON := f.Bool("json")
-	if pos, err := f.Parse(args); err != nil || len(pos) > 0 {
+	pos, err := f.Parse(args)
+	if isHelp(err) {
+		return err
+	}
+	if err != nil || len(pos) > 0 {
 		return srvUsage("doctor", doctorUsage)
 	}
 	p, err := client.ResolvePaths()
