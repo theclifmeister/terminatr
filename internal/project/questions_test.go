@@ -23,7 +23,7 @@ func TestQuestions(t *testing.T) {
 		t.Fatalf("line %q", got)
 	}
 	// The context shows them, so a cleared coordinator still knows.
-	secs, err := p.Context(Ticked{})
+	secs, err := p.Context(Ticked{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func TestQuestions(t *testing.T) {
 	if _, err := p.DoneQuestion("Q1"); err != nil {
 		t.Fatal(err)
 	}
-	secs, _ = p.Context(Ticked{})
+	secs, _ = p.Context(Ticked{}, nil)
 	if strings.Contains(RenderContext(secs), "Open questions (tm ask)") {
 		t.Fatal("context shows answered questions")
 	}

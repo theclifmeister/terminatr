@@ -3,7 +3,7 @@ package proto
 import (
 	"time"
 
-	"github.com/theclifmeister/terminatr/internal/widget"
+	"github.com/theclifmeister/terminatr/internal/age"
 )
 
 // Watching a project (docs/SPEC.md §3.3, Watch): project.watch answers
@@ -213,7 +213,7 @@ func CheckedWords(t, now time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	return "checked " + widget.AgeWords(now.Sub(t)) + " ago"
+	return "checked " + age.Words(now.Sub(t)) + " ago"
 }
 
 // TickerRow is one row of the ticker's section: a label and its value.
@@ -229,11 +229,11 @@ type TickerRow struct {
 func (t WatchTicker) Rows(now time.Time) []TickerRow {
 	var rows []TickerRow
 	if !t.PRChecked.IsZero() {
-		v := widget.AgeWords(now.Sub(t.PRChecked)) + " ago"
+		v := age.Words(now.Sub(t.PRChecked)) + " ago"
 		if t.PRPollSeconds > 0 {
 			next := t.PRChecked.Add(time.Duration(t.PRPollSeconds) * time.Second).Sub(now)
 			if next > 0 {
-				v += " · next " + widget.AgeWords(next)
+				v += " · next " + age.Words(next)
 			} else {
 				v += " · due"
 			}
@@ -241,7 +241,7 @@ func (t WatchTicker) Rows(now time.Time) []TickerRow {
 		rows = append(rows, TickerRow{Label: "PRs", Value: v})
 	}
 	if !t.Synced.IsZero() {
-		rows = append(rows, TickerRow{Label: "synced", Value: widget.AgeWords(now.Sub(t.Synced)) + " ago"})
+		rows = append(rows, TickerRow{Label: "synced", Value: age.Words(now.Sub(t.Synced)) + " ago"})
 	}
 	if t.NoPRHost {
 		rows = append(rows, TickerRow{Label: "PR host", Value: "none"})

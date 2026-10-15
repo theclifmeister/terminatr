@@ -336,3 +336,41 @@ func TestReportPRs(t *testing.T) {
 		t.Fatalf("ReportPRs = %q, want %s", prs, want)
 	}
 }
+
+// TestContextSection: the Threads section of tm context lists open
+// threads with their task, report, PR and next lines, counts resolved and
+// archived ones, and reads next lines as tm thread show does.
+func TestContextSection(t *testing.T) {
+	p := libFixture(t)
+	w := func(id, rec, report string) {
+		os.MkdirAll(p.Path("threads", id), 0o755)
+		os.WriteFile(p.Path("threads", id, "thread.toml"), []byte(rec), 0o644)
+		if report != "" {
+			os.WriteFile(p.Path("threads", id, "REPORT.md"), []byte(report), 0o644)
+		}
+	}
+	w("t-0001", "task = \"T16\"\ntitle = \"Fix login\"\n", "## Report\nok\n\n## Next\n- Merge the PR\n")
+	w("t-0002", "title = \"Docs\"\n", "PR: https://github.com/o/r/pull/9\n## Report\nok\n\n## Next\nReview it\n")
+	w("t-0004", "title = \"Az\"\n", "PR: https://dev.azure.com/o/p/_git/r/pullrequest/9\n## Report\nok\n\n## Next\nReview it\n")
+	w("t-0003", "title = \"Old\"\nstate = \"resolved\"\n", "## Report\nok\n\n## Next\nStale next line\n")
+	os.MkdirAll(p.Path("threads", "archive"), 0o755)
+	os.WriteFile(p.Path("threads", "archive", "t-0000.tar.gz"), nil, 0o644)
+	sec, err := ContextSection(p, map[string]string{"t-0001": "#8 open, checks pass"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := strings.Join(sec.Lines, "\n")
+	for _, want := range []string{
+		"T16 (t-0001)  Fix login  report: yes  PR: #8 open, checks pass\n    next: Merge the PR",
+		"t-0002  Docs  report: yes  PR: https://github.com/o/r/pull/9\n    next: Review it",
+		"t-0004  Az  report: yes  PR: https://dev.azure.com/o/p/_git/r/pullrequest/9",
+		"2 resolved threads not shown (tm thread list --all)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("section lacks %q in\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "Stale next line") || strings.Contains(out, "archive") {
+		t.Errorf("a resolved or archived thread is listed:\n%s", out)
+	}
+}
