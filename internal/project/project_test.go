@@ -648,3 +648,22 @@ func TestCodeHostOverride(t *testing.T) {
 		t.Fatalf("%+v", c)
 	}
 }
+
+// TestJournalAndContextPlain: a journal line keeps an agent's words
+// without their control characters, and tm context prints none, whoever
+// wrote the line.
+func TestJournalAndContextPlain(t *testing.T) {
+	setup(t)
+	p, _ := New(Options{Slug: "demo"})
+	if err := p.Journal(coord, "task.add", "T1", "a\x1b]52;c;aGk=\x07b\u009b2Jc"); err != nil {
+		t.Fatal(err)
+	}
+	lines, _, _ := p.JournalTail(1)
+	if len(lines) != 1 || !strings.HasSuffix(lines[0], " task.add T1 a]52;c;aGk=b2Jc") {
+		t.Fatalf("journal: %q", lines)
+	}
+	out := RenderContext([]Section{{Title: "T", Lines: []string{"x\x1b[2Ky"}}})
+	if out != "## T\nx[2Ky\n" {
+		t.Fatalf("context: %q", out)
+	}
+}

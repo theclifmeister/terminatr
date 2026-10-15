@@ -120,7 +120,7 @@ func watchLine(w proto.Watch) string {
 	if w.Queued > 0 {
 		parts = append(parts, fmt.Sprintf("%d queued", w.Queued))
 	}
-	return strings.Join(parts, " · ")
+	return shown(strings.Join(parts, " · "))
 }
 
 // watchProject is `tm watch --project`: the project's state, then a line
@@ -172,5 +172,5 @@ func projectWatchLine(w proto.ProjectWatch) string {
 		}
 		line += " · " + strings.Join(parts, " · ")
 	}
-	return line
+	return shown(line)
 }
