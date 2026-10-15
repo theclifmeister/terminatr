@@ -92,7 +92,8 @@ func (m *Manifest) CommandWords() []string {
 }
 
 // PermWords is permission perm in the consent screen's words: "reads
-// your projects", "talks to api.linear.app", "runs glab".
+// your projects", "talks to api.linear.app", "runs glab with your
+// GitLab login".
 func (p Permissions) PermWords(perm string) string {
 	switch perm {
 	case PermProjectRead:
@@ -108,7 +109,7 @@ func (p Permissions) PermWords(perm string) string {
 	case PermNet:
 		return "talks to " + strings.Join(p.Net, ", ")
 	case PermCommands:
-		return "runs " + strings.Join(p.Commands, ", ")
+		return p.commandWords()
 	case PermActions:
 		var parts []string
 		for _, id := range p.Actions {
@@ -119,11 +120,19 @@ func (p Permissions) PermWords(perm string) string {
 		return "offers you keys and buttons that " + strings.Join(parts, "; ") + "; tm asks you before each one runs"
 	case PermFiles:
 		var parts []string
+		roots := func(rs []string) string {
+			home := userHome()
+			out := make([]string, len(rs))
+			for i, r := range rs {
+				out[i] = rootWords(r, home)
+			}
+			return strings.Join(out, ", ")
+		}
 		if len(p.Files.Read) > 0 {
-			parts = append(parts, "reads "+strings.Join(p.Files.Read, ", "))
+			parts = append(parts, "reads "+roots(p.Files.Read))
 		}
 		if len(p.Files.Write) > 0 {
-			parts = append(parts, "writes "+strings.Join(p.Files.Write, ", "))
+			parts = append(parts, "writes "+roots(p.Files.Write))
 		}
 		return Clean(strings.Join(parts, "; "), false)
 	}

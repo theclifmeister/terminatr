@@ -48,7 +48,7 @@ type Example struct {
 func (x Example) Perms() []string { return x.Asks.Requested() }
 
 // Words are the example's permissions in the consent screen's words
-// ("runs glab"); none is "safe".
+// ("runs glab with your GitLab login"); none is "safe".
 func (x Example) Words() []string { return x.Asks.Words(x.Perms()) }
 
 // Examples are the folder's mods: one per surface, an agent tool and a

@@ -30,7 +30,9 @@ func CheckRun(argv, commands []string) error {
 	if !slices.Contains(commands, argv[0]) {
 		return Denied("process.run: %q isn't one of the mod's commands", argv[0])
 	}
-	if rule, ok := argRules[argv[0]]; ok {
+	// git.exe and Git are git too, on a file system that ignores case.
+	prog := strings.TrimSuffix(strings.ToLower(argv[0]), ".exe")
+	if rule, ok := argRules[prog]; ok {
 		if why := rule(argv[1:]); why != "" {
 			return Denied("process.run: %s %s", argv[0], why)
 		}
@@ -40,7 +42,38 @@ func CheckRun(argv, commands []string) error {
 
 // argRules say why a program's arguments are refused, or "".
 var argRules = map[string]func(args []string) string{
-	"git": gitArgs,
+	"git":  gitArgs,
+	"gh":   loginToolArgs,
+	"glab": loginToolArgs,
+}
+
+// loginToolRefused are the gh and glab commands a mod may not run: ones
+// that show or change the login, the tool's settings, its aliases (which
+// may run a shell) and its extensions (programs of their own).
+var loginToolRefused = []string{"auth", "config", "alias", "extension", "extensions", "ext"}
+
+// loginToolArgs refuses a gh or glab command of loginToolRefused, but
+// for "auth status" without the option that prints the login's token.
+func loginToolArgs(args []string) string {
+	i := slices.IndexFunc(args, func(a string) bool { return !strings.HasPrefix(a, "-") })
+	if i < 0 || !slices.Contains(loginToolRefused, args[i]) {
+		return ""
+	}
+	if args[i] == "auth" && i+1 < len(args) && args[i+1] == "status" {
+		for _, a := range args[i+2:] {
+			if a == "--" {
+				break
+			}
+			name := optName(a)
+			long := strings.HasPrefix(name, "--")
+			if long && len(name) > 3 && (strings.HasPrefix("--show-token", name) || name == "--show") ||
+				!long && strings.HasPrefix(name, "-") && strings.ContainsRune(name, 't') {
+				return "auth status may not show the token"
+			}
+		}
+		return ""
+	}
+	return "takes no " + args[i] + " command"
 }
 
 // gitGlobals are the options git may have before its command: none
@@ -94,6 +127,11 @@ func gitArgs(args []string) string {
 			}
 		}
 	}
+	if cmd >= 0 {
+		if why := gitRuns(args[cmd], args[cmd+1:]); why != "" {
+			return why
+		}
+	}
 	if cmd >= 0 && args[cmd] == "config" {
 		rest := args[cmd+1:]
 		read := false
@@ -106,6 +144,64 @@ func gitArgs(args []string) string {
 		}
 		if !read {
 			return "config only reads settings (get, list, --get, --list)"
+		}
+	}
+	return ""
+}
+
+// gitRunsCommands are git commands that run a program or shell command
+// they are given, ask the credential helpers for a login, or serve.
+var gitRunsCommands = []string{
+	"filter-branch", "send-email", "credential", "credential-cache", "credential-store",
+	"daemon", "instaweb", "web--browse", "upload-pack", "receive-pack", "upload-archive", "shell",
+}
+
+// gitRunOptions are, by git command, its options that take a program or
+// shell command to run: the short ones and the long ones (a prefix of a
+// long one counts).
+var gitRunOptions = map[string]struct{ short, long []string }{
+	"rebase":   {[]string{"x"}, []string{"--exec"}},
+	"difftool": {[]string{"x"}, []string{"--extcmd"}},
+	"grep":     {[]string{"O"}, []string{"--open-files-in-pager"}},
+	"clone":    {[]string{"u"}, []string{"--upload-pack"}},
+	"help":     {[]string{"w"}, []string{"--web"}},
+}
+
+// gitRuns says why git command cmd, with its arguments rest, is refused
+// for running a program it is given, or "".
+func gitRuns(cmd string, rest []string) string {
+	if slices.Contains(gitRunsCommands, cmd) || strings.HasPrefix(cmd, "credential-") {
+		return "takes no " + cmd + " command"
+	}
+	sub := slices.IndexFunc(rest, func(a string) bool { return !strings.HasPrefix(a, "-") })
+	switch {
+	case cmd == "bisect" && sub >= 0 && rest[sub] == "run",
+		cmd == "submodule" && sub >= 0 && rest[sub] == "foreach":
+		return "takes no " + cmd + " " + rest[sub]
+	}
+	opts, ok := gitRunOptions[cmd]
+	if !ok {
+		return ""
+	}
+	for _, a := range rest {
+		if a == "--" {
+			break
+		}
+		name := optName(a)
+		switch {
+		case strings.HasPrefix(name, "--"):
+			for _, l := range opts.long {
+				if len(name) > 3 && strings.HasPrefix(l, name) {
+					return cmd + " takes no " + l + " option"
+				}
+			}
+		case strings.HasPrefix(name, "-"):
+			// A cluster (-ix) or an attached value (-xmake) holds it too.
+			for _, sh := range opts.short {
+				if strings.Contains(name[1:], sh) {
+					return cmd + " takes no -" + sh + " option"
+				}
+			}
 		}
 	}
 	return ""
@@ -161,7 +257,8 @@ func (p Paths) checkArgs(args []string, dir string, check func(string) error) er
 
 // argPaths are the words of an argument that may be paths: itself, what
 // follows its first =, an option's attached value (-C/x → /x), what
-// follows a leading @ and a file:// URL's path.
+// follows a leading @, a file:// URL's path and an absolute or ~ path
+// after a colon (host:/x).
 func argPaths(a string) []string {
 	out := []string{a}
 	if _, v, ok := strings.Cut(a, "="); ok {
@@ -179,6 +276,17 @@ func argPaths(a string) []string {
 	}
 	if _, v, ok := strings.Cut(a, "file://"); ok {
 		out = append(out, v)
+	}
+	// host:/path, a:~/x, a list a:/b:/c: each part after a colon that is
+	// an absolute or ~ path (not a URL's //host, nor a Windows drive's).
+	for i, part := range strings.Split(a, ":") {
+		if i == 0 || i == 1 && caps.Windows && len(a) > 1 && a[1] == ':' {
+			continue
+		}
+		if part == "~" || strings.HasPrefix(part, "~/") ||
+			strings.HasPrefix(part, "/") && !strings.HasPrefix(part, "//") {
+			out = append(out, part)
+		}
 	}
 	return slices.DeleteFunc(out, func(s string) bool { return s == "" })
 }

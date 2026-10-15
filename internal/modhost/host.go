@@ -27,6 +27,7 @@ import (
 	"github.com/dop251/goja"
 
 	"github.com/theclifmeister/terminatr/internal/modproto"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // DefaultBudget is a slice's CPU budget (design §7: a handler over 5 s is
@@ -445,12 +446,7 @@ func (h *Host) toolText(v goja.Value) (string, error) {
 // maxToolText caps a tool's answer, as the agent gets it.
 const maxToolText = 64 << 10
 
-func clipTool(s string) string {
-	if len(s) > maxToolText {
-		return s[:maxToolText] + "…"
-	}
-	return s
-}
+func clipTool(s string) string { return textsafe.Cut(s, maxToolText) }
 
 func (h *Host) events() []string {
 	names := make([]string, 0, len(h.handlers))
@@ -654,11 +650,8 @@ func firstLine(s string) string {
 	return s
 }
 
-func clip(s string) string {
-	if len(s) > maxText {
-		return s[:maxText] + "…"
-	}
-	return s
-}
+// clip cuts s to maxText bytes on a character's edge; the supervisor
+// escapes what it logs.
+func clip(s string) string { return textsafe.Cut(s, maxText) }
 
 func ms(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }

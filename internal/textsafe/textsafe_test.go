@@ -82,3 +82,41 @@ func TestHidden(t *testing.T) {
 		}
 	}
 }
+
+func TestEscape(t *testing.T) {
+	for in, want := range map[string]string{
+		"plain café":                    "plain café",
+		"a\nb":                          `a\nb`,
+		"\x1b]52;c;eA==\x07":            `\x1b]52;c;eA==\a`,
+		"x\rhidden":                     `x\rhidden`,
+		"a\u202eb\u2028c":               `a\u202eb\u2028c`,
+		`a\nb`:                          `a\\nb`,
+		"bad\xffbyte":                   `bad\xffbyte`,
+		"2026-10-15 broker: http.fetch": "2026-10-15 broker: http.fetch",
+	} {
+		got := Escape(in)
+		if got != want {
+			t.Errorf("Escape(%q) = %q, want %q", in, got, want)
+		}
+		if !Safe(got) {
+			t.Errorf("Escape(%q) = %q isn't safe", in, got)
+		}
+	}
+}
+
+func TestCut(t *testing.T) {
+	for _, c := range []struct {
+		in   string
+		n    int
+		want string
+	}{
+		{"abc", 3, "abc"},
+		{"abcd", 3, "abc…"},
+		{"aé", 2, "a…"},
+		{"日本", 4, "日…"},
+	} {
+		if got := Cut(c.in, c.n); got != c.want {
+			t.Errorf("Cut(%q, %d) = %q, want %q", c.in, c.n, got, c.want)
+		}
+	}
+}

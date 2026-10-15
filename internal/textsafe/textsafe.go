@@ -9,6 +9,8 @@
 package textsafe
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -50,6 +52,47 @@ func Line(s string, n int) string {
 		s = strings.TrimSpace(string(r[:n-1])) + "…"
 	}
 	return s
+}
+
+// Escape is s as one line with nothing hidden: each character Clean
+// would drop or blank written out as Go would quote it (\n, \x1b,
+// \u202e), and a backslash doubled so an escape can't be forged; for
+// a log line from text tm didn't write.
+func Escape(s string) string {
+	if strings.IndexFunc(s, func(r rune) bool { return r == '\\' || unsafe(r) }) < 0 {
+		return s
+	}
+	var b strings.Builder
+	for i, r := range s {
+		switch {
+		case r == '\\':
+			b.WriteString(`\\`)
+		case r == utf8.RuneError:
+			if _, n := utf8.DecodeRuneInString(s[i:]); n == 1 {
+				fmt.Fprintf(&b, `\x%02x`, s[i])
+			} else {
+				b.WriteString(`\ufffd`)
+			}
+		case unsafe(r):
+			q := strconv.QuoteRune(r)
+			b.WriteString(q[1 : len(q)-1])
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// Cut is s cut to at most n bytes on a character's edge, with an
+// ellipsis when cut.
+func Cut(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n] + "…"
 }
 
 // Safe reports whether s is one line with nothing Clean would change.

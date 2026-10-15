@@ -80,10 +80,12 @@ key = "esc"
 net = ["https://x"]
 commands = ["/bin/sh"]
 actions = ["thread.merge", "task.accept"]
-files = { read = ["notes"], write = ["~/x/../y"] }
+files = { read = ["notes", "/", "~/./"], write = ["~/x/../y"] }
 
 [settings]
 Bad = { type = "int", default = 0, min = 2, max = 1 }
+t = { type = "string", default = "a\u001b[31m", label = "x\ny" }
+o = { type = "choice", default = "a", options = ["a", "b\u0007"] }
 c = { type = "choice", default = "a" }
 s = { type = "string", min = 1 }
 
@@ -127,6 +129,8 @@ func TestManifestCheckSections(t *testing.T) {
 			`permissions.commands: "/bin/sh" isn't a program name (no path, no arguments)`,
 			`permissions.files: "notes" must be absolute or start with ~/`,
 			`permissions.files: "~/x/../y" has a .. in it`,
+			`permissions.files: "/" is the home folder, holds it or is a disk's root; name the folder the mod needs`,
+			`permissions.files: "~/./" is the home folder, holds it or is a disk's root; name the folder the mod needs`,
 			`permissions.net: "https://x" isn't a host name (no scheme, port or path)`,
 			`provides.code_host: "github" must be lowercase letters, digits and dashes, and not github or azure (tm's own hosts)`,
 			`provides.columns[1]: id "a" is listed twice`,
@@ -171,6 +175,9 @@ func TestManifestCheckSections(t *testing.T) {
 			"settings.c: default must be one of ",
 			"settings.s: has no default",
 			"settings.s: min and max are for an int",
+			"settings.t: default must be one line, without control or format characters",
+			"settings.t: label must be one line, without control or format characters",
+			`settings.o: option "b\a" must be one line, without control or format characters`,
 		}},
 		{"data", messyData, []string{
 			`api "1" isn't MAJOR.MINOR`,

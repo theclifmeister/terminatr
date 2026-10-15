@@ -89,7 +89,7 @@ func (p Paths) resolve() Paths {
 				}
 				r = filepath.Join(p.Home, filepath.FromSlash(strings.TrimPrefix(r, "~")))
 			}
-			if !filepath.IsAbs(r) {
+			if !filepath.IsAbs(r) || p.holdsHome(r) {
 				continue
 			}
 			out = append(out, r)
@@ -101,6 +101,14 @@ func (p Paths) resolve() Paths {
 	p.write = exp(p.Write)
 	p.read = append(exp(p.Read), p.write...)
 	return p
+}
+
+// holdsHome reports whether root r (absolute) is the home folder, holds
+// it or is a file system's root: never a root, though Manifest.check
+// refuses those already.
+func (p Paths) holdsHome(r string) bool {
+	c := filepath.Clean(r)
+	return filepath.Dir(c) == c || p.Home != "" && (fsx.Under(p.Home, c) || fsx.Under(fsx.Canonical(p.Home), fsx.Canonical(c)))
 }
 
 // Check returns the file path names, symlinks resolved, when the mod may
