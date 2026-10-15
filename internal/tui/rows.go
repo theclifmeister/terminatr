@@ -733,16 +733,16 @@ func linkWaitWords(n, asks int) string {
 }
 
 // countLinkWaits sets LinkWaits and LinkAsks from the links.
-func (pd *ProjectData) countLinkWaits() {
-	pd.LinkWaits, pd.LinkAsks = 0, 0
-	for _, r := range pd.Links {
-		pd.LinkWaits += r.Held
+func (p *ProjectData) countLinkWaits() {
+	p.LinkWaits, p.LinkAsks = 0, 0
+	for _, r := range p.Links {
+		p.LinkWaits += r.Held
 		if r.Paused {
-			pd.LinkWaits++
+			p.LinkWaits++
 		}
 		if r.Asks != nil {
-			pd.LinkWaits++
-			pd.LinkAsks++
+			p.LinkWaits++
+			p.LinkAsks++
 		}
 	}
 }
