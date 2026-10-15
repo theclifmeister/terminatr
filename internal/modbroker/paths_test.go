@@ -377,8 +377,9 @@ func TestPathsCheckPrivate(t *testing.T) {
 	}
 	if _, err := p.Check("~/docs/ok.txt", false); err != nil {
 		t.Errorf("~/docs/ok.txt: %v", err)
-
+	}
 }
+
 // TestPathsHomeRoots: a root that is the home folder, holds it or is a
 // file system's root, or a link to one, opens nothing.
 func TestPathsHomeRoots(t *testing.T) {
