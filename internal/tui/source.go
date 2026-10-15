@@ -140,9 +140,11 @@ type ProjectData struct {
 	PRHostFails int
 	// Links are the project's links to other projects' coordinators
 	// (link.Rows); LinkWaits counts its messages waiting for the user's
-	// OK and its links the breaker paused, a NEEDS YOU row.
+	// OK, its links the breaker paused and the paired servers' link
+	// requests waiting for the user (LinkAsks of them), a NEEDS YOU row.
 	Links     []link.Row
 	LinkWaits int
+	LinkAsks  int
 	Err       string
 }
 
@@ -685,12 +687,7 @@ func (s *ServerSource) loadProjects(d *Data, cfg *config.Config) {
 			pd.PRHostFails = hostFails(fails, p)
 			if cfg != nil {
 				pd.Links = link.Rows(cfg, p)
-				for _, r := range pd.Links {
-					pd.LinkWaits += r.Held
-					if r.Paused {
-						pd.LinkWaits++
-					}
-				}
+				pd.countLinkWaits()
 			}
 		}
 		d.Projects = append(d.Projects, pd)

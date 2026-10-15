@@ -2,7 +2,9 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/project"
 )
@@ -63,6 +65,33 @@ func (s *ServerSource) LinkAct(slug, verb, arg, text string) (string, error) {
 			return "", err
 		}
 		return "sent " + m.ID + " to " + m.Peer, nil
+	case "request":
+		r, err := link.Ask(s.Caller, p, arg, text)
+		if err != nil {
+			return "", err
+		}
+		return RequestWords(r), nil
+	case "accept", "decline":
+		allow, ask, _ := strings.Cut(text, " ")
+		r, err := link.Answer(s.Caller, p, arg, verb == "accept", allow, ask == "ask")
+		if err != nil {
+			return "", err
+		}
+		return AnswerWords(r), nil
 	}
 	return "", fmt.Errorf("unknown link action %q", verb)
+}
+
+// RequestWords is what sending link request r says.
+func RequestWords(r *link.Request) string {
+	alias, _, _ := config.Remote(r.Peer)
+	return fmt.Sprintf("asked %s to link back (%s, %s on this side); %s's user accepts or declines it there", r.Peer, r.ID, linkAllowWords(config.Link{Allow: r.Allow}), alias)
+}
+
+// AnswerWords is what answering link request r says.
+func AnswerWords(r *link.Request) string {
+	if r.State == link.ReqAccepted {
+		return fmt.Sprintf("accepted %s: %s → %s %s on this side; %s hears of it", r.ID, r.Project, r.Peer, linkAllowWords(config.Link{Allow: r.Answer, Ask: r.Ask}), r.Peer)
+	}
+	return fmt.Sprintf("declined %s from %s; %s hears of it, nothing here changed", r.ID, r.Peer, r.Peer)
 }

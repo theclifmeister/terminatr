@@ -31,6 +31,12 @@ type store struct {
 	Epoch string            `json:"epoch,omitempty"`
 	Out   map[string]int    `json:"out,omitempty"`
 	In    map[string]*inSeq `json:"in,omitempty"`
+	// Requests are the link requests to and from paired servers
+	// (request.go), the newest per project, peer and direction; ReqOut
+	// and ReqIn the last hour's, by alias, for the rate.
+	Requests []*Request             `json:"requests,omitempty"`
+	ReqOut   map[string][]time.Time `json:"req_out,omitempty"`
+	ReqIn    map[string][]time.Time `json:"req_in,omitempty"`
 }
 
 // bucket is one direction's token bucket (PerHour, Burst).
@@ -80,6 +86,12 @@ func loadStore(file string) *store {
 	}
 	if s.In == nil {
 		s.In = map[string]*inSeq{}
+	}
+	if s.ReqOut == nil {
+		s.ReqOut = map[string][]time.Time{}
+	}
+	if s.ReqIn == nil {
+		s.ReqIn = map[string][]time.Time{}
 	}
 	return s
 }

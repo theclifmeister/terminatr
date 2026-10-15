@@ -916,13 +916,14 @@ var verbs = map[string]string{
 	project.KindSendBack: "sent back by the user", project.KindMod: "from a mod",
 	"link-message": "wrote to you (tm link read)", "link-held": "a message of yours waits for the user's OK",
 	"link-paused": "link paused (ask the user)", "link-undelivered": "a message of yours wasn't delivered",
+	"link-request": "asks to link (the user answers it)", "link-answer": "answered a link request",
 	KindSlotFree: "a thread slot is free",
 }
 
 // linkKinds name a linked project in their subject: the nudge says its
 // slug (or "<server>/<slug>" on a paired server), which only the user
 // and tm write.
-var linkKinds = map[string]bool{"link-message": true, "link-held": true, "link-paused": true, "link-undelivered": true}
+var linkKinds = map[string]bool{"link-message": true, "link-held": true, "link-paused": true, "link-undelivered": true, "link-request": true, "link-answer": true}
 
 // NudgeText is the one line an idle coordinator gets (§7.5). It holds
 // only fixed words, ids and what label makes of an id (thread.Label: the

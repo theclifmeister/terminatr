@@ -118,7 +118,7 @@ func (v *linksView) items(m *dash) ([]linkItem, []linkGroup) {
 	}
 	if p := m.projectData(v.slug); p != nil {
 		for _, r := range p.Links {
-			if alias, slug, ok := config.Remote(r.Peer); ok && r.HasMine {
+			if alias, slug, ok := config.Remote(r.Peer); ok && (r.HasMine || r.Asks != nil || r.Asked != nil) {
 				add(alias, slug)
 			}
 		}
@@ -168,6 +168,23 @@ func (v *linksView) theirSide(m *dash, items []linkItem, key string) link.Back {
 	return v.back[key]
 }
 
+// otherSide is the other side's column of remote row r: the answer to
+// this side's request while nothing newer tells otherwise, else what the
+// messages say (back).
+func otherSide(r link.Row, back link.Back) string {
+	q := r.Asked
+	switch {
+	case q == nil:
+	case q.Pending(), q.State == link.ReqDeclined:
+		return q.Words()
+	case q.State == link.ReqAccepted && !back.Refuses:
+		return q.Words()
+	case back == link.Back{}:
+		return q.Words()
+	}
+	return back.Words()
+}
+
 // nextAllow is the direction after cur: off, both, send, receive, off.
 func nextAllow(cur string, has bool) string {
 	if !has {
@@ -210,6 +227,11 @@ func (v *linksView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			}
 			return actionMsg{msg: slug + " and " + other + ": " + linkAllowWords(config.Link{Allow: allow})}
 		})
+	case "r":
+		if v.sel >= len(items) || m.busy {
+			break
+		}
+		return v.request(m, items[v.sel])
 	case "a":
 		if v.sel >= len(items) || m.busy {
 			break
@@ -231,6 +253,81 @@ func (v *linksView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
+// request asks the user of the paired server it.alias to link the project back
+// (link.Ask), after a y: this side's direction, both when it has none,
+// which it then sets, asking first.
+func (v *linksView) request(m *dash, it linkItem) tea.Cmd {
+	if it.alias == "" {
+		m.msg = "a link here sets both sides at once (enter); r asks a paired server's project"
+		return nil
+	}
+	r := v.entry(m, it.key)
+	if q := r.Asked; q != nil && q.Pending() {
+		m.msg = "asked already (" + q.ID + "): it waits for " + it.alias + "'s user"
+		return nil
+	}
+	allow, q := r.Mine.Allow, "Ask "+it.alias+"'s user to link "+it.key+" back with "+v.slug+"? This side is "+linkAllowWords(r.Mine)+"; they choose theirs."
+	if !r.HasMine || allow == config.LinkOff {
+		allow = config.LinkBoth
+		q = "Link " + v.slug + " with " + it.key + " both ways on this side (asking first), and ask " + it.alias + "'s user to link back?"
+	}
+	src, slug, key := m.src, v.slug, it.key
+	m.confirm("Ask for a link", q, func() tea.Cmd {
+		return m.act(func() actionMsg {
+			out, err := src.LinkAct(slug, "request", key, allow)
+			if err != nil {
+				return actionMsg{err: settingsErr(err)}
+			}
+			return actionMsg{msg: out}
+		})
+	})
+	return nil
+}
+
+// answerRequest accepts (a menu of the directions and ask, the
+// request's mirror first) or declines (after a y) the paired server's
+// link request on row r of project slug.
+func (m *dash) answerRequest(slug string, r link.Row, accept bool) tea.Cmd {
+	q := r.Asks
+	if q == nil {
+		m.msg = "no link request waits from " + r.Peer
+		return nil
+	}
+	src, id := m.src, q.ID
+	run := func(verb, text string) tea.Cmd {
+		return m.act(func() actionMsg {
+			out, err := src.LinkAct(slug, verb, id, text)
+			if err != nil {
+				return actionMsg{err: settingsErr(err)}
+			}
+			return actionMsg{msg: out}
+		})
+	}
+	if !accept {
+		m.confirm("Decline a link request", "Decline "+r.Peer+"'s request to link with "+slug+"? Nothing here changes; "+r.Peer+" hears of it.", func() tea.Cmd { return run("decline", "") })
+		return nil
+	}
+	mirror := config.Mirror(q.Allow)
+	allows := []string{mirror}
+	for _, a := range config.LinkAllows {
+		if a != mirror {
+			allows = append(allows, a)
+		}
+	}
+	var items []menuItem
+	for _, a := range allows {
+		for _, ask := range []bool{true, false} {
+			text := a
+			if ask {
+				text += " ask"
+			}
+			items = append(items, menuItem{label: linkAllowWords(config.Link{Allow: a, Ask: ask}), run: func(m *dash) tea.Cmd { return run("accept", text) }})
+		}
+	}
+	m.push(&menuView{title: "Link " + slug + " with " + r.Peer + " · this side", items: items, centred: true})
+	return nil
+}
+
 // linkAllowWords is an entry in words: "both ways, ask first".
 func linkAllowWords(l config.Link) string {
 	w := map[string]string{config.LinkBoth: "both ways", config.LinkSend: "send only", config.LinkReceive: "receive only", config.LinkOff: "off"}[l.Allow]
@@ -242,7 +339,7 @@ func linkAllowWords(l config.Link) string {
 
 func (v *linksView) render(m *dash) string {
 	lines, sel := v.lines(m, m.inner(viewWidth))
-	return m.popup(box{title: "Linked projects · " + v.slug, body: lines, sel: sel, keys: "enter link: off › both › send › receive · a ask first · ↑ ↓ move · esc back"})
+	return m.popup(box{title: "Linked projects · " + v.slug, body: lines, sel: sel, keys: "enter link: off › both › send › receive · a ask first · r ask a paired server to link back · ↑ ↓ move · esc back"})
 }
 
 // lines are the list's lines in width w, and the selected one's.
@@ -270,9 +367,14 @@ func (v *linksView) lines(m *dash, w int) ([]string, int) {
 		name := it.key
 		if it.alias != "" {
 			// This side's entry is the link here; the other side is
-			// that server's user's, known only from the messages.
+			// that server's user's, known from a request's answer and
+			// the messages.
 			back := v.theirSide(m, items, it.key)
-			name, theirs, state = "  "+it.slug, back.Words(), it.alias+" decides its side"
+			name, theirs, state = "  "+it.slug, otherSide(r, back), it.alias+" decides its side"
+			if r.Asks != nil {
+				state = "asks to link (Messages tab: A or x)"
+				st = th().Warn
+			}
 			if r.Paused {
 				state += ", paused"
 			}
@@ -302,7 +404,7 @@ func (v *linksView) lines(m *dash, w int) ([]string, int) {
 			i++
 		}
 	}
-	lines = append(lines, "", th().Faint.Render("A link here is set on both sides at once: send here is receive there. With a paired server's project only this side is set, asking first; that server's user sets the other (tm project link there). Ask first holds each message this coordinator sends on the link until you approve it in the Messages tab."))
+	lines = append(lines, "", th().Faint.Render("A link here is set on both sides at once: send here is receive there. With a paired server's project only this side is set, asking first; that server's user sets the other (tm project link there); r asks them to, and the answer shows in the other side's column. Ask first holds each message this coordinator sends on the link until you approve it in the Messages tab."))
 	return lines, sel
 }
 

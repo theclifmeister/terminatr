@@ -17,6 +17,8 @@ const linkUsage = `usage: tm link send <project>|<server>/<project> "text" | --f
        tm link list [--json]
        tm link approve|drop M-12 [--approved-by-user]
        tm link resume <project> [--approved-by-user]
+       tm link accept R-4F2A-18 [both|send|receive] [--ask|--no-ask]
+       tm link decline R-4F2A-18
   (each takes --project <slug>: the project acting; the coordinator's own by default)`
 
 // runLink is the coordinators' messages to linked projects (docs/SPEC.md
@@ -30,6 +32,7 @@ func runLink(e *Env, args []string) error {
 	slug, asJSON := f.String("project"), f.Bool("json")
 	file, re, last := f.String("file"), f.String("re"), f.String("last")
 	attach, approved := f.List("attach"), f.Bool("approved-by-user")
+	ask, noAsk := f.Bool("ask"), f.Bool("no-ask")
 	pos, err := f.Parse(args[1:])
 	if err != nil {
 		return err
@@ -197,8 +200,68 @@ func runLink(e *Env, args []string) error {
 		}
 		fmt.Fprintf(e.Stdout, "resumed the link between %s and %s\n", p.Slug, other)
 		return nil
+	case "accept", "decline":
+		return answerRequest(e, p, args[0] == "accept", pos, *ask, *noAsk)
 	}
 	return usagef("unknown subcommand %q\n%s", args[0], linkUsage)
+}
+
+// answerRequest accepts or declines a paired server's link request,
+// the human's (docs/SPEC.md §16.11): accepting sets this project's own
+// entry, the request's mirror unless a direction is given, asking first
+// unless --no-ask (or the entry there already doesn't).
+func answerRequest(e *Env, p *project.Project, accept bool, pos []string, ask, noAsk bool) error {
+	if len(pos) < 1 || len(pos) > 2 || (!accept && len(pos) > 1) || (ask && noAsk) {
+		return usagef("%s", linkUsage)
+	}
+	if e.Caller.IsAgent() {
+		return &project.Error{Code: "human-only", Msg: "link requests are the user's to answer: tell them, and they accept or decline it (the Messages tab, or tm link accept|decline)"}
+	}
+	id := pos[0]
+	allow, askOn := "", true
+	if accept {
+		var q *link.Request
+		for _, r := range link.Requests(p) {
+			if r.ID == id && !r.Out {
+				q = &r
+			}
+		}
+		if q == nil {
+			return &project.Error{Code: "unknown-request", Msg: fmt.Sprintf("%s has no link request %s", p.Slug, id)}
+		}
+		allow = config.Mirror(q.Allow)
+		if len(pos) == 2 {
+			allow = pos[1]
+		}
+		if cfg, err := config.Load(); err == nil {
+			if mine, _ := cfg.Links(p.Slug); mine != nil {
+				if l, ok := mine[q.Peer]; ok {
+					askOn = l.Ask
+				}
+			}
+		}
+		if ask || noAsk {
+			askOn = ask
+		}
+	}
+	r, err := link.Answer(e.Caller, p, id, accept, allow, askOn)
+	if err != nil {
+		return err
+	}
+	if accept {
+		fmt.Fprintf(e.Stdout, "accepted %s: %s → %s %s on this side; %s hears of it\n", r.ID, p.Slug, r.Peer, linkAllowWords(r.Answer, r.Ask), r.Peer)
+		return nil
+	}
+	fmt.Fprintf(e.Stdout, "declined %s from %s; nothing here changed, %s hears of it\n", r.ID, r.Peer, r.Peer)
+	return nil
+}
+
+// linkAllowWords is a direction and ask in words: "both ask".
+func linkAllowWords(allow string, ask bool) string {
+	if ask && allow != config.LinkOff {
+		return allow + " ask"
+	}
+	return allow
 }
 
 // sentWords is what send and approve say of a message that went: sent
@@ -232,7 +295,7 @@ func rowCounts(r link.Row) string {
 	return s
 }
 
-const projectLinkUsage = `usage: tm project link <a> <b>|<server>/<b> [both|send|receive|off] [--ask|--no-ask]`
+const projectLinkUsage = `usage: tm project link <a> <b>|<server>/<b> [both|send|receive|off] [--ask|--no-ask] [--request]`
 
 // projectLink links two projects in one call, the human's (docs/SPEC.md
 // §7.9, §11.2): a's entry gets the direction (both by default), b's the
@@ -242,7 +305,7 @@ const projectLinkUsage = `usage: tm project link <a> <b>|<server>/<b> [both|send
 // --no-ask: the other side is that server's user's (§16.11).
 func projectLink(e *Env, args []string) error {
 	f := newFlags()
-	ask, noAsk := f.Bool("ask"), f.Bool("no-ask")
+	ask, noAsk, request := f.Bool("ask"), f.Bool("no-ask"), f.Bool("request")
 	pos, err := f.Parse(args)
 	if err != nil {
 		return err
@@ -266,12 +329,26 @@ func projectLink(e *Env, args []string) error {
 	if *ask || *noAsk {
 		askp = ask
 	}
+	if *request {
+		if _, _, remote := config.Remote(b); !remote || allow == config.LinkOff {
+			return usagef("--request asks a paired server's project (<server>/<project>) to link back, both, send or receive; a link here sets both sides at once\n%s", projectLinkUsage)
+		}
+	}
 	if err := link.Set(e.Caller, a, b, allow, askp); err != nil {
 		return err
 	}
 	p, err := project.Open(a)
 	if err != nil {
 		return err
+	}
+	if *request {
+		r, err := link.Ask(e.Caller, p, b, allow)
+		if err != nil {
+			return err
+		}
+		alias, _, _ := config.Remote(b)
+		fmt.Fprintf(e.Stdout, "asked %s to link back (%s, %s on this side): %s's user accepts or declines it there; tm link list shows the answer\n", b, r.ID, allow, alias)
+		return nil
 	}
 	cfg, err := config.Load()
 	if err != nil {

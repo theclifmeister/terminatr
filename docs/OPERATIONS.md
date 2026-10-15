@@ -417,6 +417,15 @@ acme ⇄ mini/api: linked both ways on this side
 
 and on `mini`, `tm project link api studio/acme`. The name is the other server's alias here (`tm peer list`) and the project's slug there. Each side is written separately, since neither user can set the other's; a message goes only when both allow it, and a side that doesn't answers with a `link-undelivered` item in the sender's inbox. On a link to another server each of the coordinator's messages waits for your OK (approve it in the Messages tab, or tell the coordinator in chat) unless you link with `--no-ask`.
 
+Instead of telling the other user what to type, you can ask them from tm. In the project's Settings tab, **Linked projects** lists the projects each paired server shares; `r` on one sets your side (both ways, asking first, when it has none) and sends them a link request, or from the command line:
+
+```
+$ tm project link acme mini/api --request
+asked mini/api to link back (R-4F2A-18, both on this side): mini's user accepts or declines it there; tm link list shows the answer
+```
+
+On `mini` it shows in NEEDS YOU (`1 link request waits`) and in `api`'s Messages tab: `A` offers the directions for `api`'s side (the mirror of yours first: both ways, or receive only when you asked to send only) with or without ask first, and writes only `mini`'s config; `x` declines it and changes nothing. `tm link accept R-4F2A-18 [both|send|receive] [--ask|--no-ask] --project api` and `tm link decline R-4F2A-18 --project api` do the same. Coordinators can't answer one; they tell you. The answer comes back to `studio`: the other side's column in Linked projects says `accepted: both ways` or `declined`, and `acme`'s inbox gets a `link-answer` item. Only a shared project takes requests (one that isn't answers `not-shared`), one waits per pair, at most 5 go to or come from one server an hour, and an unanswered one expires after 7 days. A server older than tm 0.28.0 refuses requests (the item says so); set that side there by hand.
+
 Messages wait in the sending server's outbox until the link is up, and `tm link log mini/api` shows each as `queued`, `sent` (the other server has it) or `read` (its coordinator handled it). One not taken within 72 hours is dropped with a `link-undelivered` item. Files don't cross servers; the text is at most 8 KB. The same rate limit and breaker apply on each server, and `tm link resume` lifts only this server's pause (SPEC §16.11).
 
 ### Remote panes

@@ -195,8 +195,15 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case tabLibrary:
 		return pv.libraryKey(m, k)
 	case tabMessages:
-		if ls := pv.data(m).Links; (s == "enter" || s == "space") && pv.sel[tabMessages] < len(ls) {
-			return m.openConversation(pv.slug, ls[pv.sel[tabMessages]].Peer)
+		ls := pv.data(m).Links
+		if pv.sel[tabMessages] >= len(ls) {
+			break
+		}
+		switch r := ls[pv.sel[tabMessages]]; s {
+		case "enter", "space":
+			return m.openConversation(pv.slug, r.Peer)
+		case "A", "x":
+			return m.answerRequest(pv.slug, r, s == "A")
 		}
 	}
 	return nil
@@ -369,6 +376,9 @@ func (pv *projectView) box(m *dash) box {
 		body = append(body, "", th().Faint.Render("Messages between this project's coordinator and linked projects' (tm link)."))
 		if len(p.Links) > 0 {
 			keys = "enter open · " + keys
+		}
+		if pv.sel[tabMessages] < len(p.Links) && p.Links[pv.sel[tabMessages]].Asks != nil {
+			keys = "A accept the link · x decline · " + keys
 		}
 	}
 	head := []string{pv.tabBar(m, p), ""}
@@ -643,6 +653,8 @@ var kindWords = map[string]string{
 	"link-held":        "message held",
 	"link-paused":      "link paused",
 	"link-undelivered": "not delivered",
+	"link-request":     "link request",
+	"link-answer":      "link answer",
 	"slot-free":        "slot free",
 	"guard":            "guard refused",
 	"model-refused":    "model refused",

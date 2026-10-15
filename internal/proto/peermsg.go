@@ -17,6 +17,14 @@ const (
 	// PeerMessageRead is the handled receipt: the receiving project's
 	// coordinator handled the message's item.
 	PeerMessageRead = "read"
+	// PeerLinkRequest asks the receiving project's user to link back
+	// (docs/SPEC.md §16.11): Allow is the requesting side's entry, ID
+	// the request's (R-<fp>-<n>). A server that predates it refuses it
+	// as bad-message, as any kind it doesn't know.
+	PeerLinkRequest = "link-request"
+	// PeerLinkAnswer is that user's answer to request ID: Allow is the
+	// answering side's own entry now, "off" when declined.
+	PeerLinkAnswer = "link-answer"
 )
 
 // PeerMessage is one entry of a server's outbox to a paired server.
@@ -35,6 +43,7 @@ type PeerMessage struct {
 	Re      string    `json:"re,omitempty"`
 	By      string    `json:"by,omitempty"` // "coordinator" or "human"
 	Text    string    `json:"text,omitempty"`
+	Allow   string    `json:"allow,omitempty"` // link-request, link-answer
 }
 
 // PeerMessageResult statuses.

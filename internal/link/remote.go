@@ -199,6 +199,7 @@ const callTimeout = 30 * time.Second
 // peer's in sequence order, stopping at a peer's first entry that isn't
 // taken now.
 func Flush(ctx context.Context, t Transport) {
+	ExpireRequests()
 	root, err := outboxDir()
 	if err != nil {
 		return
@@ -229,6 +230,7 @@ func Flush(ctx context.Context, t Transport) {
 			if now().Sub(e.Queued) > Expiry {
 				os.Remove(file)
 				undelivered(alias, e.Msg, "expired")
+				requestUndelivered(alias, e.Msg, "expired")
 				continue
 			}
 			if !ready || ctx.Err() != nil {
@@ -244,9 +246,11 @@ func Flush(ctx context.Context, t Transport) {
 			case res.Status == proto.PeerDelivered, res.Status == proto.PeerDuplicate:
 				os.Remove(file)
 				delivered(alias, e.Msg)
+				requestDelivered(alias, e.Msg)
 			case res.Status == proto.PeerRefused:
 				os.Remove(file)
 				undelivered(alias, e.Msg, res.Code)
+				requestUndelivered(alias, e.Msg, res.Code)
 			default:
 				ready = false
 			}
@@ -293,9 +297,14 @@ func undelivered(alias string, m proto.PeerMessage, code string) {
 		code, words = "refused", RefusalWords["refused"]
 	}
 	update(p, key, m.ID, func(x *Message) { x.State, x.Refused = StateUndelivered, code })
-	why := strings.NewReplacer("{to}", key, "{from}", p.Slug).Replace(words)
+	why := replaceWords(words, key, p.Slug)
 	p.AddMessageItem(KindUndelivered, key, fmt.Sprintf("your message %s to %s wasn't delivered: %s", m.ID, key, why), false, m.ID)
 	p.Journal(caller.Caller{Kind: caller.Ticker}, "link.undelivered", key, m.ID+" ("+code+")")
+}
+
+// replaceWords fills a refusal's {to} and {from}.
+func replaceWords(words, to, from string) string {
+	return strings.NewReplacer("{to}", to, "{from}", from).Replace(words)
 }
 
 // inSeq is the highest sequence taken from a paired server, in its
@@ -316,7 +325,11 @@ const clockSkew = 5 * time.Minute
 // so the answer tells nothing of the projects here.
 func Receive(alias string, id peer.ID, m proto.PeerMessage) proto.PeerMessageResult {
 	res := proto.PeerMessageResult{Status: proto.PeerRefused, Code: "bad-message"}
-	if m.Epoch == "" || m.Seq < 1 || !project.ValidSlug(m.From) || !project.ValidSlug(m.To) || !ValidID(m.ID) {
+	idOK := ValidID(m.ID)
+	if m.Kind == proto.PeerLinkRequest || m.Kind == proto.PeerLinkAnswer {
+		idOK = ValidRequestID(m.ID)
+	}
+	if m.Epoch == "" || m.Seq < 1 || !project.ValidSlug(m.From) || !project.ValidSlug(m.To) || !idOK {
 		return res
 	}
 	err := withStore(func(s *store) error {
@@ -329,6 +342,10 @@ func Receive(alias string, id peer.ID, m proto.PeerMessage) proto.PeerMessageRes
 			res = s.receive(alias, fingerprint(id), m)
 		case proto.PeerMessageRead:
 			res = s.receipt(alias, m)
+		case proto.PeerLinkRequest:
+			res = s.receiveRequest(alias, fingerprint(id), m)
+		case proto.PeerLinkAnswer:
+			res = s.receiveAnswer(alias, m)
 		default:
 			res = proto.PeerMessageResult{Status: proto.PeerRefused, Code: "bad-message"}
 		}

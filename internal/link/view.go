@@ -35,6 +35,10 @@ type Row struct {
 	Held   int       `json:"held"`
 	Last   string    `json:"last,omitempty"` // the newest message's id
 	LastAt time.Time `json:"last_at,omitzero"`
+	// Asks is the paired server's link request that waits for the
+	// user here; Asked this side's newest request to it (request.go).
+	Asks  *Request `json:"asks,omitempty"`
+	Asked *Request `json:"asked,omitempty"`
 }
 
 // Words is a row's state: "linked both ways", "linked, send only",
@@ -61,6 +65,11 @@ func (r Row) Words() string {
 	}
 	if r.Paused {
 		s += ", paused"
+	}
+	if r.Asks != nil {
+		s += ", asks to link (" + r.Asks.ID + ")"
+	} else if r.Asked != nil && r.Asked.Pending() {
+		s += ", asked to link back"
 	}
 	return s
 }
@@ -104,10 +113,15 @@ func Rows(cfg *config.Config, p *project.Project) []Row {
 			peers = append(peers, o)
 		}
 	}
+	st := look()
+	for _, rq := range st.requests {
+		if rq.Project == p.Slug && !slices.Contains(peers, rq.Peer) && (rq.Out || rq.Pending()) {
+			peers = append(peers, rq.Peer)
+		}
+	}
 	slices.Sort(peers)
 	mine, _ := cfg.Links(p.Slug)
 	items, _ := p.Inbox()
-	st := look()
 	var out []Row
 	for _, o := range peers {
 		r := Row{Peer: o}
@@ -130,6 +144,16 @@ func Rows(cfg *config.Config, p *project.Project) []Row {
 		}
 		if m := newest(p, o); m != nil {
 			r.Last, r.LastAt = m.ID, m.Created
+		}
+		for _, rq := range st.requests {
+			if rq.Project != p.Slug || rq.Peer != o {
+				continue
+			}
+			if rq.Out {
+				r.Asked = rq
+			} else if rq.Pending() {
+				r.Asks = rq
+			}
 		}
 		out = append(out, r)
 	}
