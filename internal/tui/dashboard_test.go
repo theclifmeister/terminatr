@@ -1332,3 +1332,26 @@ func TestQueuedKeyKeepsAttach(t *testing.T) {
 		t.Fatalf("current %q", m.current)
 	}
 }
+
+// TestStatusBarButtonsFollowRebind: the buttons sit under their text
+// when help.open is bound to a wider key.
+func TestStatusBarButtonsFollowRebind(t *testing.T) {
+	old := binds
+	t.Cleanup(func() { binds = old })
+	if err := ApplyKeymap(map[string][]string{"help.open": {"f1"}}, ""); err != nil {
+		t.Skipf("keymap: %v", err)
+	}
+	info := proto.SessionInfo{ID: "s-4", Role: proto.RoleThread, Project: "terminatr", Agent: "claude", State: "working"}
+	line, hs := statusBar(info, nil, "", false, 140, previewNote, nil)
+	got := ansi.Strip(line)
+	for key, text := range map[string]string{"?": "prefix+f1", "d": "prefix+d dashboard", "menu": menuButton + " menu"} {
+		i := strings.Index(got, text)
+		if i < 0 {
+			t.Fatalf("no %q in %q", text, got)
+		}
+		col := ansi.StringWidth(got[:i])
+		if hintAt(hs, col) != key {
+			t.Errorf("column %d (%q) is button %q, want %q; line %q", col, text, hintAt(hs, col), key, got)
+		}
+	}
+}
