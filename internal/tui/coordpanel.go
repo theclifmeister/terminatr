@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -31,7 +32,7 @@ const coordReady = 5
 
 // loadCoordInfo reads the panel's data for coordinator session s, with
 // the poll's sessions.
-func loadCoordInfo(paths server.Paths, s proto.SessionInfo, sessions []proto.SessionInfo) *infoData {
+func loadCoordInfo(paths tmclient.Paths, s proto.SessionInfo, sessions []proto.SessionInfo) *infoData {
 	d := &infoData{slug: s.Project, session: s}
 	p, err := project.Open(s.Project)
 	if err != nil {

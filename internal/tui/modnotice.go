@@ -8,9 +8,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/modnotify"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/widget"
 )
 
@@ -243,7 +243,7 @@ func (nv *noticesView) render(m *dash) string {
 // claimNotices claims the notifications in the tray that this console has
 // not seen and no console has drawn, and returns the sequences that draw
 // the ones it won; noticed is its memory, pruned to the tray.
-func claimNotices(ctl *server.Client, ns []modnotify.Notice, noticed map[string]bool) []byte {
+func claimNotices(ctl *tmclient.Client, ns []modnotify.Notice, noticed map[string]bool) []byte {
 	var out []byte
 	live := map[string]bool{}
 	for _, n := range ns {

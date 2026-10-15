@@ -13,9 +13,9 @@ import (
 	"runtime"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/keychain"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/service"
 )
 
@@ -75,12 +75,12 @@ func (e *Env) srvJSON(v any) int {
 // connect opens a control connection, starting the server if needed,
 // with a warning when that start is over SSH and not through launchd
 // (warnSSH).
-func connect(autostart bool) (*server.Client, server.Paths, error) {
-	p, err := server.ResolvePaths()
+func connect(autostart bool) (*client.Client, client.Paths, error) {
+	p, err := client.ResolvePaths()
 	if err != nil {
 		return nil, p, err
 	}
-	c, err := server.Connect(p, autostart)
+	c, err := client.Connect(p, autostart)
 	if c != nil && c.Started && !service.Wanted(runtime.GOOS, os.Getenv) {
 		warnSSH(os.Stderr, runtime.GOOS, os.Getenv)
 	}

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -253,7 +254,7 @@ func TestHookGuard(t *testing.T) {
 func TestAccessMergeCommands(t *testing.T) {
 	testPaths(t)
 	p := newWatchProject(t)
-	s := &Server{opts: Options{Paths: Paths{Home: os.Getenv("TERMINATR_HOME")}}}
+	s := &Server{opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}}}
 	cmds := func(role string) []string {
 		a, err := s.accessFor(role, p.Slug, t.TempDir(), loadLaunchConfig())
 		if err != nil {
@@ -295,7 +296,7 @@ func TestAccessMergeCommands(t *testing.T) {
 func TestAccessThreadGitDirs(t *testing.T) {
 	testPaths(t)
 	p := newWatchProject(t)
-	s := &Server{opts: Options{Paths: Paths{Home: os.Getenv("TERMINATR_HOME")}}}
+	s := &Server{opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}}}
 	root := realPath(t.TempDir())
 	repo, wt, other := filepath.Join(root, "repo"), filepath.Join(root, "wt"), filepath.Join(root, "other")
 	for _, args := range [][]string{

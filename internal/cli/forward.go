@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 )
 
 // forwarded are the project commands an agent runs through the server
@@ -57,11 +57,11 @@ func needsStdin(args []string) bool {
 // forward runs args in the server. ok is false when no server answers;
 // the command then runs here, with the caller from the environment.
 func (e *Env) forward(args []string) (code int, ok bool) {
-	p, err := server.ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		return 0, false
 	}
-	c, err := server.Connect(p, false)
+	c, err := client.Connect(p, false)
 	if err != nil {
 		return 0, false
 	}

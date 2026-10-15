@@ -2,11 +2,9 @@ package server
 
 import (
 	"errors"
-	"os"
-	"strconv"
-	"strings"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/plat/flock"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 )
@@ -45,7 +43,7 @@ const lockWait = 2 * time.Second
 // when the pid file names a live process, and otherwise retries until
 // lockWait, so a probe that holds the lock for a moment is not taken for a
 // server. It returns *AlreadyRunningError if the lock stays held.
-func takeLock(p Paths) (*lockFile, error) {
+func takeLock(p client.Paths) (*lockFile, error) {
 	if lk := inheritedLock(p.Lock); lk != nil {
 		return lk, nil
 	}
@@ -55,20 +53,10 @@ func takeLock(p Paths) (*lockFile, error) {
 		if !errors.Is(err, ErrLocked) {
 			return lk, err
 		}
-		pid := readPID(p.PID)
+		pid := client.ReadPID(p.PID)
 		if proc.Alive(pid) || time.Now().After(deadline) {
 			return nil, &AlreadyRunningError{PID: pid}
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-}
-
-// readPID reads a pid file; 0 if missing or malformed.
-func readPID(path string) int {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return 0
-	}
-	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
-	return pid
 }

@@ -15,6 +15,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modview"
@@ -22,7 +23,6 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/open"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
@@ -69,7 +69,7 @@ type infoData struct {
 // loadInfo reads the panel's data for session s, one of sessions: a
 // thread's, or a coordinator's (its project, coordpanel.go); nil for any
 // other.
-func loadInfo(paths server.Paths, s proto.SessionInfo, sessions []proto.SessionInfo) *infoData {
+func loadInfo(paths tmclient.Paths, s proto.SessionInfo, sessions []proto.SessionInfo) *infoData {
 	if s.Role == proto.RoleCoordinator && s.Project != "" {
 		return loadCoordInfo(paths, s, sessions)
 	}
@@ -706,9 +706,9 @@ func (c *client) infoSection(st sideStep) {
 
 // openQuestions has project slug's coordinator open its questions
 // (questions.open); a variable for tests.
-var openQuestions = func(paths server.Paths, slug string) (proto.QuestionsOpenResult, error) {
+var openQuestions = func(paths tmclient.Paths, slug string) (proto.QuestionsOpenResult, error) {
 	var res proto.QuestionsOpenResult
-	cl, err := server.Connect(paths, false)
+	cl, err := tmclient.Connect(paths, false)
 	if err != nil {
 		return res, err
 	}
@@ -955,7 +955,7 @@ func (c *client) showInfo(d *infoData) bool {
 // pollViews is mod.views on ctl, saying the console shows shown: the
 // mods' views and the views they ask to open, nil without a server (or
 // an older one).
-func pollViews(ctl *server.Client, shown []modview.Shown) *proto.ModViewsResult {
+func pollViews(ctl *tmclient.Client, shown []modview.Shown) *proto.ModViewsResult {
 	if ctl == nil {
 		return nil
 	}

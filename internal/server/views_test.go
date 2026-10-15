@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
@@ -581,7 +582,7 @@ func TestViewsPersist(t *testing.T) {
 func TestViewSubscribeStream(t *testing.T) {
 	p := testPaths(t)
 	startServer(t, p)
-	c, err := Dial(p, proto.KindControl)
+	c, err := client.Dial(p, proto.KindControl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -590,12 +591,12 @@ func TestViewSubscribeStream(t *testing.T) {
 	call(t, c, proto.MethodSessionStart, proto.SessionStartParams{Argv: []string{testSh(t)}, Cwd: t.TempDir()}, &started)
 	id := started.Session.ID
 
-	a, v, err := SubscribeView(p, proto.ViewSubscribeParams{Cols: 100, Rows: 30})
+	a, v, err := client.SubscribeView(p, proto.ViewSubscribeParams{Cols: 100, Rows: 30})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer a.Close()
-	b, _, err := SubscribeView(p, proto.ViewSubscribeParams{Cols: 80, Rows: 24})
+	b, _, err := client.SubscribeView(p, proto.ViewSubscribeParams{Cols: 80, Rows: 24})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -639,8 +640,8 @@ func TestViewSubscribeStream(t *testing.T) {
 }
 
 // viewNow is main as a fresh subscriber sees it.
-func viewNow(p Paths) (view.View, error) {
-	s, v, err := SubscribeView(p, proto.ViewSubscribeParams{Cols: 80, Rows: 24})
+func viewNow(p client.Paths) (view.View, error) {
+	s, v, err := client.SubscribeView(p, proto.ViewSubscribeParams{Cols: 80, Rows: 24})
 	if err != nil {
 		return v, err
 	}

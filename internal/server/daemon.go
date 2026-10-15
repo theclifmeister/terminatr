@@ -5,11 +5,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 )
 
 // OpenLog opens the rotating server log.
-func OpenLog(p Paths) (io.WriteCloser, error) {
+func OpenLog(p client.Paths) (io.WriteCloser, error) {
 	if err := os.MkdirAll(filepath.Dir(p.Log), 0o700); err != nil {
 		return nil, err
 	}

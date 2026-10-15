@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -64,18 +65,18 @@ func TestHumanSocket(t *testing.T) {
 		t.Fatalf("human socket %s: %v %v", p.HumanSocket(), fi, err)
 	}
 
-	srv, err := dialAt(p.Socket, proto.KindControl, proto.Protocol)
+	srv, err := client.DialAt(p.Socket, proto.KindControl, proto.Protocol)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer srv.Close()
-	human, err := Dial(p, proto.KindControl)
+	human, err := client.Dial(p, proto.KindControl)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer human.Close()
-	if got := human.conn.RemoteAddr().String(); got != p.HumanSocket() {
-		t.Fatalf("Dial connected to %q, want the human socket %q", got, p.HumanSocket())
+	if got := human.RemoteAddr().String(); got != p.HumanSocket() {
+		t.Fatalf("client.Dial connected to %q, want the human socket %q", got, p.HumanSocket())
 	}
 
 	for _, m := range humanOnlyMethods {
@@ -95,7 +96,7 @@ func TestHumanSocket(t *testing.T) {
 		}
 	}
 	// The connection outlives a refusal, and the rest answer on both.
-	for _, c := range []*Client{srv, human} {
+	for _, c := range []*client.Client{srv, human} {
 		if err := c.Call(proto.MethodPing, nil, nil); err != nil {
 			t.Errorf("ping: %v", err)
 		}
@@ -115,13 +116,13 @@ func TestHumanSocket(t *testing.T) {
 	// An agent's session doesn't try the human socket.
 	t.Setenv(caller.EnvSession, "s-1")
 	t.Setenv(caller.EnvRole, string(caller.Thread))
-	agent, err := Dial(p, proto.KindControl)
+	agent, err := client.Dial(p, proto.KindControl)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer agent.Close()
-	if got := agent.conn.RemoteAddr().String(); got != p.Socket {
-		t.Errorf("an agent's Dial connected to %q, want %q", got, p.Socket)
+	if got := agent.RemoteAddr().String(); got != p.Socket {
+		t.Errorf("an agent's client.Dial connected to %q, want %q", got, p.Socket)
 	}
 	for _, m := range []string{proto.MethodCLIRun, proto.MethodCallerWho, proto.MethodHookEvent,
 		proto.MethodSessionList, proto.MethodSessionRead, proto.MethodSessionWait, proto.MethodSessionAsk,
@@ -138,12 +139,12 @@ func TestHumanSocket(t *testing.T) {
 func TestHumanSocketCLIRun(t *testing.T) {
 	p := testPaths(t)
 	startServer(t, p)
-	srv, err := dialAt(p.Socket, proto.KindControl, proto.Protocol)
+	srv, err := client.DialAt(p.Socket, proto.KindControl, proto.Protocol)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer srv.Close()
-	human, err := Dial(p, proto.KindControl)
+	human, err := client.Dial(p, proto.KindControl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +165,7 @@ func TestHumanSocketCLIRun(t *testing.T) {
 func TestHumanSocketAttach(t *testing.T) {
 	p := testPaths(t)
 	startServer(t, p)
-	c, err := Dial(p, proto.KindControl)
+	c, err := client.Dial(p, proto.KindControl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,29 +174,29 @@ func TestHumanSocketAttach(t *testing.T) {
 	call(t, c, proto.MethodSessionStart, proto.SessionStartParams{Argv: []string{testSh(t)}, Cwd: t.TempDir()}, &started)
 	id := started.Session.ID
 
-	srv, err := dialAt(p.Socket, proto.KindAttach, proto.Protocol)
+	srv, err := client.DialAt(p.Socket, proto.KindAttach, proto.Protocol)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer srv.Close()
-	if err := proto.WriteLine(srv.conn, proto.AttachRequest{Attach: proto.AttachParams{Session: id}}); err != nil {
+	if err := srv.WriteLine(proto.AttachRequest{Attach: proto.AttachParams{Session: id}}); err != nil {
 		t.Fatal(err)
 	}
 	var reply proto.AttachReply
-	if err := proto.ReadLine(srv.br, &reply); err != nil {
+	if err := srv.ReadLine(&reply); err != nil {
 		t.Fatal(err)
 	}
 	if reply.Attached != nil || !onHumanSocketOnly(reply.Error) {
 		t.Errorf("attach on the server socket: %+v, want the human-only refusal", reply)
 	}
 
-	a, info, err := Attach(p, proto.AttachParams{Session: id})
+	a, info, err := client.Attach(p, proto.AttachParams{Session: id})
 	if err != nil {
 		t.Fatalf("Attach: %v", err)
 	}
 	defer a.Close()
-	if got := a.conn.RemoteAddr().String(); got != p.HumanSocket() || info == nil || info.ID != id {
-		t.Errorf("Attach connected to %q (%+v), want the human socket", got, info)
+	if got := a.RemoteAddr().String(); got != p.HumanSocket() || info == nil || info.ID != id {
+		t.Errorf("client.Attach connected to %q (%+v), want the human socket", got, info)
 	}
 }
 
@@ -252,13 +253,13 @@ func TestHumanSocketFallback(t *testing.T) {
 	if err := os.Remove(p.HumanSocket()); err != nil {
 		t.Fatal(err)
 	}
-	c, err := Dial(p, proto.KindControl)
+	c, err := client.Dial(p, proto.KindControl)
 	if err != nil {
-		t.Fatalf("Dial without the human socket: %v", err)
+		t.Fatalf("client.Dial without the human socket: %v", err)
 	}
 	defer c.Close()
-	if got := c.conn.RemoteAddr().String(); got != p.Socket {
-		t.Fatalf("Dial connected to %q, want %q", got, p.Socket)
+	if got := c.RemoteAddr().String(); got != p.Socket {
+		t.Fatalf("client.Dial connected to %q, want %q", got, p.Socket)
 	}
 	if err := c.Call(proto.MethodPing, nil, nil); err != nil {
 		t.Fatalf("ping: %v", err)
@@ -322,7 +323,7 @@ template = "{{.NoSandboxEscapes}}"
 		t.Fatal(err)
 	}
 	startServer(t, p)
-	c, err := Dial(p, proto.KindControl)
+	c, err := client.Dial(p, proto.KindControl)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	_ "github.com/theclifmeister/terminatr/internal/agent/claude"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/home"
@@ -43,7 +44,7 @@ func TestWorked(t *testing.T) {
 // trusted ahead of launch, never the folder above it or elsewhere.
 func TestOwnWorktree(t *testing.T) {
 	home := t.TempDir()
-	s := &Server{opts: Options{Paths: Paths{Home: home}}}
+	s := &Server{opts: Options{Paths: client.Paths{Home: home}}}
 	for dir, want := range map[string]bool{
 		home + "/worktrees/demo/t-0001-fix":       true,
 		home + "/worktrees/demo/t-0001-fix/sub":   false,
@@ -209,7 +210,7 @@ func TestColorsSurviveRestart(t *testing.T) {
 	}
 	path := filepath.Join(t.TempDir(), "sessions.json")
 	newServer := func() *Server {
-		return &Server{opts: Options{Paths: Paths{Sessions: path}}, log: log.New(io.Discard, "", 0),
+		return &Server{opts: Options{Paths: client.Paths{Sessions: path}}, log: log.New(io.Discard, "", 0),
 			prevProject: map[string]string{}, dormant: map[string]SessionRecord{}, records: map[string]SessionRecord{}}
 	}
 	old := newServer()

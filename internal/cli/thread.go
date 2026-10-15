@@ -21,12 +21,12 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -822,7 +822,7 @@ func (e *Env) rowOf(p *project.Project, r *thread.Record, sessions map[string]pr
 // tickerState is the ticker's state file, "" when the paths can't be
 // worked out.
 func tickerState() string {
-	paths, err := server.ResolvePaths()
+	paths, err := client.ResolvePaths()
 	if err != nil {
 		return ""
 	}
@@ -1374,7 +1374,7 @@ func menuAnswer(it proto.QuestionItem, a answerArgs) (string, error) {
 // answerByKeys answers the menu on the thread's screen with keys: option
 // n, or the free-text option with text.
 func (e *Env) answerByKeys(p *project.Project, id string, r *thread.Record, info proto.SessionInfo, choice int, text string, withText bool, a answerArgs) error {
-	paths, err := server.ResolvePaths()
+	paths, err := client.ResolvePaths()
 	if err != nil {
 		return err
 	}

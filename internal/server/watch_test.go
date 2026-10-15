@@ -9,6 +9,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -101,7 +102,7 @@ func TestWatchStream(t *testing.T) {
 	// Registered before the server's cleanup, so it runs after it.
 	t.Cleanup(func() { watchFunc = watchOf })
 	startServer(t, p)
-	c, err := Dial(p, proto.KindControl)
+	c, err := client.Dial(p, proto.KindControl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,13 +111,13 @@ func TestWatchStream(t *testing.T) {
 	call(t, c, proto.MethodSessionStart, proto.SessionStartParams{Argv: []string{testSh(t)}, Cwd: t.TempDir()}, &started)
 	id := started.Session.ID
 
-	if _, _, err := WatchSession(p, "s-999"); err == nil {
+	if _, _, err := client.WatchSession(p, "s-999"); err == nil {
 		t.Fatal("watched an unknown session")
 	}
 	watch := func(poll string) <-chan proto.Watch {
 		t.Helper()
 		t.Setenv(envWatchPoll, poll)
-		st, w, err := WatchSession(p, id)
+		st, w, err := client.WatchSession(p, id)
 		if err != nil {
 			t.Fatal(err)
 		}

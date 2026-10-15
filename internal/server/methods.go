@@ -4,12 +4,9 @@ import (
 	"bufio"
 	"encoding/json"
 	"net"
-	"os"
-	"runtime"
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
-	"github.com/theclifmeister/terminatr/internal/keychain"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -124,7 +121,7 @@ func init() {
 		proto.MethodPing:           {call: plain(func(*Server, callCtx) any { return map[string]bool{"pong": true} })},
 		proto.MethodCallerWho:      {call: plain(func(s *Server, c callCtx) any { return s.whoIs(c.peerPID) })},
 		proto.MethodServerStatus:   {call: plain(func(s *Server, _ callCtx) any { return s.status() })},
-		proto.MethodServerKeychain: {call: plain(func(*Server, callCtx) any { return keychain.Probe(runtime.GOOS, os.Getenv, keychain.Run) })},
+		proto.MethodServerKeychain: {call: plain(func(*Server, callCtx) any { return keychainStatus() })},
 		proto.MethodServerCodeHost: {call: plain(func(*Server, callCtx) any { return codeHostStatus() })},
 		proto.MethodSessionList:    {call: plain(func(s *Server, c callCtx) any { return s.listFor(c.who(), c.human) })},
 		proto.MethodAgentList:      {call: plain(func(s *Server, _ callCtx) any { return s.agentList() })},

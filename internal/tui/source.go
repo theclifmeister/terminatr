@@ -20,6 +20,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/link"
@@ -375,12 +376,12 @@ const (
 // ServerSource is the real Source: the control socket plus the project
 // folders.
 type ServerSource struct {
-	Paths server.Paths
+	Paths tmclient.Paths
 	// Caller is who acts: the human, unless tm runs inside an agent.
 	Caller caller.Caller
 
 	mu  sync.Mutex
-	ctl *server.Client
+	ctl *tmclient.Client
 	// slow is what Load reads that an install, a setting or an edit
 	// changes (slowCache).
 	slow slowCache
@@ -486,7 +487,7 @@ func (s *ServerSource) call(method string, params, result any) error {
 	defer s.mu.Unlock()
 	for try := 0; ; try++ {
 		if s.ctl == nil {
-			c, err := server.Connect(s.Paths, true)
+			c, err := tmclient.Connect(s.Paths, true)
 			if err != nil {
 				return err
 			}
@@ -849,7 +850,7 @@ func (s *ServerSource) RemovePeer(alias string) error {
 		return fmt.Errorf("no paired server %s (tm peer list)", alias)
 	}
 	var st *proto.LinkStatus
-	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, server.ErrNotRunning) {
+	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, tmclient.ErrNotRunning) {
 		return fmt.Errorf("removed %s, but the server didn't read the peers again (%v); tm server restart does", alias, err)
 	}
 	return nil
@@ -867,7 +868,7 @@ func (s *ServerSource) SetPeerPanes(alias, level string) error {
 		return fmt.Errorf("no paired server %s (tm peer list)", alias)
 	}
 	var st *proto.LinkStatus
-	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, server.ErrNotRunning) {
+	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, tmclient.ErrNotRunning) {
 		return fmt.Errorf("set, but the server didn't read the peers again (%v); tm server restart does", err)
 	}
 	return nil
@@ -889,7 +890,7 @@ func (s *ServerSource) SetPeerRelay(alias, relayText string) (string, error) {
 		return "", fmt.Errorf("no paired server %s (tm peer list)", alias)
 	}
 	var st *proto.LinkStatus
-	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, server.ErrNotRunning) {
+	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, tmclient.ErrNotRunning) {
 		return "", fmt.Errorf("set, but the server didn't read the peers again (%v); tm server restart does", err)
 	}
 	return relay.PrivateWarning(r), nil
@@ -990,7 +991,7 @@ func (s *ServerSource) pairing(ctx context.Context, code peer.Code, ev PairEvent
 		return "", err
 	}
 	var st *proto.LinkStatus
-	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, server.ErrNotRunning) {
+	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, tmclient.ErrNotRunning) {
 		return got.Alias, fmt.Errorf("paired with %s, but the server didn't read the peers again (%v); tm server restart does", got.Alias, err)
 	}
 	return got.Alias, nil

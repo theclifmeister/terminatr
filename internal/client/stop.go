@@ -1,9 +1,13 @@
-package server
+package client
 
 import (
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
 
+	"github.com/theclifmeister/terminatr/internal/plat/flock"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -67,15 +71,15 @@ func Stop(p Paths, yes bool) (Stopped, error) {
 // Terminate sends SIGTERM to this home's server when it can't be asked
 // to stop. want, if not 0, is the pid the server announced in its hello.
 func Terminate(p Paths, want int, yes bool) (int, error) {
-	lk, err := tryLock(p.Lock)
+	lk, err := flock.TryLock(p.Lock)
 	if err == nil {
 		lk.Unlock()
 		return 0, ErrNotRunning
 	}
-	if !errors.Is(err, ErrLocked) {
+	if !errors.Is(err, flock.ErrLocked) {
 		return 0, err
 	}
-	pid := readPID(p.PID)
+	pid := ReadPID(p.PID)
 	switch {
 	case !proc.Alive(pid):
 		return pid, fmt.Errorf("the server lock is held but %s names no live process (%d); see %s", p.PID, pid, p.Log)
@@ -102,4 +106,14 @@ func isServerProcess(pid int) bool {
 
 func isServerArgv(argv []string) bool {
 	return len(argv) >= 3 && argv[1] == "server" && argv[2] == "run"
+}
+
+// ReadPID reads a pid file; 0 if missing or malformed.
+func ReadPID(path string) int {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
+	return pid
 }

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/detect"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -47,7 +48,7 @@ func agentCmd(e *Env, args []string) int {
 // localAgents lists the manifests as this binary sees them, for when no
 // server runs.
 func localAgents() (proto.AgentListResult, error) {
-	p, err := server.ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		return proto.AgentListResult{}, err
 	}
@@ -84,7 +85,7 @@ func agentList(e *Env, args []string) int {
 	if err == nil {
 		defer c.Close()
 		err = c.Call(proto.MethodAgentList, nil, &res)
-	} else if errors.Is(err, server.ErrNotRunning) {
+	} else if errors.Is(err, client.ErrNotRunning) {
 		res, err = localAgents()
 	}
 	if err != nil && len(res.Agents) == 0 {
@@ -213,7 +214,7 @@ func agentReload(e *Env, args []string) int {
 		return e.srvUsage("agent reload", "usage: tm agent reload")
 	}
 	c, _, err := connect(false)
-	if errors.Is(err, server.ErrNotRunning) {
+	if errors.Is(err, client.ErrNotRunning) {
 		fmt.Fprintln(e.Stdout, "no server running; manifests are read when it starts")
 		return ExitOK
 	}

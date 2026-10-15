@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/version"
@@ -108,11 +109,11 @@ func runMCPCmd(e *Env, args []string) error {
 		return usagef("usage: tm mcp   (an MCP server on stdio: a thread's tools)")
 	}
 	ask := func(method string, params, res any) error {
-		p, err := server.ResolvePaths()
+		p, err := client.ResolvePaths()
 		if err != nil {
 			return err
 		}
-		c, err := server.Connect(p, false)
+		c, err := client.Connect(p, false)
 		if err != nil {
 			return err
 		}

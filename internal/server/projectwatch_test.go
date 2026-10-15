@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"os"
 	"os/exec"
@@ -143,10 +144,10 @@ func TestProjectWatchStream(t *testing.T) {
 	t.Setenv(envWatchPoll, "50ms")
 	startServer(t, paths)
 
-	if _, _, err := WatchProject(paths, "nope"); err == nil {
+	if _, _, err := client.WatchProject(paths, "nope"); err == nil {
 		t.Fatal("watched an unknown project")
 	}
-	st, w, err := WatchProject(paths, p.Slug)
+	st, w, err := client.WatchProject(paths, p.Slug)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +225,7 @@ func TestProjectWatchSeesChanges(t *testing.T) {
 	startServer(t, paths)
 	var streams []chan proto.ProjectWatch
 	for range 2 {
-		st, _, err := WatchProject(paths, p.Slug)
+		st, _, err := client.WatchProject(paths, p.Slug)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -332,7 +333,7 @@ func TestProjectWatchIdleNoGit(t *testing.T) {
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv(envWatchPoll, "20ms")
 	startServer(t, paths)
-	st, _, err := WatchProject(paths, p.Slug)
+	st, _, err := client.WatchProject(paths, p.Slug)
 	if err != nil {
 		t.Fatal(err)
 	}

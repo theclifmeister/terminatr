@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 )
 
 // SetRemote turns remote control of a project's running coordinator on
@@ -95,7 +95,7 @@ func (c *client) answerRemote(p *pane, yes bool) {
 		return
 	}
 	go func() {
-		ctl, err := server.Connect(c.paths, false)
+		ctl, err := tmclient.Connect(c.paths, false)
 		var res proto.SessionRemoteResult
 		if err == nil {
 			res, err = SetRemote(ctl.Call, slug, on)

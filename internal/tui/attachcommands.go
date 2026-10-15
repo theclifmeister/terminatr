@@ -4,11 +4,11 @@ import (
 	"errors"
 	"time"
 
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 )
 
 // The mods' commands in a session (docs/SPEC.md §5.3, Commands): prefix
@@ -34,7 +34,7 @@ type cmdWait struct {
 
 // loadCommands are the mods' commands that run: none of a user mod's
 // while ctl's server runs in safe mode.
-func loadCommands(ctl *server.Client) []mod.ModCommand {
+func loadCommands(ctl *tmclient.Client) []mod.ModCommand {
 	cfg, err := config.Load()
 	if err != nil {
 		cfg = nil
@@ -44,7 +44,7 @@ func loadCommands(ctl *server.Client) []mod.ModCommand {
 
 // commandsWith are loadCommands' commands, with config cfg (nil for one
 // that doesn't load).
-func commandsWith(ctl *server.Client, cfg *config.Config) []mod.ModCommand {
+func commandsWith(ctl *tmclient.Client, cfg *config.Config) []mod.ModCommand {
 	reg, err := mod.Load(cfg)
 	if err != nil {
 		return nil
@@ -139,10 +139,10 @@ func (c *client) runCommand(mc mod.ModCommand) {
 }
 
 // sendCommand sends mod.command to the server at paths.
-func sendCommand(paths server.Paths) func(proto.ModCommandParams) (proto.ModCommandResult, error) {
+func sendCommand(paths tmclient.Paths) func(proto.ModCommandParams) (proto.ModCommandResult, error) {
 	return func(p proto.ModCommandParams) (proto.ModCommandResult, error) {
 		var res proto.ModCommandResult
-		ctl, err := server.Connect(paths, false)
+		ctl, err := tmclient.Connect(paths, false)
 		if err != nil {
 			return res, err
 		}

@@ -9,10 +9,10 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/tui"
 )
@@ -56,7 +56,7 @@ func attachCmd(e *Env, args []string) int {
 		fmt.Fprintln(e.Stderr, "tm attach: this terminal looks like it was left in raw mode (a client killed with SIGKILL?); run `reset` if it misbehaves")
 	}
 	c, p, err := connect(false)
-	if errors.Is(err, server.ErrNotRunning) {
+	if errors.Is(err, client.ErrNotRunning) {
 		fmt.Fprintln(e.Stderr, "tm attach: tm server is not running; start a session with tm session start")
 		return ExitRefused
 	}
@@ -119,7 +119,7 @@ func (e *Env) tookOver(s proto.SessionInfo) error {
 // the user detaches, with opts' sidebar, flash, command and handover
 // (the rest is filled in here). On a build mismatch it re-execs the
 // server's binary with args (docs/SPEC.md §3.3) and doesn't return.
-func (e *Env) attach(p server.Paths, vc *tui.ViewConn, opts tui.Options, args []string) (tui.Result, int) {
+func (e *Env) attach(p client.Paths, vc *tui.ViewConn, opts tui.Options, args []string) (tui.Result, int) {
 	id := vc.View().Focus
 	logger := log.New(io.Discard, "", 0)
 	pid := os.Getpid()

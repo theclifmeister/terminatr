@@ -13,6 +13,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -133,7 +134,7 @@ func projectLifecycle(e *Env, verb string, args []string) error {
 		case err == nil:
 			defer c.Close()
 			call = c.Call
-		case (verb == "activate" || verb == "deactivate") && !errors.Is(err, server.ErrNotRunning):
+		case (verb == "activate" || verb == "deactivate") && !errors.Is(err, client.ErrNotRunning):
 			// The server runs the project's agents: it must hear of it.
 			return err
 		}
@@ -205,7 +206,7 @@ func projectRename(e *Env, args []string) error {
 			}
 			return err
 		}
-	case errors.Is(err, server.ErrNotRunning):
+	case errors.Is(err, client.ErrNotRunning):
 		if res, err = renameOffline(e, params); err != nil {
 			return err
 		}
@@ -232,7 +233,7 @@ func projectRename(e *Env, args []string) error {
 // can run, and the ticker's memos are in its state file.
 func renameOffline(e *Env, p proto.ProjectRenameParams) (proto.ProjectRenameResult, error) {
 	var out proto.ProjectRenameResult
-	paths, err := server.ResolvePaths()
+	paths, err := client.ResolvePaths()
 	if err != nil {
 		return out, err
 	}

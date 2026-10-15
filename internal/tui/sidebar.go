@@ -15,11 +15,11 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/view"
 	"github.com/theclifmeister/terminatr/internal/widget"
 )
@@ -1276,13 +1276,13 @@ func (r treeRow) preview() (t Target, ok bool) {
 // coordinator_agent, when none runs)
 // or the session. A bare view's console hands over to view main with it
 // (docs/SPEC.md §3.3); a full one opens it in place.
-func OpenTarget(p server.Paths, vc *ViewConn, t Target) error {
+func OpenTarget(p tmclient.Paths, vc *ViewConn, t Target) error {
 	switch {
 	case t.Session != "":
 		_, err := vc.Do(proto.MethodViewAttach, proto.ViewParams{Session: t.Session, Project: t.Project})
 		return err
 	case t.Coordinator:
-		c, err := server.Connect(p, true)
+		c, err := tmclient.Connect(p, true)
 		if err != nil {
 			return err
 		}
@@ -1742,7 +1742,7 @@ func (c *client) askActive(slug string, on bool) {
 // says what came of it in the status bar.
 func (c *client) setActive(slug string, on bool) {
 	go func() {
-		ctl, err := server.Connect(c.paths, false)
+		ctl, err := tmclient.Connect(c.paths, false)
 		msg := ""
 		if err == nil {
 			msg, err = ActivateProject(ctl.Call, caller.FromEnv(), slug, on)
@@ -1807,7 +1807,7 @@ func (c *client) sectionDo(st sideStep) {
 		p := sectionClick(s)
 		go func() {
 			var res proto.ModViewInputResult
-			ctl, err := server.Connect(c.paths, false)
+			ctl, err := tmclient.Connect(c.paths, false)
 			if err == nil {
 				err = ctl.Call(proto.MethodModViewInput, p, &res)
 				ctl.Close()

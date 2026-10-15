@@ -15,9 +15,9 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
@@ -442,28 +442,28 @@ func TestPrefixRepaint(t *testing.T) {
 // console still ends with the stream's words, not "detached", when the
 // closed frame comes after (T416: panes turned off on mini).
 func TestGoneWaitsForReason(t *testing.T) {
-	c, err := newClient(server.Paths{}, log.New(io.Discard, "", 0))
+	c, err := newClient(tmclient.Paths{}, log.New(io.Discard, "", 0))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer c.enc.Close()
 	near, far := net.Pipe()
 	defer far.Close()
-	p := &pane{conn: server.StreamOver(near), info: proto.SessionInfo{ID: "mini/s-1", Server: "mini"}}
+	p := &pane{conn: tmclient.StreamOver(near), info: proto.SessionInfo{ID: "mini/s-1", Server: "mini"}}
 	c.panes[p.info.ID], c.focus = p, p
 	go c.readLoop(p)
 
 	const words = "mini turned its panes off for this server"
 	go func() {
 		time.Sleep(100 * time.Millisecond) // after the view's word
-		server.StreamOver(far).WriteFrame(proto.FrameClosed, []byte(words))
+		tmclient.StreamOver(far).WriteFrame(proto.FrameClosed, []byte(words))
 	}()
 	if res := c.goneResult(); res.Reason != words || res.Detached {
 		t.Fatalf("result %+v, want %q", res, words)
 	}
 
 	// No stream to wait for: the result is at once.
-	c2, _ := newClient(server.Paths{}, log.New(io.Discard, "", 0))
+	c2, _ := newClient(tmclient.Paths{}, log.New(io.Discard, "", 0))
 	defer c2.enc.Close()
 	t0 := time.Now()
 	if res := c2.goneResult(); !res.Detached || time.Since(t0) > time.Second {

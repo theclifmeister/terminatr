@@ -22,6 +22,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/keychain"
@@ -31,6 +32,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modsup"
 	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/peer"
+	"github.com/theclifmeister/terminatr/internal/pin"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/plat/shell"
@@ -64,7 +66,7 @@ func (e *AlreadyRunningError) Error() string {
 
 // Options configure a server.
 type Options struct {
-	Paths Paths
+	Paths client.Paths
 	Log   *log.Logger
 	// Bin is the absolute path of tm, exported to sessions as TERMINATR_BIN.
 	Bin string
@@ -74,7 +76,7 @@ type Options struct {
 	Source string
 	// Exec, when set, runs the pinned binary in place of this process
 	// (proc.Exec), with Args, so the server itself runs from the pin
-	// (pinBinary). Nil keeps running the binary started.
+	// (pin.Binary). Nil keeps running the binary started.
 	Exec func(bin string, argv, env []string) error
 	// Args are the arguments Exec passes, after the binary.
 	Args []string
@@ -255,7 +257,7 @@ func Run(ctx context.Context, opts Options) error {
 	// path launchd started it from, which then stays the same across
 	// upgrades.
 	if opts.Bin != "" {
-		if bin, again, err := pinFor(p.RunDir, opts.Bin, opts.Source, logger.Printf); err != nil {
+		if bin, again, err := pin.For(p.RunDir, opts.Bin, opts.Source, logger.Printf); err != nil {
 			logger.Printf("pin: %v; an upgrade in place will break attach re-exec and hooks until restart", err)
 		} else {
 			if opts.Exec != nil && again && !lock.handedOver {
@@ -1204,6 +1206,12 @@ func decodeParams(raw json.RawMessage, v any) *proto.Error {
 		return proto.Errorf(proto.ErrBadParams, "%v", err)
 	}
 	return nil
+}
+
+// keychainStatus is server.keychain's answer: whether the server's
+// sessions reach the login keychain.
+func keychainStatus() proto.KeychainStatus {
+	return keychain.Probe(runtime.GOOS, os.Getenv, keychain.Run)
 }
 
 // codeHostStatus runs the code-host checks (codehost.Checks) for the
