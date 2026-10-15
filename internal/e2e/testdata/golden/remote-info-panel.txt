@@ -7,9 +7,9 @@
 │ THREAD ──────────────────────────────
 │ thread    t-0001 ○ idle
 │
-│ Read-only: nothing here acts on mini.
-│
-│
+│ Keys typed in the pane go to mini's
+│ session. This panel only reads:
+│ nothing in it acts on mini.
 │
 │
 │

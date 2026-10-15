@@ -120,9 +120,9 @@ func TestSmokeRemotePanes(t *testing.T) {
 
 	// In a window with room for it, the info panel beside the pane,
 	// from studio's mirror of mini: the server and its link, the
-	// thread, read-only.
+	// thread, and that keys go to mini.
 	wide := studio.Attach(160, 40, remote)
-	wide.WaitFor("Read-only: nothing here acts on mini.", wait)
+	wide.WaitFor("Keys typed in the pane go to mini", wait)
 	WaitGolden(t, wait, func() string { return infoPanelScreen(wide) }, "remote-info-panel.txt", remotePanelMasks...)
 	wide.CloseWindow()
 
