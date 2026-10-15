@@ -148,11 +148,12 @@ snapshot:
 changelog:
   use: github
   sort: asc
+  # Short hashes, as older releases showed ("5c40f01: ...").
+  abbrev: 7
   filters:
     exclude:
-      - "^Merge pull request"
-      - "^Merge branch"
-      - "^Merge remote-tracking branch"
+      # Every merge commit: PR merges and the threads' own merges of main.
+      - "^Merge "
 
 release:
   github:
