@@ -113,6 +113,7 @@ func TestModAgentTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.mu.Lock()
+	s.inSession = testInSession
 	sock, err := s.listenMod("s-1", rt)
 	s.mu.Unlock()
 	if err != nil {

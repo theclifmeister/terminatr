@@ -107,6 +107,10 @@ type Server struct {
 	latest    atomic.Pointer[latestRelease]
 	checkedAt atomic.Int64 // unix time update.CachedLatest was last consulted
 
+	// inSession, when set, says whether pid is a process of session id
+	// for the mod sockets (modPeerIn), instead of callerOf (tests).
+	inSession func(id string, pid int) bool
+
 	mu       sync.Mutex
 	sessions map[string]*session.Session
 	records  map[string]SessionRecord
