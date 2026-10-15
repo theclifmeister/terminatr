@@ -139,7 +139,7 @@ func Update(path string, fn func(old []byte) ([]byte, error)) error {
 	if err != nil {
 		return err
 	}
-	if old != nil && bytes.Equal(old, data) {
+	if bytes.Equal(old, data) {
 		return nil
 	}
 	return fsx.WriteAtomic(path, data, 0o644)
