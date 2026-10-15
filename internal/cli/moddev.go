@@ -20,7 +20,6 @@ import (
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/moddev"
-	"github.com/theclifmeister/terminatr/internal/modtest"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -56,12 +55,12 @@ func (e *Env) modNew(id, kind, dir string) error {
 
 // testRow is a mod in tm mod test --json.
 type testRow struct {
-	Dir     string           `json:"dir"`
-	ID      string           `json:"id,omitempty"`
-	OK      bool             `json:"ok"`
-	Error   string           `json:"error,omitempty"`
-	Data    bool             `json:"data,omitempty"`
-	Results []modtest.Result `json:"results"`
+	Dir     string          `json:"dir"`
+	ID      string          `json:"id,omitempty"`
+	OK      bool            `json:"ok"`
+	Error   string          `json:"error,omitempty"`
+	Data    bool            `json:"data,omitempty"`
+	Results []moddev.Result `json:"results"`
 }
 
 func (e *Env) modTest(dirs []string, asJSON bool) error {
@@ -71,11 +70,11 @@ func (e *Env) modTest(dirs []string, asJSON bool) error {
 	rows := []testRow{}
 	bad := false
 	for _, d := range dirs {
-		row := testRow{Dir: e.abs(d), OK: true, Results: []modtest.Result{}}
+		row := testRow{Dir: e.abs(d), OK: true, Results: []moddev.Result{}}
 		if m, err := mod.Validate(row.Dir); m != nil && err == nil {
 			row.ID, row.Data = m.ID, !m.IsCode()
 		}
-		res, err := modtest.RunDir(row.Dir)
+		res, err := moddev.RunDir(row.Dir)
 		if err != nil {
 			row.OK, row.Error = false, mod.Clean(err.Error(), true)
 		}

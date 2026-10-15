@@ -95,8 +95,7 @@ One binary, several roles:
 | `internal/modproto` | The mod host wire: JSON-RPC 2.0 over NDJSON, its messages and exit codes (§3.7) |
 | `internal/modapi` | The mod API v1 as one schema: its events and `$` methods, the host's `$` bindings and the generated `tm.d.ts` (§3.7) |
 | `internal/modsup` | The mod supervisor: starts, stops and restarts each code mod's host, its limits, backoff, failure states and log (§3.7) |
-| `internal/modtest` | `tm mod test`: replays a mod's event fixtures against it in an in-process host with a fake broker (§5.3) |
-| `internal/moddev` | The mod author's tools: `tm mod new`'s scaffolds, and the folder watch and log tail of `tm mod dev` and `tm mod logs` (§5.3) |
+| `internal/moddev` | The mod author's tools: `tm mod new`'s scaffolds, and the folder watch and log tail of `tm mod dev` and `tm mod logs`, and `tm mod test`, which replays a mod's event fixtures against it in an in-process host with a fake broker (§5.3) |
 | `internal/modbroker` | The broker for user mods: every `$` call checked against the mod's grants and done by the server; the path, host and program checks and the credential deny list (§5.3) |
 | `internal/relay` | `tm relay serve`, the meeting point of two linked servers, and the client side a server dials it with: the WebSocket subset, the signed hello, rooms, limits (§16) |
 | `internal/peer` | The server's identity key and paired servers, the pinned-TLS link to each (§16.7), pairing by one-time code (§16.8), the peer dispatcher that serves shared projects to paired servers (§16.9), its `peer.message` for links across servers (§16.11), and remote panes: `peer.attach` and its binary frames on the link (§16.12) |
