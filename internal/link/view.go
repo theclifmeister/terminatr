@@ -174,3 +174,44 @@ func StampPaths(p *project.Project, rows []Row) []string {
 	}
 	return paths
 }
+
+// Back is what this side knows of a paired server's entry for a remote
+// link, from the messages between them (§16.11): Sends, a message came
+// from there; Receives, that server took one of this side's (its ok or
+// read receipt); Refuses, its last answer was not-linked. The newest
+// answer wins; none of them is known before a message crossed.
+type Back struct{ Sends, Receives, Refuses bool }
+
+// TheirSide reads Back from msgs, oldest first (Log).
+func TheirSide(msgs []*Message) Back {
+	var b Back
+	for _, m := range msgs {
+		switch {
+		case !m.Out:
+			b.Sends = true
+		case m.State == StateSent || m.State == StateRead:
+			b.Receives, b.Refuses = true, false
+		case m.State == StateUndelivered && m.Refused == "not-linked":
+			b.Receives, b.Refuses = false, true
+		}
+	}
+	return b
+}
+
+// Words is Back in words, short enough for a column: "linked back
+// both ways", "refuses ours", or "their side unknown".
+func (b Back) Words() string {
+	switch {
+	case b.Refuses && b.Sends:
+		return "sends, refuses ours"
+	case b.Refuses:
+		return "refuses ours"
+	case b.Sends && b.Receives:
+		return "linked back both ways"
+	case b.Receives:
+		return "takes ours"
+	case b.Sends:
+		return "sends here"
+	}
+	return "their side unknown"
+}

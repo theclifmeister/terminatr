@@ -80,6 +80,8 @@ type fakeSource struct {
 	links    []string
 	linkActs []string
 	linkLog  []*link.Message
+	// linkLogs, when set, are LinkLog's by the other project instead.
+	linkLogs map[string][]*link.Message
 	modViews proto.ModViewsResult
 	// tasksTab: ModViews lists the Tasks tab mod's view, drawn from the
 	// board (taskstab_test.go), its done tasks listed with tasksDoneAll.
@@ -167,7 +169,12 @@ func (f *fakeSource) SetLinkAsk(slug, other string, ask bool) error {
 	f.links = append(f.links, fmt.Sprintf("%s %s ask %v", slug, other, ask))
 	return nil
 }
-func (f *fakeSource) LinkLog(slug, other string) ([]*link.Message, error) { return f.linkLog, nil }
+func (f *fakeSource) LinkLog(slug, other string) ([]*link.Message, error) {
+	if f.linkLogs != nil {
+		return f.linkLogs[other], nil
+	}
+	return f.linkLog, nil
+}
 func (f *fakeSource) LinkAct(slug, verb, arg, text string) (string, error) {
 	f.linkActs = append(f.linkActs, strings.TrimSpace(strings.Join([]string{slug, verb, arg, text}, " ")))
 	return verb + " done", nil
