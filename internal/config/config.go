@@ -196,31 +196,10 @@ type Safety struct {
 // ArchiveDays is the retention setting key names (ArchiveKeys), 0 for
 // another key.
 func (s Safety) ArchiveDays(key string) int {
-	switch key {
-	case "archive_tasks_days":
-		return s.ArchiveTasksDays
-	case "archive_threads_days":
-		return s.ArchiveThreadsDays
-	case "archive_inbox_days":
-		return s.ArchiveInboxDays
-	case "archive_journal_days":
-		return s.ArchiveJournalDays
+	if !slices.Contains(ArchiveKeys, key) {
+		return 0
 	}
-	return 0
-}
-
-// SetArchiveDays sets the retention setting key names (ArchiveKeys).
-func (s *Safety) SetArchiveDays(key string, n int) {
-	switch key {
-	case "archive_tasks_days":
-		s.ArchiveTasksDays = n
-	case "archive_threads_days":
-		s.ArchiveThreadsDays = n
-	case "archive_inbox_days":
-		s.ArchiveInboxDays = n
-	case "archive_journal_days":
-		s.ArchiveJournalDays = n
-	}
+	return s.Value(key).(int)
 }
 
 // LegacyAgent is what a session or thread record without an agent ran:

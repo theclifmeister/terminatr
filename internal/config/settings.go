@@ -50,6 +50,8 @@ type settingRow struct {
 	// value is the setting's value in s; nil for a key Safety has no
 	// field for (auto_resolve).
 	value func(s *Safety) any
+	// put sets the setting in s to v, when v has its type.
+	put func(s *Safety, v any)
 }
 
 // limit is a check's error that says what the value must be; apply adds
@@ -123,6 +125,11 @@ func def[T any](key, words string, at reach, raw func(*rawSafety) *T, field func
 			return nil
 		},
 		value: func(s *Safety) any { return *field(s) },
+		put: func(s *Safety, v any) {
+			if t, ok := v.(T); ok {
+				*field(s) = t
+			}
+		},
 	}
 }
 
@@ -199,6 +206,7 @@ var autoResolve = settingRow{key: "auto_resolve", reach: everywhere,
 		return nil
 	},
 	value: func(*Safety) any { return nil },
+	put:   func(*Safety, any) {},
 }
 
 // checkCoordModel: "" is the agent's default model.
@@ -286,6 +294,15 @@ func (s Safety) Value(key string) any {
 		return st.value(&s)
 	}
 	return nil
+}
+
+// Set sets the setting key in s to v, as a write of it does (the TUI
+// shows a change before it is read back); a key Safety has no field
+// for, or a v of another type, changes nothing.
+func (s *Safety) Set(key string, v any) {
+	if st, ok := lookup(key); ok {
+		st.put(s, v)
+	}
 }
 
 // apply sets in s every setting r names, checked; table names it in

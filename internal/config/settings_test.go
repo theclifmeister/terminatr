@@ -157,3 +157,25 @@ func TestAutoCloseOverAutoResolve(t *testing.T) {
 		}
 	}
 }
+
+// TestSafetySet: Set changes the field Value reads, and only with a
+// value of its type.
+func TestSafetySet(t *testing.T) {
+	s := Defaults
+	for key, v := range map[string]any{"yolo": true, "parallel_threads": 3, "auto_close": CloseDays, "models": []string{"a"}, "archive_inbox_days": 9, "guard_off": []string{"merge"}} {
+		s.Set(key, v)
+		if got := s.Value(key); !reflect.DeepEqual(got, v) {
+			t.Errorf("%s: %v, want %v", key, got, v)
+		}
+	}
+	if s.ArchiveDays("archive_inbox_days") != 9 || s.ArchiveDays("parallel_threads") != 0 {
+		t.Errorf("ArchiveDays %d %d", s.ArchiveDays("archive_inbox_days"), s.ArchiveDays("parallel_threads"))
+	}
+	before := s
+	s.Set("parallel_threads", "4")
+	s.Set("auto_resolve", true)
+	s.Set("nope", 1)
+	if !reflect.DeepEqual(s, before) {
+		t.Errorf("changed: %+v", s)
+	}
+}
