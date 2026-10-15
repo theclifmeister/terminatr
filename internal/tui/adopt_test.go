@@ -43,7 +43,7 @@ func TestAdoptSession(t *testing.T) {
 		t.Fatalf("n: %q %v", m.msg, src.adopted)
 	}
 	press(m, "T")
-	run(m, press(m, "y"))
+	drain(t, m, press(m, "y"))
 	if len(src.adopted) != 1 || src.adopted[0] != "beta s-4" || m.msg != "asked the coordinator to adopt s-4" {
 		t.Fatalf("y: %q %v", m.msg, src.adopted)
 	}
@@ -71,7 +71,7 @@ func TestAdoptWithdraw(t *testing.T) {
 		t.Fatalf("n: %q %v", m.msg, src.withdrawn)
 	}
 	press(m, "T")
-	run(m, press(m, "y"))
+	drain(t, m, press(m, "y"))
 	if len(src.withdrawn) != 1 || src.withdrawn[0] != "beta s-4" || len(src.adopted) != 0 || m.msg != "withdrew the go-ahead to adopt s-4" {
 		t.Fatalf("y: %q %v %v", m.msg, src.withdrawn, src.adopted)
 	}

@@ -41,6 +41,25 @@ func eventually(t *testing.T, what string, cond func() bool) {
 	}
 }
 
+// never fails the test if bad turns true within d: the negative of
+// eventually, for "nothing happens". It polls instead of sleeping the
+// whole window, so a failure shows at once; d is a bound on how long a
+// regression may hide, not a wait for a result, so keep the clocks it
+// guards (PromptHold, ModPollTimeout) well under it.
+func never(t *testing.T, d time.Duration, what string, bad func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(d)
+	for time.Now().Before(deadline) {
+		if bad() {
+			t.Fatalf("happened within %v: %s", d, what)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if bad() {
+		t.Fatalf("happened within %v: %s", d, what)
+	}
+}
+
 func screen(t *testing.T, s *Session) string {
 	t.Helper()
 	r, err := s.Read(false)

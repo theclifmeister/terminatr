@@ -41,12 +41,16 @@ func TestSmokePrefixQuit(t *testing.T) {
 	} {
 		w := env.Window(100, 30)
 		w.WaitFor("SESSIONS", wait)
+		var keys []any
 		for _, k := range c.keys {
 			if k == '\t' {
-				w.Key(tab)
+				keys = append(keys, tab)
 			} else {
-				w.Type(string(k))
+				keys = append(keys, string(k))
 			}
+		}
+		if len(keys) > 0 {
+			w.Keys(keys...)
 		}
 		w.WaitFor(c.shows, wait)
 		if c.name == "the list" {

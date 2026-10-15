@@ -173,8 +173,7 @@ func TestSmokeProjectPopup(t *testing.T) {
 	saved(w, "parallel threads 9", func(sc string) bool {
 		return regexp.MustCompile(`Parallel threads\s+9 · 0 working now`).MatchString(sc)
 	})
-	w.Key(keyDown)
-	w.Key(Enter)
+	w.Keys(keyDown, Enter)
 	saved(w, "7 days", func(sc string) bool { return strings.Contains(sc, "7 days after it finishes") })
 	w.Type("+")
 	saved(w, "8 days", func(sc string) bool { return strings.Contains(sc, "8 days after it finishes") })
@@ -191,8 +190,7 @@ func TestSmokeProjectPopup(t *testing.T) {
 		t.Fatalf("context after the numbers:\n%s", out)
 	}
 	// Complete tasks: by you → when merged, in the coordinator's context.
-	w.Key(keyDown)
-	w.Key(Enter)
+	w.Keys(keyDown, Enter)
 	saved(w, "complete tasks when merged", func(sc string) bool {
 		return regexp.MustCompile(`Complete tasks\s+when merged`).MatchString(sc)
 	})

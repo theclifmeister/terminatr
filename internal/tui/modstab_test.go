@@ -125,8 +125,8 @@ func modsDash(t *testing.T) (*fakeSource, *dash) {
 
 // modAct presses key and runs what it starts, then polls the source
 // again, mods included.
-func modAct(m *dash, src *fakeSource, key string) {
-	run(m, keyPress(m, key))
+func modAct(t testing.TB, m *dash, src *fakeSource, key string) {
+	drain(t, m, keyPress(m, key))
 	src.loadMods()
 	m.setData(src.data)
 }
@@ -179,7 +179,7 @@ func TestModsTabList(t *testing.T) {
 		t.Errorf("an empty log says so:\n%s", out)
 	}
 	press(m, "q")
-	run(m, keyPress(m, "right"))
+	drain(t, m, keyPress(m, "right"))
 	if sv := m.top().(*settingsView); sv.tab != tabPeers {
 		t.Errorf("→ from Mods goes to tab %d, want Peers", sv.tab)
 	}
@@ -200,12 +200,12 @@ func TestModsConsent(t *testing.T) {
 			t.Errorf("consent lacks %q:\n%s", want, out)
 		}
 	}
-	modAct(m, src, "n")
+	modAct(t, m, src, "n")
 	if md := modState(t, src, "review-age"); md.State != mod.Disabled {
 		t.Fatalf("n turned it %s", md.State)
 	}
 	press(m, "enter")
-	modAct(m, src, "y")
+	modAct(t, m, src, "y")
 	md := modState(t, src, "review-age")
 	if md.State != mod.Enabled || !slices.Equal(md.Grants, []string{mod.PermProjectRead, mod.PermNet}) {
 		t.Fatalf("after y: %s with %v", md.State, md.Grants)
@@ -216,7 +216,7 @@ func TestModsConsent(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "● Review age") || !strings.Contains(out, "reads your projects · talks to api.example.com") {
 		t.Errorf("an on mod shows ● and its permissions:\n%s", out)
 	}
-	modAct(m, src, "enter")
+	modAct(t, m, src, "enter")
 	if md := modState(t, src, "review-age"); md.State != mod.Disabled {
 		t.Errorf("enter on an on mod left it %s", md.State)
 	}
@@ -235,13 +235,13 @@ func TestModsWantsMore(t *testing.T) {
 	src, m := modsDash(t)
 	selectMod(t, m, "review-age")
 	press(m, "enter")
-	modAct(m, src, "y")
+	modAct(t, m, src, "y")
 	press(m, "p")
 	if out := screen(m); !strings.Contains(out, "Review age · permissions") || !strings.Contains(out, "granted") {
 		t.Fatalf("p doesn't list its permissions:\n%s", out)
 	}
 	press(m, "down") // talks to api.example.com
-	modAct(m, src, "enter")
+	modAct(t, m, src, "enter")
 	if md := modState(t, src, "review-age"); !slices.Equal(md.WantsMore, []string{mod.PermNet}) {
 		t.Fatalf("taking net back: wants more %v", md.WantsMore)
 	}
@@ -254,7 +254,7 @@ func TestModsWantsMore(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "Grant Review age what it wants more?") || !strings.Contains(out, "· new") {
 		t.Errorf("its consent asks for what it wants more:\n%s", out)
 	}
-	modAct(m, src, "o")
+	modAct(t, m, src, "o")
 	if md := modState(t, src, "review-age"); md.State != mod.Disabled {
 		t.Errorf("o left it %s", md.State)
 	}
@@ -262,7 +262,7 @@ func TestModsWantsMore(t *testing.T) {
 	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "talks to api.example.com") {
 		t.Fatalf("granting asks first: %T", m.top())
 	}
-	modAct(m, src, "y")
+	modAct(t, m, src, "y")
 	if md := modState(t, src, "review-age"); !md.Granted(mod.PermNet) {
 		t.Errorf("y didn't grant net: %v", md.Grants)
 	}
@@ -277,11 +277,11 @@ func TestModsSettingsPage(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "warn_after_hours") || !strings.Contains(out, "Warn after (hours)") || !strings.Contains(out, "24") {
 		t.Fatalf("s doesn't show its settings:\n%s", out)
 	}
-	modAct(m, src, "+")
+	modAct(t, m, src, "+")
 	if md := modState(t, src, "review-age"); md.Settings["warn_after_hours"] != int64(25) {
 		t.Errorf("+ set %v (%s)", md.Settings["warn_after_hours"], m.msg)
 	}
-	modAct(m, src, "x")
+	modAct(t, m, src, "x")
 	if md := modState(t, src, "review-age"); md.Settings["warn_after_hours"] != int64(24) {
 		t.Errorf("x left %v", md.Settings["warn_after_hours"])
 	}
@@ -325,7 +325,7 @@ func TestModsTextSetting(t *testing.T) {
 	}
 
 	edit("in review for")
-	modAct(m, src, "enter")
+	modAct(t, m, src, "enter")
 	if md := modState(t, src, "review-age"); md.Settings["wording"] != "in review for" {
 		t.Errorf("enter saved %q (%s)", md.Settings["wording"], m.msg)
 	}
@@ -334,7 +334,7 @@ func TestModsTextSetting(t *testing.T) {
 		t.Errorf("config.toml:\n%s", data)
 	}
 
-	modAct(m, src, "x")
+	modAct(t, m, src, "x")
 	if md := modState(t, src, "review-age"); md.Settings["wording"] != "waiting" {
 		t.Errorf("x left %q", md.Settings["wording"])
 	}
@@ -362,7 +362,7 @@ func TestModsFailure(t *testing.T) {
 	src, m := modsDash(t)
 	selectMod(t, m, "review-age")
 	press(m, "enter")
-	modAct(m, src, "y")
+	modAct(t, m, src, "y")
 	m.msg = ""
 	src.data.ModHosts = map[string]proto.ModHost{"review-age": {ID: "review-age", State: "failed", Err: "401 from api.example.com"}}
 	m.setData(src.data)
@@ -400,7 +400,7 @@ func TestModsFailure(t *testing.T) {
 
 	selectMod(t, m, "future")
 	press(m, "x")
-	modAct(m, src, "y")
+	modAct(t, m, src, "y")
 	if slices.ContainsFunc(src.data.Mods, func(md mod.Mod) bool { return md.ID == "future" }) {
 		t.Errorf("x, y didn't remove it: %v", src.data.Mods)
 	}
@@ -415,10 +415,10 @@ func TestModsHostStates(t *testing.T) {
 	src, m := modsDash(t)
 	selectMod(t, m, "review-age")
 	press(m, "enter")
-	modAct(m, src, "y")
+	modAct(t, m, src, "y")
 	selectMod(t, m, "nord")
 	press(m, "enter")
-	modAct(m, src, "y")
+	modAct(t, m, src, "y")
 	host := func(h proto.ModHost) {
 		h.ID = "review-age"
 		src.data.ModHosts = map[string]proto.ModHost{"review-age": h, "nord": {ID: "nord", State: "failed", Err: "never"}}
@@ -452,20 +452,20 @@ func TestModsHostStates(t *testing.T) {
 		}
 	}
 
-	run(m, keyPress(m, "r"))
+	drain(t, m, keyPress(m, "r"))
 	if !slices.Equal(src.restarted, []string{"review-age"}) || m.msg != "restarted Review age" {
 		t.Errorf("r: restarted %v, %q", src.restarted, m.msg)
 	}
 	selectMod(t, m, "nord")
 	m.msg = ""
-	run(m, keyPress(m, "r"))
+	drain(t, m, keyPress(m, "r"))
 	if len(src.restarted) != 1 || !strings.Contains(m.msg, "no code to restart") {
 		t.Errorf("r on a data mod: restarted %v, %q", src.restarted, m.msg)
 	}
 	selectMod(t, m, "review-age")
-	modAct(m, src, "enter")
+	modAct(t, m, src, "enter")
 	m.msg = ""
-	run(m, keyPress(m, "r"))
+	drain(t, m, keyPress(m, "r"))
 	if len(src.restarted) != 1 || !strings.Contains(m.msg, "is off") {
 		t.Errorf("r on an off mod: restarted %v, %q", src.restarted, m.msg)
 	}
@@ -528,21 +528,21 @@ func TestModsUpdate(t *testing.T) {
 	m := newDash(DashOptions{Source: src, Width: 160, Height: 50, State: DashState{Current: "beta"}})
 	m.setData(src.data)
 	press(m, ",", "3", "enter")
-	modAct(m, src, "y")
+	modAct(t, m, src, "y")
 
-	modAct(m, src, "u")
+	modAct(t, m, src, "u")
 	if m.msg != "Review age is up to date" {
 		t.Errorf("u with nothing new: %q", m.msg)
 	}
 	write(strings.Replace(strings.Replace(reviewAgeMod, `"0.3.1"`, `"0.4.0"`, 1), `net          = ["api.example.com"]`, "net          = [\"api.example.com\"]\ncommands     = [\"glab\"]", 1))
-	modAct(m, src, "u")
+	modAct(t, m, src, "u")
 	out := screen(m)
 	for _, want := range []string{"Update Review age", "0.3.1 → 0.4.0", "It now asks for", "runs glab"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the update's question lacks %q:\n%s", want, out)
 		}
 	}
-	modAct(m, src, "y")
+	modAct(t, m, src, "y")
 	md := modState(t, src, "review-age")
 	if md.Manifest.Version != "0.4.0" || !md.Granted(mod.PermCommands) || md.State != mod.Enabled {
 		t.Errorf("after y: %s %v %s (%s)", md.Manifest.Version, md.Grants, md.State, m.msg)
@@ -600,7 +600,7 @@ func TestModsDataAndBuiltin(t *testing.T) {
 			t.Errorf("default-theme lacks %q:\n%s", want, out)
 		}
 	}
-	modAct(m, src, "enter")
+	modAct(t, m, src, "enter")
 	if !strings.Contains(m.msg, "can't be turned off") || modState(t, src, mod.BundledTheme).State != mod.Enabled {
 		t.Errorf("enter on default-theme: %q", m.msg)
 	}
@@ -609,7 +609,7 @@ func TestModsDataAndBuiltin(t *testing.T) {
 		t.Errorf("x on default-theme: %q", m.msg)
 	}
 	selectMod(t, m, mod.BundledTemplates)
-	modAct(m, src, "enter")
+	modAct(t, m, src, "enter")
 	if modState(t, src, mod.BundledTemplates).State != mod.Disabled {
 		t.Errorf("enter on default-templates: %q", m.msg)
 	}
@@ -651,13 +651,13 @@ func TestModsDefaults(t *testing.T) {
 		t.Fatal("y applied an off mod's defaults")
 	}
 	press(m, "esc")
-	modAct(m, src, "enter")
-	modAct(m, src, "y")
+	modAct(t, m, src, "enter")
+	modAct(t, m, src, "y")
 	press(m, "d")
 	if out := screen(m); !strings.Contains(out, "y apply") {
 		t.Errorf("an on mod's defaults offer y:\n%s", out)
 	}
-	modAct(m, src, "y")
+	modAct(t, m, src, "y")
 	if !strings.Contains(m.msg, "all projects take Policy's auto_close") {
 		t.Errorf("msg %q", m.msg)
 	}

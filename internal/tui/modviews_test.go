@@ -85,7 +85,7 @@ func TestModTab(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("a declared key sent nothing")
 	}
-	run(m, cmd)
+	drain(t, m, cmd)
 	if len(src.inputs) != 1 || src.inputs[0].Row != "T2" || src.inputs[0].Key != "o" || src.inputs[0].Project != "alpha" || src.inputs[0].Widget != "q" {
 		t.Fatalf("inputs %+v", src.inputs)
 	}
@@ -99,23 +99,6 @@ func TestModTab(t *testing.T) {
 	m.openTab("beta", tabOverview, 0)
 	if strings.Contains(screen(m), "Review queue") {
 		t.Error("beta has alpha's mod tab")
-	}
-}
-
-// drainCursors runs cmd and the batch it may be, feeding ui.cursor sends
-// back as they return.
-func drainCursors(m *dash, cmd tea.Cmd) {
-	if cmd == nil {
-		return
-	}
-	switch msg := cmd().(type) {
-	case tea.BatchMsg:
-		for _, c := range msg {
-			drainCursors(m, c)
-		}
-	case modCursorMsg:
-		_, next := m.Update(msg)
-		drainCursors(m, next)
 	}
 }
 
@@ -135,23 +118,23 @@ func TestModViewCursor(t *testing.T) {
 		}
 		return out
 	}
-	drainCursors(m, m.setModViews(modViewsMsg{res: src.modViews}))
+	drain(t, m, m.setModViews(modViewsMsg{res: src.modViews}))
 	if got := cursors(); !slices.Equal(got, []string{"q/T1"}) {
 		t.Fatalf("shown: %q", got)
 	}
-	drainCursors(m, m.setModViews(modViewsMsg{res: src.modViews}))
+	drain(t, m, m.setModViews(modViewsMsg{res: src.modViews}))
 	sent := press(m, "down")
 	if press(m, "up", "down", "up") != nil {
 		t.Error("a second send while one is on its way")
 	}
-	drainCursors(m, sent)
+	drain(t, m, sent)
 	if got := cursors(); !slices.Equal(got, []string{"q/T1", "q/T2", "q/T1"}) {
 		t.Fatalf("moves: %q", got)
 	}
 	m.pop()
-	drainCursors(m, m.setModViews(modViewsMsg{res: src.modViews}))
+	drain(t, m, m.setModViews(modViewsMsg{res: src.modViews}))
 	m.openTab("alpha", tabCount, 0)
-	drainCursors(m, m.setModViews(modViewsMsg{res: src.modViews}))
+	drain(t, m, m.setModViews(modViewsMsg{res: src.modViews}))
 	if got := cursors(); len(got) != 4 || got[3] != "q/T1" {
 		t.Fatalf("shown again: %q", got)
 	}
@@ -279,7 +262,7 @@ func TestMemoryTabMod(t *testing.T) {
 		t.Errorf("shown %+v", s)
 	}
 	press(m, "down")
-	run(m, press(m, "enter"))
+	drain(t, m, press(m, "enter"))
 	if len(src.inputs) != 1 || src.inputs[0].Mod != mod.BundledMemory || src.inputs[0].Row != "memory/decisions.md" || src.inputs[0].Key != "enter" {
 		t.Fatalf("inputs %+v", src.inputs)
 	}
@@ -334,7 +317,7 @@ func TestModFullView(t *testing.T) {
 	if i < 0 {
 		t.Fatal("the ≡ menu lacks the full view")
 	}
-	run(m, m.dashItems()[i].run(m))
+	drain(t, m, m.dashItems()[i].run(m))
 	if _, ok := m.top().(*fullView); !ok {
 		t.Fatalf("the menu didn't open the full view: %T", m.top())
 	}
@@ -348,7 +331,7 @@ func TestModFullView(t *testing.T) {
 		t.Errorf("shown %+v", s)
 	}
 	press(m, "down")
-	run(m, press(m, "o"))
+	drain(t, m, press(m, "o"))
 	if len(src.inputs) != 1 || src.inputs[0].View != "timeline" || src.inputs[0].Row != "e2" || src.inputs[0].Key != "o" {
 		t.Fatalf("inputs %+v", src.inputs)
 	}
@@ -417,7 +400,7 @@ func TestModTabBinding(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("D on the bound row did nothing")
 	}
-	runAll(m, cmd)
+	drain(t, m, cmd)
 	if len(src.inputs) != 0 {
 		t.Fatalf("the press reached the mod: %+v", src.inputs)
 	}
@@ -443,7 +426,7 @@ func TestModTabHintClick(t *testing.T) {
 	m.render()
 	x, y := at(t, m, "D delegate")
 	_, cmd := m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
-	runAll(m, cmd)
+	drain(t, m, cmd)
 	if len(src.inputs) != 0 {
 		t.Fatalf("the click reached the mod: %+v", src.inputs)
 	}
@@ -467,7 +450,7 @@ func TestModFullViewBinding(t *testing.T) {
 		t.Fatalf("no core hint for the bound row:\n%s", out)
 	}
 	time.Sleep(modaction.Stable + 20*time.Millisecond)
-	runAll(m, press(m, "D"))
+	drain(t, m, press(m, "D"))
 	if len(src.inputs) != 0 {
 		t.Fatalf("the press reached the mod: %+v", src.inputs)
 	}
@@ -524,12 +507,12 @@ func TestTasksTabMod(t *testing.T) {
 	}
 	// The core tab's c, A and x do nothing here: T2 binds none of them.
 	for _, k := range []string{"A", "x", "c"} {
-		runAll(m, press(m, k))
+		drain(t, m, press(m, k))
 		if _, ok := m.top().(*projectView); !ok {
 			t.Fatalf("%s opened %T", k, m.top())
 		}
 	}
-	runAll(m, press(m, "enter"))
+	drain(t, m, press(m, "enter"))
 	if tv, ok := m.top().(*taskView); !ok || tv.id != 2 {
 		t.Fatalf("enter opened %T %+v", m.top(), m.top())
 	}
@@ -541,7 +524,7 @@ func TestTasksTabMod(t *testing.T) {
 		t.Errorf("done %q, want %q", src.done, want)
 	}
 	m.pop()
-	runAll(m, press(m, "+"))
+	drain(t, m, press(m, "+"))
 	if _, ok := m.top().(*projectView); ok {
 		t.Error("+ asked for no new task")
 	}

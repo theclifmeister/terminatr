@@ -191,11 +191,11 @@ func TestLookPickers(t *testing.T) {
 	}
 
 	modsRow(t, m, "Theme")
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if themeSetting() != "nord" || !themed() || file().Theme != "nord" {
 		t.Fatalf("theme nord: %s %q", themeSetting(), file().Theme)
 	}
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if themeSetting() != ThemeDefault || themed() || file().Theme != "" {
 		t.Fatalf("theme back: %s %q", themeSetting(), file().Theme)
 	}
@@ -203,18 +203,18 @@ func TestLookPickers(t *testing.T) {
 	modsRow(t, m, "Icons")
 	setIcons(IconsAuto)
 	for _, want := range []string{IconsNerd, IconsUnicode, IconsASCII, "nord", IconsAuto} {
-		act(m, src, "enter")
+		act(t, m, src, "enter")
 		if iconsSetting() != want || file().Icons != want {
 			t.Fatalf("icons: %s, file %q, want %s", iconsSetting(), file().Icons, want)
 		}
 	}
 
 	modsRow(t, m, "Layout")
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if layoutValue() != "wide" || file().Layout != "wide" {
 		t.Fatalf("layout: %s %q", layoutValue(), file().Layout)
 	}
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if layoutValue() != ThemeDefault || file().Layout != "" {
 		t.Fatalf("layout back: %s %q", layoutValue(), file().Layout)
 	}

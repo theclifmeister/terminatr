@@ -59,14 +59,14 @@ func atSide(t *testing.T, m *dash, text string) (int, int) {
 
 // mouseAt sends a press of button at window cell (x, y), after drawing
 // the window as the program would, and runs what it starts.
-func mouseAt(m *dash, button tea.MouseButton, x, y int) {
+func mouseAt(t testing.TB, m *dash, button tea.MouseButton, x, y int) {
 	m.render()
 	var msg tea.Msg = tea.MouseClickMsg{X: x, Y: y, Button: button}
 	if button == tea.MouseWheelUp || button == tea.MouseWheelDown {
 		msg = tea.MouseWheelMsg{X: x, Y: y, Button: button}
 	}
 	_, cmd := m.Update(msg)
-	run(m, cmd)
+	drain(t, m, cmd)
 }
 
 // clickItem clicks the open menu's item labelled label.
@@ -82,14 +82,14 @@ func clickItem(t *testing.T, m *dash, label string) {
 	}
 	m.render()
 	g := m.geo
-	mouseAt(m, tea.MouseLeft, g.x+2, g.y+1+i-g.top)
+	mouseAt(t, m, tea.MouseLeft, g.x+2, g.y+1+i-g.top)
 }
 
 // clickOn clicks the first place text shows.
 func clickOn(t *testing.T, m *dash, text string) {
 	t.Helper()
 	x, y := at(t, m, text)
-	mouseAt(m, tea.MouseLeft, x, y)
+	mouseAt(t, m, tea.MouseLeft, x, y)
 }
 
 // TestEveryKeyHasMousePath: every dashboard action is in the ≡ menu,
@@ -169,12 +169,12 @@ func TestNumberSettingButtons(t *testing.T) {
 			if pv.settings.rows[pv.settings.sel].label != r.label {
 				// The first click on a setting selects it, and changes
 				// nothing.
-				mouseAt(m, tea.MouseLeft, x, y)
+				mouseAt(t, m, tea.MouseLeft, x, y)
 				if len(src.settings) != before || pv.settings.rows[pv.settings.sel].label != r.label {
 					t.Fatalf("the first click on %s's %s: settings %v, selected %d", r.label, b, src.settings, pv.settings.sel)
 				}
 			}
-			mouseAt(m, tea.MouseLeft, x, y)
+			mouseAt(t, m, tea.MouseLeft, x, y)
 			if len(src.settings) != before+1 {
 				t.Fatalf("a click on %s's %s changed nothing (%v)", r.label, b, src.settings)
 			}
@@ -202,11 +202,11 @@ func TestDashboardClicks(t *testing.T) {
 		t.Fatalf("click selected %q:\n%s", m.sel, screen(m))
 	}
 	coordX, coordY := atNth(t, m, "coordinator", 1) // the project's own row, after NEEDS YOU
-	mouseAt(m, tea.MouseLeft, coordX, coordY)
+	mouseAt(t, m, tea.MouseLeft, coordX, coordY)
 	if m.sel != "p:alpha" {
 		t.Fatalf("click on the coordinator selected %q", m.sel)
 	}
-	mouseAt(m, tea.MouseLeft, coordX, coordY) // the second click of a double-click
+	mouseAt(t, m, tea.MouseLeft, coordX, coordY) // the second click of a double-click
 	if !m.busy && len(src.opened) == 0 && m.result.Attach == "" {
 		t.Fatalf("double-click didn't open the coordinator: opened %v result %+v", src.opened, m.result)
 	}
@@ -216,7 +216,7 @@ func TestDashboardClicks(t *testing.T) {
 
 	// The wheel moves the selection.
 	before := m.sel
-	mouseAt(m, tea.MouseWheelDown, coordX, coordY)
+	mouseAt(t, m, tea.MouseWheelDown, coordX, coordY)
 	if m.sel == before {
 		t.Fatal("the wheel didn't move the selection")
 	}
@@ -230,7 +230,7 @@ func TestDashboardClicks(t *testing.T) {
 	if strings.Contains(screen(m), "×") {
 		t.Fatalf("the help has a ×:\n%s", screen(m))
 	}
-	mouseAt(m, tea.MouseLeft, m.sideW(), 2)
+	mouseAt(t, m, tea.MouseLeft, m.sideW(), 2)
 	if m.top() != nil {
 		t.Fatalf("a click outside didn't close the help: %T", m.top())
 	}
@@ -238,7 +238,7 @@ func TestDashboardClicks(t *testing.T) {
 	if _, ok := m.top().(*settingsView); !ok {
 		t.Fatalf(", settings didn't open: %T", m.top())
 	}
-	mouseAt(m, tea.MouseLeft, m.sideW()+1, 2)
+	mouseAt(t, m, tea.MouseLeft, m.sideW()+1, 2)
 	if m.top() != nil {
 		t.Fatalf("a click outside didn't close the settings: %T", m.top())
 	}
@@ -263,7 +263,7 @@ func TestDashboardMenus(t *testing.T) {
 
 	// A row's menu: right-click the coordinator.
 	x, y := atNth(t, m, "coordinator", 1)
-	mouseAt(m, tea.MouseRight, x, y)
+	mouseAt(t, m, tea.MouseRight, x, y)
 	mv, ok = m.top().(*menuView)
 	if !ok || m.sel != "p:alpha" {
 		t.Fatalf("right-click: %T, selected %q", m.top(), m.sel)
@@ -285,7 +285,7 @@ func TestDashboardMenus(t *testing.T) {
 	m.current = "beta"
 	m.rebuild()
 	x, y = at(t, m, "T4 Write docs")
-	mouseAt(m, tea.MouseRight, x, y)
+	mouseAt(t, m, tea.MouseRight, x, y)
 	mv = m.top().(*menuView)
 	if slices.ContainsFunc(mv.items, func(it menuItem) bool { return strings.Contains(it.label, "take over") }) {
 		t.Fatalf("a thread's menu has take over: %+v", mv.items)
@@ -298,7 +298,7 @@ func TestDashboardMenus(t *testing.T) {
 
 	// The sidebar: a right-click on beta opens beta's menu.
 	x, y = atSide(t, m, "beta")
-	mouseAt(m, tea.MouseRight, x, y)
+	mouseAt(t, m, tea.MouseRight, x, y)
 	mv, ok = m.top().(*menuView)
 	if !ok || mv.title != "beta" || mv.items[0].label != "show its dashboard" {
 		t.Fatalf("sidebar right-click: %T %+v", m.top(), mv)
@@ -334,7 +334,7 @@ func TestPopupClicks(t *testing.T) {
 		t.Fatalf("click on a setting: sel %d, settings %v", pv.settings.sel, src.settings)
 	}
 	clickOn(t, m, "5 keys")
-	mouseAt(m, tea.MouseWheelDown, m.sideW()+10, 10)
+	mouseAt(t, m, tea.MouseWheelDown, m.sideW()+10, 10)
 	m.render()
 	if pv.top[tabKeys] == 0 {
 		t.Fatal("the wheel didn't scroll the keys")
@@ -358,7 +358,7 @@ func TestDetailsWheel(t *testing.T) {
 		t.Fatal("no details panel")
 	}
 	first := screen(m)
-	mouseAt(m, tea.MouseWheelDown, m.sideW()+lw+5, 5)
+	mouseAt(t, m, tea.MouseWheelDown, m.sideW()+lw+5, 5)
 	if m.sel != "th:beta:t-0005" || screen(m) == first {
 		t.Fatalf("the wheel over the details didn't scroll them: sel %s", m.sel)
 	}

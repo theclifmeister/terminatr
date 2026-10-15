@@ -59,7 +59,7 @@ func TestModsSettings(t *testing.T) {
 	}
 
 	modsRow(t, m, "Agent mod")
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if cfg, _ := config.Load(); !cfg.AgentMod || !cfg.AgentModBand {
 		t.Fatalf("enter: mods %v, band %v", cfg.AgentMod, cfg.AgentModBand)
 	}
@@ -71,7 +71,7 @@ func TestModsSettings(t *testing.T) {
 	}
 
 	modsRow(t, m, "Agent mod band")
-	act(m, src, "space")
+	act(t, m, src, "space")
 	if cfg, _ := config.Load(); !cfg.AgentMod || cfg.AgentModBand {
 		t.Fatalf("space: mods %v, band %v", cfg.AgentMod, cfg.AgentModBand)
 	}
@@ -79,7 +79,7 @@ func TestModsSettings(t *testing.T) {
 		t.Fatalf("file:\n%s", data)
 	}
 	modsRow(t, m, "Agent mod")
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if cfg, _ := config.Load(); cfg.AgentMod || cfg.AgentModBand {
 		t.Fatalf("enter again: mods %v, band %v", cfg.AgentMod, cfg.AgentModBand)
 	}
@@ -98,7 +98,7 @@ func TestModsSettingsForm(t *testing.T) {
 	m.setData(src.data)
 	press(m, ",")
 	modsRow(t, m, "Agent mod")
-	act(m, src, "enter")
+	act(t, m, src, "enter")
 	if data, _ := os.ReadFile(path); string(data) != "agent_mod.enabled = false\n" {
 		t.Fatalf("file changed:\n%s", data)
 	}

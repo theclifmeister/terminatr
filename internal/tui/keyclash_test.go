@@ -181,7 +181,7 @@ func TestPrefixRemote(t *testing.T) {
 	if !ok || !strings.HasPrefix(cv.question, "Turn remote control on for alpha") {
 		t.Fatalf("prefix+r: %T", m.top())
 	}
-	act(m, src, "y")
+	act(t, m, src, "y")
 	if !slices.Equal(src.remote, []string{"alpha on"}) || m.msg != "remote control on for alpha" {
 		t.Fatalf("remote %v, %q", src.remote, m.msg)
 	}
@@ -269,7 +269,7 @@ func TestPanelKeysClash(t *testing.T) {
 	}
 	m.current = "alpha"
 	m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
-	run(m, keyPress(m, "]"))
+	drain(t, m, keyPress(m, "]"))
 	if len(src.opened) != 1 || src.opened[0] != "beta" {
 		t.Fatalf("prefix+] in the details panel opened %v", src.opened)
 	}

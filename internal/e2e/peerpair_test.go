@@ -47,15 +47,13 @@ func TestSmokePeerPairSettings(t *testing.T) {
 
 	w := studio.Window(110, 30)
 	w.WaitFor("n new project", wait)
-	w.Type(",")
-	w.Type("4")
+	w.Keys(",", "4")
 	w.WaitFor("Press n to pair", wait)
 	w.Golden("peers-empty.txt", popupMasks...)
 
 	w.Type("n")
 	w.WaitFor("The relay both servers dial", wait)
-	w.Type(relayURL)
-	w.Key(keyEnter)
+	w.Keys(relayURL, keyEnter)
 	screen := w.WaitFor("Waiting for the other server", wait)
 	code := pairCodeRe.FindString(screen)
 	if code == "" {
@@ -87,8 +85,7 @@ func TestSmokePeerPairSettings(t *testing.T) {
 	code = pair.waitLine(`^On the other server: tm peer join (\S+)$`)[1]
 	w.Type("j")
 	w.WaitFor("The pairing code the other server shows", wait)
-	w.Type(code)
-	w.Key(keyEnter)
+	w.Keys(code, keyEnter)
 	checkA := pair.waitLine(`^Check: (\d{3} \d{3})$`)[1]
 	screen = w.WaitFor("Pair only if the other side shows", wait)
 	if m := pairCheckRe.FindStringSubmatch(screen); m == nil || m[1] != checkA {

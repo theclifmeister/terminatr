@@ -211,20 +211,20 @@ func TestSideProjKeys(t *testing.T) {
 		t.Fatalf("↓ skips the body: %q", m.sideSel)
 	}
 	keyPress(m, "up")
-	runAll(m, keyPress(m, "left"))
+	drain(t, m, keyPress(m, "left"))
 	if !m.folds.IsSectionFolded("prci.ci@alpha") || m.folds.IsSectionFolded("prci.ci@beta") || m.sideSel != "s:prci.ci@alpha" {
 		t.Fatalf("← folded %v, cursor %q", m.folds.SectionsFolded, m.sideSel)
 	}
-	runAll(m, keyPress(m, "left"))
+	drain(t, m, keyPress(m, "left"))
 	if m.sideSel != "p:alpha" {
 		t.Fatalf("← on a folded section: %q", m.sideSel)
 	}
 	m.sideSel = "s:prci.ci@alpha"
-	runAll(m, keyPress(m, "right"))
+	drain(t, m, keyPress(m, "right"))
 	if m.folds.IsSectionFolded("prci.ci@alpha") {
 		t.Fatalf("→ didn't unfold it")
 	}
-	runAll(m, keyPress(m, "enter"))
+	drain(t, m, keyPress(m, "enter"))
 	want := proto.ModViewInputParams{Mod: "prci", View: "ci", Project: "alpha", Kind: widget.EventClick}
 	if len(src.inputs) != 1 || src.inputs[0] != want {
 		t.Fatalf("enter sent %+v, want %+v", src.inputs, want)
@@ -237,12 +237,12 @@ func TestSideProjKeys(t *testing.T) {
 		t.Fatalf("2: %q", m.sideSel)
 	}
 	m.sideSel = "s:prci.ci@beta"
-	runAll(m, keyPress(m, "z"))
+	drain(t, m, keyPress(m, "z"))
 	if !m.folds.IsFolded("beta") || !m.folds.IsSectionFolded("prci.ci@beta") || m.sideSel != "p:beta" {
 		t.Fatalf("z: %+v, cursor %q", m.folds, m.sideSel)
 	}
 	m.folds.FoldSections([]string{"panel:prci.ci"}, true)
-	runAll(m, keyPress(m, "Z"))
+	drain(t, m, keyPress(m, "Z"))
 	if !slices.Equal(m.folds.SectionsFolded, []string{"panel:prci.ci"}) {
 		t.Fatalf("Z left %v, want the right pane's fold alone", m.folds.SectionsFolded)
 	}
@@ -262,7 +262,7 @@ func TestSideProjMouse(t *testing.T) {
 	if tip := sideTip(m.tree(), m.sideW(), m.h, m.sideFoot(), 8, y); tip != "ci status · prci mod" {
 		t.Errorf("hover: %q", tip)
 	}
-	runAll(m, m.sideClick(tea.Mouse{X: 8, Y: y, Button: tea.MouseLeft}))
+	drain(t, m, m.sideClick(tea.Mouse{X: 8, Y: y, Button: tea.MouseLeft}))
 	if m.focus != areaSide || m.sideSel != "s:prci.ci@beta" || len(src.inputs) != 1 || src.inputs[0].Project != "beta" {
 		t.Fatalf("click: focus %v sel %q inputs %+v", m.focus, m.sideSel, src.inputs)
 	}

@@ -27,24 +27,6 @@ func pressed(m *dash, ev *widget.Event) tea.Cmd {
 	return next
 }
 
-// runAll runs cmd and the batch it may be, feeding action messages back.
-func runAll(m *dash, cmd tea.Cmd) {
-	if cmd == nil {
-		return
-	}
-	switch msg := cmd().(type) {
-	case tea.BatchMsg:
-		for _, c := range msg {
-			runAll(m, c)
-		}
-	case actionMsg:
-		m.Update(msg)
-	case bindingMsg:
-		_, next := m.Update(msg)
-		runAll(m, next)
-	}
-}
-
 // TestBinding: a mod's bound action runs only from a stable press, after
 // the console re-checks it against the live board, through the core's
 // own confirmation naming the target from live state; the mod hears of
@@ -60,7 +42,7 @@ func TestBinding(t *testing.T) {
 
 	// D on T2 (ready): the core asks, naming T2 by the board's title,
 	// whatever the mod's row said.
-	runAll(m, pressed(m, boundPress("task.delegate", alpha("T2"), true)))
+	drain(t, m, pressed(m, boundPress("task.delegate", alpha("T2"), true)))
 	cv, ok := m.top().(*confirmView)
 	if !ok || cv.question != "Delegate T2 to the coordinator? It starts a thread for T2 Ship it." {
 		t.Fatalf("delegate opened %T %+v", m.top(), cv)
@@ -68,13 +50,13 @@ func TestBinding(t *testing.T) {
 	if len(src.done) != 0 || len(src.delegated) != 0 {
 		t.Fatalf("acted before the human said yes: %v %v", src.done, src.delegated)
 	}
-	run(m, keyPress(m, "y"))
+	drain(t, m, keyPress(m, "y"))
 	if len(src.delegated) != 1 || src.delegated[0] != "alpha T2" || len(src.done) != 1 || src.done[0] != "lab task.delegate alpha/T2 true" {
 		t.Fatalf("after y: %v %v", src.delegated, src.done)
 	}
 
 	// n: nothing runs, and the mod hears nothing.
-	runAll(m, pressed(m, boundPress("task.delegate", alpha("T2"), true)))
+	drain(t, m, pressed(m, boundPress("task.delegate", alpha("T2"), true)))
 	if _, ok := m.top().(*confirmView); ok {
 		keyPress(m, "n")
 	}
@@ -91,7 +73,7 @@ func TestBinding(t *testing.T) {
 		{"task.delegate", map[string]string{"project": "nope", "task": "T1"}, "no project nope"},
 	} {
 		src.done = nil
-		runAll(m, pressed(m, boundPress(c.id, c.target, true)))
+		drain(t, m, pressed(m, boundPress(c.id, c.target, true)))
 		if _, ok := m.top().(*confirmView); ok {
 			t.Fatalf("%s %v asked", c.id, c.target)
 		}
@@ -102,12 +84,12 @@ func TestBinding(t *testing.T) {
 	// A project the mod doesn't run for: refused before anything runs,
 	// and the mod hears nothing.
 	src.done = nil
-	runAll(m, pressed(m, boundPress("project.activate", map[string]string{"project": "beta"}, true)))
+	drain(t, m, pressed(m, boundPress("project.activate", map[string]string{"project": "beta"}, true)))
 	if _, ok := m.top().(*confirmView); ok || !strings.Contains(m.msg, "doesn't run for project beta") || len(src.done) != 0 {
 		t.Errorf("out of reach: %T %q %v", m.top(), m.msg, src.done)
 	}
 	src.done = nil
-	runAll(m, pressed(m, boundPress("settings.open", nil, true)))
+	drain(t, m, pressed(m, boundPress("settings.open", nil, true)))
 	if !strings.Contains(m.msg, "not an action a mod may bind") || len(src.done) != 0 {
 		t.Errorf("settings.open: %q, done %v", m.msg, src.done)
 	}
@@ -154,17 +136,17 @@ func TestBindingClearAnswer(t *testing.T) {
 		}
 	}
 
-	runAll(m, pressed(m, boundPress("session.clear", map[string]string{"session": "s-9"}, true)))
+	drain(t, m, pressed(m, boundPress("session.clear", map[string]string{"session": "s-9"}, true)))
 	cv, ok := m.top().(*confirmView)
 	if !ok || !strings.HasPrefix(cv.question, "Clear alpha t-0003's conversation?") || len(src.cleared) != 0 {
 		t.Fatalf("clear opened %T %+v, cleared %v", m.top(), cv, src.cleared)
 	}
-	run(m, keyPress(m, "n"))
+	drain(t, m, keyPress(m, "n"))
 	if len(src.cleared) != 0 || len(src.done) != 0 {
 		t.Fatalf("n cleared: %v %v", src.cleared, src.done)
 	}
-	runAll(m, pressed(m, boundPress("session.clear", map[string]string{"session": "s-9"}, true)))
-	run(m, keyPress(m, "y"))
+	drain(t, m, pressed(m, boundPress("session.clear", map[string]string{"session": "s-9"}, true)))
+	drain(t, m, keyPress(m, "y"))
 	if len(src.cleared) != 1 || src.cleared[0] != "s-9" || len(src.done) != 1 || src.done[0] != "lab session.clear /s-9 true" {
 		t.Fatalf("after y: %v %v", src.cleared, src.done)
 	}
@@ -173,11 +155,11 @@ func TestBindingClearAnswer(t *testing.T) {
 	answer := func(option string) map[string]string {
 		return map[string]string{"session": "s-9", "question": "Which colour?", "option": option}
 	}
-	runAll(m, pressed(m, boundPress("question.answer", answer("Green"), true)))
+	drain(t, m, pressed(m, boundPress("question.answer", answer("Green"), true)))
 	if _, ok := m.top().(*confirmView); ok || !strings.Contains(m.msg, `not available: that question has no option "Green"`) {
 		t.Fatalf("a lying row: %T %q", m.top(), m.msg)
 	}
-	runAll(m, pressed(m, boundPress("question.answer", answer("Blue"), true)))
+	drain(t, m, pressed(m, boundPress("question.answer", answer("Blue"), true)))
 	cv, ok = m.top().(*confirmView)
 	if !ok || cv.question != `Answer alpha t-0003's question "Which colour?" with "Blue"? It goes to the agent as your answer.` {
 		t.Fatalf("answer opened %T %+v", m.top(), cv)
@@ -185,7 +167,7 @@ func TestBindingClearAnswer(t *testing.T) {
 	if len(src.answers) != 0 {
 		t.Fatalf("answered before yes: %v", src.answers)
 	}
-	run(m, keyPress(m, "y"))
+	drain(t, m, keyPress(m, "y"))
 	if len(src.answers) != 1 || src.answers[0] != "s-9 0 Which colour? → Blue" {
 		t.Fatalf("answers %v", src.answers)
 	}

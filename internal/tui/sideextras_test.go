@@ -248,7 +248,7 @@ func TestDashLastPlace(t *testing.T) {
 	// keyboard.
 	notePlace(place{session: "s-5", project: "beta", area: areaSide, sel: "t:beta/t-0005"})
 	m.notePlace()
-	run(m, keyPress(m, ";"))
+	drain(t, m, keyPress(m, ";"))
 	if m.result.Attach != "s-5" || m.focus != areaSide {
 		t.Fatalf("; to s-5: attach %q focus %d", m.result.Attach, m.focus)
 	}

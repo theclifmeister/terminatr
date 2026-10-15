@@ -125,7 +125,7 @@ func TestSideAboveKeys(t *testing.T) {
 	}
 	// Folding it works as below the tree.
 	m.sideSel = "s:ticker.ticker"
-	runAll(m, keyPress(m, "left"))
+	drain(t, m, keyPress(m, "left"))
 	if !m.folds.IsSectionFolded("ticker.ticker") || !strings.Contains(sidebarOf(m)[0], "▸ TICKER") {
 		t.Fatalf("← on the header above: %v\n%s", m.folds.SectionsFolded, strings.Join(sidebarOf(m), "\n"))
 	}
@@ -169,11 +169,11 @@ func TestSideAboveFlag(t *testing.T) {
 	}
 	x := strings.Index(head, ic().hint)
 	x = len([]rune(head[:x]))
-	runAll(m, m.sideClick(tea.Mouse{X: x, Y: y, Button: tea.MouseLeft}))
+	drain(t, m, m.sideClick(tea.Mouse{X: x, Y: y, Button: tea.MouseLeft}))
 	if m.focus != areaSide || m.sideSel != firstNeeds(m) {
 		t.Fatalf("a click on ⚑ N: focus %v sel %q, want %q", m.focus, m.sideSel, firstNeeds(m))
 	}
-	runAll(m, m.sideClick(tea.Mouse{X: 2, Y: y, Button: tea.MouseLeft}))
+	drain(t, m, m.sideClick(tea.Mouse{X: 2, Y: y, Button: tea.MouseLeft}))
 	if m.focus != areaSide || m.sideSel != headKey || !m.allShown() {
 		t.Fatalf("a click on PROJECTS off ⚑ N: focus %v sel %q current %q", m.focus, m.sideSel, m.current)
 	}

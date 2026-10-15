@@ -70,10 +70,10 @@ func infraFolder(t *testing.T) string {
 
 // installFrom presses i in the Mods tab, pastes arg into the prompt and
 // presses enter, then runs the fetch.
-func installFrom(m *dash, arg string) {
+func installFrom(t testing.TB, m *dash, arg string) {
 	press(m, "i")
 	m.Update(tea.PasteMsg{Content: arg + "\n"})
-	run(m, keyPress(m, "enter"))
+	drain(t, m, keyPress(m, "enter"))
 }
 
 // staging lists the staging folders left in ~/.terminatr/mods.
@@ -95,7 +95,7 @@ func staging(t *testing.T) []string {
 func TestModsInstall(t *testing.T) {
 	src, m := modsDash(t)
 	dir := infraFolder(t)
-	installFrom(m, dir)
+	installFrom(t, m, dir)
 	if got := src.fetchedMods; !slices.Equal(got, []string{dir}) {
 		t.Fatalf("fetched %q, want the pasted folder", got)
 	}
@@ -110,7 +110,7 @@ func TestModsInstall(t *testing.T) {
 			t.Errorf("the install consent lacks %q:\n%s", want, out)
 		}
 	}
-	modAct(m, src, "y")
+	modAct(t, m, src, "y")
 	md := modState(t, src, "infra-guard")
 	if md.State != mod.Disabled || len(md.Grants) != 0 {
 		t.Fatalf("y installed it %s with %v, want off with nothing granted", md.State, md.Grants)
@@ -121,7 +121,7 @@ func TestModsInstall(t *testing.T) {
 	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "Turn it on now?") {
 		t.Fatalf("after the install: %T, want the question to turn it on", m.top())
 	}
-	modAct(m, src, "y")
+	modAct(t, m, src, "y")
 	md = modState(t, src, "infra-guard")
 	if md.State != mod.Enabled || !slices.Equal(md.Grants, []string{mod.PermProjectRead, mod.PermTools}) {
 		t.Fatalf("y turned it %s with %v", md.State, md.Grants)
@@ -139,8 +139,8 @@ func TestModsInstall(t *testing.T) {
 // staged copy; n on the question after the install leaves it off.
 func TestModsInstallNo(t *testing.T) {
 	src, m := modsDash(t)
-	installFrom(m, infraFolder(t))
-	modAct(m, src, "n")
+	installFrom(t, m, infraFolder(t))
+	modAct(t, m, src, "n")
 	if _, ok := m.top().(*settingsView); !ok || m.msg != "nothing installed" {
 		t.Errorf("n on the consent: %T, %q", m.top(), m.msg)
 	}
@@ -150,9 +150,9 @@ func TestModsInstallNo(t *testing.T) {
 	if left := staging(t); len(left) > 0 {
 		t.Errorf("staging left behind: %v", left)
 	}
-	installFrom(m, infraFolder(t))
-	modAct(m, src, "y")
-	modAct(m, src, "n")
+	installFrom(t, m, infraFolder(t))
+	modAct(t, m, src, "y")
+	modAct(t, m, src, "n")
 	if md := modState(t, src, "infra-guard"); md.State != mod.Disabled {
 		t.Errorf("n after the install left it %s", md.State)
 	}
@@ -191,7 +191,7 @@ func TestModsInstallRefused(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			src, m := modsDash(t)
 			arg := tc.arg(t)
-			installFrom(m, arg)
+			installFrom(t, m, arg)
 			fv, ok := m.top().(*fetchView)
 			if !ok || fv.err == nil {
 				t.Fatalf("%s: %T, want the fetch's dialog with its error", arg, m.top())
@@ -225,7 +225,7 @@ func TestModsInstallCancel(t *testing.T) {
 		t.Errorf("while it fetches:\n%s", out)
 	}
 	press(m, "esc")
-	run(m, cmd)
+	drain(t, m, cmd)
 	if _, ok := m.top().(*settingsView); !ok {
 		t.Errorf("after esc: %T, want the Mods tab", m.top())
 	}

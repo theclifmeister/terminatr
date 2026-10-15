@@ -164,7 +164,7 @@ func TestDashOverView(t *testing.T) {
 func TestDashPrefixCommand(t *testing.T) {
 	src, m := commandDash(t)
 	m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
-	run(m, keyPress(m, "g"))
+	drain(t, m, keyPress(m, "g"))
 	if len(src.commands) != 1 || src.commands[0].Command != "relabel" {
 		t.Fatalf("prefix+g: %+v", src.commands)
 	}

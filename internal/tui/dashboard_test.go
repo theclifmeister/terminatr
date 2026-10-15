@@ -118,6 +118,11 @@ func (f *fakeSource) Lifecycle(slug, verb string) (string, error) {
 			return "", err
 		}
 	}
+	if verb == "pin" || verb == "unpin" {
+		if err := config.SetProject(slug, "pinned", verb == "pin"); err != nil {
+			return "", err
+		}
+	}
 	return verb + " " + slug, nil
 }
 
@@ -395,18 +400,6 @@ func press(m *dash, keys ...string) tea.Cmd {
 	return cmd
 }
 
-// run executes a command and feeds its message back, as the program would.
-func run(m *dash, cmd tea.Cmd) {
-	if cmd == nil {
-		return
-	}
-	if msg := cmd(); msg != nil {
-		if _, ok := msg.(actionMsg); ok {
-			m.Update(msg)
-		}
-	}
-}
-
 // TestDashboardRows: the current project's NEEDS YOU, then its own
 // section (its coordinator, threads and task counts; the sidebar's tree
 // lists the projects), then SESSIONS. Another project's needs aren't
@@ -581,7 +574,7 @@ func TestDashboardKeys(t *testing.T) {
 	m.setData(src.data)
 
 	// enter on the blocked coordinator attaches to it.
-	run(m, press(m, "enter"))
+	drain(t, m, press(m, "enter"))
 	if m.result.Attach != "s-1" {
 		t.Fatalf("attach %q", m.result.Attach)
 	}
@@ -605,16 +598,16 @@ func TestDashboardKeys(t *testing.T) {
 	m.current = "beta"
 	m.rebuild()
 	m.sel = "th:beta:t-0005"
-	run(m, press(m, "enter"))
+	drain(t, m, press(m, "enter"))
 	if m.result.Attach != "s-5" {
 		t.Fatalf("attach %q", m.result.Attach)
 	}
 
 	// ] from alpha opens beta's coordinator; [ from beta wraps to alpha.
 	m.current = "alpha"
-	run(m, press(m, "]"))
+	drain(t, m, press(m, "]"))
 	m.current = "beta"
-	run(m, press(m, "["))
+	drain(t, m, press(m, "["))
 	if got := strings.Join(src.opened, ","); got != "beta,alpha" {
 		t.Fatalf("opened %q", got)
 	}
@@ -744,7 +737,7 @@ func TestDashboardOverlays(t *testing.T) {
 	src.board = &tasks.Board{Tasks: []*tasks.Task{{ID: 1, Title: "One", Status: tasks.Review}}}
 	m.Update(boardMsg{slug: "alpha", board: src.board})
 	tasksTabNow(m, src)
-	runAll(m, press(m, "enter"))
+	drain(t, m, press(m, "enter"))
 	tv, ok := m.top().(*taskView)
 	if !ok || !strings.Contains(screen(m), "Task · alpha") {
 		t.Fatalf("enter on the board:\n%s", screen(m))

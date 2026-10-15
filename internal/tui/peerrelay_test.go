@@ -37,7 +37,7 @@ func TestPeersTabRelayUpdate(t *testing.T) {
 		t.Fatalf("n asked: %v", src.relayUpdates)
 	}
 	press(m, "u")
-	run(m, press(m, "y"))
+	drain(t, m, press(m, "y"))
 	if !slices.Equal(src.relayUpdates, []string{"mini"}) || m.msg != "the relay updates" {
 		t.Fatalf("asked %v, %q", src.relayUpdates, m.msg)
 	}

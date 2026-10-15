@@ -76,6 +76,7 @@ for a in "$dist"/tm_*.tar.gz "$dist"/tm_*.zip; do
 		loads=$(otool -l "$d/tm")
 		echo "$loads" | grep -q 'cmd LC_DYLD_CHAINED_FIXUPS' || fail "$name: no chained fixups (LC_DYLD_CHAINED_FIXUPS)"
 		minos=$(echo "$loads" | awk '$1 == "minos" {print $2; exit}')
+		[ -n "$minos" ] || fail "$name: no minos found in otool -l output"
 		[ "$minos" = 13.0 ] || fail "$name: minimum macOS is $minos, want 13.0"
 	fi
 	if [ "$os" = darwin ] && [ -n "$signed" ]; then
@@ -90,6 +91,7 @@ for a in "$dist"/tm_*.tar.gz "$dist"/tm_*.zip; do
 	fi
 	if [ "$os" = linux ] && command -v objdump >/dev/null; then
 		max=$(objdump -T "$d/tm" | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -t. -k1,1n -k2,2n | tail -1)
+		[ -n "$max" ] || fail "$name: no GLIBC_ versions found in objdump -T output"
 		top=$(printf '%s\n%s\n' "$max" "$glibc_floor" | sort -t. -k1,1n -k2,2n | tail -1)
 		[ "$top" = "$glibc_floor" ] || fail "$name needs glibc $max, above the floor $glibc_floor"
 		echo "$name: glibc >= $max"

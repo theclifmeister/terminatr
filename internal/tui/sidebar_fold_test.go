@@ -90,12 +90,12 @@ func TestDividerKeys(t *testing.T) {
 		key  string
 		open bool
 	}{{"right", true}, {"right", true}, {"left", false}, {"left", false}, {"enter", true}, {"enter", false}} {
-		run(m, keyPress(m, s.key))
+		drain(t, m, keyPress(m, s.key))
 		if open() != s.open || m.sideSel != dividerKey {
 			t.Fatalf("step %d (%s): open %v, cursor %q", i, s.key, open(), m.sideSel)
 		}
 	}
-	run(m, keyPress(m, "space"))
+	drain(t, m, keyPress(m, "space"))
 	if open() || len(src.lifecycle) != 0 || m.msg != "" {
 		t.Fatalf("space on the divider: lifecycle %v msg %q", src.lifecycle, m.msg)
 	}
@@ -105,7 +105,7 @@ func TestDividerKeys(t *testing.T) {
 	y := len(lay.above) + lay.head + slices.IndexFunc(lay.slots, func(s sideSlot) bool {
 		return s.row >= 0 && lay.rows[s.row].key() == dividerKey
 	})
-	run(m, m.sideClick(tea.Mouse{X: 5, Y: y, Button: tea.MouseLeft}))
+	drain(t, m, m.sideClick(tea.Mouse{X: 5, Y: y, Button: tea.MouseLeft}))
 	if !open() || len(src.opened) != 0 {
 		t.Fatalf("click: open %v, opened %v", open(), src.opened)
 	}
@@ -129,7 +129,7 @@ func TestFoldAllAndPin(t *testing.T) {
 	if !slices.Contains(rowKeys(m.tree()), m.sideSel) {
 		t.Fatalf("no row %s: %v", m.sideSel, rowKeys(m.tree()))
 	}
-	run(m, keyPress(m, "z"))
+	drain(t, m, keyPress(m, "z"))
 	if got := rowKeys(m.tree()); !slices.Equal(got, []string{"p:alpha", dividerKey}) || m.sideSel != "p:alpha" {
 		t.Fatalf("z: tree %v, cursor %q", got, m.sideSel)
 	}
@@ -140,31 +140,31 @@ func TestFoldAllAndPin(t *testing.T) {
 	if r := m.tree()[0]; gridCol(treeCells(r, 35, false, false), gridState) == "" {
 		t.Fatalf("folded alpha has no state: %q", ansi.Strip(treeCells(r, 35, false, false)))
 	}
-	run(m, keyPress(m, "Z"))
+	drain(t, m, keyPress(m, "Z"))
 	want := []string{"p:alpha", "c:alpha", dividerKey, "p:beta", "c:beta", "t:beta/t-0005", "t:beta/t-0006"}
 	if got := rowKeys(m.tree()); !slices.Equal(got, want) || len(src.lifecycle) != 0 {
 		t.Fatalf("Z: tree %v, want %v; lifecycle %v", got, want, src.lifecycle)
 	}
 	// z on a dormant row moves the cursor to the divider.
 	m.sideSel = "c:beta"
-	run(m, keyPress(m, "z"))
+	drain(t, m, keyPress(m, "z"))
 	if m.sideSel != dividerKey {
 		t.Fatalf("z on beta's coordinator: cursor %q", m.sideSel)
 	}
 
 	m.sideSel = "p:alpha"
-	run(m, keyPress(m, "p"))
+	drain(t, m, keyPress(m, "p"))
 	if !slices.Equal(src.lifecycle, []string{"alpha pin"}) || !m.projectData("alpha").pinned() {
 		t.Fatalf("p: lifecycle %v", src.lifecycle)
 	}
-	run(m, keyPress(m, "p"))
+	drain(t, m, keyPress(m, "p"))
 	if !slices.Equal(src.lifecycle, []string{"alpha pin", "alpha unpin"}) || m.projectData("alpha").pinned() {
 		t.Fatalf("p again: lifecycle %v", src.lifecycle)
 	}
-	m.sideSel = dividerKey
-	run(m, keyPress(m, "p"))
+	m.sideSel = "c:beta" // alpha has no divider now: its pin reloaded its settings
+	drain(t, m, keyPress(m, "p"))
 	if len(src.lifecycle) != 2 || !strings.Contains(m.msg, "p on a project") {
-		t.Fatalf("p on the divider: lifecycle %v msg %q", src.lifecycle, m.msg)
+		t.Fatalf("p on a coordinator: lifecycle %v msg %q", src.lifecycle, m.msg)
 	}
 }
 
@@ -190,11 +190,11 @@ func TestPinnedAboveNeedsFirst(t *testing.T) {
 func TestNeedYouUnfoldsActive(t *testing.T) {
 	m, _ := sideDash(t)
 	m.sideSel = "p:beta"
-	run(m, keyPress(m, "left"))
+	drain(t, m, keyPress(m, "left"))
 	if slices.Contains(rowKeys(m.tree()), "t:beta/t-0005") {
 		t.Fatal("← didn't fold beta")
 	}
-	run(m, keyPress(m, "w"))
+	drain(t, m, keyPress(m, "w"))
 	if got := sideCursorKey(m); got != "t:beta/t-0005" || m.folds.IsFolded("beta") {
 		t.Fatalf("w: cursor %q, folds %+v", got, m.folds)
 	}
@@ -208,8 +208,8 @@ func TestNeedYouUnfoldsActive(t *testing.T) {
 func TestSideKeysWhileActing(t *testing.T) {
 	m, src, _ := foldDash(t)
 	m.sideSel = dividerKey
-	run(m, keyPress(m, "right")) // unfolds it
-	run(m, keyPress(m, "j"))
+	drain(t, m, keyPress(m, "right")) // unfolds it
+	drain(t, m, keyPress(m, "j"))
 	if m.sideSel != "p:beta" {
 		t.Fatalf("cursor %q under the divider", m.sideSel)
 	}
@@ -222,23 +222,23 @@ func TestSideKeysWhileActing(t *testing.T) {
 	}
 	for m.sideSel != "p:alpha" {
 		before := m.sideSel
-		run(m, keyPress(m, "k"))
+		drain(t, m, keyPress(m, "k"))
 		if m.sideSel == before {
 			t.Fatalf("k while activating left the cursor on %q", before)
 		}
 	}
-	run(m, keyPress(m, "space"))
+	drain(t, m, keyPress(m, "space"))
 	if m.top() != nil || len(m.queued) != 1 {
 		t.Fatalf("space while activating: popup %T, queued %d", m.top(), len(m.queued))
 	}
-	run(m, activate)
+	drain(t, m, activate)
 	if !slices.Equal(src.lifecycle, []string{"beta activate"}) {
 		t.Fatalf("lifecycle %v", src.lifecycle)
 	}
 	if _, ok := m.top().(*confirmView); !ok || !strings.Contains(whole(m), "Deactivate alpha?") {
 		t.Fatalf("after the activation: popup %T, no question about alpha:\n%s", m.top(), whole(m))
 	}
-	run(m, keyPress(m, "y"))
+	drain(t, m, keyPress(m, "y"))
 	if !slices.Equal(src.lifecycle, []string{"beta activate", "alpha deactivate"}) {
 		t.Fatalf("lifecycle after y %v", src.lifecycle)
 	}

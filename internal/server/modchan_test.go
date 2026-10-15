@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"os"
 	"path/filepath"
 	"strings"
@@ -241,9 +242,15 @@ func TestModPrompts(t *testing.T) {
 	t.Cleanup(func() { sess.Stop(time.Second) })
 	c := modClient(sock)
 	c.Timeout = 10 * time.Second
-	poll := func(wait string) (int, session.ModPrompt) {
+	var pollCtx func(ctx context.Context, wait string) (int, session.ModPrompt)
+	poll := func(wait string) (int, session.ModPrompt) { return pollCtx(context.Background(), wait) }
+	pollCtx = func(ctx context.Context, wait string) (int, session.ModPrompt) {
 		t.Helper()
-		resp, err := c.Get("http://terminatr/v1/prompts?wait=" + wait)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://terminatr/v1/prompts?wait="+wait, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := c.Do(req)
 		if err != nil {
 			t.Fatalf("GET: %v", err)
 		}
@@ -269,11 +276,18 @@ func TestModPrompts(t *testing.T) {
 	}
 
 	// A prompt queued while the poll waits reaches it.
+	// The prompt is queued once the poll request is on the wire, so the
+	// poll is at or about to be in the server's wait, not before it.
+	sent := make(chan struct{})
+	var once sync.Once
+	ctx := httptrace.WithClientTrace(context.Background(), &httptrace.ClientTrace{
+		WroteRequest: func(httptrace.WroteRequestInfo) { once.Do(func() { close(sent) }) },
+	})
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		<-sent
 		sess.Prompt("/compact keep the plan")
 	}()
-	code, p := poll("5")
+	code, p := pollCtx(ctx, "5")
 	if code != http.StatusOK || p.Kind != "command" || p.Command != "compact" || p.Args != "keep the plan" {
 		t.Fatalf("poll: %d %+v", code, p)
 	}

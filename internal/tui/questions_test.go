@@ -27,7 +27,7 @@ func TestQuestionsRow(t *testing.T) {
 	if foot := m.footKeys(); !strings.Contains(foot, "enter answer") {
 		t.Errorf("footer %q", foot)
 	}
-	run(m, press(m, "enter"))
+	drain(t, m, press(m, "enter"))
 	if len(src.answered) != 1 || src.answered[0] != "beta" || m.result.Attach != "" {
 		t.Fatalf("answered %v attach %q", src.answered, m.result.Attach)
 	}
