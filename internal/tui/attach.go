@@ -271,10 +271,12 @@ func Attach(opts Options) (res Result, err error) {
 	defer cancel()
 	digests, stopDigests := vc.Digests()
 	defer stopDigests()
+	// Read before viewLoop starts: its relayout writes statusBar.
+	poll := c.statusBar || c.side != nil
 	go c.events(ctx, term.Events(ctx), digests, opts.In)
 	go c.viewLoop(watch)
 	stopInput := c.inputLoop(ctx, opts.In)
-	if c.statusBar || c.side != nil {
+	if poll {
 		go c.pollState(ctx)
 	}
 	c.poke() // paint the snapshot now, even if the pane is idle
@@ -489,11 +491,14 @@ func (c *client) empty() bool {
 // open attaches to session id as a new pane, its snapshot loaded. The
 // pane isn't in the window yet.
 func (c *client) open(id string) (*pane, error) {
-	conn, info, err := tmclient.Attach(c.paths, proto.AttachParams{Session: id, Cols: uint16(c.cols), Rows: uint16(c.rows)})
+	c.mu.Lock() // events resizes the window under it
+	cols, rows := c.cols, c.rows
+	c.mu.Unlock()
+	conn, info, err := tmclient.Attach(c.paths, proto.AttachParams{Session: id, Cols: uint16(cols), Rows: uint16(rows)})
 	if err != nil {
 		return nil, err
 	}
-	r, err := emu.NewRenderer(uint16(c.cols), uint16(c.rows))
+	r, err := emu.NewRenderer(uint16(cols), uint16(rows))
 	if err != nil {
 		conn.Close()
 		return nil, err
@@ -1297,12 +1302,13 @@ func (c *client) key(k uv.Key) {
 	if redraw {
 		c.status()
 	}
+	kb := c.kb // read under the lock: a click may move it
 	c.mu.Unlock()
 	if redraw {
 		c.poke()
 	}
 	if do.input {
-		if c.kb == areaMain { // another area has the keyboard: nothing leaks
+		if kb == areaMain { // another area has the keyboard: nothing leaks
 			c.input(k)
 		}
 		return
@@ -2399,7 +2405,10 @@ func (c *client) pollState(ctx context.Context) {
 			pl.views, sent = pollViews(ctl, shown), key
 		}
 		odd = !odd
-		if pl.reload = time.Since(c.cmdsAt) >= cmdReload; pl.reload {
+		c.mu.Lock()
+		cmdsAt := c.cmdsAt
+		c.mu.Unlock()
+		if pl.reload = time.Since(cmdsAt) >= cmdReload; pl.reload {
 			cfg, err := conf.get()
 			if err != nil {
 				cfg = nil
