@@ -283,16 +283,79 @@ func shownProject(d Data, current string) string {
 // coordinator, the user's single point of contact (§4).
 func buildRows(d Data, project string, sections []string, cards []row) []row {
 	all := project == allProjects
-	var projs, other []row
-	bySlug := map[string]bool{}
-	for _, p := range d.Projects {
-		bySlug[p.Slug] = true
-	}
 	byID := map[string]proto.SessionInfo{}
 	for _, s := range d.Sessions {
 		byID[s.ID] = s
 	}
 	now := time.Now()
+	blocks := map[string][]row{}
+	if needs := needsRows(d, project); len(needs) > 0 {
+		blocks["needs"] = append([]row{{head: "NEEDS YOU", count: len(needs)}}, needs...)
+	} else if all {
+		blocks["needs"] = []row{{head: "NEEDS YOU", count: 0}, {note: "  nothing waits on you in any project"}}
+	}
+	switch p, ok := findProject(d.Projects, project); {
+	case all:
+		// Every project's NEEDS YOU, above: no project of its own.
+	case ok:
+		blocks["project"] = projectListRows(d, p, byID, now)
+	default:
+		blocks["project"] = []row{{note: "  no projects; n creates one"}}
+	}
+	// The header's count is every session; this section has those
+	// outside the projects, so it says so.
+	other := otherRows(d, now)
+	blocks["other"] = []row{{head: "OTHER SESSIONS", count: len(other)}}
+	if len(other) == 0 {
+		note := "  no sessions"
+		if n := len(d.Sessions); n > 0 {
+			note = fmt.Sprintf("  none outside the projects (%d in them)", n)
+		}
+		other = []row{{note: note}}
+	}
+	blocks["other"] = append(blocks["other"], other...)
+	if !all {
+		blocks["cards"] = cards
+	}
+	return sectionsInOrder(sections, blocks)
+}
+
+// sectionsInOrder lays out the sections' rows, blocks by section id, in
+// the layout's order; one it leaves out is hidden (layoutSections has
+// put needs and project back).
+func sectionsInOrder(sections []string, blocks map[string][]row) []row {
+	var rows []row
+	for _, id := range sections {
+		rows = append(rows, blocks[id]...)
+	}
+	return rows
+}
+
+// projectSlugs says which slugs are this server's projects.
+func projectSlugs(ps []ProjectData) map[string]bool {
+	bySlug := map[string]bool{}
+	for _, p := range ps {
+		bySlug[p.Slug] = true
+	}
+	return bySlug
+}
+
+// findProject is the project slug, false when there is none.
+func findProject(ps []ProjectData, slug string) (ProjectData, bool) {
+	for _, p := range ps {
+		if p.Slug == slug {
+			return p, true
+		}
+	}
+	return ProjectData{}, false
+}
+
+// needsRows are NEEDS YOU's rows (buildRows): the project's, or with
+// project allProjects every project's and the paired servers', then the
+// user's own blocked sessions outside the projects.
+func needsRows(d Data, project string) []row {
+	all := project == allProjects
+	bySlug := projectSlugs(d.Projects)
 	// NEEDS YOU by project, in the projects' order, then the rest.
 	needsOf := map[string][]row{}
 	var loose []row
@@ -349,103 +412,111 @@ func buildRows(d Data, project string, sections []string, cards []row) []row {
 	}
 	// The user's own, outside the projects: in every project's.
 	needs = append(needs, loose...)
-	var head, headNote string
-	paused := false
-	for _, p := range d.Projects {
-		if p.Slug != project {
+	return needs
+}
+
+// projectListRows are the project section's rows (buildRows): its
+// header, its coordinator, threads and other sessions, and its task
+// counts.
+func projectListRows(d Data, p ProjectData, byID map[string]proto.SessionInfo, now time.Time) []row {
+	headNote := "active"
+	if p.inactive() {
+		headNote = "inactive"
+	}
+	rows := []row{{head: p.Slug, headNote: headNote, paused: p.Safety != nil && p.Safety.Paused}}
+	var coord *proto.SessionInfo
+	var members []proto.SessionInfo
+	threadOf := map[string]bool{}
+	for _, t := range p.Threads {
+		threadOf[t.ID] = true
+	}
+	for i, s := range d.Sessions {
+		if s.Project != p.Slug {
 			continue
 		}
-		head, paused = p.Slug, p.Safety != nil && p.Safety.Paused
-		headNote = "active"
-		if p.inactive() {
-			headNote = "inactive"
+		if s.Role == proto.RoleCoordinator && coord == nil {
+			coord = &d.Sessions[i]
+			continue
 		}
-		var coord *proto.SessionInfo
-		var members []proto.SessionInfo
-		threadOf := map[string]bool{}
-		for _, t := range p.Threads {
-			threadOf[t.ID] = true
+		if s.Role == proto.RoleThread && threadOf[s.Thread] {
+			continue // shown as its thread's row
 		}
-		for i, s := range d.Sessions {
-			if s.Project != p.Slug {
-				continue
-			}
-			if s.Role == proto.RoleCoordinator && coord == nil {
-				coord = &d.Sessions[i]
-				continue
-			}
-			if s.Role == proto.RoleThread && threadOf[s.Thread] {
-				continue // shown as its thread's row
-			}
-			members = append(members, s)
-		}
-		r := row{key: "p:" + p.Slug, project: p.Slug, mark: markTop, what: "coordinator", state: "—",
-			rest: "not running; enter starts it", pct: -1}
-		if coord != nil {
-			r.session, r.pct, r.state = coord.ID, sessionPct(*coord), stateWord(*coord)
-			if coord.State == "blocked" {
-				r.lead, r.leadBad = oneLine(coord.Reason), true
-			}
-			r.rest = progressOnly(*coord)
-		}
-		if p.Err != "" {
-			r.rest = "error: " + oneLine(p.Err)
-		}
-		if p.Unread > 0 {
-			r.rest = joinSp(r.rest, fmt.Sprintf("%d inbox", p.Unread))
-		}
-		projs = append(projs, r)
-		threads := append([]ThreadRow(nil), p.Threads...)
-		sort.SliceStable(threads, func(i, j int) bool {
-			return threadGroup(threads[i], byID) < threadGroup(threads[j], byID)
-		})
-		for i := range threads {
-			t := &threads[i]
-			tr := row{key: "th:" + p.Slug + ":" + t.ID, project: p.Slug, thread: t, mark: markTop, pct: -1}
-			tr.pct = t.Status.Progress().Percent
-			var reason string
-			tr.state, reason, tr.session = threadState(t, byID)
-			switch {
-			case reason != "":
-				tr.lead, tr.leadBad = oneLine(reason), true
-			case t.ReportState() == "new":
-				tr.lead = "report new"
-			}
-			// A thread leads with its task: its progress and step first,
-			// so a narrow row cuts its own id (threadName), last.
-			rest := threadProgress(t.Status)
-			if t.Status != nil && !t.Status.Updated.IsZero() {
-				rest = joinSp(rest, age(now.Sub(t.Status.Updated)))
-			}
-			if t.Report != nil && t.Report.PR != "" {
-				rest = joinSp(rest, "PR "+prRef(t.Report.PR))
-			}
-			if t.Task != "" {
-				rest = joinSp(rest, t.ID)
-			}
-			tr.what, tr.rest = threadName(t.Task, t.ID)+" "+oneLine(t.Title), rest
-			targets := []proto.CellTarget{{Project: p.Slug, Thread: t.ID}}
-			if t.Task != "" {
-				targets = append(targets, proto.CellTarget{Project: p.Slug, Task: t.Task})
-			}
-			if tr.session != "" {
-				targets = append(targets, proto.CellTarget{Session: tr.session})
-			}
-			tr.mods = rowMods(d.Cells, proto.SlotDashboardThread, targets...)
-			projs = append(projs, tr)
-		}
-		sort.SliceStable(members, func(i, j int) bool { return members[i].Thread < members[j].Thread })
-		for _, s := range members {
-			sr := row{key: "s:" + s.ID, session: s.ID, project: p.Slug, mark: markTop, what: s.ID + " " + sessionName(s),
-				state: stateWord(s), rest: joinSp(progressOnly(s), age(now.Sub(s.Created))), pct: sessionPct(s)}
-			if s.State == "blocked" {
-				sr.lead, sr.leadBad = oneLine(s.Reason), true
-			}
-			projs = append(projs, sr)
-		}
-		c := p.Counts
-		projs = append(projs, row{note: "  tasks: " + taskCounts(c), counts: true})
+		members = append(members, s)
 	}
+	r := row{key: "p:" + p.Slug, project: p.Slug, mark: markTop, what: "coordinator", state: "—",
+		rest: "not running; enter starts it", pct: -1}
+	if coord != nil {
+		r.session, r.pct, r.state = coord.ID, sessionPct(*coord), stateWord(*coord)
+		if coord.State == "blocked" {
+			r.lead, r.leadBad = oneLine(coord.Reason), true
+		}
+		r.rest = progressOnly(*coord)
+	}
+	if p.Err != "" {
+		r.rest = "error: " + oneLine(p.Err)
+	}
+	if p.Unread > 0 {
+		r.rest = joinSp(r.rest, fmt.Sprintf("%d inbox", p.Unread))
+	}
+	rows = append(rows, r)
+	threads := append([]ThreadRow(nil), p.Threads...)
+	sort.SliceStable(threads, func(i, j int) bool {
+		return threadGroup(threads[i], byID) < threadGroup(threads[j], byID)
+	})
+	for i := range threads {
+		t := &threads[i]
+		tr := row{key: "th:" + p.Slug + ":" + t.ID, project: p.Slug, thread: t, mark: markTop, pct: -1}
+		tr.pct = t.Status.Progress().Percent
+		var reason string
+		tr.state, reason, tr.session = threadState(t, byID)
+		switch {
+		case reason != "":
+			tr.lead, tr.leadBad = oneLine(reason), true
+		case t.ReportState() == "new":
+			tr.lead = "report new"
+		}
+		// A thread leads with its task: its progress and step first,
+		// so a narrow row cuts its own id (threadName), last.
+		rest := threadProgress(t.Status)
+		if t.Status != nil && !t.Status.Updated.IsZero() {
+			rest = joinSp(rest, age(now.Sub(t.Status.Updated)))
+		}
+		if t.Report != nil && t.Report.PR != "" {
+			rest = joinSp(rest, "PR "+prRef(t.Report.PR))
+		}
+		if t.Task != "" {
+			rest = joinSp(rest, t.ID)
+		}
+		tr.what, tr.rest = threadName(t.Task, t.ID)+" "+oneLine(t.Title), rest
+		targets := []proto.CellTarget{{Project: p.Slug, Thread: t.ID}}
+		if t.Task != "" {
+			targets = append(targets, proto.CellTarget{Project: p.Slug, Task: t.Task})
+		}
+		if tr.session != "" {
+			targets = append(targets, proto.CellTarget{Session: tr.session})
+		}
+		tr.mods = rowMods(d.Cells, proto.SlotDashboardThread, targets...)
+		rows = append(rows, tr)
+	}
+	sort.SliceStable(members, func(i, j int) bool { return members[i].Thread < members[j].Thread })
+	for _, s := range members {
+		sr := row{key: "s:" + s.ID, session: s.ID, project: p.Slug, mark: markTop, what: s.ID + " " + sessionName(s),
+			state: stateWord(s), rest: joinSp(progressOnly(s), age(now.Sub(s.Created))), pct: sessionPct(s)}
+		if s.State == "blocked" {
+			sr.lead, sr.leadBad = oneLine(s.Reason), true
+		}
+		rows = append(rows, sr)
+	}
+	c := p.Counts
+	rows = append(rows, row{note: "  tasks: " + taskCounts(c), counts: true})
+	return rows
+}
+
+// otherRows are the sessions outside the projects (buildRows' OTHER
+// SESSIONS), each with where it runs.
+func otherRows(d Data, now time.Time) []row {
+	bySlug := projectSlugs(d.Projects)
+	var rows []row
 	home, _ := os.UserHomeDir()
 	for _, s := range d.Sessions {
 		if s.Project != "" && bySlug[s.Project] {
@@ -457,48 +528,7 @@ func buildRows(d Data, project string, sections []string, cards []row) []row {
 		if s.State == "blocked" {
 			sr.lead, sr.leadBad = oneLine(s.Reason), true
 		}
-		other = append(other, sr)
-	}
-
-	// The sections come in the layout's order; one it leaves out is
-	// hidden (layoutSections has put needs and project back).
-	var rows []row
-	for _, id := range sections {
-		switch id {
-		case "needs":
-			if len(needs) > 0 {
-				rows = append(rows, row{head: "NEEDS YOU", count: len(needs)})
-				rows = append(rows, needs...)
-			} else if all {
-				rows = append(rows, row{head: "NEEDS YOU", count: 0}, row{note: "  nothing waits on you in any project"})
-			}
-		case "project":
-			switch {
-			case all:
-				// Every project's NEEDS YOU, above: no project of its own.
-			case head != "":
-				rows = append(rows, row{head: head, headNote: headNote, paused: paused})
-				rows = append(rows, projs...)
-			default:
-				rows = append(rows, row{note: "  no projects; n creates one"})
-			}
-		case "other":
-			// The header's count is every session; this section has those
-			// outside the projects, so it says so.
-			rows = append(rows, row{head: "OTHER SESSIONS", count: len(other)})
-			if len(other) == 0 {
-				note := "  no sessions"
-				if n := len(d.Sessions); n > 0 {
-					note = fmt.Sprintf("  none outside the projects (%d in them)", n)
-				}
-				other = []row{{note: note}}
-			}
-			rows = append(rows, other...)
-		case "cards":
-			if !all {
-				rows = append(rows, cards...)
-			}
-		}
+		rows = append(rows, sr)
 	}
 	return rows
 }

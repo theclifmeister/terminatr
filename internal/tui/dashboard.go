@@ -6,21 +6,15 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
-	"github.com/charmbracelet/x/ansi"
 
-	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
-	"github.com/theclifmeister/terminatr/internal/update"
-	"github.com/theclifmeister/terminatr/internal/version"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
 
@@ -43,10 +37,6 @@ const (
 	refresh      = time.Second
 	boardRefresh = 5 * time.Second
 )
-
-// awaitView is how long a popup over a session waits for the view a mod
-// opened (Over.View) to be listed.
-const awaitView = 3 * time.Second
 
 // DashState is what survives an attach: the selected row, the project
 // last attached to (for ] and [), and a message for the footer.
@@ -92,31 +82,6 @@ type DashOptions struct {
 	// handover, a dashboard that ends attaching leaves the screen on for
 	// the attach to draw over (Options.Handover).
 	Handover bool
-}
-
-// Over is a popup opened over a session (docs/SPEC.md §4): prefix then
-// a, i, t, , or ? in a session. The dashboard runs its key and draws the
-// popup over the session's screen, dimmed, rather than over the list,
-// and follows the session's output meanwhile (paneFeed); the view stays
-// as it is. When the popup closes the dashboard ends with
-// Attach set, and the caller attaches again. Should the view go back to
-// its dashboard meanwhile (another console, prefix then d), it carries on
-// as the dashboard.
-type Over struct {
-	Key     string   // the dashboard key that opens the popup
-	Task    int      // with Key t: the task the Tasks tab shows (opened), 0 for none
-	Project string   // the project it is about: the session's, or a sidebar row's
-	Session string   // the session it is drawn over
-	Title   string   // how the header names the session
-	Screen  []string // the session's area as shown, plain, a line per row
-	// Where the pane is in Screen: after X columns of padding, at rows
-	// Y to Y+H, from its row Top. The session's output goes there.
-	X, Y, H, Top int
-	// View: a mod asked to open one of its views after a command run in
-	// the session (attachcommands.go); the popup is that view, from the
-	// mod's open requests after After.
-	View  bool
-	After uint64
 }
 
 // DashResult says why the dashboard ended: Attach names a session to
@@ -224,59 +189,35 @@ type dash struct {
 	remoteTop int
 	// focus is the area with this console's keyboard: the list, the
 	// sidebar or the details panel (tab). sideSel is the sidebar's
-	// keyboard row, the view's. sideSent is the last one sent; one is
-	// on its way at a time (sideBusy), so they arrive in order, and the
-	// view's own doesn't overwrite this console's meanwhile.
-	focus    area
-	sideSel  string
-	sideSent string
-	sideBusy bool
+	// keyboard row, the view's (viewSync.sideSent).
+	focus   area
+	sideSel string
 	// previewSeq counts the sidebar cursor's moves: only the last one's
 	// preview shows (previewSoon).
 	previewSeq uint64
 	// folds are what the sidebar's tree folds: the view's, changed here
 	// at once (refold).
-	folds    view.Tree
-	msg      string
-	errMsg   string                  // msg when it reports a failure, drawn as one
-	toastSeq uint64                  // the last mod toast shown (showToasts)
-	toasted  bool                    // a poll set toastSeq
-	busy     bool                    // an action is running
-	acts     int                     // actions started, so a poll knows whether one began since it did
-	queued   []func(m *dash) tea.Cmd // settings keys pressed while it runs, in order
-	catalogs []Catalog               // the agents' models, read when the , popup opens (catalog.go)
-	agents   []string                // the installed agents, read by agentList; nil until then or after a poll
-	agentsOK bool                    // agents is read
-	stack    []overlay               // views open on top of the list, topmost last
-	mv       modViews                // the views user mods draw (modviews.go)
-	// awaitView: over a session for a mod's view (Over.View), the popup
-	// waits for it until then.
-	awaitView time.Time
-	under     overlay // the popup the topmost draws over, while it draws
-	geo       *boxGeo // where the topmost was drawn, for the mouse
-	// lastClick is the last left click, for double-clicks; detailTop is
-	// the details panel's first line, scrolled with the wheel, for the
-	// row detailKey (another row shows from the top).
-	lastClick click
-	detailTop int
-	detailKey string
-	// detSel is the details panel's selected mod section header (its fold
-	// id), for the row detSelKey; "" for none.
-	detSel, detSelKey string
-	shownKeys         string // the footer's hints as drawn: its buttons
-	badgeAt           [2]int // the header's needs-you badge as drawn: its columns, [0 0] for none
+	folds     view.Tree
+	msg       string
+	errMsg    string                  // msg when it reports a failure, drawn as one
+	toastSeq  uint64                  // the last mod toast shown (showToasts)
+	toasted   bool                    // a poll set toastSeq
+	busy      bool                    // an action is running
+	acts      int                     // actions started, so a poll knows whether one began since it did
+	queued    []func(m *dash) tea.Cmd // settings keys pressed while it runs, in order
+	catalogs  []Catalog               // the agents' models, read when the , popup opens (catalog.go)
+	agents    []string                // the installed agents, read by agentList; nil until then or after a poll
+	agentsOK  bool                    // agents is read
+	stack     []overlay               // views open on top of the list, topmost last
+	mv        modViews                // the views user mods draw (modviews.go)
+	under     overlay                 // the popup the topmost draws over, while it draws
+	geo       *boxGeo                 // where the topmost was drawn, for the mouse
+	lastClick click                   // the last left click, for double-clicks
+	shownKeys string                  // the footer's hints as drawn: its buttons
+	badgeAt   [2]int                  // the header's needs-you badge as drawn: its columns, [0 0] for none
 
-	// layout is the console's layout, effective: ui.json (ui) under the
-	// layout mod in use (spec, the [ui] layout layoutID), with the
-	// view's sidebar. safe: safe mode, the built-in layout.
-	layout   Layout
-	ui       Layout
-	spec     mod.Layout
-	layoutID string
-	safe     bool
-	uiFile   string
-	dragging bool // the mouse is moving the divider
-	sideDrag bool // the mouse is moving the sidebar's border
+	detailsState
+	layoutState
 
 	prefix   string    // the prefix key, as tea names it
 	prefixed bool      // the prefix was typed: the next key is a command
@@ -293,36 +234,10 @@ type dash struct {
 	// (noteModFailures).
 	modsFailed map[string]bool
 
-	// The view (nil without one). viewSeq is its version when the
-	// dashboard opened; selPending counts this console's selections on
-	// their way, which the view's own doesn't overwrite meanwhile, and
-	// treePending its changes of the folds (refold): a version of the
-	// view from before one would fold back what was just unfolded.
-	view     *ViewConn
-	viewSeq  uint64
-	viewTurn chan struct{} // closed once the last view call is answered (inTurn)
-	viewSide SidebarLayout // the view's sidebar, as last sent or seen
-	sideCols []string      // the view's sidebar columns (view.View.Columns)
-	// wantCols, when set, is the column order this console's layout
-	// ([ui] layout) asks the view for: sent once, if the view's differs.
-	wantCols *[]string
-	// wantCompact, when set, is the status bar's style this console's
-	// layout asks the view for (view.status), sent once as wantCols.
-	wantCompact *bool
-	watch       <-chan struct{}
-	stopWatch   func()
-	selPending  int
-	treePending int
-	userSel     bool // the user moved the selection: tell the view
-	sized       bool // the first window size came
-	done        chan struct{}
-
-	// over: a popup over a session (Over), nil for the dashboard; feed
-	// follows the session under it, nil for none. leaving: a popup action
-	// asked the view to show a session.
-	over    *Over
-	feed    *paneFeed
-	leaving bool
+	viewSync
+	overState
+	sized bool // the first window size came
+	done  chan struct{}
 
 	result DashResult
 }
@@ -334,8 +249,9 @@ func newDash(o DashOptions) *dash {
 	}
 	m := &dash{src: o.Source, cwd: o.Cwd, h: h,
 		sel: o.State.Selected, current: o.State.Current, msg: o.State.Message,
-		ui: LoadLayout(o.UIFile), uiFile: o.UIFile, safe: safeMode(),
-		prefix: cmp.Or(o.Prefix, DefaultPrefixKey), then: o.State.Then, done: make(chan struct{}), over: o.Over}
+		layoutState: layoutState{ui: LoadLayout(o.UIFile), uiFile: o.UIFile, safe: safeMode()},
+		prefix:      cmp.Or(o.Prefix, DefaultPrefixKey), then: o.State.Then, done: make(chan struct{}),
+		overState: overState{over: o.Over}}
 	if o.Over != nil {
 		m.then = o.Over.Key
 		if o.Over.View {
@@ -386,15 +302,6 @@ type dataMsg struct {
 }
 type tickMsg struct{}
 
-// viewMsg: the view has a new version. viewDoneMsg: a call on it
-// answered.
-type viewMsg struct{}
-type viewDoneMsg struct {
-	sel  bool // a selection
-	side bool // a move of the sidebar's keyboard row
-	tree bool // a change of what the sidebar's tree folds
-	err  error
-}
 type boardMsg struct {
 	slug  string
 	board *tasks.Board
@@ -481,152 +388,6 @@ func (m *dash) Init() tea.Cmd {
 		cmds = append(cmds, tea.RequestBackgroundColor)
 	}
 	return tea.Batch(cmds...)
-}
-
-// feedMsg: the session under the popup drew something.
-type feedMsg struct{}
-
-// waitFeed waits for the session under the popup to change.
-func (m *dash) waitFeed() tea.Cmd {
-	f, done := m.feed, m.done
-	if f == nil {
-		return nil
-	}
-	return func() tea.Msg {
-		select {
-		case <-f.wake:
-		case <-f.end:
-		case <-done:
-			return nil
-		}
-		time.Sleep(feedInterval) // a burst of output is one redraw
-		return feedMsg{}
-	}
-}
-
-// fromFeed draws the session's screen as it is now under the popup.
-func (m *dash) fromFeed() tea.Cmd {
-	if m.over == nil || m.feed == nil {
-		return nil
-	}
-	if rows := m.feed.screen(); rows != nil {
-		m.over.Screen = m.over.place(rows, len(m.over.Screen))
-	}
-	select {
-	case <-m.feed.end:
-		return nil // the last of it
-	default:
-		return m.waitFeed()
-	}
-}
-
-// dropOver turns the popup over a session into the dashboard.
-func (m *dash) dropOver() {
-	if m.feed != nil {
-		m.feed.close()
-	}
-	m.over, m.feed = nil, nil
-}
-
-// waitView waits for the view's next version.
-func (m *dash) waitView() tea.Cmd {
-	if m.view == nil {
-		return nil
-	}
-	watch, done := m.watch, m.done
-	return func() tea.Msg {
-		select {
-		case <-watch:
-			return viewMsg{}
-		case <-done:
-			return nil
-		}
-	}
-}
-
-// call runs a view action in the background.
-func (m *dash) call(method string, p proto.ViewParams) tea.Cmd {
-	vc, sel, side, tree := m.view, method == proto.MethodViewSelect, method == proto.MethodViewSideSel, method == proto.MethodViewTree
-	if sel {
-		m.selPending++
-	}
-	if tree {
-		m.treePending++
-	}
-	if side {
-		m.sideBusy, m.sideSent = true, p.Key
-	}
-	return m.inTurn(func() tea.Msg {
-		_, err := vc.Do(method, p)
-		return viewDoneMsg{sel: sel, side: side, tree: tree, err: err}
-	})
-}
-
-// inTurn runs call, a view call, once the calls this console made before
-// it are answered. Each runs in a command of its own, and those run
-// concurrently: without turns a click on a project then one on its
-// coordinator could reach the server as view.attach, then view.project,
-// which takes the view back to the dashboard and ends the attach just
-// begun (T283). Made in update, in the order of the keys and clicks.
-func (m *dash) inTurn(call func() tea.Msg) tea.Cmd {
-	prev, mine, done := m.viewTurn, make(chan struct{}), m.done
-	m.viewTurn = mine
-	return func() tea.Msg {
-		defer close(mine)
-		if prev != nil {
-			select {
-			case <-prev:
-			case <-done:
-				return nil
-			}
-		}
-		return call()
-	}
-}
-
-// fromView takes the view's new version: its selection (unless one of
-// this console's is on its way), current project and sidebar. When it
-// shows sessions now, from here or another console, the dashboard ends.
-func (m *dash) fromView() tea.Cmd {
-	v := m.view.View()
-	if m.over != nil {
-		switch {
-		case v.Mode != view.ModeLayout:
-			// Back to its dashboard, from another console: carry on as it.
-			m.dropOver()
-		case v.Focus != "" && v.Focus != m.over.Session:
-			m.result.Attach = v.Focus
-			return tea.Quit
-		}
-	} else if v.Mode == view.ModeLayout && v.Focus != "" && v.Seq != m.viewSeq {
-		m.result.Attach = cmp.Or(v.Focus, "view")
-		return tea.Quit
-	}
-	// The all-projects NEEDS YOU has no project row: "p:*" keeps the
-	// list's own selection (showProject).
-	if m.selPending == 0 && v.Selected != "" && v.Selected != "p:"+allProjects {
-		m.sel = v.Selected
-	}
-	if m.current != v.Current {
-		m.current, m.remoteTop = v.Current, 0
-		m.rebuild()
-	}
-	if !m.sideBusy && m.sideSel == m.sideSent {
-		m.sideSel, m.sideSent = v.SideSel, v.SideSel
-	}
-	if m.treePending == 0 {
-		// Kept in the layout too, so that saving it keeps the view's.
-		m.folds, m.layout.Tree = v.Tree, v.Tree
-	}
-	m.sideCols = v.Columns
-	if !m.sideDrag && v.Sidebar != m.viewSide {
-		m.layout.Sidebar, m.viewSide = v.Sidebar, v.Sidebar
-		m.setWidth(m.winW)
-	}
-	// The info panel is the attach screen's; keep it so that saving the
-	// layout here keeps it too.
-	m.layout.Info = v.Info
-	return m.waitView()
 }
 
 // Update runs update, then tells the view what this console changed in
@@ -838,57 +599,6 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// sideClick handles a click on the sidebar, from under any popup: its
-// border starts a drag; a click on a row gives the sidebar the keyboard,
-// and a project row shows
-// its dashboard, the coordinator row opens the coordinator, a thread row
-// attaches its session.
-func (m *dash) sideClick(mo tea.Mouse) tea.Cmd {
-	if mo.Button != tea.MouseLeft {
-		return nil
-	}
-	x := m.geom().sideCol(mo.X)
-	if sideFlagAt(m.tree(), m.sideW(), m.h, m.sideFoot(), m.needsCount(), x, mo.Y) {
-		// The header's ⚑ N: the first row that needs you, as w.
-		m.focus = areaSide
-		return m.sideDo(sideNeedStep(m.sideKeysIn(), treeRow{}, false))
-	}
-	if sideHeadAt(m.tree(), m.sideW(), m.h, m.sideFoot(), x, mo.Y) {
-		// The PROJECTS header: every project's NEEDS YOU, the sidebar
-		// keeping the keyboard on it.
-		m.focus, m.sideSel = areaSide, headKey
-		return tea.Batch(m.sendSideSel(), m.openTarget(Target{Project: allProjects}))
-	}
-	r, ok, border := sideHitAt(m.tree(), m.sideW(), m.h, m.sideFoot(), x, mo.Y)
-	t, can, why := r.target()
-	var cmd tea.Cmd
-	if ok && !border {
-		// A click on a row gives the sidebar the keyboard, its cursor on
-		// the row; it keeps it in the session the row attaches.
-		m.focus, m.sideSel = areaSide, r.key()
-		cmd = m.sendSideSel()
-	}
-	switch {
-	case border:
-		m.sideDrag = true
-	case !ok:
-	case r.kind == treeSection:
-		// Its header or its body: as enter on the header.
-		st, _ := sectionStep(r, sideEnter)
-		return tea.Batch(cmd, m.sectionCmd(st))
-	case m.busy:
-	case r.kind == treeDivider:
-		return tea.Batch(cmd, m.refold(foldDivider(r)))
-	case r.kind == treeServer && !r.link.local:
-		return tea.Batch(cmd, m.refold(foldPeer(r, !r.fold)))
-	case !can:
-		m.msg = why
-	default:
-		return tea.Batch(cmd, m.openTarget(t))
-	}
-	return cmd
-}
-
 // openTarget opens a sidebar row's target, closing any popup: a thread's
 // session is attached, a coordinator opened, else the project's dashboard
 // shown.
@@ -961,80 +671,6 @@ func (m *dash) catalogList() []Catalog {
 	return m.catalogs
 }
 
-// tree is the sidebar's tree, from the last poll: the listed project is
-// current, and its row the one you are on; the keyboard's row is marked
-// while the sidebar has the focus.
-func (m *dash) tree() []treeRow {
-	if m.treeMemo != nil {
-		return m.treeMemo
-	}
-	rows := m.buildSideTree()
-	if m.treeHold {
-		m.treeMemo = rows
-	}
-	return rows
-}
-
-// buildSideTree builds tree's rows afresh.
-func (m *dash) buildSideTree() []treeRow {
-	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: m.treeCurrent(), ctxHint: m.data.ContextHint,
-		tree: sideTree(m.data.Projects, m.folds), cols: m.sideCols, cells: m.data.Cells, peers: m.data.Peers})
-	rows = sideRows(rows, m.data.NeedsFirst)
-	if bandFits(m.sideW(), m.h, m.sideFoot()) {
-		rows = withSections(rows, m.band())
-		markUndrawn(rows, m.sideW(), m.h, m.sideFoot(), m.sideSel, m.focus == areaSide)
-	}
-	if m.focus == areaSide {
-		markCursor(rows, m.sideW(), m.sideSel)
-	}
-	return rows
-}
-
-// sideHeadIn is how the sidebar's PROJECTS header is drawn: its ⚑ N,
-// the keyboard's row while the sidebar has it there, the row you are on
-// while every project's NEEDS YOU shows.
-func (m *dash) sideHeadIn() sideHeadIn {
-	_, _, remote := m.remote()
-	return sideHeadIn{needs: m.needsCount(), cursor: m.focus == areaSide && m.sideSel == headKey,
-		here: m.over == nil && !remote && m.allShown()}
-}
-
-// band is what the sidebar's band of mod sections is built from.
-func (m *dash) band() bandIn {
-	return bandIn{list: m.mv.list, project: listProject(m.data, m.current), folds: m.folds, w: m.sideW(),
-		mods: m.data.Mods, noMods: m.data.NoMods, cache: &m.mv.band, order: m.layout.sideSections,
-		projOrder: m.layout.projSections}
-}
-
-// sideFoot is the rows the sidebar's footer takes (sideFootRows).
-func (m *dash) sideFoot() int {
-	return sideFootRows(m.sideW(), m.h, m.data.Server, m.layout.compact())
-}
-
-// sectionCmd runs what a key or a click on a band section does: folds
-// or unfolds sections in the view (view.sections), or sends the mod the
-// ui.click that opens its view.
-func (m *dash) sectionCmd(st sideStep) tea.Cmd {
-	var cmds []tea.Cmd
-	if ids := st.sectionIDs(m.folds); len(ids) > 0 {
-		cmds = append(cmds, m.foldSections(ids, st.foldOn))
-	}
-	if s := st.open; s != nil {
-		src, p := m.src, sectionClick(s)
-		cmds = append(cmds, func() tea.Msg { return modInputMsg{err: src.ModViewInput(p)} })
-	}
-	return tea.Batch(cmds...)
-}
-
-// fullTree is the sidebar's whole tree: nothing folded, no filter (w W).
-func (m *dash) fullTree() []treeRow {
-	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: m.treeCurrent(), ctxHint: m.data.ContextHint, tree: unfoldedTree(m.data.Projects), cols: m.sideCols, cells: m.data.Cells, peers: m.data.Peers})
-	if m.data.NeedsFirst {
-		rows = needsFirstOrder(rows)
-	}
-	return rows
-}
-
 // area is the area with the keyboard: the list when the details panel
 // has it but doesn't show (the window got narrower), or the sidebar has
 // it while hidden.
@@ -1067,156 +703,6 @@ func (m *dash) cycleFocus(key string) tea.Cmd {
 		return m.sendSideSel()
 	}
 	return nil
-}
-
-// sideKeyboard runs a key while the sidebar has the focus; ok is false
-// for a key that isn't the sidebar's, which goes to the list's actions.
-// A move previews the row the cursor rests on (previewSoon); enter or →
-// goes into it, and the keyboard follows.
-func (m *dash) sideKeyboard(key string) (tea.Cmd, bool) {
-	st, ok := sideKeyFor(m.sideKeysIn(), key)
-	if !ok {
-		return nil, false
-	}
-	return m.sideDo(st), true
-}
-
-// sideKeysIn is what a sidebar key works on, here.
-func (m *dash) sideKeysIn() sideKeysIn {
-	return sideKeysIn{tree: m.tree, full: m.fullTree, w: m.sideW(), h: m.h, sel: m.sideSel}
-}
-
-// sideDo does what a sidebar key decided (sideKeyFor).
-func (m *dash) sideDo(st sideStep) tea.Cmd {
-	var cmds []tea.Cmd
-	if st.msg != "" {
-		m.msg = st.msg
-	}
-	if st.help {
-		// A plain key that is a prefix command does what it does.
-		return m.prefixCommand(boundKey("?"))
-	}
-	if st.back {
-		m.focus = areaMain
-	}
-	if st.sel != "" && st.sel != m.sideSel {
-		m.sideSel = st.sel
-		cmds = append(cmds, m.sendSideSel(), m.previewSoon())
-	}
-	if st.refold != nil {
-		cmds = append(cmds, m.refold(st.refold))
-	}
-	cmds = append(cmds, m.sectionCmd(st))
-	var target *Target
-	if t := st.target; t != nil {
-		// Into the pane: the list, or the session attached.
-		m.focus = areaMain
-		if !st.here {
-			target = t
-		}
-	}
-	if target != nil && !targetActs(*target) {
-		cmds = append(cmds, m.openTarget(*target))
-		target = nil
-	}
-	if target == nil && st.toggle == "" && st.pin == "" {
-		return tea.Batch(cmds...)
-	}
-	// What the key starts is an action: while one runs, it waits its
-	// turn, on the row it was pressed on, as the settings keys do; the
-	// moves above are this console's alone and happen at once.
-	run := func(m *dash) tea.Cmd {
-		switch {
-		case target != nil:
-			return m.openTarget(*target)
-		case st.toggle != "":
-			return m.toggleActive(st.toggle, st.activate)
-		}
-		return m.setPinned(st.pin, st.pinOn)
-	}
-	if m.busy {
-		m.queued = append(m.queued, run)
-	} else {
-		cmds = append(cmds, run(m))
-	}
-	return tea.Batch(cmds...)
-}
-
-// previewMsg: the sidebar's cursor may have rested on its row for
-// previewDelay.
-type previewMsg struct{ seq uint64 }
-
-// previewSoon previews the sidebar's row once its cursor has rested on
-// it for previewDelay.
-func (m *dash) previewSoon() tea.Cmd {
-	m.previewSeq++
-	seq := m.previewSeq
-	return tea.Tick(previewDelay, func(time.Time) tea.Msg { return previewMsg{seq} })
-}
-
-// preview shows what the sidebar's cursor rests on, the keyboard staying
-// in the sidebar: a project's dashboard, or a session, which ends the
-// dashboard (the session keeps the sidebar's keyboard, Result.SideFocus).
-func (m *dash) preview(seq uint64) tea.Cmd {
-	if seq != m.previewSeq || m.focus != areaSide || m.top() != nil || m.busy {
-		return nil
-	}
-	r, ok := sideRowOf(shownRows(m.tree(), m.sideW()), m.sideSel, m.sideHeadIn().here)
-	if !ok {
-		return nil
-	}
-	t, ok := r.preview()
-	switch {
-	case !ok:
-	case t.Session != "":
-		return m.openTarget(t)
-	case t.Project != m.current:
-		return m.showProject(t.Project)
-	}
-	return nil
-}
-
-// refold changes what the sidebar's tree folds: here at once, in the
-// view, and in ui.json, as the tree new views start with. Folding never
-// activates or deactivates a project (§5.1).
-func (m *dash) refold(fn func(*view.Tree)) tea.Cmd {
-	t := m.folds
-	fn(&t)
-	m.folds, m.layout.Tree = t, t
-	m.saveLayout()
-	if m.view == nil {
-		return nil
-	}
-	return m.call(proto.MethodViewTree, proto.ViewParams{Tree: &t})
-}
-
-// foldSections folds (on) or unfolds the sidebar sections ids: here at
-// once, in the view (view.sections, every console of it) and in ui.json,
-// as refold. On a server of protocol 14 the folds stay this console's
-// (ViewConn.Sections).
-func (m *dash) foldSections(ids []string, on bool) tea.Cmd {
-	t := m.folds
-	if !t.FoldSections(ids, on) {
-		return nil
-	}
-	m.folds, m.layout.Tree = t, t
-	m.saveLayout()
-	if m.view == nil {
-		return nil
-	}
-	vc := m.view
-	m.treePending++
-	return m.inTurn(func() tea.Msg {
-		_, err := vc.Sections(ids, on)
-		return viewDoneMsg{tree: true, err: err}
-	})
-}
-
-// setPinned pins a project to the top of the sidebar, or unpins it:
-// here at once, and in its setting.
-func (m *dash) setPinned(slug string, on bool) tea.Cmd {
-	pinIn(m.data.Projects, slug, on)
-	return m.lifecycle(slug, map[bool]string{true: "pin", false: "unpin"}[on])
 }
 
 // setData takes a poll's result, rebuilds the rows and rings the bell
@@ -1426,95 +912,6 @@ func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 	return m.listKey(binds.list.canon(k.String()))
 }
 
-// sendSideSel tells the view where the sidebar's keyboard row is, when
-// it moved since the last time and nothing is on its way.
-func (m *dash) sendSideSel() tea.Cmd {
-	if m.view == nil || m.sideBusy || m.sideSel == m.sideSent {
-		return nil
-	}
-	return m.call(proto.MethodViewSideSel, proto.ViewParams{Key: m.sideSel})
-}
-
-// detailsKey runs a key while the details panel has the focus, by the
-// panel's key table (panelActions): the arrows scroll it, ] and [
-// select a mod section's header, ← → and enter fold, unfold or open the
-// selected one, esc drops the selection, then goes back to the list. ok
-// is false for the other keys, and for ] [ ← → enter where they find no
-// section, which go to the list's actions.
-func (m *dash) detailsKey(key string) (tea.Cmd, bool) {
-	op, ok := panelOp(key)
-	if !ok {
-		return nil, false
-	}
-	switch op {
-	case panelUp:
-		m.scrollDetails(-1)
-	case panelDown:
-		m.scrollDetails(1)
-	case panelPageUp:
-		m.scrollDetails(scrollKeys["pgup"])
-	case panelPageDown:
-		m.scrollDetails(scrollKeys["pgdown"])
-	case panelFirst:
-		m.scrollDetails(-1 << 20)
-	case panelLast:
-		m.scrollDetails(1 << 20)
-	case panelBack:
-		if m.detSelNow() != "" {
-			m.detSel = ""
-		} else {
-			m.focus = areaMain
-		}
-	default:
-		lay, shows := m.detailsNow()
-		if !shows {
-			return nil, false
-		}
-		st, next, took := panelStep(lay, m.detSelNow(), op)
-		switch {
-		case !took:
-			return nil, false
-		case next != m.detSelNow():
-			m.detSel, m.detSelKey = next, m.sel
-			m.revealDetails()
-			return nil, true
-		}
-		return m.sectionCmd(st), true
-	}
-	return nil, true
-}
-
-// detSelNow is the details panel's selected header for the row shown.
-func (m *dash) detSelNow() string {
-	if m.detSelKey != m.sel {
-		return ""
-	}
-	return m.detSel
-}
-
-// revealDetails scrolls the details panel so its selected header shows.
-func (m *dash) revealDetails() {
-	lay, ok := m.detailsNow()
-	if !ok {
-		return
-	}
-	i := slices.IndexFunc(lay.secs, func(s *sideSection) bool { return s.id == m.detSelNow() })
-	if i < 0 || lay.heads[i] < 0 {
-		return
-	}
-	if m.detailKey != m.sel {
-		m.detailKey, m.detailTop = m.sel, 0
-	}
-	h, rows := lay.heads[i], m.geom().details().h
-	switch {
-	case h < m.detailTop:
-		m.detailTop = h
-	case h >= m.detailTop+rows:
-		m.detailTop = h - rows + 1
-	}
-	m.detailTop = min(max(m.detailTop, 0), max(len(lay.lines)-rows, 0))
-}
-
 // fail shows err in the footer, as a failure.
 func (m *dash) fail(err error) { m.msg = err.Error(); m.errMsg = m.msg }
 
@@ -1596,34 +993,6 @@ func (m *dash) cycleProject(next bool) tea.Cmd {
 
 // View.
 
-// rule is a section header drawn across the width: "NEEDS YOU ───…".
-func (m *dash) rule(title string) string { return m.ruleIn(title, th().Title, m.w) }
-
-// ruleIn is a rule w cells wide with the title in st, a cell in: the
-// dashboard's gutter.
-func (m *dash) ruleIn(title string, st lipgloss.Style, w int) string {
-	if title == "" {
-		return th().Faint.Render(strings.Repeat("─", w))
-	}
-	return " " + sectionRule(title, st, w-1)
-}
-
-// sectionRule is a section heading w cells wide: the title in st, then
-// a faint rule to the edge (docs/STYLE.md, Section).
-func sectionRule(title string, st lipgloss.Style, w int) string {
-	t := title + " "
-	return st.Render(title) + " " + th().Faint.Render(strings.Repeat("─", max(w-len([]rune(t)), 0)))
-}
-
-// sectionStyle is how a section heading is drawn: bold, in the warn
-// colour for NEEDS YOU, else uncoloured (docs/STYLE.md C2).
-func sectionStyle(title string) lipgloss.Style {
-	if strings.HasPrefix(title, "NEEDS YOU") {
-		return th().Warn.Bold(true)
-	}
-	return th().Head
-}
-
 func (m *dash) View() tea.View {
 	if m.hold && m.lastOK {
 		return m.lastView
@@ -1697,19 +1066,6 @@ func (m *dash) baseWindow() []string {
 	return strings.Split(m.withSide(m.frame(title, m.base(), -1, "")), "\n")
 }
 
-func (m *dash) renderList() string {
-	if m.over != nil {
-		return m.frame("", m.base(), -1, "")
-	}
-	return m.frame(m.shownCrumb(), m.listBody(), -1, m.footKeys())
-}
-
-// overDone says the popup over a session closed: its key ran and no
-// overlay is left.
-func (m *dash) overDone() bool {
-	return m.over != nil && m.loaded && m.then == "" && m.top() == nil && !m.busy && time.Now().After(m.awaitView)
-}
-
 // base is what a popup draws over, as the body's rows: the list, or the
 // session's screen under the header.
 func (m *dash) base() []string {
@@ -1724,372 +1080,4 @@ func (m *dash) base() []string {
 		}
 	}
 	return body
-}
-
-// listBody is the list (and the details panel beside or under it) as
-// the body's rows, the list scrolled so the selected row shows.
-func (m *dash) listBody() []string {
-	if m.remoteHere() {
-		return m.remoteBody()
-	}
-	g := m.geom()
-	ls, dr, place := g.list(), g.details(), g.panel()
-	lines, _, sel := m.listLines(ls.w, place == "")
-	top := scrollTop(sel, ls.h, len(lines))
-	list := make([]string, ls.h)
-	copy(list, lines[min(top, len(lines)):])
-	if place == "" {
-		return list
-	}
-	// The list scrolls on its own; the details panel shows the selected
-	// row from the top.
-	var panel []string
-	if r, ok := m.selected(); ok {
-		panel = m.detailsLay(r, dr.w, dr.h).lines
-	}
-	if m.detailKey == m.sel {
-		// Scrolled with the wheel.
-		m.detailTop = min(m.detailTop, max(len(panel)-dr.h, 0))
-		panel = panel[m.detailTop:]
-	}
-	panel = append(panel, make([]string, max(dr.h-len(panel), 0))...)[:dr.h]
-	// The details panel's divider is in the accent colour while the
-	// panel has the keyboard.
-	st := th().Faint
-	if m.focus == areaDetails {
-		st = th().Accent
-	}
-	if place == placeBottom {
-		body := make([]string, 0, g.body().h)
-		for _, l := range list {
-			body = append(body, fit(l, ls.w)+reset)
-		}
-		body = append(body, st.Render(strings.Repeat("─", dr.w)))
-		for _, d := range panel {
-			body = append(body, fit(d, dr.w)+reset)
-		}
-		return body
-	}
-	div := st.Render("│")
-	body := make([]string, ls.h)
-	for i := range body {
-		body[i] = fit(list[i], ls.w) + reset + div + fit(panel[i], dr.w) + reset
-	}
-	return body
-}
-
-// listLines lays out the list w cells wide: its lines, the row key on
-// each (for the mouse) and the selected line. With inline set, a
-// selected thread's details show under its row, unless the rows are
-// compact (enter and the popup show them).
-func (m *dash) listLines(w int, inline bool) (lines, keys []string, sel int) {
-	sel = -1
-	inline = inline && !m.layout.compact()
-	add := func(l, key string) {
-		lines = append(lines, l)
-		keys = append(keys, key)
-	}
-	for _, r := range m.rows {
-		switch {
-		case r.card:
-			if v, ok := m.mv.card(r.key); ok {
-				selected := r.key == m.sel
-				for i, l := range m.cardLines(v, w, selected) {
-					if i == 0 && selected {
-						sel = len(lines)
-					}
-					add(l, r.key)
-				}
-			}
-		case r.head == "NEEDS YOU" || r.head == "OTHER SESSIONS":
-			add(m.ruleIn(countLabel(r.head, r.count), sectionStyle(r.head), w), "")
-		case r.head != "":
-			// A project's own section is headed by its name, its state
-			// label at the right, which a click toggles (stateAt).
-			add(projectHead(r, w), stateKey+r.head)
-		case r.key != "" && r.key == m.sel:
-			sel = len(lines)
-			st := th().Sel
-			if m.area() != areaMain {
-				st = st.Faint(true) // the keyboard is elsewhere
-			}
-			add(st.Render(fit(r.text(w), w)), r.key)
-			if inline && r.thread != nil && strings.HasPrefix(r.key, "th:") {
-				for _, l := range threadDetail(r.thread, "        ", true) {
-					add(fit(l, w)+reset, r.key)
-				}
-			}
-		default:
-			add(r.styled(w), r.key)
-		}
-	}
-	return lines, keys, sel
-}
-
-// stateKey marks the project header's line among listLines' keys: no
-// row to select, but its state label takes a click.
-const stateKey = "state:"
-
-// stateLabel is a project header's state label: "● active — space to
-// deactivate", or "⊘ inactive — space to activate"; short leaves the
-// hint out.
-func stateLabel(active, short bool) (string, lipgloss.Style) {
-	label, st := ic().working+" active — space to deactivate", th().Good
-	if !active {
-		label, st = ic().inactive+" inactive — space to activate", th().Faint
-	}
-	if short {
-		label, _, _ = strings.Cut(label, " — ")
-	}
-	return label, st
-}
-
-// projectHead is the project section's header w cells wide: its name,
-// ∥ paused while paused, a faint rule, and at the right its state label
-// (docs/SPEC.md §4), shortened, then left out, when narrow. With
-// compact rows its task counts come before the label, which gives way
-// first.
-func projectHead(r row, w int) string {
-	left := " " + th().Title.Render(countLabel(r.head, r.count))
-	if r.paused {
-		left += "  " + th().Warn.Render(ic().paused+" paused")
-	}
-	lw := ansi.StringWidth(left)
-	if r.headNote == "" {
-		return left + " " + th().Faint.Render(strings.Repeat("─", max(w-lw-1, 0)))
-	}
-	tasks := ""
-	if r.headTasks != "" {
-		tasks = " " + th().Faint.Render(r.headTasks)
-	}
-	for _, t := range []string{tasks, ""} {
-		for _, short := range []bool{false, true} {
-			label, st := stateLabel(r.headNote == "active", short)
-			if fill := w - lw - ansi.StringWidth(t) - ansi.StringWidth(label) - 3; fill >= 3 {
-				return left + " " + th().Faint.Render(strings.Repeat("─", fill)) + t + " " + st.Render(label) + " "
-			}
-		}
-		if fill := w - lw - ansi.StringWidth(t) - 2; t != "" && fill >= 3 {
-			return left + " " + th().Faint.Render(strings.Repeat("─", fill)) + t + " "
-		}
-	}
-	return fit(left, w)
-}
-
-// stateAt is the project whose state label is at body cell (x, y) of the
-// list, "" for none.
-func (m *dash) stateAt(x, y int) string {
-	g := m.geom()
-	b := g.list()
-	if !b.has(x+b.x, y) {
-		return ""
-	}
-	lines, keys, sel := m.listLines(b.w, g.panel() == "")
-	i := scrollTop(sel, b.h, len(keys)) + y - b.y
-	if i >= len(keys) {
-		return ""
-	}
-	slug, ok := strings.CutPrefix(keys[i], stateKey)
-	if !ok {
-		return ""
-	}
-	// The label is at the line's right end, before its last blank.
-	for _, short := range []bool{false, true} {
-		label, _ := stateLabel(m.projectActive(slug), short)
-		if l := ansi.Strip(lines[i]); strings.HasSuffix(l, " "+label+" ") {
-			if x >= ansi.StringWidth(l)-ansi.StringWidth(label)-1 && x < ansi.StringWidth(l)-1 {
-				return slug
-			}
-			return ""
-		}
-	}
-	return ""
-}
-
-// projectActive says whether slug is active.
-func (m *dash) projectActive(slug string) bool {
-	p := m.projectData(slug)
-	return p != nil && !p.inactive()
-}
-
-// scrollTop is the first of n lines to show in room rows so that line
-// sel shows.
-func scrollTop(sel, room, n int) int {
-	top := 0
-	if sel >= room {
-		top = sel - room + 1
-	}
-	if top > 0 && top+room > n {
-		top = max(n-room, 0)
-	}
-	return top
-}
-
-// frame draws the header, the body scrolled so line sel shows, and the
-// footer, by the layout's styles (chrome.go): keys are the footer's key
-// hints.
-func (m *dash) frame(title string, body []string, sel int, keys string) string {
-	g := m.geom()
-	right, alarm, badge := m.headRight()
-	// The app, not a project: the project's own section is headed by its
-	// slug, which may well be "terminatr".
-	left := th().Title.Render(" tm dashboard")
-	if m.over != nil {
-		left = th().Title.Render(" tm") + th().Faint.Render(" "+oneLine(m.over.Title))
-	}
-	if title != "" {
-		left += th().Faint.Render(" · ") + th().Head.Render(title)
-	}
-	switch {
-	case m.prefixed:
-		keys = prefixHint()
-	case m.area() == areaSide && m.top() == nil:
-		// The sidebar's own keys are in its key bar.
-		keys = "esc back to the list · tab next area"
-	case m.area() == areaDetails && m.top() == nil:
-		keys = "details: ↑ ↓ scroll · esc back · tab next"
-		if lay, ok := m.detailsNow(); ok {
-			if sk := panelHintKeys(lay, m.detSelNow()); sk != "" {
-				keys = "details: ↑ ↓ scroll · " + sk + " · esc back · tab next"
-			}
-		}
-	}
-	foot := m.footLines(g, keys)
-
-	room := g.body().h
-	top := scrollTop(sel, room, len(body))
-	end := min(top+room, len(body))
-	rows := append([]string(nil), body[top:end]...)
-	for i := end - top; i < room; i++ {
-		rows = append(rows, "")
-	}
-	var out []string
-	shown := right // the header's right part, as drawn
-	if g.headRows() > 0 {
-		out = append(out, plainUnder(fit(left, max(m.w-ansi.StringWidth(right)-1, 1))+reset+" "+right))
-	} else if shown = alarm; alarm != "" {
-		rows[0] = overRight(rows[0], alarm, m.w)
-	}
-	m.badgeAt = [2]int{}
-	if badge != "" {
-		x := max(m.w-ansi.StringWidth(shown)-1, 1) + 1
-		m.badgeAt = [2]int{x, x + ansi.StringWidth(badge)}
-	}
-	if g.footRows() == 0 {
-		msg := m.footMsg()
-		if m.prefixed {
-			msg = " " + keysLine(keys)
-		}
-		if msg != "" {
-			rows[len(rows)-1] = overLeft(rows[len(rows)-1], msg, m.w)
-		}
-	}
-	if m.over == nil { // over a session, the rows are its screen
-		for i, r := range rows {
-			rows[i] = plainUnder(r)
-		}
-	}
-	out = append(out, rows...)
-	for _, f := range foot {
-		out = append(out, plainUnder(f))
-	}
-	return strings.Join(out, "\n")
-}
-
-// versionTitle names the server's version, "terminatr v0.15.0", in the
-// help and as the ≡ menu's title; "" from a server too old to say.
-func versionTitle(s ServerInfo) string {
-	if v := serverVersion(s); v != "" {
-		return "terminatr " + v
-	}
-	return ""
-}
-
-// serverVersion is the help's and the ≡ menu's "v0.15.0": the server's version,
-// and this tm's too when it differs (docs/SPEC.md §4). Empty from a
-// server too old to say.
-func serverVersion(s ServerInfo) string {
-	if s.Version == "" {
-		return ""
-	}
-	out := s.Version
-	if version.Version != s.Version {
-		out += " (tm " + version.Version + ")"
-	}
-	return out
-}
-
-// consoleOlder reports whether this console runs an older tm than the
-// server: it was started before an upgrade and the server restarted on
-// the new one since. Its old code misses what the server now expects of
-// a console (the panes' theme, T344): only a restart of the console
-// fixes that, not of the server.
-func consoleOlder(s ServerInfo) bool {
-	if s.Build == "" || s.Build == version.BuildID() {
-		return false
-	}
-	// The sidebar asks several times a frame; the answer is the same
-	// while the server's build and version are (PERF-08).
-	k := olderKey{s.Build, s.Version}
-	if c := olderMemo.Load(); c != nil && c.key == k {
-		return c.older
-	}
-	newer, ok := update.Newer(s.Version, version.Version)
-	olderMemo.Store(&olderAns{key: k, older: ok && newer})
-	return ok && newer
-}
-
-type olderKey struct{ build, version string }
-
-type olderAns struct {
-	key   olderKey
-	older bool
-}
-
-// olderMemo is consoleOlder's last answer.
-var olderMemo atomic.Pointer[olderAns]
-
-// oldConsoleSaid: this console said it is older than the server, once.
-var oldConsoleSaid atomic.Bool
-
-// oldConsoleNews is the note that this console is older than the server
-// (consoleOlder), for the footer or the status bar, the first time it
-// is; "" after.
-func oldConsoleNews(s ServerInfo) string {
-	if !consoleOlder(s) || oldConsoleSaid.Swap(true) {
-		return ""
-	}
-	return versionHint(s)
-}
-
-// versionHint is the footer's faint line while it has no message: this
-// console is older than the server (a warning), the installed tm is not
-// the one the server runs, else a newer release is out. Empty for none.
-func versionHint(s ServerInfo) string {
-	switch {
-	case s.Build == "":
-		return ""
-	case consoleOlder(s):
-		return "this console runs tm " + version.Version + ", the server " + s.Version + ": quit it and run tm again"
-	case s.Build != version.BuildID():
-		return "tm " + version.Version + " is installed, the server runs " + s.Version + ": run tm server restart in a terminal"
-	case s.Latest != "":
-		return "tm " + s.Latest + " is out: " + s.Upgrade
-	}
-	return ""
-}
-
-// versionHintShort is versionHint for a narrow sidebar.
-func versionHintShort(s ServerInfo) string {
-	switch {
-	case s.Build == "":
-		return ""
-	case consoleOlder(s):
-		return "old console: quit, run tm again"
-	case s.Build != version.BuildID():
-		return "run tm server restart"
-	case s.Latest != "":
-		return s.Latest + " is out: " + s.Upgrade
-	}
-	return ""
 }
