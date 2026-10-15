@@ -119,7 +119,7 @@ func TestModBindsConsent(t *testing.T) {
 			// Granted, it is still refused: no session s-none asks it.
 			t.Errorf("%s: notify = %v; want denied %v", c.grants, err, c.denied)
 		}
-		_, perr := s.modActionCheck(proto.ModActionParams{Mod: "lab", Action: "question.answer", Target: answer}, os.Getpid())
+		_, perr := s.modActionCheck(proto.ModActionParams{Mod: "lab", Action: "question.answer", Target: answer}, os.Getpid(), s.callerOf(os.Getpid()))
 		if perr == nil || c.denied != strings.Contains(perr.Message, "[permissions] actions") {
 			t.Errorf("%s: check = %v; want denied %v", c.grants, perr, c.denied)
 		}

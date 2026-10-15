@@ -929,8 +929,9 @@ func (m *dash) act(fn func() actionMsg) tea.Cmd {
 
 func (m *dash) openProject(slug string) tea.Cmd {
 	cols, rows := m.paneSize()
+	src := m.src
 	return m.act(func() actionMsg {
-		id, err := m.src.OpenProject(slug, cols, rows)
+		id, err := src.OpenProject(slug, cols, rows)
 		if notChosen(err) {
 			// Several agents and none chosen: ask (agentpick.go).
 			return actionMsg{pick: slug, sel: "p:" + slug}

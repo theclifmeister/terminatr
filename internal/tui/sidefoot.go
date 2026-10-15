@@ -144,7 +144,7 @@ func (r treeRow) details() (string, string) {
 	}
 	if r.pr > 0 {
 		bits = append(bits, fmt.Sprintf("PR #%d", r.pr))
-		if w := map[string]string{"pass": "passes", "fail": "fails", "pending": "running"}[r.ci]; w != "" {
+		if w := ciVerb(r.ci); w != "" {
 			bits = append(bits, "CI "+w)
 		}
 	}
@@ -224,4 +224,17 @@ func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 		keys = keys[:len(keys)-1]
 	}
 	return fit(" "+keysLine(strings.Join(keys, " · ")), cw)
+}
+
+// ciVerb is a PR's CI state as the footer says it.
+func ciVerb(ci string) string {
+	switch ci {
+	case "pass":
+		return "passes"
+	case "fail":
+		return "fails"
+	case "pending":
+		return "running"
+	}
+	return ""
 }

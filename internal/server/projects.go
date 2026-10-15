@@ -78,14 +78,14 @@ func (s *Server) callerOf(pid int) caller.Caller {
 	return caller.Caller{Kind: caller.Human}
 }
 
-func (s *Server) cliRun(p proto.CLIRunParams, peerPID int) (any, *proto.Error) {
+func (s *Server) cliRun(p proto.CLIRunParams, who caller.Caller) (any, *proto.Error) {
 	if s.opts.RunCLI == nil {
 		return nil, proto.Errorf(proto.ErrRefused, "this server runs no project commands")
 	}
 	if len(p.Args) == 0 {
 		return nil, proto.Errorf(proto.ErrBadParams, "no command")
 	}
-	return s.opts.RunCLI(p, s.callerOf(peerPID)), nil
+	return s.opts.RunCLI(p, who), nil
 }
 
 // syncThread mirrors a thread session's todo list into STATUS.md and its

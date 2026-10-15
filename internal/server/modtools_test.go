@@ -199,7 +199,7 @@ func TestModTools(t *testing.T) {
 	// tool.run (tm mcp): the thread is found from the caller's pid, in
 	// the session's process tree.
 	took()
-	res, perr := s.toolRunRPC(proto.ToolRunParams{Name: "status", Input: json.RawMessage(`{"activity":"mcp"}`)}, sess.PID())
+	res, perr := s.toolRunRPC(proto.ToolRunParams{Name: "status", Input: json.RawMessage(`{"activity":"mcp"}`)}, s.callerOf(sess.PID()))
 	if perr != nil {
 		t.Fatalf("tool.run: %v", perr)
 	}
@@ -209,11 +209,11 @@ func TestModTools(t *testing.T) {
 	if got := took(); len(got) != 1 || got[0].Cwd != rt {
 		t.Fatalf("tool.run ran %+v", got)
 	}
-	res, _ = s.toolRunRPC(proto.ToolRunParams{Name: "status", Input: json.RawMessage(`{}`)}, sess.PID())
+	res, _ = s.toolRunRPC(proto.ToolRunParams{Name: "status", Input: json.RawMessage(`{}`)}, s.callerOf(sess.PID()))
 	if rr := res.(proto.ToolRunResult); !rr.IsError {
 		t.Fatalf("tool.run bad input: %+v", rr)
 	}
-	if _, perr := s.toolRunRPC(proto.ToolRunParams{Name: "done"}, 1); perr == nil {
+	if _, perr := s.toolRunRPC(proto.ToolRunParams{Name: "done"}, s.callerOf(1)); perr == nil {
 		t.Fatal("tool.run from outside a thread")
 	}
 }

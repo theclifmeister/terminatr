@@ -20,7 +20,7 @@
             { "id": "t-0012",
               "cells": [[{ "text": "t-0012" }], [{ "text": "T12" }],
                 [{ "icon": "starting" }, { "icon": "working", "role": "good" }, { "icon": "blocked", "role": "warn" }],
-                [{ "text": "blocked 0m", "role": "faint" }]],
+                [{ "text": "blocked " }, { "role": "faint" }]],
               "actions": [{ "id": "task.show", "target": { "project": "demo", "task": "T12" } }] } ] },
           { "kind": "bars", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3] }
         ] } } }

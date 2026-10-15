@@ -120,7 +120,7 @@ func init() {
 	methods = map[string]method{
 		// Anyone's.
 		proto.MethodPing:           {call: plain(func(*Server, callCtx) any { return map[string]bool{"pong": true} })},
-		proto.MethodCallerWho:      {call: plain(func(s *Server, c callCtx) any { return s.whoIs(c.peerPID) })},
+		proto.MethodCallerWho:      {call: plain(func(s *Server, c callCtx) any { return s.whoIs(c.who()) })},
 		proto.MethodServerStatus:   {call: plain(func(s *Server, _ callCtx) any { return s.status() })},
 		proto.MethodServerKeychain: {call: plain(func(*Server, callCtx) any { return keychainStatus() })},
 		proto.MethodServerCodeHost: {call: plain(func(*Server, callCtx) any { return codeHostStatus() })},
@@ -128,14 +128,14 @@ func init() {
 		proto.MethodAgentList:      {call: plain(func(s *Server, _ callCtx) any { return s.agentList() })},
 		proto.MethodModHosts:       {call: plain(func(s *Server, _ callCtx) any { return s.modHosts() })},
 		proto.MethodCLIRun: {gate: gateAgentOrHuman, call: typed(func(s *Server, p proto.CLIRunParams, c callCtx) (any, *proto.Error) {
-			res, perr := s.cliRun(p, c.peerPID)
+			res, perr := s.cliRun(p, c.who())
 			s.kick()
 			return res, perr
 		})},
 		proto.MethodToolRun: {call: typed(func(s *Server, p proto.ToolRunParams, c callCtx) (any, *proto.Error) {
-			return s.toolRunRPC(p, c.peerPID)
+			return s.toolRunRPC(p, c.who())
 		})},
-		proto.MethodToolList: {call: func(s *Server, _ proto.Request, c callCtx) (any, *proto.Error) { return s.toolListRPC(c.peerPID) }},
+		proto.MethodToolList: {call: func(s *Server, _ proto.Request, c callCtx) (any, *proto.Error) { return s.toolListRPC(c.who()) }},
 		proto.MethodViewDigest: {gate: gateNotAgent, call: typed(func(s *Server, p proto.ViewDigestParams, _ callCtx) (any, *proto.Error) {
 			n := s.views.askDigest(p.PID)
 			if n == 0 {
@@ -149,10 +149,10 @@ func init() {
 			return s.answer(p, c)
 		})},
 		proto.MethodModActionCheck: {gate: gateHuman, call: typed(func(s *Server, p proto.ModActionParams, c callCtx) (any, *proto.Error) {
-			return s.modActionCheck(p, c.peerPID)
+			return s.modActionCheck(p, c.peerPID, c.who())
 		})},
 		proto.MethodModActionDone: {gate: gateHuman, call: typed(func(s *Server, p proto.ModActionDoneParams, c callCtx) (any, *proto.Error) {
-			return s.modActionDone(p, c.peerPID)
+			return s.modActionDone(p, c.peerPID, c.who())
 		})},
 
 		// Named by a session or a project: the caller's own (mayAddress).

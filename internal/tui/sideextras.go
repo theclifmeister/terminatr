@@ -8,7 +8,6 @@ import (
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/view"
@@ -564,46 +563,19 @@ func sideTip(all []treeRow, w, h, foot, x, y int) string {
 	if r.kind == treeSection {
 		return sectionTip(r.sec)
 	}
-	end := w - 1 - sideGap // the grid's right edge
-	lead, label := treeLead(r)
-	cols := rowCols(r, end, lead, label)
-	grid := treeGrid(r, cols)
-	line := ansi.Strip(treeCells(r, end, false, false))
-	if at, aw := prMarkAt(r, lead, label, grid, end); aw > 0 && x >= at && x < at+aw {
+	_, geo := treeLayout(r, w-1-sideGap, false, false)
+	if geo.prW > 0 && x >= geo.prAt && x < geo.prAt+geo.prW {
 		return "PR host failing: " + prHostWords(r.prFails)
 	}
-	for j := len(grid) - 1; j >= 0; j-- {
-		gw := ansi.StringWidth(grid[j].s)
-		end -= gw
-		if x < end || x >= end+gw {
-			continue
+	for _, c := range geo.cells {
+		if x >= c.x0 && x < c.x0+c.w {
+			if c.x0 < 0 || c.blank {
+				return ""
+			}
+			return gridTip(r, c.col)
 		}
-		// A column a narrow row gave up holds the label instead.
-		if strings.TrimSpace(grid[j].s) == "" || ansi.Cut(line, end, end+gw) != grid[j].s {
-			return ""
-		}
-		return gridTip(r, cols[j])
 	}
 	return ""
-}
-
-// prMarkAt is where the red ▲ after project row r's name is, as
-// treeCells lays the row out end cells wide with lead, label and grid:
-// its column and width; width 0 when it has none.
-func prMarkAt(r treeRow, lead, label, grid []cellRun, end int) (at, w int) {
-	if r.kind != treeProject || r.prFails == 0 {
-		return 0, 0
-	}
-	room := max(end-runsWidth(grid), 0)
-	lead = cutRuns(lead, room)
-	label = cutRuns(label, room-runsWidth(lead))
-	lw := max(room-runsWidth(lead)-runsWidth(label)-1, 0)
-	name := projectName(r, lw, th().Plain)
-	if len(name) < 2 {
-		return 0, 0
-	}
-	// The mark is a blank, then the glyph.
-	return runsWidth(lead) + runsWidth(label) + runsWidth(name[:1]) + 1, ansi.StringWidth(ic().blocked)
 }
 
 // gridTip is the meaning of r's cell in column c (treeGrid).

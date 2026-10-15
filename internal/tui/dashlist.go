@@ -25,10 +25,10 @@ func (m *dash) listBody() []string {
 	}
 	g := m.geom()
 	ls, dr, place := g.list(), g.details(), g.panel()
-	lines, _, sel := m.listLines(ls.w, place == "")
-	top := scrollTop(sel, ls.h, len(lines))
+	f := m.listLines(ls.w, place == "")
+	top := scrollTop(f.sel, ls.h, len(f.lines))
 	list := make([]string, ls.h)
-	copy(list, lines[min(top, len(lines)):])
+	copy(list, f.lines[min(top, len(f.lines)):])
 	if place == "" {
 		return list
 	}
@@ -69,16 +69,24 @@ func (m *dash) listBody() []string {
 	return body
 }
 
-// listLines lays out the list w cells wide: its lines, the row key on
-// each (for the mouse) and the selected line. With inline set, a
+// listFrame is the laid-out list: its lines, the row key on each (for
+// the mouse), where a project header's state label sits on its line
+// (stateAt), and the selected line.
+type listFrame struct {
+	lines, keys []string
+	labels      map[int][2]int // line -> label's cells x0, x1
+	sel         int
+}
+
+// listLines lays out the list w cells wide. With inline set, a
 // selected thread's details show under its row, unless the rows are
 // compact (enter and the popup show them).
-func (m *dash) listLines(w int, inline bool) (lines, keys []string, sel int) {
-	sel = -1
+func (m *dash) listLines(w int, inline bool) listFrame {
+	f := listFrame{sel: -1}
 	inline = inline && !m.layout.compact()
 	add := func(l, key string) {
-		lines = append(lines, l)
-		keys = append(keys, key)
+		f.lines = append(f.lines, l)
+		f.keys = append(f.keys, key)
 	}
 	for _, r := range m.rows {
 		switch {
@@ -87,7 +95,7 @@ func (m *dash) listLines(w int, inline bool) (lines, keys []string, sel int) {
 				selected := r.key == m.sel
 				for i, l := range m.cardLines(v, w, selected) {
 					if i == 0 && selected {
-						sel = len(lines)
+						f.sel = len(f.lines)
 					}
 					add(l, r.key)
 				}
@@ -97,9 +105,16 @@ func (m *dash) listLines(w int, inline bool) (lines, keys []string, sel int) {
 		case r.head != "":
 			// A project's own section is headed by its name, its state
 			// label at the right, which a click toggles (stateAt).
-			add(projectHead(r, w), stateKey+r.head)
+			head, x0, x1 := projectHeadAt(r, w)
+			if x1 > x0 {
+				if f.labels == nil {
+					f.labels = map[int][2]int{}
+				}
+				f.labels[len(f.lines)] = [2]int{x0, x1}
+			}
+			add(head, stateKey+r.head)
 		case r.key != "" && r.key == m.sel:
-			sel = len(lines)
+			f.sel = len(f.lines)
 			st := th().Sel
 			if m.area() != areaMain {
 				st = st.Faint(true) // the keyboard is elsewhere
@@ -114,7 +129,7 @@ func (m *dash) listLines(w int, inline bool) (lines, keys []string, sel int) {
 			add(r.styled(w), r.key)
 		}
 	}
-	return lines, keys, sel
+	return f
 }
 
 // frame draws the header, the body scrolled so line sel shows, and the
@@ -225,13 +240,20 @@ func stateLabel(active, short bool) (string, lipgloss.Style) {
 // compact rows its task counts come before the label, which gives way
 // first.
 func projectHead(r row, w int) string {
+	line, _, _ := projectHeadAt(r, w)
+	return line
+}
+
+// projectHeadAt is projectHead with the cells x0 to x1 its state label
+// fills; none (x1 == x0) when the header shows no label.
+func projectHeadAt(r row, w int) (line string, x0, x1 int) {
 	left := " " + th().Title.Render(countLabel(r.head, r.count))
 	if r.paused {
 		left += "  " + th().Warn.Render(ic().paused+" paused")
 	}
 	lw := ansi.StringWidth(left)
 	if r.headNote == "" {
-		return left + " " + th().Faint.Render(strings.Repeat("─", max(w-lw-1, 0)))
+		return left + " " + th().Faint.Render(strings.Repeat("─", max(w-lw-1, 0))), 0, 0
 	}
 	tasks := ""
 	if r.headTasks != "" {
@@ -241,14 +263,15 @@ func projectHead(r row, w int) string {
 		for _, short := range []bool{false, true} {
 			label, st := stateLabel(r.headNote == "active", short)
 			if fill := w - lw - ansi.StringWidth(t) - ansi.StringWidth(label) - 3; fill >= 3 {
-				return left + " " + th().Faint.Render(strings.Repeat("─", fill)) + t + " " + st.Render(label) + " "
+				x0 = lw + 1 + fill + ansi.StringWidth(t) + 1
+				return left + " " + th().Faint.Render(strings.Repeat("─", fill)) + t + " " + st.Render(label) + " ", x0, x0 + ansi.StringWidth(label)
 			}
 		}
 		if fill := w - lw - ansi.StringWidth(t) - 2; t != "" && fill >= 3 {
-			return left + " " + th().Faint.Render(strings.Repeat("─", fill)) + t + " "
+			return left + " " + th().Faint.Render(strings.Repeat("─", fill)) + t + " ", 0, 0
 		}
 	}
-	return fit(left, w)
+	return fit(left, w), 0, 0
 }
 
 // stateAt is the project whose state label is at body cell (x, y) of the
@@ -259,24 +282,17 @@ func (m *dash) stateAt(x, y int) string {
 	if !b.has(x+b.x, y) {
 		return ""
 	}
-	lines, keys, sel := m.listLines(b.w, g.panel() == "")
-	i := scrollTop(sel, b.h, len(keys)) + y - b.y
-	if i >= len(keys) {
+	f := m.listLines(b.w, g.panel() == "")
+	i := scrollTop(f.sel, b.h, len(f.keys)) + y - b.y
+	if i >= len(f.keys) {
 		return ""
 	}
-	slug, ok := strings.CutPrefix(keys[i], stateKey)
+	slug, ok := strings.CutPrefix(f.keys[i], stateKey)
 	if !ok {
 		return ""
 	}
-	// The label is at the line's right end, before its last blank.
-	for _, short := range []bool{false, true} {
-		label, _ := stateLabel(m.projectActive(slug), short)
-		if l := ansi.Strip(lines[i]); strings.HasSuffix(l, " "+label+" ") {
-			if x >= ansi.StringWidth(l)-ansi.StringWidth(label)-1 && x < ansi.StringWidth(l)-1 {
-				return slug
-			}
-			return ""
-		}
+	if l, ok := f.labels[i]; ok && x >= l[0] && x < l[1] {
+		return slug
 	}
 	return ""
 }

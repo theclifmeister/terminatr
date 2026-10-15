@@ -29,14 +29,17 @@ func TestWaitRejoin(t *testing.T) {
 		vc.mu.Lock()
 		vc.up = false
 		vc.mu.Unlock()
+		vc.notify()
 		time.Sleep(50 * time.Millisecond)
 		vc.mu.Lock()
 		vc.client, vc.up = "c-1", true // same id on a new server: not yet
 		vc.mu.Unlock()
+		vc.notify()
 		time.Sleep(50 * time.Millisecond)
 		vc.mu.Lock()
 		vc.client = "c-2"
 		vc.mu.Unlock()
+		vc.notify()
 	}()
 	if got := vc.waitRejoin("c-1", 5*time.Second); got != "c-2" {
 		t.Fatalf("waitRejoin = %q, want c-2", got)

@@ -377,12 +377,12 @@ func (m *dash) rowAt(x, y int) string {
 	if !b.has(x+b.x, y) {
 		return ""
 	}
-	_, keys, sel := m.listLines(b.w, g.panel() == "")
-	i := scrollTop(sel, b.h, len(keys)) + y - b.y
-	if i >= len(keys) || strings.HasPrefix(keys[i], stateKey) {
+	f := m.listLines(b.w, g.panel() == "")
+	i := scrollTop(f.sel, b.h, len(f.keys)) + y - b.y
+	if i >= len(f.keys) || strings.HasPrefix(f.keys[i], stateKey) {
 		return ""
 	}
-	return keys[i]
+	return f.keys[i]
 }
 
 // click selects the row under the mouse, opens it on a double-click, or

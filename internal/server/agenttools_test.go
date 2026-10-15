@@ -182,11 +182,11 @@ func TestModAgentTools(t *testing.T) {
 	}
 
 	// tool.list and tool.run (tm mcp), the session found from the pid.
-	res, perr := s.toolListRPC(sess.PID())
+	res, perr := s.toolListRPC(s.callerOf(sess.PID()))
 	if perr != nil || toolNames(res.(proto.ToolListResult).Tools) != "report,status,steps,done,lint_lint_report,lint_ping" {
 		t.Fatalf("tool.list: %+v %v", res, perr)
 	}
-	res, perr = s.toolRunRPC(proto.ToolRunParams{Name: "lint_lint_report", Input: json.RawMessage(`{"text":"abc"}`)}, sess.PID())
+	res, perr = s.toolRunRPC(proto.ToolRunParams{Name: "lint_lint_report", Input: json.RawMessage(`{"text":"abc"}`)}, s.callerOf(sess.PID()))
 	if rr, _ := res.(proto.ToolRunResult); perr != nil || rr.IsError || !strings.HasPrefix(rr.Text, "3 chars") {
 		t.Fatalf("tool.run: %+v %v", res, perr)
 	}
@@ -203,11 +203,11 @@ func TestModAgentTools(t *testing.T) {
 	if code, _ := call("lint_lint_report", `{"text":"x"}`); code != http.StatusNotFound {
 		t.Fatalf("a call after the revoke: %d", code)
 	}
-	res, perr = s.toolListRPC(sess.PID())
+	res, perr = s.toolListRPC(s.callerOf(sess.PID()))
 	if perr != nil || toolNames(res.(proto.ToolListResult).Tools) != "report,status,steps,done" {
 		t.Fatalf("tool.list after the revoke: %+v %v", res, perr)
 	}
-	res, _ = s.toolRunRPC(proto.ToolRunParams{Name: "lint_lint_report", Input: json.RawMessage(`{"text":"abc"}`)}, sess.PID())
+	res, _ = s.toolRunRPC(proto.ToolRunParams{Name: "lint_lint_report", Input: json.RawMessage(`{"text":"abc"}`)}, s.callerOf(sess.PID()))
 	if rr := res.(proto.ToolRunResult); !rr.IsError || !strings.Contains(rr.Text, "tools grant") {
 		t.Fatalf("tool.run after the revoke: %+v", rr)
 	}
@@ -226,10 +226,10 @@ func TestModAgentTools(t *testing.T) {
 	if code, _ := call("status", `{"activity":"x"}`); code != http.StatusForbidden {
 		t.Fatalf("a thread tool for a coordinator: %d", code)
 	}
-	if _, perr := s.toolListRPC(sess.PID()); perr != nil {
+	if _, perr := s.toolListRPC(s.callerOf(sess.PID())); perr != nil {
 		t.Fatalf("tool.list for a coordinator: %v", perr)
 	}
-	if _, perr := s.toolListRPC(1); perr == nil {
+	if _, perr := s.toolListRPC(s.callerOf(1)); perr == nil {
 		t.Fatal("tool.list from outside a session")
 	}
 }

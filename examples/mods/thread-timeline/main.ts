@@ -44,11 +44,15 @@ const marks: Record<string, TM.Span> = {
 const mark = (state: string): TM.Span => marks[state] ?? { icon: "other", role: "faint" };
 const latest = (t: Thread): Change | undefined => t.changes[t.changes.length - 1];
 
-function ago(at: string, now: Date): string {
-  const m = Math.max(0, Math.round((now.getTime() - Date.parse(at)) / 60000));
-  if (m < 60) return `${m}m`;
-  if (m < 48 * 60) return `${Math.round(m / 60)}h`;
-  return `${Math.round(m / 1440)}d`;
+function perHourOf(threads: Record<string, Thread>, now: Date): number[] {
+  const perHour = new Array(HOURS).fill(0);
+  for (const t of Object.values(threads)) {
+    for (const c of t.changes) {
+      const h = Math.floor((now.getTime() - Date.parse(c.at)) / 3600000);
+      if (h >= 0 && h < HOURS) perHour[HOURS - 1 - h]++;
+    }
+  }
+  return perHour;
 }
 
 function view(project: string, now: Date): TM.Widget {
@@ -68,18 +72,12 @@ function view(project: string, now: Date): TM.Widget {
         [{ text: id, role: t.resolved ? ("faint" as TM.Role) : undefined }],
         [{ text: t.task ?? "" }],
         t.changes.map((c) => mark(c.state)),
-        [{ text: last ? `${last.state} ${ago(last.at, now)}` : "", role: "faint" as TM.Role }],
+        last ? [{ text: `${last.state} ` }, { ago: last.at, role: "faint" as TM.Role }] : [],
       ],
       actions: t.task ? [{ id: "task.show", target: { project, task: t.task } }] : [],
     };
   });
-  const perHour = new Array(HOURS).fill(0);
-  for (const t of Object.values(threads)) {
-    for (const c of t.changes) {
-      const h = Math.floor((now.getTime() - Date.parse(c.at)) / 3600000);
-      if (h >= 0 && h < HOURS) perHour[HOURS - 1 - h]++;
-    }
-  }
+  const perHour = perHourOf(threads, now);
   return {
     kind: "stack",
     children: [
@@ -101,8 +99,13 @@ function view(project: string, now: Date): TM.Widget {
   };
 }
 
+// The chart each shown project was last drawn with.
+const drawn = new Map<string, string>();
+
 async function draw(project: string, now: Date) {
-  if (shown.has(project)) await $.ui.view.set(VIEW, view(project, now), project ? { project } : {});
+  if (!shown.has(project)) return;
+  drawn.set(project, perHourOf(log[project] ?? {}, now).join());
+  await $.ui.view.set(VIEW, view(project, now), project ? { project } : {});
 }
 
 async function record(project: string, thread: string, state: string, task: string | undefined, now: Date) {
@@ -148,9 +151,13 @@ $.on("view.opened", async (e, meta) => {
 
 $.on("view.closed", async (e) => {
   shown.delete(e.project ?? "");
+  drawn.delete(e.project ?? "");
 });
 
-// The "Last" column ages: draw the open views again each minute.
+// The "Last" column ages by itself (an ago span); the chart only moves
+// when a change passes into the next hour, so draw again only then.
 $.on("clock.minute", async (e) => {
-  await Promise.all([...shown].map((p) => draw(p, new Date(e.now))));
+  const now = new Date(e.now);
+  const stale = [...shown].filter((p) => drawn.get(p) !== perHourOf(log[p] ?? {}, now).join());
+  await Promise.all(stale.map((p) => draw(p, now)));
 });

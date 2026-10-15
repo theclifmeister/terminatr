@@ -389,8 +389,7 @@ func jsonType(raw json.RawMessage) string {
 
 // callerSession is the live session of the caller with peer pid: a
 // thread's or a coordinator's.
-func (s *Server) callerSession(peerPID int) (SessionRecord, *proto.Error) {
-	c := s.callerOf(peerPID)
+func (s *Server) callerSession(c caller.Caller) (SessionRecord, *proto.Error) {
 	if c.Kind != caller.Thread && c.Kind != caller.Coordinator {
 		return SessionRecord{}, proto.Errorf(proto.ErrRefused, "these tools are a thread's or a coordinator's")
 	}
@@ -413,8 +412,8 @@ func (s *Server) callerSession(peerPID int) (SessionRecord, *proto.Error) {
 
 // toolRunRPC serves tool.run: the session is the caller's, found from
 // the peer pid, and gives the cwd.
-func (s *Server) toolRunRPC(p proto.ToolRunParams, peerPID int) (any, *proto.Error) {
-	rec, perr := s.callerSession(peerPID)
+func (s *Server) toolRunRPC(p proto.ToolRunParams, who caller.Caller) (any, *proto.Error) {
+	rec, perr := s.callerSession(who)
 	if perr != nil {
 		return nil, perr
 	}
@@ -423,8 +422,8 @@ func (s *Server) toolRunRPC(p proto.ToolRunParams, peerPID int) (any, *proto.Err
 }
 
 // toolListRPC serves tool.list: the caller's session's tools.
-func (s *Server) toolListRPC(peerPID int) (any, *proto.Error) {
-	rec, perr := s.callerSession(peerPID)
+func (s *Server) toolListRPC(who caller.Caller) (any, *proto.Error) {
+	rec, perr := s.callerSession(who)
 	if perr != nil {
 		return nil, perr
 	}

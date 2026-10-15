@@ -110,7 +110,7 @@ func TestCompactDensity(t *testing.T) {
 	m.current = "beta"
 	m.rebuild()
 	m.sel = "th:beta:t-0005"
-	_, normal, _ := m.listLines(100, true)
+	normal := m.listLines(100, true).keys
 
 	m = chromeDash(t, mod.Layout{Density: "compact"})
 	m.current = "alpha"
@@ -149,7 +149,7 @@ func TestCompactDensity(t *testing.T) {
 		}
 		return n
 	}
-	if _, compact, _ := m.listLines(100, true); count(normal) < 2 || count(compact) != 1 {
+	if compact := m.listLines(100, true).keys; count(normal) < 2 || count(compact) != 1 {
 		t.Fatalf("inline details: normal %d lines, compact %d", count(normal), count(compact))
 	}
 

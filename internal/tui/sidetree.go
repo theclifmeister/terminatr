@@ -487,17 +487,40 @@ func treeSel(r treeRow, focused bool) (bool, lipgloss.Style) {
 // signal. While the sidebar has the keyboard focus, the keyboard's row
 // is instead in the theme's sel_focus look (cyan reverse by default).
 func treeCells(r treeRow, cw int, slim, focused bool) string {
+	line, _ := treeLayout(r, cw, slim, focused)
+	return line
+}
+
+// rowGeo is where the parts of a full sidebar's row sit, as treeLayout
+// laid them out: the mouse reads them instead of working them out of
+// the drawn text.
+type rowGeo struct {
+	cells     []gridSpan // the grid's cells, left to right
+	prAt, prW int        // the red ▲ after a project's name; prW 0 when none
+}
+
+// gridSpan is the grid cell of column col at cells x0 to x0+w.
+type gridSpan struct {
+	x0, w int
+	blank bool // the cell draws nothing
+	col   sideCol
+}
+
+// treeLayout is treeCells with the geometry of the row it draws; none
+// for the rows that have no grid (a divider, a server, the slim strip).
+func treeLayout(r treeRow, cw int, slim, focused bool) (string, rowGeo) {
+	var geo rowGeo
 	var sel lipgloss.Style
 	r.here, sel = treeSel(r, focused)
 	if r.kind == treeDivider {
-		return dividerCells(r, cw, slim, sel)
+		return dividerCells(r, cw, slim, sel), geo
 	}
 	if r.kind == treeServer {
-		return serverCells(r, cw, slim, sel)
+		return serverCells(r, cw, slim, sel), geo
 	}
 	r = r.drawn()
 	if slim {
-		return slimCells(r, cw, sel)
+		return slimCells(r, cw, sel), geo
 	}
 	lead, label := treeLead(r)
 	cols := rowCols(r, cw, lead, label)
@@ -506,6 +529,11 @@ func treeCells(r treeRow, cw int, slim, focused bool) string {
 	lead = cutRuns(lead, room)
 	label = cutRuns(label, room-runsWidth(lead))
 	lw := max(room-runsWidth(lead)-runsWidth(label)-1, 0) // a blank parts it from the grid
+	x := cw - runsWidth(grid)
+	for j, g := range grid {
+		geo.cells = append(geo.cells, gridSpan{x, ansi.StringWidth(g.s), strings.TrimSpace(g.s) == "", cols[j]})
+		x += ansi.StringWidth(g.s)
+	}
 	switch r.kind {
 	case treeProject:
 		look := th().Head
@@ -515,7 +543,11 @@ func treeCells(r treeRow, cw int, slim, focused bool) string {
 		case r.inactive:
 			look = th().Faint
 		}
-		label = append(label, projectName(r, lw, look)...)
+		name := projectName(r, lw, look)
+		if len(name) == 2 { // the mark: a blank, then the glyph
+			geo.prAt, geo.prW = runsWidth(lead)+runsWidth(label)+runsWidth(name[:1])+1, ansi.StringWidth(ic().blocked)
+		}
+		label = append(label, name...)
 	case treeCoordinator:
 		look := th().Plain
 		if r.state == "" || r.dormant {
@@ -532,13 +564,13 @@ func treeCells(r treeRow, cw int, slim, focused bool) string {
 	label = append(label, cellRun{strings.Repeat(" ", room-runsWidth(lead)-runsWidth(label)), th().Plain})
 	rest := append(label, grid...)
 	if r.here {
-		return fit(runsRender(lead)+sel.Render(fit(runsPlain(rest), cw-runsWidth(lead))), cw)
+		return fit(runsRender(lead)+sel.Render(fit(runsPlain(rest), cw-runsWidth(lead))), cw), geo
 	}
 	if r.stale {
 		// Its last values, dimmed (sidepeers.go).
-		return fit(runsRender(lead)+th().Faint.Render(runsPlain(rest)), cw)
+		return fit(runsRender(lead)+th().Faint.Render(runsPlain(rest)), cw), geo
 	}
-	return fit(runsRender(lead)+runsRender(rest), cw)
+	return fit(runsRender(lead)+runsRender(rest), cw), geo
 }
 
 // threadLabel is a thread row's label w cells wide: "T12 Title" (a
