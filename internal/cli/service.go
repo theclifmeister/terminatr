@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,53 +27,53 @@ func serviceConfig(e *Env) (service.Config, error) {
 
 // serverService implements `tm server service install|uninstall`
 // (docs/SPEC.md §3.1): optional start at login, off by default.
-func serverService(e *Env, args []string) int {
+func serverService(e *Env, args []string) error {
 	if len(args) == 0 || (args[0] != "install" && args[0] != "uninstall") {
-		return e.srvUsage("server service", serviceUsage)
+		return srvUsage("server service", serviceUsage)
 	}
-	fs := flag.NewFlagSet("server service "+args[0], flag.ContinueOnError)
-	fs.SetOutput(e.Stderr)
-	print := fs.Bool("print", false, "print the service file instead of installing it")
-	fs.BoolVar(print, "dry-run", false, "same as --print")
-	if err := fs.Parse(args[1:]); err != nil || fs.NArg() > 0 {
-		return e.srvUsage("server service", serviceUsage)
+	f := newFlags()
+	printArg := f.Bool("print") // print the service file instead of installing it
+	dryRun := f.Bool("dry-run") // same as --print
+	if pos, err := f.Parse(args[1:]); err != nil || len(pos) > 0 {
+		return srvUsage("server service", serviceUsage)
 	}
+	print := *printArg || *dryRun
 	c, err := serviceConfig(e)
 	if err != nil {
-		return e.srvFail("server service", err)
+		return srvFail("server service", err)
 	}
 	path, err := c.File()
 	if err != nil {
-		return e.srvFail("server service", err)
+		return srvFail("server service", err)
 	}
-	if *print {
+	if print {
 		if args[0] == "uninstall" {
 			fmt.Fprintf(e.Stdout, "would unload and remove %s\n", path)
-			return ExitOK
+			return nil
 		}
 		data, err := c.Render()
 		if err != nil {
-			return e.srvFail("server service", err)
+			return srvFail("server service", err)
 		}
 		fmt.Fprintf(e.Stdout, "# %s\n%s", path, data)
-		return ExitOK
+		return nil
 	}
 	if args[0] == "install" {
 		if c.GOOS == "darwin" && c.RunDir != "" {
 			// The job runs the pin.
 			if err := server.EnsurePin(c.RunDir, c.Bin); err != nil {
-				return e.srvFail("server service install", err)
+				return srvFail("server service install", err)
 			}
 		}
 		if _, err := c.Install(); err != nil {
-			return e.srvFail("server service install", err)
+			return srvFail("server service install", err)
 		}
 		fmt.Fprintf(e.Stdout, "installed %s; the server now starts at login\n", path)
-		return ExitOK
+		return nil
 	}
 	if _, err := c.Uninstall(); err != nil {
-		return e.srvFail("server service uninstall", err)
+		return srvFail("server service uninstall", err)
 	}
 	fmt.Fprintf(e.Stdout, "removed %s; the server starts on demand again\n", path)
-	return ExitOK
+	return nil
 }
