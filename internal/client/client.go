@@ -261,16 +261,30 @@ func waitUp(p Paths, exited <-chan error, logs string) error {
 		select {
 		case err := <-exited:
 			// It may have lost a race with another client's server,
-			// which is fine if that one answers.
+			// which is fine if that one answers: while it holds the
+			// lock it may still be starting, so wait for it as for ours.
 			if c, derr := Dial(p, proto.KindControl); derr == nil {
 				c.Close()
 				return nil
+			}
+			if lockHeld(p) {
+				exited = nil
+				continue
 			}
 			return fmt.Errorf("server exited during start (%v); see %s", err, logs)
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
 	return fmt.Errorf("server did not answer within %v; see %s", AutoStartTimeout, logs)
+}
+
+// lockHeld says whether a server holds p's lock.
+func lockHeld(p Paths) bool {
+	lk, err := flock.TryLock(p.Lock)
+	if err == nil {
+		lk.Unlock()
+	}
+	return errors.Is(err, flock.ErrLocked)
 }
 
 // Call sends one request and decodes its result into result (which may be

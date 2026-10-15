@@ -116,9 +116,15 @@ func TestSmokeCrashResume(t *testing.T) {
 	}
 
 	// A clean restart after that resumes again and says so without "crash".
+	// The server files the item once every session is resumed, one at a
+	// time, which may be after the coordinator is idle.
 	env.MustCLI("server", "restart", "--yes")
 	env.WaitState(coord, "idle", agentWait)
-	if items := env.MustCLI("inbox", "list", "--project", "demo"); !strings.Contains(items, "server-restart: the server restarted after a clean stop: 2 session(s) resumed") {
+	var items string
+	if !Poll(agentWait, func() bool {
+		items = env.MustCLI("inbox", "list", "--project", "demo")
+		return strings.Contains(items, "server-restart: the server restarted after a clean stop: 2 session(s) resumed")
+	}) {
 		t.Fatalf("inbox after a clean restart:\n%s", items)
 	}
 }
