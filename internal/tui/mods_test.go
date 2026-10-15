@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/config"
-	"github.com/theclifmeister/terminatr/internal/modannot"
+	"github.com/theclifmeister/terminatr/internal/modstore"
 )
 
 // modsRow selects the General tab's row labelled label.
@@ -109,10 +109,10 @@ func TestModsSettingsForm(t *testing.T) {
 
 func TestPanelBadges(t *testing.T) {
 	d := &panel{w: 60}
-	d.badges([]modannot.Badge{
-		{Mod: "lab", Key: "a", Spans: []modannot.Span{{Text: "docs", Role: "info"}}},
-		{Mod: "lab", Key: "b", Spans: []modannot.Span{{Text: "no-check", Role: "warn"}}},
-		{Mod: "other", Key: "a", Spans: []modannot.Span{{Text: "x"}}},
+	d.badges([]modstore.Badge{
+		{Mod: "lab", Key: "a", Spans: []modstore.Span{{Text: "docs", Role: "info"}}},
+		{Mod: "lab", Key: "b", Spans: []modstore.Span{{Text: "no-check", Role: "warn"}}},
+		{Mod: "other", Key: "a", Spans: []modstore.Span{{Text: "x"}}},
 	})
 	if len(d.lines) != 2 {
 		t.Fatalf("lines = %q", d.lines)

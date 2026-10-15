@@ -24,9 +24,9 @@ import (
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/mod"
-	"github.com/theclifmeister/terminatr/internal/modannot"
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/modnotify"
+	"github.com/theclifmeister/terminatr/internal/modstore"
 	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
@@ -143,8 +143,8 @@ type ProjectData struct {
 	// behind origin, by repo path, as the ticker last saw them.
 	Checkouts map[string]string
 	// Badges are the mods' annotations in the project, by target
-	// (modannot.Task, modannot.Thread), of the mods that run for it.
-	Badges map[string][]modannot.Badge
+	// (modstore.Task, modstore.Thread), of the mods that run for it.
+	Badges map[string][]modstore.Badge
 	// PRHostFails counts the PR polls in a row on which the project's PR
 	// host failed, as the ticker last saw them; 0 while they work, or
 	// when it has no PR host. The sidebar marks its name red (▲).
@@ -634,19 +634,19 @@ func badgeMods(mods []mod.Mod) []mod.Mod {
 
 // badgesOf reads the badges of mods for project slug, by target, in the
 // mods' id order.
-func badgesOf(mods []mod.Mod, slug string) map[string][]modannot.Badge {
+func badgesOf(mods []mod.Mod, slug string) map[string][]modstore.Badge {
 	state, err := home.ModStateDir()
 	if err != nil {
 		return nil
 	}
-	var out map[string][]modannot.Badge
+	var out map[string][]modstore.Badge
 	for _, m := range mods {
 		if !m.Runs(slug) {
 			continue
 		}
-		for target, bs := range modannot.Read(filepath.Join(state, m.ID), m.ID, slug) {
+		for target, bs := range modstore.ReadBadges(filepath.Join(state, m.ID), m.ID, slug) {
 			if out == nil {
-				out = map[string][]modannot.Badge{}
+				out = map[string][]modstore.Badge{}
 			}
 			out[target] = append(out[target], bs...)
 		}
