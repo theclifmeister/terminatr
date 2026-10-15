@@ -21,11 +21,13 @@ import (
 func (a *chanAgent) ConfigDir(home string) string { return filepath.Join(home, ".claude") }
 
 // chanAgent is the built-in claude manifest with a channel that records
-// what it was sent (or fails with err).
+// what it was sent (or fails with err; with needToken, fails as Claude's
+// does without a token).
 type chanAgent struct {
 	agent.Agent
-	m   *agent.Manifest
-	err error
+	m         *agent.Manifest
+	err       error
+	needToken bool
 
 	mu     sync.Mutex
 	sent   []string
@@ -37,6 +39,9 @@ func (a *chanAgent) Manifest() *agent.Manifest { return a.m }
 func (a *chanAgent) Prompt(_ context.Context, t agent.PromptTarget, text string) error {
 	if a.err != nil {
 		return a.err
+	}
+	if a.needToken && t.Token == "" {
+		return fmt.Errorf("chan: %w", agent.ErrNoToken)
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -192,6 +197,50 @@ func TestHeldPromptChannel(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("never resolved")
+	}
+}
+
+// TestHeldPromptWaitsForToken (T493): a held server prompt whose channel
+// needs a token no hook has reported isn't sent, nor dropped: it stays
+// queued, held for the token, and the owner hears "waiting" once. The
+// token's arrival sends it.
+func TestHeldPromptWaitsForToken(t *testing.T) {
+	a := claudeLike(t)
+	a.needToken = true
+	resolved := make(chan PromptResolution, 4)
+	s := startBox(t, a, "draft", 300*time.Millisecond, resolved)
+	if _, err := s.PromptWith("[tm] nudge", PromptOptions{Channel: true}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case r := <-resolved:
+		if r.Via != "waiting" || r.Why != HeldBox || !errors.Is(r.Err, agent.ErrNoToken) {
+			t.Fatalf("resolution %+v", r)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("never resolved")
+	}
+	if st, _ := s.AgentState(); st.Queued != 1 || st.Held != HeldToken {
+		t.Fatalf("while waiting: %+v", st)
+	}
+	never(t, 600*time.Millisecond, "another resolution or a send while waiting", func() bool {
+		return len(resolved) > 0 || len(a.Sent()) > 0
+	})
+
+	s.SetPromptToken("late-token")
+	select {
+	case r := <-resolved:
+		if r.Via != "sent" || r.Err != nil || r.Text != "[tm] nudge" {
+			t.Fatalf("resolution %+v", r)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("not sent once the token came")
+	}
+	if got := a.Tokens(); len(got) != 1 || got[0] != "late-token" {
+		t.Fatalf("channel tokens %q", got)
+	}
+	if st, _ := s.AgentState(); st.Queued != 0 || st.Held != "" {
+		t.Fatalf("after the send: %+v", st)
 	}
 }
 

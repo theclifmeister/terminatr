@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
@@ -26,6 +28,12 @@ var (
 	// context, and a loaded machine after /clear can miss 500 ms, which
 	// would leave the session without them.
 	hookContext = 3 * time.Second
+	// hookTries and hookRetry: a "context" event (SessionStart) the server
+	// didn't take (no connection, closed, refused) is sent again, within
+	// hookContext: lost, it would leave the session without its context,
+	// and the server without the agent's messaging token (T493).
+	hookTries = 3
+	hookRetry = 100 * time.Millisecond
 )
 
 // maxHookPayload bounds what tm hook reads from the agent.
@@ -81,19 +89,19 @@ func runHook(e *Env, args []string) error {
 	}
 	event, _ := payload[hook.EventField()].(string)
 	payload = hook.Trim(payload)
-	total := hookAck
+	total, tries := hookAck, 1
 	for _, h := range hooks {
 		if h.Event != event || h.Respond == "" {
 			continue
 		}
 		total = max(total, hookResponse)
 		if h.Timeout == agent.HookTimeoutContext {
-			total = max(total, hookContext)
+			total, tries = max(total, hookContext), hookTries
 		}
 	}
 	params := proto.HookEventParams{Session: session, Agent: name, Event: event,
 		Payload: payload, Token: token}
-	if out := sendHook(paths.Socket, params, total); out != "" {
+	if out := sendHook(paths.Socket, params, total, tries); out != "" {
 		io.WriteString(e.Stdout, out)
 	}
 	return nil
@@ -101,14 +109,28 @@ func runHook(e *Env, args []string) error {
 
 // sendHook delivers one event and returns the server's stdout for the
 // agent. Every failure (no server, a stale socket, a wedged server, a
-// protocol mismatch) is silent and returns "".
-func sendHook(socket string, p proto.HookEventParams, total time.Duration) string {
+// protocol mismatch) is silent and returns "". One the server didn't take
+// is tried again, up to tries times in all, while total lasts.
+func sendHook(socket string, p proto.HookEventParams, total time.Duration, tries int) string {
 	deadline := time.Now().Add(total)
+	for i := 1; ; i++ {
+		out, again := sendHookOnce(socket, p, deadline)
+		if !again || i >= tries || time.Until(deadline) < hookRetry+hookDial {
+			return out
+		}
+		time.Sleep(hookRetry)
+	}
+}
+
+// sendHookOnce is one try of sendHook. again means the server didn't
+// take the event: no connection, a connection closed before its answer,
+// or a refusal. A timeout is not: the deadline is spent.
+func sendHookOnce(socket string, p proto.HookEventParams, deadline time.Time) (out string, again bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), hookDial)
 	c, err := ipc.Dial(ctx, ipc.Addr(socket))
 	cancel()
 	if err != nil {
-		return ""
+		return "", true
 	}
 	defer c.Close()
 	// The write shares the total: a write of its own deadline (100 ms)
@@ -118,26 +140,38 @@ func sendHook(socket string, p proto.HookEventParams, total time.Duration) strin
 	hello, _ := json.Marshal(proto.Hello{Protocol: proto.Protocol, Version: version.Version, Build: version.BuildID(), Kind: proto.KindHook})
 	params, err := json.Marshal(p)
 	if err != nil {
-		return ""
+		return "", false
 	}
 	req, _ := json.Marshal(proto.Request{ID: 1, Method: proto.MethodHookEvent, Params: params})
 	// Hello and request in one write: one round trip less.
 	if _, err := c.Write(append(append(append(hello, '\n'), req...), '\n')); err != nil {
-		return ""
+		return "", !isTimeout(err)
 	}
 	br := bufio.NewReader(c)
 	var srv proto.Hello
 	if line, err := br.ReadBytes('\n'); err != nil || json.Unmarshal(line, &srv) != nil {
-		return ""
+		return "", err != nil && !isTimeout(err)
 	}
 	var resp proto.Response
 	line, err := br.ReadBytes('\n')
-	if err != nil || json.Unmarshal(line, &resp) != nil || resp.Error != nil {
-		return ""
+	if err != nil {
+		return "", !isTimeout(err)
+	}
+	if json.Unmarshal(line, &resp) != nil {
+		return "", false
+	}
+	if resp.Error != nil {
+		return "", true
 	}
 	var res proto.HookEventResult
 	if json.Unmarshal(resp.Result, &res) != nil {
-		return ""
+		return "", false
 	}
-	return res.Stdout
+	return res.Stdout, false
+}
+
+// isTimeout reports whether err is a deadline's.
+func isTimeout(err error) bool {
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
 }

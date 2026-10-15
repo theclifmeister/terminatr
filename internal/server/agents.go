@@ -760,7 +760,7 @@ func (s *Server) baseEnv() []string {
 
 // promptResolved logs and journals a queued prompt the session resolved
 // after it was held for PromptHold while the agent was idle (§8.6), and
-// rings the bell for a dropped one.
+// rings the bell for one dropped, or waiting for the channel's token.
 func (s *Server) promptResolved(sess *session.Session, res session.PromptResolution) {
 	held := res.Held.Round(time.Second)
 	if res.Via == "stale" {
@@ -769,9 +769,14 @@ func (s *Server) promptResolved(sess *session.Session, res session.PromptResolut
 		return
 	}
 	msg := fmt.Sprintf("session %s: queued prompt (queued %s) held %s while idle, %s: ", sess.ID(), res.Queued.Format(time.DateTime), held, res.Why)
-	if res.Via == "sent" {
+	switch res.Via {
+	case "sent":
 		msg += "sent through the agent's channel (delivery not confirmed)"
-	} else {
+	case "waiting":
+		// Not lost: it stays queued (session.HeldToken).
+		msg += "not sent: the agent's channel needs its messaging token, which no hook has reported yet " +
+			"(was its SessionStart hook lost?); it waits for the agent's next hook, or an empty prompt box"
+	default:
 		msg += "dropped"
 		if res.Err != nil {
 			msg += fmt.Sprintf(" (channel: %v)", res.Err)

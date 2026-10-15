@@ -9,7 +9,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
@@ -142,6 +144,10 @@ func (a *app) fireHook(ctx context.Context, event string, extra map[string]any) 
 		return nil, nil
 	}
 	b, _ := json.Marshal(payload)
+	if dropHook(event) {
+		a.log("hook-dropped", map[string]any{"event": event, "payload": json.RawMessage(b)})
+		return nil, nil
+	}
 	a.hookMu.Lock()
 	var outs []string
 	for _, h := range a.hooks {
@@ -163,6 +169,13 @@ func (a *app) fireHook(ctx context.Context, event string, extra map[string]any) 
 		return outs, errCancelled
 	}
 	return outs, nil
+}
+
+// dropHook reports whether event is in $FAKEAGENT_DROP_HOOKS (a comma
+// list): its hooks never run, as if each call were lost on the way to
+// the server (T493).
+func dropHook(event string) bool {
+	return slices.Contains(strings.Split(os.Getenv("FAKEAGENT_DROP_HOOKS"), ","), event)
 }
 
 // basePayloadLocked has the fields every hook payload carries.

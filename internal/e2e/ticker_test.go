@@ -601,3 +601,54 @@ func TestSmokeHeldNudge(t *testing.T) {
 	}
 	env.WaitFor(coord, "❯ whats still open?", agentWait)
 }
+
+// TestSmokeHeldNudgeNoToken reproduces T491's failure (T493): the
+// coordinator's only SessionStart hook was lost and it ran no turn, so
+// the server never had the messaging token its socket requires; the held
+// nudge was written anyway, dropped unseen by the agent, and logged as
+// sent. Now it isn't written without the token: it waits, journaled and
+// still queued, and arrives once the agent runs again.
+func TestSmokeHeldNudgeNoToken(t *testing.T) {
+	env, projDir, out := tickerEnv(t)
+	env.Setenv("TERMINATR_PROMPT_HOLD", "2s")
+	env.Setenv("FAKEAGENT_SOCKET_AUTH", "required")
+	env.Setenv("FAKEAGENT_DROP_HOOKS", "SessionStart")
+	coord := env.StartAgent("claude", projDir, "--role", "coordinator", "--project", "demo")
+	env.WaitState(coord, "idle", agentWait)
+	env.Keys(coord, "whats still open?")
+	env.WaitFor(coord, "❯ whats still open?", agentWait)
+	startThread(t, env, projDir)
+
+	env.MustCLI("thread", "prompt", "t-0001", "run thread-report", "--project", "demo")
+	if got := readOut(t, out, "report"); !strings.Contains(got, "stored report 1") {
+		t.Fatalf("report: %q", got)
+	}
+	want := regexp.MustCompile(`ticker prompt\.waiting ` + coord.ID + ` held \S+: prompt box not empty`)
+	if !Poll(2*agentWait, func() bool {
+		b, _ := os.ReadFile(filepath.Join(projDir, "JOURNAL.md"))
+		return want.Match(b)
+	}) {
+		b, _ := os.ReadFile(filepath.Join(projDir, "JOURNAL.md"))
+		t.Fatalf("journal lacks %q:\n%s", want, b)
+	}
+	if len(env.FakeRecords("hook-dropped")) == 0 {
+		t.Fatal("no SessionStart was dropped")
+	}
+	if r := env.FakeRecords("socket-drop"); len(r) != 0 {
+		t.Fatalf("written to the socket without the token: %+v", r)
+	}
+	if info, _ := env.Info(coord); info.Queued != 1 {
+		t.Fatalf("the nudge isn't queued: %+v", info)
+	}
+
+	// The user sends what they typed: the turn's hooks bring the token,
+	// and the nudge, still queued, arrives.
+	env.Keys(coord, "\r")
+	nudge := env.WaitFake("prompt", 2*agentWait, func(r FakeRecord) bool { return strings.HasPrefix(r.Str("text"), "[tm] ") })
+	if !strings.Contains(nudge.Str("text"), "t-0001 (Small fix) reported") {
+		t.Fatalf("nudge %+v", nudge)
+	}
+	if r := env.FakeRecords("socket-drop"); len(r) != 0 {
+		t.Fatalf("socket drops: %+v", r)
+	}
+}
