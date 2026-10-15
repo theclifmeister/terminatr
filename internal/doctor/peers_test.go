@@ -289,3 +289,10 @@ func cert(t *testing.T, ttl time.Duration) tls.Certificate {
 	}
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: priv}
 }
+
+func TestRelayCheckTextIsPlain(t *testing.T) {
+	c := relayCheck(RelayHealth{URL: "wss://r.example", Error: "x\x1b]52;c;AAAA\x07\x1b[2J"})
+	if strings.ContainsAny(c.Detail, "\x1b\x07") {
+		t.Fatalf("%q", c.Detail)
+	}
+}

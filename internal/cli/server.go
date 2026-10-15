@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"log"
 	"os"
 	"os/signal"
@@ -323,12 +324,12 @@ func peerLines(st *proto.LinkStatus, now time.Time) []string {
 		out = append(out, fmt.Sprintf("server id %s (%s)", st.Short, st.ID))
 	}
 	if st.Error != "" {
-		out = append(out, "peers     "+st.Error)
+		out = append(out, "peers     "+textsafe.Line(st.Error, 200))
 	}
 	for _, p := range st.Peers {
 		line := fmt.Sprintf("peer      %s  %s · %s", p.Alias, linkWords(p, now), p.Transport)
 		if p.State != proto.LinkUp && p.Error != "" {
-			line += "\n            " + p.Error
+			line += "\n            " + textsafe.Line(p.Error, 200)
 		}
 		out = append(out, line)
 	}
@@ -346,7 +347,7 @@ func linkWords(p proto.PeerLink, now time.Time) string {
 			parts = append(parts, fmt.Sprintf("%.0f ms", max(p.RTT, 1)))
 		}
 		if p.Version != "" {
-			parts = append(parts, "tm "+p.Version)
+			parts = append(parts, "tm "+textsafe.Line(p.Version, 40))
 		}
 	case proto.LinkOffline:
 		parts[0] += " " + ago(now, p.Since)

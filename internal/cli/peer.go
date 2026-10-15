@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"io/fs"
 	"net/url"
 	"os"
@@ -345,7 +346,7 @@ func (e *Env) peerRelayUpdate(dir, alias string) error {
 		return &project.Error{Code: "relay-update-" + res.Result, Msg: words}
 	}
 	if res.Version != "" {
-		words += " (it runs tm " + strings.TrimPrefix(res.Version, "v") + " now)"
+		words += " (it runs tm " + textsafe.Line(strings.TrimPrefix(res.Version, "v"), 40) + " now)"
 	}
 	fmt.Fprintln(e.Stdout, strings.ToUpper(words[:1])+words[1:]+".")
 	return nil
@@ -411,7 +412,7 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 		case pe.Link != nil:
 			state = linkWords(*pe.Link, now)
 		case running && st != nil && st.Error != "":
-			state = "not read: " + st.Error
+			state = "not read: " + textsafe.Line(st.Error, 200)
 		case running:
 			state = "no link yet"
 		}

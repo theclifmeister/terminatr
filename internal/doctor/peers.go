@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"io/fs"
 	"net/http"
 	"net/url"
@@ -144,7 +145,7 @@ func Peers(d Deps, live Live) []Check {
 			PanesMine: proto.PanesWord(p.PanesLevel()), SharedOut: shared,
 			Queued: backlog[p.Alias].Queued, Undelivered: backlog[p.Alias].Undelivered}
 		if l, ok := links[h.ID]; ok {
-			h.State, h.Reason, h.Error, h.LatencyMS, h.Version = l.State, l.Reason, l.Error, l.RTT, l.Version
+			h.State, h.Reason, h.Error, h.LatencyMS, h.Version = l.State, l.Reason, textsafe.Line(l.Error, 200), l.RTT, textsafe.Line(l.Version, 40)
 			switch {
 			case l.State == proto.LinkUp:
 				h.LastSeen = time.Now()
@@ -197,7 +198,7 @@ func peerCheck(h PeerHealth) Check {
 			state += ", not seen since the server started"
 		}
 		if h.Error != "" {
-			state += ": " + h.Error
+			state += ": " + textsafe.Line(h.Error, 200)
 		}
 	}
 	parts = append(parts, state)
@@ -295,7 +296,7 @@ func relayChecks(d Deps, live Live, peers []peer.Peer, health []PeerHealth) []Ch
 			if live.Link != nil && seen == "" {
 				for _, l := range live.Link.Peers {
 					if l.ID == p.ID().String() {
-						seen = l.RelayVersion
+						seen = textsafe.Line(l.RelayVersion, 40)
 					}
 				}
 			}
@@ -324,7 +325,7 @@ func relayCheck(h RelayHealth) Check {
 	c := Check{Group: "peers", Name: "relay " + h.URL, Status: OK, Relay: &h}
 	if !h.Reachable {
 		c.Status = Warn
-		c.Detail = "not reachable: " + h.Error
+		c.Detail = "not reachable: " + textsafe.Line(h.Error, 200)
 		if h.PinMatch != nil && !*h.PinMatch {
 			c.Status = Fail
 		}

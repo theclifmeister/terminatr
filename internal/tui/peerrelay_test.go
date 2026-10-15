@@ -68,3 +68,25 @@ func TestRelayBehind(t *testing.T) {
 		}
 	}
 }
+
+// TestPeersTabTextFromAPeerIsPlain: a version or error the other end
+// chose shows as plain text, whatever it holds.
+func TestPeersTabTextFromAPeerIsPlain(t *testing.T) {
+	m, src := remoteDash(t, "@mini/acme-api")
+	src.peers = peersList()
+	l := src.peers.Peers[0].Link
+	l.RelayVersion = "v0.27.0\x1b]52;c;AAAA\x07\x1b[2J"
+	l.Version = "v0.27.0\x1b]0;owned\x07"
+	l.Error = "closed: \x1b]0;owned\x07\x1b[31mfake"
+	m.data.Server = ServerInfo{Version: "v0.27.0", Latest: "v0.28.0"}
+	press(m, ",", "4")
+	if out := screen(m); strings.ContainsAny(out, "\x1b\x07") && strings.Contains(out, "\x1b]") {
+		t.Fatalf("raw bytes in\n%q", out)
+	}
+	if w := relayVersionWords(m, src.peers.Peers[0]); strings.ContainsAny(w, "\x1b\x07") {
+		t.Fatalf("%q", w)
+	}
+	if w := peerAbout(m, src.peers.Peers[0]); strings.ContainsAny(w, "\x1b\x07") {
+		t.Fatalf("%q", w)
+	}
+}
