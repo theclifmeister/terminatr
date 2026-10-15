@@ -554,318 +554,427 @@ func ReadManifest(dir string) (*Manifest, error) {
 
 // check reports every problem in m, joined.
 func (m *Manifest) check(dir string) error {
-	var errs []error
-	bad := func(format string, a ...any) { errs = append(errs, fmt.Errorf(format, a...)) }
+	return errors.Join(slices.Concat(
+		m.checkMeta(),
+		m.checkFiles(dir),
+		m.checkColumns(),
+		m.checkViews(),
+		m.checkGuard(),
+		m.checkTools(),
+		m.checkCommands(),
+		m.checkProvided(),
+		m.checkPermissions(),
+		m.checkSettings(),
+		m.checkDefaults(),
+	)...)
+}
+
+// problems collects a check's errors.
+type problems []error
+
+func (ps *problems) add(format string, a ...any) { *ps = append(*ps, fmt.Errorf(format, a...)) }
+
+// An idForm is the form the ids of a provides list take: re, said as says.
+type idForm struct {
+	re   *regexp.Regexp
+	says string
+}
+
+var (
+	dashIDs  = idForm{idRE, "lowercase letters, digits and dashes"}
+	underIDs = idForm{keyRE, "lowercase letters, digits and underscores, starting with a letter"}
+)
+
+// checkIDs checks the ids of the entries of the provides list list:
+// each in form, and listed once. needs, when not empty, is why an
+// entry needs provides.main, reported in place of its id's problems in
+// a data mod; also, when not nil, says what else is wrong with an id
+// in form ("" for nothing), reported before a second listing. Entry i
+// is entryAt(list, i).
+func (m *Manifest) checkIDs(list, needs string, ids []string, form idForm, also func(id string) string) []error {
+	var ps problems
+	seen := map[string]bool{}
+	for i, id := range ids {
+		at := entryAt(list, i)
+		var more string
+		if also != nil && form.re.MatchString(id) {
+			more = also(id)
+		}
+		switch {
+		case needs != "" && !m.IsCode():
+			ps.add("%s: %s", at, needs)
+		case !form.re.MatchString(id):
+			ps.add("%s: id %q must be %s", at, id, form.says)
+		case more != "":
+			ps.add("%s: %s", at, more)
+		case seen[id]:
+			ps.add("%s: id %q is listed twice", at, id)
+		}
+		seen[id] = true
+	}
+	return ps
+}
+
+// checkRoles checks the roles a guard rule or a tool is for.
+func checkRoles(at string, roles []string) []error {
+	var ps problems
+	for _, r := range roles {
+		if r != RoleThread && r != RoleCoordinator {
+			ps.add("%s: role %q must be %s or %s", at, r, RoleThread, RoleCoordinator)
+		}
+	}
+	return ps
+}
+
+// entryAt names entry i of the provides list list.
+func entryAt(list string, i int) string { return fmt.Sprintf("provides.%s[%d]", list, i) }
+
+// idsOf are the ids of a provides list's entries.
+func idsOf[E any](es []E, id func(E) string) []string {
+	out := make([]string, len(es))
+	for i, e := range es {
+		out[i] = id(e)
+	}
+	return out
+}
+
+// checkMeta checks who the mod is: id, name, version, api, min_tm and
+// homepage.
+func (m *Manifest) checkMeta() []error {
+	var ps problems
 	if err := CheckID(m.ID); err != nil {
-		errs = append(errs, err)
+		ps = append(ps, err)
 	}
 	if strings.TrimSpace(m.Name) == "" {
-		bad("has no name")
+		ps.add("has no name")
 	}
 	if _, ok := update.Newer(m.Version, m.Version); !ok || strings.HasPrefix(m.Version, "v") {
-		bad("version %q isn't MAJOR.MINOR.PATCH", m.Version)
+		ps.add("version %q isn't MAJOR.MINOR.PATCH", m.Version)
 	}
 	if !apiRE.MatchString(m.API) {
-		bad("api %q isn't MAJOR.MINOR", m.API)
+		ps.add("api %q isn't MAJOR.MINOR", m.API)
 	}
 	if m.MinTM != "" {
 		if _, ok := update.Newer(m.MinTM, m.MinTM); !ok {
-			bad("min_tm %q isn't a tm version", m.MinTM)
+			ps.add("min_tm %q isn't a tm version", m.MinTM)
 		}
 	}
 	if m.Homepage != "" && !strings.HasPrefix(m.Homepage, "https://") && !strings.HasPrefix(m.Homepage, "http://") {
-		bad("homepage %q isn't a web address", m.Homepage)
+		ps.add("homepage %q isn't a web address", m.Homepage)
 	}
+	return ps
+}
+
+// checkFiles checks the files and folders provides names, in dir.
+func (m *Manifest) checkFiles(dir string) []error {
+	var ps problems
 	p := m.Provides
 	if p.Main != "" {
 		if ext := path.Ext(p.Main); ext != ".ts" && ext != ".js" {
-			bad("provides.main %q isn't a .ts or .js file", p.Main)
+			ps.add("provides.main %q isn't a .ts or .js file", p.Main)
 		}
-		errs = append(errs, inside(dir, "provides.main", p.Main, false))
+		ps = append(ps, inside(dir, "provides.main", p.Main, false))
 	}
 	for k, f := range map[string]string{"theme": p.Theme, "icons": p.Icons, "keymap": p.Keymap, "layout": p.Layout} {
 		if f != "" {
-			errs = append(errs, inside(dir, "provides."+k, f, false))
+			ps = append(ps, inside(dir, "provides."+k, f, false))
 		}
 	}
 	for _, role := range sortedKeys(p.Rules) {
 		if !slices.Contains(rulesKeys, role) {
-			bad("provides.rules.%s: rules are coordinator or thread (addenda), coordinator_policy or thread_policy", role)
+			ps.add("provides.rules.%s: rules are coordinator or thread (addenda), coordinator_policy or thread_policy", role)
 		}
-		errs = append(errs, inside(dir, "provides.rules."+role, p.Rules[role], false))
+		ps = append(ps, inside(dir, "provides.rules."+role, p.Rules[role], false))
 	}
 	for k, d := range map[string]string{"templates": p.Templates, "agents": p.Agents} {
 		if d != "" {
-			errs = append(errs, inside(dir, "provides."+k, d, true))
+			ps = append(ps, inside(dir, "provides."+k, d, true))
 		}
 	}
-	code := p.Main != ""
-	seen := map[string]bool{}
-	for i, c := range p.Columns {
-		at := fmt.Sprintf("provides.columns[%d]", i)
-		switch {
-		case !code:
-			bad("%s: a column needs provides.main, the code that fills it", at)
-		case !idRE.MatchString(c.ID):
-			bad("%s: id %q must be lowercase letters, digits and dashes", at, c.ID)
-		case seen["c:"+c.ID]:
-			bad("%s: id %q is listed twice", at, c.ID)
-		}
-		seen["c:"+c.ID] = true
+	return ps
+}
+
+// checkColumns checks provides.columns.
+func (m *Manifest) checkColumns() []error {
+	cs := m.Provides.Columns
+	ps := problems(m.checkIDs("columns", "a column needs provides.main, the code that fills it", idsOf(cs, func(c Column) string { return c.ID }), dashIDs, nil))
+	for i, c := range cs {
+		at := entryAt("columns", i)
 		if c.Width < 1 || c.Width > maxColumnWidth {
-			bad("%s: width must be 1 to %d cells", at, maxColumnWidth)
+			ps.add("%s: width must be 1 to %d cells", at, maxColumnWidth)
 		}
 		if len(c.Where) == 0 {
-			bad("%s: where names no slot", at)
+			ps.add("%s: where names no slot", at)
 		}
 		for _, w := range c.Where {
 			if !whereRE.MatchString(w) {
-				bad("%s: where %q isn't a slot like sidebar.thread", at, w)
+				ps.add("%s: where %q isn't a slot like sidebar.thread", at, w)
 			}
 		}
 	}
-	for i, v := range p.Views {
-		at := fmt.Sprintf("provides.views[%d]", i)
-		switch {
-		case !code:
-			bad("%s: a view needs provides.main, the code that draws it", at)
-		case !idRE.MatchString(v.ID):
-			bad("%s: id %q must be lowercase letters, digits and dashes", at, v.ID)
-		case seen["v:"+v.ID]:
-			bad("%s: id %q is listed twice", at, v.ID)
-		}
-		seen["v:"+v.ID] = true
+	return ps
+}
+
+// checkViews checks provides.views.
+func (m *Manifest) checkViews() []error {
+	vs := m.Provides.Views
+	ps := problems(m.checkIDs("views", "a view needs provides.main, the code that draws it", idsOf(vs, func(v View) string { return v.ID }), dashIDs, nil))
+	for i, v := range vs {
+		at := entryAt("views", i)
 		if strings.TrimSpace(v.Title) == "" {
-			bad("%s: has no title", at)
+			ps.add("%s: has no title", at)
 		}
 		if !slices.Contains(Slots, v.Slot) {
-			bad("%s: slot %q must be one of %s", at, v.Slot, strings.Join(Slots, ", "))
+			ps.add("%s: slot %q must be one of %s", at, v.Slot, strings.Join(Slots, ", "))
 		}
 		if maj, min, ok := splitAPI(m.API); IsSidebar(v.Slot) && ok && maj == 1 && min < SidebarAPIMinor {
-			bad(`%s: slot %s needs api = "1.%d"`, at, v.Slot, SidebarAPIMinor)
+			ps.add(`%s: slot %s needs api = "1.%d"`, at, v.Slot, SidebarAPIMinor)
 		}
 		if len([]rune(strings.TrimSpace(v.Description))) > MaxViewDescription {
-			bad("%s: description is longer than %d characters", at, MaxViewDescription)
+			ps.add("%s: description is longer than %d characters", at, MaxViewDescription)
 		}
 		if v.Opens != "" {
-			i := slices.IndexFunc(p.Views, func(o View) bool { return o.ID == v.Opens })
+			i := slices.IndexFunc(vs, func(o View) bool { return o.ID == v.Opens })
 			switch {
 			case !IsSection(v.Slot):
-				bad("%s: opens is a section's: only a %s, %s, %s or %s opens a view", at, SlotSidebarSection, SlotProjectSection, SlotCoordinatorSection, SlotDetailsSection)
+				ps.add("%s: opens is a section's: only a %s, %s, %s or %s opens a view", at, SlotSidebarSection, SlotProjectSection, SlotCoordinatorSection, SlotDetailsSection)
 			case m.Before(SidebarAPIMinor):
-				bad(`%s: opens needs api = "1.%d"`, at, SidebarAPIMinor)
+				ps.add(`%s: opens needs api = "1.%d"`, at, SidebarAPIMinor)
 			case i < 0:
-				bad("%s: opens %q, which isn't one of its views", at, v.Opens)
-			case !slices.Contains(opensSlots, p.Views[i].Slot):
-				bad("%s: opens %q, a %s: it must be a %s", at, v.Opens, p.Views[i].Slot, strings.Join(opensSlots, ", "))
+				ps.add("%s: opens %q, which isn't one of its views", at, v.Opens)
+			case !slices.Contains(opensSlots, vs[i].Slot):
+				ps.add("%s: opens %q, a %s: it must be a %s", at, v.Opens, vs[i].Slot, strings.Join(opensSlots, ", "))
 			}
 		}
 	}
-	if n := len(slices.DeleteFunc(slices.Clone(p.Views), func(v View) bool { return !IsSidebar(v.Slot) })); n > maxSidebarViews {
-		bad("provides.views: at most %d sidebar sections (%s, %s), not %d", maxSidebarViews, SlotSidebarSection, SlotProjectSection, n)
+	if n := len(slices.DeleteFunc(slices.Clone(vs), func(v View) bool { return !IsSidebar(v.Slot) })); n > maxSidebarViews {
+		ps.add("provides.views: at most %d sidebar sections (%s, %s), not %d", maxSidebarViews, SlotSidebarSection, SlotProjectSection, n)
 	}
-	if len(p.Guard) > maxGuardRules {
-		bad("provides.guard: at most %d rules", maxGuardRules)
+	return ps
+}
+
+// checkGuard checks provides.guard.
+func (m *Manifest) checkGuard() []error {
+	gs := m.Provides.Guard
+	var ps problems
+	if len(gs) > maxGuardRules {
+		ps.add("provides.guard: at most %d rules", maxGuardRules)
 	}
-	for i, g := range p.Guard {
-		at := fmt.Sprintf("provides.guard[%d]", i)
-		switch {
-		case !idRE.MatchString(g.ID):
-			bad("%s: id %q must be lowercase letters, digits and dashes", at, g.ID)
-		case slices.Contains(config.GuardRules, g.ID):
-			bad("%s: id %q is a core rule's: a mod adds rules, it doesn't change the core's", at, g.ID)
-		case seen["g:"+g.ID]:
-			bad("%s: id %q is listed twice", at, g.ID)
+	ps = append(ps, m.checkIDs("guard", "", idsOf(gs, func(g GuardRule) string { return g.ID }), dashIDs, func(id string) string {
+		if slices.Contains(config.GuardRules, id) {
+			return fmt.Sprintf("id %q is a core rule's: a mod adds rules, it doesn't change the core's", id)
 		}
-		seen["g:"+g.ID] = true
+		return ""
+	})...)
+	for i, g := range gs {
+		at := entryAt("guard", i)
 		if len(g.Commands)+len(g.Writes)+len(g.Reads) == 0 {
-			bad("%s: refuses nothing: list commands, writes or reads", at)
+			ps.add("%s: refuses nothing: list commands, writes or reads", at)
 		}
 		if len(g.Commands) > maxGuardPatterns || len(g.Writes) > maxGuardPatterns || len(g.Reads) > maxGuardPatterns {
-			bad("%s: at most %d commands, writes and reads each", at, maxGuardPatterns)
+			ps.add("%s: at most %d commands, writes and reads each", at, maxGuardPatterns)
 		}
 		for _, c := range g.Commands {
 			if w := strings.Fields(c); len(w) == 0 || !progRE.MatchString(w[0]) {
-				bad("%s: command %q must start with a program's name (no path, no *)", at, c)
+				ps.add("%s: command %q must start with a program's name (no path, no *)", at, c)
 			}
 		}
 		for _, r := range slices.Concat(g.Writes, g.Reads) {
 			if !strings.HasPrefix(r, "~/") && !filepath.IsAbs(r) && !path.IsAbs(r) {
-				bad("%s: %q must be absolute or start with ~/", at, r)
+				ps.add("%s: %q must be absolute or start with ~/", at, r)
 			} else if slices.Contains(strings.Split(filepath.ToSlash(r), "/"), "..") {
-				bad("%s: %q has a .. in it", at, r)
+				ps.add("%s: %q has a .. in it", at, r)
 			}
 		}
-		for _, r := range g.Roles {
-			if r != RoleThread && r != RoleCoordinator {
-				bad("%s: role %q must be %s or %s", at, r, RoleThread, RoleCoordinator)
-			}
-		}
+		ps = append(ps, checkRoles(at, g.Roles)...)
 		if msg := strings.TrimSpace(g.Message); msg == "" {
-			bad("%s: has no message: say why, and what to do instead", at)
+			ps.add("%s: has no message: say why, and what to do instead", at)
 		} else if len(msg) > maxGuardMessageLen {
-			bad("%s: message is longer than %d bytes", at, maxGuardMessageLen)
+			ps.add("%s: message is longer than %d bytes", at, maxGuardMessageLen)
 		}
 	}
-	if len(p.Tools) > maxTools {
-		bad("provides.tools: at most %d tools", maxTools)
+	return ps
+}
+
+// checkTools checks provides.tools.
+func (m *Manifest) checkTools() []error {
+	ts := m.Provides.Tools
+	var ps problems
+	if len(ts) > maxTools {
+		ps.add("provides.tools: at most %d tools", maxTools)
 	}
-	for i, t := range p.Tools {
-		at := fmt.Sprintf("provides.tools[%d]", i)
-		switch {
-		case !code:
-			bad("%s: a tool needs provides.main, the code that answers it", at)
-		case !keyRE.MatchString(t.ID):
-			bad("%s: id %q must be lowercase letters, digits and underscores, starting with a letter", at, t.ID)
-		case len(ToolName(m.ID, t.ID)) > maxToolName:
-			bad("%s: %s is longer than %d characters", at, ToolName(m.ID, t.ID), maxToolName)
-		case seen["t:"+t.ID]:
-			bad("%s: id %q is listed twice", at, t.ID)
+	ps = append(ps, m.checkIDs("tools", "a tool needs provides.main, the code that answers it", idsOf(ts, func(t Tool) string { return t.ID }), underIDs, func(id string) string {
+		if n := ToolName(m.ID, id); len(n) > maxToolName {
+			return fmt.Sprintf("%s is longer than %d characters", n, maxToolName)
 		}
-		seen["t:"+t.ID] = true
+		return ""
+	})...)
+	for i, t := range ts {
+		at := entryAt("tools", i)
 		if d := strings.TrimSpace(t.Description); d == "" {
-			bad("%s: has no description", at)
+			ps.add("%s: has no description", at)
 		} else if len(d) > maxToolDescLen {
-			bad("%s: description is longer than %d bytes", at, maxToolDescLen)
+			ps.add("%s: description is longer than %d bytes", at, maxToolDescLen)
 		}
-		for _, r := range t.Roles {
-			if r != RoleThread && r != RoleCoordinator {
-				bad("%s: role %q must be %s or %s", at, r, RoleThread, RoleCoordinator)
-			}
-		}
+		ps = append(ps, checkRoles(at, t.Roles)...)
 		for _, k := range sortedKeys(t.Input.Properties) {
 			if !keyRE.MatchString(k) {
-				bad("%s: input property %q must be lowercase letters, digits and underscores", at, k)
+				ps.add("%s: input property %q must be lowercase letters, digits and underscores", at, k)
 			}
 			if typ, _ := t.Input.Properties[k]["type"].(string); !slices.Contains(jsonTypes, typ) {
-				bad("%s: input property %q needs a type: %s", at, k, strings.Join(jsonTypes, ", "))
+				ps.add("%s: input property %q needs a type: %s", at, k, strings.Join(jsonTypes, ", "))
 			}
 		}
 		for _, k := range t.Input.Required {
 			if _, ok := t.Input.Properties[k]; !ok {
-				bad("%s: required %q isn't an input property", at, k)
+				ps.add("%s: required %q isn't an input property", at, k)
 			}
 		}
 	}
-	if len(p.Commands) > maxCommands {
-		bad("provides.commands: at most %d commands", maxCommands)
+	return ps
+}
+
+// checkCommands checks provides.commands.
+func (m *Manifest) checkCommands() []error {
+	cs := m.Provides.Commands
+	var ps problems
+	if len(cs) > maxCommands {
+		ps.add("provides.commands: at most %d commands", maxCommands)
 	}
+	ps = append(ps, m.checkIDs("commands", "a command needs provides.main, the code that runs it", idsOf(cs, func(c Command) string { return c.ID }), dashIDs, nil)...)
 	keys := map[string]string{}
-	for i, c := range p.Commands {
-		at := fmt.Sprintf("provides.commands[%d]", i)
-		switch {
-		case !code:
-			bad("%s: a command needs provides.main, the code that runs it", at)
-		case !idRE.MatchString(c.ID):
-			bad("%s: id %q must be lowercase letters, digits and dashes", at, c.ID)
-		case seen["k:"+c.ID]:
-			bad("%s: id %q is listed twice", at, c.ID)
-		}
-		seen["k:"+c.ID] = true
+	for i, c := range cs {
+		at := entryAt("commands", i)
 		if t := strings.TrimSpace(c.Title); t == "" {
-			bad("%s: has no title", at)
+			ps.add("%s: has no title", at)
 		} else if len([]rune(t)) > maxCommandTitle {
-			bad("%s: title is longer than %d characters", at, maxCommandTitle)
+			ps.add("%s: title is longer than %d characters", at, maxCommandTitle)
 		}
 		if c.Key != "" {
 			if err := CheckCommandKey(c.Key); err != nil {
-				bad("%s: key %v", at, err)
+				ps.add("%s: key %v", at, err)
 			} else if o, ok := keys[c.Key]; ok {
-				bad("%s: key %s is %s's already", at, c.Key, o)
+				ps.add("%s: key %s is %s's already", at, c.Key, o)
 			}
 			keys[c.Key] = c.ID
 		}
 	}
-	if len(p.Tools) > 0 && !m.Permissions.Tools {
-		bad("provides.tools needs permissions.tools")
+	return ps
+}
+
+// checkProvided checks what provides needs of permissions, and the
+// code host.
+func (m *Manifest) checkProvided() []error {
+	var ps problems
+	p, perm := m.Provides, m.Permissions
+	if len(p.Tools) > 0 && !perm.Tools {
+		ps.add("provides.tools needs permissions.tools")
 	}
-	if m.Permissions.Tools && len(p.Tools) == 0 {
-		bad("permissions.tools offers no tool: list them in provides.tools")
+	if perm.Tools && len(p.Tools) == 0 {
+		ps.add("permissions.tools offers no tool: list them in provides.tools")
 	}
 	if p.CodeHost != "" {
 		switch {
-		case !code:
-			bad("provides.code_host: a code host needs provides.main, the code that answers it")
+		case !m.IsCode():
+			ps.add("provides.code_host: a code host needs provides.main, the code that answers it")
 		case !codehost.ModKind(p.CodeHost):
-			bad("provides.code_host: %q must be lowercase letters, digits and dashes, and not github or azure (tm's own hosts)", p.CodeHost)
+			ps.add("provides.code_host: %q must be lowercase letters, digits and dashes, and not github or azure (tm's own hosts)", p.CodeHost)
 		}
-		if len(m.Permissions.Commands) == 0 {
-			bad("provides.code_host needs permissions.commands: the host's CLI it runs (glab)")
+		if len(perm.Commands) == 0 {
+			ps.add("provides.code_host needs permissions.commands: the host's CLI it runs (glab)")
 		}
 	}
-	if len(p.Views) > 0 && !m.Permissions.Views {
-		bad("provides.views needs permissions.views")
+	if len(p.Views) > 0 && !perm.Views {
+		ps.add("provides.views needs permissions.views")
 	}
+	return ps
+}
+
+// checkPermissions checks permissions.
+func (m *Manifest) checkPermissions() []error {
+	var ps problems
 	perm := m.Permissions
-	if !code && len(perm.Requested()) > 0 {
-		bad("permissions are for code mods (provides.main); a data mod needs none")
+	if !m.IsCode() && len(perm.Requested()) > 0 {
+		ps.add("permissions are for code mods (provides.main); a data mod needs none")
 	}
 	for _, h := range perm.Net {
 		if !hostRE.MatchString(h) {
-			bad("permissions.net: %q isn't a host name (no scheme, port or path)", h)
+			ps.add("permissions.net: %q isn't a host name (no scheme, port or path)", h)
 		}
 	}
 	for _, c := range perm.Commands {
 		if !progRE.MatchString(c) {
-			bad("permissions.commands: %q isn't a program name (no path, no arguments)", c)
+			ps.add("permissions.commands: %q isn't a program name (no path, no arguments)", c)
 		}
 	}
 	for i, id := range perm.Actions {
 		a, ok := modaction.Lookup(id)
 		switch {
 		case !ok:
-			bad("permissions.actions: %q is not an action a mod may bind", id)
+			ps.add("permissions.actions: %q is not an action a mod may bind", id)
 		case a.Consent == "":
-			bad("permissions.actions: %s needs no grant of its own; list only %s", id, strings.Join(ConsentActions(), ", "))
+			ps.add("permissions.actions: %s needs no grant of its own; list only %s", id, strings.Join(ConsentActions(), ", "))
 		case slices.Contains(perm.Actions[:i], id):
-			bad("permissions.actions: %s twice", id)
+			ps.add("permissions.actions: %s twice", id)
 		}
 	}
 	if len(perm.Actions) > 0 && !perm.ProjectRead {
-		bad("permissions.actions needs permissions.project_read: a binding is checked against the projects it acts in")
+		ps.add("permissions.actions needs permissions.project_read: a binding is checked against the projects it acts in")
 	}
 	for _, r := range slices.Concat(perm.Files.Read, perm.Files.Write) {
 		if !strings.HasPrefix(r, "~/") && !filepath.IsAbs(r) {
-			bad("permissions.files: %q must be absolute or start with ~/", r)
+			ps.add("permissions.files: %q must be absolute or start with ~/", r)
 		} else if slices.Contains(strings.Split(filepath.ToSlash(r), "/"), "..") {
-			bad("permissions.files: %q has a .. in it", r)
+			ps.add("permissions.files: %q has a .. in it", r)
 		}
 	}
+	return ps
+}
+
+// checkSettings checks settings.
+func (m *Manifest) checkSettings() []error {
+	var ps problems
 	for _, k := range sortedKeys(m.Settings) {
 		s := m.Settings[k]
 		at := "settings." + k
 		if !keyRE.MatchString(k) {
-			bad("%s: a setting's name is lowercase letters, digits and underscores", at)
+			ps.add("%s: a setting's name is lowercase letters, digits and underscores", at)
 		}
 		if s.Type == SettingChoice && len(s.Options) == 0 {
-			bad("%s: a choice needs options", at)
+			ps.add("%s: a choice needs options", at)
 		}
 		if s.Type != SettingInt && (s.Min != nil || s.Max != nil) {
-			bad("%s: min and max are for an int", at)
+			ps.add("%s: min and max are for an int", at)
 		}
 		if s.Min != nil && s.Max != nil && *s.Min > *s.Max {
-			bad("%s: min is above max", at)
+			ps.add("%s: min is above max", at)
 		}
 		if s.Default == nil {
-			bad("%s: has no default", at)
+			ps.add("%s: has no default", at)
 		} else if _, err := s.Check(s.Default); err != nil {
-			bad("%s: default %v", at, err)
+			ps.add("%s: default %v", at, err)
 		}
 	}
+	return ps
+}
+
+// checkDefaults checks defaults: the config a mod suggests.
+func (m *Manifest) checkDefaults() []error {
+	var ps problems
 	for _, k := range sortedKeys(m.Defaults) {
 		at := "defaults." + k
 		switch {
 		case slices.Contains(SafetyKeys, k):
 			// loosens says why.
 		case !slices.Contains(DefaultKeys, k):
-			bad("%s: a mod may suggest only %s", at, strings.Join(DefaultKeys, ", "))
+			ps.add("%s: a mod may suggest only %s", at, strings.Join(DefaultKeys, ", "))
 		default:
 			if err := config.CheckSetting(k, settingValue(m.Defaults[k])); err != nil {
-				bad("%s: %v", at, err)
+				ps.add("%s: %v", at, err)
 			}
 		}
 	}
-	return errors.Join(errs...)
+	return ps
 }
 
 // settingValue is a value TOML decoded as config's setters take it: an
