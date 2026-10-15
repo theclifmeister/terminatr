@@ -17,6 +17,9 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
+// ConfigDir is Claude's config folder, as the real claude agent has it.
+func (a *chanAgent) ConfigDir(home string) string { return filepath.Join(home, ".claude") }
+
 // chanAgent is the built-in claude manifest with a channel that records
 // what it was sent (or fails with err).
 type chanAgent struct {
