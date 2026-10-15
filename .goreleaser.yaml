@@ -140,12 +140,10 @@ checksum:
 snapshot:
   version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"
 
+# The release notes are written by hand in docs/releases/<tag>.md and passed
+# with --release-notes (make release, RELEASE_NOTES=...); no commit list.
 changelog:
-  use: github
-  sort: asc
-  filters:
-    exclude:
-      - "^Merge branch"
+  disable: true
 
 release:
   github:
