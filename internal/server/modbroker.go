@@ -40,8 +40,12 @@ import (
 const modRegistryAge = time.Second
 
 // modCallsAtOnce is how many of one mod's calls the broker works on at
-// once; the rest wait their turn.
-const modCallsAtOnce = 8
+// once; up to modCallsWaiting more wait their turn, and a call past
+// those is refused (CodeFailed) until answers come back.
+const (
+	modCallsAtOnce  = 8
+	modCallsWaiting = 56
+)
 
 // Inbox limits for a mod: an item's subject and summary are clipped, and
 // a mod with this many unhandled items in a project raises no more.
@@ -66,8 +70,10 @@ type modBroker struct {
 	cfgOK   bool
 	// logMu serialises writes to the mods' logs.
 	logMu sync.Mutex
-	// busy holds a slot per call each mod has running (modCallsAtOnce).
-	busy map[string]chan struct{}
+	// busy holds a slot per call each mod has running (modCallsAtOnce);
+	// inFlight counts each mod's calls running or waiting for a slot.
+	busy     map[string]chan struct{}
+	inFlight map[string]int
 }
 
 // CallMod answers mod id's call of method from its host (the supervisor
@@ -80,18 +86,30 @@ func (s *Server) CallMod(ctx context.Context, id, method string, params json.Raw
 // ModRequest answers request m from mod id's host on conn: the
 // supervisor's Broker hook (modsup.Options.Broker). It returns at once;
 // the call runs on its own goroutine, at most modCallsAtOnce of a mod's
-// at a time, so a slow fetch never holds up the host's events. A
-// notification (no id) is ignored.
-func (s *Server) ModRequest(id string, conn *modproto.Conn, m *modproto.Message) {
+// at a time, so a slow fetch never holds up the host's events. A call
+// past modCallsAtOnce+modCallsWaiting is refused, and ctx's end (the
+// host's) ends the mod's calls. A notification (no id) is ignored.
+func (s *Server) ModRequest(ctx context.Context, id string, conn *modproto.Conn, m *modproto.Message) {
 	if m == nil || m.ID == nil {
 		return
 	}
 	reqID, method, params := *m.ID, m.Method, m.Params
-	slot := s.modSlot(id)
+	slot, ok := s.modAdmit(id)
+	if !ok {
+		_ = conn.ReplyError(reqID, modproto.CodeFailed,
+			fmt.Sprintf("%s: too many calls in flight (%d); wait for their answers", method, modCallsAtOnce+modCallsWaiting))
+		return
+	}
 	go func() {
-		slot <- struct{}{}
-		defer func() { <-slot }()
-		res, err := s.CallMod(context.Background(), id, method, params)
+		defer s.modDone(id)
+		select {
+		case slot <- struct{}{}:
+			defer func() { <-slot }()
+		case <-ctx.Done():
+			_ = conn.ReplyError(reqID, modproto.CodeFailed, method+": "+ctx.Err().Error())
+			return
+		}
+		res, err := s.CallMod(ctx, id, method, params)
 		if err == nil {
 			err = conn.Reply(reqID, res)
 			if err != nil {
@@ -107,18 +125,34 @@ func (s *Server) ModRequest(id string, conn *modproto.Conn, m *modproto.Message)
 	}()
 }
 
-// modSlot is mod id's semaphore of modCallsAtOnce slots.
-func (s *Server) modSlot(id string) chan struct{} {
+// modAdmit counts a call of mod id in, and returns the mod's semaphore of
+// modCallsAtOnce slots; false when the mod already has
+// modCallsAtOnce+modCallsWaiting calls in flight.
+func (s *Server) modAdmit(id string) (chan struct{}, bool) {
 	mb := &s.modBr
 	mb.mu.Lock()
 	defer mb.mu.Unlock()
+	if mb.inFlight[id] >= modCallsAtOnce+modCallsWaiting {
+		return nil, false
+	}
 	if mb.busy == nil {
-		mb.busy = map[string]chan struct{}{}
+		mb.busy, mb.inFlight = map[string]chan struct{}{}, map[string]int{}
 	}
 	if mb.busy[id] == nil {
 		mb.busy[id] = make(chan struct{}, modCallsAtOnce)
 	}
-	return mb.busy[id]
+	mb.inFlight[id]++
+	return mb.busy[id], true
+}
+
+// modDone counts a call of mod id out (modAdmit).
+func (s *Server) modDone(id string) {
+	mb := &s.modBr
+	mb.mu.Lock()
+	defer mb.mu.Unlock()
+	if mb.inFlight[id]--; mb.inFlight[id] <= 0 {
+		delete(mb.inFlight, id)
+	}
 }
 
 func (s *Server) broker() *modbroker.Broker {

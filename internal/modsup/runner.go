@@ -484,12 +484,16 @@ func (r *runner) once(sub *modbus.Sub) (code int, why string) {
 
 	ev := hostEvents{r: r, bundle: bundle}
 	var cl atomic.Pointer[modproto.Client]
+	// The host's calls end with it (or the runner): their answers have
+	// nowhere to go.
+	cctx, ccancel := context.WithCancel(r.ctx)
+	defer ccancel()
 	onRequest := func(m *modproto.Message) {
 		c := cl.Load()
 		switch {
 		case c == nil:
 		case r.sup.o.Broker != nil:
-			r.sup.o.Broker(r.spec.ID, c.Conn(), m)
+			r.sup.o.Broker(cctx, r.spec.ID, c.Conn(), m)
 		default:
 			_ = c.Conn().ReplyError(*m.ID, modproto.CodeMethodNotFound, "the $ API isn't served yet: "+m.Method)
 		}
@@ -497,6 +501,10 @@ func (r *runner) once(sub *modbus.Sub) (code int, why string) {
 	onNotify := func(m *modproto.Message) { r.notified(m, &ev) }
 	client := modproto.NewClient(stdout, stdin, onRequest, onNotify)
 	cl.Store(client)
+	go func() {
+		<-client.Done()
+		ccancel()
+	}()
 	stderrDone := make(chan struct{})
 	go func() {
 		defer close(stderrDone)

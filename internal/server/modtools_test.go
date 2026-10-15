@@ -50,6 +50,7 @@ func TestModTools(t *testing.T) {
 	}
 	s.taskOf.Store("proj/t-0001", "T5")
 	s.mu.Lock()
+	s.inSession = testInSession
 	sock, err := s.listenMod("s-1", rt)
 	s.mu.Unlock()
 	if err != nil {
