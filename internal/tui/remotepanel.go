@@ -197,27 +197,7 @@ func remotePanel(d *infoData, w int, now time.Time) (*panel, []infoHit) {
 		}
 		hits = append(hits, h)
 	}
-	pl.gap()
-	pad()
-	pl.wrap(th().Faint.Render(remoteActsNote(r, d.session.ViewOnly)))
-	pad()
 	return pl, hits
-}
-
-// remoteActsNote is the panel's closing note: for a view-only pane,
-// that nothing acts on the server; for one that takes keys, that keys
-// typed in the pane go to its session (or aren't sent while the link is
-// down), and that the panel itself still
-// only reads.
-func remoteActsNote(r *remoteData, viewOnly bool) string {
-	alias := r.alias
-	if viewOnly {
-		return "Read-only: nothing here acts on " + alias + "."
-	}
-	if r.peer != nil && r.peer.State != proto.LinkUp {
-		return alias + " is offline: keys typed in the pane aren't sent. Nothing here acts on " + alias + "."
-	}
-	return "Keys typed in the pane go to " + alias + "'s session. This panel only reads: nothing in it acts on " + alias + "."
 }
 
 // remoteCoordLine is the coordinator's line under its project's name:

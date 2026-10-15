@@ -162,8 +162,14 @@ func TestPeerRows(t *testing.T) {
 	if d1 != "nas · offline 4m · relay" || d2 != "last seen "+peersAt.Add(-4*time.Minute).Format("15:04")+" · its projects keep their last values" {
 		t.Errorf("offline header's details %q %q", d1, d2)
 	}
-	if d1, _ := rows[7].details(); d1 != "mini / acme-api · view-only" {
+	if d1, _ := rows[7].details(); d1 != "mini / acme-api" {
 		t.Errorf("remote project's details %q", d1)
+	}
+	for panes, want := range map[string]string{proto.PanesView: "mini / acme-api · view-only", proto.PanesType: "mini / acme-api · panes writable"} {
+		rows := peerTreeWith(panes, "")
+		if d1, _ := rows[7].details(); d1 != want {
+			t.Errorf("%s: remote project's details %q", panes, d1)
+		}
 	}
 }
 
