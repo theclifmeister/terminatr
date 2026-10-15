@@ -147,8 +147,9 @@ snapshot:
 
 # The release notes are written by hand in docs/releases/<tag>.md and passed
 # with --release-notes (make release, RELEASE_NOTES=...); no commit list.
-changelog:
-  disable: true
+# Do not set changelog.disable: the changelog pipe is what loads
+# --release-notes, so disabling it leaves the release body empty (v0.28.0).
+# With --release-notes it uses the file as is and never reads git log.
 
 release:
   github:

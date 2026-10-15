@@ -132,7 +132,7 @@ func remoteHead(pm *proto.PeerMirror, p *proto.PeerMirrorProject, now time.Time)
 // remotePanel is a paired server's pane's panel w cells wide, with what
 // a click on each line does: the head (the server, its link), then the
 // coordinator's project or the thread, dimmed while stale, then the
-// read-only note. now is this server's clock; the peer's own times are
+// note on what acts on the server. now is this server's clock; the peer's own times are
 // shifted by the mirror's offset.
 func remotePanel(d *infoData, w int, now time.Time) (*panel, []infoHit) {
 	r := d.remote
@@ -199,9 +199,25 @@ func remotePanel(d *infoData, w int, now time.Time) (*panel, []infoHit) {
 	}
 	pl.gap()
 	pad()
-	pl.wrap(th().Faint.Render("Read-only: nothing here acts on " + r.alias + "."))
+	pl.wrap(th().Faint.Render(remoteActsNote(r, d.session.ViewOnly)))
 	pad()
 	return pl, hits
+}
+
+// remoteActsNote is the panel's closing note: for a view-only pane,
+// that nothing acts on the server; for one that takes keys, that keys
+// typed in the pane go to its session (or aren't sent while the link is
+// down), and that the panel itself still
+// only reads.
+func remoteActsNote(r *remoteData, viewOnly bool) string {
+	alias := r.alias
+	if viewOnly {
+		return "Read-only: nothing here acts on " + alias + "."
+	}
+	if r.peer != nil && r.peer.State != proto.LinkUp {
+		return alias + " is offline: keys typed in the pane aren't sent. Nothing here acts on " + alias + "."
+	}
+	return "Keys typed in the pane go to " + alias + "'s session. This panel only reads: nothing in it acts on " + alias + "."
 }
 
 // remoteCoordLine is the coordinator's line under its project's name:

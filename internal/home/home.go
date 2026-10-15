@@ -18,7 +18,13 @@ const Env = "TERMINATR_HOME"
 // ~/.terminatr. It does not create it.
 func Dir() (string, error) {
 	if d := os.Getenv(Env); d != "" {
-		return filepath.Abs(d)
+		d, err := filepath.Abs(d)
+		if err == nil && testing.Testing() && IsReal(d) {
+			// A tm session hands its children TERMINATR_HOME=~/.terminatr,
+			// so a thread running go test inherits the live home (T472).
+			panic("home: a test resolved the real state directory " + d + " through " + Env + "; set it to t.TempDir()")
+		}
+		return d, err
 	}
 	h, err := os.UserHomeDir()
 	if err != nil {
@@ -37,6 +43,22 @@ func Dir() (string, error) {
 		}
 	}
 	return d, nil
+}
+
+// IsReal reports whether dir is the account's own ~/.terminatr, the
+// live state a test must never touch, whatever $HOME says.
+func IsReal(dir string) bool {
+	real, ok := realUserHome()
+	if !ok {
+		return false
+	}
+	want := filepath.Join(real, ".terminatr")
+	if filepath.Clean(dir) == want {
+		return true
+	}
+	a, err1 := filepath.EvalSymlinks(dir)
+	b, err2 := filepath.EvalSymlinks(want)
+	return err1 == nil && err2 == nil && a == b
 }
 
 // realUserHome is the account's home from the password database, which

@@ -589,7 +589,7 @@ Thread branches (`tm/<project>/…`) live in your repositories and are not remov
 
 ## Releasing
 
-Write the release notes first: `docs/releases/v0.2.0.md`, in end-user words (no task or thread ids), starting with a "Before you update" section when users must do something. It is the release's body (goreleaser's commit changelog is off), and the workflow fails before building if the tag has no such file, so commit it and tag that commit. Then push a `v*` tag (`git tag v0.2.0 && git push origin v0.2.0`). `.github/workflows/release.yml` then, on one macOS runner:
+Write the release notes first: `docs/releases/v0.2.0.md`, in end-user words (no task or thread ids), starting with a "Before you update" section when users must do something. It is the release's body (goreleaser's commit changelog is not used, but its pipe must stay enabled: it loads the file; the workflow compares the draft's body with the file before publishing), and the workflow fails before building if the tag has no such file, so commit it and tag that commit. Then push a `v*` tag (`git tag v0.2.0 && git push origin v0.2.0`). `.github/workflows/release.yml` then, on one macOS runner:
 
 1. imports the Developer ID certificate into a temporary keychain;
 2. builds and checks a snapshot (`make release-snapshot`, `scripts/release/check.sh`), unsigned;
