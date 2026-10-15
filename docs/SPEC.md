@@ -2014,6 +2014,25 @@ only key fingerprints, IP addresses, sizes and timing; never aliases,
 project slugs, messages, pane content or a pairing code. It can drop or
 delay traffic; it can't read or forge it, nor join a room without a key.
 
+**What a relay sees.** Whoever runs it, or breaks into it, sees: the
+client IP address of every connection (or the proxy's); both server ids
+(key fingerprints) of each link, since the hello names the sender and
+its peer, so which servers are paired and when each is online; for a pairing, a
+hash of the code (the pair-room id), never the code; the timing, length
+and size of each connection and message; and the relay's own tm release,
+which it chose. It never sees aliases, project slugs, messages, pane
+content or a pairing code: the TLS 1.3 session between the two servers,
+with keys pinned at pairing, runs inside the stream it copies.
+
+**What a compromised relay can do.** Drop, delay or kick links, refuse
+new ones, or lie about being up; ask a linked server to update only
+through the checked path of §16.2 (the request is signed and holds no
+version or URL). It can't read the traffic, change it undetected, forge
+a server (it has no identity key a peer trusts) or pair one in without
+the code. A relay that is wrong or hostile therefore costs availability
+and the metadata above, not content. To limit the metadata, run the
+relay yourself, on a host you trust, and keep `--log-ips` off (§16.5).
+
 This section is the relay's side, and the link that dials it (§16.7).
 Pairing, which makes the identity key and fills the peers, is §16.8;
 what a paired server may read of the projects the user shares, §16.9;
@@ -2026,7 +2045,7 @@ projects, §16.11; a paired server's panes in this server's consoles,
 - **WebSocket** on `/v1`, over TLS (`wss://`, port 443): a request with
   `Upgrade: websocket`, `Sec-WebSocket-Version: 13` and
   `Sec-WebSocket-Protocol: tm-relay.1`, else HTTP 400 or 426. No
-  extensions. `GET /healthz` answers `ok`, with the relay's tm release in a `Tm-Version` header (and `Tm-Auto-Update: on|off` when its config says); any other path is 404.
+  extensions. `GET /healthz` answers `ok` to anyone, with `Tm-Auto-Update: on|off` when its config says and **no tm version**: the exact release tells a stranger which known bugs the relay has. The release goes only to a client that connects to `/v1`, in the challenge (§16.2). Any other path is 404.
 - **Our own framing.** tm implements the RFC 6455 subset it uses
   (`internal/relay/ws.go`, both ends); there is no WebSocket module. Clients
   mask their frames, the relay doesn't; reserved bits are refused;
@@ -2426,8 +2445,7 @@ asks a running server to read it again (`peer.reload`).
   meet through it): `GET /healthz` with a short timeout; for a CA
   certificate the days left, for a pinned IP relay whether it shows
   the pinned key (dates aren't checked there); the relay's tm version
-  (its `Tm-Version` header on `/healthz`, else what the links' hellos
-  said) and `update available` when a newer release is out; and
+  (what the links' challenges said; `/healthz` doesn't tell it) and `update available` when a newer release is out; and
   `auto-update on|off` when the relay says it (the `Tm-Auto-Update`
   header, set from `Config.AutoUpdate`; the installed units don't set
   it yet, so doctor shows nothing). Levels: `ok` when all is fine;

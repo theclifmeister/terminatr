@@ -140,9 +140,9 @@ func (s *Server) logf(format string, a ...any) {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/healthz":
-		if s.cfg.Version != "" {
-			w.Header().Set("Tm-Version", s.cfg.Version)
-		}
+		// No tm version here: anyone can ask, and the exact release
+		// tells which known bugs it has. A linked server gets it in the
+		// challenge.
 		if s.cfg.AutoUpdate != "" {
 			w.Header().Set("Tm-Auto-Update", s.cfg.AutoUpdate)
 		}

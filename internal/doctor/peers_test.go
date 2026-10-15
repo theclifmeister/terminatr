@@ -178,9 +178,10 @@ func TestRelayChecks(t *testing.T) {
 	t.Run("CA certificate, old relay", func(t *testing.T) {
 		d.Relay = probeFor(ts)
 		h := probeRelay(d.Relay, wss(ts))
-		if !h.Reachable || h.CertDays == nil || *h.CertDays < CertWarnDays || h.Version != "v0.26.0" || h.AutoUpdate != "on" {
+		if !h.Reachable || h.CertDays == nil || *h.CertDays < CertWarnDays || h.Version != "" || h.AutoUpdate != "on" {
 			t.Fatalf("probe: %+v", h)
 		}
+		h.Version = "v0.26.0" // what a link's hello says; /healthz doesn't
 		c := relayCheck(withUpdate(h))
 		if c.Status != Warn || !strings.Contains(c.Detail, "update available") || !strings.Contains(c.Detail, "auto-update on") {
 			t.Fatalf("old relay: %+v", c)
@@ -250,7 +251,7 @@ func TestRelayChecks(t *testing.T) {
 		if err := peer.SavePeers(dir, ps); err != nil {
 			t.Fatal(err)
 		}
-		cs := Peers(d, Live{Running: true, Link: &proto.LinkStatus{ID: id.ID.String()}})
+		cs := Peers(d, Live{Running: true, Link: &proto.LinkStatus{ID: id.ID.String(), Peers: []proto.PeerLink{{Alias: "a", ID: ps[0].ID().String(), RelayVersion: "v0.26.0"}}}})
 		rs := 0
 		for _, c := range cs {
 			if c.Relay != nil {
