@@ -47,11 +47,20 @@ func (e *Env) FakeClaude(edit ...func(string) string) {
 
 // FakeAgent installs the fake agent under another name as well: the
 // claude manifest renamed, so tests can pick between two agents. It has
-// none of claude's Go code (the trust of worktrees, say).
+// none of claude's Go code (the trust of worktrees, say). Its hooks
+// call `tm hook --agent NAME`: the server drops a hook that names
+// another agent than the session's, and without them the agent's state
+// comes from the screen alone, which can miss a short turn and leave a
+// kickoff pending.
 func (e *Env) FakeAgent(name string, edit ...func(string) string) {
 	e.T.Helper()
 	e.fakeManifest(name, append([]func(string) string{func(m string) string {
-		return strings.Replace(m, `name = "claude"`, "name = "+strconv.Quote(name), 1)
+		m = strings.Replace(m, `name = "claude"`, "name = "+strconv.Quote(name), 1)
+		hook := `"hook" "--agent" "claude"`
+		if !strings.Contains(m, hook) {
+			e.T.Fatalf("claude.toml: no %s to rename", hook)
+		}
+		return strings.Replace(m, hook, `"hook" "--agent" `+strconv.Quote(name), 1)
 	}}, edit...)...)
 }
 

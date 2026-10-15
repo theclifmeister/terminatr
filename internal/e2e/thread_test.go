@@ -51,7 +51,7 @@ text = "PATH-DONE"
 	"coord-agents": `
 [[step]]
 do = "run"
-cmd = '"$TERMINATR_BIN" context > "$OUT/context" 2>&1'
+cmd = '"$TERMINATR_BIN" context > "$OUT/context" 2>&1; echo "exit $?" >> "$OUT/context"'
 
 [[step]]
 do = "run"

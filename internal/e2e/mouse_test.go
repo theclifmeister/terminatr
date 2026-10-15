@@ -121,7 +121,7 @@ func TestSmokeMousePopupsAndAttach(t *testing.T) {
 	w := env.Window(120, 30)
 	w.WaitFor(" ■ demo", wait)
 
-	w.RightClick(4, sideRow(t, w.Screen(), "demo"))
+	w.RightClick(4, sideRow(t, w, "demo"))
 	w.WaitFor("show its dashboard", wait)
 	w.ClickText("show its dashboard", 1)
 	w.WaitUntil("demo's dashboard", wait, func(sc string) bool {

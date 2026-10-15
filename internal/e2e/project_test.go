@@ -114,7 +114,7 @@ func TestSmokeSidebar(t *testing.T) {
 	both := []*Window{w, w2}
 
 	// A project row shows that project's dashboard, in both consoles.
-	w.Click(4, sideRow(t, w.Screen(), demo))
+	w.Click(4, sideRow(t, w, demo))
 	for _, x := range both {
 		x.WaitUntil("demo's dashboard", wait, func(sc string) bool {
 			return strings.Contains(sc, " "+demo+" ─") && strings.Contains(sc, "t-0001 Small fix") && treeRow(sc, demo, "coordinator") >= 0
@@ -148,7 +148,7 @@ func TestSmokeSidebar(t *testing.T) {
 	waitPaneSize(t, env, th, threadCols(120), 28)
 	// beta's row, from the pane, shows beta's dashboard on both consoles;
 	// its coordinator's row attaches the coordinator again.
-	w.Click(4, sideRow(t, w.Screen(), beta))
+	w.Click(4, sideRow(t, w, beta))
 	for _, x := range both {
 		x.WaitUntil("beta's dashboard", wait, func(sc string) bool { return strings.Contains(sc, " "+beta+" ─") })
 	}
@@ -239,14 +239,14 @@ func sideGrid(l string, col int) string {
 	return strings.TrimSpace(string(r[at : at+w]))
 }
 
-// sideRow is the screen row where the sidebar lists slug.
-func sideRow(t *testing.T, screen, slug string) int {
+// sideRow is the screen row where w's sidebar lists slug, once it does:
+// a dashboard just shown may still be loading its projects (under -race
+// for seconds), so its first frame lists none.
+func sideRow(t *testing.T, w *Window, slug string) int {
 	t.Helper()
-	if i := projectRow(screen, slug); i >= 0 {
-		return i
-	}
-	t.Fatalf("the sidebar doesn't list %s:\n%s", slug, screen)
-	return -1
+	i := -1
+	w.WaitUntil("the sidebar listing "+slug, wait, func(sc string) bool { i = projectRow(sc, slug); return i >= 0 })
+	return i
 }
 
 // projectRow is the screen row of slug's project row in the sidebar, -1
@@ -297,7 +297,7 @@ func treeRow(screen, slug, label string) int {
 // (started when none runs).
 func clickCoordinator(t *testing.T, w *Window, slug string) {
 	t.Helper()
-	w.Click(4, sideRow(t, w.Screen(), slug))
+	w.Click(4, sideRow(t, w, slug))
 	y := -1
 	w.WaitUntil(slug+"'s coordinator row", agentWait, func(sc string) bool { y = treeRow(sc, slug, "coordinator"); return y >= 0 })
 	w.Click(4, y)
