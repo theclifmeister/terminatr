@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -21,7 +22,7 @@ func relayVersionWords(m *dash, e PeerEntry) string {
 	if e.Link == nil || e.Link.RelayVersion == "" {
 		return ""
 	}
-	w := "relay v" + strings.TrimPrefix(e.Link.RelayVersion, "v")
+	w := "relay v" + textsafe.Line(strings.TrimPrefix(e.Link.RelayVersion, "v"), 40)
 	if _, behind := relayBehind(m.data.Server, e.Link.RelayVersion); behind {
 		w += " · update available (u)"
 	}
@@ -46,7 +47,7 @@ func (pt *peersTab) relayUpdate(m *dash, e PeerEntry) {
 	q := fmt.Sprintf("Ask the relay %s to update itself to the latest official release? It restarts only for a newer one, and every link through it drops for a few seconds; it takes one request an hour.", host)
 	if e.Link != nil && e.Link.RelayVersion != "" {
 		if latest, behind := relayBehind(m.data.Server, e.Link.RelayVersion); behind {
-			q = fmt.Sprintf("The relay %s runs tm %s; %s is out. ", host, e.Link.RelayVersion, latest) + q
+			q = fmt.Sprintf("The relay %s runs tm %s; %s is out. ", host, textsafe.Line(e.Link.RelayVersion, 40), latest) + q
 		}
 	}
 	m.confirmNo("Update the relay", q, "relay "+host+" left as it is", func() tea.Cmd {

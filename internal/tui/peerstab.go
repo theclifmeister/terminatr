@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"net/url"
 	"slices"
 	"strings"
@@ -318,7 +319,7 @@ func peerLinkWords(m *dash, e PeerEntry, l PeerList) (string, lipgloss.Style, st
 func peerAbout(m *dash, e PeerEntry) string {
 	var bits []string
 	if e.Link != nil && e.Link.Version != "" {
-		bits = append(bits, "tm "+strings.TrimPrefix(e.Link.Version, "v"))
+		bits = append(bits, "tm "+textsafe.Line(strings.TrimPrefix(e.Link.Version, "v"), 40))
 	}
 	for _, pm := range m.data.Peers {
 		if pm.ID == e.ID && pm.Watch {
@@ -326,7 +327,7 @@ func peerAbout(m *dash, e PeerEntry) string {
 		}
 	}
 	if e.Link != nil && e.Link.Error != "" && e.Link.State != proto.LinkUp {
-		bits = append(bits, oneLine(e.Link.Error))
+		bits = append(bits, textsafe.Line(e.Link.Error, 200))
 	}
 	return strings.Join(bits, " · ")
 }

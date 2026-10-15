@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"io"
 	"net"
+	"regexp"
 	"slices"
 	"sync"
 	"time"
@@ -37,6 +39,28 @@ type Hello struct {
 	Version      string   `json:"version"` // the tm release
 	Caps         []string `json:"caps"`
 }
+
+// clean is h with its text made safe to show: the peer is paired but its
+// words are still only that. A version is one short line, a capability a
+// short lowercase word, and there are only so many.
+func (h Hello) clean() Hello {
+	h.Version = textsafe.Line(h.Version, maxVersionRunes)
+	var caps []string
+	for _, c := range h.Caps {
+		if len(caps) < maxCaps && capPattern.MatchString(c) {
+			caps = append(caps, c)
+		}
+	}
+	h.Caps = caps
+	return h
+}
+
+const (
+	maxVersionRunes = 40
+	maxCaps         = 16
+)
+
+var capPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,31}$`)
 
 // Has says whether the peer's hello lists the capability c.
 func (h Hello) Has(c string) bool { return slices.Contains(h.Caps, c) }
@@ -221,6 +245,7 @@ func (s *session) hello(own Hello) (Hello, error) {
 	if err := s.read(&peer); err != nil {
 		return peer, fmt.Errorf("link hello: %w", err)
 	}
+	peer = peer.clean()
 	if peer.LinkProtocol < MinLinkProtocol {
 		return peer, &versionError{peer}
 	}

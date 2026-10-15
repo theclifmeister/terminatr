@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"io"
 	"math/rand/v2"
 	"net"
@@ -108,6 +109,9 @@ func (l *link) openPane(ctx context.Context, p proto.PeerAttachParams, sink Pane
 // CapPane).
 var ErrNoPanes = errors.New("the paired server's tm has no remote panes")
 
+// maxErrorRunes bounds the error a link keeps and shows.
+const maxErrorRunes = 200
+
 func (l *link) status() proto.PeerLink {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -121,7 +125,7 @@ func (l *link) set(state, reason string, err error, retry time.Time) {
 	var line string
 	switch {
 	case state == proto.LinkOffline && err != nil:
-		line = fmt.Sprintf("offline (%s): %v", reason, err)
+		line = fmt.Sprintf("offline (%s): %s", reason, textsafe.Line(err.Error(), maxErrorRunes))
 	case state == proto.LinkOffline:
 		line = fmt.Sprintf("offline (%s)", reason)
 	}
@@ -132,7 +136,7 @@ func (l *link) set(state, reason string, err error, retry time.Time) {
 	}
 	l.st.State, l.st.Reason, l.st.Retry = state, reason, retry
 	if err != nil {
-		l.st.Error = err.Error()
+		l.st.Error = textsafe.Line(err.Error(), maxErrorRunes)
 	} else if state == proto.LinkUp {
 		l.st.Error = ""
 	}
@@ -199,7 +203,7 @@ func (l *link) once(ctx context.Context) (up bool, err error) {
 	}
 	if rc, ok := c.(interface{ RelayVersion() string }); ok {
 		l.mu.Lock()
-		l.st.RelayVersion = rc.RelayVersion()
+		l.st.RelayVersion = relay.CleanVersion(rc.RelayVersion())
 		l.mu.Unlock()
 	}
 	// ctx ends the link at any point from here.

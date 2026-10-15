@@ -275,7 +275,7 @@ func (w *wsConn) ReadMessage() (op byte, msg []byte, err error) {
 			ce := &CloseError{Code: closeNoStatus}
 			if len(payload) >= 2 {
 				ce.Code = int(binary.BigEndian.Uint16(payload))
-				ce.Reason = string(payload[2:])
+				ce.Reason = cleanReason(string(payload[2:]))
 			}
 			w.CloseWith(CloseNormal, "")
 			return 0, nil, ce
