@@ -54,3 +54,23 @@ func Line(s string, n int) string {
 
 // Safe reports whether s is one line with nothing Clean would change.
 func Safe(s string) bool { return strings.IndexFunc(s, unsafe) < 0 }
+
+// Hidden is the first character of s that Clean would drop or blank
+// other than the white space a text file holds (a newline, a tab, a
+// carriage return), and its byte offset; -1 when there is none. Text an
+// agent reads is refused with one: it shows as nothing to the human and
+// reaches the agent whole.
+func Hidden(s string) (rune, int) {
+	for i, r := range s {
+		if unsafe(r) && r != '\n' && r != '\t' && r != '\r' {
+			if r == utf8.RuneError {
+				_, n := utf8.DecodeRuneInString(s[i:])
+				if n == 1 {
+					return rune(s[i]), i
+				}
+			}
+			return r, i
+		}
+	}
+	return 0, -1
+}

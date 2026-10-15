@@ -2,6 +2,8 @@ Infra guard 1.2.0 (infra-guard) by Ada
 Keeps agents off production.
 Provides: code · tools · rules · guard
 
+It changes what agents run or read:
+  • adds rules every thread reads: rules.md (below)
 It may:
   • reads your projects
   • offers tools to agents
