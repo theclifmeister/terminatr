@@ -73,6 +73,11 @@ const DefaultPromptHold = 10 * time.Minute
 const (
 	HeldBox    = "prompt box not empty"
 	HeldDialog = "dialog on screen"
+	// HeldToken: held past PromptHold, the prompt is for the agent's
+	// channel, which needs a token no hook has reported yet
+	// (agent.ErrNoToken). It goes once a hook brings the token, or is
+	// pasted once the box and screen clear.
+	HeldToken = "waiting for the agent's messaging token"
 	// HeldMod: the mod took the prompt and handed it to the agent, which
 	// is idle and hasn't run it (modprompt.go).
 	HeldMod = "the mod took it, the agent hasn't run it"
@@ -97,8 +102,9 @@ type PromptOptions struct {
 type PromptResolution struct {
 	Text string
 	// Via is "sent" (written to the agent's channel, which may not
-	// confirm delivery: Claude's socket never answers), "dropped" or
-	// "stale" (Refresh said so).
+	// confirm delivery: Claude's socket never answers), "dropped",
+	// "stale" (Refresh said so) or "waiting" (the channel needs a token:
+	// the prompt stays queued, HeldToken).
 	Via    string
 	Why    string // HeldBox or HeldDialog
 	Held   time.Duration
@@ -113,6 +119,8 @@ type queuedPrompt struct {
 	at      time.Time
 	channel bool
 	refresh func() (string, bool)
+	// waitToken: the channel refused it for want of a token (HeldToken).
+	waitToken bool
 	// The mod's side (modprompt.go): when it was last offered to the mod,
 	// whether the mod took it (stored it and handed it to Claude),
 	// whether its text was refreshed already, and whether it goes to the
@@ -253,7 +261,8 @@ type AgentState struct {
 	// QueuedSince is when the oldest queued prompt was queued.
 	QueuedSince time.Time
 	// Held says why the next prompt isn't pasted although the agent is
-	// idle (HeldBox, HeldDialog), since HeldSince; empty while it isn't.
+	// idle (HeldBox, HeldDialog, HeldToken), since HeldSince; empty while
+	// it isn't.
 	Held      string
 	HeldSince time.Time
 	// RemoteControl is the observed remote control state, when the
@@ -924,6 +933,11 @@ func (s *Session) deliverPrompts(rt *agentRT, now time.Time) {
 		if rt.heldSince.IsZero() {
 			rt.heldSince = now
 		}
+		if rt.prompts[0].waitToken && rt.token == "" {
+			rt.heldWhy = HeldToken
+			rt.mu.Unlock()
+			return
+		}
 		rt.heldWhy = why
 		if now.Sub(rt.heldSince) < rt.promptHold() {
 			rt.mu.Unlock()
@@ -988,6 +1002,10 @@ func (rt *agentRT) promptHold() time.Duration {
 
 // resolveHeld sends a prompt held for PromptHold through the agent's
 // channel when the prompt allows it, else drops it, and tells the owner.
+// A channel that needs a token no hook has reported (agent.ErrNoToken)
+// sent nothing: the prompt goes back to the head of the queue, held
+// (HeldToken), and the owner hears "waiting" once (T493: an agent whose
+// SessionStart hook was lost, and which runs no turn, never reports it).
 func (s *Session) resolveHeld(rt *agentRT, p queuedPrompt, why string, held time.Duration) {
 	res := PromptResolution{Text: p.text, Via: "dropped", Why: why, Held: held, Queued: p.at}
 	if p.channel {
@@ -996,8 +1014,20 @@ func (s *Session) resolveHeld(rt *agentRT, p queuedPrompt, why string, held time
 			res.Err = rt.a.Prompt(ctx, s.promptTarget(rt), p.text)
 			cancel()
 		}
-		if res.Err == nil {
+		switch {
+		case res.Err == nil:
 			res.Via = "sent"
+		case errors.Is(res.Err, agent.ErrNoToken):
+			res.Via = "waiting"
+			first := !p.waitToken
+			p.waitToken = true
+			rt.mu.Lock()
+			rt.prompts = append([]queuedPrompt{p}, rt.prompts...)
+			rt.heldSince, rt.heldWhy = time.Now().Add(-held), HeldToken
+			rt.mu.Unlock()
+			if !first {
+				return
+			}
 		}
 	}
 	s.cfg.Logf("session %s: queued prompt held %s (%s): %s", s.cfg.ID, held.Round(time.Second), why, res.Via)

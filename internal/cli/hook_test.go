@@ -209,6 +209,77 @@ func TestHookSessionStartLimit(t *testing.T) {
 	}
 }
 
+// TestHookSessionStartRetried (T493): a SessionStart the server didn't
+// take (closed before its hello, or refused) is sent again, so neither
+// the context nor the messaging token is lost; an event that needs no
+// context is not.
+func TestHookSessionStartRetried(t *testing.T) {
+	for _, event := range []string{"SessionStart", "Stop"} {
+		t.Run(event, func(t *testing.T) {
+			e, out, _, sock := hookEnv(t, `{"hook_event_name":"`+event+`","source":"startup"}`)
+			log := filepath.Join(t.TempDir(), "hook.log")
+			getenv := e.Getenv
+			e.Getenv = func(k string) string {
+				if k == "TERMINATR_HOOK_LOG" {
+					return log
+				}
+				return getenv(k)
+			}
+			ln, err := net.Listen("unix", sock)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { ln.Close() })
+			conns := make(chan int, 8)
+			go func() {
+				for n := 1; ; n++ {
+					c, err := ln.Accept()
+					if err != nil {
+						return
+					}
+					conns <- n
+					if n == 1 {
+						c.Close() // gone before its hello
+						continue
+					}
+					br := bufio.NewReader(c)
+					br.ReadBytes('\n')
+					b, _ := json.Marshal(proto.Hello{Protocol: proto.Protocol})
+					c.Write(append(b, '\n'))
+					var req proto.Request
+					line, _ := br.ReadBytes('\n')
+					json.Unmarshal(line, &req)
+					resp := proto.Response{ID: req.ID}
+					if n == 2 {
+						resp.Error = &proto.Error{Code: proto.ErrRefused, Message: "refused"}
+					} else {
+						resp.Result, _ = json.Marshal(proto.HookEventResult{Stdout: `{"ctx":1}`})
+					}
+					b, _ = json.Marshal(resp)
+					c.Write(append(b, '\n'))
+					c.Close()
+				}
+			}()
+			runHookTimed(t, e, "--agent", "claude")
+			if event == "Stop" {
+				if len(conns) != 1 || out.Len() != 0 {
+					t.Fatalf("Stop: %d connections, stdout %q", len(conns), out)
+				}
+				return
+			}
+			if len(conns) != 3 || out.String() != `{"ctx":1}` {
+				t.Fatalf("SessionStart: %d connections, stdout %q", len(conns), out)
+			}
+			// Each failed try is logged, though the event arrived.
+			b, _ := os.ReadFile(log)
+			if lines := strings.Split(strings.TrimSpace(string(b)), "\n"); len(lines) != 2 ||
+				!strings.Contains(lines[0], "try 1 of 3") || !strings.Contains(lines[1], "refused") {
+				t.Fatalf("hook log:\n%s", b)
+			}
+		})
+	}
+}
+
 // The event's name comes from [hook] event_field, and a [[hooks]] entry's
 // timeout = "context" gives its response the longer deadline, for any
 // agent (docs/SPEC.md §8.2).

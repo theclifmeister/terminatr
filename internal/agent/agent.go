@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -250,6 +251,11 @@ type PromptTarget struct {
 	// none did.
 	Token string
 }
+
+// ErrNoToken is a channel's refusal to send without PromptTarget.Token
+// when it may need one: a message the agent would drop unseen. The core
+// keeps the prompt until a hook reports the token (session.HeldToken).
+var ErrNoToken = errors.New("no channel token: no hook has reported it")
 
 // Agent is the whole contract between the core and one agent harness.
 //

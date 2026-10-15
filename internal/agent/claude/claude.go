@@ -62,10 +62,13 @@ var ErrNoSocket = errors.New("claude: no messaging socket")
 // pins tested_versions, a version in them); the connect is the feature
 // probe.
 //
-// With a token (the CLAUDE_CODE_MESSAGING_TOKEN Claude gives its
-// children, which tm's hooks report), an {"type":"auth","token":…} line
-// goes first: Claude 2.1.291 may require it, and silently drops lines
-// from a connection without it. Claude never answers on the sending
+// An {"type":"auth","token":…} line goes first, with the token
+// (the CLAUDE_CODE_MESSAGING_TOKEN Claude gives its children, which tm's
+// hooks report): Claude 2.1.291 may require it, and then silently drops
+// lines from a connection without it. Claude makes the token up at start
+// and gives it only to its children, so tm can't set it at launch; with
+// no hook having reported it, Prompt sends nothing and returns
+// agent.ErrNoToken (T493). Claude never answers on the sending
 // connection, so nil means the lines were written, not that the message
 // was delivered: it may still be held for approval or dropped.
 func (a *Agent) Prompt(ctx context.Context, t agent.PromptTarget, text string) error {
@@ -75,6 +78,9 @@ func (a *Agent) Prompt(ctx context.Context, t agent.PromptTarget, text string) e
 	}
 	if !a.m.Tested(t.Version) {
 		return fmt.Errorf("claude: version %q: %w", t.Version, agent.ErrUntestedVersion)
+	}
+	if t.Token == "" && a.m.Inject.TokenEnv != "" {
+		return fmt.Errorf("claude: messaging socket: %w", agent.ErrNoToken)
 	}
 	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	c, err := ipc.Dial(dctx, ipc.Addr(path))

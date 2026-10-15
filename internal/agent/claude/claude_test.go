@@ -96,25 +96,22 @@ func TestPromptOverMessagingSocket(t *testing.T) {
 		return out
 	}
 
-	// Without a token: the user line alone.
-	got := accept()
+	// Without a token (no hook reported one, T493): nothing is sent, as
+	// Claude may drop an unauthenticated line unseen.
 	target := agent.PromptTarget{Version: "2.1.289", Fields: map[string]string{SocketField: sock}}
+	if err := a.Prompt(context.Background(), target, "hello\nworld"); !errors.Is(err, agent.ErrNoToken) {
+		t.Fatalf("no token: %v", err)
+	}
+
+	// With the hooks' token (2.1.291): the auth line comes first.
+	got := accept()
+	target.Version, target.Token = "2.1.291", "child-token"
 	if err := a.Prompt(context.Background(), target, "hello\nworld"); err != nil {
 		t.Fatal(err)
 	}
 	msgs := parse(<-got)
-	if len(msgs) != 1 || msgs[0].Type != "user" || msgs[0].Message.Role != "user" || msgs[0].Message.Content != "hello\nworld" {
-		t.Fatalf("lines %+v", msgs)
-	}
-
-	// With the hooks' token (2.1.291): the auth line comes first.
-	got = accept()
-	target.Version, target.Token = "2.1.291", "child-token"
-	if err := a.Prompt(context.Background(), target, "hi"); err != nil {
-		t.Fatal(err)
-	}
-	msgs = parse(<-got)
-	if len(msgs) != 2 || msgs[0].Type != "auth" || msgs[0].Token != "child-token" || msgs[1].Type != "user" || msgs[1].Message.Content != "hi" {
+	if len(msgs) != 2 || msgs[0].Type != "auth" || msgs[0].Token != "child-token" || msgs[1].Type != "user" ||
+		msgs[1].Message.Role != "user" || msgs[1].Message.Content != "hello\nworld" {
 		t.Fatalf("lines %+v", msgs)
 	}
 
