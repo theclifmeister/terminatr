@@ -23,7 +23,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/mod"
-	"github.com/theclifmeister/terminatr/internal/modannot"
+	"github.com/theclifmeister/terminatr/internal/modstore"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -85,9 +85,9 @@ type SideProject struct {
 	// branch is behind origin, by repo path.
 	Checkouts map[string]string `json:"checkouts,omitempty"`
 	// Badges are the annotations of the mods that run for the project,
-	// enabled with project_read, by target (modannot.Task,
-	// modannot.Thread), in the mods' id order.
-	Badges map[string][]modannot.Badge `json:"badges,omitempty"`
+	// enabled with project_read, by target (modstore.Task,
+	// modstore.Thread), in the mods' id order.
+	Badges map[string][]modstore.Badge `json:"badges,omitempty"`
 	// Links are the project's links to other projects' coordinators
 	// (link.Rows).
 	Links []link.Row `json:"links,omitempty"`
@@ -166,12 +166,12 @@ type sideLook struct {
 	ver    uint64          // counts the changes of b
 }
 
-// badgeEntry is a mod's annotations in a project (modannot.Read), with
+// badgeEntry is a mod's annotations in a project (modstore.ReadBadges), with
 // the stamp of its file.
 type badgeEntry struct {
 	stamp uint64
 	at    time.Time
-	b     map[string][]modannot.Badge
+	b     map[string][]modstore.Badge
 }
 
 // sideProjects is the projects as the sidebars show them, or with detail
@@ -271,7 +271,7 @@ func (s *Server) badgeMods() []mod.Mod {
 // badgesOf are the annotations of mods that run for project slug, by
 // target, in the mods' order; a mod's file is read again when its stamp
 // changed, or snapMaxAge after.
-func (h *sideHub) badgesOf(mods []mod.Mod, slug string) map[string][]modannot.Badge {
+func (h *sideHub) badgesOf(mods []mod.Mod, slug string) map[string][]modstore.Badge {
 	state, err := home.ModStateDir()
 	if err != nil {
 		return nil
@@ -279,21 +279,21 @@ func (h *sideHub) badgesOf(mods []mod.Mod, slug string) map[string][]modannot.Ba
 	if h.badges == nil {
 		h.badges = map[string]badgeEntry{}
 	}
-	var out map[string][]modannot.Badge
+	var out map[string][]modstore.Badge
 	for _, m := range mods {
 		if !m.Runs(slug) {
 			continue
 		}
 		dir := filepath.Join(state, m.ID)
-		key, st := m.ID+"/"+slug, fsx.StatStamp(filepath.Join(dir, modannot.File))
+		key, st := m.ID+"/"+slug, fsx.StatStamp(filepath.Join(dir, modstore.AnnotationsFile))
 		e, ok := h.badges[key]
 		if !ok || e.stamp != st || time.Since(e.at) >= snapMaxAge {
-			e = badgeEntry{stamp: st, at: time.Now(), b: modannot.Read(dir, m.ID, slug)}
+			e = badgeEntry{stamp: st, at: time.Now(), b: modstore.ReadBadges(dir, m.ID, slug)}
 			h.badges[key] = e
 		}
 		for target, bs := range e.b {
 			if out == nil {
-				out = map[string][]modannot.Badge{}
+				out = map[string][]modstore.Badge{}
 			}
 			out[target] = append(out[target], bs...)
 		}
