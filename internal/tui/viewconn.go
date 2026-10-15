@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
 
@@ -17,11 +17,11 @@ import (
 // which both render what it holds. When the server goes away it keeps
 // trying to join the view again, as the same kind of member.
 type ViewConn struct {
-	paths server.Paths
+	paths tmclient.Paths
 
 	mu     sync.Mutex
 	params proto.ViewSubscribeParams // to join again
-	stream *server.ViewStream
+	stream *tmclient.ViewStream
 	client string
 	v      view.View
 	up     bool // joined; false while the server is away
@@ -34,7 +34,7 @@ type ViewConn struct {
 	local *[]string
 
 	callMu sync.Mutex // one call at a time on ctl
-	ctl    *server.Client
+	ctl    *tmclient.Client
 	// serve, when set, answers the calls instead of the server (tests).
 	serve func(method string, p proto.ViewParams) (view.View, error)
 }
@@ -44,9 +44,9 @@ var ErrViewDown = errors.New("not joined to a view (the server is away)")
 
 // JoinView joins a view. A failure to join the first time is returned;
 // later the connection rejoins on its own.
-func JoinView(p server.Paths, params proto.ViewSubscribeParams) (*ViewConn, error) {
+func JoinView(p tmclient.Paths, params proto.ViewSubscribeParams) (*ViewConn, error) {
 	vc := &ViewConn{paths: p, params: params, watch: map[chan struct{}]bool{}, digest: map[chan struct{}]bool{}}
-	st, v, err := server.SubscribeView(p, params)
+	st, v, err := tmclient.SubscribeView(p, params)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func JoinView(p server.Paths, params proto.ViewSubscribeParams) (*ViewConn, erro
 
 // run reads the stream until it ends, then joins again until it works
 // or the connection is closed.
-func (vc *ViewConn) run(st *server.ViewStream) {
+func (vc *ViewConn) run(st *tmclient.ViewStream) {
 	for {
 		for {
 			v, err := st.Next()
@@ -90,7 +90,7 @@ func (vc *ViewConn) run(st *server.ViewStream) {
 				params.Session = vc.v.Focus
 			}
 			vc.mu.Unlock()
-			s, v, err := server.SubscribeView(vc.paths, params)
+			s, v, err := tmclient.SubscribeView(vc.paths, params)
 			if err != nil {
 				continue
 			}
@@ -302,7 +302,7 @@ func (vc *ViewConn) call(method string, p proto.ViewParams) (view.View, error) {
 		return vc.serve(method, p)
 	}
 	if vc.ctl == nil {
-		c, err := server.Connect(vc.paths, false)
+		c, err := tmclient.Connect(vc.paths, false)
 		if err != nil {
 			return view.View{}, err
 		}

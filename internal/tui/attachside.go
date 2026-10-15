@@ -8,11 +8,11 @@ import (
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/theclifmeister/terminatr/internal/caller"
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
 
@@ -368,7 +368,7 @@ func (c *client) askActive(slug string, on bool) {
 // says what came of it in the status bar.
 func (c *client) setActive(slug string, on bool) {
 	go func() {
-		ctl, err := server.Connect(c.paths, false)
+		ctl, err := tmclient.Connect(c.paths, false)
 		msg := ""
 		if err == nil {
 			msg, err = ActivateProject(ctl.Call, caller.FromEnv(), slug, on)
@@ -433,7 +433,7 @@ func (c *client) sectionDo(st sideStep) {
 		p := sectionClick(s)
 		go func() {
 			var res proto.ModViewInputResult
-			ctl, err := server.Connect(c.paths, false)
+			ctl, err := tmclient.Connect(c.paths, false)
 			if err == nil {
 				err = ctl.Call(proto.MethodModViewInput, p, &res)
 				ctl.Close()

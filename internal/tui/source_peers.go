@@ -11,10 +11,10 @@ import (
 	"os"
 	"time"
 
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/relay"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
 
@@ -91,7 +91,7 @@ func (s *ServerSource) RemovePeer(alias string) error {
 		return fmt.Errorf("no paired server %s (tm peer list)", alias)
 	}
 	var st *proto.LinkStatus
-	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, server.ErrNotRunning) {
+	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, tmclient.ErrNotRunning) {
 		return fmt.Errorf("removed %s, but the server didn't read the peers again (%v); tm server restart does", alias, err)
 	}
 	return nil
@@ -109,7 +109,7 @@ func (s *ServerSource) SetPeerPanes(alias, level string) error {
 		return fmt.Errorf("no paired server %s (tm peer list)", alias)
 	}
 	var st *proto.LinkStatus
-	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, server.ErrNotRunning) {
+	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, tmclient.ErrNotRunning) {
 		return fmt.Errorf("set, but the server didn't read the peers again (%v); tm server restart does", err)
 	}
 	return nil
@@ -131,7 +131,7 @@ func (s *ServerSource) SetPeerRelay(alias, relayText string) (string, error) {
 		return "", fmt.Errorf("no paired server %s (tm peer list)", alias)
 	}
 	var st *proto.LinkStatus
-	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, server.ErrNotRunning) {
+	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, tmclient.ErrNotRunning) {
 		return "", fmt.Errorf("set, but the server didn't read the peers again (%v); tm server restart does", err)
 	}
 	return relay.PrivateWarning(r), nil
@@ -232,7 +232,7 @@ func (s *ServerSource) pairing(ctx context.Context, code peer.Code, ev PairEvent
 		return "", err
 	}
 	var st *proto.LinkStatus
-	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, server.ErrNotRunning) {
+	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, tmclient.ErrNotRunning) {
 		return got.Alias, fmt.Errorf("paired with %s, but the server didn't read the peers again (%v); tm server restart does", got.Alias, err)
 	}
 	return got.Alias, nil

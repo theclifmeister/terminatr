@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 )
 
 // Keys a scenario presses with Window.Key. They are encoded the way the
@@ -168,7 +168,7 @@ func (e *Env) AssertMirrorsServer(w *Window) {
 		return n, last
 	}
 	before, _ := count()
-	c, err := server.Dial(server.Paths{Socket: e.Socket}, proto.KindControl)
+	c, err := client.Dial(client.Paths{Socket: e.Socket}, proto.KindControl)
 	if err != nil {
 		e.T.Fatalf("dial server: %v", err)
 	}

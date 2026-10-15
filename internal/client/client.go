@@ -1,4 +1,7 @@
-package server
+// Package client talks to the tm server (docs/SPEC.md §3): it finds it
+// (Paths), dials and starts it, calls its control methods and holds its
+// streams, without the server's own code.
+package client
 
 import (
 	"bufio"
@@ -14,6 +17,8 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/pin"
+	"github.com/theclifmeister/terminatr/internal/plat/flock"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -76,17 +81,18 @@ func Dial(p Paths, kind proto.Kind) (*Client, error) { return dial(p, kind, prot
 // prompt to run tm outside the sandbox.
 func dial(p Paths, kind proto.Kind, protocol int) (*Client, error) {
 	if (kind == proto.KindControl || kind == proto.KindAttach) && p.Socket != "" && !caller.FromEnv().IsAgent() {
-		c, err := dialAt(p.HumanSocket(), kind, protocol)
+		c, err := DialAt(p.HumanSocket(), kind, protocol)
 		var ne net.Error
 		if err == nil || errors.As(err, &ne) && ne.Timeout() {
 			return c, err
 		}
 	}
-	return dialAt(p.Socket, kind, protocol)
+	return DialAt(p.Socket, kind, protocol)
 }
 
-// dialAt connects to the socket at sock and performs the handshake.
-func dialAt(sock string, kind proto.Kind, protocol int) (*Client, error) {
+// DialAt connects to the socket at sock, claiming protocol, and
+// performs the handshake: Dial at one socket.
+func DialAt(sock string, kind proto.Kind, protocol int) (*Client, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), UnresponsiveTimeout)
 	conn, err := ipc.Dial(ctx, ipc.Addr(sock))
 	cancel()
@@ -96,12 +102,12 @@ func dialAt(sock string, kind proto.Kind, protocol int) (*Client, error) {
 	c := &Client{conn: conn, br: bufio.NewReader(conn)}
 	conn.SetDeadline(time.Now().Add(UnresponsiveTimeout))
 	hello := proto.Hello{Protocol: protocol, Version: version.Version, Build: version.BuildID(), Kind: proto.Kind(kind)}
-	if err := writeJSONLine(conn, hello); err != nil {
+	if err := proto.WriteLine(conn, hello); err != nil {
 		conn.Close()
 		return nil, err
 	}
 	var server proto.Hello
-	if err := readJSONLine(c.br, &server); err != nil {
+	if err := proto.ReadLine(c.br, &server); err != nil {
 		conn.Close()
 		return nil, err
 	}
@@ -130,7 +136,7 @@ func Connect(p Paths, autostart bool) (*Client, error) {
 	if !ipc.IsAbsent(err) {
 		var ne net.Error
 		if errors.As(err, &ne) && ne.Timeout() {
-			return nil, &UnresponsiveError{PID: readPID(p.PID), Log: p.Log}
+			return nil, &UnresponsiveError{PID: ReadPID(p.PID), Log: p.Log}
 		}
 		return nil, err
 	}
@@ -139,7 +145,7 @@ func Connect(p Paths, autostart bool) (*Client, error) {
 	if err := os.MkdirAll(p.RunDir, 0o700); err != nil {
 		return nil, err
 	}
-	lk, lerr := tryLock(p.Lock)
+	lk, lerr := flock.TryLock(p.Lock)
 	switch {
 	case lerr == nil:
 		os.Remove(p.Socket)
@@ -157,7 +163,7 @@ func Connect(p Paths, autostart bool) (*Client, error) {
 			c.Started = true
 		}
 		return c, err
-	case errors.Is(lerr, ErrLocked):
+	case errors.Is(lerr, flock.ErrLocked):
 		// A server holds the lock: it may still be starting up.
 		deadline := time.Now().Add(UnresponsiveTimeout)
 		for time.Now().Before(deadline) {
@@ -168,7 +174,7 @@ func Connect(p Paths, autostart bool) (*Client, error) {
 				return nil, err
 			}
 		}
-		return nil, &UnresponsiveError{PID: readPID(p.PID), Log: p.Log}
+		return nil, &UnresponsiveError{PID: ReadPID(p.PID), Log: p.Log}
 	default:
 		return nil, lerr
 	}
@@ -202,7 +208,7 @@ func StartLaunchd(p Paths) error {
 	}
 	// launchd runs the pin (service.Config.Program), so it must exist
 	// and hold this build: no server runs, so none uses it.
-	if _, err := pinBinary(p.RunDir, c.Bin); err != nil {
+	if _, err := pin.Binary(p.RunDir, c.Bin); err != nil {
 		return fmt.Errorf("start the server through launchd: %w", err)
 	}
 	if err := c.Start(); err != nil {
@@ -306,9 +312,9 @@ func (c *Client) call(deadline time.Time, method string, params, result any) err
 		defer c.conn.SetDeadline(time.Time{})
 	}
 	var resp proto.Response
-	err := writeJSONLine(c.conn, req)
+	err := proto.WriteLine(c.conn, req)
 	if err == nil {
-		err = readJSONLine(c.br, &resp)
+		err = proto.ReadLine(c.br, &resp)
 	}
 	if err == nil && resp.ID != req.ID {
 		err = fmt.Errorf("%s: the answer is to request %d, not %d", method, resp.ID, req.ID)
@@ -326,6 +332,15 @@ func (c *Client) call(deadline time.Time, method string, params, result any) err
 	return nil
 }
 
+// ReadLine reads the stream's next NDJSON line into v.
+func (c *Client) ReadLine(v any) error { return proto.ReadLine(c.br, v) }
+
+// WriteLine writes v to the stream as one NDJSON line.
+func (c *Client) WriteLine(v any) error { return proto.WriteLine(c.conn, v) }
+
+// RemoteAddr is the socket the client connected to.
+func (c *Client) RemoteAddr() net.Addr { return c.conn.RemoteAddr() }
+
 // Close closes the connection.
 func (c *Client) Close() error { return c.conn.Close() }
 
@@ -341,12 +356,12 @@ func Attach(p Paths, params proto.AttachParams) (*Client, *proto.SessionInfo, er
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := writeJSONLine(c.conn, proto.AttachRequest{Attach: params}); err != nil {
+	if err := proto.WriteLine(c.conn, proto.AttachRequest{Attach: params}); err != nil {
 		c.Close()
 		return nil, nil, err
 	}
 	var reply proto.AttachReply
-	if err := readJSONLine(c.br, &reply); err != nil {
+	if err := proto.ReadLine(c.br, &reply); err != nil {
 		c.Close()
 		return nil, nil, err
 	}
@@ -373,17 +388,17 @@ func (c *Client) WriteFrame(typ proto.FrameType, payload []byte) error {
 // ForceKill sends SIGKILL to the recorded server pid, but only while the
 // lock is held (so the pid is still the server's) and the pid is alive.
 func ForceKill(p Paths) (int, error) {
-	lk, err := tryLock(p.Lock)
+	lk, err := flock.TryLock(p.Lock)
 	if err == nil {
 		lk.Unlock()
 		os.Remove(p.Socket)
 		os.Remove(p.PID)
 		return 0, ErrNotRunning
 	}
-	if !errors.Is(err, ErrLocked) {
+	if !errors.Is(err, flock.ErrLocked) {
 		return 0, err
 	}
-	pid := readPID(p.PID)
+	pid := ReadPID(p.PID)
 	if !proc.Alive(pid) {
 		return pid, fmt.Errorf("lock is held but pid file names no live process (%d)", pid)
 	}
@@ -397,7 +412,7 @@ func ForceKill(p Paths) (int, error) {
 func WaitStopped(p Paths, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for {
-		if lk, err := tryLock(p.Lock); err == nil {
+		if lk, err := flock.TryLock(p.Lock); err == nil {
 			lk.Unlock()
 			return true
 		}
@@ -450,7 +465,7 @@ func SubscribeView(p Paths, params proto.ViewSubscribeParams) (*ViewStream, view
 func (s *ViewStream) Next() (view.View, error) {
 	var ev proto.ViewEvent
 	for {
-		if err := readJSONLine(s.c.br, &ev); err != nil {
+		if err := proto.ReadLine(s.c.br, &ev); err != nil {
 			return view.View{}, err
 		}
 		switch ev.Event {
@@ -491,7 +506,7 @@ func WatchSession(p Paths, id string) (*WatchStream, proto.Watch, error) {
 func (s *WatchStream) Next() (proto.Watch, error) {
 	for {
 		var ev proto.WatchEvent
-		if err := readJSONLine(s.c.br, &ev); err != nil {
+		if err := proto.ReadLine(s.c.br, &ev); err != nil {
 			return proto.Watch{}, err
 		}
 		if ev.Event == proto.EventWatchChanged {
@@ -518,7 +533,7 @@ func AskSession(p Paths, id string, q proto.Question) (map[string]string, error)
 	}
 	for {
 		var ev proto.AskEvent
-		if err := readJSONLine(c.br, &ev); err != nil {
+		if err := proto.ReadLine(c.br, &ev); err != nil {
 			return nil, err
 		}
 		switch ev.Event {

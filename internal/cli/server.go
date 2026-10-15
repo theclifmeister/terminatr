@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -79,7 +80,7 @@ func serverRun(e *Env, args []string) error {
 			return srvFail("server run", err)
 		}
 	}
-	p, err := server.ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		return srvFail("server run", err)
 	}
@@ -169,17 +170,17 @@ func serverStart(e *Env, args []string) error {
 		c.Close()
 		return nil
 	}
-	if !errors.Is(err, server.ErrNotRunning) {
+	if !errors.Is(err, client.ErrNotRunning) {
 		return srvFail("server start", err)
 	}
-	start := server.StartDetached
+	start := client.StartDetached
 	if *direct {
-		start = server.StartChild
+		start = client.StartChild
 	}
 	if err := start(p); err != nil {
 		return srvFail("server start", err)
 	}
-	c, err = server.Dial(p, proto.KindControl)
+	c, err = client.Dial(p, proto.KindControl)
 	if err != nil {
 		return srvFail("server start", err)
 	}
@@ -199,32 +200,32 @@ func serverStop(e *Env, args []string) error {
 		return srvFail("server stop", err)
 	}
 	if *force {
-		p, err := server.ResolvePaths()
+		p, err := client.ResolvePaths()
 		if err != nil {
 			return srvFail("server stop", err)
 		}
-		pid, err := server.ForceKill(p)
-		if errors.Is(err, server.ErrNotRunning) {
+		pid, err := client.ForceKill(p)
+		if errors.Is(err, client.ErrNotRunning) {
 			fmt.Fprintln(e.Stdout, "not running")
 			return nil
 		}
 		if err != nil {
 			return srvFail("server stop", err)
 		}
-		server.WaitStopped(p, 5*time.Second)
+		client.WaitStopped(p, 5*time.Second)
 		os.Remove(p.Socket)
 		os.Remove(p.PID)
 		fmt.Fprintf(e.Stdout, "killed (pid %d)\n", pid)
 		return nil
 	}
-	p, err := server.ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		return srvFail("server stop", err)
 	}
 	// Stop works whatever protocol the server speaks: restart is how a
 	// server of another version is replaced, so it must never refuse on
 	// version (docs/SPEC.md §3.3).
-	st, err := server.Stop(p, *yes)
+	st, err := client.Stop(p, *yes)
 	var perr *proto.Error
 	if errors.As(err, &perr) && perr.Code == proto.ErrRefused && !*yes && isTTY(os.Stdin) {
 		fmt.Fprintf(e.Stderr, "%s. Stop anyway? [y/N] ", perr.Message)
@@ -232,9 +233,9 @@ func serverStop(e *Env, args []string) error {
 		if a := strings.TrimSpace(strings.ToLower(line)); a != "y" && a != "yes" {
 			return &exitError{ExitRefused}
 		}
-		st, err = server.Stop(p, true)
+		st, err = client.Stop(p, true)
 	}
-	if errors.Is(err, server.ErrNotRunning) {
+	if errors.Is(err, client.ErrNotRunning) {
 		fmt.Fprintln(e.Stdout, "not running")
 		return nil
 	}
@@ -249,7 +250,7 @@ func serverStop(e *Env, args []string) error {
 		fmt.Fprintf(e.Stderr, "tm server stop: the server speaks protocol %d, this tm %d; stopped it all the same\n", st.Protocol, proto.Protocol)
 	}
 	// The lock goes first; the process exits a moment later.
-	if !server.WaitStopped(p, server.StopGrace+5*time.Second) || !server.WaitExited(pid, 3*time.Second) {
+	if !client.WaitStopped(p, server.StopGrace+5*time.Second) || !client.WaitExited(pid, 3*time.Second) {
 		fmt.Fprintf(e.Stderr, "tm server stop: pid %d still running; see %s, or tm server stop --force kills it\n", pid, p.Log)
 		return &exitError{ExitIO}
 	}
@@ -264,7 +265,7 @@ func serverStatus(e *Env, args []string) error {
 		return srvFail("server status", err)
 	}
 	c, _, err := connect(false)
-	if errors.Is(err, server.ErrNotRunning) {
+	if errors.Is(err, client.ErrNotRunning) {
 		if *asJSON {
 			return e.printJSON(map[string]bool{"running": false})
 		}
@@ -304,11 +305,11 @@ func serverStatus(e *Env, args []string) error {
 // unloadJob boots out a dev or test home's on-demand launchd job after
 // its server stopped, so it isn't left loaded (T71). Best effort.
 func unloadJob() {
-	p, err := server.ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		return
 	}
-	if c, err := server.LaunchdConfig(p); err == nil {
+	if c, err := client.LaunchdConfig(p); err == nil {
 		c.Unload()
 	}
 }

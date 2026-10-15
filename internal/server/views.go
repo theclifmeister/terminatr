@@ -589,7 +589,7 @@ func (s *Server) serveViewStream(c net.Conn, br *bufio.Reader, req proto.Request
 			resp.Result, _ = json.Marshal(proto.ViewSubscribeResult{Client: m.id, View: v})
 		}
 	}
-	if err := writeJSONLine(c, resp); err != nil || m == nil {
+	if err := proto.WriteLine(c, resp); err != nil || m == nil {
 		if m != nil {
 			s.views.leave(name, m)
 		}
@@ -608,7 +608,7 @@ func (s *Server) serveViewStream(c net.Conn, br *bufio.Reader, req proto.Request
 		case <-gone:
 			return
 		case <-m.digest:
-			if err := writeJSONLine(c, proto.ViewEvent{Event: proto.EventViewDigest}); err != nil {
+			if err := proto.WriteLine(c, proto.ViewEvent{Event: proto.EventViewDigest}); err != nil {
 				return
 			}
 			continue
@@ -622,7 +622,7 @@ func (s *Server) serveViewStream(c net.Conn, br *bufio.Reader, req proto.Request
 			continue
 		}
 		sent = v.Seq
-		if err := writeJSONLine(c, proto.ViewEvent{Event: proto.EventViewChanged, View: v}); err != nil {
+		if err := proto.WriteLine(c, proto.ViewEvent{Event: proto.EventViewChanged, View: v}); err != nil {
 			return
 		}
 	}

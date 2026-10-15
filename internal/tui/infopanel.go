@@ -11,10 +11,10 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
@@ -62,7 +62,7 @@ type infoData struct {
 // loadInfo reads the panel's data for session s, one of sessions: a
 // thread's, or a coordinator's (its project, coordpanel.go); nil for any
 // other.
-func loadInfo(paths server.Paths, s proto.SessionInfo, sessions []proto.SessionInfo) *infoData {
+func loadInfo(paths tmclient.Paths, s proto.SessionInfo, sessions []proto.SessionInfo) *infoData {
 	if s.Role == proto.RoleCoordinator && s.Project != "" {
 		return loadCoordInfo(paths, s, sessions)
 	}

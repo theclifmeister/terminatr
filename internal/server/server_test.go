@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -23,7 +24,7 @@ import (
 
 // testPaths gives a test its own home and a short socket path (a macOS
 // temp dir is too long for sun_path).
-func testPaths(t *testing.T) Paths {
+func testPaths(t *testing.T) client.Paths {
 	t.Helper()
 	home := t.TempDir()
 	sockDir, err := os.MkdirTemp(ipc.ShortDir(), "tmt")
@@ -37,7 +38,7 @@ func testPaths(t *testing.T) Paths {
 	// The human's, even under an agent's tm: an agent's Dial skips the
 	// human socket.
 	t.Setenv(caller.EnvSession, "")
-	p, err := ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +50,7 @@ type running struct {
 	done   chan error
 }
 
-func startServer(t *testing.T, p Paths) *running {
+func startServer(t *testing.T, p client.Paths) *running {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &running{cancel: cancel, done: make(chan error, 1)}
@@ -66,7 +67,7 @@ func startServer(t *testing.T, p Paths) *running {
 	}()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		c, err := Dial(p, proto.KindControl)
+		c, err := client.Dial(p, proto.KindControl)
 		if err == nil {
 			c.Close()
 			break
@@ -131,7 +132,7 @@ func (w *testWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func call(t *testing.T, c *Client, method string, params, result any) {
+func call(t *testing.T, c *client.Client, method string, params, result any) {
 	t.Helper()
 	if err := c.Call(method, params, result); err != nil {
 		t.Fatalf("%s: %v", method, err)
@@ -152,7 +153,7 @@ func eventually(t *testing.T, what string, cond func() bool) {
 func TestControlSessionLifecycle(t *testing.T) {
 	p := testPaths(t)
 	r := startServer(t, p)
-	c, err := Connect(p, false)
+	c, err := client.Connect(p, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +222,7 @@ func TestControlSessionLifecycle(t *testing.T) {
 func TestServerStopMethod(t *testing.T) {
 	p := testPaths(t)
 	r := startServer(t, p)
-	c, err := Connect(p, false)
+	c, err := client.Connect(p, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +234,7 @@ func TestServerStopMethod(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("server.stop did not stop the server")
 	}
-	if !WaitStopped(p, time.Second) {
+	if !client.WaitStopped(p, time.Second) {
 		t.Fatal("lock still held")
 	}
 }
@@ -247,7 +248,7 @@ func TestSecondServerRefused(t *testing.T) {
 		t.Fatalf("second Run: %v", err)
 	}
 	// The first server is untouched.
-	if c, err := Dial(p, proto.KindControl); err != nil {
+	if c, err := client.Dial(p, proto.KindControl); err != nil {
 		t.Fatalf("first server gone: %v", err)
 	} else {
 		c.Close()
@@ -303,7 +304,7 @@ func TestCrashIsDetected(t *testing.T) {
 	ln.Close()
 
 	startServer(t, p)
-	c, err := Connect(p, false)
+	c, err := client.Connect(p, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -331,7 +332,7 @@ func TestStaleSocketWithoutServer(t *testing.T) {
 	os.MkdirAll(p.RunDir, 0o700)
 	os.WriteFile(p.PID, []byte("999999\n"), 0o600)
 
-	if _, err := Connect(p, false); !errors.Is(err, ErrNotRunning) {
+	if _, err := client.Connect(p, false); !errors.Is(err, client.ErrNotRunning) {
 		t.Fatalf("Connect: %v", err)
 	}
 	for _, f := range []string{p.Socket, p.PID} {
@@ -366,8 +367,8 @@ func TestHungServerIsReported(t *testing.T) {
 		}
 	}()
 	t0 := time.Now()
-	_, err = Connect(p, true)
-	var unresp *UnresponsiveError
+	_, err = client.Connect(p, true)
+	var unresp *client.UnresponsiveError
 	if !errors.As(err, &unresp) || unresp.PID != 4242 {
 		t.Fatalf("Connect: %v", err)
 	}
@@ -382,7 +383,7 @@ func TestHungServerIsReported(t *testing.T) {
 // rawHello sends a hand-made hello and reports the server's hello and
 // whether the server then serves the connection: a control connection
 // answers a ping, an attach connection answers an attach request.
-func rawHello(t *testing.T, p Paths, h proto.Hello) (proto.Hello, bool) {
+func rawHello(t *testing.T, p client.Paths, h proto.Hello) (proto.Hello, bool) {
 	t.Helper()
 	conn, err := net.Dial("unix", p.Socket)
 	if err != nil {
@@ -391,20 +392,20 @@ func rawHello(t *testing.T, p Paths, h proto.Hello) (proto.Hello, bool) {
 	defer conn.Close()
 	conn.SetDeadline(time.Now().Add(5 * time.Second))
 	br := bufio.NewReader(conn)
-	if err := writeJSONLine(conn, h); err != nil {
+	if err := proto.WriteLine(conn, h); err != nil {
 		t.Fatal(err)
 	}
 	var reply proto.Hello
-	if err := readJSONLine(br, &reply); err != nil {
+	if err := proto.ReadLine(br, &reply); err != nil {
 		t.Fatal(err)
 	}
 	if h.Kind == proto.KindAttach {
-		writeJSONLine(conn, proto.AttachRequest{Attach: proto.AttachParams{Session: "s-404"}})
+		proto.WriteLine(conn, proto.AttachRequest{Attach: proto.AttachParams{Session: "s-404"}})
 	} else {
-		writeJSONLine(conn, proto.Request{ID: 1, Method: proto.MethodPing})
+		proto.WriteLine(conn, proto.Request{ID: 1, Method: proto.MethodPing})
 	}
 	var any map[string]any
-	return reply, readJSONLine(br, &any) == nil
+	return reply, proto.ReadLine(br, &any) == nil
 }
 
 func TestHandshakeVersioning(t *testing.T) {
@@ -439,8 +440,8 @@ func TestHandshakeVersioning(t *testing.T) {
 	}
 }
 
-func mustHello(t *testing.T, p Paths) proto.Hello {
-	c, err := Dial(p, proto.KindControl)
+func mustHello(t *testing.T, p client.Paths) proto.Hello {
+	c, err := client.Dial(p, proto.KindControl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -453,7 +454,7 @@ func mustHello(t *testing.T, p Paths) proto.Hello {
 func TestAttachStream(t *testing.T) {
 	p := testPaths(t)
 	startServer(t, p)
-	c, err := Connect(p, false)
+	c, err := client.Connect(p, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -462,10 +463,10 @@ func TestAttachStream(t *testing.T) {
 	call(t, c, proto.MethodSessionStart, proto.SessionStartParams{Argv: []string{testSh(t)}, Cwd: t.TempDir(), Cols: 80, Rows: 24}, &started)
 	id := started.Session.ID
 
-	if _, _, err := Attach(p, proto.AttachParams{Session: "s-404"}); err == nil {
+	if _, _, err := client.Attach(p, proto.AttachParams{Session: "s-404"}); err == nil {
 		t.Fatal("attach to an unknown session succeeded")
 	}
-	a, info, err := Attach(p, proto.AttachParams{Session: id, Cols: 100, Rows: 30})
+	a, info, err := client.Attach(p, proto.AttachParams{Session: id, Cols: 100, Rows: 30})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -502,7 +503,7 @@ func TestAttachStream(t *testing.T) {
 	a.WriteFrame(proto.FrameInput, []byte("echo via-attach\r"))
 	// A console resizes the pane through its view: here a bare one of
 	// its own, showing the session, in a 140×40 window.
-	st, v, err := SubscribeView(p, proto.ViewSubscribeParams{Own: true, Bare: true, Session: id, Cols: 140, Rows: 40})
+	st, v, err := client.SubscribeView(p, proto.ViewSubscribeParams{Own: true, Bare: true, Session: id, Cols: 140, Rows: 40})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -572,7 +573,7 @@ func TestResolvePathsKeepsTestsIsolated(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", "/h/custom")
 	t.Setenv("TERMINATR_SOCKET", "/tmp/x/tm.sock")
 	t.Setenv("XDG_RUNTIME_DIR", "/run/user/1")
-	p, err := ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -585,7 +586,7 @@ func TestResolvePathsKeepsTestsIsolated(t *testing.T) {
 		t.Fatalf("home files: %+v", p)
 	}
 	t.Setenv("TERMINATR_SOCKET", "")
-	p, _ = ResolvePaths()
+	p, _ = client.ResolvePaths()
 	if p.Socket != abs("/h/custom/run/tm.sock") {
 		t.Fatalf("a custom home must not use XDG_RUNTIME_DIR: %s", p.Socket)
 	}

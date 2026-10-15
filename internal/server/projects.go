@@ -214,7 +214,7 @@ func (s *Server) adopt(p proto.SessionAdoptParams) (any, *proto.Error) {
 // project p.Project (T on the dashboard), replacing an earlier one for
 // another project, for AdoptAskTTL; with p.Check it only says whether
 // that go-ahead waits, and with p.Withdraw it drops it (T again). It is
-// human-only (proto.HumanOnly): an agent's tm thread adopt needs it
+// human-only (its gate in methods.go): an agent's tm thread adopt needs it
 // (session.adopt's Asked), so the coordinator can't take over the
 // user's own agent session on its own word.
 func (s *Server) adoptAsk(p proto.SessionAdoptAskParams) (any, *proto.Error) {

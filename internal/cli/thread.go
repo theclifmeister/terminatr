@@ -17,10 +17,10 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
@@ -393,7 +393,7 @@ func (e *Env) rowOf(p *project.Project, r *thread.Record, sessions map[string]pr
 // tickerState is the ticker's state file, "" when the paths can't be
 // worked out.
 func tickerState() string {
-	paths, err := server.ResolvePaths()
+	paths, err := client.ResolvePaths()
 	if err != nil {
 		return ""
 	}

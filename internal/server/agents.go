@@ -32,9 +32,6 @@ import (
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
 
-// AgentsDir is where user manifests live, under TERMINATR_HOME.
-func (p Paths) AgentsDir() string { return filepath.Join(p.Home, "agents") }
-
 // loadAgents (re)reads the registry. Broken user manifests are logged
 // and skipped; the built-ins always load.
 func (s *Server) loadAgents() {

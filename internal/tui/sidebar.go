@@ -9,8 +9,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
 
@@ -281,13 +281,13 @@ type Target struct {
 // coordinator_agent, when none runs)
 // or the session. A bare view's console hands over to view main with it
 // (docs/SPEC.md §3.3); a full one opens it in place.
-func OpenTarget(p server.Paths, vc *ViewConn, t Target) error {
+func OpenTarget(p tmclient.Paths, vc *ViewConn, t Target) error {
 	switch {
 	case t.Session != "":
 		_, err := vc.Do(proto.MethodViewAttach, proto.ViewParams{Session: t.Session, Project: t.Project})
 		return err
 	case t.Coordinator:
-		c, err := server.Connect(p, true)
+		c, err := tmclient.Connect(p, true)
 		if err != nil {
 			return err
 		}

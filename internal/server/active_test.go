@@ -7,6 +7,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -56,7 +57,7 @@ func TestLoadPreviousDormant(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	s := &Server{opts: Options{Paths: Paths{Sessions: path}}, log: log.New(io.Discard, "", 0),
+	s := &Server{opts: Options{Paths: client.Paths{Sessions: path}}, log: log.New(io.Discard, "", 0),
 		prevProject: map[string]string{}, dormant: map[string]SessionRecord{}, records: map[string]SessionRecord{}}
 	resume, _ := s.loadPrevious()
 	var ids []string

@@ -23,12 +23,12 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/keychain"
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/service"
 	"github.com/theclifmeister/terminatr/internal/update"
 )
@@ -70,7 +70,7 @@ type Fix struct {
 // Deps is everything the checks touch outside the files under Paths, so
 // tests can replace it.
 type Deps struct {
-	Paths server.Paths
+	Paths client.Paths
 	// SandboxProbe checks an agent's coordinator sandbox on the installed
 	// agent (agent.SandboxProber); nil skips.
 	SandboxProbe func(agent.SandboxProber) (version string, err error)
@@ -125,7 +125,7 @@ type Deps struct {
 type RepoHost = codehost.RepoHost
 
 // DefaultDeps uses the real system.
-func DefaultDeps(p server.Paths, version, build string) Deps {
+func DefaultDeps(p client.Paths, version, build string) Deps {
 	return Deps{Paths: p, GOOS: runtime.GOOS, LookPath: exec.LookPath, Run: run, Version: version, Build: build, Getenv: os.Getenv, Hosts: usedHosts, Relay: &RelayProbe{},
 		Keychain:    func() proto.KeychainStatus { return keychain.Probe(runtime.GOOS, os.Getenv, keychain.Run) },
 		ProbeModels: func(m *agent.Manifest) (models.Cache, error) { return models.Refresh(context.Background(), m, nil) }}

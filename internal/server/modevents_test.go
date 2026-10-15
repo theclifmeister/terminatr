@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/modbus"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
@@ -22,7 +23,7 @@ import (
 // the poll; a mod without project_read gets no project events.
 func TestModEvents(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
-	p, err := ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		t.Fatal(err)
 	}

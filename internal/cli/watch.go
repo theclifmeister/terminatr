@@ -10,8 +10,8 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 )
 
 const watchUsage = `usage: tm watch [--session ID] [--json]   (default: this session, $TERMINATR_SESSION)
@@ -46,11 +46,11 @@ func watchCmd(e *Env, args []string) error {
 	if *id == "" {
 		return srvUsage("watch", "no session: pass --session ID\n"+watchUsage)
 	}
-	p, err := server.ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		return srvFail("watch", err)
 	}
-	st, w, err := server.WatchSession(p, *id)
+	st, w, err := client.WatchSession(p, *id)
 	var perr *proto.Error
 	if errors.As(err, &perr) && perr.Code == proto.ErrUnknownMethod {
 		err = errors.New("the running server can't watch sessions; restart it (tm server restart)")
@@ -126,11 +126,11 @@ func watchLine(w proto.Watch) string {
 // on each change, until the reader or the server goes. With asJSON each
 // line is a proto.ProjectWatch.
 func watchProject(e *Env, slug string, asJSON bool) error {
-	p, err := server.ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		return srvFail("watch", err)
 	}
-	st, w, err := server.WatchProject(p, slug)
+	st, w, err := client.WatchProject(p, slug)
 	var perr *proto.Error
 	if errors.As(err, &perr) && perr.Code == proto.ErrUnknownMethod {
 		err = errors.New("the running server can't watch projects; restart it (tm server restart)")

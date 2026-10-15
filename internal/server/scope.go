@@ -1,13 +1,11 @@
 package server
 
 import (
-	"encoding/json"
-
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
-// Scopes of the session-addressed methods (docs/SPEC.md §11.1): what a
+// Scopes of the session-addressed methods (method.scope) (docs/SPEC.md §11.1): what a
 // caller other than the human on the human socket may name.
 const (
 	scopeNone    = iota // anyone may call it
@@ -15,40 +13,6 @@ const (
 	scopeSees           // its own session, or for a coordinator its project's
 	scopeProject        // the caller's own project
 )
-
-// scopeOf is method m's scope and the session or project its params
-// name, decoded as its handler decodes them.
-func scopeOf(m string, raw json.RawMessage) (int, string, *proto.Error) {
-	switch m {
-	case proto.MethodHookEvent:
-		// Events and questions come from inside the session they name:
-		// tm hook and the agent's mod are the agent's children.
-		var p proto.HookEventParams
-		perr := decodeParams(raw, &p)
-		return scopeOwn, p.Session, perr
-	case proto.MethodSessionAsk:
-		var p proto.SessionAskParams
-		perr := decodeParams(raw, &p)
-		return scopeOwn, p.ID, perr
-	case proto.MethodSessionRead:
-		var p proto.SessionReadParams
-		perr := decodeParams(raw, &p)
-		return scopeSees, p.ID, perr
-	case proto.MethodSessionWait:
-		var p proto.SessionWaitParams
-		perr := decodeParams(raw, &p)
-		return scopeSees, p.ID, perr
-	case proto.MethodSessionWatch, proto.MethodAgentExplain:
-		var p proto.SessionIDParams
-		perr := decodeParams(raw, &p)
-		return scopeSees, p.ID, perr
-	case proto.MethodProjectWatch:
-		var p proto.ProjectWatchParams
-		perr := decodeParams(raw, &p)
-		return scopeProject, p.Project, perr
-	}
-	return scopeNone, "", nil
-}
 
 // mayAddress is the gate of a method that names a session or a project,
 // after mayCall. The human on the human socket names any. Everyone else
@@ -58,9 +22,13 @@ func scopeOf(m string, raw json.RawMessage) (int, string, *proto.Error) {
 // nothing: the human's own tm uses the human socket, so that is a process
 // that left its session's tree. Params are decoded as the method's
 // handler decodes them, and refused where they don't decode.
-func (s *Server) mayAddress(req proto.Request, human bool, who func() caller.Caller) *proto.Error {
-	scope, name, perr := scopeOf(req.Method, req.Params)
-	if scope == scopeNone || perr != nil {
+func (s *Server) mayAddress(req proto.Request, m method, human bool, who func() caller.Caller) *proto.Error {
+	scope := m.scope
+	if scope == scopeNone {
+		return nil
+	}
+	name, perr := m.name(req.Params)
+	if perr != nil {
 		return perr
 	}
 	c := who()

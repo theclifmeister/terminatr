@@ -5,7 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/theclifmeister/terminatr/internal/server"
+	"github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/pin"
 	"github.com/theclifmeister/terminatr/internal/service"
 )
 
@@ -16,7 +17,7 @@ const serviceUsage = `usage: tm server service install|uninstall [--print]`
 var serviceRun func(name string, args ...string) error
 
 func serviceConfig(e *Env) (service.Config, error) {
-	p, err := server.ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		return service.Config{}, err
 	}
@@ -61,7 +62,7 @@ func serverService(e *Env, args []string) error {
 	if args[0] == "install" {
 		if c.GOOS == "darwin" && c.RunDir != "" {
 			// The job runs the pin.
-			if err := server.EnsurePin(c.RunDir, c.Bin); err != nil {
+			if err := pin.Ensure(c.RunDir, c.Bin); err != nil {
 				return srvFail("server service install", err)
 			}
 		}

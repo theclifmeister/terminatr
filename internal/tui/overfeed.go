@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 )
 
 // feedInterval caps how often the pane under a popup is drawn again.
@@ -19,7 +19,7 @@ const feedInterval = time.Second / 30
 // pane under the popup keeps updating while the popup is open
 // (docs/SPEC.md §4).
 type paneFeed struct {
-	conn *server.Client // nil in tests
+	conn *tmclient.Client // nil in tests
 
 	mu     sync.Mutex
 	mirror *emu.Terminal
@@ -32,8 +32,8 @@ type paneFeed struct {
 }
 
 // followPane attaches to session id and starts following it.
-func followPane(p server.Paths, id string) (*paneFeed, error) {
-	conn, _, err := server.Attach(p, proto.AttachParams{Session: id})
+func followPane(p tmclient.Paths, id string) (*paneFeed, error) {
+	conn, _, err := tmclient.Attach(p, proto.AttachParams{Session: id})
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func followPane(p server.Paths, id string) (*paneFeed, error) {
 	return f, nil
 }
 
-func newFeed(conn *server.Client) *paneFeed {
+func newFeed(conn *tmclient.Client) *paneFeed {
 	return &paneFeed{conn: conn, wake: make(chan struct{}, 1), end: make(chan struct{})}
 }
 

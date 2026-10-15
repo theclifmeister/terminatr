@@ -10,8 +10,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 )
 
 const sessionUsage = `usage: tm session list [--json]
@@ -386,11 +386,11 @@ func sessionAsk(e *Env, args []string) error {
 	if err := json.NewDecoder(e.Stdin).Decode(&q); err != nil {
 		return srvUsage("session ask", "the question on stdin: "+err.Error()+"\n"+usage)
 	}
-	p, err := server.ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		return srvFail("session ask", err)
 	}
-	ans, err := server.AskSession(p, args[0], q)
+	ans, err := client.AskSession(p, args[0], q)
 	if err != nil {
 		return srvFail("session ask", err)
 	}

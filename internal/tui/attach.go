@@ -19,13 +19,13 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/plat/term"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
@@ -86,7 +86,7 @@ const (
 
 // Options configure Attach.
 type Options struct {
-	Paths server.Paths
+	Paths tmclient.Paths
 	// View is the view drawn, in its layout mode. A bare view (tm attach,
 	// tm project open) has no dashboard to go back to: detaching leaves.
 	View *ViewConn
@@ -298,7 +298,7 @@ func Attach(opts Options) (res Result, err error) {
 
 // pane is one session in the window.
 type pane struct {
-	conn *server.Client
+	conn *tmclient.Client
 	wmu  sync.Mutex // serialises frames to the server
 
 	// Guarded by client.mu.
@@ -318,7 +318,7 @@ type pane struct {
 
 // client is the attached window: its panes and everything they share.
 type client struct {
-	paths server.Paths
+	paths tmclient.Paths
 	// cells are the mods' cells and status segments from the last poll
 	// (pollState). Guarded by mu.
 	cells *modCells
@@ -447,7 +447,7 @@ type client struct {
 	paneEnded chan struct{}
 }
 
-func newClient(p server.Paths, l *log.Logger) (*client, error) {
+func newClient(p tmclient.Paths, l *log.Logger) (*client, error) {
 	enc, err := emu.NewEncoder()
 	if err != nil {
 		return nil, err
@@ -489,7 +489,7 @@ func (c *client) empty() bool {
 // open attaches to session id as a new pane, its snapshot loaded. The
 // pane isn't in the window yet.
 func (c *client) open(id string) (*pane, error) {
-	conn, info, err := server.Attach(c.paths, proto.AttachParams{Session: id, Cols: uint16(c.cols), Rows: uint16(c.rows)})
+	conn, info, err := tmclient.Attach(c.paths, proto.AttachParams{Session: id, Cols: uint16(c.cols), Rows: uint16(c.rows)})
 	if err != nil {
 		return nil, err
 	}
@@ -2333,7 +2333,7 @@ type polled struct {
 // only where they changed (sidecache.go), and it draws again only when
 // what it read changed, or idleRedraw after the last time.
 func (c *client) pollState(ctx context.Context) {
-	var ctl *server.Client
+	var ctl *tmclient.Client
 	defer func() {
 		if ctl != nil {
 			ctl.Close()
@@ -2360,7 +2360,7 @@ func (c *client) pollState(ctx context.Context) {
 	defer tick.Stop()
 	for {
 		if ctl == nil {
-			ctl, _ = server.Connect(c.paths, false)
+			ctl, _ = tmclient.Connect(c.paths, false)
 		}
 		var pl polled
 		if ctl != nil {

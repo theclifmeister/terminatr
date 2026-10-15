@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/doctor"
 	"github.com/theclifmeister/terminatr/internal/emu"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/service"
 	"github.com/theclifmeister/terminatr/internal/update"
 	"github.com/theclifmeister/terminatr/internal/version"
@@ -35,7 +35,7 @@ func doctorCmd(e *Env, args []string) error {
 	if pos, err := f.Parse(args); err != nil || len(pos) > 0 {
 		return srvUsage("doctor", doctorUsage)
 	}
-	p, err := server.ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		return srvFail("doctor", err)
 	}
@@ -66,11 +66,11 @@ func doctorCmd(e *Env, args []string) error {
 		if !service.Wanted(runtime.GOOS, e.Getenv) || e.Getenv("TERMINATR_SESSION") != "" {
 			return false
 		}
-		c, err := server.LaunchdConfig(p)
+		c, err := client.LaunchdConfig(p)
 		return err == nil && c.HasConsole()
 	}
 	if service.Wanted(runtime.GOOS, e.Getenv) {
-		if c, err := server.LaunchdConfig(p); err == nil {
+		if c, err := client.LaunchdConfig(p); err == nil {
 			d.Strays, d.Bootout = c.Strays, c.Bootout
 		}
 	}

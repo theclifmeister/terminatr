@@ -1,4 +1,4 @@
-package server
+package pin
 
 import (
 	"os"
@@ -17,7 +17,7 @@ func TestPinCompanions(t *testing.T) {
 	os.WriteFile(bin, []byte("build one"), 0o755)
 	os.WriteFile(filepath.Join(src, "conpty.dll"), []byte("dll one"), 0o644)
 	run := t.TempDir()
-	pin, err := pinBinary(run, bin)
+	pin, err := Binary(run, bin)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestPinCompanions(t *testing.T) {
 	// A new build with a new companion replaces it; a stray file goes.
 	os.WriteFile(filepath.Join(src, "conpty.dll"), []byte("dll two"), 0o644)
 	os.WriteFile(filepath.Join(dir, "stray"), nil, 0o600)
-	if _, err := pinBinary(run, bin); err != nil {
+	if _, err := Binary(run, bin); err != nil {
 		t.Fatal(err)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dir, "conpty.dll")); string(b) != "dll two" {

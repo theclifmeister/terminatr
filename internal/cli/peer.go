@@ -16,12 +16,12 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/relay"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
 
@@ -255,7 +255,7 @@ func (e *Env) pin(dir string, p *peer.Paired, relayURL, as string) error {
 // reload has a running server read the peers again.
 func (e *Env) reload() {
 	switch err := reloadPeers(); {
-	case errors.Is(err, server.ErrNotRunning):
+	case errors.Is(err, client.ErrNotRunning):
 		fmt.Fprintln(e.Stdout, "The server isn't running; it reads the peers when it starts.")
 	case err != nil:
 		fmt.Fprintf(e.Stderr, "tm peer: the server didn't read the peers again (%v); tm server restart does\n", err)

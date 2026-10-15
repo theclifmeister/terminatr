@@ -12,9 +12,9 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/flock"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/keychain"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 )
 
 // Live is what the server check learned about a running server.
@@ -56,7 +56,7 @@ func lockHeld(path string) (bool, error) {
 
 // removeIfNoServer removes path while holding the server lock, so it can
 // never remove a live server's socket or pid file.
-func removeIfNoServer(p server.Paths, path string) error {
+func removeIfNoServer(p client.Paths, path string) error {
 	lk, err := flock.TryLock(p.Lock)
 	if errors.Is(err, flock.ErrLocked) {
 		return fmt.Errorf("a server started meanwhile; kept %s", path)
@@ -103,7 +103,7 @@ func Server(d Deps) ([]Check, Live) {
 	}
 	live.Running = true
 	pid := readPID(p.PID)
-	c, err := server.Dial(p, proto.KindControl)
+	c, err := client.Dial(p, proto.KindControl)
 	if err != nil {
 		var verr *proto.MismatchError
 		if errors.As(err, &verr) {
@@ -242,7 +242,7 @@ func keychainCheck(d Deps, ks proto.KeychainStatus, err error) []Check {
 // runtimeDirs finds session runtime dirs (<run dir>/s/<id>) of sessions
 // that no longer exist. Only called when every live session is known
 // (allSessions), never from a session's scoped view.
-func runtimeDirs(p server.Paths, live Live) []Check {
+func runtimeDirs(p client.Paths, live Live) []Check {
 	root := filepath.Join(p.RunDir, "s")
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -275,11 +275,11 @@ func runtimeDirs(p server.Paths, live Live) []Check {
 // serverCodeHost asks a running server for its code-host checks
 // (server.codehost) on a connection of its own, so Each can run it
 // beside the other checks; nil when no server answers.
-func serverCodeHost(p server.Paths) *proto.CodeHostStatus {
+func serverCodeHost(p client.Paths) *proto.CodeHostStatus {
 	if held, _ := lockHeld(p.Lock); !held {
 		return nil
 	}
-	c, err := server.Dial(p, proto.KindControl)
+	c, err := client.Dial(p, proto.KindControl)
 	if err != nil {
 		return nil
 	}
@@ -293,8 +293,8 @@ func serverCodeHost(p server.Paths) *proto.CodeHostStatus {
 
 // sessionsNow asks the server for its sessions (allSessions); nil if it
 // can't tell.
-func sessionsNow(p server.Paths) map[string]bool {
-	c, err := server.Dial(p, proto.KindControl)
+func sessionsNow(p client.Paths) map[string]bool {
+	c, err := client.Dial(p, proto.KindControl)
 	if err != nil {
 		if held, _ := lockHeld(p.Lock); !held {
 			return map[string]bool{}

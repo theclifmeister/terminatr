@@ -16,6 +16,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -40,7 +41,7 @@ func cacheProject(t *testing.T) (*project.Project, *thread.Record) {
 
 // startServer runs a server for the test, under a fresh home and
 // socket, and stops it at the test's end.
-func startServer(t *testing.T) server.Paths {
+func startServer(t *testing.T) tmclient.Paths {
 	t.Helper()
 	if os.Getenv("TERMINATR_HOME") == "" {
 		t.Setenv("TERMINATR_HOME", t.TempDir())
@@ -53,7 +54,7 @@ func startServer(t *testing.T) server.Paths {
 	t.Setenv("TERMINATR_SOCKET", filepath.Join(sock, "tm.sock"))
 	t.Setenv("TERMINATR_LAUNCHD", "off")
 	t.Setenv(caller.EnvSession, "")
-	paths, err := server.ResolvePaths()
+	paths, err := tmclient.ResolvePaths()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +66,7 @@ func startServer(t *testing.T) server.Paths {
 	}()
 	t.Cleanup(func() { stop(); <-done })
 	for deadline := time.Now().Add(5 * time.Second); ; {
-		c, err := server.Dial(paths, proto.KindControl)
+		c, err := tmclient.Dial(paths, proto.KindControl)
 		if err == nil {
 			c.Close()
 			return paths
@@ -185,7 +186,7 @@ func TestStatusCache(t *testing.T) {
 // applyPoll.
 func pollClient(t *testing.T) *client {
 	t.Helper()
-	c, err := newClient(server.Paths{}, log.New(io.Discard, "", 0))
+	c, err := newClient(tmclient.Paths{}, log.New(io.Discard, "", 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,23 +260,23 @@ func TestInfoCache(t *testing.T) {
 	p, r := cacheProject(t)
 	s := proto.SessionInfo{ID: "s-1", Role: proto.RoleThread, Project: p.Slug, Thread: r.ID, State: "working"}
 	var ic infoCache
-	d := ic.load(server.Paths{}, s, []proto.SessionInfo{s})
+	d := ic.load(tmclient.Paths{}, s, []proto.SessionInfo{s})
 	if d == nil || d.rec == nil || d.rec.ID != r.ID {
 		t.Fatalf("no thread data: %+v", d)
 	}
 	s.State = "idle"
-	again := ic.load(server.Paths{}, s, []proto.SessionInfo{s})
+	again := ic.load(tmclient.Paths{}, s, []proto.SessionInfo{s})
 	if again.status != d.status || again.session.State != "idle" {
 		t.Errorf("an unchanged thread was read again, or the session not taken: %+v", again.session)
 	}
 	if _, err := thread.UpdateStatus(p, r.ID, func(st *thread.Status) error { st.Activity = "panel"; return nil }); err != nil {
 		t.Fatal(err)
 	}
-	if d := ic.load(server.Paths{}, s, []proto.SessionInfo{s}); d.status == nil || d.status.Activity != "panel" {
+	if d := ic.load(tmclient.Paths{}, s, []proto.SessionInfo{s}); d.status == nil || d.status.Activity != "panel" {
 		t.Errorf("the new status doesn't show: %+v", d.status)
 	}
 	co := proto.SessionInfo{ID: "s-2", Role: proto.RoleCoordinator, Project: p.Slug}
-	if d := ic.load(server.Paths{}, co, []proto.SessionInfo{s, co}); d == nil || d.watch == nil || len(d.watch.Threads) != 1 {
+	if d := ic.load(tmclient.Paths{}, co, []proto.SessionInfo{s, co}); d == nil || d.watch == nil || len(d.watch.Threads) != 1 {
 		t.Errorf("no coordinator watch: %+v", d)
 	}
 }

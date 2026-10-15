@@ -10,12 +10,12 @@ import (
 	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/plat/open"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
 
@@ -291,9 +291,9 @@ func (c *client) infoSection(st sideStep) {
 
 // openQuestions has project slug's coordinator open its questions
 // (questions.open); a variable for tests.
-var openQuestions = func(paths server.Paths, slug string) (proto.QuestionsOpenResult, error) {
+var openQuestions = func(paths tmclient.Paths, slug string) (proto.QuestionsOpenResult, error) {
 	var res proto.QuestionsOpenResult
-	cl, err := server.Connect(paths, false)
+	cl, err := tmclient.Connect(paths, false)
 	if err != nil {
 		return res, err
 	}
@@ -540,7 +540,7 @@ func (c *client) showInfo(d *infoData) bool {
 // pollViews is mod.views on ctl, saying the console shows shown: the
 // mods' views and the views they ask to open, nil without a server (or
 // an older one).
-func pollViews(ctl *server.Client, shown []modview.Shown) *proto.ModViewsResult {
+func pollViews(ctl *tmclient.Client, shown []modview.Shown) *proto.ModViewsResult {
 	if ctl == nil {
 		return nil
 	}

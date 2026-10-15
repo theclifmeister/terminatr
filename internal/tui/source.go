@@ -11,6 +11,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/link"
@@ -408,12 +409,12 @@ const (
 // ServerSource is the real Source: the control socket plus the project
 // folders.
 type ServerSource struct {
-	Paths server.Paths
+	Paths tmclient.Paths
 	// Caller is who acts: the human, unless tm runs inside an agent.
 	Caller caller.Caller
 
 	mu  sync.Mutex
-	ctl *server.Client
+	ctl *tmclient.Client
 	// slow is what Load reads that an install, a setting or an edit
 	// changes (slowCache).
 	slow slowCache
@@ -519,7 +520,7 @@ func (s *ServerSource) call(method string, params, result any) error {
 	defer s.mu.Unlock()
 	for try := 0; ; try++ {
 		if s.ctl == nil {
-			c, err := server.Connect(s.Paths, true)
+			c, err := tmclient.Connect(s.Paths, true)
 			if err != nil {
 				return err
 			}

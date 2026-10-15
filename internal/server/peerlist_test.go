@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/relay"
@@ -64,7 +65,7 @@ func TestPeerList(t *testing.T) {
 	defer m.Close()
 
 	startServer(t, p)
-	c, err := Connect(p, false)
+	c, err := client.Connect(p, false)
 	if err != nil {
 		t.Fatal(err)
 	}

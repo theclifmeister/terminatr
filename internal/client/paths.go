@@ -1,4 +1,4 @@
-package server
+package client
 
 import (
 	"fmt"
@@ -30,6 +30,9 @@ type Paths struct {
 func (p Paths) HumanSocket() string {
 	return filepath.Join(filepath.Dir(p.Socket), ipc.HumanName)
 }
+
+// AgentsDir is the directory of the user's agent manifests.
+func (p Paths) AgentsDir() string { return filepath.Join(p.Home, "agents") }
 
 // ResolvePaths computes the paths from the process environment. The state
 // directory comes from internal/home, the single source of truth for

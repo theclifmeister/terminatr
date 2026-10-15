@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tui"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
@@ -182,7 +182,7 @@ func (e *Env) openCmd(slug, agentName string) error {
 // starts); "" otherwise. It goes on stderr, which the dashboard covers
 // at once, and in the console's message line, so it is read as it
 // starts and not only after quitting (T301 B8).
-func (e *Env) modsRunNote(c *server.Client) string {
+func (e *Env) modsRunNote(c *client.Client) string {
 	if !mod.NoMods(e.Getenv) || c.Started {
 		return ""
 	}
