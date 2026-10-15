@@ -1,8 +1,10 @@
 package codex
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/guard"
+	"github.com/theclifmeister/terminatr/internal/plat/caps"
 )
 
 func load(t *testing.T) *Agent {
@@ -40,7 +43,14 @@ func load(t *testing.T) *Agent {
 // canonical JSON Codex 0.160 hashes (keys sorted, no spaces, the
 // command's quotes escaped).
 func TestTrustHash(t *testing.T) {
-	const canon = `{"event_name":"pre_tool_use","hooks":[{"async":false,"command":"\"$TERMINATR_BIN\" hook --agent codex","timeout":5,"type":"command"}]}`
+	var cmd bytes.Buffer
+	enc := json.NewEncoder(&cmd)
+	enc.SetEscapeHTML(false)
+	enc.Encode(HookCommand)
+	canon := `{"event_name":"pre_tool_use","hooks":[{"async":false,"command":` + strings.TrimSpace(cmd.String()) + `,"timeout":5,"type":"command"}]}`
+	if !caps.Windows && HookCommand != `"$TERMINATR_BIN" hook --agent codex` {
+		t.Errorf("HookCommand = %q", HookCommand)
+	}
 	sum := sha256.Sum256([]byte(canon))
 	want := "sha256:" + hex.EncodeToString(sum[:])
 	got, err := TrustHash("pre_tool_use", HookCommand, 5)
@@ -117,6 +127,7 @@ func TestHookArgs(t *testing.T) {
 func TestLaunch(t *testing.T) {
 	a := load(t)
 	dir := t.TempDir()
+	t.Setenv("CODEX_HOME", dir) // no [windows] sandbox of the user's
 	brief := filepath.Join(dir, "brief.md")
 	if err := os.WriteFile(brief, []byte("# Brief\nSay \"hi\".\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -133,7 +144,15 @@ func TestLaunch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hooks, state, _ := HookArgs(a.Events())
+	// On Windows the trust keys name the session's drive, the socket's
+	// folder is written, and the sandbox is set (codex.go).
+	hooks, state, _ := hookArgs(a.Events(), stateSourceFor(spec.Cwd, caps.Windows))
+	var winSandbox []string
+	var sockW string
+	if caps.Windows {
+		sockW = `,"\\run"="write"`
+		winSandbox = []string{"-c", `windows.sandbox="unelevated"`}
+	}
 	want := []string{"codex",
 		"-c", "check_for_update_on_startup=false",
 		"-c", `projects={"/r/repo"={trust_level="trusted"}}`,
@@ -144,11 +163,11 @@ func TestLaunch(t *testing.T) {
 		"-c", `mcp_servers.terminatr.default_tools_approval_mode="approve"`,
 		"-a", "on-request",
 		"-c", `default_permissions="tm"`,
-		"-c", `permissions={tm={extends=":workspace",filesystem={"/h/projects/p"="read","/r/repo/.git"="write","/r/repo/.git/worktrees/wt"="write","/h/config.toml"="read"},network={enabled=true,unix_sockets={"/run/tm.sock"="allow"}}}}`,
+		"-c", `permissions={tm={extends=":workspace",filesystem={"/h/projects/p"="read","/r/repo/.git"="write","/r/repo/.git/worktrees/wt"="write"` + sockW + `,"/h/config.toml"="read"},network={enabled=true,unix_sockets={"/run/tm.sock"="allow"}}}}`,
 		"-m", "gpt-6-luna",
 		"-c", hooks, "-c", state,
-		"--", "Start.",
 	}
+	want = append(append(want, winSandbox...), "--", "Start.")
 	if !slices.Equal(l.Argv, want) {
 		t.Fatalf("argv\n%q\nwant\n%q", l.Argv, want)
 	}
@@ -170,7 +189,7 @@ func TestLaunch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if l.Argv[1] != "resume" || l.Argv[2] != spec.AgentSID || l.Kickoff || l.Argv[len(l.Argv)-1] != state {
+	if l.Argv[1] != "resume" || l.Argv[2] != spec.AgentSID || l.Kickoff || !slices.Contains(l.Argv, state) {
 		t.Errorf("resume argv %q", l.Argv)
 	}
 
@@ -197,7 +216,7 @@ func TestLaunch(t *testing.T) {
 	if slices.Contains(l.Argv, "on-request") || len(l.Warnings) > 0 {
 		t.Errorf("coordinator got -a or warnings: %q %q", l.Argv, l.Warnings)
 	}
-	coord := `permissions={tm={extends=":workspace",filesystem={"/p"="write","/h/worktrees/p"="read","/h/config.toml"="read"},network={enabled=true,mode="limited",unix_sockets={"/run/tm.sock"="allow"}}}}`
+	coord := `permissions={tm={extends=":workspace",filesystem={"/p"="write","/h/worktrees/p"="read"` + sockW + `,"/h/config.toml"="read"},network={enabled=true,mode="limited",unix_sockets={"/run/tm.sock"="allow"}}}}`
 	for _, arg := range []string{`default_permissions="tm"`, "features.network_proxy=true", coord} {
 		if !slices.Contains(l.Argv, arg) {
 			t.Errorf("coordinator argv lacks %s: %q", arg, l.Argv)
@@ -230,6 +249,7 @@ func TestLaunch(t *testing.T) {
 		"--approve-for-me",
 		"-c", hooks, "-c", state,
 	}
+	fallback = append(fallback, winSandbox...)
 	if !slices.Equal(l.Argv, fallback) {
 		t.Errorf("coordinator fallback argv\n%q\nwant\n%q", l.Argv, fallback)
 	}
