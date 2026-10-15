@@ -302,6 +302,9 @@ type dataMsg struct {
 }
 type tickMsg struct{}
 
+// awaitMsg is the end of the wait for a mod's view (awaitView).
+type awaitMsg struct{}
+
 type boardMsg struct {
 	slug  string
 	board *tasks.Board
@@ -383,6 +386,10 @@ func (m *dash) reloadBoards() tea.Cmd {
 
 func (m *dash) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.load(), m.waitView(), m.waitFeed()}
+	if !m.awaitView.IsZero() {
+		// The deadline itself wakes the loop, so overDone sees it passed.
+		cmds = append(cmds, tea.Tick(time.Until(m.awaitView), func(time.Time) tea.Msg { return awaitMsg{} }))
+	}
 	if themed() {
 		// A mod's theme may differ light and dark: ask the terminal.
 		cmds = append(cmds, tea.RequestBackgroundColor)
