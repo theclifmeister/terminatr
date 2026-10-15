@@ -83,9 +83,11 @@ echo "checksum   ok ($archive)"
 
 mkdir "$tmp/x"
 tar -xzf "$tmp/$archive" -C "$tmp/x" tm || die "$archive holds no tm"
-mkdir -p "$dir"
+# A tight umask (root with 077) must not close the folder or tm to the
+# users that run it (a service under another user, for one).
+[ -d "$dir" ] || { mkdir -p "$dir" && chmod 755 "$dir"; } || die "can't make $dir"
 # Copy beside the target, then rename over it: replacing a running tm is safe.
-cp "$tmp/x/tm" "$dir/.tm.new.$$" && chmod 755 "$dir/.tm.new.$$" && mv -f "$dir/.tm.new.$$" "$dir/tm" ||
+cp "$tmp/x/tm" "$dir/.tm.new.$$" && chmod 755 "$dir/.tm.new.$$" && mv -f "$dir/.tm.new.$$" "$dir/tm" && chmod 755 "$dir/tm" ||
   { rm -f "$dir/.tm.new.$$"; die "can't write $dir/tm"; }
 
 echo "installed  $("$dir/tm" version 2>&1 | head -n 1) at $dir/tm"

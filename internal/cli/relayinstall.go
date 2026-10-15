@@ -565,15 +565,33 @@ Let's Encrypt and both servers reach the relay on TCP port 443, so:
 Then: curl %s (the relay keeps trying for a certificate by itself; journalctl -u tm-relay shows how it goes)`, url, err, domain, where, url)
 }
 
+// takeRequest removes the update request and says whether one was
+// there. The relay's user writes that path, so it is untrusted: it can
+// be a file, a link or a directory, and whatever it is never stops the
+// update. A request that can't be removed is logged and ignored.
+func (h *relayService) takeRequest(e *Env) bool {
+	p := h.path(relayRequestFile)
+	fi, err := os.Lstat(p)
+	if err != nil {
+		return false
+	}
+	if fi.IsDir() {
+		err = os.RemoveAll(p)
+	} else {
+		err = os.Remove(p)
+	}
+	if err != nil {
+		fmt.Fprintf(e.Stderr, "tm relay update: can't remove %s: %v (going on)\n", relayRequestFile, err)
+	}
+	return true
+}
+
 func (h *relayService) update(ctx context.Context, e *Env, force bool) error {
 	// A linked server's request (tm-relay-update.path started this): it
 	// is done once this runs, whatever comes of it, so a failing update
 	// isn't started again and again.
-	switch err := os.Remove(h.path(relayRequestFile)); {
-	case err == nil:
+	if h.takeRequest(e) {
 		fmt.Fprintln(e.Stdout, "A linked server asked the relay to update to the latest release.")
-	case !errors.Is(err, os.ErrNotExist):
-		return fmt.Errorf("the relay's update request: %w", err)
 	}
 	rel, err := h.Client.Latest(ctx)
 	if err != nil {
@@ -604,6 +622,11 @@ func (h *relayService) update(ctx context.Context, e *Env, force bool) error {
 	}
 	defer b.Remove()
 	if err := b.Install(dir); err != nil {
+		return err
+	}
+	// SwapIn keeps the old file's mode; tm-relay's user must be able to
+	// run it whatever it was (root's umask, a copy by hand).
+	if err := os.Chmod(bin, 0o755); err != nil {
 		return err
 	}
 	fmt.Fprintf(e.Stdout, "Installed tm %s as %s (sha256 checked against the release's checksums.txt).\n", rel.Tag, relayBin)

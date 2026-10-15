@@ -584,3 +584,51 @@ func TestRelayUpdateUnitsAreTheDeployFiles(t *testing.T) {
 		}
 	}
 }
+
+// Whatever sits at the update-request path, and whatever mode the
+// installed tm had, the update goes through and leaves tm 0755.
+func TestRelayUpdateSurvivesHostileRequestAndTightMode(t *testing.T) {
+	h := newHarness(t)
+	r := newRelayRig(t)
+	h.ok(human, "relay", "install", "--domain", "relay.example.net")
+	bin := filepath.Join(r.s.Root, "usr", "local", "bin", "tm")
+	req := filepath.Join(r.s.Root, "var", "lib", "private", "tm-relay", "update-request")
+	os.MkdirAll(filepath.Dir(req), 0o700)
+
+	os.Chmod(bin, 0o700)
+	os.MkdirAll(filepath.Join(req, "sub"), 0o700)
+	os.WriteFile(filepath.Join(req, "sub", "f"), []byte("x"), 0o600)
+	relayRelease(t, r.s, "v0.28.0", false)
+	h.ok(human, "relay", "update")
+	if _, err := os.Lstat(req); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("request kept: %v", err)
+	}
+	if fi, _ := os.Stat(bin); fi.Mode().Perm() != 0o755 {
+		t.Fatalf("tm mode %v", fi.Mode().Perm())
+	}
+	if b, _ := os.ReadFile(bin); string(b) != "tm v0.28.0" {
+		t.Fatalf("binary %q", b)
+	}
+
+	os.Symlink("/nonexistent", req)
+	r.s.Version = "v0.27.0"
+	h.ok(human, "relay", "update")
+	if _, err := os.Lstat(req); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("link kept: %v", err)
+	}
+}
+
+// Root doesn't read a key through a link in the state directory.
+func TestRelaySelfSignedPinRefusesLink(t *testing.T) {
+	dir := t.TempDir()
+	if _, _, _, err := relay.SelfSigned(dir, []netip.Addr{netip.MustParseAddr("203.0.113.5")}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	key := filepath.Join(dir, relay.SelfSignedKey)
+	real := filepath.Join(t.TempDir(), "k")
+	os.Rename(key, real)
+	os.Symlink(real, key)
+	if _, err := relay.SelfSignedPin(dir); err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("pin through a link: %v", err)
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"math/big"
 	"net"
@@ -74,8 +75,30 @@ func SelfSignedPin(dir string) (string, error) {
 	return KeyPin(key.Public())
 }
 
+// readRegular reads path unless it is a link or other non-regular file:
+// the state directory belongs to the relay's user, so root reading from
+// it follows no link planted there.
+func readRegular(path string) ([]byte, error) {
+	li, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !li.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file", path)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	if fi, err := f.Stat(); err != nil || !os.SameFile(li, fi) {
+		return nil, fmt.Errorf("%s changed while it was opened", path)
+	}
+	return io.ReadAll(f)
+}
+
 func loadKey(path string) (*ecdsa.PrivateKey, error) {
-	b, err := os.ReadFile(path)
+	b, err := readRegular(path)
 	if err != nil {
 		return nil, err
 	}
