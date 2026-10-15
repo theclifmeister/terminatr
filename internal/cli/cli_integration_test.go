@@ -52,7 +52,7 @@ func TestMain(m *testing.M) {
 		bin := filepath.Join(dir, "tm")
 		// The Makefile's environment (PKG_CONFIG_PATH, CGO_CFLAGS) is
 		// inherited, so `make test` builds against the pinned libghostty.
-		out, err := exec.Command("go", "build", "-o", bin, "../../cmd/tm").CombinedOutput()
+		out, err := exec.Command("go", "build", "-tags", "testhooks", "-o", bin, "../../cmd/tm").CombinedOutput()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "building tm failed; binary tests will fail (run make test):\n%s\n", out)
 		} else {

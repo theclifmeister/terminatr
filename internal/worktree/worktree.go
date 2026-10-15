@@ -90,6 +90,9 @@ func headBranch(repo string) string {
 // Create adds a worktree at dir on a new branch from base. base "" means
 // DefaultBase. It returns the base used.
 func Create(repo, dir, branch, base string) (string, error) {
+	if base != "" && !ValidBase(base) {
+		return "", fmt.Errorf("base %q is not a branch, tag or commit name", base)
+	}
 	if base == "" {
 		var err error
 		if base, err = DefaultBase(repo); err != nil {
@@ -101,7 +104,7 @@ func Create(repo, dir, branch, base string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return "", err
 	}
-	if _, err := git(repo, "worktree", "add", "--quiet", "-b", branch, dir, base); err != nil {
+	if _, err := git(repo, "worktree", "add", "--quiet", "-b", branch, "--", dir, base); err != nil {
 		return "", err
 	}
 	return base, nil

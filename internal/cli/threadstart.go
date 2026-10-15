@@ -94,6 +94,9 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	if o.base != "" && repo == "" {
 		return usagef("--base needs a repo")
 	}
+	if o.base != "" && !worktree.ValidBase(o.base) {
+		return usagef("--base %q is not a branch, tag or commit name", o.base)
+	}
 	if err := e.serverAgent(agentName); err != nil {
 		return err
 	}

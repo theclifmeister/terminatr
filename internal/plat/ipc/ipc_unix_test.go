@@ -29,3 +29,19 @@ func checkPrivate(t *testing.T, a Addr) {
 		t.Fatalf("socket mode: %v, %v", st.Mode(), err)
 	}
 }
+
+// Listen leaves the process umask as it found it.
+func TestListenKeepsUmask(t *testing.T) {
+	old := syscall.Umask(0o022)
+	defer syscall.Umask(old)
+	a := Addr(sockDir(t) + "/s")
+	ln, err := Listen(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	if got := syscall.Umask(0o022); got != 0o022 {
+		t.Fatalf("umask after Listen = %o, want 022", got)
+	}
+	checkPrivate(t, a)
+}

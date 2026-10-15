@@ -37,7 +37,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: ./.github/actions/setup
 
@@ -78,7 +78,7 @@ jobs:
 
       - name: Upload e2e artifacts
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: e2e-artifacts-linux
           path: ${{ runner.temp }}/e2e-artifacts
@@ -90,7 +90,7 @@ jobs:
     if: github.event_name == 'push'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: ./.github/actions/setup
 
@@ -107,7 +107,7 @@ jobs:
 
       - name: Upload e2e artifacts
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: e2e-artifacts-macos
           path: ${{ runner.temp }}/e2e-artifacts
@@ -135,7 +135,7 @@ jobs:
     steps:
       # A pull request checks out its merge commit, whose first parent is
       # the base: depth 2 is enough to diff the two.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         if: github.event_name == 'pull_request'
         with:
           fetch-depth: 2
@@ -197,9 +197,9 @@ jobs:
     env:
       TYPESCRIPT_VERSION: 5.9.3
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
 
@@ -226,9 +226,9 @@ jobs:
       CLAUDE_CODE_VERSION: 2.1.291
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
 
@@ -251,11 +251,11 @@ jobs:
     if: needs.changes.outputs.release == 'true'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
 
@@ -266,13 +266,13 @@ jobs:
           echo "ghostty=$({ grep -E '^(GHOSTTY_(REV|REPO|CPU)|ZIG_VERSION) ' Makefile; echo "$GITHUB_WORKSPACE"; } | git hash-object --stdin)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Zig
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .build/zig-*
           key: zig-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.zig }}
 
       - name: Cache release libghostty-vt
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             .build/release/ghostty-*
@@ -282,7 +282,7 @@ jobs:
       - name: pkg-config
         run: command -v pkg-config || brew install pkgconf
 
-      - uses: goreleaser/goreleaser-action@v7
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7
         with:
           install-only: true
           version: "~> v2"
@@ -308,7 +308,7 @@ jobs:
           brew style Formula/terminatr.rb
 
       - name: Upload archives
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-snapshot
           path: |

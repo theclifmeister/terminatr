@@ -40,7 +40,7 @@ jobs:
       prerelease: ${{ steps.version.outputs.prerelease }}
       published: ${{ steps.publish.outputs.published }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Full history: goreleaser's changelog, and the formula bump pushes
           # a branch, which git refuses from a shallow clone.
@@ -57,7 +57,7 @@ jobs:
           *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
           esac
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
 
@@ -68,14 +68,14 @@ jobs:
           echo "ghostty=$({ grep -E '^(GHOSTTY_(REV|REPO|CPU)|ZIG_VERSION) ' Makefile; echo "$GITHUB_WORKSPACE"; } | git hash-object --stdin)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Zig
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .build/zig-*
           key: zig-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.zig }}
 
       # Shared with ci.yml's release-snapshot job.
       - name: Cache release libghostty-vt
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             .build/release/ghostty-*
@@ -85,7 +85,7 @@ jobs:
       - name: pkg-config
         run: command -v pkg-config || brew install pkgconf
 
-      - uses: goreleaser/goreleaser-action@v7
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7
         with:
           install-only: true
           version: "~> v2"
@@ -264,7 +264,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Tags
         id: tags
@@ -279,17 +279,17 @@ jobs:
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
 
       # arm64's build stage runs the binary (tm version) under emulation.
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: deploy/relay
           platforms: linux/amd64,linux/arm64

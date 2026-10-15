@@ -844,10 +844,17 @@ var funcs = template.FuncMap{
 	},
 	// rules formats one permission rule per directory, e.g.
 	// rules "Read(/%s/**)" .Access.Read -> ["Read(//home/u/p/**)"].
+	// A Read or Edit rule is a glob, so the path's glob characters are
+	// escaped to match literally; other rules (Bash) take the text as is.
 	"rules": func(format string, dirs []string) []string {
+		glob := strings.HasPrefix(format, "Read(") || strings.HasPrefix(format, "Edit(")
 		out := make([]string, 0, len(dirs))
 		for _, d := range dirs {
-			out = append(out, fmt.Sprintf(format, posixPath(d)))
+			d = posixPath(d)
+			if glob {
+				d = escapeGlob(d)
+			}
+			out = append(out, fmt.Sprintf(format, d))
 		}
 		return out
 	},
@@ -910,6 +917,22 @@ func colors(pairs ...string) (string, error) {
 	}
 	b.WriteByte('}')
 	return b.String(), nil
+}
+
+// escapeGlob puts a backslash before each glob metacharacter in p, so a
+// permission rule built from the path matches only that path.
+func escapeGlob(p string) string {
+	if !strings.ContainsAny(p, "*?[]{}!") {
+		return p
+	}
+	var b strings.Builder
+	for _, r := range p {
+		if strings.ContainsRune("*?[]{}!", r) {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // posixPath is d in the form Claude matches permission rules against on

@@ -8,15 +8,26 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 	"syscall"
 )
+
+// umaskMu serialises the umask change around bind; the umask is the
+// process's, not the goroutine's.
+var umaskMu sync.Mutex
 
 // Listen listens on a, readable and writable by this user only. Nothing
 // may be at a: the caller removes a stale socket first, when it knows it
 // is stale. Closing the listener leaves the socket file, which a successor
 // may already have replaced; the owner removes it.
 func Listen(a Addr) (net.Listener, error) {
+	// The socket is created under a umask that leaves only the owner's
+	// access, so it is never connectable by others, even briefly.
+	umaskMu.Lock()
+	old := syscall.Umask(0o177)
 	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: string(a), Net: "unix"})
+	syscall.Umask(old)
+	umaskMu.Unlock()
 	if err != nil {
 		return nil, err
 	}

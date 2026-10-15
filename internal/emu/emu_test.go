@@ -46,3 +46,16 @@ func TestRowsSkipDim(t *testing.T) {
 		t.Fatalf("rows: %q", plain)
 	}
 }
+
+func TestSanitizeTitle(t *testing.T) {
+	for in, want := range map[string]string{
+		"plain é title":               "plain é title",
+		"a\x07b\x1b]52;c\x07":         "ab]52;c",
+		"x\u009cy\u009bz\u0080\u009f": "xyz",
+		"del\x7f":                     "del",
+	} {
+		if got := string(sanitizeTitle(in)); got != want {
+			t.Errorf("sanitizeTitle(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

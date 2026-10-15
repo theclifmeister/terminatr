@@ -128,6 +128,14 @@ func TestGitHubPRErrors(t *testing.T) {
 	if _, err := answer("", fmt.Errorf("gh: network down")).PR("/r", Ref{Branch: "b"}); err == nil || errors.Is(err, ErrNoPR) {
 		t.Fatalf("a failure: %v", err)
 	}
+	// PRState asks gh nothing for a branch that looks like an option.
+	asked = nil
+	if st := answer(prOpen, nil).PRState("/r", "-x"); st != "" || len(asked) != 0 {
+		t.Fatalf("PRState(-x) = %q, ran %q", st, asked)
+	}
+	if st := answer(prOpen, nil).PRState("/r", "b"); st != "OPEN" {
+		t.Fatalf("PRState(b) = %q", st)
+	}
 	asked = nil
 	pr, err := answer(prOpen, nil).PR("/r", Ref{URL: "https://github.com/o/r/pull/7", Branch: "b", Number: 7})
 	if err != nil || pr.Number != 7 || len(asked) != 1 || !strings.HasPrefix(asked[0], "pr view 7 --json ") {

@@ -10,7 +10,12 @@ import (
 )
 
 // Test hooks (docs/OPERATIONS.md, Test servers). Tests set them in the
-// environment of the tm that starts a server; nothing else should.
+// environment of the tm that starts a server, which is built with
+// -tags testhooks; any other build ignores them.
+// testHooksOn is whether the hooks are honoured; tests of the server in
+// this process turn it on.
+var testHooksOn = testHooksBuilt
+
 const (
 	// testHelloEnv makes the server act like another build at the
 	// handshake: "protocol=N" claims protocol N (an older server), "deaf"
@@ -26,6 +31,9 @@ const (
 // testHello parses testHelloEnv: the protocol to claim (0: the real one)
 // and whether to hang up on every hello.
 func testHello() (protocol int, deaf bool) {
+	if !testHooksOn {
+		return 0, false
+	}
 	v := os.Getenv(testHelloEnv)
 	if v == "deaf" {
 		return 0, true
@@ -38,6 +46,9 @@ func testHello() (protocol int, deaf bool) {
 
 // watchOwner stops the server once the pid in testOwnerEnv has exited.
 func (s *Server) watchOwner() {
+	if !testHooksOn {
+		return
+	}
 	owner, _ := strconv.Atoi(os.Getenv(testOwnerEnv))
 	if owner <= 0 {
 		return
