@@ -600,3 +600,18 @@ func SaveInfo(path string, p view.Info) error {
 	l.Info = p.Clamp()
 	return SaveLayout(path, l)
 }
+
+// layoutState is the dashboard's layout and the mouse moving its borders.
+type layoutState struct {
+	// layout is the console's layout, effective: ui.json (ui) under the
+	// layout mod in use (spec, the [ui] layout layoutID), with the
+	// view's sidebar. safe: safe mode, the built-in layout.
+	layout   Layout
+	ui       Layout
+	spec     mod.Layout
+	layoutID string
+	safe     bool
+	uiFile   string
+	dragging bool // the mouse is moving the divider
+	sideDrag bool // the mouse is moving the sidebar's border
+}
