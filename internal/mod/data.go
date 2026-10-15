@@ -1,6 +1,7 @@
 package mod
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +16,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // Data mods (mods design §2, tiers 1-3): files tm reads, with no code
@@ -124,6 +127,39 @@ func (m Mod) ReadFile(rel string) ([]byte, error) {
 	}
 	if len(b) > MaxDataFile {
 		return nil, fmt.Errorf("%s: %s is over %d KiB", m.ID, rel, MaxDataFile>>10)
+	}
+	return b, nil
+}
+
+// ReadAgentText reads rel, a file of text an agent obeys or reads or tm
+// runs (a rules file, a task template, an agent manifest), from the
+// mod's folder (ReadFile), checked by AgentText.
+func (m Mod) ReadAgentText(rel string) ([]byte, error) {
+	b, err := m.ReadFile(rel)
+	if err != nil {
+		return nil, err
+	}
+	b, err = AgentText(rel, b)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", m.ID, err)
+	}
+	return b, nil
+}
+
+// AgentText is b, the file rel ("": the caller names it) of text an
+// agent obeys or reads or tm runs, without a leading byte-order mark; an error when it holds a
+// character the human wouldn't see on the consent screen but the agent
+// would read (textsafe.Hidden): a zero-width or tag character, a bidi
+// control, another control character, or bytes that aren't UTF-8.
+func AgentText(rel string, b []byte) ([]byte, error) {
+	b = bytes.TrimPrefix(b, []byte("\uFEFF"))
+	if r, at := textsafe.Hidden(string(b)); at >= 0 {
+		line := 1 + bytes.Count(b[:at], []byte("\n"))
+		where := fmt.Sprintf("line %d", line)
+		if rel != "" {
+			where = rel + " " + where
+		}
+		return nil, fmt.Errorf("%s: holds a character that doesn't show (U+%04X); text agents read is plain", where, r)
 	}
 	return b, nil
 }
@@ -273,7 +309,7 @@ func (r *Registry) Rules(role, slug string) (policy *Addendum, addenda []Addendu
 			continue
 		}
 		if f := m.Manifest.Provides.Rules[role+"_policy"]; f != "" {
-			switch b, err := m.ReadFile(f); {
+			switch b, err := m.ReadAgentText(f); {
 			case err != nil:
 				errs = append(errs, err)
 			case policy != nil && m.Builtin:
@@ -290,7 +326,7 @@ func (r *Registry) Rules(role, slug string) (policy *Addendum, addenda []Addendu
 			continue
 		}
 		if f := m.Manifest.Provides.Rules[role]; f != "" {
-			b, err := m.ReadFile(f)
+			b, err := m.ReadAgentText(f)
 			if err != nil {
 				errs = append(errs, err)
 				continue
@@ -443,7 +479,7 @@ func (m Mod) templates() (out []Template, errs []error) {
 	slices.Sort(files)
 	for _, f := range files {
 		name := strings.TrimSuffix(filepath.Base(f), ".md")
-		b, err := m.ReadFile(path.Join(dir, filepath.Base(f)))
+		b, err := m.ReadAgentText(path.Join(dir, filepath.Base(f)))
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -514,6 +550,25 @@ func (r *Registry) AgentDirs() []AgentDir {
 	return out
 }
 
+// agentFiles are the mod's agent manifests, agents/<name>.toml, by
+// name: the files tm loads as agents.
+func (m Mod) agentFiles() []string {
+	if m.Manifest == nil || m.Manifest.Provides.Agents == "" {
+		return nil
+	}
+	return m.Manifest.agentFiles(m.files())
+}
+
+func (m *Manifest) agentFiles(fsys fs.FS) []string {
+	dir := path.Clean(m.Provides.Agents)
+	if m.Provides.Agents == "" || !fs.ValidPath(dir) {
+		return nil
+	}
+	files, _ := fs.Glob(fsys, path.Join(dir, "*.toml"))
+	slices.Sort(files)
+	return files
+}
+
 // Load checks
 
 // DataChecks check the data files only the console can read whole: a
@@ -527,8 +582,9 @@ var DataChecks = map[string]func([]byte) error{}
 // says what doesn't load, each error naming the kind: a theme, icon
 // set, keymap or layout that doesn't parse or check (a v2 layout in a mod
 // below API 1.5, or a theme's pane palette below 1.6, included), a rules
-// file that can't be read, a template that doesn't parse. Nil when all load (and
-// for a mod whose manifest doesn't).
+// file that can't be read, a template that doesn't parse, and a rules
+// file, template or agent manifest that isn't plain text (AgentText).
+// Nil when all load (and for a mod whose manifest doesn't).
 func (m Mod) CheckData() []error {
 	if m.Manifest == nil {
 		return nil
@@ -560,8 +616,13 @@ func (m Mod) CheckData() []error {
 		}
 	}
 	for _, role := range sortedKeys(m.Manifest.Provides.Rules) {
-		if _, err := m.ReadFile(m.Manifest.Provides.Rules[role]); err != nil {
+		if _, err := m.ReadAgentText(m.Manifest.Provides.Rules[role]); err != nil {
 			errs = append(errs, fmt.Errorf("rules %s: %w", role, err))
+		}
+	}
+	for _, rel := range m.agentFiles() {
+		if _, err := m.ReadAgentText(rel); err != nil {
+			errs = append(errs, fmt.Errorf("agents: %w", err))
 		}
 	}
 	if m.Has(KindTemplates) {

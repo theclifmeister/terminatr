@@ -456,9 +456,10 @@ func (cv *consentView) lines(m *dash, md mod.Mod, w int) []string {
 
 // consentLines are mod md's consent as tm draws it, enabling it or
 // installing it (tm mod install's, mods design §9): what it is and
-// provides, each permission it asks for in plain words and its colour,
-// the defaults it suggests, every rules addendum, agent manifest, tool
-// and guard rule in full, then question.
+// provides, what it changes in what agents run or read, each permission
+// it asks for in plain words and its colour, the defaults it suggests,
+// every rules addendum, agent manifest, task template, tool and guard
+// rule in full, then question.
 func consentLines(md mod.Mod, question string, w int) []string {
 	man := md.Manifest
 	var out []string
@@ -480,11 +481,21 @@ func consentLines(md mod.Mod, question string, w int) []string {
 		out = append(out, wrapLines("Commands you can run: "+strings.Join(c, " · "), w)...)
 	}
 	out = append(out, "")
+	changes := md.AgentChanges()
+	if len(changes) > 0 {
+		out = append(out, "It changes what agents run or read:")
+		for _, c := range changes {
+			out = append(out, wrapLines("  • "+c.Long, w)...)
+		}
+	}
 	asked := man.Permissions.Requested()
-	if len(asked) == 0 {
+	switch {
+	case len(asked) == 0 && len(changes) > 0:
+		out = append(out, "It asks for no permission.")
+	case len(asked) == 0:
 		out = append(out, "It asks for no permission: "+th().Good.Render("safe")+".")
 		out = append(out, faintLines("Its own data, columns, settings and log, and events about sessions and the clock.", w)...)
-	} else {
+	default:
 		out = append(out, "It may:")
 		for _, p := range asked {
 			l := "  • " + permStyle(p).Render(oneLine(man.Permissions.PermWords(p)))
