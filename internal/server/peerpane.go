@@ -8,6 +8,8 @@ package server
 
 import (
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -77,13 +79,56 @@ func (p *paneSource) Resync()              { p.sub.Resync() }
 // keys do (docs/SPEC.md §4), in this server's words.
 func (p *paneSource) Input(b []byte) error {
 	p.mu.Lock()
-	tell := p.info.Role == proto.RoleThread && !p.told
-	p.told = true
+	tell := p.info.Role == proto.RoleThread && !p.told && typing(b)
+	if tell {
+		p.told = true
+	}
 	p.mu.Unlock()
 	if tell {
 		go p.takeover()
 	}
 	return p.sess.Input(b)
+}
+
+// typing reports whether b holds something the user did: a key, a paste
+// or a mouse press. The console's own reports (focus in and out, which it
+// sends when a pane is shown or the window changes focus, and mouse
+// release, motion and wheel) are not typing, so they raise no takeover.
+func typing(b []byte) bool {
+	for len(b) > 0 {
+		if b[0] != 0x1b || len(b) < 3 || b[1] != '[' {
+			return true
+		}
+		switch b[2] {
+		case 'I', 'O': // focus in, focus out
+			b = b[3:]
+		case '<': // SGR mouse: ESC [ < Cb ; Cx ; Cy M|m
+			end := 3
+			for end < len(b) && b[end] != 'M' && b[end] != 'm' {
+				end++
+			}
+			if end == len(b) {
+				return true
+			}
+			cb, _, _ := strings.Cut(string(b[3:end]), ";")
+			n, err := strconv.Atoi(cb)
+			if err != nil || (b[end] == 'M' && n&(32|64) == 0) {
+				return true // a press (or something we can't read)
+			}
+			b = b[end+1:]
+		case 'M': // X10 mouse: ESC [ M Cb Cx Cy
+			if len(b) < 6 {
+				return true
+			}
+			if cb := int(b[3]) - 32; cb&3 != 3 && cb&(32|64) == 0 {
+				return true
+			}
+			b = b[6:]
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 func (p *paneSource) takeover() {

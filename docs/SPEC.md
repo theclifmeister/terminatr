@@ -2770,6 +2770,8 @@ user's own (§16.8); the far server's human decides what crosses.
   `peer:<alias>`, an agent to every check, and its keys go to the PTY
   only while the switch is `write`, whatever it was when the stream
   opened. The first key
+  (or paste, or mouse press; never the console's focus reports or a mouse
+  release, motion or wheel, which it sends with no one typing)
   into a thread's pane on a stream raises a `takeover` item there for
   its coordinator, `the user typed into T7's pane from the paired server
   studio`, and the journal line `peer:studio thread.takeover t-0004`
