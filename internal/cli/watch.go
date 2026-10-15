@@ -3,7 +3,6 @@ package cli
 import (
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"strings"
@@ -19,24 +18,24 @@ const watchUsage = `usage: tm watch [--session ID] [--json]   (default: this ses
        tm watch --project <slug> [--json]`
 
 func init() {
-	commands["watch"] = func(e *Env, args []string) error { return codeErr(watchCmd(e, args)) }
+	commands["watch"] = watchCmd
 }
 
 // watchCmd implements `tm watch` (docs/SPEC.md §10): a session's state,
 // then a line on each change, until the session ends. With --json each
 // line is a proto.Watch (NDJSON), for mods. It reads through the control
 // socket only, so it works from a sandboxed thread.
-func watchCmd(e *Env, args []string) int {
-	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
-	fs.SetOutput(e.Stderr)
-	id := fs.String("session", "", "session id (default: $TERMINATR_SESSION)")
-	slug := fs.String("project", "", "watch a project instead: what its coordinator's /tm pane shows")
-	asJSON := fs.Bool("json", false, "print one JSON object per line")
-	if err := fs.Parse(args); err != nil {
-		return ExitUsage
+func watchCmd(e *Env, args []string) error {
+	f := newFlags()
+	id := f.String("session")   // session id (default: $TERMINATR_SESSION)
+	slug := f.String("project") // watch a project instead: what its coordinator's /tm pane shows
+	asJSON := f.Bool("json")    // print one JSON object per line
+	pos, err := f.Parse(args)
+	if err != nil {
+		return srvFail("watch", err)
 	}
-	if fs.NArg() != 0 || (*slug != "" && *id != "") {
-		return e.srvUsage("watch", watchUsage)
+	if len(pos) != 0 || (*slug != "" && *id != "") {
+		return srvUsage("watch", watchUsage)
 	}
 	if *slug != "" {
 		return watchProject(e, *slug, *asJSON)
@@ -45,11 +44,11 @@ func watchCmd(e *Env, args []string) int {
 		*id = e.Getenv(caller.EnvSession)
 	}
 	if *id == "" {
-		return e.srvUsage("watch", "no session: pass --session ID\n"+watchUsage)
+		return srvUsage("watch", "no session: pass --session ID\n"+watchUsage)
 	}
 	p, err := server.ResolvePaths()
 	if err != nil {
-		return e.srvFail("watch", err)
+		return srvFail("watch", err)
 	}
 	st, w, err := server.WatchSession(p, *id)
 	var perr *proto.Error
@@ -57,21 +56,21 @@ func watchCmd(e *Env, args []string) int {
 		err = errors.New("the running server can't watch sessions; restart it (tm server restart)")
 	}
 	if err != nil {
-		return e.srvFail("watch", err)
+		return srvFail("watch", err)
 	}
 	defer st.Close()
 	for {
 		if err := writeWatch(e.Stdout, w, *asJSON); err != nil {
-			return ExitOK // the reader went away
+			return nil // the reader went away
 		}
 		if w.Session.State == string(agent.StateExited) {
-			return ExitOK
+			return nil
 		}
 		if w, err = st.Next(); err != nil {
 			if errors.Is(err, io.EOF) {
 				err = errors.New("server hung up")
 			}
-			return e.srvFail("watch", err)
+			return srvFail("watch", err)
 		}
 	}
 }
@@ -126,10 +125,10 @@ func watchLine(w proto.Watch) string {
 // watchProject is `tm watch --project`: the project's state, then a line
 // on each change, until the reader or the server goes. With asJSON each
 // line is a proto.ProjectWatch.
-func watchProject(e *Env, slug string, asJSON bool) int {
+func watchProject(e *Env, slug string, asJSON bool) error {
 	p, err := server.ResolvePaths()
 	if err != nil {
-		return e.srvFail("watch", err)
+		return srvFail("watch", err)
 	}
 	st, w, err := server.WatchProject(p, slug)
 	var perr *proto.Error
@@ -137,7 +136,7 @@ func watchProject(e *Env, slug string, asJSON bool) int {
 		err = errors.New("the running server can't watch projects; restart it (tm server restart)")
 	}
 	if err != nil {
-		return e.srvFail("watch", err)
+		return srvFail("watch", err)
 	}
 	defer st.Close()
 	for {
@@ -149,13 +148,13 @@ func watchProject(e *Env, slug string, asJSON bool) int {
 			_, werr = fmt.Fprintln(e.Stdout, projectWatchLine(w))
 		}
 		if werr != nil {
-			return ExitOK // the reader went away
+			return nil // the reader went away
 		}
 		if w, err = st.Next(); err != nil {
 			if errors.Is(err, io.EOF) {
 				err = errors.New("server hung up")
 			}
-			return e.srvFail("watch", err)
+			return srvFail("watch", err)
 		}
 	}
 }

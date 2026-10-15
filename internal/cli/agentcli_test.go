@@ -24,8 +24,8 @@ func TestAgentCheckRender(t *testing.T) {
 			var out, errb bytes.Buffer
 			e := &Env{Stdout: &out, Stderr: &errb, Getenv: func(string) string { return "" }}
 			file := filepath.Join("..", "agent", "manifests", name+".toml")
-			if code := agentCheck(e, []string{"--render", dir, "--tm-bin", "/x/tm", file}); code != ExitOK {
-				t.Fatalf("exit %d: %s", code, errb.String())
+			if err := agentCheck(e, []string{"--render", dir, "--tm-bin", "/x/tm", file}); err != nil {
+				t.Fatalf("exit %d: %s", e.report("tm agent", err), errb.String())
 			}
 			var l struct{ Argv, Env []string }
 			if err := json.Unmarshal(out.Bytes(), &l); err != nil || len(l.Argv) == 0 || l.Argv[0] != name {
