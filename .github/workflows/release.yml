@@ -168,6 +168,22 @@ jobs:
       - name: Check the signed archives
         run: scripts/release/check.sh --signed dist
 
+      # goreleaser must have put the hand-written notes in the draft's body
+      # (it once did not: v0.28.0 went out empty). Compare, and fail rather
+      # than publish a release whose body differs from docs/releases/<tag>.md.
+      - name: Check the release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          want=$(cat "docs/releases/${GITHUB_REF_NAME}.md")
+          got=$(gh release view "$GITHUB_REF_NAME" --json body -q .body | tr -d '\r')
+          if [ "$got" != "$want" ]; then
+            echo "::error::the draft release body for $GITHUB_REF_NAME differs from docs/releases/${GITHUB_REF_NAME}.md; not publishing"
+            printf 'body:\n%s\n' "$got" >&2
+            exit 1
+          fi
+
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
