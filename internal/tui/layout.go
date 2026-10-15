@@ -3,6 +3,7 @@ package tui
 import (
 	"cmp"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"math"
 	"os"
@@ -185,13 +186,24 @@ var DefaultLayout = Layout{Details: true, Split: defaultSplit, Sidebar: SidebarL
 
 // LoadLayout reads path; a missing or unreadable file gives the default.
 func LoadLayout(path string) Layout {
+	l, _ := readLayout(path)
+	return l
+}
+
+// readLayout is LoadLayout, and says when the file is there but doesn't
+// parse: saving over it would replace what the user wrote with the
+// defaults, so the savers refuse.
+func readLayout(path string) (Layout, error) {
 	l := DefaultLayout
 	if path == "" {
-		return l
+		return l, nil
 	}
 	b, err := os.ReadFile(path)
-	if err != nil || json.Unmarshal(b, &l) != nil {
-		return DefaultLayout
+	if err != nil {
+		return DefaultLayout, nil
+	}
+	if err := json.Unmarshal(b, &l); err != nil {
+		return DefaultLayout, fmt.Errorf("ui.json: %w (not saved, fix or remove %s)", err, path)
 	}
 	l.Split = clampSplit(l.Split)
 	l.DetailsRows = clampRows(l.DetailsRows)
@@ -219,7 +231,7 @@ func LoadLayout(path string) Layout {
 		}
 		l.Layouts[id] = t
 	}
-	return l
+	return l, nil
 }
 
 // SaveLayout writes l to path, atomically.
@@ -526,6 +538,10 @@ func (m *dash) saveLayout() {
 	if m.uiFile == "" {
 		return
 	}
+	if _, err := readLayout(m.uiFile); err != nil {
+		m.fail(err)
+		return
+	}
 	if err := SaveLayout(m.uiFile, m.ui); err != nil {
 		m.fail(err)
 	}
@@ -570,7 +586,10 @@ func (l Layout) StatusCompact() bool { return l.statusBar == styleCompact }
 // the file: the attach client changes only the sidebar. A part the
 // console's layout sets goes under its id (tweak).
 func SaveSidebar(path string, s SidebarLayout) error {
-	ui := LoadLayout(path)
+	ui, err := readLayout(path)
+	if err != nil {
+		return err
+	}
 	spec, id := currentLayout()
 	was := effectiveLayout(spec, ui, id)
 	now := was
@@ -588,7 +607,10 @@ func ConsoleLayout(path string) Layout {
 // SaveTree writes what the sidebar's tree folds to path and keeps the
 // rest of the file, as SaveSidebar.
 func SaveTree(path string, t view.Tree) error {
-	l := LoadLayout(path)
+	l, err := readLayout(path)
+	if err != nil {
+		return err
+	}
 	l.Tree = t
 	return SaveLayout(path, l)
 }
@@ -596,7 +618,10 @@ func SaveTree(path string, t view.Tree) error {
 // SaveInfo writes the info panel's layout to path and keeps the rest of
 // the file, as SaveSidebar.
 func SaveInfo(path string, p view.Info) error {
-	l := LoadLayout(path)
+	l, err := readLayout(path)
+	if err != nil {
+		return err
+	}
 	l.Info = p.Clamp()
 	return SaveLayout(path, l)
 }

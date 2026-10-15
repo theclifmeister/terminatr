@@ -62,8 +62,12 @@ func (r *rotatingFile) rotate() {
 	}
 	os.Rename(r.path, r.path+".1")
 	if err := r.open(); err != nil {
-		// Keep logging somewhere rather than nowhere.
+		// Keep logging somewhere rather than nowhere, from an empty
+		// count so the next lines don't rotate again; the service's
+		// stderr is the one place left to say so.
+		fmt.Fprintf(os.Stderr, "log rotation failed, logging to nowhere: %v\n", err)
 		r.f, _ = os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+		r.size = 0
 	}
 }
 

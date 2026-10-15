@@ -91,3 +91,13 @@ func TestUpdateUnchangedKeepsFile(t *testing.T) {
 		t.Fatal("unchanged update replaced the file")
 	}
 }
+
+func TestUpdateUnchangedCreatesNothing(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "new.md")
+	if err := Update(p, func(old []byte) ([]byte, error) { return old, nil }); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(p); err == nil {
+		t.Fatal("a no-op update created the file")
+	}
+}

@@ -302,6 +302,9 @@ type dataMsg struct {
 }
 type tickMsg struct{}
 
+// awaitMsg is the end of the wait for a mod's view (awaitView).
+type awaitMsg struct{}
+
 type boardMsg struct {
 	slug  string
 	board *tasks.Board
@@ -383,6 +386,10 @@ func (m *dash) reloadBoards() tea.Cmd {
 
 func (m *dash) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.load(), m.waitView(), m.waitFeed()}
+	if !m.awaitView.IsZero() {
+		// The deadline itself wakes the loop, so overDone sees it passed.
+		cmds = append(cmds, tea.Tick(time.Until(m.awaitView), func(time.Time) tea.Msg { return awaitMsg{} }))
+	}
 	if themed() {
 		// A mod's theme may differ light and dark: ask the terminal.
 		cmds = append(cmds, tea.RequestBackgroundColor)
@@ -920,8 +927,13 @@ func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 // fail shows err in the footer, as a failure.
 func (m *dash) fail(err error) { m.msg = err.Error(); m.errMsg = m.msg }
 
-// act runs an action in the background; one at a time.
+// act runs an action in the background; one at a time: one asked for
+// while another runs waits its turn (m.queued), as a settings key does.
 func (m *dash) act(fn func() actionMsg) tea.Cmd {
+	if m.busy {
+		m.queued = append(m.queued, func(m *dash) tea.Cmd { return m.act(fn) })
+		return nil
+	}
 	m.busy = true
 	m.acts++
 	return func() tea.Msg { return fn() }

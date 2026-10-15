@@ -89,3 +89,13 @@ func TestSectionFolds(t *testing.T) {
 		t.Errorf("view JSON %s lacks sections_folded", data)
 	}
 }
+
+func TestTreeRenameOntoKnownSlug(t *testing.T) {
+	tr := Tree{Expanded: []string{"a", "b"}, Folded: []string{"a", "b"}}
+	if !tr.Rename("a", "b") {
+		t.Fatal("rename reported no change after removing the old slug")
+	}
+	if tr.IsExpanded("a") || tr.IsFolded("a") {
+		t.Fatalf("old slug kept: %+v", tr)
+	}
+}
