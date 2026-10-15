@@ -241,7 +241,7 @@ func contextFor(role, slug, threadID, brief, tickerState string) func() ([]byte,
 			if err != nil {
 				return []byte(rules), nil
 			}
-			secs, err := p.Context(ticker.Seen(tickerState, slug))
+			secs, err := thread.Context(p, ticker.Seen(tickerState, slug))
 			if err != nil {
 				return []byte(rules), nil
 			}
