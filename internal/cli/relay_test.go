@@ -14,6 +14,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -72,6 +73,21 @@ func TestRelayServeFlags(t *testing.T) {
 	}
 }
 
+// Without --max-conns, a low memory limit lowers the connection limit.
+func TestRelayServeMaxConnsFromMemory(t *testing.T) {
+	h := newHarness(t)
+	defer func(old func(context.Context, string, *relay.Server, relay.TLS) error) { relayServe = old }(relayServe)
+	relayServe = func(context.Context, string, *relay.Server, relay.TLS) error { return nil }
+	defer debug.SetMemoryLimit(debug.SetMemoryLimit(64 << 20))
+	want := fmt.Sprintf("at most %d connections, for a memory limit of 64 MiB", relay.ConnsFor(64<<20))
+	if code, _, errs := h.run(human, "", "relay", "serve", "--plain"); code != 0 || !strings.Contains(errs, want) {
+		t.Fatalf("exit %d, log %q, want %q", code, errs, want)
+	}
+	if code, _, errs := h.run(human, "", "relay", "serve", "--plain", "--max-conns", "1000"); code != 0 || strings.Contains(errs, "at most") {
+		t.Fatalf("--max-conns: exit %d, log %q", code, errs)
+	}
+}
+
 // The Dockerfile, the compose example and the systemd unit run tm relay
 // serve with flags it takes.
 func TestRelayDeployFilesUseRealFlags(t *testing.T) {
@@ -98,6 +114,15 @@ func TestRelayDeployFilesUseRealFlags(t *testing.T) {
 		}
 		t.Fatalf("no %q line", prefix)
 		return nil
+	}
+	// The image sets a soft memory limit under compose's mem_limit.
+	if !strings.Contains(read("Dockerfile"), "\nENV GOMEMLIMIT=200MiB\n") {
+		t.Error("Dockerfile: no ENV GOMEMLIMIT=200MiB")
+	}
+	for _, f := range []string{"compose.yaml", "compose.acme.yaml"} {
+		if !strings.Contains(read(f), "mem_limit: 256m") {
+			t.Errorf("%s: no mem_limit: 256m", f)
+		}
 	}
 	runs := map[string][]string{
 		"Dockerfile":        jsonLine(read("Dockerfile"), "CMD "),
@@ -129,7 +154,8 @@ func TestRelayUnitIsTheDeployFile(t *testing.T) {
 	if want := relayUnit("relay.example.net", "", true); string(b) != want {
 		t.Fatalf("deploy/relay/tm-relay.service differs from relayUnit; write it as:\n%s", want)
 	}
-	for _, want := range []string{"DynamicUser=yes", "AmbientCapabilities=CAP_NET_BIND_SERVICE", "StateDirectory=tm-relay", "ProtectSystem=strict"} {
+	for _, want := range []string{"DynamicUser=yes", "AmbientCapabilities=CAP_NET_BIND_SERVICE", "StateDirectory=tm-relay", "ProtectSystem=strict",
+		"StartLimitIntervalSec=0", "Environment=GOMEMLIMIT=200MiB", "MemoryMax=256M"} {
 		if !strings.Contains(string(b), "\n"+want+"\n") {
 			t.Errorf("no %s", want)
 		}

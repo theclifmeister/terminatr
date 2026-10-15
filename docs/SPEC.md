@@ -2159,13 +2159,15 @@ Per address (an IPv6 address counts by its /64):
 |---|---|---|
 | connections from one address | 16 (`--max-per-ip`) | HTTP 429 |
 | new connections from one address | 30 a minute, burst 10 | HTTP 429 |
-| connections in all | 1024 (`--max-conns`) | HTTP 429 |
+| connections in all | 1024 (`--max-conns`); without the flag, fewer when the memory limit (`GOMEMLIMIT`, or three quarters of the cgroup's) holds less at 160 KiB each, at least 16 | HTTP 429 |
+| TCP connections, before TLS | from one address: `--max-per-ip` + 4; in all: `--max-conns` + a quarter (a `--trusted-proxy` counts only in all) | closed at once |
 | bytes one address sends | 4 MiB/s, burst 8 MiB (`--bandwidth`) | slowed, never dropped |
 | a link room waiting | 1 h | 4408 `timeout`; the client dials again |
 | a pair room waiting | 10 min | 4408 `timeout` |
 | a mated pair room | 2 min and 256 KiB in all | 4429 `pair-limit` |
 | a frame | the relay pings every 30 s; 90 s without a frame closes | closed |
-| the HTTP request | headers in 10 s, at most 8 KiB | closed |
+| the TLS handshake | 5 s | closed |
+| the HTTP request | headers and request in 10 s, at most 8 KiB; the answer written in 5 s; 30 s idle between requests (none on a WebSocket, which has its own) | closed |
 
 ### 16.5 What it logs and keeps
 
@@ -2175,8 +2177,9 @@ certificate), and with `--update-request` the request file and its
 `.last` stamp (§16.2). Its log (standard error) has the start and stop, refused
 hellos, rooms mated and connections left, by room kind and the first four
 bytes of the room id, with duration and bytes in, and update requests
-with the first four bytes of the key's fingerprint and their result. Client addresses only
-with `--log-ips`. Address counters are forgotten ten minutes after an
+with the first four bytes of the key's fingerprint and their result, and net/http's
+per-connection errors (a failed TLS handshake) with every IP address in them replaced by
+`(address)`. Client addresses only with `--log-ips`. Address counters are forgotten ten minutes after an
 address's last connection.
 
 ### 16.6 Packaging
@@ -2192,7 +2195,10 @@ address's last connection.
   network, trusting only that network's `X-Forwarded-For`.
 - `deploy/relay/tm-relay.service`: a systemd unit with a throwaway user
   (`DynamicUser`), only `CAP_NET_BIND_SERVICE`, `--domain` with its
-  `StateDirectory=tm-relay` for the ACME cache, and a strict sandbox.
+  `StateDirectory=tm-relay` for the ACME cache, and a strict sandbox;
+  `MemoryMax=256M` with `GOMEMLIMIT=200MiB` (the Docker image sets the
+  same under compose's `mem_limit: 256m`), `LimitNOFILE=8192`, and
+  `StartLimitIntervalSec=0`, so restarts never leave it stopped.
   It is the unit `tm relay install` writes, for another name
   (`TestRelayUnitIsTheDeployFile`), with `--update-request
   ${STATE_DIRECTORY}/update-request --auto-update on|off` (the timer's
