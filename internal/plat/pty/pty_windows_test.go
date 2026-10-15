@@ -2,6 +2,7 @@ package pty
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -20,6 +22,11 @@ import (
 
 // The test binary is its own child: PTY_TEST_CHILD names what it does.
 func TestMain(m *testing.M) {
+	if p := os.Getenv("PTY_TEST_ARGS"); p != "" { // node for an npm shim
+		b, _ := json.Marshal(os.Args[1:])
+		os.WriteFile(p, b, 0o600)
+		os.Exit(0)
+	}
 	if mode := os.Getenv("PTY_TEST_CHILD"); mode != "" {
 		child(mode)
 		os.Exit(0)
@@ -162,6 +169,64 @@ func TestStart(t *testing.T) {
 	}
 	if _, err := Start([]string{`C:\no\such.exe`}, "", nil, 80, 24); err == nil {
 		t.Fatal("Start(no such exe) succeeded")
+	}
+}
+
+// npmShim is codex.cmd as npm writes it.
+const npmShim = "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n\r\n" +
+	"IF EXIST \"%dp0%\\node.exe\" (\r\n  SET \"_prog=%dp0%\\node.exe\"\r\n) ELSE (\r\n  SET \"_prog=node\"\r\n  SET PATHEXT=%PATHEXT:;.JS;=;%\r\n)\r\n\r\n" +
+	"endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & \"%_prog%\"  \"%dp0%\\node_modules\\@openai\\codex\\bin\\codex.js\" %*\r\n"
+
+// TestStartNpmShim: an npm shim starts as node <script> with the
+// arguments as they are, not through cmd.exe; another batch file starts
+// through cmd.exe only with arguments it can pass safely.
+func TestStartNpmShim(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, `node_modules\@openai\codex\bin\codex.js`)
+	os.MkdirAll(filepath.Dir(script), 0o700)
+	os.WriteFile(script, nil, 0o600)
+	os.WriteFile(filepath.Join(dir, "codex.cmd"), []byte(npmShim), 0o700)
+	exe, _ := os.Executable()
+	b, err := os.ReadFile(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The test binary is node.exe, beside the shim as npm can put it.
+	if err := os.WriteFile(filepath.Join(dir, "node.exe"), b, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "args.json")
+	env := append(os.Environ(), "PTY_TEST_ARGS="+out)
+	args := []string{"-c", `permissions={tm={network={mode="limited"}}}`, "kick & type nul > made.txt & off", "100%PATH%", "two\nlines"}
+	c, err := Start(append([]string{filepath.Join(dir, "codex.cmd")}, args...), dir, env, 80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	io.ReadAll(c)
+	if err := c.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	b, err = os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if want := append([]string{script}, args...); !slices.Equal(got, want) {
+		t.Errorf("args\n got %q\nwant %q", got, want)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "made.txt")); err == nil {
+		t.Error("cmd.exe ran a command from the arguments")
+	}
+
+	other := filepath.Join(dir, "other.cmd")
+	os.WriteFile(other, []byte("@echo off\r\n"), 0o700)
+	if c, err := Start([]string{other, `say "hi"`}, dir, nil, 80, 24); err == nil {
+		c.Close()
+		t.Error("a batch file started with a quote in its arguments")
 	}
 }
 

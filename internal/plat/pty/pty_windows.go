@@ -12,6 +12,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"github.com/theclifmeister/terminatr/internal/plat/shell"
 )
 
 // console is a process on a pseudo console (ConPTY) in a Job Object of
@@ -67,6 +69,20 @@ func start(api *conptyAPI, argv []string, dir string, env []string, cols, rows u
 	if env == nil {
 		env = os.Environ()
 	}
+	line := windows.ComposeCommandLine(argv)
+	if shell.IsBatch(path) {
+		// CreateProcess would run it through cmd.exe, which reads the
+		// arguments (a kickoff, TOML flags) as its own syntax.
+		s, err := shell.BatchStart(path, argv[1:])
+		if err != nil {
+			return nil, fmt.Errorf("pty: start %s: %w", argv[0], err)
+		}
+		path, line = s.App, s.Line
+		if line == "" {
+			line = windows.ComposeCommandLine(s.Argv)
+		}
+		env = append(env[:len(env):len(env)], s.Env...)
+	}
 	block, err := envBlock(env)
 	if err != nil {
 		return nil, fmt.Errorf("pty: start %s: %w", argv[0], err)
@@ -106,7 +122,7 @@ func start(api *conptyAPI, argv []string, dir string, env []string, cols, rows u
 	}
 	undo = append(undo, func() { windows.CloseHandle(job) }) // kills what is in it
 
-	h, pid, err := spawn(path, argv, dir, block, hpc, job)
+	h, pid, err := spawn(path, line, dir, block, hpc, job)
 	if err != nil {
 		return nil, fmt.Errorf("pty: start %s: %w", argv[0], err)
 	}
@@ -259,10 +275,10 @@ func (c *console) closeConsole() {
 	close(c.pcClosed)
 }
 
-// spawn starts path suspended on the pseudo console, puts it in job and
-// lets it run, so nothing it starts escapes the job. It returns a handle
-// to the process, which the caller closes.
-func spawn(path string, argv []string, dir string, env []uint16, hpc, job windows.Handle) (windows.Handle, int, error) {
+// spawn starts path with the command line line suspended on the pseudo
+// console, puts it in job and lets it run, so nothing it starts escapes
+// the job. It returns a handle to the process, which the caller closes.
+func spawn(path, line string, dir string, env []uint16, hpc, job windows.Handle) (windows.Handle, int, error) {
 	attrs, err := windows.NewProcThreadAttributeList(1)
 	if err != nil {
 		return 0, 0, err
@@ -282,7 +298,7 @@ func spawn(path string, argv []string, dir string, env []uint16, hpc, job window
 	if err != nil {
 		return 0, 0, err
 	}
-	cmdline, err := windows.UTF16PtrFromString(windows.ComposeCommandLine(argv))
+	cmdline, err := windows.UTF16PtrFromString(line)
 	if err != nil {
 		return 0, 0, err
 	}
