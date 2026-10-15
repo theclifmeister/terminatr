@@ -17,6 +17,9 @@ project_name: tm
 before:
   hooks:
     - go mod download
+    # tm-relay-docker.tar.gz: deploy/relay's Docker files, pinned to this
+    # release (an extra file below, so outside dist/, which isn't made yet).
+    - '{{ .Env.TM_ROOT }}/scripts/release/relay-docker.sh {{ if .IsSnapshot }}v{{ .Version }}{{ else }}{{ .Tag }}{{ end }}'
 
 builds:
   - id: tm
@@ -136,6 +139,8 @@ archives:
 checksum:
   name_template: checksums.txt
   algorithm: sha256
+  extra_files:
+    - glob: ./.build/release/tm-relay-docker.tar.gz
 
 snapshot:
   version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"
@@ -155,7 +160,10 @@ release:
   draft: true
   prerelease: auto
   # The installers, at releases/latest/download/install.ps1 (Windows) and
-  # install.sh (Linux, macOS).
+  # install.sh (Linux, macOS), and the relay's Docker files at
+  # releases/latest/download/tm-relay-docker.tar.gz (docs/OPERATIONS.md,
+  # Running a relay).
   extra_files:
     - glob: ./scripts/install.ps1
     - glob: ./scripts/install.sh
+    - glob: ./.build/release/tm-relay-docker.tar.gz

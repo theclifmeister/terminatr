@@ -1,0 +1,43 @@
+# tm relay on an IP address, with no DNS name and no certificate
+# authority (docs/OPERATIONS.md, Running a relay): it makes its own key and
+# a self-signed certificate, and servers check it by its key (the pin in
+# its address). Good for a NAS or home server on the LAN or a tailnet.
+#
+#   mkdir state && sudo chown 65532:65532 state
+#   echo RELAY_IP=192.168.1.20 > .env
+#   docker compose -f compose.selfsigned.yaml up -d
+#   docker compose -f compose.selfsigned.yaml logs relay   # its address, with the pin
+#
+# RELAY_IP is the address the servers reach the relay at (LAN, tailnet or
+# public). The key lives in ./state: back it up, a new key means giving
+# every server the relay's new address. The relay runs as uid 65532; where
+# ./state belongs to your own user instead (Synology and other NAS boxes),
+# add RELAY_USER=uid:gid to .env (`id -u`:`id -g`, e.g. 1026:100).
+#
+# Published on 8443, which the address says; for another port, use the
+# same number on both sides of ports: and in --listen.
+#
+# The copy in a release's tm-relay-docker.tar.gz pins TM_VERSION to that
+# release. Upgrade: put TM_VERSION=<new tag> in .env, run the same command.
+services:
+  relay:
+    image: ghcr.io/theclifmeister/tm-relay:${TM_VERSION:-latest}
+    # To build the image here instead, from the same release binary checked
+    # against its checksums.txt, uncomment these lines and add --build:
+    # build:
+    #   context: .
+    #   args:
+    #     TM_VERSION: ${TM_VERSION:-latest}
+    container_name: tm-relay
+    restart: unless-stopped
+    user: "${RELAY_USER:-65532:65532}"
+    command: ["--self-signed", "--ip", "${RELAY_IP:?set RELAY_IP to the address servers reach the relay at}", "--listen", ":8443", "--state", "/state"]
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./state:/state
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    pids_limit: 256

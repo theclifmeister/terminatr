@@ -1669,7 +1669,7 @@ Every agent-facing command prints short, stable, plain text. It never prints unt
 
 ### 10.1 Releases, install and update
 
-- **Releases.** A `v*` tag runs `.github/workflows/release.yml` on one macOS runner. goreleaser cross-compiles darwin and linux × amd64 and arm64 with `zig cc` (§12), except that Apple's clang and ld link darwin: chained fixups keep `__DATA_CONST` clean (zig's linker left ~2.4 MB dirty in every tm process), at minimum macOS 13.0, both checked by `scripts/release/check.sh`. A build hook (`scripts/release/sign.sh`) signs each darwin binary with the Developer ID (hardened runtime, secure timestamp, identifier `dev.terminatr.tm`) and notarises it with `notarytool`, before it is archived. The archives and `checksums.txt` go to a draft release; `scripts/release/check.sh --signed` checks what was uploaded, Gatekeeper's verdict included; then the release is published, and `Formula/terminatr.rb` is rewritten from `checksums.txt` in a pull request that merges itself. Snapshots (`make release-snapshot`, CI) skip signing and say so.
+- **Releases.** A `v*` tag runs `.github/workflows/release.yml` on one macOS runner. goreleaser cross-compiles darwin and linux × amd64 and arm64 with `zig cc` (§12), except that Apple's clang and ld link darwin: chained fixups keep `__DATA_CONST` clean (zig's linker left ~2.4 MB dirty in every tm process), at minimum macOS 13.0, both checked by `scripts/release/check.sh`. A build hook (`scripts/release/sign.sh`) signs each darwin binary with the Developer ID (hardened runtime, secure timestamp, identifier `dev.terminatr.tm`) and notarises it with `notarytool`, before it is archived. The archives, `tm-relay-docker.tar.gz` (§16.6) and `checksums.txt` go to a draft release; `scripts/release/check.sh --signed` checks what was uploaded, Gatekeeper's verdict included; then the release is published, `Formula/terminatr.rb` is rewritten from `checksums.txt` in a pull request that merges itself, and a Linux job pushes the relay image (§16.6) to ghcr.io. Snapshots (`make release-snapshot`, CI) skip signing and say so.
 - **Gatekeeper.** A bare Mach-O can't carry a stapled ticket; Apple records the notarisation against its cdhash. A quarantined copy (a browser download) is accepted after an online check; curl and Homebrew formulae set no quarantine flag, so nothing is checked. `spctl --type execute` rejects every bare binary; `spctl --assess --type open --context context:primary-signature` reports `source=Notarized Developer ID`.
 - **Homebrew.** One formula for macOS and Linux (`brew tap theclifmeister/terminatr https://github.com/theclifmeister/terminatr`, `brew install terminatr`), with `on_macos`/`on_linux` × `on_arm`/`on_intel` archives. Not a cask: casks are macOS-only, and the formula installs the signed binary unchanged.
 - **Install method.** `internal/update` tells three apart: a source build (`version.Channel` empty: `make`, `go build`), Homebrew (the resolved executable is under a `Cellar/` or `Caskroom/`), and a direct install (any other release binary).
@@ -2242,10 +2242,26 @@ address's last connection.
   `checksums.txt` as `scripts/install.sh` does, on `distroless/cc`
   (glibc and nothing else), as uid 65532, listening on 8443 (published
   as 443, so it needs no capability). `TM_VERSION` pins the release.
+  Each release's workflow builds it for linux/amd64 and linux/arm64 and
+  pushes `ghcr.io/theclifmeister/tm-relay:<tag>`, and `:latest` unless
+  a prerelease.
 - `deploy/relay/compose.yaml`: certificate files mounted read-only.
   `compose.acme.yaml` with `Caddyfile`: Caddy gets the certificate by
   ACME and passes the WebSocket to a `--plain` relay on an internal
   network, trusting only that network's `X-Forwarded-For`.
+  `compose.selfsigned.yaml`: a pinned relay (§16.1), `--self-signed
+  --ip ${RELAY_IP} --listen :8443 --state /state`, its key in a mounted
+  `./state`, published as 8443, running as `${RELAY_USER:-65532:65532}`.
+  All three run `ghcr.io/theclifmeister/tm-relay:${TM_VERSION:-latest}`
+  (a commented `build:` builds it locally instead) with a read-only root,
+  no capabilities, `no-new-privileges`, `mem_limit: 256m` and
+  `pids_limit: 256`.
+- `tm-relay-docker.tar.gz`, a release asset listed in `checksums.txt`:
+  the Dockerfile, the three compose files, the Caddyfile and
+  `deploy/relay/README.md` in `tm-relay-docker/`, the compose files'
+  default `TM_VERSION` replaced by the release's tag
+  (`scripts/release/relay-docker.sh`, a goreleaser before hook; checked
+  by `scripts/release/check.sh`).
 - `deploy/relay/tm-relay.service`: a systemd unit with a throwaway user
   (`DynamicUser`), only `CAP_NET_BIND_SERVICE`, `--domain` with its
   `StateDirectory=tm-relay` for the ACME cache, and a strict sandbox;

@@ -4,7 +4,10 @@
 # trusts only Caddy's X-Forwarded-For, so its per-address limits count
 # real clients.
 #
-#   RELAY_HOST=relay.example.net docker compose -f compose.acme.yaml up -d --build
+#   RELAY_HOST=relay.example.net docker compose -f compose.acme.yaml up -d
+#
+# The copy in a release's tm-relay-docker.tar.gz pins TM_VERSION to that
+# release. Upgrade: put TM_VERSION=<new tag> in .env, run the same command.
 #
 # Needs ports 80 and 443 reachable from the internet and RELAY_HOST's DNS
 # pointing at this host. tm's link then dials wss://$RELAY_HOST.
@@ -25,11 +28,13 @@ services:
     depends_on: [relay]
 
   relay:
-    build:
-      context: .
-      args:
-        TM_VERSION: latest # pin a tag, e.g. v0.27.0
-    image: tm-relay
+    image: ghcr.io/theclifmeister/tm-relay:${TM_VERSION:-latest}
+    # To build the image here instead, from the same release binary checked
+    # against its checksums.txt, uncomment these lines and add --build:
+    # build:
+    #   context: .
+    #   args:
+    #     TM_VERSION: ${TM_VERSION:-latest}
     restart: unless-stopped
     command: ["--listen", ":8080", "--plain", "--trusted-proxy", "172.30.53.0/24"]
     expose: ["8080"] # never published: only Caddy reaches it

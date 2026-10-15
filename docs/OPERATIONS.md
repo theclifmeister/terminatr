@@ -312,24 +312,46 @@ What to know:
 
 `tm relay serve --self-signed [--ip ADDR] [--state DIR]` does the same in the foreground (key in `~/.terminatr/relay`, or `--state DIR`) and logs the address with its pin when it starts. Without `--ip` it takes the address it listens on (`--listen 192.168.1.20:8443`), else this host's own.
 
+On a NAS, or any host with Docker, `compose.selfsigned.yaml` runs it in a container, on port 8443 ([Docker](#docker-vps-or-nas) below).
+
 ### Alternatives
 
 #### Docker (VPS or NAS)
 
-`deploy/relay/` in the repository has everything; copy that folder to the host.
-
-With Caddy getting the certificate by ACME (needs ports 80 and 443 and the DNS name pointing at the host):
+The relay image is `ghcr.io/theclifmeister/tm-relay`, one per release (`:v0.28.0`, and `:latest`), for amd64 and arm64 (most NAS boxes are one of them); it runs as uid 65532, not root, and listens on 8443 inside. The compose files for it come with each release:
 
 ```sh
-cd deploy/relay
-RELAY_HOST=relay.example.net docker compose -f compose.acme.yaml up -d --build
+curl -fLO https://github.com/theclifmeister/terminatr/releases/latest/download/tm-relay-docker.tar.gz
+tar xzf tm-relay-docker.tar.gz && cd tm-relay-docker
 ```
 
-With certificate files you already have (certbot, your NAS's own Let's Encrypt, a wildcard): put `fullchain.pem` and `privkey.pem` in `deploy/relay/certs/`, readable by uid 65532 (the image's non-root user), then `docker compose up -d --build`. The relay reads the files again when they change, so a renewal needs no restart; copy renewed files in from your ACME client's deploy hook (certbot's `live/` files are symlinks with a root-only key, so copy, don't mount them).
+The folder has three compose files, each pinned to that release, and a short README. Settings go in a `.env` file next to them, which `docker compose` reads by itself.
 
-Pin the release: set `TM_VERSION` in the compose file's build args to a tag (e.g. `v0.27.3`); the Dockerfile checks the download against the release's `checksums.txt`. To upgrade, change the tag and run `docker compose up -d --build`; connected servers drop and reconnect by themselves. The image has amd64 and arm64 builds (most NAS boxes are one of them); it listens on 8443 inside and is published as 443.
+**On an IP address, no domain** (`compose.selfsigned.yaml`), as in [Without a domain](#without-a-domain-an-ip-address): the relay makes its own key in `./state` and servers check it by its pin. Good for a NAS or home server on your LAN or tailnet:
 
-On a NAS (Synology Container Manager, QNAP Container Station, Unraid, TrueNAS apps): create a project from `compose.yaml` or `compose.acme.yaml`. If the NAS's own web interface already holds ports 80 and 443, publish the relay on another port (`"8443:8443"`, forwarded on the router as 8443) and use the NAS's reverse proxy or your own certificate files instead of Caddy.
+```sh
+mkdir state && sudo chown 65532:65532 state
+echo RELAY_IP=192.168.1.20 > .env            # the address the servers reach the relay at
+docker compose -f compose.selfsigned.yaml up -d
+docker compose -f compose.selfsigned.yaml logs relay
+```
+
+The log shows the address to pair with, with its pin: `wss://192.168.1.20:8443#sha256=…`. It is published on port 8443, so it doesn't take the NAS's own 443. Back up `state/`: it holds the key. On a NAS where the folder belongs to your own user (Synology: create `state` in File Station), skip the `chown` and add `RELAY_USER=uid:gid` to `.env` instead: your `id -u` and `id -g`, for example `RELAY_USER=1026:100`.
+
+**With a domain, Caddy getting the certificate by ACME** (`compose.acme.yaml`; needs ports 80 and 443 and the DNS name pointing at the host):
+
+```sh
+echo RELAY_HOST=relay.example.net > .env
+docker compose -f compose.acme.yaml up -d
+```
+
+**With a domain and certificate files you already have** (`compose.yaml`; certbot, your NAS's own Let's Encrypt, a wildcard): put `fullchain.pem` and `privkey.pem` in `certs/`, readable by uid 65532, then `docker compose up -d`. The relay reads the files again when they change, so a renewal needs no restart; copy renewed files in from your ACME client's deploy hook (certbot's `live/` files are symlinks with a root-only key, so copy, don't mount them).
+
+**Upgrading**: put the new release's tag in `.env` (`TM_VERSION=v0.29.0`) and run the same `up -d`; compose pulls the new image and restarts the relay, and connected servers drop and reconnect by themselves. The key in `state/` stays, so nothing changes for them.
+
+**Building the image yourself** instead of pulling it: uncomment the `build:` lines in the compose file and add `--build` to `up -d`. The `Dockerfile` downloads the release's Linux binary and checks it against the release's `checksums.txt`, as the installer does.
+
+On a NAS (Synology Container Manager, QNAP Container Station, Unraid, TrueNAS apps): create a project in the `tm-relay-docker` folder from the compose file you chose. If the NAS's own web interface holds ports 80 and 443, use `compose.selfsigned.yaml`, or publish the relay on another port (`"8443:8443"`, forwarded on the router as 8443) with the NAS's reverse proxy or your own certificate files instead of Caddy.
 
 #### systemd with certbot's certificate
 
@@ -362,7 +384,7 @@ sudo install -m 755 tm /usr/local/bin/tm
 sudo systemctl restart tm-relay
 ```
 
-Paired servers drop for a moment and reconnect by themselves; nothing to redo on them. (Docker: see the pinned release above.)
+Paired servers drop for a moment and reconnect by themselves; nothing to redo on them. (Docker: see Upgrading above.)
 
 ### Checking it
 
@@ -571,9 +593,11 @@ Write the release notes first: `docs/releases/v0.2.0.md`, in end-user words (no 
 
 1. imports the Developer ID certificate into a temporary keychain;
 2. builds and checks a snapshot (`make release-snapshot`, `scripts/release/check.sh`), unsigned;
-3. runs goreleaser (`make release`): every target cross-compiled with `zig cc`, except darwin, linked by Apple's clang and ld for chained fixups (the Windows targets as `*-windows-gnu`, their ConPTY files fetched by `scripts/release/conpty.sh`), each darwin binary signed (hardened runtime) and notarised by `scripts/release/sign.sh`, archives and `checksums.txt` uploaded to a draft release;
+3. runs goreleaser (`make release`): every target cross-compiled with `zig cc`, except darwin, linked by Apple's clang and ld for chained fixups (the Windows targets as `*-windows-gnu`, their ConPTY files fetched by `scripts/release/conpty.sh`), each darwin binary signed (hardened runtime) and notarised by `scripts/release/sign.sh`; the archives, `tm-relay-docker.tar.gz` (`deploy/relay`'s Docker files with the compose files pinned to the tag, `scripts/release/relay-docker.sh`), the installers and `checksums.txt` uploaded to a draft release;
 4. checks the archives again with `--signed` (Developer ID, hardened runtime, Gatekeeper says `Notarized Developer ID`), and only then publishes the release;
 5. rewrites `Formula/terminatr.rb` from `checksums.txt` (`scripts/release/formula.sh`) and merges it through a pull request. Prereleases (`v1.2.0-rc1`) skip this step.
+
+Then a second job, on a Linux runner in the same `release` environment, builds the relay image from `deploy/relay/Dockerfile` for amd64 and arm64 (the published linux archives, checked against `checksums.txt`) and pushes it to `ghcr.io/theclifmeister/tm-relay:<tag>`, and `:latest` unless it is a prerelease. It runs once the release is published, even when the formula step failed; if it fails, the release stays published: rerun the `image` job.
 
 Before the tag, `ci.yml` on main has run `test` (unit tests with `-race`) and `macos` (build, unit tests, e2e smoke): wait for them to be green. Pull requests run neither macOS nor `-race`, and the release snapshot only when they touch release files; the tag run is where every release build is checked. If the repository requires status checks, require `test` (the one check every pull request runs). `macos` is main-only, so don't require it; `changes`, `claude-mod` and `release-snapshot` are skipped when not needed, which counts as passed.
 
@@ -593,11 +617,12 @@ The same Apple credentials as toe. Put them in the `release` environment (Settin
 | `NOTARY_KEY_ID` | that key's id |
 | `NOTARY_ISSUER_ID` | the App Store Connect issuer id |
 
-`GITHUB_TOKEN` is provided by Actions.
+`GITHUB_TOKEN` is provided by Actions; the `image` job's token may write packages, for ghcr.io.
 
 ### Repository settings
 
 - **Settings → Actions → General → Workflow permissions:** allow GitHub Actions to create and approve pull requests, or the formula pull request can't be opened.
+- **The relay image's visibility:** the first release that pushes `ghcr.io/theclifmeister/tm-relay` creates the package as private. Make it public once (the package's Package settings → Danger Zone → Change visibility → Public), so `docker compose` pulls it without a login; check that it is linked to this repository (the image's `org.opencontainers.image.source` label does that) and that the repository has Admin or Write in the package's Manage Actions access, so later releases can push to it.
 - **Rules on `main`:** the formula pull request carries `[skip ci]` and merges at once, as toe's cask bump does. A ruleset that requires pull requests is fine; one that also requires status checks or approvals blocks it. Then the job turns on auto-merge (if Settings → General allows auto-merge) and warns; merge it by hand, or add GitHub Actions as a bypass actor of that rule.
 - **Forks:** no workflow uses `pull_request_target` or `workflow_run`, and the only one that sees secrets runs on tags, which only people with write access can push. For a public repository keep Settings → Actions → "Fork pull request workflows" at requiring approval for outside contributors.
 - **Self-hosted runners:** none. On a public repository any fork pull request can target a self-hosted runner's labels from a workflow of its own and run code on that machine, so don't register one for this repository (the real-Claude suite runs by hand, `make test-claude`).

@@ -8,6 +8,10 @@
 #
 # The relay needs a tm with `tm relay serve`; pin TM_VERSION to a tag
 # rather than following latest. Images for amd64 and arm64.
+#
+# Each release publishes this image, built from this file, as
+# ghcr.io/theclifmeister/tm-relay:<tag> (and :latest); the compose files
+# use it.
 
 FROM debian:12-slim AS fetch
 ARG TM_VERSION=latest
@@ -34,6 +38,9 @@ RUN set -eu; \
 
 # glibc (tm's Linux builds need 2.28 or later) and nothing else; uid 65532.
 FROM gcr.io/distroless/cc-debian12:nonroot
+LABEL org.opencontainers.image.source="https://github.com/theclifmeister/terminatr" \
+      org.opencontainers.image.description="terminatr relay (tm relay serve)" \
+      org.opencontainers.image.licenses="MIT"
 COPY --from=fetch /x/tm /usr/local/bin/tm
 USER nonroot:nonroot
 # The Go GC works harder near this, well before compose's mem_limit 256m.

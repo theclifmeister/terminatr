@@ -160,7 +160,7 @@ jobs:
           fi
           files=$(git diff --name-only HEAD^1 HEAD)
           printf '%s\n' "$files"
-          hits=$(printf '%s\n' "$files" | grep -E '^(\.goreleaser\.yaml|Makefile|go\.(mod|sum)|scripts/release/|Formula/|\.github/workflows/(ci|release)\.yml|\.github/actions/|internal/(emu|version)/|cmd/tm/main\.go)' || true)
+          hits=$(printf '%s\n' "$files" | grep -E '^(\.goreleaser\.yaml|Makefile|go\.(mod|sum)|scripts/release/|deploy/relay/|Formula/|\.github/workflows/(ci|release)\.yml|\.github/actions/|internal/(emu|version)/|cmd/tm/main\.go)' || true)
           echo "release-related: ${hits:-none}"
           echo "release=$([ -n "$hits" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
