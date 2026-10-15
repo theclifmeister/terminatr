@@ -117,7 +117,8 @@ jobs:
   # its `if` counts as passed for required checks, unlike a workflow left
   # out by a paths filter, which would leave them pending.
   #   code     build and test: every push to main, and pull requests that
-  #            change anything but *.md, docs/ and site/ (the website)
+  #            change anything but docs/, site/ (the website) and the root *.md
+  #            (not the embedded rules and templates: scripts/ci-code-files.sh)
   #   release  the release snapshot: pull requests that touch the release
   #            build. Not main: a release tag runs it (release.yml).
   #   mod      the Claude mod check: every push, and pull requests that
@@ -146,7 +147,7 @@ jobs:
             echo "code=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          hits=$(git diff --name-only HEAD^1 HEAD | grep -vE "(\.md$|^docs/|^site/)" || true)
+          hits=$(git diff --name-only HEAD^1 HEAD | scripts/ci-code-files.sh)
           echo "non-docs: ${hits:-none}"
           echo "code=$([ -n "$hits" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
