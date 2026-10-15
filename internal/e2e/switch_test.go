@@ -61,8 +61,8 @@ func TestSwitchSidebarOneFrame(t *testing.T) {
 	w.WaitUntil("demo's thread", wait, func(sc string) bool { return treeRow(sc, "demo", "t-0001 ") >= 0 })
 	w.Key(keyTab)
 	w.WaitFor("esc back to the list", wait)
-	w.Key(keyDown) // demo's coordinator, not running: the project's dashboard
-	w.Key(keyDown) // t-0001: its session
+	// demo's coordinator, not running: the project's dashboard; then t-0001: its session.
+	w.Keys(keyDown, keyDown)
 	const thread, project = "demo › t-0001", " demo ─"
 	w.WaitUntil("t-0001 previewed", wait, func(sc string) bool { return lastLine(sc, thread) })
 	for range 2 {

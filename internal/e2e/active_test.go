@@ -160,13 +160,11 @@ func TestSmokeSidebarInactive(t *testing.T) {
 	w.Type("\t")
 	w.WaitFor("esc back to the list", wait)
 	// Down past demo's coordinator and thread to the divider; → unfolds it.
-	w.Type("jjj")
-	w.Key(keyRight)
+	w.Keys("j", "j", "j", keyRight)
 	w.WaitUntil("beta collapsed", wait, func(sc string) bool {
 		return inactiveRow(sc, beta) && treeRow(sc, beta, "coordinator") < 0
 	})
-	w.Type("j")
-	w.Type(" ")
+	w.Keys("j", " ")
 	w.WaitUntil("beta expanded", agentWait, func(sc string) bool {
 		return treeRow(sc, beta, "coordinator") >= 0 && !inactiveRow(sc, beta)
 	})
@@ -175,9 +173,7 @@ func TestSmokeSidebarInactive(t *testing.T) {
 	}
 
 	// Down past beta's coordinator to demo, which runs a thread.
-	w.Type("j")
-	w.Type("j")
-	w.Type(" ")
+	w.Keys("j", "j", " ")
 	w.WaitFor("Deactivate demo? This stops t-0001", wait)
 	w.Type("n")
 	w.WaitFor("demo stays active", wait)
@@ -270,8 +266,7 @@ func TestSmokeSidebarExpandInactive(t *testing.T) {
 
 	// enter on the dormant coordinator (↓ from demo's row) activates
 	// demo: both resume, and the coordinator attaches.
-	w.Key(keyDown)
-	w.Key(keyEnter)
+	w.Keys(keyDown, keyEnter)
 	w.WaitUntil("on demo's coordinator", agentWait, func(sc string) bool { return lastLine(sc, "demo › coordinator") })
 	if got := env.WaitState(coord, "idle", agentWait).AgentSID; got != coordSID {
 		t.Errorf("coordinator came back with %q, want %q", got, coordSID)

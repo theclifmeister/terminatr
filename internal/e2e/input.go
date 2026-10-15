@@ -88,6 +88,39 @@ func (w *Window) Key(k emu.Key) {
 	w.send(fmt.Sprintf("key %+v", k), b, err)
 }
 
+// Keys presses keys in order, each a string typed as is ("\t" and "\r"
+// too) or an emu.Key, and waits between them: after each key but the last
+// the screen must change and settle before the next goes, so a key whose
+// meaning depends on what the one before opened (a digit in a popup, j
+// after a list is laid out again, enter on a row the cursor reached) is
+// never applied to the old screen. Every key but the last must therefore
+// change the screen; for one that may not, use Type or Key and WaitUntil.
+// The first key waits for a quiet window, never typing into a first
+// partial frame.
+func (w *Window) Keys(keys ...any) {
+	w.env.T.Helper()
+	w.Quiet(keysSettle)
+	for i, k := range keys {
+		before := w.Screen()
+		switch k := k.(type) {
+		case string:
+			w.Type(k)
+		case emu.Key:
+			w.Key(k)
+		default:
+			w.env.T.Fatalf("window: Keys: %T is neither a string nor an emu.Key", k)
+		}
+		if i < len(keys)-1 {
+			w.WaitUntil(fmt.Sprintf("a changed screen after key %d (%v)", i+1, k), DefaultTimeout,
+				func(sc string) bool { return sc != before })
+			w.Quiet(keysSettle)
+		}
+	}
+}
+
+// keysSettle is how long the window is quiet before Keys goes on.
+const keysSettle = 40 * time.Millisecond
+
 // Paste pastes text, bracketed if the program in the window asked for it.
 func (w *Window) Paste(text string) {
 	w.env.T.Helper()

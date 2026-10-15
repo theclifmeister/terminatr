@@ -213,9 +213,8 @@ func TestSmokeRemoteControlRestart(t *testing.T) {
 	for _, s := range env.Sessions() {
 		env.track(s.PID, "session "+s.ID)
 	}
-	w.Key(keyEsc) // the sidebar kept the keyboard from the click
-	w.Type("hello")
-	w.Key(Enter)
+	// Esc: the sidebar kept the keyboard from the click.
+	w.Keys(keyEsc, "hello", Enter)
 	env.WaitFake("prompt", agentWait, func(r FakeRecord) bool { return r.Str("text") == "hello" })
 	w.Detach()
 	w.WaitFor("SESSIONS", wait)

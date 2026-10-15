@@ -303,6 +303,9 @@ func TestSmokeAgentCoordinatorContext(t *testing.T) {
 		}
 	}
 	env.WaitFake("prompt", agentWait, func(r FakeRecord) bool { return r.Str("via") == "kickoff" && r.Str("text") == "hello" })
+	// The kickoff turn is over (its Stop hook), not just idle since the
+	// start: a prompt sent into the turn would make /clear run mid-turn.
+	env.WaitFake("hook", agentWait, func(r FakeRecord) bool { return r.Str("event") == "Stop" })
 	env.WaitState(s, "idle", agentWait)
 	env.MustCLI("task", "add", "Second task appears after a clear", "--project", p.Slug)
 	env.Prompt(s, "run clear-compact")

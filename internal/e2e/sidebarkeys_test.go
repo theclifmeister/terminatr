@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/emu"
 )
@@ -40,8 +41,7 @@ func TestSmokeSidebarKeys(t *testing.T) {
 	w.WaitFor("esc back to the list", wait)
 
 	// ↓ ↓ past beta's coordinator to demo: its dashboard shows.
-	w.Key(keyDown)
-	w.Key(keyDown)
+	w.Keys(keyDown, keyDown)
 	w.WaitUntil("demo's dashboard", wait, func(sc string) bool {
 		return strings.Contains(sc, " "+demo+" ─") && strings.Contains(sc, "esc back to the list")
 	})
@@ -158,9 +158,7 @@ func TestSmokeSidebarClickFocus(t *testing.T) {
 	// The dashboard: a click on demo, then ↓ ↓ to its thread, enter.
 	w.Click(5, projectRow(w.Screen(), demo))
 	w.WaitFor("esc back to the list", wait)
-	w.Key(keyDown)
-	w.Key(keyDown)
-	w.Key(keyEnter)
+	w.Keys(keyDown, keyDown, keyEnter)
 	w.WaitUntil("on t-0001", wait, func(sc string) bool { return lastLine(sc, demo+" › t-0001") })
 
 	// In the session: a click on demo's coordinator attaches it, and the
@@ -175,8 +173,8 @@ func TestSmokeSidebarClickFocus(t *testing.T) {
 	coordinator()
 	coordinatorOf(t, env, demo)
 	w.Type("xqxq")
-	w.Key(keyDown)
-	w.Key(keyEnter)
+	w.Quiet(100 * time.Millisecond)
+	w.Keys(keyDown, keyEnter)
 	w.WaitUntil("on t-0001 again", wait, func(sc string) bool { return lastLine(sc, demo+" › t-0001") })
 
 	// Back on the coordinator by a click; a click on its pane gives it

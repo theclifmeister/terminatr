@@ -157,8 +157,7 @@ func TestSmokeFirstLocalRun(t *testing.T) {
 	env.WaitState(s, "idle", agentWait)
 	w.WaitUntil("idle in the status bar", wait, func(sc string) bool { return lastLine(sc, "○ "+s.ID+" › claude") })
 
-	w.Type("run permission")
-	w.Key(Enter)
+	w.Keys("run permission", Enter)
 	env.WaitState(s, "blocked/permission", agentWait)
 	w.WaitUntil("blocked in the status bar", wait, func(sc string) bool { return lastLine(sc, "▲ "+s.ID+" › claude  permission") })
 

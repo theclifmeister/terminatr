@@ -393,8 +393,7 @@ func TestSmokeDelegateFromList(t *testing.T) {
 	w.WaitFor("enter show · + new task", wait)
 	w.Type("D")
 	w.WaitFor("T2 is started: a thread already works on it", wait)
-	w.Type("j")
-	w.Type("D")
+	w.Keys("j", "D")
 	w.WaitFor("Delegate T1 to the coordinator?", wait)
 	w.Type("y")
 	w.WaitFor("asked the coordinator to delegate T1", wait)
@@ -462,11 +461,9 @@ func TestSmokeAcceptSendBack(t *testing.T) {
 	w.Key(keyEsc)
 	w.WaitFor("asked the coordinator", wait)
 
-	w.Type("j")
-	w.Type("x")
+	w.Keys("j", "x")
 	w.WaitFor("What should change?", wait)
-	w.Type("the bell is cut")
-	w.Key(keyEnter)
+	w.Keys("the bell is cut", keyEnter)
 	w.WaitFor("sent T2 back with your note", wait)
 	items := waitInbox(t, env, "send-back: the user sends T2 back: the bell is cut")
 	if strings.Count(items, "accept:") != 1 {
