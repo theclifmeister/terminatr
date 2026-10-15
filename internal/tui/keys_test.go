@@ -12,9 +12,9 @@ import (
 
 	uv "github.com/charmbracelet/ultraviolet"
 
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
 
@@ -147,7 +147,7 @@ func TestToKey(t *testing.T) {
 // note in the status bar; the first input into it tells its coordinator,
 // once for the attach, and a coordinator's pane tells no one.
 func TestThreadPaneTakeover(t *testing.T) {
-	c, err := newClient(server.Paths{}, log.New(io.Discard, "", 0))
+	c, err := newClient(tmclient.Paths{}, log.New(io.Discard, "", 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +225,7 @@ func TestOuterModes(t *testing.T) {
 // connection: anything sent would panic), and esc or prefix+tab give
 // the keyboard back.
 func TestSidebarFocusNoLeak(t *testing.T) {
-	c, err := newClient(server.Paths{}, log.New(io.Discard, "", 0))
+	c, err := newClient(tmclient.Paths{}, log.New(io.Discard, "", 0))
 	if err != nil {
 		t.Fatal(err)
 	}

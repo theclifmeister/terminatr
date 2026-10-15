@@ -3,7 +3,6 @@ package cli
 import (
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/detect"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -23,13 +23,13 @@ const agentUsage = `usage: tm agent list [--json]
        tm agent explain SESSION [--json]`
 
 func init() {
-	commands["agent"] = func(e *Env, args []string) error { return codeErr(agentCmd(e, args)) }
+	commands["agent"] = agentCmd
 }
 
 // agentCmd implements `tm agent …` (docs/SPEC.md §8.2, §8.7).
-func agentCmd(e *Env, args []string) int {
+func agentCmd(e *Env, args []string) error {
 	if len(args) == 0 {
-		return e.srvUsage("agent", agentUsage)
+		return srvUsage("agent", agentUsage)
 	}
 	switch args[0] {
 	case "list", "ls":
@@ -41,13 +41,13 @@ func agentCmd(e *Env, args []string) int {
 	case "explain":
 		return agentExplain(e, args[1:])
 	}
-	return e.srvUsage("agent", agentUsage)
+	return srvUsage("agent", agentUsage)
 }
 
 // localAgents lists the manifests as this binary sees them, for when no
 // server runs.
 func localAgents() (proto.AgentListResult, error) {
-	p, err := server.ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		return proto.AgentListResult{}, err
 	}
@@ -72,29 +72,28 @@ func localAgents() (proto.AgentListResult, error) {
 	return res, nil
 }
 
-func agentList(e *Env, args []string) int {
-	fs := flag.NewFlagSet("agent list", flag.ContinueOnError)
-	fs.SetOutput(e.Stderr)
-	asJSON := fs.Bool("json", false, "print JSON")
-	if err := fs.Parse(args); err != nil {
-		return ExitUsage
+func agentList(e *Env, args []string) error {
+	f := newFlags()
+	asJSON := f.Bool("json")
+	if _, err := f.Parse(args); err != nil {
+		return srvFail("agent list", err)
 	}
 	var res proto.AgentListResult
 	c, _, err := connect(false)
 	if err == nil {
 		defer c.Close()
 		err = c.Call(proto.MethodAgentList, nil, &res)
-	} else if errors.Is(err, server.ErrNotRunning) {
+	} else if errors.Is(err, client.ErrNotRunning) {
 		res, err = localAgents()
 	}
 	if err != nil && len(res.Agents) == 0 {
-		return e.srvFail("agent list", err)
+		return srvFail("agent list", err)
 	}
 	if *asJSON {
-		return e.srvJSON(res)
+		return e.printJSON(res)
 	}
 	printAgents(e, res)
-	return ExitOK
+	return nil
 }
 
 func printAgents(e *Env, res proto.AgentListResult) {
@@ -123,22 +122,22 @@ func printAgents(e *Env, res proto.AgentListResult) {
 // With --render it also writes a sample launch's files into DIR (as its
 // runtime dir) and prints the launch as JSON, {"argv","env"}: what CI's
 // agent canary hands the latest agent releases (docs/SPEC.md §8.8).
-func agentCheck(e *Env, args []string) int {
-	fs := flag.NewFlagSet("agent check", flag.ContinueOnError)
-	fs.SetOutput(e.Stderr)
-	render := fs.String("render", "", "write a sample launch's files into `DIR` and print the launch as JSON")
-	role := fs.String("role", string(agent.RoleThread), "the sample launch's `ROLE` (thread, coordinator)")
-	tmBin := fs.String("tm-bin", "/usr/local/bin/tm", "the tm binary the sample launch's hooks call")
-	if err := fs.Parse(args); err != nil {
-		return ExitUsage
+func agentCheck(e *Env, args []string) error {
+	f := newFlags()
+	render := f.String("render") // write a sample launch's files into DIR and print the launch as JSON
+	role := f.String("role")     // the sample launch's ROLE (thread, coordinator)
+	tmBin := f.String("tm-bin")  // the tm binary the sample launch's hooks call
+	*role, *tmBin = string(agent.RoleThread), "/usr/local/bin/tm"
+	args, err := f.Parse(args)
+	if err != nil {
+		return srvFail("agent check", err)
 	}
-	args = fs.Args()
 	if len(args) != 1 {
-		return e.srvUsage("agent check", "usage: tm agent check [--render DIR [--role ROLE] [--tm-bin PATH]] FILE")
+		return srvUsage("agent check", "usage: tm agent check [--render DIR [--role ROLE] [--tm-bin PATH]] FILE")
 	}
 	data, err := os.ReadFile(args[0])
 	if err != nil {
-		return e.srvUsage("agent check", err.Error())
+		return srvUsage("agent check", err.Error())
 	}
 	m, err := agent.ParseManifest(data)
 	if err == nil {
@@ -159,12 +158,12 @@ func agentCheck(e *Env, args []string) int {
 		if dir == "" {
 			tmp, derr := os.MkdirTemp("", "tm-agent-check-")
 			if derr != nil {
-				return e.srvFail("agent check", derr)
+				return srvFail("agent check", derr)
 			}
 			defer os.RemoveAll(tmp)
 			dir = tmp
 		} else if dir, err = filepath.Abs(dir); err != nil {
-			return e.srvUsage("agent check", err.Error())
+			return srvUsage("agent check", err.Error())
 		}
 		cwd, repo, rt := "/tmp/wt", "/tmp/repo", "/tmp/rt"
 		if *render != "" {
@@ -196,69 +195,67 @@ func agentCheck(e *Env, args []string) int {
 		for _, line := range strings.Split(err.Error(), "\n") {
 			fmt.Fprintf(e.Stderr, "  %s\n", line)
 		}
-		return ExitRefused
+		return &exitError{ExitRefused}
 	}
 	if *render != "" {
 		enc := json.NewEncoder(e.Stdout)
 		enc.SetIndent("", "  ")
 		enc.Encode(map[string][]string{"argv": launch.Argv, "env": launch.Env})
-		return ExitOK
+		return nil
 	}
 	fmt.Fprintf(e.Stdout, "%s: ok (%d hooks, %d rules, %d todo mappings)\n", m.Name, len(m.Hooks), len(m.Rules), len(m.Todos))
-	return ExitOK
+	return nil
 }
 
-func agentReload(e *Env, args []string) int {
+func agentReload(e *Env, args []string) error {
 	if len(args) != 0 {
-		return e.srvUsage("agent reload", "usage: tm agent reload")
+		return srvUsage("agent reload", "usage: tm agent reload")
 	}
 	c, _, err := connect(false)
-	if errors.Is(err, server.ErrNotRunning) {
+	if errors.Is(err, client.ErrNotRunning) {
 		fmt.Fprintln(e.Stdout, "no server running; manifests are read when it starts")
-		return ExitOK
+		return nil
 	}
 	if err != nil {
-		return e.srvFail("agent reload", err)
+		return srvFail("agent reload", err)
 	}
 	defer c.Close()
 	var res proto.AgentListResult
 	if err := c.Call(proto.MethodAgentReload, nil, &res); err != nil {
-		return e.srvFail("agent reload", err)
+		return srvFail("agent reload", err)
 	}
 	printAgents(e, res)
 	if len(res.Errors) > 0 {
-		return ExitRefused
+		return &exitError{ExitRefused}
 	}
-	return ExitOK
+	return nil
 }
 
-func agentExplain(e *Env, args []string) int {
-	fs := flag.NewFlagSet("agent explain", flag.ContinueOnError)
-	fs.SetOutput(e.Stderr)
-	asJSON := fs.Bool("json", false, "print JSON")
-	id, rest := splitID(args)
-	if err := fs.Parse(rest); err != nil {
-		return ExitUsage
+func agentExplain(e *Env, args []string) error {
+	f := newFlags()
+	asJSON := f.Bool("json")
+	pos, err := f.Parse(args)
+	if err != nil {
+		return srvFail("agent explain", err)
 	}
-	if id == "" && fs.NArg() == 1 {
-		id = fs.Arg(0)
-	} else if id == "" || fs.NArg() > 0 {
-		return e.srvUsage("agent explain", "usage: tm agent explain SESSION [--json]")
+	if len(pos) != 1 {
+		return srvUsage("agent explain", "usage: tm agent explain SESSION [--json]")
 	}
+	id := pos[0]
 	c, _, err := connect(false)
 	if err != nil {
-		return e.srvFail("agent explain", err)
+		return srvFail("agent explain", err)
 	}
 	defer c.Close()
 	var res server.ExplainResult
 	if err := c.Call(proto.MethodAgentExplain, proto.SessionIDParams{ID: id}, &res); err != nil {
-		return e.srvFail("agent explain", err)
+		return srvFail("agent explain", err)
 	}
 	if *asJSON {
-		return e.srvJSON(res)
+		return e.printJSON(res)
 	}
 	printExplain(e, res)
-	return ExitOK
+	return nil
 }
 
 func printExplain(e *Env, r server.ExplainResult) {

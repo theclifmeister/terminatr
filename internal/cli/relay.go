@@ -147,6 +147,12 @@ func relayServeCmd(e *Env, args []string) error {
 		}
 		n.set(v)
 	}
+	// Without --max-conns, no more than the memory limit holds.
+	var memNote string
+	if mem := relay.MemoryLimit(); *maxConns == "" && mem > 0 && relay.ConnsFor(mem) < cfg.MaxConns {
+		cfg.MaxConns = relay.ConnsFor(mem)
+		memNote = fmt.Sprintf("at most %d connections, for a memory limit of %d MiB", cfg.MaxConns, mem>>20)
+	}
 	addr := *listen
 	if addr == "" {
 		addr = ":443"
@@ -182,6 +188,9 @@ func relayServeCmd(e *Env, args []string) error {
 		mode = "TLS with a self-signed certificate, its key kept in " + filepath.Dir(t.KeyFile)
 	}
 	cfg.Log.Printf("serving on %s (%s)", addr, mode)
+	if memNote != "" {
+		cfg.Log.Print(memNote)
+	}
 	if address != "" {
 		cfg.Log.Printf("the relay's address, with its key's pin: %s", address)
 		if w := relay.PrivateWarning(address); w != "" {

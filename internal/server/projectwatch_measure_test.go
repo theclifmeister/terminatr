@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -55,7 +56,7 @@ func TestProjectWatchIdleCost(t *testing.T) {
 	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
 	startServer(t, paths)
 	for range 4 {
-		st, _, err := WatchProject(paths, p.Slug)
+		st, _, err := client.WatchProject(paths, p.Slug)
 		if err != nil {
 			t.Fatal(err)
 		}

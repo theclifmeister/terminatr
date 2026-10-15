@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
 
@@ -58,7 +58,7 @@ func runHook(e *Env, args []string) error {
 	if json.Unmarshal(data, &payload) != nil {
 		return nil
 	}
-	paths, err := server.ResolvePaths()
+	paths, err := client.ResolvePaths()
 	if err != nil {
 		return nil
 	}

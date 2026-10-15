@@ -16,8 +16,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
 
@@ -671,7 +671,7 @@ func TestClickFocus(t *testing.T) {
 // gives it back: TestSidebarClickFocus in e2e). An attach that ends with
 // the sidebar's keyboard says so, for the dashboard.
 func TestSessionSidebarClickFocus(t *testing.T) {
-	c, err := newClient(server.Paths{}, log.New(io.Discard, "", 0))
+	c, err := newClient(tmclient.Paths{}, log.New(io.Discard, "", 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -704,7 +704,7 @@ func TestSessionSidebarClickFocus(t *testing.T) {
 // saying it has none (the e2e's prefix+tab then found the keyboard in
 // the sidebar and went on to the info panel).
 func TestSessionSidebarBeforePoll(t *testing.T) {
-	c, err := newClient(server.Paths{}, log.New(io.Discard, "", 0))
+	c, err := newClient(tmclient.Paths{}, log.New(io.Discard, "", 0))
 	if err != nil {
 		t.Fatal(err)
 	}

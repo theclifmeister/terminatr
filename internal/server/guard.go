@@ -249,11 +249,22 @@ func (s *Server) hookGuardOf(id string, mod bool) func(string, map[string]any) *
 // change of the human's settings still reaches running sessions.
 const hookRulesFor = time.Minute
 
-// hookRulesCache holds each session's rules for its hooks.
-var hookRulesCache = struct {
-	sync.Mutex
-	m map[string]hookRulesEntry
-}{m: map[string]hookRulesEntry{}}
+// guardState is the guard's memory of the sessions, by session id: the
+// rules cached for their hooks and when they were last refused. A
+// session's entries go when it exits (forget). The zero value is ready.
+type guardState struct {
+	mu     sync.Mutex
+	rules  map[string]hookRulesEntry
+	recent map[string][]time.Time // the refusals within guardInboxWindow
+}
+
+// forget drops session id's entries.
+func (g *guardState) forget(id string) {
+	g.mu.Lock()
+	delete(g.rules, id)
+	delete(g.recent, id)
+	g.mu.Unlock()
+}
 
 type hookRulesEntry struct {
 	rules GuardRules
@@ -270,21 +281,24 @@ type hookRulesEntry struct {
 func (s *Server) hookRules(r SessionRecord) GuardRules {
 	now := guardNow()
 	stamp := s.guardStamp(r.Project)
-	hookRulesCache.Lock()
-	e, ok := hookRulesCache.m[r.ID]
-	hookRulesCache.Unlock()
+	s.guard.mu.Lock()
+	e, ok := s.guard.rules[r.ID]
+	s.guard.mu.Unlock()
 	if ok && e.stamp == stamp && now.Sub(e.at) < hookRulesFor {
 		return e.rules
 	}
 	g := s.guardRulesFor(r)
-	hookRulesCache.Lock()
-	for id, old := range hookRulesCache.m {
+	s.guard.mu.Lock()
+	for id, old := range s.guard.rules {
 		if now.Sub(old.at) >= hookRulesFor {
-			delete(hookRulesCache.m, id)
+			delete(s.guard.rules, id)
 		}
 	}
-	hookRulesCache.m[r.ID] = hookRulesEntry{rules: g, at: now, stamp: stamp}
-	hookRulesCache.Unlock()
+	if s.guard.rules == nil {
+		s.guard.rules = map[string]hookRulesEntry{}
+	}
+	s.guard.rules[r.ID] = hookRulesEntry{rules: g, at: now, stamp: stamp}
+	s.guard.mu.Unlock()
 	return g
 }
 
@@ -305,31 +319,28 @@ func (s *Server) guardStamp(slug string) string {
 	return b.String()
 }
 
-// guardRecent is when each session was last refused, within the window.
-var guardRecent = struct {
-	sync.Mutex
-	at map[string][]time.Time
-}{at: map[string][]time.Time{}}
-
-// guardRepeated records a refusal of session id and says whether it is
-// the guardInboxCount-th within guardInboxWindow, which starts the count
+// repeated records a refusal of session id and says whether it is the
+// guardInboxCount-th within guardInboxWindow, which starts the count
 // again.
-func guardRepeated(id string) bool {
+func (g *guardState) repeated(id string) bool {
 	now := guardNow()
-	guardRecent.Lock()
-	defer guardRecent.Unlock()
-	keep := guardRecent.at[id][:0]
-	for _, t := range guardRecent.at[id] {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	keep := g.recent[id][:0]
+	for _, t := range g.recent[id] {
 		if now.Sub(t) < guardInboxWindow {
 			keep = append(keep, t)
 		}
 	}
 	keep = append(keep, now)
 	if len(keep) >= guardInboxCount {
-		delete(guardRecent.at, id)
+		delete(g.recent, id)
 		return true
 	}
-	guardRecent.at[id] = keep
+	if g.recent == nil {
+		g.recent = map[string][]time.Time{}
+	}
+	g.recent[id] = keep
 	return false
 }
 
@@ -358,7 +369,7 @@ func (s *Server) guardDenied(r SessionRecord, d GuardDenial) {
 	if err := p.Journal(who, "guard.deny", ref, fmt.Sprintf("%s %s: %s", d.Rule, tool, summary)); err != nil {
 		s.log.Printf("session %s: journal: %v", r.ID, err)
 	}
-	if !guardRepeated(r.ID) {
+	if !s.guard.repeated(r.ID) {
 		return
 	}
 	msg := fmt.Sprintf("%s: the guard refused %d calls in %d minutes, the last a %s call (%s): %s",

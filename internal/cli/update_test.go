@@ -84,7 +84,7 @@ func (r *updateRig) run(t *testing.T, stdin string, args ...string) (int, string
 	t.Helper()
 	var out, errb bytes.Buffer
 	e := &Env{Stdin: strings.NewReader(stdin), Stdout: &out, Stderr: &errb, Getenv: func(string) string { return "" }}
-	code := updateCmd(e, args, r.u)
+	code := e.report("tm update", updateCmd(e, args, r.u))
 	return code, out.String(), errb.String()
 }
 

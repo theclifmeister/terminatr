@@ -3,7 +3,6 @@ package cli
 import (
 	"bufio"
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"runtime"
@@ -11,9 +10,9 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/doctor"
 	"github.com/theclifmeister/terminatr/internal/emu"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/service"
 	"github.com/theclifmeister/terminatr/internal/update"
 	"github.com/theclifmeister/terminatr/internal/version"
@@ -22,24 +21,23 @@ import (
 const doctorUsage = `usage: tm doctor [--fix [--yes]] [--json]`
 
 func init() {
-	commands["doctor"] = func(e *Env, args []string) error { return codeErr(doctorCmd(e, args)) }
+	commands["doctor"] = doctorCmd
 }
 
 // doctorCmd implements `tm doctor [--fix]` (docs/SPEC.md). It
 // never starts the server and removes nothing without --fix and a
 // confirmation (a y on a TTY, or --yes).
-func doctorCmd(e *Env, args []string) int {
-	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
-	fs.SetOutput(e.Stderr)
-	fix := fs.Bool("fix", false, "remove what the checks found left over, after confirmation")
-	yes := fs.Bool("yes", false, "with --fix: don't ask")
-	asJSON := fs.Bool("json", false, "print JSON")
-	if err := fs.Parse(args); err != nil || fs.NArg() > 0 {
-		return e.srvUsage("doctor", doctorUsage)
+func doctorCmd(e *Env, args []string) error {
+	f := newFlags()
+	fix := f.Bool("fix") // remove what the checks found left over, after confirmation
+	yes := f.Bool("yes") // with --fix: don't ask
+	asJSON := f.Bool("json")
+	if pos, err := f.Parse(args); err != nil || len(pos) > 0 {
+		return srvUsage("doctor", doctorUsage)
 	}
-	p, err := server.ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
-		return e.srvFail("doctor", err)
+		return srvFail("doctor", err)
 	}
 	d := doctor.DefaultDeps(p, version.Version, version.BuildID())
 	d.Selftest = libghosttySelftest
@@ -57,8 +55,8 @@ func doctorCmd(e *Env, args []string) int {
 	d.Restart = func() error {
 		// The same path as tm server restart, which never refuses on
 		// version (docs/SPEC.md §3.3).
-		if code := serverCmd(e, []string{"restart", "--yes"}); code != ExitOK {
-			return fmt.Errorf("tm server restart exited %d", code)
+		if err := serverCmd(e, []string{"restart", "--yes"}); err != nil {
+			return fmt.Errorf("tm server restart exited %d", e.report("tm server", err))
 		}
 		return nil
 	}
@@ -68,24 +66,23 @@ func doctorCmd(e *Env, args []string) int {
 		if !service.Wanted(runtime.GOOS, e.Getenv) || e.Getenv("TERMINATR_SESSION") != "" {
 			return false
 		}
-		c, err := server.LaunchdConfig(p)
+		c, err := client.LaunchdConfig(p)
 		return err == nil && c.HasConsole()
 	}
 	if service.Wanted(runtime.GOOS, e.Getenv) {
-		if c, err := server.LaunchdConfig(p); err == nil {
+		if c, err := client.LaunchdConfig(p); err == nil {
 			d.Strays, d.Bootout = c.Strays, c.Bootout
 		}
 	}
 	if *asJSON && !*fix {
 		checks := doctor.Run(d)
-		code := ExitOK
+		if err := e.printJSON(map[string]any{"status": doctor.Worst(checks), "checks": checks}); err != nil {
+			return &exitError{ExitIO}
+		}
 		if doctor.Worst(checks) == doctor.Fail {
-			code = ExitRefused
+			return &exitError{ExitRefused}
 		}
-		if e.srvJSON(map[string]any{"status": doctor.Worst(checks), "checks": checks}) != ExitOK {
-			return ExitIO
-		}
-		return code
+		return nil
 	}
 	// Each group prints as soon as it is checked (doctor.Each).
 	var checks []doctor.Check
@@ -96,16 +93,16 @@ func doctorCmd(e *Env, args []string) int {
 	}, pr.waiting)
 	pr.summary()
 	fixes := doctor.Fixes(checks)
-	code := ExitOK
+	var failed error // exit 1 for a failed check or fix
 	if doctor.Worst(checks) == doctor.Fail {
-		code = ExitRefused
+		failed = &exitError{ExitRefused}
 	}
 	if len(fixes) == 0 {
-		return code
+		return failed
 	}
 	if !*fix {
 		fmt.Fprintf(e.Stdout, "\n%d thing(s) can be fixed: tm doctor --fix\n", len(fixes))
-		return code
+		return failed
 	}
 	fmt.Fprintln(e.Stdout, "\ntm doctor --fix will:")
 	for _, f := range fixes {
@@ -114,24 +111,24 @@ func doctorCmd(e *Env, args []string) int {
 	if !*yes {
 		if !isTTY(os.Stdin) {
 			fmt.Fprintln(e.Stderr, "tm doctor: not a terminal; pass --yes to do these")
-			return ExitRefused
+			return &exitError{ExitRefused}
 		}
 		fmt.Fprint(e.Stderr, "Do them? [y/N] ")
 		line, _ := bufio.NewReader(e.Stdin).ReadString('\n')
 		if a := strings.ToLower(strings.TrimSpace(line)); a != "y" && a != "yes" {
 			fmt.Fprintln(e.Stdout, "nothing done")
-			return ExitRefused
+			return &exitError{ExitRefused}
 		}
 	}
 	for _, f := range fixes {
 		if err := f.Apply(); err != nil {
 			fmt.Fprintf(e.Stdout, "  fail  %s: %v\n", f.Desc, err)
-			code = ExitRefused
+			failed = &exitError{ExitRefused}
 			continue
 		}
 		fmt.Fprintf(e.Stdout, "  done  %s\n", f.Desc)
 	}
-	return code
+	return failed
 }
 
 // checkPrinter prints doctor's checks group by group as they come.

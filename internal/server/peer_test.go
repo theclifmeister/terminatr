@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/relay"
@@ -42,7 +43,7 @@ func TestServerStatusShowsLinks(t *testing.T) {
 	}
 
 	startServer(t, p)
-	c, err := Connect(p, false)
+	c, err := client.Connect(p, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +80,7 @@ func TestServerStatusShowsLinks(t *testing.T) {
 func TestServerStatusWithoutKey(t *testing.T) {
 	p := testPaths(t)
 	startServer(t, p)
-	c, err := Connect(p, false)
+	c, err := client.Connect(p, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +97,7 @@ func TestServerStatusWithoutKey(t *testing.T) {
 func TestPeerReload(t *testing.T) {
 	p := testPaths(t)
 	startServer(t, p)
-	c, err := Connect(p, false)
+	c, err := client.Connect(p, false)
 	if err != nil {
 		t.Fatal(err)
 	}

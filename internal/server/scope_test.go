@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
 )
@@ -79,7 +80,8 @@ func TestMayAddress(t *testing.T) {
 	} {
 		raw, _ := json.Marshal(c.params)
 		who := func() caller.Caller { return c.c }
-		perr := s.mayAddress(proto.Request{Method: c.m, Params: raw}, c.humanS, who)
+		m, _ := methodOf(c.m)
+		perr := s.mayAddress(proto.Request{Method: c.m, Params: raw}, m, c.humanS, who)
 		if (perr == nil) != c.ok {
 			t.Errorf("%s %s (human socket %v) from %v: %v, want ok %v", c.m, raw, c.humanS, c.c, perr, c.ok)
 		}
@@ -90,7 +92,7 @@ func TestMayAddress(t *testing.T) {
 // socket at sock, naming its own session and session other, and prints
 // what was refused.
 func scopeProbe(sock, other string) int {
-	c, err := dialAt(sock, proto.KindControl, proto.Protocol)
+	c, err := client.DialAt(sock, proto.KindControl, proto.Protocol)
 	if err != nil {
 		fmt.Println("probe:", err)
 		return 1
@@ -130,7 +132,7 @@ func scopeProbe(sock, other string) int {
 func TestScopeInSession(t *testing.T) {
 	p := testPaths(t)
 	startServer(t, p)
-	c, err := Dial(p, proto.KindControl)
+	c, err := client.Dial(p, proto.KindControl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +159,7 @@ func TestScopeInSession(t *testing.T) {
 	if all.Scoped || len(all.Sessions) != 2 {
 		t.Errorf("session.list on the human socket: %d sessions, scoped %v", len(all.Sessions), all.Scoped)
 	}
-	srv, err := dialAt(p.Socket, proto.KindControl, proto.Protocol)
+	srv, err := client.DialAt(p.Socket, proto.KindControl, proto.Protocol)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +182,7 @@ func TestMayAddressParams(t *testing.T) {
 		`{"id":"s-3","id":"s-2","id":"s-3"}`,
 		`[]`,
 	} {
-		if perr := s.mayAddress(proto.Request{Method: proto.MethodSessionRead, Params: json.RawMessage(raw)}, false, who); perr == nil {
+		if perr := s.mayAddress(proto.Request{Method: proto.MethodSessionRead, Params: json.RawMessage(raw)}, methods[proto.MethodSessionRead], false, who); perr == nil {
 			t.Errorf("session.read %s from s-2: allowed", raw)
 		}
 	}

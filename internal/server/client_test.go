@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -18,11 +19,11 @@ func fakeServer(t *testing.T, conn net.Conn, delay time.Duration, answer func(pr
 		br := bufio.NewReader(conn)
 		for {
 			var req proto.Request
-			if err := readJSONLine(br, &req); err != nil {
+			if err := proto.ReadLine(br, &req); err != nil {
 				return
 			}
 			time.Sleep(delay)
-			if err := writeJSONLine(conn, answer(req)); err != nil {
+			if err := proto.WriteLine(conn, answer(req)); err != nil {
 				return
 			}
 		}
@@ -37,7 +38,7 @@ func TestCallWithinTimeoutBreaksTheClient(t *testing.T) {
 	fakeServer(t, sc, 100*time.Millisecond, func(req proto.Request) proto.Response {
 		return proto.Response{ID: req.ID, Result: json.RawMessage(`{"method":"` + req.Method + `"}`)}
 	})
-	c := StreamOver(cc)
+	c := client.StreamOver(cc)
 	var res struct{ Method string }
 	err := c.CallWithin(20*time.Millisecond, "slow", nil, &res)
 	var ne net.Error
@@ -68,12 +69,12 @@ func TestCallChecksTheAnswersID(t *testing.T) {
 	fakeServer(t, sc, 0, func(req proto.Request) proto.Response {
 		return proto.Response{ID: req.ID + 1, Result: json.RawMessage(`{}`)}
 	})
-	c := StreamOver(cc)
+	c := client.StreamOver(cc)
 	if err := c.Call("a", nil, nil); err == nil {
 		t.Fatal("an answer to another request was taken")
 	}
 	if err := c.Call("b", nil, nil); err == nil {
-		t.Fatal("a broken Client called again")
+		t.Fatal("a broken client.Client called again")
 	}
 }
 
@@ -85,7 +86,7 @@ func TestCallsAreOneAtATime(t *testing.T) {
 	fakeServer(t, sc, 0, func(req proto.Request) proto.Response {
 		return proto.Response{ID: req.ID, Result: json.RawMessage(`{"method":"` + req.Method + `"}`)}
 	})
-	c := StreamOver(cc)
+	c := client.StreamOver(cc)
 	errs := make(chan error, 20)
 	for i := range 20 {
 		go func() {

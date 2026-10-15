@@ -156,14 +156,14 @@ func runTask(e *Env, args []string) error {
 			return e.done(res, err, *asJSON, sub+"d")
 		}
 	case "delegate":
-		o := startOpts{task: new(string), agent: f.String("agent"), model: f.String("model"), repo: f.String("repo"),
-			base: f.String("base"), approved: f.Bool("approved-by-user"), overCap: f.Bool("over-cap")}
+		opts := startFlags(f)
 		run = func(p *project.Project, s *tasks.Store, pos []string) error {
 			id, err := oneRef(pos, 1, "delegate T12 [--agent A] [--model M] [--repo PATH] [--base B] [--approved-by-user] [--over-cap]")
 			if err != nil {
 				return err
 			}
-			*o.task = fmt.Sprintf("T%d", id)
+			o := opts()
+			o.task = fmt.Sprintf("T%d", id)
 			return e.threadStart(p, o, *asJSON)
 		}
 	default:

@@ -17,6 +17,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	_ "github.com/theclifmeister/terminatr/internal/agent/claude" // registers the Go agent (Doctor)
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/models"
@@ -24,7 +25,6 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/flock"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/service"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/update"
@@ -43,7 +43,7 @@ func testDeps(t *testing.T) Deps {
 	}
 	t.Cleanup(func() { os.RemoveAll(run) })
 	os.Chmod(run, 0o700)
-	p := server.Paths{Home: h, RunDir: run, Socket: filepath.Join(run, "tm.sock"), Lock: filepath.Join(run, "server.lock"),
+	p := client.Paths{Home: h, RunDir: run, Socket: filepath.Join(run, "tm.sock"), Lock: filepath.Join(run, "server.lock"),
 		PID: filepath.Join(run, "server.pid"), Log: filepath.Join(h, "logs", "server.log"), Sessions: filepath.Join(h, "state", "sessions.json")}
 	d := DefaultDeps(p, "v0", "b0")
 	d.GOOS = "linux"

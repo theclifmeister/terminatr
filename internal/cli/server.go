@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"flag"
 	"fmt"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"log"
 	"os"
 	"os/signal"
@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -26,9 +27,9 @@ const serverUsage = `usage: tm server run [--detached] | start [--no-launchd] | 
        tm server service install|uninstall [--print]`
 
 // serverCmd implements `tm server …` (docs/SPEC.md §3.1).
-func serverCmd(e *Env, args []string) int {
+func serverCmd(e *Env, args []string) error {
 	if len(args) == 0 {
-		return e.srvUsage("server", serverUsage)
+		return srvUsage("server", serverUsage)
 	}
 	switch args[0] {
 	case "run":
@@ -36,11 +37,11 @@ func serverCmd(e *Env, args []string) int {
 	case "start":
 		return serverStart(e, args[1:])
 	case "stop":
-		code := serverStop(e, args[1:])
-		if code == ExitOK {
+		err := serverStop(e, args[1:])
+		if err == nil {
 			unloadJob()
 		}
-		return code
+		return err
 	case "restart":
 		var stop, start []string
 		for _, a := range args[1:] {
@@ -50,8 +51,8 @@ func serverCmd(e *Env, args []string) int {
 				stop = append(stop, a)
 			}
 		}
-		if code := serverStop(e, stop); code != ExitOK {
-			return code
+		if err := serverStop(e, stop); err != nil {
+			return err
 		}
 		return serverStart(e, start)
 	case "status":
@@ -59,17 +60,16 @@ func serverCmd(e *Env, args []string) int {
 	case "service":
 		return serverService(e, args[1:])
 	}
-	return e.srvUsage("server", serverUsage)
+	return srvUsage("server", serverUsage)
 }
 
-func serverRun(e *Env, args []string) int {
-	fs := flag.NewFlagSet("server run", flag.ContinueOnError)
-	fs.SetOutput(e.Stderr)
-	detached := fs.Bool("detached", false, "detach from the terminal and log to the server log")
-	launchd := fs.Bool("launchd", false, "started by launchd (macOS): log to the server log")
-	launchFile := fs.String("launch-file", "", "with --launchd: the file holding the environment to run with")
-	if err := fs.Parse(args); err != nil {
-		return ExitUsage
+func serverRun(e *Env, args []string) error {
+	f := newFlags()
+	detached := f.Bool("detached")        // detach from the terminal and log to the server log
+	launchd := f.Bool("launchd")          // started by launchd (macOS): log to the server log
+	launchFile := f.String("launch-file") // with --launchd: the file holding the environment to run with
+	if _, err := f.Parse(args); err != nil {
+		return srvFail("server run", err)
 	}
 	var source string
 	if *launchFile != "" {
@@ -77,12 +77,12 @@ func serverRun(e *Env, args []string) int {
 		// they are.
 		var err error
 		if source, err = service.ApplyLaunchFile(*launchFile); err != nil {
-			return e.srvFail("server run", err)
+			return srvFail("server run", err)
 		}
 	}
-	p, err := server.ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
-		return e.srvFail("server run", err)
+		return srvFail("server run", err)
 	}
 	logger := log.New(e.Stderr, "", log.LstdFlags|log.Lmicroseconds)
 	sigs := []os.Signal{syscall.SIGTERM, syscall.SIGINT}
@@ -91,7 +91,7 @@ func serverRun(e *Env, args []string) int {
 		// logs/service.log, the server's log to the server log.
 		lf, err := server.OpenLog(p)
 		if err != nil {
-			return e.srvFail("server run", err)
+			return srvFail("server run", err)
 		}
 		defer lf.Close()
 		logger.SetOutput(lf)
@@ -109,19 +109,19 @@ func serverRun(e *Env, args []string) int {
 		if !proc.Detached() {
 			// Started by hand from a shell: get a fresh session first.
 			if err := server.Respawn(); err != nil {
-				return e.srvFail("server run", err)
+				return srvFail("server run", err)
 			}
-			return ExitOK
+			return nil
 		}
 		lf, err := server.OpenLog(p)
 		if err != nil {
-			return e.srvFail("server run", err)
+			return srvFail("server run", err)
 		}
 		defer lf.Close()
 		logger.SetOutput(lf)
 		if err := proc.Detach(); err != nil {
 			logger.Printf("detach: %v", err)
-			return ExitIO
+			return &exitError{ExitIO}
 		}
 		sigs = []os.Signal{syscall.SIGTERM}
 	}
@@ -147,100 +147,100 @@ func serverRun(e *Env, args []string) int {
 		if !*detached {
 			fmt.Fprintf(e.Stderr, "tm server run: %v\n", err)
 		}
-		return ExitRefused
+		return &exitError{ExitRefused}
 	}
 	if err != nil {
 		logger.Printf("server: %v", err)
-		return ExitIO
+		return &exitError{ExitIO}
 	}
-	return ExitOK
+	return nil
 }
 
-func serverStart(e *Env, args []string) int {
-	fs := flag.NewFlagSet("server start", flag.ContinueOnError)
-	fs.SetOutput(e.Stderr)
-	direct := fs.Bool("no-launchd", false, "macOS: start the server from this session, not launchd's (no keychain over SSH)")
-	if err := fs.Parse(args); err != nil || fs.NArg() > 0 {
-		return e.srvUsage("server start", serverUsage)
+func serverStart(e *Env, args []string) error {
+	f := newFlags()
+	// macOS: start the server from this session, not launchd's (no
+	// keychain over SSH).
+	direct := f.Bool("no-launchd")
+	if pos, err := f.Parse(args); err != nil || len(pos) > 0 {
+		return srvUsage("server start", serverUsage)
 	}
 	c, p, err := connect(false)
 	if err == nil {
 		fmt.Fprintf(e.Stdout, "already running (pid %d)\n", c.Server.PID)
 		c.Close()
-		return ExitOK
+		return nil
 	}
-	if !errors.Is(err, server.ErrNotRunning) {
-		return e.srvFail("server start", err)
+	if !errors.Is(err, client.ErrNotRunning) {
+		return srvFail("server start", err)
 	}
-	start := server.StartDetached
+	start := client.StartDetached
 	if *direct {
-		start = server.StartChild
+		start = client.StartChild
 	}
 	if err := start(p); err != nil {
-		return e.srvFail("server start", err)
+		return srvFail("server start", err)
 	}
-	c, err = server.Dial(p, proto.KindControl)
+	c, err = client.Dial(p, proto.KindControl)
 	if err != nil {
-		return e.srvFail("server start", err)
+		return srvFail("server start", err)
 	}
 	defer c.Close()
 	fmt.Fprintf(e.Stdout, "started (pid %d)\n", c.Server.PID)
 	if *direct || !service.Wanted(runtime.GOOS, e.Getenv) {
 		warnSSH(e.Stderr, runtime.GOOS, e.Getenv)
 	}
-	return ExitOK
+	return nil
 }
 
-func serverStop(e *Env, args []string) int {
-	fs := flag.NewFlagSet("server stop", flag.ContinueOnError)
-	fs.SetOutput(e.Stderr)
-	yes := fs.Bool("yes", false, "stop even while agent sessions run")
-	force := fs.Bool("force", false, "SIGKILL a hung server (the pid that holds the lock)")
-	if err := fs.Parse(args); err != nil {
-		return ExitUsage
+func serverStop(e *Env, args []string) error {
+	f := newFlags()
+	yes := f.Bool("yes")     // stop even while agent sessions run
+	force := f.Bool("force") // SIGKILL a hung server (the pid that holds the lock)
+	if _, err := f.Parse(args); err != nil {
+		return srvFail("server stop", err)
 	}
 	if *force {
-		p, err := server.ResolvePaths()
+		p, err := client.ResolvePaths()
 		if err != nil {
-			return e.srvFail("server stop", err)
+			return srvFail("server stop", err)
 		}
-		pid, err := server.ForceKill(p)
-		if errors.Is(err, server.ErrNotRunning) {
+		pid, err := client.ForceKill(p)
+		if errors.Is(err, client.ErrNotRunning) {
 			fmt.Fprintln(e.Stdout, "not running")
-			return ExitOK
+			return nil
 		}
 		if err != nil {
-			return e.srvFail("server stop", err)
+			return srvFail("server stop", err)
 		}
-		server.WaitStopped(p, 5*time.Second)
+		client.WaitStopped(p, 5*time.Second)
 		os.Remove(p.Socket)
 		os.Remove(p.PID)
 		fmt.Fprintf(e.Stdout, "killed (pid %d)\n", pid)
-		return ExitOK
+		return nil
 	}
-	p, err := server.ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
-		return e.srvFail("server stop", err)
+		return srvFail("server stop", err)
 	}
 	// Stop works whatever protocol the server speaks: restart is how a
 	// server of another version is replaced, so it must never refuse on
 	// version (docs/SPEC.md §3.3).
-	st, err := server.Stop(p, *yes)
+	st, err := client.Stop(p, *yes)
 	var perr *proto.Error
 	if errors.As(err, &perr) && perr.Code == proto.ErrRefused && !*yes && isTTY(os.Stdin) {
 		fmt.Fprintf(e.Stderr, "%s. Stop anyway? [y/N] ", perr.Message)
 		line, _ := bufio.NewReader(e.Stdin).ReadString('\n')
 		if a := strings.TrimSpace(strings.ToLower(line)); a != "y" && a != "yes" {
-			return ExitRefused
+			return &exitError{ExitRefused}
 		}
-		st, err = server.Stop(p, true)
+		st, err = client.Stop(p, true)
 	}
-	if errors.Is(err, server.ErrNotRunning) {
+	if errors.Is(err, client.ErrNotRunning) {
 		fmt.Fprintln(e.Stdout, "not running")
-		return ExitOK
+		return nil
 	}
 	if err != nil {
-		return e.srvFail("server stop", err)
+		return srvFail("server stop", err)
 	}
 	pid := st.PID
 	switch {
@@ -250,39 +250,38 @@ func serverStop(e *Env, args []string) int {
 		fmt.Fprintf(e.Stderr, "tm server stop: the server speaks protocol %d, this tm %d; stopped it all the same\n", st.Protocol, proto.Protocol)
 	}
 	// The lock goes first; the process exits a moment later.
-	if !server.WaitStopped(p, server.StopGrace+5*time.Second) || !server.WaitExited(pid, 3*time.Second) {
+	if !client.WaitStopped(p, server.StopGrace+5*time.Second) || !client.WaitExited(pid, 3*time.Second) {
 		fmt.Fprintf(e.Stderr, "tm server stop: pid %d still running; see %s, or tm server stop --force kills it\n", pid, p.Log)
-		return ExitIO
+		return &exitError{ExitIO}
 	}
 	fmt.Fprintf(e.Stdout, "stopped (pid %d)\n", pid)
-	return ExitOK
+	return nil
 }
 
-func serverStatus(e *Env, args []string) int {
-	fs := flag.NewFlagSet("server status", flag.ContinueOnError)
-	fs.SetOutput(e.Stderr)
-	asJSON := fs.Bool("json", false, "print JSON")
-	if err := fs.Parse(args); err != nil {
-		return ExitUsage
+func serverStatus(e *Env, args []string) error {
+	f := newFlags()
+	asJSON := f.Bool("json")
+	if _, err := f.Parse(args); err != nil {
+		return srvFail("server status", err)
 	}
 	c, _, err := connect(false)
-	if errors.Is(err, server.ErrNotRunning) {
+	if errors.Is(err, client.ErrNotRunning) {
 		if *asJSON {
-			return e.srvJSON(map[string]bool{"running": false})
+			return e.printJSON(map[string]bool{"running": false})
 		}
 		fmt.Fprintln(e.Stdout, "not running")
-		return ExitRefused
+		return &exitError{ExitRefused}
 	}
 	if err != nil {
-		return e.srvFail("server status", err)
+		return srvFail("server status", err)
 	}
 	defer c.Close()
 	var st proto.ServerStatus
 	if err := c.Call(proto.MethodServerStatus, nil, &st); err != nil {
-		return e.srvFail("server status", err)
+		return srvFail("server status", err)
 	}
 	if *asJSON {
-		return e.srvJSON(st)
+		return e.printJSON(st)
 	}
 	fmt.Fprintf(e.Stdout, "pid       %d\n", st.PID)
 	fmt.Fprintf(e.Stdout, "uptime    %s\n", time.Since(st.Started).Round(time.Second))
@@ -300,17 +299,17 @@ func serverStatus(e *Env, args []string) int {
 	if st.Build != version.BuildID() {
 		fmt.Fprintf(e.Stderr, "note: the server runs another build than this tm (%s); 'tm server restart' switches it to this one\n", version.BuildID())
 	}
-	return ExitOK
+	return nil
 }
 
 // unloadJob boots out a dev or test home's on-demand launchd job after
 // its server stopped, so it isn't left loaded (T71). Best effort.
 func unloadJob() {
-	p, err := server.ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		return
 	}
-	if c, err := server.LaunchdConfig(p); err == nil {
+	if c, err := client.LaunchdConfig(p); err == nil {
 		c.Unload()
 	}
 }
@@ -326,12 +325,12 @@ func peerLines(st *proto.LinkStatus, now time.Time) []string {
 		out = append(out, fmt.Sprintf("server id %s (%s)", st.Short, st.ID))
 	}
 	if st.Error != "" {
-		out = append(out, "peers     "+st.Error)
+		out = append(out, "peers     "+textsafe.Line(st.Error, 200))
 	}
 	for _, p := range st.Peers {
 		line := fmt.Sprintf("peer      %s  %s · %s", p.Alias, linkWords(p, now), p.Transport)
 		if p.State != proto.LinkUp && p.Error != "" {
-			line += "\n            " + p.Error
+			line += "\n            " + textsafe.Line(p.Error, 200)
 		}
 		out = append(out, line)
 	}
@@ -349,7 +348,7 @@ func linkWords(p proto.PeerLink, now time.Time) string {
 			parts = append(parts, fmt.Sprintf("%.0f ms", max(p.RTT, 1)))
 		}
 		if p.Version != "" {
-			parts = append(parts, "tm "+p.Version)
+			parts = append(parts, "tm "+textsafe.Line(p.Version, 40))
 		}
 	case proto.LinkOffline:
 		parts[0] += " " + ago(now, p.Since)

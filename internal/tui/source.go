@@ -1,25 +1,17 @@
 package tui
 
 import (
-	"bytes"
-	"cmp"
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"errors"
-	"fmt"
-	"io"
-	"io/fs"
-	"net"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/link"
@@ -28,17 +20,13 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modnotify"
 	"github.com/theclifmeister/terminatr/internal/modstore"
 	"github.com/theclifmeister/terminatr/internal/modview"
-	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/relay"
 	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
-	"github.com/theclifmeister/terminatr/internal/version"
-	"github.com/theclifmeister/terminatr/internal/worktree"
 )
 
 // Data is one poll of everything the dashboard shows. The dashboard holds
@@ -177,42 +165,38 @@ type ThreadRow struct {
 // Source is the dashboard's view of the world; tests use a fake. It
 // only reads, opens projects and asks the coordinator to
 // act on a task: what happens to threads and tasks is the coordinator's
-// (docs/SPEC.md §4).
+// (docs/SPEC.md §4). It is one interface per concern, so code and tests
+// that need one concern take or fake only that one.
 type Source interface {
+	PollSource
+	ProjectSource
+	SettingsSource
+	LinkSource
+	PeerSource
+	ModSource
+	ModViewSource
+	SessionSource
+}
+
+// PollSource is what the dashboard reads: each poll, and on opening a
+// popup or a tab.
+type PollSource interface {
 	Load() Data
 	Board(slug string) (*tasks.Board, error)
-	NewProject(slug string) (string, error)
-	// OpenProject returns the project's coordinator session, started
-	// first if none runs.
-	OpenProject(slug string, cols, rows int) (string, error)
-	// SetSetting changes a setting, on the human's keypress in a settings
-	// popup (docs/SPEC.md §11.2): key in table "" (the top level), "keys",
-	// "defaults" (all projects) or "projects.<slug>"; a nil value removes
-	// a project's own value, so it follows all projects again. It is
-	// refused when tm runs inside an agent.
-	SetSetting(table, key string, value any) error
-	// SetLink links slug and other (link.Set): slug's direction allow,
-	// other's the mirror, off removing both; SetLinkAsk turns slug's ask
-	// switch for the link on or off (link.SetAsk). LinkLog reads the messages between them;
-	// LinkAct approves, drops (arg a message id) or resumes (arg the
-	// other project), or sends text to arg as the user. All are the
-	// human's, refused when tm runs inside an agent.
-	SetLink(slug, other, allow string) error
-	SetLinkAsk(slug, other string, ask bool) error
-	LinkLog(slug, other string) ([]*link.Message, error)
-	LinkAct(slug, verb, arg, text string) (string, error)
-	// ApplyModDefaults applies the defaults an enabled mod suggests for
-	// all projects, on the human's keypress (ApplyModDefaults).
-	ApplyModDefaults(id string) ([]mod.Suggestion, error)
-	// SetRepo adds or removes one of a project's repositories.
-	SetRepo(slug, path string, add bool) error
+	// Library lists the files of every thread's library, newest first,
+	// for the project popup's Library tab; LibraryRead reads up to max
+	// bytes of one (truncated says it was longer); LibraryRemove
+	// deletes one of thread id's files, or all of them when name is
+	// "", journaled, saying how many went.
+	Library(slug string) ([]thread.LibFile, error)
+	LibraryRead(slug, id, name string, max int64) (data []byte, truncated bool, err error)
+	LibraryRemove(slug, id, name string) (int, error)
+	// Review is how to check task t, in review, and whether its change
+	// has shipped.
+	Review(slug string, t *tasks.Task) Review
 	// Templates are the task templates of the mods that run for the
 	// project (mod.Registry.Templates): what the new-task prompt offers.
 	Templates(slug string) []mod.Template
-	// AddTask adds a task to the project as the human, with template
-	// tpl laid on it when not nil (tm task add --template), and returns
-	// its ref (T12). It is refused when tm runs inside an agent.
-	AddTask(slug, title string, tpl *mod.Template) (string, error)
 	// Agents lists the installed agents: the ones tm can run.
 	Agents() []string
 	// ModsNote names the agents the Agent mod setting is for and the version
@@ -223,20 +207,26 @@ type Source interface {
 	// (docs/SPEC.md §8.2, §11.2), for the General Models page and the
 	// choices of the Thread models and Coordinator model settings.
 	Catalogs() []Catalog
-	// SetModels writes an agent's model settings (config.toml
-	// [agents.<name>]: hide, add, default_model); AgentSettings{} resets
-	// it to what the agent lists. It is refused when tm runs inside an
-	// agent.
-	SetModels(agentName string, s config.AgentSettings) error
-	// SyncModel applies the project's coordinator_model to its running
-	// coordinator session (session.model): switched live when its agent
-	// can, else on its next start.
-	SyncModel(session string) error
-	// RefreshModels asks the installed agent for its models again.
-	RefreshModels(agentName string) error
-	// Unrefuse forgets that the user's account refused one of the
-	// agent's models. It is refused when tm runs inside an agent.
-	Unrefuse(agentName, model string) error
+}
+
+// ProjectSource opens projects and asks their coordinators to act:
+// what happens to threads and tasks is the coordinator's (docs/SPEC.md §4).
+type ProjectSource interface {
+	NewProject(slug string) (string, error)
+	// OpenProject returns the project's coordinator session, started
+	// first if none runs.
+	OpenProject(slug string, cols, rows int) (string, error)
+	// Lifecycle activates, deactivates, pauses, resumes, archives,
+	// deletes, pins or unpins a project (verb "activate", "deactivate",
+	// "pause", "resume", "archive", "delete", "pin", "unpin"), saying
+	// what it did (lifecycle.go).
+	// Deactivating stops the project's coordinator and threads: the
+	// caller asks first.
+	Lifecycle(slug, verb string) (string, error)
+	// AddTask adds a task to the project as the human, with template
+	// tpl laid on it when not nil (tm task add --template), and returns
+	// its ref (T12). It is refused when tm runs inside an agent.
+	AddTask(slug, title string, tpl *mod.Template) (string, error)
 	// Ask asks the project's coordinator to act on task id: an inbox
 	// item of kind (project.KindDelegate, KindAccept or KindSendBack,
 	// with the user's note) that is the user's word (docs/SPEC.md §4).
@@ -252,12 +242,57 @@ type Source interface {
 	// OpenQuestions has the project's coordinator put its open questions
 	// (tm ask) to the user in its question dialog (questions.open).
 	OpenQuestions(slug string) (proto.QuestionsOpenResult, error)
-	// Review is how to check task t, in review, and whether its change
-	// has shipped.
-	Review(slug string, t *tasks.Task) Review
 	// SetRemote turns remote control of the project's running
 	// coordinator on or off (prefix+r), saying what it did.
 	SetRemote(slug string, on bool) (string, error)
+}
+
+// SettingsSource changes settings and models, on the human's keypress
+// in a settings popup.
+type SettingsSource interface {
+	// SetSetting changes a setting, on the human's keypress in a settings
+	// popup (docs/SPEC.md §11.2): key in table "" (the top level), "keys",
+	// "defaults" (all projects) or "projects.<slug>"; a nil value removes
+	// a project's own value, so it follows all projects again. It is
+	// refused when tm runs inside an agent.
+	SetSetting(table, key string, value any) error
+	// SetRepo adds or removes one of a project's repositories.
+	SetRepo(slug, path string, add bool) error
+	// ApplyModDefaults applies the defaults an enabled mod suggests for
+	// all projects, on the human's keypress (ApplyModDefaults).
+	ApplyModDefaults(id string) ([]mod.Suggestion, error)
+	// SetModels writes an agent's model settings (config.toml
+	// [agents.<name>]: hide, add, default_model); AgentSettings{} resets
+	// it to what the agent lists. It is refused when tm runs inside an
+	// agent.
+	SetModels(agentName string, s config.AgentSettings) error
+	// SyncModel applies the project's coordinator_model to its running
+	// coordinator session (session.model): switched live when its agent
+	// can, else on its next start.
+	SyncModel(session string) error
+	// RefreshModels asks the installed agent for its models again.
+	RefreshModels(agentName string) error
+	// Unrefuse forgets that the user's account refused one of the
+	// agent's models. It is refused when tm runs inside an agent.
+	Unrefuse(agentName, model string) error
+}
+
+// LinkSource sets and works the links between projects.
+type LinkSource interface {
+	// SetLink links slug and other (link.Set): slug's direction allow,
+	// other's the mirror, off removing both; SetLinkAsk turns slug's ask
+	// switch for the link on or off (link.SetAsk). LinkLog reads the messages between them;
+	// LinkAct approves, drops (arg a message id) or resumes (arg the
+	// other project), or sends text to arg as the user. All are the
+	// human's, refused when tm runs inside an agent.
+	SetLink(slug, other, allow string) error
+	SetLinkAsk(slug, other string, ask bool) error
+	LinkLog(slug, other string) ([]*link.Message, error)
+	LinkAct(slug, verb, arg, text string) (string, error)
+}
+
+// PeerSource manages the paired servers (the Peers tab).
+type PeerSource interface {
 	// Peers is the paired servers as tm peer list has them (docs/SPEC.md
 	// §16.8); RemovePeer unpins one as tm peer remove does, and has the
 	// server close its link. Both are the human's, refused when tm runs
@@ -283,37 +318,10 @@ type Source interface {
 	// for the six digits; ctx cancels. The human's, as above.
 	PairPeer(ctx context.Context, relay string, ev PairEvents) (string, error)
 	JoinPeer(ctx context.Context, code string, ev PairEvents) (string, error)
-	// Lifecycle activates, deactivates, pauses, resumes, archives,
-	// deletes, pins or unpins a project (verb "activate", "deactivate",
-	// "pause", "resume", "archive", "delete", "pin", "unpin"), saying
-	// what it did (lifecycle.go).
-	// Deactivating stops the project's coordinator and threads: the
-	// caller asks first.
-	Lifecycle(slug, verb string) (string, error)
-	// Library lists the files of every thread's library, newest first,
-	// for the project popup's Library tab; LibraryRead reads up to max
-	// bytes of one (truncated says it was longer); LibraryRemove
-	// deletes one of thread id's files, or all of them when name is
-	// "", journaled, saying how many went.
-	Library(slug string) ([]thread.LibFile, error)
-	LibraryRead(slug, id, name string, max int64) (data []byte, truncated bool, err error)
-	LibraryRemove(slug, id, name string) (int, error)
-	// ModActionDone tells the server a human ran (ok) or was refused an
-	// action mod's row or button bound, for the mod's action.done, with
-	// the press token ModActionCheck gave for that press.
-	ModActionDone(mod, action string, target map[string]string, ok bool, token string) error
-	// ModActionCheck refuses a binding outside its mod's reach (its
-	// projects, project_read), asked before the console runs one; in
-	// reach, it gives the press's token.
-	ModActionCheck(mod, action string, target map[string]string) (token string, err error)
-	// ClearSession clears session id's conversation (session.clear), on
-	// the human's confirmed press of a mod's session.clear binding.
-	ClearSession(id string) error
-	// AnswerQuestion answers question index of the menu open on session
-	// id with option, its label, on the human's confirmed press of a
-	// mod's question.answer binding; refused unless that question still
-	// asks question, unanswered (session.answer).
-	AnswerQuestion(id string, index int, question, option string) error
+}
+
+// ModSource installs, updates and runs mods (the Mods tab).
+type ModSource interface {
 	// ModAct enables, disables or removes installed mod id (verb
 	// "enable", "disable", "remove"), on the human's answer in the Mods
 	// tab (mods design §9). Enabling grants every permission the mod
@@ -345,6 +353,11 @@ type Source interface {
 	// failed mod gets a fresh count. It is refused when tm runs inside
 	// an agent.
 	RestartMod(id string) error
+}
+
+// ModViewSource is the mods' views and the bindings and commands run
+// from them.
+type ModViewSource interface {
 	// ModViews are the views user mods draw, with their trees and the
 	// mods' requests to open one here; shown are the views this console
 	// shows now (mod.views). ModViewInput sends a key or a click in a
@@ -353,6 +366,27 @@ type Source interface {
 	ModViewInput(p proto.ModViewInputParams) error
 	// ModCommand runs one of a mod's commands (mod.command).
 	ModCommand(p proto.ModCommandParams) error
+	// ModActionDone tells the server a human ran (ok) or was refused an
+	// action mod's row or button bound, for the mod's action.done, with
+	// the press token ModActionCheck gave for that press.
+	ModActionDone(mod, action string, target map[string]string, ok bool, token string) error
+	// ModActionCheck refuses a binding outside its mod's reach (its
+	// projects, project_read), asked before the console runs one; in
+	// reach, it gives the press's token.
+	ModActionCheck(mod, action string, target map[string]string) (token string, err error)
+}
+
+// SessionSource acts on a session, on the human's confirmed press of a
+// mod's binding.
+type SessionSource interface {
+	// ClearSession clears session id's conversation (session.clear), on
+	// the human's confirmed press of a mod's session.clear binding.
+	ClearSession(id string) error
+	// AnswerQuestion answers question index of the menu open on session
+	// id with option, its label, on the human's confirmed press of a
+	// mod's question.answer binding; refused unless that question still
+	// asks question, unanswered (session.answer).
+	AnswerQuestion(id string, index int, question, option string) error
 }
 
 // Review is what the user needs to review a task: how to check it (the
@@ -375,12 +409,12 @@ const (
 // ServerSource is the real Source: the control socket plus the project
 // folders.
 type ServerSource struct {
-	Paths server.Paths
+	Paths tmclient.Paths
 	// Caller is who acts: the human, unless tm runs inside an agent.
 	Caller caller.Caller
 
 	mu  sync.Mutex
-	ctl *server.Client
+	ctl *tmclient.Client
 	// slow is what Load reads that an install, a setting or an edit
 	// changes (slowCache).
 	slow slowCache
@@ -486,7 +520,7 @@ func (s *ServerSource) call(method string, params, result any) error {
 	defer s.mu.Unlock()
 	for try := 0; ; try++ {
 		if s.ctl == nil {
-			c, err := server.Connect(s.Paths, true)
+			c, err := tmclient.Connect(s.Paths, true)
 			if err != nil {
 				return err
 			}
@@ -754,654 +788,8 @@ func (s *ServerSource) LibraryRemove(slug, id, name string) (int, error) {
 	return thread.RemoveLibrary(p, s.Caller, id, name)
 }
 
-func (s *ServerSource) NewProject(slug string) (string, error) {
-	defer s.touch()
-	if s.Caller.IsAgent() {
-		return "", errors.New("human-only: only the human creates projects")
-	}
-	p, err := project.New(project.Options{Slug: slug})
-	if err != nil {
-		return "", err
-	}
-	return p.Slug, nil
-}
-
-// coordinatorKickoff is the coordinator's first prompt. Its context (the
-// role rules and tm context) arrives through the agent's session-start
-// hook (docs/SPEC.md §7.8); this only asks it to speak first.
-const coordinatorKickoff = "You are this project's coordinator. Greet the user: say in a few lines where the project stands, from your context, then ask what to do next."
-
-func (s *ServerSource) OpenProject(slug string, cols, rows int) (string, error) {
-	return OpenCoordinator(s.call, slug, "", cols, rows)
-}
-
 // errHumanOnly refuses a settings change from inside an agent.
 var errHumanOnly = errors.New("human-only: settings are changed by the human")
-
-// PeerList is the paired servers, for the settings' Peers tab
-// (peerstab.go): this server's id ("" before it has an identity key)
-// and each paired server with its link as the server has it.
-type PeerList struct {
-	ID, Short string
-	Peers     []PeerEntry
-	// Running: a server answered; LinkErr is why it can't read the
-	// identity key or the peers.
-	Running bool
-	LinkErr string
-}
-
-// PeerEntry is one paired server: the alias the user knows it by, its
-// server id and relay, and its link (nil while there is none).
-type PeerEntry struct {
-	Alias, ID, Short, Relay string
-	Link                    *proto.PeerLink
-	// Panes is this server's pane switch for it (proto.PanesOff …).
-	Panes string
-}
-
-func (s *ServerSource) Peers() (PeerList, error) {
-	var l PeerList
-	if s.Caller.IsAgent() {
-		return l, errHumanOnly
-	}
-	dir := peer.DirIn(s.Paths.Home)
-	id, err := peer.LoadIdentity(dir)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return l, err
-	}
-	if id != nil {
-		l.ID, l.Short = id.ID.String(), id.ID.Short()
-	}
-	peers, err := peer.LoadPeers(dir)
-	if err != nil {
-		return l, err
-	}
-	links := map[string]proto.PeerLink{}
-	var st proto.ServerStatus
-	if s.call(proto.MethodServerStatus, nil, &st) == nil {
-		l.Running = true
-		if st.Link != nil {
-			l.LinkErr = st.Link.Error
-			for _, pl := range st.Link.Peers {
-				links[pl.ID] = pl
-			}
-		}
-	}
-	for _, p := range peers {
-		e := PeerEntry{Alias: p.Alias, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: p.PanesLevel()}
-		if pl, ok := links[e.ID]; ok {
-			e.Link = &pl
-		}
-		l.Peers = append(l.Peers, e)
-	}
-	return l, nil
-}
-
-func (s *ServerSource) RemovePeer(alias string) error {
-	if s.Caller.IsAgent() {
-		return errHumanOnly
-	}
-	found, err := peer.Unpin(peer.DirIn(s.Paths.Home), alias)
-	if err != nil {
-		return err
-	}
-	if !found {
-		return fmt.Errorf("no paired server %s (tm peer list)", alias)
-	}
-	var st *proto.LinkStatus
-	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, server.ErrNotRunning) {
-		return fmt.Errorf("removed %s, but the server didn't read the peers again (%v); tm server restart does", alias, err)
-	}
-	return nil
-}
-
-func (s *ServerSource) SetPeerPanes(alias, level string) error {
-	if s.Caller.IsAgent() {
-		return errHumanOnly
-	}
-	found, err := peer.SetPanes(peer.DirIn(s.Paths.Home), alias, level)
-	if err != nil {
-		return err
-	}
-	if !found {
-		return fmt.Errorf("no paired server %s (tm peer list)", alias)
-	}
-	var st *proto.LinkStatus
-	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, server.ErrNotRunning) {
-		return fmt.Errorf("set, but the server didn't read the peers again (%v); tm server restart does", err)
-	}
-	return nil
-}
-
-func (s *ServerSource) SetPeerRelay(alias, relayText string) (string, error) {
-	if s.Caller.IsAgent() {
-		return "", errHumanOnly
-	}
-	r, err := peer.RelayURL(relayText)
-	if err != nil {
-		return "", err
-	}
-	found, err := peer.SetRelay(peer.DirIn(s.Paths.Home), alias, r)
-	if err != nil {
-		return "", err
-	}
-	if !found {
-		return "", fmt.Errorf("no paired server %s (tm peer list)", alias)
-	}
-	var st *proto.LinkStatus
-	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, server.ErrNotRunning) {
-		return "", fmt.Errorf("set, but the server didn't read the peers again (%v); tm server restart does", err)
-	}
-	return relay.PrivateWarning(r), nil
-}
-
-func (s *ServerSource) RelayUpdate(alias string) (string, error) {
-	if s.Caller.IsAgent() {
-		return "", errHumanOnly
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	p, res, err := peer.RequestRelayUpdate(ctx, peer.DirIn(s.Paths.Home), alias, nil)
-	if err != nil {
-		return "", err
-	}
-	words, ok := peer.RelayUpdateWords(relayWords(p.Relay), res)
-	if !ok {
-		return "", errors.New(words)
-	}
-	return words, nil
-}
-
-// PairEvents are what a pairing shows on the way: Waiting the code once
-// it works (pairing only), Confirm the other server and the six digits,
-// returning the person's answer.
-type PairEvents struct {
-	Waiting func(code string)
-	Confirm func(PairOffer) bool
-}
-
-// PairOffer is the other server as a pairing shows it.
-type PairOffer struct {
-	Name, Short, Version, Check string
-}
-
-func (s *ServerSource) PairPeer(ctx context.Context, relay string, ev PairEvents) (string, error) {
-	if s.Caller.IsAgent() {
-		return "", errHumanOnly
-	}
-	r, err := peer.RelayURL(relay)
-	if err != nil {
-		return "", err
-	}
-	code, err := peer.NewCode(r)
-	if err != nil {
-		return "", err
-	}
-	return s.pairing(ctx, code, ev, true)
-}
-
-func (s *ServerSource) JoinPeer(ctx context.Context, text string, ev PairEvents) (string, error) {
-	if s.Caller.IsAgent() {
-		return "", errHumanOnly
-	}
-	code, err := peer.ParseCode(text)
-	if err != nil {
-		// Its words quote what was typed: not the code, which stays
-		// out of messages.
-		return "", errors.New("that isn't a pairing code: it is the relay, a slash and 16 digits and letters, as the other server shows it")
-	}
-	return s.pairing(ctx, code, ev, false)
-}
-
-// pairWait bounds a pairing: the relay's 10 minutes for a pair room,
-// and a little more for the exchange once the other side joined (as tm
-// peer pair).
-const pairWait = 13 * time.Minute
-
-// pairing runs tm peer pair's or join's exchange through code, then
-// pins the other server as tm peer does.
-func (s *ServerSource) pairing(ctx context.Context, code peer.Code, ev PairEvents, pair bool) (string, error) {
-	dir := peer.DirIn(s.Paths.Home)
-	id, _, err := peer.EnsureIdentity(dir)
-	if err != nil {
-		return "", err
-	}
-	host, _ := os.Hostname()
-	o := peer.PairOptions{
-		Name: peer.HostLabel(host), Version: version.Version,
-		Confirm: func(of peer.Offer) (bool, error) {
-			return ev.Confirm(PairOffer{Name: of.Name, Short: of.ID.Short(), Version: of.Version, Check: of.Check}), nil
-		},
-		Waiting: func() { ev.Waiting(code.String()) },
-	}
-	ctx, cancel := context.WithTimeout(ctx, pairWait)
-	defer cancel()
-	var p *peer.Paired
-	if pair {
-		p, err = peer.Pair(ctx, id, code, o)
-	} else {
-		p, err = peer.Join(ctx, id, code, o)
-	}
-	if err != nil {
-		return "", pairWords(err, code.Relay)
-	}
-	got, err := peer.Pin(dir, p.Key, code.Relay, p.Name, "")
-	if err != nil {
-		return "", err
-	}
-	var st *proto.LinkStatus
-	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, server.ErrNotRunning) {
-		return got.Alias, fmt.Errorf("paired with %s, but the server didn't read the peers again (%v); tm server restart does", got.Alias, err)
-	}
-	return got.Alias, nil
-}
-
-// pairWords is a pairing's error in plain words: a relay that can't be
-// reached says so, with its name.
-func pairWords(err error, relayURL string) error {
-	var pe *relay.PinError
-	if errors.As(err, &pe) {
-		return pe
-	}
-	var op *net.OpError
-	var dns *net.DNSError
-	var cert *tls.CertificateVerificationError
-	var unknown x509.UnknownAuthorityError
-	var host x509.HostnameError
-	if errors.As(err, &op) || errors.As(err, &dns) || errors.As(err, &cert) || errors.As(err, &unknown) || errors.As(err, &host) {
-		return fmt.Errorf("can't reach the relay %s: check its name, that it runs and that port 443 is open (%v)", relayWords(relayURL), err)
-	}
-	return err
-}
-
-func (s *ServerSource) SetLink(slug, other, allow string) error {
-	defer s.touch()
-	if s.Caller.IsAgent() {
-		return errHumanOnly
-	}
-	return link.Set(s.Caller, slug, other, allow, nil)
-}
-
-func (s *ServerSource) SetLinkAsk(slug, other string, ask bool) error {
-	defer s.touch()
-	if s.Caller.IsAgent() {
-		return errHumanOnly
-	}
-	return link.SetAsk(s.Caller, slug, other, ask)
-}
-
-func (s *ServerSource) LinkLog(slug, other string) ([]*link.Message, error) {
-	p, err := project.Open(slug)
-	if err != nil {
-		return nil, err
-	}
-	return link.Log(p, other)
-}
-
-func (s *ServerSource) LinkAct(slug, verb, arg, text string) (string, error) {
-	defer s.touch()
-	if s.Caller.IsAgent() {
-		return "", errHumanOnly
-	}
-	p, err := project.Open(slug)
-	if err != nil {
-		return "", err
-	}
-	switch verb {
-	case "approve":
-		m, err := link.Approve(s.Caller, p, arg, false)
-		if err != nil {
-			return "", err
-		}
-		return "sent " + m.ID + " to " + m.Peer, nil
-	case "drop":
-		m, err := link.Drop(s.Caller, p, arg, false)
-		if err != nil {
-			return "", err
-		}
-		return "dropped " + m.ID, nil
-	case "resume":
-		return "resumed the link with " + arg, link.Resume(s.Caller, p, arg, false)
-	case "send":
-		m, err := link.Send(s.Caller, p, arg, link.Opts{Text: text})
-		if err != nil {
-			return "", err
-		}
-		return "sent " + m.ID + " to " + m.Peer, nil
-	}
-	return "", fmt.Errorf("unknown link action %q", verb)
-}
-
-func (s *ServerSource) SetSetting(table, key string, value any) error {
-	defer s.touch()
-	if s.Caller.IsAgent() {
-		return errHumanOnly
-	}
-	if table == config.DefaultsTable {
-		var err error
-		if value == nil {
-			err = config.UnsetDefaults(key)
-		} else {
-			err = config.SetDefaults(key, value)
-		}
-		if err != nil {
-			return err
-		}
-		journalAll(s.Caller, key, value, "all projects")
-		return nil
-	}
-	slug, isProject := strings.CutPrefix(table, "projects.")
-	if !isProject {
-		if value == nil {
-			return config.Unset(table, key)
-		}
-		return config.Set(table, key, value)
-	}
-	detail := fmt.Sprint(value)
-	if value == nil {
-		if err := config.UnsetProject(slug, key); err != nil {
-			return err
-		}
-		detail = "(follows all projects)"
-	} else if err := config.SetProject(slug, key, value); err != nil {
-		return err
-	}
-	// The project's journal records the change, as every tm action.
-	if p, err := project.Open(slug); err == nil {
-		p.Journal(s.Caller, "settings."+key, slug, detail)
-	}
-	return nil
-}
-
-// ApplyModDefaults applies the defaults enabled mod id suggests for all
-// projects (mods design §7, Tighten only), on the human's word: each in
-// [defaults], journaled as the human's change, except a key config.toml
-// already sets there (the human's stays) or one already at the value.
-// It returns the suggestions applied.
-func ApplyModDefaults(c caller.Caller, id string) ([]mod.Suggestion, error) {
-	if c.IsAgent() {
-		return nil, errHumanOnly
-	}
-	cfg, err := config.Load()
-	if err != nil && cfg == nil {
-		return nil, err
-	}
-	r, err := mod.Load(cfg)
-	if err != nil {
-		return nil, err
-	}
-	md, ok := r.Get(id)
-	switch {
-	case !ok:
-		return nil, fmt.Errorf("no mod %q is installed", id)
-	case md.State != mod.Enabled || md.Manifest == nil:
-		return nil, fmt.Errorf("%s is off: its defaults apply once it is enabled", id)
-	}
-	var done []mod.Suggestion
-	for _, sg := range md.Manifest.Suggestions(cfg) {
-		if !sg.Applies() {
-			continue
-		}
-		if err := config.SetDefaults(sg.Key, sg.Value); err != nil {
-			return done, fmt.Errorf("%s: %w", sg.Key, err)
-		}
-		journalAll(c, sg.Key, sg.Value, "all projects, suggested by mod:"+id)
-		done = append(done, sg)
-	}
-	return done, nil
-}
-
-func (s *ServerSource) ApplyModDefaults(id string) ([]mod.Suggestion, error) {
-	defer s.touch()
-	return ApplyModDefaults(s.Caller, id)
-}
-
-// journalAll records a change of an all-projects setting in the journal
-// of each project that follows it, i.e. doesn't set key itself; why
-// follows the value in brackets.
-func journalAll(c caller.Caller, key string, value any, why string) {
-	cfg, err := config.Load()
-	if err != nil {
-		return
-	}
-	if key == "auto_resolve" {
-		key = "auto_close"
-	}
-	list, _ := project.List()
-	for _, sum := range list {
-		if slices.Contains(cfg.Own(sum.Slug), key) {
-			continue
-		}
-		if p, err := project.Open(sum.Slug); err == nil {
-			p.Journal(c, "settings."+key, sum.Slug, fmt.Sprint(value)+" ("+why+")")
-		}
-	}
-}
-
-func (s *ServerSource) Lifecycle(slug, verb string) (string, error) {
-	defer s.touch()
-	switch verb {
-	case "activate", "deactivate":
-		return ActivateProject(s.call, s.Caller, slug, verb == "activate")
-	case "pause", "resume":
-		return PauseProject(s.Caller, slug, verb == "pause")
-	case "pin", "unpin":
-		return PinProject(s.Caller, slug, verb == "pin")
-	case "archive":
-		return ArchiveProject(s.call, s.Caller, slug, true)
-	case "delete":
-		return DeleteProject(s.call, s.Caller, slug)
-	}
-	return "", fmt.Errorf("unknown project action %q", verb)
-}
-
-func (s *ServerSource) Templates(slug string) []mod.Template {
-	cfg, err := config.Load()
-	if err != nil {
-		cfg = nil
-	}
-	reg, err := mod.Load(cfg)
-	if err != nil {
-		return nil
-	}
-	ts, _ := reg.Templates(slug) // tm doctor and the Mods tab say which don't load
-	return ts
-}
-
-func (s *ServerSource) AddTask(slug, title string, tpl *mod.Template) (string, error) {
-	defer s.touch()
-	if s.Caller.IsAgent() {
-		return "", errHumanOnly
-	}
-	p, err := project.Open(slug)
-	if err != nil {
-		return "", err
-	}
-	it := tasks.NewTask{Title: title}
-	if tpl != nil {
-		it.Title, it.Notes, it.Steps = tpl.Apply(title)
-	}
-	res, err := p.Tasks().Add(s.Caller, []tasks.NewTask{it})
-	switch {
-	case err != nil:
-		return "", err
-	case len(res) != 1:
-		return "", errors.New("the task wasn't added")
-	case res[0].Result == "failed":
-		return "", errors.New(res[0].Error)
-	case res[0].Result == "existing":
-		return res[0].ID, fmt.Errorf("%s %s is there already", res[0].ID, oneLine(res[0].Title))
-	}
-	return res[0].ID, nil
-}
-
-func (s *ServerSource) SetRepo(slug, path string, add bool) error {
-	defer s.touch()
-	if s.Caller.IsAgent() {
-		return errHumanOnly
-	}
-	p, err := project.Open(slug)
-	if err != nil {
-		return err
-	}
-	changed, err := p.SetRepo(path, add)
-	if err != nil || !changed {
-		return err
-	}
-	verb := map[bool]string{true: "add", false: "remove"}[add]
-	return p.Journal(s.Caller, "project.repo."+verb, slug, path)
-}
-
-func (s *ServerSource) Ask(slug string, id int, kind, note string) (bool, error) {
-	defer s.touch()
-	if s.Caller.IsAgent() {
-		return false, errors.New("human-only: only the human asks the coordinator about a task")
-	}
-	p, err := project.Open(slug)
-	if err != nil {
-		return false, err
-	}
-	t, err := p.Tasks().Get(id)
-	if err != nil {
-		return false, err
-	}
-	if why := notAskable(t, kind); why != "" {
-		return false, errors.New(why)
-	}
-	switch kind {
-	case project.KindAccept:
-		return p.AskAccept(s.Caller, t.Ref())
-	case project.KindSendBack:
-		return p.AskSendBack(s.Caller, t.Ref(), note)
-	}
-	return p.AskDelegate(s.Caller, t.Ref())
-}
-
-func (s *ServerSource) ModActionDone(mod, action string, target map[string]string, ok bool, token string) error {
-	return s.call(proto.MethodModActionDone, proto.ModActionDoneParams{ModActionParams: proto.ModActionParams{Mod: mod, Action: action, Target: target}, OK: ok, Token: token}, nil)
-}
-
-func (s *ServerSource) ModActionCheck(mod, action string, target map[string]string) (string, error) {
-	var res proto.ModActionCheckResult
-	err := s.call(proto.MethodModActionCheck, proto.ModActionParams{Mod: mod, Action: action, Target: target}, &res)
-	return res.Token, err
-}
-
-func (s *ServerSource) ClearSession(id string) error {
-	return s.call(proto.MethodSessionClear, proto.SessionIDParams{ID: id}, nil)
-}
-
-func (s *ServerSource) AnswerQuestion(id string, index int, question, option string) error {
-	return s.call(proto.MethodSessionAnswer, proto.SessionAnswerParams{ID: id, Index: index, Answer: option, Question: question}, nil)
-}
-
-func (s *ServerSource) OpenQuestions(slug string) (proto.QuestionsOpenResult, error) {
-	var res proto.QuestionsOpenResult
-	err := s.call(proto.MethodQuestionsOpen, proto.QuestionsOpenParams{Project: slug}, &res)
-	return res, err
-}
-
-func (s *ServerSource) AskAdopt(slug string, sess proto.SessionInfo) (bool, error) {
-	defer s.touch()
-	if s.Caller.IsAgent() {
-		return false, errors.New("human-only: only the human asks the coordinator to adopt a session")
-	}
-	p, err := project.Open(slug)
-	if err != nil {
-		return false, err
-	}
-	// The go-ahead the coordinator's tm thread adopt needs is the
-	// server's, given only on the human socket; the inbox item, which an
-	// agent could write too, only tells the coordinator.
-	if err := s.call(proto.MethodSessionAdoptAsk, proto.SessionAdoptAskParams{ID: sess.ID, Project: slug}, nil); err != nil {
-		return false, err
-	}
-	return p.AskAdopt(s.Caller, sess.ID, adoptWhere(sess, ""))
-}
-
-// WithdrawAdopt takes back the user's go-ahead to adopt session id into
-// project slug: the server's, which the coordinator's tm thread adopt
-// needs, and the inbox item that told it.
-func (s *ServerSource) WithdrawAdopt(slug, id string) error {
-	defer s.touch()
-	if s.Caller.IsAgent() {
-		return errHumanOnly
-	}
-	p, err := project.Open(slug)
-	if err != nil {
-		return err
-	}
-	if err := s.call(proto.MethodSessionAdoptAsk, proto.SessionAdoptAskParams{ID: id, Project: slug, Withdraw: true}, nil); err != nil {
-		return err
-	}
-	if err := p.DoneItems(project.KindAdopt, id); err != nil {
-		return err
-	}
-	return p.Journal(s.Caller, "thread.adopt.withdraw", id, "")
-}
-
-// adoptWhere says what runs in session s and where, for an adopt ask:
-// "claude in /src/app on fix-login"; home, when set, is shortened to ~.
-func adoptWhere(s proto.SessionInfo, home string) string {
-	out := s.Agent + " in " + shortHome(s.Cwd, home)
-	if pl, ok := worktree.Locate(s.Cwd); ok && pl.Branch != "" {
-		out += " on " + pl.Branch
-	}
-	return out
-}
-
-func (s *ServerSource) Review(slug string, t *tasks.Task) Review {
-	var rv Review
-	p, err := project.Open(slug)
-	if err != nil {
-		return rv
-	}
-	var rec *thread.Record
-	if thread.ValidID(t.Thread) {
-		rec, _ = thread.Load(p, t.Thread)
-	}
-	reportPR, repo := "", ""
-	if rec != nil {
-		repo = rec.Repo
-		if rep, _ := thread.ReadReport(p, rec.ID); rep != nil {
-			rv.Check, reportPR = rep.Check, rep.PR
-		}
-	}
-	if repo == "" && len(p.Repos) > 0 {
-		repo = p.Repos[0]
-	}
-	pr := ticker.PRs(ticker.StatePath(s.Paths.Sessions), slug)[t.Thread]
-	rv.PR = pr.Number
-	if rv.PR == 0 {
-		rv.PR = ticker.PRNumber(reportPR)
-	}
-	rv.Ship = shipped(repo, rv.PR, pr)
-	return rv
-}
-
-// shipped is where pull request n stands (Review.Ship), from repo's
-// history as last fetched, else the ticker's last look at it (pr).
-func shipped(repo string, n int, pr ticker.PR) string {
-	switch {
-	case n == 0:
-		return ""
-	case pr.State == "MERGED" || pr.Merge != "" || repo != "" && worktree.MergeCommit(repo, n) != "":
-		return ShipMerged
-	case pr.State == "OPEN":
-		return ShipOpen
-	case pr.State == "CLOSED":
-		return ShipClosed
-	}
-	return ""
-}
-
-func (s *ServerSource) SetRemote(slug string, on bool) (string, error) {
-	res, err := SetRemote(s.call, slug, on)
-	if err != nil {
-		return "", err
-	}
-	return RemoteMessage(slug, res), nil
-}
 
 func (s *ServerSource) Agents() []string {
 	reg, _ := agent.Load(s.Paths.AgentsDir())
@@ -1413,315 +801,11 @@ func (s *ServerSource) ModsNote() string {
 	return agent.ModNote(reg)
 }
 
-func (s *ServerSource) ModAct(id, verb string) error {
-	defer s.touch()
-	switch verb {
-	case "enable":
-		return mod.Enable(s.Caller, id, "")
-	case "disable":
-		return mod.Disable(s.Caller, id, "")
-	case "remove":
-		mod.SweepRemoved(time.Now())
-		return mod.Remove(s.Caller, id, false)
-	}
-	return fmt.Errorf("no mod action %q", verb)
-}
-
-func (s *ServerSource) SetModGrants(id string, grants []string) error {
-	defer s.touch()
-	return mod.SetGrants(s.Caller, id, grants)
-}
-
-func (s *ServerSource) SetModSetting(id, key string, value any) error {
-	return mod.SetSetting(s.Caller, id, key, value)
-}
-
-func (s *ServerSource) FetchModUpdate(id string) (*mod.Staged, error) {
-	if s.Caller.IsAgent() {
-		return nil, mod.ErrHumanOnly
-	}
-	m, err := installedMod(id)
-	if err != nil {
-		return nil, err
-	}
-	return mod.FetchUpdate(m)
-}
-
-func (s *ServerSource) ReplaceMod(id string, st *mod.Staged, grant []string) error {
-	return mod.Replace(s.Caller, id, st, grant)
-}
-
-func (s *ServerSource) FetchMod(arg string) (*mod.Staged, error) {
-	if s.Caller.IsAgent() {
-		return nil, mod.ErrHumanOnly
-	}
-	mod.SweepRemoved(time.Now())
-	src, err := mod.ParseSource(homePath(arg), "")
-	if err != nil {
-		return nil, err
-	}
-	st, err := mod.Fetch(src)
-	if err != nil {
-		st.Close()
-		return nil, fmt.Errorf("%s: %s", src, strings.ReplaceAll(mod.Clean(err.Error(), true), "\n", "; "))
-	}
-	cfg, err := config.Load()
-	if err != nil {
-		cfg = nil
-	}
-	reg, err := mod.Load(cfg)
-	if err == nil {
-		if why := mod.Taken(reg, st.Manifest.ID); why != "" {
-			err = errors.New(why)
-		}
-	}
-	if err != nil {
-		st.Close()
-		return nil, err
-	}
-	return st, nil
-}
-
-func (s *ServerSource) InstallMod(st *mod.Staged) error {
-	return mod.Install(s.Caller, st)
-}
-
-// homePath expands a leading ~/ in a folder typed into the console,
-// as a shell would have for tm mod install.
-func homePath(arg string) string {
-	if rest, ok := strings.CutPrefix(arg, "~/"); ok {
-		if h, err := os.UserHomeDir(); err == nil {
-			return filepath.Join(h, rest)
-		}
-	}
-	return arg
-}
-
-// installedMod is mod id as the registry has it now.
-func installedMod(id string) (mod.Mod, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		cfg = nil
-	}
-	reg, err := mod.Load(cfg)
-	if err != nil {
-		return mod.Mod{}, err
-	}
-	m, ok := reg.Get(id)
-	if !ok {
-		return mod.Mod{}, fmt.Errorf("no mod %q is installed", id)
-	}
-	return m, nil
-}
-
-func (s *ServerSource) ModLog(id string, max int64) (string, bool, error) {
-	if mod.CheckID(id) != nil {
-		return "", false, fmt.Errorf("no mod %q", id)
-	}
-	dir, err := home.ModLogsDir()
-	if err != nil {
-		return "", false, err
-	}
-	return tail(filepath.Join(dir, id+".log"), max)
-}
-
-func (s *ServerSource) ModViews(shown []modview.Shown) (proto.ModViewsResult, error) {
-	var res proto.ModViewsResult
-	err := s.call(proto.MethodModViews, proto.ModViewsParams{Shown: shown}, &res)
-	return res, err
-}
-
-func (s *ServerSource) ModViewInput(p proto.ModViewInputParams) error {
-	return s.call(proto.MethodModViewInput, p, nil)
-}
-
-func (s *ServerSource) ModCommand(p proto.ModCommandParams) error {
-	return s.call(proto.MethodModCommand, p, nil)
-}
-
-func (s *ServerSource) RestartMod(id string) error {
-	if s.Caller.IsAgent() {
-		return mod.ErrHumanOnly
-	}
-	return s.call(proto.MethodModRestart, proto.ModRestartParams{ID: id}, nil)
-}
-
-// tail reads the last max bytes of file path, from its first whole
-// line; a missing file is "".
-func tail(path string, max int64) (string, bool, error) {
-	f, err := os.Open(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return "", false, nil
-	}
-	if err != nil {
-		return "", false, err
-	}
-	defer f.Close()
-	fi, err := f.Stat()
-	if err != nil {
-		return "", false, err
-	}
-	cut := fi.Size() > max
-	if cut {
-		if _, err := f.Seek(fi.Size()-max, io.SeekStart); err != nil {
-			return "", false, err
-		}
-	}
-	data, err := io.ReadAll(io.LimitReader(f, max))
-	if err != nil {
-		return "", false, err
-	}
-	if cut {
-		if i := bytes.IndexByte(data, '\n'); i >= 0 {
-			data = data[i+1:]
-		}
-	}
-	return string(data), cut, nil
-}
-
-func (s *ServerSource) Catalogs() []Catalog {
-	reg, _ := agent.Load(s.Paths.AgentsDir())
-	if reg == nil {
-		return nil
-	}
-	cfg, _ := config.Load()
-	return models.Catalogs(reg, cfg, models.Installed(reg, nil))
-}
-
-func (s *ServerSource) SetModels(agentName string, set config.AgentSettings) error {
-	if s.Caller.IsAgent() {
-		return errHumanOnly
-	}
-	return config.SetAgentModels(agentName, set)
-}
-
-func (s *ServerSource) SyncModel(session string) error {
-	var res proto.SessionModelResult
-	return s.call(proto.MethodSessionModel, proto.SessionModelParams{ID: session}, &res)
-}
-
-func (s *ServerSource) RefreshModels(agentName string) error {
-	reg, _ := agent.Load(s.Paths.AgentsDir())
-	if reg == nil {
-		return errors.New("the agent manifests don't load")
-	}
-	a, ok := reg.Get(agentName)
-	m := agent.ManifestOf(a)
-	if !ok || m == nil {
-		return fmt.Errorf("no agent %s", agentName)
-	}
-	_, err := models.Refresh(context.Background(), m, nil)
-	return err
-}
-
-func (s *ServerSource) Unrefuse(agentName, model string) error {
-	if s.Caller.IsAgent() {
-		return errHumanOnly
-	}
-	return models.Unrefuse(agentName, model)
-}
-
-// Catalog is one installed agent's models (models.Catalog).
-type Catalog = models.Catalog
-
-// catalogNames lists the models the catalogs offer, each name once: the
-// choices of the Thread models setting.
-func catalogNames(cats []Catalog) []string {
-	var out []string
-	for _, c := range cats {
-		for _, n := range c.Names() {
-			if !slices.Contains(out, n) {
-				out = append(out, n)
-			}
-		}
-	}
-	return out
-}
-
 // inactive says whether the user deactivated the project (§5.1).
 func (p ProjectData) inactive() bool { return p.Safety != nil && !p.Safety.Active }
 
 // pinned says the user pinned the project to the top of the sidebar.
 func (p ProjectData) pinned() bool { return p.Safety != nil && p.Safety.Pinned }
-
-// InactiveError is opening an inactive project's coordinator: opening
-// never activates (docs/SPEC.md §5.1).
-func InactiveError(slug string) error {
-	return &project.Error{Code: "project-inactive", Msg: slug + " is inactive: activate it first (space on it in the sidebar, or tm project activate " + slug + ")"}
-}
-
-// OpenCoordinator returns the id of the project's coordinator session,
-// starting one (agent, role coordinator, cwd the project folder) if none
-// runs: `tm project open` and the dashboard's project rows. An empty
-// agentName is the project's coordinator_agent setting (§11.2).
-func OpenCoordinator(call func(method string, params, result any) error, slug, agentName string, cols, rows int) (string, error) {
-	p, err := project.Open(slug)
-	if err != nil {
-		return "", err
-	}
-	var res proto.SessionListResult
-	if err := call(proto.MethodSessionList, nil, &res); err != nil {
-		return "", err
-	}
-	for _, s := range res.Sessions {
-		if s.Role == proto.RoleCoordinator && s.Project == slug {
-			return s.ID, nil
-		}
-	}
-	// The project's agent, model and remote control settings; a broken
-	// config.toml shows in the settings popup, it doesn't keep the
-	// coordinator from starting.
-	safety := config.Defaults
-	cfg, err := config.Load()
-	if err == nil {
-		safety, _ = cfg.Safety(slug)
-	}
-	if !safety.Active {
-		return "", InactiveError(slug)
-	}
-	name, model, err := coordinatorAgent(cfg, agentName, safety)
-	if err != nil {
-		return "", err
-	}
-	var started proto.SessionStartResult
-	err = call(proto.MethodSessionStart, proto.SessionStartParams{
-		Agent: name, Model: model, Role: proto.RoleCoordinator, Project: slug, Cwd: p.Dir,
-		Cols: uint16(cols), Rows: uint16(rows), Kickoff: coordinatorKickoff,
-		RemoteControl: safety.CoordinatorRemoteControl}, &started)
-	if err != nil {
-		return "", err
-	}
-	return started.Session.ID, nil
-}
-
-// coordinatorAgent is the agent and model a new coordinator runs: the
-// agent named (tm project open --agent), else the project's
-// coordinator_agent, else the one installed agent (docs/SPEC.md §8.2,
-// §11.2); and the project's coordinator_model while that agent offers
-// it in the project's scope, else none (the agent's own default, or the
-// user's default_model, which the server passes). An agent that isn't
-// installed, none, or several with none chosen are refused
-// (models.Error: the dashboard asks for CodeNotChosen).
-func coordinatorAgent(cfg *config.Config, flag string, safety config.Safety) (name, model string, err error) {
-	reg := models.Registry()
-	if reg == nil {
-		return "", "", errors.New("no home directory for the agent manifests")
-	}
-	installed := models.Installed(reg, nil)
-	setting := cmp.Or(flag, safety.CoordinatorAgent)
-	name, _, err = models.Resolve(reg, installed, setting, "coordinator agent")
-	if err != nil {
-		return "", "", err
-	}
-	if safety.CoordinatorModel != "" {
-		// An agent never asked (the server just started) is asked first.
-		models.Ensure(context.Background(), reg, name, nil)
-		if c, ok := models.CatalogOf(reg, cfg, name, installed); ok {
-			model = c.CoordinatorModel(safety)
-		}
-	}
-	return name, model, nil
-}
 
 // modData are the mods' data files that don't load, by mod id
 // (Data.ModData): of the mods that load, not the built-in ones, which

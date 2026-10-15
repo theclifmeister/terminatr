@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/link"
@@ -393,7 +394,7 @@ func (s *Server) serveProjectsWatch(c net.Conn, br *bufio.Reader, req proto.Requ
 	resp := proto.Response{ID: req.ID}
 	if perr := decodeParams(req.Params, &p); perr != nil {
 		resp.Error = perr
-		writeJSONLine(c, resp)
+		proto.WriteLine(c, resp)
 		return
 	}
 	wake := s.watch.add()
@@ -406,7 +407,7 @@ func (s *Server) serveProjectsWatch(c net.Conn, br *bufio.Reader, req proto.Requ
 	resp.Result, _ = json.Marshal(struct {
 		Projects json.RawMessage `json:"projects"`
 	}{b})
-	if err := writeJSONLine(c, resp); err != nil {
+	if err := proto.WriteLine(c, resp); err != nil {
 		return
 	}
 	gone := make(chan struct{})
@@ -435,19 +436,19 @@ func (s *Server) serveProjectsWatch(c net.Conn, br *bufio.Reader, req proto.Requ
 			Event    string          `json:"event"`
 			Projects json.RawMessage `json:"projects"`
 		}{proto.EventProjectsChanged, b}
-		if err := writeJSONLine(c, ev); err != nil {
+		if err := proto.WriteLine(c, ev); err != nil {
 			return
 		}
 	}
 }
 
 // ProjectsWatchStream is a watch of the projects (projects.watch).
-type ProjectsWatchStream struct{ c *Client }
+type ProjectsWatchStream struct{ c *client.Client }
 
 // WatchProjects watches the projects, with detail what the dashboard
 // shows of them too, and returns the stream and the projects now.
-func WatchProjects(p Paths, detail bool) (*ProjectsWatchStream, []SideProject, error) {
-	c, err := Dial(p, proto.KindControl)
+func WatchProjects(p client.Paths, detail bool) (*ProjectsWatchStream, []SideProject, error) {
+	c, err := client.Dial(p, proto.KindControl)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -467,7 +468,7 @@ func WatchProjects(p Paths, detail bool) (*ProjectsWatchStream, []SideProject, e
 func (s *ProjectsWatchStream) Next() ([]SideProject, error) {
 	for {
 		var ev ProjectsWatchEvent
-		if err := readJSONLine(s.c.br, &ev); err != nil {
+		if err := s.c.ReadLine(&ev); err != nil {
 			return nil, err
 		}
 		if ev.Event == proto.EventProjectsChanged {

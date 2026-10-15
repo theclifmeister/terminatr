@@ -36,6 +36,8 @@ RUN set -eu; \
 FROM gcr.io/distroless/cc-debian12:nonroot
 COPY --from=fetch /x/tm /usr/local/bin/tm
 USER nonroot:nonroot
+# The Go GC works harder near this, well before compose's mem_limit 256m.
+ENV GOMEMLIMIT=200MiB
 # 8443 inside, so no capability is needed: publish it as 443 (-p 443:8443).
 EXPOSE 8443
 ENTRYPOINT ["/usr/local/bin/tm", "relay", "serve"]

@@ -522,7 +522,7 @@ func DefaultVerifier() Verifier {
 // never half of one, and a running one keeps its file (on Windows it
 // moves aside; see CleanOld). The program goes in last, so a failure
 // leaves tm as it was. A server has its own copy of its binary
-// (internal/server, pinBinary).
+// (internal/pin, Binary).
 //
 // A file that can't be replaced fails with a *BusyError naming the
 // processes that hold it, where the system can say.

@@ -8,11 +8,11 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
@@ -125,7 +125,7 @@ var tempRoots = func(e *Env) (roots, private []string) {
 		return nil, nil
 	}
 	var reg *agent.Registry
-	if paths, err := server.ResolvePaths(); err == nil {
+	if paths, err := client.ResolvePaths(); err == nil {
 		reg, _ = agent.Load(paths.AgentsDir())
 	}
 	h, _ := os.UserHomeDir()

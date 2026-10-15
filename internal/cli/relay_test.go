@@ -14,6 +14,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -73,6 +74,21 @@ func TestRelayServeFlags(t *testing.T) {
 	}
 }
 
+// Without --max-conns, a low memory limit lowers the connection limit.
+func TestRelayServeMaxConnsFromMemory(t *testing.T) {
+	h := newHarness(t)
+	defer func(old func(context.Context, string, *relay.Server, relay.TLS) error) { relayServe = old }(relayServe)
+	relayServe = func(context.Context, string, *relay.Server, relay.TLS) error { return nil }
+	defer debug.SetMemoryLimit(debug.SetMemoryLimit(64 << 20))
+	want := fmt.Sprintf("at most %d connections, for a memory limit of 64 MiB", relay.ConnsFor(64<<20))
+	if code, _, errs := h.run(human, "", "relay", "serve", "--plain"); code != 0 || !strings.Contains(errs, want) {
+		t.Fatalf("exit %d, log %q, want %q", code, errs, want)
+	}
+	if code, _, errs := h.run(human, "", "relay", "serve", "--plain", "--max-conns", "1000"); code != 0 || strings.Contains(errs, "at most") {
+		t.Fatalf("--max-conns: exit %d, log %q", code, errs)
+	}
+}
+
 // The Dockerfile, the compose example and the systemd unit run tm relay
 // serve with flags it takes.
 func TestRelayDeployFilesUseRealFlags(t *testing.T) {
@@ -99,6 +115,15 @@ func TestRelayDeployFilesUseRealFlags(t *testing.T) {
 		}
 		t.Fatalf("no %q line", prefix)
 		return nil
+	}
+	// The image sets a soft memory limit under compose's mem_limit.
+	if !strings.Contains(read("Dockerfile"), "\nENV GOMEMLIMIT=200MiB\n") {
+		t.Error("Dockerfile: no ENV GOMEMLIMIT=200MiB")
+	}
+	for _, f := range []string{"compose.yaml", "compose.acme.yaml"} {
+		if !strings.Contains(read(f), "mem_limit: 256m") {
+			t.Errorf("%s: no mem_limit: 256m", f)
+		}
 	}
 	runs := map[string][]string{
 		"Dockerfile":        jsonLine(read("Dockerfile"), "CMD "),
@@ -130,7 +155,8 @@ func TestRelayUnitIsTheDeployFile(t *testing.T) {
 	if want := relayUnit("relay.example.net", "", true); string(b) != want {
 		t.Fatalf("deploy/relay/tm-relay.service differs from relayUnit; write it as:\n%s", want)
 	}
-	for _, want := range []string{"DynamicUser=yes", "AmbientCapabilities=CAP_NET_BIND_SERVICE", "StateDirectory=tm-relay", "ProtectSystem=strict"} {
+	for _, want := range []string{"DynamicUser=yes", "AmbientCapabilities=CAP_NET_BIND_SERVICE", "StateDirectory=tm-relay", "ProtectSystem=strict",
+		"StartLimitIntervalSec=0", "Environment=GOMEMLIMIT=200MiB", "MemoryMax=256M"} {
 		if !strings.Contains(string(b), "\n"+want+"\n") {
 			t.Errorf("no %s", want)
 		}
@@ -583,5 +609,53 @@ func TestRelayUpdateUnitsAreTheDeployFiles(t *testing.T) {
 		if string(b) != want {
 			t.Errorf("deploy/relay/%s differs from tm relay install's; write it as:\n%s", name, want)
 		}
+	}
+}
+
+// Whatever sits at the update-request path, and whatever mode the
+// installed tm had, the update goes through and leaves tm 0755.
+func TestRelayUpdateSurvivesHostileRequestAndTightMode(t *testing.T) {
+	h := newHarness(t)
+	r := newRelayRig(t)
+	h.ok(human, "relay", "install", "--domain", "relay.example.net")
+	bin := filepath.Join(r.s.Root, "usr", "local", "bin", "tm")
+	req := filepath.Join(r.s.Root, "var", "lib", "private", "tm-relay", "update-request")
+	os.MkdirAll(filepath.Dir(req), 0o700)
+
+	os.Chmod(bin, 0o700)
+	os.MkdirAll(filepath.Join(req, "sub"), 0o700)
+	os.WriteFile(filepath.Join(req, "sub", "f"), []byte("x"), 0o600)
+	relayRelease(t, r.s, "v0.28.0", false)
+	h.ok(human, "relay", "update")
+	if _, err := os.Lstat(req); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("request kept: %v", err)
+	}
+	if fi, _ := os.Stat(bin); fi.Mode().Perm() != 0o755 {
+		t.Fatalf("tm mode %v", fi.Mode().Perm())
+	}
+	if b, _ := os.ReadFile(bin); string(b) != "tm v0.28.0" {
+		t.Fatalf("binary %q", b)
+	}
+
+	os.Symlink("/nonexistent", req)
+	r.s.Version = "v0.27.0"
+	h.ok(human, "relay", "update")
+	if _, err := os.Lstat(req); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("link kept: %v", err)
+	}
+}
+
+// Root doesn't read a key through a link in the state directory.
+func TestRelaySelfSignedPinRefusesLink(t *testing.T) {
+	dir := t.TempDir()
+	if _, _, _, err := relay.SelfSigned(dir, []netip.Addr{netip.MustParseAddr("203.0.113.5")}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	key := filepath.Join(dir, relay.SelfSignedKey)
+	real := filepath.Join(t.TempDir(), "k")
+	os.Rename(key, real)
+	os.Symlink(real, key)
+	if _, err := relay.SelfSignedPin(dir); err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("pin through a link: %v", err)
 	}
 }

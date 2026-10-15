@@ -11,8 +11,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
 
@@ -260,7 +260,7 @@ func TestDashLastPlace(t *testing.T) {
 func TestSessionLastPlace(t *testing.T) {
 	resetConsole()
 	t.Cleanup(resetConsole)
-	c, err := newClient(server.Paths{}, log.New(io.Discard, "", 0))
+	c, err := newClient(tmclient.Paths{}, log.New(io.Discard, "", 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +377,7 @@ func TestSidebarTooltipIconSets(t *testing.T) {
 func TestAttachFoldSections(t *testing.T) {
 	resetConsole()
 	t.Cleanup(resetConsole)
-	c, err := newClient(server.Paths{}, log.New(io.Discard, "", 0))
+	c, err := newClient(tmclient.Paths{}, log.New(io.Discard, "", 0))
 	if err != nil {
 		t.Fatal(err)
 	}

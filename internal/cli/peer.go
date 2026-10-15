@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"io/fs"
 	"net/url"
 	"os"
@@ -15,12 +16,12 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/relay"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
 
@@ -254,7 +255,7 @@ func (e *Env) pin(dir string, p *peer.Paired, relayURL, as string) error {
 // reload has a running server read the peers again.
 func (e *Env) reload() {
 	switch err := reloadPeers(); {
-	case errors.Is(err, server.ErrNotRunning):
+	case errors.Is(err, client.ErrNotRunning):
 		fmt.Fprintln(e.Stdout, "The server isn't running; it reads the peers when it starts.")
 	case err != nil:
 		fmt.Fprintf(e.Stderr, "tm peer: the server didn't read the peers again (%v); tm server restart does\n", err)
@@ -345,7 +346,7 @@ func (e *Env) peerRelayUpdate(dir, alias string) error {
 		return &project.Error{Code: "relay-update-" + res.Result, Msg: words}
 	}
 	if res.Version != "" {
-		words += " (it runs tm " + strings.TrimPrefix(res.Version, "v") + " now)"
+		words += " (it runs tm " + textsafe.Line(strings.TrimPrefix(res.Version, "v"), 40) + " now)"
 	}
 	fmt.Fprintln(e.Stdout, strings.ToUpper(words[:1])+words[1:]+".")
 	return nil
@@ -411,7 +412,7 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 		case pe.Link != nil:
 			state = linkWords(*pe.Link, now)
 		case running && st != nil && st.Error != "":
-			state = "not read: " + st.Error
+			state = "not read: " + textsafe.Line(st.Error, 200)
 		case running:
 			state = "no link yet"
 		}

@@ -4,9 +4,14 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"io"
+	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,6 +36,23 @@ type TLS struct {
 	Directory string
 }
 
+// httpTimeouts is the HTTP side's deadlines. The WebSocket clears them
+// once upgraded (upgrade) and sets its own per frame.
+type httpTimeouts struct {
+	header    time.Duration // the request's headers
+	handshake time.Duration // the TLS handshake, and writing an answer
+	idle      time.Duration // between requests on one connection
+}
+
+var defaultHTTPTimeouts = httpTimeouts{header: 10 * time.Second, handshake: 5 * time.Second, idle: 30 * time.Second}
+
+// acceptLimits is how many TCP connections the listener holds, in all
+// and from one address: the WebSocket limits and some room for /healthz
+// and answers that refuse.
+func (c Config) acceptLimits() (all, perIP int) {
+	return c.MaxConns + c.MaxConns/4, c.MaxPerIP + 4
+}
+
 // Serve runs the relay on ln until ctx ends, then closes every
 // connection with "shutdown", serving TLS as t says.
 func Serve(ctx context.Context, ln net.Listener, s *Server, t TLS) error {
@@ -38,14 +60,20 @@ func Serve(ctx context.Context, ln net.Listener, s *Server, t TLS) error {
 	if err != nil {
 		return err
 	}
+	all, perIP := s.cfg.acceptLimits()
+	ln = newLimitListener(ln, all, perIP, s.trusted)
 	if cfg != nil {
 		ln = tls.NewListener(ln, cfg)
 	}
 	hs := &http.Server{
 		Handler:           s,
-		ReadHeaderTimeout: 10 * time.Second,
-		MaxHeaderBytes:    8 << 10,
-		ErrorLog:          s.cfg.Log,
+		ReadHeaderTimeout: s.http.header,
+		ReadTimeout:       s.http.header,
+		// net/http gives the TLS handshake the least of its timeouts.
+		WriteTimeout:   s.http.handshake,
+		IdleTimeout:    s.http.idle,
+		MaxHeaderBytes: 8 << 10,
+		ErrorLog:       s.errorLog(),
 	}
 	errc := make(chan error, 1)
 	go func() { errc <- hs.Serve(ln) }()
@@ -63,6 +91,43 @@ func Serve(ctx context.Context, ln net.Listener, s *Server, t TLS) error {
 		return err
 	}
 	return nil
+}
+
+// errorLog is net/http's log of failed connections (a TLS handshake
+// that went wrong): the relay's log, without client addresses unless
+// LogIPs.
+func (s *Server) errorLog() *log.Logger {
+	if s.cfg.Log == nil {
+		return log.New(io.Discard, "", 0)
+	}
+	if s.cfg.LogIPs {
+		return s.cfg.Log
+	}
+	return log.New(writerFunc(func(p []byte) (int, error) {
+		s.cfg.Log.Print(hideAddrs(strings.TrimSuffix(string(p), "\n")))
+		return len(p), nil
+	}), "", 0)
+}
+
+type writerFunc func([]byte) (int, error)
+
+func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
+
+// addrLike finds what may be an IP address, with or without a port.
+var addrLike = regexp.MustCompile(`\[[0-9A-Fa-f:.%]+\](:[0-9]+)?|[0-9A-Fa-f:.%]*[:.][0-9A-Fa-f:.%]*`)
+
+// hideAddrs replaces the IP addresses in a log line.
+func hideAddrs(line string) string {
+	return addrLike.ReplaceAllStringFunc(line, func(m string) string {
+		ip := strings.TrimRight(m, ":.")
+		if ap, err := netip.ParseAddrPort(ip); err == nil && ap.Addr().IsValid() {
+			return "(address)" + m[len(ip):]
+		}
+		if a, err := netip.ParseAddr(strings.Trim(ip, "[]")); err == nil && a.IsValid() {
+			return "(address)" + m[len(ip):]
+		}
+		return m
+	})
 }
 
 // config is the listener's TLS configuration, nil for plain HTTP.

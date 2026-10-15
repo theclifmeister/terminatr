@@ -15,8 +15,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 )
 
 const adoptScript = `
@@ -91,7 +91,7 @@ func TestThreadAdoptNeedsTheUser(t *testing.T) {
 	// The user's T: the go-ahead on the human socket, which a client in
 	// an agent's session doesn't try (a run of this suite from a thread).
 	t.Setenv(caller.EnvSession, "")
-	c, err := server.Dial(server.Paths{Socket: env.Socket}, proto.KindControl)
+	c, err := client.Dial(client.Paths{Socket: env.Socket}, proto.KindControl)
 	if err != nil {
 		t.Fatal(err)
 	}

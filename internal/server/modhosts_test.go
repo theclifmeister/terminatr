@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modapi"
 	"github.com/theclifmeister/terminatr/internal/modproto"
@@ -28,7 +29,7 @@ func TestModHostsFollowConfig(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("TERMINATR_HOME", home)
 	t.Setenv(envModsPoll, "20ms")
-	p, err := ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +178,7 @@ func TestModHostReachesBroker(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("TERMINATR_HOME", home)
 	t.Setenv(envModsPoll, "20ms")
-	p, err := ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +271,7 @@ func TestModHostsSafeMode(t *testing.T) {
 	os.WriteFile(filepath.Join(home, "mods", "code", "mod.toml"), []byte("id = \"code\"\nname = \"X\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nmain = \"main.js\"\n"), 0o600)
 	os.WriteFile(filepath.Join(home, "mods", "code", "main.js"), nil, 0o600)
 	os.WriteFile(filepath.Join(home, "config.toml"), []byte("[mods.code]\nenabled = true\n"), 0o600)
-	p, err := ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +300,7 @@ func TestModHostsSafeMode(t *testing.T) {
 func TestModSpecsTickerPlace(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("TERMINATR_HOME", home)
-	p, err := ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -347,7 +348,7 @@ func TestModSpecsTickerPlace(t *testing.T) {
 func TestModSpecsColumnModsEager(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("TERMINATR_HOME", home)
-	p, err := ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -394,7 +395,7 @@ func TestModSpecsColumnModsEager(t *testing.T) {
 func TestModSpecsShareRegistry(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("TERMINATR_HOME", home)
-	p, err := ResolvePaths()
+	p, err := client.ResolvePaths()
 	if err != nil {
 		t.Fatal(err)
 	}

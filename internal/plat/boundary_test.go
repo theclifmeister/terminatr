@@ -30,17 +30,17 @@ const goos = "runtime.GOOS"
 // into internal/plat and deletes their entries; the list ends empty. Never
 // add to it: put the new OS code in internal/plat instead.
 var allowed = map[string][]string{
-	"internal/cli/doctor.go":          {goos},
-	"internal/cli/server.go":          {"syscall", goos},
-	"internal/cli/servercli.go":       {goos},
-	"internal/cli/update.go":          {goos},
-	"internal/doctor/doctor.go":       {goos},
-	"internal/server/client.go":       {goos},
-	"internal/server/clone_darwin.go": {"golang.org/x/sys/unix"},
-	"internal/server/resolve.go":      {goos},
-	"internal/server/server.go":       {goos},
-	"internal/service/launchd.go":     {goos},
-	"internal/update/update.go":       {goos},
+	"internal/cli/doctor.go":       {goos},
+	"internal/client/client.go":    {goos},
+	"internal/client/paths.go":     {goos},
+	"internal/cli/server.go":       {"syscall", goos},
+	"internal/cli/servercli.go":    {goos},
+	"internal/cli/update.go":       {goos},
+	"internal/doctor/doctor.go":    {goos},
+	"internal/pin/clone_darwin.go": {"golang.org/x/sys/unix"},
+	"internal/server/server.go":    {goos},
+	"internal/service/launchd.go":  {goos},
+	"internal/update/update.go":    {goos},
 }
 
 // TestBoundary parses every non-test Go file of the module outside

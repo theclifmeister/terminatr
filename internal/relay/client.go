@@ -66,7 +66,7 @@ func (d *Dialer) RequestUpdate(ctx context.Context, rawURL string) (UpdateResult
 		if err != nil {
 			return err
 		}
-		res.Version = ch.TM
+		res.Version = CleanVersion(ch.TM)
 		op, msg, err := ws.ReadMessage()
 		var ce *CloseError
 		if errors.As(err, &ce) && ce.Reason == ErrBadHello {
@@ -210,7 +210,7 @@ func (d *Dialer) hello(c net.Conn, host, path string) (*Conn, error) {
 				max = maxMessage
 			}
 			ws.idle = 0 // from here the link keeps its own time
-			return &Conn{ws: ws, max: max, version: ch.TM}, nil
+			return &Conn{ws: ws, max: max, version: CleanVersion(ch.TM)}, nil
 		}
 	}
 }

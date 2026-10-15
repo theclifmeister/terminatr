@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -20,7 +21,7 @@ var menu = proto.Question{Tool: "AskUserQuestion", Questions: []proto.QuestionIt
 func TestAsk(t *testing.T) {
 	p := testPaths(t)
 	startServer(t, p)
-	c, err := Dial(p, proto.KindControl)
+	c, err := client.Dial(p, proto.KindControl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,10 +69,10 @@ func TestAsk(t *testing.T) {
 	if _, err := answer(0, "Red"); code(err) != proto.ErrNoQuestion {
 		t.Fatalf("answer without a question: %v", err)
 	}
-	if _, err := AskSession(p, id, proto.Question{}); code(err) != proto.ErrBadParams {
+	if _, err := client.AskSession(p, id, proto.Question{}); code(err) != proto.ErrBadParams {
 		t.Fatalf("ask with no questions: %v", err)
 	}
-	if _, err := AskSession(p, "s-999", menu); code(err) != proto.ErrUnknownSession {
+	if _, err := client.AskSession(p, "s-999", menu); code(err) != proto.ErrUnknownSession {
 		t.Fatalf("ask on an unknown session: %v", err)
 	}
 
@@ -82,7 +83,7 @@ func TestAsk(t *testing.T) {
 	ask := func() <-chan got {
 		ch := make(chan got, 1)
 		go func() {
-			a, err := AskSession(p, id, menu)
+			a, err := client.AskSession(p, id, menu)
 			ch <- got{a, err}
 		}()
 		return ch
@@ -118,7 +119,7 @@ func TestAsk(t *testing.T) {
 	waitQuestion(false)
 
 	// The mod hangs up (the user answered in the pane): the question goes.
-	m, err := Dial(p, proto.KindControl)
+	m, err := client.Dial(p, proto.KindControl)
 	if err != nil {
 		t.Fatal(err)
 	}

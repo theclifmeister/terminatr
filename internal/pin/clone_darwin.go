@@ -1,4 +1,4 @@
-package server
+package pin
 
 import "golang.org/x/sys/unix"
 

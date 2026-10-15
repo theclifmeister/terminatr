@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -76,7 +77,7 @@ type sideFeed struct {
 // watchSide is a sideFeed with the projects now, watched from then on
 // by its run: nil projects when the server doesn't answer, which run
 // asks again. With detail it watches what the dashboard shows.
-func watchSide(paths server.Paths, detail bool) (*sideFeed, []ProjectData) {
+func watchSide(paths tmclient.Paths, detail bool) (*sideFeed, []ProjectData) {
 	f := &sideFeed{detail: detail}
 	st, ps, err := server.WatchProjects(paths, detail)
 	if err != nil {
@@ -88,7 +89,7 @@ func watchSide(paths server.Paths, detail bool) (*sideFeed, []ProjectData) {
 
 // run keeps the feed's projects current until ctx ends, watching again
 // statePoll after a lost watch.
-func (f *sideFeed) run(ctx context.Context, paths server.Paths) {
+func (f *sideFeed) run(ctx context.Context, paths tmclient.Paths) {
 	f.mu.Lock()
 	st := f.st
 	f.st = nil
@@ -276,7 +277,7 @@ type infoCache struct {
 
 // load is loadInfo's data for session s, one of sessions, read again
 // when its files changed.
-func (ic *infoCache) load(paths server.Paths, s proto.SessionInfo, sessions []proto.SessionInfo) *infoData {
+func (ic *infoCache) load(paths tmclient.Paths, s proto.SessionInfo, sessions []proto.SessionInfo) *infoData {
 	ts := ""
 	if paths.Sessions != "" {
 		ts = ticker.StatePath(paths.Sessions)

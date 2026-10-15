@@ -319,7 +319,7 @@ func (s *Server) serveProjectWatch(c net.Conn, br *bufio.Reader, req proto.Reque
 	resp := proto.Response{ID: req.ID}
 	if perr := decodeParams(req.Params, &p); perr != nil {
 		resp.Error = perr
-		writeJSONLine(c, resp)
+		proto.WriteLine(c, resp)
 		return
 	}
 	wake := s.watch.add()
@@ -327,11 +327,11 @@ func (s *Server) serveProjectWatch(c net.Conn, br *bufio.Reader, req proto.Reque
 	w, err := s.projectWatchState(p.Project)
 	if err != nil {
 		resp.Error = proto.Errorf(proto.ErrBadParams, "%v", err)
-		writeJSONLine(c, resp)
+		proto.WriteLine(c, resp)
 		return
 	}
 	resp.Result, _ = json.Marshal(w)
-	if err := writeJSONLine(c, resp); err != nil {
+	if err := proto.WriteLine(c, resp); err != nil {
 		return
 	}
 	last := resp.Result
@@ -365,45 +365,11 @@ func (s *Server) serveProjectWatch(c net.Conn, br *bufio.Reader, req proto.Reque
 			continue
 		}
 		last = b
-		if err := writeJSONLine(c, proto.ProjectWatchEvent{Event: proto.EventProjectChanged, Watch: next}); err != nil {
+		if err := proto.WriteLine(c, proto.ProjectWatchEvent{Event: proto.EventProjectChanged, Watch: next}); err != nil {
 			return
 		}
 	}
 }
-
-// ProjectWatchStream is a project watch (project.watch).
-type ProjectWatchStream struct{ c *Client }
-
-// WatchProject watches project slug and returns the stream and the
-// project's state now.
-func WatchProject(p Paths, slug string) (*ProjectWatchStream, proto.ProjectWatch, error) {
-	c, err := Dial(p, proto.KindControl)
-	if err != nil {
-		return nil, proto.ProjectWatch{}, err
-	}
-	var w proto.ProjectWatch
-	if err := c.Call(proto.MethodProjectWatch, proto.ProjectWatchParams{Project: slug}, &w); err != nil {
-		c.Close()
-		return nil, proto.ProjectWatch{}, err
-	}
-	return &ProjectWatchStream{c: c}, w, nil
-}
-
-// Next blocks until the project's next state.
-func (s *ProjectWatchStream) Next() (proto.ProjectWatch, error) {
-	for {
-		var ev proto.ProjectWatchEvent
-		if err := readJSONLine(s.c.br, &ev); err != nil {
-			return proto.ProjectWatch{}, err
-		}
-		if ev.Event == proto.EventProjectChanged {
-			return ev.Watch, nil
-		}
-	}
-}
-
-// Close ends the watch.
-func (s *ProjectWatchStream) Close() error { return s.c.Close() }
 
 // contextOf is the context use of project slug's coordinator, nil when
 // none runs or none reported a turn; hint is the config's ContextHint.

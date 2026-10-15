@@ -145,7 +145,8 @@ type Server struct {
 	updated time.Time              // the last update request taken
 	keyUpd  map[[32]byte]time.Time // the last taken from each key
 
-	now func() time.Time // tests
+	now  func() time.Time // tests
+	http httpTimeouts
 }
 
 // New returns a relay with cfg's limits.
@@ -154,7 +155,7 @@ func New(cfg Config) *Server {
 		cfg.MaxWaiting = max(cfg.MaxConns/2, 1)
 	}
 	s := &Server{
-		cfg: cfg, now: time.Now,
+		cfg: cfg, now: time.Now, http: defaultHTTPTimeouts,
 		all:     map[*conn]struct{}{},
 		waiting: map[roomKey]*conn{},
 		busy:    map[roomKey]*mated{},

@@ -1,6 +1,6 @@
 //go:build !windows
 
-package server
+package pin
 
 // companions are pinned beside tm: none.
 var companions []string

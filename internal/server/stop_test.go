@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -16,10 +17,10 @@ func TestStopOlderProtocol(t *testing.T) {
 	p := testPaths(t)
 	r := startServer(t, p)
 	var mm *proto.MismatchError
-	if _, err := Dial(p, proto.KindControl); !errors.As(err, &mm) || mm.Server.Protocol != 1 || !strings.Contains(err.Error(), "tm server restart") {
+	if _, err := client.Dial(p, proto.KindControl); !errors.As(err, &mm) || mm.Server.Protocol != 1 || !strings.Contains(err.Error(), "tm server restart") {
 		t.Fatalf("Dial: %v", err)
 	}
-	st, err := Stop(p, true)
+	st, err := client.Stop(p, true)
 	if err != nil || st.Signalled || st.Protocol != 1 {
 		t.Fatalf("Stop: %+v %v", st, err)
 	}
@@ -27,9 +28,9 @@ func TestStopOlderProtocol(t *testing.T) {
 	case <-r.done:
 		r.done <- nil
 	case <-time.After(10 * time.Second):
-		t.Fatal("Stop did not stop the server")
+		t.Fatal("client.Stop did not stop the server")
 	}
-	if _, err := Stop(p, true); !errors.Is(err, ErrNotRunning) {
+	if _, err := client.Stop(p, true); !errors.Is(err, client.ErrNotRunning) {
 		t.Fatalf("second Stop: %v", err)
 	}
 }
@@ -41,26 +42,8 @@ func TestStopNeverSignalsAnUnrelatedProcess(t *testing.T) {
 	t.Setenv(testHelloEnv, "deaf")
 	p := testPaths(t)
 	startServer(t, p)
-	_, err := Stop(p, true)
+	_, err := client.Stop(p, true)
 	if err == nil || !strings.Contains(err.Error(), "not a tm server") {
 		t.Fatalf("Stop: %v", err)
-	}
-}
-
-func TestIsServerArgv(t *testing.T) {
-	for _, c := range []struct {
-		argv []string
-		want bool
-	}{
-		{[]string{"/opt/homebrew/bin/tm", "server", "run", "--detached"}, true},
-		{[]string{"/Users/x/.terminatr/bin/tm-abc", "server", "run"}, true},
-		{[]string{"tm", "server", "stop"}, false},
-		{[]string{"server", "run"}, false}, // argv[0] is the program
-		{[]string{"vim", "notes", "server", "run"}, false},
-		{nil, false},
-	} {
-		if got := isServerArgv(c.argv); got != c.want {
-			t.Errorf("%q: %v, want %v", c.argv, got, c.want)
-		}
 	}
 }

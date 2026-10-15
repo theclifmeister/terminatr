@@ -133,11 +133,15 @@ func (e *Env) report(prefix string, err error) int {
 	var u *usageError
 	var r *tasks.Error
 	var x *exitError
+	var c *cmdError
 	switch {
 	case err == nil:
 		return ExitOK
 	case errors.As(err, &x):
 		return x.code
+	case errors.As(err, &c):
+		fmt.Fprintf(e.Stderr, "tm %s: %v\n", c.cmd, c.err)
+		return srvCode(c.err)
 	case errors.As(err, &u):
 		fmt.Fprintf(e.Stderr, "%s: %s\n", prefix, u.msg)
 		return ExitUsage
@@ -163,6 +167,10 @@ type flagSet struct {
 	strs  map[string]*string
 	lists map[string]*[]string
 	set   map[string]bool
+	// stopAtArg ends flag parsing at the first positional argument too,
+	// for a command whose rest is another command's own command line
+	// ("tm session start bash -l").
+	stopAtArg bool
 }
 
 func newFlags() *flagSet {
@@ -182,7 +190,8 @@ func (f *flagSet) anySet(names ...string) bool {
 	return false
 }
 
-// Parse returns the positional arguments. "--" ends flag parsing.
+// Parse returns the positional arguments. "--" ends flag parsing. A
+// flag is --name or -name; a value follows as --name=v or --name v.
 func (f *flagSet) Parse(args []string) ([]string, error) {
 	var pos []string
 	for i := 0; i < len(args); i++ {
@@ -191,6 +200,9 @@ func (f *flagSet) Parse(args []string) ([]string, error) {
 			return append(pos, args[i+1:]...), nil
 		}
 		if !strings.HasPrefix(a, "-") || a == "-" {
+			if f.stopAtArg {
+				return append(pos, args[i:]...), nil
+			}
 			pos = append(pos, a)
 			continue
 		}

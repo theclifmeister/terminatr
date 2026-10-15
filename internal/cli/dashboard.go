@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tui"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
@@ -21,7 +21,7 @@ import (
 // It shows the view's screen, the dashboard or the attached layout, and
 // follows it when this console or another changes it.
 func (e *Env) dashboardCmd(own bool) int {
-	return e.fullConsole(own, nil)
+	return e.report("tm", e.fullConsole(own, nil))
 }
 
 // uiFile is ui.json, the console's layout (docs/SPEC.md §5.1); "" when
@@ -37,17 +37,17 @@ func uiFile() string {
 // layout of view main (own: a view of its own). goTo, from a sidebar
 // click in tm attach or tm project open, is opened first: that bare view
 // hands its console over to this one (docs/SPEC.md §3.3).
-func (e *Env) fullConsole(own bool, goTo *tui.Target) int {
+func (e *Env) fullConsole(own bool, goTo *tui.Target) error {
 	if !isTTY(os.Stdin) || !isTTY(os.Stdout) {
 		fmt.Fprintln(e.Stderr, "tm: the dashboard needs a terminal; see tm session list")
-		return ExitUsage
+		return &exitError{ExitUsage}
 	}
 	if rawMode(os.Stdin) {
 		fmt.Fprintln(e.Stderr, "tm: this terminal looks like it was left in raw mode (a client killed with SIGKILL?); run `reset` if it misbehaves")
 	}
 	c, p, err := connect(true)
 	if err != nil {
-		return e.srvFail("dashboard", err)
+		return srvFail("dashboard", err)
 	}
 	modsNote := e.modsRunNote(c)
 	c.Close()
@@ -68,7 +68,7 @@ func (e *Env) fullConsole(own bool, goTo *tui.Target) int {
 	side, info, tree := lay.Sidebar, lay.Info, lay.Tree
 	vc, err := tui.JoinView(p, proto.ViewSubscribeParams{Own: own, Cols: cols, Rows: rows, Sidebar: &side, Info: &info, Tree: &tree, StatusCompact: lay.StatusCompact()})
 	if err != nil {
-		return e.srvFail("dashboard", err)
+		return srvFail("dashboard", err)
 	}
 	defer vc.Close()
 	args := []string{}
@@ -91,13 +91,13 @@ func (e *Env) fullConsole(own bool, goTo *tui.Target) int {
 	for {
 		var over *tui.Over
 		if attach {
-			ares, code := e.attach(p, vc, tui.Options{Sidebar: &tui.SidebarOptions{UIFile: uiFile, Focus: sideFocus},
+			ares, err := e.attach(p, vc, tui.Options{Sidebar: &tui.SidebarOptions{UIFile: uiFile, Focus: sideFocus},
 				Flash: flash, Command: command, Handover: handover, Back: true}, args)
-			if code != ExitOK {
-				return code
+			if err != nil {
+				return err
 			}
 			if ares.Quit {
-				return ExitOK
+				return nil
 			}
 			handover = true
 			st.Message = strings.TrimPrefix(ares.Session+": "+ares.Reason, ": ")
@@ -117,10 +117,10 @@ func (e *Env) fullConsole(own bool, goTo *tui.Target) int {
 		res, err := tui.Dashboard(tui.DashOptions{Source: src, In: os.Stdin, Out: os.Stdout, Width: int(wc), Height: int(wr),
 			Cwd: e.Cwd, State: st, UIFile: uiFile, Prefix: tui.ConfigPrefix(), View: vc, Over: over, Handover: handover})
 		if err != nil {
-			return e.srvFail("dashboard", err)
+			return srvFail("dashboard", err)
 		}
 		if res.Attach == "" {
-			return ExitOK
+			return nil
 		}
 		handover = true
 		attach, st, flash, command, sideFocus = true, tui.DashState{}, res.Message, res.Command, res.SideFocus
@@ -165,13 +165,13 @@ func (e *Env) openCmd(slug, agentName string) error {
 	if agentName != "" {
 		args = append(args, "--agent", agentName)
 	}
-	res, code := e.attach(p, vc, tui.Options{Sidebar: &tui.SidebarOptions{UIFile: uiFile}}, args)
+	res, err := e.attach(p, vc, tui.Options{Sidebar: &tui.SidebarOptions{UIFile: uiFile}}, args)
 	vc.Close()
-	if code != ExitOK {
-		return &exitError{code}
+	if err != nil {
+		return err
 	}
 	if res.GoTo != nil {
-		return codeErr(e.fullConsole(false, res.GoTo))
+		return e.fullConsole(false, res.GoTo)
 	}
 	fmt.Fprintf(e.Stdout, "[%s: %s]\n", id, res.Reason)
 	return nil
@@ -182,7 +182,7 @@ func (e *Env) openCmd(slug, agentName string) error {
 // starts); "" otherwise. It goes on stderr, which the dashboard covers
 // at once, and in the console's message line, so it is read as it
 // starts and not only after quitting (T301 B8).
-func (e *Env) modsRunNote(c *server.Client) string {
+func (e *Env) modsRunNote(c *client.Client) string {
 	if !mod.NoMods(e.Getenv) || c.Started {
 		return ""
 	}

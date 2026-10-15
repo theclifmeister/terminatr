@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -30,7 +31,7 @@ func TestBuiltinTasksTab(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("TERMINATR_HOME", home)
 	t.Setenv(envModsPoll, "20ms")
-	paths, err := ResolvePaths()
+	paths, err := client.ResolvePaths()
 	if err != nil {
 		t.Fatal(err)
 	}

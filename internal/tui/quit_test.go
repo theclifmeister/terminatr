@@ -10,8 +10,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 
+	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
 
@@ -124,7 +124,7 @@ func TestAttachPrefixQuits(t *testing.T) {
 			},
 			"a question": func(c *client) { c.key(pk); c.key(uv.Key{Code: 'r', Text: "r"}) },
 		} {
-			c, err := newClient(server.Paths{}, log.New(io.Discard, "", 0))
+			c, err := newClient(tmclient.Paths{}, log.New(io.Discard, "", 0))
 			if err != nil {
 				t.Fatal(err)
 			}

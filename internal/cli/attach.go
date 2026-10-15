@@ -2,17 +2,16 @@ package cli
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"strconv"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/tui"
 )
@@ -33,46 +32,45 @@ const reexecEnv = "TERMINATR_REEXEC"
 // checks, key encodings). Tests read it.
 const attachLogEnv = "TERMINATR_ATTACH_LOG"
 
-func init() { commands["attach"] = runAttach }
-
-func runAttach(e *Env, args []string) error { return codeErr(attachCmd(e, args)) }
+func init() { commands["attach"] = attachCmd }
 
 // attachCmd implements `tm attach [SESSION]` (docs/SPEC.md §3.3).
-func attachCmd(e *Env, args []string) int {
-	fs := flag.NewFlagSet("attach", flag.ContinueOnError)
-	fs.SetOutput(e.Stderr)
-	fs.Usage = func() { fmt.Fprintln(e.Stderr, attachUsage) }
-	if err := fs.Parse(args); err != nil {
-		return ExitUsage
+func attachCmd(e *Env, args []string) error {
+	pos, err := newFlags().Parse(args)
+	if err != nil {
+		return srvUsage("attach", err.Error()+"\n"+attachUsage)
 	}
-	if fs.NArg() > 1 {
-		return e.srvUsage("attach", attachUsage)
+	if len(pos) > 1 {
+		return srvUsage("attach", attachUsage)
 	}
-	id := fs.Arg(0)
+	id := ""
+	if len(pos) == 1 {
+		id = pos[0]
+	}
 	if !isTTY(os.Stdin) {
-		return e.srvUsage("attach", "stdin is not a terminal")
+		return srvUsage("attach", "stdin is not a terminal")
 	}
 	if rawMode(os.Stdin) {
 		fmt.Fprintln(e.Stderr, "tm attach: this terminal looks like it was left in raw mode (a client killed with SIGKILL?); run `reset` if it misbehaves")
 	}
 	c, p, err := connect(false)
-	if errors.Is(err, server.ErrNotRunning) {
+	if errors.Is(err, client.ErrNotRunning) {
 		fmt.Fprintln(e.Stderr, "tm attach: tm server is not running; start a session with tm session start")
-		return ExitRefused
+		return &exitError{ExitRefused}
 	}
 	if err != nil {
-		return e.srvFail("attach", err)
+		return srvFail("attach", err)
 	}
 	var list proto.SessionListResult
 	if err := c.Call(proto.MethodSessionList, nil, &list); err != nil {
 		c.Close()
-		return e.srvFail("attach", err)
+		return srvFail("attach", err)
 	}
 	c.Close()
 	if id == "" {
 		if id = newest(list.Sessions); id == "" {
 			fmt.Fprintln(e.Stderr, "tm attach: no sessions; start one with tm session start")
-			return ExitRefused
+			return &exitError{ExitRefused}
 		}
 	}
 	cols, rows, ok := termSize()
@@ -85,12 +83,12 @@ func attachCmd(e *Env, args []string) int {
 	vc, err := tui.JoinView(p, proto.ViewSubscribeParams{Own: true, Bare: true, StatusBar: true, Session: id,
 		Cols: cols, Rows: rows, Sidebar: &side, Info: &info, Tree: &tree, StatusCompact: lay.StatusCompact()})
 	if err != nil {
-		return e.srvFail("attach", err)
+		return srvFail("attach", err)
 	}
-	res, code := e.attach(p, vc, tui.Options{Sidebar: &tui.SidebarOptions{UIFile: uiFile}}, []string{"attach", id})
+	res, err := e.attach(p, vc, tui.Options{Sidebar: &tui.SidebarOptions{UIFile: uiFile}}, []string{"attach", id})
 	vc.Close()
-	if code != ExitOK {
-		return code
+	if err != nil {
+		return err
 	}
 	if res.GoTo != nil {
 		// A click on the sidebar: this console becomes a full one of view
@@ -99,10 +97,10 @@ func attachCmd(e *Env, args []string) int {
 	}
 	if res.Detached {
 		fmt.Fprintf(e.Stdout, "[%s from %s]\n", res.Reason, id)
-		return ExitOK
+		return nil
 	}
 	fmt.Fprintf(e.Stdout, "[%s: %s]\n", id, res.Reason)
-	return ExitOK
+	return nil
 }
 
 // tookOver tells a thread's coordinator that the user typed into the
@@ -119,7 +117,7 @@ func (e *Env) tookOver(s proto.SessionInfo) error {
 // the user detaches, with opts' sidebar, flash, command and handover
 // (the rest is filled in here). On a build mismatch it re-execs the
 // server's binary with args (docs/SPEC.md §3.3) and doesn't return.
-func (e *Env) attach(p server.Paths, vc *tui.ViewConn, opts tui.Options, args []string) (tui.Result, int) {
+func (e *Env) attach(p client.Paths, vc *tui.ViewConn, opts tui.Options, args []string) (tui.Result, error) {
 	id := vc.View().Focus
 	logger := log.New(io.Discard, "", 0)
 	pid := os.Getpid()
@@ -144,12 +142,12 @@ func (e *Env) attach(p server.Paths, vc *tui.ViewConn, opts tui.Options, args []
 		vc.Close()
 		argv := append([]string{verr.Bin}, args...)
 		err = proc.Exec(verr.Bin, argv, append(os.Environ(), reexecEnv+"="+strconv.Itoa(pid)))
-		return res, e.srvFail("attach", fmt.Errorf("re-exec %s: %w", verr.Bin, err))
+		return res, srvFail("attach", fmt.Errorf("re-exec %s: %w", verr.Bin, err))
 	}
 	if err != nil {
-		return res, e.srvFail("attach", err)
+		return res, srvFail("attach", err)
 	}
-	return res, ExitOK
+	return res, nil
 }
 
 // newest returns the id of the most recently created session.

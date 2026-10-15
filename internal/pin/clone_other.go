@@ -1,6 +1,6 @@
 //go:build !darwin && !windows
 
-package server
+package pin
 
 import "os"
 
