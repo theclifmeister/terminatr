@@ -201,12 +201,7 @@ func sideProjects(ps []server.SideProject) []ProjectData {
 			}
 			pd.Threads = append(pd.Threads, tr)
 		}
-		for _, r := range pd.Links {
-			pd.LinkWaits += r.Held
-			if r.Paused {
-				pd.LinkWaits++
-			}
-		}
+		pd.countLinkWaits()
 		out = append(out, pd)
 	}
 	return out

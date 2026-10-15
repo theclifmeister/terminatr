@@ -76,6 +76,12 @@ asks, so acknowledge reports, prompt threads and move tasks yourself.
 - `link-undelivered`: a message to a project on a paired server didn't
   arrive (refused there, or not taken in 72 hours); the item says why.
   Tell the user; don't resend it in a loop.
+- `link-request`: the user of a paired server asks to link one of its
+  projects with this one. Only the user answers it: tell them, and they
+  accept or decline it in the Messages tab (or `tm link accept|decline
+  R-<fp>-<n>`). You can't.
+- `link-answer`: the other server's user answered this side's link
+  request; the item says how. Tell the user if it matters to them.
 
 Mark every item done once handled. The server itself closes finished
 threads (auto_close), prompts threads about failing checks and conflicts

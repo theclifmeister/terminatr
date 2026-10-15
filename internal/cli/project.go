@@ -37,7 +37,7 @@ const projectUsage = `usage: tm project new <slug> [--goal "…"] [--repo PATH].
        tm project archive|unarchive <slug> (hidden from the sidebar; the ticker leaves it alone)
        tm project delete <slug> [--yes]    (moves it to the trash; asks first)
        tm project rename <slug> <new-slug> [--json]   (no thread may run; restarts its coordinator)
-       tm project link <a> <b>|<server>/<b> [both|send|receive|off] [--ask|--no-ask]   (links both sides at once; only this side for a paired server's)`
+       tm project link <a> <b>|<server>/<b> [both|send|receive|off] [--ask|--no-ask] [--request]   (links both sides at once; only this side for a paired server's, --request asking its user to link back)`
 
 func runProject(e *Env, args []string) error {
 	if len(args) == 0 {

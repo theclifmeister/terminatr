@@ -773,8 +773,9 @@ func Paused(a, b string) bool {
 // looked is what a look at the links needs from the store: which pairs
 // are paused and how many messages wait, by direction.
 type looked struct {
-	paused map[string]bool
-	held   map[string]int
+	paused   map[string]bool
+	held     map[string]int
+	requests []*Request
 }
 
 func look() looked {
@@ -786,6 +787,7 @@ func look() looked {
 		for k, ids := range s.Held {
 			l.held[k] = len(ids)
 		}
+		l.requests = s.Requests
 	})
 	return l
 }

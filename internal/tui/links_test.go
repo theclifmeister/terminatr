@@ -175,3 +175,80 @@ func TestLinkedProjectsRemote(t *testing.T) {
 		t.Fatalf("ask %v", src.links)
 	}
 }
+
+// TestLinkRequests: r on a paired server's project asks its user to
+// link back (after a y; with no entry here it links both ways first),
+// once while one waits, and the other side's column says the request's
+// state. A request from there is a NEEDS YOU row; in the Messages tab A
+// offers the directions, the request's mirror first, and x declines
+// after a y.
+func TestLinkRequests(t *testing.T) {
+	src, m := linkDash(t)
+	src.data.Peers = remotePeers()
+	now := time.Now()
+	src.data.Projects[0].Links = []link.Row{
+		{Peer: "mini/acme-api", Remote: true, HasMine: true, Mine: config.Link{Allow: config.LinkSend, Ask: true}, Send: true,
+			Asked: &link.Request{ID: "R-4F2A-7", Out: true, Peer: "mini/acme-api", Allow: "send", Created: now, State: link.ReqWaiting}},
+		{Peer: "nas/old", Remote: true,
+			Asks: &link.Request{ID: "R-9C1B-3", Peer: "nas/old", Project: "alpha", Allow: "send", Created: now, State: link.ReqWaiting}},
+	}
+	src.data.Projects[0].countLinkWaits()
+	m.setData(src.data)
+	if out := screen(m); !strings.Contains(out, "1 link request waits") {
+		t.Fatalf("no NEEDS YOU row:\n%s", out)
+	}
+
+	v := &linksView{slug: "alpha"}
+	m.push(v)
+	if out := screen(m); !strings.Contains(out, "asked, no answer yet") || !strings.Contains(out, "asks to link") || !strings.Contains(out, "r ask") {
+		t.Fatalf("list:\n%s", out)
+	}
+	items, _ := v.items(m)
+	for i, it := range items {
+		if it.key == "mini/acme-api" {
+			v.sel = i
+		}
+	}
+	press(m, "r")
+	if len(src.linkActs) != 0 || !strings.Contains(m.msg, "asked already (R-4F2A-7)") {
+		t.Fatalf("r while one waits: %v %q", src.linkActs, m.msg)
+	}
+	for i, it := range items {
+		if it.key == "nas/media" {
+			v.sel = i
+		}
+	}
+	press(m, "r")
+	cv, ok := m.top().(*confirmView)
+	if !ok || !strings.Contains(cv.question, "both ways on this side") {
+		t.Fatalf("r without an entry: %T", m.top())
+	}
+	runAll(m, press(m, "y"))
+	if len(src.linkActs) != 1 || src.linkActs[0] != "alpha request nas/media both" {
+		t.Fatalf("request %v", src.linkActs)
+	}
+	m.pop()
+
+	m.openTab("alpha", tabMessages, 0)
+	m.projectPopupView().sel[tabMessages] = 1
+	if out := screen(m); !strings.Contains(out, "A accept the link") {
+		t.Fatalf("tab:\n%s", out)
+	}
+	press(m, "A")
+	mv, ok := m.top().(*menuView)
+	if !ok || mv.items[0].label != "receive only, ask first" || len(mv.items) != 6 {
+		t.Fatalf("A: %T %+v", m.top(), mv)
+	}
+	runAll(m, press(m, "enter"))
+	if got := src.linkActs[len(src.linkActs)-1]; got != "alpha accept R-9C1B-3 receive ask" {
+		t.Fatalf("accept %v", src.linkActs)
+	}
+	press(m, "x")
+	if _, ok := m.top().(*confirmView); !ok {
+		t.Fatalf("x: %T", m.top())
+	}
+	runAll(m, press(m, "y"))
+	if got := src.linkActs[len(src.linkActs)-1]; got != "alpha decline R-9C1B-3" {
+		t.Fatalf("decline %v", src.linkActs)
+	}
+}
