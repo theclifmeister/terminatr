@@ -31,6 +31,7 @@ func TestRelayServeFlags(t *testing.T) {
 	h.expect(2, "or --plain", human, "relay", "serve", "--plain", "--cert", "c", "--key", "k")
 	h.expect(2, "--trusted-proxy nope", human, "relay", "serve", "--plain", "--trusted-proxy", "nope")
 	h.expect(2, "--max-per-ip 0", human, "relay", "serve", "--plain", "--max-per-ip", "0")
+	h.expect(2, "--total-bandwidth x", human, "relay", "serve", "--plain", "--total-bandwidth", "x")
 	h.expect(2, "--auto-update on or --auto-update off", human, "relay", "serve", "--plain", "--auto-update", "maybe")
 	h.expect(1, "human-only", coord, "relay", "serve", "--plain")
 	h.expect(1, "human-only", thr, "relay", "serve", "--plain")
@@ -48,7 +49,7 @@ func TestRelayServeFlags(t *testing.T) {
 		return nil
 	}
 	h.ok(human, "relay", "serve", "--plain", "--listen", "127.0.0.1:8080",
-		"--trusted-proxy", "172.16.0.0/12", "--trusted-proxy", "10.1.2.3", "--max-conns", "50", "--bandwidth", "1.5")
+		"--trusted-proxy", "172.16.0.0/12", "--trusted-proxy", "10.1.2.3", "--max-conns", "50", "--bandwidth", "1.5", "--total-bandwidth", "64")
 	if gotAddr != "127.0.0.1:8080" || gotCert != "" {
 		t.Fatalf("addr %q cert %q", gotAddr, gotCert)
 	}

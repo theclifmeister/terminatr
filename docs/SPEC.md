@@ -1658,7 +1658,7 @@ These commands are used by the human, the coordinator and threads alike. Exit co
 | `tm doctor [--fix [--yes]] [--json]` | human | checks and changes nothing; `--fix` offers to remove leftovers and restart an old server after a `y` on a terminal (`--yes` instead, needed without one); `--json` for scripts; exit 1 only when a check fails. Checks: toolchain (with `gh auth status`: a warning when `gh` isn't logged in or can't read its token, since the ticker's PR polls need it, §7.5; the code-host lines (`gh`, `gh auth`, the `az` lines, `git origin`) are the running server's, from `server.codehost`, since over SSH on a Mac this shell has no login keychain while the server's sessions do: each carries `source` "server" in `--json` (a field added to every check, empty for the others) and `[server]` in the text; where this shell fails a check the server passes, a `local shell` note (ok, source "local") says so instead of a warning; with no server, or an older one, the checks run in this shell and are labelled `local`), install method and newer release, server (a server of an older protocol is a warning whose fix is `tm server restart`; on macOS, a server whose sessions can't reach the keychain is a warning whose fix is a restart from the Mac, §3.1; a session whose queued prompts are held while its agent is idle is a `prompt queue` warning, §8.6), sockets, manifests, hooks, enabled Claude plugins known to be unsafe in tm sessions (`claude plugin list --json`; a warning naming the reason and `claude plugin disable <id>`, no fix; the list is `unsafePlugins` in `internal/doctor/plugins.go`, today `worktrees@supermods`, whose "Remove N finished" removes clean worktrees with no commits ahead, which includes a fresh thread's), leftovers, settings tm no longer has (`complete_tasks = "released"`, read as `user`, in a project's table or `[defaults]`), and the installed agents and their models (§8.2 **Models**; doctor asks each installed agent again: a fail `agent` line when none is installed, naming the agents tm knows; per installed agent an ok `<agent> models` line, `12 models, asked 2.1.296 today (Claude Max, firstParty)`, with the models the user hid, added and the account refused, or a warning `unknown: <reason>` (logged out, with the login to run; probe failed; no lister); a fail for a `thread_agent` / `coordinator_agent` that isn't installed or tm doesn't know, naming who sets it; and warnings for several agents installed with none chosen for all projects, a `default_model` the agent doesn't offer now, the older `[agents.<name>] models` list, `[agents.<name>]` of an agent tm doesn't know, a manifest's ignored `[[models]]`, a `coordinator_model` its agent doesn't offer, and each model in a project's scope no installed agent offers, naming who allows it), and the paired servers (§16.8: nothing for a server never paired, else one `peers` line with each link's state, a warning for a refused link, an old protocol or an unreachable relay) |
 | `tm mod list [--outdated] [--json] \| install <path\|git-url[//subfolder][@tag]\|github-tree-url> [--yes] \| enable <id> [--project <slug>] [--yes] \| disable <id> [--project <slug>] \| remove <id> [--purge] [--yes] \| update [<id>] [--yes] \| validate [<dir>…] [--json]` | human; list and validate: anyone | user mods, §5.3: install by path or git URL only, consent on a terminal (`--yes` without one) |
 | `tm mod new <id> [--kind column\|hook\|theme\|icons\|keymap\|rules] [--dir <dir>] \| dev <dir> [--yes] \| test [<dir>…] [--json] \| logs <id> [--follow\|-f] [--lines\|-n N]` | dev: human; the rest: anyone | the mod author's tools, §5.3: scaffold, run from a folder with a restart on every save, replay fixtures with a fake broker, read a mod's log |
-| `tm relay serve [--listen ADDR] (--domain NAME [--state DIR] [--email ADDR] \| --cert FILE --key FILE \| --plain) [--trusted-proxy CIDR]… [--max-conns N] [--max-per-ip N] [--bandwidth MiB/s] [--log-ips] [--update-request FILE] [--auto-update on\|off]` | human (`human-only` for an agent) | the relay two linked servers meet through, on the user's own host (§16): `--listen` defaults to `:443`; TLS from Let's Encrypt for `--domain` (TLS-ALPN-01, cached in the state directory, renewed by itself), from the certificate files, reloaded when they change, or `--plain` for a TLS proxy in front, whose `X-Forwarded-For` counts only from a `--trusted-proxy`; runs until SIGINT or SIGTERM |
+| `tm relay serve [--listen ADDR] (--domain NAME [--state DIR] [--email ADDR] \| --cert FILE --key FILE \| --plain) [--trusted-proxy CIDR]… [--max-conns N] [--max-per-ip N] [--bandwidth MiB/s] [--total-bandwidth MiB/s] [--log-ips] [--update-request FILE] [--auto-update on\|off]` | human (`human-only` for an agent) | the relay two linked servers meet through, on the user's own host (§16): `--listen` defaults to `:443`; TLS from Let's Encrypt for `--domain` (TLS-ALPN-01, cached in the state directory, renewed by itself), from the certificate files, reloaded when they change, or `--plain` for a TLS proxy in front, whose `X-Forwarded-For` counts only from a `--trusted-proxy`; runs until SIGINT or SIGTERM |
 | `tm relay install (--domain NAME [--email ADDR] \| --ip [ADDR]) [--auto-update=on\|off] \| update \| uninstall` | human, as root on Linux with systemd (`human-only` for an agent) | the relay as the `tm-relay` systemd service: install (with a daily update timer unless `--auto-update=off`, and a path unit for linked servers' update requests), update to the latest release (sha256 checked) and restart only when newer, remove (§16.6) |
 | `tm peer pair [--relay URL] [--as ALIAS] \| join CODE [--as ALIAS] \| list [--json] \| remove ALIAS \| rotate [--yes]` | human (`human-only` for an agent) | pairing this server with another through a relay by a one-time code and a six-digit check, and the paired servers (§16.8) |
 | `tm update [--check [--json]] [--yes] [--restart]` | human | §10.1 |
@@ -2111,7 +2111,13 @@ Text messages, JSON, before a room is joined; bytes are base64, ids hex.
      min(fp, peer) ‖ max(fp, peer))` and `peer ≠ fp` (close 4403
      `bad-room`). Both servers compute the same room; the relay checks it
      from the key it just verified, so only the two key holders can sit in
-     a link room, and the relay is no open pipe.
+     a link room. That proves who sits in a room, not that its two keys
+     ever paired: the relay doesn't know which keys are tm servers, so
+     anyone who makes two keys can use a link room of their own. What
+     keeps the relay for the servers using it is its limits (§16.4):
+     waiting rooms are capped so they can't take every connection, and
+     bytes are capped per address, per room and in all, so a stranger's
+     room gets a share of the bandwidth, never all of it.
    - **pair** rooms: `room` comes from the one-time pairing code, which
      the relay never sees, so it can't check it. Pair rooms are capped
      instead (§16.4).
@@ -2143,18 +2149,21 @@ no URL. The relay answers `{"t":"update","result":R}` and closes (1000):
 
 | `result` | when |
 |---|---|
-| `queued` | the key is one side of a link room that is mated now (the room it signed): the relay wrote its request file |
-| `not-linked` | no live link of that key through the relay |
+| `queued` | the key is one side of a link room that is mated now (the room it signed) and has carried bytes both ways: the relay wrote its request file |
+| `not-linked` | no live link of that key through the relay (or one that has carried nothing yet) |
 | `off` | the relay runs without `--update-request` (installed before update requests) |
-| `too-soon` | it took one less than an hour ago (`UpdateEvery`); `"next"` is when it takes another |
+| `too-soon` | the link has been up less than 10 minutes (`UpdateAfter`), this key's last request taken was less than an hour ago (`UpdateKeyEvery`), or anyone's less than 10 minutes ago (`UpdateEvery`); `"next"` is when it takes another |
 | `failed` | the request file couldn't be written (the relay's log says why) |
 
 **Any server with a live link through the relay may ask**: whoever can
-use the relay can make it update, at most once an hour. That is all
+use the relay can make it update, each key at most once an hour, all
+of them together at most once every 10 minutes. That is all
 it can do: the relay stays unprivileged (`DynamicUser`) and only writes
 `update-request` in its state directory (`--update-request FILE`;
-`FILE.last`'s time is the last request taken, so the hour holds across
-the restart). Root's `tm-relay-update.path` sees the file and starts
+`FILE.last`'s time is the last request taken, so the 10 minutes hold
+across the restart; the per-key times are kept in memory only, and a
+restart makes every link new again). Root's `tm-relay-update.path` sees
+the file and starts
 `tm-relay-update.service`, `tm relay update` (§16.6), which removes the
 request first (a failing update isn't started again), checks the
 release's checksums and restarts the relay only for a newer release.
@@ -2174,7 +2183,8 @@ release's checksums and restarts the relay only for a newer release.
 
 ### 16.4 Limits
 
-Per address (an IPv6 address counts by its /64):
+Per address (an IPv6 address counts by its /64, and by its /48 for
+waiting):
 
 | Limit | Default | Over it |
 |---|---|---|
@@ -2182,13 +2192,34 @@ Per address (an IPv6 address counts by its /64):
 | new connections from one address | 30 a minute, burst 10 | HTTP 429 |
 | connections in all | 1024 (`--max-conns`); without the flag, fewer when the memory limit (`GOMEMLIMIT`, or three quarters of the cgroup's) holds less at 160 KiB each, at least 16 | HTTP 429 |
 | TCP connections, before TLS | from one address: `--max-per-ip` + 4; in all: `--max-conns` + a quarter (a `--trusted-proxy` counts only in all) | closed at once |
+| connections waiting in rooms, in all | half of the connections in all | see below |
+| connections waiting in rooms from one address | 4 | 4429 `rate-limited` |
 | bytes one address sends | 4 MiB/s, burst 8 MiB (`--bandwidth`) | slowed, never dropped |
-| a link room waiting | 1 h | 4408 `timeout`; the client dials again |
+| bytes all connections send together | 16 MiB/s, burst 32 MiB (`--total-bandwidth`) | slowed, never dropped |
+| bytes one mated room carries, both ways | 2 MiB/s, burst 64 MiB | slowed, never dropped |
+| pings and pongs a client sends | 12 a minute, burst 10; their bytes count as the address's | 4429 `rate-limited` |
+| a link room waiting | 1 h when it has mated on this relay in the last day, else 5 min | 4408 `timeout`; the client dials again |
 | a pair room waiting | 10 min | 4408 `timeout` |
 | a mated pair room | 2 min and 256 KiB in all | 4429 `pair-limit` |
 | a frame | the relay pings every 30 s; 90 s without a frame closes | closed |
 | the TLS handshake | 5 s | closed |
 | the HTTP request | headers and request in 10 s, at most 8 KiB; the answer written in 5 s; 30 s idle between requests (none on a WebSocket, which has its own) | closed |
+
+**Waiting rooms** take at most half the connections, so at least half
+are left for rooms that mate. When the waiting are at their cap, a
+newcomer that would wait makes room by closing the oldest waiter of
+the address with the most waiting (4408 `timeout`, so it dials
+again), when that address has at least two more waiting than the
+newcomer's; otherwise the newcomer gets 4429 `rate-limited`. A
+connection that mates a waiting one never needs a place: it doesn't
+wait.
+
+**What the limits guarantee**: a server's link through the relay
+always finds connections to mate in, and at most a few waiters from
+one address can be crowded out at a time; the relay never sends more
+than `--total-bandwidth`, whoever uses it, and no single room or
+address takes more than its own share of it. They don't keep a
+stranger from using a room of their own within those shares (§16.2).
 
 ### 16.5 What it logs and keeps
 

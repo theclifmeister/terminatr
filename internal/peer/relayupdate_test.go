@@ -20,6 +20,7 @@ func TestRelayVersionAndUpdate(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "update-request")
 	cfg := relay.DefaultConfig()
 	cfg.Version, cfg.UpdateFile = "v0.27.0", file
+	cfg.UpdateAfter = 0 // the link may ask once it is up
 	s := relay.New(cfg)
 	hs := httptest.NewUnstartedServer(s)
 	hs.StartTLS()
@@ -52,7 +53,7 @@ func TestRelayVersionAndUpdate(t *testing.T) {
 		t.Fatalf("words %q", words)
 	}
 	_, res, _ = RequestRelayUpdate(ctx, a.dir, "mini", tc)
-	if words, ok := RelayUpdateWords("relay.example.net", res); ok || !strings.Contains(words, "less than an hour ago") {
+	if words, ok := RelayUpdateWords("relay.example.net", res); ok || !strings.Contains(words, "it takes another after") {
 		t.Fatalf("too soon: %+v %q", res, words)
 	}
 	// The link carried on.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,8 +29,9 @@ func TestChallengeTellsTheVersion(t *testing.T) {
 }
 
 // An update request is a signed hello from a key with a live link
-// through the relay; it writes the request file, at most once per
-// UpdateEvery, and says so.
+// through the relay that has carried bytes both ways for UpdateAfter;
+// it writes the request file, at most once per UpdateKeyEvery from one
+// key and once per UpdateEvery from any, and says so.
 func TestUpdateRequest(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "update-request")
 	cfg := DefaultConfig()
@@ -56,7 +58,12 @@ func TestUpdateRequest(t *testing.T) {
 		t.Fatalf("request file written: %v", err)
 	}
 
-	_, _, a, b = mate(t, url, tc)
+	ca, cb, a, b := mate(t, url, tc)
+	// Mated, but nothing sent yet: not a link that is used.
+	if res, _ := linkDialer(b, a, tc).RequestUpdate(ctx, url); res.Result != UpdateNotLinked {
+		t.Fatalf("silent room: %+v", res)
+	}
+	exchange(t, ca, cb)
 	// A stranger naming the live room with its own key: the room isn't
 	// its own, so the hello is refused.
 	c := newKey(t)
@@ -70,6 +77,12 @@ func TestUpdateRequest(t *testing.T) {
 		t.Fatalf("forged: %q", reason)
 	}
 
+	// Too soon until the room has been mated UpdateAfter.
+	res, err = linkDialer(b, a, tc).RequestUpdate(ctx, url)
+	if err != nil || res.Result != UpdateTooSoon || !res.Next.Equal(nowFn().Add(10*time.Minute)) {
+		t.Fatalf("young room: %+v %v", res, err)
+	}
+	advance(10 * time.Minute)
 	res, err = linkDialer(b, a, tc).RequestUpdate(ctx, url)
 	if err != nil || res.Result != UpdateQueued {
 		t.Fatalf("linked: %+v %v", res, err)
@@ -77,8 +90,8 @@ func TestUpdateRequest(t *testing.T) {
 	if body, err := os.ReadFile(file); err != nil || !strings.HasPrefix(string(body), "update to the latest release\n") {
 		t.Fatalf("request file %q %v", body, err)
 	}
-	// Once an hour, from either side.
-	advance(59 * time.Minute)
+	// From any key, once per UpdateEvery.
+	advance(9 * time.Minute)
 	res, err = linkDialer(a, b, tc).RequestUpdate(ctx, url)
 	if err != nil || res.Result != UpdateTooSoon || !res.Next.Equal(nowFn().Add(time.Minute)) {
 		t.Fatalf("too soon: %+v %v", res, err)
@@ -87,11 +100,21 @@ func TestUpdateRequest(t *testing.T) {
 	os.Remove(file)
 	s2 := New(cfg)
 	s2.now = nowFn
-	if !s2.updated.Equal(nowFn().Add(-59 * time.Minute)) {
+	if !s2.updated.Equal(nowFn().Add(-9 * time.Minute)) {
 		t.Fatalf("restarted relay's last request %v", s2.updated)
 	}
 	advance(time.Minute)
 	if res, _ := linkDialer(a, b, tc).RequestUpdate(ctx, url); res.Result != UpdateQueued {
+		t.Fatalf("ten minutes later, the other key: %+v", res)
+	}
+	// From one key, once per UpdateKeyEvery: b asked 20 minutes ago.
+	advance(10 * time.Minute)
+	res, err = linkDialer(b, a, tc).RequestUpdate(ctx, url)
+	if err != nil || res.Result != UpdateTooSoon || !res.Next.Equal(nowFn().Add(40*time.Minute)) {
+		t.Fatalf("same key: %+v %v", res, err)
+	}
+	advance(40 * time.Minute)
+	if res, _ := linkDialer(b, a, tc).RequestUpdate(ctx, url); res.Result != UpdateQueued {
 		t.Fatalf("an hour later: %+v", res)
 	}
 	// The link stayed up through all of it.
@@ -101,10 +124,25 @@ func TestUpdateRequest(t *testing.T) {
 	s.mu.Unlock()
 }
 
+// exchange sends a few bytes each way between two mated ends.
+func exchange(t *testing.T, a, b *Conn) {
+	t.Helper()
+	for _, p := range [][2]*Conn{{a, b}, {b, a}} {
+		if _, err := p[0].Write([]byte("hi")); err != nil {
+			t.Fatal(err)
+		}
+		buf := make([]byte, 2)
+		if _, err := io.ReadFull(p[1], buf); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // A relay without --update-request takes none.
 func TestUpdateRequestOff(t *testing.T) {
 	_, url, tc := relayFor(t, DefaultConfig())
-	_, _, a, b := mate(t, url, tc)
+	ca, cb, a, b := mate(t, url, tc)
+	exchange(t, ca, cb)
 	if res, err := linkDialer(a, b, tc).RequestUpdate(context.Background(), url); err != nil || res.Result != UpdateOff {
 		t.Fatalf("%+v %v", res, err)
 	}

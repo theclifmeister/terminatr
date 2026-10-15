@@ -50,7 +50,7 @@ func RelayUpdateWords(host string, r relay.UpdateResult) (string, bool) {
 	case relay.UpdateNotLinked:
 		return fmt.Sprintf("the relay %s takes update requests only from a server whose link through it is up; this one's isn't", host), false
 	case relay.UpdateTooSoon:
-		return fmt.Sprintf("the relay %s took an update request less than an hour ago; it takes another after %s", host, r.Next.Local().Format("15:04")), false
+		return fmt.Sprintf("the relay %s takes update requests from a link up 10 minutes, at most one an hour from a server and one every 10 minutes in all; it takes another after %s", host, r.Next.Local().Format("15:04")), false
 	}
 	return fmt.Sprintf("the relay %s couldn't write the update request; its log says why (journalctl -u tm-relay)", host), false
 }
