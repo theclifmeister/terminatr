@@ -8,6 +8,7 @@ package server
 // no file read or git.
 
 import (
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -92,20 +93,27 @@ func (c *projectCache) look(slug, tickerState string, gen uint64, byGen bool) (*
 }
 
 // snapStamp is the stat stamp (fsx.StatStamp) of what snap was read
-// from: the project's files and folders, each of its threads' (a new
-// thread changes the threads folder), the ticker's state file, the
-// config, the repos' .git/config (their origin) and the links' files
-// (link.StampPaths).
+// from: the project's files and folders, those of every thread folder
+// (a new thread changes the threads folder), the ticker's state file,
+// the config, the repos' .git/config (their origin) and the links'
+// files (link.StampPaths). The thread folders are listed, not taken
+// from snap: a read between thread.Create's mkdir and its thread.toml
+// lists no thread, and the record landing must still change the stamp
+// (T457).
 func snapStamp(snap *projectSnap, tickerState string) uint64 {
 	p := snap.p
 	var paths []string
 	for _, name := range []string{"PROJECT.md", "TASKS.md", "questions.json", "inbox", "threads"} {
 		paths = append(paths, p.Path(name))
 	}
-	for _, r := range snap.recs {
-		paths = append(paths, thread.Dir(p, r.ID))
+	ents, _ := os.ReadDir(p.Path("threads"))
+	for _, e := range ents {
+		if !e.IsDir() || !thread.ValidID(e.Name()) {
+			continue
+		}
+		paths = append(paths, thread.Dir(p, e.Name()))
 		for _, name := range []string{"thread.toml", "STATUS.md", "REPORT.md"} {
-			paths = append(paths, thread.Path(p, r.ID, name))
+			paths = append(paths, thread.Path(p, e.Name(), name))
 		}
 	}
 	paths = append(paths, tickerState)
