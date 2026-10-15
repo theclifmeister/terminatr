@@ -1139,12 +1139,16 @@ func (c *client) inputLoop(ctx context.Context, in *os.File) (stop func()) {
 		c.finish(Result{Reason: "detached (terminal closed: " + errString(err) + ")", Detached: true, Quit: true})
 	}()
 	go func() {
+		// Past ctx it keeps draining until the reader is done: its last
+		// sends block on a full channel, and with them the reader.
 		for {
 			select {
-			case <-ctx.Done():
+			case <-done:
 				return
 			case ev := <-events:
-				c.handle(ev)
+				if ctx.Err() == nil {
+					c.handle(ev)
+				}
 			}
 		}
 	}()
@@ -1158,6 +1162,7 @@ func (c *client) inputLoop(ctx context.Context, in *os.File) (stop func()) {
 			cr.Close()
 		case <-time.After(time.Second):
 			c.log.Printf("input: the terminal read didn't stop")
+			cr.Close()
 		}
 	}
 }
