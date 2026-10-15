@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/view"
 )
 
 // parseSpec is a layout.toml for the tests.
@@ -445,5 +446,25 @@ func TestDetailsBottom(t *testing.T) {
 	press(m, "|")
 	if v := place.value(m); !strings.HasPrefix(v, "bottom (no room") || !strings.Contains(m.msg, "16 rows") {
 		t.Fatalf("| in a short window: %q, msg %q", v, m.msg)
+	}
+}
+
+// TestSaveKeepsMalformedUI: a ui.json that doesn't parse is left as the
+// user wrote it, not replaced by the defaults with one field changed.
+func TestSaveKeepsMalformedUI(t *testing.T) {
+	ui := filepath.Join(t.TempDir(), "ui.json")
+	const bad = `{"split": 0.4,}`
+	os.WriteFile(ui, []byte(bad), 0o600)
+	for name, err := range map[string]error{
+		"SaveSidebar": SaveSidebar(ui, SidebarLayout{Width: 40}),
+		"SaveTree":    SaveTree(ui, view.Tree{}),
+		"SaveInfo":    SaveInfo(ui, view.Info{Width: view.InfoDefault}),
+	} {
+		if err == nil {
+			t.Errorf("%s: no error for a malformed ui.json", name)
+		}
+	}
+	if b, _ := os.ReadFile(ui); string(b) != bad {
+		t.Fatalf("ui.json rewritten: %q", b)
 	}
 }
