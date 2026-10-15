@@ -274,10 +274,8 @@ release-snapshot: release-ghostty
 	$(RELEASE_ENV) $(GORELEASER) release --snapshot --clean
 	cp .build/release/tm-relay-docker.tar.gz dist/
 
-# RELEASE_NOTES is the tag's hand-written notes (docs/releases/vX.Y.Z.md).
 release: release-ghostty
-	@test -n "$(RELEASE_NOTES)" -a -f "$(RELEASE_NOTES)" || { echo "make release: set RELEASE_NOTES to the tag's notes file (docs/releases/vX.Y.Z.md)" >&2; exit 1; }
-	$(RELEASE_ENV) $(GORELEASER) release --clean --release-notes $(RELEASE_NOTES)
+	$(RELEASE_ENV) $(GORELEASER) release --clean
 	cp .build/release/tm-relay-docker.tar.gz dist/
 
 clean:
