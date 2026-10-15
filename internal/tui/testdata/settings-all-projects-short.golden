@@ -1,0 +1,24 @@
+ PROJECTS                      2   │ tm dashboard                                     ● server ok · 6 sessions
+ ■ alpha              2         ⚑  │ NEEDS YOU 2 ─────────────────────────────────────────────────────────────
+ └─ coordin╭─ Settings ───────────────────────────────────────────────────────────────────────────╮
+    ├─ t-00│  1 General   2 All projects   3 Mods   4 Peers                                       │
+    └─ t-00│ About: tm dev · server unknown · update check off                                    │deactivate
+ ■ beta    │                                                                                      │
+ └─ coordin│ Coordinator model            agent's default                                         │
+    ├─ T4 W│ The model a new coordinator runs, from its agent's models in Thread models; a        │
+    └─ t-00│ running one keeps its model until it is started anew. Enter picks the next one; the  │
+           │ agent's default is the first.                                                        │───────────
+           │                                                                                      │
+           │ Keep history                 30 days                                                 │s  /y
+           │ How long done tasks, resolved threads, handled inbox items and journal lines stay    │
+           │ before they move to compressed archives beside them; nothing is deleted, and a       │
+           │ thread with unsaved work stays. Enter lists them.                                    │
+           │                                                                                      │
+           │ Every project follows these, a new one too, unless it sets its own in its popup (a   │
+           │ on the dashboard, prefix+a in a session); x there makes it follow these again.       │
+           │                                                                                      │
+           │ enter change · + - number · ↑ ↓ move · ← → tabs · esc close                          │
+ ──────────╰───────────────────────────────────────────────────────────────────────────── more ↑ ─╯
+ alpha · active                    │──────────────────────────────────────────────────────────────────────────
+ 2 threads · coordinator blocked   │
+ tab sidebar · ? help              │
