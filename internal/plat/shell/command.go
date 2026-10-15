@@ -2,9 +2,29 @@ package shell
 
 import (
 	"fmt"
+	"os/exec"
 	"strconv"
 	"strings"
 )
+
+// argVar starts the name of a variable that carries an argument with a
+// % (batchLine).
+const argVar = "TM_ARG"
+
+// SetEnv runs cmd, made by CLICommand, in env (nil: this process's),
+// keeping the variables CLICommand added for its quoting.
+func SetEnv(cmd *exec.Cmd, env []string) {
+	if env == nil {
+		return
+	}
+	var keep []string
+	for _, kv := range cmd.Env {
+		if strings.HasPrefix(kv, argVar) {
+			keep = append(keep, kv)
+		}
+	}
+	cmd.Env = append(env[:len(env):len(env)], keep...)
+}
 
 // batchLine builds the command line that runs the batch file script with
 // args through cmd.exe, safe from its parsing: `cmd /d /s /c ""script"
@@ -23,7 +43,7 @@ func batchLine(comspec, script string, args []string) (line string, env []string
 		}
 		b.WriteString(` "`)
 		if strings.Contains(a, "%") {
-			name := "TM_ARG" + strconv.Itoa(i)
+			name := argVar + strconv.Itoa(i)
 			env = append(env, name+"="+a)
 			b.WriteString("%" + name + "%")
 		} else {
