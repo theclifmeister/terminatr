@@ -201,7 +201,7 @@ template = '''
 # writes outside its worktree: plan mode's plans and its own memory.
 [guard]
 secrets = [".claude/.credentials.json", "$CLAUDE_CONFIG_DIR/.credentials.json"]
-writable = [".claude/plans", ".claude/projects"]
+writable = [".claude/plans", ".claude/projects", "$CLAUDE_CONFIG_DIR/plans", "$CLAUDE_CONFIG_DIR/projects"]
 # The sandbox's TMPDIR: $CLAUDE_CODE_TMPDIR/claude-<uid>, else /tmp/claude-<uid>.
 temp = ["$CLAUDE_CODE_TMPDIR/claude-{uid}", "/tmp/claude-{uid}"]
 # Its sandbox keeps Bash from this one (a read deny).
@@ -333,7 +333,7 @@ fields = ["tool_input"]
 # change. It clears the cases where no hook fires (Esc on a dialog, while
 # streaming, during a tool).
 [status_file]
-path = "{{.Home}}/.claude/sessions/{{.PID}}.json"
+path = "{{.ConfigDir}}/sessions/{{.PID}}.json"
 state_field = "status"
 # "shell" (2.1.289, t-0034): idle at the prompt while a background shell
 # runs ("1 shell still running"). Unknown values distrust the whole file.
@@ -512,7 +512,7 @@ status = "status"
 
 # Claude's own copy of the list, re-read to heal the mirror.
 [todos_snapshot]
-dir = "{{.Home}}/.claude/tasks/{{.AgentSID}}"
+dir = "{{.ConfigDir}}/tasks/{{.AgentSID}}"
 glob = "*.json"
 id = "id"
 text = "subject"
