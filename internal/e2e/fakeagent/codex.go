@@ -37,6 +37,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -893,7 +894,10 @@ func (a *app) codexUnload(thread, rollout string) {
 // run the command but prints what tm's probe would, judging the profile
 // as Codex 0.160 does: tm's socket reachable when the profile allows it,
 // TCP refused when network.mode is "limited" and features.network_proxy
-// is on. FAKEAGENT_CODEX_SANDBOX plays a newer Codex: "ignore-proxy"
+// is on. With a path to write (the probe's form on Windows, where the
+// network is off rather than limited), tm's socket is reachable when the
+// profile allows it and the write is denied. FAKEAGENT_CODEX_SANDBOX
+// plays a newer Codex: "ignore-proxy"
 // (the feature renamed: the network is open) or "reject" (a -c key
 // refused).
 func sandboxCmd(logPath string, args []string) int {
@@ -922,7 +926,7 @@ func sandboxCmd(logPath string, args []string) int {
 		return 1
 	}
 	cfg, err := codexConfig(values)
-	if err != nil || len(cmd) != 4 {
+	if err != nil || len(cmd) != 4 && len(cmd) != 5 {
 		fmt.Fprintln(os.Stderr, "Error:", err, cmd)
 		return 1
 	}
@@ -931,7 +935,17 @@ func sandboxCmd(logPath string, args []string) int {
 	perms, _ := cfg["permissions"].(map[string]any)
 	prof, _ := perms[name].(map[string]any)
 	netw, _ := prof["network"].(map[string]any)
-	if socks, _ := netw["unix_sockets"].(map[string]any); socks[sock] == "allow" && netw["enabled"] == true {
+	if len(cmd) == 5 {
+		if socks, _ := netw["unix_sockets"].(map[string]any); socks[sock] == "allow" {
+			unix = "ok"
+		}
+		rec["verdict"] = "unix=" + unix + " write=denied"
+		fmt.Printf("unix=%s write=denied\n", unix)
+		return 0
+	}
+	// On Windows the socket's folder, not the network, lets it connect
+	// (Codex 0.162): tm's coordinator profile there has the network off.
+	if socks, _ := netw["unix_sockets"].(map[string]any); socks[sock] == "allow" && (netw["enabled"] == true || runtime.GOOS == "windows") {
 		unix = "ok"
 		features, _ := cfg["features"].(map[string]any)
 		limited := netw["mode"] == "limited" && features["network_proxy"] == true

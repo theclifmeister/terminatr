@@ -67,7 +67,8 @@ func threadSandboxCheck(d Deps, name string, m *agent.Manifest, p agent.ThreadSa
 // sandboxCheck runs the agent's coordinator sandbox probe: a newer Codex
 // may rename or change the experimental network proxy or the profile
 // syntax tm relies on, and then the coordinator runs without its sandbox
-// (docs/SPEC.md §8.6, Codex).
+// (docs/SPEC.md §8.6, Codex). On Windows the probe checks the profile
+// without the proxy, which Codex doesn't apply there.
 func sandboxCheck(d Deps, name string, m *agent.Manifest, p agent.SandboxProber) Check {
 	c := Check{Group: "agents", Name: name + " coordinator sandbox"}
 	v, err := d.SandboxProbe(p)
@@ -80,6 +81,11 @@ func sandboxCheck(d Deps, name string, m *agent.Manifest, p agent.SandboxProber)
 		return c
 	}
 	c.Status, c.Detail = OK, fmt.Sprintf("%s %s: the network reaches only tm's socket", m.Launch.Command, v)
+	if d.GOOS == "windows" {
+		// Codex limits the network to its proxy only in its elevated
+		// sandbox; tm turns it off instead (internal/agent/codex/probe.go).
+		c.Detail = fmt.Sprintf("%s %s: the coordinator's commands run sandboxed and reach tm's socket; its network is off only through proxy settings, which a program can ignore (docs/CODEX.md)", m.Launch.Command, v)
+	}
 	return c
 }
 
