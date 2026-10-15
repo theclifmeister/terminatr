@@ -539,7 +539,7 @@ func (sv *settingsView) render(m *dash) string {
 		all = append(all, noHit)
 	}
 	b := box{title: "Settings", head: head, body: lines, sel: -1, hits: all, keys: keys}
-	b.scroll = sv.scroll(m.boxRows(b)-len(head), sel, len(lines))
+	b.scroll = sv.scroll(m.boxRows(b)-len(head), sel, len(lines), lastRow(hits, sel))
 	return m.popup(b)
 }
 
@@ -560,13 +560,26 @@ func aboutLines(m *dash, w int) []string {
 	return faintLines(text, w)
 }
 
-// scroll is the open tab's first line shown, as projectView.scroll.
-func (sv *settingsView) scroll(rows, sel, n int) int {
+// lastRow is whether line sel belongs to the tab's last row, whose
+// note or help below it then scrolls into view with it.
+func lastRow(hits []int, sel int) bool {
+	if sel < 0 || sel >= len(hits) || hits[sel] < 0 {
+		return false
+	}
+	return hits[sel] == slices.Max(hits)
+}
+
+// scroll is the open tab's first line shown, as projectView.scroll; on
+// the last row it goes on to the end, so the closing note shows.
+func (sv *settingsView) scroll(rows, sel, n int, last bool) int {
 	t := sv.top[sv.tab]
 	if sel >= 0 && sel+1 != sv.shown[sv.tab] {
 		sv.shown[sv.tab] = sel + 1
 		t = min(t, sel)
 		t = max(t, sel-rows+1)
+		if last {
+			t = n
+		}
 	}
 	t = min(max(t, 0), max(n-max(rows, 1), 0))
 	sv.top[sv.tab] = t
