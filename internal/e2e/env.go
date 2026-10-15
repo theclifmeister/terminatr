@@ -164,6 +164,10 @@ type Env struct {
 	// AttachLog is where attach clients log digest checks and keys
 	// (TERMINATR_ATTACH_LOG).
 	AttachLog string
+	// HookLog is where tm hook logs each event it failed to deliver
+	// (TERMINATR_HOOK_LOG), through the server's sessions and their
+	// agents.
+	HookLog string
 	// Vars is the environment of every tm command and window.
 	Vars []string
 
@@ -195,6 +199,7 @@ func New(t testing.TB) *Env {
 		pids:   map[int]string{},
 	}
 	e.AttachLog = filepath.Join(root, "attach.log")
+	e.HookLog = filepath.Join(root, "hook.log")
 	home := filepath.Join(root, "home")
 	os.MkdirAll(home, 0o700)
 	e.Vars = append(append(cleanEnv(os.Environ()), osVars(home)...),
@@ -206,6 +211,7 @@ func New(t testing.TB) *Env {
 		"PS1=$ ",
 		"TM="+e.Bin,
 		"TERMINATR_ATTACH_LOG="+e.AttachLog,
+		"TERMINATR_HOOK_LOG="+e.HookLog,
 		// No release checks against GitHub (tm doctor, tm update).
 		"TERMINATR_UPDATE_URL=off",
 		// Servers start as children, never through the user's launchd
@@ -505,8 +511,10 @@ func (e *Env) saveArtifacts() string {
 	if b, err := os.ReadFile(e.FakeLog()); err == nil {
 		os.WriteFile(filepath.Join(dir, "fakeagent.jsonl"), b, 0o644)
 	}
-	if b, err := os.ReadFile(e.AttachLog); err == nil {
-		os.WriteFile(filepath.Join(dir, "attach.log"), b, 0o644)
+	for name, f := range map[string]string{"attach.log": e.AttachLog, "hook.log": e.HookLog} {
+		if b, err := os.ReadFile(f); err == nil {
+			os.WriteFile(filepath.Join(dir, name), b, 0o644)
+		}
 	}
 	for _, f := range []string{"logs/server.log", "state/sessions.json"} {
 		if b, err := os.ReadFile(filepath.Join(e.Home, f)); err == nil {

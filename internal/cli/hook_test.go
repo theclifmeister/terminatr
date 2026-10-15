@@ -217,6 +217,14 @@ func TestHookSessionStartRetried(t *testing.T) {
 	for _, event := range []string{"SessionStart", "Stop"} {
 		t.Run(event, func(t *testing.T) {
 			e, out, _, sock := hookEnv(t, `{"hook_event_name":"`+event+`","source":"startup"}`)
+			log := filepath.Join(t.TempDir(), "hook.log")
+			getenv := e.Getenv
+			e.Getenv = func(k string) string {
+				if k == "TERMINATR_HOOK_LOG" {
+					return log
+				}
+				return getenv(k)
+			}
 			ln, err := net.Listen("unix", sock)
 			if err != nil {
 				t.Fatal(err)
@@ -262,6 +270,12 @@ func TestHookSessionStartRetried(t *testing.T) {
 			if len(conns) != 3 || out.String() != `{"ctx":1}` {
 				t.Fatalf("SessionStart: %d connections, stdout %q", len(conns), out)
 			}
+			// Each failed try is logged, though the event arrived.
+			b, _ := os.ReadFile(log)
+			if lines := strings.Split(strings.TrimSpace(string(b)), "\n"); len(lines) != 2 ||
+				!strings.Contains(lines[0], "try 1 of 3") || !strings.Contains(lines[1], "refused") {
+				t.Fatalf("hook log:\n%s", b)
+			}
 		})
 	}
 }
@@ -299,5 +313,28 @@ respond = "{{json .Context}}"
 	}
 	if out.String() != `"ctx"` {
 		t.Errorf("slow context lost: %q", out)
+	}
+}
+
+// TestHookLog: an event tm hook couldn't deliver is logged to
+// $TERMINATR_HOOK_LOG, still silently for the agent; a delivered one
+// isn't (T491: a lost SessionStart left no trace).
+func TestHookLog(t *testing.T) {
+	e, out, errb, sock := hookEnv(t, `{"hook_event_name":"SessionStart","session_id":"a"}`)
+	log := filepath.Join(t.TempDir(), "hook.log")
+	vars := map[string]string{"TERMINATR_SESSION": "s-1", "TERMINATR_HOOK_LOG": log}
+	e.Getenv = func(k string) string { return vars[k] }
+	runHookTimed(t, e, "--agent", "claude")
+	b, _ := os.ReadFile(log)
+	if !strings.Contains(string(b), "s-1 SessionStart: dial: ") || out.Len() != 0 || errb.Len() != 0 {
+		t.Fatalf("log %q stdout %q stderr %q", b, out, errb)
+	}
+
+	os.Remove(log)
+	fakeServer(t, sock, 0, "", nil)
+	e.Stdin = strings.NewReader(`{"hook_event_name":"Stop","session_id":"a"}`)
+	runHookTimed(t, e, "--agent", "claude")
+	if b, err := os.ReadFile(log); err == nil {
+		t.Fatalf("a delivered event was logged: %q", b)
 	}
 }

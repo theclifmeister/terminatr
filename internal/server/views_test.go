@@ -756,3 +756,29 @@ func TestViewsColumns(t *testing.T) {
 		t.Fatal("view.columns took an overlong list")
 	}
 }
+
+// TestViewsRemoteFocusSizes: a paired server's pane takes a console's size
+// when that console switches to it or reports focus, with no keys typed
+// (T494).
+func TestViewsRemoteFocusSizes(t *testing.T) {
+	h := newFakeHost()
+	h.panes["mini/s-3"] = paneInfo{follows: true, sized: true, remote: true}
+	vs := newViews(h, "", nil)
+	side := &view.Sidebar{Width: 20}
+	big, _ := join(t, vs, proto.ViewSubscribeParams{Cols: 120, Rows: 40, Sidebar: side})
+	small, _ := join(t, vs, proto.ViewSubscribeParams{Cols: 80, Rows: 24})
+
+	mustDo(t, vs, proto.MethodViewAttach, proto.ViewParams{Client: big.id, Session: "mini/s-3", Project: "p"})
+	if r := h.takeResizes(); !slices.Equal(r, []string{"mini/s-3 100×38"}) {
+		t.Fatalf("big's switch resized %v", r)
+	}
+	mustDo(t, vs, proto.MethodViewAttach, proto.ViewParams{Client: small.id, Session: "mini/s-3", Project: "p"})
+	if r := h.takeResizes(); !slices.Equal(r, []string{"mini/s-3 60×22"}) {
+		t.Fatalf("small's switch resized %v", r)
+	}
+	// Focus-in reaches the server as view.input: big takes the size back.
+	mustDo(t, vs, proto.MethodViewInput, proto.ViewParams{Client: big.id, Session: "mini/s-3"})
+	if r := h.takeResizes(); !slices.Equal(r, []string{"mini/s-3 100×38"}) {
+		t.Fatalf("big's focus-in resized %v", r)
+	}
+}

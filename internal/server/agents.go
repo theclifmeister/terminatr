@@ -748,8 +748,19 @@ func (s *Server) terminatrEnv(r SessionRecord) map[string]string {
 	if r.Thread != "" {
 		set["TERMINATR_THREAD"] = r.Thread
 	}
+	// The server's own TERMINATR_* don't reach sessions (terminalEnv),
+	// but where tm hook logs what it failed to deliver (tests) does.
+	for _, kv := range s.baseEnv() {
+		if v, ok := strings.CutPrefix(kv, hookLogEnv+"="); ok && v != "" {
+			set[hookLogEnv] = v
+		}
+	}
 	return set
 }
+
+// hookLogEnv names the file tm hook logs undelivered events to
+// (internal/cli).
+const hookLogEnv = "TERMINATR_HOOK_LOG"
 
 func (s *Server) baseEnv() []string {
 	if s.opts.Env != nil {
@@ -919,11 +930,20 @@ func (s *Server) resumeOne(r SessionRecord) restartOutcome {
 }
 
 func (s *Server) hookEvent(p proto.HookEventParams) proto.HookEventResult {
+	// tm hook says nothing of a dropped event, and the agent carries on
+	// without it: its state, its context and its prompt token (T491: a
+	// coordinator's only SessionStart lost, a nudge then refused).
 	sess, perr := s.session(p.Session)
 	if perr != nil {
+		s.log.Printf("hook %s for %s dropped: %s", p.Event, p.Session, perr.Message)
 		return proto.HookEventResult{}
 	}
 	if a := sess.Agent(); a == nil || a.Name() != p.Agent {
+		runs := "no agent"
+		if a != nil {
+			runs = a.Name()
+		}
+		s.log.Printf("hook %s for %s dropped: from agent %q, the session runs %s", p.Event, p.Session, p.Agent, runs)
 		return proto.HookEventResult{}
 	}
 	if p.Token != "" {

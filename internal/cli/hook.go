@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
+	"os"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
@@ -39,6 +41,11 @@ var (
 // maxHookPayload bounds what tm hook reads from the agent.
 const maxHookPayload = 4 << 20
 
+// hookLogEnv names a file tm hook appends a line to for each event it
+// failed to deliver, and why (tests: the agent never shows it, and a
+// lost SessionStart costs the session its context and prompt token).
+const hookLogEnv = "TERMINATR_HOOK_LOG"
+
 func init() { commands["hook"] = runHook }
 
 // runHook is `tm hook --agent NAME`: the endpoint every generated hook
@@ -68,6 +75,7 @@ func runHook(e *Env, args []string) error {
 	}
 	paths, err := client.ResolvePaths()
 	if err != nil {
+		hookLog(e, session, "", err)
 		return nil
 	}
 	// The event's name is in [hook] event_field (default hook_event_name),
@@ -101,22 +109,46 @@ func runHook(e *Env, args []string) error {
 	}
 	params := proto.HookEventParams{Session: session, Agent: name, Event: event,
 		Payload: payload, Token: token}
-	if out := sendHook(paths.Socket, params, total, tries); out != "" {
+	start := time.Now()
+	out := sendHook(paths.Socket, params, total, tries, func(try int, err error) {
+		hookLog(e, session, event, fmt.Errorf("%w (try %d of %d, after %v of %v)", err, try, tries, time.Since(start).Round(time.Millisecond), total))
+	})
+	if out != "" {
 		io.WriteString(e.Stdout, out)
 	}
 	return nil
 }
 
+// hookLog appends why event wasn't delivered to $TERMINATR_HOOK_LOG, if
+// set; never to stderr.
+func hookLog(e *Env, session, event string, err error) {
+	path := e.Getenv(hookLogEnv)
+	if path == "" {
+		return
+	}
+	f, ferr := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if ferr != nil {
+		return
+	}
+	fmt.Fprintf(f, "%s pid %d %s %s: %v\n", time.Now().Format("15:04:05.000000"), os.Getpid(), session, event, err)
+	f.Close()
+}
+
 // sendHook delivers one event and returns the server's stdout for the
 // agent. Every failure (no server, a stale socket, a wedged server, a
-// protocol mismatch) is silent and returns "". One the server didn't take
-// is tried again, up to tries times in all, while total lasts.
-func sendHook(socket string, p proto.HookEventParams, total time.Duration, tries int) string {
+// protocol mismatch, a refusal) returns "" and goes to failed, never to
+// the agent. One the server didn't take is tried again, up to tries times
+// in all, while total lasts.
+func sendHook(socket string, p proto.HookEventParams, total time.Duration, tries int, failed func(try int, err error)) string {
 	deadline := time.Now().Add(total)
 	for i := 1; ; i++ {
-		out, again := sendHookOnce(socket, p, deadline)
-		if !again || i >= tries || time.Until(deadline) < hookRetry+hookDial {
+		out, again, err := sendHookOnce(socket, p, deadline)
+		if err == nil {
 			return out
+		}
+		failed(i, err)
+		if !again || i >= tries || time.Until(deadline) < hookRetry+hookDial {
+			return ""
 		}
 		time.Sleep(hookRetry)
 	}
@@ -125,12 +157,12 @@ func sendHook(socket string, p proto.HookEventParams, total time.Duration, tries
 // sendHookOnce is one try of sendHook. again means the server didn't
 // take the event: no connection, a connection closed before its answer,
 // or a refusal. A timeout is not: the deadline is spent.
-func sendHookOnce(socket string, p proto.HookEventParams, deadline time.Time) (out string, again bool) {
+func sendHookOnce(socket string, p proto.HookEventParams, deadline time.Time) (out string, again bool, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), hookDial)
 	c, err := ipc.Dial(ctx, ipc.Addr(socket))
 	cancel()
 	if err != nil {
-		return "", true
+		return "", true, fmt.Errorf("dial: %w", err)
 	}
 	defer c.Close()
 	// The write shares the total: a write of its own deadline (100 ms)
@@ -140,34 +172,37 @@ func sendHookOnce(socket string, p proto.HookEventParams, deadline time.Time) (o
 	hello, _ := json.Marshal(proto.Hello{Protocol: proto.Protocol, Version: version.Version, Build: version.BuildID(), Kind: proto.KindHook})
 	params, err := json.Marshal(p)
 	if err != nil {
-		return "", false
+		return "", false, err
 	}
 	req, _ := json.Marshal(proto.Request{ID: 1, Method: proto.MethodHookEvent, Params: params})
 	// Hello and request in one write: one round trip less.
 	if _, err := c.Write(append(append(append(hello, '\n'), req...), '\n')); err != nil {
-		return "", !isTimeout(err)
+		return "", !isTimeout(err), fmt.Errorf("write: %w", err)
 	}
 	br := bufio.NewReader(c)
 	var srv proto.Hello
-	if line, err := br.ReadBytes('\n'); err != nil || json.Unmarshal(line, &srv) != nil {
-		return "", err != nil && !isTimeout(err)
-	}
-	var resp proto.Response
 	line, err := br.ReadBytes('\n')
 	if err != nil {
-		return "", !isTimeout(err)
+		return "", !isTimeout(err), fmt.Errorf("server hello: %w", err)
 	}
-	if json.Unmarshal(line, &resp) != nil {
-		return "", false
+	if err := json.Unmarshal(line, &srv); err != nil {
+		return "", false, fmt.Errorf("server hello: %w", err)
+	}
+	var resp proto.Response
+	if line, err = br.ReadBytes('\n'); err != nil {
+		return "", !isTimeout(err), fmt.Errorf("response: %w", err)
+	}
+	if err := json.Unmarshal(line, &resp); err != nil {
+		return "", false, fmt.Errorf("response: %w", err)
 	}
 	if resp.Error != nil {
-		return "", true
+		return "", true, fmt.Errorf("response: %w", resp.Error)
 	}
 	var res proto.HookEventResult
-	if json.Unmarshal(resp.Result, &res) != nil {
-		return "", false
+	if err := json.Unmarshal(resp.Result, &res); err != nil {
+		return "", false, fmt.Errorf("result: %w", err)
 	}
-	return res.Stdout, false
+	return res.Stdout, false, nil
 }
 
 // isTimeout reports whether err is a deadline's.
