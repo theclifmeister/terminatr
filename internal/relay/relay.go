@@ -114,13 +114,14 @@ type Server struct {
 	swept   time.Time
 	updated time.Time // the last update request taken
 
-	now func() time.Time // tests
+	now  func() time.Time // tests
+	http httpTimeouts
 }
 
 // New returns a relay with cfg's limits.
 func New(cfg Config) *Server {
 	return &Server{
-		cfg: cfg, now: time.Now,
+		cfg: cfg, now: time.Now, http: defaultHTTPTimeouts,
 		all:     map[*conn]struct{}{},
 		waiting: map[roomKey]*conn{},
 		busy:    map[roomKey]*mated{},

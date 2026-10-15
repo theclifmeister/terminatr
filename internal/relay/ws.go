@@ -141,6 +141,9 @@ func upgrade(w http.ResponseWriter, r *http.Request, max int) (*wsConn, error) {
 		"Upgrade: websocket\r\nConnection: Upgrade\r\n" +
 		"Sec-WebSocket-Accept: " + acceptKey(key) + "\r\n" +
 		"Sec-WebSocket-Protocol: " + Subprotocol + "\r\n\r\n"
+	// The HTTP server's deadlines stay on a hijacked connection: from
+	// here the WebSocket sets its own.
+	c.SetReadDeadline(time.Time{})
 	c.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	if _, err := c.Write([]byte(resp)); err != nil {
 		c.Close()
@@ -301,6 +304,11 @@ func (w *wsConn) ReadMessage() (op byte, msg []byte, err error) {
 	}
 }
 
+// wbufKeep is the largest write buffer a connection keeps between
+// writes; a bigger frame goes out without one (server) or in a buffer
+// of its own (client, which masks a copy).
+const wbufKeep = 4 << 10
+
 // write sends one unfragmented frame.
 func (w *wsConn) write(op byte, payload []byte) error {
 	w.wmu.Lock()
@@ -311,39 +319,51 @@ func (w *wsConn) write(op byte, payload []byte) error {
 	if op == opClose {
 		w.closed = true
 	}
-	b := w.wbuf[:0]
-	b = append(b, 0x80|op)
+	var hdr [14]byte
+	h := append(hdr[:0], 0x80|op)
 	var maskBit byte
 	if w.client {
 		maskBit = 0x80
 	}
 	switch n := len(payload); {
 	case n < 126:
-		b = append(b, maskBit|byte(n))
+		h = append(h, maskBit|byte(n))
 	case n <= 0xFFFF:
-		b = append(b, maskBit|126, byte(n>>8), byte(n))
+		h = append(h, maskBit|126, byte(n>>8), byte(n))
 	default:
-		b = append(b, maskBit|127)
-		b = binary.BigEndian.AppendUint64(b, uint64(n))
+		h = append(h, maskBit|127)
+		h = binary.BigEndian.AppendUint64(h, uint64(n))
 	}
+	var mask [4]byte
 	if w.client {
-		var mask [4]byte
 		if _, err := rand.Read(mask[:]); err != nil {
 			return err
 		}
-		b = append(b, mask[:]...)
-		start := len(b)
-		b = append(b, payload...)
-		for i := start; i < len(b); i++ {
-			b[i] ^= mask[(i-start)&3]
-		}
-	} else {
-		b = append(b, payload...)
-	}
-	if cap(b) <= 2*maxMessage {
-		w.wbuf = b
+		h = append(h, mask[:]...)
 	}
 	w.c.SetWriteDeadline(time.Now().Add(writeTimeout))
+	size := len(h) + len(payload)
+	if !w.client && size > wbufKeep {
+		bufs := net.Buffers{h, payload}
+		_, err := bufs.WriteTo(w.c)
+		return err
+	}
+	var b []byte
+	if size <= wbufKeep {
+		if w.wbuf == nil {
+			w.wbuf = make([]byte, 0, wbufKeep)
+		}
+		b = w.wbuf[:0]
+	} else {
+		b = make([]byte, 0, size)
+	}
+	b = append(b, h...)
+	b = append(b, payload...)
+	if w.client {
+		for i := len(h); i < len(b); i++ {
+			b[i] ^= mask[(i-len(h))&3]
+		}
+	}
 	_, err := w.c.Write(b)
 	return err
 }

@@ -368,7 +368,7 @@ Paired servers drop for a moment and reconnect by themselves; nothing to redo on
 curl https://relay.example.net/healthz     # ok
 ```
 
-The log (`docker compose logs relay`, or the journal) shows `serving on …`, rooms as they mate and connections as they leave, by room kind and a short room id, with bytes and duration; client addresses only if you add `--log-ips`. Limits (SPEC §16.4) can be raised with `--max-conns`, `--max-per-ip` and `--bandwidth` (MiB/s per address); the defaults are generous for two servers.
+The log (`docker compose logs relay`, or the journal) shows `serving on …`, rooms as they mate and connections as they leave, by room kind and a short room id, with bytes and duration; client addresses only if you add `--log-ips`. Limits (SPEC §16.4) can be raised with `--max-conns`, `--max-per-ip` and `--bandwidth` (MiB/s per address); the defaults are generous for two servers. Without `--max-conns` the relay holds no more connections than its memory limit fits (the unit's and the image's `GOMEMLIMIT=200MiB` fits the default 1024) and logs the lower number when it takes one.
 
 Behind your own reverse proxy (nginx, Traefik, the NAS's), run the relay with `--plain --listen :8080` on a private address, have the proxy pass WebSockets to it, and name the proxy with `--trusted-proxy <its address or subnet>`, so the relay's limits count real clients and not the proxy.
 

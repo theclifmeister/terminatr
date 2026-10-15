@@ -239,6 +239,8 @@ Description=terminatr relay (tm relay serve)
 Documentation=https://github.com/theclifmeister/terminatr/blob/main/docs/OPERATIONS.md
 Wants=network-online.target
 After=network-online.target
+# Restart however often it fails: never left stopped by a start limit.
+StartLimitIntervalSec=0
 
 [Service]
 ` + exec + `
@@ -246,6 +248,8 @@ StateDirectory=tm-relay
 StateDirectoryMode=0700
 Restart=on-failure
 RestartSec=2s
+# The Go GC works harder near this, well before MemoryMax kills it.
+Environment=GOMEMLIMIT=200MiB
 
 DynamicUser=yes
 AmbientCapabilities=CAP_NET_BIND_SERVICE
