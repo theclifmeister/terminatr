@@ -20,7 +20,6 @@ import (
 // agents' answers no longer back: models and coordinator_model names
 // no agent offers, a default_model, the older models list.
 func Models(d Deps) []Check {
-	const g = "agents"
 	cfg, err := config.Load()
 	if err != nil {
 		return nil // Settings reports it
@@ -29,7 +28,32 @@ func Models(d Deps) []Check {
 	if reg == nil {
 		return nil // Agents reports it
 	}
-	var installed []string
+	out, cats, installed := catalogChecks(d, reg, cfg)
+	if len(installed) == 0 {
+		return out
+	}
+	out = append(out, agentSettingsChecks(cfg, reg, cats)...)
+	scoped, stale := scopeChecks(cfg, reg, installed, cats)
+	out = append(out, scoped...)
+	out = append(out, severalAgentsChecks(cfg, installed)...)
+	return append(out, staleModelChecks(stale)...)
+}
+
+// modelsWarn is a Warn check in the models row.
+func modelsWarn(format string, args ...any) Check {
+	return Check{Group: "agents", Name: "models", Status: Warn, Detail: fmt.Sprintf(format, args...)}
+}
+
+// agentFail is a Fail check in the agent row.
+func agentFail(format string, args ...any) Check {
+	return Check{Group: "agents", Name: "agent", Status: Fail, Detail: fmt.Sprintf(format, args...)}
+}
+
+// catalogChecks finds the installed agents, asks each for its models again
+// and reports one line per agent: what it offers, or why that is unknown.
+// With no agent installed it returns the one failure.
+func catalogChecks(d Deps, reg *agent.Registry, cfg *config.Config) (out []Check, cats []models.Catalog, installed []string) {
+	const g = "agents"
 	for _, name := range reg.Names() {
 		a, _ := reg.Get(name)
 		if m := agent.ManifestOf(a); m != nil && d.LookPath != nil {
@@ -38,12 +62,10 @@ func Models(d Deps) []Check {
 			}
 		}
 	}
-	var out []Check
 	if len(installed) == 0 {
-		return append(out, Check{Group: g, Name: "agent", Status: Fail, Detail: errMsg(models.NoAgent(reg))})
+		return append(out, agentFail("%s", errMsg(models.NoAgent(reg)))), nil, nil
 	}
 	now := time.Now()
-	var cats []models.Catalog
 	for _, name := range installed {
 		a, _ := reg.Get(name)
 		m := agent.ManifestOf(a)
@@ -85,42 +107,51 @@ func Models(d Deps) []Check {
 		}
 		out = append(out, ck)
 	}
-	warn := func(format string, args ...any) {
-		out = append(out, Check{Group: g, Name: "models", Status: Warn, Detail: fmt.Sprintf(format, args...)})
-	}
-	fail := func(format string, args ...any) {
-		out = append(out, Check{Group: g, Name: "agent", Status: Fail, Detail: fmt.Sprintf(format, args...)})
-	}
-	catOf := func(name string) (models.Catalog, bool) {
-		for _, c := range cats {
-			if c.Agent == name {
-				return c, true
-			}
+	return out, cats, installed
+}
+
+// catalogOf is the catalog of the named agent.
+func catalogOf(cats []models.Catalog, name string) (models.Catalog, bool) {
+	for _, c := range cats {
+		if c.Agent == name {
+			return c, true
 		}
-		return models.Catalog{}, false
 	}
+	return models.Catalog{}, false
+}
+
+// agentSettingsChecks warns about [agents.<name>] settings that name an
+// unknown agent, use the older models list or a default model no longer
+// offered, and about manifests that still carry [[models]].
+func agentSettingsChecks(cfg *config.Config, reg *agent.Registry, cats []models.Catalog) []Check {
+	var out []Check
 	for _, name := range cfg.AgentNames() {
 		if _, ok := reg.Get(name); !ok {
-			warn("config.toml has models settings for agent %s, which tm doesn't know (tm agent list)", name)
+			out = append(out, modelsWarn("config.toml has models settings for agent %s, which tm doesn't know (tm agent list)", name))
 			continue
 		}
 		s := cfg.Agent(name)
 		if s.HasLegacy {
-			warn("config.toml [agents.%s] models is the older full list: tm now asks %s for its models; the names it doesn't list count as yours, and Settings > Models saves the new form", name, name)
+			out = append(out, modelsWarn("config.toml [agents.%s] models is the older full list: tm now asks %s for its models; the names it doesn't list count as yours, and Settings > Models saves the new form", name, name))
 		}
-		c, ok := catOf(name)
+		c, ok := catalogOf(cats, name)
 		if ok && c.Known && s.DefaultModel != "" && !c.Has(s.DefaultModel) {
-			warn("%s's default model %s isn't offered now, so threads run %s's own default; pick another in Settings > Models", name, s.DefaultModel, name)
+			out = append(out, modelsWarn("%s's default model %s isn't offered now, so threads run %s's own default; pick another in Settings > Models", name, s.DefaultModel, name))
 		}
 	}
 	for _, name := range reg.Names() {
 		a, _ := reg.Get(name)
 		if m := agent.ManifestOf(a); m != nil && len(m.LegacyModels) > 0 {
-			warn("%s's manifest (%s) has [[models]], which tm no longer reads: tm asks the agent ([list_models], docs/SPEC.md §8.2)", name, reg.Source[name])
+			out = append(out, modelsWarn("%s's manifest (%s) has [[models]], which tm no longer reads: tm asks the agent ([list_models], docs/SPEC.md §8.2)", name, reg.Source[name]))
 		}
 	}
-	// The settings that name agents and models, for all projects and
-	// each project with its own.
+	return out
+}
+
+// scopeChecks checks the settings that name agents and models, for all
+// projects and each project with its own. stale maps each model name no
+// installed agent offers to the scopes that list it.
+func scopeChecks(cfg *config.Config, reg *agent.Registry, installed []string, cats []models.Catalog) (out []Check, stale map[string][]string) {
 	type scope struct {
 		who    string
 		safety config.Safety
@@ -135,7 +166,7 @@ func Models(d Deps) []Check {
 			scopes = append(scopes, scope{slug, s, cfg.Own(slug)})
 		}
 	}
-	stale := map[string][]string{}
+	stale = map[string][]string{}
 	for _, sc := range scopes {
 		for _, k := range []struct{ key, value, what string }{
 			{"thread_agent", sc.safety.ThreadAgent, "thread agent"},
@@ -145,7 +176,7 @@ func Models(d Deps) []Check {
 				continue
 			}
 			if _, _, err := models.Resolve(reg, installed, k.value, k.what); err != nil && k.value != "" {
-				fail("%s: %s %s", sc.who, k.key, errMsg(err))
+				out = append(out, agentFail("%s: %s %s", sc.who, k.key, errMsg(err)))
 			}
 		}
 		if slices.Contains(sc.own, "models") {
@@ -161,26 +192,40 @@ func Models(d Deps) []Check {
 		}
 		if slices.Contains(sc.own, "coordinator_model") && sc.safety.CoordinatorModel != "" {
 			name, _, err := models.Resolve(reg, installed, sc.safety.CoordinatorAgent, "coordinator agent")
-			if c, ok := catOf(name); err == nil && ok && c.Known {
+			if c, ok := catalogOf(cats, name); err == nil && ok && c.Known {
 				if err := c.Check(sc.safety.CoordinatorModel, sc.safety.Models); err != nil {
-					warn("%s: coordinator_model %s: %s; the coordinator runs %s's default", sc.who, sc.safety.CoordinatorModel, errMsg(err), name)
+					out = append(out, modelsWarn("%s: coordinator_model %s: %s; the coordinator runs %s's default", sc.who, sc.safety.CoordinatorModel, errMsg(err), name))
 				}
 			}
 		}
 	}
-	if len(installed) > 1 {
-		all, _ := cfg.AllProjects()
-		if all.ThreadAgent == "" || all.CoordinatorAgent == "" {
-			warn("several agents are installed (%s) and the settings name none for all projects: the dashboard asks once when a project opens; until then tm thread start needs --agent", strings.Join(installed, ", "))
-		}
+	return out, stale
+}
+
+// severalAgentsChecks warns when several agents are installed and the
+// settings for all projects name no thread or coordinator agent.
+func severalAgentsChecks(cfg *config.Config, installed []string) []Check {
+	if len(installed) < 2 {
+		return nil
 	}
+	all, _ := cfg.AllProjects()
+	if all.ThreadAgent != "" && all.CoordinatorAgent != "" {
+		return nil
+	}
+	return []Check{modelsWarn("several agents are installed (%s) and the settings name none for all projects: the dashboard asks once when a project opens; until then tm thread start needs --agent", strings.Join(installed, ", "))}
+}
+
+// staleModelChecks warns, by model name, about models no installed agent
+// offers now.
+func staleModelChecks(stale map[string][]string) []Check {
 	var names []string
 	for n := range stale {
 		names = append(names, n)
 	}
 	sort.Strings(names)
+	var out []Check
 	for _, n := range names {
-		warn("model %s is in the models of %s, but no installed agent offers it now; --model %s is refused", n, strings.Join(stale[n], ", "), n)
+		out = append(out, modelsWarn("model %s is in the models of %s, but no installed agent offers it now; --model %s is refused", n, strings.Join(stale[n], ", "), n))
 	}
 	return out
 }

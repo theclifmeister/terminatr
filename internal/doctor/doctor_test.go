@@ -1082,3 +1082,17 @@ func TestSettingsHalfLinked(t *testing.T) {
 		t.Fatalf("%+v", cs)
 	}
 }
+
+// TestModelsSubchecks: the pieces Models is made of answer on their own.
+func TestModelsSubchecks(t *testing.T) {
+	got := staleModelChecks(map[string][]string{"b": {"x"}, "a": {"y", "z"}})
+	if len(got) != 2 || !strings.HasPrefix(got[0].Detail, "model a is in the models of y, z") || got[1].Status != Warn {
+		t.Fatalf("stale: %+v", got)
+	}
+	if staleModelChecks(nil) != nil {
+		t.Fatal("no stale models should give no checks")
+	}
+	if severalAgentsChecks(nil, []string{"claude"}) != nil {
+		t.Fatal("one agent should give no several-agents warning")
+	}
+}

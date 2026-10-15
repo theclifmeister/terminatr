@@ -24,6 +24,7 @@ import (
 
 	"github.com/rivo/uniseg"
 
+	"github.com/theclifmeister/terminatr/internal/age"
 	"github.com/theclifmeister/terminatr/internal/modaction"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
@@ -114,7 +115,7 @@ type Span struct {
 func (s Span) Timed() bool { return s.Ago != "" || s.Until != "" }
 
 // Words is the span's text as drawn at now: Text, or its Ago or Until
-// in words (AgeWords). A time that doesn't parse (a span not checked)
+// in words (age.Words). A time that doesn't parse (a span not checked)
 // draws as nothing.
 func (s Span) Words(now time.Time) string {
 	switch {
@@ -123,14 +124,14 @@ func (s Span) Words(now time.Time) string {
 		if err != nil {
 			return ""
 		}
-		return AgeWords(now.Sub(t)) + " ago"
+		return age.Words(now.Sub(t)) + " ago"
 	case s.Until != "":
 		t, err := time.Parse(time.RFC3339, s.Until)
 		if err != nil {
 			return ""
 		}
 		if d := t.Sub(now); d >= time.Second {
-			return AgeWords(d)
+			return age.Words(d)
 		}
 		return "due"
 	}
@@ -163,25 +164,6 @@ func (w *Widget) Timed() bool {
 		}
 	}
 	return false
-}
-
-// AgeWords writes a span of time, short: "40s", "1m20s", "2h5m".
-// Negative or tiny spans are "0s".
-func AgeWords(d time.Duration) string {
-	d = max(d, 0).Round(time.Second)
-	switch {
-	case d < time.Minute:
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	case d < time.Hour:
-		if s := int(d.Seconds()) % 60; s != 0 {
-			return fmt.Sprintf("%dm%ds", int(d.Minutes()), s)
-		}
-		return fmt.Sprintf("%dm", int(d.Minutes()))
-	}
-	if m := int(d.Minutes()) % 60; m != 0 {
-		return fmt.Sprintf("%dh%dm", int(d.Hours()), m)
-	}
-	return fmt.Sprintf("%dh", int(d.Hours()))
 }
 
 // Row is a list's or table's row. Spans are a list row's; Cells are a

@@ -229,33 +229,15 @@ func TestContextDeterministicAndCapped(t *testing.T) {
 		ctx.WriteString("line\n")
 	}
 	os.WriteFile(p.Path("CONTEXT.md"), []byte(ctx.String()), 0o644)
-	os.MkdirAll(p.Path("threads", "t-0001"), 0o755)
-	os.WriteFile(p.Path("threads", "t-0001", "thread.toml"), []byte("task = \"T16\"\ntitle = \"Fix login\"\n"), 0o644)
-	os.WriteFile(p.Path("threads", "t-0001", "REPORT.md"), []byte("## Report\nok\n\n## Next\nMerge the PR\n"), 0o644)
-	os.MkdirAll(p.Path("threads", "t-0002"), 0o755)
-	os.WriteFile(p.Path("threads", "t-0002", "thread.toml"), []byte("title = \"Docs\"\n"), 0o644)
-	os.WriteFile(p.Path("threads", "t-0002", "REPORT.md"), []byte("PR: https://github.com/o/r/pull/9\n## Report\nok\n\n## Next\nReview it\n"), 0o644)
-	os.MkdirAll(p.Path("threads", "t-0004"), 0o755)
-	os.WriteFile(p.Path("threads", "t-0004", "thread.toml"), []byte("title = \"Az\"\n"), 0o644)
-	os.WriteFile(p.Path("threads", "t-0004", "REPORT.md"), []byte("PR: https://dev.azure.com/o/p/_git/r/pullrequest/9\n## Report\nok\n\n## Next\nReview it\n"), 0o644)
-	if next, pr, ok := reportNext(p.Path("threads", "t-0004", "REPORT.md")); !ok || pr != "https://dev.azure.com/o/p/_git/r/pullrequest/9" || len(next) != 1 {
-		t.Fatalf("reportNext of an Azure PR line: %v %q %v", next, pr, ok)
-	}
-	os.MkdirAll(p.Path("threads", "t-0003"), 0o755)
-	os.WriteFile(p.Path("threads", "t-0003", "thread.toml"), []byte("title = \"Old\"\nstate = \"resolved\"\n"), 0o644)
-	os.WriteFile(p.Path("threads", "t-0003", "REPORT.md"), []byte("## Report\nok\n\n## Next\nStale next line\n"), 0o644)
-	os.MkdirAll(p.Path("threads", "archive"), 0o755)
-	os.WriteFile(p.Path("threads", "archive", "t-0000.tar.gz"), nil, 0o644)
-	prs := map[string]string{"t-0001": "#8 open, checks pass"}
 	p.AddItem("report", "t-0001", "t-0001 reported", false)
 
-	seen := Ticked{PRs: prs, Checkouts: map[string]string{p.Repos[0]: "local main is 3 behind origin (uncommitted changes)"},
+	seen := Ticked{Checkouts: map[string]string{p.Repos[0]: "local main is 3 behind origin (uncommitted changes)"},
 		Queues: []HeldQueue{{Session: "s-28", Role: "coordinator", Queued: 1, Why: "prompt box not empty", Since: time.Date(2026, 10, 5, 19, 45, 49, 0, time.UTC)}}}
-	sec1, err := p.Context(seen)
+	sec1, err := p.Context(seen, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sec2, _ := p.Context(seen)
+	sec2, _ := p.Context(seen, nil)
 	out := RenderContext(sec1)
 	if out != RenderContext(sec2) {
 		t.Fatal("context not deterministic")
@@ -268,18 +250,12 @@ func TestContextDeterministicAndCapped(t *testing.T) {
 		"Done (15)",
 		"Prompt queue: s-28 (coordinator) has 1 prompt(s) held since 2026-10-05 19:45 UTC (prompt box not empty)",
 		"[… 12 done tasks not shown (tm task list)]",
-		"T16 (t-0001)  Fix login  report: yes  PR: #8 open, checks pass\n    next: Merge the PR",
-		"t-0002  Docs  report: yes  PR: https://github.com/o/r/pull/9\n    next: Review it",
 		"report: t-0001 reported",
 		"human task.add T16 Fix login",
-		"2 resolved threads not shown (tm thread list --all)",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("context lacks %q", want)
 		}
-	}
-	if strings.Contains(out, "Stale next line") || strings.Contains(out, "archive") {
-		t.Error("a resolved or archived thread is listed")
 	}
 	if strings.Contains(out, "done a ") {
 		t.Error("oldest done task not capped")
@@ -521,7 +497,7 @@ func TestUpkeep(t *testing.T) {
 	setup(t)
 	p, _ := New(Options{Slug: "demo-app"})
 	render := func() string {
-		secs, err := p.Context(Ticked{})
+		secs, err := p.Context(Ticked{}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -413,7 +413,7 @@ func runContext(e *Env, args []string) error {
 		// Live session state is the agent's own project's only (§11.1).
 		seen.Queues, seen.Questions = liveWaits(p.Slug, sessions)
 	}
-	sections, err := p.Context(seen)
+	sections, err := thread.Context(p, seen)
 	if err != nil {
 		return err
 	}
