@@ -2,14 +2,14 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { commands, judge, psCommands, rulesOf } from '../hooks/guard'
+import { commands, judge, psCommands, rulesOf, writeTargets } from '../hooks/guard'
 import type { Rules } from '../hooks/guard'
 import vectors from './guard-vectors'
 
 type Vectors = {
   tools: Rules['tools']
   rules: Record<string, Rules>
-  cases: { rules: string; tool: string; input: Record<string, unknown>; rule: string | null; summary?: string; ask?: boolean }[]
+  cases: { rules: string; tool: string; input: Record<string, unknown>; rule: string | null; summary?: string; ask?: boolean; links?: Record<string, string> }[]
   messages: Record<string, Record<string, string>>
 }
 
@@ -48,7 +48,9 @@ test('commands splits a command line shell-style', () => {
 test('the shared vectors: rule and summary of each call', () => {
   const v = vectors as unknown as Vectors
   for (const c of v.cases) {
-    const d = judge({ ...v.rules[c.rules], tools: v.tools }, c.tool, c.input)
+    const r: Rules = { ...v.rules[c.rules], tools: v.tools }
+    if (c.links) r.resolve = linksTo(c.links)
+    const d = judge(r, c.tool, c.input)
     expect([c.rules, c.tool, c.input, d?.rule ?? null, d?.summary, d?.ask ?? false]).toEqual([c.rules, c.tool, c.input, c.rule, c.summary, c.ask ?? false])
   }
   for (const [role, m] of Object.entries(v.messages)) {
@@ -60,6 +62,28 @@ test('the shared vectors: rule and summary of each call', () => {
     }
     for (const [rule, [tool, input]] of Object.entries(probe)) expect([role, rule, judge(r, tool, input)?.message]).toEqual([role, rule, m[rule]])
   }
+})
+
+// linksTo is a resolve that follows links: a path under a link (a key)
+// to the same place under its target, as guard_test.go does.
+function linksTo(links: Record<string, string>): (p: string) => string {
+  return p => {
+    for (const [link, to] of Object.entries(links)) if (p === link || p.startsWith(link + '/')) return to + p.slice(link.length)
+    return p
+  }
+}
+
+// As Go's TestResolve: a write is judged where it lands and named as
+// given; resolve is asked about the path joined, not yet cleaned.
+test('with resolve, a write is judged where it lands', () => {
+  const asked: string[] = []
+  const r: Rules = { ...thread, resolve: p => (asked.push(p), p) }
+  expect(judge(r, 'Edit', { file_path: 'a/../b' })).toBe(null)
+  expect(asked).toEqual([`${WT}/a/../b`])
+  expect(writeTargets(thread, 'apply_patch', { command: '*** Begin Patch\n*** Update File: a.go\n*** Move to: ~/b.go\n*** End Patch' })).toEqual([`${WT}/a.go`, '/h/b.go'])
+  // Nothing to ask: no file written, or no rule judging writes.
+  expect(writeTargets(thread, 'Read', { file_path: 'x' })).toEqual([])
+  expect(writeTargets({ ...thread, rules: ['force-push'] }, 'Write', { file_path: 'x' })).toEqual([])
 })
 
 test('a refusal names the push target and az says what gh says', () => {
@@ -80,15 +104,26 @@ test('a mod rule is labelled with the mod and refuses with every core rule off',
 })
 
 // start runs session.start in a terminatr session whose server answers
-// the rules with rules, and keeps what the mod reports refused.
+// the rules with rules, and where writes land through links (POST
+// /v1/resolve: a status to answer with instead, or 'hang' for none), and
+// keeps what the mod reports refused and the paths it asked about.
 async function start($: Engine, on: On, rules: Rules | null, env: Record<string, string> = { TERMINATR_MOD_SOCKET: SOCKET }) {
   const clock = mock.clock(on)
   mock.env(on, { TERMINATR_BIN: '/opt/tm', TERMINATR_SESSION: 's-7', ...env })
   const denied: { rule: string; tool: string; summary: string }[] = []
   let fetches = 0
   let current = rules
+  let links: Record<string, string> | number | 'hang' = {}
+  const resolved: string[][] = []
   on('http.fetch', async (_$, e) => {
     const ok = (status: number, text = '') => ({ value: { status, ok: status < 300, headers: {}, text } })
+    if (e.url.endsWith('/v1/resolve')) {
+      const paths = (JSON.parse(e.init?.body ?? '{}') as { paths: string[] }).paths
+      resolved.push(paths)
+      if (links === 'hang') return new Promise<never>(() => {})
+      if (typeof links === 'number') return ok(links, 'down')
+      return ok(200, JSON.stringify({ paths: paths.map(linksTo(links)) }))
+    }
     if (e.url.endsWith('/v1/rules')) {
       fetches++
       return current ? ok(200, JSON.stringify(current)) : ok(500, 'down')
@@ -107,7 +142,11 @@ async function start($: Engine, on: On, rules: Rules | null, env: Record<string,
   on('tool.check', async () => ({ decision: 'allow' as const }))
   await $.session.start({ cwd: WT, surface: 'terminal', isInteractive: true })
   await clock.settle()
-  return { clock, denied, fetches: () => fetches, setRules: (r: Rules | null) => { current = r } }
+  return {
+    clock, denied, resolved, fetches: () => fetches,
+    setRules: (r: Rules | null) => { current = r },
+    setLinks: (l: typeof links) => { links = l },
+  }
 }
 
 test('a refused call returns the rule\'s sentence and is reported; others run', async ($, on) => {
@@ -163,6 +202,37 @@ test('a PowerShell command the guard can\'t read is asked, with its reason; one 
   expect([asked.decision, asked.reason]).toEqual(['ask', "terminatr guard: it can't tell what this PowerShell command runs (invoke-expression), so it asks first."])
   expect((await $.tool.check({ tool: 'PowerShell', input: { command: 'git status; Invoke-Expression $line; git branch -D x' } })).decision).toBe('deny')
   expect((await $.tool.check({ tool: 'PowerShell', input: { command: 'Get-ChildItem | Select-String foo' } })).decision).toBe('allow')
+})
+
+test('a write through a link out of the worktree is refused where it lands, and reported as given', async ($, on) => {
+  const { clock, denied, resolved, setLinks } = await start($, on, thread)
+  setLinks({ [`${WT}/link`]: '/etc' })
+  const r = await $.tool.call({ tool: 'Write', file_path: 'link/hosts', content: 'x' })
+  expect((r as { deny?: string }).deny).toContain('terminatr guard (worktree-only)')
+  await clock.settle()
+  expect(denied).toEqual([{ rule: 'worktree-only', tool: 'Write', summary: `Write of ${WT}/link/hosts` }])
+  expect(resolved).toEqual([[`${WT}/link/hosts`]])
+  expect((await $.tool.check({ tool: 'Edit', input: { file_path: `${WT}/main.go` } })).decision).toBe('allow')
+  expect((await $.tool.check({ tool: 'Edit', input: { file_path: `${WT}/link/passwd` } })).decision).toBe('deny')
+  // A call that writes no file isn't asked about.
+  expect((await $.tool.check({ tool: 'Read', input: { file_path: `${WT}/link/hosts` } })).decision).toBe('allow')
+  expect(resolved.length).toBe(3)
+})
+
+test('a write the server can\'t place is refused, not judged as written', async ($, on) => {
+  const { clock, denied, setLinks } = await start($, on, thread)
+  setLinks(500)
+  const r = await $.tool.call({ tool: 'Write', file_path: 'main.go', content: 'x' })
+  expect((r as { deny?: string }).deny).toContain('could not be checked')
+  expect((await $.tool.check({ tool: 'Edit', input: { file_path: 'main.go' } })).decision).toBe('deny')
+  setLinks('hang')
+  const late = $.tool.check({ tool: 'Edit', input: { file_path: 'main.go' } })
+  await clock.advance(2_001)
+  expect((await late).decision).toBe('deny')
+  // Other calls go on; an unplaced write is no rule broken, so not reported.
+  expect((await $.tool.check({ tool: 'Bash', input: { command: 'ls' } })).decision).toBe('allow')
+  await clock.settle()
+  expect(denied).toEqual([])
 })
 
 test('psCommands splits a PowerShell line', () => {
