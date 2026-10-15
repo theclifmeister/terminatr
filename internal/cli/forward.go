@@ -72,7 +72,7 @@ func (e *Env) forward(args []string) (code int, ok bool) {
 	}
 	var res proto.CLIRunResult
 	if err := c.Call(proto.MethodCLIRun, params, &res); err != nil {
-		return e.srvFail(args[0], err), true
+		return e.report("tm "+args[0], srvFail(args[0], err)), true
 	}
 	io.WriteString(e.Stdout, res.Stdout)
 	io.WriteString(e.Stderr, res.Stderr)

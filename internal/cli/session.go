@@ -3,9 +3,9 @@ package cli
 import (
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -19,15 +19,15 @@ const sessionUsage = `usage: tm session list [--json]
        tm session start --agent NAME [--cwd DIR] [--brief FILE] [--kickoff TEXT] [--model M] [--yolo]
        tm session stop ID
        tm session read ID [--scrollback] [--json]   (the screen as plain text)
-       tm session keys ID [--enter] [TEXT…]   (types TEXT literally; --enter presses Enter)
+       tm session keys ID [--enter] [--] [TEXT…]   (types TEXT literally; --enter presses Enter)
        tm session prompt ID TEXT   (pasted once the agent is idle)
        tm session wait ID [--state S[,S…]] [--timeout 30s]
        tm session ask ID < QUESTION.json   (for mods: waits for the answers)`
 
 // sessionCmd implements `tm session …`: plain sessions outside projects.
-func sessionCmd(e *Env, args []string) int {
+func sessionCmd(e *Env, args []string) error {
 	if len(args) == 0 {
-		return e.srvUsage("session", sessionUsage)
+		return srvUsage("session", sessionUsage)
 	}
 	switch args[0] {
 	case "list", "ls":
@@ -47,27 +47,26 @@ func sessionCmd(e *Env, args []string) int {
 	case "ask":
 		return sessionAsk(e, args[1:])
 	}
-	return e.srvUsage("session", sessionUsage)
+	return srvUsage("session", sessionUsage)
 }
 
-func sessionList(e *Env, args []string) int {
-	fs := flag.NewFlagSet("session list", flag.ContinueOnError)
-	fs.SetOutput(e.Stderr)
-	asJSON := fs.Bool("json", false, "print JSON")
-	if err := fs.Parse(args); err != nil {
-		return ExitUsage
+func sessionList(e *Env, args []string) error {
+	f := newFlags()
+	asJSON := f.Bool("json")
+	if _, err := f.Parse(args); err != nil {
+		return srvFail("session list", err)
 	}
 	c, _, err := connect(true)
 	if err != nil {
-		return e.srvFail("session list", err)
+		return srvFail("session list", err)
 	}
 	defer c.Close()
 	var res proto.SessionListResult
 	if err := c.Call(proto.MethodSessionList, nil, &res); err != nil {
-		return e.srvFail("session list", err)
+		return srvFail("session list", err)
 	}
 	if *asJSON {
-		return e.srvJSON(res.Sessions)
+		return e.printJSON(res.Sessions)
 	}
 	tw := tabwriter.NewWriter(e.Stdout, 0, 0, 2, ' ', 0)
 	for _, s := range res.Sessions {
@@ -87,47 +86,55 @@ func sessionList(e *Env, args []string) int {
 			time.Since(s.Created).Round(time.Second), what, shown(s.Cwd))
 	}
 	tw.Flush()
-	return ExitOK
+	return nil
 }
 
-func sessionStart(e *Env, args []string) int {
-	fs := flag.NewFlagSet("session start", flag.ContinueOnError)
-	fs.SetOutput(e.Stderr)
-	cwd := fs.String("cwd", "", "working directory (default: the current one)")
-	cols := fs.Uint("cols", 0, "columns (default: this terminal's, or 80)")
-	rows := fs.Uint("rows", 0, "rows (default: this terminal's, or 24)")
-	agentName := fs.String("agent", "", "agent to run, from tm agent list (instead of a command)")
-	brief := fs.String("brief", "", "file given to the agent as its brief (system prompt)")
-	kickoff := fs.String("kickoff", "", "the agent's first prompt")
-	model := fs.String("model", "", "the agent's model")
-	yolo := fs.Bool("yolo", false, "skip the agent's own permission prompts")
-	role := fs.String("role", "", "coordinator, thread or shell (default)")
-	project := fs.String("project", "", "project slug, for coordinator and thread roles")
-	thread := fs.String("thread", "", "thread id, for the thread role")
-	if err := fs.Parse(args); err != nil {
-		return ExitUsage
+func sessionStart(e *Env, args []string) error {
+	f := newFlags()
+	// The command to run is the first positional argument: its own
+	// flags are its own (tm session start bash -l).
+	f.stopAtArg = true
+	cwd := f.String("cwd")         // working directory (default: the current one)
+	colsArg := f.String("cols")    // columns (default: this terminal's, or 80)
+	rowsArg := f.String("rows")    // rows (default: this terminal's, or 24)
+	agentName := f.String("agent") // agent to run, from tm agent list (instead of a command)
+	brief := f.String("brief")     // file given to the agent as its brief (system prompt)
+	kickoff := f.String("kickoff") // the agent's first prompt
+	model := f.String("model")     // the agent's model
+	yolo := f.Bool("yolo")         // skip the agent's own permission prompts
+	role := f.String("role")       // coordinator, thread or shell (default)
+	project := f.String("project") // project slug, for coordinator and thread roles
+	thread := f.String("thread")   // thread id, for the thread role
+	argv, err := f.Parse(args)
+	if err != nil {
+		return srvFail("session start", err)
 	}
-	if *agentName != "" && fs.NArg() > 0 {
-		return e.srvUsage("session start", "pass --agent or a command, not both")
+	if *agentName != "" && len(argv) > 0 {
+		return srvUsage("session start", "pass --agent or a command, not both")
 	}
 	if *agentName == "" && (*brief != "" || *kickoff != "" || *model != "" || *yolo || *role != "") {
-		return e.srvUsage("session start", "--brief, --kickoff, --model, --yolo and --role need --agent")
+		return srvUsage("session start", "--brief, --kickoff, --model, --yolo and --role need --agent")
 	}
 	if *yolo && e.Caller.IsAgent() {
 		// Turning permission prompts off is the human's call (§11.2).
 		fmt.Fprintln(e.Stderr, "tm session start: coordinator-only: --yolo is a human call")
-		return ExitRefused
+		return &exitError{ExitRefused}
 	}
-	if *cols > 0xffff || *rows > 0xffff {
-		return e.srvUsage("session start", "size out of range")
+	cols, err := sizeArg("cols", *colsArg)
+	if err != nil {
+		return srvFail("session start", err)
 	}
-	p := proto.SessionStartParams{Argv: fs.Args(), Cols: uint16(*cols), Rows: uint16(*rows),
+	rows, err := sizeArg("rows", *rowsArg)
+	if err != nil {
+		return srvFail("session start", err)
+	}
+	p := proto.SessionStartParams{Argv: argv, Cols: cols, Rows: rows,
 		Agent: *agentName, Kickoff: *kickoff, Model: *model, Yolo: *yolo,
 		Role: *role, Project: *project, Thread: *thread}
 	if *brief != "" {
 		abs, err := filepath.Abs(*brief)
 		if err != nil {
-			return e.srvUsage("session start", err.Error())
+			return srvUsage("session start", err.Error())
 		}
 		p.Brief = abs
 	}
@@ -143,30 +150,45 @@ func sessionStart(e *Env, args []string) int {
 	if dir != "" {
 		abs, err := filepath.Abs(dir)
 		if err != nil {
-			return e.srvUsage("session start", err.Error())
+			return srvUsage("session start", err.Error())
 		}
 		p.Cwd = abs
 	}
 	c, _, err := connect(true)
 	if err != nil {
-		return e.srvFail("session start", err)
+		return srvFail("session start", err)
 	}
 	defer c.Close()
 	var res proto.SessionStartResult
 	if err := c.Call(proto.MethodSessionStart, p, &res); err != nil {
-		return e.srvFail("session start", err)
+		return srvFail("session start", err)
 	}
 	fmt.Fprintln(e.Stdout, res.Session.ID)
-	return ExitOK
+	return nil
 }
 
-func sessionStop(e *Env, args []string) int {
+// sizeArg is a --cols or --rows value; "" is 0, the default.
+func sizeArg(name, v string) (uint16, error) {
+	if v == "" {
+		return 0, nil
+	}
+	n, err := strconv.ParseUint(v, 10, 64)
+	if err != nil {
+		return 0, usagef("--%s takes a number", name)
+	}
+	if n > 0xffff {
+		return 0, usagef("size out of range")
+	}
+	return uint16(n), nil
+}
+
+func sessionStop(e *Env, args []string) error {
 	if len(args) != 1 {
-		return e.srvUsage("session stop", "usage: tm session stop ID")
+		return srvUsage("session stop", "usage: tm session stop ID")
 	}
 	c, _, err := connect(true)
 	if err != nil {
-		return e.srvFail("session stop", err)
+		return srvFail("session stop", err)
 	}
 	defer c.Close()
 	err = c.Call(proto.MethodSessionStop, proto.SessionIDParams{ID: args[0]}, nil)
@@ -174,82 +196,78 @@ func sessionStop(e *Env, args []string) int {
 	if errors.As(err, &perr) && perr.Code == proto.ErrUnknownSession {
 		// Idempotent: a session that is gone is stopped.
 		fmt.Fprintf(e.Stdout, "%s not running\n", args[0])
-		return ExitOK
+		return nil
 	}
 	if err != nil {
-		return e.srvFail("session stop", err)
+		return srvFail("session stop", err)
 	}
 	fmt.Fprintf(e.Stdout, "%s stopped\n", args[0])
-	return ExitOK
+	return nil
 }
 
-func sessionRead(e *Env, args []string) int {
-	fs := flag.NewFlagSet("session read", flag.ContinueOnError)
-	fs.SetOutput(e.Stderr)
-	scrollback := fs.Bool("scrollback", false, "include the scrollback")
-	asJSON := fs.Bool("json", false, "print JSON")
-	id, rest := splitID(args)
-	if err := fs.Parse(rest); err != nil {
-		return ExitUsage
+func sessionRead(e *Env, args []string) error {
+	f := newFlags()
+	scrollback := f.Bool("scrollback") // include the scrollback
+	asJSON := f.Bool("json")
+	pos, err := f.Parse(args)
+	if err != nil {
+		return srvFail("session read", err)
 	}
-	if id == "" && fs.NArg() == 1 {
-		id = fs.Arg(0)
-	} else if id == "" || fs.NArg() > 0 {
-		return e.srvUsage("session read", "usage: tm session read ID [--scrollback] [--json]")
+	if len(pos) != 1 {
+		return srvUsage("session read", "usage: tm session read ID [--scrollback] [--json]")
 	}
+	id := pos[0]
 	c, _, err := connect(true)
 	if err != nil {
-		return e.srvFail("session read", err)
+		return srvFail("session read", err)
 	}
 	defer c.Close()
 	var res proto.SessionReadResult
 	if err := c.Call(proto.MethodSessionRead, proto.SessionReadParams{ID: id, Scrollback: *scrollback}, &res); err != nil {
-		return e.srvFail("session read", err)
+		return srvFail("session read", err)
 	}
 	if *asJSON {
-		return e.srvJSON(res)
+		return e.printJSON(res)
 	}
 	fmt.Fprintln(e.Stdout, strings.TrimRight(res.Text, "\n"))
-	return ExitOK
+	return nil
 }
 
-func sessionKeys(e *Env, args []string) int {
-	fs := flag.NewFlagSet("session keys", flag.ContinueOnError)
-	fs.SetOutput(e.Stderr)
-	enter := fs.Bool("enter", false, "press Enter after the text (key names are not parsed: 'enter' types e-n-t-e-r)")
-	id, rest := splitID(args)
-	if err := fs.Parse(rest); err != nil {
-		return ExitUsage
-	}
-	words := fs.Args()
-	if id == "" && len(words) > 0 {
-		id, words = words[0], words[1:]
-	}
-	if id == "" || (len(words) == 0 && !*enter) {
-		return e.srvUsage("session keys", "usage: tm session keys ID [--enter] [TEXT…]   (TEXT is typed literally; --enter presses Enter)")
-	}
-	data := strings.Join(words, " ")
-	if *enter {
-		data += "\r"
+func sessionKeys(e *Env, args []string) error {
+	p, err := keysParams(args)
+	if err != nil {
+		return srvFail("session keys", err)
 	}
 	c, _, err := connect(true)
 	if err != nil {
-		return e.srvFail("session keys", err)
+		return srvFail("session keys", err)
 	}
 	defer c.Close()
-	if err := c.Call(proto.MethodSessionKeys, proto.SessionKeysParams{ID: id, Data: data}, nil); err != nil {
-		return e.srvFail("session keys", err)
+	if err := c.Call(proto.MethodSessionKeys, p, nil); err != nil {
+		return srvFail("session keys", err)
 	}
-	return ExitOK
+	return nil
 }
 
-// splitID takes a leading positional id so flags may follow it
-// (`tm session read s-1 --json`).
-func splitID(args []string) (string, []string) {
-	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		return args[0], args[1:]
+// keysParams parses tm session keys' arguments: the session, then the
+// words to type, joined by spaces, and --enter anywhere. Text that
+// starts with - follows a --.
+func keysParams(args []string) (proto.SessionKeysParams, error) {
+	f := newFlags()
+	// Key names are not parsed: 'enter' types e-n-t-e-r.
+	enter := f.Bool("enter")
+	words, err := f.Parse(args)
+	if err != nil {
+		return proto.SessionKeysParams{}, err
 	}
-	return "", args
+	if len(words) == 0 || (len(words) == 1 && !*enter) {
+		return proto.SessionKeysParams{}, usagef("usage: tm session keys ID [--enter] [--] [TEXT…]   (TEXT is typed literally; --enter presses Enter)")
+	}
+	p := proto.SessionKeysParams{ID: words[0], Data: strings.Join(words[1:], " ")}
+	if *enter {
+		p.Data += "\r"
+	}
+	return p, nil
 }
 
 // stateLine is an agent session's state for listings: state/reason,
@@ -280,26 +298,26 @@ func stateLine(s proto.SessionInfo) string {
 	return shown(st)
 }
 
-func sessionPrompt(e *Env, args []string) int {
+func sessionPrompt(e *Env, args []string) error {
 	if len(args) < 2 {
-		return e.srvUsage("session prompt", "usage: tm session prompt ID TEXT")
+		return srvUsage("session prompt", "usage: tm session prompt ID TEXT")
 	}
 	id, text := args[0], strings.Join(args[1:], " ")
 	if text == "-" {
 		b, err := e.readArg("-")
 		if err != nil {
-			return e.srvUsage("session prompt", err.Error())
+			return srvUsage("session prompt", err.Error())
 		}
 		text = strings.TrimRight(b, "\n")
 	}
 	c, _, err := connect(false)
 	if err != nil {
-		return e.srvFail("session prompt", err)
+		return srvFail("session prompt", err)
 	}
 	defer c.Close()
 	var res proto.SessionPromptResult
 	if err := c.Call(proto.MethodSessionPrompt, proto.SessionPromptParams{ID: id, Text: text}, &res); err != nil {
-		return e.srvFail("session prompt", err)
+		return srvFail("session prompt", err)
 	}
 	switch res.Via {
 	case "channel":
@@ -307,20 +325,25 @@ func sessionPrompt(e *Env, args []string) int {
 	default:
 		fmt.Fprintf(e.Stdout, "%s: queued (pasted once the agent is idle)\n", id)
 	}
-	return ExitOK
+	return nil
 }
 
-func sessionWait(e *Env, args []string) int {
-	fs := flag.NewFlagSet("session wait", flag.ContinueOnError)
-	fs.SetOutput(e.Stderr)
-	states := fs.String("state", "", "comma-separated states to wait for (default: any change)")
-	timeout := fs.Duration("timeout", 30*time.Second, "give up after this long (exit 1)")
-	id, rest := splitID(args)
-	if err := fs.Parse(rest); err != nil {
-		return ExitUsage
+func sessionWait(e *Env, args []string) error {
+	f := newFlags()
+	states := f.String("state")       // comma-separated states to wait for (default: any change)
+	timeoutArg := f.String("timeout") // give up after this long (exit 1)
+	pos, err := f.Parse(args)
+	if err != nil {
+		return srvFail("session wait", err)
 	}
-	if id == "" || fs.NArg() > 0 {
-		return e.srvUsage("session wait", "usage: tm session wait ID [--state S[,S…]] [--timeout 30s]")
+	if len(pos) != 1 {
+		return srvUsage("session wait", "usage: tm session wait ID [--state S[,S…]] [--timeout 30s]")
+	}
+	id, timeout := pos[0], 30*time.Second
+	if f.IsSet("timeout") {
+		if timeout, err = time.ParseDuration(*timeoutArg); err != nil {
+			return srvUsage("session wait", "--timeout takes a duration, such as 30s")
+		}
 	}
 	p := proto.SessionWaitParams{ID: id, TimeoutMS: int(timeout.Milliseconds())}
 	if *states != "" {
@@ -328,12 +351,12 @@ func sessionWait(e *Env, args []string) int {
 	}
 	c, _, err := connect(false)
 	if err != nil {
-		return e.srvFail("session wait", err)
+		return srvFail("session wait", err)
 	}
 	defer c.Close()
 	var res proto.SessionWaitResult
 	if err := c.Call(proto.MethodSessionWait, p, &res); err != nil {
-		return e.srvFail("session wait", err)
+		return srvFail("session wait", err)
 	}
 	st := res.State
 	if res.Reason != "" {
@@ -341,10 +364,10 @@ func sessionWait(e *Env, args []string) int {
 	}
 	fmt.Fprintln(e.Stdout, st)
 	if res.TimedOut {
-		fmt.Fprintf(e.Stderr, "tm session wait: timed out after %v\n", *timeout)
-		return ExitRefused
+		fmt.Fprintf(e.Stderr, "tm session wait: timed out after %v\n", timeout)
+		return &exitError{ExitRefused}
 	}
-	return ExitOK
+	return nil
 }
 
 // sessionAsk implements `tm session ask ID` (docs/SPEC.md §3.3, Ask), the
@@ -354,30 +377,30 @@ func sessionWait(e *Env, args []string) int {
 // answers as one JSON object by question text. It exits 1 with nothing
 // printed when the question closed without answers; killing it takes the
 // question down.
-func sessionAsk(e *Env, args []string) int {
+func sessionAsk(e *Env, args []string) error {
 	const usage = "usage: tm session ask ID < QUESTION.json"
 	if len(args) != 1 {
-		return e.srvUsage("session ask", usage)
+		return srvUsage("session ask", usage)
 	}
 	var q proto.Question
 	if err := json.NewDecoder(e.Stdin).Decode(&q); err != nil {
-		return e.srvUsage("session ask", "the question on stdin: "+err.Error()+"\n"+usage)
+		return srvUsage("session ask", "the question on stdin: "+err.Error()+"\n"+usage)
 	}
 	p, err := client.ResolvePaths()
 	if err != nil {
-		return e.srvFail("session ask", err)
+		return srvFail("session ask", err)
 	}
 	ans, err := client.AskSession(p, args[0], q)
 	if err != nil {
-		return e.srvFail("session ask", err)
+		return srvFail("session ask", err)
 	}
 	if ans == nil {
 		fmt.Fprintln(e.Stderr, "tm session ask: the question closed unanswered")
-		return ExitRefused
+		return &exitError{ExitRefused}
 	}
 	b, _ := json.Marshal(ans)
 	if _, err := e.Stdout.Write(append(b, '\n')); err != nil {
-		return ExitIO
+		return &exitError{ExitIO}
 	}
-	return ExitOK
+	return nil
 }

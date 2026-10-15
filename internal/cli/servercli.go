@@ -2,10 +2,9 @@ package cli
 
 // Glue between the server/session commands and the dispatcher in cli.go.
 // These commands talk to the server; their errors carry proto error codes
-// that srvFail maps onto the shared exit codes.
+// that srvCode maps onto the shared exit codes.
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -24,24 +23,33 @@ func init() {
 	commands["session"] = runSession
 }
 
-func runServer(e *Env, args []string) error  { return codeErr(serverCmd(e, args)) }
-func runSession(e *Env, args []string) error { return codeErr(sessionCmd(e, args)) }
+func runServer(e *Env, args []string) error  { return serverCmd(e, args) }
+func runSession(e *Env, args []string) error { return sessionCmd(e, args) }
 
-// codeErr turns an exit code that was already reported into an error for
-// Env.report.
-func codeErr(code int) error {
-	if code == ExitOK {
-		return nil
-	}
-	return &exitError{code: code}
+// cmdError is an error of the server command cmd ("session start"):
+// Env.report prints it as "tm session start: …" and exits with srvCode.
+type cmdError struct {
+	cmd string
+	err error
 }
 
-// srvFail prints err for command cmd and returns the exit code it maps to.
-func (e *Env) srvFail(cmd string, err error) int {
-	fmt.Fprintf(e.Stderr, "tm %s: %v\n", cmd, err)
+func (c *cmdError) Error() string { return "tm " + c.cmd + ": " + c.err.Error() }
+func (c *cmdError) Unwrap() error { return c.err }
+
+// srvFail is err as a failure of command cmd.
+func srvFail(cmd string, err error) error { return &cmdError{cmd: cmd, err: err} }
+
+// srvUsage is a usage error (exit 2) of command cmd.
+func srvUsage(cmd, msg string) error { return &cmdError{cmd: cmd, err: &usageError{msg}} }
+
+// srvCode is the exit code of a server command's error.
+func srvCode(err error) int {
+	var u *usageError
 	var perr *proto.Error
 	var verr *proto.MismatchError
 	switch {
+	case errors.As(err, &u):
+		return ExitUsage
 	case errors.Is(err, service.ErrNoConsole):
 		return ExitRefused
 	case errors.As(err, &verr):
@@ -56,20 +64,6 @@ func (e *Env) srvFail(cmd string, err error) int {
 		return ExitIO
 	}
 	return ExitIO
-}
-
-func (e *Env) srvUsage(cmd, msg string) int {
-	fmt.Fprintf(e.Stderr, "tm %s: %s\n", cmd, msg)
-	return ExitUsage
-}
-
-func (e *Env) srvJSON(v any) int {
-	enc := json.NewEncoder(e.Stdout)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(v); err != nil {
-		return ExitIO
-	}
-	return ExitOK
 }
 
 // connect opens a control connection, starting the server if needed,

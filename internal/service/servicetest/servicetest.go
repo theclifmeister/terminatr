@@ -45,7 +45,7 @@ func Run(m *testing.M) int {
 }
 
 // NotAServer ends a test binary that a test started as the server, before
-// it runs anything. An autostart in a test (server.StartChild) runs
+// it runs anything. An autostart in a test (client.StartChild) runs
 // os.Executable, the test binary, as `server run --detached`; the binary
 // would run its whole suite again, autostarts included, and the copies
 // multiplied and outlived go test, starving every package after it (T337).

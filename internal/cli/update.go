@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -20,7 +19,7 @@ import (
 const updateUsage = `usage: tm update [--check] [--yes] [--restart] [--json]`
 
 func init() {
-	commands["update"] = func(e *Env, args []string) error { return codeErr(updateCmd(e, args, defaultUpdater(e))) }
+	commands["update"] = func(e *Env, args []string) error { return updateCmd(e, args, defaultUpdater(e)) }
 }
 
 // updater is everything `tm update` touches outside its arguments, so
@@ -113,15 +112,14 @@ type updateCheck struct {
 // updateCmd implements `tm update` (docs/SPEC.md §10.1). It never stops
 // the server on its own: the old server keeps running its binary, and
 // restarting it is a question on a terminal or an explicit --restart.
-func updateCmd(e *Env, args []string, u *updater) int {
-	fs := flag.NewFlagSet("update", flag.ContinueOnError)
-	fs.SetOutput(e.Stderr)
-	check := fs.Bool("check", false, "only report whether a newer release exists")
-	yes := fs.Bool("yes", false, "install without asking")
-	restart := fs.Bool("restart", false, "restart the server afterwards (agents are resumed)")
-	asJSON := fs.Bool("json", false, "with --check: print JSON")
-	if err := fs.Parse(args); err != nil || fs.NArg() > 0 || *asJSON && !*check {
-		return e.srvUsage("update", updateUsage)
+func updateCmd(e *Env, args []string, u *updater) error {
+	f := newFlags()
+	check := f.Bool("check")     // only report whether a newer release exists
+	yes := f.Bool("yes")         // install without asking
+	restart := f.Bool("restart") // restart the server afterwards (agents are resumed)
+	asJSON := f.Bool("json")     // with --check: print JSON
+	if pos, err := f.Parse(args); err != nil || len(pos) > 0 || *asJSON && !*check {
+		return srvUsage("update", updateUsage)
 	}
 	in := update.Detect(u.Exe, u.Channel)
 	res := updateCheck{Install: in, Current: u.Version}
@@ -140,59 +138,59 @@ func updateCmd(e *Env, args []string, u *updater) int {
 	}
 	if *check {
 		if *asJSON {
-			return e.srvJSON(res)
+			return e.printJSON(res)
 		}
 		fmt.Fprintf(e.Stdout, "installed  %s (%s, %s)\n", u.Version, in.Method, in.Path)
 		switch {
 		case res.Error != "":
 			fmt.Fprintf(e.Stdout, "latest     unknown: %s\n", res.Error)
-			return ExitIO
+			return &exitError{ExitIO}
 		case res.Newer:
 			fmt.Fprintf(e.Stdout, "latest     %s: %s\n", rel.Tag, updateHint(in))
 		default:
 			fmt.Fprintf(e.Stdout, "latest     %s: up to date\n", rel.Tag)
 		}
-		return ExitOK
+		return nil
 	}
 
 	switch in.Method {
 	case update.Dev:
 		fmt.Fprintf(e.Stderr, "tm update: this tm (%s) was built from source; update it with git pull && make\n", u.Version)
-		return ExitRefused
+		return &exitError{ExitRefused}
 	case update.Homebrew:
 		if res.Error == "" && !res.Newer {
 			fmt.Fprintf(e.Stdout, "tm %s is the latest release\n", u.Version)
-			return ExitOK
+			return nil
 		}
 		// Homebrew owns its files: never replace them, let brew do it.
 		fmt.Fprintf(e.Stdout, "tm was installed with Homebrew (%s); it updates with:\n  %s\n", in.Path, in.Upgrade)
 		if !*yes && !(u.TTY && ask(e, "Run it now? [y/N] ")) {
-			return ExitOK
+			return nil
 		}
 		if err := u.Brew("upgrade", update.Formula); err != nil {
 			fmt.Fprintf(e.Stderr, "tm update: brew upgrade: %v\n", err)
-			return ExitIO
+			return &exitError{ExitIO}
 		}
 		return u.afterUpdate(e, brewBin(in.Path), res.Latest, *restart)
 	}
 
 	if res.Error != "" {
 		fmt.Fprintf(e.Stderr, "tm update: %s\n", res.Error)
-		return ExitIO
+		return &exitError{ExitIO}
 	}
 	if !res.Newer {
 		fmt.Fprintf(e.Stdout, "tm %s is the latest release\n", u.Version)
-		return ExitOK
+		return nil
 	}
 	fmt.Fprintf(e.Stdout, "tm %s is available (installed: %s at %s)\n", rel.Tag, u.Version, in.Path)
 	if !*yes {
 		if !u.TTY {
 			fmt.Fprintln(e.Stderr, "tm update: not a terminal; pass --yes to install it")
-			return ExitRefused
+			return &exitError{ExitRefused}
 		}
 		if !ask(e, "Install it? [y/N] ") {
 			fmt.Fprintln(e.Stdout, "nothing changed")
-			return ExitRefused
+			return &exitError{ExitRefused}
 		}
 	}
 	dir := filepath.Dir(in.Path)
@@ -203,7 +201,7 @@ func updateCmd(e *Env, args []string, u *updater) int {
 			err = fmt.Errorf("%w: %s is not writable; reinstall where you can write, or update as its owner", err, dir)
 		}
 		fmt.Fprintf(e.Stderr, "tm update: %v\n", err)
-		return ExitIO
+		return &exitError{ExitIO}
 	}
 	defer staged.Remove() // gone after the rename; cleans up on failure
 	fmt.Fprintf(e.Stdout, "checksum   ok (%s)\n", update.ArchiveName(u.GOOS, u.GOARCH))
@@ -212,17 +210,17 @@ func updateCmd(e *Env, args []string, u *updater) int {
 		team, err := u.Verify(tmp, u.Team)
 		if err != nil {
 			fmt.Fprintf(e.Stderr, "tm update: the downloaded tm fails the signature check: %v; nothing changed\n", err)
-			return ExitRefused
+			return &exitError{ExitRefused}
 		}
 		fmt.Fprintf(e.Stdout, "signature  ok (Developer ID, team %s)\n", team)
 	}
 	if out, err := u.RunVersion(tmp); err != nil || !strings.Contains(out, rel.Tag) {
 		fmt.Fprintf(e.Stderr, "tm update: the downloaded tm doesn't run as %s (%v): %s; nothing changed\n", rel.Tag, err, out)
-		return ExitRefused
+		return &exitError{ExitRefused}
 	}
 	if err := staged.Install(dir); err != nil {
 		fmt.Fprintf(e.Stderr, "tm update: %v\n", err)
-		return ExitIO
+		return &exitError{ExitIO}
 	}
 	fmt.Fprintf(e.Stdout, "installed  %s at %s\n", rel.Tag, in.Path)
 	return u.afterUpdate(e, in.Path, rel.Tag, *restart)
@@ -241,10 +239,10 @@ func brewBin(keg string) string {
 // afterUpdate deals with a server that still runs the old binary: it
 // says so, and restarts it only on --restart or a y on a terminal,
 // because a restart ends the agents' running turns.
-func (u *updater) afterUpdate(e *Env, bin, newVersion string, restart bool) int {
+func (u *updater) afterUpdate(e *Env, bin, newVersion string, restart bool) error {
 	st, ok := u.Server()
 	if !ok || newVersion != "" && st.Version == newVersion {
-		return ExitOK
+		return nil
 	}
 	sessions := plural(st.Sessions, "session")
 	if st.Sessions < 0 {
@@ -253,15 +251,20 @@ func (u *updater) afterUpdate(e *Env, bin, newVersion string, restart bool) int 
 	fmt.Fprintf(e.Stdout, "\nThe server (pid %d) still runs %s with %s; it keeps the old binary until it restarts.\n",
 		st.PID, st.Version, sessions)
 	fmt.Fprintln(e.Stdout, "Restarting stops every session: agents are resumed but lose the turn they are in, shells are lost.")
+	code := ExitOK
 	switch {
 	case restart:
-		return u.Restart(bin, true)
+		code = u.Restart(bin, true)
 	case u.TTY && ask(e, "Restart the server now? [y/N] "):
 		// No --yes: the restart itself still asks when agents are working.
-		return u.Restart(bin, false)
+		code = u.Restart(bin, false)
+	default:
+		fmt.Fprintln(e.Stdout, "Restart it when convenient: tm server restart")
 	}
-	fmt.Fprintln(e.Stdout, "Restart it when convenient: tm server restart")
-	return ExitOK
+	if code != ExitOK {
+		return &exitError{code}
+	}
+	return nil
 }
 
 func updateHint(in update.Install) string {
