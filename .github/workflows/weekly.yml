@@ -81,6 +81,9 @@ jobs:
 
       - name: Canary
         id: canary
+        # shell: bash sets pipefail; the default shell does not, and tee's
+        # status would hide the canary's.
+        shell: bash
         run: scripts/agent-canary.sh 2>&1 | tee "$RUNNER_TEMP/canary.txt"
         env:
           TM: ${{ runner.temp }}/tm
@@ -89,6 +92,7 @@ jobs:
       # own plugin checks.
       - name: claude plugin validate / test
         if: ${{ !cancelled() }}
+        shell: bash
         run: go test -count=1 -run '^TestModPlugin$' -v ./internal/agent/claude 2>&1 | tee "$RUNNER_TEMP/plugin.txt"
         env:
           TERMINATR_CLAUDE_PLUGIN_CHECK: "1"
