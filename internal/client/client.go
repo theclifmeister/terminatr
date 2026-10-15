@@ -83,7 +83,8 @@ func dial(p Paths, kind proto.Kind, protocol int) (*Client, error) {
 	if (kind == proto.KindControl || kind == proto.KindAttach) && p.Socket != "" && !caller.FromEnv().IsAgent() {
 		c, err := DialAt(p.HumanSocket(), kind, protocol)
 		var ne net.Error
-		if err == nil || errors.As(err, &ne) && ne.Timeout() {
+		var me *proto.MismatchError
+		if err == nil || errors.As(err, &ne) && ne.Timeout() || errors.As(err, &me) {
 			return c, err
 		}
 	}
@@ -148,9 +149,7 @@ func Connect(p Paths, autostart bool) (*Client, error) {
 	lk, lerr := flock.TryLock(p.Lock)
 	switch {
 	case lerr == nil:
-		os.Remove(p.Socket)
-		os.Remove(p.HumanSocket())
-		os.Remove(p.PID)
+		removeStale(p)
 		lk.Unlock()
 		if !autostart {
 			return nil, ErrNotRunning
@@ -178,6 +177,14 @@ func Connect(p Paths, autostart bool) (*Client, error) {
 	default:
 		return nil, lerr
 	}
+}
+
+// removeStale removes what a crashed server left behind; the caller
+// holds the lock, so no live server's files go with it.
+func removeStale(p Paths) {
+	os.Remove(p.Socket)
+	os.Remove(p.HumanSocket())
+	os.Remove(p.PID)
 }
 
 // StartDetached starts the server and waits until it answers. On macOS it
@@ -404,9 +411,8 @@ func (c *Client) WriteFrame(typ proto.FrameType, payload []byte) error {
 func ForceKill(p Paths) (int, error) {
 	lk, err := flock.TryLock(p.Lock)
 	if err == nil {
+		removeStale(p)
 		lk.Unlock()
-		os.Remove(p.Socket)
-		os.Remove(p.PID)
 		return 0, ErrNotRunning
 	}
 	if !errors.Is(err, flock.ErrLocked) {
