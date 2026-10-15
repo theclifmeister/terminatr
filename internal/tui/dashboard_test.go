@@ -1315,3 +1315,27 @@ func TestViewCallsInTurn(t *testing.T) {
 		t.Fatalf("calls %v, want %v", got, want)
 	}
 }
+
+// TestQueuedKeyKeepsAttach: a key that waited for the action in flight
+// doesn't swallow that action's attach or its selection.
+func TestQueuedKeyKeepsAttach(t *testing.T) {
+	src := &fakeSource{data: testData()}
+	m := newDash(DashOptions{Source: src, Width: 120, Height: 30, State: DashState{Current: "beta"}})
+	m.setData(src.data)
+	m.busy = true
+	ran := false
+	m.queued = append(m.queued, func(*dash) tea.Cmd {
+		ran = true
+		return func() tea.Msg { return nil }
+	})
+	_, cmd := m.update(actionMsg{attach: "s-1", current: "alpha"})
+	if ran {
+		t.Fatal("the queued key ran before the attach")
+	}
+	if m.result.Attach != "s-1" || cmd == nil {
+		t.Fatalf("attach %q, cmd %v: the attach was dropped", m.result.Attach, cmd)
+	}
+	if m.current != "alpha" {
+		t.Fatalf("current %q", m.current)
+	}
+}
