@@ -748,8 +748,19 @@ func (s *Server) terminatrEnv(r SessionRecord) map[string]string {
 	if r.Thread != "" {
 		set["TERMINATR_THREAD"] = r.Thread
 	}
+	// The server's own TERMINATR_* don't reach sessions (terminalEnv),
+	// but where tm hook logs what it failed to deliver (tests) does.
+	for _, kv := range s.baseEnv() {
+		if v, ok := strings.CutPrefix(kv, hookLogEnv+"="); ok && v != "" {
+			set[hookLogEnv] = v
+		}
+	}
 	return set
 }
+
+// hookLogEnv names the file tm hook logs undelivered events to
+// (internal/cli).
+const hookLogEnv = "TERMINATR_HOOK_LOG"
 
 func (s *Server) baseEnv() []string {
 	if s.opts.Env != nil {

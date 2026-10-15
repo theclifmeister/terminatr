@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
@@ -30,6 +32,11 @@ var (
 
 // maxHookPayload bounds what tm hook reads from the agent.
 const maxHookPayload = 4 << 20
+
+// hookLogEnv names a file tm hook appends a line to for each event it
+// failed to deliver, and why (tests: the agent never shows it, and a
+// lost SessionStart costs the session its context and prompt token).
+const hookLogEnv = "TERMINATR_HOOK_LOG"
 
 func init() { commands["hook"] = runHook }
 
@@ -60,6 +67,7 @@ func runHook(e *Env, args []string) error {
 	}
 	paths, err := client.ResolvePaths()
 	if err != nil {
+		hookLog(e, session, "", err)
 		return nil
 	}
 	// The event's name is in [hook] event_field (default hook_event_name),
@@ -93,22 +101,42 @@ func runHook(e *Env, args []string) error {
 	}
 	params := proto.HookEventParams{Session: session, Agent: name, Event: event,
 		Payload: payload, Token: token}
-	if out := sendHook(paths.Socket, params, total); out != "" {
+	start := time.Now()
+	out, err := sendHook(paths.Socket, params, total)
+	if err != nil {
+		hookLog(e, session, event, fmt.Errorf("%w (after %v of %v)", err, time.Since(start).Round(time.Millisecond), total))
+	}
+	if out != "" {
 		io.WriteString(e.Stdout, out)
 	}
 	return nil
 }
 
+// hookLog appends why event wasn't delivered to $TERMINATR_HOOK_LOG, if
+// set; never to stderr.
+func hookLog(e *Env, session, event string, err error) {
+	path := e.Getenv(hookLogEnv)
+	if path == "" {
+		return
+	}
+	f, ferr := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if ferr != nil {
+		return
+	}
+	fmt.Fprintf(f, "%s pid %d %s %s: %v\n", time.Now().Format("15:04:05.000000"), os.Getpid(), session, event, err)
+	f.Close()
+}
+
 // sendHook delivers one event and returns the server's stdout for the
-// agent. Every failure (no server, a stale socket, a wedged server, a
-// protocol mismatch) is silent and returns "".
-func sendHook(socket string, p proto.HookEventParams, total time.Duration) string {
+// agent, or why it couldn't: no server, a stale socket, a wedged server,
+// a protocol mismatch, a refusal. The agent never sees the error.
+func sendHook(socket string, p proto.HookEventParams, total time.Duration) (string, error) {
 	deadline := time.Now().Add(total)
 	ctx, cancel := context.WithTimeout(context.Background(), hookDial)
 	c, err := ipc.Dial(ctx, ipc.Addr(socket))
 	cancel()
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("dial: %w", err)
 	}
 	defer c.Close()
 	// The write shares the total: a write of its own deadline (100 ms)
@@ -118,26 +146,35 @@ func sendHook(socket string, p proto.HookEventParams, total time.Duration) strin
 	hello, _ := json.Marshal(proto.Hello{Protocol: proto.Protocol, Version: version.Version, Build: version.BuildID(), Kind: proto.KindHook})
 	params, err := json.Marshal(p)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	req, _ := json.Marshal(proto.Request{ID: 1, Method: proto.MethodHookEvent, Params: params})
 	// Hello and request in one write: one round trip less.
 	if _, err := c.Write(append(append(append(hello, '\n'), req...), '\n')); err != nil {
-		return ""
+		return "", fmt.Errorf("write: %w", err)
 	}
 	br := bufio.NewReader(c)
 	var srv proto.Hello
-	if line, err := br.ReadBytes('\n'); err != nil || json.Unmarshal(line, &srv) != nil {
-		return ""
+	line, err := br.ReadBytes('\n')
+	if err == nil {
+		err = json.Unmarshal(line, &srv)
+	}
+	if err != nil {
+		return "", fmt.Errorf("server hello: %w", err)
 	}
 	var resp proto.Response
-	line, err := br.ReadBytes('\n')
-	if err != nil || json.Unmarshal(line, &resp) != nil || resp.Error != nil {
-		return ""
+	if line, err = br.ReadBytes('\n'); err == nil {
+		err = json.Unmarshal(line, &resp)
+	}
+	if err == nil && resp.Error != nil {
+		err = resp.Error
+	}
+	if err != nil {
+		return "", fmt.Errorf("response: %w", err)
 	}
 	var res proto.HookEventResult
-	if json.Unmarshal(resp.Result, &res) != nil {
-		return ""
+	if err := json.Unmarshal(resp.Result, &res); err != nil {
+		return "", fmt.Errorf("result: %w", err)
 	}
-	return res.Stdout
+	return res.Stdout, nil
 }
