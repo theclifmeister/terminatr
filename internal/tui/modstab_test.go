@@ -687,3 +687,12 @@ func TestModsSidebarHidden(t *testing.T) {
 		t.Errorf("hidden sidebar:\n%s", got)
 	}
 }
+
+// TestModSettingRowCleansDefault: a string default is the mod's text,
+// shown cleaned and quoted like its label.
+func TestModSettingRowCleansDefault(t *testing.T) {
+	r := modSettingRow("m", "k", mod.Setting{Type: mod.SettingString, Default: "a\x1b]52;c;eA==\x07b", Label: "Wor\x1b[2Jding"})
+	if want := `Wor[2Jding. Default "a]52;c;eA==b".`; r.help != want {
+		t.Errorf("help = %q, want %q", r.help, want)
+	}
+}

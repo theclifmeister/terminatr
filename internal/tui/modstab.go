@@ -776,7 +776,8 @@ func modSettingRow(id, key string, s mod.Setting) setting {
 	if s.Label != "" {
 		help = oneLine(mod.Clean(s.Label, false)) + ". "
 	}
-	help += "Default " + fmt.Sprint(s.Default) + "."
+	// A mod's text, so cleaned (mod.SettingWords), as its label is.
+	help += "Default " + mod.SettingWords(s.Default) + "."
 	cur := func(m *dash) any {
 		if md, ok := modByID(m, id); ok {
 			return md.Settings[key]
@@ -793,8 +794,8 @@ func modSettingRow(id, key string, s mod.Setting) setting {
 		})
 	}
 	r := setting{label: label, help: help,
-		value: func(m *dash) string { return fmt.Sprint(cur(m)) },
-		unset: func(m *dash) tea.Cmd { return set(m, nil, key+": back to "+fmt.Sprint(s.Default)) }}
+		value: func(m *dash) string { return mod.Clean(fmt.Sprint(cur(m)), false) },
+		unset: func(m *dash) tea.Cmd { return set(m, nil, key+": back to "+mod.SettingWords(s.Default)) }}
 	switch s.Type {
 	case mod.SettingBool:
 		r.value = func(m *dash) string { b, _ := cur(m).(bool); return onOff(b) }
@@ -809,7 +810,7 @@ func modSettingRow(id, key string, s mod.Setting) setting {
 			}
 			c, _ := cur(m).(string)
 			next := s.Options[(slices.Index(s.Options, c)+1)%len(s.Options)]
-			return set(m, next, key+": "+next)
+			return set(m, next, key+": "+mod.Clean(next, false))
 		}
 	case mod.SettingInt:
 		r.adjust = func(m *dash, d int) tea.Cmd {

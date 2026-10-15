@@ -11,7 +11,7 @@ import (
 )
 
 func TestCheckRunGit(t *testing.T) {
-	cmds := []string{"git"}
+	cmds := []string{"git", "Git"}
 	for _, argv := range [][]string{
 		{"git", "-C", "../elsewhere", "status"},
 		{"git", "-C../elsewhere", "status"},
@@ -35,6 +35,27 @@ func TestCheckRunGit(t *testing.T) {
 		{"git", "config", "set", "core.pager", "x"},
 		{"git", "config", "--get", "core.pager", "--add"},
 		{"git", "config", "--global", "core.pager", "x"},
+		{"git", "rebase", "-x", "make", "main"},
+		{"git", "rebase", "-ix", "make", "main"},
+		{"git", "rebase", "-xmake", "main"},
+		{"git", "rebase", "--exe=make", "main"},
+		{"git", "bisect", "run", "make"},
+		{"git", "submodule", "foreach", "make"},
+		{"git", "submodule", "--quiet", "foreach", "make"},
+		{"git", "difftool", "-x", "make"},
+		{"git", "difftool", "--extcmd=make"},
+		{"git", "difftool", "--extc", "make"},
+		{"git", "grep", "-Omake", "x"},
+		{"git", "grep", "--open-files-in-pager=make", "x"},
+		{"git", "clone", "-u", "make", "origin"},
+		{"git", "help", "-w", "log"},
+		{"git", "filter-branch", "--tree-filter", "make"},
+		{"git", "send-email", "--to-cmd=make"},
+		{"git", "credential", "fill"},
+		{"git", "credential-osxkeychain", "get"},
+		{"git", "daemon"},
+		{"git", "--no-pager", "bisect", "run", "make"},
+		{"Git", "credential", "fill"},
 	} {
 		if err := CheckRun(argv, cmds); code(err) != CodeDenied {
 			t.Errorf("%q: %v", argv, err)
@@ -48,6 +69,14 @@ func TestCheckRunGit(t *testing.T) {
 		{"git", "config", "--get", "user.name"},
 		{"git", "config", "get", "user.name"},
 		{"git", "log", "--", "--exec"},
+		{"git", "rebase", "-i", "main"},
+		{"git", "rebase", "-Xours", "main"},
+		{"git", "bisect", "start"},
+		{"git", "submodule", "status"},
+		{"git", "difftool", "--tool=vimdiff"},
+		{"git", "grep", "-n", "x"},
+		{"git", "clone", "--depth=1", "https://example.com/x.git"},
+		{"git", "log", "--", "run"},
 	} {
 		if err := CheckRun(argv, cmds); err != nil {
 			t.Errorf("%q: %v", argv, err)
@@ -55,6 +84,42 @@ func TestCheckRunGit(t *testing.T) {
 	}
 	if err := CheckRun([]string{"git"}, nil); code(err) != CodeDenied {
 		t.Errorf("an ungranted git: %v", err)
+	}
+}
+
+func TestCheckRunLoginTools(t *testing.T) {
+	cmds := []string{"gh", "glab"}
+	for _, argv := range [][]string{
+		{"gh", "auth", "token"},
+		{"gh", "auth", "status", "--show-token"},
+		{"gh", "auth", "status", "-t"},
+		{"gh", "auth", "status", "-ht"},
+		{"gh", "auth", "login"},
+		{"gh", "auth"},
+		{"gh", "config", "get", "oauth_token"},
+		{"gh", "alias", "set", "x", "y", "--shell"},
+		{"gh", "extension", "install", "x/y"},
+		{"gh", "ext", "install", "x/y"},
+		{"glab", "auth", "status", "--show-token"},
+		{"glab", "auth", "status", "--hostname", "gitlab.com", "-t"},
+		{"glab", "config", "get", "token"},
+		{"glab", "alias", "set", "x", "!y"},
+	} {
+		if err := CheckRun(argv, cmds); code(err) != CodeDenied {
+			t.Errorf("%q: %v", argv, err)
+		}
+	}
+	for _, argv := range [][]string{
+		{"gh", "pr", "view", "12", "--json", "state"},
+		{"gh", "auth", "status"},
+		{"gh", "auth", "status", "--hostname", "github.com"},
+		{"glab", "auth", "status", "--hostname", "gitlab.com"},
+		{"glab", "api", "--hostname", "gitlab.com", "projects/1"},
+		{"glab", "version"},
+	} {
+		if err := CheckRun(argv, cmds); err != nil {
+			t.Errorf("%q: %v", argv, err)
+		}
 	}
 }
 
@@ -68,6 +133,12 @@ func TestArgPaths(t *testing.T) {
 		"if=/x":           "if=/x|/x",
 		"file:///x":       "file:///x|/x",
 		"--url=file:///x": "--url=file:///x|file:///x|=file:///x|/x",
+		"a:/x":            "a:/x|/x",
+		"a:~/x":           "a:~/x|~/x",
+		"a:/x:/y":         "a:/x:/y|/x|/y",
+		"a:b":             "a:b",
+		"https://h/x":     "https://h/x",
+		"git@h:org/r.git": "git@h:org/r.git",
 	} {
 		if got := strings.Join(argPaths(a), "|"); got != want {
 			t.Errorf("argPaths(%q) = %s, want %s", a, got, want)
@@ -108,6 +179,9 @@ func TestRunArgPaths(t *testing.T) {
 		{"", []string{"if=" + away}},
 		{"", []string{"file://" + away}},
 		{"", []string{"ok", "--out=" + up}},
+		{"", []string{"localhost:" + away}},
+		{"", []string{"a:~/elsewhere"}},
+		{"", []string{"--path=" + own + ":" + away}},
 		{"~/notes", []string{"link-ssh/id_rsa"}},
 		{"~/notes", []string{"link-else"}},
 		{"~/notes", []string{"repo/.git/config"}},
