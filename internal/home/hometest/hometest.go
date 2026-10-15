@@ -10,12 +10,13 @@ import (
 	"github.com/theclifmeister/terminatr/internal/home"
 )
 
-// Run is for a package's TestMain: with TERMINATR_HOME unset it points
-// it at a fresh temp dir for the whole run, then calls run (m.Run, or
-// whatever wraps it) and removes the dir. Tests that care still set
-// their own with t.Setenv.
+// Run is for a package's TestMain: with TERMINATR_HOME unset, or set to
+// the user's real ~/.terminatr (as every tm session's children inherit
+// it, T472), it points it at a fresh temp dir for the whole run, then
+// calls run (m.Run, or whatever wraps it) and removes the dir. Tests
+// that care still set their own with t.Setenv.
 func Run(run func() int) int {
-	if os.Getenv(home.Env) != "" {
+	if d := os.Getenv(home.Env); d != "" && !home.IsReal(d) {
 		return run()
 	}
 	dir, err := os.MkdirTemp("", "tm-home-")

@@ -2,6 +2,7 @@ package home
 
 import (
 	"os/user"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -40,6 +41,25 @@ func TestDirPanicsOnRealHome(t *testing.T) {
 		r, _ := recover().(string)
 		if !strings.Contains(r, "real state directory") {
 			t.Fatalf("Dir did not panic on the real home, recovered %q", r)
+		}
+	}()
+	Dir()
+}
+
+// TestDirPanicsOnRealHomeFromEnv is the guard for T472: a tm session
+// hands its children TERMINATR_HOME=~/.terminatr, so a thread's go test
+// inherits it; resolving it from a test must fail, not write the live
+// config (a tui test turned the user's share setting off).
+func TestDirPanicsOnRealHomeFromEnv(t *testing.T) {
+	u, err := user.Current()
+	if err != nil || u.HomeDir == "" {
+		t.Skip("no account home")
+	}
+	t.Setenv(Env, filepath.Join(u.HomeDir, ".terminatr"))
+	defer func() {
+		r, _ := recover().(string)
+		if !strings.Contains(r, "real state directory") {
+			t.Fatalf("Dir did not panic on TERMINATR_HOME=~/.terminatr, recovered %q", r)
 		}
 	}()
 	Dir()
