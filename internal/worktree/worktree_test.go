@@ -207,3 +207,16 @@ func TestMergeCommit(t *testing.T) {
 		t.Fatalf("MergeCommit: %q %q", m61, m610)
 	}
 }
+
+func TestValidBase(t *testing.T) {
+	for _, b := range []string{"main", "origin/main", "v1.2.3", "feature/x", "0123456789abcdef0123456789abcdef01234567"} {
+		if !ValidBase(b) {
+			t.Errorf("ValidBase(%q) = false", b)
+		}
+	}
+	for _, b := range []string{"", "-x", "--force", "--orphan", "a b", "a\nb", "a..b", "a~1", "x:y", "a[b", "@{u}"} {
+		if ValidBase(b) {
+			t.Errorf("ValidBase(%q) = true", b)
+		}
+	}
+}

@@ -76,6 +76,21 @@ func DefaultBranch(repo string) string {
 // git.
 func ValidBranch(b string) bool { return branchRE.MatchString(b) }
 
+// ValidBase reports whether b can name the start point of a new
+// worktree: a ref name (branch, remote branch, tag) or a commit id, as
+// git's own rules read it, and not an option.
+func ValidBase(b string) bool {
+	if b == "" || strings.HasPrefix(b, "-") || len(b) > 200 {
+		return false
+	}
+	for _, r := range b {
+		if r <= ' ' || r == 0x7f {
+			return false
+		}
+	}
+	return exec.Command("git", "check-ref-format", "--allow-onelevel", b).Run() == nil
+}
+
 // branchRE is a branch name tm shows and passes to git: no spaces,
 // control characters or leading dash.
 var branchRE = regexp.MustCompile(`^[A-Za-z0-9_.][A-Za-z0-9_./-]{0,99}$`)

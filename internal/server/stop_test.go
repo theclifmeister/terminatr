@@ -14,6 +14,7 @@ import (
 // this tm's hello, and Stop still stops it by redialling at its protocol.
 func TestStopOlderProtocol(t *testing.T) {
 	t.Setenv(testHelloEnv, "protocol=1")
+	useTestHooks(t)
 	p := testPaths(t)
 	r := startServer(t, p)
 	var mm *proto.MismatchError
@@ -40,6 +41,7 @@ func TestStopOlderProtocol(t *testing.T) {
 // pid is the test binary, so Stop refuses.
 func TestStopNeverSignalsAnUnrelatedProcess(t *testing.T) {
 	t.Setenv(testHelloEnv, "deaf")
+	useTestHooks(t)
 	p := testPaths(t)
 	startServer(t, p)
 	_, err := client.Stop(p, true)

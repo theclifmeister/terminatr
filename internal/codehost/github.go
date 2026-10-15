@@ -220,11 +220,11 @@ var digitsRE = regexp.MustCompile(`^[0-9]{1,12}$`)
 
 // PRState asks gh for the state of the PR whose head is branch.
 func (g GitHub) PRState(repo, branch string) string {
-	out, err := g.gh(repo, "pr", "view", branch, "--json", "state", "--jq", ".state")
+	pr, err := g.PR(repo, Ref{Branch: branch})
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(out))
+	return pr.State
 }
 
 // PRHead asks gh for a pull request's state, number and head branch.

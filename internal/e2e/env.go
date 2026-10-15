@@ -86,7 +86,7 @@ func build(t testing.TB) string {
 			buildErr = err
 			return
 		}
-		args := []string{"build", "-o", filepath.Join(binDir, exe("tm"))}
+		args := []string{"build", "-tags", "testhooks", "-o", filepath.Join(binDir, exe("tm"))}
 		if os.Getenv("E2E_RACE") == "1" {
 			args = append(args, "-race")
 		}

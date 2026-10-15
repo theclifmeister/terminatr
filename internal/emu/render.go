@@ -494,14 +494,16 @@ func sgrFor(dst []byte, st *libghostty.Style, selected bool, pal *Palette) []byt
 	return append(dst, 'm')
 }
 
-// sanitizeTitle drops control characters, so a title can't end the OSC
-// early and inject sequences into the outer terminal.
+// sanitizeTitle drops control characters, C0 and C1 (U+0080-U+009F, which
+// some terminals act on in UTF-8), so a title can't end the OSC early and
+// inject sequences into the outer terminal.
 func sanitizeTitle(s string) []byte {
 	out := make([]byte, 0, len(s))
-	for _, c := range []byte(s) {
-		if c >= 0x20 && c != 0x7f {
-			out = append(out, c)
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f || r >= 0x80 && r < 0xa0 {
+			continue
 		}
+		out = utf8.AppendRune(out, r)
 	}
 	return out
 }
