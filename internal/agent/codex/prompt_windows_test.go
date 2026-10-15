@@ -3,11 +3,13 @@ package codex
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 )
@@ -15,12 +17,63 @@ import (
 // With CODEX_TEST_ARGS set the test binary is node: it writes its
 // arguments there as JSON.
 func TestMain(m *testing.M) {
+	if p := os.Getenv("CODEX_FAKE_ARGS"); p != "" {
+		fakeMain(p, os.Getenv("CODEX_FAKE_MODE"))
+	}
 	if p := os.Getenv("CODEX_TEST_ARGS"); p != "" {
 		b, _ := json.Marshal(os.Args[1:])
 		os.WriteFile(p, b, 0o600)
 		os.Exit(0)
 	}
 	os.Exit(m.Run())
+}
+
+// The fake codex's behaviours.
+const (
+	fakeOK   = "ok"
+	fakeFail = "fail"
+	fakeHang = "hang"
+)
+
+// fakeMain is the test binary run as codex.exe: it writes its arguments,
+// NUL separated, to path, then does what mode says.
+func fakeMain(path, mode string) {
+	var b strings.Builder
+	for _, a := range os.Args[1:] {
+		b.WriteString(a + "\x00")
+	}
+	os.WriteFile(path, []byte(b.String()), 0o600)
+	switch mode {
+	case fakeFail:
+		fmt.Fprintln(os.Stderr, "WARNING: proceeding")
+		fmt.Fprintln(os.Stderr, "Error: failed to queue session message: no rollout found")
+		os.Exit(1)
+	case fakeHang:
+		time.Sleep(10 * time.Second)
+	default:
+		fmt.Println("Queued message x for thread y.")
+	}
+	os.Exit(0)
+}
+
+// fakeCodex puts this test binary on PATH as codex.exe, behaving as mode
+// says, and returns the file it writes its arguments to.
+func fakeCodex(t *testing.T, mode string) string {
+	t.Helper()
+	dir := t.TempDir()
+	exe, _ := os.Executable()
+	b, err := os.ReadFile(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "codex.exe"), b, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	args := filepath.Join(dir, "args")
+	t.Setenv("CODEX_FAKE_ARGS", args)
+	t.Setenv("CODEX_FAKE_MODE", mode)
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return args
 }
 
 // npmShim is codex.cmd as npm writes it.
