@@ -273,8 +273,10 @@ release-ghostty:
 release-snapshot: release-ghostty
 	$(RELEASE_ENV) $(GORELEASER) release --snapshot --clean
 
+# RELEASE_NOTES is the tag's hand-written notes (docs/releases/vX.Y.Z.md).
 release: release-ghostty
-	$(RELEASE_ENV) $(GORELEASER) release --clean
+	@test -n "$(RELEASE_NOTES)" -a -f "$(RELEASE_NOTES)" || { echo "make release: set RELEASE_NOTES to the tag's notes file (docs/releases/vX.Y.Z.md)" >&2; exit 1; }
+	$(RELEASE_ENV) $(GORELEASER) release --clean --release-notes $(RELEASE_NOTES)
 
 clean:
 	rm -rf bin
