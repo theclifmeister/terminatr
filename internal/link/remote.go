@@ -288,11 +288,11 @@ func undelivered(alias string, m proto.PeerMessage, code string) {
 	if !ok {
 		return
 	}
-	update(p, key, m.ID, func(x *Message) { x.State = StateUndelivered })
 	words, known := RefusalWords[code]
 	if !known {
 		code, words = "refused", RefusalWords["refused"]
 	}
+	update(p, key, m.ID, func(x *Message) { x.State, x.Refused = StateUndelivered, code })
 	why := strings.NewReplacer("{to}", key, "{from}", p.Slug).Replace(words)
 	p.AddMessageItem(KindUndelivered, key, fmt.Sprintf("your message %s to %s wasn't delivered: %s", m.ID, key, why), false, m.ID)
 	p.Journal(caller.Caller{Kind: caller.Ticker}, "link.undelivered", key, m.ID+" ("+code+")")

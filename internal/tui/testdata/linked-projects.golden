@@ -1,0 +1,11 @@
+│project               this side               other side              link
+│beta                  both ways               both ways               linked both ways
+│
+│mini · paired server, linked · its user sets its side of each link
+│  acme-api            both ways, ask first    linked back both ways   mini decides its side
+│
+│nas · paired server, offline · its user sets its side of each link
+│  media               —                       their side unknown      nas decides its side
+│  old                 send only               refuses ours            nas decides its side
+│
+│A link here is set on both sides at once: send here is receive there. With a paired server's project only this side is set, asking first; that server's user sets the other (tm project link there). Ask first holds each message this coordinator sends on the link until you approve it in the Messages tab.

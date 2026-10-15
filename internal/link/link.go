@@ -91,6 +91,9 @@ type Message struct {
 	// By is who sent it: the coordinator, or the human for the project.
 	By          string   `toml:"by" json:"by"`
 	Attachments []string `toml:"attachments,omitempty" json:"attachments,omitempty"`
+	// Refused is the code a paired server refused an undelivered
+	// message with (RefusalWords), "expired" when it didn't take it.
+	Refused string `toml:"refused,omitempty" json:"refused,omitempty"`
 	// Peer is the other project (the folder's name), Text the message;
 	// neither is in the front matter.
 	Peer string `toml:"-" json:"peer"`

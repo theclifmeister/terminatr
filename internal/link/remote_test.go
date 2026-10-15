@@ -261,7 +261,7 @@ func TestRemoteUndelivered(t *testing.T) {
 		Flush(context.Background(), toMini)
 		got, _ := Read(acme, m.ID)
 		its := items(t, acme, KindUndelivered)
-		if got.State != StateUndelivered || len(its) != 1 || !strings.Contains(its[0].Summary, "mini/gone doesn't take messages from acme") {
+		if got.State != StateUndelivered || got.Refused != "not-linked" || len(its) != 1 || !strings.Contains(its[0].Summary, "mini/gone doesn't take messages from acme") {
 			t.Fatalf("not linked: %s %+v", got.State, its)
 		}
 
@@ -282,7 +282,7 @@ func TestRemoteUndelivered(t *testing.T) {
 		Flush(context.Background(), toMini)
 		got, _ = Read(acme, m2.ID)
 		its = items(t, acme, KindUndelivered)
-		if got.State != StateUndelivered || len(its) != 2 || !strings.Contains(its[1].Summary+its[0].Summary, "didn't take it within 72 hours") {
+		if got.State != StateUndelivered || got.Refused != "expired" || len(its) != 2 || !strings.Contains(its[1].Summary+its[0].Summary, "didn't take it within 72 hours") {
 			t.Fatalf("expired: %s %+v", got.State, its)
 		}
 		if b := Backlogs()["mini"]; b != (Backlog{Undelivered: 2}) {
@@ -358,4 +358,29 @@ func TestRemoteLinkSetting(t *testing.T) {
 			t.Fatalf("after off: %+v", links)
 		}
 	})
+}
+
+// TestTheirSide: what the messages tell of a paired server's side, the
+// newest answer winning.
+func TestTheirSide(t *testing.T) {
+	out := func(state, refused string) *Message { return &Message{Out: true, State: state, Refused: refused} }
+	in := &Message{State: StateRead}
+	for _, c := range []struct {
+		msgs []*Message
+		want string
+	}{
+		{nil, "their side unknown"},
+		{[]*Message{out(StateQueued, "")}, "their side unknown"},
+		{[]*Message{out(StateUndelivered, "expired")}, "their side unknown"},
+		{[]*Message{out(StateSent, "")}, "takes ours"},
+		{[]*Message{in}, "sends here"},
+		{[]*Message{out(StateRead, ""), in}, "linked back both ways"},
+		{[]*Message{out(StateUndelivered, "not-linked")}, "refuses ours"},
+		{[]*Message{in, out(StateRead, ""), out(StateUndelivered, "not-linked")}, "sends, refuses ours"},
+		{[]*Message{out(StateUndelivered, "not-linked"), out(StateSent, "")}, "takes ours"},
+	} {
+		if got := TheirSide(c.msgs).Words(); got != c.want {
+			t.Errorf("%d messages: %q, want %q", len(c.msgs), got, c.want)
+		}
+	}
 }

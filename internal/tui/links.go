@@ -11,6 +11,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/link"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // Links between projects' coordinators (docs/SPEC.md §7.9, §4): the
@@ -22,7 +23,7 @@ import (
 
 // linkRow is the Settings tab's Linked projects row of project slug.
 func linkRow(slug string) setting {
-	return setting{label: "Linked projects", help: "The other projects whose coordinators this one may write to and hear from (tm link). Linking sets both projects at once: send here is receive there. Enter lists the projects.",
+	return setting{label: "Linked projects", help: "The other projects whose coordinators this one may write to and hear from (tm link). Linking sets both projects at once: send here is receive there; with a paired server's project, only this side. Enter lists the projects, this server's and the paired servers'.",
 		value: func(m *dash) string { return linksWords(m.projectData(slug)) },
 		change: func(m *dash) tea.Cmd {
 			m.push(&linksView{slug: slug})
@@ -55,28 +56,91 @@ func linksWords(p *ProjectData) string {
 // enter steps the link through off, both, send and receive, writing both
 // sides at once (the other side's entry the mirror of this one's); a
 // turns this side's ask first on or off. A half-linked pair (a hand edit
-// of config.toml) shows as such, and enter makes it whole.
+// of config.toml) shows as such, and enter makes it whole. Under them,
+// a group per paired server lists the projects it shares (the mirror,
+// peer.list) and any this side still has an entry for: there enter and
+// a write this side only, a new entry asking first, since that server's
+// user sets its own (§16.11); what the messages tell of that side shows
+// beside it.
 type linksView struct {
 	slug string
 	sel  int
+	// back is what the messages say of each remote link's other side,
+	// read at most every 2 s.
+	back   map[string]link.Back
+	loaded time.Time
 }
 
-// others are the projects the list shows: every project but this one.
-func (v *linksView) others(m *dash) []string {
-	var out []string
+// linkItem is one row of the list: a project here (alias "") or the
+// project slug on the paired server alias, key its link's key.
+type linkItem struct{ key, alias, slug string }
+
+// linkGroup is a paired server's rows, with its link's state.
+type linkGroup struct {
+	alias, state string
+	items        []linkItem
+}
+
+// items are the projects the list shows: every project here but this
+// one, then each paired server's group; sel indexes them all in order.
+func (v *linksView) items(m *dash) ([]linkItem, []linkGroup) {
+	var out []linkItem
 	for _, p := range m.data.Projects {
 		if p.Slug != v.slug {
-			out = append(out, p.Slug)
+			out = append(out, linkItem{key: p.Slug, slug: p.Slug})
 		}
 	}
-	slices.Sort(out)
-	return out
+	slices.SortFunc(out, func(a, b linkItem) int { return strings.Compare(a.key, b.key) })
+	groups := map[string]*linkGroup{}
+	var order []string
+	group := func(alias string) *linkGroup {
+		if g := groups[alias]; g != nil {
+			return g
+		}
+		groups[alias] = &linkGroup{alias: alias, state: "not paired"}
+		order = append(order, alias)
+		return groups[alias]
+	}
+	add := func(alias, slug string) {
+		g, key := group(alias), alias+"/"+slug
+		if !slices.ContainsFunc(g.items, func(it linkItem) bool { return it.key == key }) {
+			g.items = append(g.items, linkItem{key: key, alias: alias, slug: slug})
+		}
+	}
+	for _, pm := range m.data.Peers {
+		group(pm.Alias).state = map[string]string{proto.LinkUp: "linked", proto.LinkConnecting: "connecting"}[pm.State]
+		if pm.State != proto.LinkUp && pm.State != proto.LinkConnecting {
+			group(pm.Alias).state = "offline"
+		}
+		for _, pp := range pm.Projects {
+			add(pm.Alias, pp.Project)
+		}
+	}
+	if p := m.projectData(v.slug); p != nil {
+		for _, r := range p.Links {
+			if alias, slug, ok := config.Remote(r.Peer); ok && r.HasMine {
+				add(alias, slug)
+			}
+		}
+	}
+	var gs []linkGroup
+	for _, a := range order {
+		g := groups[a]
+		if len(g.items) == 0 {
+			continue
+		}
+		slices.SortFunc(g.items, func(a, b linkItem) int { return strings.Compare(a.key, b.key) })
+		gs = append(gs, *g)
+		out = append(out, g.items...)
+	}
+	return out, gs
 }
 
 // entry is this side's and the other side's entries for other, from the
 // last poll.
 func (v *linksView) entry(m *dash, other string) (row link.Row) {
 	row.Peer = other
+	_, _, row.Remote = config.Remote(other)
 	if p := m.projectData(v.slug); p != nil {
 		for _, r := range p.Links {
 			if r.Peer == other {
@@ -85,6 +149,23 @@ func (v *linksView) entry(m *dash, other string) (row link.Row) {
 		}
 	}
 	return row
+}
+
+// theirSide is what the messages say of the remote link key's other
+// side; the logs are read again at most every 2 s.
+func (v *linksView) theirSide(m *dash, items []linkItem, key string) link.Back {
+	if v.back == nil || time.Since(v.loaded) > 2*time.Second {
+		v.back, v.loaded = map[string]link.Back{}, time.Now()
+		for _, it := range items {
+			if it.alias == "" {
+				continue
+			}
+			if msgs, err := m.src.LinkLog(v.slug, it.key); err == nil {
+				v.back[it.key] = link.TheirSide(msgs)
+			}
+		}
+	}
+	return v.back[key]
 }
 
 // nextAllow is the direction after cur: off, both, send, receive, off.
@@ -102,32 +183,38 @@ func nextAllow(cur string, has bool) string {
 }
 
 func (v *linksView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
-	others := v.others(m)
+	items, _ := v.items(m)
 	switch s := k.String(); s {
 	case "esc", "q":
 		m.pop()
 	case "up", "k", "down", "j":
-		v.sel = moveSel(v.sel, scrollKeys[s], len(others))
+		v.sel = moveSel(v.sel, scrollKeys[s], len(items))
 	case "enter", "space", " ":
-		if v.sel >= len(others) || m.busy {
+		if v.sel >= len(items) || m.busy {
 			break
 		}
-		// One act sets both sides: this side's direction, the other's
-		// the mirror; off removes both.
-		other, r := others[v.sel], v.entry(m, others[v.sel])
+		// One act sets both sides here: this side's direction, the
+		// other's the mirror; off removes both. A paired server's
+		// project gets this side only, asking first when new.
+		it := items[v.sel]
+		other, r := it.key, v.entry(m, it.key)
 		allow := nextAllow(r.Mine.Allow, r.HasMine)
 		src, slug := m.src, v.slug
 		return m.act(func() actionMsg {
 			if err := src.SetLink(slug, other, allow); err != nil {
 				return actionMsg{err: settingsErr(err)}
 			}
+			if it.alias != "" {
+				l := config.Link{Allow: allow, Ask: !r.HasMine || r.Mine.Ask}
+				return actionMsg{msg: slug + " → " + other + ": " + linkAllowWords(l) + " on this side; " + it.alias + " decides its side"}
+			}
 			return actionMsg{msg: slug + " and " + other + ": " + linkAllowWords(config.Link{Allow: allow})}
 		})
 	case "a":
-		if v.sel >= len(others) || m.busy {
+		if v.sel >= len(items) || m.busy {
 			break
 		}
-		other, r := others[v.sel], v.entry(m, others[v.sel])
+		other, r := items[v.sel].key, v.entry(m, items[v.sel].key)
 		if !r.HasMine {
 			m.msg = "link " + other + " first (enter)"
 			break
@@ -154,12 +241,17 @@ func linkAllowWords(l config.Link) string {
 }
 
 func (v *linksView) render(m *dash) string {
-	w := m.inner(viewWidth)
+	lines, sel := v.lines(m, m.inner(viewWidth))
+	return m.popup(box{title: "Linked projects · " + v.slug, body: lines, sel: sel, keys: "enter link: off › both › send › receive · a ask first · ↑ ↓ move · esc back"})
+}
+
+// lines are the list's lines in width w, and the selected one's.
+func (v *linksView) lines(m *dash, w int) ([]string, int) {
 	lines := []string{th().Faint.Render(fit("project", 20) + "  " + fit("this side", 22) + "  " + fit("other side", 22) + "  link")}
-	others := v.others(m)
+	items, groups := v.items(m)
 	sel := -1
-	for i, o := range others {
-		r := v.entry(m, o)
+	row := func(i int, it linkItem) {
+		r := v.entry(m, it.key)
 		mine, theirs := "—", "—"
 		if r.HasMine {
 			mine = linkAllowWords(r.Mine)
@@ -168,12 +260,6 @@ func (v *linksView) render(m *dash) string {
 			theirs = linkAllowWords(r.Theirs)
 		}
 		state := r.Words()
-		l := fit(o, 20) + "  " + fit(mine, 22) + "  " + fit(theirs, 22) + "  "
-		if i == v.sel {
-			sel = len(lines)
-			lines = append(lines, th().Sel.Render(fit(l+state, w)))
-			continue
-		}
 		st := th().Faint
 		switch {
 		case r.Send || r.Receive:
@@ -181,13 +267,43 @@ func (v *linksView) render(m *dash) string {
 		case r.Half():
 			st = th().Warn
 		}
-		lines = append(lines, l+st.Render(state))
+		name := it.key
+		if it.alias != "" {
+			// This side's entry is the link here; the other side is
+			// that server's user's, known only from the messages.
+			back := v.theirSide(m, items, it.key)
+			name, theirs, state = "  "+it.slug, back.Words(), it.alias+" decides its side"
+			if r.Paused {
+				state += ", paused"
+			}
+			if back.Refuses && r.Send {
+				st = th().Warn
+			}
+		}
+		l := fit(name, 20) + "  " + fit(mine, 22) + "  " + fit(theirs, 22) + "  "
+		if i == v.sel {
+			sel = len(lines)
+			lines = append(lines, th().Sel.Render(fit(l+state, w)))
+			return
+		}
+		lines = append(lines, fit(l+st.Render(state), w)+reset)
 	}
-	if len(others) == 0 {
+	i := 0
+	for ; i < len(items) && items[i].alias == ""; i++ {
+		row(i, items[i])
+	}
+	if i == 0 {
 		lines = append(lines, th().Faint.Render("no other projects"))
 	}
-	lines = append(lines, "", th().Faint.Render("A link is set on both sides at once: send here is receive there. Ask first holds each message this coordinator sends on the link until you approve it in the Messages tab."))
-	return m.popup(box{title: "Linked projects · " + v.slug, body: lines, sel: sel, keys: "enter link: off › both › send › receive · a ask first · ↑ ↓ move · esc back"})
+	for _, g := range groups {
+		lines = append(lines, "", th().Head.Render(g.alias)+th().Faint.Render(" · paired server, "+g.state+" · its user sets its side of each link"))
+		for range g.items {
+			row(i, items[i])
+			i++
+		}
+	}
+	lines = append(lines, "", th().Faint.Render("A link here is set on both sides at once: send here is receive there. With a paired server's project only this side is set, asking first; that server's user sets the other (tm project link there). Ask first holds each message this coordinator sends on the link until you approve it in the Messages tab."))
+	return lines, sel
 }
 
 func (v *linksView) wheel(m *dash, d int) { v.key(m, arrow(d)) }

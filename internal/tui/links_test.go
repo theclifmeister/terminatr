@@ -1,9 +1,13 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/link"
@@ -102,5 +106,72 @@ func TestMessagesTab(t *testing.T) {
 	press(m, "A")
 	if len(src.linkActs) != 1 || !strings.Contains(m.msg, "only a message that waits") {
 		t.Fatalf("A on a sent message: %v %q", src.linkActs, m.msg)
+	}
+}
+
+// TestLinkedProjectsRemote: the list has a group per paired server with
+// the projects it shares and any this side links; enter and a write
+// this side only (SetLink with the qualified key, which asks first when
+// new), and the row says that server decides its side and what the
+// messages tell of it. It matches testdata/linked-projects.golden (go
+// test -run TestLinkedProjectsRemote -update rewrites it).
+func TestLinkedProjectsRemote(t *testing.T) {
+	setIcons(IconsUnicode)
+	defer resetConsole()
+	src, m := linkDash(t)
+	src.data.Peers = remotePeers()
+	src.data.Projects[0].Links = append(src.data.Projects[0].Links,
+		link.Row{Peer: "mini/acme-api", Remote: true, HasMine: true, Mine: config.Link{Allow: config.LinkBoth, Ask: true}, Send: true, Receive: true},
+		link.Row{Peer: "nas/old", Remote: true, HasMine: true, Mine: config.Link{Allow: config.LinkSend}, Send: true})
+	m.setData(src.data)
+	src.linkLogs = map[string][]*link.Message{
+		"mini/acme-api": {
+			{ID: "M-4F2A-1", Out: true, State: link.StateRead},
+			{ID: "M-9C1B-4", Out: false, State: link.StateRead},
+		},
+		"nas/old": {{ID: "M-4F2A-2", Out: true, State: link.StateUndelivered, Refused: "not-linked"}},
+	}
+	v := &linksView{slug: "alpha"}
+	m.push(v)
+	items, groups := v.items(m)
+	var keys []string
+	for _, it := range items {
+		keys = append(keys, it.key)
+	}
+	if got := strings.Join(keys, " "); got != "beta mini/acme-api nas/media nas/old" {
+		t.Fatalf("items %s", got)
+	}
+	if len(groups) != 2 || groups[0].alias != "mini" || groups[1].state != "offline" {
+		t.Fatalf("groups %+v", groups)
+	}
+
+	lines, _ := v.lines(m, 110)
+	var b strings.Builder
+	for _, l := range lines {
+		b.WriteString("│" + strings.TrimRight(ansi.Strip(l), " ") + "\n")
+	}
+	path := filepath.Join("testdata", "linked-projects.golden")
+	if *updateGolden {
+		if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	} else if want, err := os.ReadFile(path); err != nil {
+		t.Fatalf("%v (go test -run TestLinkedProjectsRemote -update writes it)", err)
+	} else if b.String() != string(want) {
+		t.Errorf("the list differs from %s:\n%s", path, b.String())
+	}
+
+	// nas/media, unlinked: enter links this side both ways (link.Set
+	// asks first for a new remote entry); a on mini/acme-api turns its
+	// ask off.
+	v.sel = 2
+	runAll(m, press(m, "enter"))
+	if got := src.links[len(src.links)-1]; got != "alpha nas/media both" || !strings.Contains(m.msg, "nas decides its side") || !strings.Contains(m.msg, "ask first") {
+		t.Fatalf("link %v %q", src.links, m.msg)
+	}
+	v.sel = 1
+	runAll(m, press(m, "a"))
+	if got := src.links[len(src.links)-1]; got != "alpha mini/acme-api ask false" {
+		t.Fatalf("ask %v", src.links)
 	}
 }
