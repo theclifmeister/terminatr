@@ -18,24 +18,95 @@ import (
 // maxFile is the most fs.read returns and fs.write takes.
 const maxFile = 8 << 20
 
-// Keychains are the credential stores agent.Secrets doesn't list: the
-// OS keychains, and the token files of common command-line tools. No mod
-// reaches them, whatever its files grant says.
+// Private places, by group: what no files grant reaches, whatever its
+// roots, beyond agent.Secrets. The home lists are relative to the home
+// folder; the app-data lists are relative to %APPDATA% or %LOCALAPPDATA%
+// (Windows), when set.
+var (
+	// keychainHome: the OS keychains, password managers and other tools'
+	// token files.
+	keychainHome = []string{
+		"Library/Keychains", ".local/share/keyrings", ".gnome2/keyrings", ".local/share/kwalletd", ".password-store",
+		".config/glab-cli", ".config/hub", ".config/op", ".op", ".vault-token", ".pgpass", ".my.cnf",
+		".cargo/credentials", ".cargo/credentials.toml", ".gem/credentials", ".terraform.d/credentials.tfrc.json",
+		"Library/Group Containers/2BUA8C4S2C.com.1password", "Library/Application Support/1Password",
+		"Library/Application Support/Bitwarden", "Library/Application Support/Bitwarden CLI",
+		"Library/Application Support/KeePassXC", "Library/Application Support/Dashlane",
+		"Library/Application Support/LastPass", "Library/Containers/com.lastpass.LastPass",
+		".config/1Password", ".config/Bitwarden", ".config/Bitwarden CLI", ".config/keepassxc", ".keepassxc",
+		".var/app/com.bitwarden.desktop", ".var/app/org.keepassxc.KeePassXC",
+	}
+	// browserHome: browser profiles (cookies, saved logins, history).
+	browserHome = []string{
+		"Library/Application Support/Google/Chrome", "Library/Application Support/Chromium",
+		"Library/Application Support/Firefox", "Library/Application Support/Microsoft Edge",
+		"Library/Application Support/BraveSoftware", "Library/Application Support/Arc",
+		"Library/Application Support/Vivaldi", "Library/Safari", "Library/Cookies",
+		"Library/Containers/com.apple.Safari", "Library/Group Containers/group.com.apple.safari",
+		".config/google-chrome", ".config/chromium", ".config/microsoft-edge", ".config/BraveSoftware",
+		".config/vivaldi", ".mozilla", ".config/mozilla", ".librewolf", ".zen",
+		"snap/firefox", "snap/chromium", ".var/app/org.mozilla.firefox", ".var/app/com.google.Chrome",
+		".var/app/org.chromium.Chromium", ".var/app/com.brave.Browser", ".var/app/com.microsoft.Edge",
+	}
+	browserApp = []string{
+		"Google/Chrome", "Chromium", "Microsoft/Edge", "BraveSoftware", "Vivaldi", "Mozilla/Firefox",
+		"Opera Software", "Zen",
+	}
+	// historyHome: shell and REPL histories.
+	historyHome = []string{
+		".bash_history", ".zsh_history", ".zsh_sessions", ".sh_history", ".history", ".zhistory",
+		".local/share/fish", ".config/fish/fish_history", ".local/share/nushell", ".config/nushell/history.txt",
+		".python_history", ".psql_history", ".mysql_history", ".sqlite_history", ".node_repl_history",
+		".irb_history", ".lesshst", ".rediscli_history",
+	}
+	historyApp = []string{"Microsoft/Windows/PowerShell/PSReadLine"}
+	// packageHome: package-manager and registry credentials.
+	packageHome = []string{
+		".npmrc", ".yarnrc", ".yarnrc.yml", ".config/yarn", ".pnpmrc", ".config/pnpm/rc",
+		".m2/settings.xml", ".m2/settings-security.xml", ".gradle/gradle.properties",
+		".pypirc", ".pip/pip.conf", ".config/pip/pip.conf", ".config/pypoetry/auth.toml", ".local/share/pypoetry/auth.toml",
+		".docker/config.json", ".kube/config",
+		".nuget/NuGet/NuGet.Config", ".config/NuGet/NuGet.Config", ".composer/auth.json", ".config/composer/auth.json",
+		".bundle/config", ".config/helm", ".ivy2/.credentials", ".sbt/.credentials",
+	}
+	packageApp = []string{"NuGet/NuGet.Config", "npm", "Composer/auth.json", "pypoetry/auth.toml"}
+	// cloudHome: cloud and platform CLIs' sessions and keys.
+	cloudHome = []string{
+		".aws", ".azure", ".config/gcloud", ".config/doctl", ".config/hcloud", ".config/heroku", ".config/flyctl",
+		".fly", ".oci", ".bluemix", ".config/exoscale", ".config/vercel", ".config/netlify",
+		".config/stripe", ".config/ngrok", ".ngrok2",
+	}
+	cloudApp = []string{"gcloud", "Azure", "doctl", "heroku"}
+)
+
+// Keychains are the private places agent.Secrets doesn't list: the OS
+// keychains and password managers, browser profiles, shell histories,
+// package-manager credentials, cloud CLIs' sessions and the token files of
+// common command-line tools, on macOS, Linux and Windows. No mod reaches
+// them, whatever its files grant says.
 func Keychains(home string, getenv func(string) string) []string {
 	var out []string
 	if home != "" {
-		for _, p := range []string{
-			"Library/Keychains", ".local/share/keyrings", ".password-store",
-			".config/glab-cli", ".config/hub", ".config/op", ".op", ".vault-token", ".pgpass", ".my.cnf",
-			".cargo/credentials", ".cargo/credentials.toml", ".gem/credentials", ".terraform.d/credentials.tfrc.json",
-		} {
-			out = append(out, filepath.Join(home, filepath.FromSlash(p)))
+		for _, list := range [][]string{keychainHome, browserHome, historyHome, packageHome, cloudHome} {
+			for _, p := range list {
+				out = append(out, filepath.Join(home, filepath.FromSlash(p)))
+			}
 		}
 	}
 	out = append(out, "/Library/Keychains", "/System/Library/Keychains")
 	for _, v := range []string{"APPDATA", "LOCALAPPDATA"} {
-		if d := getenv(v); d != "" && filepath.IsAbs(d) {
-			out = append(out, filepath.Join(d, "Microsoft", "Credentials"), filepath.Join(d, "Microsoft", "Protect"))
+		d := getenv(v)
+		if d == "" || !filepath.IsAbs(d) {
+			continue
+		}
+		out = append(out, filepath.Join(d, "Microsoft", "Credentials"), filepath.Join(d, "Microsoft", "Protect"))
+		for _, list := range [][]string{
+			browserApp, historyApp, packageApp, cloudApp,
+			{"1Password", "Bitwarden", "Bitwarden CLI", "KeePass", "KeePassXC", "Dashlane", "LastPass"},
+		} {
+			for _, p := range list {
+				out = append(out, filepath.Join(d, filepath.FromSlash(p)))
+			}
 		}
 	}
 	return out

@@ -3,6 +3,7 @@ package modbroker
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -298,5 +299,83 @@ func TestPathsCheckIn(t *testing.T) {
 		if got != c.want || (err == nil) != (c.want != "") {
 			t.Errorf("CheckIn(%s, %q) = %q, %v; want %q", c.root, c.path, got, err, c.want)
 		}
+	}
+}
+
+// TestKeychainGroups: each group of private places is listed, per OS.
+func TestKeychainGroups(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "h")
+	app, local := filepath.Join(t.TempDir(), "Roaming"), filepath.Join(t.TempDir(), "Local")
+	env := map[string]string{"APPDATA": app, "LOCALAPPDATA": local}
+	got := Keychains(home, func(k string) string { return env[k] })
+	groups := map[string][]string{
+		"keychains and password managers": {"Library/Keychains", ".password-store", ".local/share/keyrings", ".config/op",
+			"Library/Application Support/1Password", ".config/Bitwarden", ".config/keepassxc", ".pgpass"},
+		"browser profiles": {"Library/Application Support/Google/Chrome", "Library/Application Support/Firefox",
+			"Library/Safari", "Library/Application Support/Microsoft Edge", "Library/Application Support/BraveSoftware",
+			"Library/Application Support/Arc", ".config/google-chrome", ".mozilla", ".config/BraveSoftware", ".config/microsoft-edge"},
+		"shell histories": {".bash_history", ".zsh_history", ".local/share/fish", ".python_history", ".psql_history"},
+		"package-manager credentials": {".npmrc", ".yarnrc.yml", ".m2/settings.xml", ".gradle/gradle.properties", ".pypirc",
+			".cargo/credentials", ".cargo/credentials.toml", ".docker/config.json", ".kube/config", ".nuget/NuGet/NuGet.Config"},
+		"cloud CLIs": {".aws", ".azure", ".config/gcloud", ".config/doctl", ".oci"},
+	}
+	for name, rels := range groups {
+		for _, rel := range rels {
+			if want := filepath.Join(home, filepath.FromSlash(rel)); !slices.Contains(got, want) {
+				t.Errorf("%s: no %s in Keychains", name, rel)
+			}
+		}
+	}
+	windows := map[string][]string{
+		"browser profiles": {filepath.Join(local, "Google", "Chrome"), filepath.Join(local, "Microsoft", "Edge"),
+			filepath.Join(local, "BraveSoftware"), filepath.Join(app, "Mozilla", "Firefox")},
+		"shell histories":   {filepath.Join(app, "Microsoft", "Windows", "PowerShell", "PSReadLine")},
+		"package-manager":   {filepath.Join(app, "NuGet", "NuGet.Config")},
+		"cloud CLIs":        {filepath.Join(app, "gcloud"), filepath.Join(app, "Azure")},
+		"password managers": {filepath.Join(app, "Bitwarden"), filepath.Join(local, "1Password"), filepath.Join(app, "Microsoft", "Credentials")},
+	}
+	for name, ps := range windows {
+		for _, p := range ps {
+			if !slices.Contains(got, p) {
+				t.Errorf("windows %s: no %s in Keychains", name, p)
+			}
+		}
+	}
+	if n := len(Keychains("", func(string) string { return "" })); n != 2 {
+		t.Errorf("without a home or app data: %d entries, want the 2 system keychains", n)
+	}
+}
+
+// TestPathsCheckPrivate: a grant over the home's folders never reaches a
+// private place in any group, by name or through a link.
+func TestPathsCheckPrivate(t *testing.T) {
+	home := t.TempDir()
+	getenv := func(string) string { return "" }
+	files := []string{
+		"docs/ok.txt", "Library/Application Support/Google/Chrome/Default/Cookies", ".mozilla/firefox/p/logins.json",
+		".zsh_history", ".local/share/fish/fish_history", ".m2/settings.xml", ".gradle/gradle.properties",
+		".config/gcloud/credentials.db", ".azure/accessTokens.json", "Library/Application Support/Bitwarden/data.json",
+	}
+	for _, f := range files {
+		full := filepath.Join(home, filepath.FromSlash(f))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p := Paths{
+		Home: home, TMHome: filepath.Join(home, ".terminatr"), Own: filepath.Join(home, ".terminatr", "m"),
+		Read:    []string{"~/docs", "~/Library", "~/.mozilla", "~/.local", "~/.m2", "~/.gradle", "~/.config", "~/.azure"},
+		Secrets: Real(append(agent.Secrets(nil, home, getenv), Keychains(home, getenv)...)),
+	}.resolve()
+	for _, f := range files[1:] {
+		if _, err := p.Check("~/"+f, false); err == nil {
+			t.Errorf("~/%s was reachable", f)
+		}
+	}
+	if _, err := p.Check("~/docs/ok.txt", false); err != nil {
+		t.Errorf("~/docs/ok.txt: %v", err)
 	}
 }
