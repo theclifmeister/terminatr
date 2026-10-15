@@ -96,12 +96,12 @@ func dialAt(sock string, kind proto.Kind, protocol int) (*Client, error) {
 	c := &Client{conn: conn, br: bufio.NewReader(conn)}
 	conn.SetDeadline(time.Now().Add(UnresponsiveTimeout))
 	hello := proto.Hello{Protocol: protocol, Version: version.Version, Build: version.BuildID(), Kind: proto.Kind(kind)}
-	if err := writeJSONLine(conn, hello); err != nil {
+	if err := proto.WriteLine(conn, hello); err != nil {
 		conn.Close()
 		return nil, err
 	}
 	var server proto.Hello
-	if err := readJSONLine(c.br, &server); err != nil {
+	if err := proto.ReadLine(c.br, &server); err != nil {
 		conn.Close()
 		return nil, err
 	}
@@ -306,9 +306,9 @@ func (c *Client) call(deadline time.Time, method string, params, result any) err
 		defer c.conn.SetDeadline(time.Time{})
 	}
 	var resp proto.Response
-	err := writeJSONLine(c.conn, req)
+	err := proto.WriteLine(c.conn, req)
 	if err == nil {
-		err = readJSONLine(c.br, &resp)
+		err = proto.ReadLine(c.br, &resp)
 	}
 	if err == nil && resp.ID != req.ID {
 		err = fmt.Errorf("%s: the answer is to request %d, not %d", method, resp.ID, req.ID)
@@ -341,12 +341,12 @@ func Attach(p Paths, params proto.AttachParams) (*Client, *proto.SessionInfo, er
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := writeJSONLine(c.conn, proto.AttachRequest{Attach: params}); err != nil {
+	if err := proto.WriteLine(c.conn, proto.AttachRequest{Attach: params}); err != nil {
 		c.Close()
 		return nil, nil, err
 	}
 	var reply proto.AttachReply
-	if err := readJSONLine(c.br, &reply); err != nil {
+	if err := proto.ReadLine(c.br, &reply); err != nil {
 		c.Close()
 		return nil, nil, err
 	}
@@ -450,7 +450,7 @@ func SubscribeView(p Paths, params proto.ViewSubscribeParams) (*ViewStream, view
 func (s *ViewStream) Next() (view.View, error) {
 	var ev proto.ViewEvent
 	for {
-		if err := readJSONLine(s.c.br, &ev); err != nil {
+		if err := proto.ReadLine(s.c.br, &ev); err != nil {
 			return view.View{}, err
 		}
 		switch ev.Event {
@@ -491,7 +491,7 @@ func WatchSession(p Paths, id string) (*WatchStream, proto.Watch, error) {
 func (s *WatchStream) Next() (proto.Watch, error) {
 	for {
 		var ev proto.WatchEvent
-		if err := readJSONLine(s.c.br, &ev); err != nil {
+		if err := proto.ReadLine(s.c.br, &ev); err != nil {
 			return proto.Watch{}, err
 		}
 		if ev.Event == proto.EventWatchChanged {
@@ -518,7 +518,7 @@ func AskSession(p Paths, id string, q proto.Question) (map[string]string, error)
 	}
 	for {
 		var ev proto.AskEvent
-		if err := readJSONLine(c.br, &ev); err != nil {
+		if err := proto.ReadLine(c.br, &ev); err != nil {
 			return nil, err
 		}
 		switch ev.Event {

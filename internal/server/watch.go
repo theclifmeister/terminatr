@@ -168,7 +168,7 @@ func (s *Server) serveWatch(c net.Conn, br *bufio.Reader, req proto.Request) {
 	resp := proto.Response{ID: req.ID}
 	if perr := decodeParams(req.Params, &p); perr != nil {
 		resp.Error = perr
-		writeJSONLine(c, resp)
+		proto.WriteLine(c, resp)
 		return
 	}
 	// Read before the answer: once it is out, the caller may change it.
@@ -182,11 +182,11 @@ func (s *Server) serveWatch(c net.Conn, br *bufio.Reader, req proto.Request) {
 	w, ok := s.watchState(p.ID)
 	if !ok {
 		resp.Error = proto.Errorf(proto.ErrUnknownSession, "no session %q", p.ID)
-		writeJSONLine(c, resp)
+		proto.WriteLine(c, resp)
 		return
 	}
 	resp.Result, _ = json.Marshal(w)
-	if err := writeJSONLine(c, resp); err != nil {
+	if err := proto.WriteLine(c, resp); err != nil {
 		return
 	}
 	last, _ := json.Marshal(w)
@@ -212,7 +212,7 @@ func (s *Server) serveWatch(c net.Conn, br *bufio.Reader, req proto.Request) {
 		}
 		if !alive {
 			w.Session.State, w.Session.Reason = string(agent.StateExited), ""
-			writeJSONLine(c, proto.WatchEvent{Event: proto.EventWatchChanged, Watch: w})
+			proto.WriteLine(c, proto.WatchEvent{Event: proto.EventWatchChanged, Watch: w})
 			return
 		}
 		b, _ := json.Marshal(next)
@@ -220,7 +220,7 @@ func (s *Server) serveWatch(c net.Conn, br *bufio.Reader, req proto.Request) {
 			continue
 		}
 		w, last = next, b
-		if err := writeJSONLine(c, proto.WatchEvent{Event: proto.EventWatchChanged, Watch: w}); err != nil {
+		if err := proto.WriteLine(c, proto.WatchEvent{Event: proto.EventWatchChanged, Watch: w}); err != nil {
 			return
 		}
 	}

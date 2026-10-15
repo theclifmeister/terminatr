@@ -618,7 +618,7 @@ func (s *Server) handle(c net.Conn, human bool) {
 	br := bufio.NewReader(c)
 	c.SetReadDeadline(time.Now().Add(handshakeTimeout))
 	var hello proto.Hello
-	if err := readJSONLine(br, &hello); err != nil {
+	if err := proto.ReadLine(br, &hello); err != nil {
 		return
 	}
 	c.SetReadDeadline(time.Time{})
@@ -626,7 +626,7 @@ func (s *Server) handle(c net.Conn, human bool) {
 		return
 	}
 	reply := s.hello()
-	if err := writeJSONLine(c, reply); err != nil {
+	if err := proto.WriteLine(c, reply); err != nil {
 		return
 	}
 	// Both sides check; the client says what went wrong, the server just
@@ -659,7 +659,7 @@ func (s *Server) hello() proto.Hello {
 func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human bool) {
 	for {
 		var req proto.Request
-		if err := readJSONLine(br, &req); err != nil {
+		if err := proto.ReadLine(br, &req); err != nil {
 			return
 		}
 		who := s.whoFor(peerPID)
@@ -669,7 +669,7 @@ func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human b
 			perr = s.mayAddress(req, m, human, who)
 		}
 		if perr != nil {
-			if err := writeJSONLine(c, proto.Response{ID: req.ID, Error: perr}); err != nil {
+			if err := proto.WriteLine(c, proto.Response{ID: req.ID, Error: perr}); err != nil {
 				return
 			}
 			continue
@@ -693,7 +693,7 @@ func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human b
 				resp.Result = b
 			}
 		}
-		if err := writeJSONLine(c, resp); err != nil {
+		if err := proto.WriteLine(c, resp); err != nil {
 			return
 		}
 		if req.Method == proto.MethodServerStop && perr == nil {
@@ -1101,14 +1101,14 @@ func (s *Server) stopSession(id string) (any, *proto.Error) {
 func (s *Server) serveAttach(c net.Conn, br *bufio.Reader, peerPID int, human bool) {
 	c.SetReadDeadline(time.Now().Add(handshakeTimeout))
 	var req proto.AttachRequest
-	if err := readJSONLine(br, &req); err != nil {
+	if err := proto.ReadLine(br, &req); err != nil {
 		return
 	}
 	c.SetReadDeadline(time.Time{})
 	// Attach types into a session as the human would: the human's alone,
 	// like session.keys.
 	if perr := mayCall(attachMethod, gateHuman, human, s.whoFor(peerPID)); perr != nil {
-		writeJSONLine(c, proto.AttachReply{Error: perr})
+		proto.WriteLine(c, proto.AttachReply{Error: perr})
 		return
 	}
 	if _, _, ok := remoteID(req.Attach.Session); ok {
@@ -1117,16 +1117,16 @@ func (s *Server) serveAttach(c net.Conn, br *bufio.Reader, peerPID int, human bo
 	}
 	sess, perr := s.session(req.Attach.Session)
 	if perr != nil {
-		writeJSONLine(c, proto.AttachReply{Error: perr})
+		proto.WriteLine(c, proto.AttachReply{Error: perr})
 		return
 	}
 	sub, err := sess.Attach()
 	if err != nil {
-		writeJSONLine(c, proto.AttachReply{Error: sessionError(req.Attach.Session, err)})
+		proto.WriteLine(c, proto.AttachReply{Error: sessionError(req.Attach.Session, err)})
 		return
 	}
 	info := s.info(sess)
-	if err := writeJSONLine(c, proto.AttachReply{Attached: &info}); err != nil {
+	if err := proto.WriteLine(c, proto.AttachReply{Attached: &info}); err != nil {
 		sub.Detach()
 		return
 	}
@@ -1204,36 +1204,6 @@ func decodeParams(raw json.RawMessage, v any) *proto.Error {
 		return proto.Errorf(proto.ErrBadParams, "%v", err)
 	}
 	return nil
-}
-
-// maxLine bounds one NDJSON line.
-const maxLine = 16 << 20
-
-func readJSONLine(br *bufio.Reader, v any) error {
-	var line []byte
-	for {
-		chunk, isPrefix, err := br.ReadLine()
-		if err != nil {
-			return err
-		}
-		line = append(line, chunk...)
-		if len(line) > maxLine {
-			return fmt.Errorf("line too long")
-		}
-		if !isPrefix {
-			break
-		}
-	}
-	return json.Unmarshal(line, v)
-}
-
-func writeJSONLine(w net.Conn, v any) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	_, err = w.Write(append(b, '\n'))
-	return err
 }
 
 // codeHostStatus runs the code-host checks (codehost.Checks) for the

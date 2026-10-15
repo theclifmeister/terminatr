@@ -423,18 +423,18 @@ func (rp *remotePane) sessionInfo() proto.SessionInfo {
 func (s *Server) serveRemoteAttach(c net.Conn, br *bufio.Reader, id string) {
 	rp, perr := s.remotes.open(id)
 	if perr != nil {
-		writeJSONLine(c, proto.AttachReply{Error: perr})
+		proto.WriteLine(c, proto.AttachReply{Error: perr})
 		return
 	}
 	sub, err := rp.proxy.Attach()
 	if err != nil {
-		writeJSONLine(c, proto.AttachReply{Error: proto.Errorf(proto.ErrUnknownSession, "the pane on %s closed", rp.alias)})
+		proto.WriteLine(c, proto.AttachReply{Error: proto.Errorf(proto.ErrUnknownSession, "the pane on %s closed", rp.alias)})
 		return
 	}
 	rp.attached()
 	defer rp.detached()
 	info := rp.sessionInfo()
-	if err := writeJSONLine(c, proto.AttachReply{Attached: &info}); err != nil {
+	if err := proto.WriteLine(c, proto.AttachReply{Attached: &info}); err != nil {
 		sub.Detach()
 		return
 	}

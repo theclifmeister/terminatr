@@ -1,7 +1,9 @@
 package proto
 
 import (
+	"bufio"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -150,6 +152,14 @@ func WriteFrame(w io.Writer, t FrameType, payload []byte) error {
 	return err
 }
 
+// AppendFrame appends one encoded frame to b, the in-memory form of
+// WriteFrame for queues that batch frames.
+func AppendFrame(b []byte, t FrameType, payload []byte) []byte {
+	n := len(payload)
+	b = append(b, byte(t), byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
+	return append(b, payload...)
+}
+
 // ReadFrame reads one frame. buf is reused when it is large enough.
 func ReadFrame(r io.Reader, buf []byte) (FrameType, []byte, error) {
 	var hdr [5]byte
@@ -184,4 +194,36 @@ func ParseSize(b []byte) (cols, rows uint16, err error) {
 		return 0, 0, fmt.Errorf("proto: size payload is %d bytes, want 4", len(b))
 	}
 	return binary.BigEndian.Uint16(b), binary.BigEndian.Uint16(b[2:]), nil
+}
+
+// MaxLine bounds one NDJSON line of the control protocol.
+const MaxLine = 16 << 20
+
+// ReadLine reads one NDJSON line of at most MaxLine bytes from br into v.
+func ReadLine(br *bufio.Reader, v any) error {
+	var line []byte
+	for {
+		chunk, isPrefix, err := br.ReadLine()
+		if err != nil {
+			return err
+		}
+		line = append(line, chunk...)
+		if len(line) > MaxLine {
+			return fmt.Errorf("line too long")
+		}
+		if !isPrefix {
+			break
+		}
+	}
+	return json.Unmarshal(line, v)
+}
+
+// WriteLine writes v to w as one NDJSON line, in one Write.
+func WriteLine(w io.Writer, v any) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(append(b, '\n'))
+	return err
 }

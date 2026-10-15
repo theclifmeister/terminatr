@@ -149,7 +149,7 @@ func (s *Server) serveAsk(c net.Conn, br *bufio.Reader, req proto.Request) {
 	resp := proto.Response{ID: req.ID}
 	if perr := decodeParams(req.Params, &p); perr != nil {
 		resp.Error = perr
-		writeJSONLine(c, resp)
+		proto.WriteLine(c, resp)
 		return
 	}
 	sess, perr := s.session(p.ID)
@@ -158,7 +158,7 @@ func (s *Server) serveAsk(c net.Conn, br *bufio.Reader, req proto.Request) {
 	}
 	if perr != nil {
 		resp.Error = perr
-		writeJSONLine(c, resp)
+		proto.WriteLine(c, resp)
 		return
 	}
 	q := p.Question
@@ -173,7 +173,7 @@ func (s *Server) serveAsk(c net.Conn, br *bufio.Reader, req proto.Request) {
 	defer s.watch.wake()
 	defer s.modEv.wake()
 	resp.Result = []byte("{}")
-	if err := writeJSONLine(c, resp); err != nil {
+	if err := proto.WriteLine(c, resp); err != nil {
 		return
 	}
 	// The client sends nothing more; a read returning is it leaving.
@@ -185,10 +185,10 @@ func (s *Server) serveAsk(c net.Conn, br *bufio.Reader, req proto.Request) {
 	select {
 	case <-gone:
 	case ans := <-o.answered:
-		writeJSONLine(c, proto.AskEvent{Event: proto.EventAskAnswered, Answers: ans})
+		proto.WriteLine(c, proto.AskEvent{Event: proto.EventAskAnswered, Answers: ans})
 	case <-o.replaced:
-		writeJSONLine(c, proto.AskEvent{Event: proto.EventAskClosed})
+		proto.WriteLine(c, proto.AskEvent{Event: proto.EventAskClosed})
 	case <-sess.Done():
-		writeJSONLine(c, proto.AskEvent{Event: proto.EventAskClosed})
+		proto.WriteLine(c, proto.AskEvent{Event: proto.EventAskClosed})
 	}
 }

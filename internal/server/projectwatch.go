@@ -319,7 +319,7 @@ func (s *Server) serveProjectWatch(c net.Conn, br *bufio.Reader, req proto.Reque
 	resp := proto.Response{ID: req.ID}
 	if perr := decodeParams(req.Params, &p); perr != nil {
 		resp.Error = perr
-		writeJSONLine(c, resp)
+		proto.WriteLine(c, resp)
 		return
 	}
 	wake := s.watch.add()
@@ -327,11 +327,11 @@ func (s *Server) serveProjectWatch(c net.Conn, br *bufio.Reader, req proto.Reque
 	w, err := s.projectWatchState(p.Project)
 	if err != nil {
 		resp.Error = proto.Errorf(proto.ErrBadParams, "%v", err)
-		writeJSONLine(c, resp)
+		proto.WriteLine(c, resp)
 		return
 	}
 	resp.Result, _ = json.Marshal(w)
-	if err := writeJSONLine(c, resp); err != nil {
+	if err := proto.WriteLine(c, resp); err != nil {
 		return
 	}
 	last := resp.Result
@@ -365,7 +365,7 @@ func (s *Server) serveProjectWatch(c net.Conn, br *bufio.Reader, req proto.Reque
 			continue
 		}
 		last = b
-		if err := writeJSONLine(c, proto.ProjectWatchEvent{Event: proto.EventProjectChanged, Watch: next}); err != nil {
+		if err := proto.WriteLine(c, proto.ProjectWatchEvent{Event: proto.EventProjectChanged, Watch: next}); err != nil {
 			return
 		}
 	}
@@ -393,7 +393,7 @@ func WatchProject(p Paths, slug string) (*ProjectWatchStream, proto.ProjectWatch
 func (s *ProjectWatchStream) Next() (proto.ProjectWatch, error) {
 	for {
 		var ev proto.ProjectWatchEvent
-		if err := readJSONLine(s.c.br, &ev); err != nil {
+		if err := proto.ReadLine(s.c.br, &ev); err != nil {
 			return proto.ProjectWatch{}, err
 		}
 		if ev.Event == proto.EventProjectChanged {

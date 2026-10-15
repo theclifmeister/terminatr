@@ -178,11 +178,11 @@ func TestHumanSocketAttach(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer srv.Close()
-	if err := writeJSONLine(srv.conn, proto.AttachRequest{Attach: proto.AttachParams{Session: id}}); err != nil {
+	if err := proto.WriteLine(srv.conn, proto.AttachRequest{Attach: proto.AttachParams{Session: id}}); err != nil {
 		t.Fatal(err)
 	}
 	var reply proto.AttachReply
-	if err := readJSONLine(srv.br, &reply); err != nil {
+	if err := proto.ReadLine(srv.br, &reply); err != nil {
 		t.Fatal(err)
 	}
 	if reply.Attached != nil || !onHumanSocketOnly(reply.Error) {

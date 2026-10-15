@@ -391,20 +391,20 @@ func rawHello(t *testing.T, p Paths, h proto.Hello) (proto.Hello, bool) {
 	defer conn.Close()
 	conn.SetDeadline(time.Now().Add(5 * time.Second))
 	br := bufio.NewReader(conn)
-	if err := writeJSONLine(conn, h); err != nil {
+	if err := proto.WriteLine(conn, h); err != nil {
 		t.Fatal(err)
 	}
 	var reply proto.Hello
-	if err := readJSONLine(br, &reply); err != nil {
+	if err := proto.ReadLine(br, &reply); err != nil {
 		t.Fatal(err)
 	}
 	if h.Kind == proto.KindAttach {
-		writeJSONLine(conn, proto.AttachRequest{Attach: proto.AttachParams{Session: "s-404"}})
+		proto.WriteLine(conn, proto.AttachRequest{Attach: proto.AttachParams{Session: "s-404"}})
 	} else {
-		writeJSONLine(conn, proto.Request{ID: 1, Method: proto.MethodPing})
+		proto.WriteLine(conn, proto.Request{ID: 1, Method: proto.MethodPing})
 	}
 	var any map[string]any
-	return reply, readJSONLine(br, &any) == nil
+	return reply, proto.ReadLine(br, &any) == nil
 }
 
 func TestHandshakeVersioning(t *testing.T) {

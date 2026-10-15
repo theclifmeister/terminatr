@@ -26,7 +26,7 @@ func FuzzControlDecode(f *testing.F) {
 		br := bufio.NewReader(bytes.NewReader(data))
 		for i := 0; i < 8; i++ {
 			var raw json.RawMessage
-			if err := readJSONLine(br, &raw); err != nil {
+			if err := proto.ReadLine(br, &raw); err != nil {
 				if errors.Is(err, io.EOF) {
 					return
 				}

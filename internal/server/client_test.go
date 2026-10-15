@@ -18,11 +18,11 @@ func fakeServer(t *testing.T, conn net.Conn, delay time.Duration, answer func(pr
 		br := bufio.NewReader(conn)
 		for {
 			var req proto.Request
-			if err := readJSONLine(br, &req); err != nil {
+			if err := proto.ReadLine(br, &req); err != nil {
 				return
 			}
 			time.Sleep(delay)
-			if err := writeJSONLine(conn, answer(req)); err != nil {
+			if err := proto.WriteLine(conn, answer(req)); err != nil {
 				return
 			}
 		}
