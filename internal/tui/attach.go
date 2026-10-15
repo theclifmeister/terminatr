@@ -2496,3 +2496,62 @@ func (c *client) applyPoll(pl *polled, now time.Time) bool {
 	}
 	return draw
 }
+
+// reattachWait bounds how long a restarting session may take to be back.
+const reattachWait = 15 * time.Second
+
+// reattach attaches p to its session again once the server relaunched it
+// under the same id (proto.ClosedRestarting), keeping p's place in the
+// layout; if it doesn't come back, the pane ends.
+func (c *client) reattach(p *pane) {
+	deadline := time.Now().Add(reattachWait)
+	for {
+		if !c.lock() {
+			return
+		}
+		gone, id := p.gone, p.info.ID
+		c.mu.Unlock()
+		if gone {
+			return
+		}
+		np, err := c.open(id)
+		if err == nil {
+			p.wmu.Lock()
+			if !c.lock() {
+				p.wmu.Unlock()
+				np.conn.Close()
+				np.r.Close()
+				return
+			}
+			old := p.conn
+			if p.mirror != nil {
+				p.mirror.Close()
+			}
+			if p.r != nil {
+				p.r.Close()
+			}
+			p.conn, p.mirror, p.r, p.info = np.conn, np.mirror, np.r, np.info
+			p.restarting = false
+			// Place the new renderer; like any attach, no resize.
+			c.relayout()
+			c.flash = paneName(p.info) + " is back"
+			c.status()
+			c.mu.Unlock()
+			p.wmu.Unlock()
+			old.Close()
+			go c.readLoop(p)
+			c.poke()
+			return
+		}
+		if time.Now().After(deadline) {
+			if !c.lock() {
+				return
+			}
+			p.restarting = false
+			c.mu.Unlock()
+			c.ended(p, "session restart failed: "+errMessage(err))
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
