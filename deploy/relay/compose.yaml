@@ -2,17 +2,22 @@
 # Running a relay). Put fullchain.pem and privkey.pem in ./certs,
 # readable by uid 65532; the relay reloads them when they change.
 #
-#   docker compose up -d --build
+#   docker compose up -d
+#
+# The copy in a release's tm-relay-docker.tar.gz pins TM_VERSION to that
+# release. Upgrade: put TM_VERSION=<new tag> in .env, run the same command.
 #
 # For a certificate obtained and renewed automatically (ACME), use
 # compose.acme.yaml instead.
 services:
   relay:
-    build:
-      context: .
-      args:
-        TM_VERSION: latest # pin a tag, e.g. v0.27.0
-    image: tm-relay
+    image: ghcr.io/theclifmeister/tm-relay:${TM_VERSION:-latest}
+    # To build the image here instead, from the same release binary checked
+    # against its checksums.txt, uncomment these lines and add --build:
+    # build:
+    #   context: .
+    #   args:
+    #     TM_VERSION: ${TM_VERSION:-latest}
     restart: unless-stopped
     ports:
       - "443:8443"

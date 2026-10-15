@@ -120,14 +120,26 @@ func TestRelayDeployFilesUseRealFlags(t *testing.T) {
 	if !strings.Contains(read("Dockerfile"), "\nENV GOMEMLIMIT=200MiB\n") {
 		t.Error("Dockerfile: no ENV GOMEMLIMIT=200MiB")
 	}
-	for _, f := range []string{"compose.yaml", "compose.acme.yaml"} {
+	for _, f := range []string{"compose.yaml", "compose.acme.yaml", "compose.selfsigned.yaml"} {
 		if !strings.Contains(read(f), "mem_limit: 256m") {
 			t.Errorf("%s: no mem_limit: 256m", f)
 		}
 	}
+	// compose.selfsigned.yaml's address comes from .env, its state from
+	// a mount.
+	selfSigned := jsonLine(read("compose.selfsigned.yaml"), "command: ")
+	for i, a := range selfSigned {
+		switch {
+		case strings.HasPrefix(a, "${RELAY_IP:?"):
+			selfSigned[i] = "192.0.2.1"
+		case a == "/state":
+			selfSigned[i] = t.TempDir()
+		}
+	}
 	runs := map[string][]string{
-		"Dockerfile":        jsonLine(read("Dockerfile"), "CMD "),
-		"compose.acme.yaml": jsonLine(read("compose.acme.yaml"), "command: "),
+		"Dockerfile":              jsonLine(read("Dockerfile"), "CMD "),
+		"compose.acme.yaml":       jsonLine(read("compose.acme.yaml"), "command: "),
+		"compose.selfsigned.yaml": selfSigned,
 	}
 	for _, l := range strings.Split(read("tm-relay.service"), "\n") {
 		if rest, ok := strings.CutPrefix(l, "ExecStart=/usr/local/bin/tm relay serve "); ok {

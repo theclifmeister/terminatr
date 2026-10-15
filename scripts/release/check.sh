@@ -101,3 +101,18 @@ for a in "$dist"/tm_*.tar.gz "$dist"/tm_*.zip; do
 	echo "$name: ok ($desc)" | cut -c1-120
 done
 [ "$n" -eq 6 ] || fail "$n archives, want 6"
+
+# The relay's Docker files (scripts/release/relay-docker.sh), each compose
+# file pinned to the one release.
+docker=tm-relay-docker.tar.gz
+grep -q " $docker\$" "$dist/checksums.txt" || fail "checksums.txt does not list $docker"
+mkdir "$tmp/docker"
+tar -xzf "$dist/$docker" -C "$tmp/docker" || fail "$docker: not a tar.gz"
+for f in Dockerfile Caddyfile README.md compose.yaml compose.acme.yaml compose.selfsigned.yaml; do
+	[ -f "$tmp/docker/tm-relay-docker/$f" ] || fail "$docker lacks tm-relay-docker/$f"
+done
+pins=$(cat "$tmp"/docker/tm-relay-docker/compose*.yaml | grep -o '\${TM_VERSION:-[^}]*}' | sort -u)
+case $pins in
+'${TM_VERSION:-v'[0-9]*'}') echo "$docker: ok (pinned to $(echo "$pins" | sed 's/.*:-//; s/}//'))" ;;
+*) fail "$docker: compose files pin TM_VERSION to '$(echo $pins)', want one release tag" ;;
+esac

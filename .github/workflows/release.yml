@@ -10,10 +10,13 @@ name: release
 #   4. the uploaded archives are checked again, signatures included, and
 #      only then is the release published
 #   5. Formula/terminatr.rb is bumped in a pull request that merges itself
+#   6. the relay image (deploy/relay/Dockerfile, from the published linux
+#      binaries) goes to ghcr.io/theclifmeister/tm-relay, on a Linux runner
 #
-# Everything runs on one macOS runner: tm needs cgo, the Linux targets are
+# The build runs on one macOS runner: tm needs cgo, the Linux targets are
 # cross-compiled with zig cc, and the darwin targets are linked by Apple's
-# clang and ld from the macOS SDK.
+# clang and ld from the macOS SDK. The image needs Docker, which macOS
+# runners lack, so it has its own job once the release is published.
 # The secrets are listed in docs/OPERATIONS.md (Releasing).
 
 on:
@@ -33,6 +36,9 @@ jobs:
     # request, can read them. Repository secrets of the same names work
     # too, but are readable by any workflow on a branch of this repository.
     environment: release
+    outputs:
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      published: ${{ steps.publish.outputs.published }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -185,9 +191,12 @@ jobs:
           fi
 
       - name: Publish
+        id: publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release edit "$GITHUB_REF_NAME" --draft=false
+        run: |
+          gh release edit "$GITHUB_REF_NAME" --draft=false
+          echo "published=true" >> "$GITHUB_OUTPUT"
 
       # Same as toe's cask bump: open a pull request with the new formula and
       # merge it, so the release stays one step. Both values come from the
@@ -264,3 +273,52 @@ jobs:
       - name: Clean up keychain
         if: always()
         run: security delete-keychain "$RUNNER_TEMP/tm-signing.keychain-db" || true
+
+  # The relay image, for amd64 and arm64, built by deploy/relay/Dockerfile
+  # from this release's published linux archives, checked against its
+  # checksums.txt, as `docker build` anywhere does: the image holds exactly
+  # the released binary. Tagged with the version and, unless a prerelease,
+  # latest. It runs once the release is published, even if the formula
+  # bump after that failed. A failure here leaves the release published;
+  # rerun this job.
+  image:
+    needs: release
+    if: ${{ !cancelled() && needs.release.outputs.published == 'true' }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Tags
+        id: tags
+        env:
+          PRERELEASE: ${{ needs.release.outputs.prerelease }}
+        run: |
+          image=ghcr.io/theclifmeister/tm-relay
+          tags="$image:$GITHUB_REF_NAME"
+          if [ "$PRERELEASE" = false ]; then
+            tags="$tags,$image:latest"
+          fi
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+
+      # arm64's build stage runs the binary (tm version) under emulation.
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: deploy/relay
+          platforms: linux/amd64,linux/arm64
+          build-args: TM_VERSION=${{ github.ref_name }}
+          tags: ${{ steps.tags.outputs.tags }}
+          push: true
