@@ -21,6 +21,8 @@ type vectors struct {
 		Rule    *string        `json:"rule"`
 		Summary string         `json:"summary"`
 		Ask     bool           `json:"ask"`
+		// Links are where writes under a link land (Resolve, faked).
+		Links map[string]string `json:"links"`
 	} `json:"cases"`
 	Messages map[string]map[string]string `json:"messages"`
 }
@@ -53,6 +55,19 @@ func loadVectors(t *testing.T) vectors {
 	return v
 }
 
+// linksTo is a Resolve that follows links: a path under a link (a key)
+// to the same place under its target, as guard.test.ts does.
+func linksTo(links map[string]string) func(string) string {
+	return func(p string) string {
+		for link, to := range links {
+			if p == link || strings.HasPrefix(p, link+"/") {
+				return to + p[len(link):]
+			}
+		}
+		return p
+	}
+}
+
 // TestVectors: the Go port refuses (or asks about) what guard.ts does,
 // with the same rule, summary and sentence.
 func TestVectors(t *testing.T) {
@@ -61,6 +76,9 @@ func TestVectors(t *testing.T) {
 		r, ok := v.Rules[c.Rules]
 		if !ok {
 			t.Fatalf("no rules %q", c.Rules)
+		}
+		if c.Links != nil {
+			r.Resolve = linksTo(c.Links)
 		}
 		d := r.Judge(c.Tool, c.Input)
 		var got, want string

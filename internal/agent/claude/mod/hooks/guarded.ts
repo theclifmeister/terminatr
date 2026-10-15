@@ -16,21 +16,32 @@
 // made of changed: a fetch is cheap). Without the mod
 // socket, or when the server can't say, the guard is off: the session
 // keeps exactly the permission rules it has without the mod.
+//
+// A file tool's write is judged where it lands: the guard has no file
+// system, so before judging one it asks the server (POST /v1/resolve)
+// where each path it writes leads through links and junctions. A write
+// the server can't place in time is refused, never judged as written.
 
 import type { EngineInterface, On } from 'claude-code'
 
-import { judge, off, rulesOf } from './guard'
+import { judge, off, rulesOf, writeTargets } from './guard'
 import type { Denial, Rules } from './guard'
 import { failed, FETCH_MS, postInit, refused, socketURL, timedOut, within } from './socket'
 
 // RULES_TTL_MS is how long fetched rules hold; FETCH_MS bounds a fetch.
 const RULES_TTL_MS = 1_000
 
+// UNPLACED is what a write the server couldn't place is refused with.
+const UNPLACED = 'terminatr guard: where this write lands could not be checked (the server did not answer), so it was refused. Try again; if it keeps failing, say so.'
+
 let cached: { at: number; rules: Promise<Rules> } | null = null
 
 export function guard(on: On) {
   on('tool.call', async ($, e, next) => {
-    const d = judge(await rulesNow($), e.tool, e as unknown as Record<string, unknown>)
+    const input = e as unknown as Record<string, unknown>
+    const r = await placed($, await rulesNow($), e.tool, input)
+    if (!r) return { deny: UNPLACED }
+    const d = judge(r, e.tool, input)
     if (!d || d.ask) return next(e)
     void reportDenial($, e.tool, d)
     return { deny: d.message }
@@ -43,11 +54,13 @@ export function guard(on: On) {
   // never gets here: tool.call refused it first.
   on('tool.check', async ($, e, next) => {
     const input = e.input && typeof e.input === 'object' ? (e.input as Record<string, unknown>) : {}
-    const d = judge(await rulesNow($), e.tool, input)
+    const r = await placed($, await rulesNow($), e.tool, input)
+    if (!r) return { decision: 'deny' as const, reason: UNPLACED }
+    const d = judge(r, e.tool, input)
     if (!d) return next(e)
     if (!d.ask) return { decision: 'deny' as const, reason: d.message }
-    const r = await next(e)
-    return r.decision === 'allow' ? { decision: 'ask' as const, reason: d.message } : r
+    const c = await next(e)
+    return c.decision === 'allow' ? { decision: 'ask' as const, reason: d.message } : c
   }).catch(() => ({ decision: 'deny' as const }))
 }
 
@@ -77,6 +90,36 @@ async function fetchRules($: EngineInterface, socket: string): Promise<Rules> {
   cached = null
   log($, `terminatr: guard rules: ${got ? `${got.status} ${got.text}` : 'no answer'}`)
   return off
+}
+
+// placed is r with resolve answering where each file the call writes
+// lands, as the server says (POST /v1/resolve); r itself when the call
+// writes no file a rule judges. Null when the server can't say in time.
+async function placed($: EngineInterface, r: Rules, tool: string, input: Record<string, unknown>): Promise<Rules | null> {
+  const paths = writeTargets(r, tool, input)
+  if (paths.length === 0) return r
+  try {
+    const socket = (await $.env.get('TERMINATR_MOD_SOCKET')) ?? ''
+    const got = socket ? await within($.http.fetch(socketURL('/v1/resolve'), postInit(socket, JSON.stringify({ paths }))), $.clock.sleep(FETCH_MS)) : null
+    if (!got) {
+      log($, socket ? timedOut('guard resolve') : 'terminatr: guard resolve: no mod socket')
+      return null
+    }
+    if (!got.ok) {
+      log($, refused('guard resolve', got.status, got.text))
+      return null
+    }
+    const lands = (JSON.parse(got.text) as { paths?: unknown }).paths
+    if (!Array.isArray(lands) || lands.length !== paths.length || !lands.every(p => typeof p === 'string' && p !== '')) {
+      log($, `terminatr: guard resolve: unexpected answer ${got.text}`)
+      return null
+    }
+    const at = new Map(paths.map((p, i) => [p, lands[i] as string]))
+    return { ...r, resolve: p => at.get(p) ?? p }
+  } catch (err) {
+    log($, failed('guard resolve', err))
+    return null
+  }
 }
 
 async function reportDenial($: EngineInterface, tool: string, d: Denial) {
