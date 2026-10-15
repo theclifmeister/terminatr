@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"net"
@@ -781,4 +782,32 @@ func FuzzCheckHello(f *testing.F) {
 			t.Fatalf("accepted an unsigned hello: %s", raw)
 		}
 	})
+}
+
+// /healthz tells an unauthenticated client "ok" and not the tm release;
+// the release goes to linked servers in the challenge.
+func TestHealthzDoesNotTellTheVersion(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Version = "v1.2.3"
+	cfg.AutoUpdate = "on"
+	s := New(cfg)
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, httptest.NewRequest("GET", "/healthz", nil))
+	if rec.Code != 200 || rec.Body.String() != "ok\n" {
+		t.Fatalf("healthz: %d %q", rec.Code, rec.Body.String())
+	}
+	if v := rec.Header().Get("Tm-Version"); v != "" {
+		t.Fatalf("Tm-Version = %q", v)
+	}
+	if strings.Contains(rec.Body.String(), "1.2.3") || strings.Contains(fmt.Sprint(rec.Header()), "1.2.3") {
+		t.Fatalf("version leaks: %v", rec.Header())
+	}
+	if rec.Header().Get("Tm-Auto-Update") != "on" {
+		t.Fatalf("Tm-Auto-Update = %q", rec.Header().Get("Tm-Auto-Update"))
+	}
+	rec = httptest.NewRecorder()
+	s.ServeHTTP(rec, httptest.NewRequest("GET", "/other", nil))
+	if rec.Code != 404 {
+		t.Fatalf("other path: %d", rec.Code)
+	}
 }

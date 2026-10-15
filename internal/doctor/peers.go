@@ -411,7 +411,6 @@ func probeRelay(rp *RelayProbe, raw string) RelayHealth {
 		return h
 	}
 	h.Reachable = true
-	h.Version = resp.Header.Get("Tm-Version")
 	h.AutoUpdate = resp.Header.Get("Tm-Auto-Update")
 	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
 		if pin != "" {

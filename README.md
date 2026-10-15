@@ -73,7 +73,7 @@ Newer Homebrew refuses formulas from a tap it doesn't trust, hence `brew trust` 
 
 ## Connect your servers
 
-Run tm on more than one machine (a laptop and a server, say) and pair them: each one's dashboard then shows the projects the other shares, and you can open their panes. The two meet through a relay you run yourself, which both dial out to, so neither needs an open port. The relay sees only who connects and when, never what they say to each other.
+Run tm on more than one machine (a laptop and a server, say) and pair them: each one's dashboard then shows the projects the other shares, and you can open their panes. The two meet through a relay you run yourself, which both dial out to, so neither needs an open port. The relay sees which servers are paired, their IP addresses, and when and how much they talk, never what they say to each other. A relay that is broken into can cut or slow your links, but can't read or change them.
 
 The relay needs a Linux server with a domain name pointing at it and port 443 open. On that server:
 
