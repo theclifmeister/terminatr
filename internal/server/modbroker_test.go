@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modapi"
@@ -185,7 +186,7 @@ func TestModRequest(t *testing.T) {
 	conn := modproto.NewConn(strings.NewReader(""), inW)
 	read := modproto.NewConn(inR, io.Discard)
 	id := int64(7)
-	s.ModRequest("ghost", conn, &modproto.Message{ID: &id, Method: "store.get", Params: json.RawMessage(`{"key":"k"}`)})
+	s.ModRequest(context.Background(), "ghost", conn, &modproto.Message{ID: &id, Method: "store.get", Params: json.RawMessage(`{"key":"k"}`)})
 	m, err := read.Read()
 	if err != nil {
 		t.Fatal(err)
@@ -193,5 +194,84 @@ func TestModRequest(t *testing.T) {
 	if m.ID == nil || *m.ID != 7 || m.Error == nil || m.Error.Code != modproto.CodeDenied {
 		t.Fatalf("reply %+v", m)
 	}
-	s.ModRequest("ghost", conn, &modproto.Message{Method: "log"}) // a notification: no answer
+	s.ModRequest(context.Background(), "ghost", conn, &modproto.Message{Method: "log"}) // a notification: no answer
+}
+
+// TestModRequestBounded: a mod gets modCallsAtOnce calls running and
+// modCallsWaiting waiting; the next is refused at once, and the host's
+// end ends the rest.
+func TestModRequestBounded(t *testing.T) {
+	tmHome := t.TempDir()
+	t.Setenv("TERMINATR_HOME", tmHome)
+	dir := filepath.Join(tmHome, "mods", "lab")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, text := range map[string]string{"mod.toml": labManifest, "main.js": ""} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(tmHome, "config.toml"), []byte("[mods.lab]\nenabled = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{log: log.New(os.Stderr, "", 0), modEv: newModEvents()}
+	started := make(chan struct{}, modCallsAtOnce+modCallsWaiting)
+	s.broker().Handle("test.block", "", func(ctx context.Context, _ *modbroker.Call) (any, error) {
+		started <- struct{}{}
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+	inR, inW := io.Pipe()
+	conn := modproto.NewConn(strings.NewReader(""), inW)
+	read := modproto.NewConn(inR, io.Discard)
+	replies := make(chan *modproto.Message, 2*(modCallsAtOnce+modCallsWaiting))
+	go func() {
+		for {
+			m, err := read.Read()
+			if err != nil {
+				return
+			}
+			replies <- m
+		}
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	n := modCallsAtOnce + modCallsWaiting
+	for i := range n {
+		id := int64(i + 1)
+		s.ModRequest(ctx, "lab", conn, &modproto.Message{ID: &id, Method: "test.block"})
+	}
+	for range modCallsAtOnce {
+		<-started
+	}
+	id := int64(n + 1)
+	s.ModRequest(ctx, "lab", conn, &modproto.Message{ID: &id, Method: "test.block"})
+	m := <-replies
+	if m.ID == nil || *m.ID != id || m.Error == nil || m.Error.Code != modproto.CodeFailed {
+		t.Fatalf("call past the limit: %+v", m)
+	}
+	select {
+	case <-started:
+		t.Fatal("more than modCallsAtOnce calls ran at once")
+	default:
+	}
+	cancel()
+	for range n {
+		if m := <-replies; m.Error == nil || m.Error.Code != modproto.CodeFailed {
+			t.Fatalf("call after the host ended: %+v", m)
+		}
+	}
+	// Each call is counted out just after its answer.
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(time.Millisecond) {
+		s.modBr.mu.Lock()
+		left := s.modBr.inFlight["lab"]
+		s.modBr.mu.Unlock()
+		if left == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d calls still counted in flight", left)
+		}
+	}
 }
