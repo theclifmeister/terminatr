@@ -110,153 +110,40 @@ func runThread(e *Env, args []string) error {
 	f := newFlags()
 	slug, asJSON := f.String("project"), f.Bool("json")
 	var run func(p *project.Project, pos []string) error
-	oneID := func(pos []string, usage string) (string, error) {
-		if len(pos) != 1 {
-			return "", usagef("usage: tm thread %s", usage)
-		}
-		return pos[0], nil
-	}
 	switch sub {
 	case "start":
-		o := startOpts{task: f.String("task"), agent: f.String("agent"), model: f.String("model"), repo: f.String("repo"),
-			base: f.String("base"), approved: f.Bool("approved-by-user"), overCap: f.Bool("over-cap")}
-		run = func(p *project.Project, pos []string) error {
-			if len(pos) > 1 {
-				return usagef("usage: tm thread start [--task T12] [flags] \"title\" (quote the title)")
-			}
-			if len(pos) == 1 {
-				o.title = pos[0]
-			}
-			return e.threadStart(p, o, *asJSON)
-		}
+		run = bind(threadStartFlags(f), func(p *project.Project, o startOpts) error { return e.threadStart(p, o, *asJSON) })
 	case "adopt":
-		o := adoptOpts{task: f.String("task"), title: f.String("title")}
-		// Accepted and ignored: the user's go-ahead to adopt is T on the
-		// dashboard, which no flag stands in for (threadAdopt).
-		f.Bool("approved-by-user")
-		run = func(p *project.Project, pos []string) error {
-			if len(pos) != 1 {
-				return usagef("usage: tm thread adopt <session> [--task T12] [--title \"…\"]")
-			}
-			return e.threadAdopt(p, pos[0], o, *asJSON)
-		}
+		run = bind(adoptFlags(f), func(p *project.Project, o adoptOpts) error { return e.threadAdopt(p, o, *asJSON) })
 	case "list", "ls":
-		all := f.Bool("all")
-		run = func(p *project.Project, pos []string) error {
-			if len(pos) != 0 {
-				return usagef("usage: tm thread list [--all]")
-			}
-			return e.threadList(p, *all, *asJSON)
-		}
+		run = bind(listFlags(f), func(p *project.Project, all bool) error { return e.threadList(p, all, *asJSON) })
 	case "show":
-		run = func(p *project.Project, pos []string) error {
-			id, err := oneID(pos, "show <id>")
-			if err != nil {
-				return err
-			}
-			return e.threadShow(p, id, *asJSON)
-		}
+		run = bind(idFlags("show <id>"), func(p *project.Project, id string) error { return e.threadShow(p, id, *asJSON) })
 	case "read":
-		lines := f.String("lines")
-		run = func(p *project.Project, pos []string) error {
-			id, err := oneID(pos, "read <id> [--lines N]")
-			if err != nil {
-				return err
-			}
-			n := 40
-			if f.IsSet("lines") {
-				if n, err = strconv.Atoi(*lines); err != nil || n < 1 {
-					return usagef("--lines takes a positive number")
-				}
-			}
-			return e.threadRead(p, id, n)
-		}
+		run = bind(readFlags(f), func(p *project.Project, o readOpts) error { return e.threadRead(p, o.id, o.lines) })
 	case "prompt":
-		next := f.String("next")
-		run = func(p *project.Project, pos []string) error {
-			if len(pos) < 1 || (len(pos) == 1) == !f.IsSet("next") || len(pos) > 2 {
-				return usagef("usage: tm thread prompt <id> \"text\" | tm thread prompt <id> --next N")
-			}
-			text := ""
-			if len(pos) == 2 {
-				text = pos[1]
-			}
-			return e.threadPrompt(p, pos[0], text, *next)
-		}
+		run = bind(promptFlags(f), func(p *project.Project, o promptOpts) error { return e.threadPrompt(p, o.id, o.text, o.next) })
 	case "approve":
-		choice := f.String("choice")
-		run = func(p *project.Project, pos []string) error {
-			id, err := oneID(pos, "approve <id> [--choice N]")
-			if err != nil {
-				return err
-			}
-			n := 1
-			if f.IsSet("choice") {
-				if n, err = strconv.Atoi(*choice); err != nil || n < 1 || n > 9 {
-					return usagef("--choice takes a number 1-9")
-				}
-			}
-			return e.threadApprove(p, id, n)
-		}
+		run = bind(approveFlags(f), func(p *project.Project, o approveOpts) error { return e.threadApprove(p, o.id, o.choice) })
 	case "answer":
-		choice, text, question := f.String("choice"), f.String("text"), f.String("question")
-		options := f.List("option")
-		run = func(p *project.Project, pos []string) error {
-			id, err := oneID(pos, "answer <id> [--choice N[,N…]] [--option LABEL]… [--text T] [--question K]")
-			if err != nil {
-				return err
-			}
-			a := answerArgs{options: *options, text: *text, withText: f.IsSet("text")}
-			if f.IsSet("choice") {
-				for _, c := range strings.Split(*choice, ",") {
-					n, err := strconv.Atoi(strings.TrimSpace(c))
-					if err != nil || n < 1 || n > 9 {
-						return usagef("--choice takes a number 1-9, or several joined with commas")
-					}
-					a.choices = append(a.choices, n)
-				}
-			}
-			if f.IsSet("question") {
-				if a.question, err = strconv.Atoi(*question); err != nil || a.question < 1 || a.question > 4 {
-					return usagef("--question takes a number 1-4")
-				}
-			}
-			if len(a.choices) == 0 && len(a.options) == 0 && !a.withText {
-				return usagef("answer with --choice N, --option LABEL or --text T")
-			}
-			return e.threadAnswer(p, id, a)
-		}
+		run = bind(answerFlags(f), func(p *project.Project, a answerArgs) error { return e.threadAnswer(p, a.id, a) })
 	case "merge":
-		run = func(p *project.Project, pos []string) error {
-			id, err := oneID(pos, "merge <id>")
-			if err != nil {
-				return err
-			}
-			return e.threadMerge(p, id)
-		}
+		run = bind(idFlags("merge <id>"), e.threadMerge)
 	case "ack", "stop", "restart", "resolve":
-		discard := new(bool)
-		if sub == "resolve" {
-			discard = f.Bool("discard")
-		}
-		run = func(p *project.Project, pos []string) error {
-			id, err := oneID(pos, sub+" <id>")
-			if err != nil {
-				return err
-			}
+		run = bind(resolveFlags(f, sub), func(p *project.Project, o resolveOpts) error {
 			if err := e.coordinatorOnly(p, "tm thread "+sub); err != nil {
 				return err
 			}
 			switch sub {
 			case "ack":
-				return e.threadAck(p, id)
+				return e.threadAck(p, o.id)
 			case "stop":
-				return e.threadStop(p, id)
+				return e.threadStop(p, o.id)
 			case "restart":
-				return e.threadRestart(p, id)
+				return e.threadRestart(p, o.id)
 			}
-			return e.threadResolve(p, id, *discard)
-		}
+			return e.threadResolve(p, o.id, o.discard)
+		})
 	default:
 		return usagef("unknown subcommand %q\n%s", sub, threadUsage)
 	}
@@ -275,6 +162,188 @@ func runThread(e *Env, args []string) error {
 		}
 	}
 	return run(p, pos)
+}
+
+// bind runs a subcommand: parse checks its positional arguments and
+// flags into its options, which do is given.
+func bind[O any](parse func(pos []string) (O, error), do func(p *project.Project, o O) error) func(*project.Project, []string) error {
+	return func(p *project.Project, pos []string) error {
+		o, err := parse(pos)
+		if err != nil {
+			return err
+		}
+		return do(p, o)
+	}
+}
+
+// The xFlags funcs below declare a tm thread subcommand's flags on f and
+// return its parser: once f has parsed, it checks the positional
+// arguments and the flags' values and returns the subcommand's options.
+
+// idFlags is for the subcommands that take just a thread id.
+func idFlags(usage string) func(pos []string) (string, error) {
+	return func(pos []string) (string, error) {
+		if len(pos) != 1 {
+			return "", usagef("usage: tm thread %s", usage)
+		}
+		return pos[0], nil
+	}
+}
+
+// startFlags declares the flags tm thread start shares with tm task
+// delegate; its func reads them, once parsed.
+func startFlags(f *flagSet) func() startOpts {
+	agent, model, repo, base := f.String("agent"), f.String("model"), f.String("repo"), f.String("base")
+	approved, overCap := f.Bool("approved-by-user"), f.Bool("over-cap")
+	return func() startOpts {
+		return startOpts{agent: *agent, model: *model, repo: *repo, base: *base, approved: *approved, overCap: *overCap}
+	}
+}
+
+func threadStartFlags(f *flagSet) func(pos []string) (startOpts, error) {
+	task, opts := f.String("task"), startFlags(f)
+	return func(pos []string) (startOpts, error) {
+		if len(pos) > 1 {
+			return startOpts{}, usagef("usage: tm thread start [--task T12] [flags] \"title\" (quote the title)")
+		}
+		o := opts()
+		o.task = *task
+		if len(pos) == 1 {
+			o.title = pos[0]
+		}
+		return o, nil
+	}
+}
+
+func adoptFlags(f *flagSet) func(pos []string) (adoptOpts, error) {
+	task, title := f.String("task"), f.String("title")
+	// Accepted and ignored: the user's go-ahead to adopt is T on the
+	// dashboard, which no flag stands in for (threadAdopt).
+	f.Bool("approved-by-user")
+	return func(pos []string) (adoptOpts, error) {
+		if len(pos) != 1 {
+			return adoptOpts{}, usagef("usage: tm thread adopt <session> [--task T12] [--title \"…\"]")
+		}
+		return adoptOpts{session: pos[0], task: *task, title: *title}, nil
+	}
+}
+
+func listFlags(f *flagSet) func(pos []string) (bool, error) {
+	all := f.Bool("all")
+	return func(pos []string) (bool, error) {
+		if len(pos) != 0 {
+			return false, usagef("usage: tm thread list [--all]")
+		}
+		return *all, nil
+	}
+}
+
+type readOpts struct {
+	id    string
+	lines int
+}
+
+func readFlags(f *flagSet) func(pos []string) (readOpts, error) {
+	lines := f.String("lines")
+	return func(pos []string) (readOpts, error) {
+		id, err := idFlags("read <id> [--lines N]")(pos)
+		if err != nil {
+			return readOpts{}, err
+		}
+		o := readOpts{id: id, lines: 40}
+		if f.IsSet("lines") {
+			if o.lines, err = strconv.Atoi(*lines); err != nil || o.lines < 1 {
+				return readOpts{}, usagef("--lines takes a positive number")
+			}
+		}
+		return o, nil
+	}
+}
+
+type promptOpts struct{ id, text, next string }
+
+func promptFlags(f *flagSet) func(pos []string) (promptOpts, error) {
+	next := f.String("next")
+	return func(pos []string) (promptOpts, error) {
+		if len(pos) < 1 || (len(pos) == 1) == !f.IsSet("next") || len(pos) > 2 {
+			return promptOpts{}, usagef("usage: tm thread prompt <id> \"text\" | tm thread prompt <id> --next N")
+		}
+		o := promptOpts{id: pos[0], next: *next}
+		if len(pos) == 2 {
+			o.text = pos[1]
+		}
+		return o, nil
+	}
+}
+
+type approveOpts struct {
+	id     string
+	choice int
+}
+
+func approveFlags(f *flagSet) func(pos []string) (approveOpts, error) {
+	choice := f.String("choice")
+	return func(pos []string) (approveOpts, error) {
+		id, err := idFlags("approve <id> [--choice N]")(pos)
+		if err != nil {
+			return approveOpts{}, err
+		}
+		o := approveOpts{id: id, choice: 1}
+		if f.IsSet("choice") {
+			if o.choice, err = strconv.Atoi(*choice); err != nil || o.choice < 1 || o.choice > 9 {
+				return approveOpts{}, usagef("--choice takes a number 1-9")
+			}
+		}
+		return o, nil
+	}
+}
+
+func answerFlags(f *flagSet) func(pos []string) (answerArgs, error) {
+	choice, text, question := f.String("choice"), f.String("text"), f.String("question")
+	options := f.List("option")
+	return func(pos []string) (answerArgs, error) {
+		id, err := idFlags("answer <id> [--choice N[,N…]] [--option LABEL]… [--text T] [--question K]")(pos)
+		if err != nil {
+			return answerArgs{}, err
+		}
+		a := answerArgs{id: id, options: *options, text: *text, withText: f.IsSet("text")}
+		if f.IsSet("choice") {
+			for _, c := range strings.Split(*choice, ",") {
+				n, err := strconv.Atoi(strings.TrimSpace(c))
+				if err != nil || n < 1 || n > 9 {
+					return answerArgs{}, usagef("--choice takes a number 1-9, or several joined with commas")
+				}
+				a.choices = append(a.choices, n)
+			}
+		}
+		if f.IsSet("question") {
+			if a.question, err = strconv.Atoi(*question); err != nil || a.question < 1 || a.question > 4 {
+				return answerArgs{}, usagef("--question takes a number 1-4")
+			}
+		}
+		if len(a.choices) == 0 && len(a.options) == 0 && !a.withText {
+			return answerArgs{}, usagef("answer with --choice N, --option LABEL or --text T")
+		}
+		return a, nil
+	}
+}
+
+type resolveOpts struct {
+	id      string
+	discard bool
+}
+
+// resolveFlags is for ack, stop, restart and resolve; only resolve takes
+// --discard.
+func resolveFlags(f *flagSet, sub string) func(pos []string) (resolveOpts, error) {
+	discard := new(bool)
+	if sub == "resolve" {
+		discard = f.Bool("discard")
+	}
+	return func(pos []string) (resolveOpts, error) {
+		id, err := idFlags(sub + " <id>")(pos)
+		return resolveOpts{id: id, discard: *discard}, err
+	}
 }
 
 // threadRow is one thread's merged state (docs/SPEC.md §7.4).

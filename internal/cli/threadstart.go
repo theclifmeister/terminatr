@@ -23,11 +23,11 @@ import (
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
 
+// startOpts are tm thread start's and tm task delegate's options.
 type startOpts struct {
-	title              string
-	task, agent, model *string
-	repo, base         *string
-	approved, overCap  *bool
+	title, task, agent, model string
+	repo, base                string
+	approved, overCap         bool
 }
 
 func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
@@ -44,11 +44,11 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	}
 	// --agent overrides the user's thread_agent setting (§11.2); unset,
 	// the one installed agent.
-	agentName, err := threadAgent(*o.agent, safety)
+	agentName, err := threadAgent(o.agent, safety)
 	if err != nil {
 		return err
 	}
-	if err := checkModel(cfg, agentName, *o.model, safety.Models); err != nil {
+	if err := checkModel(cfg, agentName, o.model, safety.Models); err != nil {
 		return err
 	}
 	if err := parkedErr(p, safety); err != nil {
@@ -56,15 +56,15 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	}
 	// --over-cap is the user's word on the cap, not on the thread: under
 	// propose it still needs --approved-by-user.
-	if safety.StartThreads == config.StartPropose && e.Caller.IsAgent() && !*o.approved {
+	if safety.StartThreads == config.StartPropose && e.Caller.IsAgent() && !o.approved {
 		return &tasks.Error{Code: "needs-approval", Msg: "start_threads = propose: propose the thread to the user, and once they agree start it with --approved-by-user"}
 	}
-	if !*o.overCap {
-		if err := e.underCap(p, safety.ParallelThreads, safety.GlobalParallelThreads, cmp.Or(*o.task, o.title)); err != nil {
+	if !o.overCap {
+		if err := e.underCap(p, safety.ParallelThreads, safety.GlobalParallelThreads, cmp.Or(o.task, o.title)); err != nil {
 			return err
 		}
 	}
-	task, err := threadTask(p, *o.task)
+	task, err := threadTask(p, o.task)
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	if o.title == "" {
 		return usagef("a thread needs a title, or --task T12")
 	}
-	repo := *o.repo
+	repo := o.repo
 	if repo != "" {
 		repo = e.abs(repo)
 		// An agent names only the project's repos, which the user adds:
@@ -91,14 +91,14 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	} else if len(p.Repos) > 0 {
 		repo = p.Repos[0]
 	}
-	if *o.base != "" && repo == "" {
+	if o.base != "" && repo == "" {
 		return usagef("--base needs a repo")
 	}
 	if err := e.serverAgent(agentName); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
-	rec := thread.Record{Title: o.title, Agent: agentName, Model: *o.model, Repo: repo, State: thread.Running, Created: now, LastPrompt: now}
+	rec := thread.Record{Title: o.title, Agent: agentName, Model: o.model, Repo: repo, State: thread.Running, Created: now, LastPrompt: now}
 	if task != nil {
 		rec.Task = task.Ref()
 	}
@@ -117,7 +117,7 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	branch, base := "", ""
 	if repo != "" {
 		branch = thread.BranchName(p.Slug, r.ID, o.title)
-		if base, err = worktree.Create(repo, wt, branch, *o.base); err != nil {
+		if base, err = worktree.Create(repo, wt, branch, o.base); err != nil {
 			return fail(err)
 		}
 	} else if err := os.MkdirAll(wt, 0o755); err != nil {
@@ -138,9 +138,9 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 		detail += " (model " + r.Model + ")"
 	}
 	switch {
-	case *o.overCap:
+	case o.overCap:
 		detail += " (over the parallel threads cap, approved by the user)"
-	case *o.approved:
+	case o.approved:
 		detail += " (approved by the user)"
 	}
 	if err := p.Journal(e.Caller, "thread.start", r.ID, detail); err != nil {

@@ -117,10 +117,11 @@ func questionLines(q *proto.Question) []string {
 	return out
 }
 
-// answerArgs are tm thread answer's flags: options by number (choices)
+// answerArgs are tm thread answer's thread id and flags: options by number (choices)
 // or label, free text, and which question of the menu (from 1; 0 is the
 // first one not yet answered).
 type answerArgs struct {
+	id       string
 	choices  []int
 	options  []string
 	text     string

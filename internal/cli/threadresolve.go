@@ -77,54 +77,8 @@ func (e *Env) threadResolve(p *project.Project, id string, discard bool) error {
 		default:
 			did = append(did, "removed worktree "+r.Worktree)
 		}
-		var deleted []string
-		if discard && r.Branch != "" && worktree.BranchExists(r.Repo, r.Branch) {
-			// discardable found no commit that is nowhere else.
-			if err := worktree.DeleteBranch(r.Repo, r.Branch); err != nil {
-				did = append(did, "kept branch "+r.Branch+" ("+oneLine(err.Error(), 120)+")")
-			} else {
-				did = append(did, "deleted branch "+r.Branch+" (discarded)")
-				deleted = append(deleted, r.Branch+" (discarded)")
-			}
-		} else if r.Branch != "" && worktree.BranchExists(r.Repo, r.Branch) {
-			host := pickHost(r.Repo, p.CodeHost())
-			switch st := host.PRState(r.Repo, r.Branch); st {
-			case "MERGED":
-				// The host's word deletes nothing by itself: commits made
-				// after the merge and pushed nowhere would be lost, so git
-				// must find the branch's commits on the remote.
-				if unsaved, err := worktree.BranchUnsaved(r.Repo, r.Branch); err != nil || unsaved != "" {
-					why := unsaved
-					if err != nil {
-						why = oneLine(err.Error(), 120)
-					}
-					did = append(did, "kept branch "+r.Branch+" (PR merged, but "+why+")")
-					break
-				}
-				if err := worktree.DeleteBranch(r.Repo, r.Branch); err != nil {
-					did = append(did, "kept branch "+r.Branch+" ("+oneLine(err.Error(), 120)+")")
-				} else {
-					did = append(did, "deleted branch "+r.Branch+" (PR merged)")
-					deleted = append(deleted, r.Branch+" (PR merged)")
-				}
-			default:
-				// No merged PR (a repo without remote or gh, or one merged
-				// by hand): a branch whose commits are all on the default
-				// branch loses nothing.
-				if base := worktree.MergedBase(r.Repo, r.Branch); base != "" {
-					if err := worktree.DeleteBranch(r.Repo, r.Branch); err != nil {
-						did = append(did, "kept branch "+r.Branch+" ("+oneLine(err.Error(), 120)+")")
-					} else {
-						did = append(did, "deleted branch "+r.Branch+" (merged into "+base+")")
-						deleted = append(deleted, r.Branch+" (merged into "+base+")")
-					}
-				} else if st == "" {
-					did = append(did, "kept branch "+r.Branch+" (no merged PR found)")
-				} else {
-					did = append(did, "kept branch "+r.Branch+" (PR "+strings.ToLower(st)+")")
-				}
-			}
-		}
+		more, deleted := branchCleanup(p, r, discard)
+		did = append(did, more...)
 		more, gone := otherBranches(p, r)
 		did, deleted = append(did, more...), append(deleted, gone...)
 		for _, d := range deleted {
@@ -159,6 +113,61 @@ func (e *Env) threadResolve(p *project.Project, id string, discard bool) error {
 	}
 	fmt.Fprintln(e.Stdout, shown(summary))
 	return nil
+}
+
+// branchCleanup deletes the thread's own branch when nothing would be
+// lost: with discard (discardable found no commit that is nowhere
+// else), after a merged PR whose commits git finds on the remote, or
+// when its commits are all on the default branch. It returns what it
+// did, for the resolve item, and the deleted branches, for the journal.
+func branchCleanup(p *project.Project, r *thread.Record, discard bool) (did, deleted []string) {
+	if r.Branch == "" || !worktree.BranchExists(r.Repo, r.Branch) {
+		return nil, nil
+	}
+	if discard {
+		if err := worktree.DeleteBranch(r.Repo, r.Branch); err != nil {
+			return []string{"kept branch " + r.Branch + " (" + oneLine(err.Error(), 120) + ")"}, nil
+		}
+		return []string{"deleted branch " + r.Branch + " (discarded)"}, []string{r.Branch + " (discarded)"}
+	}
+	host := pickHost(r.Repo, p.CodeHost())
+	switch st := host.PRState(r.Repo, r.Branch); st {
+	case "MERGED":
+		// The host's word deletes nothing by itself: commits made
+		// after the merge and pushed nowhere would be lost, so git
+		// must find the branch's commits on the remote.
+		if unsaved, err := worktree.BranchUnsaved(r.Repo, r.Branch); err != nil || unsaved != "" {
+			why := unsaved
+			if err != nil {
+				why = oneLine(err.Error(), 120)
+			}
+			did = append(did, "kept branch "+r.Branch+" (PR merged, but "+why+")")
+			break
+		}
+		if err := worktree.DeleteBranch(r.Repo, r.Branch); err != nil {
+			did = append(did, "kept branch "+r.Branch+" ("+oneLine(err.Error(), 120)+")")
+		} else {
+			did = append(did, "deleted branch "+r.Branch+" (PR merged)")
+			deleted = append(deleted, r.Branch+" (PR merged)")
+		}
+	default:
+		// No merged PR (a repo without remote or gh, or one merged
+		// by hand): a branch whose commits are all on the default
+		// branch loses nothing.
+		if base := worktree.MergedBase(r.Repo, r.Branch); base != "" {
+			if err := worktree.DeleteBranch(r.Repo, r.Branch); err != nil {
+				did = append(did, "kept branch "+r.Branch+" ("+oneLine(err.Error(), 120)+")")
+			} else {
+				did = append(did, "deleted branch "+r.Branch+" (merged into "+base+")")
+				deleted = append(deleted, r.Branch+" (merged into "+base+")")
+			}
+		} else if st == "" {
+			did = append(did, "kept branch "+r.Branch+" (no merged PR found)")
+		} else {
+			did = append(did, "kept branch "+r.Branch+" (PR "+strings.ToLower(st)+")")
+		}
+	}
+	return did, deleted
 }
 
 // leftover says whether a resolved thread still has a worktree or branch

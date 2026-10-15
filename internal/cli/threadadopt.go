@@ -18,14 +18,16 @@ import (
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
 
+// adoptOpts are tm thread adopt's options: the session to adopt.
 type adoptOpts struct {
-	task, title *string
+	session, task, title string
 }
 
 // threadAdopt makes a running agent session outside the projects a
 // thread (docs/SPEC.md §9, Adopt): a thread record for where it works,
 // the session given the thread's role, and a prompt that tells it so.
-func (e *Env) threadAdopt(p *project.Project, sid string, o adoptOpts, asJSON bool) error {
+func (e *Env) threadAdopt(p *project.Project, o adoptOpts, asJSON bool) error {
+	sid := o.session
 	if err := e.coordinatorOnly(p, "adopting sessions"); err != nil {
 		return err
 	}
@@ -81,7 +83,7 @@ func (e *Env) threadAdopt(p *project.Project, sid string, o adoptOpts, asJSON bo
 	case info.Agent == "" || info.State == "exited":
 		return &tasks.Error{Code: "no-agent", Msg: fmt.Sprintf("no agent runs in session %s; only an agent session becomes a thread", sid)}
 	}
-	task, err := threadTask(p, *o.task)
+	task, err := threadTask(p, o.task)
 	if err != nil {
 		return err
 	}
@@ -89,7 +91,7 @@ func (e *Env) threadAdopt(p *project.Project, sid string, o adoptOpts, asJSON bo
 	if pl, ok := worktree.Locate(info.Cwd); ok {
 		rec.Repo, rec.Branch, rec.Worktree, rec.Checkout = pl.Repo, pl.Branch, pl.Top, !pl.Linked
 	}
-	rec.Title = strings.Join(strings.Fields(*o.title), " ")
+	rec.Title = strings.Join(strings.Fields(o.title), " ")
 	switch {
 	case rec.Title != "":
 	case task != nil:
