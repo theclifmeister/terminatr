@@ -19,7 +19,7 @@ import (
 // drawn from the server's mirror of that server (peer.list, §16.10), the
 // project's ProjectWatch and its trimmed sessions, never from a request
 // to the far server. A coordinator's shows its project as the remote
-// dashboard does (watchPanel, read-only); a thread's its task, steps,
+// dashboard does (watchPanel); a thread's its task, steps,
 // state and PR. Its head names the server and the link; while the link
 // is down, or the last read failed, the rest keeps its last values,
 // dimmed, with when they were read. Nothing in it acts on that server:
@@ -33,7 +33,6 @@ import (
 //	" ● in-progress"
 //	" STEPS ───"
 //	" …"
-//	" Read-only: nothing here acts on mini."
 
 // remoteData is what the panel shows of a paired server's pane: the
 // server as the mirror has it, and the pane's project and session there.
@@ -197,27 +196,7 @@ func remotePanel(d *infoData, w int, now time.Time) (*panel, []infoHit) {
 		}
 		hits = append(hits, h)
 	}
-	pl.gap()
-	pad()
-	pl.wrap(th().Faint.Render(remoteActsNote(r, d.session.ViewOnly)))
-	pad()
 	return pl, hits
-}
-
-// remoteActsNote is the panel's closing note: for a view-only pane,
-// that nothing acts on the server; for one that takes keys, that keys
-// typed in the pane go to its session (or aren't sent while the link is
-// down), and that the panel itself still
-// only reads.
-func remoteActsNote(r *remoteData, viewOnly bool) string {
-	alias := r.alias
-	if viewOnly {
-		return "Read-only: nothing here acts on " + alias + "."
-	}
-	if r.peer != nil && r.peer.State != proto.LinkUp {
-		return alias + " is offline: keys typed in the pane aren't sent. Nothing here acts on " + alias + "."
-	}
-	return "Keys typed in the pane go to " + alias + "'s session. This panel only reads: nothing in it acts on " + alias + "."
 }
 
 // remoteCoordLine is the coordinator's line under its project's name:

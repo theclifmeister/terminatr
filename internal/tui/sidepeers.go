@@ -178,6 +178,27 @@ func paneWhyNot(r treeRow) string {
 	return ""
 }
 
+// panesTag labels a paired server's project by what its pane switch lets
+// this server do: "view-only" for panes that only watch, "panes writable"
+// for ones that take keys, nothing when panes are off or unknown.
+func panesTag(panes string) string {
+	switch panes {
+	case proto.PanesView:
+		return "view-only"
+	case proto.PanesType:
+		return "panes writable"
+	}
+	return ""
+}
+
+// joinTag is s with " · tag" after it, when there is a tag.
+func joinTag(s, tag string) string {
+	if tag == "" {
+		return s
+	}
+	return s + " · " + tag
+}
+
 // paneWords are the footer's words on a remote coordinator's or thread's
 // pane: whether enter opens it, and how.
 func paneWords(r treeRow) string {
@@ -187,7 +208,7 @@ func paneWords(r treeRow) string {
 	case paneWhyNot(r) != "":
 		return "view-only"
 	case r.link.panes == proto.PanesView:
-		return "its pane: view only"
+		return "its pane: view-only"
 	}
 	return "its pane opens here"
 }
@@ -449,9 +470,12 @@ func peerDetails(r treeRow) (string, string) {
 		case r.threads == 0:
 			return l1, "shares no projects with this server"
 		}
-		return l1, counted(r.threads, "shared project") + " · view-only"
+		return l1, joinTag(counted(r.threads, "shared project"), panesTag(l.panes))
 	case treePeerProject:
-		bits := []string{where, "view-only"}
+		bits := []string{where}
+		if t := panesTag(r.link.panes); t != "" {
+			bits = append(bits, t)
+		}
 		if r.paused {
 			bits = append(bits, "paused")
 		}
@@ -492,7 +516,7 @@ func peerWhy(r treeRow) string {
 		}
 		return "enter on a paired server folds or unfolds it"
 	}
-	return r.slug + " is " + r.peer + "'s: view-only here"
+	return r.slug + " is " + r.peer + "'s: nothing here acts on it"
 }
 
 // peerFoldStep is what → ← and enter do to the folds on a server header
@@ -557,7 +581,7 @@ func peerKeyBar(r *treeRow) []string {
 		}
 		return []string{enter + " fold"}
 	case treePeerProject:
-		// enter shows its read-only dashboard (peerdash.go).
+		// enter shows its remote dashboard (peerdash.go).
 		switch {
 		case r.stale:
 			return []string{enter + " open", left + " server"}

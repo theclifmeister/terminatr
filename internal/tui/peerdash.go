@@ -13,7 +13,7 @@ import (
 
 // The remote dashboard (docs/SPEC.md §4, **Paired servers**): enter, a
 // click or the preview on a paired server's project in the sidebar
-// shows its dashboard, read-only, built from the server's mirror of it
+// shows its dashboard, built from the server's mirror of it
 // (peer.list, §16.10: its ProjectWatch and sessions), as the
 // coordinator's info panel draws one of this server's (coordpanel.go).
 // The view's current project is then "@alias/slug" (peerFold), which no
@@ -101,7 +101,7 @@ func remoteLines(peers []proto.PeerMirror, alias, slug string, w int, now time.T
 	if pm.State != proto.LinkUp {
 		look = th().Faint
 	}
-	add(gst.Render(g) + " " + look.Render(alias) + th().Faint.Render(" · "+words+" · view-only"))
+	add(gst.Render(g) + " " + look.Render(alias) + th().Faint.Render(joinTag(" · "+words, panesTag(pm.Panes))))
 	if p == nil {
 		out = append(out, "")
 		add(th().Faint.Render(alias + " doesn't share " + slug + " with this server any more."))
@@ -140,7 +140,7 @@ func remoteLines(peers []proto.PeerMirror, alias, slug string, w int, now time.T
 	}
 	out = append(out, lines...)
 	out = append(out, "")
-	for _, l := range wrapLines("Read-only: nothing here acts on "+alias+". To ask its coordinator something, link a project of yours to "+alias+"/"+slug+" (tm project link).", max(w-2, 8)) {
+	for _, l := range wrapLines("To ask its coordinator something, link a project of yours to "+alias+"/"+slug+" (tm project link).", max(w-2, 8)) {
 		add(th().Faint.Render(l))
 	}
 	return out
@@ -216,7 +216,7 @@ func (m *dash) remoteKey(key string) (tea.Cmd, bool) {
 			return actions[i].run(m, actions[i].keys[0]), true
 		}
 	}
-	m.msg = slug + " is " + alias + "'s: view-only here"
+	m.msg = slug + " is " + alias + "'s: nothing here acts on it"
 	return nil, true
 }
 

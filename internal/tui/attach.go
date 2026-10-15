@@ -1569,7 +1569,7 @@ func (c *client) typed(p *pane) {
 }
 
 // viewOnlyNote starts the note on a key dropped at a view-only pane.
-const viewOnlyNote = "view only: "
+const viewOnlyNote = "view-only: "
 
 // remoteBlock is why keys don't reach p, a paired server's pane: its
 // server lets this one watch only, or the link is down (keys typed then
@@ -1606,7 +1606,7 @@ func (c *client) remoteNote(p *pane) string {
 		}
 		note := "remote"
 		if in.ViewOnly {
-			note = "view only"
+			note = "view-only"
 			if p.mirror != nil {
 				cols, rows := p.mirror.Size()
 				if r := c.geo.Area; cols > 0 && (int(cols) != r.W || int(rows) != r.H) {

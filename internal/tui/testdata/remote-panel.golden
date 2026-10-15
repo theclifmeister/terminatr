@@ -22,10 +22,6 @@ mini's coordinator (width 40)
 │
 │ ON DECK ──────────────────────────────
 │ T9 ○ ready Rate limits
-│
-│ Keys typed in the pane go to mini's
-│ session. This panel only reads:
-│ nothing in it acts on mini.
 
 mini's thread (width 40)
 │ mini
@@ -48,12 +44,8 @@ mini's thread (width 40)
 │           checked 30s ago
 │ checks    failing
 │ reports   2
-│
-│ Keys typed in the pane go to mini's
-│ session. This panel only reads:
-│ nothing in it acts on mini.
 
-mini's thread, view only (width 40)
+mini's thread, view-only (width 40)
 │ mini
 │ ◉ linked 38 ms · synced 2s ago
 │
@@ -74,8 +66,6 @@ mini's thread, view only (width 40)
 │           checked 30s ago
 │ checks    failing
 │ reports   2
-│
-│ Read-only: nothing here acts on mini.
 
 nas's thread, offline (width 40)
 │ nas
@@ -89,9 +79,6 @@ nas's thread, offline (width 40)
 │
 │ THREAD ───────────────────────────────
 │ thread    t-0003 ○ idle
-│
-│ nas is offline: keys typed in the pane
-│ aren't sent. Nothing here acts on nas.
 
 a long server name (width 30)
 │ runnervm-6qbd8-ubuntu-24-04-…
@@ -116,14 +103,6 @@ a long server name (width 30)
 │           30s ago
 │ checks    failing
 │ reports   2
-│
-│ Keys typed in the pane go to
-│ runnervm-6qbd8-ubuntu-24-04-
-│ x64-standard-runner's
-│ session. This panel only
-│ reads: nothing in it acts on
-│ runnervm-6qbd8-ubuntu-24-04-
-│ x64-standard-runner.
 
 not shared any more (width 40)
 │ mini

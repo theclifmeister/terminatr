@@ -44,7 +44,7 @@ func TestRemoteDashboard(t *testing.T) {
 	out := screen(m)
 	for _, want := range []string{
 		" tm dashboard · mini › acme-api",
-		"◉ mini · linked 38 ms · synced 2s ago · view-only",
+		"◉ mini · linked 38 ms · synced 2s ago",
 		"the billing API",
 		"coordinator ● working · 22 / 100 context",
 		"1 question waiting",
@@ -52,14 +52,14 @@ func TestRemoteDashboard(t *testing.T) {
 		"report T41 ready for review",
 		"t-0041 T41 ◆ review 3/3",
 		"T44",
-		"Read-only: nothing here acts on mini.",
+		"To ask its coordinator something, link a project of yours to mini/acme-api (tm project link).",
 		"≡ menu · ↑ ↓ scroll · , settings · ? help · prefix+q quit",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in\n%s", want, out)
 		}
 	}
-	for _, not := range []string{"a or click answers", "tm agent explain", "NEEDS YOU 0", " terminatr ─", "project ·", "activate"} {
+	for _, not := range []string{"view-only", "Read-only", "panes writable", "a or click answers", "tm agent explain", "NEEDS YOU 0", " terminatr ─", "project ·", "activate"} {
 		if strings.Contains(out, not) {
 			t.Errorf("shows %q:\n%s", not, out)
 		}
@@ -73,13 +73,31 @@ func TestRemoteDashboard(t *testing.T) {
 	}
 }
 
+// TestRemoteDashboardPanes: the header says view-only only when mini's
+// panes are view-only, "panes writable" when they take keys, and
+// neither claims the project read-only.
+func TestRemoteDashboardPanes(t *testing.T) {
+	for panes, want := range map[string]string{proto.PanesView: "synced 2s ago · view-only", proto.PanesType: "synced 2s ago · panes writable", proto.PanesOff: "synced 2s ago "} {
+		m, src := remoteDash(t, "@mini/acme-api")
+		src.data.Peers[0].Panes = panes
+		m.setData(src.data)
+		out := screen(m)
+		if !strings.Contains(out, want) || strings.Contains(out, "Read-only") {
+			t.Errorf("%s: want %q in\n%s", panes, want, out)
+		}
+		if panes != proto.PanesView && strings.Contains(out, "view-only") {
+			t.Errorf("%s: says view-only:\n%s", panes, out)
+		}
+	}
+}
+
 // TestRemoteDashboardStale: an offline server's project keeps its last
 // values, dimmed, saying when it was last seen; one never read says so;
 // a project no longer shared and a server no longer paired say that.
 func TestRemoteDashboardStale(t *testing.T) {
 	m, _ := remoteDash(t, "@nas/media")
 	out := screen(m)
-	for _, want := range []string{" tm dashboard · nas › media", "○ nas · offline 4m · relay · last seen " + peersAt.Add(-4*time.Minute).Format("15:04") + " · view-only",
+	for _, want := range []string{" tm dashboard · nas › media", "○ nas · offline 4m · relay · last seen " + peersAt.Add(-4*time.Minute).Format("15:04"),
 		"Nothing read from nas yet."} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in\n%s", want, out)
@@ -108,7 +126,7 @@ func TestRemoteDashboardKeys(t *testing.T) {
 		if m.top() != nil || len(src.lifecycle) > 0 || len(src.opened) > 0 || len(src.adopted) > 0 {
 			t.Fatalf("%q acted: %+v %v %v", k, m.top(), src.lifecycle, src.opened)
 		}
-		if m.msg != "acme-api is mini's: view-only here" {
+		if m.msg != "acme-api is mini's: nothing here acts on it" {
 			t.Errorf("%q: %q", k, m.msg)
 		}
 	}

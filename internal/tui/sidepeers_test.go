@@ -162,8 +162,14 @@ func TestPeerRows(t *testing.T) {
 	if d1 != "nas · offline 4m · relay" || d2 != "last seen "+peersAt.Add(-4*time.Minute).Format("15:04")+" · its projects keep their last values" {
 		t.Errorf("offline header's details %q %q", d1, d2)
 	}
-	if d1, _ := rows[7].details(); d1 != "mini / acme-api · view-only" {
+	if d1, _ := rows[7].details(); d1 != "mini / acme-api" {
 		t.Errorf("remote project's details %q", d1)
+	}
+	for panes, want := range map[string]string{proto.PanesView: "mini / acme-api · view-only", proto.PanesType: "mini / acme-api · panes writable"} {
+		rows := peerTreeWith(panes, "")
+		if d1, _ := rows[7].details(); d1 != want {
+			t.Errorf("%s: remote project's details %q", panes, d1)
+		}
 	}
 }
 
@@ -328,7 +334,7 @@ func TestPeerRowsOpenPanes(t *testing.T) {
 			}
 		}
 		_, d2 := rowOf(rows, "rc:mini/acme-api").details()
-		if word := map[string]string{proto.PanesType: "its pane opens here", proto.PanesView: "its pane: view only"}[panes]; !strings.HasPrefix(d2, word) {
+		if word := map[string]string{proto.PanesType: "its pane opens here", proto.PanesView: "its pane: view-only"}[panes]; !strings.HasPrefix(d2, word) {
 			t.Errorf("%s: coordinator's details %q", panes, d2)
 		}
 		// The project opens its read-only dashboard, never a pane.
@@ -386,8 +392,8 @@ func TestRemoteStatus(t *testing.T) {
 		t.Errorf("note %q", n)
 	}
 	p.info.ViewOnly = true
-	if why := c.remoteBlock(p); !strings.HasPrefix(why, "view only") {
-		t.Errorf("view only: %q", why)
+	if why := c.remoteBlock(p); !strings.HasPrefix(why, "view-only") {
+		t.Errorf("view-only: %q", why)
 	}
 	// The peer's switch, as the mirror has it the moment it changes,
 	// decides whether the pane takes keys.
@@ -397,7 +403,7 @@ func TestRemoteStatus(t *testing.T) {
 	}
 	peers[0].Panes = proto.PanesType
 	if in := remoteInfo(peers, p.info); in.ViewOnly {
-		t.Error("raised to write in the mirror: the pane is still view only")
+		t.Error("raised to write in the mirror: the pane is still view-only")
 	}
 	peers[0].Panes = proto.PanesView
 	p.info = proto.SessionInfo{ID: "nas/q-1", Server: "nas", Role: proto.RoleCoordinator}

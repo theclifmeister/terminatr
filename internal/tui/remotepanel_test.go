@@ -99,7 +99,7 @@ func TestRemotePanelGolden(t *testing.T) {
 	write("mini's thread", peers, remotePane("mini", "r-2", proto.RoleThread, "acme-api", "t-0007"), 40)
 	view := remotePane("mini", "r-2", proto.RoleThread, "acme-api", "t-0007")
 	view.ViewOnly = true
-	write("mini's thread, view only", peers, view, 40)
+	write("mini's thread, view-only", peers, view, 40)
 	write("nas's thread, offline", peers, remotePane("nas", "q-2", proto.RoleThread, "media", "t-0003"), 40)
 	write("a long server name", long, remotePane(longAlias, "r-2", proto.RoleThread, "acme-api", "t-0007"), 30)
 	write("not shared any more", peers, remotePane("mini", "r-9", proto.RoleThread, "infra", "t-0001"), 40)

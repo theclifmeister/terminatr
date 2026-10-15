@@ -47,21 +47,24 @@ func TestPeerDashboard(t *testing.T) {
 
 	// The keyboard to the sidebar, down to api, and in.
 	w.Key(keyTab)
-	for i := 0; i < 6 && !strings.Contains(w.Screen(), "mini / api · view-only"); i++ {
+	for i := 0; i < 6 && !strings.Contains(w.Screen(), "mini / api"); i++ {
 		w.Key(keyDown)
 		time.Sleep(100 * time.Millisecond)
 	}
-	w.WaitFor("mini / api · view-only", wait)
+	w.WaitFor("mini / api", wait)
 	w.Key(keyEnter)
 	w.WaitFor("tm dashboard · mini › api", wait)
 	screen := w.WaitFor("◉ mini · linked", wait)
-	for _, want := range []string{"view-only", "Read-only: nothing here acts on mini.", "≡ menu · ↑ ↓ scroll · n new project · , settings"} {
+	for _, want := range []string{"To ask its coordinator something", "≡ menu · ↑ ↓ scroll · n new project · , settings"} {
 		if !strings.Contains(screen, want) {
 			t.Errorf("missing %q in\n%s", want, screen)
 		}
 	}
+	if strings.Contains(screen, "view-only") || strings.Contains(screen, "Read-only") {
+		t.Errorf("panes are off: the project isn't called read-only:\n%s", screen)
+	}
 	w.Type("a")
-	w.WaitFor("api is mini's: view-only here", wait)
+	w.WaitFor("api is mini's: nothing here acts on it", wait)
 
 	w.Type(",")
 	w.Type("4")
