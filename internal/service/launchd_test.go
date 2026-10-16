@@ -203,23 +203,21 @@ func TestUnload(t *testing.T) {
 
 func TestStrays(t *testing.T) {
 	c, _ := config(t, "darwin")
-	// A real home isn't in a temp dir: use one under the package.
-	dir, err := os.MkdirTemp(".", "strays-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir, _ = filepath.Abs(dir)
-	t.Cleanup(func() { os.RemoveAll(dir) })
+	// The test's own temp root, beside a "real" home that isn't in it.
+	base := t.TempDir()
+	tmp, dir := filepath.Join(base, "tmp"), filepath.Join(base, "home")
+	defer func(f func() []string) { tempRoots = f }(tempRoots)
+	tempRoots = func() []string { return []string{tmp} }
+	os.MkdirAll(dir, 0o755)
 	live := filepath.Join(dir, "live.plist")
 	os.WriteFile(live, nil, 0o644)
 	bin := filepath.Join(dir, "tm")
 	os.WriteFile(bin, nil, 0o755)
 	gone := "/nonexistent/dev.terminatr.server.aaaa.plist"
-	temp := filepath.Join(os.TempDir(), "x", "run", "b.plist")
+	temp := filepath.Join(tmp, "run", "b.plist")
 	// A temp plist that exists is flagged by where it is.
 	os.MkdirAll(filepath.Dir(temp), 0o755)
 	os.WriteFile(temp, nil, 0o644)
-	defer os.RemoveAll(filepath.Dir(filepath.Dir(temp)))
 	list := "PID\tStatus\tLabel\n" +
 		"-\t0\t" + c.JobLabel() + "\n" + // this home's
 		"-\t0\tdev.terminatr.server.aaaa\n" +

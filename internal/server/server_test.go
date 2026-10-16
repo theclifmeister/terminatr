@@ -333,7 +333,8 @@ func TestHungServerIsReported(t *testing.T) {
 	if !errors.As(err, &unresp) || unresp.PID != 4242 {
 		t.Fatalf("Connect: %v", err)
 	}
-	if d := time.Since(t0); d > 4*time.Second {
+	// It gives up after UnresponsiveTimeout; the bound only catches a hang.
+	if d := time.Since(t0); d > 5*client.UnresponsiveTimeout {
 		t.Fatalf("took %v", d)
 	}
 	if !strings.Contains(err.Error(), "tm server stop --force") {

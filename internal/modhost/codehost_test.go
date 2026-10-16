@@ -4,7 +4,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/theclifmeister/terminatr/internal/modproto"
 )
@@ -22,7 +21,7 @@ func TestCodeHostCalls(t *testing.T) {
 		$.codehost.handle("prState", (a) => ({state: a.branch === "m" ? "MERGED" : "OPEN"}));
 		$.codehost.handle("merge", () => { throw new Error("409 Conflict"); });
 		$.codehost.handle("doctor", () => {});
-	`, time.Second)
+	`, DefaultBudget)
 	if r := s.hello(); !slices.Equal(r.CodeHost, []string{"doctor", "merge", "pr", "prState"}) {
 		t.Fatalf("hello codehost %v", r.CodeHost)
 	}
@@ -59,7 +58,7 @@ func TestCodeHostCalls(t *testing.T) {
 }
 
 func TestCodeHostBeforeHelloAndBadHandle(t *testing.T) {
-	s := startHost(t, `$.codehost.handle("delete", () => 1);`, time.Second)
+	s := startHost(t, `$.codehost.handle("delete", () => 1);`, DefaultBudget)
 	if m := s.reply(s.request("codehost.pr", map[string]any{})); m.Error == nil || m.Error.Code != modproto.CodeNotReady {
 		t.Fatalf("before hello %+v", m.Error)
 	}

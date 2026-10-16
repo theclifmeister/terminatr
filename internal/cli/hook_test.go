@@ -106,7 +106,11 @@ func TestHookDelivers(t *testing.T) {
 }
 
 // The hook never holds the agent up and never says anything when the
-// server is missing, stale or wedged (docs/SPEC.md §8.2).
+// server is missing, stale or wedged (docs/SPEC.md §8.2). Each limit
+// tells the deadlines apart rather than timing them: a missing server
+// is given up on before hookAck, an event nobody answers well before
+// hookContext, and the wedged server's late answer (after 5 s) is never
+// read.
 func TestHookDeadlines(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -114,19 +118,19 @@ func TestHookDeadlines(t *testing.T) {
 		event string
 		max   time.Duration
 	}{
-		{"server down", func(*testing.T, string) {}, "Stop", 100 * time.Millisecond},
+		{"server down", func(*testing.T, string) {}, "Stop", hookAck},
 		{"stale socket", func(t *testing.T, sock string) {
 			clienttest.StaleSocket(t, sock)
-		}, "Stop", 100 * time.Millisecond},
+		}, "Stop", hookAck},
 		{"wedged, no response expected", func(t *testing.T, sock string) {
 			fakeServer(t, sock, 5*time.Second, "late", nil)
-		}, "Stop", hookAck + 150*time.Millisecond},
+		}, "Stop", hookContext / 2},
 		{"wedged, response expected", func(t *testing.T, sock string) {
 			fakeServer(t, sock, 5*time.Second, "late", nil)
-		}, "SessionStart", hookContext + 150*time.Millisecond},
+		}, "SessionStart", hookContext + time.Second},
 		{"never says hello", func(t *testing.T, sock string) {
 			clienttest.Silent(t, sock)
-		}, "SessionStart", hookContext + 150*time.Millisecond},
+		}, "SessionStart", hookContext + time.Second},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

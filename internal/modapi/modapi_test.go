@@ -108,7 +108,7 @@ func start(t *testing.T, script string, answer func(m *modproto.Message) (any, *
 	b := &broker{t: t, calls: make(chan *modproto.Message, 100), logs: make(chan string, 100),
 		fails: make(chan string, 100), answer: answer, code: make(chan int, 1)}
 	go func() {
-		b.code <- modhost.Run(modhost.Options{Name: "main.js", Script: script, Budget: 2 * time.Second, In: inR, Out: outW, Bind: Bind})
+		b.code <- modhost.Run(modhost.Options{Name: "main.js", Script: script, In: inR, Out: outW, Bind: Bind})
 		outW.Close()
 	}()
 	b.c = modproto.NewClient(outR, inW, func(m *modproto.Message) {

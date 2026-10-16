@@ -66,7 +66,7 @@ func TestTypeScriptModRuns(t *testing.T) {
 	if len(inputs) != 3 || inputs["lib/age.ts"] == "" || inputs["limits.json"] == "" {
 		t.Fatalf("inputs %v", inputs)
 	}
-	s := startHost(t, code, time.Second)
+	s := startHost(t, code, DefaultBudget)
 	s.hello()
 	id := s.event("task.changed", map[string]any{"now": 100 * 3600, "tasks": []map[string]any{
 		{"id": "T1", "since": 0}, {"id": "T2", "since": 90 * 3600},

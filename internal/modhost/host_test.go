@@ -179,7 +179,7 @@ func TestHelloRunsTheScriptAndListsEvents(t *testing.T) {
 		$.on("task.changed", () => {});
 		$.on("clock.minute", () => {});
 		$.on("task.changed", () => {});
-	`, time.Second)
+	`, DefaultBudget)
 	r := s.hello()
 	if r.Protocol != modproto.Protocol || r.Runtime != "goja" || strings.Join(r.Events, ",") != "clock.minute,task.changed" {
 		t.Fatalf("hello result %+v", r)
@@ -187,7 +187,7 @@ func TestHelloRunsTheScriptAndListsEvents(t *testing.T) {
 }
 
 func TestNothingRunsBeforeHello(t *testing.T) {
-	s := startHost(t, `$.log("loaded")`, time.Second)
+	s := startHost(t, `$.log("loaded")`, DefaultBudget)
 	id := s.event("x", nil)
 	m := s.next()
 	if !m.IsResponse() || *m.ID != id || m.Error == nil || m.Error.Code != modproto.CodeNotReady {
@@ -200,7 +200,7 @@ func TestNothingRunsBeforeHello(t *testing.T) {
 }
 
 func TestLogFormatsValues(t *testing.T) {
-	s := startHost(t, `$.log("n", 1, {a: [1, "b"]}, null)`, time.Second)
+	s := startHost(t, `$.log("n", 1, {a: [1, "b"]}, null)`, DefaultBudget)
 	s.hello()
 	if got := logText(s.method(modproto.MethodLog)); got != `n 1 {"a":[1,"b"]} null` {
 		t.Fatalf("log %q", got)
@@ -212,7 +212,7 @@ func TestEventPayloadIsPlainJS(t *testing.T) {
 		$.on("task.changed", (ev) => {
 			$.log(Array.isArray(ev.steps), Object.keys(ev).join(","), ev.steps.map((x) => x * 2).join(","));
 		});
-	`, time.Second)
+	`, DefaultBudget)
 	s.hello()
 	id := s.event("task.changed", map[string]any{"id": "T1", "steps": []int{1, 2}})
 	if got := logText(s.method(modproto.MethodLog)); got != "true id,steps 2,4" {
@@ -232,7 +232,7 @@ func TestThrowIsReportedAndTheHostLivesOn(t *testing.T) {
 		$.on("boom", () => { throw new Error("boom"); });
 		$.on("boom", () => { $.log("second ran"); });
 		$.on("ok", () => $.log("ok"));
-	`, time.Second)
+	`, DefaultBudget)
 	s.hello()
 	id := s.event("boom", nil)
 	f := s.failed()
@@ -262,7 +262,7 @@ func TestAsyncHandlerAwaitsTheBroker(t *testing.T) {
 				$.log("refused", e.message, e.code, e instanceof Error);
 			}
 		});
-	`, time.Second)
+	`, DefaultBudget)
 	s.hello()
 	ev := s.event("task.changed", map[string]any{"project": "tm"})
 	call := s.method("project.get")
@@ -288,7 +288,7 @@ func TestRejectedHandlerIsCountedOnce(t *testing.T) {
 	s := startHost(t, `
 		$.on("x", async () => { await $.call("a"); throw new Error("late"); });
 		$.on("ok", () => {});
-	`, time.Second)
+	`, DefaultBudget)
 	s.hello()
 	ev := s.event("x", nil)
 	call := s.method("a")
@@ -308,7 +308,7 @@ func TestRejectedHandlerIsCountedOnce(t *testing.T) {
 }
 
 func TestUnhandledRejectionInATimer(t *testing.T) {
-	s := startHost(t, `setTimeout(() => { Promise.reject(new Error("lost")); }, 1);`, time.Second)
+	s := startHost(t, `setTimeout(() => { Promise.reject(new Error("lost")); }, 1);`, DefaultBudget)
 	s.hello()
 	f := s.failed()
 	if f.Where != "timer" || f.Kind != modproto.KindRejected || f.Error != "Error: lost" {
@@ -326,7 +326,7 @@ func TestTimers(t *testing.T) {
 		const never = setTimeout(() => $.log("cleared timer ran"), 1);
 		clearTimeout(never);
 		setTimeout(() => $.log("timeout", n >= 0), 0);
-	`, time.Second)
+	`, DefaultBudget)
 	s.hello()
 	var got []string
 	for len(got) < 2 {
@@ -344,7 +344,7 @@ func TestTimers(t *testing.T) {
 }
 
 func TestSubscribeAfterHello(t *testing.T) {
-	s := startHost(t, `$.on("first", () => { $.on("later", () => {}); $.on("later", () => {}); });`, time.Second)
+	s := startHost(t, `$.on("first", () => { $.on("later", () => {}); $.on("later", () => {}); });`, DefaultBudget)
 	s.hello()
 	s.event("first", nil)
 	var sub modproto.Subscribe
@@ -355,7 +355,7 @@ func TestSubscribeAfterHello(t *testing.T) {
 }
 
 func TestOnNeedsAFunction(t *testing.T) {
-	s := startHost(t, `$.on("x", 1)`, time.Second)
+	s := startHost(t, `$.on("x", 1)`, DefaultBudget)
 	id := s.request(modproto.MethodHello, modproto.Hello{Protocol: 1})
 	m := s.reply(id)
 	if m.Error == nil || m.Error.Code != modproto.CodeLoad || !strings.Contains(m.Error.Message, "TypeError") {
@@ -367,7 +367,7 @@ func TestOnNeedsAFunction(t *testing.T) {
 }
 
 func TestNoAmbientIO(t *testing.T) {
-	s := startHost(t, `$.log(typeof require, typeof process, typeof fetch, typeof console, typeof setTimeout)`, time.Second)
+	s := startHost(t, `$.log(typeof require, typeof process, typeof fetch, typeof console, typeof setTimeout)`, DefaultBudget)
 	s.hello()
 	if got := logText(s.method(modproto.MethodLog)); got != "undefined undefined undefined undefined function" {
 		t.Fatalf("globals %q", got)
@@ -395,7 +395,7 @@ for (const [k, f] of Object.entries(tries)) {
   try { out.push(k + "=" + f()); } catch (e) { out.push(k + ":" + (e instanceof TypeError || e instanceof ReferenceError ? "refused" : String(e))); }
 }
 out.push(typeof eval, (() => 0) instanceof Function, typeof Function);
-$.log(out.join(" "));`, time.Second)
+$.log(out.join(" "));`, DefaultBudget)
 	s.hello()
 	want := "eval:refused indirect:refused Function:refused newFunction:refused ctor:refused proto:refused async:refused gen:refused restore=null undefined true function"
 	if got := logText(s.method(modproto.MethodLog)); got != want {
@@ -471,7 +471,7 @@ func TestSpinWhileLoadingExits3(t *testing.T) {
 }
 
 func TestShutdownAndEOF(t *testing.T) {
-	s := startHost(t, `setInterval(() => {}, 1)`, time.Second)
+	s := startHost(t, `setInterval(() => {}, 1)`, DefaultBudget)
 	s.hello()
 	id := s.request(modproto.MethodShutdown, nil)
 	if m := s.reply(id); m.Error != nil {
@@ -481,7 +481,7 @@ func TestShutdownAndEOF(t *testing.T) {
 		t.Fatalf("exit %d", c)
 	}
 
-	s = startHost(t, ``, time.Second)
+	s = startHost(t, ``, DefaultBudget)
 	s.hello()
 	s.in.Close()
 	if c := s.exit(); c != modproto.ExitOK {
@@ -490,7 +490,7 @@ func TestShutdownAndEOF(t *testing.T) {
 }
 
 func TestProtocolErrors(t *testing.T) {
-	s := startHost(t, ``, time.Second)
+	s := startHost(t, ``, DefaultBudget)
 	_, _ = s.in.Write([]byte("not json\n"))
 	if m := s.method(modproto.MethodLog); !strings.Contains(logText(m), "bad frame") {
 		t.Fatalf("log %q", logText(m))
@@ -511,7 +511,7 @@ func TestProtocolErrors(t *testing.T) {
 }
 
 func TestNewerProtocolIsRefused(t *testing.T) {
-	s := startHost(t, `$.log("ran")`, time.Second)
+	s := startHost(t, `$.log("ran")`, DefaultBudget)
 	id := s.request(modproto.MethodHello, modproto.Hello{Protocol: modproto.Protocol + 1})
 	if m := s.reply(id); m.Error == nil || !strings.Contains(m.Error.Message, "protocol") {
 		t.Fatalf("hello %+v", m)
@@ -565,7 +565,7 @@ func TestCallsInFlightAreBounded(t *testing.T) {
 			}
 		});
 		$.on("y", () => { $.call("b"); });
-	`, time.Second)
+	`, DefaultBudget)
 	s.hello()
 	ev := s.event("x", nil)
 	if got := logText(s.method(modproto.MethodLog)); got != fmt.Sprintf("refused %d %d", CallsInFlight, modproto.CodeFailed) {
@@ -592,7 +592,7 @@ func TestHugeTimerDelayWaits(t *testing.T) {
 		setInterval(() => $.log("huge interval"), 1e300);
 		setTimeout(() => $.log("huge timeout"), Infinity);
 		setTimeout(() => $.log("late"), 30);
-	`, time.Second)
+	`, DefaultBudget)
 	s.hello()
 	if got := logText(s.method(modproto.MethodLog)); got != "late" {
 		t.Fatalf("first log %q, want late", got)

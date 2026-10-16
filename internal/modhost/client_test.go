@@ -19,7 +19,7 @@ func TestClientEventLimit(t *testing.T) {
 	outR, outW := io.Pipe()
 	code := make(chan int, 1)
 	go func() {
-		code <- Run(Options{Name: "main.js", Budget: time.Second, In: inR, Out: outW, Bind: testBind, Script: `
+		code <- Run(Options{Name: "main.js", In: inR, Out: outW, Bind: testBind, Script: `
 			$.on("mod.ready", (data, meta) => $.log(meta.name, meta.project, meta.seq, meta.dropped, data.projects.length));
 			$.on("hang", async () => { await $.call("never"); });
 			$.on("ask", async () => { $.log("got", await $.call("project.get", {slug: "tm"})); });
