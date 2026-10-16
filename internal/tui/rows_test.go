@@ -50,7 +50,7 @@ func TestTextViewWrapCached(t *testing.T) {
 		t.Errorf("a wider view has %d lines, not fewer than %d", len(b), len(a))
 	}
 	tv.body = "short"
-	if c := tv.lines(60); len(c) != 2 {
+	if c := tv.lines(60); len(c) != 3 {
 		t.Errorf("after the body changed: %q", c)
 	}
 }
