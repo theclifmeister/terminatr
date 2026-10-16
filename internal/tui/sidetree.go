@@ -465,7 +465,7 @@ func treeSel(r treeRow, focused bool) (bool, lipgloss.Style) {
 //	                                      its state, ⚑ while it waits on you
 //
 // The columns are count/%, PR/CI, state, remote, paused, inactive and
-// needs you (sideGrid cells), in the order the view's Columns gives
+// needs you (the sidebar grid's cells), in the order the view's Columns gives
 // (view.Columns), where a mod's columns take their slots too (sideCols).
 // A project row's state column is its
 // coordinator's state, only while the project is folded: unfolded, the
@@ -729,12 +729,6 @@ func treeGrid(r treeRow, cols []sideCol) []cellRun {
 
 // pctCol is the width of the grid's count/% column: "100% ".
 const pctCol = 5
-
-// sideGrid is the width of the default grid on the right of every row
-// of the full sidebar without mod columns: the count/% column, then five
-// glyph columns two cells wide (treeCells). The PR/CI column is the
-// pr-ci-column mod's: two cells more while it is on.
-const sideGrid = pctCol + 5*2
 
 // modCell is r's cell in mod column col: a project's, a coordinator's
 // session's, or a thread's (its own, else its task's, else its

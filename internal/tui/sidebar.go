@@ -46,12 +46,6 @@ const (
 	sideRoom    = view.SideRoom
 )
 
-// sidebarLines draws the sidebar on the left with nothing needing you:
-// sideLines.
-func sidebarLines(all []treeRow, w, h int, foot []string) []string {
-	return sideLines(all, w, h, sideHeadIn{}, foot, false)
-}
-
 // sideHeadIn is how the sidebar's PROJECTS header is drawn: needs, the
 // things that need you its ⚑ N counts; cursor, the keyboard's row is the
 // header (headKey); here, every project's NEEDS YOU shows (allProjects),
