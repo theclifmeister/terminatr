@@ -26,6 +26,7 @@ interface Used {
   title: string;
   tokens: number;
   cost: number;
+  resolved?: string; // RFC 3339, once the thread is resolved
 }
 interface Day {
   tokens: number;
@@ -86,6 +87,23 @@ function card(project: string, now: Date): TM.Widget {
   };
 }
 
+// prune drops the threads resolved more than KEEP_DAYS before now, so
+// the store doesn't grow with every thread ever seen (it holds 1 MiB).
+function prune(now: Date) {
+  const cutoff = now.getTime() - KEEP_DAYS * 86400000;
+  for (const [k, u] of Object.entries(threads)) if (u.resolved && Date.parse(u.resolved) < cutoff) delete threads[k];
+}
+
+// save keeps a value in the store. A store that refuses it (full) isn't
+// fatal: the card goes on from memory.
+async function save(key: string, value: unknown) {
+  try {
+    await $.store.set(key, value);
+  } catch (e) {
+    $.log(`the store refused ${key}:`, String(e));
+  }
+}
+
 async function draw(now: Date) {
   await Promise.all(
     [...shown].map((p) => $.ui.view.set(CARD, card(p, now), { project: p || undefined, height: 6 + Math.min(Object.keys(threads).length, Number($.settings().rows) || 5) })),
@@ -96,11 +114,21 @@ $.on("mod.ready", async () => {
   threads = ((await $.store.get(THREADS)) as Record<string, Used>) ?? {};
   days = ((await $.store.get(DAYS)) as Record<string, Day>) ?? {};
   fresh = ((await $.store.get(FRESH)) as Record<string, true>) ?? {};
+  prune(new Date());
+});
+
+$.on("thread.resolved", async (e, meta) => {
+  const k = `${e.project}/${e.thread}`;
+  if (threads[k]) threads[k].resolved = new Date(meta.time).toISOString();
+  delete fresh[k];
+  prune(new Date(meta.time));
+  await save(THREADS, threads);
+  await save(FRESH, fresh);
 });
 
 $.on("thread.started", async (e) => {
   fresh[`${e.project}/${e.thread}`] = true;
-  await $.store.set(FRESH, fresh);
+  await save(FRESH, fresh);
 });
 
 $.on("session.state", async (e, meta) => {
@@ -117,15 +145,16 @@ $.on("session.state", async (e, meta) => {
     d.tokens += tokens - was.tokens;
     d.cost += cost - was.cost;
     for (const old of Object.keys(days)) if (old < day(now, KEEP_DAYS)) delete days[old];
-    await $.store.set(DAYS, days);
+    await save(DAYS, days);
   }
   // The thread's title, once: its id until the project says.
   const title = was?.title || (await $.thread.get(e.project, e.thread))?.title || e.thread;
   threads[k] = { project: e.project, thread: e.thread, title, tokens, cost };
-  await $.store.set(THREADS, threads);
+  prune(now);
+  await save(THREADS, threads);
   if (fresh[k]) {
     delete fresh[k];
-    await $.store.set(FRESH, fresh);
+    await save(FRESH, fresh);
   }
   await draw(now);
 });

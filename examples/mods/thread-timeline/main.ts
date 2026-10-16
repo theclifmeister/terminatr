@@ -16,6 +16,7 @@ const VIEW = "timeline";
 const LOG = "log";
 const MARKS = 16; // state changes kept per thread: a cell holds 16 spans
 const HOURS = 12;
+const KEEP_RESOLVED_DAYS = 7; // a resolved thread's row stays this long; the store holds 1 MiB
 
 interface Change {
   at: string; // RFC 3339
@@ -108,6 +109,28 @@ async function draw(project: string, now: Date) {
   await $.ui.view.set(VIEW, view(project, now), project ? { project } : {});
 }
 
+// prune drops the threads resolved more than KEEP_RESOLVED_DAYS before
+// now, so the store doesn't grow with every thread the project ever had.
+function prune(now: Date) {
+  const cutoff = now.getTime() - KEEP_RESOLVED_DAYS * 86400000;
+  for (const threads of Object.values(log)) {
+    for (const [id, t] of Object.entries(threads)) {
+      const last = latest(t);
+      if (t.resolved && last && Date.parse(last.at) < cutoff) delete threads[id];
+    }
+  }
+}
+
+// save keeps the log in the store. A store that refuses it (full) isn't
+// fatal: the timeline goes on from memory.
+async function save() {
+  try {
+    await $.store.set(LOG, log);
+  } catch (e) {
+    $.log("the store refused the log:", String(e));
+  }
+}
+
 async function record(project: string, thread: string, state: string, task: string | undefined, now: Date) {
   const threads = (log[project] ??= {});
   const t = (threads[thread] ??= { changes: [] });
@@ -116,7 +139,8 @@ async function record(project: string, thread: string, state: string, task: stri
   t.changes.push({ at: now.toISOString(), state });
   t.changes = t.changes.slice(-MARKS);
   t.resolved = state === "resolved";
-  await $.store.set(LOG, log);
+  prune(now);
+  await save();
   await draw(project, now);
 }
 
@@ -125,6 +149,7 @@ $.on("mod.ready", async (e) => {
   // A project the mod no longer runs for keeps no history.
   const projects = new Set(e.projects.map((p) => p.project));
   for (const p of Object.keys(log)) if (!projects.has(p)) delete log[p];
+  prune(new Date());
 });
 
 $.on("thread.started", async (e, meta) => {

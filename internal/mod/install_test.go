@@ -599,3 +599,46 @@ func TestExampleInstallLines(t *testing.T) {
 		}
 	}
 }
+
+func gitIn(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"}, args...)...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+// A mod pinned to an annotated tag that isn't a version is not behind.
+func TestLatestAnnotatedTag(t *testing.T) {
+	withHome(t)
+	repo, _ := gitRepo(t, map[string]string{"mod.toml": nordToml, "theme.toml": "", "rules/thread.md": ""}, "")
+	gitIn(t, repo, "tag", "-a", "stable", "-m", "stable")
+	installFrom(t, Source{Git: "file://" + repo, Ref: "stable"})
+	m, _ := registryOf(t).Get("nord")
+	s, _ := ReadSource(m.Dir)
+	if next, behind, err := Latest(s); err != nil || behind {
+		t.Fatalf("fresh install of an annotated tag behind: %q %v %v", next, behind, err)
+	}
+}
+
+// A newer tag over the same files is recorded, so the mod isn't
+// reported behind again.
+func TestUpdateUnchangedFilesRecordsTag(t *testing.T) {
+	withHome(t)
+	repo, _ := gitRepo(t, map[string]string{"mod.toml": nordToml, "theme.toml": "", "rules/thread.md": ""}, "v0.4.0")
+	installFrom(t, Source{Git: "file://" + repo, Ref: "v0.4.0"})
+	gitIn(t, repo, "commit", "-q", "--allow-empty", "-m", "nothing")
+	gitIn(t, repo, "tag", "v0.5.0")
+	m, _ := registryOf(t).Get("nord")
+	if st, err := FetchUpdate(m); err != nil || st != nil {
+		t.Fatalf("update of unchanged files: %v %v", st, err)
+	}
+	s, _ := ReadSource(m.Dir)
+	if s.Ref != "v0.5.0" {
+		t.Fatalf("recorded ref %q", s.Ref)
+	}
+	if next, behind, err := Latest(s); err != nil || behind {
+		t.Fatalf("still behind: %q %v %v", next, behind, err)
+	}
+}
