@@ -15,21 +15,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/theclifmeister/terminatr/internal/plat/flock"
+	"github.com/theclifmeister/terminatr/internal/client/clienttest"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 const wait = 10 * time.Second
-
-func staleSocket(t *testing.T, path string) {
-	t.Helper()
-	ln, err := net.Listen("unix", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ln.(*net.UnixListener).SetUnlinkOnClose(false)
-	ln.Close()
-}
 
 // TestSmokeServerSurvivesClientAndTerminal is M1's "Try it": a user in a
 // terminal window starts a session (auto-starting the server); the client
@@ -38,7 +28,7 @@ func TestSmokeServerSurvivesClientAndTerminal(t *testing.T) {
 	env := New(t)
 
 	// Leftovers of a crashed server must not get in the way.
-	staleSocket(t, env.Socket)
+	clienttest.StaleSocket(t, env.Socket)
 	os.WriteFile(filepath.Join(filepath.Dir(env.Socket), "server.pid"), []byte("999999\n"), 0o600)
 
 	w := env.Shell(80, 24)
@@ -243,32 +233,8 @@ func TestCrashThenAutoStart(t *testing.T) {
 func TestHungServer(t *testing.T) {
 	env := New(t)
 	run := filepath.Dir(env.Socket)
-	lock, err := flock.TryLock(filepath.Join(run, "server.lock"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer lock.Unlock()
-	os.WriteFile(filepath.Join(run, "server.pid"), []byte("4242\n"), 0o600)
-	ln, err := net.Listen("unix", env.Socket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ln.Close()
-	go func() {
-		var conns []net.Conn
-		defer func() {
-			for _, c := range conns {
-				c.Close()
-			}
-		}()
-		for {
-			c, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			conns = append(conns, c) // accept, never answer
-		}
-	}()
+	clienttest.Running(t, filepath.Join(run, "server.lock"), filepath.Join(run, "server.pid"), 4242)
+	clienttest.Silent(t, env.Socket) // accept, never answer
 	t0 := time.Now()
 	r := env.CLI("session", "list")
 	if r.Code != 3 || !strings.Contains(r.Stderr, "server unresponsive (pid 4242)") ||

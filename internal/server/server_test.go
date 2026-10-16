@@ -16,6 +16,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/client/clienttest"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -296,12 +297,7 @@ func TestCrashIsDetected(t *testing.T) {
 	// What a crashed server leaves: no clean marker, a stale socket.
 	saveState(p.Sessions, &State{Version: 1, ServerPID: 999999, NextID: 7,
 		Sessions: []SessionRecord{{ID: "s-6", Role: proto.RoleShell}}})
-	ln, err := net.Listen("unix", p.Socket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ln.(*net.UnixListener).SetUnlinkOnClose(false)
-	ln.Close()
+	clienttest.StaleSocket(t, p.Socket)
 
 	startServer(t, p)
 	c, err := client.Connect(p, false)
@@ -323,12 +319,7 @@ func TestCrashIsDetected(t *testing.T) {
 
 func TestStaleSocketWithoutServer(t *testing.T) {
 	p := testPaths(t)
-	ln, err := net.Listen("unix", p.Socket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ln.(*net.UnixListener).SetUnlinkOnClose(false)
-	ln.Close()
+	clienttest.StaleSocket(t, p.Socket)
 	os.MkdirAll(p.RunDir, 0o700)
 	os.WriteFile(p.PID, []byte("999999\n"), 0o600)
 
@@ -346,28 +337,10 @@ func TestHungServerIsReported(t *testing.T) {
 	p := testPaths(t)
 	os.MkdirAll(p.RunDir, 0o700)
 	// A "server" that holds the lock and accepts but never says hello.
-	lk, err := tryLock(p.Lock)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer lk.Unlock()
-	os.WriteFile(p.PID, []byte("4242\n"), 0o600)
-	ln, err := net.Listen("unix", p.Socket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ln.Close()
-	go func() {
-		for {
-			c, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			defer c.Close()
-		}
-	}()
+	clienttest.Running(t, p.Lock, p.PID, 4242)
+	clienttest.Silent(t, p.Socket)
 	t0 := time.Now()
-	_, err = client.Connect(p, true)
+	_, err := client.Connect(p, true)
 	var unresp *client.UnresponsiveError
 	if !errors.As(err, &unresp) || unresp.PID != 4242 {
 		t.Fatalf("Connect: %v", err)
