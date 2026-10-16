@@ -1,9 +1,6 @@
 package server
 
 import (
-	"log"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -31,23 +28,7 @@ views = true
 // cmdServer is a bare Server with mod lab installed and enabled for
 // project demo.
 func cmdServer(t *testing.T) *Server {
-	tmHome := t.TempDir()
-	t.Setenv("TERMINATR_HOME", tmHome)
-	dir := filepath.Join(tmHome, "mods", "lab")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	for name, text := range map[string]string{"mod.toml": cmdManifest, "main.js": ""} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	cfg := "[mods.lab]\nenabled = true\ngrants = [\"views\"]\nprojects = [\"demo\"]\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n[mods.ticker]\nenabled = false\n"
-	if err := os.WriteFile(filepath.Join(tmHome, "config.toml"), []byte(cfg), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	newWatchProject(t)
-	return &Server{log: log.New(os.Stderr, "", 0), modEv: newModEvents()}
+	return modServer(t, "lab", cmdManifest, `"views"`, false)
 }
 
 // TestModCommand: the human's mod.command reaches the mod as

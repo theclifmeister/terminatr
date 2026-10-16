@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 )
@@ -142,4 +143,79 @@ func TestEditProjectsKeepsText(t *testing.T) {
 	if bak, _ := os.ReadFile(cfg + ".tm-backup"); string(bak) != in {
 		t.Errorf("backup %q", bak)
 	}
+}
+
+func TestLockConfig(t *testing.T) {
+	setup := func(t *testing.T) (path, lock string) {
+		path = filepath.Join(t.TempDir(), ".claude.json")
+		return path, path + ".lock"
+	}
+	t.Run("free", func(t *testing.T) {
+		path, lock := setup(t)
+		unlock := lockConfig(path)
+		if !exists(lock) {
+			t.Fatal("no lock taken")
+		}
+		unlock()
+		if exists(lock) {
+			t.Error("lock left behind")
+		}
+	})
+	t.Run("held then released", func(t *testing.T) {
+		path, lock := setup(t)
+		os.Mkdir(lock, 0o700)
+		go func() {
+			time.Sleep(200 * time.Millisecond)
+			os.Remove(lock)
+		}()
+		start := time.Now()
+		unlock := lockConfig(path)
+		if d := time.Since(start); d < 150*time.Millisecond || d > lockWait {
+			t.Errorf("waited %v", d)
+		}
+		if !exists(lock) {
+			t.Error("lock not taken after the other writer let go")
+		}
+		unlock()
+		if exists(lock) {
+			t.Error("lock left behind")
+		}
+	})
+	t.Run("held past lockWait", func(t *testing.T) {
+		path, lock := setup(t)
+		os.Mkdir(lock, 0o700)
+		start := time.Now()
+		unlock := lockConfig(path)
+		if d := time.Since(start); d < lockWait {
+			t.Errorf("gave up after %v", d)
+		}
+		// Not ours: unlocking must not remove the other writer's lock.
+		unlock()
+		if !exists(lock) {
+			t.Error("removed a lock it doesn't hold")
+		}
+	})
+	t.Run("stale", func(t *testing.T) {
+		path, lock := setup(t)
+		os.Mkdir(lock, 0o700)
+		old := time.Now().Add(-time.Minute)
+		os.Chtimes(lock, old, old)
+		start := time.Now()
+		unlock := lockConfig(path)
+		if d := time.Since(start); d > time.Second {
+			t.Errorf("waited %v on a stale lock", d)
+		}
+		unlock()
+		if !exists(lock) {
+			t.Error("removed a stale lock it doesn't hold")
+		}
+	})
+	t.Run("can't be created", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "no", "such", ".claude.json")
+		start := time.Now()
+		lockConfig(path)()
+		if d := time.Since(start); d > time.Second {
+			t.Errorf("waited %v", d)
+		}
+	})
 }

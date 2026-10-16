@@ -3,9 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -27,29 +25,18 @@ func modActionsSetup(t *testing.T, grants string) *Server {
 // modActionsSetupWith is modActionsSetup with lab's manifest.
 func modActionsSetupWith(t *testing.T, manifest, grants string) *Server {
 	t.Helper()
-	tmHome := t.TempDir()
-	t.Setenv("TERMINATR_HOME", tmHome)
-	dir := filepath.Join(tmHome, "mods", "lab")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	s := modServer(t, "lab", manifest, grants, true)
+	p, err := project.Open("demo")
+	if err != nil {
 		t.Fatal(err)
 	}
-	for name, text := range map[string]string{"mod.toml": manifest, "main.js": ""} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	cfg := "[mods.lab]\nenabled = true\ngrants = [" + grants + "]\nprojects = [\"demo\"]\n"
-	if err := os.WriteFile(filepath.Join(tmHome, "config.toml"), []byte(cfg), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	p := newWatchProject(t)
 	if _, err := project.New(project.Options{Slug: "other"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := p.Tasks().Add(human, []tasks.NewTask{{Title: "One", Status: "started"}, {Title: "Two", Status: "review"}}); err != nil {
 		t.Fatal(err)
 	}
-	return &Server{log: log.New(os.Stderr, "", 0), modEv: newModEvents()}
+	return s
 }
 
 func callLab(s *Server, method string, params any) (any, error) {

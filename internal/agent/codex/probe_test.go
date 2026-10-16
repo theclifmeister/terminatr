@@ -184,3 +184,79 @@ func TestProbeMainWrite(t *testing.T) {
 		t.Errorf("unwritable = %q", got)
 	}
 }
+
+// fakeCodex puts a shell script named codex first on PATH: --version
+// answers, and `sandbox` runs sandbox (counting its runs in the file
+// the returned function reads).
+func fakeSandboxCodex(t *testing.T, sandbox string) (runs func() int) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands in for codex")
+	}
+	dir := t.TempDir()
+	count := filepath.Join(dir, "runs")
+	script := "#!/bin/sh\n" +
+		`case "$1" in --version) echo "codex-cli 0.162.1"; exit 0;; esac` + "\n" +
+		`echo x >> "` + count + `"` + "\n" + sandbox + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "codex"), []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return func() int {
+		b, _ := os.ReadFile(count)
+		return strings.Count(string(b), "x")
+	}
+}
+
+// TestProbeThreadSandbox: what a thread's sandbox run says (tm doctor on
+// Windows) becomes the version, or the reason it doesn't hold.
+func TestProbeThreadSandbox(t *testing.T) {
+	cases := []struct {
+		script, want string
+	}{
+		{`echo "unix=ok write=denied"`, ""},
+		{`echo "WARNING: something"; echo "unix=ok write=denied"`, ""},
+		{`echo "unix=ok write=ok"`, "the sandbox doesn't apply"},
+		{`echo "unix=refused write=denied"`, "tm's socket is unreachable"},
+		{`echo "error: bad" >&2; exit 2`, "codex sandbox refused it: error: bad"},
+		{`echo something else`, "unexpected probe output"},
+	}
+	a := load(t)
+	for _, tc := range cases {
+		fakeSandboxCodex(t, tc.script)
+		version, err := a.ProbeThreadSandbox("/bin/tm")
+		switch {
+		case tc.want == "" && err != nil, tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)):
+			t.Errorf("%s: %v, want %q", tc.script, err, tc.want)
+		case version != "0.162.1":
+			t.Errorf("%s: version %q", tc.script, version)
+		}
+	}
+}
+
+// TestProbeProfileCache: a verdict is kept for a binary (path, size,
+// mtime) and the same arguments, so a launch doesn't run the sandbox
+// twice; another binary or another argument is probed again.
+func TestProbeProfileCache(t *testing.T) {
+	runs := fakeSandboxCodex(t, `echo "unix=ok tcp=refused"`)
+	m := agent.ManifestOf(load(t))
+	cwd := t.TempDir()
+	probe := func(name string) (string, error) {
+		return probeProfile(m, "codex", "/bin/tm", cwd, "/run/"+t.Name()+".sock", name, []string{"-c", "x=1"}, false)
+	}
+	name := "cache-" + filepath.Base(t.TempDir())
+	for i := 0; i < 3; i++ {
+		if v, err := probe(name); err != nil || v != "0.162.1" {
+			t.Fatalf("probe %d: %q %v", i, v, err)
+		}
+	}
+	if n := runs(); n != 1 {
+		t.Errorf("%d sandbox runs for 3 identical probes, want 1", n)
+	}
+	if _, err := probe(name + "-other"); err != nil {
+		t.Fatal(err)
+	}
+	if n := runs(); n != 2 {
+		t.Errorf("%d sandbox runs after another profile, want 2", n)
+	}
+}
