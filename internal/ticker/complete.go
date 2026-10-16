@@ -42,8 +42,10 @@ func (t *Ticker) rememberMerge(p *project.Project, r *thread.Record, pr PR) {
 }
 
 // mergeOf is thread id's PR merge: as the ticker saw it, else from the
-// PR in its report and its repo's history (a PR that merged before tm
-// kept merges). nil when there is none.
+// PR in its report, by its repo's history (a PR that merged before tm
+// kept merges) or, when git names no commit for it (a squash or rebase
+// merge), by the host's word on the PR of a resolved thread (an open
+// one's PR polls see it). nil when there is none.
 func (t *Ticker) mergeOf(p *project.Project, pm *projectMemo, id string) *mergeMemo {
 	if mm := pm.Merges[id]; mm != nil {
 		return mm
@@ -61,11 +63,27 @@ func (t *Ticker) mergeOf(p *project.Project, pm *projectMemo, id string) *mergeM
 	}
 	// Only a URL of the repo's own host counts: a GitHub URL in an
 	// Azure DevOps repo's report names no PR there.
-	n, _ := t.host(p, r.Repo).ParsePRURL(rep.PR)
-	if merge := t.host(p, r.Repo).MergeCommit(r.Repo, n); n > 0 && oidRE.MatchString(merge) {
+	host := t.host(p, r.Repo)
+	n, _ := host.ParsePRURL(rep.PR)
+	if n <= 0 {
+		return nil
+	}
+	if merge := host.MergeCommit(r.Repo, n); oidRE.MatchString(merge) {
 		return &mergeMemo{Repo: r.Repo, PR: n, Merge: merge}
 	}
-	return nil
+	if r.State != thread.Resolved {
+		return nil // its PR polls remember the merge (rememberMerge)
+	}
+	pr, err := host.PR(r.Repo, codehost.Ref{Number: n})
+	if err != nil || pr.Number != n || pr.Branch != r.Branch || pr.State != "MERGED" || !oidRE.MatchString(pr.Merge) {
+		return nil
+	}
+	mm := &mergeMemo{Repo: r.Repo, PR: n, Merge: pr.Merge}
+	if pm.Merges == nil {
+		pm.Merges = map[string]*mergeMemo{}
+	}
+	pm.Merges[id] = mm // asked once
+	return mm
 }
 
 // PRNumber is the number of a GitHub or Azure DevOps pull request's URL,

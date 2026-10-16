@@ -116,7 +116,8 @@ func short(oid string) string {
 // right before it is judged conflicting: main may have moved by merging it.
 //
 // A head that main has is a hint that the PR merged (a merge commit or a
-// fast-forward, on any host): the PR is asked about at once instead of
+// fast-forward, on any host), and so is main's new head naming the PR in
+// its subject (a squash merge): the PR is asked about at once instead of
 // on its next poll, and when it merged the merge is kept for
 // completeTasks. It reports whether a PR was seen merged.
 func (t *Ticker) followMain(p *project.Project, sessions []proto.SessionInfo, safety config.Safety, now time.Time) (merged bool) {
@@ -139,7 +140,11 @@ func (t *Ticker) followMain(p *project.Project, sessions []proto.SessionInfo, sa
 		if rm == nil || m.MainSeen == rm.Origin || (m.PR.Base != "" && m.PR.Base != rm.Branch) {
 			continue
 		}
-		if worktree.Contains(r.Repo, rm.Origin, m.PR.Head) {
+		// main has the PR's head (a merge commit or a fast-forward), or
+		// its new head's subject names the PR (a squash merge's "… (#9)",
+		// Azure DevOps' "Merged PR 9: …"). A rebase merge leaves neither:
+		// the next poll finds it.
+		if worktree.Contains(r.Repo, rm.Origin, m.PR.Head) || rm.MergedPR > 0 && rm.MergedPR == m.PR.Number {
 			m.MainSeen = rm.Origin
 			_, _, info, live := liveState(r, sessions)
 			if done, ok := t.refreshPR(p, r, m, info, live, safety, now); ok && done {

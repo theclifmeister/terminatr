@@ -143,6 +143,8 @@ type ModRef struct {
 	Branch string       `json:"branch,omitempty"`
 	Number int          `json:"number,omitempty"`
 	Head   string       `json:"head,omitempty"`
+	// Method is merge's method: "merge", "squash" or "rebase".
+	Method string `json:"method,omitempty"`
 }
 
 // modPR is codehost.pr's answer, PR's fields by their state-file names.
@@ -392,17 +394,28 @@ func (m Mod) MergedPR(repo, commit string) int {
 	return n
 }
 
-// Merge asks the mod to merge pr with a merge commit, only at pr.Head:
-// tm thread merge has checked it is open, green and mergeable at that
-// head, and the mod passes the head on to the host (glab mr merge --sha),
-// which refuses it once the head moved.
-func (m Mod) Merge(repo string, pr PR) error {
-	if pr.Number <= 0 || !oidRE.MatchString(pr.Head) {
-		return fmt.Errorf("%s: no PR number or head to merge", m.Target.Kind)
+// Merge asks the mod to merge pr by method, only at pr.Head: tm thread
+// merge has checked it is open, green and mergeable at that head, and
+// the mod passes the head on to the host (glab mr merge --sha), which
+// refuses it once the head moved. A mod that doesn't merge by the
+// method, or whose host refuses it, answers {refused: "method", allowed:
+// [...]}: a MethodError.
+func (m Mod) Merge(repo string, pr PR, method string) error {
+	if err := checkMerge(m.Target.Kind, pr, method); err != nil {
+		return err
 	}
 	q := m.ref()
-	q.Number, q.Head = pr.Number, pr.Head
-	return m.call(MethodMerge, q, nil)
+	q.Number, q.Head, q.Method = pr.Number, pr.Head, method
+	var raw json.RawMessage
+	if err := m.call(MethodMerge, q, &raw); err != nil {
+		return err
+	}
+	// Any other answer is a merge, as before mods could refuse.
+	var a methodRefused
+	if json.Unmarshal(raw, &a) == nil && a.Refused == "method" {
+		return &MethodError{Method: method, Allowed: knownMethods(a.Allowed), Err: fmt.Errorf("mod %s: %w", m.ID, errMethodRefused)}
+	}
+	return nil
 }
 
 // Hints are fixed text by tm (prompts carry no mod's words): glab's
@@ -482,7 +495,7 @@ func (u unserved) MergeCommit(repo string, n int) string {
 func (u unserved) MergedPR(repo, commit string) int {
 	return Mod{Target: u.Target}.MergedPR(repo, commit)
 }
-func (u unserved) Merge(string, PR) error          { return u.Err }
+func (u unserved) Merge(string, PR, string) error  { return u.Err }
 func (u unserved) Hints(n int) Hints               { return Mod{Target: u.Target}.Hints(n) }
 func (u unserved) ParsePRURL(s string) (int, bool) { return Mod{Target: u.Target}.ParsePRURL(s) }
 func (u unserved) Doctor(DoctorDeps) []Check {

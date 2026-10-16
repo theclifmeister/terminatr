@@ -11,6 +11,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
 var human = caller.Caller{Kind: caller.Human}
@@ -132,5 +133,52 @@ func TestCompleteTasksMerged(t *testing.T) {
 	}
 	if j := r.journal(); !strings.Contains(j, "ticker task.done T1 merged (PR #7)") || strings.Count(j, "task.done") != 1 {
 		t.Fatalf("journal:\n%s", j)
+	}
+}
+
+// TestCompleteTasksResolvedNoMergeCommit (T497): a resolved thread's PR
+// merged by squash or rebase leaves no "Merge pull request" commit in
+// git: the host's word on the PR in its report completes its task, and
+// is asked once. An open thread's PR is left to its polls.
+func TestCompleteTasksResolvedNoMergeCommit(t *testing.T) {
+	repo, other := gitFixture(t)
+	merge := push(t, other, "g", "two\n", "Other work (#12)")
+	r := newRigIn(t, repo, []string{repo})
+	r.setConfig("[projects.demo]\ncomplete_tasks = \"merged\"\n")
+	for _, th := range []struct {
+		title string
+		state string
+	}{{"Other", thread.Resolved}, {"Open", thread.Running}} {
+		rec, err := thread.Create(r.p, thread.Record{Title: th.title, Task: "T2", Agent: "claude", Repo: repo,
+			Branch: "tm/demo/t-0002-other", State: thread.Running})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := thread.StoreReport(r.p, rec.ID, "PR: https://github.com/o/r/pull/12\n## Report\nDone.\n## Next\n- Merge it\n", nil, r.now); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := thread.Update(r.p, rec.ID, func(rec *thread.Record) error { rec.State = th.state; return nil }); err != nil {
+			t.Fatal(err)
+		}
+		r.addTask(th.title, "review", rec.ID, "")
+	}
+	asked := 0
+	r.ghFor = func(target string) string {
+		if target != "12" {
+			return ""
+		}
+		asked++
+		return fmt.Sprintf(`{"number":12,"url":"https://github.com/o/r/pull/12","state":"MERGED","mergedAt":"2026-10-04T12:00:00Z","mergeCommit":{"oid":%q},"headRefName":"tm/demo/t-0002-other","statusCheckRollup":[]}`, merge)
+	}
+	r.sweep(0)
+	r.sweep(2 * time.Minute)
+	if st := r.status(1); st != tasks.Done {
+		t.Fatalf("resolved thread's task %s:\n%s", st, r.journal())
+	}
+	if st := r.status(2); st != tasks.Review {
+		t.Fatalf("open thread's task %s", st)
+	}
+	if asked != 1 {
+		t.Fatalf("asked about #12 %d times", asked)
 	}
 }

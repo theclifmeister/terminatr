@@ -161,6 +161,7 @@ var settingRows = []settingRow{
 	def("coordinator_remote_control", "coordinator remote control", everywhere, func(r *rawSafety) *bool { return r.CoordinatorRC }, func(s *Safety) *bool { return &s.CoordinatorRemoteControl }, nil),
 	def("auto_clear", "auto-clear", everywhere, func(r *rawSafety) *bool { return r.AutoClear }, func(s *Safety) *bool { return &s.AutoClear }, nil),
 	def("coordinator_merges", "coordinator merges", everywhere, func(r *rawSafety) *bool { return r.CoordMerges }, func(s *Safety) *bool { return &s.CoordinatorMerges }, nil),
+	def("merge_method", "merge method", everywhere, func(r *rawSafety) *string { return r.MergeMethod }, func(s *Safety) *string { return &s.MergeMethod }, oneOf(MergeMethods...)),
 	def("fast_forward_checkout", "fast-forward checkout", everywhere, func(r *rawSafety) *bool { return r.FastForward }, func(s *Safety) *bool { return &s.FastForwardCheckout }, nil),
 	def("sandbox_escapes", "sandbox escapes", everywhere, func(r *rawSafety) *bool { return r.SandboxEsc }, func(s *Safety) *bool { return &s.SandboxEscapes }, nil),
 	def("thread_agent", "the agent", everywhere, func(r *rawSafety) *string { return r.ThreadAgent }, func(s *Safety) *string { return &s.ThreadAgent }, CheckAgent),

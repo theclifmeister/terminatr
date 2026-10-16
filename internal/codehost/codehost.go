@@ -97,11 +97,11 @@ type Host interface {
 	// MergedPR is the PR number commit's subject says it merged, 0 for
 	// none, by git alone.
 	MergedPR(repo, commit string) int
-	// Merge merges pr (open, as PR just read it) with a regular merge
-	// commit, only if its head is still pr.Head: never a squash, a
-	// rebase or a forced one. It checks nothing else; tm thread merge
-	// does (docs/SPEC.md §9).
-	Merge(repo string, pr PR) error
+	// Merge merges pr (open, as PR just read it) by method (ByMerge,
+	// BySquash or ByRebase), only if its head is still pr.Head: never a
+	// forced one. A method the repo doesn't allow is a *MethodError. It
+	// checks nothing else; tm thread merge does (docs/SPEC.md §9).
+	Merge(repo string, pr PR, method string) error
 	// Hints are the commands prompts name for PR n.
 	Hints(n int) Hints
 	// Doctor checks the host's CLI and its login.

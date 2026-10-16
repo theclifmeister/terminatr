@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -134,11 +135,32 @@ func TestModDoctor(t *testing.T) {
 func TestModMergeChecked(t *testing.T) {
 	var asked []ModRef
 	m := modAnswers(map[string]string{MethodMerge: `{}`}, &asked)
-	if err := m.Merge("/r", PR{Number: 7}); err == nil {
+	if err := m.Merge("/r", PR{Number: 7}, ByMerge); err == nil {
 		t.Error("merged without a head")
 	}
-	if err := m.Merge("/r", PR{Number: 7, Head: sha}); err != nil || len(asked) != 1 || asked[0].Number != 7 || asked[0].Head != sha {
+	if err := m.Merge("/r", PR{Number: 7, Head: sha}, BySquash); err != nil || len(asked) != 1 || asked[0].Number != 7 || asked[0].Head != sha || asked[0].Method != BySquash {
 		t.Errorf("%v %+v", err, asked)
+	}
+	// Any answer but a refusal is a merge, as before mods could refuse.
+	for _, a := range []string{`null`, `true`, `"ok"`, `{"iid":7}`, `{"refused":"head"}`} {
+		if err := modAnswers(map[string]string{MethodMerge: a}, nil).Merge("/r", PR{Number: 7, Head: sha}, ByRebase); err != nil {
+			t.Errorf("%s: %v", a, err)
+		}
+	}
+}
+
+// T497: a mod refusing the method is a MethodError with the methods it
+// names that tm knows.
+func TestModMergeMethodRefused(t *testing.T) {
+	m := modAnswers(map[string]string{MethodMerge: `{"refused":"method","allowed":["Squash","merge","fast-forward"]}`}, nil)
+	err := m.Merge("/r", PR{Number: 7, Head: sha}, ByRebase)
+	var me *MethodError
+	if !errors.As(err, &me) || me.Method != ByRebase || !slices.Equal(me.Allowed, []string{ByMerge, BySquash}) || !strings.Contains(err.Error(), "gitlab") {
+		t.Fatalf("%#v", err)
+	}
+	m = modAnswers(map[string]string{MethodMerge: `{"refused":"method"}`}, nil)
+	if err := m.Merge("/r", PR{Number: 7, Head: sha}, ByRebase); !errors.As(err, &me) || me.Allowed != nil {
+		t.Fatalf("%#v", err)
 	}
 }
 
@@ -231,7 +253,7 @@ func TestPickMod(t *testing.T) {
 	if cli, _, advice := Advice(func() error { _, err := h.PR(repo, Ref{}); return err }()); cli != "gitlab" || !strings.Contains(advice, "tm server") {
 		t.Errorf("advice %q %q", cli, advice)
 	}
-	if err := h.Merge(repo, PR{Number: 1, Head: sha}); err == nil {
+	if err := h.Merge(repo, PR{Number: 1, Head: sha}, ByMerge); err == nil {
 		t.Error("unserved merged")
 	}
 

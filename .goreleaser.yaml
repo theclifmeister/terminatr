@@ -153,6 +153,8 @@ changelog:
   filters:
     exclude:
       # Every merge commit: PR merges and the threads' own merges of main.
+      # A squash merge's commit ("Title (#12)") and a rebase merge's
+      # commits are the changes themselves and stay.
       - "^Merge "
 
 release:

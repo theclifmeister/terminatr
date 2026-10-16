@@ -1,5 +1,5 @@
 {
-  "name": "merge sends the checked head as sha, a merge commit, the source branch kept",
+  "name": "merge sends the checked head as sha, the method as squash (rebase refused), the source branch kept",
   "answers": [
     {
       "method": "process.run",
@@ -25,6 +25,31 @@
         "stdout": "{\"iid\": 7, \"state\": \"merged\"}",
         "stderr": ""
       }
+    },
+    {
+      "method": "process.run",
+      "params": {
+        "argv": [
+          "glab",
+          "api",
+          "--hostname",
+          "gitlab.com",
+          "--method",
+          "PUT",
+          "--raw-field",
+          "sha=0123456789abcdef0123456789abcdef01234567",
+          "--raw-field",
+          "squash=true",
+          "--raw-field",
+          "should_remove_source_branch=false",
+          "projects/acme%2Fweb%2Fshop/merge_requests/7/merge"
+        ]
+      },
+      "result": {
+        "code": 0,
+        "stdout": "{\"iid\": 7, \"state\": \"merged\"}",
+        "stderr": ""
+      }
     }
   ],
   "events": [
@@ -38,6 +63,45 @@
         },
         "number": 7,
         "head": "0123456789abcdef0123456789abcdef01234567"
+      }
+    },
+    {
+      "name": "codehost.merge",
+      "data": {
+        "remote": {
+          "kind": "gitlab",
+          "host": "gitlab.com",
+          "path": "acme/web/shop"
+        },
+        "number": 7,
+        "head": "0123456789abcdef0123456789abcdef01234567",
+        "method": "merge"
+      }
+    },
+    {
+      "name": "codehost.merge",
+      "data": {
+        "remote": {
+          "kind": "gitlab",
+          "host": "gitlab.com",
+          "path": "acme/web/shop"
+        },
+        "number": 7,
+        "head": "0123456789abcdef0123456789abcdef01234567",
+        "method": "squash"
+      }
+    },
+    {
+      "name": "codehost.merge",
+      "data": {
+        "remote": {
+          "kind": "gitlab",
+          "host": "gitlab.com",
+          "path": "acme/web/shop"
+        },
+        "number": 7,
+        "head": "0123456789abcdef0123456789abcdef01234567",
+        "method": "rebase"
       }
     },
     {
@@ -74,10 +138,59 @@
             "projects/acme%2Fweb%2Fshop/merge_requests/7/merge"
           ]
         }
+      },
+      {
+        "method": "process.run",
+        "params": {
+          "argv": [
+            "glab",
+            "api",
+            "--hostname",
+            "gitlab.com",
+            "--method",
+            "PUT",
+            "--raw-field",
+            "sha=0123456789abcdef0123456789abcdef01234567",
+            "--raw-field",
+            "squash=false",
+            "--raw-field",
+            "should_remove_source_branch=false",
+            "projects/acme%2Fweb%2Fshop/merge_requests/7/merge"
+          ]
+        }
+      },
+      {
+        "method": "process.run",
+        "params": {
+          "argv": [
+            "glab",
+            "api",
+            "--hostname",
+            "gitlab.com",
+            "--method",
+            "PUT",
+            "--raw-field",
+            "sha=0123456789abcdef0123456789abcdef01234567",
+            "--raw-field",
+            "squash=true",
+            "--raw-field",
+            "should_remove_source_branch=false",
+            "projects/acme%2Fweb%2Fshop/merge_requests/7/merge"
+          ]
+        }
       }
     ],
     "codehost": [
       {},
+      {},
+      {},
+      {
+        "refused": "method",
+        "allowed": [
+          "merge",
+          "squash"
+        ]
+      },
       {
         "error": "merge needs the number and head"
       }

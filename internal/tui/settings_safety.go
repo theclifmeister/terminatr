@@ -104,7 +104,7 @@ var toggles = map[string]struct{ label, help, what string }{
 		"remote control for coordinators"},
 	"auto_clear": {"Auto-clear coordinator", "Clear the coordinator's conversation once its context reaches the hint (context_hint), only while it is idle with nothing waiting: no inbox item, queued prompt, open question or blocked thread. The project lives in files, so it reads tm context again. Off by default; each clear is journaled.",
 		"auto-clear for coordinators"},
-	"coordinator_merges": {"Coordinator may merge", "Let the coordinator merge pull requests with tm thread merge without the agent's auto mode refusing it: tm adds a permission allow rule for that command to the coordinator only. It merges only a PR whose checks are green on its current head and that the host calls mergeable, with a regular merge commit, on GitHub and Azure DevOps. Threads never get it, and the guard still refuses their merges. Only has an effect while merge is coordinator (the default). Off by default.",
+	"coordinator_merges": {"Coordinator may merge", "Let the coordinator merge pull requests with tm thread merge without the agent's auto mode refusing it: tm adds a permission allow rule for that command to the coordinator only. It merges only a PR whose checks are green on its current head and that the host calls mergeable, by the merge method below, on GitHub and Azure DevOps. Threads never get it, and the guard still refuses their merges. Only has an effect while merge is coordinator (the default). Off by default.",
 		"the coordinator merging"},
 	"fast_forward_checkout": {"Keep my checkout current", "Fast-forward your own checkout of each repository when its default branch is checked out, clean and only behind origin; else the overview says how far behind.", "keeping your checkout current"},
 }
@@ -181,6 +181,7 @@ func (sr safetyRows) sharedRows() []setting {
 		rc,
 		sr.toggle("auto_clear"),
 		sr.toggle("coordinator_merges"),
+		sr.mergeMethodRow(),
 		sr.toggle("fast_forward_checkout"),
 		sr.agentRow("Thread agent", "The agent new threads run; the coordinator may still name another for one thread. Enter picks the next one tm knows.",
 			"thread_agent", func(s config.Safety) string { return s.ThreadAgent }, "new threads "+sr.ofWho+" run "),
@@ -329,6 +330,21 @@ func (sr safetyRows) completeRow() setting {
 				msg = "tasks " + sr.ofWho + " are done when you accept them"
 			}
 			return sr.set(m, "complete_tasks", next, msg)
+		}}
+}
+
+// mergeMethodWords name merge_method's values.
+var mergeMethodWords = map[string]string{config.MethodMerge: "merge commit", config.MethodSquash: "squash", config.MethodRebase: "rebase"}
+
+func (sr safetyRows) mergeMethodRow() setting {
+	word := func(s config.Safety) string { return cmp.Or(mergeMethodWords[s.MergeMethod], s.MergeMethod) }
+	return setting{label: "Merge method", help: "How tm thread merge merges a pull request: a merge commit, a squash (one commit, the pull request's title as its subject) or a rebase (its commits onto the base, no merge commit). A repository that requires linear history refuses merge commits. Enter picks the next one.",
+		keys: []string{"merge_method"}, word: word,
+		value: func(m *dash) string { return word(sr.safety(m)) },
+		change: func(m *dash) tea.Cmd {
+			ms := config.MergeMethods
+			next := ms[(slices.Index(ms, sr.safety(m).MergeMethod)+1)%len(ms)]
+			return sr.set(m, "merge_method", next, "pull requests "+sr.ofWho+" merge by "+mergeMethodWords[next])
 		}}
 }
 

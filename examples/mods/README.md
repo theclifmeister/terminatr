@@ -140,7 +140,8 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
   asks it about that project's merge requests as it asks gh about pull
   requests (state, pipeline, approvals, the failing job's log), and
   `tm thread merge` has it merge the head tm checked, with a merge
-  commit. tm still decides what is safe: it finds merge commits in git
+  commit or a squash by the project's merge method (it refuses rebase,
+  which GitLab sets per project). tm still decides what is safe: it finds merge commits in git
   itself, never deletes a branch or worktree on the mod's word alone
   (git must find the commits on the remote), and makes the merge
   checks itself. `tm doctor` shows which mod serves the kind and glab's
