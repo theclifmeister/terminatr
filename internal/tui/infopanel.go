@@ -194,7 +194,7 @@ func threadInfo(d *infoData, w int, now time.Time) (*panel, []infoHit) {
 		pl.block("core")
 		if len(t.Steps) > 0 {
 			pl.section("STEPS", "")
-			pl.add(progressLine(thread.Progress{Percent: pctOf(t.StepsDone(), len(t.Steps)), Done: t.StepsDone(), Total: len(t.Steps)}))
+			pl.add(stepsProgress(t))
 			cur := true
 			for _, step := range t.Steps {
 				glyph, text := todoGlyph("pending"), oneLine(step.Text)
@@ -217,12 +217,8 @@ func threadInfo(d *infoData, w int, now time.Time) (*panel, []infoHit) {
 	}
 	// The thread: its state, progress, what it does now, what it waits on.
 	pl.section("THREAD", "")
-	state := stateWord(s)
-	if s.State == "blocked" && s.Reason != "" {
-		state += " " + blockReason(s)
-	}
 	g, st := stateLook(s.State)
-	pl.field("thread", id+" "+st.Render(strings.TrimSpace(g+" "+oneLine(state))))
+	pl.field("thread", id+" "+st.Render(strings.TrimSpace(g+" "+oneLine(sessionState(s)))))
 	if d.rec != nil && d.rec.Model != "" {
 		pl.field("model", oneLine(d.rec.Model))
 	}
@@ -234,12 +230,7 @@ func threadInfo(d *infoData, w int, now time.Time) (*panel, []infoHit) {
 			// A task with steps shows its progress above, once.
 			pl.field("progress", progressLine(ts.Progress()))
 		}
-		switch {
-		case ts.Current != "":
-			pl.field("now", "▸ "+oneLine(ts.Current))
-		case ts.Activity != "":
-			pl.field("now", `"`+oneLine(ts.Activity)+`"`)
-		}
+		pl.field("now", nowWords(ts))
 		if ts.NeedsYou != "" {
 			from := len(pl.lines)
 			hang(pl, th().Faint.Render(fmt.Sprintf("%-9s", "needs you"))+" ", th().Warn.Render(oneLine(ts.NeedsYou)))
