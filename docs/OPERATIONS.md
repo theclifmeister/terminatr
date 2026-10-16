@@ -665,7 +665,7 @@ Before you merge the release pull request (or push a tag), `ci.yml` on main has 
 
 ### Secrets
 
-The same Apple credentials as toe. Put them in the `release` environment (Settings → Environments → release), not as repository secrets, and limit that environment to `v*` tags (Deployment branches and tags → Selected → tag pattern `v*`): then only the release job can read them. The run the release App's tag starts is a run on the tag, like a hand-pushed tag's, so the same rule admits it; main needs no entry there. No required reviewer: merging the release pull request is the approval. What keeps anyone else from releasing is who may push a `v*` tag: a tag ruleset (Settings → Rules → Rulesets, target tags `v*`, restrict creations, updates and deletions) with the release App and the repository admins as bypass actors.
+The same Apple credentials as toe. Put them in the `release` environment (Settings → Environments → release), not as repository secrets, and limit that environment to `v*` tags (Deployment branches and tags → Selected → tag pattern `v*`): then only the release job can read them. The run the release App's tag starts is a run on the tag, like a hand-pushed tag's, so the same rule admits it; main needs no entry there. There is no approval step: the environment has no required reviewer, and only lets runs on `v*` tags use the signing secrets.
 
 | Secret | What |
 |---|---|
