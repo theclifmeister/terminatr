@@ -54,6 +54,7 @@ func child(args []string) int {
 		}
 		say("dial", err)
 	}
+	signalProbes(say)
 	run := exec.Command(os.Args[0], "-test.run=^$")
 	run.Stdin, run.Stdout, run.Stderr = os.Stdin, os.Stderr, os.Stderr // no /dev/null to open
 	say("exec", run.Run())
@@ -121,6 +122,10 @@ func TestStartConfines(t *testing.T) {
 	want := map[string]bool{"read-allowed": true, "lockdown": true, "read-secret-early": false, "read-secret": false, "write": false, "exec": false}
 	if addr != "" && runtime.GOOS != "windows" { // Windows' sandbox leaves the network to the language sandbox
 		want["dial"] = false
+	}
+	if runtime.GOOS == "linux" && p.Mode != "landlock" {
+		want["signal"] = false
+		want["signal-self"] = true
 	}
 	for name, ok := range want {
 		res, seen := got[name]

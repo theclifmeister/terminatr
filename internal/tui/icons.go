@@ -142,11 +142,3 @@ func configIcons(cfg *config.Config) string {
 	}
 	return cfg.Icons
 }
-
-// loadIcons makes config.toml's icons setting this console's set.
-func loadIcons() string {
-	cfg, _ := config.Load()
-	v := configIcons(cfg)
-	setIconsFrom(loadMods(cfg), v)
-	return v
-}

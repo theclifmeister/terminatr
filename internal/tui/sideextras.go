@@ -49,14 +49,6 @@ var thisConsole struct {
 	hover     string // the tooltip (sideHoverTip)
 }
 
-// resetConsole forgets the filter and the places (tests).
-func resetConsole() {
-	thisConsole.Lock()
-	defer thisConsole.Unlock()
-	thisConsole.filter, thisConsole.now, thisConsole.last = sideFilterState{}, place{}, place{}
-	thisConsole.known, thisConsole.lastKnown, thisConsole.hover = false, false, ""
-}
-
 func sideFilterNow() sideFilterState {
 	thisConsole.Lock()
 	defer thisConsole.Unlock()

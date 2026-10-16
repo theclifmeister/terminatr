@@ -139,8 +139,11 @@ type Broker struct {
 	secrets []string
 	mu      sync.RWMutex
 	methods map[string]method
-	store   sync.Mutex // one store write at a time
-	net     *fetcher
+	// stores is a lock per mod id (store calls of different mods run
+	// together) and storeSeen the stores as last parsed.
+	stores    sync.Map
+	storeSeen sync.Map
+	net       *fetcher
 }
 
 // New is a Broker with the methods every mod has: settings, its store,

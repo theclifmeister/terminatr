@@ -66,13 +66,6 @@ var whyState = map[string]string{
 	proto.WhyBlocked:  "blocked",
 }
 
-// coordLines draws a coordinator's panel w cells wide, with what a click
-// on each line does.
-func coordLines(pw *proto.ProjectWatch, w int, now time.Time) ([]string, []infoHit) {
-	pl, hits := coordPanel(pw, w, now)
-	return pl.lines, hits
-}
-
 // coordPanel is coordLines' panel, with core's blocks named
 // (mod.CoordinatorBlocks: needs, inbox, threads, deck) and its head and
 // NEEDS YOU must-see, for the mods' sections placed among them.

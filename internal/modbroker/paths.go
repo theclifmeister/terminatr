@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -462,6 +463,10 @@ func fsRead(_ context.Context, c *Call) (any, error) {
 
 // fs.write {path, text, append} writes (or appends to) a file. Folders
 // are made only inside the mod's own folder.
+// reservedOwn are the files of a mod's own folder that the broker keeps:
+// its store and its annotations.
+var reservedOwn = []string{storeFile, "annotations.json"}
+
 func fsWrite(_ context.Context, c *Call) (any, error) {
 	var a struct {
 		Path   string `json:"path"`
@@ -483,6 +488,13 @@ func fsWrite(_ context.Context, c *Call) (any, error) {
 		own = own || fsx.Under(real, o)
 	}
 	if own {
+		// The broker's own files in the folder are written only through
+		// store.* and annotate, which keep them within their limits.
+		for _, o := range c.Paths.own {
+			if filepath.Dir(real) == o && slices.Contains(reservedOwn, filepath.Base(real)) {
+				return nil, Denied("%s is kept by the broker (store.set and annotate write it)", a.Path)
+			}
+		}
 		if err := os.MkdirAll(filepath.Dir(real), 0o700); err != nil {
 			return nil, err
 		}
