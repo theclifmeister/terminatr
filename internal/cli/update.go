@@ -56,7 +56,7 @@ func defaultUpdater(e *Env) *updater {
 		GOOS: runtime.GOOS, GOARCH: runtime.GOARCH,
 		Client: update.NewClient(e.Getenv),
 		Verify: update.DefaultVerifier(),
-		TTY:    isTTY(os.Stdin),
+		TTY:    stdinTTY(e),
 		RunVersion: func(bin string) (string, error) {
 			out, err := exec.Command(bin, "version").CombinedOutput()
 			return strings.TrimSpace(string(out)), err

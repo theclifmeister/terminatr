@@ -27,12 +27,8 @@ Exit codes: 0 done, 1 refused, 2 usage, 3 I/O.`
 // Questions): the questions it waits on the user for, which the band in
 // its pane, or a dashboard key, has it open in its question dialog.
 func runAsk(e *Env, args []string) error {
-	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
-		if len(args) == 0 {
-			return usagef("%s", askUsage)
-		}
-		fmt.Fprintln(e.Stdout, askUsage)
-		return nil
+	if done, err := helpOr(e, args, askUsage); done {
+		return err
 	}
 	sub := args[0]
 	f := newFlags()

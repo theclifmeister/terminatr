@@ -988,13 +988,7 @@ func (t *Ticker) nudge(p *project.Project, sessions []proto.SessionInfo, now tim
 		pm.heldSince, pm.heldLogged, pm.idleQueued, pm.unstuck = time.Time{}, false, time.Time{}, false
 		return
 	}
-	var coord *proto.SessionInfo
-	for i, s := range sessions {
-		if s.Role == proto.RoleCoordinator && s.Project == p.Slug {
-			coord = &sessions[i]
-			break
-		}
-	}
+	coord := proto.CoordinatorOf(sessions, p.Slug)
 	if coord != nil && (coord.State != "idle" || coord.Queued > 0) {
 		t.nudgeStall(p, pm, coord, len(fresh), now)
 		return

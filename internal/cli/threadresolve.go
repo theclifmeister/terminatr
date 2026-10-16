@@ -124,11 +124,18 @@ func branchCleanup(p *project.Project, r *thread.Record, discard bool) (did, del
 	if r.Branch == "" || !worktree.BranchExists(r.Repo, r.Branch) {
 		return nil, nil
 	}
-	if discard {
+	// del deletes the branch and records what happened, whatever the why.
+	del := func(why string) {
 		if err := worktree.DeleteBranch(r.Repo, r.Branch); err != nil {
-			return []string{"kept branch " + r.Branch + " (" + oneLine(err.Error(), 120) + ")"}, nil
+			did = append(did, "kept branch "+r.Branch+" ("+oneLine(err.Error(), 120)+")")
+			return
 		}
-		return []string{"deleted branch " + r.Branch + " (discarded)"}, []string{r.Branch + " (discarded)"}
+		did = append(did, "deleted branch "+r.Branch+" ("+why+")")
+		deleted = append(deleted, r.Branch+" ("+why+")")
+	}
+	if discard {
+		del("discarded")
+		return did, deleted
 	}
 	host := pickHost(r.Repo, p.CodeHost())
 	switch st := host.PRState(r.Repo, r.Branch); st {
@@ -144,23 +151,13 @@ func branchCleanup(p *project.Project, r *thread.Record, discard bool) (did, del
 			did = append(did, "kept branch "+r.Branch+" (PR merged, but "+why+")")
 			break
 		}
-		if err := worktree.DeleteBranch(r.Repo, r.Branch); err != nil {
-			did = append(did, "kept branch "+r.Branch+" ("+oneLine(err.Error(), 120)+")")
-		} else {
-			did = append(did, "deleted branch "+r.Branch+" (PR merged)")
-			deleted = append(deleted, r.Branch+" (PR merged)")
-		}
+		del("PR merged")
 	default:
 		// No merged PR (a repo without remote or gh, or one merged
 		// by hand): a branch whose commits are all on the default
 		// branch loses nothing.
 		if base := worktree.MergedBase(r.Repo, r.Branch); base != "" {
-			if err := worktree.DeleteBranch(r.Repo, r.Branch); err != nil {
-				did = append(did, "kept branch "+r.Branch+" ("+oneLine(err.Error(), 120)+")")
-			} else {
-				did = append(did, "deleted branch "+r.Branch+" (merged into "+base+")")
-				deleted = append(deleted, r.Branch+" (merged into "+base+")")
-			}
+			del("merged into " + base)
 		} else if st == "" {
 			did = append(did, "kept branch "+r.Branch+" (no merged PR found)")
 		} else {
