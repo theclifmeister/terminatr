@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -598,6 +599,16 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 			s.log.Printf("session %s: no mod: %v", r.ID, err)
 		}
 	}
+	// A thread's secret environment (secretenv.go): got now, put only in
+	// the session's environment below.
+	var secrets map[string]string
+	if r.Role == proto.RoleThread && r.Project != "" {
+		var fails []string
+		secrets, fails = secretEnv(lc.cfg, r.Project, s.baseEnv())
+		for _, f := range fails {
+			s.log.Printf("session %s: %s", r.ID, f)
+		}
+	}
 	if r.ModelPending {
 		// The coordinator's setting changed while its agent couldn't
 		// switch live: this start applies it (session.model).
@@ -609,6 +620,10 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		Yolo: r.Yolo, NoSandboxEscapes: r.NoSandboxEscapes, Model: r.Model, TMBin: s.opts.Bin, Socket: s.opts.Paths.Socket, Access: access,
 		RemoteControl: r.RemoteControl, RemoteName: remoteName(r),
 		Mods: p.modSock != "", PaneScheme: v.paneScheme,
+	}
+	if len(secrets) > 0 {
+		spec.SecretEnv = slices.Sorted(maps.Keys(secrets))
+		spec.EnvHide = envHide(s.baseEnv(), spec.SecretEnv)
 	}
 	if spec.Model == "" {
 		spec.Model = launchModel(a, r.Project, r.Role == proto.RoleCoordinator, lc.cfg)
@@ -628,6 +643,11 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		return nil, proto.Errorf(proto.ErrInternal, "%v", err)
 	}
 	set := s.terminatrEnv(r)
+	for k, v := range secrets {
+		if _, taken := set[k]; !taken {
+			set[k] = v
+		}
+	}
 	if spec.Mods {
 		set[envModSocket] = p.modSock
 		if !lc.band() {

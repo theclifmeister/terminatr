@@ -73,12 +73,12 @@ type fakeSource struct {
 	done         []string          // action.done: "mod action project/task ok"
 	// refusals are the guard's log's open refusals; decided its
 	// decisions: "id how session".
-	refusals []guardlog.Entry
-	decided  []string
-	restarted    []string          // mod ids
-	fetchedMods  []string          // what FetchMod was asked for
-	templates    []mod.Template
-	added        []string // "slug title|notes|step;step"
+	refusals    []guardlog.Entry
+	decided     []string
+	restarted   []string // mod ids
+	fetchedMods []string // what FetchMod was asked for
+	templates   []mod.Template
+	added       []string // "slug title|notes|step;step"
 	// links are SetLink's and SetLinkAsk's calls ("slug other both",
 	// "slug other ask true"), linkActs
 	// LinkAct's ("slug verb arg text"); linkLog is what LinkLog gives.
