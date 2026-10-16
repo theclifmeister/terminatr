@@ -229,3 +229,65 @@ func TestSideHubDetail(t *testing.T) {
 		t.Errorf("the sidebars' look has the dashboard's: %+v", sp)
 	}
 }
+
+// TestReadProjects: what a client reads itself while no watch runs
+// (ReadProjects) is what the dashboard's look (detail) sends, the
+// archived projects left out; a config.toml that doesn't load gives
+// its error and no projects.
+func TestReadProjects(t *testing.T) {
+	paths := testPaths(t)
+	p := newWatchProject(t)
+	if _, err := p.Tasks().Add(human, []tasks.NewTask{{Title: "Work", Status: "started", Steps: []string{"a"}}, {Title: "Look", Status: "review"}}); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := thread.Create(p, thread.Record{Title: "work", Task: "T1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := thread.StoreReport(p, rec.ID, "PR: https://github.com/o/r/pull/3\n## Report\nDone.\n## Next\nMerge it\n", nil, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.AddItem("report", rec.ID, "T1: reported", false); err != nil {
+		t.Fatal(err)
+	}
+	for _, slug := range []string{"next", "old"} {
+		if _, err := project.New(project.Options{Slug: slug}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := config.SetProject("old", "archived", true); err != nil {
+		t.Fatal(err)
+	}
+	ts := ticker.StatePath(paths.Sessions)
+	if err := os.MkdirAll(filepath.Dir(ts), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ts, []byte(`{"threads": {"demo/`+rec.ID+`": {"pr": {"number": 3, "state": "OPEN", "checks": "pass"}}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &Server{opts: Options{Paths: paths}}
+	want, _ := s.sideProjects(0, time.Hour, true)
+	ps, err := ReadProjects(ts, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := json.Marshal(ps)
+	if string(got) != string(want) {
+		t.Errorf("ReadProjects\n%s\nthe watch's look\n%s", got, want)
+	}
+	if len(ps) != 2 || ps[0].Slug != "demo" || ps[1].Slug != "next" || len(ps[0].Threads) != 1 || ps[0].Threads[0].PR != 3 {
+		t.Errorf("ReadProjects: %s", got)
+	}
+
+	path, err := config.Path()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("not = [toml"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if ps, err := ReadProjects(ts, nil); err == nil || ps == nil || len(ps) != 0 {
+		t.Errorf("a broken config.toml: %v, %v", ps, err)
+	}
+}

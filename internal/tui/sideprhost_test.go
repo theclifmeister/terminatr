@@ -5,8 +5,6 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
-
-	"github.com/theclifmeister/terminatr/internal/project"
 )
 
 // TestSidePRHostMark: a project whose PR host fails (T357) gets a red ▲
@@ -56,21 +54,5 @@ func TestSidePRHostMark(t *testing.T) {
 	}
 	if tip := sideTip(rows, sideDefault, h, 0, 4, y); strings.Contains(tip, "PR host") {
 		t.Errorf("tooltip over the name %q", tip)
-	}
-}
-
-// TestHostFails: a project's PRHostFails is the ticker's count, and
-// none for a project without a PR host to fail (server.NoPRHost).
-func TestHostFails(t *testing.T) {
-	fails := map[string]int{"demo": 3}
-	if n := hostFails(fails, &project.Project{Slug: "demo"}); n != 3 {
-		t.Errorf("demo %d", n)
-	}
-	if n := hostFails(fails, &project.Project{Slug: "other"}); n != 0 {
-		t.Errorf("other %d", n)
-	}
-	// A repo without an origin: no PR host.
-	if n := hostFails(fails, &project.Project{Slug: "demo", Repos: []string{t.TempDir()}}); n != 0 {
-		t.Errorf("no PR host %d", n)
 	}
 }
