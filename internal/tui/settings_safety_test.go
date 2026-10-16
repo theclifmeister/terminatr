@@ -17,7 +17,7 @@ func TestSafetyRowKeys(t *testing.T) {
 		"Complete tasks": {"complete_tasks"}, "Pull request follow-up": {"pr_followup"}, "Remote control": {"coordinator_remote_control"},
 		"Auto-clear coordinator": {"auto_clear"}, "Coordinator may merge": {"coordinator_merges"}, "Keep my checkout current": {"fast_forward_checkout"},
 		"Thread agent": {"thread_agent"}, "Coordinator agent": {"coordinator_agent"}, "Thread models": {"models"},
-		"Coordinator model": {"coordinator_model"}, "Keep history": config.ArchiveKeys,
+		"Coordinator model": {"coordinator_model"}, "Branch names": {"branch_name"}, "Keep history": config.ArchiveKeys,
 	}
 	for _, slug := range []string{"demo", ""} {
 		rows := safetySettings(slug)
@@ -77,5 +77,20 @@ func TestToggles(t *testing.T) {
 		if tg.label == "" || tg.help == "" || tg.what == "" {
 			t.Errorf("%s: %+v", k, tg)
 		}
+	}
+}
+
+// TestBranchRow: the Branch names row shows the template and a preview
+// of the next branch, with and without a task.
+func TestBranchRow(t *testing.T) {
+	sr := newSafetyRows("demo")
+	if got := sr.branchPreview(config.DefaultBranchName); got != "tm/demo/t-0042-fix-login" {
+		t.Errorf("default preview %q", got)
+	}
+	if got := sr.branchPreview("feature/{task}-{title}"); got != "feature/T42-fix-login (feature/fix-login without a task)" {
+		t.Errorf("preview %q", got)
+	}
+	if got := newSafetyRows("").branchPreview("users/me/{id}"); got != "users/me/t-0042" {
+		t.Errorf("preview %q", got)
 	}
 }

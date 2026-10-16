@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
@@ -233,7 +234,7 @@ func Create(p *project.Project, rec Record) (*Record, error) {
 }
 
 // WorktreeDir is ~/.terminatr/worktrees/<slug>/<id>-<title-slug> and
-// BranchName tm/<slug>/<id>-<title-slug> (docs/SPEC.md §9).
+// BranchName (docs/SPEC.md §9).
 func WorktreeDir(slug, id, title string) (string, error) {
 	root, err := home.WorktreesDir()
 	if err != nil {
@@ -242,8 +243,22 @@ func WorktreeDir(slug, id, title string) (string, error) {
 	return filepath.Join(root, slug, id+titleSuffix(title)), nil
 }
 
-// BranchName is the thread's branch.
-func BranchName(slug, id, title string) string { return "tm/" + slug + "/" + id + titleSuffix(title) }
+// BranchName is the thread's branch: the branch_name template (""
+// for config.DefaultBranchName) filled with the thread's values, refused
+// with the reason when the template or the result is no branch name.
+func BranchName(template, slug, id, task, title string) (string, error) {
+	if template == "" {
+		template = config.DefaultBranchName
+	}
+	if err := config.CheckBranchName(template); err != nil {
+		return "", fmt.Errorf("branch_name %q %w", template, err)
+	}
+	s := project.Slugify(title)
+	if len(s) > 40 {
+		s = strings.TrimRight(s[:40], "-")
+	}
+	return config.ExpandBranchName(template, slug, id, task, s), nil
+}
 
 func titleSuffix(title string) string {
 	s := project.Slugify(title)
