@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/client/clienttest"
 	"github.com/theclifmeister/terminatr/internal/emu"
+	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/version"
@@ -621,5 +623,19 @@ func TestWithBinFirst(t *testing.T) {
 	}
 	if got := withBinFirst([]string{"HOME=/h"}, tm); got[1] != "PATH="+list("/run/bin") {
 		t.Errorf("no PATH: %v", got)
+	}
+}
+
+// On Windows the variable is "Path": withBinFirst keeps that one entry,
+// with the bin directory first, and adds no second PATH beside it.
+func TestWithBinFirstWindowsPath(t *testing.T) {
+	if !caps.Windows {
+		t.Skip("env names are case-sensitive here")
+	}
+	tm := filepath.FromSlash("/run/bin/tm")
+	got := withBinFirst([]string{"HOME=/h", `Path=C:\a;C:\b`}, tm)
+	want := []string{"HOME=/h", "Path=" + filepath.Dir(tm) + `;C:\a;C:\b`}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }

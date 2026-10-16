@@ -23,12 +23,7 @@ func LookPath(m *agent.Manifest, env []string) (string, error) {
 	if env == nil {
 		env = os.Environ()
 	}
-	path := ""
-	for _, kv := range env {
-		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
-			path = v
-		}
-	}
+	path, _ := shell.EnvValue(env, "PATH")
 	return shell.LookPathIn(m.Launch.Command, path)
 }
 
