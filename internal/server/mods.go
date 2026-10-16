@@ -9,7 +9,6 @@ package server
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
@@ -96,7 +95,8 @@ func (s *Server) versionOf(a agent.Agent, env []string) (string, error) {
 	if m == nil || len(m.Identify.VersionArgs) == 0 {
 		return "", errors.New("the manifest has no version_args")
 	}
-	path, err := shell.LookPathIn(m.Launch.Command, envValue(env, "PATH"))
+	pathEnv, _ := shell.EnvValue(env, "PATH")
+	path, err := shell.LookPathIn(m.Launch.Command, pathEnv)
 	if err != nil {
 		return "", err
 	}
@@ -104,16 +104,4 @@ func (s *Server) versionOf(a agent.Agent, env []string) (string, error) {
 		return agent.Version(context.Background(), path, m, env)
 	}
 	return s.versions.Of(context.Background(), path, m, env)
-}
-
-// envValue is the value of key in env (KEY=VALUE entries), the last one
-// winning.
-func envValue(env []string, key string) string {
-	v := ""
-	for _, kv := range env {
-		if k, val, ok := strings.Cut(kv, "="); ok && k == key {
-			v = val
-		}
-	}
-	return v
 }

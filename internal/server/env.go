@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/plat/shell"
 )
 
 // Variables that leak the launching terminal's identity into a session
@@ -46,25 +47,13 @@ func withBinFirst(base []string, bin string) []string {
 		return base
 	}
 	dir := filepath.Dir(bin)
-	out := make([]string, 0, len(base)+1)
-	found := false
-	for _, kv := range base {
-		v, ok := strings.CutPrefix(kv, "PATH=")
-		if !ok {
-			out = append(out, kv)
-			continue
-		}
-		found = true
+	return shell.SetEnvPath(base, func(old string) string {
 		parts := []string{dir}
-		for _, p := range filepath.SplitList(v) {
+		for _, p := range filepath.SplitList(old) {
 			if p != dir {
 				parts = append(parts, p)
 			}
 		}
-		out = append(out, "PATH="+strings.Join(parts, string(filepath.ListSeparator)))
-	}
-	if !found {
-		out = append(out, "PATH="+dir)
-	}
-	return out
+		return strings.Join(parts, string(filepath.ListSeparator))
+	})
 }
