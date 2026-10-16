@@ -403,9 +403,19 @@ func followsTerminal(cfg *config.Config) bool {
 	return cfg.Theme == "" || cfg.Theme == mod.BundledTheme || cfg.Theme == "default"
 }
 
-// schemeName is the terminal's scheme a console last reported, "" for
-// none yet.
+// schemeName is the terminal's scheme for an agent's theme: its
+// background's, light or dark, when a console reported one, as the
+// console's own theme follows it, else the scheme a console last
+// reported (mode 2031); "" for neither yet. A terminal's 2031 scheme may
+// be the system's appearance, not its background's: a dark terminal
+// that reports light would give Claude a light theme over it (T520).
 func (s *Server) schemeName() string {
+	if s.colors.Known&emu.KnownBg != 0 {
+		if s.colors.Bg.Dark() {
+			return "dark"
+		}
+		return "light"
+	}
 	switch s.scheme {
 	case emu.SchemeDark:
 		return "dark"
