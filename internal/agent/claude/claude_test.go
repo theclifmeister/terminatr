@@ -15,25 +15,16 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/agent/agenttest"
 	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 )
 
 func load(t *testing.T) agent.Agent {
 	t.Helper()
-	r, err := agent.Load("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	a, ok := r.Get("claude")
-	if !ok {
-		t.Fatal("no claude agent")
-	}
+	a := agenttest.Load(t, "claude")
 	if _, ok := a.(*Agent); !ok {
 		t.Fatalf("claude is %T, want the Go agent", a)
-	}
-	if agent.ManifestOf(a) == nil {
-		t.Fatal("ManifestOf(claude) is nil")
 	}
 	return a
 }

@@ -3,9 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"log"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -39,24 +36,7 @@ func panelServer(t *testing.T, grants string) *Server {
 
 // manifestServer is panelServer with mod panel's manifest.
 func manifestServer(t *testing.T, manifest, grants string) *Server {
-	tmHome := t.TempDir()
-	t.Setenv("TERMINATR_HOME", tmHome)
-	dir := filepath.Join(tmHome, "mods", "panel")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	for name, text := range map[string]string{"mod.toml": manifest, "main.js": ""} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// The built-in Memory tab off: these tests are about mod panel.
-	cfg := "[mods.panel]\nenabled = true\ngrants = [" + grants + "]\nprojects = [\"demo\"]\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n[mods.ticker]\nenabled = false\n"
-	if err := os.WriteFile(filepath.Join(tmHome, "config.toml"), []byte(cfg), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	newWatchProject(t)
-	return &Server{log: log.New(os.Stderr, "", 0), modEv: newModEvents()}
+	return modServer(t, "panel", manifest, grants, false)
 }
 
 // TestModViews: a mod publishes its views' trees, a console polls them

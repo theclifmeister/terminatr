@@ -15,26 +15,17 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/agent/agenttest"
 	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
 )
 
 func load(t *testing.T) *Agent {
 	t.Helper()
-	r, err := agent.Load("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	a, ok := r.Get("codex")
-	if !ok {
-		t.Fatal("no codex agent")
-	}
+	a := agenttest.Load(t, "codex")
 	c, ok := a.(*Agent)
 	if !ok {
 		t.Fatalf("codex is %T, want the Go agent", a)
-	}
-	if agent.ManifestOf(a) == nil {
-		t.Fatal("ManifestOf(codex) is nil")
 	}
 	return c
 }
