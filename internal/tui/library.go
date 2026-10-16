@@ -222,12 +222,21 @@ func trimPartial(b []byte) []byte {
 	return b
 }
 
+// hardLines are text's lines as a read-only popup shows them: tabs as
+// four spaces, each line cut to w cells (10 at least), trailing newlines
+// dropped.
+func hardLines(text string, w int) []string {
+	var out []string
+	for _, l := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
+		out = append(out, strings.Split(ansi.Hardwrap(strings.ReplaceAll(l, "\t", "    "), max(w, 10), true), "\n")...)
+	}
+	return out
+}
+
 func (tv *textView) lines(w int) []string {
 	var out []string
 	if tv.body != "" {
-		for _, l := range strings.Split(strings.TrimRight(tv.body, "\n"), "\n") {
-			out = append(out, strings.Split(ansi.Hardwrap(l, max(w, 10), true), "\n")...)
-		}
+		out = hardLines(tv.body, w)
 	}
 	if tv.note != "" {
 		if len(out) > 0 {
