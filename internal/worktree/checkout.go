@@ -66,7 +66,7 @@ func (c Checkout) Note() string {
 // when the repo has no origin/HEAD and the remote can't say.
 func DefaultBranch(repo string) string {
 	b, ok := strings.CutPrefix(originHead(repo, true), "origin/")
-	if !ok || !branchRE.MatchString(b) {
+	if !ok || !ValidBranch(b) {
 		return ""
 	}
 	return b
@@ -74,7 +74,7 @@ func DefaultBranch(repo string) string {
 
 // ValidBranch reports whether b is a branch name tm shows and passes to
 // git.
-func ValidBranch(b string) bool { return branchRE.MatchString(b) }
+func ValidBranch(b string) bool { return codehost.ValidBranch(b) }
 
 // ValidBase reports whether b can name the start point of a new
 // worktree: a ref name (branch, remote branch, tag) or a commit id, as
@@ -90,10 +90,6 @@ func ValidBase(b string) bool {
 	}
 	return exec.Command("git", "check-ref-format", "--allow-onelevel", b).Run() == nil
 }
-
-// branchRE is a branch name tm shows and passes to git: no spaces,
-// control characters or leading dash.
-var branchRE = regexp.MustCompile(`^[A-Za-z0-9_.][A-Za-z0-9_./-]{0,99}$`)
 
 // Sync fetches origin and, when ff is set, fast-forwards the repo's
 // local default branch to origin's, but only when that branch is

@@ -49,6 +49,25 @@ func (c Config) Bootout(label string) error {
 	return c.run("launchctl", "bootout", c.domain()+"/"+label)
 }
 
+// Job is a loaded dev.terminatr.server.* job in `launchctl list`'s output.
+type Job struct {
+	PID   string // "-" when not running
+	Label string
+}
+
+// ParseJobs reads the dev.terminatr.server.* jobs from `launchctl list`
+// output (columns PID, last exit status, label).
+func ParseJobs(list string) []Job {
+	var jobs []Job
+	for _, line := range strings.Split(list, "\n") {
+		f := strings.Fields(line)
+		if len(f) == 3 && strings.HasPrefix(f[2], Label+".") {
+			jobs = append(jobs, Job{PID: f[0], Label: f[2]})
+		}
+	}
+	return jobs
+}
+
 // Strays lists the loaded dev.terminatr.server.<hash> jobs that aren't
 // this home's, aren't running, and whose plist is gone, lives in a temp
 // directory, or names a tm that no longer exists.
@@ -61,12 +80,11 @@ func (c Config) Strays() ([]Stray, error) {
 		return nil, err
 	}
 	var out []Stray
-	for _, line := range strings.Split(list, "\n") {
-		f := strings.Fields(line) // PID, last exit status, label
-		if len(f) != 3 || !strings.HasPrefix(f[2], Label+".") || f[2] == c.JobLabel() || f[0] != "-" {
+	for _, j := range ParseJobs(list) {
+		if j.Label == c.JobLabel() || j.PID != "-" {
 			continue
 		}
-		label := f[2]
+		label := j.Label
 		info, err := c.output("launchctl", "print", c.domain()+"/"+label)
 		if err != nil {
 			continue

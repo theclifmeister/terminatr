@@ -260,27 +260,10 @@ func codexMain() {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
-	a := &app{
-		opts:        options{yolo: o.yolo, model: cx.model, prompt: o.prompt},
-		cx:          cx,
-		version:     codexVersion,
-		home:        home,
-		logicalWD:   wd,
-		cwd:         realPath(wd),
-		pid:         os.Getpid(),
-		born:        time.Now(),
-		startedAt:   nowMS(),
-		ctx:         context.Background(),
-		alwaysAllow: map[string]bool{},
-		redraw:      make(chan struct{}, 1),
-		wake:        make(chan struct{}, 1),
-		restoreTerm: func() {},
-		logPath:     logPath,
-	}
-	a.trustDebounce = 500 * time.Millisecond
-	if v, err := strconv.Atoi(os.Getenv("FAKEAGENT_TRUST_DEBOUNCE_MS")); err == nil && v >= 0 {
-		a.trustDebounce = time.Duration(v) * time.Millisecond
-	}
+	a := newApp()
+	a.opts = options{yolo: o.yolo, model: cx.model, prompt: o.prompt}
+	a.cx, a.version, a.home = cx, codexVersion, home
+	a.logicalWD, a.cwd, a.logPath = wd, realPath(wd), logPath
 	if o.resume != nil {
 		if *o.resume == "" {
 			a.picker()
@@ -300,10 +283,7 @@ func codexMain() {
 	}
 	a.codexLogStart()
 
-	a.restoreTerm = setupTerm()
-	go a.signals()
-	go a.renderLoop()
-	go a.inputLoop()
+	a.startTerm()
 	go a.pollQueue()
 	a.requestRedraw()
 
@@ -742,19 +722,7 @@ func (a *app) codexFrameLocked(now time.Time) string {
 			conv = append(conv, wrap(codexPrefix(l.prefix)+strings.TrimPrefix(l.visible(now), l.prefix), cols)...)
 		}
 	}
-	avail := rows - len(header) - len(bottom)
-	if avail < 0 {
-		header = nil
-		avail = rows - len(bottom)
-	}
-	if avail < 0 {
-		bottom = bottom[len(bottom)-rows:]
-		avail = 0
-	}
-	if len(conv) > avail {
-		conv = conv[len(conv)-avail:]
-	}
-	lines := append(append(header, conv...), bottom...)
+	lines := fitScreen(header, conv, bottom, rows)
 	return "\x1b[H\x1b[2J" + strings.Join(lines, "\r\n")
 }
 

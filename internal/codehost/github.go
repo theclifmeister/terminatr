@@ -103,10 +103,14 @@ var (
 	upperRE = regexp.MustCompile(`^[A-Z_]{0,32}$`)
 	oidRE   = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	urlRE   = regexp.MustCompile(`^https://[A-Za-z0-9.-]+(/[A-Za-z0-9._-]+){2}/pull/[0-9]{1,9}$`)
-	// branchRE is worktree.ValidBranch's: no spaces, control characters
-	// or leading dash.
+	// branchRE is a branch name tm shows and passes to git: no spaces,
+	// control characters or leading dash.
 	branchRE = regexp.MustCompile(`^[A-Za-z0-9_.][A-Za-z0-9_./-]{0,99}$`)
 )
+
+// ValidBranch reports whether b is a branch name tm shows and passes to
+// git.
+func ValidBranch(b string) bool { return branchRE.MatchString(b) }
 
 // parseGitHubPR reads gh's JSON into the fixed fields. Anything outside
 // the expected shapes is dropped, not passed on.
