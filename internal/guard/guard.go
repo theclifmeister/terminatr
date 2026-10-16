@@ -84,6 +84,11 @@ type Rules struct {
 	// Learn is guard_mode "learn": a refusal tells the model the user
 	// reviews it.
 	Learn bool `json:"learn,omitempty"`
+	// Floor are the rules whose floor holds though the human turned the
+	// rule off (guard_off): force-push (to a protected branch, --all,
+	// --mirror) always, merge for a thread while the coordinator merges.
+	// Only the guard off lifts them.
+	Floor []string `json:"floor,omitempty"`
 	// Resolve, when set, is where a write to a path lands: the path made
 	// absolute but not yet cleaned, with the links of its longest existing
 	// prefix followed. The matcher has no file system of its own; the
@@ -190,7 +195,7 @@ const learnNote = " The user reviews refused calls: if they allow this one, you 
 // Judge is the rule the call of tool with input breaks, or nil. The
 // tool is judged by its kind in r.Tools, from the fields listed there.
 func (r Rules) Judge(tool string, input map[string]any) *Denial {
-	if !r.On || len(r.Rules) == 0 && len(r.Mods) == 0 && len(r.Own) == 0 && len(r.SecretEnv) == 0 {
+	if !r.On || len(r.Rules) == 0 && len(r.Mods) == 0 && len(r.Own) == 0 && len(r.SecretEnv) == 0 && len(r.Floor) == 0 {
 		return nil
 	}
 	t, ok := r.Tools[tool]
@@ -421,7 +426,11 @@ func PatchPaths(patch string) []string {
 	return out
 }
 
-func (r Rules) has(id string) bool { return slices.Contains(r.Rules, id) }
+// has: rule id is on. Merge on the floor is: every merge refusal is
+// the floor's.
+func (r Rules) has(id string) bool {
+	return slices.Contains(r.Rules, id) || id == "merge" && slices.Contains(r.Floor, id)
+}
 
 func (r Rules) writable(p string) bool {
 	return slices.ContainsFunc(r.Writable, func(w string) bool { return r.under(p, w) })
@@ -565,13 +574,16 @@ func (r Rules) judgeGit(args []string) *Denial {
 	}
 	switch sub {
 	case "push":
-		if r.has("force-push") && (flag("f", "--force", "--force-with-lease", "--force-if-includes", "--mirror") || slices.ContainsFunc(rest, func(a string) bool { return strings.HasPrefix(a, "+") })) {
-			d := r.deny("force-push", "git push with force", "")
-			// Every branch, or a protected one: never allowed.
-			if long("--all", "--branches", "--mirror") || slices.ContainsFunc(r.pushTargets(rest), func(b string) bool { return slices.Contains(r.Protected, b) }) {
-				d.Floor = true
+		if flag("f", "--force", "--force-with-lease", "--force-if-includes", "--mirror") || slices.ContainsFunc(rest, func(a string) bool { return strings.HasPrefix(a, "+") }) {
+			// Every branch, or a protected one: never allowed, the rule
+			// off too.
+			onFloor := slices.Contains(r.Floor, "force-push") || r.has("force-push")
+			if onFloor && (long("--all", "--branches", "--mirror") || slices.ContainsFunc(r.pushTargets(rest), func(b string) bool { return slices.Contains(r.Protected, b) })) {
+				return floor(r.deny("force-push", "git push with force", ""))
 			}
-			return d
+			if r.has("force-push") {
+				return r.deny("force-push", "git push with force", "")
+			}
 		}
 		if r.has("delete-branch") && (flag("d", "--delete", "--prune") || slices.ContainsFunc(rest, func(a string) bool { return strings.HasPrefix(a, ":") && len(a) > 1 })) {
 			return r.deny("delete-branch", "git push deleting a branch", "")

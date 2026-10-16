@@ -40,6 +40,9 @@ guard_allow = [{ rule = "force-push", command = "git push -f origin tm/*" }]
 	if !g.Learn || !slices.Contains(g.Allow, want) || !slices.Contains(g.Allow, guard.Allow{Rule: "force-push", Command: "git push -f origin tm/*"}) {
 		t.Errorf("allow %+v learn %t", g.Allow, g.Learn)
 	}
+	if !slices.Equal(g.Floor, []string{"force-push", "merge"}) {
+		t.Errorf("floor %v", g.Floor)
+	}
 	if !slices.Equal(g.SecretEnv, []string{"NODE_AUTH_TOKEN"}) {
 		t.Errorf("secret env %v", g.SecretEnv)
 	}
@@ -54,7 +57,7 @@ guard_allow = [{ rule = "force-push", command = "git push -f origin tm/*" }]
 		t.Errorf("reading the log: %+v", d)
 	}
 	coord := SessionRecord{ID: "s-1", Role: proto.RoleCoordinator, Project: p.Slug, Cwd: p.Dir}
-	if g := s.guardRulesFor(coord); g.SecretEnv != nil || len(g.Allow) != 2 {
+	if g := s.guardRulesFor(coord); g.SecretEnv != nil || len(g.Allow) != 2 || !slices.Equal(g.Floor, []string{"force-push"}) {
 		t.Errorf("coordinator %+v", g)
 	}
 }

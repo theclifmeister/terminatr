@@ -23,11 +23,11 @@ import (
 // guardRuleWords name the guard's rules for the user, in config.GuardRules
 // order.
 var guardRuleWords = map[string]struct{ label, help string }{
-	"force-push":    {"Force-pushing", "No force-push, to any branch."},
+	"force-push":    {"Force-pushing", "No force-push, to any branch. Off, a force-push to a protected branch is still refused."},
 	"push-default":  {"Pushing to the default branch", "Nothing is pushed straight to main, master or a repository's default branch: work lands through a pull request."},
 	"worktree-only": {"Threads write only in their worktree", "A thread's file tools and commands write only inside its worktree and the temporary folders."},
 	"delete-branch": {"Deleting branches and worktrees", "No agent deletes a branch, a worktree or a repository; tm cleans them up once the work has merged."},
-	"merge":         {"Threads merging", "A thread never merges a pull request while the coordinator merges them."},
+	"merge":         {"Threads merging", "A thread never merges a pull request while the coordinator merges them; off, still refused (set who merges instead)."},
 	"credentials":   {"Reading credentials", "No agent reads credential files, the keychain or tokens, or prints the environment."},
 }
 
@@ -93,7 +93,7 @@ func (sr safetyRows) guardRulesRow() setting {
 		}
 		return "all on"
 	}
-	return setting{label: "Guard rules", help: "What the guard refuses. Enter lists them to turn each on or off. Whatever is off, it never lets an agent read tm's own files or print a secret variable tm gives threads.",
+	return setting{label: "Guard rules", help: "What the guard refuses. Enter lists them to turn each on or off. Whatever is off, while the guard is on it never lets an agent read tm's own files, print a secret variable tm gives threads, force-push to a protected branch, or a thread merge while the coordinator merges.",
 		keys: []string{"guard_off"}, word: word,
 		value: func(m *dash) string { return word(sr.safety(m)) },
 		change: func(m *dash) tea.Cmd {

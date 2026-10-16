@@ -13,7 +13,9 @@
 // The thread-allow, thread-learn and floor-only sets carry the human's
 // allowances (a refusal under an allowance's rule of the command line or
 // file it matches is lifted), tm's own files and the secret variables:
-// a case with "floor" is a refusal no allowance lifts; "subject" (the
+// a case with "floor" is a refusal no allowance lifts; the rules-off
+// sets have the force-push and merge rules off (guard_off) and their
+// floor still refusing; "subject" (the
 // command line or file an allowance names) and "message", when a case
 // gives them, are the refusal's.
 // A case with links judges file writes where they land: each link (an
@@ -53,6 +55,8 @@ export default {
  "thread-allow": {"on": true, "role": "thread", "rules": ["force-push", "push-default", "worktree-only", "delete-branch", "merge", "credentials"], "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "writable": ["/h/.terminatr/worktrees/demo/t-0001-fix", "/tmp", "/private/tmp"], "worktrees": "/h/.terminatr/worktrees", "protected": ["main", "master"], "secrets": ["/h/.ssh", "/h/.aws", "/h/.config/gh", "/h/.codex/auth.json", "/ch/auth.json", "/h/.npmrc"], "mods": [{"mod": "infra", "id": "no-destroy", "commands": [["terraform", "destroy"]], "message": "infrastructure is the human's to change."}], "allow": [{"rule": "force-push", "command": "git push -f origin *"}, {"rule": "worktree-only", "path": "/h/src/shared/*"}, {"rule": "credentials", "path": "/h/.npmrc"}, {"rule": "credentials", "command": "gh auth token"}, {"rule": "credentials", "path": "/h/.ssh/*"}, {"rule": "merge", "command": "gh pr merge 1"}, {"rule": "mod:infra.no-destroy", "command": "terraform destroy -target=x"}, {"rule": "push-default", "command": "git push origin main"}, {"rule": "worktree-only", "path": "~/notes/*.md"}], "own": ["/h/.terminatr/run", "/h/.terminatr/state/peer", "/h/.terminatr/state/guard"], "secretEnv": ["NODE_AUTH_TOKEN"]},
  "thread-learn": {"on": true, "role": "thread", "rules": ["force-push", "push-default", "worktree-only", "delete-branch", "merge", "credentials"], "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "writable": ["/h/.terminatr/worktrees/demo/t-0001-fix", "/tmp", "/private/tmp"], "worktrees": "/h/.terminatr/worktrees", "protected": ["main", "master"], "secrets": ["/h/.ssh", "/h/.aws", "/h/.config/gh", "/h/.codex/auth.json", "/ch/auth.json", "/h/.npmrc"], "learn": true, "allow": [{"rule": "force-push", "command": "git push -f origin *"}, {"rule": "worktree-only", "path": "/h/src/shared/*"}, {"rule": "credentials", "path": "/h/.npmrc"}, {"rule": "credentials", "command": "gh auth token"}, {"rule": "credentials", "path": "/h/.ssh/*"}, {"rule": "merge", "command": "gh pr merge 1"}, {"rule": "mod:infra.no-destroy", "command": "terraform destroy -target=x"}, {"rule": "push-default", "command": "git push origin main"}, {"rule": "worktree-only", "path": "~/notes/*.md"}], "own": ["/h/.terminatr/run", "/h/.terminatr/state/peer", "/h/.terminatr/state/guard"], "secretEnv": ["NODE_AUTH_TOKEN"]},
  "floor-only": {"on": true, "role": "thread", "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "own": ["/h/.terminatr/run", "/h/.terminatr/state/peer", "/h/.terminatr/state/guard"], "secretEnv": ["NODE_AUTH_TOKEN"]},
+ "rules-off": {"on": true, "role": "thread", "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "protected": ["main", "master"], "floor": ["force-push", "merge"]},
+ "rules-off-merge-thread": {"on": true, "role": "thread", "rules": ["credentials"], "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "protected": ["main", "master"], "floor": ["force-push"], "allow": [{"rule": "force-push", "command": "git push -f origin *"}]},
  "off": {"on": false}
 },
 "cases": [
@@ -522,7 +526,18 @@ export default {
  {"rules": "floor-only", "tool": "Bash", "input": {"command": "cat ~/.ssh/id_rsa"}, "rule": null},
  {"rules": "floor-only", "tool": "Bash", "input": {"command": "cat ~/.terminatr/run/s/s-1/claude-settings.json"}, "rule": "credentials", "summary": "cat of /h/.terminatr/run/s/s-1/claude-settings.json", "floor": true},
  {"rules": "floor-only", "tool": "Bash", "input": {"command": "git push -f origin main"}, "rule": null},
- {"rules": "floor-only", "tool": "Read", "input": {"file_path": "/h/.terminatr/run/human"}, "rule": "credentials", "summary": "Read of /h/.terminatr/run/human", "floor": true}
+ {"rules": "floor-only", "tool": "Read", "input": {"file_path": "/h/.terminatr/run/human"}, "rule": "credentials", "summary": "Read of /h/.terminatr/run/human", "floor": true},
+ {"rules": "rules-off", "tool": "Bash", "input": {"command": "git push -f origin main"}, "rule": "force-push", "summary": "git push with force", "floor": true},
+ {"rules": "rules-off", "tool": "Bash", "input": {"command": "git push --force origin HEAD:master"}, "rule": "force-push", "summary": "git push with force", "floor": true},
+ {"rules": "rules-off", "tool": "Bash", "input": {"command": "git push --mirror"}, "rule": "force-push", "summary": "git push with force", "floor": true},
+ {"rules": "rules-off", "tool": "Bash", "input": {"command": "git push -f origin tm/x"}, "rule": null},
+ {"rules": "rules-off", "tool": "Bash", "input": {"command": "git push origin main"}, "rule": null},
+ {"rules": "rules-off", "tool": "Bash", "input": {"command": "gh pr merge 1"}, "rule": "merge", "summary": "gh pr merge", "floor": true},
+ {"rules": "rules-off", "tool": "Bash", "input": {"command": "az repos pr update --id 7 --status completed"}, "rule": "merge", "summary": "az repos pr update completing a PR", "floor": true},
+ {"rules": "rules-off", "tool": "Bash", "input": {"command": "git branch -D tm/x"}, "rule": null},
+ {"rules": "rules-off-merge-thread", "tool": "Bash", "input": {"command": "gh pr merge 1"}, "rule": null},
+ {"rules": "rules-off-merge-thread", "tool": "Bash", "input": {"command": "git push -f origin main"}, "rule": "force-push", "summary": "git push with force", "floor": true},
+ {"rules": "rules-off-merge-thread", "tool": "Bash", "input": {"command": "git push -f origin tm/x"}, "rule": null}
 ],
 "messages": {
  "thread": {

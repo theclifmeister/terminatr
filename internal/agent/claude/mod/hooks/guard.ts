@@ -63,6 +63,11 @@ export type Rules = {
   secretEnv?: readonly string[]
   // guard_mode "learn": a refusal tells the model the user reviews it.
   learn?: boolean
+  // The rules whose floor holds though the human turned the rule off
+  // (guard_off): force-push (to a protected branch, --all, --mirror)
+  // always, merge for a thread while the coordinator merges. Only the
+  // guard off lifts them.
+  floor?: readonly string[]
   // Where a write to a path lands: the path made absolute but not yet
   // cleaned (writeTargets), with the links of its longest existing
   // prefix followed. The matcher has no file system of its own: the
@@ -119,7 +124,7 @@ export const off: Rules = { on: false }
 export function rulesOf(text: string): Rules {
   try {
     const r = JSON.parse(text) as Rules
-    return r && typeof r === 'object' && r.on === true && (Array.isArray(r.rules) || Array.isArray(r.mods) || Array.isArray(r.own) || Array.isArray(r.secretEnv)) ? r : off
+    return r && typeof r === 'object' && r.on === true && (Array.isArray(r.rules) || Array.isArray(r.mods) || Array.isArray(r.own) || Array.isArray(r.secretEnv) || Array.isArray(r.floor)) ? r : off
   } catch {
     return off
   }
@@ -128,7 +133,7 @@ export function rulesOf(text: string): Rules {
 // judge is the rule the call of tool with input breaks, or null. The
 // tool is judged by its kind in r.tools, from the fields listed there.
 export function judge(r: Rules, tool: string, input: Record<string, unknown>): Denial | null {
-  if (!r.on || (!r.rules?.length && !r.mods?.length && !r.own?.length && !r.secretEnv?.length)) return null
+  if (!r.on || (!r.rules?.length && !r.mods?.length && !r.own?.length && !r.secretEnv?.length && !r.floor?.length)) return null
   const t = r.tools && Object.hasOwn(r.tools, tool) ? r.tools[tool] : undefined
   if (!t) return null
   const values = (t.fields ?? []).map(f => input[f]).filter((v): v is string => typeof v === 'string' && v !== '')
@@ -136,7 +141,7 @@ export function judge(r: Rules, tool: string, input: Record<string, unknown>): D
   // lands and named as given.
   const landing = (given: string) => (r.resolve ? abs(r, r.resolve(joined(r, given))) : abs(r, given))
   const judgeWrite = (r: Rules, given: string, p: string): Denial | null => {
-    const has = (id: string) => r.rules?.includes(id) ?? false
+    const has = hasOf(r)
     const shown = abs(r, given)
     const writable = (p: string) => (r.writable ?? []).some(w => under(r, p, w))
     if (has('worktree-only') && !writable(p)) return deny(r, 'worktree-only', `${tool} of ${safe(shown)}`)
@@ -148,7 +153,7 @@ export function judge(r: Rules, tool: string, input: Record<string, unknown>): D
       let ask: Denial | null = null
       for (const c of values) {
         const d = lifted(r, c.trim(), false, r => {
-          const has = (id: string) => r.rules?.includes(id) ?? false
+          const has = hasOf(r)
           return t.syntax === 'powershell' ? judgePowerShell(r, has, c) : judgeBash(r, has, c)
         })
         if (d && !d.ask) return d
@@ -185,6 +190,12 @@ export function judge(r: Rules, tool: string, input: Record<string, unknown>): D
       return null
   }
   return null
+}
+
+// hasOf says whether a rule is on. Merge on the floor is: every merge
+// refusal is the floor's.
+function hasOf(r: Rules): (id: string) => boolean {
+  return id => (r.rules?.includes(id) ?? false) || (id === 'merge' && (r.floor?.includes(id) ?? false))
 }
 
 // judgeRead judges a file tool reading p (absolute; a glob by the part
@@ -407,10 +418,14 @@ function judgeGit(r: Rules, has: (id: string) => boolean, args: string[]): Denia
   const flag = (short: string, ...names: string[]) => long(...names) || rest.some(a => /^-[a-zA-Z0-9]+$/.test(a) && a.includes(short))
   switch (sub) {
     case 'push': {
-      if (has('force-push') && (flag('f', '--force', '--force-with-lease', '--force-if-includes', '--mirror') || rest.some(a => a.startsWith('+')))) {
-        const d = deny(r, 'force-push', 'git push with force')
-        // Every branch, or a protected one: never allowed.
-        return long('--all', '--branches', '--mirror') || pushTargets(rest).some(b => (r.protected ?? []).includes(b)) ? floor(d) : d
+      if (flag('f', '--force', '--force-with-lease', '--force-if-includes', '--mirror') || rest.some(a => a.startsWith('+'))) {
+        // Every branch, or a protected one: never allowed, the rule off
+        // too.
+        const onFloor = (r.floor?.includes('force-push') ?? false) || has('force-push')
+        if (onFloor && (long('--all', '--branches', '--mirror') || pushTargets(rest).some(b => (r.protected ?? []).includes(b)))) {
+          return floor(deny(r, 'force-push', 'git push with force'))
+        }
+        if (has('force-push')) return deny(r, 'force-push', 'git push with force')
       }
       if (has('delete-branch') && (flag('d', '--delete', '--prune') || rest.some(a => a.startsWith(':') && a.length > 1))) {
         return deny(r, 'delete-branch', 'git push deleting a branch')

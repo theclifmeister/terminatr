@@ -136,6 +136,12 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 	if r.Role == proto.RoleThread {
 		g.SecretEnv = lc.cfg.SecretEnvNames(r.Project)
 	}
+	// The floor holds with its rule off (guard_off): only the guard off
+	// lifts it.
+	g.Floor = []string{"force-push"}
+	if r.Role == proto.RoleThread && set.Merge == config.MergeCoordinator {
+		g.Floor = append(g.Floor, "merge")
+	}
 	if s.opts.Paths.Home != "" {
 		g.Worktrees = realPath(filepath.Join(s.opts.Paths.Home, "worktrees"))
 	}

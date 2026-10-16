@@ -247,7 +247,7 @@ The guard checks every tool call of a project's agents before it runs, in every 
 
 - **Guard**: on or off. Off, the agents have only their own permission rules and the sandbox. Turning it off asks first.
 - **Guard mode**: *refuse* (the default) or *refuse, then ask you*, the learning mode. Either way the call is refused and nothing passes until you allow it. In learning mode the agent is also told you review refused calls, and each new refusal is put to you in the project's inbox.
-- **Guard rules**: each rule on or off.
+- **Guard rules**: each rule on or off. A rule turned off still never lets through what is never allowed (below).
 - **Guard allowances**: the calls the guard lets through though a rule would refuse them. Enter changes one, `x` removes it. A project's own add to all projects'.
 - **Guard refusals**: the calls refused lately, the latest first, with the whole command or file (enter shows a long one whole). `a` allows it for this project, `A` for all projects, `x` keeps refusing it and stops listing it. An allowance takes effect at once, is journaled, and the thread that was refused is told it may retry.
 
@@ -267,7 +267,7 @@ guard_mode = "learn"
 
 `rule` is `force-push`, `push-default`, `worktree-only`, `delete-branch` or `credentials` (or a mod's rule, `mod:<mod>.<rule>`); `command` is the whole command line, `path` a file. A `*` matches anything, so a command or folder ending in `*` is a prefix; without one it is that exact command or file. A credentials allowance names one exact command or file, no `*`.
 
-**What is never allowed**, in either mode and whatever the rules and allowances say, while the guard is on: reading tm's own files (its run folder and sockets, its keys, the guard's log), printing a secret variable tm gives threads (below), force-pushing to a protected branch, and a thread merging (set `merge = "thread"` for that instead).
+**What is never allowed**, in either mode and whatever the rules (Guard rules turned off included) and allowances say, while the guard is on: reading tm's own files (its run folder and sockets, its keys, the guard's log), printing a secret variable tm gives threads (below), force-pushing to a protected branch, and a thread merging (set `merge = "thread"` for that instead).
 
 **Secret environment for threads.** A thread's tools sometimes need a token the agent must not see, such as a private npm registry's. Name it in the project's table, or under `[defaults.env]` for all projects:
 
