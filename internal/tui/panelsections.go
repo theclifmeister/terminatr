@@ -110,9 +110,7 @@ func panelSections(list []proto.ModView, t panelTarget, o panelOpts, w int) []pa
 	}()
 	for _, p := range mod.PanelSections(o.order, t.blocks(), ids) {
 		v := vs[slices.Index(ids, p.ID)]
-		s := &sideSection{id: view.PanelSection + p.ID, mod: v.Mod, view: v.View, title: v.Title, name: v.Name,
-			desc: v.Description, opens: v.Opens, log: v.Log, builtin: builtinMod(o.mods, v.Mod), project: t.project}
-		s.folded = o.folds.IsSectionFolded(s.id)
+		s := newSection(v, view.PanelSection+p.ID, t.project, o.mods, o.folds)
 		if v.State == proto.ModViewFailed {
 			s.failed = true
 			if !s.folded {
@@ -164,14 +162,12 @@ type panelAsk struct {
 	sel   bool
 }
 
-// panelFit is how a panel's sections fit: per section whether its header
-// shows, its body lines, whether it gave its body up for room (shrunk)
-// and whether it is drawn at the bottom; more is how many headers didn't
-// fit, which the last one shown says (+N).
+// panelFit is how a panel's sections fit: the budget (fitBudget), whose
+// more the last header shown says (+N), and per section whether it is
+// drawn at the bottom.
 type panelFit struct {
-	show, shrunk, bottom []bool
-	body                 []int
-	more                 int
+	fitBudget
+	bottom []bool
 }
 
 // rows are the rows section j takes: a blank, its header and its body.
@@ -188,16 +184,6 @@ func (f panelFit) used(in func(int) bool) int {
 	for j := range f.show {
 		if in == nil || in(j) {
 			n += f.rows(j)
-		}
-	}
-	return n
-}
-
-func (f panelFit) headers() int {
-	n := 0
-	for _, on := range f.show {
-		if on {
-			n++
 		}
 	}
 	return n
@@ -220,54 +206,28 @@ func (f panelFit) headers() int {
 // sections give way, last, only for the shares.
 func fitPanel(h int, must []int, asks []panelAsk) panelFit {
 	n := len(asks)
-	f := panelFit{show: make([]bool, n), shrunk: make([]bool, n), bottom: make([]bool, n), body: make([]int, n)}
+	f := panelFit{fitBudget: newFitBudget(n), bottom: make([]bool, n)}
 	for j, a := range asks {
 		f.bottom[j] = a.at < 0 || h < panelMin
-		f.show[j], f.body[j] = true, min(max(a.want, 0), modview.MaxSidebarHeight)
+		f.ask(j, a.want)
+		f.keep[j] = a.sel
 	}
 	if h < panelMin || n == 0 {
 		return f
 	}
+	placed := func(j int) bool { return !f.bottom[j] }
 	// The order sections give way in: above core's blocks, then between
 	// them, then at the bottom, each from its lowest.
-	var order []int
-	for _, group := range []func(int) bool{
-		func(j int) bool { return !f.bottom[j] && asks[j].above },
-		func(j int) bool { return !f.bottom[j] && !asks[j].above },
+	f.giveOrder(
+		func(j int) bool { return placed(j) && asks[j].above },
+		func(j int) bool { return placed(j) && !asks[j].above },
 		func(j int) bool { return f.bottom[j] },
-	} {
-		for j := n - 1; j >= 0; j-- {
-			if group(j) {
-				order = append(order, j)
-			}
-		}
+	)
+	for f.headers() > h/4 && f.drop(false, anySection) {
 	}
-	all := func(int) bool { return true }
-	placed := func(j int) bool { return !f.bottom[j] }
-	shrink := func(in func(int) bool) bool {
-		for _, j := range order {
-			if in(j) && f.show[j] && f.body[j] > 0 {
-				f.body[j], f.shrunk[j] = 0, true
-				return true
-			}
-		}
-		return false
+	for f.used(placed) > h/4 && f.give(placed) {
 	}
-	drop := func(sel bool, in func(int) bool) bool {
-		for _, j := range order {
-			if in(j) && f.show[j] && (sel || !asks[j].sel) {
-				f.show[j], f.body[j] = false, 0
-				return true
-			}
-		}
-		return false
-	}
-	give := func(in func(int) bool) bool { return shrink(in) || drop(false, in) || drop(true, in) }
-	for f.headers() > h/4 && drop(false, all) {
-	}
-	for f.used(placed) > h/4 && give(placed) {
-	}
-	for f.used(nil) > h/2 && give(all) {
+	for f.used(nil) > h/2 && f.give(anySection) {
 	}
 	safe := func() bool {
 		for _, k := range must {
@@ -286,14 +246,9 @@ func fitPanel(h int, must []int, asks []panelAsk) panelFit {
 		}
 		return true
 	}
-	for !safe() && give(placed) {
+	for !safe() && f.give(placed) {
 	}
-	for j := range asks {
-		if !f.show[j] {
-			f.more++
-			f.shrunk[j] = false
-		}
-	}
+	f.tally()
 	return f
 }
 
@@ -328,9 +283,7 @@ func (l panelLay) shownHeads() []int {
 // (hits: what a click on each does, nil for nothing), as o says.
 func layPanel(pl *panel, hits []infoHit, list []proto.ModView, t panelTarget, o panelOpts) panelLay {
 	hits = slices.Clone(hits)
-	for len(hits) < len(pl.lines) {
-		hits = append(hits, infoHit{})
-	}
+	hits = padHits(hits, len(pl.lines), infoHit{})
 	secs := panelSections(list, t, o, panelBody(pl.w))
 	lay := panelLay{secs: make([]*sideSection, len(secs)), heads: make([]int, len(secs))}
 	asks := make([]panelAsk, len(secs))

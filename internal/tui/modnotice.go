@@ -70,18 +70,11 @@ func OSNotice(termProgram string, n modnotify.Notice) string {
 func (m *dash) drawNotices() []tea.Cmd {
 	src, _ := m.src.(noticeSource)
 	var cmds []tea.Cmd
-	var fresh []modnotify.Notice
-	live := map[string]bool{}
-	for _, n := range m.data.ModNotices {
-		live[n.ID] = true
-		if m.noticed[n.ID] {
-			continue
-		}
-		if m.noticed == nil {
-			m.noticed = map[string]bool{}
-		}
-		m.noticed[n.ID] = true
-		fresh = append(fresh, n)
+	if m.noticed == nil {
+		m.noticed = map[string]bool{}
+	}
+	fresh := takeFresh(m.data.ModNotices, m.noticed)
+	for _, n := range fresh {
 		if src != nil && !n.Drawn {
 			prog := os.Getenv("TERM_PROGRAM")
 			cmds = append(cmds, func() tea.Msg {
@@ -90,11 +83,6 @@ func (m *dash) drawNotices() []tea.Cmd {
 				}
 				return nil
 			})
-		}
-	}
-	for id := range m.noticed {
-		if !live[id] {
-			delete(m.noticed, id)
 		}
 	}
 	if len(fresh) > 0 && m.seen {
@@ -245,23 +233,33 @@ func (nv *noticesView) render(m *dash) string {
 // the ones it won; noticed is its memory, pruned to the tray.
 func claimNotices(ctl *tmclient.Client, ns []modnotify.Notice, noticed map[string]bool) []byte {
 	var out []byte
-	live := map[string]bool{}
-	for _, n := range ns {
-		live[n.ID] = true
-		if noticed[n.ID] {
-			continue
-		}
-		noticed[n.ID] = true
+	for _, n := range takeFresh(ns, noticed) {
 		var res proto.NoticeResult
 		if n.Drawn || ctl.Call(proto.MethodNotifyClaim, proto.NoticeParams{ID: n.ID}, &res) != nil || !res.OK {
 			continue
 		}
 		out = append(out, OSNotice(os.Getenv("TERM_PROGRAM"), n)...)
 	}
+	return out
+}
+
+// takeFresh are the notifications of ns that noticed, a console's
+// memory, has not seen; it marks them seen and forgets those no longer
+// in ns.
+func takeFresh(ns []modnotify.Notice, noticed map[string]bool) []modnotify.Notice {
+	var fresh []modnotify.Notice
+	live := map[string]bool{}
+	for _, n := range ns {
+		live[n.ID] = true
+		if !noticed[n.ID] {
+			noticed[n.ID] = true
+			fresh = append(fresh, n)
+		}
+	}
 	for id := range noticed {
 		if !live[id] {
 			delete(noticed, id)
 		}
 	}
-	return out
+	return fresh
 }

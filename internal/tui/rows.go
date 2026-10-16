@@ -464,10 +464,7 @@ func projectListRows(d Data, p ProjectData, byID map[string]proto.SessionInfo, n
 		r.rest = joinSp(r.rest, fmt.Sprintf("%d inbox", p.Unread))
 	}
 	rows = append(rows, r)
-	threads := append([]ThreadRow(nil), p.Threads...)
-	sort.SliceStable(threads, func(i, j int) bool {
-		return threadGroup(threads[i], byID) < threadGroup(threads[j], byID)
-	})
+	threads := orderedThreads(p.Threads, byID)
 	for i := range threads {
 		t := &threads[i]
 		tr := row{key: "th:" + p.Slug + ":" + t.ID, project: p.Slug, thread: t, mark: markTop, pct: -1}
@@ -493,14 +490,7 @@ func projectListRows(d Data, p ProjectData, byID map[string]proto.SessionInfo, n
 			rest = joinSp(rest, t.ID)
 		}
 		tr.what, tr.rest = threadName(t.Task, t.ID)+" "+oneLine(t.Title), rest
-		targets := []proto.CellTarget{{Project: p.Slug, Thread: t.ID}}
-		if t.Task != "" {
-			targets = append(targets, proto.CellTarget{Project: p.Slug, Task: t.Task})
-		}
-		if tr.session != "" {
-			targets = append(targets, proto.CellTarget{Session: tr.session})
-		}
-		tr.mods = rowMods(d.Cells, proto.SlotDashboardThread, targets...)
+		tr.mods = rowMods(d.Cells, proto.SlotDashboardThread, threadTargets(p.Slug, t.ID, t.Task, tr.session)...)
 		rows = append(rows, tr)
 	}
 	sort.SliceStable(members, func(i, j int) bool { return members[i].Thread < members[j].Thread })
@@ -654,6 +644,30 @@ func threadGroup(t ThreadRow, byID map[string]proto.SessionInfo) int {
 		return 3
 	}
 	return 4
+}
+
+// orderedThreads are a copy of a project's threads in threadGroup's
+// order, the dashboard's and the sidebar's alike.
+func orderedThreads(threads []ThreadRow, byID map[string]proto.SessionInfo) []ThreadRow {
+	out := append([]ThreadRow(nil), threads...)
+	sort.SliceStable(out, func(i, j int) bool {
+		return threadGroup(out[i], byID) < threadGroup(out[j], byID)
+	})
+	return out
+}
+
+// threadTargets are where a thread's mod cell is looked up, in order:
+// the thread's own, its task's (when it has one), its session's (when
+// it runs).
+func threadTargets(slug, thread, task, session string) []proto.CellTarget {
+	ts := []proto.CellTarget{{Project: slug, Thread: thread}}
+	if task != "" {
+		ts = append(ts, proto.CellTarget{Project: slug, Task: task})
+	}
+	if session != "" {
+		ts = append(ts, proto.CellTarget{Session: session})
+	}
+	return ts
 }
 
 // prRef shortens a PR URL to "#12"; anything else is shown cut short.

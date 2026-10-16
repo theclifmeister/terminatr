@@ -20,10 +20,10 @@ import (
 // glyph's tooltip shows instead. Each line is w-1-sideGap cells wide,
 // styled.
 func sideFooter(all []treeRow, w int, head sideHeadIn, s ServerInfo, session, compact bool) []string {
-	cw := w - 1 - sideGap
-	if w <= sideSlim || cw < 4 {
+	if !footWide(w) {
 		return nil
 	}
+	cw := w - 1 - sideGap
 	var r *treeRow
 	focused := false
 	if head.cursor || head.here {
