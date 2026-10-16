@@ -129,9 +129,9 @@ func TestAzureMerge(t *testing.T) {
 				t.Errorf("%s: args lack %q: %s", method, w, all)
 			}
 		}
-	}
-	if all := strings.Join(got, " "); strings.Contains(all, "mergeCommitMessage") {
-		t.Errorf("a rebase carries a message: %s", all)
+		if method == ByRebase && strings.Contains(all, "mergeCommitMessage") {
+			t.Errorf("a rebase carries a message: %s", all)
+		}
 	}
 	for _, method := range []string{ByMerge, BySquash} {
 		if err := a.Merge("/r", PR{Number: 5, Head: mergeHead}, method); err != nil {
