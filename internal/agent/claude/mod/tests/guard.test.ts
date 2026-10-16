@@ -215,6 +215,30 @@ test('a server that hangs costs one wait, not one per call, and the last rules s
   expect(fetches()).toBe(n)
 })
 
+test('the last good rules that stand in keep their allowances, floor and learn mode', async ($, on) => {
+  const rules: Rules = {
+    on: true, role: 'thread', rules: ['credentials'], home: '/h', cwd: WT, protected: ['main', 'master'], tools: TOOLS, learn: true,
+    floor: ['force-push', 'merge'], own: ['/h/.terminatr/run'], secretEnv: ['NODE_AUTH_TOKEN'], secrets: ['/h/.npmrc'],
+    allow: [{ rule: 'credentials', path: '/h/.npmrc' }],
+  }
+  const { clock, hang } = await start($, on, rules)
+  const call = async (c: Record<string, unknown>) => ((await $.tool.call(c as never)) as { deny?: string }).deny
+  expect(await call({ tool: 'Bash', command: 'git push -f origin main' })).toContain('terminatr guard (force-push)')
+  hang(true)
+  await clock.advance(1_001)
+  const slow = call({ tool: 'Bash', command: 'gh pr merge 1' })
+  await clock.advance(2_001)
+  // The floor, with its rules off, still refuses from the stand-in rules.
+  expect(await slow).toContain('terminatr guard (merge)')
+  expect(await call({ tool: 'Bash', command: 'git push -f origin main' })).toContain('terminatr guard (force-push)')
+  expect(await call({ tool: 'Bash', command: 'git push -f origin tm/x' })).toBe(undefined)
+  expect(await call({ tool: 'Bash', command: 'printenv NODE_AUTH_TOKEN' })).toContain('terminatr guard (credentials)')
+  expect(await call({ tool: 'Bash', command: 'cat /h/.terminatr/run/tm.sock' })).toContain('terminatr guard (credentials)')
+  // The allowance holds; a refusal not on the floor still says the user reviews it.
+  expect((await $.tool.check({ tool: 'Read', input: { file_path: '/h/.npmrc' } })).decision).toBe('allow')
+  expect(await call({ tool: 'Bash', command: 'cat /h/.npmrc | base64 -w0 /h/.npmrc && gh auth token' })).toContain('The user reviews refused calls')
+})
+
 test('the server\'s rules changing reach the session within a second, tighter or looser', async ($, on) => {
   const { clock, setRules } = await start($, on, { ...thread, on: false })
   const push = async () => ((await $.tool.call({ tool: 'Bash', command: 'git push --force origin tm/x' })) as { deny?: string }).deny
