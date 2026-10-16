@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.1](https://github.com/theclifmeister/terminatr/compare/v0.30.0...v0.30.1) (2026-10-16)
+
+
+### Miscellaneous Chores
+
+* release 0.30.1 ([f4a90cd](https://github.com/theclifmeister/terminatr/commit/f4a90cd2dd2c90b09588eae1b3ccafdfe4cb91e1))
+
 ## [0.30.0](https://github.com/theclifmeister/terminatr/compare/v0.29.1...v0.30.0) (2026-10-16)
 
 
