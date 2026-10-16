@@ -324,7 +324,7 @@ func TestThemeChangeReachesClaude(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.mu.Lock()
-	s.colors = emu.Colors{Known: emu.KnownBg}
+	s.colors = emu.Colors{Known: emu.KnownBg, Bg: emu.RGB{R: 0xec, G: 0xef, B: 0xf4}}
 	s.themeChangedLocked()
 	s.mu.Unlock()
 	if ct := read(); ct.Base != "light" || len(ct.Overrides) != 0 {
@@ -342,11 +342,45 @@ func TestThemeChangeReachesClaude(t *testing.T) {
 		t.Fatalf("follow terminal, light: %+v", ct)
 	}
 	s.mu.Lock()
-	s.scheme = emu.SchemeDark
+	s.colors, s.scheme = emu.Colors{Known: emu.KnownBg, Bg: emu.RGB{R: 0x10, G: 0x12, B: 0x16}}, emu.SchemeDark
 	s.themeChangedLocked()
 	s.mu.Unlock()
 	if ct := read(); ct.Base != "dark-ansi" {
 		t.Fatalf("follow terminal, dark: %+v", ct)
+	}
+	// A dark terminal that reports a light scheme (the system's, say):
+	// Claude follows the background the user sees (T520).
+	s.mu.Lock()
+	s.scheme = emu.SchemeLight
+	s.themeChangedLocked()
+	s.mu.Unlock()
+	if ct := read(); ct.Base != "dark-ansi" {
+		t.Fatalf("follow terminal, dark background, light scheme: %+v", ct)
+	}
+}
+
+// TestSchemeName: an agent's theme follows the terminal's background
+// when a console reported it, whatever scheme it reported (a terminal's
+// may be the system's appearance), else the reported scheme (T520).
+func TestSchemeName(t *testing.T) {
+	dark, light := emu.RGB{R: 0x10, G: 0x12, B: 0x16}, emu.RGB{R: 0xff, G: 0xff, B: 0xff}
+	for _, c := range []struct {
+		colors emu.Colors
+		scheme emu.Scheme
+		want   string
+	}{
+		{emu.Colors{}, 0, ""},
+		{emu.Colors{}, emu.SchemeLight, "light"},
+		{emu.Colors{}, emu.SchemeDark, "dark"},
+		{emu.Colors{Known: emu.KnownBg, Bg: dark}, emu.SchemeLight, "dark"},
+		{emu.Colors{Known: emu.KnownBg, Bg: dark}, 0, "dark"},
+		{emu.Colors{Known: emu.KnownBg, Bg: light}, emu.SchemeDark, "light"},
+		{emu.Colors{Known: emu.KnownFg, Bg: light}, emu.SchemeDark, "dark"}, // a background not reported
+	} {
+		s := &Server{colors: c.colors, scheme: c.scheme}
+		if got := s.schemeName(); got != c.want {
+			t.Errorf("colours %+v scheme %d: %q, want %q", c.colors, c.scheme, got, c.want)
+		}
 	}
 }
 

@@ -33,6 +33,12 @@ type Options struct {
 // RGB is a 24-bit colour.
 type RGB struct{ R, G, B uint8 }
 
+// Dark reports whether c is a dark colour: its HSL lightness is below
+// one half, as the console decides for a terminal's background.
+func (c RGB) Dark() bool {
+	return int(max(c.R, c.G, c.B))+int(min(c.R, c.G, c.B)) < 255
+}
+
 // Colors are a terminal's default colours as its answers to OSC 10
 // (foreground), 11 (background) and 4 (the 16 ANSI palette entries) gave
 // them, with which of them are known. The zero value knows none.

@@ -1173,6 +1173,7 @@ loop:
 				if err := sess.SetColorScheme(scheme); err == nil {
 					s.mu.Lock()
 					if s.scheme != scheme {
+						s.log.Printf("session %s: console's colour scheme %d (1 dark, 2 light)", sess.ID(), scheme)
 						s.scheme = scheme
 						s.saveColorsLocked()
 						s.themeChangedLocked()
