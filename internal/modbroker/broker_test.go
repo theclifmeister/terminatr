@@ -143,7 +143,7 @@ func TestStoreCache(t *testing.T) {
 		t.Fatalf("store.get = %v", got)
 	}
 	// A refused edit leaves the cached store as it was.
-	big := strings.Repeat("x", maxStore)
+	big := strings.Repeat("x", MaxStore)
 	if _, err := tb.call(t, "store.set", map[string]any{"key": "big", "value": big}); code(err) != CodeDenied {
 		t.Fatalf("an over-size store: %v", err)
 	}
