@@ -22,9 +22,12 @@ var umaskMu sync.Mutex
 // may already have replaced; the owner removes it.
 func Listen(a Addr) (net.Listener, error) {
 	// The socket is created under a umask that leaves only the owner's
-	// access, so it is never connectable by others, even briefly.
+	// access, so it is never connectable by others, even briefly. The
+	// umask is the whole process's: it keeps the owner's bits, or a
+	// folder another goroutine makes meanwhile loses its x and nothing
+	// can be made in it (T525).
 	umaskMu.Lock()
-	old := syscall.Umask(0o177)
+	old := syscall.Umask(0o077)
 	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: string(a), Net: "unix"})
 	syscall.Umask(old)
 	umaskMu.Unlock()
