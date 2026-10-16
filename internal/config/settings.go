@@ -177,6 +177,7 @@ var settingRows = []settingRow{
 	def("archive_threads_days", "archive days", everywhere, func(r *rawSafety) *int { return r.ArchiveThreads }, func(s *Safety) *int { return &s.ArchiveThreadsDays }, between(1, MaxArchiveDays)),
 	def("archive_inbox_days", "archive days", everywhere, func(r *rawSafety) *int { return r.ArchiveInbox }, func(s *Safety) *int { return &s.ArchiveInboxDays }, between(1, MaxArchiveDays)),
 	def("archive_journal_days", "archive days", everywhere, func(r *rawSafety) *int { return r.ArchiveJournal }, func(s *Safety) *int { return &s.ArchiveJournalDays }, between(1, MaxArchiveDays)),
+	def("branch_name", "branch names", everywhere, func(r *rawSafety) *string { return r.BranchName }, func(s *Safety) *string { return &s.BranchName }, CheckBranchName),
 	def("merge", "merge", byHand, func(r *rawSafety) *string { return r.Merge }, func(s *Safety) *string { return &s.Merge }, oneOf(MergeCoordinator, MergeThread)),
 	def("guard", "guard", byHand, func(r *rawSafety) *bool { return r.Guard }, func(s *Safety) *bool { return &s.Guard }, nil),
 	def("guard_off", "guard off", byHand, func(r *rawSafety) *[]string { return r.GuardOff }, func(s *Safety) *[]string { return &s.GuardOff }, checkGuardOff),

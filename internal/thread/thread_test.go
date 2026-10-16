@@ -374,3 +374,22 @@ func TestContextSection(t *testing.T) {
 		t.Errorf("a resolved or archived thread is listed:\n%s", out)
 	}
 }
+
+func TestBranchName(t *testing.T) {
+	for _, c := range []struct{ tmpl, task, title, want string }{
+		{"", "", "Fix it", "tm/demo/t-0007-fix-it"},
+		{"", "T3", "", "tm/demo/t-0007"},
+		{"feature/{task}-{title}-{id}", "T3", "Fix it", "feature/T3-fix-it-t-0007"},
+		{"users/me/{id}", "", "Fix it", "users/me/t-0007"},
+	} {
+		got, err := BranchName(c.tmpl, "demo", "t-0007", c.task, c.title)
+		if err != nil || got != c.want {
+			t.Errorf("%+v: %q, %v", c, got, err)
+		}
+	}
+	for _, bad := range []string{"feature/{title}", "x/{id}/{y}", "a b/{id}"} {
+		if _, err := BranchName(bad, "demo", "t-0007", "", "x"); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}

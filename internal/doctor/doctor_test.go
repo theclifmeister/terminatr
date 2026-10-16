@@ -383,7 +383,7 @@ func TestLeftovers(t *testing.T) {
 			t.Fatal(err)
 		}
 		wt, _ := thread.WorktreeDir(p.Slug, r.ID, title)
-		br := thread.BranchName(p.Slug, r.ID, title)
+		br, _ := thread.BranchName("", p.Slug, r.ID, "", title)
 		if _, err := worktree.Create(repo, wt, br, "HEAD"); err != nil {
 			t.Fatal(err)
 		}
