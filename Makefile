@@ -165,9 +165,11 @@ E2E_SHARD ?=
 # default per shard on macOS, so -race runs get a longer -timeout.
 E2E_TIMEOUT ?= $(if $(filter 1,$(E2E_RACE)),30m,10m)
 E2E_GOFLAGS := $(if $(filter 1,$(E2E_RACE)),-race) -timeout $(E2E_TIMEOUT)
+# The full suite (every scenario, not just TestSmoke*) takes far longer.
+E2E_FULL_TIMEOUT ?= 40m
 
 e2e: test-bin
-	E2E=1 E2E_RACE=$(E2E_RACE) E2E_BIN=$(TESTBIN) $(GO) test $(E2E_GOFLAGS) -count=1 ./internal/e2e $(E2E_FLAGS)
+	E2E=1 E2E_RACE=$(E2E_RACE) E2E_BIN=$(TESTBIN) $(GO) test $(if $(filter 1,$(E2E_RACE)),-race) -timeout $(E2E_FULL_TIMEOUT) -count=1 ./internal/e2e $(E2E_FLAGS)
 
 e2e-smoke: test-bin
 	@run='^TestSmoke'; \
@@ -274,6 +276,7 @@ env:
 # libghostty-vt build per target in .build/release/ (scripts/release/). `make release-snapshot`
 # builds the archives into dist/ without a tag; `make release` is what
 # the tag-triggered release workflow runs.
+# CI installs this version too (scripts/release/pins.sh).
 GORELEASER_VERSION ?= v2.18.2
 GORELEASER ?= $(or $(shell command -v goreleaser 2>/dev/null),$(GO) run github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION))
 RELEASE_ENV = TM_ROOT=$(CURDIR) TM_GHOSTTY_REV=$(shell echo $(GHOSTTY_REV) | cut -c1-12) TM_GHOSTTY_CPU=$(GHOSTTY_CPU)

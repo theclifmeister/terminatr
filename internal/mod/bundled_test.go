@@ -174,6 +174,15 @@ func TestBundledCodeCurrent(t *testing.T) {
 				t.Errorf("bundled/%s/%s is stale: run go generate ./internal/mod", id, name)
 			}
 		}
+		entries, err := fs.ReadDir(bundledFS, "bundled/"+id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			if _, ok := want[e.Name()]; !ok {
+				t.Errorf("bundled/%s/%s is not made by go generate: remove it", id, e.Name())
+			}
+		}
 	}
 }
 

@@ -65,6 +65,17 @@ func Write(examples, bundled string) error {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return err
+		}
+		for _, e := range entries {
+			if _, ok := files[e.Name()]; !ok {
+				if err := os.RemoveAll(filepath.Join(dir, e.Name())); err != nil {
+					return err
+				}
+			}
+		}
 		for name, b := range files {
 			if err := os.WriteFile(filepath.Join(dir, name), b, 0o644); err != nil {
 				return err

@@ -37,4 +37,4 @@ runs:
     - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7
       with:
         install-only: true
-        version: "~> v2"
+        version: ${{ steps.pins.outputs.goreleaser }}
