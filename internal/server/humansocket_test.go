@@ -2,6 +2,9 @@ package server
 
 import (
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -26,7 +29,30 @@ var humanOnlyMethods = []string{
 	proto.MethodViewSubscribe, proto.MethodViewAttach, proto.MethodViewDashboard, proto.MethodViewProject,
 	proto.MethodViewSelect, proto.MethodViewSideSel, proto.MethodViewExpand, proto.MethodViewTree, proto.MethodViewSections,
 	proto.MethodViewSidebar, proto.MethodViewInfo, proto.MethodViewColumns, proto.MethodViewSize,
-	proto.MethodViewInput,
+	proto.MethodViewInput, proto.MethodViewStatus,
+}
+
+// notHumanOnly are the control methods that aren't human-only, with
+// their gates (0: anyone): a method that leaves humanOnlyMethods has to
+// be named here, with the gate it gets instead.
+var notHumanOnly = map[string]gate{
+	proto.MethodPing: 0, proto.MethodCallerWho: 0, proto.MethodServerStatus: 0,
+	proto.MethodServerKeychain: 0, proto.MethodServerCodeHost: 0,
+	proto.MethodAgentList: 0, proto.MethodAgentExplain: 0, proto.MethodModHosts: 0,
+	proto.MethodHookEvent: 0, proto.MethodToolRun: 0, proto.MethodToolList: 0,
+	proto.MethodSessionList: 0, proto.MethodSessionRead: 0, proto.MethodSessionWait: 0,
+	proto.MethodSessionWatch: 0, proto.MethodSessionAsk: 0, proto.MethodProjectWatch: 0,
+	// Gated in its handler (mayAnswer).
+	proto.MethodSessionAnswer: 0,
+	proto.MethodCLIRun:        gateAgentOrHuman,
+	proto.MethodViewDigest:    gateNotAgent,
+}
+
+// notControl are proto's methods of the peer link (internal/peer), not
+// of the control socket.
+var notControl = map[string]bool{
+	proto.MethodPeerProjects: true, proto.MethodPeerWatch: true, proto.MethodPeerAttach: true,
+	proto.MethodPeerPanes: true, proto.MethodPeerMessage: true,
 }
 
 // gateOf is method m's gate, an attach connection's among them.
@@ -363,4 +389,94 @@ func TestMethodTable(t *testing.T) {
 	if _, ok := methodOf("no.such.method"); ok {
 		t.Error("an unknown method is known")
 	}
+}
+
+// TestEveryMethodHasItsGate: every Method constant of package proto is
+// human-only (humanOnlyMethods), another caller's with the gate
+// notHumanOnly gives it, or the peer link's; a new method has to be
+// put in one of them, and one that changes its gate fails here.
+func TestEveryMethodHasItsGate(t *testing.T) {
+	human := map[string]bool{}
+	for _, m := range humanOnlyMethods {
+		human[m] = true
+	}
+	consts := protoMethods(t)
+	for name, m := range consts {
+		want, other := notHumanOnly[m]
+		switch {
+		case notControl[m]:
+			if _, ok := methodOf(m); ok {
+				t.Errorf("%s (%s) is the peer link's, and the control table answers it", name, m)
+			}
+			continue
+		case human[m] == other:
+			t.Errorf("%s (%s): in humanOnlyMethods %v, in notHumanOnly %v; want exactly one", name, m, human[m], other)
+			continue
+		case human[m]:
+			want = gateHuman
+		}
+		e, ok := methodOf(m)
+		if !ok {
+			t.Errorf("%s (%s) is not in the method table", name, m)
+		} else if e.gate != want {
+			t.Errorf("%s (%s): gate %d, want %d", name, m, e.gate, want)
+		}
+	}
+	known := map[string]bool{}
+	for _, m := range consts {
+		known[m] = true
+	}
+	for m := range methods {
+		if !known[m] {
+			t.Errorf("the table's %s is no Method constant of package proto", m)
+		}
+	}
+}
+
+// protoMethods are package proto's string constants named Method*, by
+// name, read from its source.
+func protoMethods(t *testing.T) map[string]string {
+	t.Helper()
+	fset := token.NewFileSet()
+	names, err := filepath.Glob(filepath.Join("..", "proto", "*.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var files []*ast.File
+	for _, name := range names {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, f)
+	}
+	out := map[string]string{}
+	for _, f := range files {
+		for _, d := range f.Decls {
+			g, ok := d.(*ast.GenDecl)
+			if !ok || g.Tok != token.CONST {
+				continue
+			}
+			for _, spec := range g.Specs {
+				vs := spec.(*ast.ValueSpec)
+				for i, n := range vs.Names {
+					if !strings.HasPrefix(n.Name, "Method") || i >= len(vs.Values) {
+						continue
+					}
+					lit, ok := vs.Values[i].(*ast.BasicLit)
+					if !ok || lit.Kind != token.STRING {
+						t.Fatalf("proto.%s is not a string literal", n.Name)
+					}
+					out[n.Name], _ = strconv.Unquote(lit.Value)
+				}
+			}
+		}
+	}
+	if len(out) < 40 {
+		t.Fatalf("found %d Method constants in package proto; the parse missed some", len(out))
+	}
+	return out
 }

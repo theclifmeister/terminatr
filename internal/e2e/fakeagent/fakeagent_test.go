@@ -23,6 +23,16 @@ import (
 var binPath string
 
 func TestMain(m *testing.M) {
+	// make test builds fakeagent once, with tm and the e2e apps (make
+	// test-bin), and names the dir in E2E_BIN.
+	if pre := os.Getenv("E2E_BIN"); pre != "" {
+		binPath = filepath.Join(pre, "fakeagent")
+		if _, err := os.Stat(binPath); err != nil {
+			fmt.Fprintf(os.Stderr, "E2E_BIN: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(m.Run())
+	}
 	dir, err := os.MkdirTemp("", "fakeagent-bin")
 	if err != nil {
 		panic(err)

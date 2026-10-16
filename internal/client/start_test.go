@@ -3,8 +3,11 @@ package client
 import (
 	"bufio"
 	"errors"
+	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -37,15 +40,32 @@ func TestWaitUpLostRace(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer lk.Unlock()
+	serveHello(t, p.Socket, 300*time.Millisecond)
+	exited := make(chan error, 1)
+	exited <- errors.New("exit status 1")
+	if err := waitUp(p, exited, p.Log); err != nil {
+		t.Fatalf("waitUp: %v", err)
+	}
+}
+
+// serveHello is a server starting up: after delay it listens on sock
+// and answers each connection's hello.
+func serveHello(t *testing.T, sock string, delay time.Duration) {
+	ln := make(chan net.Listener, 1)
+	t.Cleanup(func() {
+		if l := <-ln; l != nil {
+			l.Close()
+		}
+	})
 	go func() {
-		time.Sleep(300 * time.Millisecond)
-		ln, err := ipc.Listen(ipc.Addr(p.Socket))
+		time.Sleep(delay)
+		l, err := ipc.Listen(ipc.Addr(sock))
+		ln <- l
 		if err != nil {
 			return
 		}
-		t.Cleanup(func() { ln.Close() })
 		for {
-			c, err := ln.Accept()
+			c, err := l.Accept()
 			if err != nil {
 				return
 			}
@@ -58,10 +78,81 @@ func TestWaitUpLostRace(t *testing.T) {
 			}()
 		}
 	}()
-	exited := make(chan error, 1)
-	exited <- errors.New("exit status 1")
-	if err := waitUp(p, exited, p.Log); err != nil {
-		t.Fatalf("waitUp: %v", err)
+}
+
+// TestConnectWaitsForAStartingServer: a server that holds the lock but
+// doesn't listen yet is starting: Connect waits for it, and removes
+// none of its files, which a crashed server's would be.
+func TestConnectWaitsForAStartingServer(t *testing.T) {
+	p := testPaths(t)
+	lk, err := flock.TryLock(p.Lock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lk.Unlock()
+	if err := os.WriteFile(p.PID, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	serveHello(t, p.Socket, 300*time.Millisecond)
+	c, err := Connect(p, false)
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	c.Close()
+	if c.Started {
+		t.Error("Connect says it started the server")
+	}
+	if ReadPID(p.PID) != os.Getpid() {
+		t.Error("Connect removed a starting server's pid file")
+	}
+}
+
+// TestForceKill: with no server holding the lock, ForceKill removes
+// what a crashed one left and says none runs; with the lock held and
+// the pid file naming no live process it kills nothing and removes
+// nothing.
+func TestForceKill(t *testing.T) {
+	p := testPaths(t)
+	// A pid that was a process's and no longer is.
+	child := exec.Command(os.Args[0], "-test.run=^$")
+	if err := child.Run(); err != nil {
+		t.Fatal(err)
+	}
+	dead := child.Process.Pid
+	stale := func() {
+		for _, f := range []string{p.Socket, p.HumanSocket()} {
+			if err := os.WriteFile(f, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(p.PID, []byte(strconv.Itoa(dead)+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	stale()
+	if _, err := ForceKill(p); !errors.Is(err, ErrNotRunning) {
+		t.Fatalf("no server: %v, want ErrNotRunning", err)
+	}
+	for _, f := range []string{p.Socket, p.HumanSocket(), p.PID} {
+		if _, err := os.Stat(f); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s left behind: %v", f, err)
+		}
+	}
+
+	stale()
+	lk, err := flock.TryLock(p.Lock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lk.Unlock()
+	if pid, err := ForceKill(p); err == nil || pid != dead {
+		t.Fatalf("held lock, dead pid: %d, %v; want an error naming %d", pid, err, dead)
+	}
+	for _, f := range []string{p.Socket, p.HumanSocket(), p.PID} {
+		if _, err := os.Stat(f); err != nil {
+			t.Errorf("%s removed while the lock is held: %v", f, err)
+		}
 	}
 }
 

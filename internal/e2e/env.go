@@ -53,9 +53,10 @@ var apps = []string{"printer", "fullscreen", "termquery"}
 // build compiles tm and the apps once per test process. E2E_RACE=1 builds
 // tm with the race detector (make e2e-smoke-race, main and weekly in CI).
 // E2E_BIN names a dir of binaries built beforehand instead (tm, the apps
-// and fakeagent, with .exe on Windows, plus whatever tm needs beside it),
-// for a machine without Go or cgo: a Windows test box gets the test
-// binary and E2E_BIN cross-built (scripts/e2e-windows.sh).
+// and fakeagent, with .exe on Windows, plus whatever tm needs beside it):
+// make builds them once for all the tests (make test-bin), and a machine
+// without Go or cgo gets them cross-built (a Windows test box gets the
+// test binary and E2E_BIN from scripts/e2e-windows.sh).
 func build(t testing.TB) string {
 	t.Helper()
 	buildOnce.Do(func() {
