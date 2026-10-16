@@ -643,6 +643,10 @@ async function follow($: EngineInterface, bin: string, id: string, isBand: boole
       $.ui.log(`terminatr: tm watch: ${String(err)}`, { to: 'debug' })
     }
     if (last?.session.state === 'exited') return
-    await $.clock.sleep(RETRY_MS)
+    try {
+      await $.clock.sleep(RETRY_MS)
+    } catch {
+      return // the module unloaded (or there is no clock): stop quietly
+    }
   }
 }
