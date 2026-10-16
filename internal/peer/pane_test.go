@@ -431,6 +431,15 @@ func TestPaneRaiseTold(t *testing.T) {
 				t.Fatalf("OpenPane at view: %+v %v", c, err)
 			}
 			c.Input([]byte("at view"))
+			// Frames are served in order: once the repaint request after
+			// the key is seen, the far end has judged the key at view.
+			c.Repaint()
+			testwait.Eventually(t, "the far end served the key", func() bool {
+				src := h.last()
+				src.mu.Lock()
+				defer src.mu.Unlock()
+				return src.asked == 1
+			})
 
 			SetPanes(b.dir, "studio", proto.PanesWrite)
 			mb.Reload()

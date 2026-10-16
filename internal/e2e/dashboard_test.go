@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/emu"
 )
@@ -52,6 +53,10 @@ func TestSmokeDashboard(t *testing.T) {
 	w.Golden("dashboard-empty.txt")
 
 	slug, _ := newProject(env, "demo")
+	// The cursor lands on the first row the dashboard has: wait for the
+	// project, or a session started first takes it (the golden's footer
+	// says enter opens the project).
+	w.WaitFor("demo", wait)
 	env.MustCLI("task", "add", "Write the README", "--status", "ready", "--project", slug, "--step", "Draft", "--step", "Review")
 	env.MustCLI("task", "add", "Ship it", "--project", slug)
 	env.MustCLI("task", "status", "T2", "started", "--project", slug)
@@ -88,7 +93,14 @@ func TestSmokeDashboard(t *testing.T) {
 	w.WaitFor("3 tasks", wait)
 	w.WaitFor("T1", wait)
 	w.Golden("dashboard-tasks.txt", append(dashMasks, popupEdgeCwd)...)
-	w.Type("D")
+	// The tab's view is the tasks-tab mod's: a D before its cursor sits on
+	// the row says nothing, so press again until it explains (D only says
+	// why; it never changes anything).
+	said := false
+	for try := 0; try < 10 && !said; try++ {
+		w.Type("D")
+		said = Poll(time.Second, func() bool { return strings.Contains(w.Screen(), "T1 is in review") })
+	}
 	w.WaitFor("T1 is in review", wait)
 	if out := env.MustCLI("task", "show", "T1", "--project", slug, "--json"); !strings.Contains(out, `"status": "review"`) {
 		t.Fatalf("T1 after D:\n%s", out)
