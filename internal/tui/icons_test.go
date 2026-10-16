@@ -81,7 +81,7 @@ func TestParseIcons(t *testing.T) {
 // sidebar and the grid's columns line up: every coordinator and thread
 // row has its state glyph in the state column.
 func TestIconsTree(t *testing.T) {
-	defer setIcons(IconsUnicode)
+	freshConsole(t)
 	d := testData()
 	for _, set := range IconChoices[1:] {
 		setIcons(set)
@@ -122,7 +122,7 @@ func TestIconsAuto(t *testing.T) {
 func TestIconsSetting(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
 	t.Setenv("TERM_PROGRAM", "Apple_Terminal")
-	defer setIcons(IconsUnicode)
+	freshConsole(t)
 	if loadIcons() != IconsAuto || ic().name != IconsUnicode {
 		t.Fatalf("no settings file: %s %s", iconsSetting(), ic().name)
 	}

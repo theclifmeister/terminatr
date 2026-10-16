@@ -116,8 +116,7 @@ func TestMessagesTab(t *testing.T) {
 // messages tell of it. It matches testdata/linked-projects.golden (go
 // test -run TestLinkedProjectsRemote -update rewrites it).
 func TestLinkedProjectsRemote(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	src, m := linkDash(t)
 	src.data.Peers = remotePeers()
 	src.data.Projects[0].Links = append(src.data.Projects[0].Links,

@@ -258,8 +258,7 @@ func TestDashLastPlace(t *testing.T) {
 // to the sidebar row it was on, or to the pane; the filter types there
 // as on the dashboard.
 func TestSessionLastPlace(t *testing.T) {
-	resetConsole()
-	t.Cleanup(resetConsole)
+	freshConsole(t)
 	c, err := newClient(tmclient.Paths{}, log.New(io.Discard, "", 0))
 	if err != nil {
 		t.Fatal(err)
@@ -357,7 +356,7 @@ func TestSidebarTooltip(t *testing.T) {
 // TestSidebarTooltipIconSets: the tooltip finds its glyph in every icon
 // set.
 func TestSidebarTooltipIconSets(t *testing.T) {
-	defer setIcons(IconsUnicode)
+	freshConsole(t)
 	for _, set := range []string{IconsNerd, IconsUnicode, IconsASCII} {
 		setIcons(set)
 		m, _ := sideDash(t)
@@ -375,8 +374,7 @@ func TestSidebarTooltipIconSets(t *testing.T) {
 // in the view and in ui.json; on a server of protocol 14 it keeps them as
 // its own and says nothing.
 func TestAttachFoldSections(t *testing.T) {
-	resetConsole()
-	t.Cleanup(resetConsole)
+	freshConsole(t)
 	c, err := newClient(tmclient.Paths{}, log.New(io.Discard, "", 0))
 	if err != nil {
 		t.Fatal(err)

@@ -27,7 +27,7 @@ func TestRemoteMarkers(t *testing.T) {
 	if len(rows) != 5 || rows[0].remote || !rows[1].remote || rows[2].remote || rows[3].remote || rows[4].remote {
 		t.Fatalf("rows = %+v", rows)
 	}
-	defer setIcons(IconsUnicode)
+	freshConsole(t)
 	for _, name := range IconChoices[1:] {
 		setIcons(name)
 		set := ic()

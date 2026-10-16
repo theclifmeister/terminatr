@@ -282,7 +282,8 @@ func TestDashLayout(t *testing.T) {
 func TestSafeModeLayout(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
 	t.Setenv(mod.EnvNoMods, "1")
-	resetLook(t)
+	freshConsole(t)
+	defaultKeymap(t)
 	installMod(t, "wide", map[string]string{
 		"mod.toml":    "id = \"wide\"\nname = \"Wide\"\nversion = \"1.0.0\"\napi = \"1.5\"\n[provides]\nlayout = \"layout.toml\"\n",
 		"layout.toml": "[sidebar]\nwidth = 80\nmode = \"slim\"\n",
@@ -313,7 +314,8 @@ func TestSafeModeLayout(t *testing.T) {
 // own.
 func TestPickLayout(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
-	resetLook(t)
+	freshConsole(t)
+	defaultKeymap(t)
 	installMod(t, "cockpit", map[string]string{
 		"mod.toml":    "id = \"cockpit\"\nname = \"Cockpit\"\nversion = \"1.0.0\"\napi = \"1.5\"\n[provides]\nlayout = \"layout.toml\"\n",
 		"layout.toml": "[sidebar]\nwidth = 50\nmode = \"slim\"\n[details]\nplace = \"off\"\n",
@@ -327,7 +329,7 @@ func TestPickLayout(t *testing.T) {
 			pick = s
 		}
 	}
-	pick.change(m)
+	m.Update(pick.change(m)()) // the mods load, then the layout applies
 	if layoutValue() != "cockpit" || m.layoutID != "cockpit" || m.sideW() != sideSlim || m.layout.Details {
 		t.Fatalf("cockpit: %s, sidebar %d, details %v", layoutValue(), m.sideW(), m.layout.Details)
 	}
@@ -336,7 +338,7 @@ func TestPickLayout(t *testing.T) {
 	if m.sideW() != 50 || LoadLayout(ui).Layouts["cockpit"].Sidebar.Mode != modeFull {
 		t.Fatalf("b under cockpit: %d %+v", m.sideW(), LoadLayout(ui))
 	}
-	pick.change(m)
+	m.Update(pick.change(m)()) // the mods load, then the layout applies
 	if layoutValue() != ThemeDefault || m.sideW() != sideDefault || !m.layout.Details {
 		t.Fatalf("default: %s, sidebar %d, details %v", layoutValue(), m.sideW(), m.layout.Details)
 	}

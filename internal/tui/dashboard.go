@@ -318,6 +318,17 @@ type boardMsg struct {
 	libErr  error
 }
 
+// loadedMsg is what a command loaded off the UI goroutine (config.toml,
+// the mods, a project's templates), with then, which applies it on the
+// dashboard.
+type loadedMsg struct{ then func(m *dash) tea.Cmd }
+
+// whenLoaded runs load off the UI goroutine, then what it returns on the
+// dashboard.
+func whenLoaded(load func() func(m *dash) tea.Cmd) tea.Cmd {
+	return func() tea.Msg { return loadedMsg{then: load()} }
+}
+
 // actionMsg is the outcome of a key's action: attach to a session, or a
 // message for the footer.
 type actionMsg struct {
@@ -529,6 +540,8 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case pairMsg:
 		return m, msg.pv.step(m, msg)
+	case loadedMsg:
+		return m, msg.then(m)
 	case actionMsg:
 		m.busy = false
 		m.agentsOK = false // an action may have installed or removed one

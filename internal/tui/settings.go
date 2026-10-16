@@ -54,6 +54,23 @@ type setting struct {
 type settingsList struct {
 	rows []setting
 	sel  int
+	// lw is the widest label's width, measured on lwRows rows
+	// (labelWidth).
+	lw     int
+	lwRows int
+}
+
+// labelWidth is the widest label's width, measured once for the rows (a
+// list's rows are set as it is made, and a label never changes), not
+// on every frame.
+func (l *settingsList) labelWidth() int {
+	if l.lwRows != len(l.rows) {
+		l.lw, l.lwRows = 0, len(l.rows)
+		for _, r := range l.rows {
+			l.lw = max(l.lw, len([]rune(r.label)))
+		}
+	}
+	return l.lw
 }
 
 func (l *settingsList) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
@@ -119,10 +136,7 @@ func (l *settingsList) lines(m *dash, w int) (out []string, sel int, hits []int)
 			hits = append(hits, noHit)
 		}
 	}()
-	lw := 0
-	for _, r := range l.rows {
-		lw = max(lw, len([]rune(r.label)))
-	}
+	lw := l.labelWidth()
 	for i, r := range l.rows {
 		if i > 0 {
 			out = append(out, "")
@@ -182,10 +196,7 @@ func (l *settingsList) click(m *dash, item, col int) tea.Cmd {
 	}
 	key := "enter"
 	if r := l.rows[l.sel]; r.adjust != nil {
-		lw := 0
-		for _, r := range l.rows {
-			lw = max(lw, len([]rune(r.label)))
-		}
+		lw := l.labelWidth()
 		// − is 2 cells after the value, + 3 after −; a cell either side
 		// counts.
 		minus := lw + 2 + ansi.StringWidth(r.value(m)) + 2
@@ -331,10 +342,11 @@ func globalSettings(note string) []setting {
 		{label: "Theme", help: "The colours of every part of tm: follow terminal, the built-in one, which uses your terminal's own theme (Ghostty's, say) in tm and in the panes, Claude's too, or a theme from a mod that is on, which may differ light and dark. Each console follows its terminal's light or dark scheme.",
 			value: func(m *dash) string { return themeLabel(themeSetting()) },
 			change: func(m *dash) tea.Cmd {
-				choices := modChoices([]string{ThemeDefault}, mod.KindTheme)
-				next := choices[(slices.Index(choices, themeSetting())+1)%len(choices)]
-				cfg, _ := config.Load()
-				return m.pickMod("theme", next, useTheme(loadMods(cfg), next))
+				return withMods(func(m *dash, r *mod.Registry) tea.Cmd {
+					choices := modChoicesIn(r, []string{ThemeDefault}, mod.KindTheme)
+					next := choices[(slices.Index(choices, themeSetting())+1)%len(choices)]
+					return m.pickMod("theme", next, useTheme(r, next))
+				})
 			}},
 		{label: "Icons", help: "The glyphs of the sidebar's tree, states and progress: Nerd Font icons, Unicode shapes, ASCII for any font, or a set from a mod that is on. Auto picks Nerd Font icons in Ghostty, Unicode elsewhere. Each console decides auto for itself.",
 			value: func(m *dash) string {
@@ -345,24 +357,27 @@ func globalSettings(note string) []setting {
 				return v
 			},
 			change: func(m *dash) tea.Cmd {
-				choices := modChoices(IconChoices, mod.KindIcons)
-				next := choices[(slices.Index(choices, iconsSetting())+1)%len(choices)]
-				return m.pickMod("icons", next, setIcons(next))
+				return withMods(func(m *dash, r *mod.Registry) tea.Cmd {
+					choices := modChoicesIn(r, IconChoices, mod.KindIcons)
+					next := choices[(slices.Index(choices, iconsSetting())+1)%len(choices)]
+					return m.pickMod("icons", next, setIconsFrom(r, next))
+				})
 			}},
 		{label: "Layout", help: "The built-in layout, or one from a mod that is on: the sidebar's columns (a mod's among them), width and mode, the details panel's place and size, the header, the footer, the status bar and how compact the rows are. A layout sets only what it changes; what you change under it (a drag, { }, b, < >, |) is kept for it, and the rest is yours as before. The state, paused, inactive and needs-you columns always show. The sidebar and the status bar are the view's: every console of this view follows.",
 			value: func(m *dash) string { return layoutValue() },
 			change: func(m *dash) tea.Cmd {
-				choices := modChoices([]string{ThemeDefault}, mod.KindLayout)
-				next := choices[(slices.Index(choices, layoutValue())+1)%len(choices)]
-				cfg, _ := config.Load()
-				spec, err := modLayout(loadMods(cfg), next)
-				useLayoutValue(next, spec)
-				m.useLayout(next, spec, true)
-				cmd := m.pickMod("layout", next, err)
-				if m.view == nil {
-					return cmd
-				}
-				return tea.Batch(cmd, m.call(proto.MethodViewColumns, proto.ViewParams{Columns: layoutColumns(spec)}))
+				return withMods(func(m *dash, r *mod.Registry) tea.Cmd {
+					choices := modChoicesIn(r, []string{ThemeDefault}, mod.KindLayout)
+					next := choices[(slices.Index(choices, layoutValue())+1)%len(choices)]
+					spec, err := modLayout(r, next)
+					useLayoutValue(next, spec)
+					m.useLayout(next, spec, true)
+					cmd := m.pickMod("layout", next, err)
+					if m.view == nil {
+						return cmd
+					}
+					return tea.Batch(cmd, m.call(proto.MethodViewColumns, proto.ViewParams{Columns: layoutColumns(spec)}))
+				})
 			}},
 		{label: "Context hint", help: "Tell a coordinator to consider /clear once its context window is this full: a toast in its pane, a bell and a yellow percent on its sidebar row (red from 80%). Its context lives in files, so a clear loses nothing. Off never says it.",
 			value: func(m *dash) string {

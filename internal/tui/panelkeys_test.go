@@ -48,8 +48,7 @@ func detailsDash(t *testing.T, views []proto.ModView) (*fakeSource, *dash) {
 // selection, then gives the keyboard back. The footer names the keys.
 // With no section, ] is the list's: the next project.
 func TestDetailsSectionKeys(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	src, m := detailsDash(t, detailsTestViews())
 	if out := whole(m); !strings.Contains(out, "] [ sections") || !strings.Contains(out, "▾ CHECKS") {
 		t.Fatalf("the footer doesn't name the section keys:\n%s", out)
@@ -122,8 +121,7 @@ func TestDetailsSectionKeys(t *testing.T) {
 // its header elsewhere or its body selects the header and opens the
 // view its mod names, or folds it when there is none.
 func TestDetailsSectionMouse(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	src, m := detailsDash(t, detailsTestViews())
 	m.focus = areaMain
 	g := m.geom()
@@ -162,8 +160,7 @@ func TestDetailsSectionMouse(t *testing.T) {
 // as in the details panel, and with no header selected enter still
 // shows the task.
 func TestInfoSectionKeys(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	c := infoClient(t, 200)
 	views := detailsTestViews()
 	for i := range views {

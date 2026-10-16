@@ -63,7 +63,7 @@ func goldenTree() []treeRow {
 // slim strip (11), matches testdata/sidebar-<set>.golden. go test -run
 // TestSidebarGolden -update rewrites the files.
 func TestSidebarGolden(t *testing.T) {
-	defer setIcons(IconsUnicode)
+	freshConsole(t)
 	rows := goldenTree()
 	for _, set := range IconChoices[1:] {
 		setIcons(set)

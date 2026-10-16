@@ -48,8 +48,7 @@ func sectionRows(rows []treeRow) []string {
 // tells mod.views of them as the dashboard does, for the focused pane's
 // project.
 func TestAttachBand(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	c := bandClient(bandTestViews(), bandTestSections())
 	if got := sectionRows(c.sideTree()); !slices.Equal(got, []string{"s:ticker.ticker", "s:ci.status"}) {
 		t.Fatalf("band %v", got)
@@ -104,8 +103,7 @@ func TestAttachBand(t *testing.T) {
 // then says ⚑ N, and CI status below the tree; the ticker's header
 // comes before the first project in the cursor's path.
 func TestAttachBandAbove(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	c := bandClient(bandTestViews(), bandTestSections())
 	c.side.order = []string{"ticker.ticker", "tree"}
 	rows := c.sideTree()
@@ -182,8 +180,7 @@ func TestHandViews(t *testing.T) {
 // session.list names under each project, as the dashboard does, and
 // tells mod.views of one per project on screen, next to the band's.
 func TestAttachProj(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	secs := append(bandTestSections(), proto.ModSection{Mod: "prci", View: "ci", Title: "ci status", Slot: mod.SlotProjectSection})
 	c := bandClient(projTestViews(), secs)
 	if got := sectionRows(c.sideTree()); !slices.Equal(got, []string{"s:prci.ci@alpha", "s:prci.ci@beta", "s:ticker.ticker", "s:ci.status"}) {

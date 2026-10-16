@@ -11,6 +11,7 @@ import (
 // a key's command returns for the model to act on.
 var drainFed = []reflect.Type{
 	reflect.TypeOf(actionMsg{}),
+	reflect.TypeOf(loadedMsg{}),
 	reflect.TypeOf(bindingMsg{}),
 	reflect.TypeOf(modCursorMsg{}),
 }
@@ -28,7 +29,7 @@ var drainDropped = []reflect.Type{
 
 // drain runs cmd as the program would: it walks a tea.BatchMsg or
 // tea.Sequence recursively, feeds each message of a type in want (by
-// default actionMsg, bindingMsg and modCursorMsg) back into m, and runs
+// default actionMsg, loadedMsg, bindingMsg and modCursorMsg) back into m, and runs
 // the command that returns. A message in drainDropped is ignored; any
 // other fails the test, so a
 // command is never dropped unseen; list the types a test expects beyond

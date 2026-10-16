@@ -77,7 +77,7 @@ func pinPeersClock(t *testing.T) {
 // it.
 func TestSidebarPeersGolden(t *testing.T) {
 	pinPeersClock(t)
-	defer setIcons(IconsUnicode)
+	freshConsole(t)
 	var b strings.Builder
 	for _, set := range IconChoices[1:] {
 		setIcons(set)
@@ -483,8 +483,7 @@ func TestGoneWaitsForReason(t *testing.T) {
 // spare, directly above the footer, else after the last group with a blank line between.
 func TestPeerGapsAndInactivePinned(t *testing.T) {
 	pinPeersClock(t)
-	defer setIcons(IconsUnicode)
-	setIcons(IconsUnicode)
+	freshConsole(t)
 	ps, sessions, peers := peerData()
 	off := config.Defaults
 	off.Active = false

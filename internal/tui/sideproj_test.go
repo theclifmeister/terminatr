@@ -77,8 +77,7 @@ func slugsOf(ps []ProjectData) []string {
 // project's threads, at thread depth, as testdata/sidebar-proj.golden
 // has them (go test -run TestSideProjGolden -update rewrites it).
 func TestSideProjGolden(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	var b strings.Builder
 	show := func(name string, m *dash) {
 		fmt.Fprintf(&b, "%s (%d×%d, sidebar %d)\n", name, m.winW, m.h, m.sideW())
@@ -163,7 +162,7 @@ func TestSideProjGolden(t *testing.T) {
 // between its row and its coordinator or threads; none for a folded or
 // inactive project, nor in the slim strip; in the layout's order.
 func TestSideProjRows(t *testing.T) {
-	defer resetConsole()
+	freshConsole(t)
 	other := projTestView("alpha", "beta")
 	other.Mod, other.View = "age", "age"
 	views := append(projTestViews(), other)
@@ -197,8 +196,7 @@ func TestSideProjRows(t *testing.T) {
 // project; enter sends the ui.click for the section's own project; z on
 // it folds everything and keeps the cursor on its project; 1-9 skip it.
 func TestSideProjKeys(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	src, m := projDash(t, 34, projTestViews())
 	keyPress(m, "tab")
 	m.sideSel = "c:alpha"
@@ -252,8 +250,7 @@ func TestSideProjKeys(t *testing.T) {
 // the sidebar the keyboard on its header and sends the click for its
 // project; the hover names its mod.
 func TestSideProjMouse(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	src, m := projDash(t, 34, projTestViews())
 	y := slices.IndexFunc(sidebarOf(m), func(l string) bool { return strings.Contains(l, "#415 beta") })
 	if y < 0 {
@@ -272,7 +269,7 @@ func TestSideProjMouse(t *testing.T) {
 // section per project whose rows are on screen, folded or not: none for
 // a folded project or one scrolled off, none in the slim strip.
 func TestSideProjShown(t *testing.T) {
-	defer resetConsole()
+	freshConsole(t)
 	shown := func(m *dash) []string {
 		var out []string
 		for _, s := range m.shownViews() {
@@ -394,8 +391,7 @@ func TestFitBandProjProperties(t *testing.T) {
 // row, the cursor's and the one you are on that shows without sections
 // shows with them, for any window height and cursor.
 func TestSideProjGuarantee(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	rng := rand.New(rand.NewPCG(4, 355))
 	for range 200 {
 		ps := manyProjects(1 + rng.IntN(16))

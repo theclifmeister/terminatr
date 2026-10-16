@@ -39,18 +39,6 @@ func writeConfig(t *testing.T, body string) {
 	}
 }
 
-// resetLook puts the built-in theme, icons and keys back after a test.
-func resetLook(t *testing.T) {
-	t.Cleanup(func() {
-		useTheme(&mod.Registry{}, ThemeDefault)
-		setScheme(true)
-		setIcons(IconsUnicode)
-		ApplyKeymap(nil, DefaultPrefixKey)
-		layoutVal.Store(ThemeDefault)
-		layoutSpec.Store(nil)
-	})
-}
-
 // TestThemeMod: [ui] theme names an enabled mod: the console takes its
 // roles for its scheme, the others stay built in; light follows the
 // terminal; a theme that doesn't resolve, or a mod that is off, leaves
@@ -58,7 +46,8 @@ func resetLook(t *testing.T) {
 func TestThemeMod(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
 	t.Setenv("COLORTERM", "truecolor")
-	resetLook(t)
+	freshConsole(t)
+	defaultKeymap(t)
 	installMod(t, "nord", nord)
 	writeConfig(t, "[ui]\ntheme = \"nord\"\n[mods.nord]\nenabled = true\n")
 	if err := loadLook(); err != nil {
@@ -97,7 +86,8 @@ func TestThemeMod(t *testing.T) {
 func TestIconsMod(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
 	t.Setenv("TERM_PROGRAM", "Apple_Terminal")
-	resetLook(t)
+	freshConsole(t)
+	defaultKeymap(t)
 	installMod(t, "nord", nord)
 	writeConfig(t, "[ui]\nicons = \"nord\"\n[mods.nord]\nenabled = true\n")
 	if err := loadLook(); err != nil {
@@ -116,7 +106,8 @@ func TestIconsMod(t *testing.T) {
 // winning a key; a refused binding keeps its default and names its mod.
 func TestKeymapMods(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
-	resetLook(t)
+	freshConsole(t)
+	defaultKeymap(t)
 	keys := func(id, body string) map[string]string {
 		return map[string]string{"mod.toml": "id = \"" + id + "\"\nname = \"K\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nkeymap = \"keys.toml\"\n", "keys.toml": body}
 	}
@@ -146,7 +137,8 @@ func TestKeymapMods(t *testing.T) {
 // built-in order.
 func TestLayoutMod(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
-	resetLook(t)
+	freshConsole(t)
+	defaultKeymap(t)
 	installMod(t, "wide", map[string]string{
 		"mod.toml":    "id = \"wide\"\nname = \"Wide\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nlayout = \"layout.toml\"\n",
 		"layout.toml": "sidebar = [\"needs\", \"review-age.age\", \"count\"]\n",
@@ -169,7 +161,8 @@ func TestLayoutMod(t *testing.T) {
 func TestLookPickers(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
 	t.Setenv("TERM_PROGRAM", "Apple_Terminal")
-	resetLook(t)
+	freshConsole(t)
+	defaultKeymap(t)
 	installMod(t, "nord", nord)
 	installMod(t, "off", nord)
 	installMod(t, "off", map[string]string{"mod.toml": strings.Replace(nord["mod.toml"], "\"nord\"", "\"off\"", 1)})
@@ -232,7 +225,8 @@ func TestLookPickers(t *testing.T) {
 func TestThemeAcrossViews(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
 	t.Setenv("COLORTERM", "truecolor")
-	resetLook(t)
+	freshConsole(t)
+	defaultKeymap(t)
 	installMod(t, "nord", nord)
 	writeConfig(t, "[ui]\ntheme = \"nord\"\n[mods.nord]\nenabled = true\n")
 	const light, dark = "94;129;172", "136;192;208" // nord's accent
@@ -283,7 +277,8 @@ func TestSafeModeLook(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
 	t.Setenv("TERM_PROGRAM", "Apple_Terminal")
 	t.Setenv(mod.EnvNoMods, "1")
-	resetLook(t)
+	freshConsole(t)
+	defaultKeymap(t)
 	installMod(t, "nord", nord)
 	installMod(t, "keys", map[string]string{
 		"mod.toml":  "id = \"keys\"\nname = \"K\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\nkeymap = \"keys.toml\"\n",

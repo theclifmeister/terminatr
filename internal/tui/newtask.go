@@ -18,17 +18,25 @@ import (
 // newTask asks for a new task in project slug: its template, then its
 // title.
 func (m *dash) newTask(slug string) tea.Cmd {
-	ts := m.src.Templates(slug)
+	src := m.src
+	return whenLoaded(func() func(m *dash) tea.Cmd {
+		ts := src.Templates(slug) // reads config.toml and the mods
+		return func(m *dash) tea.Cmd { m.pickTemplate(slug, ts); return nil }
+	})
+}
+
+// pickTemplate asks for the new task's template among ts, then its
+// title; none to pick from asks for the title at once.
+func (m *dash) pickTemplate(slug string, ts []mod.Template) {
 	if len(ts) == 0 {
 		m.newTaskTitle(slug, nil)
-		return nil
+		return
 	}
 	items := []menuItem{{label: "no template", run: func(m *dash) tea.Cmd { m.newTaskTitle(slug, nil); return nil }}}
 	for _, t := range ts {
 		items = append(items, menuItem{label: templateLabel(t, ts), run: func(m *dash) tea.Cmd { m.newTaskTitle(slug, &t); return nil }})
 	}
 	m.push(&menuView{title: "New task · " + slug, items: items, centred: true})
-	return nil
 }
 
 // templateLabel is template t as the menu offers it: its name (its

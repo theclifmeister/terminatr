@@ -57,8 +57,7 @@ func digestView() proto.ModView {
 // thread's info panel with a details section; the dashboard's details
 // panel on a thread's row.
 func TestPanelSectionsGolden(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	var b strings.Builder
 	write := func(name string, lines []string, rows int) {
 		fmt.Fprintf(&b, "%s (%d rows)\n", name, rows)
