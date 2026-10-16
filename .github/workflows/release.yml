@@ -259,7 +259,9 @@ jobs:
     needs: release
     if: ${{ !cancelled() && needs.release.outputs.published == 'true' }}
     runs-on: ubuntu-latest
-    environment: release
+    # No environment: it only holds the Apple secrets, which this job doesn't
+    # use (GITHUB_TOKEN only), and it would ask for a second approval. The job
+    # is gated by needs: release and the v* tag trigger.
     permissions:
       contents: read
       packages: write
