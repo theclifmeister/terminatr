@@ -42,6 +42,14 @@ var azSubs sync.Map
 // with the PAT when az can't sign in or is refused and one is set.
 func (a Azure) get(dir, u string) ([]byte, error) {
 	out, err := a.rest(dir, u)
+	if err != nil {
+		if _, used := azSubs.Load(a.Target.OrgURL); used {
+			// The subscription found earlier may be of an account az is no
+			// longer logged in as: forget it and ask again without it.
+			azSubs.Delete(a.Target.OrgURL)
+			out, err = a.rest(dir, u)
+		}
+	}
 	if err == nil || !authFailure(err) {
 		return out, err
 	}
