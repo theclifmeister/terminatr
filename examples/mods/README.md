@@ -54,7 +54,7 @@ and `tm mod install` refuses a built-in mod's id. To change one, copy it, give t
 copy its own id and install that:
 
 ```sh
-git clone --depth 1 --branch v0.28.1 https://github.com/theclifmeister/terminatr
+git clone --depth 1 --branch v0.28.3 https://github.com/theclifmeister/terminatr
 cp -R terminatr/examples/mods/pr-ci-column my-pr-ci-column
 # set id = "my-pr-ci-column" in my-pr-ci-column/mod.toml
 tm mod install my-pr-ci-column
