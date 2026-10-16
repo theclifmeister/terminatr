@@ -50,23 +50,24 @@ func grepMerge(repo, pattern string, merges bool) string {
 
 // azureMergedRE finds the PR number in the subject Azure DevOps writes
 // when it completes a PR, "Merged PR 12: title", for a merge commit and
-// a squash commit alike ("Merge PR 12: …" in some docs). A custom
-// message has none.
-var azureMergedRE = regexp.MustCompile(`^Merged? PR ([0-9]{1,9}): `)
+// a squash commit alike ("Merge PR 12: …" in some docs), or in the
+// "title (!12)" tm's own squash merge writes (Azure.Merge). Any other
+// custom message has none.
+var azureMergedRE = regexp.MustCompile(`^Merged? PR ([0-9]{1,9}): |\(!([0-9]{1,9})\)$`)
 
 // MergeCommit is the commit Azure DevOps wrote completing PR n, "Merged
-// PR n: …", a merge or a squash, on the default branch as last fetched.
-// "" when there is none: not completed, rebased, a custom message, or
-// not fetched yet. No fetch.
+// PR n: …", a merge or a squash, or tm's squash "… (!n)", on the default
+// branch as last fetched. "" when there is none: not completed, rebased,
+// another custom message, or not fetched yet. No fetch.
 func (Azure) MergeCommit(repo string, n int) string {
 	if n <= 0 {
 		return ""
 	}
-	return grepMerge(repo, fmt.Sprintf("^Merged? PR %d: ", n), false)
+	return grepMerge(repo, fmt.Sprintf(`^Merged? PR %d: |\(!%d\)$`, n, n), false)
 }
 
 // MergedPR reads the PR number from the commit's subject, Azure DevOps'
-// "Merged PR 12: …".
+// "Merged PR 12: …" or tm's squash "… (!12)".
 func (Azure) MergedPR(repo, commit string) int {
 	return subjectPR(repo, commit, azureMergedRE)
 }
