@@ -337,49 +337,34 @@ func (c *client) sideTitle(r treeRow) string {
 	return r.slug
 }
 
-// sideItems are a sidebar row's menu items. c.mu held.
+// sideItems are a sidebar row's menu items (sideMenuItems); its
+// project's popups only where this console has the dashboard. c.mu held.
 func (c *client) sideItems(r treeRow, t Target) []aitem {
 	var out []aitem
-	add := func(label, key string, run func()) { out = append(out, aitem{label: label, key: key, run: run}) }
-	popups := func() {
-		if !c.dashboard {
-			return
+	for _, it := range sideMenuItems(r, c.dashboard) {
+		ai := aitem{label: it.label, key: it.key}
+		switch it.act {
+		case menuShow:
+			ai.run = func() { c.sideGo(Target{Project: r.slug}) }
+		case menuCoordinator:
+			ai.run = func() { c.sideGo(Target{Project: r.slug, Coordinator: true}) }
+		case menuFold:
+			fn := it.fold
+			ai.run = func() { c.refold(fn) }
+		case menuPopup:
+			key := it.popup
+			ai.key = "prefix+" + key
+			ai.run = func() { c.popupOver(r.slug, key) }
+		case menuActive:
+			ai.run = func() { c.askActive(r.slug, r.inactive) }
+		case menuPin:
+			ai.run = func() { c.setPinned(r.slug, !r.pinned) }
+		case menuOpen:
+			ai.run = func() { c.sideGo(t) }
+		case menuAttach:
+			ai.run = func() { c.attachThread(t) }
 		}
-		add("project popup", "prefix+a", func() { c.popupOver(r.slug, "a") })
-		if r.kind == treeProject {
-			add("tasks", "prefix+t", func() { c.popupOver(r.slug, "t") })
-			add("inbox", "prefix+i", func() { c.popupOver(r.slug, "i") })
-		}
-	}
-	switch r.kind {
-	case treeProject:
-		add("show its dashboard", "", func() { c.sideGo(Target{Project: r.slug}) })
-		if r.inactive {
-			label, key := expandLabel(r)
-			add(label, key, func() { c.refold(foldProject(r, !r.fold)) })
-		} else {
-			add("open its coordinator", "", func() { c.sideGo(Target{Project: r.slug, Coordinator: true}) })
-			label, key := foldLabel(r)
-			add(label, key, func() { c.refold(foldProject(r, !r.fold)) })
-		}
-		popups()
-		add(activeLabel(r), "space", func() { c.askActive(r.slug, r.inactive) })
-		add(pinLabel(r), "p", func() { c.setPinned(r.slug, !r.pinned) })
-	case treeDivider:
-		label, key := foldLabel(r)
-		add(label, key, func() { c.refold(foldDivider(r)) })
-	case treeCoordinator:
-		add(coordLabel(r), "", func() { c.sideGo(t) })
-		popups()
-	case treePeerProject:
-		// A paired server's: its read-only dashboard, and its fold.
-		add("show its dashboard", "", func() { c.sideGo(t) })
-		if !r.stale {
-			label, key := foldLabel(r)
-			add(label, key, func() { c.refold(foldPeer(r, !r.fold)) })
-		}
-	default:
-		add("attach", "", func() { c.attachThread(t) })
+		out = append(out, ai)
 	}
 	return out
 }

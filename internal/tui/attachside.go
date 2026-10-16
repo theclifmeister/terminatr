@@ -548,14 +548,15 @@ func (c *client) sideMouse(m emu.Mouse) {
 		c.mu.Unlock()
 		return
 	}
-	if sideFlagAt(c.sideTree(), c.sideW, c.sideRows(), c.sideFoot(), needsYouCount(c.side.projects, c.side.sessions), c.sideCol(m.X), m.Y) {
+	ck := sideClickAt(c.sideTree(), c.sideW, c.sideRows(), c.sideFoot(), needsYouCount(c.side.projects, c.side.sessions), c.sideCol(m.X), m.Y)
+	if ck.need {
 		// The header's ⚑ N: the first row that needs you, as w.
 		c.kb = areaSide
 		in := sideKeysIn{tree: c.sideTree, full: c.sideFullTree, w: c.sideW, h: c.sideRows(), sel: c.v.SideSel}
 		c.sideDo(sideNeedStep(in, treeRow{}, false))
 		return
 	}
-	if sideHeadAt(c.sideTree(), c.sideW, c.sideRows(), c.sideFoot(), c.sideCol(m.X), m.Y) {
+	if ck.head {
 		// The PROJECTS header: every project's NEEDS YOU, on the
 		// dashboard; the sidebar keeps the keyboard on it.
 		c.kb, c.v.SideSel = areaSide, headKey
@@ -569,54 +570,36 @@ func (c *client) sideMouse(m emu.Mouse) {
 		c.poke()
 		return
 	}
-	r, ok, border := sideHitAt(c.sideTree(), c.sideW, c.sideRows(), c.sideFoot(), c.sideCol(m.X), m.Y)
-	t, can, why := r.target()
-	sel := ""
-	if ok && !border {
+	if ck.sel != "" {
 		// A click on a row gives the sidebar the keyboard, its cursor on
 		// the row; it keeps it while the row's session shows.
-		sel = r.key()
-		c.kb, c.v.SideSel = areaSide, sel
+		c.kb, c.v.SideSel = areaSide, ck.sel
 		c.flash = ""
 		c.status()
 	}
-	open, fold := false, false
-	var sec sideStep
-	var peer func(*view.Tree) // a paired server's header folds
-	switch {
-	case border:
+	if ck.drag {
 		sd.drag = true
-	case !ok:
-	case r.kind == treeSection:
-		// Its header or its body: as enter on the header.
-		sec, _ = sectionStep(r, sideEnter)
-	case r.kind == treeDivider:
-		fold = true
-	case r.kind == treeServer && !r.link.local:
-		peer = foldPeer(r, !r.fold)
-	case !can:
-		c.flash = why
+	}
+	if ck.cant {
+		c.flash = ck.msg
 		c.status()
-	case r.here && r.kind != treeProject:
+	}
+	if ck.open != nil && ck.row.here && ck.row.kind != treeProject {
 		c.flash = "you are on it"
 		c.status()
-	default:
-		open = true
+		ck.open = nil
 	}
 	c.mu.Unlock()
-	if sel != "" && c.vc != nil {
-		c.act(proto.MethodViewSideSel, proto.ViewParams{Key: sel})
+	if ck.sel != "" && c.vc != nil {
+		c.act(proto.MethodViewSideSel, proto.ViewParams{Key: ck.sel})
 	}
-	if open {
-		c.sideGo(t)
+	if ck.open != nil {
+		c.sideGo(*ck.open)
 	}
-	if fold {
-		c.refold(foldDivider(r))
+	if ck.refold != nil {
+		c.refold(ck.refold)
 	}
-	if peer != nil {
-		c.refold(peer)
-	}
-	c.sectionDo(sec)
+	c.sectionDo(ck.section)
 	c.poke()
 }
 
