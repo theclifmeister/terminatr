@@ -226,7 +226,7 @@ func (p *Project) Context(seen Ticked, threads func(prs map[string]string) (Sect
 		return nil, err
 	}
 	for i, l := range lines {
-		lines[i] = ClipRunes(l, capJournalLine)
+		lines[i] = textsafe.Clip(l, capJournalLine)
 	}
 	j := Section{Title: fmt.Sprintf("Journal (last %d)", capJournal), Lines: lines}
 	if total > len(lines) {
@@ -417,15 +417,6 @@ func splitLines(s string) []string {
 		return nil
 	}
 	return strings.Split(s, "\n")
-}
-
-// ClipRunes bounds s to n runes, the last one an ellipsis when cut.
-func ClipRunes(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return string(r[:n-1]) + "…"
 }
 
 func orNone(s string) string {

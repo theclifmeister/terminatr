@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // Caps on the Threads section of `tm context` (docs/SPEC.md §7.6).
@@ -70,7 +71,7 @@ func ContextSection(p *project.Project, prs map[string]string) (project.Section,
 			line = rec.Task + " (" + id + ")"
 		}
 		if rec.Title != "" {
-			line += "  " + project.ClipRunes(rec.Title, capContextTitle)
+			line += "  " + textsafe.Clip(rec.Title, capContextTitle)
 		}
 		if rec.State != "" {
 			line += "  " + rec.State

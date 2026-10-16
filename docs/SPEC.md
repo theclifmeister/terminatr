@@ -85,6 +85,7 @@ One binary, several roles:
 | `internal/caller` | Who is calling: human, coordinator, thread or ticker (§11.1) |
 | `internal/config` | `config.toml`: loading, project settings with `[defaults]`, the line editor the settings popups write with (§5.1, §11.2) |
 | `internal/home` | `TERMINATR_HOME` and the paths under it |
+| `internal/logrot` | A log file rotated by size, which another process may append to: the server's log and each mod's |
 | `internal/skill` | The standing rules, `tm skill coordinator\|thread` (§7.7) |
 | `internal/doctor` | `tm doctor`'s checks and `--fix` (§10) |
 | `internal/update` | Install method, latest release, `tm update` (§10.1) |

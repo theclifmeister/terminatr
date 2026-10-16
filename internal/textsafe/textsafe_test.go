@@ -120,3 +120,20 @@ func TestCut(t *testing.T) {
 		}
 	}
 }
+
+func TestClip(t *testing.T) {
+	for _, c := range []struct {
+		in   string
+		n    int
+		want string
+	}{
+		{"abc", 3, "abc"},
+		{"abcd", 3, "ab…"},
+		{"日本語です", 3, "日本…"},
+		{"ééé", 3, "ééé"},
+	} {
+		if got := Clip(c.in, c.n); got != c.want {
+			t.Errorf("Clip(%q, %d) = %q, want %q", c.in, c.n, got, c.want)
+		}
+	}
+}

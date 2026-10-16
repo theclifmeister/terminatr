@@ -83,6 +83,15 @@ func Escape(s string) string {
 	return b.String()
 }
 
+// Clip is s cut to at most n runes, the last one an ellipsis when cut.
+func Clip(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n-1]) + "…"
+}
+
 // Cut is s cut to at most n bytes on a character's edge, with an
 // ellipsis when cut.
 func Cut(s string, n int) string {

@@ -36,7 +36,7 @@ func Lines(ts []*Task) []string {
 	}
 	out := make([]string, len(ts))
 	for i, t := range ts {
-		cols := []string{pad(t.Ref(), wRef), pad(string(t.Status), wStatus), pad(clip(titles[i], maxTitle), wTitle)}
+		cols := []string{pad(t.Ref(), wRef), pad(string(t.Status), wStatus), pad(textsafe.Clip(titles[i], maxTitle), wTitle)}
 		if wSteps > 0 {
 			cols = append(cols, strings.Repeat(" ", wSteps-width(steps[i]))+steps[i])
 		}
@@ -57,14 +57,6 @@ func Lines(ts []*Task) []string {
 func width(s string) int { return utf8.RuneCountInString(s) }
 
 func pad(s string, w int) string { return s + strings.Repeat(" ", max(w-width(s), 0)) }
-
-// clip cuts s to w runes, the last one "…".
-func clip(s string, w int) string {
-	if width(s) <= w {
-		return s
-	}
-	return string([]rune(s)[:w-1]) + "…"
-}
 
 // Detail is a task in full, for `tm task show`, what agents wrote shown
 // as plain text (textsafe.Clean).
