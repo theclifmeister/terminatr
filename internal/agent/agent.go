@@ -77,6 +77,14 @@ type LaunchSpec struct {
 	// Access is the policy the core decided for this role. The manifest
 	// turns it into the agent's own permission and sandbox settings.
 	Access Access
+
+	// SecretEnv are the names of a thread's secret variables (config
+	// env), which the core puts in its environment, never in its
+	// arguments; EnvHide are the other variables of that environment
+	// whose names look secret. An agent that filters its commands'
+	// environment by name (Codex) is told to pass the first and keep
+	// dropping the others.
+	SecretEnv, EnvHide []string
 }
 
 // Access is a harness-neutral file access policy (docs/SPEC.md §5.2).

@@ -2,7 +2,9 @@
 // against the session's rules before it runs, in every permission mode,
 // so a refusal comes ahead of any dialog. A refused call returns the
 // rule's sentence as the tool's error, and the mod reports it to the
-// server (POST /v1/denied), which journals it and tells the coordinator.
+// server (POST /v1/denied), which journals it and tells the coordinator;
+// the whole command line or file goes only to the guard's log, for the
+// user to allow or keep refusing.
 // A call no rule matches goes on to Claude's own checks. A PowerShell
 // command the guard can't read is let through tool.call and asked in
 // tool.check: a call Claude would allow goes to the dialog, or auto
@@ -143,7 +145,7 @@ async function reportDenial($: EngineInterface, tool: string, d: Denial) {
   const socket = (await $.env.get('TERMINATR_MOD_SOCKET')) ?? ''
   if (!socket) return
   try {
-    const r = await within($.http.fetch(socketURL('/v1/denied'), postInit(socket, JSON.stringify({ rule: d.rule, tool, summary: d.summary }))), $.clock.sleep(FETCH_MS))
+    const r = await within($.http.fetch(socketURL('/v1/denied'), postInit(socket, JSON.stringify({ rule: d.rule, tool, summary: d.summary, subject: d.subject, floor: d.floor }))), $.clock.sleep(FETCH_MS))
     if (!r) log($, timedOut('guard report'))
     else if (!r.ok) log($, refused('guard report', r.status, r.text))
   } catch (err) {

@@ -239,6 +239,47 @@ The coordinator opens merge requests with `glab mr create`, threads report their
 
 Without the CLI and a login (or a PAT for Azure DevOps), that host's PRs are not followed: no follow-up prompts, no auto-close on merge, no completing tasks on merge, and after 3 failed polls the project's inbox gets a "PR host failing" item. Threads, tasks and reports are unaffected. The full table is in SPEC §3. terminatr's own release flow (below) is GitHub-only and unrelated to the hosts of your projects.
 
+## The guard
+
+The guard checks every tool call of a project's agents before it runs, in every permission mode, and refuses the ones that break the standing rules: force-pushing, pushing straight to the default branch, a thread writing outside its worktree, deleting branches or worktrees, a thread merging its pull request (while the coordinator merges), and reading credentials. The agent reads why and what to do instead; the project's journal records each refusal briefly (rule, tool and a short account, never the whole command).
+
+**Settings.** A project's popup (`a`) and all projects' (`,`, All projects) have the guard's rows, at the end of the settings:
+
+- **Guard**: on or off. Off, the agents have only their own permission rules and the sandbox. Turning it off asks first.
+- **Guard mode**: *refuse* (the default) or *refuse, then ask you*, the learning mode. Either way the call is refused and nothing passes until you allow it. In learning mode the agent is also told you review refused calls, and each new refusal is put to you in the project's inbox.
+- **Guard rules**: each rule on or off. A rule turned off still never lets through what is never allowed (below).
+- **Guard allowances**: the calls the guard lets through though a rule would refuse them. Enter changes one, `x` removes it. A project's own add to all projects'.
+- **Guard refusals**: the calls refused lately, the latest first, with the whole command or file (enter shows a long one whole). `a` allows it for this project, `A` for all projects, `x` keeps refusing it and stops listing it. An allowance takes effect at once, is journaled, and the thread that was refused is told it may retry.
+
+The whole commands are kept in tm's state folder, which no agent or mod can read, not in the journal.
+
+**Allowances by hand.** They are `guard_allow` in `~/.terminatr/config.toml`, under `[defaults]` or a project's table:
+
+```toml
+[projects.web]
+guard_allow = [
+  { rule = "force-push", command = "git push --force-with-lease origin tm/*" },
+  { rule = "worktree-only", path = "~/src/shared-fixtures/*" },
+  { rule = "credentials", path = "~/.config/acme/registry.json" },
+]
+guard_mode = "learn"
+```
+
+`rule` is `force-push`, `push-default`, `worktree-only`, `delete-branch` or `credentials` (or a mod's rule, `mod:<mod>.<rule>`); `command` is the whole command line, `path` a file. A `*` matches anything, so a command or folder ending in `*` is a prefix; without one it is that exact command or file. A credentials allowance names one exact command or file, no `*`.
+
+**What is never allowed**, in either mode and whatever the rules (Guard rules turned off included) and allowances say, while the guard is on: reading tm's own files (its run folder and sockets, its keys, the guard's log), printing a secret variable tm gives threads (below), force-pushing to a protected branch, and a thread merging (set `merge = "thread"` for that instead).
+
+**Secret environment for threads.** A thread's tools sometimes need a token the agent must not see, such as a private npm registry's. Name it in the project's table, or under `[defaults.env]` for all projects:
+
+```toml
+[projects.web.env]
+NODE_AUTH_TOKEN = { from = "gh-auth-token" }         # the output of gh auth token
+NPM_TOKEN = { from = "keychain:npm.acme.example" }   # a login keychain item (macOS)
+ARTIFACTORY_TOKEN = { from = "env:ARTIFACTORY_TOKEN" } # the server's own environment
+```
+
+tm gets each value when a thread starts and puts it only in that thread's environment, so `npm ci` with an `.npmrc` such as `//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}` works. The value never goes into a prompt, a report, a log or the journal, and the guard refuses printing it (`printenv`, `echo $NAME`, `env`). Coordinators don't get it. If a source fails (gh not logged in, no such keychain item), the thread starts without that variable and the server log names it and why. For the `env:` source, the server's environment is the one it started with: export the variable before `tm server restart`. `tm doctor` warns when a project repository's `.npmrc` reads a registry token from a variable its threads don't get.
+
 ## Running a relay
 
 Two tm servers are joined through a relay that both dial out to (SPEC §16), so neither machine needs an open port. You run the relay yourself, on a host both machines can reach: a small VPS, or a NAS at home. It is `tm relay serve` from the same binary; it stores nothing and sees only key fingerprints, IP addresses, sizes and timing, never what the servers say to each other (that is TLS with keys pinned at pairing, inside the stream).
@@ -492,6 +533,7 @@ peer      nas  offline 4m0s · relay · dials again in 30s · relay relay.exampl
 - leftovers: worktrees under `~/.terminatr/worktrees` whose thread is resolved or gone, and `tm/<project>/…` branches already merged into the default branch;
 - paired servers, once this server has an identity key: a `peers` line for each paired server (link state, latency, when it was last seen, its tm version, the pane level each side allows, the projects shared each way, messages queued and undelivered) and one for each relay in use (`/healthz`, certificate days left or whether a pinned relay shows its pin, the relay's tm version and `update available`, auto-update when the relay says). A warning for an offline peer, a tm two minor releases or more from this one, undelivered messages, a relay that doesn't answer or is behind, a CA certificate with under 14 days left; a failure for a relay that shows another key than the pinned one (set it up again with `tm peer relay ALIAS ADDRESS`, or something else answers there) or an identity key that can't be read. `tm doctor --json` has the same fields on each line (`peer`, `relay`). Only you run it; agents see no more than `server.status`;
 - upkeep: a project's `CONTEXT.md`, `MEMORY.md` or memory file over its size budget (the coordinator consolidates it);
+- a project repository whose `.npmrc` reads a registry token from a variable the project's threads don't get from their secret environment (see The guard);
 - settings in `config.toml`: keys tm doesn't know under `[keys]`, `[ui]` or `[agent_mod]` (ignored), and a project's (or All projects') Complete tasks still set to the removed "when released" (it now means by you; pick again in Settings).
 
 Each group prints as soon as it is checked. The code-host checks are the slow ones (every `az` call starts Python, several per repo), so they run in the background from the start, each repo beside the others (at most 4 at once), and print last, under `code host (checking…)` while they finish.

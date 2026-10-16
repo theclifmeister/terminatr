@@ -83,6 +83,14 @@ args = [
   '''{{if and (eq .Role "thread") (not .Yolo)}}permissions={tm={extends=":workspace",filesystem={{pathmodes .Access}},network={enabled=true,unix_sockets={ {{- toml .Socket}}="allow"}}}}{{end}}''',
   "{{if and (eq .Role \"coordinator\") (not .Yolo)}}-c{{end}}",
   '''{{if and (eq .Role "coordinator") (not .Yolo)}}permissions={tm={extends=":workspace",filesystem={{pathmodes .Access .Cwd}},network={enabled=true,mode="limited",unix_sockets={ {{- toml .Socket}}="allow"}}}}{{end}}''',
+  # A thread's secret variables (config env) reach its commands: Codex
+  # drops every variable whose name holds KEY, SECRET or TOKEN from what
+  # its commands get, so that filter is replaced by one naming the other
+  # such variables of the session's environment (.EnvHide), and the
+  # secret ones pass. Their values are in the environment only, never
+  # here.
+  "{{if .SecretEnv}}-c{{end}}", "{{if .SecretEnv}}shell_environment_policy.ignore_default_excludes=true{{end}}",
+  "{{if .SecretEnv}}-c{{end}}", "{{if .SecretEnv}}shell_environment_policy.exclude={{json .EnvHide}}{{end}}",
 ]
 yolo_args = ["--dangerously-bypass-approvals-and-sandbox"]
 model_args = ["-m", "{{.Model}}"]

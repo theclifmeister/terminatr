@@ -233,9 +233,15 @@ func TestHookGuard(t *testing.T) {
 		t.Error("merge again: not refused")
 	}
 	// The human's settings reach the session's hooks at once (T301 B4).
+	// The merge rule off, a thread merging is still the floor's; only
+	// merge = "thread" lets it.
 	writeConfig(t, "[projects."+p.Slug+"]\nguard_off = [\"merge\"]\n")
+	if d := judge("Bash", map[string]any{"command": "gh pr merge 1"}); d == nil || !d.Floor {
+		t.Errorf("merge rule off: %+v", d)
+	}
+	writeConfig(t, "[projects."+p.Slug+"]\nmerge = \"thread\"\n")
 	if d := judge("Bash", map[string]any{"command": "gh pr merge 1"}); d != nil {
-		t.Errorf("merge turned off: %+v", d)
+		t.Errorf("merge = thread: %+v", d)
 	}
 	// The third refusal within ten minutes filed one inbox item.
 	items, _ := p.Inbox()

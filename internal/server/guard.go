@@ -26,7 +26,9 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/guard"
+	"github.com/theclifmeister/terminatr/internal/guardlog"
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -41,11 +43,16 @@ import (
 // permission rules decide alone, as without the mod.
 type GuardRules = guard.Rules
 
-// GuardDenial is the body of POST /v1/denied.
+// GuardDenial is the body of POST /v1/denied: the refusal's rule, the
+// tool, the short summary the journal keeps, and for the guard's log
+// (guardlog, the human's) the whole command line or file an allowance
+// would name and whether one can (Floor: never).
 type GuardDenial struct {
 	Rule    string `json:"rule"`
 	Tool    string `json:"tool"`
 	Summary string `json:"summary,omitempty"`
+	Subject string `json:"subject,omitempty"`
+	Floor   bool   `json:"floor,omitempty"`
 }
 
 // A refusal is journaled and shown on the thread's info panel, not put
@@ -65,6 +72,52 @@ func guardSettings(slug string) config.Safety {
 	return loadLaunchConfig().safety(slug)
 }
 
+// guardAllows are a project's allowances as the matcher takes them: a
+// path from ~ made absolute, and once more with the symlinks of the
+// folder before its first * resolved, as writes are judged where they
+// land.
+func guardAllows(list []config.GuardAllow, home string) []guard.Allow {
+	var out []guard.Allow
+	for _, a := range list {
+		g := guard.Allow{Rule: a.Rule, Command: a.Command, Path: a.Path}
+		if rest, ok := strings.CutPrefix(a.Path, "~/"); ok && home != "" {
+			g.Path = filepath.Join(home, filepath.FromSlash(rest))
+		}
+		out = append(out, g)
+		if g.Path == "" {
+			continue
+		}
+		fixed, wild, _ := strings.Cut(g.Path, "*")
+		dir, tail := fixed, ""
+		if !strings.HasSuffix(fixed, string(filepath.Separator)) && !strings.HasSuffix(fixed, "/") {
+			dir, tail = filepath.Dir(fixed), fixed[len(filepath.Dir(fixed)):]
+		}
+		if real := realPath(filepath.Clean(dir)); real != filepath.Clean(dir) {
+			r := g
+			r.Path = strings.TrimSuffix(real, string(filepath.Separator)) + string(filepath.Separator) + strings.TrimLeft(tail, `/\`)
+			if strings.Contains(g.Path, "*") {
+				r.Path += "*" + wild
+			}
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// guardOwn are tm's own files no agent reads, whatever the rules (the
+// guard's floor): the run folder (the sockets, the sessions' runtime
+// folders), the server's keys and the guard's log.
+func (s *Server) guardOwn() []string {
+	var out []string
+	if d := s.opts.Paths.RunDir; d != "" {
+		out = append(out, d)
+	}
+	if h := s.opts.Paths.Home; h != "" {
+		out = append(out, peer.DirIn(h), guardlog.Dir(h))
+	}
+	return withReal(out)
+}
+
 // guardRulesFor is session record r's rules. Only a project's agents are
 // guarded; a coordinator neither merges under a thread's rule nor keeps
 // to a worktree.
@@ -72,12 +125,23 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 	if r.Project == "" || (r.Role != proto.RoleThread && r.Role != proto.RoleCoordinator) {
 		return GuardRules{}
 	}
-	set := guardSettings(r.Project)
+	lc := loadLaunchConfig()
+	set := lc.safety(r.Project)
 	if !set.Guard {
 		return GuardRules{}
 	}
 	home, _ := os.UserHomeDir()
-	g := GuardRules{On: true, Role: r.Role, Home: home, Cwd: r.Cwd, CaseFold: caps.CaseFold}
+	g := GuardRules{On: true, Role: r.Role, Home: home, Cwd: r.Cwd, CaseFold: caps.CaseFold,
+		Learn: set.GuardMode == config.GuardLearn, Allow: guardAllows(set.GuardAllow, home), Own: s.guardOwn()}
+	if r.Role == proto.RoleThread {
+		g.SecretEnv = lc.cfg.SecretEnvNames(r.Project)
+	}
+	// The floor holds with its rule off (guard_off): only the guard off
+	// lifts it.
+	g.Floor = []string{"force-push"}
+	if r.Role == proto.RoleThread && set.Merge == config.MergeCoordinator {
+		g.Floor = append(g.Floor, "merge")
+	}
 	if s.opts.Paths.Home != "" {
 		g.Worktrees = realPath(filepath.Join(s.opts.Paths.Home, "worktrees"))
 	}
@@ -327,7 +391,7 @@ func (s *Server) hookGuardOf(id string, mod bool) func(string, map[string]any) *
 		rules.Resolve = realTarget
 		d := rules.Judge(tool, input)
 		if d != nil && !d.Ask {
-			s.guardDenied(rec, GuardDenial{Rule: d.Rule, Tool: tool, Summary: d.Summary})
+			s.guardDenied(rec, GuardDenial{Rule: d.Rule, Tool: tool, Summary: d.Summary, Subject: d.Subject, Floor: d.Floor})
 		}
 		return d
 	}
@@ -438,6 +502,9 @@ func (g *guardState) repeated(id string) bool {
 // (guardInboxCount times in guardInboxWindow) does it tell the
 // coordinator, with one inbox item. The tool's own words never reach
 // either: the summary is the mod's, cut short and folded to one line.
+// The whole call goes to the guard's log only (guardlog), the human's,
+// for the dashboard's Guard refusals; in learn mode a call newly listed
+// there is put to the user with an inbox item.
 func (s *Server) guardDenied(r SessionRecord, d GuardDenial) {
 	s.log.Printf("session %s: guard denied %s (%s)", r.ID, d.Rule, d.Tool)
 	if r.Project == "" {
@@ -458,6 +525,23 @@ func (s *Server) guardDenied(r SessionRecord, d GuardDenial) {
 	if err := p.Journal(who, "guard.deny", ref, fmt.Sprintf("%s %s: %s", d.Rule, tool, summary)); err != nil {
 		s.log.Printf("session %s: journal: %v", r.ID, err)
 	}
+	if s.opts.Paths.Home != "" && d.Subject != "" {
+		e := guardlog.Entry{Project: r.Project, Session: r.ID, Role: r.Role, Rule: d.Rule, Tool: tool, Summary: summary,
+			Subject: d.Subject, Floor: d.Floor, Path: s.guardFileTool(r, d.Tool)}
+		if r.Role == proto.RoleThread {
+			e.Thread = r.Thread
+		}
+		e, listed, err := guardlog.Record(s.opts.Paths.Home, e, guardNow())
+		if err != nil {
+			s.log.Printf("session %s: guard log: %v", r.ID, err)
+		} else if listed && !e.Floor && guardSettings(r.Project).GuardMode == config.GuardLearn {
+			msg := fmt.Sprintf("%s: the guard refused a %s call (%s: %s) and learns from your answer: allow it or keep refusing it in the project's Settings, Guard refusals",
+				ref, tool, d.Rule, summary)
+			if _, err := p.AddItem("guard", ref, msg, true); err != nil {
+				s.log.Printf("session %s: inbox: %v", r.ID, err)
+			}
+		}
+	}
 	if !s.guard.repeated(r.ID) {
 		return
 	}
@@ -466,6 +550,16 @@ func (s *Server) guardDenied(r SessionRecord, d GuardDenial) {
 	if _, err := p.AddItem("guard", ref, msg, false); err != nil {
 		s.log.Printf("session %s: inbox: %v", r.ID, err)
 	}
+}
+
+// guardFileTool: tool is one of session r's agent's file tools, whose
+// refusals name a file rather than a command line.
+func (s *Server) guardFileTool(r SessionRecord, tool string) bool {
+	s.mu.Lock()
+	reg := s.agents
+	s.mu.Unlock()
+	t, ok := agent.GuardTools(reg, r.Agent)[tool]
+	return ok && t.Kind != guard.KindShell
 }
 
 // oneLine is s folded to one line of at most n runes, cleaned

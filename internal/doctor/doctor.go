@@ -197,6 +197,7 @@ func Each(d Deps, emit func([]Check), waiting func(group string)) {
 	emit(Leftovers(d, live))
 	emit(Launchd(d))
 	emit(Settings(d))
+	emit(SecretEnv(d))
 	emit(Mods(d, live))
 	emit(Peers(d, live))
 	emit(Upkeep(d))

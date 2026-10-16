@@ -33,7 +33,7 @@ func (s *ServerSource) SetSetting(table, key string, value any) error {
 		if err != nil {
 			return err
 		}
-		journalAll(s.Caller, key, value, "all projects")
+		journalAll(s.Caller, key, journalValue(key, value), "all projects")
 		return nil
 	}
 	slug, isProject := strings.CutPrefix(table, "projects.")
@@ -43,7 +43,7 @@ func (s *ServerSource) SetSetting(table, key string, value any) error {
 		}
 		return config.Set(table, key, value)
 	}
-	detail := fmt.Sprint(value)
+	detail := fmt.Sprint(journalValue(key, value))
 	if value == nil {
 		if err := config.UnsetProject(slug, key); err != nil {
 			return err
@@ -100,6 +100,16 @@ func ApplyModDefaults(c caller.Caller, id string) ([]mod.Suggestion, error) {
 func (s *ServerSource) ApplyModDefaults(id string) ([]mod.Suggestion, error) {
 	defer s.touch()
 	return ApplyModDefaults(s.Caller, id)
+}
+
+// journalValue is a setting's value as the journal has it: the guard's
+// allowances by their number only, as the commands they name stay out of
+// the journal, which agents read.
+func journalValue(key string, value any) any {
+	if l, ok := value.([]config.GuardAllow); ok && key == "guard_allow" {
+		return fmt.Sprintf("%d allowances", len(l))
+	}
+	return value
 }
 
 // journalAll records a change of an all-projects setting in the journal
