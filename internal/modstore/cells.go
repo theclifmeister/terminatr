@@ -53,6 +53,10 @@ type key struct {
 type CellStore struct {
 	path string
 
+	// flushMu serialises writers of the file, so an older snapshot can't
+	// land after a newer one.
+	flushMu sync.Mutex
+
 	mu     sync.Mutex
 	cells  map[key][]widget.Span
 	count  map[string]int // cells per mod
@@ -222,6 +226,8 @@ func (s *CellStore) changed() {
 // Flush writes the store's file now if it changed since it was last
 // written (the server stopping).
 func (s *CellStore) Flush() error {
+	s.flushMu.Lock()
+	defer s.flushMu.Unlock()
 	s.mu.Lock()
 	if s.timer != nil {
 		s.timer.Stop()

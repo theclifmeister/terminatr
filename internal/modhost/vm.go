@@ -139,6 +139,10 @@ func (h *Host) jsLog(c goja.FunctionCall) goja.Value {
 	return goja.Undefined()
 }
 
+// maxDelayMs is the longest timer delay in milliseconds, as in a
+// browser (2^31-1): a longer one would overflow time.Duration.
+const maxDelayMs = float64(math.MaxInt32)
+
 // setTimeout(fn, ms, ...args) and setInterval: fn runs in a slice of its
 // own, under the budget.
 func (h *Host) jsTimer(c goja.FunctionCall, repeat bool) goja.Value {
@@ -149,7 +153,7 @@ func (h *Host) jsTimer(c goja.FunctionCall, repeat bool) goja.Value {
 	msec := c.Argument(1).ToFloat()
 	d := minDelay
 	if !math.IsNaN(msec) && msec*float64(time.Millisecond) > float64(minDelay) {
-		d = time.Duration(min(msec*float64(time.Millisecond), float64(math.MaxInt64)))
+		d = time.Duration(min(msec, maxDelayMs) * float64(time.Millisecond))
 	}
 	var args []goja.Value
 	if len(c.Arguments) > 2 {

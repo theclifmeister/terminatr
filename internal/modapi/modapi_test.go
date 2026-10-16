@@ -205,6 +205,7 @@ func TestBindings(t *testing.T) {
 			$.log("store", await $.store.get("k"));
 			await $.ui.cell.set("age", {project: "tm", task: "T1"}, null);
 			await $.ui.toast("hi");
+			await $.fs.write("log.txt", "a\n", true);
 			await $.projects.list();
 			try { await $.fs.read("/etc/passwd"); } catch (e) { $.log("fs", e.message, e.code); }
 			$.log("settings", $.settings().warn, typeof $.settings);
@@ -224,6 +225,7 @@ func TestBindings(t *testing.T) {
 		{"store.get", `{"key":"k"}`},
 		{"ui.cell.set", `{"column":"age","target":{"project":"tm","task":"T1"},"spans":null}`},
 		{"ui.toast", `{"text":"hi"}`},
+		{"fs.write", `{"path":"log.txt","text":"a\n","append":true}`},
 		{"projects.list", ``},
 		{"fs.read", `{"path":"/etc/passwd"}`},
 	}

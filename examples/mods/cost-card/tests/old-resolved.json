@@ -1,0 +1,14 @@
+{
+  "name": "a thread resolved long ago is dropped from the store at the start; a live one stays",
+  "store": {
+    "threads": {
+      "demo/t-0001": { "project": "demo", "thread": "t-0001", "title": "Old", "tokens": 10, "cost": 1, "resolved": "2020-01-01T00:00:00Z" },
+      "demo/t-0002": { "project": "demo", "thread": "t-0002", "title": "Live", "tokens": 20, "cost": 2 }
+    }
+  },
+  "events": [
+    { "name": "mod.ready", "data": { "projects": [] } },
+    { "name": "thread.resolved", "project": "demo", "data": { "project": "demo", "thread": "t-0002", "task": "T2" } }
+  ],
+  "expect": { "store": { "threads": { "demo/t-0001": null, "demo/t-0002": { "title": "Live" } } } }
+}

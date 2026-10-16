@@ -3,7 +3,9 @@ package modstore
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -137,5 +139,30 @@ func TestRestart(t *testing.T) {
 	}
 	if c := OpenCells(path).Cells(nil, nil); len(c) != 0 {
 		t.Errorf("a broken file %+v", c)
+	}
+}
+
+func TestConcurrentFlushKeepsTheLatest(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cells.json")
+	s := OpenCells(path)
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 50 {
+				_ = s.Flush()
+			}
+		}()
+	}
+	for i := range 200 {
+		s.Set("m", "c", t12, []widget.Span{{Text: strconv.Itoa(i)}})
+		_ = s.Flush()
+	}
+	wg.Wait()
+	want := s.Cells(nil, nil)
+	got := OpenCells(path).Cells(nil, nil)
+	if len(got) != 1 || len(want) != 1 || got[0].Spans[0].Text != want[0].Spans[0].Text {
+		t.Fatalf("file holds %+v, memory %+v", got, want)
 	}
 }
