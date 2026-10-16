@@ -11,15 +11,25 @@ const mergeHead = "0123456789abcdef0123456789abcdef01234567"
 
 func TestGitHubMerge(t *testing.T) {
 	var got []string
-	g := GitHub{Run: func(_ string, args ...string) ([]byte, error) { got = args; return nil, nil }}
+	g := GitHub{Run: func(_ string, args ...string) ([]byte, error) {
+		if args[1] == "view" {
+			return []byte("fix(merge): use the title\n"), nil
+		}
+		got = args
+		return nil, nil
+	}}
 	for _, method := range MergeMethods {
 		if err := g.Merge("/r", PR{Number: 12, Head: mergeHead}, method); err != nil {
 			t.Fatal(err)
 		}
-		if want := "pr merge 12 --" + method + " --match-head-commit " + mergeHead; strings.Join(got, " ") != want {
+		want := "pr merge 12 --" + method + " --match-head-commit " + mergeHead
+		if method == BySquash {
+			want += " --subject fix(merge): use the title (#12)"
+		}
+		if strings.Join(got, " ") != want {
 			t.Fatalf("args %q, want %q", got, want)
 		}
-		for _, bad := range []string{"--admin", "--auto", "--delete-branch", "--subject"} {
+		for _, bad := range []string{"--admin", "--auto", "--delete-branch", "--body"} {
 			if strings.Contains(strings.Join(got, " "), bad) {
 				t.Errorf("args carry %s", bad)
 			}
@@ -31,6 +41,30 @@ func TestGitHubMerge(t *testing.T) {
 	}
 	if g.Merge("/r", PR{Number: 12, Head: mergeHead}, "auto") == nil || got != nil {
 		t.Fatalf("an unknown method merged: %q", got)
+	}
+}
+
+// A squash needs the PR's title: none read, none merged; a merge
+// commit never asks for it.
+func TestGitHubSquashNeedsTitle(t *testing.T) {
+	for _, title := range []string{"", " \n"} {
+		var merged bool
+		g := GitHub{Run: func(_ string, args ...string) ([]byte, error) {
+			merged = merged || args[1] == "merge"
+			return []byte(title), nil
+		}}
+		if g.Merge("/r", PR{Number: 12, Head: mergeHead}, BySquash) == nil || merged {
+			t.Errorf("title %q: merged=%v", title, merged)
+		}
+	}
+	g := GitHub{Run: func(_ string, args ...string) ([]byte, error) {
+		if args[1] == "view" {
+			return nil, errors.New("gh: no network")
+		}
+		return nil, nil
+	}}
+	if g.Merge("/r", PR{Number: 12, Head: mergeHead}, BySquash) == nil || g.Merge("/r", PR{Number: 12, Head: mergeHead}, ByMerge) != nil {
+		t.Error("a failed title read must stop a squash only")
 	}
 }
 
@@ -55,6 +89,9 @@ func TestGitHubMergeMethodRefused(t *testing.T) {
 			if args[0] == "repo" {
 				return []byte(c.repo), nil
 			}
+			if args[1] == "view" {
+				return []byte("fix: a title"), nil
+			}
 			return nil, errors.New("gh pr merge: exit status 1 " + c.stderr)
 		}}
 		err := g.Merge("/r", PR{Number: 12, Head: mergeHead}, c.method)
@@ -75,7 +112,13 @@ func TestGitHubMergeMethodRefused(t *testing.T) {
 func TestAzureMerge(t *testing.T) {
 	var got []string
 	a := Azure{Target: Target{Kind: AzureKind, OrgURL: "https://dev.azure.com/o", Project: "p", Repo: "r"},
-		Run: func(_ string, args ...string) ([]byte, error) { got = args; return []byte("{}"), nil }}
+		Run: func(_ string, args ...string) ([]byte, error) {
+			if !slices.Contains(args, "patch") {
+				return []byte(`{"title":"fix(merge): use\nthe title"}`), nil
+			}
+			got = args
+			return []byte("{}"), nil
+		}}
 	for method, strategy := range map[string]string{ByMerge: "noFastForward", BySquash: "squash", ByRebase: "rebase"} {
 		if err := a.Merge("/r", PR{Number: 5, Head: mergeHead}, method); err != nil {
 			t.Fatal(err)
@@ -85,6 +128,18 @@ func TestAzureMerge(t *testing.T) {
 			if !strings.Contains(all, w) {
 				t.Errorf("%s: args lack %q: %s", method, w, all)
 			}
+		}
+	}
+	if all := strings.Join(got, " "); strings.Contains(all, "mergeCommitMessage") {
+		t.Errorf("a rebase carries a message: %s", all)
+	}
+	for _, method := range []string{ByMerge, BySquash} {
+		if err := a.Merge("/r", PR{Number: 5, Head: mergeHead}, method); err != nil {
+			t.Fatal(err)
+		}
+		all := strings.Join(got, " ")
+		if has := strings.Contains(all, `"mergeCommitMessage":"fix(merge): use the title (!5)"`); has != (method == BySquash) {
+			t.Errorf("%s: message in %s", method, all)
 		}
 	}
 	got = nil

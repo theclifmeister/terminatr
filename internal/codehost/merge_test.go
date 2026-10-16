@@ -44,6 +44,10 @@ func TestAzureMergedPR(t *testing.T) {
 		"Release 2.0 (custom message)":    0,
 		"Revert \"Merged PR 5: x\"":       0,
 		"Merged PR 1234567890: too long":  0,
+		"fix(merge): a title (!42)":       42, // tm's squash
+		"fix: a title (!42) and more":     0,
+		"fix: a title (#42)":              0,
+		"fix: a title (!1234567890)":      0,
 	} {
 		run("commit", "-q", "--allow-empty", "-m", msg)
 		if n := a.MergedPR(repo, run("rev-parse", "HEAD")); n != want {
@@ -75,6 +79,10 @@ func TestAzureMergeCommit(t *testing.T) {
 	run("merge", "-q", "--squash", "squashed")
 	run("commit", "-q", "-m", "Merged PR 610: squashed\n\nRelated work items: #4")
 	m610 := run("rev-parse", "HEAD")
+	branch("tmsquash")
+	run("merge", "-q", "--squash", "tmsquash")
+	run("commit", "-q", "-m", "fix(merge): tm squash (!620)")
+	m620 := run("rev-parse", "HEAD")
 	branch("custom")
 	run("merge", "-q", "--squash", "custom")
 	run("commit", "-q", "-m", "Ship the custom thing")
@@ -86,7 +94,10 @@ func TestAzureMergeCommit(t *testing.T) {
 	if got := a.MergeCommit(repo, 610); got != m610 {
 		t.Errorf("squash commit: %q, want %q", got, m610)
 	}
-	for _, n := range []int{6, 0, -1, 62} {
+	if got := a.MergeCommit(repo, 620); got != m620 {
+		t.Errorf("tm squash commit: %q, want %q", got, m620)
+	}
+	for _, n := range []int{6, 0, -1, 62, 20, 6200} {
 		if got := a.MergeCommit(repo, n); got != "" {
 			t.Errorf("PR %d: %q", n, got)
 		}
