@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // The merge methods, merge_method's values (config.MergeMethods): a
@@ -56,19 +57,45 @@ var ghMethodRE = regexp.MustCompile(`(?i)(merge commits|squash merges|rebase mer
 
 // Merge asks gh to merge the PR by method (--merge, --squash or
 // --rebase), which GitHub refuses when the head moved since pr was read.
-// The branch is kept. A squash takes GitHub's own subject, the PR's
-// title. A refused method is a MethodError naming the methods the repo
+// The branch is kept. A squash gets the PR's title and number as its
+// subject ("title (#12)", as GitHub writes it when it takes the title
+// itself; the repo's default may take the commit's message instead), read
+// from the PR now; the body is left to GitHub. A refused method is a MethodError naming the methods the repo
 // allows, as gh repo view says (less the refused one when a branch rule
 // refused it).
 func (g GitHub) Merge(repo string, pr PR, method string) error {
 	if err := checkMerge("github", pr, method); err != nil {
 		return err
 	}
-	_, err := g.gh(repo, "pr", "merge", strconv.Itoa(pr.Number), "--"+method, "--match-head-commit", pr.Head)
+	args := []string{"pr", "merge", strconv.Itoa(pr.Number), "--" + method, "--match-head-commit", pr.Head}
+	if method == BySquash {
+		out, err := g.gh(repo, "pr", "view", strconv.Itoa(pr.Number), "--json", "title", "--jq", ".title")
+		if err != nil {
+			return err
+		}
+		subject, err := squashSubject(string(out), pr.Number, "#")
+		if err != nil {
+			return fmt.Errorf("github: %w", err)
+		}
+		args = append(args, "--subject", subject)
+	}
+	_, err := g.gh(repo, args...)
 	if err == nil || !ghMethodRE.MatchString(err.Error()) {
 		return err
 	}
 	return &MethodError{Method: method, Allowed: g.allowedMethods(repo, method), Err: err}
+}
+
+// squashSubject is a squash commit's subject: the PR's title on one
+// line, then " (<mark>N)". An empty title is an error: the host would
+// write its own.
+func squashSubject(title string, n int, mark string) (string, error) {
+	title = strings.Join(strings.FieldsFunc(title, func(r rune) bool { return unicode.IsControl(r) }), " ")
+	title = strings.Join(strings.Fields(title), " ")
+	if title == "" {
+		return "", errors.New("the PR has no title to squash with")
+	}
+	return fmt.Sprintf("%s (%s%d)", title, mark, n), nil
 }
 
 // allowedMethods are the methods the repo's settings allow, less
@@ -109,14 +136,35 @@ var azMethodRE = regexp.MustCompile(`(?i)merge (strategy|type)[^.]*not (allowed|
 // applies to, and the source branch kept. Azure DevOps finishes the
 // completion a moment after the call answers. A strategy a branch policy
 // refuses is a MethodError; Azure DevOps doesn't say which it allows.
+// A squash's commit message is the PR's title and " (!N)" (Azure
+// DevOps' PR link), as completionOptions.mergeCommitMessage; a merge
+// commit keeps Azure DevOps' own message.
 func (a Azure) Merge(repo string, pr PR, method string) error {
 	if err := checkMerge("azure devops", pr, method); err != nil {
 		return err
 	}
+	opts := map[string]any{"mergeStrategy": azStrategy[method], "deleteSourceBranch": false}
+	if method == BySquash {
+		out, err := a.get(repo, a.prURL(pr.Number))
+		if err != nil {
+			return err
+		}
+		var p struct {
+			Title string `json:"title"`
+		}
+		if err := json.Unmarshal(out, &p); err != nil {
+			return fmt.Errorf("azure devops: PR %d: %w", pr.Number, err)
+		}
+		subject, err := squashSubject(p.Title, pr.Number, "!")
+		if err != nil {
+			return fmt.Errorf("azure devops: %w", err)
+		}
+		opts["mergeCommitMessage"] = subject
+	}
 	body, _ := json.Marshal(map[string]any{
 		"status":                "completed",
 		"lastMergeSourceCommit": map[string]string{"commitId": pr.Head},
-		"completionOptions":     map[string]any{"mergeStrategy": azStrategy[method], "deleteSourceBranch": false},
+		"completionOptions":     opts,
 	})
 	args := []string{"rest", "--method", "patch", "--resource", azResource, "--url", a.prURL(pr.Number),
 		"--headers", "Content-Type=application/json", "--body", string(body)}
