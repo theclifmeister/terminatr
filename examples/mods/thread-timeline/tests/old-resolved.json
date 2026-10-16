@@ -1,0 +1,12 @@
+{
+  "name": "a thread resolved long ago loses its row; a recent one and a live one stay",
+  "store": { "log": { "demo": {
+    "t-0001": { "resolved": true, "changes": [{ "at": "2020-01-01T09:00:00Z", "state": "resolved" }] },
+    "t-0002": { "changes": [{ "at": "2020-01-01T09:00:00Z", "state": "working" }] }
+  } } },
+  "events": [
+    { "name": "mod.ready", "data": { "projects": [{ "project": "demo", "needs_you": [], "inbox": [], "threads": [], "ready": [] }] } },
+    { "name": "thread.state", "project": "demo", "data": { "project": "demo", "thread": "t-0003", "state": "idle" } }
+  ],
+  "expect": { "store": { "log": { "demo": { "t-0001": null, "t-0002": { "changes": [{ "state": "working" }] }, "t-0003": { "changes": [{ "state": "idle" }] } } } } }
+}

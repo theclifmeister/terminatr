@@ -586,3 +586,15 @@ func TestCallsInFlightAreBounded(t *testing.T) {
 		t.Fatalf("call %+v", m)
 	}
 }
+
+func TestHugeTimerDelayWaits(t *testing.T) {
+	s := startHost(t, `
+		setInterval(() => $.log("huge interval"), 1e300);
+		setTimeout(() => $.log("huge timeout"), Infinity);
+		setTimeout(() => $.log("late"), 30);
+	`, time.Second)
+	s.hello()
+	if got := logText(s.method(modproto.MethodLog)); got != "late" {
+		t.Fatalf("first log %q, want late", got)
+	}
+}

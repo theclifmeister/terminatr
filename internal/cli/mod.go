@@ -689,6 +689,7 @@ func (e *Env) updateOne(m mod.Mod, yes, named bool) error {
 	}
 	defer st.Close()
 	if st.Source.Hash == src.Hash {
+		mod.RecordSource(m, src, st)
 		fmt.Fprintf(e.Stdout, "%s is up to date\n", m.ID)
 		return nil
 	}

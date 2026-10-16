@@ -35,8 +35,23 @@ func FetchUpdate(m Mod) (*Staged, error) {
 		return nil, fmt.Errorf("%s: %s", next, strings.ReplaceAll(Clean(err.Error(), true), "\n", "; "))
 	}
 	if st.Source.Hash == src.Hash {
+		RecordSource(m, src, st)
 		st.Close()
 		return nil, nil
 	}
 	return st, nil
+}
+
+// RecordSource notes in installed mod m's .tm-source.json that its
+// files, unchanged, are now those of st's newer ref or commit, so a
+// check for updates doesn't keep finding it behind. It does nothing when
+// the ref and commit are the same; a failure to write is ignored, the
+// mod being up to date either way.
+func RecordSource(m Mod, was Source, st *Staged) {
+	if st.Source.Ref == was.Ref && st.Source.Commit == was.Commit && st.Source.Tree == was.Tree {
+		return
+	}
+	next := st.Source
+	next.Installed = was.Installed
+	_ = writeSource(m.Dir, next)
 }
