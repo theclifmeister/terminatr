@@ -638,13 +638,14 @@ Thread branches (`tm/<project>/…`) live in your repositories and are not remov
 
 Releases go through release-please (`.github/workflows/release-please.yml`, `release-please-config.json`, `.release-please-manifest.json`). On every push to main it keeps one pull request open, titled like `chore: release 0.29.0`: the next version, worked out from the [Conventional Commit](https://www.conventionalcommits.org/) messages since the last release (`feat:` raises the minor version while terminatr is below 1.0, `fix:` and `perf:` the patch version), and that version's entry in `CHANGELOG.md`. To release:
 
-1. Wait for `ci.yml` on main to be green (below), then merge the release pull request. Nothing else needs doing in it; it updates itself as more changes land.
-2. release-please tags the merge commit (`v0.29.0`), creates a draft GitHub release whose notes are the new `CHANGELOG.md` entry, and starts the release workflow on that tag.
-3. Approve the `release` environment in that run (Actions → release → Review deployments). The draft becomes the published release once its archives are checked.
+1. Wait for `ci.yml` on main to be green (below), then merge the release pull request. Nothing else needs doing in it; it updates itself as more changes land, and `ci.yml` runs on each of its updates like on any pull request.
+2. release-please creates a draft GitHub release whose notes are the new `CHANGELOG.md` entry and tags the merge commit (`v0.29.0`); the tag push starts the release workflow. The draft becomes the published release once its archives are checked.
+
+That merge is the only click. release-please acts as a GitHub App of this repository (the release App, below), not with `GITHUB_TOKEN`: a pull request or tag that `GITHUB_TOKEN` makes starts no workflow, so the release pull request would wait for "Approve and run" on each update and the tag would not start the release.
 
 The notes are the changelog entry: what users see on the releases page is what the release pull request showed in `CHANGELOG.md`. Only `feat:`, `fix:` and `perf:` commits appear there (and reverts); `chore:`, `ci:`, `docs:`, `test:`, `refactor:`, `build:` and `style:` commits don't, and don't make a release on their own. A squash-merged pull request's commit is its title, so pull request titles are written as Conventional Commits (CONTRIBUTING.md); a merge commit's own message ("Merge pull request #12 …") counts for nothing, only the commits it brings in do.
 
-A tag pushed by hand (`git tag v0.2.0 && git push origin v0.2.0`) still releases, the same way from step 3, but release-please doesn't know about it: its draft release has no notes (write them on the release page before or after publishing), and you must set `.release-please-manifest.json` to that version on main yourself, or the next release pull request proposes it again. Release through the pull request when you can.
+A tag pushed by hand (`git tag v0.2.0 && git push origin v0.2.0`) still releases, the same way from step 2, but release-please doesn't know about it: its draft release has no notes (write them on the release page before or after publishing), and you must set `.release-please-manifest.json` to that version on main yourself, or the next release pull request proposes it again. Release through the pull request when you can.
 
 `.github/workflows/release.yml` runs on the tag, on one macOS runner:
 
@@ -652,9 +653,11 @@ A tag pushed by hand (`git tag v0.2.0 && git push origin v0.2.0`) still releases
 2. builds and checks a snapshot (`make release-snapshot`, `scripts/release/check.sh`), unsigned;
 3. runs goreleaser (`make release`): every target cross-compiled with `zig cc`, except darwin, linked by Apple's clang and ld for chained fixups (the Windows targets as `*-windows-gnu`, their ConPTY files fetched by `scripts/release/conpty.sh`), each darwin binary signed (hardened runtime) and notarised by `scripts/release/sign.sh`; the archives, `tm-relay-docker.tar.gz` (`deploy/relay`'s Docker files with the compose files pinned to the tag, `scripts/release/relay-docker.sh`), the installers and `checksums.txt` uploaded to the draft release (release-please's, keeping its notes, or for a hand-made tag a new one without notes);
 4. checks the archives again with `--signed` (Developer ID, hardened runtime, Gatekeeper says `Notarized Developer ID`), and only then publishes the release;
-5. rewrites `Formula/terminatr.rb` from `checksums.txt` (`scripts/release/formula.sh`) and merges it through a pull request. Prereleases (`v1.2.0-rc1`) skip this step.
+5. rewrites `Formula/terminatr.rb` from `checksums.txt` (`scripts/release/formula.sh`) and merges it through a pull request, opened and merged as the release App so that `ci.yml` runs on it. Prereleases (`v1.2.0-rc1`) skip this step.
 
-Then a second job, on a Linux runner (outside the `release` environment, so a release needs one approval), builds the relay image from `deploy/relay/Dockerfile` for amd64 and arm64 (the published linux archives, checked against `checksums.txt`) and pushes it to `ghcr.io/theclifmeister/tm-relay:<tag>`, and `:latest` unless it is a prerelease. It runs once the release is published, even when the formula step failed; if it fails, the release stays published: rerun the `image` job.
+To run a release again (a failed run, say), rerun its failed jobs, or Actions → release → Run workflow with Use workflow from set to the tag: on a branch it does nothing.
+
+Then a second job, on a Linux runner (outside the `release` environment, which holds only the Apple secrets), builds the relay image from `deploy/relay/Dockerfile` for amd64 and arm64 (the published linux archives, checked against `checksums.txt`) and pushes it to `ghcr.io/theclifmeister/tm-relay:<tag>`, and `:latest` unless it is a prerelease. It runs once the release is published, even when the formula step failed; if it fails, the release stays published: rerun the `image` job.
 
 Before you merge the release pull request (or push a tag), `ci.yml` on main has run `test` (unit tests with `-race`) and `macos` (build, unit tests, e2e smoke): wait for them to be green. Pull requests run neither macOS nor `-race`, and the release snapshot only when they touch release files; the tag run is where every release build is checked. If the repository requires status checks, require `test` (the one check every pull request runs). `macos` is main-only, so don't require it; `changes`, `claude-mod` and `release-snapshot` are skipped when not needed, which counts as passed.
 
@@ -662,7 +665,7 @@ Before you merge the release pull request (or push a tag), `ci.yml` on main has 
 
 ### Secrets
 
-The same Apple credentials as toe. Put them in the `release` environment (Settings → Environments → release), not as repository secrets, and limit that environment to `v*` tags (Deployment branches and tags → Selected → tag pattern `v*`): then only the release job can read them. Add yourself as a required reviewer, so each release waits for your approval. The run release-please starts is a run on the tag, like a pushed tag's, so the same rule admits it; main needs no entry there.
+The same Apple credentials as toe. Put them in the `release` environment (Settings → Environments → release), not as repository secrets, and limit that environment to `v*` tags (Deployment branches and tags → Selected → tag pattern `v*`): then only the release job can read them. The run the release App's tag starts is a run on the tag, like a hand-pushed tag's, so the same rule admits it; main needs no entry there. There is no approval step: the environment has no required reviewer, and only lets runs on `v*` tags use the signing secrets.
 
 | Secret | What |
 |---|---|
@@ -674,14 +677,21 @@ The same Apple credentials as toe. Put them in the `release` environment (Settin
 | `NOTARY_KEY_ID` | that key's id |
 | `NOTARY_ISSUER_ID` | the App Store Connect issuer id |
 
-`GITHUB_TOKEN` is provided by Actions; the `image` job's token may write packages, for ghcr.io.
+And two repository secrets (Settings → Secrets and variables → Actions → Repository secrets), for the release App: a GitHub App of your own (Settings → Developer settings → GitHub Apps → New GitHub App; no webhook), installed on this repository only, with the repository permissions Contents, Pull requests and Issues set to Read and write. `release-please.yml` and the release job's formula step get a short-lived token from it (`actions/create-github-app-token`).
+
+| Secret | What |
+|---|---|
+| `RELEASE_APP_ID` | the App's id (its settings page, About) |
+| `RELEASE_APP_KEY` | a private key of the App (Private keys → Generate a private key), the whole .pem |
+
+`GITHUB_TOKEN` is provided by Actions: the release job uploads and publishes the release with it; the `image` job's token may write packages, for ghcr.io.
 
 ### Repository settings
 
-- **Settings → Actions → General → Workflow permissions:** allow GitHub Actions to create and approve pull requests, or neither the release pull request nor the formula pull request can be opened.
-- **Checks on the release pull request:** a pull request that GitHub Actions opens or updates starts no workflow, so the release pull request has no `ci.yml` run of its own (it changes only `CHANGELOG.md` and `.release-please-manifest.json`; main's run is the one that counts). If the rules on main require status checks, close and reopen the release pull request to start them, or merge it with your bypass.
+- **Settings → Actions → General → Workflow permissions:** GitHub Actions needs no right to create or approve pull requests: the release App opens both the release pull request and the formula pull request.
+- **Checks on the release pull request:** opened and updated by the release App, it gets `ci.yml` runs like any pull request, so rules on main that require status checks apply to it as usual.
 - **The relay image's visibility:** the first release that pushes `ghcr.io/theclifmeister/tm-relay` creates the package as private. Make it public once (the package's Package settings → Danger Zone → Change visibility → Public), so `docker compose` pulls it without a login; check that it is linked to this repository (the image's `org.opencontainers.image.source` label does that) and that the repository has Admin or Write in the package's Manage Actions access, so later releases can push to it.
-- **Rules on `main`:** the formula pull request carries `[skip ci]` and merges at once, as toe's cask bump does. A ruleset that requires pull requests is fine; one that also requires status checks or approvals blocks it. Then the job turns on auto-merge (if Settings → General allows auto-merge) and warns; merge it by hand, or add GitHub Actions as a bypass actor of that rule.
+- **Rules on `main`:** the formula pull request merges at once when the rules allow, as toe's cask bump does. A ruleset that requires pull requests is fine. One that requires status checks refuses the immediate merge: the job then turns on auto-merge (if Settings → General allows auto-merge), and it merges once its `ci.yml` checks pass. One that requires approvals blocks it: merge it by hand, or add the release App as a bypass actor of that rule.
 - **Forks:** no workflow uses `pull_request_target` or `workflow_run`, and the only one that sees secrets runs on tags, which only people with write access can push. For a public repository keep Settings → Actions → "Fork pull request workflows" at requiring approval for outside contributors.
 - **Self-hosted runners:** none. On a public repository any fork pull request can target a self-hosted runner's labels from a workflow of its own and run code on that machine, so don't register one for this repository (the real-Claude suite runs by hand, `make test-claude`).
 
