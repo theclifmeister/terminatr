@@ -110,3 +110,23 @@ func TestMCPToolsMatchMod(t *testing.T) {
 		}
 	}
 }
+
+func TestMCPVersionAndOversize(t *testing.T) {
+	big := `{"jsonrpc":"2.0","id":9,"method":"ping","params":"` + strings.Repeat("x", mcpMaxLine) + `"}`
+	in := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2099-01-01"}}` + "\n" + big + "\n" +
+		`{"jsonrpc":"2.0","id":2,"method":"ping"}` + "\n"
+	var out strings.Builder
+	if err := runMCP(strings.NewReader(in), &out, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("%d replies: %s", len(lines), out.String())
+	}
+	if !strings.Contains(lines[0], `"protocolVersion":"`+mcpProtocol+`"`) {
+		t.Errorf("initialize: %s", lines[0])
+	}
+	if !strings.Contains(lines[1], "-32600") || !strings.Contains(lines[2], `"id":2`) {
+		t.Errorf("replies: %s", out.String())
+	}
+}

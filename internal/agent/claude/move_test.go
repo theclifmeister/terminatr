@@ -88,3 +88,10 @@ func TestMoveDirRealPath(t *testing.T) {
 		t.Fatalf(".claude.json:\n%s", b)
 	}
 }
+
+func TestFolderKeyNonASCII(t *testing.T) {
+	// Claude replaces per UTF-16 unit: é is one, 😀 is two.
+	if k := folderKey("/Users/josé/a😀b"); k != "-Users-jos--a--b" {
+		t.Fatalf("key %q", k)
+	}
+}
