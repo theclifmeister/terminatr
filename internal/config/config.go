@@ -286,8 +286,8 @@ type rawSafety struct {
 	// Links are the project's links to other projects' coordinators
 	// (links.go): a project's own, never [defaults]'s.
 	Links map[string]any `toml:"links"`
-	// Env is the secret environment of threads (env.go): not a setting
-	// the popups show, read by SecretEnv.
+	// Env is the secret environment of threads (env.go): not a safety
+	// setting; read by SecretEnv and EnvOf, written by SetEnv.
 	Env map[string]EnvSource `toml:"env"`
 }
 

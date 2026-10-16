@@ -59,6 +59,41 @@ func (s *ServerSource) SetSetting(table, key string, value any) error {
 	return nil
 }
 
+func (s *ServerSource) SetSecretEnv(table, name string, src *config.EnvSource) error {
+	defer s.touch()
+	if s.Caller.IsAgent() {
+		return errHumanOnly
+	}
+	// The journal has the name and the source: never a value, which tm
+	// doesn't hold.
+	detail := name + " removed"
+	if src != nil {
+		detail = name + " from " + src.From
+		if err := config.SetEnv(table, name, *src); err != nil {
+			return err
+		}
+	} else if err := config.UnsetEnv(table, name); err != nil {
+		return err
+	}
+	if table == config.DefaultsTable {
+		journalAll(s.Caller, "env", detail, "all projects")
+	} else if p, err := project.Open(strings.TrimPrefix(table, "projects.")); err == nil {
+		p.Journal(s.Caller, "settings.env", p.Slug, detail)
+	}
+	return nil
+}
+
+func (s *ServerSource) TestSecretEnv(slug, name string) (string, error) {
+	if s.Caller.IsAgent() {
+		return "", errHumanOnly
+	}
+	var res proto.SecretTestResult
+	if err := s.call(proto.MethodSecretTest, proto.SecretTestParams{Project: slug, Name: name}, &res); err != nil {
+		return "", err
+	}
+	return secretTestWord(name, res.OK, res.Error), nil
+}
+
 // ApplyModDefaults applies the defaults enabled mod id suggests for all
 // projects (mods design §7, Tighten only), on the human's word: each in
 // [defaults], journaled as the human's change, except a key config.toml

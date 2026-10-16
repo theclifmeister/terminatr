@@ -300,6 +300,12 @@ func Edit(data []byte, table, key string, value any) ([]byte, error) {
 		}
 		return res, nil
 	}
+	if want, ok := value.(EnvSource); ok {
+		if m, _ := v.(map[string]any); len(m) != 1 || m["from"] != any(want.From) {
+			return nil, ErrForm
+		}
+		return res, nil
+	}
 	if want, ok := value.(Link); ok {
 		if got, _, err := parseLink(v); err != nil || got != want {
 			return nil, ErrForm
@@ -430,6 +436,9 @@ func tomlValue(v any) (string, error) {
 			parts[i] = "{ rule = " + r + ", " + k + " = " + q + " }"
 		}
 		return "[" + strings.Join(parts, ", ") + "]", nil
+	case EnvSource:
+		from, _ := tomlValue(v.From)
+		return "{ from = " + from + " }", nil
 	case Link:
 		allow, _ := tomlValue(v.Allow)
 		if !v.Ask {

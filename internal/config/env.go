@@ -106,6 +106,53 @@ func (c *Config) SecretEnv(slug string) (map[string]EnvSource, error) {
 	return out, nil
 }
 
+// EnvOf is one table's secret environment, names and sources only: all
+// projects' ([defaults.env]) for slug "", else the project's own, without
+// all projects'. None for a nil Config.
+func (c *Config) EnvOf(slug string) map[string]EnvSource {
+	if c == nil {
+		return nil
+	}
+	if slug == "" {
+		return maps.Clone(c.defaults.Env)
+	}
+	return maps.Clone(c.projects[slug].Env)
+}
+
+// envTable is the env table of table, DefaultsTable or a project's
+// ("projects.<slug>").
+func envTable(table string) (string, error) {
+	if table != DefaultsTable && !strings.HasPrefix(table, "projects.") {
+		return "", fmt.Errorf("no secret environment in [%s]", table)
+	}
+	return table + ".env", nil
+}
+
+// SetEnv names a secret variable in table's env table (DefaultsTable
+// or "projects.<slug>"), checked as Load checks it; one of the same name
+// there is replaced. Only the name and its source are written: tm never
+// writes a value.
+func SetEnv(table, name string, e EnvSource) error {
+	if err := CheckEnv(name, e); err != nil {
+		return err
+	}
+	t, err := envTable(table)
+	if err != nil {
+		return err
+	}
+	return Set(t, name, e)
+}
+
+// UnsetEnv removes a secret variable from table's env table; ErrForm
+// when the file names it in a form the line editor doesn't change.
+func UnsetEnv(table, name string) error {
+	t, err := envTable(table)
+	if err != nil {
+		return err
+	}
+	return Unset(t, name)
+}
+
 // SecretEnvNames are the names SecretEnv gives, sorted: what the guard
 // keeps from being printed. Every project's and all projects' when slug
 // is "".

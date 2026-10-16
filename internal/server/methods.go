@@ -198,6 +198,9 @@ func init() {
 		proto.MethodSessionPrompt: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionPromptParams, _ callCtx) (any, *proto.Error) {
 			return s.prompt(p)
 		})},
+		proto.MethodSecretTest: {gate: gateHuman, call: typed(func(s *Server, p proto.SecretTestParams, _ callCtx) (any, *proto.Error) {
+			return s.secretTest(p)
+		})},
 		proto.MethodSessionClear: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionIDParams, c callCtx) (any, *proto.Error) {
 			return s.clearSession(p.ID, c.who())
 		})},

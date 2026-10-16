@@ -43,9 +43,11 @@ func guardRuleWord(rule string) string {
 // guardModeWords name guard_mode's values.
 var guardModeWords = map[string]string{config.GuardEnforce: "refuse", config.GuardLearn: "refuse, then ask you"}
 
-// guardRows are the guard's rows, under the project settings.
+// guardRows are the guard's rows, under the project settings, and the
+// secret environment the guard keeps from being printed
+// (settings_secretenv.go).
 func (sr safetyRows) guardRows() []setting {
-	return []setting{sr.guardOnRow(), sr.guardModeRow(), sr.guardRulesRow(), sr.guardAllowRow(), sr.guardRefusalsRow()}
+	return []setting{sr.guardOnRow(), sr.guardModeRow(), sr.guardRulesRow(), sr.guardAllowRow(), sr.guardRefusalsRow(), sr.secretEnvRow()}
 }
 
 func (sr safetyRows) guardOnRow() setting {
