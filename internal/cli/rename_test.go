@@ -40,7 +40,7 @@ func threadWithWorktree(t *testing.T, h *harness, slug string) (repo string, rec
 		t.Fatal(err)
 	}
 	wt, _ := thread.WorktreeDir(slug, "t-0001", "Fix it")
-	branch := thread.BranchName(slug, "t-0001", "Fix it")
+	branch, _ := thread.BranchName("", slug, "t-0001", "", "Fix it")
 	os.MkdirAll(filepath.Dir(wt), 0o755)
 	git(t, repo, "worktree", "add", "-q", "-b", branch, wt)
 	rec, err = thread.Create(p, thread.Record{Title: "Fix it", Agent: "claude", Repo: repo, Branch: branch, Worktree: wt,
@@ -125,7 +125,7 @@ func TestProjectRename(t *testing.T) {
 	}
 
 	// A new thread's branch takes the new slug; --name is gone.
-	if b := thread.BranchName("demo2", "t-0002", "More"); b != "tm/demo2/t-0002-more" {
+	if b, _ := thread.BranchName("", "demo2", "t-0002", "", "More"); b != "tm/demo2/t-0002-more" {
 		t.Fatalf("branch %q", b)
 	}
 	h.expect(2, "unknown flag --name", human, "project", "rename", "demo2", "demo3", "--name", "Demo 3")

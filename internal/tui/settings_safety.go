@@ -188,7 +188,41 @@ func (sr safetyRows) sharedRows() []setting {
 			"coordinator_agent", func(s config.Safety) string { return s.CoordinatorAgent }, "new coordinators "+sr.ofWho+" run "),
 		sr.modelsRow(),
 		sr.coordModelRow(),
+		sr.branchRow(),
 	}
+}
+
+// branchPreview is the branch a thread would get from template: a
+// thread t-0042 for task T42, "Fix login", and the same without a task.
+func (sr safetyRows) branchPreview(template string) string {
+	slug := cmp.Or(sr.slug, "demo")
+	with := config.ExpandBranchName(template, slug, "t-0042", "T42", "fix-login")
+	if !strings.Contains(template, "{task}") {
+		return with
+	}
+	return with + " (" + config.ExpandBranchName(template, slug, "t-0042", "", "fix-login") + " without a task)"
+}
+
+func (sr safetyRows) branchRow() setting {
+	return setting{label: "Branch names", help: "How new threads name their branch, for a company's branch policy. Use {project}, {id} (required, as t-0042), {task} (as T42, or empty) and {title}; for example feature/{task}-{title} or users/me/{id}. Existing threads keep their branches. Enter edits it; an empty one is the default.",
+		keys: []string{"branch_name"}, word: func(s config.Safety) string { return s.BranchName },
+		value: func(m *dash) string { return sr.safety(m).BranchName },
+		note: func(m *dash) []string {
+			return []string{"next branch, e.g. " + sr.branchPreview(sr.safety(m).BranchName)}
+		},
+		change: func(m *dash) tea.Cmd {
+			m.push(&inputView{title: "Branch names " + sr.forWho, keep: true, text: sr.safety(m).BranchName,
+				label: "Template ({project} {id} {task} {title}; {id} is required):",
+				submit: func(t string) tea.Cmd {
+					t = cmp.Or(strings.TrimSpace(t), config.DefaultBranchName)
+					if err := config.CheckBranchName(t); err != nil {
+						m.msg = "branch names " + err.Error() + ": it stays as it is"
+						return nil
+					}
+					return sr.set(m, "branch_name", t, "new threads "+sr.ofWho+" get branches like "+sr.branchPreview(t))
+				}})
+			return nil
+		}}
 }
 
 func startWords(s config.Safety) string {

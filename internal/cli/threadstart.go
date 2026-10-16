@@ -42,6 +42,9 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	if err != nil {
 		return err
 	}
+	if err := config.CheckBranchName(safety.BranchName); err != nil {
+		return usagef("branch_name %q %v (fix it in the settings or config.toml)", safety.BranchName, err)
+	}
 	// --agent overrides the user's thread_agent setting (§11.2); unset,
 	// the one installed agent.
 	agentName, err := threadAgent(o.agent, safety)
@@ -119,7 +122,9 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	}
 	branch, base := "", ""
 	if repo != "" {
-		branch = thread.BranchName(p.Slug, r.ID, o.title)
+		if branch, err = thread.BranchName(safety.BranchName, p.Slug, r.ID, r.Task, o.title); err != nil {
+			return fail(err)
+		}
 		if base, err = worktree.Create(repo, wt, branch, o.base); err != nil {
 			return fail(err)
 		}

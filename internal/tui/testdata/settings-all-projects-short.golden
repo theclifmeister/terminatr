@@ -4,10 +4,10 @@
     ├─ t-00│  1 General   2 All projects   3 Mods   4 Peers                                       │
     └─ t-00│ About: tm dev · server unknown · update check off                                    │deactivate
  ■ beta    │                                                                                      │
- └─ coordin│ Coordinator model            agent's default                                         │
-    ├─ T4 W│ The model a new coordinator runs, from its agent's models in Thread models; a        │
-    └─ t-00│ running one keeps its model until it is started anew. Enter picks the next one; the  │
-           │ agent's default is the first.                                                        │───────────
+ └─ coordin│ {id} (required, as t-0042), {task} (as T42, or empty) and {title}; for example       │
+    ├─ T4 W│ feature/{task}-{title} or users/me/{id}. Existing threads keep their branches. Enter │
+    └─ t-00│ edits it; an empty one is the default.                                               │
+           │ next branch, e.g. tm/demo/t-0042-fix-login                                           │───────────
            │                                                                                      │
            │ Keep history                 30 days                                                 │s  /y
            │ How long done tasks, resolved threads, handled inbox items and journal lines stay    │

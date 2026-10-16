@@ -178,6 +178,9 @@ type Safety struct {
 	Share bool `json:"share"`
 	// Merge is who merges a thread's PR: MergeCoordinator or MergeThread.
 	Merge string `json:"merge"`
+	// BranchName is the template of new threads' branches
+	// (ExpandBranchName); existing threads keep the branch they have.
+	BranchName string `json:"branch_name"`
 	// Guard turns the mod's guard on (docs/SPEC.md §8.6, Guard): it
 	// refuses tool calls that break the standing rules. GuardOff are the
 	// GuardRules it leaves out. Only the human sets them, here.
@@ -211,7 +214,7 @@ const LegacyAgent = "claude"
 // [defaults] (all projects) name.
 var Defaults = Safety{StartThreads: StartPropose, Yolo: false, CoordinatorApproves: true,
 	ParallelThreads: 10, AutoClose: CloseMerged, AutoCloseDays: 7, PRFollowup: true, PRPollSeconds: DefaultPRPollSeconds,
-	CompleteTasks: CompleteUser, FastForwardCheckout: true, SandboxEscapes: true, Merge: MergeCoordinator, Guard: true, Active: true,
+	CompleteTasks: CompleteUser, FastForwardCheckout: true, SandboxEscapes: true, Merge: MergeCoordinator, BranchName: DefaultBranchName, Guard: true, Active: true,
 	ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30}
 
 type rawSafety struct {
@@ -243,6 +246,7 @@ type rawSafety struct {
 	Pinned         *bool     `toml:"pinned"`
 	Share          *bool     `toml:"share"`
 	Merge          *string   `toml:"merge"`
+	BranchName     *string   `toml:"branch_name"`
 	Guard          *bool     `toml:"guard"`
 	GuardOff       *[]string `toml:"guard_off"`
 	ArchiveTasks   *int      `toml:"archive_tasks_days"`
