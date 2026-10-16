@@ -136,19 +136,10 @@ func realPath(p string) string {
 
 // checkedOut maps each branch checked out in a worktree of repo to that
 // worktree's real path.
-func checkedOut(d Deps, repo string) map[string]string {
-	out := map[string]string{}
-	list, err := d.Run(repo, "git", "worktree", "list", "--porcelain")
-	if err != nil {
-		return out
-	}
-	dir := ""
-	for _, l := range strings.Split(list, "\n") {
-		if v, ok := strings.CutPrefix(l, "worktree "); ok {
-			dir = v
-		} else if v, ok := strings.CutPrefix(l, "branch refs/heads/"); ok {
-			out[v] = realPath(dir)
-		}
+func checkedOut(repo string) map[string]string {
+	out := worktree.CheckedOut(repo)
+	for br, dir := range out {
+		out[br] = realPath(dir)
 	}
 	return out
 }
@@ -173,7 +164,7 @@ func leftoverWorktrees(d Deps, ix *threadIndex) []worktreeCheck {
 			}
 			_, reason := ix.why(s.Name(), e.Name())
 			c := Check{Group: g, Name: "worktree", Status: Warn, Detail: dir + ": " + reason}
-			common, err := d.Run(dir, "git", "rev-parse", "--path-format=absolute", "--git-common-dir")
+			dirs, err := worktree.GitDirs(dir)
 			if err != nil {
 				if empty(dir) {
 					c.Fix = &Fix{Desc: "remove empty folder " + dir, Apply: func() error { return os.Remove(dir) }}
@@ -183,10 +174,7 @@ func leftoverWorktrees(d Deps, ix *threadIndex) []worktreeCheck {
 				out = append(out, worktreeCheck{c, dir})
 				continue
 			}
-			repo := common
-			if filepath.Base(common) == ".git" {
-				repo = filepath.Dir(common)
-			}
+			repo := dirs.RepoRoot
 			if st, _ := d.Run(dir, "git", "status", "--porcelain"); st != "" {
 				c.Detail += "; has uncommitted changes, kept"
 				out = append(out, worktreeCheck{c, dir})
@@ -232,7 +220,7 @@ func leftoverBranches(d Deps, ix *threadIndex, removable map[string]bool) []Chec
 			continue
 		}
 		base := defaultBase(repo)
-		used := checkedOut(d, repo)
+		used := checkedOut(repo)
 		for _, br := range strings.Split(refs, "\n") {
 			parts := strings.SplitN(br, "/", 3)
 			if len(parts) != 3 {

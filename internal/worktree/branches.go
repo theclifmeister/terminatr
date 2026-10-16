@@ -35,19 +35,26 @@ func PRHead(repo, pr string) (state string, number int, head string) {
 
 // CheckedOutIn is the worktree branch is checked out in, "" for none.
 func CheckedOutIn(repo, branch string) string {
+	return CheckedOut(repo)[branch]
+}
+
+// CheckedOut maps each branch checked out in a worktree of repo to that
+// worktree's folder, as git lists it; empty when git can't list them.
+func CheckedOut(repo string) map[string]string {
+	out := map[string]string{}
 	list, err := git(repo, "worktree", "list", "--porcelain")
 	if err != nil {
-		return ""
+		return out
 	}
 	dir := ""
 	for _, l := range strings.Split(list, "\n") {
 		if v, ok := strings.CutPrefix(l, "worktree "); ok {
 			dir = v
-		} else if l == "branch refs/heads/"+branch {
-			return dir
+		} else if v, ok := strings.CutPrefix(l, "branch refs/heads/"); ok {
+			out[v] = dir
 		}
 	}
-	return ""
+	return out
 }
 
 // DefaultRef is the branch merged work lands on: origin's default
