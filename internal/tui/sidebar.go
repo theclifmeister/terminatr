@@ -78,9 +78,7 @@ func sideLines(all []treeRow, w, h int, head sideHeadIn, foot []string, right bo
 	if slim {
 		gap = 0
 	}
-	if len(foot) > 0 && h < len(foot)+4 {
-		foot = nil // no room: the tree comes first
-	}
+	foot = foot[:footRoom(h, len(foot))] // no room: the tree comes first
 	lay := sideLayout(all, w, h, len(foot))
 	h -= len(foot)
 	focused := head.cursor || slices.ContainsFunc(all, func(r treeRow) bool { return r.cursor })

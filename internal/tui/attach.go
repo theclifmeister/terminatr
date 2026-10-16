@@ -1447,15 +1447,7 @@ func (c *client) detachThen(then string) {
 			c.log.Printf("%s: %v", proto.MethodViewDashboard, err)
 		}
 	}
-	var ps []*pane
-	if c.lock() {
-		ps = c.leaves()
-		c.mu.Unlock()
-	}
-	for _, p := range ps {
-		c.send(p, proto.FrameDetach, nil)
-	}
-	c.finish(c.detachResult())
+	c.leaveAll()
 }
 
 // quit ends this console, as closing its window does: the view, its
@@ -1463,11 +1455,24 @@ func (c *client) detachThen(then string) {
 func (c *client) quit() {
 	c.quitting = true
 	c.detaching.Store(true) // publishes quitting to lost
+	c.leaveAll()
+}
+
+// leaveAll is leave with every leaf.
+func (c *client) leaveAll() {
 	var ps []*pane
 	if c.lock() {
 		ps = c.leaves()
 		c.mu.Unlock()
 	}
+	c.leave(ps)
+}
+
+// leave detaches the panes ps and ends the attach as detachResult says.
+// The caller has set detaching first, once it published what lost reads
+// (then, quitting, over): a pane that fails as it detaches is then not
+// lost.
+func (c *client) leave(ps []*pane) {
 	for _, p := range ps {
 		c.send(p, proto.FrameDetach, nil)
 	}
@@ -1519,10 +1524,7 @@ func (c *client) goOver(o *Over) {
 	c.mu.Unlock()
 	c.over = o
 	c.detaching.Store(true) // publishes over to lost
-	for _, p := range ps {
-		c.send(p, proto.FrameDetach, nil)
-	}
-	c.finish(c.detachResult())
+	c.leave(ps)
 }
 
 // paneLines are the pane area's rows as shown, as plain text: what a

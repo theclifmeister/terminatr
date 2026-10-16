@@ -138,9 +138,7 @@ func remotePanel(d *infoData, w int, now time.Time) (*panel, []infoHit) {
 	pl := &panel{w: w}
 	var hits []infoHit
 	pad := func() {
-		for len(hits) < len(pl.lines) {
-			hits = append(hits, infoHit{})
-		}
+		hits = padHits(hits, len(pl.lines), infoHit{})
 	}
 	// The head: the server's name on a line of its own, so a long one
 	// is cut, never the link's words, which wrap under it.
@@ -239,9 +237,7 @@ func remoteThread(r *remoteData, in proto.SessionInfo, w int, now time.Time) (*p
 	pl := &panel{w: w}
 	var hits []infoHit
 	hit := func(from int, h infoHit) {
-		for len(hits) < len(pl.lines) {
-			hits = append(hits, infoHit{})
-		}
+		hits = padHits(hits, len(pl.lines), infoHit{})
 		for i := from; i < len(hits); i++ {
 			hits[i] = h
 		}
@@ -343,8 +339,6 @@ func remoteThread(r *remoteData, in proto.SessionInfo, w int, now time.Time) (*p
 	if wt != nil && wt.Reports > 0 {
 		pl.field("reports", fmt.Sprint(wt.Reports))
 	}
-	for len(hits) < len(pl.lines) {
-		hits = append(hits, infoHit{})
-	}
+	hits = padHits(hits, len(pl.lines), infoHit{})
 	return pl, hits
 }
