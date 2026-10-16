@@ -72,17 +72,25 @@ func (p *Project) AddItem(kind, subject, summary string, needsUser bool) (*Item,
 func (p *Project) AddMessageItem(kind, subject, summary string, needsUser bool, message string) (*Item, error) {
 	t := now().UTC().Truncate(time.Second)
 	base := fmt.Sprintf("%s-%s-%s", t.Format("20060102T150405Z"), kind, Slugify(subject))
+	if err := os.MkdirAll(p.Path("inbox"), 0o755); err != nil {
+		return nil, err
+	}
+	// The name is taken by creating the file, so that two writers in the
+	// same second can't both pick it; mdfile.Write then replaces the empty
+	// file.
 	id := base
 	for i := 2; ; i++ {
-		if _, err := os.Stat(p.Path("inbox", id+".md")); errors.Is(err, fs.ErrNotExist) {
+		f, err := os.OpenFile(p.Path("inbox", id+".md"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+		if err == nil {
+			f.Close()
 			break
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			return nil, err
 		}
 		id = fmt.Sprintf("%s-%d", base, i)
 	}
 	it := &Item{ID: id, Kind: kind, Subject: subject, Created: t, Summary: summary, NeedsUser: needsUser, Message: message}
-	if err := os.MkdirAll(p.Path("inbox"), 0o755); err != nil {
-		return nil, err
-	}
 	if err := mdfile.Write(p.Path("inbox", id+".md"), it, nil); err != nil {
 		return nil, err
 	}

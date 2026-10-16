@@ -231,7 +231,7 @@ func AgentColors(tt Table, dark bool) *Agent {
 		a.ANSI[i] = hexOf(c)
 	}
 	builtin, _ := Bundled()
-	def := builtin.Dark.Roles()
+	def := builtin.Scheme(dark).Roles()
 	rs.SelFocus = rs.SelFocusSpec()
 	for i, r := range rs.Roles() {
 		spec := r.Spec

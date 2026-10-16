@@ -255,3 +255,37 @@ func errStrings(errs []error) []string {
 	}
 	return s
 }
+
+func TestCheckLimits(t *testing.T) {
+	n := func(k int) []string {
+		out := make([]string, k)
+		for i := range out {
+			out[i] = "h" + strings.Repeat("a", i) + ".example.com"
+		}
+		return out
+	}
+	m := &Manifest{
+		Name:        strings.Repeat("n", maxNameLen+1),
+		Description: strings.Repeat("d", maxDescLen+1),
+		Authors:     make([]string, maxAuthors+1),
+		Provides:    Provides{Main: "m.ts", Columns: make([]Column, maxColumns+1), Views: make([]View, maxViews+1)},
+		Permissions: Permissions{Net: n(maxNetHosts + 1), Commands: []string{"git", "git"}, Files: Files{Read: []string{"~/a", "~/a"}}},
+		Settings:    map[string]Setting{"c": {Type: SettingChoice, Options: make([]string, maxOptions+1)}},
+	}
+	var got []error
+	got = append(got, m.checkMeta()...)
+	got = append(got, m.checkColumns()...)
+	got = append(got, m.checkViews()...)
+	got = append(got, m.checkPermissions()...)
+	got = append(got, m.checkSettings()...)
+	all := strings.Join(errStrings(got), "\n")
+	for _, w := range []string{
+		"name is longer than", "description is longer than", "authors: at most", "provides.columns: at most",
+		"provides.views: at most", "permissions.net: at most", `permissions.commands: "git" is listed twice`,
+		`permissions.files.read: "~/a" is listed twice`, "settings.c: at most 32 options",
+	} {
+		if !strings.Contains(all, w) {
+			t.Errorf("no problem %q in:\n%s", w, all)
+		}
+	}
+}

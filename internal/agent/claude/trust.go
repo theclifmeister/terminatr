@@ -108,16 +108,42 @@ func editProjects(home string, fn func(projects map[string]json.RawMessage, path
 	if err != nil || !changed {
 		return err
 	}
-	b, err := json.Marshal(projects)
+	b, err := marshalPlain(projects, "")
 	if err != nil {
 		return err
 	}
 	top["projects"] = b
-	out, err := json.MarshalIndent(top, "", "  ")
+	out, err := marshalPlain(top, "  ")
 	if err != nil {
 		return err
 	}
+	if len(data) > 0 {
+		// One copy of the file as it was before tm first rewrote it.
+		if bak := path + ".tm-backup"; !exists(bak) {
+			_ = fsx.WriteAtomic(bak, data, mode)
+		}
+	}
 	return writeAtomic(path, out, mode)
+}
+
+// marshalPlain is json.Marshal(Indent) without HTML escaping, so <, > and &
+// in the file's strings stay as they were written.
+func marshalPlain(v any, indent string) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if indent != "" {
+		enc.SetIndent("", indent)
+	}
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+}
+
+func exists(path string) bool {
+	_, err := os.Lstat(path)
+	return err == nil
 }
 
 // lockConfig takes a lock directory next to the file (the proper-lockfile

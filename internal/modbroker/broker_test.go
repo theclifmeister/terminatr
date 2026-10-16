@@ -123,7 +123,7 @@ func TestSettingsAndStore(t *testing.T) {
 	if got, err := tb.call(t, "store.get", map[string]string{"key": "seen"}); err != nil || got != nil {
 		t.Fatalf("store.get after del = %v, %v", got, err)
 	}
-	big := strings.Repeat("x", maxStore)
+	big := strings.Repeat("x", MaxStore)
 	if _, err := tb.call(t, "store.set", map[string]any{"key": "big", "value": big}); code(err) != CodeDenied {
 		t.Fatalf("an over-size store: %v", err)
 	}

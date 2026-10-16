@@ -56,8 +56,8 @@ export interface TM {
   fs: {
     /** Reads a text file in the mod's own data dir, or under a root the files grant lists. */
     read(path: string): Promise<string>;
-    /** Writes a text file in the mod's own data dir, or under a root the files grant lets it write. */
-    write(path: string, text: string): Promise<void>;
+    /** Writes a text file in the mod's own data dir, or under a root the files grant lets it write; with append true it adds to the end instead of replacing the file. */
+    write(path: string, text: string, append?: boolean): Promise<void>;
   };
   /** The mod's settings. */
   settings(): TM.Settings;

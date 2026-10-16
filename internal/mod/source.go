@@ -549,15 +549,29 @@ func remoteHead(url, ref string) (string, error) {
 	if ref == "" {
 		ref = "HEAD"
 	}
-	out, err := git("", "ls-remote", "--", url, ref)
+	out, err := git("", "ls-remote", "--", url, ref, ref+"^{}")
 	if err != nil {
 		return "", err
 	}
+	found := ""
 	for _, l := range strings.Split(out, "\n") {
 		commit, name, ok := strings.Cut(l, "\t")
-		if ok && (name == ref || name == "refs/heads/"+ref || name == "refs/tags/"+ref) {
-			return commit, nil
+		if !ok {
+			continue
 		}
+		switch name {
+		case "refs/tags/" + ref + "^{}", ref + "^{}":
+			// An annotated tag's peeled line is the commit; the line
+			// before it is the tag object.
+			return commit, nil
+		case ref, "refs/heads/" + ref, "refs/tags/" + ref:
+			if found == "" {
+				found = commit
+			}
+		}
+	}
+	if found != "" {
+		return found, nil
 	}
 	return "", fmt.Errorf("%s has no %s", url, ref)
 }

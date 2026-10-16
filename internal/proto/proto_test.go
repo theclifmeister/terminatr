@@ -121,3 +121,9 @@ func TestPanesWords(t *testing.T) {
 		t.Error("PanesWord")
 	}
 }
+
+func TestAppendFrameTooLarge(t *testing.T) {
+	if got := AppendFrame([]byte("x"), FrameOutput, make([]byte, MaxFrame+1)); string(got) != "x" {
+		t.Fatalf("an oversized frame was appended: %d bytes", len(got))
+	}
+}

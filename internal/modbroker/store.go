@@ -14,8 +14,8 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 )
 
-// maxStore is the most a mod's store holds, as JSON.
-const maxStore = 1 << 20
+// MaxStore is the most a mod's store holds, as JSON.
+const MaxStore = 1 << 20
 
 // storeFile is a mod's store in its own folder.
 const storeFile = "store.json"
@@ -74,10 +74,32 @@ func (c *Call) storeKey() (storeArgs, error) {
 	if err := c.Decode(&a); err != nil {
 		return a, err
 	}
-	if a.Key == "" || len(a.Key) > 256 {
-		return a, BadParams("%s: a key is 1 to 256 bytes", c.Method)
+	return a, CheckKey(c.Method, a.Key)
+}
+
+// CheckKey refuses a store key that isn't 1 to 256 bytes; method is the
+// call, for the message.
+func CheckKey(method, key string) error {
+	if key == "" || len(key) > 256 {
+		return BadParams("%s: a key is 1 to 256 bytes", method)
 	}
-	return a, nil
+	return nil
+}
+
+// CheckStoreSize refuses a store whose JSON is over MaxStore.
+func CheckStoreSize(store map[string]json.RawMessage) error {
+	data, err := json.Marshal(store)
+	if err != nil {
+		return err
+	}
+	return checkStoreLen(len(data))
+}
+
+func checkStoreLen(n int) error {
+	if n > MaxStore {
+		return Denied("the store would be %d bytes, over its %d", n, MaxStore)
+	}
+	return nil
 }
 
 // store.get {key} → the value, or null.
@@ -100,7 +122,7 @@ func (b *Broker) storeGet(_ context.Context, c *Call) (any, error) {
 }
 
 // store.set {key, value}: value is any JSON; the store stays under
-// maxStore.
+// MaxStore.
 func (b *Broker) storeSet(_ context.Context, c *Call) (any, error) {
 	a, err := c.storeKey()
 	if err != nil {
@@ -136,8 +158,8 @@ func (b *Broker) editStore(id string, edit func(map[string]json.RawMessage)) err
 	if err != nil {
 		return err
 	}
-	if len(data) > maxStore {
-		return Denied("the store would be %d bytes, over its %d", len(data), maxStore)
+	if err := checkStoreLen(len(data)); err != nil {
+		return err
 	}
 	b.storeSeen.Delete(id)
 	return fsx.WriteAtomic(filepath.Join(b.OwnDir(id), storeFile), data, 0o600)

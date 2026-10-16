@@ -45,3 +45,32 @@ func TestListenKeepsUmask(t *testing.T) {
 	}
 	checkPrivate(t, a)
 }
+
+// TestPeerOfOtherUser: a peer whose uid isn't ours is not SameUser.
+func TestPeerOfOtherUser(t *testing.T) {
+	ownUID = func() int { return os.Getuid() + 1 }
+	t.Cleanup(func() { ownUID = os.Getuid })
+	a := SessionAddr(sockDir(t), "x.sock")
+	ln, err := Listen(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	c, err := Dial(ctx(t), a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	s, err := ln.Accept()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	p, err := PeerOf(s)
+	if err != nil {
+		t.Fatalf("PeerOf: %v", err)
+	}
+	if p.SameUser || p.PID != os.Getpid() {
+		t.Fatalf("peer %+v, want pid %d, another user", p, os.Getpid())
+	}
+}

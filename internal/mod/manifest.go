@@ -193,6 +193,15 @@ func CommandName(mod, cmd string) string { return mod + ":" + cmd }
 // Limits of a mod's commands.
 const (
 	maxCommands     = 16
+	maxColumns      = 8
+	maxViews        = 16
+	maxSettings     = 32
+	maxOptions      = 32
+	maxNetHosts     = 16
+	maxFileRoots    = 16
+	maxAuthors      = 8
+	maxNameLen      = 64
+	maxDescLen      = 400
 	maxCommandTitle = 48
 )
 
@@ -615,6 +624,20 @@ func (m *Manifest) checkIDs(list, needs string, ids []string, form idForm, also 
 	return ps
 }
 
+// checkList checks a list of permission entries: at most max, none twice.
+func checkList(at string, list []string, max int) []error {
+	var ps problems
+	if len(list) > max {
+		ps.add("%s: at most %d", at, max)
+	}
+	for i, e := range list {
+		if slices.Contains(list[:i], e) {
+			ps.add("%s: %q is listed twice", at, e)
+		}
+	}
+	return ps
+}
+
 // checkRoles checks the roles a guard rule or a tool is for.
 func checkRoles(at string, roles []string) []error {
 	var ps problems
@@ -647,6 +670,14 @@ func (m *Manifest) checkMeta() []error {
 	}
 	if strings.TrimSpace(m.Name) == "" {
 		ps.add("has no name")
+	} else if len([]rune(m.Name)) > maxNameLen {
+		ps.add("name is longer than %d characters", maxNameLen)
+	}
+	if len([]rune(m.Description)) > maxDescLen {
+		ps.add("description is longer than %d characters", maxDescLen)
+	}
+	if len(m.Authors) > maxAuthors {
+		ps.add("authors: at most %d", maxAuthors)
 	}
 	if _, ok := update.Newer(m.Version, m.Version); !ok || strings.HasPrefix(m.Version, "v") {
 		ps.add("version %q isn't MAJOR.MINOR.PATCH", m.Version)
@@ -698,6 +729,9 @@ func (m *Manifest) checkFiles(dir string) []error {
 func (m *Manifest) checkColumns() []error {
 	cs := m.Provides.Columns
 	ps := problems(m.checkIDs("columns", "a column needs provides.main, the code that fills it", idsOf(cs, func(c Column) string { return c.ID }), dashIDs, nil))
+	if len(cs) > maxColumns {
+		ps.add("provides.columns: at most %d columns", maxColumns)
+	}
 	for i, c := range cs {
 		at := entryAt("columns", i)
 		if c.Width < 1 || c.Width > maxColumnWidth {
@@ -719,6 +753,9 @@ func (m *Manifest) checkColumns() []error {
 func (m *Manifest) checkViews() []error {
 	vs := m.Provides.Views
 	ps := problems(m.checkIDs("views", "a view needs provides.main, the code that draws it", idsOf(vs, func(v View) string { return v.ID }), dashIDs, nil))
+	if len(vs) > maxViews {
+		ps.add("provides.views: at most %d views", maxViews)
+	}
 	for i, v := range vs {
 		at := entryAt("views", i)
 		if strings.TrimSpace(v.Title) == "" {
@@ -897,6 +934,10 @@ func (m *Manifest) checkPermissions() []error {
 	if !m.IsCode() && len(perm.Requested()) > 0 {
 		ps.add("permissions are for code mods (provides.main); a data mod needs none")
 	}
+	ps = append(ps, checkList("permissions.net", perm.Net, maxNetHosts)...)
+	ps = append(ps, checkList("permissions.commands", perm.Commands, maxCommands)...)
+	ps = append(ps, checkList("permissions.files.read", perm.Files.Read, maxFileRoots)...)
+	ps = append(ps, checkList("permissions.files.write", perm.Files.Write, maxFileRoots)...)
 	for _, h := range perm.Net {
 		if !hostRE.MatchString(h) {
 			ps.add("permissions.net: %q isn't a host name (no scheme, port or path)", h)
@@ -937,6 +978,9 @@ func (m *Manifest) checkPermissions() []error {
 // checkSettings checks settings.
 func (m *Manifest) checkSettings() []error {
 	var ps problems
+	if len(m.Settings) > maxSettings {
+		ps.add("settings: at most %d", maxSettings)
+	}
 	for _, k := range sortedKeys(m.Settings) {
 		s := m.Settings[k]
 		at := "settings." + k
@@ -961,6 +1005,9 @@ func (m *Manifest) checkSettings() []error {
 		}
 		if err := checkText(s.Label); err != nil {
 			ps.add("%s: label %v", at, err)
+		}
+		if len(s.Options) > maxOptions {
+			ps.add("%s: at most %d options", at, maxOptions)
 		}
 		for _, o := range s.Options {
 			if err := checkText(o); err != nil {

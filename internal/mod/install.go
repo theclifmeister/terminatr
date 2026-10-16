@@ -199,7 +199,11 @@ func Replace(c caller.Caller, id string, st *Staged, grant []string) error {
 		return err
 	}
 	if err := os.Rename(st.Dir, m.Dir); err != nil {
-		os.Rename(old, m.Dir)
+		if rerr := os.Rename(old, m.Dir); rerr != nil {
+			// Keep the staging folder: it holds the only copy.
+			st.tmp = ""
+			return fmt.Errorf("%w; putting the old copy back failed too (%v): it is kept in %s", err, rerr, old)
+		}
 		return err
 	}
 	if len(grant) == 0 {
@@ -215,7 +219,10 @@ func Replace(c caller.Caller, id string, st *Staged, grant []string) error {
 			grants = append(grants, g)
 		}
 	}
-	return SetGrants(c, id, grants)
+	if err := SetGrants(c, id, grants); err != nil {
+		return fmt.Errorf("%s is updated, but granting %s failed: %w", id, strings.Join(grant, ", "), err)
+	}
+	return nil
 }
 
 // removedFile marks a removed mod's data folder with when it was

@@ -413,3 +413,19 @@ func mustLoad(t *testing.T) *Config {
 	}
 	return c
 }
+
+func TestEditStopsAtArrayTable(t *testing.T) {
+	in := "[projects.demo]\nyolo = false\n\n[[mods.x.items]]\nactive = true\n"
+	got, err := Edit([]byte(in), "projects.demo", "start_threads", "auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "[projects.demo]\nyolo = false\nstart_threads = \"auto\"\n\n[[mods.x.items]]\nactive = true\n"
+	if string(got) != want {
+		t.Errorf("Edit:\n%s", got)
+	}
+	in = "[projects.demo]\nyolo = false\n[[mods.x.items]]\nactive = true\n"
+	if got := string(Remove([]byte(in), "projects.demo", "active")); got != in {
+		t.Errorf("Remove touched the array table:\n%s", got)
+	}
+}
