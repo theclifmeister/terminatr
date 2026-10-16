@@ -158,6 +158,12 @@ type textView struct {
 	title, body, note string
 	scroll            int
 	bottom, quit      bool
+
+	// wrapped is body hard-wrapped at wrapW (for wrapBody): wrapping a
+	// large file is done once per width, not on every key and frame.
+	wrapped []string
+	wrapW   int
+	wrapOf  string
 }
 
 // scrollKey scrolls *scroll for key k over n lines; it says whether k
@@ -233,11 +239,25 @@ func hardLines(text string, w int) []string {
 	return out
 }
 
-func (tv *textView) lines(w int) []string {
-	var out []string
+// wrapBody is the body's lines hard-wrapped for w cells (hardLines),
+// kept for as long as w and the body stay the same. The slice is
+// shared: callers copy before changing it.
+func (tv *textView) wrapBody(w int) []string {
+	w = max(w, 10)
+	if tv.wrapped != nil && tv.wrapW == w && tv.wrapOf == tv.body {
+		return tv.wrapped
+	}
+	out := []string{}
 	if tv.body != "" {
 		out = hardLines(tv.body, w)
 	}
+	tv.wrapped, tv.wrapW, tv.wrapOf = out, w, tv.body
+	return out
+}
+
+func (tv *textView) lines(w int) []string {
+	out := tv.wrapBody(w)
+	out = out[:len(out):len(out)] // an append below must not write into the cache
 	if tv.note != "" {
 		if len(out) > 0 {
 			out = append(out, "")

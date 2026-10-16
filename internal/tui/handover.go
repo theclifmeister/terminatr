@@ -113,8 +113,13 @@ func synced(b []byte) []byte {
 	if len(b) == 0 {
 		return b
 	}
-	b = bytes.ReplaceAll(b, []byte(syncStart), nil)
-	b = bytes.ReplaceAll(b, []byte(syncEnd), nil)
+	// ReplaceAll copies even when nothing matches: only when a marker is there.
+	if bytes.Contains(b, []byte(syncStart)) {
+		b = bytes.ReplaceAll(b, []byte(syncStart), nil)
+	}
+	if bytes.Contains(b, []byte(syncEnd)) {
+		b = bytes.ReplaceAll(b, []byte(syncEnd), nil)
+	}
 	out := make([]byte, 0, len(b)+len(syncStart)+len(syncEnd))
 	out = append(out, syncStart...)
 	out = append(out, b...)

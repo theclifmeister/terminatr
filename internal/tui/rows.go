@@ -122,7 +122,19 @@ func (r row) text(w int) string {
 	if r.note != "" {
 		return r.note
 	}
-	return r.line(w, r.hasBar(w), func(_ int, s string) string { return s })
+	plain := func(_ int, s string) string { return s }
+	return r.withBar(w, func(bar bool) string { return r.line(w, bar, plain) })
+}
+
+// withBar is the row drawn by draw with its progress bar when it has a
+// percent and the whole row still fits in w cells, else without: the
+// row is laid out once, and again only when the bar does not fit.
+func (r row) withBar(w int, draw func(bar bool) string) string {
+	line := draw(r.pct >= 0)
+	if r.pct >= 0 && ansi.StringWidth(line) > w {
+		return draw(false)
+	}
+	return line
 }
 
 // line lays the row out for w cells; paint styles each column (0 mark, 1
@@ -156,46 +168,39 @@ func (r row) line(w int, withBar bool, paint func(col int, s string) string) str
 	return out + strings.Join(rest, "  ")
 }
 
-// hasBar says whether the row draws its progress bar: only when it has
-// a percent and the whole row still fits in w cells.
-func (r row) hasBar(w int) bool {
-	if r.pct < 0 {
-		return false
-	}
-	return ansi.StringWidth(r.line(w, true, func(_ int, s string) string { return s })) <= w
-}
-
 // styled is text in the theme's colours, w cells wide.
 func (r row) styled(w int) string {
 	if r.note != "" {
 		return th().Faint.Render(fit(r.note, w))
 	}
 	_, st := stateLook(r.state)
-	mod := 0
-	line := r.line(w, r.hasBar(w), func(col int, s string) string {
-		switch col {
-		case 7:
-			_, styled := spansCell(r.mods[mod].spans, r.mods[mod].w)
-			mod++
-			return styled
-		case 0:
-			return markStyle(r.mark).Render(s)
-		case 1:
-			if strings.HasPrefix(r.key, "p:") {
-				return th().Head.Render(s)
+	line := r.withBar(w, func(bar bool) string {
+		mod := 0
+		return r.line(w, bar, func(col int, s string) string {
+			switch col {
+			case 7:
+				_, styled := spansCell(r.mods[mod].spans, r.mods[mod].w)
+				mod++
+				return styled
+			case 0:
+				return markStyle(r.mark).Render(s)
+			case 1:
+				if strings.HasPrefix(r.key, "p:") {
+					return th().Head.Render(s)
+				}
+			case 3:
+				return st.Render(s)
+			case 4:
+				if r.leadBad {
+					return th().Bad.Render(s)
+				}
+				return th().Warn.Render(s)
+			case 5:
+				n := strings.Count(s, "▰")
+				return th().Good.Render(strings.Repeat("▰", n)) + th().Faint.Render(strings.Repeat("▱", 5-n))
 			}
-		case 3:
-			return st.Render(s)
-		case 4:
-			if r.leadBad {
-				return th().Bad.Render(s)
-			}
-			return th().Warn.Render(s)
-		case 5:
-			n := strings.Count(s, "▰")
-			return th().Good.Render(strings.Repeat("▰", n)) + th().Faint.Render(strings.Repeat("▱", 5-n))
-		}
-		return s
+			return s
+		})
 	})
 	return fit(line, w) + reset
 }

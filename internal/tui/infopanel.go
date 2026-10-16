@@ -136,13 +136,6 @@ func (d *infoData) prLine() string {
 	return s
 }
 
-// infoLines draws the panel's content w cells wide (its border not
-// included), with what a click on each line does. now dates the ages.
-func infoLines(d *infoData, w int, now time.Time) ([]string, []infoHit) {
-	lay := infoLay(d, w, now, panelOpts{})
-	return lay.lines, lay.hits
-}
-
 // infoLay is the panel's content w cells wide with the mods' sections
 // placed as o says: beside a coordinator its coordinator sections,
 // beside a thread the details sections for it, as the dashboard's
