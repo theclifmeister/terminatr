@@ -45,8 +45,13 @@ type shooter struct {
 	n    int
 }
 
-func (s *shooter) shot(name string) {
+// shot saves the screen once it shows each of want (soft: a miss is
+// logged, the shot still taken) and has then been quiet a while.
+func (s *shooter) shot(name string, want ...string) {
 	s.t.Helper()
+	for _, text := range want {
+		s.soft(text)
+	}
 	s.w.Quiet(400 * time.Millisecond)
 	s.n++
 	base := filepath.Join(s.dir, fmt.Sprintf("%s-%02d-%s", s.size, s.n, name))
@@ -64,8 +69,21 @@ func (s *shooter) soft(text string) bool {
 	return ok
 }
 
+// changes runs press and waits for the screen to change, logging
+// instead of failing: for a focus move, whose new screen has no one text
+// to wait for at every window size.
+func (s *shooter) changes(what string, press func()) {
+	before := s.w.Screen()
+	press()
+	if !Poll(wait, func() bool { return s.w.Screen() != before }) {
+		s.t.Logf("%s: %s changed nothing", s.size, what)
+	}
+}
+
 // home closes whatever is open and goes back to the dashboard, so one
-// section's miss doesn't spill into the next.
+// section's miss doesn't spill into the next. Its pauses are fixed: an
+// esc with nothing open, or prefix+d on the dashboard, changes nothing
+// to wait for.
 func (s *shooter) home() {
 	for range 3 {
 		s.w.Key(keyEsc)
@@ -76,6 +94,7 @@ func (s *shooter) home() {
 	s.soft("SESSIONS")
 }
 
+// esc closes the top dialog; what shows next is the caller's to wait for.
 func (s *shooter) esc() {
 	s.w.Key(keyEsc)
 	time.Sleep(150 * time.Millisecond)
@@ -119,7 +138,7 @@ func (s *shooter) downTo(text string) bool {
 	if !s.clickSoft(text, 0) {
 		return false
 	}
-	time.Sleep(150 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond) // the first click only selects: no text changes
 	return s.clickSoft(text, 0)
 }
 
@@ -176,8 +195,9 @@ cmd = 'printf "PR: https://github.com/o/r/pull/7\n\n## Report\nFixed the login r
 	env.WaitFor(sh, "$", wait)
 	own := env.Workdir()
 	env.Trust(own)
-	ownAgent = env.StartAgent("claude", own).ID
-	time.Sleep(2 * time.Second)
+	ownSess := env.StartAgent("claude", own)
+	env.WaitState(ownSess, "idle", agentWait)
+	ownAgent = ownSess.ID
 
 	for _, sz := range shotSizes {
 		if only := os.Getenv("TM_SHOTS_SIZES"); only != "" && !strings.Contains(only, sz.name) {
@@ -235,32 +255,38 @@ func shootSize(t *testing.T, env *Env, dir string, sz shotSize) {
 	w.Type("a")
 	s.soft("1 overview")
 	s.shot("popup-overview")
-	for i, tab := range []string{"inbox", "tasks", "settings", "keys", "memory"} {
+	for i, tab := range []struct{ name, want string }{
+		{"inbox", "The coordinator handles these"},
+		{"tasks", "enter show"},
+		{"settings", "Start threads"},
+		{"keys", "On the dashboard"},
+		{"memory", ""},
+	} {
 		w.Type(fmt.Sprint(i + 2))
-		time.Sleep(200 * time.Millisecond)
-		s.shot("popup-" + tab)
+		if tab.want == "" {
+			// The memory tab's text is the mod's own: nothing to wait for.
+			time.Sleep(200 * time.Millisecond)
+		}
+		s.shot("popup-"+tab.name, tab.want)
 	}
 	// Overview: add a repository.
 	w.Type("1")
-	time.Sleep(200 * time.Millisecond)
+	s.soft("Goal")
 	w.Type("+")
-	time.Sleep(300 * time.Millisecond)
-	s.shot("input-add-repo")
+	s.shot("input-add-repo", "Add a repository")
 	s.esc()
 	w.Type("x")
-	time.Sleep(300 * time.Millisecond)
-	s.shot("confirm-remove-repo")
+	s.shot("confirm-remove-repo", "Remove a repository")
 	s.esc()
 	// Settings tab: the lists behind a row (a click on a row is enter).
 	w.Type("4")
-	time.Sleep(200 * time.Millisecond)
+	s.soft("Start threads")
 	for _, row := range []struct{ text, name string }{
 		{"Thread models", "settings-models"},
 		{"Keep history", "settings-history"},
 	} {
 		if s.downTo(row.text) {
-			time.Sleep(300 * time.Millisecond)
-			s.shot(row.name)
+			s.shot(row.name, "─ "+row.text+" ─") // the list's frame title
 			s.esc()
 		}
 	}
@@ -269,47 +295,38 @@ func shootSize(t *testing.T, env *Env, dir string, sz shotSize) {
 	w.Type("a")
 	s.soft("1 overview")
 	w.Type("3")
-	s.soft("T4")
+	s.soft(tasksRow)
 	w.Key(keyDown)
-	time.Sleep(200 * time.Millisecond)
-	s.shot("popup-tasks-sel")
+	s.shot("popup-tasks-sel", "A accept")
 	w.Key(Enter)
-	time.Sleep(300 * time.Millisecond)
-	s.shot("task-detail-review")
+	s.shot("task-detail-review", "HOW TO CHECK")
 	s.esc()
 	w.Type("A")
-	time.Sleep(300 * time.Millisecond)
-	s.shot("confirm-accept")
+	s.shot("confirm-accept", "Accept T4?")
 	s.esc()
 	w.Type("x")
-	time.Sleep(300 * time.Millisecond)
-	s.shot("input-send-back")
+	s.shot("input-send-back", "Send T4 back")
 	s.esc()
 	w.Keys(keyUp, Enter)
-	time.Sleep(300 * time.Millisecond)
-	s.shot("task-detail-blocked")
+	s.shot("task-detail-blocked", "Blocked on:")
 	s.esc()
 	for range 4 {
 		w.Key(keyDown)
 	}
 	w.Key(Enter)
-	time.Sleep(300 * time.Millisecond)
-	s.shot("task-detail-open")
+	s.shot("task-detail-open", "T2 Write the docs")
 	s.esc()
 	w.Type("D")
-	time.Sleep(300 * time.Millisecond)
-	s.shot("confirm-delegate")
+	s.shot("confirm-delegate", "Delegate T2")
 	s.esc()
 	s.esc()
 
 	s.home()
 	// t: the project popup on its Tasks tab; inbox, new project.
 	w.Type("t")
-	s.soft("3 tasks")
-	s.shot("tasks")
+	s.shot("tasks", tasksRow)
 	w.Key(Enter)
-	time.Sleep(300 * time.Millisecond)
-	s.shot("tasks-detail")
+	s.shot("tasks-detail", "esc back")
 	s.esc()
 	s.esc()
 	w.Type("i")
@@ -317,54 +334,46 @@ func shootSize(t *testing.T, env *Env, dir string, sz shotSize) {
 	s.shot("inbox")
 	s.esc()
 	w.Type("n")
-	time.Sleep(300 * time.Millisecond)
-	s.shot("input-new-project")
+	s.shot("input-new-project", "New project")
 	s.esc()
 
 	s.home()
 	// Settings, both tabs, and their dialogs.
 	w.Type(",")
-	time.Sleep(300 * time.Millisecond)
-	s.shot("settings-general")
+	s.shot("settings-general", "Prefix key")
 	w.Key(Enter) // the first row: the prefix key
-	time.Sleep(300 * time.Millisecond)
-	s.shot("settings-prefix-capture")
+	s.shot("settings-prefix-capture", "Press the new prefix key")
 	s.esc()
 	w.Key(emu.Key{Special: emu.KeyRight})
-	time.Sleep(300 * time.Millisecond)
-	s.shot("settings-all-projects")
+	s.shot("settings-all-projects", "Start threads")
 	if s.downTo("Yolo mode") {
-		time.Sleep(300 * time.Millisecond)
-		s.shot("confirm-yolo")
+		s.shot("confirm-yolo", "Turn on yolo mode")
 		s.esc()
 	}
 	w.Key(emu.Key{Special: emu.KeyPageDown})
 	w.Key(emu.Key{Special: emu.KeyPageDown})
-	time.Sleep(300 * time.Millisecond)
-	s.shot("settings-all-projects-end")
+	s.shot("settings-all-projects-end", "Guard rules")
 	s.esc()
 
 	s.home()
 	// Adopt an agent session of the user's own.
 	if x, y := s.at(ownAgent+" ", 1); y >= 0 {
 		w.Click(x, y)
-		time.Sleep(200 * time.Millisecond)
-		s.shot("dashboard-row-own-agent")
+		s.shot("dashboard-row-own-agent", "T adopt")
 		w.Type("T")
-		time.Sleep(300 * time.Millisecond)
-		s.shot("confirm-adopt")
+		s.shot("confirm-adopt", "Adopt "+ownAgent)
 		s.esc()
 	}
 
 	s.home()
 	// Focus areas: the details panel, the sidebar; the slim strip.
 	w.Key(emu.Key{Special: emu.KeyTab})
-	time.Sleep(200 * time.Millisecond)
-	s.shot("focus-next")
-	w.Key(emu.Key{Special: emu.KeyTab})
-	time.Sleep(200 * time.Millisecond)
+	s.shot("focus-next", "esc back")
+	s.changes("tab", func() { w.Key(emu.Key{Special: emu.KeyTab}) })
 	s.shot("focus-next2")
 	s.esc()
+	// The sidebar's width is all b changes, and a narrow window has no
+	// room for it to: no text to wait for.
 	w.Type("b")
 	time.Sleep(300 * time.Millisecond)
 	s.shot("sidebar-slim")
@@ -372,65 +381,61 @@ func shootSize(t *testing.T, env *Env, dir string, sz shotSize) {
 	time.Sleep(300 * time.Millisecond)
 
 	// Attached: the thread with its info panel, its menus.
-	attach := func(label string) bool {
+	// attach double-clicks label's row and waits for want, the session's
+	// own screen.
+	attach := func(label, want string) bool {
 		x, y := s.at(label, 1)
 		if y < 0 {
 			return false
 		}
 		w.DoubleClick(x+2, y)
-		time.Sleep(1500 * time.Millisecond)
+		s.soft(want)
 		return true
 	}
-	if attach("T1 Fix the login") {
-		s.soft("Fake Claude Code")
+	// dashboard goes back to the dashboard from a session.
+	dashboard := func() {
+		w.Prefix("d")
+		s.soft("SESSIONS")
+	}
+	if attach("T1 Fix the login", "Fake Claude Code") {
 		s.shot("attach-thread")
 		if x, y := s.at(menuGlyph, int(sz.rows)-1); y >= 0 {
 			w.Click(x, y)
 			s.shot("attach-menu")
 			s.esc()
 		}
-		w.Prefix("\t")
-		time.Sleep(300 * time.Millisecond)
+		s.changes("prefix+tab", func() { w.Prefix("\t") })
 		s.shot("attach-sidebar-focus")
-		w.Prefix("\t")
-		time.Sleep(300 * time.Millisecond)
+		s.changes("prefix+tab", func() { w.Prefix("\t") })
 		s.shot("attach-panel-focus")
 		w.Prefix("\t")
 		w.Prefix("a")
-		time.Sleep(400 * time.Millisecond)
-		s.shot("attach-popup")
+		s.shot("attach-popup", "1 overview")
 		s.esc()
 		w.Prefix("?")
-		time.Sleep(400 * time.Millisecond)
-		s.shot("attach-help")
+		s.shot("attach-help", "On the dashboard")
 		s.esc()
 	}
-	w.Prefix("d")
-	time.Sleep(500 * time.Millisecond)
-	if attach("T5 Clean up") {
+	dashboard()
+	if attach("T5 Clean up", "› T5 Clean up") {
 		s.shot("attach-blocked")
 	}
 	// The coordinator, with its panel.
-	w.Prefix("d")
-	time.Sleep(500 * time.Millisecond)
+	dashboard()
 	if x, y := s.at(" coordinator", 1); y >= 0 {
 		w.DoubleClick(x+3, y)
-		time.Sleep(2 * time.Second)
 		s.soft("Fake Claude Code")
 		s.shot("attach-coordinator")
 		w.Prefix("r")
-		time.Sleep(400 * time.Millisecond)
-		s.shot("confirm-remote")
+		s.shot("confirm-remote", "Remote control")
 		s.esc()
 	}
 	// The shell.
-	w.Prefix("d")
-	time.Sleep(500 * time.Millisecond)
-	if attach(sh(t)) {
+	dashboard()
+	if attach(sh(t), "› /bin/sh") {
 		s.shot("attach-shell")
 	}
-	w.Prefix("d")
-	time.Sleep(500 * time.Millisecond)
+	dashboard()
 	s.shot("back-on-dashboard")
 	w.Quit()
 	w.WaitExit(wait)
@@ -441,6 +446,10 @@ func shootSize(t *testing.T, env *Env, dir string, sz shotSize) {
 }
 
 const menuGlyph = "≡"
+
+// tasksRow is a row only the Tasks tab draws (the dashboard behind the
+// popup lists T3 and T4, one space after the id): the tab is in.
+const tasksRow = "T2  Write the docs"
 
 // ownAgent is the agent session outside the projects.
 var ownAgent string

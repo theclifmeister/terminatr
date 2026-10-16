@@ -16,7 +16,6 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/mod"
-	"github.com/theclifmeister/terminatr/internal/modaction"
 	"github.com/theclifmeister/terminatr/internal/models/modelstest"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -779,7 +778,7 @@ func TestSendBackDone(t *testing.T) {
 	if m.msg != "not available: T5 is done, not in review" {
 		t.Fatalf("A on done: %q", m.msg)
 	}
-	time.Sleep(modaction.Stable + 20*time.Millisecond) // T5's row is new
+	stillRows(t) // T5's row is new
 	pressKey(t, m, "x")
 	if out := screen(m); !strings.Contains(out, "Send T5 back") || !strings.Contains(out, "What should change?") {
 		t.Fatalf("prompt:\n%s", out)
@@ -827,7 +826,7 @@ func TestReviewDetail(t *testing.T) {
 
 	feed(m, keyPress(m, "a"))
 	keyPress(m, "3")
-	time.Sleep(modaction.Stable + 20*time.Millisecond) // T3's row changed with the ask
+	stillRows(t) // T3's row changed with the ask
 	pressKey(t, m, "enter")
 	_, ok := m.top().(*taskView)
 	if !ok || !strings.Contains(screen(m), "PR #61 merged") {
@@ -882,7 +881,7 @@ func TestNeedsYouNarrow(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "asked the coordinator") {
 		t.Fatalf("t list row:\n%s", out)
 	}
-	time.Sleep(modaction.Stable + 20*time.Millisecond) // T3's row changed
+	stillRows(t) // T3's row changed
 	pressKey(t, m, "enter")
 	if f := foot(); !strings.Contains(f, "A accept · x send back · esc back") {
 		t.Fatalf("shown task keys:\n%s", f)

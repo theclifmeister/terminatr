@@ -379,6 +379,14 @@ func TestModFullViewFailed(t *testing.T) {
 	}
 }
 
+// stillRows steps the hosted mod views' clock past modaction.Stable, as
+// if every row had been still that long.
+func stillRows(t *testing.T) {
+	prev := viewClock
+	viewClock = func() time.Time { return prev().Add(modaction.Stable) }
+	t.Cleanup(func() { viewClock = prev })
+}
+
 // TestModTabBinding: a row of a mod's tab that binds task.delegate shows
 // the core's hint; D there (once the row has been still for 300 ms)
 // never reaches the mod: the core re-checks the live board and asks.
@@ -395,7 +403,7 @@ func TestModTabBinding(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "D delegate") {
 		t.Fatalf("no core hint for the bound row:\n%s", out)
 	}
-	time.Sleep(modaction.Stable + 20*time.Millisecond)
+	stillRows(t)
 	cmd := press(m, "D")
 	if cmd == nil {
 		t.Fatal("D on the bound row did nothing")
@@ -422,7 +430,7 @@ func TestModTabHintClick(t *testing.T) {
 	m.openTab("alpha", tabOverview, 0)
 	press(m, "9")
 	press(m, "down")
-	time.Sleep(modaction.Stable + 20*time.Millisecond)
+	stillRows(t)
 	m.render()
 	x, y := at(t, m, "D delegate")
 	_, cmd := m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
@@ -449,7 +457,7 @@ func TestModFullViewBinding(t *testing.T) {
 	if out := whole(m); !strings.Contains(out, "D delegate") {
 		t.Fatalf("no core hint for the bound row:\n%s", out)
 	}
-	time.Sleep(modaction.Stable + 20*time.Millisecond)
+	stillRows(t)
 	drain(t, m, press(m, "D"))
 	if len(src.inputs) != 0 {
 		t.Fatalf("the press reached the mod: %+v", src.inputs)

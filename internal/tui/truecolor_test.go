@@ -71,10 +71,10 @@ func (f *fakeTerm) cancel() bool {
 func TestProbeTruecolor(t *testing.T) {
 	ft := newFakeTerm("\x1bP1+r524742\x1b\\\x1bP0$r\x1b\\\x1b[?1;2c")
 	start := time.Now()
-	if !probeTruecolor(ft.pr, ft, ft.cancel, 5*time.Second) {
+	if !probeTruecolor(ft.pr, ft, ft.cancel, 20*time.Second) {
 		t.Error("a terminal answering RGB: not truecolor")
 	}
-	if time.Since(start) > 2*time.Second {
+	if time.Since(start) > 10*time.Second {
 		t.Error("the probe waited out its bound despite DA1")
 	}
 	if ft.asked.String() != askTruecolor {

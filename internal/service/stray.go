@@ -123,8 +123,11 @@ func exists(p string) bool {
 	return err == nil
 }
 
+// tempRoots are the temp directories inTemp knows; tests narrow them.
+var tempRoots = fsx.TempRoots
+
 func inTemp(p string) bool {
-	for _, r := range fsx.TempRoots() {
+	for _, r := range tempRoots() {
 		if rel, ok := fsx.Rel(r, p); ok && rel != "." {
 			return true
 		}

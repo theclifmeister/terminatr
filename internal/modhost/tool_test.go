@@ -39,7 +39,7 @@ func TestToolCalls(t *testing.T) {
 		$.tool.handle("throws", () => { throw new Error("no draft"); });
 		$.tool.handle("rejects", async () => { throw new Error("later no"); });
 		$.tool.handle("empty", (input) => Object.keys(input).length);
-	`, time.Second)
+	`, DefaultBudget)
 	if r := s.hello(); !slices.Equal(r.Tools, []string{"echo", "empty", "json", "later", "none", "rejects", "throws"}) {
 		t.Fatalf("hello tools %v", r.Tools)
 	}
@@ -83,7 +83,7 @@ func TestToolCalls(t *testing.T) {
 }
 
 func TestToolCallBeforeHelloAndBadHandle(t *testing.T) {
-	s := startHost(t, `$.tool.handle("x");`, time.Second)
+	s := startHost(t, `$.tool.handle("x");`, DefaultBudget)
 	if m := s.toolCall("x", `{}`); m.Error == nil || m.Error.Code != modproto.CodeNotReady {
 		t.Fatalf("before hello %+v", m.Error)
 	}

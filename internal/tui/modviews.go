@@ -198,6 +198,10 @@ func tree(v proto.ModView, project string) *modview.Tree {
 	return all
 }
 
+// viewClock is the hosted views' clock (a bound row's stillness, the
+// drawn ages); tests step it.
+var viewClock = time.Now
+
 // host is the widget.View for v shown for project, given its latest
 // tree; nil while there is none (or the mod failed).
 func (mv *modViews) host(v proto.ModView, project string) *widget.View {
@@ -213,6 +217,7 @@ func (mv *modViews) host(v proto.ModView, project string) *widget.View {
 	if h == nil {
 		h = widget.NewView()
 		h.SetBindKeys(BindKeys) // this console's keys for bound actions
+		h.SetClock(func() time.Time { return viewClock() })
 		mv.hosted[k] = h
 	}
 	if mv.trees[k] != t.Tree {

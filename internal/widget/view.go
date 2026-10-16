@@ -126,6 +126,12 @@ func (v *View) SetBindKeys(keys func(id string) []string) {
 	v.bindKeys, v.layValid = keys, false
 }
 
+// SetClock gives the view its clock (time.Now by default): a bound
+// row's stillness and the drawn ages go by it. Hosts' tests step it.
+func (v *View) SetClock(now func() time.Time) {
+	v.now = now
+}
+
 // Tree is the tree on show, nil before Set.
 func (v *View) Tree() *Widget { return v.tree }
 
