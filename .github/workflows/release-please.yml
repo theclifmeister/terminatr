@@ -5,9 +5,10 @@ name: release-please
 # Commit messages since the last release, and its CHANGELOG.md entry.
 # Merging it is the release:
 #
-#   1. release-please tags the merge commit (v0.29.0) and creates a draft
-#      release whose notes are that CHANGELOG.md entry
-#   2. this workflow starts release.yml on the tag, which waits for the
+#   1. release-please creates a draft release (v0.29.0) whose notes are that
+#      CHANGELOG.md entry
+#   2. this workflow tags the merge commit if release-please did not, and
+#      starts release.yml on the tag, which waits for the
 #      release environment's approval, uploads the archives into that draft
 #      and publishes it
 #
@@ -54,6 +55,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release.outputs.tag_name }}
+          SHA: ${{ steps.release.outputs.sha }}
         run: |
+          # release-please may only create the draft release, which holds the
+          # tag name but no git ref ("Tag already exists, skipping tag
+          # creation"). Without the ref, `gh workflow run --ref` fails with
+          # 422 No ref found, and the next run counts from the previous tag
+          # and opens the same release again. So push the tag ourselves.
+          if ! gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" --silent 2>/dev/null; then
+            gh api "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$TAG" -f sha="$SHA" --silent
+          fi
           gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
           echo "::notice::release.yml started on $TAG; approve the release environment in its run"
