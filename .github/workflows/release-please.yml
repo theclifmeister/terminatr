@@ -3,20 +3,20 @@ name: release-please
 # Keeps a release pull request open on main (release-please-config.json,
 # .release-please-manifest.json): the next version, from the Conventional
 # Commit messages since the last release, and its CHANGELOG.md entry.
-# Merging it is the release:
+# Merging it is the release, and the only click it needs:
 #
 #   1. release-please creates a draft release (v0.29.0) whose notes are that
 #      CHANGELOG.md entry
-#   2. this workflow tags the merge commit if release-please did not, and
-#      starts release.yml on the tag, which waits for the
-#      release environment's approval, uploads the archives into that draft
-#      and publishes it
+#   2. this workflow tags the merge commit if release-please did not; the
+#      tag push starts release.yml, which uploads the archives into that
+#      draft and publishes it
 #
-# A tag or a workflow run made with GITHUB_TOKEN starts no other workflow,
-# except through workflow_dispatch: hence `gh workflow run` on the tag,
-# which runs release.yml exactly as a pushed tag does (github.ref is the
-# tag, so the environment's v* tag rule still applies). By hand (Actions →
-# release-please → Run workflow) it refreshes the release pull request.
+# Everything here acts as the release GitHub App (RELEASE_APP_ID,
+# RELEASE_APP_KEY; docs/OPERATIONS.md, Releasing), not GITHUB_TOKEN: a pull
+# request or tag made with GITHUB_TOKEN starts no workflow, so the release
+# pull request would get no ci.yml run without an "Approve and run", and
+# the tag would not start release.yml. By hand (Actions → release-please →
+# Run workflow) it refreshes the release pull request.
 
 on:
   push:
@@ -25,8 +25,8 @@ on:
 
 permissions: {}
 
-# One run at a time, none cancelled: a run that has tagged a release must
-# start its release.
+# One run at a time, none cancelled: a run that has merged a release must
+# get to push its tag.
 concurrency:
   group: release-please
   cancel-in-progress: false
@@ -34,37 +34,43 @@ concurrency:
 jobs:
   release-please:
     runs-on: ubuntu-latest
-    permissions:
-      # The release branch, the tag and the draft release.
-      contents: write
-      # The release pull request, and its labels (autorelease: pending /
-      # tagged), which go through the issues API.
-      pull-requests: write
-      issues: write
-      # gh workflow run release.yml.
-      actions: write
+    # GITHUB_TOKEN is unused: the App's token does everything below.
+    permissions: {}
     steps:
+      # The App's installation token, for this repository only: Contents
+      # (the release branch, the tag, the draft release), Pull requests (the
+      # release pull request) and Issues (its autorelease: labels, which go
+      # through the issues API), read and write.
+      - id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_KEY }}
+
       - id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
+          token: ${{ steps.app.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      - name: Start the release
+      - name: Tag the release
         if: steps.release.outputs.release_created == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           TAG: ${{ steps.release.outputs.tag_name }}
           SHA: ${{ steps.release.outputs.sha }}
         run: |
           # release-please may only create the draft release, which holds the
           # tag name but no git ref ("Tag already exists, skipping tag
-          # creation"). Without the ref, `gh workflow run --ref` fails with
-          # 422 No ref found, and the next run counts from the previous tag
-          # and opens the same release again. So push the tag ourselves.
-          if ! gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" --silent 2>/dev/null; then
+          # creation"). Without the ref nothing starts release.yml, and the
+          # next run counts from the previous tag and opens the same release
+          # again. So push the tag ourselves, as the App: its push starts
+          # release.yml.
+          if gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" --silent 2>/dev/null; then
+            echo "::notice::$TAG exists; its push started release.yml"
+          else
             gh api "repos/$GITHUB_REPOSITORY/git/refs" \
               -f ref="refs/tags/$TAG" -f sha="$SHA" --silent
+            echo "::notice::tagged $SHA as $TAG; the push starts release.yml"
           fi
-          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
-          echo "::notice::release.yml started on $TAG; approve the release environment in its run"
