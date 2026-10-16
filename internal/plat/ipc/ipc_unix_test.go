@@ -4,6 +4,7 @@ package ipc
 
 import (
 	"os"
+	"path/filepath"
 	"syscall"
 	"testing"
 )
@@ -44,6 +45,37 @@ func TestListenKeepsUmask(t *testing.T) {
 		t.Fatalf("umask after Listen = %o, want 022", got)
 	}
 	checkPrivate(t, a)
+}
+
+// TestListenSparesOtherFolders: a folder another goroutine makes while
+// Listen binds keeps its owner's bits, so what goes in it can still be
+// made (T525: the mod cache's mkdir failed beside a session's socket).
+func TestListenSparesOtherFolders(t *testing.T) {
+	dir := sockDir(t)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		a := Addr(filepath.Join(dir, "s"))
+		for range 500 {
+			if ln, err := Listen(a); err == nil {
+				ln.Close()
+			}
+			os.Remove(string(a))
+		}
+	}()
+	base := t.TempDir()
+	for i := 0; ; i++ {
+		select {
+		case <-done:
+			return
+		default:
+		}
+		if err := os.MkdirAll(filepath.Join(base, "c", "m"), 0o700); err != nil {
+			<-done
+			t.Fatalf("mkdir %d beside Listen: %v", i, err)
+		}
+		os.RemoveAll(filepath.Join(base, "c"))
+	}
 }
 
 // TestPeerOfOtherUser: a peer whose uid isn't ours is not SameUser.
