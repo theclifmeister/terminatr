@@ -31,12 +31,22 @@ import { failed, FETCH_MS, postInit, refused, socketURL, timedOut, within } from
 // RULES_TTL_MS is how long fetched rules hold; FETCH_MS bounds a fetch.
 const RULES_TTL_MS = 1_000
 
+// BACKOFF_MS is how long a fetch that got no answer is not tried again,
+// and STALE_MS how long the last good rules stand in for rules the server
+// can't give: a hung server costs one wait, not one per call, and a
+// hiccup doesn't turn the guard off.
+const BACKOFF_MS = 10_000
+const STALE_MS = 60_000
+
 // UNPLACED is what a write the server couldn't place is refused with.
 const UNPLACED = 'terminatr guard: where this write lands could not be checked (the server did not answer), so it was refused. Try again; if it keeps failing, say so.'
 
-let cached: { at: number; rules: Promise<Rules> } | null = null
+let cached: { at: number; ttl: number; rules: Promise<Rules> } | null = null
+let lastGood: { at: number; rules: Rules } | null = null
 
 export function guard(on: On) {
+  cached = null
+  lastGood = null
   on('tool.call', async ($, e, next) => {
     const input = e as unknown as Record<string, unknown>
     const r = await placed($, await rulesNow($), e.tool, input)
@@ -72,7 +82,7 @@ async function rulesNow($: EngineInterface): Promise<Rules> {
     const socket = (await $.env.get('TERMINATR_MOD_SOCKET')) ?? ''
     if (!socket) return off
     const now = await $.clock.now()
-    if (!cached || now - cached.at > RULES_TTL_MS) cached = { at: now, rules: fetchRules($, socket) }
+    if (!cached || now - cached.at > cached.ttl) cached = { at: now, ttl: RULES_TTL_MS, rules: fetchRules($, socket, now) }
     return await cached.rules
   } catch {
     cached = null
@@ -80,16 +90,23 @@ async function rulesNow($: EngineInterface): Promise<Rules> {
   }
 }
 
-async function fetchRules($: EngineInterface, socket: string): Promise<Rules> {
+async function fetchRules($: EngineInterface, socket: string, now: number): Promise<Rules> {
   const got = await Promise.race([
     $.http.fetch(socketURL('/v1/rules'), { socketPath: socket }),
     $.clock.sleep(FETCH_MS).then(() => null),
   ])
-  if (got && got.ok) return rulesOf(got.text)
-  // Asked again at the next call, not after the TTL.
-  cached = null
+  if (got && got.ok) {
+    const rules = rulesOf(got.text)
+    lastGood = { at: now, rules }
+    return rules
+  }
+  // No answer: not asked again for BACKOFF_MS. An answer that says no is
+  // asked again at the next call, not after the TTL.
+  const mine = cached
+  if (got) cached = null
+  else if (mine) mine.ttl = BACKOFF_MS
   log($, `terminatr: guard rules: ${got ? `${got.status} ${got.text}` : 'no answer'}`)
-  return off
+  return lastGood && now - lastGood.at < STALE_MS ? lastGood.rules : off
 }
 
 // placed is r with resolve answering where each file the call writes

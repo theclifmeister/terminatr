@@ -58,3 +58,29 @@ func TestLimitsAndHostileFile(t *testing.T) {
 		t.Fatal("broken file read")
 	}
 }
+
+// ReadBadges parses the file once while it is unchanged, and reads it
+// again after a change.
+func TestReadBadgesCached(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Annotate(dir, "a", Task("T1"), "k", []Span{{Text: "x"}}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if got := ReadBadges(dir, "m", "a")[Task("T1")]; len(got) != 1 {
+			t.Fatalf("read %d = %+v", i, got)
+		}
+	}
+	if _, err := Annotate(dir, "b", Task("T2"), "k", []Span{{Text: "y"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := ReadBadges(dir, "m", "b")[Task("T2")]; len(got) != 1 {
+		t.Fatalf("after a write = %+v", got)
+	}
+	if err := os.Remove(filepath.Join(dir, AnnotationsFile)); err != nil {
+		t.Fatal(err)
+	}
+	if got := ReadBadges(dir, "m", "a"); len(got) != 0 {
+		t.Fatalf("after the file went = %+v", got)
+	}
+}

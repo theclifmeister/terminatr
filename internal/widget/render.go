@@ -31,8 +31,9 @@ type line struct {
 	s string // styled, at most the width
 	// For a row: its list and id, and its text unstyled and padded to the
 	// width, which the cursor draws in the sel role.
-	list, row, plain string
-	keys             []keyHit // a keys line's hints, for clicks
+	list, row string
+	plain     func() string
+	keys      []keyHit // a keys line's hints, for clicks
 }
 
 // keyHit is a key hint's cells, [x0, x1).
@@ -51,8 +52,9 @@ func (v *View) Render(w, h int, look Look) []string {
 		v.lay = layout(v, w, look, now)
 		v.layW, v.layValid, v.layAt = w, true, now.Unix()
 	}
+	cur := v.cursorLine()
 	if v.follow {
-		if y := v.cursorLine(); y >= 0 {
+		if y := cur; y >= 0 {
 			if y < v.top {
 				v.top = y
 			} else if y >= v.top+h {
@@ -71,10 +73,9 @@ func (v *View) Render(w, h int, look Look) []string {
 	v.shown, v.height = v.top, h
 	end := min(v.top+h, len(v.lay))
 	out := make([]string, 0, end-v.top)
-	cur := v.cursorLine()
 	for i := v.top; i < end; i++ {
 		if i == cur {
-			out = append(out, look.Style("sel", v.lay[i].plain))
+			out = append(out, look.Style("sel", v.lay[i].plain()))
 			continue
 		}
 		out = append(out, v.lay[i].s)
@@ -260,26 +261,42 @@ func (lo *layer) rows(w *Widget) {
 			lo.add(head + " " + lo.look.Style("faint", strings.Repeat("─", max(lo.w-ansi.StringWidth(head)-1, 0))))
 			continue
 		}
-		var s, plain string
+		// The unstyled text is what the cursor draws in the sel role: made
+		// when the cursor is on the row, which a move may do without a
+		// new layout.
+		plain := func() string {
+			if w.Kind != KindTable {
+				return pad(clip(lo.plainSpans(r.Spans), lo.w), lo.w, false)
+			}
+			ps := make([]string, 0, len(w.Columns))
+			for j, c := range w.Columns {
+				var cell []Span
+				if j < len(r.Cells) {
+					cell = r.Cells[j]
+				}
+				ps = append(ps, pad(clip(lo.plainSpans(cell), widths[j]), widths[j], c.Right))
+			}
+			return pad(clip(strings.Join(ps, "  "), lo.w), lo.w, false)
+		}
+		var s string
 		if w.Kind == KindTable {
-			var cs, ps []string
+			cs := make([]string, 0, len(w.Columns))
 			for j, c := range w.Columns {
 				var cell []Span
 				if j < len(r.Cells) {
 					cell = r.Cells[j]
 				}
 				cs = append(cs, pad(clip(lo.spans(cell), widths[j]), widths[j], c.Right))
-				ps = append(ps, pad(clip(lo.plainSpans(cell), widths[j]), widths[j], c.Right))
 			}
-			s, plain = strings.Join(cs, "  "), strings.Join(ps, "  ")
+			s = strings.Join(cs, "  ")
 		} else {
-			s, plain = lo.spans(r.Spans), lo.plainSpans(r.Spans)
+			s = lo.spans(r.Spans)
 		}
-		lo.out = append(lo.out, line{s: clip(s, lo.w), list: w.ID, row: r.ID, plain: pad(clip(plain, lo.w), lo.w, false)})
+		lo.out = append(lo.out, line{s: clip(s, lo.w), list: w.ID, row: r.ID, plain: plain})
 		// The cursor's row's lines under it; a click on one picks the row.
 		if r.ID == l.cursor {
 			for _, m := range r.More {
-				lo.out = append(lo.out, line{s: clip(lo.spans(m), lo.w), list: w.ID, row: r.ID, plain: pad(clip(lo.plainSpans(m), lo.w), lo.w, false)})
+				lo.out = append(lo.out, line{s: clip(lo.spans(m), lo.w), list: w.ID, row: r.ID, plain: constText(pad(clip(lo.plainSpans(m), lo.w), lo.w, false))})
 			}
 		}
 	}
@@ -458,3 +475,5 @@ func (lo *layer) keys(ks []Key) {
 	}
 	lo.out = append(lo.out, line{s: clip(b.String(), lo.w), keys: hits})
 }
+
+func constText(s string) func() string { return func() string { return s } }

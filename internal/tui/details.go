@@ -22,9 +22,6 @@ import (
 // (docs/SPEC.md §4). Without room for it, or with it off, a thread's
 // details show under its row instead.
 
-// details is the panel for r, w cells wide, styled.
-func (m *dash) details(r row, w int) []string { return m.detailsLay(r, w, 0).lines }
-
 // detailsLay is the panel for r, w cells wide and h rows tall (0: no
 // fitting), with the mods' details sections placed.
 func (m *dash) detailsLay(r row, w, h int) panelLay {
@@ -445,6 +442,9 @@ type detailsState struct {
 	// wheel, for the row detailKey (another row shows from the top).
 	detailTop int
 	detailKey string
+	// bodyLay is the panel listBody laid out for the frame being drawn,
+	// which the footer's hint reads instead of laying it out again.
+	bodyLay *panelLay
 	// detSel is the details panel's selected mod section header (its fold
 	// id), for the row detSelKey; "" for none.
 	detSel, detSelKey string

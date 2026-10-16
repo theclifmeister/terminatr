@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"sync"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 )
@@ -22,18 +25,47 @@ type storeArgs struct {
 	Value json.RawMessage `json:"value"`
 }
 
+// storeCache is a mod's store as last parsed, with the file's stamp:
+// a read parses the file again only when it changed.
+type storeCache struct {
+	size int64
+	mod  time.Time
+	m    map[string]json.RawMessage
+}
+
+// storeLock is mod id's lock: one mod's store calls don't wait for another's.
+func (b *Broker) storeLock(id string) *sync.Mutex {
+	l, _ := b.stores.LoadOrStore(id, new(sync.Mutex))
+	return l.(*sync.Mutex)
+}
+
+// readStore is mod id's store; the map is shared with the cache, so a
+// caller that changes it must write it out (editStore) or drop it.
 func (b *Broker) readStore(id string) (map[string]json.RawMessage, error) {
-	m := map[string]json.RawMessage{}
-	data, err := os.ReadFile(filepath.Join(b.OwnDir(id), storeFile))
+	path := filepath.Join(b.OwnDir(id), storeFile)
+	fi, err := os.Stat(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return m, nil
+		b.storeSeen.Delete(id)
+		return map[string]json.RawMessage{}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	if c, ok := b.storeSeen.Load(id); ok {
+		c := c.(*storeCache)
+		if c.size == fi.Size() && c.mod.Equal(fi.ModTime()) {
+			return c.m, nil
+		}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	m := map[string]json.RawMessage{}
 	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, Failed("the store is broken: %v", err)
 	}
+	b.storeSeen.Store(id, &storeCache{size: fi.Size(), mod: fi.ModTime(), m: m})
 	return m, nil
 }
 
@@ -76,8 +108,9 @@ func (b *Broker) storeGet(_ context.Context, c *Call) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	b.store.Lock()
-	defer b.store.Unlock()
+	l := b.storeLock(c.Mod.ID)
+	l.Lock()
+	defer l.Unlock()
 	m, err := b.readStore(c.Mod.ID)
 	if err != nil {
 		return nil, err
@@ -111,12 +144,15 @@ func (b *Broker) storeDel(_ context.Context, c *Call) (any, error) {
 }
 
 func (b *Broker) editStore(id string, edit func(map[string]json.RawMessage)) error {
-	b.store.Lock()
-	defer b.store.Unlock()
-	m, err := b.readStore(id)
+	l := b.storeLock(id)
+	l.Lock()
+	defer l.Unlock()
+	cur, err := b.readStore(id)
 	if err != nil {
 		return err
 	}
+	// Edit a copy: a refused edit leaves the cached store as it was.
+	m := maps.Clone(cur)
 	edit(m)
 	data, err := json.Marshal(m)
 	if err != nil {
@@ -125,5 +161,6 @@ func (b *Broker) editStore(id string, edit func(map[string]json.RawMessage)) err
 	if err := checkStoreLen(len(data)); err != nil {
 		return err
 	}
+	b.storeSeen.Delete(id)
 	return fsx.WriteAtomic(filepath.Join(b.OwnDir(id), storeFile), data, 0o600)
 }

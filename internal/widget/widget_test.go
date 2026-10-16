@@ -28,7 +28,7 @@ func (l plainLook) Icon(name string) string {
 
 func (l plainLook) ASCII() bool { return l.ascii }
 
-func mustDecode(t *testing.T, js string) *Widget {
+func mustDecode(t testing.TB, js string) *Widget {
 	t.Helper()
 	w, err := Decode([]byte(js))
 	if err != nil {
