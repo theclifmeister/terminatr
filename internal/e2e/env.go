@@ -38,6 +38,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
 var (
@@ -530,18 +531,7 @@ func (e *Env) saveArtifacts() string {
 func Alive(pid int) bool { return proc.Alive(pid) }
 
 // Poll calls cond until it returns true or timeout passes.
-func Poll(timeout time.Duration, cond func() bool) bool {
-	deadline := time.Now().Add(timeout)
-	for {
-		if cond() {
-			return true
-		}
-		if time.Now().After(deadline) {
-			return false
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-}
+func Poll(timeout time.Duration, cond func() bool) bool { return testwait.Poll(timeout, cond) }
 
 // TrimScreen removes trailing blanks on every line and trailing empty lines.
 func TrimScreen(s string) string {

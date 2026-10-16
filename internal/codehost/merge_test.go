@@ -2,31 +2,16 @@ package codehost
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/theclifmeister/terminatr/internal/gittest"
 )
 
 // gitRepo is a new repo on main with one commit, and a git runner for it.
 func gitRepo(t *testing.T) (string, func(args ...string) string) {
 	t.Helper()
-	repo := t.TempDir()
-	run := func(args ...string) string {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...)
-		cmd.Dir = repo
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v %s", args, err, out)
-		}
-		return strings.TrimSpace(string(out))
-	}
-	run("init", "-q", "-b", "main")
-	os.WriteFile(filepath.Join(repo, "a"), []byte("a"), 0o644)
-	run("add", ".")
-	run("commit", "-q", "-m", "a")
-	return repo, run
+	return gittest.Repo(t)
 }
 
 // TestAzureMergedPR: Azure DevOps' subject for a completed PR, merge or

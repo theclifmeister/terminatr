@@ -13,6 +13,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/testwait"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
 
@@ -627,7 +628,7 @@ func TestViewSubscribeStream(t *testing.T) {
 			if v.Mode == view.ModeLayout && v.Focus == id {
 				// The session ending takes it out of the view.
 				call(t, c, proto.MethodSessionStop, proto.SessionIDParams{ID: id}, nil)
-				eventually(t, "the view to drop the ended session", func() bool {
+				testwait.Eventually(t, "the view to drop the ended session", func() bool {
 					v, err := viewNow(p)
 					return err == nil && v.Mode == view.ModeDashboard
 				})

@@ -17,7 +17,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/guard"
-	"github.com/theclifmeister/terminatr/internal/plat/ipc"
+	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
 )
@@ -80,11 +80,7 @@ func writeConfig(t *testing.T, body string) {
 func TestGuardRoutes(t *testing.T) {
 	testPaths(t)
 	p := newWatchProject(t)
-	rt, err := os.MkdirTemp(ipc.ShortDir(), "tmguard")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(rt) })
+	rt := ipctest.ShortTempDir(t, "tmguard")
 	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
 	s.mu.Lock()
 	s.inSession = testInSession
@@ -326,11 +322,7 @@ func TestRealTarget(t *testing.T) {
 // lands, through a link out of the worktree, in order; a relative path
 // comes back as sent, and too many paths are refused.
 func TestModResolve(t *testing.T) {
-	rt, err := os.MkdirTemp(ipc.ShortDir(), "tmresolve")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(rt) })
+	rt := ipctest.ShortTempDir(t, "tmresolve")
 	rt, _ = filepath.EvalSymlinks(rt)
 	wt, out := filepath.Join(rt, "wt"), filepath.Join(rt, "out")
 	for _, d := range []string{wt, out} {
@@ -565,11 +557,7 @@ message = "prod secrets\nstay with the human."
 	if err := os.WriteFile(filepath.Join(dir, "mod.toml"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := os.MkdirTemp(ipc.ShortDir(), "tmguard")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(rt) })
+	rt := ipctest.ShortTempDir(t, "tmguard")
 	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
 	config := func(body string) {
 		t.Helper()

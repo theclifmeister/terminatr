@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/theclifmeister/terminatr/internal/gittest"
 )
 
 const azOrigin = "https://dev.azure.com/acme/Shop/_git/web"
@@ -70,16 +72,16 @@ esac
 func azureRepo(t *testing.T, projDir string) {
 	t.Helper()
 	repo := projectRepo(t, projDir)
-	bare := repoGit(t, repo, "remote", "get-url", "origin")
+	bare := gittest.Run(t, repo, "remote", "get-url", "origin")
 	if bare == ghOrigin { // tickerEnv's: the bare repo is what it rewrites to
-		key := repoGit(t, repo, "config", "--get-regexp", `^url\..*\.insteadof$`)
+		key := gittest.Run(t, repo, "config", "--get-regexp", `^url\..*\.insteadof$`)
 		key, _, _ = strings.Cut(key, " ")
 		section := strings.TrimSuffix(key, ".insteadof")
 		bare = strings.TrimPrefix(section, "url.")
-		repoGit(t, repo, "config", "--remove-section", section)
+		gittest.Run(t, repo, "config", "--remove-section", section)
 	}
-	repoGit(t, repo, "remote", "set-url", "origin", azOrigin)
-	repoGit(t, repo, "config", "url."+bare+".insteadOf", azOrigin)
+	gittest.Run(t, repo, "remote", "set-url", "origin", azOrigin)
+	gittest.Run(t, repo, "config", "url."+bare+".insteadOf", azOrigin)
 }
 
 // TestSmokeTickerAzurePR: on an Azure DevOps repo the ticker finds the
@@ -160,14 +162,6 @@ func TestThreadResolveAzure(t *testing.T) {
 	azureRepo(t, projDir)
 	state, _, _ := fakeAZ(t, env)
 	dir := filepath.Dir(state)
-	git := func(d string, args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t"}, args...)...)
-		cmd.Dir = d
-		if b, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, b)
-		}
-	}
 	type record struct{ Repo, Worktree, Branch, Session string }
 	thread := func(id, title string) record {
 		t.Helper()
@@ -176,9 +170,9 @@ func TestThreadResolveAzure(t *testing.T) {
 		readTOML(t, filepath.Join(projDir, "threads", id, "thread.toml"), &rec)
 		env.WaitState(&Session{ID: rec.Session}, "idle", agentWait)
 		os.WriteFile(filepath.Join(rec.Worktree, id), []byte(id), 0o644)
-		git(rec.Worktree, "add", ".")
-		git(rec.Worktree, "commit", "-q", "-m", title)
-		git(rec.Worktree, "push", "-q", "origin", "HEAD")
+		gittest.Run(t, rec.Worktree, "add", ".")
+		gittest.Run(t, rec.Worktree, "commit", "-q", "-m", title)
+		gittest.Run(t, rec.Worktree, "push", "-q", "origin", "HEAD")
 		return rec
 	}
 	azPR := func(n int, status, branch string) string {
@@ -210,10 +204,10 @@ func TestThreadResolveAzure(t *testing.T) {
 	// Completed by a squash merge: Azure DevOps' subject on main, the
 	// branch's commits not. az says completed, so the branch goes.
 	a := thread("t-0001", "Squashed")
-	git(a.Repo, "merge", "-q", "--squash", a.Branch)
-	git(a.Repo, "commit", "-q", "-m", "Merged PR 11: Squashed")
-	git(a.Repo, "push", "-q", "origin", "main")
-	git(a.Repo, "fetch", "-q", "origin")
+	gittest.Run(t, a.Repo, "merge", "-q", "--squash", a.Branch)
+	gittest.Run(t, a.Repo, "commit", "-q", "-m", "Merged PR 11: Squashed")
+	gittest.Run(t, a.Repo, "push", "-q", "origin", "main")
+	gittest.Run(t, a.Repo, "fetch", "-q", "origin")
 	list(a.Branch, azPR(11, "completed", a.Branch))
 	resolve(a, "t-0001", "deleted branch "+a.Branch+" (PR merged)")
 	if exists(a.Repo, a.Branch) {
@@ -225,14 +219,14 @@ func TestThreadResolveAzure(t *testing.T) {
 	// that branch goes with git branch -d.
 	b := thread("t-0002", "Abandoned")
 	second := "tm/demo/t-0002-second"
-	git(b.Worktree, "checkout", "-q", "-b", second, "origin/main")
-	git(b.Worktree, "commit", "-q", "--allow-empty", "-m", "second")
-	git(b.Worktree, "push", "-q", "origin", "HEAD")
-	git(b.Worktree, "checkout", "-q", b.Branch)
-	git(b.Repo, "fetch", "-q", "origin")
-	git(b.Repo, "merge", "-q", "--no-ff", "-m", "Merged PR 13: Second", "origin/"+second)
-	git(b.Repo, "push", "-q", "origin", "main")
-	git(b.Repo, "fetch", "-q", "origin")
+	gittest.Run(t, b.Worktree, "checkout", "-q", "-b", second, "origin/main")
+	gittest.Run(t, b.Worktree, "commit", "-q", "--allow-empty", "-m", "second")
+	gittest.Run(t, b.Worktree, "push", "-q", "origin", "HEAD")
+	gittest.Run(t, b.Worktree, "checkout", "-q", b.Branch)
+	gittest.Run(t, b.Repo, "fetch", "-q", "origin")
+	gittest.Run(t, b.Repo, "merge", "-q", "--no-ff", "-m", "Merged PR 13: Second", "origin/"+second)
+	gittest.Run(t, b.Repo, "push", "-q", "origin", "main")
+	gittest.Run(t, b.Repo, "fetch", "-q", "origin")
 	os.WriteFile(filepath.Join(projDir, "threads", "t-0002", "REPORT.md"),
 		[]byte("PR: "+azOrigin+"/pullrequest/13\n\n## Report\nTwo PRs.\n\n## Next\n- Review it\n"), 0o644)
 	setPR(t, filepath.Join(dir, "pr-13.json"), azPR(13, "completed", second))
@@ -268,28 +262,18 @@ func TestSmokeTickerAzureCompleteOnMerge(t *testing.T) {
 		env.WaitState(&Session{ID: recs[i].Session}, "idle", agentWait)
 	}
 
-	git := func(dir string, args ...string) string {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t"}, args...)...)
-		cmd.Dir = dir
-		b, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, b)
-		}
-		return strings.TrimSpace(string(b))
-	}
 	// Both PRs complete on origin, from another clone, as squash commits
 	// with Azure DevOps' subject.
 	other := filepath.Join(t.TempDir(), "other")
-	git(recs[0].Repo, "clone", "-q", git(recs[0].Repo, "remote", "get-url", "origin"), other)
+	gittest.Run(t, recs[0].Repo, "clone", "-q", gittest.Run(t, recs[0].Repo, "remote", "get-url", "origin"), other)
 	var merges []string
 	for _, c := range []struct{ file, msg string }{{"older", "Merged PR 8: Older fix"}, {"fix", "Merged PR 7: Small fix"}} {
 		os.WriteFile(filepath.Join(other, c.file), []byte(c.file+"\n"), 0o644)
-		git(other, "add", c.file)
-		git(other, "commit", "-q", "-m", c.msg)
-		merges = append(merges, git(other, "rev-parse", "HEAD"))
+		gittest.Run(t, other, "add", c.file)
+		gittest.Run(t, other, "commit", "-q", "-m", c.msg)
+		merges = append(merges, gittest.Run(t, other, "rev-parse", "HEAD"))
 	}
-	git(other, "push", "-q", "origin", "HEAD:main")
+	gittest.Run(t, other, "push", "-q", "origin", "HEAD:main")
 	// t-0002 handed in PR 8 before; az has no PR for its branch.
 	os.WriteFile(filepath.Join(projDir, "threads", "t-0002", "REPORT.md"),
 		[]byte("PR: "+azOrigin+"/pullrequest/8\n\n## Report\nFixed.\n\n## Next\n- Review it\n"), 0o644)

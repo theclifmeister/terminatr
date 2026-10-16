@@ -13,16 +13,16 @@ runs:
     # No setup-zig: `make` fetches the pinned Zig into .build/ (sha256-
     # checked) unless a Zig 0.16 is already on PATH. Cached on its own,
     # keyed on the Zig pin in the Makefile.
-    - name: Zig pin
-      id: zig
+    - name: Pins
+      id: pins
       shell: bash
-      run: echo "key=$(grep -E '^ZIG_(VERSION|SHA256_)' Makefile | git hash-object --stdin)" >> "$GITHUB_OUTPUT"
+      run: scripts/release/pins.sh >> "$GITHUB_OUTPUT"
 
     - name: Cache Zig
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
         path: .build/zig-*
-        key: zig-${{ runner.os }}-${{ runner.arch }}-${{ steps.zig.outputs.key }}
+        key: zig-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.zig }}
 
     - name: pkg-config
       shell: bash
@@ -33,18 +33,13 @@ runs:
     # Makefile edits don't force a rebuild. The checkout path is in the
     # key too: the build's pkg-config files name their absolute prefix,
     # which moved when the repository was renamed.
-    - name: Ghostty pin
-      id: ghostty
-      shell: bash
-      run: echo "key=$({ grep -E '^(GHOSTTY_(REV|REPO|CPU)|ZIG_VERSION) ' Makefile; echo "$GITHUB_WORKSPACE"; } | git hash-object --stdin)" >> "$GITHUB_OUTPUT"
-
     - name: Cache libghostty-vt
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
         path: |
           .build/ghostty-*
           !.build/ghostty-src
-        key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ steps.ghostty.outputs.key }}
+        key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.ghostty }}
 
     - name: toolchain
       shell: bash

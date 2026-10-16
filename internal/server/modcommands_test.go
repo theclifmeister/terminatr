@@ -5,10 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/modbus"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
 const cmdManifest = `id = "lab"
@@ -55,14 +57,14 @@ func cmdServer(t *testing.T) *Server {
 func TestModCommand(t *testing.T) {
 	s := cmdServer(t)
 	sub := s.SubscribeMod("lab", []string{"views"}, nil)
-	if ev := next(t, sub); ev.Name != modbus.ModReady {
+	if ev := testwait.Next(t, sub, time.Second); ev.Name != modbus.ModReady {
 		t.Fatalf("first event %s", ev.Name)
 	}
 	sel := &proto.ModTarget{Project: "demo", Task: "T3"}
 	if _, perr := s.modCommand(proto.ModCommandParams{Mod: "lab", Command: "relabel", Project: "demo", Selection: sel}, 7, human); perr != nil {
 		t.Fatal(perr)
 	}
-	ev := next(t, sub)
+	ev := testwait.Next(t, sub, time.Second)
 	c, ok := ev.Data.(modbus.Command)
 	if ev.Name != modbus.CommandRun || !ok || c.Command != "relabel" || c.Project != "demo" || c.Selection == nil || c.Selection.Task != "T3" {
 		t.Fatalf("event %s %+v", ev.Name, ev.Data)
@@ -74,7 +76,7 @@ func TestModCommand(t *testing.T) {
 	if perr != nil {
 		t.Fatal(perr)
 	}
-	if ev := next(t, sub); ev.Data.(modbus.Command).Selection != nil {
+	if ev := testwait.Next(t, sub, time.Second); ev.Data.(modbus.Command).Selection != nil {
 		t.Fatalf("selection %+v", ev.Data)
 	}
 	if !s.modViewStore().Open("lab", "out") {

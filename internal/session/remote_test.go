@@ -8,6 +8,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
 // remoteMirror plays the near server of a remote pane: a repaint starts
@@ -92,7 +93,7 @@ func (m *remoteMirror) drain(ch <-chan []byte) {
 func TestAttachRemote(t *testing.T) {
 	s := start(t, "/bin/sh")
 	s.Input([]byte("printf '\\033[1mbold\\033[0m %s\\n' x-$((6*7))\r"))
-	eventually(t, "output", func() bool { return strings.Contains(screen(t, s), "bold x-42") })
+	testwait.Eventually(t, "output", func() bool { return strings.Contains(screen(t, s), "bold x-42") })
 	sub, err := s.AttachRemote()
 	if err != nil {
 		t.Fatal(err)
@@ -110,7 +111,7 @@ func TestAttachRemote(t *testing.T) {
 	ch := pump(sub)
 	s.Input([]byte("echo more-$((7*8))\r"))
 	s.Resize(100, 30)
-	eventually(t, "the stream to follow", func() bool {
+	testwait.Eventually(t, "the stream to follow", func() bool {
 		m.drain(ch)
 		got, _ := m.term.Screen()
 		return strings.Contains(got, "more-56") && got == screen(t, s)
@@ -139,12 +140,12 @@ func TestRemoteLagRepaints(t *testing.T) {
 	m.apply(b)
 	t0 := time.Now()
 	s.Input([]byte("i=0; while [ $i -lt 3000 ]; do echo flood-$i; i=$((i+1)); done; echo done-$((6*7))\r"))
-	eventually(t, "flood to finish", func() bool { return strings.Contains(screen(t, s), "done-42") })
+	testwait.Eventually(t, "flood to finish", func() bool { return strings.Contains(screen(t, s), "done-42") })
 	if sub.Resyncs() == 0 {
 		t.Fatal("the backlog was never dropped")
 	}
 	ch := pump(sub)
-	eventually(t, "the mirror to match", func() bool {
+	testwait.Eventually(t, "the mirror to match", func() bool {
 		m.drain(ch)
 		got, _ := m.term.Screen()
 		return got == screen(t, s)
@@ -185,7 +186,7 @@ func TestRemoteRepaintHistory(t *testing.T) {
 
 	s := start(t, "/bin/sh")
 	s.Input([]byte("i=0; while [ $i -lt 600 ]; do echo old-$i; i=$((i+1)); done; echo done-$((6*7))\r"))
-	eventually(t, "the history", func() bool { return strings.Contains(screen(t, s), "done-42") })
+	testwait.Eventually(t, "the history", func() bool { return strings.Contains(screen(t, s), "done-42") })
 	history := func(m *remoteMirror) string {
 		text, err := m.term.PlainText()
 		if err != nil {
@@ -208,14 +209,14 @@ func TestRemoteRepaintHistory(t *testing.T) {
 
 	// A lag: the backlog becomes a repaint with the last rows only.
 	s.Input([]byte("i=0; while [ $i -lt 2000 ]; do echo lag-$i; i=$((i+1)); done; echo end-$((7*8))\r"))
-	eventually(t, "the flood", func() bool { return strings.Contains(screen(t, s), "end-56") })
+	testwait.Eventually(t, "the flood", func() bool { return strings.Contains(screen(t, s), "end-56") })
 	if sub.Resyncs() == 0 {
 		t.Fatal("the backlog was never dropped")
 	}
 	time.Sleep(2 * RepaintEvery)
 	m.repaints = 0
 	ch := pump(sub)
-	eventually(t, "the lag's repaint", func() bool {
+	testwait.Eventually(t, "the lag's repaint", func() bool {
 		m.drain(ch)
 		got, _ := m.term.Screen()
 		return m.repaints > 0 && got == screen(t, s)
@@ -226,7 +227,7 @@ func TestRemoteRepaintHistory(t *testing.T) {
 
 	// prefix+R: the whole scrollback again.
 	sub.Resync()
-	eventually(t, "the asked-for repaint", func() bool {
+	testwait.Eventually(t, "the asked-for repaint", func() bool {
 		m.drain(ch)
 		return strings.Contains(history(m), "old-0\n")
 	})

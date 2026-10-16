@@ -1,14 +1,15 @@
 package server
 
 import (
-	"github.com/theclifmeister/terminatr/internal/client"
-	"github.com/theclifmeister/terminatr/internal/project"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/gittest"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -184,14 +185,8 @@ func TestProjectWatchStream(t *testing.T) {
 // failure kept from before), and a project with a GitHub origin doesn't.
 func TestProjectWatchNoPRHost(t *testing.T) {
 	testPaths(t)
-	git := func(dir string, args ...string) {
-		t.Helper()
-		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v %s", args, err, out)
-		}
-	}
 	repo := t.TempDir()
-	git(repo, "init", "-q")
+	gittest.Run(t, repo, "init", "-q")
 	p, err := project.New(project.Options{Slug: "demo", Repos: []string{repo}})
 	if err != nil {
 		t.Fatal(err)
@@ -207,7 +202,7 @@ func TestProjectWatchNoPRHost(t *testing.T) {
 	if rows := w.Ticker.Rows(time.Now()); len(rows) == 0 || rows[len(rows)-1] != (proto.TickerRow{Label: "PR host", Value: "none"}) {
 		t.Errorf("rows %+v", rows)
 	}
-	git(repo, "remote", "add", "origin", "https://github.com/o/r.git")
+	gittest.Run(t, repo, "remote", "add", "origin", "https://github.com/o/r.git")
 	w = ProjectWatchOf(p, nil, st)
 	if w.Ticker == nil || w.Ticker.NoPRHost || !w.Ticker.GHFailing {
 		t.Fatalf("github origin: ticker %+v", w.Ticker)

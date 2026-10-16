@@ -2,12 +2,12 @@ package tui
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/theclifmeister/terminatr/internal/gittest"
 	"github.com/theclifmeister/terminatr/internal/ticker"
 )
 
@@ -15,14 +15,7 @@ import (
 // merge; without it, the ticker's last look decides.
 func TestShipped(t *testing.T) {
 	repo := t.TempDir()
-	git := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t", "-c", "init.defaultBranch=main"}, args...)...)
-		cmd.Dir = repo
-		if b, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, b)
-		}
-	}
+	git := gittest.In(t, repo)
 	git("init", "-q")
 	os.WriteFile(filepath.Join(repo, "a"), []byte("a"), 0o644)
 	git("add", ".")

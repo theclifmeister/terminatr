@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/codehost"
+	"github.com/theclifmeister/terminatr/internal/gittest"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
@@ -37,15 +38,15 @@ func TestResolveModHostMerged(t *testing.T) {
 
 		// origin names gitlab.com; git reaches it in a bare repo here.
 		bare := filepath.Join(t.TempDir(), "shop.git")
-		git(t, repo, "init", "-q", "--bare", bare)
-		git(t, repo, "remote", "add", "origin", "git@gitlab.com:acme/shop.git")
-		git(t, repo, "config", "url."+bare+".insteadOf", "git@gitlab.com:acme/shop.git")
-		git(t, repo, "push", "-q", "origin", "HEAD")
+		gittest.Run(t, repo, "init", "-q", "--bare", bare)
+		gittest.Run(t, repo, "remote", "add", "origin", "git@gitlab.com:acme/shop.git")
+		gittest.Run(t, repo, "config", "url."+bare+".insteadOf", "git@gitlab.com:acme/shop.git")
+		gittest.Run(t, repo, "push", "-q", "origin", "HEAD")
 		os.WriteFile(filepath.Join(rec.Worktree, "work.md"), []byte("work"), 0o644)
-		git(t, rec.Worktree, "add", ".")
-		git(t, rec.Worktree, "commit", "-q", "-m", "work")
+		gittest.Run(t, rec.Worktree, "add", ".")
+		gittest.Run(t, rec.Worktree, "commit", "-q", "-m", "work")
 		if pushed {
-			git(t, rec.Worktree, "push", "-q", "origin", rec.Branch)
+			gittest.Run(t, rec.Worktree, "push", "-q", "origin", rec.Branch)
 		}
 
 		out := h.ok(coord, "thread", "resolve", rec.ID, "--project", "demo")

@@ -14,7 +14,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/guardlog"
-	"github.com/theclifmeister/terminatr/internal/plat/ipc"
+	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -91,11 +91,7 @@ func TestGuardLogRoute(t *testing.T) {
 	paths := testPaths(t)
 	p := newWatchProject(t)
 	writeConfig(t, "[projects."+p.Slug+"]\nguard_mode = \"learn\"\n")
-	rt, err := os.MkdirTemp(ipc.ShortDir(), "tmguard")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(rt) })
+	rt := ipctest.ShortTempDir(t, "tmguard")
 	var logged lockedBuffer
 	s := &Server{log: log.New(&logged, "", 0), records: map[string]SessionRecord{}, opts: Options{Paths: paths}}
 	s.mu.Lock()

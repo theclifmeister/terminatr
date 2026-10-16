@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/gittest"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -97,8 +98,8 @@ func TestCompleteTasksMergedItem(t *testing.T) {
 func TestCompleteTasksReleasedRemoved(t *testing.T) {
 	repo, other := gitFixture(t)
 	merge := push(t, other, "g", "two\n", "Merge pull request #7 from a/b")
-	gitT(t, other, "tag", "v0.5.0")
-	gitT(t, other, "push", "-q", "origin", "v0.5.0")
+	gittest.Run(t, other, "tag", "v0.5.0")
+	gittest.Run(t, other, "push", "-q", "origin", "v0.5.0")
 	r := newRigIn(t, repo, []string{repo})
 	r.setConfig("[projects.demo]\ncomplete_tasks = \"released\"\n")
 	r.addTask("Ship it", "review", "t-0001", "")

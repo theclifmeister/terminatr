@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
 type syncBuf struct {
@@ -27,17 +29,6 @@ func (s *syncBuf) String() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.b.String()
-}
-
-func waitFor(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
 }
 
 func TestTailAndFollow(t *testing.T) {
@@ -58,14 +49,14 @@ func TestTailAndFollow(t *testing.T) {
 	go Follow(ctx, p, off, 5*time.Millisecond, &out)
 	f, _ := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0)
 	f.WriteString("d\ne")
-	waitFor(t, "d", func() bool { return out.String() == "d\n" })
+	testwait.Eventually(t, "d", func() bool { return out.String() == "d\n" })
 	f.WriteString("\n")
 	f.Close()
-	waitFor(t, "e", func() bool { return out.String() == "d\ne\n" })
+	testwait.Eventually(t, "e", func() bool { return out.String() == "d\ne\n" })
 	// Rotated: a new, shorter file is read from its start.
 	os.Rename(p, p+".1")
 	os.WriteFile(p, []byte("f\n"), 0o600)
-	waitFor(t, "f", func() bool { return strings.HasSuffix(out.String(), "e\nf\n") })
+	testwait.Eventually(t, "f", func() bool { return strings.HasSuffix(out.String(), "e\nf\n") })
 }
 
 func TestWatch(t *testing.T) {
@@ -88,7 +79,7 @@ func TestWatch(t *testing.T) {
 		t.Fatal("node_modules counted")
 	}
 	os.WriteFile(filepath.Join(dir, "main.ts"), []byte("22"), 0o644)
-	waitFor(t, "a change", func() bool { return count() == 1 })
+	testwait.Eventually(t, "a change", func() bool { return count() == 1 })
 	time.Sleep(30 * time.Millisecond)
 	if count() != 1 {
 		t.Fatalf("one save, %d changes", count())

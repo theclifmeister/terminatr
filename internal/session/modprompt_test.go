@@ -9,6 +9,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
 // startMod is startBox in a session that runs the mod; live says the
@@ -40,7 +41,7 @@ func startMod(t *testing.T, box string, live bool, resolved chan<- PromptResolut
 			t.Fatal(err)
 		}
 	}
-	eventually(t, "the prompt box", func() bool { return strings.Contains(screen(t, s), "❯") })
+	testwait.Eventually(t, "the prompt box", func() bool { return strings.Contains(screen(t, s), "❯") })
 	return s
 }
 
@@ -143,7 +144,7 @@ func TestModPromptFallback(t *testing.T) {
 
 	s.Prompt("never-taken")
 	p := nextMod(t, s)
-	eventually(t, "the paste after no ack", func() bool { return strings.Contains(screen(t, s), "never-taken") })
+	testwait.Eventually(t, "the paste after no ack", func() bool { return strings.Contains(screen(t, s), "never-taken") })
 	if err := s.AckModPrompt(p.ID, ModTaken, ""); !errors.Is(err, ErrNoModPrompt) {
 		t.Fatalf("a late take: %v", err)
 	}
@@ -163,7 +164,7 @@ func TestModPromptFallback(t *testing.T) {
 		t.Fatalf("bad result: %v", err)
 	}
 	s.ModState(agent.StateIdle, "", "turn.complete")
-	eventually(t, "the paste after a refusal", func() bool { return strings.Contains(screen(t, s), "refused-one") })
+	testwait.Eventually(t, "the paste after a refusal", func() bool { return strings.Contains(screen(t, s), "refused-one") })
 }
 
 // TestModPromptNotPolled (T82): a mod whose heartbeat goes on but which
@@ -186,7 +187,7 @@ func TestModPromptNotPolled(t *testing.T) {
 		}
 	}()
 	// Once the poll is waiting, let it outlast the bound.
-	eventually(t, "the poll waiting", func() bool {
+	testwait.Eventually(t, "the poll waiting", func() bool {
 		rt := s.agentRT()
 		rt.mu.Lock()
 		defer rt.mu.Unlock()
@@ -203,7 +204,7 @@ func TestModPromptNotPolled(t *testing.T) {
 	// The mod stops polling; the agent idles: the next prompt is pasted.
 	s.ModState(agent.StateIdle, "", "turn.complete")
 	s.Prompt("never-polled")
-	eventually(t, "the paste with no poll", func() bool { return strings.Contains(screen(t, s), "never-polled") })
+	testwait.Eventually(t, "the paste with no poll", func() bool { return strings.Contains(screen(t, s), "never-polled") })
 	if st, _ := s.AgentState(); st.Queued != 0 {
 		t.Fatalf("queued after the paste: %+v", st)
 	}
@@ -219,14 +220,14 @@ func TestModPromptTakenNotRun(t *testing.T) {
 	}
 	s.Prompt("taken-lost")
 	ack(t, s, nextMod(t, s).ID, ModTaken)
-	eventually(t, "held by the mod", func() bool {
+	testwait.Eventually(t, "held by the mod", func() bool {
 		st, _ := s.AgentState()
 		return st.Held == HeldMod && !st.HeldSince.IsZero()
 	})
 	if did := s.Unstick(); !strings.Contains(did, "pasted instead") {
 		t.Fatalf("Unstick: %q", did)
 	}
-	eventually(t, "the paste after Unstick", func() bool { return strings.Contains(screen(t, s), "taken-lost") })
+	testwait.Eventually(t, "the paste after Unstick", func() bool { return strings.Contains(screen(t, s), "taken-lost") })
 
 	// Working, a taken prompt is no stall; idle past PromptHold it is
 	// pasted without Unstick.
@@ -242,7 +243,7 @@ func TestModPromptTakenNotRun(t *testing.T) {
 	rt.cfg.PromptHold = 50 * time.Millisecond
 	rt.mu.Unlock()
 	s.ModState(agent.StateIdle, "", "turn.complete")
-	eventually(t, "the paste after PromptHold", func() bool { return strings.Contains(screen(t, s), "taken-again") })
+	testwait.Eventually(t, "the paste after PromptHold", func() bool { return strings.Contains(screen(t, s), "taken-again") })
 }
 
 // TestModPromptNotLive: a session with the mod that never heard from it
@@ -251,7 +252,7 @@ func TestModPromptTakenNotRun(t *testing.T) {
 func TestModPromptNotLive(t *testing.T) {
 	s := startMod(t, "", false, make(chan PromptResolution, 1))
 	s.Prompt("pasted-anyway")
-	eventually(t, "the paste", func() bool { return strings.Contains(screen(t, s), "pasted-anyway") })
+	testwait.Eventually(t, "the paste", func() bool { return strings.Contains(screen(t, s), "pasted-anyway") })
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 	if p, ok, err := s.NextModPrompt(ctx); ok || err != nil {

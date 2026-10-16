@@ -13,7 +13,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
-	"github.com/theclifmeister/terminatr/internal/plat/ipc"
+	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -24,11 +24,7 @@ import (
 // stands for, and what isn't a tool's input is refused before anything
 // runs.
 func TestModTools(t *testing.T) {
-	rt, err := os.MkdirTemp(ipc.ShortDir(), "tmmod")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(rt) })
+	rt := ipctest.ShortTempDir(t, "tmmod")
 	b, _ := agent.Builtin("claude")
 	m, err := agent.ParseManifest(b)
 	if err != nil {

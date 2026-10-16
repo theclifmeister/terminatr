@@ -15,6 +15,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
 // ConfigDir is Claude's config folder, as the real claude agent has it.
@@ -106,7 +107,7 @@ func startBoxLog(t *testing.T, a agent.Agent, box string, hold time.Duration, re
 	if _, err := s.Hook("SessionStart", map[string]any{"source": "startup"}); err != nil {
 		t.Fatal(err)
 	}
-	eventually(t, "the prompt box", func() bool { return strings.Contains(screen(t, s), "❯") })
+	testwait.Eventually(t, "the prompt box", func() bool { return strings.Contains(screen(t, s), "❯") })
 	return s
 }
 
@@ -117,7 +118,7 @@ func TestPromptPastedIntoEmptyBox(t *testing.T) {
 	if via, err := s.Prompt("hello-paste"); err != nil || via != "queued" {
 		t.Fatalf("Prompt: %q %v", via, err)
 	}
-	eventually(t, "the paste", func() bool { return strings.Contains(screen(t, s), "hello-paste") })
+	testwait.Eventually(t, "the paste", func() bool { return strings.Contains(screen(t, s), "hello-paste") })
 	if st, _ := s.AgentState(); st.Queued != 0 || st.Held != "" {
 		t.Fatalf("after the paste: %+v", st)
 	}
@@ -135,7 +136,7 @@ func TestHeldPromptDropped(t *testing.T) {
 	if _, err := s.Prompt("[tm] 2 new inbox items"); err != nil {
 		t.Fatal(err)
 	}
-	eventually(t, "the hold", func() bool {
+	testwait.Eventually(t, "the hold", func() bool {
 		st, _ := s.AgentState()
 		return st.Held == HeldBox && st.Queued == 1
 	})
@@ -252,7 +253,7 @@ func TestPromptNotHeldWhileWorking(t *testing.T) {
 	if _, err := s.Hook("UserPromptSubmit", map[string]any{"prompt": "go"}); err != nil {
 		t.Fatal(err)
 	}
-	eventually(t, "working", func() bool {
+	testwait.Eventually(t, "working", func() bool {
 		st, _ := s.AgentState()
 		return st.State == agent.StateWorking
 	})
@@ -286,7 +287,7 @@ func TestPromptRefresh(t *testing.T) {
 	if _, err := s.PromptWith("old-text", PromptOptions{Refresh: func() (string, bool) { return "new-text", true }}); err != nil {
 		t.Fatal(err)
 	}
-	eventually(t, "the refreshed paste", func() bool { return strings.Contains(screen(t, s), "new-text") })
+	testwait.Eventually(t, "the refreshed paste", func() bool { return strings.Contains(screen(t, s), "new-text") })
 	if strings.Contains(screen(t, s), "old-text") {
 		t.Fatal("the stale text was pasted")
 	}
@@ -321,7 +322,7 @@ func TestHeldPromptProbeGone(t *testing.T) {
 	resolved := make(chan PromptResolution, 1)
 	s := startBox(t, a, "draft", 500*time.Millisecond, resolved)
 	writeStatus(t, s.agentRT().cfg.Home, s.PID(), `{"status":"idle","version":"2.1.291","messagingSocketPath":"/nowhere.sock"}`)
-	eventually(t, "the probe", func() bool {
+	testwait.Eventually(t, "the probe", func() bool {
 		e, _ := s.Explain()
 		return strings.HasPrefix(e.Extra["liveness"], "gone: messaging socket")
 	})
@@ -390,16 +391,16 @@ func TestNudgeAfterInjectedSlashCommand(t *testing.T) {
 	if _, err := s.Prompt("/remote-control"); err != nil {
 		t.Fatal(err)
 	}
-	eventually(t, "the slash command pasted", func() bool { return strings.Contains(screen(t, s), "/remote-control") })
+	testwait.Eventually(t, "the slash command pasted", func() bool { return strings.Contains(screen(t, s), "/remote-control") })
 	writeStatus(t, home, pid, `{"status":"busy","version":"2.1.291"}`)
-	eventually(t, "working by the status file", func() bool {
+	testwait.Eventually(t, "working by the status file", func() bool {
 		st, _ := s.AgentState()
 		return st.State == agent.StateWorking && st.Sources == "status_file"
 	})
 	if _, err := s.Prompt("[tm] nudge"); err != nil {
 		t.Fatal(err)
 	}
-	eventually(t, "the nudge pasted", func() bool { return strings.Contains(screen(t, s), "[tm] nudge") })
+	testwait.Eventually(t, "the nudge pasted", func() bool { return strings.Contains(screen(t, s), "[tm] nudge") })
 	st, _ := s.AgentState()
 	if st.State != agent.StateIdle || st.Sources != "hooks" {
 		t.Fatalf("state %+v", st.Merged)
@@ -441,7 +442,7 @@ func TestPromptStallLogged(t *testing.T) {
 	if _, err := s.Prompt("[tm] main moved"); err != nil {
 		t.Fatal(err)
 	}
-	eventually(t, "the stall log", func() bool { n, _ := stalls(); return n > 0 })
+	testwait.Eventually(t, "the stall log", func() bool { n, _ := stalls(); return n > 0 })
 	// Further stall lines, were each check to log one, come with the
 	// checks: give them a few.
 	never(t, 300*time.Millisecond, "a second stall line", func() bool { n, _ := stalls(); return n > 1 })

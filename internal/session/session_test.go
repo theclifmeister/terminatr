@@ -9,6 +9,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
 func start(t *testing.T, argv ...string) *Session {
@@ -27,18 +28,6 @@ func start(t *testing.T, argv ...string) *Session {
 	}
 	t.Cleanup(func() { s.Stop(time.Second) })
 	return s
-}
-
-// eventually polls cond until it holds or the deadline passes.
-func eventually(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
 }
 
 // never fails the test if bad turns true within d: the negative of
@@ -72,7 +61,7 @@ func screen(t *testing.T, s *Session) string {
 func TestInputAndRead(t *testing.T) {
 	s := start(t, "/bin/sh")
 	s.Input([]byte("echo hi-$((40+2))\r"))
-	eventually(t, "echo output", func() bool { return strings.Contains(screen(t, s), "hi-42") })
+	testwait.Eventually(t, "echo output", func() bool { return strings.Contains(screen(t, s), "hi-42") })
 }
 
 // mirror plays an attach client: it rebuilds the pane from the snapshot
@@ -151,7 +140,7 @@ func (m *mirror) apply(t *testing.T, typ proto.FrameType, payload []byte) {
 func TestAttachMirrorMatchesServer(t *testing.T) {
 	s := start(t, "/bin/sh")
 	s.Input([]byte("echo before-attach\r"))
-	eventually(t, "first output", func() bool { return strings.Contains(screen(t, s), "before-attach") })
+	testwait.Eventually(t, "first output", func() bool { return strings.Contains(screen(t, s), "before-attach") })
 
 	sub, err := s.Attach()
 	if err != nil {
@@ -161,14 +150,14 @@ func TestAttachMirrorMatchesServer(t *testing.T) {
 	m := runMirror(t, sub)
 
 	s.Input([]byte("for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do echo line-$i; done\r"))
-	eventually(t, "loop output", func() bool { return strings.Contains(screen(t, s), "line-30") })
+	testwait.Eventually(t, "loop output", func() bool { return strings.Contains(screen(t, s), "line-30") })
 	if err := s.Resize(100, 30); err != nil {
 		t.Fatal(err)
 	}
 	s.Input([]byte("echo after-resize\r"))
-	eventually(t, "post-resize output", func() bool { return strings.Contains(screen(t, s), "after-resize") })
+	testwait.Eventually(t, "post-resize output", func() bool { return strings.Contains(screen(t, s), "after-resize") })
 
-	eventually(t, "mirror to match the server", func() bool {
+	testwait.Eventually(t, "mirror to match the server", func() bool {
 		<-m.updates
 		got, _ := m.term.Screen()
 		return got == screen(t, s)
@@ -215,7 +204,7 @@ func TestRequestResizeCoalesces(t *testing.T) {
 	if got := s.Info(); got.Cols != 100 {
 		t.Fatalf("a request within the quiet time applied at once: %d×%d", got.Cols, got.Rows)
 	}
-	eventually(t, "the last request", func() bool { got := s.Info(); return got.Cols == 92 && got.Rows == 20 })
+	testwait.Eventually(t, "the last request", func() bool { got := s.Info(); return got.Cols == 92 && got.Rows == 20 })
 
 	// The stream saw exactly two resizes: 100×30, then 92×20. The
 	// subscriber holds everything since attaching.
@@ -256,12 +245,12 @@ func TestSlowClientIsResynced(t *testing.T) {
 	// Nobody drains the subscriber while this runs.
 	// The echoed command line must not match: wait for computed output.
 	s.Input([]byte("i=0; while [ $i -lt 2000 ]; do echo flood-$i; i=$((i+1)); done; echo done-$((6*7))\r"))
-	eventually(t, "flood to finish", func() bool { return strings.Contains(screen(t, s), "done-42") })
+	testwait.Eventually(t, "flood to finish", func() bool { return strings.Contains(screen(t, s), "done-42") })
 	if sub.Resyncs() == 0 {
 		t.Fatal("expected at least one resync")
 	}
 	m := runMirror(t, sub)
-	eventually(t, "mirror to match after resync", func() bool {
+	testwait.Eventually(t, "mirror to match after resync", func() bool {
 		<-m.updates
 		got, _ := m.term.Screen()
 		return got == screen(t, s)
@@ -270,7 +259,7 @@ func TestSlowClientIsResynced(t *testing.T) {
 
 func TestStopEscalatesToKill(t *testing.T) {
 	s := start(t, "/bin/sh", "-c", "trap '' HUP; echo ready; while :; do sleep 1; done")
-	eventually(t, "ready", func() bool { return strings.Contains(screen(t, s), "ready") })
+	testwait.Eventually(t, "ready", func() bool { return strings.Contains(screen(t, s), "ready") })
 	t0 := time.Now()
 	s.Stop(300 * time.Millisecond)
 	select {
@@ -341,7 +330,7 @@ func TestColors(t *testing.T) {
 		t.Helper()
 		// The answer is 24 bytes; ESC and BEL shown as E and B.
 		s.Input([]byte("clear; stty raw -echo; printf '\\033]11;?\\007'; head -c 24 | tr '\\033\\007' EB; stty sane; echo\r"))
-		eventually(t, want, func() bool { return strings.Contains(screen(t, s), want) })
+		testwait.Eventually(t, want, func() bool { return strings.Contains(screen(t, s), want) })
 	}
 	var c emu.Colors
 	c.Bg, c.Known = emu.RGB{R: 0x12, G: 0x34, B: 0x56}, emu.KnownBg

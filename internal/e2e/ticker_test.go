@@ -6,12 +6,13 @@ package e2e
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/theclifmeister/terminatr/internal/gittest"
 )
 
 // tickerScripts are the fake agent's scripts for these scenarios.
@@ -67,9 +68,9 @@ const ghOrigin = "https://github.com/o/r.git"
 func githubRepo(t *testing.T, projDir string) {
 	t.Helper()
 	repo := projectRepo(t, projDir)
-	bare := repoGit(t, repo, "remote", "get-url", "origin")
-	repoGit(t, repo, "remote", "set-url", "origin", ghOrigin)
-	repoGit(t, repo, "config", "url."+bare+".insteadOf", ghOrigin)
+	bare := gittest.Run(t, repo, "remote", "get-url", "origin")
+	gittest.Run(t, repo, "remote", "set-url", "origin", ghOrigin)
+	gittest.Run(t, repo, "config", "url."+bare+".insteadOf", ghOrigin)
 }
 
 // projectRepo is the project's one repo, from config.toml.
@@ -80,15 +81,6 @@ func projectRepo(t *testing.T, projDir string) string {
 		t.Fatalf("repos of %s: %v", projDir, repos)
 	}
 	return repos[0]
-}
-
-func repoGit(t *testing.T, repo string, args ...string) string {
-	t.Helper()
-	out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, out)
-	}
-	return strings.TrimSpace(string(out))
 }
 
 // startThread starts thread t-0001 as the human and waits until its
@@ -503,28 +495,18 @@ func TestTickerCheckoutSync(t *testing.T) {
 	if repo == "" {
 		t.Fatal("no repo in tm context")
 	}
-	git := func(dir string, args ...string) string {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t"}, args...)...)
-		cmd.Dir = dir
-		b, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, b)
-		}
-		return strings.TrimSpace(string(b))
-	}
 	other := filepath.Join(t.TempDir(), "other")
-	git(repo, "clone", "-q", git(repo, "remote", "get-url", "origin"), other)
+	gittest.Run(t, repo, "clone", "-q", gittest.Run(t, repo, "remote", "get-url", "origin"), other)
 	pushMain := func(body string) string {
 		os.WriteFile(filepath.Join(other, "NEWS"), []byte(body), 0o644)
-		git(other, "add", "NEWS")
-		git(other, "commit", "-q", "-m", "Merge pull request #12 from a/b")
-		git(other, "push", "-q", "origin", "HEAD:main")
-		return git(other, "rev-parse", "HEAD")
+		gittest.Run(t, other, "add", "NEWS")
+		gittest.Run(t, other, "commit", "-q", "-m", "Merge pull request #12 from a/b")
+		gittest.Run(t, other, "push", "-q", "origin", "HEAD:main")
+		return gittest.Run(t, other, "rev-parse", "HEAD")
 	}
 
 	head := pushMain("one\n")
-	if !Poll(agentWait, func() bool { return git(repo, "rev-parse", "HEAD") == head }) {
+	if !Poll(agentWait, func() bool { return gittest.Run(t, repo, "rev-parse", "HEAD") == head }) {
 		t.Fatal("the checkout was not fast-forwarded")
 	}
 	var j []byte
@@ -544,7 +526,7 @@ func TestTickerCheckoutSync(t *testing.T) {
 	}) {
 		t.Fatalf("tm context:\n%s", ctx)
 	}
-	if git(repo, "rev-parse", "HEAD") != head {
+	if gittest.Run(t, repo, "rev-parse", "HEAD") != head {
 		t.Fatal("moved a dirty checkout")
 	}
 }

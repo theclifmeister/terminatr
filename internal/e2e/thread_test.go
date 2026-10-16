@@ -14,6 +14,8 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/theclifmeister/terminatr/internal/gittest"
 )
 
 // threadScripts are the fake agent's scripts for these scenarios. $OUT is
@@ -150,21 +152,13 @@ func threadEnv(t *testing.T) (env *Env, projDir, out string) {
 
 	root := t.TempDir()
 	origin, repo := filepath.Join(root, "origin.git"), filepath.Join(root, "repo")
-	git := func(dir string, args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t", "-c", "init.defaultBranch=main"}, args...)...)
-		cmd.Dir = dir
-		if b, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, b)
-		}
-	}
-	git(root, "init", "--bare", "-q", origin)
-	git(root, "clone", "-q", origin, repo)
+	gittest.Run(t, root, "init", "--bare", "-q", origin)
+	gittest.Run(t, root, "clone", "-q", origin, repo)
 	os.WriteFile(filepath.Join(repo, "README"), []byte("hi\n"), 0o644)
-	git(repo, "add", ".")
-	git(repo, "commit", "-q", "-m", "first")
-	git(repo, "push", "-q", "origin", "HEAD:main")
-	git(repo, "remote", "set-head", "origin", "main")
+	gittest.Run(t, repo, "add", ".")
+	gittest.Run(t, repo, "commit", "-q", "-m", "first")
+	gittest.Run(t, repo, "push", "-q", "origin", "HEAD:main")
+	gittest.Run(t, repo, "remote", "set-head", "origin", "main")
 
 	var p struct{ Slug, Dir string }
 	if err := json.Unmarshal([]byte(env.MustCLI("project", "new", "demo", "--repo", repo, "--json")), &p); err != nil {
@@ -424,14 +418,6 @@ func TestSmokeThreadLifecycle(t *testing.T) {
 // unmerged one; the worktree goes in every case.
 func TestThreadResolveMergedBranch(t *testing.T) {
 	env, projDir, _ := threadEnv(t)
-	git := func(dir string, args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t"}, args...)...)
-		cmd.Dir = dir
-		if b, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, b)
-		}
-	}
 	// thread starts a thread, commits a file in its worktree and returns
 	// its record.
 	type record struct{ Repo, Worktree, Branch, Session string }
@@ -442,8 +428,8 @@ func TestThreadResolveMergedBranch(t *testing.T) {
 		readTOML(t, filepath.Join(projDir, "threads", id, "thread.toml"), &rec)
 		env.WaitState(&Session{ID: rec.Session}, "idle", agentWait)
 		os.WriteFile(filepath.Join(rec.Worktree, id), []byte(id), 0o644)
-		git(rec.Worktree, "add", ".")
-		git(rec.Worktree, "commit", "-q", "-m", title)
+		gittest.Run(t, rec.Worktree, "add", ".")
+		gittest.Run(t, rec.Worktree, "commit", "-q", "-m", title)
 		return rec
 	}
 	resolve := func(rec record, id, want string, gone bool) {
@@ -466,17 +452,17 @@ func TestThreadResolveMergedBranch(t *testing.T) {
 
 	// Merged on origin with a merge commit, no PR: deleted.
 	a := thread("t-0001", "Merge commit")
-	git(a.Repo, "merge", "-q", "--no-ff", "-m", "Merge", a.Branch)
-	git(a.Repo, "push", "-q", "origin", "main")
-	git(a.Repo, "fetch", "-q", "origin")
+	gittest.Run(t, a.Repo, "merge", "-q", "--no-ff", "-m", "Merge", a.Branch)
+	gittest.Run(t, a.Repo, "push", "-q", "origin", "main")
+	gittest.Run(t, a.Repo, "fetch", "-q", "origin")
 	resolve(a, "t-0001", "deleted branch "+a.Branch+" (merged into origin/main)", true)
 
 	// Squash-merged, no PR: kept (git can't tell its work is on main).
 	b := thread("t-0002", "Squash")
-	git(b.Repo, "merge", "-q", "--squash", b.Branch)
-	git(b.Repo, "commit", "-q", "-m", "Squash (#2)")
-	git(b.Repo, "push", "-q", "origin", "main")
-	git(b.Repo, "fetch", "-q", "origin")
+	gittest.Run(t, b.Repo, "merge", "-q", "--squash", b.Branch)
+	gittest.Run(t, b.Repo, "commit", "-q", "-m", "Squash (#2)")
+	gittest.Run(t, b.Repo, "push", "-q", "origin", "main")
+	gittest.Run(t, b.Repo, "fetch", "-q", "origin")
 	resolve(b, "t-0002", "kept branch "+b.Branch+" (no merged PR found)", false)
 
 	// A thread with more branches of its own (a second PR's): one merged
@@ -485,18 +471,18 @@ func TestThreadResolveMergedBranch(t *testing.T) {
 	// worktree, are kept and the item says why.
 	e := thread("t-0003", "Two PRs")
 	second, third, fourth := "tm/demo/t-0003-second", "tm/demo/t-0003-third", "tm/demo/t-0003-fourth"
-	git(e.Worktree, "checkout", "-q", "-b", second)
+	gittest.Run(t, e.Worktree, "checkout", "-q", "-b", second)
 	os.WriteFile(filepath.Join(e.Worktree, "second"), []byte("2"), 0o644)
-	git(e.Worktree, "add", ".")
-	git(e.Worktree, "commit", "-q", "-m", "second")
-	git(e.Worktree, "push", "-q", "origin", "HEAD:main")
-	git(e.Worktree, "checkout", "-q", "-b", third)
-	git(e.Worktree, "commit", "-q", "--allow-empty", "-m", "unmerged")
-	git(e.Worktree, "checkout", "-q", e.Branch)
-	git(e.Repo, "fetch", "-q", "origin")
-	git(e.Repo, "branch", fourth, "origin/main")
+	gittest.Run(t, e.Worktree, "add", ".")
+	gittest.Run(t, e.Worktree, "commit", "-q", "-m", "second")
+	gittest.Run(t, e.Worktree, "push", "-q", "origin", "HEAD:main")
+	gittest.Run(t, e.Worktree, "checkout", "-q", "-b", third)
+	gittest.Run(t, e.Worktree, "commit", "-q", "--allow-empty", "-m", "unmerged")
+	gittest.Run(t, e.Worktree, "checkout", "-q", e.Branch)
+	gittest.Run(t, e.Repo, "fetch", "-q", "origin")
+	gittest.Run(t, e.Repo, "branch", fourth, "origin/main")
 	elsewhere := filepath.Join(t.TempDir(), "elsewhere")
-	git(e.Repo, "worktree", "add", "-q", elsewhere, fourth)
+	gittest.Run(t, e.Repo, "worktree", "add", "-q", elsewhere, fourth)
 	resolve(e, "t-0003", "deleted branch "+second+" (merged into origin/main)", true)
 	res := env.MustCLI("inbox", "list", "--project", "demo")
 	for _, w := range []string{"kept branch " + third + " (not merged into origin/main)", "kept branch " + fourth + " (checked out in "} {
@@ -517,14 +503,14 @@ func TestThreadResolveMergedBranch(t *testing.T) {
 			t.Errorf("journal lacks %q:\n%s", w, journal)
 		}
 	}
-	git(e.Repo, "worktree", "remove", elsewhere)
+	gittest.Run(t, e.Repo, "worktree", "remove", elsewhere)
 
 	// A repo without remote, merged by fast-forward (tm's own todo
 	// project): deleted; an unmerged branch is kept.
 	c := thread("t-0004", "Local")
 	d := thread("t-0005", "Unmerged")
-	git(c.Repo, "remote", "remove", "origin")
-	git(c.Repo, "merge", "-q", "--ff-only", c.Branch)
+	gittest.Run(t, c.Repo, "remote", "remove", "origin")
+	gittest.Run(t, c.Repo, "merge", "-q", "--ff-only", c.Branch)
 	resolve(c, "t-0004", "deleted branch "+c.Branch+" (merged into main)", true)
 	resolve(d, "t-0005", "kept branch "+d.Branch+" (no merged PR found)", false)
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/creack/pty"
 
 	"github.com/theclifmeister/terminatr/internal/agent/codex"
+	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
 func TestParseCodexArgs(t *testing.T) {
@@ -192,7 +193,7 @@ func TestCodexHooksReview(t *testing.T) {
 	a.waitScreen(0, "Hooks need review")
 	a.sendUntil("3", func() bool { return len(a.logKinds("hooks-review")) > 0 })
 	a.waitEvent("UserPromptSubmit", 1)
-	waitUntil(t, "task_complete", func() bool { return slices.Contains(rolloutTypes(a.rollout()), "task_complete") })
+	testwait.Eventually(t, "task_complete", func() bool { return slices.Contains(rolloutTypes(a.rollout()), "task_complete") })
 	if count(a.events(), "Stop") != 0 {
 		t.Fatalf("the untrusted Stop hook ran: %v", a.events())
 	}
@@ -237,7 +238,7 @@ func TestCodexApproval(t *testing.T) {
 	a.esc()
 	a.waitEvent("Interrupt", 1)
 	a.waitScreen(m, "Conversation interrupted")
-	waitUntil(t, "turn_aborted", func() bool { return slices.Contains(rolloutTypes(a.rollout()), "turn_aborted") })
+	testwait.Eventually(t, "turn_aborted", func() bool { return slices.Contains(rolloutTypes(a.rollout()), "turn_aborted") })
 	if count(a.events(), "Stop") != 1 {
 		t.Fatalf("an interrupted turn fired Stop: %v", a.events())
 	}
@@ -281,11 +282,11 @@ func TestCodexQueueAndClear(t *testing.T) {
 	}
 
 	a.send("\x1b[200~/clear\x1b[201~\r")
-	waitUntil(t, "the thread left", func() bool { return len(a.logKinds("cleared")) > 0 })
+	testwait.Eventually(t, "the thread left", func() bool { return len(a.logKinds("cleared")) > 0 })
 	if _, err := a.queue(sid, "lost"); err != nil {
 		t.Fatal(err)
 	}
-	waitUntil(t, "the hidden run", func() bool { return len(a.logKinds("queue-hidden")) == 1 })
+	testwait.Eventually(t, "the hidden run", func() bool { return len(a.logKinds("queue-hidden")) == 1 })
 	if count(a.events(), "SessionStart") != 1 {
 		t.Fatalf("SessionStart before the first prompt after /clear: %v", a.events())
 	}

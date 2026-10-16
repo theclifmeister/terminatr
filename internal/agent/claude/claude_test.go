@@ -16,6 +16,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/guard"
+	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 )
 
 func load(t *testing.T) agent.Agent {
@@ -49,11 +50,7 @@ func TestPromptOverMessagingSocket(t *testing.T) {
 	if inj := (&Agent{Agent: agent.FromManifest(&m), m: &m}).Injector(); inj != agent.InjectPaste {
 		t.Fatalf("inject.prompt = channel: injector %q", inj)
 	}
-	dir, err := os.MkdirTemp("/tmp", "tmclaude")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
+	dir := ipctest.ShortTempDir(t, "tmclaude")
 	sock := filepath.Join(dir, "m.sock")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
@@ -139,11 +136,7 @@ func TestPromptOverMessagingSocket(t *testing.T) {
 // line.
 func TestProbe(t *testing.T) {
 	a := load(t).(agent.Prober)
-	dir, err := os.MkdirTemp("/tmp", "tmclaude")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
+	dir := ipctest.ShortTempDir(t, "tmclaude")
 	sock := filepath.Join(dir, "m.sock")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {

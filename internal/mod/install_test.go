@@ -12,6 +12,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/gittest"
 	"github.com/theclifmeister/terminatr/internal/home"
 )
 
@@ -398,14 +399,7 @@ func gitRepo(t *testing.T, files map[string]string, tag string) (string, func(fi
 		t.Skip("no git")
 	}
 	dir := install(t, t.TempDir(), "repo", files)
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"}, args...)...)
-		cmd.Dir = dir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
+	run := gittest.In(t, dir)
 	run("init", "-q", "-b", "main")
 	run("add", "-A")
 	run("commit", "-q", "-m", "one")
@@ -600,20 +594,11 @@ func TestExampleInstallLines(t *testing.T) {
 	}
 }
 
-func gitIn(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"}, args...)...)
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, out)
-	}
-}
-
 // A mod pinned to an annotated tag that isn't a version is not behind.
 func TestLatestAnnotatedTag(t *testing.T) {
 	withHome(t)
 	repo, _ := gitRepo(t, map[string]string{"mod.toml": nordToml, "theme.toml": "", "rules/thread.md": ""}, "")
-	gitIn(t, repo, "tag", "-a", "stable", "-m", "stable")
+	gittest.Run(t, repo, "tag", "-a", "stable", "-m", "stable")
 	installFrom(t, Source{Git: "file://" + repo, Ref: "stable"})
 	m, _ := registryOf(t).Get("nord")
 	s, _ := ReadSource(m.Dir)
@@ -628,8 +613,8 @@ func TestUpdateUnchangedFilesRecordsTag(t *testing.T) {
 	withHome(t)
 	repo, _ := gitRepo(t, map[string]string{"mod.toml": nordToml, "theme.toml": "", "rules/thread.md": ""}, "v0.4.0")
 	installFrom(t, Source{Git: "file://" + repo, Ref: "v0.4.0"})
-	gitIn(t, repo, "commit", "-q", "--allow-empty", "-m", "nothing")
-	gitIn(t, repo, "tag", "v0.5.0")
+	gittest.Run(t, repo, "commit", "-q", "--allow-empty", "-m", "nothing")
+	gittest.Run(t, repo, "tag", "v0.5.0")
 	m, _ := registryOf(t).Get("nord")
 	if st, err := FetchUpdate(m); err != nil || st != nil {
 		t.Fatalf("update of unchanged files: %v %v", st, err)

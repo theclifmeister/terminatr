@@ -17,6 +17,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modproto"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/plat/sandbox"
+	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
 // The test binary is the hosts' tm: run as `mod host …` it is one, as
@@ -115,12 +116,8 @@ func (f *fixture) waitState(id string, want State) Status {
 
 func (f *fixture) waitFor(what string, cond func() bool) {
 	f.t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for !cond() {
-		if time.Now().After(deadline) {
-			f.t.Fatalf("timed out waiting for %s; status %+v", what, f.sup.Status())
-		}
-		time.Sleep(5 * time.Millisecond)
+	if !testwait.Poll(testwait.Timeout, cond) {
+		f.t.Fatalf("timed out waiting for %s; status %+v", what, f.sup.Status())
 	}
 }
 

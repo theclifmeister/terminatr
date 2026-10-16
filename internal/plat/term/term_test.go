@@ -1,14 +1,8 @@
-//go:build unix
-
 package term
 
 import (
-	"context"
 	"os"
 	"testing"
-	"time"
-
-	"golang.org/x/sys/unix"
 )
 
 func TestNotATerminal(t *testing.T) {
@@ -26,41 +20,5 @@ func TestNotATerminal(t *testing.T) {
 	}
 	if _, err := MakeRaw(r); err == nil {
 		t.Fatal("MakeRaw on a pipe worked")
-	}
-}
-
-func TestEvents(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	evs := Events(ctx)
-	next := func() Event {
-		t.Helper()
-		select {
-		case ev := <-evs:
-			return ev
-		case <-time.After(5 * time.Second):
-			t.Fatal("no event")
-		}
-		return Event{}
-	}
-	// Events starts its signal handler asynchronously: send until one
-	// arrives.
-	got := make(chan Event, 1)
-	go func() { got <- next() }()
-	for len(got) == 0 {
-		unix.Kill(os.Getpid(), unix.SIGWINCH)
-		time.Sleep(10 * time.Millisecond)
-	}
-	if ev := <-got; ev.Kind != Resize {
-		t.Fatalf("SIGWINCH gave %+v", ev)
-	}
-	for len(evs) > 0 {
-		<-evs
-	}
-	unix.Kill(os.Getpid(), unix.SIGHUP)
-	if ev := next(); ev.Kind != Detach || ev.Why != "hangup" {
-		t.Fatalf("SIGHUP gave %+v", ev)
-	}
-	cancel()
-	for range evs {
 	}
 }

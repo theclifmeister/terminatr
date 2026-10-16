@@ -12,17 +12,14 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/client/clienttest"
+	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // hookEnv runs `tm hook` in-process against a socket in a short temp dir.
 func hookEnv(t *testing.T, payload string) (*Env, *bytes.Buffer, *bytes.Buffer, string) {
 	t.Helper()
-	dir, err := os.MkdirTemp("/tmp", "tmhook")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
+	dir := ipctest.ShortTempDir(t, "tmhook")
 	sock := filepath.Join(dir, "tm.sock")
 	t.Setenv("TERMINATR_HOME", filepath.Join(dir, "home"))
 	t.Setenv("TERMINATR_SOCKET", sock)

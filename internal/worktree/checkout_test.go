@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/theclifmeister/terminatr/internal/gittest"
 )
 
 func out(t *testing.T, dir string, args ...string) string {
@@ -20,8 +22,8 @@ func out(t *testing.T, dir string, args ...string) string {
 func commit(t *testing.T, dir, file, body, msg string) {
 	t.Helper()
 	os.WriteFile(filepath.Join(dir, file), []byte(body), 0o644)
-	run(t, dir, "add", file)
-	run(t, dir, "commit", "-q", "-m", msg)
+	gittest.Run(t, dir, "add", file)
+	gittest.Run(t, dir, "commit", "-q", "-m", msg)
 }
 
 // fixture is an origin with one commit, the user's checkout of it
@@ -31,13 +33,13 @@ func fixture(t *testing.T) (repo, other string) {
 	root := t.TempDir()
 	origin := filepath.Join(root, "origin.git")
 	repo, other = filepath.Join(root, "repo"), filepath.Join(root, "other")
-	run(t, root, "init", "--bare", "-q", "-b", "main", origin)
-	run(t, root, "clone", "-q", origin, repo)
+	gittest.Run(t, root, "init", "--bare", "-q", "-b", "main", origin)
+	gittest.Run(t, root, "clone", "-q", origin, repo)
 	commit(t, repo, "f", "one\n", "first")
-	run(t, repo, "push", "-q", "origin", "main")
-	run(t, repo, "remote", "set-head", "origin", "main")
-	run(t, repo, "branch", "-q", "--set-upstream-to", "origin/main")
-	run(t, root, "clone", "-q", origin, other)
+	gittest.Run(t, repo, "push", "-q", "origin", "main")
+	gittest.Run(t, repo, "remote", "set-head", "origin", "main")
+	gittest.Run(t, repo, "branch", "-q", "--set-upstream-to", "origin/main")
+	gittest.Run(t, root, "clone", "-q", origin, other)
 	return repo, other
 }
 
@@ -47,7 +49,7 @@ func advance(t *testing.T, other string, n int) {
 	for i := range n {
 		commit(t, other, "g", strings.Repeat("x", i+1), "Merge pull request #4"+string(rune('0'+i))+" from someone/branch")
 	}
-	run(t, other, "push", "-q", "origin", "main")
+	gittest.Run(t, other, "push", "-q", "origin", "main")
 }
 
 func TestSyncCleanFastForward(t *testing.T) {
@@ -93,7 +95,7 @@ func TestSyncDirtyTree(t *testing.T) {
 		t.Fatal("moved a dirty checkout")
 	}
 	// Staged counts too.
-	run(t, repo, "add", "f")
+	gittest.Run(t, repo, "add", "f")
 	if c, _ := Sync(repo, true); c.Held != HeldDirty {
 		t.Fatalf("staged: %+v", c)
 	}
@@ -129,7 +131,7 @@ func TestSyncDiverged(t *testing.T) {
 func TestSyncOtherBranchCheckedOut(t *testing.T) {
 	repo, other := fixture(t)
 	advance(t, other, 2)
-	run(t, repo, "checkout", "-q", "-b", "feature")
+	gittest.Run(t, repo, "checkout", "-q", "-b", "feature")
 	main := out(t, repo, "rev-parse", "main")
 	c, err := Sync(repo, true)
 	if err != nil || c.Behind != 2 || c.Held != HeldOther {
@@ -139,7 +141,7 @@ func TestSyncOtherBranchCheckedOut(t *testing.T) {
 		t.Fatal("touched another branch")
 	}
 	// Detached HEAD is another branch too.
-	run(t, repo, "checkout", "-q", "--detach", "main")
+	gittest.Run(t, repo, "checkout", "-q", "--detach", "main")
 	if c, _ := Sync(repo, true); c.Held != HeldOther {
 		t.Fatalf("detached: %+v", c)
 	}
@@ -160,7 +162,7 @@ func TestSyncOff(t *testing.T) {
 
 func TestSyncNoOrigin(t *testing.T) {
 	repo := t.TempDir()
-	run(t, repo, "init", "-q")
+	gittest.Run(t, repo, "init", "-q")
 	if c, err := Sync(repo, true); err != nil || c != (Checkout{}) {
 		t.Fatalf("got %+v %v", c, err)
 	}
@@ -170,7 +172,7 @@ func TestSyncNoOrigin(t *testing.T) {
 // behind, and one whose change clashes with base's conflicts.
 func TestHeadState(t *testing.T) {
 	repo, other := fixture(t)
-	run(t, repo, "checkout", "-q", "-b", "tm/x")
+	gittest.Run(t, repo, "checkout", "-q", "-b", "tm/x")
 	commit(t, repo, "h", "thread\n", "thread work")
 	head := out(t, repo, "rev-parse", "HEAD")
 	base := out(t, repo, "rev-parse", "origin/main")
@@ -178,14 +180,14 @@ func TestHeadState(t *testing.T) {
 		t.Fatalf("current: %q %v", s, ok)
 	}
 	advance(t, other, 1)
-	run(t, repo, "fetch", "-q", "origin")
+	gittest.Run(t, repo, "fetch", "-q", "origin")
 	base = out(t, repo, "rev-parse", "origin/main")
 	if s, ok := HeadState(repo, head, base); !ok || s != "behind" {
 		t.Fatalf("behind: %q %v", s, ok)
 	}
 	commit(t, other, "h", "main's\n", "clash")
-	run(t, other, "push", "-q", "origin", "main")
-	run(t, repo, "fetch", "-q", "origin")
+	gittest.Run(t, other, "push", "-q", "origin", "main")
+	gittest.Run(t, repo, "fetch", "-q", "origin")
 	base = out(t, repo, "rev-parse", "origin/main")
 	if s, ok := HeadState(repo, head, base); !ok || s != "conflict" {
 		t.Fatalf("conflict: %q %v", s, ok)
