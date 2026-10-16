@@ -635,23 +635,33 @@ Thread branches (`tm/<project>/…`) live in your repositories and are not remov
 
 ## Releasing
 
-Push a `v*` tag (`git tag v0.2.0 && git push origin v0.2.0`). `.github/workflows/release.yml` then, on one macOS runner:
+Releases go through release-please (`.github/workflows/release-please.yml`, `release-please-config.json`, `.release-please-manifest.json`). On every push to main it keeps one pull request open, titled like `chore: release 0.29.0`: the next version, worked out from the [Conventional Commit](https://www.conventionalcommits.org/) messages since the last release (`feat:` raises the minor version while terminatr is below 1.0, `fix:` and `perf:` the patch version), and that version's entry in `CHANGELOG.md`. To release:
+
+1. Wait for `ci.yml` on main to be green (below), then merge the release pull request. Nothing else needs doing in it; it updates itself as more changes land.
+2. release-please tags the merge commit (`v0.29.0`), creates a draft GitHub release whose notes are the new `CHANGELOG.md` entry, and starts the release workflow on that tag.
+3. Approve the `release` environment in that run (Actions → release → Review deployments). The draft becomes the published release once its archives are checked.
+
+The notes are the changelog entry: what users see on the releases page is what the release pull request showed in `CHANGELOG.md`. Only `feat:`, `fix:` and `perf:` commits appear there (and reverts); `chore:`, `ci:`, `docs:`, `test:`, `refactor:`, `build:` and `style:` commits don't, and don't make a release on their own. A squash-merged pull request's commit is its title, so pull request titles are written as Conventional Commits (CONTRIBUTING.md); a merge commit's own message ("Merge pull request #12 …") counts for nothing, only the commits it brings in do.
+
+A tag pushed by hand (`git tag v0.2.0 && git push origin v0.2.0`) still releases, the same way from step 3, but release-please doesn't know about it: its draft release has no notes (write them on the release page before or after publishing), and you must set `.release-please-manifest.json` to that version on main yourself, or the next release pull request proposes it again. Release through the pull request when you can.
+
+`.github/workflows/release.yml` runs on the tag, on one macOS runner:
 
 1. imports the Developer ID certificate into a temporary keychain;
 2. builds and checks a snapshot (`make release-snapshot`, `scripts/release/check.sh`), unsigned;
-3. runs goreleaser (`make release`): every target cross-compiled with `zig cc`, except darwin, linked by Apple's clang and ld for chained fixups (the Windows targets as `*-windows-gnu`, their ConPTY files fetched by `scripts/release/conpty.sh`), each darwin binary signed (hardened runtime) and notarised by `scripts/release/sign.sh`; the archives, `tm-relay-docker.tar.gz` (`deploy/relay`'s Docker files with the compose files pinned to the tag, `scripts/release/relay-docker.sh`), the installers and `checksums.txt` uploaded to a draft release;
+3. runs goreleaser (`make release`): every target cross-compiled with `zig cc`, except darwin, linked by Apple's clang and ld for chained fixups (the Windows targets as `*-windows-gnu`, their ConPTY files fetched by `scripts/release/conpty.sh`), each darwin binary signed (hardened runtime) and notarised by `scripts/release/sign.sh`; the archives, `tm-relay-docker.tar.gz` (`deploy/relay`'s Docker files with the compose files pinned to the tag, `scripts/release/relay-docker.sh`), the installers and `checksums.txt` uploaded to the draft release (release-please's, keeping its notes, or for a hand-made tag a new one without notes);
 4. checks the archives again with `--signed` (Developer ID, hardened runtime, Gatekeeper says `Notarized Developer ID`), and only then publishes the release;
 5. rewrites `Formula/terminatr.rb` from `checksums.txt` (`scripts/release/formula.sh`) and merges it through a pull request. Prereleases (`v1.2.0-rc1`) skip this step.
 
 Then a second job, on a Linux runner (outside the `release` environment, so a release needs one approval), builds the relay image from `deploy/relay/Dockerfile` for amd64 and arm64 (the published linux archives, checked against `checksums.txt`) and pushes it to `ghcr.io/theclifmeister/tm-relay:<tag>`, and `:latest` unless it is a prerelease. It runs once the release is published, even when the formula step failed; if it fails, the release stays published: rerun the `image` job.
 
-Before the tag, `ci.yml` on main has run `test` (unit tests with `-race`) and `macos` (build, unit tests, e2e smoke): wait for them to be green. Pull requests run neither macOS nor `-race`, and the release snapshot only when they touch release files; the tag run is where every release build is checked. If the repository requires status checks, require `test` (the one check every pull request runs). `macos` is main-only, so don't require it; `changes`, `claude-mod` and `release-snapshot` are skipped when not needed, which counts as passed.
+Before you merge the release pull request (or push a tag), `ci.yml` on main has run `test` (unit tests with `-race`) and `macos` (build, unit tests, e2e smoke): wait for them to be green. Pull requests run neither macOS nor `-race`, and the release snapshot only when they touch release files; the tag run is where every release build is checked. If the repository requires status checks, require `test` (the one check every pull request runs). `macos` is main-only, so don't require it; `changes`, `claude-mod` and `release-snapshot` are skipped when not needed, which counts as passed.
 
 `make release-snapshot` runs the same build locally without a tag, signing nothing: `sign: TM_SIGN_IDENTITY not set; … keeps its linker signature` in the log. To try signing locally, set `TM_SIGN_IDENTITY` to a Developer ID identity in your keychain, by its SHA-1 hash from `security find-identity -v -p codesigning` (codesign refuses a name that two certificates share, as after a renewal); add `TM_NOTARY_KEY` (path to the .p8), `TM_NOTARY_KEY_ID` and `TM_NOTARY_ISSUER` to notarise.
 
 ### Secrets
 
-The same Apple credentials as toe. Put them in the `release` environment (Settings → Environments → release), not as repository secrets, and limit that environment to `v*` tags (Deployment branches and tags → Selected → tag pattern `v*`): then only the release job can read them.
+The same Apple credentials as toe. Put them in the `release` environment (Settings → Environments → release), not as repository secrets, and limit that environment to `v*` tags (Deployment branches and tags → Selected → tag pattern `v*`): then only the release job can read them. Add yourself as a required reviewer, so each release waits for your approval. The run release-please starts is a run on the tag, like a pushed tag's, so the same rule admits it; main needs no entry there.
 
 | Secret | What |
 |---|---|
@@ -667,7 +677,8 @@ The same Apple credentials as toe. Put them in the `release` environment (Settin
 
 ### Repository settings
 
-- **Settings → Actions → General → Workflow permissions:** allow GitHub Actions to create and approve pull requests, or the formula pull request can't be opened.
+- **Settings → Actions → General → Workflow permissions:** allow GitHub Actions to create and approve pull requests, or neither the release pull request nor the formula pull request can be opened.
+- **Checks on the release pull request:** a pull request that GitHub Actions opens or updates starts no workflow, so the release pull request has no `ci.yml` run of its own (it changes only `CHANGELOG.md` and `.release-please-manifest.json`; main's run is the one that counts). If the rules on main require status checks, close and reopen the release pull request to start them, or merge it with your bypass.
 - **The relay image's visibility:** the first release that pushes `ghcr.io/theclifmeister/tm-relay` creates the package as private. Make it public once (the package's Package settings → Danger Zone → Change visibility → Public), so `docker compose` pulls it without a login; check that it is linked to this repository (the image's `org.opencontainers.image.source` label does that) and that the repository has Admin or Write in the package's Manage Actions access, so later releases can push to it.
 - **Rules on `main`:** the formula pull request carries `[skip ci]` and merges at once, as toe's cask bump does. A ruleset that requires pull requests is fine; one that also requires status checks or approvals blocks it. Then the job turns on auto-merge (if Settings → General allows auto-merge) and warns; merge it by hand, or add GitHub Actions as a bypass actor of that rule.
 - **Forks:** no workflow uses `pull_request_target` or `workflow_run`, and the only one that sees secrets runs on tags, which only people with write access can push. For a public repository keep Settings → Actions → "Fork pull request workflows" at requiring approval for outside contributors.

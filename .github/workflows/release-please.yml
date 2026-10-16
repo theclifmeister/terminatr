@@ -1,0 +1,59 @@
+name: release-please
+
+# Keeps a release pull request open on main (release-please-config.json,
+# .release-please-manifest.json): the next version, from the Conventional
+# Commit messages since the last release, and its CHANGELOG.md entry.
+# Merging it is the release:
+#
+#   1. release-please tags the merge commit (v0.29.0) and creates a draft
+#      release whose notes are that CHANGELOG.md entry
+#   2. this workflow starts release.yml on the tag, which waits for the
+#      release environment's approval, uploads the archives into that draft
+#      and publishes it
+#
+# A tag or a workflow run made with GITHUB_TOKEN starts no other workflow,
+# except through workflow_dispatch: hence `gh workflow run` on the tag,
+# which runs release.yml exactly as a pushed tag does (github.ref is the
+# tag, so the environment's v* tag rule still applies). By hand (Actions →
+# release-please → Run workflow) it refreshes the release pull request.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+# One run at a time, none cancelled: a run that has tagged a release must
+# start its release.
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      # The release branch, the tag and the draft release.
+      contents: write
+      # The release pull request, and its labels (autorelease: pending /
+      # tagged), which go through the issues API.
+      pull-requests: write
+      issues: write
+      # gh workflow run release.yml.
+      actions: write
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - name: Start the release
+        if: steps.release.outputs.release_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
+          echo "::notice::release.yml started on $TAG; approve the release environment in its run"

@@ -145,26 +145,24 @@ checksum:
 snapshot:
   version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"
 
+# The notes are release-please's CHANGELOG.md entry, already in the draft
+# release it created (release-please-config.json); goreleaser writes none.
 changelog:
-  use: github
-  sort: asc
-  # Short hashes, as older releases showed ("5c40f01: ...").
-  abbrev: 7
-  filters:
-    exclude:
-      # Every merge commit: PR merges and the threads' own merges of main.
-      # A squash merge's commit ("Title (#12)") and a rebase merge's
-      # commits are the changes themselves and stay.
-      - "^Merge "
+  disable: true
 
 release:
   github:
     owner: theclifmeister
     name: terminatr
-  # Created as a draft; the release workflow publishes it once the
-  # uploaded archives pass scripts/release/check.sh --signed, then bumps
-  # Formula/terminatr.rb.
+  # A draft; the release workflow publishes it once the uploaded archives
+  # pass scripts/release/check.sh --signed, then bumps Formula/terminatr.rb.
+  # The archives go into release-please's draft of the same name (the tag,
+  # v0.29.0), keeping its notes; for a tag pushed by hand there is none, and
+  # goreleaser creates the draft, without notes.
   draft: true
+  use_existing_draft: true
+  name_template: "{{ .Tag }}"
+  mode: keep-existing
   prerelease: auto
   # The installers, at releases/latest/download/install.ps1 (Windows) and
   # install.sh (Linux, macOS), and the relay's Docker files at
