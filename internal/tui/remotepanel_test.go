@@ -75,8 +75,7 @@ const longAlias = "runnervm-6qbd8-ubuntu-24-04-x64-standard-runner"
 // was last read; a server with a long name, narrow; a project no longer
 // shared; a server no longer paired.
 func TestRemotePanelGolden(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	peers := remotePeers()
 	long := slices.Clone(peers[:1])
 	long[0].Alias = longAlias
@@ -189,8 +188,7 @@ func TestRemotePanelHits(t *testing.T) {
 // from the mirror and shows no mod sections; its hint leaves out enter
 // and a, which say the panel is view-only, and its arrows scroll.
 func TestRemotePanelKeys(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	infoClock = func() time.Time { return peersAt }
 	defer func() { infoClock = time.Now }()
 	c := infoClient(t, 200)

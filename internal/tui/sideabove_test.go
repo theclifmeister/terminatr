@@ -36,8 +36,7 @@ func manyNeeds(src *fakeSource, n int) {
 // the first project and saying ⚑ N, as testdata/sidebar-above.golden
 // has it (go test -run TestSideAboveGolden -update rewrites it).
 func TestSideAboveGolden(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	var b strings.Builder
 	show := func(name string, m *dash) {
 		fmt.Fprintf(&b, "%s (%d×%d, sidebar %d)\n", name, m.winW, m.h, m.sideW())
@@ -95,8 +94,7 @@ func TestSideAboveGolden(t *testing.T) {
 // project in the cursor's path, those below after the last row, round
 // the ends; 1-9 and w skip the headers.
 func TestSideAboveKeys(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	_, m := aboveDash(t, 30)
 	keyPress(m, "tab")
 	m.sideSel = "p:alpha"
@@ -150,8 +148,7 @@ func firstNeeds(m *dash) string {
 // header off it shows every project's NEEDS YOU, the keyboard on the
 // header.
 func TestSideAboveFlag(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	_, m := bandDash(t, 120+sideDefault, 30, bandTestViews())
 	if l := sidebarOf(m)[0]; strings.Contains(l, ic().hint) {
 		t.Fatalf("⚑ N with the band below alone: %q", l)
@@ -183,8 +180,7 @@ func TestSideAboveFlag(t *testing.T) {
 // you, the band above gives way before the band below, so every ⚑ row
 // the tree shows without sections still shows.
 func TestSideAboveGuarantee(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	src, m := aboveDash(t, 30)
 	manyNeeds(src, 15)
 	m.setData(src.data)
@@ -207,8 +203,7 @@ func TestSideAboveGuarantee(t *testing.T) {
 // as both screens' clicks ask; not off them, not without anything that
 // needs you, and not while it doesn't show.
 func TestSideFlagAt(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	_, m := aboveDash(t, 30)
 	all, w, h, foot := m.tree(), m.sideW(), m.h, m.sideFoot()
 	y := len(sideLayout(all, w, h, foot).above)

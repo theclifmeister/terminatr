@@ -40,8 +40,7 @@ func testCells() *modCells {
 // column with a blank after it, and blank in the rows of slots the
 // column doesn't name.
 func TestModCellsSidebar(t *testing.T) {
-	defer setIcons(IconsUnicode)
-	setIcons(IconsUnicode)
+	freshConsole(t)
 	mc := testCells()
 	order := mc.sideOrder(nil)
 	if want := []string{"count", mod.PRCIColumn, "pr-ci.dot", "review-age.age", "state", "remote", "paused", "inactive", "needs"}; !slices.Equal(order, want) {

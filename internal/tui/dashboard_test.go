@@ -1181,8 +1181,7 @@ func TestInboxLinesRows(t *testing.T) {
 // (T344).
 func TestOldConsoleHint(t *testing.T) {
 	defer func(v string) { version.Version = v }(version.Version)
-	defer oldConsoleSaid.Store(oldConsoleSaid.Load())
-	oldConsoleSaid.Store(false)
+	freshConsole(t)
 	version.Version = "v0.24.0"
 	srv := ServerInfo{Version: "v0.25.0", Build: "v0.25.0+x+y"}
 	if !consoleOlder(srv) {

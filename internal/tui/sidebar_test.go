@@ -220,7 +220,7 @@ func gridCol(row string, c int) string {
 // From 38 columns the title shows too, and a wide sidebar (there is no
 // maximum width) shows a long one whole.
 func TestTreeThreadIDNeverCut(t *testing.T) {
-	defer setIcons(IconsUnicode)
+	freshConsole(t)
 	const title = "Prefix each thread row with its id, and keep the title whole when the sidebar is wide"
 	for _, name := range []string{"t-0042", "T1052"} {
 		testTreeNameNeverCut(t, treeRow{kind: treeThread, thread: "t-0042", name: name, title: title, state: "working", pct: 40})
@@ -485,7 +485,7 @@ func TestSidebarDefaultKeepsSavedWidth(t *testing.T) {
 // whole (T16); other rows leave both last cells plain. The blank column
 // stays blank either way, and the glyph sits right before it.
 func TestTreeHighlightRunsToBorder(t *testing.T) {
-	defer setIcons(IconsUnicode)
+	freshConsole(t)
 	rows := []treeRow{
 		{kind: treeProject, slug: "terminatr", state: "idle", hint: true, threads: 1, current: true},
 		{kind: treeProject, slug: "todo", state: "", threads: 0},
@@ -852,8 +852,7 @@ func TestSideKeyRules(t *testing.T) {
 // cursor's look while the cursor rests on it, and as the row you are
 // on while that view shows. The header's ⚑ N badge opens it too.
 func TestSidebarProjectsHeader(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	rows := buildTree(testData().Projects, testData().Sessions, treeIn{current: "beta"})
 	for _, op := range []int{sideEnter, sideIn} {
 		if st := sideKeyStep(rows, sideDefault, headKey, op); st.target == nil || st.target.Project != allProjects || !st.into {

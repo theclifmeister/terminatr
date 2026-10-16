@@ -5,9 +5,11 @@ package tui
 // program calls them.
 
 import (
+	"testing"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -39,12 +41,39 @@ func loadIcons() string {
 	return v
 }
 
-// resetConsole forgets the filter and the places (tests).
+// resetConsole forgets the filter, the places and the tooltip (tests).
 func resetConsole() {
 	thisConsole.Lock()
 	defer thisConsole.Unlock()
 	thisConsole.filter, thisConsole.now, thisConsole.last = sideFilterState{}, place{}, place{}
 	thisConsole.known, thisConsole.lastKnown, thisConsole.hover = false, false, ""
+}
+
+// freshConsole puts the console state the package keeps for the whole
+// process back as a console starts, now and when t ends: the sidebar's
+// filter, places and tooltip, the theme and its scheme, the icons, the
+// layout and the notes said once. The keymap is defaultKeymap's.
+func freshConsole(t testing.TB) {
+	t.Helper()
+	fresh := func() {
+		resetConsole()
+		setScheme(true)
+		useTheme(&mod.Registry{}, ThemeDefault)
+		setIcons(IconsUnicode)
+		layoutVal.Store(ThemeDefault)
+		layoutSpec.Store(nil)
+		lookSaid.Store("")
+		oldConsoleSaid.Store(false)
+	}
+	fresh()
+	t.Cleanup(fresh)
+}
+
+// defaultKeymap puts the default keymap back when t ends. The keymap is
+// read without a lock (ApplyKeymap), so only a test that changes it sets
+// it back: a session an earlier test started may still be drawing.
+func defaultKeymap(t testing.TB) {
+	t.Cleanup(func() { ApplyKeymap(nil, DefaultPrefixKey) })
 }
 
 // sideGrid is the width of the default grid on the right of every row

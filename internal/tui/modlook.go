@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync/atomic"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	tmtheme "github.com/theclifmeister/terminatr/internal/theme"
@@ -50,13 +52,28 @@ func loadMods(cfg *config.Config) *mod.Registry {
 	return r
 }
 
+// withMods loads the enabled mods off the UI goroutine, then runs then
+// with them on the dashboard.
+func withMods(then func(m *dash, r *mod.Registry) tea.Cmd) tea.Cmd {
+	return whenLoaded(func() func(m *dash) tea.Cmd {
+		cfg, _ := config.Load()
+		r := loadMods(cfg)
+		return func(m *dash) tea.Cmd { return then(m, r) }
+	})
+}
+
 // modChoices are the built-in choices (the bundled mods', by their
 // names: default, unicode…), then the enabled user mods that provide
 // kind, in the order they were enabled.
 func modChoices(builtin []string, kind string) []string {
 	cfg, _ := config.Load()
+	return modChoicesIn(loadMods(cfg), builtin, kind)
+}
+
+// modChoicesIn is modChoices with the mods in r.
+func modChoicesIn(r *mod.Registry, builtin []string, kind string) []string {
 	out := append([]string(nil), builtin...)
-	for _, m := range loadMods(cfg).Providers(kind) {
+	for _, m := range r.Providers(kind) {
 		if !m.Builtin {
 			out = append(out, m.ID)
 		}

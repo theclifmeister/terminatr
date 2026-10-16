@@ -12,8 +12,7 @@ import (
 // line say so; the slim strip draws its name red. Without failures, or
 // on a row too narrow for both, there is no mark.
 func TestSidePRHostMark(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	ps := []ProjectData{{Slug: "demo", PRHostFails: 3}, {Slug: "a-very-long-project-name"}, {Slug: "ok"}}
 	ps[1].PRHostFails = 4
 	rows := buildTree(ps, nil, treeIn{current: "ok"})

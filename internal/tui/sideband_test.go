@@ -61,8 +61,7 @@ func sidebarOf(m *dash) []string {
 // testdata/sidebar-band.golden has it (go test -run TestSideBandGolden
 // -update rewrites it).
 func TestSideBandGolden(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	var b strings.Builder
 	show := func(name string, m *dash) {
 		fmt.Fprintf(&b, "%s (%d×%d, sidebar %d)\n", name, m.winW, m.h, m.sideW())
@@ -141,8 +140,7 @@ func TestSideBandGolden(t *testing.T) {
 // doesn't, space and p do nothing there, and z Z fold and unfold every
 // section with the tree.
 func TestSideBandKeys(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	src, m := bandDash(t, 120+sideDefault, 30, bandTestViews())
 	keyPress(m, "tab")
 	m.sideSel = "t:beta/t-0006"
@@ -222,8 +220,7 @@ func TestSideBandKeys(t *testing.T) {
 // there; the hover over a section names its mod, and the details line
 // on a header says which mod drew it.
 func TestSideBandMouse(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	lineOf := func(m *dash, s string) int {
 		for y, l := range sidebarOf(m) {
 			if strings.Contains(l, s) {
@@ -264,7 +261,7 @@ func TestSideBandMouse(t *testing.T) {
 // a folded one and one that drew a null tree too, and of none in the
 // slim strip or a window too short.
 func TestSideBandShown(t *testing.T) {
-	defer resetConsole()
+	freshConsole(t)
 	views := bandTestViews()
 	views = append(views, proto.ModView{Mod: "quiet", View: "q", Title: "Quiet", Slot: mod.SlotSidebarSection,
 		Trees: []modview.Tree{{Project: "beta"}}})
@@ -292,8 +289,7 @@ func TestSideBandShown(t *testing.T) {
 // you, the band gives way so every ⚑ row the tree shows without it still
 // shows, the last header shown counting those that didn't fit.
 func TestSideBandGuarantee(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	src := &fakeSource{data: testData(), modViews: proto.ModViewsResult{Views: bandTestViews()}}
 	for i := range 18 {
 		src.data.Projects[1].Threads = append(src.data.Projects[1].Threads, ThreadRow{
@@ -318,8 +314,7 @@ func TestSideBandGuarantee(t *testing.T) {
 // as the cursor's, is off the cursor's path: down goes past it, and a
 // cursor left on it falls back to the row you are on (T369).
 func TestSideBandUndrawnCursor(t *testing.T) {
-	setIcons(IconsUnicode)
-	defer resetConsole()
+	freshConsole(t)
 	undrawn := 0
 	for h := 14; h <= 40; h++ {
 		src, m := projDash(t, h, nil)

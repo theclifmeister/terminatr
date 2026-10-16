@@ -34,7 +34,7 @@ func TestSidebarColumnOrder(t *testing.T) {
 // are; a narrow sidebar gives it up first (24: as without it); a mod column no mod declares
 // takes no room.
 func TestSidebarModColumn(t *testing.T) {
-	defer setIcons(IconsUnicode)
+	freshConsole(t)
 	order := []string{"count", "ci", "review-age.age", "state", "remote", "paused", "inactive", "needs"}
 	// goldenTree's rows have the PR/CI mod's column (ci), as by default.
 	prci := map[string]modColumn{mod.PRCIColumn: {width: 2, title: "CI"}}
