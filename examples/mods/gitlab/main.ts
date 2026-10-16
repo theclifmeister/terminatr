@@ -8,8 +8,11 @@
 // finds merge commits in git itself, and tm thread merge makes its own
 // checks (open, green, mergeable) before it asks for merge, with the
 // head it checked. merge passes that head to GitLab as sha, so GitLab
-// refuses it once the branch moved, and it never squashes or removes the
-// source branch.
+// refuses it once the branch moved, and it never removes the source
+// branch. It merges by the project's merge_method: "merge" and "squash"
+// (the merge request's squash flag); GitLab's API has no per-merge
+// rebase, so "rebase" is refused (the project's own GitLab merge method
+// decides between a merge commit and a fast-forward).
 //
 // glab runs on its own login (glab auth login), with no token in its
 // environment: the commands grant runs it with a scrubbed one.
@@ -188,10 +191,12 @@ $.codehost.handle("failedLog", async (a) => {
 
 $.codehost.handle("merge", async (a) => {
   if (!a.number || !a.head || !/^[0-9a-f]{40}$/.test(a.head)) throw new Error("merge needs the number and head tm checked");
-  // A merge commit at exactly this head: GitLab answers 409 when the
-  // head moved, and 405 or 422 when it can't merge.
+  const method = a.method ?? "merge";
+  if (method !== "merge" && method !== "squash") return { refused: "method", allowed: ["merge", "squash"] };
+  // At exactly this head: GitLab answers 409 when the head moved, and
+  // 405 or 422 when it can't merge.
   await api(a.remote, `${mrPath(a.remote, a.number)}/merge`,
-    [`sha=${a.head}`, "squash=false", "should_remove_source_branch=false"], "PUT");
+    [`sha=${a.head}`, `squash=${method === "squash"}`, "should_remove_source_branch=false"], "PUT");
   return {};
 });
 

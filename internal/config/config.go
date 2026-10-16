@@ -62,6 +62,19 @@ const (
 	MergeThread      = "thread"
 )
 
+// Values of merge_method: how tm thread merge merges a PR on the host.
+// MethodMerge writes a merge commit (the host's regular merge);
+// MethodSquash one commit of the PR's changes; MethodRebase the PR's
+// commits replayed on the base, no merge commit.
+const (
+	MethodMerge  = "merge"
+	MethodSquash = "squash"
+	MethodRebase = "rebase"
+)
+
+// MergeMethods are merge_method's values, in the settings' cycle order.
+var MergeMethods = []string{MethodMerge, MethodSquash, MethodRebase}
+
 // GuardRules are the ids of the mod's guard rules (docs/SPEC.md §8.6,
 // Guard), which guard_off may name.
 var GuardRules = []string{"force-push", "push-default", "worktree-only", "delete-branch", "merge", "credentials"}
@@ -178,6 +191,10 @@ type Safety struct {
 	Share bool `json:"share"`
 	// Merge is who merges a thread's PR: MergeCoordinator or MergeThread.
 	Merge string `json:"merge"`
+	// MergeMethod is how tm thread merge merges a PR: MethodMerge,
+	// MethodSquash or MethodRebase. A repo whose rules require linear
+	// history refuses MethodMerge.
+	MergeMethod string `json:"merge_method"`
 	// Guard turns the mod's guard on (docs/SPEC.md §8.6, Guard): it
 	// refuses tool calls that break the standing rules. GuardOff are the
 	// GuardRules it leaves out. Only the human sets them, here.
@@ -211,7 +228,7 @@ const LegacyAgent = "claude"
 // [defaults] (all projects) name.
 var Defaults = Safety{StartThreads: StartPropose, Yolo: false, CoordinatorApproves: true,
 	ParallelThreads: 10, AutoClose: CloseMerged, AutoCloseDays: 7, PRFollowup: true, PRPollSeconds: DefaultPRPollSeconds,
-	CompleteTasks: CompleteUser, FastForwardCheckout: true, SandboxEscapes: true, Merge: MergeCoordinator, Guard: true, Active: true,
+	CompleteTasks: CompleteUser, FastForwardCheckout: true, SandboxEscapes: true, Merge: MergeCoordinator, MergeMethod: MethodMerge, Guard: true, Active: true,
 	ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30}
 
 type rawSafety struct {
@@ -232,6 +249,7 @@ type rawSafety struct {
 	AutoClear      *bool     `toml:"auto_clear"`
 	CoordMerges    *bool     `toml:"coordinator_merges"`
 	FastForward    *bool     `toml:"fast_forward_checkout"`
+	MergeMethod    *string   `toml:"merge_method"`
 	SandboxEsc     *bool     `toml:"sandbox_escapes"`
 	ThreadAgent    *string   `toml:"thread_agent"`
 	CoordAgent     *string   `toml:"coordinator_agent"`

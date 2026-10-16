@@ -23,6 +23,7 @@ type fakeHost struct {
 	mergeErr error
 	asked    []codehost.Ref
 	merged   []codehost.PR
+	methods  []string
 }
 
 func (f *fakeHost) Kind() string { return codehost.GitHubKind }
@@ -33,8 +34,9 @@ func (f *fakeHost) PR(_ string, ref codehost.Ref) (codehost.PR, error) {
 	f.asked = append(f.asked, ref)
 	return f.pr, f.err
 }
-func (f *fakeHost) Merge(_ string, pr codehost.PR) error {
+func (f *fakeHost) Merge(_ string, pr codehost.PR, method string) error {
 	f.merged = append(f.merged, pr)
+	f.methods = append(f.methods, method)
 	return f.mergeErr
 }
 
@@ -78,7 +80,7 @@ func TestThreadMerge(t *testing.T) {
 		*fh = fakeHost{pr: greenPR()}
 		mut(fh)
 		h.expect(1, code, coord, args()...)
-		if len(fh.merged) != 0 && code != "merge-failed" {
+		if len(fh.merged) != 0 && fh.mergeErr == nil {
 			t.Fatalf("%s: merged anyway", code)
 		}
 	}
@@ -92,6 +94,14 @@ func TestThreadMerge(t *testing.T) {
 	refuse("not-mergeable", func(f *fakeHost) { f.pr.Mergeable = "UNKNOWN" })
 	refuse("not-mergeable", func(f *fakeHost) { f.pr.Head = "" })
 	refuse("merge-failed", func(f *fakeHost) { f.mergeErr = errors.New("head moved") })
+	// T497: the host refusing the method is its own refusal, naming
+	// what the repo allows and the setting.
+	refuse("merge-method-not-allowed", func(f *fakeHost) {
+		f.mergeErr = &codehost.MethodError{Method: "merge", Allowed: []string{"squash", "rebase"}, Err: errors.New("Merge commits are not allowed on this repository")}
+	})
+	refuse("does not allow merging by merge commit (it allows: squash, rebase); the user picks another merge method in the Settings tab (merge_method", func(f *fakeHost) {
+		f.mergeErr = &codehost.MethodError{Method: "merge", Allowed: []string{"squash", "rebase"}, Err: errors.New("x")}
+	})
 	// T378: only the PR of the thread's own branch, in its own repo.
 	refuse("not-thread-pr", func(f *fakeHost) { f.pr.Branch = "someone-else" })
 	refuse("not-thread-pr", func(f *fakeHost) { f.pr.Branch = "" })
@@ -105,8 +115,8 @@ func TestThreadMerge(t *testing.T) {
 
 	*fh = fakeHost{pr: greenPR()}
 	out := h.ok(coord, args()...)
-	if !strings.Contains(out, "merged PR #7") || len(fh.merged) != 1 || fh.merged[0].Head != head40 {
-		t.Fatalf("merge: %q %+v", out, fh.merged)
+	if !strings.Contains(out, "merged PR #7 (merge commit, head 0123456") || len(fh.merged) != 1 || fh.merged[0].Head != head40 || fh.methods[0] != "merge" {
+		t.Fatalf("merge: %q %+v %q", out, fh.merged, fh.methods)
 	}
 
 	// The report's PR line is a hint that must agree with the branch's
@@ -135,8 +145,23 @@ func TestThreadMerge(t *testing.T) {
 		t.Fatalf("own PR in the report: %q %+v", out, fh.merged)
 	}
 
-	// merge = thread: the coordinator doesn't merge.
+	// merge_method picks the method, from the project's table or
+	// [defaults], and the success line names it.
 	cfg := filepath.Join(h.root, "config.toml")
+	for conf, want := range map[string]string{
+		"[projects.demo]\nmerge_method = \"squash\"\n":                                       "squash",
+		"[defaults]\nmerge_method = \"rebase\"\n":                                            "rebase",
+		"[defaults]\nmerge_method = \"rebase\"\n[projects.demo]\nmerge_method = \"merge\"\n": "merge commit",
+	} {
+		os.WriteFile(cfg, []byte(conf), 0o644)
+		*fh = fakeHost{pr: greenPR()}
+		out := h.ok(coord, args()...)
+		if !strings.Contains(out, "merged PR #7 ("+want+", head") || len(fh.methods) != 1 || methodWords[fh.methods[0]] != want {
+			t.Fatalf("%s: %q %q", conf, out, fh.methods)
+		}
+	}
+
+	// merge = thread: the coordinator doesn't merge.
 	os.WriteFile(cfg, []byte("[projects.demo]\nmerge = \"thread\"\n"), 0o644)
 	*fh = fakeHost{pr: greenPR()}
 	h.expect(1, "merge-not-allowed", coord, args()...)

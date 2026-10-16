@@ -93,15 +93,39 @@ func (e *Env) threadMerge(p *project.Project, id string) error {
 	if len(pr.Head) != 40 {
 		return mergeRefusal("not-mergeable", "%s: the host gave no head commit to merge", pr.Ref())
 	}
-	if err := host.Merge(r.Repo, pr); err != nil {
+	method := safety.MergeMethod
+	if err := host.Merge(r.Repo, pr, method); err != nil {
+		var me *codehost.MethodError
+		if errors.As(err, &me) {
+			return methodRefusal(pr, me)
+		}
 		return mergeRefusal("merge-failed", "%s was not merged: %s", pr.Ref(), oneLine(err.Error(), 300))
 	}
 	head := pr.Head[:7]
-	if err := p.Journal(e.Caller, "thread.merge", id, fmt.Sprintf("%s merged at %s", pr.Ref(), head)); err != nil {
+	if err := p.Journal(e.Caller, "thread.merge", id, fmt.Sprintf("%s merged at %s (%s)", pr.Ref(), head, methodWords[method])); err != nil {
 		return err
 	}
-	fmt.Fprintf(e.Stdout, "%s merged %s (merge commit, head %s, checks green)\n", id, pr.Ref(), head)
+	fmt.Fprintf(e.Stdout, "%s merged %s (%s, head %s, checks green)\n", id, pr.Ref(), methodWords[method], head)
 	return nil
+}
+
+// methodWords name the merge methods to the user.
+var methodWords = map[string]string{config.MethodMerge: "merge commit", config.MethodSquash: "squash", config.MethodRebase: "rebase"}
+
+// methodRefusal is merge-method-not-allowed: the host refused the
+// project's merge method, with the methods it allows when it said, and
+// the setting that picks another.
+func methodRefusal(pr codehost.PR, me *codehost.MethodError) error {
+	allows := ""
+	if len(me.Allowed) > 0 {
+		words := make([]string, len(me.Allowed))
+		for i, m := range me.Allowed {
+			words[i] = methodWords[m]
+		}
+		allows = " (it allows: " + strings.Join(words, ", ") + ")"
+	}
+	return mergeRefusal("merge-method-not-allowed", "%s was not merged: its repo does not allow merging by %s%s; the user picks another merge method in the Settings tab (merge_method in config.toml)",
+		pr.Ref(), methodWords[me.Method], allows)
 }
 
 // samePR says whether the report's PR URL names pr: one of the host's

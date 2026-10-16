@@ -67,6 +67,8 @@ const codeHostTS = `
     number?: number;
     /** The PR's head commit (failedLog; merge: merge only if the head is still this). */
     head?: string;
+    /** merge's method, the project's merge_method: a merge commit, a squash commit, or the commits rebased without one. */
+    method?: "merge" | "squash" | "rebase";
   }
 
   /** A pull request in tm's fixed words; anything else is dropped. */
@@ -103,8 +105,8 @@ const codeHostTS = `
     prHead: { state: "OPEN" | "CLOSED" | "MERGED" | ""; number: number; head: string };
     /** The failing CI job of the PR's head and its log; tm cuts the excerpt. */
     failedLog: { job: string; log: string };
-    /** Merges the PR with a merge commit, only at head (never a squash, a rebase or a forced one); tm thread merge has checked it. */
-    merge: unknown;
+    /** Merges the PR by method, only at head (never a forced one); tm thread merge has checked it. A method the mod or its host doesn't allow: answer {refused: "method", allowed: [the methods it does, when known]}. */
+    merge: { refused?: "method"; allowed?: ("merge" | "squash" | "rebase")[] } | unknown;
     /** The host CLI's checks for tm doctor: is it there, is it logged in. */
     doctor: { checks: { name: string; ok: boolean; detail: string }[] };
   }

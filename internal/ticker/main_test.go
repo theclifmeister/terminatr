@@ -327,3 +327,56 @@ func TestFollowMainMergeHint(t *testing.T) {
 		t.Fatalf("asked gh %d times", r.ghN)
 	}
 }
+
+// TestFollowMainSquashHint (T497): a squash merge leaves main without
+// the PR's head, but main's new head names the PR ("… (#9)"): the PR is
+// asked about at once, as for a merge commit, and the merge completes
+// its task. A rebase merge names nothing; the next poll finds it.
+func TestFollowMainSquashHint(t *testing.T) {
+	for _, squash := range []bool{true, false} {
+		repo, other := gitFixture(t)
+		gitT(t, repo, "checkout", "-q", "-b", "tm/demo/t-0001-fix-it")
+		prHead := commitT(t, repo, "h", "thread\n", "thread work")
+		gitT(t, repo, "push", "-q", "origin", "HEAD")
+		gitT(t, repo, "checkout", "-q", "main")
+		r := newRigIn(t, repo, []string{repo})
+		r.setConfig("[projects.demo]\ncomplete_tasks = \"merged\"\n")
+		r.addTask("Fix it", "review", "t-0001", "")
+		open := fmt.Sprintf(`{"number":9,"url":"https://github.com/o/r/pull/9","state":"OPEN","statusCheckRollup":[],"headRefOid":%q,"baseRefName":"main","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN"}`, prHead)
+		r.gh = []string{open, open}
+		r.sweep(0)
+		r.handleAll()
+
+		// Rebased onto main, the commit gets another id.
+		subject := "thread work, rebased"
+		if squash {
+			subject = "Fix it (#9)"
+		}
+		merge := push(t, other, "h", "thread\n", subject)
+		mergedJSON := fmt.Sprintf(`{"number":9,"url":"https://github.com/o/r/pull/9","state":"MERGED","mergedAt":"2026-10-04T12:01:00Z","mergeCommit":{"oid":%q},"statusCheckRollup":[],"headRefOid":%q,"baseRefName":"main"}`, merge, prHead)
+		r.gh = append(r.gh, mergedJSON)
+		r.sweep(2 * time.Minute)
+		if !squash {
+			// The poll before the sync still read it open; nothing
+			// named the PR, so it waits for the next poll.
+			if r.ghN != 2 || r.kinds() != "" {
+				t.Fatalf("rebase: asked gh %d times, items %s", r.ghN, r.kinds())
+			}
+			r.sweep(2 * time.Minute)
+			if r.ghN != 3 {
+				t.Fatalf("rebase: asked gh %d times", r.ghN)
+			}
+		} else if r.ghN != 3 {
+			t.Fatalf("squash: asked gh %d times", r.ghN)
+		}
+		if k := r.kinds(); k != KindPRMerged+","+KindTaskDone {
+			t.Fatalf("squash %v: items %s:\n%s", squash, k, r.summaries())
+		}
+		if st := r.status(1); st != tasks.Done {
+			t.Fatalf("squash %v: task %s", squash, st)
+		}
+		if len(r.host.prompts) != 0 {
+			t.Fatalf("squash %v: prompts %q", squash, r.host.prompts)
+		}
+	}
+}

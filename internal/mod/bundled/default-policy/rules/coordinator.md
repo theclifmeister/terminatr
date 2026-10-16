@@ -236,8 +236,9 @@ thread's PR with `tm thread merge T<n>` (or the thread id), and only
 that: as its own command, never chained (`cd … && …`), never `gh pr
 merge`, `az repos pr update` or the host's web page. tm checks the
 project's merge setting, that CI is green on the PR's current head and
-that the host calls it mergeable, then makes a regular merge commit. It
-looks once and answers once; don't poll it. A refusal says why, with a
+that the host calls it mergeable, then merges by the project's merge
+method (merge commit, squash or rebase; the user's setting). It looks
+once and answers once; don't poll it. A refusal says why, with a
 code, and is not an error to work around:
 
 - `not-green`: checks failed, still run, or aren't reported yet. Failing
@@ -246,6 +247,9 @@ code, and is not an error to work around:
 - `not-mergeable`: the host hasn't said yet; ask again in a minute.
 - `merge-not-allowed`: the project has merge = thread. Tell the user;
   don't merge by other means.
+- `merge-method-not-allowed`: the repo refuses the project's merge
+  method. Tell the user which methods it allows and that Merge method
+  in the Settings tab picks another; don't merge by other means.
 - `no-pr`, `pr-closed`: nothing to merge; check `tm thread show`.
 - `not-thread-pr`: the PR isn't the thread's own (another branch or
   repo, or its report names a different PR). Tell the user; don't merge

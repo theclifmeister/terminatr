@@ -145,7 +145,7 @@ func TestModMerge(t *testing.T) {
 		return modbrokerResult{Stdout: `{"iid":7,"state":"merged"}`}, nil
 	})
 	h := codehost.Mod{Target: gitlabTarget, ID: "gitlab", Call: call}
-	if err := h.Merge("/r", codehost.PR{Number: 7, Head: head}); err != nil {
+	if err := h.Merge("/r", codehost.PR{Number: 7, Head: head}, codehost.ByMerge); err != nil {
 		t.Fatal(err)
 	}
 	want := "glab api --hostname gitlab.com --method PUT --raw-field sha=" + head +
@@ -154,14 +154,14 @@ func TestModMerge(t *testing.T) {
 		t.Fatalf("ran %q", ran)
 	}
 	status = 1
-	err := h.Merge("/r", codehost.PR{Number: 7, Head: head})
+	err := h.Merge("/r", codehost.PR{Number: 7, Head: head}, codehost.ByMerge)
 	if err == nil || !strings.Contains(err.Error(), "409") {
 		t.Fatalf("a refused merge: %v", err)
 	}
 	if cli, _, advice := codehost.Advice(err); cli != "gitlab" || !strings.Contains(advice, "tm mod logs gitlab") {
 		t.Fatalf("advice %q %q", cli, advice)
 	}
-	if err := h.Merge("/r", codehost.PR{Number: 7}); err == nil || len(ran) != 2 {
+	if err := h.Merge("/r", codehost.PR{Number: 7}, codehost.ByMerge); err == nil || len(ran) != 2 {
 		t.Fatalf("no head: %v, ran %d", err, len(ran))
 	}
 }

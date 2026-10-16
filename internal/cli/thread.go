@@ -44,7 +44,7 @@ const threadUsage = `usage: tm thread <command> [--project <slug>] [--json]
   ack <id>                       acknowledge the latest report
   stop <id> | restart <id>
   merge <id>                     merge the thread's PR (merge = coordinator): checks green on
-                                 its head, mergeable, regular merge commit; else a refusal says why
+                                 its head, mergeable, by merge_method; else a refusal says why
   resolve <id> [--discard]       --discard also removes a worktree with uncommitted changes
                                  and its branch; refused when the branch has unsaved commits
 

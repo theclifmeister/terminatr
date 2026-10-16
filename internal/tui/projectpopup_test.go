@@ -230,6 +230,23 @@ func TestProjectSettingsToggle(t *testing.T) {
 		t.Fatal("coordinator merge not saved")
 	}
 
+	// Merge method: a merge commit by default; enter cycles squash,
+	// rebase and back.
+	keyPress(m, "down")
+	if out := screen(m); !strings.Contains(out, "Merge method                 merge commit") {
+		t.Fatalf("merge method row:\n%s", out)
+	}
+	for _, want := range []string{"squash", "rebase", "merge"} {
+		act(t, m, src, "enter")
+		if cfg, _ := config.Load(); must(cfg.Safety("alpha")).MergeMethod != want {
+			t.Fatalf("merge method %q not saved", want)
+		}
+	}
+	act(t, m, src, "enter")
+	if out := screen(m); !strings.Contains(out, "Merge method                 squash") {
+		t.Fatalf("merge method row:\n%s", out)
+	}
+
 	// Keep my checkout current: on by default, enter turns it off.
 	keyPress(m, "down")
 	if out := screen(m); !strings.Contains(out, "Keep my checkout current     on") {

@@ -90,6 +90,7 @@ func TestManifestGuardErrors(t *testing.T) {
 		{"merge", head + "[provides]\nmerge = \"thread\"\n", "provides.merge: a mod can't set merge"},
 		{"yolo permission", head + "[permissions]\nyolo = true\n", "permissions.yolo: a mod can't set yolo"},
 		{"safety setting", head + "[settings.coordinator_merges]\ntype = \"bool\"\ndefault = true\n", "settings.coordinator_merges: a mod can't set coordinator_merges"},
+		{"merge method", head + "[settings.merge_method]\ntype = \"string\"\ndefault = \"squash\"\n", "settings.merge_method: a mod can't set merge_method"},
 		{"nested", head + "[defaults]\nguard_off = [\"credentials\"]\n", "defaults.guard_off: a mod can't set guard_off"},
 	} {
 		_, err := ParseManifest([]byte(tc.toml), "")
