@@ -18,8 +18,10 @@ var ErrClosed = errors.New("mod host closed")
 type Client struct {
 	conn *Conn
 	// OnRequest answers a host request (a $ API call) with Reply or
-	// ReplyError on Conn. Each runs in its own goroutine.
+	// ReplyError on Conn. Each runs in its own goroutine, or on the read
+	// loop when inline.
 	onRequest func(*Message)
+	inline    bool
 	// OnNotify gets the host's notifications, in order, on the read loop:
 	// it must not block.
 	onNotify func(*Message)
@@ -34,7 +36,18 @@ type Client struct {
 // NewClient reads the host's messages from r until it ends and writes to
 // w. Either callback may be nil.
 func NewClient(r io.Reader, w io.Writer, onRequest, onNotify func(*Message)) *Client {
-	c := &Client{conn: NewConn(r, w), onRequest: onRequest, onNotify: onNotify,
+	return newClient(r, w, onRequest, onNotify, false)
+}
+
+// NewInlineClient is NewClient answering the host's requests on the read
+// loop: one at a time, in the order the host made them (tm mod test
+// records them so).
+func NewInlineClient(r io.Reader, w io.Writer, onRequest, onNotify func(*Message)) *Client {
+	return newClient(r, w, onRequest, onNotify, true)
+}
+
+func newClient(r io.Reader, w io.Writer, onRequest, onNotify func(*Message), inline bool) *Client {
+	c := &Client{conn: NewConn(r, w), onRequest: onRequest, onNotify: onNotify, inline: inline,
 		waits: map[int64]chan *Message{}, done: make(chan struct{})}
 	go c.read()
 	return c
@@ -77,7 +90,11 @@ func (c *Client) read() {
 				_ = c.conn.ReplyError(*m.ID, CodeMethodNotFound, "no broker")
 				continue
 			}
-			go c.onRequest(m)
+			if c.inline {
+				c.onRequest(m)
+			} else {
+				go c.onRequest(m)
+			}
 		case m.IsNotification():
 			if c.onNotify != nil {
 				c.onNotify(m)
