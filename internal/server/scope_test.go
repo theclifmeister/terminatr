@@ -81,7 +81,7 @@ func TestMayAddress(t *testing.T) {
 		raw, _ := json.Marshal(c.params)
 		who := func() caller.Caller { return c.c }
 		m, _ := methodOf(c.m)
-		perr := s.mayAddress(proto.Request{Method: c.m, Params: raw}, m, c.humanS, who)
+		_, perr := s.mayAddress(proto.Request{Method: c.m, Params: raw}, m, c.humanS, who)
 		if (perr == nil) != c.ok {
 			t.Errorf("%s %s (human socket %v) from %v: %v, want ok %v", c.m, raw, c.humanS, c.c, perr, c.ok)
 		}
@@ -182,7 +182,7 @@ func TestMayAddressParams(t *testing.T) {
 		`{"id":"s-3","id":"s-2","id":"s-3"}`,
 		`[]`,
 	} {
-		if perr := s.mayAddress(proto.Request{Method: proto.MethodSessionRead, Params: json.RawMessage(raw)}, methods[proto.MethodSessionRead], false, who); perr == nil {
+		if _, perr := s.mayAddress(proto.Request{Method: proto.MethodSessionRead, Params: json.RawMessage(raw)}, methods[proto.MethodSessionRead], false, who); perr == nil {
 			t.Errorf("session.read %s from s-2: allowed", raw)
 		}
 	}

@@ -667,8 +667,9 @@ func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human b
 		who := s.whoFor(peerPID)
 		m, known := methodOf(req.Method)
 		perr := mayCall(req.Method, m.gate, human, who)
+		var params any
 		if perr == nil {
-			perr = s.mayAddress(req, m, human, who)
+			params, perr = s.mayAddress(req, m, human, who)
 		}
 		if perr != nil {
 			if req.Method == proto.MethodHookEvent {
@@ -685,7 +686,7 @@ func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human b
 		}
 		var result any
 		if known {
-			result, perr = m.call(s, req, callCtx{method: req.Method, peerPID: peerPID, human: human, who: who})
+			result, perr = m.call(s, req, callCtx{method: req.Method, params: params, peerPID: peerPID, human: human, who: who})
 		} else {
 			perr = proto.Errorf(proto.ErrUnknownMethod, "unknown method %q", req.Method)
 		}

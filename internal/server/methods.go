@@ -17,9 +17,10 @@ type method struct {
 	gate gate
 	// scope is what a caller other than the human on the human socket
 	// may name, and name the session or project the params name, decoded
-	// as the handler decodes them (scoped).
+	// as the handler decodes them (scoped); name also returns the params
+	// decoded, which the handler then takes as they are (callCtx.params).
 	scope int
-	name  func(raw json.RawMessage) (string, *proto.Error)
+	name  func(raw json.RawMessage) (string, any, *proto.Error)
 	// call answers the request; stream, when set instead, serves the
 	// connection from then on.
 	call   handler
@@ -51,7 +52,10 @@ const (
 
 // callCtx is what a handler knows of its call besides the params.
 type callCtx struct {
-	method  string
+	method string
+	// params are the request's params as mayAddress decoded them, nil
+	// for a method without a scope.
+	params  any
 	peerPID int
 	human   bool // on the human socket
 	who     func() caller.Caller
@@ -61,9 +65,13 @@ type callCtx struct {
 type handler func(s *Server, req proto.Request, c callCtx) (any, *proto.Error)
 
 // typed is the handler of f, which takes the request's params decoded
-// into a P.
+// into a P: those mayAddress decoded when they are a P, so a scoped
+// method's params are decoded once.
 func typed[P any](f func(s *Server, p P, c callCtx) (any, *proto.Error)) handler {
 	return func(s *Server, req proto.Request, c callCtx) (any, *proto.Error) {
+		if p, ok := c.params.(P); ok {
+			return f(s, p, c)
+		}
 		var p P
 		if err := decodeParams(req.Params, &p); err != nil {
 			return nil, err
@@ -79,11 +87,13 @@ func plain(f func(s *Server, c callCtx) any) handler {
 
 // scoped is the name of a method of scope scope: what of its params,
 // decoded into a P, names a session or a project.
-func scoped[P any](of func(P) string) func(json.RawMessage) (string, *proto.Error) {
-	return func(raw json.RawMessage) (string, *proto.Error) {
+func scoped[P any](of func(P) string) func(json.RawMessage) (string, any, *proto.Error) {
+	return func(raw json.RawMessage) (string, any, *proto.Error) {
 		var p P
-		perr := decodeParams(raw, &p)
-		return of(p), perr
+		if perr := decodeParams(raw, &p); perr != nil {
+			return of(p), nil, perr
+		}
+		return of(p), p, nil
 	}
 }
 
