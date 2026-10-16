@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
@@ -119,5 +120,26 @@ func TestProjectKeyForwardSlash(t *testing.T) {
 	// ToSlash of the backslash path (a no-op elsewhere).
 	if got, want := projectKey(filepath.Join("a", "b")), "a/b"; got != want {
 		t.Fatalf("projectKey = %q, want %q", got, want)
+	}
+}
+
+func TestEditProjectsKeepsText(t *testing.T) {
+	home := t.TempDir()
+	cfg := filepath.Join(home, ".claude.json")
+	in := `{"cmd": "a && b <c>", "projects": {}}`
+	os.WriteFile(cfg, []byte(in), 0o600)
+	err := editProjects(home, func(p map[string]json.RawMessage, _ string) (bool, error) {
+		p["/x"] = json.RawMessage(`{"n": "<&>"}`)
+		return true, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(cfg)
+	if !strings.Contains(string(b), "a && b <c>") || !strings.Contains(string(b), `"<&>"`) {
+		t.Errorf("escaped: %s", b)
+	}
+	if bak, _ := os.ReadFile(cfg + ".tm-backup"); string(bak) != in {
+		t.Errorf("backup %q", bak)
 	}
 }

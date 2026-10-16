@@ -38,29 +38,42 @@ func check() error {
 // Everyone, Users and logon SIDs are granted as well: the user's own
 // files (granted to the user, SYSTEM and Administrators) are refused,
 // system files stay readable. Low integrity refuses writes to anything
-// not labelled low. pol.Read's files get an ACE granting RESTRICTED read.
+// not labelled low. pol.Read's files get an ACE granting RESTRICTED read for as long as the process runs.
 func start(cmd *exec.Cmd, pol Policy) (*Proc, error) {
 	restricted, err := windows.CreateWellKnownSid(windows.WinRestrictedCodeSid)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
+	// The files' own ACLs come back when the process is done with them.
+	var restores []func()
+	restore := func() {
+		for i := len(restores) - 1; i >= 0; i-- {
+			restores[i]()
+		}
+	}
 	for _, f := range pol.Read {
-		if err := grantRead(f, restricted); err != nil {
+		undo, err := grantRead(f, restricted)
+		if err != nil {
+			restore()
 			return nil, fmt.Errorf("%w: granting %s: %v", ErrUnavailable, f, err)
 		}
+		restores = append(restores, undo)
 	}
 	tok, err := restrictedToken(restricted)
 	if err != nil {
+		restore()
 		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
 	job, err := newJob()
 	if err != nil {
 		tok.Close()
+		restore()
 		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
 	release := func() {
 		windows.CloseHandle(job)
 		tok.Close()
+		restore()
 	}
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
@@ -178,23 +191,28 @@ func logonSID(tok windows.Token) *windows.SID {
 }
 
 // grantRead adds an ACE granting sid read access to path, keeping its
-// other entries.
-func grantRead(path string, sid *windows.SID) error {
+// other entries. It returns the function that puts the DACL back as it was.
+func grantRead(path string, sid *windows.SID) (func(), error) {
 	sd, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	old, _, err := sd.DACL()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	acl, err := windows.ACLFromEntries([]windows.EXPLICIT_ACCESS{{AccessPermissions: windows.GENERIC_READ,
 		AccessMode: windows.GRANT_ACCESS, Trustee: windows.TRUSTEE{TrusteeForm: windows.TRUSTEE_IS_SID,
 			TrusteeValue: windows.TrusteeValueFromSID(sid)}}}, old)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION, nil, nil, acl, nil)
+	if err := windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION, nil, nil, acl, nil); err != nil {
+		return nil, err
+	}
+	return func() {
+		_ = windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION, nil, nil, old, nil)
+	}, nil
 }
 
 // newJob is a Job Object that holds one process (no children), kills it

@@ -24,6 +24,12 @@ import (
 
 const mcpProtocol = "2025-06-18"
 
+// mcpVersions are the revisions the bridge speaks; mcpMaxLine caps one
+// message.
+var mcpVersions = map[string]bool{"2025-03-26": true, "2025-06-18": true}
+
+const mcpMaxLine = 4 << 20
+
 type rpcMsg struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id,omitempty"`
@@ -49,11 +55,24 @@ func runMCP(in io.Reader, out io.Writer, list func() []proto.ToolDef, call func(
 		}
 		enc.Encode(m)
 	}
-	sc := bufio.NewScanner(in)
-	sc.Buffer(make([]byte, 0, 64<<10), 4<<20)
-	for sc.Scan() {
+	br := bufio.NewReaderSize(in, 64<<10)
+	for {
+		line, tooLong, err := readMCPLine(br)
+		if err != nil && len(line) == 0 && !tooLong {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+		if tooLong {
+			reply(json.RawMessage("null"), nil, &rpcErr{-32600, "message too large"})
+			if err != nil {
+				return nil
+			}
+			continue
+		}
 		var m rpcMsg
-		if err := json.Unmarshal(sc.Bytes(), &m); err != nil {
+		if err := json.Unmarshal(line, &m); err != nil {
 			reply(json.RawMessage("null"), nil, &rpcErr{-32700, "parse error"})
 			continue
 		}
@@ -67,7 +86,7 @@ func runMCP(in io.Reader, out io.Writer, list func() []proto.ToolDef, call func(
 			}
 			json.Unmarshal(m.Params, &p)
 			ver := mcpProtocol
-			if p.ProtocolVersion != "" {
+			if mcpVersions[p.ProtocolVersion] {
 				ver = p.ProtocolVersion
 			}
 			reply(m.ID, map[string]any{
@@ -100,7 +119,26 @@ func runMCP(in io.Reader, out io.Writer, list func() []proto.ToolDef, call func(
 			reply(m.ID, nil, &rpcErr{-32601, "method not found: " + m.Method})
 		}
 	}
-	return sc.Err()
+}
+
+// readMCPLine reads one newline-ended message. One over mcpMaxLine is
+// dropped up to its newline and flagged, so the server can answer it and go
+// on. A final line without a newline comes with io.EOF.
+func readMCPLine(br *bufio.Reader) (line []byte, tooLong bool, err error) {
+	for {
+		chunk, e := br.ReadSlice('\n')
+		if !tooLong {
+			if len(line)+len(chunk) > mcpMaxLine {
+				tooLong, line = true, nil
+			} else {
+				line = append(line, chunk...)
+			}
+		}
+		if e == bufio.ErrBufferFull {
+			continue
+		}
+		return line, tooLong, e
+	}
 }
 
 // runMCPCmd is tm mcp.

@@ -43,6 +43,17 @@ func TestMain(m *testing.M) {
 		if testing.Short() {
 			return m.Run()
 		}
+		// make test builds tm once for every package that runs it
+		// (make test-bin) and names the dir in E2E_BIN.
+		if pre := os.Getenv("E2E_BIN"); pre != "" {
+			bin := filepath.Join(pre, "tm")
+			if _, err := os.Stat(bin); err != nil {
+				fmt.Fprintf(os.Stderr, "E2E_BIN: %v; binary tests will fail\n", err)
+			} else {
+				tmBin = bin
+			}
+			return m.Run()
+		}
 		dir, err := os.MkdirTemp("", "tm-bin-")
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -51,7 +62,8 @@ func TestMain(m *testing.M) {
 		defer os.RemoveAll(dir)
 		bin := filepath.Join(dir, "tm")
 		// The Makefile's environment (PKG_CONFIG_PATH, CGO_CFLAGS) is
-		// inherited, so `make test` builds against the pinned libghostty.
+		// inherited, so a go test run under make builds against the
+		// pinned libghostty.
 		out, err := exec.Command("go", "build", "-tags", "testhooks", "-o", bin, "../../cmd/tm").CombinedOutput()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "building tm failed; binary tests will fail (run make test):\n%s\n", out)

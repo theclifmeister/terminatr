@@ -1,6 +1,7 @@
 package modproto
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestConnRoundTrip(t *testing.T) {
@@ -51,6 +53,61 @@ func TestSendRefusesAnOverlongLine(t *testing.T) {
 	c := NewConn(nil, io.Discard)
 	if err := c.Notify(MethodLog, Log{Text: strings.Repeat("x", MaxLine)}); err == nil {
 		t.Fatal("sent a line over MaxLine")
+	}
+}
+
+// TestCallLateAnswerDropped: the answer to a call whose ctx ended comes
+// after the next call was sent; it is dropped, and the next call gets
+// its own.
+func TestCallLateAnswerDropped(t *testing.T) {
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	t.Cleanup(func() { inW.Close(); outW.Close() })
+	go func() {
+		host := NewConn(inR, outW)
+		first, err := host.Read()
+		if err != nil {
+			return
+		}
+		second, err := host.Read()
+		if err != nil {
+			return
+		}
+		_ = host.Reply(*first.ID, "first")
+		_ = host.Reply(*second.ID, "second")
+	}()
+	c := NewClient(outR, inW, nil, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { time.Sleep(50 * time.Millisecond); cancel() }()
+	if _, err := c.Call(ctx, MethodEvent, nil); !errors.Is(err, context.Canceled) {
+		t.Fatalf("first call: %v, want context.Canceled", err)
+	}
+	got, err := c.Call(context.Background(), MethodEvent, nil)
+	if err != nil || string(got) != `"second"` {
+		t.Fatalf("second call: %s, %v; want its own answer", got, err)
+	}
+}
+
+// TestOverlongLineEndsTheHost: a line from the host over MaxLine can't
+// be read past, so it ends the host: Done closes and a call waiting on
+// it fails with ErrClosed.
+func TestOverlongLineEndsTheHost(t *testing.T) {
+	r, w := io.Pipe()
+	t.Cleanup(func() { r.Close() })
+	c := NewClient(r, io.Discard, nil, nil)
+	go w.Write(append(bytes.Repeat([]byte("x"), MaxLine+1), '\n'))
+	if _, err := c.Call(context.Background(), MethodEvent, nil); !errors.Is(err, ErrClosed) {
+		t.Fatalf("call: %v, want ErrClosed", err)
+	}
+	select {
+	case <-c.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("Done not closed after an overlong line")
+	}
+
+	conn := NewConn(strings.NewReader(strings.Repeat("x", MaxLine+1)+"\n"), io.Discard)
+	if _, err := conn.Read(); !errors.Is(err, bufio.ErrTooLong) {
+		t.Fatalf("Read: %v, want bufio.ErrTooLong", err)
 	}
 }
 

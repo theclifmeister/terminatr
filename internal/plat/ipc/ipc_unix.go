@@ -53,6 +53,10 @@ func IsAbsent(err error) bool {
 	return errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ECONNREFUSED)
 }
 
+// ownUID is this process's uid, which PeerOf compares the peer's with;
+// a test stands in another.
+var ownUID = os.Getuid
+
 // PeerOf returns the process at the other end of c, a connection
 // accepted from Listen.
 func PeerOf(c net.Conn) (Peer, error) {
@@ -72,7 +76,7 @@ func PeerOf(c net.Conn) (Peer, error) {
 	if serr != nil {
 		return Peer{}, serr
 	}
-	return Peer{PID: pid, SameUser: uid == os.Getuid()}, nil
+	return Peer{PID: pid, SameUser: uid == ownUID()}, nil
 }
 
 // ShortDir is a short directory every user can make a socket directory

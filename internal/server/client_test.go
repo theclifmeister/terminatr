@@ -78,6 +78,32 @@ func TestCallChecksTheAnswersID(t *testing.T) {
 	}
 }
 
+// TestCallErrorWithResult: an error answer that carries a result too is
+// the error, the result is left alone, and the Client stays usable: the
+// answer came whole.
+func TestCallErrorWithResult(t *testing.T) {
+	cc, sc := net.Pipe()
+	t.Cleanup(func() { cc.Close(); sc.Close() })
+	fakeServer(t, sc, 0, func(req proto.Request) proto.Response {
+		if req.Method == "bad" {
+			return proto.Response{ID: req.ID, Result: json.RawMessage(`{"method":"bad"}`), Error: proto.Errorf(proto.ErrRefused, "no")}
+		}
+		return proto.Response{ID: req.ID, Result: json.RawMessage(`{"method":"` + req.Method + `"}`)}
+	})
+	c := client.StreamOver(cc)
+	var res struct{ Method string }
+	var perr *proto.Error
+	if err := c.Call("bad", nil, &res); !errors.As(err, &perr) || perr.Code != proto.ErrRefused {
+		t.Fatalf("bad: %v, want the %s error", err, proto.ErrRefused)
+	}
+	if res.Method != "" {
+		t.Fatalf("an error answer's result was decoded: %+v", res)
+	}
+	if err := c.Call("good", nil, &res); err != nil || res.Method != "good" {
+		t.Fatalf("good after an error answer: %v, %+v", err, res)
+	}
+}
+
 // TestCallsAreOneAtATime: Calls from many goroutines each get their own
 // answer.
 func TestCallsAreOneAtATime(t *testing.T) {

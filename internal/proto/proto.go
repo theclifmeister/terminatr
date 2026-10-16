@@ -153,8 +153,13 @@ func WriteFrame(w io.Writer, t FrameType, payload []byte) error {
 }
 
 // AppendFrame appends one encoded frame to b, the in-memory form of
-// WriteFrame for queues that batch frames.
+// WriteFrame for queues that batch frames. A payload over MaxFrame can't
+// be framed (its length would wrap): the frame is left out and b comes
+// back as it was, as WriteFrame refuses it.
 func AppendFrame(b []byte, t FrameType, payload []byte) []byte {
+	if len(payload) > MaxFrame {
+		return b
+	}
 	n := len(payload)
 	b = append(b, byte(t), byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
 	return append(b, payload...)
