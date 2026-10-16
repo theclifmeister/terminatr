@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"sort"
@@ -576,33 +575,20 @@ func (s *Server) resizePane(id string, cols, rows uint16) {
 // which leaves the view.
 func (s *Server) serveViewStream(c net.Conn, br *bufio.Reader, req proto.Request, pid int) {
 	var p proto.ViewSubscribeParams
-	resp := proto.Response{ID: req.ID}
-	var m *member
-	var name string
 	if perr := decodeParams(req.Params, &p); perr != nil {
-		resp.Error = perr
-	} else {
-		var v view.View
-		m, name, v, perr = s.views.subscribe(p, pid)
-		if perr != nil {
-			resp.Error = perr
-		} else {
-			resp.Result, _ = json.Marshal(proto.ViewSubscribeResult{Client: m.id, View: v})
-		}
+		refuse(c, req, perr)
+		return
 	}
-	if err := proto.WriteLine(c, resp); err != nil || m == nil {
-		if m != nil {
-			s.views.leave(name, m)
-		}
+	m, name, v, perr := s.views.subscribe(p, pid)
+	if perr != nil {
+		refuse(c, req, perr)
 		return
 	}
 	defer s.views.leave(name, m)
-	// The client sends nothing more; a read returning is it leaving.
-	gone := make(chan struct{})
-	go func() {
-		io.Copy(io.Discard, br)
-		close(gone)
-	}()
+	if !answer(c, req, proto.ViewSubscribeResult{Client: m.id, View: v}) {
+		return
+	}
+	gone := clientGone(br)
 	var sent uint64
 	for {
 		select {

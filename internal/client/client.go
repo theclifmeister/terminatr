@@ -469,13 +469,9 @@ type ViewStream struct {
 // SubscribeView joins a view and returns the stream and the view as it
 // was on joining.
 func SubscribeView(p Paths, params proto.ViewSubscribeParams) (*ViewStream, view.View, error) {
-	c, err := Dial(p, proto.KindControl)
-	if err != nil {
-		return nil, view.View{}, err
-	}
 	var res proto.ViewSubscribeResult
-	if err := c.Call(proto.MethodViewSubscribe, params, &res); err != nil {
-		c.Close()
+	c, err := OpenStream(p, proto.MethodViewSubscribe, params, &res)
+	if err != nil {
 		return nil, view.View{}, err
 	}
 	return &ViewStream{c: c, Client: res.Client}, res.View, nil
@@ -483,20 +479,13 @@ func SubscribeView(p Paths, params proto.ViewSubscribeParams) (*ViewStream, view
 
 // Next blocks until the view's next version.
 func (s *ViewStream) Next() (view.View, error) {
-	var ev proto.ViewEvent
-	for {
-		if err := proto.ReadLine(s.c.br, &ev); err != nil {
-			return view.View{}, err
+	ev, err := NextEvent(s.c, func(ev proto.ViewEvent) bool {
+		if ev.Event == proto.EventViewDigest && s.Digest != nil {
+			s.Digest()
 		}
-		switch ev.Event {
-		case proto.EventViewChanged:
-			return ev.View, nil
-		case proto.EventViewDigest:
-			if s.Digest != nil {
-				s.Digest()
-			}
-		}
-	}
+		return ev.Event == proto.EventViewChanged
+	})
+	return ev.View, err
 }
 
 // Close leaves the view.
@@ -509,13 +498,9 @@ type WatchStream struct{ c *Client }
 // WatchSession watches session id and returns the stream and the
 // session's state on joining.
 func WatchSession(p Paths, id string) (*WatchStream, proto.Watch, error) {
-	c, err := Dial(p, proto.KindControl)
-	if err != nil {
-		return nil, proto.Watch{}, err
-	}
 	var w proto.Watch
-	if err := c.Call(proto.MethodSessionWatch, proto.SessionIDParams{ID: id}, &w); err != nil {
-		c.Close()
+	c, err := OpenStream(p, proto.MethodSessionWatch, proto.SessionIDParams{ID: id}, &w)
+	if err != nil {
 		return nil, proto.Watch{}, err
 	}
 	return &WatchStream{c: c}, w, nil
@@ -524,15 +509,8 @@ func WatchSession(p Paths, id string) (*WatchStream, proto.Watch, error) {
 // Next blocks until the session's next state. After the one whose state
 // is "exited" the server hangs up and Next returns io.EOF.
 func (s *WatchStream) Next() (proto.Watch, error) {
-	for {
-		var ev proto.WatchEvent
-		if err := proto.ReadLine(s.c.br, &ev); err != nil {
-			return proto.Watch{}, err
-		}
-		if ev.Event == proto.EventWatchChanged {
-			return ev.Watch, nil
-		}
-	}
+	ev, err := NextEvent(s.c, func(ev proto.WatchEvent) bool { return ev.Event == proto.EventWatchChanged })
+	return ev.Watch, err
 }
 
 // Close ends the watch.
@@ -543,24 +521,16 @@ func (s *WatchStream) Close() error { return s.c.Close() }
 // one, or nil when it closed without (replaced, or the session ended).
 // The caller ending takes the question down with its connection.
 func AskSession(p Paths, id string, q proto.Question) (map[string]string, error) {
-	c, err := Dial(p, proto.KindControl)
+	c, err := OpenStream(p, proto.MethodSessionAsk, proto.SessionAskParams{ID: id, Question: q}, nil)
 	if err != nil {
 		return nil, err
 	}
 	defer c.Close()
-	if err := c.Call(proto.MethodSessionAsk, proto.SessionAskParams{ID: id, Question: q}, nil); err != nil {
+	ev, err := NextEvent(c, func(ev proto.AskEvent) bool {
+		return ev.Event == proto.EventAskAnswered || ev.Event == proto.EventAskClosed
+	})
+	if err != nil || ev.Event == proto.EventAskClosed {
 		return nil, err
 	}
-	for {
-		var ev proto.AskEvent
-		if err := proto.ReadLine(c.br, &ev); err != nil {
-			return nil, err
-		}
-		switch ev.Event {
-		case proto.EventAskAnswered:
-			return ev.Answers, nil
-		case proto.EventAskClosed:
-			return nil, nil
-		}
-	}
+	return ev.Answers, nil
 }
