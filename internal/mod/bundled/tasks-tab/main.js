@@ -163,6 +163,7 @@
   $.on("view.closed", async (e) => {
     if (e.view !== VIEW || !e.project) return;
     tabs.delete(e.project);
+    await $.ui.view.set(VIEW, null, { project: e.project });
   });
   $.on("tasks.changed", async (e) => refresh(e.project));
   $.on("ui.key", async (e) => {

@@ -1,4 +1,6 @@
 import type { TerminatrAsk, TerminatrContext, TerminatrItem, TerminatrNeed, TerminatrProject, TerminatrThread, TerminatrTicker, TerminatrTodo } from '../types'
+import { ndjson } from './feed'
+import { isPRBad } from './view'
 
 // The coordinator's /tm pane (docs/SPEC.md §8.6, Mods): what it says
 // about a line of `tm watch --project --json`, and what its buttons ask.
@@ -124,13 +126,8 @@ export function needDetail(n: TerminatrNeed): { text: string; tone: 'question' |
     return { text: `${what} until it clears; tm agent explain ${n.session ?? ''} says why`, tone: 'bad' }
   }
   if (n.question) return { text: '“' + n.question + '”', tone: 'question' }
-  if (n.pr) return { text: n.pr, tone: n.why === 'ci' || isBad(n.pr) ? 'bad' : 'ok' }
+  if (n.pr) return { text: n.pr, tone: n.why === 'ci' || isPRBad(n.pr) ? 'bad' : 'ok' }
   return { text: '', tone: '' }
-}
-
-// isBad reports a PR the thread has to act on, in the ticker's words.
-function isBad(pr: string): boolean {
-  return /failed|conflicts|changes requested|behind/.test(pr)
 }
 
 // sentWords say what was asked: "asked the coordinator: accept".
@@ -230,23 +227,16 @@ export function contextToast(was: boolean, c: TerminatrContext | undefined): str
   return `Context ${c.percent}% full: consider /clear; the context lives in files (tm context)`
 }
 
-// projectFeed reads `tm watch --project --json` output: what is left of
-// the last piece and a new piece, answering the whole lines that parse,
-// in order, and the rest.
+// projectFeed reads `tm watch --project --json` output (ndjson): the
+// projects, and the rest.
 export function projectFeed(rest: string, text: string): { projects: TerminatrProject[]; rest: string } {
-  const lines = (rest + text).split('\n')
-  const tail = lines.pop() ?? ''
-  const projects: TerminatrProject[] = []
-  for (const l of lines) {
-    if (l.trim() === '') continue
-    try {
-      const v = JSON.parse(l) as TerminatrProject
-      if (v && typeof v.project === 'string' && Array.isArray(v.needs_you)) projects.push(v)
-    } catch {
-      // not a line of the feed: skip it
-    }
-  }
-  return { projects, rest: tail }
+  const got = ndjson(rest, text, isProject)
+  return { projects: got.values, rest: got.rest }
+}
+
+function isProject(v: unknown): v is TerminatrProject {
+  const p = v as Partial<TerminatrProject> | null
+  return !!p && typeof p.project === 'string' && Array.isArray(p.needs_you)
 }
 
 // reportTextOf reads `tm thread show <id> --json`: its report's text, "" for

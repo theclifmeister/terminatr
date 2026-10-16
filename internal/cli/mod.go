@@ -477,7 +477,7 @@ func (e *Env) fetch(src mod.Source) (*mod.Staged, error) {
 		if st != nil {
 			st.Close()
 		}
-		return nil, &project.Error{Code: "invalid-mod", Msg: fmt.Sprintf("%s: %s", src, strings.ReplaceAll(mod.Clean(err.Error(), true), "\n", "; "))}
+		return nil, &project.Error{Code: "invalid-mod", Msg: (&mod.FetchError{From: src.String(), Err: err}).Error()}
 	}
 	return st, nil
 }
@@ -670,29 +670,26 @@ func (e *Env) modUpdate(ids []string, yes bool) error {
 }
 
 // updateOne updates installed mod m from its source; named says the
-// human named it, so a mod without a recorded source is an error.
+// human named it, so a built-in mod or one without a recorded source is
+// an error.
 func (e *Env) updateOne(m mod.Mod, yes, named bool) error {
-	src, ok := mod.ReadSource(m.Dir)
-	if !ok {
-		if named {
-			return errors.New("it records no source (installed by hand, or by tm mod dev)")
-		}
+	if m.Builtin && !named {
 		return nil
 	}
-	next, err := mod.Next(src)
-	if err != nil {
+	st, err := mod.FetchUpdate(m)
+	var fe *mod.FetchError
+	switch {
+	case errors.Is(err, mod.ErrNoSource) && !named:
+		return nil
+	case errors.As(err, &fe):
+		return &project.Error{Code: "invalid-mod", Msg: fe.Error()}
+	case err != nil:
 		return err
-	}
-	st, err := e.fetch(next)
-	if err != nil {
-		return err
-	}
-	defer st.Close()
-	if st.Source.Hash == src.Hash {
-		mod.RecordSource(m, src, st)
+	case st == nil:
 		fmt.Fprintf(e.Stdout, "%s is up to date\n", m.ID)
 		return nil
 	}
+	defer st.Close()
 	from := "?"
 	if m.Manifest != nil {
 		from = m.Manifest.Version

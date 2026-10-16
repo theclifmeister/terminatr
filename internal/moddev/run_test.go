@@ -144,7 +144,7 @@ func TestRunChecksTheFixture(t *testing.T) {
 		Events: []Step{{Name: "task.changed"}, {Name: "made.up"}, {Name: ToolStep, Data: json.RawMessage(`{"tool":"lint"}`)}},
 		Expect: Expect{Calls: []Call{{Method: "ui.nothing"}}, Tools: []string{"a", "b"}}}, "f.json")
 	all := strings.Join(r.Problems, "\n")
-	for _, p := range []string{"nope: the mod has no such setting", "task.changed needs the project_read permission",
+	for _, p := range []string{"nope: age has no such setting", "task.changed needs the project_read permission",
 		`no event is called "made.up"`, `no method is called "ui.nothing"`, `the mod offers no tool "lint"`,
 		"2 answers for 1 tool calls"} {
 		if !strings.Contains(all, p) {

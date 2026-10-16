@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/theclifmeister/terminatr/internal/mod"
 )
 
 func next(t *testing.T, s *Sub) Event {
@@ -30,7 +32,7 @@ func empty(t *testing.T, s *Sub) {
 	}
 }
 
-var all = []string{GrantProjectRead, GrantViews}
+var all = []string{mod.PermProjectRead, mod.PermViews}
 
 func TestReadyFirstThenInOrder(t *testing.T) {
 	b := New()

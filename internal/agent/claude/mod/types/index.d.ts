@@ -18,14 +18,7 @@ export type TerminatrWatch = {
     reason?: string
     needs_you?: string
   }
-  task: {
-    id: string
-    title: string
-    status: string
-    steps_done: number
-    steps_total: number
-    current?: string
-  } | null
+  task: TerminatrTask | null
   pr: string
   pr_url?: string
   needs_you: number
@@ -34,6 +27,16 @@ export type TerminatrWatch = {
   // A coordinator's open questions (tm ask), which its band offers to
   // open in the question dialog; absent for none.
   questions?: number
+}
+
+// A thread's task as a watch line gives it (proto.WatchTask).
+export type TerminatrTask = {
+  id: string
+  title: string
+  status: string
+  steps_done: number
+  steps_total: number
+  current?: string
 }
 
 // The session's turn as the mod's own events left it (hooks/turn.ts),
@@ -117,7 +120,7 @@ export type TerminatrThread = {
   state?: string
   reason?: string
   needs_you?: string
-  task?: { id: string; title: string; status: string; steps_done: number; steps_total: number; current?: string }
+  task?: TerminatrTask
   pr?: string
   pr_url?: string
   pr_bad?: boolean

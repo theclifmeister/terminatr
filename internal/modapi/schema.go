@@ -16,19 +16,10 @@ import (
 	"reflect"
 
 	"github.com/theclifmeister/terminatr/internal/changes"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modbus"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/widget"
-)
-
-// Grants a method may need ([permissions] in mod.toml).
-const (
-	GrantProjectRead = modbus.GrantProjectRead
-	GrantViews       = modbus.GrantViews
-	GrantNotify      = "notify"
-	GrantInbox       = "inbox"
-	GrantNet         = "net"
-	GrantCommands    = "commands"
 )
 
 // Event is one event of the API.
@@ -258,25 +249,25 @@ type RunResult struct {
 // Events are the API's events, which $.on subscribes to.
 var Events = []Event{
 	{Name: modbus.ModReady, Data: typ[modbus.Ready](), Doc: "First after every (re)start: a snapshot of the projects the mod runs for (none without project_read), not a replay."},
-	{Name: modbus.TaskChanged, Data: typ[modbus.Task](), Needs: GrantProjectRead, Doc: "A task's status or steps changed, or it is new (from \"\")."},
-	{Name: modbus.TasksChanged, Data: typ[modbus.Tasks](), Needs: GrantProjectRead, Doc: "Anything $.tasks.list shows of a project changed: a title, a step, a status, a task added or gone, an ask about a task came or was handled (mod API 1.4). List the tasks again."},
-	{Name: modbus.ThreadState, Data: typ[modbus.Thread](), Needs: GrantProjectRead, Doc: "A thread's state changed, or the question it waits on."},
-	{Name: modbus.ThreadStarted, Data: typ[modbus.ThreadLife](), Needs: GrantProjectRead, Doc: "A thread started."},
-	{Name: modbus.ThreadResolved, Data: typ[modbus.ThreadLife](), Needs: GrantProjectRead, Doc: "A thread was resolved."},
-	{Name: modbus.ReportStored, Data: typ[modbus.Report](), Needs: GrantProjectRead, Doc: "A thread stored a report."},
-	{Name: modbus.InboxItem, Data: typ[modbus.Item](), Needs: GrantProjectRead, Doc: "A new item in the coordinator's inbox."},
-	{Name: modbus.PRChanged, Data: typ[modbus.PR](), Needs: GrantProjectRead, Doc: "The ticker learnt something new of a thread's PR."},
-	{Name: modbus.TickerChanged, Data: typ[modbus.Ticker](), Needs: GrantProjectRead, Doc: "A project's ticker polled PRs or synced its repos, or its PR host began or stopped failing (mod API 1.7): the ticker as $.project.get gives it. Draw its times as ago and until spans, which move by themselves."},
-	{Name: modbus.ThreadChanges, Data: typ[modbus.Changes](), Needs: GrantProjectRead, Doc: "A thread whose session is live changed its worktree (mod API 1.8): an edit, a commit or a push moved its HEAD, its status or origin/<branch>. Seen by the server's look within seconds, at most once a look; the totals are $.thread.changes' (mode base). Looked for only while a mod listens to it."},
+	{Name: modbus.TaskChanged, Data: typ[modbus.Task](), Needs: mod.PermProjectRead, Doc: "A task's status or steps changed, or it is new (from \"\")."},
+	{Name: modbus.TasksChanged, Data: typ[modbus.Tasks](), Needs: mod.PermProjectRead, Doc: "Anything $.tasks.list shows of a project changed: a title, a step, a status, a task added or gone, an ask about a task came or was handled (mod API 1.4). List the tasks again."},
+	{Name: modbus.ThreadState, Data: typ[modbus.Thread](), Needs: mod.PermProjectRead, Doc: "A thread's state changed, or the question it waits on."},
+	{Name: modbus.ThreadStarted, Data: typ[modbus.ThreadLife](), Needs: mod.PermProjectRead, Doc: "A thread started."},
+	{Name: modbus.ThreadResolved, Data: typ[modbus.ThreadLife](), Needs: mod.PermProjectRead, Doc: "A thread was resolved."},
+	{Name: modbus.ReportStored, Data: typ[modbus.Report](), Needs: mod.PermProjectRead, Doc: "A thread stored a report."},
+	{Name: modbus.InboxItem, Data: typ[modbus.Item](), Needs: mod.PermProjectRead, Doc: "A new item in the coordinator's inbox."},
+	{Name: modbus.PRChanged, Data: typ[modbus.PR](), Needs: mod.PermProjectRead, Doc: "The ticker learnt something new of a thread's PR."},
+	{Name: modbus.TickerChanged, Data: typ[modbus.Ticker](), Needs: mod.PermProjectRead, Doc: "A project's ticker polled PRs or synced its repos, or its PR host began or stopped failing (mod API 1.7): the ticker as $.project.get gives it. Draw its times as ago and until spans, which move by themselves."},
+	{Name: modbus.ThreadChanges, Data: typ[modbus.Changes](), Needs: mod.PermProjectRead, Doc: "A thread whose session is live changed its worktree (mod API 1.8): an edit, a commit or a push moved its HEAD, its status or origin/<branch>. Seen by the server's look within seconds, at most once a look; the totals are $.thread.changes' (mode base). Looked for only while a mod listens to it."},
 	{Name: modbus.SessionState, Data: typ[modbus.Session](), Doc: "A session's agent state or context use changed, or it exited."},
-	{Name: modbus.SessionQuestion, Data: typ[modbus.Question](), Needs: GrantProjectRead, Doc: "The question a thread's or coordinator's open question menu asks changed (mod API 1.3): its first unanswered question, none once it is answered or gone. Its options can be offered as question.answer bindings."},
+	{Name: modbus.SessionQuestion, Data: typ[modbus.Question](), Needs: mod.PermProjectRead, Doc: "The question a thread's or coordinator's open question menu asks changed (mod API 1.3): its first unanswered question, none once it is answered or gone. Its options can be offered as question.answer bindings."},
 	{Name: modbus.ClockMinute, Data: typ[modbus.Clock](), Doc: "Every minute."},
 	{Name: modbus.UIClick, Data: typ[modbus.Input](), Doc: "The human clicked one of the mod's columns, views or widgets, or pressed enter on (or clicked) the header of a section whose manifest names a companion view (opens, mod API 1.7): target.project is the section's project (the panel's for a coordinator.section or details.section), and the mod may then open its companion with $.ui.view.open."},
 	{Name: modbus.UIKey, Data: typ[modbus.Input](), Doc: "The human pressed a key on one of the mod's views or widgets."},
 	{Name: modbus.UICursor, Data: typ[modbus.Input](), Doc: "The row under the cursor of a view's focused list (widget) is now row (\"\": none), moved by a key, a click, the filter or a publish; sent when the view shows, and again on each change. To follow the selection."},
 	{Name: modbus.ActionDone, Data: typ[modbus.Done](), Doc: "A human ran a core action bound in the mod's row, view or notification."},
-	{Name: modbus.ViewOpened, Data: typ[modbus.View](), Needs: GrantViews, Doc: "One of the mod's views is shown: publish it with $.ui.view.set. A details.section names the task or thread the details panel shows, on the dashboard or beside that thread's pane: publish for that one, and clear it on view.closed. A project.tab opened to show a task picked elsewhere names it (mod API 1.4): list its row, and the console puts the cursor on the row that binds an action on it. A sidebar.section is for the project the sidebar's tree is for; a sidebar.project.section opens once for each project whose rows show (mod API 1.7): publish for each, or one tree for all, and a null tree for a project shows no section under it."},
-	{Name: modbus.ViewClosed, Data: typ[modbus.View](), Needs: GrantViews, Doc: "One of the mod's views is no longer shown."},
+	{Name: modbus.ViewOpened, Data: typ[modbus.View](), Needs: mod.PermViews, Doc: "One of the mod's views is shown: publish it with $.ui.view.set. A details.section names the task or thread the details panel shows, on the dashboard or beside that thread's pane: publish for that one, and clear it on view.closed. A project.tab opened to show a task picked elsewhere names it (mod API 1.4): list its row, and the console puts the cursor on the row that binds an action on it. A sidebar.section is for the project the sidebar's tree is for; a sidebar.project.section opens once for each project whose rows show (mod API 1.7): publish for each, or one tree for all, and a null tree for a project shows no section under it."},
+	{Name: modbus.ViewClosed, Data: typ[modbus.View](), Needs: mod.PermViews, Doc: "One of the mod's views is no longer shown."},
 	{Name: modbus.CommandRun, Data: typ[modbus.Command](), Doc: "The human ran one of the commands in the manifest's [provides].commands: by its key (on the dashboard, or prefix+key in a session: the selection is then that session), or ≡ menu entry (then the mod may open a view), or with tm mod run."},
 }
 
@@ -284,21 +275,21 @@ var Events = []Event{
 // $.codehost.handle, which the host builds in.
 var Methods = []Method{
 	// Read.
-	{Name: "projects.list", Result: typ[[]Project](), Needs: GrantProjectRead,
+	{Name: "projects.list", Result: typ[[]Project](), Needs: mod.PermProjectRead,
 		Doc: "The projects the mod runs for."},
-	{Name: "project.get", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[proto.ProjectWatch](), Needs: GrantProjectRead,
+	{Name: "project.get", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[proto.ProjectWatch](), Needs: mod.PermProjectRead,
 		Doc: "A project as its dashboard shows it."},
-	{Name: "tasks.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]Task](), Needs: GrantProjectRead,
+	{Name: "tasks.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]Task](), Needs: mod.PermProjectRead,
 		Doc: "A project's tasks, in board order."},
-	{Name: "thread.get", Params: []Param{{Name: "project", Type: typ[string]()}, {Name: "thread", Type: typ[string]()}}, Result: typ[*proto.WatchThread](), Needs: GrantProjectRead,
+	{Name: "thread.get", Params: []Param{{Name: "project", Type: typ[string]()}, {Name: "thread", Type: typ[string]()}}, Result: typ[*proto.WatchThread](), Needs: mod.PermProjectRead,
 		Doc: "A thread of a project; null when there is none."},
-	{Name: "report.get", Params: []Param{{Name: "project", Type: typ[string]()}, {Name: "thread", Type: typ[string]()}}, Result: typ[*modbus.Report](), Needs: GrantProjectRead,
+	{Name: "report.get", Params: []Param{{Name: "project", Type: typ[string]()}, {Name: "thread", Type: typ[string]()}}, Result: typ[*modbus.Report](), Needs: mod.PermProjectRead,
 		Doc: "A thread's latest report; null when it has none."},
-	{Name: "thread.changes", Params: []Param{{Name: "project", Type: typ[string]()}, {Name: "thread", Type: typ[string]()}, {Name: "options", Type: typ[ChangesOptions](), Optional: true}}, Result: typ[Changeset](), Needs: GrantProjectRead,
+	{Name: "thread.changes", Params: []Param{{Name: "project", Type: typ[string]()}, {Name: "thread", Type: typ[string]()}, {Name: "options", Type: typ[ChangesOptions](), Optional: true}}, Result: typ[Changeset](), Needs: mod.PermProjectRead,
 		Doc: "What a thread's worktree changed (mod API 1.8), read by tm with git, read-only: the files changed since its base (or, mode uncommitted, since HEAD), each with its +/- lines and its newest bucket (uncommitted, unpushed: in a commit origin/<branch> lacks, pushed), the totals and each bucket's, the commits ahead of the base and unpushed. state none: no repo or worktree. options.path answers that one file (inside the worktree; never .git, .env or a credential store), with its unified diff when options.patch (at most 256 KiB). Paths are relative to the worktree; paths and diffs are data, cleaned of control characters. At most 2000 files, 1 MiB per git output (truncated) and 30 s."},
-	{Name: "memory.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]MemoryFile](), Needs: GrantProjectRead,
+	{Name: "memory.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]MemoryFile](), Needs: mod.PermProjectRead,
 		Doc: "A project's memory files: CONTEXT.md, MEMORY.md and the notes in memory/, by title."},
-	{Name: "memory.read", Params: []Param{{Name: "slug", Type: typ[string]()}, {Name: "path", Type: typ[string]()}}, Result: typ[string](), Needs: GrantProjectRead,
+	{Name: "memory.read", Params: []Param{{Name: "slug", Type: typ[string]()}, {Name: "path", Type: typ[string]()}}, Result: typ[string](), Needs: mod.PermProjectRead,
 		Doc: "The text of one of a project's memory files, by the path memory.list gives (1 MB at most)."},
 	// Own state.
 	{Name: "store.get", Params: []Param{{Name: "key", Type: typ[string]()}}, Result: typ[Value](),
@@ -316,7 +307,7 @@ var Methods = []Method{
 	{Name: "api.has", Params: []Param{{Name: "name", Type: typ[string]()}}, Result: typ[bool](), Local: true,
 		Doc: "Whether this tm has a method (\"ui.view.set\") or event (\"view.opened\"): feature-test instead of pinning a minor."},
 	// Annotations.
-	{Name: "annotate", Params: []Param{{Name: "target", Type: typ[modbus.Target]()}, {Name: "key", Type: typ[string]()}, {Name: "spans", Type: typ[*[]Span]()}}, Needs: GrantProjectRead,
+	{Name: "annotate", Params: []Param{{Name: "target", Type: typ[modbus.Target]()}, {Name: "key", Type: typ[string]()}, {Name: "spans", Type: typ[*[]Span]()}}, Needs: mod.PermProjectRead,
 		Doc: "Shows spans as badges by a task or thread (target {project, task} or {project, thread}); null removes them."},
 	// UI.
 	{Name: "ui.cell.set", Params: []Param{{Name: "column", Type: typ[string]()}, {Name: "target", Type: typ[modbus.Target]()}, {Name: "spans", Type: typ[*[]Span]()}},
@@ -325,11 +316,11 @@ var Methods = []Method{
 		Doc: "Publishes the mod's status-bar segment; null clears it."},
 	{Name: "ui.toast", Params: []Param{{Name: "text", Type: typ[string]()}, {Name: "level", Type: typ[Level](), Optional: true}},
 		Doc: "Shows a short message on the consoles."},
-	{Name: "ui.view.set", Params: []Param{{Name: "view", Type: typ[string]()}, {Name: "widget", Type: typ[*Widget]()}, {Name: "options", Type: typ[ViewOptions](), Optional: true}}, Needs: GrantViews,
+	{Name: "ui.view.set", Params: []Param{{Name: "view", Type: typ[string]()}, {Name: "widget", Type: typ[*Widget]()}, {Name: "options", Type: typ[ViewOptions](), Optional: true}}, Needs: mod.PermViews,
 		Doc: "Publishes the widget tree of a view the manifest declares, for one project (options.project) or all, a details.section's also for one task or thread of it (options.task, options.thread), a section's with a badge (options.badge, mod API 1.7); null clears it."},
-	{Name: "ui.view.open", Params: []Param{{Name: "view", Type: typ[string]()}}, Needs: GrantViews,
+	{Name: "ui.view.open", Params: []Param{{Name: "view", Type: typ[string]()}}, Needs: mod.PermViews,
 		Doc: "Asks the console to show a view (not a panel section, which shows with its panel); only after a human input (a key, a click or a command)."},
-	{Name: "ui.notify", Params: []Param{{Name: "notification", Type: typ[Notification]()}}, Needs: GrantNotify,
+	{Name: "ui.notify", Params: []Param{{Name: "notification", Type: typ[Notification]()}}, Needs: mod.PermNotify,
 		Doc: "Sends an OS notification through a console."},
 	// Actions.
 	{Name: "actions.list", Result: typ[[]Action](),
@@ -337,12 +328,12 @@ var Methods = []Method{
 	{Name: "actions.available", Params: []Param{{Name: "id", Type: typ[string]()}, {Name: "target", Type: typ[modbus.Target]()}}, Result: typ[bool](),
 		Doc: "Whether action id's precondition holds for target now, to grey a row out."},
 	// Act.
-	{Name: "inbox.raise", Params: []Param{{Name: "project", Type: typ[string]()}, {Name: "item", Type: typ[InboxRaise]()}}, Needs: GrantInbox,
+	{Name: "inbox.raise", Params: []Param{{Name: "project", Type: typ[string]()}, {Name: "item", Type: typ[InboxRaise]()}}, Needs: mod.PermInbox,
 		Doc: "Raises an item of kind mod for the project's coordinator: data only, with the mod's id in front."},
 	// Outside.
-	{Name: "http.fetch", Params: []Param{{Name: "url", Type: typ[string]()}, {Name: "options", Type: typ[FetchOptions](), Optional: true}}, Result: typ[FetchResponse](), Needs: GrantNet,
+	{Name: "http.fetch", Params: []Param{{Name: "url", Type: typ[string]()}, {Name: "options", Type: typ[FetchOptions](), Optional: true}}, Result: typ[FetchResponse](), Needs: mod.PermNet,
 		Doc: "HTTPS to a host the net grant lists; redirects only within the list."},
-	{Name: "process.run", Params: []Param{{Name: "argv", Type: typ[[]string]()}, {Name: "options", Type: typ[RunOptions](), Optional: true}}, Result: typ[RunResult](), Needs: GrantCommands,
+	{Name: "process.run", Params: []Param{{Name: "argv", Type: typ[[]string]()}, {Name: "options", Type: typ[RunOptions](), Optional: true}}, Result: typ[RunResult](), Needs: mod.PermCommands,
 		Doc: "Runs a program the commands grant lists, with a scrubbed env, no shell and a timeout."},
 }
 

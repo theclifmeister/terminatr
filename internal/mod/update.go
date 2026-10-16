@@ -10,6 +10,17 @@ import (
 // by hand, or linked by tm mod dev.
 var ErrNoSource = errors.New("it records no source (installed by hand, or by tm mod dev)")
 
+// FetchError is why Fetch could not stage a mod from From: Err, cleaned
+// and on one line.
+type FetchError struct {
+	From string
+	Err  error
+}
+
+func (e *FetchError) Error() string {
+	return e.From + ": " + strings.ReplaceAll(Clean(e.Err.Error(), true), "\n", "; ")
+}
+
 // FetchUpdate stages the update of installed mod m from the source it
 // records (Next: a newer tag, or the branch or folder as it is now);
 // nil, with no error, when what it fetched is what is installed. The
@@ -32,7 +43,7 @@ func FetchUpdate(m Mod) (*Staged, error) {
 		if st != nil {
 			st.Close()
 		}
-		return nil, fmt.Errorf("%s: %s", next, strings.ReplaceAll(Clean(err.Error(), true), "\n", "; "))
+		return nil, &FetchError{From: next.String(), Err: err}
 	}
 	if st.Source.Hash == src.Hash {
 		RecordSource(m, src, st)

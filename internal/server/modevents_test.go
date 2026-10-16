@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modbus"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
@@ -54,7 +55,7 @@ func TestModEvents(t *testing.T) {
 	defer cancel()
 	go s.runModEvents(ctx)
 
-	reader := s.SubscribeMod("reader", []string{modbus.GrantProjectRead}, nil)
+	reader := s.SubscribeMod("reader", []string{mod.PermProjectRead}, nil)
 	blind := s.SubscribeMod("blind", nil, nil)
 	next := func(sub *modbus.Sub) modbus.Event {
 		t.Helper()

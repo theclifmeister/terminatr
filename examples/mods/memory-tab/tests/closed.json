@@ -1,0 +1,20 @@
+{
+  "name": "the tab, closed, clears the project's tree",
+  "answers": [
+    { "method": "memory.list", "params": { "slug": "demo" },
+      "result": [{ "path": "CONTEXT.md", "title": "Context", "bytes": 2048 }] }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "memory", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } },
+    { "name": "view.closed", "project": "demo",
+      "data": { "view": "memory", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "memory.list", "params": { "slug": "demo" } },
+      { "method": "ui.view.set", "params": { "view": "memory", "options": { "project": "demo" } } },
+      { "method": "ui.view.set", "params": { "view": "memory", "options": { "project": "demo" }, "widget": null } }
+    ]
+  }
+}

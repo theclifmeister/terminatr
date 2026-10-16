@@ -202,6 +202,8 @@ $.on("view.opened", async (e) => {
 $.on("view.closed", async (e) => {
   if (e.view !== VIEW || !e.project) return;
   tabs.delete(e.project);
+  // A view keeps at most 64 trees: drop the project's once it's gone.
+  await $.ui.view.set(VIEW, null, { project: e.project });
 });
 
 // Anything the tab shows changed: a task's title, status or steps, a

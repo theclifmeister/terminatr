@@ -71,7 +71,7 @@ func (s *ServerSource) FetchMod(arg string) (*mod.Staged, error) {
 	st, err := mod.Fetch(src)
 	if err != nil {
 		st.Close()
-		return nil, fmt.Errorf("%s: %s", src, strings.ReplaceAll(mod.Clean(err.Error(), true), "\n", "; "))
+		return nil, &mod.FetchError{From: src.String(), Err: err}
 	}
 	cfg, err := config.Load()
 	if err != nil {

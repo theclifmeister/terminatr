@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modbus"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -72,7 +73,7 @@ func (e *modEvents) wake() {
 func (s *Server) SubscribeMod(id string, grants []string, projects func(slug string) bool) *modbus.Sub {
 	read := false
 	for _, g := range grants {
-		read = read || g == modbus.GrantProjectRead
+		read = read || g == mod.PermProjectRead
 	}
 	sub := s.modEv.bus.Subscribe(id, modbus.Options{Grants: grants, Project: projects,
 		Ready: func() any { return s.modReady(read, projects) }})

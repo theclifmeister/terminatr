@@ -104,6 +104,12 @@ async function save(key: string, value: unknown) {
   }
 }
 
+// record is a stored map, or an empty one when the store has none or
+// something else under its key.
+function record<T>(stored: unknown): Record<string, T> {
+  return stored && typeof stored === "object" && !Array.isArray(stored) ? (stored as Record<string, T>) : {};
+}
+
 async function draw(now: Date) {
   await Promise.all(
     [...shown].map((p) => $.ui.view.set(CARD, card(p, now), { project: p || undefined, height: 6 + Math.min(Object.keys(threads).length, Number($.settings().rows) || 5) })),
@@ -111,9 +117,9 @@ async function draw(now: Date) {
 }
 
 $.on("mod.ready", async () => {
-  threads = ((await $.store.get(THREADS)) as Record<string, Used>) ?? {};
-  days = ((await $.store.get(DAYS)) as Record<string, Day>) ?? {};
-  fresh = ((await $.store.get(FRESH)) as Record<string, true>) ?? {};
+  threads = record<Used>(await $.store.get(THREADS));
+  days = record<Day>(await $.store.get(DAYS));
+  fresh = record<true>(await $.store.get(FRESH));
   prune(new Date());
 });
 
@@ -166,5 +172,8 @@ $.on("view.opened", async (e, meta) => {
 });
 
 $.on("view.closed", async (e) => {
+  if (e.view !== CARD) return;
   shown.delete(e.project ?? "");
+  // A view keeps at most 64 trees: drop the project's once it's gone.
+  await $.ui.view.set(CARD, null, { project: e.project || undefined });
 });

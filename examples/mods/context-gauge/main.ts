@@ -105,7 +105,10 @@ $.on("view.opened", async (e) => {
 });
 
 $.on("view.closed", async (e) => {
+  if (e.view !== CARD) return;
   shown.delete(e.project ?? "");
+  // A view keeps at most 64 trees: drop the project's once it's gone.
+  await $.ui.view.set(CARD, null, e.project ? { project: e.project } : {});
 });
 
 $.on("action.done", async (e) => {
