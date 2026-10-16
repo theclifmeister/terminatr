@@ -11,7 +11,6 @@ package server
 import (
 	"bufio"
 	"encoding/json"
-	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -391,55 +390,33 @@ func (sn *projectSnap) detail(sp SideProject, own []string) SideProject {
 // client hangs up or the server stops.
 func (s *Server) serveProjectsWatch(c net.Conn, br *bufio.Reader, req proto.Request) {
 	var p proto.ProjectsWatchParams
-	resp := proto.Response{ID: req.ID}
 	if perr := decodeParams(req.Params, &p); perr != nil {
-		resp.Error = perr
-		proto.WriteLine(c, resp)
+		refuse(c, req, perr)
 		return
 	}
 	wake := s.watch.add()
 	defer s.watch.remove(wake)
-	poll := envDuration(envWatchPoll)
-	if poll <= 0 {
-		poll = defaultWatchPoll
-	}
+	poll := watchPollEvery()
 	b, last := s.sideProjects(s.watch.generation(), poll, p.Detail)
-	resp.Result, _ = json.Marshal(struct {
+	if !answer(c, req, struct {
 		Projects json.RawMessage `json:"projects"`
-	}{b})
-	if err := proto.WriteLine(c, resp); err != nil {
+	}{b}) {
 		return
 	}
-	gone := make(chan struct{})
-	go func() {
-		io.Copy(io.Discard, br)
-		close(gone)
-	}()
-	t := time.NewTicker(poll)
-	defer t.Stop()
-	for {
-		select {
-		case <-gone:
-			return
-		case <-wake:
-		case <-t.C:
-		}
+	pollStream(c, clientGone(br), wake, poll, func() (any, bool) {
 		if s.isStopping() {
-			return
+			return nil, true
 		}
 		b, ver := s.sideProjects(s.watch.generation(), poll, p.Detail)
 		if ver == last {
-			continue
+			return nil, false
 		}
 		last = ver
-		ev := struct {
+		return struct {
 			Event    string          `json:"event"`
 			Projects json.RawMessage `json:"projects"`
-		}{proto.EventProjectsChanged, b}
-		if err := proto.WriteLine(c, ev); err != nil {
-			return
-		}
-	}
+		}{proto.EventProjectsChanged, b}, false
+	})
 }
 
 // ProjectsWatchStream is a watch of the projects (projects.watch).
@@ -448,17 +425,13 @@ type ProjectsWatchStream struct{ c *client.Client }
 // WatchProjects watches the projects, with detail what the dashboard
 // shows of them too, and returns the stream and the projects now.
 func WatchProjects(p client.Paths, detail bool) (*ProjectsWatchStream, []SideProject, error) {
-	c, err := client.Dial(p, proto.KindControl)
-	if err != nil {
-		return nil, nil, err
-	}
 	var params any
 	if detail {
 		params = proto.ProjectsWatchParams{Detail: true}
 	}
 	var w ProjectsWatch
-	if err := c.Call(proto.MethodProjectsWatch, params, &w); err != nil {
-		c.Close()
+	c, err := client.OpenStream(p, proto.MethodProjectsWatch, params, &w)
+	if err != nil {
 		return nil, nil, err
 	}
 	return &ProjectsWatchStream{c: c}, w.Projects, nil
@@ -466,15 +439,8 @@ func WatchProjects(p client.Paths, detail bool) (*ProjectsWatchStream, []SidePro
 
 // Next blocks until the projects' next state.
 func (s *ProjectsWatchStream) Next() ([]SideProject, error) {
-	for {
-		var ev ProjectsWatchEvent
-		if err := s.c.ReadLine(&ev); err != nil {
-			return nil, err
-		}
-		if ev.Event == proto.EventProjectsChanged {
-			return ev.Projects, nil
-		}
-	}
+	ev, err := client.NextEvent(s.c, func(ev ProjectsWatchEvent) bool { return ev.Event == proto.EventProjectsChanged })
+	return ev.Projects, err
 }
 
 // Close ends the watch.

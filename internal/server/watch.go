@@ -12,10 +12,7 @@ package server
 
 import (
 	"bufio"
-	"bytes"
 	"cmp"
-	"encoding/json"
-	"io"
 	"net"
 	"sync"
 	"time"
@@ -165,63 +162,39 @@ func (s *Server) isStopping() bool {
 // server just hangs up.
 func (s *Server) serveWatch(c net.Conn, br *bufio.Reader, req proto.Request) {
 	var p proto.SessionIDParams
-	resp := proto.Response{ID: req.ID}
 	if perr := decodeParams(req.Params, &p); perr != nil {
-		resp.Error = perr
-		proto.WriteLine(c, resp)
+		refuse(c, req, perr)
 		return
 	}
 	// Read before the answer: once it is out, the caller may change it.
-	poll := envDuration(envWatchPoll)
-	if poll <= 0 {
-		poll = defaultWatchPoll
-	}
+	poll := watchPollEvery()
 	// Join before the first read, so no change between them is missed.
 	wake := s.watch.add()
 	defer s.watch.remove(wake)
 	w, ok := s.watchState(p.ID)
 	if !ok {
-		resp.Error = proto.Errorf(proto.ErrUnknownSession, "no session %q", p.ID)
-		proto.WriteLine(c, resp)
+		refuse(c, req, proto.Errorf(proto.ErrUnknownSession, "no session %q", p.ID))
 		return
 	}
-	resp.Result, _ = json.Marshal(w)
-	if err := proto.WriteLine(c, resp); err != nil {
+	if !answer(c, req, w) {
 		return
 	}
-	last, _ := json.Marshal(w)
-	// The client sends nothing more; a read returning is it leaving.
-	gone := make(chan struct{})
-	go func() {
-		io.Copy(io.Discard, br)
-		close(gone)
-	}()
-	t := time.NewTicker(poll)
-	defer t.Stop()
-	for {
-		select {
-		case <-gone:
-			return
-		case <-wake:
-		case <-t.C:
-		}
+	var last lastSent
+	last.changed(w)
+	pollStream(c, clientGone(br), wake, poll, func() (any, bool) {
 		next, alive := s.watchState(p.ID)
 		if !alive && s.isStopping() {
 			// Not ended: the next server resumes it under its id.
-			return
+			return nil, true
 		}
 		if !alive {
 			w.Session.State, w.Session.Reason = string(agent.StateExited), ""
-			proto.WriteLine(c, proto.WatchEvent{Event: proto.EventWatchChanged, Watch: w})
-			return
+			return proto.WatchEvent{Event: proto.EventWatchChanged, Watch: w}, true
 		}
-		b, _ := json.Marshal(next)
-		if bytes.Equal(b, last) {
-			continue
+		if !last.changed(next) {
+			return nil, false
 		}
-		w, last = next, b
-		if err := proto.WriteLine(c, proto.WatchEvent{Event: proto.EventWatchChanged, Watch: w}); err != nil {
-			return
-		}
-	}
+		w = next
+		return proto.WatchEvent{Event: proto.EventWatchChanged, Watch: w}, false
+	})
 }

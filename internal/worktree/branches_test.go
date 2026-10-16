@@ -105,3 +105,30 @@ func TestPruneBranchNoRemote(t *testing.T) {
 		t.Fatalf("%v %q", ok, why)
 	}
 }
+
+// TestCheckedOut: every branch a worktree of the repo has checked out,
+// the main checkout's included, by its folder; CheckedOutIn reads the
+// same list.
+func TestCheckedOut(t *testing.T) {
+	repo, _ := fixture(t)
+	run(t, repo, "branch", "tm/demo/t-0001-busy")
+	wt := filepath.Join(t.TempDir(), "busy")
+	run(t, repo, "worktree", "add", "-q", wt, "tm/demo/t-0001-busy")
+	got := CheckedOut(repo)
+	if len(got) != 2 || got["main"] == "" || got["tm/demo/t-0001-busy"] == "" {
+		t.Fatalf("CheckedOut = %q", got)
+	}
+	real := func(p string) string { r, _ := filepath.EvalSymlinks(p); return r }
+	if real(got["tm/demo/t-0001-busy"]) != real(wt) || real(got["main"]) != real(repo) {
+		t.Fatalf("CheckedOut = %q, want %s and %s", got, wt, repo)
+	}
+	if in := CheckedOutIn(repo, "tm/demo/t-0001-busy"); in != got["tm/demo/t-0001-busy"] {
+		t.Fatalf("CheckedOutIn = %q", in)
+	}
+	if in := CheckedOutIn(repo, "nope"); in != "" {
+		t.Fatalf("CheckedOutIn(nope) = %q", in)
+	}
+	if got := CheckedOut(t.TempDir()); len(got) != 0 {
+		t.Fatalf("not a repo: %q", got)
+	}
+}

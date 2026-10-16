@@ -21,36 +21,37 @@ const (
 // A caller the walk finds in no session, on the server socket, names
 // nothing: the human's own tm uses the human socket, so that is a process
 // that left its session's tree. Params are decoded as the method's
-// handler decodes them, and refused where they don't decode.
-func (s *Server) mayAddress(req proto.Request, m method, human bool, who func() caller.Caller) *proto.Error {
+// handler decodes them, and refused where they don't decode; params are
+// those decoded, for the handler (callCtx.params).
+func (s *Server) mayAddress(req proto.Request, m method, human bool, who func() caller.Caller) (params any, perr *proto.Error) {
 	scope := m.scope
 	if scope == scopeNone {
-		return nil
+		return nil, nil
 	}
-	name, perr := m.name(req.Params)
+	name, params, perr := m.name(req.Params)
 	if perr != nil {
-		return perr
+		return nil, perr
 	}
 	c := who()
 	if unscoped(c, human) {
-		return nil
+		return params, nil
 	}
 	switch scope {
 	case scopeProject:
 		if c.IsAgent() && c.Project != "" && c.Project == name {
-			return nil
+			return params, nil
 		}
-		return proto.Errorf(proto.ErrRefused, "%s: project %s isn't the caller's", req.Method, name)
+		return nil, proto.Errorf(proto.ErrRefused, "%s: project %s isn't the caller's", req.Method, name)
 	case scopeSees:
 		if s.sees(c, name) {
-			return nil
+			return params, nil
 		}
 	case scopeOwn:
 		if c.Session != "" && c.Session == name {
-			return nil
+			return params, nil
 		}
 	}
-	return proto.Errorf(proto.ErrRefused, "%s: session %s isn't the caller's", req.Method, name)
+	return nil, proto.Errorf(proto.ErrRefused, "%s: session %s isn't the caller's", req.Method, name)
 }
 
 // unscoped reports whether caller c, on the human socket when human,

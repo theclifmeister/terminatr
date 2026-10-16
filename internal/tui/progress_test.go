@@ -50,3 +50,29 @@ func TestProgressSameEverywhere(t *testing.T) {
 		t.Errorf("status bar: %q", sb)
 	}
 }
+
+// TestThreadCoreWords: what both thread panels say of a thread's state,
+// what it does now and its steps.
+func TestThreadCoreWords(t *testing.T) {
+	if got := sessionState(proto.SessionInfo{State: "blocked", Agent: "claude", Reason: "question", Question: &proto.Question{}}); got != stateWord(proto.SessionInfo{State: "blocked", Agent: "claude"})+" question open" {
+		t.Errorf("blocked on a question: %q", got)
+	}
+	if got := sessionState(proto.SessionInfo{State: "working", Agent: "claude"}); got != stateWord(proto.SessionInfo{State: "working", Agent: "claude"}) {
+		t.Errorf("working: %q", got)
+	}
+	for _, c := range []struct {
+		st   thread.Status
+		want string
+	}{
+		{thread.Status{Current: "step 2", Activity: "reading"}, "▸ step 2"},
+		{thread.Status{Activity: "reading"}, `"reading"`},
+		{thread.Status{}, ""},
+	} {
+		if got := nowWords(&c.st); got != c.want {
+			t.Errorf("nowWords(%+v) = %q, want %q", c.st, got, c.want)
+		}
+	}
+	if got := stepLine(tasks.Step{N: 3, Text: "ship\nit", Done: true}); got != todoGlyph("done")+" 3 "+oneLine("ship\nit") {
+		t.Errorf("stepLine: %q", got)
+	}
+}

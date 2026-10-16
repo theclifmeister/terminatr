@@ -532,50 +532,48 @@ func (m *dash) sideMenu(mo tea.Mouse) tea.Cmd {
 	}
 	m.stack = nil
 	title := r.slug
-	var items []menuItem
-	// show runs a dashboard key on the row's project.
-	show := func(label, key string) menuItem {
-		return menuItem{label: label, key: key, run: func(m *dash) tea.Cmd {
-			return tea.Batch(m.showProject(r.slug), m.key(keyMsg(key)))
-		}}
-	}
 	switch r.kind {
 	case treeProject:
-		items = append(items, menuItem{label: "show its dashboard", run: func(m *dash) tea.Cmd { return m.showProject(r.slug) }})
-		fold := func(m *dash) tea.Cmd { return m.refold(foldProject(r, !r.fold)) }
-		if r.inactive {
-			label, key := expandLabel(r)
-			items = append(items, menuItem{label: label, key: key, run: fold})
-		} else {
-			label, key := foldLabel(r)
-			items = append(items, menuItem{label: "open its coordinator", run: func(m *dash) tea.Cmd { return m.openProject(r.slug) }},
-				menuItem{label: label, key: key, run: fold})
-		}
-		items = append(items, show("project popup", "a"), show("tasks", "t"), show("inbox", "i"),
-			menuItem{label: activeLabel(r), key: "space", run: func(m *dash) tea.Cmd { return m.toggleActive(r.slug, r.inactive) }},
-			menuItem{label: pinLabel(r), key: "p", run: func(m *dash) tea.Cmd { return m.setPinned(r.slug, !r.pinned) }})
 	case treeDivider:
 		title = "inactive projects"
-		label, key := foldLabel(r)
-		items = append(items, menuItem{label: label, key: key, run: func(m *dash) tea.Cmd { return m.refold(foldDivider(r)) }})
 	case treeCoordinator:
 		title += " coordinator"
-		items = append(items, menuItem{label: coordLabel(r), key: "enter", run: func(m *dash) tea.Cmd { return m.openTarget(t) }},
-			show("project popup", "a"))
 	case treePeerProject:
-		// A paired server's: its read-only dashboard, and its fold.
 		title = r.peer + " / " + r.slug
-		items = append(items, menuItem{label: "show its dashboard", key: "enter", run: func(m *dash) tea.Cmd { return m.openTarget(t) }})
-		if !r.stale {
-			label, key := foldLabel(r)
-			items = append(items, menuItem{label: label, key: key, run: func(m *dash) tea.Cmd { return m.refold(foldPeer(r, !r.fold)) }})
-		}
 	default:
 		title = r.thread
-		items = append(items,
-			menuItem{label: "attach", key: "enter", run: func(m *dash) tea.Cmd {
+	}
+	var items []menuItem
+	for _, it := range sideMenuItems(r, true) {
+		mi := menuItem{label: it.label, key: it.key}
+		if it.enter {
+			mi.key = "enter"
+		}
+		switch it.act {
+		case menuShow:
+			mi.run = func(m *dash) tea.Cmd { return m.showProject(r.slug) }
+		case menuCoordinator:
+			mi.run = func(m *dash) tea.Cmd { return m.openProject(r.slug) }
+		case menuFold:
+			fn := it.fold
+			mi.run = func(m *dash) tea.Cmd { return m.refold(fn) }
+		case menuPopup:
+			// The dashboard key, on the row's project.
+			key := it.popup
+			mi.key = key
+			mi.run = func(m *dash) tea.Cmd { return tea.Batch(m.showProject(r.slug), m.key(keyMsg(key))) }
+		case menuActive:
+			mi.run = func(m *dash) tea.Cmd { return m.toggleActive(r.slug, r.inactive) }
+		case menuPin:
+			mi.run = func(m *dash) tea.Cmd { return m.setPinned(r.slug, !r.pinned) }
+		case menuOpen:
+			mi.run = func(m *dash) tea.Cmd { return m.openTarget(t) }
+		case menuAttach:
+			mi.run = func(m *dash) tea.Cmd {
 				return m.act(func() actionMsg { return actionMsg{attach: t.Session, current: t.Project} })
-			}})
+			}
+		}
+		items = append(items, mi)
 	}
 	m.openMenu(title, items, 0, mo.Y-1)
 	return nil

@@ -8,12 +8,9 @@ package server
 
 import (
 	"bufio"
-	"bytes"
 	"cmp"
-	"encoding/json"
 	"fmt"
 	"github.com/theclifmeister/terminatr/internal/codehost"
-	"io"
 	"net"
 	"slices"
 	"time"
@@ -316,59 +313,35 @@ func isMergeable(pr ticker.PR) bool {
 // client hangs up or the server stops.
 func (s *Server) serveProjectWatch(c net.Conn, br *bufio.Reader, req proto.Request) {
 	var p proto.ProjectWatchParams
-	resp := proto.Response{ID: req.ID}
 	if perr := decodeParams(req.Params, &p); perr != nil {
-		resp.Error = perr
-		proto.WriteLine(c, resp)
+		refuse(c, req, perr)
 		return
 	}
 	wake := s.watch.add()
 	defer s.watch.remove(wake)
 	w, err := s.projectWatchState(p.Project)
 	if err != nil {
-		resp.Error = proto.Errorf(proto.ErrBadParams, "%v", err)
-		proto.WriteLine(c, resp)
+		refuse(c, req, proto.Errorf(proto.ErrBadParams, "%v", err))
 		return
 	}
-	resp.Result, _ = json.Marshal(w)
-	if err := proto.WriteLine(c, resp); err != nil {
+	if !answer(c, req, w) {
 		return
 	}
-	last := resp.Result
-	gone := make(chan struct{})
-	go func() {
-		io.Copy(io.Discard, br)
-		close(gone)
-	}()
-	poll := envDuration(envWatchPoll)
-	if poll <= 0 {
-		poll = defaultWatchPoll
-	}
-	t := time.NewTicker(poll)
-	defer t.Stop()
-	for {
-		select {
-		case <-gone:
-			return
-		case <-wake:
-		case <-t.C:
-		}
+	var last lastSent
+	last.changed(w)
+	pollStream(c, clientGone(br), wake, watchPollEvery(), func() (any, bool) {
 		if s.isStopping() {
-			return
+			return nil, true
 		}
 		next, err := s.projectWatchState(p.Project)
 		if err != nil {
-			continue // a project being renamed or moved: try again
+			return nil, false // a project being renamed or moved: try again
 		}
-		b, _ := json.Marshal(next)
-		if bytes.Equal(b, last) {
-			continue
+		if !last.changed(next) {
+			return nil, false
 		}
-		last = b
-		if err := proto.WriteLine(c, proto.ProjectWatchEvent{Event: proto.EventProjectChanged, Watch: next}); err != nil {
-			return
-		}
-	}
+		return proto.ProjectWatchEvent{Event: proto.EventProjectChanged, Watch: next}, false
+	})
 }
 
 // contextOf is the context use of project slug's coordinator, nil when

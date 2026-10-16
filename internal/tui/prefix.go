@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"slices"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -14,6 +16,57 @@ import (
 // (prefixStep): d, q, r, the dashboard keys (prefixCommands), the
 // sidebar's and the info panel's (paneCommands), the prefix itself and
 // the mods' command keys (modcommands.go), which the core's come before.
+
+// The kinds of prefix command (prefixCmd.kind).
+const (
+	cmdCore  = iota // the session's own: d, q, r, R and the prefix itself
+	cmdPopup        // opens its popup, over a session too (popupCommands)
+	cmdDash         // a dashboard key that runs on the dashboard (prefixCommands)
+	cmdPane         // acts on the window itself (paneCommands)
+)
+
+// prefixCmd is a prefix command: its default key, its ≡ menu label and
+// its kind.
+type prefixCmd struct {
+	key, menu string
+	kind      int
+}
+
+// prefixCmds are the prefix commands, the mods' aside, in the help's
+// and the ≡ menu's order: the one list the key sets (prefixCommands,
+// popupCommands, paneCommands) and the menu (sessionMenu) are made of.
+var prefixCmds = []prefixCmd{
+	{"d", "dashboard", cmdCore},
+	{"q", "quit this console", cmdCore},
+	{"a", "project popup", cmdPopup},
+	{"n", "new project", cmdPopup},
+	{"]", "next project", cmdDash},
+	{"[", "previous project", cmdDash},
+	{"i", "inbox", cmdPopup},
+	{"t", "tasks", cmdPopup},
+	{",", "settings", cmdPopup},
+	{"?", "help: keys and mouse", cmdPopup},
+	{"{", "narrower sidebar", cmdPane},
+	{"}", "wider sidebar", cmdPane},
+	{"b", "sidebar: slim / hide / full", cmdPane},
+	{"|", "info panel on / off", cmdPane},
+	{"tab", "keyboard to the sidebar", cmdPane},
+	{";", "back to the last place", cmdPane},
+	{"r", "remote control on / off…", cmdCore},
+	{"R", "repaint from its server", cmdCore},
+	{"prefix", "send the prefix key", cmdCore},
+}
+
+// prefixCmdKeys is the set of the keys of the prefix commands of kinds.
+func prefixCmdKeys(kinds ...int) map[string]bool {
+	out := map[string]bool{}
+	for _, c := range prefixCmds {
+		if slices.Contains(kinds, c.kind) {
+			out[c.key] = true
+		}
+	}
+	return out
+}
 
 // prefixHint is the footer while the prefix waits for its command, in
 // the bound keys (keybind.go).

@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -32,6 +33,39 @@ func blockReason(s proto.SessionInfo) string {
 		return "question open"
 	}
 	return s.Reason
+}
+
+// sessionState is a session's state as its panels head it: its word
+// (stateWord), and why it is blocked when it says.
+func sessionState(s proto.SessionInfo) string {
+	state := stateWord(s)
+	if s.State == "blocked" && s.Reason != "" {
+		state += " " + blockReason(s)
+	}
+	return state
+}
+
+// nowWords are what a thread's STATUS.md says it does now: its current
+// step (▸), else its activity, quoted; "" for neither.
+func nowWords(st *thread.Status) string {
+	switch {
+	case st.Current != "":
+		return "▸ " + oneLine(st.Current)
+	case st.Activity != "":
+		return `"` + oneLine(st.Activity) + `"`
+	}
+	return ""
+}
+
+// stepLine is a task's plan step as the panels and the rows list it:
+// its box, number and text.
+func stepLine(s tasks.Step) string {
+	return fmt.Sprintf("%s %d %s", todoGlyph(stepStatus(s.Done)), s.N, oneLine(s.Text))
+}
+
+// stepsProgress is a task's steps as a progress bar (progressLine).
+func stepsProgress(t *tasks.Task) string {
+	return progressLine(thread.Progress{Percent: pctOf(t.StepsDone(), len(t.Steps)), Done: t.StepsDone(), Total: len(t.Steps)})
 }
 
 // questionLines are a session's open question menu, as tm thread show
@@ -370,11 +404,8 @@ func threadProgress(st *thread.Status) string {
 	if p := st.Progress().String(); p != "" {
 		parts = append(parts, p)
 	}
-	switch {
-	case st.Current != "":
-		parts = append(parts, "▸ "+oneLine(st.Current))
-	case st.Activity != "":
-		parts = append(parts, `"`+oneLine(st.Activity)+`"`)
+	if now := nowWords(st); now != "" {
+		parts = append(parts, now)
 	}
 	return strings.Join(parts, " ")
 }

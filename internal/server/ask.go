@@ -9,7 +9,6 @@ package server
 
 import (
 	"bufio"
-	"io"
 	"net"
 	"slices"
 	"strings"
@@ -146,10 +145,8 @@ func validQuestion(q proto.Question) *proto.Error {
 // ask.closed when another ask replaced it or the session ended.
 func (s *Server) serveAsk(c net.Conn, br *bufio.Reader, req proto.Request) {
 	var p proto.SessionAskParams
-	resp := proto.Response{ID: req.ID}
 	if perr := decodeParams(req.Params, &p); perr != nil {
-		resp.Error = perr
-		proto.WriteLine(c, resp)
+		refuse(c, req, perr)
 		return
 	}
 	sess, perr := s.session(p.ID)
@@ -157,8 +154,7 @@ func (s *Server) serveAsk(c net.Conn, br *bufio.Reader, req proto.Request) {
 		perr = validQuestion(p.Question)
 	}
 	if perr != nil {
-		resp.Error = perr
-		proto.WriteLine(c, resp)
+		refuse(c, req, perr)
 		return
 	}
 	q := p.Question
@@ -172,18 +168,11 @@ func (s *Server) serveAsk(c net.Conn, br *bufio.Reader, req proto.Request) {
 	s.modEv.wake()
 	defer s.watch.wake()
 	defer s.modEv.wake()
-	resp.Result = []byte("{}")
-	if err := proto.WriteLine(c, resp); err != nil {
+	if !answer(c, req, struct{}{}) {
 		return
 	}
-	// The client sends nothing more; a read returning is it leaving.
-	gone := make(chan struct{})
-	go func() {
-		io.Copy(io.Discard, br)
-		close(gone)
-	}()
 	select {
-	case <-gone:
+	case <-clientGone(br):
 	case ans := <-o.answered:
 		proto.WriteLine(c, proto.AskEvent{Event: proto.EventAskAnswered, Answers: ans})
 	case <-o.replaced:

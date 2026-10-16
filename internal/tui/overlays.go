@@ -50,8 +50,7 @@ func moveSel(sel, d, n int) int { return min(max(sel+d, 0), max(n-1, 0)) }
 type helpView struct{ scroll int }
 
 func (h *helpView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
-	if d, ok := scrollKeys[k.String()]; ok {
-		h.scroll = clampScroll(h.scroll+d, len(m.helpBody()))
+	if scrollKey(&h.scroll, k, len(m.helpBody())) {
 		return nil
 	}
 	if k.String() == "esc" {

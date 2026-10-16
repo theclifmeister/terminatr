@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
-	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -18,6 +17,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	_ "github.com/theclifmeister/terminatr/internal/agent/claude" // registers the Go agent (Doctor)
 	"github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/client/clienttest"
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/models"
@@ -818,32 +818,8 @@ func TestServerHangs(t *testing.T) {
 	d := testDeps(t)
 	defer func(a, b time.Duration) { callTimeout, codeHostTimeout = a, b }(callTimeout, codeHostTimeout)
 	callTimeout, codeHostTimeout = 200*time.Millisecond, 200*time.Millisecond
-	lk, err := flock.TryLock(d.Paths.Lock)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer lk.Unlock()
-	ln, err := net.Listen("unix", d.Paths.Socket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ln.Close()
-	go func() {
-		for {
-			c, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			go func() {
-				defer c.Close()
-				br := bufio.NewReader(c)
-				br.ReadBytes('\n') // the client's hello
-				b, _ := json.Marshal(proto.Hello{Protocol: proto.Protocol, Version: "v0", Build: "b0"})
-				c.Write(append(b, '\n'))
-				io.Copy(io.Discard, br) // and never an answer
-			}()
-		}
-	}()
+	clienttest.Running(t, d.Paths.Lock, "", 0)
+	clienttest.Mute(t, d.Paths.Socket, "v0", "b0")
 	start := time.Now()
 	cs, _ := Server(d)
 	if c := find(cs, "server"); len(c) != 1 || c[0].Status != Fail || !strings.Contains(c[0].Detail, "server.status") {

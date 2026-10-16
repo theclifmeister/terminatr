@@ -230,10 +230,7 @@ func (m *dash) threadPanel(d *panel, r row) {
 	var q *proto.Question
 	if s, ok := m.session(t.Session); ok && t.Session != "" {
 		q = s.Question
-		state = stateWord(s)
-		if s.State == "blocked" && s.Reason != "" {
-			state += " " + blockReason(s)
-		}
+		state = sessionState(s)
 	}
 	d.title(threadName(t.Task, t.ID)+" "+t.Title, state)
 	d.badges(m.badges(r.project, modstore.Thread(t.ID)))
@@ -243,11 +240,7 @@ func (m *dash) threadPanel(d *panel, r row) {
 	d.field("usage", t.Usage.String())
 	if st := t.Status; st != nil {
 		d.field("progress", progressLine(st.Progress()))
-		if st.Current != "" {
-			d.field("now", "▸ "+oneLine(st.Current))
-		} else if st.Activity != "" {
-			d.field("now", `"`+oneLine(st.Activity)+`"`)
-		}
+		d.field("now", nowWords(st))
 		if !st.Updated.IsZero() {
 			d.field("updated", age(time.Since(st.Updated))+" ago")
 		}
@@ -317,9 +310,9 @@ func taskPanelWith(d *panel, t *tasks.Task, rv *Review, asked string, usage thre
 	}
 	if len(t.Steps) > 0 {
 		d.section("STEPS", "")
-		d.add(progressLine(thread.Progress{Percent: pctOf(t.StepsDone(), len(t.Steps)), Done: t.StepsDone(), Total: len(t.Steps)}))
+		d.add(stepsProgress(t))
 		for _, s := range t.Steps {
-			d.add(fmt.Sprintf("%s %d %s", todoGlyph(stepStatus(s.Done)), s.N, oneLine(s.Text)))
+			d.add(stepLine(s))
 		}
 	}
 	if notes := strings.TrimSpace(t.Notes); notes != "" {
@@ -361,11 +354,7 @@ func (m *dash) projectPanel(d *panel, r row) {
 }
 
 func sessionPanel(d *panel, s proto.SessionInfo) {
-	state := stateWord(s)
-	if s.State == "blocked" && s.Reason != "" {
-		state += " " + blockReason(s)
-	}
-	d.title(s.ID+" "+sessionName(s), state)
+	d.title(s.ID+" "+sessionName(s), sessionState(s))
 	d.field("project", s.Project)
 	d.field("role", string(s.Role))
 	if s.Task != "" {

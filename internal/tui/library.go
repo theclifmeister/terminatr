@@ -228,9 +228,20 @@ func trimPartial(b []byte) []byte {
 	return b
 }
 
-// wrapBody is the body's lines hard-wrapped for w cells, kept for as
-// long as w and the body stay the same. The slice is shared: callers
-// copy before changing it.
+// hardLines are text's lines as a read-only popup shows them: tabs as
+// four spaces, each line cut to w cells (10 at least), trailing newlines
+// dropped.
+func hardLines(text string, w int) []string {
+	var out []string
+	for _, l := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
+		out = append(out, strings.Split(ansi.Hardwrap(strings.ReplaceAll(l, "\t", "    "), max(w, 10), true), "\n")...)
+	}
+	return out
+}
+
+// wrapBody is the body's lines hard-wrapped for w cells (hardLines),
+// kept for as long as w and the body stay the same. The slice is
+// shared: callers copy before changing it.
 func (tv *textView) wrapBody(w int) []string {
 	w = max(w, 10)
 	if tv.wrapped != nil && tv.wrapW == w && tv.wrapOf == tv.body {
@@ -238,9 +249,7 @@ func (tv *textView) wrapBody(w int) []string {
 	}
 	out := []string{}
 	if tv.body != "" {
-		for _, l := range strings.Split(strings.TrimRight(tv.body, "\n"), "\n") {
-			out = append(out, strings.Split(ansi.Hardwrap(l, w, true), "\n")...)
-		}
+		out = hardLines(tv.body, w)
 	}
 	tv.wrapped, tv.wrapW, tv.wrapOf = out, w, tv.body
 	return out

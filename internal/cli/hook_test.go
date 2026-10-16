@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/client/clienttest"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -118,9 +119,7 @@ func TestHookDeadlines(t *testing.T) {
 	}{
 		{"server down", func(*testing.T, string) {}, "Stop", 100 * time.Millisecond},
 		{"stale socket", func(t *testing.T, sock string) {
-			ln, _ := net.Listen("unix", sock)
-			ln.(*net.UnixListener).SetUnlinkOnClose(false)
-			ln.Close()
+			clienttest.StaleSocket(t, sock)
 		}, "Stop", 100 * time.Millisecond},
 		{"wedged, no response expected", func(t *testing.T, sock string) {
 			fakeServer(t, sock, 5*time.Second, "late", nil)
@@ -129,20 +128,7 @@ func TestHookDeadlines(t *testing.T) {
 			fakeServer(t, sock, 5*time.Second, "late", nil)
 		}, "SessionStart", hookContext + 150*time.Millisecond},
 		{"never says hello", func(t *testing.T, sock string) {
-			ln, err := net.Listen("unix", sock)
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { ln.Close() })
-			go func() {
-				for {
-					c, err := ln.Accept()
-					if err != nil {
-						return
-					}
-					defer c.Close()
-				}
-			}()
+			clienttest.Silent(t, sock)
 		}, "SessionStart", hookContext + 150*time.Millisecond},
 	}
 	for _, c := range cases {

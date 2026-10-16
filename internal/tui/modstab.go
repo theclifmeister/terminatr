@@ -517,9 +517,7 @@ func consentLines(md mod.Mod, question string, w int) []string {
 	}
 	if shown := md.Shown(); shown != "" {
 		out = append(out, "")
-		for _, l := range strings.Split(strings.TrimRight(shown, "\n"), "\n") {
-			out = append(out, strings.Split(ansi.Hardwrap(strings.ReplaceAll(l, "\t", "    "), max(w, 10), true), "\n")...)
-		}
+		out = append(out, hardLines(shown, w)...)
 	}
 	return append(out, "", th().Head.Render(question))
 }
@@ -952,9 +950,7 @@ func (uv *updateView) lines(w int) []string {
 		from = uv.md.Manifest.Version
 	}
 	out := []string{th().Head.Render(fmt.Sprintf("%s %s → %s", modName(uv.md), from, uv.st.Manifest.Version)), ""}
-	for _, l := range strings.Split(strings.TrimRight(uv.ch.Describe(uv.st.Manifest), "\n"), "\n") {
-		out = append(out, strings.Split(ansi.Hardwrap(strings.ReplaceAll(l, "\t", "    "), max(w, 10), true), "\n")...)
-	}
+	out = append(out, hardLines(uv.ch.Describe(uv.st.Manifest), w)...)
 	return append(out, "", th().Head.Render("Update "+modName(uv.md)+"?"))
 }
 

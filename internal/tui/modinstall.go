@@ -128,8 +128,7 @@ func (iv *installView) lines(w int) []string {
 }
 
 func (iv *installView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
-	if d, ok := scrollKeys[k.String()]; ok {
-		iv.scroll = clampScroll(iv.scroll+d, len(iv.lines(m.inner(viewWidth))))
+	if scrollKey(&iv.scroll, k, len(iv.lines(m.inner(viewWidth)))) {
 		return nil
 	}
 	switch k.String() {

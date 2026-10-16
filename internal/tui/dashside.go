@@ -18,46 +18,39 @@ func (m *dash) sideClick(mo tea.Mouse) tea.Cmd {
 	if mo.Button != tea.MouseLeft {
 		return nil
 	}
-	x := m.geom().sideCol(mo.X)
-	if sideFlagAt(m.tree(), m.sideW(), m.h, m.sideFoot(), m.needsCount(), x, mo.Y) {
-		// The header's ⚑ N: the first row that needs you, as w.
+	ck := sideClickAt(m.tree(), m.sideW(), m.h, m.sideFoot(), m.needsCount(), m.geom().sideCol(mo.X), mo.Y)
+	switch {
+	case ck.need:
 		m.focus = areaSide
 		return m.sideDo(sideNeedStep(m.sideKeysIn(), treeRow{}, false))
-	}
-	if sideHeadAt(m.tree(), m.sideW(), m.h, m.sideFoot(), x, mo.Y) {
-		// The PROJECTS header: every project's NEEDS YOU, the sidebar
-		// keeping the keyboard on it.
+	case ck.head:
 		m.focus, m.sideSel = areaSide, headKey
 		return tea.Batch(m.sendSideSel(), m.openTarget(Target{Project: allProjects}))
 	}
-	r, ok, border := sideHitAt(m.tree(), m.sideW(), m.h, m.sideFoot(), x, mo.Y)
-	t, can, why := r.target()
-	var cmd tea.Cmd
-	if ok && !border {
+	var cmds []tea.Cmd
+	if ck.sel != "" {
 		// A click on a row gives the sidebar the keyboard, its cursor on
 		// the row; it keeps it in the session the row attaches.
-		m.focus, m.sideSel = areaSide, r.key()
-		cmd = m.sendSideSel()
+		m.focus, m.sideSel = areaSide, ck.sel
+		cmds = append(cmds, m.sendSideSel())
 	}
-	switch {
-	case border:
+	if ck.drag {
 		m.sideDrag = true
-	case !ok:
-	case r.kind == treeSection:
-		// Its header or its body: as enter on the header.
-		st, _ := sectionStep(r, sideEnter)
-		return tea.Batch(cmd, m.sectionCmd(st))
-	case m.busy:
-	case r.kind == treeDivider:
-		return tea.Batch(cmd, m.refold(foldDivider(r)))
-	case r.kind == treeServer && !r.link.local:
-		return tea.Batch(cmd, m.refold(foldPeer(r, !r.fold)))
-	case !can:
-		m.msg = why
-	default:
-		return tea.Batch(cmd, m.openTarget(t))
 	}
-	return cmd
+	cmds = append(cmds, m.sectionCmd(ck.section))
+	if m.busy {
+		return tea.Batch(cmds...)
+	}
+	if ck.refold != nil {
+		cmds = append(cmds, m.refold(ck.refold))
+	}
+	if ck.cant {
+		m.msg = ck.msg
+	}
+	if ck.open != nil {
+		cmds = append(cmds, m.openTarget(*ck.open))
+	}
+	return tea.Batch(cmds...)
 }
 
 // tree is the sidebar's tree, from the last poll: the listed project is

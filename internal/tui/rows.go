@@ -679,7 +679,7 @@ func threadDetail(t *ThreadRow, ind string, report bool) []string {
 	if t.TaskRec != nil && len(t.TaskRec.Steps) > 0 {
 		out = append(out, ind+th().Faint.Render(fmt.Sprintf("steps %d/%d", t.TaskRec.StepsDone(), len(t.TaskRec.Steps))))
 		for _, st := range t.TaskRec.Steps {
-			out = append(out, fmt.Sprintf("%s  %s %d %s", ind, todoGlyph(stepStatus(st.Done)), st.N, oneLine(st.Text)))
+			out = append(out, ind+"  "+stepLine(st))
 		}
 	}
 	if report && t.Reports > 0 {

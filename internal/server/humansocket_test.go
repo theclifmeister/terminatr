@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"errors"
 	"go/ast"
 	"go/parser"
@@ -388,6 +389,31 @@ func TestMethodTable(t *testing.T) {
 	}
 	if _, ok := methodOf("no.such.method"); ok {
 		t.Error("an unknown method is known")
+	}
+}
+
+// TestTypedTakesDecodedParams: a handler takes the params mayAddress
+// decoded when they are its own type, without decoding the request
+// again; other params, or none, it decodes itself.
+func TestTypedTakesDecodedParams(t *testing.T) {
+	h := typed(func(_ *Server, p proto.SessionIDParams, _ callCtx) (any, *proto.Error) { return p.ID, nil })
+	bad := proto.Request{Params: json.RawMessage(`not json`)}
+	if got, perr := h(&Server{}, bad, callCtx{params: proto.SessionIDParams{ID: "s-1"}}); perr != nil || got != "s-1" {
+		t.Fatalf("decoded params: %v %v", got, perr)
+	}
+	if _, perr := h(&Server{}, bad, callCtx{params: proto.SessionReadParams{ID: "s-2"}}); perr == nil || perr.Code != proto.ErrBadParams {
+		t.Fatalf("another type's params: %v, want the request decoded", perr)
+	}
+	good := proto.Request{Params: json.RawMessage(`{"id":"s-3"}`)}
+	if got, perr := h(&Server{}, good, callCtx{}); perr != nil || got != "s-3" {
+		t.Fatalf("no decoded params: %v %v", got, perr)
+	}
+	// mayAddress hands on what it decoded.
+	m := methods[proto.MethodSessionRead]
+	params, perr := (&Server{}).mayAddress(proto.Request{Method: proto.MethodSessionRead, Params: json.RawMessage(`{"id":"s-4"}`)}, m, true,
+		func() caller.Caller { return caller.Caller{Kind: caller.Human} })
+	if p, ok := params.(proto.SessionReadParams); perr != nil || !ok || p.ID != "s-4" {
+		t.Fatalf("mayAddress: %#v %v", params, perr)
 	}
 }
 
