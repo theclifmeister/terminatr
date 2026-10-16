@@ -35,8 +35,10 @@ func (m *dash) listBody() []string {
 	// The list scrolls on its own; the details panel shows the selected
 	// row from the top.
 	var panel []string
+	m.bodyLay = nil
 	if r, ok := m.selected(); ok {
-		panel = m.detailsLay(r, dr.w, dr.h).lines
+		lay := m.detailsLay(r, dr.w, dr.h)
+		panel, m.bodyLay = lay.lines, &lay
 	}
 	if m.detailKey == m.sel {
 		// Scrolled with the wheel.
@@ -136,6 +138,7 @@ func (m *dash) listLines(w int, inline bool) listFrame {
 // footer, by the layout's styles (chrome.go): keys are the footer's key
 // hints.
 func (m *dash) frame(title string, body []string, sel int, keys string) string {
+	defer func() { m.bodyLay = nil }()
 	g := m.geom()
 	right, alarm, badge := m.headRight()
 	// The app, not a project: the project's own section is headed by its
@@ -155,7 +158,14 @@ func (m *dash) frame(title string, body []string, sel int, keys string) string {
 		keys = "esc back to the list · tab next area"
 	case m.area() == areaDetails && m.top() == nil:
 		keys = "details: ↑ ↓ scroll · esc back · tab next"
-		if lay, ok := m.detailsNow(); ok {
+		// The panel listBody just laid out for this frame, if it did.
+		lay, ok := panelLay{}, false
+		if m.bodyLay != nil {
+			lay, ok = *m.bodyLay, true
+		} else {
+			lay, ok = m.detailsNow()
+		}
+		if ok {
 			if sk := panelHintKeys(lay, m.detSelNow()); sk != "" {
 				keys = "details: ↑ ↓ scroll · " + sk + " · esc back · tab next"
 			}

@@ -445,6 +445,9 @@ type detailsState struct {
 	// wheel, for the row detailKey (another row shows from the top).
 	detailTop int
 	detailKey string
+	// bodyLay is the panel listBody laid out for the frame being drawn,
+	// which the footer's hint reads instead of laying it out again.
+	bodyLay *panelLay
 	// detSel is the details panel's selected mod section header (its fold
 	// id), for the row detSelKey; "" for none.
 	detSel, detSelKey string

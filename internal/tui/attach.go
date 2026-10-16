@@ -2102,7 +2102,9 @@ func (c *client) drawFrame(out io.Writer) {
 		b = c.paint(t, b)
 	}
 	if err == nil {
-		b = append(c.outerModes(), b...)
+		if modes := c.outerModes(); len(modes) > 0 { // usually none: no copy of the frame
+			b = append(modes, b...)
+		}
 		if c.bell {
 			b = append(b, '\a')
 			c.bell = false

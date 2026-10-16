@@ -587,6 +587,10 @@ func (rt *agentRT) readTail() ([]agent.Usage, []string) {
 	if p == "" {
 		return nil, nil
 	}
+	// Nothing appended: one stat, no open (this runs every tick).
+	if fi, err := os.Stat(p); err == nil && fi.Size() == off {
+		return nil, nil
+	}
 	f, err := os.Open(p)
 	if err != nil {
 		return nil, nil
