@@ -174,6 +174,71 @@ NPM_TOKEN = { from = "keychain:npm registry" }
 	}
 }
 
+// TestSetEnv: the writers add a secret variable to a project's or all
+// projects' env table, replace it, refuse a bad name or source, and
+// remove it, the user's comments and other tables kept.
+func TestSetEnv(t *testing.T) {
+	write(t, `# mine
+[projects.a]
+yolo = true
+
+[projects.a.env]
+# for npm
+NPM_TOKEN = { from = "env:NPM_TOKEN" }
+`)
+	if err := SetEnv("projects.a", "NODE_AUTH_TOKEN", EnvSource{From: EnvFromGH}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetEnv(DefaultsTable, "REG_TOKEN", EnvSource{From: "keychain:my registry"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetEnv("projects.a", "NPM_TOKEN", EnvSource{From: "keychain:npm"}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := c.EnvOf("a"), map[string]EnvSource{"NODE_AUTH_TOKEN": {From: EnvFromGH}, "NPM_TOKEN": {From: "keychain:npm"}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("a %v", got)
+	}
+	if got := c.EnvOf(""); len(got) != 1 || got["REG_TOKEN"].From != "keychain:my registry" {
+		t.Errorf("defaults %v", got)
+	}
+	if b, _ := os.ReadFile(c.Path); !strings.Contains(string(b), "# for npm\nNPM_TOKEN = { from = \"keychain:npm\" }") || !strings.Contains(string(b), "# mine") {
+		t.Errorf("file:\n%s", b)
+	}
+	for name, e := range map[string]EnvSource{"PATH": {From: EnvFromGH}, "CLAUDE_X": {From: EnvFromGH}, "A-B": {From: EnvFromGH}, "X": {From: "vault"}, "Y": {From: "env:"}} {
+		if err := SetEnv("projects.a", name, e); err == nil {
+			t.Errorf("%s %v written", name, e)
+		}
+	}
+	if err := SetEnv("ui", "X", EnvSource{From: EnvFromGH}); err == nil {
+		t.Error("env in [ui]")
+	}
+	if err := UnsetEnv("projects.a", "NPM_TOKEN"); err != nil {
+		t.Fatal(err)
+	}
+	if err := UnsetEnv(DefaultsTable, "REG_TOKEN"); err != nil {
+		t.Fatal(err)
+	}
+	c, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.EnvOf("a"); len(got) != 1 || got["NODE_AUTH_TOKEN"].From != EnvFromGH {
+		t.Errorf("after unset a %v", got)
+	}
+	if got := c.EnvOf(""); len(got) != 0 {
+		t.Errorf("after unset defaults %v", got)
+	}
+	// An inline env table isn't the line editor's: it stays.
+	write(t, "[projects.b]\nenv = { X = { from = \"gh-auth-token\" } }\n")
+	if err := SetEnv("projects.b", "Y", EnvSource{From: EnvFromGH}); err != ErrForm {
+		t.Errorf("inline table: %v", err)
+	}
+}
+
 // TestGuardKeysByHuman: the guard's settings are the writers' (the
 // settings popups), never a mod's to suggest.
 func TestGuardKeysByHuman(t *testing.T) {

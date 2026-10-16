@@ -113,3 +113,43 @@ func TestSecretEnvLaunch(t *testing.T) {
 		t.Errorf("a coordinator got the thread's secret")
 	}
 }
+
+// TestSecretTest: secret.test gets the variable from its source in the
+// server's environment and answers ok, or why not, never the value; a
+// project's table, or all projects' for "", names it.
+func TestSecretTest(t *testing.T) {
+	testPaths(t)
+	writeConfig(t, `[defaults.env]
+NODE_AUTH_TOKEN = { from = "gh-auth-token" }
+
+[projects.demo.env]
+FROM_ENV = { from = "env:SRV_SECRET" }
+MISSING = { from = "env:NOT_SET" }
+`)
+	s := &Server{opts: Options{Env: []string{"SRV_SECRET=s3cr3t"}}}
+	fakeSecrets(t, "gho_abc\n", nil)
+	for _, c := range []struct {
+		p    proto.SecretTestParams
+		ok   bool
+		want string
+	}{
+		{proto.SecretTestParams{Name: "NODE_AUTH_TOKEN"}, true, ""},
+		{proto.SecretTestParams{Project: "demo", Name: "FROM_ENV"}, true, ""},
+		{proto.SecretTestParams{Project: "demo", Name: "MISSING"}, false, "the server's environment has no NOT_SET"},
+	} {
+		res, perr := s.secretTest(c.p)
+		r, _ := res.(proto.SecretTestResult)
+		if perr != nil || r.OK != c.ok || !strings.Contains(r.Error, c.want) {
+			t.Errorf("%+v: %+v %v", c.p, r, perr)
+		}
+	}
+	// Only the tables' own: demo's test doesn't reach all projects'.
+	if _, perr := s.secretTest(proto.SecretTestParams{Project: "demo", Name: "NODE_AUTH_TOKEN"}); perr == nil {
+		t.Error("demo tested all projects' variable")
+	}
+	fakeSecrets(t, "token-in-output", errors.New("exit status 1"))
+	res, _ := s.secretTest(proto.SecretTestParams{Name: "NODE_AUTH_TOKEN"})
+	if r := res.(proto.SecretTestResult); r.OK || r.Error != "gh auth token failed (exit status 1)" {
+		t.Errorf("%+v", r)
+	}
+}

@@ -17,6 +17,26 @@ const (
 	MethodServerCodeHost = "server.codehost"
 )
 
+// MethodSecretTest gets one secret variable of threads from its source
+// in the server's own context, as a thread's start does, and says only
+// whether that worked: never the value (docs/SPEC.md §8.6, Secret
+// environment). The human's.
+const MethodSecretTest = "secret.test"
+
+// SecretTestParams name the variable: in Project's env table, all
+// projects' ([defaults.env]) when Project is "".
+type SecretTestParams struct {
+	Project string `json:"project,omitempty"`
+	Name    string `json:"name"`
+}
+
+// SecretTestResult is whether the source gave a value; Error says why
+// not (the source and an exit status, never a program's output).
+type SecretTestResult struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
 // ServerStatus is the result of server.status.
 type ServerStatus struct {
 	PID      int       `json:"pid"`

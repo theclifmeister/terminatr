@@ -4,15 +4,15 @@
     ├─ t-00│  1 General   2 All projects   3 Mods   4 Peers                                       │
     └─ t-00│ About: tm dev · server unknown · update check off                                    │deactivate
  ■ beta    │                                                                                      │
- └─ coordin│ Guard allowances             none                                                    │
-    ├─ T4 W│ Calls the guard lets through though a rule would refuse them: one command or file,   │
-    └─ t-00│ or a pattern where * matches anything. A project's add to all projects'. Allow a     │
-           │ refusal from Guard refusals; enter lists them to change or remove.                   │───────────
-           │                                                                                      │
-           │ Guard refusals               enter lists them                                        │s  /y
-           │ The calls the guard refused lately, with the whole command or file: allow one for    │
-           │ this project or all projects (the agent is told it may retry), or keep refusing it,  │
-           │ which stops listing it.                                                              │
+ └─ coordin│ this project or all projects (the agent is told it may retry), or keep refusing it,  │
+    ├─ T4 W│ which stops listing it.                                                              │
+    └─ t-00│                                                                                      │
+           │ Secret environment           none                                                    │───────────
+           │ Variables a thread gets in its environment when it starts, each from gh auth token,  │
+           │ a login keychain item (macOS) or the server's own environment: its tools (npm, a     │s  /y
+           │ registry client) use the token and the guard keeps the agent from printing it. A     │
+           │ project's add to all projects', replacing one of the same name. Only the name and    │
+           │ where the value comes from are kept; enter lists them to add, remove or test.        │
            │                                                                                      │
            │ Every project follows these, a new one too, unless it sets its own in its popup (a   │
            │ on the dashboard, prefix+a in a session); x there makes it follow these again.       │

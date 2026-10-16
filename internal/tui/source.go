@@ -47,6 +47,10 @@ type Data struct {
 	// Defaults are the all-projects settings, which a project follows
 	// for each one it doesn't set; nil when they can't be read.
 	Defaults *config.Safety
+	// Env are the secret environment's tables, names and sources only:
+	// all projects' under "", each project's own under its slug
+	// (config.EnvOf).
+	Env map[string]map[string]config.EnvSource
 	// AgentMod, AgentModBand and AgentModPane are the settings popup's Agent mod, Agent mod
 	// band and Agent mod pane (docs/SPEC.md §8.6); the band is on unless set
 	// off, the pane off unless set on.
@@ -285,6 +289,14 @@ type SettingsSource interface {
 	// it did. Both are refused when tm runs inside an agent.
 	GuardRefusals(slug string) ([]guardlog.Entry, error)
 	GuardDecide(e guardlog.Entry, how, session string) (string, error)
+	// SetSecretEnv names a secret variable of threads in table
+	// ("defaults" or "projects.<slug>") with its source, or removes it
+	// (src nil); TestSecretEnv has the server get the variable of
+	// project slug's table (all projects' for "") from its source, and
+	// says whether that worked, never the value. Both are refused when
+	// tm runs inside an agent.
+	SetSecretEnv(table, name string, src *config.EnvSource) error
+	TestSecretEnv(slug, name string) (string, error)
 }
 
 // LinkSource sets and works the links between projects.
@@ -627,6 +639,10 @@ func (s *ServerSource) Load() Data {
 		d.NeedsFirst = cfg.NeedsFirst
 		if all, err := cfg.AllProjects(); err == nil {
 			d.Defaults = &all
+		}
+		d.Env = map[string]map[string]config.EnvSource{"": cfg.EnvOf("")}
+		for _, slug := range cfg.ProjectSlugs() {
+			d.Env[slug] = cfg.EnvOf(slug)
 		}
 	}
 	d.NoAgent = sc.noAgent

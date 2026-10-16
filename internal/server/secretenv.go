@@ -12,6 +12,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/plat/shell"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // The secret environment of threads (docs/SPEC.md §8.6, Guard; config
@@ -53,6 +54,31 @@ func secretEnv(cfg *config.Config, slug string, base []string) (map[string]strin
 		out[name] = v
 	}
 	return out, fails
+}
+
+// secretTest gets the secret variable p names from its source with the
+// server's environment, as a thread's start does, and answers only
+// whether that worked: the value is dropped here (secret.test).
+func (s *Server) secretTest(p proto.SecretTestParams) (any, *proto.Error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return proto.SecretTestResult{Error: err.Error()}, nil
+	}
+	e, ok := cfg.EnvOf(p.Project)[p.Name]
+	if !ok {
+		where := config.AllProjectsName
+		if p.Project != "" {
+			where = p.Project
+		}
+		return nil, proto.Errorf(proto.ErrBadParams, "%s has no secret variable %q", where, p.Name)
+	}
+	if err := config.CheckEnv(p.Name, e); err != nil {
+		return proto.SecretTestResult{Error: err.Error()}, nil
+	}
+	if _, err := secretValue(e, s.baseEnv()); err != nil {
+		return proto.SecretTestResult{Error: err.Error()}, nil
+	}
+	return proto.SecretTestResult{OK: true}, nil
 }
 
 // secretValue is one source's value.

@@ -73,8 +73,12 @@ type fakeSource struct {
 	done         []string          // action.done: "mod action project/task ok"
 	// refusals are the guard's log's open refusals; decided its
 	// decisions: "id how session".
-	refusals    []guardlog.Entry
-	decided     []string
+	refusals []guardlog.Entry
+	decided  []string
+	// secrets are SetSecretEnv's calls ("table NAME=from", "table NAME
+	// removed"), secretTests TestSecretEnv's ("slug NAME").
+	secrets     []string
+	secretTests []string
 	restarted   []string // mod ids
 	fetchedMods []string // what FetchMod was asked for
 	templates   []mod.Template
@@ -350,6 +354,18 @@ func (f *fakeSource) GuardRefusals(slug string) ([]guardlog.Entry, error) {
 func (f *fakeSource) GuardDecide(e guardlog.Entry, how, session string) (string, error) {
 	f.decided = append(f.decided, e.ID+" "+how+" "+session)
 	return "decided " + how, nil
+}
+func (f *fakeSource) SetSecretEnv(table, name string, src *config.EnvSource) error {
+	if src == nil {
+		f.secrets = append(f.secrets, table+" "+name+" removed")
+		return config.UnsetEnv(table, name)
+	}
+	f.secrets = append(f.secrets, table+" "+name+"="+src.From)
+	return config.SetEnv(table, name, *src)
+}
+func (f *fakeSource) TestSecretEnv(slug, name string) (string, error) {
+	f.secretTests = append(f.secretTests, slug+" "+name)
+	return secretTestWord(name, true, ""), nil
 }
 func (f *fakeSource) SyncModel(id string) error {
 	f.settings = append(f.settings, "sync "+id)

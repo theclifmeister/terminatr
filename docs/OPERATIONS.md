@@ -250,6 +250,7 @@ The guard checks every tool call of a project's agents before it runs, in every 
 - **Guard rules**: each rule on or off. A rule turned off still never lets through what is never allowed (below).
 - **Guard allowances**: the calls the guard lets through though a rule would refuse them. Enter changes one, `x` removes it. A project's own add to all projects'.
 - **Guard refusals**: the calls refused lately, the latest first, with the whole command or file (enter shows a long one whole). `a` allows it for this project, `A` for all projects, `x` keeps refusing it and stops listing it. An allowance takes effect at once, is journaled, and the thread that was refused is told it may retry.
+- **Secret environment**: the variables threads get when they start (below), by name and where the value comes from; a project's list shows all projects' too, marked. `a` adds one: its name, then its source (gh auth token, a login keychain item, or a variable of the server's environment, which asks the item or variable's name). `x` removes the selected one, from all projects' when it is theirs. `t` tests it: the server gets the value from its source as a thread's start would and says only whether that worked, or why not (gh not logged in, no such keychain item, the server's environment lacks the variable); the value is never shown. A change applies to threads started from then on.
 
 The whole commands are kept in tm's state folder, which no agent or mod can read, not in the journal.
 
@@ -269,7 +270,7 @@ guard_mode = "learn"
 
 **What is never allowed**, in either mode and whatever the rules (Guard rules turned off included) and allowances say, while the guard is on: reading tm's own files (its run folder and sockets, its keys, the guard's log), printing a secret variable tm gives threads (below), force-pushing to a protected branch, and a thread merging (set `merge = "thread"` for that instead).
 
-**Secret environment for threads.** A thread's tools sometimes need a token the agent must not see, such as a private npm registry's. Name it in the project's table, or under `[defaults.env]` for all projects:
+**Secret environment for threads.** A thread's tools sometimes need a token the agent must not see, such as a private npm registry's. Add it from the **Secret environment** row of the project's settings, or all projects' (above), or name it in the project's table, or under `[defaults.env]` for all projects:
 
 ```toml
 [projects.web.env]
@@ -278,7 +279,7 @@ NPM_TOKEN = { from = "keychain:npm.acme.example" }   # a login keychain item (ma
 ARTIFACTORY_TOKEN = { from = "env:ARTIFACTORY_TOKEN" } # the server's own environment
 ```
 
-tm gets each value when a thread starts and puts it only in that thread's environment, so `npm ci` with an `.npmrc` such as `//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}` works. The value never goes into a prompt, a report, a log or the journal, and the guard refuses printing it (`printenv`, `echo $NAME`, `env`). Coordinators don't get it. If a source fails (gh not logged in, no such keychain item), the thread starts without that variable and the server log names it and why. For the `env:` source, the server's environment is the one it started with: export the variable before `tm server restart`. `tm doctor` warns when a project repository's `.npmrc` reads a registry token from a variable its threads don't get.
+tm keeps only the name and the source, never a value: it gets each value when a thread starts and puts it only in that thread's environment, so `npm ci` with an `.npmrc` such as `//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}` works. The value never goes into a prompt, a report, a log or the journal, and the guard refuses printing it (`printenv`, `echo $NAME`, `env`). Coordinators don't get it. If a source fails (gh not logged in, no such keychain item), the thread starts without that variable and the server log names it and why. Test it from the settings row (`t`) to find out before a thread needs it. For the `env:` source, the server's environment is the one it started with: export the variable before `tm server restart`. `tm doctor` warns when a project repository's `.npmrc` reads a registry token from a variable its threads don't get.
 
 ## Running a relay
 
