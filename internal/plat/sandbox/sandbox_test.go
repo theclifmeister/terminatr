@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -55,11 +54,7 @@ func child(args []string) int {
 		}
 		say("dial", err)
 	}
-	if runtime.GOOS == "linux" {
-		// A signal to another process (the parent) is refused; to itself it works.
-		say("signal", syscall.Kill(os.Getppid(), 0))
-		say("signal-self", syscall.Kill(os.Getpid(), 0))
-	}
+	signalProbes(say)
 	run := exec.Command(os.Args[0], "-test.run=^$")
 	run.Stdin, run.Stdout, run.Stderr = os.Stdin, os.Stderr, os.Stderr // no /dev/null to open
 	say("exec", run.Run())
