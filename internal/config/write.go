@@ -202,12 +202,12 @@ func Edit(data []byte, table, key string, value any) ([]byte, error) {
 	var out []string
 	done := false
 	for i, l := range lines {
-		if h, ok := header(l); ok {
+		if h, ok := header(l); ok || isArrayHeader(l) {
 			if in && !done {
 				out = insertAt(out, last, bare+" = "+val+"\n", len(out))
 				done = true
 			}
-			in = equal(h, want)
+			in = ok && equal(h, want)
 			if in {
 				found, last = true, len(out)
 			}
@@ -333,6 +333,8 @@ func Remove(data []byte, table, key string) []byte {
 	for _, l := range lines {
 		if h, ok := header(l); ok {
 			in = equal(h, want)
+		} else if isArrayHeader(l) {
+			in = false
 		} else if _, _, ok := setting(l, key); ok && in {
 			continue
 		}
@@ -446,6 +448,11 @@ func header(l string) ([]string, bool) {
 		return nil, false
 	}
 	return splitTable(m[1]), true
+}
+
+// isArrayHeader is an [[array of tables]] line: it ends the table before it.
+func isArrayHeader(l string) bool {
+	return arrayHeaderRE.MatchString(strings.TrimRight(l, "\r\n"))
 }
 
 // splitTable splits a table name at its dots, quotes and spaces removed.

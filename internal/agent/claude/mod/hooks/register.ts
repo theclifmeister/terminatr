@@ -616,27 +616,37 @@ function debug($: EngineInterface, text: string) {
 }
 
 // follow keeps the latest line of the feed, and the status entry and CI
-// toast with it when the band is on. The loop ends with the session (tm
-// watch exits after the "exited" line) or when the module unloads.
+// toast with it when the band is on. tm watch is started again when it
+// ends before the session does (the server was busy or went away for a
+// moment); the loop ends with the session (tm watch exits after the
+// "exited" line) or when the module unloads.
 async function follow($: EngineInterface, bin: string, id: string, isBand: boolean) {
-  let rest = ''
   let last: TerminatrWatch | null = null
-  try {
-    for await (const { stream, text } of $.process.spawn({ argv: [bin, 'watch', '--session', id, '--json'] })) {
-      if (stream !== 'stdout') continue
-      const got = feed(rest, text)
-      rest = got.rest
-      if (got.watches.length === 0) continue
-      for (const w of got.watches) {
-        const toast = isBand ? ciToast(last, w) : undefined
-        if (toast) $.ui.toast(toast, { timeoutMs: CI_TOAST_MS })
-        last = w
+  for (;;) {
+    let rest = ''
+    try {
+      for await (const { stream, text } of $.process.spawn({ argv: [bin, 'watch', '--session', id, '--json'] })) {
+        if (stream !== 'stdout') continue
+        const got = feed(rest, text)
+        rest = got.rest
+        if (got.watches.length === 0) continue
+        for (const w of got.watches) {
+          const toast = isBand ? ciToast(last, w) : undefined
+          if (toast) $.ui.toast(toast, { timeoutMs: CI_TOAST_MS })
+          last = w
+        }
+        const w = last
+        await update($, watch, () => w)
+        if (isBand) $.ui.status(statusText(w))
       }
-      const w = last
-      await update($, watch, () => w)
-      if (isBand) $.ui.status(statusText(w))
+    } catch (err) {
+      $.ui.log(`terminatr: tm watch: ${String(err)}`, { to: 'debug' })
     }
-  } catch (err) {
-    $.ui.log(`terminatr: tm watch: ${String(err)}`, { to: 'debug' })
+    if (last?.session.state === 'exited') return
+    try {
+      await $.clock.sleep(RETRY_MS)
+    } catch {
+      return // the module unloaded (or there is no clock): stop quietly
+    }
   }
 }

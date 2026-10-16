@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
+	"unicode/utf16"
 )
 
 // Moving a folder Claude has run in (tm project rename, docs/SPEC.md
@@ -23,13 +25,18 @@ func projectsDir(home string) string {
 
 // folderKey is Claude's name for a folder under projectsDir.
 func folderKey(dir string) string {
-	b := []byte(dir)
-	for i, c := range b {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9') {
-			b[i] = '-'
+	var sb strings.Builder
+	for _, r := range dir {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+			sb.WriteRune(r)
+			continue
+		}
+		// Claude replaces per UTF-16 unit: a rune outside the BMP is two.
+		for i := utf16.RuneLen(r); i > 0; i-- {
+			sb.WriteByte('-')
 		}
 	}
-	return string(b)
+	return sb.String()
 }
 
 // MoveDir carries Claude's conversations and settings for the folder from

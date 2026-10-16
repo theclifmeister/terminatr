@@ -55,12 +55,23 @@ func (c *console) Wait() error {
 }
 
 func (c *console) Stop(grace time.Duration) error {
+	// Once Wait has returned the pid is free for anyone: signal nothing.
+	select {
+	case <-c.exited:
+		return nil
+	default:
+	}
 	pid := c.cmd.Process.Pid
 	signal(pid, syscall.SIGHUP)
 	select {
 	case <-c.exited:
 		return nil
 	case <-time.After(grace):
+	}
+	select {
+	case <-c.exited:
+		return nil
+	default:
 	}
 	signal(pid, syscall.SIGKILL)
 	return fmt.Errorf("still running %v after SIGHUP; sent SIGKILL", grace)

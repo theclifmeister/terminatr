@@ -101,7 +101,7 @@ export CGO_ENABLED := 1
 CGO_CFLAGS ?= -O2 -g
 export CGO_CFLAGS += -DTM_LIBGHOSTTY=$(GHOSTTY_OUT)
 
-.PHONY: all build run test test-race test-claude test-codex e2e e2e-smoke e2e-smoke-race fuzz vet vet-cross ghostty toolchain env clean distclean zig-path release-ghostty release-snapshot release
+.PHONY: all build run test-bin test test-race test-claude test-codex e2e e2e-smoke e2e-smoke-race fuzz vet vet-cross ghostty toolchain env clean distclean zig-path release-ghostty release-snapshot release
 
 all: build
 
@@ -114,11 +114,26 @@ build: $(READY)
 run: build
 	@TM=bin/tm ./scripts/run.sh $(RUN_ARGS)
 
-test: $(READY)
-	$(GO) test ./...
+# The binaries the tests run: tm (testhooks), the e2e apps and fakeagent,
+# built once into TESTBIN and handed to the tests as E2E_BIN, so the cli
+# integration tests, fakeagent's tests and the e2e harness run the same
+# tm instead of each linking its own. go build leaves an up-to-date binary
+# alone, so `make test e2e-smoke` links tm once. E2E_RACE=1 builds tm with
+# -race, into a dir of its own. Under bin/, not .build/: a worktree
+# without a .build/ of its own uses the main checkout's (BUILD).
+TESTBIN := $(CURDIR)/bin/test$(if $(filter 1,$(E2E_RACE)),-race)
+TEST_APPS := printer fullscreen termquery
 
-test-race: $(READY)
-	$(GO) test -race ./...
+test-bin: $(READY)
+	@mkdir -p $(TESTBIN)
+	$(GO) build -tags testhooks $(if $(filter 1,$(E2E_RACE)),-race) -o $(TESTBIN)/tm ./cmd/tm
+	$(GO) build -o $(TESTBIN)/ $(addprefix ./internal/e2e/apps/,$(TEST_APPS)) ./internal/e2e/fakeagent
+
+test: test-bin
+	E2E_BIN=$(TESTBIN) $(GO) test ./...
+
+test-race: test-bin
+	E2E_BIN=$(TESTBIN) $(GO) test -race ./...
 
 FUZZTIME ?= 5m
 # -fuzzminimizetime: Go minimizes each new interesting input for up to 60s
@@ -136,7 +151,7 @@ fuzz: $(READY)
 	done
 
 # End-to-end scenarios (internal/e2e, docs/SPEC.md §15.2). The harness
-# builds tm itself; E2E_FLAGS=-update rewrites golden screens. The smoke
+# runs test-bin's binaries (run alone, go test builds them itself); E2E_FLAGS=-update rewrites golden screens. The smoke
 # set is every scenario named TestSmoke*. E2E_RACE=1 builds tm and the
 # test with -race; the harness then fails a scenario whose tm printed
 # "WARNING: DATA RACE". A race-built tm takes about a second to start, and
@@ -151,13 +166,13 @@ E2E_SHARD ?=
 E2E_TIMEOUT ?= $(if $(filter 1,$(E2E_RACE)),30m,10m)
 E2E_GOFLAGS := $(if $(filter 1,$(E2E_RACE)),-race) -timeout $(E2E_TIMEOUT)
 
-e2e: $(READY)
-	E2E=1 E2E_RACE=$(E2E_RACE) $(GO) test $(E2E_GOFLAGS) -count=1 ./internal/e2e $(E2E_FLAGS)
+e2e: test-bin
+	E2E=1 E2E_RACE=$(E2E_RACE) E2E_BIN=$(TESTBIN) $(GO) test $(E2E_GOFLAGS) -count=1 ./internal/e2e $(E2E_FLAGS)
 
-e2e-smoke: $(READY)
+e2e-smoke: test-bin
 	@run='^TestSmoke'; \
 	$(if $(E2E_SHARD),run=$$(GO=$(GO) scripts/e2e-shard.sh "$$run" $(E2E_SHARD)) || exit 1; echo "shard $(E2E_SHARD): -run '$$run'";) \
-	E2E=1 E2E_RACE=$(E2E_RACE) $(GO) test $(E2E_GOFLAGS) -count=1 -run "$$run" ./internal/e2e $(E2E_FLAGS)
+	E2E=1 E2E_RACE=$(E2E_RACE) E2E_BIN=$(TESTBIN) $(GO) test $(E2E_GOFLAGS) -count=1 -run "$$run" ./internal/e2e $(E2E_FLAGS)
 
 e2e-smoke-race:
 	$(MAKE) e2e-smoke E2E_RACE=1
