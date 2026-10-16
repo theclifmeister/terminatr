@@ -16,6 +16,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modbus"
 	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
 const panelManifest = `id = "panel"
@@ -58,18 +59,6 @@ func manifestServer(t *testing.T, manifest, grants string) *Server {
 	return &Server{log: log.New(os.Stderr, "", 0), modEv: newModEvents()}
 }
 
-// next is the sub's next event within a second.
-func next(t *testing.T, sub *modbus.Sub) modbus.Event {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	ev, err := sub.Next(ctx)
-	if err != nil {
-		t.Fatalf("no event: %v", err)
-	}
-	return ev
-}
-
 // TestModViews: a mod publishes its views' trees, a console polls them
 // and says what it shows (view.opened, view.closed), its keys reach the
 // mod (ui.key), only after which the mod may open a view, and its
@@ -78,7 +67,7 @@ func next(t *testing.T, sub *modbus.Sub) modbus.Event {
 func TestModViews(t *testing.T) {
 	s := panelServer(t, `"project_read", "views"`)
 	sub := s.SubscribeMod("panel", []string{"project_read", "views"}, nil)
-	if ev := next(t, sub); ev.Name != modbus.ModReady {
+	if ev := testwait.Next(t, sub, time.Second); ev.Name != modbus.ModReady {
 		t.Fatalf("first event %s", ev.Name)
 	}
 	call := func(method string, params any) error {
@@ -116,7 +105,7 @@ func TestModViews(t *testing.T) {
 	if tr := r.Views[0].Trees; len(tr) != 1 || tr[0].Project != "demo" || *tr[0].Count != 1 || tr[0].Tree.Rows[0].Spans[0].Text != "T1 [31mfix" {
 		t.Fatalf("trees %+v", tr)
 	}
-	ev := next(t, sub)
+	ev := testwait.Next(t, sub, time.Second)
 	if v, ok := ev.Data.(modbus.View); ev.Name != modbus.ViewOpened || !ok || v.Project != "demo" || v.Width != 70 {
 		t.Fatalf("event %s %+v", ev.Name, ev.Data)
 	}
@@ -128,7 +117,7 @@ func TestModViews(t *testing.T) {
 	if _, perr := s.modViewInput(proto.ModViewInputParams{Mod: "panel", View: "queue", Project: "demo", Kind: "cursor", Widget: "q", Row: "T1"}, 42, human); perr != nil {
 		t.Fatal(perr)
 	}
-	ev = next(t, sub)
+	ev = testwait.Next(t, sub, time.Second)
 	if in, ok := ev.Data.(modbus.Input); ev.Name != modbus.UICursor || !ok || in.Widget != "q" || in.Row != "T1" || in.Key != "" || in.Target.Project != "demo" {
 		t.Fatalf("event %s %+v", ev.Name, ev.Data)
 	}
@@ -145,7 +134,7 @@ func TestModViews(t *testing.T) {
 	if _, perr := s.modViewInput(proto.ModViewInputParams{Mod: "panel", View: "queue", Project: "demo", Kind: "key", Widget: "q", Row: "T1", Key: "o"}, 42, human); perr != nil {
 		t.Fatal(perr)
 	}
-	ev = next(t, sub)
+	ev = testwait.Next(t, sub, time.Second)
 	if in, ok := ev.Data.(modbus.Input); ev.Name != modbus.UIKey || !ok || in.Row != "T1" || in.Key != "o" || in.Target.Project != "demo" {
 		t.Fatalf("event %s %+v", ev.Name, ev.Data)
 	}
@@ -159,8 +148,8 @@ func TestModViews(t *testing.T) {
 
 	// A restart: no trees, and the tab on show opens again.
 	sub = s.SubscribeMod("panel", []string{"project_read", "views"}, nil)
-	next(t, sub) // mod.ready
-	if ev := next(t, sub); ev.Name != modbus.ViewOpened {
+	testwait.Next(t, sub, time.Second) // mod.ready
+	if ev := testwait.Next(t, sub, time.Second); ev.Name != modbus.ViewOpened {
 		t.Fatalf("after a restart: %s", ev.Name)
 	}
 	res, _ = s.modViews(proto.ModViewsParams{Shown: shown[:1]}, 42, human)
@@ -169,7 +158,7 @@ func TestModViews(t *testing.T) {
 	}
 	// The console shows nothing any more.
 	s.modViews(proto.ModViewsParams{}, 42, human)
-	if ev := next(t, sub); ev.Name != modbus.ViewClosed {
+	if ev := testwait.Next(t, sub, time.Second); ev.Name != modbus.ViewClosed {
 		t.Fatalf("closing: %s", ev.Name)
 	}
 	if _, perr := s.modViews(proto.ModViewsParams{}, 42, caller.Caller{Kind: caller.Thread}); perr == nil {
@@ -209,7 +198,7 @@ views = true
 func TestModSections(t *testing.T) {
 	s := manifestServer(t, sectionManifest, `"project_read", "views"`)
 	sub := s.SubscribeMod("panel", []string{"project_read", "views"}, nil)
-	next(t, sub) // mod.ready
+	testwait.Next(t, sub, time.Second) // mod.ready
 	call := func(params any) error {
 		raw, _ := json.Marshal(params)
 		_, err := s.CallMod(context.Background(), "panel", "ui.view.set", raw)
@@ -257,7 +246,7 @@ func TestModSections(t *testing.T) {
 	}
 	got := map[string]modbus.View{}
 	for range 2 {
-		ev := next(t, sub)
+		ev := testwait.Next(t, sub, time.Second)
 		v := ev.Data.(modbus.View)
 		if ev.Name != modbus.ViewOpened {
 			t.Fatalf("event %s", ev.Name)
@@ -277,11 +266,11 @@ func TestModSections(t *testing.T) {
 	// the thread's opens.
 	shown[0].Task, shown[0].Thread = "", "t-0003"
 	s.modViews(proto.ModViewsParams{Shown: shown[:2]}, 42, human)
-	ev := next(t, sub)
+	ev := testwait.Next(t, sub, time.Second)
 	if v := ev.Data.(modbus.View); ev.Name != modbus.ViewClosed || v.Task != "T12" {
 		t.Fatalf("event %s %+v", ev.Name, ev.Data)
 	}
-	ev = next(t, sub)
+	ev = testwait.Next(t, sub, time.Second)
 	if v := ev.Data.(modbus.View); ev.Name != modbus.ViewOpened || v.Thread != "t-0003" {
 		t.Fatalf("event %s %+v", ev.Name, ev.Data)
 	}
@@ -308,7 +297,7 @@ views = true
 `, "API", api, 1)
 			s := manifestServer(t, man, `"views"`)
 			sub := s.SubscribeMod("panel", []string{"views"}, nil)
-			next(t, sub) // mod.ready
+			testwait.Next(t, sub, time.Second) // mod.ready
 			call := func(params any) error {
 				raw, _ := json.Marshal(params)
 				_, err := s.CallMod(context.Background(), "panel", "ui.view.set", raw)
@@ -366,7 +355,7 @@ views = true
 func TestModSidebarSections(t *testing.T) {
 	s := manifestServer(t, sidebarManifest, `"project_read", "views"`)
 	sub := s.SubscribeMod("panel", []string{"project_read", "views"}, nil)
-	next(t, sub) // mod.ready
+	testwait.Next(t, sub, time.Second) // mod.ready
 	call := func(params any) error {
 		raw, _ := json.Marshal(params)
 		_, err := s.CallMod(context.Background(), "panel", "ui.view.set", raw)
@@ -423,7 +412,7 @@ func TestModSidebarSections(t *testing.T) {
 		t.Fatalf("ci %+v", ci)
 	}
 	for range 2 {
-		if ev := next(t, sub); ev.Name != modbus.ViewOpened || ev.Data.(modbus.View).Project != "demo" {
+		if ev := testwait.Next(t, sub, time.Second); ev.Name != modbus.ViewOpened || ev.Data.(modbus.View).Project != "demo" {
 			t.Fatalf("event %s %+v", ev.Name, ev.Data)
 		}
 	}

@@ -3,34 +3,23 @@ package ticker
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/gittest"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
-func gitT(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t", "-c", "init.defaultBranch=main"}, args...)...)
-	cmd.Dir = dir
-	b, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, b)
-	}
-	return strings.TrimSpace(string(b))
-}
-
 func commitT(t *testing.T, dir, file, body, msg string) string {
 	t.Helper()
 	os.WriteFile(filepath.Join(dir, file), []byte(body), 0o644)
-	gitT(t, dir, "add", file)
-	gitT(t, dir, "commit", "-q", "-m", msg)
-	return gitT(t, dir, "rev-parse", "HEAD")
+	gittest.Run(t, dir, "add", file)
+	gittest.Run(t, dir, "commit", "-q", "-m", msg)
+	return gittest.Run(t, dir, "rev-parse", "HEAD")
 }
 
 // gitFixture is an origin, the user's checkout of it on main ("repo")
@@ -40,12 +29,12 @@ func gitFixture(t *testing.T) (repo, other string) {
 	root := t.TempDir()
 	origin := filepath.Join(root, "origin.git")
 	repo, other = filepath.Join(root, "repo"), filepath.Join(root, "other")
-	gitT(t, root, "init", "--bare", "-q", "-b", "main", origin)
-	gitT(t, root, "clone", "-q", origin, repo)
+	gittest.Run(t, root, "init", "--bare", "-q", "-b", "main", origin)
+	gittest.Run(t, root, "clone", "-q", origin, repo)
 	commitT(t, repo, "f", "one\n", "first")
-	gitT(t, repo, "push", "-q", "origin", "main")
-	gitT(t, repo, "remote", "set-head", "origin", "main")
-	gitT(t, root, "clone", "-q", origin, other)
+	gittest.Run(t, repo, "push", "-q", "origin", "main")
+	gittest.Run(t, repo, "remote", "set-head", "origin", "main")
+	gittest.Run(t, root, "clone", "-q", origin, other)
 	return repo, other
 }
 
@@ -53,7 +42,7 @@ func gitFixture(t *testing.T) (repo, other string) {
 func push(t *testing.T, other, file, body, msg string) string {
 	t.Helper()
 	h := commitT(t, other, file, body, msg)
-	gitT(t, other, "push", "-q", "origin", "main")
+	gittest.Run(t, other, "push", "-q", "origin", "main")
 	return h
 }
 
@@ -74,11 +63,11 @@ func TestSyncCheckout(t *testing.T) {
 	}
 	head := push(t, other, "g", "two\n", "Merge pull request #61 from a/b")
 	r.sweep(time.Minute) // not due yet
-	if gitT(t, repo, "rev-parse", "HEAD") == head {
+	if gittest.Run(t, repo, "rev-parse", "HEAD") == head {
 		t.Fatal("synced before the poll")
 	}
 	r.sweep(2 * time.Minute)
-	if got := gitT(t, repo, "rev-parse", "HEAD"); got != head {
+	if got := gittest.Run(t, repo, "rev-parse", "HEAD"); got != head {
 		t.Fatalf("not fast-forwarded: %s", got)
 	}
 	if j := r.journal(); !strings.Contains(j, "ticker repo.fast-forward "+repo+" main ") {
@@ -95,17 +84,17 @@ func TestSyncCheckout(t *testing.T) {
 	if s := Seen(r.tk.o.State, "demo"); s.Checkouts[repo] != want {
 		t.Fatalf("seen %+v", s)
 	}
-	if gitT(t, repo, "rev-parse", "HEAD") != head {
+	if gittest.Run(t, repo, "rev-parse", "HEAD") != head {
 		t.Fatal("moved a dirty checkout")
 	}
 
-	gitT(t, repo, "checkout", "-q", "--", "f")
+	gittest.Run(t, repo, "checkout", "-q", "--", "f")
 	os.WriteFile(filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml"), []byte("[projects.demo]\nfast_forward_checkout = false\n"), 0o600)
 	r.sweep(2 * time.Minute)
 	if c := Checkouts(r.tk.o.State, "demo"); c[repo] != "local main is 1 behind origin (fast-forward is off)" {
 		t.Fatalf("notes %v", c)
 	}
-	if gitT(t, repo, "rev-parse", "HEAD") != head {
+	if gittest.Run(t, repo, "rev-parse", "HEAD") != head {
 		t.Fatal("fast-forwarded with the setting off")
 	}
 }
@@ -116,10 +105,10 @@ func TestSyncCheckout(t *testing.T) {
 // pr-conflict item, which says when the thread could not be prompted.
 func TestFollowMain(t *testing.T) {
 	repo, other := gitFixture(t)
-	gitT(t, repo, "checkout", "-q", "-b", "tm/demo/t-0001-fix-it")
+	gittest.Run(t, repo, "checkout", "-q", "-b", "tm/demo/t-0001-fix-it")
 	prHead := commitT(t, repo, "h", "thread\n", "thread work")
-	gitT(t, repo, "push", "-q", "origin", "HEAD")
-	gitT(t, repo, "checkout", "-q", "main")
+	gittest.Run(t, repo, "push", "-q", "origin", "HEAD")
+	gittest.Run(t, repo, "checkout", "-q", "main")
 	r := newRigIn(t, repo, []string{repo})
 	pr := fmt.Sprintf(`{"number":9,"url":"https://github.com/o/r/pull/9","state":"OPEN","reviewDecision":"","statusCheckRollup":[],"headRefOid":%q,"baseRefName":"main","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN"}`, prHead)
 	for range 20 {
@@ -195,11 +184,11 @@ func TestFollowMainOwnMerge(t *testing.T) {
 	repo, other := gitFixture(t)
 	heads := map[string]string{}
 	for _, b := range []struct{ branch, file string }{{"tm/demo/t-0001-fix-it", "h"}, {"tm/demo/t-0002-other", "i"}} {
-		gitT(t, repo, "checkout", "-q", "-b", b.branch, "main")
+		gittest.Run(t, repo, "checkout", "-q", "-b", b.branch, "main")
 		heads[b.branch] = commitT(t, repo, b.file, "thread\n", "thread work")
-		gitT(t, repo, "push", "-q", "origin", "HEAD")
+		gittest.Run(t, repo, "push", "-q", "origin", "HEAD")
 	}
-	gitT(t, repo, "checkout", "-q", "main")
+	gittest.Run(t, repo, "checkout", "-q", "main")
 	r := newRigIn(t, repo, []string{repo})
 	if _, err := thread.Create(r.p, thread.Record{Title: "Other", Task: "T2", Agent: "claude", Repo: repo,
 		Branch: "tm/demo/t-0002-other", State: thread.Running, Session: "s-3"}); err != nil {
@@ -214,9 +203,9 @@ func TestFollowMainOwnMerge(t *testing.T) {
 	r.sweep(0)
 	r.handleAll()
 
-	gitT(t, other, "fetch", "-q", "origin")
-	gitT(t, other, "-c", "user.name=t", "-c", "user.email=t@t", "merge", "-q", "--no-ff", "-m", "Merge pull request #9 from o/tm/demo/t-0001-fix-it", "origin/tm/demo/t-0001-fix-it")
-	gitT(t, other, "push", "-q", "origin", "main")
+	gittest.Run(t, other, "fetch", "-q", "origin")
+	gittest.Run(t, other, "-c", "user.name=t", "-c", "user.email=t@t", "merge", "-q", "--no-ff", "-m", "Merge pull request #9 from o/tm/demo/t-0001-fix-it", "origin/tm/demo/t-0001-fix-it")
+	gittest.Run(t, other, "push", "-q", "origin", "main")
 	r.sweep(2 * time.Minute)
 	if len(r.host.prompts) != 0 {
 		t.Fatalf("prompts %q", r.host.prompts)
@@ -291,10 +280,10 @@ func TestConflictPromptRefresh(t *testing.T) {
 // open; the merge completes its task.
 func TestFollowMainMergeHint(t *testing.T) {
 	repo, other := gitFixture(t)
-	gitT(t, repo, "checkout", "-q", "-b", "tm/demo/t-0001-fix-it")
+	gittest.Run(t, repo, "checkout", "-q", "-b", "tm/demo/t-0001-fix-it")
 	prHead := commitT(t, repo, "h", "thread\n", "thread work")
-	gitT(t, repo, "push", "-q", "origin", "HEAD")
-	gitT(t, repo, "checkout", "-q", "main")
+	gittest.Run(t, repo, "push", "-q", "origin", "HEAD")
+	gittest.Run(t, repo, "checkout", "-q", "main")
 	r := newRigIn(t, repo, []string{repo})
 	r.setConfig("[projects.demo]\ncomplete_tasks = \"merged\"\n")
 	r.addTask("Fix it", "review", "t-0001", "")
@@ -303,10 +292,10 @@ func TestFollowMainMergeHint(t *testing.T) {
 	r.sweep(0)
 	r.handleAll()
 
-	gitT(t, other, "fetch", "-q", "origin")
-	gitT(t, other, "-c", "user.name=t", "-c", "user.email=t@t", "merge", "-q", "--no-ff", "-m", "Ship the fix", "origin/tm/demo/t-0001-fix-it")
-	gitT(t, other, "push", "-q", "origin", "main")
-	merge := gitT(t, other, "rev-parse", "HEAD")
+	gittest.Run(t, other, "fetch", "-q", "origin")
+	gittest.Run(t, other, "-c", "user.name=t", "-c", "user.email=t@t", "merge", "-q", "--no-ff", "-m", "Ship the fix", "origin/tm/demo/t-0001-fix-it")
+	gittest.Run(t, other, "push", "-q", "origin", "main")
+	merge := gittest.Run(t, other, "rev-parse", "HEAD")
 	r.gh = append(r.gh, fmt.Sprintf(`{"number":9,"url":"https://github.com/o/r/pull/9","state":"MERGED","mergedAt":"2026-10-04T12:01:00Z","mergeCommit":{"oid":%q},"statusCheckRollup":[],"headRefOid":%q,"baseRefName":"main"}`, merge, prHead))
 	r.sweep(2 * time.Minute)
 	if r.ghN != 3 {
@@ -335,10 +324,10 @@ func TestFollowMainMergeHint(t *testing.T) {
 func TestFollowMainSquashHint(t *testing.T) {
 	for _, squash := range []bool{true, false} {
 		repo, other := gitFixture(t)
-		gitT(t, repo, "checkout", "-q", "-b", "tm/demo/t-0001-fix-it")
+		gittest.Run(t, repo, "checkout", "-q", "-b", "tm/demo/t-0001-fix-it")
 		prHead := commitT(t, repo, "h", "thread\n", "thread work")
-		gitT(t, repo, "push", "-q", "origin", "HEAD")
-		gitT(t, repo, "checkout", "-q", "main")
+		gittest.Run(t, repo, "push", "-q", "origin", "HEAD")
+		gittest.Run(t, repo, "checkout", "-q", "main")
 		r := newRigIn(t, repo, []string{repo})
 		r.setConfig("[projects.demo]\ncomplete_tasks = \"merged\"\n")
 		r.addTask("Fix it", "review", "t-0001", "")

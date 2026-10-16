@@ -2,27 +2,16 @@ package cli
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	_ "github.com/theclifmeister/terminatr/internal/agent/claude" // registers the Go agent (Mover); the tui import did before T165
+	"github.com/theclifmeister/terminatr/internal/gittest"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
-
-func git(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t", "-c", "init.defaultBranch=main"}, args...)...)
-	cmd.Dir = dir
-	b, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, b)
-	}
-	return strings.TrimSpace(string(b))
-}
 
 // threadWithWorktree makes a repo and a thread of project slug with a
 // live worktree of it, as tm thread start would.
@@ -30,10 +19,10 @@ func threadWithWorktree(t *testing.T, h *harness, slug string) (repo string, rec
 	t.Helper()
 	repo = filepath.Join(t.TempDir(), "repo")
 	os.MkdirAll(repo, 0o755)
-	git(t, repo, "init", "-q")
+	gittest.Run(t, repo, "init", "-q")
 	os.WriteFile(filepath.Join(repo, "f"), []byte("x"), 0o644)
-	git(t, repo, "add", ".")
-	git(t, repo, "commit", "-q", "-m", "c")
+	gittest.Run(t, repo, "add", ".")
+	gittest.Run(t, repo, "commit", "-q", "-m", "c")
 	h.ok(human, "project", "repo", "add", repo, "--project", slug)
 	p, err := project.Open(slug)
 	if err != nil {
@@ -42,7 +31,7 @@ func threadWithWorktree(t *testing.T, h *harness, slug string) (repo string, rec
 	wt, _ := thread.WorktreeDir(slug, "t-0001", "Fix it")
 	branch, _ := thread.BranchName("", slug, "t-0001", "", "Fix it")
 	os.MkdirAll(filepath.Dir(wt), 0o755)
-	git(t, repo, "worktree", "add", "-q", "-b", branch, wt)
+	gittest.Run(t, repo, "worktree", "add", "-q", "-b", branch, wt)
 	rec, err = thread.Create(p, thread.Record{Title: "Fix it", Agent: "claude", Repo: repo, Branch: branch, Worktree: wt,
 		State: thread.Stopped, AgentSID: "sid-1", Prompted: true})
 	if err != nil {
@@ -102,10 +91,10 @@ func TestProjectRename(t *testing.T) {
 		t.Fatalf("record: %v %+v", err, r)
 	}
 	real, _ := filepath.EvalSymlinks(wt)
-	if list := git(t, repo, "worktree", "list", "--porcelain"); !strings.Contains(list, "worktree "+real+"\n") || strings.Contains(list, "prunable") {
+	if list := gittest.Run(t, repo, "worktree", "list", "--porcelain"); !strings.Contains(list, "worktree "+real+"\n") || strings.Contains(list, "prunable") {
 		t.Fatalf("worktree list:\n%s", list)
 	}
-	if b := git(t, wt, "rev-parse", "--abbrev-ref", "HEAD"); b != r.Branch {
+	if b := gittest.Run(t, wt, "rev-parse", "--abbrev-ref", "HEAD"); b != r.Branch {
 		t.Fatalf("worktree branch %q", b)
 	}
 
@@ -183,14 +172,14 @@ func TestResolveDiscard(t *testing.T) {
 	h.expect(1, "coordinator-only", thr, "thread", "resolve", rec.ID, "--discard", "--project", "demo")
 
 	// A commit on the branch is unsaved work: refused, nothing touched.
-	git(t, rec.Worktree, "add", ".")
-	git(t, rec.Worktree, "commit", "-q", "-m", "work")
+	gittest.Run(t, rec.Worktree, "add", ".")
+	gittest.Run(t, rec.Worktree, "commit", "-q", "-m", "work")
 	os.WriteFile(filepath.Join(rec.Worktree, "more.md"), []byte("x"), 0o644)
 	h.expect(1, "unsaved work", coord, "thread", "resolve", rec.ID, "--discard", "--project", "demo")
 	if _, err := os.Stat(rec.Worktree); err != nil {
 		t.Fatalf("worktree touched by a refused discard: %v", err)
 	}
-	git(t, rec.Worktree, "reset", "-q", "--hard", "HEAD~1")
+	gittest.Run(t, rec.Worktree, "reset", "-q", "--hard", "HEAD~1")
 	os.WriteFile(filepath.Join(rec.Worktree, "report.md"), []byte("notes"), 0o644)
 
 	out := h.ok(coord, "thread", "resolve", rec.ID, "--discard", "--project", "demo")

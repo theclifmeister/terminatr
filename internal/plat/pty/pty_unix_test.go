@@ -32,22 +32,6 @@ func TestStart(t *testing.T) {
 	}
 }
 
-// waitFor reads c until its output contains s.
-func waitFor(t *testing.T, c Console, s string) {
-	t.Helper()
-	var out []byte
-	buf := make([]byte, 1024)
-	c.SetReadDeadline(time.Now().Add(5 * time.Second))
-	defer c.SetReadDeadline(time.Time{})
-	for !strings.Contains(string(out), s) {
-		n, err := c.Read(buf)
-		out = append(out, buf[:n]...)
-		if err != nil {
-			t.Fatalf("waiting for %q: %v (output %q)", s, err, out)
-		}
-	}
-}
-
 func TestResizeAndForeground(t *testing.T) {
 	c, err := Start([]string{"/bin/sh", "-c", "echo ready; read x; stty size; sleep 5"}, "/", testEnv, 80, 24)
 	if err != nil {

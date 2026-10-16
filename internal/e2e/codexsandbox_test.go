@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/gittest"
 )
 
 // sandboxArgs picks the profile's -c flags out of a thread's launch.
@@ -79,23 +80,16 @@ func TestSmokeCodexSandbox(t *testing.T) {
 		os.MkdirAll(d, 0o700)
 	}
 	os.WriteFile(filepath.Join(proj, "TASKS.md"), []byte("tasks\n"), 0o600)
-	git := func(dir string, args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=t", "-c", "user.email=t@t"}, args...)...)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
 	// origin in the temporary folder, which the profile makes writable:
 	// a push then writes only what a push to a real remote writes here.
 	origin, other := filepath.Join(t.TempDir(), "origin.git"), filepath.Join(root, "other")
-	git(root, "init", "-q", "--bare", "-b", "main", origin)
-	git(repo, "init", "-q", "-b", "main")
-	git(repo, "commit", "-q", "--allow-empty", "-m", "first")
-	git(repo, "remote", "add", "origin", origin)
-	git(repo, "push", "-q", "origin", "main")
-	git(repo, "worktree", "add", "-q", "-b", "wt", wt)
-	git(repo, "worktree", "add", "-q", "-b", "other", other)
+	gittest.Run(t, root, "init", "-q", "--bare", "-b", "main", origin)
+	gittest.Run(t, repo, "init", "-q", "-b", "main")
+	gittest.Run(t, repo, "commit", "-q", "--allow-empty", "-m", "first")
+	gittest.Run(t, repo, "remote", "add", "origin", origin)
+	gittest.Run(t, repo, "push", "-q", "origin", "main")
+	gittest.Run(t, repo, "worktree", "add", "-q", "-b", "wt", wt)
+	gittest.Run(t, repo, "worktree", "add", "-q", "-b", "other", other)
 
 	// The server on a socket the profile doesn't make writable.
 	env.Socket = filepath.Join(run, "tm.sock")

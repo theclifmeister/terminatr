@@ -20,8 +20,9 @@ import (
 	"github.com/theclifmeister/terminatr/internal/client/clienttest"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
-	"github.com/theclifmeister/terminatr/internal/plat/ipc"
+	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/testwait"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
 
@@ -30,11 +31,7 @@ import (
 func testPaths(t *testing.T) client.Paths {
 	t.Helper()
 	home := t.TempDir()
-	sockDir, err := os.MkdirTemp(ipc.ShortDir(), "tmt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(sockDir) })
+	sockDir := ipctest.ShortTempDir(t, "tmt")
 	t.Setenv("TERMINATR_HOME", home)
 	t.Setenv("TERMINATR_SOCKET", filepath.Join(sockDir, "tm.sock"))
 	t.Setenv("TERMINATR_LAUNCHD", "off")
@@ -142,17 +139,6 @@ func call(t *testing.T, c *client.Client, method string, params, result any) {
 	}
 }
 
-func eventually(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
 func TestControlSessionLifecycle(t *testing.T) {
 	p := testPaths(t)
 	r := startServer(t, p)
@@ -180,7 +166,7 @@ func TestControlSessionLifecycle(t *testing.T) {
 	call(t, c, proto.MethodSessionKeys, proto.SessionKeysParams{ID: id,
 		Data: "echo id=$TERMINATR_SESSION cc=${CLAUDECODE:-none}${CLAUDE_CODE_SESSION_ID:-none} tmux=${TMUX:-none} keep=$KEEP term=$TERM\r"}, nil)
 	want := "id=s-1 cc=nonenone tmux=none keep=me term=xterm-256color"
-	eventually(t, "the echo", func() bool {
+	testwait.Eventually(t, "the echo", func() bool {
 		var rr proto.SessionReadResult
 		call(t, c, proto.MethodSessionRead, proto.SessionReadParams{ID: id}, &rr)
 		return strings.Contains(rr.Text, want)

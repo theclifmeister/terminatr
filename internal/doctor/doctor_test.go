@@ -19,10 +19,12 @@ import (
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/client/clienttest"
 	"github.com/theclifmeister/terminatr/internal/codehost"
+	"github.com/theclifmeister/terminatr/internal/gittest"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/models/modelstest"
 	"github.com/theclifmeister/terminatr/internal/plat/flock"
+	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/service"
@@ -37,11 +39,7 @@ func testDeps(t *testing.T) Deps {
 	t.Helper()
 	h := t.TempDir()
 	t.Setenv("TERMINATR_HOME", h)
-	run, err := os.MkdirTemp("/tmp", "tmdoc-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(run) })
+	run := ipctest.ShortTempDir(t, "tmdoc-")
 	os.Chmod(run, 0o700)
 	p := client.Paths{Home: h, RunDir: run, Socket: filepath.Join(run, "tm.sock"), Lock: filepath.Join(run, "server.lock"),
 		PID: filepath.Join(run, "server.pid"), Log: filepath.Join(h, "logs", "server.log"), Sessions: filepath.Join(h, "state", "sessions.json")}
@@ -355,23 +353,12 @@ func TestSandboxUserns(t *testing.T) {
 	}
 }
 
-func git(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t", "-c", "init.defaultBranch=main"}, args...)...)
-	cmd.Dir = dir
-	b, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, b)
-	}
-	return strings.TrimSpace(string(b))
-}
-
 func TestLeftovers(t *testing.T) {
 	d := testDeps(t)
 	repo := filepath.Join(t.TempDir(), "repo")
 	os.MkdirAll(repo, 0o755)
-	git(t, repo, "init", "-q")
-	git(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+	gittest.Run(t, repo, "init", "-q")
+	gittest.Run(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
 	p, err := project.New(project.Options{Slug: "demo", Repos: []string{repo}})
 	if err != nil {
 		t.Fatal(err)
@@ -398,12 +385,12 @@ func TestLeftovers(t *testing.T) {
 	dirty := mk("Done dirty", thread.Resolved)
 	os.WriteFile(filepath.Join(dirty.Worktree, "wip.txt"), []byte("x"), 0o644)
 	// A branch with work on it and no thread: never offered for removal.
-	git(t, repo, "branch", "tm/demo/t-0009-gone")
-	git(t, repo, "checkout", "-q", "tm/demo/t-0009-gone")
-	git(t, repo, "commit", "-q", "--allow-empty", "-m", "work")
-	git(t, repo, "checkout", "-q", "main")
+	gittest.Run(t, repo, "branch", "tm/demo/t-0009-gone")
+	gittest.Run(t, repo, "checkout", "-q", "tm/demo/t-0009-gone")
+	gittest.Run(t, repo, "commit", "-q", "--allow-empty", "-m", "work")
+	gittest.Run(t, repo, "checkout", "-q", "main")
 	// A resolved thread's second branch (a second PR's), merged: offered.
-	git(t, repo, "branch", "tm/demo/t-0002-second")
+	gittest.Run(t, repo, "branch", "tm/demo/t-0002-second")
 	// An empty folder with no thread at all.
 	stray := filepath.Join(d.Paths.Home, "worktrees", "demo", "t-0042-stray")
 	os.MkdirAll(stray, 0o755)
@@ -455,7 +442,7 @@ func TestLeftovers(t *testing.T) {
 			t.Errorf("%s removed", kept)
 		}
 	}
-	branches := git(t, repo, "branch", "--list", "tm/*")
+	branches := gittest.Run(t, repo, "branch", "--list", "tm/*")
 	if strings.Contains(branches, clean.Branch) || strings.Contains(branches, "t-0002-second") || !strings.Contains(branches, "t-0009-gone") || !strings.Contains(branches, running.Branch) {
 		t.Errorf("branches after fix:\n%s", branches)
 	}

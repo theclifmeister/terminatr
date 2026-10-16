@@ -3,8 +3,9 @@ package codehost
 import (
 	"errors"
 	"os"
-	"os/exec"
 	"testing"
+
+	"github.com/theclifmeister/terminatr/internal/gittest"
 )
 
 func TestParseRemote(t *testing.T) {
@@ -65,13 +66,7 @@ func TestGitPath(t *testing.T) {
 // override wins.
 func TestDetect(t *testing.T) {
 	repo := t.TempDir()
-	run := func(args ...string) {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = repo
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v %s", args, err, out)
-		}
-	}
+	run := gittest.In(t, repo)
 	run("init", "-q")
 	if got := Detect(repo, Config{}); got != (Target{Kind: NoKind}) {
 		t.Fatalf("no origin: %+v", got)

@@ -12,6 +12,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
+	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
 // TestMayAddress: a session-addressed call names the caller's own session
@@ -146,7 +147,7 @@ func TestScopeInSession(t *testing.T) {
 	call(t, c, proto.MethodSessionKeys, proto.SessionKeysParams{ID: ids[0],
 		Data: fmt.Sprintf("'%s' scope-probe '%s' %s\r", os.Args[0], p.Socket, ids[1])}, nil)
 	want := "probe own=ok other=refused hook=refused wait=refused list=ok " + ids[0] + " scoped done"
-	eventually(t, "the probe", func() bool {
+	testwait.Eventually(t, "the probe", func() bool {
 		var rr proto.SessionReadResult
 		call(t, c, proto.MethodSessionRead, proto.SessionReadParams{ID: ids[0]}, &rr)
 		if strings.Contains(rr.Text, "probe ") && strings.Contains(rr.Text, " done") && !strings.Contains(rr.Text, want) {

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
-	"github.com/theclifmeister/terminatr/internal/plat/ipc"
+	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
 )
@@ -69,11 +69,7 @@ func TestModAgentTools(t *testing.T) {
 	write("mods/lint/main.ts", lintToolMain)
 	write("config.toml", "[mods.lint]\nenabled = true\ngrants = [\"tools\"]\nprojects = [\"proj\"]\n[mods.pr-ci-column]\nenabled = false\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n[mods.ticker]\nenabled = false\n")
 
-	rt, err := os.MkdirTemp(ipc.ShortDir(), "tmmod")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(rt) })
+	rt := ipctest.ShortTempDir(t, "tmmod")
 	s := &Server{opts: Options{Bin: os.Args[0]}, log: log.New(&testWriter{t: t}, "server: ", 0),
 		sessions: map[string]*session.Session{}, records: map[string]SessionRecord{}, modEv: newModEvents()}
 

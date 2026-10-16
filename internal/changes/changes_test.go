@@ -3,20 +3,12 @@ package changes
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
-)
 
-func run(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t", "-c", "init.defaultBranch=main"}, args...)...)
-	cmd.Dir = dir
-	if b, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, b)
-	}
-}
+	"github.com/theclifmeister/terminatr/internal/gittest"
+)
 
 func write(t *testing.T, dir, name, text string) {
 	t.Helper()
@@ -36,15 +28,15 @@ func repo(t *testing.T) (root, repo string) {
 	root = t.TempDir()
 	origin := filepath.Join(root, "origin.git")
 	repo = filepath.Join(root, "repo")
-	run(t, root, "init", "--bare", "-q", origin)
-	run(t, root, "clone", "-q", origin, repo)
+	gittest.Run(t, root, "init", "--bare", "-q", origin)
+	gittest.Run(t, root, "clone", "-q", origin, repo)
 	write(t, repo, "keep.txt", "a\nb\nc\n")
 	write(t, repo, "old.txt", "one\ntwo\nthree\nfour\nfive\n")
 	write(t, repo, "gone.txt", "x\n")
-	run(t, repo, "add", ".")
-	run(t, repo, "commit", "-q", "-m", "c")
-	run(t, repo, "push", "-q", "origin", "HEAD:main")
-	run(t, repo, "remote", "set-head", "origin", "main")
+	gittest.Run(t, repo, "add", ".")
+	gittest.Run(t, repo, "commit", "-q", "-m", "c")
+	gittest.Run(t, repo, "push", "-q", "origin", "HEAD:main")
+	gittest.Run(t, repo, "remote", "set-head", "origin", "main")
 	return root, repo
 }
 
@@ -62,14 +54,14 @@ func byPath(cs *Changeset) map[string]File {
 func TestStartedThread(t *testing.T) {
 	root, repo := repo(t)
 	wt := filepath.Join(root, "wt")
-	run(t, repo, "worktree", "add", "-q", "-b", "tm/p/t-0001-x", wt, "origin/main")
+	gittest.Run(t, repo, "worktree", "add", "-q", "-b", "tm/p/t-0001-x", wt, "origin/main")
 	write(t, wt, "pushed.go", "package p\n")
-	run(t, wt, "add", ".")
-	run(t, wt, "commit", "-q", "-m", "pushed")
-	run(t, wt, "push", "-q", "origin", "HEAD:tm/p/t-0001-x")
-	run(t, wt, "mv", "old.txt", "renamed.txt")
-	run(t, wt, "rm", "-q", "gone.txt")
-	run(t, wt, "commit", "-q", "-m", "unpushed")
+	gittest.Run(t, wt, "add", ".")
+	gittest.Run(t, wt, "commit", "-q", "-m", "pushed")
+	gittest.Run(t, wt, "push", "-q", "origin", "HEAD:tm/p/t-0001-x")
+	gittest.Run(t, wt, "mv", "old.txt", "renamed.txt")
+	gittest.Run(t, wt, "rm", "-q", "gone.txt")
+	gittest.Run(t, wt, "commit", "-q", "-m", "unpushed")
 	write(t, wt, "keep.txt", "a\nB\nc\nd\n")
 	write(t, wt, "new/untracked.txt", "1\n2\n3")
 	write(t, wt, "bin.dat", "\x00\x01\x02")
@@ -134,17 +126,17 @@ func TestStartedThread(t *testing.T) {
 // and a branch never pushed has all its commits unpushed.
 func TestCustomBase(t *testing.T) {
 	root, repo := repo(t)
-	run(t, repo, "checkout", "-q", "-b", "develop")
+	gittest.Run(t, repo, "checkout", "-q", "-b", "develop")
 	write(t, repo, "dev.txt", "d\n")
-	run(t, repo, "add", ".")
-	run(t, repo, "commit", "-q", "-m", "dev")
-	run(t, repo, "push", "-q", "origin", "develop")
-	run(t, repo, "checkout", "-q", "main")
+	gittest.Run(t, repo, "add", ".")
+	gittest.Run(t, repo, "commit", "-q", "-m", "dev")
+	gittest.Run(t, repo, "push", "-q", "origin", "develop")
+	gittest.Run(t, repo, "checkout", "-q", "main")
 	wt := filepath.Join(root, "wt")
-	run(t, repo, "worktree", "add", "-q", "-b", "tm/p/t-0002-y", wt, "origin/develop")
+	gittest.Run(t, repo, "worktree", "add", "-q", "-b", "tm/p/t-0002-y", wt, "origin/develop")
 	write(t, wt, "y.txt", "y\n")
-	run(t, wt, "add", ".")
-	run(t, wt, "commit", "-q", "-m", "y")
+	gittest.Run(t, wt, "add", ".")
+	gittest.Run(t, wt, "commit", "-q", "-m", "y")
 
 	cs, err := Read(context.Background(), wt, Options{Repo: repo, Base: "origin/develop"})
 	if err != nil {
@@ -166,10 +158,10 @@ func TestCustomBase(t *testing.T) {
 // its uncommitted work only.
 func TestAdopted(t *testing.T) {
 	dir := t.TempDir()
-	run(t, dir, "init", "-q")
+	gittest.Run(t, dir, "init", "-q")
 	write(t, dir, "a.txt", "a\n")
-	run(t, dir, "add", ".")
-	run(t, dir, "commit", "-q", "-m", "c")
+	gittest.Run(t, dir, "add", ".")
+	gittest.Run(t, dir, "commit", "-q", "-m", "c")
 	write(t, dir, "a.txt", "a\nb\n")
 	cs, err := Read(context.Background(), dir, Options{Repo: dir})
 	if err != nil {
@@ -202,9 +194,9 @@ func TestNone(t *testing.T) {
 // TestUnborn: before the first commit every file is uncommitted.
 func TestUnborn(t *testing.T) {
 	dir := t.TempDir()
-	run(t, dir, "init", "-q")
+	gittest.Run(t, dir, "init", "-q")
 	write(t, dir, "staged.txt", "s\n")
-	run(t, dir, "add", ".")
+	gittest.Run(t, dir, "add", ".")
 	write(t, dir, "loose.txt", "l\nm\n")
 	cs, err := Read(context.Background(), dir, Options{Repo: dir})
 	if err != nil {
@@ -221,8 +213,8 @@ func TestUnborn(t *testing.T) {
 // without it.
 func TestCleanedPaths(t *testing.T) {
 	dir := t.TempDir()
-	run(t, dir, "init", "-q")
-	run(t, dir, "commit", "-q", "--allow-empty", "-m", "c")
+	gittest.Run(t, dir, "init", "-q")
+	gittest.Run(t, dir, "commit", "-q", "--allow-empty", "-m", "c")
 	write(t, dir, "a\x1b[31mred.txt", "x\n")
 	cs, err := Read(context.Background(), dir, Options{Repo: dir})
 	if err != nil || len(cs.Files) != 1 || cs.Files[0].Path != "a[31mred.txt" {
@@ -235,7 +227,7 @@ func TestCleanedPaths(t *testing.T) {
 func TestFingerprint(t *testing.T) {
 	root, repo := repo(t)
 	wt := filepath.Join(root, "wt")
-	run(t, repo, "worktree", "add", "-q", "-b", "tm/p/t-0001-x", wt, "origin/main")
+	gittest.Run(t, repo, "worktree", "add", "-q", "-b", "tm/p/t-0001-x", wt, "origin/main")
 	ctx := context.Background()
 	seen := map[string]bool{}
 	step := func(name string) {
@@ -254,18 +246,18 @@ func TestFingerprint(t *testing.T) {
 	step("untracked")
 	write(t, wt, "a.txt", "a\nb\n")
 	step("edited")
-	run(t, wt, "add", ".")
-	run(t, wt, "commit", "-q", "-m", "a")
+	gittest.Run(t, wt, "add", ".")
+	gittest.Run(t, wt, "commit", "-q", "-m", "a")
 	step("committed")
 	write(t, wt, "a.txt", "a\nb\nc\n")
 	step("modified")
 	write(t, wt, "a.txt", "a\nb\nc\nd\n")
 	step("modified again")
-	run(t, wt, "mv", "a.txt", "b.txt")
+	gittest.Run(t, wt, "mv", "a.txt", "b.txt")
 	step("renamed")
-	run(t, wt, "commit", "-q", "-am", "b")
+	gittest.Run(t, wt, "commit", "-q", "-am", "b")
 	step("committed again")
-	run(t, wt, "push", "-q", "origin", "HEAD:tm/p/t-0001-x")
+	gittest.Run(t, wt, "push", "-q", "origin", "HEAD:tm/p/t-0001-x")
 	step("pushed")
 	if Fingerprint(ctx, wt, "") != "" || Fingerprint(ctx, filepath.Join(root, "gone"), repo) != "" {
 		t.Fatal("a fingerprint without a repo or worktree")

@@ -5,7 +5,6 @@ package e2e
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -13,6 +12,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/theclifmeister/terminatr/internal/gittest"
 )
 
 // writeConfig replaces config.toml with body, keeping each project's
@@ -203,23 +204,13 @@ func TestSmokeTickerCompleteOnMerge(t *testing.T) {
 	env.MustCLI("task", "status", "T1", "review", "--project", "demo")
 
 	// The PR merges on origin, from another clone.
-	git := func(dir string, args ...string) string {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t"}, args...)...)
-		cmd.Dir = dir
-		b, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, b)
-		}
-		return strings.TrimSpace(string(b))
-	}
 	other := filepath.Join(t.TempDir(), "other")
-	git(rec.Repo, "clone", "-q", git(rec.Repo, "remote", "get-url", "origin"), other)
+	gittest.Run(t, rec.Repo, "clone", "-q", gittest.Run(t, rec.Repo, "remote", "get-url", "origin"), other)
 	os.WriteFile(filepath.Join(other, "fix"), []byte("fixed\n"), 0o644)
-	git(other, "add", "fix")
-	git(other, "commit", "-q", "-m", "Merge pull request #7 from o/fix")
-	merge := git(other, "rev-parse", "HEAD")
-	git(other, "push", "-q", "origin", "HEAD:main")
+	gittest.Run(t, other, "add", "fix")
+	gittest.Run(t, other, "commit", "-q", "-m", "Merge pull request #7 from o/fix")
+	merge := gittest.Run(t, other, "rev-parse", "HEAD")
+	gittest.Run(t, other, "push", "-q", "origin", "HEAD:main")
 	setPR(t, state, `{"number":7,"url":"https://github.com/o/r/pull/7","state":"MERGED","mergeCommit":{"oid":"`+merge+`"},"statusCheckRollup":[]}`)
 	waitInbox(t, env, "task-done: T1 Small fix is done: merged (PR #7), as the user's setting says (complete tasks when merged)")
 	if out := env.MustCLI("task", "show", "T1", "--project", "demo", "--json"); !strings.Contains(out, `"status": "done"`) {

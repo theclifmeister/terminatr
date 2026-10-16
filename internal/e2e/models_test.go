@@ -3,13 +3,14 @@ package e2e
 import (
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/theclifmeister/terminatr/internal/gittest"
 )
 
 // The installed-agents scenarios of docs/SPEC.md §8.2 (Models): which
@@ -24,21 +25,13 @@ func modelsProject(t *testing.T, env *Env) string {
 	t.Helper()
 	root := t.TempDir()
 	origin, repo := filepath.Join(root, "origin.git"), filepath.Join(root, "repo")
-	git := func(dir string, args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t", "-c", "init.defaultBranch=main"}, args...)...)
-		cmd.Dir = dir
-		if b, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, b)
-		}
-	}
-	git(root, "init", "--bare", "-q", origin)
-	git(root, "clone", "-q", origin, repo)
+	gittest.Run(t, root, "init", "--bare", "-q", origin)
+	gittest.Run(t, root, "clone", "-q", origin, repo)
 	os.WriteFile(filepath.Join(repo, "README"), []byte("hi\n"), 0o644)
-	git(repo, "add", ".")
-	git(repo, "commit", "-q", "-m", "first")
-	git(repo, "push", "-q", "origin", "HEAD:main")
-	git(repo, "remote", "set-head", "origin", "main")
+	gittest.Run(t, repo, "add", ".")
+	gittest.Run(t, repo, "commit", "-q", "-m", "first")
+	gittest.Run(t, repo, "push", "-q", "origin", "HEAD:main")
+	gittest.Run(t, repo, "remote", "set-head", "origin", "main")
 	var p struct{ Slug, Dir string }
 	if err := json.Unmarshal([]byte(env.MustCLI("project", "new", "demo", "--repo", repo, "--json")), &p); err != nil {
 		t.Fatal(err)

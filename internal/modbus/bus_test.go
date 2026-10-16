@@ -8,18 +8,9 @@ import (
 	"sync"
 	"testing"
 	"time"
-)
 
-func next(t *testing.T, s *Sub) Event {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	ev, err := s.Next(ctx)
-	if err != nil {
-		t.Fatalf("Next: %v", err)
-	}
-	return ev
-}
+	"github.com/theclifmeister/terminatr/internal/testwait"
+)
 
 func empty(t *testing.T, s *Sub) {
 	t.Helper()
@@ -41,11 +32,11 @@ func TestReadyFirstThenInOrder(t *testing.T) {
 	if built != 0 {
 		t.Fatal("snapshot built before delivery")
 	}
-	ev := next(t, s)
+	ev := testwait.Next(t, s, time.Second)
 	if ev.Name != ModReady || ev.Data != "snap" || built != 1 {
 		t.Fatalf("first = %+v, built %d", ev, built)
 	}
-	a, c := next(t, s), next(t, s)
+	a, c := testwait.Next(t, s, time.Second), testwait.Next(t, s, time.Second)
 	if a.Data != 1 || c.Data != 2 || a.Seq >= c.Seq || ev.Seq <= c.Seq {
 		t.Fatalf("order: ready %d, %d %v, %d %v", ev.Seq, a.Seq, a.Data, c.Seq, c.Data)
 	}
@@ -61,14 +52,14 @@ func TestQueueBoundDropsOldest(t *testing.T) {
 	if s.Len() != QueueSize {
 		t.Fatalf("len %d", s.Len())
 	}
-	if ev := next(t, s); ev.Name != ModReady || ev.Dropped != 0 {
+	if ev := testwait.Next(t, s, time.Second); ev.Name != ModReady || ev.Dropped != 0 {
 		t.Fatalf("ready = %+v", ev)
 	}
-	ev := next(t, s)
+	ev := testwait.Next(t, s, time.Second)
 	if ev.Data != 5 || ev.Dropped != 5 {
 		t.Fatalf("first after drops: data %v dropped %d", ev.Data, ev.Dropped)
 	}
-	if ev := next(t, s); ev.Dropped != 0 {
+	if ev := testwait.Next(t, s, time.Second); ev.Dropped != 0 {
 		t.Fatalf("dropped count given twice: %d", ev.Dropped)
 	}
 }
@@ -78,8 +69,8 @@ func TestGrantsEventsProjects(t *testing.T) {
 	none := b.Subscribe("none", Options{})
 	some := b.Subscribe("some", Options{Grants: all, Events: []string{TaskChanged, ClockMinute},
 		Project: func(slug string) bool { return slug == "a" }})
-	next(t, none)
-	next(t, some)
+	testwait.Next(t, none, time.Second)
+	testwait.Next(t, some, time.Second)
 	b.Publish(TaskChanged, "a", "task a")
 	b.Publish(TaskChanged, "b", "task b")
 	b.Publish(InboxItem, "a", "item")
@@ -88,7 +79,7 @@ func TestGrantsEventsProjects(t *testing.T) {
 	b.Publish(ClockMinute, "", "tick")
 	var got []any
 	for range 2 {
-		got = append(got, next(t, some).Data)
+		got = append(got, testwait.Next(t, some, time.Second).Data)
 	}
 	empty(t, some)
 	if fmt.Sprint(got) != "[task a tick]" {
@@ -96,7 +87,7 @@ func TestGrantsEventsProjects(t *testing.T) {
 	}
 	got = nil
 	for range 2 {
-		got = append(got, next(t, none).Data)
+		got = append(got, testwait.Next(t, none, time.Second).Data)
 	}
 	empty(t, none)
 	if fmt.Sprint(got) != "[session b tick]" {
@@ -131,7 +122,7 @@ func TestWants(t *testing.T) {
 func TestResubscribeStartsOver(t *testing.T) {
 	b := New()
 	old := b.Subscribe("m", Options{Grants: all})
-	next(t, old)
+	testwait.Next(t, old, time.Second)
 	b.Publish(TaskChanged, "p", "missed")
 	s := b.Subscribe("m", Options{Grants: all})
 	if _, err := old.Next(context.Background()); !errors.Is(err, ErrClosed) {
@@ -141,7 +132,7 @@ func TestResubscribeStartsOver(t *testing.T) {
 	if !b.Active() {
 		t.Fatal("new queue gone with the old")
 	}
-	if ev := next(t, s); ev.Name != ModReady {
+	if ev := testwait.Next(t, s, time.Second); ev.Name != ModReady {
 		t.Fatalf("first = %s", ev.Name)
 	}
 	empty(t, s) // no replay
@@ -228,10 +219,10 @@ func TestWaitAndSetEvents(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatalf("Wait: %v", err)
 	}
-	if ev := next(t, s); ev.Name != ModReady {
+	if ev := testwait.Next(t, s, time.Second); ev.Name != ModReady {
 		t.Fatalf("first %s, want mod.ready", ev.Name)
 	}
-	if ev := next(t, s); ev.Name != TaskChanged || ev.Data != 3 {
+	if ev := testwait.Next(t, s, time.Second); ev.Name != TaskChanged || ev.Data != 3 {
 		t.Fatalf("got %s %v, want task.changed 3", ev.Name, ev.Data)
 	}
 	empty(t, s)

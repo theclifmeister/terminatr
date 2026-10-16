@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/codehost"
+	"github.com/theclifmeister/terminatr/internal/gittest"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/session"
 )
@@ -53,9 +54,7 @@ func TestCodeHostMod(t *testing.T) {
 	const off = "[mods.pr-ci-column]\nenabled = false\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n[mods.ticker]\nenabled = false\n"
 	repo := t.TempDir()
 	for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", "git@gitlab.com:acme/shop.git"}} {
-		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v %s", args, err, out)
-		}
+		gittest.Run(t, repo, args...)
 	}
 
 	s := &Server{opts: Options{Bin: os.Args[0]}, log: log.New(&testWriter{t: t}, "server: ", 0),

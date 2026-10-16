@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/creack/pty"
+
+	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
 var binPath string
@@ -208,21 +210,10 @@ func (a *agent) sendUntil(keys string, cond func() bool) {
 	}
 }
 
-func waitUntil(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(8 * time.Second)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
 // waitScreen waits for s in the output written after mark.
 func (a *agent) waitScreen(since int, s string) {
 	a.t.Helper()
-	waitUntil(a.t, "screen "+s, func() bool {
+	testwait.Eventually(a.t, "screen "+s, func() bool {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		return bytes.Contains(a.out.Bytes()[since:], []byte(s))
@@ -271,7 +262,7 @@ func count(ev []string, name string) int {
 
 func (a *agent) waitEvent(name string, n int) {
 	a.t.Helper()
-	waitUntil(a.t, fmt.Sprintf("%d× %s (have %v)", n, name, a.events()), func() bool { return count(a.events(), name) >= n })
+	testwait.Eventually(a.t, fmt.Sprintf("%d× %s (have %v)", n, name, a.events()), func() bool { return count(a.events(), name) >= n })
 }
 
 func (a *agent) session() rec {
@@ -286,7 +277,7 @@ func (a *agent) session() rec {
 
 func (a *agent) waitStatus(status, waitingFor string) {
 	a.t.Helper()
-	waitUntil(a.t, "status "+status+"/"+waitingFor, func() bool {
+	testwait.Eventually(a.t, "status "+status+"/"+waitingFor, func() bool {
 		s := a.session()
 		wf, _ := s["waitingFor"].(string)
 		return s != nil && s["status"] == status && wf == waitingFor
@@ -465,7 +456,7 @@ func TestClearRotatesSession(t *testing.T) {
 	if st["source"] != "clear" || sid2 == sid1 || sid2 == "" {
 		t.Fatalf("SessionStart %v", st)
 	}
-	waitUntil(t, "session file sid", func() bool { return a.sid() == sid2 })
+	testwait.Eventually(t, "session file sid", func() bool { return a.sid() == sid2 })
 	a.send("run todos\r")
 	a.waitEvent("Stop", 2)
 	for _, r := range a.hooks() {

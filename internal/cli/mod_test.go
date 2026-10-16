@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/theclifmeister/terminatr/internal/gittest"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -153,14 +154,7 @@ func TestModInstallSubfolder(t *testing.T) {
 	}
 	h := newHarness(t)
 	repo := t.TempDir()
-	git := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"}, args...)...)
-		cmd.Dir = repo
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
+	git := gittest.In(t, repo)
 	write := func(name, body string) {
 		p := filepath.Join(repo, filepath.FromSlash(name))
 		os.MkdirAll(filepath.Dir(p), 0o755)

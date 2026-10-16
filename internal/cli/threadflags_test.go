@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/codehost"
+	"github.com/theclifmeister/terminatr/internal/gittest"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
@@ -154,13 +155,13 @@ func TestBranchCleanup(t *testing.T) {
 	}
 	commit := func() {
 		t.Helper()
-		git(t, repo, "branch", "-f", branch, "main")
+		gittest.Run(t, repo, "branch", "-f", branch, "main")
 		wt := filepath.Join(t.TempDir(), "wt")
-		git(t, repo, "worktree", "add", "-q", wt, branch)
+		gittest.Run(t, repo, "worktree", "add", "-q", wt, branch)
 		os.WriteFile(filepath.Join(wt, "g"), []byte("y"), 0o644)
-		git(t, wt, "add", ".")
-		git(t, wt, "commit", "-q", "-m", "work")
-		git(t, repo, "worktree", "remove", wt)
+		gittest.Run(t, wt, "add", ".")
+		gittest.Run(t, wt, "commit", "-q", "-m", "work")
+		gittest.Run(t, repo, "worktree", "remove", wt)
 	}
 
 	commit()
@@ -174,7 +175,7 @@ func TestBranchCleanup(t *testing.T) {
 		t.Errorf("no branch left: did %q, deleted %q", did, gone)
 	}
 
-	git(t, repo, "branch", branch, "main")
+	gittest.Run(t, repo, "branch", branch, "main")
 	host.state = ""
 	check(false, "deleted branch "+branch+" (merged into main)", true)
 }

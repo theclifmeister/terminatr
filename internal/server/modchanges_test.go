@@ -5,28 +5,19 @@ import (
 	"encoding/json"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/changes"
+	"github.com/theclifmeister/terminatr/internal/gittest"
 	"github.com/theclifmeister/terminatr/internal/modbroker"
 	"github.com/theclifmeister/terminatr/internal/modbus"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
-
-func gitIn(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t", "-c", "init.defaultBranch=main"}, args...)...)
-	cmd.Dir = dir
-	if b, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, b)
-	}
-}
 
 func writeIn(t *testing.T, dir, name, text string) {
 	t.Helper()
@@ -41,19 +32,19 @@ func writeIn(t *testing.T, dir, name, text string) {
 func changesRepo(t *testing.T, root, name string) string {
 	t.Helper()
 	origin, repo := filepath.Join(root, name+".git"), filepath.Join(root, name)
-	gitIn(t, root, "init", "--bare", "-q", origin)
-	gitIn(t, root, "clone", "-q", origin, repo)
+	gittest.Run(t, root, "init", "--bare", "-q", origin)
+	gittest.Run(t, root, "clone", "-q", origin, repo)
 	writeIn(t, repo, "a.txt", "a\n")
-	gitIn(t, repo, "add", ".")
-	gitIn(t, repo, "commit", "-q", "-m", "c")
-	gitIn(t, repo, "push", "-q", "origin", "HEAD:main")
-	gitIn(t, repo, "remote", "set-head", "origin", "main")
-	gitIn(t, repo, "checkout", "-q", "-b", "develop")
+	gittest.Run(t, repo, "add", ".")
+	gittest.Run(t, repo, "commit", "-q", "-m", "c")
+	gittest.Run(t, repo, "push", "-q", "origin", "HEAD:main")
+	gittest.Run(t, repo, "remote", "set-head", "origin", "main")
+	gittest.Run(t, repo, "checkout", "-q", "-b", "develop")
 	writeIn(t, repo, "dev.txt", "d\n")
-	gitIn(t, repo, "add", ".")
-	gitIn(t, repo, "commit", "-q", "-m", "dev")
-	gitIn(t, repo, "push", "-q", "origin", "develop")
-	gitIn(t, repo, "checkout", "-q", "main")
+	gittest.Run(t, repo, "add", ".")
+	gittest.Run(t, repo, "commit", "-q", "-m", "dev")
+	gittest.Run(t, repo, "push", "-q", "origin", "develop")
+	gittest.Run(t, repo, "checkout", "-q", "main")
 	return repo
 }
 
@@ -110,20 +101,20 @@ func newChangesFixture(t *testing.T) changesFixture {
 	f := changesFixture{s: &Server{log: log.New(os.Stderr, "", 0), modEv: newModEvents()}, p: p, root: root}
 
 	wt := filepath.Join(wts, "t-0001-x")
-	gitIn(t, one, "worktree", "add", "-q", "-b", "tm/demo/t-0001-x", wt, "origin/main")
+	gittest.Run(t, one, "worktree", "add", "-q", "-b", "tm/demo/t-0001-x", wt, "origin/main")
 	writeIn(t, wt, "a.txt", "a\nb\n")
 	writeIn(t, wt, ".env", "SECRET=1\n")
 	f.started = changesThread(t, p, thread.Record{Repo: one, Base: "origin/main", Branch: "tm/demo/t-0001-x", Worktree: wt})
 
 	wt = filepath.Join(wts, "t-0002-x")
-	gitIn(t, one, "worktree", "add", "-q", "-b", "tm/demo/t-0002-x", wt, "origin/develop")
+	gittest.Run(t, one, "worktree", "add", "-q", "-b", "tm/demo/t-0002-x", wt, "origin/develop")
 	writeIn(t, wt, "b.txt", "b\n")
-	gitIn(t, wt, "add", ".")
-	gitIn(t, wt, "commit", "-q", "-m", "b")
+	gittest.Run(t, wt, "add", ".")
+	gittest.Run(t, wt, "commit", "-q", "-m", "b")
 	f.based = changesThread(t, p, thread.Record{Repo: one, Base: "origin/develop", Branch: "tm/demo/t-0002-x", Worktree: wt})
 
 	wt = filepath.Join(wts, "t-0003-x")
-	gitIn(t, two, "worktree", "add", "-q", "-b", "tm/demo/t-0003-x", wt, "origin/main")
+	gittest.Run(t, two, "worktree", "add", "-q", "-b", "tm/demo/t-0003-x", wt, "origin/main")
 	writeIn(t, wt, "two.txt", "1\n2\n")
 	f.second = changesThread(t, p, thread.Record{Repo: two, Base: "origin/main", Branch: "tm/demo/t-0003-x", Worktree: wt})
 
@@ -272,8 +263,8 @@ func TestModThreadChangesEvent(t *testing.T) {
 	if reads != 2 {
 		t.Fatalf("%d reads, want 2", reads)
 	}
-	gitIn(t, f.started.Worktree, "add", ".")
-	gitIn(t, f.started.Worktree, "commit", "-q", "-m", "c")
+	gittest.Run(t, f.started.Worktree, "add", ".")
+	gittest.Run(t, f.started.Worktree, "commit", "-q", "-m", "c")
 	now = now.Add(modChangesEvery)
 	look(live)
 	// Its session ended: nothing, and no git.

@@ -13,11 +13,11 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
-	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 
 	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -46,11 +46,7 @@ func startServer(t *testing.T) tmclient.Paths {
 	if os.Getenv("TERMINATR_HOME") == "" {
 		t.Setenv("TERMINATR_HOME", t.TempDir())
 	}
-	sock, err := os.MkdirTemp(ipc.ShortDir(), "tmt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(sock) })
+	sock := ipctest.ShortTempDir(t, "tmt")
 	t.Setenv("TERMINATR_SOCKET", filepath.Join(sock, "tm.sock"))
 	t.Setenv("TERMINATR_LAUNCHD", "off")
 	t.Setenv(caller.EnvSession, "")

@@ -13,6 +13,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
 // fakeSource is a pane on the far end: batches the test queues, keys
@@ -156,17 +157,6 @@ func panePair(t *testing.T, h PaneHost, level *string) (a, b *session) {
 	return sa, sb
 }
 
-func eventually(t *testing.T, what string, ok func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for !ok() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-}
-
 func repaintFrame(cols, rows uint16, vt string) []byte {
 	return append(proto.Size(cols, rows), vt...)
 }
@@ -192,8 +182,8 @@ func TestPaneStream(t *testing.T) {
 	src.push(proto.FrameRepaint, repaintFrame(120, 40, big))
 	src.push(proto.FrameOutput, []byte("more"))
 	src.push(proto.FrameResize, proto.Size(100, 30))
-	eventually(t, "the repaint and output", func() bool { return sk.text() == big+"more" })
-	eventually(t, "the resize", func() bool { sk.mu.Lock(); defer sk.mu.Unlock(); return len(sk.resizes) == 1 })
+	testwait.Eventually(t, "the repaint and output", func() bool { return sk.text() == big+"more" })
+	testwait.Eventually(t, "the resize", func() bool { sk.mu.Lock(); defer sk.mu.Unlock(); return len(sk.resizes) == 1 })
 	if sk.size != [2]uint16{120, 40} || sk.resizes[0] != [2]uint16{100, 30} {
 		t.Errorf("size %v, resizes %v", sk.size, sk.resizes)
 	}
@@ -201,7 +191,7 @@ func TestPaneStream(t *testing.T) {
 	c.Input([]byte("y\r"))
 	c.Size(90, 20)
 	c.Repaint()
-	eventually(t, "keys, size and repaint request", func() bool {
+	testwait.Eventually(t, "keys, size and repaint request", func() bool {
 		src.mu.Lock()
 		defer src.mu.Unlock()
 		return string(src.input) == "y\r" && len(src.sizes) == 1 && src.asked == 1
@@ -210,7 +200,7 @@ func TestPaneStream(t *testing.T) {
 		t.Errorf("size %v", src.sizes[0])
 	}
 	c.Close()
-	eventually(t, "the source closed", src.isClosed)
+	testwait.Eventually(t, "the source closed", src.isClosed)
 	if h.seen[0] != caller.ForPeer("studio") {
 		t.Errorf("the host saw %+v", h.seen[0])
 	}
@@ -235,7 +225,7 @@ func TestPaneSwitch(t *testing.T) {
 	c.Input([]byte("rm -rf /\r"))
 	c.Size(10, 10)
 	c.Repaint()
-	eventually(t, "the repaint request", func() bool { src.mu.Lock(); defer src.mu.Unlock(); return src.asked == 1 })
+	testwait.Eventually(t, "the repaint request", func() bool { src.mu.Lock(); defer src.mu.Unlock(); return src.asked == 1 })
 	if src.input != nil || src.sizes != nil {
 		t.Errorf("view typed %q, sized %v", src.input, src.sizes)
 	}
@@ -263,17 +253,17 @@ func TestPaneClosed(t *testing.T) {
 	}
 	sk, src := open()
 	src.push(proto.FrameClosed, []byte("session exited: exit status 1 /home/me/secret"))
-	eventually(t, "exited", func() bool { return sk.reason() == proto.PaneExited })
+	testwait.Eventually(t, "exited", func() bool { return sk.reason() == proto.PaneExited })
 
 	sk, src = open()
 	b.panes.closeServed(proto.PaneOff)
-	eventually(t, "panes-off", func() bool { return sk.reason() == proto.PaneOff })
-	eventually(t, "the source closed", src.isClosed)
+	testwait.Eventually(t, "panes-off", func() bool { return sk.reason() == proto.PaneOff })
+	testwait.Eventually(t, "the source closed", src.isClosed)
 
 	sk, src = open()
 	a.c.Close()
-	eventually(t, "link", func() bool { return sk.reason() == proto.PaneLink })
-	eventually(t, "the source closed with the link", src.isClosed)
+	testwait.Eventually(t, "link", func() bool { return sk.reason() == proto.PaneLink })
+	testwait.Eventually(t, "the source closed with the link", src.isClosed)
 }
 
 // TestPaneWindow: the far end stops at the window until the near end
@@ -297,7 +287,7 @@ func TestPaneWindow(t *testing.T) {
 	}
 	src.push(proto.FrameRepaint, repaintFrame(80, 24, ""))
 	src.push(proto.FrameOutput, all.Bytes())
-	eventually(t, "the window's worth", func() bool { return len(sk.text()) >= paneWindow })
+	testwait.Eventually(t, "the window's worth", func() bool { return len(sk.text()) >= paneWindow })
 	time.Sleep(100 * time.Millisecond)
 	if n := len(sk.text()); n > paneWindow+frameChunk {
 		t.Fatalf("%d bytes arrived without an ack, window %d", n, paneWindow)
@@ -312,7 +302,7 @@ func TestPaneWindow(t *testing.T) {
 			time.Sleep(2 * time.Millisecond)
 		}
 	}()
-	eventually(t, "everything", func() bool { return len(sk.text()) == all.Len() })
+	testwait.Eventually(t, "everything", func() bool { return len(sk.text()) == all.Len() })
 	if sk.text() != all.String() {
 		t.Error("output arrived out of order")
 	}
@@ -348,7 +338,7 @@ func TestPaneThroughRelay(t *testing.T) {
 		t.Fatalf("OpenPane: %+v %v", c, err)
 	}
 	h.last().push(proto.FrameRepaint, repaintFrame(80, 24, "hello"))
-	eventually(t, "the repaint", func() bool { return sk.text() == "hello" })
+	testwait.Eventually(t, "the repaint", func() bool { return sk.text() == "hello" })
 	var ps proto.PeerProjects
 	if err := ma.Call(ctx, "mini", proto.MethodPeerProjects, nil, &ps); code(err) != proto.ErrUnknownMethod {
 		// b exports no projects; peer.projects isn't there.
@@ -359,7 +349,7 @@ func TestPaneThroughRelay(t *testing.T) {
 		t.Fatal(err)
 	}
 	mb.Reload()
-	eventually(t, "panes-off", func() bool { return sk.reason() == proto.PaneOff })
+	testwait.Eventually(t, "panes-off", func() bool { return sk.reason() == proto.PaneOff })
 	if _, err := ma.OpenPane(ctx, "mini", proto.PeerAttachParams{Project: "web", Session: "s-1"}, &sink{}); code(err) != proto.ErrPanesOff {
 		t.Errorf("after off: %v", err)
 	}
@@ -445,14 +435,14 @@ func TestPaneRaiseTold(t *testing.T) {
 			SetPanes(b.dir, "studio", proto.PanesWrite)
 			mb.Reload()
 			if !old {
-				eventually(t, "the raise told", func() bool {
+				testwait.Eventually(t, "the raise told", func() bool {
 					mu.Lock()
 					defer mu.Unlock()
 					return slices.Equal(told, []string{proto.PanesType})
 				})
 			}
 			// The far end checks each key: the open stream types now.
-			eventually(t, "keys after the raise", func() bool {
+			testwait.Eventually(t, "keys after the raise", func() bool {
 				c.Input([]byte("!"))
 				return strings.Contains(h.last().typed(), "!")
 			})
@@ -463,7 +453,7 @@ func TestPaneRaiseTold(t *testing.T) {
 			SetPanes(b.dir, "studio", proto.PanesView)
 			mb.Reload()
 			if !old {
-				eventually(t, "the lowering told", func() bool {
+				testwait.Eventually(t, "the lowering told", func() bool {
 					mu.Lock()
 					defer mu.Unlock()
 					return slices.Equal(told, []string{proto.PanesType, proto.PanesView})

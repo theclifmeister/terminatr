@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/codehost"
+	"github.com/theclifmeister/terminatr/internal/gittest"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/worktree"
@@ -59,7 +60,7 @@ func TestThreadMerge(t *testing.T) {
 	h := newHarness(t)
 	h.ok(human, "project", "new", "demo")
 	repo, rec := threadWithWorktree(t, h, "demo")
-	git(t, repo, "remote", "add", "origin", "git@github.com:acme/shop.git")
+	gittest.Run(t, repo, "remote", "add", "origin", "git@github.com:acme/shop.git")
 	greenPRBranch = rec.Branch
 	t.Cleanup(func() { greenPRBranch = "" })
 	fh := &fakeHost{pr: greenPR()}
@@ -189,14 +190,14 @@ func TestResolveMergedKeepsUnpushed(t *testing.T) {
 		h.ok(human, "project", "new", "demo")
 		repo, rec := threadWithWorktree(t, h, "demo")
 		bare := filepath.Join(t.TempDir(), "shop.git")
-		git(t, repo, "init", "-q", "--bare", bare)
-		git(t, repo, "remote", "add", "origin", bare)
-		git(t, repo, "push", "-q", "origin", "HEAD")
+		gittest.Run(t, repo, "init", "-q", "--bare", bare)
+		gittest.Run(t, repo, "remote", "add", "origin", bare)
+		gittest.Run(t, repo, "push", "-q", "origin", "HEAD")
 		os.WriteFile(filepath.Join(rec.Worktree, "late.md"), []byte("late"), 0o644)
-		git(t, rec.Worktree, "add", ".")
-		git(t, rec.Worktree, "commit", "-q", "-m", "after the merge")
+		gittest.Run(t, rec.Worktree, "add", ".")
+		gittest.Run(t, rec.Worktree, "commit", "-q", "-m", "after the merge")
 		if pushed {
-			git(t, rec.Worktree, "push", "-q", "origin", rec.Branch)
+			gittest.Run(t, rec.Worktree, "push", "-q", "origin", rec.Branch)
 		}
 		out := h.ok(coord, "thread", "resolve", rec.ID, "--project", "demo")
 		exists := worktree.BranchExists(repo, rec.Branch)

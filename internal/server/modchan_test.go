@@ -20,6 +20,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
+	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
@@ -69,11 +70,7 @@ func (l *lockedBuffer) String() string {
 // socket; the server takes it, refuses what isn't a state, and closes
 // the socket with the session.
 func TestModChannel(t *testing.T) {
-	rt, err := os.MkdirTemp(ipc.ShortDir(), "tmmod")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(rt) })
+	rt := ipctest.ShortTempDir(t, "tmmod")
 	b, _ := agent.Builtin("claude")
 	m, err := agent.ParseManifest(b)
 	if err != nil {
@@ -213,11 +210,7 @@ func TestModChannel(t *testing.T) {
 // once it is live, and its acks move the queue on; what isn't an ack is
 // refused.
 func TestModPrompts(t *testing.T) {
-	rt, err := os.MkdirTemp(ipc.ShortDir(), "tmmod")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(rt) })
+	rt := ipctest.ShortTempDir(t, "tmmod")
 	b, _ := agent.Builtin("claude")
 	m, err := agent.ParseManifest(b)
 	if err != nil {
@@ -476,11 +469,7 @@ func TestModSocketPeer(t *testing.T) {
 	if _, err := ipc.PeerOf(nil); errors.Is(err, errors.ErrUnsupported) {
 		t.Skip("no peer credentials here")
 	}
-	rt, err := os.MkdirTemp(ipc.ShortDir(), "tmmod")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(rt) })
+	rt := ipctest.ShortTempDir(t, "tmmod")
 	s := &Server{log: log.New(io.Discard, "", 0), sessions: map[string]*session.Session{}, records: map[string]SessionRecord{}}
 	socks := map[string]string{}
 	s.mu.Lock()
@@ -489,6 +478,7 @@ func TestModSocketPeer(t *testing.T) {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
+		var err error
 		if socks[id], err = s.listenMod(id, dir); err != nil {
 			t.Fatal(err)
 		}
@@ -519,6 +509,7 @@ func TestModSocketPeer(t *testing.T) {
 	}
 	want := fmt.Sprintf("own=%d other=%d", http.StatusBadRequest, http.StatusForbidden)
 	var got []byte
+	var err error
 	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		if got, err = os.ReadFile(out); err == nil && len(got) > 0 {
 			break

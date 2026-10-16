@@ -255,37 +255,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version-file: go.mod
-
-      - name: Pins
-        id: pins
-        run: |
-          echo "zig=$(grep -E '^ZIG_(VERSION|SHA256_)' Makefile | git hash-object --stdin)" >> "$GITHUB_OUTPUT"
-          echo "ghostty=$({ grep -E '^(GHOSTTY_(REV|REPO|CPU)|ZIG_VERSION) ' Makefile; echo "$GITHUB_WORKSPACE"; } | git hash-object --stdin)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Zig
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: .build/zig-*
-          key: zig-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.zig }}
-
-      - name: Cache release libghostty-vt
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: |
-            .build/release/ghostty-*
-            !.build/release/ghostty-src
-          key: ghostty-release-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.ghostty }}-${{ hashFiles('scripts/release/targets.sh') }}
-
-      - name: pkg-config
-        run: command -v pkg-config || brew install pkgconf
-
-      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7
-        with:
-          install-only: true
-          version: "~> v2"
+      - uses: ./.github/actions/release-setup
 
       - name: goreleaser check
         run: goreleaser check

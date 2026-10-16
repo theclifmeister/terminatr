@@ -1,8 +1,9 @@
 package codehost
 
 import (
-	"os/exec"
 	"testing"
+
+	"github.com/theclifmeister/terminatr/internal/gittest"
 )
 
 func TestParsePRURL(t *testing.T) {
@@ -80,13 +81,7 @@ func FuzzParsePRURL(f *testing.F) {
 
 func TestInRepo(t *testing.T) {
 	repo := t.TempDir()
-	git := func(args ...string) {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = repo
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v %s", args, err, out)
-		}
-	}
+	git := gittest.In(t, repo)
 	git("init", "-q")
 	pr := PR{Number: 7, URL: "https://github.com/acme/shop/pull/7"}
 	if InRepo(repo, GitHub{}, pr) {

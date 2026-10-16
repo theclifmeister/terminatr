@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/gittest"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -87,21 +88,21 @@ func TestUpkeep(t *testing.T) {
 func TestKept(t *testing.T) {
 	repo, _ := gitFixture(t)
 	wt := filepath.Join(t.TempDir(), "wt")
-	gitT(t, repo, "worktree", "add", "-q", "-b", "tm/demo/t-0001", wt)
+	gittest.Run(t, repo, "worktree", "add", "-q", "-b", "tm/demo/t-0001", wt)
 	rec := &thread.Record{Repo: repo, Branch: "tm/demo/t-0001", Worktree: wt}
 	if why, err := kept(rec); err != nil || why != "its worktree is still there" {
 		t.Fatalf("with worktree: %q, %v", why, err)
 	}
 	commitT(t, wt, "g", "two\n", "work")
-	gitT(t, repo, "worktree", "remove", wt)
+	gittest.Run(t, repo, "worktree", "remove", wt)
 	if why, err := kept(rec); err != nil || why != "1 unpushed commit on tm/demo/t-0001" {
 		t.Fatalf("unpushed branch: %q, %v", why, err)
 	}
-	gitT(t, repo, "push", "-q", "origin", "tm/demo/t-0001")
+	gittest.Run(t, repo, "push", "-q", "origin", "tm/demo/t-0001")
 	if why, err := kept(rec); err != nil || why != "" {
 		t.Fatalf("pushed branch: %q, %v", why, err)
 	}
-	gitT(t, repo, "branch", "-q", "-D", "tm/demo/t-0001")
+	gittest.Run(t, repo, "branch", "-q", "-D", "tm/demo/t-0001")
 	if why, err := kept(rec); err != nil || why != "" {
 		t.Fatalf("no branch: %q, %v", why, err)
 	}
