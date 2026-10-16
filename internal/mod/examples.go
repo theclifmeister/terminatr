@@ -3,7 +3,7 @@ package mod
 // terminatr's examples/mods folder (mods design §13): one small, working
 // mod per mod surface, so people see each surface working and get ideas
 // to build and share. They are sample mods, not defaults: nothing in the
-// folder is loaded or enabled, though three of them are the sources of
+// folder is loaded or enabled, though four of them are the sources of
 // built-in mods. The Mods tab's e, its empty state and tm mod examples
 // show the link and each one's install lines, and do nothing else.
 
