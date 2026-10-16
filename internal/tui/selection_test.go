@@ -129,6 +129,52 @@ func TestPaneClipboardForwarded(t *testing.T) {
 	}
 }
 
+// TestWheelScrollsMainScreen: over a program on the main screen that
+// doesn't track the mouse (a shell, Claude's inline renderer, issue
+// #567), the wheel scrolls the local scrollback without claiming the
+// size, as Shift+PgUp; on the alternate screen it doesn't scroll.
+func TestWheelScrollsMainScreen(t *testing.T) {
+	var out strings.Builder
+	for i := range 60 {
+		fmt.Fprintf(&out, "line-%d\r\n", i)
+	}
+	c, p := selClient(t, out.String())
+	x, y := p.rect.X, p.rect.Y
+	top := func() string { // the top row, by selecting it
+		t.Helper()
+		c.mouse(uv.MouseClickEvent{X: x, Y: y, Button: uv.MouseLeft})
+		c.mouse(uv.MouseMotionEvent{X: x + 7, Y: y, Button: uv.MouseLeft})
+		c.mouse(uv.MouseReleaseEvent{X: x + 7, Y: y, Button: uv.MouseLeft})
+		got, _ := p.mirror.SelectionText()
+		return strings.TrimSpace(got)
+	}
+
+	c.me, c.v.Latest = "c-1", "c-2" // another console typed last
+	c.mouse(uv.MouseWheelEvent{X: x + 1, Y: y + 1, Button: uv.MouseWheelUp})
+	c.mouse(uv.MouseWheelEvent{X: x + 1, Y: y + 1, Button: uv.MouseWheelUp})
+	if !p.scrolled {
+		t.Fatal("the wheel didn't scroll the local scrollback")
+	}
+	if c.claimed {
+		t.Fatal("scrolling the local scrollback claimed the size")
+	}
+	c.v.Latest = "c-1"
+	first := 60 - p.rect.H + 1 - 2*wheelRows
+	if got, want := top(), fmt.Sprintf("line-%d", first); got != want {
+		t.Fatalf("top row %q after two turns up, want %q", got, want)
+	}
+	c.mouse(uv.MouseWheelEvent{X: x + 1, Y: y + 1, Button: uv.MouseWheelDown})
+	if got, want := top(), fmt.Sprintf("line-%d", first+wheelRows); got != want {
+		t.Fatalf("top row %q after a turn down, want %q", got, want)
+	}
+
+	c, p = selClient(t, out.String()+"\x1b[?1049h") // a full-screen app
+	c.mouse(uv.MouseWheelEvent{X: x + 1, Y: y + 1, Button: uv.MouseWheelUp})
+	if p.scrolled {
+		t.Fatal("the wheel scrolled under a full-screen app")
+	}
+}
+
 // TestViewOnlyRemoteMouse: on a paired server's pane that takes no keys,
 // the mouse is tm's even though the program tracks it: the wheel
 // scrolls the local scrollback, a left drag selects and copies, and

@@ -1813,11 +1813,28 @@ func (c *client) input(k uv.Key) {
 // scrollback.
 const wheelRows = 3
 
+// wheelScroll scrolls p's local scrollback when m turns the wheel, and
+// says whether it did. c.mu held.
+func wheelScroll(p *pane, m emu.Mouse) bool {
+	if m.Action != emu.MousePress || m.Button != emu.MouseWheelUp && m.Button != emu.MouseWheelDown {
+		return false
+	}
+	d := wheelRows
+	if m.Button == emu.MouseWheelUp {
+		d = -d
+	}
+	p.mirror.ScrollViewport(d)
+	p.scrolled = true
+	p.r.Invalidate()
+	return true
+}
+
 // mouse handles a mouse event (attachmouse.go): the open menu, a
 // question in the status bar, the sidebar and the status bar are tm's.
 // Over the pane, a click takes the keyboard back from the sidebar; the
 // event goes to the program when it tracks the mouse, and otherwise a
-// right-click opens the ≡ menu. The outer terminal reports the mouse
+// right-click opens the ≡ menu and, on the main screen, the wheel
+// scrolls the local scrollback. The outer terminal reports the mouse
 // while the focused program tracks it or the sidebar shows (see
 // outerModes).
 func (c *client) mouse(ev uv.Event) {
@@ -1899,10 +1916,7 @@ func (c *client) mouse(ev uv.Event) {
 		switch {
 		case press && m.Button == emu.MouseRight:
 			c.openMenu(c.menuTitle(), c.sessionItems(), m.X, m.Y, false)
-		case m.Action == emu.MousePress && (m.Button == emu.MouseWheelUp || m.Button == emu.MouseWheelDown):
-			p.mirror.ScrollViewport(map[bool]int{true: -wheelRows, false: wheelRows}[m.Button == emu.MouseWheelUp])
-			p.scrolled = true
-			p.r.Invalidate()
+		case wheelScroll(p, m):
 		case m.Button == emu.MouseLeft:
 			c.selMouse(p, m)
 		}
@@ -1911,15 +1925,22 @@ func (c *client) mouse(ev uv.Event) {
 		return
 	}
 	if !p.mirror.Modes().MouseTracking() {
-		// tm's: the program doesn't take the mouse. A left drag selects.
+		// tm's: the program doesn't take the mouse. A left drag selects,
+		// and on the main screen (a shell, an inline app such as Claude's
+		// default renderer) the wheel scrolls the local scrollback, as
+		// Shift+PgUp/PgDn do; like them it sends the program nothing, so
+		// it doesn't claim the size.
+		local := false
 		switch {
 		case press && m.Button == emu.MouseRight:
 			c.openMenu(c.menuTitle(), c.sessionItems(), m.X, m.Y, false)
+		case !p.mirror.Modes().AltScreen && wheelScroll(p, m):
+			local = true
 		case m.Button == emu.MouseLeft:
 			c.selMouse(p, m)
 		}
 		_, wheel := ev.(uv.MouseWheelEvent)
-		claim := (click || wheel) && c.needClaim()
+		claim := (click || wheel && !local) && c.needClaim()
 		c.mu.Unlock()
 		if claim {
 			c.claim(p.info.ID)
