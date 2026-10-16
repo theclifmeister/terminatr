@@ -188,6 +188,8 @@ $.on("view.closed", async (e) => {
   if (e.view !== VIEW || !e.project) return;
   // Opened again, the tab starts at the list, read afresh.
   tabs.delete(e.project);
+  // A view keeps at most 64 trees: drop the project's once it's gone.
+  await $.ui.view.set(VIEW, null, { project: e.project });
 });
 
 // open shows file path (in the list) of project's tab; "" goes back to

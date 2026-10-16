@@ -146,6 +146,7 @@
   $.on("view.closed", async (e) => {
     if (e.view !== VIEW || !e.project) return;
     tabs.delete(e.project);
+    await $.ui.view.set(VIEW, null, { project: e.project });
   });
   async function open(project, path) {
     const t = tab(project);
