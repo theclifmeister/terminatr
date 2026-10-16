@@ -24,6 +24,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // The methods a code host mod answers, as $.codehost.handle names them
@@ -468,12 +470,7 @@ func (m Mod) ParsePRURL(s string) (int, bool) {
 	return l.Number, true
 }
 
-func clip(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return strings.ToValidUTF8(s[:n], "") + "…"
-}
+func clip(s string, n int) string { return textsafe.Cut(s, n) }
 
 // unserved is the Host of a code host mod's kind that no mod serves here
 // (no server, no enabled mod for the project, no commands grant): every

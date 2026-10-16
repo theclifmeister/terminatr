@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -169,31 +170,25 @@ func sendHookOnce(socket string, p proto.HookEventParams, deadline time.Time) (o
 	// lost events on a loaded Windows machine, where a socket write
 	// completes through the runtime's poller (T217).
 	c.SetDeadline(deadline)
-	hello, _ := json.Marshal(proto.Hello{Protocol: proto.Protocol, Version: version.Version, Build: version.BuildID(), Kind: proto.KindHook})
 	params, err := json.Marshal(p)
 	if err != nil {
 		return "", false, err
 	}
-	req, _ := json.Marshal(proto.Request{ID: 1, Method: proto.MethodHookEvent, Params: params})
 	// Hello and request in one write: one round trip less.
-	if _, err := c.Write(append(append(append(hello, '\n'), req...), '\n')); err != nil {
+	var msg bytes.Buffer
+	proto.WriteLine(&msg, proto.Hello{Protocol: proto.Protocol, Version: version.Version, Build: version.BuildID(), Kind: proto.KindHook})
+	proto.WriteLine(&msg, proto.Request{ID: 1, Method: proto.MethodHookEvent, Params: params})
+	if _, err := c.Write(msg.Bytes()); err != nil {
 		return "", !isTimeout(err), fmt.Errorf("write: %w", err)
 	}
 	br := bufio.NewReader(c)
 	var srv proto.Hello
-	line, err := br.ReadBytes('\n')
-	if err != nil {
-		return "", !isTimeout(err), fmt.Errorf("server hello: %w", err)
-	}
-	if err := json.Unmarshal(line, &srv); err != nil {
-		return "", false, fmt.Errorf("server hello: %w", err)
+	if err := proto.ReadLine(br, &srv); err != nil {
+		return "", readAgain(err), fmt.Errorf("server hello: %w", err)
 	}
 	var resp proto.Response
-	if line, err = br.ReadBytes('\n'); err != nil {
-		return "", !isTimeout(err), fmt.Errorf("response: %w", err)
-	}
-	if err := json.Unmarshal(line, &resp); err != nil {
-		return "", false, fmt.Errorf("response: %w", err)
+	if err := proto.ReadLine(br, &resp); err != nil {
+		return "", readAgain(err), fmt.Errorf("response: %w", err)
 	}
 	if resp.Error != nil {
 		return "", true, fmt.Errorf("response: %w", resp.Error)
@@ -203,6 +198,18 @@ func sendHookOnce(socket string, p proto.HookEventParams, deadline time.Time) (o
 		return "", false, fmt.Errorf("result: %w", err)
 	}
 	return res.Stdout, false, nil
+}
+
+// readAgain reports whether a failed proto.ReadLine is worth another
+// try: a connection that failed, not a deadline or a line that isn't
+// the answer.
+func readAgain(err error) bool {
+	var se *json.SyntaxError
+	var te *json.UnmarshalTypeError
+	if errors.As(err, &se) || errors.As(err, &te) || errors.Is(err, proto.ErrLineTooLong) {
+		return false
+	}
+	return !isTimeout(err)
 }
 
 // isTimeout reports whether err is a deadline's.
