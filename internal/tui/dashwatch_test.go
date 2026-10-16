@@ -89,8 +89,7 @@ func dashProjects(t *testing.T) *project.Project {
 
 // TestDashboardWatch: with a server, the dashboard's Load shows the
 // projects the server's projects.watch with detail sends, and they are
-// what the dashboard reads from the files itself (loadProjects), but
-// for a report's text: the rows show its PR line alone.
+// what the dashboard reads from the files itself (loadProjects).
 func TestDashboardWatch(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
 	alpha := dashProjects(t)
@@ -106,19 +105,10 @@ func TestDashboardWatch(t *testing.T) {
 		t.Helper()
 		sc := src.slow.load(paths.AgentsDir())
 		d := Data{Mods: sc.reg.Mods}
-		src.loadProjects(&d, sc.cfg)
+		src.loadProjects(&d)
 		for i := range d.Projects {
-			pd := &d.Projects[i]
-			for j, th := range pd.Threads {
-				if th.Report != nil {
-					pd.Threads[j].Report = &thread.Report{PR: th.Report.PR}
-				}
-			}
 			// None is none, on the wire.
-			if len(pd.Checkouts) == 0 {
-				pd.Checkouts = nil
-			}
-			if len(pd.TaskUsage) == 0 {
+			if pd := &d.Projects[i]; len(pd.TaskUsage) == 0 {
 				pd.TaskUsage = nil
 			}
 		}

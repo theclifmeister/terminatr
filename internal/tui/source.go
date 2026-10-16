@@ -637,69 +637,19 @@ func (s *ServerSource) Load() Data {
 		}
 		return d
 	}
-	s.loadProjects(&d, cfg)
+	s.loadProjects(&d)
 	return d
 }
 
-// loadProjects reads every project's rows from its files into d, cfg
-// the config (nil when it doesn't load): what the server's watch sends
-// when it runs.
-func (s *ServerSource) loadProjects(d *Data, cfg *config.Config) {
-	list, err := project.List()
+// loadProjects reads every project's rows from its files into d, as
+// the server's watch sends them when it runs (server.ReadProjects), with
+// the badges of d's mods.
+func (s *ServerSource) loadProjects(d *Data) {
+	ps, err := server.ReadProjects(ticker.StatePath(s.Paths.Sessions), d.Mods)
 	if err != nil && d.Err == "" {
 		d.Err = err.Error()
 	}
-	badgers := badgeMods(d.Mods)
-	tick := ticker.Load(ticker.StatePath(s.Paths.Sessions))
-	fails := tick.HostFails()
-	for _, sum := range list {
-		if sum.Safety != nil && sum.Safety.Archived {
-			continue // hidden: tm project unarchive brings it back
-		}
-		pd := ProjectData{Slug: sum.Slug, Goal: sum.Goal, Repos: sum.Repos,
-			Counts: sum.Counts, Safety: sum.Safety, Own: sum.Own, Err: sum.Error,
-			Checkouts: tick.Checkouts(sum.Slug)}
-		if p, err := project.Open(sum.Slug); err == nil {
-			b, err := p.Tasks().Load()
-			if err != nil {
-				b = nil
-			}
-			if b != nil {
-				for _, t := range b.Tasks {
-					if tasks.GroupOf(t.Status) == tasks.NeedsYou {
-						pd.NeedsYou = append(pd.NeedsYou, t)
-					}
-				}
-			}
-			recs, _ := thread.List(p)
-			pd.TaskUsage, pd.Usage = thread.TaskUsage(recs)
-			prs := tick.PRs(sum.Slug)
-			for _, r := range recs {
-				if r.State == thread.Resolved {
-					continue
-				}
-				tr := ThreadRow{Record: r}
-				tr.Status, _ = thread.ReadStatus(p, r.ID)
-				tr.Report, _ = thread.ReadReport(p, r.ID)
-				tr.Checks, tr.PR = prs[r.ID].Checks, prs[r.ID].Number
-				if b != nil && r.TaskID() > 0 {
-					tr.TaskRec = b.Find(r.TaskID())
-				}
-				pd.Threads = append(pd.Threads, tr)
-			}
-			items, _ := p.Inbox()
-			pd.Unread, pd.Items = len(items), items
-			qs, _ := p.Questions()
-			pd.Questions = len(qs)
-			pd.Badges = badgesOf(badgers, sum.Slug)
-			pd.PRHostFails = hostFails(fails, p)
-			if cfg != nil {
-				pd.Links = link.Rows(cfg, p)
-				pd.countLinkWaits()
-			}
-		}
-		d.Projects = append(d.Projects, pd)
-	}
+	d.Projects = sideProjects(ps)
 }
 
 // loadPeers asks the server for its mirror of the paired servers
@@ -711,51 +661,6 @@ func loadPeers(call func(method string, params, result any) error) []proto.PeerM
 		return nil
 	}
 	return l.Peers
-}
-
-// hostFails is project p's PRHostFails, of the ticker's fails by slug
-// (ticker.HostFails): none without a PR host, as the coordinator's
-// panel has it (server.NoPRHost).
-func hostFails(fails map[string]int, p *project.Project) int {
-	if n := fails[p.Slug]; n > 0 && !server.NoPRHost(p) {
-		return n
-	}
-	return 0
-}
-
-// badgeMods are the mods whose annotations show: enabled, with the
-// project_read grant that $.annotate needs. A mod disabled, regranted or
-// removed shows no badges.
-func badgeMods(mods []mod.Mod) []mod.Mod {
-	var out []mod.Mod
-	for _, m := range mods {
-		if m.State == mod.Enabled && m.Granted(mod.PermProjectRead) {
-			out = append(out, m)
-		}
-	}
-	return out
-}
-
-// badgesOf reads the badges of mods for project slug, by target, in the
-// mods' id order.
-func badgesOf(mods []mod.Mod, slug string) map[string][]modstore.Badge {
-	state, err := home.ModStateDir()
-	if err != nil {
-		return nil
-	}
-	var out map[string][]modstore.Badge
-	for _, m := range mods {
-		if !m.Runs(slug) {
-			continue
-		}
-		for target, bs := range modstore.ReadBadges(filepath.Join(state, m.ID), m.ID, slug) {
-			if out == nil {
-				out = map[string][]modstore.Badge{}
-			}
-			out[target] = append(out[target], bs...)
-		}
-	}
-	return out
 }
 
 func (s *ServerSource) Board(slug string) (*tasks.Board, error) {

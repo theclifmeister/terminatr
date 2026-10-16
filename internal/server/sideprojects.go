@@ -225,44 +225,119 @@ func (s *Server) lookSideProjects(gen uint64, detail bool) []SideProject {
 	}
 	out := []SideProject{}
 	for _, slug := range h.slugs {
-		safety, serr := h.cfg.Safety(slug)
-		if serr == nil && safety.Archived {
-			continue // hidden: tm project unarchive brings it back
-		}
-		sp := SideProject{Slug: slug}
-		snap, err := s.projects.stamped(slug, ts, gen)
-		if err != nil {
-			if detail {
-				sp.Error = err.Error()
-			}
-			out = append(out, sp)
-			continue
-		}
-		if serr == nil {
-			sp.Safety = &safety
-		}
-		sp = snap.side(sp)
+		snap := func() (*projectSnap, error) { return s.projects.stamped(slug, ts, gen) }
+		var badges func() map[string][]modstore.Badge
 		if detail {
-			sp = snap.detail(sp, h.cfg.Own(slug))
-			sp.Badges = h.badgesOf(badgers, slug)
+			badges = func() map[string][]modstore.Badge { return h.badgesOf(badgers, slug) }
 		}
-		out = append(out, sp)
+		if sp, ok := sideProject(h.cfg, slug, snap, badges); ok {
+			out = append(out, sp)
+		}
 	}
 	return out
 }
 
+// sideProject is project slug as the sidebars show it, of the config cfg
+// and its snapshot (snap); with badges, the mods' annotations of it, as
+// the dashboard shows it (detail). False for an archived project.
+func sideProject(cfg *config.Config, slug string, snap func() (*projectSnap, error), badges func() map[string][]modstore.Badge) (SideProject, bool) {
+	safety, serr := cfg.Safety(slug)
+	if serr == nil && safety.Archived {
+		return SideProject{}, false // hidden: tm project unarchive brings it back
+	}
+	sp := SideProject{Slug: slug}
+	sn, err := snap()
+	if err != nil {
+		if badges != nil {
+			sp.Error = err.Error()
+		}
+		return sp, true
+	}
+	if serr == nil {
+		sp.Safety = &safety
+	}
+	sp = sn.side(sp)
+	if badges != nil {
+		sp = sn.detail(sp, cfg.Own(slug))
+		sp.Badges = badges()
+	}
+	return sp, true
+}
+
+// ReadProjects reads the projects as projects.watch with detail sends
+// them, from their files and the ticker's state file at tickerState,
+// with the annotations of mods, the installed mods, that show
+// (BadgeMods): for a client that reads them itself while no watch runs
+// (the dashboard without a server). It caches nothing. The error is
+// config.toml's, with no projects.
+func ReadProjects(tickerState string, mods []mod.Mod) ([]SideProject, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return []SideProject{}, err
+	}
+	root, err := home.ProjectsDir()
+	if err != nil {
+		return []SideProject{}, err
+	}
+	_, slugs := projectDirs(root)
+	badgers := BadgeMods(mods)
+	out := []SideProject{}
+	for _, slug := range slugs {
+		snap := func() (*projectSnap, error) {
+			p, err := project.Open(slug)
+			if err != nil {
+				return nil, err
+			}
+			return readProjectSnap(p, tickerState), nil
+		}
+		badges := func() map[string][]modstore.Badge { return readBadges(badgers, slug) }
+		if sp, ok := sideProject(cfg, slug, snap, badges); ok {
+			out = append(out, sp)
+		}
+	}
+	return out, nil
+}
+
 // badgeMods are the installed mods whose annotations show on the
-// dashboard: enabled, with the project_read grant that $.annotate
-// needs.
+// dashboard (BadgeMods).
 func (s *Server) badgeMods() []mod.Mod {
 	reg := s.modRegistry()
 	if reg == nil {
 		return nil
 	}
+	return BadgeMods(reg.Mods)
+}
+
+// BadgeMods are the mods of mods whose annotations show on the
+// dashboard: enabled, with the project_read grant that $.annotate
+// needs. A mod disabled, regranted or removed shows no badges.
+func BadgeMods(mods []mod.Mod) []mod.Mod {
 	var out []mod.Mod
-	for _, m := range reg.Mods {
+	for _, m := range mods {
 		if m.State == mod.Enabled && m.Granted(mod.PermProjectRead) {
 			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// readBadges reads the annotations of mods that run for project slug,
+// by target, in the mods' order, as badgesOf has them uncached.
+func readBadges(mods []mod.Mod, slug string) map[string][]modstore.Badge {
+	state, err := home.ModStateDir()
+	if err != nil {
+		return nil
+	}
+	var out map[string][]modstore.Badge
+	for _, m := range mods {
+		if !m.Runs(slug) {
+			continue
+		}
+		for target, bs := range modstore.ReadBadges(filepath.Join(state, m.ID), m.ID, slug) {
+			if out == nil {
+				out = map[string][]modstore.Badge{}
+			}
+			out[target] = append(out[target], bs...)
 		}
 	}
 	return out
