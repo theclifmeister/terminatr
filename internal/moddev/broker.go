@@ -31,10 +31,15 @@ import (
 // project.get, http.fetch and process.run an error (the fixture must
 // say); everything else (the ui, annotate, inbox.raise) null.
 //
-// process.run is refused, answer or not, as the broker refuses it: a
+// A call is refused, answer or not, as the broker refuses it, by name
+// only (the mod's folder and home are made up): process.run for a
 // program the commands don't name, an option the program may not have,
-// or an argument naming a path the mod couldn't read, by name only
-// (its folder and home are made up).
+// or an argument naming a path the mod couldn't read; http.fetch for a
+// URL (modbroker.CheckURL) that isn't https, on port 443, at a host of
+// permissions.net; fs.* for a path (modbroker.Paths) outside the mod's
+// own folder and files roots, or on the deny list; store.* for a key
+// not 1 to 256 bytes, or a store over modbroker.MaxStore. fs.read of a
+// file the fixture doesn't have is NotFound.
 type Broker struct {
 	grants  []string
 	perms   mod.Permissions
@@ -53,8 +58,14 @@ func NewBroker(grants []string, perms mod.Permissions, answers []Answer, store m
 	if b.store == nil {
 		b.store = map[string]json.RawMessage{}
 	}
-	if b.files == nil {
-		b.files = map[string]string{}
+	// The fixture names files as a mod would; keep them by the path the
+	// checks make of the name.
+	b.files = map[string]string{}
+	for k, v := range files {
+		if abs, err := b.paths().CheckName(k, false); err == nil {
+			k = abs
+		}
+		b.files[k] = v
 	}
 	return b
 }
@@ -85,10 +96,8 @@ func (b *Broker) Answer(method string, params json.RawMessage) (json.RawMessage,
 	if m.Needs != "" && !slices.Contains(b.grants, m.Needs) {
 		return nil, &modproto.Error{Code: modproto.CodeDenied, Message: fmt.Sprintf("refused: %s needs the %s permission", method, m.Needs)}
 	}
-	if method == "process.run" {
-		if err := b.checkRun(params); err != nil {
-			return nil, err
-		}
+	if err := b.check(method, params); err != nil {
+		return nil, err
 	}
 	for _, a := range b.answers {
 		if a.Method == method && Match(a.Params, params) {
@@ -126,16 +135,18 @@ func (b *Broker) Answer(method string, params json.RawMessage) (json.RawMessage,
 	case "store.del":
 		delete(b.store, p.Key)
 	case "fs.read":
-		t, ok := b.files[p.Path]
+		abs, _ := b.paths().CheckName(p.Path, false) // checked already
+		t, ok := b.files[abs]
 		if !ok {
-			return nil, &modproto.Error{Code: modproto.CodeInternal, Message: "no file " + p.Path}
+			return nil, &modproto.Error{Code: modproto.CodeNotFound, Message: p.Path + ": no such file"}
 		}
 		return marshal(t), nil
 	case "fs.write":
+		abs, _ := b.paths().CheckName(p.Path, true)
 		if p.Append {
-			b.files[p.Path] += p.Text
+			b.files[abs] += p.Text
 		} else {
-			b.files[p.Path] = p.Text
+			b.files[abs] = p.Text
 		}
 	case "ui.toast":
 		// Refused as the server refuses it (ui.toast in internal/server).
@@ -166,26 +177,81 @@ func marshal(v any) json.RawMessage {
 // fakeRoot is the made-up folder the mod's home and own folder are in.
 var fakeRoot = map[bool]string{false: "/fixture", true: `C:\fixture`}[caps.Windows]
 
-// checkRun refuses a process.run the broker would refuse.
-func (b *Broker) checkRun(params json.RawMessage) *modproto.Error {
-	var a struct {
-		Argv []string `json:"argv"`
-		modbroker.RunOptions
-		Options *modbroker.RunOptions `json:"options"`
-	}
-	if err := json.Unmarshal(params, &a); err != nil {
-		return &modproto.Error{Code: modproto.CodeInvalidParams, Message: "process.run: " + err.Error()}
-	}
-	if a.Options != nil {
-		a.RunOptions = *a.Options
-	}
+// paths are the file rules of the mod, over the made-up folders: its own
+// folder always, the roots of its files grant when granted.
+func (b *Broker) paths() modbroker.Paths {
 	home := filepath.Join(fakeRoot, "home")
 	p := modbroker.Paths{Home: home, TMHome: filepath.Join(home, ".terminatr"), Own: filepath.Join(home, ".terminatr", "state", "mods", "mod"),
 		Secrets: append(agent.Secrets(nil, home, noenv), modbroker.Keychains(home, noenv)...)}
 	if slices.Contains(b.grants, mod.PermFiles) {
 		p.Read, p.Write = b.perms.Files.Read, b.perms.Files.Write
 	}
-	p = p.Resolved()
+	return p.Resolved()
+}
+
+// check refuses a call the broker would refuse for what it names: a
+// program, a URL, a path or a store key and size. Nothing else.
+func (b *Broker) check(method string, params json.RawMessage) *modproto.Error {
+	var err error
+	switch method {
+	case "process.run":
+		err = b.checkRun(params)
+	case "http.fetch":
+		var a struct {
+			URL string `json:"url"`
+		}
+		if err = json.Unmarshal(params, &a); err == nil {
+			_, err = modbroker.CheckURL(a.URL, b.perms.Net)
+		}
+	case "fs.read", "fs.write":
+		var a struct {
+			Path string `json:"path"`
+		}
+		if err = json.Unmarshal(params, &a); err == nil {
+			_, err = b.paths().CheckName(a.Path, method == "fs.write")
+		}
+	case "store.get", "store.set", "store.del":
+		var a struct {
+			Key   string          `json:"key"`
+			Value json.RawMessage `json:"value"`
+		}
+		if err = json.Unmarshal(params, &a); err == nil {
+			err = modbroker.CheckKey(method, a.Key)
+		}
+		if err == nil && method == "store.set" {
+			next := maps.Clone(b.store)
+			if len(a.Value) == 0 {
+				a.Value = json.RawMessage("null")
+			}
+			next[a.Key] = a.Value
+			err = modbroker.CheckStoreSize(next)
+		}
+	}
+	var e *modbroker.Error
+	switch {
+	case err == nil:
+		return nil
+	case errors.As(err, &e):
+		return &modproto.Error{Code: e.Code, Message: e.Message}
+	default:
+		return &modproto.Error{Code: modproto.CodeInvalidParams, Message: method + ": " + err.Error()}
+	}
+}
+
+// checkRun refuses a process.run the broker would refuse.
+func (b *Broker) checkRun(params json.RawMessage) error {
+	var a struct {
+		Argv []string `json:"argv"`
+		modbroker.RunOptions
+		Options *modbroker.RunOptions `json:"options"`
+	}
+	if err := json.Unmarshal(params, &a); err != nil {
+		return err
+	}
+	if a.Options != nil {
+		a.RunOptions = *a.Options
+	}
+	p := b.paths()
 	err := modbroker.CheckRun(a.Argv, b.perms.Commands)
 	if err == nil {
 		dir := p.Own
@@ -196,11 +262,7 @@ func (b *Broker) checkRun(params json.RawMessage) *modproto.Error {
 			err = p.CheckArgsByName(a.Argv[1:], dir)
 		}
 	}
-	var e *modbroker.Error
-	if errors.As(err, &e) {
-		return &modproto.Error{Code: e.Code, Message: e.Message}
-	}
-	return nil
+	return err
 }
 
 func noenv(string) string { return "" }

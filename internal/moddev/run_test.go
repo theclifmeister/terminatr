@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/modbroker"
+	"github.com/theclifmeister/terminatr/internal/modproto"
 )
 
 const manifest = `id = "age"
@@ -302,5 +304,136 @@ func TestPinnedNow(t *testing.T) {
 				t.Errorf("bad.json: ok %v, problems %q", r.OK, r.Problems)
 			}
 		}
+	}
+}
+
+// refuses runs one call and reports the code it was refused with, 0 for
+// none.
+func refuses(b *Broker, method, params string) int {
+	if _, e := b.Answer(method, json.RawMessage(params)); e != nil {
+		return e.Code
+	}
+	return 0
+}
+
+// TestBrokerFetch: the fake refuses an http.fetch the broker refuses,
+// even when the fixture answers it.
+func TestBrokerFetch(t *testing.T) {
+	perms := mod.Permissions{Net: []string{"api.example.com", "*.cdn.example.org"}}
+	answers := []Answer{{Method: "http.fetch", Result: json.RawMessage(`{"status":200}`)}}
+	b := NewBroker([]string{mod.PermNet}, perms, answers, nil, nil)
+	for _, c := range []struct {
+		params string
+		code   int
+	}{
+		{`{"url":"https://api.example.com/v1?q=1"}`, 0},
+		{`{"url":"https://api.example.com:443/v1"}`, 0},
+		{`{"url":"https://a.cdn.example.org/x","options":{"method":"GET"}}`, 0},
+		{`{"url":"http://api.example.com/"}`, modproto.CodeDenied},
+		{`{"url":"https://api.example.com:8443/"}`, modproto.CodeDenied},
+		{`{"url":"https://other.example.com/"}`, modproto.CodeDenied},
+		{`{"url":"https://cdn.example.org/"}`, modproto.CodeDenied},
+		{`{"url":"https://user:pw@api.example.com/"}`, modproto.CodeDenied},
+		{`{"url":"https://127.0.0.1/"}`, modproto.CodeDenied},
+		{`{"url":"file:///etc/passwd"}`, modproto.CodeDenied},
+		{`{"url":"https://api.example.com/` + strings.Repeat("a", 9000) + `"}`, modproto.CodeInvalidParams},
+	} {
+		if got := refuses(b, "http.fetch", c.params); got != c.code {
+			t.Errorf("%.80s: code %d, want %d", c.params, got, c.code)
+		}
+	}
+	// Without an answer a fetch the broker allows is the fixture's to say.
+	b = NewBroker([]string{mod.PermNet}, perms, nil, nil, nil)
+	if got := refuses(b, "http.fetch", `{"url":"https://api.example.com/"}`); got != modproto.CodeInternal {
+		t.Errorf("no answer: code %d", got)
+	}
+}
+
+// TestBrokerFiles: the fake checks fs.* paths as the broker does, and a
+// file the fixture lacks is NotFound.
+func TestBrokerFiles(t *testing.T) {
+	perms := mod.Permissions{Files: mod.Files{Read: []string{"~/notes"}, Write: []string{"~/out"}}}
+	files := map[string]string{"a.txt": "own", "~/notes/n.txt": "note"}
+	b := NewBroker([]string{mod.PermFiles}, perms, nil, nil, files)
+	for _, c := range []struct {
+		method, params string
+		code           int
+	}{
+		{"fs.read", `{"path":"a.txt"}`, 0},
+		{"fs.read", `{"path":"~/notes/n.txt"}`, 0},
+		{"fs.read", `{"path":"~/out/x"}`, modproto.CodeNotFound},
+		{"fs.read", `{"path":"missing.txt"}`, modproto.CodeNotFound},
+		{"fs.read", `{"path":"~/notes/missing.txt"}`, modproto.CodeNotFound},
+		{"fs.read", `{"path":""}`, modproto.CodeInvalidParams},
+		{"fs.read", `{"path":"~/elsewhere/x"}`, modproto.CodeDenied},
+		{"fs.read", `{"path":"/etc/passwd"}`, modproto.CodeDenied},
+		{"fs.read", `{"path":"../../../../x"}`, modproto.CodeDenied},
+		{"fs.read", `{"path":"~/.ssh/id_rsa"}`, modproto.CodeDenied},
+		{"fs.read", `{"path":"~/notes/.env"}`, modproto.CodeDenied},
+		{"fs.read", `{"path":"~/notes/r/.git/config"}`, modproto.CodeDenied},
+		{"fs.read", `{"path":"~/.terminatr/config.toml"}`, modproto.CodeDenied},
+		{"fs.write", `{"path":"b.txt","text":"x"}`, 0},
+		{"fs.write", `{"path":"~/out/o.txt","text":"x"}`, 0},
+		{"fs.write", `{"path":"~/notes/n.txt","text":"x"}`, modproto.CodeDenied},
+		{"fs.write", `{"path":"~/out/.env","text":"x"}`, modproto.CodeDenied},
+		{"fs.write", `{"path":"~/.terminatr/config.toml","text":"x"}`, modproto.CodeDenied},
+	} {
+		if got := refuses(b, c.method, c.params); got != c.code {
+			t.Errorf("%s %s: code %d, want %d", c.method, c.params, got, c.code)
+		}
+	}
+	// What was written reads back, by any name for the same file.
+	if res, e := b.Answer("fs.read", json.RawMessage(`{"path":"~/out/o.txt"}`)); e != nil || string(res) != `"x"` {
+		t.Errorf("read back: %s %v", res, e)
+	}
+	// A files root is the grant's: without it only the own folder.
+	b = NewBroker(nil, perms, nil, nil, files)
+	if got := refuses(b, "fs.read", `{"path":"~/notes/n.txt"}`); got != modproto.CodeDenied {
+		t.Errorf("a root without the files grant: code %d", got)
+	}
+	if got := refuses(b, "fs.read", `{"path":"a.txt"}`); got != 0 {
+		t.Errorf("the own folder: code %d", got)
+	}
+}
+
+// TestBrokerStore: the fake holds a store to the broker's key and size
+// limits.
+func TestBrokerStore(t *testing.T) {
+	b := NewBroker(nil, mod.Permissions{}, nil, nil, nil)
+	key := func(n int) string { return strings.Repeat("k", n) }
+	for _, c := range []struct {
+		method, params string
+		code           int
+	}{
+		{"store.set", `{"key":"a","value":1}`, 0},
+		{"store.get", `{"key":"a"}`, 0},
+		{"store.del", `{"key":"a"}`, 0},
+		{"store.set", `{"key":"` + key(256) + `","value":1}`, 0},
+		{"store.set", `{"key":"` + key(257) + `","value":1}`, modproto.CodeInvalidParams},
+		{"store.set", `{"key":"","value":1}`, modproto.CodeInvalidParams},
+		{"store.set", `{"value":1}`, modproto.CodeInvalidParams},
+		{"store.get", `{"key":"` + key(257) + `"}`, modproto.CodeInvalidParams},
+		{"store.del", `{"key":""}`, modproto.CodeInvalidParams},
+		{"store.set", `{"key":"big","value":"` + strings.Repeat("x", modbroker.MaxStore) + `"}`, modproto.CodeDenied},
+	} {
+		if got := refuses(b, c.method, c.params); got != c.code {
+			t.Errorf("%s %.60s: code %d, want %d", c.method, c.params, got, c.code)
+		}
+	}
+	if _, ok := b.Store()["big"]; ok {
+		t.Error("a refused set was stored")
+	}
+	// The store as a whole is held to the limit: a second value that
+	// tips it over is refused, and the first stays.
+	half := `"` + strings.Repeat("x", modbroker.MaxStore/2) + `"`
+	b = NewBroker(nil, mod.Permissions{}, nil, nil, nil)
+	if got := refuses(b, "store.set", `{"key":"one","value":`+half+`}`); got != 0 {
+		t.Fatalf("first half: code %d", got)
+	}
+	if got := refuses(b, "store.set", `{"key":"two","value":`+half+`}`); got != modproto.CodeDenied {
+		t.Errorf("second half: code %d", got)
+	}
+	if got := refuses(b, "store.set", `{"key":"one","value":`+half+`}`); got != 0 {
+		t.Errorf("replacing a value: code %d", got)
 	}
 }
