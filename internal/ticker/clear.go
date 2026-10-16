@@ -104,13 +104,7 @@ func (t *Ticker) autoClear(p *project.Project, sessions []proto.SessionInfo, saf
 // itself may still count as queued, and a prompt queued after it lands
 // in the fresh conversation: the queue isn't looked at then.
 func clearBlocked(p *project.Project, sessions []proto.SessionInfo, hint int, delivery bool) (*proto.SessionInfo, string) {
-	var coord *proto.SessionInfo
-	for i, s := range sessions {
-		if s.Role == proto.RoleCoordinator && s.Project == p.Slug {
-			coord = &sessions[i]
-			break
-		}
-	}
+	coord := proto.CoordinatorOf(sessions, p.Slug)
 	switch {
 	case coord == nil:
 		return nil, "no coordinator"

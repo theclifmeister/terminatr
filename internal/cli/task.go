@@ -33,12 +33,8 @@ const taskUsage = `usage: tm task <command> [--project <slug>] [--json]
 Exit codes: 0 done or already true, 1 refused, 2 usage, 3 I/O.`
 
 func runTask(e *Env, args []string) error {
-	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
-		if len(args) == 0 {
-			return usagef("%s", taskUsage)
-		}
-		fmt.Fprintln(e.Stdout, taskUsage)
-		return nil
+	if done, err := helpOr(e, args, taskUsage); done {
+		return err
 	}
 	sub, rest := args[0], args[1:]
 	f := newFlags()

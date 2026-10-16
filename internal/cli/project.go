@@ -163,11 +163,7 @@ func projectLifecycle(e *Env, verb string, args []string) error {
 		msg, err = tui.DeleteProject(call, e.Caller, p.Slug)
 	}
 	if err != nil {
-		var pe *proto.Error
-		if errors.As(err, &pe) {
-			return &project.Error{Code: pe.Code, Msg: pe.Message}
-		}
-		return err
+		return fromProto(err)
 	}
 	fmt.Fprintln(e.Stdout, msg)
 	return nil
@@ -200,11 +196,7 @@ func projectRename(e *Env, args []string) error {
 	case err == nil:
 		defer c.Close()
 		if err := c.Call(proto.MethodProjectRename, params, &res); err != nil {
-			var pe *proto.Error
-			if errors.As(err, &pe) {
-				return &project.Error{Code: pe.Code, Msg: pe.Message}
-			}
-			return err
+			return fromProto(err)
 		}
 	case errors.Is(err, client.ErrNotRunning):
 		if res, err = renameOffline(e, params); err != nil {
@@ -279,13 +271,10 @@ func (e *Env) confirmDeactivate(call func(method string, params, result any) err
 	if err != nil || len(busy) == 0 {
 		return err
 	}
-	in, ok := e.Stdin.(*os.File)
-	if !ok || !isTTY(in) {
+	if !stdinTTY(e) {
 		return usagef("tm project deactivate %s stops %s now: confirm with --yes", slug, strings.Join(busy, ", "))
 	}
-	fmt.Fprintf(e.Stdout, "%s [y/N] ", tui.DeactivateQuestion(slug, busy))
-	line, _ := bufio.NewReader(in).ReadString('\n')
-	if a := strings.ToLower(strings.TrimSpace(line)); a != "y" && a != "yes" {
+	if !ask(e, tui.DeactivateQuestion(slug, busy)+" [y/N] ") {
 		return &project.Error{Code: "not-confirmed", Msg: slug + " stays active"}
 	}
 	return nil
@@ -629,11 +618,7 @@ func projectRemote(e *Env, args []string) error {
 	defer c.Close()
 	res, err := tui.SetRemote(c.Call, p.Slug, pos[0] == "on")
 	if err != nil {
-		var pe *proto.Error
-		if errors.As(err, &pe) {
-			return &project.Error{Code: pe.Code, Msg: pe.Message}
-		}
-		return err
+		return fromProto(err)
 	}
 	fmt.Fprintln(e.Stdout, tui.RemoteMessage(p.Slug, res))
 	return nil

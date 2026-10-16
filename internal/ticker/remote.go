@@ -49,13 +49,7 @@ func (t *Ticker) keepRemote(p *project.Project, sessions []proto.SessionInfo, sa
 		pm.Remote = nil
 		return
 	}
-	var coord *proto.SessionInfo
-	for i, s := range sessions {
-		if s.Role == proto.RoleCoordinator && s.Project == p.Slug {
-			coord = &sessions[i]
-			break
-		}
-	}
+	coord := proto.CoordinatorOf(sessions, p.Slug)
 	rm := pm.Remote
 	if rm == nil {
 		rm = &remoteMemo{}

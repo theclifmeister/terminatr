@@ -163,10 +163,8 @@ func runMod(e *Env, args []string) error {
 		if err != nil {
 			return err
 		}
-		if *slug != "" {
-			if _, err := project.Open(*slug); err != nil {
-				return err
-			}
+		if err := optProject(*slug); err != nil {
+			return err
 		}
 		if err := mod.Disable(e.Caller, id, *slug); err != nil {
 			return modErr(err)
@@ -209,10 +207,8 @@ func (e *Env) modRun(id, cmd, slug string) error {
 	if err := mod.CheckID(id); err != nil {
 		return usagef("%v", err)
 	}
-	if slug != "" {
-		if _, err := project.Open(slug); err != nil {
-			return err
-		}
+	if err := optProject(slug); err != nil {
+		return err
 	}
 	if err := runModCommand(proto.ModCommandParams{Mod: id, Command: cmd, Project: slug}); err != nil {
 		return err
@@ -298,6 +294,25 @@ func (e *Env) confirm(yes bool, cmd, q string) error {
 		return &project.Error{Code: "not-confirmed", Msg: "nothing changed"}
 	}
 	return nil
+}
+
+// installedMod is the installed mod id, else the refusal that none is.
+func installedMod(r *mod.Registry, id string) (mod.Mod, error) {
+	m, ok := r.Get(id)
+	if !ok {
+		return m, &project.Error{Code: "refused", Msg: fmt.Sprintf("no mod %q is installed", id)}
+	}
+	return m, nil
+}
+
+// optProject checks that the project named by an optional --project
+// exists; "" names none.
+func optProject(slug string) error {
+	if slug == "" {
+		return nil
+	}
+	_, err := project.Open(slug)
+	return err
 }
 
 // registry loads the installed mods with config.toml's tables.
@@ -511,19 +526,17 @@ func (e *Env) modInstall(arg string, yes bool) error {
 }
 
 func (e *Env) modEnable(id, slug string, yes bool) error {
-	if slug != "" {
-		if _, err := project.Open(slug); err != nil {
-			return err
-		}
+	if err := optProject(slug); err != nil {
+		return err
 	}
 	r, err := registry()
 	if err != nil {
 		return err
 	}
-	m, ok := r.Get(id)
+	m, err := installedMod(r, id)
 	switch {
-	case !ok:
-		return &project.Error{Code: "refused", Msg: fmt.Sprintf("no mod %q is installed", id)}
+	case err != nil:
+		return err
 	case m.State == mod.Invalid || m.State == mod.Incompatible:
 		return &project.Error{Code: "invalid-mod", Msg: fmt.Sprintf("%s can't be enabled: %s", id, m.Reason())}
 	}
@@ -542,7 +555,7 @@ func (e *Env) modEnable(id, slug string, yes bool) error {
 	if err != nil {
 		return err
 	}
-	if m, ok = r.Get(id); ok {
+	if m, ok := r.Get(id); ok {
 		fmt.Fprintf(e.Stdout, "%s enabled: %s\n", id, m.Status())
 		if c, _ := config.Load(); m.Manifest != nil && m.Manifest.Permissions.Tools && (c == nil || !c.AgentMod) {
 			fmt.Fprintf(e.Stdout, "The Agent mod is off: %s.\n", mod.ToolsAgentModNote)
@@ -563,10 +576,10 @@ func (e *Env) modDefaults(id string, apply, yes bool) error {
 	if err != nil {
 		return err
 	}
-	m, ok := r.Get(id)
+	m, err := installedMod(r, id)
 	switch {
-	case !ok:
-		return &project.Error{Code: "refused", Msg: fmt.Sprintf("no mod %q is installed", id)}
+	case err != nil:
+		return err
 	case m.Manifest == nil:
 		return &project.Error{Code: "invalid-mod", Msg: fmt.Sprintf("%s: %s", id, m.Reason())}
 	case len(m.Manifest.Defaults) == 0:
@@ -619,9 +632,9 @@ func (e *Env) modRemove(id string, purge, yes bool) error {
 	if err != nil {
 		return err
 	}
-	m, ok := r.Get(id)
-	if !ok {
-		return &project.Error{Code: "refused", Msg: fmt.Sprintf("no mod %q is installed", id)}
+	m, err := installedMod(r, id)
+	if err != nil {
+		return err
 	}
 	name := id
 	if m.Manifest != nil {
@@ -648,9 +661,9 @@ func (e *Env) modUpdate(ids []string, yes bool) error {
 	}
 	var todo []mod.Mod
 	if len(ids) == 1 {
-		m, ok := r.Get(ids[0])
-		if !ok {
-			return &project.Error{Code: "refused", Msg: fmt.Sprintf("no mod %q is installed", ids[0])}
+		m, err := installedMod(r, ids[0])
+		if err != nil {
+			return err
 		}
 		todo = append(todo, m)
 	} else {

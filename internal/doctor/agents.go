@@ -46,22 +46,32 @@ func Agents(d Deps) []Check {
 	return out
 }
 
-// threadSandboxCheck runs the agent's thread sandbox probe on Windows,
-// where Codex's sandbox is a separate piece (docs/CODEX.md): a thread whose
-// sandbox doesn't hold can't reach tm's socket.
-func threadSandboxCheck(d Deps, name string, m *agent.Manifest, p agent.ThreadSandboxProber) Check {
-	c := Check{Group: "agents", Name: name + " thread sandbox"}
-	v, err := d.ThreadSandboxProbe(p)
+// probeCheck is the check named name for an agent's sandbox probe: OK
+// with ok when it passes, else a Warn with bad(err). Both read as
+// "<command> <version>: ...".
+func probeCheck(name string, m *agent.Manifest, probe func() (string, error), ok string, bad func(err error) string) Check {
+	c := Check{Group: "agents", Name: name}
+	v, err := probe()
 	if v == "" {
 		v = "(version unknown)"
 	}
 	if err != nil {
-		c.Status = Warn
-		c.Detail = fmt.Sprintf("%s %s: the thread sandbox doesn't hold (%v); a %s thread runs without it or asks approval for every command (docs/CODEX.md)", m.Launch.Command, v, err, m.Display)
+		c.Status, c.Detail = Warn, m.Launch.Command+" "+v+": "+bad(err)
 		return c
 	}
-	c.Status, c.Detail = OK, fmt.Sprintf("%s %s: a thread's commands run sandboxed and reach tm's socket", m.Launch.Command, v)
+	c.Status, c.Detail = OK, m.Launch.Command+" "+v+": "+ok
 	return c
+}
+
+// threadSandboxCheck runs the agent's thread sandbox probe on Windows,
+// where Codex's sandbox is a separate piece (docs/CODEX.md): a thread whose
+// sandbox doesn't hold can't reach tm's socket.
+func threadSandboxCheck(d Deps, name string, m *agent.Manifest, p agent.ThreadSandboxProber) Check {
+	return probeCheck(name+" thread sandbox", m, func() (string, error) { return d.ThreadSandboxProbe(p) },
+		"a thread's commands run sandboxed and reach tm's socket",
+		func(err error) string {
+			return fmt.Sprintf("the thread sandbox doesn't hold (%v); a %s thread runs without it or asks approval for every command (docs/CODEX.md)", err, m.Display)
+		})
 }
 
 // sandboxCheck runs the agent's coordinator sandbox probe: a newer Codex
@@ -70,23 +80,16 @@ func threadSandboxCheck(d Deps, name string, m *agent.Manifest, p agent.ThreadSa
 // (docs/SPEC.md §8.6, Codex). On Windows the probe checks the profile
 // without the proxy, which Codex doesn't apply there.
 func sandboxCheck(d Deps, name string, m *agent.Manifest, p agent.SandboxProber) Check {
-	c := Check{Group: "agents", Name: name + " coordinator sandbox"}
-	v, err := d.SandboxProbe(p)
-	if v == "" {
-		v = "(version unknown)"
-	}
-	if err != nil {
-		c.Status = Warn
-		c.Detail = fmt.Sprintf("%s %s: the coordinator's sandbox doesn't hold (%v); a %s coordinator runs without it (auto-review, workspace-write, network off)", m.Launch.Command, v, err, m.Display)
-		return c
-	}
-	c.Status, c.Detail = OK, fmt.Sprintf("%s %s: the network reaches only tm's socket", m.Launch.Command, v)
+	ok := "the network reaches only tm's socket"
 	if d.GOOS == "windows" {
 		// Codex limits the network to its proxy only in its elevated
 		// sandbox; tm turns it off instead (internal/agent/codex/probe.go).
-		c.Detail = fmt.Sprintf("%s %s: the coordinator's commands run sandboxed and reach tm's socket; its network is off only through proxy settings, which a program can ignore (docs/CODEX.md)", m.Launch.Command, v)
+		ok = "the coordinator's commands run sandboxed and reach tm's socket; its network is off only through proxy settings, which a program can ignore (docs/CODEX.md)"
 	}
-	return c
+	return probeCheck(name+" coordinator sandbox", m, func() (string, error) { return d.SandboxProbe(p) }, ok,
+		func(err error) string {
+			return fmt.Sprintf("the coordinator's sandbox doesn't hold (%v); a %s coordinator runs without it (auto-review, workspace-write, network off)", err, m.Display)
+		})
 }
 
 func agentCheck(d Deps, name, source string, m *agent.Manifest) Check {

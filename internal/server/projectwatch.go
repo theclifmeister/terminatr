@@ -347,18 +347,16 @@ func (s *Server) serveProjectWatch(c net.Conn, br *bufio.Reader, req proto.Reque
 // contextOf is the context use of project slug's coordinator, nil when
 // none runs or none reported a turn; hint is the config's ContextHint.
 func contextOf(slug string, sessions []proto.SessionInfo, hint int) *proto.WatchContext {
-	for _, info := range sessions {
-		if info.Project != slug || info.Role != proto.RoleCoordinator {
-			continue
-		}
-		pct := info.ContextPercent()
-		if pct < 0 {
-			return nil
-		}
-		return &proto.WatchContext{Tokens: info.Context, Window: info.ContextWindow, Percent: pct,
-			Threshold: hint, Hint: hint > 0 && pct >= hint}
+	info := proto.CoordinatorOf(sessions, slug)
+	if info == nil {
+		return nil
 	}
-	return nil
+	pct := info.ContextPercent()
+	if pct < 0 {
+		return nil
+	}
+	return &proto.WatchContext{Tokens: info.Context, Window: info.ContextWindow, Percent: pct,
+		Threshold: hint, Hint: hint > 0 && pct >= hint}
 }
 
 // projectTicker is project p's ticker as its dashboard shows it, with
