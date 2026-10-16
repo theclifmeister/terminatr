@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.30.0](https://github.com/theclifmeister/terminatr/compare/v0.29.1...v0.30.0) (2026-10-16)
+
+
+### Features
+
+* **dashboard:** list, add, remove and test the secret environment of threads in the settings popups ([0337007](https://github.com/theclifmeister/terminatr/commit/033700752b83b7006b4423c67ffc7152e1575652))
+
+
+### Bug Fixes
+
+* **ipc:** Listen's umask keeps the owner's bits, so folders made meanwhile stay usable (T525) ([#579](https://github.com/theclifmeister/terminatr/issues/579)) ([eb9e861](https://github.com/theclifmeister/terminatr/commit/eb9e8616d177b1727d28c6d0119e477a86b21425))
+* **merge:** a squash merge uses the PR title as the commit title ([#566](https://github.com/theclifmeister/terminatr/issues/566)) ([9f1f115](https://github.com/theclifmeister/terminatr/commit/9f1f115046e74a8b60898ffb096c3d114029df02))
+* pin goreleaser in CI, give the full e2e suite its own timeout, guard bundled mod folders both ways ([#576](https://github.com/theclifmeister/terminatr/issues/576)) ([3f766f4](https://github.com/theclifmeister/terminatr/commit/3f766f45977b3a2a5dfaf85afc429cfd19161d32))
+* **test:** TestAzureMerge checks the rebase args on the rebase call, not the last map iteration ([#575](https://github.com/theclifmeister/terminatr/issues/575)) ([0b6d146](https://github.com/theclifmeister/terminatr/commit/0b6d146a90886f787180aa9e45039da52f4ba9fc))
+* **theme:** Claude's ANSI theme follows the terminal's background, not its 2031 scheme ([#577](https://github.com/theclifmeister/terminatr/issues/577)) ([51a7b5d](https://github.com/theclifmeister/terminatr/commit/51a7b5da791719a0db397d172d920e22a9d2ba20))
+* **windows:** the wheel scrolls back through a pane's earlier output ([#570](https://github.com/theclifmeister/terminatr/issues/570)) ([568b411](https://github.com/theclifmeister/terminatr/commit/568b411214ab4ec9242eb747fdda3e913699bd0a)), closes [#567](https://github.com/theclifmeister/terminatr/issues/567)
+
 ## [0.29.1](https://github.com/theclifmeister/terminatr/compare/v0.29.0...v0.29.1) (2026-10-16)
 
 
