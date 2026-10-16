@@ -358,10 +358,7 @@ func projectRows(p ProjectData, sessions []proto.SessionInfo, byID map[string]pr
 			break
 		}
 	}
-	threads := append([]ThreadRow(nil), p.Threads...)
-	sort.SliceStable(threads, func(i, j int) bool {
-		return threadGroup(threads[i], byID) < threadGroup(threads[j], byID)
-	})
+	threads := orderedThreads(p.Threads, byID)
 	var kids []treeRow
 	for i := range threads {
 		t := &threads[i]
@@ -751,14 +748,7 @@ func (r treeRow) modCell(col string) []widget.Span {
 		if !r.cells.shows(col, proto.SlotSidebarThread) {
 			return nil
 		}
-		ts := []proto.CellTarget{{Project: p, Thread: r.thread}}
-		if r.task != "" {
-			ts = append(ts, proto.CellTarget{Project: p, Task: r.task})
-		}
-		if r.session != "" {
-			ts = append(ts, proto.CellTarget{Session: r.session})
-		}
-		return r.cells.cell(col, ts...)
+		return r.cells.cell(col, threadTargets(p, r.thread, r.task, r.session)...)
 	}
 	return nil
 }

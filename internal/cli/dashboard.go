@@ -33,6 +33,46 @@ func uiFile() string {
 	return ""
 }
 
+// warnRaw notes, before a console starts, a terminal that a killed
+// client left in raw mode.
+func (e *Env) warnRaw(prefix string) {
+	if rawMode(os.Stdin) {
+		fmt.Fprintln(e.Stderr, prefix+": this terminal looks like it was left in raw mode (a client killed with SIGKILL?); run `reset` if it misbehaves")
+	}
+}
+
+// console is what a console joins its view with: the window's size
+// (80×24 without a terminal) and its layout in ui.json.
+type console struct {
+	uiFile     string
+	cols, rows uint16
+	lay        tui.Layout
+}
+
+func newConsole() console {
+	c := console{uiFile: uiFile()}
+	var ok bool
+	if c.cols, c.rows, ok = termSize(); !ok {
+		c.cols, c.rows = 80, 24
+	}
+	c.lay = tui.ConsoleLayout(c.uiFile)
+	return c
+}
+
+// params are the console's view.subscribe params: its size and layout.
+func (c console) params() proto.ViewSubscribeParams {
+	side, info, tree := c.lay.Sidebar, c.lay.Info, c.lay.Tree
+	return proto.ViewSubscribeParams{Cols: c.cols, Rows: c.rows, Sidebar: &side, Info: &info, Tree: &tree, StatusCompact: c.lay.StatusCompact()}
+}
+
+// joinBare joins a bare view of the console's own on session id, with a
+// status bar.
+func (c console) joinBare(p client.Paths, id string) (*tui.ViewConn, error) {
+	params := c.params()
+	params.Own, params.Bare, params.StatusBar, params.Session = true, true, true, id
+	return tui.JoinView(p, params)
+}
+
 // fullConsole runs a full console: the dashboard and the attached
 // layout of view main (own: a view of its own). goTo, from a sidebar
 // click in tm attach or tm project open, is opened first: that bare view
@@ -42,9 +82,7 @@ func (e *Env) fullConsole(own bool, goTo *tui.Target) error {
 		fmt.Fprintln(e.Stderr, "tm: the dashboard needs a terminal; see tm session list")
 		return &exitError{ExitUsage}
 	}
-	if rawMode(os.Stdin) {
-		fmt.Fprintln(e.Stderr, "tm: this terminal looks like it was left in raw mode (a client killed with SIGKILL?); run `reset` if it misbehaves")
-	}
+	e.warnRaw("tm")
 	c, p, err := connect(true)
 	if err != nil {
 		return srvFail("dashboard", err)
@@ -59,14 +97,11 @@ func (e *Env) fullConsole(own bool, goTo *tui.Target) error {
 	}
 	src := &tui.ServerSource{Paths: p, Caller: who}
 	defer src.Close()
-	uiFile := uiFile()
-	cols, rows, ok := termSize()
-	if !ok {
-		cols, rows = 80, 24
-	}
-	lay := tui.ConsoleLayout(uiFile)
-	side, info, tree := lay.Sidebar, lay.Info, lay.Tree
-	vc, err := tui.JoinView(p, proto.ViewSubscribeParams{Own: own, Cols: cols, Rows: rows, Sidebar: &side, Info: &info, Tree: &tree, StatusCompact: lay.StatusCompact()})
+	con := newConsole()
+	uiFile := con.uiFile
+	params := con.params()
+	params.Own = own
+	vc, err := tui.JoinView(p, params)
 	if err != nil {
 		return srvFail("dashboard", err)
 	}
@@ -139,15 +174,10 @@ func (e *Env) openCmd(slug, agentName string) error {
 	if err != nil {
 		return err
 	}
-	cols, rows, ok := termSize()
-	if !ok {
-		cols, rows = 80, 25
-	}
 	// The pane gets the window less the sidebar and the status bar.
-	uiFile := uiFile()
-	lay := tui.ConsoleLayout(uiFile)
-	side, info, tree := lay.Sidebar, lay.Info, lay.Tree
-	id, err := tui.OpenCoordinator(c.Call, slug, agentName, max(int(cols)-side.Cols(int(cols)), 1), int(max(rows, 2)-1))
+	con := newConsole()
+	cols, rows := con.cols, con.rows
+	id, err := tui.OpenCoordinator(c.Call, slug, agentName, max(int(cols)-con.lay.Sidebar.Cols(int(cols)), 1), int(max(rows, 2)-1))
 	c.Close()
 	if err != nil {
 		return err
@@ -156,8 +186,7 @@ func (e *Env) openCmd(slug, agentName string) error {
 		fmt.Fprintln(e.Stdout, id)
 		return nil
 	}
-	vc, err := tui.JoinView(p, proto.ViewSubscribeParams{Own: true, Bare: true, StatusBar: true, Session: id,
-		Cols: cols, Rows: rows, Sidebar: &side, Info: &info, Tree: &tree, StatusCompact: lay.StatusCompact()})
+	vc, err := con.joinBare(p, id)
 	if err != nil {
 		return err
 	}
@@ -165,7 +194,7 @@ func (e *Env) openCmd(slug, agentName string) error {
 	if agentName != "" {
 		args = append(args, "--agent", agentName)
 	}
-	res, err := e.attach(p, vc, tui.Options{Sidebar: &tui.SidebarOptions{UIFile: uiFile}}, args)
+	res, err := e.attach(p, vc, tui.Options{Sidebar: &tui.SidebarOptions{UIFile: con.uiFile}}, args)
 	vc.Close()
 	if err != nil {
 		return err

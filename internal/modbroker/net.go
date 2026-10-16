@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // Fetch limits.
@@ -78,12 +80,7 @@ func CheckURL(raw string, hosts []string) (*url.URL, error) {
 	return out, nil
 }
 
-func clip(s string) string {
-	if len(s) > 120 {
-		return s[:120] + "…"
-	}
-	return s
-}
+func clip(s string) string { return textsafe.Cut(s, 120) }
 
 // PublicAddr reports whether a fetch may connect to a: never a loopback,
 // private, link-local (cloud metadata), shared (CGNAT), multicast or

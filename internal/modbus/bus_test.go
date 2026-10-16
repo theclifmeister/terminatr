@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
@@ -21,7 +22,7 @@ func empty(t *testing.T, s *Sub) {
 	}
 }
 
-var all = []string{GrantProjectRead, GrantViews}
+var all = []string{mod.PermProjectRead, mod.PermViews}
 
 func TestReadyFirstThenInOrder(t *testing.T) {
 	b := New()

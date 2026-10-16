@@ -12,6 +12,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/changes"
 	"github.com/theclifmeister/terminatr/internal/gittest"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modbroker"
 	"github.com/theclifmeister/terminatr/internal/modbus"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -240,7 +241,7 @@ func TestModThreadChangesEvent(t *testing.T) {
 	}
 
 	// No mod listens: no git.
-	other := e.bus.Subscribe("other", modbus.Options{Grants: []string{modbus.GrantProjectRead}, Events: []string{modbus.TaskChanged}})
+	other := e.bus.Subscribe("other", modbus.Options{Grants: []string{mod.PermProjectRead}, Events: []string{modbus.TaskChanged}})
 	look(live)
 	if reads != 0 {
 		t.Fatalf("%d reads with no mod listening", reads)
@@ -248,7 +249,7 @@ func TestModThreadChangesEvent(t *testing.T) {
 	other.Close()
 	tr.Reset()
 
-	sub := e.bus.Subscribe("lab", modbus.Options{Grants: []string{modbus.GrantProjectRead}, Events: []string{modbus.ThreadChanges}})
+	sub := e.bus.Subscribe("lab", modbus.Options{Grants: []string{mod.PermProjectRead}, Events: []string{modbus.ThreadChanges}})
 	look(live) // the baseline
 	if reads != 1 {
 		t.Fatalf("baseline: %d reads, want 1 (the no-repo thread has none)", reads)

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -231,10 +230,8 @@ func serverStop(e *Env, args []string) error {
 	// version (docs/SPEC.md §3.3).
 	st, err := client.Stop(p, *yes)
 	var perr *proto.Error
-	if errors.As(err, &perr) && perr.Code == proto.ErrRefused && !*yes && isTTY(os.Stdin) {
-		fmt.Fprintf(e.Stderr, "%s. Stop anyway? [y/N] ", perr.Message)
-		line, _ := bufio.NewReader(e.Stdin).ReadString('\n')
-		if a := strings.TrimSpace(strings.ToLower(line)); a != "y" && a != "yes" {
+	if errors.As(err, &perr) && perr.Code == proto.ErrRefused && !*yes && stdinTTY(e) {
+		if !ask(e, perr.Message+". Stop anyway? [y/N] ") {
 			return &exitError{ExitRefused}
 		}
 		st, err = client.Stop(p, true)

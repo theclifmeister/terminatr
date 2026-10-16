@@ -59,16 +59,7 @@ func localAgents() (proto.AgentListResult, error) {
 	if reg == nil {
 		return res, lerr
 	}
-	for _, n := range reg.Names() {
-		a, _ := reg.Get(n)
-		info := proto.AgentInfo{Name: n, Source: reg.Source[n], Injector: string(a.Injector())}
-		if m := agent.ManifestOf(a); m != nil {
-			info.Display, info.Command, info.Tested = m.Display, m.Launch.Command, m.TestedVersions
-			info.LastTested = m.Identify.LastTested
-			info.Unenforced = !m.RendersAccess()
-		}
-		res.Agents = append(res.Agents, info)
-	}
+	res.Agents = agent.Infos(reg)
 	return res, nil
 }
 

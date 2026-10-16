@@ -145,7 +145,8 @@ async function record(project: string, thread: string, state: string, task: stri
 }
 
 $.on("mod.ready", async (e) => {
-  log = ((await $.store.get(LOG)) as typeof log) ?? {};
+  const stored = await $.store.get(LOG);
+  log = stored && typeof stored === "object" && !Array.isArray(stored) ? (stored as typeof log) : {};
   // A project the mod no longer runs for keeps no history.
   const projects = new Set(e.projects.map((p) => p.project));
   for (const p of Object.keys(log)) if (!projects.has(p)) delete log[p];
@@ -175,8 +176,11 @@ $.on("view.opened", async (e, meta) => {
 });
 
 $.on("view.closed", async (e) => {
+  if (e.view !== VIEW) return;
   shown.delete(e.project ?? "");
   drawn.delete(e.project ?? "");
+  // A view keeps at most 64 trees: drop the project's once it's gone.
+  await $.ui.view.set(VIEW, null, e.project ? { project: e.project } : {});
 });
 
 // The "Last" column ages by itself (an ago span); the chart only moves

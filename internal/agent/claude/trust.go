@@ -22,8 +22,8 @@ import (
 
 // configPath is Claude's global config file for home.
 func configPath(home string) string {
-	if d := os.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
-		return filepath.Join(d, ".claude.json")
+	if os.Getenv("CLAUDE_CONFIG_DIR") != "" {
+		return filepath.Join(configDir(home), ".claude.json")
 	}
 	return filepath.Join(home, ".claude.json")
 }

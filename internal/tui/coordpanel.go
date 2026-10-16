@@ -82,16 +82,12 @@ func watchPanel(pw *proto.ProjectWatch, w int, now time.Time, readOnly bool) (*p
 	// line adds text as one line, h what a click on it does.
 	line := func(text string, h infoHit) {
 		pl.add(text)
-		for len(hits) < len(pl.lines) {
-			hits = append(hits, h)
-		}
+		hits = padHits(hits, len(pl.lines), h)
 	}
 	// wrapped adds lead then text wrapped under it, all lines doing h.
 	wrapped := func(lead, text string, h infoHit) {
 		hang(pl, lead, text)
-		for len(hits) < len(pl.lines) {
-			hits = append(hits, h)
-		}
+		hits = padHits(hits, len(pl.lines), h)
 	}
 	// item adds an item's text wrapped, its lines after the first
 	// indented as its detail lines are (docs/STYLE.md S3), all doing h.
@@ -102,15 +98,11 @@ func watchPanel(pw *proto.ProjectWatch, w int, now time.Time, readOnly bool) (*p
 			}
 			pl.add(l)
 		}
-		for len(hits) < len(pl.lines) {
-			hits = append(hits, h)
-		}
+		hits = padHits(hits, len(pl.lines), h)
 	}
 	gap := func() {
 		pl.gap()
-		for len(hits) < len(pl.lines) {
-			hits = append(hits, infoHit{})
-		}
+		hits = padHits(hits, len(pl.lines), infoHit{})
 	}
 
 	line(th().Title.Render(oneLine(pw.Project)), infoHit{})
@@ -135,9 +127,7 @@ func watchPanel(pw *proto.ProjectWatch, w int, now time.Time, readOnly bool) (*p
 	// heading starts a section.
 	heading := func(title string) {
 		pl.section(title, "")
-		for len(hits) < len(pl.lines) {
-			hits = append(hits, infoHit{})
-		}
+		hits = padHits(hits, len(pl.lines), infoHit{})
 	}
 	pl.block("needs")
 	needs := len(pl.lines)
@@ -299,9 +289,7 @@ func watchPanel(pw *proto.ProjectWatch, w int, now time.Time, readOnly bool) (*p
 		item(th().Head.Render(t.Task)+" "+text, taskHit(t.Task))
 	}
 
-	for len(hits) < len(pl.lines) {
-		hits = append(hits, infoHit{})
-	}
+	hits = padHits(hits, len(pl.lines), infoHit{})
 	return pl, hits
 }
 

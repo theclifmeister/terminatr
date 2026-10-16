@@ -12,7 +12,6 @@ import (
 	_ "github.com/theclifmeister/terminatr/internal/agent/claude"
 	"github.com/theclifmeister/terminatr/internal/agent/codex"
 	"github.com/theclifmeister/terminatr/internal/cli"
-	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
@@ -29,7 +28,7 @@ func main() {
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "selftest" {
-		if err := selftest(); err != nil {
+		if err := cli.Selftest(); err != nil {
 			fmt.Fprintln(os.Stderr, "tm selftest:", err)
 			os.Exit(1)
 		}
@@ -66,24 +65,4 @@ func usage() string {
 		"--no-mods is safe mode: a server this tm starts runs no user mods\n" +
 		"commands: " + strings.Join(append(append([]string{}, own...), cli.Commands()...), " | ") + "\n" +
 		"docs/SPEC.md §10 lists every command and flag"
-}
-
-// selftest feeds a line through the emulator to show libghostty-vt is linked.
-func selftest() error {
-	t, err := emu.New(80, 24)
-	if err != nil {
-		return err
-	}
-	defer t.Close()
-	if _, err := t.Write([]byte("ok\r\n")); err != nil {
-		return err
-	}
-	got, err := t.PlainText()
-	if err != nil {
-		return err
-	}
-	if got != "ok" {
-		return fmt.Errorf("unexpected screen %q", got)
-	}
-	return nil
 }

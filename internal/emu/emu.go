@@ -368,36 +368,51 @@ func (t *Terminal) PlainText() (string, error) {
 func (t *Terminal) Screen() (string, error) {
 	// The viewport must come from the render state: slicing the last rows
 	// of the formatter output is wrong when the bottom rows are blank.
+	var lines []string
+	err := t.eachRow(func(ri *libghostty.RenderStateRowIterator, rc *libghostty.RenderStateRowCells) error {
+		b, err := ri.AppendText(nil, rc)
+		if err != nil {
+			return fmt.Errorf("emu: row text: %w", err)
+		}
+		lines = append(lines, strings.TrimRight(string(b), " "))
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return strings.Join(lines, "\n"), nil
+}
+
+// eachRow calls fn for each visible row, top to bottom, from a fresh
+// render state of the terminal; rc is shared by every call.
+func (t *Terminal) eachRow(fn func(ri *libghostty.RenderStateRowIterator, rc *libghostty.RenderStateRowCells) error) error {
 	rs, err := libghostty.NewRenderState()
 	if err != nil {
-		return "", fmt.Errorf("emu: render state: %w", err)
+		return fmt.Errorf("emu: render state: %w", err)
 	}
 	defer rs.Close()
 	if err := rs.Update(t.t); err != nil {
-		return "", fmt.Errorf("emu: render state: %w", err)
+		return fmt.Errorf("emu: render state: %w", err)
 	}
 	ri, err := libghostty.NewRenderStateRowIterator()
 	if err != nil {
-		return "", fmt.Errorf("emu: row iterator: %w", err)
+		return fmt.Errorf("emu: row iterator: %w", err)
 	}
 	defer ri.Close()
 	rc, err := libghostty.NewRenderStateRowCells()
 	if err != nil {
-		return "", fmt.Errorf("emu: row cells: %w", err)
+		return fmt.Errorf("emu: row cells: %w", err)
 	}
 	defer rc.Close()
 	if err := rs.RowIterator(ri); err != nil {
-		return "", fmt.Errorf("emu: row iterator: %w", err)
+		return fmt.Errorf("emu: row iterator: %w", err)
 	}
-	var lines []string
 	for ri.Next() {
-		b, err := ri.AppendText(nil, rc)
-		if err != nil {
-			return "", fmt.Errorf("emu: row text: %w", err)
+		if err := fn(ri, rc); err != nil {
+			return err
 		}
-		lines = append(lines, strings.TrimRight(string(b), " "))
 	}
-	return strings.Join(lines, "\n"), nil
+	return nil
 }
 
 // Close frees the emulator.
@@ -408,45 +423,24 @@ func (t *Terminal) Close() { t.t.Close() }
 // so ghost text such as a prompt suggestion isn't read as typed input
 // (docs/SPEC.md §8.2). Trailing blanks are trimmed on every row.
 func (t *Terminal) Rows() (plain, noDim []string, err error) {
-	rs, err := libghostty.NewRenderState()
-	if err != nil {
-		return nil, nil, fmt.Errorf("emu: render state: %w", err)
-	}
-	defer rs.Close()
-	if err := rs.Update(t.t); err != nil {
-		return nil, nil, fmt.Errorf("emu: render state: %w", err)
-	}
-	ri, err := libghostty.NewRenderStateRowIterator()
-	if err != nil {
-		return nil, nil, fmt.Errorf("emu: row iterator: %w", err)
-	}
-	defer ri.Close()
-	rc, err := libghostty.NewRenderStateRowCells()
-	if err != nil {
-		return nil, nil, fmt.Errorf("emu: row cells: %w", err)
-	}
-	defer rc.Close()
-	if err := rs.RowIterator(ri); err != nil {
-		return nil, nil, fmt.Errorf("emu: row iterator: %w", err)
-	}
 	var style libghostty.RenderCellStyle
 	var buf []byte
-	for ri.Next() {
+	err = t.eachRow(func(ri *libghostty.RenderStateRowIterator, rc *libghostty.RenderStateRowCells) error {
 		if err := ri.Cells(rc); err != nil {
-			return nil, nil, fmt.Errorf("emu: row cells: %w", err)
+			return fmt.Errorf("emu: row cells: %w", err)
 		}
 		var line, dimless []byte
 		for rc.Next() {
 			raw, err := rc.Raw()
 			if err != nil {
-				return nil, nil, fmt.Errorf("emu: cell: %w", err)
+				return fmt.Errorf("emu: cell: %w", err)
 			}
 			if w, _ := raw.Wide(); w == libghostty.CellWideSpacerTail || w == libghostty.CellWideSpacerHead {
 				continue
 			}
 			buf, err = rc.AppendGraphemes(buf[:0])
 			if err != nil {
-				return nil, nil, fmt.Errorf("emu: cell text: %w", err)
+				return fmt.Errorf("emu: cell text: %w", err)
 			}
 			if len(buf) == 0 {
 				buf = append(buf, ' ')
@@ -460,6 +454,10 @@ func (t *Terminal) Rows() (plain, noDim []string, err error) {
 		}
 		plain = append(plain, strings.TrimRight(string(line), " "))
 		noDim = append(noDim, strings.TrimRight(string(dimless), " "))
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
 	}
 	return plain, noDim, nil
 }

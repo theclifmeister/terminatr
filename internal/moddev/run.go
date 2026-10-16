@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/mod"
@@ -229,7 +230,7 @@ func (m *Mod) Run(f *Fixture, file string) (r Result) {
 	case <-time.After(5 * time.Second):
 		bad("the host didn't exit after shutdown")
 	}
-	<-d.done
+	<-d.c.Load().Done()
 
 	r.Calls, r.Logs = b.Calls(), d.lines()
 	failed := d.failures()
@@ -333,28 +334,18 @@ func RunDir(dir string) ([]Result, error) {
 // settings are the manifest's defaults overlaid with set, as hello sends
 // them.
 func (m *Mod) settings(set map[string]any) (json.RawMessage, error) {
-	out := map[string]any{}
-	for k, s := range m.Manifest.Settings {
-		out[k], _ = s.Check(s.Default)
-	}
-	var errs []error
-	for _, k := range slices.Sorted(maps.Keys(set)) {
-		s, ok := m.Manifest.Settings[k]
-		if !ok {
-			errs = append(errs, fmt.Errorf("%s: the mod has no such setting", k))
-			continue
-		}
-		v := set[k]
+	whole := map[string]any{}
+	for k, v := range set {
 		// JSON's numbers are floats; a setting's are whole.
 		if f, ok := v.(float64); ok && f == float64(int64(f)) {
 			v = int64(f)
 		}
-		v, err := s.Check(v)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("%s %v", k, err))
-			continue
-		}
-		out[k] = v
+		whole[k] = v
+	}
+	out, bad := mod.SettingsOf(m.Manifest.ID, m.Manifest, whole)
+	errs := make([]error, 0, len(bad)+1)
+	for _, b := range bad {
+		errs = append(errs, errors.New(b))
 	}
 	b, err := json.Marshal(out)
 	if err != nil {
@@ -368,94 +359,66 @@ func firstLine(s string) string {
 	return s
 }
 
-// driver is the server's side of the host: it sends hello, events and
-// shutdown, answers the host's calls with the broker on the read loop,
-// so they are recorded in the order the mod made them, and keeps the
-// host's log lines and failed handlers.
+// driver is the server's side of the host: a modproto.Client that
+// answers the host's calls with the broker on the read loop, so they are
+// recorded in the order the mod made them, and keeps the host's log lines
+// and failed handlers.
 type driver struct {
-	conn *modproto.Conn
-	b    *Broker
-	done chan struct{}
+	c atomic.Pointer[modproto.Client] // set once the client exists
+	b *Broker
 
 	mu     sync.Mutex
-	next   int64
-	waits  map[int64]chan *modproto.Message
 	logs   []string
 	failed []modproto.HandlerFailed
 }
 
 func newDriver(r io.Reader, w io.Writer, b *Broker) *driver {
-	d := &driver{conn: modproto.NewConn(r, w), b: b, done: make(chan struct{}), waits: map[int64]chan *modproto.Message{}}
-	go d.read()
+	d := &driver{b: b}
+	d.c.Store(modproto.NewInlineClient(r, w, d.answer, d.note))
 	return d
 }
 
-func (d *driver) read() {
-	defer close(d.done)
-	for {
-		m, err := d.conn.Read()
-		var fe *modproto.FrameError
-		if errors.As(err, &fe) {
-			continue
-		}
-		if err != nil {
-			return
-		}
-		switch {
-		case m.IsResponse():
+func (d *driver) answer(m *modproto.Message) {
+	conn := d.c.Load().Conn()
+	if res, e := d.b.Answer(m.Method, m.Params); e != nil {
+		_ = conn.ReplyError(*m.ID, e.Code, e.Message)
+	} else {
+		_ = conn.Reply(*m.ID, res)
+	}
+}
+
+func (d *driver) note(m *modproto.Message) {
+	switch m.Method {
+	case modproto.MethodLog:
+		var l modproto.Log
+		if json.Unmarshal(m.Params, &l) == nil {
 			d.mu.Lock()
-			ch := d.waits[*m.ID]
-			delete(d.waits, *m.ID)
+			d.logs = append(d.logs, l.Level+": "+l.Text)
 			d.mu.Unlock()
-			if ch != nil {
-				ch <- m
-			}
-		case m.IsRequest():
-			if res, e := d.b.Answer(m.Method, m.Params); e != nil {
-				_ = d.conn.ReplyError(*m.ID, e.Code, e.Message)
-			} else {
-				_ = d.conn.Reply(*m.ID, res)
-			}
-		case m.Method == modproto.MethodLog:
-			var l modproto.Log
-			if json.Unmarshal(m.Params, &l) == nil {
-				d.mu.Lock()
-				d.logs = append(d.logs, l.Level+": "+l.Text)
-				d.mu.Unlock()
-			}
-		case m.Method == modproto.MethodHandlerFailed:
-			var h modproto.HandlerFailed
-			if json.Unmarshal(m.Params, &h) == nil {
-				d.mu.Lock()
-				d.failed = append(d.failed, h)
-				d.mu.Unlock()
-			}
+		}
+	case modproto.MethodHandlerFailed:
+		var h modproto.HandlerFailed
+		if json.Unmarshal(m.Params, &h) == nil {
+			d.mu.Lock()
+			d.failed = append(d.failed, h)
+			d.mu.Unlock()
 		}
 	}
 }
 
 // call sends a request and waits for its answer, ctx's end or the host's.
 func (d *driver) call(ctx context.Context, method string, params any) (json.RawMessage, error) {
-	ch := make(chan *modproto.Message, 1)
-	d.mu.Lock()
-	d.next++
-	id := d.next
-	d.waits[id] = ch
-	d.mu.Unlock()
-	if err := d.conn.Request(id, method, params); err != nil {
-		return nil, fmt.Errorf("the host is gone: %w", err)
-	}
-	select {
-	case m := <-ch:
-		if m.Error != nil {
-			return nil, errors.New(m.Error.Message)
-		}
-		return m.Result, nil
-	case <-ctx.Done():
-		return nil, errors.New("no answer in time")
-	case <-d.done:
+	raw, err := d.c.Load().Call(ctx, method, params)
+	var e *modproto.Error
+	switch {
+	case errors.As(err, &e):
+		return nil, errors.New(e.Message)
+	case errors.Is(err, modproto.ErrClosed):
 		return nil, errors.New("the host is gone")
+	case err != nil:
+		return nil, errors.New("no answer in time")
 	}
+	return raw, nil
 }
 
 func (d *driver) lines() []string {

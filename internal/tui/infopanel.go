@@ -98,6 +98,14 @@ type infoHit struct {
 	sec     string // hitSection: the mod section's fold id
 }
 
+// padHits is hits with h for each of a panel's n lines past them.
+func padHits(hits []infoHit, n int, h infoHit) []infoHit {
+	for len(hits) < n {
+		hits = append(hits, h)
+	}
+	return hits
+}
+
 // hitKind is the kind of an infoHit.
 type hitKind int
 
@@ -168,9 +176,7 @@ func threadInfo(d *infoData, w int, now time.Time) (*panel, []infoHit) {
 	var hits []infoHit
 	// hit makes the lines added since line from clickable.
 	hit := func(from int, h infoHit) {
-		for len(hits) < len(pl.lines) {
-			hits = append(hits, infoHit{})
-		}
+		hits = padHits(hits, len(pl.lines), infoHit{})
 		for i := from; i < len(hits); i++ {
 			hits[i] = h
 		}
@@ -293,9 +299,7 @@ func threadInfo(d *infoData, w int, now time.Time) (*panel, []infoHit) {
 	if at := d.lastActive(); !at.IsZero() {
 		pl.field("active", age(now.Sub(at))+" ago")
 	}
-	for len(hits) < len(pl.lines) {
-		hits = append(hits, infoHit{})
-	}
+	hits = padHits(hits, len(pl.lines), infoHit{})
 	return pl, hits
 }
 

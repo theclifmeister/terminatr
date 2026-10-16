@@ -1,18 +1,15 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/doctor"
-	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/service"
 	"github.com/theclifmeister/terminatr/internal/update"
 	"github.com/theclifmeister/terminatr/internal/version"
@@ -44,7 +41,7 @@ func doctorCmd(e *Env, args []string) error {
 		return srvFail("doctor", err)
 	}
 	d := doctor.DefaultDeps(p, version.Version, version.BuildID())
-	d.Selftest = libghosttySelftest
+	d.Selftest = Selftest
 	exe, _ := os.Executable()
 	in := update.Detect(exe, version.Channel)
 	d.Install = &in
@@ -113,13 +110,11 @@ func doctorCmd(e *Env, args []string) error {
 		fmt.Fprintf(e.Stdout, "  - %s\n", f.Desc)
 	}
 	if !*yes {
-		if !isTTY(os.Stdin) {
+		if !stdinTTY(e) {
 			fmt.Fprintln(e.Stderr, "tm doctor: not a terminal; pass --yes to do these")
 			return &exitError{ExitRefused}
 		}
-		fmt.Fprint(e.Stderr, "Do them? [y/N] ")
-		line, _ := bufio.NewReader(e.Stdin).ReadString('\n')
-		if a := strings.ToLower(strings.TrimSpace(line)); a != "y" && a != "yes" {
+		if !ask(e, "Do them? [y/N] ") {
 			fmt.Fprintln(e.Stdout, "nothing done")
 			return &exitError{ExitRefused}
 		}
@@ -169,26 +164,6 @@ func (p *checkPrinter) waiting(group string) {
 
 func (p *checkPrinter) summary() {
 	fmt.Fprintf(p.e.Stdout, "\n%d ok, %s, %s\n", p.counts[doctor.OK], plural(p.counts[doctor.Warn], "warning"), plural(p.counts[doctor.Fail], "failure"))
-}
-
-// libghosttySelftest feeds a line through the emulator, as tm selftest.
-func libghosttySelftest() error {
-	t, err := emu.New(80, 24)
-	if err != nil {
-		return err
-	}
-	defer t.Close()
-	if _, err := t.Write([]byte("ok\r\n")); err != nil {
-		return err
-	}
-	got, err := t.PlainText()
-	if err != nil {
-		return err
-	}
-	if got != "ok" {
-		return fmt.Errorf("unexpected screen %q", got)
-	}
-	return nil
 }
 
 func plural(n int, word string) string {

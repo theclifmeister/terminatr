@@ -21,11 +21,8 @@ func jobs() map[string]bool {
 	if err != nil {
 		return out
 	}
-	for _, line := range strings.Split(string(b), "\n") {
-		f := strings.Fields(line)
-		if len(f) == 3 && strings.HasPrefix(f[2], service.Label+".") {
-			out[f[2]] = true
-		}
+	for _, j := range service.ParseJobs(string(b)) {
+		out[j.Label] = true
 	}
 	return out
 }

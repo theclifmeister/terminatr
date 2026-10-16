@@ -3,6 +3,7 @@ package modbus
 import (
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -41,19 +42,13 @@ const (
 	ModReady = "mod.ready"
 )
 
-// Grants an event may need ([permissions] in mod.toml).
-const (
-	GrantProjectRead = "project_read"
-	GrantViews       = "views"
-)
-
 // Needs is the grant a mod needs to get event name; "" for none.
 func Needs(name string) string {
 	switch name {
 	case TaskChanged, TasksChanged, ThreadState, ThreadStarted, ThreadResolved, ReportStored, InboxItem, PRChanged, TickerChanged, ThreadChanges, SessionQuestion:
-		return GrantProjectRead
+		return mod.PermProjectRead
 	case ViewOpened, ViewClosed:
-		return GrantViews
+		return mod.PermViews
 	}
 	return ""
 }

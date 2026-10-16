@@ -291,6 +291,53 @@ func firstLine(out string, err error) string {
 	return "no output"
 }
 
+// probeScratch makes a probe's scratch folders (base holding work,
+// outside and run) and listens on a unix socket in run; done removes
+// them and closes the socket.
+func probeScratch() (work, outside, base, sock string, done func(), err error) {
+	base, err = os.MkdirTemp("", "tm-probe-")
+	if err != nil {
+		return
+	}
+	if real, rerr := filepath.EvalSymlinks(base); rerr == nil {
+		base = real
+	}
+	work, outside, rundir := filepath.Join(base, "work"), filepath.Join(base, "outside"), filepath.Join(base, "run")
+	for _, d := range []string{work, outside, rundir} {
+		if err = os.Mkdir(d, 0o700); err != nil {
+			os.RemoveAll(base)
+			return
+		}
+	}
+	sock = filepath.Join(rundir, "s.sock")
+	ln, lerr := net.Listen("unix", sock)
+	if lerr != nil {
+		os.RemoveAll(base)
+		err = lerr
+		return
+	}
+	done = func() {
+		ln.Close()
+		os.RemoveAll(base)
+	}
+	return
+}
+
+// probeTarget is the codex a probe runs, its version, and the profile in
+// argv (none: noProfile is the error).
+func (a *Agent) probeTarget(argv []string, noProfile string) (path, version, name string, flags []string, err error) {
+	idx, name, flags := profileFlags(argv)
+	if len(idx) == 0 {
+		return "", "", "", nil, errors.New(noProfile)
+	}
+	path, err = exec.LookPath(argv[0])
+	if err != nil {
+		return "", "", "", nil, err
+	}
+	version, _ = agent.Version(context.Background(), path, a.m, nil)
+	return path, version, name, flags, nil
+}
+
 // ProbeSandbox checks the installed Codex as a coordinator's launch
 // would, against a scratch folder and socket (agent.SandboxProber, for
 // tm doctor), uncached: the Codex version and why it doesn't hold. On
@@ -321,15 +368,10 @@ func (a *Agent) ProbeSandbox(tmBin string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	idx, name, flags := profileFlags(l.Argv)
-	if len(idx) == 0 {
-		return "", errors.New("the manifest gives the coordinator no profile")
-	}
-	path, err := exec.LookPath(l.Argv[0])
+	path, version, name, flags, err := a.probeTarget(l.Argv, "the manifest gives the coordinator no profile")
 	if err != nil {
 		return "", err
 	}
-	version, _ := agent.Version(context.Background(), path, a.m, nil)
 	return version, probeOnce(path, tmBin, dir, sock, name, flags, false)
 }
 
@@ -338,26 +380,11 @@ func (a *Agent) ProbeSandbox(tmBin string) (string, error) {
 // folder above the workspace read-only as a coordinator's worktrees are,
 // so the probe's write there must be denied.
 func (a *Agent) probeWindowsCoordinator(tmBin string) (string, error) {
-	base, err := os.MkdirTemp("", "tm-probe-")
+	work, outside, base, sock, done, err := probeScratch()
 	if err != nil {
 		return "", err
 	}
-	defer os.RemoveAll(base)
-	if real, err := filepath.EvalSymlinks(base); err == nil {
-		base = real
-	}
-	work, outside, rundir := filepath.Join(base, "work"), filepath.Join(base, "outside"), filepath.Join(base, "run")
-	for _, d := range []string{work, outside, rundir} {
-		if err := os.Mkdir(d, 0o700); err != nil {
-			return "", err
-		}
-	}
-	sock := filepath.Join(rundir, "s.sock")
-	ln, err := net.Listen("unix", sock)
-	if err != nil {
-		return "", err
-	}
-	defer ln.Close()
+	defer done()
 	l, err := a.Agent.Launch(socketAccess(agent.LaunchSpec{
 		Role: "coordinator", Cwd: work, RuntimeDir: base, TMBin: tmBin, Socket: sock,
 		Access: agent.Access{Read: []string{work, base}},
@@ -365,15 +392,10 @@ func (a *Agent) probeWindowsCoordinator(tmBin string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	idx, name, flags := profileFlags(windowsCoordinator(l.Argv))
-	if len(idx) == 0 {
-		return "", errors.New("the manifest gives the coordinator no profile")
-	}
-	path, err := exec.LookPath(l.Argv[0])
+	path, version, name, flags, err := a.probeTarget(windowsCoordinator(l.Argv), "the manifest gives the coordinator no profile")
 	if err != nil {
 		return "", err
 	}
-	version, _ := agent.Version(context.Background(), path, a.m, nil)
 	return version, writeVerdict(path, tmBin, work, sock, name, flags, filepath.Join(outside, "probe"))
 }
 
@@ -384,26 +406,11 @@ func (a *Agent) probeWindowsCoordinator(tmBin string) (string, error) {
 // profile, so it holds only when the sandbox applies and tm's socket
 // (AF_UNIX on Windows) is reachable from it.
 func (a *Agent) ProbeThreadSandbox(tmBin string) (string, error) {
-	base, err := os.MkdirTemp("", "tm-probe-")
+	work, outside, base, sock, done, err := probeScratch()
 	if err != nil {
 		return "", err
 	}
-	defer os.RemoveAll(base)
-	if real, err := filepath.EvalSymlinks(base); err == nil {
-		base = real
-	}
-	work, outside, rundir := filepath.Join(base, "work"), filepath.Join(base, "outside"), filepath.Join(base, "run")
-	for _, d := range []string{work, outside, rundir} {
-		if err := os.Mkdir(d, 0o700); err != nil {
-			return "", err
-		}
-	}
-	sock := filepath.Join(rundir, "s.sock")
-	ln, err := net.Listen("unix", sock)
-	if err != nil {
-		return "", err
-	}
-	defer ln.Close()
+	defer done()
 	l, err := a.Agent.Launch(socketAccess(agent.LaunchSpec{
 		Role: "thread", Cwd: work, RuntimeDir: base, TMBin: tmBin, Socket: sock,
 		Access: agent.Access{Write: []string{work}, Read: []string{base}},
@@ -411,17 +418,12 @@ func (a *Agent) ProbeThreadSandbox(tmBin string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	idx, name, flags := profileFlags(l.Argv)
-	if len(idx) == 0 {
-		return "", errors.New("the manifest gives a thread no profile")
-	}
 	// A thread's profile is the one -c permissions=… flag; profileFlags
 	// takes it as it takes the coordinator's.
-	path, err := exec.LookPath(l.Argv[0])
+	path, version, name, flags, err := a.probeTarget(l.Argv, "the manifest gives a thread no profile")
 	if err != nil {
 		return "", err
 	}
-	version, _ := agent.Version(context.Background(), path, a.m, nil)
 	return version, writeVerdict(path, tmBin, work, sock, name, flags, filepath.Join(outside, "probe"))
 }
 

@@ -180,6 +180,14 @@ func builtinMod(mods []mod.Mod, id string) bool {
 	return i >= 0 && mods[i].Builtin
 }
 
+// newSection is the section of mod view v with fold id id, showing for
+// project, folded as folds say; mods say whether its mod is built in.
+func newSection(v proto.ModView, id, project string, mods []mod.Mod, folds view.Tree) *sideSection {
+	return &sideSection{id: id, mod: v.Mod, view: v.View, title: v.Title, name: v.Name,
+		desc: v.Description, opens: v.Opens, log: v.Log, builtin: builtinMod(mods, v.Mod), project: project,
+		folded: folds.IsSectionFolded(id)}
+}
+
 // withSections is the tree rows with the sections' header rows: each
 // project's after its last row (projRows), then the band's (withBand).
 func withSections(tree []treeRow, in bandIn) []treeRow {
@@ -205,10 +213,8 @@ func bandRows(in bandIn) []treeRow {
 	w := bandWidth(in.w)
 	above, below := bandViews(in)
 	for i, v := range slices.Concat(above, below) {
-		s := &sideSection{id: v.Mod + "." + v.View, mod: v.Mod, view: v.View, title: v.Title, name: v.Name,
-			desc: v.Description, opens: v.Opens, log: v.Log, builtin: builtinMod(in.mods, v.Mod), project: in.project,
-			above: i < len(above)}
-		s.folded = in.folds.IsSectionFolded(s.id)
+		s := newSection(v, v.Mod+"."+v.View, in.project, in.mods, in.folds)
+		s.above = i < len(above)
 		switch t := sectionTree(v, in.project, "", ""); {
 		case v.State == proto.ModViewFailed:
 			s.failed = true
@@ -264,9 +270,8 @@ func projRows(tree []treeRow, in bandIn) []treeRow {
 			if !runsFor(v, slug) {
 				continue
 			}
-			s := &sideSection{id: v.Mod + "." + v.View + "@" + slug, mod: v.Mod, view: v.View, title: v.Title, name: v.Name,
-				desc: v.Description, opens: v.Opens, log: v.Log, builtin: builtinMod(in.mods, v.Mod), project: slug, proj: true}
-			s.folded = in.folds.IsSectionFolded(s.id)
+			s := newSection(v, v.Mod+"."+v.View+"@"+slug, slug, in.mods, in.folds)
+			s.proj = true
 			switch t := sectionTree(v, slug, "", ""); {
 			case t == nil:
 				continue // nothing drawn for it yet, or null
@@ -442,20 +447,15 @@ func (a bandAsk) place() int {
 }
 
 // bandFit is how the sections fit a sidebar body: the rows the tree
-// keeps (treeH, its per-project sections shown in them), and per section
-// whether its header shows, its body lines, and whether it gave its body
-// up for room (shrunk); more is how many headers didn't fit, which the
-// last one shown says (+N). asks are the sections' asks; top is the
-// first of the tree's slots (its rows and its per-project sections'
-// lines) that shows.
+// keeps (treeH, its per-project sections shown in them), and the budget
+// (fitBudget), whose more the last header shown says (+N). asks are the
+// sections' asks; top is the first of the tree's slots (its rows and its
+// per-project sections' lines) that shows.
 type bandFit struct {
-	treeH  int
-	show   []bool
-	body   []int
-	shrunk []bool
-	asks   []bandAsk
-	more   int
-	top    int
+	fitBudget
+	treeH int
+	asks  []bandAsk
+	top   int
 }
 
 // used is the rows the sections take, above the tree, under its
@@ -473,16 +473,6 @@ func (f bandFit) part(place int) int {
 	}
 	if n > 0 && place == placeBelow {
 		n++
-	}
-	return n
-}
-
-func (f bandFit) headers() int {
-	n := 0
-	for _, on := range f.show {
-		if on {
-			n++
-		}
 	}
 	return n
 }
@@ -545,71 +535,37 @@ func (f bandFit) scroll(b, n, cur int) (h, top int) {
 // same order, the cursor's last. The rows left are the tree's, and its
 // per-project sections are among them.
 func fitBand(b, n, cur int, keep []int, asks []bandAsk) bandFit {
-	f := bandFit{show: make([]bool, len(asks)), body: make([]int, len(asks)), shrunk: make([]bool, len(asks)), asks: asks}
+	f := bandFit{fitBudget: newFitBudget(len(asks)), asks: asks}
 	if b >= bandMinBody {
-		f.give(b, n, cur, keep)
-	}
-	for j := range asks {
-		if !f.show[j] && b >= bandMinBody {
-			f.more++
-			f.shrunk[j] = false
-		}
+		f.fit(b, n, cur, keep)
+		f.tally()
 	}
 	f.treeH, f.top = f.scroll(max(b, 0), n, cur)
 	return f
 }
 
-// give is fitBand's budget and guarantee.
-func (f *bandFit) give(b, n, cur int, keep []int) {
+// fit is fitBand's budget and guarantee.
+func (f *bandFit) fit(b, n, cur int, keep []int) {
 	asks := f.asks
 	for j, a := range asks {
-		f.show[j], f.body[j] = true, min(max(a.want, 0), modview.MaxSidebarHeight)
+		f.ask(j, a.want)
+		f.keep[j] = a.cursor
 	}
+	// The cursor's header stays while its body gives way.
+	f.keepBody = true
+	in := func(place int) func(int) bool { return func(j int) bool { return asks[j].place() == place } }
 	// The order sections give way in: under the projects, then above the
 	// tree, then below, each from its bottom.
-	var order []int
-	for _, place := range []int{placeProj, placeAbove, placeBelow} {
-		for j := len(asks) - 1; j >= 0; j-- {
-			if asks[j].place() == place {
-				order = append(order, j)
-			}
-		}
-	}
-	all := func(int) bool { return true }
-	in := func(place int) func(int) bool { return func(j int) bool { return asks[j].place() == place } }
-	shrink := func(in func(int) bool) bool {
-		for _, j := range order {
-			if in(j) && f.show[j] && f.body[j] > 0 {
-				f.body[j], f.shrunk[j] = 0, true
-				return true
-			}
-		}
-		return false
-	}
-	drop := func(cursor bool, in func(int) bool) bool {
-		for _, j := range order {
-			switch {
-			case !in(j) || !f.show[j]:
-			case cursor || !asks[j].cursor:
-				f.show[j], f.body[j] = false, 0
-				return true
-			case f.body[j] > 0:
-				// The cursor's header stays; its body gives way first.
-				f.body[j], f.shrunk[j] = 0, true
-			}
-		}
-		return false
-	}
-	give := func(in func(int) bool) bool { return shrink(in) || drop(false, in) || drop(true, in) }
+	f.giveOrder(in(placeProj), in(placeAbove), in(placeBelow))
 	// The shares keep the cursor's header: alone it is one row, in any.
-	share := func(in func(int) bool) bool { return shrink(in) || drop(false, in) }
-	for f.headers() > b/4 && drop(false, all) {
+	share := func(in func(int) bool) bool { return f.shrink(in) || f.drop(false, in) }
+	for f.headers() > b/4 && f.drop(false, anySection) {
 	}
 	for f.part(placeAbove) > b/4 && share(in(placeAbove)) {
 	}
 	for f.part(placeProj) > b/4 && share(in(placeProj)) {
 	}
-	for f.used() > b/2 && share(all) {
+	for f.used() > b/2 && share(anySection) {
 	}
 	safe := func() bool {
 		h, top := f.scroll(b, n, cur)
@@ -623,7 +579,7 @@ func (f *bandFit) give(b, n, cur int, keep []int) {
 		}
 		return true
 	}
-	for !safe() && give(all) {
+	for !safe() && f.give(anySection) {
 	}
 }
 
@@ -696,9 +652,7 @@ func projectCount(all []treeRow) int {
 // the band below (fitBand).
 func sideLayout(all []treeRow, w, h, foot int) sideLay {
 	lay := sideLay{rows: shownRows(all, w), head: sideHeadRows()}
-	if foot > 0 && h < foot+4 {
-		foot = 0
-	}
+	foot = footRoom(h, foot)
 	if projectCount(all) == 0 {
 		lay.head++ // "no projects"
 	}
@@ -1095,7 +1049,7 @@ func sectionKeys(s *sideSection) []string {
 // sideFootRows are the rows sideFooter takes in a sidebar w wide and h
 // tall, as sideLines draws it: none when it doesn't fit.
 func sideFootRows(w, h int, s ServerInfo, compact bool) int {
-	if w <= sideSlim || w-1-sideGap < 4 {
+	if !footWide(w) {
 		return 0
 	}
 	n := 4
@@ -1105,6 +1059,16 @@ func sideFootRows(w, h int, s ServerInfo, compact bool) int {
 	if versionHint(s) != "" {
 		n++
 	}
+	return footRoom(h, n)
+}
+
+// footWide says a sidebar w wide has a footer: not the slim strip, and
+// its lines at least 4 cells wide.
+func footWide(w int) bool { return w > sideSlim && w-1-sideGap >= 4 }
+
+// footRoom is the rows a footer of n rows takes in a sidebar h tall: all
+// of them, or none where the tree would keep fewer than 4 rows.
+func footRoom(h, n int) int {
 	if h < n+4 {
 		return 0
 	}

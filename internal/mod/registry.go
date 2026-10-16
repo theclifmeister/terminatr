@@ -195,7 +195,7 @@ func load(id, dir string, t config.Mod) Mod {
 			m.WantsMore = append(m.WantsMore, p)
 		}
 	}
-	m.Settings, m.BadSettings = settingsOf(id, man, t.Settings)
+	m.Settings, m.BadSettings = SettingsOf(id, man, t.Settings)
 	if err := CheckAPI(man); err != nil {
 		m.Err, m.State = err, Incompatible
 		return m
@@ -207,10 +207,10 @@ func load(id, dir string, t config.Mod) Mod {
 	return m
 }
 
-// settingsOf are mod id's settings: each of man's defaults, overlaid
+// SettingsOf are mod id's settings: each of man's defaults, overlaid
 // with set (its [mods.<id>.settings]) where that is valid; bad say which
 // of set aren't.
-func settingsOf(id string, man *Manifest, set map[string]any) (settings map[string]any, bad []string) {
+func SettingsOf(id string, man *Manifest, set map[string]any) (settings map[string]any, bad []string) {
 	settings = map[string]any{}
 	for _, k := range sortedKeys(man.Settings) {
 		settings[k], _ = man.Settings[k].Check(man.Settings[k].Default)

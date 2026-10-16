@@ -16,7 +16,7 @@ test('feed joins split lines, skips what is not a watch', () => {
   const a = line('working', 1)
   let got = feed('', a.slice(0, 20))
   expect(got.watches).toEqual([])
-  got = feed(got.rest, a.slice(20) + 'not json\n\n' + line('idle', 2) + '{"ses')
+  got = feed(got.rest, a.slice(20) + 'not json\n\n{"pr":""}\n' + line('idle', 2) + '{"ses')
   expect(got.watches.map(w => w.session.state)).toEqual(['working', 'idle'])
   expect(got.watches[1]?.task?.steps_done).toBe(2)
   expect(got.rest).toBe('{"ses')

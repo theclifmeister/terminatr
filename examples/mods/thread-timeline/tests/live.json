@@ -17,7 +17,8 @@
       { "method": "ui.view.set", "params": { "widget": { "children": [{ "rows": [
         { "id": "t-0007", "cells": [[{ "text": "t-0007" }], [{ "text": "T7" }], [{ "icon": "working" }], [{ "text": "working " }, { "ago": "2026-10-01T09:00:00Z", "role": "faint" }]] } ] }, {}] } } },
       { "method": "ui.view.set", "params": { "widget": { "children": [{ "rows": [
-        { "id": "t-0007", "cells": [[{ "text": "t-0007", "role": "faint" }], [{}], [{ "icon": "working" }, { "icon": "done" }], [{ "text": "resolved " }, { "role": "faint" }]] } ] }, {}] } } }
+        { "id": "t-0007", "cells": [[{ "text": "t-0007", "role": "faint" }], [{}], [{ "icon": "working" }, { "icon": "done" }], [{ "text": "resolved " }, { "role": "faint" }]] } ] }, {}] } } },
+      { "method": "ui.view.set", "params": { "view": "timeline", "options": { "project": "demo" }, "widget": null } }
     ],
     "store": { "log": { "demo": { "t-0007": { "resolved": true }, "t-0008": { "changes": [{ "state": "working" }] } } } }
   }

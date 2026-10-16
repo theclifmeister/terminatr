@@ -204,6 +204,9 @@ func ParseSize(b []byte) (cols, rows uint16, err error) {
 // MaxLine bounds one NDJSON line of the control protocol.
 const MaxLine = 16 << 20
 
+// ErrLineTooLong is ReadLine's error for a line over MaxLine.
+var ErrLineTooLong = errors.New("line too long")
+
 // ReadLine reads one NDJSON line of at most MaxLine bytes from br into v.
 func ReadLine(br *bufio.Reader, v any) error {
 	var line []byte
@@ -214,7 +217,7 @@ func ReadLine(br *bufio.Reader, v any) error {
 		}
 		line = append(line, chunk...)
 		if len(line) > MaxLine {
-			return fmt.Errorf("line too long")
+			return ErrLineTooLong
 		}
 		if !isPrefix {
 			break

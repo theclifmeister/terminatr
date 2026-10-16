@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
@@ -189,6 +191,30 @@ func commandUsage(name string) string {
 type usageError struct{ msg string }
 
 func (u *usageError) Error() string { return u.msg }
+
+// helpOr serves a command's help prologue: no arguments is a usage
+// error, help, -h or --help prints usage. It reports whether args were
+// the help request, and then the command ends with err.
+func helpOr(e *Env, args []string, usage string) (bool, error) {
+	if len(args) == 0 {
+		return true, usagef("%s", usage)
+	}
+	if args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+		fmt.Fprintln(e.Stdout, usage)
+		return true, nil
+	}
+	return false, nil
+}
+
+// fromProto maps a server's *proto.Error to the project.Error the CLI
+// prints and exits on; any other error passes through.
+func fromProto(err error) error {
+	var pe *proto.Error
+	if errors.As(err, &pe) {
+		return &project.Error{Code: pe.Code, Msg: pe.Message}
+	}
+	return err
+}
 
 func usagef(format string, a ...any) error { return &usageError{fmt.Sprintf(format, a...)} }
 

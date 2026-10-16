@@ -53,9 +53,7 @@ func attachCmd(e *Env, args []string) error {
 	if !isTTY(os.Stdin) {
 		return srvUsage("attach", "stdin is not a terminal")
 	}
-	if rawMode(os.Stdin) {
-		fmt.Fprintln(e.Stderr, "tm attach: this terminal looks like it was left in raw mode (a client killed with SIGKILL?); run `reset` if it misbehaves")
-	}
+	e.warnRaw("tm attach")
 	c, p, err := connect(false)
 	if errors.Is(err, client.ErrNotRunning) {
 		fmt.Fprintln(e.Stderr, "tm attach: tm server is not running; start a session with tm session start")
@@ -76,19 +74,12 @@ func attachCmd(e *Env, args []string) error {
 			return &exitError{ExitRefused}
 		}
 	}
-	cols, rows, ok := termSize()
-	if !ok {
-		cols, rows = 80, 24
-	}
-	uiFile := uiFile()
-	lay := tui.ConsoleLayout(uiFile)
-	side, info, tree := lay.Sidebar, lay.Info, lay.Tree
-	vc, err := tui.JoinView(p, proto.ViewSubscribeParams{Own: true, Bare: true, StatusBar: true, Session: id,
-		Cols: cols, Rows: rows, Sidebar: &side, Info: &info, Tree: &tree, StatusCompact: lay.StatusCompact()})
+	con := newConsole()
+	vc, err := con.joinBare(p, id)
 	if err != nil {
 		return srvFail("attach", err)
 	}
-	res, err := e.attach(p, vc, tui.Options{Sidebar: &tui.SidebarOptions{UIFile: uiFile}}, []string{"attach", id})
+	res, err := e.attach(p, vc, tui.Options{Sidebar: &tui.SidebarOptions{UIFile: con.uiFile}}, []string{"attach", id})
 	vc.Close()
 	if err != nil {
 		return err

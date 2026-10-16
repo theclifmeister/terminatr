@@ -160,9 +160,15 @@ func holdsHome(dir string) bool {
 	if err != nil {
 		return true
 	}
-	for _, d := range []string{filepath.Clean(dir), realPath(dir)} {
-		for _, hd := range []string{filepath.Clean(h), realPath(h)} {
-			if _, ok := fsx.Within(d, hd); ok {
+	return underAny(h, []string{dir}) || underAny(realPath(h), []string{dir})
+}
+
+// underAny reports whether path is inside one of dirs (each taken as
+// given and with its links resolved).
+func underAny(path string, dirs []string) bool {
+	for _, d := range dirs {
+		for _, dd := range []string{filepath.Clean(d), realPath(d)} {
+			if _, ok := fsx.Within(dd, path); ok {
 				return true
 			}
 		}
@@ -194,19 +200,11 @@ func agentFileOK(f *os.File, private []string) error {
 	}
 	real := realPath(f.Name())
 	h, _ := os.UserHomeDir()
-	for _, p := range private {
-		for _, pp := range []string{filepath.Clean(p), realPath(p)} {
-			if _, ok := fsx.Within(pp, real); ok {
-				return &tasks.Error{Code: "outside-roots", Msg: fmt.Sprintf("%s is in a folder its agent's sandbox keeps from it", f.Name())}
-			}
-		}
+	if underAny(real, private) {
+		return &tasks.Error{Code: "outside-roots", Msg: fmt.Sprintf("%s is in a folder its agent's sandbox keeps from it", f.Name())}
 	}
-	for _, sec := range agent.Secrets(nil, h, os.Getenv) {
-		for _, sp := range []string{filepath.Clean(sec), realPath(sec)} {
-			if _, ok := fsx.Within(sp, real); ok {
-				return &tasks.Error{Code: "outside-roots", Msg: fmt.Sprintf("%s is in a credential store", f.Name())}
-			}
-		}
+	if underAny(real, agent.Secrets(nil, h, os.Getenv)) {
+		return &tasks.Error{Code: "outside-roots", Msg: fmt.Sprintf("%s is in a credential store", f.Name())}
 	}
 	return nil
 }

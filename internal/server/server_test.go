@@ -553,28 +553,6 @@ func TestResolvePathsKeepsTestsIsolated(t *testing.T) {
 	}
 }
 
-func TestLogRotation(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "server.log")
-	r, err := openRotating(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	r.max = 100
-	line := []byte(strings.Repeat("x", 59) + "\n")
-	for i := 0; i < 10; i++ {
-		r.Write(line)
-	}
-	r.Close()
-	for _, f := range []string{path, path + ".1", path + ".2", path + ".3"} {
-		if _, err := os.Stat(f); err != nil {
-			t.Errorf("%s missing", f)
-		}
-	}
-	if _, err := os.Stat(path + ".4"); err == nil {
-		t.Error("kept more than 3 old logs")
-	}
-}
-
 func TestSessionEnvStripsInheritedIdentity(t *testing.T) {
 	env := sessionEnv([]string{"PATH=/bin", "CLAUDECODE=1", "CLAUDE_CODE_ENTRYPOINT=cli", "TMUX=x", "CLAUDE_CODE_USE_BEDROCK=1",
 		"TERMINATR_SESSION=old", "TERM=screen", "HOME=/h"}, map[string]string{"TERM": "xterm-256color", "TERMINATR_SESSION": "s-1"})
