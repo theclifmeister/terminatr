@@ -103,10 +103,10 @@ func (r Rules) judgePSCommand(words []string) *Denial {
 		}
 	} else if e := psExpr(argv); strings.HasPrefix(e, "$") {
 		// An expression: printed unless assigned.
-		if v := patVar(e); v != "" && !assigned && r.has("credentials") {
-			return r.deny("credentials", "output of "+safe(v), "")
+		if assigned {
+			return nil
 		}
-		return nil
+		return r.printed("output of ", e)
 	}
 	cmd := psName(argv[0])
 	args := argv[1:]
@@ -178,7 +178,7 @@ func (r Rules) judgePSArgs(cmd string, argv, args []string) *Denial {
 	if d != nil {
 		return d
 	}
-	if r.has("credentials") {
+	if r.guardsSecrets() {
 		if d := r.judgePSSecret(cmd, args); d != nil {
 			return d
 		}
@@ -274,10 +274,17 @@ func (r Rules) judgePSSecret(cmd string, args []string) *Denial {
 		if m == nil {
 			continue
 		}
-		if m[1] == "" || psWildcard.MatchString(m[1]) {
-			return r.deny("credentials", safe(cmd)+" printing the environment", "")
-		}
-		if secretName.MatchString(m[1]) {
+		switch {
+		case m[1] == "" || psWildcard.MatchString(m[1]):
+			if len(r.SecretEnv) > 0 {
+				return floor(r.deny("credentials", safe(cmd)+" printing the environment", ""))
+			}
+			if r.has("credentials") {
+				return r.deny("credentials", safe(cmd)+" printing the environment", "")
+			}
+		case r.isSecretEnv(m[1]):
+			return floor(r.deny("credentials", safe(cmd)+" of "+safe(m[1]), ""))
+		case r.has("credentials") && secretName.MatchString(m[1]):
 			return r.deny("credentials", safe(cmd)+" of "+safe(m[1]), "")
 		}
 	}

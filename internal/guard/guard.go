@@ -67,6 +67,23 @@ type Rules struct {
 	// Mods are the rules the user's enabled mods add: they only refuse,
 	// in force whichever core rules the human turned off.
 	Mods []ModRule `json:"mods,omitempty"`
+	// Allow are the human's allowances for the session's project
+	// (config guard_allow): a refusal under an allowance's rule of a call
+	// whose command line, or the file it names, the allowance matches is
+	// lifted, and the call judged again without that rule. Never one of
+	// the floor's (Denial.Floor). Paths absolute.
+	Allow []Allow `json:"allow,omitempty"`
+	// Own are tm's own files and folders (its run folder with the
+	// sockets, its keys, the guard's log): no tool reads them, whichever
+	// rules are on (the floor).
+	Own []string `json:"own,omitempty"`
+	// SecretEnv are the names of the secret variables tm gives the
+	// session (config env): no command prints them or the whole
+	// environment, whichever rules are on (the floor).
+	SecretEnv []string `json:"secretEnv,omitempty"`
+	// Learn is guard_mode "learn": a refusal tells the model the user
+	// reviews it.
+	Learn bool `json:"learn,omitempty"`
 	// Resolve, when set, is where a write to a path lands: the path made
 	// absolute but not yet cleaned, with the links of its longest existing
 	// prefix followed. The matcher has no file system of its own; the
@@ -96,6 +113,16 @@ type ModRule struct {
 
 // Name is the rule's name in a refusal and the journal: mod:<mod>.<id>.
 func (m ModRule) Name() string { return "mod:" + m.Mod + "." + m.ID }
+
+// Allow is one of the human's allowances (config.GuardAllow): Rule's
+// refusals of the command line Command, or of the file Path, are
+// lifted. A * matches any run of characters; a credentials allowance
+// with one is ignored (it names one exact command or path).
+type Allow struct {
+	Rule    string `json:"rule"`
+	Command string `json:"command,omitempty"`
+	Path    string `json:"path,omitempty"`
+}
 
 // Tool is what the guard knows of one of an agent's tools: its kind and
 // the fields of its input the kind reads. A shell tool's Syntax is how
@@ -141,17 +168,29 @@ var Kinds = []Kind{KindShell, KindWrite, KindPatch, KindRead, KindGlob}
 // one the guard can't read (rule "unknown"), so it goes to the agent's
 // dialog or classifier however its rules would allow it; Message is
 // the reason the dialog shows. An ask is not journaled.
+//
+// Floor marks a refusal no allowance lifts, in any mode: reading tm's
+// own files, printing a secret variable tm gives the session,
+// force-pushing to a protected branch, a thread merging. Subject is what
+// an allowance of the refusal names: the whole command line, or the file
+// (where a write lands); it is the human's to see (the guard's log),
+// never journaled.
 type Denial struct {
 	Rule    string `json:"rule"`
 	Message string `json:"message"`
 	Summary string `json:"summary"`
 	Ask     bool   `json:"ask,omitempty"`
+	Floor   bool   `json:"floor,omitempty"`
+	Subject string `json:"subject,omitempty"`
 }
+
+// learnNote ends a refusal's sentence in learn mode.
+const learnNote = " The user reviews refused calls: if they allow this one, you will be told and may retry it; until then don't work around it."
 
 // Judge is the rule the call of tool with input breaks, or nil. The
 // tool is judged by its kind in r.Tools, from the fields listed there.
 func (r Rules) Judge(tool string, input map[string]any) *Denial {
-	if !r.On || len(r.Rules) == 0 && len(r.Mods) == 0 {
+	if !r.On || len(r.Rules) == 0 && len(r.Mods) == 0 && len(r.Own) == 0 && len(r.SecretEnv) == 0 {
 		return nil
 	}
 	t, ok := r.Tools[tool]
@@ -168,11 +207,12 @@ func (r Rules) Judge(tool string, input map[string]any) *Denial {
 	case KindShell:
 		var ask *Denial
 		for _, c := range values {
-			judge := r.judgeBash
-			if t.Syntax == SyntaxPowerShell {
-				judge = r.judgePowerShell
-			}
-			d := judge(c)
+			d := r.lifted(strings.TrimSpace(c), false, func(r Rules) *Denial {
+				if t.Syntax == SyntaxPowerShell {
+					return r.judgePowerShell(c)
+				}
+				return r.judgeBash(c)
+			})
 			if d != nil && !d.Ask {
 				return d
 			}
@@ -183,14 +223,14 @@ func (r Rules) Judge(tool string, input map[string]any) *Denial {
 		return ask
 	case KindWrite:
 		for _, p := range values {
-			if d := r.judgeWrite(tool, r.abs(p), r.target(p)); d != nil {
+			if d := r.lifted(r.target(p), true, func(r Rules) *Denial { return r.judgeWrite(tool, r.abs(p), r.target(p)) }); d != nil {
 				return d
 			}
 		}
 	case KindPatch:
 		for _, patch := range values {
 			for _, p := range PatchPaths(patch) {
-				if d := r.judgeWrite(tool, r.abs(p), r.target(p)); d != nil {
+				if d := r.lifted(r.target(p), true, func(r Rules) *Denial { return r.judgeWrite(tool, r.abs(p), r.target(p)) }); d != nil {
 					return d
 				}
 			}
@@ -198,17 +238,109 @@ func (r Rules) Judge(tool string, input map[string]any) *Denial {
 	case KindRead, KindGlob:
 		for _, p := range values {
 			p = r.abs(p)
-			if r.has("credentials") && r.isSecret(p) {
-				return r.deny("credentials", tool+" of "+safe(p), "")
-			}
-			for _, m := range r.Mods {
-				if r.covers(m.Reads, p) {
-					return r.denyMod(m, tool+" of "+safe(p))
-				}
+			if d := r.lifted(p, true, func(r Rules) *Denial { return r.judgeRead(tool, p) }); d != nil {
+				return d
 			}
 		}
 	}
 	return nil
+}
+
+// judgeRead judges a file tool reading p (absolute; a glob by the part
+// before its first wildcard).
+func (r Rules) judgeRead(tool, p string) *Denial {
+	if r.covers(r.Own, p) {
+		return floor(r.deny("credentials", tool+" of "+safe(p), ""))
+	}
+	if r.has("credentials") && r.isSecret(p) {
+		return r.deny("credentials", tool+" of "+safe(p), "")
+	}
+	for _, m := range r.Mods {
+		if r.covers(m.Reads, p) {
+			return r.denyMod(m, tool+" of "+safe(p))
+		}
+	}
+	return nil
+}
+
+// lifted is judge's refusal of a call, the ones the human allowed lifted:
+// while it refuses under a rule an allowance of subject (the command
+// line, or with path the file) names, it judges again without that rule.
+// The refusal that stands carries subject, and in learn mode says the
+// user reviews it.
+func (r Rules) lifted(subject string, path bool, judge func(Rules) *Denial) *Denial {
+	for {
+		d := judge(r)
+		if d == nil || d.Ask {
+			return d
+		}
+		if !d.Floor && r.allows(d.Rule, subject, path) {
+			r = r.without(d.Rule)
+			continue
+		}
+		d.Subject = subject
+		if r.Learn && !d.Floor {
+			d.Message += learnNote
+		}
+		return d
+	}
+}
+
+// allows: an allowance of rule matches subject, a command line or with
+// path a file.
+func (r Rules) allows(rule, subject string, path bool) bool {
+	for _, a := range r.Allow {
+		text := a.Command
+		if path {
+			text = a.Path
+		}
+		if a.Rule != rule || strings.TrimSpace(text) == "" || rule == "credentials" && strings.Contains(text, "*") {
+			continue
+		}
+		if path && globMatch(r.fold(r.abs(text)), r.fold(subject)) || !path && globMatch(strings.TrimSpace(text), subject) {
+			return true
+		}
+	}
+	return false
+}
+
+// without is r without rule: a core rule's id, or a mod's rule's name.
+func (r Rules) without(rule string) Rules {
+	if strings.HasPrefix(rule, "mod:") {
+		r.Mods = slices.DeleteFunc(slices.Clone(r.Mods), func(m ModRule) bool { return m.Name() == rule })
+	} else {
+		r.Rules = slices.DeleteFunc(slices.Clone(r.Rules), func(id string) bool { return id == rule })
+	}
+	return r
+}
+
+// globMatch: s is pattern, a * in it matching any run of characters.
+func globMatch(pattern, s string) bool {
+	parts := strings.Split(pattern, "*")
+	if len(parts) == 1 {
+		return pattern == s
+	}
+	if !strings.HasPrefix(s, parts[0]) {
+		return false
+	}
+	s = s[len(parts[0]):]
+	last := parts[len(parts)-1]
+	for _, p := range parts[1 : len(parts)-1] {
+		i := strings.Index(s, p)
+		if i < 0 {
+			return false
+		}
+		s = s[i+len(p):]
+	}
+	return len(s) >= len(last) && strings.HasSuffix(s, last)
+}
+
+// floor marks d as a refusal no allowance lifts.
+func floor(d *Denial) *Denial {
+	if d != nil {
+		d.Floor = true
+	}
+	return d
 }
 
 // target is where a file tool writing p writes: p made absolute, through
@@ -322,9 +454,10 @@ func (r Rules) deny(rule, summary, target string) *Denial {
 	case "merge":
 		m = `merging is the coordinator's job in this project (merge = "coordinator"). Leave the PR open with CI green and say so in your report.`
 	case "credentials":
-		m = "credential files and tokens are not read here. If the task needs access you don't have, " + tell + " exactly what is missing."
+		m = "credential files and tokens are not read here. A tool that needs a token gets it from the secret environment the user gives threads in tm's settings; if the task needs access you don't have, " + tell + " exactly what is missing."
 	}
-	return &Denial{Rule: rule, Message: "terminatr guard (" + rule + "): " + m, Summary: summary}
+	// A thread never merges while the rule holds: no allowance lifts it.
+	return &Denial{Rule: rule, Message: "terminatr guard (" + rule + "): " + m, Summary: summary, Floor: rule == "merge"}
 }
 
 // judgeBash checks each simple command of a Bash command line.
@@ -375,13 +508,19 @@ func (r Rules) judgeBash(command string) *Denial {
 		if d != nil {
 			return d
 		}
-		if r.has("credentials") {
+		if r.guardsSecrets() {
 			if d := r.judgeSecret(cmd, args, words, readers[cmd], printers[cmd]); d != nil {
 				return d
 			}
 		}
 	}
 	return nil
+}
+
+// guardsSecrets: credentials is on, or the floor keeps tm's files or
+// the session's secret variables.
+func (r Rules) guardsSecrets() bool {
+	return r.has("credentials") || len(r.Own) > 0 || len(r.SecretEnv) > 0
 }
 
 var (
@@ -427,7 +566,12 @@ func (r Rules) judgeGit(args []string) *Denial {
 	switch sub {
 	case "push":
 		if r.has("force-push") && (flag("f", "--force", "--force-with-lease", "--force-if-includes", "--mirror") || slices.ContainsFunc(rest, func(a string) bool { return strings.HasPrefix(a, "+") })) {
-			return r.deny("force-push", "git push with force", "")
+			d := r.deny("force-push", "git push with force", "")
+			// Every branch, or a protected one: never allowed.
+			if long("--all", "--branches", "--mirror") || slices.ContainsFunc(r.pushTargets(rest), func(b string) bool { return slices.Contains(r.Protected, b) }) {
+				d.Floor = true
+			}
+			return d
 		}
 		if r.has("delete-branch") && (flag("d", "--delete", "--prune") || slices.ContainsFunc(rest, func(a string) bool { return strings.HasPrefix(a, ":") && len(a) > 1 })) {
 			return r.deny("delete-branch", "git push deleting a branch", "")
@@ -436,14 +580,8 @@ func (r Rules) judgeGit(args []string) *Denial {
 			if long("--all", "--branches", "--mirror") {
 				return r.deny("push-default", "git push --all", "")
 			}
-			pos := positionals(rest, []string{"-o", "--push-option", "--repo", "--receive-pack", "--exec"})
-			for j := 1; j < len(pos); j++ {
-				spec := pos[j]
-				if k := strings.Index(spec, ":"); k >= 0 {
-					spec = spec[k+1:]
-				}
-				target := branchOf(spec)
-				if target != "" && slices.Contains(r.Protected, target) {
+			for _, target := range r.pushTargets(rest) {
+				if slices.Contains(r.Protected, target) {
 					return r.deny("push-default", "git push to "+safe(target), target)
 				}
 			}
@@ -469,6 +607,23 @@ func (r Rules) judgeGit(args []string) *Denial {
 		}
 	}
 	return nil
+}
+
+// pushTargets are the branches git push's arguments (after push) name
+// as where they push: each refspec's destination.
+func (r Rules) pushTargets(rest []string) []string {
+	var out []string
+	pos := positionals(rest, []string{"-o", "--push-option", "--repo", "--receive-pack", "--exec"})
+	for j := 1; j < len(pos); j++ {
+		spec := strings.TrimPrefix(pos[j], "+")
+		if k := strings.Index(spec, ":"); k >= 0 {
+			spec = spec[k+1:]
+		}
+		if target := branchOf(spec); target != "" {
+			out = append(out, target)
+		}
+	}
+	return out
 }
 
 var (
@@ -902,9 +1057,23 @@ var (
 )
 
 // judgeSecret: cmd (a reader or a printer of what it is given) reading a
-// secret or printing the environment.
+// secret or printing the environment. Under credentials, any secret;
+// whatever the rules (the floor), tm's own files and the session's
+// secret variables.
 func (r Rules) judgeSecret(cmd string, args, words []string, reader, printer bool) *Denial {
-	if cmd == "security" && securityCmd.MatchString(at(args, 0)) {
+	creds := r.has("credentials")
+	// The whole environment printed: refused under credentials, and
+	// always where it holds a secret variable of tm's.
+	dump := func(what string) *Denial {
+		if len(r.SecretEnv) > 0 {
+			return floor(r.deny("credentials", what, ""))
+		}
+		if creds {
+			return r.deny("credentials", what, "")
+		}
+		return nil
+	}
+	if cmd == "security" && creds && securityCmd.MatchString(at(args, 0)) {
 		return r.deny("credentials", "security "+at(args, 0), "")
 	}
 	if cmd == "printenv" {
@@ -918,24 +1087,34 @@ func (r Rules) judgeSecret(cmd string, args, words []string, reader, printer boo
 			}
 		}
 		if len(names) == 0 {
-			return r.deny("credentials", "printenv printing the environment", "")
+			if d := dump("printenv printing the environment"); d != nil {
+				return d
+			}
 		}
-		if i := slices.IndexFunc(names, secretName.MatchString); i >= 0 {
+		if i := slices.IndexFunc(names, r.isSecretEnv); i >= 0 {
+			return floor(r.deny("credentials", "printenv "+safe(names[i]), ""))
+		}
+		if i := slices.IndexFunc(names, secretName.MatchString); i >= 0 && creds {
 			return r.deny("credentials", "printenv "+safe(names[i]), "")
 		}
 	} else if cmd == "env" && !slices.ContainsFunc(unredirected(args), func(a string) bool { return !strings.HasPrefix(a, "-") && !substituted(a) }) {
-		return r.deny("credentials", "env printing the environment", "")
+		if d := dump("env printing the environment"); d != nil {
+			return d
+		}
 	} else if envPrinters[cmd] && !slices.ContainsFunc(args, func(a string) bool { return !strings.HasPrefix(a, "-") || strings.ContainsAny(a, "fF") }) ||
 		cmd == "set" && len(args) == 0 {
 		// export, declare -x and the like with no names print the
 		// variables (with -f, the functions); set alone prints them all.
-		return r.deny("credentials", cmd+" printing the environment", "")
+		if d := dump(cmd + " printing the environment"); d != nil {
+			return d
+		}
 	}
-	// echo and the like given a secret variable ($AZURE_DEVOPS_EXT_PAT).
+	// echo and the like given a secret variable ($AZURE_DEVOPS_EXT_PAT,
+	// or one of tm's).
 	if printer || reader {
 		for _, w := range words {
-			if v := patVar(w); v != "" {
-				return r.deny("credentials", cmd+" of "+safe(v), "")
+			if d := r.printed(cmd+" of ", w); d != nil {
+				return d
 			}
 		}
 	}
@@ -946,8 +1125,43 @@ func (r Rules) judgeSecret(cmd string, args, words []string, reader, printer boo
 		if strings.HasPrefix(w, "<") && len(w) > 1 {
 			path = w[1:]
 		}
-		if (reader || redirected) && !strings.HasPrefix(path, "-") && path != "<" && r.isSecret(r.abs(path)) {
-			return r.deny("credentials", cmd+" of "+safe(r.abs(path)), "")
+		if !(reader || redirected) || strings.HasPrefix(path, "-") || path == "<" {
+			continue
+		}
+		p := r.abs(path)
+		switch {
+		case r.covers(r.Own, p):
+			return floor(r.deny("credentials", cmd+" of "+safe(p), ""))
+		case procEnviron.MatchString(p):
+			if d := dump(cmd + " of " + safe(p)); d != nil {
+				return d
+			}
+		case creds && r.isSecret(p):
+			return r.deny("credentials", cmd+" of "+safe(p), "")
+		}
+	}
+	return nil
+}
+
+// procEnviron: a process's environment on Linux.
+var procEnviron = regexp.MustCompile(`^/proc/[^/]+/environ$`)
+
+// isSecretEnv: name is one of the session's secret variables (case
+// aside: Windows ignores it).
+func (r Rules) isSecretEnv(name string) bool {
+	return slices.ContainsFunc(r.SecretEnv, func(s string) bool { return strings.EqualFold(s, name) })
+}
+
+// printed is the refusal of word w printing a secret variable, summary
+// what then the variable: one of the session's secret variables (the
+// floor), or under credentials Azure DevOps' token.
+func (r Rules) printed(what, w string) *Denial {
+	for _, m := range shellVar.FindAllStringSubmatch(w, -1) {
+		if r.isSecretEnv(m[1]) {
+			return floor(r.deny("credentials", what+safe(m[1]), ""))
+		}
+		if r.has("credentials") && azurePAT.MatchString(m[1]) {
+			return r.deny("credentials", what+safe(m[1]), "")
 		}
 	}
 	return nil
@@ -1002,17 +1216,6 @@ func (r Rules) judgeGitConfig(cmd string, words []string) *Denial {
 		}
 	}
 	return nil
-}
-
-// patVar is the Azure DevOps token variable w names ($AZURE_DEVOPS_EXT_PAT,
-// $env:AZURE_DEVOPS_EXT_PAT), or "".
-func patVar(w string) string {
-	for _, m := range shellVar.FindAllStringSubmatch(w, -1) {
-		if azurePAT.MatchString(m[1]) {
-			return m[1]
-		}
-	}
-	return ""
 }
 
 // heredoc is a here-document a command line opens (<<WORD, <<-WORD):

@@ -47,6 +47,22 @@ export type Rules = {
   // The rules the user's enabled mods add: they only refuse, in force
   // whichever core rules the human turned off.
   mods?: readonly ModRule[]
+  // The human's allowances for the session's project (config
+  // guard_allow): a refusal under an allowance's rule of a call whose
+  // command line, or the file it names, the allowance matches is lifted,
+  // and the call judged again without that rule. Never one of the
+  // floor's (Denial.floor). Paths absolute.
+  allow?: readonly Allow[]
+  // tm's own files and folders (its run folder with the sockets, its
+  // keys, the guard's log): no tool reads them, whichever rules are on
+  // (the floor).
+  own?: readonly string[]
+  // The names of the secret variables tm gives the session (config
+  // env): no command prints them or the whole environment, whichever
+  // rules are on (the floor).
+  secretEnv?: readonly string[]
+  // guard_mode "learn": a refusal tells the model the user reviews it.
+  learn?: boolean
   // Where a write to a path lands: the path made absolute but not yet
   // cleaned (writeTargets), with the links of its longest existing
   // prefix followed. The matcher has no file system of its own: the
@@ -68,6 +84,12 @@ type ModRule = {
   message: string
 }
 
+// One of the human's allowances (config.GuardAllow): rule's refusals of
+// the command line command, or of the file path, are lifted. A * matches
+// any run of characters; a credentials allowance with one is ignored (it
+// names one exact command or path).
+type Allow = { rule: string; command?: string; path?: string }
+
 // What the guard knows of a tool: its kind (shell, write, patch, read,
 // glob) and the fields of its input that kind reads. A shell tool's
 // syntax is how its command lines are read: none for a POSIX shell,
@@ -80,7 +102,16 @@ type Tool = { kind: string; syntax?: string; fields: readonly string[] }
 // can't read (rule "unknown"), so it goes to Claude's dialog or
 // classifier however its rules would allow it; message is the reason
 // the dialog shows. An ask is not reported.
-export type Denial = { rule: string; message: string; summary: string; ask?: boolean }
+// floor marks a refusal no allowance lifts, in any mode: reading tm's
+// own files, printing a secret variable tm gives the session,
+// force-pushing to a protected branch, a thread merging. subject is what
+// an allowance of the refusal names: the whole command line, or the file
+// (where a write lands); it is the human's to see (the guard's log),
+// never journaled.
+export type Denial = { rule: string; message: string; summary: string; ask?: boolean; floor?: boolean; subject?: string }
+
+// LEARN_NOTE ends a refusal's sentence in learn mode.
+const LEARN_NOTE = " The user reviews refused calls: if they allow this one, you will be told and may retry it; until then don't work around it."
 
 export const off: Rules = { on: false }
 
@@ -88,7 +119,7 @@ export const off: Rules = { on: false }
 export function rulesOf(text: string): Rules {
   try {
     const r = JSON.parse(text) as Rules
-    return r && typeof r === 'object' && r.on === true && (Array.isArray(r.rules) || Array.isArray(r.mods)) ? r : off
+    return r && typeof r === 'object' && r.on === true && (Array.isArray(r.rules) || Array.isArray(r.mods) || Array.isArray(r.own) || Array.isArray(r.secretEnv)) ? r : off
   } catch {
     return off
   }
@@ -97,17 +128,17 @@ export function rulesOf(text: string): Rules {
 // judge is the rule the call of tool with input breaks, or null. The
 // tool is judged by its kind in r.tools, from the fields listed there.
 export function judge(r: Rules, tool: string, input: Record<string, unknown>): Denial | null {
-  if (!r.on || (!r.rules?.length && !r.mods?.length)) return null
+  if (!r.on || (!r.rules?.length && !r.mods?.length && !r.own?.length && !r.secretEnv?.length)) return null
   const t = r.tools && Object.hasOwn(r.tools, tool) ? r.tools[tool] : undefined
   if (!t) return null
-  const has = (id: string) => r.rules?.includes(id) ?? false
   const values = (t.fields ?? []).map(f => input[f]).filter((v): v is string => typeof v === 'string' && v !== '')
-  const writable = (p: string) => (r.writable ?? []).some(w => under(r, p, w))
   // A file tool writing p (as the call gave it), judged where the write
   // lands and named as given.
-  const judgeWrite = (given: string): Denial | null => {
+  const landing = (given: string) => (r.resolve ? abs(r, r.resolve(joined(r, given))) : abs(r, given))
+  const judgeWrite = (r: Rules, given: string, p: string): Denial | null => {
+    const has = (id: string) => r.rules?.includes(id) ?? false
     const shown = abs(r, given)
-    const p = r.resolve ? abs(r, r.resolve(joined(r, given))) : shown
+    const writable = (p: string) => (r.writable ?? []).some(w => under(r, p, w))
     if (has('worktree-only') && !writable(p)) return deny(r, 'worktree-only', `${tool} of ${safe(shown)}`)
     const m = (r.mods ?? []).find(m => (m.writes ?? []).some(w => under(r, p, w)))
     return m ? denyMod(m, `${tool} of ${safe(shown)}`) : null
@@ -116,7 +147,10 @@ export function judge(r: Rules, tool: string, input: Record<string, unknown>): D
     case 'shell': {
       let ask: Denial | null = null
       for (const c of values) {
-        const d = t.syntax === 'powershell' ? judgePowerShell(r, has, c) : judgeBash(r, has, c)
+        const d = lifted(r, c.trim(), false, r => {
+          const has = (id: string) => r.rules?.includes(id) ?? false
+          return t.syntax === 'powershell' ? judgePowerShell(r, has, c) : judgeBash(r, has, c)
+        })
         if (d && !d.ask) return d
         ask ??= d
       }
@@ -124,7 +158,8 @@ export function judge(r: Rules, tool: string, input: Record<string, unknown>): D
     }
     case 'write':
       for (const p of values) {
-        const d = judgeWrite(p)
+        const at = landing(p)
+        const d = lifted(r, at, true, r => judgeWrite(r, p, at))
         if (d) return d
       }
       return null
@@ -132,7 +167,8 @@ export function judge(r: Rules, tool: string, input: Record<string, unknown>): D
       // Each file the patch adds, updates, deletes or moves to is a write.
       for (const patch of values) {
         for (const p of patchPaths(patch)) {
-          const d = judgeWrite(p)
+          const at = landing(p)
+          const d = lifted(r, at, true, r => judgeWrite(r, p, at))
           if (d) return d
         }
       }
@@ -143,13 +179,74 @@ export function judge(r: Rules, tool: string, input: Record<string, unknown>): D
       // first wildcard.
       for (const v of values) {
         const p = abs(r, v)
-        if (has('credentials') && isSecret(r, p)) return deny(r, 'credentials', `${tool} of ${safe(p)}`)
-        const m = (r.mods ?? []).find(m => covers(r, m.reads ?? [], p))
-        if (m) return denyMod(m, `${tool} of ${safe(p)}`)
+        const d = lifted(r, p, true, r => judgeRead(r, tool, p))
+        if (d) return d
       }
       return null
   }
   return null
+}
+
+// judgeRead judges a file tool reading p (absolute; a glob by the part
+// before its first wildcard).
+function judgeRead(r: Rules, tool: string, p: string): Denial | null {
+  if (covers(r, r.own ?? [], p)) return floor(deny(r, 'credentials', `${tool} of ${safe(p)}`))
+  if (r.rules?.includes('credentials') && isSecret(r, p)) return deny(r, 'credentials', `${tool} of ${safe(p)}`)
+  const m = (r.mods ?? []).find(m => covers(r, m.reads ?? [], p))
+  return m ? denyMod(m, `${tool} of ${safe(p)}`) : null
+}
+
+// lifted is judge's refusal of a call, the ones the human allowed lifted:
+// while it refuses under a rule an allowance of subject (the command
+// line, or with path the file) names, it judges again without that rule.
+// The refusal that stands carries subject, and in learn mode says the
+// user reviews it.
+function lifted(r: Rules, subject: string, path: boolean, judge: (r: Rules) => Denial | null): Denial | null {
+  for (;;) {
+    const d = judge(r)
+    if (!d || d.ask) return d
+    if (!d.floor && allows(r, d.rule, subject, path)) {
+      r = without(r, d.rule)
+      continue
+    }
+    return { ...d, subject, message: r.learn && !d.floor ? d.message + LEARN_NOTE : d.message }
+  }
+}
+
+// allows: an allowance of rule matches subject, a command line or with
+// path a file.
+function allows(r: Rules, rule: string, subject: string, path: boolean): boolean {
+  return (r.allow ?? []).some(a => {
+    const text = (path ? a.path : a.command) ?? ''
+    if (a.rule !== rule || text.trim() === '' || (rule === 'credentials' && text.includes('*'))) return false
+    return path ? globMatch(fold(r, abs(r, text)), fold(r, subject)) : globMatch(text.trim(), subject)
+  })
+}
+
+// without is r without rule: a core rule's id, or a mod's rule's name.
+function without(r: Rules, rule: string): Rules {
+  if (rule.startsWith('mod:')) return { ...r, mods: (r.mods ?? []).filter(m => `mod:${m.mod}.${m.id}` !== rule) }
+  return { ...r, rules: (r.rules ?? []).filter(id => id !== rule) }
+}
+
+// globMatch: s is pattern, a * in it matching any run of characters.
+function globMatch(pattern: string, s: string): boolean {
+  const parts = pattern.split('*')
+  if (parts.length === 1) return pattern === s
+  if (!s.startsWith(parts[0])) return false
+  s = s.slice(parts[0].length)
+  const last = parts[parts.length - 1]
+  for (const p of parts.slice(1, -1)) {
+    const i = s.indexOf(p)
+    if (i < 0) return false
+    s = s.slice(i + p.length)
+  }
+  return s.length >= last.length && s.endsWith(last)
+}
+
+// floor marks d as a refusal no allowance lifts.
+function floor(d: Denial): Denial {
+  return { ...d, floor: true }
 }
 
 // writeTargets are the files the call of tool with input writes, made
@@ -179,9 +276,11 @@ function deny(r: Rules, rule: string, summary: string, target = ''): Denial {
     'worktree-only': `a thread writes only inside its worktree (${r.writable?.[0] ?? ''}). Write the file there, or ${tell} what needs changing elsewhere.`,
     'delete-branch': `agents don't delete branches or worktrees; tm cleans them up once the work has merged. Leave them, and ${tell} if one is in the way.`,
     merge: `merging is the coordinator's job in this project (merge = "coordinator"). Leave the PR open with CI green and say so in your report.`,
-    credentials: `credential files and tokens are not read here. If the task needs access you don't have, ${tell} exactly what is missing.`,
+    credentials: `credential files and tokens are not read here. A tool that needs a token gets it from the secret environment the user gives threads in tm's settings; if the task needs access you don't have, ${tell} exactly what is missing.`,
   }
-  return { rule, message: `terminatr guard (${rule}): ${m[rule]}`, summary }
+  // A thread never merges while the rule holds: no allowance lifts it.
+  const d: Denial = { rule, message: `terminatr guard (${rule}): ${m[rule]}`, summary }
+  return rule === 'merge' ? floor(d) : d
 }
 
 // judgeMods judges a simple command, its name and arguments, by the
@@ -254,12 +353,18 @@ function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Den
         if (isWorktreeRoot(r, abs(r, a))) return deny(r, 'delete-branch', `rm -r of ${safe(abs(r, a))}`)
       }
     }
-    if (has('credentials')) {
+    if (guardsSecrets(r, has)) {
       const d = judgeSecret(r, cmd, args, words, READERS.has(cmd), PRINTERS.has(cmd))
       if (d) return d
     }
   }
   return null
+}
+
+// guardsSecrets: credentials is on, or the floor keeps tm's files or the
+// session's secret variables.
+function guardsSecrets(r: Rules, has: (id: string) => boolean): boolean {
+  return has('credentials') || !!r.own?.length || !!r.secretEnv?.length
 }
 
 // SHELLS run a command line given with -c; STDIN_SHELLS (them and more)
@@ -303,17 +408,17 @@ function judgeGit(r: Rules, has: (id: string) => boolean, args: string[]): Denia
   switch (sub) {
     case 'push': {
       if (has('force-push') && (flag('f', '--force', '--force-with-lease', '--force-if-includes', '--mirror') || rest.some(a => a.startsWith('+')))) {
-        return deny(r, 'force-push', 'git push with force')
+        const d = deny(r, 'force-push', 'git push with force')
+        // Every branch, or a protected one: never allowed.
+        return long('--all', '--branches', '--mirror') || pushTargets(rest).some(b => (r.protected ?? []).includes(b)) ? floor(d) : d
       }
       if (has('delete-branch') && (flag('d', '--delete', '--prune') || rest.some(a => a.startsWith(':') && a.length > 1))) {
         return deny(r, 'delete-branch', 'git push deleting a branch')
       }
       if (has('push-default')) {
         if (long('--all', '--branches', '--mirror')) return deny(r, 'push-default', 'git push --all')
-        const pos = positionals(rest, ['-o', '--push-option', '--repo', '--receive-pack', '--exec'])
-        for (const spec of pos.slice(1)) {
-          const target = branchOf(spec.includes(':') ? spec.slice(spec.indexOf(':') + 1) : spec)
-          if (target && (r.protected ?? []).includes(target)) return deny(r, 'push-default', `git push to ${safe(target)}`, target)
+        for (const target of pushTargets(rest)) {
+          if ((r.protected ?? []).includes(target)) return deny(r, 'push-default', `git push to ${safe(target)}`, target)
         }
       }
       return null
@@ -333,6 +438,18 @@ function judgeGit(r: Rules, has: (id: string) => boolean, args: string[]): Denia
       return null
   }
   return null
+}
+
+// pushTargets are the branches git push's arguments (after push) name as
+// where they push: each refspec's destination.
+function pushTargets(rest: string[]): string[] {
+  const out: string[] = []
+  for (let spec of positionals(rest, ['-o', '--push-option', '--repo', '--receive-pack', '--exec']).slice(1)) {
+    if (spec.startsWith('+')) spec = spec.slice(1)
+    const target = branchOf(spec.includes(':') ? spec.slice(spec.indexOf(':') + 1) : spec)
+    if (target) out.push(target)
+  }
+  return out
 }
 
 // gh's options that take a value, which may come before or between the
@@ -582,9 +699,16 @@ const READERS = new Set([
 const SECRET_NAME = /token|secret|key|password|passwd|credential|(^|_)pat$/i
 
 // judgeSecret: cmd (a reader or a printer of what it is given) reading a
-// secret or printing the environment.
+// secret or printing the environment. Under credentials, any secret;
+// whatever the rules (the floor), tm's own files and the session's
+// secret variables.
 function judgeSecret(r: Rules, cmd: string, args: string[], words: string[], reader: boolean, printer: boolean): Denial | null {
-  if (cmd === 'security' && /^(find-(generic|internet)-password|dump-keychain|export)$/.test(args[0] ?? '')) {
+  const creds = r.rules?.includes('credentials') ?? false
+  // The whole environment printed: refused under credentials, and
+  // always where it holds a secret variable of tm's.
+  const dump = (what: string): Denial | null =>
+    r.secretEnv?.length ? floor(deny(r, 'credentials', what)) : creds ? deny(r, 'credentials', what) : null
+  if (cmd === 'security' && creds && /^(find-(generic|internet)-password|dump-keychain|export)$/.test(args[0] ?? '')) {
     return deny(r, 'credentials', `security ${args[0]}`)
   }
   if (cmd === 'printenv') {
@@ -592,21 +716,29 @@ function judgeSecret(r: Rules, cmd: string, args: string[], words: string[], rea
     // name looks secret. With no name (or only substitutions) it prints
     // everything.
     const names = unredirected(args).filter(a => !a.startsWith('-') && !substituted(a))
-    if (!names.length) return deny(r, 'credentials', 'printenv printing the environment')
+    if (!names.length) {
+      const d = dump('printenv printing the environment')
+      if (d) return d
+    }
+    const mine = names.find(n => isSecretEnv(r, n))
+    if (mine) return floor(deny(r, 'credentials', `printenv ${safe(mine)}`))
     const secret = names.find(n => SECRET_NAME.test(n))
-    if (secret) return deny(r, 'credentials', `printenv ${safe(secret)}`)
+    if (secret && creds) return deny(r, 'credentials', `printenv ${safe(secret)}`)
   } else if (cmd === 'env' && unredirected(args).every(a => a.startsWith('-') || substituted(a))) {
-    return deny(r, 'credentials', 'env printing the environment')
+    const d = dump('env printing the environment')
+    if (d) return d
   } else if ((ENV_PRINTERS.has(cmd) && args.every(a => a.startsWith('-') && !/[fF]/.test(a))) || (cmd === 'set' && args.length === 0)) {
     // export, declare -x and the like with no names print the variables
     // (with -f, the functions); set alone prints them all.
-    return deny(r, 'credentials', `${cmd} printing the environment`)
+    const d = dump(`${cmd} printing the environment`)
+    if (d) return d
   }
-  // echo and the like given a secret variable ($AZURE_DEVOPS_EXT_PAT).
+  // echo and the like given a secret variable ($AZURE_DEVOPS_EXT_PAT, or
+  // one of tm's).
   if (printer || reader) {
     for (const w of words) {
-      const v = patVar(w)
-      if (v) return deny(r, 'credentials', `${cmd} of ${safe(v)}`)
+      const d = printed(r, `${cmd} of `, w)
+      if (d) return d
     }
   }
   // A reader given a secret, or a secret redirected in.
@@ -614,9 +746,30 @@ function judgeSecret(r: Rules, cmd: string, args: string[], words: string[], rea
     const w = words[i]
     const redirected = w === '<' || words[i - 1] === '<'
     const path = w.startsWith('<') && w.length > 1 ? w.slice(1) : w
-    if ((reader || redirected) && !path.startsWith('-') && path !== '<' && isSecret(r, abs(r, path))) {
-      return deny(r, 'credentials', `${cmd} of ${safe(abs(r, path))}`)
-    }
+    if (!(reader || redirected) || path.startsWith('-') || path === '<') continue
+    const p = abs(r, path)
+    if (covers(r, r.own ?? [], p)) return floor(deny(r, 'credentials', `${cmd} of ${safe(p)}`))
+    if (/^\/proc\/[^/]+\/environ$/.test(p)) {
+      const d = dump(`${cmd} of ${safe(p)}`)
+      if (d) return d
+    } else if (creds && isSecret(r, p)) return deny(r, 'credentials', `${cmd} of ${safe(p)}`)
+  }
+  return null
+}
+
+// isSecretEnv: name is one of the session's secret variables (case
+// aside: Windows ignores it).
+function isSecretEnv(r: Rules, name: string): boolean {
+  return (r.secretEnv ?? []).some(s => s.toLowerCase() === name.toLowerCase())
+}
+
+// printed is the refusal of word w printing a secret variable, summary
+// what then the variable: one of the session's secret variables (the
+// floor), or under credentials Azure DevOps' token.
+function printed(r: Rules, what: string, w: string): Denial | null {
+  for (const m of w.matchAll(/\$\{?(?:[Ee][Nn][Vv]:)?([A-Za-z_][A-Za-z0-9_]*)/g)) {
+    if (isSecretEnv(r, m[1])) return floor(deny(r, 'credentials', `${what}${safe(m[1])}`))
+    if (r.rules?.includes('credentials') && /^AZURE_DEVOPS_EXT_PAT$|^AZURE_DEVOPS_.*(PAT|TOKEN)$/i.test(m[1])) return deny(r, 'credentials', `${what}${safe(m[1])}`)
   }
   return null
 }
@@ -639,15 +792,6 @@ function unredirected(args: string[]): string[] {
 // PowerShell expression, which may give no word at all.
 function substituted(a: string): boolean {
   return a.startsWith('$(') || a.startsWith('`') || psExprArg(a)
-}
-
-// patVar is the Azure DevOps token variable w names ($AZURE_DEVOPS_EXT_PAT,
-// $env:AZURE_DEVOPS_EXT_PAT), or ''.
-function patVar(w: string): string {
-  for (const m of w.matchAll(/\$\{?(?:[Ee][Nn][Vv]:)?([A-Za-z_][A-Za-z0-9_]*)/g)) {
-    if (/^AZURE_DEVOPS_EXT_PAT$|^AZURE_DEVOPS_.*(PAT|TOKEN)$/i.test(m[1])) return m[1]
-  }
-  return ''
 }
 
 // A here-document a command line opens (<<WORD, <<-WORD): the word that
@@ -1161,9 +1305,7 @@ function judgePSCommand(r: Rules, has: (id: string) => boolean, words: string[])
     if (argv[0].startsWith('$')) return askOf(`${op} of a variable`)
   } else if (psExpr(argv).startsWith('$')) {
     // An expression: printed unless assigned.
-    const v = patVar(psExpr(argv))
-    if (v && !assigned && has('credentials')) return deny(r, 'credentials', `output of ${safe(v)}`)
-    return null
+    return assigned ? null : printed(r, 'output of ', psExpr(argv))
   }
   const cmd = psName(argv[0])
   const args = argv.slice(1)
@@ -1210,7 +1352,7 @@ function judgePSArgs(r: Rules, has: (id: string) => boolean, cmd: string, argv: 
     }
   }
   if (d) return d
-  if (has('credentials')) {
+  if (guardsSecrets(r, has)) {
     const paths = psPaths(args)
     return judgePSSecret(r, cmd, args) ??
       judgeSecret(r, cmd, paths, [argv[0], ...paths], READERS.has(cmd) || PS_READERS.has(cmd), PRINTERS.has(cmd) || PS_PRINTERS.has(cmd))
@@ -1262,8 +1404,11 @@ function judgePSSecret(r: Rules, cmd: string, args: string[]): Denial | null {
   for (const p of psPaths(args)) {
     const m = /^env:[\\/]?(.*)$/is.exec(p)
     if (!m) continue
-    if (m[1] === '' || /[*?[]/.test(m[1])) return deny(r, 'credentials', `${safe(cmd)} printing the environment`)
-    if (SECRET_NAME.test(m[1])) return deny(r, 'credentials', `${safe(cmd)} of ${safe(m[1])}`)
+    if (m[1] === '' || /[*?[]/.test(m[1])) {
+      if (r.secretEnv?.length) return floor(deny(r, 'credentials', `${safe(cmd)} printing the environment`))
+      if (r.rules?.includes('credentials')) return deny(r, 'credentials', `${safe(cmd)} printing the environment`)
+    } else if (isSecretEnv(r, m[1])) return floor(deny(r, 'credentials', `${safe(cmd)} of ${safe(m[1])}`))
+    else if (r.rules?.includes('credentials') && SECRET_NAME.test(m[1])) return deny(r, 'credentials', `${safe(cmd)} of ${safe(m[1])}`)
   }
   return null
 }

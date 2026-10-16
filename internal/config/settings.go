@@ -108,7 +108,10 @@ func def[T any](key, words string, at reach, raw func(*rawSafety) *T, field func
 				return err
 			}
 			val := *v
-			if l, ok := any(val).([]string); ok {
+			switch l := any(val).(type) {
+			case []string:
+				val = any(slices.Clone(l)).(T)
+			case []GuardAllow:
 				val = any(slices.Clone(l)).(T)
 			}
 			*field(s) = val
@@ -178,9 +181,11 @@ var settingRows = []settingRow{
 	def("archive_inbox_days", "archive days", everywhere, func(r *rawSafety) *int { return r.ArchiveInbox }, func(s *Safety) *int { return &s.ArchiveInboxDays }, between(1, MaxArchiveDays)),
 	def("archive_journal_days", "archive days", everywhere, func(r *rawSafety) *int { return r.ArchiveJournal }, func(s *Safety) *int { return &s.ArchiveJournalDays }, between(1, MaxArchiveDays)),
 	def("branch_name", "branch names", everywhere, func(r *rawSafety) *string { return r.BranchName }, func(s *Safety) *string { return &s.BranchName }, CheckBranchName),
+	def("guard", "guard", everywhere, func(r *rawSafety) *bool { return r.Guard }, func(s *Safety) *bool { return &s.Guard }, nil),
+	def("guard_off", "guard off", everywhere, func(r *rawSafety) *[]string { return r.GuardOff }, func(s *Safety) *[]string { return &s.GuardOff }, checkGuardOff),
+	def("guard_mode", "guard mode", everywhere, func(r *rawSafety) *string { return r.GuardMode }, func(s *Safety) *string { return &s.GuardMode }, oneOf(GuardModes...)),
+	def("guard_allow", "guard allowances", everywhere, func(r *rawSafety) *[]GuardAllow { return r.GuardAllow }, func(s *Safety) *[]GuardAllow { return &s.GuardAllow }, checkGuardAllows),
 	def("merge", "merge", byHand, func(r *rawSafety) *string { return r.Merge }, func(s *Safety) *string { return &s.Merge }, oneOf(MergeCoordinator, MergeThread)),
-	def("guard", "guard", byHand, func(r *rawSafety) *bool { return r.Guard }, func(s *Safety) *bool { return &s.Guard }, nil),
-	def("guard_off", "guard off", byHand, func(r *rawSafety) *[]string { return r.GuardOff }, func(s *Safety) *[]string { return &s.GuardOff }, checkGuardOff),
 }
 
 // autoClose is auto_close's row: a table sets it with the older

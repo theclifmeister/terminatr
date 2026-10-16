@@ -200,9 +200,14 @@ type Safety struct {
 	BranchName string `json:"branch_name"`
 	// Guard turns the mod's guard on (docs/SPEC.md §8.6, Guard): it
 	// refuses tool calls that break the standing rules. GuardOff are the
-	// GuardRules it leaves out. Only the human sets them, here.
-	Guard    bool     `json:"guard"`
-	GuardOff []string `json:"guard_off,omitempty"`
+	// GuardRules it leaves out; GuardMode is GuardEnforce or GuardLearn;
+	// GuardAllow are the calls it lets through (a project's: all
+	// projects' first, marked All, then its own). Only the human sets
+	// them, by hand or in the settings popups.
+	Guard      bool         `json:"guard"`
+	GuardOff   []string     `json:"guard_off,omitempty"`
+	GuardMode  string       `json:"guard_mode"`
+	GuardAllow []GuardAllow `json:"guard_allow,omitempty"`
 	// The retention ages in days (ArchiveKeys): after them the ticker
 	// moves done tasks to the task archive, packs resolved threads'
 	// folders, and bundles handled inbox items and journal lines into
@@ -231,7 +236,7 @@ const LegacyAgent = "claude"
 // [defaults] (all projects) name.
 var Defaults = Safety{StartThreads: StartPropose, Yolo: false, CoordinatorApproves: true,
 	ParallelThreads: 10, AutoClose: CloseMerged, AutoCloseDays: 7, PRFollowup: true, PRPollSeconds: DefaultPRPollSeconds,
-	CompleteTasks: CompleteUser, FastForwardCheckout: true, SandboxEscapes: true, Merge: MergeCoordinator, MergeMethod: MethodMerge, BranchName: DefaultBranchName, Guard: true, Active: true,
+	CompleteTasks: CompleteUser, FastForwardCheckout: true, SandboxEscapes: true, Merge: MergeCoordinator, MergeMethod: MethodMerge, BranchName: DefaultBranchName, Guard: true, GuardMode: GuardEnforce, Active: true,
 	ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30}
 
 type rawSafety struct {
@@ -244,33 +249,35 @@ type rawSafety struct {
 	AutoCloseDays       *int    `toml:"auto_close_days"`
 	// AutoResolve is auto_close's older form: true is "merged", false
 	// "off"; auto_close wins when both are set.
-	AutoResolve    *bool     `toml:"auto_resolve"`
-	PRFollowup     *bool     `toml:"pr_followup"`
-	PRPoll         *int      `toml:"pr_poll_seconds"`
-	CompleteTasks  *string   `toml:"complete_tasks"`
-	CoordinatorRC  *bool     `toml:"coordinator_remote_control"`
-	AutoClear      *bool     `toml:"auto_clear"`
-	CoordMerges    *bool     `toml:"coordinator_merges"`
-	FastForward    *bool     `toml:"fast_forward_checkout"`
-	MergeMethod    *string   `toml:"merge_method"`
-	SandboxEsc     *bool     `toml:"sandbox_escapes"`
-	ThreadAgent    *string   `toml:"thread_agent"`
-	CoordAgent     *string   `toml:"coordinator_agent"`
-	Models         *[]string `toml:"models"`
-	CoordModel     *string   `toml:"coordinator_model"`
-	Active         *bool     `toml:"active"`
-	Paused         *bool     `toml:"paused"`
-	Archived       *bool     `toml:"archived"`
-	Pinned         *bool     `toml:"pinned"`
-	Share          *bool     `toml:"share"`
-	Merge          *string   `toml:"merge"`
-	BranchName     *string   `toml:"branch_name"`
-	Guard          *bool     `toml:"guard"`
-	GuardOff       *[]string `toml:"guard_off"`
-	ArchiveTasks   *int      `toml:"archive_tasks_days"`
-	ArchiveThreads *int      `toml:"archive_threads_days"`
-	ArchiveInbox   *int      `toml:"archive_inbox_days"`
-	ArchiveJournal *int      `toml:"archive_journal_days"`
+	AutoResolve    *bool         `toml:"auto_resolve"`
+	PRFollowup     *bool         `toml:"pr_followup"`
+	PRPoll         *int          `toml:"pr_poll_seconds"`
+	CompleteTasks  *string       `toml:"complete_tasks"`
+	CoordinatorRC  *bool         `toml:"coordinator_remote_control"`
+	AutoClear      *bool         `toml:"auto_clear"`
+	CoordMerges    *bool         `toml:"coordinator_merges"`
+	FastForward    *bool         `toml:"fast_forward_checkout"`
+	MergeMethod    *string       `toml:"merge_method"`
+	SandboxEsc     *bool         `toml:"sandbox_escapes"`
+	ThreadAgent    *string       `toml:"thread_agent"`
+	CoordAgent     *string       `toml:"coordinator_agent"`
+	Models         *[]string     `toml:"models"`
+	CoordModel     *string       `toml:"coordinator_model"`
+	Active         *bool         `toml:"active"`
+	Paused         *bool         `toml:"paused"`
+	Archived       *bool         `toml:"archived"`
+	Pinned         *bool         `toml:"pinned"`
+	Share          *bool         `toml:"share"`
+	Merge          *string       `toml:"merge"`
+	BranchName     *string       `toml:"branch_name"`
+	Guard          *bool         `toml:"guard"`
+	GuardOff       *[]string     `toml:"guard_off"`
+	GuardMode      *string       `toml:"guard_mode"`
+	GuardAllow     *[]GuardAllow `toml:"guard_allow"`
+	ArchiveTasks   *int          `toml:"archive_tasks_days"`
+	ArchiveThreads *int          `toml:"archive_threads_days"`
+	ArchiveInbox   *int          `toml:"archive_inbox_days"`
+	ArchiveJournal *int          `toml:"archive_journal_days"`
 	// Repos is the project's repo list, the repositories the user
 	// approved for its threads' worktrees (Config.Repos): here, not in
 	// PROJECT.md, which the coordinator writes. Not a setting: neither
@@ -279,6 +286,9 @@ type rawSafety struct {
 	// Links are the project's links to other projects' coordinators
 	// (links.go): a project's own, never [defaults]'s.
 	Links map[string]any `toml:"links"`
+	// Env is the secret environment of threads (env.go): not a setting
+	// the popups show, read by SecretEnv.
+	Env map[string]EnvSource `toml:"env"`
 }
 
 // CheckAgent checks an agent name's shape: one word. Whether the
@@ -461,8 +471,14 @@ func Load() (*Config, error) {
 	if _, err := c.AllProjects(); err != nil {
 		return c, err
 	}
+	if _, err := c.SecretEnv(""); err != nil {
+		return c, err
+	}
 	for slug := range raw.Projects {
 		if _, err := c.Safety(slug); err != nil {
+			return c, err
+		}
+		if _, err := c.SecretEnv(slug); err != nil {
 			return c, err
 		}
 		if _, err := c.Links(slug); err != nil {
@@ -493,7 +509,15 @@ func (c *Config) Safety(slug string) (Safety, error) {
 	if r.GlobalThreads != nil {
 		return s, fmt.Errorf("%s: projects.%s can't set global_parallel_threads; it is all projects' cap, in [defaults]", c.Path, slug)
 	}
-	return s, r.apply(&s, c.Path, "projects."+slug)
+	all := s.GuardAllow
+	if err := r.apply(&s, c.Path, "projects."+slug); err != nil {
+		return s, err
+	}
+	// A project's allowances add to all projects'.
+	if r.GuardAllow != nil {
+		s.GuardAllow = withAllowsOf(all, s.GuardAllow)
+	}
+	return s, nil
 }
 
 // Repos is project slug's repo list ([projects.<slug>] repos), the

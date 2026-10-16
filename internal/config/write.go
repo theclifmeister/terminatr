@@ -279,6 +279,27 @@ func Edit(data []byte, table, key string, value any) ([]byte, error) {
 		}
 		return res, nil
 	}
+	if want, ok := value.([]GuardAllow); ok {
+		var arr []map[string]any
+		for _, x := range asSlice(v) {
+			m, _ := x.(map[string]any)
+			arr = append(arr, m)
+		}
+		if a, ok := v.([]map[string]any); ok {
+			arr = a
+		}
+		if len(arr) != len(want) {
+			return nil, ErrForm
+		}
+		for i, x := range arr {
+			c, _ := x["command"].(string)
+			p, _ := x["path"].(string)
+			if len(x) != 2 || x["rule"] != any(want[i].Rule) || c != want[i].Command || p != want[i].Path {
+				return nil, ErrForm
+			}
+		}
+		return res, nil
+	}
 	if want, ok := value.(Link); ok {
 		if got, _, err := parseLink(v); err != nil || got != want {
 			return nil, ErrForm
@@ -393,6 +414,18 @@ func tomlValue(v any) (string, error) {
 			n, _ := tomlValue(x.Name)
 			a, _ := tomlValue(x.About)
 			parts[i] = "{ name = " + n + ", about = " + a + " }"
+		}
+		return "[" + strings.Join(parts, ", ") + "]", nil
+	case []GuardAllow:
+		parts := make([]string, len(v))
+		for i, x := range v {
+			r, _ := tomlValue(x.Rule)
+			k, t := "command", x.Command
+			if x.Path != "" {
+				k, t = "path", x.Path
+			}
+			q, _ := tomlValue(t)
+			parts[i] = "{ rule = " + r + ", " + k + " = " + q + " }"
 		}
 		return "[" + strings.Join(parts, ", ") + "]", nil
 	case Link:

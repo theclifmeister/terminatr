@@ -21,6 +21,11 @@ type vectors struct {
 		Rule    *string        `json:"rule"`
 		Summary string         `json:"summary"`
 		Ask     bool           `json:"ask"`
+		// Floor: no allowance lifts the refusal. Subject and Message,
+		// when given, are the refusal's.
+		Floor   bool   `json:"floor"`
+		Subject string `json:"subject"`
+		Message string `json:"message"`
 		// Links are where writes under a link land (Resolve, faked).
 		Links map[string]string `json:"links"`
 	} `json:"cases"`
@@ -83,10 +88,22 @@ func TestVectors(t *testing.T) {
 		d := r.Judge(c.Tool, c.Input)
 		var got, want string
 		if d != nil {
-			got = fmt.Sprintf("%s / %s / ask %t", d.Rule, d.Summary, d.Ask)
+			got = fmt.Sprintf("%s / %s / ask %t / floor %t", d.Rule, d.Summary, d.Ask, d.Floor)
+			if c.Subject != "" {
+				got += " / " + d.Subject
+			}
+			if c.Message != "" {
+				got += " / " + d.Message
+			}
 		}
 		if c.Rule != nil {
-			want = fmt.Sprintf("%s / %s / ask %t", *c.Rule, c.Summary, c.Ask)
+			want = fmt.Sprintf("%s / %s / ask %t / floor %t", *c.Rule, c.Summary, c.Ask, c.Floor)
+			if c.Subject != "" {
+				want += " / " + c.Subject
+			}
+			if c.Message != "" {
+				want += " / " + c.Message
+			}
 		}
 		if got != want {
 			t.Errorf("%s %s %v: got %q, want %q", c.Rules, c.Tool, c.Input, got, want)

@@ -9,7 +9,10 @@ import vectors from './guard-vectors'
 type Vectors = {
   tools: Rules['tools']
   rules: Record<string, Rules>
-  cases: { rules: string; tool: string; input: Record<string, unknown>; rule: string | null; summary?: string; ask?: boolean; links?: Record<string, string> }[]
+  cases: {
+    rules: string; tool: string; input: Record<string, unknown>; rule: string | null; summary?: string; ask?: boolean; links?: Record<string, string>
+    floor?: boolean; subject?: string; message?: string
+  }[]
   messages: Record<string, Record<string, string>>
 }
 
@@ -51,7 +54,9 @@ test('the shared vectors: rule and summary of each call', () => {
     const r: Rules = { ...v.rules[c.rules], tools: v.tools }
     if (c.links) r.resolve = linksTo(c.links)
     const d = judge(r, c.tool, c.input)
-    expect([c.rules, c.tool, c.input, d?.rule ?? null, d?.summary, d?.ask ?? false]).toEqual([c.rules, c.tool, c.input, c.rule, c.summary, c.ask ?? false])
+    expect([c.rules, c.tool, c.input, d?.rule ?? null, d?.summary, d?.ask ?? false, d ? d.floor ?? false : undefined]).toEqual([c.rules, c.tool, c.input, c.rule, c.summary, c.ask ?? false, c.rule === null ? undefined : c.floor ?? false])
+    if (c.subject !== undefined) expect([c.input, d?.subject]).toEqual([c.input, c.subject])
+    if (c.message !== undefined) expect([c.input, d?.message]).toEqual([c.input, c.message])
   }
   for (const [role, m] of Object.entries(v.messages)) {
     const r = { ...v.rules.thread, role, tools: v.tools }
@@ -110,7 +115,7 @@ test('a mod rule is labelled with the mod and refuses with every core rule off',
 async function start($: Engine, on: On, rules: Rules | null, env: Record<string, string> = { TERMINATR_MOD_SOCKET: SOCKET }) {
   const clock = mock.clock(on)
   mock.env(on, { TERMINATR_BIN: '/opt/tm', TERMINATR_SESSION: 's-7', ...env })
-  const denied: { rule: string; tool: string; summary: string }[] = []
+  const denied: { rule: string; tool: string; summary: string; subject?: string; floor?: boolean }[] = []
   let fetches = 0
   let current = rules
   let links: Record<string, string> | number | 'hang' = {}
@@ -154,10 +159,20 @@ test('a refused call returns the rule\'s sentence and is reported; others run', 
   const r = await $.tool.call({ tool: 'Bash', command: 'git push --force origin tm/x' })
   expect((r as { deny?: string }).deny).toContain('terminatr guard (force-push)')
   await clock.settle()
-  expect(denied).toEqual([{ rule: 'force-push', tool: 'Bash', summary: 'git push with force' }])
+  expect(denied).toEqual([{ rule: 'force-push', tool: 'Bash', summary: 'git push with force', subject: 'git push --force origin tm/x' }])
   const ran = await $.tool.call({ tool: 'Bash', command: 'git push -u origin tm/x' })
   expect((ran as { deny?: string }).deny).toBe(undefined)
   expect((ran as { result: { stdout: string } }).result.stdout).toBe('ran')
+})
+
+test('an allowed call runs; a refusal the floor holds is reported as one', async ($, on) => {
+  const { clock, denied } = await start($, on, { ...thread, allow: [{ rule: 'force-push', command: 'git push --force origin tm/*' }, { rule: 'merge', command: 'gh pr merge 1' }] })
+  const ran = await $.tool.call({ tool: 'Bash', command: 'git push --force origin tm/x' })
+  expect((ran as { deny?: string }).deny).toBe(undefined)
+  const r = await $.tool.call({ tool: 'Bash', command: 'gh pr merge 1' })
+  expect((r as { deny?: string }).deny).toContain('terminatr guard (merge)')
+  await clock.settle()
+  expect(denied).toEqual([{ rule: 'merge', tool: 'Bash', summary: 'gh pr merge', subject: 'gh pr merge 1', floor: true }])
 })
 
 test('$.tool.check gets the same answer', async ($, on) => {
@@ -210,7 +225,7 @@ test('a write through a link out of the worktree is refused where it lands, and 
   const r = await $.tool.call({ tool: 'Write', file_path: 'link/hosts', content: 'x' })
   expect((r as { deny?: string }).deny).toContain('terminatr guard (worktree-only)')
   await clock.settle()
-  expect(denied).toEqual([{ rule: 'worktree-only', tool: 'Write', summary: `Write of ${WT}/link/hosts` }])
+  expect(denied).toEqual([{ rule: 'worktree-only', tool: 'Write', summary: `Write of ${WT}/link/hosts`, subject: '/etc/hosts' }])
   expect(resolved).toEqual([[`${WT}/link/hosts`]])
   expect((await $.tool.check({ tool: 'Edit', input: { file_path: `${WT}/main.go` } })).decision).toBe('allow')
   expect((await $.tool.check({ tool: 'Edit', input: { file_path: `${WT}/link/passwd` } })).decision).toBe('deny')
