@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -84,5 +85,23 @@ func TestTimeSpansRender(t *testing.T) {
 	}
 	if (&Widget{Kind: KindText, Lines: [][]Span{{{Text: "x"}}}}).Timed() {
 		t.Error("a tree without time spans is Timed")
+	}
+}
+
+// A table of many rows with a time span, relaid out each second while idle.
+func BenchmarkRenderTimedTable(b *testing.B) {
+	var rows []string
+	for i := 0; i < 2000; i++ {
+		rows = append(rows, fmt.Sprintf(`{"id":"r%d","cells":[[{"text":"row %d"}],[{"ago":"2026-10-13T13:59:20Z"}]]}`, i, i))
+	}
+	tree := mustDecode(b, `{"kind":"table","id":"t","columns":[{"title":"name"},{"title":"when"}],"rows":[`+strings.Join(rows, ",")+`]}`)
+	clock := spanNow
+	v := NewView()
+	v.now = func() time.Time { return clock }
+	v.Set(tree)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		clock = clock.Add(time.Second)
+		v.Render(80, 30, plainLook{})
 	}
 }
