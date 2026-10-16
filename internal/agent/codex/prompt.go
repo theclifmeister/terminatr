@@ -163,14 +163,12 @@ func (a *Agent) leftThread(session, thread string) bool {
 	return ok && t == thread
 }
 
-// errorLine is the last line of out that isn't a warning: Codex prints
-// "WARNING: …" lines before its error.
+// errorLine is the last line of out that isn't a warning (lastLine), else
+// its last line.
 func errorLine(out string) string {
-	lines := strings.Split(out, "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		if l := strings.TrimSpace(lines[i]); l != "" && !strings.HasPrefix(l, "WARNING:") {
-			return l
-		}
+	if l := lastLine(out); l != "" {
+		return l
 	}
+	lines := strings.Split(out, "\n")
 	return lines[len(lines)-1]
 }

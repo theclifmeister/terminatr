@@ -150,19 +150,7 @@ func (a *app) frameLocked(now time.Time) string {
 			conv = append(conv, wrap(l.visible(now), cols)...)
 		}
 	}
-	avail := rows - len(header) - len(bottom)
-	if avail < 0 {
-		header = nil
-		avail = rows - len(bottom)
-	}
-	if avail < 0 {
-		bottom = bottom[len(bottom)-rows:]
-		avail = 0
-	}
-	if len(conv) > avail {
-		conv = conv[len(conv)-avail:]
-	}
-	lines := append(append(header, conv...), bottom...)
+	lines := fitScreen(header, conv, bottom, rows)
 	var b strings.Builder
 	fmt.Fprintf(&b, "\x1b]0;%s\a\x1b[H\x1b[2J", title)
 	b.WriteString(strings.Join(lines, "\r\n"))
@@ -303,4 +291,23 @@ func (d *dialog) lines() []string {
 		out = append(out, " Enter to select · ↑/↓ to navigate · Esc to cancel")
 	}
 	return out
+}
+
+// fitScreen is the rows of a frame: the header, the conversation's tail
+// and the bottom, dropping the header and then the bottom's top when
+// rows is too few.
+func fitScreen(header, conv, bottom []string, rows int) []string {
+	avail := rows - len(header) - len(bottom)
+	if avail < 0 {
+		header = nil
+		avail = rows - len(bottom)
+	}
+	if avail < 0 {
+		bottom = bottom[len(bottom)-rows:]
+		avail = 0
+	}
+	if len(conv) > avail {
+		conv = conv[len(conv)-avail:]
+	}
+	return append(append(header, conv...), bottom...)
 }

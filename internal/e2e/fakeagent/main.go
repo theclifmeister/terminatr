@@ -118,29 +118,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
-	a := &app{
-		opts:        opts,
-		remote:      opts.remote != nil,
-		version:     version,
-		home:        home,
-		logicalWD:   wd,
-		cwd:         realPath(wd),
-		pid:         os.Getpid(),
-		born:        time.Now(),
-		startedAt:   nowMS(),
-		ctx:         context.Background(),
-		alwaysAllow: map[string]bool{},
-		redraw:      make(chan struct{}, 1),
-		wake:        make(chan struct{}, 1),
-		restoreTerm: func() {},
-	}
+	a := newApp()
+	a.opts, a.remote, a.version = opts, opts.remote != nil, version
+	a.home, a.logicalWD, a.cwd = home, wd, realPath(wd)
 	a.logPath = os.Getenv("FAKEAGENT_LOG")
 	if a.logPath == "" {
 		a.logPath = filepath.Join(home, ".fakeagent", "log.jsonl")
-	}
-	a.trustDebounce = 500 * time.Millisecond
-	if v, err := strconv.Atoi(os.Getenv("FAKEAGENT_TRUST_DEBOUNCE_MS")); err == nil && v >= 0 {
-		a.trustDebounce = time.Duration(v) * time.Millisecond
 	}
 
 	switch {
@@ -172,10 +155,7 @@ func main() {
 	a.syncSessionLocked()
 	a.mu.Unlock()
 
-	a.restoreTerm = setupTerm()
-	go a.signals()
-	go a.renderLoop()
-	go a.inputLoop()
+	a.startTerm()
 	a.requestRedraw()
 
 	a.startup()
@@ -438,4 +418,34 @@ func (a *app) transcriptAppend(entry map[string]any) {
 	entry["cwd"] = a.cwd
 	entry["version"] = a.version
 	_ = appendJSONL(path, entry)
+}
+
+// newApp is an app with what the Claude and the Codex flavour both
+// start from: the process's identity, the channels and the trust
+// debounce (FAKEAGENT_TRUST_DEBOUNCE_MS).
+func newApp() *app {
+	a := &app{
+		pid:           os.Getpid(),
+		born:          time.Now(),
+		startedAt:     nowMS(),
+		ctx:           context.Background(),
+		alwaysAllow:   map[string]bool{},
+		redraw:        make(chan struct{}, 1),
+		wake:          make(chan struct{}, 1),
+		restoreTerm:   func() {},
+		trustDebounce: 500 * time.Millisecond,
+	}
+	if v, err := strconv.Atoi(os.Getenv("FAKEAGENT_TRUST_DEBOUNCE_MS")); err == nil && v >= 0 {
+		a.trustDebounce = time.Duration(v) * time.Millisecond
+	}
+	return a
+}
+
+// startTerm takes over the terminal and starts the signal, render and
+// input loops.
+func (a *app) startTerm() {
+	a.restoreTerm = setupTerm()
+	go a.signals()
+	go a.renderLoop()
+	go a.inputLoop()
 }
