@@ -132,6 +132,46 @@ func TestSettingsAndStore(t *testing.T) {
 	}
 }
 
+// The parsed store is kept between calls, and a file changed behind the
+// broker's back is read again.
+func TestStoreCache(t *testing.T) {
+	tb := newTestBroker(t)
+	if _, err := tb.call(t, "store.set", map[string]any{"key": "a", "value": 1}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := tb.call(t, "store.get", map[string]string{"key": "a"}); string(got.(json.RawMessage)) != "1" {
+		t.Fatalf("store.get = %v", got)
+	}
+	// A refused edit leaves the cached store as it was.
+	big := strings.Repeat("x", maxStore)
+	if _, err := tb.call(t, "store.set", map[string]any{"key": "big", "value": big}); code(err) != CodeDenied {
+		t.Fatalf("an over-size store: %v", err)
+	}
+	if got, _ := tb.call(t, "store.get", map[string]string{"key": "big"}); got != nil {
+		t.Fatalf("a refused value was kept: %v", got)
+	}
+	path := filepath.Join(tb.OwnDir("m"), storeFile)
+	if err := os.WriteFile(path, []byte(`{"a":2,"pad":"xxxxxxxxxx"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := tb.call(t, "store.get", map[string]string{"key": "a"}); string(got.(json.RawMessage)) != "2" {
+		t.Fatalf("store.get after an outside edit = %v", got)
+	}
+}
+
+// The broker's own files in the mod's folder are not written through fs.write.
+func TestFsWriteReserved(t *testing.T) {
+	tb := newTestBroker(t)
+	for _, name := range []string{"store.json", "annotations.json", "./store.json"} {
+		if _, err := tb.call(t, "fs.write", map[string]any{"path": name, "text": "{}"}); code(err) != CodeDenied {
+			t.Errorf("fs.write %s: %v", name, err)
+		}
+	}
+	if _, err := tb.call(t, "fs.write", map[string]any{"path": "sub/store.json", "text": "{}"}); err != nil {
+		t.Errorf("a store.json in a subfolder: %v", err)
+	}
+}
+
 func TestFiles(t *testing.T) {
 	tb := newTestBroker(t)
 	// Its own folder needs no grant.

@@ -113,6 +113,7 @@ async function start($: Engine, on: On, rules: Rules | null, env: Record<string,
   const denied: { rule: string; tool: string; summary: string }[] = []
   let fetches = 0
   let current = rules
+  let hangRules = false
   let links: Record<string, string> | number | 'hang' = {}
   const resolved: string[][] = []
   on('http.fetch', async (_$, e) => {
@@ -126,6 +127,7 @@ async function start($: Engine, on: On, rules: Rules | null, env: Record<string,
     }
     if (e.url.endsWith('/v1/rules')) {
       fetches++
+      if (hangRules) return new Promise<never>(() => {})
       return current ? ok(200, JSON.stringify(current)) : ok(500, 'down')
     }
     if (e.url.endsWith('/v1/denied')) {
@@ -145,6 +147,7 @@ async function start($: Engine, on: On, rules: Rules | null, env: Record<string,
   return {
     clock, denied, resolved, fetches: () => fetches,
     setRules: (r: Rules | null) => { current = r },
+    hang: (h: boolean) => { hangRules = h },
     setLinks: (l: typeof links) => { links = l },
   }
 }
@@ -179,6 +182,22 @@ test('rules the server couldn\'t give are asked for again at the next call', asy
     expect((r as { deny?: string }).deny).toBe(undefined)
   }
   expect(fetches()).toBe(2)
+})
+
+test('a server that hangs costs one wait, not one per call, and the last rules stand in', async ($, on) => {
+  const { clock, fetches, hang } = await start($, on, thread)
+  const push = async () => ((await $.tool.call({ tool: 'Bash', command: 'git push --force origin tm/x' })) as { deny?: string }).deny
+  expect(await push()).toContain('terminatr guard (force-push)')
+  hang(true)
+  await clock.advance(1_001)
+  const slow = push()
+  await clock.advance(2_001)
+  // The wait ends with the last good rules, still guarding.
+  expect(await slow).toContain('terminatr guard (force-push)')
+  const n = fetches()
+  await clock.advance(1_001)
+  expect(await push()).toContain('terminatr guard (force-push)')
+  expect(fetches()).toBe(n)
 })
 
 test('the server\'s rules changing reach the session within a second, tighter or looser', async ($, on) => {

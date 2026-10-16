@@ -193,7 +193,7 @@ func lockdown() error {
 	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
 		return fmt.Errorf("no_new_privs: %w", err)
 	}
-	prog := filter()
+	prog := filter(uint32(os.Getpid()))
 	fprog := unix.SockFprog{Len: uint16(len(prog)), Filter: &prog[0]}
 	_, _, errno := unix.Syscall(unix.SYS_SECCOMP, unix.SECCOMP_SET_MODE_FILTER, unix.SECCOMP_FILTER_FLAG_TSYNC,
 		uintptr(unsafe.Pointer(&fprog)))
@@ -208,11 +208,13 @@ func lockdown() error {
 const (
 	offNr   = 0
 	offArch = 4
+	offArg0 = 16 // low word of args[0]
 )
 
 // filter is the BPF program: a foreign architecture kills the process,
-// a denied syscall fails with EPERM, the rest is allowed.
-func filter() []unix.SockFilter {
+// a denied syscall fails with EPERM, a signal syscall fails with EPERM
+// unless it names the process pid itself, the rest is allowed.
+func filter(pid uint32) []unix.SockFilter {
 	stmt := func(code uint16, k uint32) unix.SockFilter { return unix.SockFilter{Code: code, K: k} }
 	jump := func(code uint16, k uint32, jt, jf uint8) unix.SockFilter {
 		return unix.SockFilter{Code: code, Jt: jt, Jf: jf, K: k}
@@ -237,6 +239,17 @@ func filter() []unix.SockFilter {
 	for _, nr := range denied {
 		p = append(p, jump(jeq, uint32(nr), 0, 1), stmt(ret, deny))
 	}
+	for _, nr := range selfOnly {
+		// Allowed only when the first argument is this process: the Go
+		// runtime signals its own threads with tgkill(getpid(), tid).
+		p = append(p,
+			jump(jeq, uint32(nr), 0, 4),
+			stmt(ld, offArg0),
+			jump(jeq, pid, 1, 0),
+			stmt(ret, deny),
+			stmt(ld, offNr),
+		)
+	}
 	return append(p, stmt(ret, unix.SECCOMP_RET_ALLOW))
 }
 
@@ -254,6 +267,16 @@ var deniedCommon = []uintptr{
 	unix.SYS_KEYCTL, unix.SYS_ADD_KEY, unix.SYS_REQUEST_KEY,
 	unix.SYS_MKNODAT, unix.SYS_UNLINKAT, unix.SYS_RENAMEAT2, unix.SYS_MKDIRAT,
 	unix.SYS_SYMLINKAT, unix.SYS_LINKAT, unix.SYS_TRUNCATE,
+	// tkill takes a thread id, which cannot be matched against the pid;
+	// pidfd_send_signal takes a descriptor.
+	unix.SYS_TKILL, unix.SYS_PIDFD_SEND_SIGNAL,
+}
+
+// selfOnly are the signal calls whose first argument is a process id:
+// refused unless it is the host's own, so a host cannot signal the
+// server or another session (landlock only scopes signals from ABI 6).
+var selfOnly = []uintptr{
+	unix.SYS_KILL, unix.SYS_TGKILL, unix.SYS_RT_SIGQUEUEINFO, unix.SYS_RT_TGSIGQUEUEINFO, unix.SYS_PIDFD_OPEN,
 }
 
 var denied = append(deniedCommon, deniedArch...)

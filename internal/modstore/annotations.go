@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/widget"
@@ -119,6 +120,43 @@ func read(dir string) (data, error) {
 	return d, nil
 }
 
+// seen is each folder's annotations as last parsed, with the file's
+// stamp: the console reads one project's badges at a time, so the same
+// file would be parsed once per project.
+var seen = struct {
+	sync.Mutex
+	m map[string]seenFile
+}{m: map[string]seenFile{}}
+
+type seenFile struct {
+	size int64
+	mod  time.Time
+	d    data
+}
+
+// readCached is read, parsing the file again only when it changed. The
+// result is shared: a caller must not change it.
+func readCached(dir string) (data, error) {
+	fi, err := os.Stat(filepath.Join(dir, AnnotationsFile))
+	if err != nil {
+		return read(dir)
+	}
+	seen.Lock()
+	c, ok := seen.m[dir]
+	seen.Unlock()
+	if ok && c.size == fi.Size() && c.mod.Equal(fi.ModTime()) {
+		return c.d, nil
+	}
+	d, err := read(dir)
+	if err != nil {
+		return d, err
+	}
+	seen.Lock()
+	seen.m[dir] = seenFile{fi.Size(), fi.ModTime(), d}
+	seen.Unlock()
+	return d, nil
+}
+
 // Annotate puts mod folder dir's annotation key on target of project: spans
 // replace the old ones, and none (or only empty ones) removes the
 // annotation. It reports whether the store changed. Spans must be Clean.
@@ -192,7 +230,7 @@ func count(d data) int {
 // from mod folder dir; a missing or broken file has none. Everything is
 // cleaned again, and what is over the limits is dropped.
 func ReadBadges(dir, id, project string) map[string][]Badge {
-	d, err := read(dir)
+	d, err := readCached(dir)
 	if err != nil {
 		return nil
 	}
