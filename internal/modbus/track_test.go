@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -257,7 +258,7 @@ func nonEmpty(s string) []string {
 
 func TestTrackerQuestions(t *testing.T) {
 	b := New()
-	s := b.Subscribe("m", Options{Grants: []string{GrantProjectRead}})
+	s := b.Subscribe("m", Options{Grants: []string{mod.PermProjectRead}})
 	tr := NewTracker(b, nil)
 	ask := func(q string) *Ask {
 		return &Ask{Question: q, Options: []AskOption{{Label: "Yes"}, {Label: "No"}}}
