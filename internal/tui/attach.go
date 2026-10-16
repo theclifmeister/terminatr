@@ -1386,7 +1386,7 @@ type prefixDo struct {
 // paneCommands are the keys that, after the prefix, act on the window
 // itself: the sidebar's width ({ }), slim or hidden (b), the keyboard
 // (tab), the info panel (|) and the last place (;).
-var paneCommands = map[string]bool{"{": true, "}": true, "b": true, "tab": true, "|": true, ";": true}
+var paneCommands = prefixCmdKeys(cmdPane)
 
 // keyName names k as paneCommands does.
 func keyName(k uv.Key) string {

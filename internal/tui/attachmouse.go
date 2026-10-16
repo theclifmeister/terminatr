@@ -21,29 +21,15 @@ import (
 // row opens that row's menu. Menus are this console's own; what they do
 // are the same view actions the keys run.
 
-// sessionMenu is the ≡ menu of a session: every prefix command, in the
-// help's order (sessionKeys in keymap.go).
-var sessionMenu = []struct{ label, key string }{
-	{"dashboard", "d"},
-	{"quit this console", "q"},
-	{"project popup", "a"},
-	{"new project", "n"},
-	{"next project", "]"},
-	{"previous project", "["},
-	{"inbox", "i"},
-	{"tasks", "t"},
-	{"settings", ","},
-	{"help: keys and mouse", "?"},
-	{"narrower sidebar", "{"},
-	{"wider sidebar", "}"},
-	{"sidebar: slim / hide / full", "b"},
-	{"info panel on / off", "|"},
-	{"keyboard to the sidebar", "tab"},
-	{"back to the last place", ";"},
-	{"remote control on / off…", "r"},
-	{"repaint from its server", "R"},
-	{"send the prefix key", "prefix"},
-}
+// sessionMenu is the ≡ menu of a session: every prefix command
+// (prefixCmds), in the help's order (sessionKeys in keymap.go).
+var sessionMenu = func() []struct{ label, key string } {
+	out := make([]struct{ label, key string }, len(prefixCmds))
+	for i, c := range prefixCmds {
+		out[i].label, out[i].key = c.menu, c.key
+	}
+	return out
+}()
 
 // cmdKey is the key a prefix command's name stands for.
 func cmdKey(name string) uv.Key {
