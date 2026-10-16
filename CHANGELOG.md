@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.29.1](https://github.com/theclifmeister/terminatr/compare/v0.29.0...v0.29.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* match env names case-insensitively on Windows (Path=) ([ad0f405](https://github.com/theclifmeister/terminatr/commit/ad0f405e510148fad2d72c1265c2097083bd900e))
+* match env names case-insensitively on Windows (Path=) ([030d4ad](https://github.com/theclifmeister/terminatr/commit/030d4ad56aa15e98fa34be5508fab88022c149fc))
+
 ## [0.29.0](https://github.com/theclifmeister/terminatr/compare/v0.28.3...v0.29.0) (2026-10-16)
 
 
