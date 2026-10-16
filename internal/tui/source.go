@@ -13,6 +13,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/guardlog"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/mod"
@@ -277,6 +278,13 @@ type SettingsSource interface {
 	// Unrefuse forgets that the user's account refused one of the
 	// agent's models. It is refused when tm runs inside an agent.
 	Unrefuse(agentName, model string) error
+	// GuardRefusals lists the guard's open refusals of project slug (all
+	// projects' for ""), the latest first; GuardDecide allows refusal e
+	// for its project (how "here") or all projects ("all"), telling
+	// session it may retry, or keeps refusing it ("keep"), and says what
+	// it did. Both are refused when tm runs inside an agent.
+	GuardRefusals(slug string) ([]guardlog.Entry, error)
+	GuardDecide(e guardlog.Entry, how, session string) (string, error)
 }
 
 // LinkSource sets and works the links between projects.

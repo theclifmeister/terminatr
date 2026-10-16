@@ -18,6 +18,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/guardlog"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/models"
@@ -70,6 +71,10 @@ type fakeSource struct {
 	libFiles     map[string]string // "t-0001/name" -> content
 	libRemoved   []string          // "t-0001/name", "t-0001/" for all
 	done         []string          // action.done: "mod action project/task ok"
+	// refusals are the guard's log's open refusals; decided its
+	// decisions: "id how session".
+	refusals []guardlog.Entry
+	decided  []string
 	restarted    []string          // mod ids
 	fetchedMods  []string          // what FetchMod was asked for
 	templates    []mod.Template
@@ -333,6 +338,19 @@ func (f *fakeSource) RefreshModels(name string) error {
 	return nil
 }
 func (f *fakeSource) Unrefuse(name, model string) error { return models.Unrefuse(name, model) }
+func (f *fakeSource) GuardRefusals(slug string) ([]guardlog.Entry, error) {
+	var out []guardlog.Entry
+	for _, e := range f.refusals {
+		if slug == "" || e.Project == slug {
+			out = append(out, e)
+		}
+	}
+	return out, nil
+}
+func (f *fakeSource) GuardDecide(e guardlog.Entry, how, session string) (string, error) {
+	f.decided = append(f.decided, e.ID+" "+how+" "+session)
+	return "decided " + how, nil
+}
 func (f *fakeSource) SyncModel(id string) error {
 	f.settings = append(f.settings, "sync "+id)
 	return nil
