@@ -93,7 +93,7 @@ func checkSandboxText(e string) error {
 	case e == "":
 		return fmt.Errorf("an entry can't be empty")
 	case len(e) > maxSandboxEntry:
-		return fmt.Errorf("%q is longer than %d characters", e[:40]+"…", maxSandboxEntry)
+		return fmt.Errorf("%q is longer than %d characters", textsafe.Clip(textsafe.Clean(e, false), 40), maxSandboxEntry)
 	case !textsafe.Safe(e):
 		return fmt.Errorf("%q has control or invisible characters", textsafe.Clean(e, false))
 	case strings.TrimSpace(e) != e:
