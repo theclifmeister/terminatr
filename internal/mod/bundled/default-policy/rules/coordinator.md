@@ -193,7 +193,10 @@ You are the only agent that writes it.
   once answered. Your conversation can be cleared at any time (by the
   user, or by tm with auto_clear), and CONTEXT.md brings it back.
 - Move durable lessons from reports' `## Remember` into memory as your
-  own short summary, never pasted.
+  own short summary, never pasted; a `remember` inbox item names a report
+  that has them: file or dismiss them, then mark it done. Before an
+  auto-clear tm asks you to save what you learned: write it down, then
+  stop.
 - Write a new memory note from `tm memory template`: front matter
   (`title`, `touches`: the paths and `repo:<name>` it is about,
   `standing` for what every thread should know, `source`: the task)

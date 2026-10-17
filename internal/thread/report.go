@@ -41,8 +41,10 @@ const PRLineWant = "PR: https://github.com/<owner>/<repo>/pull/<n>, https://dev.
 
 // Report is a validated report.
 type Report struct {
-	PR       string   `json:"pr,omitempty"`
-	Next     []string `json:"next"`
+	PR   string   `json:"pr,omitempty"`
+	Next []string `json:"next"`
+	// Remember are the lessons under ## Remember, one per line without
+	// its list bullet: the ticker counts them for its remember item.
 	Remember []string `json:"remember,omitempty"`
 	// Check is how the user can check the work (the optional ## Check
 	// section), shown on the task while it waits in review.
@@ -96,13 +98,15 @@ func Validate(text string) (*Report, error) {
 		}
 		switch section {
 		case "Next":
-			n := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(t, "- "), "* "))
+			n := unbullet(t)
 			if utf8.RuneCountInString(n) > MaxNextLine {
 				return nil, refuse("invalid-report", "line %d over %d chars", i+1, MaxNextLine)
 			}
 			r.Next = append(r.Next, n)
 		case "Remember":
-			r.Remember = append(r.Remember, t)
+			if n := unbullet(t); n != "" {
+				r.Remember = append(r.Remember, n)
+			}
 		case "Check":
 			r.Check = append(r.Check, t)
 		}
@@ -117,6 +121,11 @@ func Validate(text string) (*Report, error) {
 		r.Next = []string{}
 	}
 	return r, nil
+}
+
+// unbullet is a section line without its "- " or "* " list bullet.
+func unbullet(t string) string {
+	return strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(t, "- "), "* "))
 }
 
 // ReadReport parses a thread's stored REPORT.md; nil when there is none.

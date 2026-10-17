@@ -99,6 +99,28 @@ func (h tickerHost) Clear(id string, still func() bool) error {
 	return nil
 }
 
+// AskSave pastes the ticker's save-lessons line (ticker.SaveText) into
+// session id ahead of its auto-clear, as Clear pastes the clear: never
+// for an agent without a clear prompt, which is never cleared.
+func (h tickerHost) AskSave(id, text string, still func() bool) error {
+	h.s.mu.Lock()
+	sess := h.s.sessions[id]
+	h.s.mu.Unlock()
+	if sess == nil {
+		return fmt.Errorf("no session %s", id)
+	}
+	if agent.ClearTextOf(sess.Agent()) == "" {
+		return fmt.Errorf("its agent has no clear prompt ([inject] clear)")
+	}
+	_, perr := h.s.promptWith(proto.SessionPromptParams{ID: id, Text: text}, session.PromptOptions{
+		Refresh: func() (string, bool) { return text, still() },
+	})
+	if perr != nil {
+		return perr
+	}
+	return nil
+}
+
 func (h tickerHost) Remote(id string, on bool) (proto.SessionRemoteResult, error) {
 	res, perr := h.s.remote(proto.SessionRemoteParams{ID: id, On: on})
 	if perr != nil {

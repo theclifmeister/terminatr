@@ -61,6 +61,10 @@ const (
 	// KindSlotFree: a thread slot freed for a coordinator a cap refused
 	// (slots.go).
 	KindSlotFree = "slot-free"
+	// KindRemember: a new report has ## Remember lines not yet filed;
+	// the coordinator files them in memory or dismisses them, then marks
+	// the item done.
+	KindRemember = "remember"
 )
 
 // GHFailPolls is how many PR polls in a row (sweeps of a project that
@@ -95,6 +99,11 @@ type Host interface {
 	// session; still is asked right before delivery and drops it when
 	// false. An error when the agent has none.
 	Clear(session string, still func() bool) error
+	// AskSave pastes text (SaveText) into a session whose agent has a
+	// clear prompt, ahead of its clear; still is asked right before
+	// delivery and drops it when false. An error when the agent has no
+	// clear prompt.
+	AskSave(session, text string, still func() bool) error
 }
 
 // Options configure a Ticker. Zero durations take the defaults.
@@ -646,6 +655,7 @@ func (t *Ticker) sweepThreads(p *project.Project, sessions []proto.SessionInfo, 
 				name = r.Task + " (" + r.ID + ")"
 			}
 			t.o.Host.Alert(fmt.Sprintf("%s %s handed in report %d", p.Slug, name, r.Reports))
+			t.remember(p, r)
 		}
 		m.Reports = r.Reports
 
@@ -657,6 +667,24 @@ func (t *Ticker) sweepThreads(p *project.Project, sessions []proto.SessionInfo, 
 		t.autoClose(p, r, m, cur, safety, now)
 	}
 	return merged
+}
+
+// remember raises a remember item for the thread's latest report when it
+// has ## Remember lines. A thread hands in its whole report again, so the
+// new item supersedes the thread's older one still unhandled.
+func (t *Ticker) remember(p *project.Project, r *thread.Record) {
+	rep, err := thread.ReadReport(p, r.ID)
+	if err != nil || rep == nil || len(rep.Remember) == 0 {
+		return
+	}
+	if err := p.DoneItems(KindRemember, r.ID); err != nil {
+		t.o.Log.Printf("ticker: %s: inbox: %v", p.Slug, err)
+	}
+	noun := "lessons"
+	if len(rep.Remember) == 1 {
+		noun = "lesson"
+	}
+	t.item(p, KindRemember, r.ID, fmt.Sprintf("%s's report %d has %d %s under ## Remember, not yet filed: put what lasts in memory as your own summary, or dismiss them (tm thread show %s), then tm inbox done <id>", r.ID, r.Reports, len(rep.Remember), noun, r.ID), false)
 }
 
 // closeDue reports whether auto-close closes a thread now (§9): its
@@ -917,7 +945,7 @@ var verbs = map[string]string{
 	"link-message": "wrote to you (tm link read)", "link-held": "a message of yours waits for the user's OK",
 	"link-paused": "link paused (ask the user)", "link-undelivered": "a message of yours wasn't delivered",
 	"link-request": "asks to link (the user answers it)", "link-answer": "answered a link request",
-	KindSlotFree: "a thread slot is free",
+	KindSlotFree: "a thread slot is free", KindRemember: "has lessons to file",
 }
 
 // linkKinds name a linked project in their subject: the nudge says its
