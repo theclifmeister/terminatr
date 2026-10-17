@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.35.0](https://github.com/theclifmeister/terminatr/compare/v0.34.0...v0.35.0) (2026-10-17)
+
+
+### Features
+
+* **dashboard:** a Logs tab in the , popup for the server, service, console and mod logs ([#630](https://github.com/theclifmeister/terminatr/issues/630)) ([8642380](https://github.com/theclifmeister/terminatr/commit/8642380e9f6127394ed1e231b2c50ea8787536b2))
+* **sandbox:** a Sandbox tab with presets (browser testing, local dev servers), per-OS, and hardened lists ([#626](https://github.com/theclifmeister/terminatr/issues/626)) ([ec091d8](https://github.com/theclifmeister/terminatr/commit/ec091d84d7dc28b4c040243343d401d8efe2ec3c))
+* **sandbox:** say why a project's sandbox lists and presets were dropped ([#629](https://github.com/theclifmeister/terminatr/issues/629)) ([3825163](https://github.com/theclifmeister/terminatr/commit/38251639f43b4208cad09787beabab92d492811d))
+
+
+### Bug Fixes
+
+* **sandbox:** browser testing without local binding; plain local-port warning ([#628](https://github.com/theclifmeister/terminatr/issues/628)) ([a99225a](https://github.com/theclifmeister/terminatr/commit/a99225a5f1df979c220374a926003c67a7dc8289))
+
 ## [0.34.0](https://github.com/theclifmeister/terminatr/compare/v0.33.0...v0.34.0) (2026-10-17)
 
 
