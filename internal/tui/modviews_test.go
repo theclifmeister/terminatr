@@ -67,10 +67,10 @@ func TestModTab(t *testing.T) {
 	src, m := panelDash(t)
 	m.openTab("alpha", tabOverview, 0)
 	out := screen(m)
-	if !strings.Contains(out, "9 Review queue 2") {
+	if !strings.Contains(out, "0 Review queue 2") {
 		t.Fatalf("no mod tab in the tab bar:\n%s", out)
 	}
-	press(m, "9")
+	press(m, "0")
 	out = screen(m)
 	for _, want := range []string{"T1 fix the login", "T2 write docs", "older first", "/ filter"} {
 		if !strings.Contains(out, want) {
@@ -246,14 +246,14 @@ func TestMemoryTabMod(t *testing.T) {
 	m.setData(src.data)
 	m.setModViews(modViewsMsg{res: src.modViews})
 	m.openTab("alpha", tabOverview, 0)
-	press(m, "6")
+	press(m, "7")
 	out := screen(m)
-	for _, want := range []string{"6 memory", "9 Review queue", "Context", "CONTEXT.md · 1 KB", "Decisions", "read"} {
+	for _, want := range []string{"7 memory", "0 Review queue", "Context", "CONTEXT.md · 1 KB", "Decisions", "read"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("memory tab lacks %q:\n%s", want, out)
 		}
 	}
-	for _, not := range []string{"9 memory", "mod: memory-tab"} {
+	for _, not := range []string{"0 memory", "mod: memory-tab"} {
 		if strings.Contains(out, not) {
 			t.Errorf("memory tab shows %q:\n%s", not, out)
 		}
@@ -398,7 +398,7 @@ func TestModTabBinding(t *testing.T) {
 	q.Rows[1].Actions = []widget.Action{{ID: "task.delegate", Target: map[string]string{"project": "alpha", "task": "T2"}}}
 	m.setModViews(modViewsMsg{res: src.modViews})
 	m.openTab("alpha", tabOverview, 0)
-	press(m, "9")
+	press(m, "0")
 	press(m, "down")
 	if out := screen(m); !strings.Contains(out, "D delegate") {
 		t.Fatalf("no core hint for the bound row:\n%s", out)
@@ -428,7 +428,7 @@ func TestModTabHintClick(t *testing.T) {
 	q.Rows[1].Actions = []widget.Action{{ID: "task.delegate", Target: map[string]string{"project": "alpha", "task": "T2"}}}
 	m.setModViews(modViewsMsg{res: src.modViews})
 	m.openTab("alpha", tabOverview, 0)
-	press(m, "9")
+	press(m, "0")
 	press(m, "down")
 	stillRows(t)
 	m.render()
@@ -499,12 +499,12 @@ func TestTasksTabMod(t *testing.T) {
 	m.Update(m.openTab("alpha", tabOverview, 0)())
 	press(m, "3")
 	out := screen(m)
-	for _, want := range []string{"3 tasks", "9 Review queue", "IN MOTION ─", "ON DECK ─", "Write the README", "Proofread", "enter show"} {
+	for _, want := range []string{"3 tasks", "0 Review queue", "IN MOTION ─", "ON DECK ─", "Write the README", "Proofread", "enter show"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("tasks tab lacks %q:\n%s", want, out)
 		}
 	}
-	if strings.Contains(out, "9 tasks") {
+	if strings.Contains(out, "0 tasks") {
 		t.Errorf("the mod's tab is listed again after the core tabs:\n%s", out)
 	}
 	// j, as down, skips the head: T2 is under the cursor, T1's steps fold.
@@ -565,8 +565,8 @@ func checkModOff(t *testing.T, m *dash, id string) {
 		md   mod.Mod
 		want []string
 	}{
-		{mod.Mod{ID: id, State: mod.Disabled}, []string{"The " + id + " mod draws this tab, and it is off.", "Mods tab (, then 3)", "tm mod enable " + id + "."}},
-		{mod.Mod{ID: id, State: mod.Enabled, Projects: []string{"zeta"}}, []string{"it is off for " + slug, "Mods tab (, then 3)", "tm mod enable " + id + " --project " + slug}},
+		{mod.Mod{ID: id, State: mod.Disabled}, []string{"The " + id + " mod draws this tab, and it is off.", "Mods tab (, then 4)", "tm mod enable " + id + "."}},
+		{mod.Mod{ID: id, State: mod.Enabled, Projects: []string{"zeta"}}, []string{"it is off for " + slug, "Mods tab (, then 4)", "tm mod enable " + id + " --project " + slug}},
 		{mod.Mod{ID: id, State: mod.Enabled}, []string{"Waiting for the " + id + " mod to draw this tab"}},
 	} {
 		m.data.Mods = []mod.Mod{c.md}

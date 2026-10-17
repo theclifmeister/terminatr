@@ -6,9 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -60,5 +62,45 @@ excluded_commands = ["npx playwright *"]
 	excluded, allow = settingsOf(SessionRecord{ID: "s-2", Role: proto.RoleCoordinator, Agent: "claude", Project: "demo", Cwd: t.TempDir()})
 	if excluded != nil || slices.Contains(allow, "Bash(npx playwright *)") {
 		t.Errorf("coordinator: excluded %q, allow %q", excluded, allow)
+	}
+}
+
+// TestSandboxPresetsLaunch: a preset on maps to local binding where it
+// applies (macOS) and is skipped with a note elsewhere, config.toml
+// keeping it; browser testing adds its guidance after the brief.
+func TestSandboxPresetsLaunch(t *testing.T) {
+	testPaths(t)
+	writeConfig(t, `[defaults.sandbox]
+browser_testing = true
+excluded_commands = ["npx playwright *"]
+`)
+	lc := loadLaunchConfig()
+	lists, presets, skipped := lc.sandbox("demo", config.OSMac)
+	if !lists.LocalBinding || !slices.Equal(presets, []string{config.SandboxBrowser}) || len(skipped) != 0 ||
+		!slices.Equal(lists.Excluded, []string{"npx playwright *"}) {
+		t.Errorf("macOS: %+v %q %q", lists, presets, skipped)
+	}
+	lists, presets, skipped = lc.sandbox("demo", config.OSLinux)
+	if lists.LocalBinding || len(presets) != 0 || !slices.Equal(lists.Excluded, []string{"npx playwright *"}) ||
+		!slices.Equal(skipped, []string{"sandbox preset browser testing is set but doesn't apply on Linux: skipped"}) {
+		t.Errorf("Linux: %+v %q %q", lists, presets, skipped)
+	}
+
+	rt := t.TempDir()
+	brief := filepath.Join(t.TempDir(), "brief.md")
+	os.WriteFile(brief, []byte("# Thread t-0001\n"), 0o600)
+	if got, err := presetBrief(rt, brief, nil); err != nil || got != brief {
+		t.Errorf("no presets: %q, %v", got, err)
+	}
+	if got, err := presetBrief(rt, brief, []string{config.SandboxDevServers}); err != nil || got != brief {
+		t.Errorf("dev servers only: %q, %v", got, err)
+	}
+	got, err := presetBrief(rt, brief, []string{config.SandboxBrowser})
+	b, _ := os.ReadFile(got)
+	if err != nil || filepath.Dir(got) != rt || !strings.HasPrefix(string(b), "# Thread t-0001\n") || !strings.Contains(string(b), "--single-process") {
+		t.Errorf("browser testing: %q, %v\n%s", got, err, b)
+	}
+	if got, err = presetBrief(rt, "", []string{config.SandboxBrowser}); err != nil || got == "" {
+		t.Errorf("no brief: %q, %v", got, err)
 	}
 }

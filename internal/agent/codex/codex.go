@@ -102,7 +102,7 @@ func (a *Agent) Launch(spec agent.LaunchSpec) (agent.Launch, error) {
 	if spec.Role == "coordinator" {
 		l = sandboxed(l, spec, a.m, caps.Windows) // probe.go
 	}
-	if spec.Role == agent.RoleThread && !spec.Sandbox.Empty() {
+	if spec.Role == agent.RoleThread && spec.Sandbox.Lists() {
 		l.Warnings = append(l.Warnings, sandboxListsGap)
 	}
 	return l, nil

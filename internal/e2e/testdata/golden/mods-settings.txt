@@ -3,7 +3,7 @@
  └─ coordi…             ·          │  coordinator                      —           not running; enter starts it  3 inbox
     ├─ T1    50% ☐      ○          │  T1 Fix the login              ○ idle             report new  50% 1/2 ▸ Fix it  <duration>…
     └─ T2   ╭─ Settings ───────────────────────────────────────────────────────────────────────────────────╮
-            │  1 General   2 All projects   3 Mods   4 Peers                                               │
+            │  1 General   2 All projects   3 Sandbox   4 Mods   5 Peers                                   │
             │ About: tm dev · server dev · update check on                                                 │
             │                                                                                              │
             │ ● Context gauge      code · column · view      1.0.0  reads your projects · draws its own p… │

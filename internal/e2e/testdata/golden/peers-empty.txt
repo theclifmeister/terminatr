@@ -2,7 +2,7 @@
  no projects                       │  no projects; n creates one
                                    │ OTHER SESSIONS ──────────────────────────────────────────────────────────
            ╭─ Settings ───────────────────────────────────────────────────────────────────────────╮
-           │  1 General   2 All projects   3 Mods   4 Peers                                       │
+           │  1 General   2 All projects   3 Sandbox   4 Mods   5 Peers                           │
            │ About: tm dev · server dev · update check on                                         │
            │                                                                                      │
            │ SHARED PROJECTS                                                                      │

@@ -282,6 +282,9 @@ type SessionListResult struct {
 	// daily check (docs/SPEC.md §10.1); Upgrade is how to install it.
 	Latest  string `json:"latest,omitempty"`
 	Upgrade string `json:"upgrade,omitempty"`
+	// OS is the server's platform (runtime.GOOS), where its threads run:
+	// the Sandbox tab shows the settings that apply there.
+	OS string `json:"os,omitempty"`
 	// Mods are the mods' columns, cells and status segments (since
 	// protocol 13); nil when no mod publishes any.
 	Mods *ModCells `json:"mods,omitempty"`

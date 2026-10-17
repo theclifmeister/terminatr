@@ -119,7 +119,7 @@ func modsDash(t *testing.T) (*fakeSource, *dash) {
 	src.loadMods()
 	m := newDash(DashOptions{Source: src, Width: 160, Height: 50, State: DashState{Current: "beta"}})
 	m.setData(src.data)
-	press(m, ",", "3")
+	press(m, ",", "4")
 	return src, m
 }
 
@@ -162,7 +162,7 @@ func modState(t *testing.T, src *fakeSource, id string) mod.Mod {
 func TestModsTabList(t *testing.T) {
 	_, m := modsDash(t)
 	out := screen(m)
-	for _, want := range []string{"3 Mods", "○ Nord", "theme", "0.4.0", "off", "Review age", "code · column · rules", "0.3.1", "▲ Future", "incompatible: future needs mod API 1.99", "e examples", "p permissions"} {
+	for _, want := range []string{"4 Mods", "○ Nord", "theme", "0.4.0", "off", "Review age", "code · column · rules", "0.3.1", "▲ Future", "incompatible: future needs mod API 1.99", "e examples", "p permissions"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("Mods tab lacks %q:\n%s", want, out)
 		}
@@ -366,7 +366,7 @@ func TestModsFailure(t *testing.T) {
 	m.msg = ""
 	src.data.ModHosts = map[string]proto.ModHost{"review-age": {ID: "review-age", State: "failed", Err: "401 from api.example.com"}}
 	m.setData(src.data)
-	if m.msg != "mod Review age failed · , then 3 for details" {
+	if m.msg != "mod Review age failed · , then 4 for details" {
 		t.Errorf("footer: %q", m.msg)
 	}
 	m.msg = ""
@@ -481,7 +481,7 @@ func TestModsExamples(t *testing.T) {
 	src.loadMods()
 	m := newDash(DashOptions{Source: src, Width: 160, Height: 60, State: DashState{Current: "beta"}})
 	m.setData(src.data)
-	press(m, ",", "3")
+	press(m, ",", "4")
 	if out := screen(m); !strings.Contains(out, "Default theme") || !strings.Contains(out, "No mods of your own yet") || !strings.Contains(out, "lists terminatr's example mods") {
 		t.Errorf("the tab with only built-in mods:\n%s", out)
 	}
@@ -527,7 +527,7 @@ func TestModsUpdate(t *testing.T) {
 	src.loadMods()
 	m := newDash(DashOptions{Source: src, Width: 160, Height: 50, State: DashState{Current: "beta"}})
 	m.setData(src.data)
-	press(m, ",", "3", "enter")
+	press(m, ",", "4", "enter")
 	modAct(t, m, src, "y")
 
 	modAct(t, m, src, "u")

@@ -129,6 +129,8 @@ template = '''
 # add its excludedCommands, which run outside the sandbox even with
 # sandbox_escapes off, and allow rules after tm's: Claude merges lists
 # across settings files, and its deny rules (tm's) win over any allow.
+# Its presets' local binding (macOS only, which the server checks) is
+# allowLocalBinding: sandboxed commands may listen on and reach localhost.
 [[launch.files]]
 path = "claude-settings.json"
 template = '''
@@ -152,7 +154,8 @@ template = '''
     "excludedCommands": {{json .Sandbox.Excluded}},
     {{- end}}
     {{- end}}
-    "network": {"allowUnixSockets": [{{json .Socket}}]}
+    "network": {"allowUnixSockets": [{{json .Socket}}]
+      {{- if and (eq .Role "thread") .Sandbox.LocalBinding}}, "allowLocalBinding": true{{end}}}
   }
 }
 '''

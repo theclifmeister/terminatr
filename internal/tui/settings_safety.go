@@ -16,7 +16,7 @@ import (
 // ones: the same rows, written to the project's table or to [defaults].
 func safetySettings(slug string) []setting {
 	sr := newSafetyRows(slug)
-	rows := append(sr.scope(append(append(sr.sharedRows(), sr.historyRow()), sr.guardRows()...)), sr.sandboxRows()...)
+	rows := sr.scope(append(append(sr.sharedRows(), sr.historyRow()), sr.guardRows()...))
 	if sr.all {
 		// The cap across every project is all projects' only: no
 		// project sets its own (config.DefaultsOnly). Under Parallel

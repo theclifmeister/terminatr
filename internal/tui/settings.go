@@ -29,7 +29,10 @@ import (
 // setting is one row of a settings list.
 type setting struct {
 	label, help string
-	value       func(m *dash) string
+	// section, when set, heads the row and those after it (the Sandbox
+	// tab's Presets and Advanced).
+	section string
+	value   func(m *dash) string
 	// change runs on enter or space; nil shows the value only.
 	change func(m *dash) tea.Cmd
 	// adjust changes a number by delta, on + and -.
@@ -142,6 +145,10 @@ func (l *settingsList) lines(m *dash, w int) (out []string, sel int, hits []int)
 			out = append(out, "")
 			hits = append(hits, noHit)
 		}
+		if r.section != "" {
+			out = append(out, th().Accent.Render(r.section), "")
+			hits = append(hits, noHit, noHit)
+		}
 		hits = append(hits, i)
 		value := r.value(m)
 		btns := ""
@@ -246,13 +253,14 @@ func settingsErr(err error) error {
 	return err
 }
 
-// settingsView is the , popup: the settings of every project, in four
+// settingsView is the , popup: the settings of every project, in five
 // tabs: General, All projects (the project settings every project
-// follows unless it sets its own), Mods (modstab.go) and Peers, the
+// follows unless it sets its own), Sandbox (all projects' presets and
+// sandbox lists, settings_sandbox.go), Mods (modstab.go) and Peers, the
 // paired servers (peerstab.go).
 type settingsView struct {
 	tab   int
-	tabs  [2]settingsList
+	tabs  [3]settingsList
 	mods  modsTab
 	peers peersTab
 	// top is each tab's first line shown; shown the selection's line
@@ -261,12 +269,13 @@ type settingsView struct {
 }
 
 // settingsTabs are the , popup's tabs.
-var settingsTabs = [4]string{"General", "All projects", "Mods", "Peers"}
+var settingsTabs = [5]string{"General", "All projects", "Sandbox", "Mods", "Peers"}
 
-// tabMods and tabPeers are the Mods and Peers tabs' indexes.
+// The Sandbox, Mods and Peers tabs' indexes.
 const (
-	tabMods  = 2
-	tabPeers = 3
+	tabAllSandbox = 2
+	tabMods       = 3
+	tabPeers      = 4
 )
 
 func (m *dash) openSettings() {
@@ -276,7 +285,7 @@ func (m *dash) openSettings() {
 	if safeMode() {
 		rows = append([]setting{safeModeRow()}, rows...)
 	}
-	sv := &settingsView{tabs: [2]settingsList{{rows: rows}, {rows: allProjectsSettings()}}}
+	sv := &settingsView{tabs: [3]settingsList{{rows: rows}, {rows: allProjectsSettings()}, {rows: sandboxSettings("", m.serverOS())}}}
 	m.push(sv)
 }
 
@@ -510,7 +519,7 @@ func (sv *settingsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "left", "h":
 		sv.tab = (sv.tab + n - 1) % n
 		return nil
-	case "1", "2", "3", "4":
+	case "1", "2", "3", "4", "5":
 		sv.tab = int(s[0] - '1')
 		return nil
 	}
@@ -529,6 +538,16 @@ func (sv *settingsView) tabLines(m *dash, i, w int) ([]string, int, []int) {
 		return sv.mods.lines(m, w)
 	case tabPeers:
 		return sv.peers.lines(m, w)
+	case tabAllSandbox:
+		head := append(sandboxHead(m, w), "")
+		lines, sel, hits := sv.tabs[i].lines(m, w)
+		if sel >= 0 {
+			sel += len(head)
+		}
+		for range head {
+			hits = append([]int{noHit}, hits...)
+		}
+		return append(head, lines...), sel, hits
 	}
 	return sv.tabs[i].lines(m, w)
 }
@@ -547,6 +566,8 @@ func (sv *settingsView) render(m *dash) string {
 	case tabPeers:
 		lines = append(lines, faintLines("Paired servers see the projects you share with them, read-only, in their sidebar; you see theirs in yours. No agent can pair, share or remove a server.", w)...)
 		keys = peersKeys
+	case tabAllSandbox:
+		lines = append(lines, faintLines("Every project's threads get these, a new one's too, unless the project sets its own in its popup's Sandbox tab (a on the dashboard, prefix+a in a session); x there makes it follow these again.", w)...)
 	default:
 		lines = append(lines, faintLines("Every project follows these, a new one too, unless it sets its own in its popup (a on the dashboard, prefix+a in a session); x there makes it follow these again.", w)...)
 		keys = "enter change · + - number · ↑ ↓ move · ← → tabs · esc close"

@@ -83,7 +83,7 @@ func TestMessagesTab(t *testing.T) {
 	}
 	m.openTab("alpha", tabMessages, 0)
 	out := screen(m)
-	if !strings.Contains(out, "8 messages 1") || !strings.Contains(out, "beta") || !strings.Contains(out, "1 waits for you") {
+	if !strings.Contains(out, "9 messages 1") || !strings.Contains(out, "beta") || !strings.Contains(out, "1 waits for you") {
 		t.Fatalf("tab:\n%s", out)
 	}
 	press(m, "enter")

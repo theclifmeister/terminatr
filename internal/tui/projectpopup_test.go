@@ -102,7 +102,7 @@ func TestProjectPopup(t *testing.T) {
 	}
 	m.Update(cmd()) // the board
 	out := screen(m)
-	for _, want := range []string{"─ alpha ─", "1 overview", "2 inbox 1", "5 keys",
+	for _, want := range []string{"─ alpha ─", "1 overview", "2 inbox 1", "6 keys",
 		"Project", "alpha", "Goal", "Ship the alpha", "Repositories", "/src/alpha", "local main is 3 behind origin (uncommitted changes)", "Machines", "this one",
 		"Coordinator", "claude · s-1 blocked", "1 needs you (Tasks tab) · 1 in motion"} {
 		if !strings.Contains(out, want) {
@@ -121,9 +121,13 @@ func TestProjectPopup(t *testing.T) {
 			t.Errorf("tasks tab lacks %q:\n%s", want, out)
 		}
 	}
-	keyPress(m, "5")
+	keyPress(m, "6")
 	if pv.tab != tabKeys {
-		t.Fatalf("5: tab %d", pv.tab)
+		t.Fatalf("6: tab %d", pv.tab)
+	}
+	keyPress(m, "left")
+	if pv.tab != tabSandbox {
+		t.Fatalf("left: tab %d", pv.tab)
 	}
 	keyPress(m, "left")
 	if pv.tab != tabSettings {
@@ -479,7 +483,7 @@ func TestKeysParity(t *testing.T) {
 	help := m.top().(*helpView).box(m).body
 	keyPress(m, "esc")
 	keyPress(m, "a")
-	keyPress(m, "5")
+	keyPress(m, "6")
 	// Both are keyLines, each wrapped to its own box's width.
 	b := m.top().(*projectView).box(m)
 	if want := keyLines(m.inner(viewWidth), nil); strings.Join(b.body, "\n") != strings.Join(want, "\n") {
@@ -631,7 +635,7 @@ func TestProjectPopupFixed(t *testing.T) {
 	}
 	x, y := at(t, m, "Task number 38")
 	// A click on a tab still picks it, wherever the content is scrolled.
-	clickOn(t, m, "5 keys")
+	clickOn(t, m, "6 keys")
 	if pv.tab != tabKeys {
 		t.Fatalf("click on 5 keys: tab %d", pv.tab)
 	}
@@ -1015,12 +1019,12 @@ func TestMemoryTab(t *testing.T) {
 	_, m := popupData(t)
 	feed(m, keyPress(m, "a"))
 	pv := m.top().(*projectView)
-	keyPress(m, "6")
+	keyPress(m, "7")
 	if pv.tab != tabMemory {
 		t.Fatalf("6: tab %d", pv.tab)
 	}
 	out := screen(m)
-	for _, want := range []string{"6 memory", "The memory-tab mod draws this tab"} {
+	for _, want := range []string{"7 memory", "The memory-tab mod draws this tab"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("memory tab lacks %q:\n%s", want, out)
 		}
@@ -1373,12 +1377,12 @@ func TestLibraryTab(t *testing.T) {
 	}
 	feed(m, keyPress(m, "a"))
 	pv := m.top().(*projectView)
-	keyPress(m, "7")
+	keyPress(m, "8")
 	if pv.tab != tabLibrary {
 		t.Fatalf("7: tab %d", pv.tab)
 	}
 	out := screen(m)
-	for _, want := range []string{"7 library", "T2  Newer · t-0002 · 2026-10-08", "T1  Older · t-0001 · 2026-10-07 · archived",
+	for _, want := range []string{"8 library", "T2  Newer · t-0002 · 2026-10-08", "T1  Older · t-0001 · 2026-10-07 · archived",
 		"notes.md", "1.5 KB", "shot.png", "2.5 MB", "data.json", "7 B", "enter read · d delete"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("library tab lacks %q:\n%s", want, out)

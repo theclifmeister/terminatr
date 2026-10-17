@@ -163,13 +163,17 @@ func TestClaudeLaunch(t *testing.T) {
 		t.Fatalf("thread sandbox has excludedCommands by default: %+v", settings.Sandbox)
 	}
 	listed := closed
-	listed.Sandbox = SandboxLists{Excluded: []string{"npx playwright *"}, Allow: []string{"Bash(npx playwright *)"}}
+	if settings.Sandbox.Network.AllowLocalBinding {
+		t.Fatalf("thread sandbox allows local binding by default: %+v", settings.Sandbox)
+	}
+	listed.Sandbox = SandboxLists{Excluded: []string{"npx playwright *"}, Allow: []string{"Bash(npx playwright *)"}, LocalBinding: true}
 	if l, err = a.Launch(listed); err != nil {
 		t.Fatal(err)
 	}
 	if s := parseSettings(t, l.Files["claude-settings.json"]); !reflect.DeepEqual(s.Sandbox.ExcludedCommands, []string{"npx playwright *"}) ||
 		!reflect.DeepEqual(s.Permissions.Allow, []string{"Read(//h/.terminatr/projects/p/**)", "Bash(npx playwright *)"}) ||
-		s.Sandbox.AllowUnsandboxedCommands == nil || *s.Sandbox.AllowUnsandboxedCommands {
+		s.Sandbox.AllowUnsandboxedCommands == nil || *s.Sandbox.AllowUnsandboxedCommands || !s.Sandbox.Network.AllowLocalBinding ||
+		!reflect.DeepEqual(s.Sandbox.Network.AllowUnixSockets, settings.Sandbox.Network.AllowUnixSockets) {
 		t.Fatalf("thread with sandbox lists: %+v", s)
 	}
 	if settings.StatusLine != nil {
@@ -262,14 +266,14 @@ func TestClaudeLaunch(t *testing.T) {
 
 	coord := spec
 	coord.Role, coord.Access = Role("coordinator"), Access{Read: []string{"/h/.terminatr/worktrees/p"}}
-	coord.NoSandboxEscapes = true                                                             // a coordinator's Bash has no sandbox to keep
-	coord.Sandbox = SandboxLists{Excluded: []string{"npx *"}, Allow: []string{"Bash(npx *)"}} // threads' only
+	coord.NoSandboxEscapes = true                                                                                 // a coordinator's Bash has no sandbox to keep
+	coord.Sandbox = SandboxLists{Excluded: []string{"npx *"}, Allow: []string{"Bash(npx *)"}, LocalBinding: true} // threads' only
 	l, err = a.Launch(coord)
 	if err != nil {
 		t.Fatal(err)
 	}
 	settings = parseSettings(t, l.Files["claude-settings.json"])
-	if settings.Sandbox.Enabled || settings.Sandbox.AllowUnsandboxedCommands != nil || settings.Sandbox.ExcludedCommands != nil || len(settings.Permissions.Deny) != 0 ||
+	if settings.Sandbox.Enabled || settings.Sandbox.AllowUnsandboxedCommands != nil || settings.Sandbox.ExcludedCommands != nil || settings.Sandbox.Network.AllowLocalBinding || len(settings.Permissions.Deny) != 0 ||
 		!reflect.DeepEqual(settings.Permissions.Allow, []string{"Read(//h/.terminatr/worktrees/p/**)"}) {
 		t.Fatalf("coordinator must not get the thread sandbox or deny rules: %+v", settings)
 	}
@@ -309,7 +313,10 @@ type claudeSettings struct {
 		Enabled                  bool
 		AllowUnsandboxedCommands *bool
 		ExcludedCommands         []string
-		Network                  struct{ AllowUnixSockets []string }
+		Network                  struct {
+			AllowUnixSockets  []string
+			AllowLocalBinding bool
+		}
 	}
 	StatusLine any     `json:"statusLine"`
 	Theme      *string `json:"theme"`

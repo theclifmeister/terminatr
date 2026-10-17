@@ -39,6 +39,7 @@ const (
 	tabInbox
 	tabTasks
 	tabSettings
+	tabSandbox
 	tabKeys
 	tabMemory
 	tabLibrary
@@ -46,7 +47,7 @@ const (
 	tabCount
 )
 
-var tabNames = [tabCount]string{"overview", "inbox", "tasks", "settings", "keys", "memory", "library", "messages"}
+var tabNames = [tabCount]string{"overview", "inbox", "tasks", "settings", "sandbox", "keys", "memory", "library", "messages"}
 
 type projectView struct {
 	slug string
@@ -62,7 +63,8 @@ type projectView struct {
 	top, shown, nudge [tabCount]int
 	board             *tasks.Board
 	reviews           map[int]Review // the tasks in review, by id
-	settings          settingsList
+	// settings and sandbox are the Settings and Sandbox tabs' rows.
+	settings, sandbox settingsList
 	// library is every thread's library files, newest first (the
 	// Library tab), libOK once loaded; libErr is why it didn't.
 	library []thread.LibFile
@@ -80,9 +82,26 @@ func (m *dash) projectPopup(string) tea.Cmd {
 	if slug == "" {
 		return nil
 	}
-	pv := &projectView{slug: slug, settings: settingsList{rows: m.projectRows(slug)}}
-	m.push(pv)
+	m.push(m.newProjectView(slug))
 	return m.loadPopup(slug)
+}
+
+// newProjectView is slug's popup on its first tab, its settings rows
+// made: the Sandbox tab's for the platform the server is on.
+func (m *dash) newProjectView(slug string) *projectView {
+	return &projectView{slug: slug, settings: settingsList{rows: m.projectRows(slug)},
+		sandbox: settingsList{rows: sandboxSettings(slug, m.serverOS())}}
+}
+
+// list is the open tab's settings list, nil for a tab without one.
+func (pv *projectView) list() *settingsList {
+	switch pv.tab {
+	case tabSettings:
+		return &pv.settings
+	case tabSandbox:
+		return &pv.sandbox
+	}
+	return nil
 }
 
 // showTask opens slug's project popup on the Tasks tab, task id
@@ -96,7 +115,8 @@ func (m *dash) showTask(slug string, id int) tea.Cmd {
 func (m *dash) showTab(slug string, tab int) tea.Cmd { return m.openTab(slug, tab, 0) }
 
 func (m *dash) openTab(slug string, tab, show int) tea.Cmd {
-	pv := &projectView{slug: slug, tab: tab, show: show, picking: show != 0, settings: settingsList{rows: m.projectRows(slug)}}
+	pv := m.newProjectView(slug)
+	pv.tab, pv.show, pv.picking = tab, show, show != 0
 	m.push(pv)
 	return m.loadPopup(slug)
 }
@@ -161,9 +181,9 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "left":
 		pv.tab = (pv.tab + pv.tabs(m) - 1) % pv.tabs(m)
 		return nil
-	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-		if t := int(s[0] - '1'); t < pv.tabs(m) {
-			pv.tab = t
+	case "1", "2", "3", "4", "5", "6", "7", "8", "9", "0":
+		if t := (int(s[0]-'0') + 9) % 10; t < pv.tabs(m) {
+			pv.tab = t // 0 is the tenth
 		}
 		return nil
 	}
@@ -172,11 +192,11 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	}
 	s := k.String()
 	d := scrollKeys[s]
-	if pv.tab == tabSettings {
-		before := pv.settings.sel
-		cmd, _ := pv.settings.key(m, k)
-		if pv.settings.sel == before {
-			pv.nudge[tabSettings] += d
+	if l := pv.list(); l != nil {
+		before := l.sel
+		cmd, _ := l.key(m, k)
+		if l.sel == before {
+			pv.nudge[pv.tab] += d
 		}
 		return cmd
 	}
@@ -355,10 +375,22 @@ func (pv *projectView) box(m *dash) box {
 	case tabTasks, tabMemory:
 		// A built-in mod draws this tab (modTab): it isn't running.
 		body = pv.modOffLines(m, w)
-	case tabSettings:
-		body, sel, hits = pv.settings.lines(m, w)
+	case tabSettings, tabSandbox:
+		l := pv.list()
+		body, sel, hits = l.lines(m, w)
+		if pv.tab == tabSandbox {
+			head := append(sandboxHead(m, w), "")
+			body = append(head, body...)
+			if sel >= 0 {
+				sel += len(head)
+			}
+			hits = append(make([]int, len(head)), hits...)
+			for i := range head {
+				hits[i] = noHit
+			}
+		}
 		keys = "enter change · + - number · ↑ ↓ move · " + keys
-		if l := pv.settings; l.sel < len(l.rows) && l.rows[l.sel].from != nil && l.rows[l.sel].from(m) == "" {
+		if l.sel < len(l.rows) && l.rows[l.sel].from != nil && l.rows[l.sel].from(m) == "" {
 			// The project sets it itself: x follows all projects again.
 			keys = "enter change · + - number · x follow all projects · ↑ ↓ move · esc close"
 		}
@@ -424,8 +456,8 @@ func (pv *projectView) click(m *dash, item, col int, double bool) tea.Cmd {
 		pv.picking = false
 		return m.panelClick(v, pv.slug, col, item)
 	}
-	if pv.tab == tabSettings {
-		return pv.settings.click(m, item, col)
+	if l := pv.list(); l != nil {
+		return l.click(m, item, col)
 	}
 	pv.sel[pv.tab] = item
 	if double && pv.tab == tabMessages {
@@ -443,15 +475,29 @@ func (pv *projectView) click(m *dash, item, col int, double bool) tea.Cmd {
 
 // tabAt is the tab at column col of the tab bar, -1 for none.
 func (pv *projectView) tabAt(m *dash, p ProjectData, col int) int {
-	x := 0
+	x, pad := 0, pv.tabPad(m, p)
 	for i := range pv.tabs(m) {
-		w := len([]rune(pv.tabLabel(m, p, i))) + 2
+		w := len([]rune(pv.tabLabel(m, p, i))) + 2*len(pad)
 		if col >= x && col < x+w {
 			return i
 		}
 		x += w + 1
 	}
 	return -1
+}
+
+// tabPad is what pads each tab's label: a space either side, none when
+// the tabs wouldn't fit the popup's width so.
+func (pv *projectView) tabPad(m *dash, p ProjectData) string {
+	n := pv.tabs(m)
+	w := 3*n - 1
+	for i := range n {
+		w += len([]rune(pv.tabLabel(m, p, i)))
+	}
+	if w > m.inner(viewWidth) {
+		return ""
+	}
+	return " "
 }
 
 // wheel moves the selection as the arrows do, or scrolls a tab without
@@ -472,12 +518,13 @@ func (pv *projectView) wheel(m *dash, d int) {
 // count.
 func (pv *projectView) tabBar(m *dash, p ProjectData) string {
 	var parts []string
+	pad := pv.tabPad(m, p)
 	for i := range pv.tabs(m) {
-		label := pv.tabLabel(m, p, i)
+		label := pad + pv.tabLabel(m, p, i) + pad
 		if i == pv.tab {
-			parts = append(parts, th().Sel.Render(" "+label+" "))
+			parts = append(parts, th().Sel.Render(label))
 		} else {
-			parts = append(parts, th().Faint.Render(" "+label+" "))
+			parts = append(parts, th().Faint.Render(label))
 		}
 	}
 	return strings.Join(parts, " ")

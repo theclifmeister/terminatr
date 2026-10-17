@@ -66,7 +66,7 @@ func TestPeerDashboard(t *testing.T) {
 	w.Type("a")
 	w.WaitFor("api is mini's: nothing here acts on it", wait)
 
-	w.Keys(",", "4")
+	w.Keys(",", "5")
 	w.WaitFor("PAIRED SERVERS · this server ", wait)
 	screen = w.WaitFor("◉ mini  linked · ", wait)
 	if !strings.Contains(screen, "shares 1 project") || !strings.Contains(screen, "panes  [off] · view · write") {

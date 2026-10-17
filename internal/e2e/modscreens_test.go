@@ -98,7 +98,7 @@ cmd = 'printf "PR: https://github.com/o/r/pull/7\n\n## Report\nFixed the login r
 	// The Mods tab: the user's mods, then the built-in ones.
 	w.Type(",")
 	w.WaitFor("1 General", wait)
-	w.Type("3")
+	w.Type("4")
 	w.WaitFor("Tasks tab", wait)
 	w.WaitFor("● Standup", wait)
 	w.Golden("mods-settings.txt", append(popupMasks, cutDuration)...)
@@ -108,7 +108,7 @@ cmd = 'printf "PR: https://github.com/o/r/pull/7\n\n## Report\nFixed the login r
 	// The Memory tab, the built-in memory-tab mod, reading MEMORY.md.
 	w.Type("a")
 	w.WaitFor("1 overview", wait)
-	w.Type("6")
+	w.Type("7")
 	w.WaitFor("Memory  MEMORY.md", agentWait)
 	w.Keys(keyDown, Enter)
 	w.WaitFor("Login flow: the redirect", wait)

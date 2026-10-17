@@ -1004,7 +1004,7 @@ func (m *dash) noteModFailures() {
 	}
 	m.modsFailed = now
 	if len(fresh) > 0 {
-		m.msg = "mod " + joinAnd(fresh) + " failed · , then 3 for details"
+		m.msg = "mod " + joinAnd(fresh) + " failed · , then 4 for details"
 	}
 }
 
@@ -1017,7 +1017,7 @@ func (m *dash) projectRows(slug string) []setting {
 		return rows
 	}
 	return append(rows, setting{label: "Mods",
-		help: "The mods limited to some projects that run for this one; the others run for every project. , then 3 lists them all; tm mod enable <id> --project " + slug + " adds one here.",
+		help: "The mods limited to some projects that run for this one; the others run for every project. , then 4 lists them all; tm mod enable <id> --project " + slug + " adds one here.",
 		value: func(m *dash) string {
 			var names []string
 			for _, md := range m.data.Mods {

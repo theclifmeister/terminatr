@@ -137,7 +137,7 @@ func TestSmokeProjectPopup(t *testing.T) {
 
 	// Library: the resolved thread's files by name and size, one read
 	// in the popup, the rest deleted after y.
-	w.Type("7")
+	w.Type("8")
 	w.WaitFor("options.md", wait)
 	w.Golden("popup-library.txt", popupMasks...)
 	w.Key(Enter)
@@ -217,15 +217,15 @@ func TestSmokeProjectPopup(t *testing.T) {
 	screens = append(screens, w.Screen())
 
 	// The Keys tab and the help show the same list.
-	w.Type("5")
+	w.Type("6")
 	w.WaitFor("On the dashboard", wait)
 	keys := popupBody(w.Screen(), cols)
 	screens = append(screens, w.Screen())
 	// The Memory tab with its mod off: it says so, and how to turn it
 	// on.
-	w.Type("6")
+	w.Type("7")
 	w.WaitFor("The memory-tab mod draws this tab, and it is off.", wait)
-	w.WaitFor("Turn it on in the Mods tab (, then 3), or with tm mod enable memory-tab.", wait)
+	w.WaitFor("Turn it on in the Mods tab (, then 4), or with tm mod enable memory-tab.", wait)
 	screens = append(screens, w.Screen())
 	w.Key(keyEsc)
 	w.WaitUntil("popup closed", wait, func(sc string) bool { return !strings.Contains(sc, "1 overview") })

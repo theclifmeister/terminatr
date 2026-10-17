@@ -22,6 +22,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
@@ -645,9 +646,18 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		Mods: p.modSock != "", PaneScheme: v.paneScheme,
 	}
 	if r.Role == proto.RoleThread && r.Project != "" {
-		// The human's sandbox lists, read here at every launch: never
-		// from the session's parameters, which a coordinator writes.
-		spec.Sandbox = lc.sandbox(r.Project)
+		// The human's sandbox lists and presets, read here at every
+		// launch: never from the session's parameters, which a
+		// coordinator writes. What doesn't apply on this platform stays
+		// in config.toml and is skipped.
+		var presets, skipped []string
+		spec.Sandbox, presets, skipped = lc.sandbox(r.Project, caps.OS)
+		for _, n := range skipped {
+			s.log.Printf("session %s: %s", r.ID, n)
+		}
+		if spec.BriefPath, err = presetBrief(p.rt, r.Brief, presets); err != nil {
+			s.log.Printf("session %s: sandbox presets' guidance: %v", r.ID, err)
+		}
 	}
 	if len(secrets) > 0 {
 		spec.SecretEnv = slices.Sorted(maps.Keys(secrets))
