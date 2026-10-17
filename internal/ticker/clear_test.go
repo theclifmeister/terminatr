@@ -29,36 +29,79 @@ func clearRig(t *testing.T, on bool, extra string) *rig {
 }
 
 // With the setting on, an idle coordinator past the hint with nothing
-// waiting is cleared once every condition held for the grace, journaled,
-// and not again before ClearEvery.
+// waiting is first asked to save what it learned once every condition
+// held for the grace, then cleared at the next idle gate; both are
+// journaled, and it isn't cleared again before ClearEvery.
 func TestAutoClearClearsIdleCoordinator(t *testing.T) {
 	r := clearRig(t, true, "")
 	r.sweep(0)
 	r.sweep(DefaultClearGrace - time.Second)
-	if len(r.host.cleared) != 0 {
-		t.Fatalf("cleared within the grace: %v", r.host.cleared)
+	if len(r.host.asked) != 0 || len(r.host.cleared) != 0 {
+		t.Fatalf("asked or cleared within the grace: %v %v", r.host.asked, r.host.cleared)
 	}
 	r.sweep(time.Second)
-	if want := []string{"s-1"}; !slices.Equal(r.host.cleared, want) {
-		t.Fatalf("cleared %v, want %v", r.host.cleared, want)
+	if want := []string{"s-1 " + SaveText(50)}; !slices.Equal(r.host.asked, want) || len(r.host.cleared) != 0 {
+		t.Fatalf("asked %v, cleared %v; want the ask alone", r.host.asked, r.host.cleared)
+	}
+	if j := r.journal(); !strings.Contains(j, " ticker coordinator.clear.ask demo s-1 at 50% of its context window (hint 40%): asked to save what it learned") {
+		t.Fatalf("journal %q", j)
+	}
+	if !r.host.still() {
+		t.Fatal("ask dropped with nothing waiting")
+	}
+	// The coordinator saves, then rests: the grace starts again.
+	r.host.set("s-1", "working", "")
+	r.sweep(time.Second)
+	r.host.set("s-1", "idle", "")
+	r.sweep(time.Second)
+	r.sweep(DefaultClearGrace - time.Second)
+	if len(r.host.cleared) != 0 || len(r.host.asked) != 1 {
+		t.Fatalf("cleared %v asked %v before the grace after the save", r.host.cleared, r.host.asked)
+	}
+	r.sweep(time.Second)
+	if want := []string{"s-1"}; !slices.Equal(r.host.cleared, want) || len(r.host.asked) != 1 {
+		t.Fatalf("cleared %v asked %v, want %v once", r.host.cleared, r.host.asked, want)
 	}
 	if j := r.journal(); !strings.Contains(j, " ticker coordinator.clear demo s-1 at 50% of its context window (hint 40%)") {
 		t.Fatalf("journal %q", j)
 	}
-	if !r.host.still() {
-		t.Fatal("still false with nothing waiting")
-	}
 	// It didn't take (context still high): not again before ClearEvery,
-	// and after it only once the grace held again.
+	// and after it asked again first.
 	r.sweep(time.Second)
 	r.sweep(DefaultClearEvery - 2*time.Second)
-	if len(r.host.cleared) != 1 {
-		t.Fatalf("cleared again within ClearEvery: %v", r.host.cleared)
+	if len(r.host.cleared) != 1 || len(r.host.asked) != 1 {
+		t.Fatalf("again within ClearEvery: %v %v", r.host.cleared, r.host.asked)
 	}
 	r.sweep(time.Second)
-	if len(r.host.cleared) != 2 {
-		t.Fatalf("not tried again after ClearEvery: %v", r.host.cleared)
+	if len(r.host.asked) != 2 || len(r.host.cleared) != 1 {
+		t.Fatalf("not asked again after ClearEvery: %v %v", r.host.asked, r.host.cleared)
 	}
+}
+
+// An ask whose turn ended between two sweeps (the coordinator never seen
+// working) is followed by the clear once the grace went by since it.
+func TestAutoClearAfterUnseenSave(t *testing.T) {
+	r := clearRig(t, true, "")
+	r.sweep(0)
+	r.sweep(DefaultClearGrace)
+	if len(r.host.asked) != 1 {
+		t.Fatalf("not asked: %v", r.host.asked)
+	}
+	r.sweep(DefaultClearGrace - time.Second)
+	if len(r.host.cleared) != 0 {
+		t.Fatalf("cleared within the grace after the ask: %v", r.host.cleared)
+	}
+	r.sweep(time.Second)
+	if len(r.host.cleared) != 1 {
+		t.Fatalf("not cleared: %v", r.host.cleared)
+	}
+}
+
+// clearNow sweeps a clearRig through the ask and the grace after it, up
+// to its clear.
+func clearNow(r *rig) {
+	r.sweep(DefaultClearGrace)
+	r.sweep(DefaultClearGrace)
 }
 
 // Each safety condition alone holds the clear back; once it lifts, the
@@ -92,12 +135,15 @@ func TestAutoClearWaitsForEveryCondition(t *testing.T) {
 			if len(r.host.cleared) != 0 {
 				t.Fatalf("cleared while %s: %v", c.name, r.host.cleared)
 			}
+			if len(r.host.asked) != 0 {
+				t.Fatalf("asked while %s: %v", c.name, r.host.asked)
+			}
 			c.undo(r)
 			r.sweep(time.Second)
-			if len(r.host.cleared) != 0 {
-				t.Fatalf("cleared without a new grace: %v", r.host.cleared)
+			if len(r.host.asked) != 0 {
+				t.Fatalf("asked without a new grace: %v", r.host.asked)
 			}
-			r.sweep(DefaultClearGrace)
+			clearNow(r)
 			if len(r.host.cleared) != 1 {
 				t.Fatalf("not cleared once free: %v (journal %q)", r.host.cleared, r.journal())
 			}
@@ -117,7 +163,7 @@ func needsYou(r *rig, q string) {
 func TestAutoClearStillAtDelivery(t *testing.T) {
 	r := clearRig(t, true, "")
 	r.sweep(0)
-	r.sweep(DefaultClearGrace)
+	clearNow(r)
 	if len(r.host.cleared) != 1 {
 		t.Fatalf("not cleared: %v", r.host.cleared)
 	}
@@ -145,7 +191,7 @@ func TestAutoClearOff(t *testing.T) {
 		for range 5 {
 			r.sweep(time.Hour)
 		}
-		if len(r.host.cleared) != 0 || strings.Contains(r.journal(), "coordinator.clear") {
+		if len(r.host.cleared) != 0 || len(r.host.asked) != 0 || strings.Contains(r.journal(), "coordinator.clear") {
 			t.Fatalf("%s: cleared: %v", name, r.host.cleared)
 		}
 	}
@@ -157,16 +203,16 @@ func TestAutoClearOff(t *testing.T) {
 	r.host.sessions[0].State, r.host.sessions[0].Context, r.host.sessions[0].ContextWindow = "idle", 190_000, 200_000
 	r.sweep(0)
 	r.sweep(time.Hour)
-	if len(r.host.cleared) != 0 {
+	if len(r.host.cleared) != 0 || len(r.host.asked) != 0 {
 		t.Fatalf("cleared while paused: %v", r.host.cleared)
 	}
 
 	r = clearRig(t, true, "")
 	r.host.clearErr = errors.New("no clear prompt")
 	r.sweep(0)
-	r.sweep(DefaultClearGrace)
-	if strings.Contains(r.journal(), "coordinator.clear") {
-		t.Fatalf("journaled a failed clear: %q", r.journal())
+	clearNow(r)
+	if strings.Contains(r.journal(), "coordinator.clear") || len(r.host.asked) != 0 {
+		t.Fatalf("asked or journaled for an agent without a clear: %q", r.journal())
 	}
 }
 
@@ -177,10 +223,10 @@ func TestAutoClearGraceAfterRelaunch(t *testing.T) {
 	r.sweep(DefaultClearGrace - time.Second)
 	r.host.sessions[0].PID = 101
 	r.sweep(2 * time.Second)
-	if len(r.host.cleared) != 0 {
-		t.Fatalf("cleared a fresh process: %v", r.host.cleared)
+	if len(r.host.asked) != 0 {
+		t.Fatalf("asked a fresh process: %v", r.host.asked)
 	}
-	r.sweep(DefaultClearGrace)
+	clearNow(r)
 	if len(r.host.cleared) != 1 {
 		t.Fatalf("not cleared: %v", r.host.cleared)
 	}

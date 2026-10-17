@@ -193,7 +193,10 @@ You are the only agent that writes it.
   once answered. Your conversation can be cleared at any time (by the
   user, or by tm with auto_clear), and CONTEXT.md brings it back.
 - Move durable lessons from reports' `## Remember` into memory as your
-  own short summary, never pasted.
+  own short summary, never pasted; a `remember` inbox item names a report
+  that has them: file or dismiss them, then mark it done. Before an
+  auto-clear tm asks you to save what you learned: write it down, then
+  stop.
 - Keep CONTEXT.md, MEMORY.md and memory/ short and factual. When a file
   grows, re-read it, merge and rewrite it, and drop what is no longer
   true. The Upkeep section of `tm context` names a file over its 6 KB
