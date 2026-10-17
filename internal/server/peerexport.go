@@ -97,6 +97,7 @@ func (e peerExport) Watch(c caller.Caller, slug string) (proto.PeerWatch, error)
 	if err != nil {
 		return proto.PeerWatch{}, errNotShared(slug)
 	}
+	w = proto.PeerProjectWatch(w)
 	// A link names another project: only a shared one may show.
 	w.Links = slices.DeleteFunc(w.Links, func(l proto.WatchLink) bool { return !slices.Contains(shared, l.Peer) })
 	if len(w.Links) == 0 {

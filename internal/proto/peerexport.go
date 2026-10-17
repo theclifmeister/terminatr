@@ -101,3 +101,59 @@ func PeerSessionOf(s SessionInfo) PeerSession {
 		Current: s.Current, Queued: s.Queued, RemoteControl: s.RemoteControl, Model: s.Model, Asking: s.Question != nil,
 		Context: s.Context, ContextWindow: s.ContextWindow}
 }
+
+// PeerQuestion stands for a question's text in what a paired server
+// sees: that one is open, never what it asks.
+const PeerQuestion = "a question in its session"
+
+// PeerProjectWatch is w as a paired server may see it (docs/SPEC.md
+// §16.9): no mods' cells, no question's text (PeerQuestion says one is
+// open), and of the inbox only each item's kind, count and task. As in
+// PeerSessionOf, fields are copied one by one, down to the nested
+// records: a field added to any of them stays home until it is added
+// here. Links are copied whole here; which may show is the caller's.
+func PeerProjectWatch(w ProjectWatch) ProjectWatch {
+	out := ProjectWatch{Project: w.Project, Questions: w.Questions,
+		NeedsYou: make([]WatchNeed, 0, len(w.NeedsYou)), Inbox: make([]WatchItem, 0, len(w.Inbox)),
+		Threads: make([]WatchThread, 0, len(w.Threads)), Ready: make([]WatchTodo, 0, len(w.Ready))}
+	question := func(q string) string {
+		if q == "" {
+			return ""
+		}
+		return PeerQuestion
+	}
+	for _, n := range w.NeedsYou {
+		out.NeedsYou = append(out.NeedsYou, WatchNeed{Why: n.Why, Task: n.Task, Title: n.Title, Status: n.Status,
+			Thread: n.Thread, Session: n.Session, Question: question(n.Question), PR: n.PR, PRURL: n.PRURL,
+			PRNumber: n.PRNumber, Mergeable: n.Mergeable, Asked: n.Asked})
+	}
+	for _, it := range w.Inbox {
+		out.Inbox = append(out.Inbox, WatchItem{Kind: it.Kind, NeedsUser: it.NeedsUser, Count: it.Count,
+			Task: it.Task, Title: it.Title})
+	}
+	for _, t := range w.Threads {
+		wt := WatchThread{ID: t.ID, Title: t.Title, Session: t.Session, State: t.State, Reason: t.Reason,
+			NeedsYou: question(t.NeedsYou), PR: t.PR, PRURL: t.PRURL, PRBad: t.PRBad, PRChecks: t.PRChecks,
+			PRChecked: t.PRChecked, Reports: t.Reports, Done: t.Done}
+		if t.Task != nil {
+			wt.Task = &WatchTask{ID: t.Task.ID, Title: t.Task.Title, Status: t.Task.Status,
+				StepsDone: t.Task.StepsDone, StepsTotal: t.Task.StepsTotal, Current: t.Task.Current}
+		}
+		out.Threads = append(out.Threads, wt)
+	}
+	for _, r := range w.Ready {
+		out.Ready = append(out.Ready, WatchTodo{Task: r.Task, Title: r.Title, Status: r.Status, Asked: r.Asked})
+	}
+	if c := w.Context; c != nil {
+		out.Context = &WatchContext{Tokens: c.Tokens, Window: c.Window, Percent: c.Percent, Threshold: c.Threshold, Hint: c.Hint}
+	}
+	if t := w.Ticker; t != nil {
+		out.Ticker = &WatchTicker{PRChecked: t.PRChecked, Synced: t.Synced, PRPollSeconds: t.PRPollSeconds,
+			GHFailing: t.GHFailing, NoPRHost: t.NoPRHost}
+	}
+	for _, l := range w.Links {
+		out.Links = append(out.Links, WatchLink{Peer: l.Peer, State: l.State, Send: l.Send, Receive: l.Receive,
+			Paused: l.Paused, Unread: l.Unread, Held: l.Held, Last: l.Last})
+	}
+	return out
+}

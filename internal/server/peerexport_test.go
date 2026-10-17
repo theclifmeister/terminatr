@@ -22,6 +22,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/relay"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
 // linkedServers pairs two peer directories through an in-process relay
@@ -76,7 +77,8 @@ func linkedServers(t *testing.T, ex peer.Exporter) *peer.Manager {
 // TestPeerExportNeverLeaks: through a real link, a paired server sees
 // the shared, active projects only, each project's sessions without
 // argv, working directory, pid, agent session id, title or question
-// text, and links only to other shared projects. An unshared project
+// text, the project without mods' cells, questions' text or the inbox's
+// words, and links only to other shared projects. An unshared project
 // answers exactly as one that doesn't exist, and turning share off hides
 // a project at once.
 func TestPeerExportNeverLeaks(t *testing.T) {
@@ -105,6 +107,15 @@ func TestPeerExportNeverLeaks(t *testing.T) {
 	if _, err := web.Tasks().Add(human, []tasks.NewTask{{Title: "Next up", Status: "ready"}}); err != nil {
 		t.Fatal(err)
 	}
+	// A thread whose agent asks something, and an inbox item whose
+	// summary names a path.
+	asker, err := thread.Create(web, thread.Record{Title: "Asks", Session: "s-4", State: thread.Running})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := web.AddItem("guard", "s-4", "SECRET-SUMMARY ran /Users/someone/SECRET-PATH", true); err != nil {
+		t.Fatal(err)
+	}
 	worktree := filepath.Join(root, "worktrees", "web", "t-0001")
 	sessions := []proto.SessionInfo{
 		{ID: "s-1", Role: proto.RoleCoordinator, Agent: "claude", Project: "web", Argv: []string{"claude", "--token", "SECRET-ARGV"},
@@ -114,6 +125,8 @@ func TestPeerExportNeverLeaks(t *testing.T) {
 			RemoteControl: true, Context: 50, ContextWindow: 100},
 		{ID: "s-2", Role: proto.RoleThread, Project: "secret-proj", Thread: "t-0001", Argv: []string{"claude", "SECRET-OTHER"}, Cwd: worktree},
 		{ID: "s-3", Role: proto.RoleShell, Argv: []string{"zsh"}, Cwd: root},
+		{ID: "s-4", Role: proto.RoleThread, Project: "web", Thread: asker.ID, State: "blocked", Reason: "question",
+			Question: &proto.Question{Questions: []proto.QuestionItem{{Question: "SECRET-THREAD-QUESTION"}}}},
 	}
 	ticker := filepath.Join(t.TempDir(), "ticker.json")
 	ex := peerExport{
@@ -123,7 +136,10 @@ func TestPeerExportNeverLeaks(t *testing.T) {
 			if err != nil {
 				return proto.ProjectWatch{}, err
 			}
-			return ProjectWatchOf(p, ss, ticker), nil
+			// As projectWatchWith: the watch, and the mods' cells.
+			w := ProjectWatchOf(p, ss, ticker)
+			w.Cells = []proto.ModCell{{Mod: "SECRET-MOD-CELL", Column: "c"}}
+			return w, nil
 		},
 		changes: func() (<-chan struct{}, func()) { return make(chan struct{}), func() {} },
 	}
@@ -172,11 +188,24 @@ func TestPeerExportNeverLeaks(t *testing.T) {
 	}
 	var pw proto.PeerWatch
 	json.Unmarshal(raw, &pw)
-	if len(pw.Sessions) != 1 || pw.Sessions[0].ID != "s-1" || !pw.Sessions[0].Asking || pw.Sessions[0].Model != "opus" || !pw.Sessions[0].RemoteControl {
+	if len(pw.Sessions) != 2 || pw.Sessions[0].ID != "s-1" || !pw.Sessions[0].Asking || pw.Sessions[0].Model != "opus" || !pw.Sessions[0].RemoteControl {
 		t.Errorf("sessions: %+v", pw.Sessions)
 	}
 	if len(pw.Watch.Links) != 1 || pw.Watch.Links[0].Peer != "api" {
 		t.Errorf("links: %+v, want only api's", pw.Watch.Links)
+	}
+	// The thread's question is open, its words stay home; the inbox item
+	// crosses as its kind.
+	if len(pw.Watch.Threads) != 1 || pw.Watch.Threads[0].NeedsYou != proto.PeerQuestion {
+		t.Errorf("threads: %+v", pw.Watch.Threads)
+	}
+	if !slices.ContainsFunc(pw.Watch.NeedsYou, func(n proto.WatchNeed) bool {
+		return n.Why == proto.WhyQuestion && n.Thread == asker.ID && n.Question == proto.PeerQuestion
+	}) {
+		t.Errorf("needs you: %+v", pw.Watch.NeedsYou)
+	}
+	if len(pw.Watch.Inbox) != 1 || pw.Watch.Inbox[0].Kind != "guard" || pw.Watch.Inbox[0].Count != 1 {
+		t.Errorf("inbox: %+v", pw.Watch.Inbox)
 	}
 	if len(pw.Watch.Ready) != 1 || pw.Watch.Context == nil || pw.Watch.Context.Percent != 50 {
 		t.Errorf("watch: %+v", pw.Watch)
@@ -221,7 +250,7 @@ func TestPeerExportNeverLeaks(t *testing.T) {
 	all := strings.Join(crossed, "\n")
 	cfg, _ := os.ReadFile(filepath.Join(root, "config.toml"))
 	for _, never := range []string{"secret-proj", "dormant", "attic", "SECRET", root, "worktrees", "config.toml",
-		`"argv"`, `"cwd"`, `"pid"`, `"agent_session_id"`, `"cells"`, `"repos"`, `"dir"`} {
+		`"argv"`, `"cwd"`, `"pid"`, `"agent_session_id"`, `"cells"`, `"repos"`, `"dir"`, "/Users/"} {
 		if strings.Contains(all, never) {
 			t.Errorf("%q crossed:\n%s", never, all)
 		}

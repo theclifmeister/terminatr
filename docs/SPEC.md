@@ -2555,7 +2555,11 @@ user shares a project, and nothing that crosses can act here.
   seconds (at most and by default 50) with the same state. `rev` names
   a state (a hash of its JSON, without `rev` and `now`). `watch` is the project's `ProjectWatch`
   as `project.watch` gives it (§3.3, **Watch**), its `links` only to
-  other shared projects. `sessions` are the project's sessions, each
+  other shared projects, copied field by field as `sessions` are: no
+  mods' cells, no question's text (a thread's `needs_you` and a need's
+  `question` say `a question in its session` instead), and of each inbox
+  item only its kind, count, task, title and whether it needs the user,
+  never its summary. `sessions` are the project's sessions, each
   `{"id", "role", "agent", "project", "thread", "task", "created",
   "state", "reason", "todos_done", "todos_total", "current",
   "queued_prompts", "remote_control", "model", "asking", "context",
