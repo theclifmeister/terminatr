@@ -1,6 +1,7 @@
 package modbroker
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestCheckRunGit(t *testing.T) {
-	cmds := []string{"git", "Git"}
+	cmds := []string{"git", "Git", "Git.exe"}
 	for _, argv := range [][]string{
 		{"git", "-C", "../elsewhere", "status"},
 		{"git", "-C../elsewhere", "status"},
@@ -56,6 +57,24 @@ func TestCheckRunGit(t *testing.T) {
 		{"git", "daemon"},
 		{"git", "--no-pager", "bisect", "run", "make"},
 		{"Git", "credential", "fill"},
+		{"git", "clone", "-c", "core.fsmonitor=x", "src", "dst"},
+		{"git", "clone", "-qc", "core.fsmonitor=x", "src", "dst"},
+		{"git", "clone", "-ccore.fsmonitor=x", "src", "dst"},
+		{"git", "clone", "--config", "core.fsmonitor=x", "src", "dst"},
+		{"git", "clone", "--config=core.fsmonitor=x", "src", "dst"},
+		{"git", "clone", "--conf=core.fsmonitor=x", "src", "dst"},
+		{"git", "clone", "--template=tpl", "src", "dst"},
+		{"git", "clone", "--te", "tpl", "src", "dst"},
+		{"git", "clone", "--separate-git-dir=gd", "src", "dst"},
+		{"git", "clone", "--bare", "src", "dst"},
+		{"git", "clone", "--mirror", "src", "dst"},
+		{"git", "init", "--template=tpl", "dst"},
+		{"git", "init", "--separate-git-dir", "gd", "dst"},
+		{"git", "init", "--bare", "dst"},
+		{"git", "init", "--b", "dst"},
+		{"git", "maintenance", "start"},
+		{"git", "maintenance", "register"},
+		{"Git.exe", "clone", "-c", "core.fsmonitor=x", "src", "dst"},
 	} {
 		if err := CheckRun(argv, cmds); code(err) != CodeDenied {
 			t.Errorf("%q: %v", argv, err)
@@ -77,6 +96,12 @@ func TestCheckRunGit(t *testing.T) {
 		{"git", "grep", "-n", "x"},
 		{"git", "clone", "--depth=1", "https://example.com/x.git"},
 		{"git", "log", "--", "run"},
+		{"git", "switch", "-c", "feature"},
+		{"git", "commit", "--template=msg.txt"},
+		{"git", "init", "dst"},
+		{"git", "clone", "--no-template", "src", "dst"},
+		{"git", "clone", "src", "--", "-c"},
+		{"git", "maintenance", "run"},
 	} {
 		if err := CheckRun(argv, cmds); err != nil {
 			t.Errorf("%q: %v", argv, err)
@@ -237,5 +262,69 @@ func TestRunGitCeiling(t *testing.T) {
 	got, err := tb.call(t, "process.run", map[string]any{"argv": []string{"git", "rev-parse", "--show-toplevel"}, "cwd": "~/notes/sub"})
 	if res, _ := got.(RunResult); err != nil || res.Code != 0 {
 		t.Errorf("git in a repository under the root = %+v, %v", got, err)
+	}
+}
+
+// TestRunGitConfig: a repository's config can't make the git a mod runs
+// start a program, whether git made the repository or the mod wrote it,
+// and the mod can't have git set it.
+func TestRunGitConfig(t *testing.T) {
+	git, err := exec.LookPath("git")
+	if err != nil || caps.Windows {
+		t.Skip("no git")
+	}
+	tb := newTestBroker(t, mod.PermCommands)
+	own := tb.f.p.Own
+	run := func(cwd string, args ...string) RunResult {
+		t.Helper()
+		got, err := tb.call(t, "process.run", map[string]any{"argv": append([]string{"git"}, args...), "cwd": cwd})
+		if err != nil {
+			t.Fatalf("git %q: %v", args, err)
+		}
+		return got.(RunResult)
+	}
+	if res := run("", "init", "-q", "src"); res.Code != 0 {
+		t.Fatalf("git init = %+v", res)
+	}
+	if _, err := tb.call(t, "process.run", map[string]any{"argv": []string{"git", "clone", "-q", "-c", "core.fsmonitor=touch pwned", "src", "dst"}}); code(err) != CodeDenied {
+		t.Errorf("clone -c: %v", err)
+	}
+	if res := run("", "clone", "-q", "src", "dst"); res.Code != 0 {
+		t.Fatalf("git clone = %+v", res)
+	}
+	// Config set some other way than the mod could.
+	pwned := filepath.Join(own, "dst", "pwned")
+	for _, kv := range [][]string{{"core.fsmonitor", "touch " + pwned}, {"core.pager", "touch " + pwned}} {
+		if out, err := exec.Command(git, "-C", filepath.Join(own, "dst"), "config", kv[0], kv[1]).CombinedOutput(); err != nil {
+			t.Fatalf("git config: %v %s", err, out)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(own, "dst", "a.txt"), []byte("a"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if res := run("dst", "status", "--porcelain"); res.Code != 0 || !strings.Contains(res.Stdout, "a.txt") {
+		t.Errorf("git status = %+v", res)
+	}
+	run("dst", "-p", "log")
+	if _, err := os.Stat(pwned); err == nil {
+		t.Error("the repository's config ran a program")
+	}
+	// A bare repository the mod wrote with fs.write, outside any .git.
+	bare := map[string]string{
+		"bare/HEAD":              "ref: refs/heads/main\n",
+		"bare/config":            "[core]\n\tbare = true\n[alias]\n\tx = !touch pwned\n",
+		"bare/objects/info/keep": "",
+		"bare/refs/heads/keep":   "",
+	}
+	for name, text := range bare {
+		if _, err := tb.call(t, "fs.write", map[string]any{"path": name, "text": text}); err != nil {
+			t.Fatalf("fs.write %s: %v", name, err)
+		}
+	}
+	if res := run("bare", "x"); res.Code == 0 {
+		t.Errorf("git x in a bare repository = %+v", res)
+	}
+	if _, err := os.Stat(filepath.Join(own, "bare", "pwned")); err == nil {
+		t.Error("a bare repository's alias ran a program")
 	}
 }

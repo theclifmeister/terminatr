@@ -1,6 +1,7 @@
 package modbroker
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -30,14 +31,44 @@ func CheckRun(argv, commands []string) error {
 	if !slices.Contains(commands, argv[0]) {
 		return Denied("process.run: %q isn't one of the mod's commands", argv[0])
 	}
-	// git.exe and Git are git too, on a file system that ignores case.
-	prog := strings.TrimSuffix(strings.ToLower(argv[0]), ".exe")
-	if rule, ok := argRules[prog]; ok {
+	if rule, ok := argRules[progName(argv[0])]; ok {
 		if why := rule(argv[1:]); why != "" {
 			return Denied("process.run: %s %s", argv[0], why)
 		}
 	}
 	return nil
+}
+
+// gitSafeConfig is the configuration every git a mod runs has, given on
+// its command line, above any repository's: no program it names from a
+// repository's config (fsmonitor, hooks, a pager) and no repository it
+// finds that is bare, which the mod could have written itself (fs.write
+// keeps it out of .git folders only).
+var gitSafeConfig = []string{
+	"core.fsmonitor=false",
+	"core.hooksPath=" + os.DevNull,
+	"core.pager=cat",
+	"protocol.ext.allow=never",
+	"safe.bareRepository=explicit",
+}
+
+// RunArgv is argv, which CheckRun let through, as the broker runs it:
+// git with gitSafeConfig first.
+func RunArgv(argv []string) []string {
+	if progName(argv[0]) != "git" {
+		return argv
+	}
+	out := []string{argv[0]}
+	for _, kv := range gitSafeConfig {
+		out = append(out, "-c", kv)
+	}
+	return append(out, argv[1:]...)
+}
+
+// progName is a program's name as argRules has it: git.exe and Git are
+// git too, on a file system that ignores case.
+func progName(prog string) string {
+	return strings.TrimSuffix(strings.ToLower(prog), ".exe")
 }
 
 // argRules say why a program's arguments are refused, or "".
@@ -157,14 +188,26 @@ var gitRunsCommands = []string{
 }
 
 // gitRunOptions are, by git command, its options that take a program or
-// shell command to run: the short ones and the long ones (a prefix of a
-// long one counts).
+// shell command to run, or that set the configuration of the repository
+// it makes (which may name a program: core.fsmonitor, an alias), seed it
+// from a template, or make it where git won't find it as a .git folder
+// (bare, or its git folder elsewhere), so the mod could write its config:
+// the short ones and the long ones (a prefix of a long one counts).
 var gitRunOptions = map[string]struct{ short, long []string }{
 	"rebase":   {[]string{"x"}, []string{"--exec"}},
 	"difftool": {[]string{"x"}, []string{"--extcmd"}},
 	"grep":     {[]string{"O"}, []string{"--open-files-in-pager"}},
-	"clone":    {[]string{"u"}, []string{"--upload-pack"}},
-	"help":     {[]string{"w"}, []string{"--web"}},
+	"clone": {[]string{"u", "c"}, []string{"--upload-pack", "--config", "--template",
+		"--separate-git-dir", "--bare", "--mirror"}},
+	"init": {nil, []string{"--template", "--separate-git-dir", "--bare"}},
+	"help": {[]string{"w"}, []string{"--web"}},
+}
+
+// gitConfigSubcommands are, by git command, its commands that change the
+// human's git config (git maintenance register adds the repository to
+// it, and start schedules git to run there too).
+var gitConfigSubcommands = map[string][]string{
+	"maintenance": {"register", "unregister", "start", "stop"},
 }
 
 // gitRuns says why git command cmd, with its arguments rest, is refused
@@ -176,7 +219,8 @@ func gitRuns(cmd string, rest []string) string {
 	sub := slices.IndexFunc(rest, func(a string) bool { return !strings.HasPrefix(a, "-") })
 	switch {
 	case cmd == "bisect" && sub >= 0 && rest[sub] == "run",
-		cmd == "submodule" && sub >= 0 && rest[sub] == "foreach":
+		cmd == "submodule" && sub >= 0 && rest[sub] == "foreach",
+		sub >= 0 && slices.Contains(gitConfigSubcommands[cmd], rest[sub]):
 		return "takes no " + cmd + " " + rest[sub]
 	}
 	opts, ok := gitRunOptions[cmd]
@@ -191,7 +235,7 @@ func gitRuns(cmd string, rest []string) string {
 		switch {
 		case strings.HasPrefix(name, "--"):
 			for _, l := range opts.long {
-				if len(name) > 3 && strings.HasPrefix(l, name) {
+				if len(name) > 2 && strings.HasPrefix(l, name) {
 					return cmd + " takes no " + l + " option"
 				}
 			}

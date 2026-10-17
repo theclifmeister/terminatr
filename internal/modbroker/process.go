@@ -87,7 +87,9 @@ type RunOptions struct {
 // scrubbed environment, in the mod's own folder or a folder its files
 // grant may read, and is killed (with what it started) at the timeout.
 // Its arguments may not name a file or folder the mod couldn't read
-// (Paths.CheckArgs), nor point git elsewhere (CheckRun).
+// (Paths.CheckArgs), nor point git elsewhere (CheckRun); git runs with
+// settings that keep a repository's config from naming a program
+// (RunArgv).
 func run(ctx context.Context, c *Call) (any, error) {
 	var a struct {
 		Argv []string `json:"argv"`
@@ -132,7 +134,8 @@ func run(ctx context.Context, c *Call) (any, error) {
 	defer cancel()
 	// exec looks the name up in the server's PATH, the one the program
 	// gets, and refuses a match in the working folder (exec.ErrDot).
-	cmd := exec.CommandContext(ctx, a.Argv[0], a.Argv[1:]...)
+	argv := RunArgv(a.Argv)
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = dir
 	cmd.Env = ScrubbedEnv(os.Getenv)
 	if root := c.Paths.Root(dir); root != "" {
