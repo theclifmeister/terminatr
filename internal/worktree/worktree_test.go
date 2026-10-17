@@ -5,9 +5,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/gittest"
+	"github.com/theclifmeister/terminatr/internal/gitx"
 )
 
 func TestCreateRemove(t *testing.T) {
@@ -87,7 +89,7 @@ func TestUnsaved(t *testing.T) {
 	}
 	check := func(pushed, want string) {
 		t.Helper()
-		if got, err := Unsaved(dir, pushed); err != nil || got != want {
+		if got, err := Unsaved(repo, dir, pushed); err != nil || got != want {
 			t.Fatalf("unsaved %q %v, want %q", got, err, want)
 		}
 	}
@@ -211,5 +213,71 @@ func TestValidBase(t *testing.T) {
 		if ValidBase(b) {
 			t.Errorf("ValidBase(%q) = true", b)
 		}
+	}
+}
+
+// TestPlantedGitDir: a worktree whose .git its agent replaced with a
+// repository of its own, set to run a file system monitor, is not
+// read, nor removed, and the monitor never runs.
+func TestPlantedGitDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell command monitor")
+	}
+	repo, _ := gittest.Repo(t)
+	dir := filepath.Join(t.TempDir(), "wt")
+	if _, err := Create(repo, dir, "tm/x", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(dir, "f"), []byte("x"), 0o644)
+	if dirty, err := Dirty(repo, dir); err != nil || !dirty {
+		t.Fatalf("before: %v %v", dirty, err)
+	}
+	marker := filepath.Join(t.TempDir(), "ran")
+	os.Remove(filepath.Join(dir, ".git"))
+	gittest.Run(t, dir, "init", "-q")
+	gittest.Run(t, dir, "config", "core.fsmonitor", "touch "+marker)
+	if _, err := Unsaved(repo, dir, ""); !errors.Is(err, gitx.ErrNotPinned) {
+		t.Errorf("unsaved: %v", err)
+	}
+	if _, err := Dirty(repo, dir); !errors.Is(err, gitx.ErrNotPinned) {
+		t.Errorf("dirty: %v", err)
+	}
+	if err := Remove(repo, dir); !errors.Is(err, gitx.ErrNotPinned) {
+		t.Errorf("remove: %v", err)
+	}
+	if _, err := os.Stat(dir); err != nil {
+		t.Errorf("removed: %v", err)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("the planted monitor ran")
+	}
+}
+
+// TestRemoveRedirectedCommonDir: git worktree remove checks the
+// worktree for changes with git status; a common dir the worktree's
+// own git dir was made to name, set to run a monitor, is not read.
+func TestRemoveRedirectedCommonDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell command monitor")
+	}
+	repo, _ := gittest.Repo(t)
+	dir := filepath.Join(t.TempDir(), "wt")
+	if _, err := Create(repo, dir, "tm/x", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	d, err := GitDirs(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(t.TempDir(), "ran")
+	evil := filepath.Join(t.TempDir(), "evil.git")
+	gittest.Run(t, repo, "clone", "-q", "--bare", repo, evil)
+	gittest.Run(t, evil, "config", "core.fsmonitor", "touch "+marker)
+	os.WriteFile(filepath.Join(d.GitDir, "commondir"), []byte(evil+"\n"), 0o644)
+	if err := Remove(repo, dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("the planted monitor ran")
 	}
 }

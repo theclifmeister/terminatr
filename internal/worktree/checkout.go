@@ -6,13 +6,13 @@ package worktree
 
 import (
 	"errors"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/codehost"
+	"github.com/theclifmeister/terminatr/internal/gitx"
 )
 
 // fetchTimeout bounds Sync's fetch, so a hung remote can't stall the
@@ -88,7 +88,8 @@ func ValidBase(b string) bool {
 			return false
 		}
 	}
-	return exec.Command("git", "check-ref-format", "--allow-onelevel", b).Run() == nil
+	ok, _ := gitx.CheckRefFormat(b, "--allow-onelevel")
+	return ok
 }
 
 // Sync fetches origin and, when ff is set, fast-forwards the repo's
@@ -185,14 +186,11 @@ func HeadState(repo, head, base string) (state string, ok bool) {
 	if _, err := git(repo, "merge-base", "--is-ancestor", head, base); err == nil {
 		return "", true
 	}
-	cmd := exec.Command("git", "merge-tree", "--write-tree", "--quiet", head, base)
-	cmd.Dir = repo
-	err := cmd.Run()
-	var ee *exec.ExitError
+	_, err := git(repo, "merge-tree", "--write-tree", "--quiet", head, base)
 	switch {
 	case err == nil:
 		return "behind", true
-	case errors.As(err, &ee) && ee.ExitCode() == 1:
+	case gitx.ExitCode(err) == 1:
 		return "conflict", true
 	}
 	return "", false

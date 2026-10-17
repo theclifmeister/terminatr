@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -261,5 +262,36 @@ func TestFingerprint(t *testing.T) {
 	step("pushed")
 	if Fingerprint(ctx, wt, "") != "" || Fingerprint(ctx, filepath.Join(root, "gone"), repo) != "" {
 		t.Fatal("a fingerprint without a repo or worktree")
+	}
+}
+
+// TestPlantedGitDir: a worktree whose .git its agent replaced with a
+// repository of its own, set to run a file system monitor, has no
+// changes to read, and the monitor never runs.
+func TestPlantedGitDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell command monitor")
+	}
+	root, repo := repo(t)
+	wt := filepath.Join(root, "wt")
+	gittest.Run(t, repo, "worktree", "add", "-q", "-b", "tm/p/t-0001-x", wt, "origin/main")
+	write(t, wt, "new.txt", "x\n")
+	ctx := context.Background()
+	if cs, err := Read(ctx, wt, Options{Repo: repo}); err != nil || cs.State != StateDirty {
+		t.Fatalf("before: %+v %v", cs, err)
+	}
+	marker := filepath.Join(t.TempDir(), "ran")
+	os.Remove(filepath.Join(wt, ".git"))
+	gittest.Run(t, wt, "init", "-q")
+	gittest.Run(t, wt, "config", "core.fsmonitor", "touch "+marker)
+	cs, err := Read(ctx, wt, Options{Repo: repo, Path: "new.txt"})
+	if err != nil || cs.State != StateNone || len(cs.Files) != 0 {
+		t.Errorf("read: %+v %v", cs, err)
+	}
+	if fp := Fingerprint(ctx, wt, repo); fp != "" {
+		t.Errorf("fingerprint %q", fp)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("the planted monitor ran")
 	}
 }

@@ -384,6 +384,13 @@ func TestLeftovers(t *testing.T) {
 	clean := mk("Done clean", thread.Resolved)
 	dirty := mk("Done dirty", thread.Resolved)
 	os.WriteFile(filepath.Join(dirty.Worktree, "wip.txt"), []byte("x"), 0o644)
+	// A worktree whose .git its agent replaced, set to run a monitor:
+	// kept, and git never asked of it.
+	planted := mk("Done planted", thread.Resolved)
+	marker := filepath.Join(t.TempDir(), "ran")
+	os.Remove(filepath.Join(planted.Worktree, ".git"))
+	gittest.Run(t, planted.Worktree, "init", "-q")
+	gittest.Run(t, planted.Worktree, "config", "core.fsmonitor", "touch "+marker)
 	// A branch with work on it and no thread: never offered for removal.
 	gittest.Run(t, repo, "branch", "tm/demo/t-0009-gone")
 	gittest.Run(t, repo, "checkout", "-q", "tm/demo/t-0009-gone")
@@ -406,12 +413,13 @@ func TestLeftovers(t *testing.T) {
 		}
 	}
 	want := map[string]bool{ // detail substring → has a fix
-		clean.Worktree + ": thread t-0002 is resolved":                                true,
-		dirty.Worktree + ": thread t-0003 is resolved; has uncommitted changes, kept": false,
-		stray + ": thread t-0042 has no record":                                       true,
-		clean.Branch + " in " + repo:                                                  true,
-		"tm/demo/t-0009-gone in " + repo:                                              false,
-		"tm/demo/t-0002-second in " + repo + ": thread t-0002 is resolved":            true,
+		clean.Worktree + ": thread t-0002 is resolved":                                                 true,
+		dirty.Worktree + ": thread t-0003 is resolved; has uncommitted changes, kept":                  false,
+		stray + ": thread t-0042 has no record":                                                        true,
+		planted.Worktree + ": thread t-0004 is resolved; not a git worktree of a project's repo, kept": false,
+		clean.Branch + " in " + repo:                                                                   true,
+		"tm/demo/t-0009-gone in " + repo:                                                               false,
+		"tm/demo/t-0002-second in " + repo + ": thread t-0002 is resolved":                             true,
 	}
 	for sub, fix := range want {
 		found := false
@@ -437,10 +445,13 @@ func TestLeftovers(t *testing.T) {
 			t.Errorf("%s not removed", gone)
 		}
 	}
-	for _, kept := range []string{running.Worktree, dirty.Worktree} {
+	for _, kept := range []string{running.Worktree, dirty.Worktree, planted.Worktree} {
 		if _, err := os.Stat(kept); err != nil {
 			t.Errorf("%s removed", kept)
 		}
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("the planted monitor ran")
 	}
 	branches := gittest.Run(t, repo, "branch", "--list", "tm/*")
 	if strings.Contains(branches, clean.Branch) || strings.Contains(branches, "t-0002-second") || !strings.Contains(branches, "t-0009-gone") || !strings.Contains(branches, running.Branch) {

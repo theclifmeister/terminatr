@@ -20,14 +20,13 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/theclifmeister/terminatr/internal/plat/proc"
+	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/widget"
 )
 
@@ -153,13 +152,14 @@ func Read(ctx context.Context, dir string, o Options) (*Changeset, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, Timeout)
 	defer cancel()
-	g := &git{ctx: ctx, dir: dir}
-	// The worktree must be a checkout's top, not a folder inside some
-	// other repository.
-	top, ok := g.line("rev-parse", "--show-toplevel")
-	if !ok || !sameDir(top, dir) {
-		return cs, g.err()
+	// The worktree must be a checkout of the repository by its records,
+	// and git is told so: it never looks its repository up from the
+	// folder, which the agent writes.
+	t, err := gitx.Pin(ctx, o.Repo, dir)
+	if err != nil {
+		return cs, ctxErr(ctx)
 	}
+	g := &git{ctx: ctx, tree: t}
 	cs.Head, _ = g.line("rev-parse", "--verify", "-q", "HEAD")
 	cs.Branch, _ = g.line("symbolic-ref", "-q", "--short", "HEAD")
 	from := cs.Head
@@ -278,7 +278,11 @@ func Fingerprint(ctx context.Context, dir, repo string) string {
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 		return ""
 	}
-	g := &git{ctx: ctx, dir: dir}
+	t, err := gitx.Pin(ctx, repo, dir)
+	if err != nil {
+		return ""
+	}
+	g := &git{ctx: ctx, tree: t}
 	st, _ := g.out(MaxOutput, "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all")
 	if st == "" {
 		return ""
@@ -510,15 +514,6 @@ func clean(s string) string {
 	return strings.ToValidUTF8(strings.ReplaceAll(widget.Clean(s), "\n", " "), "?")
 }
 
-func sameDir(a, b string) bool {
-	ra, err1 := filepath.EvalSymlinks(filepath.FromSlash(a))
-	rb, err2 := filepath.EvalSymlinks(b)
-	if err1 != nil || err2 != nil {
-		return filepath.Clean(filepath.FromSlash(a)) == filepath.Clean(b)
-	}
-	return ra == rb
-}
-
 func cmpOr(a, b string) string {
 	if a != "" {
 		return a
@@ -526,19 +521,23 @@ func cmpOr(a, b string) string {
 	return b
 }
 
-// git runs git in one worktree under the read's context.
+// git runs git in one worktree (tree), or in the repository (dir),
+// under the read's context.
 type git struct {
 	ctx       context.Context
 	dir       string
+	tree      *gitx.Tree
 	truncated bool
 }
 
 // err is the read's timeout, once it passed.
-func (g *git) err() error {
-	if errors.Is(g.ctx.Err(), context.DeadlineExceeded) {
+func (g *git) err() error { return ctxErr(g.ctx) }
+
+func ctxErr(ctx context.Context) error {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return errors.New("git took over " + Timeout.String())
 	}
-	return g.ctx.Err()
+	return ctx.Err()
 }
 
 // out runs git args and returns its stdout up to limit bytes, and
@@ -548,33 +547,24 @@ func (g *git) out(limit int, args ...string) (string, bool) {
 	if g.ctx.Err() != nil {
 		return "", false
 	}
-	cmd := exec.CommandContext(g.ctx, "git", append([]string{"-c", "core.quotepath=off", "-c", "color.ui=never"}, args...)...)
-	cmd.Dir = g.dir
-	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0", "GIT_PAGER=cat", "LC_ALL=C")
-	stdout := &capped{n: limit}
-	cmd.Stdout, cmd.Stderr = stdout, io.Discard
-	cmd.WaitDelay = 2 * time.Second
-	proc.Group(cmd)
-	err := cmd.Run()
-	var exit *exec.ExitError
-	switch {
-	case g.ctx.Err() != nil:
-		return "", false
-	case errors.As(err, &exit) && exit.ExitCode() == 1 && slices.Contains(args, "--no-index"):
-	case err != nil:
+	o := gitx.Opts{Max: limit, Tree: g.tree, Config: []string{"core.quotepath=off", "color.ui=never"}}
+	if slices.Contains(args, "--no-index") {
+		o.OK = []int{1}
+	}
+	s, over, err := gitx.Output(g.ctx, g.dir, o, args...)
+	if err != nil {
 		return "", false
 	}
-	if stdout.over && limit == MaxOutput {
+	if over && limit == MaxOutput {
 		g.truncated = true
 	}
-	s := stdout.buf.String()
-	if stdout.over {
+	if over {
 		// A cut -z list ends in a partial record: drop it.
 		if i := strings.LastIndexByte(s, 0); i >= 0 && slices.Contains(args, "-z") {
 			s = s[:i+1]
 		}
 	}
-	return s, stdout.over
+	return s, over
 }
 
 // line is git's first line of output, and whether git succeeded.
@@ -582,17 +572,11 @@ func (g *git) line(args ...string) (string, bool) {
 	if g.ctx.Err() != nil {
 		return "", false
 	}
-	cmd := exec.CommandContext(g.ctx, "git", args...)
-	cmd.Dir = g.dir
-	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0", "LC_ALL=C")
-	out := &capped{n: 4096}
-	cmd.Stdout, cmd.Stderr = out, io.Discard
-	cmd.WaitDelay = 2 * time.Second
-	proc.Group(cmd)
-	if err := cmd.Run(); err != nil {
+	out, _, err := gitx.Output(g.ctx, g.dir, gitx.Opts{Max: 4096, Tree: g.tree}, args...)
+	if err != nil {
 		return "", false
 	}
-	s, _, _ := strings.Cut(out.buf.String(), "\n")
+	s, _, _ := strings.Cut(out, "\n")
 	return strings.TrimSpace(s), true
 }
 
@@ -601,21 +585,4 @@ func (g *git) count(rng string) int {
 	s, _ := g.line("rev-list", "--count", rng)
 	n, _ := strconv.Atoi(s)
 	return n
-}
-
-// capped keeps the first n bytes written to it.
-type capped struct {
-	buf  bytes.Buffer
-	n    int
-	over bool
-}
-
-func (c *capped) Write(p []byte) (int, error) {
-	if room := c.n - c.buf.Len(); room < len(p) {
-		c.over = true
-		c.buf.Write(p[:max(room, 0)])
-	} else {
-		c.buf.Write(p)
-	}
-	return len(p), nil
 }
