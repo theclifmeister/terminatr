@@ -163,7 +163,7 @@ function tree(t: Tab): TM.Widget {
       kind: "stack",
       children: [
         { kind: "text", lines: [[{ text: "New note", role: "accent" }, { text: "  memory/<name>.md · tm memory template", role: "faint" }]] },
-        { kind: "text", text: TEMPLATE.trimEnd() },
+        { kind: "text", text: TEMPLATE.replace(/\s+$/, "") },
         {
           kind: "text",
           text: "All of it is optional; a free-form note still works. touches are paths in a repo (a folder ends with /) or repo:<name>; standing notes are for every thread. List the note in MEMORY.md with its touches.",
