@@ -65,7 +65,7 @@ func FuzzParseGitHubPR(f *testing.F) {
 			return
 		}
 		if pr.URL != "" && !urlRE.MatchString(pr.URL) || !upperRE.MatchString(pr.State) || !upperRE.MatchString(pr.Review) || pr.Number < 0 ||
-			!upperRE.MatchString(pr.Mergeable) || !upperRE.MatchString(pr.MergeState) || pr.Base != "" && !branchRE.MatchString(pr.Base) ||
+			!upperRE.MatchString(pr.Mergeable) || !upperRE.MatchString(pr.MergeState) || pr.Base != "" && !ValidBranch(pr.Base) ||
 			pr.Merge != "" && !oidRE.MatchString(pr.Merge) {
 			t.Fatalf("unchecked field: %+v", pr)
 		}

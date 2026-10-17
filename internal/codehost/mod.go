@@ -216,10 +216,10 @@ func (m Mod) PR(repo string, ref Ref) (PR, error) {
 	case ref.URL != "":
 		if n, ok := m.ParsePRURL(ref.URL); ok {
 			q.Number = n
-		} else if branchRE.MatchString(ref.Branch) {
+		} else if ValidBranch(ref.Branch) {
 			q.Branch = ref.Branch
 		}
-	case branchRE.MatchString(ref.Branch):
+	case ValidBranch(ref.Branch):
 		q.Branch = ref.Branch
 	}
 	if q.Number == 0 && q.Branch == "" {
@@ -283,7 +283,7 @@ func (m Mod) fixed(a modPR) PR {
 		pr.MergeState = a.MergeState
 	}
 	pr.setRefs(a.MergedAt, a.Head, a.Merge, a.Base)
-	if branchRE.MatchString(a.Branch) {
+	if ValidBranch(a.Branch) {
 		pr.Branch = a.Branch
 	}
 	return pr
@@ -318,7 +318,7 @@ func (m Mod) FailedLog(repo string, pr PR) (job, log string) {
 
 // PRState is the state of the PR whose head is branch.
 func (m Mod) PRState(repo, branch string) string {
-	if !branchRE.MatchString(branch) {
+	if !ValidBranch(branch) {
 		return ""
 	}
 	q := m.ref()
@@ -346,7 +346,7 @@ func (m Mod) PRHead(repo, url string) (state string, number int, head string) {
 		Number int    `json:"number"`
 		Head   string `json:"head"`
 	}
-	if err := m.call(MethodPRHead, q, &a); err != nil || a.Number != n || !branchRE.MatchString(a.Head) {
+	if err := m.call(MethodPRHead, q, &a); err != nil || a.Number != n || !ValidBranch(a.Head) {
 		return "", 0, ""
 	}
 	if state = oneOf(a.State, modStates); state == "" {

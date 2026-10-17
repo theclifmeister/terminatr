@@ -49,8 +49,10 @@ func selClient(t *testing.T, out string) (*client, *pane) {
 	p := &pane{r: r, info: proto.SessionInfo{ID: "s-1"}}
 	t.Cleanup(func() { // before c.close, which would close its connection
 		delete(c.panes, "s-1")
-		p.mirror.Close()
-		r.Close()
+		if p.mirror != nil { // free closed them
+			p.mirror.Close()
+			p.r.Close()
+		}
 	})
 	c.mu.Lock()
 	err = c.loadSnapshot(p, snap)
@@ -102,6 +104,87 @@ func TestDragSelectsAndCopies(t *testing.T) {
 	c.mouse(uv.MouseReleaseEvent{X: x + 1, Y: y + 1, Button: uv.MouseLeft})
 	if got, _ := p.mirror.SelectionText(); got != "" || len(c.clip) != 0 {
 		t.Fatalf("a click: selection %q, clip %q", got, c.clip)
+	}
+}
+
+// TestDragOverFreedPane: a drag whose pane leaves the window before the
+// release (its session ended, the view moved on) ends with it; the
+// motion and release after don't reach the freed mirror.
+func TestDragOverFreedPane(t *testing.T) {
+	c, p := selClient(t, "$ echo hello\r\nhello\r\n$ ")
+	x, y := p.rect.X, p.rect.Y
+	c.mouse(uv.MouseClickEvent{X: x + 2, Y: y, Button: uv.MouseLeft})
+	c.mouse(uv.MouseMotionEvent{X: x + 4, Y: y + 1, Button: uv.MouseLeft})
+	c.mu.Lock()
+	c.free(p)
+	delete(c.panes, "s-1")
+	drag, sel := c.drag, c.selOn
+	c.mu.Unlock()
+	if drag != nil || sel != nil {
+		t.Fatalf("free kept the drag %v / selection %v", drag, sel)
+	}
+	c.mouse(uv.MouseMotionEvent{X: x + 6, Y: y + 1, Button: uv.MouseLeft})
+	c.mouse(uv.MouseReleaseEvent{X: x + 6, Y: y + 1, Button: uv.MouseLeft})
+	if len(c.clip) != 0 {
+		t.Fatalf("copied from a freed pane: %q", c.clip)
+	}
+}
+
+// newPane is a pane like open makes for session s-1, showing out, not in
+// the window.
+func newPane(t *testing.T, c *client, out string) *pane {
+	t.Helper()
+	src, err := emu.New(80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer src.Close()
+	src.Write([]byte(out))
+	snap, err := src.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := emu.NewRenderer(80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	np := &pane{r: r, info: proto.SessionInfo{ID: "s-1"}}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.loadSnapshot(np, snap); err != nil {
+		t.Fatal(err)
+	}
+	return np
+}
+
+// TestReattachBindsMirror: after a restart the pane that took the new
+// mirror gets its clipboard writes and render holds, not the pane open
+// made it for; a pane gone meanwhile takes nothing.
+func TestReattachBindsMirror(t *testing.T) {
+	c, p := selClient(t, "")
+	np := newPane(t, c, "")
+	c.mu.Lock()
+	if _, ok := c.adopt(p, np); !ok {
+		t.Fatal("not adopted")
+	}
+	p.mirror.Write([]byte("\x1b]52;c;aGk=\a"))
+	if want := string(emu.OSC52('c', []byte("hi"))); string(c.clip) != want {
+		t.Errorf("clip %q, want %q", c.clip, want)
+	}
+	p.mirror.Write([]byte("\x1b[?2026h"))
+	if !p.held || np.held {
+		t.Errorf("hold: pane %v, open's pane %v", p.held, np.held)
+	}
+	c.free(p)
+	c.mu.Unlock()
+
+	np = newPane(t, c, "")
+	defer np.r.Close()
+	defer np.mirror.Close()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.adopt(p, np); ok || p.mirror != nil {
+		t.Fatal("a freed pane took the new mirror")
 	}
 }
 

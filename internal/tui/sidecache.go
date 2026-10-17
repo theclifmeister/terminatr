@@ -103,17 +103,7 @@ func (f *sideFeed) run(ctx context.Context, paths tmclient.Paths) {
 			}
 		}
 		if st != nil {
-			stop := context.AfterFunc(ctx, func() { st.Close() })
-			for {
-				ps, err := st.Next()
-				if err != nil {
-					break
-				}
-				f.put(ps)
-			}
-			if stop() {
-				st.Close()
-			}
+			follow(ctx, st, f.put)
 			st = nil
 			f.mu.Lock()
 			f.live = false
@@ -124,6 +114,26 @@ func (f *sideFeed) run(ctx context.Context, paths tmclient.Paths) {
 			return
 		case <-time.After(statePoll):
 		}
+	}
+}
+
+// follow passes each update of st to put until st fails or ctx ends,
+// then closes st. st is a parameter, not run's variable, so the close
+// that ctx's end runs never reads the variable run sets to nil.
+func follow(ctx context.Context, st interface {
+	Next() ([]server.SideProject, error)
+	Close() error
+}, put func([]server.SideProject)) {
+	stop := context.AfterFunc(ctx, func() { st.Close() })
+	for {
+		ps, err := st.Next()
+		if err != nil {
+			break
+		}
+		put(ps)
+	}
+	if stop() {
+		st.Close()
 	}
 }
 

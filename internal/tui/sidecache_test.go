@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -322,5 +324,54 @@ func TestSlowCache(t *testing.T) {
 	manifest("alpha", "Alpha Two")
 	if got := userMods(sc.load(agents)); got["alpha"] != "Alpha Two" {
 		t.Errorf("the edited manifest doesn't show: %v", got)
+	}
+}
+
+// fakeWatch is a projects watch: Next gives ups, then fails at once
+// when ends, else once closed.
+type fakeWatch struct {
+	ups    [][]server.SideProject
+	ends   bool
+	closed chan struct{}
+	closes atomic.Int32
+}
+
+func (w *fakeWatch) Next() ([]server.SideProject, error) {
+	if len(w.ups) > 0 {
+		ps := w.ups[0]
+		w.ups = w.ups[1:]
+		return ps, nil
+	}
+	if !w.ends {
+		<-w.closed
+	}
+	return nil, io.EOF
+}
+
+func (w *fakeWatch) Close() error {
+	if w.closes.Add(1) == 1 {
+		close(w.closed)
+	}
+	return nil
+}
+
+// TestFollowClosesOnce: the watch is closed once, whether it fails on
+// its own or the context ends while it waits, and every update before
+// it is passed on.
+func TestFollowClosesOnce(t *testing.T) {
+	for _, ends := range []bool{true, false} {
+		w := &fakeWatch{ups: [][]server.SideProject{{{Slug: "a"}}, {{Slug: "b"}}}, ends: ends, closed: make(chan struct{})}
+		ctx, cancel := context.WithCancel(context.Background())
+		var got []string
+		follow(ctx, w, func(ps []server.SideProject) {
+			got = append(got, ps[0].Slug)
+			if len(got) == 2 && !ends {
+				cancel() // the context ends while the watch waits
+			}
+		})
+		cancel()
+		if strings.Join(got, ",") != "a,b" || w.closes.Load() != 1 {
+			t.Errorf("ends %v: updates %v, closes %d", ends, got, w.closes.Load())
+		}
 	}
 }

@@ -25,10 +25,13 @@ import (
 // agents can't change safety settings. The file is
 // edited line by line, so the user's comments, order and formatting stay
 // as they were; the result is parsed before it replaces the file, which
-// happens atomically under the file's lock.
+// happens atomically under the file's lock. A line is a whole statement
+// (statements): a value that spans lines, such as an array written one
+// item per line, is read, replaced and removed as one.
 
 // ErrForm means the file sets the setting in a form the line editor
-// doesn't change (a dotted key, an inline table); the user edits it by hand.
+// doesn't change (a dotted key, a key inside an inline table); the user
+// edits it by hand.
 var ErrForm = errors.New("this setting is set in a form tm can't change here")
 
 // SetProject sets one of a project's safety settings by its key
@@ -191,10 +194,7 @@ func Edit(data []byte, table, key string, value any) ([]byte, error) {
 		return nil, fmt.Errorf("the settings can't be read: %w", err)
 	}
 	bare := keyText(key)
-	lines := strings.SplitAfter(string(data), "\n")
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
+	lines := statements(data)
 	want := splitTable(table)
 	in := len(want) == 0 // the top level comes first
 	found := in
@@ -358,7 +358,7 @@ func asSlice(v any) []any {
 // an inline table), or the result wouldn't parse without it, data comes
 // back as it was.
 func Remove(data []byte, table, key string) []byte {
-	lines := strings.SplitAfter(string(data), "\n")
+	lines := statements(data)
 	want := splitTable(table)
 	in := len(want) == 0
 	var out []string
@@ -488,6 +488,75 @@ func tomlValue(v any) (string, error) {
 		return b.String(), nil
 	}
 	return "", fmt.Errorf("can't write a %T setting", v)
+}
+
+// statements splits data into its lines, each with its line end, but
+// keeps a statement whose value goes on past its line end (an array or
+// inline table whose brackets close on a later line, a multi-line
+// string) in one: header and setting then never read a line inside a
+// value, and replacing or removing a setting takes its whole value.
+// Brackets and '#' inside strings and comments don't count.
+func statements(data []byte) []string {
+	var out []string
+	var cur strings.Builder
+	depth, ml := 0, "" // open brackets; the open multi-line string's quotes
+	for _, l := range strings.SplitAfter(string(data), "\n") {
+		if l == "" {
+			continue
+		}
+		cur.WriteString(l)
+		depth, ml = scanLine(l, depth, ml)
+		if depth == 0 && ml == "" {
+			out = append(out, cur.String())
+			cur.Reset()
+		}
+	}
+	if cur.Len() > 0 {
+		out = append(out, cur.String())
+	}
+	return out
+}
+
+// scanLine reads one line of TOML from the state the lines before left
+// (depth open brackets, ml the quotes of an open multi-line string) and
+// returns the state after it.
+func scanLine(l string, depth int, ml string) (int, string) {
+	for i := 0; i < len(l); i++ {
+		if ml != "" {
+			switch {
+			case ml == `"""` && l[i] == '\\':
+				i++
+			case strings.HasPrefix(l[i:], ml):
+				i += 2
+				for k := 0; k < 2 && i+1 < len(l) && l[i+1] == ml[0]; k++ {
+					i++ // up to two quotes end the string's content
+				}
+				ml = ""
+			}
+			continue
+		}
+		switch c := l[i]; c {
+		case '#':
+			return depth, ""
+		case '"', '\'':
+			if q := strings.Repeat(string(c), 3); strings.HasPrefix(l[i:], q) {
+				ml, i = q, i+2
+				continue
+			}
+			for i++; i < len(l) && l[i] != c && l[i] != '\n'; i++ {
+				if c == '"' && l[i] == '\\' {
+					i++
+				}
+			}
+		case '[', '{':
+			depth++
+		case ']', '}':
+			if depth > 0 {
+				depth--
+			}
+		}
+	}
+	return depth, ml
 }
 
 var headerRE = regexp.MustCompile(`^\s*\[\s*([^\[\]#]+?)\s*\]\s*(#.*)?$`)
@@ -651,7 +720,7 @@ func RenameTable(data []byte, from, to string) ([]byte, error) {
 	if _, ok := projects[from]; !ok && !linkedTo(projects, from) {
 		return data, nil
 	}
-	lines := strings.SplitAfter(string(data), "\n")
+	lines := statements(data)
 	inLinks := false
 	for i, l := range lines {
 		h, ok := header(l)

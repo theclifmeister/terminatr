@@ -39,6 +39,9 @@ func TestCheckBranchName(t *testing.T) {
 		"x/{id}/":         "trailing",
 		"x--{task}{id}":   "doubled",
 		"-{id}":           "leading",
+		"users/clif+{id}": "git refuses", // git takes '+', tm's PR lookups don't
+		"x/{id}.lock":     "git refuses",
+		strings.Repeat("team/", 8) + "{project}/{id}-{title}": "over 100 characters",
 	} {
 		err := CheckBranchName(tmpl)
 		if err == nil || !strings.Contains(err.Error(), why) {
@@ -56,5 +59,17 @@ func TestBranchNameSetting(t *testing.T) {
 	}
 	if err := CheckSetting("branch_name", "users/me/{id}"); err != nil {
 		t.Error(err)
+	}
+}
+
+// The check runs on every settings resolution (each Load, each Safety),
+// so it must not start a program.
+func TestCheckBranchNameRunsNoProgram(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	if err := CheckBranchName(DefaultBranchName); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckBranchName("x y/{id}"); err == nil || !strings.Contains(err.Error(), "git refuses") {
+		t.Fatalf("%v, want a refusal without git", err)
 	}
 }

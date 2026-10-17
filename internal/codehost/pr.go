@@ -103,7 +103,7 @@ func (pr *PR) setRefs(mergedAt, head, merge, base string) {
 	if pr.State == "MERGED" && oidRE.MatchString(merge) {
 		pr.Merge = merge
 	}
-	if branchRE.MatchString(base) {
+	if ValidBranch(base) {
 		pr.Base = base
 	}
 }

@@ -429,3 +429,52 @@ func TestEditStopsAtArrayTable(t *testing.T) {
 		t.Errorf("Remove touched the array table:\n%s", got)
 	}
 }
+
+// TestMultiLineValues: a value written over several lines (an array one
+// item per line, a multi-line string) is replaced and removed whole,
+// and no line inside it is read as a header or a setting.
+func TestMultiLineValues(t *testing.T) {
+	allow := "[defaults]\nguard_allow = [\n  { rule = \"credentials\", command = \"cat ~/.npmrc\" }, # mine\n  # more ] here\n]\nguard = true\n"
+	got, err := Edit([]byte(allow), "defaults", "guard_allow", []GuardAllow{{Rule: "credentials", Command: "x"}})
+	if want := "[defaults]\nguard_allow = [{ rule = \"credentials\", command = \"x\" }]\nguard = true\n"; err != nil || string(got) != want {
+		t.Errorf("guard_allow: %q %v\nwant %q", got, err, want)
+	}
+	if got := Remove([]byte(allow), "defaults", "guard_allow"); string(got) != "[defaults]\nguard = true\n" {
+		t.Errorf("guard_allow removed: %q", got)
+	}
+	models := "[projects.demo]\nmodels = [\n  \"opus\",\n  \"so]nnet\",\n]\nyolo = true\n"
+	got, err = Edit([]byte(models), "projects.demo", "models", []string{"haiku"})
+	if want := "[projects.demo]\nmodels = [\"haiku\"]\nyolo = true\n"; err != nil || string(got) != want {
+		t.Errorf("models: %q %v\nwant %q", got, err, want)
+	}
+	// A line inside a value that looks like a header or a setting.
+	tricky := "[projects.demo]\nnote = \"\"\"\n[projects.other]\nyolo = false\n\"\"\"\nguard_off = [\n  [\"a\"]\n]\nyolo = true\n"
+	got, err = Edit([]byte(tricky), "projects.demo", "yolo", false)
+	if want := strings.Replace(tricky, "yolo = true", "yolo = false", 1); err != nil || string(got) != want {
+		t.Errorf("tricky: %q %v\nwant %q", got, err, want)
+	}
+	if got, err := RenameTable([]byte(tricky), "demo", "d2"); err != nil || !strings.HasPrefix(string(got), "[projects.d2]\n") || strings.Count(string(got), "[projects.other]") != 1 {
+		t.Errorf("rename: %q %v", got, err)
+	}
+
+	write(t, "[projects.demo]\nrepos = [\n  \"/src/a\",\n]\n")
+	if err := UpdateRepos("demo", func(old []string, _ bool) ([]string, error) { return append(old, "/src/b"), nil }); err != nil {
+		t.Fatal(err)
+	}
+	c, _ := Load()
+	if got, _ := c.Repos("demo"); !slices.Equal(got, []string{"/src/a", "/src/b"}) {
+		t.Fatalf("repos: %v", got)
+	}
+	write(t, "[defaults]\nguard_off = [\n  \"credentials\",\n]\n")
+	if err := UnsetDefaults("guard_off"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestStatements(t *testing.T) {
+	in := "a = [ # [\n 1,\n]\nb = '''x\n]'''\nc = \"\\\"[\"\nd = \"\"\"q\"\"\"\"\ne = 1\n[t]\n"
+	want := []string{"a = [ # [\n 1,\n]\n", "b = '''x\n]'''\n", "c = \"\\\"[\"\n", "d = \"\"\"q\"\"\"\"\n", "e = 1\n", "[t]\n"}
+	if got := statements([]byte(in)); !slices.Equal(got, want) {
+		t.Fatalf("got %q\nwant %q", got, want)
+	}
+}

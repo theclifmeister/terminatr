@@ -160,7 +160,7 @@ func (a Azure) PR(repo string, ref Ref) (PR, error) {
 		n, _ = a.ParsePRURL(ref.URL)
 	}
 	branch := ref.Branch
-	if n <= 0 && (branch == "" || strings.HasPrefix(branch, "-") || !branchRE.MatchString(branch)) {
+	if n <= 0 && (branch == "" || strings.HasPrefix(branch, "-") || !ValidBranch(branch)) {
 		return PR{}, ErrNoRef
 	}
 	if a.Target.OrgURL == "" || a.Target.Project == "" || a.Target.Repo == "" {
@@ -426,7 +426,7 @@ func azurePR(t Target, pr, policies, statuses []byte) (PR, error) {
 		base = b
 	}
 	out.setRefs(a.ClosedDate, head, merge, base)
-	if b, ok := strings.CutPrefix(a.SourceRefName, "refs/heads/"); ok && branchRE.MatchString(b) {
+	if b, ok := strings.CutPrefix(a.SourceRefName, "refs/heads/"); ok && ValidBranch(b) {
 		out.Branch = b
 	}
 
@@ -576,7 +576,7 @@ func (a Azure) PRHead(repo, prURL string) (state string, number int, head string
 	}
 	pr, _ := azurePR(a.Target, out, nil, nil)
 	b, ok := strings.CutPrefix(p.SourceRefName, "refs/heads/")
-	if pr.State == "" || !ok || !branchRE.MatchString(b) {
+	if pr.State == "" || !ok || !ValidBranch(b) {
 		return "", 0, ""
 	}
 	return pr.State, n, b
