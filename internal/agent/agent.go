@@ -52,7 +52,7 @@ type LaunchSpec struct {
 	// §5.2): the human's, read by the server at each launch; a manifest
 	// agent drops them for any other role.
 	Sandbox SandboxLists
-	Model            string // optional; "" passes none: the agent's own default
+	Model   string // optional; "" passes none: the agent's own default
 	// RemoteControl starts the agent reachable from another device
 	// ([remote_control] args), listed there as RemoteName.
 	RemoteControl bool

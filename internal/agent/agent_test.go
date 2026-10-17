@@ -262,7 +262,7 @@ func TestClaudeLaunch(t *testing.T) {
 
 	coord := spec
 	coord.Role, coord.Access = Role("coordinator"), Access{Read: []string{"/h/.terminatr/worktrees/p"}}
-	coord.NoSandboxEscapes = true // a coordinator's Bash has no sandbox to keep
+	coord.NoSandboxEscapes = true                                                             // a coordinator's Bash has no sandbox to keep
 	coord.Sandbox = SandboxLists{Excluded: []string{"npx *"}, Allow: []string{"Bash(npx *)"}} // threads' only
 	l, err = a.Launch(coord)
 	if err != nil {
