@@ -287,22 +287,31 @@ func (p *Project) NoteChanged(c caller.Caller, op, rel string) error {
 // indexDesc is the most an index line says of a note, in runes.
 const indexDesc = 120
 
-// IndexLine is note n's line in MEMORY.md: "- [title](memory/file.md):
-// what it holds (touches: a, b)". What it holds is kept, the
-// description the note's line had already (kept, "" for none), else
-// the note's first line of text (a heading's text, but none of the
-// schema's section headings); a free-form note (no front matter) shows
-// by its file name and its first line, whatever it is.
-func IndexLine(n Note, kept string) string {
+// indexTitle is the title note n's line in MEMORY.md shows: its front
+// matter's title, else keptTitle, the one its line had already ("" for
+// none), else its first heading (a note with front matter) or its file
+// name (a free-form note).
+func indexTitle(n Note, keptTitle string) string {
 	title := n.Title
-	var desc string
-	if n.Front {
-		desc = firstLine(n.Body, true)
-	} else {
+	switch {
+	case n.Front && n.titled:
+	case textsafe.Line(keptTitle, 0) != "":
+		title = keptTitle
+	case !n.Front:
 		title = strings.TrimSuffix(path.Base(n.Path), ".md")
-		desc = firstLine(n.Body, false)
 	}
-	title = strings.NewReplacer("[", "(", "]", ")").Replace(textsafe.Line(title, indexDesc))
+	return strings.NewReplacer("[", "(", "]", ")").Replace(textsafe.Line(title, indexDesc))
+}
+
+// IndexLine is note n's line in MEMORY.md: "- [title](memory/file.md):
+// what it holds (touches: a, b)". The title is indexTitle's; what it
+// holds is kept, the description the note's line had already ("" for
+// none), else the note's first line of text (a heading's text, but none
+// of the schema's section headings; for a free-form note, no front
+// matter, its first line whatever it is).
+func IndexLine(n Note, keptTitle, kept string) string {
+	title := indexTitle(n, keptTitle)
+	desc := firstLine(n.Body, n.Front)
 	line := fmt.Sprintf("- [%s](%s)", title, n.Path)
 	if kept = textsafe.Line(kept, 0); kept != "" {
 		line += ": " + kept
@@ -336,19 +345,20 @@ func firstLine(text string, skipHeads bool) string {
 	return ""
 }
 
-// indexLineRE reads a note's line in MEMORY.md: its path, then the rest
-// after the link.
-var indexLineRE = regexp.MustCompile(`^- \[.*?\]\((memory/[^)\s]+)\)(.*)$`)
+// indexLineRE reads a note's line in MEMORY.md: its title, its path,
+// then the rest after the link.
+var indexLineRE = regexp.MustCompile(`^- \[(.*?)\]\((memory/[^)\s]+)\)(.*)$`)
 
-// keptDesc is the description of index line l, by its note's path: the
-// text after the link and its ":" (or a dash), without the touches tm
-// adds. ok is false for a line that isn't a note's.
-func keptDesc(l string) (path, desc string, ok bool) {
+// keptLine is what index line l says of its note: its path, its title
+// and its description, the text after the link and its ":" (or a dash),
+// without the touches tm adds. ok is false for a line that isn't a
+// note's.
+func keptLine(l string) (path, title, desc string, ok bool) {
 	m := indexLineRE.FindStringSubmatch(l)
 	if m == nil {
-		return "", "", false
+		return "", "", "", false
 	}
-	desc = strings.TrimSpace(m[2])
+	title, path, desc = strings.TrimSpace(m[1]), m[2], strings.TrimSpace(m[3])
 	if i := strings.LastIndex(desc, "(touches: "); i >= 0 && strings.HasSuffix(desc, ")") {
 		desc = strings.TrimSpace(desc[:i])
 	}
@@ -358,7 +368,7 @@ func keptDesc(l string) (path, desc string, ok bool) {
 			break
 		}
 	}
-	return m[1], desc, true
+	return path, title, desc, true
 }
 
 // isIndexLine says whether l is one of MEMORY.md's lines for a note.
@@ -399,19 +409,25 @@ func (p *Project) RebuildIndex() (bool, error) {
 		}
 	}
 	lines := strings.Split(strings.ReplaceAll(string(old), "\r\n", "\n"), "\n")
-	kept := map[string]string{}
+	type said struct{ title, desc string }
+	kept := map[string]said{}
 	for _, l := range lines {
 		if isIndexLine(l) {
-			if path, desc, ok := keptDesc(l); ok && desc != "" {
+			if path, title, desc, ok := keptLine(l); ok {
 				if _, seen := kept[path]; !seen {
-					kept[path] = desc
+					kept[path] = said{title, desc}
 				}
 			}
 		}
 	}
+	// By the title each line shows.
+	slices.SortFunc(notes, func(a, b Note) int {
+		ta, tb := indexTitle(a, kept[a.Path].title), indexTitle(b, kept[b.Path].title)
+		return cmp.Or(cmp.Compare(strings.ToLower(ta), strings.ToLower(tb)), cmp.Compare(a.Path, b.Path))
+	})
 	list := make([]string, len(notes))
 	for i, n := range notes {
-		list[i] = IndexLine(n, kept[n.Path])
+		list[i] = IndexLine(n, kept[n.Path].title, kept[n.Path].desc)
 	}
 	var out []string
 	placed := false
@@ -482,8 +498,7 @@ func (p *Project) SyncIndex() (bool, error) {
 	return changed, err
 }
 
-// indexNotes are the notes RebuildIndex lists, sorted by the title
-// their line shows.
+// indexNotes are the notes RebuildIndex lists.
 func (p *Project) indexNotes() ([]Note, error) {
 	ents, err := os.ReadDir(p.Path("memory"))
 	if errors.Is(err, fs.ErrNotExist) {
@@ -509,14 +524,5 @@ func (p *Project) indexNotes() ([]Note, error) {
 		}
 		notes = append(notes, ParseNote(rel, string(data)))
 	}
-	shown := func(n Note) string {
-		if n.Front {
-			return strings.ToLower(n.Title)
-		}
-		return strings.ToLower(strings.TrimSuffix(path.Base(n.Path), ".md"))
-	}
-	slices.SortFunc(notes, func(a, b Note) int {
-		return cmp.Or(cmp.Compare(shown(a), shown(b)), cmp.Compare(a.Path, b.Path))
-	})
 	return notes, nil
 }

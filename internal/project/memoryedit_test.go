@@ -174,7 +174,7 @@ Our own words about the list.
 
 Our own words about the list.
 
-- [gotchas](memory/gotchas.md): hand-written
+- [Gotchas](memory/gotchas.md): hand-written
 - [plain](memory/plain.md): just a line
 - [Retries stay at 4](memory/retries.md): Four retries, then a backoff. (touches: internal/ticker/pr.go, repo:api)
 
@@ -283,8 +283,10 @@ func TestNoteStamp(t *testing.T) {
 }
 
 // TestRebuildIndexKeepsWording: an index an older tm left, its lines
-// written by hand, keeps each note's description; titles and touches
-// follow the notes, a new note gets its first line, a removed one goes.
+// written by hand, keeps each note's description, and the title of a
+// note whose front matter gives none; a front-matter title and the
+// touches follow the note, a new note gets its file name and first
+// line, a removed one goes.
 func TestRebuildIndexKeepsWording(t *testing.T) {
 	p := memoryProject(t)
 	os.MkdirAll(p.Path("memory"), 0o755)
@@ -292,6 +294,7 @@ func TestRebuildIndexKeepsWording(t *testing.T) {
 	os.WriteFile(p.Path("memory", "backlog.md"), []byte("Backlog means open.\n"), 0o644)
 	os.WriteFile(p.Path("memory", "retries.md"), []byte("+++\ntitle = \"Retries stay at 4\"\ntouches = [\"internal/ticker/\"]\n+++\n## Decided\nFour.\n"), 0o644)
 	os.WriteFile(p.Path("memory", "fresh.md"), []byte("# Fresh\nA new note.\n"), 0o644)
+	os.WriteFile(p.Path("memory", "untitled.md"), []byte("+++\ntouches = [\"a/\"]\n+++\n# A heading\nBody.\n"), 0o644)
 	os.WriteFile(p.Path("MEMORY.md"), []byte(`# Memory
 
 One line per memory file.
@@ -300,6 +303,7 @@ One line per memory file.
 - [Backlog = open status](memory/backlog.md) — 'backlog' means status open
 - [Retries](memory/retries.md): the poller's retries, curated (touches: old/path.go)
 - [Gone](memory/gone.md): a note removed by hand
+- [Curated name](memory/untitled.md): its own words
 `), 0o644)
 	if _, err := p.RebuildIndex(); err != nil {
 		t.Fatal(err)
@@ -309,9 +313,10 @@ One line per memory file.
 
 One line per memory file.
 
-- [backlog](memory/backlog.md): 'backlog' means status open
-- [decisions](memory/decisions.md): architecture, who does what (current state)
+- [Backlog = open status](memory/backlog.md): 'backlog' means status open
+- [Curated name](memory/untitled.md): its own words (touches: a/)
 - [fresh](memory/fresh.md): Fresh
+- [Product decisions](memory/decisions.md): architecture, who does what (current state)
 - [Retries stay at 4](memory/retries.md): the poller's retries, curated (touches: internal/ticker/)
 `
 	if string(got) != want {

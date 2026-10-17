@@ -74,6 +74,8 @@ type Note struct {
 	// read as free-form text, all of it the body).
 	Body  string `json:"-"`
 	Front bool   `json:"front"`
+	// titled: the front matter gives the title.
+	titled bool
 }
 
 // ParseNote parses the note at path (memory/<name>.md) from its text.
@@ -84,6 +86,7 @@ func ParseNote(p, text string) Note {
 	var f NoteFront
 	if body, err := mdfile.Decode([]byte(text), &f); err == nil && len(body) < len(text) {
 		n.NoteFront, n.Body, n.Front = f, string(body), true
+		n.titled = strings.TrimSpace(f.Title) != ""
 	}
 	if strings.TrimSpace(n.Title) == "" {
 		n.Title = noteTitle(n.Body, strings.TrimSuffix(path.Base(p), ".md"))
