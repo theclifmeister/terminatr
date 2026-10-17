@@ -349,8 +349,8 @@ function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Den
       if (d) return d
     } else if (SHELLS.has(cmd)) {
       // bash -c STRING runs the string.
-      const i = args.findIndex(a => SHELL_C.test(a))
-      const d = i >= 0 && i + 1 < args.length ? judgeBash(r, has, args[i + 1]) : null
+      const c = shellCommand(args)
+      const d = c !== null ? judgeBash(r, has, c) : null
       if (d) return d
     } else if (cmd === 'eval') {
       const d = judgeBash(r, has, args.join(' '))
@@ -358,7 +358,7 @@ function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Den
     } else if (cmd === 'pwsh' || cmd === 'powershell') {
       const d = judgePwsh(r, has, args)
       if (d) return d
-    } else if (cmd === 'rm' && has('delete-branch') && args.some(a => /^-[a-zA-Z]*[rR]/.test(a) || a === '--recursive')) {
+    } else if (cmd === 'rm' && has('delete-branch') && args.some(a => /^-[a-zA-Z]*[rR]/.test(a) || isLong(a, '--recursive'))) {
       for (const a of args) {
         if (a.startsWith('-')) continue
         if (isWorktreeRoot(r, abs(r, a))) return deny(r, 'delete-branch', `rm -r of ${safe(abs(r, a))}`)
@@ -411,10 +411,10 @@ function judgeGit(r: Rules, has: (id: string) => boolean, args: string[]): Denia
   }
   const sub = args[i]
   const rest = args.slice(i + 1)
-  // long: one of the long options, with or without a value; flag: that
-  // or the short one, alone or among others (-fu; digits too: -4 is
-  // --ipv4).
-  const long = (...names: string[]) => rest.some(a => names.some(l => a === l || a.startsWith(l + '=')))
+  // long: one of the long options, with or without a value, or its
+  // abbreviation; flag: that or the short one, alone or among others
+  // (-fu; digits too: -4 is --ipv4).
+  const long = (...names: string[]) => rest.some(a => names.some(l => isLong(a, l)))
   const flag = (short: string, ...names: string[]) => long(...names) || rest.some(a => /^-[a-zA-Z0-9]+$/.test(a) && a.includes(short))
   switch (sub) {
     case 'push': {
@@ -601,6 +601,7 @@ function httpMethod(cmd: string, args: string[], url: number): string {
     for (let i = 0; i < args.length; i++) {
       const a = args[i]
       if (a.startsWith('--')) {
+        // curl takes its long options whole.
         let [name, val, eq] = cut(a)
         if (name === '--request') {
           if (!eq) val = args[++i] ?? ''
@@ -631,9 +632,9 @@ function httpMethod(cmd: string, args: string[], url: number): string {
     if (get && implied === 'POST') implied = ''
   } else if (cmd === 'wget') {
     for (let i = 0; i < args.length; i++) {
-      const [name, val, eq] = cut(args[i])
-      if (name === '--method') method = eq ? val : (args[i + 1] ?? '')
-      else if (name === '--post-data' || name === '--post-file') imply('POST')
+      const [, val, eq] = cut(args[i])
+      if (isLong(args[i], '--method')) method = eq ? val : (args[i + 1] ?? '')
+      else if (isLong(args[i], '--post-data') || isLong(args[i], '--post-file')) imply('POST')
     }
   } else if (cmd === 'http' || cmd === 'https' || cmd === 'xh') {
     if (url > 0 && HTTP_METHODS.has(args[url - 1].toUpperCase())) method = args[url - 1]
@@ -1115,7 +1116,7 @@ function strip(words: string[]): string[] {
         if (k >= 0) {
           name = o.slice(0, k)
           val = o.slice(k + 1)
-        } else if ((wr.long ?? []).includes(o) && i < words.length) val = words[i++]
+        } else if ((wr.long ?? []).some(l => isLong(o, l)) && i < words.length) val = words[i++]
       } else {
         let k = 1
         while (k < o.length && !(wr.short ?? '').includes(o[k])) k++
@@ -1125,7 +1126,7 @@ function strip(words: string[]): string[] {
           if (val === '' && i < words.length) val = words[i++]
         }
       }
-      if (w === 'env' && (name === '-S' || name === '--split-string')) {
+      if (w === 'env' && (name === '-S' || isLong(name, '--split-string'))) {
         // env -S 'a b': the string is words.
         words = [...val.split(/\s+/).filter(Boolean), ...words.slice(i)]
         from = 0
@@ -1139,12 +1140,39 @@ function strip(words: string[]): string[] {
   return from >= 0 && from < words.length ? words.slice(from) : []
 }
 
+// isLong: a is the long option l, with or without a value, or an
+// abbreviation of it. git and getopt_long take any prefix of a long
+// option (--force-w for --force-with-lease); one that other options share
+// too is an error to them, so matching it here only refuses a command
+// that would fail anyway.
+function isLong(a: string, l: string): boolean {
+  const name = a.split('=', 1)[0]
+  return name.length > 2 && name.startsWith('--') && l.startsWith(name)
+}
+
+// shellCommand is the string bash -c runs: the first argument after the
+// -c that is not an option (bash -c -e -- STRING), -o and -O taking a
+// value.
+function shellCommand(args: string[]): string | null {
+  const i = args.findIndex(a => SHELL_C.test(a))
+  if (i < 0) return null
+  let value = /[oO]/.test(args[i])
+  for (let j = i + 1; j < args.length; j++) {
+    const a = args[j]
+    if (value) value = false
+    else if (a === '--' || a === '-') return j + 1 < args.length ? args[j + 1] : null
+    else if (a.length > 1 && (a[0] === '-' || a[0] === '+')) value = a[1] !== '-' && /[oO]/.test(a)
+    else return a
+  }
+  return null
+}
+
 // positionals are args without their options, valued options skipping
 // their value.
 function positionals(args: string[], valued: string[]): string[] {
   const out: string[] = []
   for (let i = 0; i < args.length; i++) {
-    if (valued.includes(args[i])) i++
+    if (valued.some(v => args[i] === v || (v.startsWith('--') && !args[i].includes('=') && isLong(args[i], v)))) i++
     else if (args[i] === '<' || args[i] === '>') i++
     else if (!args[i].startsWith('-')) out.push(args[i])
   }
@@ -1435,7 +1463,7 @@ function psRecursive(a: string): boolean {
     const v = psValue(a)
     return v === undefined || v.toLowerCase() !== '$false'
   }
-  return /^-[a-zA-Z]*[rR]/.test(a) || a === '--recursive'
+  return /^-[a-zA-Z]*[rR]/.test(a) || isLong(a, '--recursive')
 }
 
 // psPaths are the paths among a cmdlet's arguments: those not options,
