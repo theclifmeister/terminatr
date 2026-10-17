@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/plat/shell"
 )
 
@@ -103,14 +104,11 @@ var (
 	upperRE = regexp.MustCompile(`^[A-Z_]{0,32}$`)
 	oidRE   = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	urlRE   = regexp.MustCompile(`^https://[A-Za-z0-9.-]+(/[A-Za-z0-9._-]+){2}/pull/[0-9]{1,9}$`)
-	// branchRE is a branch name tm shows and passes to git: no spaces,
-	// control characters or leading dash.
-	branchRE = regexp.MustCompile(`^[A-Za-z0-9_.][A-Za-z0-9_./-]{0,99}$`)
 )
 
 // ValidBranch reports whether b is a branch name tm shows and passes to
-// git.
-func ValidBranch(b string) bool { return branchRE.MatchString(b) }
+// git (gitx.ValidBranch, the rule thread branches are made by too).
+func ValidBranch(b string) bool { return gitx.ValidBranch(b) }
 
 // parseGitHubPR reads gh's JSON into the fixed fields. Anything outside
 // the expected shapes is dropped, not passed on.
@@ -137,7 +135,7 @@ func parseGitHubPR(data []byte) (PR, error) {
 		merge = g.MergeCommit.Oid
 	}
 	pr.setRefs(g.MergedAt, g.HeadRefOid, merge, g.BaseRefName)
-	if !g.CrossRepo && branchRE.MatchString(g.HeadRefName) {
+	if !g.CrossRepo && ValidBranch(g.HeadRefName) {
 		pr.Branch = g.HeadRefName
 	}
 	if upperRE.MatchString(g.Mergeable) {
@@ -241,7 +239,7 @@ func (g GitHub) PRHead(repo, pr string) (state string, number int, head string) 
 		return "", 0, ""
 	}
 	f := strings.Fields(string(b))
-	if len(f) != 3 || !branchRE.MatchString(f[2]) {
+	if len(f) != 3 || !ValidBranch(f[2]) {
 		return "", 0, ""
 	}
 	fmt.Sscanf(f[1], "%d", &number)

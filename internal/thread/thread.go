@@ -14,6 +14,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
@@ -244,8 +245,10 @@ func WorktreeDir(slug, id, title string) (string, error) {
 }
 
 // BranchName is the thread's branch: the branch_name template (""
-// for config.DefaultBranchName) filled with the thread's values, refused
-// with the reason when the template or the result is no branch name.
+// for config.DefaultBranchName) filled with the thread's values, the
+// title shortened so the name fits gitx.MaxBranch, refused with the
+// reason when the template or the result is no branch name tm takes
+// (gitx.ValidBranch, the rule its PRs are looked up by).
 func BranchName(template, slug, id, task, title string) (string, error) {
 	if template == "" {
 		template = config.DefaultBranchName
@@ -257,7 +260,19 @@ func BranchName(template, slug, id, task, title string) (string, error) {
 	if len(s) > 40 {
 		s = strings.TrimRight(s[:40], "-")
 	}
-	return config.ExpandBranchName(template, slug, id, task, s), nil
+	name := config.ExpandBranchName(template, slug, id, task, s)
+	for len(name) > gitx.MaxBranch && s != "" {
+		cut := len(s) - (len(name) - gitx.MaxBranch)
+		if cut < 0 {
+			cut = 0
+		}
+		s = strings.TrimRight(s[:cut], "-")
+		name = config.ExpandBranchName(template, slug, id, task, s)
+	}
+	if !gitx.ValidBranch(name) {
+		return "", fmt.Errorf("branch_name %q makes %q, which is no branch name tm takes (at most %d characters from A-Z a-z 0-9 _ . / -)", template, name, gitx.MaxBranch)
+	}
+	return name, nil
 }
 
 func titleSuffix(title string) string {

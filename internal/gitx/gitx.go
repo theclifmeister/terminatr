@@ -203,6 +203,36 @@ func (c *Capped) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// MaxBranch is the longest branch name tm takes.
+const MaxBranch = 100
+
+// ValidBranch reports whether b is a branch name tm creates, shows and
+// passes to git: at most MaxBranch characters from A-Z a-z 0-9 _ . / -,
+// not starting with '-' or '/', and one git check-ref-format --branch
+// accepts (no "..", "//", component starting with '.' or ending in
+// ".lock", trailing '/' or '.', nor "HEAD"). It is the one rule for a
+// branch name, checked without running git.
+func ValidBranch(b string) bool {
+	if b == "" || len(b) > MaxBranch || b == "HEAD" || b[0] == '-' || b[0] == '/' {
+		return false
+	}
+	for i := 0; i < len(b); i++ {
+		c := b[i]
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '.' || c == '/' || c == '-') {
+			return false
+		}
+	}
+	if strings.Contains(b, "..") || strings.HasSuffix(b, ".") {
+		return false
+	}
+	for _, part := range strings.Split(b, "/") {
+		if part == "" || part[0] == '.' || strings.HasSuffix(part, ".lock") {
+			return false
+		}
+	}
+	return true
+}
+
 // CheckRefFormat reports whether git check-ref-format accepts name with
 // flags (--branch, --allow-onelevel); err when git can't be run.
 func CheckRefFormat(name string, flags ...string) (bool, error) {

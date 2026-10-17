@@ -304,3 +304,23 @@ func TestOneRunner(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestValidBranch(t *testing.T) {
+	long := strings.Repeat("a", MaxBranch)
+	for b, want := range map[string]bool{
+		"main": true, "tm/x/t-1-fix": true, "users/clif.v2_x": true, long: true,
+		"": false, long + "a": false, "-x": false, "/x": false, "a+b": false, "a b": false,
+		"a..b": false, "a//b": false, "a/": false, "a.": false, "a/.b": false, ".a": false,
+		"a.lock": false, "a.lock/b": false, "HEAD": false, "a@{b": false, "a~1": false,
+	} {
+		if got := ValidBranch(b); got != want {
+			t.Errorf("ValidBranch(%q) = %v, want %v", b, got, want)
+		}
+		// Whatever tm takes, git takes.
+		if ValidBranch(b) {
+			if ok, err := CheckRefFormat(b, "--branch"); err != nil || !ok {
+				t.Errorf("git refuses %q, ValidBranch takes it (%v)", b, err)
+			}
+		}
+	}
+}

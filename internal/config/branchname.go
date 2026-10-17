@@ -58,9 +58,11 @@ func ExpandBranchName(template, project, id, task, title string) string {
 
 // CheckBranchName checks a branch_name template, with the reason it is
 // refused: it must name {id} (a branch per thread), only use the
-// placeholders {project}, {id}, {task} and {title}, make a branch git
-// accepts, and, with no task, not leave a doubled or trailing '-' or
-// '/'. The error has no key in front.
+// placeholders {project}, {id}, {task} and {title}, make a branch name
+// tm takes (gitx.ValidBranch), also for the longest project slug with
+// no title (BranchName shortens the title to fit), and, with no task,
+// not leave a doubled or trailing '-' or '/'. It runs no program: it is
+// checked on every settings resolution. The error has no key in front.
 func CheckBranchName(template string) error {
 	if strings.TrimSpace(template) == "" {
 		return limit("must not be empty")
@@ -90,12 +92,18 @@ func CheckBranchName(template string) error {
 		if bad := separatorFault(name); bad != "" {
 			return limit(fmt.Sprintf("would leave %s in the branch name (%s)", bad, name))
 		}
-		if err := gitBranchOK(name); err != nil {
-			return err
+		if !gitx.ValidBranch(name) {
+			return limit(fmt.Sprintf("would make a branch name git refuses (%s)", name))
 		}
+	}
+	if name := ExpandBranchName(template, strings.Repeat("p", MaxProjectSlug), "t-99999", "T99999", ""); len(name) > gitx.MaxBranch {
+		return limit(fmt.Sprintf("would make a branch name over %d characters for a project slug of %d", gitx.MaxBranch, MaxProjectSlug))
 	}
 	return nil
 }
+
+// MaxProjectSlug is the longest project slug (project.ValidSlug).
+const MaxProjectSlug = 64
 
 // separatorFault names what is wrong with name's separators, "" for
 // nothing: a doubled '-' or '/', a '-' next to a '/', or either at an
@@ -110,15 +118,4 @@ func separatorFault(name string) string {
 		return "a leading separator"
 	}
 	return ""
-}
-
-func gitBranchOK(name string) error {
-	ok, err := gitx.CheckRefFormat(name, "--branch")
-	switch {
-	case err != nil:
-		return fmt.Errorf("can't check the branch name: %w", err)
-	case !ok:
-		return limit(fmt.Sprintf("would make a branch name git refuses (%s)", name))
-	}
-	return nil
 }

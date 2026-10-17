@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/codehost"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
@@ -387,9 +389,21 @@ func TestBranchName(t *testing.T) {
 			t.Errorf("%+v: %q, %v", c, got, err)
 		}
 	}
-	for _, bad := range []string{"feature/{title}", "x/{id}/{y}", "a b/{id}"} {
+	for _, bad := range []string{"feature/{title}", "x/{id}/{y}", "a b/{id}", "users/clif+{id}-{title}"} {
 		if _, err := BranchName(bad, "demo", "t-0007", "", "x"); err == nil {
 			t.Errorf("%q accepted", bad)
+		}
+	}
+	// The longest slug and title still give a name the PR lookups take:
+	// the title is shortened to fit.
+	slug := strings.Repeat("s", config.MaxProjectSlug)
+	if !project.ValidSlug(slug) || project.ValidSlug(slug+"s") {
+		t.Fatal("config.MaxProjectSlug is not project.ValidSlug's limit")
+	}
+	for _, tmpl := range []string{"", "feature/{project}/{task}-{title}-{id}"} {
+		got, err := BranchName(tmpl, slug, "t-12345", "T12345", strings.Repeat("word ", 30))
+		if err != nil || !codehost.ValidBranch(got) || !strings.Contains(got, "-word") {
+			t.Errorf("%q: %q (%d chars), %v", tmpl, got, len(got), err)
 		}
 	}
 }

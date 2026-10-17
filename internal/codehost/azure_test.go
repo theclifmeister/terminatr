@@ -224,7 +224,7 @@ func FuzzParseAzurePR(f *testing.F) {
 			return
 		}
 		if pr.Number < 0 || pr.URL != "" && pr.URL != azurePRURL(shop, pr.Number) || !upperRE.MatchString(pr.State) || !upperRE.MatchString(pr.Review) ||
-			!upperRE.MatchString(pr.Mergeable) || !upperRE.MatchString(pr.MergeState) || pr.Base != "" && !branchRE.MatchString(pr.Base) || pr.Branch != "" && !branchRE.MatchString(pr.Branch) ||
+			!upperRE.MatchString(pr.Mergeable) || !upperRE.MatchString(pr.MergeState) || pr.Base != "" && !ValidBranch(pr.Base) || pr.Branch != "" && !ValidBranch(pr.Branch) ||
 			pr.Merge != "" && !oidRE.MatchString(pr.Merge) || pr.Head != "" && !oidRE.MatchString(pr.Head) ||
 			pr.Failed < 0 || pr.Checks != "" && pr.Checks != "pass" && pr.Checks != "fail" && pr.Checks != "pending" {
 			t.Fatalf("unchecked field: %+v", pr)

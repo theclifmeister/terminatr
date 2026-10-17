@@ -42,9 +42,6 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	if err != nil {
 		return err
 	}
-	if err := config.CheckBranchName(safety.BranchName); err != nil {
-		return usagef("branch_name %q %v (fix it in the settings or config.toml)", safety.BranchName, err)
-	}
 	// --agent overrides the user's thread_agent setting (§11.2); unset,
 	// the one installed agent.
 	agentName, err := threadAgent(o.agent, safety)
