@@ -74,12 +74,12 @@ func guardSettings(slug string) config.Safety {
 
 // guardAllows are a project's allowances as the matcher takes them: a
 // path from ~ made absolute, and once more with the symlinks of the
-// folder before its first * resolved, as writes are judged where they
-// land.
+// folder before its first * (an exact one's, its folder) resolved, as
+// writes are judged where they land.
 func guardAllows(list []config.GuardAllow, home string) []guard.Allow {
 	var out []guard.Allow
 	for _, a := range list {
-		g := guard.Allow{Rule: a.Rule, Command: a.Command, Path: a.Path}
+		g := guard.Allow{Rule: a.Rule, Command: a.Command, Path: a.Path, Exact: a.Exact}
 		if rest, ok := strings.CutPrefix(a.Path, "~/"); ok && home != "" {
 			g.Path = filepath.Join(home, filepath.FromSlash(rest))
 		}
@@ -87,7 +87,10 @@ func guardAllows(list []config.GuardAllow, home string) []guard.Allow {
 		if g.Path == "" {
 			continue
 		}
-		fixed, wild, _ := strings.Cut(g.Path, "*")
+		fixed, wild, pattern := g.Path, "", false
+		if !g.Exact {
+			fixed, wild, pattern = strings.Cut(g.Path, "*")
+		}
 		dir, tail := fixed, ""
 		if !strings.HasSuffix(fixed, string(filepath.Separator)) && !strings.HasSuffix(fixed, "/") {
 			dir, tail = filepath.Dir(fixed), fixed[len(filepath.Dir(fixed)):]
@@ -95,7 +98,7 @@ func guardAllows(list []config.GuardAllow, home string) []guard.Allow {
 		if real := realPath(filepath.Clean(dir)); real != filepath.Clean(dir) {
 			r := g
 			r.Path = strings.TrimSuffix(real, string(filepath.Separator)) + string(filepath.Separator) + strings.TrimLeft(tail, `/\`)
-			if strings.Contains(g.Path, "*") {
+			if pattern {
 				r.Path += "*" + wild
 			}
 			out = append(out, r)

@@ -113,7 +113,7 @@ guard_allow = [{ rule = "force-push", command = "git push -f origin tm/*" }, { r
 	}
 	keyPress(m, "down")
 	drain(t, m, keyPress(m, "x"))
-	if got := src.settings[len(src.settings)-1]; got != "projects.alpha.guard_allow=[{credentials  ~/.npmrc false}]" {
+	if got := src.settings[len(src.settings)-1]; got != "projects.alpha.guard_allow=[{credentials  ~/.npmrc false false}]" {
 		t.Errorf("removed own: %v", src.settings)
 	}
 	if l := m.projectData("alpha").Safety.GuardAllow; len(l) != 2 || !l[0].All {
@@ -136,6 +136,38 @@ guard_allow = [{ rule = "force-push", command = "git push -f origin tm/*" }, { r
 	drain(t, m, keyPress(m, "enter"))
 	if len(src.settings) != n || !strings.Contains(m.msg, "no *") {
 		t.Errorf("pattern taken: %v %q", src.settings, m.msg)
+	}
+}
+
+// TestGuardAllowViewExact: an exact allowance is marked so, and stays
+// exact when its text changes.
+func TestGuardAllowViewExact(t *testing.T) {
+	src, m := popupData(t)
+	os.WriteFile(filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml"), []byte(`[projects.alpha]
+guard_allow = [{ rule = "worktree-only", command = "cp build/* /opt/app/", exact = true }]
+`), 0o600)
+	c, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, _ := c.Safety("alpha")
+	m.projectData("alpha").Safety = &s
+	drain(t, m, guardRow(t, "alpha", "Guard allowances").change(m))
+	if out := screen(m); !strings.Contains(out, "Threads write only in their worktree · exact") {
+		t.Errorf("not marked exact:\n%s", out)
+	}
+	keyPress(m, "enter")
+	in, ok := m.top().(*inputView)
+	if !ok {
+		t.Fatalf("no input: %T", m.top())
+	}
+	if !strings.Contains(in.label, "exact") {
+		t.Errorf("label %q", in.label)
+	}
+	in.text = "cp dist/* /opt/app/"
+	drain(t, m, keyPress(m, "enter"))
+	if got := src.settings[len(src.settings)-1]; got != "projects.alpha.guard_allow=[{worktree-only cp dist/* /opt/app/  true false}]" {
+		t.Errorf("changed: %v", src.settings)
 	}
 }
 
@@ -254,5 +286,15 @@ func TestGuardDecide(t *testing.T) {
 	}
 	if _, err := guardDecide(who, home, guardlog.Entry{Project: "demo", Rule: "credentials", Subject: "cat ~/.ssh/*"}, guardAllowHere, tell); err == nil {
 		t.Error("credentials pattern allowed")
+	}
+	// A * in a call allowed is the call's own: the allowance is exact.
+	g, _, _ := guardlog.Record(home, guardlog.Entry{Project: "demo", Rule: "worktree-only", Tool: "Bash", Subject: "cp build/* /opt/app/"}, time.Now())
+	if _, err := guardDecide(who, home, g, guardAllowHere, tell); err != nil {
+		t.Fatal(err)
+	}
+	c, _ = config.Load()
+	s, _ = c.Safety("demo")
+	if own := config.OwnAllows(s.GuardAllow); !slices.Contains(own, config.GuardAllow{Rule: "worktree-only", Command: "cp build/* /opt/app/", Exact: true}) {
+		t.Errorf("not exact %+v", own)
 	}
 }

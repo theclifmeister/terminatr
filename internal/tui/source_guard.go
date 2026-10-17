@@ -64,7 +64,9 @@ func guardDecide(who caller.Caller, home string, e guardlog.Entry, how string, t
 	if e.Floor {
 		return "", errors.New("the guard never allows this one: keep refusing it")
 	}
-	a := config.GuardAllow{Rule: e.Rule}
+	// The call the user saw, exactly: a * in it is the call's own, not a
+	// wildcard.
+	a := config.GuardAllow{Rule: e.Rule, Exact: true}
 	if e.Path {
 		a.Path = e.Subject
 	} else {
