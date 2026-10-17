@@ -15,14 +15,17 @@ import (
 // sandbox is project slug's sandbox lists and presets for its threads on
 // platform goos (docs/SPEC.md §5.2), the presets on that apply there, and
 // a note for each setting that doesn't, which the launch skips:
-// config.toml keeps it. A config.toml that doesn't load opens nothing.
+// config.toml keeps it. A config.toml that doesn't load, or an entry
+// that fails the sandbox checks, opens nothing (fails closed) and gives
+// one note saying why, for the log and the launch's warnings.
 func (l launchConfig) sandbox(slug, goos string) (lists agent.SandboxLists, presets, skipped []string) {
-	if l.err != nil {
-		return lists, nil, nil
+	err := l.err
+	var t config.ThreadSandbox
+	if err == nil {
+		t, err = l.cfg.ThreadSandbox(slug)
 	}
-	t, err := l.cfg.ThreadSandbox(slug)
 	if err != nil {
-		return lists, nil, nil
+		return lists, nil, []string{fmt.Sprintf("project %s: sandbox lists and presets dropped, the thread starts without them (fix or remove the entry: tm settings, Sandbox tab): %v", slug, err)}
 	}
 	skip := func(key, what string) bool {
 		if config.SandboxApplies(key, goos) {

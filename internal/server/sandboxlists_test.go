@@ -109,3 +109,29 @@ excluded_commands = ["npx playwright *"]
 		t.Errorf("a brief over %d bytes was read", maxBrief)
 	}
 }
+
+// TestSandboxDroppedSaid: an entry that fails the checks drops the
+// project's sandbox lists and presets (fails closed), and the launch
+// says why: project, key, the entry and its rule.
+func TestSandboxDroppedSaid(t *testing.T) {
+	testPaths(t)
+	writeConfig(t, `[defaults.sandbox]
+browser_testing = true
+
+[projects.demo.sandbox]
+excluded_commands = ["make a$X"]
+allow = ["Bash(npx playwright *)"]
+`)
+	lists, presets, notes := loadLaunchConfig().sandbox("demo", config.OSMac)
+	if lists.Excluded != nil || lists.Allow != nil || lists.LocalBinding || len(presets) != 0 {
+		t.Errorf("not failed closed: %+v %q", lists, presets)
+	}
+	if len(notes) != 1 {
+		t.Fatalf("notes %q", notes)
+	}
+	for _, want := range []string{"demo", "projects.demo.sandbox.excluded_commands", "make a$X", "has a variable", "dropped"} {
+		if !strings.Contains(notes[0], want) {
+			t.Errorf("note lacks %q: %s", want, notes[0])
+		}
+	}
+}

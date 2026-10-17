@@ -214,7 +214,7 @@ func (s *Server) relaunchSession(old *session.Session, remote bool) (gone bool) 
 			l.kick, l.rec.AgentSessionID = r.Kickoff, newUUID()
 		}
 		stopping, changed := false, false
-		_, perr := s.launchAgent(l, func() *proto.Error {
+		_, _, perr := s.launchAgent(l, func() *proto.Error {
 			// Launched from a copy of the record: it must still be the
 			// one recorded, and nothing may have started under its id.
 			cur, ok := s.records[id]

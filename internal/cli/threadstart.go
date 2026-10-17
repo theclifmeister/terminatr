@@ -398,6 +398,9 @@ func (e *Env) launchThread(p *project.Project, r *thread.Record, brief, resume s
 	if err := e.call(proto.MethodSessionStart, params, &res); err != nil {
 		return proto.SessionInfo{}, err
 	}
+	for _, w := range res.Warnings {
+		fmt.Fprintf(e.Stderr, "warning: %s\n", w)
+	}
 	_, err = thread.Update(p, r.ID, func(x *thread.Record) error {
 		x.Session, x.State = res.Session.ID, thread.Running
 		if res.Session.AgentSID != "" {

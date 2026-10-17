@@ -544,6 +544,7 @@ type preparedLaunch struct {
 	kickoff   bool
 	agentSID  string
 	home      string
+	warnings  []string // what the launch tells the human who started it
 }
 
 // launchAgent prepares an agent session without s.mu and starts it
@@ -551,23 +552,24 @@ type preparedLaunch struct {
 // s.mu not held: the git, config and version reads of a launch, its
 // files and the agent's own launch steps take long enough (seconds for
 // the first --version) to stall every hook and request behind them.
-func (s *Server) launchAgent(l agentLaunch, ok func() *proto.Error) (*session.Session, *proto.Error) {
+func (s *Server) launchAgent(l agentLaunch, ok func() *proto.Error) (*session.Session, []string, *proto.Error) {
 	s.mu.Lock()
 	v := s.launchViewLocked()
 	s.mu.Unlock()
 	p, perr := s.prepareLaunch(l, v)
 	if perr != nil {
-		return nil, perr
+		return nil, nil, perr
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if ok != nil {
 		if perr := ok(); perr != nil {
 			p.abandon()
-			return nil, perr
+			return nil, nil, perr
 		}
 	}
-	return s.commitLaunchLocked(p)
+	sess, perr := s.commitLaunchLocked(p)
+	return sess, p.warnings, perr
 }
 
 // abandon undoes a prepared launch that doesn't start.
@@ -655,6 +657,7 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		for _, n := range skipped {
 			s.log.Printf("session %s: %s", r.ID, n)
 		}
+		p.warnings = skipped
 		if spec.BriefPath, err = presetBrief(p.rt, r.Brief, presets); err != nil {
 			s.log.Printf("session %s: sandbox presets' guidance: %v", r.ID, err)
 		}
@@ -979,7 +982,7 @@ func (s *Server) resumeOne(r SessionRecord) restartOutcome {
 		// Nothing to resume: the agent saved no conversation yet.
 		l.resume, l.kick, l.rec.AgentSessionID = false, r.Kickoff, newUUID()
 	}
-	if _, perr := s.launchAgent(l, func() *proto.Error {
+	if _, _, perr := s.launchAgent(l, func() *proto.Error {
 		if _, taken := s.records[r.ID]; taken {
 			return proto.Errorf(proto.ErrRefused, "session %s: id taken during the resume", r.ID)
 		}

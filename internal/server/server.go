@@ -995,11 +995,11 @@ func (s *Server) startSession(p proto.SessionStartParams) (any, *proto.Error) {
 		}
 		s.mu.Unlock()
 		// The id is new: only a stop since can keep it from starting.
-		sess, perr := s.launchAgent(l, s.notStoppingLocked)
+		sess, warns, perr := s.launchAgent(l, s.notStoppingLocked)
 		if perr != nil {
 			return nil, perr
 		}
-		return proto.SessionStartResult{Session: s.info(sess)}, nil
+		return proto.SessionStartResult{Session: s.info(sess), Warnings: warns}, nil
 	}
 	defer s.mu.Unlock()
 	env := sessionEnv(s.baseEnv(), s.terminatrEnv(rec))
