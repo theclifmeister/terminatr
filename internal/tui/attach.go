@@ -556,9 +556,7 @@ func (c *client) sync(v view.View) error {
 			c.mu.Unlock()
 		}
 		for _, p := range opened {
-			p.conn.Close()
-			p.r.Close()
-			p.mirror.Close()
+			p.discard()
 		}
 		return nil
 	}
@@ -721,6 +719,19 @@ func (c *client) free(p *pane) {
 	if c.focus == p {
 		c.focus = nil
 	}
+	c.forget(p)
+}
+
+// forget drops the selection state that points into p's mirror, the
+// drag in progress and the highlighted selection: p is freed, or its
+// mirror replaced. c.mu held.
+func (c *client) forget(p *pane) {
+	if c.selOn == p {
+		c.selOn = nil
+	}
+	if c.drag != nil && c.drag.p == p {
+		c.drag = nil
+	}
 }
 
 // lock takes c.mu unless the client is closed.
@@ -794,14 +805,19 @@ func (c *client) loadSnapshot(p *pane, payload []byte) error {
 		c.log.Printf("resync %s: new snapshot of %d bytes", p.info.ID, len(payload))
 	}
 	p.mirror = mirror
-	p.held, p.scrolled = false, false
+	p.scrolled = false
 	p.r.Invalidate()
-	if c.selOn == p {
-		c.selOn = nil
-	}
-	if c.drag != nil && c.drag.p == p {
-		c.drag = nil
-	}
+	c.forget(p)
+	c.bindMirror(p)
+	return nil
+}
+
+// bindMirror points p.mirror's hooks at p: the program's clipboard
+// writes and its mode-2026 holds. Whenever a mirror moves to another
+// pane (reattach), it is bound again there. c.mu held.
+func (c *client) bindMirror(p *pane) {
+	mirror := p.mirror
+	p.held = false
 	mirror.OnClipboard(c.forwardClipboard(p))
 	// Runs inside mirror.Write with c.mu held. At hold start the terminal
 	// still shows the last complete frame: capture it and keep drawing it.
@@ -812,7 +828,6 @@ func (c *client) loadSnapshot(p *pane, payload []byte) error {
 		}
 		p.held = held
 	})
-	return nil
 }
 
 func (c *client) readLoop(p *pane) {
@@ -2536,6 +2551,36 @@ func (c *client) applyPoll(pl *polled, now time.Time) bool {
 	return draw
 }
 
+// adopt moves np's connection, mirror and renderer, attached anew to
+// p's session, into p and returns p's old connection, for the caller to
+// close; ok is false, with nothing moved, when p is gone. The mirror's
+// hooks are bound to p, not np. c.mu and p.wmu held.
+func (c *client) adopt(p, np *pane) (old *tmclient.Client, ok bool) {
+	if p.gone {
+		return nil, false
+	}
+	old = p.conn
+	if p.mirror != nil {
+		p.mirror.Close()
+	}
+	if p.r != nil {
+		p.r.Close()
+	}
+	p.conn, p.mirror, p.r, p.info = np.conn, np.mirror, np.r, np.info
+	p.scrolled = false
+	c.forget(p)
+	c.bindMirror(p)
+	p.restarting = false
+	return old, true
+}
+
+// discard closes a pane open made that never joined the window.
+func (p *pane) discard() {
+	p.conn.Close()
+	p.mirror.Close()
+	p.r.Close()
+}
+
 // reattachWait bounds how long a restarting session may take to be back.
 const reattachWait = 15 * time.Second
 
@@ -2558,19 +2603,16 @@ func (c *client) reattach(p *pane) {
 			p.wmu.Lock()
 			if !c.lock() {
 				p.wmu.Unlock()
-				np.conn.Close()
-				np.r.Close()
+				np.discard()
 				return
 			}
-			old := p.conn
-			if p.mirror != nil {
-				p.mirror.Close()
+			old, ok := c.adopt(p, np)
+			if !ok { // the pane left the window meanwhile
+				c.mu.Unlock()
+				p.wmu.Unlock()
+				np.discard()
+				return
 			}
-			if p.r != nil {
-				p.r.Close()
-			}
-			p.conn, p.mirror, p.r, p.info = np.conn, np.mirror, np.r, np.info
-			p.restarting = false
 			// Place the new renderer; like any attach, no resize.
 			c.relayout()
 			c.flash = paneName(p.info) + " is back"
