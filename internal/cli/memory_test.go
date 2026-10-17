@@ -3,11 +3,14 @@ package cli
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/gittest"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
 // TestMemoryFind: tm memory find lists the notes that match words and
@@ -50,5 +53,61 @@ func TestMemoryFind(t *testing.T) {
 
 	if out := h.ok(thr, "memory", "template"); out != project.NoteTemplate {
 		t.Errorf("template:\n%s", out)
+	}
+}
+
+// TestMemoryCheck: tm memory check flags a thread's diff that changes a
+// note's decided value or adds what it ruled out, and tm report adds
+// the warnings to its ## Check without refusing.
+func TestMemoryCheck(t *testing.T) {
+	h := newHarness(t)
+	h.ok(human, "project", "new", "demo")
+	repo, rec := threadWithWorktree(t, h, "demo")
+	p, _ := project.Open("demo")
+	os.MkdirAll(filepath.Join(repo, "internal", "ticker"), 0o755)
+	os.WriteFile(filepath.Join(repo, "internal", "ticker", "pr.go"), []byte("package ticker\n\nconst retries = 4\n"), 0o644)
+	gittest.Run(t, repo, "add", ".")
+	gittest.Run(t, repo, "commit", "-q", "-m", "ticker")
+	gittest.Run(t, rec.Worktree, "reset", "-q", "--hard", gittest.Run(t, repo, "rev-parse", "HEAD"))
+
+	if out := h.ok(thr, "memory", "check", "--project", "demo"); !strings.Contains(out, "no note of demo's memory speaks against t-0001's diff") {
+		t.Errorf("no notes:\n%s", out)
+	}
+	os.MkdirAll(p.Path("memory"), 0o755)
+	os.WriteFile(p.Path("memory", "retries.md"), []byte("+++\ntitle = \"Retries stay at 4\"\ntouches = [\"internal/ticker/\"]\n+++\n## Decided\nKeep 4 for the gh poller.\n## Ruled out\nExponential backoff.\n"), 0o644)
+	os.WriteFile(filepath.Join(rec.Worktree, "internal", "ticker", "pr.go"), []byte("package ticker\n\nconst retries = 6\n\nvar exponentialBackoff = true\n"), 0o644)
+
+	want := []string{
+		"internal/ticker/pr.go changes 4 to 6; memory/retries.md (Retries stay at 4) decided 4",
+		"internal/ticker/pr.go adds exponential, backoff; memory/retries.md (Retries stay at 4) ruled it out",
+	}
+	out := h.ok(thr, "memory", "check", "--project", "demo")
+	for _, w := range want {
+		if !strings.Contains(out, w) {
+			t.Errorf("check lacks %q:\n%s", w, out)
+		}
+	}
+	var res struct {
+		Conflicts []project.Conflict `json:"conflicts"`
+	}
+	if err := json.Unmarshal([]byte(h.ok(coord, "memory", "check", "--thread", rec.ID, "--json", "--project", "demo")), &res); err != nil || len(res.Conflicts) != 2 {
+		t.Fatalf("json: %v %+v", err, res)
+	}
+	h.expect(2, "", coord, "memory", "check", "--project", "demo")
+	h.expect(1, "coordinator-only", thr, "memory", "check", "--thread", "t-0002", "--project", "demo")
+	h.expect(2, "", thr, "memory", "find", "x", "--thread", "t-0001", "--project", "demo")
+
+	code, out, errs := h.run(thr, "## Report\nDone.\n## Next\nMerge it\n## Check\nRun it.\n", "report", "--project", "demo")
+	if code != 0 {
+		t.Fatalf("report: %d %s", code, errs)
+	}
+	stored, _ := os.ReadFile(thread.Path(p, rec.ID, "REPORT.md"))
+	for _, w := range want {
+		if !strings.Contains(out, "Memory check: "+w) || !strings.Contains(string(stored), "\nMemory check: "+w+"\n") {
+			t.Errorf("report lacks %q:\n%s\n%s", w, out, stored)
+		}
+	}
+	if !strings.Contains(string(stored), "## Check\nRun it.\nMemory check: ") {
+		t.Errorf("warnings not after the thread's own ## Check:\n%s", stored)
 	}
 }

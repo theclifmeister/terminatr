@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -163,6 +164,56 @@ func Section(text, name string) string {
 		}
 	}
 	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
+// AddCheck is report text with lines added to the end of its ## Check
+// section; with none, a ## Check section of them goes before ## Remember,
+// else at the end. A line the text already has is left out, so a report
+// handed in again doesn't repeat them.
+func AddCheck(text string, lines []string) string {
+	text = strings.TrimSpace(strings.ReplaceAll(text, "\r\n", "\n"))
+	all := strings.Split(text, "\n")
+	var add []string
+	for _, l := range lines {
+		if !slices.ContainsFunc(all, func(x string) bool { return strings.TrimSpace(x) == l }) && !slices.Contains(add, l) {
+			add = append(add, l)
+		}
+	}
+	if len(add) == 0 {
+		return text + "\n"
+	}
+	check, remember := -1, -1
+	for i, l := range all {
+		h, ok := strings.CutPrefix(strings.TrimSpace(l), "## ")
+		switch {
+		case !ok:
+		case strings.TrimSpace(h) == "Check" && check < 0:
+			check = i
+		case strings.TrimSpace(h) == "Remember" && remember < 0:
+			remember = i
+		}
+	}
+	at := len(all)
+	switch {
+	case check >= 0:
+		// After the section's last line that isn't blank.
+		at = check + 1
+		for i := check + 1; i < len(all); i++ {
+			if strings.HasPrefix(strings.TrimSpace(all[i]), "## ") {
+				break
+			}
+			if strings.TrimSpace(all[i]) != "" {
+				at = i + 1
+			}
+		}
+	case remember >= 0:
+		add = append(append([]string{"## Check"}, add...), "")
+		at = remember
+	default:
+		add = append([]string{"", "## Check"}, add...)
+	}
+	out := slices.Concat(all[:at], add, all[at:])
+	return strings.TrimSpace(strings.Join(out, "\n")) + "\n"
 }
 
 // StoreReport validates text and stores it as REPORT.md, moving the
