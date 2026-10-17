@@ -104,7 +104,9 @@ func (c *Client) read() {
 }
 
 // Call sends a request and waits for its answer, ctx's end, or the host's.
-// After ctx ends the answer, when it comes, is dropped.
+// After ctx ends the answer, when it comes, is dropped. ctx bounds the
+// write too: a host that stopped reading its stdin cannot hold up Call
+// past it.
 func (c *Client) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	ch := make(chan *Message, 1)
 	c.mu.Lock()
@@ -121,8 +123,11 @@ func (c *Client) Call(ctx context.Context, method string, params any) (json.RawM
 		delete(c.waits, id)
 		c.mu.Unlock()
 	}
-	if err := c.conn.Request(id, method, params); err != nil {
+	if err := c.conn.RequestContext(ctx, id, method, params); err != nil {
 		forget()
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return nil, fmt.Errorf("%w: %v", ErrClosed, err)
 	}
 	select {
