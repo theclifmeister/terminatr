@@ -140,10 +140,10 @@ func (pv *projectView) modOffLines(m *dash, w int) []string {
 		return faintLines(fmt.Sprintf("Waiting for the %s mod to draw this tab…", id), w)
 	case md.State == mod.Enabled:
 		return append(faintLines(fmt.Sprintf("The %s mod draws this tab, and it is off for %s.", id, pv.slug), w),
-			faintLines(fmt.Sprintf("Turn it on for %s in the Mods tab (, then 3), or with tm mod enable %s --project %s.", pv.slug, id, pv.slug), w)...)
+			faintLines(fmt.Sprintf("Turn it on for %s in the Mods tab (, then 4), or with tm mod enable %s --project %s.", pv.slug, id, pv.slug), w)...)
 	}
 	return append(faintLines(fmt.Sprintf("The %s mod draws this tab, and it is off.", id), w),
-		faintLines(fmt.Sprintf("Turn it on in the Mods tab (, then 3), or with tm mod enable %s.", id), w)...)
+		faintLines(fmt.Sprintf("Turn it on in the Mods tab (, then 4), or with tm mod enable %s.", id), w)...)
 }
 
 // tabsFor are the mods' project tabs for project slug, in order, after
@@ -619,8 +619,8 @@ func (pv *projectView) modTab(m *dash) (proto.ModView, bool) {
 // modTabLabel is mod tab v's label: its number, title and count.
 func modTabLabel(v proto.ModView, slug string, i int) string {
 	label := v.Title
-	if i < 9 {
-		label = fmt.Sprintf("%d %s", i+1, label)
+	if i < 10 {
+		label = fmt.Sprintf("%d %s", (i+1)%10, label) // 0 is the tenth
 	}
 	if t := tree(v, slug); t != nil && t.Count != nil && v.State != proto.ModViewFailed {
 		label += fmt.Sprintf(" %d", *t.Count)

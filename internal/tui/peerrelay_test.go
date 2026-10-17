@@ -14,7 +14,7 @@ func TestPeersTabRelayUpdate(t *testing.T) {
 	src.peers = peersList()
 	src.peers.Peers[0].Link.RelayVersion = "v0.27.0"
 	m.data.Server = ServerInfo{Version: "v0.27.0", Latest: "v0.28.0"}
-	press(m, ",", "4")
+	press(m, ",", "5")
 	out := screen(m)
 	if !strings.Contains(out, "relay  relay.example.net · v0.27.0 · update available (u)") {
 		t.Fatalf("no relay version in\n%s", out)
@@ -79,7 +79,7 @@ func TestPeersTabTextFromAPeerIsPlain(t *testing.T) {
 	l.Version = "v0.27.0\x1b]0;owned\x07"
 	l.Error = "closed: \x1b]0;owned\x07\x1b[31mfake"
 	m.data.Server = ServerInfo{Version: "v0.27.0", Latest: "v0.28.0"}
-	press(m, ",", "4")
+	press(m, ",", "5")
 	if out := screen(m); strings.ContainsAny(out, "\x1b\x07") && strings.Contains(out, "\x1b]") {
 		t.Fatalf("raw bytes in\n%q", out)
 	}

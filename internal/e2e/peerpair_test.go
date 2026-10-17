@@ -47,7 +47,7 @@ func TestSmokePeerPairSettings(t *testing.T) {
 
 	w := studio.Window(110, 30)
 	w.WaitFor("n new project", wait)
-	w.Keys(",", "4")
+	w.Keys(",", "5")
 	w.WaitFor("Press n to pair", wait)
 	w.Golden("peers-empty.txt", popupMasks...)
 

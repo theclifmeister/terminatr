@@ -3,44 +3,198 @@ package tui
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
-// The sandbox lists of threads (docs/SPEC.md §5.2, Sandbox lists), after
-// the secret environment: the commands a thread runs outside its
-// sandbox, and the permission rules it gets on top of tm's. A project's
-// list of a key replaces all projects' (config.ThreadSandbox), so on a
-// project the view edits the project's own list, starting from all
-// projects' when it follows them, and f follows them again.
+// The Sandbox tab (docs/SPEC.md §5.2): what a project's threads may do
+// beyond their sandbox, in a project's popup and, for all projects, in
+// the , popup. Presets first, named switches that open what one kind of
+// tool needs while its commands stay in the sandbox; then, under
+// Advanced, the sandbox lists: the commands a thread runs outside its
+// sandbox, and the permission rules it gets on top of tm's. It shows
+// only what applies on the platform the server is on, where threads
+// run (config.SandboxSettings); config.toml keeps the rest, and a launch
+// skips it. A project's switch or list of a key replaces all projects'
+// (config.ThreadSandbox), so on a project a list's view edits the
+// project's own list, starting from all projects' when it follows
+// them, and f follows them again. Writes are the human's only.
 
 // sandboxOutside is what an excluded command opens, said wherever one is
 // added or listed.
 const sandboxOutside = "Excluded commands run outside the sandbox, with your full file and network access (tm's socket included): only the guard and the permission check still judge them."
 
+// sandboxBoth is what an excluded command with an allow rule covering it
+// means, said plainly wherever either is added or listed.
+const sandboxBoth = "An excluded command that an allow rule also covers runs outside the sandbox without asking: if it can run code (a test runner runs test files the thread can write), the thread may run any code as you without asking."
+
+// sandboxLocal is what local binding opens, put to the human before a
+// preset with it is turned on.
+const sandboxLocal = "Their sandboxed commands may then listen on ports, which macOS's sandbox doesn't limit to localhost, and connect to every service listening on a local port (a database, an IDE's or a browser's debug port): one of those that runs commands lets the thread out of the sandbox."
+
+// sandboxGuide heads the Sandbox tab.
+const sandboxGuide = "Prefer a preset: the thread's commands stay inside the sandbox, opened only as far as the tool needs. Excluded commands (Advanced) run outside it: a last resort. " + sandboxBoth
+
 // sandboxLists are each list's row label, help and view text.
 var sandboxLists = map[string]struct{ label, help, about, example string }{
-	config.SandboxExcluded: {"Sandbox: excluded commands",
-		"Commands a thread's Bash runs outside its sandbox, for a tool the sandbox can't hold (Playwright's Chromium on macOS). " + sandboxOutside + " Claude's Bash rule syntax: a trailing * takes any arguments. A project's list replaces all projects'. Claude threads only; Codex has no such setting.",
-		sandboxOutside + " Claude still asks, or auto mode decides, unless an allow rule covers the command.",
+	config.SandboxExcluded: {"Excluded commands",
+		"A last resort: commands a thread's Bash runs outside its sandbox, for a tool no preset gets working (full Chrome, headed Playwright). " + sandboxOutside + " Claude's Bash rule syntax: a trailing * takes any arguments. A project's list replaces all projects'.",
+		sandboxOutside + " Claude still asks, or auto mode decides, unless an allow rule covers the command. " + sandboxBoth,
 		"npx playwright *"},
-	config.SandboxAllow: {"Sandbox: allow rules",
-		"Permission rules a thread's agent gets on top of tm's, so auto mode or a prompt doesn't stop a command you excluded (Bash(npx playwright *)). tm's deny rules and the guard still win. A project's list replaces all projects'. Claude threads only.",
-		"Calls these rules match run without a prompt or auto mode's review; tm's deny rules and the guard still win.",
+	config.SandboxAllow: {"Allow rules",
+		"Permission rules a thread's agent gets on top of tm's, so auto mode or a prompt doesn't stop a command you excluded (Bash(npx playwright *)). " + sandboxBoth + " tm's deny rules and the guard still win. A project's list replaces all projects'.",
+		"Calls these rules match run without a prompt or auto mode's review; tm's deny rules and the guard still win. " + sandboxBoth,
 		"Bash(npx playwright *)"},
 }
 
-// sandboxRows are the two lists' rows.
-func (sr safetyRows) sandboxRows() []setting {
-	return []setting{sr.sandboxRow(config.SandboxExcluded), sr.sandboxRow(config.SandboxAllow)}
+// sandboxPresets are each preset's row label and help.
+var sandboxPresets = map[string]struct{ label, help string }{
+	config.SandboxBrowser: {"Browser testing (Playwright, Chromium)",
+		"Playwright and other Chromium tools inside the sandbox: threads are told to launch the headless shell in one process (--single-process), the one Chromium that starts in macOS's sandbox, and their commands may serve and open pages on local ports, as Local dev servers. Full Chrome and headed runs still need an excluded command (Advanced)."},
+	config.SandboxDevServers: {"Local dev servers",
+		"Threads' commands may listen on and connect to local ports: a dev server, a test server, a local database. That reaches every local service on a port too (an IDE's or a browser's debug port), and a server bound to all interfaces is reachable from your network; turning it on says so first."},
+}
+
+// agentsWord says which agents' threads get key.
+func agentsWord(key string) string {
+	if config.SandboxSettings[key].Codex {
+		return "Claude and Codex threads."
+	}
+	return "Claude threads only; Codex has no such setting."
+}
+
+// serverOS is the platform the server runs threads on: the one it says,
+// else this console's (a server of an older build says none).
+func (m *dash) serverOS() string {
+	if os := m.data.Server.OS; os != "" {
+		return os
+	}
+	return caps.OS
+}
+
+// sandboxSettings are the Sandbox tab's rows for slug ("" for all
+// projects) on platform goos: the presets that apply there under
+// Presets, then the lists under Advanced.
+func sandboxSettings(slug, goos string) []setting {
+	sr := newSafetyRows(slug)
+	var rows []setting
+	for _, k := range config.SandboxPresets {
+		if config.SandboxApplies(k, goos) {
+			rows = append(rows, sr.presetRow(k))
+		}
+	}
+	if len(rows) > 0 {
+		rows[0].section = "Presets"
+	}
+	adv := len(rows)
+	for _, k := range config.SandboxKeys {
+		if config.SandboxApplies(k, goos) {
+			rows = append(rows, sr.sandboxRow(k))
+		}
+	}
+	if adv < len(rows) {
+		rows[adv].section = "Advanced"
+	}
+	return rows
+}
+
+// sandboxHead are the Sandbox tab's lines above its rows: the guidance,
+// and the platform it shows (with why no preset shows, when none does).
+func sandboxHead(m *dash, w int) []string {
+	goos := m.serverOS()
+	where := "Shown: what applies on " + config.OSName(goos) + ", where this server's threads run."
+	if !slices.ContainsFunc(config.SandboxPresets, func(k string) bool { return config.SandboxApplies(k, goos) }) {
+		where += " No preset applies there"
+		if goos == config.OSLinux {
+			where += ": Playwright's Chromium should need none in Linux's sandbox"
+		}
+		where += "."
+	}
+	return append(faintLines(sandboxGuide, w), append([]string{""}, faintLines(where, w)...)...)
+}
+
+// presetOf is whether preset key is on for the rows' threads, and
+// whether the table sets it itself (all projects' always does).
+func (sr safetyRows) presetOf(m *dash, key string) (bool, bool) {
+	if on, ok := m.data.SandboxPresets[sr.slug][key]; ok || sr.all {
+		return on, true
+	}
+	return m.data.SandboxPresets[""][key], false
+}
+
+func (sr safetyRows) presetRow(key string) setting {
+	p := sandboxPresets[key]
+	row := setting{label: p.label, help: p.help + " " + agentsWord(key) + " Threads get a change from their next start.",
+		value: func(m *dash) string {
+			on, _ := sr.presetOf(m, key)
+			return onOff(on)
+		},
+		change: func(m *dash) tea.Cmd {
+			on, _ := sr.presetOf(m, key)
+			next := !on
+			msg := p.label + " " + onOff(next) + " " + sr.forWho + ": threads get it from their next start"
+			if sr.all && !next {
+				return sr.savePreset(m, key, nil, msg) // off is all projects' default
+			}
+			if !next {
+				return sr.savePreset(m, key, &next, msg)
+			}
+			m.confirm(p.label+" "+sr.forWho, "Turn on "+p.label+" "+sr.forWho+"? "+sandboxLocal, func() tea.Cmd {
+				return sr.savePreset(m, key, &next, msg)
+			})
+			return nil
+		}}
+	if !sr.all {
+		row.from = func(m *dash) string {
+			if _, own := sr.presetOf(m, key); !own {
+				return config.AllProjectsName
+			}
+			return ""
+		}
+		row.unset = func(m *dash) tea.Cmd {
+			if _, own := sr.presetOf(m, key); !own {
+				m.msg = p.label + " of " + sr.slug + " already follows all projects"
+				return nil
+			}
+			return sr.savePreset(m, key, nil, sr.slug+" follows all projects' "+p.label+": threads get it from their next start")
+		}
+	}
+	return row
+}
+
+// savePreset writes preset key's switch in the rows' table (nil: none of
+// its own) and shows it at once.
+func (sr safetyRows) savePreset(m *dash, key string, on *bool, msg string) tea.Cmd {
+	if m.data.SandboxPresets == nil {
+		m.data.SandboxPresets = map[string]map[string]bool{}
+	}
+	sw := map[string]bool{}
+	for k, v := range m.data.SandboxPresets[sr.slug] {
+		sw[k] = v
+	}
+	if on == nil {
+		delete(sw, key)
+	} else {
+		sw[key] = *on
+	}
+	m.data.SandboxPresets[sr.slug] = sw
+	s, table := m.src, sr.table
+	return m.act(func() actionMsg {
+		if err := s.SetSandboxPreset(table, key, on); err != nil {
+			return actionMsg{err: settingsErr(err)}
+		}
+		return actionMsg{msg: msg}
+	})
 }
 
 func (sr safetyRows) sandboxRow(key string) setting {
 	l := sandboxLists[key]
-	row := setting{label: l.label, help: l.help,
+	row := setting{label: l.label, help: l.help + " " + agentsWord(key),
 		value: func(m *dash) string {
 			list, _ := sr.sandboxOf(m, key)
 			if len(list) == 0 {
@@ -194,6 +348,9 @@ func (v *sandboxView) add(m *dash) {
 		if w := config.SandboxWarning(v.list, e); w != "" {
 			q += " " + e + ": " + w + "."
 		}
+		if c := v.covered(m, e); c != "" {
+			q += " " + c + "."
+		}
 		if q == "" {
 			return save()
 		}
@@ -228,7 +385,10 @@ func (v *sandboxView) render(m *dash) string {
 		} else {
 			lines = append(lines, th().Head.Render(text))
 		}
-		if warn := config.SandboxWarning(v.list, e); warn != "" {
+		for _, warn := range []string{config.SandboxWarning(v.list, e), v.covered(m, e)} {
+			if warn == "" {
+				continue
+			}
 			for _, l := range warnLines(warn, w-2) {
 				lines = append(lines, "  "+l)
 			}
@@ -242,4 +402,29 @@ func (v *sandboxView) render(m *dash) string {
 		keys = "a add · x remove · f follow all projects · esc back"
 	}
 	return m.popup(box{title: l.label + " " + v.sr.forWho, body: lines, sel: sel, keys: keys})
+}
+
+// covered says which entries of the other list pair with entry e of the
+// view's list: the allow rule that lets excluded command e run without
+// asking, or the excluded commands allow rule e lets run so; "" for
+// none.
+func (v *sandboxView) covered(m *dash, e string) string {
+	if v.list == config.SandboxExcluded {
+		allow, _ := v.sr.sandboxOf(m, config.SandboxAllow)
+		if a := config.SandboxCovered(e, allow); a != "" {
+			return "the allow rule " + a + " covers it: it runs outside the sandbox without asking"
+		}
+		return ""
+	}
+	excluded, _ := v.sr.sandboxOf(m, config.SandboxExcluded)
+	var cmds []string
+	for _, x := range excluded {
+		if config.SandboxCovered(x, []string{e}) != "" {
+			cmds = append(cmds, x)
+		}
+	}
+	if len(cmds) == 0 {
+		return ""
+	}
+	return "covers the excluded " + strings.Join(cmds, ", ") + ": they run outside the sandbox without asking"
 }

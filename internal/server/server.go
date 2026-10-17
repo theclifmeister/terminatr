@@ -33,6 +33,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modview"
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/pin"
+	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/plat/shell"
@@ -846,7 +847,7 @@ func (s *Server) list() proto.SessionListResult {
 	}
 	s.mu.Unlock()
 	res := proto.SessionListResult{Sessions: []proto.SessionInfo{}, Alerts: s.alerts.Load(),
-		Version: version.Version, Build: s.build}
+		Version: version.Version, Build: s.build, OS: caps.OS}
 	if l := s.latest.Load(); l != nil {
 		res.Latest, res.Upgrade = l.Tag, l.Upgrade
 	}

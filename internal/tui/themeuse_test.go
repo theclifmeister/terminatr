@@ -108,7 +108,7 @@ func TestUnthemedProbe(t *testing.T) {
 func TestDashboardThemed(t *testing.T) {
 	withProbeTheme(t)
 	for _, keys := range [][]string{
-		nil, {"down", "down"}, {","}, {",", "2"}, {",", "3"}, {"?"}, {"i"}, {"t"}, {"n"}, {"a"},
+		nil, {"down", "down"}, {","}, {",", "2"}, {",", "4"}, {",", "3"}, {"?"}, {"i"}, {"t"}, {"n"}, {"a"},
 	} {
 		src := &fakeSource{data: testData()}
 		m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 40, State: DashState{Current: "beta"}})

@@ -175,6 +175,16 @@ func TestLaunch(t *testing.T) {
 	if ll, err := a.Launch(listed); err != nil || !slices.Equal(ll.Argv, want) || !slices.Equal(ll.Warnings, []string{sandboxListsGap}) {
 		t.Errorf("with sandbox lists: argv %q warnings %q, %v", ll.Argv, ll.Warnings, err)
 	}
+	// A preset's local binding is the thread profile's network
+	// allow_local_binding, without a warning.
+	bound := spec
+	bound.Sandbox = agent.SandboxLists{LocalBinding: true}
+	ll, err := a.Launch(bound)
+	if err != nil || len(ll.Warnings) > 0 || !slices.ContainsFunc(ll.Argv, func(s string) bool {
+		return strings.HasPrefix(s, "permissions={tm=") && strings.HasSuffix(s, `network={enabled=true,unix_sockets={"/run/tm.sock"="allow"},allow_local_binding=true}}}`)
+	}) {
+		t.Errorf("with local binding: argv %q warnings %q, %v", ll.Argv, ll.Warnings, err)
+	}
 	if !slices.Contains(l.Env, "TERMINATR_BIN=/bin/tm") || !slices.Contains(l.Unset, "CODEX_THREAD_ID") {
 		t.Errorf("env %q unset %q", l.Env, l.Unset)
 	}

@@ -333,7 +333,7 @@ func TestPopupClicks(t *testing.T) {
 	if pv.settings.sel != 2 || len(src.settings) != 1 || !strings.HasPrefix(src.settings[0], "projects.alpha.coordinator_approves=") {
 		t.Fatalf("click on a setting: sel %d, settings %v", pv.settings.sel, src.settings)
 	}
-	clickOn(t, m, "5 keys")
+	clickOn(t, m, "6 keys")
 	mouseAt(t, m, tea.MouseWheelDown, m.sideW()+10, 10)
 	m.render()
 	if pv.top[tabKeys] == 0 {

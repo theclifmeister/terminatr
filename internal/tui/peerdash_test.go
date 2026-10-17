@@ -208,14 +208,14 @@ func peersList() PeerList {
 func TestPeersTab(t *testing.T) {
 	m, src := remoteDash(t, "@mini/acme-api")
 	src.peers = peersList()
-	press(m, ",", "4")
+	press(m, ",", "5")
 	sv, ok := m.top().(*settingsView)
 	if !ok || sv.tab != tabPeers {
 		t.Fatalf("top %T", m.top())
 	}
 	out := screen(m)
 	for _, want := range []string{
-		"4 Peers",
+		"5 Peers",
 		"SHARED PROJECTS",
 		"[ ] terminatr",
 		"[ ] web",
@@ -278,7 +278,7 @@ func TestPeersTab(t *testing.T) {
 func TestPeersTabShare(t *testing.T) {
 	m, src := remoteDash(t, "@mini/acme-api")
 	src.peers = peersList()
-	press(m, ",", "4")
+	press(m, ",", "5")
 	screen(m)
 	press(m, "space")
 	if cv, ok := m.top().(*confirmView); !ok || cv.title != "Share terminatr" {
@@ -318,7 +318,7 @@ func TestPeersTabShare(t *testing.T) {
 func TestPeersTabPanes(t *testing.T) {
 	m, src := remoteDash(t, "@mini/acme-api")
 	src.peers = peersList()
-	press(m, ",", "4")
+	press(m, ",", "5")
 	sv := m.top().(*settingsView)
 	screen(m) // the tab reads the list as it draws
 	press(m, "down", "down")
@@ -378,7 +378,7 @@ func TestPeersTabLongName(t *testing.T) {
 	m, src := remoteDash(t, "@mini/acme-api")
 	src.peers = peersList()
 	src.peers.Peers[0].Alias = "3a5a3800c87c-E2A37F3E8BF5.local.example.internal.lan"
-	press(m, ",", "4")
+	press(m, ",", "5")
 	out := screen(m)
 	for _, want := range []string{"◉ 3a5a3800c87c-E2A37F3E8B…  linked · 38 ms", "panes  [off] · view · write"} {
 		if !strings.Contains(out, want) {
@@ -408,7 +408,7 @@ func pairStep(t *testing.T, m *dash, cmd tea.Cmd) tea.Cmd {
 func TestPeersTabRelay(t *testing.T) {
 	m, src := remoteDash(t, "@mini/acme-api")
 	src.peers = peersList()
-	press(m, ",", "4")
+	press(m, ",", "5")
 	screen(m)
 	// e on a project does nothing; on mini's panes row it asks.
 	press(m, "e")
@@ -458,7 +458,7 @@ func TestPeersTabRelay(t *testing.T) {
 func TestPeersTabPair(t *testing.T) {
 	m, src := remoteDash(t, "@mini/acme-api")
 	src.peers = peersList()
-	press(m, ",", "4")
+	press(m, ",", "5")
 	screen(m)
 	press(m, "n")
 	in, ok := m.top().(*inputView)
@@ -502,7 +502,7 @@ func TestPeersTabPair(t *testing.T) {
 // code again as typed.
 func TestPeersTabJoin(t *testing.T) {
 	m, src := remoteDash(t, "@mini/acme-api")
-	press(m, ",", "4")
+	press(m, ",", "5")
 	if out := screen(m); !strings.Contains(out, "Press n to pair") {
 		t.Errorf("empty tab:\n%s", out)
 	}
@@ -534,7 +534,7 @@ func TestPeersTabJoin(t *testing.T) {
 // popup; esc while the code waits cancels the pairing and closes it.
 func TestPeersTabPairErrors(t *testing.T) {
 	m, src := remoteDash(t, "@mini/acme-api")
-	press(m, ",", "4")
+	press(m, ",", "5")
 	screen(m)
 	src.pairErr = pairWords(&net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}, "wss://relay.example.net")
 	press(m, "n", "r", "e", "l", "a", "y")

@@ -81,7 +81,8 @@ type fakeSource struct {
 	// removed"), secretTests TestSecretEnv's ("slug NAME").
 	secrets     []string
 	secretTests []string
-	// sandbox are SetSandbox's calls ("table key [list]", nil when removed).
+	// sandbox are SetSandbox's and SetSandboxPreset's calls ("table key
+	// [list]", nil when removed; "table key on|off|follow").
 	sandbox     []string
 	restarted   []string // mod ids
 	fetchedMods []string // what FetchMod was asked for
@@ -386,6 +387,14 @@ func (f *fakeSource) SetSandbox(table, key string, list []string) error {
 		return config.UnsetSandbox(table, key)
 	}
 	return config.SetSandbox(table, key, list)
+}
+func (f *fakeSource) SetSandboxPreset(table, key string, on *bool) error {
+	word := "follow"
+	if on != nil {
+		word = onOff(*on)
+	}
+	f.sandbox = append(f.sandbox, table+" "+key+" "+word)
+	return config.SetSandboxPreset(table, key, on)
 }
 func (f *fakeSource) TestSecretEnv(slug, name string) (string, error) {
 	f.secretTests = append(f.secretTests, slug+" "+name)

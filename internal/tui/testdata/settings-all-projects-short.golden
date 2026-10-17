@@ -1,18 +1,18 @@
  PROJECTS                      2   │ tm dashboard                                     ● server ok · 6 sessions
  ■ alpha              2         ⚑  │ NEEDS YOU 2 ─────────────────────────────────────────────────────────────
  └─ coordin╭─ Settings ───────────────────────────────────────────────────────────────────────────╮
-    ├─ t-00│  1 General   2 All projects   3 Mods   4 Peers                                       │
+    ├─ t-00│  1 General   2 All projects   3 Sandbox   4 Mods   5 Peers                           │
     └─ t-00│ About: tm dev · server unknown · update check off                                    │deactivate
  ■ beta    │                                                                                      │
- └─ coordin│ your full file and network access (tm's socket included): only the guard and the     │
-    ├─ T4 W│ permission check still judge them. Claude's Bash rule syntax: a trailing * takes any │
-    └─ t-00│ arguments. A project's list replaces all projects'. Claude threads only; Codex has   │
-           │ no such setting.                                                                     │───────────
-           │                                                                                      │
-           │ Sandbox: allow rules         none                                                    │s  /y
-           │ Permission rules a thread's agent gets on top of tm's, so auto mode or a prompt      │
-           │ doesn't stop a command you excluded (Bash(npx playwright *)). tm's deny rules and    │
-           │ the guard still win. A project's list replaces all projects'. Claude threads only.   │
+ └─ coordin│ this project or all projects (the agent is told it may retry), or keep refusing it,  │
+    ├─ T4 W│ which stops listing it.                                                              │
+    └─ t-00│                                                                                      │
+           │ Secret environment           none                                                    │───────────
+           │ Variables a thread gets in its environment when it starts, each from gh auth token,  │
+           │ a login keychain item (macOS) or the server's own environment: its tools (npm, a     │s  /y
+           │ registry client) use the token and the guard keeps the agent from printing it. A     │
+           │ project's add to all projects', replacing one of the same name. Only the name and    │
+           │ where the value comes from are kept; enter lists them to add, remove or test.        │
            │                                                                                      │
            │ Every project follows these, a new one too, unless it sets its own in its popup (a   │
            │ on the dashboard, prefix+a in a session); x there makes it follow these again.       │

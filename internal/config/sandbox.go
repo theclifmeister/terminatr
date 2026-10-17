@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -36,10 +37,13 @@ const (
 // SandboxKeys are a sandbox table's keys, in the settings' order.
 var SandboxKeys = []string{SandboxExcluded, SandboxAllow}
 
-// rawSandbox is a [projects.<slug>.sandbox] or [defaults.sandbox] table.
+// rawSandbox is a [projects.<slug>.sandbox] or [defaults.sandbox] table:
+// the lists, and the presets' switches (sandbox_presets.go).
 type rawSandbox struct {
 	ExcludedCommands *[]string `toml:"excluded_commands"`
 	Allow            *[]string `toml:"allow"`
+	BrowserTesting   *bool     `toml:"browser_testing"`
+	LocalDevServers  *bool     `toml:"local_dev_servers"`
 }
 
 // list is the table's list of key, nil when it doesn't set it.
@@ -56,15 +60,20 @@ func (r *rawSandbox) list(key string) *[]string {
 	return nil
 }
 
-// ThreadSandbox is what a project's threads get: each list the
-// project's own, else all projects'.
+// ThreadSandbox is what a project's threads get: each list and switch
+// the project's own, else all projects'. Presets are the keys of the
+// presets on, on any platform: the launch skips one that doesn't apply
+// where it runs.
 type ThreadSandbox struct {
 	ExcludedCommands []string
 	Allow            []string
+	Presets          []string
 }
 
 // Empty reports whether it opens nothing.
-func (t ThreadSandbox) Empty() bool { return len(t.ExcludedCommands)+len(t.Allow) == 0 }
+func (t ThreadSandbox) Empty() bool {
+	return len(t.ExcludedCommands)+len(t.Allow)+len(t.Presets) == 0
+}
 
 // maxSandboxEntry bounds an entry's length.
 const maxSandboxEntry = 300
@@ -78,8 +87,69 @@ const matchAll = "*: /~."
 // they can run.
 var broad = []string{"sh", "bash", "zsh", "fish", "dash", "ksh", "csh", "tcsh", "pwsh", "powershell",
 	"env", "sudo", "doas", "su", "xargs", "eval", "exec", "command", "builtin", "nohup", "nice", "time", "timeout", "watch", "script",
-	"python", "python3", "node", "deno", "bun", "ruby", "perl", "php", "lua", "osascript", "awk", "make",
+	"python", "node", "deno", "bun", "ruby", "perl", "php", "lua", "osascript", "awk", "make",
 	"npx", "bunx", "pnpx", "uvx", "pipx", "npm", "pnpm", "yarn", "uv", "docker", "podman", "kubectl", "ssh", "git"}
+
+// wrappers run the command after them (env sh -c …): the checks look
+// past them, and past their flags, numbers and NAME=value words.
+var wrappers = []string{"env", "sudo", "doas", "nohup", "nice", "time", "timeout", "command", "builtin", "exec", "xargs"}
+
+// codeFlags make the program before them run the code that follows (sh
+// -c, python3 -c, node -e, npm exec): with that left open, any code.
+var codeFlags = []string{"-c", "-lc", "-ic", "-e", "-E", "--eval", "-p", "--print", "-r", "-m", "eval", "exec", "run", "x", "dlx"}
+
+// program is a command word's program as the checks compare it: its
+// file name, without a version (/usr/bin/python3.12 is python).
+func program(word string) string {
+	if i := strings.LastIndexAny(word, `/\`); i >= 0 {
+		word = word[i+1:]
+	}
+	word = strings.ToLower(strings.TrimSuffix(word, ".exe"))
+	if t := strings.TrimRight(word, "0123456789."); t != "" {
+		word = t
+	}
+	return word
+}
+
+// openProgram is why a command pattern leaves its program open (*e*,
+// *-*, python*: any program whose name fits), or "".
+func openProgram(cmd string) string {
+	words := strings.Fields(cmd)
+	if len(words) > 0 && strings.Contains(words[0], "*") {
+		return fmt.Sprintf("%q leaves the program open (%s matches many programs): name it, e.g. npx playwright *", cmd, words[0])
+	}
+	return ""
+}
+
+// codeWarning is why command pattern cmd, open at its first *, lets any
+// program or code through, or "": a program that runs others with its
+// arguments open (bash *, /bin/sh *, env sh *), or with the code it runs
+// open (sh -c *, python3 -c *).
+func codeWarning(cmd string) string {
+	fixed, _, open := strings.Cut(cmd, "*")
+	if !open {
+		return ""
+	}
+	words := strings.Fields(fixed)
+	for wrapped := false; len(words) > 1; words = words[1:] {
+		w := words[0]
+		switch {
+		case slices.Contains(wrappers, program(w)):
+			wrapped = true
+			continue
+		case wrapped && (strings.HasPrefix(w, "-") || strings.Contains(w, "=") || strings.Trim(w, "0123456789.smhd") == ""):
+			continue
+		}
+		break
+	}
+	switch {
+	case len(words) == 1 && slices.Contains(broad, program(strings.TrimSuffix(words[0], ":"))):
+		return words[0] + " runs other programs or code: with its arguments open, this lets through anything it can run"
+	case len(words) == 2 && slices.Contains(broad, program(words[0])) && slices.Contains(codeFlags, words[1]):
+		return words[0] + " " + words[1] + " runs the code that follows it: left open, that is any code"
+	}
+	return ""
+}
 
 // shellOps are what splits a call into several commands, or keeps it in
 // the sandbox whatever the lists say (a redirect, a substitution):
@@ -111,11 +181,13 @@ func CheckExcludedCommand(e string) error {
 	if err := checkSandboxText(e); err != nil {
 		return err
 	}
-	switch {
+	switch l := strings.ToLower(e); {
 	case strings.Trim(e, matchAll) == "":
 		return fmt.Errorf("%q matches every command: that is no sandbox at all", e)
-	case strings.HasPrefix(e, "Bash(") || strings.HasPrefix(e, "PowerShell("):
+	case strings.HasPrefix(l, "bash(") || strings.HasPrefix(l, "powershell("):
 		return fmt.Errorf("%q is a permission rule: an excluded command is the command itself, e.g. npx playwright *", e)
+	case openProgram(e) != "":
+		return errors.New(openProgram(e))
 	}
 	for _, op := range shellOps {
 		if strings.Contains(e, op) {
@@ -129,15 +201,36 @@ func CheckExcludedCommand(e string) error {
 // applies to in parentheses.
 var allowRule = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9_-]*)(?:\((.+)\))?$`)
 
-// wholeTools are the tools whose rule may never match every call: every
-// command, or every file written. Edit allow rules also open the Bash
-// sandbox for writing.
-var wholeTools = []string{"Bash", "PowerShell", "Edit", "Write", "MultiEdit", "NotebookEdit"}
+// wholeTools are the tools whose rule must name what it is for: never
+// every command, every file read or written, or every site fetched.
+// Edit allow rules also open the Bash sandbox for writing. Each with an
+// example of what to name.
+var wholeTools = map[string]string{
+	"bash": "npx playwright *", "powershell": "npx playwright *",
+	"edit": "~/Library/Caches/ms-playwright/**", "write": "~/Library/Caches/ms-playwright/**",
+	"multiedit": "~/Library/Caches/ms-playwright/**", "notebookedit": "~/Library/Caches/ms-playwright/**",
+	"read": "~/Library/Caches/ms-playwright/**", "glob": "~/Library/Caches/ms-playwright/**", "grep": "~/Library/Caches/ms-playwright/**",
+	"webfetch": "domain:playwright.dev",
+}
+
+// editTools are the tools whose allow rules write files.
+var editTools = []string{"edit", "write", "multiedit", "notebookedit"}
+
+// bashRule is a Bash or PowerShell rule's command pattern, its legacy
+// prefix form (npx:*) as the command form (npx *).
+func bashRule(what string) string {
+	if c, ok := strings.CutSuffix(what, ":*"); ok {
+		return c + " *"
+	}
+	return what
+}
 
 // CheckSandboxAllow checks one allow rule: Claude's permission rule
 // syntax (Tool or Tool(what), e.g. Bash(npx playwright *)), never one
-// that lets every command run or every file be written without a
-// prompt. tm's own deny rules win over it either way.
+// that lets every command run, every file be read or written, or every
+// site be fetched without a prompt: those must name what they are for.
+// Tool names count whatever their case. tm's own deny rules win over
+// it either way.
 func CheckSandboxAllow(e string) error {
 	if err := checkSandboxText(e); err != nil {
 		return err
@@ -146,8 +239,21 @@ func CheckSandboxAllow(e string) error {
 	if m == nil {
 		return fmt.Errorf("%q isn't a permission rule: Tool or Tool(what), e.g. Bash(npx playwright *)", e)
 	}
-	if slices.Contains(wholeTools, m[1]) && strings.Trim(m[2], matchAll) == "" {
-		return fmt.Errorf("%q allows every %s call: name what it is for, e.g. %s(npx playwright *)", e, m[1], m[1])
+	tool, what := strings.ToLower(m[1]), m[2]
+	ex, whole := wholeTools[tool]
+	if !whole {
+		return nil
+	}
+	if tool == "webfetch" {
+		what = strings.TrimPrefix(what, "domain:")
+	}
+	if strings.Trim(what, matchAll) == "" {
+		return fmt.Errorf("%q allows every %s call: name what it is for, e.g. %s(%s)", e, m[1], m[1], ex)
+	}
+	if tool == "bash" || tool == "powershell" {
+		if why := openProgram(bashRule(what)); why != "" {
+			return errors.New(why)
+		}
 	}
 	return nil
 }
@@ -178,38 +284,114 @@ func CheckSandboxList(key string, list []string) error {
 
 // SandboxWarning is why an entry of key's list, which passes its check,
 // still opens more than it seems to, or "": a program that runs others
-// with its arguments left open, a tool allowed whole, an Edit rule
-// (which opens the Bash sandbox for writing there too).
+// or code with that left open, a tool allowed whole (an MCP server's
+// every tool), an Edit rule (which opens the Bash sandbox for writing
+// there too), more so high up a tree or where files start programs.
 func SandboxWarning(key, e string) string {
-	cmd := e
-	if key == SandboxAllow {
-		m := allowRule.FindStringSubmatch(e)
-		if m == nil {
-			return ""
-		}
-		switch {
-		case m[2] == "" || strings.Trim(m[2], matchAll) == "":
-			return "allows every " + m[1] + " call without a prompt"
-		case m[1] == "Edit" || m[1] == "Write" || m[1] == "MultiEdit" || m[1] == "NotebookEdit":
-			return "also lets the thread's sandboxed commands write there"
-		case m[1] != "Bash" && m[1] != "PowerShell":
-			return ""
-		}
-		if c, ok := strings.CutSuffix(m[2], ":*"); ok {
-			cmd = c + " *"
-		} else {
-			cmd = m[2]
-		}
+	if key != SandboxAllow {
+		return codeWarning(e)
 	}
-	fixed, _, open := strings.Cut(cmd, "*")
-	if !open {
+	m := allowRule.FindStringSubmatch(e)
+	if m == nil {
 		return ""
 	}
-	words := strings.Fields(fixed)
-	if len(words) == 1 && slices.Contains(broad, strings.TrimSuffix(words[0], ":")) {
-		return words[0] + " runs other programs or code: with its arguments open, this lets through anything it can run"
+	tool := strings.ToLower(m[1])
+	server, one := strings.CutPrefix(tool, "mcp__")
+	switch {
+	case one && strings.Contains(server, "__"):
+		return "" // one MCP tool: its rule has no target to name
+	case one:
+		return "allows every tool of the MCP server " + m[1][len("mcp__"):] + " without a prompt"
+	case m[2] == "" || strings.Trim(m[2], matchAll) == "":
+		return "allows every " + m[1] + " call without a prompt"
+	case slices.Contains(editTools, tool):
+		return editWarning(m[2])
+	case tool == "bash" || tool == "powershell":
+		return codeWarning(bashRule(m[2]))
 	}
 	return ""
+}
+
+// startFiles are the file and folder names whose contents start
+// programs as the user, outside any sandbox: shell profiles, git hooks
+// and config, agents' and tm's settings, launch agents.
+var startFiles = []string{".zshrc", ".zshenv", ".zprofile", ".bashrc", ".bash_profile", ".profile", ".bash_login",
+	".config", ".ssh", ".gitconfig", ".git", ".claude", ".codex", ".terminatr", "LaunchAgents", ".npmrc", ".local"}
+
+// editWarning is an Edit allow rule's warning: always that the thread
+// writes there unprompted and its sandboxed commands can too; plainer
+// where that reaches files that start programs, or a whole tree high
+// up (~/Work/**, //Users/**).
+func editWarning(path string) string {
+	const base = "lets the thread change files there without asking, and its sandboxed commands write there too"
+	parts := strings.FieldsFunc(path, func(r rune) bool { return r == '/' })
+	for _, p := range parts {
+		if slices.Contains(startFiles, p) {
+			return base + ": " + p + " holds files that start programs, so this lets the thread run code as you outside the sandbox"
+		}
+	}
+	fixed := 0
+	for _, p := range parts {
+		if p == ".." {
+			return base + ": " + path + " climbs out of the folder it names (..), which may reach other repositories and your settings"
+		}
+		if strings.ContainsAny(p, "*?[") {
+			break
+		}
+		fixed++
+	}
+	// High up: ~/<folder>, //Users/<name>; a relative path has only a
+	// leading wildcard.
+	high := 0
+	if strings.HasPrefix(path, "~") || strings.HasPrefix(path, "//") {
+		high = 2
+	}
+	if fixed < len(parts) && fixed <= high {
+		return base + ": " + path + " is a whole tree high up, which may hold other repositories and your settings"
+	}
+	return base
+}
+
+// SandboxCovered is the allow rule of allow that lets excluded command
+// e run without a prompt, or "": a Bash rule whose pattern takes e's.
+// The two together run e outside the sandbox without asking.
+func SandboxCovered(e string, allow []string) string {
+	for _, a := range allow {
+		m := allowRule.FindStringSubmatch(a)
+		if m == nil || m[2] == "" || !strings.EqualFold(m[1], "bash") {
+			continue
+		}
+		if globMatch(bashRule(m[2]), e) {
+			return a
+		}
+	}
+	return ""
+}
+
+// globMatch reports whether s fits pattern p, where * is any text and
+// a trailing " *" no arguments too, as Claude matches Bash rules.
+func globMatch(p, s string) bool {
+	if q, ok := strings.CutSuffix(p, " *"); ok && s == q {
+		return true
+	}
+	// match[j]: p[:i] fits s[:j], row by row of p.
+	match := make([]bool, len(s)+1)
+	match[0] = true
+	for i := 0; i < len(p); i++ {
+		next := make([]bool, len(s)+1)
+		if p[i] == '*' {
+			next[0] = match[0]
+			for j := 1; j <= len(s); j++ {
+				next[j] = next[j-1] || match[j]
+			}
+		} else {
+			for j := 1; j <= len(s); j++ {
+				next[j] = match[j-1] && p[i] == s[j-1]
+			}
+		}
+		match = next
+	}
+	return match[len(s)]
 }
 
 // checkSandbox checks a table's lists.
@@ -249,6 +431,15 @@ func (c *Config) ThreadSandbox(slug string) (ThreadSandbox, error) {
 		return nil
 	}
 	out.ExcludedCommands, out.Allow = pick(SandboxExcluded), pick(SandboxAllow)
+	for _, k := range SandboxPresets {
+		on := own.preset(k)
+		if on == nil {
+			on = c.defaults.Sandbox.preset(k)
+		}
+		if on != nil && *on {
+			out.Presets = append(out.Presets, k)
+		}
+	}
 	return out, nil
 }
 

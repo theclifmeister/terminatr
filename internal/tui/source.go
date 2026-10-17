@@ -55,6 +55,9 @@ type Data struct {
 	// sets: all projects' under "", each project's own under its slug
 	// (config.SandboxOf).
 	Sandbox map[string]map[string][]string
+	// SandboxPresets are the sandbox presets' switches the same way
+	// (config.SandboxPresetsOf).
+	SandboxPresets map[string]map[string]bool
 	// AgentMod, AgentModBand and AgentModPane are the settings popup's Agent mod, Agent mod
 	// band and Agent mod pane (docs/SPEC.md §8.6); the band is on unless set
 	// off, the pane off unless set on.
@@ -106,6 +109,9 @@ type Data struct {
 // ServerInfo is the running server's identity, from session.list.
 type ServerInfo struct {
 	Version, Build string
+	// OS is its platform (runtime.GOOS), where its threads run; "" from
+	// a server that doesn't say.
+	OS string
 	// Latest is the tag of a newer release; Upgrade how to install it.
 	Latest, Upgrade string
 }
@@ -316,6 +322,10 @@ type SettingsSource interface {
 	// too; list nil removes it, so a project follows all projects'.
 	// Refused when tm runs inside an agent.
 	SetSandbox(table, key string, list []string) error
+	// SetSandboxPreset turns a sandbox preset ("browser_testing", …) of
+	// table on or off; nil removes it, so a project follows all
+	// projects'. Refused when tm runs inside an agent.
+	SetSandboxPreset(table, key string, on *bool) error
 }
 
 // LinkSource sets and works the links between projects.
@@ -633,7 +643,7 @@ func (s *ServerSource) Load() Data {
 		if res.Mods != nil {
 			d.Toasts = res.Mods.Toasts
 		}
-		d.Server = ServerInfo{Version: res.Version, Build: res.Build, Latest: res.Latest, Upgrade: res.Upgrade}
+		d.Server = ServerInfo{Version: res.Version, Build: res.Build, OS: res.OS, Latest: res.Latest, Upgrade: res.Upgrade}
 	}
 	sc := s.slow.load(s.Paths.AgentsDir())
 	cfg := sc.cfg
@@ -661,9 +671,11 @@ func (s *ServerSource) Load() Data {
 		}
 		d.Env = map[string]map[string]config.EnvSource{"": cfg.EnvOf("")}
 		d.Sandbox = map[string]map[string][]string{"": cfg.SandboxOf("")}
+		d.SandboxPresets = map[string]map[string]bool{"": cfg.SandboxPresetsOf("")}
 		for _, slug := range cfg.ProjectSlugs() {
 			d.Env[slug] = cfg.EnvOf(slug)
 			d.Sandbox[slug] = cfg.SandboxOf(slug)
+			d.SandboxPresets[slug] = cfg.SandboxPresetsOf(slug)
 		}
 	}
 	d.NoAgent = sc.noAgent
