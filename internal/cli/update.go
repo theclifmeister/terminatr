@@ -284,6 +284,13 @@ func updateHint(in update.Install) string {
 // ask prints a question on stderr and reads a y/yes. It reads byte by
 // byte, so a second question still finds its own line on stdin.
 func ask(e *Env, q string) bool {
+	a := strings.ToLower(answer(e, q))
+	return a == "y" || a == "yes"
+}
+
+// answer prints a question on stderr and reads a line of stdin, byte by
+// byte, trimmed.
+func answer(e *Env, q string) string {
 	fmt.Fprint(e.Stderr, q)
 	var line []byte
 	b := make([]byte, 1)
@@ -296,6 +303,5 @@ func ask(e *Env, q string) bool {
 			break
 		}
 	}
-	a := strings.ToLower(strings.TrimSpace(string(line)))
-	return a == "y" || a == "yes"
+	return strings.TrimSpace(string(line))
 }

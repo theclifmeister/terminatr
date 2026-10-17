@@ -30,8 +30,9 @@ conversation loses none.
 
 const memoryTemplate = `# Memory
 
-One line per memory file: ` + "`- [title](memory/file.md): what it holds (touches: a, b)`" + `.
-A new note starts from ` + "`tm memory template`" + `; ` + "`tm memory find`" + ` searches them.
+tm writes the list below from the notes in memory/ after every change:
+` + "`- [title](memory/file.md): what it holds (touches: a, b)`" + `.
+A new note starts from ` + "`tm memory new`" + `; ` + "`tm memory find`" + ` searches them.
 `
 
 // roleFileMarker starts the comment that marks AGENTS.md as tm's.
@@ -62,8 +63,9 @@ If `+"`tm skill`"+` isn't available, the short version:
   global_parallel_threads across all projects when set; at either cap tm
   thread start refuses: propose instead, and use --over-cap only when the
   user says so.
-- You are the only agent that writes project state: CONTEXT.md, MEMORY.md,
-  memory/, PROJECT.md's goal and body directly, and TASKS.md only through
+- You are the only agent that writes project state: CONTEXT.md and
+  PROJECT.md's goal and body directly, memory/ through `+"`tm memory`"+` (which
+  keeps MEMORY.md's list of the notes), and TASKS.md only through
   `+"`tm task`"+`. Read thread reports and decide what goes into tasks and memory.
 - Only the user accepts work. Once they say a task is done, run
   `+"`tm task status T<n> done --approved-by-user`"+`. Their "Complete tasks"
