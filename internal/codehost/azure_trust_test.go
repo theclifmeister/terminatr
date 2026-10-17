@@ -2,6 +2,7 @@ package codehost
 
 import (
 	"errors"
+	"os/exec"
 	"testing"
 )
 
@@ -57,5 +58,74 @@ func TestAzureNoTokenToUntrustedHost(t *testing.T) {
 	}
 	if _, err := PATGet(a.repoURL(), "s3cret"); !errors.Is(err, errUntrustedURL) {
 		t.Fatalf("PATGet: %v", err)
+	}
+}
+
+func TestAzureURLTrustsOriginAndAzDefault(t *testing.T) {
+	defer func(f func() []string, g func() string) { azureHosts, azDefaultHost = f, g }(azureHosts, azDefaultHost)
+	azureHosts = func() []string { return nil }
+	azDefaultHost = func() string { return "" }
+	mk := func(remote string) string {
+		repo := t.TempDir()
+		for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", remote}} {
+			if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %v %s", args, err, out)
+			}
+		}
+		return repo
+	}
+	const org = "https://onprem.example/tfs/Coll"
+	for _, remote := range []string{
+		"https://onprem.example/tfs/Coll/Shop/_git/web",
+		"ssh://tfs@onprem.example:22/tfs/Coll/Shop/_git/web",
+		"tfs@onprem.example:v3/Coll/Shop/web",
+	} {
+		repo := mk(remote)
+		got := Detect(repo, Config{CodeHost: AzureKind, AzureURL: org, OriginRepos: []string{repo}})
+		if got.OrgURL != org {
+			t.Errorf("origin %q: OrgURL %q", remote, got.OrgURL)
+		}
+		a := Azure{Target: got}
+		if !a.trusted(org+"/_apis/x") || a.trusted("https://other.example/x") {
+			t.Errorf("origin %q: target trust", remote)
+		}
+		// The trust is the target's: nothing global, no other repo's.
+		if TrustedAzureURL(org) || (Azure{Target: Target{Kind: AzureKind}}).trusted(org) {
+			t.Errorf("origin %q: trust leaked", remote)
+		}
+	}
+	repo := mk("https://onprem.example/tfs/Coll/Shop/_git/web")
+	// A repo the user didn't register (not in OriginRepos) doesn't vouch.
+	if got := Detect(repo, Config{CodeHost: AzureKind, AzureURL: org}); got.OrgURL != "" {
+		t.Errorf("unregistered repo vouched: %q", got.OrgURL)
+	}
+	if got := Detect(repo, Config{CodeHost: AzureKind, AzureURL: org, OriginRepos: []string{t.TempDir()}}); got.OrgURL != "" {
+		t.Errorf("another repo vouched: %q", got.OrgURL)
+	}
+	// An azure_url on a host that is not the origin's stays ignored.
+	if got := Detect(repo, Config{CodeHost: AzureKind, AzureURL: "https://unrelated.example/tfs", OriginRepos: []string{repo}}); got.OrgURL != "" {
+		t.Errorf("unrelated host trusted: %q", got.OrgURL)
+	}
+	// A host only PROJECT.md names is not trusted.
+	if TrustedAzureURL("https://only-project.example/tfs") {
+		t.Error("PROJECT.md-only host trusted")
+	}
+	// The az default organization's host.
+	azDefaultHost = func() string { return "azorg.example" }
+	if !TrustedAzureURL("https://azorg.example/tfs/Coll") || TrustedAzureURL("https://other.example/tfs") {
+		t.Error("az default organization host")
+	}
+}
+
+func TestOrgHostFromConfig(t *testing.T) {
+	for in, want := range map[string]string{
+		"[defaults]\norganization = https://TFS.example.com/tfs/Coll\nproject = x\n": "tfs.example.com",
+		"[defaults]\nproject = x\n":                                "",
+		"[defaults]\norganization = http://tfs.example.com\n":      "",
+		"[defaults]\norganization = https://u:p@tfs.example.com\n": "",
+	} {
+		if got := orgHostFromConfig(in); got != want {
+			t.Errorf("%q: %q, want %q", in, got, want)
+		}
 	}
 }

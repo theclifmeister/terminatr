@@ -735,3 +735,28 @@ func TestOwned(t *testing.T) {
 		}
 	}
 }
+
+func TestOriginReposLeavesOutCheckoutThreads(t *testing.T) {
+	dir := t.TempDir()
+	for id, rec := range map[string]string{
+		"t-1": "repo = \"/r/a\"\nstate = \"working\"\ncheckout = true\n",
+		"t-2": "repo = \"/r/b\"\nstate = \"working\"\nadopted = true\n",
+		"t-3": "repo = \"/r/c\"\nstate = \"resolved\"\ncheckout = true\n",
+		"t-4": "repo = \"/r/d\"\nstate = \"working\"\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(dir, "threads", id), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "threads", id, "thread.toml"), []byte(rec), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p := &Project{Dir: dir, Repos: []string{"/r/a", "/r/b", "/r/c", "/r/d"}, Meta: Meta{AzureURL: "https://x.example"}}
+	if got := p.CodeHost().OriginRepos; !slices.Equal(got, []string{"/r/c", "/r/d"}) {
+		t.Fatalf("OriginRepos %v", got)
+	}
+	p.Meta.AzureURL = ""
+	if got := p.CodeHost().OriginRepos; got != nil {
+		t.Fatalf("no azure_url: %v", got)
+	}
+}

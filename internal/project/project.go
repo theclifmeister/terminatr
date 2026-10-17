@@ -3,6 +3,7 @@ package project
 import (
 	"errors"
 	"fmt"
+	"github.com/BurntSushi/toml"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -39,7 +40,45 @@ type Meta struct {
 
 // CodeHost is the project's code host override, for codehost.Pick.
 func (p *Project) CodeHost() codehost.Config {
-	return codehost.Config{CodeHost: p.Meta.CodeHost, AzureURL: p.Meta.AzureURL, Project: p.Slug}
+	c := codehost.Config{CodeHost: p.Meta.CodeHost, AzureURL: p.Meta.AzureURL, Project: p.Slug}
+	if c.AzureURL != "" {
+		c.OriginRepos = p.originRepos()
+	}
+	return c
+}
+
+// originRepos are the repos whose origin remote may vouch for azure_url's
+// host: the ones in config.toml, which only the user writes, less any
+// that a live thread works in the main checkout of (an adopted thread or
+// a checkout one): its agent can edit that repo's .git/config.
+func (p *Project) originRepos() []string {
+	busy := map[string]bool{}
+	ents, _ := os.ReadDir(filepath.Join(p.Dir, "threads"))
+	for _, e := range ents {
+		var r struct {
+			Repo     string `toml:"repo"`
+			State    string `toml:"state"`
+			Adopted  bool   `toml:"adopted"`
+			Checkout bool   `toml:"checkout"`
+		}
+		b, err := os.ReadFile(filepath.Join(p.Dir, "threads", e.Name(), "thread.toml"))
+		if err != nil {
+			continue
+		}
+		if toml.Unmarshal(b, &r) != nil || r.State == "resolved" {
+			continue
+		}
+		if r.Adopted || r.Checkout {
+			busy[filepath.Clean(r.Repo)] = true
+		}
+	}
+	var out []string
+	for _, r := range p.Repos {
+		if !busy[filepath.Clean(r)] {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // Project is one project folder, ~/.terminatr/projects/<slug>/.

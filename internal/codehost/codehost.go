@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -122,6 +123,10 @@ type Config struct {
 	// Project is the project's slug: a code host mod serves the projects
 	// it runs for.
 	Project string
+	// OriginRepos are the repos whose own origin remote may vouch for
+	// AzureURL's host: those the user registered (config.toml), less any
+	// an agent can change the origin of. Empty: none does.
+	OriginRepos []string
 }
 
 // Target is what Detect makes of a repo: its host kind and, for Azure
@@ -131,6 +136,11 @@ type Target struct {
 	OrgURL  string // https://dev.azure.com/org, https://org.visualstudio.com; GitLab's https://host
 	Project string
 	Repo    string // GitLab's project path, group/subgroup/project
+
+	// originHost is the host of the repo's own origin remote, when
+	// Detect vetted OrgURL's host against it: trusted for this target
+	// alone.
+	originHost string
 }
 
 // Detect tells which host repo's PRs live on, from cfg, else its origin
@@ -153,8 +163,12 @@ func Detect(repo string, cfg Config) Target {
 		t.Kind = AzureKind
 		if cfg.AzureURL != "" {
 			t.OrgURL = strings.TrimRight(cfg.AzureURL, "/")
-			if !TrustedAzureURL(t.OrgURL) {
+			if oh := originVouch(repo, url, cfg); oh != "" && trustedAzureURL(t.OrgURL, oh) && !TrustedAzureURL(t.OrgURL) {
+				t.originHost = oh
+			}
+			if !trustedAzureURL(t.OrgURL, t.originHost) {
 				t.OrgURL = ""
+				t.originHost = ""
 			}
 			if t.Project == "" {
 				t.Project, t.Repo = gitPath(url)
@@ -169,6 +183,16 @@ func Detect(repo string, cfg Config) Target {
 		return Target{Kind: NoKind}
 	}
 	return Target{Kind: GitHubKind}
+}
+
+// originVouch is the host of repo's origin URL when repo is one of
+// cfg.OriginRepos, else "".
+func originVouch(repo, originURL string, cfg Config) string {
+	if !slices.ContainsFunc(cfg.OriginRepos, func(r string) bool { return filepath.Clean(r) == filepath.Clean(repo) }) {
+		return ""
+	}
+	h, _, _ := splitRemote(originURL)
+	return h
 }
 
 // otherHosts are well-known git hosts that are neither GitHub nor Azure
