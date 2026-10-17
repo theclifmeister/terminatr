@@ -248,7 +248,7 @@ The guard checks every tool call of a project's agents before it runs, in every 
 - **Guard**: on or off. Off, the agents have only their own permission rules and the sandbox. Turning it off asks first.
 - **Guard mode**: *refuse* (the default) or *refuse, then ask you*, the learning mode. Either way the call is refused and nothing passes until you allow it. In learning mode the agent is also told you review refused calls, and each new refusal is put to you in the project's inbox.
 - **Guard rules**: each rule on or off. A rule turned off still never lets through what is never allowed (below).
-- **Guard allowances**: the calls the guard lets through though a rule would refuse them. Enter changes one, `x` removes it. A project's own add to all projects'.
+- **Guard allowances**: the calls the guard lets through though a rule would refuse them, an exact one (below) marked so. Enter changes one, `x` removes it. A project's own add to all projects'.
 - **Guard refusals**: the calls refused lately, the latest first, with the whole command or file (enter shows a long one whole). `a` allows it for this project, `A` for all projects, `x` keeps refusing it and stops listing it. An allowance takes effect at once, is journaled, and the thread that was refused is told it may retry.
 - **Secret environment**: the variables threads get when they start (below), by name and where the value comes from; a project's list shows all projects' too, marked. `a` adds one: its name, then its source (gh auth token, a login keychain item, or a variable of the server's environment, which asks the item or variable's name). `x` removes the selected one, from all projects' when it is theirs. `t` tests it: the server gets the value from its source as a thread's start would and says only whether that worked, or why not (gh not logged in, no such keychain item, the server's environment lacks the variable); the value is never shown. A change applies to threads started from then on.
 
@@ -266,7 +266,7 @@ guard_allow = [
 guard_mode = "learn"
 ```
 
-`rule` is `force-push`, `push-default`, `worktree-only`, `delete-branch` or `credentials` (or a mod's rule, `mod:<mod>.<rule>`); `command` is the whole command line, `path` a file. A `*` matches anything, so a command or folder ending in `*` is a prefix; without one it is that exact command or file. A credentials allowance names one exact command or file, no `*`.
+`rule` is `force-push`, `push-default`, `worktree-only`, `delete-branch` or `credentials` (or a mod's rule, `mod:<mod>.<rule>`); `command` is the whole command line, `path` a file. A `*` matches anything, so a command or folder ending in `*` is a prefix; without one it is that exact command or file. With `exact = true` a `*` is just a `*`: an allowance written from **Guard refusals** is exact, so allowing `cp build/* /opt/app/` allows that one command, not every command that starts and ends like it. A credentials allowance names one exact command or file, no `*`.
 
 **What is never allowed**, in either mode and whatever the rules (Guard rules turned off included) and allowances say, while the guard is on: reading tm's own files (its run folder and sockets, its keys, the guard's log), printing a secret variable tm gives threads (below), force-pushing to a protected branch, and a thread merging (set `merge = "thread"` for that instead).
 

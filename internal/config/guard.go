@@ -28,7 +28,9 @@ var GuardModes = []string{GuardEnforce, GuardLearn}
 // command line (Command) or the file it names (Path) is this one. A *
 // in either matches any run of characters (git push -f origin tm/*), so
 // a pattern is a prefix with a * at its end; without one it is that
-// exact command or path. A credentials allowance is always exact.
+// exact command or path. An Exact allowance, as allowing a refusal
+// writes, is that command or path whatever it holds, a * matching only
+// a *. A credentials allowance is always exact, and has no *.
 // Some refusals are never allowed (the guard's floor): reading tm's own
 // files, printing a secret variable tm gives threads, force-pushing to
 // a protected branch, a thread merging.
@@ -36,6 +38,7 @@ type GuardAllow struct {
 	Rule    string `toml:"rule" json:"rule"`
 	Command string `toml:"command,omitempty" json:"command,omitempty"`
 	Path    string `toml:"path,omitempty" json:"path,omitempty"`
+	Exact   bool   `toml:"exact,omitempty" json:"exact,omitempty"`
 	// All marks, in a project's resolved list, an allowance of all
 	// projects' ([defaults]): the file never has it.
 	All bool `toml:"-" json:"all,omitempty"`
@@ -49,12 +52,9 @@ func (a GuardAllow) Text() string {
 	return a.Command
 }
 
-// Pattern says whether a * makes the allowance cover more than one call.
-func (a GuardAllow) Pattern() bool { return strings.Contains(a.Text(), "*") }
-
 // Same says whether a and b allow the same, wherever each comes from.
 func (a GuardAllow) Same(b GuardAllow) bool {
-	return a.Rule == b.Rule && a.Command == b.Command && a.Path == b.Path
+	return a.Rule == b.Rule && a.Command == b.Command && a.Path == b.Path && a.Exact == b.Exact
 }
 
 // MaxGuardAllow bounds an allowance's text, and maxGuardAllows how many a
@@ -86,9 +86,9 @@ func CheckGuardAllow(a GuardAllow) error {
 		return fmt.Errorf("allowance of %s: a path is one line", a.Rule)
 	case strings.ContainsFunc(a.Command, func(c rune) bool { return unicode.IsControl(c) && c != '\n' && c != '\t' }):
 		return fmt.Errorf("allowance of %s has a control character", a.Rule)
-	case strings.Trim(t, "* ") == "":
+	case !a.Exact && strings.Trim(t, "* ") == "":
 		return fmt.Errorf("allowance of %s allows everything: turn the rule off instead (guard_off)", a.Rule)
-	case a.Rule == "credentials" && a.Pattern():
+	case a.Rule == "credentials" && strings.Contains(t, "*"):
 		return errors.New("a credentials allowance names one exact command or path, no *")
 	case a.Path != "" && !strings.HasPrefix(a.Path, "/") && !strings.HasPrefix(a.Path, "~/") && !windowsAbs.MatchString(a.Path):
 		return fmt.Errorf("allowance of %s: the path %q must be absolute or start with ~/", a.Rule, a.Path)

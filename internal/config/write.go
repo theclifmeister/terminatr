@@ -294,7 +294,12 @@ func Edit(data []byte, table, key string, value any) ([]byte, error) {
 		for i, x := range arr {
 			c, _ := x["command"].(string)
 			p, _ := x["path"].(string)
-			if len(x) != 2 || x["rule"] != any(want[i].Rule) || c != want[i].Command || p != want[i].Path {
+			e, _ := x["exact"].(bool)
+			n := 2
+			if want[i].Exact {
+				n = 3
+			}
+			if len(x) != n || x["rule"] != any(want[i].Rule) || c != want[i].Command || p != want[i].Path || e != want[i].Exact {
 				return nil, ErrForm
 			}
 		}
@@ -433,7 +438,11 @@ func tomlValue(v any) (string, error) {
 				k, t = "path", x.Path
 			}
 			q, _ := tomlValue(t)
-			parts[i] = "{ rule = " + r + ", " + k + " = " + q + " }"
+			parts[i] = "{ rule = " + r + ", " + k + " = " + q
+			if x.Exact {
+				parts[i] += ", exact = true"
+			}
+			parts[i] += " }"
 		}
 		return "[" + strings.Join(parts, ", ") + "]", nil
 	case EnvSource:

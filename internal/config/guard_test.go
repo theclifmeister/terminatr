@@ -60,6 +60,7 @@ func TestGuardAllowCheck(t *testing.T) {
 		`guard_allow = [{ rule = "force-push" }]`:                                                        "needs a command or a path",
 		`guard_allow = [{ rule = "force-push", command = "x", path = "/x" }]`:                            "needs a command or a path",
 		`guard_allow = [{ rule = "credentials", command = "gh auth *" }]`:                                "exact command or path, no *",
+		`guard_allow = [{ rule = "credentials", command = "cat ~/.ssh/*", exact = true }]`:               "exact command or path, no *",
 		`guard_allow = [{ rule = "worktree-only", path = "*" }]`:                                         "allows everything",
 		`guard_allow = [{ rule = "worktree-only", path = "src/x" }]`:                                     "must be absolute",
 		`guard_allow = [{ rule = "force-push", command = "a\u0007b" }]`:                                  "control character",
@@ -78,6 +79,7 @@ func TestGuardAllowCheck(t *testing.T) {
 		{Rule: "mod:infra.no-destroy", Command: "terraform destroy -target=x"},
 		{Rule: "worktree-only", Path: `C:\Users\me\x`},
 		{Rule: "force-push", Command: "cat <<EOF | sh\n\tgit push -f\nEOF"},
+		{Rule: "worktree-only", Command: "*", Exact: true},
 	} {
 		if err := CheckGuardAllow(ok); err != nil {
 			t.Errorf("%+v: %v", ok, err)
@@ -95,7 +97,7 @@ func TestGuardAllowCheck(t *testing.T) {
 // guard's other settings, in a project's table and [defaults].
 func TestGuardAllowWrite(t *testing.T) {
 	write(t, "[projects.demo]\nyolo = true\n")
-	list := []GuardAllow{{Rule: "force-push", Command: `git push -f origin "tm/x"`}, {Rule: "worktree-only", Path: "~/src/a b/*"}, {Rule: "force-push", Command: "cat <<EOF | sh\n\tgit push -f\nEOF"}}
+	list := []GuardAllow{{Rule: "force-push", Command: `git push -f origin "tm/x"`}, {Rule: "worktree-only", Path: "~/src/a b/*"}, {Rule: "force-push", Command: "cat <<EOF | sh\n\tgit push -f\nEOF"}, {Rule: "worktree-only", Command: "cp build/* /opt/app/", Exact: true}}
 	if err := SetProject("demo", "guard_allow", list); err != nil {
 		t.Fatal(err)
 	}

@@ -91,9 +91,10 @@ type ModRule = {
 
 // One of the human's allowances (config.GuardAllow): rule's refusals of
 // the command line command, or of the file path, are lifted. A * matches
-// any run of characters; a credentials allowance with one is ignored (it
-// names one exact command or path).
-type Allow = { rule: string; command?: string; path?: string }
+// any run of characters, but in an exact one, which matches only that
+// command or path; a credentials allowance with one is ignored (it names
+// one exact command or path).
+type Allow = { rule: string; command?: string; path?: string; exact?: boolean }
 
 // What the guard knows of a tool: its kind (shell, write, patch, read,
 // glob) and the fields of its input that kind reads. A shell tool's
@@ -230,7 +231,8 @@ function allows(r: Rules, rule: string, subject: string, path: boolean): boolean
   return (r.allow ?? []).some(a => {
     const text = (path ? a.path : a.command) ?? ''
     if (a.rule !== rule || text.trim() === '' || (rule === 'credentials' && text.includes('*'))) return false
-    return path ? globMatch(fold(r, abs(r, text)), fold(r, subject)) : globMatch(text.trim(), subject)
+    const match = a.exact ? (t: string, s: string) => t === s : globMatch
+    return path ? match(fold(r, abs(r, text)), fold(r, subject)) : match(text.trim(), subject)
   })
 }
 

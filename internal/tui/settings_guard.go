@@ -287,8 +287,11 @@ func (v *guardAllowView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		if a.Path != "" {
 			label = "File (* matches anything; ~ is your home):"
 		}
-		if a.Rule == "credentials" {
+		switch {
+		case a.Rule == "credentials":
 			label = strings.TrimSuffix(strings.Split(label, " (")[0], ":") + " (exact, no *):"
+		case a.Exact:
+			label = strings.TrimSuffix(strings.Split(label, " (")[0], ":") + " (exact: * is a plain *):"
 		}
 		m.push(&inputView{title: "Allowance of " + guardRuleWord(a.Rule) + " " + where, keep: true, text: a.Text(), label: label,
 			submit: func(t string) tea.Cmd {
@@ -300,7 +303,7 @@ func (v *guardAllowView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 				if t == "" {
 					return v.save(m, all, slices.Delete(table, i, i+1), "allowance removed "+where)
 				}
-				b := config.GuardAllow{Rule: a.Rule}
+				b := config.GuardAllow{Rule: a.Rule, Exact: a.Exact}
 				if a.Path != "" {
 					b.Path = t
 				} else {
@@ -327,6 +330,9 @@ func (v *guardAllowView) render(m *dash) string {
 		head := guardRuleWords[a.Rule].label
 		if head == "" {
 			head = a.Rule
+		}
+		if a.Exact {
+			head += " · exact"
 		}
 		if a.All && !v.sr.all {
 			head += " · all projects"

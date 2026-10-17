@@ -16,6 +16,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -283,6 +284,35 @@ func TestHookGuardFollowsLinks(t *testing.T) {
 		if d := judge("apply_patch", patch(path)); d != nil {
 			t.Errorf("%s: %+v", path, d)
 		}
+	}
+}
+
+// TestGuardAllowsExact: an exact allowance's path is taken whole, a *
+// in it a folder's own name, so a link of that name is followed; a
+// pattern's link before its first * is, and its * kept.
+func TestGuardAllowsExact(t *testing.T) {
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	if err := os.Mkdir(filepath.Join(dir, "real"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("real", filepath.Join(dir, "l*nk")); err != nil {
+		t.Skip(err)
+	}
+	if err := os.Symlink("real", filepath.Join(dir, "ln")); err != nil {
+		t.Fatal(err)
+	}
+	got := guardAllows([]config.GuardAllow{
+		{Rule: "worktree-only", Path: filepath.Join(dir, "l*nk", "a.go"), Exact: true},
+		{Rule: "worktree-only", Path: filepath.Join(dir, "ln", "a*.go")},
+	}, "")
+	want := []guard.Allow{
+		{Rule: "worktree-only", Path: filepath.Join(dir, "l*nk", "a.go"), Exact: true},
+		{Rule: "worktree-only", Path: filepath.Join(dir, "real", "a.go"), Exact: true},
+		{Rule: "worktree-only", Path: filepath.Join(dir, "ln", "a*.go")},
+		{Rule: "worktree-only", Path: filepath.Join(dir, "real", "a*.go")},
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %+v\nwant %+v", got, want)
 	}
 }
 

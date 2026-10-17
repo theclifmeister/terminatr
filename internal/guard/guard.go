@@ -121,12 +121,14 @@ func (m ModRule) Name() string { return "mod:" + m.Mod + "." + m.ID }
 
 // Allow is one of the human's allowances (config.GuardAllow): Rule's
 // refusals of the command line Command, or of the file Path, are
-// lifted. A * matches any run of characters; a credentials allowance
-// with one is ignored (it names one exact command or path).
+// lifted. A * matches any run of characters, but in an Exact one,
+// which matches only that command or path; a credentials allowance with
+// one is ignored (it names one exact command or path).
 type Allow struct {
 	Rule    string `json:"rule"`
 	Command string `json:"command,omitempty"`
 	Path    string `json:"path,omitempty"`
+	Exact   bool   `json:"exact,omitempty"`
 }
 
 // Tool is what the guard knows of one of an agent's tools: its kind and
@@ -302,7 +304,11 @@ func (r Rules) allows(rule, subject string, path bool) bool {
 		if a.Rule != rule || strings.TrimSpace(text) == "" || rule == "credentials" && strings.Contains(text, "*") {
 			continue
 		}
-		if path && globMatch(r.fold(r.abs(text)), r.fold(subject)) || !path && globMatch(strings.TrimSpace(text), subject) {
+		match := globMatch
+		if a.Exact {
+			match = func(text, s string) bool { return text == s }
+		}
+		if path && match(r.fold(r.abs(text)), r.fold(subject)) || !path && match(strings.TrimSpace(text), subject) {
 			return true
 		}
 	}

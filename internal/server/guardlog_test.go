@@ -32,13 +32,17 @@ guard_allow = [{ rule = "worktree-only", path = "~/src/shared/*" }]
 NODE_AUTH_TOKEN = { from = "gh-auth-token" }
 [projects.`+p.Slug+`]
 guard_mode = "learn"
-guard_allow = [{ rule = "force-push", command = "git push -f origin tm/*" }]
+guard_allow = [{ rule = "force-push", command = "git push -f origin tm/*" }, { rule = "push-default", command = "git push origin *", exact = true }]
 `)
 	thread := SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: "t-0001", Cwd: t.TempDir()}
 	g := s.guardRulesFor(thread)
 	want := guard.Allow{Rule: "worktree-only", Path: filepath.Join(home, "src", "shared", "*")}
 	if !g.Learn || !slices.Contains(g.Allow, want) || !slices.Contains(g.Allow, guard.Allow{Rule: "force-push", Command: "git push -f origin tm/*"}) {
 		t.Errorf("allow %+v learn %t", g.Allow, g.Learn)
+	}
+	// An exact allowance's * is a plain *.
+	if d := g.Judge("Bash", map[string]any{"command": "git push origin main"}); d == nil || d.Rule != "push-default" {
+		t.Errorf("exact allowance as a pattern: %+v", d)
 	}
 	if !slices.Equal(g.Floor, []string{"force-push", "merge"}) {
 		t.Errorf("floor %v", g.Floor)
@@ -57,7 +61,7 @@ guard_allow = [{ rule = "force-push", command = "git push -f origin tm/*" }]
 		t.Errorf("reading the log: %+v", d)
 	}
 	coord := SessionRecord{ID: "s-1", Role: proto.RoleCoordinator, Project: p.Slug, Cwd: p.Dir}
-	if g := s.guardRulesFor(coord); g.SecretEnv != nil || len(g.Allow) != 2 || !slices.Equal(g.Floor, []string{"force-push"}) {
+	if g := s.guardRulesFor(coord); g.SecretEnv != nil || len(g.Allow) != 3 || !slices.Equal(g.Floor, []string{"force-push"}) {
 		t.Errorf("coordinator %+v", g)
 	}
 }
