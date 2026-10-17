@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.32.0](https://github.com/theclifmeister/terminatr/compare/v0.31.0...v0.32.0) (2026-10-17)
+
+
+### Features
+
+* **briefs:** carry matched memory notes in thread briefs, preview with tm context --thread ([0a5886f](https://github.com/theclifmeister/terminatr/commit/0a5886f1681b88f7e013b49fe5eee5bdee226118))
+* **briefs:** carry matched memory notes in thread briefs, preview with tm context --thread ([4f5dd1e](https://github.com/theclifmeister/terminatr/commit/4f5dd1e358eebfc3dcae968940bcb08f5920442f))
+* **coordinator:** save and clear from the context hint, tm clear and /saveclear ([#614](https://github.com/theclifmeister/terminatr/issues/614)) ([4cdc262](https://github.com/theclifmeister/terminatr/commit/4cdc262345385feb066f3258c6b72443294d6615))
+* **memory:** edit, create and delete memory notes from the Memory tab; tm keeps MEMORY.md's list ([#613](https://github.com/theclifmeister/terminatr/issues/613)) ([8ed9bb6](https://github.com/theclifmeister/terminatr/commit/8ed9bb678a644f313a9977352da18dc231bcaffb))
+* **memory:** optional TOML front matter for memory notes, Match and tm memory find ([061bd44](https://github.com/theclifmeister/terminatr/commit/061bd44ba5041857cda180de6f6abf5bfb5cfa1c))
+* **memory:** optional TOML front matter for memory notes, Match and tm memory find ([a0df23c](https://github.com/theclifmeister/terminatr/commit/a0df23cf991dab8bc8e7d7d6dd9cfecf2bd070ac))
+* **memory:** tm memory check flags thread diffs that contradict notes ([9637ced](https://github.com/theclifmeister/terminatr/commit/9637ceddac5076a1e12a9d92a14b3ae1b6550b60))
+* **memory:** tm memory check flags thread diffs that contradict recorded decisions ([a3bc418](https://github.com/theclifmeister/terminatr/commit/a3bc418db7720ed426d347585ed428363bf2e054))
+* **ticker:** remember items for unfiled lessons, and a save-lessons ask before auto-clear ([8907e9c](https://github.com/theclifmeister/terminatr/commit/8907e9c1622d5b434ec9fbf43e500f9058e6a8a5))
+* **ticker:** remember items for unfiled lessons, and a save-lessons ask before auto-clear ([b9c14f4](https://github.com/theclifmeister/terminatr/commit/b9c14f4277e5edc4453098e99358f73dade8e0e5))
+
+
+### Bug Fixes
+
+* **memory-tab:** no String.prototype.trimEnd in the mod's ES lib ([d3ecdec](https://github.com/theclifmeister/terminatr/commit/d3ecdec5cc031dbd84c5d97f8fca000d7da50ae7))
+
 ## [0.31.0](https://github.com/theclifmeister/terminatr/compare/v0.30.1...v0.31.0) (2026-10-17)
 
 
