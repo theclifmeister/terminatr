@@ -231,7 +231,7 @@ Threads push their branch and report the PR's title and body; the coordinator op
 **GitLab** is served by a code host mod, not by tm itself (SPEC §3, **Code host**). terminatr's `examples/mods/gitlab` is one, through `glab`:
 
 1. Install glab (`brew install glab`) and `glab auth login` (for a self-managed server, `glab auth login --hostname gitlab.example.com`). The mod runs glab on that login, so with your GitLab access; tm refuses the glab commands that would show or change the login (`auth`, but `auth status` without `-t`, `config`, `alias`).
-2. `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.30.0/examples/mods/gitlab` (or a later release's tag), read the consent screen (it asks only to run `glab`), and enable it in the Mods tab with the `commands` grant, for the projects that use GitLab or all.
+2. `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.31.0/examples/mods/gitlab` (or a later release's tag), read the consent screen (it asks only to run `glab`), and enable it in the Mods tab with the `commands` grant, for the projects that use GitLab or all.
 3. Put `code_host = "gitlab"` in each such project's `PROJECT.md` front matter. Without it a `gitlab.com` remote has no PR host, as before.
 4. Run `tm doctor`: under `code host` it names the mod that serves `gitlab`, then glab and its login.
 
@@ -364,7 +364,7 @@ On a NAS, or any host with Docker, `compose.selfsigned.yaml` runs it in a contai
 
 #### Docker (VPS or NAS)
 
-The relay image is `ghcr.io/theclifmeister/tm-relay`, one per release (`:v0.30.0`, and `:latest`), for amd64 and arm64 (most NAS boxes are one of them); it runs as uid 65532, not root, and listens on 8443 inside. The compose files for it come with each release:
+The relay image is `ghcr.io/theclifmeister/tm-relay`, one per release (`:v0.31.0`, and `:latest`), for amd64 and arm64 (most NAS boxes are one of them); it runs as uid 65532, not root, and listens on 8443 inside. The compose files for it come with each release:
 
 ```sh
 curl -fLO https://github.com/theclifmeister/terminatr/releases/latest/download/tm-relay-docker.tar.gz
@@ -393,7 +393,7 @@ docker compose -f compose.acme.yaml up -d
 
 **With a domain and certificate files you already have** (`compose.yaml`; certbot, your NAS's own Let's Encrypt, a wildcard): put `fullchain.pem` and `privkey.pem` in `certs/`, readable by uid 65532, then `docker compose up -d`. The relay reads the files again when they change, so a renewal needs no restart; copy renewed files in from your ACME client's deploy hook (certbot's `live/` files are symlinks with a root-only key, so copy, don't mount them).
 
-**Upgrading**: put the new release's tag in `.env` (`TM_VERSION=v0.30.0`) and run the same `up -d`; compose pulls the new image and restarts the relay, and connected servers drop and reconnect by themselves. The key in `state/` stays, so nothing changes for them.
+**Upgrading**: put the new release's tag in `.env` (`TM_VERSION=v0.31.0`) and run the same `up -d`; compose pulls the new image and restarts the relay, and connected servers drop and reconnect by themselves. The key in `state/` stays, so nothing changes for them.
 
 **Building the image yourself** instead of pulling it: uncomment the `build:` lines in the compose file and add `--build` to `up -d`. The `Dockerfile` downloads the release's Linux binary and checks it against the release's `checksums.txt`, as the installer does.
 
