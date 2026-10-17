@@ -55,6 +55,7 @@ type fakeSource struct {
 	adopted      []string // "slug s-3"
 	withdrawn    []string // "slug s-3"
 	answered     []string // slugs whose questions were opened
+	saveCleared  []string // slugs whose coordinators were saved and cleared
 	reviews      map[int]Review
 	peers        PeerList
 	peerErr      error
@@ -219,6 +220,10 @@ func (f *fakeSource) AnswerQuestion(id string, index int, question, option strin
 func (f *fakeSource) OpenQuestions(slug string) (proto.QuestionsOpenResult, error) {
 	f.answered = append(f.answered, slug)
 	return proto.QuestionsOpenResult{Session: "s-1", Via: "queued", Open: 2}, nil
+}
+func (f *fakeSource) SaveClear(slug string) (proto.CoordinatorClearResult, error) {
+	f.saveCleared = append(f.saveCleared, slug)
+	return proto.CoordinatorClearResult{Session: "s-1"}, nil
 }
 func (f *fakeSource) AskAdopt(slug string, s proto.SessionInfo) (bool, error) {
 	f.adopted = append(f.adopted, slug+" "+s.ID)

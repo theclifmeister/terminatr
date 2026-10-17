@@ -115,6 +115,7 @@ const (
 	hitPR                // the PR in the browser
 	hitSession           // that session in the pane (a coordinator's thread row)
 	hitQuestions         // the coordinator opens its questions (tm ask open)
+	hitSaveClear         // the coordinator saves and clears (tm clear)
 	hitSection           // a mod section's header or body (panelsections.go)
 )
 

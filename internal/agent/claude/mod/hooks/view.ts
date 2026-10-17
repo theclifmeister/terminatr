@@ -39,6 +39,14 @@ export function answeredText(code: number | null, stderr: string): string {
   return `Not asked: ${why || `tm ask open exited ${code}`}`
 }
 
+// clearedText is what /saveclear (or the pane's Save and clear) says:
+// what `tm clear` did, from its exit code and output.
+export function clearedText(code: number | null, stderr: string): string {
+  if (code === 0) return 'Asked: the coordinator saves what it learned, then its conversation is cleared once it is idle'
+  const why = stderr.trim().replace(/^tm clear: /, '').split('\n')[0]
+  return `Not cleared: ${why || `tm clear exited ${code}`}`
+}
+
 // waiting counts what waits for the user: the board's Needs you tasks
 // and the unhandled inbox items.
 export function waiting(w: TerminatrWatch): number {

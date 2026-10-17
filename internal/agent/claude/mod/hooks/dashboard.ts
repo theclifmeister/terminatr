@@ -216,7 +216,7 @@ export function contextLine(c: TerminatrContext): { text: string; tone: 'ok' | '
   return {
     text: `context ${k(c.tokens)} / ${k(c.window)} · ${c.percent}%`,
     tone,
-    hint: c.hint ? 'consider /clear: the context lives in files (tm context)' : '',
+    hint: c.hint ? 'past the context hint: /saveclear saves what it learned, then clears' : '',
   }
 }
 
@@ -224,7 +224,7 @@ export function contextLine(c: TerminatrContext): { text: string; tone: 'ok' | '
 // since the line before, once per crossing; undefined otherwise.
 export function contextToast(was: boolean, c: TerminatrContext | undefined): string | undefined {
   if (!c?.hint || was) return undefined
-  return `Context ${c.percent}% full: consider /clear; the context lives in files (tm context)`
+  return `Context ${c.percent}% full: /saveclear saves what the coordinator learned, then clears it`
 }
 
 // projectFeed reads `tm watch --project --json` output (ndjson): the

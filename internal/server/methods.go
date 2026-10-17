@@ -219,6 +219,9 @@ func init() {
 		proto.MethodQuestionsOpen: {gate: gateHuman, call: typed(func(s *Server, p proto.QuestionsOpenParams, _ callCtx) (any, *proto.Error) {
 			return s.openQuestions(p)
 		})},
+		proto.MethodCoordinatorClear: {gate: gateHuman, call: typed(func(s *Server, p proto.CoordinatorClearParams, _ callCtx) (any, *proto.Error) {
+			return s.saveClear(p)
+		})},
 		proto.MethodProjectRename: {gate: gateHuman, call: typed(func(s *Server, p proto.ProjectRenameParams, c callCtx) (any, *proto.Error) {
 			return s.renameProject(p, c.who())
 		})},

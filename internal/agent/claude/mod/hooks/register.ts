@@ -48,7 +48,9 @@
 // in the pane first.
 //
 // In a coordinator it also keeps the project's dashboard pane, /tm
-// (hooks/pane.tsx).
+// (hooks/pane.tsx), and registers /saveclear: `tm clear`, the save ask
+// and then the clear that auto_clear does, which a /clear typed by hand
+// skips.
 //
 // Its guard refuses tool calls that break the standing rules the server
 // sends (hooks/guarded.ts, hooks/guard.ts).
@@ -72,7 +74,7 @@ import { initialTurn, stateOf, step, waitKey } from './turn'
 import { initialUsage, reportOf } from './usage'
 import type { TurnUsageIn, UsageReport } from './usage'
 import type { Seen } from './turn'
-import { answeredText, bandShows, ciToast, statusText } from './view'
+import { answeredText, bandShows, ciToast, clearedText, statusText } from './view'
 
 const watch = atom({ plugin: 'terminatr', key: 'watch' } as const, null)
 const band = atom({ plugin: 'terminatr', key: 'band' } as const, true)
@@ -119,6 +121,7 @@ export const register: Register = on => {
     const role = await $.env.get('TERMINATR_ROLE')
     if (socket && (role === 'thread' || role === 'coordinator')) await registerTools($, role)
     if (role === 'coordinator' && isBand) await $.command.register({ name: 'answer', description: "Open the coordinator's questions to you in a dialog" })
+    if (role === 'coordinator') await $.command.register({ name: 'saveclear', description: 'Save what the coordinator learned, then clear its conversation (tm clear)' })
     if (bin && id) void follow($, bin, id, isBand)
     return started
   })
@@ -206,6 +209,13 @@ export const register: Register = on => {
     return { text: 'Asked the coordinator to open your questions.' }
   })
 
+  // /clear skips the save: /saveclear has tm take auto_clear's steps,
+  // the save ask, then the clear once the coordinator is idle. It runs
+  // tm itself rather than asking the model to: a clear can't be typed
+  // from inside a turn, and the save ask then waits on nothing the
+  // model might skip.
+  on('command.run', { command: 'saveclear' }, async $ => ({ text: await saveClear($) }))
+
   on('turn.start', async ($, e, next) => {
     const r = await next(e)
     await saw($, { kind: 'turn.start' }, 'turn.start')
@@ -288,6 +298,19 @@ async function answerQuestions($: EngineInterface) {
     $.ui.toast(answeredText(r.exitCode, r.stderr))
   } catch (err) {
     $.ui.toast(answeredText(null, String(err)))
+  }
+}
+
+// saveClear has tm save and clear the coordinator (tm clear) and says
+// what came of it. In this file: the engine follows $ into no import.
+async function saveClear($: EngineInterface): Promise<string> {
+  const bin = await $.env.get('TERMINATR_BIN')
+  if (!bin) return clearedText(null, 'this session has no tm (TERMINATR_BIN)')
+  try {
+    const r = await $.process.run([bin, 'clear'])
+    return clearedText(r.exitCode, r.stderr)
+  } catch (err) {
+    return clearedText(null, String(err))
   }
 }
 

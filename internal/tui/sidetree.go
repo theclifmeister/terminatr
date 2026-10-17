@@ -261,7 +261,7 @@ type treeIn struct {
 	current string
 	focus   string
 	// ctxHint is [ui] context_hint: the percent from which a coordinator
-	// row says to consider /clear; 0 for never.
+	// row offers a save and clear; 0 for never.
 	ctxHint int
 	// tree is what the user folded (the view's).
 	tree view.Tree

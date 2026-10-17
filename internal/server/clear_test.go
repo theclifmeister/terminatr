@@ -6,6 +6,8 @@ import (
 	"errors"
 	"log"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -45,6 +47,54 @@ func TestClearSession(t *testing.T) {
 	}
 	if err := c.Call(proto.MethodSessionClear, proto.SessionIDParams{ID: "s-999"}, nil); code(err) != proto.ErrUnknownSession {
 		t.Errorf("clear of no session: %v", err)
+	}
+}
+
+// TestSaveClear: coordinator.clear is refused for an unknown project,
+// one with no coordinator running, and a coordinator whose agent has no
+// clear prompt, so the user hears why at once.
+func TestSaveClear(t *testing.T) {
+	p := testPaths(t)
+	newWatchProject(t)
+	if err := os.MkdirAll(p.AgentsDir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, inject := range map[string]string{"noclear": "", "clears": "[inject]\nclear = \"/clear\"\n"} {
+		manifest := "manifest_version = 1\nname = " + strconv.Quote(name) + "\n[launch]\ncommand = " + strconv.Quote(testSh(t)) + "\nargs = [\"-c\", \"sleep 30\"]\n" + inject
+		if err := os.WriteFile(filepath.Join(p.AgentsDir(), name+".toml"), []byte(manifest), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	startServer(t, p)
+	c, err := client.Dial(p, proto.KindControl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	code := func(err error) string {
+		var perr *proto.Error
+		if errors.As(err, &perr) {
+			return perr.Code
+		}
+		return ""
+	}
+	if err := c.Call(proto.MethodCoordinatorClear, proto.CoordinatorClearParams{Project: "nope"}, nil); code(err) != proto.ErrBadParams {
+		t.Errorf("unknown project: %v", err)
+	}
+	if err := c.Call(proto.MethodCoordinatorClear, proto.CoordinatorClearParams{Project: "demo"}, nil); code(err) != proto.ErrRefused || !strings.Contains(err.Error(), "no coordinator running") {
+		t.Errorf("no coordinator: %v", err)
+	}
+	var started proto.SessionStartResult
+	call(t, c, proto.MethodSessionStart, proto.SessionStartParams{Agent: "noclear", Cwd: t.TempDir(), Role: proto.RoleCoordinator, Project: "demo"}, &started)
+	if err := c.Call(proto.MethodCoordinatorClear, proto.CoordinatorClearParams{Project: "demo"}, nil); code(err) != proto.ErrRefused || !strings.Contains(err.Error(), "(noclear) has no clear prompt ([inject] clear)") {
+		t.Errorf("a coordinator without a clear: %v", err)
+	}
+	call(t, c, proto.MethodSessionStop, proto.SessionIDParams{ID: started.Session.ID}, nil)
+	call(t, c, proto.MethodSessionStart, proto.SessionStartParams{Agent: "clears", Cwd: t.TempDir(), Role: proto.RoleCoordinator, Project: "demo"}, &started)
+	var res proto.CoordinatorClearResult
+	call(t, c, proto.MethodCoordinatorClear, proto.CoordinatorClearParams{Project: "demo"}, &res)
+	if res.Session != started.Session.ID {
+		t.Errorf("asked %q, want %s", res.Session, started.Session.ID)
 	}
 }
 

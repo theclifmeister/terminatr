@@ -36,6 +36,7 @@
 "side.fold-all" = ["z"]
 "side.unfold-all" = ["Z"]
 "side.pin" = ["p"]
+"side.save-clear" = ["c"]
 "side.first" = ["home"]
 "side.last" = ["end"]
 "side.page-up" = ["pgup"]
@@ -55,3 +56,4 @@
 "panel.unfold" = ["right"]
 "panel.fold" = ["left"]
 "panel.enter" = ["enter"]
+"panel.save-clear" = ["c"]

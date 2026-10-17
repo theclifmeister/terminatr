@@ -257,6 +257,12 @@ func (s *ServerSource) OpenQuestions(slug string) (proto.QuestionsOpenResult, er
 	return res, err
 }
 
+func (s *ServerSource) SaveClear(slug string) (proto.CoordinatorClearResult, error) {
+	var res proto.CoordinatorClearResult
+	err := s.call(proto.MethodCoordinatorClear, proto.CoordinatorClearParams{Project: slug}, &res)
+	return res, err
+}
+
 func (s *ServerSource) Review(slug string, t *tasks.Task) Review {
 	var rv Review
 	p, err := project.Open(slug)

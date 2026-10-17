@@ -199,7 +199,7 @@ func (c *client) infoToggle() {
 func (c *client) infoKeyboard(k uv.Key) {
 	c.flash = ""
 	ip := c.info
-	task, answer := false, false
+	task, answer, clear := false, false, false
 	var do *sideStep
 	name := keyName(k)
 	op, ok := panelOp(name)
@@ -207,8 +207,15 @@ func (c *client) infoKeyboard(k uv.Key) {
 	case ip.data != nil && ip.data.remote != nil && (name == "a" || ok && op == panelEnter && ip.sel == ""):
 		// The task and the questions are the paired server's.
 		c.flash = ip.data.remote.alias + "'s: view-only here"
+	case ip.data != nil && ip.data.remote != nil && ok && op == panelSaveClear:
+		c.flash = ip.data.remote.alias + "'s: view-only here"
 	case name == "a":
 		answer = true
+	case ok && op == panelSaveClear:
+		clear = ip.data != nil && ip.data.watch != nil
+		if !clear {
+			c.flash = barKey("panel.save-clear", "c") + " beside a coordinator saves and clears it"
+		}
 	case name == "tab":
 		c.kb = areaMain
 		c.infoLayout()
@@ -256,6 +263,9 @@ func (c *client) infoKeyboard(k uv.Key) {
 	}
 	if answer {
 		c.infoQuestions()
+	}
+	if clear {
+		c.saveClear(ip.data.slug)
 	}
 }
 
@@ -324,6 +334,50 @@ func (c *client) infoQuestions() {
 		c.mu.Unlock()
 		c.poke()
 	}
+}
+
+// coordinatorClear has project slug's coordinator save and clear
+// (coordinator.clear); a variable for tests.
+var coordinatorClear = func(paths tmclient.Paths, slug string) (proto.CoordinatorClearResult, error) {
+	var res proto.CoordinatorClearResult
+	cl, err := tmclient.Connect(paths, false)
+	if err != nil {
+		return res, err
+	}
+	defer cl.Close()
+	err = cl.Call(proto.MethodCoordinatorClear, proto.CoordinatorClearParams{Project: slug}, &res)
+	return res, err
+}
+
+// saveClear has project slug's coordinator save what it learned, then
+// clears it (the context hint's key, in the panel or the sidebar), and
+// says so in the status bar. Not with c.mu held: it calls the server.
+func (c *client) saveClear(slug string) {
+	if !c.lock() {
+		return
+	}
+	paths := c.paths
+	c.mu.Unlock()
+	res, err := coordinatorClear(paths, slug)
+	if c.lock() {
+		c.flash = saveClearWords(slug, res, err)
+		c.status()
+		c.mu.Unlock()
+		c.poke()
+	}
+}
+
+// saveClearWords says what came of a save and clear of slug's
+// coordinator.
+func saveClearWords(slug string, res proto.CoordinatorClearResult, err error) string {
+	if err != nil {
+		var perr *proto.Error
+		if errors.As(err, &perr) {
+			return "not cleared: " + perr.Message
+		}
+		return "not cleared: " + err.Error()
+	}
+	return fmt.Sprintf("asked %s's coordinator to save what it learned; it is cleared at its next idle moment after that", slug)
 }
 
 // questionsFlash says what came of asking the coordinator to open its
@@ -458,6 +512,8 @@ func (c *client) infoMouse(m emu.Mouse) {
 		c.sideGo(Target{Project: slug, Session: h.session})
 	case hitQuestions:
 		c.infoQuestions()
+	case hitSaveClear:
+		c.saveClear(slug)
 	case hitPR:
 		if err := openURL(h.url); err != nil && c.lock() {
 			c.flash = "can't open the browser: " + err.Error() + "; the PR is " + h.url

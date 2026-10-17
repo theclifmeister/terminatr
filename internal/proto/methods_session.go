@@ -386,6 +386,25 @@ type QuestionsOpenResult struct {
 	Open    int    `json:"open"`
 }
 
+// MethodCoordinatorClear saves and clears a project's coordinator
+// (docs/SPEC.md §7.5, Auto-clear): `tm clear`, the context hint's key,
+// /saveclear in its pane. The ticker takes auto-clear's steps for it at
+// its next sweep: the save ask, then the agent's clear prompt once the
+// coordinator rested after it. Refused for a coordinator whose agent has
+// no clear prompt ([inject] clear).
+const MethodCoordinatorClear = "coordinator.clear"
+
+// CoordinatorClearParams are the params of coordinator.clear.
+type CoordinatorClearParams struct {
+	Project string `json:"project"`
+}
+
+// CoordinatorClearResult names the coordinator session asked to save and
+// clear.
+type CoordinatorClearResult struct {
+	Session string `json:"session"`
+}
+
 // MethodSessionClear clears an agent session's conversation
 // (SessionIDParams): the server pastes its agent's clear prompt ([inject]
 // clear, /clear for Claude) as a plain prompt, queued until the agent is

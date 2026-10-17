@@ -463,6 +463,9 @@ func (m *dash) detailsKey(key string) (tea.Cmd, bool) {
 		m.scrollDetails(-1 << 20)
 	case panelLast:
 		m.scrollDetails(1 << 20)
+	case panelSaveClear:
+		// The details panel has no coordinator: the list's key.
+		return nil, false
 	case panelBack:
 		if m.detSelNow() != "" {
 			m.detSel = ""

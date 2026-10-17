@@ -348,6 +348,16 @@ func (m *dash) answerQuestions(slug string) tea.Cmd {
 	})
 }
 
+// saveClear has slug's coordinator save what it learned, then clears its
+// conversation (the context hint's key); the footer says what came of it.
+func (m *dash) saveClear(slug string) tea.Cmd {
+	src := m.src
+	return m.act(func() actionMsg {
+		res, err := src.SaveClear(slug)
+		return actionMsg{msg: saveClearWords(slug, res, err)}
+	})
+}
+
 // activeWord is what space does to a project that is on (active) or not.
 func activeWord(active bool) string {
 	if active {
