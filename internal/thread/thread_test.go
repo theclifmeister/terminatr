@@ -194,7 +194,7 @@ func TestFiles(t *testing.T) {
 	if !strings.HasPrefix(string(b), "# changed\n") || !strings.Contains(string(b), "also this") {
 		t.Fatalf("task.md:\n%s", b)
 	}
-	brief, err := WriteBrief(p, r, true)
+	brief, _, err := WriteBrief(p, r, true)
 	if err != nil {
 		t.Fatal(err)
 	}

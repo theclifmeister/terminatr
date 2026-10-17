@@ -404,7 +404,7 @@ func TestSmokeThreadLifecycle(t *testing.T) {
 		t.Fatalf("resolve again: %q", again)
 	}
 	journal, _ := os.ReadFile(filepath.Join(projDir, "JOURNAL.md"))
-	for _, w := range []string{"coordinator thread.start t-0001 T1 Fix the login (approved by the user)", "coordinator thread.prompt t-0001",
+	for _, w := range []string{"coordinator thread.memory t-0001 0 matched, 0 standing", "coordinator thread.start t-0001 T1 Fix the login (approved by the user)", "coordinator thread.prompt t-0001",
 		"t-0001 task.steps.add T1", "t-0001 thread.report t-0001", "t-0001 thread.done t-0001", "human thread.resolve t-0001"} {
 		if !strings.Contains(string(journal), w) {
 			t.Errorf("journal lacks %q:\n%s", w, journal)
