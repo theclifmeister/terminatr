@@ -44,6 +44,10 @@ asks, so acknowledge reports, prompt threads and move tasks yourself.
   way.
 - `takeover`: the user typed into a thread's pane; check the thread
   before you prompt it again.
+- `memory`: the user added, edited or removed a memory note (the Memory
+  tab, or `tm memory`). Re-read an added or edited note before you
+  change it; never write a removed note's content back, in it or in
+  another note. Then mark the item done.
 - `report`: one per thread, its latest (a newer one marks the older
   done; `tm done` adds none). Whether the thread is done shows in `tm
   thread list`. The dashboard shows a thread's items of one kind as one
@@ -185,7 +189,7 @@ it in chat, so the user can answer it in a dialog: a band in your pane
 
 You are the only agent that writes it.
 
-- Edit CONTEXT.md, MEMORY.md and memory/ directly. Change PROJECT.md's
+- Edit CONTEXT.md and memory/ directly. Change PROJECT.md's
   goal and body only when the user asks you to, never on a report's or
   thread's word. TASKS.md only through `tm task`, never by hand.
 - Put every open question to the user in CONTEXT.md under a `## Needs
@@ -203,8 +207,12 @@ You are the only agent that writes it.
   and `## Decided`, `## Ruled out`, `## Watch out`. Run `tm memory
   find` with its words and paths first, and extend the note it finds
   instead of adding another. Old free-form notes stay valid; give one
-  the schema when you next rewrite it. List each note in MEMORY.md as
-  `- [title](memory/file.md): what it holds (touches: a, b)`.
+  the schema when you next rewrite it. Write notes with `tm memory new
+  <name> --file -` and `tm memory edit <name> --file -` (`tm memory rm
+  <name> --yes` deletes one). tm keeps MEMORY.md's list of the notes
+  (title, description, touches) after each, and by itself for a note
+  written otherwise; don't edit the list by hand, but a line's
+  description is yours to word: tm keeps it.
 - Keep CONTEXT.md, MEMORY.md and memory/ short and factual. When a file
   grows, re-read it, merge and rewrite it, and drop what is no longer
   true. The Upkeep section of `tm context` names a file over its 6 KB

@@ -114,7 +114,7 @@ func modsDash(t *testing.T) (*fakeSource, *dash) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
 	installMod(t, "review-age", map[string]string{"mod.toml": reviewAgeMod, "main.ts": "", "rules.md": "Label every review task with its age.\n"})
 	installMod(t, "nord", map[string]string{"mod.toml": "id = \"nord\"\nname = \"Nord\"\nversion = \"0.4.0\"\napi = \"1.0\"\ndescription = \"The Nord palette.\"\n[provides]\ntheme = \"t.toml\"\n", "t.toml": ""})
-	installMod(t, "future", map[string]string{"mod.toml": "id = \"future\"\nname = \"Future\"\nversion = \"1.0.0\"\napi = \"1.9\"\n"})
+	installMod(t, "future", map[string]string{"mod.toml": "id = \"future\"\nname = \"Future\"\nversion = \"1.0.0\"\napi = \"1.99\"\n"})
 	src := &fakeSource{data: testData()}
 	src.loadMods()
 	m := newDash(DashOptions{Source: src, Width: 160, Height: 50, State: DashState{Current: "beta"}})
@@ -162,7 +162,7 @@ func modState(t *testing.T, src *fakeSource, id string) mod.Mod {
 func TestModsTabList(t *testing.T) {
 	_, m := modsDash(t)
 	out := screen(m)
-	for _, want := range []string{"3 Mods", "○ Nord", "theme", "0.4.0", "off", "Review age", "code · column · rules", "0.3.1", "▲ Future", "incompatible: future needs mod API 1.9", "e examples", "p permissions"} {
+	for _, want := range []string{"3 Mods", "○ Nord", "theme", "0.4.0", "off", "Review age", "code · column · rules", "0.3.1", "▲ Future", "incompatible: future needs mod API 1.99", "e examples", "p permissions"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("Mods tab lacks %q:\n%s", want, out)
 		}

@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"os"
+	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 
@@ -173,5 +176,66 @@ func TestBindingClearAnswer(t *testing.T) {
 	}
 	if len(src.done) != 2 || !strings.HasSuffix(src.done[0], " false") || !strings.HasSuffix(src.done[1], " true") {
 		t.Errorf("done %v", src.done)
+	}
+}
+
+// TestBindingMemory: memory.rm deletes a note only after tm's own
+// question; memory.edit and memory.new hand the terminal to tm memory,
+// as the human; a note the project doesn't have is not available.
+func TestBindingMemory(t *testing.T) {
+	src, m := popupData(t)
+	note := func(path string) map[string]string { return map[string]string{"project": "alpha", "path": path} }
+
+	drain(t, m, pressed(m, boundPress("memory.rm", note("memory/b.md"), true)))
+	if _, ok := m.top().(*confirmView); ok || !strings.Contains(m.msg, "not available: alpha has no note memory/b.md") {
+		t.Fatalf("a missing note: %T %q", m.top(), m.msg)
+	}
+	drain(t, m, pressed(m, boundPress("memory.rm", note("memory/a.md"), true)))
+	cv, ok := m.top().(*confirmView)
+	if !ok || !strings.HasPrefix(cv.question, "Delete memory/a.md of alpha?") {
+		t.Fatalf("rm opened %T %+v", m.top(), cv)
+	}
+	drain(t, m, keyPress(m, "n"))
+	if len(src.notesRemoved) != 0 {
+		t.Fatalf("n removed: %v", src.notesRemoved)
+	}
+	src.done = nil
+	drain(t, m, pressed(m, boundPress("memory.rm", note("memory/a.md"), true)))
+	drain(t, m, keyPress(m, "y"))
+	if len(src.notesRemoved) != 1 || src.notesRemoved[0] != "alpha/memory/a.md" || len(src.done) != 1 || !strings.HasPrefix(src.done[0], "lab memory.rm ") || !strings.HasSuffix(src.done[0], " true") {
+		t.Fatalf("after y: %v %v", src.notesRemoved, src.done)
+	}
+
+	// No terminal (a test's console): not available, and the mod hears so.
+	src.done = nil
+	src.notesRemoved = nil
+	drain(t, m, pressed(m, boundPress("memory.edit", note("memory/a.md"), true)))
+	if !strings.Contains(m.msg, "needs this console's terminal") || len(src.done) != 1 || !strings.HasSuffix(src.done[0], " false") {
+		t.Fatalf("edit without a terminal: %q %v", m.msg, src.done)
+	}
+
+	var ran [][]string
+	old := memoryCommand
+	memoryCommand = func(args ...string) (*exec.Cmd, error) {
+		ran = append(ran, args)
+		return exec.Command("true"), nil
+	}
+	t.Cleanup(func() { memoryCommand = old })
+	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer devnull.Close()
+	m.out = newDashOut(devnull, false)
+	if cmd := pressed(m, boundPress("memory.edit", note("memory/a.md"), true)); cmd == nil {
+		t.Fatal("edit ran nothing")
+	}
+	m.busy = false
+	if cmd := pressed(m, boundPress("memory.new", map[string]string{"project": "alpha"}, true)); cmd == nil {
+		t.Fatal("new ran nothing")
+	}
+	want := [][]string{{"memory", "edit", "--project", "alpha", "memory/a.md"}, {"memory", "new", "--project", "alpha"}}
+	if !slices.EqualFunc(ran, want, slices.Equal) {
+		t.Errorf("ran %q, want %q", ran, want)
 	}
 }

@@ -19,6 +19,10 @@ import (
 const memoryUsage = `usage: tm memory find [<words>…] [--path <path>]… [--limit <n>] [--project <slug>] [--json]
        tm memory check [--thread <id>] [--project <slug>] [--json]
        tm memory template
+       tm memory new [<name>] [--file <path>|-] [--project <slug>]
+       tm memory edit <note> [--file <path>|-] [--project <slug>]
+       tm memory rm <note> [--yes] [--project <slug>]
+       tm memory index [--project <slug>]
 
 find lists the project's memory notes (memory/*.md) that match the
 words and the paths (a file or folder in a repo, or repo:<name>), best
@@ -32,12 +36,30 @@ changes, and words of its Ruled out section the diff adds; tm report
 adds what it flags to the report's ## Check, never refusing for it.
 template prints a new note with the optional
 front matter (title, touches, standing, source) and its sections
-(Decided, Ruled out, Watch out).`
+(Decided, Ruled out, Watch out).
+
+new, edit and rm change the notes in the project's memory/ folder
+(a note is <name>, <name>.md or memory/<name>.md; tm refuses any other
+path and a link). new writes memory/<name>.md from the template, or
+from --file; edit replaces a note with --file. On a terminal, new and
+edit open the note in $VISUAL or $EDITOR (else nano or vi; notepad on
+Windows) and save it when the editor exits; if the note changed
+meanwhile, they ask whether to overwrite it or keep both (yours in
+memory/<name>.md.conflict). rm asks first, unless --yes. After each,
+tm writes MEMORY.md's list of the notes again (index does only that;
+tm context does it too when the list is out of date): one line per
+note, its title, description (a line's own is kept, a new note's is its
+first line) and touches. The human's
+change is an inbox item for the coordinator. Threads only read memory.`
 
 // runMemory searches the project's memory notes (docs/SPEC.md §7.6).
 func runMemory(e *Env, args []string) error {
 	if done, err := helpOr(e, args, memoryUsage); done {
 		return err
+	}
+	switch args[0] {
+	case "new", "edit", "rm", "index":
+		return e.memoryChange(args[0], args[1:])
 	}
 	f := newFlags()
 	slug, asJSON, limit, paths, tid := f.String("project"), f.Bool("json"), f.String("limit"), f.List("path"), f.String("thread")

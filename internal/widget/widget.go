@@ -548,7 +548,7 @@ func (c *checker) actions(as []Action, at string) {
 const MaxQuestionTarget = 1024
 
 // targetKeys are a target's fields, mod API v1's (modbus.Target).
-var targetKeys = []string{"project", "task", "thread", "session", "question", "option"}
+var targetKeys = []string{"project", "task", "thread", "session", "question", "option", "path"}
 
 // ActionTarget is a's target as the core action table takes it.
 func ActionTarget(a Action) modaction.Target { return modaction.TargetOf(a.Target) }

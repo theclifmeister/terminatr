@@ -26,6 +26,7 @@ func (s state) Task(slug, ref string) *tasks.Task {
 func (s state) Asked(slug, ref string) string { return s.asked[ref] }
 func (s state) Session(id string) bool        { return s.sessions[id] }
 func (s state) Menu(id string) []MenuQuestion { return s.menus[id] }
+func (s state) Note(slug, path string) bool   { return slug == "alpha" && path == "memory/a.md" }
 
 func live() state {
 	return state{
@@ -87,6 +88,19 @@ func TestWhy(t *testing.T) {
 		{"question.answer", answer("s-1", "Which colour?", "2"), `no option "2"`},
 		{"question.answer", answer("s-1", "Done?", "Yes"), "answered already"},
 		{"question.answer", answer("s-1", "Which fruits?", "Pear"), "answered in the session"},
+		{"memory.edit", Target{Project: "alpha", Path: "memory/a.md"}, ""},
+		{"memory.rm", Target{Project: "alpha", Path: "memory/a.md"}, ""},
+		{"memory.rm", Target{Project: "alpha", Path: "memory/b.md"}, "has no note memory/b.md"},
+		{"memory.edit", Target{Project: "beta", Path: "memory/a.md"}, "no project beta"},
+		{"memory.new", Target{Project: "alpha"}, ""},
+		{"memory.new", Target{Project: "alpha", Path: "memory/a.md"}, "takes no path"},
+		{"memory.rm", Target{Project: "alpha", Path: "MEMORY.md"}, "takes a target of"},
+		{"memory.rm", Target{Project: "alpha", Path: "memory/../PROJECT.md"}, "takes a target of"},
+		{"memory.rm", Target{Project: "alpha", Path: "memory/sub/a.md"}, "takes a target of"},
+		{"memory.rm", Target{Project: "alpha", Path: "memory/.a.md"}, "takes a target of"},
+		{"memory.edit", Target{Project: "alpha"}, "takes a target of"},
+		{"memory.edit", Target{Project: "alpha", Path: "memory/a.md", Task: "T1"}, "takes a target of"},
+		{"task.show", Target{Project: "alpha", Task: "T1", Path: "memory/a.md"}, "takes no path"},
 		// Wrong shapes.
 		{"task.accept", Target{Project: "alpha", Task: "12"}, "takes a target of"},
 		{"task.accept", Target{Project: "alpha", Task: "T02"}, "takes a target of"},
@@ -128,11 +142,11 @@ func TestTable(t *testing.T) {
 			t.Errorf("%s: label, key and precondition are all needed", a.ID)
 		}
 		switch a.On {
-		case OnTask, OnProject, OnSession, OnQuestion:
+		case OnTask, OnProject, OnSession, OnQuestion, OnNote:
 		default:
 			t.Errorf("%s: target kind %q", a.ID, a.On)
 		}
-		writes := askKind(a.ID) != "" || a.ID == "project.activate" || a.Consent != ""
+		writes := askKind(a.ID) != "" || a.ID == "project.activate" || a.ID == "memory.rm" || a.Consent != ""
 		if writes && !a.Confirm {
 			t.Errorf("%s changes state but doesn't ask first", a.ID)
 		}

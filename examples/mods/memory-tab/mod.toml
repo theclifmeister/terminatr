@@ -8,8 +8,8 @@
 id = "memory-tab"
 name = "Memory tab"
 version = "1.0.0"
-api = "1.0"
-description = "The project's memory in its popup: a list of the memory files and a text viewer, read-only."
+api = "1.9"
+description = "The project's memory in its popup: a list of the memory files and a text viewer; e, n and d edit, write and delete notes."
 authors = ["terminatr"]
 homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/memory-tab"
 

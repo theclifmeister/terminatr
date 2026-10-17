@@ -28,6 +28,12 @@ func (t *Ticker) upkeep(p *project.Project, safety config.Safety, now time.Time)
 		t.o.Log.Printf("ticker: %s: archived %d done tasks", p.Slug, len(ids))
 	}
 	t.archiveThreads(p, now, days(safety.ArchiveThreadsDays))
+	// MEMORY.md's list, in line with memory/ (journaled when it changes).
+	if changed, err := p.SyncIndex(); err != nil {
+		t.o.Log.Printf("ticker: %s: memory index: %v", p.Slug, err)
+	} else if changed {
+		t.o.Log.Printf("ticker: %s: wrote MEMORY.md's list of the notes", p.Slug)
+	}
 	if n, err := p.ArchiveInbox(now, days(safety.ArchiveInboxDays)); err != nil {
 		t.o.Log.Printf("ticker: %s: archive inbox: %v", p.Slug, err)
 	} else if n > 0 {

@@ -520,7 +520,7 @@ func TestUpkeep(t *testing.T) {
 			t.Errorf("context lacks %q:\n%s", w, ctx)
 		}
 	}
-	if strings.Contains(ctx, "small.md") {
+	if strings.Contains(ctx, "small.md is") {
 		t.Error("a file within budget named")
 	}
 

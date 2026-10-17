@@ -70,6 +70,7 @@ type fakeSource struct {
 	library      []thread.LibFile
 	libFiles     map[string]string // "t-0001/name" -> content
 	libRemoved   []string          // "t-0001/name", "t-0001/" for all
+	notesRemoved []string          // "demo/memory/a.md"
 	done         []string          // action.done: "mod action project/task ok"
 	// refusals are the guard's log's open refusals; decided its
 	// decisions: "id how session".
@@ -253,6 +254,15 @@ func (f *fakeSource) Library(string) ([]thread.LibFile, error) { return f.librar
 func (f *fakeSource) LibraryRead(_, id, name string, max int64) ([]byte, bool, error) {
 	return []byte(f.libFiles[id+"/"+name]), false, nil
 }
+func (f *fakeSource) HasNote(slug, path string) bool {
+	return path == "memory/a.md" && !slices.Contains(f.notesRemoved, slug+"/"+path)
+}
+
+func (f *fakeSource) RemoveNote(slug, path string) error {
+	f.notesRemoved = append(f.notesRemoved, slug+"/"+path)
+	return nil
+}
+
 func (f *fakeSource) LibraryRemove(_, id, name string) (int, error) {
 	f.libRemoved = append(f.libRemoved, id+"/"+name)
 	var keep []thread.LibFile

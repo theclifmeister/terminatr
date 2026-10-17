@@ -184,7 +184,7 @@ func TestModsInstallRefused(t *testing.T) {
 		{"no folder", func(*testing.T) string { return "/no/such/folder" }, "no such folder, and not a git URL"},
 		{"refused path", func(*testing.T) string { return "https://example.com/r.git//a/../../etc" }, ".. isn't allowed"},
 		{"too big", func(t *testing.T) string { return modFolder(t, big) }, "more than 2000 files"},
-		{"incompatible", func(t *testing.T) string { return modFolder(t, data("later", "1.9")) }, "mod API 1.9"},
+		{"incompatible", func(t *testing.T) string { return modFolder(t, data("later", "1.99")) }, "mod API 1.99"},
 		{"installed", func(t *testing.T) string { return modFolder(t, data("nord", "1.0")) }, "nord is already installed"},
 		{"built in", func(t *testing.T) string { return modFolder(t, data("memory-tab", "1.0")) }, "it is a built-in mod's id"},
 	} {
