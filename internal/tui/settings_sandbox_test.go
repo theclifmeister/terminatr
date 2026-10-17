@@ -279,3 +279,25 @@ func TestSandboxPresetHumanOnly(t *testing.T) {
 		t.Error("written")
 	}
 }
+
+// TestSandboxBadEntryFlagged: an entry that fails the checks (written by
+// hand in config.toml) is marked with its reason, and the list says the
+// project's sandbox settings are dropped until it is fixed or removed.
+func TestSandboxBadEntryFlagged(t *testing.T) {
+	_, m := sandboxData(t)
+	m.data.Sandbox[""][config.SandboxExcluded] = []string{"docker compose *", "make a$X"}
+	row := sandboxRow(t, "", "Excluded commands")
+	if v := row.value(m); v != "2, 1 invalid" {
+		t.Errorf("value %q", v)
+	}
+	drain(t, m, row.change(m))
+	out := screen(m)
+	for _, want := range []string{"✗ make a$X", "has a variable", "dropped at launch"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "✗ docker compose") {
+		t.Errorf("good entry flagged:\n%s", out)
+	}
+}

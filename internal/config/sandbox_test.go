@@ -82,7 +82,7 @@ func TestCheckSandboxEntries(t *testing.T) {
 			t.Errorf("excluded %q: %v", e, err)
 		}
 	}
-	for _, e := range []string{"*", "**", " * ", "npx * ", "a; b", "a && b", "a > f", "$(x)", "`x`", "${X} x", "echo $X", "?", "x", "Bash(npx *)", "PowerShell(x)",
+	for _, e := range []string{"*", "**", " * ", "npx * ", "a; b", "a && b", "a > f", "$(x)", "`x`", "${X} x", "echo $X", "make a$X", "x ok $1", "x $@", "x $*", "x $$", "x $?", "x $# y", "ok $ $_a", "x a$-", "?", "x", "Bash(npx *)", "PowerShell(x)",
 		// T560's security review: a program left open, a rule in another case.
 		"*e*", "*-*", "* --version", "python* -c x", "bash(npx *)", "POWERSHELL(x)"} {
 		if err := CheckExcludedCommand(e); err == nil {
@@ -286,5 +286,14 @@ func TestSandboxApplies(t *testing.T) {
 		if got := SandboxApplies(c.key, c.goos); got != c.want {
 			t.Errorf("%s on %s: %v", c.key, c.goos, got)
 		}
+	}
+}
+
+// TestSandboxProblems: each entry's reason, for the Sandbox tab; a lone
+// $ is plain text.
+func TestSandboxProblems(t *testing.T) {
+	got := SandboxProblems(SandboxExcluded, []string{"make e2e", "x $1", "make e2e", "*", "price $"})
+	if got[0] != "" || got[4] != "" || !strings.Contains(got[1], "variable") || !strings.Contains(got[2], "twice") || !strings.Contains(got[3], "every command") {
+		t.Errorf("%q", got)
 	}
 }

@@ -172,6 +172,23 @@ func checkSandboxText(e string) error {
 	return nil
 }
 
+// hasExpansion is whether e has a $ that starts an expansion anywhere in
+// it: a name or ${, or a special parameter ($1 $@ $* $$ $? $# $! $- $0);
+// $( is a shellOp. A $ at the end or before a space is plain.
+func hasExpansion(e string) bool {
+	for i := 0; i+1 < len(e); i++ {
+		if e[i] != '$' {
+			continue
+		}
+		switch c := e[i+1]; {
+		case c == '{', c == '_', c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9',
+			c == '@', c == '*', c == '$', c == '?', c == '#', c == '!', c == '-':
+			return true
+		}
+	}
+	return false
+}
+
 // CheckExcludedCommand checks one excluded command: a command pattern
 // in Claude's Bash rule syntax ("npx playwright *": a trailing " *"
 // takes any arguments, none too; without it the command must match
@@ -192,7 +209,7 @@ func CheckExcludedCommand(e string) error {
 	if len([]rune(e)) < 2 {
 		return fmt.Errorf("%q is too short for a command: it would match programs by accident", e)
 	}
-	if i := strings.Index(e, "$"); i >= 0 && i+1 < len(e) && (e[i+1] == '{' || e[i+1] == '_' || e[i+1] >= 'A' && e[i+1] <= 'Z' || e[i+1] >= 'a' && e[i+1] <= 'z') {
+	if hasExpansion(e) {
 		return fmt.Errorf("%q has a variable: an excluded command is one command, without substitutions", e)
 	}
 	for _, op := range shellOps {
@@ -286,6 +303,22 @@ func CheckSandboxList(key string, list []string) error {
 		}
 	}
 	return nil
+}
+
+// SandboxProblems is, for each entry of key's list, why it fails the
+// sandbox checks ("" for one that passes): the rule it breaks, or that
+// it is listed twice. A config.toml with any such entry drops the
+// project's sandbox lists and presets at launch.
+func SandboxProblems(key string, list []string) []string {
+	out := make([]string, len(list))
+	for i, e := range list {
+		if err := checkSandboxEntry(key, e); err != nil {
+			out[i] = err.Error()
+		} else if slices.Contains(list[:i], e) {
+			out[i] = fmt.Sprintf("%q is listed twice", e)
+		}
+	}
+	return out
 }
 
 // SandboxWarning is why an entry of key's list, which passes its check,

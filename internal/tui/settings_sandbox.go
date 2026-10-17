@@ -203,6 +203,9 @@ func (sr safetyRows) sandboxRow(key string) setting {
 			if len(list) == 0 {
 				return "none"
 			}
+			if n := len(slices.DeleteFunc(config.SandboxProblems(key, list), func(p string) bool { return p == "" })); n > 0 {
+				return fmt.Sprintf("%d, %d invalid", len(list), n)
+			}
 			return fmt.Sprint(len(list))
 		},
 		change: func(m *dash) tea.Cmd {
@@ -379,14 +382,28 @@ func (v *sandboxView) render(m *dash) string {
 		lines = append(lines, faintLines(where, w)...)
 	}
 	sel := -1
+	problems := config.SandboxProblems(v.list, list)
+	if slices.ContainsFunc(problems, func(p string) bool { return p != "" }) {
+		lines = append(lines, "")
+		lines = append(lines, warnLines("An entry marked ✗ fails the checks: until it is fixed or removed (x), config.toml's sandbox lists and presets for "+v.sr.forWho+" are all dropped at launch: threads start without them.", w)...)
+	}
 	for i, e := range list {
 		lines = append(lines, "")
 		text := textsafe.Line(e, w)
+		if problems[i] != "" {
+			text = textsafe.Line("✗ "+e, w)
+		}
 		if i == v.sel {
 			lines = append(lines, th().Sel.Render(fit(text, w)))
 			sel = len(lines) - 1
 		} else {
 			lines = append(lines, th().Head.Render(text))
+		}
+		if problems[i] != "" {
+			for _, l := range warnLines(problems[i], w-2) {
+				lines = append(lines, "  "+l)
+			}
+			continue
 		}
 		for _, warn := range []string{config.SandboxWarning(v.list, e), v.covered(m, e)} {
 			if warn == "" {
