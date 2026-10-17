@@ -173,6 +173,13 @@ func TestRemotePanelHits(t *testing.T) {
 	if len(got[hitPR]) == 0 || got[hitPR][0].url != "https://github.com/o/acme/pull/70" {
 		t.Fatalf("the PR: %+v", got[hitPR])
 	}
+	for _, bad := range []string{"file:///tmp/x.command", `C:\evil.exe`, "smb://h/s/x.exe", "-a Calculator"} {
+		evil := remotePeers()
+		evil[0].Projects[0].Watch.Threads[0].PRURL = bad
+		if got := kinds(evil, remotePane("mini", "r-2", proto.RoleThread, "acme-api", "t-0007")); len(got[hitPR]) > 0 {
+			t.Fatalf("a peer's PR address %q opens: %+v", bad, got[hitPR])
+		}
+	}
 	off := remotePeers()
 	off[0].Panes = proto.PanesOff
 	if got := kinds(off, coord); len(got[hitSession]) > 0 {

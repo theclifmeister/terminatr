@@ -28,3 +28,28 @@ func TestCommand(t *testing.T) {
 		}
 	}
 }
+
+func TestWeb(t *testing.T) {
+	for s, want := range map[string]bool{
+		"https://github.com/o/r/pull/1": true,
+		"http://x.test/a":               true,
+		"":                              false,
+		"file:///tmp/x.command":         false,
+		`C:\Users\x\evil.exe`:           false,
+		"smb://host/share/x.exe":        false,
+		"-a Calculator":                 false,
+		"-https://x.test":               false,
+		"https:///nohost":               false,
+		"https://":                      false,
+		"/usr/bin/true":                 false,
+		" https://x.test":               false,
+		"javascript:alert(1)":           false,
+	} {
+		if got := Web(s); got != want {
+			t.Errorf("Web(%q) = %v, want %v", s, got, want)
+		}
+	}
+	if err := URL("file:///tmp/x.command"); err == nil {
+		t.Error("URL opened a non-web address")
+	}
+}

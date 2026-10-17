@@ -2,15 +2,35 @@
 package open
 
 import (
+	"errors"
+	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 )
 
-// URL starts the platform's opener for url and returns without waiting.
-func URL(url string) error {
-	name, args := command(runtime.GOOS, url, wsl(), func(n string) bool {
+// Web reports whether s is an absolute http or https address with a host,
+// the only kind the opener is given: anything else (a file path, an app
+// scheme, a leading dash) could launch a program instead of a page.
+func Web(s string) bool {
+	if s == "" || s != strings.TrimSpace(s) || strings.HasPrefix(s, "-") {
+		return false
+	}
+	u, err := url.Parse(s)
+	if err != nil || u.Hostname() == "" {
+		return false
+	}
+	return u.Scheme == "https" || u.Scheme == "http"
+}
+
+// URL starts the platform's opener for addr and returns without waiting.
+// It refuses anything but a web address.
+func URL(addr string) error {
+	if !Web(addr) {
+		return errors.New("not a web address")
+	}
+	name, args := command(runtime.GOOS, addr, wsl(), func(n string) bool {
 		_, err := exec.LookPath(n)
 		return err == nil
 	})
