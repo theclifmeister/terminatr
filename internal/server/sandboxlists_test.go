@@ -67,7 +67,7 @@ excluded_commands = ["npx playwright *"]
 
 // TestSandboxPresetsLaunch: a preset on maps to local binding where it
 // applies (macOS) and is skipped with a note elsewhere, config.toml
-// keeping it; browser testing adds its guidance after the brief.
+// keeping it; only local dev servers open local binding; browser testing adds its guidance after the brief.
 func TestSandboxPresetsLaunch(t *testing.T) {
 	testPaths(t)
 	writeConfig(t, `[defaults.sandbox]
@@ -76,7 +76,7 @@ excluded_commands = ["npx playwright *"]
 `)
 	lc := loadLaunchConfig()
 	lists, presets, skipped := lc.sandbox("demo", config.OSMac)
-	if !lists.LocalBinding || !slices.Equal(presets, []string{config.SandboxBrowser}) || len(skipped) != 0 ||
+	if lists.LocalBinding || !slices.Equal(presets, []string{config.SandboxBrowser}) || len(skipped) != 0 ||
 		!slices.Equal(lists.Excluded, []string{"npx playwright *"}) {
 		t.Errorf("macOS: %+v %q %q", lists, presets, skipped)
 	}
@@ -102,5 +102,10 @@ excluded_commands = ["npx playwright *"]
 	}
 	if got, err = presetBrief(rt, "", []string{config.SandboxBrowser}); err != nil || got == "" {
 		t.Errorf("no brief: %q, %v", got, err)
+	}
+	big := filepath.Join(t.TempDir(), "big.md")
+	os.WriteFile(big, make([]byte, maxBrief+1), 0o600)
+	if _, err = presetBrief(rt, big, []string{config.SandboxBrowser}); err == nil {
+		t.Errorf("a brief over %d bytes was read", maxBrief)
 	}
 }

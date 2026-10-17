@@ -189,6 +189,12 @@ func CheckExcludedCommand(e string) error {
 	case openProgram(e) != "":
 		return errors.New(openProgram(e))
 	}
+	if len([]rune(e)) < 2 {
+		return fmt.Errorf("%q is too short for a command: it would match programs by accident", e)
+	}
+	if i := strings.Index(e, "$"); i >= 0 && i+1 < len(e) && (e[i+1] == '{' || e[i+1] == '_' || e[i+1] >= 'A' && e[i+1] <= 'Z' || e[i+1] >= 'a' && e[i+1] <= 'z') {
+		return fmt.Errorf("%q has a variable: an excluded command is one command, without substitutions", e)
+	}
 	for _, op := range shellOps {
 		if strings.Contains(e, op) {
 			return fmt.Errorf("%q has %q: an excluded command is one command, without pipes, redirects, substitutions or ;", e, strings.TrimSpace(op))

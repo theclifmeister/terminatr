@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -42,7 +43,7 @@ func (l launchConfig) sandbox(slug, goos string) (lists agent.SandboxLists, pres
 		}
 		presets = append(presets, k)
 		switch k {
-		case config.SandboxBrowser, config.SandboxDevServers:
+		case config.SandboxDevServers:
 			lists.LocalBinding = true
 		}
 	}
@@ -50,7 +51,7 @@ func (l launchConfig) sandbox(slug, goos string) (lists agent.SandboxLists, pres
 }
 
 // browserGuide is what a thread with the browser testing preset is told
-// (macOS: T561's findings). Seatbelt has no mach-register rule in Claude
+// (macOS: T561's findings; no local binding, the pipe transport needs none). Seatbelt has no mach-register rule in Claude
 // or Codex, which multi-process Chromium needs for its child processes;
 // the headless shell in one process needs none.
 const browserGuide = `## Sandbox: browser testing
@@ -69,12 +70,18 @@ sandbox is Playwright's headless shell in one process:
 - Not channel 'chrome' or 'chromium' (full Chrome) and not headed mode: those
   fail in this sandbox.
 
-Your commands may listen on and reach localhost, so a dev server (Playwright's
-webServer) works. Downloads (npx playwright install) need domains the sandbox
+Playwright talks to the browser over a pipe, which needs no local port. Your
+commands may not listen on or reach local ports unless the human also turned
+on local dev servers, so a dev server (Playwright's webServer) may not work.
+Downloads (npx playwright install) need domains the sandbox
 may not allow. If a browser is missing or what you need still fails, don't run
 it outside the sandbox: say so in your report; only the human can add an
 excluded command.
 `
+
+// maxBrief is the most of a thread's brief.md that presetBrief copies:
+// the brief is the coordinator's text, not unbounded.
+const maxBrief = 1 << 20
 
 // presetBrief is the brief a thread with presets gets: brief (its
 // brief.md, "" for none) with the presets' guidance after it, written in
@@ -86,9 +93,17 @@ func presetBrief(rt, brief string, presets []string) (string, error) {
 	}
 	var text []byte
 	if brief != "" {
-		b, err := os.ReadFile(brief)
+		f, err := os.Open(brief)
 		if err != nil {
 			return brief, err
+		}
+		b, err := io.ReadAll(io.LimitReader(f, maxBrief+1))
+		f.Close()
+		if err != nil {
+			return brief, err
+		}
+		if len(b) > maxBrief {
+			return brief, fmt.Errorf("brief %s is longer than %d bytes", brief, maxBrief)
 		}
 		text = append(b, '\n')
 	}

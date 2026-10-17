@@ -35,7 +35,7 @@ const sandboxBoth = "An excluded command that an allow rule also covers runs out
 
 // sandboxLocal is what local binding opens, put to the human before a
 // preset with it is turned on.
-const sandboxLocal = "Their sandboxed commands may then listen on ports, which macOS's sandbox doesn't limit to localhost, and connect to every service listening on a local port (a database, an IDE's or a browser's debug port): one of those that runs commands lets the thread out of the sandbox."
+const sandboxLocal = "A thread can then connect to every service listening on a local port (databases, Docker over TCP, Chrome's debug port, IDE extensions) and can take a port another program expects. It may also listen on ports, which macOS's sandbox doesn't limit to localhost. A service that runs commands lets the thread out of the sandbox."
 
 // sandboxGuide heads the Sandbox tab.
 const sandboxGuide = "Prefer a preset: the thread's commands stay inside the sandbox, opened only as far as the tool needs. Excluded commands (Advanced) run outside it: a last resort. " + sandboxBoth
@@ -55,9 +55,9 @@ var sandboxLists = map[string]struct{ label, help, about, example string }{
 // sandboxPresets are each preset's row label and help.
 var sandboxPresets = map[string]struct{ label, help string }{
 	config.SandboxBrowser: {"Browser testing (Playwright, Chromium)",
-		"Playwright and other Chromium tools inside the sandbox: threads are told to launch the headless shell in one process (--single-process), the one Chromium that starts in macOS's sandbox, and their commands may serve and open pages on local ports, as Local dev servers. Full Chrome and headed runs still need an excluded command (Advanced)."},
+		"Playwright and other Chromium tools inside the sandbox: threads are told to launch the headless shell in one process (--single-process), the one Chromium that starts in macOS's sandbox, and no local ports are opened: to test against a local dev server, turn on Local dev servers too. Full Chrome and headed runs still need an excluded command (Advanced)."},
 	config.SandboxDevServers: {"Local dev servers",
-		"Threads' commands may listen on and connect to local ports: a dev server, a test server, a local database. That reaches every local service on a port too (an IDE's or a browser's debug port), and a server bound to all interfaces is reachable from your network; turning it on says so first."},
+		"Threads' commands may listen on and connect to local ports: a dev server, a test server, a local database. A thread can connect to every service listening on a local port (databases, Docker over TCP, Chrome's debug port, IDE extensions) and can take a port another program expects; a server bound to all interfaces is reachable from your network. Turning it on says so first."},
 }
 
 // agentsWord says which agents' threads get key.
@@ -142,6 +142,9 @@ func (sr safetyRows) presetRow(key string) setting {
 				return sr.savePreset(m, key, nil, msg) // off is all projects' default
 			}
 			if !next {
+				return sr.savePreset(m, key, &next, msg)
+			}
+			if key != config.SandboxDevServers {
 				return sr.savePreset(m, key, &next, msg)
 			}
 			m.confirm(p.label+" "+sr.forWho, "Turn on "+p.label+" "+sr.forWho+"? "+sandboxLocal, func() tea.Cmd {

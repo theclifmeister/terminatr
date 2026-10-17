@@ -200,8 +200,8 @@ func TestSandboxTabOS(t *testing.T) {
 // switch at all.
 func TestSandboxPresetRows(t *testing.T) {
 	src, m := sandboxData(t)
-	all := sandboxRow(t, "", "Browser testing (Playwright, Chromium)")
-	row := sandboxRow(t, "alpha", "Browser testing (Playwright, Chromium)")
+	all := sandboxRow(t, "", "Local dev servers")
+	row := sandboxRow(t, "alpha", "Local dev servers")
 	if v, from := row.value(m), row.from(m); v != "off" || from != config.AllProjectsName {
 		t.Errorf("value %q from %q", v, from)
 	}
@@ -223,12 +223,12 @@ func TestSandboxPresetRows(t *testing.T) {
 	if got, _ := c.ThreadSandbox("alpha"); len(got.Presets) != 0 {
 		t.Errorf("alpha: %+v", got)
 	}
-	if got, _ := c.ThreadSandbox("beta"); !slices.Equal(got.Presets, []string{config.SandboxBrowser}) {
+	if got, _ := c.ThreadSandbox("beta"); !slices.Equal(got.Presets, []string{config.SandboxDevServers}) {
 		t.Errorf("beta: %+v", got)
 	}
 	drain(t, m, row.unset(m))
 	drain(t, m, all.change(m))
-	want := []string{"defaults browser_testing on", "projects.alpha browser_testing off", "projects.alpha browser_testing follow", "defaults browser_testing follow"}
+	want := []string{"defaults local_dev_servers on", "projects.alpha local_dev_servers off", "projects.alpha local_dev_servers follow", "defaults local_dev_servers follow"}
 	if !slices.Equal(src.sandbox, want) {
 		t.Errorf("saved %q", src.sandbox)
 	}
