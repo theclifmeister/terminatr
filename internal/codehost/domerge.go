@@ -168,6 +168,9 @@ func (a Azure) Merge(repo string, pr PR, method string) error {
 	})
 	args := []string{"rest", "--method", "patch", "--resource", azResource, "--url", a.prURL(pr.Number),
 		"--headers", "Content-Type=application/json", "--body", string(body)}
+	if !TrustedAzureURL(a.prURL(pr.Number)) {
+		return errUntrustedURL
+	}
 	_, err := a.az(repo, a.withSub(args)...)
 	if err != nil && azMethodRE.MatchString(err.Error()) {
 		return &MethodError{Method: method, Err: err}
