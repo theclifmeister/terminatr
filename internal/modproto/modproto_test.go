@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -147,4 +148,46 @@ func (h heldWriter) Write(p []byte) (int, error) {
 	n, err := h.w.Write(p)
 	<-h.ended
 	return n, err
+}
+
+// TestCallHostNotReading: a host that stops reading its stdin holds up no
+// Call past its ctx, neither the one whose write fills the pipe nor those
+// after it; once the host is gone they fail at once.
+func TestCallHostNotReading(t *testing.T) {
+	inR, inW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer inW.Close()
+	outR, outW := io.Pipe()
+	defer outW.Close()
+	c := NewClient(outR, inW, nil, nil)
+	call := func(params any) error {
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		start := time.Now()
+		_, err := c.Call(ctx, MethodEvent, params)
+		if d := time.Since(start); d > 2*time.Second {
+			t.Errorf("Call took %s", d)
+		}
+		return err
+	}
+	big := Event{Name: "x", Data: json.RawMessage(`"` + strings.Repeat("x", 1<<20) + `"`)}
+	if err := call(big); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("big write: %v", err)
+	}
+	if err := call(nil); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("after it: %v", err)
+	}
+	inR.Close() // the host is gone: the write in the background fails
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		err := call(nil)
+		if errors.Is(err, ErrClosed) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("after the host went: %v", err)
+		}
+	}
 }

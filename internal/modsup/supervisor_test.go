@@ -38,6 +38,9 @@ func hostMain(args []string) int {
 	modhost.Tune(os.Getenv) // as cmd/tm's host does
 	out := os.Stdout
 	os.Stdout = os.Stderr
+	if b, _ := os.ReadFile(fs.Arg(0)); strings.HasPrefix(string(b), deafHost) {
+		return deafMain(out)
+	}
 	script, err := modhost.Load(fs.Arg(0))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -49,6 +52,25 @@ func hostMain(args []string) int {
 		return modproto.ExitLoad
 	}
 	return modhost.Run(modhost.Options{Name: fs.Arg(0), Script: script, Budget: *budget, In: os.Stdin, Out: out})
+}
+
+// deafHost starts a bundle for a host that answers hello and mod.ready,
+// then stops reading its stdin and keeps its stdout open.
+const deafHost = "// test host: stops reading stdin\n"
+
+func deafMain(out *os.File) int {
+	c := modproto.NewConn(os.Stdin, out)
+	m, err := c.Read()
+	if err != nil || !m.IsRequest() {
+		return modproto.ExitUsage
+	}
+	_ = c.Reply(*m.ID, modproto.HelloResult{Protocol: modproto.Protocol, Events: []string{modbus.ClockMinute}})
+	if m, err = c.Read(); err != nil || !m.IsRequest() {
+		return modproto.ExitUsage
+	}
+	_ = c.Reply(*m.ID, modproto.EventResult{})
+	time.Sleep(time.Hour)
+	return 0
 }
 
 type fixture struct {
@@ -376,4 +398,39 @@ func TestHostMemoryLimitUnderRSSLimit(t *testing.T) {
 	if modhost.MemoryLimit >= DefaultRSSLimit {
 		t.Fatalf("host memory limit %d MiB is not under the RSS limit %d MiB", modhost.MemoryLimit>>20, DefaultRSSLimit>>20)
 	}
+}
+
+// TestHostNotReadingStdin: a host whose stdin is full (an event it does
+// not read) is still killed when it misses a ping, and stopped by Close.
+func TestHostNotReadingStdin(t *testing.T) {
+	fill := func(f *fixture) int {
+		f.sup.Set([]Spec{{ID: "d", Bundle: []byte(deafHost)}})
+		pid := f.waitState("d", Running).PID
+		f.bus.Publish(modbus.ClockMinute, "", map[string]string{"pad": strings.Repeat("x", 1<<20)})
+		return pid
+	}
+	t.Run("ping", func(t *testing.T) {
+		f := newFixture(t, func(o *Options) {
+			o.Ping, o.PingLimit = 50*time.Millisecond, 200*time.Millisecond
+			o.Backoff = []time.Duration{time.Hour}
+		})
+		pid := fill(f)
+		f.waitLog("d", "no stats answer within 200ms")
+		f.waitFor("host killed", func() bool { return !proc.Alive(pid) })
+	})
+	t.Run("close", func(t *testing.T) {
+		f := newFixture(t, func(o *Options) { o.StopGrace = 200 * time.Millisecond })
+		pid := fill(f)
+		time.Sleep(100 * time.Millisecond) // the event's write is under way
+		done := make(chan struct{})
+		go func() { f.sup.Close(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(testwait.Timeout):
+			t.Fatal("Close did not return")
+		}
+		if proc.Alive(pid) {
+			t.Fatal("the host outlived Close")
+		}
+	})
 }

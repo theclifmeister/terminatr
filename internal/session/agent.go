@@ -162,6 +162,7 @@ type agentRT struct {
 	mu         sync.Mutex
 	tailPath   string
 	tailOff    int64
+	tailSkip   bool   // tailOff is inside a line too long to read: drop to its end
 	usageKey   string // the last counted usage line's key (agent.TailUsage.Key)
 	statusMod  time.Time
 	statusSize int64
@@ -409,7 +410,7 @@ func (rt *agentRT) setTail(p string) {
 	if p == rt.tailPath {
 		return
 	}
-	rt.tailPath, rt.tailOff, rt.usageKey = p, 0, ""
+	rt.tailPath, rt.tailOff, rt.tailSkip, rt.usageKey = p, 0, false, ""
 	if fi, err := os.Stat(p); err == nil {
 		rt.tailOff = fi.Size()
 	}
@@ -573,6 +574,11 @@ func (rt *agentRT) channelGone() error {
 	return nil
 }
 
+// maxTailRead bounds one read of the JSONL file, and so the longest line
+// the tailer parses; a longer one (a tool result holding a large file) is
+// skipped, so the lines after it are still read.
+const maxTailRead = 8 << 20
+
 // readTail reads lines appended to the JSONL file since the last call,
 // and returns the usage they report and the refusals of the model
 // they say.
@@ -582,7 +588,7 @@ func (rt *agentRT) readTail() ([]agent.Usage, []string) {
 		return nil, nil
 	}
 	rt.mu.Lock()
-	p, off := rt.tailPath, rt.tailOff
+	p, off, skip := rt.tailPath, rt.tailOff, rt.tailSkip
 	rt.mu.Unlock()
 	if p == "" {
 		return nil, nil
@@ -596,19 +602,39 @@ func (rt *agentRT) readTail() ([]agent.Usage, []string) {
 		return nil, nil
 	}
 	defer f.Close()
-	if fi, err := f.Stat(); err == nil && fi.Size() < off {
-		off = 0 // truncated or replaced
-	}
-	if _, err := f.Seek(off, io.SeekStart); err != nil {
-		return nil, nil
-	}
-	data, err := io.ReadAll(io.LimitReader(f, 8<<20))
+	fi, err := f.Stat()
 	if err != nil {
 		return nil, nil
 	}
-	// Only whole lines; a partial last line is read again next time.
-	end := bytes.LastIndexByte(data, '\n')
+	if fi.Size() < off {
+		off, skip = 0, false // truncated or replaced
+	}
+	data := make([]byte, min(fi.Size()-off, maxTailRead))
+	n, err := f.ReadAt(data, off)
+	if err != nil && err != io.EOF {
+		return nil, nil
+	}
+	data = data[:n]
+	// The rest of a line too long to read is dropped up to its newline.
+	start := 0
+	if skip {
+		i := bytes.IndexByte(data, '\n')
+		if i < 0 {
+			rt.setTailOff(p, off+int64(n), true)
+			return nil, nil
+		}
+		start, skip = i+1, false
+	}
+	// Only whole lines; a partial last line is read again next time,
+	// unless it fills the whole read: then it is too long, and skipped.
+	lines := data[start:]
+	end := bytes.LastIndexByte(lines, '\n')
 	if end < 0 {
+		if len(lines) == maxTailRead {
+			rt.setTailOff(p, off+int64(n), true)
+		} else if start > 0 {
+			rt.setTailOff(p, off+int64(start), false)
+		}
 		return nil, nil
 	}
 	var used []agent.Usage
@@ -616,7 +642,7 @@ func (rt *agentRT) readTail() ([]agent.Usage, []string) {
 	rt.mu.Lock()
 	key := rt.usageKey
 	rt.mu.Unlock()
-	for _, line := range bytes.Split(data[:end], []byte{'\n'}) {
+	for _, line := range bytes.Split(lines[:end], []byte{'\n'}) {
 		l := t.Parse(line)
 		if l.HasSignal {
 			rt.tr.Tail(l.Signal)
@@ -635,11 +661,21 @@ func (rt *agentRT) readTail() ([]agent.Usage, []string) {
 	}
 	rt.mu.Lock()
 	if rt.tailPath == p {
-		rt.tailOff = off + int64(end) + 1
+		rt.tailOff, rt.tailSkip = off+int64(start+end)+1, false
 		rt.usageKey = key
 	}
 	rt.mu.Unlock()
 	return used, refused
+}
+
+// setTailOff moves the tailer on in p, unless the agent named another
+// file meanwhile.
+func (rt *agentRT) setTailOff(p string, off int64, skip bool) {
+	rt.mu.Lock()
+	if rt.tailPath == p {
+		rt.tailOff, rt.tailSkip = off, skip
+	}
+	rt.mu.Unlock()
 }
 
 // evalScreen runs the screen rules on the emulator's current text.
