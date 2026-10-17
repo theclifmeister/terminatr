@@ -3,7 +3,7 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import type { TerminatrWatch } from '../types'
-import { answeredText, ciToast, questions, statusText } from '../hooks/view'
+import { answeredText, ciToast, clearedText, questions, statusText } from '../hooks/view'
 
 const thread = (over: Partial<TerminatrWatch> = {}): TerminatrWatch => ({
   session: { id: 's-7', role: 'thread', project: 'demo', thread: 't-0044', state: 'working' },
@@ -223,4 +223,37 @@ test('[agent_mod] band = false: no questions entry or /answer either', async ($,
   expect(await ui.find({ key: 'questions' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: 'engine' })).toBeDefined()
   await ui.unmount()
+})
+
+test('a coordinator gets /saveclear, band or not: it runs tm clear and says what came of it', async ($, on) => {
+  const runs: string[][] = []
+  let code = 0
+  on('process.run', async (_$, e) => {
+    runs.push([...e.argv])
+    const stderr = code ? "tm clear: refused: the coordinator's agent (shell) has no clear prompt ([inject] clear): tm can't clear it\n" : ''
+    return { value: { exitCode: code, stdout: '', stderr, isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  const commands: string[] = []
+  on('command.register', async (_$, e) => {
+    commands.push(e.name)
+    return { value: { command: e.name } }
+  })
+  await start($, on, [coordinator(0, 0)], { TERMINATR_BAND: 'off', TERMINATR_ROLE: 'coordinator' })
+  expect(commands).toEqual(['saveclear'])
+  const cmd = { command: 'saveclear', args: '', origin: { kind: 'composer' as const }, presentation: { isFullscreen: false, columns: 100 } }
+  expect(await $.command.run(cmd)).toEqual({ text: 'Asked: the coordinator saves what it learned, then its conversation is cleared once it is idle' })
+  expect(runs).toEqual([['/opt/tm', 'clear']])
+  code = 1
+  expect(await $.command.run(cmd)).toEqual({ text: "Not cleared: refused: the coordinator's agent (shell) has no clear prompt ([inject] clear): tm can't clear it" })
+})
+
+test('a thread has no /saveclear', async ($, on) => {
+  const commands: string[] = []
+  on('command.register', async (_$, e) => {
+    commands.push(e.name)
+    return { value: { command: e.name } }
+  })
+  await start($, on, [thread()], { TERMINATR_ROLE: 'thread' })
+  expect(commands).not.toContain('saveclear')
+  expect(clearedText(2, '')).toBe('Not cleared: tm clear exited 2')
 })

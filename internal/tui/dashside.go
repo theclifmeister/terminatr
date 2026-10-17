@@ -177,7 +177,7 @@ func (m *dash) sideDo(st sideStep) tea.Cmd {
 		cmds = append(cmds, m.openTarget(*target))
 		target = nil
 	}
-	if target == nil && st.toggle == "" && st.pin == "" {
+	if target == nil && st.toggle == "" && st.pin == "" && st.saveClear == "" {
 		return tea.Batch(cmds...)
 	}
 	// What the key starts is an action: while one runs, it waits its
@@ -189,6 +189,8 @@ func (m *dash) sideDo(st sideStep) tea.Cmd {
 			return m.openTarget(*target)
 		case st.toggle != "":
 			return m.toggleActive(st.toggle, st.activate)
+		case st.saveClear != "":
+			return m.saveClear(st.saveClear)
 		}
 		return m.setPinned(st.pin, st.pinOn)
 	}

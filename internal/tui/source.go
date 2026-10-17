@@ -56,7 +56,7 @@ type Data struct {
 	// off, the pane off unless set on.
 	AgentMod, AgentModBand, AgentModPane bool
 	// ContextHint is [ui] context_hint: the percent of its context window
-	// from which a coordinator is told to consider /clear; 0 for never.
+	// from which a save and clear of a coordinator is offered; 0 for never.
 	ContextHint int
 	// NeedsFirst is [ui] needs_first: the sidebar lists the projects
 	// where something needs you first.
@@ -249,6 +249,9 @@ type ProjectSource interface {
 	// OpenQuestions has the project's coordinator put its open questions
 	// (tm ask) to the user in its question dialog (questions.open).
 	OpenQuestions(slug string) (proto.QuestionsOpenResult, error)
+	// SaveClear has the project's coordinator save what it learned, then
+	// clears its conversation, as auto_clear does (coordinator.clear).
+	SaveClear(slug string) (proto.CoordinatorClearResult, error)
 	// SetRemote turns remote control of the project's running
 	// coordinator on or off (prefix+r), saying what it did.
 	SetRemote(slug string, on bool) (string, error)

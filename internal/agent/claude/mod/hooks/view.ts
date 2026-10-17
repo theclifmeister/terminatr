@@ -1,7 +1,10 @@
+import type { EngineInterface } from 'claude-code'
+
 import type { TerminatrWatch } from '../types'
 
 // What the band, the status entry and the CI toast say about a watch
-// line. Plain functions of the line, so the tests can hold them to it.
+// line. Plain functions of the line, so the tests can hold them to it;
+// and saveClear, which /saveclear and the /tm pane share.
 
 // shows reports whether the session has anything to show: a thread with
 // a task, or a session whose project has work waiting for the user. A
@@ -37,6 +40,27 @@ export function answeredText(code: number | null, stderr: string): string {
   if (code === 0) return 'Asked: your questions open in a dialog once the coordinator is free'
   const why = stderr.trim().replace(/^tm ask: /, '').split('\n')[0]
   return `Not asked: ${why || `tm ask open exited ${code}`}`
+}
+
+// clearedText is what /saveclear (or the pane's Save and clear) says:
+// what `tm clear` did, from its exit code and output.
+export function clearedText(code: number | null, stderr: string): string {
+  if (code === 0) return 'Asked: the coordinator saves what it learned, then its conversation is cleared once it is idle'
+  const why = stderr.trim().replace(/^tm clear: /, '').split('\n')[0]
+  return `Not cleared: ${why || `tm clear exited ${code}`}`
+}
+
+// saveClear has tm save and clear the coordinator (tm clear) and says
+// what came of it.
+export async function saveClear($: EngineInterface): Promise<string> {
+  const bin = await $.env.get('TERMINATR_BIN')
+  if (!bin) return clearedText(null, 'this session has no tm (TERMINATR_BIN)')
+  try {
+    const r = await $.process.run([bin, 'clear'])
+    return clearedText(r.exitCode, r.stderr)
+  } catch (err) {
+    return clearedText(null, String(err))
+  }
 }
 
 // waiting counts what waits for the user: the board's Needs you tasks

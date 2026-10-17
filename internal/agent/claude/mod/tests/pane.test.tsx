@@ -36,6 +36,7 @@ type Seen = {
   submitted: { text: string; asUser?: boolean }[]
   fills: string[]
   toasts: string[]
+  runs: string[][]
 }
 
 // start runs session.start in a terminatr session of role, with a tm
@@ -43,7 +44,7 @@ type Seen = {
 async function start($: Engine, on: On, role: string, lines: TerminatrProject[], env: Record<string, string> = {}) {
   const clock = mock.clock(on)
   mock.env(on, { TERMINATR_BIN: '/opt/tm', TERMINATR_SESSION: 's-1', TERMINATR_PROJECT: 'demo', TERMINATR_ROLE: role, ...env })
-  const seen: Seen = { spawned: [], commands: [], opened: [], closed: [], submitted: [], fills: [], toasts: [] }
+  const seen: Seen = { spawned: [], commands: [], opened: [], closed: [], submitted: [], fills: [], toasts: [], runs: [] }
   const open = new Set<string>()
   on('process.spawn', async function* (_$, e) {
     seen.spawned.push([...e.argv])
@@ -52,7 +53,7 @@ async function start($: Engine, on: On, role: string, lines: TerminatrProject[],
     }
     return { value: { code: 0, signal: null } }
   })
-  on('process.run', async (_$, e) => ({
+  on('process.run', async (_$, e) => (seen.runs.push([...e.argv]), {
     value: { exitCode: 0, stdout: JSON.stringify({ thread: {}, report_text: `## Report\nreport of ${e.argv[3]}` }), stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
   }))
   on('command.register', async (_$, e) => {
@@ -171,7 +172,7 @@ test('projectFeed joins split lines; threadLine is compact', () => {
 test('a coordinator follows its project, registers /tm and opens the pane where it docks', async ($, on) => {
   const { seen, clock } = await start($, on, 'coordinator', [project()])
   expect(seen.spawned).toContainEqual(['/opt/tm', 'watch', '--project', 'demo', '--json'])
-  expect(seen.commands).toEqual(['tm', 'answer'])
+  expect(seen.commands).toEqual(['tm', 'answer', 'saveclear'])
   expect(seen.opened).toEqual([])
   await draw($, true)
   await clock.advance(300)
@@ -299,13 +300,33 @@ test('the context line is coloured by how full it is, with the hint from the thr
   expect(contextLine(ctx(12))).toEqual({ text: 'context 24k / 200k · 12%', tone: 'ok', hint: '' })
   const warn = contextLine(ctx(42, true))
   expect(warn.tone).toBe('warning')
-  expect(warn.hint).toContain('/clear')
+  expect(warn.hint).toContain('/saveclear')
+  expect(warn.hint).toContain('saves')
   expect(contextLine(ctx(85, true)).tone).toBe('error')
   expect(contextLine({ tokens: 400_000, window: 1_000_000, percent: 40, threshold: 40, hint: true }).text).toBe('context 400k / 1.0M · 40%')
 })
 
+test('past the context hint the pane offers Save and clear, which runs tm clear', async ($, on) => {
+  const { seen, clock } = await start($, on, 'coordinator', [project({ context: ctx(45, true) })])
+  const ui = await $.ui.mount({ plugin: 'terminatr', surface: 'terminal', ...pane(80) })
+  expect((await ui.find({ key: 'save-clear' }))?.text).toBe('Save and clear')
+  await ui.press({ key: 'save-clear' })
+  await clock.settle()
+  expect(seen.runs).toEqual([['/opt/tm', 'clear']])
+  expect(seen.toasts).toContain('Asked: the coordinator saves what it learned, then its conversation is cleared once it is idle')
+  await ui.unmount()
+})
+
+test('below the context hint there is no Save and clear', async ($, on) => {
+  await start($, on, 'coordinator', [project({ context: ctx(12) })])
+  const ui = await $.ui.mount({ plugin: 'terminatr', surface: 'terminal', ...pane(80) })
+  expect(await ui.find({ key: 'save-clear' })).toBeUndefined()
+  await ui.unmount()
+})
+
 test('one toast per crossing of the threshold', () => {
   expect(contextToast(false, ctx(41, true))).toContain('41%')
+  expect(contextToast(false, ctx(41, true))).toContain('/saveclear')
   expect(contextToast(true, ctx(45, true))).toBeUndefined()
   expect(contextToast(false, ctx(10))).toBeUndefined()
   expect(contextToast(false, undefined)).toBeUndefined()

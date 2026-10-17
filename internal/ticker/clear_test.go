@@ -40,7 +40,7 @@ func TestAutoClearClearsIdleCoordinator(t *testing.T) {
 		t.Fatalf("asked or cleared within the grace: %v %v", r.host.asked, r.host.cleared)
 	}
 	r.sweep(time.Second)
-	if want := []string{"s-1 " + SaveText(50)}; !slices.Equal(r.host.asked, want) || len(r.host.cleared) != 0 {
+	if want := []string{"s-1 " + SaveText(50, false)}; !slices.Equal(r.host.asked, want) || len(r.host.cleared) != 0 {
 		t.Fatalf("asked %v, cleared %v; want the ask alone", r.host.asked, r.host.cleared)
 	}
 	if j := r.journal(); !strings.Contains(j, " ticker coordinator.clear.ask demo s-1 at 50% of its context window (hint 40%): asked to save what it learned") {
@@ -229,5 +229,95 @@ func TestAutoClearGraceAfterRelaunch(t *testing.T) {
 	clearNow(r)
 	if len(r.host.cleared) != 1 {
 		t.Fatalf("not cleared: %v", r.host.cleared)
+	}
+}
+
+// The user's save and clear (RequestClear) takes auto-clear's steps with
+// auto_clear off, paused, and the context below the hint: the ask at the
+// next sweep, the clear once the coordinator rested the grace after it,
+// both journaled as auto-clear's. Nothing waiting in the project holds it
+// back; the coordinator at work does. It is done once.
+func TestRequestClearAsksThenClears(t *testing.T) {
+	r := clearRig(t, false, "")
+	cfg := filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml")
+	if err := os.WriteFile(cfg, []byte("[projects.demo]\npaused = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r.host.sessions[0].Context = 20_000
+	needsYou(r, "which colour?")
+	r.host.set("s-1", "working", "")
+	r.tk.RequestClear("demo", r.host.sessions[0])
+	r.sweep(DefaultClearGrace)
+	if len(r.host.asked) != 0 {
+		t.Fatalf("asked a working coordinator: %v", r.host.asked)
+	}
+	r.host.set("s-1", "idle", "")
+	r.sweep(time.Second)
+	if want := []string{"s-1 " + SaveText(10, true)}; !slices.Equal(r.host.asked, want) || len(r.host.cleared) != 0 {
+		t.Fatalf("asked %v, cleared %v; want the ask alone", r.host.asked, r.host.cleared)
+	}
+	if !strings.Contains(SaveText(10, true), "The user asked to clear") {
+		t.Fatalf("ask %q", SaveText(10, true))
+	}
+	if j := r.journal(); !strings.Contains(j, " ticker coordinator.clear.ask demo s-1 at 10% of its context window, on the user's request: asked to save") {
+		t.Fatalf("journal %q", j)
+	}
+	if !r.host.still() {
+		t.Fatal("ask dropped over the project's waits")
+	}
+	r.host.set("s-1", "working", "")
+	r.sweep(time.Second)
+	r.host.set("s-1", "idle", "")
+	r.sweep(time.Second)
+	r.sweep(DefaultClearGrace - time.Second)
+	if len(r.host.cleared) != 0 {
+		t.Fatalf("cleared before the grace after the save: %v", r.host.cleared)
+	}
+	r.sweep(time.Second)
+	if want := []string{"s-1"}; !slices.Equal(r.host.cleared, want) || len(r.host.asked) != 1 {
+		t.Fatalf("cleared %v asked %v", r.host.cleared, r.host.asked)
+	}
+	if j := r.journal(); !strings.Contains(j, " ticker coordinator.clear demo s-1 at 10% of its context window, on the user's request, idle with nothing waiting") {
+		t.Fatalf("journal %q", j)
+	}
+	for range 3 {
+		r.sweep(time.Hour)
+	}
+	if len(r.host.cleared) != 1 || len(r.host.asked) != 1 {
+		t.Fatalf("done again: %v %v", r.host.cleared, r.host.asked)
+	}
+}
+
+// A request is for the process it names: a relaunch drops it, and so
+// does ClearEvery going by; an agent without a clear drops it at the ask.
+func TestRequestClearDropped(t *testing.T) {
+	r := clearRig(t, false, "")
+	r.host.set("s-1", "working", "")
+	r.tk.RequestClear("demo", r.host.sessions[0])
+	r.host.sessions[0].PID = 101
+	r.host.set("s-1", "idle", "")
+	r.sweep(time.Second)
+	if len(r.host.asked) != 0 {
+		t.Fatalf("asked a relaunched coordinator: %v", r.host.asked)
+	}
+
+	r = clearRig(t, false, "")
+	r.host.set("s-1", "working", "")
+	r.tk.RequestClear("demo", r.host.sessions[0])
+	r.sweep(DefaultClearEvery)
+	r.host.set("s-1", "idle", "")
+	r.sweep(time.Second)
+	if len(r.host.asked) != 0 {
+		t.Fatalf("asked after ClearEvery: %v", r.host.asked)
+	}
+
+	r = clearRig(t, false, "")
+	r.host.clearErr = errors.New("no clear prompt")
+	r.tk.RequestClear("demo", r.host.sessions[0])
+	r.sweep(0)
+	r.host.clearErr = nil
+	clearNow(r)
+	if len(r.host.asked) != 0 || len(r.host.cleared) != 0 {
+		t.Fatalf("asked or cleared after a failed ask: %v %v", r.host.asked, r.host.cleared)
 	}
 }

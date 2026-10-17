@@ -16,7 +16,8 @@
 // Its buttons never act themselves: each sends the coordinator a fixed
 // line in the user's words ("accept T63", hooks/dashboard.ts), which the
 // model can't fake, as it can't press a button. Report opens the
-// thread's latest report in a pane of its own, with no turn.
+// thread's latest report in a pane of its own, with no turn. Save and
+// clear, past the context hint, runs `tm clear` as /saveclear does.
 
 import { atom, read, update } from 'claude-code'
 import type { Elements, EngineInterface, On, RenderSurface, RenderViewport } from 'claude-code'
@@ -28,6 +29,7 @@ import {
   sentWords, summary, threadLine, tickerRows, todoLine,
 } from './dashboard'
 import type { AskKind } from './dashboard'
+import { saveClear } from './view'
 
 const project = atom({ plugin: 'terminatr', key: 'project' } as const, null)
 const asks = atom({ plugin: 'terminatr', key: 'asks' } as const, [])
@@ -219,7 +221,7 @@ function drawPane($: EngineInterface, els: Elements[RenderSurface], hasInput: bo
   return (
     <Box flexDirection="column">
       <Text bold wrap="truncate-end">{p.project + ' · ' + summary(p)}</Text>
-      {p.context ? drawContext(els, contextLine(p.context)) : null}
+      {p.context ? drawContext(els, contextLine(p.context), () => void saveClear($).then(t => $.ui.toast(t))) : null}
       {/* A blank row before each section (docs/STYLE.md, spacing). */}
       <Box marginTop={1}>
         {p.needs_you.length === 0 ? <Text dimColor>Nothing waits for you.</Text> : <Text bold color="warning">Needs you</Text>}
@@ -267,15 +269,16 @@ function drawTicker(els: Elements[RenderSurface], rows: ReturnType<typeof ticker
   )
 }
 
-// drawContext draws the coordinator's context use, coloured, and the
-// hint past the threshold.
-function drawContext(els: Elements[RenderSurface], c: ReturnType<typeof contextLine>) {
+// drawContext draws the coordinator's context use, coloured, and past
+// the threshold the hint with its Save and clear button.
+function drawContext(els: Elements[RenderSurface], c: ReturnType<typeof contextLine>, onClear: () => void) {
   const { Box, Text } = els
   const color = c.tone === 'ok' ? undefined : c.tone
   return (
     <Box flexDirection="column">
       <Text wrap="truncate-end" color={color} dimColor={c.tone === 'ok'}>{c.text}</Text>
       {c.hint ? <Text wrap="truncate-end" color={color}>{c.hint}</Text> : null}
+      {c.hint ? <Box>{drawButton(els, 'save-clear', 'Save and clear', onClear)}</Box> : null}
     </Box>
   )
 }

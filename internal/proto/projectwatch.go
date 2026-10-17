@@ -118,7 +118,7 @@ type WatchContext struct {
 	Window  int64 `json:"window"`
 	Percent int   `json:"percent"`
 	// Threshold is [ui] context_hint (0: never); Hint says Percent has
-	// reached it, so the coordinator should consider /clear.
+	// reached it, so a save and clear (tm clear) is offered.
 	Threshold int  `json:"threshold"`
 	Hint      bool `json:"hint,omitempty"`
 }

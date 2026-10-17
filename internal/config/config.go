@@ -80,8 +80,8 @@ var MergeMethods = []string{MethodMerge, MethodSquash, MethodRebase}
 var GuardRules = []string{"force-push", "push-default", "worktree-only", "delete-branch", "merge", "credentials"}
 
 // DefaultContextHint is [ui] context_hint when unset: the percent of
-// its model's context window at which a coordinator is told to consider
-// /clear.
+// its model's context window from which a save and clear of a
+// coordinator is offered.
 const DefaultContextHint = 40
 
 // Limits of the number settings.
@@ -355,7 +355,7 @@ type Config struct {
 	// panel shows the same beside the coordinator); /tm opens it anyway.
 	AgentModPane bool
 	// ContextHint is [ui] context_hint: the percent of its model's
-	// context window at which a coordinator is told to consider /clear
+	// context window at which a save and clear of a coordinator is offered
 	// (DefaultContextHint when unset, 0 for never).
 	ContextHint int
 	// NeedsFirst is [ui] needs_first: the sidebar lists the projects

@@ -51,6 +51,43 @@ func (s *Server) clearSession(id string, c caller.Caller) (any, *proto.Error) {
 	return res, nil
 }
 
+// saveClear is coordinator.clear: the user's save and clear of a
+// project's coordinator (tm clear, the context hint's key, /saveclear;
+// docs/SPEC.md §7.5, Auto-clear). The ticker takes auto-clear's steps
+// for it (ticker.RequestClear), journaled as auto-clear's: the save ask,
+// then the clear. A coordinator whose agent has no clear prompt is
+// refused here, so the user hears so at once.
+func (s *Server) saveClear(p proto.CoordinatorClearParams) (any, *proto.Error) {
+	if _, err := project.Open(p.Project); err != nil {
+		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
+	}
+	var coord *proto.SessionInfo
+	for _, info := range s.list().Sessions {
+		if info.Project == p.Project && info.Role == proto.RoleCoordinator && info.State != string(agent.StateExited) {
+			coord = &info
+			break
+		}
+	}
+	if coord == nil {
+		return nil, proto.Errorf(proto.ErrRefused, "project %s has no coordinator running", p.Project)
+	}
+	sess, perr := s.session(coord.ID)
+	if perr != nil {
+		return nil, perr
+	}
+	if agent.ClearTextOf(sess.Agent()) == "" {
+		return nil, proto.Errorf(proto.ErrRefused, "the coordinator's agent (%s) has no clear prompt ([inject] clear): tm can't clear it; ask it to save what it learned, then clear it by hand", coord.Agent)
+	}
+	s.mu.Lock()
+	t := s.tick
+	s.mu.Unlock()
+	if t == nil {
+		return nil, proto.Errorf(proto.ErrRefused, "this server runs no ticker")
+	}
+	t.RequestClear(p.Project, *coord)
+	return proto.CoordinatorClearResult{Session: coord.ID}, nil
+}
+
 // journalAnswer journals a console's answer to a question menu, from a
 // mod's question.answer binding the human confirmed, in the session's
 // project, as tm thread answer journals the coordinator's.

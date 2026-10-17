@@ -579,7 +579,7 @@ func gridTip(r treeRow, c sideCol) string {
 			return "open threads"
 		case treeCoordinator:
 			if r.ctxHint {
-				return "context use: consider /clear, the context lives in files"
+				return "context use past the hint: c saves and clears it (tm clear)"
 			}
 			return "context use"
 		}

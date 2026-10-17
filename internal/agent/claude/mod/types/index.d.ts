@@ -75,7 +75,7 @@ export type TerminatrTicker = {
 }
 
 // How full the coordinator's context window is; hint says it reached
-// the threshold (percent, 0 for never) and /clear is worth considering.
+// the threshold (percent, 0 for never): a save and clear is offered.
 export type TerminatrContext = {
   tokens: number
   window: number

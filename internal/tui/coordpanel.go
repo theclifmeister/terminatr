@@ -114,10 +114,14 @@ func watchPanel(pw *proto.ProjectWatch, w int, now time.Time, readOnly bool) (*p
 		line(th().Bad.Render(strings.TrimSpace(ic().blocked+" PR host failing"))+th().Faint.Render(" · inbox"), infoHit{})
 	}
 	if c := pw.Context; c != nil {
-		text, look, hint := contextWords(c)
+		text, look, hint := contextWords(c, readOnly)
 		line(look.Render(text), infoHit{})
 		if hint != "" {
-			wrapped("", look.Render(hint), infoHit{})
+			h := infoHit{}
+			if !readOnly {
+				h.kind = hitSaveClear
+			}
+			wrapped("", look.Render(hint), h)
 		}
 	}
 
@@ -320,8 +324,10 @@ func plural(on bool, s string) string {
 
 // contextWords is the coordinator's context use, "context 84k / 200k ·
 // 42%", its look (faint below the threshold, yellow from it, red from
-// 80%, as the sidebar's), and the /clear hint past the threshold.
-func contextWords(c *proto.WatchContext) (text string, look lipgloss.Style, hint string) {
+// 80%, as the sidebar's), and the save-and-clear hint past the threshold:
+// its key (and a click) here, none for a paired server's project
+// (readOnly).
+func contextWords(c *proto.WatchContext, readOnly bool) (text string, look lipgloss.Style, hint string) {
 	text = fmt.Sprintf("context %s / %s · %d%%", kTokens(c.Tokens), kTokens(c.Window), c.Percent)
 	switch {
 	case c.Percent >= 80:
@@ -332,7 +338,10 @@ func contextWords(c *proto.WatchContext) (text string, look lipgloss.Style, hint
 		look = th().Faint
 	}
 	if c.Hint {
-		hint = "consider /clear: the context lives in files (tm context)"
+		hint = barKey("panel.save-clear", "c") + " or click: save and clear (it saves what it learned first)"
+		if readOnly {
+			hint = "past the context hint: save and clear it there"
+		}
 	}
 	return text, look, hint
 }

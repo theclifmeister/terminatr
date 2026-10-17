@@ -379,7 +379,7 @@ func globalSettings(note string) []setting {
 					return tea.Batch(cmd, m.call(proto.MethodViewColumns, proto.ViewParams{Columns: layoutColumns(spec)}))
 				})
 			}},
-		{label: "Context hint", help: "Tell a coordinator to consider /clear once its context window is this full: a toast in its pane, a bell and a yellow percent on its sidebar row (red from 80%). Its context lives in files, so a clear loses nothing. Off never says it.",
+		{label: "Context hint", help: "Offer to save and clear a coordinator once its context window is this full: a toast in its pane, a bell and a yellow percent on its sidebar row (red from 80%). c there, or /saveclear in its pane, has it save what it learned, then clears it (tm clear); a /clear typed by hand skips the save. Off never says it.",
 			value: func(m *dash) string {
 				if m.data.ContextHint <= 0 {
 					return "off"
