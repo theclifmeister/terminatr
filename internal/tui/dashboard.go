@@ -515,7 +515,10 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.setData(msg.data)
 	case tickMsg:
-		return m, tea.Batch(m.load(), m.reloadBoards(), m.pollModViews())
+		return m, tea.Batch(m.load(), m.reloadBoards(), m.pollModViews(), m.logsTick())
+	case logMsg:
+		m.logsTook(msg)
+		return m, nil
 	case bindingMsg:
 		return m, m.runBinding(msg)
 	case modViewsMsg:
@@ -942,7 +945,7 @@ func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 func (m *dash) fail(err error) {
 	m.msg = err.Error()
 	m.errMsg = m.msg
-	clog("error: %s", m.msg)
+	clog("%s", m.msg)
 }
 
 // act runs an action in the background; one at a time: one asked for

@@ -58,6 +58,10 @@ type fakeSource struct {
 	saveCleared  []string // slugs whose coordinators were saved and cleared
 	reviews      map[int]Review
 	peers        PeerList
+	// logs are the Logs tab's (logstab_test.go), read from their files;
+	// logReads the log.read calls.
+	logs     []proto.LogInfo
+	logReads []proto.LogReadParams
 	peerErr      error
 	unpinned     []string // aliases removed from the Peers tab
 	panesSet     []string // "alias level" set from the Peers tab

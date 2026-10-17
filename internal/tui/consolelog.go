@@ -37,5 +37,5 @@ var consoleLog = sync.OnceValue(func() *log.Logger {
 	return log.New(w, fmt.Sprintf("pid %d: ", os.Getpid()), log.LstdFlags)
 })
 
-// clog adds a line to the console's log.
-func clog(format string, args ...any) { consoleLog().Printf(format, args...) }
+// clog adds an error to the console's log.
+func clog(format string, args ...any) { consoleLog().Printf("error: "+format, args...) }

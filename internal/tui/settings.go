@@ -253,29 +253,32 @@ func settingsErr(err error) error {
 	return err
 }
 
-// settingsView is the , popup: the settings of every project, in five
+// settingsView is the , popup: the settings of every project, in six
 // tabs: General, All projects (the project settings every project
 // follows unless it sets its own), Sandbox (all projects' presets and
-// sandbox lists, settings_sandbox.go), Mods (modstab.go) and Peers, the
-// paired servers (peerstab.go).
+// sandbox lists, settings_sandbox.go), Mods (modstab.go), Peers, the
+// paired servers (peerstab.go), and Logs, the server host's logs
+// (logstab.go).
 type settingsView struct {
 	tab   int
 	tabs  [3]settingsList
 	mods  modsTab
 	peers peersTab
+	logs  logsTab
 	// top is each tab's first line shown; shown the selection's line
 	// (plus one) it last scrolled to (projectView.scroll).
 	top, shown [len(settingsTabs)]int
 }
 
 // settingsTabs are the , popup's tabs.
-var settingsTabs = [5]string{"General", "All projects", "Sandbox", "Mods", "Peers"}
+var settingsTabs = [6]string{"General", "All projects", "Sandbox", "Mods", "Peers", "Logs"}
 
-// The Sandbox, Mods and Peers tabs' indexes.
+// The Sandbox, Mods, Peers and Logs tabs' indexes.
 const (
 	tabAllSandbox = 2
 	tabMods       = 3
 	tabPeers      = 4
+	tabLogs       = 5
 )
 
 func (m *dash) openSettings() {
@@ -508,6 +511,12 @@ func (sv *settingsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			return cmd
 		}
 	}
+	if sv.tab == tabLogs && (sv.logs.typing || s != "h" && s != "l" && s != "left" && s != "right" && s != "esc") {
+		// Its own keys first: l and h stay the tabs', as in Mods.
+		if cmd, ok := sv.logs.key(m, k); ok {
+			return cmd
+		}
+	}
 	n := len(settingsTabs)
 	switch s {
 	case "esc":
@@ -519,11 +528,14 @@ func (sv *settingsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "left", "h":
 		sv.tab = (sv.tab + n - 1) % n
 		return nil
-	case "1", "2", "3", "4", "5":
+	case "1", "2", "3", "4", "5", "6":
 		sv.tab = int(s[0] - '1')
+		if sv.tab == tabLogs {
+			return sv.logs.poll(m)
+		}
 		return nil
 	}
-	if sv.tab == tabMods || sv.tab == tabPeers {
+	if sv.tab == tabMods || sv.tab == tabPeers || sv.tab == tabLogs {
 		return nil
 	}
 	cmd, _ := sv.tabs[sv.tab].key(m, k)
@@ -554,6 +566,9 @@ func (sv *settingsView) tabLines(m *dash, i, w int) ([]string, int, []int) {
 
 func (sv *settingsView) render(m *dash) string {
 	w := m.inner(viewWidth)
+	if sv.tab == tabLogs {
+		return sv.renderLogs(m, w)
+	}
 	lines, sel, hits := sv.tabLines(m, sv.tab, w)
 	lines = append(lines, "")
 	keys := "enter change · ↑ ↓ move · ← → tabs · esc close"
@@ -664,6 +679,8 @@ func (sv *settingsView) click(m *dash, item, col int, _ bool) tea.Cmd {
 		return nil
 	case tabPeers:
 		return sv.peers.click(m, item, col)
+	case tabLogs:
+		return nil
 	}
 	return sv.tabs[sv.tab].click(m, item, col)
 }
@@ -675,6 +692,9 @@ func (sv *settingsView) wheel(m *dash, d int) {
 		return
 	case tabPeers:
 		sv.peers.key(m, arrow(d))
+		return
+	case tabLogs:
+		sv.logs.scroll(m, 3*d)
 		return
 	}
 	sv.tabs[sv.tab].key(m, arrow(d))

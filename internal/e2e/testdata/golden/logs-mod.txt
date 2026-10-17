@@ -1,0 +1,30 @@
+ PROJECTS                          │ tm dashboard                                     ● server ok · 0 sessions
+ no projects                       │  no projects; n creates one
+                                   │ OTHER SESSIONS ──────────────────────────────────────────────────────────
+           ╭─ Settings ───────────────────────────────────────────────────────────────────────────╮
+           │  1 General   2 All projects   3 Sandbox   4 Mods   5 Peers   6 Logs                  │
+           │ About: tm dev · server dev · update check on                                         │
+           │                                                                                      │
+           │  Server   Console   mod demo                                                         │
+           │ 157 B · following · <path> │
+           │                                                                                      │
+           │ 2026-10-18T09:00:00.000+02:00 supervisor: started                                    │
+           │ 2026-10-18T09:00:01.000+02:00 broker: ui.view.open board                             │
+           │ 2026-10-18T09:00:02.000+02:00 supervisor: stopped                                    │
+           │                                                                                      │
+           │                                                                                      │
+           │                                                                                      │
+           │                                                                                      │
+           │                                                                                      │
+           │                                                                                      │
+           │                                                                                      │
+           │                                                                                      │
+           │                                                                                      │
+           │                                                                                      │
+           │                                                                                      │
+           │ [ ] log · ↑ ↓ pgup pgdn scroll · f follow · / search · n N next · v level · o pager  │
+           │ c copy path · ← → tabs · esc close                                                   │
+ ──────────╰──────────────────────────────────────────────────────────────────────────────────────╯
+                                   │──────────────────────────────────────────────────────────────────────────
+                                   │
+ tab sidebar · ? help              │

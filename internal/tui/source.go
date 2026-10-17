@@ -193,6 +193,14 @@ type Source interface {
 	ModSource
 	ModViewSource
 	SessionSource
+	LogSource
+}
+
+// LogSource reads the logs on the server's host (the , popup's Logs
+// tab): log.list and log.read, the human's.
+type LogSource interface {
+	Logs() ([]proto.LogInfo, error)
+	ReadLog(p proto.LogReadParams) (proto.LogReadResult, error)
 }
 
 // PollSource is what the dashboard reads: each poll, and on opening a
