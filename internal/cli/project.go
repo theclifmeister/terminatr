@@ -377,11 +377,15 @@ func (e *Env) ownProject(slug string) error {
 	return &project.Error{Code: "other-project", Msg: "a thread sees only its own project"}
 }
 
-const contextUsage = `usage: tm context [--project <slug>] [--json]`
+const contextUsage = `usage: tm context [--thread <id>|<task>] [--project <slug>] [--json]
+
+--thread previews the memory notes a thread's brief carries (the
+standing ones, and the best 3 for its task's words and paths), for a
+thread or for a task's thread before it starts.`
 
 func runContext(e *Env, args []string) error {
 	f := newFlags()
-	slug, asJSON := f.String("project"), f.Bool("json")
+	slug, asJSON, of := f.String("project"), f.Bool("json"), f.String("thread")
 	pos, err := f.Parse(args)
 	if err != nil {
 		return err
@@ -392,6 +396,9 @@ func runContext(e *Env, args []string) error {
 	p, err := e.openProject(*slug)
 	if err != nil {
 		return err
+	}
+	if *of != "" {
+		return e.previewMemory(p, *of, *asJSON)
 	}
 	seen := ticker.Seen(tickerState(), p.Slug)
 	seen.Links = linkLines(p)
@@ -412,6 +419,62 @@ func runContext(e *Env, args []string) error {
 	}
 	_, err = fmt.Fprint(e.Stdout, project.RenderContext(sections))
 	return err
+}
+
+// previewMemory prints what tm context --thread shows: the brief's memory
+// notes for a thread (by id), or for a task's (its thread's, else the one
+// tm thread start would make).
+func (e *Env) previewMemory(p *project.Project, of string, asJSON bool) error {
+	var r *thread.Record
+	if thread.ValidID(of) {
+		rec, err := thread.Load(p, of)
+		if err != nil {
+			return err
+		}
+		r = rec
+	} else {
+		id, err := ref(of)
+		if err != nil {
+			return usagef("--thread takes a thread id like t-0007 or a task id like T12")
+		}
+		t, err := p.Tasks().Get(id)
+		if err != nil {
+			return err
+		}
+		if rec, err := thread.Load(p, t.Thread); t.Thread != "" && err == nil {
+			r = rec
+		} else {
+			r = &thread.Record{Title: t.Title, Task: t.Ref()}
+			if len(p.Repos) > 0 {
+				r.Repo = p.Repos[0]
+			}
+		}
+	}
+	mem := thread.BriefMemory(p, r)
+	if asJSON {
+		if mem.Notes == nil {
+			mem.Notes = []thread.BriefNote{}
+		}
+		return e.printJSON(map[string]any{"project": p.Slug, "thread": r.ID, "task": r.Task, "memory": mem})
+	}
+	who := r.ID
+	switch {
+	case who == "":
+		who = r.Task + "'s new thread"
+	case r.Task != "":
+		who += " (" + r.Task + ")"
+	}
+	standing, matched := mem.Counts()
+	fmt.Fprintf(e.Stdout, "Memory notes for %s: %d standing, %d matched (of at most %d).\n", who, standing, matched, thread.MaxMatched)
+	if len(mem.Paths) > 0 {
+		fmt.Fprintln(e.Stdout, shown("Paths from the task: "+strings.Join(mem.Paths, ", ")))
+	}
+	if len(mem.Notes) == 0 {
+		fmt.Fprintln(e.Stdout, "The brief carries no memory notes: none is standing and none matches the task.")
+		return nil
+	}
+	fmt.Fprint(e.Stdout, "\n"+shownText(mem.Render(p.Dir)))
+	return nil
 }
 
 // liveSessions asks a running server (it starts none) for its sessions;
