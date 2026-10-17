@@ -52,6 +52,9 @@ func TestBriefMemory(t *testing.T) {
 	writeNote(t, p, "login.md", "# Login flow\n\nThe login uses cookies.\n")
 	writeNote(t, p, "big.md", "+++\ntitle = \"Login retries\"\n+++\n"+strings.Repeat("A long line about login retries.\n", 300))
 	writeNote(t, p, "other.md", "# Unrelated\n\nNothing here.\n")
+	// Notes for the coordinator only: never in a brief, standing or not.
+	writeNote(t, p, "ops.md", "+++\ntitle = \"Merge order\"\nstanding = true\naudience = \"coordinator\"\n+++\nMerge in batches.\n")
+	writeNote(t, p, "budget.md", "+++\ntitle = \"Login retries budget\"\ntouches = [\"internal/ticker/\"]\naudience = \"coordinator\"\n+++\nLogin retries cost.\n")
 
 	res, err := p.Tasks().Add(caller.Caller{Kind: caller.Human}, []tasks.NewTask{{
 		Title: "Fix login retries", Notes: "In internal/ticker/pr.go, for the web repo.", Steps: []string{"Write a test"},
@@ -69,10 +72,11 @@ func TestBriefMemory(t *testing.T) {
 	for _, n := range m.Notes {
 		got = append(got, n.Note.Path)
 	}
-	// Standing first; then the three best of poller (path 4 + retries 3),
-	// web (repo:web 4 + web 3), big (login, retries in its title: 6) and
-	// login (3).
-	if want := []string{"memory/standing.md", "memory/poller.md", "memory/web.md", "memory/big.md"}; !slices.Equal(got, want) {
+	// Standing first; then the notes sharing a path, web (repo:web, and
+	// web in its title) before poller (internal/ticker/, and retries in
+	// its title, a word big.md has too); then big (login and retries in
+	// its title) over login, which only has login.
+	if want := []string{"memory/standing.md", "memory/web.md", "memory/poller.md", "memory/big.md"}; !slices.Equal(got, want) {
 		t.Errorf("notes %q, want %q", got, want)
 	}
 	if s, n := m.Counts(); s != 1 || n != 3 {

@@ -4,7 +4,7 @@
     { "method": "memory.list", "params": { "slug": "demo" },
       "result": [{ "path": "memory/retries.md", "title": "Retries stay at 4", "bytes": 160, "touches": ["internal/ticker/pr.go"] }] },
     { "method": "memory.read", "params": { "slug": "demo", "path": "memory/retries.md" },
-      "result": "+++\ntitle = \"Retries stay at 4\"\ntouches = [\"internal/ticker/pr.go\", \"repo:api\"]\nstanding = true\nsource = \"T481\"\n+++\n## Decided\nKeep 4.\n" }
+      "result": "+++\ntitle = \"Retries stay at 4\"\ntouches = [\"internal/ticker/pr.go\", \"repo:api\"]\nstanding = true\naudience = \"coordinator\"\nsource = \"T481\"\n+++\n## Decided\nKeep 4.\n" }
   ],
   "events": [
     { "name": "view.opened", "project": "demo",
@@ -24,7 +24,7 @@
         "params": { "view": "memory", "options": { "project": "demo" },
           "widget": { "kind": "stack", "children": [
             { "kind": "text", "lines": [[{ "text": "Retries stay at 4", "role": "accent" }, { "text": "  memory/retries.md", "role": "faint" }]] },
-            { "kind": "text", "text": "touches internal/ticker/pr.go, repo:api · standing · from T481", "role": "faint" },
+            { "kind": "text", "text": "touches internal/ticker/pr.go, repo:api · standing · for the coordinator only · from T481", "role": "faint" },
             { "kind": "text", "text": "Decided", "role": "head" },
             { "kind": "text", "text": "Keep 4." },
             { "kind": "keys", "keys": [{ "key": "enter", "label": "files" }, { "key": "n", "label": "next" }, { "key": "p", "label": "previous" }] }
