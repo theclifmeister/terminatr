@@ -50,18 +50,18 @@ type fakeSource struct {
 	repos      []string // +path or -path
 	// delegated are the tasks asked to be delegated: "slug T12"; asked
 	// the other asks: "accept slug T12", "send-back slug T12 note".
-	delegated    []string
-	asked        []string
-	adopted      []string // "slug s-3"
-	withdrawn    []string // "slug s-3"
-	answered     []string // slugs whose questions were opened
-	saveCleared  []string // slugs whose coordinators were saved and cleared
-	reviews      map[int]Review
-	peers        PeerList
+	delegated   []string
+	asked       []string
+	adopted     []string // "slug s-3"
+	withdrawn   []string // "slug s-3"
+	answered    []string // slugs whose questions were opened
+	saveCleared []string // slugs whose coordinators were saved and cleared
+	reviews     map[int]Review
+	peers       PeerList
 	// logs are the Logs tab's (logstab_test.go), read from their files;
 	// logReads the log.read calls.
-	logs     []proto.LogInfo
-	logReads []proto.LogReadParams
+	logs         []proto.LogInfo
+	logReads     []proto.LogReadParams
 	peerErr      error
 	unpinned     []string // aliases removed from the Peers tab
 	panesSet     []string // "alias level" set from the Peers tab

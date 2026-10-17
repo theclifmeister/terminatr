@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -26,8 +27,8 @@ import (
 // level when they carry one, o opens the file in $PAGER when it is on
 // this host and c copies its path.
 //
-//	"Server · Service · Console · mod linear"
-//	"~/.terminatr/logs/server.log · 3.8 MB · following"
+//	" Server   Service   Console   mod linear "
+//	"3.8 MB · following · ~/.terminatr/logs/server.log"
 //	"2026/10/18 01:08:50.075414 session s-693: claude working/"
 //	…
 
@@ -415,7 +416,9 @@ func (lt *logsTab) pager(m *dash) tea.Cmd {
 	if !ok {
 		return nil
 	}
-	if fi, err := os.Stat(l.Path); err != nil || !fi.Mode().IsRegular() {
+	// Only an absolute path: one the pager could take for an option (less
+	// runs a +!command) never reaches it.
+	if fi, err := os.Stat(l.Path); err != nil || !fi.Mode().IsRegular() || !filepath.IsAbs(l.Path) {
 		lt.note = "its file isn't on this host: c copies its path"
 		return nil
 	}
@@ -533,7 +536,7 @@ func (lt *logsTab) body(w, rows int) (out []string, above, below bool) {
 		if l, ok := lt.shown(); ok && l.Missing {
 			msg = "No file yet: nothing was logged here."
 			if l.ID == proto.LogServer {
-				msg = "No file yet: a server started in the foreground (tm server run) logs to its terminal."
+				msg = "No file yet: a server run in the foreground (tm server run, as the systemd service runs it) logs to its terminal or the journal (journalctl --user -u terminatr)."
 			}
 		}
 		return faintLines(msg, w), false, false

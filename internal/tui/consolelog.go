@@ -28,7 +28,7 @@ const (
 const ConsoleLogName = "console.log"
 
 var consoleLog = sync.OnceValue(func() *log.Logger {
-	var w io.Writer = io.Discard
+	w := io.Discard
 	if dir, err := home.LogsDir(); err == nil {
 		// A file that can't be opened drops the lines: the console runs on.
 		f, _ := logrot.Open(filepath.Join(dir, ConsoleLogName), consoleLogMax, consoleLogKeep)

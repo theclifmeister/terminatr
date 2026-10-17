@@ -146,7 +146,9 @@ Everything is under `~/.terminatr`, or `$TERMINATR_HOME` when that is set. Nothi
 | `state/links.json` | the message counter, each link direction's rate and each linked pair's conversation breaker (`tm link`) |
 | `state/slots.json` | the coordinators a thread cap refused, waiting for a `slot-free` item |
 | `logs/server.log` | the server log, rotated at 10 MB (`server.log.1` … `.3` kept) |
-| `logs/service.log` | output of a server started by launchd (macOS service only) |
+| `logs/service.log` | output of a server started by launchd (macOS service only; not rotated) |
+| `logs/console.log` | the consoles' own errors (what the footer showed, a failed view call, a panic), rotated at 1 MB (`console.log.1` kept) |
+| `logs/mods/<id>.log` | each code mod's log (`tm mod logs <id>`), rotated |
 | `run/` | `tm.sock`, `server.lock`, `server.pid` and per-session runtime dirs (`s/<id>/`: the agent's generated settings and plugin, with terminatr's mod when it is on) and `bin/tm`: the running server's own copy of its binary, which it runs from, so `tm update` or `brew upgrade` can't pull it from under the server and macOS privacy settings see one `tm` across releases ([macOS privacy prompts](#macos-privacy-prompts)); per-build `bin/tm-<build>` copies and a `server-bin/` from older versions are removed on start |
 
 The run directory is `$XDG_RUNTIME_DIR/terminatr` on Linux when that variable is set (and `TERMINATR_HOME` isn't), and falls back to `/tmp/terminatr-<uid>-<hash>` when the path to the socket would be too long. `tm server status` and `tm doctor` print the one in use. `$TERMINATR_SOCKET` overrides the socket path.
@@ -578,9 +580,12 @@ It exits 1 only when a check fails; warnings don't count. `--json` prints the re
 
 ## Logs
 
+The console reads them: `,` (Settings), then `6` for the **Logs** tab. `[` and `]` pick the server's log, the service's (launchd's output, on macOS), the consoles' and each mod's; the tab shows the end and follows it as it grows. `↑` `↓` and `pgup` `pgdn` scroll (scrolling pauses it; `f` or `G` follows again), and scrolling up reads the file further back, 64 KB at a time, so a large log stays quick. `/` searches, `n` and `N` go to the next older and newer match, `v` keeps only warnings and errors, or errors, when the lines carry a level (the consoles' log does). `o` opens the file in `$PAGER` (`less` by default) and `c` copies its path. The logs come through the server, so a console of a server on another machine shows that machine's logs (`o` then says the file isn't on this host: copy the path). Only you can read them there: an agent's `tm` is refused, and threads read what their sandbox lets them.
+
 - `~/.terminatr/logs/server.log`: the server's log: starts and stops, sessions, agent state changes, resumes. Start here when something looks wrong.
+- `~/.terminatr/logs/console.log`: what went wrong on the console's side (an error the footer showed, a view call that failed, a crash with its stack). It holds no keys or pane output; `TERMINATR_ATTACH_LOG=<file>` adds the attach client's diagnostics, keys included, to that file, for debugging only.
 - `tm agent explain <session>`: why an agent session is in its current state (which signal decided it).
-- A server started in the foreground (`tm server run`) logs to stderr instead.
+- A server started in the foreground (`tm server run`) logs to stderr instead; so does the Linux systemd service, whose log is `journalctl --user -u terminatr`.
 
 ## Upgrading
 

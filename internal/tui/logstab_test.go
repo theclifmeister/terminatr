@@ -206,3 +206,16 @@ func TestLogsLevel(t *testing.T) {
 		t.Errorf("unsafe: %q", l)
 	}
 }
+
+// TestLogsPager: o opens only a regular file on this host by its
+// absolute path, which no pager takes for an option.
+func TestLogsPager(t *testing.T) {
+	_, m, _ := logsData(t)
+	lt := &m.top().(*settingsView).logs
+	for _, path := range []string{"+!touch pwned", "-o/tmp/x", filepath.Join(t.TempDir(), "none.log")} {
+		lt.logs[lt.cur].Path, lt.note = path, ""
+		if cmd := lt.pager(m); cmd != nil || !strings.Contains(lt.note, "isn't on this host") {
+			t.Errorf("%q: %v %q", path, cmd != nil, lt.note)
+		}
+	}
+}
