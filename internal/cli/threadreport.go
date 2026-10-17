@@ -13,6 +13,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -160,8 +161,8 @@ func runStatus(e *Env, args []string) error {
 			st.SelfPercent = pct
 		}
 		st.SelfAt = time.Now().UTC()
-		st.Activity = oneLine(*activity, 100)
-		st.NeedsYou = oneLine(*needsYou, 300)
+		st.Activity = textsafe.Line(*activity, 100)
+		st.NeedsYou = textsafe.Line(*needsYou, 300)
 		if st.NeedsYou == "" && strings.EqualFold(st.Activity, "waiting for you") {
 			st.NeedsYou = st.Activity
 		}
@@ -224,7 +225,7 @@ func runDone(e *Env, args []string) error {
 	}
 	detail := ""
 	if len(pos) == 1 {
-		detail = oneLine(pos[0], 80)
+		detail = textsafe.Line(pos[0], 80)
 	}
 	if err := p.Journal(e.Caller, "thread.done", r.ID, detail); err != nil {
 		return err

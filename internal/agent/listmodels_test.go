@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/theclifmeister/terminatr/internal/config"
 )
 
 // TestListState: made-up replies for each rule of the reading.
@@ -102,5 +104,13 @@ func TestSwitchText(t *testing.T) {
 		if _, err := ParseManifest([]byte(base + body)); (err == nil) != ok {
 			t.Errorf("%q: %v", body, err)
 		}
+	}
+}
+
+// A model's words from the agent's reply are one line of plain text.
+func TestOneLineIsText(t *testing.T) {
+	if got := oneLine("fast\x1b]52;c;eA==\a\u202e model\n" + strings.Repeat("x", 200)); strings.ContainsAny(got, "\x1b\a\u202e\n") ||
+		!strings.HasPrefix(got, "fast]52;c;eA== model x") || len([]rune(got)) > config.MaxModelAbout {
+		t.Fatalf("%q", got)
 	}
 }

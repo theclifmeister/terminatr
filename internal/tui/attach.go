@@ -1515,7 +1515,7 @@ func (c *client) popupOverTask(project, key string, id int) {
 func (c *client) goOver(o *Over) {
 	o.Screen = c.paneLines(o)
 	if p := c.focus; p != nil {
-		o.Session, o.Title = p.info.ID, p.info.ID+" · "+strings.TrimPrefix(p.info.Project+" "+sessionName(p.info), " ")
+		o.Session, o.Title = p.info.ID, oneLine(p.info.ID+" · "+strings.TrimPrefix(p.info.Project+" "+sessionName(p.info), " "))
 		if o.Project == "" {
 			o.Project = p.info.Project
 		}

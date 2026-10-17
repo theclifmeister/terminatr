@@ -15,6 +15,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
@@ -71,7 +72,7 @@ func (e *Env) threadResolve(p *project.Project, id string, discard bool) error {
 		case errors.Is(err, worktree.ErrDirty):
 			did = append(did, "kept worktree "+r.Worktree+" (uncommitted changes)")
 		case err != nil:
-			did = append(did, "kept worktree "+r.Worktree+" ("+oneLine(err.Error(), 120)+")")
+			did = append(did, "kept worktree "+r.Worktree+" ("+textsafe.Line(err.Error(), 120)+")")
 		case statErr != nil:
 			did = append(did, "worktree was already gone")
 		default:
@@ -127,7 +128,7 @@ func branchCleanup(p *project.Project, r *thread.Record, discard bool) (did, del
 	// del deletes the branch and records what happened, whatever the why.
 	del := func(why string) {
 		if err := worktree.DeleteBranch(r.Repo, r.Branch); err != nil {
-			did = append(did, "kept branch "+r.Branch+" ("+oneLine(err.Error(), 120)+")")
+			did = append(did, "kept branch "+r.Branch+" ("+textsafe.Line(err.Error(), 120)+")")
 			return
 		}
 		did = append(did, "deleted branch "+r.Branch+" ("+why+")")
@@ -146,7 +147,7 @@ func branchCleanup(p *project.Project, r *thread.Record, discard bool) (did, del
 		if unsaved, err := worktree.BranchUnsaved(r.Repo, r.Branch); err != nil || unsaved != "" {
 			why := unsaved
 			if err != nil {
-				why = oneLine(err.Error(), 120)
+				why = textsafe.Line(err.Error(), 120)
 			}
 			did = append(did, "kept branch "+r.Branch+" (PR merged, but "+why+")")
 			break
@@ -197,7 +198,7 @@ func discardable(p *project.Project, r *thread.Record) error {
 	}
 	unsaved, err := worktree.BranchUnsaved(r.Repo, r.Branch)
 	if err != nil {
-		return refuse("can't tell whether branch %s has unsaved work (%s); nothing discarded", r.Branch, oneLine(err.Error(), 120))
+		return refuse("can't tell whether branch %s has unsaved work (%s); nothing discarded", r.Branch, textsafe.Line(err.Error(), 120))
 	}
 	if unsaved != "" {
 		return refuse("%s: unsaved work; push it or ask the thread to, then resolve without --discard", unsaved)
@@ -268,7 +269,7 @@ func otherBranches(p *project.Project, r *thread.Record) (did, deleted []string)
 			if pr != "" {
 				how = pr + ", but " + how
 			}
-			did = append(did, "kept branch "+b+" ("+oneLine(how, 120)+")")
+			did = append(did, "kept branch "+b+" ("+textsafe.Line(how, 120)+")")
 			continue
 		}
 		how = "merged into " + how

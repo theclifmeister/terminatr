@@ -16,6 +16,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // Limits of a report (docs/SPEC.md §7.2).
@@ -175,6 +176,9 @@ func StoreReportFrom(p *project.Project, id, text string, attach []string, open 
 		}
 	}()
 	for _, a := range attach {
+		if name := filepath.Base(a); !textsafe.Safe(name) {
+			return 0, refuse("invalid-attachment", "%q: a library file's name is one line of plain text; rename it", name)
+		}
 		f, err := open(a)
 		if err != nil {
 			return 0, refuse("invalid-attachment", "%v", err)

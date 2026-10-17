@@ -3,6 +3,10 @@ package codehost
 import (
 	"regexp"
 	"strings"
+
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // The failing job's log, put in the checks-failed prompt (docs/SPEC.md
@@ -17,7 +21,6 @@ const (
 )
 
 var (
-	ansiRE  = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`)
 	stampRE = regexp.MustCompile(`^\d{4}-\d\d-\d\dT[\d:.]+Z ?`)
 	errRE   = regexp.MustCompile(`(?i)(^|[^a-z])(error|fail(ed|ure)?|panic|fatal|--- FAIL|exit code [1-9])([^a-z]|$)`)
 )
@@ -73,7 +76,7 @@ func excerptLines(job string, lines []string) (string, string) {
 		return "", ""
 	}
 	for i, l := range lines {
-		lines[i] = clean(stampRE.ReplaceAllString(ansiRE.ReplaceAllString(l, ""), ""))
+		lines[i] = clean(stampRE.ReplaceAllString(ansi.Strip(l), ""))
 	}
 	if len(lines) == 0 {
 		return "", ""
@@ -101,12 +104,8 @@ func excerptLines(job string, lines []string) (string, string) {
 	return job, strings.ReplaceAll(strings.TrimSpace(text), "```", "'''")
 }
 
-// clean drops control characters from one line.
+// clean is one line without its escape sequences (their payload too)
+// and without what textsafe drops, trimmed.
 func clean(s string) string {
-	return strings.Map(func(r rune) rune {
-		if r < 0x20 && r != '\t' || r == 0x7f {
-			return -1
-		}
-		return r
-	}, strings.TrimSpace(s))
+	return strings.TrimSpace(textsafe.Clean(ansi.Strip(s), false))
 }

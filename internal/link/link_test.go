@@ -150,7 +150,14 @@ func TestBreakerHuman(t *testing.T) {
 }
 
 func TestClean(t *testing.T) {
-	if got := Clean("  a\r\nb\x00c\td\x1b \xff "); got != "a\nb c\td  �" {
+	if got := Clean("  a\r\nb\x00c\td\x1b \xff "); got != "a\nbc\td" {
+		t.Fatalf("%q", got)
+	}
+	// what renders other than it reads goes too: a bidi override, a
+	// zero-width space, tag characters, a line separator, an OSC
+	// sequence's introducer and C1 controls
+	in := "pay \u202eredro\u200b\U000E0069\U000E0067nore\u2028x\x1b]52;c;eA==\a\u009b2J"
+	if got := Clean(in); got != "pay redronore x]52;c;eA==2J" {
 		t.Fatalf("%q", got)
 	}
 }

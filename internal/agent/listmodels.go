@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // ModelLister is a manifest's [list_models]: how tm asks the installed
@@ -272,10 +273,4 @@ func (s *ListState) Listing() (Listing, error) {
 }
 
 // oneLine is s on one line, at most config.MaxModelAbout characters.
-func oneLine(s string) string {
-	s = strings.Join(strings.Fields(s), " ")
-	if r := []rune(s); len(r) > config.MaxModelAbout {
-		s = string(r[:config.MaxModelAbout-1]) + "…"
-	}
-	return s
-}
+func oneLine(s string) string { return textsafe.Line(s, config.MaxModelAbout) }

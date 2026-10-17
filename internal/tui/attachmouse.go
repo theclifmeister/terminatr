@@ -322,8 +322,11 @@ func (c *client) sideMenu(m emu.Mouse) {
 	c.poke()
 }
 
-// sideTitle names a sidebar row in its menu.
-func (c *client) sideTitle(r treeRow) string {
+// sideTitle names a sidebar row in its menu, as plain text: the names
+// may be a paired server's.
+func (c *client) sideTitle(r treeRow) string { return oneLine(c.sideName(r)) }
+
+func (c *client) sideName(r treeRow) string {
 	switch r.kind {
 	case treeCoordinator:
 		return r.slug + " coordinator"

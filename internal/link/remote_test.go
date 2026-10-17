@@ -193,6 +193,17 @@ func TestRemoteRoundTrip(t *testing.T) {
 		t.Fatalf("duplicate: %+v", dup)
 	}
 
+	// Text from the far side is cleaned like a local message: what would
+	// render other than it reads (a bidi override, tag characters) goes.
+	sv.in(sv.mini, func() {
+		id := "M-" + fp + "-2"
+		r := Receive("studio", sv.sid, proto.PeerMessage{Epoch: epochOf(t, sv.studio), Seq: 2, Kind: proto.PeerMessageText, From: "acme", To: "api", ID: id, By: "coordinator", Text: "ok\u202e\U000E0041\U000E0042\x1b]52;c;eA==\a done"})
+		got, err := Read(api, id)
+		if r.Status == proto.PeerRefused || err != nil || got.Text != "ok]52;c;eA== done" {
+			t.Fatalf("received %+v: %+v %v", r, got, err)
+		}
+	})
+
 	// Handled on mini: the read receipt goes back through mini's outbox.
 	sv.in(sv.mini, func() {
 		api.DoneItem(item.ID)

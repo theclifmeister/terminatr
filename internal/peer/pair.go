@@ -17,12 +17,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/relay"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // SecretSize is the pairing secret's size: 80 bits.
@@ -291,6 +293,13 @@ func dialPair(ctx context.Context, id *Identity, code Code, o PairOptions, onWai
 	return c, nil
 }
 
+const (
+	// maxPairBytes bounds what runPair reads from the other end.
+	maxPairBytes = 64 << 10
+	// maxNameRunes cuts the other side's host name.
+	maxNameRunes = 64
+)
+
 // pairMsg is one NDJSON line of the pairing.
 type pairMsg struct {
 	Proof   []byte `json:"proof,omitempty"`
@@ -339,7 +348,9 @@ func runPair(raw net.Conn, id *Identity, t Secret, role string, o PairOptions) (
 		return nil, err
 	}
 	enc := json.NewEncoder(c)
-	dec := json.NewDecoder(bufio.NewReader(c))
+	// the whole exchange is a few short lines; whatever the other end
+	// sends beyond maxPairBytes, before or after its proof, isn't read
+	dec := json.NewDecoder(bufio.NewReader(io.LimitReader(c, maxPairBytes)))
 	recv := func() (pairMsg, error) {
 		var m pairMsg
 		if err := dec.Decode(&m); err != nil {
@@ -366,7 +377,9 @@ func runPair(raw net.Conn, id *Identity, t Secret, role string, o PairOptions) (
 	if m.Proof != nil || m.OK != nil {
 		return nil, errPairFormat
 	}
-	offer := Offer{Name: m.Name, Version: m.Version, ID: otherID, Check: CheckDigits(pairer, joiner)}
+	// the other side's words are shown beside the check digits: one
+	// short line of plain text each, so they can't hide or forge them
+	offer := Offer{Name: textsafe.Line(m.Name, maxNameRunes), Version: textsafe.Line(m.Version, maxVersionRunes), ID: otherID, Check: CheckDigits(pairer, joiner)}
 	yes, err := o.Confirm(offer)
 	if err != nil {
 		return nil, err

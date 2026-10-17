@@ -28,6 +28,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -147,21 +148,10 @@ func KB(n int) string {
 	return fmt.Sprintf("%.1f KB", float64(n)/1024)
 }
 
-// Clean is a message's text as it is kept: valid UTF-8, line ends as
-// \n, control characters but newline and tab as spaces, trimmed.
+// Clean is a message's text as it is kept: line ends as \n, bytes that
+// aren't UTF-8 dropped, then textsafe.Text, trimmed.
 func Clean(text string) string {
-	text = strings.ToValidUTF8(text, "�")
-	text = strings.ReplaceAll(text, "\r\n", "\n")
-	text = strings.Map(func(r rune) rune {
-		if r == '\n' || r == '\t' {
-			return r
-		}
-		if r < ' ' || r == 0x7f || (r >= 0x80 && r < 0xa0) {
-			return ' '
-		}
-		return r
-	}, text)
-	return strings.TrimSpace(text)
+	return strings.TrimSpace(textsafe.Text(strings.ReplaceAll(strings.ToValidUTF8(text, ""), "\r\n", "\n")))
 }
 
 func write(p *project.Project, m *Message) error {
@@ -314,7 +304,7 @@ func checkAttach(p *project.Project, specs []string) ([]attachment, error) {
 	var out []attachment
 	for _, s := range specs {
 		id, name, ok := strings.Cut(s, "/")
-		if !ok || !thread.ValidID(id) || name == "" || strings.ContainsAny(name, "/\\") || strings.HasPrefix(name, ".") {
+		if !ok || !thread.ValidID(id) || name == "" || strings.ContainsAny(name, "/\\") || strings.HasPrefix(name, ".") || !textsafe.Safe(name) {
 			return nil, refuse("bad-attachment", "%q: name a library file as <thread>/<file> (tm library list)", s)
 		}
 		src := thread.Path(p, id, "library", name)

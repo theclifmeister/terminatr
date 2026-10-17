@@ -2,10 +2,10 @@ package thread
 
 import (
 	"strings"
-	"unicode"
 
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // maxLabelTitle caps the title in a label, in runes.
@@ -60,11 +60,5 @@ func Labelled(p *project.Project, id, text string) string {
 	return strings.Replace(text, id, Label(p, id), 1)
 }
 
-// cleanTitle keeps a title to one short line of printable text.
-func cleanTitle(s string) string {
-	s = strings.Join(strings.FieldsFunc(s, func(r rune) bool { return unicode.IsSpace(r) || !unicode.IsPrint(r) }), " ")
-	if r := []rune(s); len(r) > maxLabelTitle {
-		s = strings.TrimSpace(string(r[:maxLabelTitle-1])) + "…"
-	}
-	return s
-}
+// cleanTitle keeps a title to one short line of plain text.
+func cleanTitle(s string) string { return textsafe.Line(s, maxLabelTitle) }

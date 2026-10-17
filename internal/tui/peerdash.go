@@ -153,7 +153,7 @@ func remoteCoord(sessions []proto.PeerSession) string {
 		if s.Role != proto.RoleCoordinator {
 			continue
 		}
-		state := peerState(s)
+		state := oneLine(peerState(s))
 		g, st := stateLook(state)
 		text := "coordinator " + st.Render(strings.TrimSpace(g+" "+state))
 		var bits []string
@@ -161,7 +161,7 @@ func remoteCoord(sessions []proto.PeerSession) string {
 			bits = append(bits, kTokens(s.Context)+" / "+kTokens(s.ContextWindow)+" context")
 		}
 		if s.Model != "" {
-			bits = append(bits, s.Model)
+			bits = append(bits, oneLine(s.Model))
 		}
 		if len(bits) > 0 {
 			text += th().Faint.Render(" · " + strings.Join(bits, " · "))

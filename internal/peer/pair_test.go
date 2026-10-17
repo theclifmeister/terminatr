@@ -1,13 +1,16 @@
 package peer
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"net"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestCode(t *testing.T) {
@@ -300,5 +303,57 @@ func TestHostLabel(t *testing.T) {
 		if got := HostLabel(in); got != want {
 			t.Errorf("HostLabel(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// The other side's name and version are shown beside the check digits:
+// they arrive as one short line of plain text each, whatever was sent.
+func TestPairOfferIsCleaned(t *testing.T) {
+	a, b := newServer(t), newServer(t)
+	ca, cb := tcpPipe(t)
+	var sec Secret
+	evil := PairOptions{Name: "mini\x1b[8m", Version: "0.30\x1b[8m\nCheck: 000 000\x1b]52;c;eA==\a" + strings.Repeat("9", 100),
+		Confirm: func(Offer) (bool, error) { return false, nil }}
+	go runPair(ca, a.id, sec, rolePair, evil)
+	var got Offer
+	runPair(cb, b.id, sec, roleJoin, PairOptions{Confirm: func(o Offer) (bool, error) { got = o; return false, nil }})
+	if got.Name != "mini[8m" || strings.ContainsAny(got.Version, "\x1b\a\n") || !strings.HasPrefix(got.Version, "0.30[8m Check: 000 000]52") ||
+		utf8.RuneCountInString(got.Version) > maxVersionRunes {
+		t.Fatalf("offer %+v", got)
+	}
+}
+
+// Before the proof is checked the other end is anyone: runPair reads at
+// most maxPairBytes from it, so an endless line ends the pairing.
+func TestPairReadIsBounded(t *testing.T) {
+	a, x := newServer(t), newServer(t)
+	ca, cb := tcpPipe(t)
+	errs := make(chan error, 1)
+	go func() {
+		_, err := runPair(ca, a.id, Secret{}, rolePair, PairOptions{Confirm: func(Offer) (bool, error) { t.Error("asked"); return false, nil }})
+		errs <- err
+	}()
+	cert, err := certificate(x.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := tls.Client(cb, &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{cert}, InsecureSkipVerify: true})
+	defer c.Close()
+	go func() {
+		c.Write([]byte(`{"proof":"`))
+		chunk := bytes.Repeat([]byte("A"), 16<<10)
+		for i := 0; i < 64; i++ {
+			if _, err := c.Write(chunk); err != nil {
+				return
+			}
+		}
+	}()
+	select {
+	case err := <-errs:
+		if err == nil {
+			t.Fatal("paired")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("still reading")
 	}
 }

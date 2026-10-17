@@ -7,6 +7,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -91,20 +92,7 @@ func slotWords(slug string, w thread.Waiter, working, capN, total, global int) s
 	}
 	s += fmt.Sprintf("; you were refused (%s) at %s", w.Code, w.At.Local().Format("15:04"))
 	if w.What != "" {
-		s += " for " + oneLineClip(w.What, 60)
+		s += " for " + textsafe.Line(w.What, 60)
 	}
 	return s + ". Start the thread you proposed if the user agreed; else remind them of it"
-}
-
-func oneLineClip(s string, n int) string {
-	r := []rune(s)
-	for i, c := range r {
-		if c < ' ' {
-			r[i] = ' '
-		}
-	}
-	if len(r) > n {
-		r = append(r[:n-1], '…')
-	}
-	return string(r)
 }

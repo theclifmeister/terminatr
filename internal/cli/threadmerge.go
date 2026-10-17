@@ -14,6 +14,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -99,7 +100,7 @@ func (e *Env) threadMerge(p *project.Project, id string) error {
 		if errors.As(err, &me) {
 			return methodRefusal(pr, me)
 		}
-		return mergeRefusal("merge-failed", "%s was not merged: %s", pr.Ref(), oneLine(err.Error(), 300))
+		return mergeRefusal("merge-failed", "%s was not merged: %s", pr.Ref(), textsafe.Line(err.Error(), 300))
 	}
 	head := pr.Head[:7]
 	if err := p.Journal(e.Caller, "thread.merge", id, fmt.Sprintf("%s merged at %s (%s)", pr.Ref(), head, methodWords[method])); err != nil {

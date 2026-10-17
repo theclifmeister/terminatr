@@ -121,7 +121,7 @@ func TestModDoctor(t *testing.T) {
 	m := modAnswers(map[string]string{MethodDoctor: `{"checks":[{"name":"glab\u001b[2J","ok":true,"detail":"found"},{"name":"glab auth","ok":false,"detail":"` + strings.Repeat("y", 300) + `"},{"name":"","ok":true}]}`}, nil)
 	m.Target = Target{Kind: GitLabKind}
 	got := m.Doctor(DoctorDeps{})
-	if len(got) != 3 || got[0] != (Check{Name: "gitlab", OK: true, Detail: "served by mod gitlab"}) || got[1].Name != "glab[2J" || got[2].OK || len(got[2].Detail) > 204 {
+	if len(got) != 3 || got[0] != (Check{Name: "gitlab", OK: true, Detail: "served by mod gitlab"}) || got[1].Name != "glab" || got[2].OK || len(got[2].Detail) > 204 {
 		t.Errorf("%+v", got)
 	}
 	got = modAnswers(map[string]string{}, nil).Doctor(DoctorDeps{})

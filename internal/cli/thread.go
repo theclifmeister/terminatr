@@ -23,6 +23,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
 	"github.com/theclifmeister/terminatr/internal/worktree"
@@ -712,19 +713,11 @@ func (e *Env) threadPrompt(p *project.Project, id, text, next string) error {
 	if err := e.call(proto.MethodSessionPrompt, proto.SessionPromptParams{ID: r.Session, Text: text}, &res); err != nil {
 		return err
 	}
-	if err := p.Journal(e.Caller, "thread.prompt", id, oneLine(text, 80)); err != nil {
+	if err := p.Journal(e.Caller, "thread.prompt", id, textsafe.Line(text, 80)); err != nil {
 		return err
 	}
 	fmt.Fprintf(e.Stdout, "prompt for %s %s\n", id, res.Via)
 	return nil
-}
-
-func oneLine(s string, n int) string {
-	s = strings.Join(strings.Fields(s), " ")
-	if r := []rune(s); len(r) > n {
-		s = string(r[:n]) + "…"
-	}
-	return s
 }
 
 func (e *Env) threadAck(p *project.Project, id string) error {

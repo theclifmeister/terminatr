@@ -571,7 +571,7 @@ func (v *convView) render(m *dash) string {
 		state := map[string]string{link.StateSent: "sent", link.StateRead: "read", link.StateHeld: "waits for your OK", link.StateDropped: "dropped"}[msg.State]
 		meta += " · " + state
 		if len(msg.Attachments) > 0 {
-			meta += " · " + strings.Join(msg.Attachments, ", ")
+			meta += " · " + oneLine(strings.Join(msg.Attachments, ", "))
 		}
 		if i == v.sel {
 			sel = len(lines)

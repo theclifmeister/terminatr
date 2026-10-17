@@ -254,8 +254,10 @@ func (b *Broker) paths(m mod.Mod) (Paths, error) {
 	return p.resolve(), nil
 }
 
+// audit gives Audit line as it is, newlines and all: the mod's words are
+// in it, and the log escapes them (Server.modLog).
 func (b *Broker) audit(id, line string) {
 	if b.o.Audit != nil {
-		b.o.Audit(id, "broker: "+strings.Join(strings.Fields(line), " "))
+		b.o.Audit(id, "broker: "+strings.TrimSpace(line))
 	}
 }

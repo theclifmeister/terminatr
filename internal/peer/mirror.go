@@ -124,9 +124,11 @@ func (m *Mirror) SetPanesOf(alias, level string) {
 
 // setPanes records p's pane switch for this server and tells; mu held.
 func (m *Mirror) setPanes(p *mirrorPeer, level string) bool {
-	if l, ok := proto.ParsePanes(level); ok {
-		level = l
+	l, ok := proto.ParsePanes(level)
+	if !ok && level != "" {
+		return false // not a level: the peer's word is ignored
 	}
+	level = l
 	if p.panes == level {
 		return false
 	}
@@ -284,6 +286,7 @@ func (m *Mirror) read(ctx context.Context, id, alias string) {
 // setProjects takes a peer.projects answer: new projects are watched,
 // gone ones dropped.
 func (m *Mirror) setProjects(ctx context.Context, id, alias string, ps proto.PeerProjects, recv time.Time) {
+	ps = cleanProjects(ps)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	p := m.peer(ctx, id)
@@ -399,6 +402,7 @@ func (m *Mirror) project(ctx, peerCtx context.Context, id, slug string) (*mirror
 }
 
 func (m *Mirror) setWatch(ctx, peerCtx context.Context, id, slug string, w proto.PeerWatch, recv time.Time) {
+	w = cleanWatch(w)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	p, pr := m.project(ctx, peerCtx, id, slug)

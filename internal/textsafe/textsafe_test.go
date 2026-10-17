@@ -41,6 +41,18 @@ func TestClean(t *testing.T) {
 	}
 }
 
+func TestText(t *testing.T) {
+	for in, want := range map[string]string{
+		"plain\n":                           "plain\n",
+		"\tindent\n\t\tmore\x1b[2J":         "\tindent\n\t\tmore[2J",
+		"a\u202e\tb\r\u2028c\x00\U000E0041": "a\tb  c",
+	} {
+		if got := Text(in); got != want {
+			t.Errorf("Text(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestLine(t *testing.T) {
 	for _, c := range []struct {
 		in   string

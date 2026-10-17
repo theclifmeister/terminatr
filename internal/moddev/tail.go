@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // tailMax is how much of a log's end Tail reads.
@@ -14,7 +16,8 @@ const tailMax = 1 << 20
 
 // Tail returns the last n lines of the file at path (all of them for
 // n <= 0, within its last MB) and the size it read to, where Follow
-// starts.
+// starts. The log holds a mod's words, so a line is only its text
+// (textsafe.Clean).
 func Tail(path string, n int) ([]string, int64, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -45,11 +48,14 @@ func Tail(path string, n int) ([]string, int64, error) {
 	if n > 0 && len(lines) > n {
 		lines = lines[len(lines)-n:]
 	}
+	for i, l := range lines {
+		lines[i] = textsafe.Clean(l, false)
+	}
 	return lines, size, nil
 }
 
 // Follow writes what is added to the file at path after offset to w, a
-// line at a time, until ctx ends. A file that shrinks was rotated (the
+// line at a time and as text, like Tail, until ctx ends. A file that shrinks was rotated (the
 // mod log moves to <id>.log.1 at 1 MB) and is read again from its start;
 // a file not there yet is waited for.
 func Follow(ctx context.Context, path string, offset int64, every time.Duration, w io.Writer) {
@@ -69,7 +75,7 @@ func Follow(ctx context.Context, path string, offset int64, every time.Duration,
 					offset += int64(n)
 					part = append(part, b[:n]...)
 					if i := bytes.LastIndexByte(part, '\n'); i >= 0 {
-						_, _ = w.Write(part[:i+1])
+						_, _ = io.WriteString(w, textsafe.Clean(string(part[:i+1]), true))
 						part = append([]byte(nil), part[i+1:]...)
 					}
 				}
