@@ -12,6 +12,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/dop251/goja v0.0.0-20261011122007-9b0700c7e02e
 	github.com/evanw/esbuild v0.28.2
+	github.com/kljensen/snowball v0.10.0
 	github.com/rivo/uniseg v0.4.7
 	go.mitchellh.com/libghostty v0.0.0-20261001181910-76867c77a212
 	golang.org/x/crypto v0.57.0
