@@ -277,15 +277,18 @@ func TestPickMod(t *testing.T) {
 	if _, ok := Pick(repo, Config{CodeHost: "gitlab", Project: "none"}).(unserved); !ok {
 		t.Error("no mod for the project isn't unserved")
 	}
-	for cfg, want := range map[Config]string{
-		{}:                   NoKind, // gitlab.com by origin: nothing to poll without a mod
-		{CodeHost: "github"}: GitHubKind,
-		{CodeHost: "GitLab"}: NoKind, // not a kind: by origin
-		{CodeHost: "gitea"}:  "gitea",
-		{CodeHost: "azure"}:  AzureKind,
+	for _, c := range []struct {
+		cfg  Config
+		want string
+	}{
+		{Config{}, NoKind}, // gitlab.com by origin: nothing to poll without a mod
+		{Config{CodeHost: "github"}, GitHubKind},
+		{Config{CodeHost: "GitLab"}, NoKind}, // not a kind: by origin
+		{Config{CodeHost: "gitea"}, "gitea"},
+		{Config{CodeHost: "azure"}, AzureKind},
 	} {
-		if k := Pick(repo, cfg).Kind(); k != want {
-			t.Errorf("%+v: %q, want %q", cfg, k, want)
+		if k := Pick(repo, c.cfg).Kind(); k != c.want {
+			t.Errorf("%+v: %q, want %q", c.cfg, k, c.want)
 		}
 	}
 	for _, k := range []Host{GitHub{}, Azure{}, NoHost{}} {

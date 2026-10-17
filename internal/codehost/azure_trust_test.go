@@ -74,22 +74,39 @@ func TestAzureURLTrustsOriginAndAzDefault(t *testing.T) {
 		}
 		return repo
 	}
-	cfg := Config{CodeHost: AzureKind, AzureURL: "https://onprem-https.example/tfs/Coll"}
+	const org = "https://onprem.example/tfs/Coll"
 	for _, remote := range []string{
-		"https://onprem-https.example/tfs/Coll/Shop/_git/web",
-		"ssh://tfs@onprem-https.example:22/tfs/Coll/Shop/_git/web",
-		"tfs@onprem-https.example:v3/Coll/Shop/web",
+		"https://onprem.example/tfs/Coll/Shop/_git/web",
+		"ssh://tfs@onprem.example:22/tfs/Coll/Shop/_git/web",
+		"tfs@onprem.example:v3/Coll/Shop/web",
 	} {
-		originHosts.Delete("onprem-https.example")
-		if got := Detect(mk(remote), cfg); got.OrgURL != "https://onprem-https.example/tfs/Coll" {
+		repo := mk(remote)
+		got := Detect(repo, Config{CodeHost: AzureKind, AzureURL: org, OriginRepos: []string{repo}})
+		if got.OrgURL != org {
 			t.Errorf("origin %q: OrgURL %q", remote, got.OrgURL)
 		}
+		a := Azure{Target: got}
+		if !a.trusted(org+"/_apis/x") || a.trusted("https://other.example/x") {
+			t.Errorf("origin %q: target trust", remote)
+		}
+		// The trust is the target's: nothing global, no other repo's.
+		if TrustedAzureURL(org) || (Azure{Target: Target{Kind: AzureKind}}).trusted(org) {
+			t.Errorf("origin %q: trust leaked", remote)
+		}
+	}
+	repo := mk("https://onprem.example/tfs/Coll/Shop/_git/web")
+	// A repo the user didn't register (not in OriginRepos) doesn't vouch.
+	if got := Detect(repo, Config{CodeHost: AzureKind, AzureURL: org}); got.OrgURL != "" {
+		t.Errorf("unregistered repo vouched: %q", got.OrgURL)
+	}
+	if got := Detect(repo, Config{CodeHost: AzureKind, AzureURL: org, OriginRepos: []string{t.TempDir()}}); got.OrgURL != "" {
+		t.Errorf("another repo vouched: %q", got.OrgURL)
 	}
 	// An azure_url on a host that is not the origin's stays ignored.
-	if got := Detect(mk("https://onprem-https.example/x/_git/y"), Config{CodeHost: AzureKind, AzureURL: "https://unrelated.example/tfs"}); got.OrgURL != "" {
+	if got := Detect(repo, Config{CodeHost: AzureKind, AzureURL: "https://unrelated.example/tfs", OriginRepos: []string{repo}}); got.OrgURL != "" {
 		t.Errorf("unrelated host trusted: %q", got.OrgURL)
 	}
-	// So does a host only PROJECT.md names, with no origin on it.
+	// A host only PROJECT.md names is not trusted.
 	if TrustedAzureURL("https://only-project.example/tfs") {
 		t.Error("PROJECT.md-only host trusted")
 	}
