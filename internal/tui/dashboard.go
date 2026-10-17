@@ -147,6 +147,7 @@ func Dashboard(opts DashOptions) (DashResult, error) {
 	m.out.flush()
 	if err != nil {
 		opts.Out.WriteString(leaveScreen)
+		clog("dashboard: %v", err)
 		return DashResult{}, err
 	}
 	d := final.(*dash)
@@ -938,7 +939,11 @@ func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 }
 
 // fail shows err in the footer, as a failure.
-func (m *dash) fail(err error) { m.msg = err.Error(); m.errMsg = m.msg }
+func (m *dash) fail(err error) {
+	m.msg = err.Error()
+	m.errMsg = m.msg
+	clog("error: %s", m.msg)
+}
 
 // act runs an action in the background; one at a time: one asked for
 // while another runs waits its turn (m.queued), as a settings key does.

@@ -105,3 +105,7 @@ func ModCacheDir() (string, error) { return sub(filepath.Join("cache", "mods")) 
 
 // ModLogsDir is <home>/logs/mods, each mod's <id>.log.
 func ModLogsDir() (string, error) { return sub(filepath.Join("logs", "mods")) }
+
+// LogsDir is <home>/logs: the server's, the service's, the consoles'
+// and (in mods/) each mod's log.
+func LogsDir() (string, error) { return sub("logs") }
