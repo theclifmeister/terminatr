@@ -81,7 +81,8 @@ func AppendFollowUp(p *project.Project, id, text string, at time.Time) error {
 
 // WriteBrief (re)generates brief.md (docs/SPEC.md §7.1). It is written
 // at start and restart only: the agent snapshots it as a system prompt.
-func WriteBrief(p *project.Project, r *Record, restart bool) (string, error) {
+// It answers the memory notes the brief carries (BriefMemory).
+func WriteBrief(p *project.Project, r *Record, restart bool) (string, Memory, error) {
 	path := Path(p, r.ID, "brief.md")
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Thread %s of project %s\n\n", r.ID, p.Slug)
@@ -111,6 +112,10 @@ func WriteBrief(p *project.Project, r *Record, restart bool) (string, error) {
 
 	fmt.Fprintf(&b, "## Project files (live, read-only; read as needed)\n\n%s/: PROJECT.md, CONTEXT.md, MEMORY.md,\n"+
 		"memory/, TASKS.md, and uploads/ (the user's files; your task names the ones for you).\n\n", p.Dir)
+	mem := BriefMemory(p, r)
+	if s := mem.Render(p.Dir); s != "" {
+		b.WriteString(s + "\n")
+	}
 	if restart {
 		b.WriteString("## Restart\n\nA previous attempt exists on this branch. Read your last report first: `tm report --show`.\n" +
 			"Then continue from the task's unchecked steps.\n\n")
@@ -118,11 +123,11 @@ func WriteBrief(p *project.Project, r *Record, restart bool) (string, error) {
 	b.WriteString("# Task\n\n")
 	task, err := os.ReadFile(Path(p, r.ID, "task.md"))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return "", err
+		return "", mem, err
 	}
 	b.WriteString(strings.TrimSpace(string(task)) + "\n\n")
 	fmt.Fprintf(&b, "Follow-ups from the coordinator are appended to %s.\n", Path(p, r.ID, "task.md"))
-	return path, fsx.WriteAtomic(path, []byte(b.String()), 0o644)
+	return path, mem, fsx.WriteAtomic(path, []byte(b.String()), 0o644)
 }
 
 // ResetContext is what a thread gets back after /clear or compaction

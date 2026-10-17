@@ -111,3 +111,40 @@ func TestMemoryCheck(t *testing.T) {
 		t.Errorf("warnings not after the thread's own ## Check:\n%s", stored)
 	}
 }
+
+// TestContextThread: tm context --thread previews the memory notes a
+// thread's brief carries, for a task before its thread starts.
+func TestContextThread(t *testing.T) {
+	h := newHarness(t)
+	h.ok(human, "project", "new", "demo")
+	h.ok(human, "task", "add", "Tune the gh poller retries", "--project", "demo")
+	p, _ := project.Open("demo")
+	os.MkdirAll(p.Path("memory"), 0o755)
+	os.WriteFile(p.Path("memory", "retries.md"), []byte("+++\ntitle = \"Retries stay at 4\"\n+++\n## Decided\nKeep 4 for the gh poller.\n"), 0o644)
+	os.WriteFile(p.Path("memory", "rules.md"), []byte("+++\ntitle = \"House rules\"\nstanding = true\n+++\nBe brief.\n"), 0o644)
+
+	out := h.ok(coord, "context", "--thread", "T1", "--project", "demo")
+	for _, want := range []string{"Memory notes for T1's new thread: 1 standing, 1 matched (of at most 3).", "### House rules (memory/rules.md; standing)",
+		"### Retries stay at 4 (memory/retries.md; matched: gh, poller, retries)", "Keep 4 for the gh poller."} {
+		if !strings.Contains(out, want) {
+			t.Errorf("preview lacks %q:\n%s", want, out)
+		}
+	}
+	var res struct {
+		Memory struct {
+			Notes []struct {
+				Standing bool `json:"standing"`
+			} `json:"notes"`
+		} `json:"memory"`
+	}
+	if err := json.Unmarshal([]byte(h.ok(thr, "context", "--thread", "T1", "--json", "--project", "demo")), &res); err != nil || len(res.Memory.Notes) != 2 || !res.Memory.Notes[0].Standing {
+		t.Fatalf("json: %v %+v", err, res)
+	}
+	os.Remove(p.Path("memory", "rules.md"))
+	os.Remove(p.Path("memory", "retries.md"))
+	if out := h.ok(coord, "context", "--thread", "T1", "--project", "demo"); !strings.Contains(out, "carries no memory notes") {
+		t.Errorf("without notes:\n%s", out)
+	}
+	h.expect(2, "", coord, "context", "--thread", "nope", "--project", "demo")
+	h.expect(1, "", coord, "context", "--thread", "t-0009", "--project", "demo")
+}

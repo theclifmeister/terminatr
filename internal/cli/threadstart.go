@@ -287,7 +287,8 @@ func threadTask(p *project.Project, taskRef string) (*tasks.Task, error) {
 
 // threadFiles links a new thread's task (started, if it was open or
 // ready) and writes its task.md, brief.md and STATUS.md. It returns the
-// brief's path.
+// brief's path. The journal counts the memory notes the brief carries
+// (thread.memory), so how often a thread gets a matched one shows.
 func (e *Env) threadFiles(p *project.Project, r *thread.Record, task *tasks.Task) (string, error) {
 	if task != nil {
 		s := p.Tasks()
@@ -304,14 +305,34 @@ func (e *Env) threadFiles(p *project.Project, r *thread.Record, task *tasks.Task
 	if err := thread.WriteTaskText(p, r.ID, thread.TaskText(r, task)); err != nil {
 		return "", err
 	}
-	brief, err := thread.WriteBrief(p, r, false)
+	brief, mem, err := thread.WriteBrief(p, r, false)
 	if err != nil {
+		return "", err
+	}
+	if err := p.Journal(e.Caller, "thread.memory", r.ID, memoryDetail(mem)); err != nil {
 		return "", err
 	}
 	if _, err := thread.UpdateStatus(p, r.ID, nil); err != nil {
 		return "", err
 	}
 	return brief, nil
+}
+
+// memoryDetail is a thread.memory journal line's detail:
+// "2 matched (memory/a.md, memory/b.md), 1 standing".
+func memoryDetail(m thread.Memory) string {
+	standing, matched := m.Counts()
+	var paths []string
+	for _, n := range m.Notes {
+		if !n.Standing {
+			paths = append(paths, n.Note.Path)
+		}
+	}
+	d := fmt.Sprintf("%d matched", matched)
+	if len(paths) > 0 {
+		d += " (" + strings.Join(paths, ", ") + ")"
+	}
+	return fmt.Sprintf("%s, %d standing", d, standing)
 }
 
 // listedRepo reports whether dir is one of p's repos, either spelling

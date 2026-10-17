@@ -3,8 +3,9 @@
 - Stay in your worktree. Write code only there. The project folder is
   read-only for you: read PROJECT.md, CONTEXT.md, MEMORY.md, memory/ and
   TASKS.md by the absolute paths in your brief when you need them (they
-  are live). `tm memory find <words> [--path <path>]…` lists the
-  memory notes that bear on your task: read them before you start.
+  are live). Your brief carries the standing memory notes and the
+  ones that best match your task, cut to fit; `tm memory find <words>
+  [--path <path>]…` lists more that bear on it.
   Files the user uploaded are in its uploads/ folder; your brief or
   the coordinator names yours.
 - Work through your task's steps in order, ticking each when done: `tm
