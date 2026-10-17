@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -55,6 +57,28 @@ var (
 
 const maxPaneStreams = 8
 
+// A paired server's word on a pane's size is only that: sizes in its
+// frames are taken up to maxPaneCols × maxPaneRows, and its repaints at
+// most one per paneRepaintEvery, as its subscriber promises
+// (session.RepaintEvery); one sooner is dropped with the output after
+// it, and a fresh one asked for once the time has passed.
+const (
+	maxPaneCols = 1000
+	maxPaneRows = 500
+)
+
+var paneRepaintEvery = 250 * time.Millisecond
+
+// paneSize reads a size from a paired server's frame: false for none or
+// a zero, and at most maxPaneCols × maxPaneRows.
+func paneSize(b []byte) (cols, rows uint16, ok bool) {
+	cols, rows, err := proto.ParseSize(b)
+	if err != nil || cols == 0 || rows == 0 {
+		return 0, 0, false
+	}
+	return min(cols, maxPaneCols), min(rows, maxPaneRows), true
+}
+
 // PaneHost is what the server lends a link for its panes.
 type PaneHost interface {
 	// OpenPane subscribes to the pane of session, the coordinator's or a
@@ -103,6 +127,9 @@ type paneMux struct {
 	opened map[uint32]*PaneConn
 	next   uint32
 	ended  bool
+	// closes counts closeServed calls: a stream whose switch was read
+	// before one isn't served (serve).
+	closes int
 	// window and ackEvery are paneWindow and paneAckEvery when the
 	// session began.
 	window, ackEvery int
@@ -154,6 +181,7 @@ func (m *paneMux) closeServed(reason string) {
 	m.mu.Lock()
 	ss := m.served
 	m.served = map[uint32]*served{}
+	m.closes++
 	m.mu.Unlock()
 	for _, sv := range ss {
 		sv.s.sendFrame(sv.id, frameClosed, []byte(reason))
@@ -176,9 +204,18 @@ type served struct {
 	done     bool
 }
 
+// closed is the count of closeServed calls so far, for serve.
+func (m *paneMux) closed() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.closes
+}
+
 // serve starts stream id from src; typing says, at each key, whether the
-// peer may type.
-func (m *paneMux) serve(id uint32, src PaneSource, typing func() bool) error {
+// peer may type. since is m.closed() from before the switch allowed the
+// stream: when closeServed ran in between, the switch went off and the
+// stream isn't served.
+func (m *paneMux) serve(id uint32, src PaneSource, typing func() bool, since int) error {
 	sv := &served{m: m, s: m.s, id: id, src: src, typing: typing}
 	sv.cond = sync.NewCond(&sv.mu)
 	m.mu.Lock()
@@ -186,6 +223,9 @@ func (m *paneMux) serve(id uint32, src PaneSource, typing func() bool) error {
 	case m.ended:
 		m.mu.Unlock()
 		return errNotUp
+	case m.closes != since:
+		m.mu.Unlock()
+		return errPanesOff
 	case m.served[id] != nil:
 		m.mu.Unlock()
 		return proto.Errorf(proto.ErrBadParams, "stream %d is open", id)
@@ -214,7 +254,7 @@ func (sv *served) frame(typ byte, payload []byte) {
 			sv.src.Input(payload)
 		}
 	case frameSize:
-		if c, r, err := proto.ParseSize(payload); err == nil && c > 0 && r > 0 && sv.typing() {
+		if c, r, ok := paneSize(payload); ok && sv.typing() {
 			sv.src.Resize(c, r)
 		}
 	case frameAck:
@@ -349,6 +389,14 @@ type PaneConn struct {
 	unacked int
 	closed  bool
 	ack     chan struct{}
+
+	// Frames come on the link's reader, one at a time: repainted is when
+	// the sink last took a repaint; skipping, that a repaint came sooner
+	// and its output is dropped until the next; asked, that a fresh one
+	// is asked for.
+	repainted time.Time
+	skipping  bool
+	asked     atomic.Bool
 }
 
 // open opens a stream on session p.Session of the peer, frames to sink.
@@ -379,15 +427,25 @@ func (m *paneMux) open(ctx context.Context, p proto.PeerAttachParams, sink PaneS
 func (c *PaneConn) frame(typ byte, payload []byte) {
 	switch typ {
 	case frameRepaint:
-		if cols, rows, err := proto.ParseSize(payload[:min(4, len(payload))]); err == nil {
-			c.sink.Repaint(cols, rows, payload[4:])
-			c.took(len(payload) - 4)
+		if len(payload) < 4 {
+			return
 		}
+		c.took(len(payload) - 4)
+		cols, rows, ok := paneSize(payload[:4])
+		if wait := time.Until(c.repainted.Add(paneRepaintEvery)); !ok || wait > 0 {
+			c.skipping = true
+			c.askRepaint(max(wait, 0))
+			return
+		}
+		c.repainted, c.skipping = time.Now(), false
+		c.sink.Repaint(cols, rows, payload[4:])
 	case frameOutput:
-		c.sink.Output(payload)
 		c.took(len(payload))
+		if !c.skipping {
+			c.sink.Output(payload)
+		}
 	case frameResize:
-		if cols, rows, err := proto.ParseSize(payload); err == nil {
+		if cols, rows, ok := paneSize(payload); ok {
 			c.sink.Resize(cols, rows)
 		}
 	case frameClosed:
@@ -398,6 +456,17 @@ func (c *PaneConn) frame(typ byte, payload []byte) {
 		c.m.mu.Unlock()
 		c.end(string(payload))
 	}
+}
+
+// askRepaint asks for a fresh repaint after wait, once at a time.
+func (c *PaneConn) askRepaint(wait time.Duration) {
+	if c.asked.Swap(true) {
+		return
+	}
+	time.AfterFunc(wait, func() {
+		c.asked.Store(false)
+		c.Repaint()
+	})
 }
 
 // took counts n bytes fed to the sink, waking the acks every
@@ -509,17 +578,22 @@ func (d *dispatcher) attach(ctx context.Context, raw json.RawMessage) (any, erro
 	if s == nil {
 		return nil, errNotUp
 	}
+	// The switch can go off while the pane opens: since, read before
+	// the switch, lets serve see that it did.
+	since := s.panes.closed()
 	if lv := d.level(); lv != proto.PanesView && lv != proto.PanesType {
-		return nil, proto.Errorf(proto.ErrPanesOff, "this server doesn't share panes with yours")
+		return nil, errPanesOff
 	}
 	src, info, err := d.panes.OpenPane(d.caller, p.Project, p.Session)
 	if err != nil {
 		return nil, err
 	}
 	typing := func() bool { return d.level() == proto.PanesType }
-	if err := s.panes.serve(p.Stream, src, typing); err != nil {
+	if err := s.panes.serve(p.Stream, src, typing, since); err != nil {
 		src.Close()
 		return nil, err
 	}
 	return proto.PeerAttachResult{Input: typing(), Session: info}, nil
 }
+
+var errPanesOff = proto.Errorf(proto.ErrPanesOff, "this server doesn't share panes with yours")

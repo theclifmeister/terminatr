@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/ecdsa"
@@ -810,4 +811,93 @@ func TestHealthzDoesNotTellTheVersion(t *testing.T) {
 	if rec.Code != 404 {
 		t.Fatalf("other path: %d", rec.Code)
 	}
+}
+
+// stalling is a listener whose connections each get serve, then stay
+// open: a relay that accepts and goes quiet.
+func stalling(t *testing.T, serve func(net.Conn)) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	var conns []net.Conn
+	t.Cleanup(func() {
+		ln.Close()
+		mu.Lock()
+		defer mu.Unlock()
+		for _, c := range conns {
+			c.Close()
+		}
+	})
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			conns = append(conns, c)
+			mu.Unlock()
+			if serve != nil {
+				go serve(c)
+			}
+		}
+	}()
+	return ln.Addr().String()
+}
+
+func TestDialToAStalledRelayTimesOut(t *testing.T) {
+	old := dialTimeout
+	dialTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { dialTimeout = old })
+	upgraded := func(c net.Conn) {
+		http.ReadRequest(bufio.NewReader(c))
+		io.WriteString(c, "HTTP/1.1 101 Switching Protocols\r\n") // and no more
+	}
+	endless := func(c net.Conn) {
+		http.ReadRequest(bufio.NewReader(c))
+		io.WriteString(c, "HTTP/1.1 101 Switching Protocols\r\n")
+		for {
+			if _, err := io.WriteString(c, "X-Pad: "+strings.Repeat("a", 1000)+"\r\n"); err != nil {
+				return
+			}
+		}
+	}
+	for _, tc := range []struct {
+		name, scheme string
+		serve        func(net.Conn)
+	}{
+		{"silent wss", "wss", nil},
+		{"silent ws", "ws", nil},
+		{"half an upgrade", "ws", upgraded},
+		{"an endless upgrade", "ws", endless},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			url := tc.scheme + "://" + stalling(t, tc.serve)
+			r, _ := dialAsync(context.Background(), linkDialer(newKey(t), newKey(t), &tls.Config{InsecureSkipVerify: true}), url)
+			if d := got(t, r); d.err == nil {
+				t.Fatal("a dial to a stalled relay succeeded")
+			}
+		})
+	}
+}
+
+func TestDialWaitsPastTheDialTimeout(t *testing.T) {
+	old := dialTimeout
+	dialTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { dialTimeout = old })
+	_, url, tc := relayFor(t, DefaultConfig())
+	a, b := newKey(t), newKey(t)
+	ra, wa := dialAsync(context.Background(), linkDialer(a, b, tc), url)
+	waitFor(t, wa, "the first side to wait")
+	time.Sleep(3 * dialTimeout)
+	rb, _ := dialAsync(context.Background(), linkDialer(b, a, tc), url)
+	da, db := got(t, ra), got(t, rb)
+	if da.err != nil || db.err != nil {
+		t.Fatalf("dial: %v, %v", da.err, db.err)
+	}
+	da.c.Close()
+	db.c.Close()
 }

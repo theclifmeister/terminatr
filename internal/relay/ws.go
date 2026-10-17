@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"strings"
@@ -157,6 +158,9 @@ func upgrade(w http.ResponseWriter, r *http.Request, max int) (*wsConn, error) {
 	return newWS(c, brw.Reader, false, max), nil
 }
 
+// maxHandshake bounds the relay's answer to the upgrade request.
+const maxHandshake = 16 << 10
+
 // clientHandshake sends the upgrade request for url's host and path over
 // c and checks the answer.
 func clientHandshake(c net.Conn, host, path string, max int) (*wsConn, error) {
@@ -172,12 +176,19 @@ func clientHandshake(c net.Conn, host, path string, max int) (*wsConn, error) {
 	if _, err := c.Write([]byte(req)); err != nil {
 		return nil, err
 	}
-	br := bufio.NewReaderSize(c, 4096)
+	// The answer's head is read through lr, at most maxHandshake bytes;
+	// the frames after it through the same br, unbounded.
+	lr := &io.LimitedReader{R: c, N: maxHandshake}
+	br := bufio.NewReaderSize(lr, 4096)
 	resp, err := http.ReadResponse(br, &http.Request{Method: http.MethodGet})
 	if err != nil {
+		if lr.N <= 0 {
+			return nil, errors.New("relay: the WebSocket handshake answer is too long")
+		}
 		return nil, err
 	}
 	resp.Body.Close()
+	lr.N = math.MaxInt64
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		return nil, &HTTPError{Status: resp.StatusCode}
 	}

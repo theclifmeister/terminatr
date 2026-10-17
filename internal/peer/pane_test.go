@@ -237,6 +237,44 @@ func TestPaneSwitch(t *testing.T) {
 	}
 }
 
+// switchingHost is fakeHost with the switch turned off while the pane
+// opens.
+type switchingHost struct {
+	fakeHost
+	off func()
+}
+
+func (h *switchingHost) OpenPane(c caller.Caller, project, session string) (PaneSource, proto.PeerSession, error) {
+	src, info, err := h.fakeHost.OpenPane(c, project, session)
+	h.off()
+	return src, info, err
+}
+
+// TestPaneSwitchOffWhileOpening: a pane whose switch goes off while it
+// opens isn't served.
+func TestPaneSwitchOffWhileOpening(t *testing.T) {
+	h := &switchingHost{}
+	level := proto.PanesView
+	a, b := panePair(t, h, &level)
+	h.off = func() {
+		level = proto.PanesOff
+		b.panes.closeServed(proto.PaneOff)
+	}
+	_, err := a.panes.open(context.Background(), proto.PeerAttachParams{Project: "web", Session: "s-1"}, &sink{})
+	if code(err) != proto.ErrPanesOff {
+		t.Fatalf("switched off while opening: %v, want panes-off", err)
+	}
+	if !h.last().isClosed() {
+		t.Error("the source is still open")
+	}
+	b.panes.mu.Lock()
+	n := len(b.panes.served)
+	b.panes.mu.Unlock()
+	if n != 0 {
+		t.Errorf("%d streams served with the switch off", n)
+	}
+}
+
 // TestPaneClosed: the far end's closed frame reaches the sink in fixed
 // words, as does the switch going off, and the link dropping.
 func TestPaneClosed(t *testing.T) {
@@ -480,5 +518,74 @@ func TestPaneRaiseTold(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestPaneSizesBounded: sizes in a paired server's frames are taken up
+// to maxPaneCols × maxPaneRows, both ways, and a zero not at all.
+func TestPaneSizesBounded(t *testing.T) {
+	h := &fakeHost{}
+	level := proto.PanesType
+	a, _ := panePair(t, h, &level)
+	sk := &sink{}
+	c, err := a.panes.open(context.Background(), proto.PeerAttachParams{Project: "web", Session: "s-1"}, sk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := h.last()
+	src.push(proto.FrameRepaint, repaintFrame(65535, 65535, "x"))
+	src.push(proto.FrameResize, proto.Size(0, 40))
+	src.push(proto.FrameResize, proto.Size(2000, 65535))
+	testwait.Eventually(t, "the resize", func() bool { sk.mu.Lock(); defer sk.mu.Unlock(); return len(sk.resizes) > 0 })
+	sk.mu.Lock()
+	if sk.size != [2]uint16{maxPaneCols, maxPaneRows} || !slices.Equal(sk.resizes, [][2]uint16{{maxPaneCols, maxPaneRows}}) {
+		t.Errorf("repaint size %v, resizes %v", sk.size, sk.resizes)
+	}
+	sk.mu.Unlock()
+
+	c.Size(0, 10)
+	c.Size(65535, 65535)
+	testwait.Eventually(t, "the size", func() bool { src.mu.Lock(); defer src.mu.Unlock(); return len(src.sizes) > 0 })
+	src.mu.Lock()
+	defer src.mu.Unlock()
+	if !slices.Equal(src.sizes, [][2]uint16{{maxPaneCols, maxPaneRows}}) {
+		t.Errorf("sizes %v", src.sizes)
+	}
+}
+
+// TestPaneRepaintsPaced: a paired server's repaints are taken at most one
+// per paneRepaintEvery; one sooner is dropped with its output, and a
+// fresh one asked for.
+func TestPaneRepaintsPaced(t *testing.T) {
+	old := paneRepaintEvery
+	paneRepaintEvery = 300 * time.Millisecond
+	t.Cleanup(func() { paneRepaintEvery = old })
+	h := &fakeHost{}
+	level := proto.PanesView
+	a, _ := panePair(t, h, &level)
+	sk := &sink{}
+	if _, err := a.panes.open(context.Background(), proto.PeerAttachParams{Project: "web", Session: "s-1"}, sk); err != nil {
+		t.Fatal(err)
+	}
+	src := h.last()
+	src.push(proto.FrameRepaint, repaintFrame(80, 24, "first"))
+	for i := range 50 {
+		src.push(proto.FrameRepaint, repaintFrame(80, 24, fmt.Sprint("flood", i)))
+	}
+	src.push(proto.FrameOutput, []byte("+dropped"))
+	testwait.Eventually(t, "a fresh repaint asked for", func() bool { src.mu.Lock(); defer src.mu.Unlock(); return src.asked == 1 })
+	sk.mu.Lock()
+	n, text := sk.repaint, sk.screen.String()
+	sk.mu.Unlock()
+	if n != 1 || text != "first" {
+		t.Errorf("%d repaints taken, screen %q", n, text)
+	}
+	src.push(proto.FrameRepaint, repaintFrame(80, 24, "fresh"))
+	src.push(proto.FrameOutput, []byte("+more"))
+	testwait.Eventually(t, "the fresh repaint", func() bool { return sk.text() == "fresh+more" })
+	src.mu.Lock()
+	defer src.mu.Unlock()
+	if src.asked != 1 {
+		t.Errorf("%d repaints asked for", src.asked)
 	}
 }

@@ -2555,7 +2555,11 @@ user shares a project, and nothing that crosses can act here.
   seconds (at most and by default 50) with the same state. `rev` names
   a state (a hash of its JSON, without `rev` and `now`). `watch` is the project's `ProjectWatch`
   as `project.watch` gives it (§3.3, **Watch**), its `links` only to
-  other shared projects. `sessions` are the project's sessions, each
+  other shared projects, copied field by field as `sessions` are: no
+  mods' cells, no question's text (a thread's `needs_you` and a need's
+  `question` say `a question in its session` instead), and of each inbox
+  item only its kind, count, task, title and whether it needs the user,
+  never its summary. `sessions` are the project's sessions, each
   `{"id", "role", "agent", "project", "thread", "task", "created",
   "state", "reason", "todos_done", "todos_total", "current",
   "queued_prompts", "remote_control", "model", "asking", "context",
@@ -2780,7 +2784,11 @@ user's own (§16.8); the far server's human decides what crosses.
   unacked; the near end acks every 32 KiB it has fed. Past 1 MiB queued
   (`session.AttachRemote`; a repaint waiting at the head doesn't count)
   the backlog is dropped for a fresh repaint, at most one per 250 ms: the
-  pane skips ahead rather than lag.
+  pane skips ahead rather than lag. Each end holds the other to that: the
+  near end drops a repaint that comes sooner, with the output after it,
+  and asks for a fresh one once the 250 ms have passed; and the sizes in
+  either end's repaint, resize and size frames are taken up to 1000 × 500
+  (a zero not at all).
 - **Keys and who types.** On the far server the caller stays
   `peer:<alias>`, an agent to every check, and its keys go to the PTY
   only while the switch is `write`, whatever it was when the stream

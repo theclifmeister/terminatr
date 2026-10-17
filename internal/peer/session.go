@@ -356,8 +356,12 @@ func (s *session) loop() error {
 			return err
 		}
 		if l.Method == "" {
+			// A response is delivered once: it takes its request out of
+			// pending, so a peer that answers twice can't fill the
+			// call's one slot and block the reader.
 			s.mu.Lock()
 			ch := s.pending[l.ID]
+			delete(s.pending, l.ID)
 			s.mu.Unlock()
 			if ch != nil {
 				ch <- l
