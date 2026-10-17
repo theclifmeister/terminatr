@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/theclifmeister/terminatr/internal/plat/open"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
@@ -329,7 +330,7 @@ func remoteThread(r *remoteData, in proto.SessionInfo, w int, now time.Time) (*p
 		case "pending":
 			pl.field("checks", th().Warn.Render("running"))
 		}
-		if wt.PRURL != "" {
+		if open.Web(wt.PRURL) {
 			hit(from, infoHit{kind: hitPR, url: wt.PRURL})
 		}
 		if wt.PRBad {
