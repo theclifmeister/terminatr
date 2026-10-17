@@ -1,8 +1,9 @@
 // The project popup's Memory tab (mods design §11, proof 2): the
 // project's memory files (CONTEXT.md, MEMORY.md and the notes in
-// memory/) as a list, and a text viewer for the one opened, read-only.
-// The core keeps the cursor, the filter and the scroll; only enter, n, p
-// and clicks on a row reach the mod. It draws when the tab is shown
+// memory/) as a list, and a text viewer for the one opened, read-only,
+// a note's front matter as one line; t shows the template of a new
+// note. The core keeps the cursor, the filter and the scroll; only
+// enter, n, p, t and clicks on a row reach the mod. It draws when the tab is shown
 // (view.opened) and reads the files again then, so the tab never shows
 // older memory than when it was opened.
 import type { TM } from "./types/tm";
@@ -20,13 +21,32 @@ const MAX_LINES = 1900;
 const MAX_BLOCKS = 250;
 const MAX_TREE = 800000;
 
+// TEMPLATE is a new memory note with the schema: tm's own
+// (internal/project.NoteTemplate, which tm memory template prints).
+const TEMPLATE = `+++
+title    = "One line: what was decided"
+touches  = ["path/in/repo.go", "repo:<name>"]
+standing = false
+source   = "T<n>"
++++
+## Decided
+What holds, and why.
+
+## Ruled out
+What was tried or proposed and dropped, and why.
+
+## Watch out
+What bites whoever changes this next.
+`;
+
 // What a project's tab shows: the files, and the one open in the viewer
-// ("" for the list).
+// ("" for the list), or the note template.
 interface Tab {
   files: TM.MemoryFile[];
   open: string;
   text: string;
   error: string;
+  template: boolean;
 }
 
 const tabs = new Map<string, Tab>();
@@ -44,6 +64,36 @@ function bytes(s: string): number {
 function size(n: number): string {
   if (n < 1024) return `${n} B`;
   return `${Math.round(n / 102.4) / 10} KB`;
+}
+
+// front splits a note's TOML front matter (between +++ lines) from its
+// body, and says it as one line: touches, standing, source. A value is
+// read as JSON, which TOML's strings, arrays of strings and booleans
+// are; anything else shows as written. Without a closing +++ there is
+// no front matter, as tm reads it.
+function front(md: string): { meta: string; body: string } {
+  const lines = md.replace(/\r\n?/g, "\n").split("\n");
+  if (lines[0] !== "+++") return { meta: "", body: md };
+  const end = lines.indexOf("+++", 1);
+  if (end < 0) return { meta: "", body: md };
+  const vals = new Map<string, unknown>();
+  for (const l of lines.slice(1, end)) {
+    const m = /^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$/.exec(l);
+    if (!m) continue;
+    try {
+      vals.set(m[1], JSON.parse(m[2]));
+    } catch {
+      vals.set(m[1], m[2]);
+    }
+  }
+  const meta: string[] = [];
+  const touches = vals.get("touches");
+  if (Array.isArray(touches) && touches.length > 0) meta.push(`touches ${touches.join(", ")}`);
+  else if (typeof touches === "string" && touches) meta.push(`touches ${touches}`);
+  if (vals.get("standing") === true) meta.push("standing");
+  const source = vals.get("source");
+  if (source) meta.push(`from ${source}`);
+  return { meta: meta.join(" · "), body: lines.slice(end + 1).join("\n") };
 }
 
 // blocks is markdown as text widgets: each heading in the head role (the
@@ -102,10 +152,26 @@ function blocks(md: string): TM.Widget[] {
   return out;
 }
 
-// tree is the tab's widget tree: the list, or the open file.
+// tree is the tab's widget tree: the list, the open file or the
+// template.
 function tree(t: Tab): TM.Widget {
   if (t.error) {
     return { kind: "text", text: `error: ${t.error}`, role: "bad" };
+  }
+  if (t.template) {
+    return {
+      kind: "stack",
+      children: [
+        { kind: "text", lines: [[{ text: "New note", role: "accent" }, { text: "  memory/<name>.md · tm memory template", role: "faint" }]] },
+        { kind: "text", text: TEMPLATE.replace(/\s+$/, "") },
+        {
+          kind: "text",
+          text: "All of it is optional; a free-form note still works. touches are paths in a repo (a folder ends with /) or repo:<name>; standing notes are for every thread. List the note in MEMORY.md with its touches.",
+          role: "faint",
+        },
+        { kind: "keys", keys: [{ key: "enter", label: "files" }] },
+      ],
+    };
   }
   const file = t.files.find((f) => f.path === t.open);
   if (!file) {
@@ -118,19 +184,30 @@ function tree(t: Tab): TM.Widget {
           empty: "no memory yet",
           rows: t.files.map((f) => ({
             id: f.path,
-            spans: [{ text: f.title }, { text: `  ${f.path} · ${size(f.bytes)}`, role: "faint" }],
+            spans: [
+              { text: f.title },
+              { text: `  ${f.path} · ${size(f.bytes)}${f.touches?.length ? ` · ${f.touches.join(", ")}` : ""}`, role: "faint" },
+            ],
           })),
         },
         { kind: "text", text: "Read-only: the coordinator keeps these; every thread is told them.", role: "faint" },
-        { kind: "keys", keys: [{ key: "enter", label: "read" }] },
+        {
+          kind: "keys",
+          keys: [
+            { key: "enter", label: "read" },
+            { key: "t", label: "note template" },
+          ],
+        },
       ],
     };
   }
-  const body = blocks(t.text);
+  const note = file.path.startsWith("memory/") ? front(t.text) : { meta: "", body: t.text };
+  const body = blocks(note.body);
   return {
     kind: "stack",
     children: [
       { kind: "text", lines: [[{ text: file.title, role: "accent" }, { text: `  ${file.path}`, role: "faint" }]] },
+      ...(note.meta ? [{ kind: "text", text: note.meta.slice(0, 1000), role: "faint" } as TM.Widget] : []),
       ...(body.length > 0 ? body : [{ kind: "text", text: "empty", role: "faint" }]),
       {
         kind: "keys",
@@ -171,7 +248,7 @@ async function publish(project: string, t: Tab) {
 function tab(project: string): Tab {
   let t = tabs.get(project);
   if (!t) {
-    t = { files: [], open: "", text: "", error: "" };
+    t = { files: [], open: "", text: "", error: "", template: false };
     tabs.set(project, t);
   }
   return t;
@@ -197,6 +274,7 @@ $.on("view.closed", async (e) => {
 async function open(project: string, path: string) {
   const t = tab(project);
   t.open = path;
+  t.template = false;
   await load(project, t);
   await publish(project, t);
 }
@@ -207,12 +285,18 @@ $.on("ui.key", async (e) => {
   const t = tab(project);
   const at = t.files.findIndex((f) => f.path === t.open);
   switch (e.key) {
+    case "t":
+      if (!t.open && !t.template) {
+        t.template = true;
+        await publish(project, t);
+      }
+      break;
     case "enter":
       await open(project, t.open ? "" : e.widget === LIST ? e.row ?? "" : "");
       break;
     case "n":
     case "p":
-      if (at >= 0 && t.files.length > 0) {
+      if (!t.template && at >= 0 && t.files.length > 0) {
         const step = e.key === "n" ? 1 : -1;
         await open(project, t.files[(at + step + t.files.length) % t.files.length].path);
       }

@@ -126,11 +126,13 @@ type Project struct {
 
 // MemoryFile is one of a project's memory files: its path in the project
 // folder (CONTEXT.md, MEMORY.md or memory/<name>.md), its title (a
-// note's first heading) and its size.
+// note's front-matter title, else its first heading), its size and, for
+// a note with front matter, the paths and repo:<name> entries it touches.
 type MemoryFile struct {
-	Path  string `json:"path"`
-	Title string `json:"title"`
-	Bytes int64  `json:"bytes"`
+	Path    string   `json:"path"`
+	Title   string   `json:"title"`
+	Bytes   int64    `json:"bytes"`
+	Touches []string `json:"touches,omitempty"`
 }
 
 // Task is one task of a project's board.

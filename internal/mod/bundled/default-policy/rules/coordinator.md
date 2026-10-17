@@ -197,6 +197,14 @@ You are the only agent that writes it.
   that has them: file or dismiss them, then mark it done. Before an
   auto-clear tm asks you to save what you learned: write it down, then
   stop.
+- Write a new memory note from `tm memory template`: front matter
+  (`title`, `touches`: the paths and `repo:<name>` it is about,
+  `standing` for what every thread should know, `source`: the task)
+  and `## Decided`, `## Ruled out`, `## Watch out`. Run `tm memory
+  find` with its words and paths first, and extend the note it finds
+  instead of adding another. Old free-form notes stay valid; give one
+  the schema when you next rewrite it. List each note in MEMORY.md as
+  `- [title](memory/file.md): what it holds (touches: a, b)`.
 - Keep CONTEXT.md, MEMORY.md and memory/ short and factual. When a file
   grows, re-read it, merge and rewrite it, and drop what is no longer
   true. The Upkeep section of `tm context` names a file over its 6 KB

@@ -7,6 +7,21 @@
   var MAX_LINES = 1900;
   var MAX_BLOCKS = 250;
   var MAX_TREE = 8e5;
+  var TEMPLATE = `+++
+title    = "One line: what was decided"
+touches  = ["path/in/repo.go", "repo:<name>"]
+standing = false
+source   = "T<n>"
++++
+## Decided
+What holds, and why.
+
+## Ruled out
+What was tried or proposed and dropped, and why.
+
+## Watch out
+What bites whoever changes this next.
+`;
   var tabs = /* @__PURE__ */ new Map();
   function bytes(s) {
     var _a;
@@ -20,6 +35,30 @@
   function size(n) {
     if (n < 1024) return `${n} B`;
     return `${Math.round(n / 102.4) / 10} KB`;
+  }
+  function front(md) {
+    const lines = md.replace(/\r\n?/g, "\n").split("\n");
+    if (lines[0] !== "+++") return { meta: "", body: md };
+    const end = lines.indexOf("+++", 1);
+    if (end < 0) return { meta: "", body: md };
+    const vals = /* @__PURE__ */ new Map();
+    for (const l of lines.slice(1, end)) {
+      const m = /^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$/.exec(l);
+      if (!m) continue;
+      try {
+        vals.set(m[1], JSON.parse(m[2]));
+      } catch (e) {
+        vals.set(m[1], m[2]);
+      }
+    }
+    const meta = [];
+    const touches = vals.get("touches");
+    if (Array.isArray(touches) && touches.length > 0) meta.push(`touches ${touches.join(", ")}`);
+    else if (typeof touches === "string" && touches) meta.push(`touches ${touches}`);
+    if (vals.get("standing") === true) meta.push("standing");
+    const source = vals.get("source");
+    if (source) meta.push(`from ${source}`);
+    return { meta: meta.join(" · "), body: lines.slice(end + 1).join("\n") };
   }
   function blocks(md) {
     const out = [];
@@ -72,6 +111,21 @@
     if (t.error) {
       return { kind: "text", text: `error: ${t.error}`, role: "bad" };
     }
+    if (t.template) {
+      return {
+        kind: "stack",
+        children: [
+          { kind: "text", lines: [[{ text: "New note", role: "accent" }, { text: "  memory/<name>.md · tm memory template", role: "faint" }]] },
+          { kind: "text", text: TEMPLATE.replace(/\s+$/, "") },
+          {
+            kind: "text",
+            text: "All of it is optional; a free-form note still works. touches are paths in a repo (a folder ends with /) or repo:<name>; standing notes are for every thread. List the note in MEMORY.md with its touches.",
+            role: "faint"
+          },
+          { kind: "keys", keys: [{ key: "enter", label: "files" }] }
+        ]
+      };
+    }
     const file = t.files.find((f) => f.path === t.open);
     if (!file) {
       return {
@@ -81,21 +135,35 @@
             kind: "list",
             id: LIST,
             empty: "no memory yet",
-            rows: t.files.map((f) => ({
-              id: f.path,
-              spans: [{ text: f.title }, { text: `  ${f.path} · ${size(f.bytes)}`, role: "faint" }]
-            }))
+            rows: t.files.map((f) => {
+              var _a;
+              return {
+                id: f.path,
+                spans: [
+                  { text: f.title },
+                  { text: `  ${f.path} · ${size(f.bytes)}${((_a = f.touches) == null ? void 0 : _a.length) ? ` · ${f.touches.join(", ")}` : ""}`, role: "faint" }
+                ]
+              };
+            })
           },
           { kind: "text", text: "Read-only: the coordinator keeps these; every thread is told them.", role: "faint" },
-          { kind: "keys", keys: [{ key: "enter", label: "read" }] }
+          {
+            kind: "keys",
+            keys: [
+              { key: "enter", label: "read" },
+              { key: "t", label: "note template" }
+            ]
+          }
         ]
       };
     }
-    const body = blocks(t.text);
+    const note = file.path.startsWith("memory/") ? front(t.text) : { meta: "", body: t.text };
+    const body = blocks(note.body);
     return {
       kind: "stack",
       children: [
         { kind: "text", lines: [[{ text: file.title, role: "accent" }, { text: `  ${file.path}`, role: "faint" }]] },
+        ...note.meta ? [{ kind: "text", text: note.meta.slice(0, 1e3), role: "faint" }] : [],
         ...body.length > 0 ? body : [{ kind: "text", text: "empty", role: "faint" }],
         {
           kind: "keys",
@@ -132,7 +200,7 @@
   function tab(project) {
     let t = tabs.get(project);
     if (!t) {
-      t = { files: [], open: "", text: "", error: "" };
+      t = { files: [], open: "", text: "", error: "", template: false };
       tabs.set(project, t);
     }
     return t;
@@ -151,6 +219,7 @@
   async function open(project, path) {
     const t = tab(project);
     t.open = path;
+    t.template = false;
     await load(project, t);
     await publish(project, t);
   }
@@ -161,12 +230,18 @@
     const t = tab(project);
     const at = t.files.findIndex((f) => f.path === t.open);
     switch (e.key) {
+      case "t":
+        if (!t.open && !t.template) {
+          t.template = true;
+          await publish(project, t);
+        }
+        break;
       case "enter":
         await open(project, t.open ? "" : e.widget === LIST ? (_b = e.row) != null ? _b : "" : "");
         break;
       case "n":
       case "p":
-        if (at >= 0 && t.files.length > 0) {
+        if (!t.template && at >= 0 && t.files.length > 0) {
           const step = e.key === "n" ? 1 : -1;
           await open(project, t.files[(at + step + t.files.length) % t.files.length].path);
         }

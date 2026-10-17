@@ -30,7 +30,8 @@ conversation loses none.
 
 const memoryTemplate = `# Memory
 
-One line per memory file: ` + "`- [title](memory/file.md): what it holds`" + `.
+One line per memory file: ` + "`- [title](memory/file.md): what it holds (touches: a, b)`" + `.
+A new note starts from ` + "`tm memory template`" + `; ` + "`tm memory find`" + ` searches them.
 `
 
 // roleFileMarker starts the comment that marks AGENTS.md as tm's.

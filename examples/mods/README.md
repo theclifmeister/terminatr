@@ -134,7 +134,9 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
   sidebar and NEEDS YOU in sight, and `esc` returns.
 - **memory-search** answers an agent's call with the matching lines of
   the project's memory. The agent's input is data; the consent screen
-  shows the tool's description and input in full.
+  shows the tool's description and input in full. tm has the same
+  search built in, ranked by title, body and the paths a note touches:
+  `tm memory find`; keep this one as an example of an agent tool.
 - **gitlab** serves `code_host = "gitlab"`: put that in a project's
   `PROJECT.md` front matter, and log glab in (`glab auth login`). tm then
   asks it about that project's merge requests as it asks gh about pull
