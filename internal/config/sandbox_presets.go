@@ -46,8 +46,9 @@ const (
 //     which only its macOS sandbox reads (Linux doesn't pass it, Windows
 //     has no setting for localhost), and Codex's
 //     permissions.<profile>.network.allow_local_binding (macOS policy).
-//   - browser testing is local binding plus how to launch Chromium in a
-//     macOS sandbox, which can't register Mach services (multi-process
+//   - browser testing is only how to launch Chromium in a
+//     macOS sandbox (no local binding: Playwright's pipe transport needs
+//     none; a dev server needs local dev servers too), which can't register Mach services (multi-process
 //     Chromium needs that; no setting of either agent grants it): the
 //     headless shell with --single-process. On Linux Chromium needs
 //     nothing more (bubblewrap, no Mach), so it doesn't apply there.

@@ -82,7 +82,7 @@ func TestCheckSandboxEntries(t *testing.T) {
 			t.Errorf("excluded %q: %v", e, err)
 		}
 	}
-	for _, e := range []string{"*", "**", " * ", "npx * ", "a; b", "a && b", "a > f", "$(x)", "`x`", "Bash(npx *)", "PowerShell(x)",
+	for _, e := range []string{"*", "**", " * ", "npx * ", "a; b", "a && b", "a > f", "$(x)", "`x`", "${X} x", "echo $X", "?", "x", "Bash(npx *)", "PowerShell(x)",
 		// T560's security review: a program left open, a rule in another case.
 		"*e*", "*-*", "* --version", "python* -c x", "bash(npx *)", "POWERSHELL(x)"} {
 		if err := CheckExcludedCommand(e); err == nil {
