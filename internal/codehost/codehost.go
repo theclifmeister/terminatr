@@ -153,6 +153,9 @@ func Detect(repo string, cfg Config) Target {
 		t.Kind = AzureKind
 		if cfg.AzureURL != "" {
 			t.OrgURL = strings.TrimRight(cfg.AzureURL, "/")
+			if !TrustedAzureURL(t.OrgURL) {
+				t.OrgURL = ""
+			}
 			if t.Project == "" {
 				t.Project, t.Repo = gitPath(url)
 			}

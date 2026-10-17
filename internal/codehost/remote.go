@@ -38,6 +38,9 @@ func ParseRemote(remote string) (t Target, ok bool) {
 		}
 		t.OrgURL = "https://dev.azure.com/" + url.PathEscape(seg[1])
 		if host == "vs-ssh.visualstudio.com" {
+			if !azOrgNameRE.MatchString(seg[1]) {
+				return Target{}, false
+			}
 			t.OrgURL = "https://" + seg[1] + ".visualstudio.com"
 		}
 		t.Project, t.Repo = seg[2], seg[3]
