@@ -9,32 +9,33 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 )
 
-// anythingRunners are the programs that run whatever they are told to:
-// shells, language interpreters and launchers. A commands grant of one
-// is a grant to run anything, as the human, so the consent says so.
-var anythingRunners = []string{
-	// shells
-	"sh", "bash", "zsh", "fish", "dash", "ksh", "mksh", "csh", "tcsh", "ash", "nu", "elvish", "xonsh", "busybox", "toybox",
-	// interpreters
-	"python", "pythonw", "py", "pypy", "node", "nodejs", "deno", "bun", "perl", "ruby", "irb", "php", "lua", "luajit",
-	"tclsh", "wish", "r", "rscript", "julia", "awk", "gawk", "mawk", "nawk", "jshell", "groovy", "scala", "java",
-	// launchers
-	"env", "xargs", "nohup", "sudo", "doas", "su", "nice", "timeout", "time", "stdbuf", "setsid", "script", "watch",
-	"parallel", "open", "launchctl", "systemd-run", "flatpak-spawn", "osascript", "automator", "shortcuts",
-	// Windows
-	"cmd", "powershell", "pwsh", "wsl", "wscript", "cscript", "mshta", "rundll32", "start", "runas",
+// narrowTools are the programs vetted to do no more than their
+// arguments say: they read, filter or print, and have no option that
+// runs a program or writes a file. A commands grant of any program not
+// here (nor a loginTool) is a grant to run anything, as the human: a
+// build tool reads a Makefile or a script the mod wrote itself, find and
+// tar can run a command, ssh and rsync run a remote or helper program,
+// and so on, so the list is of what is safe, not of what is not.
+var narrowTools = []string{
+	"jq", "grep", "egrep", "fgrep", "cat", "ls", "head", "tail", "wc", "uniq", "diff", "cmp", "stat", "file",
+	"which", "tree", "date", "echo", "pwd", "uname", "basename", "dirname", "realpath", "readlink", "cut", "tr",
+	"comm", "nl", "column", "hostname", "whoami", "true", "false", "printf", "du", "df", "shellcheck",
+	"sha256sum", "sha1sum", "md5sum", "shasum",
 }
 
-// RunsAnything reports whether prog, a commands grant's program, runs
-// whatever it is told to (anythingRunners), by its name: case, a
-// Windows extension and a version (python3.12, perl5.36) aside.
+// RunsAnything reports whether prog, a commands grant's program, may run
+// whatever it is told to: it is not one of narrowTools, nor git, gh or
+// glab (whose arguments the broker limits). Its name counts as written
+// but for case, a Windows extension and a version (python3.12).
 func RunsAnything(prog string) bool {
 	p := strings.ToLower(prog)
 	for _, ext := range []string{".exe", ".cmd", ".bat", ".com"} {
 		p = strings.TrimSuffix(p, ext)
 	}
-	p = strings.TrimRight(p, "0123456789.-")
-	return slices.Contains(anythingRunners, p)
+	if slices.Contains(narrowTools, p) || p == "git" || loginTools[p] != "" {
+		return false
+	}
+	return true
 }
 
 // loginTools are the programs that run on a login of the human's own,

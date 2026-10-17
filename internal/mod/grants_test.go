@@ -8,12 +8,12 @@ import (
 )
 
 func TestRunsAnything(t *testing.T) {
-	for _, p := range []string{"sh", "bash", "python3", "python3.12", "Python.exe", "node", "env", "xargs", "osascript", "powershell", "pwsh.exe", "perl5.36", "sudo"} {
+	for _, p := range []string{"sh", "bash", "python3", "python3.12", "Python.exe", "node", "env", "xargs", "osascript", "powershell", "pwsh.exe", "perl5.36", "sudo", "make", "gmake", "find", "tar", "npm", "npx", "pnpm", "yarn", "go", "cargo", "rsync", "ssh", "vim", "less", "rg", "fd", "sed", "sort", "unknowntool", "Make.exe"} {
 		if !RunsAnything(p) {
 			t.Errorf("RunsAnything(%q) = false", p)
 		}
 	}
-	for _, p := range []string{"git", "glab", "gh", "jq", "rg", "shellcheck", "nodemon", "python3-config"} {
+	for _, p := range []string{"git", "glab", "gh", "jq", "grep", "Cat.exe", "shellcheck"} {
 		if RunsAnything(p) {
 			t.Errorf("RunsAnything(%q) = true", p)
 		}
