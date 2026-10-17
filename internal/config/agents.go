@@ -190,7 +190,7 @@ func SetAgentModels(name string, s AgentSettings) error {
 	return edit(func(data []byte) ([]byte, error) {
 		// [[agents.<name>.models]] tables are the user's to edit by hand:
 		// the line editor would add a second definition.
-		for _, l := range strings.SplitAfter(string(data), "\n") {
+		for _, l := range statements(data) {
 			if m := arrayHeaderRE.FindStringSubmatch(strings.TrimRight(l, "\r\n")); m != nil {
 				if h := splitTable(m[1]); len(h) >= 2 && h[0] == "agents" && h[1] == name {
 					return nil, ErrForm

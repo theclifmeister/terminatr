@@ -122,7 +122,7 @@ func DropTable(data []byte, table string) ([]byte, error) {
 	under := func(h []string) bool { return len(h) >= len(want) && equal(h[:len(want)], want) }
 	var out []string
 	in := false
-	for _, l := range strings.SplitAfter(string(data), "\n") {
+	for _, l := range statements(data) {
 		if h, ok := header(l); ok {
 			in = under(h)
 		} else if m := arrayHeaderRE.FindStringSubmatch(strings.TrimRight(l, "\r\n")); m != nil {
