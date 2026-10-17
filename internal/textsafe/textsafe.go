@@ -44,6 +44,19 @@ func Clean(s string, lines bool) string {
 	}, s)
 }
 
+// Text is Clean with lines that keeps tabs too, for a file's or a
+// message's text, whose indent they may be.
+func Text(s string) string {
+	if !strings.Contains(s, "\t") {
+		return Clean(s, true)
+	}
+	parts := strings.Split(s, "\t")
+	for i, p := range parts {
+		parts[i] = Clean(p, true)
+	}
+	return strings.Join(parts, "\t")
+}
+
 // Line is s as one line of at most n runes: Clean, then each run of
 // white space one space, trimmed, and a cut ending in an ellipsis.
 func Line(s string, n int) string {

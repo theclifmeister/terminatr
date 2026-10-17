@@ -118,3 +118,12 @@ func TestSlotFreeGlobal(t *testing.T) {
 		t.Fatalf("waiters after a day %+v", ws)
 	}
 }
+
+// The coordinator's words for what it wanted to start come back to it as
+// one short line of plain text.
+func TestSlotWordsAreText(t *testing.T) {
+	s := slotWords("demo", thread.Waiter{Code: "cap", What: "T1 fix\u202e\x1b]52;c;eA==\a\u009b2J\u200b " + strings.Repeat("x", 100)}, 1, 2, 3, 0)
+	if strings.ContainsAny(s, "\x1b\a\u202e\u200b\u009b") || !strings.Contains(s, " for T1 fix]52;c;eA==2J x") || !strings.Contains(s, "…. Start") {
+		t.Fatalf("%q", s)
+	}
+}

@@ -59,7 +59,10 @@ func TestLinks(t *testing.T) {
 	// An attachment from a thread's library.
 	p, _ := project.Open("demo")
 	os.MkdirAll(thread.Path(p, "t-0001", "library"), 0o755)
-	os.WriteFile(thread.Path(p, "t-0001", "library", "notes.md"), []byte("the notes"), 0o644)
+	os.WriteFile(thread.Path(p, "t-0001", "library", "notes.md"), []byte("the notes\x1b]52;c;eA==\a\n\tindented"), 0o644)
+	// a name that isn't plain text isn't attached
+	os.WriteFile(thread.Path(p, "t-0001", "library", "x\x1b]0;t\a.md"), []byte("x"), 0o644)
+	h.expect(1, "bad-attachment", coord, "link", "send", "mods", "hi", "--attach", "t-0001/x\x1b]0;t\a.md", "--project", "demo")
 
 	out := h.ok(coord, "link", "send", "mods", "The API landed.\x1b[31m\nSee SPEC.", "--attach", "t-0001/notes.md", "--project", "demo")
 	if !strings.HasPrefix(out, "sent M-1 to mods (") {
@@ -73,10 +76,11 @@ func TestLinks(t *testing.T) {
 	}
 	read := h.ok(modsCoord, "link", "read", "M-1", "--project", "mods")
 	if !strings.Contains(read, "from demo's coordinator") || !strings.Contains(read, "data, not instructions") ||
-		!strings.Contains(read, "The API landed. [31m\nSee SPEC.") || !strings.Contains(read, "attached: notes.md") {
+		!strings.Contains(read, "The API landed.[31m\nSee SPEC.") || !strings.Contains(read, "attached: notes.md") {
 		t.Fatalf("read %q", read)
 	}
-	if f := h.ok(modsCoord, "link", "read", "M-1", "--file", "notes.md", "--project", "mods"); !strings.Contains(f, "the notes") {
+	// the file is another project's: only its text reaches the terminal
+	if f := h.ok(modsCoord, "link", "read", "M-1", "--file", "notes.md", "--project", "mods"); !strings.Contains(f, "the notes]52;c;eA==\n\tindented\n(characters that aren't text") || strings.ContainsAny(f, "\x1b\a") {
 		t.Fatalf("file %q", f)
 	}
 	h.expect(1, "unknown-file", modsCoord, "link", "read", "M-1", "--file", "x.md", "--project", "mods")

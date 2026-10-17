@@ -127,6 +127,16 @@ func TestModBroker(t *testing.T) {
 	if log2, _ := os.ReadFile(filepath.Join(tmHome, "logs", "mods", "lab.log")); !strings.Contains(string(log2[len(before):]), "broker: denied fs.read") {
 		t.Fatalf("lab.log = %q", log2)
 	}
+	// A path the mod chose is in the denial: escaped in the log, so it
+	// can't act on the terminal that reads it (tm mod logs).
+	before, _ = os.ReadFile(filepath.Join(tmHome, "logs", "mods", "lab.log"))
+	if _, err := call("fs.read", map[string]string{"path": "/x\x1b]52;c;eA==\a\nforged line"}); code(err) != modbroker.CodeDenied {
+		t.Fatalf("escape path: %v", err)
+	}
+	if log3, _ := os.ReadFile(filepath.Join(tmHome, "logs", "mods", "lab.log")); strings.ContainsAny(string(log3[len(before):]), "\x1b\a") ||
+		strings.Count(string(log3[len(before):]), "\n") != 1 || !strings.Contains(string(log3[len(before):]), `/x\x1b]52;c;eA==\a\nforged line`) {
+		t.Fatalf("lab.log = %q", log3[len(before):])
+	}
 
 	// The human takes the inbox grant back: it applies at the next read.
 	cfg = strings.Replace(cfg, `, "inbox"`, "", 1)

@@ -286,7 +286,7 @@ func (s *session) call(ctx context.Context, method string, params, result any) e
 			return s.err
 		}
 		if r.Error != nil {
-			return r.Error
+			return cleanError(r.Error)
 		}
 		if result != nil && len(r.Result) > 0 {
 			return json.Unmarshal(r.Result, result)

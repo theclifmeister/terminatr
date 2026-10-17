@@ -72,7 +72,7 @@ func (e *Env) threadApprove(p *project.Project, id string, choice int) error {
 	if err := e.call(proto.MethodSessionKeys, proto.SessionKeysParams{ID: r.Session, Data: strconv.Itoa(choice)}, nil); err != nil {
 		return err
 	}
-	if err := p.Journal(e.Caller, "thread.approve", id, oneLine(question+" → "+option, 160)); err != nil {
+	if err := p.Journal(e.Caller, "thread.approve", id, textsafe.Line(question+" → "+option, 160)); err != nil {
 		return err
 	}
 	fmt.Fprintf(e.Stdout, "approved %s: %s\n", id, shown(option))
@@ -105,7 +105,7 @@ func questionLines(q *proto.Question) []string {
 		for j, o := range it.Options {
 			opt := fmt.Sprintf("   %d. %s", j+1, o.Label)
 			if o.Description != "" {
-				opt += " — " + oneLine(o.Description, 100)
+				opt += " — " + textsafe.Line(o.Description, 100)
 			}
 			out = append(out, opt)
 		}
@@ -182,7 +182,7 @@ func (e *Env) answerByMod(p *project.Project, id, session string, q *proto.Quest
 	if err != nil {
 		return err
 	}
-	if err := p.Journal(e.Caller, "thread.answer", id, oneLine(it.Question+" → "+answer, 160)); err != nil {
+	if err := p.Journal(e.Caller, "thread.answer", id, textsafe.Line(it.Question+" → "+answer, 160)); err != nil {
 		return err
 	}
 	if res.Remaining > 0 {
@@ -327,7 +327,7 @@ func (e *Env) answerByKeys(p *project.Project, id string, r *thread.Record, info
 		}
 		answer = strconv.Quote(text)
 	}
-	if err := p.Journal(e.Caller, "thread.answer", id, oneLine(question+" → "+answer, 160)); err != nil {
+	if err := p.Journal(e.Caller, "thread.answer", id, textsafe.Line(question+" → "+answer, 160)); err != nil {
 		return err
 	}
 	if total > 1 && cur < total {

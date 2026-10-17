@@ -229,7 +229,7 @@ func (pv *pairView) render(m *dash) string {
 			name = "(no name)"
 		}
 		body = []string{ansi.Truncate("The other server: "+oneLine(name), max(w, 10), "…")}
-		body = append(body, fmt.Sprintf("server id %s · tm %s", pv.offer.Short, strings.TrimPrefix(pv.offer.Version, "v")))
+		body = append(body, ansi.Truncate(fmt.Sprintf("server id %s · tm %s", pv.offer.Short, oneLine(strings.TrimPrefix(pv.offer.Version, "v"))), max(w, 10), "…"))
 		body = append(body, "", "Check: "+th().Accent.Render(pv.offer.Check), "")
 		if pv.stage == pairCheck {
 			body = append(body, wrapLines("Pair only if the other side shows the same six digits. Do they match?", w)...)

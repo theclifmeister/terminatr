@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -180,22 +182,49 @@ func age(d time.Duration) string {
 	return fmt.Sprintf("%dd", int(d.Hours()/24))
 }
 
-// oneLine drops control characters, so text from agents can't break a row.
-func oneLine(s string) string {
-	return strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f || r >= 0x80 && r < 0xa0 {
-			return ' '
+// oneLine is s without what textsafe drops (control and format
+// characters), so text from agents and peers can't break a row or reach
+// the terminal as anything but text.
+func oneLine(s string) string { return textsafe.Clean(s, false) }
+
+// sgrRE is a colour or style sequence, the one escape sequence a row
+// may carry.
+var sgrRE = regexp.MustCompile(`^\x1b\[[0-9;:]*m$`)
+
+// plainStyled is s as text and the colour and style sequences lipgloss
+// writes, nothing else: any other escape sequence goes whole (its
+// payload too), and so do the characters textsafe drops.
+func plainStyled(s string) string {
+	if textsafe.Safe(s) {
+		return s
+	}
+	var b strings.Builder
+	var state byte
+	for len(s) > 0 {
+		seq, width, n, next := ansi.DecodeSequence(s, state, nil)
+		if n == 0 {
+			break
 		}
-		return r
-	}, s)
+		switch {
+		case width > 0:
+			b.WriteString(textsafe.Clean(seq, false))
+		case sgrRE.MatchString(seq):
+			b.WriteString(seq)
+		case seq == "\t" || seq == "\n" || seq == "\r":
+			b.WriteByte(' ')
+		}
+		s, state = s[n:], next
+	}
+	return b.String()
 }
 
-// fit truncates or pads plain text to exactly w cells.
+// fit truncates or pads text to exactly w cells; whatever isn't text or
+// a style (plainStyled) goes, so a row can't carry it to the terminal.
 func fit(s string, w int) string {
 	if w <= 0 {
 		return ""
 	}
-	s = ansi.Truncate(s, w, "…")
+	s = ansi.Truncate(plainStyled(s), w, "…")
 	if n := ansi.StringWidth(s); n < w {
 		s += strings.Repeat(" ", w-n)
 	}
@@ -280,6 +309,7 @@ func statusBar(s proto.SessionInfo, ts *thread.Status, title string, pending boo
 		// A paired server's pane (docs/SPEC.md §16.12).
 		path = s.Server + " › " + path
 	}
+	path = oneLine(path) // names a paired server may choose
 	// The progress, from the most to the least: the percent always
 	// stays.
 	pr := sessionProgress(s)
@@ -301,7 +331,7 @@ func statusBar(s proto.SessionInfo, ts *thread.Status, title string, pending boo
 		step = strings.TrimSpace(step + " ▸ " + oneLine(cur))
 	}
 	if s.State == "blocked" && s.Reason != "" {
-		rest = append(rest, blockReason(s))
+		rest = append(rest, oneLine(blockReason(s)))
 	}
 	if s.Queued > 0 {
 		q := fmt.Sprintf("%d queued", s.Queued)

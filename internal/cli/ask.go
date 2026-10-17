@@ -8,6 +8,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 const askUsage = `usage: tm ask <command> [--project <slug>] [--json]
@@ -87,7 +88,7 @@ func runAsk(e *Env, args []string) error {
 				return err
 			}
 			added = append(added, got)
-			if err := p.Journal(e.Caller, "ask.add", got.ID, oneLine(got.Question, 80)); err != nil {
+			if err := p.Journal(e.Caller, "ask.add", got.ID, textsafe.Line(got.Question, 80)); err != nil {
 				return err
 			}
 		}

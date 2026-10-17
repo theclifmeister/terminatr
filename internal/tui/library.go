@@ -97,7 +97,7 @@ func (pv *projectView) libraryLines(w int) ([]string, int, []int) {
 			out, hits = append(out, libGroup(f, w)), append(hits, noHit)
 		}
 		size := fmt.Sprintf("%9s", sizeWords(f.Size))
-		l := "  " + fit(f.Name, max(w-len(size)-4, 4)) + "  " + size
+		l := "  " + fit(oneLine(f.Name), max(w-len(size)-4, 4)) + "  " + size
 		if i == pv.sel[tabLibrary] {
 			sel = len(out)
 			l = th().Sel.Render(fit(l, w))
@@ -120,8 +120,8 @@ func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "enter":
 		return m.openLibFile(pv, f)
 	case "d":
-		m.confirm("Delete a library file", "Delete "+f.Name+" ("+sizeWords(f.Size)+") of thread "+f.Thread+"? It can't be brought back.", func() tea.Cmd {
-			return m.libRemove(pv.slug, f.Thread, f.Name, "deleted "+f.Name)
+		m.confirm("Delete a library file", "Delete "+oneLine(f.Name)+" ("+sizeWords(f.Size)+") of thread "+f.Thread+"? It can't be brought back.", func() tea.Cmd {
+			return m.libRemove(pv.slug, f.Thread, f.Name, "deleted "+oneLine(f.Name))
 		})
 	case "D":
 		n := 0
@@ -177,7 +177,7 @@ func scrollKey(scroll *int, k tea.KeyPressMsg, n int) bool {
 }
 
 func (m *dash) openLibFile(pv *projectView, f thread.LibFile) tea.Cmd {
-	tv := &textView{title: f.Name + " · " + sizeWords(f.Size)}
+	tv := &textView{title: oneLine(f.Name) + " · " + sizeWords(f.Size)}
 	data, truncated, err := m.src.LibraryRead(pv.slug, f.Thread, f.Name, libMax)
 	switch {
 	case err != nil:

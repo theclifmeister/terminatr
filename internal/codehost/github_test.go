@@ -162,3 +162,12 @@ func TestGitHubParsePRURL(t *testing.T) {
 		t.Fatalf("%+v", h)
 	}
 }
+
+// A log line's escape sequences go whole, an OSC's payload too, and so do
+// C1 controls and format characters.
+func TestExcerptIsText(t *testing.T) {
+	_, text := excerpt("build\tstep\t2026-10-06T10:00:00.0Z \x1b]0;owned\a\x1b]8;;https://x\x1b\\error\u202e: boom\u009b2J\x1b]8;;\x1b\\\n")
+	if text != "error: boom2J" {
+		t.Fatalf("%q", text)
+	}
+}

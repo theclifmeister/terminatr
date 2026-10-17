@@ -59,6 +59,25 @@ func TestTailAndFollow(t *testing.T) {
 	testwait.Eventually(t, "f", func() bool { return strings.HasSuffix(out.String(), "e\nf\n") })
 }
 
+// A log line that holds an escape sequence (written by something that
+// didn't escape it) is shown as its text only.
+func TestTailAndFollowShowText(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "m.log")
+	os.WriteFile(p, []byte("a\x1b]52;c;eA==\a\u202eb\n"), 0o600)
+	lines, off, _ := Tail(p, 5)
+	if !slices.Equal(lines, []string{"a]52;c;eA==b"}) {
+		t.Fatalf("Tail = %q", lines)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var out syncBuf
+	go Follow(ctx, p, off, 5*time.Millisecond, &out)
+	f, _ := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0)
+	f.WriteString("c\x1b[2J\u009bd\n")
+	f.Close()
+	testwait.Eventually(t, "c", func() bool { return out.String() == "c[2Jd\n" })
+}
+
 func TestWatch(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "main.ts"), []byte("1"), 0o644)

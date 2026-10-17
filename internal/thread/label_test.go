@@ -19,12 +19,12 @@ func TestLabel(t *testing.T) {
 		t.Fatal(err)
 	}
 	Create(p, Record{Title: "old title", Task: "T1"})
-	Create(p, Record{Title: "No task\x1b[31m here"})
+	Create(p, Record{Title: "No task\x1b[31m\u202e\u200b here"})
 	Create(p, Record{Title: "gone", Task: "T9"})
 	Create(p, Record{Title: strings.Repeat("x", 100)})
 	for id, want := range map[string]string{
 		"t-0001": "T1 Make needs-you tasks easy to find (t-0001)",
-		"t-0002": "t-0002 (No task [31m here)",
+		"t-0002": "t-0002 (No task[31m here)",
 		"t-0003": "T9 gone (t-0003)",
 		"t-0004": "t-0004 (" + strings.Repeat("x", 59) + "…)",
 		"t-0099": "t-0099",
