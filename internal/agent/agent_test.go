@@ -157,6 +157,21 @@ func TestClaudeLaunch(t *testing.T) {
 	if s := parseSettings(t, l.Files["claude-settings.json"]); s.Sandbox.AllowUnsandboxedCommands == nil || *s.Sandbox.AllowUnsandboxedCommands || !s.Sandbox.Enabled {
 		t.Fatalf("thread sandbox with sandbox_escapes off = %+v", s.Sandbox)
 	}
+	// The project's sandbox lists: excludedCommands, and allow rules
+	// after tm's; none by default.
+	if settings.Sandbox.ExcludedCommands != nil {
+		t.Fatalf("thread sandbox has excludedCommands by default: %+v", settings.Sandbox)
+	}
+	listed := closed
+	listed.Sandbox = SandboxLists{Excluded: []string{"npx playwright *"}, Allow: []string{"Bash(npx playwright *)"}}
+	if l, err = a.Launch(listed); err != nil {
+		t.Fatal(err)
+	}
+	if s := parseSettings(t, l.Files["claude-settings.json"]); !reflect.DeepEqual(s.Sandbox.ExcludedCommands, []string{"npx playwright *"}) ||
+		!reflect.DeepEqual(s.Permissions.Allow, []string{"Read(//h/.terminatr/projects/p/**)", "Bash(npx playwright *)"}) ||
+		s.Sandbox.AllowUnsandboxedCommands == nil || *s.Sandbox.AllowUnsandboxedCommands {
+		t.Fatalf("thread with sandbox lists: %+v", s)
+	}
 	if settings.StatusLine != nil {
 		t.Fatal("settings must never set statusLine; it would replace the user's")
 	}
@@ -248,12 +263,14 @@ func TestClaudeLaunch(t *testing.T) {
 	coord := spec
 	coord.Role, coord.Access = Role("coordinator"), Access{Read: []string{"/h/.terminatr/worktrees/p"}}
 	coord.NoSandboxEscapes = true // a coordinator's Bash has no sandbox to keep
+	coord.Sandbox = SandboxLists{Excluded: []string{"npx *"}, Allow: []string{"Bash(npx *)"}} // threads' only
 	l, err = a.Launch(coord)
 	if err != nil {
 		t.Fatal(err)
 	}
 	settings = parseSettings(t, l.Files["claude-settings.json"])
-	if settings.Sandbox.Enabled || settings.Sandbox.AllowUnsandboxedCommands != nil || len(settings.Permissions.Deny) != 0 {
+	if settings.Sandbox.Enabled || settings.Sandbox.AllowUnsandboxedCommands != nil || settings.Sandbox.ExcludedCommands != nil || len(settings.Permissions.Deny) != 0 ||
+		!reflect.DeepEqual(settings.Permissions.Allow, []string{"Read(//h/.terminatr/worktrees/p/**)"}) {
 		t.Fatalf("coordinator must not get the thread sandbox or deny rules: %+v", settings)
 	}
 
@@ -291,6 +308,7 @@ type claudeSettings struct {
 	Sandbox     struct {
 		Enabled                  bool
 		AllowUnsandboxedCommands *bool
+		ExcludedCommands         []string
 		Network                  struct{ AllowUnixSockets []string }
 	}
 	StatusLine any     `json:"statusLine"`

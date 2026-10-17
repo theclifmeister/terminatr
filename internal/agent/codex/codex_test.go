@@ -165,6 +165,16 @@ func TestLaunch(t *testing.T) {
 	if !l.Kickoff {
 		t.Error("the kickoff is in argv")
 	}
+	if len(l.Warnings) > 0 {
+		t.Errorf("warnings without sandbox lists: %q", l.Warnings)
+	}
+	// Codex has nothing to map a project's sandbox lists to: the argv
+	// stays as it is, and the launch says so.
+	listed := spec
+	listed.Sandbox = agent.SandboxLists{Excluded: []string{"npx playwright *"}}
+	if ll, err := a.Launch(listed); err != nil || !slices.Equal(ll.Argv, want) || !slices.Equal(ll.Warnings, []string{sandboxListsGap}) {
+		t.Errorf("with sandbox lists: argv %q warnings %q, %v", ll.Argv, ll.Warnings, err)
+	}
 	if !slices.Contains(l.Env, "TERMINATR_BIN=/bin/tm") || !slices.Contains(l.Unset, "CODEX_THREAD_ID") {
 		t.Errorf("env %q unset %q", l.Env, l.Unset)
 	}

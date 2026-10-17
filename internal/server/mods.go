@@ -42,6 +42,19 @@ func (l launchConfig) safety(slug string) config.Safety {
 	return s
 }
 
+// sandbox is project slug's sandbox lists for its threads; a config.toml
+// that doesn't load opens nothing.
+func (l launchConfig) sandbox(slug string) agent.SandboxLists {
+	if l.err != nil {
+		return agent.SandboxLists{}
+	}
+	t, err := l.cfg.ThreadSandbox(slug)
+	if err != nil {
+		return agent.SandboxLists{}
+	}
+	return agent.SandboxLists{Excluded: t.ExcludedCommands, Allow: t.Allow}
+}
+
 // agentMod is [agent_mod] enabled; a config.toml that doesn't load leaves
 // mods off.
 func (l launchConfig) agentMod() bool {

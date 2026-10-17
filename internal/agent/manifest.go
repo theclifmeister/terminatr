@@ -687,6 +687,11 @@ func (a *manifestAgent) Launch(spec LaunchSpec) (Launch, error) {
 		// Some CLIs open an interactive picker for an empty id.
 		return out, fmt.Errorf("agent %s: resume needs the agent's session id", a.m.Name)
 	}
+	if spec.Role != "thread" {
+		// Sandbox lists are threads' only: whatever asks, a coordinator's
+		// settings never get them.
+		spec.Sandbox = SandboxLists{}
+	}
 	data := launchData{spec, a.m.HookEvents()}
 	argv := []string{l.Command}
 	add := func(tmpls []string) error {
