@@ -8,12 +8,13 @@ import (
 )
 
 func TestRunsAnything(t *testing.T) {
-	for _, p := range []string{"sh", "bash", "python3", "python3.12", "Python.exe", "node", "env", "xargs", "osascript", "powershell", "pwsh.exe", "perl5.36", "sudo"} {
+	for _, p := range []string{"sh", "bash", "python3", "python3.12", "Python.exe", "node", "env", "xargs", "osascript", "powershell", "pwsh.exe", "perl5.36", "sudo", "make", "gmake", "find", "tar", "npm", "npx", "pnpm", "yarn", "go", "cargo", "rsync", "ssh", "vim", "less", "rg", "fd", "sed", "sort", "unknowntool", "Make.exe",
+		"tree", "uniq", "file", "date", "diff", "hostname", "gh", "glab"} {
 		if !RunsAnything(p) {
 			t.Errorf("RunsAnything(%q) = false", p)
 		}
 	}
-	for _, p := range []string{"git", "glab", "gh", "jq", "rg", "shellcheck", "nodemon", "python3-config"} {
+	for _, p := range []string{"git", "jq", "grep", "Cat.exe", "shellcheck"} {
 		if RunsAnything(p) {
 			t.Errorf("RunsAnything(%q) = true", p)
 		}
@@ -22,7 +23,7 @@ func TestRunsAnything(t *testing.T) {
 
 func TestCommandWords(t *testing.T) {
 	p := Permissions{Commands: []string{"sh", "glab", "jq", "gh", "git"}}
-	want := "runs jq, git; runs sh: anything it wants, as you; runs glab with your GitLab login; runs gh with your GitHub login"
+	want := "runs jq, git; runs sh: anything it wants, as you; runs glab with your GitLab login: anything it wants, as you; runs gh with your GitHub login: anything it wants, as you"
 	if got := p.PermWords(PermCommands); got != want {
 		t.Errorf("PermWords(commands) = %q, want %q", got, want)
 	}
