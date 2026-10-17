@@ -81,6 +81,8 @@ type fakeSource struct {
 	// removed"), secretTests TestSecretEnv's ("slug NAME").
 	secrets     []string
 	secretTests []string
+	// sandbox are SetSandbox's calls ("table key [list]", nil when removed).
+	sandbox     []string
 	restarted   []string // mod ids
 	fetchedMods []string // what FetchMod was asked for
 	templates   []mod.Template
@@ -377,6 +379,13 @@ func (f *fakeSource) SetSecretEnv(table, name string, src *config.EnvSource) err
 	}
 	f.secrets = append(f.secrets, table+" "+name+"="+src.From)
 	return config.SetEnv(table, name, *src)
+}
+func (f *fakeSource) SetSandbox(table, key string, list []string) error {
+	f.sandbox = append(f.sandbox, fmt.Sprintf("%s %s %q", table, key, list))
+	if list == nil {
+		return config.UnsetSandbox(table, key)
+	}
+	return config.SetSandbox(table, key, list)
 }
 func (f *fakeSource) TestSecretEnv(slug, name string) (string, error) {
 	f.secretTests = append(f.secretTests, slug+" "+name)
