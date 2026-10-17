@@ -38,6 +38,8 @@ func TestParseRemote(t *testing.T) {
 		{"git@ssh.dev.azure.com:v2/acme/Shop/web", Target{}},
 		{"git@ssh.dev.azure.com:v3/acme/web", Target{}},
 		{"https://a.b.visualstudio.com/Shop/_git/web", Target{}},
+		{"evil@vs-ssh.visualstudio.com:v3/evil.com%2F/Shop/web", Target{}},
+		{"evil@vs-ssh.visualstudio.com:v3/a%2Fb/Shop/web", Target{}},
 		{"https://dev.azure.com/acme/Shop/_git/bad%zz", Target{}},
 		{"/local/path/repo", Target{}},
 		{"", Target{}},
@@ -113,6 +115,8 @@ func TestDetect(t *testing.T) {
 	if got := Detect(repo, Config{}); got.Kind != GitHubKind {
 		t.Fatalf("unknown server: %+v", got)
 	}
+	defer func(f func() []string) { azureHosts = f }(azureHosts)
+	azureHosts = func() []string { return []string{"tfs.example.com"} }
 	got := Detect(repo, Config{CodeHost: AzureKind, AzureURL: "https://tfs.example.com/tfs/Coll/"})
 	if got != (Target{Kind: AzureKind, OrgURL: "https://tfs.example.com/tfs/Coll", Project: "Shop", Repo: "web"}) {
 		t.Fatalf("server with override: %+v", got)

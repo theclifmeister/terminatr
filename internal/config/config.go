@@ -361,6 +361,11 @@ type Config struct {
 	// NeedsFirst is [ui] needs_first: the sidebar lists the projects
 	// where something needs you first. Off unless set true.
 	NeedsFirst bool
+	// AzureHosts is [azure] hosts: the Azure DevOps Server hosts (no
+	// port) a project's azure_url may name, besides dev.azure.com and
+	// *.visualstudio.com. Only this file, the user's, can allow a host
+	// tm sends an Azure DevOps token to.
+	AzureHosts []string
 	// Mods are the user mods' [mods.<id>] tables by id (mods.go).
 	Mods map[string]Mod
 	// UpdateCheck is [ui] update_check: the server looks once a day for a
@@ -427,6 +432,9 @@ func Load() (*Config, error) {
 			UpdateCheck *bool  `toml:"update_check"`
 			NeedsFirst  bool   `toml:"needs_first"`
 		} `toml:"ui"`
+		Azure struct {
+			Hosts []string `toml:"hosts"`
+		} `toml:"azure"`
 		AgentMod rawAgentMod `toml:"agent_mod"`
 		// Mods are the user mods' [mods.<id>] tables and, under the
 		// keys enabled, band and pane, the older name of [agent_mod],
@@ -445,7 +453,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	am := raw.AgentMod.over(old)
-	c := &Config{Mods: mods, Path: path, projects: raw.Projects, defaults: raw.Defaults, agent: raw.DefaultAgent, agents: raw.Agents,
+	c := &Config{AzureHosts: raw.Azure.Hosts, Mods: mods, Path: path, projects: raw.Projects, defaults: raw.Defaults, agent: raw.DefaultAgent, agents: raw.Agents,
 		Prefix: cmp.Or(raw.Keys.Prefix, raw.Keys.Detach), Icons: raw.UI.Icons, Theme: raw.UI.Theme, Layout: raw.UI.Layout, AgentMod: am.Enabled != nil && *am.Enabled,
 		AgentModBand: am.Band == nil || *am.Band, AgentModPane: am.Pane != nil && *am.Pane,
 		ContextHint: DefaultContextHint, UpdateCheck: raw.UI.UpdateCheck == nil || *raw.UI.UpdateCheck, NeedsFirst: raw.UI.NeedsFirst}

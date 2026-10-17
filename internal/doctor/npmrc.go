@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -14,7 +15,7 @@ import (
 
 // npmAuth: a line of an .npmrc giving a registry's credential from an
 // environment variable (//npm.example.com/:_authToken=${NPM_TOKEN}).
-var npmAuth = regexp.MustCompile(`^\s*//([^\s:]+(?::\d+)?)[^\s]*:(_authToken|_auth|_password)\s*=\s*\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+var npmAuth = regexp.MustCompile(`^\s*//([^\s:/]+(?::\d+)?)[^\s]*:(_authToken|_auth|_password)\s*=\s*\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
 // npmNeed is a variable an .npmrc reads for a registry's credential.
 type npmNeed struct{ name, host string }
@@ -56,14 +57,38 @@ func SecretEnv(d Deps) []Check {
 		for _, repo := range sum.Repos {
 			var missing []string
 			for _, n := range npmrcNeeds(filepath.Join(repo, ".npmrc")) {
-				if _, ok := env[n.name]; !ok && !slices.Contains(missing, n.name) {
-					missing = append(missing, n.name)
+				src, have := env[n.name]
+				switch {
+				case !have:
+					if !slices.Contains(missing, n.name) {
+						missing = append(missing, n.name)
+						out = append(out, Check{Group: "settings", Name: "secret environment", Status: Warn,
+							Detail: fmt.Sprintf("%s: %s/.npmrc reads %s for %s, which tm doesn't give the project's threads; add it to the project's secret environment (env in its settings), %s",
+								sum.Slug, repo, n.name, n.host, envAdvice(n))})
+					}
+				case src.From == config.EnvFromGH && !isGitHubPackages(n.host):
 					out = append(out, Check{Group: "settings", Name: "secret environment", Status: Warn,
-						Detail: fmt.Sprintf("%s: %s/.npmrc reads %s for %s, which tm doesn't give the project's threads; add it to the project's secret environment (env in its settings), e.g. %s = { from = \"gh-auth-token\" }",
-							sum.Slug, repo, n.name, n.host, n.name)})
+						Detail: fmt.Sprintf("%s: %s/.npmrc sends %s, which is your GitHub token (gh-auth-token), to %s, which isn't GitHub's package registry; remove it from the secret environment unless you trust %s with your GitHub token",
+							sum.Slug, repo, n.name, n.host, n.host)})
 				}
 			}
 		}
 	}
 	return out
+}
+
+// isGitHubPackages: host is GitHub's npm package registry, the one host
+// a GitHub token belongs to.
+func isGitHubPackages(host string) bool {
+	return strings.EqualFold(host, "npm.pkg.github.com")
+}
+
+// envAdvice is how to give the variable an .npmrc names for host: the
+// GitHub token only for GitHub's registry, else a credential for that
+// host, which the .npmrc (repository content) names and so isn't trusted.
+func envAdvice(n npmNeed) string {
+	if isGitHubPackages(n.host) {
+		return fmt.Sprintf("e.g. %s = { from = \"gh-auth-token\" }", n.name)
+	}
+	return fmt.Sprintf("with a token for %s only if you trust that host, e.g. %s = { from = \"keychain:<item>\" } or { from = \"env:<NAME>\" }; not your GitHub token", n.host, n.name)
 }

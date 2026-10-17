@@ -7,16 +7,16 @@
 package codehost
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/theclifmeister/terminatr/internal/gitx"
 )
 
 // Host kinds (Host.Kind, Config.CodeHost).
@@ -153,6 +153,9 @@ func Detect(repo string, cfg Config) Target {
 		t.Kind = AzureKind
 		if cfg.AzureURL != "" {
 			t.OrgURL = strings.TrimRight(cfg.AzureURL, "/")
+			if !TrustedAzureURL(t.OrgURL) {
+				t.OrgURL = ""
+			}
 			if t.Project == "" {
 				t.Project, t.Repo = gitPath(url)
 			}
@@ -260,17 +263,7 @@ var gitTimeout = 30 * time.Second
 // git runs git in dir, for at most gitTimeout, and returns its trimmed
 // stdout.
 func git(dir string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if err := cmd.Run(); err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(out.String()), nil
+	return gitx.Run(context.Background(), dir, gitx.Opts{Timeout: gitTimeout}, args...)
 }
 
 // Advice is what to tell the user about a code host call that failed

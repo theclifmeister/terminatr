@@ -484,6 +484,11 @@ func TestAccessThreadGitDirs(t *testing.T) {
 			t.Errorf("worktree: %s not in no-write files %q", n, a.NoWriteFiles)
 		}
 	}
+	for _, n := range []string{"config.worktree", "commondir"} {
+		if !slices.Contains(a.NoWriteFiles, filepath.Join(common, "worktrees", "wt", n)) {
+			t.Errorf("worktree: its own %s not in no-write files %q", n, a.NoWriteFiles)
+		}
+	}
 	if slices.Contains(a.NoWrite, filepath.Join(common, "worktrees", "wt")) {
 		t.Errorf("worktree: its own git dir in no-write %q", a.NoWrite)
 	}

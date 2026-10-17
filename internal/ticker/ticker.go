@@ -316,7 +316,7 @@ func unsaved(r *thread.Record, pushed string) (string, error) {
 	if r.Repo == "" || r.Checkout {
 		return "", nil
 	}
-	return worktree.Unsaved(r.Worktree, pushed)
+	return worktree.Unsaved(r.Repo, r.Worktree, pushed)
 }
 
 func (t *Ticker) load() *state {

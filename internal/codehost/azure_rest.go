@@ -17,11 +17,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/theclifmeister/terminatr/internal/config"
 )
 
 // azResource is Azure DevOps' application id in Microsoft Entra ID, the
@@ -35,6 +39,39 @@ const patEnv = "AZURE_DEVOPS_EXT_PAT"
 // the organization's, when az login's default is another tenant's: what
 // az rest gets its token for (--subscription).
 var azSubs sync.Map
+
+// TrustedAzureURL reports whether u is an Azure DevOps URL a token may
+// be sent to: https, no userinfo, host dev.azure.com or an
+// {org}.visualstudio.com or a host of [azure] hosts in config.toml. PROJECT.md's azure_url and a remote's organization
+// are untrusted text; every call that attaches a token checks the URL first.
+func TrustedAzureURL(u string) bool {
+	p, err := url.Parse(u)
+	if err != nil || p.Scheme != "https" || p.User != nil || p.Opaque != "" || p.Port() != "" {
+		return false
+	}
+	h := strings.ToLower(p.Hostname())
+	if h == "dev.azure.com" {
+		return true
+	}
+	if org := strings.TrimSuffix(h, ".visualstudio.com"); org != h {
+		return azOrgNameRE.MatchString(org)
+	}
+	return slices.ContainsFunc(azureHosts(), func(x string) bool { return strings.EqualFold(x, h) })
+}
+
+// azureHosts are the hosts the user's config.toml allows besides
+// Microsoft's ([azure] hosts); a variable for tests.
+var azureHosts = func() []string {
+	c, _ := config.Load()
+	if c == nil {
+		return nil
+	}
+	return c.AzureHosts
+}
+
+var azOrgNameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]*$`)
+
+var errUntrustedURL = errors.New("azure devops: refusing to send credentials to a URL that is not dev.azure.com or *.visualstudio.com over https")
 
 // get answers the JSON of the GET of u, a REST URL under the Target's
 // organization: through az rest, retried once with the subscription of
@@ -69,6 +106,9 @@ func (a Azure) get(dir, u string) ([]byte, error) {
 
 // rest runs az rest's GET of u with JSON asked for.
 func (a Azure) rest(dir, u string, headers ...string) ([]byte, error) {
+	if !TrustedAzureURL(u) {
+		return nil, errUntrustedURL
+	}
 	args := []string{"rest", "--method", "get", "--resource", azResource, "--url", u, "--headers", "Accept=application/json"}
 	args = append(args, headers...)
 	return a.az(dir, a.withSub(args)...)
@@ -110,7 +150,7 @@ var guidRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[
 // orgURL, as its anonymous answer names it (X-VSS-ResourceTenant), ""
 // when it can't tell or the organization has none. A variable for tests.
 var orgTenant = func(orgURL string) string {
-	if !azOrgURLRE.MatchString(orgURL) {
+	if !azOrgURLRE.MatchString(orgURL) || !TrustedAzureURL(orgURL) {
 		return ""
 	}
 	c := http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -161,6 +201,9 @@ func (a Azure) tenantAccount(dir string) (sub, tenant string, has bool) {
 // auth with an empty user, never on a command line. Its errors are
 // CLIErrors named as az's are.
 func (a Azure) patGet(u, pat string) ([]byte, error) {
+	if !TrustedAzureURL(u) {
+		return nil, errUntrustedURL
+	}
 	if a.PATGet != nil {
 		return a.PATGet(u, pat)
 	}
@@ -169,6 +212,9 @@ func (a Azure) patGet(u, pat string) ([]byte, error) {
 
 // PATGet asks u with pat (patGet).
 func PATGet(u, pat string) ([]byte, error) {
+	if !TrustedAzureURL(u) {
+		return nil, errUntrustedURL
+	}
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
 		return nil, azError(err)

@@ -4,45 +4,36 @@
 package worktree
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/codehost"
+	"github.com/theclifmeister/terminatr/internal/gitx"
 )
+
+// gitTimeout bounds a git run: a fetch or a checkout of a big repo
+// takes a while, but a hung one must not hold tm forever.
+const gitTimeout = 10 * time.Minute
 
 // git runs git in dir and returns its trimmed stdout.
 func git(dir string, args ...string) (string, error) {
-	return gitWithin(0, dir, args...)
+	return gitWithin(gitTimeout, dir, args...)
 }
 
-// gitWithin is git that is killed after timeout (0: never).
+// gitWithin is git that is killed after timeout.
 func gitWithin(timeout time.Duration, dir string, args ...string) (string, error) {
-	ctx := context.Background()
-	if timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
-	}
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	var out, errb bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &errb
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(errb.String())
-		if msg == "" {
-			msg = err.Error()
-		}
-		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
-	}
-	return strings.TrimSpace(out.String()), nil
+	return gitx.Run(context.Background(), dir, gitx.Opts{Timeout: timeout}, args...)
+}
+
+// untrusted is git in a folder an agent may write, which git is asked
+// where its repository is (gitx.Opts.Untrusted).
+func untrusted(dir string, args ...string) (string, error) {
+	return gitx.Run(context.Background(), dir, gitx.Opts{Untrusted: true}, args...)
 }
 
 // DefaultBase is what a new worktree starts from: origin's default branch
@@ -131,7 +122,9 @@ var ErrNoRepo = errors.New("repository folder is gone")
 
 // Remove removes a worktree without force: a dirty one is kept and
 // reported with ErrDirty. A worktree that is already gone is pruned. A
-// repo that is gone gives ErrNoRepo, and nothing is touched.
+// repo that is gone gives ErrNoRepo, and nothing is touched. A folder
+// that isn't repo's worktree by repo's records (gitx.ErrNotPinned) is
+// kept.
 func Remove(repo, dir string) error {
 	if _, err := os.Stat(repo); errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("%s: %w", repo, ErrNoRepo)
@@ -140,11 +133,41 @@ func Remove(repo, dir string) error {
 		_, err := git(repo, "worktree", "prune")
 		return err
 	}
-	if out, err := git(dir, "status", "--porcelain"); err == nil && out != "" {
+	switch dirty, err := Dirty(repo, dir); {
+	case err != nil:
+		return err
+	case dirty:
 		return ErrDirty
 	}
-	_, err := git(repo, "worktree", "remove", dir)
+	_, err := removeWorktree(repo, dir)
 	return err
+}
+
+// Dirty reports whether repo's worktree dir has uncommitted changes.
+// Git runs in dir with the git dirs gitx.Pin checked, never the ones
+// dir's own .git names: dir is the agent's to write. A folder that isn't
+// repo's worktree by repo's records fails with gitx.ErrNotPinned.
+func Dirty(repo, dir string) (bool, error) {
+	ctx := context.Background()
+	t, err := gitx.Pin(ctx, repo, dir)
+	if err != nil {
+		return false, err
+	}
+	out, err := gitx.Run(ctx, "", gitx.Opts{Tree: t}, "status", "--porcelain")
+	return out != "", err
+}
+
+// removeWorktree is git worktree remove of dir. Its own check for
+// changes runs git status in dir: it is given the repo's git dir, not
+// the one dir's git dir names, and no monitor or hooks.
+func removeWorktree(repo, dir string, flags ...string) (string, error) {
+	common, err := gitx.CommonDir(context.Background(), repo)
+	if err != nil {
+		return "", err
+	}
+	return gitx.Run(context.Background(), repo, gitx.Opts{Timeout: gitTimeout, Untrusted: true,
+		Env: []string{"GIT_COMMON_DIR=" + common}},
+		append(append([]string{"worktree", "remove"}, flags...), "--", dir)...)
 }
 
 // RemoveForce removes a worktree with its uncommitted changes (git
@@ -158,7 +181,7 @@ func RemoveForce(repo, dir string) error {
 		_, err := git(repo, "worktree", "prune")
 		return err
 	}
-	_, err := git(repo, "worktree", "remove", "--force", dir)
+	_, err := removeWorktree(repo, dir, "--force")
 	return err
 }
 
@@ -177,7 +200,7 @@ func Repair(repo string, dirs ...string) error {
 // worktree now lives at dir, after the worktree alone moved (git
 // worktree repair, run in it).
 func Reconnect(dir string) error {
-	_, err := git(dir, "worktree", "repair")
+	_, err := untrusted(dir, "worktree", "repair")
 	return err
 }
 
@@ -198,7 +221,7 @@ type Dirs struct {
 // GitDirs returns the git directories of the checkout dir is in, as
 // absolute paths.
 func GitDirs(dir string) (Dirs, error) {
-	out, err := git(dir, "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir")
+	out, err := untrusted(dir, "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir")
 	if err != nil {
 		return Dirs{}, err
 	}
@@ -291,28 +314,37 @@ func BranchUnsaved(repo, branch string) (string, error) {
 // had, e.g. a merged PR's head, whose branch the merge deleted), has
 // them. A repo without remotes has nowhere to push: its commits stay on
 // the branch, which resolve keeps. A worktree already gone loses
-// nothing.
-func Unsaved(dir, pushed string) (string, error) {
+// nothing. Git runs in dir with repo's git dirs (gitx.Pin): a folder
+// that isn't repo's worktree by repo's records is an error.
+func Unsaved(repo, dir, pushed string) (string, error) {
 	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
 		return "", nil
 	}
-	out, err := git(dir, "status", "--porcelain")
+	ctx := context.Background()
+	t, err := gitx.Pin(ctx, repo, dir)
+	if err != nil {
+		return "", err
+	}
+	git := func(args ...string) (string, error) {
+		return gitx.Run(ctx, "", gitx.Opts{Tree: t}, args...)
+	}
+	out, err := git("status", "--porcelain")
 	if err != nil {
 		return "", err
 	}
 	if out != "" {
 		return "uncommitted changes", nil
 	}
-	if remotes, err := git(dir, "remote"); err != nil || remotes == "" {
+	if remotes, err := git("remote"); err != nil || remotes == "" {
 		return "", err
 	}
 	args := []string{"rev-list", "--count", "HEAD", "--not", "--remotes"}
 	if pushed != "" {
-		if _, err := git(dir, "cat-file", "-e", pushed+"^{commit}"); err == nil {
+		if _, err := git("cat-file", "-e", pushed+"^{commit}"); err == nil {
 			args = append(args, pushed)
 		}
 	}
-	n, err := git(dir, args...)
+	n, err := git(args...)
 	if err != nil {
 		return "", err
 	}
@@ -345,7 +377,7 @@ type Place struct {
 // Locate tells where dir sits in git; ok is false outside a repository
 // (or in a bare one).
 func Locate(dir string) (pl Place, ok bool) {
-	out, err := git(dir, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-dir", "--git-common-dir")
+	out, err := untrusted(dir, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-dir", "--git-common-dir")
 	if err != nil {
 		return Place{}, false
 	}
@@ -362,6 +394,6 @@ func Locate(dir string) (pl Place, ok bool) {
 		}
 		pl.Repo = filepath.Dir(common)
 	}
-	pl.Branch, _ = git(dir, "symbolic-ref", "--quiet", "--short", "HEAD")
+	pl.Branch, _ = untrusted(dir, "symbolic-ref", "--quiet", "--short", "HEAD")
 	return pl, true
 }

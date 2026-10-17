@@ -496,14 +496,14 @@ func (r Rules) judgeBash(command string) *Denial {
 			d = r.judgeHTTP(cmd, args)
 		case shells[cmd]:
 			// bash -c STRING runs the string.
-			if i := slices.IndexFunc(args, shellC.MatchString); i >= 0 && i+1 < len(args) {
-				d = r.judgeBash(args[i+1])
+			if c, ok := shellCommand(args); ok {
+				d = r.judgeBash(c)
 			}
 		case cmd == "eval":
 			d = r.judgeBash(strings.Join(args, " "))
 		case cmd == "pwsh" || cmd == "powershell":
 			d = r.judgePwsh(args)
-		case cmd == "rm" && r.has("delete-branch") && slices.ContainsFunc(args, func(a string) bool { return rmRecursive.MatchString(a) || a == "--recursive" }):
+		case cmd == "rm" && r.has("delete-branch") && slices.ContainsFunc(args, func(a string) bool { return rmRecursive.MatchString(a) || isLong(a, "--recursive") }):
 			for _, a := range args {
 				if strings.HasPrefix(a, "-") {
 					continue
@@ -562,11 +562,12 @@ func (r Rules) judgeGit(args []string) *Denial {
 	if i+1 < len(args) {
 		rest = args[i+1:]
 	}
-	// long: one of the long options, with or without a value; flag: that
-	// or the short one, alone or among others (-fu).
+	// long: one of the long options, with or without a value, or its
+	// abbreviation; flag: that or the short one, alone or among others
+	// (-fu).
 	long := func(names ...string) bool {
 		return slices.ContainsFunc(rest, func(a string) bool {
-			return slices.ContainsFunc(names, func(l string) bool { return a == l || strings.HasPrefix(a, l+"=") })
+			return slices.ContainsFunc(names, func(l string) bool { return isLong(a, l) })
 		})
 	}
 	flag := func(short string, names ...string) bool {
@@ -868,6 +869,7 @@ func httpMethod(cmd string, args []string, url int) string {
 		for i := 0; i < len(args); i++ {
 			a := args[i]
 			if name, val, eq := strings.Cut(a, "="); strings.HasPrefix(a, "--") {
+				// curl takes its long options whole.
 				switch {
 				case name == "--request":
 					if !eq {
@@ -918,13 +920,13 @@ func httpMethod(cmd string, args []string, url int) string {
 		}
 	case "wget":
 		for i, a := range args {
-			switch name, val, eq := strings.Cut(a, "="); name {
-			case "--method":
+			switch _, val, eq := strings.Cut(a, "="); {
+			case isLong(a, "--method"):
 				if !eq {
 					val = at(args, i+1)
 				}
 				method = val
-			case "--post-data", "--post-file":
+			case isLong(a, "--post-data"), isLong(a, "--post-file"):
 				imply("POST")
 			}
 		}
@@ -1609,7 +1611,7 @@ func strip(words []string) []string {
 			if strings.HasPrefix(o, "--") {
 				var eq bool
 				name, val, eq = strings.Cut(o, "=")
-				if !eq && slices.Contains(wr.long, name) && i < len(words) {
+				if !eq && slices.ContainsFunc(wr.long, func(l string) bool { return isLong(o, l) }) && i < len(words) {
 					val = words[i]
 					i++
 				}
@@ -1620,7 +1622,7 @@ func strip(words []string) []string {
 					i++
 				}
 			}
-			if w == "env" && (name == "-S" || name == "--split-string") {
+			if w == "env" && (name == "-S" || isLong(name, "--split-string")) {
 				// env -S 'a b': the string is words.
 				words = append(strings.Fields(val), words[i:]...)
 				from, i = 0, 0
@@ -1640,13 +1642,50 @@ func strip(words []string) []string {
 	return nil
 }
 
+// isLong: a is the long option l, with or without a value, or an
+// abbreviation of it. git and getopt_long take any prefix of a long
+// option (--force-w for --force-with-lease); one that other options share
+// too is an error to them, so matching it here only refuses a command
+// that would fail anyway.
+func isLong(a, l string) bool {
+	name, _, _ := strings.Cut(a, "=")
+	return len(name) > 2 && strings.HasPrefix(name, "--") && strings.HasPrefix(l, name)
+}
+
+// shellCommand is the string bash -c runs: the first argument after the
+// -c that is not an option (bash -c -e -- STRING), -o and -O taking a
+// value.
+func shellCommand(args []string) (string, bool) {
+	i := slices.IndexFunc(args, shellC.MatchString)
+	if i < 0 {
+		return "", false
+	}
+	value := strings.ContainsAny(args[i], "oO")
+	for j := i + 1; j < len(args); j++ {
+		a := args[j]
+		switch {
+		case value:
+			value = false
+		case a == "--" || a == "-":
+			return at(args, j+1), j+1 < len(args)
+		case len(a) > 1 && (a[0] == '-' || a[0] == '+'):
+			value = a[1] != '-' && strings.ContainsAny(a, "oO")
+		default:
+			return a, true
+		}
+	}
+	return "", false
+}
+
 // positionals are args without their options, valued options skipping
 // their value.
 func positionals(args, valued []string) []string {
 	var out []string
 	for i := 0; i < len(args); i++ {
 		switch {
-		case slices.Contains(valued, args[i]), args[i] == "<", args[i] == ">":
+		case slices.ContainsFunc(valued, func(v string) bool {
+			return args[i] == v || strings.HasPrefix(v, "--") && !strings.Contains(args[i], "=") && isLong(args[i], v)
+		}), args[i] == "<", args[i] == ">":
 			i++
 		case !strings.HasPrefix(args[i], "-"):
 			out = append(out, args[i])

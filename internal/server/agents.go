@@ -177,9 +177,10 @@ func (s *Server) accessFor(role, slug, cwd string, lc launchConfig) (agent.Acces
 // its objects, refs and reflogs, and packed-refs when a ref goes. HEAD
 // and index are in the worktree's own git dir, granted by name for
 // sandboxes that carve git dirs out of any broader grant (Codex's).
-// What git runs or reads as configuration (hooks, config, info) and
-// the other worktrees' git dirs are never written: the human's git and
-// the server use them outside any sandbox. They are named NoWrite so
+// What git runs or reads as configuration (hooks, config, info, the
+// own git dir's config.worktree and commondir) and the other worktrees'
+// git dirs are never written: the human's git and the server use them
+// outside any sandbox. They are named NoWrite so
 // that a broader grant (the main checkout as cwd, a user's own rule)
 // doesn't open them either. A worktree added later is in no grant.
 func threadGitAccess(common, own string) agent.Access {
@@ -192,7 +193,10 @@ func threadGitAccess(common, own string) agent.Access {
 	}
 	wts := filepath.Join(common, "worktrees")
 	if own != common {
+		// Its own git dir is written, but for the files that would make
+		// git read configuration or another common dir from it.
 		a.Write = append(a.Write, own)
+		a.NoWriteFiles = append(a.NoWriteFiles, ownConfig(own)...)
 	}
 	if es, err := os.ReadDir(wts); err == nil {
 		for _, e := range es {
@@ -202,6 +206,13 @@ func threadGitAccess(common, own string) agent.Access {
 		}
 	}
 	return a
+}
+
+// ownConfig are what git reads as configuration in a linked worktree's
+// own git dir own: config.worktree, and commondir, which says where the
+// rest of it is.
+func ownConfig(own string) []string {
+	return []string{filepath.Join(own, "config.worktree"), filepath.Join(own, "commondir")}
 }
 
 // gitConfig are what git runs or reads as configuration in git dir

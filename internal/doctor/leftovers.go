@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/worktree"
@@ -164,19 +166,24 @@ func leftoverWorktrees(d Deps, ix *threadIndex) []worktreeCheck {
 			}
 			_, reason := ix.why(s.Name(), e.Name())
 			c := Check{Group: g, Name: "worktree", Status: Warn, Detail: dir + ": " + reason}
-			dirs, err := worktree.GitDirs(dir)
-			if err != nil {
+			// The repo comes from tm's records, never from the folder's
+			// own .git, which its thread's agent could write.
+			repo := ix.repoOf(dir)
+			if repo == "" {
 				if empty(dir) {
 					c.Fix = &Fix{Desc: "remove empty folder " + dir, Apply: func() error { return os.Remove(dir) }}
 				} else {
-					c.Detail += "; not a git worktree, kept (remove it by hand)"
+					c.Detail += "; not a git worktree of a project's repo, kept (remove it by hand)"
 				}
 				out = append(out, worktreeCheck{c, dir})
 				continue
 			}
-			repo := dirs.RepoRoot
-			if st, _ := d.Run(dir, "git", "status", "--porcelain"); st != "" {
-				c.Detail += "; has uncommitted changes, kept"
+			if dirty, err := worktree.Dirty(repo, dir); err != nil || dirty {
+				if err != nil {
+					c.Detail += "; can't tell its changes, kept"
+				} else {
+					c.Detail += "; has uncommitted changes, kept"
+				}
 				out = append(out, worktreeCheck{c, dir})
 				continue
 			}
@@ -191,6 +198,17 @@ func leftoverWorktrees(d Deps, ix *threadIndex) []worktreeCheck {
 		}
 	}
 	return out
+}
+
+// repoOf is the project repo whose worktree dir is, by the repo's own
+// records (gitx.Pin); "" for none.
+func (ix *threadIndex) repoOf(dir string) string {
+	for _, r := range ix.repos {
+		if _, err := gitx.Pin(context.Background(), r, dir); err == nil {
+			return r
+		}
+	}
+	return ""
 }
 
 func empty(dir string) bool {

@@ -3,6 +3,12 @@
 /.build/
 /dist/
 
+# Binaries from a bare `go build` inside a package folder
+/internal/e2e/fakeagent/fakeagent
+/internal/e2e/fakeagent/fakeagent.exe
+/internal/e2e/apps/*/*
+!/internal/e2e/apps/*/*.go
+
 # Per-thread working files from herdr-projects
 /.herdr-project/
 
