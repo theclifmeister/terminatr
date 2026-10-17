@@ -74,7 +74,7 @@ import { initialTurn, stateOf, step, waitKey } from './turn'
 import { initialUsage, reportOf } from './usage'
 import type { TurnUsageIn, UsageReport } from './usage'
 import type { Seen } from './turn'
-import { answeredText, bandShows, ciToast, saveClear, statusText } from './view'
+import { answeredText, bandShows, ciToast, clearedText, statusText } from './view'
 
 const watch = atom({ plugin: 'terminatr', key: 'watch' } as const, null)
 const band = atom({ plugin: 'terminatr', key: 'band' } as const, true)
@@ -298,6 +298,19 @@ async function answerQuestions($: EngineInterface) {
     $.ui.toast(answeredText(r.exitCode, r.stderr))
   } catch (err) {
     $.ui.toast(answeredText(null, String(err)))
+  }
+}
+
+// saveClear has tm save and clear the coordinator (tm clear) and says
+// what came of it. In this file: the engine follows $ into no import.
+async function saveClear($: EngineInterface): Promise<string> {
+  const bin = await $.env.get('TERMINATR_BIN')
+  if (!bin) return clearedText(null, 'this session has no tm (TERMINATR_BIN)')
+  try {
+    const r = await $.process.run([bin, 'clear'])
+    return clearedText(r.exitCode, r.stderr)
+  } catch (err) {
+    return clearedText(null, String(err))
   }
 }
 

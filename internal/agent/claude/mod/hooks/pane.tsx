@@ -29,7 +29,7 @@ import {
   sentWords, summary, threadLine, tickerRows, todoLine,
 } from './dashboard'
 import type { AskKind } from './dashboard'
-import { saveClear } from './view'
+import { clearedText } from './view'
 
 const project = atom({ plugin: 'terminatr', key: 'project' } as const, null)
 const asks = atom({ plugin: 'terminatr', key: 'asks' } as const, [])
@@ -267,6 +267,19 @@ function drawTicker(els: Elements[RenderSurface], rows: ReturnType<typeof ticker
       ))}
     </Box>
   )
+}
+
+// saveClear has tm save and clear the coordinator (tm clear) and says
+// what came of it. In this file: the engine follows $ into no import.
+async function saveClear($: EngineInterface): Promise<string> {
+  const bin = await $.env.get('TERMINATR_BIN')
+  if (!bin) return clearedText(null, 'this session has no tm (TERMINATR_BIN)')
+  try {
+    const r = await $.process.run([bin, 'clear'])
+    return clearedText(r.exitCode, r.stderr)
+  } catch (err) {
+    return clearedText(null, String(err))
+  }
 }
 
 // drawContext draws the coordinator's context use, coloured, and past
