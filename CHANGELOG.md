@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.0](https://github.com/theclifmeister/terminatr/compare/v0.33.0...v0.34.0) (2026-10-17)
+
+
+### Features
+
+* **sandbox:** per-project sandbox lists for threads (excluded commands, allow rules), editable in settings ([#622](https://github.com/theclifmeister/terminatr/issues/622)) ([2c91af8](https://github.com/theclifmeister/terminatr/commit/2c91af8d169604f8637d85359bced6a5eda1b6c3))
+
 ## [0.33.0](https://github.com/theclifmeister/terminatr/compare/v0.32.0...v0.33.0) (2026-10-17)
 
 
