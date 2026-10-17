@@ -121,9 +121,10 @@ func Start(cfg Config) (*Session, error) {
 	s.held.Store(cfg.RemoteHeld)
 	term, err := emu.NewWith(emu.Options{
 		Cols: cfg.Cols, Rows: cfg.Rows,
-		// Answers to terminal queries go back to the program. Only this
-		// emulator answers; attach mirrors never do.
-		WritePty:  func(b []byte) { s.in.push(b, false) },
+		// Answers to terminal queries go back to the program, queued
+		// within answerRoom. Only this emulator answers; attach mirrors
+		// never do.
+		WritePty:  func(b []byte) { s.in.push(b, true) },
 		Xtversion: cfg.Xtversion,
 		// Called from term.Write, with s.mu held.
 		ColorScheme: func() (emu.Scheme, bool) { return s.scheme, s.scheme != 0 },
@@ -311,7 +312,7 @@ func (s *Session) Read(scrollback bool) (proto.SessionReadResult, error) {
 
 // Input queues bytes for the PTY as if typed. It never blocks.
 func (s *Session) Input(p []byte) error {
-	if !s.in.push(p, true) {
+	if !s.in.push(p, false) {
 		return ErrExited
 	}
 	s.typed(p)
@@ -415,7 +416,7 @@ func (s *Session) SetColorScheme(scheme emu.Scheme) error {
 	}
 	s.scheme = scheme
 	if s.term.Modes().ColorSchemeReport {
-		s.in.push(emu.SchemeReport(scheme), false)
+		s.in.push(emu.SchemeReport(scheme), true)
 	}
 	return nil
 }
@@ -589,8 +590,14 @@ type inputQueue struct {
 	closed bool
 }
 
-// maxInput bounds queued client input; query answers are always queued.
-const maxInput = 1 << 20
+// maxInput bounds queued client input. Query answers may use answerRoom
+// more, so a paste that fills the queue does not starve them, but they are
+// bounded too: a program that prints queries and never reads stdin needs
+// no replies, and must not grow the queue without limit.
+const (
+	maxInput   = 1 << 20
+	answerRoom = 64 << 10
+)
 
 func newInputQueue() *inputQueue {
 	q := &inputQueue{}
@@ -598,13 +605,19 @@ func newInputQueue() *inputQueue {
 	return q
 }
 
-func (q *inputQueue) push(p []byte, bounded bool) bool {
+// push queues p, client input or (answer) a query answer. It reports false
+// once the queue is closed; when the queue is full it drops p.
+func (q *inputQueue) push(p []byte, answer bool) bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.closed {
 		return false
 	}
-	if bounded && len(q.buf)+len(p) > maxInput {
+	limit := maxInput
+	if answer {
+		limit += answerRoom
+	}
+	if len(q.buf)+len(p) > limit {
 		return true // the program is not reading; drop rather than grow
 	}
 	q.buf = append(q.buf, p...)

@@ -15,13 +15,13 @@ package modproto
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -233,15 +233,17 @@ func (e *FrameError) Unwrap() error { return e.Err }
 // safe from any.
 type Conn struct {
 	sc *bufio.Scanner
-	mu sync.Mutex
-	w  io.Writer
+	// wmu holds one write at a time: a channel, so that a sender can
+	// give up waiting for it.
+	wmu chan struct{}
+	w   io.Writer
 }
 
 // NewConn speaks the protocol over r and w.
 func NewConn(r io.Reader, w io.Writer) *Conn {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64<<10), MaxLine)
-	return &Conn{sc: sc, w: w}
+	return &Conn{sc: sc, wmu: make(chan struct{}, 1), w: w}
 }
 
 // Read returns the next message, a *FrameError for a line that isn't one
@@ -272,6 +274,14 @@ func (c *Conn) Read() (*Message, error) {
 
 // Send writes one message as one line.
 func (c *Conn) Send(m Message) error {
+	return c.SendContext(context.Background(), m)
+}
+
+// SendContext is Send giving up when ctx ends, also while waiting on a
+// peer that stopped reading. A write it gives up on goes on in the
+// background, so no line is ever cut short; later sends wait for it to
+// end, as it does once the peer exits or the writer is closed.
+func (c *Conn) SendContext(ctx context.Context, m Message) error {
 	m.JSONRPC = "2.0"
 	b, err := json.Marshal(m)
 	if err != nil {
@@ -280,19 +290,46 @@ func (c *Conn) Send(m Message) error {
 	if len(b) >= MaxLine {
 		return fmt.Errorf("message of %d bytes is over the %d limit", len(b), MaxLine)
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	_, err = c.w.Write(append(b, '\n'))
-	return err
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case c.wmu <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	line := append(b, '\n')
+	if ctx.Done() == nil {
+		defer func() { <-c.wmu }()
+		_, err = c.w.Write(line)
+		return err
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.w.Write(line)
+		<-c.wmu
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Request sends a request; params may be a json.RawMessage.
 func (c *Conn) Request(id int64, method string, params any) error {
+	return c.RequestContext(context.Background(), id, method, params)
+}
+
+// RequestContext is Request giving up when ctx ends (SendContext).
+func (c *Conn) RequestContext(ctx context.Context, id int64, method string, params any) error {
 	p, err := raw(params)
 	if err != nil {
 		return err
 	}
-	return c.Send(Message{ID: &id, Method: method, Params: p})
+	return c.SendContext(ctx, Message{ID: &id, Method: method, Params: p})
 }
 
 // Notify sends a notification.
