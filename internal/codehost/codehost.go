@@ -152,6 +152,7 @@ func Detect(repo string, cfg Config) Target {
 		t, _ := ParseRemote(url)
 		t.Kind = AzureKind
 		if cfg.AzureURL != "" {
+			noteOrigin(url)
 			t.OrgURL = strings.TrimRight(cfg.AzureURL, "/")
 			if !TrustedAzureURL(t.OrgURL) {
 				t.OrgURL = ""

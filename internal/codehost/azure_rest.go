@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -42,8 +43,12 @@ var azSubs sync.Map
 
 // TrustedAzureURL reports whether u is an Azure DevOps URL a token may
 // be sent to: https, no userinfo, host dev.azure.com or an
-// {org}.visualstudio.com or a host of [azure] hosts in config.toml. PROJECT.md's azure_url and a remote's organization
-// are untrusted text; every call that attaches a token checks the URL first.
+// {org}.visualstudio.com, a host of [azure] hosts in config.toml, the
+// host of a repo's origin remote (noteOrigin) or the host of the az CLI's
+// default organization (the user's own az config). PROJECT.md's azure_url
+// and a remote's organization are untrusted text, and a host PROJECT.md
+// names alone is never trusted; every call that attaches a token checks
+// the URL first.
 func TrustedAzureURL(u string) bool {
 	p, err := url.Parse(u)
 	if err != nil || p.Scheme != "https" || p.User != nil || p.Opaque != "" || p.Port() != "" {
@@ -56,7 +61,60 @@ func TrustedAzureURL(u string) bool {
 	if org := strings.TrimSuffix(h, ".visualstudio.com"); org != h {
 		return azOrgNameRE.MatchString(org)
 	}
-	return slices.ContainsFunc(azureHosts(), func(x string) bool { return strings.EqualFold(x, h) })
+	if slices.ContainsFunc(azureHosts(), func(x string) bool { return strings.EqualFold(x, h) }) {
+		return true
+	}
+	if _, ok := originHosts.Load(h); ok {
+		return true
+	}
+	return h != "" && h == azDefaultHost()
+}
+
+// originHosts are the hosts of the origin remotes of the repos Detect
+// has read, which git (not PROJECT.md) names.
+var originHosts sync.Map
+
+// noteOrigin trusts the host of a repo's origin URL (https, ssh or
+// vs-ssh form) for azure_url.
+func noteOrigin(remote string) {
+	if h, _, ok := splitRemote(remote); ok && h != "" {
+		originHosts.Store(h, true)
+	}
+}
+
+// azDefaultHost is the host of the az CLI's default organization
+// (az devops configure), "" for none; a variable for tests.
+var azDefaultHost = func() string {
+	dir := os.Getenv("AZURE_CONFIG_DIR")
+	if dir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		dir = filepath.Join(home, ".azure")
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "azuredevops", "config"))
+	if err != nil {
+		return ""
+	}
+	return orgHostFromConfig(string(b))
+}
+
+// orgHostFromConfig is the lower-case host of the organization in az
+// devops' ini config, "" when it has none or it isn't an https URL.
+func orgHostFromConfig(ini string) string {
+	for _, l := range strings.Split(ini, "\n") {
+		k, v, ok := strings.Cut(l, "=")
+		if !ok || strings.ToLower(strings.TrimSpace(k)) != "organization" {
+			continue
+		}
+		p, err := url.Parse(strings.TrimSpace(v))
+		if err != nil || p.Scheme != "https" || p.User != nil {
+			return ""
+		}
+		return strings.ToLower(p.Hostname())
+	}
+	return ""
 }
 
 // azureHosts are the hosts the user's config.toml allows besides
