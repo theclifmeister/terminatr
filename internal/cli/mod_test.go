@@ -255,7 +255,7 @@ func TestModExamples(t *testing.T) {
 	out := h.ok(thr, "mod", "examples")
 	for _, want := range []string{mod.ExamplesURL, "git clone --depth 1 --branch " + mod.ExamplesRef + " " + mod.ExamplesRepo, "tm mod install " + mod.ExamplesURL + "/nord",
 		"cp -R terminatr/examples/mods/pr-ci-column my-pr-ci-column", "tm mod install my-pr-ci-column", "memory-search  an agent tool", "tm mod install " + mod.ExamplesURL + "/standup",
-		"gitlab  a code host (GitLab, through glab) · runs glab with your GitLab login\n"} {
+		"gitlab  a code host (GitLab, through glab) · runs glab with your GitLab login: anything it wants, as you\n"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("examples lack %q:\n%s", want, out)
 		}
