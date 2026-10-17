@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -54,6 +56,28 @@ var (
 )
 
 const maxPaneStreams = 8
+
+// A paired server's word on a pane's size is only that: sizes in its
+// frames are taken up to maxPaneCols × maxPaneRows, and its repaints at
+// most one per paneRepaintEvery, as its subscriber promises
+// (session.RepaintEvery); one sooner is dropped with the output after
+// it, and a fresh one asked for once the time has passed.
+const (
+	maxPaneCols = 1000
+	maxPaneRows = 500
+)
+
+var paneRepaintEvery = 250 * time.Millisecond
+
+// paneSize reads a size from a paired server's frame: false for none or
+// a zero, and at most maxPaneCols × maxPaneRows.
+func paneSize(b []byte) (cols, rows uint16, ok bool) {
+	cols, rows, err := proto.ParseSize(b)
+	if err != nil || cols == 0 || rows == 0 {
+		return 0, 0, false
+	}
+	return min(cols, maxPaneCols), min(rows, maxPaneRows), true
+}
 
 // PaneHost is what the server lends a link for its panes.
 type PaneHost interface {
@@ -230,7 +254,7 @@ func (sv *served) frame(typ byte, payload []byte) {
 			sv.src.Input(payload)
 		}
 	case frameSize:
-		if c, r, err := proto.ParseSize(payload); err == nil && c > 0 && r > 0 && sv.typing() {
+		if c, r, ok := paneSize(payload); ok && sv.typing() {
 			sv.src.Resize(c, r)
 		}
 	case frameAck:
@@ -365,6 +389,14 @@ type PaneConn struct {
 	unacked int
 	closed  bool
 	ack     chan struct{}
+
+	// Frames come on the link's reader, one at a time: repainted is when
+	// the sink last took a repaint; skipping, that a repaint came sooner
+	// and its output is dropped until the next; asked, that a fresh one
+	// is asked for.
+	repainted time.Time
+	skipping  bool
+	asked     atomic.Bool
 }
 
 // open opens a stream on session p.Session of the peer, frames to sink.
@@ -395,15 +427,25 @@ func (m *paneMux) open(ctx context.Context, p proto.PeerAttachParams, sink PaneS
 func (c *PaneConn) frame(typ byte, payload []byte) {
 	switch typ {
 	case frameRepaint:
-		if cols, rows, err := proto.ParseSize(payload[:min(4, len(payload))]); err == nil {
-			c.sink.Repaint(cols, rows, payload[4:])
-			c.took(len(payload) - 4)
+		if len(payload) < 4 {
+			return
 		}
+		c.took(len(payload) - 4)
+		cols, rows, ok := paneSize(payload[:4])
+		if wait := time.Until(c.repainted.Add(paneRepaintEvery)); !ok || wait > 0 {
+			c.skipping = true
+			c.askRepaint(max(wait, 0))
+			return
+		}
+		c.repainted, c.skipping = time.Now(), false
+		c.sink.Repaint(cols, rows, payload[4:])
 	case frameOutput:
-		c.sink.Output(payload)
 		c.took(len(payload))
+		if !c.skipping {
+			c.sink.Output(payload)
+		}
 	case frameResize:
-		if cols, rows, err := proto.ParseSize(payload); err == nil {
+		if cols, rows, ok := paneSize(payload); ok {
 			c.sink.Resize(cols, rows)
 		}
 	case frameClosed:
@@ -414,6 +456,17 @@ func (c *PaneConn) frame(typ byte, payload []byte) {
 		c.m.mu.Unlock()
 		c.end(string(payload))
 	}
+}
+
+// askRepaint asks for a fresh repaint after wait, once at a time.
+func (c *PaneConn) askRepaint(wait time.Duration) {
+	if c.asked.Swap(true) {
+		return
+	}
+	time.AfterFunc(wait, func() {
+		c.asked.Store(false)
+		c.Repaint()
+	})
 }
 
 // took counts n bytes fed to the sink, waking the acks every
