@@ -237,6 +237,44 @@ func TestPaneSwitch(t *testing.T) {
 	}
 }
 
+// switchingHost is fakeHost with the switch turned off while the pane
+// opens.
+type switchingHost struct {
+	fakeHost
+	off func()
+}
+
+func (h *switchingHost) OpenPane(c caller.Caller, project, session string) (PaneSource, proto.PeerSession, error) {
+	src, info, err := h.fakeHost.OpenPane(c, project, session)
+	h.off()
+	return src, info, err
+}
+
+// TestPaneSwitchOffWhileOpening: a pane whose switch goes off while it
+// opens isn't served.
+func TestPaneSwitchOffWhileOpening(t *testing.T) {
+	h := &switchingHost{}
+	level := proto.PanesView
+	a, b := panePair(t, h, &level)
+	h.off = func() {
+		level = proto.PanesOff
+		b.panes.closeServed(proto.PaneOff)
+	}
+	_, err := a.panes.open(context.Background(), proto.PeerAttachParams{Project: "web", Session: "s-1"}, &sink{})
+	if code(err) != proto.ErrPanesOff {
+		t.Fatalf("switched off while opening: %v, want panes-off", err)
+	}
+	if !h.last().isClosed() {
+		t.Error("the source is still open")
+	}
+	b.panes.mu.Lock()
+	n := len(b.panes.served)
+	b.panes.mu.Unlock()
+	if n != 0 {
+		t.Errorf("%d streams served with the switch off", n)
+	}
+}
+
 // TestPaneClosed: the far end's closed frame reaches the sink in fixed
 // words, as does the switch going off, and the link dropping.
 func TestPaneClosed(t *testing.T) {

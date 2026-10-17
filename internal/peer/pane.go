@@ -103,6 +103,9 @@ type paneMux struct {
 	opened map[uint32]*PaneConn
 	next   uint32
 	ended  bool
+	// closes counts closeServed calls: a stream whose switch was read
+	// before one isn't served (serve).
+	closes int
 	// window and ackEvery are paneWindow and paneAckEvery when the
 	// session began.
 	window, ackEvery int
@@ -154,6 +157,7 @@ func (m *paneMux) closeServed(reason string) {
 	m.mu.Lock()
 	ss := m.served
 	m.served = map[uint32]*served{}
+	m.closes++
 	m.mu.Unlock()
 	for _, sv := range ss {
 		sv.s.sendFrame(sv.id, frameClosed, []byte(reason))
@@ -176,9 +180,18 @@ type served struct {
 	done     bool
 }
 
+// closed is the count of closeServed calls so far, for serve.
+func (m *paneMux) closed() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.closes
+}
+
 // serve starts stream id from src; typing says, at each key, whether the
-// peer may type.
-func (m *paneMux) serve(id uint32, src PaneSource, typing func() bool) error {
+// peer may type. since is m.closed() from before the switch allowed the
+// stream: when closeServed ran in between, the switch went off and the
+// stream isn't served.
+func (m *paneMux) serve(id uint32, src PaneSource, typing func() bool, since int) error {
 	sv := &served{m: m, s: m.s, id: id, src: src, typing: typing}
 	sv.cond = sync.NewCond(&sv.mu)
 	m.mu.Lock()
@@ -186,6 +199,9 @@ func (m *paneMux) serve(id uint32, src PaneSource, typing func() bool) error {
 	case m.ended:
 		m.mu.Unlock()
 		return errNotUp
+	case m.closes != since:
+		m.mu.Unlock()
+		return errPanesOff
 	case m.served[id] != nil:
 		m.mu.Unlock()
 		return proto.Errorf(proto.ErrBadParams, "stream %d is open", id)
@@ -509,17 +525,22 @@ func (d *dispatcher) attach(ctx context.Context, raw json.RawMessage) (any, erro
 	if s == nil {
 		return nil, errNotUp
 	}
+	// The switch can go off while the pane opens: since, read before
+	// the switch, lets serve see that it did.
+	since := s.panes.closed()
 	if lv := d.level(); lv != proto.PanesView && lv != proto.PanesType {
-		return nil, proto.Errorf(proto.ErrPanesOff, "this server doesn't share panes with yours")
+		return nil, errPanesOff
 	}
 	src, info, err := d.panes.OpenPane(d.caller, p.Project, p.Session)
 	if err != nil {
 		return nil, err
 	}
 	typing := func() bool { return d.level() == proto.PanesType }
-	if err := s.panes.serve(p.Stream, src, typing); err != nil {
+	if err := s.panes.serve(p.Stream, src, typing, since); err != nil {
 		src.Close()
 		return nil, err
 	}
 	return proto.PeerAttachResult{Input: typing(), Session: info}, nil
 }
+
+var errPanesOff = proto.Errorf(proto.ErrPanesOff, "this server doesn't share panes with yours")
