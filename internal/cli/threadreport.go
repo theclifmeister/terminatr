@@ -49,7 +49,9 @@ func (e *Env) ownThread(p *project.Project, flag string) (*thread.Record, error)
 const reportUsage = `usage: tm report [--file F] [--attach F]...   (the report on stdin, or from --file)
        tm report --show
 Format: optional "PR: <url>" first line, "## Report", required "## Next"
-(one action per line, at most 100 characters), optional "## Remember".`
+(one action per line, at most 100 characters), optional "## Check",
+optional "## Remember". Notes of the project's memory that the
+thread's diff speaks against (tm memory check) are added to ## Check.`
 
 func runReport(e *Env, args []string) error {
 	f := newFlags()
@@ -100,6 +102,20 @@ func runReport(e *Env, args []string) error {
 	if err != nil {
 		return err
 	}
+	// The memory check warns, in the report's ## Check, and never
+	// refuses: a check that fails or finds nothing leaves the text be.
+	var warn []string
+	if _, err := thread.Validate(text); err == nil {
+		found, _ := memoryConflicts(p, r)
+		for _, c := range found {
+			warn = append(warn, "Memory check: "+c.String())
+		}
+		if t := thread.AddCheck(text, warn); len(t) <= thread.MaxReport {
+			text = t
+		} else {
+			warn = nil
+		}
+	}
 	var files []string
 	for _, a := range *attach {
 		files = append(files, e.abs(a))
@@ -121,6 +137,9 @@ func runReport(e *Env, args []string) error {
 		return err
 	}
 	fmt.Fprintf(e.Stdout, "stored report %d for %s\n", n, r.ID)
+	for _, w := range warn {
+		fmt.Fprintln(e.Stdout, shown(w))
+	}
 	return nil
 }
 
