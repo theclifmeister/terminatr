@@ -86,6 +86,10 @@ func (d *Dialer) RequestUpdate(ctx context.Context, rawURL string) (UpdateResult
 	return res, err
 }
 
+// dialTimeout bounds a relay's TLS handshake, WebSocket upgrade and
+// challenge.
+var dialTimeout = 30 * time.Second
+
 // open connects to the relay at rawURL and runs f on the stream, ctx
 // bounding both; the stream is closed when f fails.
 func (d *Dialer) open(ctx context.Context, rawURL string, f func(c net.Conn, host, path string) error) error {
@@ -117,6 +121,10 @@ func (d *Dialer) open(ctx context.Context, rawURL string, f func(c net.Conn, hos
 	if err != nil {
 		return err
 	}
+	// The TLS handshake, the upgrade and the challenge must come within
+	// dialTimeout whatever ctx allows (a link's ctx waits for its peer
+	// for as long as it takes): greet lifts it once the relay has spoken.
+	c.SetDeadline(time.Now().Add(dialTimeout))
 	switch u.Scheme {
 	case "wss":
 		cfg := d.TLS.Clone()
@@ -160,11 +168,13 @@ func (d *Dialer) greet(c net.Conn, host, path string) (*wsConn, challenge, error
 	if err != nil {
 		return nil, ch, err
 	}
-	ws.idle = 3 * DefaultConfig().Ping
 	op, msg, err := ws.ReadMessage()
 	if err != nil {
 		return nil, ch, err
 	}
+	// The relay answered: from here its pings keep the wait alive.
+	c.SetDeadline(time.Time{})
+	ws.idle = 3 * DefaultConfig().Ping
 	if op != opText || json.Unmarshal(msg, &ch) != nil || ch.T != msgChallenge || len(ch.Nonce) != 32 {
 		return nil, ch, errNotHello
 	}
