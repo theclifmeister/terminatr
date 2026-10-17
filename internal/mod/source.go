@@ -1,7 +1,6 @@
 package mod
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -11,7 +10,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -19,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/update"
 )
 
@@ -434,26 +433,9 @@ func TreeHash(dir string) (string, error) {
 const gitTimeout = 2 * time.Minute
 
 // git runs git with args, never asking for a password and refusing
-// transports that run commands, and returns its output.
+// transports that run commands (gitx), and returns its output.
 func git(dir string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-c", "protocol.ext.allow=never"}, args...)...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=", "SSH_ASKPASS=")
-	var out, errb bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &errb
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(errb.String())
-		if msg == "" {
-			msg = err.Error()
-		}
-		if i := strings.LastIndex(msg, "\n"); i >= 0 {
-			msg = msg[i+1:]
-		}
-		return "", fmt.Errorf("git %s: %s", args[0], msg)
-	}
-	return strings.TrimSpace(out.String()), nil
+	return gitx.Run(context.Background(), dir, gitx.Opts{Timeout: gitTimeout, Env: []string{"GIT_ASKPASS=", "SSH_ASKPASS="}}, args...)
 }
 
 // clone fetches url at ref ("" the default branch) into dir, shallow,

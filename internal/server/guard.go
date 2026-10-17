@@ -170,6 +170,9 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		g.Writable = withReal(dirs)
 		if d, err := worktree.GitDirs(r.Cwd); err == nil {
 			dirs, files := gitConfig(realPath(d.CommonDir))
+			if own := realPath(d.GitDir); own != realPath(d.CommonDir) {
+				files = append(files, ownConfig(own)...)
+			}
 			g.GitConfig = withReal(append(dirs, files...))
 		}
 	}

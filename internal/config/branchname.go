@@ -2,9 +2,10 @@ package config
 
 import (
 	"fmt"
-	"os/exec"
 	"regexp"
 	"strings"
+
+	"github.com/theclifmeister/terminatr/internal/gitx"
 )
 
 // DefaultBranchName is the branch_name template of a thread's branch
@@ -112,11 +113,11 @@ func separatorFault(name string) string {
 }
 
 func gitBranchOK(name string) error {
-	if out, err := exec.Command("git", "check-ref-format", "--branch", name).CombinedOutput(); err != nil {
-		if _, ok := err.(*exec.ExitError); !ok {
-			return fmt.Errorf("can't check the branch name: %w", err)
-		}
-		_ = out
+	ok, err := gitx.CheckRefFormat(name, "--branch")
+	switch {
+	case err != nil:
+		return fmt.Errorf("can't check the branch name: %w", err)
+	case !ok:
 		return limit(fmt.Sprintf("would make a branch name git refuses (%s)", name))
 	}
 	return nil
