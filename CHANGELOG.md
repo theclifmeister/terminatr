@@ -1,5 +1,56 @@
 # Changelog
 
+## [0.31.0](https://github.com/theclifmeister/terminatr/compare/v0.30.1...v0.31.0) (2026-10-17)
+
+
+### Features
+
+* **codehost:** trust the origin remote host and the az default organization for azure_url ([99f7587](https://github.com/theclifmeister/terminatr/commit/99f7587c98413cdf8aa69fe08b116c1ac78df32c))
+* **codehost:** trust the origin remote host and the az default organization for azure_url ([63321f9](https://github.com/theclifmeister/terminatr/commit/63321f9c957f2fe4e46fdbdf57c6f617d30959b6))
+
+
+### Bug Fixes
+
+* bound session input answers, transcript tail reads and mod host writes ([ad81574](https://github.com/theclifmeister/terminatr/commit/ad81574fcdd97db25dfa661db6eccc8eb68f97ae))
+* branch names, multi-line settings, and pane state in the attach client ([75bcf37](https://github.com/theclifmeister/terminatr/commit/75bcf37d400c861c9f9a94d962347af528647296))
+* clean peer, agent and mod text with textsafe before any terminal ([5ce1f90](https://github.com/theclifmeister/terminatr/commit/5ce1f90f33a9cd07d5c03cb25062ecf8a9e00144))
+* clean peer, agent and mod text with textsafe before any terminal ([30dc871](https://github.com/theclifmeister/terminatr/commit/30dc871f1465ea8a2d022071132346979a8233f2))
+* **codehost:** send Azure DevOps credentials only to trusted hosts ([1b3b9e5](https://github.com/theclifmeister/terminatr/commit/1b3b9e55b4bc31d34b7bae1b55e5cd1486b665af))
+* **codehost:** send Azure DevOps credentials only to trusted hosts ([cb365c8](https://github.com/theclifmeister/terminatr/commit/cb365c80d25eb022dd8314a5748806308e31c210))
+* **codehost:** trust an origin host per target, only for repos the user registered ([570d68f](https://github.com/theclifmeister/terminatr/commit/570d68fadb2e024c4d1dd8dde4752c778b8f5db4))
+* **config:** edit settings written over several lines ([9c1275b](https://github.com/theclifmeister/terminatr/commit/9c1275ba19b21db0b7022f2e60a0cb8bbfa58a3c))
+* **doctor:** suggest the GitHub token only for GitHub's npm registry ([2cabf55](https://github.com/theclifmeister/terminatr/commit/2cabf55a5c25ed0007bc5c8f6afdbbe5056e7e57))
+* **doctor:** suggest the GitHub token only for GitHub's npm registry ([4d746d5](https://github.com/theclifmeister/terminatr/commit/4d746d547630087112724829453f81874539ec9b))
+* **git:** run every git call through one hardened runner and pin worktree git dirs ([9de70cd](https://github.com/theclifmeister/terminatr/commit/9de70cd947c41f90c7e1e1617b4f0c02e2216b0e))
+* **git:** run every git call through one hardened runner and pin worktree git dirs ([42577d4](https://github.com/theclifmeister/terminatr/commit/42577d48f86ecd9f81fdd5b33148e2541de42f3d))
+* **guard:** allow a refused call exactly, its * included ([f5f0c3e](https://github.com/theclifmeister/terminatr/commit/f5f0c3e0536d0e2e483d5b6e6bc8e10c5561fa95))
+* **guard:** allow a refused call exactly, its * included ([6391cf1](https://github.com/theclifmeister/terminatr/commit/6391cf134dd9fe1f0c876858e40e35fb84d08088))
+* **guard:** read abbreviated long options and options after bash -c ([b6a3979](https://github.com/theclifmeister/terminatr/commit/b6a3979fe079b739d969f5778ec3cd03008385c4))
+* **guard:** read abbreviated long options and options after bash -c ([bbecd6c](https://github.com/theclifmeister/terminatr/commit/bbecd6c89e96d2f242071d4d2247e8fc985ce7f1))
+* keep tm's project files out of the coordinator's reach and refuse links ([28b3a6e](https://github.com/theclifmeister/terminatr/commit/28b3a6ed62a07dec5340ce5d863ddc9ad4c8a379))
+* keep tm's project files out of the coordinator's reach and refuse links ([9022cdb](https://github.com/theclifmeister/terminatr/commit/9022cdb0e24df82a54466df928469a40bc3d3b26))
+* **modbroker:** keep git's repository config from naming a program ([2d8eb89](https://github.com/theclifmeister/terminatr/commit/2d8eb89d3abe6c9fc222c9c331190c0414432fbf))
+* **modbroker:** keep git's repository config from naming a program ([3b7280a](https://github.com/theclifmeister/terminatr/commit/3b7280ab96b11015bd06912e4b34c95262647a51))
+* **mod:** describe a commands grant as running anything unless the program is vetted as narrow ([6512db2](https://github.com/theclifmeister/terminatr/commit/6512db2dbf2bc163a020c724fc5b61b426e9196a))
+* **mod:** describe a commands grant as running anything unless the program is vetted as narrow ([eee5210](https://github.com/theclifmeister/terminatr/commit/eee521048d45f6fe2773e9fbc224c14e4950378f))
+* **mod:** keep only options-free programs on the narrow commands list ([9eb549d](https://github.com/theclifmeister/terminatr/commit/9eb549d625913d614568066d6f251210b4bbc6b3))
+* **modproto:** let a request's context bound its write to the host ([db52a7a](https://github.com/theclifmeister/terminatr/commit/db52a7a93125bc399883e482623d3fabb0cf972e))
+* peer link delivery, relay dial bounds, pane revocation and sizes, peer.watch export ([c741a7f](https://github.com/theclifmeister/terminatr/commit/c741a7f7017643f6cb1a8891552ed5c1f2929c0b))
+* **peer:** bound the pane sizes and repaint rate a paired server sets ([258cc77](https://github.com/theclifmeister/terminatr/commit/258cc7707d992717fda41754956aa4538d3211c2))
+* **peer:** deliver each link response at most once ([b516f98](https://github.com/theclifmeister/terminatr/commit/b516f983cdb9008583636b0c40f754bee0f25602))
+* **peer:** don't serve a pane whose switch went off while it opened ([b91b811](https://github.com/theclifmeister/terminatr/commit/b91b8119f9aaeab1e1f6b0b41f827e0e53f05a98))
+* **relay:** bound the dial up to the relay's challenge ([74d86a2](https://github.com/theclifmeister/terminatr/commit/74d86a26ed37e3b8aca91a05cf358ee28e06dfb8))
+* **sandbox:** widen the Linux seccomp filter and check it by argument ([5fd6476](https://github.com/theclifmeister/terminatr/commit/5fd6476e45f366c1374940661e3d9d91e789f7af))
+* **sandbox:** widen the Linux seccomp filter and check it by argument ([1cc3062](https://github.com/theclifmeister/terminatr/commit/1cc30624070cccf20a62dbaa21e4fc0f0c8742d2))
+* **server:** copy what peer.watch sends field by field ([0afe623](https://github.com/theclifmeister/terminatr/commit/0afe623b0e95011195f7cb3906dc120af28ec40f))
+* **session:** bound queued answers to terminal queries ([ee2dd64](https://github.com/theclifmeister/terminatr/commit/ee2dd645f0d8c7ac671a01a526327449c0b3faec))
+* **session:** skip transcript lines longer than one tail read ([c5020b7](https://github.com/theclifmeister/terminatr/commit/c5020b7eee8bfa4608d701e3f32d1ff018624f0e))
+* **thread:** make branch_name give names tm can look PRs up by ([315ff3a](https://github.com/theclifmeister/terminatr/commit/315ff3af84b1ac162e26b217f005617649c33a06))
+* **tui:** close the sidebar's projects watch by value ([8768642](https://github.com/theclifmeister/terminatr/commit/87686427635c009970de0d6bfab528dfbb46c6aa))
+* **tui:** keep pane state right across a session restart and a freed pane ([55c2a76](https://github.com/theclifmeister/terminatr/commit/55c2a76cc639f5d0c41fe12c2edf74519e220451))
+* **tui:** open only http(s) addresses from a peer's PR line ([9963303](https://github.com/theclifmeister/terminatr/commit/9963303e0678f156c8aafdf7a1ef81d7e7e1d5d6))
+* **tui:** open only http(s) addresses from a peer's PR line ([2edd8d5](https://github.com/theclifmeister/terminatr/commit/2edd8d5c12be27523f109f39b033c4fb4302a697))
+
 ## [0.30.1](https://github.com/theclifmeister/terminatr/compare/v0.30.0...v0.30.1) (2026-10-16)
 
 
