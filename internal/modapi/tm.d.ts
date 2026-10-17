@@ -377,6 +377,7 @@ export declare namespace TM {
     path: string;
     title: string;
     bytes: number;
+    touches?: string[];
   }
 
   interface ModCell {

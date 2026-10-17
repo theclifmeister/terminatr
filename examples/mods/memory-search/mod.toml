@@ -3,6 +3,9 @@
 # through the agent mod or tm mcp, in sessions of the projects the mod
 # runs for. Install it by path from a checkout:
 #   tm mod install terminatr/examples/mods/memory-search
+# tm memory find is the core command for this job, ranked by title,
+# body and the paths a note touches; this mod stays as the example of
+# an agent tool.
 id = "memory-search"
 name = "Memory search"
 version = "1.0.0"

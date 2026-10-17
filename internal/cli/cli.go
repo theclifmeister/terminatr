@@ -74,6 +74,7 @@ var commands = map[string]command{
 	"inbox":   runInbox,
 	"ask":     runAsk,
 	"library": runLibrary,
+	"memory":  runMemory,
 	"link":    runLink,
 	"skill":   runSkill,
 	"thread":  runThread,
@@ -155,6 +156,8 @@ func commandUsage(name string) string {
 		return libraryUsage
 	case "link":
 		return linkUsage
+	case "memory":
+		return memoryUsage
 	case "mcp":
 		return "usage: tm mcp   (an MCP server on stdio: a thread's tools)"
 	case "mod":

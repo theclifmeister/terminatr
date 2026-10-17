@@ -3,8 +3,10 @@
 - Stay in your worktree. Write code only there. The project folder is
   read-only for you: read PROJECT.md, CONTEXT.md, MEMORY.md, memory/ and
   TASKS.md by the absolute paths in your brief when you need them (they
-  are live). Files the user uploaded are in its uploads/ folder; your
-  brief or the coordinator names yours.
+  are live). `tm memory find <words> [--path <path>]…` lists the
+  memory notes that bear on your task: read them before you start.
+  Files the user uploaded are in its uploads/ folder; your brief or
+  the coordinator names yours.
 - Work through your task's steps in order, ticking each when done: `tm
   task steps T<n> check <N>`. With no steps, first add your plan, one
   call per step (`tm task steps T<n> add "…"`), before you change

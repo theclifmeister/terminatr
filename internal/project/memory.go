@@ -25,18 +25,20 @@ func noteTitle(text, name string) string {
 
 // MemoryFile is one file of the project's memory, as the Memory tab
 // lists it: its path in the project folder (CONTEXT.md, MEMORY.md or
-// memory/<name>.md), its title and its size.
+// memory/<name>.md), its title, its size and, for a note with front
+// matter, what it touches.
 type MemoryFile struct {
-	Path  string `json:"path"`
-	Title string `json:"title"`
-	Bytes int64  `json:"bytes"`
+	Path    string   `json:"path"`
+	Title   string   `json:"title"`
+	Bytes   int64    `json:"bytes"`
+	Touches []string `json:"touches,omitempty"`
 }
 
 // MaxMemoryRead is the largest memory file ReadMemoryFile reads.
 const MaxMemoryRead = 1 << 20
 
 // MemoryFiles lists the project's memory files: CONTEXT.md and MEMORY.md
-// when they are there, then the notes by title. Only regular files
+// when they are there, then the notes by title (ParseNote's). Only regular files
 // count, never a link, so a link can't show a file from elsewhere.
 func (p *Project) MemoryFiles() ([]MemoryFile, error) {
 	var out []MemoryFile
@@ -65,13 +67,14 @@ func (p *Project) MemoryFiles() ([]MemoryFile, error) {
 		if err != nil {
 			continue // gone since
 		}
-		title := name
+		f := MemoryFile{Path: "memory/" + e.Name(), Title: name, Bytes: fi.Size()}
 		if fi.Size() <= MaxMemoryRead {
 			if data, err := os.ReadFile(p.Path("memory", e.Name())); err == nil {
-				title = noteTitle(string(data), name)
+				n := ParseNote(f.Path, string(data))
+				f.Title, f.Touches = n.Title, n.Touches
 			}
 		}
-		notes = append(notes, MemoryFile{Path: "memory/" + e.Name(), Title: title, Bytes: fi.Size()})
+		notes = append(notes, f)
 	}
 	slices.SortFunc(notes, func(a, b MemoryFile) int {
 		return cmp.Or(cmp.Compare(strings.ToLower(a.Title), strings.ToLower(b.Title)), cmp.Compare(a.Path, b.Path))
