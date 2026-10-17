@@ -129,12 +129,13 @@ func Conflicts(notes []Note, repo string, diffs []FileDiff) []Conflict {
 }
 
 // ruledTerms are the words of a note's Ruled out section to look for:
-// four or more letters, not a number, not in its title or Decided.
+// four or more letters, not a number or a stop word, not in its title
+// or Decided, each once.
 func ruledTerms(n Note) []string {
 	known := wordSet(n.Title + "\n" + n.Section(SectionDecided))
 	var out []string
-	for _, t := range Terms(n.Section(SectionRuledOut)) {
-		if len([]rune(t)) >= 4 && !known[t] && strings.ContainsFunc(t, unicode.IsLetter) {
+	for _, t := range words(n.Section(SectionRuledOut)) {
+		if len([]rune(t)) >= 4 && !known[t] && !stopWord(t) && strings.ContainsFunc(t, unicode.IsLetter) && !slices.Contains(out, t) {
 			out = append(out, t)
 		}
 	}

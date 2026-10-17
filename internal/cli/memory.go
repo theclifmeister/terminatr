@@ -26,17 +26,22 @@ const memoryUsage = `usage: tm memory find [<words>…] [--path <path>]… [--li
 
 find lists the project's memory notes (memory/*.md) that match the
 words and the paths (a file or folder in a repo, or repo:<name>), best
-first, at most --limit (5 when left out). A word in a note's title
-scores 3, one only in its body 1, a path the note touches 4; a note
-shows with a shared path, two matched words or a title word, and a
-score of at least 3. check reads a thread's diff since its base (a
-thread's own, else --thread's) and, for the notes that touch its
-files, flags a number the note's Decided section holds that the diff
-changes, and words of its Ruled out section the diff adds; tm report
-adds what it flags to the report's ## Check, never refusing for it.
-template prints a new note with the optional
-front matter (title, touches, standing, source) and its sections
-(Decided, Ruled out, Watch out).
+first, at most --limit (5 when left out). Words are compared by their
+English stem and scored with BM25, a word most notes have weighing
+little and a word in a title three times one in the body; numbers,
+words under three letters and stop words never match. A path the note
+touches adds 10 and ranks it first; a note without one shows when its
+words stand out from the other notes'.
+
+check reads a thread's diff since its base (a thread's own, else
+--thread's) and, for the notes that touch its files, flags a number
+the note's Decided section holds that the diff changes, and words of
+its Ruled out section the diff adds; tm report adds what it flags to
+the report's ## Check, never refusing for it. template prints a new note with the optional
+front matter (title, touches, standing, audience, source) and its
+sections (Decided, Ruled out, Watch out). A note with audience =
+"coordinator" is never shown to a thread: not in its brief, find or
+check.
 
 new, edit and rm change the notes in the project's memory/ folder
 (a note is <name>, <name>.md or memory/<name>.md; tm refuses any other
@@ -93,7 +98,7 @@ func runMemory(e *Env, args []string) error {
 		if err != nil {
 			return err
 		}
-		found, err := memoryConflicts(p, r)
+		found, err := memoryConflicts(p, r, e.Caller.Kind == caller.Thread)
 		if err != nil {
 			return err
 		}
@@ -136,6 +141,9 @@ func runMemory(e *Env, args []string) error {
 		if err != nil {
 			return err
 		}
+		if e.Caller.Kind == caller.Thread {
+			notes = project.ThreadNotes(notes)
+		}
 		hits := project.Match(notes, query, *paths, n)
 		if *asJSON {
 			if hits == nil {
@@ -149,7 +157,7 @@ func runMemory(e *Env, args []string) error {
 		}
 		for _, h := range hits {
 			why := append(append([]string{}, h.Terms...), h.Paths...)
-			fmt.Fprintln(e.Stdout, shown(fmt.Sprintf("%s  %s  (score %d: %s)", h.Note.Path, h.Note.Title, h.Score, strings.Join(why, ", "))))
+			fmt.Fprintln(e.Stdout, shown(fmt.Sprintf("%s  %s  (score %g: %s)", h.Note.Path, h.Note.Title, h.Score, strings.Join(why, ", "))))
 			var meta []string
 			if len(h.Note.Touches) > 0 {
 				meta = append(meta, "touches "+strings.Join(h.Note.Touches, ", "))
@@ -178,13 +186,16 @@ const (
 )
 
 // memoryConflicts checks thread r's diff since its base against the
-// project's notes (project.Conflicts). Only the files a note with a
-// Decided or Ruled out section touches are read; with none, git
-// doesn't run.
-func memoryConflicts(p *project.Project, r *thread.Record) ([]project.Conflict, error) {
+// project's notes (project.Conflicts), only those threads may see when
+// forThread. Only the files a note with a Decided or Ruled out section
+// touches are read; with none, git doesn't run.
+func memoryConflicts(p *project.Project, r *thread.Record, forThread bool) ([]project.Conflict, error) {
 	notes, err := p.Notes()
 	if err != nil {
 		return nil, err
+	}
+	if forThread {
+		notes = project.ThreadNotes(notes)
 	}
 	notes = slices.DeleteFunc(notes, func(n project.Note) bool {
 		return len(n.Touches) == 0 || n.Section(project.SectionDecided) == "" && n.Section(project.SectionRuledOut) == ""

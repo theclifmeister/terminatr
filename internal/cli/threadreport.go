@@ -106,7 +106,7 @@ func runReport(e *Env, args []string) error {
 	// refuses: a check that fails or finds nothing leaves the text be.
 	var warn []string
 	if _, err := thread.Validate(text); err == nil {
-		found, _ := memoryConflicts(p, r)
+		found, _ := memoryConflicts(p, r, e.Caller.Kind == caller.Thread)
 		for _, c := range found {
 			warn = append(warn, "Memory check: "+c.String())
 		}

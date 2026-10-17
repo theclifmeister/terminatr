@@ -19,6 +19,7 @@ import (
 //	title    = "Retries stay at 4 for the gh poller"
 //	touches  = ["internal/ticker/pr.go", "repo:api"]
 //	standing = true
+//	audience = "coordinator"
 //	source   = "T481"
 //	+++
 //	## Decided
@@ -41,6 +42,7 @@ const NoteTemplate = `+++
 title    = "One line: what was decided"
 touches  = ["path/in/repo.go", "repo:<name>"]
 standing = false
+audience = "everyone"
 source   = "T<n>"
 +++
 ## Decided
@@ -61,8 +63,30 @@ type NoteFront struct {
 	Touches []string `toml:"touches,omitempty" json:"touches,omitempty"`
 	// Standing is a note every thread of the project should know.
 	Standing bool `toml:"standing,omitempty" json:"standing,omitempty"`
+	// Audience is who the note is for: "everyone" (the default, when
+	// empty) or AudienceCoordinator, a note tm never points a thread at
+	// or shows one (ForThreads).
+	Audience string `toml:"audience,omitempty" json:"audience,omitempty"`
 	// Source is the task or thread the note came from.
 	Source string `toml:"source,omitempty" json:"source,omitempty"`
+}
+
+// AudienceCoordinator is the audience of a note for the coordinator
+// only.
+const AudienceCoordinator = "coordinator"
+
+// ForThreads reports whether threads may be pointed at or shown the
+// note: its audience is empty or "everyone". Any other audience, a
+// typo too, keeps it from them.
+func (n Note) ForThreads() bool {
+	a := strings.ToLower(strings.TrimSpace(n.Audience))
+	return a == "" || a == "everyone"
+}
+
+// ThreadNotes are the notes threads may be pointed at or shown
+// (ForThreads), in order.
+func ThreadNotes(notes []Note) []Note {
+	return slices.DeleteFunc(notes, func(n Note) bool { return !n.ForThreads() })
 }
 
 // Note is a memory note, parsed.

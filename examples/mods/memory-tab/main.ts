@@ -31,6 +31,7 @@ const TEMPLATE = `+++
 title    = "One line: what was decided"
 touches  = ["path/in/repo.go", "repo:<name>"]
 standing = false
+audience = "everyone"
 source   = "T<n>"
 +++
 ## Decided
@@ -83,9 +84,9 @@ function size(n: number): string {
 }
 
 // front splits a note's TOML front matter (between +++ lines) from its
-// body, and says it as one line: touches, standing, source. A value is
-// read as JSON, which TOML's strings, arrays of strings and booleans
-// are; anything else shows as written. Without a closing +++ there is
+// body, and says it as one line: touches, standing, audience, source.
+// A value is read as JSON, which TOML's strings, arrays of strings and
+// booleans are; anything else shows as written. Without a closing +++ there is
 // no front matter, as tm reads it.
 function front(md: string): { meta: string; body: string } {
   const lines = md.replace(/\r\n?/g, "\n").split("\n");
@@ -107,6 +108,8 @@ function front(md: string): { meta: string; body: string } {
   if (Array.isArray(touches) && touches.length > 0) meta.push(`touches ${touches.join(", ")}`);
   else if (typeof touches === "string" && touches) meta.push(`touches ${touches}`);
   if (vals.get("standing") === true) meta.push("standing");
+  const audience = vals.get("audience");
+  if (audience && audience !== "everyone") meta.push(`for the ${audience} only`);
   const source = vals.get("source");
   if (source) meta.push(`from ${source}`);
   return { meta: meta.join(" · "), body: lines.slice(end + 1).join("\n") };
@@ -182,7 +185,7 @@ function tree(project: string, t: Tab): TM.Widget {
         { kind: "text", text: TEMPLATE.replace(/\s+$/, "") },
         {
           kind: "text",
-          text: "All of it is optional; a free-form note still works. touches are paths in a repo (a folder ends with /) or repo:<name>; standing notes are for every thread. tm lists the note in MEMORY.md with its touches.",
+          text: "All of it is optional; a free-form note still works. touches are paths in a repo (a folder ends with /) or repo:<name>; standing notes are for every thread; audience = \"coordinator\" keeps a note from threads. tm lists the note in MEMORY.md with its touches.",
           role: "faint",
         },
         { kind: "keys", keys: [{ key: "enter", label: "files" }], actions: [{ id: "memory.new", target: { project } }] },

@@ -28,6 +28,7 @@
 title    = "One line: what was decided"
 touches  = ["path/in/repo.go", "repo:<name>"]
 standing = false
+audience = "everyone"
 source   = "T<n>"
 +++
 ## Decided
@@ -82,6 +83,8 @@ What bites whoever changes this next.
     if (Array.isArray(touches) && touches.length > 0) meta.push(`touches ${touches.join(", ")}`);
     else if (typeof touches === "string" && touches) meta.push(`touches ${touches}`);
     if (vals.get("standing") === true) meta.push("standing");
+    const audience = vals.get("audience");
+    if (audience && audience !== "everyone") meta.push(`for the ${audience} only`);
     const source = vals.get("source");
     if (source) meta.push(`from ${source}`);
     return { meta: meta.join(" · "), body: lines.slice(end + 1).join("\n") };
@@ -145,7 +148,7 @@ What bites whoever changes this next.
           { kind: "text", text: TEMPLATE.replace(/\s+$/, "") },
           {
             kind: "text",
-            text: "All of it is optional; a free-form note still works. touches are paths in a repo (a folder ends with /) or repo:<name>; standing notes are for every thread. tm lists the note in MEMORY.md with its touches.",
+            text: 'All of it is optional; a free-form note still works. touches are paths in a repo (a folder ends with /) or repo:<name>; standing notes are for every thread; audience = "coordinator" keeps a note from threads. tm lists the note in MEMORY.md with its touches.',
             role: "faint"
           },
           { kind: "keys", keys: [{ key: "enter", label: "files" }], actions: [{ id: "memory.new", target: { project } }] }

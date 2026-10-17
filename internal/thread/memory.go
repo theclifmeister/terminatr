@@ -45,7 +45,7 @@ func (m Memory) Counts() (standing, matched int) {
 // and the best MaxMatched others for the task's title, notes and steps
 // and the paths and repos they name (TaskPaths). A project with no
 // notes, or notes it can't read, gives none: a brief never fails on
-// memory.
+// memory. A note for the coordinator only is never in one.
 func BriefMemory(p *project.Project, r *Record) Memory {
 	m := Memory{Query: r.Title}
 	if tid := r.TaskID(); tid > 0 {
@@ -77,7 +77,7 @@ func BriefMemory(p *project.Project, r *Record) Memory {
 		return m
 	}
 	var rest []project.Note
-	for _, n := range notes {
+	for _, n := range project.ThreadNotes(notes) {
 		if n.Standing {
 			m.Notes = append(m.Notes, BriefNote{Hit: project.Hit{Note: n}, Standing: true})
 		} else {
