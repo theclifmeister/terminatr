@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"net"
@@ -436,4 +437,51 @@ func TestSessionUnknownMethodAndIdle(t *testing.T) {
 		t.Fatal("an idle session never ended")
 	}
 	a.Close()
+}
+
+// slowResult holds its unmarshal until release closes, so a call is
+// still taking its response when more copies of it arrive.
+type slowResult struct{ release chan struct{} }
+
+func (r *slowResult) UnmarshalJSON([]byte) error {
+	<-r.release
+	return nil
+}
+
+func TestSessionDuplicateResponses(t *testing.T) {
+	a, b, err := tcpPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Close()
+	s := newSession(a)
+	s.ping = time.Hour
+	ended := make(chan error, 1)
+	go func() { ended <- s.serve(func(time.Duration) {}) }()
+	// The far end answers the request four times.
+	go func() {
+		var l line
+		if err := json.NewDecoder(b).Decode(&l); err != nil {
+			return
+		}
+		r, _ := json.Marshal(line{ID: l.ID, Result: json.RawMessage(`{"ok":true}`)})
+		for range 4 {
+			b.Write(append(r, '\n'))
+		}
+	}()
+	res := &slowResult{release: make(chan struct{})}
+	called := make(chan error, 1)
+	go func() { called <- s.call(context.Background(), "peer.x", nil, res) }()
+	// Give the copies time to arrive while the call is unmarshalling.
+	time.Sleep(200 * time.Millisecond)
+	a.Close()
+	select {
+	case <-ended:
+	case <-time.After(5 * time.Second):
+		t.Fatal("serve never returned after the conn closed: duplicate responses blocked the reader")
+	}
+	close(res.release)
+	if err := <-called; err != nil {
+		t.Errorf("the call: %v", err)
+	}
 }
