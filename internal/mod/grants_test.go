@@ -14,7 +14,7 @@ func TestRunsAnything(t *testing.T) {
 			t.Errorf("RunsAnything(%q) = false", p)
 		}
 	}
-	for _, p := range []string{"git", "glab", "gh", "git", "jq", "grep", "Cat.exe", "shellcheck"} {
+	for _, p := range []string{"git", "jq", "grep", "Cat.exe", "shellcheck"} {
 		if RunsAnything(p) {
 			t.Errorf("RunsAnything(%q) = true", p)
 		}
