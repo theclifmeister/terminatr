@@ -252,6 +252,10 @@ func init() {
 		proto.MethodModRestart: {gate: gateHuman, call: typed(func(s *Server, p proto.ModRestartParams, c callCtx) (any, *proto.Error) {
 			return s.restartMod(p.ID, c.who())
 		})},
+		proto.MethodLogList: {gate: gateHuman, call: func(s *Server, _ proto.Request, c callCtx) (any, *proto.Error) { return s.logList(c.who()) }},
+		proto.MethodLogRead: {gate: gateHuman, call: typed(func(s *Server, p proto.LogReadParams, c callCtx) (any, *proto.Error) {
+			return s.logRead(p, c.who())
+		})},
 		proto.MethodNotifyClaim:   {gate: gateHuman, call: notice(proto.MethodNotifyClaim)},
 		proto.MethodNotifyDismiss: {gate: gateHuman, call: notice(proto.MethodNotifyDismiss)},
 		proto.MethodViewSubscribe: {gate: gateHuman, stream: (*Server).serveViewStream},

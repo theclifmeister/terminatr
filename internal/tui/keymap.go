@@ -72,6 +72,7 @@ var settingsKeys = []keyHelp{
 	{"n j", "on the , settings' Peers tab: pair with another server through a relay, or join the pairing code another shows; both compare six digits (j doesn't move there: ↓ does)"},
 	{"space ← →", "on the Peers tab: share or stop sharing the selected project (sharing asks first), or move the selected server's panes setting along off · view · write (more asks first)"},
 	{"x e u", "on the Peers tab: remove the selected server (asks first), give it another relay (the relay moved, or has a new key), or ask its relay to update itself (asks first)"},
+	{"[ ] f / v", "on the , settings' Logs tab: pick the log (the server's, the service's, the consoles', a mod's), follow it as it grows, search it (n N next match), keep the lines of a level; o opens it in $PAGER, c copies its path"},
 	{"esc", "close"},
 }
 

@@ -22,6 +22,7 @@ import (
 var humanOnlyMethods = []string{
 	proto.MethodProjectRename, proto.MethodProjectActive,
 	proto.MethodModViews, proto.MethodModViewInput, proto.MethodModCommand, proto.MethodModRestart,
+	proto.MethodLogList, proto.MethodLogRead,
 	proto.MethodNotifyClaim, proto.MethodNotifyDismiss,
 	proto.MethodModActionCheck, proto.MethodModActionDone, proto.MethodSessionClear, proto.MethodSecretTest,
 	proto.MethodSessionStart, proto.MethodSessionStop, proto.MethodSessionKeys, proto.MethodSessionPrompt,

@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"runtime/debug"
 	"slices"
 	"strconv"
 	"strings"
@@ -250,6 +251,7 @@ func Attach(opts Options) (res Result, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			restore(false)
+			clog("attach: panic: %v\n%s", p, debug.Stack())
 			panic(p)
 		}
 	}()
@@ -542,6 +544,7 @@ func (c *client) sync(v view.View) error {
 			return err
 		case err != nil:
 			c.log.Printf("view %s: %s: %v", v.Name, id, err)
+			clog("attach: view %s: %s: %v", v.Name, id, err)
 			note = id + ": " + err.Error()
 			if perr := (*proto.Error)(nil); errors.As(err, &perr) {
 				note = id + ": " + perr.Message
@@ -864,6 +867,7 @@ func (c *client) readLoop(p *pane) {
 				c.log.Printf("digest ok %s", mine)
 			} else {
 				c.log.Printf("digest mismatch server=%s client=%s %v", payload, mine, derr)
+				clog("attach: digest mismatch server=%s client=%s %v", payload, mine, derr)
 			}
 		case proto.FrameClosed:
 			if string(payload) == proto.ClosedRestarting {
@@ -1064,6 +1068,7 @@ func (c *client) needClaim() bool {
 func (c *client) claim(id string) {
 	if _, err := c.vc.Do(proto.MethodViewInput, proto.ViewParams{Session: id}); err != nil {
 		c.log.Printf("claim %s: %v", id, err)
+		clog("attach: claim %s: %v", id, err)
 	}
 }
 
@@ -1460,6 +1465,7 @@ func (c *client) detachThen(then string) {
 	if !c.bare {
 		if _, err := c.vc.Do(proto.MethodViewDashboard, proto.ViewParams{}); err != nil {
 			c.log.Printf("%s: %v", proto.MethodViewDashboard, err)
+			clog("attach: %s: %v", proto.MethodViewDashboard, err)
 		}
 	}
 	c.leaveAll()
@@ -1591,6 +1597,7 @@ func (c *client) typed(p *pane) {
 		go func() {
 			if err := tell(info); err != nil {
 				c.log.Printf("takeover %s: %v", info.ID, err)
+				clog("attach: takeover %s: %v", info.ID, err)
 			}
 		}()
 	}

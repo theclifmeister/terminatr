@@ -196,3 +196,24 @@ func (s *ServerSource) ModActionCheck(mod, action string, target map[string]stri
 func (s *ServerSource) ModActionDone(mod, action string, target map[string]string, ok bool, token string) error {
 	return s.call(proto.MethodModActionDone, proto.ModActionDoneParams{ModActionParams: proto.ModActionParams{Mod: mod, Action: action, Target: target}, OK: ok, Token: token}, nil)
 }
+
+func (s *ServerSource) Logs() ([]proto.LogInfo, error) {
+	if s.Caller.IsAgent() {
+		return nil, errHumanLogs
+	}
+	var res proto.LogListResult
+	err := s.call(proto.MethodLogList, nil, &res)
+	return res.Logs, err
+}
+
+func (s *ServerSource) ReadLog(p proto.LogReadParams) (proto.LogReadResult, error) {
+	var res proto.LogReadResult
+	if s.Caller.IsAgent() {
+		return res, errHumanLogs
+	}
+	err := s.call(proto.MethodLogRead, p, &res)
+	return res, err
+}
+
+// errHumanLogs refuses the logs inside an agent.
+var errHumanLogs = errors.New("only the user reads the logs here")

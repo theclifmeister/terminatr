@@ -1,7 +1,7 @@
  PROJECTS                      2   │ tm dashboard                                     ● server ok · 6 sessions
  ■ alpha              2         ⚑  │ NEEDS YOU 2 ─────────────────────────────────────────────────────────────
  └─ coordin╭─ Settings ───────────────────────────────────────────────────────────────────────────╮
-    ├─ t-00│  1 General   2 All projects   3 Sandbox   4 Mods   5 Peers                           │
+    ├─ t-00│  1 General   2 All projects   3 Sandbox   4 Mods   5 Peers   6 Logs                  │
     └─ t-00│ About: tm dev · server unknown · update check off                                    │deactivate
  ■ beta    │                                                                                      │
  └─ coordin│ this project or all projects (the agent is told it may retry), or keep refusing it,  │
