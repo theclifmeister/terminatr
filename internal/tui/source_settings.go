@@ -83,6 +83,28 @@ func (s *ServerSource) SetSecretEnv(table, name string, src *config.EnvSource) e
 	return nil
 }
 
+func (s *ServerSource) SetSandbox(table, key string, list []string) error {
+	defer s.touch()
+	if s.Caller.IsAgent() {
+		return errHumanOnly
+	}
+	detail := key + " follows all projects"
+	if list != nil {
+		detail = fmt.Sprintf("%s = %q", key, list)
+		if err := config.SetSandbox(table, key, list); err != nil {
+			return err
+		}
+	} else if err := config.UnsetSandbox(table, key); err != nil {
+		return err
+	}
+	if table == config.DefaultsTable {
+		journalAll(s.Caller, "sandbox."+key, detail, "all projects")
+	} else if p, err := project.Open(strings.TrimPrefix(table, "projects.")); err == nil {
+		p.Journal(s.Caller, "settings.sandbox", p.Slug, detail)
+	}
+	return nil
+}
+
 func (s *ServerSource) TestSecretEnv(slug, name string) (string, error) {
 	if s.Caller.IsAgent() {
 		return "", errHumanOnly

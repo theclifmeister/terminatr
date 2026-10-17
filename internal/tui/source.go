@@ -51,6 +51,10 @@ type Data struct {
 	// all projects' under "", each project's own under its slug
 	// (config.EnvOf).
 	Env map[string]map[string]config.EnvSource
+	// Sandbox are the sandbox lists' tables by key, only the keys each
+	// sets: all projects' under "", each project's own under its slug
+	// (config.SandboxOf).
+	Sandbox map[string]map[string][]string
 	// AgentMod, AgentModBand and AgentModPane are the settings popup's Agent mod, Agent mod
 	// band and Agent mod pane (docs/SPEC.md §8.6); the band is on unless set
 	// off, the pane off unless set on.
@@ -307,6 +311,11 @@ type SettingsSource interface {
 	// tm runs inside an agent.
 	SetSecretEnv(table, name string, src *config.EnvSource) error
 	TestSecretEnv(slug, name string) (string, error)
+	// SetSandbox writes the sandbox list key ("excluded_commands",
+	// "allow") of table ("defaults" or "projects.<slug>"), an empty one
+	// too; list nil removes it, so a project follows all projects'.
+	// Refused when tm runs inside an agent.
+	SetSandbox(table, key string, list []string) error
 }
 
 // LinkSource sets and works the links between projects.
@@ -651,8 +660,10 @@ func (s *ServerSource) Load() Data {
 			d.Defaults = &all
 		}
 		d.Env = map[string]map[string]config.EnvSource{"": cfg.EnvOf("")}
+		d.Sandbox = map[string]map[string][]string{"": cfg.SandboxOf("")}
 		for _, slug := range cfg.ProjectSlugs() {
 			d.Env[slug] = cfg.EnvOf(slug)
+			d.Sandbox[slug] = cfg.SandboxOf(slug)
 		}
 	}
 	d.NoAgent = sc.noAgent

@@ -125,6 +125,10 @@ template = '''
 # With sandbox_escapes off, a thread's Bash can't leave the sandbox
 # (allowUnsandboxedCommands): a command run outside it would reach the
 # human socket (§3.2), whoever approved it.
+# A thread's sandbox lists (.Sandbox, the human's [projects.<slug>.sandbox])
+# add its excludedCommands, which run outside the sandbox even with
+# sandbox_escapes off, and allow rules after tm's: Claude merges lists
+# across settings files, and its deny rules (tm's) win over any allow.
 [[launch.files]]
 path = "claude-settings.json"
 template = '''
@@ -135,7 +139,7 @@ template = '''
   "theme": {{json (printf "%s-ansi" .PaneScheme)}},
   {{- end}}
   "permissions": {
-    "allow": {{json (concat (rules "Read(/%s/**)" .Access.Read) (rules "Edit(/%s/**)" .Access.Write) (rules "Edit(/%s)" .Access.WriteFiles) (rules "Bash(%s:*)" .Access.Commands))}},
+    "allow": {{json (concat (rules "Read(/%s/**)" .Access.Read) (rules "Edit(/%s/**)" .Access.Write) (rules "Edit(/%s)" .Access.WriteFiles) (rules "Bash(%s:*)" .Access.Commands) .Sandbox.Allow)}},
     "deny": {{json (concat (rules "Edit(/%s/**)" .Access.NoWrite) (rules "Edit(/%s)" .Access.NoWriteFiles))}}
   },
   "sandbox": {
@@ -143,6 +147,9 @@ template = '''
     "enabled": true,
     {{- if .NoSandboxEscapes}}
     "allowUnsandboxedCommands": false,
+    {{- end}}
+    {{- if .Sandbox.Excluded}}
+    "excludedCommands": {{json .Sandbox.Excluded}},
     {{- end}}
     {{- end}}
     "network": {"allowUnixSockets": [{{json .Socket}}]}

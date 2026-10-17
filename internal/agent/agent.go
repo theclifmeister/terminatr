@@ -48,7 +48,11 @@ type LaunchSpec struct {
 	// NoSandboxEscapes keeps every command of a thread's agent in its
 	// sandbox, approved or not (sandbox_escapes = false, docs/SPEC.md §5.2).
 	NoSandboxEscapes bool
-	Model            string // optional; "" passes none: the agent's own default
+	// Sandbox are a thread's sandbox lists (config sandbox, docs/SPEC.md
+	// §5.2): the human's, read by the server at each launch; a manifest
+	// agent drops them for any other role.
+	Sandbox SandboxLists
+	Model   string // optional; "" passes none: the agent's own default
 	// RemoteControl starts the agent reachable from another device
 	// ([remote_control] args), listed there as RemoteName.
 	RemoteControl bool
@@ -103,6 +107,19 @@ type Access struct {
 	// e.g. the coordinator's PR merge command, opt-in (§11.2).
 	Commands []string
 }
+
+// SandboxLists are the commands a thread's agent runs outside its
+// sandbox (Excluded, in Claude's Bash rule syntax: "npx playwright *")
+// and the permission rules it gets on top of tm's (Allow: "Bash(npx
+// playwright *)"). An agent with nothing to map them to says so in its
+// launch's Warnings.
+type SandboxLists struct {
+	Excluded []string
+	Allow    []string
+}
+
+// Empty reports whether the lists open nothing.
+func (s SandboxLists) Empty() bool { return len(s.Excluded)+len(s.Allow) == 0 }
 
 // Launch is the agent's answer: what to exec in the PTY, and which files to
 // write first (paths relative to LaunchSpec.RuntimeDir).

@@ -644,6 +644,11 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		RemoteControl: r.RemoteControl, RemoteName: remoteName(r),
 		Mods: p.modSock != "", PaneScheme: v.paneScheme,
 	}
+	if r.Role == proto.RoleThread && r.Project != "" {
+		// The human's sandbox lists, read here at every launch: never
+		// from the session's parameters, which a coordinator writes.
+		spec.Sandbox = lc.sandbox(r.Project)
+	}
 	if len(secrets) > 0 {
 		spec.SecretEnv = slices.Sorted(maps.Keys(secrets))
 		spec.EnvHide = envHide(s.baseEnv(), spec.SecretEnv)

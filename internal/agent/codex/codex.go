@@ -102,8 +102,19 @@ func (a *Agent) Launch(spec agent.LaunchSpec) (agent.Launch, error) {
 	if spec.Role == "coordinator" {
 		l = sandboxed(l, spec, a.m, caps.Windows) // probe.go
 	}
+	if spec.Role == agent.RoleThread && !spec.Sandbox.Empty() {
+		l.Warnings = append(l.Warnings, sandboxListsGap)
+	}
 	return l, nil
 }
+
+// sandboxListsGap is the launch warning of a thread whose project has
+// sandbox lists: Codex has no session flag for a command that runs
+// outside its sandbox, or for an approval rule. Its exec-policy rules
+// (prefix_rule, decision "allow") live in files under CODEX_HOME, which
+// tm never writes, and its permission profile has no per-command
+// carve-out, so the lists don't reach Codex threads.
+const sandboxListsGap = "the project's sandbox lists (excluded commands, allow rules) don't apply to Codex: it has no per-session setting for them"
 
 // socketAccess adds, on Windows, write access to the folder of tm's
 // socket. Codex's Windows sandbox (a restricted token) lets a command

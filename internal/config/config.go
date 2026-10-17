@@ -289,6 +289,10 @@ type rawSafety struct {
 	// Env is the secret environment of threads (env.go): not a safety
 	// setting; read by SecretEnv and EnvOf, written by SetEnv.
 	Env map[string]EnvSource `toml:"env"`
+	// Sandbox are the sandbox lists of threads (sandbox.go): not a
+	// safety setting; read by ThreadSandbox and SandboxOf, written by
+	// SetSandbox.
+	Sandbox *rawSandbox `toml:"sandbox"`
 }
 
 // CheckAgent checks an agent name's shape: one word. Whether the
@@ -482,11 +486,17 @@ func Load() (*Config, error) {
 	if _, err := c.SecretEnv(""); err != nil {
 		return c, err
 	}
+	if _, err := c.ThreadSandbox(""); err != nil {
+		return c, err
+	}
 	for slug := range raw.Projects {
 		if _, err := c.Safety(slug); err != nil {
 			return c, err
 		}
 		if _, err := c.SecretEnv(slug); err != nil {
+			return c, err
+		}
+		if _, err := c.ThreadSandbox(slug); err != nil {
 			return c, err
 		}
 		if _, err := c.Links(slug); err != nil {
