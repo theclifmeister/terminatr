@@ -234,12 +234,13 @@ func Attachments(p *project.Project, id string) []string {
 	return out
 }
 
-// copyFile copies the open file in to dst, creating its folder.
+// copyFile copies the open file in to dst, creating its folder. A link
+// at dst or as its folder is refused, not followed.
 func copyFile(in *os.File, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	if err := fsx.MkdirNoLink(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	out, err := os.Create(dst)
+	out, err := fsx.OpenNoLink(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
 	}

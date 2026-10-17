@@ -127,7 +127,43 @@ func Load(p *project.Project, id string) (*Record, error) {
 	if _, err := toml.Decode(string(data), &r); err != nil {
 		return nil, fmt.Errorf("%s: %w", recordPath(p, id), err)
 	}
+	if err := r.check(); err != nil {
+		return nil, fmt.Errorf("%s: %w", recordPath(p, id), err)
+	}
 	return &r, nil
+}
+
+// check refuses a record whose places and names tm couldn't have
+// written: the project folder holding it is the coordinator's, and what
+// tm passes on to git must stay a path or a name, never an option.
+// Repo and Worktree are absolute paths, Branch and Base names that are
+// no option and hold no space or control character.
+func (r *Record) check() error {
+	for _, f := range []struct{ name, v string }{{"repo", r.Repo}, {"worktree", r.Worktree}} {
+		if f.v != "" && (!filepath.IsAbs(f.v) || strings.ContainsFunc(f.v, isControl)) {
+			return fmt.Errorf("%s %q is not an absolute path", f.name, f.v)
+		}
+	}
+	for _, f := range []struct{ name, v string }{{"branch", r.Branch}, {"base", r.Base}} {
+		if f.v != "" && (strings.HasPrefix(f.v, "-") || strings.ContainsFunc(f.v, func(c rune) bool { return c <= ' ' || c == 0x7f })) {
+			return fmt.Errorf("%s %q is not a branch name", f.name, f.v)
+		}
+	}
+	return nil
+}
+
+func isControl(c rune) bool { return c < ' ' || c == 0x7f }
+
+// OwnWorktree reports whether the record's worktree is where tm puts a
+// thread's worktree, inside <home>/worktrees/<slug>/ (WorktreeDir), so
+// tm may create it again.
+func (r *Record) OwnWorktree(slug string) bool {
+	root, err := home.WorktreesDir()
+	if err != nil || r.Worktree == "" {
+		return false
+	}
+	rel, ok := fsx.Within(filepath.Join(root, slug), filepath.Clean(r.Worktree))
+	return ok && rel != "." && !strings.Contains(rel, string(filepath.Separator))
 }
 
 // List reads every thread record of a project, by id.
@@ -167,6 +203,9 @@ func Update(p *project.Project, id string, fn func(r *Record) error) (*Record, e
 		}
 		var r Record
 		if _, err := toml.Decode(string(old), &r); err != nil {
+			return nil, err
+		}
+		if err := r.check(); err != nil {
 			return nil, err
 		}
 		if err := fn(&r); err != nil {

@@ -26,6 +26,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/mdfile"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -476,7 +477,7 @@ func copyAttach(p *project.Project, m *Message, att []attachment) error {
 		return nil
 	}
 	d := filepath.Join(dir(p, m.Peer), m.ID)
-	if err := os.MkdirAll(d, 0o755); err != nil {
+	if err := fsx.MkdirNoLink(d, 0o755); err != nil {
 		return err
 	}
 	for _, a := range att {
@@ -493,7 +494,7 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	out, err := fsx.OpenNoLink(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
 	}

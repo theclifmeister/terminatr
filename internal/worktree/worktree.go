@@ -112,11 +112,14 @@ func Create(repo, dir, branch, base string) (string, error) {
 
 // Restore re-adds a worktree removed by hand, on its existing branch.
 func Restore(repo, dir, branch string) error {
+	if !ValidBranch(branch) {
+		return fmt.Errorf("branch %q is not a branch name", branch)
+	}
 	git(repo, "worktree", "prune")
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return err
 	}
-	_, err := git(repo, "worktree", "add", "--quiet", dir, branch)
+	_, err := git(repo, "worktree", "add", "--quiet", "--", dir, branch)
 	return err
 }
 

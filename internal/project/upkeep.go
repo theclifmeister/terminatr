@@ -297,7 +297,7 @@ func (p *Project) ArchiveJournal(now time.Time, age time.Duration) (int, error) 
 	if n == 0 {
 		return 0, nil
 	}
-	if err := os.MkdirAll(p.Path("journal"), 0o755); err != nil {
+	if err := fsx.MkdirNoLink(p.Path("journal"), 0o755); err != nil {
 		return 0, err
 	}
 	sort.Strings(months)
@@ -312,7 +312,7 @@ func (p *Project) ArchiveJournal(now time.Time, age time.Duration) (int, error) 
 }
 
 // appendGzip appends data to path as one more gzip member, under its
-// lock.
+// lock; a link at path is refused.
 func appendGzip(path string, data []byte) error {
 	unlock, err := mdfile.Lock(path)
 	if err != nil {
@@ -327,7 +327,7 @@ func appendGzip(path string, data []byte) error {
 	if err := zw.Close(); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	f, err := fsx.OpenNoLink(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}

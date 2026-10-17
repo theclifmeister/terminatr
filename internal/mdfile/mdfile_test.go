@@ -101,3 +101,21 @@ func TestUpdateUnchangedCreatesNothing(t *testing.T) {
 		t.Fatal("a no-op update created the file")
 	}
 }
+
+// TestAppendRefusesLink: a log that is a link is refused, not followed:
+// the file it points at is left as it was.
+func TestAppendRefusesLink(t *testing.T) {
+	dir := t.TempDir()
+	victim := filepath.Join(dir, "victim")
+	os.WriteFile(victim, []byte("keep\n"), 0o600)
+	log := filepath.Join(dir, "JOURNAL.md")
+	if err := os.Symlink(victim, log); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+	if err := Append(log, []byte("line\n")); err == nil {
+		t.Fatal("appended through a link")
+	}
+	if b, _ := os.ReadFile(victim); string(b) != "keep\n" {
+		t.Errorf("victim %q", b)
+	}
+}

@@ -673,7 +673,7 @@ So **nothing terminatr-owned lives in a worktree**. There is no `.terminatr/` fo
 
 **Live context.** Threads read `PROJECT.md`, `CONTEXT.md`, `MEMORY.md`, `memory/` and `TASKS.md` by absolute path whenever they need them. They see edits the coordinator makes after they started; this fixes herdr-projects' snapshot problem without copying.
 
-**The coordinator.** Its cwd is the project folder, so it reads everything directly. `AGENTS.md` (with `CLAUDE.md` as a symlink to it) makes it the coordinator. That symlink sits in the coordinator's own folder and is read, never written, so the spike's write refusal doesn't apply. How it learns the rules is in §7.8.
+**The coordinator.** Its cwd is the project folder, so it reads everything directly, and writes there but for what tm alone writes (`Project.Owned`): `threads/`, `inbox/`, `tasks/`, `journal/`, `messages/`, `uploads/`, `JOURNAL.md`, `TASKS.md`, `questions.json`, the role files and tm's lock files are in its `NoWrite` lists. tm itself, which writes them outside any sandbox, doesn't trust them either: it never appends to or creates a file through a link there (`fsx.OpenNoLink`), and a `thread.toml` whose paths aren't absolute or whose branch or base reads as an option is refused; a missing worktree is made again only inside `worktrees/<slug>/`, and never for an adopted thread. `AGENTS.md` (with `CLAUDE.md` as a symlink to it) makes it the coordinator. That symlink sits in the coordinator's own folder and is read, never written, so the spike's write refusal doesn't apply. How it learns the rules is in §7.8.
 
 ### 5.3 User mods
 

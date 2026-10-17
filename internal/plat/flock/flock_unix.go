@@ -19,8 +19,10 @@ type Lock struct {
 	f *os.File
 }
 
+// open opens the lock file, never through a link: a lock file sits next
+// to the file it guards, in folders an agent may write.
 func open(path string, flag int) (*os.File, error) {
-	return os.OpenFile(path, flag, 0o600)
+	return os.OpenFile(path, flag|unix.O_NOFOLLOW, 0o600)
 }
 
 func take(path string, how int) (*Lock, error) {

@@ -154,3 +154,36 @@ func TestClean(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+// TestCopyAttachRefusesLinks: an attachment's place in messages/ that
+// is a link, or its message folder, is refused, and what the link
+// points at is left as it was.
+func TestCopyAttachRefusesLinks(t *testing.T) {
+	a, _, _ := setup(t)
+	src := filepath.Join(t.TempDir(), "notes.md")
+	os.WriteFile(src, []byte("evil\n"), 0o644)
+	victim := filepath.Join(t.TempDir(), "victim")
+	os.WriteFile(victim, []byte("keep\n"), 0o600)
+	m := &Message{ID: "m1", Peer: "b"}
+	att := []attachment{{name: "notes.md", src: src}}
+	d := filepath.Join(dir(a, "b"), "m1")
+	os.MkdirAll(d, 0o755)
+	if err := os.Symlink(victim, filepath.Join(d, "notes.md")); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+	if err := copyAttach(a, m, att); err == nil {
+		t.Error("file: copied through a link")
+	}
+	if b, _ := os.ReadFile(victim); string(b) != "keep\n" {
+		t.Errorf("victim %q", b)
+	}
+	elsewhere := t.TempDir()
+	os.RemoveAll(d)
+	os.Symlink(elsewhere, d)
+	if err := copyAttach(a, m, att); err == nil {
+		t.Error("folder: copied through a link")
+	}
+	if ents, _ := os.ReadDir(elsewhere); len(ents) != 0 {
+		t.Errorf("folder: wrote %v", ents)
+	}
+}

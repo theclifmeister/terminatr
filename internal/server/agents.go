@@ -144,6 +144,17 @@ func (s *Server) accessFor(role, slug, cwd string, lc launchConfig) (agent.Acces
 	case proto.RoleCoordinator:
 		wt := realPath(filepath.Join(s.opts.Paths.Home, "worktrees", slug))
 		a := agent.Access{Read: []string{dir, wt}, NoWriteFiles: []string{cfg}}
+		// Its folder, but for what tm alone writes there (§5.2).
+		// The folders are made first, so that each sandbox has a real
+		// path to close.
+		owned, ownedFiles := (&project.Project{Slug: slug, Dir: dir}).Owned()
+		for _, d := range owned {
+			if err := os.MkdirAll(d, 0o755); err != nil {
+				return agent.Access{}, err
+			}
+		}
+		a.NoWrite = owned
+		a.NoWriteFiles = append(a.NoWriteFiles, ownedFiles...)
 		a.Commands = coordinatorCommands(lc.safety(slug))
 		return a, nil
 	case proto.RoleThread:
