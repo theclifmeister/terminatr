@@ -254,6 +254,24 @@ func New(o Options) (*Project, error) {
 	return p, nil
 }
 
+// Owned is what in the project folder only tm writes (docs/SPEC.md
+// §5.2), as absolute paths: folders and single files, existing or not,
+// with the lock files tm takes on them. The coordinator, whose folder it
+// is, edits CONTEXT.md, MEMORY.md, memory/ and PROJECT.md and leaves
+// these to tm, which writes and appends to them outside its sandbox.
+func (p *Project) Owned() (dirs, files []string) {
+	for _, d := range []string{"threads", "inbox", "tasks", "journal", "messages", "uploads"} {
+		dirs = append(dirs, p.Path(d))
+	}
+	for _, f := range []string{"JOURNAL.md", "TASKS.md", questionsFile, "AGENTS.md", "CLAUDE.md"} {
+		files = append(files, p.Path(f))
+	}
+	for _, f := range []string{"JOURNAL.md", "TASKS.md", questionsFile, "PROJECT.md"} {
+		files = append(files, mdfile.LockPath(p.Path(f)))
+	}
+	return dirs, files
+}
+
 func (p *Project) scaffold() error {
 	for _, d := range []string{"memory", "tasks", "inbox/done", "threads", "uploads"} {
 		if err := os.MkdirAll(p.Path(d), 0o755); err != nil {

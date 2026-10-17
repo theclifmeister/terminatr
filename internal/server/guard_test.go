@@ -431,6 +431,40 @@ func TestAccessMergeCommands(t *testing.T) {
 	}
 }
 
+// TestAccessCoordinatorOwned: the coordinator may write its project
+// folder but not what tm alone writes there, whose folders exist before
+// it starts; CONTEXT.md, MEMORY.md, memory/ and PROJECT.md stay open.
+func TestAccessCoordinatorOwned(t *testing.T) {
+	testPaths(t)
+	p := newWatchProject(t)
+	s := &Server{opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}}}
+	a, err := s.accessFor(proto.RoleCoordinator, p.Slug, p.Dir, loadLaunchConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := realPath(p.Dir)
+	for _, n := range []string{"threads", "inbox", "tasks", "journal", "messages", "uploads"} {
+		d := filepath.Join(dir, n)
+		if !slices.Contains(a.NoWrite, d) {
+			t.Errorf("%s not in no-write %q", n, a.NoWrite)
+		}
+		if fi, err := os.Stat(d); err != nil || !fi.IsDir() {
+			t.Errorf("%s not made: %v", n, err)
+		}
+	}
+	for _, n := range []string{"JOURNAL.md", "TASKS.md", "questions.json", "AGENTS.md", ".JOURNAL.md.lock"} {
+		if !slices.Contains(a.NoWriteFiles, filepath.Join(dir, n)) {
+			t.Errorf("%s not in no-write files %q", n, a.NoWriteFiles)
+		}
+	}
+	for _, n := range []string{"", "CONTEXT.md", "MEMORY.md", "memory", "PROJECT.md"} {
+		w := filepath.Join(dir, n)
+		if slices.Contains(a.NoWrite, w) || slices.Contains(a.NoWriteFiles, w) {
+			t.Errorf("%q closed", n)
+		}
+	}
+}
+
 // TestAccessThreadGitDirs: a thread in a linked worktree may write what
 // its commits and pushes need in the main repo's git dir and, by name,
 // the worktree's own git dir below it; never the git dir's hooks,

@@ -216,6 +216,30 @@ func TestValidBase(t *testing.T) {
 	}
 }
 
+// TestRestoreBranchNoOption: a branch that reads as an option is
+// refused before git runs, and the branch it would have reset keeps
+// its commits; a real one is checked out again.
+func TestRestoreBranchNoOption(t *testing.T) {
+	root := t.TempDir()
+	repo := filepath.Join(root, "repo")
+	gittest.Run(t, root, "init", "-q", repo)
+	gittest.Run(t, repo, "commit", "-q", "--allow-empty", "-m", "a")
+	gittest.Run(t, repo, "branch", "keep")
+	gittest.Run(t, repo, "checkout", "-q", "keep")
+	gittest.Run(t, repo, "commit", "-q", "--allow-empty", "-m", "b")
+	tip := gittest.Run(t, repo, "rev-parse", "keep")
+	gittest.Run(t, repo, "checkout", "-q", "-")
+	if err := Restore(repo, filepath.Join(root, "wt"), "-Bkeep"); err == nil {
+		t.Fatal("option branch restored")
+	}
+	if got := gittest.Run(t, repo, "rev-parse", "keep"); got != tip {
+		t.Fatalf("keep moved: %s, was %s", got, tip)
+	}
+	if err := Restore(repo, filepath.Join(root, "wt"), "keep"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestPlantedGitDir: a worktree whose .git its agent replaced with a
 // repository of its own, set to run a file system monitor, is not
 // read, nor removed, and the monitor never runs.

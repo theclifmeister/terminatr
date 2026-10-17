@@ -809,10 +809,15 @@ func (e *Env) threadRestart(p *project.Project, id string) error {
 		}
 	}
 	// A worktree removed by hand comes back on its branch: nothing of the
-	// thread's lived in it.
+	// thread's lived in it. Only where tm made it, in the project's
+	// worktrees folder: an adopted thread's is the user's own, and the
+	// record is in the coordinator's folder.
 	if _, err := os.Stat(r.Worktree); errors.Is(err, os.ErrNotExist) {
 		if r.Checkout {
 			return &tasks.Error{Code: "no-worktree", Msg: fmt.Sprintf("thread %s's checkout %s is gone; resolve it", id, r.Worktree)}
+		}
+		if r.Adopted || !r.OwnWorktree(p.Slug) {
+			return &tasks.Error{Code: "no-worktree", Msg: fmt.Sprintf("thread %s's worktree %s is gone, and tm didn't make it; resolve the thread", id, r.Worktree)}
 		}
 		if r.Repo != "" && r.Branch != "" {
 			if err := worktree.Restore(r.Repo, r.Worktree, r.Branch); err != nil {

@@ -147,14 +147,15 @@ func Update(path string, fn func(old []byte) ([]byte, error)) error {
 
 // Append locks path and appends data to it, creating the file if needed.
 // It is for append-only logs such as JOURNAL.md, where rewriting the whole
-// file on every line would be wasteful.
+// file on every line would be wasteful. A link at path is refused, not
+// followed (fsx.OpenNoLink).
 func Append(path string, data []byte) error {
 	unlock, err := Lock(path)
 	if err != nil {
 		return err
 	}
 	defer unlock()
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	f, err := fsx.OpenNoLink(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}
