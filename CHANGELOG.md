@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.0](https://github.com/theclifmeister/terminatr/compare/v0.32.0...v0.33.0) (2026-10-17)
+
+
+### Features
+
+* **memory:** BM25 note matching with stemming and stop words; coordinator-only notes ([#618](https://github.com/theclifmeister/terminatr/issues/618)) ([ad8145b](https://github.com/theclifmeister/terminatr/commit/ad8145b1a18ab4836ebcf2170e86f728a4fcf7a1))
+
 ## [0.32.0](https://github.com/theclifmeister/terminatr/compare/v0.31.0...v0.32.0) (2026-10-17)
 
 
