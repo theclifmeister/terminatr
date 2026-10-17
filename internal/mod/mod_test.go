@@ -213,7 +213,7 @@ func TestRegistry(t *testing.T) {
 	install(t, mods, "review-age", map[string]string{"mod.toml": reviewAge, "main.ts": ""})
 	install(t, mods, "nord", map[string]string{"mod.toml": "id = \"nord\"\nname = \"Nord\"\nversion = \"1.0.0\"\napi = \"1.0\"\n[provides]\ntheme = \"t.toml\"\n", "t.toml": ""})
 	install(t, mods, "wrong-folder", map[string]string{"mod.toml": "id = \"other\"\nname = \"O\"\nversion = \"1.0.0\"\napi = \"1.0\"\n"})
-	install(t, mods, "future", map[string]string{"mod.toml": "id = \"future\"\nname = \"F\"\nversion = \"1.0.0\"\napi = \"1.9\"\n"})
+	install(t, mods, "future", map[string]string{"mod.toml": "id = \"future\"\nname = \"F\"\nversion = \"1.0.0\"\napi = \"1.99\"\n"})
 	install(t, mods, "empty", map[string]string{"README": ""})
 	os.WriteFile(filepath.Join(mods, "stray.txt"), nil, 0o644)
 

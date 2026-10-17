@@ -1,0 +1,50 @@
+{
+  "name": "a note's row and viewer bind memory.edit and memory.rm, the list memory.new; action.done reads the files again",
+  "answers": [
+    { "method": "memory.list", "params": { "slug": "demo" },
+      "result": [{ "path": "MEMORY.md", "title": "Memory", "bytes": 120 },
+                 { "path": "memory/retries.md", "title": "Retries stay at 4", "bytes": 160 }] },
+    { "method": "memory.read", "params": { "slug": "demo", "path": "memory/retries.md" },
+      "result": "# Retries\nKeep 4.\n" }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "memory", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } },
+    { "name": "ui.key", "project": "demo",
+      "data": { "view": "memory", "widget": "files", "row": "memory/retries.md", "key": "enter", "target": { "project": "demo" } } },
+    { "name": "action.done", "project": "demo",
+      "data": { "action": "memory.edit", "target": { "project": "demo", "path": "memory/retries.md" }, "ok": true } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "memory.list", "params": { "slug": "demo" } },
+      { "method": "ui.view.set",
+        "params": { "view": "memory", "options": { "project": "demo" },
+          "widget": { "kind": "stack", "children": [
+            { "kind": "list", "id": "files", "rows": [
+              { "id": "MEMORY.md" },
+              { "id": "memory/retries.md", "actions": [
+                { "id": "memory.edit", "target": { "project": "demo", "path": "memory/retries.md" } },
+                { "id": "memory.rm", "target": { "project": "demo", "path": "memory/retries.md" } }
+              ] }
+            ] },
+            { "kind": "text", "role": "faint" },
+            { "kind": "keys", "actions": [{ "id": "memory.new", "target": { "project": "demo" } }] }
+          ] } } },
+      { "method": "memory.read", "params": { "slug": "demo", "path": "memory/retries.md" } },
+      { "method": "ui.view.set",
+        "params": { "view": "memory", "options": { "project": "demo" },
+          "widget": { "kind": "stack", "children": [
+            { "kind": "text" },
+            { "kind": "text", "text": "Keep 4." },
+            { "kind": "keys", "actions": [
+              { "id": "memory.edit", "target": { "project": "demo", "path": "memory/retries.md" } },
+              { "id": "memory.rm", "target": { "project": "demo", "path": "memory/retries.md" } }
+            ] }
+          ] } } },
+      { "method": "memory.list", "params": { "slug": "demo" } },
+      { "method": "memory.read", "params": { "slug": "demo", "path": "memory/retries.md" } },
+      { "method": "ui.view.set", "params": { "view": "memory" } }
+    ]
+  }
+}

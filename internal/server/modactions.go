@@ -166,6 +166,11 @@ func menuOf(q *proto.Question) []modaction.MenuQuestion {
 	return out
 }
 
+func (l *liveActions) Note(slug, path string) bool {
+	p, err := project.Open(slug)
+	return err == nil && p.HasNote(path)
+}
+
 func (l *liveActions) Session(id string) bool {
 	sess, perr := l.s.session(id)
 	if perr != nil {

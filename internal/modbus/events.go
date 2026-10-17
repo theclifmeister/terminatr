@@ -229,7 +229,9 @@ type Ready struct {
 
 // Target is what a mod's cell, row, action or input is about: a task or
 // a thread of a project, or a session; for question.answer an option
-// (its label) of a question (its text) the session's menu asks.
+// (its label) of a question (its text) the session's menu asks; for
+// memory.edit and memory.rm a memory note of the project, its path
+// memory/<name>.md (mod API 1.9).
 type Target struct {
 	Project  string `json:"project,omitempty"`
 	Task     string `json:"task,omitempty"`
@@ -237,6 +239,7 @@ type Target struct {
 	Session  string `json:"session,omitempty"`
 	Question string `json:"question,omitempty"`
 	Option   string `json:"option,omitempty"`
+	Path     string `json:"path,omitempty"`
 }
 
 // Input is ui.click and ui.key: the human clicked, or pressed Key on, one

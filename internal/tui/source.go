@@ -198,6 +198,13 @@ type PollSource interface {
 	Library(slug string) ([]thread.LibFile, error)
 	LibraryRead(slug, id, name string, max int64) (data []byte, truncated bool, err error)
 	LibraryRemove(slug, id, name string) (int, error)
+	// RemoveNote deletes memory note path (memory/<name>.md) of the
+	// project as tm memory rm does: MEMORY.md written again, journaled,
+	// and an inbox item for the coordinator.
+	RemoveNote(slug, path string) error
+	// HasNote says whether the project has memory note path, a
+	// regular file in its memory/ folder.
+	HasNote(slug, path string) bool
 	// Review is how to check task t, in review, and whether its change
 	// has shipped.
 	Review(slug string, t *tasks.Task) Review
@@ -712,6 +719,29 @@ func (s *ServerSource) LibraryRemove(slug, id, name string) (int, error) {
 		return 0, err
 	}
 	return thread.RemoveLibrary(p, s.Caller, id, name)
+}
+
+func (s *ServerSource) HasNote(slug, path string) bool {
+	p, err := project.Open(slug)
+	return err == nil && p.HasNote(path)
+}
+
+func (s *ServerSource) RemoveNote(slug, path string) error {
+	if s.Caller.IsAgent() {
+		return errors.New("human-only: the human deletes memory notes from the console")
+	}
+	p, err := project.Open(slug)
+	if err != nil {
+		return err
+	}
+	rel, err := p.NotePath(path)
+	if err != nil {
+		return err
+	}
+	if err := p.RemoveNote(rel); err != nil {
+		return err
+	}
+	return p.NoteChanged(s.Caller, project.NoteRm, rel)
 }
 
 // errHumanOnly refuses a settings change from inside an agent.

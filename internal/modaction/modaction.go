@@ -34,13 +34,16 @@ type Target struct {
 	// and Option the label of one of its options (mod API 1.3).
 	Question string `json:"question,omitempty"`
 	Option   string `json:"option,omitempty"`
+	// Path is a memory note of the project, memory/<name>.md (mod API
+	// 1.9).
+	Path string `json:"path,omitempty"`
 }
 
 // TargetOf is the target of a binding's fields, as a widget row or a
 // notification button carries them.
 func TargetOf(m map[string]string) Target {
 	return Target{Project: m["project"], Task: m["task"], Thread: m["thread"], Session: m["session"],
-		Question: m["question"], Option: m["option"]}
+		Question: m["question"], Option: m["option"], Path: m["path"]}
 }
 
 // The kinds of inbox item a task action drops: KindDelegate,
@@ -64,6 +67,9 @@ const (
 	// OnQuestion is session, question and option: an option of a
 	// question the session's open menu asks.
 	OnQuestion = "question"
+	// OnNote is project and path: one of the project's memory notes,
+	// memory/<name>.md (mod API 1.9).
+	OnNote = "note"
 )
 
 // Action is one bindable action.
@@ -117,6 +123,12 @@ var Actions = []Action{
 	{ID: "question.answer", Label: "answer", Key: "a", On: OnQuestion, Confirm: true,
 		Precondition: "the session's open question menu asks the question, unanswered and single-select, and the option is one of its labels",
 		Consent:      "answer an agent's question with one of its options"},
+	{ID: "memory.edit", Label: "edit", Key: "e", On: OnNote,
+		Precondition: "the note is in the project's memory/ folder; the console opens it in the human's editor and saves it when the editor exits (tm memory edit)"},
+	{ID: "memory.new", Label: "new note", Key: "n", On: OnProject,
+		Precondition: "the project exists; the human names the note and writes it in their editor (tm memory new)"},
+	{ID: "memory.rm", Label: "delete", Key: "d", On: OnNote, Confirm: true,
+		Precondition: "the note is in the project's memory/ folder (tm memory rm)"},
 }
 
 // Lookup is action id, ok false for one that isn't bindable.
@@ -142,6 +154,9 @@ type State interface {
 	Session(id string) bool
 	// Menu is the question menu open on session id, nil for none.
 	Menu(id string) []MenuQuestion
+	// Note says whether slug has memory note path (memory/<name>.md), a
+	// regular file in its memory/ folder.
+	Note(slug, path string) bool
 }
 
 // MenuQuestion is one question of a session's open question menu, as a
@@ -180,6 +195,12 @@ func Why(id string, st State, t Target) string {
 	if !st.Project(t.Project) {
 		return "no project " + t.Project
 	}
+	if a.On == OnNote {
+		if !st.Note(t.Project, t.Path) {
+			return t.Project + " has no note " + t.Path
+		}
+		return ""
+	}
 	if a.On != OnTask {
 		return ""
 	}
@@ -206,6 +227,9 @@ func TargetWhy(a Action, t Target) string {
 	if a.On != OnQuestion && (t.Question != "" || t.Option != "") {
 		return a.ID + " takes no question or option"
 	}
+	if a.On != OnNote && t.Path != "" {
+		return a.ID + " takes no path"
+	}
 	switch a.On {
 	case OnSession:
 		if t.Session == "" || t.Project != "" || t.Task != "" || t.Thread != "" {
@@ -223,6 +247,10 @@ func TargetWhy(a Action, t Target) string {
 		if t.Project == "" || !TaskRef(t.Task) || t.Session != "" || t.Thread != "" {
 			return a.ID + " takes a target of {project, task: \"T12\"}"
 		}
+	case OnNote:
+		if t.Project == "" || !NotePath(t.Path) || t.Task != "" || t.Session != "" || t.Thread != "" {
+			return a.ID + " takes a target of {project, path: \"memory/<name>.md\"}"
+		}
 	}
 	return ""
 }
@@ -235,6 +263,17 @@ func TaskRef(s string) bool {
 	}
 	_, err := strconv.Atoi(n)
 	return err == nil && strings.Trim(n, "0123456789") == ""
+}
+
+// NotePath says whether s has a memory note's shape: memory/<name>.md,
+// the name without a folder, a leading dot or a .. step.
+func NotePath(s string) bool {
+	name, ok := strings.CutPrefix(s, "memory/")
+	if !ok {
+		return false
+	}
+	name, ok = strings.CutSuffix(name, ".md")
+	return ok && name != "" && name[0] != '.' && name[0] != '-' && !strings.Contains(name, "..") && !strings.ContainsAny(name, "/\\ ")
 }
 
 // askKind is the inbox item kind a task action drops, "" for one that

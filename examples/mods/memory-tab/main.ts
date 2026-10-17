@@ -1,11 +1,15 @@
 // The project popup's Memory tab (mods design §11, proof 2): the
 // project's memory files (CONTEXT.md, MEMORY.md and the notes in
-// memory/) as a list, and a text viewer for the one opened, read-only,
-// a note's front matter as one line; t shows the template of a new
-// note. The core keeps the cursor, the filter and the scroll; only
-// enter, n, p, t and clicks on a row reach the mod. It draws when the tab is shown
-// (view.opened) and reads the files again then, so the tab never shows
-// older memory than when it was opened.
+// memory/) as a list, and a text viewer for the one opened, a note's
+// front matter as one line; t shows the template of a new note. The
+// core keeps the cursor, the filter and the scroll; only enter, n, p,
+// t and clicks on a row reach the mod. A note's row, and the viewer of
+// one, bind the core's memory.edit (e: the human's editor, then back
+// here) and memory.rm (d: tm asks first); the list binds memory.new
+// (n). tm runs them, as tm memory edit, new and rm do, and the mod
+// hears action.done, then reads the files again. It draws when the tab
+// is shown (view.opened) and reads the files again then, so the tab
+// never shows older memory than when it was opened.
 import type { TM } from "./types/tm";
 declare const $: TM;
 
@@ -38,6 +42,18 @@ What was tried or proposed and dropped, and why.
 ## Watch out
 What bites whoever changes this next.
 `;
+
+// noteActions are the core actions a note binds: edit it, delete it.
+function noteActions(project: string, path: string): TM.Value {
+  return [
+    { id: "memory.edit", target: { project, path } },
+    { id: "memory.rm", target: { project, path } },
+  ];
+}
+
+function isNote(path: string): boolean {
+  return path.indexOf("memory/") === 0;
+}
 
 // What a project's tab shows: the files, and the one open in the viewer
 // ("" for the list), or the note template.
@@ -152,9 +168,9 @@ function blocks(md: string): TM.Widget[] {
   return out;
 }
 
-// tree is the tab's widget tree: the list, the open file or the
+// tree is project's tab's widget tree: the list, the open file or the
 // template.
-function tree(t: Tab): TM.Widget {
+function tree(project: string, t: Tab): TM.Widget {
   if (t.error) {
     return { kind: "text", text: `error: ${t.error}`, role: "bad" };
   }
@@ -166,10 +182,10 @@ function tree(t: Tab): TM.Widget {
         { kind: "text", text: TEMPLATE.replace(/\s+$/, "") },
         {
           kind: "text",
-          text: "All of it is optional; a free-form note still works. touches are paths in a repo (a folder ends with /) or repo:<name>; standing notes are for every thread. List the note in MEMORY.md with its touches.",
+          text: "All of it is optional; a free-form note still works. touches are paths in a repo (a folder ends with /) or repo:<name>; standing notes are for every thread. tm lists the note in MEMORY.md with its touches.",
           role: "faint",
         },
-        { kind: "keys", keys: [{ key: "enter", label: "files" }] },
+        { kind: "keys", keys: [{ key: "enter", label: "files" }], actions: [{ id: "memory.new", target: { project } }] },
       ],
     };
   }
@@ -188,15 +204,21 @@ function tree(t: Tab): TM.Widget {
               { text: f.title },
               { text: `  ${f.path} · ${size(f.bytes)}${f.touches?.length ? ` · ${f.touches.join(", ")}` : ""}`, role: "faint" },
             ],
+            ...(isNote(f.path) ? { actions: noteActions(project, f.path) } : {}),
           })),
         },
-        { kind: "text", text: "Read-only: the coordinator keeps these; every thread is told them.", role: "faint" },
+        {
+          kind: "text",
+          text: "Every thread is told these. e edits a note in your editor, n writes a new one, d deletes one; tm lists the notes in MEMORY.md and tells the coordinator.",
+          role: "faint",
+        },
         {
           kind: "keys",
           keys: [
             { key: "enter", label: "read" },
             { key: "t", label: "note template" },
           ],
+          actions: [{ id: "memory.new", target: { project } }],
         },
       ],
     };
@@ -216,6 +238,7 @@ function tree(t: Tab): TM.Widget {
           { key: "n", label: "next" },
           { key: "p", label: "previous" },
         ],
+        ...(isNote(file.path) ? { actions: noteActions(project, file.path) } : {}),
       },
     ],
   };
@@ -237,7 +260,7 @@ async function load(project: string, t: Tab) {
 // too full of escapes for its limit) says why instead.
 async function publish(project: string, t: Tab) {
   try {
-    await $.ui.view.set(VIEW, tree(t), { project });
+    await $.ui.view.set(VIEW, tree(project, t), { project });
   } catch (e) {
     const why = String((e as Error)?.message ?? e);
     $.log(`memory-tab: ${project}: ${why}`);
@@ -302,6 +325,17 @@ $.on("ui.key", async (e) => {
       }
       break;
   }
+});
+
+// A note edited, made or deleted from the tab: read the files again (a
+// deleted note's viewer goes back to the list).
+$.on("action.done", async (e) => {
+  const project = e.target?.project;
+  if (!project || e.action.indexOf("memory.") !== 0 || !tabs.has(project)) return;
+  const t = tab(project);
+  if (e.action === "memory.new") t.template = false;
+  await load(project, t);
+  await publish(project, t);
 });
 
 $.on("ui.click", async (e) => {

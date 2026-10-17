@@ -161,6 +161,12 @@ func (m *dash) runBinding(msg bindingMsg) tea.Cmd {
 	case "question.answer":
 		s, _ := m.session(t.Session)
 		return m.answerQuestion(s, t.Question, t.Option, &b)
+	case "memory.edit":
+		return m.runMemory(&b, "tm memory edit "+t.Path, "edit", "--project", t.Project, t.Path)
+	case "memory.new":
+		return m.runMemory(&b, "tm memory new", "new", "--project", t.Project)
+	case "memory.rm":
+		return m.removeNote(t.Project, t.Path, &b)
 	}
 	m.msg = "not available: " + b.action.ID
 	return m.bindingDone(&b, false)
@@ -215,6 +221,8 @@ func (d dashActions) Asked(slug, ref string) string {
 	}
 	return ""
 }
+
+func (d dashActions) Note(slug, path string) bool { return d.m.src.HasNote(slug, path) }
 
 func (d dashActions) Session(id string) bool {
 	_, ok := d.m.session(id)
