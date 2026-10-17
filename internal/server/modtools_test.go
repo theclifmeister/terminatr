@@ -148,7 +148,7 @@ func TestModTools(t *testing.T) {
 		t.Fatalf("%v\n%s", err, got[0].Stdin)
 	}
 	if rep.PR != "https://github.com/o/r/pull/7" || !reflect.DeepEqual(rep.Next, []string{"Merge PR #7"}) ||
-		!reflect.DeepEqual(rep.Check, []string{"- run tm x"}) || !reflect.DeepEqual(rep.Remember, []string{"- one"}) ||
+		!reflect.DeepEqual(rep.Check, []string{"- run tm x"}) || !reflect.DeepEqual(rep.Remember, []string{"one"}) ||
 		!strings.Contains(rep.Text, "### Detail") {
 		t.Fatalf("report %+v", rep)
 	}

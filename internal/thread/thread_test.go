@@ -95,7 +95,7 @@ func TestValidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.PR != "https://github.com/o/r/pull/12" || len(r.Next) != 2 || r.Next[0] != "Merge the PR" || len(r.Remember) != 1 ||
+	if r.PR != "https://github.com/o/r/pull/12" || len(r.Next) != 2 || r.Next[0] != "Merge the PR" || len(r.Remember) != 1 || r.Remember[0] != "lesson" ||
 		len(r.Check) != 1 || r.Check[0] != "Run tm, press t" {
 		t.Fatalf("%+v", r)
 	}
