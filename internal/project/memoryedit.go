@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
@@ -287,11 +288,12 @@ func (p *Project) NoteChanged(c caller.Caller, op, rel string) error {
 const indexDesc = 120
 
 // IndexLine is note n's line in MEMORY.md: "- [title](memory/file.md):
-// what it holds (touches: a, b)". What it holds is the note's first
-// line of text (a heading's text, but none of the schema's section
-// headings); a free-form note (no front matter) shows by its file name
-// and its first line, whatever it is.
-func IndexLine(n Note) string {
+// what it holds (touches: a, b)". What it holds is kept, the
+// description the note's line had already (kept, "" for none), else
+// the note's first line of text (a heading's text, but none of the
+// schema's section headings); a free-form note (no front matter) shows
+// by its file name and its first line, whatever it is.
+func IndexLine(n Note, kept string) string {
 	title := n.Title
 	var desc string
 	if n.Front {
@@ -302,7 +304,9 @@ func IndexLine(n Note) string {
 	}
 	title = strings.NewReplacer("[", "(", "]", ")").Replace(textsafe.Line(title, indexDesc))
 	line := fmt.Sprintf("- [%s](%s)", title, n.Path)
-	if desc = textsafe.Line(desc, indexDesc); desc != "" && desc != title {
+	if kept = textsafe.Line(kept, 0); kept != "" {
+		line += ": " + kept
+	} else if desc = textsafe.Line(desc, indexDesc); desc != "" && desc != title {
 		line += ": " + desc
 	}
 	if len(n.Touches) > 0 {
@@ -332,6 +336,31 @@ func firstLine(text string, skipHeads bool) string {
 	return ""
 }
 
+// indexLineRE reads a note's line in MEMORY.md: its path, then the rest
+// after the link.
+var indexLineRE = regexp.MustCompile(`^- \[.*?\]\((memory/[^)\s]+)\)(.*)$`)
+
+// keptDesc is the description of index line l, by its note's path: the
+// text after the link and its ":" (or a dash), without the touches tm
+// adds. ok is false for a line that isn't a note's.
+func keptDesc(l string) (path, desc string, ok bool) {
+	m := indexLineRE.FindStringSubmatch(l)
+	if m == nil {
+		return "", "", false
+	}
+	desc = strings.TrimSpace(m[2])
+	if i := strings.LastIndex(desc, "(touches: "); i >= 0 && strings.HasSuffix(desc, ")") {
+		desc = strings.TrimSpace(desc[:i])
+	}
+	for _, sep := range []string{":", "—", "–", "-"} {
+		if rest, cut := strings.CutPrefix(desc, sep); cut {
+			desc = strings.TrimSpace(rest)
+			break
+		}
+	}
+	return m[1], desc, true
+}
+
 // isIndexLine says whether l is one of MEMORY.md's lines for a note.
 func isIndexLine(l string) bool {
 	return strings.HasPrefix(l, "- [") && strings.Contains(l, "](memory/")
@@ -339,8 +368,8 @@ func isIndexLine(l string) bool {
 
 // RebuildIndex writes MEMORY.md's list of the notes again, one
 // IndexLine per note in memory/ (a regular .md file; one too big to
-// read shows by its file name), by title. The rest of the file stays as
-// it is: its heading and text, the list where its first line was (else
+// read shows by its file name), by title; a note that had a line keeps
+// that line's description. The rest of the file stays as it is: its heading and text, the list where its first line was (else
 // at the end). A missing MEMORY.md starts from the new project's. It
 // says whether the file changed.
 func (p *Project) RebuildIndex() (bool, error) {
@@ -369,13 +398,24 @@ func (p *Project) RebuildIndex() (bool, error) {
 			return false, err
 		}
 	}
+	lines := strings.Split(strings.ReplaceAll(string(old), "\r\n", "\n"), "\n")
+	kept := map[string]string{}
+	for _, l := range lines {
+		if isIndexLine(l) {
+			if path, desc, ok := keptDesc(l); ok && desc != "" {
+				if _, seen := kept[path]; !seen {
+					kept[path] = desc
+				}
+			}
+		}
+	}
 	list := make([]string, len(notes))
 	for i, n := range notes {
-		list[i] = IndexLine(n)
+		list[i] = IndexLine(n, kept[n.Path])
 	}
 	var out []string
 	placed := false
-	for _, l := range strings.Split(strings.ReplaceAll(string(old), "\r\n", "\n"), "\n") {
+	for _, l := range lines {
 		if !isIndexLine(l) {
 			out = append(out, l)
 			continue
@@ -396,6 +436,50 @@ func (p *Project) RebuildIndex() (bool, error) {
 		return false, nil
 	}
 	return true, fsx.WriteAtomic(file, data, 0o644)
+}
+
+// indexStamps are SyncIndex's stamps of what it found in sync, by
+// MEMORY.md's path.
+var indexStamps sync.Map
+
+// indexStamp is the stat stamp of MEMORY.md, memory/ and the entries in
+// it: what a rebuild reads.
+func (p *Project) indexStamp() uint64 {
+	paths := []string{p.Path("MEMORY.md"), p.Path("memory")}
+	if ents, err := os.ReadDir(p.Path("memory")); err == nil {
+		for _, e := range ents {
+			paths = append(paths, p.Path("memory", e.Name()))
+		}
+	}
+	return fsx.StatStamp(paths...)
+}
+
+// SyncIndex brings MEMORY.md's list in line with memory/ when it isn't
+// (RebuildIndex), so a note written by hand, or an index an older tm
+// left, needs no command: tm context and the ticker's upkeep run it. It
+// is a few stats while nothing changed since it last found the list in
+// sync; it writes only when the list differs, and journals that as the
+// ticker's memory.index. It says whether it wrote.
+func (p *Project) SyncIndex() (bool, error) {
+	key := p.Path("MEMORY.md")
+	st := p.indexStamp()
+	if v, ok := indexStamps.Load(key); ok && v.(uint64) == st {
+		return false, nil
+	}
+	if _, err := os.Lstat(key); errors.Is(err, fs.ErrNotExist) {
+		if ents, _ := os.ReadDir(p.Path("memory")); len(ents) == 0 {
+			return false, nil // nothing to list, nor a file to keep it in
+		}
+	}
+	changed, err := p.RebuildIndex()
+	if err != nil {
+		return false, err
+	}
+	indexStamps.Store(key, p.indexStamp())
+	if changed {
+		err = p.Journal(caller.Caller{Kind: caller.Ticker}, "memory.index", "MEMORY.md", "synced with memory/")
+	}
+	return changed, err
 }
 
 // indexNotes are the notes RebuildIndex lists, sorted by the title

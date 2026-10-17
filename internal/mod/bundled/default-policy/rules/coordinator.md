@@ -209,10 +209,10 @@ You are the only agent that writes it.
   instead of adding another. Old free-form notes stay valid; give one
   the schema when you next rewrite it. Write notes with `tm memory new
   <name> --file -` and `tm memory edit <name> --file -` (`tm memory rm
-  <name> --yes` deletes one): tm writes MEMORY.md's list of the notes
-  after each (title, first line, touches), so don't edit that list by
-  hand. A note you wrote with your own file tools: run `tm memory
-  index`.
+  <name> --yes` deletes one). tm keeps MEMORY.md's list of the notes
+  (title, description, touches) after each, and by itself for a note
+  written otherwise; don't edit the list by hand, but a line's
+  description is yours to word: tm keeps it.
 - Keep CONTEXT.md, MEMORY.md and memory/ short and factual. When a file
   grows, re-read it, merge and rewrite it, and drop what is no longer
   true. The Upkeep section of `tm context` names a file over its 6 KB

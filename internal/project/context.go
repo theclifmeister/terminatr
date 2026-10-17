@@ -151,6 +151,11 @@ func (p *Project) Context(seen Ticked, threads func(prs map[string]string) (Sect
 	out = append(out, Section{Title: "Project", Lines: head})
 	out = append(out, capLines("Standing instructions (PROJECT.md)", splitLines(p.Instructions), capInstructions, "PROJECT.md"))
 
+	// The memory index as tm keeps it: a note added or removed by hand,
+	// or a list an older tm left, is brought in line first.
+	if _, err := p.SyncIndex(); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
 	for _, f := range []struct {
 		title, file string
 		cap         int

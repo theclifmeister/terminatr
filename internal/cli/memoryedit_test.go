@@ -64,8 +64,8 @@ func TestMemoryNewEditRm(t *testing.T) {
 		t.Fatalf("edit: %s", errs)
 	}
 	index, _ = os.ReadFile(p.Path("MEMORY.md"))
-	if !strings.Contains(string(index), "- [retries](memory/retries.md): Retries\n") {
-		t.Errorf("MEMORY.md after the edit:\n%s", index)
+	if !strings.Contains(string(index), "- [retries](memory/retries.md): Four.\n") {
+		t.Errorf("MEMORY.md after the edit (its line keeps its description):\n%s", index)
 	}
 	h.expect(2, "--file", coord, "memory", "edit", "retries", "--project", "demo")
 	h.expect(2, "--yes", coord, "memory", "rm", "retries", "--project", "demo")

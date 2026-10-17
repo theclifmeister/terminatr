@@ -174,7 +174,7 @@ Our own words about the list.
 
 Our own words about the list.
 
-- [gotchas](memory/gotchas.md): Code gotchas
+- [gotchas](memory/gotchas.md): hand-written
 - [plain](memory/plain.md): just a line
 - [Retries stay at 4](memory/retries.md): Four retries, then a backoff. (touches: internal/ticker/pr.go, repo:api)
 
@@ -279,5 +279,77 @@ func TestNoteStamp(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(p.Path("memory", "a.md.conflict")); string(data) != "mine\n" {
 		t.Errorf("conflict copy %q", data)
+	}
+}
+
+// TestRebuildIndexKeepsWording: an index an older tm left, its lines
+// written by hand, keeps each note's description; titles and touches
+// follow the notes, a new note gets its first line, a removed one goes.
+func TestRebuildIndexKeepsWording(t *testing.T) {
+	p := memoryProject(t)
+	os.MkdirAll(p.Path("memory"), 0o755)
+	os.WriteFile(p.Path("memory", "decisions.md"), []byte("# Product decisions\n\nArchitecture first.\n"), 0o644)
+	os.WriteFile(p.Path("memory", "backlog.md"), []byte("Backlog means open.\n"), 0o644)
+	os.WriteFile(p.Path("memory", "retries.md"), []byte("+++\ntitle = \"Retries stay at 4\"\ntouches = [\"internal/ticker/\"]\n+++\n## Decided\nFour.\n"), 0o644)
+	os.WriteFile(p.Path("memory", "fresh.md"), []byte("# Fresh\nA new note.\n"), 0o644)
+	os.WriteFile(p.Path("MEMORY.md"), []byte(`# Memory
+
+One line per memory file.
+
+- [Product decisions](memory/decisions.md): architecture, who does what (current state)
+- [Backlog = open status](memory/backlog.md) — 'backlog' means status open
+- [Retries](memory/retries.md): the poller's retries, curated (touches: old/path.go)
+- [Gone](memory/gone.md): a note removed by hand
+`), 0o644)
+	if _, err := p.RebuildIndex(); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(p.Path("MEMORY.md"))
+	want := `# Memory
+
+One line per memory file.
+
+- [backlog](memory/backlog.md): 'backlog' means status open
+- [decisions](memory/decisions.md): architecture, who does what (current state)
+- [fresh](memory/fresh.md): Fresh
+- [Retries stay at 4](memory/retries.md): the poller's retries, curated (touches: internal/ticker/)
+`
+	if string(got) != want {
+		t.Errorf("MEMORY.md:\n%s\nwant\n%s", got, want)
+	}
+}
+
+// TestSyncIndex: a note added or removed by hand shows in MEMORY.md
+// after a context build, journaled once; in sync, nothing is written.
+func TestSyncIndex(t *testing.T) {
+	p := memoryProject(t)
+	os.MkdirAll(p.Path("memory"), 0o755)
+	os.WriteFile(p.Path("memory", "byhand.md"), []byte("# By hand\nWritten without tm.\n"), 0o644)
+	secs, err := p.Context(Ticked{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ctx := RenderContext(secs); !strings.Contains(ctx, "- [byhand](memory/byhand.md): By hand") {
+		t.Errorf("the context's memory index lacks the note:\n%s", ctx)
+	}
+	before, _ := os.Stat(p.Path("MEMORY.md"))
+	for range 2 {
+		if changed, err := p.SyncIndex(); err != nil || changed {
+			t.Fatalf("in sync: %v %v", changed, err)
+		}
+	}
+	if after, _ := os.Stat(p.Path("MEMORY.md")); !after.ModTime().Equal(before.ModTime()) {
+		t.Error("MEMORY.md written while in sync")
+	}
+	os.Remove(p.Path("memory", "byhand.md"))
+	if changed, err := p.SyncIndex(); err != nil || !changed {
+		t.Fatalf("a note removed by hand: %v %v", changed, err)
+	}
+	if data, _ := os.ReadFile(p.Path("MEMORY.md")); strings.Contains(string(data), "byhand") {
+		t.Errorf("MEMORY.md keeps a removed note:\n%s", data)
+	}
+	lines, _, _ := p.JournalTail(10)
+	if n := strings.Count(strings.Join(lines, "\n"), "ticker memory.index MEMORY.md synced with memory/"); n != 2 {
+		t.Errorf("journaled %d syncs, want 2:\n%s", n, strings.Join(lines, "\n"))
 	}
 }

@@ -46,8 +46,10 @@ edit open the note in $VISUAL or $EDITOR (else nano or vi; notepad on
 Windows) and save it when the editor exits; if the note changed
 meanwhile, they ask whether to overwrite it or keep both (yours in
 memory/<name>.md.conflict). rm asks first, unless --yes. After each,
-tm writes MEMORY.md's list of the notes again (index does only that):
-one line per note, its title, first line and touches. The human's
+tm writes MEMORY.md's list of the notes again (index does only that;
+tm context does it too when the list is out of date): one line per
+note, its title, description (a line's own is kept, a new note's is its
+first line) and touches. The human's
 change is an inbox item for the coordinator. Threads only read memory.`
 
 // runMemory searches the project's memory notes (docs/SPEC.md §7.6).
