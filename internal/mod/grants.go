@@ -15,31 +15,37 @@ import (
 // here (nor a loginTool) is a grant to run anything, as the human: a
 // build tool reads a Makefile or a script the mod wrote itself, find and
 // tar can run a command, ssh and rsync run a remote or helper program,
-// and so on, so the list is of what is safe, not of what is not.
+// and so on, so the list is of what is safe, not of what is not. An
+// entry has no option, on GNU or BSD, that runs a program, writes a file
+// or sets the system (so not tree -o, uniq IN OUT, file -C, date -s,
+// diff -l, which runs pr, nor hostname NAME).
 var narrowTools = []string{
-	"jq", "grep", "egrep", "fgrep", "cat", "ls", "head", "tail", "wc", "uniq", "diff", "cmp", "stat", "file",
-	"which", "tree", "date", "echo", "pwd", "uname", "basename", "dirname", "realpath", "readlink", "cut", "tr",
-	"comm", "nl", "column", "hostname", "whoami", "true", "false", "printf", "du", "df", "shellcheck",
+	"jq", "grep", "egrep", "fgrep", "cat", "ls", "head", "tail", "wc", "cmp", "stat",
+	"which", "echo", "pwd", "uname", "basename", "dirname", "realpath", "readlink", "cut", "tr",
+	"comm", "nl", "column", "whoami", "true", "false", "printf", "du", "df", "shellcheck",
 	"sha256sum", "sha1sum", "md5sum", "shasum",
 }
 
 // RunsAnything reports whether prog, a commands grant's program, may run
-// whatever it is told to: it is not one of narrowTools, nor git, gh or
-// glab (whose arguments the broker limits). Its name counts as written
-// but for case, a Windows extension and a version (python3.12).
+// whatever it is told to: it is not one of narrowTools, nor git (whose
+// run-a-program options the broker refuses). gh and glab are not narrow:
+// the broker refuses only their auth, config, alias and extension
+// commands, not those that clone, check out, download or open an
+// editor. The name counts but for case, a Windows extension and a
+// version (python3.12).
 func RunsAnything(prog string) bool {
 	p := strings.ToLower(prog)
 	for _, ext := range []string{".exe", ".cmd", ".bat", ".com"} {
 		p = strings.TrimSuffix(p, ext)
 	}
-	if slices.Contains(narrowTools, p) || p == "git" || loginTools[p] != "" {
+	if slices.Contains(narrowTools, p) || p == "git" {
 		return false
 	}
 	return true
 }
 
 // loginTools are the programs that run on a login of the human's own,
-// with what it is a login to.
+// with what it is a login to; the consent names the login as well.
 var loginTools = map[string]string{"gh": "GitHub", "glab": "GitLab"}
 
 // commandWords are p's commands in the consent's words: "runs jq, git;
@@ -48,10 +54,10 @@ func (p Permissions) commandWords() string {
 	var plain, parts []string
 	for _, c := range p.Commands {
 		switch {
+		case loginTools[c] != "":
+			parts = append(parts, "runs "+c+" with your "+loginTools[c]+" login: anything it wants, as you")
 		case RunsAnything(c):
 			parts = append(parts, "runs "+c+": anything it wants, as you")
-		case loginTools[c] != "":
-			parts = append(parts, "runs "+c+" with your "+loginTools[c]+" login")
 		default:
 			plain = append(plain, c)
 		}
