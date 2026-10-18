@@ -12,7 +12,7 @@ import (
 // TestAccessView: e on a thread's row shows what it launched with, each
 // rule with its source, RESTART TO APPLY on what changed since, the
 // agent's own files' rules shown only, the settings file by that name;
-// e on the project popup's Sandbox tab shows what a new thread gets.
+// e on the project popup's Access tab shows what a new thread gets.
 func TestAccessView(t *testing.T) {
 	src, m := popupData(t)
 	src.access = proto.AccessShowResult{Recorded: true, Changes: 2, AccessSet: proto.AccessSet{Agent: "claude", OS: "darwin",
@@ -48,7 +48,7 @@ func TestAccessView(t *testing.T) {
 	keyPress(m, "5")
 	drain(t, m, keyPress(m, "e"))
 	if got := src.accessShown[len(src.accessShown)-1]; got != "alpha " {
-		t.Errorf("Sandbox tab asked for %q", got)
+		t.Errorf("Access tab asked for %q", got)
 	}
 	if sc := whole(m); !strings.Contains(sc, "Effective access · alpha · a new thread (Linux)") || !strings.Contains(sc, "What a new thread of alpha gets") {
 		t.Errorf("project view:\n%s", sc)
