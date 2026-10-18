@@ -131,8 +131,19 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 	}
 	lc := loadLaunchConfig()
 	set := lc.safety(r.Project)
+	// A thread's escapes, which its sandbox lets it ask for, are the
+	// user's to answer, the guard on or off (T574 case 6).
+	askEscapes := r.Role == proto.RoleThread && !r.Yolo && !r.NoSandboxEscapes
 	if !set.Guard {
-		return GuardRules{}
+		if !askEscapes {
+			return GuardRules{}
+		}
+		// Off: no rule and no floor (Floor nil says so), only the
+		// question about escapes.
+		s.mu.Lock()
+		reg := s.agents
+		s.mu.Unlock()
+		return GuardRules{On: true, Role: r.Role, Cwd: r.Cwd, CaseFold: caps.CaseFold, Tools: agent.GuardTools(reg, r.Agent), AskEscapes: true}
 	}
 	home, _ := os.UserHomeDir()
 	g := GuardRules{On: true, Role: r.Role, Home: home, Cwd: r.Cwd, CaseFold: caps.CaseFold,
@@ -147,9 +158,7 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		g.Floor = append(g.Floor, "merge")
 	}
 	g.NoWrite = s.guardNoWrite(r)
-	// A thread's escapes, which its sandbox lets it ask for, are the
-	// user's to answer.
-	g.AskEscapes = r.Role == proto.RoleThread && !r.Yolo && !r.NoSandboxEscapes
+	g.AskEscapes = askEscapes
 	if s.opts.Paths.Home != "" {
 		g.Worktrees = realPath(filepath.Join(s.opts.Paths.Home, "worktrees"))
 	}
@@ -330,6 +339,13 @@ func realTarget(p string) string {
 	return cur
 }
 
+// GuardEscape is POST /v1/escape's body: the call that asks to leave
+// the sandbox, by the mod's id for it, and whether it has ended.
+type GuardEscape struct {
+	ID   string `json:"id"`
+	Done bool   `json:"done,omitempty"`
+}
+
 // GuardResolve is POST /v1/resolve's body and answer: the paths a file
 // tool writes, absolute but not cleaned, and where each lands
 // (realTarget), in the same order.
@@ -380,7 +396,18 @@ func (s *Server) guardRoutes(mux *http.ServeMux, id string) {
 	// The guard asked about a call that leaves the sandbox: the prompt it
 	// brings is the user's (T574 case 6), which tm thread approve and the
 	// ticker read from the session's state (AgentState.Escape).
+	// Its body names the call (the mod's own id) and, once the call has
+	// ended, says done.
 	mux.HandleFunc("POST /v1/escape", func(w http.ResponseWriter, r *http.Request) {
+		var e GuardEscape
+		b, err := io.ReadAll(io.LimitReader(r.Body, maxModReport))
+		if err == nil {
+			err = json.Unmarshal(b, &e)
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		s.mu.Lock()
 		sess := s.sessions[id]
 		s.mu.Unlock()
@@ -388,7 +415,11 @@ func (s *Server) guardRoutes(mux *http.ServeMux, id string) {
 			http.Error(w, "session "+id+" is gone", http.StatusGone)
 			return
 		}
-		sess.MarkEscape()
+		if e.Done {
+			sess.EndEscape(e.ID)
+		} else {
+			sess.MarkEscape(e.ID)
+		}
 		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("POST /v1/denied", func(w http.ResponseWriter, r *http.Request) {

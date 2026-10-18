@@ -324,6 +324,12 @@ type SessionReadResult struct {
 type SessionKeysParams struct {
 	ID   string `json:"id"`
 	Data string `json:"data"`
+	// Relay is the role whose answer the keys carry, when tm's own
+	// commands send them for an agent (the coordinator's tm thread
+	// approve and answer): "coordinator" keys never answer an escape's
+	// prompt (SessionInfo.Escape), whatever the session's state was
+	// when the command looked.
+	Relay string `json:"relay,omitempty"`
 }
 
 // AttachRequest is the first line a client sends on an attach connection

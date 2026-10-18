@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/gittest"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // tickerScripts are the fake agent's scripts for these scenarios.
@@ -185,11 +187,14 @@ func TestTickerBlockedInbox(t *testing.T) {
 }
 
 // TestTickerEscapeToUser: a thread's prompt to run a command outside
-// its sandbox is the user's (T574 case 6): the inbox says so, the
-// coordinator's tm thread approve is refused though coordinator_approves
-// is on, and the user's answer goes through.
+// its sandbox is the user's (T574 case 6), with the guard off too: the
+// inbox says so, the coordinator's tm thread approve is refused though
+// coordinator_approves is on, and so are keys sent for the coordinator
+// (the server checks, not only the command); the user's answer goes
+// through.
 func TestTickerEscapeToUser(t *testing.T) {
 	env, projDir, out := tickerEnv(t)
+	writeConfig(t, env, "[projects.demo]\nguard = false\n")
 	coord := &Session{ID: strings.TrimSpace(env.MustCLI("project", "open", "demo"))}
 	info, _ := env.Info(coord)
 	coord.PID = info.PID
@@ -202,6 +207,14 @@ func TestTickerEscapeToUser(t *testing.T) {
 	env.Prompt(coord, "run coord-approve")
 	if got := readOut(t, out, "approve"); !strings.Contains(got, "human-only") || !strings.Contains(got, "exit 1") {
 		t.Fatalf("the coordinator's approve of an escape: %s", got)
+	}
+	c, err := client.DialAt(client.Paths{Socket: env.Socket}.HumanSocket(), proto.KindControl, proto.Protocol)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if err := c.Call(proto.MethodSessionKeys, proto.SessionKeysParams{ID: th.ID, Data: "1", Relay: proto.RoleCoordinator}, nil); err == nil || !strings.Contains(err.Error(), "only the user answers") {
+		t.Fatalf("keys for the coordinator on an escape's prompt: %v", err)
 	}
 	if r := env.CLI("thread", "approve", "t-0001", "--project", "demo"); r.Code != 0 {
 		t.Fatalf("the user's approve: %+v", r)

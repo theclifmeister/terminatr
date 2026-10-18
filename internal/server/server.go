@@ -779,6 +779,12 @@ func (s *Server) keys(p proto.SessionKeysParams) (any, *proto.Error) {
 	if perr != nil {
 		return nil, perr
 	}
+	// The coordinator's keys (tm thread approve, answer: the only way
+	// they reach a session) never answer an escape's prompt, checked
+	// here against the session's state as the keys go (T574 case 6).
+	if p.Relay == proto.RoleCoordinator && sess.Info().Escape {
+		return nil, proto.Errorf(proto.ErrRefused, "session %s asks to run a command outside its sandbox: only the user answers that prompt", p.ID)
+	}
 	if err := sess.Input([]byte(p.Data)); err != nil {
 		return nil, sessionError(p.ID, err)
 	}
@@ -794,6 +800,9 @@ func (s *Server) answer(p proto.SessionAnswerParams, cc callCtx) (any, *proto.Er
 	c := cc.who()
 	if perr := s.mayAnswer(sess.Info(), c, cc.human); perr != nil {
 		return nil, perr
+	}
+	if !cc.human && sess.Info().Escape {
+		return nil, proto.Errorf(proto.ErrRefused, "session %s asks to run a command outside its sandbox: only the user answers that prompt", p.ID)
 	}
 	res, perr := s.asks.answer(p.ID, p.Index, p.Answer, p.Question)
 	if perr == nil && p.Question != "" {
