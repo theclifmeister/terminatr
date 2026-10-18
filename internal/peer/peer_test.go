@@ -440,10 +440,12 @@ func TestSessionUnknownMethodAndIdle(t *testing.T) {
 }
 
 // slowResult holds its unmarshal until release closes, so a call is
-// still taking its response when more copies of it arrive.
-type slowResult struct{ release chan struct{} }
+// still taking its response when more copies of it arrive; entered
+// closes once the call has its response.
+type slowResult struct{ entered, release chan struct{} }
 
 func (r *slowResult) UnmarshalJSON([]byte) error {
+	close(r.entered)
 	<-r.release
 	return nil
 }
@@ -458,21 +460,31 @@ func TestSessionDuplicateResponses(t *testing.T) {
 	s.ping = time.Hour
 	ended := make(chan error, 1)
 	go func() { ended <- s.serve(func(time.Duration) {}) }()
-	// The far end answers the request four times.
+	// The far end answers the request four times; serve's first ping
+	// may come before it.
 	go func() {
+		d := json.NewDecoder(b)
 		var l line
-		if err := json.NewDecoder(b).Decode(&l); err != nil {
-			return
+		for l.Method != "peer.x" {
+			l = line{}
+			if err := d.Decode(&l); err != nil {
+				return
+			}
 		}
 		r, _ := json.Marshal(line{ID: l.ID, Result: json.RawMessage(`{"ok":true}`)})
 		for range 4 {
 			b.Write(append(r, '\n'))
 		}
 	}()
-	res := &slowResult{release: make(chan struct{})}
+	res := &slowResult{entered: make(chan struct{}), release: make(chan struct{})}
 	called := make(chan error, 1)
 	go func() { called <- s.call(context.Background(), "peer.x", nil, res) }()
 	// Give the copies time to arrive while the call is unmarshalling.
+	select {
+	case <-res.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the call never got its response")
+	}
 	time.Sleep(200 * time.Millisecond)
 	a.Close()
 	select {

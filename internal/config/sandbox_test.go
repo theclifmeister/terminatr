@@ -411,7 +411,7 @@ func TestSandboxApplies(t *testing.T) {
 	}
 }
 
-// TestSandboxProblems: each entry's reason, for the Sandbox tab; a lone
+// TestSandboxProblems: each entry's reason, for the Access tab; a lone
 // $ is plain text.
 func TestSandboxProblems(t *testing.T) {
 	got := SandboxProblems(SandboxExcluded, []string{"make e2e", "x $1", "make e2e", "*", "price $"})

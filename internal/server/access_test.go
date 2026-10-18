@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,6 +14,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -128,6 +130,16 @@ merge = "thread"
 	"this is = not [toml",
 }
 
+// pinTree is folder dir's checkout of repo (gitx.Pin), as threadTree
+// gives a thread recorded there; nil when it is none.
+func pinTree(repo, dir string) *gitx.Tree {
+	t, err := gitx.Pin(context.Background(), repo, dir)
+	if err != nil {
+		return nil
+	}
+	return t
+}
+
 // TestAccessLaunchEqual: the launch settings the rules give (file
 // access, sandbox lists and guidance, their notes, yolo and escapes,
 // and the files and arguments each agent renders from them) are what
@@ -166,11 +178,12 @@ func TestAccessLaunchEqual(t *testing.T) {
 						if role == proto.RoleShell {
 							slug = ""
 						}
-						set, err := s.resolveAccess(accessInput{role: role, slug: slug, cwd: cwd, agent: "claude", goos: goos, yolo: flags[0], noEscapes: flags[1]}, lc)
+						tree := pinTree(repo, cwd)
+						set, err := s.resolveAccess(accessInput{role: role, slug: slug, cwd: cwd, tree: tree, agent: "claude", goos: goos, yolo: flags[0], noEscapes: flags[1]}, lc)
 						if err != nil {
 							t.Fatalf("%s: %v", name, err)
 						}
-						want, err := s.accessFor(role, slug, cwd, lc)
+						want, err := s.accessFor(role, slug, tree, lc)
 						if err != nil {
 							t.Fatal(err)
 						}

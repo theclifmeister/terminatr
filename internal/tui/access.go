@@ -29,7 +29,8 @@ type accessView struct {
 }
 
 // showAccess opens the effective access of thread id of project slug
-// (id "" for a new thread of it).
+// (id "" for a new thread of it), asked off the UI goroutine: the
+// server reads files to answer.
 func (m *dash) showAccess(slug, id string) tea.Cmd { return m.openAccess(slug, id, "") }
 
 // showAccessFrom opens what a new thread of project slug gets from
@@ -37,22 +38,29 @@ func (m *dash) showAccess(slug, id string) tea.Cmd { return m.openAccess(slug, i
 func (m *dash) showAccessFrom(slug, source string) tea.Cmd { return m.openAccess(slug, "", source) }
 
 func (m *dash) openAccess(slug, id, source string) tea.Cmd {
-	res, err := m.src.AccessShow(slug, id)
-	if err != nil {
-		m.fail(err)
-		return nil
-	}
-	if source != "" {
-		var rules []proto.AccessRule
-		for _, r := range res.Rules {
-			if r.Source == source {
-				rules = append(rules, r)
+	src := m.src
+	m.msg = "reading the effective access…"
+	return whenLoaded(func() func(m *dash) tea.Cmd {
+		res, err := src.AccessShow(slug, id)
+		return func(m *dash) tea.Cmd {
+			m.msg = ""
+			if err != nil {
+				m.fail(err)
+				return nil
 			}
+			if source != "" {
+				var rules []proto.AccessRule
+				for _, r := range res.Rules {
+					if r.Source == source {
+						rules = append(rules, r)
+					}
+				}
+				res.Rules = rules
+			}
+			m.push(&accessView{res: res, from: source})
+			return nil
 		}
-		res.Rules = rules
-	}
-	m.push(&accessView{res: res, from: source})
-	return nil
+	})
 }
 
 // accessHere is the e action: the selected thread's effective access,
