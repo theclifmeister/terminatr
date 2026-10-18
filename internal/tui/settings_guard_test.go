@@ -14,10 +14,10 @@ import (
 	"github.com/theclifmeister/terminatr/internal/project"
 )
 
-// guardRow is the safety row labelled label of slug's settings.
+// guardRow is the row labelled label of slug's Access tab, on macOS.
 func guardRow(t *testing.T, slug, label string) setting {
 	t.Helper()
-	for _, r := range safetySettings(slug) {
+	for _, r := range accessSettings(slug, config.OSMac) {
 		if r.label == label {
 			return r
 		}

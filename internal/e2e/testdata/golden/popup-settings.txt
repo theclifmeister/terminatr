@@ -3,19 +3,11 @@
  └─ coordinator         ·          │  coordinator                      —           not running; enter starts it
                                    │  tasks: 0 need you · 1 in motion · 1 on deck
             ╭─ demo ───────────────────────────────────────────────────────────────────────────────────────╮────────────
-            │ 1 overview 2 inbox 3 tasks 4 settings 5 sandbox 6 keys 7 memory 8 library 9 messages         │
+            │ 1 overview 2 inbox 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages          │
             │                                                                                              │
             │ Start threads                ask first · all projects                                        │
             │ Ask first: the coordinator proposes threads and starts them after your go-ahead.             │
             │ Automatically: it starts them itself.                                                        │
-            │                                                                                              │
-            │ Yolo mode                    off · all projects                                              │
-            │ New threads run with no sandbox and no permission prompts; the guard keeps only its floor.   │
-            │ Turning it on asks first.                                                                    │
-            │                                                                                              │
-            │ Coordinator approves         on · all projects                                               │
-            │ The coordinator may answer its threads' in-scope permission prompts (allow once, never       │
-            │ always); one to run outside the sandbox is always yours.                                     │
             │                                                                                              │
             │ Parallel threads             10 · 0 working now  −  + · all projects                         │
             │ The most threads working at once; beyond it the coordinator proposes and waits. Idle and     │
@@ -31,8 +23,16 @@
             │ merges. x sends it back.                                                                     │
             │                                                                                              │
             │ Pull request follow-up       on · all projects                                               │
+            │ Prompt a thread when its pull request's checks fail, a reviewer asks for changes, or main    │
+            │ moves past it.                                                                               │
             │                                                                                              │
-            │ enter change · + - number · ↑ ↓ move · ← → tabs · esc close                                  │
+            │ Remote control               off · all projects                                              │
+            │ Coordinators keep remote control on, so you can continue them from another device: a new one │
+            │ starts with it, and tm turns it back on when it drops. prefix+r changes the running one;     │
+            │ your off holds until it is started anew.                                                     │
+            │                                                                                              │
+            │                                                                                              │
+            │ enter change · ← → tabs · esc close                                                          │
             ╰───────────────────────────────────────────────────────────────────────────────────── more ↓ ─╯
  ───────────────────────────────── │
  demo · active                     │────────────────────────────────────────────────────────────────────────────────────

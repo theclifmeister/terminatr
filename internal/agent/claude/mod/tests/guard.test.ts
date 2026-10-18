@@ -276,11 +276,14 @@ test('an excluded command that asks first is asked though Claude would allow it,
   expect([asked.decision, asked.reason]).toEqual(['ask', 'terminatr guard: this command runs outside the sandbox (excluded command npx playwright *), and the user set it to ask first.'])
   const r = await $.tool.call({ tool: 'Bash', ...input })
   expect((r as { deny?: string }).deny).toBeUndefined()
-  expect(escapes()).toBe(1)
+  // Marked before it runs, and unmarked once it ended.
+  const sent = escapes()
+  expect(sent.map(e => !!e.done)).toEqual([false, true])
+  expect(sent[0].id).toBe(sent[1].id)
   // Another command: nothing asked, nothing told.
   expect((await $.tool.check({ tool: 'Bash', input: { command: 'npx vitest' } })).decision).toBe('allow')
   await $.tool.call({ tool: 'Bash', command: 'npx vitest' })
-  expect(escapes()).toBe(1)
+  expect(escapes().length).toBe(2)
 })
 
 test('a call that asks to leave the sandbox is asked, and the server told first; not under yolo', async ($, on) => {

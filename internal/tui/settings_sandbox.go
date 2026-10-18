@@ -12,14 +12,15 @@ import (
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
-// The Sandbox tab (docs/SPEC.md §5.2): what a project's threads may do
-// beyond their sandbox, in a project's popup and, for all projects, in
-// the , popup. Presets first, named switches that open what one kind of
-// tool needs while its commands stay in the sandbox; then, under
-// Advanced, the sandbox lists: the commands a thread runs outside its
-// sandbox, each asking first or running without asking, the permission
-// rules it gets on top of tm's, and the folders it writes in besides
-// its worktree. It shows
+// The Access tab's sandbox rows (docs/SPEC.md §5.2, settings_access.go):
+// what a project's threads may do beyond their sandbox, in a project's
+// popup and, for all projects, in the , popup. Presets first, under
+// Inside the sandbox, named switches that open what one kind of tool
+// needs while its commands stay in the sandbox; then the sandbox lists:
+// the folders besides its worktree it writes in (Inside the sandbox),
+// the commands a thread runs outside its sandbox, each asking first or
+// running without asking (Outside the sandbox), and the permission rules
+// it gets on top of tm's. It shows
 // only what applies on the platform the server is on, where threads
 // run (config.SandboxSettings); config.toml keeps the rest, and a launch
 // skips it. A project's switch or list of a key replaces all projects'
@@ -49,8 +50,8 @@ var sandboxDownloads = "It opens " + strings.Join(config.BrowserDomains, ", ") +
 // sandboxConfirm is what turning on a preset puts to the human first.
 var sandboxConfirm = map[string]string{config.SandboxDownloads: sandboxDownloads, config.SandboxDevServers: sandboxLocal}
 
-// sandboxGuide heads the Sandbox tab.
-const sandboxGuide = "Prefer a preset: the thread's commands stay inside the sandbox, opened only as far as the tool needs. Excluded commands (Advanced) run outside it: a last resort. " + sandboxBoth
+// sandboxGuide heads the Access tab.
+const sandboxGuide = "Prefer a preset: the thread's commands stay inside the sandbox, opened only as far as the tool needs. Excluded commands (Outside the sandbox) run outside it: a last resort. " + sandboxBoth
 
 // sandboxLists are each list's row label, help and view text.
 var sandboxLists = map[string]struct{ label, help, about, example string }{
@@ -71,7 +72,7 @@ var sandboxLists = map[string]struct{ label, help, about, example string }{
 // sandboxPresets are each preset's row label and help.
 var sandboxPresets = map[string]struct{ label, help string }{
 	config.SandboxBrowser: {"Browser testing (Playwright, Chromium)",
-		"Playwright and other Chromium tools inside the sandbox: threads are told to launch the headless shell in one process (--single-process), the one Chromium that starts in macOS's sandbox, and given a ready Playwright test setup that runs several tests that way. It opens nothing: to install Playwright and its browser inside the sandbox, turn on Browser downloads too; to test against a local dev server, Local dev servers. Full Chrome and headed runs still need an excluded command (Advanced)."},
+		"Playwright and other Chromium tools inside the sandbox: threads are told to launch the headless shell in one process (--single-process), the one Chromium that starts in macOS's sandbox, and given a ready Playwright test setup that runs several tests that way. It opens nothing: to install Playwright and its browser inside the sandbox, turn on Browser downloads too; to test against a local dev server, Local dev servers. Full Chrome and headed runs still need an excluded command (Outside the sandbox)."},
 	config.SandboxDownloads: {"Browser downloads (npm, Playwright)",
 		"npm installs and Playwright's browser downloads inside the sandbox. " + sandboxDownloads + " Turning it on says so first."},
 	config.SandboxDevServers: {"Local dev servers",
@@ -95,9 +96,16 @@ func (m *dash) serverOS() string {
 	return caps.OS
 }
 
-// sandboxSettings are the Sandbox tab's rows for slug ("" for all
-// projects) on platform goos: the presets that apply there under
-// Presets, then the lists under Advanced.
+// sandboxSections head the sandbox lists' rows on the Access tab.
+var sandboxSections = map[string]string{config.SandboxWrite: "Inside the sandbox: write folders", config.SandboxExcluded: "Outside the sandbox", config.SandboxAllow: "Permission rules"}
+
+// sandboxOrder are the sandbox lists in the Access tab's order: what
+// opens inside the sandbox first.
+var sandboxOrder = []string{config.SandboxWrite, config.SandboxExcluded, config.SandboxAllow}
+
+// sandboxSettings are the Access tab's sandbox rows for slug ("" for
+// all projects) on platform goos: the presets that apply there under
+// Inside the sandbox, then each list under its own section.
 func sandboxSettings(slug, goos string) []setting {
 	sr := newSafetyRows(slug)
 	var rows []setting
@@ -107,23 +115,21 @@ func sandboxSettings(slug, goos string) []setting {
 		}
 	}
 	if len(rows) > 0 {
-		rows[0].section = "Presets"
+		rows[0].section = "Inside the sandbox: presets"
 	}
-	adv := len(rows)
-	for _, k := range config.SandboxKeys {
+	for _, k := range sandboxOrder {
 		if config.SandboxApplies(k, goos) {
-			rows = append(rows, sr.sandboxRow(k))
+			row := sr.sandboxRow(k)
+			row.section = sandboxSections[k]
+			rows = append(rows, row)
 		}
-	}
-	if adv < len(rows) {
-		rows[adv].section = "Advanced"
 	}
 	return rows
 }
 
-// sandboxHead are the Sandbox tab's lines above its rows: the guidance,
+// accessHead are the Access tab's lines above its rows: the guidance,
 // and the platform it shows (with why no preset shows, when none does).
-func sandboxHead(m *dash, w int) []string {
+func accessHead(m *dash, w int) []string {
 	goos := m.serverOS()
 	where := "Shown: what applies on " + config.OSName(goos) + ", where this server's threads run."
 	if !slices.ContainsFunc(config.SandboxPresets, func(k string) bool { return config.SandboxApplies(k, goos) }) {
@@ -171,7 +177,11 @@ func (sr safetyRows) presetRow(key string) setting {
 			})
 			return nil
 		}}
-	if !sr.all {
+	if sr.all {
+		row.note = func(m *dash) []string {
+			return ownersNote(m, func(p ProjectData) bool { _, ok := m.data.SandboxPresets[p.Slug][key]; return ok })
+		}
+	} else {
 		row.from = func(m *dash) string {
 			if _, own := sr.presetOf(m, key); !own {
 				return config.AllProjectsName
@@ -241,7 +251,11 @@ func (sr safetyRows) sandboxRow(key string) setting {
 			m.push(&sandboxView{sr: sr, list: key})
 			return nil
 		}}
-	if !sr.all {
+	if sr.all {
+		row.note = func(m *dash) []string {
+			return ownersNote(m, func(p ProjectData) bool { _, ok := m.data.Sandbox[p.Slug][key]; return ok })
+		}
+	} else {
 		row.from = func(m *dash) string {
 			if _, own := sr.sandboxOf(m, key); !own {
 				return config.AllProjectsName
