@@ -363,20 +363,16 @@ func sandboxed(l agent.Launch, spec agent.LaunchSpec, m *agent.Manifest, windows
 // or a key would otherwise leave the network open (T577). The probe is
 // the coordinator's (tm's socket connects, a loopback address outside
 // the domains is refused, the proxy refuses an unlisted host and takes
-// a listed one), without the local binding. On Windows (closedOS) the
-// network is off; on Linux (openOS) it keeps today's open form.
+// a listed one), without the local binding. On Linux and Windows
+// (openOS) it keeps the open form threads had before.
 func limited(l agent.Launch, spec agent.LaunchSpec, m *agent.Manifest, goos string) agent.Launch {
 	idx, name, flags := profileFlags(l.Argv)
 	if len(idx) == 0 {
 		return l // yolo: no sandbox to shape
 	}
-	switch {
-	case closedOS(goos):
-		l.Argv = closedNetwork(l.Argv)
-		return l
-	case openOS(goos):
+	if openOS(goos) {
 		l.Argv = openNetwork(l.Argv)
-		l.Warnings = append(l.Warnings, OpenNote)
+		l.Warnings = append(l.Warnings, OpenNote(goos))
 		return l
 	}
 	version, err := probeFunc(m, l.Argv[0], spec.TMBin, spec.Cwd, spec.Socket, name, unbound(flags), false)
@@ -623,14 +619,11 @@ func (a *Agent) probeWindowsCoordinator(tmBin string) (string, error) {
 	return version, writeVerdict(path, tmBin, work, sock, name, flags, filepath.Join(outside, "probe"))
 }
 
-// closedOS reports whether a thread's network is off on platform goos
-// rather than going through Codex's proxy: on Windows the proxy needs
-// Codex's elevated sandbox.
-func closedOS(goos string) bool { return goos == "windows" }
-
-// openOS reports whether a thread keeps today's open network on
-// platform goos (coordinator decision, 2026-10-19: never break tm for a
-// Codex thread, never wider than today). Linux: Codex 0.162's seccomp
+// openOS reports whether a thread keeps the open network threads had
+// before T583 on platform goos (coordinator decisions, 2026-10-19: never
+// break a Codex thread, never wider than before). Windows: Codex's
+// proxy needs its elevated sandbox, and the closed form would break
+// git push and everything networked that worked before. Linux: Codex 0.162's seccomp
 // filter refuses every AF_UNIX socket while the network goes through
 // its proxy (unless dangerously_allow_all_unix_sockets, which would open
 // every socket, the human one too; network.unix_sockets names sockets
@@ -638,11 +631,16 @@ func closedOS(goos string) bool { return goos == "windows" }
 // (linux-sandbox/src/landlock.rs, NetworkSeccompMode; its README: "In
 // managed proxy mode … seccomp blocks new AF_UNIX/socketpair creation";
 // CI measured both). Only the open form reaches tm's socket there.
-func openOS(goos string) bool { return goos == "linux" }
+func openOS(goos string) bool { return goos == "linux" || goos == "windows" }
 
 // OpenNote is what a thread's launch warns and the effective view says
-// where its network keeps the open form (openOS).
-const OpenNote = "network not limited on Linux: Codex's Linux sandbox can't allow tm's socket with its proxy on"
+// on platform goos, where its network keeps the open form (openOS).
+func OpenNote(goos string) string {
+	if goos == "windows" {
+		return "network not limited on Windows: Codex's proxy needs its elevated sandbox"
+	}
+	return "network not limited on Linux: Codex's Linux sandbox can't allow tm's socket with its proxy on"
+}
 
 // openNetwork is a launch's argv in today's open form: no proxy
 // feature, the profile's network on without a mode or domains, its
@@ -673,18 +671,14 @@ func openNetwork(argv []string) []string {
 // Network forms a thread starts with (ThreadNetwork).
 const (
 	NetworkLimited = "limited" // through Codex's proxy, its hosts only
-	NetworkClosed  = "closed"  // off (closedOS)
-	NetworkOpen    = "open"    // today's form (openOS)
+	NetworkOpen    = "open"    // the form before T583 (openOS)
 )
 
 // ThreadNetwork is the network form a thread starts with on platform
 // goos, and its launch argv in that form before its probe. For tests
 // that run the profile under the installed Codex.
 func ThreadNetwork(argv []string, goos string) (string, []string) {
-	switch {
-	case closedOS(goos):
-		return NetworkClosed, closedNetwork(argv)
-	case openOS(goos):
+	if openOS(goos) {
 		return NetworkOpen, openNetwork(argv)
 	}
 	return NetworkLimited, argv

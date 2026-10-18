@@ -153,15 +153,12 @@ func TestLaunch(t *testing.T) {
 		sockW = `,"\\run"="write"`
 		winSandbox = []string{"-c", `windows.sandbox="unelevated"`}
 	}
-	// The network form per OS (ThreadNetwork): off on Windows, today's
-	// open form on Linux, with its note.
+	// The network form per OS (ThreadNetwork): the open form threads had
+	// before on Linux and Windows, with its note.
 	form, _ := ThreadNetwork(nil, caps.OS)
 	var formWarn []string
-	switch form {
-	case NetworkClosed:
-		network, proxy = `network={enabled=false,unix_sockets={"/run/tm.sock"="allow"}}`, nil
-	case NetworkOpen:
-		network, proxy, formWarn = `network={enabled=true,unix_sockets={"/run/tm.sock"="allow"}}`, nil, []string{OpenNote}
+	if form == NetworkOpen {
+		network, proxy, formWarn = `network={enabled=true,unix_sockets={"/run/tm.sock"="allow"}}`, nil, []string{OpenNote(caps.OS)}
 	}
 	want := []string{"codex",
 		"-c", "check_for_update_on_startup=false",

@@ -72,7 +72,7 @@ func threadSandboxCheck(d Deps, name string, m *agent.Manifest, p agent.ThreadSa
 	ok, fallback := "a thread's commands run sandboxed, reach tm's socket and only the hosts it is given", "starts with its network off"
 	switch d.GOOS {
 	case "windows":
-		ok, fallback = "a thread's commands run sandboxed and reach tm's socket", "runs without it or asks approval for every command"
+		ok, fallback = "a thread's commands run sandboxed and reach tm's socket; network not limited on Windows: Codex's proxy needs its elevated sandbox", "runs without it or asks approval for every command"
 	case "linux":
 		// Today's open network (internal/agent/codex/probe.go, openOS).
 		ok = "a thread's commands run sandboxed and reach tm's socket; network not limited on Linux: Codex's Linux sandbox can't allow tm's socket with its proxy on"

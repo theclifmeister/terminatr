@@ -92,10 +92,10 @@ func TestRemoteHostRules(t *testing.T) {
 	if rules, domains := hosts("codex", true); rules != nil || domains != nil {
 		t.Errorf("yolo: rules %q domains %q", rules, domains)
 	}
-	// On Windows a Codex thread's network is off, on Linux open: its
-	// hosts show, not used, and a network rule says which, with the
-	// launch's note on Linux.
-	for goos, want := range map[string]string{config.OSWindows: "off", config.OSLinux: "open"} {
+	// On Windows and Linux a Codex thread keeps its open network: its
+	// hosts show, not used, and a network rule says so, with the
+	// launch's note.
+	for goos, want := range map[string]string{config.OSWindows: "open", config.OSLinux: "open"} {
 		set, err := s.resolveAccess(accessInput{role: proto.RoleThread, slug: "demo", cwd: repo, tree: tree, agent: "codex", goos: goos}, loadLaunchConfig())
 		if err != nil {
 			t.Fatal(err)
@@ -107,8 +107,8 @@ func TestRemoteHostRules(t *testing.T) {
 			}
 			if r.Kind == proto.AccessNetwork {
 				network = append(network, r.Value)
-				if goos == config.OSLinux && r.Note != codex.OpenNote {
-					t.Errorf("linux note %q", r.Note)
+				if r.Note != codex.OpenNote(goos) {
+					t.Errorf("%s note %q", goos, r.Note)
 				}
 			}
 		}

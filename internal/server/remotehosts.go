@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -22,8 +23,13 @@ import (
 // sandbox asks per host.
 
 // codexOpenNote is codex.OpenNote: what the effective view says of a
-// Codex thread's network on Linux.
-const codexOpenNote = "network not limited on Linux: Codex's Linux sandbox can't allow tm's socket with its proxy on"
+// Codex thread's network on Linux and Windows.
+func codexOpenNote(goos string) string {
+	if goos == config.OSWindows {
+		return "network not limited on Windows: Codex's proxy needs its elevated sandbox"
+	}
+	return "network not limited on Linux: Codex's Linux sandbox can't allow tm's socket with its proxy on"
+}
 
 // remoteHostNote is the note of a git remote host rule.
 const remoteHostNote = "git remote host"

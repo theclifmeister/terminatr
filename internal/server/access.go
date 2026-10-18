@@ -65,15 +65,12 @@ func (s *Server) resolveAccess(in accessInput, lc launchConfig) (proto.AccessSet
 			add(remoteHostRules(in.tree.CommonDir)...)
 		}
 		if in.agent == "codex" && (in.goos == config.OSWindows || in.goos == config.OSLinux) {
-			// Its network isn't limited to its hosts there
-			// (codex.ThreadNetwork): off on Windows, where Codex's proxy
-			// needs its elevated sandbox; open on Linux, where its
-			// sandbox can't allow tm's socket with the proxy on. Its host
-			// rules aren't used; one rule says which.
-			value, why := "off", "a Codex thread's network is off on Windows"
-			if in.goos == config.OSLinux {
-				value, why = "open", codexOpenNote
-			}
+			// Its network keeps the open form it had before
+			// (codex.ThreadNetwork): on Windows Codex's proxy needs its
+			// elevated sandbox, on Linux its sandbox can't allow tm's
+			// socket with the proxy on. Its host rules aren't used; one
+			// rule says so.
+			value, why := "open", codexOpenNote(in.goos)
 			for i := from; i < len(set.Rules); i++ {
 				if r := &set.Rules[i]; r.Kind == proto.AccessHost && r.Skipped == "" {
 					r.Skipped = why

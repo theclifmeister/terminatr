@@ -109,18 +109,19 @@ func TestThreadNetwork(t *testing.T) {
 	if !slices.Equal(l.Argv, closed) || len(l.Warnings) != 1 || !strings.Contains(l.Warnings[0], "codex 0.170.0: the thread's limited network doesn't hold") {
 		t.Errorf("not held: %q %q", l.Argv, l.Warnings)
 	}
-	probed = nil
-	if l = limited(agent.Launch{Argv: argv}, spec, m, "windows"); !slices.Equal(l.Argv, closed) || probed != nil || len(l.Warnings) > 0 {
-		t.Errorf("windows: %q %q, probed %q", l.Argv, l.Warnings, probed)
-	}
-	// On Linux the thread keeps today's open form, unprobed, with its
-	// note (openOS).
-	probed = nil
+	// On Linux and Windows the thread keeps the open form it had before,
+	// unprobed, with its note (openOS).
 	open := []string{"codex", "-a", "on-request", "-c", `default_permissions="tm"`,
 		"-c", `permissions={tm={extends=":workspace",filesystem={"/w"="write"},network={enabled=true,unix_sockets={"/run/tm.sock"="allow"},allow_local_binding=true}}}`,
 		"-c", "hooks={}"}
-	if l = limited(agent.Launch{Argv: argv}, spec, m, "linux"); !slices.Equal(l.Argv, open) || probed != nil || !slices.Equal(l.Warnings, []string{OpenNote}) {
-		t.Errorf("linux: %q %q, probed %q", l.Argv, l.Warnings, probed)
+	for _, goos := range []string{"linux", "windows"} {
+		probed = nil
+		if l = limited(agent.Launch{Argv: argv}, spec, m, goos); !slices.Equal(l.Argv, open) || probed != nil || !slices.Equal(l.Warnings, []string{OpenNote(goos)}) {
+			t.Errorf("%s: %q %q, probed %q", goos, l.Argv, l.Warnings, probed)
+		}
+	}
+	if !strings.Contains(OpenNote("windows"), "on Windows: Codex's proxy needs its elevated sandbox") || !strings.Contains(OpenNote("linux"), "on Linux") {
+		t.Errorf("notes %q %q", OpenNote("windows"), OpenNote("linux"))
 	}
 	probed = nil
 	if l = limited(agent.Launch{Argv: []string{"codex", "--dangerously-bypass-approvals-and-sandbox"}}, spec, m, "darwin"); len(l.Argv) != 2 || probed != nil {
@@ -183,11 +184,10 @@ func TestClosedNetworkManifest(t *testing.T) {
 	}
 }
 
-// TestClosedOS: a thread's network is off on Windows, today's open form
-// on Linux (where Codex's proxy refuses tm's socket), through the proxy
-// on macOS.
+// TestClosedOS: a thread keeps its open form on Windows and Linux,
+// goes through the proxy on macOS.
 func TestClosedOS(t *testing.T) {
-	for goos, want := range map[string]string{"windows": NetworkClosed, "linux": NetworkOpen, "darwin": NetworkLimited} {
+	for goos, want := range map[string]string{"windows": NetworkOpen, "linux": NetworkOpen, "darwin": NetworkLimited} {
 		if got, _ := ThreadNetwork(nil, goos); got != want {
 			t.Errorf("%s: %s, want %s", goos, got, want)
 		}

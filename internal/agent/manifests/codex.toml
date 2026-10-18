@@ -89,7 +89,8 @@ args = [
   # "full" keeps the domains and lets every method through (measured on
   # 0.162). Either is silently open without the proxy feature (T577). The Go agent probes it before a thread
   # starts and, when it doesn't hold, closes the network rather than
-  # leaving it open (probe.go); on Windows it is off. Its local-ports
+  # leaving it open (probe.go); on Linux and Windows it keeps the open
+  # form threads had before (no proxy: openNetwork). Its local-ports
   # rule (macOS, which the server checks) is its network's
   # allow_local_binding: a bool in the 0.162 NetworkToml, which `codex
   # sandbox -c` parses (a string is refused). Under limited mode loopback

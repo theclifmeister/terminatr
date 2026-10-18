@@ -43,7 +43,7 @@ func sandboxArgs(t *testing.T, spec agent.LaunchSpec) (string, []string) {
 			out = append(out, "-c", argv[i+1])
 		}
 	}
-	if want := map[string]int{codex.NetworkLimited: 6, codex.NetworkOpen: 4, codex.NetworkClosed: 4}[form]; len(out) != want {
+	if want := map[string]int{codex.NetworkLimited: 6, codex.NetworkOpen: 4}[form]; len(out) != want {
 		t.Fatalf("no thread profile in %q", l.Argv)
 	}
 	return form, out
@@ -183,14 +183,12 @@ func TestSmokeCodexSandbox(t *testing.T) {
 		"outside": "no", "home": "no", "project-read": "ok", "project-write": "no",
 		"socket": "ok", "loopback": "no", "proxy": "ok",
 	}
-	switch form {
-	case codex.NetworkOpen:
-		// Linux: today's open form (Codex's Linux sandbox can't allow
-		// tm's socket with its proxy on): the socket and loopback
-		// connect, no proxy.
+	if form == codex.NetworkOpen {
+		// Linux and Windows: the open form threads had before (Codex's
+		// Linux sandbox can't allow tm's socket with its proxy on; on
+		// Windows its proxy needs the elevated sandbox): the socket and
+		// loopback connect, no proxy.
 		want["loopback"], want["proxy"] = "ok", "no"
-	case codex.NetworkClosed:
-		want["proxy"] = "no"
 	}
 	got := map[string]string{}
 	for _, line := range strings.Split(string(out), "\n") {
