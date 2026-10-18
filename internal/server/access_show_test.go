@@ -3,6 +3,7 @@ package server
 import (
 	"log"
 	"os"
+	"os/exec"
 	"slices"
 	"strings"
 	"testing"
@@ -220,5 +221,52 @@ allow = ["Bash(npx playwright *)"]
 	writeConfig(t, "[projects.demo]\nyolo = true\n")
 	if r := explain("ls"); r.Sandbox != proto.AccessInside || r.Prompt != proto.PromptNone || r.PromptFrom != "demo" {
 		t.Errorf("yolo: %+v", r)
+	}
+}
+
+// TestAccessGitDirRule: a thread in a repo's worktree shows its git-dir
+// grant as one tm rule naming the repo, each path it opens noting it;
+// a thread outside a repo has none, and a project's thread to come a
+// placeholder. The launch never takes the rule itself.
+func TestAccessGitDirRule(t *testing.T) {
+	testPaths(t)
+	newWatchProject(t)
+	s := &Server{opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}}}
+	root := realPath(t.TempDir())
+	repo, wt := root+"/repo", root+"/wt"
+	for _, args := range [][]string{
+		{"init", "-q", repo},
+		{"-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "c"},
+		{"-C", repo, "worktree", "add", "-q", "-b", "x", wt},
+	} {
+		if b, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, b)
+		}
+	}
+	rules := func(cwd string) []proto.AccessRule {
+		t.Helper()
+		set, err := s.resolveAccess(accessInput{role: proto.RoleThread, slug: "demo", cwd: cwd, goos: "darwin"}, loadLaunchConfig())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if a := launchAccess(set); slices.Contains(a.Write, repo) {
+			t.Errorf("the repo itself launched as writable: %q", a.Write)
+		}
+		return set.Rules
+	}
+	got := rules(wt)
+	if r := findRule(got, proto.AccessGitDir, repo); r == nil || r.Source != proto.AccessFromTM {
+		t.Errorf("no git-dir rule for %s: %+v", repo, got)
+	}
+	if r := findRule(got, proto.AccessWrite, repo+"/.git/objects"); r == nil || r.Note != "git-dir grant: "+repo {
+		t.Errorf("objects: %+v", r)
+	}
+	for _, r := range rules(t.TempDir()) {
+		if r.Kind == proto.AccessGitDir {
+			t.Errorf("outside a repo: %+v", r)
+		}
+	}
+	if findRule(rules(""), proto.AccessGitDir, "<its repo>") == nil {
+		t.Error("no placeholder for a thread to come")
 	}
 }
