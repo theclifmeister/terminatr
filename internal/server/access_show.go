@@ -97,7 +97,12 @@ func (s *Server) accessShow(p proto.AccessShowParams, c callCtx) (any, *proto.Er
 	}
 	lc := loadLaunchConfig()
 	safety := lc.safety(p.Project)
-	home, _ := os.UserHomeDir()
+	// The agent's own files are the human's to see: the user's settings
+	// aren't a thread's business, and its worktree's it reads itself.
+	home := ""
+	if c.human {
+		home, _ = os.UserHomeDir()
+	}
 	if p.Thread == "" {
 		name := s.threadAgentOf(safety)
 		set, err := s.resolveAccess(accessInput{role: proto.RoleThread, slug: p.Project, agent: name, goos: caps.OS,

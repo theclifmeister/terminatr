@@ -334,6 +334,9 @@ type SettingsSource interface {
 	// table on or off; nil removes it, so a project follows all
 	// projects'. Refused when tm runs inside an agent.
 	SetSandboxPreset(table, key string, on *bool) error
+	// AccessShow is the effective access of thread id of project slug
+	// (id "" for a new thread of it), read-only (access.show).
+	AccessShow(slug, id string) (proto.AccessShowResult, error)
 }
 
 // LinkSource sets and works the links between projects.

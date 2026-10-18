@@ -162,8 +162,10 @@ excluded_commands = ["make bench"]
 	}
 
 	self := callCtx{who: func() caller.Caller { return caller.Caller{Kind: caller.Thread, Project: "demo", Thread: "t-0001"} }}
-	if _, perr := show(self, "t-0001"); perr != nil {
+	if own, perr := show(self, "t-0001"); perr != nil {
 		t.Errorf("own thread refused: %v", perr)
+	} else if findRule(own.Rules, proto.AccessAllow, "Bash(git log:*)") != nil {
+		t.Error("a thread was shown the agent's own files")
 	}
 	if _, perr := show(self, ""); perr == nil {
 		t.Error("a thread saw the project's")

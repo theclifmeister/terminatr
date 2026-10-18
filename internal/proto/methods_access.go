@@ -68,6 +68,10 @@ const (
 	AccessFromDefault = "tm default"   // an on/off setting nobody set
 )
 
+// AccessSettingsNote is the note of the rule that names the human's
+// settings file (config.toml), which the TUI shows by that name only.
+const AccessSettingsNote = "your settings"
+
 // Changes since launch (AccessRule.Change).
 const (
 	AccessAdded   = "added"
@@ -100,9 +104,10 @@ type AccessRule struct {
 	Change string `json:"change,omitempty"`
 }
 
-// Same says whether r and o are the same rule, wherever each was read.
+// Same says whether r and o give a launch the same, wherever each was
+// read and whichever table set it.
 func (r AccessRule) Same(o AccessRule) bool {
-	return r.Where == o.Where && r.Kind == o.Kind && r.Value == o.Value && r.Source == o.Source && r.Skipped == o.Skipped
+	return r.Where == o.Where && r.Kind == o.Kind && r.Value == o.Value && r.Skipped == o.Skipped
 }
 
 // AccessSet is a thread's access: its rules and what they are for.

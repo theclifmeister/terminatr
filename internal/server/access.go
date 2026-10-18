@@ -148,7 +148,7 @@ func (s *Server) pathNotes(in accessInput) func(string) string {
 		case p == dir:
 			return "project folder"
 		case p == cfg:
-			return "config.toml: your settings"
+			return proto.AccessSettingsNote
 		case dir != "" && strings.HasPrefix(p, dir+string(filepath.Separator)):
 			return "project folder: only tm writes it"
 		case common != "" && (p == common || strings.HasPrefix(p, common+string(filepath.Separator))):

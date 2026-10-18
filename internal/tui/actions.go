@@ -135,6 +135,8 @@ func init() {
 			foot: withProject("tasks"), run: (*dash).taskTab},
 		{id: "project.inbox", keys: []string{"i"}, label: "i", help: "the Inbox tab of the project popup: what the coordinator is told about", menu: "inbox",
 			foot: withProject("inbox"), run: (*dash).inbox},
+		{id: "access.show", keys: []string{"e"}, label: "e", help: "effective access: on a thread, what it launched with (RESTART TO APPLY marks what the settings changed since); elsewhere, what a new thread of the project gets: every sandbox, prompt, guard and secret rule with where it comes from, read-only (tm access show)",
+			menu: "effective access", run: (*dash).accessHere},
 		{id: "project.next", keys: []string{"]"}, label: "] [", help: "next / previous project's coordinator", menu: "next project",
 			run: func(m *dash, _ string) tea.Cmd { return m.cycleProject(true) }},
 		{id: "project.prev", keys: []string{"["}, menu: "previous project",

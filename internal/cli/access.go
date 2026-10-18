@@ -10,6 +10,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 const accessUsage = `usage: tm access show [<project>] [--thread <id>] [--json]
@@ -101,7 +102,7 @@ func accessShow(e *Env, args []string) error {
 func printAccess(e *Env, res proto.AccessShowResult) {
 	fmt.Fprintln(e.Stdout, accessTitle(res))
 	if res.SandboxError != "" {
-		fmt.Fprintf(e.Stdout, "sandbox lists and presets left out: %s\n", res.SandboxError)
+		fmt.Fprintf(e.Stdout, "sandbox lists and presets left out: %s\n", oneLineText(res.SandboxError))
 	}
 	tw := tabwriter.NewWriter(e.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "WHERE\tRULE\tFROM\t")
@@ -110,11 +111,12 @@ func printAccess(e *Env, res proto.AccessShowResult) {
 		if r.Note != "" {
 			from += " · " + r.Note
 		}
+		from = oneLineText(from)
 		where := r.Where
 		if r.Change == proto.AccessRemoved || r.Skipped != "" {
 			where += " ─"
 		}
-		fmt.Fprintf(tw, "%s\t%s %s\t%s\t%s\n", where, r.Kind, oneLineText(r.Value), from, strings.Join(r.Remarks(), "; "))
+		fmt.Fprintf(tw, "%s\t%s %s\t%s\t%s\n", where, r.Kind, oneLineText(r.Value), from, oneLineText(strings.Join(r.Remarks(), "; ")))
 	}
 	tw.Flush()
 	switch {
@@ -148,9 +150,11 @@ func accessTitle(res proto.AccessShowResult) string {
 	return t
 }
 
-// oneLineText is s on one line, for a table cell.
+// oneLineText is s on one line, for a table cell, without what a
+// terminal would act on: a rule's text may come from a file a thread
+// writes (its worktree's agent settings).
 func oneLineText(s string) string {
-	return strings.Join(strings.Fields(s), " ")
+	return strings.Join(strings.Fields(textsafe.Clean(s, false)), " ")
 }
 
 func accessExplain(e *Env, args []string) error {
@@ -188,7 +192,7 @@ func accessExplain(e *Env, args []string) error {
 // printAccessExplain prints an explanation: the sandbox, the prompt and the
 // guard, each with why and where its rule comes from.
 func printAccessExplain(e *Env, res proto.AccessExplainResult) {
-	fmt.Fprintln(e.Stdout, res.Command)
+	fmt.Fprintln(e.Stdout, oneLineText(res.Command))
 	from := func(s string) string {
 		if s == "" {
 			return ""
@@ -200,11 +204,11 @@ func printAccessExplain(e *Env, res proto.AccessExplainResult) {
 		sandbox = "runs OUTSIDE the sandbox"
 	}
 	tw := tabwriter.NewWriter(e.Stdout, 0, 0, 3, ' ', 0)
-	fmt.Fprintf(tw, "  sandbox\t%s\t%s\t%s\n", sandbox, res.SandboxWhy, from(res.SandboxFrom))
-	fmt.Fprintf(tw, "  prompt\t%s\t%s\t%s\n", res.Prompt, res.PromptWhy, from(res.PromptFrom))
+	fmt.Fprintf(tw, "  sandbox\t%s\t%s\t%s\n", sandbox, oneLineText(res.SandboxWhy), from(res.SandboxFrom))
+	fmt.Fprintf(tw, "  prompt\t%s\t%s\t%s\n", res.Prompt, oneLineText(res.PromptWhy), from(res.PromptFrom))
 	fmt.Fprintf(tw, "  guard\t%s\t%s\t\n", res.Guard, oneLineText(res.GuardWhy))
 	tw.Flush()
 	if res.Agents != "" {
-		fmt.Fprintf(e.Stdout, "  %s\n", res.Agents)
+		fmt.Fprintf(e.Stdout, "  %s\n", oneLineText(res.Agents))
 	}
 }

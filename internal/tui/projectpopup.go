@@ -192,6 +192,9 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	}
 	s := k.String()
 	d := scrollKeys[s]
+	if pv.tab == tabSandbox && s == "e" {
+		return m.showAccess(pv.slug, "")
+	}
 	if l := pv.list(); l != nil {
 		before := l.sel
 		cmd, _ := l.key(m, k)
