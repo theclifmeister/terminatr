@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.1](https://github.com/theclifmeister/terminatr/compare/v0.35.0...v0.35.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* **server:** rotate service.log at launchd start when over 1 MB ([#632](https://github.com/theclifmeister/terminatr/issues/632)) ([0296b88](https://github.com/theclifmeister/terminatr/commit/0296b8883b9a1d4ce36b1b41a4bc97ac077669be))
+
 ## [0.35.0](https://github.com/theclifmeister/terminatr/compare/v0.34.0...v0.35.0) (2026-10-17)
 
 
