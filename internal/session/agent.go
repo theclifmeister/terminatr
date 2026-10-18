@@ -64,6 +64,10 @@ type AgentConfig struct {
 	// ModSocket, when set, says the agent runs terminatr's mod, which
 	// reports its state over this socket (ModState; docs/SPEC.md §8.6).
 	ModSocket string
+	// PromptsEscape: every permission prompt of the agent asks to run
+	// outside its sandbox (a Codex thread's escalation), which the user
+	// answers, never the coordinator (AgentState.Escape).
+	PromptsEscape bool
 }
 
 // DefaultPromptHold is AgentConfig.PromptHold's default.
@@ -73,6 +77,9 @@ const DefaultPromptHold = 10 * time.Minute
 const (
 	HeldBox    = "prompt box not empty"
 	HeldDialog = "dialog on screen"
+	// HeldEscape: a call that asked to leave the sandbox is open, whose
+	// prompt is the user's (PromptNow doesn't paste then).
+	HeldEscape = "a call asks to leave the sandbox"
 	// HeldToken: held past PromptHold, the prompt is for the agent's
 	// channel, which needs a token no hook has reported yet
 	// (agent.ErrNoToken). It goes once a hook brings the token, or is
@@ -185,8 +192,22 @@ type agentRT struct {
 	lastState  agent.Merged
 	lastSID    string
 	lastTodos  []agent.Todo
-	emptyBox   bool // the empty-box rule matched at the last evaluation
-	blocker    bool // a blocked rule matched at the last evaluation
+	// escapes are the calls, by id, that asked to run outside the
+	// sandbox (MarkEscape): while one is held, the permission prompt on
+	// screen may be its, so it is the user's. One per call, so that a
+	// parallel call's prompt ending doesn't end an escape's. The call's
+	// end (EndEscape, its PostToolUse) or the turn's only says it may
+	// go: it goes once the screen shows no permission dialog and
+	// escapeGrace has passed since, since the hooks that say so can
+	// come from any process in the agent's tree, before its dialog has
+	// even drawn.
+	escapes  map[string]*escapeMark
+	emptyBox bool // the empty-box rule matched at the last evaluation
+	blocker  bool // a blocked rule matched at the last evaluation
+	// permDialog: a permission dialog's rule matched at the last
+	// evaluation; escapeDialog: the one that says it runs a command
+	// outside the sandbox ([guard] escape_rule).
+	permDialog, escapeDialog bool
 
 	keys        map[string]string // rule id -> the keys that answer its dialog (agent.Rule.Keys)
 	answerRule  string            // the keyed rule that is the screen's match
@@ -269,6 +290,10 @@ type AgentState struct {
 	// RemoteControl is the observed remote control state, when the
 	// manifest names a status_field and the status file was read.
 	RemoteControl, RemoteKnown bool
+	// Escape: the agent is blocked on a permission prompt that asks to
+	// run outside its sandbox (T574 case 6): the user answers it, never
+	// the coordinator.
+	Escape bool
 }
 
 // AgentState returns the agent's merged state; ok is false for a session
@@ -285,17 +310,96 @@ func (s *Session) AgentState() (st AgentState, ok bool) {
 		since = rt.prompts[0].at
 	}
 	held, heldSince := rt.heldWhy, rt.heldSince
+	escape := len(rt.escapes) > 0 || rt.cfg.PromptsEscape || rt.escapeDialog
+	dialog := rt.permDialog
 	var remote, known bool
 	if m := agent.ManifestOf(rt.a); m != nil && m.ObservesRemote() && rt.fields != nil {
 		remote, known = rt.fields[m.RemoteControl.StatusField] != "", true
 	}
 	rt.mu.Unlock()
+	m := rt.tr.State()
 	return AgentState{
-		Agent: rt.a.Name(), Observed: rt.observed, Merged: rt.tr.State(),
+		Agent: rt.a.Name(), Observed: rt.observed, Merged: m,
 		AgentSID: rt.tr.AgentSID(), Todos: rt.tr.Todos(), Queued: queued,
 		QueuedSince: since, Held: held, HeldSince: heldSince,
 		RemoteControl: remote, RemoteKnown: known,
+		Escape: escape && (m.State == agent.StateBlocked && m.Reason == "permission" || dialog),
 	}, true
+}
+
+// MarkEscape says the agent's call id asks to run outside its sandbox
+// (the guard asked: rule "escape"), so a permission prompt open while
+// the call is is the user's to answer. Kept until EndEscape(id), or
+// the turn's end, and then until the screen shows no permission
+// dialog. An id "" is the call's when it has none of its own.
+func (s *Session) MarkEscape(id string) { s.escape(id, true) }
+
+// EndEscape says the call id ended (ran, failed or was refused): its
+// mark goes once no permission dialog is on screen.
+func (s *Session) EndEscape(id string) { s.escape(id, false) }
+
+func (s *Session) escape(id string, open bool) {
+	rt := s.agentRT()
+	if rt == nil {
+		return
+	}
+	rt.setEscape(id, open)
+	s.agentChanged(rt)
+}
+
+// escapeMark is an escape's call: when it ended (zero while it runs).
+type escapeMark struct{ ended time.Time }
+
+// escapeGrace is how long an ended escape's mark stays, at least, once
+// no permission dialog shows: its dialog may not have drawn yet when a
+// forged hook says the call ended (a variable for tests).
+var escapeGrace = 8 * time.Second
+
+func (rt *agentRT) setEscape(id string, open bool) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if !open {
+		rt.endEscapes(func(m string) bool { return m == id })
+		return
+	}
+	if rt.escapes == nil {
+		rt.escapes = map[string]*escapeMark{}
+	}
+	rt.escapes[id] = &escapeMark{}
+}
+
+// endEscapes says the calls of the marks which picks ended, now; rt.mu
+// held.
+func (rt *agentRT) endEscapes(which func(string) bool) {
+	for id, m := range rt.escapes {
+		if which(id) && m.ended.IsZero() {
+			m.ended = time.Now()
+		}
+	}
+	rt.sweepEscapes()
+}
+
+// sweepEscapes drops the marks whose call or turn ended escapeGrace
+// ago or more, unless a permission dialog is on screen, which holds
+// them all and starts their grace again; rt.mu held.
+func (rt *agentRT) sweepEscapes() {
+	now := time.Now()
+	for id, m := range rt.escapes {
+		switch {
+		case m.ended.IsZero():
+		case rt.permDialog:
+			m.ended = now
+		case now.Sub(m.ended) >= escapeGrace:
+			delete(rt.escapes, id)
+		}
+	}
+}
+
+// escapeOpen: a call that asked to leave the sandbox is marked.
+func (rt *agentRT) escapeOpen() bool {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return len(rt.escapes) > 0
 }
 
 // Explain returns the agent tracker's view of every source.
@@ -367,7 +471,22 @@ func (s *Session) Hook(event string, payload map[string]any) (agent.HookResult, 
 		return agent.HookResult{}, nil
 	}
 	s.checkHook(rt, event, payload)
-	env := agent.HookEnv{Guard: rt.cfg.Guard}
+	env := agent.HookEnv{}
+	callID, _ := payload["tool_use_id"].(string)
+	if g := rt.cfg.Guard; g != nil {
+		env.Guard = func(tool string, input map[string]any) *guard.Denial {
+			d := g(tool, input)
+			if d != nil && d.Ask && d.Rule == guard.RuleEscape {
+				rt.setEscape(callID, true)
+			}
+			return d
+		}
+	}
+	switch event {
+	case "PostToolUse", "PostToolUseFailure", "PermissionDenied":
+		// The call ended; an escape's mark with it.
+		rt.setEscape(callID, false)
+	}
 	if c := rt.cfg.Context; c != nil {
 		env.Context = func() ([]byte, error) { return c(payload) }
 	}
@@ -694,7 +813,7 @@ func (s *Session) evalScreen(rt *agentRT) {
 	}
 	best, all := rt.eng.Eval(detect.Screen{Title: title, Rows: rows, NoDim: noDim})
 	var names []string
-	empty, blocker := false, false
+	empty, blocker, perm, esc := false, false, false, false
 	for _, m := range all {
 		names = append(names, m.Rule)
 		if rt.man != nil && m.Rule == rt.man.Inject.EmptyRule {
@@ -702,10 +821,15 @@ func (s *Session) evalScreen(rt *agentRT) {
 		}
 		if m.State == agent.StateBlocked {
 			blocker = true
+			perm = perm || m.Reason == "permission"
+		}
+		if rt.man != nil && rt.man.Guard.EscapeRule != "" && m.Rule == rt.man.Guard.EscapeRule {
+			esc = true
 		}
 	}
 	rt.mu.Lock()
-	rt.emptyBox, rt.blocker = empty, blocker
+	rt.emptyBox, rt.blocker, rt.permDialog, rt.escapeDialog = empty, blocker, perm, esc
+	rt.sweepEscapes()
 	if best != nil && best.State == agent.StateWorking && rt.workingSince.IsZero() {
 		rt.workingSince = time.Now()
 	}
@@ -765,6 +889,16 @@ func (s *Session) agentChanged(rt *agentRT) {
 	rt.mu.Lock()
 	changed := st != rt.lastState || sid != rt.lastSID || !slices.Equal(todos, rt.lastTodos)
 	rt.lastState, rt.lastSID, rt.lastTodos = st, sid, todos
+	switch st.State {
+	case agent.StateExited:
+		rt.escapes = nil
+	case agent.StateIdle:
+		// No call outlives its turn: each mark goes once the screen
+		// agrees.
+		rt.endEscapes(func(string) bool { return true })
+	default:
+		rt.sweepEscapes()
+	}
 	rt.mu.Unlock()
 	if changed {
 		s.notifyState()

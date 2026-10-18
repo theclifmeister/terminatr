@@ -773,7 +773,8 @@ func (s *Server) commitLaunchLocked(p *preparedLaunch) (*session.Session, *proto
 			OnUsage:    s.tailUsage,
 			OnRefused:  s.modelRefused,
 			PromptHold: envDuration(envPromptHold), OnPromptResolved: s.promptResolved,
-			ModSocket: p.modSock,
+			ModSocket:     p.modSock,
+			PromptsEscape: r.Role == proto.RoleThread && agent.ManifestOf(a) != nil && agent.ManifestOf(a).Guard.PromptsEscape,
 		},
 	})
 	if err != nil {

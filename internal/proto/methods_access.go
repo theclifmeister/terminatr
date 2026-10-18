@@ -69,6 +69,13 @@ const (
 	AccessFromDefault = "tm default"   // an on/off setting nobody set
 )
 
+// Why a rule isn't used under yolo (AccessRule.Skipped): the sandbox
+// is off, and the guard keeps its floor only (T574 case 4).
+const (
+	AccessYoloNoSandbox = "yolo is on: the sandbox is off"
+	AccessYoloFloor     = "floor only: yolo is on"
+)
+
 // AccessSettingsNote is the note of the rule that names the human's
 // settings file (config.toml), which the TUI shows by that name only.
 const AccessSettingsNote = "your settings"
@@ -94,8 +101,8 @@ type AccessRule struct {
 	// agents that get it; none: all.
 	OS     []string `json:"os,omitempty"`
 	Agents []string `json:"agents,omitempty"`
-	// Skipped is why the launch leaves it out (another platform), "" for
-	// a rule in force.
+	// Skipped is why the launch leaves it out (another platform, yolo),
+	// "" for a rule in force.
 	Skipped string `json:"skipped,omitempty"`
 	// Dropped: all projects' rule, which the project drops (Note names
 	// it); the launch leaves it out.

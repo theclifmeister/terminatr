@@ -123,15 +123,27 @@ func (s *Server) guardOwn() []string {
 
 // guardRulesFor is session record r's rules. Only a project's agents are
 // guarded; a coordinator neither merges under a thread's rule nor keeps
-// to a worktree.
+// to a worktree. Under yolo the guard keeps its floor only (T574 case 4):
+// no rule, allowance or mod rule, nothing asked.
 func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 	if r.Project == "" || (r.Role != proto.RoleThread && r.Role != proto.RoleCoordinator) {
 		return GuardRules{}
 	}
 	lc := loadLaunchConfig()
 	set := lc.safety(r.Project)
+	// A thread's escapes, which its sandbox lets it ask for, are the
+	// user's to answer, the guard on or off (T574 case 6).
+	askEscapes := r.Role == proto.RoleThread && !r.Yolo && !r.NoSandboxEscapes
 	if !set.Guard {
-		return GuardRules{}
+		if !askEscapes {
+			return GuardRules{}
+		}
+		// Off: no rule and no floor (Floor nil says so), only the
+		// question about escapes.
+		s.mu.Lock()
+		reg := s.agents
+		s.mu.Unlock()
+		return GuardRules{On: true, Role: r.Role, Cwd: r.Cwd, CaseFold: caps.CaseFold, Tools: agent.GuardTools(reg, r.Agent), AskEscapes: true}
 	}
 	home, _ := os.UserHomeDir()
 	g := GuardRules{On: true, Role: r.Role, Home: home, Cwd: r.Cwd, CaseFold: caps.CaseFold,
@@ -145,10 +157,18 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 	if r.Role == proto.RoleThread && set.Merge == config.MergeCoordinator {
 		g.Floor = append(g.Floor, "merge")
 	}
+	g.NoWrite = s.guardNoWrite(r)
+	g.AskEscapes = askEscapes
 	if s.opts.Paths.Home != "" {
 		g.Worktrees = realPath(filepath.Join(s.opts.Paths.Home, "worktrees"))
 	}
+	if r.Yolo {
+		g.Learn, g.Allow = false, nil
+	}
 	for _, id := range config.GuardRules {
+		if r.Yolo {
+			break
+		}
 		if slices.Contains(set.GuardOff, id) {
 			continue
 		}
@@ -189,8 +209,35 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		}
 	}
 	g.Secrets = withReal(agent.Secrets(reg, home, os.Getenv))
-	g.Mods = s.guardMods(r, home)
+	if !r.Yolo {
+		g.Mods = s.guardMods(r, home)
+	}
 	return g
+}
+
+// guardNoWrite are the files and folders no tool of session r writes,
+// whatever the rules (the guard's floor, T574 §3.1): tm's settings
+// (config.toml), and a thread's project folder, or the parts of it only
+// tm writes for the coordinator, whose folder it is. The sandbox and the
+// agent's deny rules hold them too, where there are those (not under
+// yolo).
+func (s *Server) guardNoWrite(r SessionRecord) []string {
+	var out []string
+	if h := s.opts.Paths.Home; h != "" {
+		out = append(out, filepath.Join(h, "config.toml"))
+	}
+	dir, err := project.Dir(r.Project)
+	if err != nil {
+		return withReal(out)
+	}
+	switch r.Role {
+	case proto.RoleThread:
+		out = append(out, dir)
+	case proto.RoleCoordinator:
+		dirs, files := (&project.Project{Slug: r.Project, Dir: dir}).Owned()
+		out = append(append(out, dirs...), files...)
+	}
+	return withReal(out)
 }
 
 // guardMods are the guard rules the user's mods that run for session
@@ -292,6 +339,13 @@ func realTarget(p string) string {
 	return cur
 }
 
+// GuardEscape is POST /v1/escape's body: the call that asks to leave
+// the sandbox, by the mod's id for it, and whether it has ended.
+type GuardEscape struct {
+	ID   string `json:"id"`
+	Done bool   `json:"done,omitempty"`
+}
+
 // GuardResolve is POST /v1/resolve's body and answer: the paths a file
 // tool writes, absolute but not cleaned, and where each lands
 // (realTarget), in the same order.
@@ -339,6 +393,35 @@ func (s *Server) guardRoutes(mux *http.ServeMux, id string) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(s.hookRules(rec))
 	})
+	// The guard asked about a call that leaves the sandbox: the prompt it
+	// brings is the user's (T574 case 6), which tm thread approve and the
+	// ticker read from the session's state (AgentState.Escape).
+	// Its body names the call (the mod's own id) and, once the call has
+	// ended, says done.
+	mux.HandleFunc("POST /v1/escape", func(w http.ResponseWriter, r *http.Request) {
+		var e GuardEscape
+		b, err := io.ReadAll(io.LimitReader(r.Body, maxModReport))
+		if err == nil {
+			err = json.Unmarshal(b, &e)
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		s.mu.Lock()
+		sess := s.sessions[id]
+		s.mu.Unlock()
+		if sess == nil {
+			http.Error(w, "session "+id+" is gone", http.StatusGone)
+			return
+		}
+		if e.Done {
+			sess.EndEscape(e.ID)
+		} else {
+			sess.MarkEscape(e.ID)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("POST /v1/denied", func(w http.ResponseWriter, r *http.Request) {
 		var d GuardDenial
 		b, err := io.ReadAll(io.LimitReader(r.Body, maxModReport))
@@ -346,7 +429,7 @@ func (s *Server) guardRoutes(mux *http.ServeMux, id string) {
 			err = json.Unmarshal(b, &d)
 		}
 		mods := strings.HasPrefix(d.Rule, "mod:")
-		if err == nil && !mods && !slices.Contains(config.GuardRules, d.Rule) {
+		if err == nil && !mods && !slices.Contains(config.GuardRules, d.Rule) && d.Rule != guard.RuleTMFiles {
 			err = fmt.Errorf("unknown rule %q", d.Rule)
 		}
 		if err != nil {

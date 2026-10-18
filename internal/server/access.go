@@ -49,6 +49,7 @@ func (s *Server) resolveAccess(in accessInput, lc launchConfig) (proto.AccessSet
 			onOff(proto.AccessOutside, proto.AccessEscapes, !in.noEscapes, proto.AccessFromDefault, false))
 		return set, nil
 	}
+	from := len(set.Rules)
 	if in.role == proto.RoleThread {
 		rules, why := sandboxRules(lc, in.slug, in.goos)
 		add(rules...)
@@ -56,7 +57,16 @@ func (s *Server) resolveAccess(in accessInput, lc launchConfig) (proto.AccessSet
 	}
 	add(onOff(proto.AccessPrompts, proto.AccessYolo, in.yolo, settingSource(lc, in.slug, "yolo"), false),
 		onOff(proto.AccessOutside, proto.AccessEscapes, !in.noEscapes, settingSource(lc, in.slug, "sandbox_escapes"), false))
-	set.Rules = append(set.Rules, guardRules(lc, in.slug, in.role)...)
+	if in.yolo && in.role == proto.RoleThread {
+		// Yolo is no sandbox (T574 case 4): what opens or leaves it isn't
+		// used, and shows so.
+		for i := from; i < len(set.Rules); i++ {
+			if r := &set.Rules[i]; r.Kind != proto.AccessYolo && r.Kind != proto.AccessAllow && r.Skipped == "" {
+				r.Skipped = proto.AccessYoloNoSandbox
+			}
+		}
+	}
+	set.Rules = append(set.Rules, guardRules(lc, in.slug, in.role, in.yolo)...)
 	if in.role == proto.RoleThread {
 		add(secretRules(lc, in.slug)...)
 	}
@@ -234,18 +244,24 @@ func sandboxRules(lc launchConfig, slug, goos string) ([]proto.AccessRule, strin
 
 // guardRules are the guard's settings for a session of role in project
 // slug, read live: on or off, its mode, the rules off, the allowances
-// and the floor. A config.toml that doesn't load leaves the defaults
-// (guard on), as the guard does.
-func guardRules(lc launchConfig, slug, role string) []proto.AccessRule {
+// and the floor. Under yolo the guard keeps its floor only, so the
+// others show as not used. A config.toml that doesn't load leaves the
+// defaults (guard on), as the guard does.
+func guardRules(lc launchConfig, slug, role string, yolo bool) []proto.AccessRule {
 	set := lc.safety(slug)
 	src := func(key string) string { return settingSource(lc, slug, key) }
-	out := []proto.AccessRule{onOff(proto.AccessGuard, proto.AccessGuardOn, set.Guard, src("guard"), true)}
+	on := onOff(proto.AccessGuard, proto.AccessGuardOn, set.Guard, src("guard"), true)
+	skip := ""
+	if yolo && set.Guard {
+		on.Note, skip = proto.AccessYoloFloor, proto.AccessYoloFloor
+	}
+	out := []proto.AccessRule{on}
 	if !set.Guard {
 		return out
 	}
-	out = append(out, proto.AccessRule{Where: proto.AccessGuard, Kind: proto.AccessGuardMode, Value: set.GuardMode, Source: src("guard_mode"), Live: true})
+	out = append(out, proto.AccessRule{Where: proto.AccessGuard, Kind: proto.AccessGuardMode, Value: set.GuardMode, Source: src("guard_mode"), Live: true, Skipped: skip})
 	for _, r := range set.GuardOff {
-		out = append(out, proto.AccessRule{Where: proto.AccessGuard, Kind: proto.AccessGuardRuleOff, Value: r, Source: src("guard_off"), Live: true})
+		out = append(out, proto.AccessRule{Where: proto.AccessGuard, Kind: proto.AccessGuardRuleOff, Value: r, Source: src("guard_off"), Live: true, Skipped: skip})
 	}
 	// A project without guard_allow of its own takes all projects'
 	// whole (config.Safety marks All only beside its own).
@@ -259,9 +275,15 @@ func guardRules(lc launchConfig, slug, role string) []proto.AccessRule {
 		if a.Exact {
 			note += ", exact"
 		}
-		out = append(out, proto.AccessRule{Where: proto.AccessGuard, Kind: proto.AccessGuardAllow, Value: a.Text(), Source: from, Note: note, Live: true})
+		out = append(out, proto.AccessRule{Where: proto.AccessGuard, Kind: proto.AccessGuardAllow, Value: a.Text(), Source: from, Note: note, Live: true, Skipped: skip})
 	}
-	floor := "reading tm's own files, printing a secret variable tm gives threads, force-pushing to a protected branch"
+	floor := "reading tm's own files, writing your settings"
+	if role == proto.RoleThread {
+		floor += ", writing the project folder"
+	} else {
+		floor += ", writing the parts of the project folder only tm writes"
+	}
+	floor += ", printing a secret variable tm gives threads, force-pushing to a protected branch"
 	if role == proto.RoleThread && set.Merge == config.MergeCoordinator {
 		floor += ", a thread merging"
 	}
@@ -355,6 +377,9 @@ func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, guides, skipp
 		}
 		if r.Refused != "" {
 			skipped = append(skipped, fmt.Sprintf("sandbox %s %q refused, the thread starts without it: %s", r.Kind, r.Value, r.Refused))
+			continue
+		}
+		if r.Skipped == proto.AccessYoloNoSandbox {
 			continue
 		}
 		if r.Skipped != "" {

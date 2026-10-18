@@ -241,7 +241,8 @@ func (s *Server) accessExplain(p proto.AccessExplainParams) (any, *proto.Error) 
 		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 	}
 	res := explainCommand(set, cmd)
-	g := s.guardRulesFor(SessionRecord{Role: proto.RoleThread, Project: p.Project, Thread: p.Thread, Cwd: cwd, Agent: in.agent})
+	g := s.guardRulesFor(SessionRecord{Role: proto.RoleThread, Project: p.Project, Thread: p.Thread, Cwd: cwd, Agent: in.agent,
+		Yolo: in.yolo, NoSandboxEscapes: in.noEscapes})
 	res.Guard, res.GuardWhy = guardVerdict(g, cmd)
 	return res, nil
 }
@@ -291,10 +292,17 @@ func explainCommand(set proto.AccessSet, cmd string) proto.AccessExplainResult {
 		res.PromptWhy = "no tm rule covers it: the agent's mode and own rules decide"
 	}
 	if yolo {
+		// No sandbox and no prompts (T574 case 4).
 		res.Prompt, res.PromptWhy, res.PromptFrom = proto.PromptNone, "yolo is on: no permission prompts", ""
+		if set.Role == proto.RoleThread {
+			res.Sandbox, res.SandboxWhy, res.Agents = proto.AccessOutside, proto.AccessYoloNoSandbox, ""
+		}
 		for _, r := range set.Rules {
 			if r.Kind == proto.AccessYolo {
 				res.PromptFrom = r.Source
+				if set.Role == proto.RoleThread {
+					res.SandboxFrom = r.Source
+				}
 			}
 		}
 	}
@@ -304,7 +312,8 @@ func explainCommand(set proto.AccessSet, cmd string) proto.AccessExplainResult {
 // guardVerdict is the guard's verdict on command line cmd under rules
 // g, by the agent's first shell tool, and why.
 func guardVerdict(g guard.Rules, cmd string) (string, string) {
-	if !g.On {
+	// The guard off still asks about escapes, with no floor.
+	if !g.On || g.Floor == nil {
 		return "off", "the guard is off"
 	}
 	tool, field := "", ""
