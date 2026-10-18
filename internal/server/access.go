@@ -17,9 +17,9 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/worktree"
 )
 
 // accessInput is what a session's rules are worked out for: its role,
@@ -27,14 +27,17 @@ import (
 // of its record (tm thread start reads them from config.toml).
 type accessInput struct {
 	role, slug, cwd, agent, goos string
-	yolo, noEscapes              bool
+	// tree is a thread's checkout by its record (threadTree), whose git
+	// dirs it is granted; nil for none.
+	tree            *gitx.Tree
+	yolo, noEscapes bool
 }
 
 // resolveAccess is the rules of a session of in, with config.toml as lc.
 // It fails only where accessFor does.
 func (s *Server) resolveAccess(in accessInput, lc launchConfig) (proto.AccessSet, error) {
 	set := proto.AccessSet{Project: in.slug, Role: in.role, Agent: in.agent, OS: in.goos, Rules: []proto.AccessRule{}}
-	a, err := s.accessFor(in.role, in.slug, in.cwd, lc)
+	a, err := s.accessFor(in.role, in.slug, in.tree, lc)
 	if err != nil {
 		return set, err
 	}
@@ -95,8 +98,8 @@ func (s *Server) fileRules(in accessInput, a agent.Access, lc launchConfig) []pr
 	// The repo whose git dir a thread's commits write in: accessFor
 	// grants it on the same condition (threadGitAccess).
 	var repo, common string
-	if d, err := worktree.GitDirs(in.cwd); in.cwd != "" && err == nil {
-		repo, common = realPath(d.RepoRoot), realPath(d.CommonDir)
+	if in.tree != nil {
+		repo, common = repoRoot(in.tree.CommonDir), in.tree.CommonDir
 	}
 	note := s.pathNotes(in.slug, repo, common)
 	var out []proto.AccessRule
@@ -145,7 +148,7 @@ func (s *Server) fileRules(in accessInput, a agent.Access, lc launchConfig) []pr
 // the launch takes the paths it opens and closes from their own rules.
 func gitDirRule(repo string) proto.AccessRule {
 	return proto.AccessRule{Where: proto.AccessInside, Kind: proto.AccessGitDir, Value: repo, Source: proto.AccessFromTM,
-		Note: "git-dir grant: objects, refs, logs, packed-refs and its own git dir; never hooks, info, config or other worktrees'"}
+		Note: "git-dir grant: objects, refs, logs, packed-refs and its own git dir; never hooks, info, modules, config files or other worktrees'"}
 }
 
 // pathNotes says what a path of project slug's access is: the project

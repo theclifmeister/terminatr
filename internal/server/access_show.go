@@ -123,7 +123,7 @@ func (s *Server) accessShow(p proto.AccessShowParams, c callCtx) (any, *proto.Er
 	}
 	// What a restart would launch it with: tm thread restart reads yolo
 	// and escapes from config.toml again.
-	now, err := s.resolveAccess(accessInput{role: proto.RoleThread, slug: p.Project, cwd: rec.Worktree, agent: rec.Agent, goos: caps.OS,
+	now, err := s.resolveAccess(accessInput{role: proto.RoleThread, slug: p.Project, cwd: rec.Worktree, tree: recordTree(p.Project, rec), agent: rec.Agent, goos: caps.OS,
 		yolo: safety.Yolo, noEscapes: !safety.SandboxEscapes}, lc)
 	if err != nil {
 		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
@@ -230,7 +230,7 @@ func (s *Server) accessExplain(p proto.AccessExplainParams) (any, *proto.Error) 
 		if err != nil {
 			return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 		}
-		in.cwd, in.agent, cwd = rec.Worktree, rec.Agent, rec.Worktree
+		in.cwd, in.tree, in.agent, cwd = rec.Worktree, recordTree(p.Project, rec), rec.Agent, rec.Worktree
 	}
 	if reg := s.registry(); in.agent == "" && reg != nil && len(reg.Names()) > 0 {
 		// No agent chosen yet: the guard judges by the first one's tools.

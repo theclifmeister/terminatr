@@ -258,7 +258,7 @@ func TestAccessGitDirRule(t *testing.T) {
 	}
 	rules := func(cwd string) []proto.AccessRule {
 		t.Helper()
-		set, err := s.resolveAccess(accessInput{role: proto.RoleThread, slug: "demo", cwd: cwd, goos: "darwin"}, loadLaunchConfig())
+		set, err := s.resolveAccess(accessInput{role: proto.RoleThread, slug: "demo", cwd: cwd, tree: pinTree(repo, cwd), goos: "darwin"}, loadLaunchConfig())
 		if err != nil {
 			t.Fatal(err)
 		}
