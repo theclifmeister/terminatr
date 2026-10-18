@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"reflect"
 	"slices"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestThreadSandboxMerge(t *testing.T) {
-	write(t, `
+	write(t, accessMarker+`
 [defaults.sandbox]
 excluded_commands = ["docker compose *"]
 allow = ["Bash(docker compose *)"]
@@ -38,19 +39,17 @@ yolo = false
 	all := func(key, v string) SandboxRule { return SandboxRule{Key: key, Value: v} }
 	own := func(key, v string) SandboxRule { return SandboxRule{Key: key, Value: v, Own: true} }
 	dropped := func(key, v string) SandboxRule { return SandboxRule{Key: key, Value: v, Dropped: true} }
-	replaced := func(key, v string) SandboxRule { return SandboxRule{Key: key, Value: v, Replaced: true} }
 	// all projects' Bash rule, of a file written before, covers their
 	// excluded command: it runs without asking, as it did.
 	noAsk := func(r SandboxRule) SandboxRule { r.NoAsk = true; return r }
 	common := []SandboxRule{all(SandboxHosts, "registry.npmjs.org"), noAsk(all(SandboxExcluded, "docker compose *")), all(SandboxAllow, "Bash(docker compose *)")}
 	for slug, want := range map[string]ThreadSandbox{
-		// Until the migration, a project's excluded_commands and allow
-		// replace all projects' (tm 0.37); the key it doesn't set follows
-		// them.
-		"web": {Rules: []SandboxRule{all(SandboxHosts, "registry.npmjs.org"), noAsk(replaced(SandboxExcluded, "docker compose *")), own(SandboxExcluded, "npx playwright *"), noAsk(own(SandboxExcluded, "docker compose *")), all(SandboxAllow, "Bash(docker compose *)")},
+		// A project's lists add to all projects', an entry of theirs it
+		// lists too given once.
+		"web": {Rules: []SandboxRule{all(SandboxHosts, "registry.npmjs.org"), noAsk(all(SandboxExcluded, "docker compose *")), own(SandboxExcluded, "npx playwright *"), all(SandboxAllow, "Bash(docker compose *)")},
 			LocalPorts: true, LocalPortsSet: true, LocalPortsOwn: true},
-		// An empty one replaces them too; hosts add up.
-		"empty": {Rules: []SandboxRule{all(SandboxHosts, "registry.npmjs.org"), own(SandboxHosts, "x.dev"), all(SandboxExcluded, "docker compose *"), replaced(SandboxAllow, "Bash(docker compose *)")}},
+		// An empty list takes nothing away.
+		"empty": {Rules: []SandboxRule{all(SandboxHosts, "registry.npmjs.org"), own(SandboxHosts, "x.dev"), noAsk(all(SandboxExcluded, "docker compose *")), all(SandboxAllow, "Bash(docker compose *)")}},
 		// A drop takes one of all projects' entries away; one that
 		// matches nothing stays listed.
 		"none": {Rules: []SandboxRule{dropped(SandboxHosts, "registry.npmjs.org"), all(SandboxExcluded, "docker compose *"), dropped(SandboxAllow, "Bash(docker compose *)")},
@@ -65,7 +64,7 @@ yolo = false
 	if got := c.ThreadSandbox("none").Given(SandboxAllow); len(got) != 0 {
 		t.Errorf("none's allow rules: %v", got)
 	}
-	if got := c.SandboxOf("web"); !reflect.DeepEqual(got.Lists, map[string][]string{SandboxExcluded: {"npx playwright *", "docker compose *"}}) || got.LocalPorts == nil || !got.Replacing(SandboxExcluded) {
+	if got := c.SandboxOf("web"); !reflect.DeepEqual(got.Lists, map[string][]string{SandboxExcluded: {"npx playwright *", "docker compose *"}}) || got.LocalPorts == nil {
 		t.Errorf("SandboxOf(web) = %+v", got)
 	}
 	if got := c.SandboxOf("plain"); len(got.Lists) != 0 {
@@ -83,7 +82,8 @@ yolo = false
 // TestReplaceNeverWider: before the migration, a project that opted out
 // of all projects' excluded commands with an empty list, or listed its
 // own, gets none of theirs, as in tm 0.37; only a drop or a list it
-// doesn't set lets all projects' through.
+// doesn't set lets all projects' through. Such a file isn't written
+// until it is migrated, which keeps the opt-out.
 func TestReplaceNeverWider(t *testing.T) {
 	write(t, `
 [defaults.sandbox]
@@ -108,7 +108,10 @@ hosts = ["x.dev"]
 			t.Errorf("%s: excluded %q allow %q", slug, got.Given(SandboxExcluded), got.Given(SandboxAllow))
 		}
 	}
-	// A write of another key keeps the opt-out.
+	if err := EditSandbox("projects.optout", func(t *SandboxTable) error { t.Add(SandboxHosts, "x.dev"); return nil }); !errors.Is(err, ErrLegacy) {
+		t.Fatalf("a write before the migration: %v", err)
+	}
+	migrateFile(t)
 	if err := EditSandbox("projects.optout", func(t *SandboxTable) error { t.Add(SandboxHosts, "x.dev"); return nil }); err != nil {
 		t.Fatal(err)
 	}
@@ -289,9 +292,8 @@ func TestEditSandbox(t *testing.T) {
 	if err := EditSandbox("projects.web", add(SandboxDrop, "WebFetch(domain:playwright.dev)")); err != nil {
 		t.Fatal(err)
 	}
-	// A project's first excluded command starts its own list from all
-	// projects' (it replaces them until the migration); removing the
-	// last leaves an empty list, which still replaces them.
+	// A project's excluded command adds to all projects'; removing it
+	// leaves theirs, and the file marked as one whose lists add.
 	if err := EditSandbox(DefaultsTable, add(SandboxExcluded, "docker compose *")); err != nil {
 		t.Fatal(err)
 	}
@@ -299,24 +301,18 @@ func TestEditSandbox(t *testing.T) {
 		t.Fatal(err)
 	}
 	c0, _ := Load()
-	if got := c0.SandboxOf("app").Lists[SandboxExcluded]; !reflect.DeepEqual(got, []string{"docker compose *", "make e2e"}) {
-		t.Fatalf("app's own list: %q", got)
+	if got := c0.ThreadSandbox("app").Given(SandboxExcluded); !reflect.DeepEqual(got, []string{"docker compose *", "make e2e"}) {
+		t.Fatalf("app's excluded commands: %q", got)
 	}
-	for _, v := range []string{"docker compose *", "make e2e"} {
-		if err := EditSandbox("projects.app", func(t *SandboxTable) error { t.Remove(SandboxExcluded, v); return nil }); err != nil {
-			t.Fatal(err)
-		}
-	}
-	c0, _ = Load()
-	if got := c0.ThreadSandbox("app").Given(SandboxExcluded); len(got) != 0 || !c0.SandboxOf("app").Replacing(SandboxExcluded) {
-		t.Fatalf("app after removing all: %q", got)
-	}
-	if err := EditSandbox("projects.app", func(t *SandboxTable) error { t.Follow(SandboxExcluded); return nil }); err != nil {
+	if err := EditSandbox("projects.app", func(t *SandboxTable) error { t.Remove(SandboxExcluded, "make e2e"); return nil }); err != nil {
 		t.Fatal(err)
 	}
 	c0, _ = Load()
-	if got := c0.ThreadSandbox("app").Given(SandboxExcluded); !reflect.DeepEqual(got, []string{"docker compose *"}) {
-		t.Fatalf("app following: %q", got)
+	if got := c0.ThreadSandbox("app").Given(SandboxExcluded); !reflect.DeepEqual(got, []string{"docker compose *"}) || c0.legacy {
+		t.Fatalf("app after removing its own: %q", got)
+	}
+	if b, _ := os.ReadFile(c0.Path); !strings.HasPrefix(string(b), accessMarker) {
+		t.Errorf("no marker:\n%s", b)
 	}
 	for _, bad := range []struct {
 		table string
@@ -343,7 +339,7 @@ func TestEditSandbox(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := c.ThreadSandbox("web")
-	if !reflect.DeepEqual(got.Given(SandboxExcluded), []string{"npx playwright *"}) || len(got.Given(SandboxAllow)) != 0 {
+	if !reflect.DeepEqual(got.Given(SandboxExcluded), []string{"docker compose *", "npx playwright *"}) || len(got.Given(SandboxAllow)) != 0 {
 		t.Fatalf("got %+v", got)
 	}
 	if err := EditSandbox("projects.web", func(t *SandboxTable) error { t.Remove(SandboxDrop, "WebFetch(domain:playwright.dev)"); return nil }); err != nil {
@@ -354,7 +350,7 @@ func TestEditSandbox(t *testing.T) {
 		t.Fatalf("after undrop: %+v", got)
 	}
 	data, _ := os.ReadFile(c.Path)
-	if !strings.Contains(string(data), "[projects.web.sandbox]") || !strings.Contains(string(data), "yolo = false") || strings.Contains(string(data), "drop") {
+	if !strings.Contains(string(data), "[projects.web.sandbox]") || !strings.Contains(string(data), "yolo = false") || strings.Contains(string(data), "drop =") {
 		t.Fatalf("file:\n%s", data)
 	}
 }
@@ -362,7 +358,7 @@ func TestEditSandbox(t *testing.T) {
 // TestEditSandboxKeepsRefused: an entry the file has that fails its
 // check doesn't stop a write, and can be removed.
 func TestEditSandboxKeepsRefused(t *testing.T) {
-	write(t, "[projects.web.sandbox]\nexcluded_commands = [\"*\"]\n")
+	write(t, accessMarker+"[projects.web.sandbox]\nexcluded_commands = [\"*\"]\n")
 	if err := EditSandbox("projects.web", func(t *SandboxTable) error { t.Add(SandboxExcluded, "make e2e"); return nil }); err != nil {
 		t.Fatal(err)
 	}
@@ -525,7 +521,7 @@ func TestSandboxProblems(t *testing.T) {
 // asks first; SetExcludedAsk changes it; a file's legacy Bash rule
 // stays, and still lets the command it covers run without asking.
 func TestExcludedAsk(t *testing.T) {
-	write(t, `
+	write(t, accessMarker+`
 [defaults.sandbox]
 excluded_commands = ["docker compose *", { command = "npx playwright *", ask = false }]
 allow = ["Bash(make e2e)"]
@@ -542,7 +538,7 @@ excluded_commands = [{ command = "make e2e", ask = true }, { command = "pnpm tes
 	}
 	// make e2e asks in its own table, but all projects' Bash rule covers
 	// it: it ran without asking before, and still does.
-	if got := c.ThreadSandbox("web").WithoutAsking(); !reflect.DeepEqual(got, []string{"make e2e", "pnpm test *"}) {
+	if got := c.ThreadSandbox("web").WithoutAsking(); !reflect.DeepEqual(got, []string{"npx playwright *", "make e2e", "pnpm test *"}) {
 		t.Errorf("web: %q", got)
 	}
 	if got := c.SandboxOf("").NoAsk; !reflect.DeepEqual(got, []string{"npx playwright *"}) {
@@ -578,14 +574,13 @@ excluded_commands = [{ command = "make e2e", ask = true }, { command = "pnpm tes
 			t.Errorf("no %s in:\n%s", want, data)
 		}
 	}
-	// A project's own list started from all projects' keeps each one's
-	// choice.
+	// A project's own one asks first; all projects' keep their choice.
 	if err := EditSandbox("projects.app", add(SandboxExcluded, "make bench")); err != nil {
 		t.Fatal(err)
 	}
 	c, _ = Load()
-	if got := c.SandboxOf("app").NoAsk; !reflect.DeepEqual(got, []string{"npx playwright *"}) {
-		t.Errorf("app's own list: NoAsk %q", got)
+	if got, all := c.SandboxOf("app").NoAsk, c.ThreadSandbox("app").WithoutAsking(); len(got) != 0 || !reflect.DeepEqual(all, []string{"npx playwright *"}) {
+		t.Errorf("app: own NoAsk %q, without asking %q", got, all)
 	}
 	for name, body := range map[string]string{
 		"no command":  "[defaults.sandbox]\nexcluded_commands = [{ ask = false }]\n",
@@ -687,4 +682,22 @@ func TestWriteFolders(t *testing.T) {
 	if SandboxWarning(SandboxWrite, "~/src/fixtures") == "" {
 		t.Error("a write folder doesn't say what it opens")
 	}
+}
+
+// migrateFile migrates the test's config.toml in place.
+func migrateFile(t *testing.T) *Migration {
+	t.Helper()
+	path, _ := Path()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := Migrate(data)
+	if err != nil || m == nil || m.Differs != "" {
+		t.Fatalf("migrate: %+v, %v", m, err)
+	}
+	if err := os.WriteFile(path, m.Data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return m
 }

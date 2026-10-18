@@ -587,13 +587,15 @@ const IN_PLACE = new Set('sed gsed perl ruby'.split(' '))
 const REMOVERS = new Set('rm rmdir mv rsync'.split(' '))
 
 // TM_AGENT_MOD are the tm mod subcommands an agent may run; the others,
-// tm project's TM_PROJECT_WRITES (and repo add) and the dashboard write
+// tm project's TM_PROJECT_WRITES (and repo add), tm access's
+// TM_ACCESS_WRITES (and preset add) and the dashboard write
 // tm's settings in the tm process itself, the human's alone: an agent
 // past its sandbox (yolo) that runs one with its session's variables
 // unset and out of its session's process tree would pass for the human,
 // so the floor refuses them.
 const TM_AGENT_MOD = new Set('list show validate new test logs examples host'.split(' '))
 const TM_PROJECT_WRITES = new Set('new remote activate deactivate pause resume archive unarchive delete rename mv link open'.split(' '))
+const TM_ACCESS_WRITES = new Set('add rm drop undrop set'.split(' '))
 
 // tmWritesSettings is which of those tm with args (after its name) is
 // ("tm mod enable", "tm (the dashboard)"), or ''.
@@ -607,6 +609,8 @@ function tmWritesSettings(args: string[]): string {
   if (pos.length === 0) return ''
   if ((args[i] === 'mod' && !TM_AGENT_MOD.has(pos[0])) || (args[i] === 'project' && TM_PROJECT_WRITES.has(pos[0]))) return `tm ${args[i]} ${safe(pos[0])}`
   if (args[i] === 'project' && (pos[0] === 'repo' || pos[0] === 'repos') && pos[1] === 'add') return 'tm project repo add'
+  if (args[i] === 'access' && TM_ACCESS_WRITES.has(pos[0])) return `tm access ${pos[0]}`
+  if (args[i] === 'access' && pos[0] === 'preset' && pos[1] === 'add') return 'tm access preset add'
   return ''
 }
 

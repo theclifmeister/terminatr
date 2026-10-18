@@ -39,8 +39,8 @@ import (
 // One rule sets each thing (T574 §4.6): the allow list takes no new
 // rule that runs commands or writes files (Bash, PowerShell, Edit,
 // Write, MultiEdit, NotebookEdit), which are excluded commands' and
-// write folders'. A file written before still has them, and they still
-// work, until the migration moves them.
+// write folders'. A file written before may still have them, those the
+// migration couldn't move (sandbox_migrate.go), and they still work.
 
 // Keys of a sandbox table.
 const (
@@ -430,7 +430,7 @@ func SandboxWarning(key, e string) string {
 // legacyNote is the warning of an allow rule the list no longer takes,
 // whose job what does now, with its own warning w after it.
 func legacyNote(w, what string) string {
-	out := "allow rules no longer take this kind of rule: " + what + " does this now, and tm's next release moves it there"
+	out := "allow rules no longer take this kind of rule: " + what + " does this now, and the move to the access rules moves it there where it can"
 	if w != "" {
 		out += "; it " + w
 	}

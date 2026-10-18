@@ -581,6 +581,27 @@ func TestUpkeep(t *testing.T) {
 	}
 }
 
+// TestSettingsOldAccess: an old preset switch, a file allow rule and a
+// project list still replacing all projects' are one warning naming
+// each; none once the file is moved.
+func TestSettingsOldAccess(t *testing.T) {
+	d := testDeps(t)
+	os.WriteFile(filepath.Join(d.Paths.Home, "config.toml"), []byte("[defaults.sandbox]\nbrowser_testing = true\nallow = [\"Edit(~/src/x/**)\"]\n\n[projects.demo.sandbox]\nexcluded_commands = []\n"), 0o600)
+	cs := Settings(d)
+	if len(cs) != 1 || cs[0].Name != "access rules" || cs[0].Status != Warn {
+		t.Fatalf("%+v", cs)
+	}
+	for _, want := range []string{"browser_testing", "Edit(~/src/x/**)", "replaces all projects'"} {
+		if !strings.Contains(cs[0].Detail, want) {
+			t.Errorf("lacks %q: %s", want, cs[0].Detail)
+		}
+	}
+	os.WriteFile(filepath.Join(d.Paths.Home, "config.toml"), []byte("sandbox_lists = \"add\"\n[defaults.sandbox]\nguides = [\"browser-testing\"]\n"), 0o600)
+	if cs := Settings(d); len(cs) != 0 {
+		t.Errorf("moved: %+v", cs)
+	}
+}
+
 // TestSettingsUnknownKeys: a key tm doesn't know under [keys] or [ui]
 // is a warning, not an error that stops tm.
 func TestSettingsUnknownKeys(t *testing.T) {
