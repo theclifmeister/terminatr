@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -180,8 +181,8 @@ allow = ["Edit(~/src/fixtures/**)", "Write(//Users/someone/src/shared/out/**)", 
 [projects.p.sandbox]
 allow = ["NotebookEdit(~/src/notes/**)", "Edit(~/src/*.txt)"]
 write = ["~/src/fixtures"]
-`, changes: []string{`write = ["~/src/fixtures", "/Users/someone/src/shared/out", "~/src/one"]`, `write = ["~/src/fixtures", "~/src/notes"]`},
-			kept: []string{"Edit(~/.ssh/**)", "Edit(src/**)", "Edit(~/src/*.txt)"}},
+`, changes: []string{`write = ["~/src/fixtures", "/Users/someone/src/shared/out"]`, `write = ["~/src/fixtures", "~/src/notes"]`, `allow = ["Edit(~/.ssh/**)", "Edit(src/**)", "MultiEdit(~/src/one)"]`},
+			kept: []string{"Edit(~/.ssh/**)", "Edit(src/**)", "Edit(~/src/*.txt)", "MultiEdit(~/src/one)"}},
 		"guard allowances": {file: `
 [defaults]
 guard_allow = [{ rule = "worktree-only", path = "~/src/shared/*" }, { rule = "force-push", command = "git push -f origin tm/*" }]
@@ -346,5 +347,26 @@ func TestLegacyNotWritten(t *testing.T) {
 	data, _ := os.ReadFile(c.Path)
 	if !strings.Contains(string(data), `drop = ["docker *"]`) {
 		t.Errorf("file:\n%s", data)
+	}
+}
+
+// TestMigrateFileBackup: the backup is a new file, never one there or a
+// link planted there: another name is taken.
+func TestMigrateFileBackup(t *testing.T) {
+	old := "[projects.p.sandbox]\nexcluded_commands = []\n"
+	write(t, old)
+	path, _ := Path()
+	target := filepath.Join(t.TempDir(), "elsewhere")
+	os.WriteFile(target, []byte("keep"), 0o600)
+	os.Symlink(target, path+".bak-0.38")
+	m, backup, err := MigrateFile("0.38")
+	if err != nil || m == nil || backup != path+".bak-0.38-2" {
+		t.Fatalf("%+v %q %v", m, backup, err)
+	}
+	if b, _ := os.ReadFile(target); string(b) != "keep" {
+		t.Errorf("written through the link: %q", b)
+	}
+	if b, _ := os.ReadFile(backup); string(b) != old {
+		t.Errorf("backup %q", b)
 	}
 }

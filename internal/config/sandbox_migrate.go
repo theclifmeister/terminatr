@@ -8,7 +8,6 @@ import (
 	"maps"
 	"os"
 	"reflect"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -138,12 +137,9 @@ func (r rawTables) legacy() bool {
 	return !r.marked() && slices.ContainsFunc(slices.Collect(maps.Values(r.Projects)), func(t rawTable) bool { return t.Sandbox.replaces() })
 }
 
-// markerLine finds a top-level sandbox_lists line.
-var markerLine = regexp.MustCompile(`(?m)^\s*` + accessMarkerKey + `\s*=`)
-
 // withMarker is data with AccessMarker before its first table.
 func withMarker(data []byte) []byte {
-	if markerLine.Match(data) {
+	if raw, err := decodeTables(data); err == nil && raw.marked() {
 		return data
 	}
 	out := []byte(accessMarker)
@@ -194,8 +190,8 @@ func legacyAllow(a string) string {
 }
 
 // editFolder is the write folder file rule target what names (Claude's
-// //abs/** or ~/x/**, or the folder plainly), when CheckWriteFolder takes
-// it.
+// //abs/** or ~/x/**: a folder and all below it; a path without /** may
+// be one file), when CheckWriteFolder takes it.
 func editFolder(what string) (string, bool) {
 	p := what
 	switch {
@@ -205,8 +201,8 @@ func editFolder(what string) (string, bool) {
 	default:
 		return "", false
 	}
-	p = strings.TrimSuffix(p, "/**")
-	if strings.ContainsAny(p, "*?[]{}") || CheckWriteFolder(p) != nil {
+	p, ok := strings.CutSuffix(p, "/**")
+	if !ok || strings.ContainsAny(p, "*?[]{}") || CheckWriteFolder(p) != nil {
 		return "", false
 	}
 	return p, true
@@ -501,6 +497,7 @@ func (m *Migration) moveRules(slug string, t SandboxTable, guard []GuardAllow, e
 			}
 			next.Remove(SandboxAllow, a)
 			next.Add(SandboxWrite, f)
+			m.Changes[slug] = append(m.Changes[slug], "allow rule "+a+" is now write folder "+f+", which Codex threads, sandboxed commands and the guard take too")
 		}
 	}
 	var keep []GuardAllow
@@ -509,7 +506,7 @@ func (m *Migration) moveRules(slug string, t SandboxTable, guard []GuardAllow, e
 		switch {
 		case ok:
 			next.Add(SandboxWrite, f)
-			m.Changes[slug] = append(m.Changes[slug], "guard allowance worktree-only "+a.Path+" is now write folder "+f)
+			m.Changes[slug] = append(m.Changes[slug], "guard allowance worktree-only "+a.Path+" is now write folder "+f+", which sandboxed commands and Codex threads take too")
 			continue
 		case a.Rule == "worktree-only" && a.Path != "":
 			m.Kept[slug] = append(m.Kept[slug], "guard allowance worktree-only "+a.Path+" names no folder tm can make a write folder: kept as it is")
@@ -685,13 +682,20 @@ func MigrateFile(release string) (m *Migration, backup string, err error) {
 			return data, err
 		}
 		backup = path + ".bak-" + release
-		for i := 2; ; i++ {
-			if _, err := os.Lstat(backup); errors.Is(err, fs.ErrNotExist) {
-				break
-			}
+		// A new file, never one there (or a link planted there).
+		f, err := os.OpenFile(backup, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		for i := 2; errors.Is(err, fs.ErrExist) && i < 100; i++ {
 			backup = fmt.Sprintf("%s.bak-%s-%d", path, release, i)
+			f, err = os.OpenFile(backup, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 		}
-		if err := os.WriteFile(backup, data, 0o600); err != nil {
+		if err != nil {
+			return nil, fmt.Errorf("the backup: %w", err)
+		}
+		_, err = f.Write(data)
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		if err != nil {
 			return nil, fmt.Errorf("the backup: %w", err)
 		}
 		return m.Data, nil
