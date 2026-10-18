@@ -1314,6 +1314,46 @@ var (
 	removers = setOf("rm rmdir mv rsync")
 )
 
+// tmAgentMod are the tm mod subcommands an agent may run; the others,
+// tm project's tmProjectWrites (and repo add) and the dashboard write
+// tm's settings in the tm process itself, the human's alone: an agent
+// past its sandbox (yolo) that runs one with its session's variables
+// unset and out of its session's process tree would pass for the human
+// (internal/cli: Run, caller.Narrower), so the floor refuses them.
+var (
+	tmAgentMod      = setOf("list show validate new test logs examples host")
+	tmProjectWrites = setOf("new remote activate deactivate pause resume archive unarchive delete rename mv link open")
+)
+
+// tmWritesSettings is which of those tm with args (after its name) is
+// ("tm mod enable", "tm (the dashboard)"), or "".
+func tmWritesSettings(args []string) string {
+	i := 0
+	for i < len(args) && strings.HasPrefix(args[i], "-") {
+		if args[i] == "-h" || args[i] == "--help" {
+			return ""
+		}
+		i++
+	}
+	if i == len(args) {
+		return "tm (the dashboard)"
+	}
+	var pos []string
+	for _, a := range args[i+1:] {
+		if !strings.HasPrefix(a, "-") {
+			pos = append(pos, a)
+		}
+	}
+	switch {
+	case len(pos) == 0:
+	case args[i] == "mod" && !tmAgentMod[pos[0]], args[i] == "project" && tmProjectWrites[pos[0]]:
+		return "tm " + args[i] + " " + safe(pos[0])
+	case args[i] == "project" && (pos[0] == "repo" || pos[0] == "repos") && len(pos) > 1 && pos[1] == "add":
+		return "tm project repo add"
+	}
+	return ""
+}
+
 // nowhere is the folder a command line's relative paths are from, as
 // the floor follows its cd: "" when it can't tell.
 type nowhere struct{ dir string }
@@ -1383,6 +1423,11 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 	}
 	if cmd == ">" {
 		return nil
+	}
+	if cmd == "tm" || strings.Contains(cmd, "TERMINATR_BIN") {
+		if what := tmWritesSettings(args); what != "" {
+			return floor(r.deny(RuleTMFiles, what, ""))
+		}
 	}
 	all, ok := writers[cmd]
 	if inPlace[cmd] {

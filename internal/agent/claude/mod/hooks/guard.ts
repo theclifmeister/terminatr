@@ -464,6 +464,30 @@ const WRITERS: ReadonlyMap<string, boolean> = new Map([
 const IN_PLACE = new Set('sed gsed perl ruby'.split(' '))
 const REMOVERS = new Set('rm rmdir mv rsync'.split(' '))
 
+// TM_AGENT_MOD are the tm mod subcommands an agent may run; the others,
+// tm project's TM_PROJECT_WRITES (and repo add) and the dashboard write
+// tm's settings in the tm process itself, the human's alone: an agent
+// past its sandbox (yolo) that runs one with its session's variables
+// unset and out of its session's process tree would pass for the human,
+// so the floor refuses them.
+const TM_AGENT_MOD = new Set('list show validate new test logs examples host'.split(' '))
+const TM_PROJECT_WRITES = new Set('new remote activate deactivate pause resume archive unarchive delete rename mv link open'.split(' '))
+
+// tmWritesSettings is which of those tm with args (after its name) is
+// ("tm mod enable", "tm (the dashboard)"), or ''.
+function tmWritesSettings(args: string[]): string {
+  let i = 0
+  for (; i < args.length && args[i].startsWith('-'); i++) {
+    if (args[i] === '-h' || args[i] === '--help') return ''
+  }
+  if (i === args.length) return 'tm (the dashboard)'
+  const pos = args.slice(i + 1).filter(a => !a.startsWith('-'))
+  if (pos.length === 0) return ''
+  if ((args[i] === 'mod' && !TM_AGENT_MOD.has(pos[0])) || (args[i] === 'project' && TM_PROJECT_WRITES.has(pos[0]))) return `tm ${args[i]} ${safe(pos[0])}`
+  if (args[i] === 'project' && (pos[0] === 'repo' || pos[0] === 'repos') && pos[1] === 'add') return 'tm project repo add'
+  return ''
+}
+
 // cdTo is where cmd (cd, pushd, popd) with args leaves a line whose
 // relative paths were from dir: a folder it names plainly, home for
 // none, else unknown ('').
@@ -502,6 +526,10 @@ function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): D
     }
   }
   if (cmd === '>') return null
+  if (cmd === 'tm' || cmd.includes('TERMINATR_BIN')) {
+    const what = tmWritesSettings(args)
+    if (what) return floor(deny(r, 'tm-files', what))
+  }
   let all = WRITERS.get(cmd)
   if (IN_PLACE.has(cmd)) all = args.some(a => isLong(a, '--in-place') || (/^-[a-zA-Z0-9]+$/.test(a) && a.includes('i')) || a.startsWith('-i')) ? true : undefined
   if (cmd === 'dd') {
