@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.0](https://github.com/theclifmeister/terminatr/compare/v0.35.1...v0.36.0) (2026-10-18)
+
+
+### Features
+
+* **threads:** priority prompts (--now, --interrupt) and a stuck-prompt warning ([#639](https://github.com/theclifmeister/terminatr/issues/639)) ([d33037e](https://github.com/theclifmeister/terminatr/commit/d33037ed1f7fda869745e7871bff6395181e576f))
+
 ## [0.35.1](https://github.com/theclifmeister/terminatr/compare/v0.35.0...v0.35.1) (2026-10-18)
 
 
