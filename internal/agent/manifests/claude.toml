@@ -222,6 +222,8 @@ writable = [".claude/plans", ".claude/projects", "$CLAUDE_CONFIG_DIR/plans", "$C
 temp = ["$CLAUDE_CODE_TMPDIR/claude-{uid}", "/tmp/claude-{uid}"]
 # Its sandbox keeps Bash from this one (a read deny).
 temp_private = ["bash-edit-diff"]
+# Shared by all its sessions: a thread may name only its own scratchpad.
+temp_scratch = true
 
 # The tools the guard judges, by kind, and the input fields each reads.
 # The mod's guard (hooks/guard.ts) gets them from GET /v1/rules too.
