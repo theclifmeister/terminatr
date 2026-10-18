@@ -3,6 +3,7 @@ package server
 import (
 	"log"
 	"os"
+	"os/exec"
 	"slices"
 	"strings"
 	"testing"
@@ -125,7 +126,7 @@ excluded_commands = ["npx playwright *"]
 		t.Fatalf("record %v: %+v", ok, got)
 	}
 
-	human := callCtx{human: true}
+	human := callCtx{human: true, who: func() caller.Caller { return caller.Caller{Kind: caller.Human} }}
 	show := func(c callCtx, id string) (proto.AccessShowResult, *proto.Error) {
 		res, perr := s.accessShow(proto.AccessShowParams{Project: "demo", Thread: id}, c)
 		if perr != nil {
@@ -169,6 +170,19 @@ excluded_commands = ["make bench"]
 	}
 	if _, perr := show(self, ""); perr == nil {
 		t.Error("a thread saw the project's")
+	}
+	// On the human socket, a caller in an agent's session (an
+	// unsandboxed command) is that agent, as gateHuman has it.
+	escaped := callCtx{human: true, who: self.who}
+	if res, perr := show(escaped, ""); perr == nil {
+		t.Errorf("an escaped thread saw the project's: %+v", res)
+	}
+	if own, perr := show(escaped, "t-0001"); perr != nil || findRule(own.Rules, proto.AccessAllow, "Bash(git log:*)") != nil {
+		t.Errorf("an escaped thread's own: %v, agent files shown %v", perr, perr == nil)
+	}
+	coord := callCtx{human: true, who: func() caller.Caller { return caller.Caller{Kind: caller.Coordinator, Project: "demo"} }}
+	if _, perr := show(coord, "t-0001"); perr == nil {
+		t.Error("the coordinator on the human socket saw a thread's")
 	}
 	other := callCtx{who: func() caller.Caller { return caller.Caller{Kind: caller.Coordinator, Project: "demo"} }}
 	if _, perr := show(other, "t-0001"); perr == nil {
@@ -220,5 +234,65 @@ allow = ["Bash(npx playwright *)"]
 	writeConfig(t, "[projects.demo]\nyolo = true\n")
 	if r := explain("ls"); r.Sandbox != proto.AccessInside || r.Prompt != proto.PromptNone || r.PromptFrom != "demo" {
 		t.Errorf("yolo: %+v", r)
+	}
+}
+
+// TestAccessGitDirRule: a thread in a repo's worktree shows its git-dir
+// grant as one tm rule naming the repo, each path it opens noting it;
+// a thread outside a repo has none, and a project's thread to come a
+// placeholder. The launch never takes the rule itself.
+func TestAccessGitDirRule(t *testing.T) {
+	testPaths(t)
+	newWatchProject(t)
+	s := &Server{opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}}}
+	root := realPath(t.TempDir())
+	repo, wt := root+"/repo", root+"/wt"
+	for _, args := range [][]string{
+		{"init", "-q", repo},
+		{"-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "c"},
+		{"-C", repo, "worktree", "add", "-q", "-b", "x", wt},
+	} {
+		if b, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, b)
+		}
+	}
+	rules := func(cwd string) []proto.AccessRule {
+		t.Helper()
+		set, err := s.resolveAccess(accessInput{role: proto.RoleThread, slug: "demo", cwd: cwd, goos: "darwin"}, loadLaunchConfig())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if a := launchAccess(set); slices.Contains(a.Write, repo) {
+			t.Errorf("the repo itself launched as writable: %q", a.Write)
+		}
+		return set.Rules
+	}
+	got := rules(wt)
+	if r := findRule(got, proto.AccessGitDir, repo); r == nil || r.Source != proto.AccessFromTM {
+		t.Errorf("no git-dir rule for %s: %+v", repo, got)
+	}
+	if r := findRule(got, proto.AccessWrite, repo+"/.git/objects"); r == nil || r.Note != "git-dir grant: "+repo {
+		t.Errorf("objects: %+v", r)
+	}
+	for _, r := range rules(t.TempDir()) {
+		if r.Kind == proto.AccessGitDir {
+			t.Errorf("outside a repo: %+v", r)
+		}
+	}
+	if findRule(rules(""), proto.AccessGitDir, "<its repo>") == nil {
+		t.Error("no placeholder for a thread to come")
+	}
+	// Placeholders are display-only: no kind or value of theirs launches,
+	// even given a path rule's kind.
+	set, err := s.resolveAccess(accessInput{role: proto.RoleThread, slug: "demo", goos: "darwin"}, loadLaunchConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	set.Rules = append(set.Rules, proto.AccessRule{Where: proto.AccessInside, Kind: proto.AccessWrite, Value: "<repo>/.git", Source: proto.AccessFromTM})
+	a := launchAccess(set)
+	for _, p := range slices.Concat(a.Read, a.Write, a.WriteFiles, a.NoWrite, a.NoWriteFiles) {
+		if strings.HasPrefix(p, "<") {
+			t.Errorf("a placeholder launched: %q in %+v", p, a)
+		}
 	}
 }

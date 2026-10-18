@@ -34,7 +34,7 @@ const modUsage = `usage: tm mod list [--outdated] [--json]
        tm mod examples [--json]
 
 User mods (docs/SPEC.md §5.3), installed in ~/.terminatr/mods. install
-takes a folder or a git URL (https://, ssh://, file://, user@host:path)
+takes a folder or a git URL (https://, file://; not ssh)
 with an optional //<subfolder> holding the mod and an optional @tag,
 e.g. https://example.com/mods.git//nord@v1.0.0, or a GitHub folder's
 URL (https://github.com/<owner>/<repo>/tree/<tag>/<subfolder>); only
@@ -354,7 +354,7 @@ type modRow struct {
 
 // setSource fills the row's fields from where the mod came from.
 func (r *modRow) setSource(src mod.Source) {
-	r.Source, r.Commit = src.String(), src.Commit
+	r.Source, r.Commit = mod.Clean(src.String(), false), mod.Clean(src.Commit, false)
 	if !src.Installed.IsZero() {
 		r.Installed = src.Installed.UTC().Format(time.RFC3339)
 	}
@@ -403,7 +403,7 @@ func (e *Env) modShow(id string, asJSON bool) error {
 	default:
 		fmt.Fprintf(e.Stdout, "source:     %s\n", mod.Clean(row.Source, false))
 		if row.Commit != "" {
-			fmt.Fprintf(e.Stdout, "commit:     %s\n", row.Commit)
+			fmt.Fprintf(e.Stdout, "commit:     %s\n", mod.Clean(row.Commit, false))
 		}
 		if row.Installed != "" {
 			fmt.Fprintf(e.Stdout, "installed:  %s\n", row.Installed)
