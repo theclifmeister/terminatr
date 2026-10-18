@@ -184,7 +184,10 @@ func (s *Server) tempRules(in accessInput) []proto.AccessRule {
 	fits := agent.OwnTempFits(reg, in.agent, own)
 	h, _ := os.UserHomeDir()
 	for _, d := range agent.SharedTemps(reg, h, os.Getenv) {
-		d = realPath(d)
+		// By the kernel's spelling (/private/tmp), which sandboxes match,
+		// even before the folder exists: a later session of the user
+		// makes it while the thread runs.
+		d = filepath.Join(realPath(filepath.Dir(d)), filepath.Base(d))
 		r := proto.AccessRule{Where: proto.AccessInside, Kind: proto.AccessNoRead, Value: d, Source: proto.AccessFromTM,
 			Note: "other sessions' temp folders: the user's Claude sessions' scratchpads and task output"}
 		switch {
