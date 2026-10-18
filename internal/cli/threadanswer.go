@@ -188,7 +188,7 @@ func (e *Env) answerByMod(p *project.Project, id, session string, q *proto.Quest
 		return err
 	}
 	var res proto.SessionAnswerResult
-	err = e.call(proto.MethodSessionAnswer, proto.SessionAnswerParams{ID: session, Index: k - 1, Answer: answer}, &res)
+	err = e.call(proto.MethodSessionAnswer, proto.SessionAnswerParams{ID: session, Index: k - 1, Answer: answer, Relay: e.relay()}, &res)
 	var perr *proto.Error
 	if errors.As(err, &perr) && perr.Code == proto.ErrNoQuestion {
 		return &tasks.Error{Code: "no-menu", Msg: fmt.Sprintf("thread %s's menu has closed (answered in its pane?); look with tm thread read %s", id, id)}

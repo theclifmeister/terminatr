@@ -73,6 +73,11 @@ type SessionAnswerParams struct {
 	// binding sets it, so a menu replaced after the human confirmed gets
 	// no answer meant for another (docs/SPEC.md §5.3, Action binding).
 	Question string `json:"question,omitempty"`
+	// Relay is the role whose answer this is, when tm's own commands
+	// send it for an agent (the coordinator's tm thread answer):
+	// "coordinator" never answers while the session is on an escape's
+	// prompt (SessionKeysParams.Relay).
+	Relay string `json:"relay,omitempty"`
 }
 
 // SessionAnswerResult says how many questions still wait for an answer;

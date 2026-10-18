@@ -21,6 +21,7 @@
 package guard
 
 import (
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -572,18 +573,76 @@ func (r Rules) deny(rule, summary, target string) *Denial {
 }
 
 // judgeBash checks each simple command of a Bash command line.
-func (r Rules) judgeBash(command string) *Denial {
-	// The floor follows a cd (or pushd) of the line for the relative
-	// paths after it, best effort; one it can't follow leaves them
-	// unknown (nowhere.dir ""). After a command that ends in a redirect
-	// (>| f, tee >(…) f: the line splits there), a command's first word
-	// may be what it writes.
-	here := nowhere{dir: r.Cwd}
+func (r Rules) judgeBash(command string) *Denial { return r.judgeLine(command, []string{r.Cwd}) }
+
+// judgeLine judges each simple command of a Bash command line with its
+// relative paths from each folder of cwds, as the floor sees them: ""
+// is one it can't tell, which refuses a relative path a writer is
+// given. A cd (or pushd, popd) moves them only where it is a plain
+// command of the line's top level: joined by && it moves them for what
+// follows in its list, joined by ; or || it adds a folder they may be
+// in (it may fail, or not run); in ( ), a pipeline or the background it
+// moves nothing, and anywhere else ({ }, if, a substitution) it leaves
+// them unknown.
+func (r Rules) judgeLine(command string, cwds []string) *Denial {
+	parts, ok := topLevel(command)
+	if !ok {
+		// A heredoc or a line it can't split: one part, with any cd in
+		// it leaving its relative paths unknown from the start.
+		parts = []linePart{{text: command}}
+		if hasCd(command) {
+			cwds = withDirs(cwds, "")
+		}
+	}
+	cur, list := cwds, cwds
+	for _, pt := range parts {
+		if listEnd(pt.before) {
+			list = cur
+		}
+		for _, c := range cur {
+			if d := r.judgeCommands(pt.text, c); d != nil {
+				return d
+			}
+		}
+		inPipe := pt.before == "|" || pt.after == "|" || pt.after == "&"
+		if cmd, args, plain := plainCd(pt.text); plain && !inPipe {
+			var to []string
+			for _, c := range cur {
+				to = withDirs(to, nowhere{dir: c}.cd(r, cmd, args).dir)
+			}
+			switch {
+			case pt.after == "&&" && pt.before != "||":
+				cur = to
+			case pt.after == "||":
+				list = withDirs(list, to...)
+			default:
+				cur = withDirs(cur, to...)
+			}
+		} else if !inPipe && !strings.HasPrefix(pt.text, "(") && hasCd(pt.text) {
+			cur = withDirs(cur, "")
+		}
+		list = withDirs(list, cur...)
+		if listEnd(pt.after) {
+			cur = list
+		}
+	}
+	return nil
+}
+
+// judgeCommands judges each simple command of part, a part of a line
+// (topLevel), with its relative paths from cwd ("" unknown: the floor
+// refuses them, the other rules take the session's folder). After a
+// command that ends in a redirect (>| f, tee >(…) f: the part splits
+// there), a command's first word may be what it writes.
+func (r Rules) judgeCommands(part, cwd string) *Denial {
+	fl := r
+	fl.Cwd = cwd
+	if cwd != "" {
+		r.Cwd = cwd
+	}
 	split := false
-	for _, words := range Commands(command) {
+	for _, words := range Commands(part) {
 		argv := strip(words)
-		fl := r
-		fl.Cwd = here.dir
 		// Only a word that looks like a path: 2>&1 splits the same way.
 		if split && len(words) > 0 && (strings.ContainsAny(words[0], `/\`) || strings.HasPrefix(words[0], "~")) {
 			if d := fl.judgeNoWrite(">", []string{words[0]}, []string{">", words[0]}); d != nil {
@@ -609,9 +668,6 @@ func (r Rules) judgeBash(command string) *Denial {
 		if d := fl.judgeNoWrite(cmd, args, words); d != nil {
 			return d
 		}
-		if cmd == "cd" || cmd == "pushd" || cmd == "popd" {
-			here = here.cd(r, cmd, args)
-		}
 		var d *Denial
 		switch {
 		case cmd == "git":
@@ -625,10 +681,10 @@ func (r Rules) judgeBash(command string) *Denial {
 		case shells[cmd]:
 			// bash -c STRING runs the string.
 			if c, ok := shellCommand(args); ok {
-				d = r.judgeBash(c)
+				d = r.judgeLine(c, []string{cwd})
 			}
 		case cmd == "eval":
-			d = r.judgeBash(strings.Join(args, " "))
+			d = r.judgeLine(strings.Join(args, " "), []string{cwd})
 		case cmd == "pwsh" || cmd == "powershell":
 			d = r.judgePwsh(args)
 		case cmd == "rm" && r.has("delete-branch") && slices.ContainsFunc(args, func(a string) bool { return rmRecursive.MatchString(a) || isLong(a, "--recursive") }):
@@ -1447,6 +1503,222 @@ func (n nowhere) cd(r Rules, cmd string, args []string) nowhere {
 	return nowhere{dir: r.abs(a)}
 }
 
+// globReaches: glob p (a wildcard in it) could name a folder that holds
+// root, or root itself: its part before the first wildcard, back to the
+// last /, holds root, and the pattern's next part matches root's
+// (rm -rf ~/.term*, ~/.terminatr/proj*).
+func (r Rules) globReaches(p, root string) bool {
+	i := strings.IndexAny(p, "*?[")
+	if i < 0 {
+		return false
+	}
+	j := strings.LastIndex(p[:i], "/")
+	if j < 0 {
+		return false
+	}
+	dir, pat := r.fold(p[:j]), r.fold(p[j+1:])
+	if dir == "" {
+		dir = "/"
+	}
+	root = r.fold(root)
+	if !under(root, dir) || root == dir {
+		return false
+	}
+	rest := strings.TrimPrefix(root[len(dir):], "/")
+	part, _, _ := strings.Cut(rest, "/")
+	pat, _, _ = strings.Cut(pat, "/")
+	ok, err := path.Match(pat, part)
+	return ok || err != nil
+}
+
+// linePart is a part of a command line between the separators of its
+// top level (;, newline, &&, ||, |, &): its text and the separators
+// before and after it ("" at the line's ends; a newline is ;, |& is |).
+type linePart struct{ text, before, after string }
+
+// listEnd: separator sep ends an and-or list.
+func listEnd(sep string) bool { return sep == "" || sep == ";" || sep == "&" }
+
+// withDirs is dirs with more added, without repeats.
+func withDirs(dirs []string, more ...string) []string {
+	out := slices.Clone(dirs)
+	for _, d := range more {
+		if !slices.Contains(out, d) {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// cdWords are the commands that change a shell's folder.
+var cdWords = setOf("cd pushd popd")
+
+// hasCd: some word of text's commands is cd, pushd or popd.
+func hasCd(text string) bool {
+	for _, words := range Commands(text) {
+		if slices.ContainsFunc(words, func(w string) bool { return cdWords[w] }) {
+			return true
+		}
+	}
+	return false
+}
+
+// plainCd: part is one plain cd, pushd or popd, and its arguments.
+func plainCd(part string) (cmd string, args []string, ok bool) {
+	if strings.HasPrefix(part, "(") || strings.HasPrefix(part, "{") {
+		return "", nil, false
+	}
+	cmds := Commands(part)
+	if len(cmds) != 1 || len(cmds[0]) == 0 || !cdWords[cmds[0][0]] {
+		return "", nil, false
+	}
+	return cmds[0][0], cmds[0][1:], true
+}
+
+// topLevel splits a command line at its top level's separators, outside
+// quotes, ( ), { }, $( ) and backticks; ok is false for a line with a
+// heredoc, or whose quotes or brackets don't close.
+func topLevel(line string) (parts []linePart, ok bool) {
+	s := []rune(line)
+	var stack []rune
+	var b strings.Builder
+	before := ""
+	cut := func(sep string) {
+		if t := strings.TrimSpace(b.String()); t != "" {
+			parts = append(parts, linePart{text: t, before: before})
+			before = sep
+		} else if before == "" || sep == ";" {
+			before = sep
+		}
+		if n := len(parts); n > 0 && parts[n-1].after == "" {
+			parts[n-1].after = sep
+		}
+		b.Reset()
+	}
+	wordStart := func(i int) bool { return i == 0 || strings.ContainsRune(" \t\n;&|(", s[i-1]) }
+	top := func() rune {
+		if len(stack) == 0 {
+			return 0
+		}
+		return stack[len(stack)-1]
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch top() {
+		case '"':
+			b.WriteRune(c)
+			switch {
+			case c == '\\' && i+1 < len(s):
+				i++
+				b.WriteRune(s[i])
+			case c == '"':
+				stack = stack[:len(stack)-1]
+			case c == '$' && i+1 < len(s) && s[i+1] == '(':
+				i++
+				b.WriteRune('(')
+				stack = append(stack, '(')
+			case c == '`':
+				stack = append(stack, '`')
+			}
+			continue
+		case '`':
+			b.WriteRune(c)
+			if c == '\\' && i+1 < len(s) {
+				i++
+				b.WriteRune(s[i])
+			} else if c == '`' {
+				stack = stack[:len(stack)-1]
+			}
+			continue
+		}
+		next := rune(0)
+		if i+1 < len(s) {
+			next = s[i+1]
+		}
+		prev := rune(0)
+		if i > 0 {
+			prev = s[i-1]
+		}
+		switch {
+		case c == '\\' && i+1 < len(s):
+			b.WriteRune(c)
+			i++
+			b.WriteRune(s[i])
+			continue
+		case c == '\'':
+			j := i + 1
+			for j < len(s) && s[j] != '\'' {
+				j++
+			}
+			if j == len(s) {
+				return nil, false
+			}
+			b.WriteString(string(s[i : j+1]))
+			i = j
+			continue
+		case c == '"' || c == '`':
+			stack = append(stack, c)
+		case c == '$' && next == '{':
+			j := i + 2
+			for j < len(s) && s[j] != '}' {
+				j++
+			}
+			if j == len(s) {
+				return nil, false
+			}
+			b.WriteString(string(s[i : j+1]))
+			i = j
+			continue
+		case c == '(':
+			stack = append(stack, '(')
+		case c == ')':
+			if top() != '(' {
+				return nil, false
+			}
+			stack = stack[:len(stack)-1]
+		case c == '{' && wordStart(i) && (next == ' ' || next == '\t' || next == '\n'):
+			stack = append(stack, '{')
+		case c == '}' && top() == '{' && wordStart(i):
+			stack = stack[:len(stack)-1]
+		case c == '<' && next == '<' && (i+2 >= len(s) || s[i+2] != '<') && prev != '<':
+			return nil, false
+		case len(stack) > 0:
+		case c == '#' && wordStart(i):
+			for i < len(s) && s[i] != '\n' {
+				i++
+			}
+			cut(";")
+			continue
+		case c == ';' || c == '\n':
+			cut(";")
+			continue
+		case c == '&' && next == '&':
+			i++
+			cut("&&")
+			continue
+		case c == '|' && next == '|':
+			i++
+			cut("||")
+			continue
+		case c == '|' && prev != '>':
+			if next == '&' {
+				i++
+			}
+			cut("|")
+			continue
+		case c == '&' && prev != '>' && prev != '<' && next != '>':
+			cut("&")
+			continue
+		}
+		b.WriteRune(c)
+	}
+	if len(stack) > 0 {
+		return nil, false
+	}
+	cut("")
+	return parts, true
+}
+
 // judgeNoWrite: the floor's NoWrite, of a simple command, its name and
 // arguments and its words as written: a redirect into a path there, or
 // a command that writes the paths it is given naming one (cp's and the
@@ -1469,7 +1741,7 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 		if fixed == "" {
 			fixed = "/"
 		}
-		if r.covers(r.NoWrite, p) || parents && slices.ContainsFunc(r.NoWrite, func(n string) bool { return r.under(n, fixed) }) {
+		if r.covers(r.NoWrite, p) || parents && slices.ContainsFunc(r.NoWrite, func(n string) bool { return r.under(n, fixed) || r.globReaches(p, n) }) {
 			return floor(r.deny(RuleTMFiles, cmd+" of "+safe(p), ""))
 		}
 		return nil

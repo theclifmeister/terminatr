@@ -131,7 +131,7 @@ func TestSmokeMousePopupsAndAttach(t *testing.T) {
 	w.ClickText("a project", 28)
 	w.WaitFor("1 overview", wait)
 	w.ClickText("5 access", 1)
-	w.WaitFor("ask you or auto mode", wait)
+	w.WaitFor("ask you", wait)
 	_, y := w.TextAt("Escapes ", 1)
 	before := strings.Split(w.Screen(), "\n")[y]
 	w.ClickText("Escapes ", 1) // selects it

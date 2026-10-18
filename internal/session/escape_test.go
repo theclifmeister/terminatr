@@ -1,12 +1,15 @@
 package session
 
 import (
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
 // TestEscapeMod: a call the mod says leaves the sandbox (MarkEscape)
@@ -116,5 +119,63 @@ func TestEscapeHook(t *testing.T) {
 				t.Fatalf("after the escape's call ended: %s/%s, escape %v", info.State, info.Reason, info.Escape)
 			}
 		})
+	}
+}
+
+// TestEscapeScreenHolds: hooks can come from any process in the agent's
+// tree, so a mark ends only when the screen shows no permission dialog:
+// with the escape's dialog on screen, a forged PostToolUse, Stop and a
+// new PermissionRequest leave it marked.
+func TestEscapeScreenHolds(t *testing.T) {
+	dialog := `printf 'Bash command\n\n  ls\n\nDo you want to proceed?\n\342\235\257 1. Yes\n  2. No\n\nEsc to cancel\n'; exec cat`
+	s, err := Start(Config{
+		ID: "s-esc", Role: proto.RoleThread, Project: "p",
+		Argv: []string{"/bin/sh", "-c", dialog},
+		Cwd:  t.TempDir(),
+		Env:  []string{"PATH=/usr/bin:/bin", "TERM=xterm-256color", "LANG=C.UTF-8"},
+		Cols: 80, Rows: 24,
+		Logf: t.Logf,
+		Agent: &AgentConfig{
+			Agent: claudeLike(t), Home: t.TempDir(),
+			Guard: func(_ string, input map[string]any) *guard.Denial {
+				if input["dangerouslyDisableSandbox"] != true {
+					return nil
+				}
+				return &guard.Denial{Rule: guard.RuleEscape, Ask: true}
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Stop(time.Second) })
+	hook := func(ev string, payload map[string]any) {
+		t.Helper()
+		if _, err := s.Hook(ev, payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hook("SessionStart", map[string]any{"source": "startup"})
+	hook("UserPromptSubmit", map[string]any{"prompt": "go"})
+	hook("PreToolUse", map[string]any{"tool_name": "Bash", "tool_use_id": "t1", "tool_input": map[string]any{"command": "ls", "dangerouslyDisableSandbox": true}})
+	hook("PermissionRequest", map[string]any{"tool_name": "Bash", "tool_use_id": "t1"})
+	testwait.Eventually(t, "the dialog on screen", func() bool {
+		e, _ := s.Explain()
+		return slices.Contains(e.Matches, "blocked-permission-dialog")
+	})
+	if !s.Info().Escape {
+		t.Fatal("the escape's dialog is not marked")
+	}
+	hook("PostToolUse", map[string]any{"tool_name": "Bash", "tool_use_id": "t1"})
+	hook("Stop", map[string]any{})
+	hook("UserPromptSubmit", map[string]any{"prompt": "x"})
+	hook("PreToolUse", map[string]any{"tool_name": "Bash", "tool_use_id": "t9", "tool_input": map[string]any{"command": "pwd"}})
+	hook("PermissionRequest", map[string]any{"tool_name": "Bash", "tool_use_id": "t9"})
+	time.Sleep(300 * time.Millisecond)
+	if info := s.Info(); !info.Escape {
+		t.Fatalf("forged hooks ended the mark while its dialog shows: %s/%s", info.State, info.Reason)
+	}
+	if _, why, _ := s.PromptNow("hi", false); why != "" && why != HeldEscape && !strings.HasPrefix(why, "the agent is") {
+		t.Errorf("PromptNow while an escape is open: %q", why)
 	}
 }

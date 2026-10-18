@@ -34,13 +34,13 @@ func accessSettings(slug, goos string) []setting {
 // escapesWords name sandbox_escapes' values.
 func escapesWords(s config.Safety) string {
 	if s.SandboxEscapes {
-		return "ask you or auto mode"
+		return "ask you"
 	}
 	return "never"
 }
 
 func (sr safetyRows) escapesRow() setting {
-	return setting{label: "Escapes", help: "Whether a thread's agent may ask to run a command outside its sandbox when the sandbox stops it: on, you (or auto mode) approve each one; never, what can't run in the sandbox doesn't run. Claude threads; Codex threads ask as before. Threads get a change from their next start or tm thread restart.",
+	return setting{label: "Escapes", help: "Whether a thread's agent may ask to run a command outside its sandbox when the sandbox stops it: on, you approve each one, never the coordinator or auto mode; never, what can't run in the sandbox doesn't run. Claude threads; a Codex thread's requests come to you too. Threads get a change from their next start or tm thread restart.",
 		keys: []string{"sandbox_escapes"}, word: escapesWords,
 		value: func(m *dash) string { return escapesWords(sr.safety(m)) },
 		change: func(m *dash) tea.Cmd {
