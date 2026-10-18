@@ -72,10 +72,7 @@ func TestParseSource(t *testing.T) {
 	for _, c := range []struct{ arg, git, ref, path string }{
 		{arg: "https://github.com/ada/tm-nord", git: "https://github.com/ada/tm-nord"},
 		{arg: "https://github.com/ada/tm-nord.git@v0.4.0", git: "https://github.com/ada/tm-nord.git", ref: "v0.4.0"},
-		{arg: "git@github.com:ada/tm-nord.git", git: "git@github.com:ada/tm-nord.git"},
-		{arg: "git@github.com:ada/tm-nord.git@main", git: "git@github.com:ada/tm-nord.git", ref: "main"},
 		// An @ before the last slash is part of the path.
-		{arg: "ssh://example.com/x@release/1", git: "ssh://example.com/x@release/1"},
 		{arg: "https://example.com/x@y/z", git: "https://example.com/x@y/z"},
 		{arg: "nord", path: filepath.Join(dir, "nord")},
 	} {
@@ -98,6 +95,9 @@ func TestSourceCredentials(t *testing.T) {
 		"https://ghp_TOKEN@github.com/ada/tm-nord//mods/x",
 		"https://github.com/ada/tm-nord", // control: below
 		"ssh://git@example.com/x",
+		"ssh://example.com/x",
+		"git@github.com:ada/tm-nord.git",
+		"ada@example.com:mods.git//nord@v1",
 		"https://:tok@example.com/x",
 	} {
 		_, err := ParseSource(bad, "")
@@ -107,9 +107,23 @@ func TestSourceCredentials(t *testing.T) {
 			}
 			continue
 		}
-		if !errors.Is(err, ErrCredentials) {
-			t.Errorf("%s: err %v, want ErrCredentials", bad, err)
+		if !errors.Is(err, ErrNotPublic) {
+			t.Errorf("%s: err %v, want ErrNotPublic", bad, err)
 		}
+	}
+	// A record installed over SSH is shown as is and never fetched.
+	ssh := Source{Git: "git@example.com:ada/mods.git", Ref: "v1"}
+	if ssh.String() != "git@example.com:ada/mods.git@v1" {
+		t.Errorf("ssh record shown as %s", ssh.String())
+	}
+	if _, err := Fetch(ssh); !errors.Is(err, ErrNotPublic) {
+		t.Errorf("Fetch ssh: %v", err)
+	}
+	if _, err := Next(ssh); err == nil {
+		t.Error("Next ssh: no error")
+	}
+	if _, _, err := Latest(ssh); err == nil {
+		t.Error("Latest ssh: no error")
 	}
 	// A record from before: shown redacted, never fetched.
 	s := Source{Git: "https://ada:s3cret@example.com/tm-nord", Ref: "v1", Subdir: "m", Commit: "abcdef1234"}
@@ -118,7 +132,7 @@ func TestSourceCredentials(t *testing.T) {
 			t.Errorf("not redacted: %s", out)
 		}
 	}
-	if _, err := Fetch(s); !errors.Is(err, ErrCredentials) {
+	if _, err := Fetch(s); !errors.Is(err, ErrNotPublic) {
 		t.Errorf("Fetch: %v", err)
 	}
 	if _, err := Next(s); err == nil || strings.Contains(err.Error(), "s3cret") {
@@ -141,8 +155,6 @@ func TestParseSourceSubdir(t *testing.T) {
 		{arg: "https://github.com/ada/mods//nord@v0.4.0", git: "https://github.com/ada/mods", ref: "v0.4.0", sub: "nord",
 			str: "https://github.com/ada/mods/tree/v0.4.0/nord"},
 		{arg: "https://example.com/ada/mods.git//themes/nord@main", git: "https://example.com/ada/mods.git", ref: "main", sub: "themes/nord"},
-		{arg: "ssh://example.com/mods.git//nord@v1", git: "ssh://example.com/mods.git", ref: "v1", sub: "nord"},
-		{arg: "git@example.com:ada/mods.git//nord@v1", git: "git@example.com:ada/mods.git", ref: "v1", sub: "nord"},
 		{arg: "file:///srv/mods//nord", git: "file:///srv/mods", sub: "nord"},
 		{arg: "file:///srv/mods", git: "file:///srv/mods"},
 	} {

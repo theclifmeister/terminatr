@@ -104,10 +104,11 @@ var (
 	segRE = regexp.MustCompile(`^[A-Za-z0-9._+-]+$`)
 )
 
-// ErrCredentials refuses a git URL that carries a user, password or
-// token: mods install from public URLs only, and a record of the URL
-// would keep the secret where the Mods tab and agents can read it.
-var ErrCredentials = errors.New("the URL has a user, password or token in it: mods install from public URLs only (no credentials; a private repository can't be installed)")
+// ErrNotPublic refuses a git URL that is not a public https one: SSH
+// (ssh:// or user@host:path), or a user, password or token in the URL.
+// Mods install over https from public URLs only; a record of a URL with
+// a secret would keep it where the Mods tab and agents can read it.
+var ErrNotPublic = errors.New("mods install from public URLs only: use an https:// URL with no user, password or token in it (SSH and private repositories can't be installed)")
 
 // urlUserinfo splits the userinfo out of a URL with a scheme://
 // authority (https://, ssh://), and says whether it had any. The scp
@@ -135,6 +136,9 @@ func HasCredentials(u string) bool {
 	_, _, _, ok := urlUserinfo(u)
 	return ok
 }
+
+// IsSSH says whether git URL u goes over SSH: ssh:// or the scp form.
+func IsSSH(u string) bool { return strings.HasPrefix(u, "ssh://") || scpRE.MatchString(u) }
 
 // RedactURL is u with any userinfo replaced by ***, for showing.
 func RedactURL(u string) string {
@@ -175,8 +179,8 @@ func CheckSubdir(p string) error {
 // with an optional //<path> (the mod's folder in the repository) and
 // an optional @<ref> after it.
 func parseGit(arg string) (Source, error) {
-	if HasCredentials(arg) {
-		return Source{}, ErrCredentials
+	if HasCredentials(arg) || IsSSH(arg) {
+		return Source{}, ErrNotPublic
 	}
 	if m := githubTreeRE.FindStringSubmatch(arg); m != nil {
 		if m[2] == "blob" {
@@ -241,7 +245,7 @@ func ParseSource(arg, cwd string) (Source, error) {
 	case arg == "" || strings.HasPrefix(arg, "-"):
 		return Source{}, fmt.Errorf("%q is neither a folder nor a git URL", arg)
 	case strings.HasPrefix(arg, "http://"), strings.HasPrefix(arg, "git://"):
-		return Source{}, fmt.Errorf("%s: use https:// or ssh://, which check whom they talk to", arg)
+		return Source{}, fmt.Errorf("%s: use https://, which checks whom it talks to", arg)
 	case strings.HasPrefix(arg, "https://"), strings.HasPrefix(arg, "ssh://"), strings.HasPrefix(arg, "file://"), scpRE.MatchString(arg):
 		return parseGit(arg)
 	}
@@ -255,7 +259,7 @@ func ParseSource(arg, cwd string) (Source, error) {
 	}
 	fi, err := os.Stat(p)
 	if err != nil {
-		return Source{}, fmt.Errorf("%s: no such folder, and not a git URL (https://, ssh://, file:// or user@host:path)", arg)
+		return Source{}, fmt.Errorf("%s: no such folder, and not a git URL (https:// or file://)", arg)
 	}
 	if !fi.IsDir() {
 		return Source{}, fmt.Errorf("%s isn't a folder", arg)
@@ -679,8 +683,8 @@ func Latest(s Source) (next string, behind bool, err error) {
 		return "changed", true, nil
 	case s.Git == "":
 		return "", false, errors.New("no source recorded")
-	case HasCredentials(s.Git):
-		return "", false, recordCredentials(s)
+	case HasCredentials(s.Git) || IsSSH(s.Git):
+		return "", false, recordNotPublic(s)
 	case isVersionTag(s.Ref):
 		tag, err := newestTag(s.Git, s.Ref)
 		if err != nil || tag == "" {
@@ -730,8 +734,8 @@ func subdirChanged(s Source, ref string) (bool, error) {
 // version tag moves on to the newest one; a folder, branch or other tag
 // is fetched again as it is.
 func Next(s Source) (Source, error) {
-	if HasCredentials(s.Git) {
-		return Source{}, recordCredentials(s)
+	if HasCredentials(s.Git) || IsSSH(s.Git) {
+		return Source{}, recordNotPublic(s)
 	}
 	next := Source{Path: s.Path, Git: s.Git, Ref: s.Ref, Subdir: s.Subdir}
 	if s.Git != "" && isVersionTag(s.Ref) {
@@ -753,8 +757,8 @@ func shortCommit(c string) string {
 	return c
 }
 
-// recordCredentials is the refusal of a recorded source whose URL has
-// userinfo (installed before tm refused those).
-func recordCredentials(s Source) error {
-	return fmt.Errorf("%s: its recorded URL has credentials in it, which tm no longer fetches with: remove the mod and install it again from a public URL", s)
+// recordNotPublic is the refusal of a recorded source tm no longer
+// fetches (installed over SSH, or with credentials in the URL).
+func recordNotPublic(s Source) error {
+	return fmt.Errorf("%s: this source isn't a public https URL, which is all tm fetches from now: remove the mod and install it again from an https:// URL", s)
 }

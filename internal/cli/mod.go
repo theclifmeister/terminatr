@@ -34,7 +34,7 @@ const modUsage = `usage: tm mod list [--outdated] [--json]
        tm mod examples [--json]
 
 User mods (docs/SPEC.md §5.3), installed in ~/.terminatr/mods. install
-takes a folder or a git URL (https://, ssh://, file://, user@host:path)
+takes a folder or a git URL (https://, file://; not ssh)
 with an optional //<subfolder> holding the mod and an optional @tag,
 e.g. https://example.com/mods.git//nord@v1.0.0, or a GitHub folder's
 URL (https://github.com/<owner>/<repo>/tree/<tag>/<subfolder>); only
