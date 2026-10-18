@@ -2,9 +2,13 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/theclifmeister/terminatr/internal/plat/caps"
 )
 
 // Write folders (T574 §4.6, case 2): one rule for a folder besides its
@@ -14,9 +18,38 @@ import (
 // there too) and Codex's filesystem write. A write folder is a folder,
 // everything below it included: no pattern, never the whole home or
 // disk, nor a folder of files that start programs (shell profiles, git
-// hooks and config, agents' and tm's settings). The launch also leaves
-// out one that holds or is in tm's own folder, config.toml or the
-// project folder.
+// hooks and config, agents' and tm's settings), nor one whose files are
+// loaded or run as code (a folder on PATH or holding one, ~/Library but
+// its caches, package managers' and toolchains' folders). Names compare
+// with case folded where the file system ignores case (macOS). The
+// launch also leaves out one that holds or is in tm's own folder,
+// config.toml or the project folder.
+
+// codeHome are the folders below home whose files are loaded or run as
+// code, by their first part: no write folder is in one. ~/Library is
+// one but for ~/Library/Caches/<folder> (libraryCaches).
+var codeHome = []string{"Library", "bin", "go", ".local", ".cargo", ".rustup", ".docker", ".oh-my-zsh", ".npm-global", ".npm", ".bun", ".deno",
+	".nvm", ".volta", ".asdf", ".rbenv", ".pyenv", ".sdkman", ".gem", ".zsh", ".zshrc.d", ".bashrc.d", ".vim", ".emacs.d", ".tmux"}
+
+// codeRoot are the folders outside home whose files are loaded or run
+// as code: no write folder is in one.
+var codeRoot = []string{"/opt/homebrew", "/opt/local", "/usr", "/bin", "/sbin", "/etc", "/private/etc", "/System", "/Library", "/Applications", "/nix"}
+
+// fold is name as the file system compares it: case folded where it
+// ignores case.
+func fold(name string) string {
+	if caps.CaseFold {
+		return strings.ToLower(name)
+	}
+	return name
+}
+
+// inFolder reports whether slash path p is root or below it, compared
+// as the file system does.
+func inFolder(p, root string) bool {
+	p, root = fold(p), strings.TrimSuffix(fold(root), "/")
+	return p == root || strings.HasPrefix(p, root+"/")
+}
 
 // CheckWriteFolder checks one write folder: absolute or from ~/, clean,
 // without wildcards, at least two folders below the home folder (or
@@ -51,12 +84,56 @@ func CheckWriteFolder(e string) error {
 		return fmt.Errorf("%q has a $: a write folder is a plain path, without variables", e)
 	}
 	for _, x := range parts {
-		if slices.Contains(startFiles, x) {
+		if slices.ContainsFunc(startFiles, func(f string) bool { return fold(f) == fold(x) }) {
 			return fmt.Errorf("%q is in %s, which holds files that start programs as you outside the sandbox: never a write folder", e, x)
 		}
 	}
 	if high(parts) {
 		return fmt.Errorf("%q is a whole tree high up, which holds other repositories and your settings: name the folder itself, e.g. ~/src/fixtures", e)
+	}
+	return checkCodeFolder(e, p, parts)
+}
+
+// checkCodeFolder refuses write folder e (slash path p, its parts from
+// ~ or the root) where files are loaded or run as code: in one of
+// codeHome or codeRoot, or on PATH, in a folder of it or holding one
+// (with ~ and PATH as this process has them).
+func checkCodeFolder(e, p string, parts []string) error {
+	home, _ := os.UserHomeDir()
+	home = filepath.ToSlash(home)
+	abs := p
+	if parts[0] == "~" {
+		abs = home + strings.TrimPrefix(p, "~")
+	}
+	rel := parts[1:] // below home, when it is
+	if parts[0] != "~" {
+		rel = nil
+		if home != "" && inFolder(abs, home) && fold(abs) != fold(home) {
+			rel = strings.Split(strings.TrimPrefix(abs[len(home):], "/"), "/")
+		}
+	}
+	const code = ", whose files are loaded or run as code (outside the sandbox too): never a write folder"
+	if len(rel) > 0 && slices.ContainsFunc(codeHome, func(c string) bool { return fold(c) == fold(rel[0]) }) {
+		caches := len(rel) >= 3 && fold(rel[0]) == fold("Library") && fold(rel[1]) == fold("Caches")
+		if !caches {
+			return fmt.Errorf("%q is in ~/%s%s (~/Library/Caches/<folder> is the one allowed there)", e, rel[0], code)
+		}
+	}
+	if rel == nil {
+		for _, c := range codeRoot {
+			if inFolder(abs, c) {
+				return fmt.Errorf("%q is in %s%s", e, c, code)
+			}
+		}
+	}
+	for _, d := range filepath.SplitList(os.Getenv("PATH")) {
+		d = filepath.ToSlash(filepath.Clean(d))
+		if d == "." || !filepath.IsAbs(filepath.FromSlash(d)) && !strings.HasPrefix(d, "/") {
+			continue
+		}
+		if inFolder(abs, d) || inFolder(d, abs) {
+			return fmt.Errorf("%q holds or is in %s, a folder on PATH%s", e, d, code)
+		}
 	}
 	return nil
 }

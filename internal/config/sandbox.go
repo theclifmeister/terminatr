@@ -233,6 +233,10 @@ func CheckExcludedCommand(e string) error {
 	if len([]rune(e)) < 2 {
 		return fmt.Errorf("%q is too short for a command: it would match programs by accident", e)
 	}
+	if strings.ContainsAny(e, "()") {
+		// tm writes it into a Bash(...) rule when it runs without asking.
+		return fmt.Errorf("%q has a parenthesis: an excluded command is a plain command, e.g. npx playwright *", e)
+	}
 	if hasExpansion(e) {
 		return fmt.Errorf("%q has a variable: an excluded command is one command, without substitutions", e)
 	}

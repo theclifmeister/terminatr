@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/theclifmeister/terminatr/internal/plat/caps"
 )
 
 func TestThreadSandboxMerge(t *testing.T) {
@@ -199,7 +201,10 @@ func TestCheckSandboxEntries(t *testing.T) {
 	}
 	for _, e := range []string{"*", "**", " * ", "npx * ", "a; b", "a && b", "a > f", "$(x)", "`x`", "${X} x", "echo $X", "make a$X", "x ok $1", "x $@", "x $*", "x $$", "x $?", "x $# y", "ok $ $_a", "x a$-", "?", "x", "Bash(npx *)", "PowerShell(x)",
 		// T560's security review: a program left open, a rule in another case.
-		"*e*", "*-*", "* --version", "python* -c x", "bash(npx *)", "POWERSHELL(x)"} {
+		"*e*", "*-*", "* --version", "python* -c x", "bash(npx *)", "POWERSHELL(x)",
+		// #655's review: a parenthesis would split the Bash(...) rule tm
+		// writes for one that runs without asking.
+		"npx playwright *) Bash(*", "make (x)", "x )"} {
 		if err := CheckExcludedCommand(e); err == nil {
 			t.Errorf("excluded %q passed", e)
 		}
@@ -601,6 +606,36 @@ excluded_commands = [{ command = "make e2e", ask = true }, { command = "pnpm tes
 	}
 	if got := c.ThreadSandbox("x").Given(SandboxExcluded); !reflect.DeepEqual(got, []string{"make e2e"}) {
 		t.Errorf("refused entry: %q", got)
+	}
+}
+
+// TestWriteFolderCode: no write folder where files are loaded or run as
+// code: ~/Library but its caches, toolchains' and package managers'
+// folders, the system's, and a folder on PATH or holding one; names
+// compare with case folded where the file system ignores case (#655
+// security review).
+func TestWriteFolderCode(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", "/usr/bin:/x/tools/bin:"+home+"/src/tools/bin")
+	for _, e := range []string{"~/Library/Caches/ms-playwright", "~/src/fixtures", "~/src/tools-data", "/x/data/fixtures"} {
+		if err := CheckWriteFolder(e); err != nil {
+			t.Errorf("%q: %v", e, err)
+		}
+	}
+	for _, e := range []string{"~/Library/Preferences/x", "~/Library/Application Support/x/plugins", "~/Library/Caches", "~/.cargo/bin", "~/go/bin", "~/.local/share/x",
+		"~/.docker/cli-plugins", "~/.oh-my-zsh/custom", "~/.npm-global/lib", "~/.bun/bin", "~/.deno/bin", "~/bin/x", "/opt/homebrew/lib", "/usr/local/lib",
+		"/etc/paths.d", "/x/tools/bin", "/x/tools/bin/sub", "~/src/tools", "~/src/tools/bin", home + "/.cargo/env", home + "/src/tools"} {
+		if err := CheckWriteFolder(e); err == nil {
+			t.Errorf("%q passed", e)
+		}
+	}
+	if caps.CaseFold {
+		for _, e := range []string{"~/library/launchagents/x", "~/LIBRARY/Preferences/x", "~/src/repo/.GIT/hooks", "~/src/x/.SSH/k", "~/.CLAUDE/commands", "~/.Config/git", "~/src/x/LaunchAgents", "~/.Cargo/bin", "/USR/local/x", "~/src/TOOLS/bin"} {
+			if err := CheckWriteFolder(e); err == nil {
+				t.Errorf("%q passed with case folded", e)
+			}
+		}
 	}
 }
 
