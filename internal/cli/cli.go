@@ -39,6 +39,9 @@ type Env struct {
 	// Identify asks the server who the caller is (§11.1); ok is false
 	// when no server answers. Nil skips the check.
 	Identify func() (c caller.Caller, ok bool)
+	// Identified: Run asked the server who the caller is and it
+	// answered, so Caller is narrowed to what the server sees.
+	Identified bool
 }
 
 // OSEnv is the process's real environment.
@@ -103,7 +106,7 @@ func Commands() []string {
 // the server's view of the caller is combined with the environment's.
 // Every forwarded command is checked too, so one run here, its session's
 // variables unset, is still narrowed to the agent the server sees.
-var checked = map[string]bool{"mod": true, "skill": true}
+var checked = map[string]bool{"mod": true, "skill": true, "access": true}
 
 // Run dispatches args (without the program name).
 func (e *Env) Run(args []string) (code int, handled bool) {
@@ -117,6 +120,7 @@ func (e *Env) Run(args []string) (code int, handled bool) {
 	if (checked[args[0]] || forwarded[args[0]]) && e.Identify != nil {
 		if c, ok := e.Identify(); ok {
 			e.Caller = caller.Narrower(e.Caller, c)
+			e.Identified = true
 		}
 	}
 	err := cmd(e, args[1:])

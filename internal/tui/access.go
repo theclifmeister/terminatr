@@ -118,7 +118,7 @@ func (v *accessView) render(m *dash) string {
 		head = faintLines("What a new thread of "+res.Project+" gets. Guard rules are read live; the agent's own files are shown only.", w)
 	}
 	if res.SandboxError != "" {
-		head = append(head, warnLines("Sandbox lists and presets left out: "+res.SandboxError, w)...)
+		head = append(head, warnLines("Sandbox rules left out: "+res.SandboxError, w)...)
 	}
 	const whereW = 9
 	srcW := min(max(w/3, 12), 30)
@@ -127,7 +127,7 @@ func (v *accessView) render(m *dash) string {
 	sel := -1
 	for i, r := range res.Rules {
 		where := r.Where
-		gone := r.Change == proto.AccessRemoved || r.Skipped != ""
+		gone := r.Change == proto.AccessRemoved || !r.Given()
 		if gone {
 			where += " ─"
 		}

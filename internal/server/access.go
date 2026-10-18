@@ -175,28 +175,17 @@ func (s *Server) pathNotes(slug, repo, common string) func(string) string {
 	}
 }
 
-// sandboxRules are project slug's sandbox lists and presets for its
-// threads on platform goos (config.ThreadSandbox): each entry a rule,
-// a preset with the rules it opens, a rule that doesn't apply there
-// marked skipped. A config.toml that doesn't load, or an entry that
-// fails its check, gives no rules and why.
+// sandboxRules are project slug's sandbox rules for its threads on
+// platform goos (config.ThreadSandbox): each entry a rule, all
+// projects' first, those the project drops or that fail their check
+// marked and left out, a rule that doesn't apply there marked skipped;
+// local ports when a table sets them. A config.toml that doesn't load
+// gives no rules and why.
 func sandboxRules(lc launchConfig, slug, goos string) ([]proto.AccessRule, string) {
-	err := lc.err
-	var t config.ThreadSandbox
-	if err == nil {
-		t, err = lc.cfg.ThreadSandbox(slug)
+	if lc.err != nil {
+		return nil, fmt.Sprintf("project %s: sandbox rules left out, the thread starts without them (fix config.toml: tm settings, Access tab): %v", slug, lc.err)
 	}
-	if err != nil {
-		return nil, fmt.Sprintf("project %s: sandbox lists and presets dropped, the thread starts without them (fix or remove the entry: tm settings, Access tab): %v", slug, err)
-	}
-	own := lc.cfg.SandboxOf(slug)
-	ownPresets := lc.cfg.PresetsOf(slug)
-	from := func(set bool) string {
-		if set {
-			return slug
-		}
-		return proto.AccessFromAll
-	}
+	t := lc.cfg.ThreadSandbox(slug)
 	skip := func(key string) string {
 		if config.SandboxApplies(key, goos) {
 			return ""
@@ -210,44 +199,38 @@ func sandboxRules(lc launchConfig, slug, goos string) ([]proto.AccessRule, strin
 		}
 		return []string{"claude"}
 	}
-	var out []proto.AccessRule
-	list := func(key, where, kind string, vals []string) {
-		_, set := own[key]
-		for _, v := range vals {
-			out = append(out, proto.AccessRule{Where: where, Kind: kind, Value: v, Source: from(set),
-				OS: config.SandboxSettings[key].OS, Agents: agents(key), Skipped: skip(key)})
-		}
+	kinds := map[string][2]string{
+		config.SandboxHosts:    {proto.AccessInside, proto.AccessHost},
+		config.SandboxGuides:   {proto.AccessBrief, proto.AccessGuide},
+		config.SandboxExcluded: {proto.AccessOutside, proto.AccessExcluded},
+		config.SandboxAllow:    {proto.AccessPrompts, proto.AccessAllow},
 	}
-	list(config.SandboxExcluded, proto.AccessOutside, proto.AccessExcluded, t.ExcludedCommands)
-	list(config.SandboxAllow, proto.AccessPrompts, proto.AccessAllow, t.Allow)
-	for _, k := range t.Presets {
-		_, set := ownPresets[k]
-		base := proto.AccessRule{Source: from(set), OS: config.SandboxSettings[k].OS, Skipped: skip(k), Note: presetName(k) + " preset"}
-		r := base
-		r.Where, r.Kind, r.Value, r.Note = proto.AccessInside, proto.AccessPreset, k, presetName(k)
+	var out []proto.AccessRule
+	for _, r := range t.Rules {
+		k := kinds[r.Key]
+		rule := proto.AccessRule{Where: k[0], Kind: k[1], Value: r.Value, Source: proto.AccessFromAll,
+			OS: config.SandboxSettings[r.Key].OS, Agents: agents(r.Key), Skipped: skip(r.Key), Dropped: r.Dropped || r.Replaced, Refused: r.Refused}
+		switch {
+		case r.Own:
+			rule.Source = slug
+		case r.Dropped:
+			rule.Note = "dropped by " + slug
+		case r.Replaced:
+			rule.Note = slug + "'s own list replaces all projects'"
+		}
+		out = append(out, rule)
+	}
+	if t.LocalPortsSet {
+		src := proto.AccessFromAll
+		if t.LocalPortsOwn {
+			src = slug
+		}
+		r := onOff(proto.AccessInside, proto.AccessLocalPorts, t.LocalPorts, src, false)
+		r.OS, r.Skipped = config.SandboxSettings[config.SandboxLocalPorts].OS, skip(config.SandboxLocalPorts)
 		out = append(out, r)
-		opens := func(where, kind, value string) {
-			r := base
-			r.Where, r.Kind, r.Value = where, kind, value
-			out = append(out, r)
-		}
-		switch k {
-		case config.SandboxBrowser:
-			opens(proto.AccessBrief, proto.AccessGuide, "browser-testing")
-		case config.SandboxDownloads:
-			for _, h := range config.BrowserDomains {
-				opens(proto.AccessInside, proto.AccessHost, h)
-			}
-			opens(proto.AccessBrief, proto.AccessGuide, "browser-downloads")
-		case config.SandboxDevServers:
-			opens(proto.AccessInside, proto.AccessLocalPorts, "on")
-		}
 	}
 	return out, ""
 }
-
-// presetName is a preset's key as the UI and the log say it.
-func presetName(key string) string { return strings.ReplaceAll(key, "_", " ") }
 
 // guardRules are the guard's settings for a session of role in project
 // slug, read live: on or off, its mode, the rules off, the allowances
@@ -324,9 +307,9 @@ func agentRules(a agent.Agent, home, cwd string) []proto.AccessRule {
 
 // launched reports whether rule r goes into the agent's launch: not
 // one shown only (the agent's own files), nor one left out where it
-// runs.
+// runs, dropped or refused.
 func launched(r proto.AccessRule) bool {
-	return r.Where != proto.AccessAgent && r.Skipped == ""
+	return r.Where != proto.AccessAgent && r.Given()
 }
 
 // launchAccess is the file access policy the launch gives the agent:
@@ -357,32 +340,27 @@ func launchAccess(set proto.AccessSet) agent.Access {
 	return a
 }
 
-// launchSandbox is a thread's sandbox lists from set, the presets on
-// where it runs (for their guidance in the brief), and a note for each
-// setting that doesn't apply there, or the one why its lists were
-// dropped, for the log and the launch's warnings.
-func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, presets, skipped []string) {
+// launchSandbox is a thread's sandbox lists from set, the guidance
+// texts its brief gets where it runs, and a note for each kind of rule
+// that doesn't apply there and each rule refused, or the one why its
+// rules were left out, for the log and the launch's warnings.
+func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, guides, skipped []string) {
 	if set.SandboxError != "" {
 		return lists, nil, []string{set.SandboxError}
 	}
 	said := map[string]bool{}
 	for _, r := range set.Rules {
-		if r.Where == proto.AccessAgent {
+		if r.Where == proto.AccessAgent || r.Dropped {
+			continue
+		}
+		if r.Refused != "" {
+			skipped = append(skipped, fmt.Sprintf("sandbox %s %q refused, the thread starts without it: %s", r.Kind, r.Value, r.Refused))
 			continue
 		}
 		if r.Skipped != "" {
-			what := ""
-			switch r.Kind {
-			case proto.AccessExcluded:
-				what = "excluded commands"
-			case proto.AccessAllow:
-				what = "allow rules"
-			case proto.AccessPreset:
-				what = "preset " + presetName(r.Value)
-			}
-			if what != "" && !said[what] {
+			if what := sandboxKindWords[r.Kind]; what != "" && !said[what] {
 				said[what] = true
-				skipped = append(skipped, fmt.Sprintf("sandbox %s is set but %s: skipped", what, r.Skipped))
+				skipped = append(skipped, fmt.Sprintf("sandbox %s skipped: %s", what, r.Skipped))
 			}
 			continue
 		}
@@ -391,15 +369,21 @@ func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, presets, skip
 			lists.Excluded = append(lists.Excluded, r.Value)
 		case proto.AccessAllow:
 			lists.Allow = append(lists.Allow, r.Value)
-		case proto.AccessPreset:
-			presets = append(presets, r.Value)
+		case proto.AccessGuide:
+			guides = append(guides, r.Value)
 		case proto.AccessHost:
 			lists.Domains = append(lists.Domains, r.Value)
 		case proto.AccessLocalPorts:
-			lists.LocalBinding = true
+			lists.LocalBinding = r.Value == "on"
 		}
 	}
-	return lists, presets, skipped
+	return lists, guides, skipped
+}
+
+// sandboxKindWords name the sandbox rules of a kind in the log.
+var sandboxKindWords = map[string]string{
+	proto.AccessExcluded: "excluded commands", proto.AccessAllow: "allow rules", proto.AccessHost: "hosts",
+	proto.AccessGuide: "guidance texts", proto.AccessLocalPorts: "local ports",
 }
 
 // launchFlags are the yolo and escapes the launch gives the agent.
