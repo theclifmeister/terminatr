@@ -169,6 +169,44 @@ func TestRealThreadAccess(t *testing.T) {
 	}
 }
 
+// TestRealYoloNoSandbox: tm's launch of a yolo thread (T574 case 4:
+// --dangerously-skip-permissions and sandbox.enabled false in tm's
+// --settings) runs its Bash outside Claude's sandbox, which sets
+// SANDBOX_RUNTIME=1 for what it sandboxes; a thread without yolo runs in
+// it.
+func TestRealYoloNoSandbox(t *testing.T) {
+	env := realAgentEnv(t, "claude", nil)
+	var p struct{ Slug, Dir string }
+	if err := json.Unmarshal([]byte(env.MustCLI("project", "new", "real", "--json")), &p); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		yolo bool
+		want string
+	}{{false, "SR=1"}, {true, "SR=unset"}} {
+		args := []string{"--role", "thread", "--project", p.Slug, "--thread", "t-0001"}
+		if c.yolo {
+			args = append(args, "--yolo")
+		}
+		s, dir := realStart(t, env, "claude", "haiku", args...)
+		out := filepath.Join(dir, "sr.txt")
+		env.Prompt(s, `Run exactly this Bash command, without dangerouslyDisableSandbox, and nothing else: echo "SR=${SANDBOX_RUNTIME:-unset}" > `+out)
+		env.WaitState(s, "working", realWait)
+		Poll(realWait, func() bool {
+			i, _ := env.Info(s)
+			if i.State == "blocked" && i.Reason == "permission" {
+				env.Keys(s, "1")
+			}
+			return i.State == "idle"
+		})
+		b, err := os.ReadFile(out)
+		if err != nil || strings.TrimSpace(string(b)) != c.want {
+			t.Errorf("yolo=%v: %q %v, want %s\nscreen:\n%s", c.yolo, b, err, c.want, env.Screen(s))
+		}
+		env.MustCLI("session", "stop", s.ID)
+	}
+}
+
 // TestRealFirstLocalRun is M4's "Try it" against Claude: a Claude
 // session of the user's own shows on the dashboard and enter attaches; a prompt
 // typed there blocks on a permission dialog; Ctrl+B d shows it under NEEDS

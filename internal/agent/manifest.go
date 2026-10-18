@@ -209,6 +209,14 @@ type Guard struct {
 	// sandbox keeps from it (Claude's bash-edit-diff): no file argument
 	// of its may be in them.
 	TempPrivate []string `toml:"temp_private"`
+	// PromptsEscape: every permission prompt the agent shows a thread
+	// asks to run outside its sandbox (Codex's escalations under -a
+	// on-request), so the user answers it, never the coordinator.
+	PromptsEscape bool `toml:"prompts_escape"`
+	// EscapeRule is the screen rule whose match is a permission dialog
+	// for a command run outside the sandbox: an escape, the user's to
+	// answer, whatever the hooks said.
+	EscapeRule string `toml:"escape_rule"`
 	// TempScratch: the temp folder is shared by all the agent's sessions
 	// of the user, each keeping its working folder's files in a folder
 	// named after the folder's path (Claude Code's scratchpad). A file
@@ -493,6 +501,9 @@ func (m *Manifest) validate() error {
 		if !validGuardPath(e) {
 			errs = append(errs, fmt.Errorf("guard.secrets: %q is not relative to home or under $VAR", e))
 		}
+	}
+	if r := m.Guard.EscapeRule; r != "" && !slices.ContainsFunc(m.Rules, func(x Rule) bool { return x.ID == r && x.State == StateBlocked }) {
+		errs = append(errs, fmt.Errorf("guard.escape_rule: %q names no blocked [[rules]] entry", r))
 	}
 	for _, e := range m.Guard.Writable {
 		if !validGuardPath(e) {

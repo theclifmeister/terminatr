@@ -101,7 +101,7 @@ func (sr safetyRows) toggleRow(label, help, key, what string) setting {
 
 // toggles are the plain on/off settings, by key; sharedRows places them.
 var toggles = map[string]struct{ label, help, what string }{
-	"coordinator_approves": {"Coordinator approves", "The coordinator may answer its threads' in-scope permission prompts (allow once, never always).", "coordinator approvals"},
+	"coordinator_approves": {"Coordinator approves", "The coordinator may answer its threads' in-scope permission prompts (allow once, never always); one to run outside the sandbox is always yours.", "coordinator approvals"},
 	"pr_followup":          {"Pull request follow-up", "Prompt a thread when its pull request's checks fail, a reviewer asks for changes, or main moves past it.", "pull request follow-up"},
 	"coordinator_remote_control": {"Remote control", "Coordinators keep remote control on, so you can continue them from another device: a new one starts with it, and tm turns it back on when it drops. prefix+r changes the running one; your off holds until it is started anew.",
 		"remote control for coordinators"},
@@ -248,19 +248,19 @@ func (sr safetyRows) startRow() setting {
 }
 
 func (sr safetyRows) yoloRow() setting {
-	return setting{label: "Yolo mode", help: "New threads skip the agent's permission prompts; the file rules and the sandbox still hold. Turning it on asks first.",
+	return setting{label: "Yolo mode", help: "New threads run with no sandbox and no permission prompts; the guard keeps only its floor. Turning it on asks first.",
 		keys: []string{"yolo"}, word: onOffWord("yolo"),
 		value: func(m *dash) string { return onOff(sr.safety(m).Yolo) },
 		change: func(m *dash) tea.Cmd {
 			if sr.safety(m).Yolo {
 				return sr.set(m, "yolo", false, "yolo mode off "+sr.forWho)
 			}
-			q := "Turn yolo mode on for " + sr.slug + "? Threads started from now on skip the agent's permission prompts (the file rules and the sandbox still hold)."
+			q := "Turn yolo mode on for " + sr.slug + "? Threads started from now on run with no sandbox and no permission prompts; the guard keeps only its floor."
 			if sr.all {
-				q = "Turn yolo mode on for all projects? Threads started from now on skip the agent's permission prompts in " + followers(m, []string{"yolo"}) + " (the file rules and the sandbox still hold)."
+				q = "Turn yolo mode on for all projects? Threads started from now on run with no sandbox and no permission prompts in " + followers(m, []string{"yolo"}) + "; the guard keeps only its floor."
 			}
 			m.confirm("Turn on yolo mode", q, func() tea.Cmd {
-				return sr.set(m, "yolo", true, "yolo mode on "+sr.forWho+": new threads skip permission prompts")
+				return sr.set(m, "yolo", true, "yolo mode on "+sr.forWho+": new threads have no sandbox and no prompts")
 			})
 			return nil
 		}}

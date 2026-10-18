@@ -206,6 +206,11 @@ func TestAccessLaunchEqual(t *testing.T) {
 						if role == proto.RoleThread {
 							lists, presets, skipped = launchSandbox(set)
 							wl, wp, ws = wantSandbox(lc, slug, goos)
+							if flags[0] {
+								// Yolo has no sandbox (T574 case 4): of the
+								// lists only the allow rules are given.
+								wl, wp = agent.SandboxLists{Allow: wl.Allow}, nil
+							}
 						} else if !launchSandboxEmpty(set) {
 							t.Errorf("%s: sandbox rules for a %s", name, role)
 						}
@@ -240,4 +245,59 @@ func TestAccessLaunchEqual(t *testing.T) {
 func launchSandboxEmpty(set proto.AccessSet) bool {
 	l, p, n := launchSandbox(set)
 	return l.Empty() && len(p) == 0 && len(n) == 0
+}
+
+// TestAccessYolo: under yolo a thread has no sandbox (T574 case 4): what
+// opens or leaves it shows as not used and isn't launched, its allow
+// rules stay, the guard's settings but its floor show as not used, and
+// the floor names the settings file and the project folder.
+func TestAccessYolo(t *testing.T) {
+	testPaths(t)
+	t.Setenv("HOME", t.TempDir())
+	newWatchProject(t)
+	s := &Server{opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}}}
+	writeConfig(t, `[defaults]
+guard_off = ["push-default"]
+
+[defaults.sandbox]
+browser_testing = true
+browser_downloads = true
+local_dev_servers = true
+excluded_commands = ["npx playwright *"]
+allow = ["WebFetch(domain:playwright.dev)"]
+`)
+	lc := loadLaunchConfig()
+	set, err := s.resolveAccess(accessInput{role: proto.RoleThread, slug: "demo", agent: "claude", goos: config.OSMac, yolo: true}, lc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, r := range set.Rules {
+		seen[r.Kind] = true
+		want := ""
+		switch r.Kind {
+		case proto.AccessExcluded, proto.AccessHost, proto.AccessLocalPorts, proto.AccessPreset, proto.AccessGuide, proto.AccessEscapes:
+			want = proto.AccessYoloNoSandbox
+		case proto.AccessGuardMode, proto.AccessGuardRuleOff:
+			want = proto.AccessYoloFloor
+		}
+		if r.Skipped != want {
+			t.Errorf("%s %s under yolo: skipped %q, want %q", r.Kind, r.Value, r.Skipped, want)
+		}
+		if r.Kind == proto.AccessGuardFloor && (!strings.Contains(r.Value, "writing your settings") || !strings.Contains(r.Value, "writing the project folder")) {
+			t.Errorf("floor %q", r.Value)
+		}
+		if r.Kind == proto.AccessGuardOn && r.Note != proto.AccessYoloFloor {
+			t.Errorf("guard row note %q", r.Note)
+		}
+	}
+	for _, k := range []string{proto.AccessExcluded, proto.AccessHost, proto.AccessAllow, proto.AccessGuardMode, proto.AccessGuardRuleOff} {
+		if !seen[k] {
+			t.Errorf("no %s rule", k)
+		}
+	}
+	lists, presets, skipped := launchSandbox(set)
+	if !reflect.DeepEqual(lists, agent.SandboxLists{Allow: []string{"WebFetch(domain:playwright.dev)"}}) || presets != nil || skipped != nil {
+		t.Errorf("yolo launch: %+v %q %q", lists, presets, skipped)
+	}
 }

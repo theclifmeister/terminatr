@@ -180,6 +180,32 @@ func TestClaudeLaunch(t *testing.T) {
 		!reflect.DeepEqual(s.Sandbox.Network.AllowUnixSockets, settings.Sandbox.Network.AllowUnixSockets) {
 		t.Fatalf("thread with sandbox lists: %+v", s)
 	}
+	// Yolo (T574 case 4): no sandbox and no prompts. The sandbox is off,
+	// set to false so that a project's or the user's own true doesn't
+	// turn it back on, and its lists aren't written; tm's deny rules
+	// still are.
+	yolo := listed
+	yolo.Yolo = true
+	if l, err = a.Launch(yolo); err != nil {
+		t.Fatal(err)
+	}
+	if !contains(l.Argv, "--dangerously-skip-permissions") {
+		t.Fatalf("yolo argv %q: want --dangerously-skip-permissions", l.Argv)
+	}
+	var raw struct {
+		Sandbox map[string]json.RawMessage `json:"sandbox"`
+	}
+	if err := json.Unmarshal(l.Files["claude-settings.json"], &raw); err != nil {
+		t.Fatal(err)
+	}
+	if string(raw.Sandbox["enabled"]) != "false" {
+		t.Fatalf("yolo sandbox.enabled = %s, want false\n%s", raw.Sandbox["enabled"], l.Files["claude-settings.json"])
+	}
+	if s := parseSettings(t, l.Files["claude-settings.json"]); s.Sandbox.ExcludedCommands != nil || s.Sandbox.AllowUnsandboxedCommands != nil ||
+		s.Sandbox.Network.AllowLocalBinding || s.Sandbox.Network.AllowedDomains != nil ||
+		!reflect.DeepEqual(s.Permissions.Deny, settings.Permissions.Deny) {
+		t.Fatalf("yolo thread settings: %+v", s)
+	}
 	if settings.StatusLine != nil {
 		t.Fatal("settings must never set statusLine; it would replace the user's")
 	}
@@ -1026,6 +1052,7 @@ func TestManifestGuard(t *testing.T) {
 		{`secrets = ["../x"]`, false},
 		{`writable = ["$A_HOME/../x"]`, false},
 		{`secrets = [""]`, false},
+		{`escape_rule = "nope"`, false},
 	} {
 		if _, err := ParseManifest([]byte(base + c.guard + "\n")); (err == nil) != c.ok {
 			t.Errorf("%s: err = %v, want ok %v", c.guard, err, c.ok)
@@ -1125,7 +1152,13 @@ func TestGuardToolVectors(t *testing.T) {
 			t.Errorf("%s: no [guard.tools]", name)
 		}
 		for tool, x := range tools {
-			if got, ok := v.Tools[tool]; !ok || !reflect.DeepEqual(got, x) {
+			got, ok := v.Tools[tool]
+			if name != "claude" {
+				// The escape field is Claude's (dangerouslyDisableSandbox):
+				// Codex asks to leave its sandbox through its own prompt.
+				got.Escape = ""
+			}
+			if !ok || !reflect.DeepEqual(got, x) {
 				t.Errorf("%s %s: manifest %+v, vectors %+v", name, tool, x, got)
 			}
 		}

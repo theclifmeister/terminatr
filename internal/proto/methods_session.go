@@ -151,8 +151,12 @@ type SessionInfo struct {
 
 	// Agent state (docs/SPEC.md §8.4), for agent sessions and for shells
 	// whose foreground job was identified as an agent.
-	State        string `json:"state,omitempty"`
-	Reason       string `json:"reason,omitempty"`
+	State  string `json:"state,omitempty"`
+	Reason string `json:"reason,omitempty"`
+	// Escape: blocked on a permission prompt that asks to run outside
+	// the agent's sandbox, which the user answers, never the
+	// coordinator (T574 case 6).
+	Escape       bool   `json:"escape,omitempty"`
 	StateSources string `json:"state_sources,omitempty"`
 	AgentSID     string `json:"agent_session_id,omitempty"`
 	Identified   bool   `json:"identified,omitempty"` // found by process, not launched
@@ -320,6 +324,12 @@ type SessionReadResult struct {
 type SessionKeysParams struct {
 	ID   string `json:"id"`
 	Data string `json:"data"`
+	// Relay is the role whose answer the keys carry, when tm's own
+	// commands send them for an agent (the coordinator's tm thread
+	// approve and answer): "coordinator" keys never answer an escape's
+	// prompt (SessionInfo.Escape), whatever the session's state was
+	// when the command looked.
+	Relay string `json:"relay,omitempty"`
 }
 
 // AttachRequest is the first line a client sends on an attach connection
