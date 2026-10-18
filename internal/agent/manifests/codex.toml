@@ -43,7 +43,10 @@ command = "codex"
 # The coordinator runs with Codex's auto-review (user, 2026-10-07); any
 # other session asks: -a on-request (user, 2026-10-08). Codex 0.160's
 # default for a session started this way refuses an escalation without
-# a dialog (T105), so there was nothing to approve.
+# a dialog (T105), so there was nothing to approve. With escapes off
+# (sandbox_escapes = false) it is -a never: Codex then can't ask to leave
+# the tm profile, which still applies (T574 case 3, checked on 0.162 in
+# T577).
 args = [
   "{{if .Resume}}resume{{end}}", "{{if .Resume}}{{.AgentSID}}{{end}}",
   "-c", "check_for_update_on_startup=false",
@@ -54,16 +57,16 @@ args = [
   "-c", 'mcp_servers.terminatr.env_vars=["TERMINATR_HOME"]',
   "-c", 'mcp_servers.terminatr.default_tools_approval_mode="approve"',
   "{{if and (eq .Role \"coordinator\") (not .Yolo)}}--approve-for-me{{end}}",
-  "{{if and (ne .Role \"coordinator\") (not .Yolo)}}-a{{end}}", "{{if and (ne .Role \"coordinator\") (not .Yolo)}}on-request{{end}}",
+  "{{if and (ne .Role \"coordinator\") (not .Yolo)}}-a{{end}}", "{{if and (ne .Role \"coordinator\") (not .Yolo)}}{{if .NoSandboxEscapes}}never{{else}}on-request{{end}}{{end}}",
   # Sandbox (T99, T188).
   # A thread or a coordinator runs in permission profile "tm", the access
   # policy (docs/SPEC.md §5.2) on top of Codex's workspace-write: Read is
   # read, Write is write, NoWrite and NoWriteFiles are read ("deny" would
   # block reading too), NoRead is none. A linked worktree's git dirs need write by name:
   # Codex carves git dirs out of every broader grant, and --add-dir and
-  # writable_roots don't reopen them. tm.sock needs the network on, which
-  # also opens HTTPS (user, 2026-10-07: open for now). Yolo has no
-  # sandbox to shape.
+  # writable_roots don't reopen them. tm.sock needs the network on,
+  # limited to it (and a thread's hosts) by Codex's network proxy. Yolo
+  # has no sandbox to shape.
   # A coordinator's cwd is the project folder, its Read grant: it is
   # written as write by name rather than left to the tie with the cwd. Its
   # network is the socket only (mode "limited", no domains, enforced by
@@ -77,15 +80,25 @@ args = [
   # flags, with a logged warning, when it doesn't hold (probe.go). On
   # Windows the Go agent turns the network off instead of limiting it:
   # Codex's proxy needs its elevated sandbox there (probe.go).
-  # A thread's sandbox presets' local binding (macOS, which the server
-  # checks) is its network's allow_local_binding: a bool in the 0.162
-  # NetworkToml, which `codex sandbox -c` parses (a string is refused).
-  # Its domains (browser testing's download hosts) need nothing: a
-  # thread's network is open.
+  # A thread's network goes through the proxy too (T574 case 5): tm's
+  # socket and its host rules (.Sandbox.Domains: its presets' hosts and
+  # its repo's git remote hosts) as the proxy's domains, a map of host to
+  # "allow", wildcards as Codex takes them (*.example.com); no domains,
+  # no host. Its mode is "full": "limited" also lets only GET, HEAD and
+  # OPTIONS through, so a git push over https (a POST) gets a 403;
+  # "full" keeps the domains and lets every method through (measured on
+  # 0.162). Either is silently open without the proxy feature (T577). The Go agent probes it before a thread
+  # starts and, when it doesn't hold, closes the network rather than
+  # leaving it open (probe.go); on Linux and Windows it keeps the open
+  # form threads had before (no proxy: openNetwork). Its local-ports
+  # rule (macOS, which the server checks) is its network's
+  # allow_local_binding: a bool in the 0.162 NetworkToml, which `codex
+  # sandbox -c` parses (a string is refused). Under limited mode loopback
+  # is refused without it, so a dev server needs it.
   "{{if and (or (eq .Role \"thread\") (eq .Role \"coordinator\")) (not .Yolo)}}-c{{end}}", "{{if and (or (eq .Role \"thread\") (eq .Role \"coordinator\")) (not .Yolo)}}default_permissions=\"tm\"{{end}}",
-  "{{if and (eq .Role \"coordinator\") (not .Yolo)}}-c{{end}}", "{{if and (eq .Role \"coordinator\") (not .Yolo)}}features.network_proxy=true{{end}}",
+  "{{if and (or (eq .Role \"thread\") (eq .Role \"coordinator\")) (not .Yolo)}}-c{{end}}", "{{if and (or (eq .Role \"thread\") (eq .Role \"coordinator\")) (not .Yolo)}}features.network_proxy=true{{end}}",
   "{{if and (eq .Role \"thread\") (not .Yolo)}}-c{{end}}",
-  '''{{if and (eq .Role "thread") (not .Yolo)}}permissions={tm={extends=":workspace",filesystem={{pathmodes .Access}},network={enabled=true,unix_sockets={ {{- toml .Socket}}="allow"}{{if .Sandbox.LocalBinding}},allow_local_binding=true{{end}}}}}{{end}}''',
+  '''{{if and (eq .Role "thread") (not .Yolo)}}permissions={tm={extends=":workspace",filesystem={{pathmodes .Access}},network={enabled=true,mode="full",unix_sockets={ {{- toml .Socket}}="allow"}{{with .Sandbox.Domains}},domains={ {{- range $i, $d := .}}{{if $i}},{{end}}{{toml $d}}="allow"{{end}}}{{end}}{{if .Sandbox.LocalBinding}},allow_local_binding=true{{end}}}}}{{end}}''',
   "{{if and (eq .Role \"coordinator\") (not .Yolo)}}-c{{end}}",
   '''{{if and (eq .Role "coordinator") (not .Yolo)}}permissions={tm={extends=":workspace",filesystem={{pathmodes .Access .Cwd}},network={enabled=true,mode="limited",unix_sockets={ {{- toml .Socket}}="allow"}}}}{{end}}''',
   # A thread's secret variables (config env) reach its commands: Codex
@@ -149,7 +162,7 @@ logged_out = { "result.account.type" = "!*", "result.requiresOpenaiAuth" = "true
 secrets = [".codex/auth.json", "$CODEX_HOME/auth.json"]
 # A thread runs with -a on-request: Codex asks only to leave its sandbox
 # (an escalation), which the user answers, never the coordinator (T574
-# case 6).
+# case 6). With escapes off it runs with -a never and doesn't ask.
 prompts_escape = true
 # The TMPDIR it inherits from the server, else /tmp.
 temp = ["$TMPDIR", "/tmp"]

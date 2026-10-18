@@ -202,6 +202,10 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		g.GitConfig = withReal(threadGitConfig(r))
 	}
 	g.Tools = agent.GuardTools(reg, r.Agent)
+	if r.Role == proto.RoleThread && !r.Yolo {
+		g.Unsandboxed, g.TMExcluded = ownExcluded(reg, r, home, lc)
+		g.NoEscapes = r.NoSandboxEscapes
+	}
 	g.Protected = []string{"main", "master"}
 	repos := []string{r.Cwd}
 	if r.Role == proto.RoleCoordinator {
@@ -221,6 +225,44 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		g.Mods = s.guardMods(r, home)
 	}
 	return g
+}
+
+// agentOf is reg's agent name, nil for none.
+func agentOf(reg *agent.Registry, name string) agent.Agent {
+	a, _ := reg.Get(name)
+	return a
+}
+
+// ownExcluded are the excluded commands of thread r's agent's own
+// settings files (agent.OwnRuler: Claude's ~/.claude/settings.json and
+// its worktree's .claude), read live, and the ones tm gives it (config
+// sandbox): the guard treats a command the first run outside the
+// sandbox, and none of tm's, as an escape (T574 case 7). tm doesn't
+// change the user's files.
+func ownExcluded(reg *agent.Registry, r SessionRecord, home string, lc launchConfig) (own, tm []string) {
+	if reg == nil {
+		return nil, nil
+	}
+	a, ok := reg.Get(r.Agent)
+	if !ok {
+		return nil, nil
+	}
+	or, ok := a.(agent.OwnRuler)
+	if !ok || home == "" {
+		return nil, nil
+	}
+	for _, o := range or.OwnRules(home, r.Cwd) {
+		if o.Kind == proto.AccessExcluded && !slices.Contains(own, o.Value) {
+			own = append(own, o.Value)
+		}
+	}
+	if len(own) == 0 {
+		return nil, nil
+	}
+	if lc.err == nil {
+		tm = lc.cfg.ThreadSandbox(r.Project).Given(config.SandboxExcluded)
+	}
+	return own, tm
 }
 
 // guardNoWrite are the files and folders no tool of session r writes,
@@ -524,7 +566,7 @@ type hookRulesEntry struct {
 // what only git says (the protected branches).
 func (s *Server) hookRules(r SessionRecord) GuardRules {
 	now := guardNow()
-	stamp := s.guardStamp(r.Project)
+	stamp := s.guardStamp(r)
 	s.guard.mu.Lock()
 	e, ok := s.guard.rules[r.ID]
 	s.guard.mu.Unlock()
@@ -546,18 +588,35 @@ func (s *Server) hookRules(r SessionRecord) GuardRules {
 	return g
 }
 
-// guardStamp says, cheaply (stats only), whether what a session of
-// project slug's rules are made of changed: the installed mods and
-// config.toml (s.installedMods, which reads them anew when they did, so the
-// rules worked out next see the change) and the project's PROJECT.md
-// (its repos until they move to config.toml, project.MoveRepos).
-func (s *Server) guardStamp(slug string) string {
+// guardStamp says, cheaply (stats only), whether what session r's rules
+// are made of changed: the installed mods and config.toml
+// (s.installedMods, which reads them anew when they did, so the rules
+// worked out next see the change), the project's PROJECT.md (its repos
+// until they move to config.toml, project.MoveRepos) and a thread's
+// agent's own settings files.
+func (s *Server) guardStamp(r SessionRecord) string {
 	_, _, stamp := s.installedMods(0)
 	var b strings.Builder
 	b.WriteString(stamp)
-	if slug != "" {
-		if dir, err := project.Dir(slug); err == nil {
+	if r.Project != "" {
+		if dir, err := project.Dir(r.Project); err == nil {
 			stampFile(&b, filepath.Join(dir, "PROJECT.md"))
+		}
+	}
+	// A thread's agent's own settings files, whose excluded commands are
+	// its escapes (ownExcluded): the thread writes its worktree's, so a
+	// change must not wait for hookRulesFor.
+	if r.Role == proto.RoleThread {
+		s.mu.Lock()
+		reg := s.agents
+		s.mu.Unlock()
+		if reg != nil {
+			if or, ok := agentOf(reg, r.Agent).(agent.OwnRuler); ok {
+				home, _ := os.UserHomeDir()
+				for _, f := range or.OwnFiles(home, r.Cwd) {
+					stampFile(&b, f)
+				}
+			}
 		}
 	}
 	return b.String()

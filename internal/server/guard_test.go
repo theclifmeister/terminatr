@@ -982,3 +982,105 @@ func TestGuardStateOfServer(t *testing.T) {
 		t.Error("the exited session's refusals are kept")
 	}
 }
+
+// TestGuardOwnExcluded: a thread's guard gets the excluded commands of
+// the user's own Claude settings and its worktree's, with tm's beside
+// them (T574 case 7): a command one takes and tm's don't asks the user,
+// or with escapes off is refused; none under yolo, nor for Codex,
+// which has no such files.
+func TestGuardOwnExcluded(t *testing.T) {
+	testPaths(t)
+	p := newWatchProject(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	os.MkdirAll(filepath.Join(home, ".claude"), 0o700)
+	os.WriteFile(filepath.Join(home, ".claude", "settings.json"), []byte(`{"sandbox":{"excludedCommands":["docker","npx *"]}}`), 0o600)
+	wt := t.TempDir()
+	os.MkdirAll(filepath.Join(wt, ".claude"), 0o700)
+	os.WriteFile(filepath.Join(wt, ".claude", "settings.local.json"), []byte(`{"sandbox":{"excludedCommands":["make deploy *","docker"]}}`), 0o600)
+	writeConfig(t, "[projects."+p.Slug+".sandbox]\nexcluded_commands = [\"npx playwright *\"]\n")
+	reg, err := agent.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{log: log.New(os.Stderr, "", 0), opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}}, agents: reg}
+	thread := SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: "t-0001", Cwd: wt}
+	g := s.guardRulesFor(thread)
+	if !slices.Equal(g.Unsandboxed, []string{"docker", "npx *", "make deploy *"}) || !slices.Equal(g.TMExcluded, []string{"npx playwright *"}) || g.NoEscapes {
+		t.Fatalf("thread %+v", g)
+	}
+	bash := func(g guard.Rules, c string) *guard.Denial { return g.Judge("Bash", map[string]any{"command": c}) }
+	if d := bash(g, "docker ps"); d == nil || !d.Ask || d.Rule != guard.RuleEscape {
+		t.Errorf("docker ps: %+v", d)
+	}
+	if d := bash(g, "make deploy prod"); d == nil || !d.Ask {
+		t.Errorf("the worktree's own: %+v", d)
+	}
+	if d := bash(g, "npx playwright test"); d != nil {
+		t.Errorf("tm's excluded command: %+v", d)
+	}
+	closed := thread
+	closed.NoSandboxEscapes = true
+	if d := bash(s.guardRulesFor(closed), "docker ps"); d == nil || d.Ask || d.Rule != guard.RuleEscape {
+		t.Errorf("escapes off: %+v", d)
+	}
+	yolo := thread
+	yolo.Yolo = true
+	if g := s.guardRulesFor(yolo); g.Unsandboxed != nil {
+		t.Errorf("yolo %+v", g.Unsandboxed)
+	}
+	codex := thread
+	codex.Agent = "codex"
+	if g := s.guardRulesFor(codex); g.Unsandboxed != nil {
+		t.Errorf("codex %+v", g.Unsandboxed)
+	}
+}
+
+// TestGuardOwnExcludedLive: a thread writing an excluded command into
+// its worktree's Claude settings (or the user changing theirs) reaches
+// its guard's rules at once, not after hookRulesFor: with escapes off
+// the command is refused from the next call (security review, PR #654).
+func TestGuardOwnExcludedLive(t *testing.T) {
+	testPaths(t)
+	p := newWatchProject(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	clock := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	guardNow = func() time.Time { return clock } // never a minute later
+	t.Cleanup(func() { guardNow = time.Now })
+	reg, err := agent.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wt := t.TempDir()
+	s := &Server{log: log.New(os.Stderr, "", 0), opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}}, agents: reg, records: map[string]SessionRecord{}}
+	rec := SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: "t-0001", Cwd: wt, NoSandboxEscapes: true}
+	s.records["s-2"] = rec
+	curl := func() *guard.Denial {
+		return s.hookRules(rec).Judge("Bash", map[string]any{"command": "curl https://example.com"})
+	}
+	if d := curl(); d != nil {
+		t.Fatalf("before: %+v", d)
+	}
+	write := func(path, body string) {
+		t.Helper()
+		os.MkdirAll(filepath.Dir(path), 0o700)
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(wt, ".claude", "settings.local.json"), `{"sandbox":{"excludedCommands":["curl *"]}}`)
+	if d := curl(); d == nil || d.Rule != guard.RuleEscape || d.Ask {
+		t.Errorf("after the worktree's settings: %+v", d)
+	}
+	os.Remove(filepath.Join(wt, ".claude", "settings.local.json"))
+	if d := curl(); d != nil {
+		t.Errorf("after removing it: %+v", d)
+	}
+	write(filepath.Join(home, ".claude", "settings.json"), `{"sandbox":{"excludedCommands":["curl"]}}`)
+	if d := curl(); d == nil || d.Rule != guard.RuleEscape {
+		t.Errorf("after the user's settings: %+v", d)
+	}
+}

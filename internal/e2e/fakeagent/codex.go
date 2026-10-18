@@ -862,7 +862,8 @@ func (a *app) codexUnload(thread, rollout string) {
 // coordinator probe runs it (internal/agent/codex/probe.go): it doesn't
 // run the command but prints what tm's probe would, judging the profile
 // as Codex 0.160 does: tm's socket reachable when the profile allows it,
-// TCP refused when network.mode is "limited" and features.network_proxy
+// TCP refused (and with --proxy the probe's domains held) when
+// network.mode is "limited" or "full" and features.network_proxy
 // is on. With a path to write (the probe's form on Windows, where the
 // network is off rather than limited), tm's socket is reachable when the
 // profile allows it and the write is denied. FAKEAGENT_CODEX_SANDBOX
@@ -895,7 +896,10 @@ func sandboxCmd(logPath string, args []string) int {
 		return 1
 	}
 	cfg, err := codexConfig(values)
-	if err != nil || len(cmd) != 4 && len(cmd) != 5 {
+	// The proxy form (tm's probe since PR #654): ... --proxy LISTED
+	// UNLISTED.
+	proxied := len(cmd) == 7 && cmd[4] == "--proxy"
+	if err != nil || len(cmd) != 4 && len(cmd) != 5 && !proxied {
 		fmt.Fprintln(os.Stderr, "Error:", err, cmd)
 		return 1
 	}
@@ -917,12 +921,24 @@ func sandboxCmd(logPath string, args []string) int {
 	if socks, _ := netw["unix_sockets"].(map[string]any); socks[sock] == "allow" && (netw["enabled"] == true || caps.Windows) {
 		unix = "ok"
 		features, _ := cfg["features"].(map[string]any)
-		limited := netw["mode"] == "limited" && features["network_proxy"] == true
+		limited := (netw["mode"] == "limited" || netw["mode"] == "full") && features["network_proxy"] == true
 		if !limited || os.Getenv("FAKEAGENT_CODEX_SANDBOX") == "ignore-proxy" {
 			tcp = "ok"
 		}
 	}
 	rec["verdict"] = "unix=" + unix + " tcp=" + tcp
-	fmt.Printf("unix=%s tcp=%s\n", unix, tcp)
+	if proxied {
+		// Codex's proxy answers for the domains, the probe's listed host
+		// among them, when the network goes through it.
+		proxy := "none"
+		if tcp == "refused" && unix == "ok" {
+			proxy = "closed"
+			if domains, _ := netw["domains"].(map[string]any); domains["localhost"] == "allow" {
+				proxy = "ok"
+			}
+		}
+		rec["verdict"] = rec["verdict"].(string) + " proxy=" + proxy
+	}
+	fmt.Println(rec["verdict"])
 	return 0
 }

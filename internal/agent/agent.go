@@ -141,8 +141,8 @@ func (a Access) Closed() []string {
 // playwright *)"), and what its presets open inside it: LocalBinding
 // lets its sandboxed commands listen on and reach localhost (a dev
 // server; Claude's allowLocalBinding, Codex's allow_local_binding), and
-// Domains are hosts they may reach (Claude's allowedDomains; a Codex
-// thread's network is open already). The server fills in only what
+// Domains are hosts they may reach (Claude's allowedDomains, Codex's
+// limited network's domains). The server fills in only what
 // applies on its platform. An agent with nothing to map the lists to
 // says so in its launch's Warnings.
 type SandboxLists struct {
@@ -418,6 +418,10 @@ type Truster interface {
 // home is the user's home directory, dir the session's folder.
 type OwnRuler interface {
 	OwnRules(home, dir string) []OwnRule
+	// OwnFiles are the files OwnRules reads, absolute, read or not:
+	// what the guard's rules are stamped with, so a change to one (a
+	// thread writing its worktree's) reaches them at once.
+	OwnFiles(home, dir string) []string
 }
 
 // OwnRule is one rule of an agent's own settings files: Kind "allow",
