@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/guard"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/theme"
 )
 
@@ -41,10 +42,13 @@ type LaunchSpec struct {
 	RepoRoot   string
 	GitDir     string
 	RuntimeDir string // per-session scratch dir owned by the server; generated files go here
-	BriefPath  string // thread brief, or the coordinator role file
-	Kickoff    string // the first user prompt, e.g. "Read your brief and do what it says."
-	Resume     bool   // resume AgentSID instead of starting fresh; AgentSID must be set
-	Yolo       bool   // skip the agent's own permission prompts (project setting)
+	// TempDir is a thread's own temp folder (home.ThreadTempDir), which
+	// the manifest's [launch.env] makes the agent's TMPDIR; "" for none.
+	TempDir   string
+	BriefPath string // thread brief, or the coordinator role file
+	Kickoff   string // the first user prompt, e.g. "Read your brief and do what it says."
+	Resume    bool   // resume AgentSID instead of starting fresh; AgentSID must be set
+	Yolo      bool   // skip the agent's own permission prompts (project setting)
 	// NoSandboxEscapes keeps every command of a thread's agent in its
 	// sandbox, approved or not (sandbox_escapes = false, docs/SPEC.md §5.2).
 	NoSandboxEscapes bool
@@ -103,9 +107,32 @@ type Access struct {
 	// NoWriteFiles are single files that must never be written, e.g.
 	// config.toml, which holds the human's safety settings.
 	NoWriteFiles []string
+	// NoRead are folders never read nor written by a sandboxed command:
+	// other sessions' temp folders (T587); nor by a file tool, but for
+	// the one that holds OwnTemp (Closed).
+	NoRead []string
+	// OwnTemp is the thread's own temp folder (its TMPDIR), open to it
+	// inside a NoRead folder.
+	OwnTemp string
 	// Commands are command prefixes that run without a permission prompt,
 	// e.g. the coordinator's PR merge command, opt-in (§11.2).
 	Commands []string
+}
+
+// Closed are the NoRead folders that don't hold OwnTemp, which file
+// tools are kept from too: a deny rule there would take OwnTemp with it,
+// as deny rules win over any allow.
+func (a Access) Closed() []string {
+	var out []string
+	for _, d := range a.NoRead {
+		if a.OwnTemp != "" {
+			if _, ok := fsx.Within(d, a.OwnTemp); ok {
+				continue
+			}
+		}
+		out = append(out, d)
+	}
+	return out
 }
 
 // SandboxLists are the commands a thread's agent runs outside its

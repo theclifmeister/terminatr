@@ -19,6 +19,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/client/clienttest"
 	"github.com/theclifmeister/terminatr/internal/emu"
+	"github.com/theclifmeister/terminatr/internal/home/hometest"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -33,6 +34,7 @@ func testPaths(t *testing.T) client.Paths {
 	home := t.TempDir()
 	sockDir := ipctest.ShortTempDir(t, "tmt")
 	t.Setenv("TERMINATR_HOME", home)
+	hometest.CleanThreadTemps(t)
 	t.Setenv("TERMINATR_SOCKET", filepath.Join(sockDir, "tm.sock"))
 	t.Setenv("TERMINATR_LAUNCHD", "off")
 	// The human's, even under an agent's tm: an agent's Dial skips the

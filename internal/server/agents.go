@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"net/http"
 	"os"
@@ -24,6 +25,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
@@ -105,6 +107,45 @@ func newUUID() string {
 // the short run dir, which is private (0700).
 func (s *Server) runtimeDir(id string) string {
 	return filepath.Join(s.opts.Paths.RunDir, "s", id)
+}
+
+// readyThreadTemp makes a thread's own temp folder ready for a launch:
+// it and its folder in the shared /tmp private folders of this user
+// (made, not links, no one else's). The folder is the thread's to write,
+// and kept across restarts: a link it left there (a direct child, or one
+// of its claude-<uid> folder's) could lead the agent, or tm reading
+// files in it, elsewhere, so then the folder is made anew (renewed).
+func readyThreadTemp(dir string) (renewed bool, err error) {
+	for _, d := range []string{filepath.Dir(dir), dir} {
+		if err := fsx.EnsurePrivateDir(d); err != nil {
+			return false, err
+		}
+	}
+	if !holdsLink(dir, 2) {
+		return false, nil
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return false, err
+	}
+	return true, fsx.EnsurePrivateDir(dir)
+}
+
+// holdsLink reports whether folder dir holds a link (a junction or other
+// reparse point on Windows) depth levels down at most, or can't be read.
+func holdsLink(dir string, depth int) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return true
+	}
+	for _, e := range entries {
+		if e.Type()&(fs.ModeSymlink|fs.ModeIrregular) != 0 {
+			return true
+		}
+		if e.IsDir() && depth > 1 && holdsLink(filepath.Join(dir, e.Name()), depth-1) {
+			return true
+		}
+	}
+	return false
 }
 
 // realPath resolves symlinks, because agents check permission rules
@@ -613,7 +654,7 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 	// from and the thread's launch record keeps.
 	tree := threadTree(r)
 	acc, err := s.resolveAccess(accessInput{role: r.Role, slug: r.Project, cwd: r.Cwd, tree: tree, agent: r.Agent, goos: caps.OS,
-		yolo: r.Yolo, noEscapes: r.NoSandboxEscapes}, lc)
+		thread: r.Thread, yolo: r.Yolo, noEscapes: r.NoSandboxEscapes}, lc)
 	if err != nil {
 		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 	}
@@ -667,6 +708,20 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		RemoteControl: r.RemoteControl, RemoteName: remoteName(r),
 		Mods: p.modSock != "", PaneScheme: v.paneScheme,
 	}
+	if spec.TempDir = launchTemp(acc); spec.TempDir != "" {
+		// The thread's own temp folder (T587), kept across its restarts
+		// like its worktree: its scratchpads stay where it left them. Its
+		// folder in the shared /tmp must be this user's own first: no
+		// one else may have made it or put a link there.
+		renewed, err := readyThreadTemp(spec.TempDir)
+		if err != nil {
+			p.abandon()
+			return nil, proto.Errorf(proto.ErrInternal, "thread temp folder: %v", err)
+		}
+		if renewed {
+			s.log.Printf("session %s: thread temp folder %s held a link: made anew", r.ID, spec.TempDir)
+		}
+	}
 	if r.Role == proto.RoleThread && r.Project != "" {
 		// The human's sandbox rules, read here at every launch: never
 		// from the session's parameters, which a coordinator writes.
@@ -677,7 +732,10 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		for _, n := range skipped {
 			s.log.Printf("session %s: %s", r.ID, n)
 		}
-		p.warnings = skipped
+		p.warnings = append(skipped, tempWarnings(acc)...)
+		for _, n := range p.warnings[len(skipped):] {
+			s.log.Printf("session %s: %s", r.ID, n)
+		}
 		if spec.BriefPath, err = guideBrief(p.rt, r.Brief, guides, spec.Sandbox); err != nil {
 			s.log.Printf("session %s: sandbox guidance: %v", r.ID, err)
 		}

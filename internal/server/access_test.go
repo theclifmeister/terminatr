@@ -15,6 +15,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/gitx"
+	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -199,6 +200,14 @@ func TestAccessLaunchEqual(t *testing.T) {
 							t.Fatal(err)
 						}
 						got := launchAccess(set)
+						if role == proto.RoleThread {
+							// On top of accessFor's: the other threads' temp
+							// folders and the shared ones (T587, tempRules).
+							if !slices.Contains(got.NoRead, home.ThreadTempRoot()) {
+								t.Errorf("%s: no read deny of %s: %q", name, home.ThreadTempRoot(), got.NoRead)
+							}
+							want.NoRead = got.NoRead
+						}
 						if !reflect.DeepEqual(got, want) {
 							t.Errorf("%s: access\n got %+v\nwant %+v", name, got, want)
 						}

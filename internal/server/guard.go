@@ -156,6 +156,11 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		Learn: set.GuardMode == config.GuardLearn, Allow: guardAllows(set.GuardAllow, home), Own: s.guardOwn()}
 	if r.Role == proto.RoleThread {
 		g.SecretEnv = lc.cfg.SecretEnvNames(r.Project)
+		// The other threads' temp folders (T587): the sandbox keeps Bash
+		// out of them, the floor its file tools.
+		if own, err := threadTemp(r.Project, r.Thread); err == nil {
+			g.OtherTemps, g.OwnTemp = withReal([]string{threadTempRoot()}), own
+		}
 	}
 	// The floor holds with its rule off (guard_off): only the guard off
 	// lifts it.
@@ -195,6 +200,9 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 	s.mu.Unlock()
 	if slices.Contains(g.Rules, "worktree-only") {
 		dirs := append([]string{r.Cwd}, fsx.TempRoots()...)
+		if d, err := threadTemp(r.Project, r.Thread); err == nil {
+			dirs = append(dirs, d) // its own temp folder (T587)
+		}
 		dirs = append(dirs, agent.GuardWritable(reg, r.Agent, home, os.Getenv)...)
 		dirs = append(dirs, writeFolders(lc, r.Project, s.opts.Paths.Home)...)
 		g.Writable = withReal(dirs)

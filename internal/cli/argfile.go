@@ -49,7 +49,7 @@ func (e *Env) openArg(path string) (*os.File, error) {
 			if err == nil && set.flat[root] {
 				// Loose in the shared temp folder: the user's own, as
 				// Claude's TMPDIR has a thread write them.
-				if fi, serr := f.Stat(); serr != nil || !fsx.Mine(fi) {
+				if !fsx.FileMine(f) {
 					f.Close()
 					lastErr = &tasks.Error{Code: "outside-roots", Msg: fmt.Sprintf("%s is not a file of this user", f.Name())}
 					continue
@@ -251,7 +251,31 @@ var tempRoots = func(e *Env) (roots, private []string, scratch bool) {
 		reg, _ = agent.Load(paths.AgentsDir())
 	}
 	h, _ := os.UserHomeDir()
+	if own := e.threadTemp(); own != "" {
+		// A thread launched with its own temp folder (T587): the agent's
+		// temp variables are that folder ([launch.env]), and only what
+		// resolves in it is its own; the shared one its sandbox can't
+		// read (/tmp/claude-<uid>) is no root of it.
+		dirs, private, scratch := agent.AgentTemps(reg, name, h, func(string) string { return own })
+		mine := func(d string) bool { _, ok := fsx.Within(own, d); return ok }
+		return slices.DeleteFunc(dirs, func(d string) bool { return !mine(d) }),
+			slices.DeleteFunc(private, func(d string) bool { return !mine(d) }), scratch
+	}
 	return agent.AgentTemps(reg, name, h, os.Getenv)
+}
+
+// threadTemp is a thread caller's own temp folder (home.ThreadTempDir)
+// when it is one, a private folder of this user: "" for none (another
+// caller, or a thread launched before tm gave threads their own).
+func (e *Env) threadTemp() string {
+	if e.Caller.Kind != caller.Thread || e.Caller.Project == "" {
+		return ""
+	}
+	d, err := home.ThreadTempDir(e.Caller.Project, e.Caller.Thread)
+	if err != nil || fsx.CheckPrivate(d) != nil {
+		return ""
+	}
+	return d
 }
 
 // threadAgent is the agent a thread caller's record says runs it, "" for
@@ -342,7 +366,9 @@ func agentFileOK(f *os.File, private []string) error {
 	if !fi.Mode().IsRegular() {
 		return &tasks.Error{Code: "invalid-file", Msg: fmt.Sprintf("%s is not a regular file", f.Name())}
 	}
-	if fsx.Links(fi) > 1 {
+	if n, err := fsx.FileLinks(f); err != nil {
+		return err
+	} else if n > 1 {
 		return &tasks.Error{Code: "invalid-file", Msg: fmt.Sprintf("%s has other hard links; an agent's files may not", f.Name())}
 	}
 	real := realPath(f.Name())

@@ -6,6 +6,8 @@ package hometest
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/home"
 )
@@ -28,4 +30,28 @@ func Run(run func() int) int {
 	os.Setenv(home.Env, dir)
 	defer os.Unsetenv(home.Env)
 	return run()
+}
+
+// CleanThreadTemps removes, when t ends, the own temp folders
+// (home.ThreadTempDir) of the threads of the home t runs with: they are
+// outside it, in the shared /tmp, so its removal leaves them behind.
+// Call it after setting TERMINATR_HOME.
+func CleanThreadTemps(t testing.TB) {
+	t.Cleanup(func() {
+		if d, err := home.Dir(); err == nil {
+			RemoveThreadTemps(d)
+		}
+	})
+}
+
+// RemoveThreadTemps removes the own temp folders of the threads of the
+// state directory dir.
+func RemoveThreadTemps(dir string) {
+	threads, _ := filepath.Glob(filepath.Join(dir, "projects", "*", "threads", "*"))
+	for _, th := range threads {
+		slug := filepath.Base(filepath.Dir(filepath.Dir(th)))
+		if tmp, err := home.ThreadTempDirOf(dir, slug, filepath.Base(th)); err == nil {
+			os.RemoveAll(tmp)
+		}
+	}
 }

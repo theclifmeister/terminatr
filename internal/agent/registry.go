@@ -246,24 +246,71 @@ func Secrets(reg *Registry, home string, getenv func(string) string) []string {
 // manifest replacing a built-in one doesn't drop what it protected.
 func GuardSecrets(reg *Registry, home string, getenv func(string) string) []string {
 	var out []string
-	add := func(m *Manifest) {
+	for _, m := range knownManifests(reg) {
 		for _, p := range GuardPaths(m.Guard.Secrets, home, getenv) {
 			if !slices.Contains(out, p) {
 				out = append(out, p)
 			}
 		}
 	}
+	return out
+}
+
+// SharedTemps is the temp folders that every known agent's sessions of
+// the user share ([guard] temp_scratch: Claude Code's /tmp/claude-<uid>,
+// with its sessions' scratchpads and task output), resolved as
+// AgentTemps does: a thread, which has its own (home.ThreadTempDir),
+// never reads nor writes them (T587). Only per-user entries ("{uid}"):
+// never a folder like /tmp, which the system's tools write too.
+func SharedTemps(reg *Registry, home string, getenv func(string) string) []string {
+	var out []string
+	for _, m := range knownManifests(reg) {
+		if !m.Guard.TempScratch {
+			continue
+		}
+		for _, e := range m.Guard.Temp {
+			if !strings.Contains(e, "{uid}") {
+				continue
+			}
+			for _, p := range GuardTemps([]string{e}, home, getenv) {
+				if !slices.Contains(out, p) {
+					out = append(out, p)
+				}
+			}
+		}
+	}
+	return out
+}
+
+// OwnTempFits reports whether the agent named name keeps its sandbox's
+// TMPDIR in its temp folder when its temp variables are dir (a thread's
+// own temp folder): its first [guard] temp entry, so resolved, is at
+// most [guard] temp_max bytes. Else it falls back to a shared one, which
+// a thread then can't be kept from.
+func OwnTempFits(reg *Registry, name, dir string) bool {
+	m := manifestNamed(reg, name)
+	if m == nil || m.Guard.TempMax <= 0 {
+		return true
+	}
+	t := GuardTemp(m.Guard.Temp, "", func(string) string { return dir })
+	return len(t) <= m.Guard.TempMax
+}
+
+// knownManifests is the built-in manifests and reg's (nil: the
+// built-ins only).
+func knownManifests(reg *Registry) []*Manifest {
+	var out []*Manifest
 	names, _ := fs.Glob(builtin, "manifests/*.toml")
 	for _, n := range names {
 		data, _ := builtin.ReadFile(n)
 		if m, err := ParseManifest(data); err == nil {
-			add(m)
+			out = append(out, m)
 		}
 	}
 	if reg != nil {
 		for _, n := range reg.Names() {
 			if m := ManifestOf(reg.agents[n]); m != nil {
-				add(m)
+				out = append(out, m)
 			}
 		}
 	}

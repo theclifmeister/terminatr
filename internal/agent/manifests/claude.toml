@@ -65,6 +65,12 @@ CLAUDE_CODE_ENABLE_TODO_TOOLS = "1"
 TERMINATR_SESSION = "{{.SessionID}}"
 TERMINATR_SOCKET = "{{.Socket}}"
 TERMINATR_BIN = "{{.TMBin}}"
+# A thread's own temp folder (T587): Claude keeps its scratchpads, task
+# output and its sandbox's TMPDIR in $CLAUDE_CODE_TMPDIR/claude-<uid>,
+# else /tmp/claude-<uid>, which all the user's sessions share. TMPDIR
+# for what Claude runs outside its sandbox (hooks, MCP servers).
+CLAUDE_CODE_TMPDIR = "{{.TempDir}}"
+TMPDIR = "{{.TempDir}}"
 
 # With .Mods the same plugin is also terminatr's mod (docs/SPEC.md §8.6,
 # Mods): the Go agent (internal/agent/claude) writes its module and type
@@ -110,6 +116,11 @@ template = '''
 # resolves symlinks first. On Windows Claude matches POSIX-form paths, so
 # C:\Users\a is written //c/Users/a (the rules function converts it). Only Edit(...) deny rules: they cover Write, Edit
 # and NotebookEdit, while Write(...) rules aren't matched by file checks.
+# NoRead (other sessions' temp folders) is the sandbox's denyRead, the
+# thread's own temp folder (OwnTemp) its allowRead within; and, for those
+# that don't hold OwnTemp (.Access.Closed), a Read(...) and an Edit(...)
+# deny, which keep file tools out too. File tools elsewhere outside the
+# worktree ask first.
 # Edit(...) allow rules also open the Bash sandbox for writing (a thread's
 # commits go to the parts of the main repo's git dir they need), and
 # Edit(...) deny rules close it, within a broader grant too (the main
@@ -150,7 +161,7 @@ template = '''
   {{- end}}
   "permissions": {
     "allow": {{json (concat (rules "Read(/%s/**)" .Access.Read) (rules "Edit(/%s/**)" .Access.Write) (rules "Edit(/%s)" .Access.WriteFiles) (rules "Bash(%s:*)" .Access.Commands) .Sandbox.Allow)}},
-    "deny": {{json (concat (rules "Edit(/%s/**)" .Access.NoWrite) (rules "Edit(/%s)" .Access.NoWriteFiles))}}
+    "deny": {{json (concat (rules "Edit(/%s/**)" .Access.NoWrite) (rules "Edit(/%s)" .Access.NoWriteFiles) (rules "Read(/%s/**)" .Access.Closed) (rules "Edit(/%s/**)" .Access.Closed))}}
   },
   "sandbox": {
     {{- if and (eq .Role "thread") .Yolo}}
@@ -162,6 +173,9 @@ template = '''
     {{- end}}
     {{- if .Sandbox.Excluded}}
     "excludedCommands": {{json .Sandbox.Excluded}},
+    {{- end}}
+    {{- if .Access.NoRead}}
+    "filesystem": {"denyRead": {{json .Access.NoRead}}{{if .Access.OwnTemp}}, "allowRead": [{{json .Access.OwnTemp}}]{{end}}},
     {{- end}}
     {{- end}}
     "network": {"allowUnixSockets": [{{json .Socket}}]
@@ -225,7 +239,8 @@ template = '''
 [guard]
 secrets = [".claude/.credentials.json", "$CLAUDE_CONFIG_DIR/.credentials.json"]
 writable = [".claude/plans", ".claude/projects", "$CLAUDE_CONFIG_DIR/plans", "$CLAUDE_CONFIG_DIR/projects"]
-# The sandbox's TMPDIR: $CLAUDE_CODE_TMPDIR/claude-<uid>, else /tmp/claude-<uid>.
+# The sandbox's TMPDIR: $CLAUDE_CODE_TMPDIR/claude-<uid>, else /tmp/claude-<uid>
+# (a thread's: in its own temp folder, [launch.env]).
 temp = ["$CLAUDE_CODE_TMPDIR/claude-{uid}", "/tmp/claude-{uid}"]
 # Its sandbox keeps Bash from this one (a read deny).
 temp_private = ["bash-edit-diff"]
@@ -234,6 +249,9 @@ temp_private = ["bash-edit-diff"]
 escape_rule = "blocked-escape-dialog"
 # Shared by all its sessions: a thread may name only its own scratchpad.
 temp_scratch = true
+# The sandbox's TMPDIR is the per-uid folder only up to 44 bytes (AF_UNIX
+# socket paths), else /tmp/claude-<uid> (2.1.302).
+temp_max = 44
 
 # The tools the guard judges, by kind, and the input fields each reads.
 # The mod's guard (hooks/guard.ts) gets them from GET /v1/rules too.
