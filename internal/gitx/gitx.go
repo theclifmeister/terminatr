@@ -44,6 +44,10 @@ type Opts struct {
 	Config []string
 	// Env are variables added to the base environment.
 	Env []string
+	// Unset are variables taken out of the base environment (setting
+	// one empty is not the same for git: GIT_SSL_NO_VERIFY= still turns
+	// verification off).
+	Unset []string
 	// OK are exit codes besides 0 that count as success (git diff
 	// --no-index answers 1 for a difference).
 	OK []int
@@ -101,6 +105,12 @@ func Output(ctx context.Context, dir string, o Opts, args ...string) (string, bo
 	defer cancel()
 	cfg := append([]string{"protocol.ext.allow=never"}, o.Config...)
 	env := Env()
+	if len(o.Unset) > 0 {
+		env = slices.DeleteFunc(env, func(kv string) bool {
+			k, _, _ := strings.Cut(kv, "=")
+			return slices.Contains(o.Unset, k)
+		})
+	}
 	if o.Untrusted || o.Tree != nil {
 		cfg = append(cfg, untrusted...)
 	}
