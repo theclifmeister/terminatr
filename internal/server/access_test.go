@@ -33,7 +33,7 @@ func legacySandbox(l launchConfig, slug, goos string) (lists agent.SandboxLists,
 		t, err = l.cfg.ThreadSandbox(slug)
 	}
 	if err != nil {
-		return lists, nil, []string{fmt.Sprintf("project %s: sandbox lists and presets dropped, the thread starts without them (fix or remove the entry: tm settings, Sandbox tab): %v", slug, err)}
+		return lists, nil, []string{fmt.Sprintf("project %s: sandbox lists and presets dropped, the thread starts without them (fix or remove the entry: tm settings, Access tab): %v", slug, err)}
 	}
 	skip := func(key, what string) bool {
 		if config.SandboxApplies(key, goos) {

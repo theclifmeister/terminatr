@@ -17,7 +17,7 @@ import (
 
 // The guard's settings (docs/SPEC.md §8.6, Guard): on or off, its mode,
 // each rule, the allowances, and the refusals to allow or keep refusing.
-// A project's and all projects' popups have the same rows; a project's
+// A project's and all projects' Access tabs have the same rows; a project's
 // allowances add to all projects'.
 
 // guardRuleWords name the guard's rules for the user, in config.GuardRules
@@ -43,11 +43,9 @@ func guardRuleWord(rule string) string {
 // guardModeWords name guard_mode's values.
 var guardModeWords = map[string]string{config.GuardEnforce: "refuse", config.GuardLearn: "refuse, then ask you"}
 
-// guardRows are the guard's rows, under the project settings, and the
-// secret environment the guard keeps from being printed
-// (settings_secretenv.go).
+// guardRows are the guard's rows, on the Access tab under Guard.
 func (sr safetyRows) guardRows() []setting {
-	return []setting{sr.guardOnRow(), sr.guardModeRow(), sr.guardRulesRow(), sr.guardAllowRow(), sr.guardRefusalsRow(), sr.secretEnvRow()}
+	return []setting{sr.guardOnRow(), sr.guardModeRow(), sr.guardRulesRow(), sr.guardAllowRow(), sr.guardRefusalsRow()}
 }
 
 func (sr safetyRows) guardOnRow() setting {
