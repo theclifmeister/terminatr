@@ -61,6 +61,18 @@ export type Rules = {
   // env): no command prints them or the whole environment, whichever
   // rules are on (the floor).
   secretEnv?: readonly string[]
+  // The files and folders no tool writes, whichever rules are on (the
+  // floor): tm's settings (config.toml), and a thread's project folder
+  // or the parts of it only tm writes for the coordinator. File tools
+  // are judged by where they write, shell commands by the paths they
+  // redirect into or give a command that writes (cp, mv, tee, rm and
+  // the like: judgeNoWrite).
+  noWrite?: readonly string[]
+  // A shell call that asks to run outside the sandbox (its tool's escape
+  // field true) is put to the user (rule "escape"), even where Claude's
+  // own rules would let it run: tm answers that prompt for the user
+  // only, never for the coordinator (T574 case 6).
+  askEscapes?: boolean
   // guard_mode "learn": a refusal tells the model the user reviews it.
   learn?: boolean
   // The rules whose floor holds though the human turned the rule off
@@ -100,7 +112,13 @@ type Allow = { rule: string; command?: string; path?: string; exact?: boolean }
 // glob) and the fields of its input that kind reads. A shell tool's
 // syntax is how its command lines are read: none for a POSIX shell,
 // 'powershell' for PowerShell.
-type Tool = { kind: string; syntax?: string; fields: readonly string[] }
+// escape is a shell tool's input field that, true, asks to run the call
+// outside the sandbox (Claude's dangerouslyDisableSandbox).
+type Tool = { kind: string; syntax?: string; fields: readonly string[]; escape?: string }
+
+// The rule of the guard's question about a call that asks to leave the
+// sandbox (Rules.askEscapes).
+export const RULE_ESCAPE = 'escape'
 
 // A refusal: the rule, what the model reads, and a short account for
 // the journal that carries no text of the call beyond a path or branch.
@@ -125,7 +143,7 @@ export const off: Rules = { on: false }
 export function rulesOf(text: string): Rules {
   try {
     const r = JSON.parse(text) as Rules
-    return r && typeof r === 'object' && r.on === true && (Array.isArray(r.rules) || Array.isArray(r.mods) || Array.isArray(r.own) || Array.isArray(r.secretEnv) || Array.isArray(r.floor)) ? r : off
+    return r && typeof r === 'object' && r.on === true && (Array.isArray(r.rules) || Array.isArray(r.mods) || Array.isArray(r.own) || Array.isArray(r.secretEnv) || Array.isArray(r.floor) || Array.isArray(r.noWrite) || r.askEscapes === true) ? r : off
   } catch {
     return off
   }
@@ -134,7 +152,7 @@ export function rulesOf(text: string): Rules {
 // judge is the rule the call of tool with input breaks, or null. The
 // tool is judged by its kind in r.tools, from the fields listed there.
 export function judge(r: Rules, tool: string, input: Record<string, unknown>): Denial | null {
-  if (!r.on || (!r.rules?.length && !r.mods?.length && !r.own?.length && !r.secretEnv?.length && !r.floor?.length)) return null
+  if (!r.on || (!r.rules?.length && !r.mods?.length && !r.own?.length && !r.secretEnv?.length && !r.floor?.length && !r.noWrite?.length && !r.askEscapes)) return null
   const t = r.tools && Object.hasOwn(r.tools, tool) ? r.tools[tool] : undefined
   if (!t) return null
   const values = (t.fields ?? []).map(f => input[f]).filter((v): v is string => typeof v === 'string' && v !== '')
@@ -145,6 +163,7 @@ export function judge(r: Rules, tool: string, input: Record<string, unknown>): D
     const has = hasOf(r)
     const shown = abs(r, given)
     const writable = (p: string) => (r.writable ?? []).some(w => under(r, p, w))
+    if (covers(r, r.noWrite ?? [], p)) return floor(deny(r, 'tm-files', `${tool} of ${safe(shown)}`))
     if (has('worktree-only') && !writable(p)) return deny(r, 'worktree-only', `${tool} of ${safe(shown)}`)
     const m = (r.mods ?? []).find(m => (m.writes ?? []).some(w => under(r, p, w)))
     return m ? denyMod(m, `${tool} of ${safe(shown)}`) : null
@@ -159,6 +178,9 @@ export function judge(r: Rules, tool: string, input: Record<string, unknown>): D
         })
         if (d && !d.ask) return d
         ask ??= d
+      }
+      if (!ask && r.askEscapes && t.escape && input[t.escape] === true) {
+        ask = { rule: RULE_ESCAPE, ask: true, summary: 'a command outside the sandbox', message: 'terminatr guard: this command asks to run outside the sandbox, so the user answers it.' }
       }
       return ask
     }
@@ -266,7 +288,7 @@ function floor(d: Denial): Denial {
 // absolute but not cleaned: what r.resolve is asked about. None when no
 // rule judges a write.
 export function writeTargets(r: Rules, tool: string, input: Record<string, unknown>): string[] {
-  if (!r.on || (!r.rules?.includes('worktree-only') && !(r.mods ?? []).some(m => m.writes?.length))) return []
+  if (!r.on || (!r.rules?.includes('worktree-only') && !r.noWrite?.length && !(r.mods ?? []).some(m => m.writes?.length))) return []
   const t = r.tools && Object.hasOwn(r.tools, tool) ? r.tools[tool] : undefined
   if (!t || (t.kind !== 'write' && t.kind !== 'patch')) return []
   const values = (t.fields ?? []).map(f => input[f]).filter((v): v is string => typeof v === 'string' && v !== '')
@@ -289,6 +311,10 @@ function deny(r: Rules, rule: string, summary: string, target = ''): Denial {
     'worktree-only': `a thread writes only inside its worktree (${r.writable?.[0] ?? ''}). Write the file there, or ${tell} what needs changing elsewhere.`,
     'delete-branch': `agents don't delete branches or worktrees; tm cleans them up once the work has merged. Leave them, and ${tell} if one is in the way.`,
     merge: `merging is the coordinator's job in this project (merge = "coordinator"). Leave the PR open with CI green and say so in your report.`,
+    'tm-files':
+      r.role === 'thread'
+        ? "a thread doesn't write tm's settings (config.toml) or the project folder. Write in your worktree, or say so in your report."
+        : "tm's settings (config.toml) and the parts of the project folder tm keeps (threads/, inbox/, tasks/, journal/, TASKS.md and the like) are written by tm only: use tm's commands, or ask the user.",
     credentials: `credential files and tokens are not read here. A tool that needs a token gets it from the secret environment the user gives threads in tm's settings; if the task needs access you don't have, ${tell} exactly what is missing.`,
   }
   // A thread never merges while the rule holds: no allowance lifts it.
@@ -330,13 +356,20 @@ function denyMod(m: ModRule, summary: string): Denial {
 function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Denial | null {
   for (const words of commands(command)) {
     const argv = strip(words)
-    if (argv.length === 0) continue
+    if (argv.length === 0) {
+      // A redirect alone (date &> f: the & ends the command).
+      const nd = judgeNoWrite(r, '>', [], words)
+      if (nd) return nd
+      continue
+    }
     const cmd = base(argv[0])
     const args = argv.slice(1)
     const md = judgeMods(r, cmd, args, false)
     if (md) return md
     const gd = judgeGitConfig(r, has, cmd, words)
     if (gd) return gd
+    const nd = judgeNoWrite(r, cmd, args, words)
+    if (nd) return nd
     if (cmd === 'git') {
       const d = judgeGit(r, has, args)
       if (d) return d
@@ -400,6 +433,61 @@ function judgeGitConfig(r: Rules, has: (id: string) => boolean, cmd: string, wor
     const out = i > 0 && words[i - 1] === '>'
     const p = abs(r, w)
     if (r.gitConfig.some(g => under(r, p, g)) && (out || !VIEWERS.has(cmd))) return deny(r, 'worktree-only', `${cmd} of ${safe(p)}`)
+  }
+  return null
+}
+
+// The commands that write the files they are given: all of them (true),
+// or the last one, where the others are what is copied (false);
+// IN_PLACE those that write only with -i (sed -i, perl -pi).
+const WRITERS: ReadonlyMap<string, boolean> = new Map([
+  ...'rm rmdir unlink shred touch mkdir truncate tee mv chmod chown chgrp'.split(' ').map(c => [c, true] as const),
+  ...'cp install ln rsync'.split(' ').map(c => [c, false] as const),
+])
+const IN_PLACE = new Set('sed gsed perl ruby'.split(' '))
+
+// judgeNoWrite: the floor's noWrite, of a simple command, its name and
+// arguments and its words as written: a redirect into a path there, or a
+// command that writes the paths it is given naming one (cp's and the
+// like's target).
+function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): Denial | null {
+  if (!r.noWrite?.length) return null
+  const refuse = (w: string): Denial | null => {
+    const p = abs(r, w)
+    return w !== '' && !w.startsWith('&') && covers(r, r.noWrite ?? [], p) ? floor(deny(r, 'tm-files', `${cmd} of ${safe(p)}`)) : null
+  }
+  for (let i = 1; i < words.length; i++) {
+    if (words[i - 1] === '>' && words[i] !== '>') {
+      const d = refuse(words[i])
+      if (d) return d
+    }
+  }
+  let all = WRITERS.get(cmd)
+  if (IN_PLACE.has(cmd)) all = args.some(a => isLong(a, '--in-place') || (/^-[a-zA-Z0-9]+$/.test(a) && a.includes('i')) || a.startsWith('-i')) ? true : undefined
+  if (cmd === 'dd') {
+    for (const a of args) {
+      if (!a.startsWith('of=')) continue
+      const d = refuse(a.slice(3))
+      if (d) return d
+    }
+  }
+  if (all === undefined) return null
+  // The paths given, and the targets given with -t.
+  let paths: string[] = []
+  const targets: string[] = []
+  const rest = unredirected(args)
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i]
+    if (a === '-t' && i + 1 < rest.length) targets.push(rest[++i])
+    else if (a.startsWith('--target-directory=')) targets.push(a.slice('--target-directory='.length))
+    else if (!a.startsWith('-')) paths.push(a)
+  }
+  if (all) paths.push(...targets)
+  else if (targets.length > 0) paths = targets
+  else paths = paths.slice(-1)
+  for (const p of paths) {
+    const d = refuse(p)
+    if (d) return d
   }
   return null
 }

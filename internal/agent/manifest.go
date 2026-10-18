@@ -209,6 +209,10 @@ type Guard struct {
 	// sandbox keeps from it (Claude's bash-edit-diff): no file argument
 	// of its may be in them.
 	TempPrivate []string `toml:"temp_private"`
+	// PromptsEscape: every permission prompt the agent shows a thread
+	// asks to run outside its sandbox (Codex's escalations under -a
+	// on-request), so the user answers it, never the coordinator.
+	PromptsEscape bool `toml:"prompts_escape"`
 	// Tools are the agent's tools the guard judges, by name: each one's
 	// kind (shell, write, patch, read, glob) and the input fields that
 	// kind reads, e.g. Bash = { kind = "shell", fields = ["command"] };

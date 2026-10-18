@@ -218,7 +218,14 @@ allow = ["Bash(npx playwright *)"]
 		t.Errorf("force-push: %+v", r)
 	}
 	writeConfig(t, "[projects.demo]\nyolo = true\n")
-	if r := explain("ls"); r.Sandbox != proto.AccessInside || r.Prompt != proto.PromptNone || r.PromptFrom != "demo" {
+	// Yolo: no sandbox, no prompts, the guard's floor only (T574 case 4).
+	if r := explain("ls"); r.Sandbox != proto.AccessOutside || r.SandboxFrom != "demo" || r.Prompt != proto.PromptNone || r.PromptFrom != "demo" {
 		t.Errorf("yolo: %+v", r)
+	}
+	if r := explain("git push --force origin main"); r.Guard != "refused" {
+		t.Errorf("yolo force-push (the floor): %+v", r)
+	}
+	if r := explain("git push origin main"); r.Guard != "allowed" {
+		t.Errorf("yolo push-default (not the floor): %+v", r)
 	}
 }

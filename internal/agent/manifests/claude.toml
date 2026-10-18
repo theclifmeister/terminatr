@@ -134,6 +134,11 @@ template = '''
 # their domains (browser testing's download hosts) are allowedDomains,
 # which sandboxed commands reach without a prompt (Claude merges the
 # list with the user's own).
+# Yolo (T574 case 4) means no sandbox and no prompts: a yolo thread's
+# sandbox is off (enabled false, which a --settings file sets over the
+# project's and the user's own true: T577) beside yolo_args, so its
+# lists aren't written; the Edit deny rules above still are, and the
+# guard keeps its floor.
 [[launch.files]]
 path = "claude-settings.json"
 template = '''
@@ -148,7 +153,9 @@ template = '''
     "deny": {{json (concat (rules "Edit(/%s/**)" .Access.NoWrite) (rules "Edit(/%s)" .Access.NoWriteFiles))}}
   },
   "sandbox": {
-    {{- if eq .Role "thread"}}
+    {{- if and (eq .Role "thread") .Yolo}}
+    "enabled": false,
+    {{- else if eq .Role "thread"}}
     "enabled": true,
     {{- if .NoSandboxEscapes}}
     "allowUnsandboxedCommands": false,
@@ -158,8 +165,8 @@ template = '''
     {{- end}}
     {{- end}}
     "network": {"allowUnixSockets": [{{json .Socket}}]
-      {{- if and (eq .Role "thread") .Sandbox.LocalBinding}}, "allowLocalBinding": true{{end}}
-      {{- if and (eq .Role "thread") .Sandbox.Domains}}, "allowedDomains": {{json .Sandbox.Domains}}{{end}}}
+      {{- if and (eq .Role "thread") (not .Yolo) .Sandbox.LocalBinding}}, "allowLocalBinding": true{{end}}
+      {{- if and (eq .Role "thread") (not .Yolo) .Sandbox.Domains}}, "allowedDomains": {{json .Sandbox.Domains}}{{end}}}
   }
 }
 '''
@@ -227,7 +234,10 @@ temp_private = ["bash-edit-diff"]
 # The mod's guard (hooks/guard.ts) gets them from GET /v1/rules too.
 # PowerShell is Claude's shell tool on Windows without Git Bash.
 [guard.tools]
-Bash = { kind = "shell", fields = ["command"] }
+# A Bash call with dangerouslyDisableSandbox asks to run outside the
+# sandbox (T577: the flag is in the hook's input): the guard puts it to
+# the user, never the coordinator (T574 case 6).
+Bash = { kind = "shell", fields = ["command"], escape = "dangerouslyDisableSandbox" }
 PowerShell = { kind = "shell", syntax = "powershell", fields = ["command"] }
 Edit = { kind = "write", fields = ["file_path"] }
 Write = { kind = "write", fields = ["file_path"] }

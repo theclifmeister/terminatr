@@ -121,6 +121,7 @@ async function start($: Engine, on: On, rules: Rules | null, env: Record<string,
   let hangRules = false
   let links: Record<string, string> | number | 'hang' = {}
   const resolved: string[][] = []
+  let escapes = 0
   on('http.fetch', async (_$, e) => {
     const ok = (status: number, text = '') => ({ value: { status, ok: status < 300, headers: {}, text } })
     if (e.url.endsWith('/v1/resolve')) {
@@ -139,6 +140,7 @@ async function start($: Engine, on: On, rules: Rules | null, env: Record<string,
       denied.push(JSON.parse(e.init?.body ?? '{}'))
       return ok(204)
     }
+    if (e.url.endsWith('/v1/escape')) escapes++
     return ok(204)
   })
   on('process.spawn', async function* () {
@@ -150,7 +152,7 @@ async function start($: Engine, on: On, rules: Rules | null, env: Record<string,
   await $.session.start({ cwd: WT, surface: 'terminal', isInteractive: true })
   await clock.settle()
   return {
-    clock, denied, resolved, fetches: () => fetches,
+    clock, denied, resolved, fetches: () => fetches, escapes: () => escapes,
     setRules: (r: Rules | null) => { current = r },
     hang: (h: boolean) => { hangRules = h },
     setLinks: (l: typeof links) => { links = l },
@@ -260,6 +262,24 @@ test('a PowerShell command the guard can\'t read is asked, with its reason; one 
   expect([asked.decision, asked.reason]).toEqual(['ask', "terminatr guard: it can't tell what this PowerShell command runs (invoke-expression), so it asks first."])
   expect((await $.tool.check({ tool: 'PowerShell', input: { command: 'git status; Invoke-Expression $line; git branch -D x' } })).decision).toBe('deny')
   expect((await $.tool.check({ tool: 'PowerShell', input: { command: 'Get-ChildItem | Select-String foo' } })).decision).toBe('allow')
+})
+
+test('a call that asks to leave the sandbox is asked, and the server told first; not under yolo', async ($, on) => {
+  const { clock, escapes, setRules } = await start($, on, { ...thread, askEscapes: true })
+  const input = { command: 'ls', dangerouslyDisableSandbox: true }
+  const asked = await $.tool.check({ tool: 'Bash', input })
+  expect([asked.decision, asked.reason]).toEqual(['ask', 'terminatr guard: this command asks to run outside the sandbox, so the user answers it.'])
+  const r = await $.tool.call({ tool: 'Bash', ...input })
+  expect((r as { deny?: string }).deny).toBeUndefined()
+  expect(escapes()).toBe(1)
+  // In the sandbox: nothing to tell.
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  expect(escapes()).toBe(1)
+  // Yolo: the floor only, nothing asked.
+  setRules({ on: true, role: 'thread', home: '/h', cwd: WT, floor: ['force-push'], noWrite: ['/h/.terminatr/config.toml'], tools: TOOLS })
+  await clock.advance(1_001)
+  expect((await $.tool.check({ tool: 'Bash', input })).decision).toBe('allow')
+  expect((await $.tool.check({ tool: 'Write', input: { file_path: '/h/.terminatr/config.toml' } })).decision).toBe('deny')
 })
 
 test('a write through a link out of the worktree is refused where it lands, and reported as given', async ($, on) => {

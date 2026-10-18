@@ -45,6 +45,11 @@ func (e *Env) threadApprove(p *project.Project, id string, choice int) error {
 	if info.State != "blocked" || info.Reason != "permission" {
 		return &tasks.Error{Code: "not-permission", Msg: fmt.Sprintf("thread %s is %s/%s, not blocked on a permission prompt", id, info.State, info.Reason)}
 	}
+	// A command that asks to run outside the sandbox is the user's to
+	// allow, whoever else may answer prompts (T574 case 6).
+	if info.Escape && e.Caller.Kind == caller.Coordinator {
+		return &tasks.Error{Code: "human-only", Msg: fmt.Sprintf("thread %s asks to run a command outside its sandbox: only the user answers that prompt", id)}
+	}
 	// The screen must show the dialog too: approving on hook state alone
 	// could answer something else.
 	var x struct {

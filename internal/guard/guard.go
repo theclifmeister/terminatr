@@ -81,6 +81,18 @@ type Rules struct {
 	// session (config env): no command prints them or the whole
 	// environment, whichever rules are on (the floor).
 	SecretEnv []string `json:"secretEnv,omitempty"`
+	// NoWrite are the files and folders no tool writes, whichever rules
+	// are on (the floor): tm's settings (config.toml), and a thread's
+	// project folder or the parts of it only tm writes for the
+	// coordinator. File tools are judged by where they write, shell
+	// commands by the paths they redirect into or give a command that
+	// writes (cp, mv, tee, rm and the like: judgeNoWrite).
+	NoWrite []string `json:"noWrite,omitempty"`
+	// AskEscapes: a shell call that asks to run outside the sandbox (its
+	// tool's Escape field true) is put to the user (rule "escape"), even
+	// where the agent's own rules would let it run: tm answers that
+	// prompt for the user only, never for the coordinator (T574 case 6).
+	AskEscapes bool `json:"askEscapes,omitempty"`
 	// Learn is guard_mode "learn": a refusal tells the model the user
 	// reviews it.
 	Learn bool `json:"learn,omitempty"`
@@ -139,7 +151,18 @@ type Tool struct {
 	Kind   Kind     `json:"kind" toml:"kind"`
 	Syntax string   `json:"syntax,omitempty" toml:"syntax"`
 	Fields []string `json:"fields" toml:"fields"`
+	// Escape is a shell tool's input field that, true, asks to run the
+	// call outside the sandbox (Claude's dangerouslyDisableSandbox).
+	Escape string `json:"escape,omitempty" toml:"escape"`
 }
+
+// RuleTMFiles is the rule of the floor's refusal to write tm's settings
+// or the project folder (Rules.NoWrite).
+const RuleTMFiles = "tm-files"
+
+// RuleEscape is the rule of the guard's question about a call that asks
+// to leave the sandbox (Rules.AskEscapes).
+const RuleEscape = "escape"
 
 // SyntaxPowerShell marks a shell tool whose command lines are PowerShell.
 const SyntaxPowerShell = "powershell"
@@ -197,7 +220,7 @@ const learnNote = " The user reviews refused calls: if they allow this one, you 
 // Judge is the rule the call of tool with input breaks, or nil. The
 // tool is judged by its kind in r.Tools, from the fields listed there.
 func (r Rules) Judge(tool string, input map[string]any) *Denial {
-	if !r.On || len(r.Rules) == 0 && len(r.Mods) == 0 && len(r.Own) == 0 && len(r.SecretEnv) == 0 && len(r.Floor) == 0 {
+	if !r.On || len(r.Rules) == 0 && len(r.Mods) == 0 && len(r.Own) == 0 && len(r.SecretEnv) == 0 && len(r.Floor) == 0 && len(r.NoWrite) == 0 && !r.AskEscapes {
 		return nil
 	}
 	t, ok := r.Tools[tool]
@@ -226,6 +249,10 @@ func (r Rules) Judge(tool string, input map[string]any) *Denial {
 			if ask == nil {
 				ask = d
 			}
+		}
+		if ask == nil && r.AskEscapes && t.Escape != "" && input[t.Escape] == true {
+			ask = &Denial{Rule: RuleEscape, Ask: true, Summary: "a command outside the sandbox",
+				Message: "terminatr guard: this command asks to run outside the sandbox, so the user answers it."}
 		}
 		return ask
 	case KindWrite:
@@ -366,6 +393,9 @@ func (r Rules) target(p string) string {
 // judgeWrite judges a file tool writing p (absolute, where the write
 // lands), named in a refusal as shown (as the call gave it).
 func (r Rules) judgeWrite(tool, shown, p string) *Denial {
+	if r.covers(r.NoWrite, p) {
+		return floor(r.deny(RuleTMFiles, tool+" of "+safe(shown), ""))
+	}
 	if r.has("worktree-only") && !r.writable(p) {
 		return r.deny("worktree-only", tool+" of "+safe(shown), "")
 	}
@@ -468,6 +498,12 @@ func (r Rules) deny(rule, summary, target string) *Denial {
 		m = "agents don't delete branches or worktrees; tm cleans them up once the work has merged. Leave them, and " + tell + " if one is in the way."
 	case "merge":
 		m = `merging is the coordinator's job in this project (merge = "coordinator"). Leave the PR open with CI green and say so in your report.`
+	case RuleTMFiles:
+		if r.Role == "thread" {
+			m = "a thread doesn't write tm's settings (config.toml) or the project folder. Write in your worktree, or say so in your report."
+		} else {
+			m = "tm's settings (config.toml) and the parts of the project folder tm keeps (threads/, inbox/, tasks/, journal/, TASKS.md and the like) are written by tm only: use tm's commands, or ask the user."
+		}
 	case "credentials":
 		m = "credential files and tokens are not read here. A tool that needs a token gets it from the secret environment the user gives threads in tm's settings; if the task needs access you don't have, " + tell + " exactly what is missing."
 	}
@@ -480,6 +516,10 @@ func (r Rules) judgeBash(command string) *Denial {
 	for _, words := range Commands(command) {
 		argv := strip(words)
 		if len(argv) == 0 {
+			// A redirect alone (date &> f: the & ends the command).
+			if d := r.judgeNoWrite(">", nil, words); d != nil {
+				return d
+			}
 			continue
 		}
 		cmd := base(argv[0])
@@ -488,6 +528,9 @@ func (r Rules) judgeBash(command string) *Denial {
 			return d
 		}
 		if d := r.judgeGitConfig(cmd, words); d != nil {
+			return d
+		}
+		if d := r.judgeNoWrite(cmd, args, words); d != nil {
 			return d
 		}
 		var d *Denial
@@ -1233,6 +1276,86 @@ func (r Rules) judgeGitConfig(cmd string, words []string) *Denial {
 		p := r.abs(w)
 		if slices.ContainsFunc(r.GitConfig, func(g string) bool { return r.under(p, g) }) && (out || !viewers[cmd]) {
 			return r.deny("worktree-only", cmd+" of "+safe(p), "")
+		}
+	}
+	return nil
+}
+
+// writers are the commands that write the files they are given: all
+// of them (true), or the last one, where the others are what is copied
+// (false); inPlace those that write only with -i (sed -i, perl -pi).
+var (
+	writers = map[string]bool{"rm": true, "rmdir": true, "unlink": true, "shred": true, "touch": true, "mkdir": true,
+		"truncate": true, "tee": true, "mv": true, "chmod": true, "chown": true, "chgrp": true,
+		"cp": false, "install": false, "ln": false, "rsync": false}
+	inPlace = setOf("sed gsed perl ruby")
+)
+
+// judgeNoWrite: the floor's NoWrite, of a simple command, its name and
+// arguments and its words as written: a redirect into a path there, or
+// a command that writes the paths it is given naming one (cp's and the
+// like's target).
+func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
+	if len(r.NoWrite) == 0 {
+		return nil
+	}
+	refuse := func(w string) *Denial {
+		if p := r.abs(w); w != "" && !strings.HasPrefix(w, "&") && r.covers(r.NoWrite, p) {
+			return floor(r.deny(RuleTMFiles, cmd+" of "+safe(p), ""))
+		}
+		return nil
+	}
+	for i := 1; i < len(words); i++ {
+		if words[i-1] == ">" && words[i] != ">" {
+			if d := refuse(words[i]); d != nil {
+				return d
+			}
+		}
+	}
+	all, ok := writers[cmd]
+	if inPlace[cmd] {
+		all, ok = true, slices.ContainsFunc(args, func(a string) bool {
+			return isLong(a, "--in-place") || shortFlags.MatchString(a) && strings.Contains(a, "i") || strings.HasPrefix(a, "-i")
+		})
+	}
+	if cmd == "dd" {
+		for _, a := range args {
+			if p, ok := strings.CutPrefix(a, "of="); ok {
+				if d := refuse(p); d != nil {
+					return d
+				}
+			}
+		}
+	}
+	if !ok {
+		return nil
+	}
+	// The paths given, and the targets given with -t.
+	var paths, targets []string
+	args = unredirected(args)
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "-t" && i+1 < len(args):
+			i++
+			targets = append(targets, args[i])
+		case strings.HasPrefix(a, "--target-directory="):
+			targets = append(targets, strings.TrimPrefix(a, "--target-directory="))
+		case !strings.HasPrefix(a, "-"):
+			paths = append(paths, a)
+		}
+	}
+	switch {
+	case all:
+		paths = append(paths, targets...)
+	case len(targets) > 0:
+		paths = targets
+	case len(paths) > 0:
+		paths = paths[len(paths)-1:]
+	}
+	for _, p := range paths {
+		if d := refuse(p); d != nil {
+			return d
 		}
 	}
 	return nil

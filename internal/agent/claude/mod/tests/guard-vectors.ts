@@ -10,6 +10,11 @@
 // (a PowerShell command it can't read) has rule "unknown" and "ask": true.
 // The thread-mods and mods-only sets carry rules a mod adds (mods design
 // §7, Tighten only): the core's and the mod's, and the mod's alone.
+// The yolo-thread set is a yolo thread's guard: the floor only, with
+// tm's settings and the project folder no tool writes (noWrite); the
+// floor-coordinator set the coordinator's, whose project folder it
+// writes but for tm's parts of it; thread-escapes asks about a call that
+// asks to leave the sandbox (askEscapes), rule "escape".
 // The thread-allow, thread-learn and floor-only sets carry the human's
 // allowances (a refusal under an allowance's rule of the command line or
 // file it matches is lifted; an "exact" one's * matches only a *), tm's
@@ -26,7 +31,7 @@
 // so (double quotes, no trailing commas, no comments). One case a line.
 export default {
 "tools": {
- "Bash": {"kind": "shell", "fields": ["command"]},
+ "Bash": {"kind": "shell", "fields": ["command"], "escape": "dangerouslyDisableSandbox"},
  "PowerShell": {"kind": "shell", "syntax": "powershell", "fields": ["command"]},
  "Edit": {"kind": "write", "fields": ["file_path"]},
  "Write": {"kind": "write", "fields": ["file_path"]},
@@ -58,6 +63,9 @@ export default {
  "floor-only": {"on": true, "role": "thread", "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "own": ["/h/.terminatr/run", "/h/.terminatr/state/peer", "/h/.terminatr/state/guard"], "secretEnv": ["NODE_AUTH_TOKEN"]},
  "rules-off": {"on": true, "role": "thread", "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "protected": ["main", "master"], "floor": ["force-push", "merge"]},
  "rules-off-merge-thread": {"on": true, "role": "thread", "rules": ["credentials"], "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "protected": ["main", "master"], "floor": ["force-push"], "allow": [{"rule": "force-push", "command": "git push -f origin *"}]},
+ "yolo-thread": {"on": true, "role": "thread", "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "protected": ["main", "master"], "floor": ["force-push", "merge"], "own": ["/h/.terminatr/run"], "noWrite": ["/h/.terminatr/config.toml", "/h/.terminatr/projects/demo"]},
+ "floor-coordinator": {"on": true, "role": "coordinator", "rules": ["force-push", "push-default", "delete-branch", "credentials"], "home": "/h", "cwd": "/h/.terminatr/projects/demo", "protected": ["main", "master"], "floor": ["force-push"], "noWrite": ["/h/.terminatr/config.toml", "/h/.terminatr/projects/demo/threads", "/h/.terminatr/projects/demo/inbox", "/h/.terminatr/projects/demo/TASKS.md"], "allow": [{"rule": "tm-files", "path": "/h/.terminatr/config.toml"}]},
+ "thread-escapes": {"on": true, "role": "thread", "rules": ["force-push", "credentials"], "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "protected": ["main", "master"], "floor": ["force-push"], "askEscapes": true},
  "off": {"on": false}
 },
 "cases": [
@@ -567,7 +575,47 @@ export default {
  {"rules": "rules-off", "tool": "Bash", "input": {"command": "git branch -D tm/x"}, "rule": null},
  {"rules": "rules-off-merge-thread", "tool": "Bash", "input": {"command": "gh pr merge 1"}, "rule": null},
  {"rules": "rules-off-merge-thread", "tool": "Bash", "input": {"command": "git push -f origin main"}, "rule": "force-push", "summary": "git push with force", "floor": true},
- {"rules": "rules-off-merge-thread", "tool": "Bash", "input": {"command": "git push -f origin tm/x"}, "rule": null}
+ {"rules": "rules-off-merge-thread", "tool": "Bash", "input": {"command": "git push -f origin tm/x"}, "rule": null},
+ {"rules": "yolo-thread", "tool": "Write", "input": {"file_path": "/h/.terminatr/config.toml"}, "rule": "tm-files", "summary": "Write of /h/.terminatr/config.toml", "floor": true, "message": "terminatr guard (tm-files): a thread doesn't write tm's settings (config.toml) or the project folder. Write in your worktree, or say so in your report."},
+ {"rules": "yolo-thread", "tool": "Edit", "input": {"file_path": "/h/.terminatr/projects/demo/CONTEXT.md"}, "rule": "tm-files", "summary": "Edit of /h/.terminatr/projects/demo/CONTEXT.md", "floor": true},
+ {"rules": "yolo-thread", "tool": "Write", "input": {"file_path": "/h/.terminatr/worktrees/demo/t-0001-fix/link/x"}, "links": {"/h/.terminatr/worktrees/demo/t-0001-fix/link": "/h/.terminatr/projects/demo"}, "rule": "tm-files", "summary": "Write of /h/.terminatr/worktrees/demo/t-0001-fix/link/x", "floor": true},
+ {"rules": "yolo-thread", "tool": "apply_patch", "input": {"command": "*** Begin Patch\n*** Add File: /h/.terminatr/projects/demo/TASKS.md\n+x\n*** End Patch"}, "rule": "tm-files", "summary": "apply_patch of /h/.terminatr/projects/demo/TASKS.md", "floor": true},
+ {"rules": "yolo-thread", "tool": "Write", "input": {"file_path": "/etc/hosts"}, "rule": null},
+ {"rules": "yolo-thread", "tool": "Write", "input": {"file_path": "/h/.terminatr/config.toml.bak"}, "rule": null},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "echo 'yolo = false' >> ~/.terminatr/config.toml"}, "rule": "tm-files", "summary": "echo of /h/.terminatr/config.toml", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "date &> /h/.terminatr/projects/demo/x.log"}, "rule": "tm-files", "summary": "> of /h/.terminatr/projects/demo/x.log", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "cp notes.md /h/.terminatr/projects/demo/memory/"}, "rule": "tm-files", "summary": "cp of /h/.terminatr/projects/demo/memory", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "cp -t /h/.terminatr/projects/demo a b"}, "rule": "tm-files", "summary": "cp of /h/.terminatr/projects/demo", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "cp /h/.terminatr/projects/demo/uploads/a.png ."}, "rule": null},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "mv /h/.terminatr/projects/demo/TASKS.md /tmp/x"}, "rule": "tm-files", "summary": "mv of /h/.terminatr/projects/demo/TASKS.md", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "sudo rm -rf ~/.terminatr/projects/demo"}, "rule": "tm-files", "summary": "rm of /h/.terminatr/projects/demo", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "rm /h/.terminatr/projects/demo/*"}, "rule": "tm-files", "summary": "rm of /h/.terminatr/projects/demo/?", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "git log | tee -a /h/.terminatr/projects/demo/JOURNAL.md"}, "rule": "tm-files", "summary": "tee of /h/.terminatr/projects/demo/JOURNAL.md", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "sed -i 's/a/b/' /h/.terminatr/config.toml"}, "rule": "tm-files", "summary": "sed of /h/.terminatr/config.toml", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "sed -n 1,20p /h/.terminatr/config.toml"}, "rule": null},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "perl -pi -e 's/a/b/' /h/.terminatr/projects/demo/PROJECT.md"}, "rule": "tm-files", "summary": "perl of /h/.terminatr/projects/demo/PROJECT.md", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "dd if=/dev/zero of=/h/.terminatr/config.toml"}, "rule": "tm-files", "summary": "dd of /h/.terminatr/config.toml", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "bash -c 'touch /h/.terminatr/projects/demo/x'"}, "rule": "tm-files", "summary": "touch of /h/.terminatr/projects/demo/x", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "cat /h/.terminatr/projects/demo/TASKS.md > notes.md"}, "rule": null},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "grep -n yolo /h/.terminatr/config.toml 2>&1"}, "rule": null},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "git push origin main"}, "rule": null},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "git push -f origin main"}, "rule": "force-push", "summary": "git push with force", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "gh pr merge 1"}, "rule": "merge", "summary": "gh pr merge", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "cat /h/.terminatr/run/human"}, "rule": "credentials", "summary": "cat of /h/.terminatr/run/human", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "rm -rf /h/.terminatr/worktrees/demo/t-0001-fix"}, "rule": null},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "ls", "dangerouslyDisableSandbox": true}, "rule": null},
+ {"rules": "floor-coordinator", "tool": "Edit", "input": {"file_path": "/h/.terminatr/projects/demo/CONTEXT.md"}, "rule": null},
+ {"rules": "floor-coordinator", "tool": "Write", "input": {"file_path": "/h/.terminatr/projects/demo/TASKS.md"}, "rule": "tm-files", "summary": "Write of /h/.terminatr/projects/demo/TASKS.md", "floor": true, "message": "terminatr guard (tm-files): tm's settings (config.toml) and the parts of the project folder tm keeps (threads/, inbox/, tasks/, journal/, TASKS.md and the like) are written by tm only: use tm's commands, or ask the user."},
+ {"rules": "floor-coordinator", "tool": "Write", "input": {"file_path": "/h/.terminatr/config.toml"}, "rule": "tm-files", "summary": "Write of /h/.terminatr/config.toml", "floor": true},
+ {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "echo hi > inbox/x.md"}, "rule": "tm-files", "summary": "echo of /h/.terminatr/projects/demo/inbox/x.md", "floor": true},
+ {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "echo hi > memory/x.md"}, "rule": null},
+ {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "mkdir -p threads/t-0009"}, "rule": "tm-files", "summary": "mkdir of /h/.terminatr/projects/demo/threads/t-0009", "floor": true},
+ {"rules": "thread-escapes", "tool": "Bash", "input": {"command": "ls", "dangerouslyDisableSandbox": true}, "rule": "escape", "summary": "a command outside the sandbox", "ask": true, "message": "terminatr guard: this command asks to run outside the sandbox, so the user answers it."},
+ {"rules": "thread-escapes", "tool": "Bash", "input": {"command": "ls", "dangerouslyDisableSandbox": false}, "rule": null},
+ {"rules": "thread-escapes", "tool": "Bash", "input": {"command": "ls"}, "rule": null},
+ {"rules": "thread-escapes", "tool": "Bash", "input": {"command": "git push -f origin main", "dangerouslyDisableSandbox": true}, "rule": "force-push", "summary": "git push with force", "floor": true},
+ {"rules": "thread-escapes", "tool": "Write", "input": {"file_path": "/etc/x", "dangerouslyDisableSandbox": true}, "rule": null},
+ {"rules": "thread-escapes", "tool": "bash", "input": {"command": "ls", "dangerouslyDisableSandbox": true}, "rule": null}
 ],
 "messages": {
  "thread": {

@@ -9,7 +9,10 @@
 // command the guard can't read is let through tool.call and asked in
 // tool.check: a call Claude would allow goes to the dialog, or auto
 // mode's classifier, with the guard's reason; one it would ask about
-// or refuse keeps Claude's answer. An ask is not reported.
+// or refuse keeps Claude's answer. An ask is not reported, but for a
+// call that asks to run outside the sandbox (rule "escape"): the mod
+// tells the server (POST /v1/escape) before Claude's prompt opens, so
+// that the prompt is the user's to answer, never the coordinator's.
 //
 // The rules come from the server (GET /v1/rules), fetched at the first
 // call after a load and again once they are a second old, so a change of
@@ -26,7 +29,7 @@
 
 import type { EngineInterface, On } from 'claude-code'
 
-import { judge, off, rulesOf, writeTargets } from './guard'
+import { judge, off, RULE_ESCAPE, rulesOf, writeTargets } from './guard'
 import type { Denial, Rules } from './guard'
 import { failed, FETCH_MS, postInit, refused, socketURL, timedOut, within } from './socket'
 
@@ -54,6 +57,7 @@ export function guard(on: On) {
     const r = await placed($, await rulesNow($), e.tool, input)
     if (!r) return { deny: UNPLACED }
     const d = judge(r, e.tool, input)
+    if (d?.ask && d.rule === RULE_ESCAPE) await reportEscape($)
     if (!d || d.ask) return next(e)
     void reportDenial($, e.tool, d)
     return { deny: d.message }
@@ -150,6 +154,20 @@ async function reportDenial($: EngineInterface, tool: string, d: Denial) {
     else if (!r.ok) log($, refused('guard report', r.status, r.text))
   } catch (err) {
     log($, failed('guard report', err))
+  }
+}
+
+// reportEscape tells the server the call asks to leave the sandbox. Not
+// knowing makes the prompt look like any other, so it is awaited.
+async function reportEscape($: EngineInterface) {
+  const socket = (await $.env.get('TERMINATR_MOD_SOCKET')) ?? ''
+  if (!socket) return
+  try {
+    const r = await within($.http.fetch(socketURL('/v1/escape'), postInit(socket, '{}')), $.clock.sleep(FETCH_MS))
+    if (!r) log($, timedOut('guard escape'))
+    else if (!r.ok) log($, refused('guard escape', r.status, r.text))
+  } catch (err) {
+    log($, failed('guard escape', err))
   }
 }
 

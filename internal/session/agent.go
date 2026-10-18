@@ -64,6 +64,10 @@ type AgentConfig struct {
 	// ModSocket, when set, says the agent runs terminatr's mod, which
 	// reports its state over this socket (ModState; docs/SPEC.md §8.6).
 	ModSocket string
+	// PromptsEscape: every permission prompt of the agent asks to run
+	// outside its sandbox (a Codex thread's escalation), which the user
+	// answers, never the coordinator (AgentState.Escape).
+	PromptsEscape bool
 }
 
 // DefaultPromptHold is AgentConfig.PromptHold's default.
@@ -185,8 +189,12 @@ type agentRT struct {
 	lastState  agent.Merged
 	lastSID    string
 	lastTodos  []agent.Todo
-	emptyBox   bool // the empty-box rule matched at the last evaluation
-	blocker    bool // a blocked rule matched at the last evaluation
+	// escape: a call asked to run outside the sandbox (MarkEscape), so
+	// the permission prompt it brings is the user's; escapeSeen: that
+	// prompt came. It ends when the prompt does, or with the turn.
+	escape, escapeSeen bool
+	emptyBox           bool // the empty-box rule matched at the last evaluation
+	blocker            bool // a blocked rule matched at the last evaluation
 
 	keys        map[string]string // rule id -> the keys that answer its dialog (agent.Rule.Keys)
 	answerRule  string            // the keyed rule that is the screen's match
@@ -269,6 +277,10 @@ type AgentState struct {
 	// RemoteControl is the observed remote control state, when the
 	// manifest names a status_field and the status file was read.
 	RemoteControl, RemoteKnown bool
+	// Escape: the agent is blocked on a permission prompt that asks to
+	// run outside its sandbox (T574 case 6): the user answers it, never
+	// the coordinator.
+	Escape bool
 }
 
 // AgentState returns the agent's merged state; ok is false for a session
@@ -285,17 +297,35 @@ func (s *Session) AgentState() (st AgentState, ok bool) {
 		since = rt.prompts[0].at
 	}
 	held, heldSince := rt.heldWhy, rt.heldSince
+	escape := rt.escape || rt.cfg.PromptsEscape
 	var remote, known bool
 	if m := agent.ManifestOf(rt.a); m != nil && m.ObservesRemote() && rt.fields != nil {
 		remote, known = rt.fields[m.RemoteControl.StatusField] != "", true
 	}
 	rt.mu.Unlock()
+	m := rt.tr.State()
 	return AgentState{
-		Agent: rt.a.Name(), Observed: rt.observed, Merged: rt.tr.State(),
+		Agent: rt.a.Name(), Observed: rt.observed, Merged: m,
 		AgentSID: rt.tr.AgentSID(), Todos: rt.tr.Todos(), Queued: queued,
 		QueuedSince: since, Held: held, HeldSince: heldSince,
 		RemoteControl: remote, RemoteKnown: known,
+		Escape: escape && m.State == agent.StateBlocked && m.Reason == "permission",
 	}, true
+}
+
+// MarkEscape says the agent's call that comes next to a permission
+// prompt asks to run outside its sandbox (the guard asked: rule
+// "escape"), so that prompt is the user's to answer. Kept until the
+// prompt ends, or the turn does.
+func (s *Session) MarkEscape() {
+	rt := s.agentRT()
+	if rt == nil {
+		return
+	}
+	rt.mu.Lock()
+	rt.escape, rt.escapeSeen = true, false
+	rt.mu.Unlock()
+	s.agentChanged(rt)
 }
 
 // Explain returns the agent tracker's view of every source.
@@ -367,7 +397,18 @@ func (s *Session) Hook(event string, payload map[string]any) (agent.HookResult, 
 		return agent.HookResult{}, nil
 	}
 	s.checkHook(rt, event, payload)
-	env := agent.HookEnv{Guard: rt.cfg.Guard}
+	env := agent.HookEnv{}
+	if g := rt.cfg.Guard; g != nil {
+		env.Guard = func(tool string, input map[string]any) *guard.Denial {
+			d := g(tool, input)
+			if d != nil && d.Ask && d.Rule == guard.RuleEscape {
+				rt.mu.Lock()
+				rt.escape, rt.escapeSeen = true, false
+				rt.mu.Unlock()
+			}
+			return d
+		}
+	}
 	if c := rt.cfg.Context; c != nil {
 		env.Context = func() ([]byte, error) { return c(payload) }
 	}
@@ -765,6 +806,14 @@ func (s *Session) agentChanged(rt *agentRT) {
 	rt.mu.Lock()
 	changed := st != rt.lastState || sid != rt.lastSID || !slices.Equal(todos, rt.lastTodos)
 	rt.lastState, rt.lastSID, rt.lastTodos = st, sid, todos
+	switch {
+	case !rt.escape:
+	case st.State == agent.StateBlocked:
+		rt.escapeSeen = true
+	case rt.escapeSeen || st.State == agent.StateIdle || st.State == agent.StateExited:
+		// Its prompt was answered, or the turn ended without one.
+		rt.escape, rt.escapeSeen = false, false
+	}
 	rt.mu.Unlock()
 	if changed {
 		s.notifyState()

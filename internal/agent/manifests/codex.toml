@@ -145,6 +145,10 @@ logged_out = { "result.account.type" = "!*", "result.requiresOpenaiAuth" = "true
 # The guard (docs/SPEC.md §8.6): Codex's login, in ~/.codex or $CODEX_HOME.
 [guard]
 secrets = [".codex/auth.json", "$CODEX_HOME/auth.json"]
+# A thread runs with -a on-request: Codex asks only to leave its sandbox
+# (an escalation), which the user answers, never the coordinator (T574
+# case 6).
+prompts_escape = true
 # The TMPDIR it inherits from the server, else /tmp.
 temp = ["$TMPDIR", "/tmp"]
 

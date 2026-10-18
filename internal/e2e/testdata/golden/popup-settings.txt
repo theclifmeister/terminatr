@@ -10,12 +10,12 @@
             │ Automatically: it starts them itself.                                                        │
             │                                                                                              │
             │ Yolo mode                    off · all projects                                              │
-            │ New threads skip the agent's permission prompts; the file rules and the sandbox still hold.  │
+            │ New threads run with no sandbox and no permission prompts; the guard keeps only its floor.   │
             │ Turning it on asks first.                                                                    │
             │                                                                                              │
             │ Coordinator approves         on · all projects                                               │
             │ The coordinator may answer its threads' in-scope permission prompts (allow once, never       │
-            │ always).                                                                                     │
+            │ always); one to run outside the sandbox is always yours.                                     │
             │                                                                                              │
             │ Parallel threads             10 · 0 working now  −  + · all projects                         │
             │ The most threads working at once; beyond it the coordinator proposes and waits. Idle and     │

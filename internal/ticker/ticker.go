@@ -650,10 +650,12 @@ func (t *Ticker) sweepThreads(p *project.Project, sessions []proto.SessionInfo, 
 			if reason != "" {
 				summary += " on a " + reason + " prompt"
 			}
-			needsUser := reason != "permission" || !safety.CoordinatorApproves
+			needsUser := reason != "permission" || !safety.CoordinatorApproves || info.Escape
 			switch {
 			case reason == "question":
 				summary += "; ask the user and relay their answer (tm thread read " + r.ID + "; tm thread answer " + r.ID + " --choice N)"
+			case info.Escape:
+				summary += " to run a command outside its sandbox; only the user answers it (attach to the thread)"
 			case needsUser:
 				summary += "; the user answers it (attach to the thread)"
 			default:

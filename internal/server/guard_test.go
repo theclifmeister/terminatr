@@ -68,6 +68,58 @@ func TestGuardRulesFor(t *testing.T) {
 	}
 }
 
+// TestGuardRulesFloor: tm's settings and the project folder are on the
+// floor (noWrite): a thread's whole project folder, the coordinator's
+// only the parts tm writes. A thread with escapes asks about them;
+// under yolo the guard keeps its floor only (T574 cases 4, 6).
+func TestGuardRulesFloor(t *testing.T) {
+	testPaths(t)
+	p := newWatchProject(t)
+	home := os.Getenv("TERMINATR_HOME")
+	s := &Server{log: log.New(os.Stderr, "", 0), opts: Options{Paths: client.Paths{Home: home}}}
+	wt := t.TempDir()
+	cfg := filepath.Join(home, "config.toml")
+	writeConfig(t, "[projects."+p.Slug+"]\nguard_allow = [{ rule = \"push-default\", command = \"git push origin main\" }]\nguard_mode = \"learn\"\n")
+	thread := SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: "t-0001", Cwd: wt}
+	g := s.guardRulesFor(thread)
+	if !slices.Contains(g.NoWrite, cfg) || !slices.Contains(g.NoWrite, p.Dir) || !g.AskEscapes || len(g.Rules) == 0 || len(g.Allow) == 0 || !g.Learn {
+		t.Fatalf("thread %+v", g)
+	}
+	coord := SessionRecord{ID: "s-1", Role: proto.RoleCoordinator, Project: p.Slug, Cwd: p.Dir}
+	if g := s.guardRulesFor(coord); !slices.Contains(g.NoWrite, cfg) || slices.Contains(g.NoWrite, p.Dir) ||
+		!slices.Contains(g.NoWrite, filepath.Join(p.Dir, "threads")) || !slices.Contains(g.NoWrite, filepath.Join(p.Dir, "TASKS.md")) || g.AskEscapes {
+		t.Fatalf("coordinator %+v", g)
+	}
+	closed := thread
+	closed.NoSandboxEscapes = true
+	if g := s.guardRulesFor(closed); g.AskEscapes {
+		t.Errorf("escapes off still asks: %+v", g)
+	}
+	yolo := thread
+	yolo.Yolo = true
+	g = s.guardRulesFor(yolo)
+	if !g.On || g.Rules != nil || g.Allow != nil || g.Learn || g.Mods != nil || g.AskEscapes ||
+		!slices.Equal(g.Floor, []string{"force-push", "merge"}) || !slices.Contains(g.NoWrite, p.Dir) || len(g.Own) == 0 {
+		t.Fatalf("yolo %+v", g)
+	}
+	bash := func(c string) *guard.Denial { return g.Judge("Bash", map[string]any{"command": c}) }
+	if d := bash("git push origin main"); d != nil {
+		t.Errorf("yolo push to main (not the floor): %+v", d)
+	}
+	if d := bash("git push -f origin main"); d == nil || !d.Floor {
+		t.Errorf("yolo force-push to main: %+v", d)
+	}
+	if d := bash("echo x >> " + cfg); d == nil || d.Rule != guard.RuleTMFiles || !d.Floor {
+		t.Errorf("yolo write to config.toml: %+v", d)
+	}
+	if d := g.Judge("Write", map[string]any{"file_path": filepath.Join(p.Dir, "CONTEXT.md")}); d == nil || d.Rule != guard.RuleTMFiles {
+		t.Errorf("yolo write to the project folder: %+v", d)
+	}
+	if d := g.Judge("Write", map[string]any{"file_path": filepath.Join(wt, "x.go")}); d != nil {
+		t.Errorf("yolo write in the worktree: %+v", d)
+	}
+}
+
 func writeConfig(t *testing.T, body string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml"), []byte(body), 0o600); err != nil {

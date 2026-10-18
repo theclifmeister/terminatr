@@ -34,6 +34,28 @@ do = "permission"
 tool = "Bash"
 input = { command = "git push" }
 `,
+	// A command that asks to run outside the sandbox (T574 case 6).
+	"thread-escape": `
+[[step]]
+do = "permission"
+tool = "Bash"
+input = { command = "ls", dangerouslyDisableSandbox = true }
+
+[[step]]
+do = "stream"
+ms = 50
+text = "ESCAPED"
+`,
+	"coord-approve": `
+[[step]]
+do = "run"
+cmd = '"$TERMINATR_BIN" thread approve t-0001 > "$OUT/approve" 2>&1; echo "exit $?" >> "$OUT/approve"'
+
+[[step]]
+do = "stream"
+ms = 50
+text = "APPROVE-DONE"
+`,
 }
 
 // tickerEnv is threadEnv with fast ticker intervals and the scripts
@@ -160,6 +182,31 @@ func TestTickerBlockedInbox(t *testing.T) {
 	env.MustCLI("thread", "prompt", "t-0001", "run thread-block", "--project", "demo")
 	env.WaitState(th, "blocked", agentWait)
 	waitInbox(t, env, "blocked: t-0001 (Small fix) is blocked on a permission prompt (tm thread read t-0001; tm thread approve t-0001 if it is in scope)")
+}
+
+// TestTickerEscapeToUser: a thread's prompt to run a command outside
+// its sandbox is the user's (T574 case 6): the inbox says so, the
+// coordinator's tm thread approve is refused though coordinator_approves
+// is on, and the user's answer goes through.
+func TestTickerEscapeToUser(t *testing.T) {
+	env, projDir, out := tickerEnv(t)
+	coord := &Session{ID: strings.TrimSpace(env.MustCLI("project", "open", "demo"))}
+	info, _ := env.Info(coord)
+	coord.PID = info.PID
+	env.track(info.PID, "coordinator "+coord.ID)
+	env.WaitState(coord, "idle", agentWait)
+	th := startThread(t, env, projDir)
+	env.MustCLI("thread", "prompt", "t-0001", "run thread-escape", "--project", "demo")
+	env.WaitState(th, "blocked", agentWait)
+	waitInbox(t, env, "blocked [needs user]: t-0001 (Small fix) is blocked on a permission prompt to run a command outside its sandbox; only the user answers it (attach to the thread)")
+	env.Prompt(coord, "run coord-approve")
+	if got := readOut(t, out, "approve"); !strings.Contains(got, "human-only") || !strings.Contains(got, "exit 1") {
+		t.Fatalf("the coordinator's approve of an escape: %s", got)
+	}
+	if r := env.CLI("thread", "approve", "t-0001", "--project", "demo"); r.Code != 0 {
+		t.Fatalf("the user's approve: %+v", r)
+	}
+	env.WaitFor(th, "ESCAPED", agentWait)
 }
 
 // fakeGH puts a gh on PATH that answers `gh pr view` from $GH_STATE (no
