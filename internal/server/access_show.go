@@ -324,6 +324,7 @@ func explainCommand(set proto.AccessSet, cmd string) proto.AccessExplainResult {
 	default:
 		res.PromptWhy = "no tm rule covers it: the agent's mode and own rules decide"
 	}
+	res.Approved = explainApproved(set, cmd)
 	if yolo {
 		// No sandbox and no prompts (T574 case 4).
 		res.Prompt, res.PromptWhy, res.PromptFrom = proto.PromptNone, "yolo is on: no permission prompts", ""
@@ -340,6 +341,29 @@ func explainCommand(set proto.AccessSet, cmd string) proto.AccessExplainResult {
 		}
 	}
 	return res
+}
+
+// explainApproved is the approved command of set that tm run runs cmd
+// as (its words split at spaces), with where it comes from and the
+// threads it is for, or "".
+func explainApproved(set proto.AccessSet, cmd string) string {
+	argv := strings.Fields(cmd)
+	var out []string
+	for _, r := range set.Rules {
+		if r.Kind != proto.AccessApproved || !r.Given() || r.Skipped != "" || !config.ApprovedMatch(r.Value, argv) {
+			continue
+		}
+		who := "every thread"
+		if len(r.Agents) > 0 {
+			who = strings.Join(r.Agents, ", ") + " threads"
+		}
+		say := fmt.Sprintf("tm run -- %s runs it outside the sandbox for %s: approved command %q (%s)", cmd, who, r.Value, r.Source)
+		if approvedAsks(r) {
+			say += ", asking the user first"
+		}
+		out = append(out, say)
+	}
+	return strings.Join(out, "; ")
 }
 
 // guardVerdict is the guard's verdict on command line cmd under rules

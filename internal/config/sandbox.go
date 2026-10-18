@@ -13,10 +13,13 @@ import (
 // The sandbox rules of threads (docs/SPEC.md §5.2, T574 §3): what a
 // thread's sandboxed commands may reach (hosts, local_ports), the
 // guidance its brief gets (guides), the folders besides its worktree it
-// writes in (write, sandbox_write.go), the commands its Bash runs
+// writes in (write, sandbox_write.go), the unix sockets its commands
+// connect to (sockets, sandbox_sockets.go), the commands its Bash runs
 // outside its sandbox, each asking first or running without asking
-// (sandbox_excluded.go), and the permission rules its agent gets on top
-// of tm's for tools that neither run commands nor write files. [defaults.sandbox] gives every
+// (sandbox_excluded.go), the commands tm runs outside the sandbox when
+// it asks (approved_commands, sandbox_approved.go), and the permission
+// rules its agent gets on top of tm's for tools that neither run
+// commands nor write files. [defaults.sandbox] gives every
 // project's threads them; [projects.<slug>.sandbox] adds a project's
 // own, and drops the ones of all projects it doesn't want:
 //
@@ -24,7 +27,9 @@ import (
 //	hosts = ["registry.npmjs.org"]
 //	local_ports = true
 //	write = ["~/src/shared-fixtures"]
+//	sockets = ["~/.colima/default/docker.sock"]
 //	excluded_commands = [{ command = "npx playwright *", ask = false }]
+//	approved_commands = ["make e2e", "npm run e2e *"]
 //	allow = ["WebFetch(domain:playwright.dev)"]
 //	drop = ["docker compose *"]
 //
@@ -47,6 +52,8 @@ const (
 	SandboxHosts      = "hosts"
 	SandboxGuides     = "guides"
 	SandboxWrite      = "write"
+	SandboxSockets    = "sockets"
+	SandboxApproved   = "approved_commands"
 	SandboxExcluded   = "excluded_commands"
 	SandboxAllow      = "allow"
 	SandboxLocalPorts = "local_ports"
@@ -54,7 +61,7 @@ const (
 )
 
 // SandboxKeys are a sandbox table's lists, in the Access tab's order.
-var SandboxKeys = []string{SandboxHosts, SandboxGuides, SandboxWrite, SandboxExcluded, SandboxAllow}
+var SandboxKeys = []string{SandboxHosts, SandboxGuides, SandboxWrite, SandboxSockets, SandboxExcluded, SandboxApproved, SandboxAllow}
 
 // rawSandbox is a [projects.<slug>.sandbox] or [defaults.sandbox] table:
 // the lists, local ports, a project's drops, and the preset switches of
@@ -64,6 +71,8 @@ type rawSandbox struct {
 	Hosts            *[]string     `toml:"hosts"`
 	Guides           *[]string     `toml:"guides"`
 	Write            *[]string     `toml:"write"`
+	Sockets          *[]string     `toml:"sockets"`
+	Approved         *[]string     `toml:"approved_commands"`
 	ExcludedCommands *excludedList `toml:"excluded_commands"`
 	Allow            *[]string     `toml:"allow"`
 	LocalPorts       *bool         `toml:"local_ports"`
@@ -85,6 +94,10 @@ func (r *rawSandbox) list(key string) *[]string {
 		return r.Guides
 	case SandboxWrite:
 		return r.Write
+	case SandboxSockets:
+		return r.Sockets
+	case SandboxApproved:
+		return r.Approved
 	case SandboxExcluded:
 		if r.ExcludedCommands == nil {
 			return nil
@@ -341,8 +354,12 @@ func checkSandboxEntry(key, e string) error {
 		return CheckGuide(e)
 	case SandboxWrite:
 		return CheckWriteFolder(e)
+	case SandboxSockets:
+		return CheckSocket(e)
 	case SandboxExcluded:
 		return CheckExcludedCommand(e)
+	case SandboxApproved:
+		return CheckApprovedCommand(e)
 	case SandboxAllow:
 		return checkAllowRule(e)
 	case SandboxDrop:
@@ -402,6 +419,10 @@ func SandboxWarning(key, e string) string {
 		return hostWarning(e)
 	case SandboxWrite:
 		return writeWarning(e)
+	case SandboxSockets:
+		return socketWarning(e)
+	case SandboxApproved:
+		return approvedWarning(e)
 	case SandboxAllow:
 	default:
 		return ""

@@ -117,6 +117,9 @@ type Server struct {
 	mu       sync.Mutex
 	sessions map[string]*session.Session
 	records  map[string]SessionRecord
+	// runs are the approved commands running for a thread (approved.go),
+	// by pid: the pid walk places what they start in that thread.
+	runs map[int]SessionRecord
 	// relaunch marks sessions stopped to be resumed at once under the
 	// same id (a remote control change), instead of ending, with the
 	// remote control state they get.
@@ -806,7 +809,7 @@ func (s *Server) answer(p proto.SessionAnswerParams, cc callCtx) (any, *proto.Er
 	}
 	// Only the human answers while an escape's prompt is open: not an
 	// agent, nor tm's commands answering for the coordinator.
-	if (!cc.human || p.Relay == proto.RoleCoordinator || c.IsAgent()) && sess.Info().Escape {
+	if (!cc.human || p.Relay == proto.RoleCoordinator || c.IsAgent()) && (sess.Info().Escape || s.asks.escape(p.ID)) {
 		return nil, proto.Errorf(proto.ErrRefused, "session %s asks to run a command outside its sandbox: only the user answers that prompt", p.ID)
 	}
 	res, perr := s.asks.answer(p.ID, p.Index, p.Answer, p.Question)

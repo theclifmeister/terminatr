@@ -35,6 +35,10 @@ type Question struct {
 	Questions []QuestionItem `json:"questions"`
 	// Since is when the menu opened (set by the server).
 	Since time.Time `json:"since,omitzero"`
+	// Escape: only the user answers it, never the coordinator or an
+	// agent (tm's own question before an approved command that asks
+	// first runs outside the sandbox).
+	Escape bool `json:"escape,omitempty"`
 }
 
 // QuestionItem is one question of a menu. Answered says whether

@@ -74,6 +74,14 @@ var sandboxLists = map[string]struct{ label, help, about, example, word string }
 		"Permission rules a thread's agent gets on top of tm's, for tools that neither run commands nor write files (WebFetch(domain:playwright.dev), an MCP tool): an excluded command or a write folder does those. tm's deny rules and the guard still win. " + sandboxReplaces,
 		"Calls these rules match run without a prompt or auto mode's review; tm's deny rules and the guard still win. Commands and file writes aren't allow rules: an excluded command or a write folder does those.",
 		"WebFetch(domain:playwright.dev)", "allow rules"},
+	config.SandboxSockets: {"Sockets",
+		"Unix sockets besides tm's a thread's sandboxed commands may connect to: a local database's, a dev server's, Docker's. Whatever the program listening there does for them, it does as you, outside the sandbox (Docker's socket runs any container with any of your folders mounted). One socket, its path written whole; never in tm's folder or its run folder (the human socket). " + sandboxAdds,
+		"Sandboxed commands may connect to these sockets: what the program listening there does for them, it does as you, outside the sandbox.",
+		"~/.colima/default/docker.sock", "sockets"},
+	config.SandboxApproved: {"Approved commands",
+		"Commands a thread may ask tm to run outside its sandbox, in its worktree (tm run -- make test): its words, matched word for word, a last * taking any further arguments; no shell. tm runs them as you, with its own environment, and journals each run. The thread writes the files most commands read (a Makefile, the tests), so it can make one run any code as you: approve only what you'd let it run anyway. Codex threads also run the excluded commands this way. " + sandboxAdds,
+		"tm runs these outside the sandbox, as you, in the thread's worktree, when it asks (tm run). The thread writes the files they read, so it can make them run any code as you.",
+		"make test", "approved commands"},
 	config.SandboxWrite: {"Write folders",
 		"Folders besides its worktree a thread writes in: its file tools without asking, and its sandboxed commands too. One rule for all of it: the guard, Claude's file permission and both agents' sandboxes. A whole folder, everything below it included; never your home, a folder high up, or one holding settings or git hooks. " + sandboxAdds,
 		"A thread's file tools and its sandboxed commands write in these folders without asking; tm's own folder, config.toml and the project folder stay closed.",
@@ -107,7 +115,7 @@ var sandboxSections = map[string]string{config.SandboxExcluded: "Outside the san
 func sandboxSettings(slug, goos string) []setting {
 	sr := newSafetyRows(slug)
 	var rows []setting
-	for _, k := range []string{config.SandboxHosts, config.SandboxLocalPorts, config.SandboxGuides, config.SandboxWrite} {
+	for _, k := range []string{config.SandboxHosts, config.SandboxLocalPorts, config.SandboxGuides, config.SandboxWrite, config.SandboxSockets} {
 		if !config.SandboxApplies(k, goos) {
 			continue
 		}
@@ -120,7 +128,7 @@ func sandboxSettings(slug, goos string) []setting {
 	if len(rows) > 0 {
 		rows[0].section = "Inside the sandbox"
 	}
-	for _, k := range []string{config.SandboxExcluded, config.SandboxAllow} {
+	for _, k := range []string{config.SandboxExcluded, config.SandboxApproved, config.SandboxAllow} {
 		if config.SandboxApplies(k, goos) {
 			row := sr.sandboxRow(k)
 			row.section = sandboxSections[k]

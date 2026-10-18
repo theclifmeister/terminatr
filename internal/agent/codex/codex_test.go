@@ -198,11 +198,12 @@ func TestLaunch(t *testing.T) {
 	// lets through, without a warning; the probe runs without the
 	// binding, which reopens loopback.
 	bound := spec
-	bound.Sandbox = agent.SandboxLists{LocalBinding: true, Domains: []string{"registry.npmjs.org", "*.example.com"}}
+	bound.Sandbox = agent.SandboxLists{LocalBinding: true, Domains: []string{"registry.npmjs.org", "*.example.com"}, Sockets: []string{"/u/pg.sock"}}
 	threadProbed = nil
 	ll, err := a.Launch(bound)
 	if form == NetworkLimited {
-		limitedNet := `network={enabled=true,mode="full",unix_sockets={"/run/tm.sock"="allow"},domains={"registry.npmjs.org"="allow","*.example.com"="allow"},allow_local_binding=true}}}`
+		// A socket rule is one more of its unix_sockets.
+		limitedNet := `network={enabled=true,mode="full",unix_sockets={"/run/tm.sock"="allow","/u/pg.sock"="allow"},domains={"registry.npmjs.org"="allow","*.example.com"="allow"},allow_local_binding=true}}}`
 		if err != nil || len(ll.Warnings) > 0 || !slices.ContainsFunc(ll.Argv, func(s string) bool {
 			if !strings.HasPrefix(s, "permissions={tm=") || !strings.HasSuffix(s, limitedNet) {
 				return false

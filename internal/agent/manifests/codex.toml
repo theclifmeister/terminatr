@@ -98,7 +98,7 @@ args = [
   "{{if and (or (eq .Role \"thread\") (eq .Role \"coordinator\")) (not .Yolo)}}-c{{end}}", "{{if and (or (eq .Role \"thread\") (eq .Role \"coordinator\")) (not .Yolo)}}default_permissions=\"tm\"{{end}}",
   "{{if and (or (eq .Role \"thread\") (eq .Role \"coordinator\")) (not .Yolo)}}-c{{end}}", "{{if and (or (eq .Role \"thread\") (eq .Role \"coordinator\")) (not .Yolo)}}features.network_proxy=true{{end}}",
   "{{if and (eq .Role \"thread\") (not .Yolo)}}-c{{end}}",
-  '''{{if and (eq .Role "thread") (not .Yolo)}}permissions={tm={extends=":workspace",filesystem={{pathmodes .Access}},network={enabled=true,mode="full",unix_sockets={ {{- toml .Socket}}="allow"}{{with .Sandbox.Domains}},domains={ {{- range $i, $d := .}}{{if $i}},{{end}}{{toml $d}}="allow"{{end}}}{{end}}{{if .Sandbox.LocalBinding}},allow_local_binding=true{{end}}}}}{{end}}''',
+  '''{{if and (eq .Role "thread") (not .Yolo)}}permissions={tm={extends=":workspace",filesystem={{pathmodes .Access}},network={enabled=true,mode="full",unix_sockets={ {{- toml .Socket}}="allow"{{range .Sandbox.Sockets}},{{toml .}}="allow"{{end}}}{{with .Sandbox.Domains}},domains={ {{- range $i, $d := .}}{{if $i}},{{end}}{{toml $d}}="allow"{{end}}}{{end}}{{if .Sandbox.LocalBinding}},allow_local_binding=true{{end}}}}}{{end}}''',
   "{{if and (eq .Role \"coordinator\") (not .Yolo)}}-c{{end}}",
   '''{{if and (eq .Role "coordinator") (not .Yolo)}}permissions={tm={extends=":workspace",filesystem={{pathmodes .Access .Cwd}},network={enabled=true,mode="limited",unix_sockets={ {{- toml .Socket}}="allow"}}}}{{end}}''',
   # A thread's secret variables (config env) reach its commands: Codex

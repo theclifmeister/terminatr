@@ -178,7 +178,7 @@ template = '''
     "filesystem": {"denyRead": {{json .Access.NoRead}}{{if .Access.OwnTemp}}, "allowRead": [{{json .Access.OwnTemp}}]{{end}}},
     {{- end}}
     {{- end}}
-    "network": {"allowUnixSockets": [{{json .Socket}}]
+    "network": {"allowUnixSockets": [{{json .Socket}}{{if and (eq .Role "thread") (not .Yolo)}}{{range .Sandbox.Sockets}}, {{json .}}{{end}}{{end}}]
       {{- if and (eq .Role "thread") (not .Yolo) .Sandbox.LocalBinding}}, "allowLocalBinding": true{{end}}
       {{- if and (eq .Role "thread") (not .Yolo) .Sandbox.Domains}}, "allowedDomains": {{json .Sandbox.Domains}}{{end}}}
   }

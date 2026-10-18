@@ -219,6 +219,9 @@ func printAccessExplain(e *Env, res proto.AccessExplainResult) {
 	fmt.Fprintf(tw, "  prompt\t%s\t%s\t%s\n", res.Prompt, oneLineText(res.PromptWhy), from(res.PromptFrom))
 	fmt.Fprintf(tw, "  guard\t%s\t%s\t\n", res.Guard, oneLineText(res.GuardWhy))
 	tw.Flush()
+	if res.Approved != "" {
+		fmt.Fprintf(e.Stdout, "  %s\n", oneLineText(res.Approved))
+	}
 	if res.Agents != "" {
 		fmt.Fprintf(e.Stdout, "  %s\n", oneLineText(res.Agents))
 	}

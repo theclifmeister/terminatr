@@ -182,6 +182,8 @@ func commandUsage(name string) string {
 		return relayUsage
 	case "report":
 		return reportUsage
+	case "run":
+		return runUsage
 	case "server":
 		return serverUsage
 	case "session":

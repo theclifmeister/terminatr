@@ -60,6 +60,14 @@ func (a *asks) put(id string, q proto.Question) *openAsk {
 	return o
 }
 
+// escape reports whether session id's open question is one only the
+// user answers (Question.Escape).
+func (a *asks) escape(id string) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.open[id] != nil && a.open[id].q.Escape
+}
+
 // drop removes o if it is still session id's open question.
 func (a *asks) drop(id string, o *openAsk) {
 	a.mu.Lock()
@@ -158,7 +166,7 @@ func (s *Server) serveAsk(c net.Conn, br *bufio.Reader, req proto.Request) {
 		return
 	}
 	q := p.Question
-	q.Since = time.Now().UTC()
+	q.Since, q.Escape = time.Now().UTC(), false
 	for i := range q.Questions {
 		q.Questions[i].Answered, q.Questions[i].Answer = false, ""
 	}

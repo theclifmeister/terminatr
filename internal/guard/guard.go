@@ -673,6 +673,18 @@ func (r Rules) deny(rule, summary, target string) *Denial {
 	return &Denial{Rule: rule, Message: "terminatr guard (" + rule + "): " + m, Summary: summary, Floor: rule == "merge"}
 }
 
+// JudgeCommand is the rule a command line breaks as a Bash call would,
+// the allowances lifting what they name, or nil: what tm runs for a
+// thread outside its sandbox (an approved command, its words quoted)
+// is judged as the thread's own call.
+func (r Rules) JudgeCommand(line string) *Denial {
+	if !r.On {
+		return nil
+	}
+	line = strings.TrimSpace(line)
+	return r.lifted(line, false, func(r Rules) *Denial { return r.judgeBash(line) })
+}
+
 // judgeBash checks each simple command of a Bash command line.
 func (r Rules) judgeBash(command string) *Denial { return r.judgeLine(command, []string{r.Cwd}) }
 

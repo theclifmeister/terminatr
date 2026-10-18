@@ -48,7 +48,9 @@ var notHumanOnly = map[string]gate{
 	proto.MethodSessionAnswer: 0,
 	proto.MethodAccessShow:    0,
 	proto.MethodCLIRun:        gateAgentOrHuman,
-	proto.MethodViewDigest:    gateNotAgent,
+	// Only a thread, checked in its handler (runRecord).
+	proto.MethodCommandRun: gateAgentOrHuman,
+	proto.MethodViewDigest: gateNotAgent,
 }
 
 // notControl are proto's methods of the peer link (internal/peer), not
