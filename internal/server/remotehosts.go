@@ -21,6 +21,10 @@ import (
 // the host is all it needs. Claude threads don't get it: their
 // sandbox asks per host.
 
+// codexOpenNote is codex.OpenNote: what the effective view says of a
+// Codex thread's network on Linux.
+const codexOpenNote = "network not limited on Linux: Codex's Linux sandbox can't allow tm's socket with its proxy on"
+
 // remoteHostNote is the note of a git remote host rule.
 const remoteHostNote = "git remote host"
 

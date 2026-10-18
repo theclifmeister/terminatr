@@ -36,6 +36,7 @@ const (
 const (
 	AccessWorktree     = "worktree"      // the cwd, writable
 	AccessGitDir       = "git-dir"       // the git-dir grant (T551): value the repo whose git dir it opens
+	AccessNetwork      = "network"       // a Codex thread's network form where it isn't limited: "open" (Linux) or "off" (Windows)
 	AccessRead         = "read"          // a folder readable without a prompt
 	AccessWrite        = "write"         // a folder writable besides the cwd
 	AccessWriteFile    = "write-file"    // a file writable besides the cwd

@@ -58,14 +58,22 @@ func (s *Server) resolveAccess(in accessInput, lc launchConfig) (proto.AccessSet
 			// Its pushes reach the repo's remotes (remotehosts.go).
 			add(remoteHostRules(in.tree.CommonDir)...)
 		}
-		if in.agent == "codex" && in.goos == config.OSWindows {
-			// Its network is off there: Codex's proxy needs its elevated
-			// sandbox (codex.closedOS).
+		if in.agent == "codex" && (in.goos == config.OSWindows || in.goos == config.OSLinux) {
+			// Its network isn't limited to its hosts there
+			// (codex.ThreadNetwork): off on Windows, where Codex's proxy
+			// needs its elevated sandbox; open on Linux, where its
+			// sandbox can't allow tm's socket with the proxy on. Its host
+			// rules aren't used; one rule says which.
+			value, why := "off", "a Codex thread's network is off on Windows"
+			if in.goos == config.OSLinux {
+				value, why = "open", codexOpenNote
+			}
 			for i := from; i < len(set.Rules); i++ {
-				if r := &set.Rules[i]; (r.Kind == proto.AccessHost || r.Kind == proto.AccessLocalPorts) && r.Skipped == "" {
-					r.Skipped = "a Codex thread's network is off on " + config.OSName(in.goos)
+				if r := &set.Rules[i]; r.Kind == proto.AccessHost && r.Skipped == "" {
+					r.Skipped = why
 				}
 			}
+			add(proto.AccessRule{Where: proto.AccessInside, Kind: proto.AccessNetwork, Value: value, Source: proto.AccessFromTM, Note: why, Agents: []string{"codex"}})
 		}
 	}
 	add(onOff(proto.AccessPrompts, proto.AccessYolo, in.yolo, settingSource(lc, in.slug, "yolo"), false),

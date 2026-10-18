@@ -363,25 +363,24 @@ func sandboxed(l agent.Launch, spec agent.LaunchSpec, m *agent.Manifest, windows
 // or a key would otherwise leave the network open (T577). The probe is
 // the coordinator's (tm's socket connects, a loopback address outside
 // the domains is refused, the proxy refuses an unlisted host and takes
-// a listed one), without the local binding. Where the proxy can't
-// carry tm's socket (closedOS), the network is off.
+// a listed one), without the local binding. On Windows (closedOS) the
+// network is off; on Linux (openOS) it keeps today's open form.
 func limited(l agent.Launch, spec agent.LaunchSpec, m *agent.Manifest, goos string) agent.Launch {
 	idx, name, flags := profileFlags(l.Argv)
 	if len(idx) == 0 {
 		return l // yolo: no sandbox to shape
 	}
-	if closedOS(goos) {
+	switch {
+	case closedOS(goos):
 		l.Argv = closedNetwork(l.Argv)
+		return l
+	case openOS(goos):
+		l.Argv = openNetwork(l.Argv)
+		l.Warnings = append(l.Warnings, OpenNote)
 		return l
 	}
 	version, err := probeFunc(m, l.Argv[0], spec.TMBin, spec.Cwd, spec.Socket, name, unbound(flags), false)
 	if err == nil {
-		return l
-	}
-	if errors.Is(err, errNoSocket) && noSocketOS(goos) {
-		// The proxy holds; the socket can't be had without opening the
-		// network (noSocketOS).
-		l.Warnings = append(l.Warnings, "codex on "+goos+": tm's socket can't be reached from the thread's commands (Codex's proxy refuses unix sockets there); the thread reaches tm through its MCP tools")
 		return l
 	}
 	l.Argv = closedNetwork(l.Argv)
@@ -453,10 +452,8 @@ func probeOnce(codex, tmBin, cwd, sock, name string, flags []string, windows boo
 		return errors.New("the network proxy refuses a listed domain: network.domains was ignored")
 	case strings.HasSuffix(last, "proxy=bad"):
 		return errors.New("the network proxy didn't answer")
-	case last == "unix=refused tcp=refused proxy=ok":
-		// The network holds; the socket doesn't (noSocketOS, or a
-		// profile not applied): callers decide.
-		return fmt.Errorf("the profile wasn't applied or can't carry it: %w", errNoSocket)
+	case strings.HasPrefix(last, "unix=refused"):
+		return errors.New("the profile wasn't applied: tm's socket is unreachable in it")
 	}
 	return fmt.Errorf("unexpected probe output %q", firstLine(out, nil))
 }
@@ -631,40 +628,67 @@ func (a *Agent) probeWindowsCoordinator(tmBin string) (string, error) {
 // Codex's elevated sandbox.
 func closedOS(goos string) bool { return goos == "windows" }
 
-// noSocketOS reports whether tm's socket can't be reached from a
-// thread's sandboxed commands on platform goos however its network is
-// set, short of opening it. Linux: Codex 0.162's seccomp filter refuses
-// every AF_UNIX socket in proxy-routed mode (unless
-// dangerously_allow_all_unix_sockets, which would open every socket,
-// the human one too; network.unix_sockets names sockets on macOS only),
-// and refuses connect itself with the network off
+// openOS reports whether a thread keeps today's open network on
+// platform goos (coordinator decision, 2026-10-19: never break tm for a
+// Codex thread, never wider than today). Linux: Codex 0.162's seccomp
+// filter refuses every AF_UNIX socket while the network goes through
+// its proxy (unless dangerously_allow_all_unix_sockets, which would open
+// every socket, the human one too; network.unix_sockets names sockets
+// on macOS only), and refuses connect with the network off
 // (linux-sandbox/src/landlock.rs, NetworkSeccompMode; its README: "In
 // managed proxy mode … seccomp blocks new AF_UNIX/socketpair creation";
-// CI measured both). Only an open network reaches it, which a thread
-// never gets (T574: narrower, never wider). So a Linux thread keeps the
-// proxy, its hosts and remotes, and reaches tm through its MCP tools,
-// which Codex runs outside the sandbox.
-func noSocketOS(goos string) bool { return goos == "linux" }
+// CI measured both). Only the open form reaches tm's socket there.
+func openOS(goos string) bool { return goos == "linux" }
 
-// errNoSocket is a probe whose network held but whose sandbox didn't
-// reach tm's socket.
-var errNoSocket = errors.New("tm's socket is unreachable in the profile")
+// OpenNote is what a thread's launch warns and the effective view says
+// where its network keeps the open form (openOS).
+const OpenNote = "network not limited on Linux: Codex's Linux sandbox can't allow tm's socket with its proxy on"
 
-// ThreadNetwork is a thread's launch argv in the network form it starts
-// with on platform goos before its probe: closed where closedOS says
-// so, as it is (through the proxy) elsewhere. For tests that run the
-// profile under the installed Codex; NoSocket says whether tm's socket
-// is out of its reach there (noSocketOS).
-func ThreadNetwork(argv []string, goos string) []string {
-	if closedOS(goos) {
-		return closedNetwork(argv)
+// openNetwork is a launch's argv in today's open form: no proxy
+// feature, the profile's network on without a mode or domains, its
+// local binding and tm's socket kept.
+func openNetwork(argv []string) []string {
+	out := make([]string, 0, len(argv))
+	for i := 0; i < len(argv); i++ {
+		if argv[i] == "-c" && i+1 < len(argv) {
+			v := argv[i+1]
+			if strings.HasPrefix(v, "features.network_proxy=") {
+				i++
+				continue
+			}
+			if strings.HasPrefix(v, "permissions=") && strings.Contains(v, "network={") {
+				v = netKeys.ReplaceAllString(v, "")
+				v = strings.Replace(v, "network={", "network={enabled=true,", 1)
+				v = strings.Replace(cutTable(v, ",domains="), ",}", "}", 1)
+			}
+			out = append(out, "-c", v)
+			i++
+			continue
+		}
+		out = append(out, argv[i])
 	}
-	return argv
+	return out
 }
 
-// NoSocket reports whether a thread's sandboxed commands can't reach
-// tm's socket on platform goos (noSocketOS).
-func NoSocket(goos string) bool { return noSocketOS(goos) }
+// Network forms a thread starts with (ThreadNetwork).
+const (
+	NetworkLimited = "limited" // through Codex's proxy, its hosts only
+	NetworkClosed  = "closed"  // off (closedOS)
+	NetworkOpen    = "open"    // today's form (openOS)
+)
+
+// ThreadNetwork is the network form a thread starts with on platform
+// goos, and its launch argv in that form before its probe. For tests
+// that run the profile under the installed Codex.
+func ThreadNetwork(argv []string, goos string) (string, []string) {
+	switch {
+	case closedOS(goos):
+		return NetworkClosed, closedNetwork(argv)
+	case openOS(goos):
+		return NetworkOpen, openNetwork(argv)
+	}
+	return NetworkLimited, argv
+}
 
 // ProbeThreadSandbox checks a thread's profile under the installed Codex
 // (agent.ThreadSandboxProber, for tm doctor): Codex's Windows sandbox
@@ -673,7 +697,7 @@ func NoSocket(goos string) bool { return noSocketOS(goos) }
 // holds only when the sandbox applies and tm's socket (AF_UNIX on
 // Windows) is reachable from it. Where a thread's network goes through
 // the proxy (macOS) it also checks it is limited, as a thread's launch
-// does (limited).
+// does (limited); elsewhere the network form isn't the proxy's.
 func (a *Agent) ProbeThreadSandbox(tmBin string) (string, error) {
 	work, outside, base, sock, done, err := probeScratch()
 	if err != nil {
@@ -688,26 +712,17 @@ func (a *Agent) ProbeThreadSandbox(tmBin string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	argv := l.Argv
-	closed := closedOS(caps.OS)
-	if closed {
-		argv = closedNetwork(argv)
-	}
-	noSocket := noSocketOS(caps.OS)
+	form, argv := ThreadNetwork(l.Argv, caps.OS)
 	// A thread's profile is its -c features and permissions flags;
 	// profileFlags takes them as it takes the coordinator's.
 	path, version, name, flags, err := a.probeTarget(argv, "the manifest gives a thread no profile")
 	if err != nil {
 		return "", err
 	}
-	if err := writeVerdict(path, tmBin, work, sock, name, flags, filepath.Join(outside, "probe")); closed || err != nil && !(noSocket && errors.Is(err, errNoSocket)) {
+	if err := writeVerdict(path, tmBin, work, sock, name, flags, filepath.Join(outside, "probe")); err != nil || form != NetworkLimited {
 		return version, err
 	}
-	err = probeOnce(path, tmBin, work, sock, name, flags, false)
-	if noSocket && errors.Is(err, errNoSocket) {
-		err = nil
-	}
-	return version, err
+	return version, probeOnce(path, tmBin, work, sock, name, flags, false)
 }
 
 // writeVerdict runs a probe that dials tm's socket and writes path,
@@ -723,8 +738,8 @@ func writeVerdict(codex, tmBin, cwd, sock, name string, flags []string, path str
 		return nil
 	case strings.HasSuffix(last, "write=ok"):
 		return errors.New("the sandbox doesn't apply: a file outside the workspace could be written")
-	case last == "unix=refused write=denied":
-		return fmt.Errorf("tm's socket is unreachable from the sandbox: %w", errNoSocket)
+	case strings.HasPrefix(last, "unix=refused"):
+		return errors.New("tm's socket is unreachable from the sandbox")
 	}
 	return fmt.Errorf("unexpected probe output %q", firstLine(out, nil))
 }

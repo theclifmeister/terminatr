@@ -3,7 +3,6 @@ package codex
 import (
 	"bufio"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -114,18 +113,14 @@ func TestThreadNetwork(t *testing.T) {
 	if l = limited(agent.Launch{Argv: argv}, spec, m, "windows"); !slices.Equal(l.Argv, closed) || probed != nil || len(l.Warnings) > 0 {
 		t.Errorf("windows: %q %q, probed %q", l.Argv, l.Warnings, probed)
 	}
-	// On Linux a profile whose network holds but can't reach tm's socket
-	// (noSocketOS) keeps the proxy, with a warning; on macOS it closes.
-	verdict = fmt.Errorf("the profile wasn't applied or can't carry it: %w", errNoSocket)
-	if l = limited(agent.Launch{Argv: argv}, spec, m, "linux"); !slices.Equal(l.Argv, argv) || len(l.Warnings) != 1 || !strings.Contains(l.Warnings[0], "MCP tools") {
-		t.Errorf("linux, no socket: %q %q", l.Argv, l.Warnings)
-	}
-	if l = limited(agent.Launch{Argv: argv}, spec, m, "darwin"); !slices.Equal(l.Argv, closed) {
-		t.Errorf("macos, no socket: %q", l.Argv)
-	}
-	verdict = errors.New("the network proxy lets a host outside the domains through")
-	if l = limited(agent.Launch{Argv: argv}, spec, m, "linux"); !slices.Equal(l.Argv, closed) {
-		t.Errorf("linux, proxy open: %q", l.Argv)
+	// On Linux the thread keeps today's open form, unprobed, with its
+	// note (openOS).
+	probed = nil
+	open := []string{"codex", "-a", "on-request", "-c", `default_permissions="tm"`,
+		"-c", `permissions={tm={extends=":workspace",filesystem={"/w"="write"},network={enabled=true,unix_sockets={"/run/tm.sock"="allow"},allow_local_binding=true}}}`,
+		"-c", "hooks={}"}
+	if l = limited(agent.Launch{Argv: argv}, spec, m, "linux"); !slices.Equal(l.Argv, open) || probed != nil || !slices.Equal(l.Warnings, []string{OpenNote}) {
+		t.Errorf("linux: %q %q, probed %q", l.Argv, l.Warnings, probed)
 	}
 	probed = nil
 	if l = limited(agent.Launch{Argv: []string{"codex", "--dangerously-bypass-approvals-and-sandbox"}}, spec, m, "darwin"); len(l.Argv) != 2 || probed != nil {
@@ -188,11 +183,49 @@ func TestClosedNetworkManifest(t *testing.T) {
 	}
 }
 
-// TestClosedOS: a thread's network is off on Windows, through the proxy
-// elsewhere; on Linux tm's socket is out of its commands' reach.
+// TestClosedOS: a thread's network is off on Windows, today's open form
+// on Linux (where Codex's proxy refuses tm's socket), through the proxy
+// on macOS.
 func TestClosedOS(t *testing.T) {
-	if !closedOS("windows") || closedOS("linux") || closedOS("darwin") || !noSocketOS("linux") || noSocketOS("darwin") {
-		t.Error("closedOS, noSocketOS")
+	for goos, want := range map[string]string{"windows": NetworkClosed, "linux": NetworkOpen, "darwin": NetworkLimited} {
+		if got, _ := ThreadNetwork(nil, goos); got != want {
+			t.Errorf("%s: %s, want %s", goos, got, want)
+		}
+	}
+}
+
+// TestOpenNetworkManifest: on Linux a thread keeps today's form of the
+// manifest's own profile: no proxy feature, the network on without a
+// mode or domains, tm's socket and its local binding kept.
+func TestOpenNetworkManifest(t *testing.T) {
+	a := load(t)
+	l, err := a.Agent.Launch(agent.LaunchSpec{Role: agent.RoleThread, Cwd: "/w", TMBin: "/bin/tm", Socket: "/run/tm.sock",
+		Access: agent.Access{Write: []string{"/w"}}, Sandbox: agent.SandboxLists{Domains: []string{"github.com", "odd}{.example"}, LocalBinding: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	form, got := ThreadNetwork(l.Argv, "linux")
+	if form != NetworkOpen || slices.Contains(got, "features.network_proxy=true") {
+		t.Fatalf("%s %q", form, got)
+	}
+	i := slices.IndexFunc(got, func(s string) bool { return strings.HasPrefix(s, "permissions=") })
+	var v struct {
+		Permissions map[string]struct {
+			Network struct {
+				Enabled     *bool
+				Mode        string
+				Domains     map[string]string
+				Binding     *bool             `toml:"allow_local_binding"`
+				UnixSockets map[string]string `toml:"unix_sockets"`
+			}
+		}
+	}
+	if _, err := toml.Decode(got[i], &v); err != nil {
+		t.Fatalf("%s: %v", got[i], err)
+	}
+	n := v.Permissions["tm"].Network
+	if n.Enabled == nil || !*n.Enabled || n.Mode != "" || n.Domains != nil || n.Binding == nil || !*n.Binding || n.UnixSockets["/run/tm.sock"] != "allow" {
+		t.Errorf("open form %s", got[i])
 	}
 }
 
@@ -420,23 +453,18 @@ func TestProbeThreadSandbox(t *testing.T) {
 		return `case "$*" in */probe) ` + write + `;; *) ` + tcp + `;; esac`
 	}
 	held := `echo "unix=ok tcp=refused proxy=ok"`
-	// On Linux tm's socket is out of a thread's reach (noSocketOS): its
-	// sandbox holds without it.
-	noSocketWant := "tm's socket is unreachable"
-	if noSocketOS(runtime.GOOS) {
-		noSocketWant = ""
-	}
+
 	cases := []struct {
 		script, want string
 	}{
 		{answers(`echo "unix=ok write=denied"`, held), ""},
 		{answers(`echo "WARNING: something"; echo "unix=ok write=denied"`, held), ""},
 		{answers(`echo "unix=ok write=ok"`, held), "the sandbox doesn't apply"},
-		{answers(`echo "unix=refused write=denied"`, `echo "unix=refused tcp=refused proxy=ok"`), noSocketWant},
+		{answers(`echo "unix=refused write=denied"`, held), "tm's socket is unreachable"},
 		{`echo "error: bad" >&2; exit 2`, "codex sandbox refused it: error: bad"},
 		{`echo something else`, "unexpected probe output"},
 	}
-	if !closedOS(runtime.GOOS) {
+	if form, _ := ThreadNetwork(nil, runtime.GOOS); form == NetworkLimited {
 		// Where a thread's network goes through the proxy, it is checked
 		// too.
 		cases = append(cases, []struct{ script, want string }{

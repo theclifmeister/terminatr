@@ -153,9 +153,15 @@ func TestLaunch(t *testing.T) {
 		sockW = `,"\\run"="write"`
 		winSandbox = []string{"-c", `windows.sandbox="unelevated"`}
 	}
-	if closedOS(caps.OS) {
-		// The proxy can't carry tm's socket there: the network is off.
+	// The network form per OS (ThreadNetwork): off on Windows, today's
+	// open form on Linux, with its note.
+	form, _ := ThreadNetwork(nil, caps.OS)
+	var formWarn []string
+	switch form {
+	case NetworkClosed:
 		network, proxy = `network={enabled=false,unix_sockets={"/run/tm.sock"="allow"}}`, nil
+	case NetworkOpen:
+		network, proxy, formWarn = `network={enabled=true,unix_sockets={"/run/tm.sock"="allow"}}`, nil, []string{OpenNote}
 	}
 	want := []string{"codex",
 		"-c", "check_for_update_on_startup=false",
@@ -180,14 +186,14 @@ func TestLaunch(t *testing.T) {
 	if !l.Kickoff {
 		t.Error("the kickoff is in argv")
 	}
-	if len(l.Warnings) > 0 {
+	if !slices.Equal(l.Warnings, formWarn) {
 		t.Errorf("warnings without sandbox lists: %q", l.Warnings)
 	}
 	// Codex has nothing to map a project's sandbox lists to: the argv
 	// stays as it is, and the launch says so.
 	listed := spec
 	listed.Sandbox = agent.SandboxLists{Excluded: []string{"npx playwright *"}}
-	if ll, err := a.Launch(listed); err != nil || !slices.Equal(ll.Argv, want) || !slices.Equal(ll.Warnings, []string{sandboxListsGap}) {
+	if ll, err := a.Launch(listed); err != nil || !slices.Equal(ll.Argv, want) || !slices.Equal(ll.Warnings, append(slices.Clone(formWarn), sandboxListsGap)) {
 		t.Errorf("with sandbox lists: argv %q warnings %q, %v", ll.Argv, ll.Warnings, err)
 	}
 	// The local-ports rule is the thread profile's network
@@ -198,7 +204,7 @@ func TestLaunch(t *testing.T) {
 	bound.Sandbox = agent.SandboxLists{LocalBinding: true, Domains: []string{"registry.npmjs.org", "*.example.com"}}
 	threadProbed = nil
 	ll, err := a.Launch(bound)
-	if !closedOS(caps.OS) {
+	if form == NetworkLimited {
 		limitedNet := `network={enabled=true,mode="full",unix_sockets={"/run/tm.sock"="allow"},domains={"registry.npmjs.org"="allow","*.example.com"="allow"},allow_local_binding=true}}}`
 		if err != nil || len(ll.Warnings) > 0 || !slices.ContainsFunc(ll.Argv, func(s string) bool {
 			if !strings.HasPrefix(s, "permissions={tm=") || !strings.HasSuffix(s, limitedNet) {
@@ -306,7 +312,7 @@ func TestLaunch(t *testing.T) {
 		t.Errorf("fallback warnings %q", l.Warnings)
 	}
 	// A thread whose limited network doesn't hold keeps its profile,
-	// with the network off.
+	// with the network off (where it goes through the proxy).
 	probed = nil
 	probeFunc = func(_ *agent.Manifest, codex, tmBin, cwd, sock, name string, flags []string, _ bool) (string, error) {
 		probed = []string{name}
@@ -314,10 +320,10 @@ func TestLaunch(t *testing.T) {
 	}
 	l, _ = a.Launch(agent.LaunchSpec{Role: agent.RoleThread, Cwd: "/r/wt", RuntimeDir: dir, TMBin: "/bin/tm", Socket: "/run/tm.sock"})
 	if !slices.Contains(l.Argv, `default_permissions="tm"`) || slices.Contains(l.Argv, "features.network_proxy=true") ||
-		!slices.ContainsFunc(l.Argv, func(s string) bool { return strings.Contains(s, "network={enabled=false,") }) {
+		form != NetworkOpen && !slices.ContainsFunc(l.Argv, func(s string) bool { return strings.Contains(s, "network={enabled=false,") }) {
 		t.Errorf("thread argv %q", l.Argv)
 	}
-	if !closedOS(caps.OS) && (len(probed) != 1 || len(l.Warnings) != 1) {
+	if form == NetworkLimited && (len(probed) != 1 || len(l.Warnings) != 1) {
 		t.Errorf("thread probed %q, warnings %q", probed, l.Warnings)
 	}
 	spec.Yolo = true

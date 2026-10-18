@@ -21,8 +21,10 @@ import (
 	"github.com/theclifmeister/terminatr/internal/gittest"
 )
 
-// sandboxArgs picks the profile's -c flags out of a thread's launch.
-func sandboxArgs(t *testing.T, spec agent.LaunchSpec) []string {
+// sandboxArgs picks the profile's -c flags out of a thread's launch, in
+// the network form it starts with here (codex.ThreadNetwork), and says
+// which form.
+func sandboxArgs(t *testing.T, spec agent.LaunchSpec) (string, []string) {
 	t.Helper()
 	m, _ := agent.Builtin("codex")
 	pm, err := agent.ParseManifest(m)
@@ -33,8 +35,7 @@ func sandboxArgs(t *testing.T, spec agent.LaunchSpec) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The network form the Go agent launches here (closed on Windows).
-	argv := codex.ThreadNetwork(l.Argv, runtime.GOOS)
+	form, argv := codex.ThreadNetwork(l.Argv, runtime.GOOS)
 	var out []string
 	for i := 0; i+1 < len(argv); i++ {
 		if argv[i] == "-c" && (strings.HasPrefix(argv[i+1], "permissions=") || strings.HasPrefix(argv[i+1], "default_permissions=") ||
@@ -42,10 +43,10 @@ func sandboxArgs(t *testing.T, spec agent.LaunchSpec) []string {
 			out = append(out, "-c", argv[i+1])
 		}
 	}
-	if len(out) != 6 {
+	if want := map[string]int{codex.NetworkLimited: 6, codex.NetworkOpen: 4, codex.NetworkClosed: 4}[form]; len(out) != want {
 		t.Fatalf("no thread profile in %q", l.Argv)
 	}
-	return out
+	return form, out
 }
 
 func TestSmokeCodexSandbox(t *testing.T) {
@@ -112,14 +113,15 @@ func TestSmokeCodexSandbox(t *testing.T) {
 		NoWrite: []string{proj, filepath.Join(common, "hooks"), filepath.Join(common, "info"),
 			filepath.Join(common, "worktrees", "other")},
 		NoWriteFiles: []string{filepath.Join(common, "config"), filepath.Join(common, "config.lock")}}
-	args := append([]string{"sandbox", "-P", "tm", "-C", wt}, sandboxArgs(t, agent.LaunchSpec{
+	form, flags := sandboxArgs(t, agent.LaunchSpec{
 		Role: agent.RoleThread, SessionID: "s-1", Cwd: wt, RepoRoot: repo,
 		GitDir: filepath.Join(repo, ".git", "worktrees", "wt"), RuntimeDir: run,
 		TMBin: env.Bin, Socket: env.Socket, Access: access,
 		// localhost listed as tm's probe lists it (never a launch's): the
 		// proxy takes it without the internet.
 		Sandbox: agent.SandboxLists{Domains: []string{"example.com", "localhost"}},
-	})...)
+	})
+	args := append([]string{"sandbox", "-P", "tm", "-C", wt}, flags...)
 	// A loopback listener: an address outside the thread's domains,
 	// which its limited network refuses (T574 case 5).
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -181,12 +183,14 @@ func TestSmokeCodexSandbox(t *testing.T) {
 		"outside": "no", "home": "no", "project-read": "ok", "project-write": "no",
 		"socket": "ok", "loopback": "no", "proxy": "ok",
 	}
-	if codex.NoSocket(runtime.GOOS) {
-		// Codex's proxy refuses unix sockets on Linux (and with the
-		// network off it refuses connect): only an open network would
-		// reach tm's socket, which a thread never gets. The proxy still
-		// holds.
-		want["socket"] = "no"
+	switch form {
+	case codex.NetworkOpen:
+		// Linux: today's open form (Codex's Linux sandbox can't allow
+		// tm's socket with its proxy on): the socket and loopback
+		// connect, no proxy.
+		want["loopback"], want["proxy"] = "ok", "no"
+	case codex.NetworkClosed:
+		want["proxy"] = "no"
 	}
 	got := map[string]string{}
 	for _, line := range strings.Split(string(out), "\n") {
