@@ -126,8 +126,17 @@ func TestModUpdate(t *testing.T) {
 	if out := h.ok(human, "mod", "list", "--outdated"); !strings.Contains(out, "→ 0.3.2") {
 		t.Fatalf("outdated: %q", out)
 	}
+	if out := h.ok(human, "mod", "show", "review-age"); !strings.Contains(out, "source:     "+src) || !strings.Contains(out, "installed:  ") || strings.Contains(out, "updated:") {
+		t.Fatalf("show before update: %q", out)
+	}
 	if out := h.ok(human, "mod", "update"); !strings.Contains(out, "updated review-age to 0.3.2") {
 		t.Fatalf("update: %q", out)
+	}
+	if out := h.ok(human, "mod", "show", "review-age"); !strings.Contains(out, "updated:    ") {
+		t.Fatalf("show after update: %q", out)
+	}
+	if out := h.ok(human, "mod", "show", "review-age", "--json"); !strings.Contains(out, `"installed"`) || !strings.Contains(out, `"updated"`) {
+		t.Fatalf("show --json: %q", out)
 	}
 	// One that asks for more needs consent, and then has it granted.
 	more := strings.Replace(modReviewAge, "0.3.1", "0.4.0", 1) + "inbox = true\n"

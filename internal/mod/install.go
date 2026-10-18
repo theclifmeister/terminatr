@@ -190,7 +190,11 @@ func Replace(c caller.Caller, id string, st *Staged, grant []string) error {
 	if err != nil {
 		return err
 	}
-	st.Source.Installed = time.Now().UTC()
+	now := time.Now().UTC()
+	st.Source.Installed, st.Source.Updated = now, now
+	if was, ok := ReadSource(m.Dir); ok && !was.Installed.IsZero() {
+		st.Source.Installed = was.Installed
+	}
 	if err := writeSource(st.Dir, st.Source); err != nil {
 		return err
 	}

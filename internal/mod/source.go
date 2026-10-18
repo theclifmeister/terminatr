@@ -47,8 +47,29 @@ type Source struct {
 	// tell whether the mod's folder changed, not just the repository.
 	Tree string `json:"tree,omitempty"`
 	// Hash is the sha256 of the installed files (TreeHash).
-	Hash      string    `json:"hash,omitempty"`
+	Hash string `json:"hash,omitempty"`
+	// Installed is when the mod was first installed; Updated when
+	// tm mod update last replaced its files (zero if never).
 	Installed time.Time `json:"installed,omitzero"`
+	Updated   time.Time `json:"updated,omitzero"`
+}
+
+// Words says where an installed mod came from, for the Mods tab and tm
+// mod show: its source, the commit, and when it was installed and last
+// updated.
+func (s Source) Words() string {
+	out := "Installed from " + s.String()
+	if len(s.Commit) >= 7 {
+		out += " at commit " + s.Commit[:7]
+	}
+	out += "."
+	if !s.Installed.IsZero() {
+		out += " Installed " + s.Installed.Local().Format("2006-01-02 15:04") + "."
+	}
+	if !s.Updated.IsZero() {
+		out += " Updated " + s.Updated.Local().Format("2006-01-02 15:04") + "."
+	}
+	return out
 }
 
 // String is the source as tm mod install takes it: a GitHub subfolder

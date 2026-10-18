@@ -530,6 +530,9 @@ func TestModsUpdate(t *testing.T) {
 	press(m, ",", "4", "enter")
 	modAct(t, m, src, "y")
 
+	if out := screen(m); !strings.Contains(out, "Installed from "+srcDir) || strings.Contains(out, "Updated 20") {
+		t.Errorf("the installed mod's detail lacks its source, or shows an update:\n%s", out)
+	}
 	modAct(t, m, src, "u")
 	if m.msg != "Review age is up to date" {
 		t.Errorf("u with nothing new: %q", m.msg)
@@ -546,6 +549,9 @@ func TestModsUpdate(t *testing.T) {
 	md := modState(t, src, "review-age")
 	if md.Manifest.Version != "0.4.0" || !md.Granted(mod.PermCommands) || md.State != mod.Enabled {
 		t.Errorf("after y: %s %v %s (%s)", md.Manifest.Version, md.Grants, md.State, m.msg)
+	}
+	if out := screen(m); !strings.Contains(out, "Installed from "+srcDir) || !strings.Contains(out, "Installed 20") || !strings.Contains(out, "Updated 20") {
+		t.Errorf("after the update the detail lacks installed and updated times:\n%s", out)
 	}
 }
 

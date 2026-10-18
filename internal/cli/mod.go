@@ -18,6 +18,7 @@ import (
 )
 
 const modUsage = `usage: tm mod list [--outdated] [--json]
+       tm mod show <id> [--json]
        tm mod install <path | git-url[//subfolder][@tag] | github-tree-url> [--yes]
        tm mod enable <id> [--project <slug>] [--yes]
        tm mod disable <id> [--project <slug>]
@@ -88,7 +89,7 @@ func runMod(e *Env, args []string) error {
 		return err
 	}
 	allowed := map[string][]string{
-		"list": {"json", "outdated"}, "install": {"yes"}, "enable": {"project", "yes"}, "disable": {"project"},
+		"list": {"json", "outdated"}, "show": {"json"}, "install": {"yes"}, "enable": {"project", "yes"}, "disable": {"project"},
 		"remove": {"purge", "yes"}, "update": {"yes"}, "validate": {"json"},
 		"new": {"kind", "dir"}, "dev": {"yes"}, "test": {"json"}, "logs": {"follow", "f", "lines", "n"},
 		"run":      {"project"},
@@ -119,6 +120,12 @@ func runMod(e *Env, args []string) error {
 			return usagef("%s", modUsage)
 		}
 		return e.modList(*outdated, *asJSON)
+	case "show":
+		id, err := one()
+		if err != nil {
+			return err
+		}
+		return e.modShow(id, *asJSON)
 	case "validate":
 		return e.modValidate(pos, *asJSON)
 	case "new":
@@ -230,7 +237,7 @@ var runModCommand = func(p proto.ModCommandParams) error {
 
 // agentMod are the tm mod subcommands an agent may run: they read, or
 // write only in the folder given.
-var agentMod = map[string]bool{"list": true, "validate": true, "new": true, "test": true, "logs": true, "examples": true}
+var agentMod = map[string]bool{"list": true, "show": true, "validate": true, "new": true, "test": true, "logs": true, "examples": true}
 
 // exampleRow is an example mod in tm mod examples --json.
 type exampleRow struct {
@@ -336,10 +343,76 @@ type modRow struct {
 	Projects  []string `json:"projects,omitempty"`
 	Error     string   `json:"error,omitempty"`
 	Source    string   `json:"source,omitempty"`
+	Commit    string   `json:"commit,omitempty"`
+	Installed string   `json:"installed,omitempty"`
+	Updated   string   `json:"updated,omitempty"`
 	Latest    string   `json:"latest,omitempty"`
 	Behind    bool     `json:"behind,omitempty"`
 	// Builtin: it ships in tm (a bundled mod); it updates with tm.
 	Builtin bool `json:"builtin,omitempty"`
+}
+
+// setSource fills the row's fields from where the mod came from.
+func (r *modRow) setSource(src mod.Source) {
+	r.Source, r.Commit = src.String(), src.Commit
+	if !src.Installed.IsZero() {
+		r.Installed = src.Installed.UTC().Format(time.RFC3339)
+	}
+	if !src.Updated.IsZero() {
+		r.Updated = src.Updated.UTC().Format(time.RFC3339)
+	}
+}
+
+// modShow prints one installed mod: what it is and where it came from.
+func (e *Env) modShow(id string, asJSON bool) error {
+	r, err := registry()
+	if err != nil {
+		return err
+	}
+	m, ok := r.Get(id)
+	if !ok {
+		return &project.Error{Code: "no-mod", Msg: "no mod " + id + ": tm mod list shows the installed ones"}
+	}
+	row := modRow{ID: m.ID, State: string(m.State), Kinds: []string{}, Grants: m.Grants, WantsMore: m.WantsMore, Projects: m.Projects, Error: m.Reason(), Builtin: m.Builtin}
+	if row.Grants == nil {
+		row.Grants = []string{}
+	}
+	if m.Manifest != nil {
+		row.Name, row.Version, row.Kinds = mod.Clean(m.Manifest.Name, false), m.Manifest.Version, m.Manifest.Kinds()
+	}
+	src, hasSrc := mod.ReadSource(m.Dir)
+	if hasSrc {
+		row.setSource(src)
+	}
+	if asJSON {
+		return e.printJSON(row)
+	}
+	fmt.Fprintf(e.Stdout, "%s %s\n", m.ID, cmp.Or(row.Version, "-"))
+	if row.Name != "" {
+		fmt.Fprintf(e.Stdout, "name:       %s\n", row.Name)
+	}
+	fmt.Fprintf(e.Stdout, "state:      %s\n", m.Status())
+	if len(row.Kinds) > 0 {
+		fmt.Fprintf(e.Stdout, "kinds:      %s\n", strings.Join(row.Kinds, " · "))
+	}
+	switch {
+	case m.Builtin:
+		fmt.Fprintln(e.Stdout, "source:     built into tm (updates with tm)")
+	case !hasSrc:
+		fmt.Fprintln(e.Stdout, "source:     none recorded (installed by hand, or by tm mod dev)")
+	default:
+		fmt.Fprintf(e.Stdout, "source:     %s\n", mod.Clean(row.Source, false))
+		if row.Commit != "" {
+			fmt.Fprintf(e.Stdout, "commit:     %s\n", row.Commit)
+		}
+		if row.Installed != "" {
+			fmt.Fprintf(e.Stdout, "installed:  %s\n", row.Installed)
+		}
+		if row.Updated != "" {
+			fmt.Fprintf(e.Stdout, "updated:    %s\n", row.Updated)
+		}
+	}
+	return nil
 }
 
 func (e *Env) modList(outdated, asJSON bool) error {
@@ -358,7 +431,7 @@ func (e *Env) modList(outdated, asJSON bool) error {
 		}
 		src, hasSrc := mod.ReadSource(m.Dir)
 		if hasSrc {
-			row.Source = src.String()
+			row.setSource(src)
 		}
 		if outdated {
 			if !hasSrc {

@@ -264,6 +264,13 @@ func modAbout(m *dash, md mod.Mod, w int) []string {
 	if len(md.Projects) > 0 {
 		out = append(out, faintLines("Runs only for "+joinAnd(md.Projects)+".", w)...)
 	}
+	if !md.Builtin {
+		if src, ok := mod.ReadSource(md.Dir); ok {
+			out = append(out, faintLines(oneLine(mod.Clean(src.Words(), false)), w)...)
+		} else {
+			out = append(out, faintLines("Records no source: installed by hand, or by tm mod dev.", w)...)
+		}
+	}
 	if md.Builtin {
 		about := "Built into tm, and tm's defaults are drawn from it: copy its folder from terminatr's internal/mod/bundled to start your own."
 		if md.Required {
