@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/update"
@@ -75,13 +76,14 @@ func (s Source) Words() string {
 // String is the source as tm mod install takes it: a GitHub subfolder
 // at a ref as its tree URL, any other as <git-url>[//<subdir>][@<ref>].
 func (s Source) String() string {
+	git := RedactURL(s.Git)
 	switch {
 	case s.Path != "":
 		return s.Path
 	case s.Subdir != "" && s.Ref != "" && githubRepoRE.MatchString(s.Git) && !strings.Contains(s.Ref, "/"):
-		return s.Git + "/tree/" + s.Ref + "/" + s.Subdir
+		return git + "/tree/" + s.Ref + "/" + s.Subdir
 	}
-	out := s.Git
+	out := git
 	if s.Subdir != "" {
 		out += "//" + s.Subdir
 	}
@@ -102,6 +104,80 @@ var (
 	// segRE is one name in a subfolder's path.
 	segRE = regexp.MustCompile(`^[A-Za-z0-9._+-]+$`)
 )
+
+// ErrNotPublic refuses a git URL that is not a public https one: SSH
+// (ssh:// or user@host:path), or a user, password or token in the URL.
+// Mods install over https from public URLs only; a record of a URL with
+// a secret would keep it where the Mods tab and agents can read it.
+var ErrNotPublic = errors.New("mods install from public URLs only: use an https:// URL with no user, password or token in it (SSH and private repositories can't be installed)")
+
+// urlUserinfo splits the userinfo out of a URL with a scheme://
+// authority (https://, ssh://), and says whether it had any. Extra
+// slashes or backslashes after :// are skipped as curl skips them, so
+// https:///user:TOKEN@host/x has the userinfo user:TOKEN. The scp form
+// user@host:path has none in this sense: it can't carry a password.
+func urlUserinfo(u string) (before, userinfo, after string, ok bool) {
+	i := strings.Index(u, "://")
+	if i < 0 || strings.HasPrefix(u, "file://") {
+		return "", "", "", false
+	}
+	rest := strings.TrimLeft(u[i+3:], `/\`)
+	end := strings.IndexAny(rest, `/\?#`)
+	if end < 0 {
+		end = len(rest)
+	}
+	at := strings.LastIndex(rest[:end], "@")
+	if at < 0 {
+		return "", "", "", false
+	}
+	return u[:i+3], rest[:at], rest[at+1:], true
+}
+
+// HasCredentials says whether git URL u carries userinfo.
+func HasCredentials(u string) bool {
+	_, _, _, ok := urlUserinfo(u)
+	return ok
+}
+
+// IsSSH says whether git URL u goes over SSH: ssh:// or the scp form.
+func IsSSH(u string) bool { return strings.HasPrefix(u, "ssh://") || scpRE.MatchString(u) }
+
+// NotPublic says whether git URL u is anything but a plain public
+// https:// URL (or file://): SSH, userinfo, and the oddities that make
+// git or curl read a URL differently than it looks: an empty or
+// slash-led host, a backslash, whitespace or a control character.
+func NotPublic(u string) bool {
+	switch {
+	case HasCredentials(u) || IsSSH(u):
+		return true
+	case strings.HasPrefix(u, "file://"):
+		return false
+	case !strings.HasPrefix(u, "https://"):
+		return true
+	}
+	host := u[len("https://"):]
+	if host == "" || host[0] == '/' || host[0] == '?' || host[0] == '#' {
+		return true
+	}
+	if strings.ContainsAny(u, "?#") {
+		// A query or fragment is where tokens go (?token=x).
+		return true
+	}
+	for _, r := range u {
+		if r == '\\' || r <= ' ' || r == 0x7f || unicode.IsSpace(r) || unicode.IsControl(r) {
+			return true
+		}
+	}
+	return false
+}
+
+// RedactURL is u with any userinfo replaced by ***, for showing.
+func RedactURL(u string) string {
+	if before, _, after, ok := urlUserinfo(u); ok {
+		return before + "***@" + after
+	}
+	return u
+}
 
 // CheckSubdir checks p, a mod's folder in a git repository, as a slash
 // path that stays inside the repository and names no git internals: no
@@ -134,6 +210,9 @@ func CheckSubdir(p string) error {
 // with an optional //<path> (the mod's folder in the repository) and
 // an optional @<ref> after it.
 func parseGit(arg string) (Source, error) {
+	if NotPublic(arg) && !strings.HasPrefix(arg, "file://") {
+		return Source{}, ErrNotPublic
+	}
 	if m := githubTreeRE.FindStringSubmatch(arg); m != nil {
 		if m[2] == "blob" {
 			return Source{}, fmt.Errorf("%s is a file: give its folder's /tree/ URL", arg)
@@ -197,7 +276,7 @@ func ParseSource(arg, cwd string) (Source, error) {
 	case arg == "" || strings.HasPrefix(arg, "-"):
 		return Source{}, fmt.Errorf("%q is neither a folder nor a git URL", arg)
 	case strings.HasPrefix(arg, "http://"), strings.HasPrefix(arg, "git://"):
-		return Source{}, fmt.Errorf("%s: use https:// or ssh://, which check whom they talk to", arg)
+		return Source{}, fmt.Errorf("%s: use https://, which checks whom it talks to", arg)
 	case strings.HasPrefix(arg, "https://"), strings.HasPrefix(arg, "ssh://"), strings.HasPrefix(arg, "file://"), scpRE.MatchString(arg):
 		return parseGit(arg)
 	}
@@ -211,7 +290,7 @@ func ParseSource(arg, cwd string) (Source, error) {
 	}
 	fi, err := os.Stat(p)
 	if err != nil {
-		return Source{}, fmt.Errorf("%s: no such folder, and not a git URL (https://, ssh://, file:// or user@host:path)", arg)
+		return Source{}, fmt.Errorf("%s: no such folder, and not a git URL (https:// or file://)", arg)
 	}
 	if !fi.IsDir() {
 		return Source{}, fmt.Errorf("%s isn't a folder", arg)
@@ -230,7 +309,40 @@ func ReadSource(dir string) (Source, bool) {
 	if json.Unmarshal(data, &s) != nil || s.Path == "" && s.Git == "" {
 		return Source{}, false
 	}
+	if red := RedactURL(s.Git); red != s.Git {
+		// A secret from before tm refused them: don't leave it on disk.
+		s.Git = red
+		_ = writeSourceAtomic(dir, s)
+	}
 	return s, true
+}
+
+// writeSourceAtomic replaces the record through a temp file and a
+// rename, so a secret isn't overwritten in place (and a crash leaves
+// the old or the new record whole).
+func writeSourceAtomic(dir string, s Source) error {
+	data, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, ".tm-source-")
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(append(data, '\n'))
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(f.Name(), 0o644)
+	}
+	if err == nil {
+		err = os.Rename(f.Name(), filepath.Join(dir, SourceFile))
+	}
+	if err != nil {
+		os.Remove(f.Name())
+	}
+	return err
 }
 
 func writeSource(dir string, s Source) error {
@@ -456,8 +568,43 @@ const gitTimeout = 2 * time.Minute
 // git runs git with args, never asking for a password and refusing
 // transports that run commands (gitx), and returns its output.
 func git(dir string, args ...string) (string, error) {
-	return gitx.Run(context.Background(), dir, gitx.Opts{Timeout: gitTimeout, Env: []string{"GIT_ASKPASS=", "SSH_ASKPASS="}}, args...)
+	// No credential helper (an empty value resets the list, the
+	// system's and the user's included), no prompt: a private repository
+	// fails instead of using the user's stored logins.
+	//
+	// Nor does it read the user's or the system's git config (an
+	// insteadOf could turn a public URL into a credentialed or SSH one,
+	// http.extraHeader and the cookie and client certificate settings
+	// would send secrets), nor ~/.netrc, which curl reads from HOME:
+	// HOME is an empty folder for the run.
+	home, err := os.MkdirTemp("", "tm-mod-git-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(home)
+	return gitx.Run(context.Background(), dir, gitx.Opts{Timeout: gitTimeout, Env: gitEnv(home), Unset: gitUnset}, args...)
 }
+
+// gitEnv is the environment that keeps git from using the user's
+// credentials and settings, with home an empty folder.
+func gitEnv(home string) []string {
+	env := []string{
+		"HOME=" + home, "USERPROFILE=" + home, "XDG_CONFIG_HOME=" + home,
+		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=" + os.DevNull, "GIT_CONFIG_SYSTEM=" + os.DevNull,
+		"NETRC=" + os.DevNull,
+	}
+	// Only the helper is reset: the config files are shut out above,
+	// and an empty http.sslCert or http.proxyAuthMethod breaks https.
+	env = append(env, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=credential.helper", "GIT_CONFIG_VALUE_0=",
+		"GIT_ALLOW_PROTOCOL=https:file", "GIT_ASKPASS=", "SSH_ASKPASS=")
+	return env
+}
+
+// gitUnset are the variables of tm's own environment that would change
+// what git sends or trusts: settings given on a wrapper's command line,
+// SSH, TLS overrides.
+var gitUnset = []string{"GIT_CONFIG_PARAMETERS", "GIT_SSH_COMMAND", "GIT_SSH", "SSH_AUTH_SOCK",
+	"GIT_SSL_NO_VERIFY", "GIT_SSL_CAINFO", "GIT_SSL_CAPATH", "GIT_SSL_CERT", "GIT_SSL_KEY"}
 
 // clone fetches url at ref ("" the default branch) into dir, shallow,
 // and returns the commit. With sub, a folder CheckSubdir accepted, the
@@ -631,6 +778,8 @@ func Latest(s Source) (next string, behind bool, err error) {
 		return "changed", true, nil
 	case s.Git == "":
 		return "", false, errors.New("no source recorded")
+	case s.Git != "" && NotPublic(s.Git):
+		return "", false, recordNotPublic(s)
 	case isVersionTag(s.Ref):
 		tag, err := newestTag(s.Git, s.Ref)
 		if err != nil || tag == "" {
@@ -680,6 +829,9 @@ func subdirChanged(s Source, ref string) (bool, error) {
 // version tag moves on to the newest one; a folder, branch or other tag
 // is fetched again as it is.
 func Next(s Source) (Source, error) {
+	if s.Git != "" && NotPublic(s.Git) {
+		return Source{}, recordNotPublic(s)
+	}
 	next := Source{Path: s.Path, Git: s.Git, Ref: s.Ref, Subdir: s.Subdir}
 	if s.Git != "" && isVersionTag(s.Ref) {
 		tag, err := newestTag(s.Git, s.Ref)
@@ -698,4 +850,10 @@ func shortCommit(c string) string {
 		return c[:12]
 	}
 	return c
+}
+
+// recordNotPublic is the refusal of a recorded source tm no longer
+// fetches (installed over SSH, or with credentials in the URL).
+func recordNotPublic(s Source) error {
+	return fmt.Errorf("%s: this source isn't a public https URL, which is all tm fetches from now: remove the mod and install it again from an https:// URL", s)
 }

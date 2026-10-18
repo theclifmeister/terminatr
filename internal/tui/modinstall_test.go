@@ -180,7 +180,7 @@ func TestModsInstallRefused(t *testing.T) {
 		arg   func(t *testing.T) string
 		wants string
 	}{
-		{"bad url", func(*testing.T) string { return "http://example.com/mod.git" }, "use https:// or ssh://"},
+		{"bad url", func(*testing.T) string { return "http://example.com/mod.git" }, "use https://"},
 		{"no folder", func(*testing.T) string { return "/no/such/folder" }, "no such folder, and not a git URL"},
 		{"refused path", func(*testing.T) string { return "https://example.com/r.git//a/../../etc" }, ".. isn't allowed"},
 		{"too big", func(t *testing.T) string { return modFolder(t, big) }, "more than 2000 files"},

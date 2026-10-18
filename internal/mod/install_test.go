@@ -72,11 +72,8 @@ func TestParseSource(t *testing.T) {
 	for _, c := range []struct{ arg, git, ref, path string }{
 		{arg: "https://github.com/ada/tm-nord", git: "https://github.com/ada/tm-nord"},
 		{arg: "https://github.com/ada/tm-nord.git@v0.4.0", git: "https://github.com/ada/tm-nord.git", ref: "v0.4.0"},
-		{arg: "https://ada@example.com/tm-nord", git: "https://ada@example.com/tm-nord"},
-		{arg: "git@github.com:ada/tm-nord.git", git: "git@github.com:ada/tm-nord.git"},
-		{arg: "git@github.com:ada/tm-nord.git@main", git: "git@github.com:ada/tm-nord.git", ref: "main"},
 		// An @ before the last slash is part of the path.
-		{arg: "ssh://git@example.com/x@release/1", git: "ssh://git@example.com/x@release/1"},
+		{arg: "https://example.com/x@y/z", git: "https://example.com/x@y/z"},
 		{arg: "nord", path: filepath.Join(dir, "nord")},
 	} {
 		s, err := ParseSource(c.arg, dir)
@@ -88,6 +85,145 @@ func TestParseSource(t *testing.T) {
 		if _, err := ParseSource(bad, dir); err == nil {
 			t.Errorf("%q: no error", bad)
 		}
+	}
+}
+
+func TestSourceCredentials(t *testing.T) {
+	for _, bad := range []string{
+		"https://ada@example.com/tm-nord",
+		"https://ada:s3cret@example.com/tm-nord@v1",
+		"https://ghp_TOKEN@github.com/ada/tm-nord//mods/x",
+		"https://github.com/ada/tm-nord", // control: below
+		"ssh://git@example.com/x",
+		"https:///user:TOKEN@github.com/ada/mods",
+		"https:////user:TOKEN@github.com/ada/mods",
+		`https://\user:TOKEN@github.com/ada/mods`,
+		`https://github.com\@evil.com/x`,
+		"https://",
+		"https://github.com/ada/mods?token=x",
+		"https://github.com/ada/mods#frag",
+		"https:///github.com/ada/mods",
+		"https://github.com/ada/mods x",
+		"https://github.com/ada/mo\tds",
+		"https://github.com/ada/\x00mods",
+		"ssh://example.com/x",
+		"git@github.com:ada/tm-nord.git",
+		"ada@example.com:mods.git//nord@v1",
+		"https://:tok@example.com/x",
+	} {
+		_, err := ParseSource(bad, "")
+		if bad == "https://github.com/ada/tm-nord" {
+			if err != nil {
+				t.Errorf("%s: %v", bad, err)
+			}
+			continue
+		}
+		if !errors.Is(err, ErrNotPublic) {
+			t.Errorf("%s: err %v, want ErrNotPublic", bad, err)
+		}
+	}
+	// A record installed over SSH is shown as is and never fetched.
+	ssh := Source{Git: "git@example.com:ada/mods.git", Ref: "v1"}
+	if ssh.String() != "git@example.com:ada/mods.git@v1" {
+		t.Errorf("ssh record shown as %s", ssh.String())
+	}
+	if _, err := Fetch(ssh); !errors.Is(err, ErrNotPublic) {
+		t.Errorf("Fetch ssh: %v", err)
+	}
+	if _, err := Next(ssh); err == nil {
+		t.Error("Next ssh: no error")
+	}
+	if _, _, err := Latest(ssh); err == nil {
+		t.Error("Latest ssh: no error")
+	}
+	// A record from before: shown redacted, never fetched.
+	s := Source{Git: "https://ada:s3cret@example.com/tm-nord", Ref: "v1", Subdir: "m", Commit: "abcdef1234"}
+	for _, out := range []string{s.String(), s.Words()} {
+		if strings.Contains(out, "s3cret") || strings.Contains(out, "ada") || !strings.Contains(out, "***@example.com") {
+			t.Errorf("not redacted: %s", out)
+		}
+	}
+	if _, err := Fetch(s); !errors.Is(err, ErrNotPublic) {
+		t.Errorf("Fetch: %v", err)
+	}
+	if _, err := Next(s); err == nil || strings.Contains(err.Error(), "s3cret") {
+		t.Errorf("Next: %v", err)
+	}
+	if _, _, err := Latest(s); err == nil || strings.Contains(err.Error(), "s3cret") {
+		t.Errorf("Latest: %v", err)
+	}
+}
+
+func TestSourceRedactsOnDisk(t *testing.T) {
+	dir := t.TempDir()
+	rec := Source{Git: "https:///ada:s3cret@example.com/tm-nord", Commit: "abcdef1234"}
+	if err := writeSource(dir, rec); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := ReadSource(dir)
+	if !ok || strings.Contains(got.Git, "s3cret") {
+		t.Fatalf("read %+v %v", got, ok)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, SourceFile))
+	if strings.Contains(string(data), "s3cret") || strings.Contains(string(data), "ada") {
+		t.Errorf("secret still on disk: %s", data)
+	}
+	if _, err := Fetch(got); !errors.Is(err, ErrNotPublic) {
+		t.Errorf("redacted record fetched: %v", err)
+	}
+}
+
+func TestGitIgnoresUserConfig(t *testing.T) {
+	home := t.TempDir()
+	cfg := filepath.Join(home, "gitconfig")
+	os.WriteFile(cfg, []byte("[url \"https://secret.example/\"]\n\tinsteadOf = https://public.example/\n[http]\n\textraHeader = X-Token: abc\n"), 0o644)
+	os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[url \"https://secret.example/\"]\n\tinsteadOf = https://public.example/\n"), 0o644)
+	t.Setenv("HOME", home)
+	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
+	t.Setenv("GIT_CONFIG_SYSTEM", cfg)
+	out, err := git("", "ls-remote", "--get-url", "https://public.example/x")
+	if err != nil || out != "https://public.example/x" {
+		t.Errorf("config applied: %q %v", out, err)
+	}
+	if out, _ := git("", "config", "--get-all", "http.extraHeader"); out != "" {
+		t.Errorf("extraHeader set: %q", out)
+	}
+	if out, _ := git("", "config", "--get", "credential.helper"); out != "" {
+		t.Errorf("helper set: %q", out)
+	}
+}
+
+// The env that shuts out user config must still let git talk https.
+func TestGitEnvHTTPS(t *testing.T) {
+	t.Setenv("GIT_SSL_NO_VERIFY", "1")
+	t.Setenv("GIT_CONFIG_PARAMETERS", "'http.extraHeader=X-Token: abc'")
+	t.Setenv("GIT_SSH_COMMAND", "false")
+	_, err := git("", "ls-remote", "--", "https://127.0.0.1:1/x.git")
+	if err == nil {
+		t.Fatal("ls-remote of a closed port worked")
+	}
+	for _, bad := range []string{"credential missing host", "unsupported proxy", "usage", "not allowed"} {
+		if strings.Contains(err.Error(), bad) {
+			t.Errorf("https setup broken: %v", err)
+		}
+	}
+	if out, err := git("", "config", "--get", "http.extraHeader"); out != "" {
+		t.Errorf("wrapper config leaked: %q %v", out, err)
+	}
+	// A local file:// repository still clones under it.
+	repo := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	run("init", "-q")
+	os.WriteFile(filepath.Join(repo, "f"), []byte("x"), 0o644)
+	run("add", "f")
+	run("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "m")
+	if _, _, err := clone("file://"+repo, "", "", filepath.Join(t.TempDir(), "c")); err != nil {
+		t.Errorf("file clone: %v", err)
 	}
 }
 
@@ -103,8 +239,6 @@ func TestParseSourceSubdir(t *testing.T) {
 		{arg: "https://github.com/ada/mods//nord@v0.4.0", git: "https://github.com/ada/mods", ref: "v0.4.0", sub: "nord",
 			str: "https://github.com/ada/mods/tree/v0.4.0/nord"},
 		{arg: "https://example.com/ada/mods.git//themes/nord@main", git: "https://example.com/ada/mods.git", ref: "main", sub: "themes/nord"},
-		{arg: "ssh://git@example.com/mods.git//nord@v1", git: "ssh://git@example.com/mods.git", ref: "v1", sub: "nord"},
-		{arg: "git@example.com:ada/mods.git//nord@v1", git: "git@example.com:ada/mods.git", ref: "v1", sub: "nord"},
 		{arg: "file:///srv/mods//nord", git: "file:///srv/mods", sub: "nord"},
 		{arg: "file:///srv/mods", git: "file:///srv/mods"},
 	} {

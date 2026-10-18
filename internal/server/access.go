@@ -17,9 +17,9 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/worktree"
 )
 
 // accessInput is what a session's rules are worked out for: its role,
@@ -27,14 +27,17 @@ import (
 // of its record (tm thread start reads them from config.toml).
 type accessInput struct {
 	role, slug, cwd, agent, goos string
-	yolo, noEscapes              bool
+	// tree is a thread's checkout by its record (threadTree), whose git
+	// dirs it is granted; nil for none.
+	tree            *gitx.Tree
+	yolo, noEscapes bool
 }
 
 // resolveAccess is the rules of a session of in, with config.toml as lc.
 // It fails only where accessFor does.
 func (s *Server) resolveAccess(in accessInput, lc launchConfig) (proto.AccessSet, error) {
 	set := proto.AccessSet{Project: in.slug, Role: in.role, Agent: in.agent, OS: in.goos, Rules: []proto.AccessRule{}}
-	a, err := s.accessFor(in.role, in.slug, in.cwd, lc)
+	a, err := s.accessFor(in.role, in.slug, in.tree, lc)
 	if err != nil {
 		return set, err
 	}
@@ -102,7 +105,13 @@ func (s *Server) fileRules(in accessInput, a agent.Access, lc launchConfig) []pr
 	if in.slug == "" || in.role == proto.RoleShell {
 		return nil
 	}
-	note := s.pathNotes(in)
+	// The repo whose git dir a thread's commits write in: accessFor
+	// grants it on the same condition (threadGitAccess).
+	var repo, common string
+	if in.tree != nil {
+		repo, common = repoRoot(in.tree.CommonDir), in.tree.CommonDir
+	}
+	note := s.pathNotes(in.slug, repo, common)
 	var out []proto.AccessRule
 	rule := func(where, kind string) func(string) {
 		return func(v string) {
@@ -116,10 +125,13 @@ func (s *Server) fileRules(in accessInput, a agent.Access, lc launchConfig) []pr
 			what = "the thread's worktree"
 		}
 		out = append(out, proto.AccessRule{Where: proto.AccessInside, Kind: proto.AccessWorktree, Value: in.cwd, Source: proto.AccessFromTM, Note: what})
+		if in.role == proto.RoleThread && repo != "" {
+			out = append(out, gitDirRule(repo))
+		}
 	case in.role == proto.RoleThread:
-		// A thread to come: its worktree and git dirs aren't known yet.
+		// A thread to come: its worktree and repo aren't known yet.
 		out = append(out, proto.AccessRule{Where: proto.AccessInside, Kind: proto.AccessWorktree, Value: "<worktree>", Source: proto.AccessFromTM, Note: "the thread's worktree"},
-			proto.AccessRule{Where: proto.AccessInside, Kind: proto.AccessWrite, Value: "<repo>/.git: objects, refs, logs, packed-refs, its own git dir", Source: proto.AccessFromTM, Note: "the repo's git dir; never hooks, info, config or other worktrees'"})
+			gitDirRule("<its repo>"))
 	}
 	for _, l := range []struct {
 		kind  string
@@ -141,18 +153,23 @@ func (s *Server) fileRules(in accessInput, a agent.Access, lc launchConfig) []pr
 	return out
 }
 
-// pathNotes says what a path of in's access is: the project folder,
-// config.toml, a part of the project folder only tm writes, or the
-// repo's git dir.
-func (s *Server) pathNotes(in accessInput) func(string) string {
-	var dir, common string
-	if d, err := project.Dir(in.slug); err == nil {
+// gitDirRule is the git-dir grant (T551) as one rule naming repo, the
+// repo whose git dir a thread's commits and pushes write in; shown only:
+// the launch takes the paths it opens and closes from their own rules.
+func gitDirRule(repo string) proto.AccessRule {
+	return proto.AccessRule{Where: proto.AccessInside, Kind: proto.AccessGitDir, Value: repo, Source: proto.AccessFromTM,
+		Note: "git-dir grant: objects, refs, logs, packed-refs and its own git dir; never hooks, info, modules, config files or other worktrees'"}
+}
+
+// pathNotes says what a path of project slug's access is: the project
+// folder, config.toml, a part of the project folder only tm writes, or
+// a path of the git-dir grant of repo, whose git dir is common.
+func (s *Server) pathNotes(slug, repo, common string) func(string) string {
+	var dir string
+	if d, err := project.Dir(slug); err == nil {
 		dir = realPath(d)
 	}
 	cfg := filepath.Join(realPath(s.opts.Paths.Home), "config.toml")
-	if d, err := worktree.GitDirs(in.cwd); in.cwd != "" && err == nil {
-		common = realPath(d.CommonDir)
-	}
 	return func(p string) string {
 		switch {
 		case p == dir:
@@ -162,7 +179,7 @@ func (s *Server) pathNotes(in accessInput) func(string) string {
 		case dir != "" && strings.HasPrefix(p, dir+string(filepath.Separator)):
 			return "project folder: only tm writes it"
 		case common != "" && (p == common || strings.HasPrefix(p, common+string(filepath.Separator))):
-			return "the repo's git dir"
+			return "git-dir grant: " + repo
 		}
 		return ""
 	}
@@ -339,7 +356,9 @@ func launched(r proto.AccessRule) bool {
 func launchAccess(set proto.AccessSet) agent.Access {
 	var a agent.Access
 	for _, r := range set.Rules {
-		if !launched(r) {
+		// A path rule launches only with an absolute path: never a
+		// placeholder of a thread to come (<worktree>, <its repo>).
+		if !launched(r) || r.Kind != proto.AccessCommand && !filepath.IsAbs(r.Value) {
 			continue
 		}
 		switch r.Kind {

@@ -21,6 +21,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/emu"
+	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -128,9 +129,9 @@ func (s *Server) ownWorktree(dir string) bool {
 }
 
 // accessFor is the role's file access policy (docs/SPEC.md §5.2), with
-// the settings in lc. A session outside a project gets no grants and no
-// restrictions.
-func (s *Server) accessFor(role, slug, cwd string, lc launchConfig) (agent.Access, error) {
+// the settings in lc; tree is a thread's checkout (threadTree), nil for
+// none. A session outside a project gets no grants and no restrictions.
+func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) (agent.Access, error) {
 	if slug == "" || role == proto.RoleShell {
 		return agent.Access{}, nil
 	}
@@ -160,10 +161,10 @@ func (s *Server) accessFor(role, slug, cwd string, lc launchConfig) (agent.Acces
 		return a, nil
 	case proto.RoleThread:
 		a := agent.Access{Read: []string{dir}, NoWrite: []string{dir}, NoWriteFiles: []string{cfg}}
-		// No cwd: a project's thread to come (access.show), whose git
-		// dirs aren't known yet.
-		if d, err := worktree.GitDirs(cwd); cwd != "" && err == nil {
-			g := threadGitAccess(realPath(d.CommonDir), realPath(d.GitDir))
+		// No tree: a thread to come (access.show), whose git dirs aren't
+		// known yet, or one whose folder isn't its recorded checkout.
+		if tree != nil {
+			g := threadGitAccess(tree.CommonDir, tree.GitDir)
 			a.Write, a.WriteFiles = g.Write, g.WriteFiles
 			a.NoWrite = append(a.NoWrite, g.NoWrite...)
 			a.NoWriteFiles = append(a.NoWriteFiles, g.NoWriteFiles...)
@@ -219,9 +220,13 @@ func ownConfig(own string) []string {
 }
 
 // gitConfig are what git runs or reads as configuration in git dir
-// common: its hooks and info folders and its config file.
+// common: its hooks and info folders, its submodules' git dirs (modules,
+// with their own config and hooks), its config file, and the main
+// checkout's own config.worktree and commondir (ownConfig), which a
+// main checkout's cwd covers.
 func gitConfig(common string) (dirs, files []string) {
-	return []string{filepath.Join(common, "hooks"), filepath.Join(common, "info")}, []string{filepath.Join(common, "config")}
+	return []string{filepath.Join(common, "hooks"), filepath.Join(common, "info"), filepath.Join(common, "modules")},
+		append([]string{filepath.Join(common, "config")}, ownConfig(common)...)
 }
 
 // mergeCommands are the commands the opt-in coordinator_merges setting
@@ -606,7 +611,8 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 	lc := loadLaunchConfig()
 	// Its access as rules (access.go), which the launch's settings come
 	// from and the thread's launch record keeps.
-	acc, err := s.resolveAccess(accessInput{role: r.Role, slug: r.Project, cwd: r.Cwd, agent: r.Agent, goos: caps.OS,
+	tree := threadTree(r)
+	acc, err := s.resolveAccess(accessInput{role: r.Role, slug: r.Project, cwd: r.Cwd, tree: tree, agent: r.Agent, goos: caps.OS,
 		yolo: r.Yolo, noEscapes: r.NoSandboxEscapes}, lc)
 	if err != nil {
 		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
@@ -621,7 +627,9 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		}
 	}
 	var repo worktree.Dirs // empty outside a git repo
-	if d, err := worktree.GitDirs(r.Cwd); err == nil {
+	if tree != nil {
+		repo = worktree.Dirs{GitDir: tree.GitDir, CommonDir: tree.CommonDir, RepoRoot: repoRoot(tree.CommonDir)}
+	} else if d, err := worktree.GitDirs(r.Cwd); err == nil && r.Role != proto.RoleThread {
 		repo = worktree.Dirs{GitDir: realPath(d.GitDir), CommonDir: realPath(d.CommonDir), RepoRoot: realPath(d.RepoRoot)}
 	}
 	// No session of this id runs (a new id, a resume, a relaunch after
