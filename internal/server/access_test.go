@@ -16,54 +16,55 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
-// legacySandbox is launchConfig.sandbox as tm 0.37.0 had it, before
-// the rules (T578): the oracle the resolver's launch settings must equal.
-// sandbox is project slug's sandbox lists and presets for its threads on
-// platform goos (docs/SPEC.md §5.2), the presets on that apply there, and
-// a note for each setting that doesn't, which the launch skips:
-// config.toml keeps it. A config.toml that doesn't load, or an entry
-// that fails the sandbox checks, opens nothing (fails closed) and gives
-// one note saying why, for the log and the launch's warnings.
-func legacySandbox(l launchConfig, slug, goos string) (lists agent.SandboxLists, presets, skipped []string) {
-	err := l.err
-	var t config.ThreadSandbox
-	if err == nil {
-		t, err = l.cfg.ThreadSandbox(slug)
+// wantSandbox is what a thread's launch gets from config.ThreadSandbox,
+// worked out apart from the rules: the oracle the resolver's launch
+// settings must equal. Each list's entries given where it applies,
+// local ports when on; a note per kind that doesn't apply, and per
+// entry refused.
+func wantSandbox(l launchConfig, slug, goos string) (lists agent.SandboxLists, guides, skipped []string) {
+	if l.err != nil {
+		return lists, nil, []string{fmt.Sprintf("project %s: sandbox rules left out, the thread starts without them (fix config.toml: tm settings, Access tab): %v", slug, l.err)}
 	}
-	if err != nil {
-		return lists, nil, []string{fmt.Sprintf("project %s: sandbox lists and presets dropped, the thread starts without them (fix or remove the entry: tm settings, Access tab): %v", slug, err)}
-	}
+	t := l.cfg.ThreadSandbox(slug)
+	kind := map[string]string{config.SandboxHosts: "host", config.SandboxGuides: "guide", config.SandboxExcluded: "excluded", config.SandboxAllow: "allow"}
+	words := map[string]string{config.SandboxHosts: "hosts", config.SandboxGuides: "guidance texts", config.SandboxExcluded: "excluded commands", config.SandboxAllow: "allow rules"}
+	said := map[string]bool{}
 	skip := func(key, what string) bool {
 		if config.SandboxApplies(key, goos) {
 			return false
 		}
-		skipped = append(skipped, fmt.Sprintf("sandbox %s is set but doesn't apply on %s: skipped", what, config.OSName(goos)))
+		if !said[key] {
+			said[key] = true
+			skipped = append(skipped, fmt.Sprintf("sandbox %s skipped: doesn't apply on %s", what, config.OSName(goos)))
+		}
 		return true
 	}
-	if len(t.ExcludedCommands) > 0 && !skip(config.SandboxExcluded, "excluded commands") {
-		lists.Excluded = t.ExcludedCommands
-	}
-	if len(t.Allow) > 0 && !skip(config.SandboxAllow, "allow rules") {
-		lists.Allow = t.Allow
-	}
-	for _, k := range t.Presets {
-		if skip(k, "preset "+strings.ReplaceAll(k, "_", " ")) {
-			continue
-		}
-		presets = append(presets, k)
-		switch k {
-		case config.SandboxDownloads:
-			lists.Domains = config.BrowserDomains
-		case config.SandboxDevServers:
-			lists.LocalBinding = true
+	for _, r := range t.Rules {
+		switch {
+		case r.Dropped:
+		case r.Refused != "":
+			skipped = append(skipped, fmt.Sprintf("sandbox %s %q refused, the thread starts without it: %s", kind[r.Key], r.Value, r.Refused))
+		case skip(r.Key, words[r.Key]):
+		case r.Key == config.SandboxHosts:
+			lists.Domains = append(lists.Domains, r.Value)
+		case r.Key == config.SandboxGuides:
+			guides = append(guides, r.Value)
+		case r.Key == config.SandboxExcluded:
+			lists.Excluded = append(lists.Excluded, r.Value)
+		case r.Key == config.SandboxAllow:
+			lists.Allow = append(lists.Allow, r.Value)
 		}
 	}
-	return lists, presets, skipped
+	if t.LocalPortsSet && !skip(config.SandboxLocalPorts, "local ports") {
+		lists.LocalBinding = t.LocalPorts
+	}
+	return lists, guides, skipped
 }
 
 // accessConfigs are the config.toml files of TestAccessLaunchEqual:
-// every way the sandbox lists, presets, yolo, escapes and the
-// coordinator's merge rule combine today.
+// every way the sandbox rules (tm 0.37's preset switches too), drops,
+// refused entries, yolo, escapes and the coordinator's merge rule
+// combine.
 var accessConfigs = []string{
 	"",
 	`[defaults.sandbox]
@@ -95,7 +96,15 @@ browser_downloads = false
 excluded_commands = []
 `,
 	`[defaults.sandbox]
-excluded_commands = ["make a$X"]
+excluded_commands = ["make a$X", "make e2e"]
+hosts = ["registry.npmjs.org", "localhost"]
+local_ports = true
+
+[projects.demo.sandbox]
+hosts = ["cdn.playwright.dev"]
+guides = ["browser-downloads"]
+local_ports = false
+drop = ["make e2e"]
 `,
 	`[defaults]
 yolo = true
@@ -120,9 +129,9 @@ merge = "thread"
 }
 
 // TestAccessLaunchEqual: the launch settings the rules give (file
-// access, sandbox lists and presets, their notes, yolo and escapes, and
-// the files and arguments each agent renders from them) are today's,
-// for every config, platform, role and folder.
+// access, sandbox lists and guidance, their notes, yolo and escapes,
+// and the files and arguments each agent renders from them) are what
+// config.toml says, for every config, platform, role and folder.
 func TestAccessLaunchEqual(t *testing.T) {
 	testPaths(t)
 	t.Setenv("HOME", t.TempDir())
@@ -174,7 +183,7 @@ func TestAccessLaunchEqual(t *testing.T) {
 						wl, wp, ws := agent.SandboxLists{}, []string(nil), []string(nil)
 						if role == proto.RoleThread {
 							lists, presets, skipped = launchSandbox(set)
-							wl, wp, ws = legacySandbox(lc, slug, goos)
+							wl, wp, ws = wantSandbox(lc, slug, goos)
 						} else if !launchSandboxEmpty(set) {
 							t.Errorf("%s: sandbox rules for a %s", name, role)
 						}

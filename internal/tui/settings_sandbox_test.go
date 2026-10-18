@@ -3,7 +3,6 @@ package tui
 import (
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -15,7 +14,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
-// sandboxData is popupData with all projects' sandbox lists, as Load
+// sandboxData is popupData with all projects' sandbox rules, as Load
 // reads them; alpha sets none of its own.
 func sandboxData(t *testing.T) (*fakeSource, *dash) {
 	t.Helper()
@@ -27,8 +26,7 @@ excluded_commands = ["docker compose *"]
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.data.Sandbox = map[string]map[string][]string{"": c.SandboxOf(""), "alpha": c.SandboxOf("alpha")}
-	m.data.SandboxPresets = map[string]map[string]bool{"": c.SandboxPresetsOf(""), "alpha": c.SandboxPresetsOf("alpha")}
+	m.data.Sandbox = map[string]config.SandboxTable{"": c.SandboxOf(""), "alpha": c.SandboxOf("alpha")}
 	m.data.Server.OS = config.OSMac
 	return src, m
 }
@@ -46,19 +44,20 @@ func sandboxRow(t *testing.T, slug, label string) setting {
 	return setting{}
 }
 
-// TestSandboxView: a project follows all projects' list until it is
-// changed there; adding an excluded command asks first, saying it runs
-// outside the sandbox; a match-all entry is refused; f follows all
-// projects again.
+// TestSandboxView: a project's view lists all projects' entries with
+// its own, which add to them; adding an excluded command asks first,
+// saying it runs outside the sandbox; a match-all entry is refused; x
+// removes only the project's own, d drops one of all projects' and u
+// takes it back.
 func TestSandboxView(t *testing.T) {
 	src, m := sandboxData(t)
 	row := sandboxRow(t, "alpha", "Excluded commands")
-	if v, from := row.value(m), row.from(m); v != "1" || from != config.AllProjectsName {
-		t.Errorf("value %q from %q", v, from)
+	if v := row.value(m); v != "1" {
+		t.Errorf("value %q", v)
 	}
 	drain(t, m, row.change(m))
 	out := screen(m)
-	for _, want := range []string{"outside the sandbox", "full file and network access", "docker compose *", "All projects' list, which alpha follows", "f follow all projects"} {
+	for _, want := range []string{"outside the sandbox", "full file and network access", "docker compose *", "all projects", "add up", "d drop for alpha", "u take it back"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}
@@ -78,42 +77,93 @@ func TestSandboxView(t *testing.T) {
 		t.Errorf("* taken: %v %q", src.sandbox, m.msg)
 	}
 	keyPress(m, "a")
+	enter("docker compose *")
+	if len(src.sandbox) != 0 || !strings.Contains(m.msg, "all projects give docker compose * already") {
+		t.Errorf("all projects' entry taken: %v %q", src.sandbox, m.msg)
+	}
+	keyPress(m, "a")
 	enter("npx playwright *")
 	cv, ok := m.top().(*confirmView)
 	if !ok || !strings.Contains(cv.question, "outside the sandbox") {
 		t.Fatalf("no warning before adding: %T", m.top())
 	}
 	drain(t, m, keyPress(m, "y"))
-	// The project's own list starts from all projects'.
-	if want := []string{`projects.alpha excluded_commands ["docker compose *" "npx playwright *"]`}; !slices.Equal(src.sandbox, want) {
+	// The project's own entry adds to all projects'.
+	if want := []string{"projects.alpha excluded_commands + npx playwright *"}; !slices.Equal(src.sandbox, want) {
 		t.Errorf("saved %v", src.sandbox)
 	}
-	if row.from(m) != "" {
-		t.Error("still follows all projects")
+	if v := row.value(m); v != "2 (1 alpha)" {
+		t.Errorf("value %q", v)
 	}
-	// A broad entry's warning is put too, and listed under it.
-	keyPress(m, "a")
-	enter("bash *")
-	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "runs other programs") {
-		t.Fatalf("no broad warning: %T", m.top())
+	// x on all projects' entry says d drops it.
+	v := m.top().(*sandboxView)
+	v.sel = 0
+	keyPress(m, "x")
+	if !strings.Contains(m.msg, "d drops it for alpha") || len(src.sandbox) != 1 {
+		t.Errorf("x on all projects': %q %v", m.msg, src.sandbox)
 	}
-	drain(t, m, keyPress(m, "y"))
-	if !strings.Contains(screen(m), "runs other programs") {
-		t.Errorf("warning not listed:\n%s", screen(m))
-	}
-	// x removes the selected (the last added), f follows all projects.
-	drain(t, m, keyPress(m, "x"))
+	drain(t, m, keyPress(m, "d"))
 	c, _ := config.Load()
-	if got, _ := c.ThreadSandbox("alpha"); !reflect.DeepEqual(got.ExcludedCommands, []string{"docker compose *", "npx playwright *"}) {
-		t.Errorf("written %+v", got)
+	if got := c.ThreadSandbox("alpha").Given(config.SandboxExcluded); !slices.Equal(got, []string{"npx playwright *"}) {
+		t.Errorf("after the drop: %q", got)
 	}
-	drain(t, m, keyPress(m, "f"))
+	if out := screen(m); !strings.Contains(out, "─ docker compose *") || !strings.Contains(out, "all projects · dropped") {
+		t.Errorf("dropped entry not shown:\n%s", out)
+	}
+	if v := row.value(m); v != "1 (1 of all projects dropped)" {
+		t.Errorf("value %q", v)
+	}
+	drain(t, m, keyPress(m, "u"))
+	// x removes the project's own.
+	v.sel = 1
+	drain(t, m, keyPress(m, "x"))
 	c, _ = config.Load()
-	if got := c.SandboxOf("alpha"); len(got) != 0 {
+	if got := c.SandboxOf("alpha"); len(got.Lists) != 0 {
 		t.Errorf("still its own: %v", got)
 	}
-	if row.from(m) != config.AllProjectsName {
-		t.Error("doesn't follow all projects")
+	want := []string{"projects.alpha excluded_commands + npx playwright *", "projects.alpha drop + docker compose *", "projects.alpha drop - docker compose *", "projects.alpha excluded_commands - npx playwright *"}
+	if !slices.Equal(src.sandbox, want) {
+		t.Errorf("saved %q", src.sandbox)
+	}
+}
+
+// TestHostsAndGuidance: a host asks first, saying every command may
+// reach it, and warns of a shared host; a guidance text names those tm
+// has, and its view says what each tells threads.
+func TestHostsAndGuidance(t *testing.T) {
+	src, m := sandboxData(t)
+	drain(t, m, sandboxRow(t, "", "Network hosts").change(m))
+	keyPress(m, "a")
+	m.top().(*inputView).text = "https://x.dev"
+	drain(t, m, keyPress(m, "enter"))
+	if !strings.Contains(m.msg, "isn't a host name") {
+		t.Errorf("msg %q", m.msg)
+	}
+	keyPress(m, "a")
+	m.top().(*inputView).text = "storage.googleapis.com"
+	drain(t, m, keyPress(m, "enter"))
+	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "Every command a thread runs") || !strings.Contains(cv.question, "Google Cloud Storage") {
+		t.Fatalf("no question before adding a host: %T", m.top())
+	}
+	drain(t, m, keyPress(m, "y"))
+	keyPress(m, "esc")
+	drain(t, m, sandboxRow(t, "alpha", "Guidance for threads").change(m))
+	keyPress(m, "a")
+	if out := screen(m); !strings.Contains(out, "browser-testing, browser-downloads") {
+		t.Errorf("guidance prompt:\n%s", out)
+	}
+	m.top().(*inputView).text = "browser-testing"
+	drain(t, m, keyPress(m, "enter"))
+	if out := screen(m); !strings.Contains(out, "headless shell") {
+		t.Errorf("guidance view:\n%s", out)
+	}
+	want := []string{"defaults hosts + storage.googleapis.com", "projects.alpha guides + browser-testing"}
+	if !slices.Equal(src.sandbox, want) {
+		t.Errorf("saved %q", src.sandbox)
+	}
+	c, _ := config.Load()
+	if got := c.ThreadSandbox("alpha"); !slices.Equal(got.Given(config.SandboxHosts), []string{"storage.googleapis.com"}) || !slices.Equal(got.Given(config.SandboxGuides), []string{"browser-testing"}) {
+		t.Errorf("alpha: %+v", got)
 	}
 }
 
@@ -132,12 +182,16 @@ func TestSandboxAllowAll(t *testing.T) {
 		t.Errorf("msg %q", m.msg)
 	}
 	drain(t, m, keyPress(m, "x"))
-	if want := []string{`defaults allow ["Bash(npx playwright *)"]`, `defaults allow []`}; !slices.Equal(src.sandbox, want) {
+	if want := []string{"defaults allow + Bash(npx playwright *)", "defaults allow - Bash(npx playwright *)"}; !slices.Equal(src.sandbox, want) {
 		t.Errorf("saved %v", src.sandbox)
 	}
 	c, _ := config.Load()
-	if _, ok := c.SandboxOf("")[config.SandboxAllow]; ok {
+	if _, ok := c.SandboxOf("").Lists[config.SandboxAllow]; ok {
 		t.Error("an empty all-projects list is still set")
+	}
+	data, _ := os.ReadFile(c.Path)
+	if strings.Contains(string(data), "allow") {
+		t.Errorf("file:\n%s", data)
 	}
 }
 
@@ -161,12 +215,12 @@ func TestAccessTab(t *testing.T) {
 		keyPress(m, "down")
 		out += screen(m)
 	}
-	for _, want := range []string{"5 access", "Prefer a preset", "a last resort", "what applies on macOS",
+	for _, want := range []string{"5 access", "Prefer rules inside the sandbox", "a last resort", "what applies on macOS",
 		"Prompts and escapes", "Escapes", "ask you or auto mode", "Yolo mode", "Coordinator approves",
-		"Inside the sandbox: presets", "Browser testing (Playwright, Chromium)", "Browser downloads (npm, Playwright)", "Local dev servers",
-		"Outside the sandbox", "Excluded commands", "1 · all projects", "Permission rules", "Allow rules",
+		"Inside the sandbox", "Network hosts", "Local ports", "Guidance for threads",
+		"Outside the sandbox", "Excluded commands", "Permission rules", "Allow rules",
 		"Guard", "Guard mode", "Guard rules", "Guard allowances", "Guard refusals", "Secrets", "Secret environment",
-		"Built in", "tm's rules", "e effective access", "← → tabs"} {
+		"Built in", "tm's rules", "p add a preset", "e effective access", "← → tabs"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("Access tab lacks %q:\n%s", want, out)
 		}
@@ -201,7 +255,7 @@ func TestAccessTab(t *testing.T) {
 		keyPress(m, "down")
 		out += screen(m)
 	}
-	for _, want := range []string{"3 Access", "Escapes", "Yolo mode", "Browser testing", "Guard mode", "Secret environment", "unless the project sets its own", "alpha sets its own"} {
+	for _, want := range []string{"3 Access", "Escapes", "Yolo mode", "Network hosts", "Guard mode", "Secret environment", "A project's lists add to these", "alpha sets its own", "p add a preset"} {
 		if !strings.Contains(out, want) {
 			t.Errorf(", Access tab lacks %q:\n%s", want, out)
 		}
@@ -236,7 +290,8 @@ func TestAccessBuiltIn(t *testing.T) {
 }
 
 // TestSandboxTabOS: the tab shows what applies on the server's platform:
-// no preset on Linux or Windows, the lists on all three.
+// no hosts, local ports or guidance on Linux or Windows, the lists on
+// all three.
 func TestSandboxTabOS(t *testing.T) {
 	for _, goos := range []string{config.OSLinux, config.OSWindows} {
 		var labels []string
@@ -248,31 +303,37 @@ func TestSandboxTabOS(t *testing.T) {
 		}
 		_, m := sandboxData(t)
 		m.data.Server.OS = goos
-		if out := strings.Join(accessHead(m, 200), " "); !strings.Contains(out, "No preset applies there") || !strings.Contains(out, config.OSName(goos)) {
+		if out := strings.Join(accessHead(m, 200), " "); !strings.Contains(out, "don't apply there") || !strings.Contains(out, config.OSName(goos)) {
 			t.Errorf("%s head: %s", goos, out)
 		}
 	}
 	rows := sandboxSettings("", config.OSMac)
-	if len(rows) != 5 || rows[0].section != "Inside the sandbox: presets" || rows[3].section != "Outside the sandbox" || rows[4].section != "Permission rules" {
-		t.Errorf("macOS rows: %+v", rows)
+	var labels []string
+	for _, r := range rows {
+		labels = append(labels, r.label)
+	}
+	if !slices.Equal(labels, []string{"Network hosts", "Local ports", "Guidance for threads", "Excluded commands", "Allow rules"}) ||
+		rows[0].section != "Inside the sandbox" || rows[3].section != "Outside the sandbox" || rows[4].section != "Permission rules" {
+		t.Errorf("macOS rows: %q", labels)
 	}
 }
 
-// TestSandboxPresetRows: a project follows all projects' switch until
-// it is changed there; x follows them again; all projects' off is no
-// switch at all.
-func TestSandboxPresetRows(t *testing.T) {
+// TestLocalPortsRow: a project follows all projects' local ports until
+// it is changed there (its off is its own: the drop of all projects'
+// on); x follows them again, asking first when that opens them; all
+// projects' off is no setting at all.
+func TestLocalPortsRow(t *testing.T) {
 	src, m := sandboxData(t)
-	all := sandboxRow(t, "", "Local dev servers")
-	row := sandboxRow(t, "alpha", "Local dev servers")
+	all := sandboxRow(t, "", "Local ports")
+	row := sandboxRow(t, "alpha", "Local ports")
 	if v, from := row.value(m), row.from(m); v != "off" || from != config.AllProjectsName {
 		t.Errorf("value %q from %q", v, from)
 	}
 	drain(t, m, all.change(m))
-	// Turning one on asks first, saying what local binding opens.
+	// Opening them asks first, saying what local ports open.
 	cv, ok := m.top().(*confirmView)
 	if !ok || !strings.Contains(cv.question, "lets the thread out of the sandbox") {
-		t.Fatalf("no question before turning it on: %T", m.top())
+		t.Fatalf("no question before opening them: %T", m.top())
 	}
 	drain(t, m, keyPress(m, "y"))
 	if v, from := row.value(m), row.from(m); v != "on" || from != config.AllProjectsName {
@@ -283,63 +344,107 @@ func TestSandboxPresetRows(t *testing.T) {
 		t.Errorf("after alpha off: value %q from %q", v, from)
 	}
 	c, _ := config.Load()
-	if got, _ := c.ThreadSandbox("alpha"); len(got.Presets) != 0 {
-		t.Errorf("alpha: %+v", got)
+	if c.ThreadSandbox("alpha").LocalPorts || !c.ThreadSandbox("beta").LocalPorts {
+		t.Errorf("alpha %+v, beta %+v", c.ThreadSandbox("alpha"), c.ThreadSandbox("beta"))
 	}
-	if got, _ := c.ThreadSandbox("beta"); !slices.Equal(got.Presets, []string{config.SandboxDevServers}) {
-		t.Errorf("beta: %+v", got)
-	}
-	// x follows all projects' on: it asks first.
+	// x follows all projects' on: it asks first; n keeps alpha's off.
 	drain(t, m, row.unset(m))
-	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "lets the thread out of the sandbox") {
+	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "Follow all projects' local ports") {
 		t.Fatalf("x didn't ask before following all projects' on: %T", m.top())
 	}
+	drain(t, m, keyPress(m, "n"))
+	if row.from(m) != "" {
+		t.Error("n followed all projects")
+	}
+	drain(t, m, row.unset(m))
 	drain(t, m, keyPress(m, "y"))
 	drain(t, m, all.change(m))
-	// Browser downloads asks too, naming the hosts it opens; browser
-	// testing, which opens none, doesn't.
-	drain(t, m, sandboxRow(t, "", "Browser downloads (npm, Playwright)").change(m))
-	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "registry.npmjs.org") || !strings.Contains(cv.question, "storage.googleapis.com is every Google Cloud Storage bucket's host") {
-		t.Fatalf("no question before turning browser downloads on: %T", m.top())
-	}
-	drain(t, m, keyPress(m, "n"))
-	if _, ok := m.top().(*confirmView); ok {
-		t.Fatal("confirm still open")
-	}
-	want := []string{"defaults local_dev_servers on", "projects.alpha local_dev_servers off", "projects.alpha local_dev_servers follow", "defaults local_dev_servers follow"}
+	want := []string{"defaults local_ports = true", "projects.alpha local_ports = false", "projects.alpha local_ports follows all projects", "defaults local_ports = false"}
 	if !slices.Equal(src.sandbox, want) {
 		t.Errorf("saved %q", src.sandbox)
 	}
-	if c, _ = config.Load(); len(c.SandboxPresetsOf("")) != 0 || len(c.SandboxPresetsOf("alpha")) != 0 {
-		t.Errorf("left set: %v %v", c.SandboxPresetsOf(""), c.SandboxPresetsOf("alpha"))
+	if c, _ = config.Load(); c.SandboxOf("").LocalPorts != nil || c.SandboxOf("alpha").LocalPorts != nil {
+		t.Errorf("left set: %+v %+v", c.SandboxOf(""), c.SandboxOf("alpha"))
 	}
 }
 
-// TestSandboxFollowAsks: x on a project whose own switch is off, where
-// all projects' is on, turns the preset on for it, so it asks first as
-// turning it on does; n keeps the project's own off.
-func TestSandboxFollowAsks(t *testing.T) {
+// TestPresetAdd: p on a project's Access tab lists the presets; enter
+// shows the rules one adds, space leaves one out, enter adds the rest
+// as plain rules; adding it again offers only what is missing, and A
+// adds to all projects instead.
+func TestPresetAdd(t *testing.T) {
 	src, m := sandboxData(t)
-	m.data.SandboxPresets = map[string]map[string]bool{"": {config.SandboxDownloads: true, config.SandboxBrowser: true}, "alpha": {config.SandboxDownloads: false, config.SandboxBrowser: false}}
-	row := sandboxRow(t, "alpha", "Browser downloads (npm, Playwright)")
-	drain(t, m, row.unset(m))
-	cv, ok := m.top().(*confirmView)
-	if !ok || !strings.Contains(cv.question, "Follow all projects'") || !strings.Contains(cv.question, "storage.googleapis.com") {
-		t.Fatalf("x didn't ask: %T", m.top())
+	m.Update(tea.WindowSizeMsg{Width: 160, Height: 80})
+	feed(m, keyPress(m, "a"))
+	keyPress(m, "5")
+	keyPress(m, "p")
+	if _, ok := m.top().(*presetsView); !ok {
+		t.Fatalf("p: %T", m.top())
 	}
-	drain(t, m, keyPress(m, "n"))
-	if len(src.sandbox) != 0 || row.from(m) != "" {
-		t.Fatalf("n saved %q", src.sandbox)
+	out := screen(m)
+	for _, p := range config.Presets {
+		if !strings.Contains(out, p.Title) {
+			t.Errorf("lacks %q:\n%s", p.Title, out)
+		}
 	}
-	drain(t, m, row.unset(m))
-	drain(t, m, keyPress(m, "y"))
-	if want := []string{"projects.alpha browser_downloads follow"}; !slices.Equal(src.sandbox, want) || row.from(m) != config.AllProjectsName {
-		t.Errorf("y saved %q", src.sandbox)
+	keyPress(m, "down")
+	keyPress(m, "enter")
+	out = screen(m)
+	for _, want := range []string{"Add Browser downloads (npm, Playwright) for alpha", "[x] host", "registry.npmjs.org", "storage.googleapis.com", "[x] guidance", "browser-downloads",
+		"Already there: nothing", "enter add 5 rules", "A add to all projects instead"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q:\n%s", want, out)
+		}
 	}
-	// Browser testing opens nothing: x follows without asking.
-	drain(t, m, sandboxRow(t, "alpha", "Browser testing (Playwright, Chromium)").unset(m))
-	if _, ok := m.top().(*confirmView); ok || len(src.sandbox) != 2 {
-		t.Errorf("browser testing x: %T %q", m.top(), src.sandbox)
+	for _, risk := range []string{"bucket", "every command"} {
+		if strings.Contains(out, risk) {
+			t.Errorf("a risk remark (%q):\n%s", risk, out)
+		}
+	}
+	// Leave storage.googleapis.com out.
+	for range 3 {
+		keyPress(m, "down")
+	}
+	keyPress(m, "space")
+	if out := screen(m); !strings.Contains(out, "[ ] host") || !strings.Contains(out, "enter add 4 rules") {
+		t.Errorf("after space:\n%s", out)
+	}
+	drain(t, m, keyPress(m, "enter"))
+	if _, ok := m.top().(*projectView); !ok {
+		t.Fatalf("after adding: %T", m.top())
+	}
+	c, _ := config.Load()
+	got := c.SandboxOf("alpha")
+	if !slices.Equal(got.Lists[config.SandboxHosts], config.BrowserDomains[:3]) || !slices.Equal(got.Lists[config.SandboxGuides], []string{"browser-downloads"}) {
+		t.Errorf("alpha: %+v", got)
+	}
+	// Again: only the left-out host is offered; A adds it to all projects.
+	keyPress(m, "p")
+	keyPress(m, "down")
+	keyPress(m, "enter")
+	out = screen(m)
+	if !strings.Contains(out, "enter add 1 rule") || !strings.Contains(out, "Already there: host registry.npmjs.org") {
+		t.Errorf("again:\n%s", out)
+	}
+	keyPress(m, "A")
+	if out := screen(m); !strings.Contains(out, "for all projects") || !strings.Contains(out, "enter add 5 rules") || !strings.Contains(out, "A add to alpha instead") {
+		t.Errorf("after A:\n%s", out)
+	}
+	keyPress(m, "A")
+	drain(t, m, keyPress(m, "enter"))
+	if want := []string{
+		"projects.alpha preset browser-downloads: host registry.npmjs.org, host cdn.playwright.dev, host playwright.download.prss.microsoft.com, guidance browser-downloads",
+		"projects.alpha preset browser-downloads: host storage.googleapis.com"}; !slices.Equal(src.sandbox, want) {
+		t.Errorf("saved %q", src.sandbox)
+	}
+	// Local dev servers adds local ports, as a plain setting.
+	keyPress(m, "p")
+	keyPress(m, "down")
+	keyPress(m, "down")
+	keyPress(m, "enter")
+	drain(t, m, keyPress(m, "enter"))
+	if c, _ := config.Load(); !c.ThreadSandbox("alpha").LocalPortsOwn || !c.ThreadSandbox("alpha").LocalPorts {
+		t.Errorf("local ports: %+v", c.ThreadSandbox("alpha"))
 	}
 }
 
@@ -348,7 +453,7 @@ func TestSandboxFollowAsks(t *testing.T) {
 // when added.
 func TestSandboxCoveredNote(t *testing.T) {
 	_, m := sandboxData(t)
-	m.data.Sandbox[""][config.SandboxAllow] = []string{"Bash(docker compose:*)"}
+	m.data.Sandbox[""].Lists[config.SandboxAllow] = []string{"Bash(docker compose:*)"}
 	drain(t, m, sandboxRow(t, "", "Excluded commands").change(m))
 	if out := screen(m); !strings.Contains(out, "Bash(docker compose:*) covers it") {
 		t.Errorf("excluded view:\n%s", out)
@@ -372,33 +477,33 @@ func TestSandboxCoveredNote(t *testing.T) {
 	}
 }
 
-// TestSandboxPresetHumanOnly: inside an agent the preset write is
-// refused, and nothing is written.
-func TestSandboxPresetHumanOnly(t *testing.T) {
+// TestSandboxHumanOnly: inside an agent a sandbox write is refused,
+// and nothing is written.
+func TestSandboxHumanOnly(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
-	on := true
 	s := &ServerSource{Caller: caller.Caller{Kind: caller.Thread, Project: "alpha", Thread: "t-0001"}}
-	if err := s.SetSandboxPreset(config.DefaultsTable, config.SandboxBrowser, &on); err != errHumanOnly {
+	err := s.EditSandbox(config.DefaultsTable, "hosts + x.dev", func(t *config.SandboxTable) error { t.Add(config.SandboxHosts, "x.dev"); return nil })
+	if err != errHumanOnly {
 		t.Errorf("agent: %v", err)
 	}
-	if c, _ := config.Load(); len(c.SandboxPresetsOf("")) != 0 {
+	if c, _ := config.Load(); len(c.SandboxOf("").Lists) != 0 {
 		t.Error("written")
 	}
 }
 
 // TestSandboxBadEntryFlagged: an entry that fails the checks (written by
-// hand in config.toml) is marked with its reason, and the list says the
-// project's sandbox settings are dropped until it is fixed or removed.
+// hand in config.toml) is marked with its reason, and the list says
+// threads start without it, and only it.
 func TestSandboxBadEntryFlagged(t *testing.T) {
 	_, m := sandboxData(t)
-	m.data.Sandbox[""][config.SandboxExcluded] = []string{"docker compose *", "make a$X"}
+	m.data.Sandbox[""].Lists[config.SandboxExcluded] = []string{"docker compose *", "make a$X"}
 	row := sandboxRow(t, "", "Excluded commands")
-	if v := row.value(m); v != "2, 1 invalid" {
+	if v := row.value(m); v != "1 (1 refused)" {
 		t.Errorf("value %q", v)
 	}
 	drain(t, m, row.change(m))
 	out := screen(m)
-	for _, want := range []string{"✗ make a$X", "has a variable", "dropped at launch"} {
+	for _, want := range []string{"✗ make a$X", "has a variable", "and only it"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}

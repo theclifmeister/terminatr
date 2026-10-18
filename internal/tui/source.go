@@ -51,13 +51,9 @@ type Data struct {
 	// all projects' under "", each project's own under its slug
 	// (config.EnvOf).
 	Env map[string]map[string]config.EnvSource
-	// Sandbox are the sandbox lists' tables by key, only the keys each
-	// sets: all projects' under "", each project's own under its slug
-	// (config.SandboxOf).
-	Sandbox map[string]map[string][]string
-	// SandboxPresets are the sandbox presets' switches the same way
-	// (config.SandboxPresetsOf).
-	SandboxPresets map[string]map[string]bool
+	// Sandbox are the sandbox tables: all projects' under "", each
+	// project's own under its slug (config.SandboxOf).
+	Sandbox map[string]config.SandboxTable
 	// AgentMod, AgentModBand and AgentModPane are the settings popup's Agent mod, Agent mod
 	// band and Agent mod pane (docs/SPEC.md §8.6); the band is on unless set
 	// off, the pane off unless set on.
@@ -325,15 +321,11 @@ type SettingsSource interface {
 	// tm runs inside an agent.
 	SetSecretEnv(table, name string, src *config.EnvSource) error
 	TestSecretEnv(slug, name string) (string, error)
-	// SetSandbox writes the sandbox list key ("excluded_commands",
-	// "allow") of table ("defaults" or "projects.<slug>"), an empty one
-	// too; list nil removes it, so a project follows all projects'.
-	// Refused when tm runs inside an agent.
-	SetSandbox(table, key string, list []string) error
-	// SetSandboxPreset turns a sandbox preset ("browser_testing", …) of
-	// table on or off; nil removes it, so a project follows all
-	// projects'. Refused when tm runs inside an agent.
-	SetSandboxPreset(table, key string, on *bool) error
+	// EditSandbox changes the sandbox table of table ("defaults" or
+	// "projects.<slug>") with fn, as config.EditSandbox does, and
+	// journals what (e.g. "hosts + registry.npmjs.org"). Refused when tm
+	// runs inside an agent.
+	EditSandbox(table, what string, fn func(*config.SandboxTable) error) error
 	// AccessShow is the effective access of thread id of project slug
 	// (id "" for a new thread of it), read-only (access.show).
 	AccessShow(slug, id string) (proto.AccessShowResult, error)
@@ -681,12 +673,10 @@ func (s *ServerSource) Load() Data {
 			d.Defaults = &all
 		}
 		d.Env = map[string]map[string]config.EnvSource{"": cfg.EnvOf("")}
-		d.Sandbox = map[string]map[string][]string{"": cfg.SandboxOf("")}
-		d.SandboxPresets = map[string]map[string]bool{"": cfg.SandboxPresetsOf("")}
+		d.Sandbox = map[string]config.SandboxTable{"": cfg.SandboxOf("")}
 		for _, slug := range cfg.ProjectSlugs() {
 			d.Env[slug] = cfg.EnvOf(slug)
 			d.Sandbox[slug] = cfg.SandboxOf(slug)
-			d.SandboxPresets[slug] = cfg.SandboxPresetsOf(slug)
 		}
 	}
 	d.NoAgent = sc.noAgent

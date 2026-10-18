@@ -85,8 +85,7 @@ type fakeSource struct {
 	// removed"), secretTests TestSecretEnv's ("slug NAME").
 	secrets     []string
 	secretTests []string
-	// sandbox are SetSandbox's and SetSandboxPreset's calls ("table key
-	// [list]", nil when removed; "table key on|off|follow").
+	// sandbox are EditSandbox's calls ("table what").
 	sandbox []string
 	// access is what AccessShow gives (its project and thread set to
 	// the call's), accessShown its calls ("slug id").
@@ -389,12 +388,9 @@ func (f *fakeSource) SetSecretEnv(table, name string, src *config.EnvSource) err
 	f.secrets = append(f.secrets, table+" "+name+"="+src.From)
 	return config.SetEnv(table, name, *src)
 }
-func (f *fakeSource) SetSandbox(table, key string, list []string) error {
-	f.sandbox = append(f.sandbox, fmt.Sprintf("%s %s %q", table, key, list))
-	if list == nil {
-		return config.UnsetSandbox(table, key)
-	}
-	return config.SetSandbox(table, key, list)
+func (f *fakeSource) EditSandbox(table, what string, fn func(*config.SandboxTable) error) error {
+	f.sandbox = append(f.sandbox, table+" "+what)
+	return config.EditSandbox(table, fn)
 }
 func (f *fakeSource) AccessShow(slug, id string) (proto.AccessShowResult, error) {
 	f.accessShown = append(f.accessShown, slug+" "+id)
@@ -403,14 +399,6 @@ func (f *fakeSource) AccessShow(slug, id string) (proto.AccessShowResult, error)
 	return res, nil
 }
 
-func (f *fakeSource) SetSandboxPreset(table, key string, on *bool) error {
-	word := "follow"
-	if on != nil {
-		word = onOff(*on)
-	}
-	f.sandbox = append(f.sandbox, table+" "+key+" "+word)
-	return config.SetSandboxPreset(table, key, on)
-}
 func (f *fakeSource) TestSecretEnv(slug, name string) (string, error) {
 	f.secretTests = append(f.secretTests, slug+" "+name)
 	return secretTestWord(name, true, ""), nil

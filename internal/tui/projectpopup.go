@@ -195,6 +195,9 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	if pv.tab == tabAccess && s == "e" {
 		return m.showAccess(pv.slug, "")
 	}
+	if pv.tab == tabAccess && s == "p" {
+		return m.openPresets(pv.slug)
+	}
 	if l := pv.list(); l != nil {
 		before := l.sel
 		cmd, _ := l.key(m, k)
@@ -424,8 +427,8 @@ func (pv *projectView) box(m *dash) box {
 
 // listKeys are the Settings or Access tab's (access) keys for its
 // selected row: + and - on a number, x on a setting the project sets
-// itself (it follows all projects again), and e for the effective
-// access on the Access tab.
+// itself (it follows all projects again), and on the Access tab p for
+// a preset and e for the effective access.
 func listKeys(m *dash, l *settingsList, access bool) string {
 	keys := []string{"enter change"}
 	if l.sel < len(l.rows) {
@@ -441,7 +444,7 @@ func listKeys(m *dash, l *settingsList, access bool) string {
 		}
 	}
 	if access {
-		keys = append(keys, "e effective access")
+		keys = append(keys, "p add a preset", "e effective access")
 	}
 	return strings.Join(append(keys, "← → tabs", "esc close"), " · ")
 }
