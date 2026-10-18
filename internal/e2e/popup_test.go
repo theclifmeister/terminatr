@@ -166,9 +166,7 @@ func TestSmokeProjectPopup(t *testing.T) {
 	}
 	// Parallel threads: - takes it to 9, with the working count beside
 	// it. Auto-close: enter goes to days after it finishes, + adds one.
-	for range 3 {
-		w.Key(keyDown)
-	}
+	w.Key(keyDown)
 	w.Type("-")
 	saved(w, "parallel threads 9", func(sc string) bool {
 		return regexp.MustCompile(`Parallel threads\s+9 · 0 working now`).MatchString(sc)
