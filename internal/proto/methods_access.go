@@ -1,6 +1,9 @@
 package proto
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // A thread's access as one list of rules (T574 §3.1): what its sandbox,
 // its prompts, the guard and its environment give it, each rule with
@@ -168,4 +171,26 @@ type AccessExplainResult struct {
 	// Agents says which agents' threads the answer is not for, e.g. an
 	// excluded command Codex threads aren't given.
 	Agents string `json:"agents,omitempty"`
+}
+
+// Remarks are what the views say beside a rule: a change since launch,
+// why it is left out, the only agents that get it, a guard rule's
+// liveness.
+func (r AccessRule) Remarks() []string {
+	var out []string
+	switch r.Change {
+	case AccessAdded:
+		out = append(out, "RESTART TO APPLY: added since launch")
+	case AccessRemoved:
+		out = append(out, "RESTART TO APPLY: removed since launch")
+	}
+	if r.Skipped != "" {
+		out = append(out, "not used: "+r.Skipped)
+	}
+	if r.Where == AccessAgent {
+		out = append(out, "the agent's own file, shown only")
+	} else if len(r.Agents) > 0 {
+		out = append(out, strings.Join(r.Agents, ", ")+" threads only")
+	}
+	return out
 }
