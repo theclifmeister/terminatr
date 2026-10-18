@@ -198,6 +198,15 @@ func init() {
 		proto.MethodSessionPrompt: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionPromptParams, _ callCtx) (any, *proto.Error) {
 			return s.prompt(p)
 		})},
+		// access.show checks its caller itself (mayShowAccess): the
+		// human, or a thread for its own access; access.explain is the
+		// human's, on either socket.
+		proto.MethodAccessShow: {call: typed(func(s *Server, p proto.AccessShowParams, c callCtx) (any, *proto.Error) {
+			return s.accessShow(p, c)
+		})},
+		proto.MethodAccessExplain: {call: typed(func(s *Server, p proto.AccessExplainParams, c callCtx) (any, *proto.Error) {
+			return s.accessExplain(p, c)
+		})},
 		proto.MethodSecretTest: {gate: gateHuman, call: typed(func(s *Server, p proto.SecretTestParams, _ callCtx) (any, *proto.Error) {
 			return s.secretTest(p)
 		})},

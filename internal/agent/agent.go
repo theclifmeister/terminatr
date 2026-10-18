@@ -384,6 +384,25 @@ type Truster interface {
 	TrustDir(home, dir string) error
 }
 
+// OwnRuler is an Agent that reads permission or sandbox rules from
+// settings files of its own, besides tm's launch settings (Claude's
+// ~/.claude/settings.json and a folder's .claude/settings*.json): the
+// core lists them, read-only, in a thread's effective access (T574).
+// home is the user's home directory, dir the session's folder.
+type OwnRuler interface {
+	OwnRules(home, dir string) []OwnRule
+}
+
+// OwnRule is one rule of an agent's own settings files: Kind "allow",
+// "deny" or "excluded" (a command run outside the sandbox), Value the
+// rule as the file has it, File where (~ for home, a path relative to
+// the folder for the folder's own).
+type OwnRule struct {
+	Kind  string
+	Value string
+	File  string
+}
+
 // LiveThemer is an Agent that keeps a theme file of tm's in its own
 // config folder and redraws with it, rewritten, while it runs
 // (docs/SPEC.md §8.6): the core writes it before each launch and again
