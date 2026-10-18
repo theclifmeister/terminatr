@@ -42,7 +42,7 @@ func TestAgentTemp(t *testing.T) {
 // per-user entries; Codex's /tmp fallback is no extra root.
 func TestAgentTemps(t *testing.T) {
 	uid := strconv.Itoa(os.Getuid())
-	dirs, _ := AgentTemps(nil, "claude", "/home/u", func(k string) string {
+	dirs, _, scratch := AgentTemps(nil, "claude", "/home/u", func(k string) string {
 		if k == "CLAUDE_CODE_TMPDIR" {
 			return "/var/ct"
 		}
@@ -51,7 +51,10 @@ func TestAgentTemps(t *testing.T) {
 	if want := []string{"/var/ct/claude-" + uid, "/tmp/claude-" + uid}; !slices.Equal(dirs, want) {
 		t.Errorf("claude temps = %v, want %v", dirs, want)
 	}
-	if dirs, _ := AgentTemps(nil, "codex", "/home/u", func(k string) string { return map[string]string{"TMPDIR": "/var/x"}[k] }); !slices.Equal(dirs, []string{"/var/x"}) {
+	if !scratch {
+		t.Error("claude's temp folder isn't scratch-scoped")
+	}
+	if dirs, _, sc := AgentTemps(nil, "codex", "/home/u", func(k string) string { return map[string]string{"TMPDIR": "/var/x"}[k] }); !slices.Equal(dirs, []string{"/var/x"}) || sc {
 		t.Errorf("codex temps = %v", dirs)
 	}
 }

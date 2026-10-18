@@ -24,30 +24,38 @@ import (
 // --attach). The human's opens as given. An agent's command runs in the
 // server with the human's rights, past the agent's sandbox, so its file
 // opens only under the roots it may name (argRoots), through os.Root: no
-// "..", absolute link or symlink in between leads out of the root.
+// "..", absolute link or symlink in between leads out of the root. In a
+// scratch root (the caller's own Claude Code scratchpad) no symlink at
+// all, checked on the open file (fsx.OpenNoLinks).
 func (e *Env) openArg(path string) (*os.File, error) {
 	path = filepath.Clean(e.abs(path))
 	if !e.Caller.IsAgent() {
 		return os.Open(path)
 	}
-	roots, private := e.argRoots()
+	set := e.argRoots()
 	var lastErr error
-	for _, root := range roots {
+	for _, root := range set.roots {
 		rel, ok := fsx.Within(root, path)
 		if !ok {
 			continue
 		}
-		r, err := os.OpenRoot(root)
-		if err != nil {
-			continue
+		var f *os.File
+		var err error
+		if slices.Contains(set.noLinks, root) {
+			f, err = fsx.OpenNoLinks(root, rel)
+		} else {
+			var r *os.Root
+			if r, err = os.OpenRoot(root); err != nil {
+				continue
+			}
+			// Non-blocking, so a FIFO can't hold the server; then only a
+			// regular file with one link (a hard link could name a file the
+			// sandbox keeps from the agent) and outside every credential store.
+			f, err = fsx.OpenInNoBlock(r, rel)
+			r.Close()
 		}
-		// Non-blocking, so a FIFO can't hold the server; then only a
-		// regular file with one link (a hard link could name a file the
-		// sandbox keeps from the agent) and outside every credential store.
-		f, err := fsx.OpenInNoBlock(r, rel)
-		r.Close()
 		if err == nil {
-			if err = agentFileOK(f, private); err == nil {
+			if err = agentFileOK(f, set.private); err == nil {
 				return f, nil
 			}
 			f.Close()
@@ -61,31 +69,50 @@ func (e *Env) openArg(path string) (*os.File, error) {
 	if lastErr != nil {
 		return nil, usagef("%v", lastErr)
 	}
-	return nil, &tasks.Error{Code: "outside-roots", Msg: fmt.Sprintf("%s: an agent's files must be in %s", path, e.argPlaces(roots))}
+	return nil, &tasks.Error{Code: "outside-roots", Msg: fmt.Sprintf("%s: an agent's files must be in %s", path, set.places())}
 }
 
-// argPlaces says where an agent's files may be, for its refusal: the
-// roots it may name, as they are (a link spelling of one left out).
-func (e *Env) argPlaces(roots []string) string {
+// argSet is where an agent caller's files may be.
+type argSet struct {
+	roots   []string
+	noLinks []string // the roots in which no symlink is followed
+	private []string // folders of the roots it may not name
+	note    string   // why a root it might expect is none
+}
+
+// places says where the files may be, for a refusal: the roots as they
+// are (a link spelling of one left out), and the note.
+func (s argSet) places() string {
 	var seen []string
-	for _, r := range roots {
-		if !slices.Contains(seen, r) && !slices.ContainsFunc(seen, func(s string) bool { return realPath(s) == r }) {
+	for _, r := range s.roots {
+		if !slices.Contains(seen, r) && !slices.ContainsFunc(seen, func(x string) bool { return realPath(x) == r }) {
 			seen = append(seen, r)
 		}
 	}
-	if len(seen) == 0 {
-		return "a folder of its own; none is known"
+	out := "a folder of its own; none is known"
+	if len(seen) > 0 {
+		out = strings.Join(seen, ", ")
 	}
-	return strings.Join(seen, ", ")
+	if s.note != "" {
+		out += " (" + s.note + ")"
+	}
+	return out
 }
 
 // argRoots are the folders an agent caller's files may be in: a thread's
 // worktree, a coordinator's project folder and its threads' worktrees,
-// and the agent's own temp folder, where it writes what it hands in. Each comes
-// also with its links resolved (/tmp is /private/tmp on macOS), so either
-// spelling of a path matches.
-func (e *Env) argRoots() (roots, private []string) {
-	var own []string // working folders whose scratchpad is the caller's
+// and the agent's own temp folder, where it writes what it hands in.
+// Where the agent's temp folder is shared by all its sessions (Claude
+// Code's), only the caller's own scratch folder of it, named after its
+// working folder (its worktree; its project folder for a coordinator),
+// and none for an adopted thread, whose worktree is the user's own
+// checkout, whose scratch folder the user's sessions share. Each root
+// comes also with its links resolved (/tmp is /private/tmp on macOS),
+// so either spelling of a path matches.
+func (e *Env) argRoots() argSet {
+	var set argSet
+	var roots, own []string // own: working folders whose scratch folder is the caller's
+	adopted := false
 	if e.Caller.Project != "" {
 		if p, err := project.Open(e.Caller.Project); err == nil {
 			switch e.Caller.Kind {
@@ -95,7 +122,11 @@ func (e *Env) argRoots() (roots, private []string) {
 				// wherever its agent ran: never a folder holding the home.
 				if r, err := thread.Load(p, e.Caller.Thread); err == nil && r.Worktree != "" && !holdsHome(r.Worktree) {
 					roots = append(roots, r.Worktree)
-					own = append(own, r.Worktree, realPath(r.Worktree))
+					if wts, err := home.WorktreesDir(); err == nil && !r.Adopted && !r.Checkout && underAny(r.Worktree, []string{wts}) {
+						own = append(own, r.Worktree, realPath(r.Worktree))
+					} else {
+						adopted = true
+					}
 				}
 			case caller.Coordinator:
 				roots = append(roots, p.Dir)
@@ -106,42 +137,61 @@ func (e *Env) argRoots() (roots, private []string) {
 			}
 		}
 	}
-	temp, private := tempRoots(e)
-	if e.Caller.Kind == caller.Thread || e.Caller.Kind == caller.Coordinator {
-		private = append(private, otherScratch(temp, own)...)
+	temp, private, scratch := tempRoots(e)
+	if scratch {
+		var scratches []string
+		for _, t := range temp {
+			for _, o := range own {
+				d := filepath.Join(t, scratchName(o))
+				if !slices.Contains(scratches, d) {
+					scratches = append(scratches, d)
+				}
+			}
+		}
+		set.noLinks = scratches
+		temp, private = scratches, nil
+		if adopted {
+			set.note = "no scratchpad for an adopted thread or a thread in a main checkout: other sessions of the user share its scratch folder"
+		}
 	}
 	roots = append(roots, temp...)
-	out := make([]string, 0, 2*len(roots))
+	set.private = private
 	for _, r := range roots {
 		if !filepath.IsAbs(r) {
 			continue
 		}
-		out = append(out, filepath.Clean(r))
-		if real, err := filepath.EvalSymlinks(r); err == nil && real != filepath.Clean(r) {
-			out = append(out, real)
+		r = filepath.Clean(r)
+		set.roots = append(set.roots, r)
+		if real, err := filepath.EvalSymlinks(r); err == nil && real != r {
+			set.roots = append(set.roots, real)
+			if slices.Contains(set.noLinks, r) {
+				set.noLinks = append(set.noLinks, real)
+			}
 		}
 	}
-	return out, private
+	return set
 }
 
 // tempRoots is the temp folder an agent caller's files may be in, and
 // its subfolders they may not: its agent's own, where its sandbox has it
 // write ([guard] temp, its TMPDIR, less [guard] temp_private), not every
-// temp folder, which holds files that sandbox keeps from it. None when
-// the agent or its temp folder is unknown. os.TempDir() for a call
-// that runs in the caller's own process (no server: its sandbox opens
-// the file) and for a mod's. A variable for tests, whose own temp
+// temp folder, which holds files that sandbox keeps from it. scratch is
+// set when the folder is shared by the agent's sessions ([guard]
+// temp_scratch), so that only a scratch folder in it is the caller's.
+// None when the agent or its temp folder is unknown. os.TempDir() for a
+// call that runs in the caller's own process (no server: its sandbox
+// opens the file) and for a mod's. A variable for tests, whose own temp
 // folders are elsewhere.
-var tempRoots = func(e *Env) (roots, private []string) {
+var tempRoots = func(e *Env) (roots, private []string, scratch bool) {
 	if e.Caller.Kind == caller.Mod || e.Caller.Session == "" {
-		return []string{os.TempDir()}, nil
+		return []string{os.TempDir()}, nil, false
 	}
 	name := e.callerAgent()
 	if name == "" {
 		name = e.threadAgent()
 	}
 	if name == "" {
-		return nil, nil
+		return nil, nil, false
 	}
 	var reg *agent.Registry
 	if paths, err := client.ResolvePaths(); err == nil {
@@ -178,32 +228,6 @@ func scratchName(dir string) string {
 		}
 		return '-'
 	}, dir)
-}
-
-// otherScratch are the folders of temp folders that belong to other
-// working folders: Claude Code keeps each session's scratchpad in
-// <temp>/<scratchName(its working folder)>/<session>/scratchpad. A
-// thread (or coordinator) may name its own and not another's, so each
-// "-"-named folder of a temp folder is private but its own (own are
-// the working folders it may call its: its worktree, its links
-// resolved).
-func otherScratch(temps, own []string) (private []string) {
-	keep := map[string]bool{}
-	for _, o := range own {
-		keep[scratchName(o)] = true
-	}
-	for _, t := range temps {
-		ents, err := os.ReadDir(t)
-		if err != nil {
-			continue
-		}
-		for _, d := range ents {
-			if strings.HasPrefix(d.Name(), "-") && !keep[d.Name()] {
-				private = append(private, filepath.Join(t, d.Name()))
-			}
-		}
-	}
-	return private
 }
 
 // callerAgent is the agent that runs in the caller's session, "" when

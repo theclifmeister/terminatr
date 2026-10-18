@@ -301,10 +301,10 @@ func AgentTemp(reg *Registry, name, home string, getenv func(string) string) (di
 // AgentTemps is every temp folder the agent named name may write (each
 // [guard] temp entry that resolves) and the subfolders of them its
 // sandbox keeps from it.
-func AgentTemps(reg *Registry, name, home string, getenv func(string) string) (dirs, private []string) {
+func AgentTemps(reg *Registry, name, home string, getenv func(string) string) (dirs, private []string, scratch bool) {
 	m := manifestNamed(reg, name)
 	if m == nil {
-		return nil, nil
+		return nil, nil, false
 	}
 	// The first that resolves is the one the sandbox most likely uses;
 	// the others count only when per user ("{uid}"), never a shared
@@ -320,7 +320,7 @@ func AgentTemps(reg *Registry, name, home string, getenv func(string) string) (d
 			private = append(private, filepath.Join(d, p))
 		}
 	}
-	return dirs, private
+	return dirs, private, m.Guard.TempScratch
 }
 
 // GuardTools is the [guard.tools] of the agent named name: reg's

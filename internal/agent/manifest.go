@@ -209,6 +209,12 @@ type Guard struct {
 	// sandbox keeps from it (Claude's bash-edit-diff): no file argument
 	// of its may be in them.
 	TempPrivate []string `toml:"temp_private"`
+	// TempScratch: the temp folder is shared by all the agent's sessions
+	// of the user, each keeping its working folder's files in a folder
+	// named after the folder's path (Claude Code's scratchpad). A file
+	// argument may then be only in the caller's own, never loose in the
+	// temp folder nor in another's (docs/SPEC.md §7.2, T586).
+	TempScratch bool `toml:"temp_scratch"`
 	// Tools are the agent's tools the guard judges, by name: each one's
 	// kind (shell, write, patch, read, glob) and the input fields that
 	// kind reads, e.g. Bash = { kind = "shell", fields = ["command"] };
