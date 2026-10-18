@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
@@ -22,7 +24,9 @@ func TestAgentFiles(t *testing.T) {
 	h := newHarness(t)
 	tmp := t.TempDir()
 	prev := tempRoots
-	tempRoots = func(*Env) ([]string, []string) { return []string{tmp}, []string{filepath.Join(tmp, "private")} }
+	tempRoots = func(*Env) ([]string, []string, bool) {
+		return []string{tmp}, []string{filepath.Join(tmp, "private")}, false
+	}
 	t.Cleanup(func() { tempRoots = prev })
 	h.ok(human, "project", "new", "demo")
 	h.env["TERMINATR_PROJECT"] = "demo"
@@ -100,5 +104,118 @@ func TestAgentRootsNoHome(t *testing.T) {
 	}
 	if holdsHome(filepath.Join(h, "src", "app")) || holdsHome(t.TempDir()) {
 		t.Error("a folder in the home, or a temp folder, holds the home")
+	}
+}
+
+// TestAgentScratchpad: where the agent's temp folder is shared by all
+// its sessions (Claude Code's), a thread may name files only in its own
+// scratchpad (<temp>/<its worktree, every non-alphanumeric a "-">/
+// <session>/scratchpad): a regular file loose in the temp folder (Claude's TMPDIR), but not through a link or a second name, not another
+// working folder's (in any spelling), through no symlink at all, not as
+// an adopted thread; a refusal lists the roots it may name.
+func TestAgentScratchpad(t *testing.T) {
+	h := newHarness(t)
+	tmp := t.TempDir()
+	prev := tempRoots
+	tempRoots = func(*Env) ([]string, []string, bool) { return []string{tmp}, nil, true }
+	t.Cleanup(func() { tempRoots = prev })
+	h.ok(human, "project", "new", "demo")
+	h.env["TERMINATR_PROJECT"] = "demo"
+	p, _ := project.Open("demo")
+	wts, err := home.WorktreesDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wt := filepath.Join(wts, "demo", "t-0001-fix")
+	adoptedWt := filepath.Join(wts, "demo", "t-0002-adopted")
+	for _, d := range []string{wt, adoptedWt} {
+		os.MkdirAll(d, 0o755)
+	}
+	if _, err := thread.Create(p, thread.Record{Title: "Fix it", State: thread.Running, Worktree: wt}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := thread.Create(p, thread.Record{Title: "Adopted", State: thread.Running, Worktree: adoptedWt, Adopted: true}); err != nil {
+		t.Fatal(err)
+	}
+	mine := filepath.Join(tmp, scratchName(wt), "sess", "scratchpad")
+	theirsName := "-Users-someone--terminatr-projects-demo"
+	theirs := filepath.Join(tmp, theirsName, "sess", "tasks")
+	adoptedPad := filepath.Join(tmp, scratchName(adoptedWt), "sess", "scratchpad")
+	for _, d := range []string{mine, theirs, adoptedPad} {
+		os.MkdirAll(d, 0o755)
+		os.WriteFile(filepath.Join(d, "chart.png"), []byte("png"), 0o644)
+	}
+	os.WriteFile(filepath.Join(tmp, "loose.png"), []byte("png"), 0o644)
+	os.Symlink("loose.png", filepath.Join(tmp, "loose-link.png"))
+	os.WriteFile(filepath.Join(tmp, "hard-src.png"), []byte("png"), 0o644)
+	os.Link(filepath.Join(tmp, "hard-src.png"), filepath.Join(tmp, "loose-hard.png"))
+	rel, _ := filepath.Rel(mine, filepath.Join(theirs, "chart.png"))
+	os.Symlink(rel, filepath.Join(mine, "steal.png"))
+	os.Symlink(filepath.Join(theirs, "chart.png"), filepath.Join(mine, "abs.png"))
+	// A link to a file in the same scratchpad is a link all the same,
+	// and so is a link in a folder on the way.
+	os.Symlink("chart.png", filepath.Join(mine, "same.png"))
+	os.Mkdir(filepath.Join(mine, "sub"), 0o755)
+	os.WriteFile(filepath.Join(mine, "sub", "in.png"), []byte("png"), 0o644)
+	os.Symlink("sub", filepath.Join(mine, "subln"))
+	report := "## Report\nDone.\n\n## Next\n- Merge it\n"
+	h.cwd = wt
+	stored := func(name string) bool {
+		_, err := os.Stat(thread.Path(p, "t-0001", "library", name))
+		return err == nil
+	}
+	if got := scratchName("/Users/a/.terminatr/wt"); got != "-Users-a--terminatr-wt" {
+		t.Errorf("scratchName = %q", got)
+	}
+	// Windows: Claude Code's names start with the drive.
+	if got := scratchName(`C:\Users\a\.terminatr\wt`); got != "C--Users-a--terminatr-wt" {
+		t.Errorf("scratchName of a Windows path = %q", got)
+	}
+	if code, _, errs := h.run(thr, report, "report", "--attach", filepath.Join(mine, "chart.png"), "--attach", filepath.Join(mine, "sub", "in.png"), "--attach", filepath.Join(tmp, "loose.png")); code != 0 || !stored("chart.png") || !stored("in.png") || !stored("loose.png") {
+		t.Fatalf("report with files in its own scratchpad and loose in the temp folder: exit %d, %s", code, errs)
+	}
+	refused := []string{
+		filepath.Join(theirs, "chart.png"),                                            // another working folder's
+		filepath.Join(tmp, strings.ToLower(theirsName), "sess", "tasks", "chart.png"), // a case variant
+		filepath.Join(tmp, strings.ToUpper(scratchName(wt)), "sess", "scratchpad", "chart.png"),
+		filepath.Join(mine, "steal.png"), filepath.Join(mine, "abs.png"), filepath.Join(mine, "same.png"), filepath.Join(mine, "subln", "in.png"),
+		filepath.Join(adoptedPad, "chart.png"), // not its own
+	}
+	for _, a := range refused {
+		code, _, errs := h.run(thr, report, "report", "--attach", a)
+		if code == 0 {
+			t.Errorf("report --attach %s: exit %d, %s", a, code, errs)
+		}
+	}
+	for _, n := range []string{"loose-link.png", "loose-hard.png", "steal.png", "abs.png", "same.png"} {
+		if stored(n) {
+			t.Errorf("%s was stored", n)
+		}
+	}
+	code, _, errs := h.run(thr, report, "report", "--attach", filepath.Join(os.TempDir(), "nope"))
+	if code == 0 || !strings.Contains(errs, wt) || !strings.Contains(errs, scratchName(wt)) || strings.Contains(errs, theirsName) {
+		t.Errorf("the refusal doesn't list the roots: exit %d, %s", code, errs)
+	}
+
+	// The scratch folder planted as a link to another's, or gone: refused.
+	root := filepath.Join(tmp, scratchName(wt))
+	os.Rename(root, root+".x")
+	os.Symlink(filepath.Join(tmp, theirsName), root)
+	for _, a := range []string{filepath.Join(root, "sess", "tasks", "chart.png"), filepath.Join(root, "sess", "scratchpad", "chart.png")} {
+		if code, _, errs := h.run(thr, report, "report", "--attach", a); code == 0 {
+			t.Errorf("a scratch folder that is a link to another's, report --attach %s: exit %d, %s", a, code, errs)
+		}
+	}
+	os.Remove(root)
+	if code, _, errs := h.run(thr, report, "report", "--attach", filepath.Join(root, "sess", "scratchpad", "chart.png")); code == 0 {
+		t.Errorf("a missing scratch folder: exit %d, %s", code, errs)
+	}
+
+	// An adopted thread's worktree is the user's own checkout: its
+	// scratch folder is shared with the user's sessions, so none.
+	h.cwd = adoptedWt
+	code, _, errs = h.run(caller.Caller{Kind: caller.Thread, Project: "demo", Thread: "t-0002"}, report, "report", "--attach", filepath.Join(adoptedPad, "chart.png"))
+	if code == 0 || !strings.Contains(errs, "adopted") {
+		t.Errorf("an adopted thread's scratchpad: exit %d, %s", code, errs)
 	}
 }
