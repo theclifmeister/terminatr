@@ -195,16 +195,19 @@ func (e *Env) argRoots() argSet {
 // temp folder, which holds files that sandbox keeps from it. scratch is
 // set when the folder is shared by the agent's sessions ([guard]
 // temp_scratch), so that only a scratch folder in it is the caller's.
-// None when the agent or its temp folder is unknown, and for a caller
-// with no session (it can't be told which agent's temp folder is its).
-// os.TempDir() for a mod's. A variable for tests, whose own temp
+// None when the agent or its temp folder is unknown (a thread caller with
+// no session is told by its record). os.TempDir() for a mod's, and for
+// a call that runs in the caller's own process (no server: its sandbox
+// opens the file). A variable for tests, whose own temp
 // folders are elsewhere.
 var tempRoots = func(e *Env) (roots, private []string, scratch bool) {
 	if e.Caller.Kind == caller.Mod {
 		return []string{os.TempDir()}, nil, false
 	}
-	if e.Caller.Session == "" {
-		return nil, nil, false
+	if e.Caller.Session == "" && !e.InServer {
+		// In the agent's own process: its sandbox opens the file, so it
+		// can name only what it can already read.
+		return []string{os.TempDir()}, nil, false
 	}
 	name := e.callerAgent()
 	if name == "" {

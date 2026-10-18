@@ -33,6 +33,9 @@ type Env struct {
 	Getenv func(string) string
 	Cwd    string
 	Caller caller.Caller
+	// InServer: the command runs in the server for an agent (forward), so
+	// opens files with the human's rights, not the agent's.
+	InServer bool
 	// Identify asks the server who the caller is (§11.1); ok is false
 	// when no server answers. Nil skips the check.
 	Identify func() (c caller.Caller, ok bool)
