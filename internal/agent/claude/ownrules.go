@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 )
 
 // Claude's own settings files (T574 §3.1): Claude merges the user's
@@ -31,30 +32,37 @@ type ownSettings struct {
 }
 
 // OwnRules lists the allow, deny and excluded-command rules of the
-// user's settings and dir's, in that order; a file missing or not JSON
-// gives none.
+// user's settings and dir's, in that order; a file missing, not a
+// regular file or not JSON gives none, and so does one of dir's that
+// is a link out of dir or an absolute link (a thread writes its
+// worktree; os.Root follows relative links that stay inside only).
 func (a *Agent) OwnRules(home, dir string) []agent.OwnRule {
-	user := filepath.Join(configDir(home), "settings.json")
-	files := []struct{ path, name string }{{user, homeName(home, user)}}
-	if dir != "" {
-		for _, f := range []string{"settings.json", "settings.local.json"} {
-			files = append(files, struct{ path, name string }{filepath.Join(dir, ".claude", f), filepath.Join(".claude", f)})
-		}
-	}
 	var out []agent.OwnRule
-	for _, f := range files {
-		s, ok := readSettings(f.path)
-		if !ok {
-			continue
-		}
-		add := func(kind string, vals []string) {
-			for _, v := range vals {
-				out = append(out, agent.OwnRule{Kind: kind, Value: v, File: f.name})
+	add := func(s ownSettings, name string) {
+		for _, l := range []struct {
+			kind string
+			vals []string
+		}{{"allow", s.Permissions.Allow}, {"deny", s.Permissions.Deny}, {"excluded", s.Sandbox.ExcludedCommands}} {
+			for _, v := range l.vals {
+				out = append(out, agent.OwnRule{Kind: l.kind, Value: v, File: name})
 			}
 		}
-		add("allow", s.Permissions.Allow)
-		add("deny", s.Permissions.Deny)
-		add("excluded", s.Sandbox.ExcludedCommands)
+	}
+	// The user's own file may be a link (to their dotfiles): it is read
+	// where it leads.
+	user := filepath.Join(configDir(home), "settings.json")
+	if real, err := filepath.EvalSymlinks(user); err == nil {
+		if s, ok := readSettings(filepath.Dir(real), filepath.Base(real)); ok {
+			add(s, homeName(home, user))
+		}
+	}
+	if dir != "" {
+		for _, f := range []string{"settings.json", "settings.local.json"} {
+			rel := filepath.Join(".claude", f)
+			if s, ok := readSettings(dir, rel); ok {
+				add(s, rel)
+			}
+		}
 	}
 	return out
 }
@@ -67,15 +75,24 @@ func homeName(home, path string) string {
 	return path
 }
 
-// readSettings reads one settings file, ok false when it is missing,
-// too large or not JSON.
-func readSettings(path string) (ownSettings, bool) {
+// readSettings reads settings file rel under root, ok false when it is
+// missing, a link out of root, not a regular file (a FIFO would block
+// the read), too large or not JSON.
+func readSettings(root, rel string) (ownSettings, bool) {
 	var s ownSettings
-	f, err := os.Open(path)
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return s, false
+	}
+	defer r.Close()
+	f, err := fsx.OpenInNoBlock(r, rel)
 	if err != nil {
 		return s, false
 	}
 	defer f.Close()
+	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() || fi.Size() > maxSettings {
+		return s, false
+	}
 	b, err := io.ReadAll(io.LimitReader(f, maxSettings+1))
 	if err != nil || len(b) > maxSettings {
 		return s, false

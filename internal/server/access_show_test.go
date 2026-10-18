@@ -126,7 +126,7 @@ excluded_commands = ["npx playwright *"]
 		t.Fatalf("record %v: %+v", ok, got)
 	}
 
-	human := callCtx{human: true}
+	human := callCtx{human: true, who: func() caller.Caller { return caller.Caller{Kind: caller.Human} }}
 	show := func(c callCtx, id string) (proto.AccessShowResult, *proto.Error) {
 		res, perr := s.accessShow(proto.AccessShowParams{Project: "demo", Thread: id}, c)
 		if perr != nil {
@@ -170,6 +170,19 @@ excluded_commands = ["make bench"]
 	}
 	if _, perr := show(self, ""); perr == nil {
 		t.Error("a thread saw the project's")
+	}
+	// On the human socket, a caller in an agent's session (an
+	// unsandboxed command) is that agent, as gateHuman has it.
+	escaped := callCtx{human: true, who: self.who}
+	if res, perr := show(escaped, ""); perr == nil {
+		t.Errorf("an escaped thread saw the project's: %+v", res)
+	}
+	if own, perr := show(escaped, "t-0001"); perr != nil || findRule(own.Rules, proto.AccessAllow, "Bash(git log:*)") != nil {
+		t.Errorf("an escaped thread's own: %v, agent files shown %v", perr, perr == nil)
+	}
+	coord := callCtx{human: true, who: func() caller.Caller { return caller.Caller{Kind: caller.Coordinator, Project: "demo"} }}
+	if _, perr := show(coord, "t-0001"); perr == nil {
+		t.Error("the coordinator on the human socket saw a thread's")
 	}
 	other := callCtx{who: func() caller.Caller { return caller.Caller{Kind: caller.Coordinator, Project: "demo"} }}
 	if _, perr := show(other, "t-0001"); perr == nil {
@@ -268,5 +281,18 @@ func TestAccessGitDirRule(t *testing.T) {
 	}
 	if findRule(rules(""), proto.AccessGitDir, "<its repo>") == nil {
 		t.Error("no placeholder for a thread to come")
+	}
+	// Placeholders are display-only: no kind or value of theirs launches,
+	// even given a path rule's kind.
+	set, err := s.resolveAccess(accessInput{role: proto.RoleThread, slug: "demo", goos: "darwin"}, loadLaunchConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	set.Rules = append(set.Rules, proto.AccessRule{Where: proto.AccessInside, Kind: proto.AccessWrite, Value: "<repo>/.git", Source: proto.AccessFromTM})
+	a := launchAccess(set)
+	for _, p := range slices.Concat(a.Read, a.Write, a.WriteFiles, a.NoWrite, a.NoWriteFiles) {
+		if strings.HasPrefix(p, "<") {
+			t.Errorf("a placeholder launched: %q in %+v", p, a)
+		}
 	}
 }

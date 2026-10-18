@@ -26,7 +26,7 @@ func TestAccessView(t *testing.T) {
 			{Where: proto.AccessAgent, Kind: proto.AccessAllow, Value: "Bash(git log:*)", Source: ".claude/settings.local.json"},
 		}}}
 	m.sel = "th:alpha:t-0002"
-	keyPress(m, "e")
+	drain(t, m, keyPress(m, "e"))
 	if !slices.Equal(src.accessShown, []string{"alpha t-0002"}) {
 		t.Fatalf("asked for %q", src.accessShown)
 	}
@@ -46,7 +46,7 @@ func TestAccessView(t *testing.T) {
 	src.access = proto.AccessShowResult{AccessSet: proto.AccessSet{OS: "linux"}}
 	keyPress(m, "a")
 	keyPress(m, "5")
-	keyPress(m, "e")
+	drain(t, m, keyPress(m, "e"))
 	if got := src.accessShown[len(src.accessShown)-1]; got != "alpha " {
 		t.Errorf("Sandbox tab asked for %q", got)
 	}

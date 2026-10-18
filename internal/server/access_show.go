@@ -74,21 +74,25 @@ func readLaunchRecord(p *project.Project, id string) (proto.AccessSet, bool) {
 }
 
 // mayShowAccess refuses an agent asking for any access but its own
-// thread's; the human may see every project's and thread's.
-func mayShowAccess(c callCtx, slug, id string) *proto.Error {
-	if c.human {
-		return nil
-	}
+// thread's, and says whether the caller is the human, who may see every
+// project's and thread's: on the human socket, and not placed by the pid
+// walk in an agent's session (an unsandboxed command reaches that
+// socket too), as gateHuman (mayCall).
+func mayShowAccess(c callCtx, slug, id string) (human bool, perr *proto.Error) {
 	who := c.who()
-	if who.Kind == caller.Thread && id != "" && who.Project == slug && who.Thread == id {
-		return nil
+	if c.human && !who.IsAgent() {
+		return true, nil
 	}
-	return proto.Errorf(proto.ErrRefused, "an agent may see only its own thread's access (tm access show --thread <your thread>)")
+	if who.Kind == caller.Thread && id != "" && who.Project == slug && who.Thread == id {
+		return false, nil
+	}
+	return false, proto.Errorf(proto.ErrRefused, "an agent may see only its own thread's access (tm access show --thread <your thread>)")
 }
 
 // accessShow is access.show: a project's thread to come, or a thread.
 func (s *Server) accessShow(p proto.AccessShowParams, c callCtx) (any, *proto.Error) {
-	if perr := mayShowAccess(c, p.Project, p.Thread); perr != nil {
+	human, perr := mayShowAccess(c, p.Project, p.Thread)
+	if perr != nil {
 		return nil, perr
 	}
 	proj, err := project.Open(p.Project)
@@ -100,7 +104,7 @@ func (s *Server) accessShow(p proto.AccessShowParams, c callCtx) (any, *proto.Er
 	// The agent's own files are the human's to see: the user's settings
 	// aren't a thread's business, and its worktree's it reads itself.
 	home := ""
-	if c.human {
+	if human {
 		home, _ = os.UserHomeDir()
 	}
 	if p.Thread == "" {

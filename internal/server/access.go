@@ -331,7 +331,9 @@ func launched(r proto.AccessRule) bool {
 func launchAccess(set proto.AccessSet) agent.Access {
 	var a agent.Access
 	for _, r := range set.Rules {
-		if !launched(r) {
+		// A path rule launches only with an absolute path: never a
+		// placeholder of a thread to come (<worktree>, <its repo>).
+		if !launched(r) || r.Kind != proto.AccessCommand && !filepath.IsAbs(r.Value) {
 			continue
 		}
 		switch r.Kind {
