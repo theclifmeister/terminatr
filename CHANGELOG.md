@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.37.0](https://github.com/theclifmeister/terminatr/compare/v0.36.0...v0.37.0) (2026-10-18)
+
+
+### Features
+
+* **sandbox:** browser testing opens npm and Playwright downloads, ships a sandbox config ([#638](https://github.com/theclifmeister/terminatr/issues/638)) ([003f5a6](https://github.com/theclifmeister/terminatr/commit/003f5a603ef8178011c02f3b1c5b29dca7dd01eb))
+
 ## [0.36.0](https://github.com/theclifmeister/terminatr/compare/v0.35.1...v0.36.0) (2026-10-18)
 
 
