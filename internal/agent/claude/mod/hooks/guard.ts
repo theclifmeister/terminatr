@@ -402,11 +402,24 @@ function denyMod(m: ModRule, summary: string): Denial {
 
 // judgeBash checks each simple command of a Bash command line.
 function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Denial | null {
+  // The floor follows a cd (or pushd) of the line for the relative paths
+  // after it, best effort; one it can't follow leaves them unknown (dir
+  // ''). After a command that ends in a redirect (>| f, tee >(…) f: the
+  // line splits there), a command's first word may be what it writes.
+  let here = r.cwd ?? ''
+  let split = false
   for (const words of commands(command)) {
     const argv = strip(words)
+    const fl: Rules = { ...r, cwd: here }
+    // Only a word that looks like a path: 2>&1 splits the same way.
+    if (split && words.length > 0 && (/[/\\]/.test(words[0]) || words[0].startsWith('~'))) {
+      const sd = judgeNoWrite(fl, '>', [words[0]], ['>', words[0]])
+      if (sd) return sd
+    }
+    split ||= words.length > 0 && words[words.length - 1] === '>'
     if (argv.length === 0) {
       // A redirect alone (date &> f: the & ends the command).
-      const nd = judgeNoWrite(r, '>', [], words)
+      const nd = judgeNoWrite(fl, '>', [], words)
       if (nd) return nd
       continue
     }
@@ -416,8 +429,9 @@ function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Den
     if (md) return md
     const gd = judgeGitConfig(r, has, cmd, words)
     if (gd) return gd
-    const nd = judgeNoWrite(r, cmd, args, words)
+    const nd = judgeNoWrite(fl, cmd, args, words)
     if (nd) return nd
+    if (cmd === 'cd' || cmd === 'pushd' || cmd === 'popd') here = cdTo(r, here, cmd, args)
     if (cmd === 'git') {
       const d = judgeGit(r, has, args)
       if (d) return d
@@ -487,46 +501,111 @@ function judgeGitConfig(r: Rules, has: (id: string) => boolean, cmd: string, wor
 
 // The commands that write the files they are given: all of them (true),
 // or the last one, where the others are what is copied (false);
-// IN_PLACE those that write only with -i (sed -i, perl -pi).
+// IN_PLACE those that write only with -i (sed -i, perl -pi). Of the
+// paths given to REMOVERS (and to the others with -r: cp -r, chmod -R),
+// a folder that holds a noWrite path counts too: removing or moving
+// ~/.terminatr takes the project folder with it.
 const WRITERS: ReadonlyMap<string, boolean> = new Map([
   ...'rm rmdir unlink shred touch mkdir truncate tee mv chmod chown chgrp'.split(' ').map(c => [c, true] as const),
   ...'cp install ln rsync'.split(' ').map(c => [c, false] as const),
 ])
 const IN_PLACE = new Set('sed gsed perl ruby'.split(' '))
+const REMOVERS = new Set('rm rmdir mv rsync'.split(' '))
+
+// TM_AGENT_MOD are the tm mod subcommands an agent may run; the others,
+// tm project's TM_PROJECT_WRITES (and repo add) and the dashboard write
+// tm's settings in the tm process itself, the human's alone: an agent
+// past its sandbox (yolo) that runs one with its session's variables
+// unset and out of its session's process tree would pass for the human,
+// so the floor refuses them.
+const TM_AGENT_MOD = new Set('list show validate new test logs examples host'.split(' '))
+const TM_PROJECT_WRITES = new Set('new remote activate deactivate pause resume archive unarchive delete rename mv link open'.split(' '))
+
+// tmWritesSettings is which of those tm with args (after its name) is
+// ("tm mod enable", "tm (the dashboard)"), or ''.
+function tmWritesSettings(args: string[]): string {
+  let i = 0
+  for (; i < args.length && args[i].startsWith('-'); i++) {
+    if (args[i] === '-h' || args[i] === '--help') return ''
+  }
+  if (i === args.length) return 'tm (the dashboard)'
+  const pos = args.slice(i + 1).filter(a => !a.startsWith('-'))
+  if (pos.length === 0) return ''
+  if ((args[i] === 'mod' && !TM_AGENT_MOD.has(pos[0])) || (args[i] === 'project' && TM_PROJECT_WRITES.has(pos[0]))) return `tm ${args[i]} ${safe(pos[0])}`
+  if (args[i] === 'project' && (pos[0] === 'repo' || pos[0] === 'repos') && pos[1] === 'add') return 'tm project repo add'
+  return ''
+}
+
+// cdTo is where cmd (cd, pushd, popd) with args leaves a line whose
+// relative paths were from dir: a folder it names plainly, home for
+// none, else unknown ('').
+function cdTo(r: Rules, dir: string, cmd: string, args: string[]): string {
+  const to = args.filter(a => !a.startsWith('-') || a === '-')
+  if (cmd === 'popd' || to.length > 1) return ''
+  if (to.length === 0) return cmd === 'pushd' ? '' : (r.home ?? '')
+  const a = to[0]
+  if (a === '-' || /[$`]/.test(a) || (a.startsWith('~') && !a.startsWith('~/') && a !== '~')) return ''
+  if (dir === '' && !a.startsWith('/') && !a.startsWith('~') && !DRIVE.test(slash(a))) return ''
+  return abs({ ...r, cwd: dir }, a)
+}
 
 // judgeNoWrite: the floor's noWrite, of a simple command, its name and
 // arguments and its words as written: a redirect into a path there, or a
 // command that writes the paths it is given naming one (cp's and the
-// like's target).
+// like's target; a folder holding one, for a remover). With r.cwd ''
+// (a cd the line made that it can't follow) a relative path could be
+// anywhere, so it is refused.
 function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): Denial | null {
   if (!r.noWrite?.length) return null
-  const refuse = (w: string): Denial | null => {
+  const roots = r.noWrite
+  const refuse = (w: string, parents: boolean): Denial | null => {
+    if (w === '' || w.startsWith('&')) return null
+    if (r.cwd === '' && !slash(w).startsWith('/') && !w.startsWith('~') && !DRIVE.test(slash(w))) {
+      return floor(deny(r, 'tm-files', `${cmd} of ${safe(w)} after a cd`))
+    }
     const p = abs(r, w)
-    return w !== '' && !w.startsWith('&') && covers(r, r.noWrite ?? [], p) ? floor(deny(r, 'tm-files', `${cmd} of ${safe(p)}`)) : null
+    const fixed = p.replace(/[*?[{].*$/, '').replace(/\/$/, '') || '/'
+    return covers(r, roots, p) || (parents && roots.some(n => under(r, n, fixed))) ? floor(deny(r, 'tm-files', `${cmd} of ${safe(p)}`)) : null
   }
   for (let i = 1; i < words.length; i++) {
     if (words[i - 1] === '>' && words[i] !== '>') {
-      const d = refuse(words[i])
+      const d = refuse(words[i], false)
       if (d) return d
     }
+  }
+  if (cmd === '>') return null
+  if (cmd === 'tm' || cmd.includes('TERMINATR_BIN')) {
+    const what = tmWritesSettings(args)
+    if (what) return floor(deny(r, 'tm-files', what))
   }
   let all = WRITERS.get(cmd)
   if (IN_PLACE.has(cmd)) all = args.some(a => isLong(a, '--in-place') || (/^-[a-zA-Z0-9]+$/.test(a) && a.includes('i')) || a.startsWith('-i')) ? true : undefined
   if (cmd === 'dd') {
     for (const a of args) {
       if (!a.startsWith('of=')) continue
-      const d = refuse(a.slice(3))
+      const d = refuse(a.slice(3), false)
+      if (d) return d
+    }
+  } else if (cmd === 'git') {
+    // git config --file F (-f F) writes F.
+    const i = args.indexOf('config')
+    for (let j = i + 1; i >= 0 && j < args.length; j++) {
+      let f = ''
+      if ((args[j] === '--file' || args[j] === '-f') && j + 1 < args.length) f = args[j + 1]
+      else if (args[j].startsWith('--file=')) f = args[j].slice('--file='.length)
+      const d = refuse(f, false)
       if (d) return d
     }
   }
   if (all === undefined) return null
+  const recursive = REMOVERS.has(cmd) || args.some(a => isLong(a, '--recursive') || isLong(a, '--archive') || (/^-[a-zA-Z0-9]+$/.test(a) && /[rRa]/.test(a.slice(1))))
   // The paths given, and the targets given with -t.
   let paths: string[] = []
   const targets: string[] = []
   const rest = unredirected(args)
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i]
-    if (a === '-t' && i + 1 < rest.length) targets.push(rest[++i])
+    if ((a === '-t' || a === '--target-directory') && i + 1 < rest.length) targets.push(rest[++i])
     else if (a.startsWith('--target-directory=')) targets.push(a.slice('--target-directory='.length))
     else if (!a.startsWith('-')) paths.push(a)
   }
@@ -534,7 +613,7 @@ function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): D
   else if (targets.length > 0) paths = targets
   else paths = paths.slice(-1)
   for (const p of paths) {
-    const d = refuse(p)
+    const d = refuse(p, recursive)
     if (d) return d
   }
   return null

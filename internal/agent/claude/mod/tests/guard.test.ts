@@ -121,7 +121,8 @@ async function start($: Engine, on: On, rules: Rules | null, env: Record<string,
   let hangRules = false
   let links: Record<string, string> | number | 'hang' = {}
   const resolved: string[][] = []
-  let escapes = 0
+  const escapes: { id: string; done?: boolean }[] = []
+  let escapeStatus = 204
   on('http.fetch', async (_$, e) => {
     const ok = (status: number, text = '') => ({ value: { status, ok: status < 300, headers: {}, text } })
     if (e.url.endsWith('/v1/resolve')) {
@@ -140,7 +141,10 @@ async function start($: Engine, on: On, rules: Rules | null, env: Record<string,
       denied.push(JSON.parse(e.init?.body ?? '{}'))
       return ok(204)
     }
-    if (e.url.endsWith('/v1/escape')) escapes++
+    if (e.url.endsWith('/v1/escape')) {
+      escapes.push(JSON.parse(e.init?.body ?? '{}'))
+      return ok(escapeStatus)
+    }
     return ok(204)
   })
   on('process.spawn', async function* () {
@@ -153,6 +157,7 @@ async function start($: Engine, on: On, rules: Rules | null, env: Record<string,
   await clock.settle()
   return {
     clock, denied, resolved, fetches: () => fetches, escapes: () => escapes,
+    setEscapeStatus: (n: number) => { escapeStatus = n },
     setRules: (r: Rules | null) => { current = r },
     hang: (h: boolean) => { hangRules = h },
     setLinks: (l: typeof links) => { links = l },
@@ -279,16 +284,24 @@ test('an excluded command that asks first is asked though Claude would allow it,
 })
 
 test('a call that asks to leave the sandbox is asked, and the server told first; not under yolo', async ($, on) => {
-  const { clock, escapes, setRules } = await start($, on, { ...thread, askEscapes: true })
+  const { clock, escapes, setRules, setEscapeStatus } = await start($, on, { ...thread, askEscapes: true })
   const input = { command: 'ls', dangerouslyDisableSandbox: true }
   const asked = await $.tool.check({ tool: 'Bash', input })
   expect([asked.decision, asked.reason]).toEqual(['ask', 'terminatr guard: this command asks to run outside the sandbox, so the user answers it.'])
   const r = await $.tool.call({ tool: 'Bash', ...input })
   expect((r as { deny?: string }).deny).toBeUndefined()
-  expect(escapes()).toBe(1)
+  // Marked before it ran, and ended after, by the same id.
+  const sent = escapes()
+  expect(sent.length).toBe(2)
+  expect([!!sent[0].done, sent[1].done, sent[0].id === sent[1].id && sent[0].id !== '']).toEqual([false, true, true])
   // In the sandbox: nothing to tell.
   await $.tool.call({ tool: 'Bash', command: 'ls' })
-  expect(escapes()).toBe(1)
+  expect(escapes().length).toBe(2)
+  // The server can't be told: refused, never opened unmarked.
+  setEscapeStatus(500)
+  const unmarked = await $.tool.call({ tool: 'Bash', ...input })
+  expect((unmarked as { deny?: string }).deny).toContain("couldn't make sure that only the user answers it")
+  setEscapeStatus(204)
   // Yolo: the floor only, nothing asked.
   setRules({ on: true, role: 'thread', home: '/h', cwd: WT, floor: ['force-push'], noWrite: ['/h/.terminatr/config.toml'], tools: TOOLS })
   await clock.advance(1_001)

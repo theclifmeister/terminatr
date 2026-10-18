@@ -573,11 +573,27 @@ func (r Rules) deny(rule, summary, target string) *Denial {
 
 // judgeBash checks each simple command of a Bash command line.
 func (r Rules) judgeBash(command string) *Denial {
+	// The floor follows a cd (or pushd) of the line for the relative
+	// paths after it, best effort; one it can't follow leaves them
+	// unknown (nowhere.dir ""). After a command that ends in a redirect
+	// (>| f, tee >(…) f: the line splits there), a command's first word
+	// may be what it writes.
+	here := nowhere{dir: r.Cwd}
+	split := false
 	for _, words := range Commands(command) {
 		argv := strip(words)
+		fl := r
+		fl.Cwd = here.dir
+		// Only a word that looks like a path: 2>&1 splits the same way.
+		if split && len(words) > 0 && (strings.ContainsAny(words[0], `/\`) || strings.HasPrefix(words[0], "~")) {
+			if d := fl.judgeNoWrite(">", []string{words[0]}, []string{">", words[0]}); d != nil {
+				return d
+			}
+		}
+		split = split || len(words) > 0 && words[len(words)-1] == ">"
 		if len(argv) == 0 {
 			// A redirect alone (date &> f: the & ends the command).
-			if d := r.judgeNoWrite(">", nil, words); d != nil {
+			if d := fl.judgeNoWrite(">", nil, words); d != nil {
 				return d
 			}
 			continue
@@ -590,8 +606,11 @@ func (r Rules) judgeBash(command string) *Denial {
 		if d := r.judgeGitConfig(cmd, words); d != nil {
 			return d
 		}
-		if d := r.judgeNoWrite(cmd, args, words); d != nil {
+		if d := fl.judgeNoWrite(cmd, args, words); d != nil {
 			return d
+		}
+		if cmd == "cd" || cmd == "pushd" || cmd == "popd" {
+			here = here.cd(r, cmd, args)
 		}
 		var d *Denial
 		switch {
@@ -1344,32 +1363,130 @@ func (r Rules) judgeGitConfig(cmd string, words []string) *Denial {
 // writers are the commands that write the files they are given: all
 // of them (true), or the last one, where the others are what is copied
 // (false); inPlace those that write only with -i (sed -i, perl -pi).
+// Of the paths given to removers (and to the others with -r: cp -r,
+// chmod -R), a folder that holds a NoWrite path counts too: removing or
+// moving ~/.terminatr takes the project folder with it.
 var (
 	writers = map[string]bool{"rm": true, "rmdir": true, "unlink": true, "shred": true, "touch": true, "mkdir": true,
 		"truncate": true, "tee": true, "mv": true, "chmod": true, "chown": true, "chgrp": true,
 		"cp": false, "install": false, "ln": false, "rsync": false}
-	inPlace = setOf("sed gsed perl ruby")
+	inPlace  = setOf("sed gsed perl ruby")
+	removers = setOf("rm rmdir mv rsync")
 )
+
+// tmAgentMod are the tm mod subcommands an agent may run; the others,
+// tm project's tmProjectWrites (and repo add) and the dashboard write
+// tm's settings in the tm process itself, the human's alone: an agent
+// past its sandbox (yolo) that runs one with its session's variables
+// unset and out of its session's process tree would pass for the human
+// (internal/cli: Run, caller.Narrower), so the floor refuses them.
+var (
+	tmAgentMod      = setOf("list show validate new test logs examples host")
+	tmProjectWrites = setOf("new remote activate deactivate pause resume archive unarchive delete rename mv link open")
+)
+
+// tmWritesSettings is which of those tm with args (after its name) is
+// ("tm mod enable", "tm (the dashboard)"), or "".
+func tmWritesSettings(args []string) string {
+	i := 0
+	for i < len(args) && strings.HasPrefix(args[i], "-") {
+		if args[i] == "-h" || args[i] == "--help" {
+			return ""
+		}
+		i++
+	}
+	if i == len(args) {
+		return "tm (the dashboard)"
+	}
+	var pos []string
+	for _, a := range args[i+1:] {
+		if !strings.HasPrefix(a, "-") {
+			pos = append(pos, a)
+		}
+	}
+	switch {
+	case len(pos) == 0:
+	case args[i] == "mod" && !tmAgentMod[pos[0]], args[i] == "project" && tmProjectWrites[pos[0]]:
+		return "tm " + args[i] + " " + safe(pos[0])
+	case args[i] == "project" && (pos[0] == "repo" || pos[0] == "repos") && len(pos) > 1 && pos[1] == "add":
+		return "tm project repo add"
+	}
+	return ""
+}
+
+// nowhere is the folder a command line's relative paths are from, as
+// the floor follows its cd: "" when it can't tell.
+type nowhere struct{ dir string }
+
+// cd is where cmd (cd, pushd, popd) with args leaves the line: a
+// folder it names plainly, home for none, else unknown.
+func (n nowhere) cd(r Rules, cmd string, args []string) nowhere {
+	var to []string
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-") || a == "-" {
+			to = append(to, a)
+		}
+	}
+	switch {
+	case cmd == "popd" || len(to) > 1:
+		return nowhere{}
+	case len(to) == 0:
+		if cmd == "pushd" {
+			return nowhere{}
+		}
+		return nowhere{dir: r.Home}
+	}
+	a := to[0]
+	if a == "-" || strings.ContainsAny(a, "$`") || strings.HasPrefix(a, "~") && !strings.HasPrefix(a, "~/") && a != "~" {
+		return nowhere{}
+	}
+	if n.dir == "" && !strings.HasPrefix(a, "/") && !strings.HasPrefix(a, "~") && !drive.MatchString(slash(a)) {
+		return nowhere{}
+	}
+	r.Cwd = n.dir
+	return nowhere{dir: r.abs(a)}
+}
 
 // judgeNoWrite: the floor's NoWrite, of a simple command, its name and
 // arguments and its words as written: a redirect into a path there, or
 // a command that writes the paths it is given naming one (cp's and the
-// like's target).
+// like's target; a folder holding one, for a remover). With r.Cwd ""
+// (a cd the line made that it can't follow) a relative path could be
+// anywhere, so it is refused.
 func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 	if len(r.NoWrite) == 0 {
 		return nil
 	}
-	refuse := func(w string) *Denial {
-		if p := r.abs(w); w != "" && !strings.HasPrefix(w, "&") && r.covers(r.NoWrite, p) {
+	refuse := func(w string, parents bool) *Denial {
+		if w == "" || strings.HasPrefix(w, "&") {
+			return nil
+		}
+		if r.Cwd == "" && !strings.HasPrefix(slash(w), "/") && !strings.HasPrefix(w, "~") && !drive.MatchString(slash(w)) {
+			return floor(r.deny(RuleTMFiles, cmd+" of "+safe(w)+" after a cd", ""))
+		}
+		p := r.abs(w)
+		fixed := strings.TrimSuffix(wildcard.ReplaceAllString(p, ""), "/")
+		if fixed == "" {
+			fixed = "/"
+		}
+		if r.covers(r.NoWrite, p) || parents && slices.ContainsFunc(r.NoWrite, func(n string) bool { return r.under(n, fixed) }) {
 			return floor(r.deny(RuleTMFiles, cmd+" of "+safe(p), ""))
 		}
 		return nil
 	}
 	for i := 1; i < len(words); i++ {
 		if words[i-1] == ">" && words[i] != ">" {
-			if d := refuse(words[i]); d != nil {
+			if d := refuse(words[i], false); d != nil {
 				return d
 			}
+		}
+	}
+	if cmd == ">" {
+		return nil
+	}
+	if cmd == "tm" || strings.Contains(cmd, "TERMINATR_BIN") {
+		if what := tmWritesSettings(args); what != "" {
+			return floor(r.deny(RuleTMFiles, what, ""))
 		}
 	}
 	all, ok := writers[cmd]
@@ -1378,10 +1495,27 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 			return isLong(a, "--in-place") || shortFlags.MatchString(a) && strings.Contains(a, "i") || strings.HasPrefix(a, "-i")
 		})
 	}
-	if cmd == "dd" {
+	switch cmd {
+	case "dd":
 		for _, a := range args {
 			if p, ok := strings.CutPrefix(a, "of="); ok {
-				if d := refuse(p); d != nil {
+				if d := refuse(p, false); d != nil {
+					return d
+				}
+			}
+		}
+	case "git":
+		// git config --file F (-f F) writes F.
+		if i := slices.Index(args, "config"); i >= 0 {
+			for j := i + 1; j < len(args); j++ {
+				f := ""
+				switch {
+				case (args[j] == "--file" || args[j] == "-f") && j+1 < len(args):
+					f = args[j+1]
+				case strings.HasPrefix(args[j], "--file="):
+					f = strings.TrimPrefix(args[j], "--file=")
+				}
+				if d := refuse(f, false); d != nil {
 					return d
 				}
 			}
@@ -1390,13 +1524,16 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 	if !ok {
 		return nil
 	}
+	recursive := removers[cmd] || slices.ContainsFunc(args, func(a string) bool {
+		return isLong(a, "--recursive") || isLong(a, "--archive") || shortFlags.MatchString(a) && strings.ContainsAny(a[1:], "rRa")
+	})
 	// The paths given, and the targets given with -t.
 	var paths, targets []string
 	args = unredirected(args)
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
-		case a == "-t" && i+1 < len(args):
+		case (a == "-t" || a == "--target-directory") && i+1 < len(args):
 			i++
 			targets = append(targets, args[i])
 		case strings.HasPrefix(a, "--target-directory="):
@@ -1414,7 +1551,7 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 		paths = paths[len(paths)-1:]
 	}
 	for _, p := range paths {
-		if d := refuse(p); d != nil {
+		if d := refuse(p, recursive); d != nil {
 			return d
 		}
 	}

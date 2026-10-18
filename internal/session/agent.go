@@ -189,12 +189,14 @@ type agentRT struct {
 	lastState  agent.Merged
 	lastSID    string
 	lastTodos  []agent.Todo
-	// escape: a call asked to run outside the sandbox (MarkEscape), so
-	// the permission prompt it brings is the user's; escapeSeen: that
-	// prompt came. It ends when the prompt does, or with the turn.
-	escape, escapeSeen bool
-	emptyBox           bool // the empty-box rule matched at the last evaluation
-	blocker            bool // a blocked rule matched at the last evaluation
+	// escapes are the calls, by id, that asked to run outside the
+	// sandbox (MarkEscape) and haven't ended (EndEscape): while one is
+	// open, the permission prompt on screen may be its, so it is the
+	// user's. One per call, so that a parallel call's prompt ending
+	// doesn't end an escape's; all end with the turn.
+	escapes  map[string]bool
+	emptyBox bool // the empty-box rule matched at the last evaluation
+	blocker  bool // a blocked rule matched at the last evaluation
 
 	keys        map[string]string // rule id -> the keys that answer its dialog (agent.Rule.Keys)
 	answerRule  string            // the keyed rule that is the screen's match
@@ -297,7 +299,7 @@ func (s *Session) AgentState() (st AgentState, ok bool) {
 		since = rt.prompts[0].at
 	}
 	held, heldSince := rt.heldWhy, rt.heldSince
-	escape := rt.escape || rt.cfg.PromptsEscape
+	escape := len(rt.escapes) > 0 || rt.cfg.PromptsEscape
 	var remote, known bool
 	if m := agent.ManifestOf(rt.a); m != nil && m.ObservesRemote() && rt.fields != nil {
 		remote, known = rt.fields[m.RemoteControl.StatusField] != "", true
@@ -313,20 +315,36 @@ func (s *Session) AgentState() (st AgentState, ok bool) {
 	}, true
 }
 
-// MarkEscape says the agent's call that comes next to a permission
-// prompt runs outside its sandbox (the guard asked: rule "escape", or
-// "excluded" for an excluded command that asks first), so that prompt
-// is the user's to answer. Kept until the
-// prompt ends, or the turn does.
-func (s *Session) MarkEscape() {
+// MarkEscape says the agent's call id runs outside its sandbox (the
+// guard asked: rule "escape", or "excluded" for an excluded command that
+// asks first), so a permission prompt open while
+// the call is is the user's to answer. Kept until EndEscape(id), or
+// the turn's end. An id "" is the call's when it has none of its own.
+func (s *Session) MarkEscape(id string) { s.escape(id, true) }
+
+// EndEscape says the call id ended (ran, failed or was refused).
+func (s *Session) EndEscape(id string) { s.escape(id, false) }
+
+func (s *Session) escape(id string, open bool) {
 	rt := s.agentRT()
 	if rt == nil {
 		return
 	}
-	rt.mu.Lock()
-	rt.escape, rt.escapeSeen = true, false
-	rt.mu.Unlock()
+	rt.setEscape(id, open)
 	s.agentChanged(rt)
+}
+
+func (rt *agentRT) setEscape(id string, open bool) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if !open {
+		delete(rt.escapes, id)
+		return
+	}
+	if rt.escapes == nil {
+		rt.escapes = map[string]bool{}
+	}
+	rt.escapes[id] = true
 }
 
 // Explain returns the agent tracker's view of every source.
@@ -399,16 +417,20 @@ func (s *Session) Hook(event string, payload map[string]any) (agent.HookResult, 
 	}
 	s.checkHook(rt, event, payload)
 	env := agent.HookEnv{}
+	callID, _ := payload["tool_use_id"].(string)
 	if g := rt.cfg.Guard; g != nil {
 		env.Guard = func(tool string, input map[string]any) *guard.Denial {
 			d := g(tool, input)
 			if d != nil && d.Ask && (d.Rule == guard.RuleEscape || d.Rule == guard.RuleExcluded) {
-				rt.mu.Lock()
-				rt.escape, rt.escapeSeen = true, false
-				rt.mu.Unlock()
+				rt.setEscape(callID, true)
 			}
 			return d
 		}
+	}
+	switch event {
+	case "PostToolUse", "PostToolUseFailure", "PermissionDenied":
+		// The call ended; an escape's mark with it.
+		rt.setEscape(callID, false)
 	}
 	if c := rt.cfg.Context; c != nil {
 		env.Context = func() ([]byte, error) { return c(payload) }
@@ -807,13 +829,9 @@ func (s *Session) agentChanged(rt *agentRT) {
 	rt.mu.Lock()
 	changed := st != rt.lastState || sid != rt.lastSID || !slices.Equal(todos, rt.lastTodos)
 	rt.lastState, rt.lastSID, rt.lastTodos = st, sid, todos
-	switch {
-	case !rt.escape:
-	case st.State == agent.StateBlocked:
-		rt.escapeSeen = true
-	case rt.escapeSeen || st.State == agent.StateIdle || st.State == agent.StateExited:
-		// Its prompt was answered, or the turn ended without one.
-		rt.escape, rt.escapeSeen = false, false
+	if st.State == agent.StateIdle || st.State == agent.StateExited {
+		// No call outlives its turn.
+		rt.escapes = nil
 	}
 	rt.mu.Unlock()
 	if changed {

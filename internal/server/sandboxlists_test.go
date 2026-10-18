@@ -269,6 +269,13 @@ write = ["~/src/fixtures", "/`+strings.TrimPrefix(filepath.ToSlash(p.Home), "/")
 	if g := s.guardRulesFor(rec); !slices.Equal(g.AskFirst, []string{"cargo bench", "make e2e"}) || slices.Contains(g.Writable, fixtures) {
 		t.Errorf("after the change: ask first %q, writable %q", g.AskFirst, g.Writable)
 	}
+	// The guard off asks still: the question is the user's, as escapes'.
+	writeConfig(t, "[projects.demo]\nguard = false\n[projects.demo.sandbox]\nexcluded_commands = [\"cargo bench\"]\n")
+	if g := s.guardRulesFor(rec); g.Floor != nil || g.Rules != nil || !slices.Contains(g.AskFirst, "cargo bench") {
+		t.Errorf("guard off: %+v", g)
+	} else if d := g.Judge("Bash", map[string]any{"command": "cargo bench"}); d == nil || !d.Ask {
+		t.Errorf("guard off, cargo bench: %+v", d)
+	}
 	codex := rec
 	codex.Agent, codex.Thread = "codex", "t-0002"
 	if g := s.guardRulesFor(codex); g.AskFirst != nil {
