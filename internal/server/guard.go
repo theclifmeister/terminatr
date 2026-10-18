@@ -169,6 +169,9 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 	s.mu.Unlock()
 	if slices.Contains(g.Rules, "worktree-only") {
 		dirs := append([]string{r.Cwd}, fsx.TempRoots()...)
+		if d, err := threadTemp(r.Project, r.Thread); err == nil {
+			dirs = append(dirs, d) // its own temp folder (T587)
+		}
 		dirs = append(dirs, agent.GuardWritable(reg, r.Agent, home, os.Getenv)...)
 		g.Writable = withReal(dirs)
 		g.GitConfig = withReal(threadGitConfig(r))

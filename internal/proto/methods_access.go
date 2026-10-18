@@ -41,6 +41,8 @@ const (
 	AccessWriteFile    = "write-file"    // a file writable besides the cwd
 	AccessNoWrite      = "no-write"      // a folder never written
 	AccessNoWriteFile  = "no-write-file" // a file never written
+	AccessNoRead       = "no-read"       // a folder never read nor written (other sessions' temp folders)
+	AccessTemp         = "temp"          // the thread's own temp folder, its TMPDIR
 	AccessSocket       = "socket"        // tm's socket, reachable from the sandbox
 	AccessCommand      = "command"       // a command prefix run without a prompt (the coordinator's merge)
 	AccessPreset       = "preset"        // a sandbox preset's switch (config key)

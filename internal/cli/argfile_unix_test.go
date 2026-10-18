@@ -5,6 +5,8 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -217,5 +219,41 @@ func TestAgentScratchpad(t *testing.T) {
 	code, _, errs = h.run(caller.Caller{Kind: caller.Thread, Project: "demo", Thread: "t-0002"}, report, "report", "--attach", filepath.Join(adoptedPad, "chart.png"))
 	if code == 0 || !strings.Contains(errs, "adopted") {
 		t.Errorf("an adopted thread's scratchpad: exit %d, %s", code, errs)
+	}
+}
+
+// TestThreadTempRoots (T587): a thread launched with its own temp folder
+// may name files in its agent's temp folder there, never in the shared
+// /tmp/claude-<uid> its sandbox can't read; one launched before has the
+// shared folder still.
+func TestThreadTempRoots(t *testing.T) {
+	h := newHarness(t)
+	h.ok(human, "project", "new", "demo")
+	p, _ := project.Open("demo")
+	if _, err := thread.Create(p, thread.Record{Title: "Fix it", State: thread.Running, Worktree: t.TempDir(), Agent: "claude"}); err != nil {
+		t.Fatal(err)
+	}
+	e := &Env{Caller: thr, InServer: true}
+	shared := "/tmp/claude-" + strconv.Itoa(os.Getuid())
+	roots, _, scratch := tempRoots(e)
+	if !slices.Contains(roots, shared) || !scratch {
+		t.Fatalf("before its own temp folder: roots %q scratch %v, want %s", roots, scratch, shared)
+	}
+	own, err := home.ThreadTempDir("demo", "t-0001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(own, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(own) })
+	roots, _, scratch = tempRoots(e)
+	if want := []string{filepath.Join(own, "claude-"+strconv.Itoa(os.Getuid()))}; !slices.Equal(roots, want) || !scratch {
+		t.Errorf("with its own temp folder: roots %q scratch %v, want %q", roots, scratch, want)
+	}
+	// Another thread's caller doesn't get this one's.
+	other := &Env{Caller: caller.Caller{Kind: caller.Thread, Project: "demo", Thread: "t-0002"}, InServer: true}
+	if r, _, _ := tempRoots(other); slices.ContainsFunc(r, func(d string) bool { return strings.HasPrefix(d, own) }) {
+		t.Errorf("t-0002 may name t-0001's temp folder: %q", r)
 	}
 }

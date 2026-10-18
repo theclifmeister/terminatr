@@ -24,6 +24,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
@@ -613,7 +614,7 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 	// from and the thread's launch record keeps.
 	tree := threadTree(r)
 	acc, err := s.resolveAccess(accessInput{role: r.Role, slug: r.Project, cwd: r.Cwd, tree: tree, agent: r.Agent, goos: caps.OS,
-		yolo: r.Yolo, noEscapes: r.NoSandboxEscapes}, lc)
+		thread: r.Thread, yolo: r.Yolo, noEscapes: r.NoSandboxEscapes}, lc)
 	if err != nil {
 		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 	}
@@ -666,6 +667,18 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		Yolo: yolo, NoSandboxEscapes: noEscapes, Model: r.Model, TMBin: s.opts.Bin, Socket: s.opts.Paths.Socket, Access: launchAccess(acc),
 		RemoteControl: r.RemoteControl, RemoteName: remoteName(r),
 		Mods: p.modSock != "", PaneScheme: v.paneScheme,
+	}
+	if spec.TempDir = launchTemp(acc); spec.TempDir != "" {
+		// The thread's own temp folder (T587), kept across its restarts
+		// like its worktree: its scratchpads stay where it left them. Its
+		// folder in the shared /tmp must be this user's own first: no
+		// one else may have made it or put a link there.
+		for _, d := range []string{filepath.Dir(spec.TempDir), spec.TempDir} {
+			if err := fsx.EnsurePrivateDir(d); err != nil {
+				p.abandon()
+				return nil, proto.Errorf(proto.ErrInternal, "thread temp folder: %v", err)
+			}
+		}
 	}
 	if r.Role == proto.RoleThread && r.Project != "" {
 		// The human's sandbox lists and presets, read here at every

@@ -317,6 +317,7 @@ type claudeSettings struct {
 		Enabled                  bool
 		AllowUnsandboxedCommands *bool
 		ExcludedCommands         []string
+		Filesystem               *struct{ DenyRead, AllowRead []string }
 		Network                  struct {
 			AllowUnixSockets  []string
 			AllowLocalBinding bool

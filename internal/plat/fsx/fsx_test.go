@@ -271,3 +271,30 @@ func TestLinkDir(t *testing.T) {
 		t.Fatalf("removing the link touched the folder: %v", err)
 	}
 }
+
+// TestFileLinksMine: an open file's link count and owner, from its
+// handle on every platform (Windows too: an attachment check, T587).
+func TestFileLinksMine(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "f")
+	if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if n, err := FileLinks(f); err != nil || n != 1 {
+		t.Errorf("FileLinks = %d, %v; want 1", n, err)
+	}
+	if !FileMine(f) {
+		t.Error("FileMine: my own file is not mine")
+	}
+	if err := os.Link(p, filepath.Join(dir, "g")); err != nil {
+		t.Skipf("no hard links here: %v", err)
+	}
+	if n, err := FileLinks(f); err != nil || n != 2 {
+		t.Errorf("FileLinks after a second name = %d, %v; want 2", n, err)
+	}
+}

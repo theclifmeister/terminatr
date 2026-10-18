@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/codehost"
+	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -94,6 +95,17 @@ func (e *Env) threadResolve(p *project.Project, id string, discard bool) error {
 			did = append(did, "removed folder "+r.Worktree)
 		} else {
 			did = append(did, "kept folder "+r.Worktree+" (not empty)")
+		}
+	}
+	// Its own temp folder (T587): scratchpads and task output, nothing
+	// handed in (a report's attachments are copied to the library).
+	if d, err := home.ThreadTempDir(p.Slug, id); err == nil {
+		if _, err := os.Lstat(d); err == nil {
+			if err := os.RemoveAll(d); err != nil {
+				did = append(did, "kept temp folder "+d+" ("+textsafe.Line(err.Error(), 120)+")")
+			} else {
+				did = append(did, "removed temp folder "+d)
+			}
 		}
 	}
 	if _, err := thread.Update(p, id, func(x *thread.Record) error {

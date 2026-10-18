@@ -59,7 +59,7 @@ args = [
   # A thread or a coordinator runs in permission profile "tm", the access
   # policy (docs/SPEC.md §5.2) on top of Codex's workspace-write: Read is
   # read, Write is write, NoWrite and NoWriteFiles are read ("deny" would
-  # block reading too). A linked worktree's git dirs need write by name:
+  # block reading too), NoRead is none. A linked worktree's git dirs need write by name:
   # Codex carves git dirs out of every broader grant, and --add-dir and
   # writable_roots don't reopen them. tm.sock needs the network on, which
   # also opens HTTPS (user, 2026-10-07: open for now). Yolo has no
@@ -109,6 +109,8 @@ unset_env = ["CODEX_THREAD_ID", "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED
 TERMINATR_SESSION = "{{.SessionID}}"
 TERMINATR_SOCKET = "{{.Socket}}"
 TERMINATR_BIN = "{{.TMBin}}"
+# A thread's own temp folder (T587), which its workspace profile writes.
+TMPDIR = "{{.TempDir}}"
 
 # The models (docs/SPEC.md §8.2, Models): tm ships none and asks Codex's
 # app server (JSON-RPC over stdio): account/read names the login and
