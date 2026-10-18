@@ -59,7 +59,7 @@ type Manifest struct {
 		ResumeArgs  []string          `toml:"resume_args"`  // appended when Resume is set
 		YoloArgs    []string          `toml:"yolo_args"`
 		ModelArgs   []string          `toml:"model_args"` // appended when Model is set
-		Env         map[string]string `toml:"env"`        // values are templates
+		Env         map[string]string `toml:"env"`        // values are templates; an empty result sets nothing
 		UnsetEnv    []string          `toml:"unset_env"`  // inherited variables to drop; trailing * = prefix
 		Files       []ManifestFile    `toml:"files"`
 	} `toml:"launch"`
@@ -223,6 +223,10 @@ type Guard struct {
 	// argument may then be only in the caller's own, never loose in the
 	// temp folder nor in another's (docs/SPEC.md §7.2, T586).
 	TempScratch bool `toml:"temp_scratch"`
+	// TempMax is the longest temp folder, in bytes, the agent's sandbox
+	// keeps its TMPDIR in; a longer one it leaves for a shared folder
+	// (Claude's: /tmp/claude-<uid>). 0: no limit.
+	TempMax int `toml:"temp_max"`
 	// Tools are the agent's tools the guard judges, by name: each one's
 	// kind (shell, write, patch, read, glob) and the input fields that
 	// kind reads, e.g. Bash = { kind = "shell", fields = ["command"] };
@@ -781,6 +785,9 @@ func (a *manifestAgent) Launch(spec LaunchSpec) (Launch, error) {
 		if err != nil {
 			return out, err
 		}
+		if s == "" {
+			continue // nothing to set this launch, e.g. no temp folder
+		}
 		out.Env = append(out.Env, k+"="+s)
 	}
 	out.Files = map[string][]byte{}
@@ -919,7 +926,7 @@ var funcs = template.FuncMap{
 	// a -c key=value as TOML (Codex's developer_instructions).
 	"toml": TOMLString,
 	// pathmodes is the file grants of an access policy as a TOML inline
-	// table of path = "read" | "write", for a sandbox that takes one
+	// table of path = "read" | "write" | "none", for a sandbox that takes one
 	// mode per path (Codex's permission profile filesystem); any more
 	// arguments are directories to write besides (a coordinator's cwd).
 	"pathmodes": pathModes,
@@ -1001,7 +1008,9 @@ func posixPath(d string) string {
 // pathModes renders a's paths as {"/p"="read","/q"="write",…}: Read
 // is read, Write, WriteFiles and the write dirs (by real path, as the
 // policy names them) are write, NoWrite and NoWriteFiles are read and win over a
-// write of the same path. Each path appears once, in policy order.
+// write of the same path, NoRead is none (no access), winning over
+// both, and OwnTemp, inside a NoRead folder, is write. Each path appears
+// once, in policy order.
 func pathModes(a Access, write ...string) string {
 	var order []string
 	mode := map[string]string{}
@@ -1027,6 +1036,10 @@ func pathModes(a Access, write ...string) string {
 	}
 	set(a.NoWrite, "read", true)
 	set(a.NoWriteFiles, "read", true)
+	set(a.NoRead, "none", true)
+	if a.OwnTemp != "" {
+		set([]string{a.OwnTemp}, "write", true)
+	}
 	parts := make([]string, len(order))
 	for i, p := range order {
 		parts[i] = TOMLString(p) + "=" + TOMLString(mode[p])

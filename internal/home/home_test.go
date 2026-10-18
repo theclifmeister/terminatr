@@ -1,8 +1,11 @@
 package home
 
 import (
+	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -63,4 +66,40 @@ func TestDirPanicsOnRealHomeFromEnv(t *testing.T) {
 		}
 	}()
 	Dir()
+}
+
+// TestThreadTempDir (T587): one folder per home, project and thread, in
+// ThreadTempRoot, short enough for Claude's sandbox to keep its TMPDIR
+// there (44 bytes with /claude-<uid>); only plain names.
+func TestThreadTempDir(t *testing.T) {
+	t.Setenv(Env, t.TempDir())
+	a, err := ThreadTempDir("demo", "t-0001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Dir(a) != ThreadTempRoot() {
+		t.Errorf("%s is not in %s", a, ThreadTempRoot())
+	}
+	if again, _ := ThreadTempDir("demo", "t-0001"); again != a {
+		t.Errorf("not stable: %s, %s", a, again)
+	}
+	for _, o := range [][2]string{{"demo", "t-0002"}, {"other", "t-0001"}} {
+		if b, _ := ThreadTempDir(o[0], o[1]); b == a {
+			t.Errorf("%v shares %s", o, a)
+		}
+	}
+	t.Setenv(Env, t.TempDir())
+	if b, _ := ThreadTempDir("demo", "t-0001"); b == a {
+		t.Errorf("another home shares %s", a)
+	}
+	if runtime.GOOS != "windows" {
+		if n := len(filepath.Join(a, "claude-"+strconv.Itoa(os.Getuid()))); n > 44 {
+			t.Errorf("%s/claude-<uid> is %d bytes, over Claude's 44", a, n)
+		}
+	}
+	for _, bad := range [][2]string{{"", "t-1"}, {"demo", ""}, {"..", "t-1"}, {"demo", "../x"}, {"a/b", "t-1"}, {"demo", "."}} {
+		if _, err := ThreadTempDir(bad[0], bad[1]); err == nil {
+			t.Errorf("ThreadTempDir(%q, %q) took it", bad[0], bad[1])
+		}
+	}
 }

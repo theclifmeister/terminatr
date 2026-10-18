@@ -71,6 +71,7 @@ func TestSecretEnvLaunch(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("CODEX_HOME", t.TempDir())
 	newWatchProject(t)
+	cleanThreadTemp(t, "demo", "t-0001")
 	writeConfig(t, "[projects.demo.env]\nNPM_TOKEN = { from = \"env:SRV_NPM\" }\n")
 	reg, err := agent.Load("")
 	if err != nil {

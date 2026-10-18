@@ -11,6 +11,7 @@ package server
 import (
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -18,6 +19,8 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/gitx"
+	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -27,6 +30,9 @@ import (
 // of its record (tm thread start reads them from config.toml).
 type accessInput struct {
 	role, slug, cwd, agent, goos string
+	// thread is a thread's id, which names its own temp folder; "" for
+	// a thread to come.
+	thread string
 	// tree is a thread's checkout by its record (threadTree), whose git
 	// dirs it is granted; nil for none.
 	tree            *gitx.Tree
@@ -133,6 +139,9 @@ func (s *Server) fileRules(in accessInput, a agent.Access, lc launchConfig) []pr
 		out = append(out, proto.AccessRule{Where: proto.AccessInside, Kind: proto.AccessWorktree, Value: "<worktree>", Source: proto.AccessFromTM, Note: "the thread's worktree"},
 			gitDirRule("<its repo>"))
 	}
+	if in.role == proto.RoleThread {
+		out = append(out, s.tempRules(in)...)
+	}
 	for _, l := range []struct {
 		kind  string
 		paths []string
@@ -151,6 +160,88 @@ func (s *Server) fileRules(in accessInput, a agent.Access, lc launchConfig) []pr
 		out = append(out, proto.AccessRule{Where: proto.AccessInside, Kind: proto.AccessSocket, Value: s.opts.Paths.Socket, Source: proto.AccessFromTM, Note: "tm's socket; never the human socket"})
 	}
 	return out
+}
+
+// tempRules are a thread's own temp folder (home.ThreadTempDir), which
+// its launch makes the agent's TMPDIR, and the folders it never reads
+// nor writes (T587): the other threads' (home.ThreadTempRoot, its own
+// open within) and the temp folders the user's other agent sessions
+// share (agent.SharedTemps: Claude's /tmp/claude-<uid>, with their
+// scratchpads and task output). The shared ones are skipped where the
+// agent would keep its TMPDIR there all the same (agent.OwnTempFits),
+// or where one holds the thread's own folders (a tm home in a temp
+// folder: tests, scratch servers): the deny would take them too.
+func (s *Server) tempRules(in accessInput) []proto.AccessRule {
+	id := in.thread
+	if id == "" {
+		id = "t-0000" // a thread to come: as long a path as its own
+	}
+	own, err := threadTemp(in.slug, id)
+	if err != nil {
+		return nil
+	}
+	shown := own
+	if in.thread == "" {
+		shown = "<thread temp folder>"
+	}
+	out := []proto.AccessRule{
+		{Where: proto.AccessInside, Kind: proto.AccessTemp, Value: shown, Source: proto.AccessFromTM,
+			Note: "the thread's own temp folder: its TMPDIR, its scratchpads"},
+		{Where: proto.AccessInside, Kind: proto.AccessNoRead, Value: home.ThreadTempRoot(), Source: proto.AccessFromTM,
+			Note: "the other threads' temp folders; its own is open"},
+	}
+	reg := s.registry()
+	fits := agent.OwnTempFits(reg, in.agent, own)
+	h, _ := os.UserHomeDir()
+	for _, d := range agent.SharedTemps(reg, h, os.Getenv) {
+		// By the kernel's spelling (/private/tmp), which sandboxes match,
+		// even before the folder exists: a later session of the user
+		// makes it while the thread runs.
+		d = filepath.Join(realPath(filepath.Dir(d)), filepath.Base(d))
+		r := proto.AccessRule{Where: proto.AccessInside, Kind: proto.AccessNoRead, Value: d, Source: proto.AccessFromTM,
+			Note: "other sessions' temp folders: the user's Claude sessions' scratchpads and task output"}
+		switch {
+		case !fits:
+			r.Skipped = notDenied + "the thread's temp folder (" + own + ") is too long for " + in.agent + "'s sandbox, which keeps its TMPDIR in this shared folder instead, so the thread can read the user's other sessions here"
+		case within(d, own) || filepath.IsAbs(in.cwd) && within(d, in.cwd):
+			r.Skipped = "it holds the thread's own folders"
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// notDenied starts the reason a shared temp folder's deny is left out
+// where the thread can then read it: said plainly, in the effective
+// view and as a launch warning (tempWarnings).
+const notDenied = "NOT DENIED: "
+
+// tempWarnings are the launch warnings of set's shared temp folders the
+// thread can read after all.
+func tempWarnings(set proto.AccessSet) []string {
+	var out []string
+	for _, r := range set.Rules {
+		if r.Kind == proto.AccessNoRead && strings.HasPrefix(r.Skipped, notDenied) {
+			out = append(out, "access: "+r.Value+" is "+strings.ToLower(strings.TrimSuffix(notDenied, ": "))+": "+strings.TrimPrefix(r.Skipped, notDenied))
+		}
+	}
+	return out
+}
+
+// threadTemp is thread id of project slug's own temp folder.
+func threadTemp(slug, id string) (string, error) { return home.ThreadTempDir(slug, id) }
+
+// threadTempRoot holds every thread's own temp folder.
+func threadTempRoot() string { return home.ThreadTempRoot() }
+
+// within reports whether path is dir or below it, by either's real path.
+func within(dir, path string) bool {
+	for _, p := range []string{path, realPath(path)} {
+		if _, ok := fsx.Within(dir, p); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // gitDirRule is the git-dir grant (T551) as one rule naming repo, the
@@ -355,11 +446,26 @@ func launchAccess(set proto.AccessSet) agent.Access {
 			a.NoWrite = append(a.NoWrite, r.Value)
 		case proto.AccessNoWriteFile:
 			a.NoWriteFiles = append(a.NoWriteFiles, r.Value)
+		case proto.AccessNoRead:
+			a.NoRead = append(a.NoRead, r.Value)
+		case proto.AccessTemp:
+			a.OwnTemp = r.Value
 		case proto.AccessCommand:
 			a.Commands = append(a.Commands, r.Value)
 		}
 	}
 	return a
+}
+
+// launchTemp is the thread's own temp folder set's rules give it, ""
+// for none.
+func launchTemp(set proto.AccessSet) string {
+	for _, r := range set.Rules {
+		if r.Kind == proto.AccessTemp && launched(r) && filepath.IsAbs(r.Value) {
+			return r.Value
+		}
+	}
+	return ""
 }
 
 // launchSandbox is a thread's sandbox lists from set, the guidance
