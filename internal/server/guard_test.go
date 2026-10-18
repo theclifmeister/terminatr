@@ -519,12 +519,12 @@ func TestAccessThreadGitDirs(t *testing.T) {
 	if want := in("packed-refs", "packed-refs.lock"); !slices.Equal(a.WriteFiles, want) {
 		t.Errorf("worktree: write files %q, want %q", a.WriteFiles, want)
 	}
-	for _, n := range []string{"hooks", "info", "worktrees/other"} {
+	for _, n := range []string{"hooks", "info", "modules", "worktrees/other"} {
 		if !slices.Contains(a.NoWrite, filepath.Join(common, n)) {
 			t.Errorf("worktree: %s not in no-write %q", n, a.NoWrite)
 		}
 	}
-	for _, n := range []string{"config", "config.lock"} {
+	for _, n := range []string{"config", "config.lock", "config.worktree", "commondir"} {
 		if !slices.Contains(a.NoWriteFiles, filepath.Join(common, n)) {
 			t.Errorf("worktree: %s not in no-write files %q", n, a.NoWriteFiles)
 		}
@@ -551,6 +551,9 @@ func TestAccessThreadGitDirs(t *testing.T) {
 			t.Errorf("main checkout: %s not in no-write files %q", n, m.NoWriteFiles)
 		}
 	}
+	if !slices.Contains(m.NoWrite, filepath.Join(common, "modules")) {
+		t.Errorf("main checkout: modules not in no-write %q", m.NoWrite)
+	}
 	// Nothing written is the git dir or holds what git runs or reads
 	// as configuration.
 	for _, a := range []agent.Access{a, m} {
@@ -564,7 +567,7 @@ func TestAccessThreadGitDirs(t *testing.T) {
 	}
 	// The guard keeps a thread's commands off them too.
 	g := s.guardRulesFor(wtRec)
-	for _, n := range []string{"hooks", "info", "config", "worktrees/wt/config.worktree", "worktrees/wt/commondir"} {
+	for _, n := range []string{"hooks", "info", "modules", "config", "commondir", "worktrees/wt/config.worktree", "worktrees/wt/commondir", "worktrees/other/config.worktree"} {
 		if !slices.Contains(g.GitConfig, filepath.Join(common, n)) {
 			t.Errorf("guard: %s not in %q", n, g.GitConfig)
 		}
@@ -575,7 +578,8 @@ func TestAccessThreadGitDirs(t *testing.T) {
 // whatever its folder's .git says: a worktree whose .git names another
 // repository, a folder other than the recorded worktree, a thread with
 // no record or none of its repo, and a main checkout whose .git is no
-// folder get none.
+// folder get none. The guard's rule on the repo's git configuration
+// holds without the worktree.
 func TestThreadTreeRecorded(t *testing.T) {
 	testPaths(t)
 	p := newWatchProject(t)
@@ -626,8 +630,11 @@ func TestThreadTreeRecorded(t *testing.T) {
 		t.Errorf("forged .git: %+v", tr)
 	}
 	s := &Server{opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}}}
-	if g := s.guardRulesFor(r); len(g.GitConfig) != 0 {
-		t.Errorf("forged .git: guard %q", g.GitConfig)
+	g := s.guardRulesFor(r)
+	for _, n := range []string{"hooks", "config", "worktrees/wt/config.worktree"} {
+		if !slices.Contains(g.GitConfig, filepath.Join(repo, ".git", n)) {
+			t.Errorf("forged .git: guard %s not in %q", n, g.GitConfig)
+		}
 	}
 	// A main checkout's git dir is its recorded folder's .git, a folder.
 	main := session(thread.Record{Title: "main", Repo: other, Worktree: other, Checkout: true}, other)

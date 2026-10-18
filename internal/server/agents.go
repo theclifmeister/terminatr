@@ -193,14 +193,12 @@ func threadGitAccess(common, own string) agent.Access {
 		NoWrite:      dirs,
 		NoWriteFiles: append(files, filepath.Join(common, "config.lock")),
 	}
-	// Never the files in its own git dir that would make git read
-	// configuration or another common dir from it: the main checkout's
-	// too, which its cwd covers.
-	a.NoWriteFiles = append(a.NoWriteFiles, ownConfig(own)...)
 	wts := filepath.Join(common, "worktrees")
 	if own != common {
-		// Its own git dir is written, but for those files.
+		// Its own git dir is written, but for the files that would make
+		// git read configuration or another common dir from it.
 		a.Write = append(a.Write, own)
+		a.NoWriteFiles = append(a.NoWriteFiles, ownConfig(own)...)
 	}
 	if es, err := os.ReadDir(wts); err == nil {
 		for _, e := range es {
@@ -220,9 +218,13 @@ func ownConfig(own string) []string {
 }
 
 // gitConfig are what git runs or reads as configuration in git dir
-// common: its hooks and info folders and its config file.
+// common: its hooks and info folders, its submodules' git dirs (modules,
+// with their own config and hooks), its config file, and the main
+// checkout's own config.worktree and commondir (ownConfig), which a
+// main checkout's cwd covers.
 func gitConfig(common string) (dirs, files []string) {
-	return []string{filepath.Join(common, "hooks"), filepath.Join(common, "info")}, []string{filepath.Join(common, "config")}
+	return []string{filepath.Join(common, "hooks"), filepath.Join(common, "info"), filepath.Join(common, "modules")},
+		append([]string{filepath.Join(common, "config")}, ownConfig(common)...)
 }
 
 // mergeCommands are the commands the opt-in coordinator_merges setting
