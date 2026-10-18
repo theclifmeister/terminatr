@@ -213,6 +213,12 @@ type Guard struct {
 	// asks to run outside its sandbox (Codex's escalations under -a
 	// on-request), so the user answers it, never the coordinator.
 	PromptsEscape bool `toml:"prompts_escape"`
+	// TempScratch: the temp folder is shared by all the agent's sessions
+	// of the user, each keeping its working folder's files in a folder
+	// named after the folder's path (Claude Code's scratchpad). A file
+	// argument may then be only in the caller's own, never loose in the
+	// temp folder nor in another's (docs/SPEC.md §7.2, T586).
+	TempScratch bool `toml:"temp_scratch"`
 	// Tools are the agent's tools the guard judges, by name: each one's
 	// kind (shell, write, patch, read, glob) and the input fields that
 	// kind reads, e.g. Bash = { kind = "shell", fields = ["command"] };
@@ -256,6 +262,17 @@ func GuardPaths(entries []string, home string, getenv func(string) string) []str
 // are no uids: Windows); "" for none. An entry that resolves to the root
 // or to a folder holding home is skipped: it is no agent's own.
 func GuardTemp(entries []string, home string, getenv func(string) string) string {
+	if all := GuardTemps(entries, home, getenv); len(all) > 0 {
+		return all[0]
+	}
+	return ""
+}
+
+// GuardTemps is every [guard] temp entry that resolves as GuardTemp
+// says, in order: the agent's sandbox may have set any of its variables
+// when it started, so each is a folder it may write.
+func GuardTemps(entries []string, home string, getenv func(string) string) []string {
+	var out []string
 	for _, e := range entries {
 		missing := false
 		p := os.Expand(e, func(name string) string {
@@ -274,9 +291,11 @@ func GuardTemp(entries []string, home string, getenv func(string) string) string
 		if p = filepath.Clean(p); missing || !filepath.IsAbs(p) || filepath.Dir(p) == p || holds(p, home) {
 			continue
 		}
-		return p
+		if !slices.Contains(out, p) {
+			out = append(out, p)
+		}
 	}
-	return ""
+	return out
 }
 
 // holds reports whether dir is home or holds it (home "" holds nothing).

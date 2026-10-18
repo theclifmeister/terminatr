@@ -85,7 +85,7 @@ func (e *Env) forward(args []string) (code int, ok bool) {
 func RunInServer(p proto.CLIRunParams, c caller.Caller) proto.CLIRunResult {
 	var out, errb bytes.Buffer
 	e := &Env{
-		Stdin: bytes.NewReader(p.Stdin), Stdout: &out, Stderr: &errb, Cwd: p.Cwd, Caller: c,
+		Stdin: bytes.NewReader(p.Stdin), Stdout: &out, Stderr: &errb, Cwd: p.Cwd, Caller: c, InServer: true,
 		Getenv: func(k string) string {
 			switch k {
 			case caller.EnvProject:
