@@ -43,7 +43,7 @@ func wantSandbox(l launchConfig, slug, goos string) (lists agent.SandboxLists, g
 	}
 	for _, r := range t.Rules {
 		switch {
-		case r.Dropped:
+		case r.Dropped || r.Replaced:
 		case r.Refused != "":
 			skipped = append(skipped, fmt.Sprintf("sandbox %s %q refused, the thread starts without it: %s", kind[r.Key], r.Value, r.Refused))
 		case skip(r.Key, words[r.Key]):

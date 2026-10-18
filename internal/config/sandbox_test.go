@@ -22,6 +22,10 @@ local_ports = true
 [projects.none.sandbox]
 drop = ["Bash(docker compose *)", "registry.npmjs.org", "nothing here"]
 
+[projects.empty.sandbox]
+allow = []
+hosts = ["x.dev"]
+
 [projects.plain]
 yolo = false
 `)
@@ -32,12 +36,16 @@ yolo = false
 	all := func(key, v string) SandboxRule { return SandboxRule{Key: key, Value: v} }
 	own := func(key, v string) SandboxRule { return SandboxRule{Key: key, Value: v, Own: true} }
 	dropped := func(key, v string) SandboxRule { return SandboxRule{Key: key, Value: v, Dropped: true} }
+	replaced := func(key, v string) SandboxRule { return SandboxRule{Key: key, Value: v, Replaced: true} }
 	common := []SandboxRule{all(SandboxHosts, "registry.npmjs.org"), all(SandboxExcluded, "docker compose *"), all(SandboxAllow, "Bash(docker compose *)")}
 	for slug, want := range map[string]ThreadSandbox{
-		// The project's lists add to all projects'; one entry in both is
-		// all projects'.
-		"web": {Rules: []SandboxRule{all(SandboxHosts, "registry.npmjs.org"), all(SandboxExcluded, "docker compose *"), own(SandboxExcluded, "npx playwright *"), all(SandboxAllow, "Bash(docker compose *)")},
+		// Until the migration, a project's excluded_commands and allow
+		// replace all projects' (tm 0.37); the key it doesn't set follows
+		// them.
+		"web": {Rules: []SandboxRule{all(SandboxHosts, "registry.npmjs.org"), replaced(SandboxExcluded, "docker compose *"), own(SandboxExcluded, "npx playwright *"), own(SandboxExcluded, "docker compose *"), all(SandboxAllow, "Bash(docker compose *)")},
 			LocalPorts: true, LocalPortsSet: true, LocalPortsOwn: true},
+		// An empty one replaces them too; hosts add up.
+		"empty": {Rules: []SandboxRule{all(SandboxHosts, "registry.npmjs.org"), own(SandboxHosts, "x.dev"), all(SandboxExcluded, "docker compose *"), replaced(SandboxAllow, "Bash(docker compose *)")}},
 		// A drop takes one of all projects' entries away; one that
 		// matches nothing stays listed.
 		"none": {Rules: []SandboxRule{dropped(SandboxHosts, "registry.npmjs.org"), all(SandboxExcluded, "docker compose *"), dropped(SandboxAllow, "Bash(docker compose *)")},
@@ -52,7 +60,7 @@ yolo = false
 	if got := c.ThreadSandbox("none").Given(SandboxAllow); len(got) != 0 {
 		t.Errorf("none's allow rules: %v", got)
 	}
-	if got := c.SandboxOf("web"); !reflect.DeepEqual(got.Lists, map[string][]string{SandboxExcluded: {"npx playwright *", "docker compose *"}}) || got.LocalPorts == nil {
+	if got := c.SandboxOf("web"); !reflect.DeepEqual(got.Lists, map[string][]string{SandboxExcluded: {"npx playwright *", "docker compose *"}}) || got.LocalPorts == nil || !got.Replacing(SandboxExcluded) {
 		t.Errorf("SandboxOf(web) = %+v", got)
 	}
 	if got := c.SandboxOf("plain"); len(got.Lists) != 0 {
@@ -220,6 +228,35 @@ func TestEditSandbox(t *testing.T) {
 	}
 	if err := EditSandbox("projects.web", add(SandboxDrop, "Bash(npx playwright *)")); err != nil {
 		t.Fatal(err)
+	}
+	// A project's first excluded command starts its own list from all
+	// projects' (it replaces them until the migration); removing the
+	// last leaves an empty list, which still replaces them.
+	if err := EditSandbox(DefaultsTable, add(SandboxExcluded, "docker compose *")); err != nil {
+		t.Fatal(err)
+	}
+	if err := EditSandbox("projects.app", add(SandboxExcluded, "make e2e")); err != nil {
+		t.Fatal(err)
+	}
+	c0, _ := Load()
+	if got := c0.SandboxOf("app").Lists[SandboxExcluded]; !reflect.DeepEqual(got, []string{"docker compose *", "make e2e"}) {
+		t.Fatalf("app's own list: %q", got)
+	}
+	for _, v := range []string{"docker compose *", "make e2e"} {
+		if err := EditSandbox("projects.app", func(t *SandboxTable) error { t.Remove(SandboxExcluded, v); return nil }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c0, _ = Load()
+	if got := c0.ThreadSandbox("app").Given(SandboxExcluded); len(got) != 0 || !c0.SandboxOf("app").Replacing(SandboxExcluded) {
+		t.Fatalf("app after removing all: %q", got)
+	}
+	if err := EditSandbox("projects.app", func(t *SandboxTable) error { t.Follow(SandboxExcluded); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	c0, _ = Load()
+	if got := c0.ThreadSandbox("app").Given(SandboxExcluded); !reflect.DeepEqual(got, []string{"docker compose *"}) {
+		t.Fatalf("app following: %q", got)
 	}
 	for _, bad := range []struct {
 		table string

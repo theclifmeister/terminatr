@@ -44,20 +44,21 @@ func sandboxRow(t *testing.T, slug, label string) setting {
 	return setting{}
 }
 
-// TestSandboxView: a project's view lists all projects' entries with
-// its own, which add to them; adding an excluded command asks first,
-// saying it runs outside the sandbox; a match-all entry is refused; x
-// removes only the project's own, d drops one of all projects' and u
-// takes it back.
+// TestSandboxView: a project follows all projects' excluded commands
+// until it adds one, which starts its own list from theirs (it
+// replaces them, as in tm 0.37, until the migration); adding one asks
+// first, saying it runs outside the sandbox; a match-all entry is
+// refused; x removes the project's own, f follows all projects again,
+// and on a project that follows them d drops one and u takes it back.
 func TestSandboxView(t *testing.T) {
 	src, m := sandboxData(t)
 	row := sandboxRow(t, "alpha", "Excluded commands")
-	if v := row.value(m); v != "1" {
-		t.Errorf("value %q", v)
+	if v, from := row.value(m), row.from(m); v != "1" || from != config.AllProjectsName {
+		t.Errorf("value %q from %q", v, from)
 	}
 	drain(t, m, row.change(m))
 	out := screen(m)
-	for _, want := range []string{"outside the sandbox", "full file and network access", "docker compose *", "all projects", "add up", "d drop for alpha", "u take it back"} {
+	for _, want := range []string{"outside the sandbox", "full file and network access", "docker compose *", "all projects", "which alpha follows", "d drop for alpha"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}
@@ -70,6 +71,14 @@ func TestSandboxView(t *testing.T) {
 		}
 		in.text = text
 		drain(t, m, keyPress(m, "enter"))
+	}
+	given := func() []string {
+		t.Helper()
+		c, err := config.Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c.ThreadSandbox("alpha").Given(config.SandboxExcluded)
 	}
 	keyPress(m, "a")
 	enter("*")
@@ -88,42 +97,48 @@ func TestSandboxView(t *testing.T) {
 		t.Fatalf("no warning before adding: %T", m.top())
 	}
 	drain(t, m, keyPress(m, "y"))
-	// The project's own entry adds to all projects'.
-	if want := []string{"projects.alpha excluded_commands + npx playwright *"}; !slices.Equal(src.sandbox, want) {
-		t.Errorf("saved %v", src.sandbox)
+	// alpha's own list starts from all projects'.
+	if got := given(); !slices.Equal(got, []string{"docker compose *", "npx playwright *"}) {
+		t.Errorf("given %q", got)
 	}
-	if v := row.value(m); v != "2 (1 alpha)" {
-		t.Errorf("value %q", v)
+	if v, from := row.value(m), row.from(m); v != "2 (1 of all projects replaced)" || from != "" {
+		t.Errorf("value %q from %q", v, from)
 	}
-	// x on all projects' entry says d drops it.
+	if out := screen(m); !strings.Contains(out, "alpha's own list replaces all projects'") || !strings.Contains(out, "all projects · replaced") {
+		t.Errorf("own list:\n%s", out)
+	}
 	v := m.top().(*sandboxView)
 	v.sel = 0
-	keyPress(m, "x")
-	if !strings.Contains(m.msg, "d drops it for alpha") || len(src.sandbox) != 1 {
-		t.Errorf("x on all projects': %q %v", m.msg, src.sandbox)
+	keyPress(m, "d")
+	if !strings.Contains(m.msg, "f follows theirs again") {
+		t.Errorf("d on a replaced entry: %q", m.msg)
 	}
+	v.sel = 1
+	drain(t, m, keyPress(m, "x"))
+	if got := given(); !slices.Equal(got, []string{"npx playwright *"}) {
+		t.Errorf("after x: %q", got)
+	}
+	drain(t, m, keyPress(m, "f"))
+	if got := given(); !slices.Equal(got, []string{"docker compose *"}) || row.from(m) != config.AllProjectsName {
+		t.Errorf("after f: %q", got)
+	}
+	v.sel = 0
 	drain(t, m, keyPress(m, "d"))
-	c, _ := config.Load()
-	if got := c.ThreadSandbox("alpha").Given(config.SandboxExcluded); !slices.Equal(got, []string{"npx playwright *"}) {
+	if got := given(); len(got) != 0 {
 		t.Errorf("after the drop: %q", got)
 	}
 	if out := screen(m); !strings.Contains(out, "─ docker compose *") || !strings.Contains(out, "all projects · dropped") {
 		t.Errorf("dropped entry not shown:\n%s", out)
 	}
-	if v := row.value(m); v != "1 (1 of all projects dropped)" {
-		t.Errorf("value %q", v)
-	}
 	drain(t, m, keyPress(m, "u"))
-	// x removes the project's own.
-	v.sel = 1
-	drain(t, m, keyPress(m, "x"))
-	c, _ = config.Load()
-	if got := c.SandboxOf("alpha"); len(got.Lists) != 0 {
-		t.Errorf("still its own: %v", got)
-	}
-	want := []string{"projects.alpha excluded_commands + npx playwright *", "projects.alpha drop + docker compose *", "projects.alpha drop - docker compose *", "projects.alpha excluded_commands - npx playwright *"}
+	want := []string{"projects.alpha excluded_commands + npx playwright *", "projects.alpha excluded_commands - docker compose *",
+		"projects.alpha excluded_commands follows all projects", "projects.alpha drop + docker compose *", "projects.alpha drop - docker compose *"}
 	if !slices.Equal(src.sandbox, want) {
 		t.Errorf("saved %q", src.sandbox)
+	}
+	c, _ := config.Load()
+	if got := c.SandboxOf("alpha"); len(got.Lists) != 0 || len(got.Replaces) != 0 {
+		t.Errorf("left set: %+v", got)
 	}
 }
 

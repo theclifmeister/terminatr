@@ -47,6 +47,11 @@ const sandboxGuide = "Prefer rules inside the sandbox (p adds a preset's): the t
 // sandboxAdds says how a project's lists combine with all projects'.
 const sandboxAdds = "A project's entries add to all projects'; on a project, d drops one of all projects' and u takes it back."
 
+// sandboxReplaces says how a project's excluded commands and allow
+// rules combine with all projects', until the migration
+// (config.ReplaceKeys).
+const sandboxReplaces = "A project's own list replaces all projects' (adding its first entry starts it from theirs; x on the row follows them again); a project that follows them may drop one (d)."
+
 // sandboxLists are each list's row label, help, view text, example and
 // what messages call its entries.
 var sandboxLists = map[string]struct{ label, help, about, example, word string }{
@@ -59,11 +64,11 @@ var sandboxLists = map[string]struct{ label, help, about, example, word string }
 		"Texts tm adds after a thread's brief. They open nothing.",
 		config.GuideBrowserTesting, "guidance texts"},
 	config.SandboxExcluded: {"Excluded commands",
-		"A last resort: commands a thread's Bash runs outside its sandbox, for a tool nothing inside the sandbox gets working (full Chrome, headed Playwright). " + sandboxOutside + " Claude's Bash rule syntax: a trailing * takes any arguments. " + sandboxAdds,
+		"A last resort: commands a thread's Bash runs outside its sandbox, for a tool nothing inside the sandbox gets working (full Chrome, headed Playwright). " + sandboxOutside + " Claude's Bash rule syntax: a trailing * takes any arguments. " + sandboxReplaces,
 		sandboxOutside + " Claude still asks, or auto mode decides, unless an allow rule covers the command. " + sandboxBoth,
 		"npx playwright *", "excluded commands"},
 	config.SandboxAllow: {"Allow rules",
-		"Permission rules a thread's agent gets on top of tm's, so auto mode or a prompt doesn't stop a command you excluded (Bash(npx playwright *)). " + sandboxBoth + " tm's deny rules and the guard still win. " + sandboxAdds,
+		"Permission rules a thread's agent gets on top of tm's, so auto mode or a prompt doesn't stop a command you excluded (Bash(npx playwright *)). " + sandboxBoth + " tm's deny rules and the guard still win. " + sandboxReplaces,
 		"Calls these rules match run without a prompt or auto mode's review; tm's deny rules and the guard still win. " + sandboxBoth,
 		"Bash(npx playwright *)", "allow rules"},
 }
@@ -154,8 +159,12 @@ func (sr safetyRows) editSandbox(m *dash, what, msg string, fn func(*config.Sand
 	if m.data.Sandbox == nil {
 		m.data.Sandbox = map[string]config.SandboxTable{}
 	}
-	t := m.data.Sandbox[sr.slug].Clone()
+	before := m.data.Sandbox[sr.slug]
+	t := before.Clone()
 	fn(&t)
+	if !sr.all {
+		config.StartOwnLists(m.data.Sandbox[""], before, &t)
+	}
 	m.data.Sandbox[sr.slug] = t
 	s, table := m.src, sr.table
 	return m.act(func() actionMsg {
@@ -231,9 +240,19 @@ func (sr safetyRows) sandboxRow(key string) setting {
 		row.note = func(m *dash) []string {
 			return ownersNote(m, func(p ProjectData) bool {
 				t := m.data.Sandbox[p.Slug]
-				return len(t.Lists[key]) > 0 || slices.ContainsFunc(t.Lists[config.SandboxDrop], func(d string) bool { return m.data.Sandbox[""].Has(key, d) })
+				return len(t.Lists[key]) > 0 || t.Replacing(key) || slices.ContainsFunc(t.Lists[config.SandboxDrop], func(d string) bool { return m.data.Sandbox[""].Has(key, d) })
 			})
 		}
+	} else if slices.Contains(config.ReplaceKeys, key) {
+		// Until the migration, the project's own list replaces all
+		// projects': the row follows them as a setting does.
+		row.from = func(m *dash) string {
+			if !sr.own(m).Replacing(key) {
+				return config.AllProjectsName
+			}
+			return ""
+		}
+		row.unset = func(m *dash) tea.Cmd { return (&sandboxView{sr: sr, list: key}).follow(m) }
 	}
 	return row
 }
@@ -241,12 +260,14 @@ func (sr safetyRows) sandboxRow(key string) setting {
 // sandboxCount is a list row's value: how many entries threads get,
 // how many of them a project's own, dropped and refused.
 func sandboxCount(sr safetyRows, t config.ThreadSandbox, key string) string {
-	var given, own, dropped, refused int
+	var given, own, dropped, replaced, refused int
 	for _, r := range t.Rules {
 		switch {
 		case r.Key != key:
 		case r.Refused != "":
 			refused++
+		case r.Replaced:
+			replaced++
 		case r.Dropped:
 			dropped++
 		default:
@@ -256,7 +277,7 @@ func sandboxCount(sr safetyRows, t config.ThreadSandbox, key string) string {
 			}
 		}
 	}
-	if given+dropped+refused == 0 {
+	if given+dropped+replaced+refused == 0 {
 		return "none"
 	}
 	v := fmt.Sprint(given)
@@ -266,6 +287,9 @@ func sandboxCount(sr safetyRows, t config.ThreadSandbox, key string) string {
 	}
 	if dropped > 0 {
 		parts = append(parts, fmt.Sprintf("%d of all projects dropped", dropped))
+	}
+	if replaced > 0 {
+		parts = append(parts, fmt.Sprintf("%d of all projects replaced", replaced))
 	}
 	if refused > 0 {
 		parts = append(parts, fmt.Sprintf("%d refused", refused))
@@ -342,6 +366,8 @@ func (v *sandboxView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		case v.sel >= len(es):
 		case e.stray:
 			m.msg = e.Value + " is a drop: u takes it back"
+		case e.Replaced:
+			m.msg = v.sr.slug + "'s own list replaces all projects': f follows theirs again"
 		case !e.Own:
 			m.msg = e.Value + " is all projects': d drops it for " + v.sr.slug
 		default:
@@ -350,11 +376,15 @@ func (v *sandboxView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 				func(t *config.SandboxTable) { t.Remove(v.list, e.Value) })
 		}
 		return nil
+	case "f":
+		return v.follow(m)
 	case "d":
 		switch {
 		case v.sr.all || v.sel >= len(es):
 		case e.Own:
 			m.msg = e.Value + " is " + v.sr.slug + "'s own: x removes it"
+		case e.Replaced:
+			m.msg = v.sr.slug + "'s own list replaces all projects': f follows theirs again"
 		case e.Dropped:
 			m.msg = e.Value + " is dropped already: u takes it back"
 		default:
@@ -363,7 +393,7 @@ func (v *sandboxView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	case "u":
-		if v.sr.all || v.sel >= len(es) || !e.Dropped {
+		if v.sr.all || v.sel >= len(es) || !e.Dropped || e.Replaced && !slices.Contains(v.sr.merged(m).Drops, e.Value) {
 			return nil
 		}
 		msg := v.sr.slug + " takes " + e.Value + " back from all projects: threads get it from their next start"
@@ -395,6 +425,7 @@ func (v *sandboxView) add(m *dash) {
 			case r.Own:
 				m.msg = "not added: " + e + " is listed already"
 				return nil
+			case r.Replaced:
 			case r.Dropped:
 				m.msg = "not added: " + e + " is all projects', dropped " + v.sr.forWho + ": u takes it back"
 				return nil
@@ -443,8 +474,15 @@ func (v *sandboxView) render(m *dash) string {
 		lines = warnLines(l.about, w)
 	}
 	if !v.sr.all {
+		where := "All projects' entries and " + v.sr.slug + "'s own add up; " + v.sr.slug + " doesn't take the ones it drops (─)."
+		if slices.Contains(config.ReplaceKeys, v.list) {
+			where = "All projects' list, which " + v.sr.slug + " follows: an entry added here starts " + v.sr.slug + "'s own list from it. " + v.sr.slug + " doesn't take the ones it drops (─)."
+			if v.sr.own(m).Replacing(v.list) {
+				where = v.sr.slug + "'s own list replaces all projects' (─); f follows theirs again."
+			}
+		}
 		lines = append(lines, "")
-		lines = append(lines, faintLines("All projects' entries and "+v.sr.slug+"'s own add up; "+v.sr.slug+" doesn't take the ones it drops (─).", w)...)
+		lines = append(lines, faintLines(where, w)...)
 	}
 	if slices.ContainsFunc(es, func(e sandboxEntry) bool { return e.Refused != "" }) {
 		lines = append(lines, "")
@@ -457,7 +495,7 @@ func (v *sandboxView) render(m *dash) string {
 		switch {
 		case e.Refused != "":
 			mark = "✗ "
-		case e.Dropped:
+		case e.Dropped, e.Replaced:
 			mark = "─ "
 		}
 		if !v.sr.all {
@@ -465,6 +503,8 @@ func (v *sandboxView) render(m *dash) string {
 			switch {
 			case e.stray:
 				from = "dropped · matches none of all projects'"
+			case e.Replaced:
+				from = config.AllProjectsName + " · replaced"
 			case e.Dropped:
 				from = config.AllProjectsName + " · dropped"
 			case !e.Own:
@@ -480,7 +520,7 @@ func (v *sandboxView) render(m *dash) string {
 		if i == v.sel {
 			lines = append(lines, th().Sel.Render(fit(text, w)))
 			sel = len(lines) - 1
-		} else if e.Dropped {
+		} else if e.Dropped || e.Replaced {
 			lines = append(lines, th().Faint.Render(text))
 		} else {
 			lines = append(lines, th().Head.Render(text))
@@ -491,7 +531,7 @@ func (v *sandboxView) render(m *dash) string {
 			}
 			continue
 		}
-		if e.Dropped {
+		if e.Dropped || e.Replaced {
 			continue
 		}
 		for _, warn := range []string{v.about(e.Value), config.SandboxWarning(v.list, e.Value), v.covered(m, e.Value)} {
@@ -507,10 +547,26 @@ func (v *sandboxView) render(m *dash) string {
 		lines = append(lines, "", th().Faint.Render("none: a adds one"))
 	}
 	keys := "a add · x remove · ↑ ↓ move · esc back"
-	if !v.sr.all {
+	switch {
+	case v.sr.all:
+	case v.sr.own(m).Replacing(v.list):
+		keys = "a add · x remove · f follow all projects · u take it back · esc back"
+	default:
 		keys = "a add · x remove · d drop for " + v.sr.slug + " · u take it back · esc back"
 	}
 	return m.popup(box{title: l.label + " " + v.sr.forWho, body: lines, sel: sel, keys: keys})
+}
+
+// follow drops a project's own list of a ReplaceKeys key, so its
+// threads get all projects' again.
+func (v *sandboxView) follow(m *dash) tea.Cmd {
+	if v.sr.all || !v.sr.own(m).Replacing(v.list) {
+		m.msg = "the " + sandboxLists[v.list].word + " of " + v.sr.slug + " already follow all projects"
+		return nil
+	}
+	v.sel = 0
+	return v.sr.editSandbox(m, v.list+" follows all projects", v.sr.slug+" follows all projects' "+sandboxLists[v.list].word+": threads get them from their next start",
+		func(t *config.SandboxTable) { t.Follow(v.list) })
 }
 
 // about is what a guidance text tells threads, for its line in the
