@@ -81,7 +81,7 @@ func OwnDir(dir string) (string, error) {
 	if isLink(fi) {
 		return "", fmt.Errorf("%s: %w", real, ErrLink)
 	}
-	if !fi.IsDir() || !Mine(fi) {
+	if !fi.IsDir() || !mineAt(real, fi) {
 		return "", fmt.Errorf("%s is not a folder of this user", real)
 	}
 	return real, nil

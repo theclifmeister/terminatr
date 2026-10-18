@@ -78,6 +78,12 @@ type Rules struct {
 	// sockets, its keys, the guard's log): no tool reads them, whichever
 	// rules are on (the floor).
 	Own []string `json:"own,omitempty"`
+	// OtherTemps hold the other threads' own temp folders (/tmp/tm-<uid>,
+	// T587): no file tool reads or writes in them but in OwnTemp, the
+	// thread's own, whichever rules are on (the floor). Shell commands
+	// are the sandbox's to keep out.
+	OtherTemps []string `json:"otherTemps,omitempty"`
+	OwnTemp    string   `json:"ownTemp,omitempty"`
 	// SecretEnv are the names of the secret variables tm gives the
 	// session (config env): no command prints them or the whole
 	// environment, whichever rules are on (the floor).
@@ -176,6 +182,10 @@ type Tool struct {
 // or the project folder (Rules.NoWrite).
 const RuleTMFiles = "tm-files"
 
+// RuleTempFolders is the rule of the floor's refusal of a file tool in
+// another thread's temp folder (Rules.OtherTemps).
+const RuleTempFolders = "temp-folders"
+
 // RuleEscape is the rule of the guard's question about a call that asks
 // to leave the sandbox (Rules.AskEscapes).
 const RuleEscape = "escape"
@@ -236,7 +246,7 @@ const learnNote = " The user reviews refused calls: if they allow this one, you 
 // Judge is the rule the call of tool with input breaks, or nil. The
 // tool is judged by its kind in r.Tools, from the fields listed there.
 func (r Rules) Judge(tool string, input map[string]any) *Denial {
-	if !r.On || len(r.Rules) == 0 && len(r.Mods) == 0 && len(r.Own) == 0 && len(r.SecretEnv) == 0 && len(r.Floor) == 0 && len(r.NoWrite) == 0 && !r.AskEscapes && len(r.Unsandboxed) == 0 {
+	if !r.On || len(r.Rules) == 0 && len(r.Mods) == 0 && len(r.Own) == 0 && len(r.OtherTemps) == 0 && len(r.SecretEnv) == 0 && len(r.Floor) == 0 && len(r.NoWrite) == 0 && !r.AskEscapes && len(r.Unsandboxed) == 0 {
 		return nil
 	}
 	t, ok := r.Tools[tool]
@@ -367,6 +377,9 @@ func excludedTakes(e, c string) bool {
 // judgeRead judges a file tool reading p (absolute; a glob by the part
 // before its first wildcard).
 func (r Rules) judgeRead(tool, p string) *Denial {
+	if r.otherTemp(p) {
+		return floor(r.deny(RuleTempFolders, tool+" of "+safe(p), ""))
+	}
 	if r.covers(r.Own, p) {
 		return floor(r.deny("credentials", tool+" of "+safe(p), ""))
 	}
@@ -477,6 +490,9 @@ func (r Rules) target(p string) string {
 // judgeWrite judges a file tool writing p (absolute, where the write
 // lands), named in a refusal as shown (as the call gave it).
 func (r Rules) judgeWrite(tool, shown, p string) *Denial {
+	if r.otherTemp(p) {
+		return floor(r.deny(RuleTempFolders, tool+" of "+safe(shown), ""))
+	}
 	if r.covers(r.NoWrite, p) {
 		return floor(r.deny(RuleTMFiles, tool+" of "+safe(shown), ""))
 	}
@@ -588,6 +604,8 @@ func (r Rules) deny(rule, summary, target string) *Denial {
 		} else {
 			m = "tm's settings (config.toml) and the parts of the project folder tm keeps (threads/, inbox/, tasks/, journal/, TASKS.md and the like) are written by tm only: use tm's commands, or ask the user."
 		}
+	case RuleTempFolders:
+		m = "other threads' temp folders are not read or written here. Keep your files in your own temp folder ($TMPDIR) or your worktree, or " + tell + "."
 	case "credentials":
 		m = "credential files and tokens are not read here. A tool that needs a token gets it from the secret environment the user gives threads in tm's settings; if the task needs access you don't have, " + tell + " exactly what is missing."
 	}
@@ -2468,6 +2486,19 @@ func (r Rules) covers(roots []string, p string) bool {
 	return slices.ContainsFunc(roots, func(s string) bool {
 		return r.under(fixed, s) || (fixed != p && r.under(s, fixed) && !root && r.fold(fixed) != r.fold(r.Home))
 	})
+}
+
+// otherTemp reports whether a file tool at p (absolute; a glob by the
+// part before its first wildcard) reaches into OtherTemps outside
+// OwnTemp.
+func (r Rules) otherTemp(p string) bool {
+	if r.OwnTemp != "" {
+		fixed := strings.TrimSuffix(wildcard.ReplaceAllString(p, ""), "/")
+		if fixed != "" && r.under(fixed, r.OwnTemp) {
+			return false
+		}
+	}
+	return r.covers(r.OtherTemps, p)
 }
 
 // isWorktreeRoot: removing p takes a worktree with it: the thread's own,

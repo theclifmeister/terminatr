@@ -66,6 +66,7 @@ export default {
  "floor-only": {"on": true, "role": "thread", "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "own": ["/h/.terminatr/run", "/h/.terminatr/state/peer", "/h/.terminatr/state/guard"], "secretEnv": ["NODE_AUTH_TOKEN"]},
  "rules-off": {"on": true, "role": "thread", "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "protected": ["main", "master"], "floor": ["force-push", "merge"]},
  "rules-off-merge-thread": {"on": true, "role": "thread", "rules": ["credentials"], "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "protected": ["main", "master"], "floor": ["force-push"], "allow": [{"rule": "force-push", "command": "git push -f origin *"}]},
+ "thread-temps": {"on": true, "role": "thread", "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "floor": ["force-push"], "otherTemps": ["/private/tmp/tm-501"], "ownTemp": "/private/tmp/tm-501/aaaa"},
  "yolo-thread": {"on": true, "role": "thread", "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "protected": ["main", "master"], "floor": ["force-push", "merge"], "own": ["/h/.terminatr/run"], "noWrite": ["/h/.terminatr/config.toml", "/h/.terminatr/projects/demo"]},
  "floor-coordinator": {"on": true, "role": "coordinator", "rules": ["force-push", "push-default", "delete-branch", "credentials"], "home": "/h", "cwd": "/h/.terminatr/projects/demo", "protected": ["main", "master"], "floor": ["force-push"], "noWrite": ["/h/.terminatr/config.toml", "/h/.terminatr/projects/demo/threads", "/h/.terminatr/projects/demo/inbox", "/h/.terminatr/projects/demo/TASKS.md"], "allow": [{"rule": "tm-files", "path": "/h/.terminatr/config.toml"}]},
  "thread-escapes": {"on": true, "role": "thread", "rules": ["force-push", "credentials"], "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "protected": ["main", "master"], "floor": ["force-push"], "askEscapes": true},
@@ -700,7 +701,18 @@ export default {
  {"rules": "thread-own-off", "tool": "Bash", "input": {"command": "docker ps"}, "rule": "escape", "summary": "an excluded command of the agent's own settings", "message": "terminatr guard (escape): this command runs outside the sandbox through an excluded command in your agent's own settings (sandbox.excludedCommands, not tm's), and this thread's escapes are off. Run it another way inside the sandbox; if the task needs it, tell the user."},
  {"rules": "thread-own-off", "tool": "Bash", "input": {"command": "ls"}, "rule": null},
  {"rules": "thread-own", "tool": "bash", "input": {"command": "docker ps"}, "rule": null},
- {"rules": "thread-own", "tool": "Write", "input": {"file_path": "/h/.terminatr/worktrees/demo/t-0001-fix/docker"}, "rule": null}
+ {"rules": "thread-own", "tool": "Write", "input": {"file_path": "/h/.terminatr/worktrees/demo/t-0001-fix/docker"}, "rule": null},
+ {"rules": "thread-temps", "tool": "Read", "input": {"file_path": "/private/tmp/tm-501/bbbb/claude-501/x/tasks/a.output"}, "rule": "temp-folders", "summary": "Read of /private/tmp/tm-501/bbbb/claude-501/x/tasks/a.output", "floor": true, "message": "terminatr guard (temp-folders): other threads' temp folders are not read or written here. Keep your files in your own temp folder ($TMPDIR) or your worktree, or say so in your report."},
+ {"rules": "thread-temps", "tool": "Read", "input": {"file_path": "/private/tmp/tm-501/aaaa/claude-501/x/scratchpad/n.md"}, "rule": null},
+ {"rules": "thread-temps", "tool": "Read", "input": {"file_path": "/private/tmp/tm-501aaaa/x"}, "rule": null},
+ {"rules": "thread-temps", "tool": "Grep", "input": {"path": "/private/tmp/tm-501"}, "rule": "temp-folders", "summary": "Grep of /private/tmp/tm-501", "floor": true},
+ {"rules": "thread-temps", "tool": "Glob", "input": {"pattern": "/private/tmp/tm-501/*"}, "rule": "temp-folders", "summary": "Glob of /private/tmp/tm-501/?", "floor": true},
+ {"rules": "thread-temps", "tool": "Glob", "input": {"pattern": "/private/tmp/*/bbbb/**"}, "rule": "temp-folders", "summary": "Glob of /private/tmp/?/bbbb/??", "floor": true},
+ {"rules": "thread-temps", "tool": "Glob", "input": {"pattern": "/private/tmp/tm-501/aaaa/**"}, "rule": null},
+ {"rules": "thread-temps", "tool": "Write", "input": {"file_path": "/private/tmp/tm-501/bbbb/claude-501/x/scratchpad/p.md"}, "rule": "temp-folders", "summary": "Write of /private/tmp/tm-501/bbbb/claude-501/x/scratchpad/p.md", "floor": true},
+ {"rules": "thread-temps", "tool": "Edit", "input": {"file_path": "/private/tmp/tm-501/aaaa/../bbbb/f"}, "rule": "temp-folders", "summary": "Edit of /private/tmp/tm-501/bbbb/f", "floor": true},
+ {"rules": "thread-temps", "tool": "Write", "input": {"file_path": "/private/tmp/tm-501/aaaa/claude-501/x/scratchpad/p.md"}, "rule": null},
+ {"rules": "thread-temps", "tool": "Bash", "input": {"command": "cat /private/tmp/tm-501/bbbb/f"}, "rule": null}
 ],
 "messages": {
  "thread": {
@@ -709,7 +721,8 @@ export default {
   "worktree-only": "terminatr guard (worktree-only): a thread writes only inside its worktree (/h/.terminatr/worktrees/demo/t-0001-fix). Write the file there, or say so in your report what needs changing elsewhere.",
   "delete-branch": "terminatr guard (delete-branch): agents don't delete branches or worktrees; tm cleans them up once the work has merged. Leave them, and say so in your report if one is in the way.",
   "merge": "terminatr guard (merge): merging is the coordinator's job in this project (merge = \"coordinator\"). Leave the PR open with CI green and say so in your report.",
-  "credentials": "terminatr guard (credentials): credential files and tokens are not read here. A tool that needs a token gets it from the secret environment the user gives threads in tm's settings; if the task needs access you don't have, say so in your report exactly what is missing."
+  "credentials": "terminatr guard (credentials): credential files and tokens are not read here. A tool that needs a token gets it from the secret environment the user gives threads in tm's settings; if the task needs access you don't have, say so in your report exactly what is missing.",
+  "temp-folders": "terminatr guard (temp-folders): other threads' temp folders are not read or written here. Keep your files in your own temp folder ($TMPDIR) or your worktree, or say so in your report."
  },
  "coordinator": {
   "force-push": "terminatr guard (force-push): force-pushing is not allowed here. Push without force; if the branch has diverged, merge instead of rewriting it, or ask the user.",

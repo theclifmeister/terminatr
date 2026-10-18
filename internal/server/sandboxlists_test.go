@@ -19,6 +19,7 @@ import (
 // coordinator's never do (Codex's launch warning: codex_test.go).
 func TestSandboxListsLaunch(t *testing.T) {
 	p := testPaths(t)
+	cleanThreadTemp(t, "demo", "t-0001")
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("CODEX_HOME", t.TempDir())
 	newWatchProject(t)

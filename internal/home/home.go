@@ -4,10 +4,13 @@
 package home
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -109,3 +112,45 @@ func ModLogsDir() (string, error) { return sub(filepath.Join("logs", "mods")) }
 // LogsDir is <home>/logs: the server's, the service's, the consoles'
 // and (in mods/) each mod's log.
 func LogsDir() (string, error) { return sub("logs") }
+
+// ThreadTempRoot is the folder that holds every thread's own temp folder
+// (ThreadTempDir): /tmp/tm-<uid> by its real path, on Windows <TEMP>\tm.
+// Short on purpose: Claude Code keeps its sandbox's TMPDIR in
+// $CLAUDE_CODE_TMPDIR/claude-<uid> only while that is at most 44 bytes
+// (AF_UNIX socket paths), and falls back to the shared /tmp/claude-<uid>
+// otherwise (2.1.302), so a folder under the home would be too long.
+func ThreadTempRoot() string {
+	if os.Getuid() < 0 {
+		return filepath.Join(os.TempDir(), "tm")
+	}
+	tmp := "/tmp"
+	if real, err := filepath.EvalSymlinks(tmp); err == nil {
+		tmp = real // /private/tmp on macOS: the path sandboxes match
+	}
+	return filepath.Join(tmp, "tm-"+strconv.Itoa(os.Getuid()))
+}
+
+// ThreadTempDir is a thread's own temp folder (T587): its agent's
+// TMPDIR, where Claude Code keeps the thread's scratchpads and task
+// output, so no two sessions share one. In ThreadTempRoot, named by a
+// hash of the home, the project and the thread, so every home's threads
+// (tests, scratch servers) keep their own. It fails for a slug or id
+// that isn't a single plain name.
+func ThreadTempDir(slug, id string) (string, error) {
+	d, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return ThreadTempDirOf(d, slug, id)
+}
+
+// ThreadTempDirOf is ThreadTempDir for the state directory dir.
+func ThreadTempDirOf(dir, slug, id string) (string, error) {
+	for _, n := range []string{slug, id} {
+		if n == "" || n == "." || n == ".." || filepath.Base(n) != n || n != filepath.Clean(n) {
+			return "", errors.New("thread temp folder: bad project or thread name " + n)
+		}
+	}
+	sum := sha256.Sum256([]byte(dir + "\x00" + slug + "\x00" + id))
+	return filepath.Join(ThreadTempRoot(), hex.EncodeToString(sum[:5])), nil
+}

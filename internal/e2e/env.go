@@ -35,6 +35,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/home/hometest"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -226,6 +227,7 @@ func New(t testing.TB) *Env {
 	t.Cleanup(func() {
 		e.cleanup()
 		os.RemoveAll(runDir)
+		hometest.RemoveThreadTemps(e.Home)
 	})
 	return e
 }

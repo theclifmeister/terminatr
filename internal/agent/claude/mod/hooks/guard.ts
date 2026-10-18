@@ -57,6 +57,12 @@ export type Rules = {
   // keys, the guard's log): no tool reads them, whichever rules are on
   // (the floor).
   own?: readonly string[]
+  // They hold the other threads' own temp folders (/tmp/tm-<uid>,
+  // T587): no file tool reads or writes in them but in ownTemp, the
+  // thread's own, whichever rules are on (the floor). Shell commands
+  // are the sandbox's to keep out.
+  otherTemps?: readonly string[]
+  ownTemp?: string
   // The names of the secret variables tm gives the session (config
   // env): no command prints them or the whole environment, whichever
   // rules are on (the floor).
@@ -157,7 +163,7 @@ export const off: Rules = { on: false }
 export function rulesOf(text: string): Rules {
   try {
     const r = JSON.parse(text) as Rules
-    return r && typeof r === 'object' && r.on === true && (Array.isArray(r.rules) || Array.isArray(r.mods) || Array.isArray(r.own) || Array.isArray(r.secretEnv) || Array.isArray(r.floor) || Array.isArray(r.noWrite) || r.askEscapes === true || Array.isArray(r.unsandboxed)) ? r : off
+    return r && typeof r === 'object' && r.on === true && (Array.isArray(r.rules) || Array.isArray(r.mods) || Array.isArray(r.own) || Array.isArray(r.otherTemps) || Array.isArray(r.secretEnv) || Array.isArray(r.floor) || Array.isArray(r.noWrite) || r.askEscapes === true || Array.isArray(r.unsandboxed)) ? r : off
   } catch {
     return off
   }
@@ -166,7 +172,7 @@ export function rulesOf(text: string): Rules {
 // judge is the rule the call of tool with input breaks, or null. The
 // tool is judged by its kind in r.tools, from the fields listed there.
 export function judge(r: Rules, tool: string, input: Record<string, unknown>): Denial | null {
-  if (!r.on || (!r.rules?.length && !r.mods?.length && !r.own?.length && !r.secretEnv?.length && !r.floor?.length && !r.noWrite?.length && !r.askEscapes && !r.unsandboxed?.length)) return null
+  if (!r.on || (!r.rules?.length && !r.mods?.length && !r.own?.length && !r.otherTemps?.length && !r.secretEnv?.length && !r.floor?.length && !r.noWrite?.length && !r.askEscapes && !r.unsandboxed?.length)) return null
   const t = r.tools && Object.hasOwn(r.tools, tool) ? r.tools[tool] : undefined
   if (!t) return null
   const values = (t.fields ?? []).map(f => input[f]).filter((v): v is string => typeof v === 'string' && v !== '')
@@ -177,6 +183,7 @@ export function judge(r: Rules, tool: string, input: Record<string, unknown>): D
     const has = hasOf(r)
     const shown = abs(r, given)
     const writable = (p: string) => (r.writable ?? []).some(w => under(r, p, w))
+    if (otherTemp(r, p)) return floor(deny(r, 'temp-folders', `${tool} of ${safe(shown)}`))
     if (covers(r, r.noWrite ?? [], p)) return floor(deny(r, 'tm-files', `${tool} of ${safe(shown)}`))
     if (has('worktree-only') && !writable(p)) return deny(r, 'worktree-only', `${tool} of ${safe(shown)}`)
     const m = (r.mods ?? []).find(m => (m.writes ?? []).some(w => under(r, p, w)))
@@ -245,6 +252,7 @@ function hasOf(r: Rules): (id: string) => boolean {
 // judgeRead judges a file tool reading p (absolute; a glob by the part
 // before its first wildcard).
 function judgeRead(r: Rules, tool: string, p: string): Denial | null {
+  if (otherTemp(r, p)) return floor(deny(r, 'temp-folders', `${tool} of ${safe(p)}`))
   if (covers(r, r.own ?? [], p)) return floor(deny(r, 'credentials', `${tool} of ${safe(p)}`))
   if (r.rules?.includes('credentials') && isSecret(r, p)) return deny(r, 'credentials', `${tool} of ${safe(p)}`)
   const m = (r.mods ?? []).find(m => covers(r, m.reads ?? [], p))
@@ -372,6 +380,7 @@ function deny(r: Rules, rule: string, summary: string, target = ''): Denial {
       r.role === 'thread'
         ? "a thread doesn't write tm's settings (config.toml) or the project folder. Write in your worktree, or say so in your report."
         : "tm's settings (config.toml) and the parts of the project folder tm keeps (threads/, inbox/, tasks/, journal/, TASKS.md and the like) are written by tm only: use tm's commands, or ask the user.",
+    'temp-folders': `other threads' temp folders are not read or written here. Keep your files in your own temp folder ($TMPDIR) or your worktree, or ${tell}.`,
     credentials: `credential files and tokens are not read here. A tool that needs a token gets it from the secret environment the user gives threads in tm's settings; if the task needs access you don't have, ${tell} exactly what is missing.`,
   }
   // A thread never merges while the rule holds: no allowance lifts it.
@@ -1715,6 +1724,16 @@ function covers(r: Rules, roots: readonly string[], p: string): boolean {
   const fixed = p.replace(/[*?[{].*$/, '').replace(/\/$/, '') || '/'
   const root = fixed === '/' || /^[A-Za-z]:\/?$/.test(fixed)
   return roots.some(s => under(r, fixed, s) || (fixed !== p && under(r, s, fixed) && !root && fold(r, fixed) !== fold(r, r.home ?? '')))
+}
+
+// otherTemp: a file tool at p (absolute; a glob by the part before its
+// first wildcard) reaches into otherTemps outside ownTemp.
+function otherTemp(r: Rules, p: string): boolean {
+  if (r.ownTemp) {
+    const fixed = p.replace(/[*?[{].*$/, '').replace(/\/$/, '')
+    if (fixed && under(r, fixed, r.ownTemp)) return false
+  }
+  return covers(r, r.otherTemps ?? [], p)
 }
 
 // isWorktreeRoot: removing p takes a worktree with it: the thread's own,
