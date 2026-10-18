@@ -197,10 +197,7 @@ func (s *Server) agentFileRules(name, home, cwd string) []proto.AccessRule {
 
 // accessExplain is access.explain: what a thread of the project (the
 // thread named, else one to come) does with a command line.
-func (s *Server) accessExplain(p proto.AccessExplainParams, c callCtx) (any, *proto.Error) {
-	if !c.human {
-		return nil, proto.Errorf(proto.ErrRefused, "tm access explain is the human's")
-	}
+func (s *Server) accessExplain(p proto.AccessExplainParams) (any, *proto.Error) {
 	cmd := strings.TrimSpace(p.Command)
 	if cmd == "" {
 		return nil, proto.Errorf(proto.ErrBadParams, "no command to explain")
@@ -225,6 +222,10 @@ func (s *Server) accessExplain(p proto.AccessExplainParams, c callCtx) (any, *pr
 			return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 		}
 		in.cwd, in.agent, cwd = rec.Worktree, rec.Agent, rec.Worktree
+	}
+	if reg := s.registry(); in.agent == "" && reg != nil && len(reg.Names()) > 0 {
+		// No agent chosen yet: the guard judges by the first one's tools.
+		in.agent = reg.Names()[0]
 	}
 	set, err := s.resolveAccess(in, lc)
 	if err != nil {
@@ -320,4 +321,3 @@ func guardVerdict(g guard.Rules, cmd string) (string, string) {
 	}
 	return "refused", d.Rule + ": " + d.Summary
 }
-

@@ -24,7 +24,7 @@ var humanOnlyMethods = []string{
 	proto.MethodModViews, proto.MethodModViewInput, proto.MethodModCommand, proto.MethodModRestart,
 	proto.MethodLogList, proto.MethodLogRead,
 	proto.MethodNotifyClaim, proto.MethodNotifyDismiss,
-	proto.MethodModActionCheck, proto.MethodModActionDone, proto.MethodSessionClear, proto.MethodSecretTest,
+	proto.MethodModActionCheck, proto.MethodModActionDone, proto.MethodSessionClear, proto.MethodSecretTest, proto.MethodAccessExplain,
 	proto.MethodSessionStart, proto.MethodSessionStop, proto.MethodSessionKeys, proto.MethodSessionPrompt,
 	proto.MethodSessionAdopt, proto.MethodSessionAdoptAsk, proto.MethodSessionRemote, proto.MethodSessionModel, proto.MethodQuestionsOpen, proto.MethodCoordinatorClear,
 	proto.MethodServerStop, proto.MethodAgentReload, proto.MethodPeerReload, proto.MethodPeerList, proto.MethodProjectsWatch,
@@ -44,8 +44,9 @@ var notHumanOnly = map[string]gate{
 	proto.MethodHookEvent: 0, proto.MethodToolRun: 0, proto.MethodToolList: 0,
 	proto.MethodSessionList: 0, proto.MethodSessionRead: 0, proto.MethodSessionWait: 0,
 	proto.MethodSessionWatch: 0, proto.MethodSessionAsk: 0, proto.MethodProjectWatch: 0,
-	// Gated in its handler (mayAnswer).
+	// Gated in its handler (mayAnswer, mayShowAccess).
 	proto.MethodSessionAnswer: 0,
+	proto.MethodAccessShow:    0,
 	proto.MethodCLIRun:        gateAgentOrHuman,
 	proto.MethodViewDigest:    gateNotAgent,
 }

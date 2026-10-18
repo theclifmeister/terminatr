@@ -247,9 +247,12 @@ func guardRules(lc launchConfig, slug, role string) []proto.AccessRule {
 	for _, r := range set.GuardOff {
 		out = append(out, proto.AccessRule{Where: proto.AccessGuard, Kind: proto.AccessGuardRuleOff, Value: r, Source: src("guard_off"), Live: true})
 	}
+	// A project without guard_allow of its own takes all projects'
+	// whole (config.Safety marks All only beside its own).
+	own := lc.err == nil && slices.Contains(lc.cfg.Own(slug), "guard_allow")
 	for _, a := range set.GuardAllow {
 		from := slug
-		if a.All {
+		if a.All || !own {
 			from = proto.AccessFromAll
 		}
 		note := a.Rule

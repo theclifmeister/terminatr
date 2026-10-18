@@ -112,7 +112,7 @@ type AccessSet struct {
 	OS      string `json:"os"`
 	// Launched is when the thread launched with it; zero for what a new
 	// thread would get.
-	Launched time.Time `json:"launched,omitzero"`
+	Launched time.Time    `json:"launched,omitzero"`
 	Rules    []AccessRule `json:"rules"`
 	// SandboxError is why the sandbox lists and presets are left out (a
 	// config.toml that doesn't load, an entry that fails its check).
