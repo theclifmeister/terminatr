@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
+	"github.com/rivo/uniseg"
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/doctor"
@@ -130,6 +132,19 @@ func doctorCmd(e *Env, args []string) error {
 	return failed
 }
 
+// doctorNameWidth is the least width of the name column: the longest
+// name doctor shows today, so groups line up with each other.
+const doctorNameWidth = 22
+
+// padWidth pads s with spaces to w display columns (wide and combining
+// characters counted by uniseg, which fmt's %-Ns is not).
+func padWidth(s string, w int) string {
+	if n := uniseg.StringWidth(s); n < w {
+		return s + strings.Repeat(" ", w-n)
+	}
+	return s
+}
+
 // checkPrinter prints doctor's checks group by group as they come.
 type checkPrinter struct {
 	e      *Env
@@ -141,25 +156,35 @@ func (p *checkPrinter) print(checks []doctor.Check) {
 	if p.counts == nil {
 		p.counts = map[doctor.Status]int{}
 	}
+	width := doctorNameWidth
+	for _, c := range checks {
+		width = max(width, uniseg.StringWidth(c.Name))
+	}
 	for _, c := range checks {
 		if c.Group != p.group {
+			if p.group != "" {
+				fmt.Fprintln(p.e.Stdout)
+			}
 			p.group = c.Group
-			fmt.Fprintln(p.e.Stdout, p.group)
+			fmt.Fprintln(p.e.Stdout, strings.ToUpper(p.group))
 		}
 		p.counts[c.Status]++
 		detail := c.Detail
 		if c.Source != "" && c.Name != "local shell" {
 			detail += " [" + c.Source + "]"
 		}
-		fmt.Fprintf(p.e.Stdout, "  %-4s  %-14s %s\n", c.Status, c.Name, detail)
+		fmt.Fprintf(p.e.Stdout, "  %-4s  %s  %s\n", c.Status, padWidth(c.Name, width), detail)
 	}
 }
 
 // waiting heads a group doctor is still checking, so a slow one
 // (the code hosts) doesn't look frozen; its lines follow.
 func (p *checkPrinter) waiting(group string) {
+	if p.group != "" {
+		fmt.Fprintln(p.e.Stdout)
+	}
 	p.group = group
-	fmt.Fprintln(p.e.Stdout, group+" (checking…)")
+	fmt.Fprintln(p.e.Stdout, strings.ToUpper(group)+" (checking…)")
 }
 
 func (p *checkPrinter) summary() {
