@@ -41,13 +41,15 @@ func CheckHost(h string) error {
 	}
 	last := labels[len(labels)-1]
 	switch {
-	case strings.Trim(last, "0123456789") == "":
+	case last[0] >= '0' && last[0] <= '9':
+		// No top-level domain starts with a digit; an address in any
+		// form does (10.0.0.1, 0x7f.0x1, 127.0.0.0x1).
 		return fmt.Errorf("%q is an address: name the host", h)
 	case len(labels) < 2 && wild:
 		return fmt.Errorf("%q opens a whole top-level domain: name the domain, e.g. *.example.com", h)
 	case len(labels) < 2:
 		return fmt.Errorf("%q is one word: name the whole host, e.g. registry.npmjs.org", h)
-	case last == "localhost":
+	case slices.Contains(labels, "localhost") || last == "localdomain":
 		return fmt.Errorf("%q is this computer: local ports are the Local ports setting's (local_ports)", h)
 	}
 	return nil

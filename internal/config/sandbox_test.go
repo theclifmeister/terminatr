@@ -123,7 +123,7 @@ func TestCheckHostsAndGuides(t *testing.T) {
 		}
 	}
 	for _, h := range []string{"", "localhost", "com", "*.com", "*", "https://x.dev", "x.dev:443", "x.dev/path", "10.0.0.1", "X.dev",
-		"-x.dev", "x..dev", "x.localhost", "*.*.dev", "x_y.dev", " x.dev"} {
+		"-x.dev", "x..dev", "x.localhost", "*.*.dev", "x_y.dev", " x.dev", "0x7f.0x1", "127.0.0.0x1", "0x7f.0.0.0x1", "localhost.localdomain"} {
 		if err := CheckHost(h); err == nil {
 			t.Errorf("%q passed", h)
 		}
