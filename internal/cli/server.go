@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -88,6 +89,9 @@ func serverRun(e *Env, args []string) error {
 	if *launchd {
 		// launchd owns the process: its stdout and stderr go to
 		// logs/service.log, the server's log to the server log.
+		if err := service.RotateServiceLog(filepath.Join(filepath.Dir(p.Log), "service.log"), service.ServiceLogMax); err != nil {
+			logger.Printf("service log rotation: %v", err)
+		}
 		lf, err := server.OpenLog(p)
 		if err != nil {
 			return srvFail("server run", err)
