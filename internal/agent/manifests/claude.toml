@@ -229,6 +229,9 @@ writable = [".claude/plans", ".claude/projects", "$CLAUDE_CONFIG_DIR/plans", "$C
 temp = ["$CLAUDE_CODE_TMPDIR/claude-{uid}", "/tmp/claude-{uid}"]
 # Its sandbox keeps Bash from this one (a read deny).
 temp_private = ["bash-edit-diff"]
+# The permission dialog of a command run outside the sandbox (the rule
+# below): an escape, the user's to answer, marked or not.
+escape_rule = "blocked-escape-dialog"
 # Shared by all its sessions: a thread may name only its own scratchpad.
 temp_scratch = true
 
@@ -592,6 +595,19 @@ region = "screen"
 contains = ["Do you want to ", "Esc to cancel"]
 # Claude on Windows draws ">" for "❯" (its figures fallback).
 regex = '(?m)^\s*[❯>][\s\x{00A0}]+1\. Yes'
+
+# A permission dialog for a Bash call outside the sandbox: the guard's
+# reason (its PreToolUse "ask": "asks to run outside the sandbox") or
+# Claude's own ("Run outside of the sandbox", 2.1.302). [guard]
+# escape_rule names it.
+[[rules]]
+id = "blocked-escape-dialog"
+state = "blocked"
+reason = "permission"
+priority = 40
+region = "screen"
+contains = ["Do you want to ", "Esc to cancel"]
+regex = '(?ms)(asks to run outside the sandbox|Run outside of the sandbox).*^\s*[❯>][\s\x{00A0}]+1\. Yes'
 
 [[rules]]
 id = "blocked-question"

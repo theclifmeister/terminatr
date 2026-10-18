@@ -197,15 +197,17 @@ type agentRT struct {
 	// screen may be its, so it is the user's. One per call, so that a
 	// parallel call's prompt ending doesn't end an escape's. The call's
 	// end (EndEscape, its PostToolUse) or the turn's only says it may
-	// go (true): it goes once the screen shows no permission dialog
-	// (evalScreen), since the hooks that say so can come from any
-	// process in the agent's tree.
-	escapes  map[string]bool
+	// go: it goes once the screen shows no permission dialog and
+	// escapeGrace has passed since, since the hooks that say so can
+	// come from any process in the agent's tree, before its dialog has
+	// even drawn.
+	escapes  map[string]*escapeMark
 	emptyBox bool // the empty-box rule matched at the last evaluation
 	blocker  bool // a blocked rule matched at the last evaluation
 	// permDialog: a permission dialog's rule matched at the last
-	// evaluation.
-	permDialog bool
+	// evaluation; escapeDialog: the one that says it runs a command
+	// outside the sandbox ([guard] escape_rule).
+	permDialog, escapeDialog bool
 
 	keys        map[string]string // rule id -> the keys that answer its dialog (agent.Rule.Keys)
 	answerRule  string            // the keyed rule that is the screen's match
@@ -308,7 +310,7 @@ func (s *Session) AgentState() (st AgentState, ok bool) {
 		since = rt.prompts[0].at
 	}
 	held, heldSince := rt.heldWhy, rt.heldSince
-	escape := len(rt.escapes) > 0 || rt.cfg.PromptsEscape
+	escape := len(rt.escapes) > 0 || rt.cfg.PromptsEscape || rt.escapeDialog
 	dialog := rt.permDialog
 	var remote, known bool
 	if m := agent.ManifestOf(rt.a); m != nil && m.ObservesRemote() && rt.fields != nil {
@@ -345,30 +347,49 @@ func (s *Session) escape(id string, open bool) {
 	s.agentChanged(rt)
 }
 
+// escapeMark is an escape's call: when it ended (zero while it runs).
+type escapeMark struct{ ended time.Time }
+
+// escapeGrace is how long an ended escape's mark stays, at least, once
+// no permission dialog shows: its dialog may not have drawn yet when a
+// forged hook says the call ended (a variable for tests).
+var escapeGrace = 8 * time.Second
+
 func (rt *agentRT) setEscape(id string, open bool) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 	if !open {
-		if _, ok := rt.escapes[id]; ok {
-			rt.escapes[id] = true
-		}
-		rt.sweepEscapes()
+		rt.endEscapes(func(m string) bool { return m == id })
 		return
 	}
 	if rt.escapes == nil {
-		rt.escapes = map[string]bool{}
+		rt.escapes = map[string]*escapeMark{}
 	}
-	rt.escapes[id] = false
+	rt.escapes[id] = &escapeMark{}
 }
 
-// sweepEscapes drops the marks whose call or turn ended, unless a
-// permission dialog is on screen; rt.mu held.
-func (rt *agentRT) sweepEscapes() {
-	if rt.permDialog {
-		return
+// endEscapes says the calls of the marks which picks ended, now; rt.mu
+// held.
+func (rt *agentRT) endEscapes(which func(string) bool) {
+	for id, m := range rt.escapes {
+		if which(id) && m.ended.IsZero() {
+			m.ended = time.Now()
+		}
 	}
-	for id, ended := range rt.escapes {
-		if ended {
+	rt.sweepEscapes()
+}
+
+// sweepEscapes drops the marks whose call or turn ended escapeGrace
+// ago or more, unless a permission dialog is on screen, which holds
+// them all and starts their grace again; rt.mu held.
+func (rt *agentRT) sweepEscapes() {
+	now := time.Now()
+	for id, m := range rt.escapes {
+		switch {
+		case m.ended.IsZero():
+		case rt.permDialog:
+			m.ended = now
+		case now.Sub(m.ended) >= escapeGrace:
 			delete(rt.escapes, id)
 		}
 	}
@@ -792,7 +813,7 @@ func (s *Session) evalScreen(rt *agentRT) {
 	}
 	best, all := rt.eng.Eval(detect.Screen{Title: title, Rows: rows, NoDim: noDim})
 	var names []string
-	empty, blocker, perm := false, false, false
+	empty, blocker, perm, esc := false, false, false, false
 	for _, m := range all {
 		names = append(names, m.Rule)
 		if rt.man != nil && m.Rule == rt.man.Inject.EmptyRule {
@@ -802,9 +823,12 @@ func (s *Session) evalScreen(rt *agentRT) {
 			blocker = true
 			perm = perm || m.Reason == "permission"
 		}
+		if rt.man != nil && rt.man.Guard.EscapeRule != "" && m.Rule == rt.man.Guard.EscapeRule {
+			esc = true
+		}
 	}
 	rt.mu.Lock()
-	rt.emptyBox, rt.blocker, rt.permDialog = empty, blocker, perm
+	rt.emptyBox, rt.blocker, rt.permDialog, rt.escapeDialog = empty, blocker, perm, esc
 	rt.sweepEscapes()
 	if best != nil && best.State == agent.StateWorking && rt.workingSince.IsZero() {
 		rt.workingSince = time.Now()
@@ -871,9 +895,8 @@ func (s *Session) agentChanged(rt *agentRT) {
 	case agent.StateIdle:
 		// No call outlives its turn: each mark goes once the screen
 		// agrees.
-		for id := range rt.escapes {
-			rt.escapes[id] = true
-		}
+		rt.endEscapes(func(string) bool { return true })
+	default:
 		rt.sweepEscapes()
 	}
 	rt.mu.Unlock()

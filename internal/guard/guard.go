@@ -523,7 +523,9 @@ func (r Rules) judgeBash(command string) *Denial { return r.judgeLine(command, [
 // follows in its list, joined by ; or || it adds a folder they may be
 // in (it may fail, or not run); in ( ), a pipeline or the background it
 // moves nothing, and anywhere else ({ }, if, a substitution) it leaves
-// them unknown.
+// them unknown. A part that runs shell code the line doesn't show
+// (eval, trap, source, ., also through command or builtin) may move them
+// at any point after, so the rest of the line keeps unknown among them.
 func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	parts, ok := topLevel(command)
 	if !ok {
@@ -535,6 +537,7 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 		}
 	}
 	cur, list := cwds, cwds
+	hidden := false
 	for _, pt := range parts {
 		if listEnd(pt.before) {
 			list = cur
@@ -561,12 +564,35 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 		} else if !inPipe && !strings.HasPrefix(pt.text, "(") && hasCd(pt.text) {
 			cur = withDirs(cur, "")
 		}
+		hidden = hidden || runsHidden(pt.text)
+		if hidden {
+			cur = withDirs(cur, "")
+		}
 		list = withDirs(list, cur...)
 		if listEnd(pt.after) {
 			cur = list
 		}
 	}
 	return nil
+}
+
+// hiddenCode are the builtins that run shell code the line doesn't show
+// in the shell itself, where a cd in it moves the line's folder.
+var hiddenCode = setOf("eval trap source .")
+
+// runsHidden: one of text's commands is one of those, maybe through
+// command or builtin.
+func runsHidden(text string) bool {
+	for _, words := range Commands(text) {
+		argv := strip(words)
+		for len(argv) > 1 && (argv[0] == "command" || argv[0] == "builtin") {
+			argv = argv[1:]
+		}
+		if len(argv) > 0 && hiddenCode[argv[0]] {
+			return true
+		}
+	}
+	return false
 }
 
 // judgeCommands judges each simple command of part, a part of a line

@@ -365,7 +365,9 @@ function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Den
 // follows in its list, joined by ; or || it adds a folder they may be in
 // (it may fail, or not run); in ( ), a pipeline or the background it
 // moves nothing, and anywhere else ({ }, if, a substitution) it leaves
-// them unknown.
+// them unknown. A part that runs shell code the line doesn't show (eval,
+// trap, source, ., also through command or builtin) may move them at any
+// point after, so the rest of the line keeps unknown among them.
 function judgeLine(r: Rules, has: (id: string) => boolean, command: string, cwds: string[]): Denial | null {
   let parts = topLevel(command)
   if (!parts) {
@@ -376,6 +378,7 @@ function judgeLine(r: Rules, has: (id: string) => boolean, command: string, cwds
   }
   let cur = cwds
   let list = cwds
+  let hidden = false
   for (const pt of parts) {
     if (listEnd(pt.before)) list = cur
     for (const c of cur) {
@@ -393,10 +396,26 @@ function judgeLine(r: Rules, has: (id: string) => boolean, command: string, cwds
     } else if (!inPipe && !pt.text.startsWith('(') && hasCd(pt.text)) {
       cur = withDirs(cur, '')
     }
+    hidden ||= runsHidden(pt.text)
+    if (hidden) cur = withDirs(cur, '')
     list = withDirs(list, ...cur)
     if (listEnd(pt.after)) cur = list
   }
   return null
+}
+
+// The builtins that run shell code the line doesn't show in the shell
+// itself, where a cd in it moves the line's folder.
+const HIDDEN_CODE = new Set(['eval', 'trap', 'source', '.'])
+
+// runsHidden: one of text's commands is one of those, maybe through
+// command or builtin.
+function runsHidden(text: string): boolean {
+  return commands(text).some(words => {
+    let argv = strip(words)
+    while (argv.length > 1 && (argv[0] === 'command' || argv[0] === 'builtin')) argv = argv.slice(1)
+    return argv.length > 0 && HIDDEN_CODE.has(argv[0])
+  })
 }
 
 // judgeCommands judges each simple command of part, a part of a line
