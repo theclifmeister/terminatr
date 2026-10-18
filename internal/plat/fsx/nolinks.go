@@ -13,10 +13,11 @@ import (
 // by the open file itself (HandlePath: where the kernel says it is),
 // so a link swapped in between the check and the open is caught. Where
 // the kernel can't say, the components are looked at again after the open.
-// root itself may be a link; it is resolved first.
+// root must itself be no link and be given with its links resolved
+// (the kernel's spelling of it): a root that is a link is refused.
 func OpenNoLinks(root, rel string) (*os.File, error) {
-	real, err := filepath.EvalSymlinks(root)
-	if err != nil {
+	real := filepath.Clean(root)
+	if err := noLinkParts(filepath.Dir(real), []string{filepath.Base(real)}); err != nil {
 		return nil, err
 	}
 	parts := strings.Split(filepath.Clean(rel), string(filepath.Separator))
@@ -60,4 +61,28 @@ func noLinkParts(dir string, parts []string) error {
 		}
 	}
 	return nil
+}
+
+// OwnDir resolves dir the way a folder the agent can write needs: its
+// parent's links are resolved (/tmp is /private/tmp), but dir itself must
+// be a real folder, no link, owned by this user. It returns dir as the
+// kernel spells it.
+func OwnDir(dir string) (string, error) {
+	dir = filepath.Clean(dir)
+	parent, err := filepath.EvalSymlinks(filepath.Dir(dir))
+	if err != nil {
+		return "", err
+	}
+	real := filepath.Join(parent, filepath.Base(dir))
+	fi, err := os.Lstat(real)
+	if err != nil {
+		return "", err
+	}
+	if isLink(fi) {
+		return "", fmt.Errorf("%s: %w", real, ErrLink)
+	}
+	if !fi.IsDir() || !Mine(fi) {
+		return "", fmt.Errorf("%s is not a folder of this user", real)
+	}
+	return real, nil
 }

@@ -41,8 +41,8 @@ func (e *Env) openArg(path string) (*os.File, error) {
 		}
 		var f *os.File
 		var err error
-		if slices.Contains(set.noLinks, root) {
-			f, err = fsx.OpenNoLinks(root, rel)
+		if real, ok := set.noLinks[root]; ok {
+			f, err = fsx.OpenNoLinks(real, rel)
 		} else {
 			var r *os.Root
 			if r, err = os.OpenRoot(root); err != nil {
@@ -75,9 +75,9 @@ func (e *Env) openArg(path string) (*os.File, error) {
 // argSet is where an agent caller's files may be.
 type argSet struct {
 	roots   []string
-	noLinks []string // the roots in which no symlink is followed
-	private []string // folders of the roots it may not name
-	note    string   // why a root it might expect is none
+	noLinks map[string]string // the roots in which no symlink is followed, each with the folder it is, as the kernel spells it
+	private []string          // folders of the roots it may not name
+	note    string            // why a root it might expect is none
 }
 
 // places says where the files may be, for a refusal: the roots as they
@@ -139,16 +139,33 @@ func (e *Env) argRoots() argSet {
 	}
 	temp, private, scratch := tempRoots(e)
 	if scratch {
+		// The temp folder and the scratch folder in it are folders the
+		// sandbox can write: each must be a real folder of this user, never
+		// a link the agent planted to another's, so neither is resolved
+		// (only the folders above the temp folder are: /tmp).
+		// The agent may spell the temp folder's path above it any way
+		// (/tmp, /private/tmp): the spelling only names the folder, which
+		// is opened as the kernel spells it, link by link.
+		set.noLinks = map[string]string{}
 		var scratches []string
 		for _, t := range temp {
+			real, err := fsx.OwnDir(t)
+			if err != nil {
+				continue
+			}
 			for _, o := range own {
-				d := filepath.Join(t, scratchName(o))
-				if !slices.Contains(scratches, d) {
-					scratches = append(scratches, d)
+				d, err := fsx.OwnDir(filepath.Join(real, scratchName(o)))
+				if err != nil {
+					continue
+				}
+				for _, name := range []string{d, filepath.Join(filepath.Clean(t), scratchName(o))} {
+					if _, dup := set.noLinks[name]; !dup {
+						set.noLinks[name] = d
+						scratches = append(scratches, name)
+					}
 				}
 			}
 		}
-		set.noLinks = scratches
 		temp, private = scratches, nil
 		if adopted {
 			set.note = "no scratchpad for an adopted thread or a thread in a main checkout: other sessions of the user share its scratch folder"
@@ -162,11 +179,11 @@ func (e *Env) argRoots() argSet {
 		}
 		r = filepath.Clean(r)
 		set.roots = append(set.roots, r)
+		if _, ok := set.noLinks[r]; ok {
+			continue // opened as the kernel spells it
+		}
 		if real, err := filepath.EvalSymlinks(r); err == nil && real != r {
 			set.roots = append(set.roots, real)
-			if slices.Contains(set.noLinks, r) {
-				set.noLinks = append(set.noLinks, real)
-			}
 		}
 	}
 	return set
@@ -178,13 +195,16 @@ func (e *Env) argRoots() argSet {
 // temp folder, which holds files that sandbox keeps from it. scratch is
 // set when the folder is shared by the agent's sessions ([guard]
 // temp_scratch), so that only a scratch folder in it is the caller's.
-// None when the agent or its temp folder is unknown. os.TempDir() for a
-// call that runs in the caller's own process (no server: its sandbox
-// opens the file) and for a mod's. A variable for tests, whose own temp
+// None when the agent or its temp folder is unknown, and for a caller
+// with no session (it can't be told which agent's temp folder is its).
+// os.TempDir() for a mod's. A variable for tests, whose own temp
 // folders are elsewhere.
 var tempRoots = func(e *Env) (roots, private []string, scratch bool) {
-	if e.Caller.Kind == caller.Mod || e.Caller.Session == "" {
+	if e.Caller.Kind == caller.Mod {
 		return []string{os.TempDir()}, nil, false
+	}
+	if e.Caller.Session == "" {
+		return nil, nil, false
 	}
 	name := e.callerAgent()
 	if name == "" {

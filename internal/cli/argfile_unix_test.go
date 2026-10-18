@@ -195,6 +195,20 @@ func TestAgentScratchpad(t *testing.T) {
 		t.Errorf("the refusal doesn't list the roots: exit %d, %s", code, errs)
 	}
 
+	// The scratch folder planted as a link to another's, or gone: refused.
+	root := filepath.Join(tmp, scratchName(wt))
+	os.Rename(root, root+".x")
+	os.Symlink(filepath.Join(tmp, theirsName), root)
+	for _, a := range []string{filepath.Join(root, "sess", "tasks", "chart.png"), filepath.Join(root, "sess", "scratchpad", "chart.png")} {
+		if code, _, errs := h.run(thr, report, "report", "--attach", a); code == 0 {
+			t.Errorf("a scratch folder that is a link to another's, report --attach %s: exit %d, %s", a, code, errs)
+		}
+	}
+	os.Remove(root)
+	if code, _, errs := h.run(thr, report, "report", "--attach", filepath.Join(root, "sess", "scratchpad", "chart.png")); code == 0 {
+		t.Errorf("a missing scratch folder: exit %d, %s", code, errs)
+	}
+
 	// An adopted thread's worktree is the user's own checkout: its
 	// scratch folder is shared with the user's sessions, so none.
 	h.cwd = adoptedWt
