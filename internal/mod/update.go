@@ -63,6 +63,6 @@ func RecordSource(m Mod, was Source, st *Staged) {
 		return
 	}
 	next := st.Source
-	next.Installed = was.Installed
+	next.Installed, next.Updated = was.Installed, was.Updated
 	_ = writeSource(m.Dir, next)
 }
