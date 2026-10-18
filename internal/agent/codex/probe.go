@@ -198,7 +198,9 @@ func probeDomain(flags []string) []string {
 		if !strings.HasPrefix(v, "permissions=") {
 			continue
 		}
-		if strings.Contains(v, ",domains={") {
+		if strings.Contains(v, entry) {
+			continue
+		} else if strings.Contains(v, ",domains={") {
 			out[i] = strings.Replace(v, ",domains={", ",domains={"+entry+",", 1)
 		} else if m := modeKey.FindString(v); m != "" {
 			out[i] = strings.Replace(v, m, m+",domains={"+entry+"}", 1)
@@ -360,14 +362,15 @@ func sandboxed(l agent.Launch, spec agent.LaunchSpec, m *agent.Manifest, windows
 // else closed, with a warning: a Codex that renames the proxy feature
 // or a key would otherwise leave the network open (T577). The probe is
 // the coordinator's (tm's socket connects, a loopback address outside
-// the domains is refused), without the local binding. On Windows, where
-// Codex's proxy needs its elevated sandbox, the network is off.
-func limited(l agent.Launch, spec agent.LaunchSpec, m *agent.Manifest, windows bool) agent.Launch {
+// the domains is refused, the proxy refuses an unlisted host and takes
+// a listed one), without the local binding. Where the proxy can't
+// carry tm's socket (closedOS), the network is off.
+func limited(l agent.Launch, spec agent.LaunchSpec, m *agent.Manifest, closed bool) agent.Launch {
 	idx, name, flags := profileFlags(l.Argv)
 	if len(idx) == 0 {
 		return l // yolo: no sandbox to shape
 	}
-	if windows {
+	if closed {
 		l.Argv = closedNetwork(l.Argv)
 		return l
 	}
@@ -613,14 +616,37 @@ func (a *Agent) probeWindowsCoordinator(tmBin string) (string, error) {
 	return version, writeVerdict(path, tmBin, work, sock, name, flags, filepath.Join(outside, "probe"))
 }
 
+// closedOS reports whether a thread's network is off on platform goos
+// rather than going through Codex's proxy, because the proxy can't hold
+// there with tm's socket reachable. Windows: the proxy needs Codex's
+// elevated sandbox. Linux: in proxy-routed mode Codex 0.162's seccomp
+// filter refuses every AF_UNIX socket but with
+// dangerously_allow_all_unix_sockets, which would open every socket,
+// the human one too (network.unix_sockets names sockets on macOS only;
+// linux-sandbox/src/landlock.rs, NetworkSeccompMode::ProxyRouted; CI
+// measured tm's socket refused). With the network off its filter lets
+// AF_UNIX through, so tm's socket connects.
+func closedOS(goos string) bool { return goos == "windows" || goos == "linux" }
+
+// ThreadNetwork is a thread's launch argv in the network form it starts
+// with on platform goos before its probe: closed where closedOS says
+// so, as it is (through the proxy) elsewhere. For tests that run the
+// profile under the installed Codex.
+func ThreadNetwork(argv []string, goos string) []string {
+	if closedOS(goos) {
+		return closedNetwork(argv)
+	}
+	return argv
+}
+
 // ProbeThreadSandbox checks a thread's profile under the installed Codex
 // (agent.ThreadSandboxProber, for tm doctor): Codex's Windows sandbox
 // needs a one-time setup, and without it every command of a thread asks
 // for approval (docs/CODEX.md). The probe runs inside the profile, so it
 // holds only when the sandbox applies and tm's socket (AF_UNIX on
-// Windows) is reachable from it. Elsewhere it also checks the network
-// is limited: a host outside the thread's domains (a loopback listener)
-// refused, as a thread's launch checks (limited).
+// Windows) is reachable from it. Where a thread's network goes through
+// the proxy (macOS) it also checks it is limited, as a thread's launch
+// does (limited).
 func (a *Agent) ProbeThreadSandbox(tmBin string) (string, error) {
 	work, outside, base, sock, done, err := probeScratch()
 	if err != nil {
@@ -636,7 +662,8 @@ func (a *Agent) ProbeThreadSandbox(tmBin string) (string, error) {
 		return "", err
 	}
 	argv := l.Argv
-	if caps.Windows {
+	closed := closedOS(caps.OS)
+	if closed {
 		argv = closedNetwork(argv)
 	}
 	// A thread's profile is its -c features and permissions flags;
@@ -645,7 +672,7 @@ func (a *Agent) ProbeThreadSandbox(tmBin string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := writeVerdict(path, tmBin, work, sock, name, flags, filepath.Join(outside, "probe")); err != nil || caps.Windows {
+	if err := writeVerdict(path, tmBin, work, sock, name, flags, filepath.Join(outside, "probe")); err != nil || closed {
 		return version, err
 	}
 	return version, probeOnce(path, tmBin, work, sock, name, flags, false)

@@ -104,7 +104,7 @@ func (a *Agent) Launch(spec agent.LaunchSpec) (agent.Launch, error) {
 	case "coordinator":
 		l = sandboxed(l, spec, a.m, caps.Windows) // probe.go
 	case agent.RoleThread:
-		l = limited(l, spec, a.m, caps.Windows) // probe.go
+		l = limited(l, spec, a.m, closedOS(caps.OS)) // probe.go
 	}
 	if spec.Role == agent.RoleThread && spec.Sandbox.Lists() {
 		l.Warnings = append(l.Warnings, sandboxListsGap)

@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/agent/codex"
 	"github.com/theclifmeister/terminatr/internal/gittest"
 )
 
@@ -32,14 +33,16 @@ func sandboxArgs(t *testing.T, spec agent.LaunchSpec) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The network form the Go agent launches here (closed on Linux).
+	argv := codex.ThreadNetwork(l.Argv, runtime.GOOS)
 	var out []string
-	for i := 0; i+1 < len(l.Argv); i++ {
-		if l.Argv[i] == "-c" && (strings.HasPrefix(l.Argv[i+1], "permissions=") || strings.HasPrefix(l.Argv[i+1], "default_permissions=") ||
-			strings.HasPrefix(l.Argv[i+1], "features.network_proxy=")) {
-			out = append(out, "-c", l.Argv[i+1])
+	for i := 0; i+1 < len(argv); i++ {
+		if argv[i] == "-c" && (strings.HasPrefix(argv[i+1], "permissions=") || strings.HasPrefix(argv[i+1], "default_permissions=") ||
+			strings.HasPrefix(argv[i+1], "features.network_proxy=")) {
+			out = append(out, "-c", argv[i+1])
 		}
 	}
-	if len(out) != 6 {
+	if len(out) != 6 && !(runtime.GOOS == "linux" && len(out) == 4) { // no proxy feature on Linux
 		t.Fatalf("no thread profile in %q", l.Argv)
 	}
 	return out
@@ -177,6 +180,11 @@ func TestSmokeCodexSandbox(t *testing.T) {
 		"hooks": "no", "config": "no", "info": "no", "other-worktree": "no",
 		"outside": "no", "home": "no", "project-read": "ok", "project-write": "no",
 		"socket": "ok", "loopback": "no", "proxy": "ok",
+	}
+	if runtime.GOOS == "linux" {
+		// The network is off (codex.ThreadNetwork): no proxy, tm's socket
+		// still reachable.
+		want["proxy"] = "no"
 	}
 	got := map[string]string{}
 	for _, line := range strings.Split(string(out), "\n") {

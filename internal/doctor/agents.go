@@ -70,8 +70,13 @@ func probeCheck(name string, m *agent.Manifest, probe func() (string, error), ok
 // isn't, a thread starts with its network off.
 func threadSandboxCheck(d Deps, name string, m *agent.Manifest, p agent.ThreadSandboxProber) Check {
 	ok, fallback := "a thread's commands run sandboxed, reach tm's socket and only the hosts it is given", "starts with its network off"
-	if d.GOOS == "windows" {
+	switch d.GOOS {
+	case "windows":
 		ok, fallback = "a thread's commands run sandboxed and reach tm's socket", "runs without it or asks approval for every command"
+	case "linux":
+		// Codex's proxy can't carry tm's socket there: the network is
+		// off (internal/agent/codex/probe.go, closedOS).
+		ok, fallback = "a thread's commands run sandboxed and reach tm's socket; its network is off (Codex's proxy can't carry tm's socket on Linux)", "can't reach tm's socket from its commands"
 	}
 	return probeCheck(name+" thread sandbox", m, func() (string, error) { return d.ThreadSandboxProbe(p) }, ok,
 		func(err error) string {

@@ -173,11 +173,20 @@ func TestClosedNetworkManifest(t *testing.T) {
 	}
 }
 
+// TestClosedOS: a thread's network is off where the proxy can't carry
+// tm's socket (Windows, Linux), through the proxy on macOS.
+func TestClosedOS(t *testing.T) {
+	if !closedOS("windows") || !closedOS("linux") || closedOS("darwin") {
+		t.Error("closedOS")
+	}
+}
+
 // TestProbeDomain: the probe's profile lists probeListed beside the
-// thread's domains, or as its only one.
+// thread's domains, or as its only one, and not twice.
 func TestProbeDomain(t *testing.T) {
 	for in, want := range map[string]string{
 		`permissions={tm={network={enabled=true,mode="full",unix_sockets={"/s"="allow"},domains={"github.com"="allow"}}}}`: `permissions={tm={network={enabled=true,mode="full",unix_sockets={"/s"="allow"},domains={"localhost"="allow","github.com"="allow"}}}}`,
+		`permissions={tm={network={enabled=true,mode="full",domains={"localhost"="allow"}}}}`:                              `permissions={tm={network={enabled=true,mode="full",domains={"localhost"="allow"}}}}`,
 		`permissions={tm={network={enabled=true,mode="limited",unix_sockets={"/s"="allow"}}}}`:                             `permissions={tm={network={enabled=true,mode="limited",domains={"localhost"="allow"},unix_sockets={"/s"="allow"}}}}`,
 	} {
 		got := probeDomain([]string{"-c", "features.network_proxy=true", "-c", in})
@@ -405,8 +414,14 @@ func TestProbeThreadSandbox(t *testing.T) {
 		{answers(`echo "unix=refused write=denied"`, held), "tm's socket is unreachable"},
 		{`echo "error: bad" >&2; exit 2`, "codex sandbox refused it: error: bad"},
 		{`echo something else`, "unexpected probe output"},
-		{answers(`echo "unix=ok write=denied"`, `echo "unix=ok tcp=ok proxy=ok"`), "the network isn't limited"},
-		{answers(`echo "unix=ok write=denied"`, `echo "unix=ok tcp=refused proxy=open"`), "outside the domains"},
+	}
+	if !closedOS(runtime.GOOS) {
+		// Where a thread's network goes through the proxy, it is checked
+		// too.
+		cases = append(cases, []struct{ script, want string }{
+			{answers(`echo "unix=ok write=denied"`, `echo "unix=ok tcp=ok proxy=ok"`), "the network isn't limited"},
+			{answers(`echo "unix=ok write=denied"`, `echo "unix=ok tcp=refused proxy=open"`), "outside the domains"},
+		}...)
 	}
 	a := load(t)
 	for _, tc := range cases {

@@ -150,10 +150,11 @@ func TestLaunch(t *testing.T) {
 	network := `network={enabled=true,mode="full",unix_sockets={"/run/tm.sock"="allow"}}`
 	proxy = []string{"-c", "features.network_proxy=true"}
 	if caps.Windows {
-		// Codex's proxy needs its elevated sandbox there: the network
-		// is off.
 		sockW = `,"\\run"="write"`
 		winSandbox = []string{"-c", `windows.sandbox="unelevated"`}
+	}
+	if closedOS(caps.OS) {
+		// The proxy can't carry tm's socket there: the network is off.
 		network, proxy = `network={enabled=false,unix_sockets={"/run/tm.sock"="allow"}}`, nil
 	}
 	want := []string{"codex",
@@ -197,7 +198,7 @@ func TestLaunch(t *testing.T) {
 	bound.Sandbox = agent.SandboxLists{LocalBinding: true, Domains: []string{"registry.npmjs.org", "*.example.com"}}
 	threadProbed = nil
 	ll, err := a.Launch(bound)
-	if !caps.Windows {
+	if !closedOS(caps.OS) {
 		limitedNet := `network={enabled=true,mode="full",unix_sockets={"/run/tm.sock"="allow"},domains={"registry.npmjs.org"="allow","*.example.com"="allow"},allow_local_binding=true}}}`
 		if err != nil || len(ll.Warnings) > 0 || !slices.ContainsFunc(ll.Argv, func(s string) bool {
 			if !strings.HasPrefix(s, "permissions={tm=") || !strings.HasSuffix(s, limitedNet) {
@@ -316,7 +317,7 @@ func TestLaunch(t *testing.T) {
 		!slices.ContainsFunc(l.Argv, func(s string) bool { return strings.Contains(s, "network={enabled=false,") }) {
 		t.Errorf("thread argv %q", l.Argv)
 	}
-	if !caps.Windows && (len(probed) != 1 || len(l.Warnings) != 1) {
+	if !closedOS(caps.OS) && (len(probed) != 1 || len(l.Warnings) != 1) {
 		t.Errorf("thread probed %q, warnings %q", probed, l.Warnings)
 	}
 	spec.Yolo = true
