@@ -75,6 +75,44 @@ yolo = false
 	}
 }
 
+// TestReplaceNeverWider: before the migration, a project that opted out
+// of all projects' excluded commands with an empty list, or listed its
+// own, gets none of theirs, as in tm 0.37; only a drop or a list it
+// doesn't set lets all projects' through.
+func TestReplaceNeverWider(t *testing.T) {
+	write(t, `
+[defaults.sandbox]
+excluded_commands = ["docker *"]
+allow = ["Bash(docker *)"]
+
+[projects.optout.sandbox]
+excluded_commands = []
+allow = []
+
+[projects.own.sandbox]
+excluded_commands = ["make e2e"]
+hosts = ["x.dev"]
+`)
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for slug, want := range map[string][2][]string{"optout": {nil, nil}, "own": {{"make e2e"}, {"Bash(docker *)"}}} {
+		got := c.ThreadSandbox(slug)
+		if !slices.Equal(got.Given(SandboxExcluded), want[0]) || !slices.Equal(got.Given(SandboxAllow), want[1]) {
+			t.Errorf("%s: excluded %q allow %q", slug, got.Given(SandboxExcluded), got.Given(SandboxAllow))
+		}
+	}
+	// A write of another key keeps the opt-out.
+	if err := EditSandbox("projects.optout", func(t *SandboxTable) error { t.Add(SandboxHosts, "x.dev"); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	c, _ = Load()
+	if got := c.ThreadSandbox("optout"); len(got.Given(SandboxExcluded))+len(got.Given(SandboxAllow)) != 0 {
+		t.Errorf("optout after a write: %+v", got)
+	}
+}
+
 // TestThreadSandboxRefused: an entry that fails its check loads, and is
 // refused on its own; the rest hold (T574 P10).
 func TestThreadSandboxRefused(t *testing.T) {
@@ -125,13 +163,14 @@ func TestThreadSandboxLoadErrors(t *testing.T) {
 // TestCheckHostsAndGuides: a host is a name, never an address, a URL or
 // one word; a guide is a text tm ships.
 func TestCheckHostsAndGuides(t *testing.T) {
-	for _, h := range []string{"registry.npmjs.org", "cdn.playwright.dev", "*.example.com", "a-b.c0.io"} {
+	for _, h := range []string{"registry.npmjs.org", "cdn.playwright.dev", "*.example.com", "a-b.c0.io", "*.example.co.uk", "me.github.io", "storage.googleapis.com"} {
 		if err := CheckHost(h); err != nil {
 			t.Errorf("%q: %v", h, err)
 		}
 	}
 	for _, h := range []string{"", "localhost", "com", "*.com", "*", "https://x.dev", "x.dev:443", "x.dev/path", "10.0.0.1", "X.dev",
-		"-x.dev", "x..dev", "x.localhost", "*.*.dev", "x_y.dev", " x.dev", "0x7f.0x1", "127.0.0.0x1", "0x7f.0.0.0x1", "localhost.localdomain"} {
+		"-x.dev", "x..dev", "x.localhost", "*.*.dev", "x_y.dev", " x.dev", "0x7f.0x1", "127.0.0.0x1", "0x7f.0.0.0x1", "localhost.localdomain",
+		"nip.io", "127.0.0.1.nip.io", "*.sslip.io", "lvh.me", "app.localtest.me", "x.xip.io", "co.uk", "*.co.uk", "*.github.io", "github.io"} {
 		if err := CheckHost(h); err == nil {
 			t.Errorf("%q passed", h)
 		}

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 // Host and guidance rules of a sandbox table (T574 §3.1): hosts a
@@ -51,8 +53,29 @@ func CheckHost(h string) error {
 		return fmt.Errorf("%q is one word: name the whole host, e.g. registry.npmjs.org", h)
 	case slices.Contains(labels, "localhost") || last == "localdomain":
 		return fmt.Errorf("%q is this computer: local ports are the Local ports setting's (local_ports)", h)
+	case loopbackName(name) != "":
+		return fmt.Errorf("%q is under %s, whose names resolve to any address, this computer's and your network's too: local ports are the Local ports setting's (local_ports)", h, loopbackName(name))
+	}
+	if _, err := publicsuffix.EffectiveTLDPlusOne(name); err != nil {
+		return fmt.Errorf("%q is a public suffix (every site under it has its own owner): name the host or domain, e.g. *.example.co.uk", h)
 	}
 	return nil
+}
+
+// loopbackDomains are domains whose names resolve to the address they
+// spell (127.0.0.1.nip.io) or to this computer: a host rule under one
+// opens local ports or your network, which local_ports alone opens.
+// Others can exist; OPERATIONS says so.
+var loopbackDomains = []string{"nip.io", "sslip.io", "xip.io", "lvh.me", "localtest.me", "traefik.me", "localhost.direct", "vcap.me"}
+
+// loopbackName is the loopbackDomains domain name is, or is under; "".
+func loopbackName(name string) string {
+	for _, d := range loopbackDomains {
+		if name == d || strings.HasSuffix(name, "."+d) {
+			return d
+		}
+	}
+	return ""
 }
 
 // sharedHosts are hosts that serve many owners' data, with whose.

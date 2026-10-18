@@ -74,6 +74,11 @@ func TestAccessPreset(t *testing.T) {
 	if out := env.MustCLI("access", "preset", "show", "browser-downloads"); !strings.Contains(out, "host") || !strings.Contains(out, "storage.googleapis.com") || !strings.Contains(out, "guide") {
 		t.Errorf("show:\n%s", out)
 	}
+	// add writes config.toml from this process: the server says who runs it.
+	if r := env.CLI("access", "preset", "add", "browser-downloads", "demo"); r.Code == 0 || !strings.Contains(r.Stderr, "server isn't running") {
+		t.Errorf("add without a server: %+v", r)
+	}
+	env.MustCLI("server", "start")
 	out := env.MustCLI("access", "preset", "add", "browser-downloads", "demo")
 	for _, want := range []string{"already there for demo: host registry.npmjs.org", "added to demo: host cdn.playwright.dev", "added to demo: guide browser-downloads", "threads of demo get them from their next start"} {
 		if !strings.Contains(out, want) {
@@ -90,7 +95,6 @@ func TestAccessPreset(t *testing.T) {
 	if out := env.MustCLI("access", "preset", "add", "local-dev-servers", "--all"); !strings.Contains(out, "added to all projects: local-ports on") {
 		t.Errorf("--all:\n%s", out)
 	}
-	env.MustCLI("server", "start")
 	if out := env.MustCLI("access", "show", "demo"); !strings.Contains(out, "local-ports on") || !strings.Contains(out, "host cdn.playwright.dev") {
 		t.Errorf("show after adding:\n%s", out)
 	}

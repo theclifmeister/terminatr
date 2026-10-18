@@ -33,7 +33,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.30 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect
-	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/net v0.60.0
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 )

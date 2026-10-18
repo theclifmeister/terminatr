@@ -13,7 +13,10 @@ import (
 // accessPreset implements tm access preset list|show|add (T574 §5): the
 // presets tm ships, the rules each adds, and adding them to a project's
 // or all projects' sandbox table as plain rules. The human's: an agent
-// gets human-only, and the sandbox keeps it from config.toml anyway.
+// gets human-only, told by the server from the process tree (access is
+// a checked command), not only by the environment an agent can unset;
+// add, which writes config.toml from this process, refuses to run
+// when no server can tell.
 func accessPreset(e *Env, args []string) error {
 	const cmd = "access preset"
 	if len(args) == 0 {
@@ -21,6 +24,9 @@ func accessPreset(e *Env, args []string) error {
 	}
 	if e.Caller.IsAgent() {
 		return srvFail(cmd, &project.Error{Code: "human-only", Msg: "presets are the user's: they add them in the Access tab (p) or with tm access preset add"})
+	}
+	if args[0] == "add" && e.Identify != nil && !e.Identified {
+		return srvFail(cmd, &project.Error{Code: "server-down", Msg: "tm server isn't running: it tells who runs tm access preset add; start it (tm server start), or use the Access tab"})
 	}
 	f := newFlags()
 	asJSON, all := f.Bool("json"), f.Bool("all")
