@@ -561,7 +561,7 @@ peer      nas  offline 4m0s · relay · dials again in 30s · relay relay.exampl
 
 ## Checking an installation: tm doctor
 
-`tm doctor` checks your installation and changes nothing:
+`tm doctor` checks your installation and changes nothing. It prints each group under an uppercase heading, with a blank line between groups and the status, name and detail in columns (`--json` is unchanged):
 - the `tm` build and libghostty-vt, and git;
 - under `code host`, printed last, for each code host your projects' repos use: `gh` and its login for GitHub; for a code host mod's kind (`gitlab`), the mod that serves it and its own checks (glab and its login); for Azure DevOps `az` and `az login` (or `AZURE_DEVOPS_EXT_PAT` set, never shown), that tm can read each repo through `az rest` (else why: the login, the organization's tenant with the `az login --tenant` to run, the origin URL), and that `git ls-remote origin HEAD` works without a password prompt. With no project yet, the GitHub checks run; and whenever `az` is on the server's `PATH` its `az` and `az login` lines show even when no repo uses Azure DevOps, marked "no project uses Azure DevOps" and never a warning (the per-repo lines stay with Azure repos);
 - how `tm` was installed (Homebrew, a direct download, or built from source) and whether a newer release exists, with the command that updates it;

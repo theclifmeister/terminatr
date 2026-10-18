@@ -24,7 +24,7 @@ func TestDoctor(t *testing.T) {
 	if r.Code != 0 {
 		t.Fatalf("doctor: exit %d\n%s%s", r.Code, r.Stdout, r.Stderr)
 	}
-	for _, want := range []string{"libghostty-vt  linked", "pid " + strconv.Itoa(pid), "2.1.289 (tested)", "0 failures"} {
+	for _, want := range []string{"libghostty-vt" + strings.Repeat(" ", 11) + "linked", "pid " + strconv.Itoa(pid), "2.1.289 (tested)", "0 failures"} {
 		if !strings.Contains(r.Stdout, want) {
 			t.Errorf("doctor lacks %q:\n%s", want, r.Stdout)
 		}
@@ -123,7 +123,7 @@ func TestDoctorServerContext(t *testing.T) {
 			t.Errorf("doctor text, gh auth line %q:\n%s", line, out)
 		}
 	}
-	if !strings.Contains(out, "gh auth        logged in [server]") {
+	if !strings.Contains(out, "gh auth"+strings.Repeat(" ", 17)+"logged in [server]") {
 		t.Errorf("doctor text lacks the server's gh auth:\n%s", out)
 	}
 
