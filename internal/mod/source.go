@@ -75,13 +75,14 @@ func (s Source) Words() string {
 // String is the source as tm mod install takes it: a GitHub subfolder
 // at a ref as its tree URL, any other as <git-url>[//<subdir>][@<ref>].
 func (s Source) String() string {
+	git := RedactURL(s.Git)
 	switch {
 	case s.Path != "":
 		return s.Path
 	case s.Subdir != "" && s.Ref != "" && githubRepoRE.MatchString(s.Git) && !strings.Contains(s.Ref, "/"):
-		return s.Git + "/tree/" + s.Ref + "/" + s.Subdir
+		return git + "/tree/" + s.Ref + "/" + s.Subdir
 	}
-	out := s.Git
+	out := git
 	if s.Subdir != "" {
 		out += "//" + s.Subdir
 	}
@@ -102,6 +103,46 @@ var (
 	// segRE is one name in a subfolder's path.
 	segRE = regexp.MustCompile(`^[A-Za-z0-9._+-]+$`)
 )
+
+// ErrCredentials refuses a git URL that carries a user, password or
+// token: mods install from public URLs only, and a record of the URL
+// would keep the secret where the Mods tab and agents can read it.
+var ErrCredentials = errors.New("the URL has a user, password or token in it: mods install from public URLs only (no credentials; a private repository can't be installed)")
+
+// urlUserinfo splits the userinfo out of a URL with a scheme://
+// authority (https://, ssh://), and says whether it had any. The scp
+// form user@host:path has none in this sense: it can't carry a
+// password.
+func urlUserinfo(u string) (before, userinfo, after string, ok bool) {
+	i := strings.Index(u, "://")
+	if i < 0 || strings.HasPrefix(u, "file://") {
+		return "", "", "", false
+	}
+	rest := u[i+3:]
+	end := strings.IndexAny(rest, "/?#")
+	if end < 0 {
+		end = len(rest)
+	}
+	at := strings.LastIndex(rest[:end], "@")
+	if at < 0 {
+		return "", "", "", false
+	}
+	return u[:i+3], rest[:at], rest[at+1:], true
+}
+
+// HasCredentials says whether git URL u carries userinfo.
+func HasCredentials(u string) bool {
+	_, _, _, ok := urlUserinfo(u)
+	return ok
+}
+
+// RedactURL is u with any userinfo replaced by ***, for showing.
+func RedactURL(u string) string {
+	if before, _, after, ok := urlUserinfo(u); ok {
+		return before + "***@" + after
+	}
+	return u
+}
 
 // CheckSubdir checks p, a mod's folder in a git repository, as a slash
 // path that stays inside the repository and names no git internals: no
@@ -134,6 +175,9 @@ func CheckSubdir(p string) error {
 // with an optional //<path> (the mod's folder in the repository) and
 // an optional @<ref> after it.
 func parseGit(arg string) (Source, error) {
+	if HasCredentials(arg) {
+		return Source{}, ErrCredentials
+	}
 	if m := githubTreeRE.FindStringSubmatch(arg); m != nil {
 		if m[2] == "blob" {
 			return Source{}, fmt.Errorf("%s is a file: give its folder's /tree/ URL", arg)
@@ -456,7 +500,11 @@ const gitTimeout = 2 * time.Minute
 // git runs git with args, never asking for a password and refusing
 // transports that run commands (gitx), and returns its output.
 func git(dir string, args ...string) (string, error) {
-	return gitx.Run(context.Background(), dir, gitx.Opts{Timeout: gitTimeout, Env: []string{"GIT_ASKPASS=", "SSH_ASKPASS="}}, args...)
+	// No credential helper (an empty value resets the list, the
+	// system's and the user's included), no prompt: a private repository
+	// fails instead of using the user's stored logins.
+	env := []string{"GIT_ASKPASS=", "SSH_ASKPASS=", "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=credential.helper", "GIT_CONFIG_VALUE_0="}
+	return gitx.Run(context.Background(), dir, gitx.Opts{Timeout: gitTimeout, Env: env}, args...)
 }
 
 // clone fetches url at ref ("" the default branch) into dir, shallow,
@@ -631,6 +679,8 @@ func Latest(s Source) (next string, behind bool, err error) {
 		return "changed", true, nil
 	case s.Git == "":
 		return "", false, errors.New("no source recorded")
+	case HasCredentials(s.Git):
+		return "", false, recordCredentials(s)
 	case isVersionTag(s.Ref):
 		tag, err := newestTag(s.Git, s.Ref)
 		if err != nil || tag == "" {
@@ -680,6 +730,9 @@ func subdirChanged(s Source, ref string) (bool, error) {
 // version tag moves on to the newest one; a folder, branch or other tag
 // is fetched again as it is.
 func Next(s Source) (Source, error) {
+	if HasCredentials(s.Git) {
+		return Source{}, recordCredentials(s)
+	}
 	next := Source{Path: s.Path, Git: s.Git, Ref: s.Ref, Subdir: s.Subdir}
 	if s.Git != "" && isVersionTag(s.Ref) {
 		tag, err := newestTag(s.Git, s.Ref)
@@ -698,4 +751,10 @@ func shortCommit(c string) string {
 		return c[:12]
 	}
 	return c
+}
+
+// recordCredentials is the refusal of a recorded source whose URL has
+// userinfo (installed before tm refused those).
+func recordCredentials(s Source) error {
+	return fmt.Errorf("%s: its recorded URL has credentials in it, which tm no longer fetches with: remove the mod and install it again from a public URL", s)
 }

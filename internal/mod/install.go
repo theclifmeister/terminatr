@@ -44,6 +44,9 @@ func (s *Staged) Close() {
 // are CheckData's, the Mods tab's). An invalid mod
 // comes back with its manifest, if any, and the reasons.
 func Fetch(src Source) (*Staged, error) {
+	if HasCredentials(src.Git) {
+		return nil, ErrCredentials
+	}
 	mods, err := home.ModsDir()
 	if err != nil {
 		return nil, err
