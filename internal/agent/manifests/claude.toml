@@ -313,6 +313,13 @@ clear = "/clear"
 # "default" is the user's own default).
 switch_model = "/model {model}"
 switch_model_default = "default"
+# tm thread prompt --interrupt (checked on 2.1.302, T569): a prompt typed
+# mid-turn is queued; Esc then stops the turn and Claude sends what it
+# queued at once, as a turn of its own. So the prompt is pasted first.
+# Waiting for idle after a bare Esc would race that send (the status
+# file reads idle for about a second in between).
+interrupt = "\u001b"
+interrupt_paste = "before"
 
 # Hook payloads are trimmed before they leave the hook process.
 [hook]

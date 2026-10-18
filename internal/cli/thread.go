@@ -40,6 +40,9 @@ const threadUsage = `usage: tm thread <command> [--project <slug>] [--json]
                                  from threads/archive/
   read <id> [--lines N]          the thread's screen as text
   prompt <id> "text" | --next N  queue a prompt (sent when idle; refused while blocked)
+         [--now | --interrupt]   --now steers it into the running turn (read at the
+                                 agent's next tool call); --interrupt stops the turn
+                                 for it (only on the user's word)
   approve <id> [--choice N]      answer a permission prompt with "allow once"
   answer <id> [--choice N[,N…]] [--option LABEL]… [--text T] [--question K]
                                  relay the user's answer to a question menu
@@ -120,7 +123,7 @@ func runThread(e *Env, args []string) error {
 	case "read":
 		run = bind(readFlags(f), func(p *project.Project, o readOpts) error { return e.threadRead(p, o.id, o.lines) })
 	case "prompt":
-		run = bind(promptFlags(f), func(p *project.Project, o promptOpts) error { return e.threadPrompt(p, o.id, o.text, o.next) })
+		run = bind(promptFlags(f), func(p *project.Project, o promptOpts) error { return e.threadPrompt(p, o) })
 	case "approve":
 		run = bind(approveFlags(f), func(p *project.Project, o approveOpts) error { return e.threadApprove(p, o.id, o.choice) })
 	case "answer":
@@ -258,15 +261,22 @@ func readFlags(f *flagSet) func(pos []string) (readOpts, error) {
 	}
 }
 
-type promptOpts struct{ id, text, next string }
+type promptOpts struct{ id, text, next, mode string }
 
 func promptFlags(f *flagSet) func(pos []string) (promptOpts, error) {
 	next := f.String("next")
+	now, interrupt := f.Bool("now"), f.Bool("interrupt")
 	return func(pos []string) (promptOpts, error) {
-		if len(pos) < 1 || (len(pos) == 1) == !f.IsSet("next") || len(pos) > 2 {
-			return promptOpts{}, usagef("usage: tm thread prompt <id> \"text\" | tm thread prompt <id> --next N")
+		if len(pos) < 1 || (len(pos) == 1) == !f.IsSet("next") || len(pos) > 2 || *now && *interrupt {
+			return promptOpts{}, usagef("usage: tm thread prompt <id> \"text\" | tm thread prompt <id> --next N, with --now or --interrupt")
 		}
 		o := promptOpts{id: pos[0], next: *next}
+		switch {
+		case *now:
+			o.mode = proto.PromptNow
+		case *interrupt:
+			o.mode = proto.PromptInterrupt
+		}
 		if len(pos) == 2 {
 			o.text = pos[1]
 		}
@@ -677,7 +687,8 @@ func (e *Env) liveThread(p *project.Project, id string) (*thread.Record, proto.S
 	return r, info, nil
 }
 
-func (e *Env) threadPrompt(p *project.Project, id, text, next string) error {
+func (e *Env) threadPrompt(p *project.Project, o promptOpts) error {
+	id, text, next := o.id, o.text, o.next
 	if err := e.coordinatorOnly(p, "prompting threads"); err != nil {
 		return err
 	}
@@ -710,14 +721,34 @@ func (e *Env) threadPrompt(p *project.Project, id, text, next string) error {
 		return err
 	}
 	var res proto.SessionPromptResult
-	if err := e.call(proto.MethodSessionPrompt, proto.SessionPromptParams{ID: r.Session, Text: text}, &res); err != nil {
+	if err := e.call(proto.MethodSessionPrompt, proto.SessionPromptParams{ID: r.Session, Text: text, Mode: o.mode}, &res); err != nil {
 		return err
 	}
-	if err := p.Journal(e.Caller, "thread.prompt", id, textsafe.Line(text, 80)); err != nil {
+	action := "thread.prompt"
+	if o.mode != "" {
+		action += "." + o.mode
+	}
+	if err := p.Journal(e.Caller, action, id, textsafe.Line(text, 80)); err != nil {
 		return err
 	}
-	fmt.Fprintf(e.Stdout, "prompt for %s %s\n", id, res.Via)
+	fmt.Fprintf(e.Stdout, "prompt for %s %s\n", id, promptOutcome(res))
 	return nil
+}
+
+// promptOutcome says how a prompt went in, and why a --now or
+// --interrupt prompt went another way.
+func promptOutcome(res proto.SessionPromptResult) string {
+	out := res.Via
+	switch res.Via {
+	case "steered":
+		out = "steered into the running turn (read at the agent's next tool call)"
+	case "interrupted":
+		out = "interrupted the running turn; sent once it stopped"
+	}
+	if res.Why != "" {
+		out += " (" + res.Why + ")"
+	}
+	return out
 }
 
 func (e *Env) threadAck(p *project.Project, id string) error {

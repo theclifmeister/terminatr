@@ -10,6 +10,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/gittest"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
 
@@ -74,7 +75,13 @@ func TestThreadSubcommandFlags(t *testing.T) {
 	if o, err := parseWith(t, promptFlags, "t-0001", "--next", "2"); err != nil || o != (promptOpts{id: "t-0001", next: "2"}) {
 		t.Errorf("prompt --next: %+v, %v", o, err)
 	}
-	for _, args := range [][]string{{"t-0001"}, {"t-0001", "x", "--next", "2"}, {"t-0001", "a", "b"}} {
+	if o, err := parseWith(t, promptFlags, "t-0001", "go on", "--now"); err != nil || o != (promptOpts{id: "t-0001", text: "go on", mode: proto.PromptNow}) {
+		t.Errorf("prompt --now: %+v, %v", o, err)
+	}
+	if o, err := parseWith(t, promptFlags, "t-0001", "--next", "1", "--interrupt"); err != nil || o != (promptOpts{id: "t-0001", next: "1", mode: proto.PromptInterrupt}) {
+		t.Errorf("prompt --next --interrupt: %+v, %v", o, err)
+	}
+	for _, args := range [][]string{{"t-0001"}, {"t-0001", "x", "--next", "2"}, {"t-0001", "a", "b"}, {"t-0001", "x", "--now", "--interrupt"}} {
 		_, err = parseWith(t, promptFlags, args...)
 		isUsage(t, err, "tm thread prompt <id>")
 	}

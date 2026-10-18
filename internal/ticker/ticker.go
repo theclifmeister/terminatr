@@ -65,7 +65,14 @@ const (
 	// the coordinator files them in memory or dismisses them, then marks
 	// the item done.
 	KindRemember = "remember"
+	// KindPromptWaiting: a prompt for a thread has waited in its session's
+	// queue for PromptWait (a turn that never ends), once per prompt.
+	KindPromptWaiting = "prompt-waiting"
 )
+
+// PromptWait is how long a thread's queued prompt may wait before the
+// coordinator hears of it (KindPromptWaiting).
+const PromptWait = 10 * time.Minute
 
 // GHFailPolls is how many PR polls in a row (sweeps of a project that
 // asked gh anything) must fail before a gh-failing item is raised.
@@ -205,6 +212,9 @@ type threadMemo struct {
 	// still says so.
 	OweChecks bool `json:"owe_checks,omitempty"`
 	OweReview bool `json:"owe_review,omitempty"`
+	// PromptWarned is the queued-at of the prompt a prompt-waiting item
+	// was raised for: once per prompt.
+	PromptWarned time.Time `json:"prompt_warned,omitzero"`
 }
 
 type projectMemo struct {
@@ -561,6 +571,20 @@ func liveState(r *thread.Record, sessions []proto.SessionInfo) (state, reason st
 	return "exited", "", proto.SessionInfo{}, false
 }
 
+// promptWaiting is a prompt-waiting item's summary.
+func promptWaiting(id string, info proto.SessionInfo, now time.Time) string {
+	why := "its agent is " + word(info.State)
+	if info.QueueHeld != "" {
+		why = "held: " + info.QueueHeld
+	}
+	n := "a prompt has"
+	if info.Queued > 1 {
+		n = fmt.Sprintf("%d prompts have", info.Queued)
+	}
+	return fmt.Sprintf("%s: %s waited %d min in its queue (%s); tm thread prompt %s --now \"…\" steers one into the running turn instead (the queued copy is dropped)",
+		id, n, int(now.Sub(info.QueuedSince).Minutes()), why, id)
+}
+
 func (t *Ticker) item(p *project.Project, kind, subject, summary string, needsUser bool) {
 	summary = thread.Labelled(p, subject, summary)
 	if _, err := p.AddItem(kind, subject, summary, needsUser); err != nil {
@@ -647,6 +671,12 @@ func (t *Ticker) sweepThreads(p *project.Project, sessions []proto.SessionInfo, 
 			t.item(p, KindExited, r.ID, fmt.Sprintf("%s's session exited (tm thread restart %s, or resolve it)", r.ID, r.ID), false)
 		}
 		m.Agent, m.Reason = cur, reason
+
+		// A prompt stuck in the queue (§7.5): a thread that never goes idle.
+		if live && info.Queued > 0 && !info.QueuedSince.IsZero() && now.Sub(info.QueuedSince) >= PromptWait && !m.PromptWarned.Equal(info.QueuedSince) {
+			t.item(p, KindPromptWaiting, r.ID, promptWaiting(r.ID, info, now), false)
+			m.PromptWarned = info.QueuedSince
+		}
 
 		// A new report: alert (the item is tm report's).
 		if r.Reports > m.Reports {
@@ -945,7 +975,7 @@ var verbs = map[string]string{
 	"link-message": "wrote to you (tm link read)", "link-held": "a message of yours waits for the user's OK",
 	"link-paused": "link paused (ask the user)", "link-undelivered": "a message of yours wasn't delivered",
 	"link-request": "asks to link (the user answers it)", "link-answer": "answered a link request",
-	KindSlotFree: "a thread slot is free", KindRemember: "has lessons to file",
+	KindSlotFree: "a thread slot is free", KindRemember: "has lessons to file", KindPromptWaiting: "a prompt waits in its queue",
 }
 
 // linkKinds name a linked project in their subject: the nudge says its

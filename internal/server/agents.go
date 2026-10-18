@@ -1038,7 +1038,16 @@ func (s *Server) promptWith(p proto.SessionPromptParams, o session.PromptOptions
 	if strings.TrimSpace(p.Text) == "" {
 		return nil, proto.Errorf(proto.ErrBadParams, "empty prompt")
 	}
-	via, err := sess.PromptWith(p.Text, o)
+	var via, why string
+	var err error
+	switch p.Mode {
+	case "":
+		via, err = sess.PromptWith(p.Text, o)
+	case proto.PromptNow, proto.PromptInterrupt:
+		via, why, err = sess.PromptNow(p.Text, p.Mode == proto.PromptInterrupt)
+	default:
+		return nil, proto.Errorf(proto.ErrBadParams, "mode %q is not %s or %s", p.Mode, proto.PromptNow, proto.PromptInterrupt)
+	}
 	if errors.Is(err, session.ErrNoAgent) {
 		return nil, proto.Errorf(proto.ErrRefused, "session %s runs no agent; use tm session keys", p.ID)
 	}
@@ -1046,7 +1055,7 @@ func (s *Server) promptWith(p proto.SessionPromptParams, o session.PromptOptions
 		return nil, sessionError(p.ID, err)
 	}
 	s.watch.wake()
-	return proto.SessionPromptResult{Via: via}, nil
+	return proto.SessionPromptResult{Via: via, Why: why}, nil
 }
 
 // maxWait bounds session.wait.

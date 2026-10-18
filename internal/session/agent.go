@@ -1007,11 +1007,22 @@ func (s *Session) deliverPrompts(rt *agentRT, now time.Time) {
 		s.resolveHeld(rt, p, why, held)
 		return
 	}
-	text := strings.ReplaceAll(p.text, "\x1b[201~", "")
+	s.paste(p.text, "")
+}
+
+// paste types text as a bracketed paste and Enter as a separate write
+// pasteEnterDelay later (text and CR in one write is taken as part of the
+// paste), then keys, when set, interruptDelay after that.
+func (s *Session) paste(text, keys string) {
+	text = strings.ReplaceAll(text, "\x1b[201~", "")
 	s.Input([]byte("\x1b[200~" + text + "\x1b[201~"))
 	go func() {
 		time.Sleep(pasteEnterDelay)
 		s.Input([]byte("\r"))
+		if keys != "" {
+			time.Sleep(interruptDelay)
+			s.Input([]byte(keys))
+		}
 	}()
 }
 

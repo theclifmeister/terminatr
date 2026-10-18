@@ -1092,3 +1092,37 @@ func TestLoad(t *testing.T) {
 		}
 	}
 }
+
+// TestPromptWaitingItem: a thread's prompt queued for PromptWait while
+// its agent works is raised once; a later prompt is raised again.
+func TestPromptWaitingItem(t *testing.T) {
+	r := newRig(t)
+	queued := r.now
+	queue := func(at time.Time, n int) {
+		for i := range r.host.sessions {
+			if r.host.sessions[i].ID == "s-2" {
+				r.host.sessions[i].Queued, r.host.sessions[i].QueuedSince = n, at
+			}
+		}
+	}
+	queue(queued, 1)
+	r.sweep(PromptWait - time.Second)
+	if k := r.kinds(); k != "" {
+		t.Fatalf("raised too early: %s", k)
+	}
+	r.sweep(2 * time.Second)
+	items := r.items()
+	if len(items) != 1 || items[0].Kind != KindPromptWaiting || items[0].Subject != "t-0001" ||
+		!strings.Contains(items[0].Summary, "waited 10 min") || !strings.Contains(items[0].Summary, "tm thread prompt t-0001 --now") {
+		t.Fatalf("items: %+v", items)
+	}
+	r.sweep(time.Minute)
+	if k := r.kinds(); k != KindPromptWaiting {
+		t.Fatalf("raised twice for one prompt: %s", k)
+	}
+	queue(r.now, 2)
+	r.sweep(PromptWait)
+	if s := r.summaries(); !strings.Contains(s, "2 prompts have waited") {
+		t.Fatalf("the next prompt: %s", s)
+	}
+}

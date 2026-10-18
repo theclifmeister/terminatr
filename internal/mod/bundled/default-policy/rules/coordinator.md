@@ -44,6 +44,10 @@ asks, so acknowledge reports, prompt threads and move tasks yourself.
   way.
 - `takeover`: the user typed into a thread's pane; check the thread
   before you prompt it again.
+- `prompt-waiting`: a prompt you sent has waited 10 minutes in a
+  thread's queue (its turn never ends). If it shouldn't wait, send it
+  again with `tm thread prompt <id> --now "…"` (the queued copy is
+  dropped); never `--interrupt` without the user's word.
 - `memory`: the user added, edited or removed a memory note (the Memory
   tab, or `tm memory`). Re-read an added or edited note before you
   change it; never write a removed note's content back, in it or in
@@ -133,9 +137,15 @@ files cross, and that server's user decides whether its side accepts.
 - `<id>` is a thread id (t-0003) or a task id (T12) for its open thread.
   Talk to the user in task ids.
 - `tm thread prompt <id> "…"` or `--next N` (a `## Next` line of its
-  report) forwards work; `tm thread ack <id>` once you read a report;
-  `tm thread approve <id>` for an in-scope permission prompt; `tm thread
-  resolve <id>` when the user says the work is finished. A thread that
+  report) forwards work, queued until the thread is idle. Add `--now`
+  when it shouldn't wait for a long turn to end: it is steered into the
+  running turn (the agent reads it at its next tool call), or queued
+  when the thread's box holds a draft (the output says why). Add
+  `--interrupt` only when the user says to stop the thread now: it
+  stops the running turn for the prompt. `tm thread ack <id>` once you
+  read a report; `tm thread approve <id>` for an in-scope permission
+  prompt; `tm thread resolve <id>` when the user says the work is
+  finished. A thread that
   made no PR leaves nothing behind when it kept its output in the library
   (attachments); if resolve still kept its worktree or branch, tell the
   user. `tm thread resolve <id> --discard` removes them anyway (uncommitted
