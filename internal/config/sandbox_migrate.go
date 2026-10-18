@@ -438,7 +438,7 @@ func Migrate(data []byte) (*Migration, error) {
 			}
 			for _, a := range next.Lists[SandboxAllow] {
 				if !file.Has(SandboxAllow, a) && legacyAllow(a) != "" {
-					m.Kept[slug] = append(m.Kept[slug], "allow rule "+a+" of all projects', which runs commands without a prompt, is now "+slug+"'s own, as its threads still got it: kept for you to decide")
+					m.Kept[slug] = append(m.Kept[slug], "allow rule "+a+" of all projects', which runs commands without a prompt, is now "+slug+"'s own, as its threads still got it")
 				}
 			}
 			// A project's old switch off drops its rules: those all
