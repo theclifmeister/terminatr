@@ -46,7 +46,7 @@ func (l launchConfig) sandbox(slug, goos string) (lists agent.SandboxLists, pres
 		}
 		presets = append(presets, k)
 		switch k {
-		case config.SandboxBrowser:
+		case config.SandboxDownloads:
 			lists.Domains = config.BrowserDomains
 		case config.SandboxDevServers:
 			lists.LocalBinding = true
@@ -64,7 +64,8 @@ func (l launchConfig) sandbox(slug, goos string) (lists agent.SandboxLists, pres
 // sandbox proxy resets Playwright's own downloader near the end of a
 // large file (curl and Node's fetch get it whole), and ~/.npm and
 // ~/Library/Caches/ms-playwright aren't writable: hence the cache and
-// browsers path of the thread's own. %s is what it says of local ports.
+// browsers path of the thread's own. Its %s are what it says of
+// downloads and of local ports.
 const browserGuide = `## Sandbox: browser testing
 
 The human turned on browser testing for this project's threads. On macOS your
@@ -113,8 +114,16 @@ export { expect } from '@playwright/test';
 - Not channel 'chrome' or 'chromium' (full Chrome) and not headed mode: those
   fail in this sandbox.
 
-Downloads: the preset lets your commands reach registry.npmjs.org and
-Playwright's browser downloads (cdn.playwright.dev,
+%s%s
+If a browser is missing or what you need still fails, don't run it outside the
+sandbox: say so in your report; only the human can add an excluded command.
+`
+
+// browserDownloads is the guide's downloads part with browser downloads
+// on; browserNoDownloads with it off.
+const (
+	browserDownloads = `Downloads: the human turned on browser downloads, so your commands may reach
+registry.npmjs.org and Playwright's browser downloads (cdn.playwright.dev,
 playwright.download.prss.microsoft.com, storage.googleapis.com).
 
 - npm can't write ~/.npm here: npm i --cache "$TMPDIR/npm-cache" ... (npx too).
@@ -130,10 +139,13 @@ playwright.download.prss.microsoft.com, storage.googleapis.com).
   curl -fL -o "$TMPDIR/hs.zip" "<url>" && mkdir -p "<location>" &&
   unzip -q "$TMPDIR/hs.zip" -d "<location>" && touch "<location>/INSTALLATION_COMPLETE"
 
-%s
-If a browser is missing or what you need still fails, don't run it outside the
-sandbox: say so in your report; only the human can add an excluded command.
 `
+	browserNoDownloads = `Downloads: your commands may not reach the npm registry or Playwright's
+download hosts (the human hasn't turned on browser downloads): use what is
+installed already (node_modules, ~/Library/Caches/ms-playwright).
+
+`
+)
 
 // The guide's local ports paragraph, with local dev servers off and on.
 const (
@@ -153,11 +165,14 @@ local ports, so a dev server (Playwright's webServer) works.
 const maxBrief = 1 << 20
 
 // presetBrief is the brief a thread with presets gets: brief (its
-// brief.md, "" for none) with the presets' guidance after it, written in
+// brief.md, "" for none) with the presets' guidance after it (browser
+// testing's, saying whether downloads and local ports are open; browser
+// downloads' alone without it), written in
 // its runtime dir rt at every launch, so a resume sees today's switches;
 // brief itself when no preset on has any.
 func presetBrief(rt, brief string, presets []string) (string, error) {
-	if !slices.Contains(presets, config.SandboxBrowser) {
+	browser, dl := slices.Contains(presets, config.SandboxBrowser), slices.Contains(presets, config.SandboxDownloads)
+	if !browser && !dl {
 		return brief, nil
 	}
 	var text []byte
@@ -176,12 +191,19 @@ func presetBrief(rt, brief string, presets []string) (string, error) {
 		}
 		text = append(b, '\n')
 	}
-	ports := browserPortsClosed
+	downloads, ports := browserNoDownloads, browserPortsClosed
+	if slices.Contains(presets, config.SandboxDownloads) {
+		downloads = browserDownloads
+	}
 	if slices.Contains(presets, config.SandboxDevServers) {
 		ports = browserPortsOpen
 	}
+	guide := fmt.Sprintf(browserGuide, downloads, ports)
+	if !browser {
+		guide = "## Sandbox: browser downloads\n\n" + downloads
+	}
 	path := filepath.Join(rt, "brief.md")
-	if err := os.WriteFile(path, append(text, fmt.Sprintf(browserGuide, ports)...), 0o600); err != nil {
+	if err := os.WriteFile(path, append(text, guide...), 0o600); err != nil {
 		return brief, err
 	}
 	return path, nil

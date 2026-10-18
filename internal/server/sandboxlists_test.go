@@ -67,9 +67,11 @@ excluded_commands = ["npx playwright *"]
 
 // TestSandboxPresetsLaunch: a preset on maps to local binding where it
 // applies (macOS) and is skipped with a note elsewhere, config.toml
-// keeping it; only local dev servers open local binding; browser testing
-// opens its download hosts and adds its guidance after the brief, which
-// says whether local ports are open.
+// keeping it; only local dev servers open local binding, and only
+// browser downloads the download hosts: a v0.35 browser_testing = true
+// opens none (it never asked about them). Browser testing adds its
+// guidance after the brief, which says whether downloads and local
+// ports are open.
 func TestSandboxPresetsLaunch(t *testing.T) {
 	testPaths(t)
 	writeConfig(t, `[defaults.sandbox]
@@ -79,13 +81,30 @@ excluded_commands = ["npx playwright *"]
 	lc := loadLaunchConfig()
 	lists, presets, skipped := lc.sandbox("demo", config.OSMac)
 	if lists.LocalBinding || !slices.Equal(presets, []string{config.SandboxBrowser}) || len(skipped) != 0 ||
-		!slices.Equal(lists.Excluded, []string{"npx playwright *"}) || !slices.Equal(lists.Domains, config.BrowserDomains) {
+		!slices.Equal(lists.Excluded, []string{"npx playwright *"}) || lists.Domains != nil {
 		t.Errorf("macOS: %+v %q %q", lists, presets, skipped)
 	}
 	lists, presets, skipped = lc.sandbox("demo", config.OSLinux)
 	if lists.LocalBinding || lists.Domains != nil || len(presets) != 0 || !slices.Equal(lists.Excluded, []string{"npx playwright *"}) ||
 		!slices.Equal(skipped, []string{"sandbox preset browser testing is set but doesn't apply on Linux: skipped"}) {
 		t.Errorf("Linux: %+v %q %q", lists, presets, skipped)
+	}
+
+	writeConfig(t, `[defaults.sandbox]
+browser_testing = true
+
+[projects.demo.sandbox]
+browser_downloads = true
+`)
+	lc = loadLaunchConfig()
+	if lists, presets, _ = lc.sandbox("demo", config.OSMac); !slices.Equal(lists.Domains, config.BrowserDomains) || !slices.Equal(presets, []string{config.SandboxBrowser, config.SandboxDownloads}) {
+		t.Errorf("browser downloads: %+v %q", lists, presets)
+	}
+	if lists, _, _ = lc.sandbox("other", config.OSMac); lists.Domains != nil {
+		t.Errorf("browser testing alone opened %q", lists.Domains)
+	}
+	if lists, _, skipped = lc.sandbox("demo", config.OSLinux); lists.Domains != nil || len(skipped) != 2 {
+		t.Errorf("Linux: %+v %q", lists, skipped)
 	}
 
 	rt := t.TempDir()
@@ -100,12 +119,16 @@ excluded_commands = ["npx playwright *"]
 	got, err := presetBrief(rt, brief, []string{config.SandboxBrowser})
 	b, _ := os.ReadFile(got)
 	if err != nil || filepath.Dir(got) != rt || !strings.HasPrefix(string(b), "# Thread t-0001\n") || !strings.Contains(string(b), "--single-process") ||
-		!strings.Contains(string(b), "reuseContext: true") || !strings.Contains(string(b), browserPortsClosed) || strings.Contains(string(b), "%!") {
+		!strings.Contains(string(b), "reuseContext: true") || !strings.Contains(string(b), browserPortsClosed) || !strings.Contains(string(b), browserNoDownloads) || strings.Contains(string(b), "%!") {
 		t.Errorf("browser testing: %q, %v\n%s", got, err, b)
 	}
-	got, _ = presetBrief(rt, brief, []string{config.SandboxBrowser, config.SandboxDevServers})
-	if b, _ = os.ReadFile(got); !strings.Contains(string(b), browserPortsOpen) {
-		t.Errorf("browser testing with local dev servers:\n%s", b)
+	got, _ = presetBrief(rt, brief, []string{config.SandboxBrowser, config.SandboxDownloads, config.SandboxDevServers})
+	if b, _ = os.ReadFile(got); !strings.Contains(string(b), browserPortsOpen) || !strings.Contains(string(b), browserDownloads) {
+		t.Errorf("browser testing with downloads and local dev servers:\n%s", b)
+	}
+	got, _ = presetBrief(rt, brief, []string{config.SandboxDownloads})
+	if b, _ = os.ReadFile(got); !strings.Contains(string(b), "## Sandbox: browser downloads") || !strings.Contains(string(b), browserDownloads) || strings.Contains(string(b), "--single-process") {
+		t.Errorf("browser downloads alone:\n%s", b)
 	}
 	if got, err = presetBrief(rt, "", []string{config.SandboxBrowser}); err != nil || got == "" {
 		t.Errorf("no brief: %q, %v", got, err)

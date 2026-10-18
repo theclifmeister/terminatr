@@ -280,7 +280,7 @@ func TestSandboxApplies(t *testing.T) {
 		key, goos string
 		want      bool
 	}{
-		{SandboxBrowser, OSMac, true}, {SandboxBrowser, OSLinux, false}, {SandboxDevServers, OSWindows, false},
+		{SandboxBrowser, OSMac, true}, {SandboxBrowser, OSLinux, false}, {SandboxDownloads, OSMac, true}, {SandboxDownloads, OSWindows, false}, {SandboxDevServers, OSWindows, false},
 		{SandboxExcluded, OSWindows, true}, {SandboxAllow, OSLinux, true}, {"nope", OSMac, false},
 	} {
 		if got := SandboxApplies(c.key, c.goos); got != c.want {
