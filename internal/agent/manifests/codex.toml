@@ -80,11 +80,14 @@ args = [
   # flags, with a logged warning, when it doesn't hold (probe.go). On
   # Windows the Go agent turns the network off instead of limiting it:
   # Codex's proxy needs its elevated sandbox there (probe.go).
-  # A thread's network is limited the same way (T574 case 5): tm's socket
-  # and its host rules (.Sandbox.Domains) as the proxy's domains, a map of
-  # host to "allow", wildcards as Codex takes them (*.example.com). The
-  # 0.162 syntax; checked in T577, where limited without the proxy
-  # feature was silently open. The Go agent probes it before a thread
+  # A thread's network goes through the proxy too (T574 case 5): tm's
+  # socket and its host rules (.Sandbox.Domains: its presets' hosts and
+  # its repo's git remote hosts) as the proxy's domains, a map of host to
+  # "allow", wildcards as Codex takes them (*.example.com); no domains,
+  # no host. Its mode is "full": "limited" also lets only GET, HEAD and
+  # OPTIONS through, so a git push over https (a POST) gets a 403;
+  # "full" keeps the domains and lets every method through (measured on
+  # 0.162). Either is silently open without the proxy feature (T577). The Go agent probes it before a thread
   # starts and, when it doesn't hold, closes the network rather than
   # leaving it open (probe.go); on Windows it is off. Its local-ports
   # rule (macOS, which the server checks) is its network's
@@ -94,7 +97,7 @@ args = [
   "{{if and (or (eq .Role \"thread\") (eq .Role \"coordinator\")) (not .Yolo)}}-c{{end}}", "{{if and (or (eq .Role \"thread\") (eq .Role \"coordinator\")) (not .Yolo)}}default_permissions=\"tm\"{{end}}",
   "{{if and (or (eq .Role \"thread\") (eq .Role \"coordinator\")) (not .Yolo)}}-c{{end}}", "{{if and (or (eq .Role \"thread\") (eq .Role \"coordinator\")) (not .Yolo)}}features.network_proxy=true{{end}}",
   "{{if and (eq .Role \"thread\") (not .Yolo)}}-c{{end}}",
-  '''{{if and (eq .Role "thread") (not .Yolo)}}permissions={tm={extends=":workspace",filesystem={{pathmodes .Access}},network={enabled=true,mode="limited",unix_sockets={ {{- toml .Socket}}="allow"}{{with .Sandbox.Domains}},domains={ {{- range $i, $d := .}}{{if $i}},{{end}}{{toml $d}}="allow"{{end}}}{{end}}{{if .Sandbox.LocalBinding}},allow_local_binding=true{{end}}}}}{{end}}''',
+  '''{{if and (eq .Role "thread") (not .Yolo)}}permissions={tm={extends=":workspace",filesystem={{pathmodes .Access}},network={enabled=true,mode="full",unix_sockets={ {{- toml .Socket}}="allow"}{{with .Sandbox.Domains}},domains={ {{- range $i, $d := .}}{{if $i}},{{end}}{{toml $d}}="allow"{{end}}}{{end}}{{if .Sandbox.LocalBinding}},allow_local_binding=true{{end}}}}}{{end}}''',
   "{{if and (eq .Role \"coordinator\") (not .Yolo)}}-c{{end}}",
   '''{{if and (eq .Role "coordinator") (not .Yolo)}}permissions={tm={extends=":workspace",filesystem={{pathmodes .Access .Cwd}},network={enabled=true,mode="limited",unix_sockets={ {{- toml .Socket}}="allow"}}}}{{end}}''',
   # A thread's secret variables (config env) reach its commands: Codex

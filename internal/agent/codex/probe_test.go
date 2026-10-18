@@ -66,7 +66,7 @@ func TestProbeVerdicts(t *testing.T) {
 // (it reopens loopback); else it is closed, its domains and binding
 // gone, with a warning. On Windows it is closed without a probe.
 func TestThreadNetwork(t *testing.T) {
-	prof := `permissions={tm={extends=":workspace",filesystem={"/w"="write"},network={enabled=true,mode="limited",unix_sockets={"/run/tm.sock"="allow"},domains={"a.example"="allow","odd}\"{"="allow"},allow_local_binding=true}}}`
+	prof := `permissions={tm={extends=":workspace",filesystem={"/w"="write"},network={enabled=true,mode="full",unix_sockets={"/run/tm.sock"="allow"},domains={"a.example"="allow","odd}\"{"="allow"},allow_local_binding=true}}}`
 	argv := []string{"codex", "-a", "on-request", "-c", `default_permissions="tm"`, "-c", "features.network_proxy=true", "-c", prof, "-c", "hooks={}"}
 	closed := []string{"codex", "-a", "on-request", "-c", `default_permissions="tm"`,
 		"-c", `permissions={tm={extends=":workspace",filesystem={"/w"="write"},network={enabled=false,unix_sockets={"/run/tm.sock"="allow"}}}}`,
@@ -90,7 +90,7 @@ func TestThreadNetwork(t *testing.T) {
 	if !slices.Equal(l.Argv, argv) || len(l.Warnings) > 0 {
 		t.Errorf("held: %q %q", l.Argv, l.Warnings)
 	}
-	if len(probed) != 4 || strings.Contains(probed[3], "allow_local_binding") || !strings.Contains(probed[3], `mode="limited"`) {
+	if len(probed) != 4 || strings.Contains(probed[3], "allow_local_binding") || !strings.Contains(probed[3], `mode="full"`) {
 		t.Errorf("probed %q", probed)
 	}
 	verdict = errors.New("the network isn't limited to tm's socket: features.network_proxy or network.mode was ignored")

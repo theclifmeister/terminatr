@@ -862,7 +862,7 @@ func (a *app) codexUnload(thread, rollout string) {
 // coordinator probe runs it (internal/agent/codex/probe.go): it doesn't
 // run the command but prints what tm's probe would, judging the profile
 // as Codex 0.160 does: tm's socket reachable when the profile allows it,
-// TCP refused when network.mode is "limited" and features.network_proxy
+// TCP refused when network.mode is "limited" or "full" and features.network_proxy
 // is on. With a path to write (the probe's form on Windows, where the
 // network is off rather than limited), tm's socket is reachable when the
 // profile allows it and the write is denied. FAKEAGENT_CODEX_SANDBOX
@@ -917,7 +917,7 @@ func sandboxCmd(logPath string, args []string) int {
 	if socks, _ := netw["unix_sockets"].(map[string]any); socks[sock] == "allow" && (netw["enabled"] == true || caps.Windows) {
 		unix = "ok"
 		features, _ := cfg["features"].(map[string]any)
-		limited := netw["mode"] == "limited" && features["network_proxy"] == true
+		limited := (netw["mode"] == "limited" || netw["mode"] == "full") && features["network_proxy"] == true
 		if !limited || os.Getenv("FAKEAGENT_CODEX_SANDBOX") == "ignore-proxy" {
 			tcp = "ok"
 		}

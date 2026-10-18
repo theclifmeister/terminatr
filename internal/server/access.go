@@ -54,6 +54,10 @@ func (s *Server) resolveAccess(in accessInput, lc launchConfig) (proto.AccessSet
 		rules, why := sandboxRules(lc, in.slug, in.goos)
 		add(rules...)
 		set.SandboxError = why
+		if in.agent == "codex" && in.tree != nil {
+			// Its pushes reach the repo's remotes (remotehosts.go).
+			add(remoteHostRules(in.tree.CommonDir)...)
+		}
 	}
 	add(onOff(proto.AccessPrompts, proto.AccessYolo, in.yolo, settingSource(lc, in.slug, "yolo"), false),
 		onOff(proto.AccessOutside, proto.AccessEscapes, !in.noEscapes, settingSource(lc, in.slug, "sandbox_escapes"), false))
@@ -416,7 +420,10 @@ func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, presets, skip
 		case proto.AccessPreset:
 			presets = append(presets, r.Value)
 		case proto.AccessHost:
-			lists.Domains = append(lists.Domains, r.Value)
+			// Once each: Codex refuses a key given twice.
+			if !slices.Contains(lists.Domains, r.Value) {
+				lists.Domains = append(lists.Domains, r.Value)
+			}
 		case proto.AccessLocalPorts:
 			lists.LocalBinding = true
 		}

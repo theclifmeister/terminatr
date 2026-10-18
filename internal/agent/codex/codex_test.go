@@ -147,7 +147,7 @@ func TestLaunch(t *testing.T) {
 	hooks, state, _ := hookArgs(a.Events(), stateSourceFor(spec.Cwd, caps.Windows))
 	var winSandbox, proxy []string
 	var sockW string
-	network := `network={enabled=true,mode="limited",unix_sockets={"/run/tm.sock"="allow"}}`
+	network := `network={enabled=true,mode="full",unix_sockets={"/run/tm.sock"="allow"}}`
 	proxy = []string{"-c", "features.network_proxy=true"}
 	if caps.Windows {
 		// Codex's proxy needs its elevated sandbox there: the network
@@ -198,7 +198,7 @@ func TestLaunch(t *testing.T) {
 	threadProbed = nil
 	ll, err := a.Launch(bound)
 	if !caps.Windows {
-		limitedNet := `network={enabled=true,mode="limited",unix_sockets={"/run/tm.sock"="allow"},domains={"registry.npmjs.org"="allow","*.example.com"="allow"},allow_local_binding=true}}}`
+		limitedNet := `network={enabled=true,mode="full",unix_sockets={"/run/tm.sock"="allow"},domains={"registry.npmjs.org"="allow","*.example.com"="allow"},allow_local_binding=true}}}`
 		if err != nil || len(ll.Warnings) > 0 || !slices.ContainsFunc(ll.Argv, func(s string) bool {
 			if !strings.HasPrefix(s, "permissions={tm=") || !strings.HasSuffix(s, limitedNet) {
 				return false

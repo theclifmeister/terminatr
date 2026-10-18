@@ -107,8 +107,8 @@ func closedNetwork(argv []string) []string {
 				i++
 				continue
 			}
-			if strings.HasPrefix(v, "permissions=") && strings.Contains(v, `enabled=true,mode="limited"`) {
-				v = strings.Replace(v, `enabled=true,mode="limited"`, "enabled=false", 1)
+			if mode := proxied(v); mode != "" {
+				v = strings.Replace(v, mode, "enabled=false", 1)
 				v = cutTable(v, ",domains=")
 				v = strings.Replace(v, ",allow_local_binding=true", "", 1)
 			}
@@ -119,6 +119,21 @@ func closedNetwork(argv []string) []string {
 		out = append(out, argv[i])
 	}
 	return out
+}
+
+// proxied is the network part of profile flag value v that the proxy
+// enforces (`enabled=true,mode="limited"` for a coordinator, "full" for
+// a thread), or "".
+func proxied(v string) string {
+	if !strings.HasPrefix(v, "permissions=") {
+		return ""
+	}
+	for _, m := range []string{`enabled=true,mode="limited"`, `enabled=true,mode="full"`} {
+		if strings.Contains(v, m) {
+			return m
+		}
+	}
+	return ""
 }
 
 // cutTable is v without its inline table key (",domains=", say) and the
