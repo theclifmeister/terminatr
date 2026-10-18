@@ -115,45 +115,15 @@ func excludedOf(list, noAsk []string) []ExcludedCommand {
 	return out
 }
 
-// WithoutAskingOf is one table's excluded commands that run without
-// asking (ask = false): all projects' for slug "", else the project's
-// own. None for a nil Config.
-func (c *Config) WithoutAskingOf(slug string) []string {
-	if c == nil {
-		return nil
-	}
-	r := c.defaults.Sandbox
-	if slug != "" {
-		r = c.projects[slug].Sandbox
-	}
-	if r == nil || r.ExcludedCommands == nil {
-		return nil
-	}
-	return r.ExcludedCommands.withoutAsking()
-}
-
 // SetExcludedAsk makes excluded command cmd of table's own list
 // (DefaultsTable or "projects.<slug>") ask first, or run without
 // asking. The list must have it.
 func SetExcludedAsk(table, cmd string, ask bool) error {
-	t, err := sandboxTable(table, SandboxExcluded)
-	if err != nil {
-		return err
-	}
-	return edit(func(data []byte) ([]byte, error) {
-		r, err := rawSandboxIn(data, table)
-		if err != nil {
-			return nil, err
+	return EditSandbox(table, func(t *SandboxTable) error {
+		if !t.Has(SandboxExcluded, cmd) {
+			return fmt.Errorf("%q isn't in this list of excluded commands", cmd)
 		}
-		if r == nil || r.ExcludedCommands == nil || !slices.Contains(r.ExcludedCommands.commands(), cmd) {
-			return nil, fmt.Errorf("%q isn't in this list of excluded commands", cmd)
-		}
-		list := slices.Clone(*r.ExcludedCommands)
-		for i := range list {
-			if list[i].Command == cmd {
-				list[i].Ask = ask
-			}
-		}
-		return Edit(data, t, SandboxExcluded, []ExcludedCommand(list))
+		t.SetAsk(cmd, ask)
+		return nil
 	})
 }

@@ -69,101 +69,111 @@ excluded_commands = ["npx playwright *"]
 	}
 }
 
-// TestSandboxPresetsLaunch: a preset on maps to local binding where it
-// applies (macOS) and is skipped with a note elsewhere, config.toml
-// keeping it; only local dev servers open local binding, and only
-// browser downloads the download hosts: a v0.35 browser_testing = true
-// opens none (it never asked about them). Browser testing adds its
-// guidance after the brief, which says whether downloads and local
-// ports are open.
-func TestSandboxPresetsLaunch(t *testing.T) {
+// TestSandboxRulesLaunch: hosts, local ports and guidance map to the
+// launch where they apply (macOS) and are skipped with a note
+// elsewhere, config.toml keeping them; a project's rules add to all
+// projects', and a drop takes one away. tm 0.37's switches launch as
+// their rules: browser_testing alone opens no host.
+func TestSandboxRulesLaunch(t *testing.T) {
 	testPaths(t)
 	writeConfig(t, `[defaults.sandbox]
-browser_testing = true
+guides = ["browser-testing"]
 excluded_commands = ["npx playwright *"]
 `)
 	lc := loadLaunchConfig()
-	lists, presets, skipped := lc.sandbox("demo", config.OSMac)
-	if lists.LocalBinding || !slices.Equal(presets, []string{config.SandboxBrowser}) || len(skipped) != 0 ||
+	lists, guides, skipped := lc.sandbox("demo", config.OSMac)
+	if lists.LocalBinding || !slices.Equal(guides, []string{config.GuideBrowserTesting}) || len(skipped) != 0 ||
 		!slices.Equal(lists.Excluded, []string{"npx playwright *"}) || lists.Domains != nil {
-		t.Errorf("macOS: %+v %q %q", lists, presets, skipped)
+		t.Errorf("macOS: %+v %q %q", lists, guides, skipped)
 	}
-	lists, presets, skipped = lc.sandbox("demo", config.OSLinux)
-	if lists.LocalBinding || lists.Domains != nil || len(presets) != 0 || !slices.Equal(lists.Excluded, []string{"npx playwright *"}) ||
-		!slices.Equal(skipped, []string{"sandbox preset browser testing is set but doesn't apply on Linux: skipped"}) {
-		t.Errorf("Linux: %+v %q %q", lists, presets, skipped)
+	lists, guides, skipped = lc.sandbox("demo", config.OSLinux)
+	if lists.LocalBinding || lists.Domains != nil || len(guides) != 0 || !slices.Equal(lists.Excluded, []string{"npx playwright *"}) ||
+		!slices.Equal(skipped, []string{"sandbox guidance texts skipped: doesn't apply on Linux"}) {
+		t.Errorf("Linux: %+v %q %q", lists, guides, skipped)
 	}
 
 	writeConfig(t, `[defaults.sandbox]
 browser_testing = true
+hosts = ["npm.pkg.github.com"]
 
 [projects.demo.sandbox]
 browser_downloads = true
+local_ports = true
+drop = ["npm.pkg.github.com"]
 `)
 	lc = loadLaunchConfig()
-	if lists, presets, _ = lc.sandbox("demo", config.OSMac); !slices.Equal(lists.Domains, config.BrowserDomains) || !slices.Equal(presets, []string{config.SandboxBrowser, config.SandboxDownloads}) {
-		t.Errorf("browser downloads: %+v %q", lists, presets)
+	lists, guides, _ = lc.sandbox("demo", config.OSMac)
+	if !slices.Equal(lists.Domains, config.BrowserDomains) || !lists.LocalBinding ||
+		!slices.Equal(guides, []string{config.GuideBrowserTesting, config.GuideBrowserDownloads}) {
+		t.Errorf("demo: %+v %q", lists, guides)
 	}
-	if lists, _, _ = lc.sandbox("other", config.OSMac); lists.Domains != nil {
-		t.Errorf("browser testing alone opened %q", lists.Domains)
+	if lists, _, _ = lc.sandbox("other", config.OSMac); !slices.Equal(lists.Domains, []string{"npm.pkg.github.com"}) || lists.LocalBinding {
+		t.Errorf("other: %+v", lists)
 	}
-	if lists, _, skipped = lc.sandbox("demo", config.OSLinux); lists.Domains != nil || len(skipped) != 2 {
+	if lists, _, skipped = lc.sandbox("demo", config.OSLinux); lists.Domains != nil || lists.LocalBinding || len(skipped) != 3 {
 		t.Errorf("Linux: %+v %q", lists, skipped)
 	}
+}
 
+// TestGuideBrief: the guidance texts follow the brief, worded from the
+// thread's other rules: which download hosts are open, and local
+// ports.
+func TestGuideBrief(t *testing.T) {
 	rt := t.TempDir()
 	brief := filepath.Join(t.TempDir(), "brief.md")
 	os.WriteFile(brief, []byte("# Thread t-0001\n"), 0o600)
-	if got, err := presetBrief(rt, brief, nil); err != nil || got != brief {
-		t.Errorf("no presets: %q, %v", got, err)
+	none := agent.SandboxLists{}
+	all := agent.SandboxLists{Domains: config.BrowserDomains, LocalBinding: true}
+	if got, err := guideBrief(rt, brief, nil, all); err != nil || got != brief {
+		t.Errorf("no guides: %q, %v", got, err)
 	}
-	if got, err := presetBrief(rt, brief, []string{config.SandboxDevServers}); err != nil || got != brief {
-		t.Errorf("dev servers only: %q, %v", got, err)
-	}
-	got, err := presetBrief(rt, brief, []string{config.SandboxBrowser})
+	got, err := guideBrief(rt, brief, []string{config.GuideBrowserTesting}, none)
 	b, _ := os.ReadFile(got)
 	if err != nil || filepath.Dir(got) != rt || !strings.HasPrefix(string(b), "# Thread t-0001\n") || !strings.Contains(string(b), "--single-process") ||
 		!strings.Contains(string(b), "reuseContext: true") || !strings.Contains(string(b), browserPortsClosed) || !strings.Contains(string(b), browserNoDownloads) || strings.Contains(string(b), "%!") {
 		t.Errorf("browser testing: %q, %v\n%s", got, err, b)
 	}
-	got, _ = presetBrief(rt, brief, []string{config.SandboxBrowser, config.SandboxDownloads, config.SandboxDevServers})
-	if b, _ = os.ReadFile(got); !strings.Contains(string(b), browserPortsOpen) || !strings.Contains(string(b), browserDownloads) {
-		t.Errorf("browser testing with downloads and local dev servers:\n%s", b)
+	got, _ = guideBrief(rt, brief, []string{config.GuideBrowserTesting, config.GuideBrowserDownloads}, all)
+	if b, _ = os.ReadFile(got); !strings.Contains(string(b), browserPortsOpen) || !strings.Contains(string(b), "the human opened registry.npmjs.org") ||
+		strings.Contains(string(b), ", not ") || strings.Contains(string(b), "%!") {
+		t.Errorf("browser testing with downloads and local ports:\n%s", b)
 	}
-	got, _ = presetBrief(rt, brief, []string{config.SandboxDownloads})
-	if b, _ = os.ReadFile(got); !strings.Contains(string(b), "## Sandbox: browser downloads") || !strings.Contains(string(b), browserDownloads) || strings.Contains(string(b), "--single-process") {
-		t.Errorf("browser downloads alone:\n%s", b)
+	some := agent.SandboxLists{Domains: []string{"registry.npmjs.org", "x.dev"}}
+	got, _ = guideBrief(rt, brief, []string{config.GuideBrowserDownloads}, some)
+	if b, _ = os.ReadFile(got); !strings.Contains(string(b), "## Sandbox: browser downloads") || !strings.Contains(string(b), "not cdn.playwright.dev") ||
+		strings.Contains(string(b), "x.dev") || strings.Contains(string(b), "--single-process") {
+		t.Errorf("browser downloads alone, some hosts:\n%s", b)
 	}
-	if got, err = presetBrief(rt, "", []string{config.SandboxBrowser}); err != nil || got == "" {
+	if got, err = guideBrief(rt, "", []string{config.GuideBrowserTesting}, none); err != nil || got == "" {
 		t.Errorf("no brief: %q, %v", got, err)
 	}
 	big := filepath.Join(t.TempDir(), "big.md")
 	os.WriteFile(big, make([]byte, maxBrief+1), 0o600)
-	if _, err = presetBrief(rt, big, []string{config.SandboxBrowser}); err == nil {
+	if _, err = guideBrief(rt, big, []string{config.GuideBrowserTesting}, none); err == nil {
 		t.Errorf("a brief over %d bytes was read", maxBrief)
 	}
 }
 
-// TestSandboxDroppedSaid: an entry that fails the checks drops the
-// project's sandbox lists and presets (fails closed), and the launch
-// says why: project, key, the entry and its rule.
-func TestSandboxDroppedSaid(t *testing.T) {
+// TestSandboxRefusedSaid: an entry that fails its check is refused on
+// its own, the rest kept (T574 P10), and the launch says why: the
+// entry and its rule.
+func TestSandboxRefusedSaid(t *testing.T) {
 	testPaths(t)
 	writeConfig(t, `[defaults.sandbox]
-browser_testing = true
+guides = ["browser-testing"]
 
 [projects.demo.sandbox]
-excluded_commands = ["make a$X"]
+excluded_commands = ["make a$X", "make e2e"]
 allow = ["Bash(npx playwright *)"]
 `)
-	lists, presets, notes := loadLaunchConfig().sandbox("demo", config.OSMac)
-	if lists.Excluded != nil || lists.Allow != nil || lists.LocalBinding || lists.Domains != nil || len(presets) != 0 {
-		t.Errorf("not failed closed: %+v %q", lists, presets)
+	lists, guides, notes := loadLaunchConfig().sandbox("demo", config.OSMac)
+	if !slices.Equal(lists.Excluded, []string{"make e2e"}) || !slices.Equal(lists.Allow, []string{"Bash(npx playwright *)"}) || len(guides) != 1 {
+		t.Errorf("not kept: %+v %q", lists, guides)
 	}
 	if len(notes) != 1 {
 		t.Fatalf("notes %q", notes)
 	}
-	for _, want := range []string{"demo", "projects.demo.sandbox.excluded_commands", "make a$X", "has a variable", "dropped"} {
+	for _, want := range []string{"excluded", "make a$X", "has a variable", "refused"} {
 		if !strings.Contains(notes[0], want) {
 			t.Errorf("note lacks %q: %s", want, notes[0])
 		}
@@ -237,9 +247,9 @@ write = ["~/src/fixtures", "/`+strings.TrimPrefix(filepath.ToSlash(p.Home), "/")
 			t.Errorf("write folders: %s opened: allow %q", w, st.Permissions.Allow)
 		}
 	}
-	for _, w := range []string{"write folder /", "write folder ~/src/keys", "write folder ~/src/repo"} {
-		if !strings.Contains(logged.String(), w) {
-			t.Errorf("%q isn't said to be skipped: %s", w, logged.String())
+	for _, w := range []string{filepath.Join(p.Home, "sub"), filepath.Join(home, "src", "keys"), filepath.Join(home, "src", "repo")} {
+		if !strings.Contains(logged.String(), "write-folder \""+w+"\" refused") {
+			t.Errorf("%q isn't said to be refused: %s", w, logged.String())
 		}
 	}
 

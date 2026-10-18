@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -12,12 +13,18 @@ func TestThreadSandboxMerge(t *testing.T) {
 [defaults.sandbox]
 excluded_commands = ["docker compose *"]
 allow = ["Bash(docker compose *)"]
+hosts = ["registry.npmjs.org"]
 
 [projects.web.sandbox]
-excluded_commands = ["npx playwright *"]
+excluded_commands = ["npx playwright *", "docker compose *"]
+local_ports = true
 
 [projects.none.sandbox]
+drop = ["Bash(docker compose *)", "registry.npmjs.org", "nothing here"]
+
+[projects.empty.sandbox]
 allow = []
+hosts = ["x.dev"]
 
 [projects.plain]
 yolo = false
@@ -26,55 +33,161 @@ yolo = false
 	if err != nil {
 		t.Fatal(err)
 	}
+	all := func(key, v string) SandboxRule { return SandboxRule{Key: key, Value: v} }
+	own := func(key, v string) SandboxRule { return SandboxRule{Key: key, Value: v, Own: true} }
+	dropped := func(key, v string) SandboxRule { return SandboxRule{Key: key, Value: v, Dropped: true} }
+	replaced := func(key, v string) SandboxRule { return SandboxRule{Key: key, Value: v, Replaced: true} }
+	// all projects' Bash rule, of a file written before, covers their
+	// excluded command: it runs without asking, as it did.
+	noAsk := func(r SandboxRule) SandboxRule { r.NoAsk = true; return r }
+	common := []SandboxRule{all(SandboxHosts, "registry.npmjs.org"), noAsk(all(SandboxExcluded, "docker compose *")), all(SandboxAllow, "Bash(docker compose *)")}
 	for slug, want := range map[string]ThreadSandbox{
-		// The project's list of a key replaces all projects'; the key it
-		// doesn't set follows them.
-		"web":  {ExcludedCommands: []string{"npx playwright *"}, Allow: []string{"Bash(docker compose *)"}},
-		"none": {ExcludedCommands: []string{"docker compose *"}, Allow: []string{}},
-		// A Bash rule of a file written before covers its excluded
-		// command: it runs without asking, as before.
-		"plain": {ExcludedCommands: []string{"docker compose *"}, WithoutAsking: []string{"docker compose *"}, Allow: []string{"Bash(docker compose *)"}},
-		"other": {ExcludedCommands: []string{"docker compose *"}, WithoutAsking: []string{"docker compose *"}, Allow: []string{"Bash(docker compose *)"}},
+		// Until the migration, a project's excluded_commands and allow
+		// replace all projects' (tm 0.37); the key it doesn't set follows
+		// them.
+		"web": {Rules: []SandboxRule{all(SandboxHosts, "registry.npmjs.org"), noAsk(replaced(SandboxExcluded, "docker compose *")), own(SandboxExcluded, "npx playwright *"), noAsk(own(SandboxExcluded, "docker compose *")), all(SandboxAllow, "Bash(docker compose *)")},
+			LocalPorts: true, LocalPortsSet: true, LocalPortsOwn: true},
+		// An empty one replaces them too; hosts add up.
+		"empty": {Rules: []SandboxRule{all(SandboxHosts, "registry.npmjs.org"), own(SandboxHosts, "x.dev"), all(SandboxExcluded, "docker compose *"), replaced(SandboxAllow, "Bash(docker compose *)")}},
+		// A drop takes one of all projects' entries away; one that
+		// matches nothing stays listed.
+		"none": {Rules: []SandboxRule{dropped(SandboxHosts, "registry.npmjs.org"), all(SandboxExcluded, "docker compose *"), dropped(SandboxAllow, "Bash(docker compose *)")},
+			Drops: []string{"Bash(docker compose *)", "registry.npmjs.org", "nothing here"}},
+		"plain": {Rules: common},
+		"other": {Rules: common},
 	} {
-		got, err := c.ThreadSandbox(slug)
-		if err != nil || !reflect.DeepEqual(got, want) {
-			t.Errorf("%s: got %+v, %v; want %+v", slug, got, err, want)
+		if got := c.ThreadSandbox(slug); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: got %+v\nwant %+v", slug, got, want)
 		}
 	}
-	if got := c.SandboxOf("web"); !reflect.DeepEqual(got, map[string][]string{SandboxExcluded: {"npx playwright *"}}) {
-		t.Errorf("SandboxOf(web) = %v", got)
+	if got := c.ThreadSandbox("none").Given(SandboxAllow); len(got) != 0 {
+		t.Errorf("none's allow rules: %v", got)
 	}
-	if got := c.SandboxOf("plain"); len(got) != 0 {
+	if got := c.SandboxOf("web"); !reflect.DeepEqual(got.Lists, map[string][]string{SandboxExcluded: {"npx playwright *", "docker compose *"}}) || got.LocalPorts == nil || !got.Replacing(SandboxExcluded) {
+		t.Errorf("SandboxOf(web) = %+v", got)
+	}
+	if got := c.SandboxOf("plain"); len(got.Lists) != 0 {
 		t.Errorf("SandboxOf(plain) = %v", got)
 	}
-	if got := c.SandboxOf(""); len(got) != 2 {
+	if got := c.SandboxOf(""); len(got.Lists) != 3 {
 		t.Errorf("SandboxOf(all) = %v", got)
 	}
 	var nilCfg *Config
-	if got, err := nilCfg.ThreadSandbox("web"); err != nil || !got.Empty() {
-		t.Errorf("nil config: %+v, %v", got, err)
+	if got := nilCfg.ThreadSandbox("web"); !got.Empty() {
+		t.Errorf("nil config: %+v", got)
+	}
+}
+
+// TestReplaceNeverWider: before the migration, a project that opted out
+// of all projects' excluded commands with an empty list, or listed its
+// own, gets none of theirs, as in tm 0.37; only a drop or a list it
+// doesn't set lets all projects' through.
+func TestReplaceNeverWider(t *testing.T) {
+	write(t, `
+[defaults.sandbox]
+excluded_commands = ["docker *"]
+allow = ["Bash(docker *)"]
+
+[projects.optout.sandbox]
+excluded_commands = []
+allow = []
+
+[projects.own.sandbox]
+excluded_commands = ["make e2e"]
+hosts = ["x.dev"]
+`)
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for slug, want := range map[string][2][]string{"optout": {nil, nil}, "own": {{"make e2e"}, {"Bash(docker *)"}}} {
+		got := c.ThreadSandbox(slug)
+		if !slices.Equal(got.Given(SandboxExcluded), want[0]) || !slices.Equal(got.Given(SandboxAllow), want[1]) {
+			t.Errorf("%s: excluded %q allow %q", slug, got.Given(SandboxExcluded), got.Given(SandboxAllow))
+		}
+	}
+	// A write of another key keeps the opt-out.
+	if err := EditSandbox("projects.optout", func(t *SandboxTable) error { t.Add(SandboxHosts, "x.dev"); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	c, _ = Load()
+	if got := c.ThreadSandbox("optout"); len(got.Given(SandboxExcluded))+len(got.Given(SandboxAllow)) != 0 {
+		t.Errorf("optout after a write: %+v", got)
+	}
+}
+
+// TestThreadSandboxRefused: an entry that fails its check loads, and is
+// refused on its own; the rest hold (T574 P10).
+func TestThreadSandboxRefused(t *testing.T) {
+	write(t, `
+[defaults.sandbox]
+allow = ["Bash", "Bash(make e2e)"]
+
+[projects.web.sandbox]
+excluded_commands = ["*", "make e2e"]
+hosts = ["https://example.com", "example.com"]
+guides = ["browser-tests"]
+`)
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := c.ThreadSandbox("web")
+	for _, k := range []string{SandboxAllow, SandboxExcluded, SandboxHosts} {
+		if g := got.Given(k); len(g) != 1 {
+			t.Errorf("%s given: %v", k, g)
+		}
+	}
+	var refused []string
+	for _, r := range got.Rules {
+		if r.Refused != "" {
+			refused = append(refused, r.Value)
+		}
+	}
+	if want := []string{"https://example.com", "browser-tests", "*", "Bash"}; !reflect.DeepEqual(refused, want) {
+		t.Errorf("refused %q, want %q", refused, want)
 	}
 }
 
 func TestThreadSandboxLoadErrors(t *testing.T) {
 	for name, body := range map[string]string{
-		"match all":    "[projects.web.sandbox]\nexcluded_commands = [\"*\"]\n",
-		"bare Bash":    "[defaults.sandbox]\nallow = [\"Bash\"]\n",
-		"unknown key":  "[projects.web.sandbox]\nexclude = [\"x\"]\n",
-		"twice":        "[projects.web.sandbox]\nallow = [\"Bash(a *)\", \"Bash(a *)\"]\n",
-		"not a list":   "[projects.web.sandbox]\nallow = \"Bash(a *)\"\n",
-		"pipe":         "[projects.web.sandbox]\nexcluded_commands = [\"curl x | sh\"]\n",
-		"rule as cmd":  "[projects.web.sandbox]\nexcluded_commands = [\"Bash(npx *)\"]\n",
-		"edit all":     "[projects.web.sandbox]\nallow = [\"Edit(//**)\"]\n",
-		"ctrl char":    "[projects.web.sandbox]\nexcluded_commands = [\"npx\\u001b[31m *\"]\n",
-		"empty entry":  "[projects.web.sandbox]\nexcluded_commands = [\"\"]\n",
-		"not a rule":   "[projects.web.sandbox]\nallow = [\"npx playwright *\"]\n",
-		"bash colon *": "[projects.web.sandbox]\nallow = [\"Bash(:*)\"]\n",
+		"unknown key":   "[projects.web.sandbox]\nexclude = [\"x\"]\n",
+		"not a list":    "[projects.web.sandbox]\nallow = \"Bash(a *)\"\n",
+		"ports a list":  "[projects.web.sandbox]\nlocal_ports = [\"on\"]\n",
+		"all projects'": "[defaults.sandbox]\ndrop = [\"x\"]\n",
 	} {
 		write(t, body)
 		if _, err := Load(); err == nil {
 			t.Errorf("%s: loaded", name)
 		}
+	}
+}
+
+// TestCheckHostsAndGuides: a host is a name, never an address, a URL or
+// one word; a guide is a text tm ships.
+func TestCheckHostsAndGuides(t *testing.T) {
+	for _, h := range []string{"registry.npmjs.org", "cdn.playwright.dev", "*.example.com", "a-b.c0.io", "*.example.co.uk", "me.github.io", "storage.googleapis.com"} {
+		if err := CheckHost(h); err != nil {
+			t.Errorf("%q: %v", h, err)
+		}
+	}
+	for _, h := range []string{"", "localhost", "com", "*.com", "*", "https://x.dev", "x.dev:443", "x.dev/path", "10.0.0.1", "X.dev",
+		"-x.dev", "x..dev", "x.localhost", "*.*.dev", "x_y.dev", " x.dev", "0x7f.0x1", "127.0.0.0x1", "0x7f.0.0.0x1", "localhost.localdomain",
+		"nip.io", "127.0.0.1.nip.io", "*.sslip.io", "lvh.me", "app.localtest.me", "x.xip.io", "co.uk", "*.co.uk", "*.github.io", "github.io"} {
+		if err := CheckHost(h); err == nil {
+			t.Errorf("%q passed", h)
+		}
+	}
+	if SandboxWarning(SandboxHosts, "storage.googleapis.com") == "" || SandboxWarning(SandboxHosts, "*.x.dev") == "" || SandboxWarning(SandboxHosts, "x.dev") != "" {
+		t.Error("host warnings")
+	}
+	for _, g := range Guides {
+		if err := CheckGuide(g.Name); err != nil {
+			t.Errorf("%s: %v", g.Name, err)
+		}
+	}
+	if err := CheckGuide("browser_testing"); err == nil {
+		t.Error("an unknown guide passed")
 	}
 }
 
@@ -157,46 +270,103 @@ func TestSandboxWarning(t *testing.T) {
 	}
 }
 
-func TestSetSandbox(t *testing.T) {
+func TestEditSandbox(t *testing.T) {
 	write(t, "[projects.web]\nyolo = false\n")
-	if err := SetSandbox("projects.web", SandboxExcluded, []string{"npx playwright *"}); err != nil {
+	add := func(key, v string) func(*SandboxTable) error {
+		return func(t *SandboxTable) error { t.Add(key, v); return nil }
+	}
+	if err := EditSandbox("projects.web", add(SandboxExcluded, "npx playwright *")); err != nil {
 		t.Fatal(err)
 	}
-	if err := SetSandbox(DefaultsTable, SandboxAllow, []string{"Bash(npx playwright *)"}); err == nil {
-		t.Fatal("a new Bash allow rule was written")
-	}
-	if err := SetSandbox(DefaultsTable, SandboxAllow, []string{"WebFetch(domain:playwright.dev)"}); err != nil {
+	if err := EditSandbox(DefaultsTable, add(SandboxAllow, "WebFetch(domain:playwright.dev)")); err != nil {
 		t.Fatal(err)
 	}
-	if err := SetSandbox("projects.web", SandboxAllow, nil); err != nil {
+	if err := EditSandbox("projects.web", add(SandboxDrop, "WebFetch(domain:playwright.dev)")); err != nil {
 		t.Fatal(err)
 	}
-	for _, bad := range []struct{ table, key string }{{"keys", SandboxAllow}, {"projects.web", "deny"}} {
-		if err := SetSandbox(bad.table, bad.key, []string{"Bash(a *)"}); err == nil {
-			t.Errorf("SetSandbox(%s, %s) passed", bad.table, bad.key)
+	// A project's first excluded command starts its own list from all
+	// projects' (it replaces them until the migration); removing the
+	// last leaves an empty list, which still replaces them.
+	if err := EditSandbox(DefaultsTable, add(SandboxExcluded, "docker compose *")); err != nil {
+		t.Fatal(err)
+	}
+	if err := EditSandbox("projects.app", add(SandboxExcluded, "make e2e")); err != nil {
+		t.Fatal(err)
+	}
+	c0, _ := Load()
+	if got := c0.SandboxOf("app").Lists[SandboxExcluded]; !reflect.DeepEqual(got, []string{"docker compose *", "make e2e"}) {
+		t.Fatalf("app's own list: %q", got)
+	}
+	for _, v := range []string{"docker compose *", "make e2e"} {
+		if err := EditSandbox("projects.app", func(t *SandboxTable) error { t.Remove(SandboxExcluded, v); return nil }); err != nil {
+			t.Fatal(err)
 		}
 	}
-	if err := SetSandbox("projects.web", SandboxExcluded, []string{"*"}); err == nil {
-		t.Error("a match-all entry was written")
+	c0, _ = Load()
+	if got := c0.ThreadSandbox("app").Given(SandboxExcluded); len(got) != 0 || !c0.SandboxOf("app").Replacing(SandboxExcluded) {
+		t.Fatalf("app after removing all: %q", got)
+	}
+	if err := EditSandbox("projects.app", func(t *SandboxTable) error { t.Follow(SandboxExcluded); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	c0, _ = Load()
+	if got := c0.ThreadSandbox("app").Given(SandboxExcluded); !reflect.DeepEqual(got, []string{"docker compose *"}) {
+		t.Fatalf("app following: %q", got)
+	}
+	for _, bad := range []struct {
+		table string
+		fn    func(*SandboxTable) error
+	}{
+		{"keys", add(SandboxAllow, "Bash(a *)")},
+		{DefaultsTable, add(SandboxAllow, "Bash(npx playwright *)")},
+		{DefaultsTable, add(SandboxAllow, "Edit(/tmp/pw/**)")},
+		{"projects.web", add(SandboxWrite, "~")},
+		{"projects.web", add(SandboxExcluded, "*")},
+		{"projects.web", add(SandboxHosts, "localhost")},
+		{DefaultsTable, add(SandboxDrop, "x")},
+		{"projects.web", func(t *SandboxTable) error {
+			t.Lists[SandboxGuides] = []string{GuideBrowserTesting, GuideBrowserTesting}
+			return nil
+		}},
+	} {
+		if err := EditSandbox(bad.table, bad.fn); err == nil {
+			t.Errorf("%s: written", bad.table)
+		}
 	}
 	c, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, _ := c.ThreadSandbox("web")
-	if want := (ThreadSandbox{ExcludedCommands: []string{"npx playwright *"}, Allow: []string{}}); !reflect.DeepEqual(got, want) {
+	got := c.ThreadSandbox("web")
+	if !reflect.DeepEqual(got.Given(SandboxExcluded), []string{"npx playwright *"}) || len(got.Given(SandboxAllow)) != 0 {
 		t.Fatalf("got %+v", got)
 	}
-	if err := UnsetSandbox("projects.web", SandboxAllow); err != nil {
+	if err := EditSandbox("projects.web", func(t *SandboxTable) error { t.Remove(SandboxDrop, "WebFetch(domain:playwright.dev)"); return nil }); err != nil {
 		t.Fatal(err)
 	}
 	c, _ = Load()
-	if got, _ := c.ThreadSandbox("web"); !reflect.DeepEqual(got.Allow, []string{"WebFetch(domain:playwright.dev)"}) {
-		t.Fatalf("after unset: %+v", got)
+	if got := c.ThreadSandbox("web"); !reflect.DeepEqual(got.Given(SandboxAllow), []string{"WebFetch(domain:playwright.dev)"}) {
+		t.Fatalf("after undrop: %+v", got)
 	}
 	data, _ := os.ReadFile(c.Path)
-	if !strings.Contains(string(data), "[projects.web.sandbox]") || !strings.Contains(string(data), "yolo = false") {
+	if !strings.Contains(string(data), "[projects.web.sandbox]") || !strings.Contains(string(data), "yolo = false") || strings.Contains(string(data), "drop") {
 		t.Fatalf("file:\n%s", data)
+	}
+}
+
+// TestEditSandboxKeepsRefused: an entry the file has that fails its
+// check doesn't stop a write, and can be removed.
+func TestEditSandboxKeepsRefused(t *testing.T) {
+	write(t, "[projects.web.sandbox]\nexcluded_commands = [\"*\"]\n")
+	if err := EditSandbox("projects.web", func(t *SandboxTable) error { t.Add(SandboxExcluded, "make e2e"); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if err := EditSandbox("projects.web", func(t *SandboxTable) error { t.Remove(SandboxExcluded, "*"); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	c, _ := Load()
+	if got := c.SandboxOf("web").Lists[SandboxExcluded]; !reflect.DeepEqual(got, []string{"make e2e"}) {
+		t.Fatalf("got %q", got)
 	}
 }
 
@@ -239,57 +409,86 @@ func TestSandboxCovered(t *testing.T) {
 	}
 }
 
-// TestSandboxPresets: a project's switch replaces all projects'; the
-// switches it doesn't set follow them; SetSandboxPreset writes and
-// removes one.
-func TestSandboxPresets(t *testing.T) {
+// TestOldSwitches: tm 0.37's preset switches read as the rules they
+// unfold into, a project's off as drops of them; a write of the table
+// replaces them with those rules.
+func TestOldSwitches(t *testing.T) {
 	write(t, `
 [defaults.sandbox]
 browser_testing = true
+browser_downloads = true
+local_dev_servers = true
 
 [projects.web.sandbox]
-browser_testing = false
-local_dev_servers = true
+browser_downloads = false
+local_dev_servers = false
 `)
 	c, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := c.ThreadSandbox("web"); !reflect.DeepEqual(got.Presets, []string{SandboxDevServers}) {
-		t.Errorf("web: %+v", got)
+	other := c.ThreadSandbox("other")
+	if !reflect.DeepEqual(other.Given(SandboxHosts), BrowserDomains) || !reflect.DeepEqual(other.Given(SandboxGuides), []string{GuideBrowserTesting, GuideBrowserDownloads}) || !other.LocalPorts {
+		t.Errorf("other: %+v", other)
 	}
-	if got, _ := c.ThreadSandbox("other"); !reflect.DeepEqual(got.Presets, []string{SandboxBrowser}) || got.Empty() {
-		t.Errorf("other: %+v", got)
+	web := c.ThreadSandbox("web")
+	if len(web.Given(SandboxHosts)) != 0 || !reflect.DeepEqual(web.Given(SandboxGuides), []string{GuideBrowserTesting}) || web.LocalPorts || !web.LocalPortsOwn {
+		t.Errorf("web: %+v", web)
 	}
-	if got := c.SandboxPresetsOf("web"); !reflect.DeepEqual(got, map[string]bool{SandboxBrowser: false, SandboxDevServers: true}) {
-		t.Errorf("SandboxPresetsOf(web) = %v", got)
-	}
-	on := true
-	if err := SetSandboxPreset("projects.app", SandboxBrowser, &on); err != nil {
+	if err := EditSandbox("projects.web", func(t *SandboxTable) error { t.Add(SandboxHosts, "x.dev"); return nil }); err != nil {
 		t.Fatal(err)
 	}
-	if err := SetSandboxPreset("projects.web", SandboxBrowser, nil); err != nil {
+	if err := EditSandbox(DefaultsTable, func(*SandboxTable) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
-	if err := SetSandboxPreset("keys", SandboxBrowser, &on); err == nil {
-		t.Error("a preset outside a project or all projects was written")
+	c2, err := Load()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := SetSandboxPreset(DefaultsTable, "mach_register", &on); err == nil {
-		t.Error("an unknown preset was written")
+	data, _ := os.ReadFile(c2.Path)
+	for _, k := range OldSwitchKeys() {
+		if strings.Contains(string(data), k) {
+			t.Errorf("%s left:\n%s", k, data)
+		}
 	}
-	c, _ = Load()
-	if got := c.SandboxPresetsOf("app"); !reflect.DeepEqual(got, map[string]bool{SandboxBrowser: true}) {
-		t.Errorf("app: %v", got)
+	for _, slug := range []string{"web", "other"} {
+		got, was := c2.ThreadSandbox(slug), c.ThreadSandbox(slug)
+		if !reflect.DeepEqual(got.Given(SandboxGuides), was.Given(SandboxGuides)) || got.LocalPorts != was.LocalPorts {
+			t.Errorf("%s changed: %+v, was %+v", slug, got, was)
+		}
 	}
-	if got, _ := c.ThreadSandbox("web"); !reflect.DeepEqual(got.Presets, []string{SandboxBrowser, SandboxDevServers}) {
-		t.Errorf("web after unset: %+v", got)
+	if got := c2.ThreadSandbox("web").Given(SandboxHosts); !reflect.DeepEqual(got, []string{"x.dev"}) {
+		t.Errorf("web's hosts: %v", got)
 	}
 }
 
-// TestSandboxApplies: every key has its platforms; the presets are
-// macOS's only (T561), the lists every platform's.
+// TestPresets: each preset's rules pass their checks; Missing leaves out
+// what threads have.
+func TestPresets(t *testing.T) {
+	for _, p := range Presets {
+		if len(p.Rules) == 0 || len(p.OS) == 0 || p.Title == "" || p.About == "" {
+			t.Errorf("%s: incomplete", p.Name)
+		}
+		for _, r := range p.Rules {
+			if r.Key == SandboxLocalPorts {
+				continue
+			}
+			if err := checkSandboxEntry(r.Key, r.Value); err != nil {
+				t.Errorf("%s: %v", p.Name, err)
+			}
+		}
+	}
+	p, _ := PresetNamed(PresetBrowserDownloads)
+	have := ThreadSandbox{Rules: []SandboxRule{{Key: SandboxHosts, Value: "registry.npmjs.org"}, {Key: SandboxHosts, Value: "cdn.playwright.dev", Dropped: true}}}
+	if got := p.Missing(have.Has); len(got) != len(p.Rules)-1 || got[0].Value != "cdn.playwright.dev" {
+		t.Errorf("missing: %v", got)
+	}
+}
+
+// TestSandboxApplies: every key has its platforms; hosts, guides and
+// local ports are macOS's only (T561), the lists every platform's.
 func TestSandboxApplies(t *testing.T) {
-	for _, k := range append(append([]string{}, SandboxKeys...), SandboxPresets...) {
+	for _, k := range append(slices.Clone(SandboxKeys), SandboxLocalPorts) {
 		if len(SandboxSettings[k].OS) == 0 {
 			t.Errorf("%s has no platforms", k)
 		}
@@ -298,7 +497,7 @@ func TestSandboxApplies(t *testing.T) {
 		key, goos string
 		want      bool
 	}{
-		{SandboxBrowser, OSMac, true}, {SandboxBrowser, OSLinux, false}, {SandboxDownloads, OSMac, true}, {SandboxDownloads, OSWindows, false}, {SandboxDevServers, OSWindows, false},
+		{SandboxGuides, OSMac, true}, {SandboxGuides, OSLinux, false}, {SandboxHosts, OSMac, true}, {SandboxHosts, OSWindows, false}, {SandboxLocalPorts, OSWindows, false},
 		{SandboxExcluded, OSWindows, true}, {SandboxAllow, OSLinux, true}, {"nope", OSMac, false},
 	} {
 		if got := SandboxApplies(c.key, c.goos); got != c.want {
@@ -317,9 +516,9 @@ func TestSandboxProblems(t *testing.T) {
 }
 
 // TestExcludedAsk: an excluded command asks first, or with ask = false
-// runs without asking; SetSandbox keeps each one's choice, a new one
+// runs without asking; EditSandbox keeps each one's choice, a new one
 // asks first; SetExcludedAsk changes it; a file's legacy Bash rule
-// stays, and only it.
+// stays, and still lets the command it covers run without asking.
 func TestExcludedAsk(t *testing.T) {
 	write(t, `
 [defaults.sandbox]
@@ -333,24 +532,29 @@ excluded_commands = [{ command = "make e2e", ask = true }, { command = "pnpm tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, _ := c.ThreadSandbox("other")
-	if !reflect.DeepEqual(got.ExcludedCommands, []string{"docker compose *", "npx playwright *"}) || !reflect.DeepEqual(got.WithoutAsking, []string{"npx playwright *"}) {
+	if got := c.ThreadSandbox("other"); !reflect.DeepEqual(got.Given(SandboxExcluded), []string{"docker compose *", "npx playwright *"}) || !reflect.DeepEqual(got.WithoutAsking(), []string{"npx playwright *"}) {
 		t.Errorf("other: %+v", got)
 	}
-	got, _ = c.ThreadSandbox("web")
-	// make e2e asks in its own table, but all projects' Bash rule
-	// covers it: it ran without asking before, and still does.
-	if !reflect.DeepEqual(got.WithoutAsking, []string{"make e2e", "pnpm test *"}) {
-		t.Errorf("web: %+v", got)
+	// make e2e asks in its own table, but all projects' Bash rule covers
+	// it: it ran without asking before, and still does.
+	if got := c.ThreadSandbox("web").WithoutAsking(); !reflect.DeepEqual(got, []string{"make e2e", "pnpm test *"}) {
+		t.Errorf("web: %q", got)
 	}
-	if got := c.WithoutAskingOf(""); !reflect.DeepEqual(got, []string{"npx playwright *"}) {
-		t.Errorf("WithoutAskingOf(all) = %v", got)
+	if got := c.SandboxOf("").NoAsk; !reflect.DeepEqual(got, []string{"npx playwright *"}) {
+		t.Errorf("all projects' NoAsk = %q", got)
+	}
+	add := func(key, v string) func(*SandboxTable) error {
+		return func(t *SandboxTable) error { t.Add(key, v); return nil }
 	}
 	// The allow list keeps its legacy rule when another is added.
-	if err := SetSandbox(DefaultsTable, SandboxAllow, []string{"Bash(make e2e)", "WebSearch"}); err != nil {
+	if err := EditSandbox(DefaultsTable, add(SandboxAllow, "WebSearch")); err != nil {
 		t.Fatal(err)
 	}
-	if err := SetSandbox(DefaultsTable, SandboxExcluded, []string{"npx playwright *", "cargo bench"}); err != nil {
+	if err := EditSandbox(DefaultsTable, func(t *SandboxTable) error {
+		t.Remove(SandboxExcluded, "docker compose *")
+		t.Add(SandboxExcluded, "cargo bench")
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := SetExcludedAsk("projects.web", "make e2e", false); err != nil {
@@ -369,22 +573,39 @@ excluded_commands = [{ command = "make e2e", ask = true }, { command = "pnpm tes
 			t.Errorf("no %s in:\n%s", want, data)
 		}
 	}
+	// A project's own list started from all projects' keeps each one's
+	// choice.
+	if err := EditSandbox("projects.app", add(SandboxExcluded, "make bench")); err != nil {
+		t.Fatal(err)
+	}
+	c, _ = Load()
+	if got := c.SandboxOf("app").NoAsk; !reflect.DeepEqual(got, []string{"npx playwright *"}) {
+		t.Errorf("app's own list: NoAsk %q", got)
+	}
 	for name, body := range map[string]string{
 		"no command":  "[defaults.sandbox]\nexcluded_commands = [{ ask = false }]\n",
 		"unknown key": "[defaults.sandbox]\nexcluded_commands = [{ command = \"make e2e\", asks = false }]\n",
 		"ask text":    "[defaults.sandbox]\nexcluded_commands = [{ command = \"make e2e\", ask = \"no\" }]\n",
 		"number":      "[defaults.sandbox]\nexcluded_commands = [1]\n",
-		"bad command": "[defaults.sandbox]\nexcluded_commands = [{ command = \"*\", ask = false }]\n",
 	} {
 		write(t, body)
 		if _, err := Load(); err == nil {
 			t.Errorf("%s: loaded", name)
 		}
 	}
+	// A table entry that fails its check is refused on its own.
+	write(t, "[defaults.sandbox]\nexcluded_commands = [{ command = \"*\", ask = false }, \"make e2e\"]\n")
+	c, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.ThreadSandbox("x").Given(SandboxExcluded); !reflect.DeepEqual(got, []string{"make e2e"}) {
+		t.Errorf("refused entry: %q", got)
+	}
 }
 
 // TestWriteFolders: a write folder is one plain folder, not high up nor
-// where files start programs; the list follows the others' rules.
+// where files start programs; the lists add down the layers.
 func TestWriteFolders(t *testing.T) {
 	for _, e := range []string{"~/src/fixtures", "/Volumes/data/fixtures", "/opt/fixtures", "/Users/me/src/fixtures", `C:\Users\me\src\fixtures`} {
 		if err := CheckWriteFolder(e); err != nil {
@@ -397,22 +618,15 @@ func TestWriteFolders(t *testing.T) {
 			t.Errorf("%q passed", e)
 		}
 	}
-	write(t, "[defaults.sandbox]\nwrite = [\"~/src/fixtures\"]\n\n[projects.web.sandbox]\nwrite = [\"~/src/web-data\"]\n")
+	write(t, "[defaults.sandbox]\nwrite = [\"~/src/fixtures\", \"~\"]\n\n[projects.web.sandbox]\nwrite = [\"~/src/web-data\"]\n")
 	c, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := c.ThreadSandbox("web"); !reflect.DeepEqual(got.Write, []string{"~/src/web-data"}) {
-		t.Errorf("web: %+v", got)
-	}
-	if got, _ := c.ThreadSandbox("other"); !reflect.DeepEqual(got.Write, []string{"~/src/fixtures"}) {
-		t.Errorf("other: %+v", got)
+	if got := c.ThreadSandbox("web").Given(SandboxWrite); !reflect.DeepEqual(got, []string{"~/src/fixtures", "~/src/web-data"}) {
+		t.Errorf("web: %q", got)
 	}
 	if SandboxWarning(SandboxWrite, "~/src/fixtures") == "" {
 		t.Error("a write folder doesn't say what it opens")
-	}
-	write(t, "[defaults.sandbox]\nwrite = [\"~\"]\n")
-	if _, err := Load(); err == nil {
-		t.Error("a write folder of the whole home loaded")
 	}
 }

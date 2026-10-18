@@ -232,7 +232,7 @@ func (s *Server) askFirst(r SessionRecord, lc launchConfig) []string {
 	var out []string
 	add := func(rules []proto.AccessRule) {
 		for _, x := range rules {
-			if x.Kind == proto.AccessExcluded && x.Note == proto.AccessAsksFirst && x.Skipped == "" && !slices.Contains(out, x.Value) &&
+			if x.Kind == proto.AccessExcluded && x.Note == proto.AccessAsksFirst && x.Given() && !slices.Contains(out, x.Value) &&
 				(len(x.Agents) == 0 || slices.Contains(x.Agents, r.Agent)) {
 				out = append(out, x.Value)
 			}
@@ -255,7 +255,7 @@ func writeFolders(lc launchConfig, slug, tmHome string) []string {
 	rules, _ := sandboxRules(lc, slug, caps.OS, tmHome)
 	var out []string
 	for _, r := range rules {
-		if r.Kind == proto.AccessWriteFolder && r.Skipped == "" {
+		if r.Kind == proto.AccessWriteFolder && r.Given() {
 			out = append(out, r.Value)
 		}
 	}

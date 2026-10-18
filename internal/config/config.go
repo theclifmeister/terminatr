@@ -289,9 +289,9 @@ type rawSafety struct {
 	// Env is the secret environment of threads (env.go): not a safety
 	// setting; read by SecretEnv and EnvOf, written by SetEnv.
 	Env map[string]EnvSource `toml:"env"`
-	// Sandbox are the sandbox lists of threads (sandbox.go): not a
+	// Sandbox are the sandbox rules of threads (sandbox.go): not a
 	// safety setting; read by ThreadSandbox and SandboxOf, written by
-	// SetSandbox.
+	// EditSandbox.
 	Sandbox *rawSandbox `toml:"sandbox"`
 }
 
@@ -489,7 +489,7 @@ func Load() (*Config, error) {
 	if _, err := c.SecretEnv(""); err != nil {
 		return c, err
 	}
-	if _, err := c.ThreadSandbox(""); err != nil {
+	if err := checkSandboxTable(c.defaults.Sandbox, path, DefaultsTable); err != nil {
 		return c, err
 	}
 	for slug := range raw.Projects {
@@ -497,9 +497,6 @@ func Load() (*Config, error) {
 			return c, err
 		}
 		if _, err := c.SecretEnv(slug); err != nil {
-			return c, err
-		}
-		if _, err := c.ThreadSandbox(slug); err != nil {
 			return c, err
 		}
 		if _, err := c.Links(slug); err != nil {

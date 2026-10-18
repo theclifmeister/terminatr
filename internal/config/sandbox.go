@@ -7,56 +7,67 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/BurntSushi/toml"
-
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
-// The sandbox lists of threads (docs/SPEC.md §5.2, Sandbox lists): the
-// commands a thread's Bash runs outside its sandbox, each asking first
-// or running without asking (sandbox_excluded.go), the folders besides
-// its worktree it writes in, and the permission rules its agent gets on
-// top of tm's for tools that neither run commands nor write files.
-// [defaults.sandbox] gives every project's threads them;
-// [projects.<slug>.sandbox] a project's, each key it sets replacing all
-// projects' list of that key:
+// The sandbox rules of threads (docs/SPEC.md §5.2, T574 §3): what a
+// thread's sandboxed commands may reach (hosts, local_ports), the
+// guidance its brief gets (guides), the folders besides its worktree it
+// writes in (write, sandbox_write.go), the commands its Bash runs
+// outside its sandbox, each asking first or running without asking
+// (sandbox_excluded.go), and the permission rules its agent gets on top
+// of tm's for tools that neither run commands nor write files. [defaults.sandbox] gives every
+// project's threads them; [projects.<slug>.sandbox] adds a project's
+// own, and drops the ones of all projects it doesn't want:
 //
 //	[projects.web.sandbox]
-//	excluded_commands = [{ command = "npx playwright *", ask = false }]
+//	hosts = ["registry.npmjs.org"]
+//	local_ports = true
 //	write = ["~/src/shared-fixtures"]
+//	excluded_commands = [{ command = "npx playwright *", ask = false }]
 //	allow = ["WebFetch(domain:playwright.dev)"]
+//	drop = ["docker compose *"]
 //
 // tm writes them into a thread's launch settings at each start and
-// resume (Claude's sandbox.excludedCommands and permissions.allow, a
-// write folder as an Edit(...) allow rule and Codex's filesystem write)
-// and the guard reads them live; a coordinator never gets them. Only
-// the human sets them, in config.toml or the settings popups: an
-// excluded command runs with the user's full file and network access,
-// tm's socket included.
+// resume (Claude's sandbox.network, excludedCommands and
+// permissions.allow); a coordinator never gets them. Only the human
+// sets them, in config.toml or the settings popups: an excluded command
+// runs with the user's full file and network access, tm's socket
+// included. sandbox_layers.go adds the layers up; an entry that fails
+// its check is refused on its own.
 //
-// One rule sets each thing (T574 §4.6): the allow list takes no rule
-// that runs commands or writes files (Bash, PowerShell, Edit, Write,
-// MultiEdit, NotebookEdit), which are excluded commands' and write
-// folders'. A file written before that still loads with them, and they
-// still work, until the migration moves them; only a new one is
-// refused.
+// One rule sets each thing (T574 §4.6): the allow list takes no new
+// rule that runs commands or writes files (Bash, PowerShell, Edit,
+// Write, MultiEdit, NotebookEdit), which are excluded commands' and
+// write folders'. A file written before still has them, and they still
+// work, until the migration moves them.
 
 // Keys of a sandbox table.
 const (
-	SandboxExcluded = "excluded_commands"
-	SandboxAllow    = "allow"
-	SandboxWrite    = "write"
+	SandboxHosts      = "hosts"
+	SandboxGuides     = "guides"
+	SandboxWrite      = "write"
+	SandboxExcluded   = "excluded_commands"
+	SandboxAllow      = "allow"
+	SandboxLocalPorts = "local_ports"
+	SandboxDrop       = "drop"
 )
 
-// SandboxKeys are a sandbox table's keys, in the settings' order.
-var SandboxKeys = []string{SandboxExcluded, SandboxAllow, SandboxWrite}
+// SandboxKeys are a sandbox table's lists, in the Access tab's order.
+var SandboxKeys = []string{SandboxHosts, SandboxGuides, SandboxWrite, SandboxExcluded, SandboxAllow}
 
 // rawSandbox is a [projects.<slug>.sandbox] or [defaults.sandbox] table:
-// the lists, and the presets' switches (sandbox_presets.go).
+// the lists, local ports, a project's drops, and the preset switches of
+// tm 0.37 and before, read as the rules they unfold into
+// (sandbox_presets.go).
 type rawSandbox struct {
+	Hosts            *[]string     `toml:"hosts"`
+	Guides           *[]string     `toml:"guides"`
+	Write            *[]string     `toml:"write"`
 	ExcludedCommands *excludedList `toml:"excluded_commands"`
 	Allow            *[]string     `toml:"allow"`
-	Write            *[]string     `toml:"write"`
+	LocalPorts       *bool         `toml:"local_ports"`
+	Drop             *[]string     `toml:"drop"`
 	BrowserTesting   *bool         `toml:"browser_testing"`
 	BrowserDownloads *bool         `toml:"browser_downloads"`
 	LocalDevServers  *bool         `toml:"local_dev_servers"`
@@ -68,6 +79,12 @@ func (r *rawSandbox) list(key string) *[]string {
 		return nil
 	}
 	switch key {
+	case SandboxHosts:
+		return r.Hosts
+	case SandboxGuides:
+		return r.Guides
+	case SandboxWrite:
+		return r.Write
 	case SandboxExcluded:
 		if r.ExcludedCommands == nil {
 			return nil
@@ -76,29 +93,10 @@ func (r *rawSandbox) list(key string) *[]string {
 		return &l
 	case SandboxAllow:
 		return r.Allow
-	case SandboxWrite:
-		return r.Write
+	case SandboxDrop:
+		return r.Drop
 	}
 	return nil
-}
-
-// ThreadSandbox is what a project's threads get: each list and switch
-// the project's own, else all projects'. WithoutAsking are the excluded
-// commands that run without asking (the others ask first), Write the
-// write folders as written (~/ for home). Presets are the keys of the
-// presets on, on any platform: the launch skips one that doesn't apply
-// where it runs.
-type ThreadSandbox struct {
-	ExcludedCommands []string
-	WithoutAsking    []string
-	Allow            []string
-	Write            []string
-	Presets          []string
-}
-
-// Empty reports whether it opens nothing.
-func (t ThreadSandbox) Empty() bool {
-	return len(t.ExcludedCommands)+len(t.Allow)+len(t.Write)+len(t.Presets) == 0
 }
 
 // maxSandboxEntry bounds an entry's length.
@@ -333,18 +331,25 @@ func checkAllowRule(e string) error {
 // have it: an allow rule the list no longer takes too.
 func checkSandboxEntry(key, e string) error {
 	switch key {
+	case SandboxHosts:
+		return CheckHost(e)
+	case SandboxGuides:
+		return CheckGuide(e)
+	case SandboxWrite:
+		return CheckWriteFolder(e)
 	case SandboxExcluded:
 		return CheckExcludedCommand(e)
 	case SandboxAllow:
 		return checkAllowRule(e)
-	case SandboxWrite:
-		return CheckWriteFolder(e)
+	case SandboxDrop:
+		return checkSandboxText(e)
 	}
 	return fmt.Errorf("unknown sandbox list %q", key)
 }
 
-// CheckNewSandboxEntry checks an entry added to key's list: as Load
-// checks it, and never an allow rule that runs commands or writes files.
+// CheckNewSandboxEntry checks an entry added to key's list: as Load's
+// users check it, and never an allow rule that runs commands or writes
+// files.
 func CheckNewSandboxEntry(key, e string) error {
 	if key == SandboxAllow {
 		return CheckSandboxAllow(e)
@@ -352,9 +357,7 @@ func CheckNewSandboxEntry(key, e string) error {
 	return checkSandboxEntry(key, e)
 }
 
-// CheckSandboxList checks a whole list of key as config.toml may have
-// it: each entry, none twice. An entry added to it is checked with
-// CheckNewSandboxEntry too.
+// CheckSandboxList checks a whole list of key: each entry, none twice.
 func CheckSandboxList(key string, list []string) error {
 	for i, e := range list {
 		if err := checkSandboxEntry(key, e); err != nil {
@@ -369,8 +372,7 @@ func CheckSandboxList(key string, list []string) error {
 
 // SandboxProblems is, for each entry of key's list, why it fails the
 // sandbox checks ("" for one that passes): the rule it breaks, or that
-// it is listed twice. A config.toml with any such entry drops the
-// project's sandbox lists and presets at launch.
+// it is listed twice. A launch leaves such an entry out, and only it.
 func SandboxProblems(key string, list []string) []string {
 	out := make([]string, len(list))
 	for i, e := range list {
@@ -390,10 +392,15 @@ func SandboxProblems(key string, list []string) []string {
 // there too), more so high up a tree or where files start programs.
 func SandboxWarning(key, e string) string {
 	switch key {
-	case SandboxWrite:
-		return writeWarning(e)
 	case SandboxExcluded:
 		return codeWarning(e)
+	case SandboxHosts:
+		return hostWarning(e)
+	case SandboxWrite:
+		return writeWarning(e)
+	case SandboxAllow:
+	default:
+		return ""
 	}
 	m := allowRule.FindStringSubmatch(e)
 	if m == nil {
@@ -508,167 +515,6 @@ func globMatch(p, s string) bool {
 		match = next
 	}
 	return match[len(s)]
-}
-
-// checkSandbox checks a table's lists.
-func checkSandbox(r *rawSandbox, path, table string) error {
-	for _, k := range SandboxKeys {
-		if l := r.list(k); l != nil {
-			if err := CheckSandboxList(k, *l); err != nil {
-				return fmt.Errorf("%s: %s.sandbox.%s: %w", path, table, k, err)
-			}
-		}
-	}
-	return nil
-}
-
-// ThreadSandbox is what project slug's threads get: for each list, the
-// project's own when its table sets it (an empty one too), else all
-// projects' ([defaults.sandbox]). None for a nil Config.
-func (c *Config) ThreadSandbox(slug string) (ThreadSandbox, error) {
-	var out ThreadSandbox
-	if c == nil {
-		return out, nil
-	}
-	if err := checkSandbox(c.defaults.Sandbox, c.Path, DefaultsTable); err != nil {
-		return out, err
-	}
-	own := c.projects[slug].Sandbox
-	if err := checkSandbox(own, c.Path, "projects."+slug); err != nil {
-		return out, err
-	}
-	pick := func(key string) []string {
-		if l := own.list(key); l != nil {
-			return slices.Clone(*l)
-		}
-		if l := c.defaults.Sandbox.list(key); l != nil {
-			return slices.Clone(*l)
-		}
-		return nil
-	}
-	out.ExcludedCommands, out.Allow, out.Write = pick(SandboxExcluded), pick(SandboxAllow), pick(SandboxWrite)
-	from := c.defaults.Sandbox
-	if own.list(SandboxExcluded) != nil {
-		from = own
-	}
-	for _, e := range out.ExcludedCommands {
-		if slices.Contains(from.ExcludedCommands.withoutAsking(), e) || SandboxCovered(e, out.Allow) != "" {
-			out.WithoutAsking = append(out.WithoutAsking, e)
-		}
-	}
-	for _, k := range SandboxPresets {
-		on := own.preset(k)
-		if on == nil {
-			on = c.defaults.Sandbox.preset(k)
-		}
-		if on != nil && *on {
-			out.Presets = append(out.Presets, k)
-		}
-	}
-	return out, nil
-}
-
-// SandboxOf is one table's sandbox lists by key, only those it sets:
-// all projects' ([defaults.sandbox]) for slug "", else the project's
-// own. None for a nil Config.
-func (c *Config) SandboxOf(slug string) map[string][]string {
-	if c == nil {
-		return nil
-	}
-	r := c.defaults.Sandbox
-	if slug != "" {
-		r = c.projects[slug].Sandbox
-	}
-	out := map[string][]string{}
-	for _, k := range SandboxKeys {
-		if l := r.list(k); l != nil {
-			out[k] = slices.Clone(*l)
-		}
-	}
-	return out
-}
-
-// sandboxTable is the sandbox table of table, DefaultsTable or a
-// project's ("projects.<slug>").
-func sandboxTable(table, key string) (string, error) {
-	if table != DefaultsTable && !strings.HasPrefix(table, "projects.") {
-		return "", fmt.Errorf("no sandbox lists in [%s]", table)
-	}
-	if !slices.Contains(SandboxKeys, key) {
-		return "", fmt.Errorf("unknown sandbox list %q", key)
-	}
-	return table + ".sandbox", nil
-}
-
-// SetSandbox writes key's list in table's sandbox table (DefaultsTable
-// or "projects.<slug>"), checked as Load checks it, and each entry the
-// table didn't have as CheckNewSandboxEntry does; an empty list too,
-// which on a project means none, not all projects'. An excluded command
-// it keeps keeps whether it asks first; a new one asks first.
-func SetSandbox(table, key string, list []string) error {
-	t, err := sandboxTable(table, key)
-	if err != nil {
-		return err
-	}
-	if err := CheckSandboxList(key, list); err != nil {
-		return err
-	}
-	if list == nil {
-		list = []string{}
-	}
-	return edit(func(data []byte) ([]byte, error) {
-		r, err := rawSandboxIn(data, table)
-		if err != nil {
-			return nil, err
-		}
-		var old []string
-		if l := r.list(key); l != nil {
-			old = *l
-		}
-		for _, e := range list {
-			if slices.Contains(old, e) {
-				continue // the file had it: kept as it was
-			}
-			if err := CheckNewSandboxEntry(key, e); err != nil {
-				return nil, err
-			}
-		}
-		if key == SandboxExcluded {
-			var noAsk []string
-			if r != nil && r.ExcludedCommands != nil {
-				noAsk = r.ExcludedCommands.withoutAsking()
-			}
-			return Edit(data, t, key, excludedOf(list, noAsk))
-		}
-		return Edit(data, t, key, list)
-	})
-}
-
-// rawSandboxIn is table's sandbox table (DefaultsTable or
-// "projects.<slug>") as data has it; nil when data has none.
-func rawSandboxIn(data []byte, table string) (*rawSandbox, error) {
-	var raw struct {
-		Defaults struct{ Sandbox *rawSandbox }
-		Projects map[string]struct{ Sandbox *rawSandbox }
-	}
-	if _, err := toml.Decode(string(data), &raw); err != nil {
-		return nil, fmt.Errorf("the settings can't be read: %w", err)
-	}
-	if slug, ok := strings.CutPrefix(table, "projects."); ok {
-		return raw.Projects[slug].Sandbox, nil
-	}
-	return raw.Defaults.Sandbox, nil
-}
-
-// UnsetSandbox removes key's list from table's sandbox table: a
-// project's then follows all projects'. ErrForm when the file sets it
-// in a form the line editor doesn't change.
-func UnsetSandbox(table, key string) error {
-	t, err := sandboxTable(table, key)
-	if err != nil {
-		return err
-	}
-	return Unset(t, key)
 }
 
 // ExcludedMatch reports whether command line cmd matches excluded
