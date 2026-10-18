@@ -207,6 +207,60 @@ func TestRealYoloNoSandbox(t *testing.T) {
 	}
 }
 
+// TestRealExcludedAsksFirst: an excluded command that asks first is put
+// to the user though an allow rule covers it (the worktree's own
+// settings.local.json here; auto mode or the user's ~/.claude would do
+// the same, T577): only the guard's PreToolUse "ask" forces that prompt,
+// and the prompt is the user's (an escape's). With ask = false it runs
+// without asking. Either way it runs outside the sandbox (T574 case 1).
+func TestRealExcludedAsksFirst(t *testing.T) {
+	env := realAgentEnv(t, "claude", nil)
+	var p struct{ Slug, Dir string }
+	if err := json.Unmarshal([]byte(env.MustCLI("project", "new", "real", "--json")), &p); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		entry string
+		asks  bool
+	}{{`"sh probe.sh"`, true}, {`{ command = "sh probe.sh", ask = false }`, false}} {
+		cfg := "[projects." + p.Slug + ".sandbox]\nexcluded_commands = [" + c.entry + "]\n"
+		if err := os.WriteFile(filepath.Join(env.Home, "config.toml"), []byte(cfg), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		dir := env.Workdir()
+		out := filepath.Join(dir, "sr.txt")
+		files := map[string]string{
+			"probe.sh":                    "echo \"SR=${SANDBOX_RUNTIME:-unset}\" > " + out + "\n",
+			".claude/settings.local.json": `{"permissions": {"allow": ["Bash(sh probe.sh)"]}}`,
+		}
+		for name, body := range files {
+			os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755)
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		s, _ := realStartIn(t, env, dir, "claude", "haiku", "--role", "thread", "--project", p.Slug, "--thread", "t-0001")
+		env.Prompt(s, "Run exactly this Bash command, without dangerouslyDisableSandbox, and nothing else: sh probe.sh")
+		env.WaitState(s, "working", realWait)
+		asked, escape := false, false
+		Poll(realWait, func() bool {
+			i, _ := env.Info(s)
+			if i.State == "blocked" && i.Reason == "permission" {
+				asked, escape = true, escape || i.Escape
+				env.Keys(s, "1")
+			}
+			return i.State == "idle"
+		})
+		if asked != c.asks || (c.asks && !escape) {
+			t.Errorf("%s: asked %v (the user's: %v), want asked %v\nscreen:\n%s", c.entry, asked, escape, c.asks, env.Screen(s))
+		}
+		if b, err := os.ReadFile(out); err != nil || strings.TrimSpace(string(b)) != "SR=unset" {
+			t.Errorf("%s: %q %v, want it run outside the sandbox (SR=unset)\nscreen:\n%s", c.entry, b, err, env.Screen(s))
+		}
+		env.MustCLI("session", "stop", s.ID)
+	}
+}
+
 // TestRealFirstLocalRun is M4's "Try it" against Claude: a Claude
 // session of the user's own shows on the dashboard and enter attaches; a prompt
 // typed there blocks on a permission dialog; Ctrl+B d shows it under NEEDS

@@ -1017,7 +1017,9 @@ func TestGuardOwnExcluded(t *testing.T) {
 	if d := bash(g, "make deploy prod"); d == nil || !d.Ask {
 		t.Errorf("the worktree's own: %+v", d)
 	}
-	if d := bash(g, "npx playwright test"); d != nil {
+	// tm's own excluded command is no escape: it asks first, as tm's
+	// rule (T574 case 1), not as one of the user's.
+	if d := bash(g, "npx playwright test"); d == nil || !d.Ask || d.Rule != guard.RuleExcluded {
 		t.Errorf("tm's excluded command: %+v", d)
 	}
 	closed := thread

@@ -20,6 +20,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -57,7 +58,7 @@ func (s *Server) resolveAccess(in accessInput, lc launchConfig) (proto.AccessSet
 	}
 	from := len(set.Rules)
 	if in.role == proto.RoleThread {
-		rules, why := sandboxRules(lc, in.slug, in.goos)
+		rules, why := sandboxRules(lc, in.slug, in.goos, s.opts.Paths.Home)
 		add(rules...)
 		set.SandboxError = why
 		if in.agent == "codex" && in.tree != nil {
@@ -298,9 +299,11 @@ func (s *Server) pathNotes(slug, repo, common string) func(string) string {
 // platform goos (config.ThreadSandbox): each entry a rule, all
 // projects' first, those the project drops or that fail their check
 // marked and left out, a rule that doesn't apply there marked skipped;
-// local ports when a table sets them. A config.toml that doesn't load
-// gives no rules and why.
-func sandboxRules(lc launchConfig, slug, goos string) ([]proto.AccessRule, string) {
+// local ports when a table sets them. An excluded command notes whether
+// it asks first; a write folder is its absolute path, refused where no
+// write folder may be (writeFolderRefused: tmHome is tm's folder). A
+// config.toml that doesn't load gives no rules and why.
+func sandboxRules(lc launchConfig, slug, goos, tmHome string) ([]proto.AccessRule, string) {
 	if lc.err != nil {
 		return nil, fmt.Sprintf("project %s: sandbox rules left out, the thread starts without them (fix config.toml: tm settings, Access tab): %v", slug, lc.err)
 	}
@@ -321,6 +324,7 @@ func sandboxRules(lc launchConfig, slug, goos string) ([]proto.AccessRule, strin
 	kinds := map[string][2]string{
 		config.SandboxHosts:    {proto.AccessInside, proto.AccessHost},
 		config.SandboxGuides:   {proto.AccessBrief, proto.AccessGuide},
+		config.SandboxWrite:    {proto.AccessInside, proto.AccessWriteFolder},
 		config.SandboxExcluded: {proto.AccessOutside, proto.AccessExcluded},
 		config.SandboxAllow:    {proto.AccessPrompts, proto.AccessAllow},
 	}
@@ -337,6 +341,24 @@ func sandboxRules(lc launchConfig, slug, goos string) ([]proto.AccessRule, strin
 		case r.Replaced:
 			rule.Note = slug + "'s own list replaces all projects'"
 		}
+		switch r.Key {
+		case config.SandboxExcluded:
+			if rule.Note == "" {
+				rule.Note = proto.AccessAsksFirst
+				if r.NoAsk {
+					rule.Note = proto.AccessWithoutAsking
+				}
+			}
+		case config.SandboxWrite:
+			// By its absolute path, as written in the note.
+			if rule.Note == "" {
+				rule.Note = r.Value
+			}
+			rule.Value = writeFolder(r.Value)
+			if why := writeFolderRefused(slug, rule.Value, tmHome); why != "" && rule.Refused == "" {
+				rule.Refused = why
+			}
+		}
 		out = append(out, rule)
 	}
 	if t.LocalPortsSet {
@@ -349,6 +371,69 @@ func sandboxRules(lc launchConfig, slug, goos string) ([]proto.AccessRule, strin
 		out = append(out, r)
 	}
 	return out, ""
+}
+
+// writeFolder is write folder w (config write) as an absolute path:
+// ~/ from the user's home folder, cleaned.
+func writeFolder(w string) string {
+	if rest, ok := strings.CutPrefix(w, "~/"); ok {
+		home, err := os.UserHomeDir()
+		if err != nil || home == "" {
+			return w
+		}
+		return filepath.Join(home, filepath.FromSlash(rest))
+	}
+	return filepath.Clean(filepath.FromSlash(w))
+}
+
+// writeFolderRefused is why the launch leaves write folder p out, or
+// "": a folder it can't place (no home folder); one that holds or is in
+// tm's folder tmHome (config.toml with it), project slug's folder or one
+// of its repos' git dirs (hooks and config run as you), which no write
+// folder opens (T574 §4.6, case 2); or one whose links lead where no
+// write folder may be (config.CheckWriteFolder of where it lands), as
+// the sandbox would open where it lands too. Compared with their links
+// resolved too.
+func writeFolderRefused(slug, p, tmHome string) string {
+	if !filepath.IsAbs(p) {
+		return "refused: no home folder to place it in"
+	}
+	real := realPath(p)
+	if real != p {
+		if err := config.CheckWriteFolder(filepath.ToSlash(real)); err != nil {
+			return "refused: it leads to " + real + ", which isn't a write folder (" + err.Error() + ")"
+		}
+	}
+	var closed []string
+	if tmHome != "" {
+		closed = append(closed, tmHome)
+	}
+	if d, err := project.Dir(slug); err == nil {
+		closed = append(closed, d)
+	}
+	if proj, err := project.Open(slug); err == nil {
+		for _, repo := range proj.Repos {
+			closed = append(closed, filepath.Join(repo, ".git"))
+		}
+	}
+	for _, c := range withReal(closed) {
+		for _, q := range []string{p, real} {
+			if inside(q, c) || inside(c, q) {
+				return "refused: it holds or is in tm's folder, the project folder or a repository's git dir, which threads never write"
+			}
+		}
+	}
+	return ""
+}
+
+// inside reports whether p is root or below it, case folded where the
+// file system ignores case.
+func inside(p, root string) bool {
+	if caps.CaseFold {
+		p, root = strings.ToLower(p), strings.ToLower(root)
+	}
+	rel, err := filepath.Rel(root, p)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
 // guardRules are the guard's settings for a session of role in project
@@ -470,6 +555,10 @@ func launchAccess(set proto.AccessSet) agent.Access {
 			a.OwnTemp = r.Value
 		case proto.AccessCommand:
 			a.Commands = append(a.Commands, r.Value)
+		case proto.AccessWriteFolder:
+			// Claude's Edit(...) allow (its Bash sandbox writes there too)
+			// and Codex's filesystem write, as the worktree's git dir.
+			a.Write = append(a.Write, withReal([]string{r.Value})...)
 		}
 	}
 	return a
@@ -495,6 +584,7 @@ func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, guides, skipp
 		return lists, nil, []string{set.SandboxError}
 	}
 	said := map[string]bool{}
+	var noAsk []string
 	for _, r := range set.Rules {
 		if r.Where == proto.AccessAgent || r.Dropped {
 			continue
@@ -516,6 +606,9 @@ func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, guides, skipp
 		switch r.Kind {
 		case proto.AccessExcluded:
 			lists.Excluded = append(lists.Excluded, r.Value)
+			if r.Note == proto.AccessWithoutAsking {
+				noAsk = append(noAsk, "Bash("+r.Value+")")
+			}
 		case proto.AccessAllow:
 			lists.Allow = append(lists.Allow, r.Value)
 		case proto.AccessGuide:
@@ -529,13 +622,21 @@ func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, guides, skipp
 			lists.LocalBinding = r.Value == "on"
 		}
 	}
+	// One rule, one choice (T574 case 1): tm writes the allow rule of an
+	// excluded command that runs without asking, after the allow list
+	// (whose old Bash rule may be it already).
+	for _, a := range noAsk {
+		if !slices.Contains(lists.Allow, a) {
+			lists.Allow = append(lists.Allow, a)
+		}
+	}
 	return lists, guides, skipped
 }
 
 // sandboxKindWords name the sandbox rules of a kind in the log.
 var sandboxKindWords = map[string]string{
 	proto.AccessExcluded: "excluded commands", proto.AccessAllow: "allow rules", proto.AccessHost: "hosts",
-	proto.AccessGuide: "guidance texts", proto.AccessLocalPorts: "local ports",
+	proto.AccessGuide: "guidance texts", proto.AccessLocalPorts: "local ports", proto.AccessWriteFolder: "write folders",
 }
 
 // launchFlags are the yolo and escapes the launch gives the agent.

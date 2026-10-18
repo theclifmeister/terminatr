@@ -327,8 +327,9 @@ func (s *Session) AgentState() (st AgentState, ok bool) {
 	}, true
 }
 
-// MarkEscape says the agent's call id asks to run outside its sandbox
-// (the guard asked: rule "escape"), so a permission prompt open while
+// MarkEscape says the agent's call id runs outside its sandbox (the
+// guard asked: rule "escape", or "excluded" for an excluded command that
+// asks first), so a permission prompt open while
 // the call is is the user's to answer. Kept until EndEscape(id), or
 // the turn's end, and then until the screen shows no permission
 // dialog. An id "" is the call's when it has none of its own.
@@ -476,7 +477,7 @@ func (s *Session) Hook(event string, payload map[string]any) (agent.HookResult, 
 	if g := rt.cfg.Guard; g != nil {
 		env.Guard = func(tool string, input map[string]any) *guard.Denial {
 			d := g(tool, input)
-			if d != nil && d.Ask && d.Rule == guard.RuleEscape {
+			if d != nil && d.Ask && (d.Rule == guard.RuleEscape || d.Rule == guard.RuleExcluded) {
 				rt.setEscape(callID, true)
 			}
 			return d

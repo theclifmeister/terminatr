@@ -159,6 +159,7 @@ type SandboxSetting struct {
 var SandboxSettings = map[string]SandboxSetting{
 	SandboxExcluded:   {OS: []string{OSMac, OSLinux, OSWindows}},
 	SandboxAllow:      {OS: []string{OSMac, OSLinux, OSWindows}},
+	SandboxWrite:      {OS: []string{OSMac, OSLinux, OSWindows}, Codex: true},
 	SandboxHosts:      {OS: []string{OSMac}, Codex: true},
 	SandboxGuides:     {OS: []string{OSMac}, Codex: true},
 	SandboxLocalPorts: {OS: []string{OSMac}, Codex: true},

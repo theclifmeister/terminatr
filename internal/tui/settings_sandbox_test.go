@@ -188,16 +188,16 @@ func TestSandboxAllowAll(t *testing.T) {
 	src, m := sandboxData(t)
 	drain(t, m, sandboxRow(t, "", "Allow rules").change(m))
 	keyPress(m, "a")
-	m.top().(*inputView).text = "Bash(npx playwright *)"
+	m.top().(*inputView).text = "WebFetch(domain:playwright.dev)"
 	drain(t, m, keyPress(m, "enter"))
 	keyPress(m, "a")
-	m.top().(*inputView).text = "Bash"
+	m.top().(*inputView).text = "WebFetch"
 	drain(t, m, keyPress(m, "enter"))
-	if !strings.Contains(m.msg, "allows every Bash call") {
+	if !strings.Contains(m.msg, "allows every WebFetch call") {
 		t.Errorf("msg %q", m.msg)
 	}
 	drain(t, m, keyPress(m, "x"))
-	if want := []string{"defaults allow + Bash(npx playwright *)", "defaults allow - Bash(npx playwright *)"}; !slices.Equal(src.sandbox, want) {
+	if want := []string{"defaults allow + WebFetch(domain:playwright.dev)", "defaults allow - WebFetch(domain:playwright.dev)"}; !slices.Equal(src.sandbox, want) {
 		t.Errorf("saved %v", src.sandbox)
 	}
 	c, _ := config.Load()
@@ -243,7 +243,9 @@ func TestAccessTab(t *testing.T) {
 	if strings.Contains(out, "x follow all projects") || strings.Contains(out, "+ - number") {
 		t.Errorf("footer names x or + - on a following row:\n%s", out)
 	}
-	pv.access.sel = 0
+	for range pv.access.rows {
+		keyPress(m, "up")
+	}
 	for _, r := range projectSettings("alpha") {
 		for _, moved := range []string{"Escapes", "Yolo mode", "Coordinator approves", "Guard", "Guard mode", "Secret environment", "Excluded commands", "Allow rules"} {
 			if r.label == moved {
@@ -258,7 +260,9 @@ func TestAccessTab(t *testing.T) {
 	if s, _ := cfg.Safety("alpha"); s.SandboxEscapes {
 		t.Error("escapes still on for alpha")
 	}
-	if out := screen(m); !strings.Contains(lineWith(out, "Escapes"), "never") || !strings.Contains(out, "x follow all projects") {
+	// The row's label may scroll above the popup's top (its help is long):
+	// its value, and the footer offering x.
+	if out := screen(m); pv.access.rows[0].label != "Escapes" || pv.access.rows[0].value(m) != "never" || !strings.Contains(out, "x follow all projects") {
 		t.Errorf("after enter on Escapes:\n%s", out)
 	}
 	// The , popup's third tab is all projects', its workflow rows left
@@ -313,7 +317,7 @@ func TestSandboxTabOS(t *testing.T) {
 		for _, r := range sandboxSettings("alpha", goos) {
 			labels = append(labels, r.label)
 		}
-		if !slices.Equal(labels, []string{"Excluded commands", "Allow rules"}) {
+		if !slices.Equal(labels, []string{"Write folders", "Excluded commands", "Allow rules"}) {
 			t.Errorf("%s: %q", goos, labels)
 		}
 		_, m := sandboxData(t)
@@ -327,8 +331,8 @@ func TestSandboxTabOS(t *testing.T) {
 	for _, r := range rows {
 		labels = append(labels, r.label)
 	}
-	if !slices.Equal(labels, []string{"Network hosts", "Local ports", "Guidance for threads", "Excluded commands", "Allow rules"}) ||
-		rows[0].section != "Inside the sandbox" || rows[3].section != "Outside the sandbox" || rows[4].section != "Permission rules" {
+	if !slices.Equal(labels, []string{"Network hosts", "Local ports", "Guidance for threads", "Write folders", "Excluded commands", "Allow rules"}) ||
+		rows[0].section != "Inside the sandbox" || rows[4].section != "Outside the sandbox" || rows[5].section != "Permission rules" {
 		t.Errorf("macOS rows: %q", labels)
 	}
 }
@@ -463,9 +467,10 @@ func TestPresetAdd(t *testing.T) {
 	}
 }
 
-// TestSandboxCoveredNote: an excluded command an allow rule covers says
-// it runs outside the sandbox without asking, in both lists' views and
-// when added.
+// TestSandboxCoveredNote: an excluded command an allow rule of a file
+// written before covers says it runs outside the sandbox without asking,
+// in both lists' views; a new Bash or Edit rule isn't added (T574 case
+// 1).
 func TestSandboxCoveredNote(t *testing.T) {
 	_, m := sandboxData(t)
 	m.data.Sandbox[""].Lists[config.SandboxAllow] = []string{"Bash(docker compose:*)"}
@@ -478,17 +483,53 @@ func TestSandboxCoveredNote(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "covers the excluded docker compose *") {
 		t.Errorf("allow view:\n%s", out)
 	}
-	keyPress(m, "a")
-	m.top().(*inputView).text = "Bash(docker compose up *)"
-	drain(t, m, keyPress(m, "enter"))
-	if cv, ok := m.top().(*confirmView); ok {
-		t.Errorf("asked for a rule that covers nothing excluded: %q", cv.question)
+	for _, rule := range []string{"Bash(docker *)", "Edit(/tmp/pw/**)"} {
+		keyPress(m, "a")
+		m.top().(*inputView).text = rule
+		drain(t, m, keyPress(m, "enter"))
+		if _, ok := m.top().(*confirmView); ok || !strings.Contains(m.msg, "not added") {
+			t.Errorf("%s: %T, %q", rule, m.top(), m.msg)
+		}
 	}
-	keyPress(m, "a")
-	m.top().(*inputView).text = "Bash(docker *)"
-	drain(t, m, keyPress(m, "enter"))
-	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "covers the excluded docker compose *") {
-		t.Errorf("no covered note before adding: %T", m.top())
+}
+
+// TestSandboxExcludedAsk: an excluded command asks first until w lets it
+// run without asking, which says what that opens first; w again asks
+// first. All projects' entries aren't changed from a project's view.
+func TestSandboxExcludedAsk(t *testing.T) {
+	src, m := sandboxData(t)
+	drain(t, m, sandboxRow(t, "", "Excluded commands").change(m))
+	if out := screen(m); !strings.Contains(out, "asks first") || !strings.Contains(out, "w ask first or not") {
+		t.Errorf("excluded view:\n%s", out)
+	}
+	keyPress(m, "w")
+	cv, ok := m.top().(*confirmView)
+	if !ok || !strings.Contains(cv.question, "run without asking") {
+		t.Fatalf("no question before running without asking: %T", m.top())
+	}
+	drain(t, m, keyPress(m, "y"))
+	if out := screen(m); !strings.Contains(out, "runs without asking") {
+		t.Errorf("after w:\n%s", out)
+	}
+	c, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.ThreadSandbox("alpha").WithoutAsking(); !slices.Equal(got, []string{"docker compose *"}) {
+		t.Errorf("config: %q", got)
+	}
+	drain(t, m, keyPress(m, "w"))
+	if _, ok := m.top().(*confirmView); ok {
+		t.Error("asking first asked")
+	}
+	if c, _ = config.Load(); len(c.ThreadSandbox("alpha").WithoutAsking()) != 0 {
+		t.Errorf("after w again: %q (writes %q)", c.ThreadSandbox("alpha").WithoutAsking(), src.sandbox)
+	}
+	keyPress(m, "esc")
+	drain(t, m, sandboxRow(t, "alpha", "Excluded commands").change(m))
+	keyPress(m, "w")
+	if !strings.Contains(m.msg, "all projects'") {
+		t.Errorf("a project changed all projects' entry: %q", m.msg)
 	}
 }
 

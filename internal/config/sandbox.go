@@ -12,17 +12,20 @@ import (
 
 // The sandbox rules of threads (docs/SPEC.md §5.2, T574 §3): what a
 // thread's sandboxed commands may reach (hosts, local_ports), the
-// guidance its brief gets (guides), the commands its Bash runs outside
-// its sandbox, and the permission rules its agent gets on top of tm's,
-// for a tool the sandbox can't hold. [defaults.sandbox] gives every
+// guidance its brief gets (guides), the folders besides its worktree it
+// writes in (write, sandbox_write.go), the commands its Bash runs
+// outside its sandbox, each asking first or running without asking
+// (sandbox_excluded.go), and the permission rules its agent gets on top
+// of tm's for tools that neither run commands nor write files. [defaults.sandbox] gives every
 // project's threads them; [projects.<slug>.sandbox] adds a project's
 // own, and drops the ones of all projects it doesn't want:
 //
 //	[projects.web.sandbox]
 //	hosts = ["registry.npmjs.org"]
 //	local_ports = true
-//	excluded_commands = ["npx playwright *"]
-//	allow = ["Bash(npx playwright *)"]
+//	write = ["~/src/shared-fixtures"]
+//	excluded_commands = [{ command = "npx playwright *", ask = false }]
+//	allow = ["WebFetch(domain:playwright.dev)"]
 //	drop = ["docker compose *"]
 //
 // tm writes them into a thread's launch settings at each start and
@@ -32,11 +35,18 @@ import (
 // runs with the user's full file and network access, tm's socket
 // included. sandbox_layers.go adds the layers up; an entry that fails
 // its check is refused on its own.
+//
+// One rule sets each thing (T574 §4.6): the allow list takes no new
+// rule that runs commands or writes files (Bash, PowerShell, Edit,
+// Write, MultiEdit, NotebookEdit), which are excluded commands' and
+// write folders'. A file written before still has them, and they still
+// work, until the migration moves them.
 
 // Keys of a sandbox table.
 const (
 	SandboxHosts      = "hosts"
 	SandboxGuides     = "guides"
+	SandboxWrite      = "write"
 	SandboxExcluded   = "excluded_commands"
 	SandboxAllow      = "allow"
 	SandboxLocalPorts = "local_ports"
@@ -44,22 +54,23 @@ const (
 )
 
 // SandboxKeys are a sandbox table's lists, in the Access tab's order.
-var SandboxKeys = []string{SandboxHosts, SandboxGuides, SandboxExcluded, SandboxAllow}
+var SandboxKeys = []string{SandboxHosts, SandboxGuides, SandboxWrite, SandboxExcluded, SandboxAllow}
 
 // rawSandbox is a [projects.<slug>.sandbox] or [defaults.sandbox] table:
 // the lists, local ports, a project's drops, and the preset switches of
 // tm 0.37 and before, read as the rules they unfold into
 // (sandbox_presets.go).
 type rawSandbox struct {
-	Hosts            *[]string `toml:"hosts"`
-	Guides           *[]string `toml:"guides"`
-	ExcludedCommands *[]string `toml:"excluded_commands"`
-	Allow            *[]string `toml:"allow"`
-	LocalPorts       *bool     `toml:"local_ports"`
-	Drop             *[]string `toml:"drop"`
-	BrowserTesting   *bool     `toml:"browser_testing"`
-	BrowserDownloads *bool     `toml:"browser_downloads"`
-	LocalDevServers  *bool     `toml:"local_dev_servers"`
+	Hosts            *[]string     `toml:"hosts"`
+	Guides           *[]string     `toml:"guides"`
+	Write            *[]string     `toml:"write"`
+	ExcludedCommands *excludedList `toml:"excluded_commands"`
+	Allow            *[]string     `toml:"allow"`
+	LocalPorts       *bool         `toml:"local_ports"`
+	Drop             *[]string     `toml:"drop"`
+	BrowserTesting   *bool         `toml:"browser_testing"`
+	BrowserDownloads *bool         `toml:"browser_downloads"`
+	LocalDevServers  *bool         `toml:"local_dev_servers"`
 }
 
 // list is the table's list of key, nil when it doesn't set it.
@@ -72,8 +83,14 @@ func (r *rawSandbox) list(key string) *[]string {
 		return r.Hosts
 	case SandboxGuides:
 		return r.Guides
+	case SandboxWrite:
+		return r.Write
 	case SandboxExcluded:
-		return r.ExcludedCommands
+		if r.ExcludedCommands == nil {
+			return nil
+		}
+		l := r.ExcludedCommands.commands()
+		return &l
 	case SandboxAllow:
 		return r.Allow
 	case SandboxDrop:
@@ -216,6 +233,10 @@ func CheckExcludedCommand(e string) error {
 	if len([]rune(e)) < 2 {
 		return fmt.Errorf("%q is too short for a command: it would match programs by accident", e)
 	}
+	if strings.ContainsAny(e, "()") {
+		// tm writes it into a Bash(...) rule when it runs without asking.
+		return fmt.Errorf("%q has a parenthesis: an excluded command is a plain command, e.g. npx playwright *", e)
+	}
 	if hasExpansion(e) {
 		return fmt.Errorf("%q has a variable: an excluded command is one command, without substitutions", e)
 	}
@@ -255,13 +276,35 @@ func bashRule(what string) string {
 	return what
 }
 
-// CheckSandboxAllow checks one allow rule: Claude's permission rule
-// syntax (Tool or Tool(what), e.g. Bash(npx playwright *)), never one
-// that lets every command run, every file be read or written, or every
-// site be fetched without a prompt: those must name what they are for.
-// Tool names count whatever their case. tm's own deny rules win over
-// it either way.
+// commandTools are the tools whose allow rules run commands without a
+// prompt: the allow list takes none (an excluded command without asking
+// is that rule), nor one of editTools (a write folder is that rule).
+var commandTools = []string{"bash", "powershell"}
+
+// CheckSandboxAllow checks a new allow rule: checkAllowRule's checks,
+// and none for a tool that runs commands or writes files (T574 §4.6,
+// cases 1 and 2), whatever its case.
 func CheckSandboxAllow(e string) error {
+	if err := checkAllowRule(e); err != nil {
+		return err
+	}
+	m := allowRule.FindStringSubmatch(e)
+	switch tool := strings.ToLower(m[1]); {
+	case slices.Contains(commandTools, tool):
+		return fmt.Errorf("%q runs commands, which an allow rule doesn't: a command run outside the sandbox is an excluded command (it asks first, or runs without asking); one inside it needs no rule", e)
+	case slices.Contains(editTools, tool):
+		return fmt.Errorf("%q writes files, which an allow rule doesn't: add the folder to write folders instead (write = [\"~/src/fixtures\"])", e)
+	}
+	return nil
+}
+
+// checkAllowRule checks one allow rule as config.toml may have it:
+// Claude's permission rule syntax (Tool or Tool(what), e.g.
+// WebFetch(domain:playwright.dev)), never one that lets every command
+// run, every file be read or written, or every site be fetched without
+// a prompt: those must name what they are for. Tool names count
+// whatever their case. tm's own deny rules win over it either way.
+func checkAllowRule(e string) error {
 	if err := checkSandboxText(e); err != nil {
 		return err
 	}
@@ -288,21 +331,34 @@ func CheckSandboxAllow(e string) error {
 	return nil
 }
 
-// checkSandboxEntry checks an entry of key's list.
+// checkSandboxEntry checks an entry of key's list as config.toml may
+// have it: an allow rule the list no longer takes too.
 func checkSandboxEntry(key, e string) error {
 	switch key {
 	case SandboxHosts:
 		return CheckHost(e)
 	case SandboxGuides:
 		return CheckGuide(e)
+	case SandboxWrite:
+		return CheckWriteFolder(e)
 	case SandboxExcluded:
 		return CheckExcludedCommand(e)
 	case SandboxAllow:
-		return CheckSandboxAllow(e)
+		return checkAllowRule(e)
 	case SandboxDrop:
 		return checkSandboxText(e)
 	}
 	return fmt.Errorf("unknown sandbox list %q", key)
+}
+
+// CheckNewSandboxEntry checks an entry added to key's list: as Load's
+// users check it, and never an allow rule that runs commands or writes
+// files.
+func CheckNewSandboxEntry(key, e string) error {
+	if key == SandboxAllow {
+		return CheckSandboxAllow(e)
+	}
+	return checkSandboxEntry(key, e)
 }
 
 // CheckSandboxList checks a whole list of key: each entry, none twice.
@@ -344,6 +400,8 @@ func SandboxWarning(key, e string) string {
 		return codeWarning(e)
 	case SandboxHosts:
 		return hostWarning(e)
+	case SandboxWrite:
+		return writeWarning(e)
 	case SandboxAllow:
 	default:
 		return ""
@@ -362,11 +420,21 @@ func SandboxWarning(key, e string) string {
 	case m[2] == "" || strings.Trim(m[2], matchAll) == "":
 		return "allows every " + m[1] + " call without a prompt"
 	case slices.Contains(editTools, tool):
-		return editWarning(m[2])
+		return legacyNote(editWarning(m[2]), "a write folder")
 	case tool == "bash" || tool == "powershell":
-		return codeWarning(bashRule(m[2]))
+		return legacyNote(codeWarning(bashRule(m[2])), "an excluded command running without asking")
 	}
 	return ""
+}
+
+// legacyNote is the warning of an allow rule the list no longer takes,
+// whose job what does now, with its own warning w after it.
+func legacyNote(w, what string) string {
+	out := "allow rules no longer take this kind of rule: " + what + " does this now, and tm's next release moves it there"
+	if w != "" {
+		out += "; it " + w
+	}
+	return out
 }
 
 // startFiles are the file and folder names whose contents start
@@ -410,8 +478,10 @@ func editWarning(path string) string {
 }
 
 // SandboxCovered is the allow rule of allow that lets excluded command
-// e run without a prompt, or "": a Bash rule whose pattern takes e's.
-// The two together run e outside the sandbox without asking.
+// e run without a prompt, or "": a Bash rule whose pattern takes e's (a
+// rule the allow list no longer takes, a file written before has). The
+// two together run e outside the sandbox without asking, as e's own
+// ask = false does.
 func SandboxCovered(e string, allow []string) string {
 	for _, a := range allow {
 		m := allowRule.FindStringSubmatch(a)

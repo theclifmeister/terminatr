@@ -79,6 +79,12 @@ export type Rules = {
   // own rules would let it run: tm answers that prompt for the user
   // only, never for the coordinator (T574 case 6).
   askEscapes?: boolean
+  // The thread's excluded commands that ask first (config
+  // excluded_commands without ask = false), in Claude's Bash rule syntax
+  // ("npx playwright *"): a shell call with a command one matches runs
+  // outside the sandbox, so it is put to the user (rule "excluded"),
+  // even where an allow rule or auto mode would let it run (T574 case 1).
+  askFirst?: readonly string[]
   // The command patterns of the agent's own settings files that run a
   // command outside the sandbox (Claude's sandbox.excludedCommands in
   // ~/.claude and the folder's .claude), with no flag in the call for
@@ -140,6 +146,10 @@ type Tool = { kind: string; syntax?: string; fields: readonly string[]; escape?:
 // sandbox (Rules.askEscapes).
 export const RULE_ESCAPE = 'escape'
 
+// The rule of the guard's question about a call that runs an excluded
+// command that asks first (Rules.askFirst).
+export const RULE_EXCLUDED = 'excluded'
+
 // A refusal: the rule, what the model reads, and a short account for
 // the journal that carries no text of the call beyond a path or branch.
 // With ask it is no refusal but a question: the call is one the guard
@@ -163,7 +173,7 @@ export const off: Rules = { on: false }
 export function rulesOf(text: string): Rules {
   try {
     const r = JSON.parse(text) as Rules
-    return r && typeof r === 'object' && r.on === true && (Array.isArray(r.rules) || Array.isArray(r.mods) || Array.isArray(r.own) || Array.isArray(r.otherTemps) || Array.isArray(r.secretEnv) || Array.isArray(r.floor) || Array.isArray(r.noWrite) || r.askEscapes === true || Array.isArray(r.unsandboxed)) ? r : off
+    return r && typeof r === 'object' && r.on === true && (Array.isArray(r.rules) || Array.isArray(r.mods) || Array.isArray(r.own) || Array.isArray(r.otherTemps) || Array.isArray(r.secretEnv) || Array.isArray(r.floor) || Array.isArray(r.noWrite) || r.askEscapes === true || Array.isArray(r.unsandboxed) || Array.isArray(r.askFirst)) ? r : off
   } catch {
     return off
   }
@@ -172,7 +182,7 @@ export function rulesOf(text: string): Rules {
 // judge is the rule the call of tool with input breaks, or null. The
 // tool is judged by its kind in r.tools, from the fields listed there.
 export function judge(r: Rules, tool: string, input: Record<string, unknown>): Denial | null {
-  if (!r.on || (!r.rules?.length && !r.mods?.length && !r.own?.length && !r.otherTemps?.length && !r.secretEnv?.length && !r.floor?.length && !r.noWrite?.length && !r.askEscapes && !r.unsandboxed?.length)) return null
+  if (!r.on || (!r.rules?.length && !r.mods?.length && !r.own?.length && !r.otherTemps?.length && !r.secretEnv?.length && !r.floor?.length && !r.noWrite?.length && !r.askEscapes && !r.unsandboxed?.length && !r.askFirst?.length)) return null
   const t = r.tools && Object.hasOwn(r.tools, tool) ? r.tools[tool] : undefined
   if (!t) return null
   const values = (t.fields ?? []).map(f => input[f]).filter((v): v is string => typeof v === 'string' && v !== '')
@@ -209,6 +219,16 @@ export function judge(r: Rules, tool: string, input: Record<string, unknown>): D
       }
       if (!ask && r.askEscapes && t.escape && input[t.escape] === true) {
         ask = { rule: RULE_ESCAPE, ask: true, summary: 'a command outside the sandbox', message: 'terminatr guard: this command asks to run outside the sandbox, so the user answers it.' }
+      }
+      if (!ask && !t.syntax) {
+        for (const c of values) {
+          const p = askFirst(r, c)
+          if (p !== '') {
+            // p passed config's checks: one line of plain text.
+            ask = { rule: RULE_EXCLUDED, ask: true, summary: 'an excluded command that asks first', message: `terminatr guard: this command runs outside the sandbox (excluded command ${p}), and the user set it to ask first.` }
+            break
+          }
+        }
       }
       return ask
     }
@@ -291,6 +311,34 @@ function allows(r: Rules, rule: string, subject: string, path: boolean): boolean
 function without(r: Rules, rule: string): Rules {
   if (rule.startsWith('mod:')) return { ...r, mods: (r.mods ?? []).filter(m => `mod:${m.mod}.${m.id}` !== rule) }
   return { ...r, rules: (r.rules ?? []).filter(id => id !== rule) }
+}
+
+// askFirst is the excluded command of r.askFirst that a command of line
+// matches, or '': the line, or one of its simple commands as written or
+// without its env assignments and wrappers. Claude runs a line outside
+// the sandbox only when each of its commands matches an excluded one;
+// one is enough here, so a prompt comes whenever one might run outside.
+function askFirst(r: Rules, line: string): string {
+  if (!r.askFirst?.length) return ''
+  const texts = [line.trim()]
+  for (const words of commands(line)) {
+    texts.push(words.join(' '))
+    const argv = strip(words)
+    if (argv.length > 0) texts.push(argv.join(' '))
+  }
+  for (const p of r.askFirst) {
+    if (texts.some(s => excludedMatch(p, s))) return p
+  }
+  return ''
+}
+
+// excludedMatch: command s fits excluded command p as Claude matches it,
+// a * matching any run of characters and a trailing " *" (or the prefix
+// form ":*") no arguments too.
+function excludedMatch(p: string, s: string): boolean {
+  if (p.endsWith(':*')) p = p.slice(0, -2) + ' *'
+  if (p.endsWith(' *') && s === p.slice(0, -2)) return true
+  return globMatch(p, s)
 }
 
 // globMatch: s is pattern, a * in it matching any run of characters.

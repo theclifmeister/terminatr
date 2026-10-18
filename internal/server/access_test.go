@@ -32,6 +32,7 @@ func wantSandbox(l launchConfig, slug, goos string) (lists agent.SandboxLists, g
 	kind := map[string]string{config.SandboxHosts: "host", config.SandboxGuides: "guide", config.SandboxExcluded: "excluded", config.SandboxAllow: "allow"}
 	words := map[string]string{config.SandboxHosts: "hosts", config.SandboxGuides: "guidance texts", config.SandboxExcluded: "excluded commands", config.SandboxAllow: "allow rules"}
 	said := map[string]bool{}
+	var noAsk []string
 	skip := func(key, what string) bool {
 		if config.SandboxApplies(key, goos) {
 			return false
@@ -54,8 +55,18 @@ func wantSandbox(l launchConfig, slug, goos string) (lists agent.SandboxLists, g
 			guides = append(guides, r.Value)
 		case r.Key == config.SandboxExcluded:
 			lists.Excluded = append(lists.Excluded, r.Value)
+			if r.NoAsk {
+				noAsk = append(noAsk, "Bash("+r.Value+")")
+			}
 		case r.Key == config.SandboxAllow:
 			lists.Allow = append(lists.Allow, r.Value)
+		}
+	}
+	// An excluded command that runs without asking: its allow rule, after
+	// the list's, once.
+	for _, a := range noAsk {
+		if !slices.Contains(lists.Allow, a) {
+			lists.Allow = append(lists.Allow, a)
 		}
 	}
 	if t.LocalPortsSet && !skip(config.SandboxLocalPorts, "local ports") {
@@ -265,6 +276,7 @@ browser_downloads = true
 local_dev_servers = true
 excluded_commands = ["npx playwright *"]
 allow = ["WebFetch(domain:playwright.dev)"]
+write = ["~/src/fixtures"]
 `)
 	lc := loadLaunchConfig()
 	set, err := s.resolveAccess(accessInput{role: proto.RoleThread, slug: "demo", agent: "claude", goos: config.OSMac, yolo: true}, lc)
@@ -276,7 +288,7 @@ allow = ["WebFetch(domain:playwright.dev)"]
 		seen[r.Kind] = true
 		want := ""
 		switch r.Kind {
-		case proto.AccessExcluded, proto.AccessHost, proto.AccessLocalPorts, proto.AccessPreset, proto.AccessGuide, proto.AccessEscapes:
+		case proto.AccessExcluded, proto.AccessHost, proto.AccessLocalPorts, proto.AccessGuide, proto.AccessWriteFolder, proto.AccessEscapes:
 			want = proto.AccessYoloNoSandbox
 		case proto.AccessGuardMode, proto.AccessGuardRuleOff:
 			want = proto.AccessYoloFloor
@@ -291,7 +303,7 @@ allow = ["WebFetch(domain:playwright.dev)"]
 			t.Errorf("guard row note %q", r.Note)
 		}
 	}
-	for _, k := range []string{proto.AccessExcluded, proto.AccessHost, proto.AccessAllow, proto.AccessGuardMode, proto.AccessGuardRuleOff} {
+	for _, k := range []string{proto.AccessExcluded, proto.AccessHost, proto.AccessGuide, proto.AccessWriteFolder, proto.AccessAllow, proto.AccessGuardMode, proto.AccessGuardRuleOff} {
 		if !seen[k] {
 			t.Errorf("no %s rule", k)
 		}

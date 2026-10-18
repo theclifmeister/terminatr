@@ -64,6 +64,10 @@ func guardDecide(who caller.Caller, home string, e guardlog.Entry, how string, t
 	if e.Floor {
 		return "", errors.New("the guard never allows this one: keep refusing it")
 	}
+	if e.Rule == "worktree-only" && e.Path {
+		// One rule for a folder besides the worktree (T574 case 2).
+		return "", errors.New("a write outside the worktree is allowed by a write folder now (Access, Write folders), for the guard and the sandbox alike: add its folder there")
+	}
 	// The call the user saw, exactly: a * in it is the call's own, not a
 	// wildcard.
 	a := config.GuardAllow{Rule: e.Rule, Exact: true}

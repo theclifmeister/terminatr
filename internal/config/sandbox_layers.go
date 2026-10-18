@@ -32,11 +32,22 @@ var ReplaceKeys = []string{SandboxExcluded, SandboxAllow}
 // local ports when it sets them. The old preset switches it still has
 // read as the rules they unfold into. Replaces are the ReplaceKeys a
 // project's table sets, an empty list too: its own list of each
-// replaces all projects'.
+// replaces all projects'. NoAsk are the table's excluded commands that
+// run without asking (ask = false); the others ask first.
 type SandboxTable struct {
 	Lists      map[string][]string
 	LocalPorts *bool
 	Replaces   []string
+	NoAsk      []string
+}
+
+// SetAsk makes the table's excluded command v ask first, or run without
+// asking.
+func (t *SandboxTable) SetAsk(v string, ask bool) {
+	t.NoAsk = slices.DeleteFunc(slices.Clone(t.NoAsk), func(x string) bool { return x == v })
+	if !ask {
+		t.NoAsk = append(t.NoAsk, v)
+	}
 }
 
 // Replacing reports whether the table's list of key replaces all
@@ -67,6 +78,14 @@ func StartOwnLists(all, before SandboxTable, next *SandboxTable) {
 		if added := next.Lists[k]; len(added) > 0 && !next.Replacing(k) {
 			delete(next.Lists, k)
 			next.OwnList(k, given.Given(k))
+			if k == SandboxExcluded {
+				// Each keeps whether it asks first.
+				for _, r := range given.Rules {
+					if r.Key == k && r.Given() && r.NoAsk && !slices.Contains(next.NoAsk, r.Value) {
+						next.NoAsk = append(next.NoAsk, r.Value)
+					}
+				}
+			}
 			for _, v := range added {
 				next.Add(k, v)
 			}
@@ -78,6 +97,9 @@ func StartOwnLists(all, before SandboxTable, next *SandboxTable) {
 // projects' again.
 func (t *SandboxTable) Follow(key string) {
 	delete(t.Lists, key)
+	if key == SandboxExcluded {
+		t.NoAsk = nil
+	}
 	t.Replaces = slices.DeleteFunc(slices.Clone(t.Replaces), func(k string) bool { return k == key })
 }
 
@@ -96,6 +118,9 @@ func (t *SandboxTable) Add(key, v string) {
 
 // Remove takes v out of the table's list of key.
 func (t *SandboxTable) Remove(key, v string) {
+	if key == SandboxExcluded {
+		t.SetAsk(v, true)
+	}
 	l := slices.DeleteFunc(slices.Clone(t.Lists[key]), func(e string) bool { return e == v })
 	if len(l) == 0 {
 		delete(t.Lists, key)
@@ -125,6 +150,7 @@ func (t SandboxTable) Clone() SandboxTable {
 		out.LocalPorts = &on
 	}
 	out.Replaces = slices.Clone(t.Replaces)
+	out.NoAsk = slices.Clone(t.NoAsk)
 	return out
 }
 
@@ -145,6 +171,9 @@ func (r *rawSandbox) table(project bool) SandboxTable {
 	if r.LocalPorts != nil {
 		on := *r.LocalPorts
 		t.LocalPorts = &on
+	}
+	if r.ExcludedCommands != nil {
+		t.NoAsk = r.ExcludedCommands.withoutAsking()
 	}
 	for _, k := range ReplaceKeys {
 		if project && r.list(k) != nil {
@@ -192,6 +221,10 @@ type SandboxRule struct {
 	Replaced bool
 	// Refused is why the entry fails its check; not given.
 	Refused string
+	// NoAsk: an excluded command that runs without asking, by its
+	// table's ask = false or an allow rule of a file written before that
+	// covers it; the others ask first.
+	NoAsk bool
 }
 
 // Given reports whether threads get the rule.
@@ -214,6 +247,18 @@ func (t ThreadSandbox) Given(key string) []string {
 	var out []string
 	for _, r := range t.Rules {
 		if r.Key == key && r.Given() {
+			out = append(out, r.Value)
+		}
+	}
+	return out
+}
+
+// WithoutAsking are the excluded commands threads get that run without
+// asking; the others they get ask first.
+func (t ThreadSandbox) WithoutAsking() []string {
+	var out []string
+	for _, r := range t.Rules {
+		if r.Key == SandboxExcluded && r.Given() && r.NoAsk {
 			out = append(out, r.Value)
 		}
 	}
@@ -261,13 +306,23 @@ func MergeSandbox(all, own SandboxTable) ThreadSandbox {
 	for _, k := range SandboxKeys {
 		replaced := own.Replacing(k)
 		for _, v := range all.Lists[k] {
-			out.Rules = append(out.Rules, SandboxRule{Key: k, Value: v, Dropped: slices.Contains(drops, v), Replaced: replaced, Refused: refused(k, v)})
+			out.Rules = append(out.Rules, SandboxRule{Key: k, Value: v, Dropped: slices.Contains(drops, v), Replaced: replaced, Refused: refused(k, v),
+				NoAsk: k == SandboxExcluded && slices.Contains(all.NoAsk, v)})
 		}
 		for _, v := range own.Lists[k] {
 			if !replaced && slices.Contains(all.Lists[k], v) && !slices.Contains(drops, v) {
 				continue // all projects give it already
 			}
-			out.Rules = append(out.Rules, SandboxRule{Key: k, Value: v, Own: true, Refused: refused(k, v)})
+			out.Rules = append(out.Rules, SandboxRule{Key: k, Value: v, Own: true, Refused: refused(k, v),
+				NoAsk: k == SandboxExcluded && slices.Contains(own.NoAsk, v)})
+		}
+	}
+	// An allow rule of a file written before that covers an excluded
+	// command lets it run without asking, as it did.
+	allow := out.Given(SandboxAllow)
+	for i := range out.Rules {
+		if r := &out.Rules[i]; r.Key == SandboxExcluded && SandboxCovered(r.Value, allow) != "" {
+			r.NoAsk = true
 		}
 	}
 	switch {
@@ -370,11 +425,24 @@ func EditSandbox(table string, fn func(*SandboxTable) error) error {
 				if before.Has(k, e) {
 					continue // the file had it: refused where used, removable here
 				}
-				if err := checkSandboxEntry(k, e); err != nil {
+				if err := CheckNewSandboxEntry(k, e); err != nil {
 					return nil, err
 				}
 			}
 			old := r.list(k)
+			if k == SandboxExcluded && (len(l) > 0 || project && next.Replacing(k)) {
+				// Its entries keep whether they ask first.
+				var was []ExcludedCommand
+				if r != nil && r.ExcludedCommands != nil {
+					was = *r.ExcludedCommands
+				}
+				if now := excludedOf(l, next.NoAsk); old == nil || !slices.Equal(was, now) {
+					if data, err = Edit(data, t, k, now); err != nil {
+						return nil, err
+					}
+				}
+				continue
+			}
 			set := len(l) > 0 || project && next.Replacing(k) // an own empty list replaces too
 			switch {
 			case !set && old == nil:

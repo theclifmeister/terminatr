@@ -34,6 +34,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
+	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
 
@@ -134,16 +135,21 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 	// A thread's escapes, which its sandbox lets it ask for, are the
 	// user's to answer, the guard on or off (T574 case 6).
 	askEscapes := r.Role == proto.RoleThread && !r.Yolo && !r.NoSandboxEscapes
+	// So are its excluded commands that ask first (T574 case 1).
+	var askFirst []string
+	if r.Role == proto.RoleThread && !r.Yolo {
+		askFirst = s.askFirst(r, lc)
+	}
 	if !set.Guard {
-		if !askEscapes {
+		if !askEscapes && len(askFirst) == 0 {
 			return GuardRules{}
 		}
 		// Off: no rule and no floor (Floor nil says so), only the
-		// question about escapes.
+		// questions about escapes and excluded commands.
 		s.mu.Lock()
 		reg := s.agents
 		s.mu.Unlock()
-		return GuardRules{On: true, Role: r.Role, Cwd: r.Cwd, CaseFold: caps.CaseFold, Tools: agent.GuardTools(reg, r.Agent), AskEscapes: true}
+		return GuardRules{On: true, Role: r.Role, Cwd: r.Cwd, CaseFold: caps.CaseFold, Tools: agent.GuardTools(reg, r.Agent), AskEscapes: askEscapes, AskFirst: askFirst}
 	}
 	home, _ := os.UserHomeDir()
 	g := GuardRules{On: true, Role: r.Role, Home: home, Cwd: r.Cwd, CaseFold: caps.CaseFold,
@@ -163,7 +169,7 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		g.Floor = append(g.Floor, "merge")
 	}
 	g.NoWrite = s.guardNoWrite(r)
-	g.AskEscapes = askEscapes
+	g.AskEscapes, g.AskFirst = askEscapes, askFirst
 	if s.opts.Paths.Home != "" {
 		g.Worktrees = realPath(filepath.Join(s.opts.Paths.Home, "worktrees"))
 	}
@@ -198,6 +204,7 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 			dirs = append(dirs, d) // its own temp folder (T587)
 		}
 		dirs = append(dirs, agent.GuardWritable(reg, r.Agent, home, os.Getenv)...)
+		dirs = append(dirs, writeFolders(lc, r.Project, s.opts.Paths.Home)...)
 		g.Writable = withReal(dirs)
 		g.GitConfig = withReal(threadGitConfig(r))
 	}
@@ -225,6 +232,46 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		g.Mods = s.guardMods(r, home)
 	}
 	return g
+}
+
+// askFirst are the excluded commands thread session r asks first about
+// (T574 case 1): those of the project's that ask first now, and those
+// that asked first when it launched (its launch record), which its
+// launch settings still run outside the sandbox though config.toml no
+// longer lists them. Only for an agent that gets excluded commands
+// (Claude's); none when its lists are dropped.
+func (s *Server) askFirst(r SessionRecord, lc launchConfig) []string {
+	var out []string
+	add := func(rules []proto.AccessRule) {
+		for _, x := range rules {
+			if x.Kind == proto.AccessExcluded && x.Note == proto.AccessAsksFirst && x.Given() && !slices.Contains(out, x.Value) &&
+				(len(x.Agents) == 0 || slices.Contains(x.Agents, r.Agent)) {
+				out = append(out, x.Value)
+			}
+		}
+	}
+	rules, _ := sandboxRules(lc, r.Project, caps.OS, s.opts.Paths.Home)
+	add(rules)
+	if p, err := project.Open(r.Project); err == nil && thread.ValidID(r.Thread) {
+		if set, ok := readLaunchRecord(p, r.Thread); ok {
+			add(set.Rules)
+		}
+	}
+	return out
+}
+
+// writeFolders are project slug's write folders the guard lets file
+// tools write in (config write, live): absolute, without those the
+// launch leaves out.
+func writeFolders(lc launchConfig, slug, tmHome string) []string {
+	rules, _ := sandboxRules(lc, slug, caps.OS, tmHome)
+	var out []string
+	for _, r := range rules {
+		if r.Kind == proto.AccessWriteFolder && r.Given() {
+			out = append(out, r.Value)
+		}
+	}
+	return out
 }
 
 // agentOf is reg's agent name, nil for none.

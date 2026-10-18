@@ -58,10 +58,15 @@ func TestGuardSettingRows(t *testing.T) {
 	if !ok {
 		t.Fatalf("rules view: %T", m.top())
 	}
-	for range 5 {
+	// worktree-only is listed only while off: write folders are its
+	// on and off (T574 case 8).
+	if slices.Contains(rv.ids(m), "worktree-only") {
+		t.Errorf("worktree-only listed while on: %q", rv.ids(m))
+	}
+	for range 4 {
 		keyPress(m, "down")
 	}
-	if config.GuardRules[rv.sel] != "credentials" {
+	if rv.ids(m)[rv.sel] != "credentials" {
 		t.Fatalf("sel %d", rv.sel)
 	}
 	drain(t, m, keyPress(m, "enter"))
@@ -264,9 +269,13 @@ func TestGuardDecide(t *testing.T) {
 		t.Errorf("twice %+v", s.GuardAllow)
 	}
 	// All projects'.
-	f, _, _ := guardlog.Record(home, guardlog.Entry{Project: "demo", Rule: "worktree-only", Tool: "Write", Subject: "/y/a.go", Path: true}, time.Now())
+	f, _, _ := guardlog.Record(home, guardlog.Entry{Project: "demo", Rule: "credentials", Tool: "Read", Subject: "/y/a.go", Path: true}, time.Now())
 	if _, err := guardDecide(who, home, f, guardAllowAll, tell); err != nil {
 		t.Fatal(err)
+	}
+	// A write outside the worktree: a write folder allows that now.
+	if _, err := guardDecide(who, home, guardlog.Entry{Project: "demo", Rule: "worktree-only", Tool: "Write", Subject: "/y/b.go", Path: true}, guardAllowHere, tell); err == nil || !strings.Contains(err.Error(), "write folder") {
+		t.Errorf("worktree-only path allowance: %v", err)
 	}
 	c, _ = config.Load()
 	if all, _ := c.AllProjects(); len(all.GuardAllow) != 2 || all.GuardAllow[1].Path != "/y/a.go" {

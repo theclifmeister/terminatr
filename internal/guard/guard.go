@@ -100,6 +100,13 @@ type Rules struct {
 	// where the agent's own rules would let it run: tm answers that
 	// prompt for the user only, never for the coordinator (T574 case 6).
 	AskEscapes bool `json:"askEscapes,omitempty"`
+	// AskFirst are the thread's excluded commands that ask first
+	// (config excluded_commands without ask = false), in Claude's Bash
+	// rule syntax ("npx playwright *"): a shell call with a command one
+	// matches runs outside the sandbox, so it is put to the user (rule
+	// "excluded"), even where an allow rule or auto mode would let it run
+	// (T574 case 1).
+	AskFirst []string `json:"askFirst,omitempty"`
 	// Unsandboxed are the command patterns of the agent's own settings
 	// files that run a command outside the sandbox (Claude's
 	// sandbox.excludedCommands in ~/.claude and the folder's .claude),
@@ -190,6 +197,10 @@ const RuleTempFolders = "temp-folders"
 // to leave the sandbox (Rules.AskEscapes).
 const RuleEscape = "escape"
 
+// RuleExcluded is the rule of the guard's question about a call that
+// runs an excluded command that asks first (Rules.AskFirst).
+const RuleExcluded = "excluded"
+
 // SyntaxPowerShell marks a shell tool whose command lines are PowerShell.
 const SyntaxPowerShell = "powershell"
 
@@ -246,7 +257,7 @@ const learnNote = " The user reviews refused calls: if they allow this one, you 
 // Judge is the rule the call of tool with input breaks, or nil. The
 // tool is judged by its kind in r.Tools, from the fields listed there.
 func (r Rules) Judge(tool string, input map[string]any) *Denial {
-	if !r.On || len(r.Rules) == 0 && len(r.Mods) == 0 && len(r.Own) == 0 && len(r.OtherTemps) == 0 && len(r.SecretEnv) == 0 && len(r.Floor) == 0 && len(r.NoWrite) == 0 && !r.AskEscapes && len(r.Unsandboxed) == 0 {
+	if !r.On || len(r.Rules) == 0 && len(r.Mods) == 0 && len(r.Own) == 0 && len(r.OtherTemps) == 0 && len(r.SecretEnv) == 0 && len(r.Floor) == 0 && len(r.NoWrite) == 0 && !r.AskEscapes && len(r.Unsandboxed) == 0 && len(r.AskFirst) == 0 {
 		return nil
 	}
 	t, ok := r.Tools[tool]
@@ -288,6 +299,16 @@ func (r Rules) Judge(tool string, input map[string]any) *Denial {
 		if ask == nil && r.AskEscapes && t.Escape != "" && input[t.Escape] == true {
 			ask = &Denial{Rule: RuleEscape, Ask: true, Summary: "a command outside the sandbox",
 				Message: "terminatr guard: this command asks to run outside the sandbox, so the user answers it."}
+		}
+		if ask == nil && t.Syntax == "" {
+			for _, c := range values {
+				if p := r.askFirst(c); p != "" {
+					// p passed config's checks: one line of plain text.
+					ask = &Denial{Rule: RuleExcluded, Ask: true, Summary: "an excluded command that asks first",
+						Message: "terminatr guard: this command runs outside the sandbox (excluded command " + p + "), and the user set it to ask first."}
+					break
+				}
+			}
 		}
 		return ask
 	case KindWrite:
@@ -468,6 +489,45 @@ func globMatch(pattern, s string) bool {
 		s = s[i+len(p):]
 	}
 	return len(s) >= len(last) && strings.HasSuffix(s, last)
+}
+
+// askFirst is the excluded command of AskFirst that a command of line
+// matches, or "": the line, or one of its simple commands as written or
+// without its env assignments and wrappers. Claude runs a line outside
+// the sandbox only when each of its commands matches an excluded one;
+// one is enough here, so a prompt comes whenever one might run outside.
+func (r Rules) askFirst(line string) string {
+	if len(r.AskFirst) == 0 {
+		return ""
+	}
+	texts := []string{strings.TrimSpace(line)}
+	for _, words := range Commands(line) {
+		texts = append(texts, strings.Join(words, " "))
+		if argv := strip(words); len(argv) > 0 {
+			texts = append(texts, strings.Join(argv, " "))
+		}
+	}
+	for _, p := range r.AskFirst {
+		for _, s := range texts {
+			if excludedMatch(p, s) {
+				return p
+			}
+		}
+	}
+	return ""
+}
+
+// excludedMatch: command s fits excluded command p as Claude matches
+// it, a * matching any run of characters and a trailing " *" (or the
+// prefix form ":*") no arguments too.
+func excludedMatch(p, s string) bool {
+	if q, ok := strings.CutSuffix(p, ":*"); ok {
+		p = q + " *"
+	}
+	if q, ok := strings.CutSuffix(p, " *"); ok && s == q {
+		return true
+	}
+	return globMatch(p, s)
 }
 
 // floor marks d as a refusal no allowance lifts.

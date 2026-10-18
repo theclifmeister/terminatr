@@ -25,7 +25,7 @@ import (
 var guardRuleWords = map[string]struct{ label, help string }{
 	"force-push":    {"Force-pushing", "No force-push, to any branch. Off, a force-push to a protected branch is still refused."},
 	"push-default":  {"Pushing to the default branch", "Nothing is pushed straight to main, master or a repository's default branch: work lands through a pull request."},
-	"worktree-only": {"Threads write only in their worktree", "A thread's file tools and commands write only inside its worktree and the temporary folders."},
+	"worktree-only": {"Threads write only in their worktree", "Off in config.toml. A thread's file tools write only inside its worktree, the temporary folders and its write folders (Access, Write folders), which open a folder besides it: on again, it leaves this list."},
 	"delete-branch": {"Deleting branches and worktrees", "No agent deletes a branch, a worktree or a repository; tm cleans them up once the work has merged."},
 	"merge":         {"Threads merging", "A thread never merges a pull request while the coordinator merges them; off, still refused (set who merges instead)."},
 	"credentials":   {"Reading credentials", "No agent reads credential files, the keychain or tokens, or prints the environment."},
@@ -136,20 +136,34 @@ func (sr safetyRows) guardRefusalsRow() setting {
 }
 
 // guardRulesView lists the guard's rules, one to turn on or off with
-// enter; each change is saved at once.
+// enter; each change is saved at once. worktree-only is listed only
+// while it is off (T574 case 8): write folders open a folder besides the
+// worktree, for the guard and the sandbox alike.
 type guardRulesView struct {
 	sr  safetyRows
 	sel int
 }
 
+// ids are the rules the view lists.
+func (v *guardRulesView) ids(m *dash) []string {
+	off := v.sr.safety(m).GuardOff
+	return slices.DeleteFunc(slices.Clone(config.GuardRules), func(id string) bool {
+		return id == "worktree-only" && !slices.Contains(off, id)
+	})
+}
+
 func (v *guardRulesView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
+	ids := v.ids(m)
 	switch k.String() {
 	case "esc", "q":
 		m.pop()
 	case "up", "k", "down", "j":
-		v.sel = moveSel(v.sel, scrollKeys[k.String()], len(config.GuardRules))
+		v.sel = moveSel(v.sel, scrollKeys[k.String()], len(ids))
 	case "enter", "space", " ":
-		id := config.GuardRules[v.sel]
+		if v.sel >= len(ids) {
+			return nil
+		}
+		id := ids[v.sel]
 		off := slices.Clone(v.sr.safety(m).GuardOff)
 		msg := guardRuleWord(id) + ": refused " + v.sr.forWho
 		if i := slices.Index(off, id); i >= 0 {
@@ -171,7 +185,7 @@ func (v *guardRulesView) render(m *dash) string {
 	off := v.sr.safety(m).GuardOff
 	var lines []string
 	sel := 0
-	for i, id := range config.GuardRules {
+	for i, id := range v.ids(m) {
 		mark, word := ic().todoDone, "refused"
 		if slices.Contains(off, id) {
 			mark, word = ic().todoOpen, "off"

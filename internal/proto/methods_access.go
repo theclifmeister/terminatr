@@ -50,7 +50,8 @@ const (
 	AccessLocalPorts   = "local-ports"   // sandboxed commands may listen on and reach localhost
 	AccessHost         = "host"          // a host sandboxed commands may reach
 	AccessGuide        = "guide"         // guidance in the brief
-	AccessExcluded     = "excluded"      // a command run outside the sandbox
+	AccessExcluded     = "excluded"      // a command run outside the sandbox; note AccessAsksFirst or AccessWithoutAsking
+	AccessWriteFolder  = "write-folder"  // a write folder (config write): value its absolute path, note as written
 	AccessAllow        = "allow"         // a permission rule on top of tm's
 	AccessDeny         = "deny"          // a permission rule refusing (agent files)
 	AccessEscapes      = "escapes"       // sandbox_escapes: on or off
@@ -77,6 +78,13 @@ const (
 const (
 	AccessYoloNoSandbox = "yolo is on: the sandbox is off"
 	AccessYoloFloor     = "floor only: yolo is on"
+)
+
+// An excluded command's note: whether it asks first (the guard asks)
+// or runs without asking (tm writes its allow rule).
+const (
+	AccessAsksFirst     = "asks first"
+	AccessWithoutAsking = "without asking"
 )
 
 // AccessSettingsNote is the note of the rule that names the human's
@@ -124,8 +132,9 @@ type AccessRule struct {
 // Same says whether r and o give a launch the same, wherever each was
 // read and whichever table set it.
 func (r AccessRule) Same(o AccessRule) bool {
+	// An excluded command's note is its choice to ask first.
 	return r.Where == o.Where && r.Kind == o.Kind && r.Value == o.Value && r.Skipped == o.Skipped &&
-		r.Dropped == o.Dropped && r.Refused == o.Refused
+		r.Dropped == o.Dropped && r.Refused == o.Refused && (r.Kind != AccessExcluded || r.Note == o.Note)
 }
 
 // Given reports whether a launch gives the rule: not one left out

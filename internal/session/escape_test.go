@@ -69,6 +69,7 @@ func TestEscapeHook(t *testing.T) {
 		want    bool
 	}{
 		{"escape", guard.RuleEscape, false, true},
+		{"excluded asks first", guard.RuleExcluded, false, true},
 		{"unknown", "unknown", false, false},
 		{"every prompt", "", true, true},
 	} {
