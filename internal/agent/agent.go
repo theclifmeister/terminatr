@@ -113,17 +113,22 @@ type Access struct {
 // and the permission rules it gets on top of tm's (Allow: "Bash(npx
 // playwright *)"), and what its presets open inside it: LocalBinding
 // lets its sandboxed commands listen on and reach localhost (a dev
-// server; Claude's allowLocalBinding, Codex's allow_local_binding). The
-// server fills in only what applies on its platform. An agent with
-// nothing to map the lists to says so in its launch's Warnings.
+// server; Claude's allowLocalBinding, Codex's allow_local_binding), and
+// Domains are hosts they may reach (Claude's allowedDomains; a Codex
+// thread's network is open already). The server fills in only what
+// applies on its platform. An agent with nothing to map the lists to
+// says so in its launch's Warnings.
 type SandboxLists struct {
 	Excluded     []string
 	Allow        []string
 	LocalBinding bool
+	Domains      []string
 }
 
 // Empty reports whether the lists open nothing.
-func (s SandboxLists) Empty() bool { return len(s.Excluded)+len(s.Allow) == 0 && !s.LocalBinding }
+func (s SandboxLists) Empty() bool {
+	return len(s.Excluded)+len(s.Allow)+len(s.Domains) == 0 && !s.LocalBinding
+}
 
 // Lists reports whether it has excluded commands or allow rules.
 func (s SandboxLists) Lists() bool { return len(s.Excluded)+len(s.Allow) > 0 }

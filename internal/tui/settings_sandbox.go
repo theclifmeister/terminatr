@@ -37,6 +37,13 @@ const sandboxBoth = "An excluded command that an allow rule also covers runs out
 // preset with it is turned on.
 const sandboxLocal = "A thread can then connect to every service listening on a local port (databases, Docker over TCP, Chrome's debug port, IDE extensions) and can take a port another program expects. It may also listen on ports, which macOS's sandbox doesn't limit to localhost. A service that runs commands lets the thread out of the sandbox."
 
+// sandboxDownloads is what browser testing's download hosts open, put to
+// the human before it is turned on.
+var sandboxDownloads = "It opens " + strings.Join(config.BrowserDomains, ", ") + " to every command a thread runs, not only npm's and Playwright's. storage.googleapis.com is every Google Cloud Storage bucket's host: a thread's commands can download from, or send your files to, any bucket there."
+
+// sandboxConfirm is what turning on a preset puts to the human first.
+var sandboxConfirm = map[string]string{config.SandboxBrowser: sandboxDownloads, config.SandboxDevServers: sandboxLocal}
+
 // sandboxGuide heads the Sandbox tab.
 const sandboxGuide = "Prefer a preset: the thread's commands stay inside the sandbox, opened only as far as the tool needs. Excluded commands (Advanced) run outside it: a last resort. " + sandboxBoth
 
@@ -54,8 +61,8 @@ var sandboxLists = map[string]struct{ label, help, about, example string }{
 
 // sandboxPresets are each preset's row label and help.
 var sandboxPresets = map[string]struct{ label, help string }{
-	config.SandboxBrowser: {"Browser testing (Playwright, Chromium)",
-		"Playwright and other Chromium tools inside the sandbox: threads are told to launch the headless shell in one process (--single-process), the one Chromium that starts in macOS's sandbox, and no local ports are opened: to test against a local dev server, turn on Local dev servers too. Full Chrome and headed runs still need an excluded command (Advanced)."},
+	config.SandboxBrowser: {"Browser testing (Playwright, Chromium, downloads)",
+		"Playwright and other Chromium tools inside the sandbox: threads are told to launch the headless shell in one process (--single-process), the one Chromium that starts in macOS's sandbox, and get a ready playwright.sandbox.config.ts. npm installs and Playwright's browser downloads work: " + sandboxDownloads + " No local ports are opened: to test against a local dev server, turn on Local dev servers too. Full Chrome and headed runs still need an excluded command (Advanced). Turning it on says so first."},
 	config.SandboxDevServers: {"Local dev servers",
 		"Threads' commands may listen on and connect to local ports: a dev server, a test server, a local database. A thread can connect to every service listening on a local port (databases, Docker over TCP, Chrome's debug port, IDE extensions) and can take a port another program expects; a server bound to all interfaces is reachable from your network. Turning it on says so first."},
 }
@@ -144,10 +151,11 @@ func (sr safetyRows) presetRow(key string) setting {
 			if !next {
 				return sr.savePreset(m, key, &next, msg)
 			}
-			if key != config.SandboxDevServers {
+			warn, ok := sandboxConfirm[key]
+			if !ok {
 				return sr.savePreset(m, key, &next, msg)
 			}
-			m.confirm(p.label+" "+sr.forWho, "Turn on "+p.label+" "+sr.forWho+"? "+sandboxLocal, func() tea.Cmd {
+			m.confirm(p.label+" "+sr.forWho, "Turn on "+p.label+" "+sr.forWho+"? "+warn, func() tea.Cmd {
 				return sr.savePreset(m, key, &next, msg)
 			})
 			return nil

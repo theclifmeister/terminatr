@@ -67,7 +67,9 @@ excluded_commands = ["npx playwright *"]
 
 // TestSandboxPresetsLaunch: a preset on maps to local binding where it
 // applies (macOS) and is skipped with a note elsewhere, config.toml
-// keeping it; only local dev servers open local binding; browser testing adds its guidance after the brief.
+// keeping it; only local dev servers open local binding; browser testing
+// opens its download hosts and adds its guidance after the brief, which
+// says whether local ports are open.
 func TestSandboxPresetsLaunch(t *testing.T) {
 	testPaths(t)
 	writeConfig(t, `[defaults.sandbox]
@@ -77,11 +79,11 @@ excluded_commands = ["npx playwright *"]
 	lc := loadLaunchConfig()
 	lists, presets, skipped := lc.sandbox("demo", config.OSMac)
 	if lists.LocalBinding || !slices.Equal(presets, []string{config.SandboxBrowser}) || len(skipped) != 0 ||
-		!slices.Equal(lists.Excluded, []string{"npx playwright *"}) {
+		!slices.Equal(lists.Excluded, []string{"npx playwright *"}) || !slices.Equal(lists.Domains, config.BrowserDomains) {
 		t.Errorf("macOS: %+v %q %q", lists, presets, skipped)
 	}
 	lists, presets, skipped = lc.sandbox("demo", config.OSLinux)
-	if lists.LocalBinding || len(presets) != 0 || !slices.Equal(lists.Excluded, []string{"npx playwright *"}) ||
+	if lists.LocalBinding || lists.Domains != nil || len(presets) != 0 || !slices.Equal(lists.Excluded, []string{"npx playwright *"}) ||
 		!slices.Equal(skipped, []string{"sandbox preset browser testing is set but doesn't apply on Linux: skipped"}) {
 		t.Errorf("Linux: %+v %q %q", lists, presets, skipped)
 	}
@@ -97,8 +99,13 @@ excluded_commands = ["npx playwright *"]
 	}
 	got, err := presetBrief(rt, brief, []string{config.SandboxBrowser})
 	b, _ := os.ReadFile(got)
-	if err != nil || filepath.Dir(got) != rt || !strings.HasPrefix(string(b), "# Thread t-0001\n") || !strings.Contains(string(b), "--single-process") {
+	if err != nil || filepath.Dir(got) != rt || !strings.HasPrefix(string(b), "# Thread t-0001\n") || !strings.Contains(string(b), "--single-process") ||
+		!strings.Contains(string(b), "reuseContext: true") || !strings.Contains(string(b), browserPortsClosed) || strings.Contains(string(b), "%!") {
 		t.Errorf("browser testing: %q, %v\n%s", got, err, b)
+	}
+	got, _ = presetBrief(rt, brief, []string{config.SandboxBrowser, config.SandboxDevServers})
+	if b, _ = os.ReadFile(got); !strings.Contains(string(b), browserPortsOpen) {
+		t.Errorf("browser testing with local dev servers:\n%s", b)
 	}
 	if got, err = presetBrief(rt, "", []string{config.SandboxBrowser}); err != nil || got == "" {
 		t.Errorf("no brief: %q, %v", got, err)
@@ -123,7 +130,7 @@ excluded_commands = ["make a$X"]
 allow = ["Bash(npx playwright *)"]
 `)
 	lists, presets, notes := loadLaunchConfig().sandbox("demo", config.OSMac)
-	if lists.Excluded != nil || lists.Allow != nil || lists.LocalBinding || len(presets) != 0 {
+	if lists.Excluded != nil || lists.Allow != nil || lists.LocalBinding || lists.Domains != nil || len(presets) != 0 {
 		t.Errorf("not failed closed: %+v %q", lists, presets)
 	}
 	if len(notes) != 1 {

@@ -154,7 +154,7 @@ func TestSandboxTab(t *testing.T) {
 	}
 	out := screen(m)
 	for _, want := range []string{"5 sandbox", "Prefer a preset", "a last resort", "may run any code as you without asking", "what applies on macOS",
-		"Presets", "Browser testing (Playwright, Chromium)", "Local dev servers", "Claude and Codex threads", "Advanced", "Excluded commands", "1 · all projects", "Allow rules"} {
+		"Presets", "Browser testing (Playwright, Chromium, downloads)", "Local dev servers", "Claude and Codex threads", "Advanced", "Excluded commands", "1 · all projects", "Allow rules"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("Sandbox tab lacks %q:\n%s", want, out)
 		}
@@ -228,6 +228,12 @@ func TestSandboxPresetRows(t *testing.T) {
 	}
 	drain(t, m, row.unset(m))
 	drain(t, m, all.change(m))
+	// Browser testing asks too, naming the hosts it opens.
+	drain(t, m, sandboxRow(t, "", "Browser testing (Playwright, Chromium, downloads)").change(m))
+	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "registry.npmjs.org") || !strings.Contains(cv.question, "storage.googleapis.com is every Google Cloud Storage bucket's host") {
+		t.Fatalf("no question before turning browser testing on: %T", m.top())
+	}
+	drain(t, m, keyPress(m, "n"))
 	want := []string{"defaults local_dev_servers on", "projects.alpha local_dev_servers off", "projects.alpha local_dev_servers follow", "defaults local_dev_servers follow"}
 	if !slices.Equal(src.sandbox, want) {
 		t.Errorf("saved %q", src.sandbox)

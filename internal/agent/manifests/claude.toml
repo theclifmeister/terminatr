@@ -130,7 +130,10 @@ template = '''
 # sandbox_escapes off, and allow rules after tm's: Claude merges lists
 # across settings files, and its deny rules (tm's) win over any allow.
 # Its presets' local binding (macOS only, which the server checks) is
-# allowLocalBinding: sandboxed commands may listen on and reach localhost.
+# allowLocalBinding: sandboxed commands may listen on and reach localhost;
+# their domains (browser testing's download hosts) are allowedDomains,
+# which sandboxed commands reach without a prompt (Claude merges the
+# list with the user's own).
 [[launch.files]]
 path = "claude-settings.json"
 template = '''
@@ -155,7 +158,8 @@ template = '''
     {{- end}}
     {{- end}}
     "network": {"allowUnixSockets": [{{json .Socket}}]
-      {{- if and (eq .Role "thread") .Sandbox.LocalBinding}}, "allowLocalBinding": true{{end}}}
+      {{- if and (eq .Role "thread") .Sandbox.LocalBinding}}, "allowLocalBinding": true{{end}}
+      {{- if and (eq .Role "thread") .Sandbox.Domains}}, "allowedDomains": {{json .Sandbox.Domains}}{{end}}}
   }
 }
 '''

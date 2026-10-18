@@ -29,6 +29,17 @@ const (
 // SandboxPresets are the presets' keys, in the Sandbox tab's order.
 var SandboxPresets = []string{SandboxBrowser, SandboxDevServers}
 
+// BrowserDomains are the hosts the browser testing preset opens to a
+// thread's sandboxed commands, so npm i playwright and npx playwright
+// install work inside it: the npm registry (packages and their
+// tarballs), Playwright's browser download mirrors (PLAYWRIGHT_CDN_MIRRORS
+// in playwright-core 1.61 to 1.64; playwright.azureedge.net is no longer
+// one), and storage.googleapis.com, where cdn.playwright.dev redirects
+// the Chrome for Testing builds (the headless shell among them). That
+// last one is every Google Cloud Storage bucket's host, which the
+// Sandbox tab says.
+var BrowserDomains = []string{"registry.npmjs.org", "cdn.playwright.dev", "playwright.download.prss.microsoft.com", "storage.googleapis.com"}
+
 // The platforms a sandbox setting applies on, as runtime.GOOS names them.
 const (
 	OSMac     = "darwin"
@@ -46,12 +57,14 @@ const (
 //     which only its macOS sandbox reads (Linux doesn't pass it, Windows
 //     has no setting for localhost), and Codex's
 //     permissions.<profile>.network.allow_local_binding (macOS policy).
-//   - browser testing is only how to launch Chromium in a
+//   - browser testing is how to launch Chromium in a
 //     macOS sandbox (no local binding: Playwright's pipe transport needs
 //     none; a dev server needs local dev servers too), which can't register Mach services (multi-process
 //     Chromium needs that; no setting of either agent grants it): the
 //     headless shell with --single-process. On Linux Chromium needs
-//     nothing more (bubblewrap, no Mach), so it doesn't apply there.
+//     nothing more (bubblewrap, no Mach), so it doesn't apply there. It
+//     also opens BrowserDomains (Claude's allowedDomains; a Codex
+//     thread's network is open already).
 type SandboxSetting struct {
 	OS    []string
 	Codex bool
