@@ -17,6 +17,7 @@ import (
 // until that call ends (EndEscape); another call's prompt ending doesn't
 // end it (parallel calls), and the turn's end ends every mark.
 func TestEscapeMod(t *testing.T) {
+	noGrace(t)
 	s := startMod(t, "", true, make(chan PromptResolution, 1))
 	state := func(st agent.State, reason string) {
 		t.Helper()
@@ -60,6 +61,7 @@ func TestEscapeMod(t *testing.T) {
 // doesn't unmark. An agent whose every prompt is an escape
 // (PromptsEscape) marks each.
 func TestEscapeHook(t *testing.T) {
+	noGrace(t)
 	for _, c := range []struct {
 		name    string
 		rule    string
@@ -178,4 +180,79 @@ func TestEscapeScreenHolds(t *testing.T) {
 	if _, why, _ := s.PromptNow("hi", false); why != "" && why != HeldEscape && !strings.HasPrefix(why, "the agent is") {
 		t.Errorf("PromptNow while an escape is open: %q", why)
 	}
+}
+
+// noGrace lets an ended mark go as soon as no dialog shows.
+func noGrace(t *testing.T) {
+	old := escapeGrace
+	escapeGrace = 0
+	t.Cleanup(func() { escapeGrace = old })
+}
+
+// startDialog runs a session whose screen draws, after delay, a
+// permission dialog with text in it, with a guard that asks about
+// escapes.
+func startDialog(t *testing.T, delay, text string) *Session {
+	t.Helper()
+	script := `sleep ` + delay + `; printf 'Bash command\n\n  ls\n\n` + text + `\n\nDo you want to proceed?\n\342\235\257 1. Yes\n  2. No\n\nEsc to cancel\n'; exec cat`
+	s, err := Start(Config{
+		ID: "s-esc", Role: proto.RoleThread, Project: "p",
+		Argv: []string{"/bin/sh", "-c", script},
+		Cwd:  t.TempDir(),
+		Env:  []string{"PATH=/usr/bin:/bin", "TERM=xterm-256color", "LANG=C.UTF-8"},
+		Cols: 100, Rows: 24,
+		Logf: t.Logf,
+		Agent: &AgentConfig{
+			Agent: claudeLike(t), Home: t.TempDir(),
+			Guard: func(_ string, input map[string]any) *guard.Denial {
+				if input["dangerouslyDisableSandbox"] != true {
+					return nil
+				}
+				return &guard.Denial{Rule: guard.RuleEscape, Ask: true}
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Stop(time.Second) })
+	return s
+}
+
+// TestEscapeForgedStopFirst: a forged Stop that comes after the escape's
+// PreToolUse but before its dialog draws doesn't end the mark: it stays
+// for escapeGrace, the dialog then holds it.
+func TestEscapeForgedStopFirst(t *testing.T) {
+	s := startDialog(t, "1", "")
+	hook := func(ev string, payload map[string]any) {
+		t.Helper()
+		if _, err := s.Hook(ev, payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hook("SessionStart", map[string]any{"source": "startup"})
+	hook("UserPromptSubmit", map[string]any{"prompt": "go"})
+	hook("PreToolUse", map[string]any{"tool_name": "Bash", "tool_use_id": "t1", "tool_input": map[string]any{"command": "ls", "dangerouslyDisableSandbox": true}})
+	hook("Stop", map[string]any{})
+	hook("PostToolUse", map[string]any{"tool_name": "Bash", "tool_use_id": "t1"})
+	testwait.Eventually(t, "the dialog on screen", func() bool {
+		e, _ := s.Explain()
+		return slices.Contains(e.Matches, "blocked-permission-dialog")
+	})
+	hook("UserPromptSubmit", map[string]any{"prompt": "x"})
+	hook("PermissionRequest", map[string]any{"tool_name": "Bash", "tool_use_id": "t1"})
+	time.Sleep(300 * time.Millisecond)
+	if info := s.Info(); !info.Escape {
+		t.Fatalf("a Stop forged before the dialog drew ended the mark: %s/%s", info.State, info.Reason)
+	}
+}
+
+// TestEscapeDialogUnmarked: a dialog that says it runs the command
+// outside the sandbox ([guard] escape_rule) is an escape with no mark.
+func TestEscapeDialogUnmarked(t *testing.T) {
+	s := startDialog(t, "0", "Run outside of the sandbox")
+	if _, err := s.Hook("SessionStart", map[string]any{"source": "startup"}); err != nil {
+		t.Fatal(err)
+	}
+	testwait.Eventually(t, "the escape's dialog marked", func() bool { return s.Info().Escape })
 }
