@@ -145,7 +145,7 @@ func TestSandboxAllowAll(t *testing.T) {
 // none of them under Settings any more.
 func TestSandboxTab(t *testing.T) {
 	_, m := sandboxData(t)
-	m.Update(tea.WindowSizeMsg{Width: 160, Height: 60})
+	m.Update(tea.WindowSizeMsg{Width: 160, Height: 72})
 	feed(m, keyPress(m, "a"))
 	pv := m.top().(*projectView)
 	keyPress(m, "5")
@@ -154,7 +154,7 @@ func TestSandboxTab(t *testing.T) {
 	}
 	out := screen(m)
 	for _, want := range []string{"5 sandbox", "Prefer a preset", "a last resort", "may run any code as you without asking", "what applies on macOS",
-		"Presets", "Browser testing (Playwright, Chromium)", "Local dev servers", "Claude and Codex threads", "Advanced", "Excluded commands", "1 · all projects", "Allow rules"} {
+		"Presets", "Browser testing (Playwright, Chromium)", "Browser downloads (npm, Playwright)", "Local dev servers", "Claude and Codex threads", "Advanced", "Excluded commands", "1 · all projects", "Allow rules"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("Sandbox tab lacks %q:\n%s", want, out)
 		}
@@ -190,7 +190,7 @@ func TestSandboxTabOS(t *testing.T) {
 		}
 	}
 	rows := sandboxSettings("", config.OSMac)
-	if len(rows) != 4 || rows[0].section != "Presets" || rows[2].section != "Advanced" {
+	if len(rows) != 5 || rows[0].section != "Presets" || rows[3].section != "Advanced" {
 		t.Errorf("macOS rows: %+v", rows)
 	}
 }
@@ -226,14 +226,57 @@ func TestSandboxPresetRows(t *testing.T) {
 	if got, _ := c.ThreadSandbox("beta"); !slices.Equal(got.Presets, []string{config.SandboxDevServers}) {
 		t.Errorf("beta: %+v", got)
 	}
+	// x follows all projects' on: it asks first.
 	drain(t, m, row.unset(m))
+	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "lets the thread out of the sandbox") {
+		t.Fatalf("x didn't ask before following all projects' on: %T", m.top())
+	}
+	drain(t, m, keyPress(m, "y"))
 	drain(t, m, all.change(m))
+	// Browser downloads asks too, naming the hosts it opens; browser
+	// testing, which opens none, doesn't.
+	drain(t, m, sandboxRow(t, "", "Browser downloads (npm, Playwright)").change(m))
+	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "registry.npmjs.org") || !strings.Contains(cv.question, "storage.googleapis.com is every Google Cloud Storage bucket's host") {
+		t.Fatalf("no question before turning browser downloads on: %T", m.top())
+	}
+	drain(t, m, keyPress(m, "n"))
+	if _, ok := m.top().(*confirmView); ok {
+		t.Fatal("confirm still open")
+	}
 	want := []string{"defaults local_dev_servers on", "projects.alpha local_dev_servers off", "projects.alpha local_dev_servers follow", "defaults local_dev_servers follow"}
 	if !slices.Equal(src.sandbox, want) {
 		t.Errorf("saved %q", src.sandbox)
 	}
 	if c, _ = config.Load(); len(c.SandboxPresetsOf("")) != 0 || len(c.SandboxPresetsOf("alpha")) != 0 {
 		t.Errorf("left set: %v %v", c.SandboxPresetsOf(""), c.SandboxPresetsOf("alpha"))
+	}
+}
+
+// TestSandboxFollowAsks: x on a project whose own switch is off, where
+// all projects' is on, turns the preset on for it, so it asks first as
+// turning it on does; n keeps the project's own off.
+func TestSandboxFollowAsks(t *testing.T) {
+	src, m := sandboxData(t)
+	m.data.SandboxPresets = map[string]map[string]bool{"": {config.SandboxDownloads: true, config.SandboxBrowser: true}, "alpha": {config.SandboxDownloads: false, config.SandboxBrowser: false}}
+	row := sandboxRow(t, "alpha", "Browser downloads (npm, Playwright)")
+	drain(t, m, row.unset(m))
+	cv, ok := m.top().(*confirmView)
+	if !ok || !strings.Contains(cv.question, "Follow all projects'") || !strings.Contains(cv.question, "storage.googleapis.com") {
+		t.Fatalf("x didn't ask: %T", m.top())
+	}
+	drain(t, m, keyPress(m, "n"))
+	if len(src.sandbox) != 0 || row.from(m) != "" {
+		t.Fatalf("n saved %q", src.sandbox)
+	}
+	drain(t, m, row.unset(m))
+	drain(t, m, keyPress(m, "y"))
+	if want := []string{"projects.alpha browser_downloads follow"}; !slices.Equal(src.sandbox, want) || row.from(m) != config.AllProjectsName {
+		t.Errorf("y saved %q", src.sandbox)
+	}
+	// Browser testing opens nothing: x follows without asking.
+	drain(t, m, sandboxRow(t, "alpha", "Browser testing (Playwright, Chromium)").unset(m))
+	if _, ok := m.top().(*confirmView); ok || len(src.sandbox) != 2 {
+		t.Errorf("browser testing x: %T %q", m.top(), src.sandbox)
 	}
 }
 

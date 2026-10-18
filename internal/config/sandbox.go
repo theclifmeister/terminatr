@@ -43,6 +43,7 @@ type rawSandbox struct {
 	ExcludedCommands *[]string `toml:"excluded_commands"`
 	Allow            *[]string `toml:"allow"`
 	BrowserTesting   *bool     `toml:"browser_testing"`
+	BrowserDownloads *bool     `toml:"browser_downloads"`
 	LocalDevServers  *bool     `toml:"local_dev_servers"`
 }
 

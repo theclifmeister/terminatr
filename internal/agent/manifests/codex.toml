@@ -80,6 +80,8 @@ args = [
   # A thread's sandbox presets' local binding (macOS, which the server
   # checks) is its network's allow_local_binding: a bool in the 0.162
   # NetworkToml, which `codex sandbox -c` parses (a string is refused).
+  # Its domains (browser testing's download hosts) need nothing: a
+  # thread's network is open.
   "{{if and (or (eq .Role \"thread\") (eq .Role \"coordinator\")) (not .Yolo)}}-c{{end}}", "{{if and (or (eq .Role \"thread\") (eq .Role \"coordinator\")) (not .Yolo)}}default_permissions=\"tm\"{{end}}",
   "{{if and (eq .Role \"coordinator\") (not .Yolo)}}-c{{end}}", "{{if and (eq .Role \"coordinator\") (not .Yolo)}}features.network_proxy=true{{end}}",
   "{{if and (eq .Role \"thread\") (not .Yolo)}}-c{{end}}",

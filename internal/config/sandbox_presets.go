@@ -13,6 +13,7 @@ import (
 //
 //	[projects.web.sandbox]
 //	browser_testing = true
+//	browser_downloads = true
 //	local_dev_servers = true
 //
 // A project's switch, when it sets one, replaces all projects'
@@ -23,11 +24,25 @@ import (
 // Preset keys of a sandbox table.
 const (
 	SandboxBrowser    = "browser_testing"
+	SandboxDownloads  = "browser_downloads"
 	SandboxDevServers = "local_dev_servers"
 )
 
 // SandboxPresets are the presets' keys, in the Sandbox tab's order.
-var SandboxPresets = []string{SandboxBrowser, SandboxDevServers}
+var SandboxPresets = []string{SandboxBrowser, SandboxDownloads, SandboxDevServers}
+
+// BrowserDomains are the hosts the browser downloads preset opens to a
+// thread's sandboxed commands, so npm i playwright and npx playwright
+// install work inside it: the npm registry (packages and their
+// tarballs), Playwright's browser download mirrors (PLAYWRIGHT_CDN_MIRRORS
+// in playwright-core 1.61 to 1.64; playwright.azureedge.net is no longer
+// one), and storage.googleapis.com, where cdn.playwright.dev redirects
+// the Chrome for Testing builds (the headless shell among them). That
+// last one is every Google Cloud Storage bucket's host, which the
+// Sandbox tab says. They are a key of their own, not browser testing's
+// (v0.35 had that without hosts): a switch turned on before them opens
+// none until the human turns this one on, after its question.
+var BrowserDomains = []string{"registry.npmjs.org", "cdn.playwright.dev", "playwright.download.prss.microsoft.com", "storage.googleapis.com"}
 
 // The platforms a sandbox setting applies on, as runtime.GOOS names them.
 const (
@@ -46,12 +61,15 @@ const (
 //     which only its macOS sandbox reads (Linux doesn't pass it, Windows
 //     has no setting for localhost), and Codex's
 //     permissions.<profile>.network.allow_local_binding (macOS policy).
-//   - browser testing is only how to launch Chromium in a
+//   - browser testing is how to launch Chromium in a
 //     macOS sandbox (no local binding: Playwright's pipe transport needs
 //     none; a dev server needs local dev servers too), which can't register Mach services (multi-process
 //     Chromium needs that; no setting of either agent grants it): the
 //     headless shell with --single-process. On Linux Chromium needs
 //     nothing more (bubblewrap, no Mach), so it doesn't apply there.
+//   - browser downloads opens BrowserDomains (Claude's allowedDomains; a
+//     Codex thread's network is open already), with guidance for the
+//     macOS sandbox's read-only caches, so macOS only too.
 type SandboxSetting struct {
 	OS    []string
 	Codex bool
@@ -62,6 +80,7 @@ var SandboxSettings = map[string]SandboxSetting{
 	SandboxExcluded:   {OS: []string{OSMac, OSLinux, OSWindows}},
 	SandboxAllow:      {OS: []string{OSMac, OSLinux, OSWindows}},
 	SandboxBrowser:    {OS: []string{OSMac}, Codex: true},
+	SandboxDownloads:  {OS: []string{OSMac}, Codex: true},
 	SandboxDevServers: {OS: []string{OSMac}, Codex: true},
 }
 
@@ -91,6 +110,8 @@ func (r *rawSandbox) preset(key string) *bool {
 	switch key {
 	case SandboxBrowser:
 		return r.BrowserTesting
+	case SandboxDownloads:
+		return r.BrowserDownloads
 	case SandboxDevServers:
 		return r.LocalDevServers
 	}
