@@ -67,6 +67,20 @@ func (a *Agent) OwnRules(home, dir string) []agent.OwnRule {
 	return out
 }
 
+// OwnFiles are the files OwnRules reads: the user's settings (and where
+// a link leads) and dir's two.
+func (a *Agent) OwnFiles(home, dir string) []string {
+	user := filepath.Join(configDir(home), "settings.json")
+	out := []string{user}
+	if real, err := filepath.EvalSymlinks(user); err == nil && real != user {
+		out = append(out, real)
+	}
+	if dir != "" {
+		out = append(out, filepath.Join(dir, ".claude", "settings.json"), filepath.Join(dir, ".claude", "settings.local.json"))
+	}
+	return out
+}
+
 // homeName is path with home as ~.
 func homeName(home, path string) string {
 	if rel, err := filepath.Rel(home, path); err == nil && home != "" && !strings.HasPrefix(rel, "..") {

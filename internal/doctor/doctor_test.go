@@ -959,11 +959,21 @@ type fakeThreadProber struct{}
 func (fakeThreadProber) ProbeThreadSandbox(string) (string, error) { return "", nil }
 
 // TestThreadSandboxCheck: where Codex's sandbox needs a setup (Windows),
-// a thread sandbox that doesn't hold is a warning that points at it.
+// a thread sandbox that doesn't hold is a warning that points at it;
+// elsewhere one whose network isn't limited says threads start with it
+// off.
 func TestThreadSandboxCheck(t *testing.T) {
 	m := &agent.Manifest{Display: "Codex"}
 	m.Launch.Command = "codex"
 	d := testDeps(t)
+	d.GOOS = "darwin"
+	d.ThreadSandboxProbe = func(agent.ThreadSandboxProber) (string, error) {
+		return "0.170.0", errors.New("the network isn't limited to tm's socket")
+	}
+	if c := threadSandboxCheck(d, "codex", m, fakeThreadProber{}); c.Status != Warn || !strings.Contains(c.Detail, "a Codex thread starts with its network off") {
+		t.Errorf("%+v", c)
+	}
+	d.GOOS = "windows"
 	d.ThreadSandboxProbe = func(agent.ThreadSandboxProber) (string, error) {
 		return "0.162.0", errors.New("codex sandbox refused it: setup required")
 	}

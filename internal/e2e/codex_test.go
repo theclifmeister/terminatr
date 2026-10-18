@@ -292,7 +292,7 @@ func TestSmokeCodexRoles(t *testing.T) {
 	if r := env.WaitFake("start", agentWait, nil); r["approve_for_me"] != true || r.Str("permissions") != "tm" {
 		t.Fatalf("coordinator start %v", r)
 	}
-	if r := env.WaitFake("sandbox", agentWait, nil); r.Str("verdict") != "unix=ok tcp=refused" {
+	if r := env.WaitFake("sandbox", agentWait, nil); r.Str("verdict") != "unix=ok tcp=refused proxy=ok" {
 		t.Fatalf("coordinator probe %v", r)
 	}
 	r := env.WaitFake("context", agentWait, func(r FakeRecord) bool { return r.Str("source") == "startup" })

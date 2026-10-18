@@ -113,10 +113,17 @@ func TestHookArgs(t *testing.T) {
 	}
 }
 
-// TestLaunch: the argv of a fresh thread (asking for approvals), a
-// resumed one and a coordinator, with the hooks before the kickoff.
+// TestLaunch: the argv of a fresh thread (asking for approvals, its
+// network limited), a resumed one and a coordinator, with the hooks
+// before the kickoff.
 func TestLaunch(t *testing.T) {
 	a := load(t)
+	var threadProbed [][]string
+	probeFunc = func(_ *agent.Manifest, _, _, _, _, _ string, flags []string, _ bool) (string, error) {
+		threadProbed = append(threadProbed, flags)
+		return "0.170.0", nil
+	}
+	defer func() { probeFunc = probeProfile }()
 	dir := t.TempDir()
 	t.Setenv("CODEX_HOME", dir) // no [windows] sandbox of the user's
 	brief := filepath.Join(dir, "brief.md")
@@ -138,11 +145,20 @@ func TestLaunch(t *testing.T) {
 	// On Windows the trust keys name the session's drive, the socket's
 	// folder is written, and the sandbox is set (codex.go).
 	hooks, state, _ := hookArgs(a.Events(), stateSourceFor(spec.Cwd, caps.Windows))
-	var winSandbox []string
+	var winSandbox, proxy []string
 	var sockW string
+	network := `network={enabled=true,mode="full",unix_sockets={"/run/tm.sock"="allow"}}`
+	proxy = []string{"-c", "features.network_proxy=true"}
 	if caps.Windows {
 		sockW = `,"\\run"="write"`
 		winSandbox = []string{"-c", `windows.sandbox="unelevated"`}
+	}
+	// The network form per OS (ThreadNetwork): the open form threads had
+	// before on Linux and Windows, with its note.
+	form, _ := ThreadNetwork(nil, caps.OS)
+	var formWarn []string
+	if form == NetworkOpen {
+		network, proxy, formWarn = `network={enabled=true,unix_sockets={"/run/tm.sock"="allow"}}`, nil, []string{OpenNote(caps.OS)}
 	}
 	want := []string{"codex",
 		"-c", "check_for_update_on_startup=false",
@@ -154,10 +170,12 @@ func TestLaunch(t *testing.T) {
 		"-c", `mcp_servers.terminatr.default_tools_approval_mode="approve"`,
 		"-a", "on-request",
 		"-c", `default_permissions="tm"`,
-		"-c", `permissions={tm={extends=":workspace",filesystem={"/h/projects/p"="read","/r/repo/.git"="write","/r/repo/.git/worktrees/wt"="write"` + sockW + `,"/h/config.toml"="read"},network={enabled=true,unix_sockets={"/run/tm.sock"="allow"}}}}`,
+	}
+	want = append(append(want, proxy...),
+		"-c", `permissions={tm={extends=":workspace",filesystem={"/h/projects/p"="read","/r/repo/.git"="write","/r/repo/.git/worktrees/wt"="write"`+sockW+`,"/h/config.toml"="read"},`+network+`}}`,
 		"-m", "gpt-6-luna",
 		"-c", hooks, "-c", state,
-	}
+	)
 	want = append(append(want, winSandbox...), "--", "Start.")
 	if !slices.Equal(l.Argv, want) {
 		t.Fatalf("argv\n%q\nwant\n%q", l.Argv, want)
@@ -165,25 +183,47 @@ func TestLaunch(t *testing.T) {
 	if !l.Kickoff {
 		t.Error("the kickoff is in argv")
 	}
-	if len(l.Warnings) > 0 {
+	if !slices.Equal(l.Warnings, formWarn) {
 		t.Errorf("warnings without sandbox lists: %q", l.Warnings)
 	}
 	// Codex has nothing to map a project's sandbox lists to: the argv
 	// stays as it is, and the launch says so.
 	listed := spec
 	listed.Sandbox = agent.SandboxLists{Excluded: []string{"npx playwright *"}}
-	if ll, err := a.Launch(listed); err != nil || !slices.Equal(ll.Argv, want) || !slices.Equal(ll.Warnings, []string{sandboxListsGap}) {
+	if ll, err := a.Launch(listed); err != nil || !slices.Equal(ll.Argv, want) || !slices.Equal(ll.Warnings, append(slices.Clone(formWarn), sandboxListsGap)) {
 		t.Errorf("with sandbox lists: argv %q warnings %q, %v", ll.Argv, ll.Warnings, err)
 	}
-	// A preset's local binding is the thread profile's network
-	// allow_local_binding, without a warning.
+	// The local-ports rule is the thread profile's network
+	// allow_local_binding, and its host rules the domains its proxy
+	// lets through, without a warning; the probe runs without the
+	// binding, which reopens loopback.
 	bound := spec
-	bound.Sandbox = agent.SandboxLists{LocalBinding: true}
+	bound.Sandbox = agent.SandboxLists{LocalBinding: true, Domains: []string{"registry.npmjs.org", "*.example.com"}}
+	threadProbed = nil
 	ll, err := a.Launch(bound)
-	if err != nil || len(ll.Warnings) > 0 || !slices.ContainsFunc(ll.Argv, func(s string) bool {
-		return strings.HasPrefix(s, "permissions={tm=") && strings.HasSuffix(s, `network={enabled=true,unix_sockets={"/run/tm.sock"="allow"},allow_local_binding=true}}}`)
-	}) {
-		t.Errorf("with local binding: argv %q warnings %q, %v", ll.Argv, ll.Warnings, err)
+	if form == NetworkLimited {
+		limitedNet := `network={enabled=true,mode="full",unix_sockets={"/run/tm.sock"="allow"},domains={"registry.npmjs.org"="allow","*.example.com"="allow"},allow_local_binding=true}}}`
+		if err != nil || len(ll.Warnings) > 0 || !slices.ContainsFunc(ll.Argv, func(s string) bool {
+			if !strings.HasPrefix(s, "permissions={tm=") || !strings.HasSuffix(s, limitedNet) {
+				return false
+			}
+			_, err := toml.Decode(s, &struct{}{})
+			return err == nil
+		}) {
+			t.Errorf("with local binding and hosts: argv %q warnings %q, %v", ll.Argv, ll.Warnings, err)
+		}
+		if len(threadProbed) != 1 || slices.ContainsFunc(threadProbed[0], func(s string) bool { return strings.Contains(s, "allow_local_binding") }) ||
+			!slices.Contains(threadProbed[0], "features.network_proxy=true") {
+			t.Errorf("thread probed %q", threadProbed)
+		}
+	}
+	// Escapes off: -a never, so Codex can't ask to leave the profile,
+	// which stays.
+	closed := spec
+	closed.NoSandboxEscapes = true
+	if ll, err := a.Launch(closed); err != nil || !slices.Contains(ll.Argv, "never") || slices.Contains(ll.Argv, "on-request") ||
+		!slices.Contains(ll.Argv, `default_permissions="tm"`) || ll.Argv[slices.Index(ll.Argv, "never")-1] != "-a" {
+		t.Errorf("escapes off: argv %q, %v", ll.Argv, err)
 	}
 	if !slices.Contains(l.Env, "TERMINATR_BIN=/bin/tm") || !slices.Contains(l.Unset, "CODEX_THREAD_ID") {
 		t.Errorf("env %q unset %q", l.Env, l.Unset)
@@ -268,14 +308,20 @@ func TestLaunch(t *testing.T) {
 		!strings.Contains(l.Warnings[0], "--approve-for-me") {
 		t.Errorf("fallback warnings %q", l.Warnings)
 	}
-	// A thread is never probed.
+	// A thread whose limited network doesn't hold keeps its profile,
+	// with the network off (where it goes through the proxy).
 	probed = nil
 	probeFunc = func(_ *agent.Manifest, codex, tmBin, cwd, sock, name string, flags []string, _ bool) (string, error) {
 		probed = []string{name}
 		return "", errors.New("no")
 	}
-	if l, _ = a.Launch(agent.LaunchSpec{Role: agent.RoleThread, Cwd: "/r/wt", RuntimeDir: dir, TMBin: "/bin/tm", Socket: "/run/tm.sock"}); probed != nil || !slices.Contains(l.Argv, `default_permissions="tm"`) {
-		t.Errorf("thread probed %q, argv %q", probed, l.Argv)
+	l, _ = a.Launch(agent.LaunchSpec{Role: agent.RoleThread, Cwd: "/r/wt", RuntimeDir: dir, TMBin: "/bin/tm", Socket: "/run/tm.sock"})
+	if !slices.Contains(l.Argv, `default_permissions="tm"`) || slices.Contains(l.Argv, "features.network_proxy=true") ||
+		form != NetworkOpen && !slices.ContainsFunc(l.Argv, func(s string) bool { return strings.Contains(s, "network={enabled=false,") }) {
+		t.Errorf("thread argv %q", l.Argv)
+	}
+	if form == NetworkLimited && (len(probed) != 1 || len(l.Warnings) != 1) {
+		t.Errorf("thread probed %q, warnings %q", probed, l.Warnings)
 	}
 	spec.Yolo = true
 	l, _ = a.Launch(spec)
@@ -291,8 +337,9 @@ func TestLaunch(t *testing.T) {
 			Filesystem map[string]string
 		}
 	}
-	if _, err := toml.Decode(want[20], &v); err != nil || v.Permissions["tm"].Filesystem["/h/config.toml"] != "read" {
-		t.Errorf("profile %s: %v %+v", want[20], err, v)
+	prof := want[slices.IndexFunc(want, func(s string) bool { return strings.HasPrefix(s, "permissions=") })]
+	if _, err := toml.Decode(prof, &v); err != nil || v.Permissions["tm"].Filesystem["/h/config.toml"] != "read" {
+		t.Errorf("profile %s: %v %+v", prof, err, v)
 	}
 	spec = agent.LaunchSpec{Role: agent.RoleThread, Cwd: "/r/wt", RuntimeDir: dir, TMBin: "/bin/tm", Socket: "/run/tm.sock", Yolo: true}
 	l, _ = a.Launch(spec)

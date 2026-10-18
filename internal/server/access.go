@@ -61,6 +61,24 @@ func (s *Server) resolveAccess(in accessInput, lc launchConfig) (proto.AccessSet
 		rules, why := sandboxRules(lc, in.slug, in.goos, s.opts.Paths.Home)
 		add(rules...)
 		set.SandboxError = why
+		if in.agent == "codex" && in.tree != nil {
+			// Its pushes reach the repo's remotes (remotehosts.go).
+			add(remoteHostRules(in.tree.CommonDir)...)
+		}
+		if in.agent == "codex" && (in.goos == config.OSWindows || in.goos == config.OSLinux) {
+			// Its network keeps the open form it had before
+			// (codex.ThreadNetwork): on Windows Codex's proxy needs its
+			// elevated sandbox, on Linux its sandbox can't allow tm's
+			// socket with the proxy on. Its host rules aren't used; one
+			// rule says so.
+			value, why := "open", codexOpenNote(in.goos)
+			for i := from; i < len(set.Rules); i++ {
+				if r := &set.Rules[i]; r.Kind == proto.AccessHost && r.Skipped == "" {
+					r.Skipped = why
+				}
+			}
+			add(proto.AccessRule{Where: proto.AccessInside, Kind: proto.AccessNetwork, Value: value, Source: proto.AccessFromTM, Note: why, Agents: []string{"codex"}})
+		}
 	}
 	add(onOff(proto.AccessPrompts, proto.AccessYolo, in.yolo, settingSource(lc, in.slug, "yolo"), false),
 		onOff(proto.AccessOutside, proto.AccessEscapes, !in.noEscapes, settingSource(lc, in.slug, "sandbox_escapes"), false))
@@ -594,7 +612,10 @@ func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, guides, skipp
 		case proto.AccessGuide:
 			guides = append(guides, r.Value)
 		case proto.AccessHost:
-			lists.Domains = append(lists.Domains, r.Value)
+			// Once each: Codex refuses a key given twice.
+			if !slices.Contains(lists.Domains, r.Value) {
+				lists.Domains = append(lists.Domains, r.Value)
+			}
 		case proto.AccessLocalPorts:
 			lists.LocalBinding = r.Value == "on"
 		}

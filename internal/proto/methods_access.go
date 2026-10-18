@@ -36,6 +36,7 @@ const (
 const (
 	AccessWorktree     = "worktree"      // the cwd, writable
 	AccessGitDir       = "git-dir"       // the git-dir grant (T551): value the repo whose git dir it opens
+	AccessNetwork      = "network"       // a Codex thread's network where it isn't limited (Linux, Windows): "open"
 	AccessRead         = "read"          // a folder readable without a prompt
 	AccessWrite        = "write"         // a folder writable besides the cwd
 	AccessWriteFile    = "write-file"    // a file writable besides the cwd
@@ -209,6 +210,14 @@ type AccessExplainResult struct {
 	Agents string `json:"agents,omitempty"`
 }
 
+// The notes on an excluded command of the agent's own settings files
+// (T574 case 7): the guard treats a command it runs outside the
+// sandbox, and none of tm's does, as an escape.
+const (
+	AccessOwnEscape    = "tm treats it as an escape: asks you"
+	AccessOwnEscapeOff = "tm treats it as an escape: refused, escapes are off"
+)
+
 // Remarks are what the views say beside a rule: a change since launch,
 // why it is left out, the only agents that get it, a guard rule's
 // liveness.
@@ -229,7 +238,9 @@ func (r AccessRule) Remarks() []string {
 	if r.Skipped != "" {
 		out = append(out, "not used: "+r.Skipped)
 	}
-	if r.Where == AccessAgent {
+	if r.Where == AccessAgent && (r.Note == AccessOwnEscape || r.Note == AccessOwnEscapeOff) {
+		out = append(out, "the agent's own file: tm doesn't change it, its guard judges the commands")
+	} else if r.Where == AccessAgent {
 		out = append(out, "the agent's own file, shown only")
 	} else if len(r.Agents) > 0 {
 		out = append(out, strings.Join(r.Agents, ", ")+" threads only")
