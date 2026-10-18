@@ -12,6 +12,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // sandboxData is popupData with all projects' sandbox lists, as Load
@@ -140,35 +141,97 @@ func TestSandboxAllowAll(t *testing.T) {
 	}
 }
 
-// TestSandboxTab: the project popup's Sandbox tab, after Settings: the
-// guidance, the presets under Presets, the lists under Advanced, and
-// none of them under Settings any more.
-func TestSandboxTab(t *testing.T) {
+// TestAccessTab: the project popup's Access tab, after Settings: the
+// guidance, prompts and escapes, the presets, the lists, the guard, the
+// secret environment and tm's own rules, each under its section, and
+// none of them under Settings any more; the footer names x on a row the
+// project sets and e for the effective access.
+func TestAccessTab(t *testing.T) {
 	_, m := sandboxData(t)
-	m.Update(tea.WindowSizeMsg{Width: 160, Height: 72})
+	m.Update(tea.WindowSizeMsg{Width: 160, Height: 120})
 	feed(m, keyPress(m, "a"))
 	pv := m.top().(*projectView)
 	keyPress(m, "5")
-	if pv.tab != tabSandbox {
+	if pv.tab != tabAccess {
 		t.Fatalf("5: tab %d", pv.tab)
 	}
+	// The whole tab, row by row as it scrolls.
 	out := screen(m)
-	for _, want := range []string{"5 sandbox", "Prefer a preset", "a last resort", "may run any code as you without asking", "what applies on macOS",
-		"Presets", "Browser testing (Playwright, Chromium)", "Browser downloads (npm, Playwright)", "Local dev servers", "Claude and Codex threads", "Advanced", "Excluded commands", "1 · all projects", "Allow rules"} {
+	for range pv.access.rows {
+		keyPress(m, "down")
+		out += screen(m)
+	}
+	for _, want := range []string{"5 access", "Prefer a preset", "a last resort", "what applies on macOS",
+		"Prompts and escapes", "Escapes", "ask you or auto mode", "Yolo mode", "Coordinator approves",
+		"Inside the sandbox: presets", "Browser testing (Playwright, Chromium)", "Browser downloads (npm, Playwright)", "Local dev servers",
+		"Outside the sandbox", "Excluded commands", "1 · all projects", "Permission rules", "Allow rules",
+		"Guard", "Guard mode", "Guard rules", "Guard allowances", "Guard refusals", "Secrets", "Secret environment",
+		"Built in", "tm's rules", "e effective access", "← → tabs"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("Sandbox tab lacks %q:\n%s", want, out)
+			t.Errorf("Access tab lacks %q:\n%s", want, out)
 		}
 	}
+	if strings.Contains(out, "x follow all projects") || strings.Contains(out, "+ - number") {
+		t.Errorf("footer names x or + - on a following row:\n%s", out)
+	}
+	pv.access.sel = 0
 	for _, r := range projectSettings("alpha") {
-		if strings.Contains(r.label, "xcluded") || strings.Contains(r.label, "llow rules") {
-			t.Errorf("Settings still has %q", r.label)
+		for _, moved := range []string{"Escapes", "Yolo mode", "Coordinator approves", "Guard", "Guard mode", "Secret environment", "Excluded commands", "Allow rules"} {
+			if r.label == moved {
+				t.Errorf("Settings still has %q", r.label)
+			}
 		}
 	}
-	// The , popup's third tab is all projects'.
+	// Escapes: enter turns them off for the project, which then sets its
+	// own (x follows all projects again).
+	drain(t, m, keyPress(m, "enter"))
+	cfg, _ := config.Load()
+	if s, _ := cfg.Safety("alpha"); s.SandboxEscapes {
+		t.Error("escapes still on for alpha")
+	}
+	if out := screen(m); !strings.Contains(lineWith(out, "Escapes"), "never") || !strings.Contains(out, "x follow all projects") {
+		t.Errorf("after enter on Escapes:\n%s", out)
+	}
+	// The , popup's third tab is all projects', its workflow rows left
+	// on All projects.
 	keyPress(m, "esc")
 	press(m, ",", "3")
-	if out := screen(m); !strings.Contains(out, "3 Sandbox") || !strings.Contains(out, "Browser testing") || !strings.Contains(out, "unless the project sets its own") {
-		t.Errorf(", Sandbox tab:\n%s", out)
+	out = screen(m)
+	for range m.top().(*settingsView).tabs[tabAllAccess].rows {
+		keyPress(m, "down")
+		out += screen(m)
+	}
+	for _, want := range []string{"3 Access", "Escapes", "Yolo mode", "Browser testing", "Guard mode", "Secret environment", "unless the project sets its own", "alpha sets its own"} {
+		if !strings.Contains(out, want) {
+			t.Errorf(", Access tab lacks %q:\n%s", want, out)
+		}
+	}
+	for _, r := range allProjectsSettings() {
+		if slices.Contains([]string{"Yolo mode", "Coordinator approves", "Guard", "Guard rules", "Secret environment"}, r.label) {
+			t.Errorf("All projects still has %q", r.label)
+		}
+	}
+}
+
+// TestAccessBuiltIn: the Built in row lists tm's own rules for a new
+// thread of the project, and nothing else; all projects' row only says
+// where they are.
+func TestAccessBuiltIn(t *testing.T) {
+	src, m := sandboxData(t)
+	src.access = proto.AccessShowResult{AccessSet: proto.AccessSet{OS: "darwin", Rules: []proto.AccessRule{
+		{Where: proto.AccessInside, Kind: proto.AccessWorktree, Value: "<worktree>", Source: proto.AccessFromTM},
+		{Where: proto.AccessOutside, Kind: proto.AccessExcluded, Value: "docker compose *", Source: proto.AccessFromAll}}}}
+	row := guardRow(t, "alpha", "tm's rules")
+	drain(t, m, row.change(m))
+	v, ok := m.top().(*accessView)
+	if !ok || len(v.res.Rules) != 1 || v.res.Rules[0].Source != proto.AccessFromTM {
+		t.Fatalf("built in: %T %+v", m.top(), v)
+	}
+	if out := screen(m); !strings.Contains(out, "Built in (tm) · alpha") || strings.Contains(out, "docker compose") {
+		t.Errorf("built in view:\n%s", out)
+	}
+	if all := guardRow(t, "", "tm's rules"); all.change != nil {
+		t.Error("all projects' Built in row opens something")
 	}
 }
 
@@ -185,12 +248,12 @@ func TestSandboxTabOS(t *testing.T) {
 		}
 		_, m := sandboxData(t)
 		m.data.Server.OS = goos
-		if out := strings.Join(sandboxHead(m, 200), " "); !strings.Contains(out, "No preset applies there") || !strings.Contains(out, config.OSName(goos)) {
+		if out := strings.Join(accessHead(m, 200), " "); !strings.Contains(out, "No preset applies there") || !strings.Contains(out, config.OSName(goos)) {
 			t.Errorf("%s head: %s", goos, out)
 		}
 	}
 	rows := sandboxSettings("", config.OSMac)
-	if len(rows) != 5 || rows[0].section != "Presets" || rows[3].section != "Advanced" {
+	if len(rows) != 5 || rows[0].section != "Inside the sandbox: presets" || rows[3].section != "Outside the sandbox" || rows[4].section != "Permission rules" {
 		t.Errorf("macOS rows: %+v", rows)
 	}
 }

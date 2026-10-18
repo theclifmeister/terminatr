@@ -9,7 +9,7 @@ import (
 // The sandbox presets of threads (docs/SPEC.md §5.2, Sandbox presets):
 // named switches in a sandbox table, each opening what one kind of tool
 // needs while its commands stay inside the sandbox, which is why the
-// Sandbox tab puts them before the excluded commands:
+// Access tab puts them before the excluded commands:
 //
 //	[projects.web.sandbox]
 //	browser_testing = true
@@ -28,7 +28,7 @@ const (
 	SandboxDevServers = "local_dev_servers"
 )
 
-// SandboxPresets are the presets' keys, in the Sandbox tab's order.
+// SandboxPresets are the presets' keys, in the Access tab's order.
 var SandboxPresets = []string{SandboxBrowser, SandboxDownloads, SandboxDevServers}
 
 // BrowserDomains are the hosts the browser downloads preset opens to a
@@ -39,7 +39,7 @@ var SandboxPresets = []string{SandboxBrowser, SandboxDownloads, SandboxDevServer
 // one), and storage.googleapis.com, where cdn.playwright.dev redirects
 // the Chrome for Testing builds (the headless shell among them). That
 // last one is every Google Cloud Storage bucket's host, which the
-// Sandbox tab says. They are a key of their own, not browser testing's
+// Access tab says. They are a key of their own, not browser testing's
 // (v0.35 had that without hosts): a switch turned on before them opens
 // none until the human turns this one on, after its question.
 var BrowserDomains = []string{"registry.npmjs.org", "cdn.playwright.dev", "playwright.download.prss.microsoft.com", "storage.googleapis.com"}
