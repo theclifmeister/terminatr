@@ -173,6 +173,12 @@ clear = "/clear"
 # No switch_model: /model only opens a picker; "/model <name>" goes to
 # the model as text (0.162.0), so a coordinator_model change applies on
 # the coordinator's next start.
+# tm thread prompt --interrupt (checked on 0.162.0, T569): Esc stops the
+# turn within about 3 s and leaves the composer empty; the prompt is
+# pasted after, once idle. A steer pasted before the Esc stays in the
+# history unanswered.
+interrupt = "\u001b"
+interrupt_paste = "after"
 
 # Hook payloads are trimmed before they leave the hook process.
 [hook]

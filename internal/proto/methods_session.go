@@ -346,13 +346,28 @@ type AttachReply struct {
 type SessionPromptParams struct {
 	ID   string `json:"id"`
 	Text string `json:"text"`
+	// Mode is "" (queued), PromptNow or PromptInterrupt (docs/SPEC.md
+	// §8.6, Priority prompts).
+	Mode string `json:"mode,omitempty"`
 }
 
+// session.prompt modes.
+const (
+	// PromptNow steers the prompt into the agent's running turn.
+	PromptNow = "now"
+	// PromptInterrupt stops the running turn for the prompt.
+	PromptInterrupt = "interrupt"
+)
+
 // SessionPromptResult says how the prompt went in: "channel" (written to
-// the agent's structured channel, which may not confirm delivery) or
-// "queued" (pasted once the agent is idle with an empty prompt box).
+// the agent's structured channel, which may not confirm delivery),
+// "queued" (pasted once the agent is idle with an empty prompt box), and
+// for a Mode, "steered" (pasted into the running turn) or "interrupted"
+// (the turn stopped for it). Why says why a Mode's prompt went another
+// way (the agent idle, a draft in its prompt box, no interrupt key).
 type SessionPromptResult struct {
 	Via string `json:"via"`
+	Why string `json:"why,omitempty"`
 }
 
 // SessionWaitParams are the params of session.wait: block until the

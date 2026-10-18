@@ -91,6 +91,17 @@ type Manifest struct {
 		// SwitchModelDefault.
 		SwitchModel        string `toml:"switch_model"`
 		SwitchModelDefault string `toml:"switch_model_default"`
+		// Interrupt is the key that stops the agent's running turn, for
+		// a prompt sent with tm thread prompt --interrupt (docs/SPEC.md
+		// §8.6, Priority prompts). Empty: the agent has none, and such a
+		// prompt is steered into the turn instead.
+		Interrupt string `toml:"interrupt"`
+		// InterruptPaste says when that prompt is pasted: "before" the
+		// key, for an agent that sends what was typed mid-turn once
+		// interrupted (Claude), or "after" it once the agent is idle
+		// with an empty box (Codex: a steer pasted first is left
+		// unanswered). Empty means "after".
+		InterruptPaste string `toml:"interrupt_paste"`
 	} `toml:"inject"`
 
 	// RemoteControl: reaching the session from another device, e.g.
@@ -438,6 +449,14 @@ func (m *Manifest) validate() error {
 	}
 	if m.Inject.SwitchModelDefault != "" && m.Inject.SwitchModel == "" {
 		errs = append(errs, errors.New("inject.switch_model_default needs switch_model"))
+	}
+	switch m.Inject.InterruptPaste {
+	case "", InterruptPasteBefore, InterruptPasteAfter:
+	default:
+		errs = append(errs, fmt.Errorf("inject.interrupt_paste %q is not before|after", m.Inject.InterruptPaste))
+	}
+	if m.Inject.InterruptPaste != "" && m.Inject.Interrupt == "" {
+		errs = append(errs, errors.New("inject.interrupt_paste needs interrupt"))
 	}
 	if l := m.ListModels; l != nil {
 		if err := l.validate(); err != nil {

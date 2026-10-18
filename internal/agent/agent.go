@@ -269,6 +269,12 @@ const (
 	InjectNone    Injector = "none"
 )
 
+// When an interrupting prompt is pasted ([inject] interrupt_paste).
+const (
+	InterruptPasteBefore = "before"
+	InterruptPasteAfter  = "after"
+)
+
 // PromptTarget is what a structured prompt channel needs to reach one
 // live session: the ids and the extra values the status file exposes
 // (StatusFile.Fields, e.g. a messaging socket path).

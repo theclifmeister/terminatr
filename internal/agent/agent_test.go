@@ -1215,3 +1215,31 @@ func TestNoHumanSocket(t *testing.T) {
 		}
 	}
 }
+
+// TestManifestInterrupt: interrupt_paste is before or after, and needs a
+// key; the built-in agents name theirs (T569).
+func TestManifestInterrupt(t *testing.T) {
+	const base = "manifest_version = 1\nname = \"a\"\n[launch]\ncommand = \"a\"\n[inject]\n"
+	for in, ok := range map[string]bool{
+		"":                          true,
+		"interrupt = \"\\u001b\"\n": true,
+		"interrupt = \"\\u001b\"\ninterrupt_paste = \"before\"\n": true,
+		"interrupt = \"\\u001b\"\ninterrupt_paste = \"after\"\n":  true,
+		"interrupt = \"\\u001b\"\ninterrupt_paste = \"later\"\n":  false,
+		"interrupt_paste = \"after\"\n":                           false,
+	} {
+		if _, err := ParseManifest([]byte(base + in)); (err == nil) != ok {
+			t.Errorf("%q: err %v", in, err)
+		}
+	}
+	for name, paste := range map[string]string{"claude": InterruptPasteBefore, "codex": InterruptPasteAfter} {
+		b, _ := Builtin(name)
+		m, err := ParseManifest(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m.Inject.Interrupt != "\x1b" || m.Inject.InterruptPaste != paste {
+			t.Errorf("%s: interrupt %q, paste %q", name, m.Inject.Interrupt, m.Inject.InterruptPaste)
+		}
+	}
+}
