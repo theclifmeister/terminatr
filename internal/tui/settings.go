@@ -29,8 +29,8 @@ import (
 // setting is one row of a settings list.
 type setting struct {
 	label, help string
-	// section, when set, heads the row and those after it (the Sandbox
-	// tab's Presets and Advanced).
+	// section, when set, heads the row and those after it (the Access
+	// tab's Prompts and escapes, Guard, …).
 	section string
 	value   func(m *dash) string
 	// change runs on enter or space; nil shows the value only.
@@ -271,14 +271,14 @@ type settingsView struct {
 }
 
 // settingsTabs are the , popup's tabs.
-var settingsTabs = [6]string{"General", "All projects", "Sandbox", "Mods", "Peers", "Logs"}
+var settingsTabs = [6]string{"General", "All projects", "Access", "Mods", "Peers", "Logs"}
 
-// The Sandbox, Mods, Peers and Logs tabs' indexes.
+// The Access, Mods, Peers and Logs tabs' indexes.
 const (
-	tabAllSandbox = 2
-	tabMods       = 3
-	tabPeers      = 4
-	tabLogs       = 5
+	tabAllAccess = 2
+	tabMods      = 3
+	tabPeers     = 4
+	tabLogs      = 5
 )
 
 func (m *dash) openSettings() {
@@ -288,7 +288,7 @@ func (m *dash) openSettings() {
 	if safeMode() {
 		rows = append([]setting{safeModeRow()}, rows...)
 	}
-	sv := &settingsView{tabs: [3]settingsList{{rows: rows}, {rows: allProjectsSettings()}, {rows: sandboxSettings("", m.serverOS())}}}
+	sv := &settingsView{tabs: [3]settingsList{{rows: rows}, {rows: allProjectsSettings()}, {rows: accessSettings("", m.serverOS())}}}
 	m.push(sv)
 }
 
@@ -550,8 +550,8 @@ func (sv *settingsView) tabLines(m *dash, i, w int) ([]string, int, []int) {
 		return sv.mods.lines(m, w)
 	case tabPeers:
 		return sv.peers.lines(m, w)
-	case tabAllSandbox:
-		head := append(sandboxHead(m, w), "")
+	case tabAllAccess:
+		head := append(accessHead(m, w), "")
 		lines, sel, hits := sv.tabs[i].lines(m, w)
 		if sel >= 0 {
 			sel += len(head)
@@ -574,15 +574,15 @@ func (sv *settingsView) render(m *dash) string {
 	keys := "enter change · ↑ ↓ move · ← → tabs · esc close"
 	switch sv.tab {
 	case 0:
-		lines = append(lines, faintLines("A project's own settings (starting threads, yolo mode, remote control, …) are in its popup: a on the dashboard, prefix+a in a session.", w)...)
+		lines = append(lines, faintLines("A project's own settings (starting threads, remote control, …) and access (yolo mode, the guard, …) are in its popup: a on the dashboard, prefix+a in a session.", w)...)
 	case tabMods:
 		lines = append(lines, faintLines("Mods extend terminatr: themes, keys, columns, panels. They never change the safety settings, and no agent can install or turn one on. i installs one, e lists the examples.", w)...)
 		keys = modsKeys
 	case tabPeers:
 		lines = append(lines, faintLines("Paired servers see the projects you share with them, read-only, in their sidebar; you see theirs in yours. No agent can pair, share or remove a server.", w)...)
 		keys = peersKeys
-	case tabAllSandbox:
-		lines = append(lines, faintLines("Every project's threads get these, a new one's too, unless the project sets its own in its popup's Sandbox tab (a on the dashboard, prefix+a in a session); x there makes it follow these again.", w)...)
+	case tabAllAccess:
+		lines = append(lines, faintLines("Every project's threads get these, a new one's too, unless the project sets its own in its popup's Access tab (a on the dashboard, prefix+a in a session); x there makes it follow these again.", w)...)
 	default:
 		lines = append(lines, faintLines("Every project follows these, a new one too, unless it sets its own in its popup (a on the dashboard, prefix+a in a session); x there makes it follow these again.", w)...)
 		keys = "enter change · + - number · ↑ ↓ move · ← → tabs · esc close"
@@ -792,9 +792,15 @@ func ownsAny(own, keys []string) bool {
 // ownNote names, under an all-projects setting, the projects that set
 // their own value.
 func ownNote(m *dash, keys []string) []string {
+	return ownersNote(m, func(p ProjectData) bool { return ownsAny(p.Own, keys) })
+}
+
+// ownersNote names the projects that set their own (own), under an
+// all-projects row.
+func ownersNote(m *dash, own func(ProjectData) bool) []string {
 	var slugs []string
 	for _, p := range m.data.Projects {
-		if ownsAny(p.Own, keys) {
+		if own(p) {
 			slugs = append(slugs, p.Slug)
 		}
 	}

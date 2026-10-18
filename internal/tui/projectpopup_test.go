@@ -126,7 +126,7 @@ func TestProjectPopup(t *testing.T) {
 		t.Fatalf("6: tab %d", pv.tab)
 	}
 	keyPress(m, "left")
-	if pv.tab != tabSandbox {
+	if pv.tab != tabAccess {
 		t.Fatalf("left: tab %d", pv.tab)
 	}
 	keyPress(m, "left")
@@ -134,14 +134,19 @@ func TestProjectPopup(t *testing.T) {
 		t.Fatalf("left: tab %d", pv.tab)
 	}
 	out = screen(m)
-	for _, want := range []string{"Start threads", "ask first", "Yolo mode", "Coordinator approves", "Parallel threads", "10 · 1 working now",
+	for _, want := range []string{"Start threads", "ask first", "Parallel threads", "10 · 1 working now",
 		"Auto-close finished threads", "when its pull request merges", "Complete tasks", "by you",
 		"Pull request follow-up"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("settings tab lacks %q:\n%s", want, out)
 		}
 	}
-	for range 7 {
+	for _, gone := range []string{"Yolo mode", "Coordinator approves", "Guard"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("settings tab still has %q (the Access tab's):\n%s", gone, out)
+		}
+	}
+	for range 5 {
 		keyPress(m, "down")
 	}
 	if out := screen(m); !strings.Contains(out, "Remote control") {
@@ -157,7 +162,8 @@ func TestProjectPopup(t *testing.T) {
 }
 
 // TestProjectSettingsToggle: enter and space change a setting in place;
-// it is written to the settings file and shows at once. Yolo asks.
+// it is written to the settings file and shows at once. Yolo, on the
+// Access tab, asks.
 func TestProjectSettingsToggle(t *testing.T) {
 	src, m := popupData(t)
 	keyPress(m, "a")
@@ -175,6 +181,7 @@ func TestProjectSettingsToggle(t *testing.T) {
 	}
 
 	// Yolo asks first: n keeps it off, y turns it on.
+	keyPress(m, "5")
 	keyPress(m, "down")
 	act(t, m, src, "space")
 	if _, ok := m.top().(*confirmView); !ok {
@@ -192,7 +199,8 @@ func TestProjectSettingsToggle(t *testing.T) {
 
 	// Remote control: the row, and a note when the running coordinator
 	// differs.
-	for range 6 {
+	keyPress(m, "4")
+	for range 5 {
 		keyPress(m, "down")
 	}
 	src.data.Sessions[0].RemoteControl = true
@@ -333,7 +341,7 @@ func TestProjectSettingsNumbers(t *testing.T) {
 	src, m := popupData(t)
 	keyPress(m, "a")
 	keyPress(m, "4")
-	for range 3 {
+	for range 1 {
 		keyPress(m, "down")
 	}
 	act(t, m, src, "enter") // 10 → 15
@@ -929,7 +937,7 @@ func TestAllProjectsSettings(t *testing.T) {
 			t.Fatalf("all projects has a %s row", r.label)
 		}
 	}
-	for range 3 {
+	for range 1 {
 		keyPress(m, "down")
 	}
 	act(t, m, src, "enter") // 10 → 15
@@ -945,7 +953,7 @@ func TestAllProjectsSettings(t *testing.T) {
 	keyPress(m, "esc")
 	keyPress(m, "a")
 	keyPress(m, "4")
-	for range 3 {
+	for range 1 {
 		keyPress(m, "down")
 	}
 	if out := screen(m); !strings.Contains(out, "15 · 1 working now  −  + · all projects") {
@@ -975,7 +983,7 @@ func TestAllProjectsSettings(t *testing.T) {
 	if !strings.Contains(m.msg, "already follows all projects") {
 		t.Fatalf("x on a following setting: %q", m.msg)
 	}
-	for range 3 {
+	for range 1 {
 		keyPress(m, "down")
 	}
 	// Only x: delete and backspace aren't its aliases.
@@ -997,10 +1005,11 @@ func TestAllProjectsSettings(t *testing.T) {
 		t.Fatalf("file:\n%s", data)
 	}
 
-	// Yolo for all projects asks first, naming the projects it reaches.
+	// Yolo for all projects (on the Access tab) asks first, naming the
+	// projects it reaches.
 	keyPress(m, "esc")
 	keyPress(m, ",")
-	keyPress(m, "2")
+	keyPress(m, "3")
 	keyPress(m, "down")
 	act(t, m, src, "enter")
 	cv, ok := m.top().(*confirmView)
@@ -1057,8 +1066,6 @@ func TestNoKeyAliases(t *testing.T) {
 		}
 	}
 	keyPress(m, "4")
-	keyPress(m, "down")
-	keyPress(m, "down")
 	keyPress(m, "down") // Parallel threads
 	drain(t, m, keyPress(m, "="))
 	if len(src.settings) != 0 {
@@ -1120,7 +1127,7 @@ func TestSettingsKeysQueueDuringSave(t *testing.T) {
 	src, m := popupData(t)
 	keyPress(m, "a")
 	keyPress(m, "4")
-	for range 3 {
+	for range 1 {
 		keyPress(m, "down")
 	}
 	drain(t, m, keyPress(m, "enter")) // 10 → 15, saved
@@ -1166,7 +1173,7 @@ func TestSettingsQueueOutlivesStalePoll(t *testing.T) {
 	src, m := popupData(t)
 	keyPress(m, "a")
 	keyPress(m, "4")
-	for range 3 {
+	for range 1 {
 		keyPress(m, "down")
 	}
 	drain(t, m, keyPress(m, "enter")) // 10 → 15, saved
@@ -1602,7 +1609,7 @@ func TestGlobalThreadsSetting(t *testing.T) {
 	if out := screen(m); !strings.Contains(lineWith(out, "Threads across projects"), "off · 2 working now") {
 		t.Fatalf("all projects tab:\n%s", out)
 	}
-	for range 4 {
+	for range 2 {
 		keyPress(m, "down")
 	}
 	act(t, m, src, "enter") // off → 5

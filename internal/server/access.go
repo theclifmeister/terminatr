@@ -197,7 +197,7 @@ func sandboxRules(lc launchConfig, slug, goos string) ([]proto.AccessRule, strin
 		t, err = lc.cfg.ThreadSandbox(slug)
 	}
 	if err != nil {
-		return nil, fmt.Sprintf("project %s: sandbox lists and presets dropped, the thread starts without them (fix or remove the entry: tm settings, Sandbox tab): %v", slug, err)
+		return nil, fmt.Sprintf("project %s: sandbox lists and presets dropped, the thread starts without them (fix or remove the entry: tm settings, Access tab): %v", slug, err)
 	}
 	own := lc.cfg.SandboxOf(slug)
 	ownPresets := lc.cfg.PresetsOf(slug)

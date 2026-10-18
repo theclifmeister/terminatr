@@ -49,7 +49,7 @@ var popupKeys = []keyHelp{
 	{"↑ ↓ / tab", "on a mod's tab or card: move, filter (enter keeps it, esc drops it) and change list; the keys the mod lists go to it"},
 	{"↑ ↓ pgup pgdown", "move in the tab, or scroll it (Keys, Memory)"},
 	{"enter space + - x", "on the Settings tab: as in the settings, below"},
-	{"e", "on the Sandbox tab: the effective access, what a new thread of the project gets, read-only"},
+	{"e", "on the Access tab: the effective access, what a new thread of the project gets, read-only"},
 	{"+ x", "on the overview: add a repository / remove the selected one (asks first)"},
 	{"enter", "on a task (Tasks tab): show it, with what it is blocked on, or how to check it and whether its pull request merged"},
 	{"enter", "on a file (Library tab): read it, read-only: text as it is, JSON indented, other files by name and size"},
