@@ -305,6 +305,13 @@ func Edit(data []byte, table, key string, value any) ([]byte, error) {
 		}
 		return res, nil
 	}
+	if want, ok := value.([]ExcludedCommand); ok {
+		var got excludedList
+		if err := got.UnmarshalTOML(v); err != nil || !slices.Equal(got, excludedList(want)) {
+			return nil, ErrForm
+		}
+		return res, nil
+	}
 	if want, ok := value.(EnvSource); ok {
 		if m, _ := v.(map[string]any); len(m) != 1 || m["from"] != any(want.From) {
 			return nil, ErrForm
@@ -443,6 +450,19 @@ func tomlValue(v any) (string, error) {
 				parts[i] += ", exact = true"
 			}
 			parts[i] += " }"
+		}
+		return "[" + strings.Join(parts, ", ") + "]", nil
+	case []ExcludedCommand:
+		parts := make([]string, len(v))
+		for i, x := range v {
+			q, err := tomlValue(x.Command)
+			if err != nil {
+				return "", err
+			}
+			parts[i] = q
+			if !x.Ask {
+				parts[i] = "{ command = " + q + ", ask = false }"
+			}
 		}
 		return "[" + strings.Join(parts, ", ") + "]", nil
 	case EnvSource:

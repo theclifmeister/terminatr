@@ -196,7 +196,8 @@ excluded_commands = ["make bench"]
 }
 
 // TestAccessExplain: an excluded command runs outside the sandbox,
-// asking first unless an allow rule covers it; a compound command stays
+// asking first unless it runs without asking or an old allow rule covers
+// it; a compound command stays
 // inside; yolo asks nothing; the guard's verdict comes with it.
 func TestAccessExplain(t *testing.T) {
 	testPaths(t)
@@ -230,6 +231,17 @@ allow = ["Bash(npx playwright *)"]
 	}
 	if r := explain("git push --force origin main"); r.Guard != "refused" {
 		t.Errorf("force-push: %+v", r)
+	}
+	// One rule, one choice (T574 case 1): asks first, the guard asking;
+	// or without asking.
+	writeConfig(t, `[projects.demo.sandbox]
+excluded_commands = ["make e2e", { command = "pnpm test *", ask = false }]
+`)
+	if r := explain("make e2e"); r.Sandbox != proto.AccessOutside || r.Prompt != proto.PromptAsks || r.PromptFrom != "demo" || r.Guard != "asks" {
+		t.Errorf("asks first: %+v", r)
+	}
+	if r := explain("pnpm test --run"); r.Sandbox != proto.AccessOutside || r.Prompt != proto.PromptNone || !strings.Contains(r.PromptWhy, "without asking") || r.Guard != "allowed" {
+		t.Errorf("without asking: %+v", r)
 	}
 	writeConfig(t, "[projects.demo]\nyolo = true\n")
 	// Yolo: no sandbox, no prompts, the guard's floor only (T574 case 4).

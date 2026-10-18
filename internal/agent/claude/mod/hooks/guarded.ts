@@ -9,10 +9,12 @@
 // command the guard can't read is let through tool.call and asked in
 // tool.check: a call Claude would allow goes to the dialog, or auto
 // mode's classifier, with the guard's reason; one it would ask about
-// or refuse keeps Claude's answer. An ask is not reported, but for a
-// call that asks to run outside the sandbox (rule "escape"): the mod
-// tells the server (POST /v1/escape) before Claude's prompt opens, so
-// that the prompt is the user's to answer, never the coordinator's.
+// or refuse keeps Claude's answer, as does a call running an excluded
+// command that asks first (rule "excluded"). An ask is not reported, but
+// for a call that runs outside the sandbox (rule "escape", and
+// "excluded"): the mod tells the server (POST /v1/escape) before
+// Claude's prompt opens, so that the prompt is the user's to answer,
+// never the coordinator's.
 //
 // The rules come from the server (GET /v1/rules), fetched at the first
 // call after a load and again once they are a second old, so a change of
@@ -29,7 +31,7 @@
 
 import type { EngineInterface, On } from 'claude-code'
 
-import { judge, off, RULE_ESCAPE, rulesOf, writeTargets } from './guard'
+import { judge, off, RULE_ESCAPE, RULE_EXCLUDED, rulesOf, writeTargets } from './guard'
 import type { Denial, Rules } from './guard'
 import { failed, FETCH_MS, postInit, refused, socketURL, timedOut, within } from './socket'
 
@@ -57,7 +59,7 @@ export function guard(on: On) {
     const r = await placed($, await rulesNow($), e.tool, input)
     if (!r) return { deny: UNPLACED }
     const d = judge(r, e.tool, input)
-    if (d?.ask && d.rule === RULE_ESCAPE) await reportEscape($)
+    if (d?.ask && (d.rule === RULE_ESCAPE || d.rule === RULE_EXCLUDED)) await reportEscape($)
     if (!d || d.ask) return next(e)
     void reportDenial($, e.tool, d)
     return { deny: d.message }

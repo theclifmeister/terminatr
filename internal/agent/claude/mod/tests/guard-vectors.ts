@@ -14,7 +14,9 @@
 // tm's settings and the project folder no tool writes (noWrite); the
 // floor-coordinator set the coordinator's, whose project folder it
 // writes but for tm's parts of it; thread-escapes asks about a call that
-// asks to leave the sandbox (askEscapes), rule "escape".
+// asks to leave the sandbox (askEscapes), rule "escape"; thread-ask-first
+// asks about a command of an excluded command that asks first (askFirst),
+// rule "excluded", and thread-ask-first-only has nothing else.
 // The thread-allow, thread-learn and floor-only sets carry the human's
 // allowances (a refusal under an allowance's rule of the command line or
 // file it matches is lifted; an "exact" one's * matches only a *), tm's
@@ -66,6 +68,8 @@ export default {
  "yolo-thread": {"on": true, "role": "thread", "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "protected": ["main", "master"], "floor": ["force-push", "merge"], "own": ["/h/.terminatr/run"], "noWrite": ["/h/.terminatr/config.toml", "/h/.terminatr/projects/demo"]},
  "floor-coordinator": {"on": true, "role": "coordinator", "rules": ["force-push", "push-default", "delete-branch", "credentials"], "home": "/h", "cwd": "/h/.terminatr/projects/demo", "protected": ["main", "master"], "floor": ["force-push"], "noWrite": ["/h/.terminatr/config.toml", "/h/.terminatr/projects/demo/threads", "/h/.terminatr/projects/demo/inbox", "/h/.terminatr/projects/demo/TASKS.md"], "allow": [{"rule": "tm-files", "path": "/h/.terminatr/config.toml"}]},
  "thread-escapes": {"on": true, "role": "thread", "rules": ["force-push", "credentials"], "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "protected": ["main", "master"], "floor": ["force-push"], "askEscapes": true},
+ "thread-ask-first": {"on": true, "role": "thread", "rules": ["force-push", "credentials"], "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "protected": ["main", "master"], "floor": ["force-push"], "askEscapes": true, "askFirst": ["npx playwright *", "make e2e", "docker:*"]},
+ "thread-ask-first-only": {"on": true, "role": "thread", "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "askFirst": ["npx playwright *"]},
  "off": {"on": false}
 },
 "cases": [
@@ -610,6 +614,28 @@ export default {
  {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "echo hi > inbox/x.md"}, "rule": "tm-files", "summary": "echo of /h/.terminatr/projects/demo/inbox/x.md", "floor": true},
  {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "echo hi > memory/x.md"}, "rule": null},
  {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "mkdir -p threads/t-0009"}, "rule": "tm-files", "summary": "mkdir of /h/.terminatr/projects/demo/threads/t-0009", "floor": true},
+ {"rules": "thread-ask-first", "tool": "Bash", "input": {"command": "npx playwright test"}, "rule": "excluded", "summary": "an excluded command that asks first", "ask": true, "message": "terminatr guard: this command runs outside the sandbox (excluded command npx playwright *), and the user set it to ask first."},
+ {"rules": "thread-ask-first", "tool": "Bash", "input": {"command": "npx playwright"}, "rule": "excluded", "summary": "an excluded command that asks first", "ask": true, "message": "terminatr guard: this command runs outside the sandbox (excluded command npx playwright *), and the user set it to ask first."},
+ {"rules": "thread-ask-first", "tool": "Bash", "input": {"command": "  npx playwright test --headed  "}, "rule": "excluded", "summary": "an excluded command that asks first", "ask": true, "message": "terminatr guard: this command runs outside the sandbox (excluded command npx playwright *), and the user set it to ask first."},
+ {"rules": "thread-ask-first", "tool": "Bash", "input": {"command": "cd web && npx playwright test"}, "rule": "excluded", "summary": "an excluded command that asks first", "ask": true, "message": "terminatr guard: this command runs outside the sandbox (excluded command npx playwright *), and the user set it to ask first."},
+ {"rules": "thread-ask-first", "tool": "Bash", "input": {"command": "npx playwright test | tail -5"}, "rule": "excluded", "summary": "an excluded command that asks first", "ask": true, "message": "terminatr guard: this command runs outside the sandbox (excluded command npx playwright *), and the user set it to ask first."},
+ {"rules": "thread-ask-first", "tool": "Bash", "input": {"command": "CI=1 npx playwright test"}, "rule": "excluded", "summary": "an excluded command that asks first", "ask": true, "message": "terminatr guard: this command runs outside the sandbox (excluded command npx playwright *), and the user set it to ask first."},
+ {"rules": "thread-ask-first", "tool": "Bash", "input": {"command": "timeout 60 npx playwright test"}, "rule": "excluded", "summary": "an excluded command that asks first", "ask": true, "message": "terminatr guard: this command runs outside the sandbox (excluded command npx playwright *), and the user set it to ask first."},
+ {"rules": "thread-ask-first", "tool": "Bash", "input": {"command": "echo $(npx playwright --version)"}, "rule": "excluded", "summary": "an excluded command that asks first", "ask": true, "message": "terminatr guard: this command runs outside the sandbox (excluded command npx playwright *), and the user set it to ask first."},
+ {"rules": "thread-ask-first", "tool": "Bash", "input": {"command": "make e2e"}, "rule": "excluded", "summary": "an excluded command that asks first", "ask": true, "message": "terminatr guard: this command runs outside the sandbox (excluded command make e2e), and the user set it to ask first."},
+ {"rules": "thread-ask-first", "tool": "Bash", "input": {"command": "docker ps"}, "rule": "excluded", "summary": "an excluded command that asks first", "ask": true, "message": "terminatr guard: this command runs outside the sandbox (excluded command docker:*), and the user set it to ask first."},
+ {"rules": "thread-ask-first", "tool": "Bash", "input": {"command": "docker"}, "rule": "excluded", "summary": "an excluded command that asks first", "ask": true, "message": "terminatr guard: this command runs outside the sandbox (excluded command docker:*), and the user set it to ask first."},
+ {"rules": "thread-ask-first", "tool": "Bash", "input": {"command": "make e2e-fast"}, "rule": null},
+ {"rules": "thread-ask-first", "tool": "Bash", "input": {"command": "npx playwrightx"}, "rule": null},
+ {"rules": "thread-ask-first", "tool": "Bash", "input": {"command": "npx vitest"}, "rule": null},
+ {"rules": "thread-ask-first", "tool": "Bash", "input": {"command": "echo npx playwright test"}, "rule": null},
+ {"rules": "thread-ask-first", "tool": "Bash", "input": {"command": "npx playwright test && git push -f origin main"}, "rule": "force-push", "summary": "git push with force", "floor": true},
+ {"rules": "thread-ask-first", "tool": "Bash", "input": {"command": "npx playwright test", "dangerouslyDisableSandbox": true}, "rule": "escape", "summary": "a command outside the sandbox", "ask": true, "message": "terminatr guard: this command asks to run outside the sandbox, so the user answers it."},
+ {"rules": "thread-ask-first", "tool": "PowerShell", "input": {"command": "npx playwright test"}, "rule": null},
+ {"rules": "thread-ask-first", "tool": "Write", "input": {"file_path": "/h/npx playwright test"}, "rule": null},
+ {"rules": "thread-ask-first-only", "tool": "Bash", "input": {"command": "npx playwright test"}, "rule": "excluded", "summary": "an excluded command that asks first", "ask": true, "message": "terminatr guard: this command runs outside the sandbox (excluded command npx playwright *), and the user set it to ask first."},
+ {"rules": "thread-ask-first-only", "tool": "bash", "input": {"command": "npx playwright test"}, "rule": "excluded", "summary": "an excluded command that asks first", "ask": true, "message": "terminatr guard: this command runs outside the sandbox (excluded command npx playwright *), and the user set it to ask first."},
+ {"rules": "thread-escapes", "tool": "Bash", "input": {"command": "npx playwright test"}, "rule": null},
  {"rules": "thread-escapes", "tool": "Bash", "input": {"command": "ls", "dangerouslyDisableSandbox": true}, "rule": "escape", "summary": "a command outside the sandbox", "ask": true, "message": "terminatr guard: this command asks to run outside the sandbox, so the user answers it."},
  {"rules": "thread-escapes", "tool": "Bash", "input": {"command": "ls", "dangerouslyDisableSandbox": false}, "rule": null},
  {"rules": "thread-escapes", "tool": "Bash", "input": {"command": "ls"}, "rule": null},

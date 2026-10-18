@@ -11,7 +11,11 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/guard"
+	"github.com/theclifmeister/terminatr/internal/plat/caps"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
 // TestSandboxListsLaunch: a Claude thread's launch settings get the
@@ -164,4 +168,106 @@ allow = ["Bash(npx playwright *)"]
 			t.Errorf("note lacks %q: %s", want, notes[0])
 		}
 	}
+}
+
+// TestExcludedAskAndWriteLaunch: an excluded command that runs without
+// asking gets its Bash(...) allow rule from tm, one that asks first
+// none, and the guard asks about it, live and as the thread launched
+// (T574 case 1); a write folder is one Edit(...) allow rule and the
+// guard's writable list, never tm's folder (case 2). Not for a Codex
+// thread's guard, nor under yolo.
+func TestExcludedAskAndWriteLaunch(t *testing.T) {
+	p := testPaths(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CODEX_HOME", t.TempDir())
+	newWatchProject(t)
+	writeConfig(t, `[projects.demo.sandbox]
+excluded_commands = ["make e2e", { command = "npx playwright *", ask = false }]
+write = ["~/src/fixtures", "/`+strings.TrimPrefix(filepath.ToSlash(p.Home), "/")+`/sub"]
+`)
+	reg, err := agent.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var logged lockedBuffer
+	s := &Server{opts: Options{Paths: p, Bin: "/nonexistent/tm", Env: []string{"PATH=/usr/bin:/bin"}},
+		log: log.New(&logged, "", 0), noMods: true, agents: reg, records: map[string]SessionRecord{}}
+	rec := SessionRecord{ID: "s-1", Role: proto.RoleThread, Agent: "claude", Project: "demo", Thread: "t-0001", Cwd: t.TempDir()}
+	pl, perr := s.prepareLaunch(agentLaunch{rec: rec, kick: "Start."}, launchView{agents: reg})
+	if perr != nil {
+		t.Fatal(perr)
+	}
+	t.Cleanup(pl.abandon)
+	b, err := os.ReadFile(filepath.Join(pl.rt, "claude-settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var st struct {
+		Permissions struct{ Allow []string }
+		Sandbox     struct{ ExcludedCommands []string }
+	}
+	if err := json.Unmarshal(b, &st); err != nil {
+		t.Fatalf("%v\n%s", err, b)
+	}
+	fixtures := filepath.Join(home, "src", "fixtures")
+	if !slices.Equal(st.Sandbox.ExcludedCommands, []string{"make e2e", "npx playwright *"}) {
+		t.Errorf("excluded %q", st.Sandbox.ExcludedCommands)
+	}
+	if !slices.Contains(st.Permissions.Allow, "Bash(npx playwright *)") || slices.Contains(st.Permissions.Allow, "Bash(make e2e)") {
+		t.Errorf("allow %q", st.Permissions.Allow)
+	}
+	if !slices.Contains(st.Permissions.Allow, "Edit(/"+filepath.ToSlash(fixtures)+"/**)") || slices.ContainsFunc(st.Permissions.Allow, func(a string) bool { return strings.Contains(a, "/sub") }) {
+		t.Errorf("write folders: allow %q", st.Permissions.Allow)
+	}
+	if !strings.Contains(logged.String(), "write folder") {
+		t.Errorf("the folder in tm's own isn't said to be skipped: %s", logged.String())
+	}
+
+	g := s.guardRulesFor(rec)
+	if !slices.Equal(g.AskFirst, []string{"make e2e"}) || !slices.Contains(g.Writable, fixtures) || slices.Contains(g.Writable, filepath.Join(p.Home, "sub")) {
+		t.Errorf("guard: ask first %q, writable %q", g.AskFirst, g.Writable)
+	}
+	if d := g.Judge("Bash", map[string]any{"command": "make e2e"}); d == nil || !d.Ask || d.Rule != guard.RuleExcluded {
+		t.Errorf("make e2e: %+v", d)
+	}
+	if d := g.Judge("Write", map[string]any{"file_path": filepath.Join(fixtures, "a.json")}); d != nil {
+		t.Errorf("a write in the write folder: %+v", d)
+	}
+	// What it launched with holds: config.toml no longer lists it.
+	proj, err := project.Open("demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(thread.Path(proj, rec.Thread, accessRecord)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s.recordLaunch(rec, mustResolve(t, s, rec))
+	if _, ok := readLaunchRecord(proj, rec.Thread); !ok {
+		t.Fatalf("no launch record: %s", logged.String())
+	}
+	writeConfig(t, "[projects.demo.sandbox]\nexcluded_commands = [\"cargo bench\"]\n")
+	if g := s.guardRulesFor(rec); !slices.Equal(g.AskFirst, []string{"cargo bench", "make e2e"}) || slices.Contains(g.Writable, fixtures) {
+		t.Errorf("after the change: ask first %q, writable %q", g.AskFirst, g.Writable)
+	}
+	codex := rec
+	codex.Agent, codex.Thread = "codex", "t-0002"
+	if g := s.guardRulesFor(codex); g.AskFirst != nil {
+		t.Errorf("codex: ask first %q", g.AskFirst)
+	}
+	yolo := rec
+	yolo.Yolo = true
+	if g := s.guardRulesFor(yolo); g.AskFirst != nil {
+		t.Errorf("yolo: ask first %q", g.AskFirst)
+	}
+}
+
+// mustResolve is rec's access set, as its launch resolves it.
+func mustResolve(t *testing.T, s *Server, rec SessionRecord) proto.AccessSet {
+	t.Helper()
+	set, err := s.resolveAccess(accessInput{role: rec.Role, slug: rec.Project, cwd: rec.Cwd, agent: rec.Agent, goos: caps.OS}, loadLaunchConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return set
 }

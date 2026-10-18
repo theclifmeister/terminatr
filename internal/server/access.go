@@ -11,6 +11,7 @@ package server
 import (
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -51,7 +52,7 @@ func (s *Server) resolveAccess(in accessInput, lc launchConfig) (proto.AccessSet
 	}
 	from := len(set.Rules)
 	if in.role == proto.RoleThread {
-		rules, why := sandboxRules(lc, in.slug, in.goos)
+		rules, why := sandboxRules(lc, in.slug, in.goos, s.opts.Paths.Home)
 		add(rules...)
 		set.SandboxError = why
 	}
@@ -187,10 +188,12 @@ func (s *Server) pathNotes(slug, repo, common string) func(string) string {
 
 // sandboxRules are project slug's sandbox lists and presets for its
 // threads on platform goos (config.ThreadSandbox): each entry a rule,
-// a preset with the rules it opens, a rule that doesn't apply there
-// marked skipped. A config.toml that doesn't load, or an entry that
-// fails its check, gives no rules and why.
-func sandboxRules(lc launchConfig, slug, goos string) ([]proto.AccessRule, string) {
+// an excluded command noting whether it asks first, a write folder by
+// its absolute path, a preset with the rules it opens, a rule that
+// doesn't apply there marked skipped. A config.toml that doesn't load,
+// or an entry that fails its check, gives no rules and why. tmHome is
+// tm's folder, which no write folder opens.
+func sandboxRules(lc launchConfig, slug, goos, tmHome string) ([]proto.AccessRule, string) {
 	err := lc.err
 	var t config.ThreadSandbox
 	if err == nil {
@@ -229,7 +232,25 @@ func sandboxRules(lc launchConfig, slug, goos string) ([]proto.AccessRule, strin
 		}
 	}
 	list(config.SandboxExcluded, proto.AccessOutside, proto.AccessExcluded, t.ExcludedCommands)
+	for i := range out {
+		if r := &out[i]; r.Kind == proto.AccessExcluded {
+			r.Note = proto.AccessAsksFirst
+			if slices.Contains(t.WithoutAsking, r.Value) {
+				r.Note = proto.AccessWithoutAsking
+			}
+		}
+	}
 	list(config.SandboxAllow, proto.AccessPrompts, proto.AccessAllow, t.Allow)
+	from0 := len(out)
+	list(config.SandboxWrite, proto.AccessInside, proto.AccessWriteFolder, t.Write)
+	for i := from0; i < len(out); i++ {
+		r := &out[i]
+		r.Note = r.Value
+		r.Value = writeFolder(r.Value)
+		if why := writeFolderRefused(slug, r.Value, tmHome); why != "" && r.Skipped == "" {
+			r.Skipped = why
+		}
+	}
 	for _, k := range t.Presets {
 		_, set := ownPresets[k]
 		base := proto.AccessRule{Source: from(set), OS: config.SandboxSettings[k].OS, Skipped: skip(k), Note: presetName(k) + " preset"}
@@ -254,6 +275,51 @@ func sandboxRules(lc launchConfig, slug, goos string) ([]proto.AccessRule, strin
 		}
 	}
 	return out, ""
+}
+
+// writeFolder is write folder w (config write) as an absolute path:
+// ~/ from the user's home folder, cleaned.
+func writeFolder(w string) string {
+	if rest, ok := strings.CutPrefix(w, "~/"); ok {
+		home, err := os.UserHomeDir()
+		if err != nil || home == "" {
+			return w
+		}
+		return filepath.Join(home, filepath.FromSlash(rest))
+	}
+	return filepath.Clean(filepath.FromSlash(w))
+}
+
+// writeFolderRefused is why the launch leaves write folder p out, or
+// "": a folder it can't place (no home folder), or one that holds or is
+// in tm's folder tmHome (config.toml with it) or project slug's folder,
+// which no write folder opens (T574 §4.6, case 2). Compared with their
+// links resolved too.
+func writeFolderRefused(slug, p, tmHome string) string {
+	if !filepath.IsAbs(p) {
+		return "refused: no home folder to place it in"
+	}
+	var closed []string
+	if tmHome != "" {
+		closed = append(closed, tmHome)
+	}
+	if d, err := project.Dir(slug); err == nil {
+		closed = append(closed, d)
+	}
+	for _, c := range withReal(closed) {
+		for _, q := range []string{p, realPath(p)} {
+			if within(q, c) || within(c, q) {
+				return "refused: it holds or is in tm's folder or the project folder, which threads never write"
+			}
+		}
+	}
+	return ""
+}
+
+// within reports whether p is root or below it.
+func within(p, root string) bool {
+	rel, err := filepath.Rel(root, p)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
 // presetName is a preset's key as the UI and the log say it.
@@ -374,6 +440,10 @@ func launchAccess(set proto.AccessSet) agent.Access {
 			a.NoWriteFiles = append(a.NoWriteFiles, r.Value)
 		case proto.AccessCommand:
 			a.Commands = append(a.Commands, r.Value)
+		case proto.AccessWriteFolder:
+			// Claude's Edit(...) allow (its Bash sandbox writes there too)
+			// and Codex's filesystem write, as the worktree's git dir.
+			a.Write = append(a.Write, withReal([]string{r.Value})...)
 		}
 	}
 	return a
@@ -388,6 +458,7 @@ func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, presets, skip
 		return lists, nil, []string{set.SandboxError}
 	}
 	said := map[string]bool{}
+	var noAsk []string
 	for _, r := range set.Rules {
 		if r.Where == proto.AccessAgent || r.Skipped == proto.AccessYoloNoSandbox {
 			continue
@@ -399,6 +470,8 @@ func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, presets, skip
 				what = "excluded commands"
 			case proto.AccessAllow:
 				what = "allow rules"
+			case proto.AccessWriteFolder:
+				what = "write folder " + r.Note
 			case proto.AccessPreset:
 				what = "preset " + presetName(r.Value)
 			}
@@ -411,6 +484,9 @@ func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, presets, skip
 		switch r.Kind {
 		case proto.AccessExcluded:
 			lists.Excluded = append(lists.Excluded, r.Value)
+			if r.Note == proto.AccessWithoutAsking {
+				noAsk = append(noAsk, "Bash("+r.Value+")")
+			}
 		case proto.AccessAllow:
 			lists.Allow = append(lists.Allow, r.Value)
 		case proto.AccessPreset:
@@ -419,6 +495,14 @@ func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, presets, skip
 			lists.Domains = append(lists.Domains, r.Value)
 		case proto.AccessLocalPorts:
 			lists.LocalBinding = true
+		}
+	}
+	// One rule, one choice (T574 case 1): tm writes the allow rule of an
+	// excluded command that runs without asking, after the allow list
+	// (whose old Bash rule may be it already).
+	for _, a := range noAsk {
+		if !slices.Contains(lists.Allow, a) {
+			lists.Allow = append(lists.Allow, a)
 		}
 	}
 	return lists, presets, skipped

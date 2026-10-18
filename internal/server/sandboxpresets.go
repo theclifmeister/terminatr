@@ -20,7 +20,7 @@ import (
 // one note saying why, for the log and the launch's warnings. It is
 // launchSandbox of the rules (access.go).
 func (l launchConfig) sandbox(slug, goos string) (lists agent.SandboxLists, presets, skipped []string) {
-	rules, why := sandboxRules(l, slug, goos)
+	rules, why := sandboxRules(l, slug, goos, "")
 	return launchSandbox(proto.AccessSet{Rules: rules, SandboxError: why})
 }
 

@@ -31,8 +31,10 @@ yolo = false
 		// doesn't set follows them.
 		"web":   {ExcludedCommands: []string{"npx playwright *"}, Allow: []string{"Bash(docker compose *)"}},
 		"none":  {ExcludedCommands: []string{"docker compose *"}, Allow: []string{}},
-		"plain": {ExcludedCommands: []string{"docker compose *"}, Allow: []string{"Bash(docker compose *)"}},
-		"other": {ExcludedCommands: []string{"docker compose *"}, Allow: []string{"Bash(docker compose *)"}},
+		// A Bash rule of a file written before covers its excluded
+		// command: it runs without asking, as before.
+		"plain": {ExcludedCommands: []string{"docker compose *"}, WithoutAsking: []string{"docker compose *"}, Allow: []string{"Bash(docker compose *)"}},
+		"other": {ExcludedCommands: []string{"docker compose *"}, WithoutAsking: []string{"docker compose *"}, Allow: []string{"Bash(docker compose *)"}},
 	} {
 		got, err := c.ThreadSandbox(slug)
 		if err != nil || !reflect.DeepEqual(got, want) {
@@ -89,9 +91,22 @@ func TestCheckSandboxEntries(t *testing.T) {
 			t.Errorf("excluded %q passed", e)
 		}
 	}
-	for _, e := range []string{"Bash(npx playwright *)", "Bash(npx playwright:*)", "WebFetch(domain:playwright.dev)", "Edit(/tmp/pw/**)", "mcp__browser__open", "mcp__browser", "WebSearch", "Read(~/Library/Caches/ms-playwright/**)"} {
+	for _, e := range []string{"WebFetch(domain:playwright.dev)", "mcp__browser__open", "mcp__browser", "WebSearch", "Read(~/Library/Caches/ms-playwright/**)"} {
 		if err := CheckSandboxAllow(e); err != nil {
 			t.Errorf("allow %q: %v", e, err)
+		}
+	}
+	// Rules that run commands or write files: a file written before
+	// still has them (Load), a new one is refused (T574 case 1, 2).
+	for _, e := range []string{"Bash(npx playwright *)", "Bash(npx playwright:*)", "bash(make e2e)", "PowerShell(npx playwright *)", "Edit(/tmp/pw/**)", "Write(/tmp/pw/x)", "MultiEdit(/tmp/pw/**)", "NotebookEdit(/tmp/pw/**)", "edit(/tmp/pw/**)"} {
+		if err := CheckSandboxAllow(e); err == nil {
+			t.Errorf("new allow %q passed", e)
+		}
+		if err := CheckNewSandboxEntry(SandboxAllow, e); err == nil {
+			t.Errorf("new allow entry %q passed", e)
+		}
+		if err := CheckSandboxList(SandboxAllow, []string{e}); err != nil {
+			t.Errorf("allow %q in a file: %v", e, err)
 		}
 	}
 	for _, e := range []string{"Bash", "Bash(*)", "Bash(**)", "Bash(:*)", "PowerShell", "Edit", "Edit(**)", "Edit(/**)", "Edit(//**)", "Edit(~/**)", "Write(*)", "Bash()", "bash x", "Bash(npx *", "(x)",
@@ -125,7 +140,7 @@ func TestSandboxWarning(t *testing.T) {
 		{SandboxExcluded, "pnpm exec playwright test *", false},
 		{SandboxExcluded, "sh scripts/e2e.sh", false},
 		{SandboxExcluded, "make e2e", false},
-		{SandboxAllow, "Bash(npx playwright *)", false},
+		{SandboxAllow, "Bash(npx playwright *)", true}, // allow rules no longer take it
 		{SandboxAllow, "Bash(npx:*)", true},
 		{SandboxAllow, "Bash(sh *)", true},
 		{SandboxAllow, "WebFetch", true},
@@ -147,7 +162,10 @@ func TestSetSandbox(t *testing.T) {
 	if err := SetSandbox("projects.web", SandboxExcluded, []string{"npx playwright *"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := SetSandbox(DefaultsTable, SandboxAllow, []string{"Bash(npx playwright *)"}); err != nil {
+	if err := SetSandbox(DefaultsTable, SandboxAllow, []string{"Bash(npx playwright *)"}); err == nil {
+		t.Fatal("a new Bash allow rule was written")
+	}
+	if err := SetSandbox(DefaultsTable, SandboxAllow, []string{"WebFetch(domain:playwright.dev)"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := SetSandbox("projects.web", SandboxAllow, nil); err != nil {
@@ -173,7 +191,7 @@ func TestSetSandbox(t *testing.T) {
 		t.Fatal(err)
 	}
 	c, _ = Load()
-	if got, _ := c.ThreadSandbox("web"); !reflect.DeepEqual(got.Allow, []string{"Bash(npx playwright *)"}) {
+	if got, _ := c.ThreadSandbox("web"); !reflect.DeepEqual(got.Allow, []string{"WebFetch(domain:playwright.dev)"}) {
 		t.Fatalf("after unset: %+v", got)
 	}
 	data, _ := os.ReadFile(c.Path)
@@ -295,5 +313,106 @@ func TestSandboxProblems(t *testing.T) {
 	got := SandboxProblems(SandboxExcluded, []string{"make e2e", "x $1", "make e2e", "*", "price $"})
 	if got[0] != "" || got[4] != "" || !strings.Contains(got[1], "variable") || !strings.Contains(got[2], "twice") || !strings.Contains(got[3], "every command") {
 		t.Errorf("%q", got)
+	}
+}
+
+// TestExcludedAsk: an excluded command asks first, or with ask = false
+// runs without asking; SetSandbox keeps each one's choice, a new one
+// asks first; SetExcludedAsk changes it; a file's legacy Bash rule
+// stays, and only it.
+func TestExcludedAsk(t *testing.T) {
+	write(t, `
+[defaults.sandbox]
+excluded_commands = ["docker compose *", { command = "npx playwright *", ask = false }]
+allow = ["Bash(make e2e)"]
+
+[projects.web.sandbox]
+excluded_commands = [{ command = "make e2e", ask = true }, { command = "pnpm test *", ask = false }]
+`)
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := c.ThreadSandbox("other")
+	if !reflect.DeepEqual(got.ExcludedCommands, []string{"docker compose *", "npx playwright *"}) || !reflect.DeepEqual(got.WithoutAsking, []string{"npx playwright *"}) {
+		t.Errorf("other: %+v", got)
+	}
+	got, _ = c.ThreadSandbox("web")
+	// make e2e asks in its own table, but all projects' Bash rule
+	// covers it: it ran without asking before, and still does.
+	if !reflect.DeepEqual(got.WithoutAsking, []string{"make e2e", "pnpm test *"}) {
+		t.Errorf("web: %+v", got)
+	}
+	if got := c.WithoutAskingOf(""); !reflect.DeepEqual(got, []string{"npx playwright *"}) {
+		t.Errorf("WithoutAskingOf(all) = %v", got)
+	}
+	// The allow list keeps its legacy rule when another is added.
+	if err := SetSandbox(DefaultsTable, SandboxAllow, []string{"Bash(make e2e)", "WebSearch"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetSandbox(DefaultsTable, SandboxExcluded, []string{"npx playwright *", "cargo bench"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetExcludedAsk("projects.web", "make e2e", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetExcludedAsk("projects.web", "absent", false); err == nil {
+		t.Error("SetExcludedAsk of a command the list lacks passed")
+	}
+	data, _ := os.ReadFile(c.Path)
+	for _, want := range []string{
+		`excluded_commands = [{ command = "npx playwright *", ask = false }, "cargo bench"]`,
+		`excluded_commands = [{ command = "make e2e", ask = false }, { command = "pnpm test *", ask = false }]`,
+		`allow = ["Bash(make e2e)", "WebSearch"]`,
+	} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("no %s in:\n%s", want, data)
+		}
+	}
+	for name, body := range map[string]string{
+		"no command":  "[defaults.sandbox]\nexcluded_commands = [{ ask = false }]\n",
+		"unknown key": "[defaults.sandbox]\nexcluded_commands = [{ command = \"make e2e\", asks = false }]\n",
+		"ask text":    "[defaults.sandbox]\nexcluded_commands = [{ command = \"make e2e\", ask = \"no\" }]\n",
+		"number":      "[defaults.sandbox]\nexcluded_commands = [1]\n",
+		"bad command": "[defaults.sandbox]\nexcluded_commands = [{ command = \"*\", ask = false }]\n",
+	} {
+		write(t, body)
+		if _, err := Load(); err == nil {
+			t.Errorf("%s: loaded", name)
+		}
+	}
+}
+
+// TestWriteFolders: a write folder is one plain folder, not high up nor
+// where files start programs; the list follows the others' rules.
+func TestWriteFolders(t *testing.T) {
+	for _, e := range []string{"~/src/fixtures", "/Volumes/data/fixtures", "/opt/fixtures", "/Users/me/src/fixtures", `C:\Users\me\src\fixtures`} {
+		if err := CheckWriteFolder(e); err != nil {
+			t.Errorf("%q: %v", e, err)
+		}
+	}
+	for _, e := range []string{"", "~", "~/", "~/src", "/", "/opt", "/Users/me", "/Users/me/src", "/home/me/x", `C:\Users\me`, "src/fixtures", "./x", "//net/share/x",
+		"~/src/*", "~/src/x/**", "~/src/../.ssh", "~/src/./x", "~/src//x", "~/src/x/", "~/src/$X", "~/.ssh/keys", "~/src/repo/.git", "~/src/repo/.git/hooks", "~/.config/x", "~/.terminatr/x", "~/.claude/x", "~/Library/LaunchAgents/x"} {
+		if err := CheckWriteFolder(e); err == nil {
+			t.Errorf("%q passed", e)
+		}
+	}
+	write(t, "[defaults.sandbox]\nwrite = [\"~/src/fixtures\"]\n\n[projects.web.sandbox]\nwrite = [\"~/src/web-data\"]\n")
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := c.ThreadSandbox("web"); !reflect.DeepEqual(got.Write, []string{"~/src/web-data"}) {
+		t.Errorf("web: %+v", got)
+	}
+	if got, _ := c.ThreadSandbox("other"); !reflect.DeepEqual(got.Write, []string{"~/src/fixtures"}) {
+		t.Errorf("other: %+v", got)
+	}
+	if SandboxWarning(SandboxWrite, "~/src/fixtures") == "" {
+		t.Error("a write folder doesn't say what it opens")
+	}
+	write(t, "[defaults.sandbox]\nwrite = [\"~\"]\n")
+	if _, err := Load(); err == nil {
+		t.Error("a write folder of the whole home loaded")
 	}
 }

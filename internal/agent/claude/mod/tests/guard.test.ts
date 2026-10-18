@@ -264,6 +264,20 @@ test('a PowerShell command the guard can\'t read is asked, with its reason; one 
   expect((await $.tool.check({ tool: 'PowerShell', input: { command: 'Get-ChildItem | Select-String foo' } })).decision).toBe('allow')
 })
 
+test('an excluded command that asks first is asked though Claude would allow it, and the server told first', async ($, on) => {
+  const { escapes } = await start($, on, { ...thread, askFirst: ['npx playwright *'] })
+  const input = { command: 'npx playwright test' }
+  const asked = await $.tool.check({ tool: 'Bash', input })
+  expect([asked.decision, asked.reason]).toEqual(['ask', 'terminatr guard: this command runs outside the sandbox (excluded command npx playwright *), and the user set it to ask first.'])
+  const r = await $.tool.call({ tool: 'Bash', ...input })
+  expect((r as { deny?: string }).deny).toBeUndefined()
+  expect(escapes()).toBe(1)
+  // Another command: nothing asked, nothing told.
+  expect((await $.tool.check({ tool: 'Bash', input: { command: 'npx vitest' } })).decision).toBe('allow')
+  await $.tool.call({ tool: 'Bash', command: 'npx vitest' })
+  expect(escapes()).toBe(1)
+})
+
 test('a call that asks to leave the sandbox is asked, and the server told first; not under yolo', async ($, on) => {
   const { clock, escapes, setRules } = await start($, on, { ...thread, askEscapes: true })
   const input = { command: 'ls', dangerouslyDisableSandbox: true }

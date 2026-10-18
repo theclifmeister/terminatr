@@ -314,8 +314,9 @@ func (s *Session) AgentState() (st AgentState, ok bool) {
 }
 
 // MarkEscape says the agent's call that comes next to a permission
-// prompt asks to run outside its sandbox (the guard asked: rule
-// "escape"), so that prompt is the user's to answer. Kept until the
+// prompt runs outside its sandbox (the guard asked: rule "escape", or
+// "excluded" for an excluded command that asks first), so that prompt
+// is the user's to answer. Kept until the
 // prompt ends, or the turn does.
 func (s *Session) MarkEscape() {
 	rt := s.agentRT()
@@ -401,7 +402,7 @@ func (s *Session) Hook(event string, payload map[string]any) (agent.HookResult, 
 	if g := rt.cfg.Guard; g != nil {
 		env.Guard = func(tool string, input map[string]any) *guard.Denial {
 			d := g(tool, input)
-			if d != nil && d.Ask && d.Rule == guard.RuleEscape {
+			if d != nil && d.Ask && (d.Rule == guard.RuleEscape || d.Rule == guard.RuleExcluded) {
 				rt.mu.Lock()
 				rt.escape, rt.escapeSeen = true, false
 				rt.mu.Unlock()

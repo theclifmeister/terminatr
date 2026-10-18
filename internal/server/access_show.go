@@ -249,7 +249,7 @@ func (s *Server) accessExplain(p proto.AccessExplainParams) (any, *proto.Error) 
 
 // explainCommand is what set's sandbox and prompt rules do with cmd:
 // outside the sandbox when an excluded command takes it (and the agent
-// gets the list), asking first unless an allow rule covers it.
+// gets the list), asking first or without asking as that command says.
 func explainCommand(set proto.AccessSet, cmd string) proto.AccessExplainResult {
 	res := proto.AccessExplainResult{Command: cmd, Sandbox: proto.AccessInside, Prompt: proto.PromptByAgent}
 	yolo, noEscapes := launchFlags(set)
@@ -278,7 +278,14 @@ func explainCommand(set proto.AccessSet, cmd string) proto.AccessExplainResult {
 			res.SandboxWhy += "; escapes are off, so it can't leave the sandbox"
 		}
 	}
-	if a := config.SandboxCovered(cmd, allow); a != "" {
+	switch a := config.SandboxCovered(cmd, allow); {
+	case excluded != nil && excluded.Note == proto.AccessWithoutAsking:
+		res.Prompt, res.PromptFrom = proto.PromptNone, excluded.Source
+		res.PromptWhy = fmt.Sprintf("excluded command %q runs without asking", excluded.Value)
+	case excluded != nil:
+		res.Prompt, res.PromptFrom = proto.PromptAsks, excluded.Source
+		res.PromptWhy = fmt.Sprintf("excluded command %q asks first: the guard asks, whatever an allow rule or auto mode says", excluded.Value)
+	case a != "":
 		res.Prompt, res.PromptWhy = proto.PromptNone, fmt.Sprintf("allow rule %q", a)
 		for _, r := range set.Rules {
 			if r.Kind == proto.AccessAllow && r.Value == a {
@@ -286,9 +293,7 @@ func explainCommand(set proto.AccessSet, cmd string) proto.AccessExplainResult {
 				break
 			}
 		}
-	} else if excluded != nil {
-		res.Prompt, res.PromptWhy = proto.PromptAsks, "it runs outside the sandbox and no allow rule covers it"
-	} else {
+	default:
 		res.PromptWhy = "no tm rule covers it: the agent's mode and own rules decide"
 	}
 	if yolo {
