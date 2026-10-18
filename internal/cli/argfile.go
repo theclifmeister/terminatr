@@ -42,7 +42,19 @@ func (e *Env) openArg(path string) (*os.File, error) {
 		var f *os.File
 		var err error
 		if real, ok := set.noLinks[root]; ok {
+			if set.flat[root] && strings.ContainsRune(rel, filepath.Separator) {
+				continue // only files directly in it
+			}
 			f, err = fsx.OpenNoLinks(real, rel)
+			if err == nil && set.flat[root] {
+				// Loose in the shared temp folder: the user's own, as
+				// Claude's TMPDIR has a thread write them.
+				if fi, serr := f.Stat(); serr != nil || !fsx.Mine(fi) {
+					f.Close()
+					lastErr = &tasks.Error{Code: "outside-roots", Msg: fmt.Sprintf("%s is not a file of this user", f.Name())}
+					continue
+				}
+			}
 		} else {
 			var r *os.Root
 			if r, err = os.OpenRoot(root); err != nil {
@@ -75,6 +87,7 @@ func (e *Env) openArg(path string) (*os.File, error) {
 // argSet is where an agent caller's files may be.
 type argSet struct {
 	roots   []string
+	flat    map[string]bool   // the roots of which only the files directly in them may be named
 	noLinks map[string]string // the roots in which no symlink is followed, each with the folder it is, as the kernel spells it
 	private []string          // folders of the roots it may not name
 	note    string            // why a root it might expect is none
@@ -87,6 +100,11 @@ func (s argSet) places() string {
 	for _, r := range s.roots {
 		if !slices.Contains(seen, r) && !slices.ContainsFunc(seen, func(x string) bool { return realPath(x) == r }) {
 			seen = append(seen, r)
+		}
+	}
+	for i, r := range seen {
+		if s.flat[r] {
+			seen[i] = r + " (files directly in it)"
 		}
 	}
 	out := "a folder of its own; none is known"
@@ -147,11 +165,23 @@ func (e *Env) argRoots() argSet {
 		// (/tmp, /private/tmp): the spelling only names the folder, which
 		// is opened as the kernel spells it, link by link.
 		set.noLinks = map[string]string{}
+		set.flat = map[string]bool{}
 		var scratches []string
 		for _, t := range temp {
 			real, err := fsx.OwnDir(t)
 			if err != nil {
 				continue
+			}
+			// Claude sets a thread's TMPDIR to the temp folder, so what
+			// it writes there is loose in it: those files, but none in
+			// the other sessions' folders in it (T586; T587 isolates
+			// per-thread temp folders).
+			for _, name := range []string{real, filepath.Clean(t)} {
+				if _, dup := set.noLinks[name]; !dup {
+					set.noLinks[name] = real
+					set.flat[name] = true
+					scratches = append(scratches, name)
+				}
 			}
 			for _, o := range own {
 				d, err := fsx.OwnDir(filepath.Join(real, scratchName(o)))

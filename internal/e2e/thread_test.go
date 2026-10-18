@@ -113,7 +113,7 @@ cmd = 'printf "## Report\nSome work.\n" | "$TERMINATR_BIN" report > "$OUT/badrep
 
 [[step]]
 do = "run"
-cmd = 'd="$AGENT_TMP/$(pwd | sed "s/[^A-Za-z0-9]/-/g")/sess/scratchpad"; mkdir -p "$d"; printf "notes\n" > "$d/notes.md"; printf "PR: https://github.com/o/r/pull/7\n\n## Report\nDid it.\n\n## Next\nMerge the PR\n\n## Remember\n- a lesson\n" | "$TERMINATR_BIN" report --attach "$d/notes.md" > "$OUT/report" 2>&1; echo "exit $?" >> "$OUT/report"'
+cmd = 'printf "notes\n" > "$AGENT_TMP/notes.md"; printf "PR: https://github.com/o/r/pull/7\n\n## Report\nDid it.\n\n## Next\nMerge the PR\n\n## Remember\n- a lesson\n" | "$TERMINATR_BIN" report --attach "$AGENT_TMP/notes.md" > "$OUT/report" 2>&1; echo "exit $?" >> "$OUT/report"'
 
 [[step]]
 do = "run"
@@ -138,10 +138,8 @@ func threadEnv(t *testing.T) (env *Env, projDir, out string) {
 	env.Setenv("FAKEAGENT_SCRIPTS", scripts)
 	out = t.TempDir()
 	env.Setenv("OUT", out)
-	// The fake Claude writes what it attaches in its own scratchpad in its
-	// temp folder, as Claude does ([guard] temp): $CLAUDE_CODE_TMPDIR/
-	// claude-<uid>/<its working folder's path, every non-alphanumeric
-	// character a "-">/<session>/scratchpad; where
+	// The fake Claude writes what it attaches in its own temp folder, as
+	// Claude does ([guard] temp): $CLAUDE_CODE_TMPDIR/claude-<uid>; where
 	// there are no uids (Windows), the server's temp folder holds out.
 	agentTmp := out
 	if uid := os.Getuid(); uid >= 0 {

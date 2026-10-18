@@ -110,7 +110,7 @@ func TestAgentRootsNoHome(t *testing.T) {
 // TestAgentScratchpad: where the agent's temp folder is shared by all
 // its sessions (Claude Code's), a thread may name files only in its own
 // scratchpad (<temp>/<its worktree, every non-alphanumeric a "-">/
-// <session>/scratchpad): not loose in the temp folder, not another
+// <session>/scratchpad): a regular file loose in the temp folder (Claude's TMPDIR), but not through a link or a second name, not another
 // working folder's (in any spelling), through no symlink at all, not as
 // an adopted thread; a refusal lists the roots it may name.
 func TestAgentScratchpad(t *testing.T) {
@@ -146,6 +146,9 @@ func TestAgentScratchpad(t *testing.T) {
 		os.WriteFile(filepath.Join(d, "chart.png"), []byte("png"), 0o644)
 	}
 	os.WriteFile(filepath.Join(tmp, "loose.png"), []byte("png"), 0o644)
+	os.Symlink("loose.png", filepath.Join(tmp, "loose-link.png"))
+	os.WriteFile(filepath.Join(tmp, "hard-src.png"), []byte("png"), 0o644)
+	os.Link(filepath.Join(tmp, "hard-src.png"), filepath.Join(tmp, "loose-hard.png"))
 	rel, _ := filepath.Rel(mine, filepath.Join(theirs, "chart.png"))
 	os.Symlink(rel, filepath.Join(mine, "steal.png"))
 	os.Symlink(filepath.Join(theirs, "chart.png"), filepath.Join(mine, "abs.png"))
@@ -168,12 +171,11 @@ func TestAgentScratchpad(t *testing.T) {
 	if got := scratchName(`C:\Users\a\.terminatr\wt`); got != "C--Users-a--terminatr-wt" {
 		t.Errorf("scratchName of a Windows path = %q", got)
 	}
-	if code, _, errs := h.run(thr, report, "report", "--attach", filepath.Join(mine, "chart.png"), "--attach", filepath.Join(mine, "sub", "in.png")); code != 0 || !stored("chart.png") || !stored("in.png") {
-		t.Fatalf("report with files in its own scratchpad: exit %d, %s", code, errs)
+	if code, _, errs := h.run(thr, report, "report", "--attach", filepath.Join(mine, "chart.png"), "--attach", filepath.Join(mine, "sub", "in.png"), "--attach", filepath.Join(tmp, "loose.png")); code != 0 || !stored("chart.png") || !stored("in.png") || !stored("loose.png") {
+		t.Fatalf("report with files in its own scratchpad and loose in the temp folder: exit %d, %s", code, errs)
 	}
 	refused := []string{
 		filepath.Join(theirs, "chart.png"),                                            // another working folder's
-		filepath.Join(tmp, "loose.png"),                                               // loose in the shared temp folder
 		filepath.Join(tmp, strings.ToLower(theirsName), "sess", "tasks", "chart.png"), // a case variant
 		filepath.Join(tmp, strings.ToUpper(scratchName(wt)), "sess", "scratchpad", "chart.png"),
 		filepath.Join(mine, "steal.png"), filepath.Join(mine, "abs.png"), filepath.Join(mine, "same.png"), filepath.Join(mine, "subln", "in.png"),
@@ -185,7 +187,7 @@ func TestAgentScratchpad(t *testing.T) {
 			t.Errorf("report --attach %s: exit %d, %s", a, code, errs)
 		}
 	}
-	for _, n := range []string{"loose.png", "steal.png", "abs.png", "same.png"} {
+	for _, n := range []string{"loose-link.png", "loose-hard.png", "steal.png", "abs.png", "same.png"} {
 		if stored(n) {
 			t.Errorf("%s was stored", n)
 		}
