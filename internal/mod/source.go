@@ -159,6 +159,10 @@ func NotPublic(u string) bool {
 	if host == "" || host[0] == '/' || host[0] == '?' || host[0] == '#' {
 		return true
 	}
+	if strings.ContainsAny(u, "?#") {
+		// A query or fragment is where tokens go (?token=x).
+		return true
+	}
 	for _, r := range u {
 		if r == '\\' || r <= ' ' || r == 0x7f || unicode.IsSpace(r) || unicode.IsControl(r) {
 			return true
@@ -308,9 +312,37 @@ func ReadSource(dir string) (Source, bool) {
 	if red := RedactURL(s.Git); red != s.Git {
 		// A secret from before tm refused them: don't leave it on disk.
 		s.Git = red
-		_ = writeSource(dir, s)
+		_ = writeSourceAtomic(dir, s)
 	}
 	return s, true
+}
+
+// writeSourceAtomic replaces the record through a temp file and a
+// rename, so a secret isn't overwritten in place (and a crash leaves
+// the old or the new record whole).
+func writeSourceAtomic(dir string, s Source) error {
+	data, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, ".tm-source-")
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(append(data, '\n'))
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(f.Name(), 0o644)
+	}
+	if err == nil {
+		err = os.Rename(f.Name(), filepath.Join(dir, SourceFile))
+	}
+	if err != nil {
+		os.Remove(f.Name())
+	}
+	return err
 }
 
 func writeSource(dir string, s Source) error {
@@ -550,8 +582,7 @@ func git(dir string, args ...string) (string, error) {
 		return "", err
 	}
 	defer os.RemoveAll(home)
-	env := append(gitEnv(home), "GIT_ASKPASS=", "SSH_ASKPASS=")
-	return gitx.Run(context.Background(), dir, gitx.Opts{Timeout: gitTimeout, Env: env}, args...)
+	return gitx.Run(context.Background(), dir, gitx.Opts{Timeout: gitTimeout, Env: gitEnv(home), Unset: gitUnset}, args...)
 }
 
 // gitEnv is the environment that keeps git from using the user's
@@ -562,13 +593,18 @@ func gitEnv(home string) []string {
 		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=" + os.DevNull, "GIT_CONFIG_SYSTEM=" + os.DevNull,
 		"NETRC=" + os.DevNull,
 	}
-	reset := []string{"credential.helper", "http.extraHeader", "http.cookieFile", "http.sslCert", "http.sslKey", "http.proxyAuthMethod"}
-	env = append(env, fmt.Sprintf("GIT_CONFIG_COUNT=%d", len(reset)))
-	for i, k := range reset {
-		env = append(env, fmt.Sprintf("GIT_CONFIG_KEY_%d=%s", i, k), fmt.Sprintf("GIT_CONFIG_VALUE_%d=", i))
-	}
+	// Only the helper is reset: the config files are shut out above,
+	// and an empty http.sslCert or http.proxyAuthMethod breaks https.
+	env = append(env, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=credential.helper", "GIT_CONFIG_VALUE_0=",
+		"GIT_ALLOW_PROTOCOL=https:file", "GIT_ASKPASS=", "SSH_ASKPASS=")
 	return env
 }
+
+// gitUnset are the variables of tm's own environment that would change
+// what git sends or trusts: settings given on a wrapper's command line,
+// SSH, TLS overrides.
+var gitUnset = []string{"GIT_CONFIG_PARAMETERS", "GIT_SSH_COMMAND", "GIT_SSH", "SSH_AUTH_SOCK",
+	"GIT_SSL_NO_VERIFY", "GIT_SSL_CAINFO", "GIT_SSL_CAPATH", "GIT_SSL_CERT", "GIT_SSL_KEY"}
 
 // clone fetches url at ref ("" the default branch) into dir, shallow,
 // and returns the commit. With sub, a folder CheckSubdir accepted, the

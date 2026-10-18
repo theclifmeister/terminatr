@@ -100,6 +100,8 @@ func TestSourceCredentials(t *testing.T) {
 		`https://\user:TOKEN@github.com/ada/mods`,
 		`https://github.com\@evil.com/x`,
 		"https://",
+		"https://github.com/ada/mods?token=x",
+		"https://github.com/ada/mods#frag",
 		"https:///github.com/ada/mods",
 		"https://github.com/ada/mods x",
 		"https://github.com/ada/mo\tds",
@@ -188,6 +190,40 @@ func TestGitIgnoresUserConfig(t *testing.T) {
 	}
 	if out, _ := git("", "config", "--get", "credential.helper"); out != "" {
 		t.Errorf("helper set: %q", out)
+	}
+}
+
+// The env that shuts out user config must still let git talk https.
+func TestGitEnvHTTPS(t *testing.T) {
+	t.Setenv("GIT_SSL_NO_VERIFY", "1")
+	t.Setenv("GIT_CONFIG_PARAMETERS", "'http.extraHeader=X-Token: abc'")
+	t.Setenv("GIT_SSH_COMMAND", "false")
+	_, err := git("", "ls-remote", "--", "https://127.0.0.1:1/x.git")
+	if err == nil {
+		t.Fatal("ls-remote of a closed port worked")
+	}
+	for _, bad := range []string{"credential missing host", "unsupported proxy", "usage", "not allowed"} {
+		if strings.Contains(err.Error(), bad) {
+			t.Errorf("https setup broken: %v", err)
+		}
+	}
+	if out, err := git("", "config", "--get", "http.extraHeader"); out != "" {
+		t.Errorf("wrapper config leaked: %q %v", out, err)
+	}
+	// A local file:// repository still clones under it.
+	repo := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	run("init", "-q")
+	os.WriteFile(filepath.Join(repo, "f"), []byte("x"), 0o644)
+	run("add", "f")
+	run("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "m")
+	if _, _, err := clone("file://"+repo, "", "", filepath.Join(t.TempDir(), "c")); err != nil {
+		t.Errorf("file clone: %v", err)
 	}
 }
 
