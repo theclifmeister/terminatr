@@ -92,7 +92,9 @@ func noteAccess(note func(slug string) (string, bool), once bool) {
 		summary, ask := note(sum.Slug)
 		if once {
 			items, _ := p.Inbox()
-			if slices.ContainsFunc(items, func(it project.Item) bool { return it.Kind == KindAccessMigration && it.Summary == strings.Join(strings.Fields(summary), " ") }) {
+			if slices.ContainsFunc(items, func(it project.Item) bool {
+				return it.Kind == KindAccessMigration && it.Summary == strings.Join(strings.Fields(summary), " ")
+			}) {
 				continue
 			}
 		}
