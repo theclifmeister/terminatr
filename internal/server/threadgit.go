@@ -121,3 +121,9 @@ func repoRoot(common string) string {
 	}
 	return common
 }
+
+// recordTree is threadTree for thread rec of project slug in its
+// recorded worktree: what a session of it would be granted.
+func recordTree(slug string, rec *thread.Record) *gitx.Tree {
+	return threadTree(SessionRecord{Role: proto.RoleThread, Project: slug, Thread: rec.ID, Cwd: rec.Worktree})
+}

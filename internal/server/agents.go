@@ -161,6 +161,8 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 		return a, nil
 	case proto.RoleThread:
 		a := agent.Access{Read: []string{dir}, NoWrite: []string{dir}, NoWriteFiles: []string{cfg}}
+		// No tree: a thread to come (access.show), whose git dirs aren't
+		// known yet, or one whose folder isn't its recorded checkout.
 		if tree != nil {
 			g := threadGitAccess(tree.CommonDir, tree.GitDir)
 			a.Write, a.WriteFiles = g.Write, g.WriteFiles
@@ -550,6 +552,7 @@ type preparedLaunch struct {
 	agentSID  string
 	home      string
 	warnings  []string // what the launch tells the human who started it
+	access    proto.AccessSet
 }
 
 // launchAgent prepares an agent session without s.mu and starts it
@@ -566,14 +569,18 @@ func (s *Server) launchAgent(l agentLaunch, ok func() *proto.Error) (*session.Se
 		return nil, nil, perr
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if ok != nil {
 		if perr := ok(); perr != nil {
+			s.mu.Unlock()
 			p.abandon()
 			return nil, nil, perr
 		}
 	}
 	sess, perr := s.commitLaunchLocked(p)
+	s.mu.Unlock()
+	if perr == nil {
+		s.recordLaunch(p.l.rec, p.access)
+	}
 	return sess, p.warnings, perr
 }
 
@@ -602,11 +609,16 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 	}
 	// config.toml once for the launch: its access, mod, model and theme.
 	lc := loadLaunchConfig()
+	// Its access as rules (access.go), which the launch's settings come
+	// from and the thread's launch record keeps.
 	tree := threadTree(r)
-	access, err := s.accessFor(r.Role, r.Project, tree, lc)
+	acc, err := s.resolveAccess(accessInput{role: r.Role, slug: r.Project, cwd: r.Cwd, tree: tree, agent: r.Agent, goos: caps.OS,
+		yolo: r.Yolo, noEscapes: r.NoSandboxEscapes}, lc)
 	if err != nil {
 		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 	}
+	acc.Thread, acc.Session = r.Thread, r.ID
+	yolo, noEscapes := launchFlags(acc)
 	if r.Role == proto.RoleCoordinator {
 		if p, err := project.Open(r.Project); err == nil {
 			if err := p.RefreshRoleFile(); err != nil {
@@ -651,7 +663,7 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 	spec := agent.LaunchSpec{
 		Role: agent.Role(r.Role), SessionID: r.ID, AgentSID: r.AgentSessionID,
 		Cwd: r.Cwd, RepoRoot: repo.RepoRoot, GitDir: repo.GitDir, RuntimeDir: p.rt, BriefPath: r.Brief, Kickoff: l.kick, Resume: l.resume,
-		Yolo: r.Yolo, NoSandboxEscapes: r.NoSandboxEscapes, Model: r.Model, TMBin: s.opts.Bin, Socket: s.opts.Paths.Socket, Access: access,
+		Yolo: yolo, NoSandboxEscapes: noEscapes, Model: r.Model, TMBin: s.opts.Bin, Socket: s.opts.Paths.Socket, Access: launchAccess(acc),
 		RemoteControl: r.RemoteControl, RemoteName: remoteName(r),
 		Mods: p.modSock != "", PaneScheme: v.paneScheme,
 	}
@@ -661,7 +673,7 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		// coordinator writes. What doesn't apply on this platform stays
 		// in config.toml and is skipped.
 		var presets, skipped []string
-		spec.Sandbox, presets, skipped = lc.sandbox(r.Project, caps.OS)
+		spec.Sandbox, presets, skipped = launchSandbox(acc)
 		for _, n := range skipped {
 			s.log.Printf("session %s: %s", r.ID, n)
 		}
@@ -730,6 +742,7 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		}
 	}
 	p.l.rec = r
+	p.access = acc
 	p.model, p.liveTheme = spec.Model, spec.LiveTheme
 	p.argv, p.kickoff = launch.Argv, launch.Kickoff
 	return p, nil

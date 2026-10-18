@@ -6,10 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // sandbox is project slug's sandbox lists and presets for its threads on
@@ -17,42 +17,11 @@ import (
 // a note for each setting that doesn't, which the launch skips:
 // config.toml keeps it. A config.toml that doesn't load, or an entry
 // that fails the sandbox checks, opens nothing (fails closed) and gives
-// one note saying why, for the log and the launch's warnings.
+// one note saying why, for the log and the launch's warnings. It is
+// launchSandbox of the rules (access.go).
 func (l launchConfig) sandbox(slug, goos string) (lists agent.SandboxLists, presets, skipped []string) {
-	err := l.err
-	var t config.ThreadSandbox
-	if err == nil {
-		t, err = l.cfg.ThreadSandbox(slug)
-	}
-	if err != nil {
-		return lists, nil, []string{fmt.Sprintf("project %s: sandbox lists and presets dropped, the thread starts without them (fix or remove the entry: tm settings, Sandbox tab): %v", slug, err)}
-	}
-	skip := func(key, what string) bool {
-		if config.SandboxApplies(key, goos) {
-			return false
-		}
-		skipped = append(skipped, fmt.Sprintf("sandbox %s is set but doesn't apply on %s: skipped", what, config.OSName(goos)))
-		return true
-	}
-	if len(t.ExcludedCommands) > 0 && !skip(config.SandboxExcluded, "excluded commands") {
-		lists.Excluded = t.ExcludedCommands
-	}
-	if len(t.Allow) > 0 && !skip(config.SandboxAllow, "allow rules") {
-		lists.Allow = t.Allow
-	}
-	for _, k := range t.Presets {
-		if skip(k, "preset "+strings.ReplaceAll(k, "_", " ")) {
-			continue
-		}
-		presets = append(presets, k)
-		switch k {
-		case config.SandboxDownloads:
-			lists.Domains = config.BrowserDomains
-		case config.SandboxDevServers:
-			lists.LocalBinding = true
-		}
-	}
-	return lists, presets, skipped
+	rules, why := sandboxRules(l, slug, goos)
+	return launchSandbox(proto.AccessSet{Rules: rules, SandboxError: why})
 }
 
 // browserGuide is what a thread with the browser testing preset is told

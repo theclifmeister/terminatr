@@ -139,6 +139,8 @@ func (*helpError) Error() string { return "usage requested" }
 // command prints.
 func commandUsage(name string) string {
 	switch name {
+	case "access":
+		return accessUsage
 	case "agent":
 		return agentUsage
 	case "ask":

@@ -542,3 +542,15 @@ func UnsetSandbox(table, key string) error {
 	}
 	return Unset(t, key)
 }
+
+// ExcludedMatch reports whether command line cmd matches excluded
+// command e as Claude matches it: e's pattern takes cmd, and cmd is one
+// command (a pipe, redirect, substitution or ; keeps it in the sandbox).
+func ExcludedMatch(e, cmd string) bool {
+	for _, op := range shellOps {
+		if strings.Contains(cmd, op) {
+			return false
+		}
+	}
+	return globMatch(e, cmd)
+}

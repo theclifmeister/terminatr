@@ -87,7 +87,11 @@ type fakeSource struct {
 	secretTests []string
 	// sandbox are SetSandbox's and SetSandboxPreset's calls ("table key
 	// [list]", nil when removed; "table key on|off|follow").
-	sandbox     []string
+	sandbox []string
+	// access is what AccessShow gives (its project and thread set to
+	// the call's), accessShown its calls ("slug id").
+	access      proto.AccessShowResult
+	accessShown []string
 	restarted   []string // mod ids
 	fetchedMods []string // what FetchMod was asked for
 	templates   []mod.Template
@@ -392,6 +396,13 @@ func (f *fakeSource) SetSandbox(table, key string, list []string) error {
 	}
 	return config.SetSandbox(table, key, list)
 }
+func (f *fakeSource) AccessShow(slug, id string) (proto.AccessShowResult, error) {
+	f.accessShown = append(f.accessShown, slug+" "+id)
+	res := f.access
+	res.Project, res.Thread = slug, id
+	return res, nil
+}
+
 func (f *fakeSource) SetSandboxPreset(table, key string, on *bool) error {
 	word := "follow"
 	if on != nil {

@@ -16,6 +16,7 @@
 "project.popup" = ["a"]
 "project.tasks" = ["t"]
 "project.inbox" = ["i"]
+"access.show" = ["e"]
 "project.next" = ["]"]
 "project.prev" = ["["]
 "list.narrower" = ["<"]
