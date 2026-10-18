@@ -668,18 +668,18 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		Mods: p.modSock != "", PaneScheme: v.paneScheme,
 	}
 	if r.Role == proto.RoleThread && r.Project != "" {
-		// The human's sandbox lists and presets, read here at every
-		// launch: never from the session's parameters, which a
-		// coordinator writes. What doesn't apply on this platform stays
-		// in config.toml and is skipped.
-		var presets, skipped []string
-		spec.Sandbox, presets, skipped = launchSandbox(acc)
+		// The human's sandbox rules, read here at every launch: never
+		// from the session's parameters, which a coordinator writes.
+		// What doesn't apply on this platform stays in config.toml and is
+		// skipped.
+		var guides, skipped []string
+		spec.Sandbox, guides, skipped = launchSandbox(acc)
 		for _, n := range skipped {
 			s.log.Printf("session %s: %s", r.ID, n)
 		}
 		p.warnings = skipped
-		if spec.BriefPath, err = presetBrief(p.rt, r.Brief, presets); err != nil {
-			s.log.Printf("session %s: sandbox presets' guidance: %v", r.ID, err)
+		if spec.BriefPath, err = guideBrief(p.rt, r.Brief, guides, spec.Sandbox); err != nil {
+			s.log.Printf("session %s: sandbox guidance: %v", r.ID, err)
 		}
 	}
 	if len(secrets) > 0 {

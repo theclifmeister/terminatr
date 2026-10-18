@@ -15,6 +15,9 @@ import (
 
 const accessUsage = `usage: tm access show [<project>] [--thread <id>] [--json]
        tm access explain [<project>] [--thread <id>] [--json] -- <command line>
+       tm access preset list [--json]
+       tm access preset show <name> [--json]
+       tm access preset add <name> [<project> | --all]
 
 show lists a thread's access as rules: where each acts, the rule, and
 where it comes from (tm, all projects, the project, tm's default, or the
@@ -24,7 +27,13 @@ RESTART TO APPLY marking what config.toml changed since. A thread may
 show only its own access (its --thread is the default).
 
 explain says whether a thread of the project runs the command inside or
-outside the sandbox, whether it asks first, and the guard's verdict.`
+outside the sandbox, whether it asks first, and the guard's verdict.
+
+A preset is a named group of rules tm ships. preset show lists the rules
+it adds; preset add adds those the project's threads (or, with --all,
+every project's) don't have yet to its table in config.toml, as plain
+rules: each then stands on its own, to change or remove in the Access
+tab. Presets are the human's.`
 
 func init() {
 	commands["access"] = accessCmd
@@ -40,6 +49,8 @@ func accessCmd(e *Env, args []string) error {
 		return accessShow(e, args[1:])
 	case "explain":
 		return accessExplain(e, args[1:])
+	case "preset":
+		return accessPreset(e, args[1:])
 	}
 	return srvUsage("access", accessUsage)
 }
@@ -102,7 +113,7 @@ func accessShow(e *Env, args []string) error {
 func printAccess(e *Env, res proto.AccessShowResult) {
 	fmt.Fprintln(e.Stdout, accessTitle(res))
 	if res.SandboxError != "" {
-		fmt.Fprintf(e.Stdout, "sandbox lists and presets left out: %s\n", oneLineText(res.SandboxError))
+		fmt.Fprintf(e.Stdout, "sandbox rules left out: %s\n", oneLineText(res.SandboxError))
 	}
 	tw := tabwriter.NewWriter(e.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "WHERE\tRULE\tFROM\t")
@@ -113,7 +124,7 @@ func printAccess(e *Env, res proto.AccessShowResult) {
 		}
 		from = oneLineText(from)
 		where := r.Where
-		if r.Change == proto.AccessRemoved || r.Skipped != "" {
+		if r.Change == proto.AccessRemoved || !r.Given() {
 			where += " ─"
 		}
 		fmt.Fprintf(tw, "%s\t%s %s\t%s\t%s\n", where, r.Kind, oneLineText(r.Value), from, oneLineText(strings.Join(r.Remarks(), "; ")))

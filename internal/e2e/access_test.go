@@ -61,3 +61,47 @@ func TestAccessCommands(t *testing.T) {
 		t.Errorf("explain without a command: %+v", r)
 	}
 }
+
+// TestAccessPreset: tm access preset lists the presets and the rules
+// each adds; add writes those a project's threads don't have yet as
+// plain rules, and says which were there already (T574 §3.3).
+func TestAccessPreset(t *testing.T) {
+	env, _, _ := threadEnv(t)
+	writeConfig(t, env, "[defaults.sandbox]\nhosts = [\"registry.npmjs.org\"]\n")
+	if out := env.MustCLI("access", "preset", "list"); !strings.Contains(out, "browser-downloads") || !strings.Contains(out, "Local dev servers") {
+		t.Errorf("list:\n%s", out)
+	}
+	if out := env.MustCLI("access", "preset", "show", "browser-downloads"); !strings.Contains(out, "host") || !strings.Contains(out, "storage.googleapis.com") || !strings.Contains(out, "guide") {
+		t.Errorf("show:\n%s", out)
+	}
+	// add writes config.toml from this process: the server says who runs it.
+	if r := env.CLI("access", "preset", "add", "browser-downloads", "demo"); r.Code == 0 || !strings.Contains(r.Stderr, "server isn't running") {
+		t.Errorf("add without a server: %+v", r)
+	}
+	env.MustCLI("server", "start")
+	out := env.MustCLI("access", "preset", "add", "browser-downloads", "demo")
+	for _, want := range []string{"already there for demo: host registry.npmjs.org", "added to demo: host cdn.playwright.dev", "added to demo: guide browser-downloads", "threads of demo get them from their next start"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("add lacks %q:\n%s", want, out)
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(env.Home, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "[projects.demo.sandbox]") || !strings.Contains(string(data), `"cdn.playwright.dev"`) || strings.Contains(string(data), "browser_downloads") {
+		t.Errorf("config.toml:\n%s", data)
+	}
+	if out := env.MustCLI("access", "preset", "add", "local-dev-servers", "--all"); !strings.Contains(out, "added to all projects: local-ports on") {
+		t.Errorf("--all:\n%s", out)
+	}
+	if out := env.MustCLI("access", "show", "demo"); !strings.Contains(out, "local-ports on") || !strings.Contains(out, "host cdn.playwright.dev") {
+		t.Errorf("show after adding:\n%s", out)
+	}
+	if r := env.CLI("access", "preset", "add", "browser-testing", "demo", "--all"); r.Code != 2 {
+		t.Errorf("a project and --all: %+v", r)
+	}
+	if r := env.CLI("access", "preset", "add", "nope", "demo"); r.Code == 0 || !strings.Contains(r.Stderr, "browser-testing") {
+		t.Errorf("unknown preset: %+v", r)
+	}
+}

@@ -6,25 +6,25 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
-// sandbox is project slug's sandbox lists and presets for its threads on
-// platform goos (docs/SPEC.md §5.2), the presets on that apply there, and
-// a note for each setting that doesn't, which the launch skips:
-// config.toml keeps it. A config.toml that doesn't load, or an entry
-// that fails the sandbox checks, opens nothing (fails closed) and gives
-// one note saying why, for the log and the launch's warnings. It is
-// launchSandbox of the rules (access.go).
-func (l launchConfig) sandbox(slug, goos string) (lists agent.SandboxLists, presets, skipped []string) {
+// sandbox is project slug's sandbox lists for its threads on platform
+// goos (docs/SPEC.md §5.2), the guidance texts they get there, and a
+// note for each rule that doesn't apply or is refused, which the launch
+// skips: config.toml keeps it. A config.toml that doesn't load opens
+// nothing (fails closed) and gives one note saying why, for the log and
+// the launch's warnings. It is launchSandbox of the rules (access.go).
+func (l launchConfig) sandbox(slug, goos string) (lists agent.SandboxLists, guides, skipped []string) {
 	rules, why := sandboxRules(l, slug, goos)
 	return launchSandbox(proto.AccessSet{Rules: rules, SandboxError: why})
 }
 
-// browserGuide is what a thread with the browser testing preset is told
+// browserGuide is the browser-testing guidance a thread is told
 // (macOS: T561's and T571's findings; no local binding, the pipe
 // transport needs none). Seatbelt has no mach-register rule in Claude
 // or Codex, which multi-process Chromium needs for its child processes;
@@ -88,12 +88,10 @@ If a browser is missing or what you need still fails, don't run it outside the
 sandbox: say so in your report; only the human can add an excluded command.
 `
 
-// browserDownloads is the guide's downloads part with browser downloads
-// on; browserNoDownloads with it off.
+// browserDownloads is the guidance's downloads part with download hosts
+// open (%s says which), browserNoDownloads with none.
 const (
-	browserDownloads = `Downloads: the human turned on browser downloads, so your commands may reach
-registry.npmjs.org and Playwright's browser downloads (cdn.playwright.dev,
-playwright.download.prss.microsoft.com, storage.googleapis.com).
+	browserDownloads = `Downloads: %s
 
 - npm can't write ~/.npm here: npm i --cache "$TMPDIR/npm-cache" ... (npx too).
 - A browser already in ~/Library/Caches/ms-playwright is used as it is (npx
@@ -110,37 +108,78 @@ playwright.download.prss.microsoft.com, storage.googleapis.com).
 
 `
 	browserNoDownloads = `Downloads: your commands may not reach the npm registry or Playwright's
-download hosts (the human hasn't turned on browser downloads): use what is
-installed already (node_modules, ~/Library/Caches/ms-playwright).
+download hosts (the human hasn't opened them): use what is installed already
+(node_modules, ~/Library/Caches/ms-playwright).
 
 `
 )
 
-// The guide's local ports paragraph, with local dev servers off and on.
+// The guidance's local ports paragraph, with local ports closed and open.
 const (
 	browserPortsClosed = `Playwright talks to the browser over a pipe, which needs no local port, and
 file:// pages need none either. Your commands may not listen on or reach local
-ports (the human hasn't turned on local dev servers), so a dev server
+ports (the human hasn't opened local ports), so a dev server
 (Playwright's webServer) or a page served on localhost won't work.
 `
 	browserPortsOpen = `Playwright talks to the browser over a pipe, which needs no local port. The
-human also turned on local dev servers: your commands may listen on and reach
-local ports, so a dev server (Playwright's webServer) works.
+human also opened local ports: your commands may listen on and reach local
+ports, so a dev server (Playwright's webServer) works.
 `
 )
 
-// maxBrief is the most of a thread's brief.md that presetBrief copies:
+// maxBrief is the most of a thread's brief.md that guideBrief copies:
 // the brief is the coordinator's text, not unbounded.
 const maxBrief = 1 << 20
 
-// presetBrief is the brief a thread with presets gets: brief (its
-// brief.md, "" for none) with the presets' guidance after it (browser
-// testing's, saying whether downloads and local ports are open; browser
-// downloads' alone without it), written in
-// its runtime dir rt at every launch, so a resume sees today's switches;
-// brief itself when no preset on has any.
-func presetBrief(rt, brief string, presets []string) (string, error) {
-	browser, dl := slices.Contains(presets, config.SandboxBrowser), slices.Contains(presets, config.SandboxDownloads)
+// downloadsText is the guidance's downloads part for a thread whose
+// sandboxed commands reach hosts: which of the browser download hosts
+// they reach, and which not.
+func downloadsText(hosts []string) string {
+	var open, closed []string
+	for _, h := range config.BrowserDomains {
+		if slices.Contains(hosts, h) {
+			open = append(open, h)
+		} else {
+			closed = append(closed, h)
+		}
+	}
+	if len(open) == 0 {
+		return browserNoDownloads
+	}
+	say := "the human opened " + strings.Join(open, ", ") + " to your commands"
+	if len(closed) > 0 {
+		say += ", not " + strings.Join(closed, ", ") + ": a download from there fails"
+	}
+	return fmt.Sprintf(browserDownloads, wrapText(say+".", 79))
+}
+
+// wrapText breaks text into lines of at most w characters, at spaces.
+func wrapText(text string, w int) string {
+	var b strings.Builder
+	n := 0
+	for i, word := range strings.Fields(text) {
+		switch {
+		case i == 0:
+		case n+1+len(word) > w:
+			b.WriteByte('\n')
+			n = 0
+		default:
+			b.WriteByte(' ')
+			n++
+		}
+		b.WriteString(word)
+		n += len(word)
+	}
+	return b.String()
+}
+
+// guideBrief is the brief a thread with guidance texts gets: brief (its
+// brief.md, "" for none) with the texts after it, each worded from the
+// thread's other rules in lists (which download hosts it reaches,
+// whether local ports are open), written in its runtime dir rt at every
+// launch, so a resume sees today's rules; brief itself without any.
+func guideBrief(rt, brief string, guides []string, lists agent.SandboxLists) (string, error) {
+	browser, dl := slices.Contains(guides, config.GuideBrowserTesting), slices.Contains(guides, config.GuideBrowserDownloads)
 	if !browser && !dl {
 		return brief, nil
 	}
@@ -160,11 +199,8 @@ func presetBrief(rt, brief string, presets []string) (string, error) {
 		}
 		text = append(b, '\n')
 	}
-	downloads, ports := browserNoDownloads, browserPortsClosed
-	if slices.Contains(presets, config.SandboxDownloads) {
-		downloads = browserDownloads
-	}
-	if slices.Contains(presets, config.SandboxDevServers) {
+	downloads, ports := downloadsText(lists.Domains), browserPortsClosed
+	if lists.LocalBinding {
 		ports = browserPortsOpen
 	}
 	guide := fmt.Sprintf(browserGuide, downloads, ports)
