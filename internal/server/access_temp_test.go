@@ -13,6 +13,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -153,5 +154,94 @@ func TestThreadTempLaunchEnv(t *testing.T) {
 	t.Cleanup(pc.abandon)
 	if slices.ContainsFunc(pc.env, func(kv string) bool { return strings.HasPrefix(kv, "CLAUDE_CODE_TMPDIR=") }) || !slices.Contains(pc.env, "TMPDIR=/srv/tmp") {
 		t.Errorf("a coordinator's temp variables changed: %q", pc.env)
+	}
+}
+
+// TestReadyThreadTemp: a link the thread left in its temp folder (a
+// direct child, or in its claude-<uid> folder) makes the folder anew at
+// launch, without touching where the link led; a clean folder is kept.
+func TestReadyThreadTemp(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need privileges")
+	}
+	root := filepath.Join(t.TempDir(), "tm")
+	dir := filepath.Join(root, "abc")
+	target := t.TempDir()
+	os.WriteFile(filepath.Join(target, "keep"), []byte("x"), 0o600)
+	if renewed, err := readyThreadTemp(dir); err != nil || renewed {
+		t.Fatalf("new folder: renewed %v, %v", renewed, err)
+	}
+	os.MkdirAll(filepath.Join(dir, "claude-1", "scratch"), 0o700)
+	os.WriteFile(filepath.Join(dir, "claude-1", "scratch", "n.md"), []byte("x"), 0o600)
+	if renewed, err := readyThreadTemp(dir); err != nil || renewed {
+		t.Fatalf("clean folder: renewed %v, %v", renewed, err)
+	}
+	for _, link := range []string{filepath.Join(dir, "l"), filepath.Join(dir, "claude-1", "l")} {
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+		if renewed, err := readyThreadTemp(dir); err != nil || !renewed {
+			t.Fatalf("link %s: renewed %v, %v", link, renewed, err)
+		}
+		if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+			t.Errorf("renewed folder holds %v", entries)
+		}
+		if _, err := os.Stat(filepath.Join(target, "keep")); err != nil {
+			t.Errorf("the link's target lost its file: %v", err)
+		}
+		os.MkdirAll(filepath.Join(dir, "claude-1"), 0o700)
+	}
+	// Someone else's folder, or a link, in its place: refused.
+	os.RemoveAll(dir)
+	if err := os.Symlink(target, dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readyThreadTemp(dir); err == nil {
+		t.Error("a link in the folder's place was taken")
+	}
+}
+
+// TestTempWarnings: a shared temp folder left readable is a launch
+// warning, said plainly; a deny skipped for another reason is not.
+func TestTempWarnings(t *testing.T) {
+	set := proto.AccessSet{Rules: []proto.AccessRule{
+		{Kind: proto.AccessNoRead, Value: "/tmp/claude-12345", Skipped: notDenied + "too long"},
+		{Kind: proto.AccessNoRead, Value: "/tmp/claude-1", Skipped: "it holds the thread's own folders"},
+		{Kind: proto.AccessNoRead, Value: "/tmp/tm-1"},
+	}}
+	got := tempWarnings(set)
+	if len(got) != 1 || !strings.Contains(got[0], "/tmp/claude-12345 is not denied: too long") {
+		t.Errorf("tempWarnings = %q", got)
+	}
+}
+
+// TestGuardThreadTemps: a thread's guard keeps file tools out of the
+// other threads' temp folders, its own open (T591); a coordinator's
+// has none.
+func TestGuardThreadTemps(t *testing.T) {
+	p := testPaths(t)
+	t.Setenv("HOME", t.TempDir())
+	newWatchProject(t)
+	reg, err := agent.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{opts: Options{Paths: p}, agents: reg}
+	own, _ := home.ThreadTempDir("demo", "t-0001")
+	sibling := filepath.Join(home.ThreadTempRoot(), "0000000000", "claude-1", "x", "tasks", "a.output")
+	for _, yolo := range []bool{false, true} {
+		g := s.guardRulesFor(SessionRecord{Role: proto.RoleThread, Project: "demo", Thread: "t-0001", Cwd: t.TempDir(), Agent: "claude", Yolo: yolo})
+		if g.OwnTemp != own || !slices.Contains(g.OtherTemps, home.ThreadTempRoot()) {
+			t.Errorf("yolo %v: thread guard: own %q others %q", yolo, g.OwnTemp, g.OtherTemps)
+		}
+		if d := g.Judge("Read", map[string]any{"file_path": sibling}); d == nil || d.Rule != guard.RuleTempFolders || !d.Floor {
+			t.Errorf("yolo %v: Read of a sibling's temp folder: %+v", yolo, d)
+		}
+		if d := g.Judge("Write", map[string]any{"file_path": filepath.Join(own, "claude-1", "n.md")}); d != nil {
+			t.Errorf("yolo %v: Write in its own temp folder refused: %+v", yolo, d)
+		}
+	}
+	if g := s.guardRulesFor(SessionRecord{Role: proto.RoleCoordinator, Project: "demo", Cwd: t.TempDir(), Agent: "claude"}); len(g.OtherTemps) != 0 {
+		t.Errorf("coordinator guard: others %q", g.OtherTemps)
 	}
 }

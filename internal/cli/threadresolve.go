@@ -7,12 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -99,9 +101,18 @@ func (e *Env) threadResolve(p *project.Project, id string, discard bool) error {
 	}
 	// Its own temp folder (T587): scratchpads and task output, nothing
 	// handed in (a report's attachments are copied to the library).
+	// Only a private folder of this user's, in one: in the shared /tmp,
+	// anything else is no folder tm made.
 	if d, err := home.ThreadTempDir(p.Slug, id); err == nil {
 		if _, err := os.Lstat(d); err == nil {
-			if err := os.RemoveAll(d); err != nil {
+			err := fsx.CheckPrivate(filepath.Dir(d))
+			if err == nil {
+				err = fsx.CheckPrivate(d)
+			}
+			if err == nil {
+				err = os.RemoveAll(d)
+			}
+			if err != nil {
 				did = append(did, "kept temp folder "+d+" ("+textsafe.Line(err.Error(), 120)+")")
 			} else {
 				did = append(did, "removed temp folder "+d)

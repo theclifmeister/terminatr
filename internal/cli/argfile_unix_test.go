@@ -257,3 +257,31 @@ func TestThreadTempRoots(t *testing.T) {
 		t.Errorf("t-0002 may name t-0001's temp folder: %q", r)
 	}
 }
+
+// TestResolveThreadTemp (T587): resolve removes a thread's own temp
+// folder only when it and its folder in /tmp are this user's private
+// folders; else it keeps it and says why.
+func TestResolveThreadTemp(t *testing.T) {
+	for _, open := range []bool{false, true} {
+		h := newHarness(t)
+		h.ok(human, "project", "new", "demo")
+		_, rec := threadWithWorktree(t, h, "demo")
+		d, err := home.ThreadTempDir("demo", rec.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		os.MkdirAll(filepath.Join(d, "claude-1"), 0o700)
+		t.Cleanup(func() { os.RemoveAll(d) })
+		if open {
+			os.Chmod(d, 0o755)
+		}
+		out := h.ok(coord, "thread", "resolve", rec.ID, "--project", "demo")
+		_, statErr := os.Stat(d)
+		if open && (statErr != nil || !strings.Contains(out, "kept temp folder "+d)) {
+			t.Errorf("a folder open to others: %q, %v", out, statErr)
+		}
+		if !open && (statErr == nil || !strings.Contains(out, "removed temp folder "+d)) {
+			t.Errorf("own private folder: %q, %v", out, statErr)
+		}
+	}
+}

@@ -202,7 +202,7 @@ func (s *Server) tempRules(in accessInput) []proto.AccessRule {
 			Note: "other sessions' temp folders: the user's Claude sessions' scratchpads and task output"}
 		switch {
 		case !fits:
-			r.Skipped = "the thread's temp folder is too long for its agent's sandbox, which uses this one instead"
+			r.Skipped = notDenied + "the thread's temp folder (" + own + ") is too long for " + in.agent + "'s sandbox, which keeps its TMPDIR in this shared folder instead, so the thread can read the user's other sessions here"
 		case within(d, own) || filepath.IsAbs(in.cwd) && within(d, in.cwd):
 			r.Skipped = "it holds the thread's own folders"
 		}
@@ -211,8 +211,28 @@ func (s *Server) tempRules(in accessInput) []proto.AccessRule {
 	return out
 }
 
+// notDenied starts the reason a shared temp folder's deny is left out
+// where the thread can then read it: said plainly, in the effective
+// view and as a launch warning (tempWarnings).
+const notDenied = "NOT DENIED: "
+
+// tempWarnings are the launch warnings of set's shared temp folders the
+// thread can read after all.
+func tempWarnings(set proto.AccessSet) []string {
+	var out []string
+	for _, r := range set.Rules {
+		if r.Kind == proto.AccessNoRead && strings.HasPrefix(r.Skipped, notDenied) {
+			out = append(out, "access: "+r.Value+" is "+strings.ToLower(strings.TrimSuffix(notDenied, ": "))+": "+strings.TrimPrefix(r.Skipped, notDenied))
+		}
+	}
+	return out
+}
+
 // threadTemp is thread id of project slug's own temp folder.
 func threadTemp(slug, id string) (string, error) { return home.ThreadTempDir(slug, id) }
+
+// threadTempRoot holds every thread's own temp folder.
+func threadTempRoot() string { return home.ThreadTempRoot() }
 
 // within reports whether path is dir or below it, by either's real path.
 func within(dir, path string) bool {
