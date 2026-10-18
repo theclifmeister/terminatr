@@ -95,6 +95,15 @@ func TestSourceCredentials(t *testing.T) {
 		"https://ghp_TOKEN@github.com/ada/tm-nord//mods/x",
 		"https://github.com/ada/tm-nord", // control: below
 		"ssh://git@example.com/x",
+		"https:///user:TOKEN@github.com/ada/mods",
+		"https:////user:TOKEN@github.com/ada/mods",
+		`https://\user:TOKEN@github.com/ada/mods`,
+		`https://github.com\@evil.com/x`,
+		"https://",
+		"https:///github.com/ada/mods",
+		"https://github.com/ada/mods x",
+		"https://github.com/ada/mo\tds",
+		"https://github.com/ada/\x00mods",
 		"ssh://example.com/x",
 		"git@github.com:ada/tm-nord.git",
 		"ada@example.com:mods.git//nord@v1",
@@ -140,6 +149,45 @@ func TestSourceCredentials(t *testing.T) {
 	}
 	if _, _, err := Latest(s); err == nil || strings.Contains(err.Error(), "s3cret") {
 		t.Errorf("Latest: %v", err)
+	}
+}
+
+func TestSourceRedactsOnDisk(t *testing.T) {
+	dir := t.TempDir()
+	rec := Source{Git: "https:///ada:s3cret@example.com/tm-nord", Commit: "abcdef1234"}
+	if err := writeSource(dir, rec); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := ReadSource(dir)
+	if !ok || strings.Contains(got.Git, "s3cret") {
+		t.Fatalf("read %+v %v", got, ok)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, SourceFile))
+	if strings.Contains(string(data), "s3cret") || strings.Contains(string(data), "ada") {
+		t.Errorf("secret still on disk: %s", data)
+	}
+	if _, err := Fetch(got); !errors.Is(err, ErrNotPublic) {
+		t.Errorf("redacted record fetched: %v", err)
+	}
+}
+
+func TestGitIgnoresUserConfig(t *testing.T) {
+	home := t.TempDir()
+	cfg := filepath.Join(home, "gitconfig")
+	os.WriteFile(cfg, []byte("[url \"https://secret.example/\"]\n\tinsteadOf = https://public.example/\n[http]\n\textraHeader = X-Token: abc\n"), 0o644)
+	os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[url \"https://secret.example/\"]\n\tinsteadOf = https://public.example/\n"), 0o644)
+	t.Setenv("HOME", home)
+	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
+	t.Setenv("GIT_CONFIG_SYSTEM", cfg)
+	out, err := git("", "ls-remote", "--get-url", "https://public.example/x")
+	if err != nil || out != "https://public.example/x" {
+		t.Errorf("config applied: %q %v", out, err)
+	}
+	if out, _ := git("", "config", "--get-all", "http.extraHeader"); out != "" {
+		t.Errorf("extraHeader set: %q", out)
+	}
+	if out, _ := git("", "config", "--get", "credential.helper"); out != "" {
+		t.Errorf("helper set: %q", out)
 	}
 }
 

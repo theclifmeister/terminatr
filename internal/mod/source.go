@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/update"
@@ -111,16 +112,17 @@ var (
 var ErrNotPublic = errors.New("mods install from public URLs only: use an https:// URL with no user, password or token in it (SSH and private repositories can't be installed)")
 
 // urlUserinfo splits the userinfo out of a URL with a scheme://
-// authority (https://, ssh://), and says whether it had any. The scp
-// form user@host:path has none in this sense: it can't carry a
-// password.
+// authority (https://, ssh://), and says whether it had any. Extra
+// slashes or backslashes after :// are skipped as curl skips them, so
+// https:///user:TOKEN@host/x has the userinfo user:TOKEN. The scp form
+// user@host:path has none in this sense: it can't carry a password.
 func urlUserinfo(u string) (before, userinfo, after string, ok bool) {
 	i := strings.Index(u, "://")
 	if i < 0 || strings.HasPrefix(u, "file://") {
 		return "", "", "", false
 	}
-	rest := u[i+3:]
-	end := strings.IndexAny(rest, "/?#")
+	rest := strings.TrimLeft(u[i+3:], `/\`)
+	end := strings.IndexAny(rest, `/\?#`)
 	if end < 0 {
 		end = len(rest)
 	}
@@ -139,6 +141,31 @@ func HasCredentials(u string) bool {
 
 // IsSSH says whether git URL u goes over SSH: ssh:// or the scp form.
 func IsSSH(u string) bool { return strings.HasPrefix(u, "ssh://") || scpRE.MatchString(u) }
+
+// NotPublic says whether git URL u is anything but a plain public
+// https:// URL (or file://): SSH, userinfo, and the oddities that make
+// git or curl read a URL differently than it looks: an empty or
+// slash-led host, a backslash, whitespace or a control character.
+func NotPublic(u string) bool {
+	switch {
+	case HasCredentials(u) || IsSSH(u):
+		return true
+	case strings.HasPrefix(u, "file://"):
+		return false
+	case !strings.HasPrefix(u, "https://"):
+		return true
+	}
+	host := u[len("https://"):]
+	if host == "" || host[0] == '/' || host[0] == '?' || host[0] == '#' {
+		return true
+	}
+	for _, r := range u {
+		if r == '\\' || r <= ' ' || r == 0x7f || unicode.IsSpace(r) || unicode.IsControl(r) {
+			return true
+		}
+	}
+	return false
+}
 
 // RedactURL is u with any userinfo replaced by ***, for showing.
 func RedactURL(u string) string {
@@ -179,7 +206,7 @@ func CheckSubdir(p string) error {
 // with an optional //<path> (the mod's folder in the repository) and
 // an optional @<ref> after it.
 func parseGit(arg string) (Source, error) {
-	if HasCredentials(arg) || IsSSH(arg) {
+	if NotPublic(arg) && !strings.HasPrefix(arg, "file://") {
 		return Source{}, ErrNotPublic
 	}
 	if m := githubTreeRE.FindStringSubmatch(arg); m != nil {
@@ -277,6 +304,11 @@ func ReadSource(dir string) (Source, bool) {
 	var s Source
 	if json.Unmarshal(data, &s) != nil || s.Path == "" && s.Git == "" {
 		return Source{}, false
+	}
+	if red := RedactURL(s.Git); red != s.Git {
+		// A secret from before tm refused them: don't leave it on disk.
+		s.Git = red
+		_ = writeSource(dir, s)
 	}
 	return s, true
 }
@@ -507,8 +539,35 @@ func git(dir string, args ...string) (string, error) {
 	// No credential helper (an empty value resets the list, the
 	// system's and the user's included), no prompt: a private repository
 	// fails instead of using the user's stored logins.
-	env := []string{"GIT_ASKPASS=", "SSH_ASKPASS=", "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=credential.helper", "GIT_CONFIG_VALUE_0="}
+	//
+	// Nor does it read the user's or the system's git config (an
+	// insteadOf could turn a public URL into a credentialed or SSH one,
+	// http.extraHeader and the cookie and client certificate settings
+	// would send secrets), nor ~/.netrc, which curl reads from HOME:
+	// HOME is an empty folder for the run.
+	home, err := os.MkdirTemp("", "tm-mod-git-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(home)
+	env := append(gitEnv(home), "GIT_ASKPASS=", "SSH_ASKPASS=")
 	return gitx.Run(context.Background(), dir, gitx.Opts{Timeout: gitTimeout, Env: env}, args...)
+}
+
+// gitEnv is the environment that keeps git from using the user's
+// credentials and settings, with home an empty folder.
+func gitEnv(home string) []string {
+	env := []string{
+		"HOME=" + home, "USERPROFILE=" + home, "XDG_CONFIG_HOME=" + home,
+		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=" + os.DevNull, "GIT_CONFIG_SYSTEM=" + os.DevNull,
+		"NETRC=" + os.DevNull,
+	}
+	reset := []string{"credential.helper", "http.extraHeader", "http.cookieFile", "http.sslCert", "http.sslKey", "http.proxyAuthMethod"}
+	env = append(env, fmt.Sprintf("GIT_CONFIG_COUNT=%d", len(reset)))
+	for i, k := range reset {
+		env = append(env, fmt.Sprintf("GIT_CONFIG_KEY_%d=%s", i, k), fmt.Sprintf("GIT_CONFIG_VALUE_%d=", i))
+	}
+	return env
 }
 
 // clone fetches url at ref ("" the default branch) into dir, shallow,
@@ -683,7 +742,7 @@ func Latest(s Source) (next string, behind bool, err error) {
 		return "changed", true, nil
 	case s.Git == "":
 		return "", false, errors.New("no source recorded")
-	case HasCredentials(s.Git) || IsSSH(s.Git):
+	case s.Git != "" && NotPublic(s.Git):
 		return "", false, recordNotPublic(s)
 	case isVersionTag(s.Ref):
 		tag, err := newestTag(s.Git, s.Ref)
@@ -734,7 +793,7 @@ func subdirChanged(s Source, ref string) (bool, error) {
 // version tag moves on to the newest one; a folder, branch or other tag
 // is fetched again as it is.
 func Next(s Source) (Source, error) {
-	if HasCredentials(s.Git) || IsSSH(s.Git) {
+	if s.Git != "" && NotPublic(s.Git) {
 		return Source{}, recordNotPublic(s)
 	}
 	next := Source{Path: s.Path, Git: s.Git, Ref: s.Ref, Subdir: s.Subdir}
