@@ -136,6 +136,12 @@ func (s *ServerSource) TestSecretEnv(slug, name string) (string, error) {
 	return secretTestWord(name, res.OK, res.Error), nil
 }
 
+func (s *ServerSource) AccessShow(slug, id string) (proto.AccessShowResult, error) {
+	var res proto.AccessShowResult
+	err := s.call(proto.MethodAccessShow, proto.AccessShowParams{Project: slug, Thread: id}, &res)
+	return res, err
+}
+
 // ApplyModDefaults applies the defaults enabled mod id suggests for all
 // projects (mods design §7, Tighten only), on the human's word: each in
 // [defaults], journaled as the human's change, except a key config.toml

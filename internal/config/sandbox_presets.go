@@ -162,3 +162,23 @@ func SetSandboxPreset(table, key string, on *bool) error {
 	}
 	return Set(t, key, *on)
 }
+
+// PresetsOf is one table's preset switches by key, only those it sets:
+// all projects' ([defaults.sandbox]) for slug "", else the project's
+// own. None for a nil Config.
+func (c *Config) PresetsOf(slug string) map[string]bool {
+	if c == nil {
+		return nil
+	}
+	r := c.defaults.Sandbox
+	if slug != "" {
+		r = c.projects[slug].Sandbox
+	}
+	out := map[string]bool{}
+	for _, k := range SandboxPresets {
+		if on := r.preset(k); on != nil {
+			out[k] = *on
+		}
+	}
+	return out
+}
