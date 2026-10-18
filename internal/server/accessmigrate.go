@@ -7,6 +7,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
 
@@ -90,11 +91,11 @@ func noteAccess(note func(slug string) (string, bool), once bool) {
 			continue
 		}
 		summary, ask := note(sum.Slug)
+		// Plain text: it quotes config.toml's entries, refused ones too.
+		summary = textsafe.Line(summary, 0)
 		if once {
 			items, _ := p.Inbox()
-			if slices.ContainsFunc(items, func(it project.Item) bool {
-				return it.Kind == KindAccessMigration && it.Summary == strings.Join(strings.Fields(summary), " ")
-			}) {
+			if slices.ContainsFunc(items, func(it project.Item) bool { return it.Kind == KindAccessMigration && it.Summary == summary }) {
 				continue
 			}
 		}
