@@ -102,3 +102,54 @@ func TestAgentRootsNoHome(t *testing.T) {
 		t.Error("a folder in the home, or a temp folder, holds the home")
 	}
 }
+
+// TestAgentScratchpad: a Claude thread may name files in its own Claude
+// Code scratchpad (<temp>/<its worktree, every non-alphanumeric a "-">/
+// <session>/scratchpad), not another working folder's, also not through
+// a link; a refusal lists the roots it may name.
+func TestAgentScratchpad(t *testing.T) {
+	h := newHarness(t)
+	tmp := t.TempDir()
+	prev := tempRoots
+	tempRoots = func(*Env) ([]string, []string) { return []string{tmp}, nil }
+	t.Cleanup(func() { tempRoots = prev })
+	h.ok(human, "project", "new", "demo")
+	h.env["TERMINATR_PROJECT"] = "demo"
+	p, _ := project.Open("demo")
+	wt := t.TempDir()
+	if _, err := thread.Create(p, thread.Record{Title: "Fix it", State: thread.Running, Worktree: wt}); err != nil {
+		t.Fatal(err)
+	}
+	mine := filepath.Join(tmp, scratchName(wt), "sess", "scratchpad")
+	theirs := filepath.Join(tmp, scratchName(wt+"-other"), "sess", "scratchpad")
+	for _, d := range []string{mine, theirs} {
+		os.MkdirAll(d, 0o755)
+		os.WriteFile(filepath.Join(d, "chart.png"), []byte("png"), 0o644)
+	}
+	os.WriteFile(filepath.Join(tmp, "loose.png"), []byte("png"), 0o644)
+	rel, _ := filepath.Rel(mine, filepath.Join(theirs, "chart.png"))
+	os.Symlink(rel, filepath.Join(mine, "steal.png"))
+	os.Symlink(filepath.Join(theirs, "chart.png"), filepath.Join(mine, "abs.png"))
+	report := "## Report\nDone.\n\n## Next\n- Merge it\n"
+	h.cwd = wt
+	stored := func(name string) bool {
+		_, err := os.Stat(thread.Path(p, "t-0001", "library", name))
+		return err == nil
+	}
+	if scratchName("/Users/a/.terminatr/wt") != "-Users-a--terminatr-wt" {
+		t.Errorf("scratchName = %q", scratchName("/Users/a/.terminatr/wt"))
+	}
+	if code, _, errs := h.run(thr, report, "report", "--attach", filepath.Join(mine, "chart.png"), "--attach", filepath.Join(tmp, "loose.png")); code != 0 || !stored("chart.png") || !stored("loose.png") {
+		t.Fatalf("report with own scratchpad and temp files: exit %d, %s", code, errs)
+	}
+	for _, a := range []string{filepath.Join(theirs, "chart.png"), filepath.Join(mine, "steal.png"), filepath.Join(mine, "abs.png")} {
+		code, _, errs := h.run(thr, report, "report", "--attach", a)
+		if code == 0 || stored("steal.png") || stored("abs.png") {
+			t.Errorf("report --attach %s: exit %d, %s", a, code, errs)
+		}
+	}
+	code, _, errs := h.run(thr, report, "report", "--attach", filepath.Join(os.TempDir(), "nope"))
+	if code == 0 || !strings.Contains(errs, wt) || !strings.Contains(errs, tmp) {
+		t.Errorf("the refusal doesn't list the roots: exit %d, %s", code, errs)
+	}
+}

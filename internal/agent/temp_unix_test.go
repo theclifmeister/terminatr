@@ -4,6 +4,7 @@ package agent
 
 import (
 	"os"
+	"slices"
 	"strconv"
 	"testing"
 )
@@ -34,5 +35,23 @@ func TestAgentTemp(t *testing.T) {
 	}
 	if _, private := AgentTemp(nil, "claude", "/home/u", env(nil)); len(private) != 1 || private[0] != "/tmp/claude-"+uid+"/bash-edit-diff" {
 		t.Errorf("claude's private temp folders: %q", private)
+	}
+}
+
+// TestAgentTemps: Claude's temp folders are both of its manifest's
+// per-user entries; Codex's /tmp fallback is no extra root.
+func TestAgentTemps(t *testing.T) {
+	uid := strconv.Itoa(os.Getuid())
+	dirs, _ := AgentTemps(nil, "claude", "/home/u", func(k string) string {
+		if k == "CLAUDE_CODE_TMPDIR" {
+			return "/var/ct"
+		}
+		return ""
+	})
+	if want := []string{"/var/ct/claude-" + uid, "/tmp/claude-" + uid}; !slices.Equal(dirs, want) {
+		t.Errorf("claude temps = %v, want %v", dirs, want)
+	}
+	if dirs, _ := AgentTemps(nil, "codex", "/home/u", func(k string) string { return map[string]string{"TMPDIR": "/var/x"}[k] }); !slices.Equal(dirs, []string{"/var/x"}) {
+		t.Errorf("codex temps = %v", dirs)
 	}
 }

@@ -252,6 +252,17 @@ func GuardPaths(entries []string, home string, getenv func(string) string) []str
 // are no uids: Windows); "" for none. An entry that resolves to the root
 // or to a folder holding home is skipped: it is no agent's own.
 func GuardTemp(entries []string, home string, getenv func(string) string) string {
+	if all := GuardTemps(entries, home, getenv); len(all) > 0 {
+		return all[0]
+	}
+	return ""
+}
+
+// GuardTemps is every [guard] temp entry that resolves as GuardTemp
+// says, in order: the agent's sandbox may have set any of its variables
+// when it started, so each is a folder it may write.
+func GuardTemps(entries []string, home string, getenv func(string) string) []string {
+	var out []string
 	for _, e := range entries {
 		missing := false
 		p := os.Expand(e, func(name string) string {
@@ -270,9 +281,11 @@ func GuardTemp(entries []string, home string, getenv func(string) string) string
 		if p = filepath.Clean(p); missing || !filepath.IsAbs(p) || filepath.Dir(p) == p || holds(p, home) {
 			continue
 		}
-		return p
+		if !slices.Contains(out, p) {
+			out = append(out, p)
+		}
 	}
-	return ""
+	return out
 }
 
 // holds reports whether dir is home or holds it (home "" holds nothing).
