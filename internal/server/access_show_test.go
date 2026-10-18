@@ -303,3 +303,37 @@ func TestAccessGitDirRule(t *testing.T) {
 		}
 	}
 }
+
+// TestOwnEscapes: the effective view says how tm treats an excluded
+// command of the agent's own files (T574 case 7): an escape it asks
+// about, refused with escapes off, one tm excludes too, or not used
+// under yolo; its other rules stay shown only.
+func TestOwnEscapes(t *testing.T) {
+	files := func() []proto.AccessRule {
+		return []proto.AccessRule{
+			{Where: proto.AccessAgent, Kind: proto.AccessExcluded, Value: "docker", Source: "~/.claude/settings.json"},
+			{Where: proto.AccessAgent, Kind: proto.AccessExcluded, Value: "npx playwright *", Source: "~/.claude/settings.json"},
+			{Where: proto.AccessAgent, Kind: proto.AccessAllow, Value: "Bash(ls)", Source: "~/.claude/settings.json"},
+		}
+	}
+	set := func(escapes, yolo string) proto.AccessSet {
+		return proto.AccessSet{Rules: []proto.AccessRule{
+			{Where: proto.AccessOutside, Kind: proto.AccessExcluded, Value: "npx playwright *", Source: "demo"},
+			{Where: proto.AccessOutside, Kind: proto.AccessEscapes, Value: escapes},
+			{Where: proto.AccessPrompts, Kind: proto.AccessYolo, Value: yolo},
+		}}
+	}
+	got := ownEscapes(files(), set("on", "off"))
+	if got[0].Note != proto.AccessOwnEscape || got[1].Note != "tm excludes it too" || got[2].Note != "" {
+		t.Errorf("escapes on: %+v", got)
+	}
+	if rm := got[0].Remarks(); len(rm) != 1 || !strings.Contains(rm[0], "its guard judges") {
+		t.Errorf("remarks %q", rm)
+	}
+	if got := ownEscapes(files(), set("off", "off")); got[0].Note != proto.AccessOwnEscapeOff {
+		t.Errorf("escapes off: %+v", got[0])
+	}
+	if got := ownEscapes(files(), set("on", "on")); got[0].Skipped != proto.AccessYoloNoSandbox || got[0].Note != "" {
+		t.Errorf("yolo: %+v", got[0])
+	}
+}

@@ -965,3 +965,57 @@ func TestGuardStateOfServer(t *testing.T) {
 		t.Error("the exited session's refusals are kept")
 	}
 }
+
+// TestGuardOwnExcluded: a thread's guard gets the excluded commands of
+// the user's own Claude settings and its worktree's, with tm's beside
+// them (T574 case 7): a command one takes and tm's don't asks the user,
+// or with escapes off is refused; none under yolo, nor for Codex,
+// which has no such files.
+func TestGuardOwnExcluded(t *testing.T) {
+	testPaths(t)
+	p := newWatchProject(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	os.MkdirAll(filepath.Join(home, ".claude"), 0o700)
+	os.WriteFile(filepath.Join(home, ".claude", "settings.json"), []byte(`{"sandbox":{"excludedCommands":["docker","npx *"]}}`), 0o600)
+	wt := t.TempDir()
+	os.MkdirAll(filepath.Join(wt, ".claude"), 0o700)
+	os.WriteFile(filepath.Join(wt, ".claude", "settings.local.json"), []byte(`{"sandbox":{"excludedCommands":["make deploy *","docker"]}}`), 0o600)
+	writeConfig(t, "[projects."+p.Slug+".sandbox]\nexcluded_commands = [\"npx playwright *\"]\n")
+	reg, err := agent.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{log: log.New(os.Stderr, "", 0), opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}}, agents: reg}
+	thread := SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: "t-0001", Cwd: wt}
+	g := s.guardRulesFor(thread)
+	if !slices.Equal(g.Unsandboxed, []string{"docker", "npx *", "make deploy *"}) || !slices.Equal(g.TMExcluded, []string{"npx playwright *"}) || g.NoEscapes {
+		t.Fatalf("thread %+v", g)
+	}
+	bash := func(g guard.Rules, c string) *guard.Denial { return g.Judge("Bash", map[string]any{"command": c}) }
+	if d := bash(g, "docker ps"); d == nil || !d.Ask || d.Rule != guard.RuleEscape {
+		t.Errorf("docker ps: %+v", d)
+	}
+	if d := bash(g, "make deploy prod"); d == nil || !d.Ask {
+		t.Errorf("the worktree's own: %+v", d)
+	}
+	if d := bash(g, "npx playwright test"); d != nil {
+		t.Errorf("tm's excluded command: %+v", d)
+	}
+	closed := thread
+	closed.NoSandboxEscapes = true
+	if d := bash(s.guardRulesFor(closed), "docker ps"); d == nil || d.Ask || d.Rule != guard.RuleEscape {
+		t.Errorf("escapes off: %+v", d)
+	}
+	yolo := thread
+	yolo.Yolo = true
+	if g := s.guardRulesFor(yolo); g.Unsandboxed != nil {
+		t.Errorf("yolo %+v", g.Unsandboxed)
+	}
+	codex := thread
+	codex.Agent = "codex"
+	if g := s.guardRulesFor(codex); g.Unsandboxed != nil {
+		t.Errorf("codex %+v", g.Unsandboxed)
+	}
+}

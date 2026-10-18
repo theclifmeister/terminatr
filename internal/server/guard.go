@@ -185,6 +185,10 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		g.GitConfig = withReal(threadGitConfig(r))
 	}
 	g.Tools = agent.GuardTools(reg, r.Agent)
+	if r.Role == proto.RoleThread && !r.Yolo {
+		g.Unsandboxed, g.TMExcluded = ownExcluded(reg, r, home, lc)
+		g.NoEscapes = r.NoSandboxEscapes
+	}
 	g.Protected = []string{"main", "master"}
 	repos := []string{r.Cwd}
 	if r.Role == proto.RoleCoordinator {
@@ -204,6 +208,40 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		g.Mods = s.guardMods(r, home)
 	}
 	return g
+}
+
+// ownExcluded are the excluded commands of thread r's agent's own
+// settings files (agent.OwnRuler: Claude's ~/.claude/settings.json and
+// its worktree's .claude), read live, and the ones tm gives it (config
+// sandbox): the guard treats a command the first run outside the
+// sandbox, and none of tm's, as an escape (T574 case 7). tm doesn't
+// change the user's files.
+func ownExcluded(reg *agent.Registry, r SessionRecord, home string, lc launchConfig) (own, tm []string) {
+	if reg == nil {
+		return nil, nil
+	}
+	a, ok := reg.Get(r.Agent)
+	if !ok {
+		return nil, nil
+	}
+	or, ok := a.(agent.OwnRuler)
+	if !ok || home == "" {
+		return nil, nil
+	}
+	for _, o := range or.OwnRules(home, r.Cwd) {
+		if o.Kind == proto.AccessExcluded && !slices.Contains(own, o.Value) {
+			own = append(own, o.Value)
+		}
+	}
+	if len(own) == 0 {
+		return nil, nil
+	}
+	if lc.err == nil {
+		if t, err := lc.cfg.ThreadSandbox(r.Project); err == nil {
+			tm = t.ExcludedCommands
+		}
+	}
+	return own, tm
 }
 
 // guardNoWrite are the files and folders no tool of session r writes,

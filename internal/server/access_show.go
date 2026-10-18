@@ -114,7 +114,7 @@ func (s *Server) accessShow(p proto.AccessShowParams, c callCtx) (any, *proto.Er
 		if err != nil {
 			return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 		}
-		set.Rules = append(set.Rules, s.agentFileRules(name, home, "")...)
+		set.Rules = append(set.Rules, ownEscapes(s.agentFileRules(name, home, ""), set)...)
 		return proto.AccessShowResult{AccessSet: set}, nil
 	}
 	rec, err := thread.Load(proj, p.Thread)
@@ -129,7 +129,7 @@ func (s *Server) accessShow(p proto.AccessShowParams, c callCtx) (any, *proto.Er
 		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 	}
 	now.Thread = rec.ID
-	files := s.agentFileRules(rec.Agent, home, rec.Worktree)
+	files := ownEscapes(s.agentFileRules(rec.Agent, home, rec.Worktree), now)
 	launched, ok := readLaunchRecord(proj, rec.ID)
 	if !ok {
 		now.Rules = append(now.Rules, files...)
@@ -189,6 +189,34 @@ func (s *Server) threadAgentOf(safety config.Safety) string {
 		return names[0]
 	}
 	return ""
+}
+
+// ownEscapes is files, an agent's own rules, with how tm treats their
+// excluded commands said (T574 case 7): the guard takes a command one
+// runs outside the sandbox, which none of tm's does, for an escape,
+// asked of the user, or refused with escapes off; under yolo there is
+// no sandbox to leave. set is the thread's rules now.
+func ownEscapes(files []proto.AccessRule, set proto.AccessSet) []proto.AccessRule {
+	yolo, noEscapes := launchFlags(set)
+	for i := range files {
+		r := &files[i]
+		if r.Kind != proto.AccessExcluded {
+			continue
+		}
+		switch {
+		case yolo:
+			r.Skipped = proto.AccessYoloNoSandbox
+		case slices.ContainsFunc(set.Rules, func(t proto.AccessRule) bool {
+			return t.Kind == proto.AccessExcluded && t.Where != proto.AccessAgent && launched(t) && t.Value == r.Value
+		}):
+			r.Note = "tm excludes it too"
+		case noEscapes:
+			r.Note = proto.AccessOwnEscapeOff
+		default:
+			r.Note = proto.AccessOwnEscape
+		}
+	}
+	return files
 }
 
 // agentFileRules are the rules agent name reads from its own files.

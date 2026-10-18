@@ -73,6 +73,20 @@ export type Rules = {
   // own rules would let it run: tm answers that prompt for the user
   // only, never for the coordinator (T574 case 6).
   askEscapes?: boolean
+  // The command patterns of the agent's own settings files that run a
+  // command outside the sandbox (Claude's sandbox.excludedCommands in
+  // ~/.claude and the folder's .claude), with no flag in the call for
+  // escape to see (T574 case 7). A call of a shell tool with an escape
+  // field that one takes, and that none of tmExcluded (the excluded
+  // commands tm gives the thread) takes, is an escape: put to the user
+  // (rule "escape"), or with noEscapes refused. They are matched more
+  // widely than the agent does (any of the line's commands, a bare word
+  // as a prefix), so the guard asks rather than misses.
+  unsandboxed?: readonly string[]
+  tmExcluded?: readonly string[]
+  // The thread's escapes are off (sandbox_escapes = false), so a call
+  // unsandboxed takes is refused.
+  noEscapes?: boolean
   // guard_mode "learn": a refusal tells the model the user reviews it.
   learn?: boolean
   // The rules whose floor holds though the human turned the rule off
@@ -143,7 +157,7 @@ export const off: Rules = { on: false }
 export function rulesOf(text: string): Rules {
   try {
     const r = JSON.parse(text) as Rules
-    return r && typeof r === 'object' && r.on === true && (Array.isArray(r.rules) || Array.isArray(r.mods) || Array.isArray(r.own) || Array.isArray(r.secretEnv) || Array.isArray(r.floor) || Array.isArray(r.noWrite) || r.askEscapes === true) ? r : off
+    return r && typeof r === 'object' && r.on === true && (Array.isArray(r.rules) || Array.isArray(r.mods) || Array.isArray(r.own) || Array.isArray(r.secretEnv) || Array.isArray(r.floor) || Array.isArray(r.noWrite) || r.askEscapes === true || Array.isArray(r.unsandboxed)) ? r : off
   } catch {
     return off
   }
@@ -152,7 +166,7 @@ export function rulesOf(text: string): Rules {
 // judge is the rule the call of tool with input breaks, or null. The
 // tool is judged by its kind in r.tools, from the fields listed there.
 export function judge(r: Rules, tool: string, input: Record<string, unknown>): Denial | null {
-  if (!r.on || (!r.rules?.length && !r.mods?.length && !r.own?.length && !r.secretEnv?.length && !r.floor?.length && !r.noWrite?.length && !r.askEscapes)) return null
+  if (!r.on || (!r.rules?.length && !r.mods?.length && !r.own?.length && !r.secretEnv?.length && !r.floor?.length && !r.noWrite?.length && !r.askEscapes && !r.unsandboxed?.length)) return null
   const t = r.tools && Object.hasOwn(r.tools, tool) ? r.tools[tool] : undefined
   if (!t) return null
   const values = (t.fields ?? []).map(f => input[f]).filter((v): v is string => typeof v === 'string' && v !== '')
@@ -178,6 +192,13 @@ export function judge(r: Rules, tool: string, input: Record<string, unknown>): D
         })
         if (d && !d.ask) return d
         ask ??= d
+      }
+      if (t.escape) {
+        for (const c of values) {
+          const d = judgeUnsandboxed(r, c.trim())
+          if (d && !d.ask) return d
+          ask ??= d
+        }
       }
       if (!ask && r.askEscapes && t.escape && input[t.escape] === true) {
         ask = { rule: RULE_ESCAPE, ask: true, summary: 'a command outside the sandbox', message: 'terminatr guard: this command asks to run outside the sandbox, so the user answers it.' }
@@ -277,6 +298,42 @@ function globMatch(pattern: string, s: string): boolean {
     s = s.slice(i + p.length)
   }
   return s.length >= last.length && s.endsWith(last)
+}
+
+// judgeUnsandboxed judges a command line by the agent's own excluded
+// commands (Rules.unsandboxed): one that runs it outside the sandbox
+// where none of tm's does is an escape, asked of the user or, with the
+// thread's escapes off, refused.
+function judgeUnsandboxed(r: Rules, line: string): Denial | null {
+  if (!r.unsandboxed?.length || (r.tmExcluded ?? []).some(e => excludedTakes(e, line))) return null
+  const cands = commands(line).flatMap(words => [words.join(' '), strip(words).join(' ')])
+  cands.push(line)
+  if (!r.unsandboxed.some(p => cands.some(c => unsandboxedTakes(p, c)))) return null
+  const summary = "an excluded command of the agent's own settings"
+  if (r.noEscapes) {
+    return { rule: RULE_ESCAPE, summary, message: "terminatr guard (escape): this command runs outside the sandbox through an excluded command in your agent's own settings (sandbox.excludedCommands, not tm's), and this thread's escapes are off. Run it another way inside the sandbox; if the task needs it, tell the user." }
+  }
+  return { rule: RULE_ESCAPE, ask: true, summary, message: "terminatr guard: this command runs outside the sandbox through an excluded command of the user's own settings, so the user answers it." }
+}
+
+// unsandboxedTakes: the agent's excluded command p takes command c, read
+// widely: * any text, a trailing " *" (or the older ":*") no arguments
+// too, and a pattern without * also the command with arguments.
+function unsandboxedTakes(p: string, c: string): boolean {
+  p = p.trim()
+  if (p.endsWith(':*')) p = p.slice(0, -2) + ' *'
+  if (p === '' || c === '') return false
+  if (p.endsWith(' *') && c === p.slice(0, -2)) return true
+  return globMatch(p, c) || (!p.includes('*') && c.startsWith(p + ' '))
+}
+
+// excludedTakes: tm's excluded command e takes command line c as Claude
+// matches it (config.ExcludedMatch): one command, without the shell's
+// operators, that e's pattern takes.
+function excludedTakes(e: string, c: string): boolean {
+  if ([';', '&', '|', '<', '>', '`', '$(', '\n'].some(op => c.includes(op))) return false
+  if (e.endsWith(' *') && c === e.slice(0, -2)) return true
+  return globMatch(e, c)
 }
 
 // floor marks d as a refusal no allowance lifts.
