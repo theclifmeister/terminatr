@@ -184,8 +184,20 @@ func TestExcludedAskAndWriteLaunch(t *testing.T) {
 	newWatchProject(t)
 	writeConfig(t, `[projects.demo.sandbox]
 excluded_commands = ["make e2e", { command = "npx playwright *", ask = false }]
-write = ["~/src/fixtures", "/`+strings.TrimPrefix(filepath.ToSlash(p.Home), "/")+`/sub"]
+write = ["~/src/fixtures", "/`+strings.TrimPrefix(filepath.ToSlash(p.Home), "/")+`/sub", "~/src/keys", "~/src/repo"]
 `)
+	// A folder that leads where no write folder may be, and one that
+	// holds a repository of the project's: both left out.
+	os.MkdirAll(filepath.Join(home, ".ssh"), 0o700)
+	os.MkdirAll(filepath.Join(home, "src"), 0o755)
+	if err := os.Symlink(filepath.Join(home, ".ssh"), filepath.Join(home, "src", "keys")); err != nil {
+		t.Fatal(err)
+	}
+	repo := filepath.Join(home, "src", "repo", "app")
+	os.MkdirAll(filepath.Join(repo, ".git"), 0o755)
+	if err := config.SetRepos("demo", []string{repo}); err != nil {
+		t.Fatal(err)
+	}
 	reg, err := agent.Load("")
 	if err != nil {
 		t.Fatal(err)
@@ -220,8 +232,15 @@ write = ["~/src/fixtures", "/`+strings.TrimPrefix(filepath.ToSlash(p.Home), "/")
 	if !slices.Contains(st.Permissions.Allow, "Edit(/"+filepath.ToSlash(fixtures)+"/**)") || slices.ContainsFunc(st.Permissions.Allow, func(a string) bool { return strings.Contains(a, "/sub") }) {
 		t.Errorf("write folders: allow %q", st.Permissions.Allow)
 	}
-	if !strings.Contains(logged.String(), "write folder") {
-		t.Errorf("the folder in tm's own isn't said to be skipped: %s", logged.String())
+	for _, w := range []string{"/sub", ".ssh", "src/keys", "src/repo"} {
+		if slices.ContainsFunc(st.Permissions.Allow, func(a string) bool { return strings.Contains(a, w) }) {
+			t.Errorf("write folders: %s opened: allow %q", w, st.Permissions.Allow)
+		}
+	}
+	for _, w := range []string{"write folder /", "write folder ~/src/keys", "write folder ~/src/repo"} {
+		if !strings.Contains(logged.String(), w) {
+			t.Errorf("%q isn't said to be skipped: %s", w, logged.String())
+		}
 	}
 
 	g := s.guardRulesFor(rec)

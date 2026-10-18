@@ -29,8 +29,8 @@ yolo = false
 	for slug, want := range map[string]ThreadSandbox{
 		// The project's list of a key replaces all projects'; the key it
 		// doesn't set follows them.
-		"web":   {ExcludedCommands: []string{"npx playwright *"}, Allow: []string{"Bash(docker compose *)"}},
-		"none":  {ExcludedCommands: []string{"docker compose *"}, Allow: []string{}},
+		"web":  {ExcludedCommands: []string{"npx playwright *"}, Allow: []string{"Bash(docker compose *)"}},
+		"none": {ExcludedCommands: []string{"docker compose *"}, Allow: []string{}},
 		// A Bash rule of a file written before covers its excluded
 		// command: it runs without asking, as before.
 		"plain": {ExcludedCommands: []string{"docker compose *"}, WithoutAsking: []string{"docker compose *"}, Allow: []string{"Bash(docker compose *)"}},

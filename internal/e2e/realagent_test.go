@@ -71,7 +71,13 @@ func pinClaudePermissionMode(t *testing.T, bin string) string {
 // projects) and a dialog left on screen fails here.
 func realStart(t *testing.T, env *Env, name, model string, args ...string) (*Session, string) {
 	t.Helper()
-	dir := env.Workdir()
+	return realStartIn(t, env, env.Workdir(), name, model, args...)
+}
+
+// realStartIn is realStart in folder dir, which the caller may fill
+// first.
+func realStartIn(t *testing.T, env *Env, dir, name, model string, args ...string) (*Session, string) {
+	t.Helper()
 	s := env.StartAgent(name, dir, append([]string{"--model", model}, args...)...)
 	if !Poll(realWait, func() bool {
 		i, _ := env.Info(s)

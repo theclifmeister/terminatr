@@ -403,6 +403,11 @@ func (f *fakeSource) AccessShow(slug, id string) (proto.AccessShowResult, error)
 	return res, nil
 }
 
+func (f *fakeSource) SetExcludedAsk(table, cmd string, ask bool) error {
+	f.sandbox = append(f.sandbox, fmt.Sprintf("%s %s ask=%v", table, cmd, ask))
+	return config.SetExcludedAsk(table, cmd, ask)
+}
+
 func (f *fakeSource) SetSandboxPreset(table, key string, on *bool) error {
 	word := "follow"
 	if on != nil {

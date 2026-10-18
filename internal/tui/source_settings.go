@@ -105,6 +105,26 @@ func (s *ServerSource) SetSandbox(table, key string, list []string) error {
 	return nil
 }
 
+func (s *ServerSource) SetExcludedAsk(table, cmd string, ask bool) error {
+	defer s.touch()
+	if s.Caller.IsAgent() {
+		return errHumanOnly
+	}
+	if err := config.SetExcludedAsk(table, cmd, ask); err != nil {
+		return err
+	}
+	detail := fmt.Sprintf("excluded command %q asks first", cmd)
+	if !ask {
+		detail = fmt.Sprintf("excluded command %q runs without asking", cmd)
+	}
+	if table == config.DefaultsTable {
+		journalAll(s.Caller, "sandbox."+config.SandboxExcluded, detail, "all projects")
+	} else if p, err := project.Open(strings.TrimPrefix(table, "projects.")); err == nil {
+		p.Journal(s.Caller, "settings.sandbox", p.Slug, detail)
+	}
+	return nil
+}
+
 func (s *ServerSource) SetSandboxPreset(table, key string, on *bool) error {
 	defer s.touch()
 	if s.Caller.IsAgent() {

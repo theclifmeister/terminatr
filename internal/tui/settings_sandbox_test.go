@@ -122,16 +122,16 @@ func TestSandboxAllowAll(t *testing.T) {
 	src, m := sandboxData(t)
 	drain(t, m, sandboxRow(t, "", "Allow rules").change(m))
 	keyPress(m, "a")
-	m.top().(*inputView).text = "Bash(npx playwright *)"
+	m.top().(*inputView).text = "WebFetch(domain:playwright.dev)"
 	drain(t, m, keyPress(m, "enter"))
 	keyPress(m, "a")
-	m.top().(*inputView).text = "Bash"
+	m.top().(*inputView).text = "WebFetch"
 	drain(t, m, keyPress(m, "enter"))
-	if !strings.Contains(m.msg, "allows every Bash call") {
+	if !strings.Contains(m.msg, "allows every WebFetch call") {
 		t.Errorf("msg %q", m.msg)
 	}
 	drain(t, m, keyPress(m, "x"))
-	if want := []string{`defaults allow ["Bash(npx playwright *)"]`, `defaults allow []`}; !slices.Equal(src.sandbox, want) {
+	if want := []string{`defaults allow ["WebFetch(domain:playwright.dev)"]`, `defaults allow []`}; !slices.Equal(src.sandbox, want) {
 		t.Errorf("saved %v", src.sandbox)
 	}
 	c, _ := config.Load()
@@ -153,7 +153,7 @@ func TestSandboxTab(t *testing.T) {
 		t.Fatalf("5: tab %d", pv.tab)
 	}
 	out := screen(m)
-	for _, want := range []string{"5 sandbox", "Prefer a preset", "a last resort", "may run any code as you without asking", "what applies on macOS",
+	for _, want := range []string{"5 sandbox", "Prefer a preset", "a last resort", "any code as you", "what applies on macOS",
 		"Presets", "Browser testing (Playwright, Chromium)", "Browser downloads (npm, Playwright)", "Local dev servers", "Claude and Codex threads", "Advanced", "Excluded commands", "1 · all projects", "Allow rules"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("Sandbox tab lacks %q:\n%s", want, out)
@@ -180,7 +180,7 @@ func TestSandboxTabOS(t *testing.T) {
 		for _, r := range sandboxSettings("alpha", goos) {
 			labels = append(labels, r.label)
 		}
-		if !slices.Equal(labels, []string{"Excluded commands", "Allow rules"}) {
+		if !slices.Equal(labels, []string{"Excluded commands", "Allow rules", "Write folders"}) {
 			t.Errorf("%s: %q", goos, labels)
 		}
 		_, m := sandboxData(t)
@@ -190,7 +190,7 @@ func TestSandboxTabOS(t *testing.T) {
 		}
 	}
 	rows := sandboxSettings("", config.OSMac)
-	if len(rows) != 5 || rows[0].section != "Presets" || rows[3].section != "Advanced" {
+	if len(rows) != 6 || rows[0].section != "Presets" || rows[3].section != "Advanced" {
 		t.Errorf("macOS rows: %+v", rows)
 	}
 }
@@ -280,9 +280,9 @@ func TestSandboxFollowAsks(t *testing.T) {
 	}
 }
 
-// TestSandboxCoveredNote: an excluded command an allow rule covers says
-// it runs outside the sandbox without asking, in both lists' views and
-// when added.
+// TestSandboxCoveredNote: an excluded command an allow rule of a file
+// written before covers says it runs outside the sandbox without asking,
+// in both lists' views; a new Bash rule isn't added (T574 case 1).
 func TestSandboxCoveredNote(t *testing.T) {
 	_, m := sandboxData(t)
 	m.data.Sandbox[""][config.SandboxAllow] = []string{"Bash(docker compose:*)"}
@@ -295,17 +295,56 @@ func TestSandboxCoveredNote(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "covers the excluded docker compose *") {
 		t.Errorf("allow view:\n%s", out)
 	}
-	keyPress(m, "a")
-	m.top().(*inputView).text = "Bash(docker compose up *)"
-	drain(t, m, keyPress(m, "enter"))
-	if cv, ok := m.top().(*confirmView); ok {
-		t.Errorf("asked for a rule that covers nothing excluded: %q", cv.question)
+	for _, rule := range []string{"Bash(docker *)", "Edit(/tmp/pw/**)"} {
+		keyPress(m, "a")
+		m.top().(*inputView).text = rule
+		drain(t, m, keyPress(m, "enter"))
+		if _, ok := m.top().(*confirmView); ok || !strings.Contains(m.msg, "not added") {
+			t.Errorf("%s: %T, %q", rule, m.top(), m.msg)
+		}
 	}
-	keyPress(m, "a")
-	m.top().(*inputView).text = "Bash(docker *)"
-	drain(t, m, keyPress(m, "enter"))
-	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "covers the excluded docker compose *") {
-		t.Errorf("no covered note before adding: %T", m.top())
+	if l := m.data.Sandbox[""][config.SandboxAllow]; !slices.Equal(l, []string{"Bash(docker compose:*)"}) {
+		t.Errorf("allow rules %q", l)
+	}
+}
+
+// TestSandboxExcludedAsk: an excluded command asks first until w lets it
+// run without asking, which says what that opens first; w again asks
+// first. All projects' list isn't changed from a project's view.
+func TestSandboxExcludedAsk(t *testing.T) {
+	src, m := sandboxData(t)
+	drain(t, m, sandboxRow(t, "", "Excluded commands").change(m))
+	if out := screen(m); !strings.Contains(out, "asks first") || !strings.Contains(out, "w ask first or not") {
+		t.Errorf("excluded view:\n%s", out)
+	}
+	keyPress(m, "w")
+	cv, ok := m.top().(*confirmView)
+	if !ok || !strings.Contains(cv.question, "run without asking") {
+		t.Fatalf("no question before running without asking: %T", m.top())
+	}
+	drain(t, m, keyPress(m, "y"))
+	if out := screen(m); !strings.Contains(out, "runs without asking") {
+		t.Errorf("after w:\n%s", out)
+	}
+	c, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := c.ThreadSandbox("alpha"); !slices.Equal(got.WithoutAsking, []string{"docker compose *"}) {
+		t.Errorf("config: %+v", got)
+	}
+	drain(t, m, keyPress(m, "w"))
+	if _, ok := m.top().(*confirmView); ok {
+		t.Error("asking first asked")
+	}
+	if want := "defaults docker compose * ask=true"; src.sandbox[len(src.sandbox)-1] != want {
+		t.Errorf("writes %q", src.sandbox)
+	}
+	keyPress(m, "esc")
+	drain(t, m, sandboxRow(t, "alpha", "Excluded commands").change(m))
+	keyPress(m, "w")
+	if !strings.Contains(m.msg, "all projects' list") {
+		t.Errorf("a project changed all projects' list: %q", m.msg)
 	}
 }
 

@@ -17,7 +17,9 @@ import (
 // the , popup. Presets first, named switches that open what one kind of
 // tool needs while its commands stay in the sandbox; then, under
 // Advanced, the sandbox lists: the commands a thread runs outside its
-// sandbox, and the permission rules it gets on top of tm's. It shows
+// sandbox, each asking first or running without asking, the permission
+// rules it gets on top of tm's, and the folders it writes in besides
+// its worktree. It shows
 // only what applies on the platform the server is on, where threads
 // run (config.SandboxSettings); config.toml keeps the rest, and a launch
 // skips it. A project's switch or list of a key replaces all projects'
@@ -29,9 +31,12 @@ import (
 // added or listed.
 const sandboxOutside = "Excluded commands run outside the sandbox, with your full file and network access (tm's socket included): only the guard and the permission check still judge them."
 
-// sandboxBoth is what an excluded command with an allow rule covering it
-// means, said plainly wherever either is added or listed.
-const sandboxBoth = "An excluded command that an allow rule also covers runs outside the sandbox without asking: if it can run code (a test runner runs test files the thread can write), the thread may run any code as you without asking."
+// sandboxBoth is what an excluded command that runs without asking
+// means, said plainly wherever one is added, listed or changed.
+const sandboxBoth = "An excluded command that runs without asking runs outside the sandbox with no prompt: if it can run code (a test runner runs test files the thread can write), the thread may run any code as you without asking."
+
+// sandboxAsk is what each excluded command's choice means.
+const sandboxAsk = "Each one asks first (the default: the guard puts it to you, whatever auto mode or an allow rule would let through) or runs without asking (w changes it)."
 
 // sandboxLocal is what local binding opens, put to the human before a
 // preset with it is turned on.
@@ -50,13 +55,17 @@ const sandboxGuide = "Prefer a preset: the thread's commands stay inside the san
 // sandboxLists are each list's row label, help and view text.
 var sandboxLists = map[string]struct{ label, help, about, example string }{
 	config.SandboxExcluded: {"Excluded commands",
-		"A last resort: commands a thread's Bash runs outside its sandbox, for a tool no preset gets working (full Chrome, headed Playwright). " + sandboxOutside + " Claude's Bash rule syntax: a trailing * takes any arguments. A project's list replaces all projects'.",
-		sandboxOutside + " Claude still asks, or auto mode decides, unless an allow rule covers the command. " + sandboxBoth,
+		"A last resort: commands a thread's Bash runs outside its sandbox, for a tool no preset gets working (full Chrome, headed Playwright). " + sandboxOutside + " " + sandboxAsk + " Claude's Bash rule syntax: a trailing * takes any arguments. A project's list replaces all projects'.",
+		sandboxOutside + " " + sandboxAsk + " " + sandboxBoth,
 		"npx playwright *"},
 	config.SandboxAllow: {"Allow rules",
-		"Permission rules a thread's agent gets on top of tm's, so auto mode or a prompt doesn't stop a command you excluded (Bash(npx playwright *)). " + sandboxBoth + " tm's deny rules and the guard still win. A project's list replaces all projects'.",
-		"Calls these rules match run without a prompt or auto mode's review; tm's deny rules and the guard still win. " + sandboxBoth,
-		"Bash(npx playwright *)"},
+		"Permission rules a thread's agent gets on top of tm's, for tools that neither run commands nor write files (WebFetch(domain:playwright.dev), an MCP tool): an excluded command or a write folder does those. tm's deny rules and the guard still win. A project's list replaces all projects'.",
+		"Calls these rules match run without a prompt or auto mode's review; tm's deny rules and the guard still win. Commands and file writes aren't allow rules: an excluded command or a write folder does those.",
+		"WebFetch(domain:playwright.dev)"},
+	config.SandboxWrite: {"Write folders",
+		"Folders besides its worktree a thread writes in: its file tools without asking, and its sandboxed commands too. One rule for all of it: the guard, Claude's file permission and both agents' sandboxes. A whole folder, everything below it included; never your home, a folder high up, or one holding settings or git hooks. A project's list replaces all projects'.",
+		"A thread's file tools and its sandboxed commands write in these folders without asking; tm's own folder, config.toml and the project folder stay closed.",
+		"~/src/fixtures"},
 }
 
 // sandboxPresets are each preset's row label and help.
@@ -253,6 +262,18 @@ func (sr safetyRows) sandboxOf(m *dash, key string) ([]string, bool) {
 	return m.data.Sandbox[""][key], false
 }
 
+// asksFirst reports whether excluded command e of the rows' list asks
+// first: not when its table sets ask = false, nor when an allow rule of
+// a file written before covers it.
+func (sr safetyRows) asksFirst(m *dash, e string) bool {
+	slug := sr.slug
+	if _, own := sr.sandboxOf(m, config.SandboxExcluded); !own {
+		slug = ""
+	}
+	allow, _ := sr.sandboxOf(m, config.SandboxAllow)
+	return !slices.Contains(m.data.SandboxNoAsk[slug], e) && config.SandboxCovered(e, allow) == ""
+}
+
 // warnLines is text wrapped to w cells, in the warning colour.
 func warnLines(text string, w int) []string {
 	lines := wrapLines(text, w)
@@ -308,10 +329,58 @@ func (v *sandboxView) follow(m *dash) tea.Cmd {
 
 // sandboxWord names key's entries in messages.
 func sandboxWord(key string) string {
-	if key == config.SandboxExcluded {
+	switch key {
+	case config.SandboxExcluded:
 		return "excluded commands"
+	case config.SandboxWrite:
+		return "write folders"
 	}
 	return "allow rules"
+}
+
+// toggleAsk makes the selected excluded command ask first, or run
+// without asking (saying what that opens first), in the view's own list.
+func (v *sandboxView) toggleAsk(m *dash, list []string) tea.Cmd {
+	if v.list != config.SandboxExcluded || v.sel >= len(list) {
+		return nil
+	}
+	if _, own := v.sr.sandboxOf(m, v.list); !own {
+		m.msg = "this is all projects' list: change it there, or add one to " + v.sr.slug + "'s own"
+		return nil
+	}
+	e := list[v.sel]
+	allow, _ := v.sr.sandboxOf(m, config.SandboxAllow)
+	if a := config.SandboxCovered(e, allow); a != "" {
+		m.msg = "the allow rule " + a + " lets " + e + " run without asking: remove it from the allow rules first"
+		return nil
+	}
+	ask := !v.sr.asksFirst(m, e)
+	save := func() tea.Cmd {
+		if m.data.SandboxNoAsk == nil {
+			m.data.SandboxNoAsk = map[string][]string{}
+		}
+		noAsk := slices.DeleteFunc(slices.Clone(m.data.SandboxNoAsk[v.sr.slug]), func(x string) bool { return x == e })
+		if !ask {
+			noAsk = append(noAsk, e)
+		}
+		m.data.SandboxNoAsk[v.sr.slug] = noAsk
+		msg := e + " asks first " + v.sr.forWho + ": threads get it from their next start, the guard asking at once"
+		if !ask {
+			msg = e + " runs without asking " + v.sr.forWho + ": threads get it from their next start"
+		}
+		s, table := m.src, v.sr.table
+		return m.act(func() actionMsg {
+			if err := s.SetExcludedAsk(table, e, ask); err != nil {
+				return actionMsg{err: settingsErr(err)}
+			}
+			return actionMsg{msg: msg}
+		})
+	}
+	if ask {
+		return save()
+	}
+	m.confirm("Excluded commands "+v.sr.forWho, "Let "+e+" run without asking "+v.sr.forWho+"? "+sandboxBoth, save)
+	return nil
 }
 
 func (v *sandboxView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
@@ -326,6 +395,8 @@ func (v *sandboxView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "a", "+":
 		v.add(m)
 		return nil
+	case "w":
+		return v.toggleAsk(m, list)
 	case "f":
 		if v.sr.all {
 			return nil
@@ -358,6 +429,10 @@ func (v *sandboxView) add(m *dash) {
 			return nil
 		}
 		next := append(slices.Clone(list), e)
+		if err := config.CheckNewSandboxEntry(v.list, e); err != nil {
+			m.msg = "not added: " + err.Error()
+			return nil
+		}
 		if err := config.CheckSandboxList(v.list, next); err != nil {
 			m.msg = "not added: " + err.Error()
 			return nil
@@ -369,7 +444,7 @@ func (v *sandboxView) add(m *dash) {
 		}
 		q := ""
 		if v.list == config.SandboxExcluded {
-			q = sandboxOutside
+			q = sandboxOutside + " It asks first: w on it lets it run without asking."
 		}
 		if w := config.SandboxWarning(v.list, e); w != "" {
 			q += " " + e + ": " + w + "."
@@ -425,6 +500,13 @@ func (v *sandboxView) render(m *dash) string {
 			}
 			continue
 		}
+		if v.list == config.SandboxExcluded {
+			if v.sr.asksFirst(m, e) {
+				lines = append(lines, "  "+th().Faint.Render("asks first"))
+			} else {
+				lines = append(lines, "  "+th().Warn.Render("runs without asking"))
+			}
+		}
 		for _, warn := range []string{config.SandboxWarning(v.list, e), v.covered(m, e)} {
 			if warn == "" {
 				continue
@@ -440,6 +522,9 @@ func (v *sandboxView) render(m *dash) string {
 	keys := "a add · x remove · ↑ ↓ move · esc back"
 	if !v.sr.all {
 		keys = "a add · x remove · f follow all projects · esc back"
+	}
+	if v.list == config.SandboxExcluded {
+		keys = "w ask first or not · " + keys
 	}
 	return m.popup(box{title: l.label + " " + v.sr.forWho, body: lines, sel: sel, keys: keys})
 }

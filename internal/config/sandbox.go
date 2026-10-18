@@ -57,9 +57,9 @@ type rawSandbox struct {
 	ExcludedCommands *excludedList `toml:"excluded_commands"`
 	Allow            *[]string     `toml:"allow"`
 	Write            *[]string     `toml:"write"`
-	BrowserTesting   *bool     `toml:"browser_testing"`
-	BrowserDownloads *bool     `toml:"browser_downloads"`
-	LocalDevServers  *bool     `toml:"local_dev_servers"`
+	BrowserTesting   *bool         `toml:"browser_testing"`
+	BrowserDownloads *bool         `toml:"browser_downloads"`
+	LocalDevServers  *bool         `toml:"local_dev_servers"`
 }
 
 // list is the table's list of key, nil when it doesn't set it.
@@ -294,13 +294,6 @@ func CheckSandboxAllow(e string) error {
 		return fmt.Errorf("%q writes files, which an allow rule doesn't: add the folder to write folders instead (write = [\"~/src/fixtures\"])", e)
 	}
 	return nil
-}
-
-// legacyAllow reports whether allow rule e is one the allow list no
-// longer takes (CheckSandboxAllow) but a file written before still has.
-func legacyAllow(e string) bool {
-	m := allowRule.FindStringSubmatch(e)
-	return m != nil && (slices.Contains(commandTools, strings.ToLower(m[1])) || slices.Contains(editTools, strings.ToLower(m[1])))
 }
 
 // checkAllowRule checks one allow rule as config.toml may have it:

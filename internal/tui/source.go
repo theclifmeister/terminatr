@@ -55,6 +55,9 @@ type Data struct {
 	// sets: all projects' under "", each project's own under its slug
 	// (config.SandboxOf).
 	Sandbox map[string]map[string][]string
+	// SandboxNoAsk are each table's excluded commands that run without
+	// asking the same way (config.WithoutAskingOf).
+	SandboxNoAsk map[string][]string
 	// SandboxPresets are the sandbox presets' switches the same way
 	// (config.SandboxPresetsOf).
 	SandboxPresets map[string]map[string]bool
@@ -326,7 +329,7 @@ type SettingsSource interface {
 	SetSecretEnv(table, name string, src *config.EnvSource) error
 	TestSecretEnv(slug, name string) (string, error)
 	// SetSandbox writes the sandbox list key ("excluded_commands",
-	// "allow") of table ("defaults" or "projects.<slug>"), an empty one
+	// "allow", "write") of table ("defaults" or "projects.<slug>"), an empty one
 	// too; list nil removes it, so a project follows all projects'.
 	// Refused when tm runs inside an agent.
 	SetSandbox(table, key string, list []string) error
@@ -334,6 +337,9 @@ type SettingsSource interface {
 	// table on or off; nil removes it, so a project follows all
 	// projects'. Refused when tm runs inside an agent.
 	SetSandboxPreset(table, key string, on *bool) error
+	// SetExcludedAsk makes excluded command cmd of table's own list ask
+	// first, or run without asking. Refused when tm runs inside an agent.
+	SetExcludedAsk(table, cmd string, ask bool) error
 	// AccessShow is the effective access of thread id of project slug
 	// (id "" for a new thread of it), read-only (access.show).
 	AccessShow(slug, id string) (proto.AccessShowResult, error)
@@ -683,9 +689,11 @@ func (s *ServerSource) Load() Data {
 		d.Env = map[string]map[string]config.EnvSource{"": cfg.EnvOf("")}
 		d.Sandbox = map[string]map[string][]string{"": cfg.SandboxOf("")}
 		d.SandboxPresets = map[string]map[string]bool{"": cfg.SandboxPresetsOf("")}
+		d.SandboxNoAsk = map[string][]string{"": cfg.WithoutAskingOf("")}
 		for _, slug := range cfg.ProjectSlugs() {
 			d.Env[slug] = cfg.EnvOf(slug)
 			d.Sandbox[slug] = cfg.SandboxOf(slug)
+			d.SandboxNoAsk[slug] = cfg.WithoutAskingOf(slug)
 			d.SandboxPresets[slug] = cfg.SandboxPresetsOf(slug)
 		}
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/gitx"
+	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -291,13 +292,22 @@ func writeFolder(w string) string {
 }
 
 // writeFolderRefused is why the launch leaves write folder p out, or
-// "": a folder it can't place (no home folder), or one that holds or is
-// in tm's folder tmHome (config.toml with it) or project slug's folder,
-// which no write folder opens (T574 §4.6, case 2). Compared with their
-// links resolved too.
+// "": a folder it can't place (no home folder); one that holds or is in
+// tm's folder tmHome (config.toml with it), project slug's folder or one
+// of its repos' git dirs (hooks and config run as you), which no write
+// folder opens (T574 §4.6, case 2); or one whose links lead where no
+// write folder may be (config.CheckWriteFolder of where it lands), as
+// the sandbox would open where it lands too. Compared with their links
+// resolved too.
 func writeFolderRefused(slug, p, tmHome string) string {
 	if !filepath.IsAbs(p) {
 		return "refused: no home folder to place it in"
+	}
+	real := realPath(p)
+	if real != p {
+		if err := config.CheckWriteFolder(filepath.ToSlash(real)); err != nil {
+			return "refused: it leads to " + real + ", which isn't a write folder (" + err.Error() + ")"
+		}
 	}
 	var closed []string
 	if tmHome != "" {
@@ -306,18 +316,27 @@ func writeFolderRefused(slug, p, tmHome string) string {
 	if d, err := project.Dir(slug); err == nil {
 		closed = append(closed, d)
 	}
+	if proj, err := project.Open(slug); err == nil {
+		for _, repo := range proj.Repos {
+			closed = append(closed, filepath.Join(repo, ".git"))
+		}
+	}
 	for _, c := range withReal(closed) {
-		for _, q := range []string{p, realPath(p)} {
+		for _, q := range []string{p, real} {
 			if within(q, c) || within(c, q) {
-				return "refused: it holds or is in tm's folder or the project folder, which threads never write"
+				return "refused: it holds or is in tm's folder, the project folder or a repository's git dir, which threads never write"
 			}
 		}
 	}
 	return ""
 }
 
-// within reports whether p is root or below it.
+// within reports whether p is root or below it, case folded where the
+// file system ignores case.
 func within(p, root string) bool {
+	if caps.CaseFold {
+		p, root = strings.ToLower(p), strings.ToLower(root)
+	}
 	rel, err := filepath.Rel(root, p)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
