@@ -21,6 +21,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
+	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
 // TestGuardRulesFor: a thread gets every rule, a coordinator all but
@@ -399,7 +400,7 @@ func TestAccessMergeCommands(t *testing.T) {
 	p := newWatchProject(t)
 	s := &Server{opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}}}
 	cmds := func(role string) []string {
-		a, err := s.accessFor(role, p.Slug, t.TempDir(), loadLaunchConfig())
+		a, err := s.accessFor(role, p.Slug, nil, loadLaunchConfig())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -438,7 +439,7 @@ func TestAccessCoordinatorOwned(t *testing.T) {
 	testPaths(t)
 	p := newWatchProject(t)
 	s := &Server{opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}}}
-	a, err := s.accessFor(proto.RoleCoordinator, p.Slug, p.Dir, loadLaunchConfig())
+	a, err := s.accessFor(proto.RoleCoordinator, p.Slug, nil, loadLaunchConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,7 +470,8 @@ func TestAccessCoordinatorOwned(t *testing.T) {
 // its commits and pushes need in the main repo's git dir and, by name,
 // the worktree's own git dir below it; never the git dir's hooks,
 // config or info, nor another worktree's git dir, which its deny rules
-// name, and the guard keeps its commands off them too.
+// name, and the guard keeps its commands off them too. The git dirs are
+// the thread record's repo's (threadTree).
 func TestAccessThreadGitDirs(t *testing.T) {
 	testPaths(t)
 	p := newWatchProject(t)
@@ -494,7 +496,20 @@ func TestAccessThreadGitDirs(t *testing.T) {
 		}
 		return out
 	}
-	a, err := s.accessFor(proto.RoleThread, p.Slug, wt, loadLaunchConfig())
+	session := func(r thread.Record) SessionRecord {
+		t.Helper()
+		rec, err := thread.Create(p, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return SessionRecord{ID: "s-1", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: rec.ID, Cwd: rec.Worktree}
+	}
+	wtRec := session(thread.Record{Title: "wt", Repo: repo, Worktree: wt})
+	tree := threadTree(wtRec)
+	if tree == nil {
+		t.Fatal("worktree: no tree")
+	}
+	a, err := s.accessFor(proto.RoleThread, p.Slug, tree, loadLaunchConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -523,9 +538,18 @@ func TestAccessThreadGitDirs(t *testing.T) {
 		t.Errorf("worktree: its own git dir in no-write %q", a.NoWrite)
 	}
 	// The main checkout: the same, without a git dir of its own to add.
-	m, _ := s.accessFor(proto.RoleThread, p.Slug, repo, loadLaunchConfig())
+	mt := threadTree(session(thread.Record{Title: "main", Repo: repo, Worktree: repo, Checkout: true}))
+	if mt == nil {
+		t.Fatal("main checkout: no tree")
+	}
+	m, _ := s.accessFor(proto.RoleThread, p.Slug, mt, loadLaunchConfig())
 	if want := in("objects", "refs", "logs"); !slices.Equal(m.Write, want) {
 		t.Errorf("main checkout: write %q, want %q", m.Write, want)
+	}
+	for _, n := range []string{"config", "config.lock", "config.worktree", "commondir"} {
+		if !slices.Contains(m.NoWriteFiles, filepath.Join(common, n)) {
+			t.Errorf("main checkout: %s not in no-write files %q", n, m.NoWriteFiles)
+		}
 	}
 	// Nothing written is the git dir or holds what git runs or reads
 	// as configuration.
@@ -539,11 +563,85 @@ func TestAccessThreadGitDirs(t *testing.T) {
 		}
 	}
 	// The guard keeps a thread's commands off them too.
-	g := s.guardRulesFor(SessionRecord{ID: "s-1", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Cwd: wt})
-	for _, n := range []string{"hooks", "info", "config"} {
+	g := s.guardRulesFor(wtRec)
+	for _, n := range []string{"hooks", "info", "config", "worktrees/wt/config.worktree", "worktrees/wt/commondir"} {
 		if !slices.Contains(g.GitConfig, filepath.Join(common, n)) {
 			t.Errorf("guard: %s not in %q", n, g.GitConfig)
 		}
+	}
+}
+
+// TestThreadTreeRecorded: a thread's git dirs are its record's repo's,
+// whatever its folder's .git says: a worktree whose .git names another
+// repository, a folder other than the recorded worktree, a thread with
+// no record or none of its repo, and a main checkout whose .git is no
+// folder get none.
+func TestThreadTreeRecorded(t *testing.T) {
+	testPaths(t)
+	p := newWatchProject(t)
+	root := realPath(t.TempDir())
+	repo, wt, other, wt2 := filepath.Join(root, "repo"), filepath.Join(root, "wt"), filepath.Join(root, "other"), filepath.Join(root, "wt2")
+	for _, args := range [][]string{
+		{"init", "-q", repo},
+		{"-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "c"},
+		{"-C", repo, "worktree", "add", "-q", "-b", "x", wt},
+		{"-C", repo, "worktree", "add", "-q", "-b", "y", wt2},
+		{"init", "-q", other},
+		{"-C", other, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "c"},
+	} {
+		if b, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, b)
+		}
+	}
+	session := func(r thread.Record, cwd string) SessionRecord {
+		t.Helper()
+		rec, err := thread.Create(p, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return SessionRecord{ID: "s-1", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: rec.ID, Cwd: cwd}
+	}
+	if tr := threadTree(session(thread.Record{Title: "ok", Repo: repo, Worktree: wt}, wt)); tr == nil || tr.GitDir != filepath.Join(repo, ".git", "worktrees", "wt") {
+		t.Fatalf("worktree: %+v", tr)
+	}
+	for name, r := range map[string]SessionRecord{
+		"other repo":     session(thread.Record{Title: "o", Repo: other, Worktree: wt}, wt),
+		"other folder":   session(thread.Record{Title: "f", Repo: repo, Worktree: wt}, wt2),
+		"no repo":        session(thread.Record{Title: "n", Worktree: wt}, wt),
+		"no record":      {ID: "s-1", Role: proto.RoleThread, Project: p.Slug, Thread: "t-0999", Cwd: wt},
+		"no thread":      {ID: "s-1", Role: proto.RoleThread, Project: p.Slug, Cwd: wt},
+		"main as linked": session(thread.Record{Title: "m", Repo: repo, Worktree: wt, Checkout: true}, wt),
+	} {
+		if tr := threadTree(r); tr != nil {
+			t.Errorf("%s: %+v", name, tr)
+		}
+	}
+	// The agent points its worktree's .git at another repository's git
+	// dir: no grant, nor guard rules from it.
+	r := session(thread.Record{Title: "forged", Repo: repo, Worktree: wt}, wt)
+	if err := os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: "+filepath.Join(other, ".git")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if tr := threadTree(r); tr != nil {
+		t.Errorf("forged .git: %+v", tr)
+	}
+	s := &Server{opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}}}
+	if g := s.guardRulesFor(r); len(g.GitConfig) != 0 {
+		t.Errorf("forged .git: guard %q", g.GitConfig)
+	}
+	// A main checkout's git dir is its recorded folder's .git, a folder.
+	main := session(thread.Record{Title: "main", Repo: other, Worktree: other, Checkout: true}, other)
+	if tr := threadTree(main); tr == nil || tr.GitDir != filepath.Join(other, ".git") || tr.CommonDir != tr.GitDir {
+		t.Errorf("main checkout: %+v", tr)
+	}
+	if err := os.Rename(filepath.Join(other, ".git"), filepath.Join(root, "moved")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(other, ".git"), []byte("gitdir: "+filepath.Join(root, "moved")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if tr := threadTree(main); tr != nil {
+		t.Errorf("main checkout, .git a file: %+v", tr)
 	}
 }
 

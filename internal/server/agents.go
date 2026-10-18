@@ -21,6 +21,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/emu"
+	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -128,9 +129,9 @@ func (s *Server) ownWorktree(dir string) bool {
 }
 
 // accessFor is the role's file access policy (docs/SPEC.md §5.2), with
-// the settings in lc. A session outside a project gets no grants and no
-// restrictions.
-func (s *Server) accessFor(role, slug, cwd string, lc launchConfig) (agent.Access, error) {
+// the settings in lc; tree is a thread's checkout (threadTree), nil for
+// none. A session outside a project gets no grants and no restrictions.
+func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) (agent.Access, error) {
 	if slug == "" || role == proto.RoleShell {
 		return agent.Access{}, nil
 	}
@@ -160,8 +161,8 @@ func (s *Server) accessFor(role, slug, cwd string, lc launchConfig) (agent.Acces
 		return a, nil
 	case proto.RoleThread:
 		a := agent.Access{Read: []string{dir}, NoWrite: []string{dir}, NoWriteFiles: []string{cfg}}
-		if d, err := worktree.GitDirs(cwd); err == nil {
-			g := threadGitAccess(realPath(d.CommonDir), realPath(d.GitDir))
+		if tree != nil {
+			g := threadGitAccess(tree.CommonDir, tree.GitDir)
 			a.Write, a.WriteFiles = g.Write, g.WriteFiles
 			a.NoWrite = append(a.NoWrite, g.NoWrite...)
 			a.NoWriteFiles = append(a.NoWriteFiles, g.NoWriteFiles...)
@@ -192,12 +193,14 @@ func threadGitAccess(common, own string) agent.Access {
 		NoWrite:      dirs,
 		NoWriteFiles: append(files, filepath.Join(common, "config.lock")),
 	}
+	// Never the files in its own git dir that would make git read
+	// configuration or another common dir from it: the main checkout's
+	// too, which its cwd covers.
+	a.NoWriteFiles = append(a.NoWriteFiles, ownConfig(own)...)
 	wts := filepath.Join(common, "worktrees")
 	if own != common {
-		// Its own git dir is written, but for the files that would make
-		// git read configuration or another common dir from it.
+		// Its own git dir is written, but for those files.
 		a.Write = append(a.Write, own)
-		a.NoWriteFiles = append(a.NoWriteFiles, ownConfig(own)...)
 	}
 	if es, err := os.ReadDir(wts); err == nil {
 		for _, e := range es {
@@ -597,7 +600,8 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 	}
 	// config.toml once for the launch: its access, mod, model and theme.
 	lc := loadLaunchConfig()
-	access, err := s.accessFor(r.Role, r.Project, r.Cwd, lc)
+	tree := threadTree(r)
+	access, err := s.accessFor(r.Role, r.Project, tree, lc)
 	if err != nil {
 		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 	}
@@ -609,7 +613,9 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		}
 	}
 	var repo worktree.Dirs // empty outside a git repo
-	if d, err := worktree.GitDirs(r.Cwd); err == nil {
+	if tree != nil {
+		repo = worktree.Dirs{GitDir: tree.GitDir, CommonDir: tree.CommonDir, RepoRoot: repoRoot(tree.CommonDir)}
+	} else if d, err := worktree.GitDirs(r.Cwd); err == nil && r.Role != proto.RoleThread {
 		repo = worktree.Dirs{GitDir: realPath(d.GitDir), CommonDir: realPath(d.CommonDir), RepoRoot: realPath(d.RepoRoot)}
 	}
 	// No session of this id runs (a new id, a resume, a relaunch after
