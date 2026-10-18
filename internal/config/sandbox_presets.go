@@ -67,8 +67,8 @@ const (
 //     Chromium needs that; no setting of either agent grants it): the
 //     headless shell with --single-process. On Linux Chromium needs
 //     nothing more (bubblewrap, no Mach), so it doesn't apply there.
-//   - browser downloads opens BrowserDomains (Claude's allowedDomains; a
-//     Codex thread's network is open already), with guidance for the
+//   - browser downloads opens BrowserDomains (Claude's allowedDomains, a
+//     Codex thread's limited network's domains), with guidance for the
 //     macOS sandbox's read-only caches, so macOS only too.
 type SandboxSetting struct {
 	OS    []string

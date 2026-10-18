@@ -39,7 +39,7 @@ func Agents(d Deps) []Check {
 		if p, ok := a.(agent.SandboxProber); ok && d.SandboxProbe != nil && !strings.Contains(c.Detail, "not found on PATH") {
 			out = append(out, sandboxCheck(d, name, m, p))
 		}
-		if p, ok := a.(agent.ThreadSandboxProber); ok && d.GOOS == "windows" && d.ThreadSandboxProbe != nil && !strings.Contains(c.Detail, "not found on PATH") {
+		if p, ok := a.(agent.ThreadSandboxProber); ok && d.ThreadSandboxProbe != nil && !strings.Contains(c.Detail, "not found on PATH") {
 			out = append(out, threadSandboxCheck(d, name, m, p))
 		}
 	}
@@ -63,14 +63,19 @@ func probeCheck(name string, m *agent.Manifest, probe func() (string, error), ok
 	return c
 }
 
-// threadSandboxCheck runs the agent's thread sandbox probe on Windows,
-// where Codex's sandbox is a separate piece (docs/CODEX.md): a thread whose
-// sandbox doesn't hold can't reach tm's socket.
+// threadSandboxCheck runs the agent's thread sandbox probe. On Windows
+// Codex's sandbox is a separate piece (docs/CODEX.md): a thread whose
+// sandbox doesn't hold can't reach tm's socket. Elsewhere it also checks
+// a thread's network is limited to its hosts (T574 case 5): where it
+// isn't, a thread starts with its network off.
 func threadSandboxCheck(d Deps, name string, m *agent.Manifest, p agent.ThreadSandboxProber) Check {
-	return probeCheck(name+" thread sandbox", m, func() (string, error) { return d.ThreadSandboxProbe(p) },
-		"a thread's commands run sandboxed and reach tm's socket",
+	ok, fallback := "a thread's commands run sandboxed, reach tm's socket and only the hosts it is given", "starts with its network off"
+	if d.GOOS == "windows" {
+		ok, fallback = "a thread's commands run sandboxed and reach tm's socket", "runs without it or asks approval for every command"
+	}
+	return probeCheck(name+" thread sandbox", m, func() (string, error) { return d.ThreadSandboxProbe(p) }, ok,
 		func(err error) string {
-			return fmt.Sprintf("the thread sandbox doesn't hold (%v); a %s thread runs without it or asks approval for every command (docs/CODEX.md)", err, m.Display)
+			return fmt.Sprintf("the thread sandbox doesn't hold (%v); a %s thread %s (docs/CODEX.md)", err, m.Display, fallback)
 		})
 }
 

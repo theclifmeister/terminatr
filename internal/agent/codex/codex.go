@@ -79,8 +79,9 @@ func (a *Agent) Manifest() *agent.Manifest { return a.m }
 // marks each as trusted for this session only. Without it Codex shows
 // "Hooks need review" and runs none of them; nothing is written to the
 // user's ~/.codex. They go before the kickoff, which ends the argv. A
-// coordinator's sandbox profile stays only when it holds on this Codex
-// (probe.go).
+// coordinator's sandbox profile stays only when it holds on this Codex,
+// and a thread's network stays limited only when that holds, else it is
+// off (probe.go).
 func (a *Agent) Launch(spec agent.LaunchSpec) (agent.Launch, error) {
 	l, err := a.Agent.Launch(socketAccess(spec, caps.Windows))
 	if err != nil {
@@ -99,8 +100,11 @@ func (a *Agent) Launch(spec agent.LaunchSpec) (agent.Launch, error) {
 		extra = append(extra, "-c", `windows.sandbox="unelevated"`)
 	}
 	l.Argv = append(l.Argv[:at:at], append(extra, l.Argv[at:]...)...)
-	if spec.Role == "coordinator" {
+	switch spec.Role {
+	case "coordinator":
 		l = sandboxed(l, spec, a.m, caps.Windows) // probe.go
+	case agent.RoleThread:
+		l = limited(l, spec, a.m, caps.Windows) // probe.go
 	}
 	if spec.Role == agent.RoleThread && spec.Sandbox.Lists() {
 		l.Warnings = append(l.Warnings, sandboxListsGap)

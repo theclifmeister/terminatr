@@ -114,8 +114,8 @@ type Access struct {
 // playwright *)"), and what its presets open inside it: LocalBinding
 // lets its sandboxed commands listen on and reach localhost (a dev
 // server; Claude's allowLocalBinding, Codex's allow_local_binding), and
-// Domains are hosts they may reach (Claude's allowedDomains; a Codex
-// thread's network is open already). The server fills in only what
+// Domains are hosts they may reach (Claude's allowedDomains, Codex's
+// limited network's domains). The server fills in only what
 // applies on its platform. An agent with nothing to map the lists to
 // says so in its launch's Warnings.
 type SandboxLists struct {

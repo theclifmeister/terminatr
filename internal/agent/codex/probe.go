@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -38,7 +39,7 @@ import (
 // sandbox` there never starts the proxy, so the limited profile can't
 // hold (measured on Codex 0.162.1, T462: loopback TCP connects under it).
 // There a coordinator's profile turns the network off instead
-// (windowsCoordinator), which the restricted token enforces only through
+// (closedNetwork), which the restricted token enforces only through
 // proxy variables pointing nowhere: gh, az and git calls fail in the
 // sandbox and ask auto-review, as on other systems, but a program that
 // ignores them still connects. tm's socket stays reachable, through the
@@ -61,8 +62,9 @@ const threadWant = "unix=ok write=denied"
 
 // ProbeMain is the probe: it dials the unix socket and the TCP address
 // and prints how each went. With a third argument, a path to create, it
-// prints whether that write was denied instead of the TCP result (a
-// thread's network is open, so only its filesystem tells a sandbox).
+// prints whether that write was denied instead of the TCP result (the
+// Windows form, whose network can't be limited, and tm doctor's thread
+// check before its network probe).
 func ProbeMain(args []string) int {
 	if len(args) != 2 && len(args) != 3 {
 		fmt.Fprintln(os.Stderr, "usage: tm "+ProbeCommand+" SOCKET HOST:PORT [WRITE-PATH]")
@@ -90,10 +92,13 @@ func ProbeMain(args []string) int {
 	return 0
 }
 
-// windowsCoordinator turns a coordinator's argv into its Windows form:
+// closedNetwork turns a launch's argv into its closed-network form:
 // features.network_proxy dropped, the profile's network off rather than
-// limited to the proxy. tm's socket stays in the profile.
-func windowsCoordinator(argv []string) []string {
+// limited to the proxy, without the domains and local binding that only
+// limited mode reads. tm's socket stays in the profile. A coordinator's
+// and a thread's form on Windows, and a thread's where its limited
+// network doesn't hold.
+func closedNetwork(argv []string) []string {
 	out := make([]string, 0, len(argv))
 	for i := 0; i < len(argv); i++ {
 		if argv[i] == "-c" && i+1 < len(argv) {
@@ -102,14 +107,55 @@ func windowsCoordinator(argv []string) []string {
 				i++
 				continue
 			}
-			if strings.HasPrefix(v, "permissions=") {
+			if strings.HasPrefix(v, "permissions=") && strings.Contains(v, `enabled=true,mode="limited"`) {
 				v = strings.Replace(v, `enabled=true,mode="limited"`, "enabled=false", 1)
+				v = cutTable(v, ",domains=")
+				v = strings.Replace(v, ",allow_local_binding=true", "", 1)
 			}
 			out = append(out, "-c", v)
 			i++
 			continue
 		}
 		out = append(out, argv[i])
+	}
+	return out
+}
+
+// cutTable is v without its inline table key (",domains=", say) and the
+// table after it, up to its closing brace; quoted keys may hold braces.
+func cutTable(v, key string) string {
+	at := strings.Index(v, key+"{")
+	if at < 0 {
+		return v
+	}
+	depth, quoted := 0, false
+	for i := at + len(key); i < len(v); i++ {
+		switch c := v[i]; {
+		case quoted && c == '\\':
+			i++
+		case c == '"':
+			quoted = !quoted
+		case quoted:
+		case c == '{':
+			depth++
+		case c == '}':
+			if depth--; depth == 0 {
+				return v[:at] + v[i+1:]
+			}
+		}
+	}
+	return v
+}
+
+// unbound is a profile's flags without the local binding, for the
+// network probe: allow_local_binding reopens loopback, which the probe
+// relies on being refused.
+func unbound(flags []string) []string {
+	out := slices.Clone(flags)
+	for i, v := range out {
+		if strings.HasPrefix(v, "permissions=") {
+			out[i] = strings.Replace(v, ",allow_local_binding=true", "", 1)
+		}
 	}
 	return out
 }
@@ -139,7 +185,7 @@ func profileFlags(argv []string) (idx []int, name string, flags []string) {
 
 // probeFunc checks that the profile flags hold under the codex binary
 // and returns its version as m's version_args print it ("" when it
-// can't tell); windows checks the Windows form (windowsCoordinator). A
+// can't tell); windows checks the Windows form (closedNetwork). A
 // variable for tests.
 var probeFunc = probeProfile
 
@@ -156,7 +202,7 @@ type probeVerdict struct {
 // with a warning, when it doesn't.
 func sandboxed(l agent.Launch, spec agent.LaunchSpec, m *agent.Manifest, windows bool) agent.Launch {
 	if windows {
-		l.Argv = windowsCoordinator(l.Argv)
+		l.Argv = closedNetwork(l.Argv)
 	}
 	idx, name, flags := profileFlags(l.Argv)
 	if len(idx) == 0 {
@@ -182,6 +228,36 @@ func sandboxed(l agent.Launch, spec agent.LaunchSpec, m *agent.Manifest, windows
 	}
 	l.Warnings = append(l.Warnings, fmt.Sprintf(
 		"codex %s: the coordinator's sandbox profile doesn't hold (%v); running the coordinator without it (--approve-for-me: workspace-write, network off, tm calls go to auto-review)",
+		version, err))
+	return l
+}
+
+// limited returns a thread's launch l with its network limited to tm's
+// socket and its hosts when that holds on this Codex (T574 case 5),
+// else closed, with a warning: a Codex that renames the proxy feature
+// or a key would otherwise leave the network open (T577). The probe is
+// the coordinator's (tm's socket connects, a loopback address outside
+// the domains is refused), without the local binding. On Windows, where
+// Codex's proxy needs its elevated sandbox, the network is off.
+func limited(l agent.Launch, spec agent.LaunchSpec, m *agent.Manifest, windows bool) agent.Launch {
+	idx, name, flags := profileFlags(l.Argv)
+	if len(idx) == 0 {
+		return l // yolo: no sandbox to shape
+	}
+	if windows {
+		l.Argv = closedNetwork(l.Argv)
+		return l
+	}
+	version, err := probeFunc(m, l.Argv[0], spec.TMBin, spec.Cwd, spec.Socket, name, unbound(flags), false)
+	if err == nil {
+		return l
+	}
+	l.Argv = closedNetwork(l.Argv)
+	if version == "" {
+		version = "(version unknown)"
+	}
+	l.Warnings = append(l.Warnings, fmt.Sprintf(
+		"codex %s: the thread's limited network doesn't hold (%v); running the thread with its network off, its hosts unreachable",
 		version, err))
 	return l
 }
@@ -376,7 +452,7 @@ func (a *Agent) ProbeSandbox(tmBin string) (string, error) {
 }
 
 // probeWindowsCoordinator is ProbeSandbox on Windows: a coordinator's
-// profile in its Windows form (windowsCoordinator), with the scratch
+// profile in its Windows form (closedNetwork), with the scratch
 // folder above the workspace read-only as a coordinator's worktrees are,
 // so the probe's write there must be denied.
 func (a *Agent) probeWindowsCoordinator(tmBin string) (string, error) {
@@ -392,7 +468,7 @@ func (a *Agent) probeWindowsCoordinator(tmBin string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	path, version, name, flags, err := a.probeTarget(windowsCoordinator(l.Argv), "the manifest gives the coordinator no profile")
+	path, version, name, flags, err := a.probeTarget(closedNetwork(l.Argv), "the manifest gives the coordinator no profile")
 	if err != nil {
 		return "", err
 	}
@@ -400,11 +476,13 @@ func (a *Agent) probeWindowsCoordinator(tmBin string) (string, error) {
 }
 
 // ProbeThreadSandbox checks a thread's profile under the installed Codex
-// (agent.ThreadSandboxProber, for tm doctor on Windows): Codex's Windows
-// sandbox needs a one-time setup, and without it every command of a
-// thread asks for approval (docs/CODEX.md). The probe runs inside the
-// profile, so it holds only when the sandbox applies and tm's socket
-// (AF_UNIX on Windows) is reachable from it.
+// (agent.ThreadSandboxProber, for tm doctor): Codex's Windows sandbox
+// needs a one-time setup, and without it every command of a thread asks
+// for approval (docs/CODEX.md). The probe runs inside the profile, so it
+// holds only when the sandbox applies and tm's socket (AF_UNIX on
+// Windows) is reachable from it. Elsewhere it also checks the network
+// is limited: a host outside the thread's domains (a loopback listener)
+// refused, as a thread's launch checks (limited).
 func (a *Agent) ProbeThreadSandbox(tmBin string) (string, error) {
 	work, outside, base, sock, done, err := probeScratch()
 	if err != nil {
@@ -413,18 +491,26 @@ func (a *Agent) ProbeThreadSandbox(tmBin string) (string, error) {
 	defer done()
 	l, err := a.Agent.Launch(socketAccess(agent.LaunchSpec{
 		Role: "thread", Cwd: work, RuntimeDir: base, TMBin: tmBin, Socket: sock,
-		Access: agent.Access{Write: []string{work}, Read: []string{base}},
+		Access:  agent.Access{Write: []string{work}, Read: []string{base}},
+		Sandbox: agent.SandboxLists{Domains: []string{"example.com"}},
 	}, caps.Windows))
 	if err != nil {
 		return "", err
 	}
-	// A thread's profile is the one -c permissions=… flag; profileFlags
-	// takes it as it takes the coordinator's.
-	path, version, name, flags, err := a.probeTarget(l.Argv, "the manifest gives a thread no profile")
+	argv := l.Argv
+	if caps.Windows {
+		argv = closedNetwork(argv)
+	}
+	// A thread's profile is its -c features and permissions flags;
+	// profileFlags takes them as it takes the coordinator's.
+	path, version, name, flags, err := a.probeTarget(argv, "the manifest gives a thread no profile")
 	if err != nil {
 		return "", err
 	}
-	return version, writeVerdict(path, tmBin, work, sock, name, flags, filepath.Join(outside, "probe"))
+	if err := writeVerdict(path, tmBin, work, sock, name, flags, filepath.Join(outside, "probe")); err != nil || caps.Windows {
+		return version, err
+	}
+	return version, probeOnce(path, tmBin, work, sock, name, flags, false)
 }
 
 // writeVerdict runs a probe that dials tm's socket and writes path,

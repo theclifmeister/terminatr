@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -60,6 +61,52 @@ func TestProbeVerdicts(t *testing.T) {
 	}
 }
 
+// TestThreadNetwork: a thread's network stays limited to its socket and
+// domains when the probe holds, without the local binding in the probe
+// (it reopens loopback); else it is closed, its domains and binding
+// gone, with a warning. On Windows it is closed without a probe.
+func TestThreadNetwork(t *testing.T) {
+	prof := `permissions={tm={extends=":workspace",filesystem={"/w"="write"},network={enabled=true,mode="limited",unix_sockets={"/run/tm.sock"="allow"},domains={"a.example"="allow","odd}\"{"="allow"},allow_local_binding=true}}}`
+	argv := []string{"codex", "-a", "on-request", "-c", `default_permissions="tm"`, "-c", "features.network_proxy=true", "-c", prof, "-c", "hooks={}"}
+	closed := []string{"codex", "-a", "on-request", "-c", `default_permissions="tm"`,
+		"-c", `permissions={tm={extends=":workspace",filesystem={"/w"="write"},network={enabled=false,unix_sockets={"/run/tm.sock"="allow"}}}}`,
+		"-c", "hooks={}"}
+	if got := closedNetwork(argv); !slices.Equal(got, closed) {
+		t.Errorf("closedNetwork\n%q\nwant\n%q", got, closed)
+	}
+	if _, err := toml.Decode(closed[6], &struct{}{}); err != nil {
+		t.Errorf("closed profile: %v", err)
+	}
+	m := load(t).m
+	spec := agent.LaunchSpec{Role: agent.RoleThread, Cwd: "/w", TMBin: "/bin/tm", Socket: "/run/tm.sock"}
+	var probed []string
+	verdict := error(nil)
+	probeFunc = func(_ *agent.Manifest, _, _, _, _, _ string, flags []string, w bool) (string, error) {
+		probed = flags
+		return "0.170.0", verdict
+	}
+	defer func() { probeFunc = probeProfile }()
+	l := limited(agent.Launch{Argv: argv}, spec, m, false)
+	if !slices.Equal(l.Argv, argv) || len(l.Warnings) > 0 {
+		t.Errorf("held: %q %q", l.Argv, l.Warnings)
+	}
+	if len(probed) != 4 || strings.Contains(probed[3], "allow_local_binding") || !strings.Contains(probed[3], `mode="limited"`) {
+		t.Errorf("probed %q", probed)
+	}
+	verdict = errors.New("the network isn't limited to tm's socket: features.network_proxy or network.mode was ignored")
+	l = limited(agent.Launch{Argv: argv}, spec, m, false)
+	if !slices.Equal(l.Argv, closed) || len(l.Warnings) != 1 || !strings.Contains(l.Warnings[0], "codex 0.170.0: the thread's limited network doesn't hold") {
+		t.Errorf("not held: %q %q", l.Argv, l.Warnings)
+	}
+	probed = nil
+	if l = limited(agent.Launch{Argv: argv}, spec, m, true); !slices.Equal(l.Argv, closed) || probed != nil || len(l.Warnings) > 0 {
+		t.Errorf("windows: %q %q, probed %q", l.Argv, l.Warnings, probed)
+	}
+	if l = limited(agent.Launch{Argv: []string{"codex", "--dangerously-bypass-approvals-and-sandbox"}}, spec, m, false); len(l.Argv) != 2 || probed != nil {
+		t.Errorf("yolo: %q, probed %q", l.Argv, probed)
+	}
+}
+
 // TestWindowsCoordinator: on Windows a coordinator's profile turns the
 // network off instead of limiting it to the proxy, and keeps tm's socket.
 func TestWindowsCoordinator(t *testing.T) {
@@ -68,9 +115,9 @@ func TestWindowsCoordinator(t *testing.T) {
 	want := []string{"codex", "-c", `default_permissions="tm"`, "--approve-for-me",
 		"-c", `permissions={tm={extends=":workspace",filesystem={"/p"="write"},network={enabled=false,unix_sockets={"/run/tm.sock"="allow"}}}}`,
 		"-c", "hooks={}"}
-	got := windowsCoordinator(argv)
+	got := closedNetwork(argv)
 	if !slices.Equal(got, want) {
-		t.Errorf("windowsCoordinator\n%q\nwant\n%q", got, want)
+		t.Errorf("closedNetwork\n%q\nwant\n%q", got, want)
 	}
 	var v struct {
 		Permissions map[string]struct {
@@ -85,7 +132,7 @@ func TestWindowsCoordinator(t *testing.T) {
 		v.Permissions["tm"].Network.UnixSockets["/run/tm.sock"] != "allow" {
 		t.Errorf("windows profile %s: %v %+v", got[5], err, v)
 	}
-	if got := windowsCoordinator([]string{"codex", "--approve-for-me"}); !slices.Equal(got, []string{"codex", "--approve-for-me"}) {
+	if got := closedNetwork([]string{"codex", "--approve-for-me"}); !slices.Equal(got, []string{"codex", "--approve-for-me"}) {
 		t.Errorf("no profile: %q", got)
 	}
 
@@ -208,18 +255,25 @@ func fakeSandboxCodex(t *testing.T, sandbox string) (runs func() int) {
 	}
 }
 
-// TestProbeThreadSandbox: what a thread's sandbox run says (tm doctor on
-// Windows) becomes the version, or the reason it doesn't hold.
+// TestProbeThreadSandbox: what a thread's sandbox runs say (tm doctor)
+// becomes the version, or the reason it doesn't hold: the write probe
+// (its last argument a path), then the network probe, whose host
+// outside the thread's domains must be refused.
 func TestProbeThreadSandbox(t *testing.T) {
+	answers := func(write, tcp string) string {
+		return `case "$*" in */probe) ` + write + `;; *) ` + tcp + `;; esac`
+	}
+	held := `echo "unix=ok tcp=refused"`
 	cases := []struct {
 		script, want string
 	}{
-		{`echo "unix=ok write=denied"`, ""},
-		{`echo "WARNING: something"; echo "unix=ok write=denied"`, ""},
-		{`echo "unix=ok write=ok"`, "the sandbox doesn't apply"},
-		{`echo "unix=refused write=denied"`, "tm's socket is unreachable"},
+		{answers(`echo "unix=ok write=denied"`, held), ""},
+		{answers(`echo "WARNING: something"; echo "unix=ok write=denied"`, held), ""},
+		{answers(`echo "unix=ok write=ok"`, held), "the sandbox doesn't apply"},
+		{answers(`echo "unix=refused write=denied"`, held), "tm's socket is unreachable"},
 		{`echo "error: bad" >&2; exit 2`, "codex sandbox refused it: error: bad"},
 		{`echo something else`, "unexpected probe output"},
+		{answers(`echo "unix=ok write=denied"`, `echo "unix=ok tcp=ok"`), "the network isn't limited"},
 	}
 	a := load(t)
 	for _, tc := range cases {

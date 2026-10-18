@@ -8,6 +8,7 @@ package e2e
 // E2E_CODEX_SANDBOX=1, which makes a skip a failure.
 
 import (
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,11 +34,12 @@ func sandboxArgs(t *testing.T, spec agent.LaunchSpec) []string {
 	}
 	var out []string
 	for i := 0; i+1 < len(l.Argv); i++ {
-		if l.Argv[i] == "-c" && (strings.HasPrefix(l.Argv[i+1], "permissions=") || strings.HasPrefix(l.Argv[i+1], "default_permissions=")) {
+		if l.Argv[i] == "-c" && (strings.HasPrefix(l.Argv[i+1], "permissions=") || strings.HasPrefix(l.Argv[i+1], "default_permissions=") ||
+			strings.HasPrefix(l.Argv[i+1], "features.network_proxy=")) {
 			out = append(out, "-c", l.Argv[i+1])
 		}
 	}
-	if len(out) != 4 {
+	if len(out) != 6 {
 		t.Fatalf("no thread profile in %q", l.Argv)
 	}
 	return out
@@ -111,7 +113,15 @@ func TestSmokeCodexSandbox(t *testing.T) {
 		Role: agent.RoleThread, SessionID: "s-1", Cwd: wt, RepoRoot: repo,
 		GitDir: filepath.Join(repo, ".git", "worktrees", "wt"), RuntimeDir: run,
 		TMBin: env.Bin, Socket: env.Socket, Access: access,
+		Sandbox: agent.SandboxLists{Domains: []string{"example.com"}},
 	})...)
+	// A loopback listener: an address outside the thread's domains,
+	// which its limited network refuses (T574 case 5).
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
 
 	// Each probe prints its name and ok or no.
 	probe := func(name, cmd string) string {
@@ -137,6 +147,7 @@ func TestSmokeCodexSandbox(t *testing.T) {
 		probe("project-read", "cat "+filepath.Join(proj, "TASKS.md")),
 		probe("project-write", "echo x >> "+filepath.Join(proj, "TASKS.md")),
 		probe("socket", env.Bin+" server status"),
+		probe("loopback", env.Bin+" codex-sandbox-probe "+env.Socket+" "+ln.Addr().String()+" | grep -q tcp=ok"),
 	}, "\n")
 	cmd := exec.Command(bin, append(args, "--", "sh", "-c", script)...)
 	cmd.Dir = wt
@@ -159,7 +170,7 @@ func TestSmokeCodexSandbox(t *testing.T) {
 		"worktree": "ok", "commit": "ok", "push": "ok", "ref-delete": refDelete, "tmp": "ok", "tmpdir": "ok",
 		"hooks": "no", "config": "no", "info": "no", "other-worktree": "no",
 		"outside": "no", "home": "no", "project-read": "ok", "project-write": "no",
-		"socket": "ok",
+		"socket": "ok", "loopback": "no",
 	}
 	got := map[string]string{}
 	for _, line := range strings.Split(string(out), "\n") {
