@@ -243,9 +243,7 @@ func ownExcluded(reg *agent.Registry, r SessionRecord, home string, lc launchCon
 		return nil, nil
 	}
 	if lc.err == nil {
-		if t, err := lc.cfg.ThreadSandbox(r.Project); err == nil {
-			tm = t.ExcludedCommands
-		}
+		tm = lc.cfg.ThreadSandbox(r.Project).Given(config.SandboxExcluded)
 	}
 	return own, tm
 }

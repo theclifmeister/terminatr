@@ -43,7 +43,7 @@ const (
 	AccessNoWriteFile  = "no-write-file" // a file never written
 	AccessSocket       = "socket"        // tm's socket, reachable from the sandbox
 	AccessCommand      = "command"       // a command prefix run without a prompt (the coordinator's merge)
-	AccessPreset       = "preset"        // a sandbox preset's switch (config key)
+	AccessPreset       = "preset"        // a sandbox preset's switch (launch records of tm 0.37's previews only)
 	AccessLocalPorts   = "local-ports"   // sandboxed commands may listen on and reach localhost
 	AccessHost         = "host"          // a host sandboxed commands may reach
 	AccessGuide        = "guide"         // guidance in the brief
@@ -104,6 +104,12 @@ type AccessRule struct {
 	// Skipped is why the launch leaves it out (another platform, yolo),
 	// "" for a rule in force.
 	Skipped string `json:"skipped,omitempty"`
+	// Dropped: all projects' rule, which the project drops (Note names
+	// it); the launch leaves it out.
+	Dropped bool `json:"dropped,omitempty"`
+	// Refused is why the rule fails its check; the launch leaves it out,
+	// and only it.
+	Refused string `json:"refused,omitempty"`
 	// Live: read when it is used (the guard), so a change needs no
 	// restart.
 	Live bool `json:"live,omitempty"`
@@ -115,8 +121,13 @@ type AccessRule struct {
 // Same says whether r and o give a launch the same, wherever each was
 // read and whichever table set it.
 func (r AccessRule) Same(o AccessRule) bool {
-	return r.Where == o.Where && r.Kind == o.Kind && r.Value == o.Value && r.Skipped == o.Skipped
+	return r.Where == o.Where && r.Kind == o.Kind && r.Value == o.Value && r.Skipped == o.Skipped &&
+		r.Dropped == o.Dropped && r.Refused == o.Refused
 }
+
+// Given reports whether a launch gives the rule: not one left out
+// where it runs, dropped, or refused.
+func (r AccessRule) Given() bool { return r.Skipped == "" && !r.Dropped && r.Refused == "" }
 
 // AccessSet is a thread's access: its rules and what they are for.
 type AccessSet struct {
@@ -130,8 +141,9 @@ type AccessSet struct {
 	// thread would get.
 	Launched time.Time    `json:"launched,omitzero"`
 	Rules    []AccessRule `json:"rules"`
-	// SandboxError is why the sandbox lists and presets are left out (a
-	// config.toml that doesn't load, an entry that fails its check).
+	// SandboxError is why the sandbox rules are left out: a config.toml
+	// that doesn't load (an entry that fails its check is refused on its
+	// own, AccessRule.Refused).
 	SandboxError string `json:"sandbox_error,omitempty"`
 }
 
@@ -204,6 +216,12 @@ func (r AccessRule) Remarks() []string {
 		out = append(out, "RESTART TO APPLY: added since launch")
 	case AccessRemoved:
 		out = append(out, "RESTART TO APPLY: removed since launch")
+	}
+	if r.Refused != "" {
+		out = append(out, "REFUSED: "+r.Refused)
+	}
+	if r.Dropped {
+		out = append(out, "dropped: not given")
 	}
 	if r.Skipped != "" {
 		out = append(out, "not used: "+r.Skipped)

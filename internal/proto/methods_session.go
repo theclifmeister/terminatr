@@ -266,7 +266,7 @@ type SessionStartParams struct {
 type SessionStartResult struct {
 	Session SessionInfo `json:"session"`
 	// Warnings are what the launch did to the human's settings that
-	// they should hear of (sandbox lists and presets dropped, and why).
+	// they should hear of (sandbox rules refused or left out, and why).
 	Warnings []string `json:"warnings,omitempty"`
 }
 

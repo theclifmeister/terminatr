@@ -27,7 +27,8 @@ func findRule(rules []proto.AccessRule, kind, value string) *proto.AccessRule {
 }
 
 // TestAccessRuleSources: each rule says where it comes from: tm, all
-// projects, the project, tm's default; a preset lists what it opens;
+// projects, the project, tm's default; tm 0.37's preset switch lists
+// the rules it unfolds into; a drop marks all projects' rule dropped;
 // what doesn't apply on the platform is marked skipped, not left out.
 func TestAccessRuleSources(t *testing.T) {
 	testPaths(t)
@@ -38,7 +39,7 @@ guard_allow = [{ rule = "force-push", command = "git push -f origin tm/*" }]
 
 [defaults.sandbox]
 browser_downloads = true
-excluded_commands = ["docker compose *"]
+excluded_commands = ["docker compose *", "make e2e"]
 
 [defaults.env]
 NODE_AUTH_TOKEN = { from = "gh-auth-token" }
@@ -48,6 +49,8 @@ guard_mode = "learn"
 
 [projects.demo.sandbox]
 allow = ["Bash(npx playwright *)"]
+local_ports = true
+drop = ["make e2e"]
 `)
 	s := &Server{opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME"), Socket: "/run/tm.sock"}}}
 	set, err := s.resolveAccess(accessInput{role: proto.RoleThread, slug: "demo", cwd: t.TempDir(), goos: "linux", noEscapes: true}, loadLaunchConfig())
@@ -57,7 +60,7 @@ allow = ["Bash(npx playwright *)"]
 	for _, c := range []struct{ kind, value, source, skipped string }{
 		{proto.AccessExcluded, "docker compose *", proto.AccessFromAll, ""},
 		{proto.AccessAllow, "Bash(npx playwright *)", "demo", ""},
-		{proto.AccessPreset, "browser_downloads", proto.AccessFromAll, "doesn't apply on Linux"},
+		{proto.AccessLocalPorts, "on", "demo", "doesn't apply on Linux"},
 		{proto.AccessHost, "registry.npmjs.org", proto.AccessFromAll, "doesn't apply on Linux"},
 		{proto.AccessGuide, "browser-downloads", proto.AccessFromAll, "doesn't apply on Linux"},
 		{proto.AccessEscapes, "off", proto.AccessFromAll, ""},
@@ -75,6 +78,9 @@ allow = ["Bash(npx playwright *)"]
 		if r.Source != c.source || r.Skipped != c.skipped {
 			t.Errorf("%s %q: source %q skipped %q, want %q %q", c.kind, c.value, r.Source, r.Skipped, c.source, c.skipped)
 		}
+	}
+	if r := findRule(set.Rules, proto.AccessExcluded, "make e2e"); r == nil || !r.Dropped || r.Given() || r.Source != proto.AccessFromAll {
+		t.Errorf("dropped rule: %+v", r)
 	}
 	if r := findRule(set.Rules, proto.AccessAllow, "Bash(npx playwright *)"); r == nil || !slices.Equal(r.Agents, []string{"claude"}) {
 		t.Errorf("allow rule's agents: %+v", r)
