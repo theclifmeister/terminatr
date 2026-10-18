@@ -158,6 +158,32 @@ func (s *Server) approvedFor(r SessionRecord) []proto.ApprovedCommand {
 // exits (a child it left holding it), before tm closes it.
 const runWaitDelay = 5 * time.Second
 
+// maxRuns bounds a thread's runs at once; maxAskLine the line a
+// question shows whole; runWriteWait how long a client may take to
+// read one piece of output before tm stops sending it.
+const (
+	maxRuns      = 4
+	maxAskLine   = 1000
+	runWriteWait = time.Minute
+)
+
+// batchMeta are what cmd.exe reads in a batch file's arguments.
+const batchMeta = "&|<>^%\"\r\n()!"
+
+// batchArgs is why args can't go to program path, or "": Windows runs
+// a .cmd or .bat through cmd.exe, which reads its own syntax in them.
+func batchArgs(path string, args []string) string {
+	if ext := strings.ToLower(filepath.Ext(path)); ext != ".cmd" && ext != ".bat" {
+		return ""
+	}
+	for _, a := range args {
+		if strings.ContainsAny(a, batchMeta) {
+			return filepath.Base(path) + " is a batch file, which cmd.exe runs: its arguments can't hold " + batchMeta
+		}
+	}
+	return ""
+}
+
 // maxRunArgs and maxRunArg bound what a thread asks to run.
 const (
 	maxRunArgs = 256
@@ -240,7 +266,8 @@ func (s *Server) askRun(id, line string, gone <-chan struct{}) bool {
 		return false
 	}
 	q := proto.Question{Tool: "tm run", Escape: true, Since: time.Now().UTC(), Questions: []proto.QuestionItem{{
-		Question: "Run " + textsafe.Clip(line, 200) + " outside the sandbox, as you, in the thread's worktree?",
+		// The whole line: the user approves what they see.
+		Question: "Run " + line + " outside the sandbox, as you, in the thread's worktree?",
 		Header:   "tm run",
 		Options:  []proto.QuestionOption{{Label: runYes, Description: "an excluded command that asks first"}, {Label: runNo}},
 	}}}
@@ -357,6 +384,10 @@ func (s *Server) commandRun(c net.Conn, br *bufio.Reader, req proto.Request, who
 		return
 	}
 	gone := clientGone(br)
+	if cmd.Ask && len(line) > maxAskLine {
+		refuse(c, req, proto.Errorf(proto.ErrRefused, "%s asks the user first, and is longer than the %d characters a question shows whole", textsafe.Clip(line, 80), maxAskLine))
+		return
+	}
 	if cmd.Ask && !s.askRun(r.ID, line, gone) {
 		s.journalRun(r, "run.refused", line+": the user didn't let it run")
 		refuse(c, req, proto.Errorf(proto.ErrRefused, "the user didn't let %s run", textsafe.Clip(line, 200)))
@@ -366,6 +397,10 @@ func (s *Server) commandRun(c net.Conn, br *bufio.Reader, req proto.Request, who
 	path, err := lookPathIn(p.Argv[0], envValue(env, "PATH"), r.Cwd)
 	if err != nil {
 		refuse(c, req, proto.Errorf(proto.ErrBadParams, "%v", err))
+		return
+	}
+	if why := batchArgs(path, p.Argv[1:]); why != "" {
+		refuse(c, req, proto.Errorf(proto.ErrRefused, "%s", why))
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -382,6 +417,10 @@ func (s *Server) commandRun(c net.Conn, br *bufio.Reader, req proto.Request, who
 		return
 	}
 	s.journalRun(r, "run.start", fmt.Sprintf("%s (approved %q)", line, cmd.Command))
+	var ended <-chan struct{}
+	if sess, _ := s.session(r.ID); sess != nil {
+		ended = sess.Done()
+	}
 	if err := s.startRun(x, r); err != nil {
 		out.end(proto.CommandRunEvent{Event: proto.EventRunExit, Code: -1, Error: err.Error()})
 		s.journalRun(r, "run.end", line+": didn't start: "+err.Error())
@@ -403,6 +442,8 @@ func (s *Server) commandRun(c net.Conn, br *bufio.Reader, req proto.Request, who
 			return
 		case <-gone:
 			why = "the thread's call ended"
+		case <-ended:
+			why = "the thread's session ended"
 		case <-tick.C:
 			if s.isStopping() {
 				why = "the server stopped"
@@ -420,6 +461,15 @@ func (s *Server) commandRun(c net.Conn, br *bufio.Reader, req proto.Request, who
 func (s *Server) startRun(x *exec.Cmd, r SessionRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	n := 0
+	for _, o := range s.runs {
+		if o.ID == r.ID {
+			n++
+		}
+	}
+	if n >= maxRuns {
+		return fmt.Errorf("%d approved commands of this thread run already: wait for one to end", n)
+	}
 	if err := x.Start(); err != nil {
 		return err
 	}
@@ -480,6 +530,7 @@ func (w *runWriter) stream(name string) io.Writer {
 	return writerFunc(func(b []byte) (int, error) {
 		w.mu.Lock()
 		defer w.mu.Unlock()
+		w.c.SetWriteDeadline(time.Now().Add(runWriteWait))
 		if !w.dead && proto.WriteLine(w.c, proto.CommandRunEvent{Event: proto.EventRunOutput, Stream: name, Data: b}) != nil {
 			w.dead = true
 		}
@@ -492,6 +543,7 @@ func (w *runWriter) end(ev proto.CommandRunEvent) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if !w.dead {
+		w.c.SetWriteDeadline(time.Now().Add(runWriteWait))
 		proto.WriteLine(w.c, ev)
 	}
 }

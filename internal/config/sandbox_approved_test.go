@@ -50,10 +50,13 @@ func TestApprovedCommands(t *testing.T) {
 		}
 	}
 	for e, why := range map[string]string{
-		"make *":            "runs other programs",
+		"make *":            "every argument",
+		"go *":              "every argument",
+		"gh *":              "every argument",
+		"make test *":       "",
 		"sh -c *":           "runs the code",
 		"python3 -c *":      "runs the code",
-		"npx *":             "runs other programs",
+		"npx *":             "every argument",
 		"npm run *":         "runs the code",
 		"env sh *":          "runs other programs",
 		"make test*":        "pattern inside",
@@ -65,6 +68,12 @@ func TestApprovedCommands(t *testing.T) {
 		"*":                 "names no program",
 		"":                  "empty",
 	} {
+		if why == "" {
+			if err := CheckApprovedCommand(e); err != nil {
+				t.Errorf("%q refused: %v", e, err)
+			}
+			continue
+		}
 		if err := CheckApprovedCommand(e); err == nil || !strings.Contains(err.Error(), why) {
 			t.Errorf("%q: %v, want %q", e, err, why)
 		}

@@ -809,10 +809,11 @@ func (s *Server) answer(p proto.SessionAnswerParams, cc callCtx) (any, *proto.Er
 	}
 	// Only the human answers while an escape's prompt is open: not an
 	// agent, nor tm's commands answering for the coordinator.
-	if (!cc.human || p.Relay == proto.RoleCoordinator || c.IsAgent()) && (sess.Info().Escape || s.asks.escape(p.ID)) {
+	byHuman := cc.human && p.Relay != proto.RoleCoordinator && !c.IsAgent()
+	if !byHuman && sess.Info().Escape {
 		return nil, proto.Errorf(proto.ErrRefused, "session %s asks to run a command outside its sandbox: only the user answers that prompt", p.ID)
 	}
-	res, perr := s.asks.answer(p.ID, p.Index, p.Answer, p.Question)
+	res, perr := s.asks.answer(p.ID, p.Index, p.Answer, p.Question, byHuman)
 	if perr == nil && p.Question != "" {
 		s.journalAnswer(p, c)
 	}

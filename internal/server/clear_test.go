@@ -114,14 +114,14 @@ func TestAnswerBound(t *testing.T) {
 		{0, "blue", "Which colour?", proto.ErrBadParams},
 		{1, "Apple", "Which fruits?", proto.ErrBadParams},
 	} {
-		if _, perr := a.answer("s-1", c.i, c.ans, c.q); perr == nil || perr.Code != c.code {
+		if _, perr := a.answer("s-1", c.i, c.ans, c.q, true); perr == nil || perr.Code != c.code {
 			t.Errorf("answer %d %q to %q: %v, want %s", c.i, c.ans, c.q, perr, c.code)
 		}
 	}
-	if res, perr := a.answer("s-1", 0, "Blue", "Which colour?"); perr != nil || res.Remaining != 1 {
+	if res, perr := a.answer("s-1", 0, "Blue", "Which colour?", true); perr != nil || res.Remaining != 1 {
 		t.Fatalf("answer: %+v %v", res, perr)
 	}
-	if _, perr := a.answer("s-1", 0, "Red", "Which colour?"); perr == nil || perr.Code != proto.ErrRefused {
+	if _, perr := a.answer("s-1", 0, "Red", "Which colour?", true); perr == nil || perr.Code != proto.ErrRefused {
 		t.Errorf("answered twice: %v", perr)
 	}
 	if q := a.of("s-1"); q == nil || q.Questions[0].Answer != "Blue" {

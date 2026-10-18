@@ -203,9 +203,9 @@ func TestCommandRun(t *testing.T) {
 	p := testPaths(t)
 	proj := newWatchProject(t)
 	wt := t.TempDir()
-	os.WriteFile(filepath.Join(wt, "check.sh"), []byte("#!/bin/sh\necho \"in $(pwd) $# $1 ${SECRET_FROM_THREAD:-clean}\"\necho err >&2\nexit 3\n"), 0o755)
+	os.WriteFile(filepath.Join(wt, "check.sh"), []byte("#!/bin/sh\necho \"in $(pwd) $# $1 ${SECRET_FROM_THREAD:-clean} [$2]\"\necho err >&2\nexit 3\n"), 0o755)
 	writeConfig(t, `[projects.demo.sandbox]
-approved_commands = ["./check.sh *", "git push --force *"]
+approved_commands = ["./check.sh go *", "git push --force *"]
 `)
 	s := &Server{opts: Options{Paths: p, Bin: "/nonexistent/tm", Env: []string{"PATH=/usr/bin:/bin", "HOME=" + t.TempDir()}},
 		log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}, sessions: map[string]*session.Session{}}
@@ -213,12 +213,12 @@ approved_commands = ["./check.sh *", "git push --force *"]
 	s.records["s-1"], s.sessions["s-1"] = rec, nil
 	thr := caller.Caller{Kind: caller.Thread, Project: "demo", Thread: "t-0001", Session: "s-1"}
 
-	perr, out, ev := runStream(t, s, thr, proto.CommandRunParams{Argv: []string{"./check.sh", "a b; rm -rf x"}})
+	perr, out, ev := runStream(t, s, thr, proto.CommandRunParams{Argv: []string{"./check.sh", "go", "a b; rm -rf x"}})
 	if perr != nil {
 		t.Fatal(perr)
 	}
 	real, _ := filepath.EvalSymlinks(wt)
-	if ev.Code != 3 || !strings.Contains(out, "in "+real+" 1 a b; rm -rf x clean") || !strings.Contains(out, "err") {
+	if ev.Code != 3 || !strings.Contains(out, "in "+real+" 2 go clean [a b; rm -rf x]") || !strings.Contains(out, "err") {
 		t.Errorf("run: code %d, out %q", ev.Code, out)
 	}
 	if perr, _, _ := runStream(t, s, thr, proto.CommandRunParams{Argv: []string{"./check2.sh"}}); perr == nil || !strings.Contains(perr.Message, "isn't an approved command") {
@@ -237,12 +237,12 @@ approved_commands = ["./check.sh *", "git push --force *"]
 		t.Error("a session that doesn't run ran it")
 	}
 	perr, list, _ := runStream(t, s, thr, proto.CommandRunParams{List: true})
-	if perr != nil || !strings.Contains(list, `"./check.sh *"`) {
+	if perr != nil || !strings.Contains(list, `"./check.sh go *"`) {
 		t.Fatalf("list: %v %s", perr, list)
 	}
 	lines, _, _ := proj.JournalTail(20)
 	j := strings.Join(lines, "\n")
-	for _, want := range []string{"run.start t-0001 ./check.sh 'a b; rm -rf x'", "run.end t-0001 ./check.sh 'a b; rm -rf x': exit 3", "run.refused t-0001 git push --force origin main: the guard"} {
+	for _, want := range []string{"run.start t-0001 ./check.sh go 'a b; rm -rf x'", "run.end t-0001 ./check.sh go 'a b; rm -rf x': exit 3", "run.refused t-0001 git push --force origin main: the guard"} {
 		if !strings.Contains(j, want) {
 			t.Errorf("journal lacks %q:\n%s", want, j)
 		}
@@ -257,8 +257,11 @@ approved_commands = ["./check.sh *", "git push --force *"]
 func TestRunEscapeQuestion(t *testing.T) {
 	var a asks
 	a.put("s-1", proto.Question{Escape: true, Questions: []proto.QuestionItem{{Question: "Run?", Options: []proto.QuestionOption{{Label: runYes}}}}})
-	if !a.escape("s-1") || a.escape("s-2") {
-		t.Error("escape")
+	if _, perr := a.answer("s-1", 0, runYes, "Run?", false); perr == nil || perr.Code != proto.ErrRefused {
+		t.Errorf("not the human: %v", perr)
+	}
+	if res, perr := a.answer("s-1", 0, runYes, "Run?", true); perr != nil || res.Remaining != 0 {
+		t.Errorf("the human: %v", perr)
 	}
 }
 

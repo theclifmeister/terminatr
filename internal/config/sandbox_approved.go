@@ -92,6 +92,9 @@ func CheckApprovedCommand(e string) error {
 	if program(words[0]) == "tm" {
 		return fmt.Errorf("%q is tm itself: a thread runs tm in its sandbox already", e)
 	}
+	if more && len(words) == 1 {
+		return fmt.Errorf("%q leaves every argument of %s open, which is everything it can do: name its subcommand, target or script too (make test, npm run e2e *)", e, words[0])
+	}
 	if more {
 		if why := codeWarning(e); why != "" {
 			return fmt.Errorf("%q: %s; name the script or target instead (npm run e2e, make test)", e, why)
@@ -113,6 +116,10 @@ func ApprovedOf(e string) (string, string) {
 // approvedWarning is what an approved command opens, said where it is
 // added: tm runs it outside the sandbox as you, and the thread writes
 // the files most commands read.
-func approvedWarning(string) string {
-	return "tm runs it outside the sandbox, as you, in the thread's worktree, without asking: the thread writes the files it reads (a Makefile, package.json, the tests), so it can make it run any code as you"
+func approvedWarning(e string) string {
+	w := "tm runs it outside the sandbox, as you, in the thread's worktree, without asking: the thread writes the files it reads (a Makefile, package.json, the tests), so it can make it run any code as you"
+	if _, more := ApprovedWords(e); more {
+		w += "; its last * passes any argument the program takes, its options too (git log --output writes any file, go test -exec runs any program, docker compose run mounts any folder)"
+	}
+	return w
 }
