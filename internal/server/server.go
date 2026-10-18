@@ -271,6 +271,9 @@ func Run(ctx context.Context, opts Options) error {
 		}
 	}
 
+	// Write folders are checked against the user's PATH, not only ours.
+	useLoginPath()
+
 	// We hold the lock, so any socket file left here is stale.
 	os.Remove(p.Socket)
 	ln, err := ipc.Listen(ipc.Addr(p.Socket))

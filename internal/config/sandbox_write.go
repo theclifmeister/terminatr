@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
 )
@@ -29,7 +30,30 @@ import (
 // code, by their first part: no write folder is in one. ~/Library is
 // one but for ~/Library/Caches/<folder> (libraryCaches).
 var codeHome = []string{"Library", "bin", "go", ".local", ".cargo", ".rustup", ".docker", ".oh-my-zsh", ".npm-global", ".npm", ".bun", ".deno",
-	".nvm", ".volta", ".asdf", ".rbenv", ".pyenv", ".sdkman", ".gem", ".zsh", ".zshrc.d", ".bashrc.d", ".vim", ".emacs.d", ".tmux"}
+	".nvm", ".volta", ".asdf", ".rbenv", ".pyenv", ".sdkman", ".gem", ".zsh", ".zshrc.d", ".bashrc.d", ".vim", ".emacs.d", ".tmux",
+	".vscode", ".cursor", ".gradle", ".ipython", ".jupyter", ".m2", ".config", ".cache", "AppData"}
+
+// codeHomeDeep are folders two parts below home whose files run as code:
+// Windows PowerShell's profiles.
+var codeHomeDeep = [][2]string{{"Documents", "PowerShell"}, {"Documents", "WindowsPowerShell"}}
+
+// morePath, when set (SetMorePath), adds folders to PathDirs.
+var morePath atomic.Pointer[func() []string]
+
+// SetMorePath makes PathDirs add more's folders: the server adds the
+// user's login shell's PATH (server/loginpath.go), as its own may be
+// launchd's minimal one.
+func SetMorePath(more func() []string) { morePath.Store(&more) }
+
+// PathDirs are the folders on PATH a write folder may not hold or be in:
+// this process's PATH, and SetMorePath's.
+func PathDirs() []string {
+	out := filepath.SplitList(os.Getenv("PATH"))
+	if more := morePath.Load(); more != nil {
+		out = append(out, (*more)()...)
+	}
+	return out
+}
 
 // codeRoot are the folders outside home whose files are loaded or run
 // as code: no write folder is in one.
@@ -113,6 +137,9 @@ func checkCodeFolder(e, p string, parts []string) error {
 		}
 	}
 	const code = ", whose files are loaded or run as code (outside the sandbox too): never a write folder"
+	if len(rel) >= 2 && slices.ContainsFunc(codeHomeDeep, func(c [2]string) bool { return fold(c[0]) == fold(rel[0]) && fold(c[1]) == fold(rel[1]) }) {
+		return fmt.Errorf("%q is in ~/%s/%s%s", e, rel[0], rel[1], code)
+	}
 	if len(rel) > 0 && slices.ContainsFunc(codeHome, func(c string) bool { return fold(c) == fold(rel[0]) }) {
 		caches := len(rel) >= 3 && fold(rel[0]) == fold("Library") && fold(rel[1]) == fold("Caches")
 		if !caches {
@@ -126,7 +153,7 @@ func checkCodeFolder(e, p string, parts []string) error {
 			}
 		}
 	}
-	for _, d := range filepath.SplitList(os.Getenv("PATH")) {
+	for _, d := range PathDirs() {
 		d = filepath.ToSlash(filepath.Clean(d))
 		if d == "." || !filepath.IsAbs(filepath.FromSlash(d)) && !strings.HasPrefix(d, "/") {
 			continue
@@ -145,7 +172,7 @@ func high(parts []string) bool {
 	if parts[0] == "~" {
 		return len(parts) < 3
 	}
-	home := slices.Contains([]string{"Users", "home", "users"}, parts[0])
+	home := fold(parts[0]) == fold("Users") || fold(parts[0]) == fold("home") || parts[0] == "users"
 	if home {
 		return len(parts) < 4
 	}
@@ -155,6 +182,10 @@ func high(parts []string) bool {
 // writeWarning is what a write folder opens, said where it is added:
 // the thread's file tools and its sandboxed commands write there
 // without asking, on Claude and Codex alike.
-func writeWarning(string) string {
-	return "the thread's file tools and its sandboxed commands write there without asking, on Claude and Codex threads alike"
+func writeWarning(e string) string {
+	w := "the thread's file tools and its sandboxed commands write there without asking, on Claude and Codex threads alike"
+	if strings.Contains(fold(filepath.ToSlash(e)), fold("Library/Caches/")) {
+		w += "; tools run what is in a cache (Playwright's browsers in ms-playwright, go-build's objects), so a thread can plant code there that runs as you outside the sandbox"
+	}
+	return w
 }

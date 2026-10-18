@@ -630,7 +630,30 @@ func TestWriteFolderCode(t *testing.T) {
 			t.Errorf("%q passed", e)
 		}
 	}
+	// More folders on PATH (the server's login shell's) count too.
+	SetMorePath(func() []string { return []string{"/y/login/bin"} })
+	defer SetMorePath(func() []string { return nil })
+	for _, e := range []string{"/y/login/bin/x", "/y/login", "~/.vscode/extensions", "~/.cursor/x", "~/.gradle/init.d", "~/.ipython/profile_default", "~/.jupyter/x",
+		"~/.m2/repository", "~/.config/x", "~/.cache/x", "~/AppData/Roaming/x", "~/Documents/PowerShell/x", "~/Documents/WindowsPowerShell/x"} {
+		if err := CheckWriteFolder(e); err == nil {
+			t.Errorf("%q passed", e)
+		}
+	}
+	if err := CheckWriteFolder("~/Documents/fixtures"); err != nil {
+		t.Errorf("~/Documents/fixtures: %v", err)
+	}
+	// A cache is allowed, saying tools run what is in it.
+	if w := SandboxWarning(SandboxWrite, "~/Library/Caches/ms-playwright"); !strings.Contains(w, "plant code") {
+		t.Errorf("cache warning %q", w)
+	}
 	if caps.CaseFold {
+		// The whole home, or a folder one below it, in another case
+		// (#655 re-review).
+		for _, e := range []string{"/USERS/clifford", "/USERS/clifford/Work", "/users/clifford/Work", "/Home/me/x"} {
+			if err := CheckWriteFolder(e); err == nil {
+				t.Errorf("%q passed with case folded", e)
+			}
+		}
 		for _, e := range []string{"~/library/launchagents/x", "~/LIBRARY/Preferences/x", "~/src/repo/.GIT/hooks", "~/src/x/.SSH/k", "~/.CLAUDE/commands", "~/.Config/git", "~/src/x/LaunchAgents", "~/.Cargo/bin", "/USR/local/x", "~/src/TOOLS/bin"} {
 			if err := CheckWriteFolder(e); err == nil {
 				t.Errorf("%q passed with case folded", e)
