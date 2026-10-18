@@ -3,7 +3,7 @@
  └─ coordi…             ·          │  coordinator                      —           not running; enter starts it  3 inbox
     ├─ T1    50% ☐      ○          │  T1 Fix the login              ○ idle             report new  50% 1/2 ▸ Fix it  <duration>…
     └─ T2   ╭─ demo ───────────────────────────────────────────────────────────────────────────────────────╮
-            │ 1 overview 2 inbox 3 3 tasks 4 settings 5 sandbox 6 keys 7 memory 8 library 9 messages       │
+            │ 1 overview 2 inbox 3 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages        │
             │                                                                                              │
             │ Memory  MEMORY.md                                                                            │
             │ - Login flow: the redirect lives in auth/session.go                                          │
