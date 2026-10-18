@@ -107,6 +107,21 @@ type Rules struct {
 	// "excluded"), even where an allow rule or auto mode would let it run
 	// (T574 case 1).
 	AskFirst []string `json:"askFirst,omitempty"`
+	// Unsandboxed are the command patterns of the agent's own settings
+	// files that run a command outside the sandbox (Claude's
+	// sandbox.excludedCommands in ~/.claude and the folder's .claude),
+	// with no flag in the call for Escape to see (T574 case 7). A call
+	// of a shell tool with an Escape field that one takes, and that none
+	// of TMExcluded (the excluded commands tm gives the thread) takes,
+	// is an escape: put to the user (rule "escape"), or with NoEscapes
+	// refused. They are matched more widely than the agent does (any of
+	// the line's commands, a bare word as a prefix), so the guard asks
+	// rather than misses.
+	Unsandboxed []string `json:"unsandboxed,omitempty"`
+	TMExcluded  []string `json:"tmExcluded,omitempty"`
+	// NoEscapes: the thread's escapes are off (sandbox_escapes = false),
+	// so a call Unsandboxed takes is refused.
+	NoEscapes bool `json:"noEscapes,omitempty"`
 	// Learn is guard_mode "learn": a refusal tells the model the user
 	// reviews it.
 	Learn bool `json:"learn,omitempty"`
@@ -242,7 +257,7 @@ const learnNote = " The user reviews refused calls: if they allow this one, you 
 // Judge is the rule the call of tool with input breaks, or nil. The
 // tool is judged by its kind in r.Tools, from the fields listed there.
 func (r Rules) Judge(tool string, input map[string]any) *Denial {
-	if !r.On || len(r.Rules) == 0 && len(r.Mods) == 0 && len(r.Own) == 0 && len(r.OtherTemps) == 0 && len(r.SecretEnv) == 0 && len(r.Floor) == 0 && len(r.NoWrite) == 0 && !r.AskEscapes && len(r.AskFirst) == 0 {
+	if !r.On || len(r.Rules) == 0 && len(r.Mods) == 0 && len(r.Own) == 0 && len(r.OtherTemps) == 0 && len(r.SecretEnv) == 0 && len(r.Floor) == 0 && len(r.NoWrite) == 0 && !r.AskEscapes && len(r.Unsandboxed) == 0 && len(r.AskFirst) == 0 {
 		return nil
 	}
 	t, ok := r.Tools[tool]
@@ -270,6 +285,15 @@ func (r Rules) Judge(tool string, input map[string]any) *Denial {
 			}
 			if ask == nil {
 				ask = d
+			}
+		}
+		if t.Escape != "" {
+			for _, c := range values {
+				if d := r.judgeUnsandboxed(strings.TrimSpace(c)); d != nil && !d.Ask {
+					return d
+				} else if ask == nil {
+					ask = d
+				}
 			}
 		}
 		if ask == nil && r.AskEscapes && t.Escape != "" && input[t.Escape] == true {
@@ -310,6 +334,65 @@ func (r Rules) Judge(tool string, input map[string]any) *Denial {
 		}
 	}
 	return nil
+}
+
+// judgeUnsandboxed judges a command line by the agent's own excluded
+// commands (Rules.Unsandboxed): one that runs it outside the sandbox
+// where none of tm's does is an escape, asked of the user or, with the
+// thread's escapes off, refused.
+func (r Rules) judgeUnsandboxed(line string) *Denial {
+	if len(r.Unsandboxed) == 0 || slices.ContainsFunc(r.TMExcluded, func(e string) bool { return excludedTakes(e, line) }) {
+		return nil
+	}
+	var cands []string
+	for _, words := range Commands(line) {
+		cands = append(cands, strings.Join(words, " "), strings.Join(strip(words), " "))
+	}
+	cands = append(cands, line)
+	if !slices.ContainsFunc(r.Unsandboxed, func(p string) bool {
+		return slices.ContainsFunc(cands, func(c string) bool { return unsandboxedTakes(p, c) })
+	}) {
+		return nil
+	}
+	const summary = "an excluded command of the agent's own settings"
+	if r.NoEscapes {
+		return &Denial{Rule: RuleEscape, Summary: summary,
+			Message: "terminatr guard (escape): this command runs outside the sandbox through an excluded command in your agent's own settings (sandbox.excludedCommands, not tm's), and this thread's escapes are off. Run it another way inside the sandbox; if the task needs it, tell the user."}
+	}
+	return &Denial{Rule: RuleEscape, Ask: true, Summary: summary,
+		Message: "terminatr guard: this command runs outside the sandbox through an excluded command of the user's own settings, so the user answers it."}
+}
+
+// unsandboxedTakes: the agent's excluded command p takes command c, read
+// widely: * any text, a trailing " *" (or the older ":*") no arguments
+// too, and a pattern without * also the command with arguments.
+func unsandboxedTakes(p, c string) bool {
+	p = strings.TrimSpace(p)
+	if q, ok := strings.CutSuffix(p, ":*"); ok {
+		p = q + " *"
+	}
+	if p == "" || c == "" {
+		return false
+	}
+	if q, ok := strings.CutSuffix(p, " *"); ok && c == q {
+		return true
+	}
+	return globMatch(p, c) || !strings.Contains(p, "*") && strings.HasPrefix(c, p+" ")
+}
+
+// excludedTakes: tm's excluded command e takes command line c as Claude
+// matches it (config.ExcludedMatch): one command, without the shell's
+// operators, that e's pattern takes.
+func excludedTakes(e, c string) bool {
+	for _, op := range []string{";", "&", "|", "<", ">", "`", "$(", "\n"} {
+		if strings.Contains(c, op) {
+			return false
+		}
+	}
+	if q, ok := strings.CutSuffix(e, " *"); ok && c == q {
+		return true
+	}
+	return globMatch(e, c)
 }
 
 // judgeRead judges a file tool reading p (absolute; a glob by the part

@@ -16,7 +16,10 @@
 // writes but for tm's parts of it; thread-escapes asks about a call that
 // asks to leave the sandbox (askEscapes), rule "escape"; thread-ask-first
 // asks about a command of an excluded command that asks first (askFirst),
-// rule "excluded", and thread-ask-first-only has nothing else.
+// rule "excluded", and thread-ask-first-only has nothing else; thread-own
+// and thread-own-off carry excluded commands of the user's own Claude
+// settings (unsandboxed): a call one takes and tm's (tmExcluded) don't is
+// an escape, asked, or with escapes off (noEscapes) refused.
 // The thread-allow, thread-learn and floor-only sets carry the human's
 // allowances (a refusal under an allowance's rule of the command line or
 // file it matches is lifted; an "exact" one's * matches only a *), tm's
@@ -71,6 +74,8 @@ export default {
  "thread-escapes": {"on": true, "role": "thread", "rules": ["force-push", "credentials"], "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "protected": ["main", "master"], "floor": ["force-push"], "askEscapes": true},
  "thread-ask-first": {"on": true, "role": "thread", "rules": ["force-push", "credentials"], "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "protected": ["main", "master"], "floor": ["force-push"], "askEscapes": true, "askFirst": ["npx playwright *", "make e2e", "docker:*"]},
  "thread-ask-first-only": {"on": true, "role": "thread", "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "askFirst": ["npx playwright *"]},
+ "thread-own": {"on": true, "role": "thread", "rules": ["force-push"], "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "protected": ["main", "master"], "floor": ["force-push"], "askEscapes": true, "unsandboxed": ["docker", "make deploy *", "npm:*", "npx *"], "tmExcluded": ["npx playwright *"]},
+ "thread-own-off": {"on": true, "role": "thread", "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "unsandboxed": ["docker"], "noEscapes": true},
  "off": {"on": false}
 },
 "cases": [
@@ -703,6 +708,26 @@ export default {
  {"rules": "thread-escapes", "tool": "Bash", "input": {"command": "git push -f origin main", "dangerouslyDisableSandbox": true}, "rule": "force-push", "summary": "git push with force", "floor": true},
  {"rules": "thread-escapes", "tool": "Write", "input": {"file_path": "/etc/x", "dangerouslyDisableSandbox": true}, "rule": null},
  {"rules": "thread-escapes", "tool": "bash", "input": {"command": "ls", "dangerouslyDisableSandbox": true}, "rule": null},
+ {"rules": "thread-own", "tool": "Bash", "input": {"command": "docker ps"}, "rule": "escape", "summary": "an excluded command of the agent's own settings", "ask": true, "message": "terminatr guard: this command runs outside the sandbox through an excluded command of the user's own settings, so the user answers it."},
+ {"rules": "thread-own", "tool": "Bash", "input": {"command": "docker"}, "rule": "escape", "summary": "an excluded command of the agent's own settings", "ask": true},
+ {"rules": "thread-own", "tool": "Bash", "input": {"command": "cd /x && docker ps"}, "rule": "escape", "summary": "an excluded command of the agent's own settings", "ask": true},
+ {"rules": "thread-own", "tool": "Bash", "input": {"command": "sudo docker ps"}, "rule": "escape", "summary": "an excluded command of the agent's own settings", "ask": true},
+ {"rules": "thread-own", "tool": "Bash", "input": {"command": "FOO=1 docker run x"}, "rule": "escape", "summary": "an excluded command of the agent's own settings", "ask": true},
+ {"rules": "thread-own", "tool": "Bash", "input": {"command": "dockerd"}, "rule": null},
+ {"rules": "thread-own", "tool": "Bash", "input": {"command": "echo docker"}, "rule": null},
+ {"rules": "thread-own", "tool": "Bash", "input": {"command": "make deploy prod"}, "rule": "escape", "summary": "an excluded command of the agent's own settings", "ask": true},
+ {"rules": "thread-own", "tool": "Bash", "input": {"command": "make deploy"}, "rule": "escape", "summary": "an excluded command of the agent's own settings", "ask": true},
+ {"rules": "thread-own", "tool": "Bash", "input": {"command": "make build"}, "rule": null},
+ {"rules": "thread-own", "tool": "Bash", "input": {"command": "npm i"}, "rule": "escape", "summary": "an excluded command of the agent's own settings", "ask": true},
+ {"rules": "thread-own", "tool": "Bash", "input": {"command": "npx playwright test"}, "rule": null},
+ {"rules": "thread-own", "tool": "Bash", "input": {"command": "npx playwright test | tee log"}, "rule": "escape", "summary": "an excluded command of the agent's own settings", "ask": true},
+ {"rules": "thread-own", "tool": "Bash", "input": {"command": "npx tsc"}, "rule": "escape", "summary": "an excluded command of the agent's own settings", "ask": true},
+ {"rules": "thread-own", "tool": "Bash", "input": {"command": "ls"}, "rule": null},
+ {"rules": "thread-own", "tool": "Bash", "input": {"command": "git push -f origin main && docker ps"}, "rule": "force-push", "summary": "git push with force", "floor": true},
+ {"rules": "thread-own-off", "tool": "Bash", "input": {"command": "docker ps"}, "rule": "escape", "summary": "an excluded command of the agent's own settings", "message": "terminatr guard (escape): this command runs outside the sandbox through an excluded command in your agent's own settings (sandbox.excludedCommands, not tm's), and this thread's escapes are off. Run it another way inside the sandbox; if the task needs it, tell the user."},
+ {"rules": "thread-own-off", "tool": "Bash", "input": {"command": "ls"}, "rule": null},
+ {"rules": "thread-own", "tool": "bash", "input": {"command": "docker ps"}, "rule": null},
+ {"rules": "thread-own", "tool": "Write", "input": {"file_path": "/h/.terminatr/worktrees/demo/t-0001-fix/docker"}, "rule": null},
  {"rules": "thread-temps", "tool": "Read", "input": {"file_path": "/private/tmp/tm-501/bbbb/claude-501/x/tasks/a.output"}, "rule": "temp-folders", "summary": "Read of /private/tmp/tm-501/bbbb/claude-501/x/tasks/a.output", "floor": true, "message": "terminatr guard (temp-folders): other threads' temp folders are not read or written here. Keep your files in your own temp folder ($TMPDIR) or your worktree, or say so in your report."},
  {"rules": "thread-temps", "tool": "Read", "input": {"file_path": "/private/tmp/tm-501/aaaa/claude-501/x/scratchpad/n.md"}, "rule": null},
  {"rules": "thread-temps", "tool": "Read", "input": {"file_path": "/private/tmp/tm-501aaaa/x"}, "rule": null},

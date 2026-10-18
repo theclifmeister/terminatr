@@ -143,8 +143,8 @@ const (
 //     only its macOS sandbox reads (Linux doesn't pass it, Windows has
 //     no setting for localhost), and Codex's
 //     permissions.<profile>.network.allow_local_binding (macOS policy).
-//   - hosts are Claude's allowedDomains (a Codex thread's network is
-//     open already). tm gave them only on macOS (browser downloads'), so
+//   - hosts are Claude's allowedDomains and a Codex thread's limited
+//     network's domains. tm gave them only on macOS (browser downloads'), so
 //     they stay macOS only: a narrower thread elsewhere, never a wider
 //     one, until another platform's are checked.
 //   - the guidance texts are about macOS's sandbox (Chromium can't
