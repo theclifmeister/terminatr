@@ -57,8 +57,12 @@ func (s *Session) PromptNow(text string, interrupt bool) (via, why string, err e
 		via, err = s.Prompt(text)
 		return via, "the agent is " + string(st), err
 	}
+	escape := rt.escapeOpen()
 	rt.mu.Lock()
 	switch {
+	case escape:
+		// Its prompt may open at any moment: nothing is pasted now.
+		why = HeldEscape
 	case rt.blocker:
 		why = HeldDialog
 	case rt.man != nil && rt.man.Inject.EmptyRule != "" && !rt.emptyBox:
