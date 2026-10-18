@@ -391,6 +391,10 @@ type Truster interface {
 // home is the user's home directory, dir the session's folder.
 type OwnRuler interface {
 	OwnRules(home, dir string) []OwnRule
+	// OwnFiles are the files OwnRules reads, absolute, read or not:
+	// what the guard's rules are stamped with, so a change to one (a
+	// thread writing its worktree's) reaches them at once.
+	OwnFiles(home, dir string) []string
 }
 
 // OwnRule is one rule of an agent's own settings files: Kind "allow",

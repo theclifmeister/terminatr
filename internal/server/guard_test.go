@@ -1019,3 +1019,51 @@ func TestGuardOwnExcluded(t *testing.T) {
 		t.Errorf("codex %+v", g.Unsandboxed)
 	}
 }
+
+// TestGuardOwnExcludedLive: a thread writing an excluded command into
+// its worktree's Claude settings (or the user changing theirs) reaches
+// its guard's rules at once, not after hookRulesFor: with escapes off
+// the command is refused from the next call (security review, PR #654).
+func TestGuardOwnExcludedLive(t *testing.T) {
+	testPaths(t)
+	p := newWatchProject(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	clock := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	guardNow = func() time.Time { return clock } // never a minute later
+	t.Cleanup(func() { guardNow = time.Now })
+	reg, err := agent.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wt := t.TempDir()
+	s := &Server{log: log.New(os.Stderr, "", 0), opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}}, agents: reg, records: map[string]SessionRecord{}}
+	rec := SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: "t-0001", Cwd: wt, NoSandboxEscapes: true}
+	s.records["s-2"] = rec
+	curl := func() *guard.Denial {
+		return s.hookRules(rec).Judge("Bash", map[string]any{"command": "curl https://example.com"})
+	}
+	if d := curl(); d != nil {
+		t.Fatalf("before: %+v", d)
+	}
+	write := func(path, body string) {
+		t.Helper()
+		os.MkdirAll(filepath.Dir(path), 0o700)
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(wt, ".claude", "settings.local.json"), `{"sandbox":{"excludedCommands":["curl *"]}}`)
+	if d := curl(); d == nil || d.Rule != guard.RuleEscape || d.Ask {
+		t.Errorf("after the worktree's settings: %+v", d)
+	}
+	os.Remove(filepath.Join(wt, ".claude", "settings.local.json"))
+	if d := curl(); d != nil {
+		t.Errorf("after removing it: %+v", d)
+	}
+	write(filepath.Join(home, ".claude", "settings.json"), `{"sandbox":{"excludedCommands":["curl"]}}`)
+	if d := curl(); d == nil || d.Rule != guard.RuleEscape {
+		t.Errorf("after the user's settings: %+v", d)
+	}
+}

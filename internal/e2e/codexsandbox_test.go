@@ -113,7 +113,9 @@ func TestSmokeCodexSandbox(t *testing.T) {
 		Role: agent.RoleThread, SessionID: "s-1", Cwd: wt, RepoRoot: repo,
 		GitDir: filepath.Join(repo, ".git", "worktrees", "wt"), RuntimeDir: run,
 		TMBin: env.Bin, Socket: env.Socket, Access: access,
-		Sandbox: agent.SandboxLists{Domains: []string{"example.com"}},
+		// localhost listed as tm's probe lists it (never a launch's): the
+		// proxy takes it without the internet.
+		Sandbox: agent.SandboxLists{Domains: []string{"example.com", "localhost"}},
 	})...)
 	// A loopback listener: an address outside the thread's domains,
 	// which its limited network refuses (T574 case 5).
@@ -122,6 +124,7 @@ func TestSmokeCodexSandbox(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ln.Close()
+	_, port, _ := net.SplitHostPort(ln.Addr().String())
 
 	// Each probe prints its name and ok or no.
 	probe := func(name, cmd string) string {
@@ -148,6 +151,9 @@ func TestSmokeCodexSandbox(t *testing.T) {
 		probe("project-write", "echo x >> "+filepath.Join(proj, "TASKS.md")),
 		probe("socket", env.Bin+" server status"),
 		probe("loopback", env.Bin+" codex-sandbox-probe "+env.Socket+" "+ln.Addr().String()+" | grep -q tcp=ok"),
+		// Through Codex's proxy: a host outside the domains refused, a
+		// listed one taken (security review, PR #654).
+		probe("proxy", env.Bin+" codex-sandbox-probe "+env.Socket+" "+ln.Addr().String()+" --proxy localhost:"+port+" tm-probe.invalid:443 | grep -q proxy=ok"),
 	}, "\n")
 	cmd := exec.Command(bin, append(args, "--", "sh", "-c", script)...)
 	cmd.Dir = wt
@@ -170,7 +176,7 @@ func TestSmokeCodexSandbox(t *testing.T) {
 		"worktree": "ok", "commit": "ok", "push": "ok", "ref-delete": refDelete, "tmp": "ok", "tmpdir": "ok",
 		"hooks": "no", "config": "no", "info": "no", "other-worktree": "no",
 		"outside": "no", "home": "no", "project-read": "ok", "project-write": "no",
-		"socket": "ok", "loopback": "no",
+		"socket": "ok", "loopback": "no", "proxy": "ok",
 	}
 	got := map[string]string{}
 	for _, line := range strings.Split(string(out), "\n") {

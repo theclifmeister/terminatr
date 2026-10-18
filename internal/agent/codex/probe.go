@@ -1,14 +1,18 @@
 package codex
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -50,11 +54,30 @@ import (
 // workspace there includes %TEMP%, and no other folder is safe to try).
 
 // ProbeCommand is the tm command the probe runs inside the sandbox (main
-// dispatches it): `tm codex-sandbox-probe <unix socket> <tcp address>`.
+// dispatches it): `tm codex-sandbox-probe <unix socket> <tcp address>
+// [--proxy <listed host:port> <unlisted host:port>]`.
 const ProbeCommand = "codex-sandbox-probe"
 
-// probeWant is what the probe prints when the sandbox holds.
-const probeWant = "unix=ok tcp=refused"
+// probeWant is what the probe prints when the sandbox holds: tm's
+// socket connects, a direct connection is refused, and Codex's proxy
+// (the one the sandbox's proxy variables name) refuses a host outside
+// the domains and takes a listed one. The direct refusal alone doesn't
+// show the domains hold: the sandbox refuses a direct connection to
+// any host, and a Codex whose proxy let every host through would pass
+// it (security review, PR #654).
+const probeWant = "unix=ok tcp=refused proxy=ok"
+
+// The probe's hosts: probeListed is added to the domains of the profile
+// it runs (never a launch's) and names this computer, so the proxy
+// takes it without the internet (a listed name that doesn't resolve is
+// refused like an unlisted one); probeUnlisted is in no domains (a
+// reserved name, RFC 2606). Measured on Codex 0.162: CONNECT to an
+// unlisted host is a 403 (x-proxy-error: blocked-by-allowlist), to a
+// listed localhost a 200.
+const (
+	probeListed   = "localhost"
+	probeUnlisted = "tm-probe.invalid:443"
+)
 
 // threadWant is what a thread's probe prints when its sandbox holds:
 // tm's socket connects and a file outside the workspace can't be made.
@@ -65,9 +88,30 @@ const threadWant = "unix=ok write=denied"
 // prints whether that write was denied instead of the TCP result (the
 // Windows form, whose network can't be limited, and tm doctor's thread
 // check before its network probe).
+//
+// With --proxy and two addresses it also asks the proxy the sandbox's
+// variables name (HTTPS_PROXY and the like, as Codex sets them) to
+// CONNECT to each, and prints proxy=ok when it takes the first and
+// refuses the second, else none (no proxy), open (it took the second),
+// closed (it refused the first) or bad (no answer).
 func ProbeMain(args []string) int {
+	if len(args) == 5 && args[2] == "--proxy" {
+		c, err := net.DialTimeout("unix", args[0], 3*time.Second)
+		unix := "refused"
+		if err == nil {
+			c.Close()
+			unix = "ok"
+		}
+		tcp := "refused"
+		if c, err := net.DialTimeout("tcp", args[1], 3*time.Second); err == nil {
+			c.Close()
+			tcp = "ok"
+		}
+		fmt.Printf("unix=%s tcp=%s proxy=%s\n", unix, tcp, proxyVerdict(proxyEnv(), args[3], args[4]))
+		return 0
+	}
 	if len(args) != 2 && len(args) != 3 {
-		fmt.Fprintln(os.Stderr, "usage: tm "+ProbeCommand+" SOCKET HOST:PORT [WRITE-PATH]")
+		fmt.Fprintln(os.Stderr, "usage: tm "+ProbeCommand+" SOCKET HOST:PORT [WRITE-PATH | --proxy LISTED UNLISTED]")
 		return 2
 	}
 	dial := func(network, addr string) string {
@@ -92,12 +136,86 @@ func ProbeMain(args []string) int {
 	return 0
 }
 
+// proxyEnv is the HTTP proxy the sandbox's variables name, "" for none.
+func proxyEnv() string {
+	for _, k := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"} {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// proxyVerdict asks proxy (a URL, or host:port) to CONNECT to listed
+// and to unlisted: "ok" when it takes the first (2xx) and refuses the
+// second, "none" without a proxy, "open", "closed" or "bad".
+func proxyVerdict(proxy, listed, unlisted string) string {
+	if proxy == "" {
+		return "none"
+	}
+	addr := proxy
+	if u, err := url.Parse(proxy); err == nil && u.Host != "" {
+		addr = u.Host
+	}
+	connect := func(target string) (int, error) {
+		c, err := net.DialTimeout("tcp", addr, 3*time.Second)
+		if err != nil {
+			return 0, err
+		}
+		defer c.Close()
+		c.SetDeadline(time.Now().Add(5 * time.Second))
+		if _, err := fmt.Fprintf(c, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", target, target); err != nil {
+			return 0, err
+		}
+		resp, err := http.ReadResponse(bufio.NewReader(c), &http.Request{Method: http.MethodConnect})
+		if err != nil {
+			return 0, err
+		}
+		resp.Body.Close()
+		return resp.StatusCode, nil
+	}
+	code, err := connect(unlisted)
+	switch {
+	case err != nil:
+		return "bad"
+	case code/100 == 2:
+		return "open"
+	}
+	if code, err = connect(listed); err != nil {
+		return "bad"
+	} else if code/100 != 2 {
+		return "closed"
+	}
+	return "ok"
+}
+
+// probeDomain is a profile's flags with probeListed among its network's
+// domains, for the probe's proxy check.
+func probeDomain(flags []string) []string {
+	out := slices.Clone(flags)
+	entry := agent.TOMLString(probeListed) + `="allow"`
+	for i, v := range out {
+		if !strings.HasPrefix(v, "permissions=") {
+			continue
+		}
+		if strings.Contains(v, ",domains={") {
+			out[i] = strings.Replace(v, ",domains={", ",domains={"+entry+",", 1)
+		} else if m := modeKey.FindString(v); m != "" {
+			out[i] = strings.Replace(v, m, m+",domains={"+entry+"}", 1)
+		}
+	}
+	return out
+}
+
+// modeKey is a network table's mode in a profile flag.
+var modeKey = regexp.MustCompile(`mode="[a-z]+"`)
+
 // closedNetwork turns a launch's argv into its closed-network form:
-// features.network_proxy dropped, the profile's network off rather than
-// limited to the proxy, without the domains and local binding that only
-// limited mode reads. tm's socket stays in the profile. A coordinator's
-// and a thread's form on Windows, and a thread's where its limited
-// network doesn't hold.
+// features.network_proxy dropped, the profile's network off (enabled =
+// false whatever it said, its mode gone) rather than going through the
+// proxy, without the domains and local binding only the proxy reads.
+// tm's socket stays in the profile. A coordinator's and a thread's form
+// on Windows, and a thread's where its limited network doesn't hold.
 func closedNetwork(argv []string) []string {
 	out := make([]string, 0, len(argv))
 	for i := 0; i < len(argv); i++ {
@@ -107,10 +225,11 @@ func closedNetwork(argv []string) []string {
 				i++
 				continue
 			}
-			if mode := proxied(v); mode != "" {
-				v = strings.Replace(v, mode, "enabled=false", 1)
+			if strings.HasPrefix(v, "permissions=") && strings.Contains(v, "network={") {
+				v = netKeys.ReplaceAllString(v, "")
+				v = strings.Replace(v, "network={", "network={enabled=false,", 1)
 				v = cutTable(v, ",domains=")
-				v = strings.Replace(v, ",allow_local_binding=true", "", 1)
+				v = strings.Replace(strings.Replace(v, ",allow_local_binding=true", "", 1), ",}", "}", 1)
 			}
 			out = append(out, "-c", v)
 			i++
@@ -121,20 +240,9 @@ func closedNetwork(argv []string) []string {
 	return out
 }
 
-// proxied is the network part of profile flag value v that the proxy
-// enforces (`enabled=true,mode="limited"` for a coordinator, "full" for
-// a thread), or "".
-func proxied(v string) string {
-	if !strings.HasPrefix(v, "permissions=") {
-		return ""
-	}
-	for _, m := range []string{`enabled=true,mode="limited"`, `enabled=true,mode="full"`} {
-		if strings.Contains(v, m) {
-			return m
-		}
-	}
-	return ""
-}
+// netKeys are a network table's enabled and mode keys in a profile
+// flag, each with the comma after it.
+var netKeys = regexp.MustCompile(`(enabled=(true|false)|mode="[a-z]+"),?`)
 
 // cutTable is v without its inline table key (",domains=", say) and the
 // table after it, up to its closing brace; quoted keys may hold braces.
@@ -308,8 +416,15 @@ func probeOnce(codex, tmBin, cwd, sock, name string, flags []string, windows boo
 		return fmt.Errorf("probe listener: %v", err)
 	}
 	defer ln.Close()
-	args := append([]string{"sandbox", "-P", name, "-C", cwd}, flags...)
-	args = append(args, "--", tmBin, ProbeCommand, sock, ln.Addr().String())
+	probe := []string{"--", tmBin, ProbeCommand, sock, ln.Addr().String()}
+	if !windows {
+		// The proxy check: a listed host (this computer, at the
+		// listener) taken, an unlisted one refused.
+		_, port, _ := net.SplitHostPort(ln.Addr().String())
+		flags = probeDomain(flags)
+		probe = append(probe, "--proxy", net.JoinHostPort(probeListed, port), probeUnlisted)
+	}
+	args := append(append([]string{"sandbox", "-P", name, "-C", cwd}, flags...), probe...)
 	out, err := run(codex, flagsEnv(), args...)
 	last := lastLine(out)
 	switch {
@@ -319,8 +434,16 @@ func probeOnce(codex, tmBin, cwd, sock, name string, flags []string, windows boo
 		return nil
 	case strings.HasPrefix(last, "unix=refused"):
 		return errors.New("the profile wasn't applied: tm's socket is unreachable in it")
-	case strings.HasSuffix(last, "tcp=ok"):
+	case strings.Contains(last, "tcp=ok"):
 		return errors.New("the network isn't limited to tm's socket: features.network_proxy or network.mode was ignored")
+	case strings.HasSuffix(last, "proxy=none"):
+		return errors.New("no network proxy in the sandbox: features.network_proxy was ignored")
+	case strings.HasSuffix(last, "proxy=open"):
+		return errors.New("the network proxy lets a host outside the domains through")
+	case strings.HasSuffix(last, "proxy=closed"):
+		return errors.New("the network proxy refuses a listed domain: network.domains was ignored")
+	case strings.HasSuffix(last, "proxy=bad"):
+		return errors.New("the network proxy didn't answer")
 	}
 	return fmt.Errorf("unexpected probe output %q", firstLine(out, nil))
 }

@@ -1,8 +1,10 @@
 package codex
 
 import (
+	"bufio"
 	"errors"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -24,10 +26,19 @@ func TestProbeVerdicts(t *testing.T) {
 	cases := []struct {
 		script, want string
 	}{
-		{`echo "unix=ok tcp=refused"`, ""},
-		{`echo "WARNING: something"; echo "unix=ok tcp=refused"`, ""},
-		{`echo "unix=ok tcp=ok"`, "the network isn't limited"},
-		{`echo "unix=refused tcp=refused"`, "the profile wasn't applied"},
+		{`echo "unix=ok tcp=refused proxy=ok"`, ""},
+		{`echo "WARNING: something"; echo "unix=ok tcp=refused proxy=ok"`, ""},
+		{`echo "unix=ok tcp=ok proxy=ok"`, "the network isn't limited"},
+		{`echo "unix=refused tcp=refused proxy=ok"`, "the profile wasn't applied"},
+		// The direct refusal alone doesn't show the domains hold.
+		{`echo "unix=ok tcp=refused"`, "unexpected probe output"},
+		{`echo "unix=ok tcp=refused proxy=none"`, "no network proxy in the sandbox"},
+		{`echo "unix=ok tcp=refused proxy=open"`, "lets a host outside the domains through"},
+		{`echo "unix=ok tcp=refused proxy=closed"`, "refuses a listed domain"},
+		{`echo "unix=ok tcp=refused proxy=bad"`, "didn't answer"},
+		// The probe asks the proxy about a listed host it added and an
+		// unlisted one.
+		{`case "$*" in *'domains={"localhost"="allow"}'*'--proxy localhost:'*' tm-probe.invalid:443') echo "unix=ok tcp=refused proxy=ok";; *) echo "args: $*";; esac`, ""},
 		{"echo 'Error loading config.toml: unknown configuration field `features.network_proxy` in -c/--config override' >&2; exit 1", "codex sandbox refused it: Error loading config.toml: unknown configuration field"},
 		{`echo "error: unexpected argument '-P' found" >&2; exit 2`, "codex sandbox refused it: error: unexpected argument '-P'"},
 		{`echo something else`, "unexpected probe output"},
@@ -35,7 +46,7 @@ func TestProbeVerdicts(t *testing.T) {
 	for _, tc := range cases {
 		codex := filepath.Join(t.TempDir(), "codex")
 		os.WriteFile(codex, []byte("#!/bin/sh\n"+tc.script+"\n"), 0o700)
-		err := probeOnce(codex, "/bin/tm", t.TempDir(), "/run/tm.sock", "tm", []string{"-c", "features.network_proxy=true"}, false)
+		err := probeOnce(codex, "/bin/tm", t.TempDir(), "/run/tm.sock", "tm", []string{"-c", "features.network_proxy=true", "-c", `permissions={tm={network={enabled=true,mode="full"}}}`}, false)
 		if tc.want == "" && err != nil || tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)) {
 			t.Errorf("%s: %v, want %q", tc.script, err, tc.want)
 		}
@@ -104,6 +115,127 @@ func TestThreadNetwork(t *testing.T) {
 	}
 	if l = limited(agent.Launch{Argv: []string{"codex", "--dangerously-bypass-approvals-and-sandbox"}}, spec, m, false); len(l.Argv) != 2 || probed != nil {
 		t.Errorf("yolo: %q, probed %q", l.Argv, probed)
+	}
+}
+
+// TestClosedNetworkManifest: closedNetwork closes the network of the
+// manifest's own thread and coordinator profiles, as rendered, and of a
+// profile whose network it doesn't recognise: enabled false whatever it
+// said, no mode, domains or binding, no proxy feature (security review,
+// PR #654).
+func TestClosedNetworkManifest(t *testing.T) {
+	a := load(t)
+	type netw struct {
+		Enabled     *bool
+		Mode        string
+		Domains     map[string]string
+		Binding     *bool             `toml:"allow_local_binding"`
+		UnixSockets map[string]string `toml:"unix_sockets"`
+	}
+	check := func(what string, argv []string) {
+		t.Helper()
+		got := closedNetwork(argv)
+		if slices.Contains(got, "features.network_proxy=true") {
+			t.Errorf("%s: the proxy feature stays: %q", what, got)
+		}
+		i := slices.IndexFunc(got, func(s string) bool { return strings.HasPrefix(s, "permissions=") })
+		if i < 0 {
+			t.Fatalf("%s: no profile in %q", what, got)
+		}
+		var v struct {
+			Permissions map[string]struct{ Network netw }
+		}
+		if _, err := toml.Decode(got[i], &v); err != nil {
+			t.Fatalf("%s: %s: %v", what, got[i], err)
+		}
+		n := v.Permissions["tm"].Network
+		if n.Enabled == nil || *n.Enabled || n.Mode != "" || n.Domains != nil || n.Binding != nil || n.UnixSockets["/run/tm.sock"] != "allow" {
+			t.Errorf("%s: %s", what, got[i])
+		}
+	}
+	thread, err := a.Agent.Launch(agent.LaunchSpec{Role: agent.RoleThread, Cwd: "/w", TMBin: "/bin/tm", Socket: "/run/tm.sock",
+		Access: agent.Access{Write: []string{"/w"}}, Sandbox: agent.SandboxLists{Domains: []string{"github.com", "odd}{.example"}, LocalBinding: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("thread", thread.Argv)
+	coord, err := a.Agent.Launch(agent.LaunchSpec{Role: "coordinator", Cwd: "/p", TMBin: "/bin/tm", Socket: "/run/tm.sock", Access: agent.Access{Read: []string{"/p"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("coordinator", coord.Argv)
+	for _, odd := range []string{
+		`permissions={tm={network={mode="other",enabled=true,unix_sockets={"/run/tm.sock"="allow"}}}}`,
+		`permissions={tm={network={unix_sockets={"/run/tm.sock"="allow"},enabled=true}}}`,
+		`permissions={tm={network={unix_sockets={"/run/tm.sock"="allow"}}}}`,
+	} {
+		check(odd, []string{"codex", "-c", "features.network_proxy=true", "-c", odd})
+	}
+}
+
+// TestProbeDomain: the probe's profile lists probeListed beside the
+// thread's domains, or as its only one.
+func TestProbeDomain(t *testing.T) {
+	for in, want := range map[string]string{
+		`permissions={tm={network={enabled=true,mode="full",unix_sockets={"/s"="allow"},domains={"github.com"="allow"}}}}`: `permissions={tm={network={enabled=true,mode="full",unix_sockets={"/s"="allow"},domains={"localhost"="allow","github.com"="allow"}}}}`,
+		`permissions={tm={network={enabled=true,mode="limited",unix_sockets={"/s"="allow"}}}}`:                             `permissions={tm={network={enabled=true,mode="limited",domains={"localhost"="allow"},unix_sockets={"/s"="allow"}}}}`,
+	} {
+		got := probeDomain([]string{"-c", "features.network_proxy=true", "-c", in})
+		if got[3] != want || got[1] != "features.network_proxy=true" {
+			t.Errorf("probeDomain(%s)\n= %s\nwant %s", in, got[3], want)
+		}
+		if _, err := toml.Decode(got[3], &struct{}{}); err != nil {
+			t.Errorf("%s: %v", got[3], err)
+		}
+	}
+}
+
+// TestProxyVerdict: the proxy check against a stand-in proxy: it must
+// refuse the unlisted host and take the listed one.
+func TestProxyVerdict(t *testing.T) {
+	serve := func(allow func(target string) bool) string {
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Skip("no loopback listener here:", err)
+		}
+		t.Cleanup(func() { ln.Close() })
+		go func() {
+			for {
+				c, err := ln.Accept()
+				if err != nil {
+					return
+				}
+				go func(c net.Conn) {
+					defer c.Close()
+					req, err := http.ReadRequest(bufio.NewReader(c))
+					if err != nil {
+						return
+					}
+					if allow(req.Host) {
+						c.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+					} else {
+						c.Write([]byte("HTTP/1.1 403 Forbidden\r\nx-proxy-error: blocked-by-allowlist\r\nContent-Length: 0\r\n\r\n"))
+					}
+				}(c)
+			}
+		}()
+		return "http://" + ln.Addr().String()
+	}
+	listed := func(h string) bool { return strings.HasPrefix(h, "localhost:") }
+	cases := []struct {
+		proxy string
+		want  string
+	}{
+		{serve(listed), "ok"},
+		{serve(func(string) bool { return true }), "open"},
+		{serve(func(string) bool { return false }), "closed"},
+		{"", "none"},
+		{"http://127.0.0.1:1", "bad"},
+	}
+	for _, tc := range cases {
+		if got := proxyVerdict(tc.proxy, "localhost:9", probeUnlisted); got != tc.want {
+			t.Errorf("proxy %q: %s, want %s", tc.proxy, got, tc.want)
+		}
 	}
 }
 
@@ -263,7 +395,7 @@ func TestProbeThreadSandbox(t *testing.T) {
 	answers := func(write, tcp string) string {
 		return `case "$*" in */probe) ` + write + `;; *) ` + tcp + `;; esac`
 	}
-	held := `echo "unix=ok tcp=refused"`
+	held := `echo "unix=ok tcp=refused proxy=ok"`
 	cases := []struct {
 		script, want string
 	}{
@@ -273,7 +405,8 @@ func TestProbeThreadSandbox(t *testing.T) {
 		{answers(`echo "unix=refused write=denied"`, held), "tm's socket is unreachable"},
 		{`echo "error: bad" >&2; exit 2`, "codex sandbox refused it: error: bad"},
 		{`echo something else`, "unexpected probe output"},
-		{answers(`echo "unix=ok write=denied"`, `echo "unix=ok tcp=ok"`), "the network isn't limited"},
+		{answers(`echo "unix=ok write=denied"`, `echo "unix=ok tcp=ok proxy=ok"`), "the network isn't limited"},
+		{answers(`echo "unix=ok write=denied"`, `echo "unix=ok tcp=refused proxy=open"`), "outside the domains"},
 	}
 	a := load(t)
 	for _, tc := range cases {
@@ -292,7 +425,7 @@ func TestProbeThreadSandbox(t *testing.T) {
 // mtime) and the same arguments, so a launch doesn't run the sandbox
 // twice; another binary or another argument is probed again.
 func TestProbeProfileCache(t *testing.T) {
-	runs := fakeSandboxCodex(t, `echo "unix=ok tcp=refused"`)
+	runs := fakeSandboxCodex(t, `echo "unix=ok tcp=refused proxy=ok"`)
 	m := agent.ManifestOf(load(t))
 	cwd := t.TempDir()
 	probe := func(name string) (string, error) {
