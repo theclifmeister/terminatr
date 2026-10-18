@@ -74,9 +74,9 @@ func threadSandboxCheck(d Deps, name string, m *agent.Manifest, p agent.ThreadSa
 	case "windows":
 		ok, fallback = "a thread's commands run sandboxed and reach tm's socket", "runs without it or asks approval for every command"
 	case "linux":
-		// Codex's proxy can't carry tm's socket there: the network is
-		// off (internal/agent/codex/probe.go, closedOS).
-		ok, fallback = "a thread's commands run sandboxed and reach tm's socket; its network is off (Codex's proxy can't carry tm's socket on Linux)", "can't reach tm's socket from its commands"
+		// Codex's proxy refuses unix sockets there (internal/agent/codex/
+		// probe.go, noSocketOS): threads reach tm through their MCP tools.
+		ok = "a thread's commands run sandboxed and reach only the hosts it is given; tm's socket is out of their reach on Linux (Codex's proxy refuses unix sockets), so threads reach tm through their MCP tools"
 	}
 	return probeCheck(name+" thread sandbox", m, func() (string, error) { return d.ThreadSandboxProbe(p) }, ok,
 		func(err error) string {

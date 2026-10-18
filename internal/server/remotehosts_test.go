@@ -91,14 +91,14 @@ func TestRemoteHostRules(t *testing.T) {
 	if rules, domains := hosts("codex", true); rules != nil || domains != nil {
 		t.Errorf("yolo: rules %q domains %q", rules, domains)
 	}
-	// On Linux a Codex thread's network is off: its hosts show, not used.
-	set, err := s.resolveAccess(accessInput{role: proto.RoleThread, slug: "demo", cwd: repo, tree: tree, agent: "codex", goos: config.OSLinux}, loadLaunchConfig())
+	// On Windows a Codex thread's network is off: its hosts show, not used.
+	set, err := s.resolveAccess(accessInput{role: proto.RoleThread, slug: "demo", cwd: repo, tree: tree, agent: "codex", goos: config.OSWindows}, loadLaunchConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, r := range set.Rules {
 		if r.Kind == proto.AccessHost && r.Skipped == "" {
-			t.Errorf("linux: host %s used", r.Value)
+			t.Errorf("windows: host %s used", r.Value)
 		}
 	}
 	// A host both a rule and a remote give is one domain.

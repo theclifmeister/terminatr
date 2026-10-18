@@ -58,9 +58,9 @@ func (s *Server) resolveAccess(in accessInput, lc launchConfig) (proto.AccessSet
 			// Its pushes reach the repo's remotes (remotehosts.go).
 			add(remoteHostRules(in.tree.CommonDir)...)
 		}
-		if in.agent == "codex" && (in.goos == config.OSWindows || in.goos == config.OSLinux) {
-			// Its network is off there: Codex's proxy can't carry tm's
-			// socket (codex.closedOS).
+		if in.agent == "codex" && in.goos == config.OSWindows {
+			// Its network is off there: Codex's proxy needs its elevated
+			// sandbox (codex.closedOS).
 			for i := from; i < len(set.Rules); i++ {
 				if r := &set.Rules[i]; (r.Kind == proto.AccessHost || r.Kind == proto.AccessLocalPorts) && r.Skipped == "" {
 					r.Skipped = "a Codex thread's network is off on " + config.OSName(in.goos)

@@ -3,6 +3,7 @@ package codex
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -97,7 +98,7 @@ func TestThreadNetwork(t *testing.T) {
 		return "0.170.0", verdict
 	}
 	defer func() { probeFunc = probeProfile }()
-	l := limited(agent.Launch{Argv: argv}, spec, m, false)
+	l := limited(agent.Launch{Argv: argv}, spec, m, "darwin")
 	if !slices.Equal(l.Argv, argv) || len(l.Warnings) > 0 {
 		t.Errorf("held: %q %q", l.Argv, l.Warnings)
 	}
@@ -105,15 +106,29 @@ func TestThreadNetwork(t *testing.T) {
 		t.Errorf("probed %q", probed)
 	}
 	verdict = errors.New("the network isn't limited to tm's socket: features.network_proxy or network.mode was ignored")
-	l = limited(agent.Launch{Argv: argv}, spec, m, false)
+	l = limited(agent.Launch{Argv: argv}, spec, m, "darwin")
 	if !slices.Equal(l.Argv, closed) || len(l.Warnings) != 1 || !strings.Contains(l.Warnings[0], "codex 0.170.0: the thread's limited network doesn't hold") {
 		t.Errorf("not held: %q %q", l.Argv, l.Warnings)
 	}
 	probed = nil
-	if l = limited(agent.Launch{Argv: argv}, spec, m, true); !slices.Equal(l.Argv, closed) || probed != nil || len(l.Warnings) > 0 {
+	if l = limited(agent.Launch{Argv: argv}, spec, m, "windows"); !slices.Equal(l.Argv, closed) || probed != nil || len(l.Warnings) > 0 {
 		t.Errorf("windows: %q %q, probed %q", l.Argv, l.Warnings, probed)
 	}
-	if l = limited(agent.Launch{Argv: []string{"codex", "--dangerously-bypass-approvals-and-sandbox"}}, spec, m, false); len(l.Argv) != 2 || probed != nil {
+	// On Linux a profile whose network holds but can't reach tm's socket
+	// (noSocketOS) keeps the proxy, with a warning; on macOS it closes.
+	verdict = fmt.Errorf("the profile wasn't applied or can't carry it: %w", errNoSocket)
+	if l = limited(agent.Launch{Argv: argv}, spec, m, "linux"); !slices.Equal(l.Argv, argv) || len(l.Warnings) != 1 || !strings.Contains(l.Warnings[0], "MCP tools") {
+		t.Errorf("linux, no socket: %q %q", l.Argv, l.Warnings)
+	}
+	if l = limited(agent.Launch{Argv: argv}, spec, m, "darwin"); !slices.Equal(l.Argv, closed) {
+		t.Errorf("macos, no socket: %q", l.Argv)
+	}
+	verdict = errors.New("the network proxy lets a host outside the domains through")
+	if l = limited(agent.Launch{Argv: argv}, spec, m, "linux"); !slices.Equal(l.Argv, closed) {
+		t.Errorf("linux, proxy open: %q", l.Argv)
+	}
+	probed = nil
+	if l = limited(agent.Launch{Argv: []string{"codex", "--dangerously-bypass-approvals-and-sandbox"}}, spec, m, "darwin"); len(l.Argv) != 2 || probed != nil {
 		t.Errorf("yolo: %q, probed %q", l.Argv, probed)
 	}
 }
@@ -173,11 +188,11 @@ func TestClosedNetworkManifest(t *testing.T) {
 	}
 }
 
-// TestClosedOS: a thread's network is off where the proxy can't carry
-// tm's socket (Windows, Linux), through the proxy on macOS.
+// TestClosedOS: a thread's network is off on Windows, through the proxy
+// elsewhere; on Linux tm's socket is out of its commands' reach.
 func TestClosedOS(t *testing.T) {
-	if !closedOS("windows") || !closedOS("linux") || closedOS("darwin") {
-		t.Error("closedOS")
+	if !closedOS("windows") || closedOS("linux") || closedOS("darwin") || !noSocketOS("linux") || noSocketOS("darwin") {
+		t.Error("closedOS, noSocketOS")
 	}
 }
 
@@ -405,13 +420,19 @@ func TestProbeThreadSandbox(t *testing.T) {
 		return `case "$*" in */probe) ` + write + `;; *) ` + tcp + `;; esac`
 	}
 	held := `echo "unix=ok tcp=refused proxy=ok"`
+	// On Linux tm's socket is out of a thread's reach (noSocketOS): its
+	// sandbox holds without it.
+	noSocketWant := "tm's socket is unreachable"
+	if noSocketOS(runtime.GOOS) {
+		noSocketWant = ""
+	}
 	cases := []struct {
 		script, want string
 	}{
 		{answers(`echo "unix=ok write=denied"`, held), ""},
 		{answers(`echo "WARNING: something"; echo "unix=ok write=denied"`, held), ""},
 		{answers(`echo "unix=ok write=ok"`, held), "the sandbox doesn't apply"},
-		{answers(`echo "unix=refused write=denied"`, held), "tm's socket is unreachable"},
+		{answers(`echo "unix=refused write=denied"`, `echo "unix=refused tcp=refused proxy=ok"`), noSocketWant},
 		{`echo "error: bad" >&2; exit 2`, "codex sandbox refused it: error: bad"},
 		{`echo something else`, "unexpected probe output"},
 	}
