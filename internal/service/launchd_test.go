@@ -250,3 +250,35 @@ func TestStrays(t *testing.T) {
 		t.Fatalf("strays: %+v", got)
 	}
 }
+
+func TestRotateServiceLog(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "service.log")
+	if err := RotateServiceLog(path, 10); err != nil {
+		t.Fatalf("missing log: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("small"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := RotateServiceLog(path, 10); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "small" {
+		t.Errorf("small log changed: %q", b)
+	}
+	if _, err := os.Stat(path + ".1"); err == nil {
+		t.Error("small log rotated")
+	}
+	os.WriteFile(path+".1", []byte("older"), 0o600)
+	if err := os.WriteFile(path, []byte("0123456789abc"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := RotateServiceLog(path, 10); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(path + ".1"); string(b) != "0123456789abc" {
+		t.Errorf(".1 = %q", b)
+	}
+	if fi, _ := os.Stat(path); fi == nil || fi.Size() != 0 {
+		t.Errorf("log not emptied: %v", fi)
+	}
+}

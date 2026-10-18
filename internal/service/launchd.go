@@ -215,3 +215,27 @@ func (c Config) HasConsole() bool { return c.run("launchctl", "print", c.domain(
 
 // ServiceLog is where launchd writes the server's own output.
 func (c Config) ServiceLog() string { return filepath.Join(c.LogDir, "service.log") }
+
+// ServiceLogMax is the size past which RotateServiceLog moves the service
+// log aside.
+const ServiceLogMax = 1 << 20
+
+// RotateServiceLog keeps launchd's append-only service log from growing
+// forever: over max bytes, its content moves to path+".1" (replacing the
+// old one) and path is emptied. It copies and truncates rather than
+// renaming, because launchd holds the file open and would keep writing to
+// the renamed one. A missing or small log is left alone.
+func RotateServiceLog(path string, max int64) error {
+	fi, err := os.Stat(path)
+	if err != nil || fi.Size() <= max {
+		return nil
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path+".1", b, 0o600); err != nil {
+		return err
+	}
+	return os.Truncate(path, 0)
+}
