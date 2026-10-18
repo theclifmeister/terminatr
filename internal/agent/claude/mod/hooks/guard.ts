@@ -411,11 +411,90 @@ function denyMod(m: ModRule, summary: string): Denial {
 
 // judgeBash checks each simple command of a Bash command line.
 function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Denial | null {
-  for (const words of commands(command)) {
+  return judgeLine(r, has, command, [r.cwd ?? ''])
+}
+
+// judgeLine judges each simple command of a Bash command line with its
+// relative paths from each folder of cwds, as the floor sees them: ''
+// is one it can't tell, which refuses a relative path a writer is
+// given. A cd (or pushd, popd) moves them only where it is a plain
+// command of the line's top level: joined by && it moves them for what
+// follows in its list, joined by ; or || it adds a folder they may be in
+// (it may fail, or not run); in ( ), a pipeline or the background it
+// moves nothing, and anywhere else ({ }, if, a substitution) it leaves
+// them unknown. A part that runs shell code the line doesn't show (eval,
+// trap, source, ., also through command or builtin) may move them at any
+// point after, so the rest of the line keeps unknown among them.
+function judgeLine(r: Rules, has: (id: string) => boolean, command: string, cwds: string[]): Denial | null {
+  let parts = topLevel(command)
+  if (!parts) {
+    // A heredoc or a line it can't split: one part, with any cd in it
+    // leaving its relative paths unknown from the start.
+    parts = [{ text: command, before: '', after: '' }]
+    if (hasCd(command)) cwds = withDirs(cwds, '')
+  }
+  let cur = cwds
+  let list = cwds
+  let hidden = false
+  for (const pt of parts) {
+    if (listEnd(pt.before)) list = cur
+    for (const c of cur) {
+      const d = judgeCommands(r, has, pt.text, c)
+      if (d) return d
+    }
+    const inPipe = pt.before === '|' || pt.after === '|' || pt.after === '&'
+    const pc = plainCd(pt.text)
+    if (pc && !inPipe) {
+      let to: string[] = []
+      for (const c of cur) to = withDirs(to, cdTo(r, c, pc.cmd, pc.args))
+      if (pt.after === '&&' && pt.before !== '||') cur = to
+      else if (pt.after === '||') list = withDirs(list, ...to)
+      else cur = withDirs(cur, ...to)
+    } else if (!inPipe && !pt.text.startsWith('(') && hasCd(pt.text)) {
+      cur = withDirs(cur, '')
+    }
+    hidden ||= runsHidden(pt.text)
+    if (hidden) cur = withDirs(cur, '')
+    list = withDirs(list, ...cur)
+    if (listEnd(pt.after)) cur = list
+  }
+  return null
+}
+
+// The builtins that run shell code the line doesn't show in the shell
+// itself, where a cd in it moves the line's folder.
+const HIDDEN_CODE = new Set(['eval', 'trap', 'source', '.'])
+
+// runsHidden: one of text's commands is one of those, maybe through
+// command or builtin.
+function runsHidden(text: string): boolean {
+  return commands(text).some(words => {
+    let argv = strip(words)
+    while (argv.length > 1 && (argv[0] === 'command' || argv[0] === 'builtin')) argv = argv.slice(1)
+    return argv.length > 0 && HIDDEN_CODE.has(argv[0])
+  })
+}
+
+// judgeCommands judges each simple command of part, a part of a line
+// (topLevel), with its relative paths from cwd ('' unknown: the floor
+// refuses them, the other rules take the session's folder). After a
+// command that ends in a redirect (>| f, tee >(…) f: the part splits
+// there), a command's first word may be what it writes.
+function judgeCommands(r0: Rules, has: (id: string) => boolean, part: string, cwd: string): Denial | null {
+  const fl: Rules = { ...r0, cwd }
+  const r: Rules = cwd !== '' ? { ...r0, cwd } : r0
+  let split = false
+  for (const words of commands(part)) {
     const argv = strip(words)
+    // Only a word that looks like a path: 2>&1 splits the same way.
+    if (split && words.length > 0 && (/[/\\]/.test(words[0]) || words[0].startsWith('~'))) {
+      const sd = judgeNoWrite(fl, '>', [words[0]], ['>', words[0]])
+      if (sd) return sd
+    }
+    split ||= words.length > 0 && words[words.length - 1] === '>'
     if (argv.length === 0) {
       // A redirect alone (date &> f: the & ends the command).
-      const nd = judgeNoWrite(r, '>', [], words)
+      const nd = judgeNoWrite(fl, '>', [], words)
       if (nd) return nd
       continue
     }
@@ -425,7 +504,7 @@ function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Den
     if (md) return md
     const gd = judgeGitConfig(r, has, cmd, words)
     if (gd) return gd
-    const nd = judgeNoWrite(r, cmd, args, words)
+    const nd = judgeNoWrite(fl, cmd, args, words)
     if (nd) return nd
     if (cmd === 'git') {
       const d = judgeGit(r, has, args)
@@ -442,10 +521,10 @@ function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Den
     } else if (SHELLS.has(cmd)) {
       // bash -c STRING runs the string.
       const c = shellCommand(args)
-      const d = c !== null ? judgeBash(r, has, c) : null
+      const d = c !== null ? judgeLine(r, has, c, [cwd]) : null
       if (d) return d
     } else if (cmd === 'eval') {
-      const d = judgeBash(r, has, args.join(' '))
+      const d = judgeLine(r, has, args.join(' '), [cwd])
       if (d) return d
     } else if (cmd === 'pwsh' || cmd === 'powershell') {
       const d = judgePwsh(r, has, args)
@@ -496,46 +575,280 @@ function judgeGitConfig(r: Rules, has: (id: string) => boolean, cmd: string, wor
 
 // The commands that write the files they are given: all of them (true),
 // or the last one, where the others are what is copied (false);
-// IN_PLACE those that write only with -i (sed -i, perl -pi).
+// IN_PLACE those that write only with -i (sed -i, perl -pi). Of the
+// paths given to REMOVERS (and to the others with -r: cp -r, chmod -R),
+// a folder that holds a noWrite path counts too: removing or moving
+// ~/.terminatr takes the project folder with it.
 const WRITERS: ReadonlyMap<string, boolean> = new Map([
   ...'rm rmdir unlink shred touch mkdir truncate tee mv chmod chown chgrp'.split(' ').map(c => [c, true] as const),
   ...'cp install ln rsync'.split(' ').map(c => [c, false] as const),
 ])
 const IN_PLACE = new Set('sed gsed perl ruby'.split(' '))
+const REMOVERS = new Set('rm rmdir mv rsync'.split(' '))
+
+// TM_AGENT_MOD are the tm mod subcommands an agent may run; the others,
+// tm project's TM_PROJECT_WRITES (and repo add) and the dashboard write
+// tm's settings in the tm process itself, the human's alone: an agent
+// past its sandbox (yolo) that runs one with its session's variables
+// unset and out of its session's process tree would pass for the human,
+// so the floor refuses them.
+const TM_AGENT_MOD = new Set('list show validate new test logs examples host'.split(' '))
+const TM_PROJECT_WRITES = new Set('new remote activate deactivate pause resume archive unarchive delete rename mv link open'.split(' '))
+
+// tmWritesSettings is which of those tm with args (after its name) is
+// ("tm mod enable", "tm (the dashboard)"), or ''.
+function tmWritesSettings(args: string[]): string {
+  let i = 0
+  for (; i < args.length && args[i].startsWith('-'); i++) {
+    if (args[i] === '-h' || args[i] === '--help') return ''
+  }
+  if (i === args.length) return 'tm (the dashboard)'
+  const pos = args.slice(i + 1).filter(a => !a.startsWith('-'))
+  if (pos.length === 0) return ''
+  if ((args[i] === 'mod' && !TM_AGENT_MOD.has(pos[0])) || (args[i] === 'project' && TM_PROJECT_WRITES.has(pos[0]))) return `tm ${args[i]} ${safe(pos[0])}`
+  if (args[i] === 'project' && (pos[0] === 'repo' || pos[0] === 'repos') && pos[1] === 'add') return 'tm project repo add'
+  return ''
+}
+
+// cdTo is where cmd (cd, pushd, popd) with args leaves a line whose
+// relative paths were from dir: a folder it names plainly, home for
+// none, else unknown ('').
+function cdTo(r: Rules, dir: string, cmd: string, args: string[]): string {
+  const to = args.filter(a => !a.startsWith('-') || a === '-')
+  if (cmd === 'popd' || to.length > 1) return ''
+  if (to.length === 0) return cmd === 'pushd' ? '' : (r.home ?? '')
+  const a = to[0]
+  if (a === '-' || /[$`]/.test(a) || (a.startsWith('~') && !a.startsWith('~/') && a !== '~')) return ''
+  if (dir === '' && !a.startsWith('/') && !a.startsWith('~') && !DRIVE.test(slash(a))) return ''
+  return abs({ ...r, cwd: dir }, a)
+}
+
+// globReaches: glob p (a wildcard in it) could name a folder that holds
+// root, or root itself: its part before the first wildcard, back to the
+// last /, holds root, and the pattern's next part matches root's
+// (rm -rf ~/.term*, ~/.terminatr/proj*).
+function globReaches(r: Rules, p: string, root: string): boolean {
+  const i = p.search(/[*?[]/)
+  if (i < 0) return false
+  const j = p.lastIndexOf('/', i)
+  if (j < 0) return false
+  const dir = fold(r, p.slice(0, j)) || '/'
+  const pat = fold(r, p.slice(j + 1)).split('/')[0]
+  root = fold(r, root)
+  if (root === dir || !(dir === '/' ? root.startsWith('/') : root.startsWith(dir + '/'))) return false
+  const part = root.slice(dir === '/' ? 1 : dir.length + 1).split('/')[0]
+  return globPart(pat).test(part)
+}
+
+// globPart is a path part's pattern (*, ?, [...], as Go's path.Match)
+// as a regular expression; one it can't read matches anything.
+function globPart(pat: string): RegExp {
+  let re = ''
+  for (let i = 0; i < pat.length; i++) {
+    const c = pat[i]
+    if (c === '*') re += '[^/]*'
+    else if (c === '?') re += '[^/]'
+    else if (c === '[') {
+      const end = pat.indexOf(']', i + 2)
+      if (end < 0) return /^/
+      let set = pat.slice(i + 1, end)
+      if (set.startsWith('^')) set = '^' + set.slice(1)
+      re += '[' + set.replaceAll('\\', '\\\\') + ']'
+      i = end
+    } else if (c === '\\' && i + 1 < pat.length) re += pat[++i].replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
+    else re += c.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
+  }
+  return new RegExp('^' + re + '$')
+}
+
+// A part of a command line between the separators of its top level
+// (;, newline, &&, ||, |, &): its text and the separators before and
+// after it ('' at the line's ends; a newline is ;, |& is |).
+type LinePart = { text: string; before: string; after: string }
+
+// listEnd: separator sep ends an and-or list.
+function listEnd(sep: string): boolean {
+  return sep === '' || sep === ';' || sep === '&'
+}
+
+// withDirs is dirs with more added, without repeats.
+function withDirs(dirs: string[], ...more: string[]): string[] {
+  const out = [...dirs]
+  for (const d of more) if (!out.includes(d)) out.push(d)
+  return out
+}
+
+// The commands that change a shell's folder.
+const CD_WORDS = new Set(['cd', 'pushd', 'popd'])
+
+// hasCd: some word of text's commands is cd, pushd or popd.
+function hasCd(text: string): boolean {
+  return commands(text).some(words => words.some(w => CD_WORDS.has(w)))
+}
+
+// plainCd: part is one plain cd, pushd or popd, with its arguments.
+function plainCd(part: string): { cmd: string; args: string[] } | null {
+  if (part.startsWith('(') || part.startsWith('{')) return null
+  const cmds = commands(part)
+  if (cmds.length !== 1 || cmds[0].length === 0 || !CD_WORDS.has(cmds[0][0])) return null
+  return { cmd: cmds[0][0], args: cmds[0].slice(1) }
+}
+
+// topLevel splits a command line at its top level's separators, outside
+// quotes, ( ), { }, $( ) and backticks; null for a line with a heredoc,
+// or whose quotes or brackets don't close.
+function topLevel(line: string): LinePart[] | null {
+  const s = [...line]
+  const stack: string[] = []
+  const parts: LinePart[] = []
+  let b = ''
+  let before = ''
+  const cut = (sep: string) => {
+    const t = b.trim()
+    if (t !== '') {
+      parts.push({ text: t, before, after: '' })
+      before = sep
+    } else if (before === '' || sep === ';') before = sep
+    const n = parts.length
+    if (n > 0 && parts[n - 1].after === '') parts[n - 1].after = sep
+    b = ''
+  }
+  const wordStart = (i: number) => i === 0 || ' \t\n;&|('.includes(s[i - 1])
+  const top = () => stack[stack.length - 1] ?? ''
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (top() === '"') {
+      b += c
+      if (c === '\\' && i + 1 < s.length) b += s[++i]
+      else if (c === '"') stack.pop()
+      else if (c === '$' && s[i + 1] === '(') {
+        b += s[++i]
+        stack.push('(')
+      } else if (c === '`') stack.push('`')
+      continue
+    }
+    if (top() === '`') {
+      b += c
+      if (c === '\\' && i + 1 < s.length) b += s[++i]
+      else if (c === '`') stack.pop()
+      continue
+    }
+    const next = s[i + 1] ?? ''
+    const prev = s[i - 1] ?? ''
+    if (c === '\\' && i + 1 < s.length) {
+      b += c + s[++i]
+      continue
+    }
+    if (c === "'") {
+      const j = s.indexOf("'", i + 1)
+      if (j < 0) return null
+      b += s.slice(i, j + 1).join('')
+      i = j
+      continue
+    }
+    if (c === '"' || c === '`') stack.push(c)
+    else if (c === '$' && next === '{') {
+      const j = s.indexOf('}', i + 2)
+      if (j < 0) return null
+      b += s.slice(i, j + 1).join('')
+      i = j
+      continue
+    } else if (c === '(') stack.push('(')
+    else if (c === ')') {
+      if (top() !== '(') return null
+      stack.pop()
+    } else if (c === '{' && wordStart(i) && (next === ' ' || next === '\t' || next === '\n')) stack.push('{')
+    else if (c === '}' && top() === '{' && wordStart(i)) stack.pop()
+    else if (c === '<' && next === '<' && s[i + 2] !== '<' && prev !== '<') return null
+    else if (stack.length > 0) {
+      // Inside brackets: no separator.
+    } else if (c === '#' && wordStart(i)) {
+      while (i < s.length && s[i] !== '\n') i++
+      cut(';')
+      continue
+    } else if (c === ';' || c === '\n') {
+      cut(';')
+      continue
+    } else if (c === '&' && next === '&') {
+      i++
+      cut('&&')
+      continue
+    } else if (c === '|' && next === '|') {
+      i++
+      cut('||')
+      continue
+    } else if (c === '|' && prev !== '>') {
+      if (next === '&') i++
+      cut('|')
+      continue
+    } else if (c === '&' && prev !== '>' && prev !== '<' && next !== '>') {
+      cut('&')
+      continue
+    }
+    b += c
+  }
+  if (stack.length > 0) return null
+  cut('')
+  return parts
+}
 
 // judgeNoWrite: the floor's noWrite, of a simple command, its name and
 // arguments and its words as written: a redirect into a path there, or a
 // command that writes the paths it is given naming one (cp's and the
-// like's target).
+// like's target; a folder holding one, for a remover). With r.cwd ''
+// (a cd the line made that it can't follow) a relative path could be
+// anywhere, so it is refused.
 function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): Denial | null {
   if (!r.noWrite?.length) return null
-  const refuse = (w: string): Denial | null => {
+  const roots = r.noWrite
+  const refuse = (w: string, parents: boolean): Denial | null => {
+    if (w === '' || w.startsWith('&')) return null
+    if (r.cwd === '' && !slash(w).startsWith('/') && !w.startsWith('~') && !DRIVE.test(slash(w))) {
+      return floor(deny(r, 'tm-files', `${cmd} of ${safe(w)} after a cd`))
+    }
     const p = abs(r, w)
-    return w !== '' && !w.startsWith('&') && covers(r, r.noWrite ?? [], p) ? floor(deny(r, 'tm-files', `${cmd} of ${safe(p)}`)) : null
+    const fixed = p.replace(/[*?[{].*$/, '').replace(/\/$/, '') || '/'
+    return covers(r, roots, p) || (parents && roots.some(n => under(r, n, fixed) || globReaches(r, p, n))) ? floor(deny(r, 'tm-files', `${cmd} of ${safe(p)}`)) : null
   }
   for (let i = 1; i < words.length; i++) {
     if (words[i - 1] === '>' && words[i] !== '>') {
-      const d = refuse(words[i])
+      const d = refuse(words[i], false)
       if (d) return d
     }
+  }
+  if (cmd === '>') return null
+  if (cmd === 'tm' || cmd.includes('TERMINATR_BIN')) {
+    const what = tmWritesSettings(args)
+    if (what) return floor(deny(r, 'tm-files', what))
   }
   let all = WRITERS.get(cmd)
   if (IN_PLACE.has(cmd)) all = args.some(a => isLong(a, '--in-place') || (/^-[a-zA-Z0-9]+$/.test(a) && a.includes('i')) || a.startsWith('-i')) ? true : undefined
   if (cmd === 'dd') {
     for (const a of args) {
       if (!a.startsWith('of=')) continue
-      const d = refuse(a.slice(3))
+      const d = refuse(a.slice(3), false)
+      if (d) return d
+    }
+  } else if (cmd === 'git') {
+    // git config --file F (-f F) writes F.
+    const i = args.indexOf('config')
+    for (let j = i + 1; i >= 0 && j < args.length; j++) {
+      let f = ''
+      if ((args[j] === '--file' || args[j] === '-f') && j + 1 < args.length) f = args[j + 1]
+      else if (args[j].startsWith('--file=')) f = args[j].slice('--file='.length)
+      const d = refuse(f, false)
       if (d) return d
     }
   }
   if (all === undefined) return null
+  const recursive = REMOVERS.has(cmd) || args.some(a => isLong(a, '--recursive') || isLong(a, '--archive') || (/^-[a-zA-Z0-9]+$/.test(a) && /[rRa]/.test(a.slice(1))))
   // The paths given, and the targets given with -t.
   let paths: string[] = []
   const targets: string[] = []
   const rest = unredirected(args)
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i]
-    if (a === '-t' && i + 1 < rest.length) targets.push(rest[++i])
+    if ((a === '-t' || a === '--target-directory') && i + 1 < rest.length) targets.push(rest[++i])
     else if (a.startsWith('--target-directory=')) targets.push(a.slice('--target-directory='.length))
     else if (!a.startsWith('-')) paths.push(a)
   }
@@ -543,7 +856,7 @@ function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): D
   else if (targets.length > 0) paths = targets
   else paths = paths.slice(-1)
   for (const p of paths) {
-    const d = refuse(p)
+    const d = refuse(p, recursive)
     if (d) return d
   }
   return null

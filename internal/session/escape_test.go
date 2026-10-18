@@ -1,19 +1,23 @@
 package session
 
 import (
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
 // TestEscapeMod: a call the mod says leaves the sandbox (MarkEscape)
-// makes the permission prompt it brings the user's (Info.Escape) until
-// that prompt ends; the next prompt is anyone's again, and a turn that
-// ends without one drops the mark.
+// makes a permission prompt open while it is the user's (Info.Escape),
+// until that call ends (EndEscape); another call's prompt ending doesn't
+// end it (parallel calls), and the turn's end ends every mark.
 func TestEscapeMod(t *testing.T) {
+	noGrace(t)
 	s := startMod(t, "", true, make(chan PromptResolution, 1))
 	state := func(st agent.State, reason string) {
 		t.Helper()
@@ -22,7 +26,7 @@ func TestEscapeMod(t *testing.T) {
 		}
 	}
 	state(agent.StateWorking, "")
-	s.MarkEscape()
+	s.MarkEscape("e1")
 	if s.Info().Escape {
 		t.Fatal("escape while working: no prompt yet")
 	}
@@ -30,13 +34,19 @@ func TestEscapeMod(t *testing.T) {
 	if !s.Info().Escape {
 		t.Fatal("the escape's prompt is not marked")
 	}
+	// A parallel call's prompt was open first and is answered: the
+	// escape's prompt shows next, still marked.
 	state(agent.StateWorking, "")
 	state(agent.StateBlocked, "permission")
+	if !s.Info().Escape {
+		t.Fatal("another prompt's end took the escape's mark")
+	}
+	s.EndEscape("e1")
 	if s.Info().Escape {
-		t.Fatal("the next prompt is still marked an escape")
+		t.Fatal("the escape's call ended, its mark didn't")
 	}
 	state(agent.StateWorking, "")
-	s.MarkEscape()
+	s.MarkEscape("e2")
 	state(agent.StateIdle, "")
 	state(agent.StateWorking, "")
 	state(agent.StateBlocked, "permission")
@@ -46,9 +56,12 @@ func TestEscapeMod(t *testing.T) {
 }
 
 // TestEscapeHook: without the mod, the guard's "escape" ask on a
-// PreToolUse hook marks the prompt that follows; another ask doesn't.
-// An agent whose every prompt is an escape (PromptsEscape) marks each.
+// PreToolUse hook marks that call (tool_use_id) until its PostToolUse
+// or PermissionDenied; another ask doesn't mark, and another call's end
+// doesn't unmark. An agent whose every prompt is an escape
+// (PromptsEscape) marks each.
 func TestEscapeHook(t *testing.T) {
+	noGrace(t)
 	for _, c := range []struct {
 		name    string
 		rule    string
@@ -69,8 +82,8 @@ func TestEscapeHook(t *testing.T) {
 				Logf: t.Logf,
 				Agent: &AgentConfig{
 					Agent: claudeLike(t), Home: t.TempDir(), PromptsEscape: c.prompts,
-					Guard: func(string, map[string]any) *guard.Denial {
-						if c.rule == "" {
+					Guard: func(_ string, input map[string]any) *guard.Denial {
+						if c.rule == "" || input["dangerouslyDisableSandbox"] != true {
 							return nil
 						}
 						return &guard.Denial{Rule: c.rule, Ask: true}
@@ -81,22 +94,164 @@ func TestEscapeHook(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { s.Stop(time.Second) })
-			for _, ev := range []struct {
-				name    string
-				payload map[string]any
-			}{
-				{"SessionStart", map[string]any{"source": "startup"}},
-				{"UserPromptSubmit", map[string]any{"prompt": "go"}},
-				{"PreToolUse", map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": "ls", "dangerouslyDisableSandbox": true}}},
-				{"PermissionRequest", map[string]any{"tool_name": "Bash"}},
-			} {
-				if _, err := s.Hook(ev.name, ev.payload); err != nil {
+			hook := func(ev string, payload map[string]any) {
+				t.Helper()
+				if _, err := s.Hook(ev, payload); err != nil {
 					t.Fatal(err)
 				}
 			}
+			hook("SessionStart", map[string]any{"source": "startup"})
+			hook("UserPromptSubmit", map[string]any{"prompt": "go"})
+			hook("PreToolUse", map[string]any{"tool_name": "Bash", "tool_use_id": "t1", "tool_input": map[string]any{"command": "ls", "dangerouslyDisableSandbox": true}})
+			hook("PreToolUse", map[string]any{"tool_name": "Bash", "tool_use_id": "t2", "tool_input": map[string]any{"command": "pwd"}})
+			hook("PermissionRequest", map[string]any{"tool_name": "Bash", "tool_use_id": "t2"})
+			hook("PostToolUse", map[string]any{"tool_name": "Bash", "tool_use_id": "t2"})
+			hook("PermissionRequest", map[string]any{"tool_name": "Bash", "tool_use_id": "t1"})
 			if info := s.Info(); info.State != "blocked" || info.Escape != c.want {
 				t.Fatalf("state %s/%s, escape %v; want escape %v", info.State, info.Reason, info.Escape, c.want)
 			}
+			if c.prompts {
+				return
+			}
+			hook("PostToolUse", map[string]any{"tool_name": "Bash", "tool_use_id": "t1"})
+			hook("PreToolUse", map[string]any{"tool_name": "Write", "tool_use_id": "t3", "tool_input": map[string]any{"file_path": "x"}})
+			hook("PermissionRequest", map[string]any{"tool_name": "Write", "tool_use_id": "t3"})
+			if info := s.Info(); info.State != "blocked" || info.Escape {
+				t.Fatalf("after the escape's call ended: %s/%s, escape %v", info.State, info.Reason, info.Escape)
+			}
 		})
 	}
+}
+
+// TestEscapeScreenHolds: hooks can come from any process in the agent's
+// tree, so a mark ends only when the screen shows no permission dialog:
+// with the escape's dialog on screen, a forged PostToolUse, Stop and a
+// new PermissionRequest leave it marked.
+func TestEscapeScreenHolds(t *testing.T) {
+	dialog := `printf 'Bash command\n\n  ls\n\nDo you want to proceed?\n\342\235\257 1. Yes\n  2. No\n\nEsc to cancel\n'; exec cat`
+	s, err := Start(Config{
+		ID: "s-esc", Role: proto.RoleThread, Project: "p",
+		Argv: []string{"/bin/sh", "-c", dialog},
+		Cwd:  t.TempDir(),
+		Env:  []string{"PATH=/usr/bin:/bin", "TERM=xterm-256color", "LANG=C.UTF-8"},
+		Cols: 80, Rows: 24,
+		Logf: t.Logf,
+		Agent: &AgentConfig{
+			Agent: claudeLike(t), Home: t.TempDir(),
+			Guard: func(_ string, input map[string]any) *guard.Denial {
+				if input["dangerouslyDisableSandbox"] != true {
+					return nil
+				}
+				return &guard.Denial{Rule: guard.RuleEscape, Ask: true}
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Stop(time.Second) })
+	hook := func(ev string, payload map[string]any) {
+		t.Helper()
+		if _, err := s.Hook(ev, payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hook("SessionStart", map[string]any{"source": "startup"})
+	hook("UserPromptSubmit", map[string]any{"prompt": "go"})
+	hook("PreToolUse", map[string]any{"tool_name": "Bash", "tool_use_id": "t1", "tool_input": map[string]any{"command": "ls", "dangerouslyDisableSandbox": true}})
+	hook("PermissionRequest", map[string]any{"tool_name": "Bash", "tool_use_id": "t1"})
+	testwait.Eventually(t, "the dialog on screen", func() bool {
+		e, _ := s.Explain()
+		return slices.Contains(e.Matches, "blocked-permission-dialog")
+	})
+	if !s.Info().Escape {
+		t.Fatal("the escape's dialog is not marked")
+	}
+	hook("PostToolUse", map[string]any{"tool_name": "Bash", "tool_use_id": "t1"})
+	hook("Stop", map[string]any{})
+	hook("UserPromptSubmit", map[string]any{"prompt": "x"})
+	hook("PreToolUse", map[string]any{"tool_name": "Bash", "tool_use_id": "t9", "tool_input": map[string]any{"command": "pwd"}})
+	hook("PermissionRequest", map[string]any{"tool_name": "Bash", "tool_use_id": "t9"})
+	time.Sleep(300 * time.Millisecond)
+	if info := s.Info(); !info.Escape {
+		t.Fatalf("forged hooks ended the mark while its dialog shows: %s/%s", info.State, info.Reason)
+	}
+	if _, why, _ := s.PromptNow("hi", false); why != "" && why != HeldEscape && !strings.HasPrefix(why, "the agent is") {
+		t.Errorf("PromptNow while an escape is open: %q", why)
+	}
+}
+
+// noGrace lets an ended mark go as soon as no dialog shows.
+func noGrace(t *testing.T) {
+	old := escapeGrace
+	escapeGrace = 0
+	t.Cleanup(func() { escapeGrace = old })
+}
+
+// startDialog runs a session whose screen draws, after delay, a
+// permission dialog with text in it, with a guard that asks about
+// escapes.
+func startDialog(t *testing.T, delay, text string) *Session {
+	t.Helper()
+	script := `sleep ` + delay + `; printf 'Bash command\n\n  ls\n\n` + text + `\n\nDo you want to proceed?\n\342\235\257 1. Yes\n  2. No\n\nEsc to cancel\n'; exec cat`
+	s, err := Start(Config{
+		ID: "s-esc", Role: proto.RoleThread, Project: "p",
+		Argv: []string{"/bin/sh", "-c", script},
+		Cwd:  t.TempDir(),
+		Env:  []string{"PATH=/usr/bin:/bin", "TERM=xterm-256color", "LANG=C.UTF-8"},
+		Cols: 100, Rows: 24,
+		Logf: t.Logf,
+		Agent: &AgentConfig{
+			Agent: claudeLike(t), Home: t.TempDir(),
+			Guard: func(_ string, input map[string]any) *guard.Denial {
+				if input["dangerouslyDisableSandbox"] != true {
+					return nil
+				}
+				return &guard.Denial{Rule: guard.RuleEscape, Ask: true}
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Stop(time.Second) })
+	return s
+}
+
+// TestEscapeForgedStopFirst: a forged Stop that comes after the escape's
+// PreToolUse but before its dialog draws doesn't end the mark: it stays
+// for escapeGrace, the dialog then holds it.
+func TestEscapeForgedStopFirst(t *testing.T) {
+	s := startDialog(t, "1", "")
+	hook := func(ev string, payload map[string]any) {
+		t.Helper()
+		if _, err := s.Hook(ev, payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hook("SessionStart", map[string]any{"source": "startup"})
+	hook("UserPromptSubmit", map[string]any{"prompt": "go"})
+	hook("PreToolUse", map[string]any{"tool_name": "Bash", "tool_use_id": "t1", "tool_input": map[string]any{"command": "ls", "dangerouslyDisableSandbox": true}})
+	hook("Stop", map[string]any{})
+	hook("PostToolUse", map[string]any{"tool_name": "Bash", "tool_use_id": "t1"})
+	testwait.Eventually(t, "the dialog on screen", func() bool {
+		e, _ := s.Explain()
+		return slices.Contains(e.Matches, "blocked-permission-dialog")
+	})
+	hook("UserPromptSubmit", map[string]any{"prompt": "x"})
+	hook("PermissionRequest", map[string]any{"tool_name": "Bash", "tool_use_id": "t1"})
+	time.Sleep(300 * time.Millisecond)
+	if info := s.Info(); !info.Escape {
+		t.Fatalf("a Stop forged before the dialog drew ended the mark: %s/%s", info.State, info.Reason)
+	}
+}
+
+// TestEscapeDialogUnmarked: a dialog that says it runs the command
+// outside the sandbox ([guard] escape_rule) is an escape with no mark.
+func TestEscapeDialogUnmarked(t *testing.T) {
+	s := startDialog(t, "0", "Run outside of the sandbox")
+	if _, err := s.Hook("SessionStart", map[string]any{"source": "startup"}); err != nil {
+		t.Fatal(err)
+	}
+	testwait.Eventually(t, "the escape's dialog marked", func() bool { return s.Info().Escape })
 }

@@ -1051,6 +1051,7 @@ func TestManifestGuard(t *testing.T) {
 		{`secrets = ["../x"]`, false},
 		{`writable = ["$A_HOME/../x"]`, false},
 		{`secrets = [""]`, false},
+		{`escape_rule = "nope"`, false},
 	} {
 		if _, err := ParseManifest([]byte(base + c.guard + "\n")); (err == nil) != c.ok {
 			t.Errorf("%s: err = %v, want ok %v", c.guard, err, c.ok)

@@ -282,7 +282,7 @@ allow = ["WebFetch(domain:playwright.dev)"]
 			t.Errorf("guard row note %q", r.Note)
 		}
 	}
-	for _, k := range []string{proto.AccessExcluded, proto.AccessHost, proto.AccessGuide, proto.AccessLocalPorts, proto.AccessAllow, proto.AccessGuardMode, proto.AccessGuardRuleOff} {
+	for _, k := range []string{proto.AccessExcluded, proto.AccessHost, proto.AccessAllow, proto.AccessGuardMode, proto.AccessGuardRuleOff} {
 		if !seen[k] {
 			t.Errorf("no %s rule", k)
 		}

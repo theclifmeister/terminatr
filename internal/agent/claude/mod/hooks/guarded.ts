@@ -11,8 +11,11 @@
 // mode's classifier, with the guard's reason; one it would ask about
 // or refuse keeps Claude's answer. An ask is not reported, but for a
 // call that asks to run outside the sandbox (rule "escape"): the mod
-// tells the server (POST /v1/escape) before Claude's prompt opens, so
-// that the prompt is the user's to answer, never the coordinator's.
+// tells the server (POST /v1/escape, with an id of its own for the
+// call) before Claude's prompt opens, so that the prompt is the user's
+// to answer, never the coordinator's, and again once the call ended. A
+// call the server can't be told of is refused: its prompt would open
+// unmarked.
 //
 // The rules come from the server (GET /v1/rules), fetched at the first
 // call after a load and again once they are a second old, so a change of
@@ -43,9 +46,14 @@ const RULES_TTL_MS = 1_000
 const BACKOFF_MS = 10_000
 const STALE_MS = 60_000
 
+// UNMARKED is what an escape the server couldn't be told of is refused
+// with.
+const UNMARKED = "terminatr guard: this command asks to run outside the sandbox, and tm couldn't make sure that only the user answers it, so it was refused. Try again; if it keeps failing, run it in the sandbox or say so."
+
 // UNPLACED is what a write the server couldn't place is refused with.
 const UNPLACED = 'terminatr guard: where this write lands could not be checked (the server did not answer), so it was refused. Try again; if it keeps failing, say so.'
 
+let escapes = 0
 let cached: { at: number; ttl: number; rules: Promise<Rules> } | null = null
 let lastGood: { at: number; rules: Rules } | null = null
 
@@ -57,7 +65,15 @@ export function guard(on: On) {
     const r = await placed($, await rulesNow($), e.tool, input)
     if (!r) return { deny: UNPLACED }
     const d = judge(r, e.tool, input)
-    if (d?.ask && d.rule === RULE_ESCAPE) await reportEscape($)
+    if (d?.ask && d.rule === RULE_ESCAPE) {
+      const id = `esc-${await $.clock.now()}-${++escapes}`
+      if (!(await reportEscape($, id, false))) return { deny: UNMARKED }
+      try {
+        return await next(e)
+      } finally {
+        await reportEscape($, id, true)
+      }
+    }
     if (!d || d.ask) return next(e)
     void reportDenial($, e.tool, d)
     return { deny: d.message }
@@ -157,17 +173,22 @@ async function reportDenial($: EngineInterface, tool: string, d: Denial) {
   }
 }
 
-// reportEscape tells the server the call asks to leave the sandbox. Not
-// knowing makes the prompt look like any other, so it is awaited.
-async function reportEscape($: EngineInterface) {
-  const socket = (await $.env.get('TERMINATR_MOD_SOCKET')) ?? ''
-  if (!socket) return
+// reportEscape tells the server call id asks to leave the sandbox, or
+// with done that it ended; whether the server took it.
+async function reportEscape($: EngineInterface, id: string, done: boolean): Promise<boolean> {
   try {
-    const r = await within($.http.fetch(socketURL('/v1/escape'), postInit(socket, '{}')), $.clock.sleep(FETCH_MS))
+    const socket = (await $.env.get('TERMINATR_MOD_SOCKET')) ?? ''
+    if (!socket) {
+      log($, 'terminatr: guard escape: no mod socket')
+      return false
+    }
+    const r = await within($.http.fetch(socketURL('/v1/escape'), postInit(socket, JSON.stringify({ id, done }))), $.clock.sleep(FETCH_MS))
     if (!r) log($, timedOut('guard escape'))
     else if (!r.ok) log($, refused('guard escape', r.status, r.text))
+    return !!r?.ok
   } catch (err) {
     log($, failed('guard escape', err))
+    return false
   }
 }
 

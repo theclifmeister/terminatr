@@ -74,7 +74,7 @@ func (e *Env) threadApprove(p *project.Project, id string, choice int) error {
 	if l := strings.ToLower(option); strings.Contains(l, "don't ask again") || strings.Contains(l, "always") || strings.Contains(l, "don’t ask again") {
 		return &tasks.Error{Code: "always-allow", Msg: fmt.Sprintf("option %d (%s) allows more than once; only the user may choose it", choice, option)}
 	}
-	if err := e.call(proto.MethodSessionKeys, proto.SessionKeysParams{ID: r.Session, Data: strconv.Itoa(choice)}, nil); err != nil {
+	if err := e.call(proto.MethodSessionKeys, proto.SessionKeysParams{ID: r.Session, Data: strconv.Itoa(choice), Relay: e.relay()}, nil); err != nil {
 		return err
 	}
 	if err := p.Journal(e.Caller, "thread.approve", id, textsafe.Line(question+" → "+option, 160)); err != nil {
@@ -82,6 +82,15 @@ func (e *Env) threadApprove(p *project.Project, id string, choice int) error {
 	}
 	fmt.Fprintf(e.Stdout, "approved %s: %s\n", id, shown(option))
 	return nil
+}
+
+// relay is the role the keys the command sends answer for: the
+// coordinator's, which the server refuses for an escape's prompt.
+func (e *Env) relay() string {
+	if e.Caller.Kind == caller.Coordinator {
+		return proto.RoleCoordinator
+	}
+	return ""
 }
 
 // answerPause lets the agent redraw between the keys of an answer: a
@@ -179,7 +188,7 @@ func (e *Env) answerByMod(p *project.Project, id, session string, q *proto.Quest
 		return err
 	}
 	var res proto.SessionAnswerResult
-	err = e.call(proto.MethodSessionAnswer, proto.SessionAnswerParams{ID: session, Index: k - 1, Answer: answer}, &res)
+	err = e.call(proto.MethodSessionAnswer, proto.SessionAnswerParams{ID: session, Index: k - 1, Answer: answer, Relay: e.relay()}, &res)
 	var perr *proto.Error
 	if errors.As(err, &perr) && perr.Code == proto.ErrNoQuestion {
 		return &tasks.Error{Code: "no-menu", Msg: fmt.Sprintf("thread %s's menu has closed (answered in its pane?); look with tm thread read %s", id, id)}
@@ -303,7 +312,7 @@ func (e *Env) answerByKeys(p *project.Project, id string, r *thread.Record, info
 		return &tasks.Error{Code: "needs-text", Msg: fmt.Sprintf("option %d (%s) takes the user's words: add --text", choice, option)}
 	}
 	keys := func(data string) error {
-		return e.call(proto.MethodSessionKeys, proto.SessionKeysParams{ID: r.Session, Data: data}, nil)
+		return e.call(proto.MethodSessionKeys, proto.SessionKeysParams{ID: r.Session, Data: data, Relay: e.relay()}, nil)
 	}
 	if isText && ans.TextFocus != "" {
 		// The number would submit the option without the words.

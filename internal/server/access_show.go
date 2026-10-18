@@ -340,7 +340,8 @@ func explainCommand(set proto.AccessSet, cmd string) proto.AccessExplainResult {
 // guardVerdict is the guard's verdict on command line cmd under rules
 // g, by the agent's first shell tool, and why.
 func guardVerdict(g guard.Rules, cmd string) (string, string) {
-	if !g.On {
+	// The guard off still asks about escapes, with no floor.
+	if !g.On || g.Floor == nil {
 		return "off", "the guard is off"
 	}
 	tool, field := "", ""

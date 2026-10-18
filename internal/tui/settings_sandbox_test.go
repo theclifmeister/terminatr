@@ -231,7 +231,7 @@ func TestAccessTab(t *testing.T) {
 		out += screen(m)
 	}
 	for _, want := range []string{"5 access", "Prefer rules inside the sandbox", "a last resort", "what applies on macOS",
-		"Prompts and escapes", "Escapes", "ask you or auto mode", "Yolo mode", "Coordinator approves",
+		"Prompts and escapes", "Escapes", "ask you", "Yolo mode", "Coordinator approves",
 		"Inside the sandbox", "Network hosts", "Local ports", "Guidance for threads",
 		"Outside the sandbox", "Excluded commands", "Permission rules", "Allow rules",
 		"Guard", "Guard mode", "Guard rules", "Guard allowances", "Guard refusals", "Secrets", "Secret environment",

@@ -59,8 +59,12 @@ func TestGuardRulesFor(t *testing.T) {
 		t.Errorf("merge = thread, credentials off: %+v", g)
 	}
 	writeConfig(t, "[projects."+p.Slug+"]\nguard = false\n")
-	if g := s.guardRulesFor(thread); g.On || g.Rules != nil {
+	// Off: no rule and no floor; a thread's escapes are still asked.
+	if g := s.guardRulesFor(thread); g.Rules != nil || g.Floor != nil || !g.AskEscapes {
 		t.Errorf("guard = false: %+v", g)
+	}
+	if g := s.guardRulesFor(coord); g.On {
+		t.Errorf("guard = false, coordinator: %+v", g)
 	}
 	// A broken file leaves the guard on.
 	writeConfig(t, "[projects."+p.Slug+"]\nguard = \"maybe\"\n")
@@ -103,6 +107,19 @@ func TestGuardRulesFloor(t *testing.T) {
 		!slices.Equal(g.Floor, []string{"force-push", "merge"}) || !slices.Contains(g.NoWrite, p.Dir) || len(g.Own) == 0 {
 		t.Fatalf("yolo %+v", g)
 	}
+	// The guard off: no rule and no floor, but escapes are still asked.
+	writeConfig(t, "[projects."+p.Slug+"]\nguard = false\n")
+	if off := s.guardRulesFor(thread); !off.On || !off.AskEscapes || off.Rules != nil || off.Floor != nil || off.NoWrite != nil ||
+		off.Judge("Bash", map[string]any{"command": "ls", "dangerouslyDisableSandbox": true}) == nil ||
+		off.Judge("Bash", map[string]any{"command": "git push -f origin main"}) != nil {
+		t.Fatalf("guard off, escapes on: %+v", off)
+	} else if v, _ := guardVerdict(off, "git push -f origin main"); v != "off" {
+		t.Errorf("guard off verdict %q", v)
+	}
+	if off := s.guardRulesFor(closed); off.On {
+		t.Errorf("guard off, escapes off: %+v", off)
+	}
+	writeConfig(t, "")
 	bash := func(c string) *guard.Denial { return g.Judge("Bash", map[string]any{"command": c}) }
 	if d := bash("git push origin main"); d != nil {
 		t.Errorf("yolo push to main (not the floor): %+v", d)
@@ -821,7 +838,7 @@ message = "prod secrets\nstay with the human."
 		t.Fatalf("core rules off %+v", g)
 	}
 	config("[projects." + p.Slug + "]\nguard = false\n[mods.infra]\nenabled = true\n")
-	if g := s.guardRulesFor(thread); g.On || g.Mods != nil {
+	if g := s.guardRulesFor(thread); g.Rules != nil || g.Mods != nil || g.Floor != nil {
 		t.Fatalf("guard off %+v", g)
 	}
 	config("[mods.infra]\nenabled = true\nprojects = [\"other\"]\n")
