@@ -7,17 +7,17 @@
                                    │          ○ 2 Fix it
                                    │        report new · for the coordinator
                                    │  T2 Write the docs             ○ idle      4%     <duration>  t-0002
-                                   │  tasks: 0 need you · 2 in motion · 0 on deck
-                                   │ ╭─ terminatr dev ─────────────────────────────╮────────────────────────────────────
-                                   │ │ back to the last place                    ; │
-                                   │ │ open the selected row                 enter │───────────────────────────────────
-                                   │ │ adopt as a thread                         T │
-                                   │ │ activate / deactivate the project     space │t's state is in its files, so
-                                   │ │ fold / unfold the mod card                z │
-                                   │ │ new project                               n │───────────────────────────────────
-                                   │ │ project popup                             a │
+                                   │ ╭─ terminatr dev ─────────────────────────────╮
+                                   │ │ back to the last place                    ; │────────────────────────────────────
+                                   │ │ open the selected row                 enter │
+                                   │ │ adopt as a thread                         T │───────────────────────────────────
+                                   │ │ activate / deactivate the project     space │
+                                   │ │ fold / unfold the mod card                z │t's state is in its files, so
+                                   │ │ new project                               n │
+                                   │ │ project popup                             a │───────────────────────────────────
                                    │ │ tasks                                     t │
                                    │ │ inbox                                     i │
+                                   │ │ effective access                          e │
                                    │ │ next project                              ] │
                                    │ │ previous project                          [ │
                                    │ │ smaller list                              < │
