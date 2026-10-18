@@ -14,7 +14,7 @@ import (
 )
 
 // The secret environment of threads (docs/SPEC.md §8.6, Secret
-// environment), beside the guard's rows: the variables a thread gets
+// environment), the Access tab's Secrets row: the variables a thread gets
 // when it starts, by name and source. The console and the server only
 // ever handle names and sources: a value is got by the server, at a
 // thread's start or a test, and never comes back.

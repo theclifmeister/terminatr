@@ -286,7 +286,7 @@ type SessionListResult struct {
 	Latest  string `json:"latest,omitempty"`
 	Upgrade string `json:"upgrade,omitempty"`
 	// OS is the server's platform (runtime.GOOS), where its threads run:
-	// the Sandbox tab shows the settings that apply there.
+	// the Access tab shows the settings that apply there.
 	OS string `json:"os,omitempty"`
 	// Mods are the mods' columns, cells and status segments (since
 	// protocol 13); nil when no mod publishes any.

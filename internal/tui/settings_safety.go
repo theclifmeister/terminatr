@@ -12,16 +12,19 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
-// safetySettings are slug's settings, or with slug "" the all-projects
-// ones: the same rows, written to the project's table or to [defaults].
+// safetySettings are slug's workflow settings, or with slug "" the
+// all-projects ones: the same rows, written to the project's table or
+// to [defaults]. What threads may do is the Access tab's
+// (accessSettings).
 func safetySettings(slug string) []setting {
 	sr := newSafetyRows(slug)
-	rows := sr.scope(append(append(sr.sharedRows(), sr.historyRow()), sr.guardRows()...))
+	rows := sr.scope(append(sr.sharedRows(), sr.historyRow()))
 	if sr.all {
 		// The cap across every project is all projects' only: no
 		// project sets its own (config.DefaultsOnly). Under Parallel
 		// threads.
-		return slices.Insert(rows, 4, sr.globalRow())
+		at := slices.IndexFunc(rows, func(r setting) bool { return r.label == "Parallel threads" }) + 1
+		return slices.Insert(rows, at, sr.globalRow())
 	}
 	return append(rows, sr.projectOnlyRows()...)
 }
@@ -160,8 +163,8 @@ func (sr safetyRows) scope(rows []setting) []setting {
 	return rows
 }
 
-// sharedRows are the settings a project and all projects both have, but
-// Keep history (historyRow), in the popup's order.
+// sharedRows are the workflow settings a project and all projects both
+// have, but Keep history (historyRow), in the popup's order.
 func (sr safetyRows) sharedRows() []setting {
 	rc := sr.toggle("coordinator_remote_control")
 	rc.note = func(m *dash) []string {
@@ -172,8 +175,6 @@ func (sr safetyRows) sharedRows() []setting {
 	}
 	return []setting{
 		sr.startRow(),
-		sr.yoloRow(),
-		sr.toggle("coordinator_approves"),
 		sr.parallelRow(),
 		sr.autoCloseRow(),
 		sr.completeRow(),

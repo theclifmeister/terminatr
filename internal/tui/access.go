@@ -17,23 +17,41 @@ import (
 // rule config.toml added or removed since marked RESTART TO APPLY; the
 // agent's own settings files' rules are listed after, shown only.
 // Read-only: e on the dashboard (a thread's row, or the project) and on
-// a project's Sandbox tab opens it.
+// a project's Access tab opens it, and the tab's Built in row the same
+// for tm's own rules only.
 
 // accessView shows one result; ↑ ↓ move through its rules.
 type accessView struct {
 	res proto.AccessShowResult
 	sel int
+	// from is the one source shown, "" for all.
+	from string
 }
 
 // showAccess opens the effective access of thread id of project slug
 // (id "" for a new thread of it).
-func (m *dash) showAccess(slug, id string) tea.Cmd {
+func (m *dash) showAccess(slug, id string) tea.Cmd { return m.openAccess(slug, id, "") }
+
+// showAccessFrom opens what a new thread of project slug gets from
+// source only (proto.AccessFromTM: tm's own rules).
+func (m *dash) showAccessFrom(slug, source string) tea.Cmd { return m.openAccess(slug, "", source) }
+
+func (m *dash) openAccess(slug, id, source string) tea.Cmd {
 	res, err := m.src.AccessShow(slug, id)
 	if err != nil {
 		m.fail(err)
 		return nil
 	}
-	m.push(&accessView{res: res})
+	if source != "" {
+		var rules []proto.AccessRule
+		for _, r := range res.Rules {
+			if r.Source == source {
+				rules = append(rules, r)
+			}
+		}
+		res.Rules = rules
+	}
+	m.push(&accessView{res: res, from: source})
 	return nil
 }
 
@@ -82,6 +100,8 @@ func (v *accessView) render(m *dash) string {
 	res := v.res
 	var head []string
 	switch {
+	case v.from == proto.AccessFromTM:
+		head = faintLines("What tm gives every thread of "+res.Project+", whatever its settings: read-only. e on the Access tab lists every rule.", w)
 	case res.Thread != "" && !res.Recorded:
 		head = faintLines(res.Thread+" has no launch record (it launched before tm kept one, or hasn't launched): this is what it would get now.", w)
 	case res.Thread != "":
@@ -138,5 +158,9 @@ func (v *accessView) render(m *dash) string {
 	case res.Changes > 1:
 		lines = append(lines, "", th().Warn.Render(fmt.Sprintf("%d changes since launch: tm thread restart %s applies them", res.Changes, res.Thread)))
 	}
-	return m.popup(box{title: accessViewTitle(res), head: append(head, ""), body: lines, sel: sel, keys: "↑ ↓ move · esc back"})
+	title := accessViewTitle(res)
+	if v.from == proto.AccessFromTM {
+		title = "Built in (tm) · " + res.Project
+	}
+	return m.popup(box{title: title, head: append(head, ""), body: lines, sel: sel, keys: "↑ ↓ move · esc back"})
 }

@@ -323,15 +323,15 @@ func TestPopupClicks(t *testing.T) {
 	if c := tasksCursor(m, src); c != "T2" {
 		t.Fatalf("click on a task selected %q", c)
 	}
-	clickOn(t, m, "4 settings")
+	clickOn(t, m, "5 access")
 	// A click selects a setting; a second click changes it.
 	clickOn(t, m, "Coordinator approves")
-	if pv.settings.sel != 2 || len(src.settings) != 0 {
-		t.Fatalf("first click on a setting: sel %d, settings %v", pv.settings.sel, src.settings)
+	if pv.access.sel != 2 || len(src.settings) != 0 {
+		t.Fatalf("first click on a setting: sel %d, settings %v", pv.access.sel, src.settings)
 	}
 	clickOn(t, m, "Coordinator approves")
-	if pv.settings.sel != 2 || len(src.settings) != 1 || !strings.HasPrefix(src.settings[0], "projects.alpha.coordinator_approves=") {
-		t.Fatalf("click on a setting: sel %d, settings %v", pv.settings.sel, src.settings)
+	if pv.access.sel != 2 || len(src.settings) != 1 || !strings.HasPrefix(src.settings[0], "projects.alpha.coordinator_approves=") {
+		t.Fatalf("click on a setting: sel %d, settings %v", pv.access.sel, src.settings)
 	}
 	clickOn(t, m, "6 keys")
 	mouseAt(t, m, tea.MouseWheelDown, m.sideW()+10, 10)

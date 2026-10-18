@@ -39,7 +39,7 @@ const (
 	tabInbox
 	tabTasks
 	tabSettings
-	tabSandbox
+	tabAccess
 	tabKeys
 	tabMemory
 	tabLibrary
@@ -47,7 +47,7 @@ const (
 	tabCount
 )
 
-var tabNames = [tabCount]string{"overview", "inbox", "tasks", "settings", "sandbox", "keys", "memory", "library", "messages"}
+var tabNames = [tabCount]string{"overview", "inbox", "tasks", "settings", "access", "keys", "memory", "library", "messages"}
 
 type projectView struct {
 	slug string
@@ -63,8 +63,8 @@ type projectView struct {
 	top, shown, nudge [tabCount]int
 	board             *tasks.Board
 	reviews           map[int]Review // the tasks in review, by id
-	// settings and sandbox are the Settings and Sandbox tabs' rows.
-	settings, sandbox settingsList
+	// settings and access are the Settings and Access tabs' rows.
+	settings, access settingsList
 	// library is every thread's library files, newest first (the
 	// Library tab), libOK once loaded; libErr is why it didn't.
 	library []thread.LibFile
@@ -87,10 +87,10 @@ func (m *dash) projectPopup(string) tea.Cmd {
 }
 
 // newProjectView is slug's popup on its first tab, its settings rows
-// made: the Sandbox tab's for the platform the server is on.
+// made: the Access tab's for the platform the server is on.
 func (m *dash) newProjectView(slug string) *projectView {
 	return &projectView{slug: slug, settings: settingsList{rows: m.projectRows(slug)},
-		sandbox: settingsList{rows: sandboxSettings(slug, m.serverOS())}}
+		access: settingsList{rows: accessSettings(slug, m.serverOS())}}
 }
 
 // list is the open tab's settings list, nil for a tab without one.
@@ -98,8 +98,8 @@ func (pv *projectView) list() *settingsList {
 	switch pv.tab {
 	case tabSettings:
 		return &pv.settings
-	case tabSandbox:
-		return &pv.sandbox
+	case tabAccess:
+		return &pv.access
 	}
 	return nil
 }
@@ -192,7 +192,7 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	}
 	s := k.String()
 	d := scrollKeys[s]
-	if pv.tab == tabSandbox && s == "e" {
+	if pv.tab == tabAccess && s == "e" {
 		return m.showAccess(pv.slug, "")
 	}
 	if l := pv.list(); l != nil {
@@ -378,11 +378,11 @@ func (pv *projectView) box(m *dash) box {
 	case tabTasks, tabMemory:
 		// A built-in mod draws this tab (modTab): it isn't running.
 		body = pv.modOffLines(m, w)
-	case tabSettings, tabSandbox:
+	case tabSettings, tabAccess:
 		l := pv.list()
 		body, sel, hits = l.lines(m, w)
-		if pv.tab == tabSandbox {
-			head := append(sandboxHead(m, w), "")
+		if pv.tab == tabAccess {
+			head := append(accessHead(m, w), "")
 			body = append(head, body...)
 			if sel >= 0 {
 				sel += len(head)
@@ -392,11 +392,7 @@ func (pv *projectView) box(m *dash) box {
 				hits[i] = noHit
 			}
 		}
-		keys = "enter change · + - number · ↑ ↓ move · " + keys
-		if l.sel < len(l.rows) && l.rows[l.sel].from != nil && l.rows[l.sel].from(m) == "" {
-			// The project sets it itself: x follows all projects again.
-			keys = "enter change · + - number · x follow all projects · ↑ ↓ move · esc close"
-		}
+		keys = listKeys(m, l, pv.tab == tabAccess)
 	case tabKeys:
 		// The same list as the help.
 		body = keyLines(w, m.commandHelp())
@@ -424,6 +420,30 @@ func (pv *projectView) box(m *dash) box {
 	b := box{title: pv.slug, head: head, body: body, sel: -1, hits: all, keys: keys}
 	b.scroll = pv.scroll(m.boxRows(b)-len(head), sel, len(body))
 	return b
+}
+
+// listKeys are the Settings or Access tab's (access) keys for its
+// selected row: + and - on a number, x on a setting the project sets
+// itself (it follows all projects again), and e for the effective
+// access on the Access tab.
+func listKeys(m *dash, l *settingsList, access bool) string {
+	keys := []string{"enter change"}
+	if l.sel < len(l.rows) {
+		r := l.rows[l.sel]
+		if r.change == nil {
+			keys = nil
+		}
+		if r.adjust != nil {
+			keys = append(keys, "+ - number")
+		}
+		if r.from != nil && r.from(m) == "" {
+			keys = append(keys, "x follow all projects")
+		}
+	}
+	if access {
+		keys = append(keys, "e effective access")
+	}
+	return strings.Join(append(keys, "← → tabs", "esc close"), " · ")
 }
 
 // scroll is the open tab's first content line shown, rows at a time of

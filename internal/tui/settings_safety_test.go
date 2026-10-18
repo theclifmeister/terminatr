@@ -7,9 +7,10 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 )
 
-// TestSafetyRowKeys: each safety row carries its own keys and value
-// words (what scope reads, once zipped by position), and together they
-// cover every setting the popups write.
+// TestSafetyRowKeys: each safety row, on the Settings and the Access
+// tab, carries its own keys and value words (what scope reads, once
+// zipped by position), and together they cover every setting the popups
+// write.
 func TestSafetyRowKeys(t *testing.T) {
 	want := map[string][]string{
 		"Start threads": {"start_threads"}, "Yolo mode": {"yolo"}, "Coordinator approves": {"coordinator_approves"},
@@ -18,15 +19,15 @@ func TestSafetyRowKeys(t *testing.T) {
 		"Auto-clear coordinator": {"auto_clear"}, "Coordinator may merge": {"coordinator_merges"}, "Merge method": {"merge_method"}, "Keep my checkout current": {"fast_forward_checkout"},
 		"Thread agent": {"thread_agent"}, "Coordinator agent": {"coordinator_agent"}, "Thread models": {"models"},
 		"Coordinator model": {"coordinator_model"}, "Branch names": {"branch_name"}, "Keep history": config.ArchiveKeys,
-		"Guard": {"guard"}, "Guard mode": {"guard_mode"}, "Guard rules": {"guard_off"},
+		"Guard": {"guard"}, "Guard mode": {"guard_mode"}, "Guard rules": {"guard_off"}, "Escapes": {"sandbox_escapes"},
 	}
 	for _, slug := range []string{"demo", ""} {
-		rows := safetySettings(slug)
+		rows := append(safetySettings(slug), accessSettings(slug, config.OSMac)...)
 		// auto_resolve is auto_close's older form; the popups leave
-		// pr_poll_seconds and sandbox_escapes to the file.
+		// pr_poll_seconds to the file.
 		// Guard allowances add to all projects' rather than follow
 		// them: its list writes guard_allow (settings_guard.go).
-		covered := map[string]bool{"auto_resolve": true, "pr_poll_seconds": true, "sandbox_escapes": true, "guard_allow": true}
+		covered := map[string]bool{"auto_resolve": true, "pr_poll_seconds": true, "guard_allow": true}
 		for _, r := range rows {
 			if r.keys == nil {
 				continue
