@@ -225,7 +225,8 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 // What git runs or reads as configuration (hooks, config, info, the
 // own git dir's config.worktree and commondir) and the other worktrees'
 // git dirs are never written: the human's git and the server use them
-// outside any sandbox. They are named NoWrite so
+// outside any sandbox. Nor, from a linked worktree, the main checkout's
+// HEAD and index. They are named NoWrite so
 // that a broader grant (the main checkout as cwd, a user's own rule)
 // doesn't open them either. A worktree added later is in no grant.
 func threadGitAccess(common, own string) agent.Access {
@@ -242,6 +243,9 @@ func threadGitAccess(common, own string) agent.Access {
 		// git read configuration or another common dir from it.
 		a.Write = append(a.Write, own)
 		a.NoWriteFiles = append(a.NoWriteFiles, ownConfig(own)...)
+		// The main checkout's HEAD and index are the human's, not a
+		// linked worktree's git.
+		a.NoWriteFiles = append(a.NoWriteFiles, filepath.Join(common, "HEAD"), filepath.Join(common, "index"))
 	}
 	if es, err := os.ReadDir(wts); err == nil {
 		for _, e := range es {

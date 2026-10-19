@@ -603,6 +603,11 @@ func TestAccessThreadGitDirs(t *testing.T) {
 			t.Errorf("worktree: its own %s not in no-write files %q", n, a.NoWriteFiles)
 		}
 	}
+	for _, n := range []string{"HEAD", "index"} {
+		if !slices.Contains(a.NoWriteFiles, filepath.Join(common, n)) {
+			t.Errorf("worktree: the main checkout's %s not in no-write files %q", n, a.NoWriteFiles)
+		}
+	}
 	if slices.Contains(a.NoWrite, filepath.Join(common, "worktrees", "wt")) {
 		t.Errorf("worktree: its own git dir in no-write %q", a.NoWrite)
 	}
@@ -622,6 +627,11 @@ func TestAccessThreadGitDirs(t *testing.T) {
 	}
 	if !slices.Contains(m.NoWrite, filepath.Join(common, "modules")) {
 		t.Errorf("main checkout: modules not in no-write %q", m.NoWrite)
+	}
+	for _, n := range []string{"HEAD", "index"} {
+		if slices.Contains(m.NoWriteFiles, filepath.Join(common, n)) {
+			t.Errorf("main checkout: its own %s in no-write files %q", n, m.NoWriteFiles)
+		}
 	}
 	// Nothing written is the git dir or holds what git runs or reads
 	// as configuration.
