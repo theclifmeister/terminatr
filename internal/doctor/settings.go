@@ -14,7 +14,8 @@ import (
 // Settings checks config.toml for keys tm doesn't know under [keys] and
 // [ui], which it ignores, and for values tm no longer has: a project
 // whose complete_tasks is the removed "released" is read as "by you"
-// until the user picks again in its Settings.
+// until the user picks again in its Settings; sandbox rules in a form
+// of tm 0.37 (config.OldAccess), still read.
 func Settings(d Deps) []Check {
 	c, err := config.Load()
 	if err != nil {
@@ -28,6 +29,10 @@ func Settings(d Deps) []Check {
 	if slugs := c.Removed(); len(slugs) > 0 {
 		out = append(out, Check{Group: "settings", Name: "complete tasks", Status: Warn,
 			Detail: fmt.Sprintf("\"when released\" was removed, so tasks complete by you in %s: pick again in Settings (by you or when merged)", strings.Join(slugs, ", "))})
+	}
+	if old := c.OldAccess(); len(old) > 0 {
+		out = append(out, Check{Group: "settings", Name: "access rules", Status: Warn,
+			Detail: "old forms, still read: " + strings.Join(old, "; ")})
 	}
 	// A link names another project by its slug: one that isn't there
 	// (deleted, or a typo) carries nothing (docs/SPEC.md §7.9). One on a

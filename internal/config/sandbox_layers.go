@@ -5,8 +5,6 @@ import (
 	"maps"
 	"slices"
 	"strings"
-
-	"github.com/BurntSushi/toml"
 )
 
 // How the sandbox tables add up (T574 §3.2): a list adds down the
@@ -16,28 +14,20 @@ import (
 // else off. An entry that fails its check is refused on its own: the
 // rest still hold (P10).
 //
-// Until the release's migration (T584) rewrites config.toml, a
-// project's excluded_commands and allow keep tm 0.37's meaning: the
-// project's list, when it sets one (an empty one too), replaces all
-// projects' (ReplaceKeys). The migration turns each such list into the
-// project's entries plus drops of all projects' it lacked, and empties
-// ReplaceKeys.
-
-// ReplaceKeys are the lists whose project list replaces all projects'
-// rather than adding to it, as in tm 0.37, until the migration.
-var ReplaceKeys = []string{SandboxExcluded, SandboxAllow}
+// A file of tm 0.37 and before (no AccessMarker, sandbox_migrate.go)
+// is read as it meant then: there a project's excluded_commands and
+// allow, when it set them, replaced all projects'. SandboxOf turns such
+// a table into the lists and drops that give the same, until the
+// migration writes them.
 
 // SandboxTable is one sandbox table's rules: its lists by key, only
 // those with entries (a project's drops under SandboxDrop), and its
 // local ports when it sets them. The old preset switches it still has
-// read as the rules they unfold into. Replaces are the ReplaceKeys a
-// project's table sets, an empty list too: its own list of each
-// replaces all projects'. NoAsk are the table's excluded commands that
-// run without asking (ask = false); the others ask first.
+// read as the rules they unfold into. NoAsk are the table's excluded
+// commands that run without asking (ask = false); the others ask first.
 type SandboxTable struct {
 	Lists      map[string][]string
 	LocalPorts *bool
-	Replaces   []string
 	NoAsk      []string
 }
 
@@ -48,59 +38,6 @@ func (t *SandboxTable) SetAsk(v string, ask bool) {
 	if !ask {
 		t.NoAsk = append(t.NoAsk, v)
 	}
-}
-
-// Replacing reports whether the table's list of key replaces all
-// projects'.
-func (t SandboxTable) Replacing(key string) bool { return slices.Contains(t.Replaces, key) }
-
-// OwnList makes the table's list of key (a ReplaceKeys key) its own,
-// starting from given, what its threads get now, so nothing changes
-// until it is edited.
-func (t *SandboxTable) OwnList(key string, given []string) {
-	if t.Replacing(key) || !slices.Contains(ReplaceKeys, key) {
-		return
-	}
-	t.Replaces = append(slices.Clone(t.Replaces), key)
-	for _, v := range given {
-		t.Add(key, v)
-	}
-}
-
-// StartOwnLists makes each ReplaceKeys list a project's table next
-// starts (it has entries, and the table before didn't replace all
-// projects' list) its own, starting from what its threads got with all
-// projects' table all and its table before, the new entries after
-// them: the others stay.
-func StartOwnLists(all, before SandboxTable, next *SandboxTable) {
-	given := MergeSandbox(all, before)
-	for _, k := range ReplaceKeys {
-		if added := next.Lists[k]; len(added) > 0 && !next.Replacing(k) {
-			delete(next.Lists, k)
-			next.OwnList(k, given.Given(k))
-			if k == SandboxExcluded {
-				// Each keeps whether it asks first.
-				for _, r := range given.Rules {
-					if r.Key == k && r.Given() && r.NoAsk && !slices.Contains(next.NoAsk, r.Value) {
-						next.NoAsk = append(next.NoAsk, r.Value)
-					}
-				}
-			}
-			for _, v := range added {
-				next.Add(k, v)
-			}
-		}
-	}
-}
-
-// Follow drops the table's own list of key, so its threads get all
-// projects' again.
-func (t *SandboxTable) Follow(key string) {
-	delete(t.Lists, key)
-	if key == SandboxExcluded {
-		t.NoAsk = nil
-	}
-	t.Replaces = slices.DeleteFunc(slices.Clone(t.Replaces), func(k string) bool { return k == key })
 }
 
 // Has reports whether the table's list of key holds v.
@@ -149,7 +86,6 @@ func (t SandboxTable) Clone() SandboxTable {
 		on := *t.LocalPorts
 		out.LocalPorts = &on
 	}
-	out.Replaces = slices.Clone(t.Replaces)
 	out.NoAsk = slices.Clone(t.NoAsk)
 	return out
 }
@@ -174,11 +110,6 @@ func (r *rawSandbox) table(project bool) SandboxTable {
 	}
 	if r.ExcludedCommands != nil {
 		t.NoAsk = r.ExcludedCommands.withoutAsking()
-	}
-	for _, k := range ReplaceKeys {
-		if project && r.list(k) != nil {
-			t.Replaces = append(t.Replaces, k)
-		}
 	}
 	for _, s := range oldSwitches {
 		on := r.oldSwitch(s.key)
@@ -216,9 +147,6 @@ type SandboxRule struct {
 	Own bool
 	// Dropped: all projects', which the project drops; not given.
 	Dropped bool
-	// Replaced: all projects', which the project's own list of a
-	// ReplaceKeys key replaces; not given.
-	Replaced bool
 	// Refused is why the entry fails its check; not given.
 	Refused string
 	// NoAsk: an excluded command that runs without asking, by its
@@ -228,7 +156,7 @@ type SandboxRule struct {
 }
 
 // Given reports whether threads get the rule.
-func (r SandboxRule) Given() bool { return !r.Dropped && !r.Replaced && r.Refused == "" }
+func (r SandboxRule) Given() bool { return !r.Dropped && r.Refused == "" }
 
 // ThreadSandbox is what a project's threads get: each list's entries,
 // all projects' first, with those the project drops or that fail their
@@ -286,9 +214,9 @@ func (c *Config) ThreadSandbox(slug string) ThreadSandbox {
 	}
 	var own SandboxTable
 	if slug != "" {
-		own = c.projects[slug].Sandbox.table(true)
+		own = c.SandboxOf(slug)
 	}
-	return MergeSandbox(c.defaults.Sandbox.table(false), own)
+	return MergeSandbox(c.SandboxOf(""), own)
 }
 
 // MergeSandbox is what threads get from all projects' table all and a
@@ -304,13 +232,12 @@ func MergeSandbox(all, own SandboxTable) ThreadSandbox {
 		return ""
 	}
 	for _, k := range SandboxKeys {
-		replaced := own.Replacing(k)
 		for _, v := range all.Lists[k] {
-			out.Rules = append(out.Rules, SandboxRule{Key: k, Value: v, Dropped: slices.Contains(drops, v), Replaced: replaced, Refused: refused(k, v),
+			out.Rules = append(out.Rules, SandboxRule{Key: k, Value: v, Dropped: slices.Contains(drops, v), Refused: refused(k, v),
 				NoAsk: k == SandboxExcluded && slices.Contains(all.NoAsk, v)})
 		}
 		for _, v := range own.Lists[k] {
-			if !replaced && slices.Contains(all.Lists[k], v) && !slices.Contains(drops, v) {
+			if slices.Contains(all.Lists[k], v) && !slices.Contains(drops, v) {
 				continue // all projects give it already
 			}
 			out.Rules = append(out.Rules, SandboxRule{Key: k, Value: v, Own: true, Refused: refused(k, v),
@@ -355,7 +282,11 @@ func (c *Config) SandboxOf(slug string) SandboxTable {
 	if slug == "" {
 		return c.defaults.Sandbox.table(false)
 	}
-	return c.projects[slug].Sandbox.table(true)
+	r := c.projects[slug].Sandbox
+	if c.legacy {
+		return unreplaced(c.defaults.Sandbox, r)
+	}
+	return r.table(true)
 }
 
 // checkSandboxTable checks what Load must refuse in a table: a drop in
@@ -383,105 +314,108 @@ func sandboxTableOf(table string) (string, bool, error) {
 // EditSandbox changes table's sandbox table (DefaultsTable or
 // "projects.<slug>") in one write: fn changes its rules as config.toml
 // has them now, and they are written back, each entry fn added checked
-// as Load's users check it, none twice. A project's entry added to a
-// ReplaceKeys list it doesn't set yet starts its own list from what its
-// threads get, so the others stay. The old preset switches go in
-// the same write, their rules written as plain ones. ErrForm when the
-// file sets a key in a form the line editor doesn't change.
+// as Load's users check it, none twice. The old preset switches go in
+// the same write, their rules written as plain ones, and the file gets
+// AccessMarker. ErrForm when the file sets a key in a form the line
+// editor doesn't change; ErrLegacy when it still waits for its
+// migration.
 func EditSandbox(table string, fn func(*SandboxTable) error) error {
-	t, project, err := sandboxTableOf(table)
-	if err != nil {
+	if _, _, err := sandboxTableOf(table); err != nil {
 		return err
 	}
 	return edit(func(data []byte) ([]byte, error) {
-		var raw struct {
-			Defaults struct{ Sandbox *rawSandbox }
-			Projects map[string]struct{ Sandbox *rawSandbox }
+		raw, err := decodeTables(data)
+		if err != nil {
+			return nil, err
 		}
-		if _, err := toml.Decode(string(data), &raw); err != nil {
-			return nil, fmt.Errorf("the settings can't be read: %w", err)
+		if raw.legacy() {
+			return nil, ErrLegacy
 		}
-		r := raw.Defaults.Sandbox
-		if project {
-			r = raw.Projects[strings.TrimPrefix(table, "projects.")].Sandbox
-		}
-		before := r.table(project)
+		r := raw.sandbox(table)
+		before := r.table(table != DefaultsTable)
 		next := before.Clone()
 		if err := fn(&next); err != nil {
 			return nil, err
 		}
-		if !project && len(next.Lists[SandboxDrop]) > 0 {
-			return nil, fmt.Errorf("only a project drops rules (of all projects')")
+		if data, err = writeSandbox(data, table, r, before, next, CheckNewSandboxEntry); err != nil {
+			return nil, err
 		}
-		if project {
-			StartOwnLists(raw.Defaults.Sandbox.table(false), before, &next)
+		return withMarker(data), nil
+	})
+}
+
+// writeSandbox is data with table's sandbox table, r as the file has it
+// and before as read from it, written as next: each entry next adds
+// checked by check, none twice; the old switches removed.
+func writeSandbox(data []byte, table string, r *rawSandbox, before, next SandboxTable, check func(key, e string) error) ([]byte, error) {
+	t, project, err := sandboxTableOf(table)
+	if err != nil {
+		return nil, err
+	}
+	if !project && len(next.Lists[SandboxDrop]) > 0 {
+		return nil, fmt.Errorf("only a project drops rules (of all projects')")
+	}
+	for _, k := range append(slices.Clone(SandboxKeys), SandboxDrop) {
+		l := next.Lists[k]
+		for i, e := range l {
+			if slices.Contains(l[:i], e) {
+				return nil, fmt.Errorf("%q is listed twice", e)
+			}
+			if before.Has(k, e) {
+				continue // the file had it: refused where used, removable here
+			}
+			if err := check(k, e); err != nil {
+				return nil, err
+			}
 		}
-		for _, k := range append(slices.Clone(SandboxKeys), SandboxDrop) {
-			l := next.Lists[k]
-			for i, e := range l {
-				if slices.Contains(l[:i], e) {
-					return nil, fmt.Errorf("%q is listed twice", e)
-				}
-				if before.Has(k, e) {
-					continue // the file had it: refused where used, removable here
-				}
-				if err := CheckNewSandboxEntry(k, e); err != nil {
+		old := r.list(k)
+		if k == SandboxExcluded && len(l) > 0 {
+			// Its entries keep whether they ask first.
+			var was []ExcludedCommand
+			if r != nil && r.ExcludedCommands != nil {
+				was = *r.ExcludedCommands
+			}
+			if now := excludedOf(l, next.NoAsk); old == nil || !slices.Equal(was, now) {
+				if data, err = Edit(data, t, k, now); err != nil {
 					return nil, err
 				}
 			}
-			old := r.list(k)
-			if k == SandboxExcluded && (len(l) > 0 || project && next.Replacing(k)) {
-				// Its entries keep whether they ask first.
-				var was []ExcludedCommand
-				if r != nil && r.ExcludedCommands != nil {
-					was = *r.ExcludedCommands
-				}
-				if now := excludedOf(l, next.NoAsk); old == nil || !slices.Equal(was, now) {
-					if data, err = Edit(data, t, k, now); err != nil {
-						return nil, err
-					}
-				}
-				continue
-			}
-			set := len(l) > 0 || project && next.Replacing(k) // an own empty list replaces too
-			switch {
-			case !set && old == nil:
-			case !set:
-				if data, err = remove(data, t, k); err != nil {
-					return nil, err
-				}
-			case old == nil || !slices.Equal(*old, l):
-				if l == nil {
-					l = []string{}
-				}
-				if data, err = Edit(data, t, k, l); err != nil {
-					return nil, err
-				}
-			}
-		}
-		var old *bool
-		if r != nil {
-			old = r.LocalPorts
+			continue
 		}
 		switch {
-		case next.LocalPorts == nil && old != nil:
-			if data, err = remove(data, t, SandboxLocalPorts); err != nil {
+		case len(l) == 0 && old == nil:
+		case len(l) == 0:
+			if data, err = remove(data, t, k); err != nil {
 				return nil, err
 			}
-		case next.LocalPorts != nil && (old == nil || *old != *next.LocalPorts):
-			if data, err = Edit(data, t, SandboxLocalPorts, *next.LocalPorts); err != nil {
+		case old == nil || !slices.Equal(*old, l):
+			if data, err = Edit(data, t, k, l); err != nil {
 				return nil, err
 			}
 		}
-		if r.hasOldSwitch() {
-			for _, k := range OldSwitchKeys() {
-				if data, err = remove(data, t, k); err != nil {
-					return nil, err
-				}
+	}
+	var old *bool
+	if r != nil {
+		old = r.LocalPorts
+	}
+	switch {
+	case next.LocalPorts == nil && old != nil:
+		if data, err = remove(data, t, SandboxLocalPorts); err != nil {
+			return nil, err
+		}
+	case next.LocalPorts != nil && (old == nil || *old != *next.LocalPorts):
+		if data, err = Edit(data, t, SandboxLocalPorts, *next.LocalPorts); err != nil {
+			return nil, err
+		}
+	}
+	if r.hasOldSwitch() {
+		for _, k := range OldSwitchKeys() {
+			if data, err = remove(data, t, k); err != nil {
+				return nil, err
 			}
 		}
-		return data, nil
-	})
+	}
+	return data, nil
 }
 
 // remove is data without key in table; ErrForm when it is set in a form

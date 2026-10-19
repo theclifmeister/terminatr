@@ -332,14 +332,12 @@ func sandboxRules(lc launchConfig, slug, goos, tmHome string) ([]proto.AccessRul
 	for _, r := range t.Rules {
 		k := kinds[r.Key]
 		rule := proto.AccessRule{Where: k[0], Kind: k[1], Value: r.Value, Source: proto.AccessFromAll,
-			OS: config.SandboxSettings[r.Key].OS, Agents: agents(r.Key), Skipped: skip(r.Key), Dropped: r.Dropped || r.Replaced, Refused: r.Refused}
+			OS: config.SandboxSettings[r.Key].OS, Agents: agents(r.Key), Skipped: skip(r.Key), Dropped: r.Dropped, Refused: r.Refused}
 		switch {
 		case r.Own:
 			rule.Source = slug
 		case r.Dropped:
 			rule.Note = "dropped by " + slug
-		case r.Replaced:
-			rule.Note = slug + "'s own list replaces all projects'"
 		}
 		switch r.Key {
 		case config.SandboxExcluded:

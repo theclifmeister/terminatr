@@ -1558,7 +1558,8 @@ var (
 )
 
 // tmAgentMod are the tm mod subcommands an agent may run; the others,
-// tm project's tmProjectWrites (and repo add) and the dashboard write
+// tm project's tmProjectWrites (and repo add), tm access's
+// tmAccessWrites (and preset add) and the dashboard write
 // tm's settings in the tm process itself, the human's alone: an agent
 // past its sandbox (yolo) that runs one with its session's variables
 // unset and out of its session's process tree would pass for the human
@@ -1566,6 +1567,7 @@ var (
 var (
 	tmAgentMod      = setOf("list show validate new test logs examples host")
 	tmProjectWrites = setOf("new remote activate deactivate pause resume archive unarchive delete rename mv link open")
+	tmAccessWrites  = setOf("add rm drop undrop set")
 )
 
 // tmWritesSettings is which of those tm with args (after its name) is
@@ -1593,6 +1595,10 @@ func tmWritesSettings(args []string) string {
 		return "tm " + args[i] + " " + safe(pos[0])
 	case args[i] == "project" && (pos[0] == "repo" || pos[0] == "repos") && len(pos) > 1 && pos[1] == "add":
 		return "tm project repo add"
+	case args[i] == "access" && tmAccessWrites[pos[0]]:
+		return "tm access " + pos[0]
+	case args[i] == "access" && pos[0] == "preset" && len(pos) > 1 && pos[1] == "add":
+		return "tm access preset add"
 	}
 	return ""
 }

@@ -17,6 +17,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -382,6 +384,9 @@ type Config struct {
 	// agents are the [agents.<name>] tables: each agent's models
 	// catalog and default (agents.go).
 	agents map[string]rawAgent
+	// legacy: the file is tm 0.37's, a project's excluded_commands or
+	// allow replacing all projects' (sandbox_migrate.go).
+	legacy bool
 }
 
 // rawAgentMod is [agent_mod], and the older [mods] it replaced.
@@ -419,7 +424,20 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return &Config{Path: path, AgentModBand: true, ContextHint: DefaultContextHint, UpdateCheck: true}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return parse(path, data)
+}
+
+// parse is Load of data, the file at path.
+func parse(path string, data []byte) (*Config, error) {
 	var raw struct {
+		SandboxLists string               `toml:"sandbox_lists"`
 		DefaultAgent string               `toml:"default_agent"`
 		Projects     map[string]rawSafety `toml:"projects"`
 		Defaults     rawSafety            `toml:"defaults"`
@@ -445,10 +463,7 @@ func Load() (*Config, error) {
 		// read for each key [agent_mod] doesn't set.
 		Mods map[string]toml.Primitive `toml:"mods"`
 	}
-	md, err := toml.DecodeFile(path, &raw)
-	if errors.Is(err, fs.ErrNotExist) {
-		return &Config{Path: path, AgentModBand: true, ContextHint: DefaultContextHint, UpdateCheck: true}, nil
-	}
+	md, err := toml.Decode(string(data), &raw)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
@@ -468,6 +483,13 @@ func Load() (*Config, error) {
 		c.ContextHint = *h
 	}
 	c.Unknown = unknownMods
+	switch raw.SandboxLists {
+	case accessMarkerValue:
+	case "":
+		c.legacy = slices.ContainsFunc(slices.Collect(maps.Values(raw.Projects)), func(r rawSafety) bool { return r.Sandbox.replaces() })
+	default:
+		return c, fmt.Errorf("%s: %s is %q (tm writes it)", path, accessMarkerKey, accessMarkerValue)
+	}
 	for _, k := range md.Undecoded() {
 		switch {
 		case len(k) >= 4 && k[0] == "projects" && k[2] == "links", len(k) >= 3 && k[0] == "defaults" && k[1] == "links":

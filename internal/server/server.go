@@ -340,6 +340,9 @@ func Run(ctx context.Context, opts Options) error {
 	} else if len(moved) > 0 {
 		logger.Printf("repo lists moved to config.toml: %s", strings.Join(moved, ", "))
 	}
+	// And config.toml's sandbox rules move to the access rules, once.
+	migrateAccess(logger.Printf)
+	tellYolo(logger.Printf)
 	toResume, lost := s.loadPrevious()
 	if err := s.saveLocked(""); err != nil {
 		logger.Printf("sessions.json: %v", err)
