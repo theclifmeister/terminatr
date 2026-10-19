@@ -286,11 +286,16 @@ func ownConfig(own string) []string {
 
 // gitConfig are what git runs or reads as configuration in git dir
 // common: its hooks and info folders, its submodules' git dirs (modules,
-// with their own config and hooks), its config file, and the main
-// checkout's own config.worktree and commondir (ownConfig), which a
-// main checkout's cwd covers.
+// with their own config and hooks), the remotes and branches folders
+// (remotes the old way), its config file, and the main checkout's own
+// config.worktree and commondir (ownConfig), which a main checkout's
+// cwd covers.
 func gitConfig(common string) (dirs, files []string) {
-	return []string{filepath.Join(common, "hooks"), filepath.Join(common, "info"), filepath.Join(common, "modules")},
+	var ds []string
+	for _, n := range []string{"hooks", "info", "modules", "remotes", "branches"} {
+		ds = append(ds, filepath.Join(common, n))
+	}
+	return ds,
 		append([]string{filepath.Join(common, "config")}, ownConfig(common)...)
 }
 

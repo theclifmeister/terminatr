@@ -592,7 +592,7 @@ func TestAccessThreadGitDirs(t *testing.T) {
 	if runs := gitx.RunsDir(realPath(s.opts.Paths.Home)); !slices.Contains(a.NoWrite, runs) {
 		t.Errorf("worktree: tm's git runs folder %s not in no-write %q", runs, a.NoWrite)
 	}
-	for _, n := range []string{"hooks", "info", "modules", "worktrees/other", "rebase-merge", "rebase-apply", "sequencer"} {
+	for _, n := range []string{"hooks", "info", "modules", "remotes", "branches", "worktrees/other", "rebase-merge", "rebase-apply", "sequencer"} {
 		if !slices.Contains(a.NoWrite, filepath.Join(common, n)) {
 			t.Errorf("worktree: %s not in no-write %q", n, a.NoWrite)
 		}
