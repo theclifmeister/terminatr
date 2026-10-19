@@ -95,6 +95,9 @@ func WriteBrief(p *project.Project, r *Record, restart bool) (string, Memory, er
 		fmt.Fprintf(&b, " on branch %s", r.Branch)
 	}
 	b.WriteString(".\n\n")
+	if r.Plain() {
+		b.WriteString("## No git\n\n" + PlainFolderRule + "\n\n")
+	}
 
 	// The rules are `tm skill thread`; this is the fallback, and the one
 	// line on steps the rules give without the task id.
@@ -130,6 +133,14 @@ func WriteBrief(p *project.Project, r *Record, restart bool) (string, Memory, er
 	return path, mem, fsx.WriteAtomic(path, []byte(b.String()), 0o644)
 }
 
+// PlainFolderRule is what a thread without a repo is told, in its
+// brief and after /clear or compaction (docs/SPEC.md §9).
+const PlainFolderRule = "Your folder is a plain folder: no git, no branch, no pull request. Hand in\n" +
+	"what you make as attachments of your report (`tm report --attach FILE`): they go to\n" +
+	"the thread's library. Write them outside the folder (your scratchpad or temp folder),\n" +
+	"or delete them from it once attached: when the thread closes, tm removes the folder\n" +
+	"only if it is empty, and auto-close waits while files are left in it."
+
 // ResetContext is what a thread gets back after /clear or compaction
 // (docs/SPEC.md §7.8), besides the role rules: the brief path, the task
 // with its steps, the current item, the PR (pr, the ticker's summary of
@@ -144,6 +155,9 @@ func ResetContext(p *project.Project, id, pr string) string {
 	fmt.Fprintf(&b, "You are thread %s of project %s, in %s", r.ID, p.Slug, r.Worktree)
 	if r.Branch != "" {
 		fmt.Fprintf(&b, " on branch %s", r.Branch)
+	}
+	if r.Plain() {
+		b.WriteString(" (a plain folder: no git, no branch, no PR; hand in what you make with tm report --attach, and leave the folder empty)")
 	}
 	fmt.Fprintf(&b, ".\nYour brief: %s (your system prompt when your agent loaded it there; else read it).\nContinue with your task's unchecked steps.\n", Path(p, id, "brief.md"))
 	if tid := r.TaskID(); tid > 0 {

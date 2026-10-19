@@ -128,7 +128,7 @@ func TestBuiltinTasksTab(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	title := "Fix the login page"
-	if _, err := p.Tasks().Edit(human, 1, &title, nil, nil); err != nil {
+	if _, err := p.Tasks().Edit(human, 1, &title, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	tree(title)

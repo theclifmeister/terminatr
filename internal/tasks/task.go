@@ -96,6 +96,7 @@ type Task struct {
 	Steps    []Step
 	Thread   string
 	Owner    string
+	Repo     string // the repo its thread works in, by name or path, or NoRepo
 	Created  string
 	Updated  string
 	Archived bool
@@ -217,7 +218,7 @@ func checkStep(s string) (string, error) {
 	return s, nil
 }
 
-// checkLabel validates owner and thread values, which live in the
+// checkLabel validates owner, repo and thread values, which live in the
 // one-line metadata, so they can't hold the separator.
 func checkLabel(field, s string) (string, error) {
 	s = strings.TrimSpace(s)

@@ -107,9 +107,29 @@ func (m *dash) askAfterConfirm(slug string, t *tasks.Task, b *binding, kind, hin
 // and sendBack).
 func (m *dash) delegate(slug string, t *tasks.Task, b *binding) tea.Cmd {
 	ref := t.Ref()
+	var repos []string
+	if p := m.projectData(slug); p != nil {
+		repos = p.Repos
+	}
 	return m.askAfterConfirm(slug, t, b, project.KindDelegate, "D delegates open, ready and blocked tasks",
-		"Delegate "+ref, "Delegate "+ref+" to the coordinator? It starts a thread for "+ref+" "+oneLine(t.Title)+".",
+		"Delegate "+ref, "Delegate "+ref+" to the coordinator? It starts a thread for "+ref+" "+oneLine(t.Title)+delegateWhere(t, repos)+".",
 		ref+" not delegated", "asked the coordinator to delegate "+ref+"; it starts a thread for it")
+}
+
+// delegateWhere says where the thread for t works, for D's question:
+// the task's repo, a folder without git, or, in a project of several
+// repos when t names none, that the coordinator asks which (tm task
+// delegate refuses to guess).
+func delegateWhere(t *tasks.Task, repos []string) string {
+	switch {
+	case t.Repo == tasks.NoRepo:
+		return " in a folder without git"
+	case t.Repo != "":
+		return " in " + oneLine(t.Repo)
+	case len(repos) > 1:
+		return "; it names none of the project's repos, so the coordinator asks you which"
+	}
+	return ""
 }
 
 // accept asks, then tells the coordinator the user accepts slug's task

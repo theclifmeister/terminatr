@@ -149,6 +149,8 @@ func parseMeta(t *Task, line string) error {
 			t.Status = st
 		case "owner":
 			t.Owner = v
+		case "repo":
+			t.Repo = v
 		case "thread":
 			t.Thread = v
 		case "created":
@@ -224,7 +226,7 @@ func (b *Board) RenderArchive() []byte {
 func writeTask(w *bytes.Buffer, t *Task) {
 	fmt.Fprintf(w, "\n### %s %s\n", t.Ref(), t.Title)
 	meta := []string{"status: " + string(t.Status)}
-	for _, kv := range [][2]string{{"owner", t.Owner}, {"thread", t.Thread}, {"created", t.Created}, {"updated", t.Updated}} {
+	for _, kv := range [][2]string{{"owner", t.Owner}, {"repo", t.Repo}, {"thread", t.Thread}, {"created", t.Created}, {"updated", t.Updated}} {
 		if kv[1] != "" {
 			meta = append(meta, kv[0]+": "+kv[1])
 		}

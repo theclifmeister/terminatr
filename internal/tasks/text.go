@@ -12,10 +12,10 @@ import (
 const maxTitle = 60
 
 // Lines are the tasks' one-line forms ("T12  started  Fix login redirect
-// 2/3  t-0005  owner:claude") with their columns aligned, for
+// 2/3  t-0005  owner:claude  repo:web") with their columns aligned, for
 // `tm task list` and `tm context`: id, status, title, steps, thread,
-// owner. A column no task has takes no room. What agents wrote is shown
-// as plain text (textsafe.Clean).
+// owner, repo. A column no task has takes no room. What agents wrote is
+// shown as plain text (textsafe.Clean).
 func Lines(ts []*Task) []string {
 	// The id and status keep their old minimum widths, so a short list
 	// reads as it always did.
@@ -46,6 +46,9 @@ func Lines(ts []*Task) []string {
 		if t.Owner != "" {
 			cols = append(cols, "owner:"+textsafe.Clean(t.Owner, false))
 		}
+		if t.Repo != "" {
+			cols = append(cols, "repo:"+textsafe.Clean(t.Repo, false))
+		}
 		if t.Archived {
 			cols = append(cols, "(archived)")
 		}
@@ -65,7 +68,7 @@ func Detail(t *Task) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s %s\n", t.Ref(), one(t.Title))
 	meta := []string{"status: " + string(t.Status)}
-	for _, kv := range [][2]string{{"owner", t.Owner}, {"thread", t.Thread}, {"created", t.Created}, {"updated", t.Updated}} {
+	for _, kv := range [][2]string{{"owner", t.Owner}, {"repo", t.Repo}, {"thread", t.Thread}, {"created", t.Created}, {"updated", t.Updated}} {
 		if kv[1] != "" {
 			meta = append(meta, kv[0]+": "+one(kv[1]))
 		}
@@ -100,6 +103,7 @@ type JSON struct {
 	Steps    []Step `json:"steps"`
 	Thread   string `json:"thread"`
 	Owner    string `json:"owner"`
+	Repo     string `json:"repo,omitempty"`
 	Created  string `json:"created"`
 	Updated  string `json:"updated"`
 	Archived bool   `json:"archived,omitempty"`
@@ -113,7 +117,7 @@ func ToJSON(t *Task) JSON {
 	}
 	return JSON{
 		ID: t.Ref(), Title: t.Title, Status: t.Status, Group: string(GroupOf(t.Status)),
-		Notes: t.Notes, Steps: steps, Thread: t.Thread, Owner: t.Owner,
+		Notes: t.Notes, Steps: steps, Thread: t.Thread, Owner: t.Owner, Repo: t.Repo,
 		Created: t.Created, Updated: t.Updated, Archived: t.Archived,
 	}
 }

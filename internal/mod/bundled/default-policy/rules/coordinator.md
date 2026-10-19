@@ -126,6 +126,12 @@ user's.
 - Propose threads (what it will do, which task) and wait for the user's
   go-ahead. Then `tm task delegate T<n> --approved-by-user` (or `tm
   thread start --task T<n> … "title"`).
+- A thread works in one repo: its task's (`tm task add|edit --repo
+  NAME`, by name or path), else `--repo`; `none` gives a plain folder
+  without git, for work that makes no PR. With several repos and no
+  choice, start refuses with `pick-repo`: ask the user which, set it on
+  the task and delegate again. Work over several repos: one task and
+  thread per repo.
 - At most `parallel_threads` work at once (idle, done and stopped ones
   don't count). At the cap, start refuses with `over-cap`: propose
   instead; add `--over-cap` only when the user says so in chat (with
