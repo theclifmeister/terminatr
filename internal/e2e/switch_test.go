@@ -25,7 +25,9 @@ func TestSmokeSwitchOneFrame(t *testing.T) {
 	w := env.Window(120, 30)
 	w.WaitFor(s.ID+" ", wait)
 
-	const dash, attached = "enter attach", "prefix+d dashboard"
+	// The dashboard by its header: on a slow run (-race) the data comes
+	// after the hold (holdMax), and its first frame is "loading…".
+	const dash, attached = "tm dashboard", "prefix+d dashboard"
 	for i := range 2 {
 		w.Quiet(300 * time.Millisecond)
 		n := len(w.Raw())
