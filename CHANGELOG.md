@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.40.0](https://github.com/theclifmeister/terminatr/compare/v0.39.0...v0.40.0) (2026-10-19)
+
+
+### Features
+
+* **access:** edit rules in place and accept wide command patterns ([#677](https://github.com/theclifmeister/terminatr/issues/677)) ([a3cda82](https://github.com/theclifmeister/terminatr/commit/a3cda82b50e47f1b040783c8b5d10a5a5725681b))
+
+
+### Bug Fixes
+
+* **run:** let approved commands on macOS start ps and top outside the run's sandbox ([#676](https://github.com/theclifmeister/terminatr/issues/676)) ([c6e3a3a](https://github.com/theclifmeister/terminatr/commit/c6e3a3a8f96ac6fbca3b890e572db08be12f48e3))
+* **sandbox:** keep later worktrees' git dirs and the main checkout's git state out of a thread's reach ([#672](https://github.com/theclifmeister/terminatr/issues/672)) ([d155fbf](https://github.com/theclifmeister/terminatr/commit/d155fbf9e75351ffa660e113522aca9f0470b8df))
+
 ## [0.39.0](https://github.com/theclifmeister/terminatr/compare/v0.38.0...v0.39.0) (2026-10-19)
 
 
