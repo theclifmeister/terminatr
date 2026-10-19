@@ -17,6 +17,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
+	"github.com/theclifmeister/terminatr/internal/plat/sandbox"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
 )
@@ -201,6 +202,7 @@ func TestCommandRun(t *testing.T) {
 	if caps.Windows {
 		t.Skip("uses sh")
 	}
+	skipNested(t)
 	p := testPaths(t)
 	proj := newWatchProject(t)
 	wt := t.TempDir()
@@ -250,6 +252,18 @@ approved_commands = ["./check.sh go *", "git push --force *"]
 	}
 	if len(s.runs) != 0 {
 		t.Errorf("runs left: %v", s.runs)
+	}
+}
+
+// skipNested skips a test whose runs go through sandbox-exec on macOS
+// when it can't apply a profile: the tests run in a sandbox already, as
+// under a thread's tm run -- make test.
+func skipNested(t *testing.T) {
+	if caps.OS != config.OSMac {
+		return
+	}
+	if err := sandbox.Check(); err != nil {
+		t.Skip(err)
 	}
 }
 
@@ -326,11 +340,14 @@ func TestCommandRunHangUp(t *testing.T) {
 
 // TestCommandRunConfined: on macOS an approved command's run, and what
 // it starts, can't connect to tm's sockets (the human socket among
-// them) nor read config.toml; the rest of the disk is open.
+// them) nor read config.toml; the rest of the disk is open. Of the
+// setuid programs, which a sandbox can't start, ps starts outside it,
+// crontab doesn't start.
 func TestCommandRunConfined(t *testing.T) {
 	if caps.OS != config.OSMac {
 		t.Skip("macOS's seatbelt")
 	}
+	skipNested(t)
 	p := testPaths(t)
 	newWatchProject(t)
 	// Its own socket, outside tm's folders, is the control: nc connects.
@@ -360,6 +377,8 @@ wait
 nc -U "$5" </dev/null >/dev/null 2>&1 && echo other=connected || echo other=refused
 cat "$3" >/dev/null 2>&1 && echo config=read || echo config=refused
 cat "$4" >/dev/null 2>&1 && echo open=read || echo open=refused
+/bin/ps -p $$ -o pid= >/dev/null 2>&1 && echo ps=ran || echo ps=refused
+/usr/bin/crontab -l >/dev/null 2>&1; [ $? = 126 ] && echo crontab=refused || echo crontab=ran
 `), 0o755)
 	writeConfig(t, "[projects.demo.sandbox]\napproved_commands = [\"./probe.sh go *\"]\n")
 	s := &Server{opts: Options{Paths: p, Bin: "/nonexistent/tm", Env: []string{"PATH=/usr/bin:/bin"}},
@@ -370,7 +389,8 @@ cat "$4" >/dev/null 2>&1 && echo open=read || echo open=refused
 	if perr != nil {
 		t.Fatal(perr)
 	}
-	if ev.Code != 0 || !strings.Contains(out, "human=refused") || !strings.Contains(out, "config=refused") || !strings.Contains(out, "open=read") || !strings.Contains(out, "other=connected") {
+	if ev.Code != 0 || !strings.Contains(out, "human=refused") || !strings.Contains(out, "config=refused") || !strings.Contains(out, "open=read") || !strings.Contains(out, "other=connected") ||
+		!strings.Contains(out, "ps=ran") || !strings.Contains(out, "crontab=refused") {
 		t.Errorf("code %d, out:\n%s", ev.Code, out)
 	}
 }
