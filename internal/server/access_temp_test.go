@@ -37,7 +37,8 @@ func TestThreadTempRules(t *testing.T) {
 	}
 	shared := ""
 	if runtime.GOOS != "windows" {
-		shared = realPath("/tmp/claude-" + strconv.Itoa(os.Getuid()))
+		// By the kernel's spelling (/private/tmp on macOS), as the rule has it.
+		shared = filepath.Join(realPath("/tmp"), "claude-"+strconv.Itoa(os.Getuid()))
 	}
 	rules := func(in accessInput) proto.AccessSet {
 		t.Helper()
