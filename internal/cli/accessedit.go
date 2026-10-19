@@ -103,6 +103,7 @@ func accessAdd(e *Env, verb string, args []string) error {
 	}
 	f := newFlags()
 	all, noAsk := f.Bool("all"), f.Bool("without-asking")
+	text, file, replace := f.String("text"), f.String("file"), f.Bool("replace")
 	pos, err := f.Parse(args)
 	if err != nil {
 		return srvFail(cmd, err)
@@ -117,6 +118,24 @@ func accessAdd(e *Env, verb string, args []string) error {
 	}
 	if *noAsk && (verb != "add" || key != config.SandboxExcluded) {
 		return srvUsage(cmd, "--without-asking is for tm access add excluded")
+	}
+	var guide config.Guide
+	switch guides := verb == "add" && key == config.SandboxGuides; {
+	case !guides && f.anySet("text", "file", "replace"):
+		return srvUsage(cmd, "--text, --file and --replace are for tm access add guide")
+	case guides && f.IsSet("text") == f.IsSet("file"):
+		return srvUsage(cmd, "tm access add guide <title> --text <text> | --file <file> (- for stdin)")
+	case guides:
+		body := *text
+		if f.IsSet("file") {
+			if body, err = e.readArg(*file); err != nil {
+				return srvFail(cmd, err)
+			}
+		}
+		guide = config.Guide{Title: value, Body: config.GuideBody(body)}
+		if err := config.CheckGuideBody(guide.Body); err != nil {
+			return srvFail(cmd, &project.Error{Code: "refused", Msg: err.Error()})
+		}
 	}
 	table, slug, who, err := e.accessScope(cmd, pos[2:], *all)
 	if err != nil {
@@ -141,6 +160,10 @@ func accessAdd(e *Env, verb string, args []string) error {
 	}
 	err = config.EditSandbox(table, func(t *config.SandboxTable) error {
 		switch has := t.Has(key, value); {
+		case verb == "add" && has && key == config.SandboxGuides && !*replace:
+			return fmt.Errorf("a guide %s is listed already for %s: --replace changes its text", value, who)
+		case verb == "add" && key == config.SandboxGuides:
+			t.SetGuide(guide)
 		case verb == "add" && has && (key != config.SandboxExcluded || !*noAsk):
 			return fmt.Errorf("%s is listed already for %s", value, who)
 		case verb == "add":
@@ -163,6 +186,9 @@ func accessAdd(e *Env, verb string, args []string) error {
 		word += ", without asking"
 	}
 	detail := key + " + " + value
+	if *replace {
+		detail = key + " ~ " + value
+	}
 	if verb == "rm" {
 		detail = key + " - " + value
 		fmt.Fprintf(e.Stdout, "removed from %s: %s\n", who, word)

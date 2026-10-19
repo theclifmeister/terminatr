@@ -494,9 +494,10 @@ func parse(path string, data []byte) (*Config, error) {
 		switch {
 		case len(k) >= 4 && k[0] == "projects" && k[2] == "links", len(k) >= 3 && k[0] == "defaults" && k[1] == "links":
 			// A link entry's table, read and checked by Links.
-		case len(k) >= 5 && k[0] == "projects" && k[2] == "sandbox" && k[3] == SandboxExcluded,
-			len(k) >= 4 && k[0] == "defaults" && k[1] == "sandbox" && k[2] == SandboxExcluded:
-			// An excluded command's table, read and checked by excludedList.
+		case len(k) >= 5 && k[0] == "projects" && k[2] == "sandbox" && (k[3] == SandboxExcluded || k[3] == SandboxGuides),
+			len(k) >= 4 && k[0] == "defaults" && k[1] == "sandbox" && (k[2] == SandboxExcluded || k[2] == SandboxGuides):
+			// An excluded command's or a guide's table, read and checked by
+			// excludedList or guideList.
 		case len(k) >= 3 && k[0] == "projects", len(k) >= 2 && k[0] == "defaults":
 			return c, fmt.Errorf("%s: unknown setting %s", path, k.String())
 		case len(k) >= 2 && (k[0] == "keys" || k[0] == "ui" || k[0] == "mods" || k[0] == "agent_mod"),

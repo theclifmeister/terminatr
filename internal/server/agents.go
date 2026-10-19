@@ -756,7 +756,8 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		// from the session's parameters, which a coordinator writes.
 		// What doesn't apply on this platform stays in config.toml and is
 		// skipped.
-		var guides, skipped []string
+		var guides []config.Guide
+		var skipped []string
 		spec.Sandbox, guides, skipped = launchSandbox(acc)
 		for _, n := range skipped {
 			s.log.Printf("session %s: %s", r.ID, n)

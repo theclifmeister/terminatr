@@ -9,7 +9,9 @@ import (
 // stay inside the sandbox. A preset is no setting: adding it adds its
 // rules to a sandbox table (all projects' or a project's) as if the
 // human had typed them, and each then stands on its own, to change or
-// remove one by one. Nothing in config.toml names it afterwards.
+// remove one by one. Nothing in config.toml names it afterwards. A
+// preset's guide is its text written out, worded from the rules the
+// threads have once it is added (WordRules), to edit like any other.
 //
 // tm 0.37 and before had a switch per preset in a sandbox table
 // (browser_testing, browser_downloads, local_dev_servers). They are
@@ -25,9 +27,11 @@ const (
 )
 
 // A PresetRule is one rule a preset adds: a sandbox list's key and an
-// entry of it, or SandboxLocalPorts with "on".
+// entry of it, or SandboxLocalPorts with "on". A guide's Value is its
+// title, its Body the text WordRules gives it.
 type PresetRule struct {
 	Key, Value string
+	Body       string `json:",omitempty"`
 }
 
 // A Preset is a named group of rules, with one line saying what it is
@@ -53,20 +57,20 @@ var BrowserDomains = []string{"registry.npmjs.org", "cdn.playwright.dev", "playw
 var Presets = []Preset{
 	{PresetBrowserTesting, "Browser testing (Playwright, Chromium)",
 		"Lets threads run Playwright and other Chromium tools inside macOS's sandbox: guidance only, it opens nothing.",
-		[]string{OSMac}, []PresetRule{{SandboxGuides, GuideBrowserTesting}}},
+		[]string{OSMac}, []PresetRule{{Key: SandboxGuides, Value: GuideBrowserTesting}}},
 	{PresetBrowserDownloads, "Browser downloads (npm, Playwright)",
 		"Lets threads install Playwright and its browser inside the sandbox.",
-		[]string{OSMac}, append(hostRules(BrowserDomains), PresetRule{SandboxGuides, GuideBrowserDownloads})},
+		[]string{OSMac}, append(hostRules(BrowserDomains), PresetRule{Key: SandboxGuides, Value: GuideBrowserDownloads})},
 	{PresetLocalDevServers, "Local dev servers",
 		"Lets threads' commands listen on and reach local ports: a dev server, a test server, a local database.",
-		[]string{OSMac}, []PresetRule{{SandboxLocalPorts, "on"}}},
+		[]string{OSMac}, []PresetRule{{Key: SandboxLocalPorts, Value: "on"}}},
 }
 
 // hostRules are a host rule for each host.
 func hostRules(hosts []string) []PresetRule {
 	out := make([]PresetRule, len(hosts))
 	for i, h := range hosts {
-		out[i] = PresetRule{SandboxHosts, h}
+		out[i] = PresetRule{Key: SandboxHosts, Value: h}
 	}
 	return out
 }
@@ -91,6 +95,36 @@ func (p Preset) Missing(has func(PresetRule) bool) []PresetRule {
 	}
 	return out
 }
+
+// WordRules are rules with each guide's text worded for threads that
+// have ts and get rules too: the hosts they then reach, and whether
+// their local ports are open.
+func WordRules(rules []PresetRule, ts ThreadSandbox) []PresetRule {
+	hosts, ports := ts.Given(SandboxHosts), ts.LocalPorts
+	for _, r := range rules {
+		switch r.Key {
+		case SandboxHosts:
+			hosts = append(hosts, r.Value)
+		case SandboxLocalPorts:
+			ports = true
+		}
+	}
+	out := slices.Clone(rules)
+	for i, r := range out {
+		switch {
+		case r.Key != SandboxGuides:
+		case r.Value == GuideBrowserTesting:
+			out[i].Body = BrowserTestingGuide(ports).Body
+		case r.Value == GuideBrowserDownloads:
+			out[i].Body = BrowserDownloadsGuide(hosts).Body
+		}
+	}
+	return out
+}
+
+// legacySwitchGuides are the guide names of tm 0.38 the old switches
+// gave, by preset.
+var legacySwitchGuides = map[string]string{PresetBrowserTesting: legacyBrowserTesting, PresetBrowserDownloads: legacyBrowserDownloads}
 
 // oldSwitches are the preset switches of tm 0.37 and before, by the
 // preset each turned on.
@@ -153,9 +187,9 @@ const (
 //     network's domains. tm gave them only on macOS (browser downloads'), so
 //     they stay macOS only: a narrower thread elsewhere, never a wider
 //     one, until another platform's are checked.
-//   - the guidance texts are about macOS's sandbox (Chromium can't
-//     register Mach services there; on Linux it needs nothing more, as
-//     bubblewrap has no Mach), so macOS only too.
+//   - guides are plain text the brief gets, on every platform, for both
+//     agents (the browser presets, whose texts are about macOS's
+//     sandbox, are macOS's only).
 type SandboxSetting struct {
 	OS    []string
 	Codex bool
@@ -169,7 +203,7 @@ var SandboxSettings = map[string]SandboxSetting{
 	SandboxSockets:    {OS: []string{OSMac}, Codex: true},
 	SandboxApproved:   {OS: []string{OSMac, OSLinux, OSWindows}, Codex: true},
 	SandboxHosts:      {OS: []string{OSMac}, Codex: true},
-	SandboxGuides:     {OS: []string{OSMac}, Codex: true},
+	SandboxGuides:     {OS: []string{OSMac, OSLinux, OSWindows}, Codex: true},
 	SandboxLocalPorts: {OS: []string{OSMac}, Codex: true},
 }
 

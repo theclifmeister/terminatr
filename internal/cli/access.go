@@ -13,11 +13,12 @@ import (
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
-const accessUsage = `usage: tm access show [<project>] [--thread <id>] [--json]
+const accessUsage = `usage: tm access show [<project>] [--thread <id>] [--guides] [--json]
        tm access explain [<project>] [--thread <id>] [--json] -- <command line>
        tm access preset list [--json]
        tm access preset show <name> [--json]
        tm access add <kind> <value> [<project> | --all] [--without-asking]
+       tm access add guide <title> --text <text> | --file <file> [<project> | --all] [--replace]
        tm access rm <kind> <value> [<project> | --all]
        tm access drop|undrop <value> [<project>]
        tm access set local-ports|escapes|yolo on|off [<project> | --all] [--yes]
@@ -27,15 +28,19 @@ show lists a thread's access as rules: where each acts, the rule, and
 where it comes from (tm, all projects, the project, tm's default, or the
 agent's own settings file, shown only). Without --thread, what a new
 thread of the project gets; with it, what that thread launched with,
-RESTART TO APPLY marking what config.toml changed since. A thread may
-show only its own access (its --thread is the default).
+RESTART TO APPLY marking what config.toml changed since; --guides
+prints each guide's text after the table, as the brief gets it. A
+thread may show only its own access (its --thread is the default).
 
 explain says whether a thread of the project runs the command inside or
 outside the sandbox, whether it asks first, and the guard's verdict.
 
 add and rm change a sandbox list of the project's table (the one here
 when none is named) or, with --all, all projects': kinds write (a write
-folder), host, guide, socket (a unix socket sandboxed commands may
+folder), host, guide (a text tm adds after a thread's brief: its title,
+and its text from --text or --file, - for stdin; --replace changes the
+text of one the table has; rm and drop name it by its title), socket (a
+unix socket sandboxed commands may
 connect to), excluded (an excluded command, asking first;
 --without-asking runs it without asking), approved (a command a thread
 may ask tm to run outside its sandbox: tm run) and allow (a permission
@@ -108,7 +113,7 @@ func (e *Env) accessTarget(cmd string, pos []string, id string) (slug, thread st
 
 func accessShow(e *Env, args []string) error {
 	f := newFlags()
-	id, asJSON := f.String("thread"), f.Bool("json")
+	id, asJSON, guides := f.String("thread"), f.Bool("json"), f.Bool("guides")
 	pos, err := f.Parse(args)
 	if err != nil {
 		return srvFail("access show", err)
@@ -130,7 +135,28 @@ func accessShow(e *Env, args []string) error {
 		return e.printJSON(res)
 	}
 	printAccess(e, res)
+	if *guides {
+		printGuides(e, res)
+	}
 	return nil
+}
+
+// printGuides prints the texts of the guides a set gives, as the brief
+// gets them (tm 0.38's names, worded at launch, by name only).
+func printGuides(e *Env, res proto.AccessShowResult) {
+	var gs []config.Guide
+	for _, r := range res.Rules {
+		switch {
+		case r.Kind != proto.AccessGuide || !r.Given() || r.Change == proto.AccessRemoved:
+		case r.Body == "":
+			fmt.Fprintf(e.Stdout, "\n%s: tm 0.38's guidance, worded at launch (the server writes it out when it starts)\n", oneLineText(r.Value))
+		default:
+			gs = append(gs, config.Guide{Title: r.Value, Body: textsafe.Text(r.Body)})
+		}
+	}
+	if len(gs) > 0 {
+		fmt.Fprint(e.Stdout, "\n"+config.GuideText(gs))
+	}
 }
 
 // printAccess prints a set as the effective access view's table.

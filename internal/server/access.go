@@ -337,7 +337,7 @@ func sandboxRules(lc launchConfig, slug, goos string, tm tmDirs) ([]proto.Access
 	var out []proto.AccessRule
 	for _, r := range t.Rules {
 		k := kinds[r.Key]
-		rule := proto.AccessRule{Where: k[0], Kind: k[1], Value: r.Value, Source: proto.AccessFromAll,
+		rule := proto.AccessRule{Where: k[0], Kind: k[1], Value: r.Value, Body: r.Body, Source: proto.AccessFromAll,
 			OS: config.SandboxSettings[r.Key].OS, Agents: agents(r.Key), Skipped: skip(r.Key), Dropped: r.Dropped, Refused: r.Refused}
 		switch {
 		case r.Own:
@@ -602,12 +602,12 @@ func launchTemp(set proto.AccessSet) string {
 // texts its brief gets where it runs, and a note for each kind of rule
 // that doesn't apply there and each rule refused, or the one why its
 // rules were left out, for the log and the launch's warnings.
-func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, guides, skipped []string) {
+func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, guides []config.Guide, skipped []string) {
 	if set.SandboxError != "" {
 		return lists, nil, []string{set.SandboxError}
 	}
 	said := map[string]bool{}
-	var noAsk []string
+	var noAsk, names []string
 	for _, r := range set.Rules {
 		if r.Where == proto.AccessAgent || r.Dropped || !forAgent(r, set.Agent) {
 			continue
@@ -637,7 +637,11 @@ func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, guides, skipp
 		case proto.AccessAllow:
 			lists.Allow = append(lists.Allow, r.Value)
 		case proto.AccessGuide:
-			guides = append(guides, r.Value)
+			if r.Body == "" {
+				names = append(names, r.Value) // tm 0.38's, worded below
+			} else {
+				guides = append(guides, config.Guide{Title: r.Value, Body: r.Body})
+			}
 		case proto.AccessHost:
 			// Once each: Codex refuses a key given twice.
 			if !slices.Contains(lists.Domains, r.Value) {
@@ -665,13 +669,14 @@ func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, guides, skipp
 			lists.Allow = append(lists.Allow, a)
 		}
 	}
+	guides = append(config.LegacyGuides(names, lists.Domains, lists.LocalBinding), guides...)
 	return lists, guides, skipped
 }
 
 // sandboxKindWords name the sandbox rules of a kind in the log.
 var sandboxKindWords = map[string]string{
 	proto.AccessExcluded: "excluded commands", proto.AccessAllow: "allow rules", proto.AccessHost: "hosts",
-	proto.AccessGuide: "guidance texts", proto.AccessLocalPorts: "local ports", proto.AccessWriteFolder: "write folders",
+	proto.AccessGuide: "guides", proto.AccessLocalPorts: "local ports", proto.AccessWriteFolder: "write folders",
 	proto.AccessUnixSocket: "sockets", proto.AccessApproved: "approved commands",
 }
 

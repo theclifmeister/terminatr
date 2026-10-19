@@ -169,7 +169,8 @@ func TestThreadSandboxLoadErrors(t *testing.T) {
 }
 
 // TestCheckHostsAndGuides: a host is a name, never an address, a URL or
-// one word; a guide is a text tm ships.
+// one word; a guide is a title of one line and a text in lines, or a
+// name of tm 0.38's texts.
 func TestCheckHostsAndGuides(t *testing.T) {
 	for _, h := range []string{"registry.npmjs.org", "cdn.playwright.dev", "*.example.com", "a-b.c0.io", "*.example.co.uk", "me.github.io", "storage.googleapis.com"} {
 		if err := CheckHost(h); err != nil {
@@ -186,13 +187,17 @@ func TestCheckHostsAndGuides(t *testing.T) {
 	if SandboxWarning(SandboxHosts, "storage.googleapis.com") == "" || SandboxWarning(SandboxHosts, "*.x.dev") == "" || SandboxWarning(SandboxHosts, "x.dev") != "" {
 		t.Error("host warnings")
 	}
-	for _, g := range Guides {
-		if err := CheckGuide(g.Name); err != nil {
-			t.Errorf("%s: %v", g.Name, err)
+	for _, g := range []Guide{{"browser-testing", ""}, {"browser-downloads", ""}, {"Test data", "Run make fixtures.\n\n\tNever edit testdata/."},
+		BrowserTestingGuide(true), BrowserDownloadsGuide(BrowserDomains)} {
+		if err := CheckGuide(g); err != nil {
+			t.Errorf("%q: %v", g.Title, err)
 		}
 	}
-	if err := CheckGuide("browser_testing"); err == nil {
-		t.Error("an unknown guide passed")
+	for _, g := range []Guide{{"browser_testing", ""}, {"Test data", ""}, {"Test data", " \n "}, {"", "x"}, {"a\nb", "x"}, {strings.Repeat("t", 121), "x"},
+		{"T", strings.Repeat("x", MaxGuideBody+1)}, {"T", "a\x1b[2Jb"}, {"T", "a\r\nb"}, {"T", "a\u202eb"}} {
+		if err := CheckGuide(g); err == nil {
+			t.Errorf("%q passed", g)
+		}
 	}
 }
 
@@ -329,6 +334,8 @@ func TestEditSandbox(t *testing.T) {
 			t.Lists[SandboxGuides] = []string{GuideBrowserTesting, GuideBrowserTesting}
 			return nil
 		}},
+		{"projects.web", func(t *SandboxTable) error { t.SetGuide(Guide{"Test data", ""}); return nil }},
+		{"projects.web", func(t *SandboxTable) error { t.SetGuide(Guide{"Test data", "a\x1bb"}); return nil }},
 	} {
 		if err := EditSandbox(bad.table, bad.fn); err == nil {
 			t.Errorf("%s: written", bad.table)
@@ -429,11 +436,11 @@ local_dev_servers = false
 		t.Fatal(err)
 	}
 	other := c.ThreadSandbox("other")
-	if !reflect.DeepEqual(other.Given(SandboxHosts), BrowserDomains) || !reflect.DeepEqual(other.Given(SandboxGuides), []string{GuideBrowserTesting, GuideBrowserDownloads}) || !other.LocalPorts {
+	if !reflect.DeepEqual(other.Given(SandboxHosts), BrowserDomains) || !reflect.DeepEqual(other.Given(SandboxGuides), legacyGuideNames) || !other.LocalPorts {
 		t.Errorf("other: %+v", other)
 	}
 	web := c.ThreadSandbox("web")
-	if len(web.Given(SandboxHosts)) != 0 || !reflect.DeepEqual(web.Given(SandboxGuides), []string{GuideBrowserTesting}) || web.LocalPorts || !web.LocalPortsOwn {
+	if len(web.Given(SandboxHosts)) != 0 || !reflect.DeepEqual(web.Given(SandboxGuides), []string{legacyBrowserTesting}) || web.LocalPorts || !web.LocalPortsOwn {
 		t.Errorf("web: %+v", web)
 	}
 	if err := EditSandbox("projects.web", func(t *SandboxTable) error { t.Add(SandboxHosts, "x.dev"); return nil }); err != nil {
@@ -498,7 +505,7 @@ func TestSandboxApplies(t *testing.T) {
 		key, goos string
 		want      bool
 	}{
-		{SandboxGuides, OSMac, true}, {SandboxGuides, OSLinux, false}, {SandboxHosts, OSMac, true}, {SandboxHosts, OSWindows, false}, {SandboxLocalPorts, OSWindows, false},
+		{SandboxGuides, OSMac, true}, {SandboxGuides, OSLinux, true}, {SandboxHosts, OSMac, true}, {SandboxHosts, OSWindows, false}, {SandboxLocalPorts, OSWindows, false},
 		{SandboxExcluded, OSWindows, true}, {SandboxAllow, OSLinux, true}, {"nope", OSMac, false},
 	} {
 		if got := SandboxApplies(c.key, c.goos); got != c.want {

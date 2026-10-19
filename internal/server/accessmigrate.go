@@ -23,7 +23,9 @@ import (
 // was, and each project's inbox says why, once for each reason. Each
 // write folder a file allow rule or a worktree-only allowance became
 // reaches further than it did, which the check can't see: the note
-// names it and needs the user. Whatever the migration does, every
+// names it and needs the user. The same start writes out tm 0.38's
+// guide names as guides (config.MigrateGuides), with the same check of
+// what threads get and the same note. Whatever the migration does, every
 // project with yolo on is told once that yolo now turns Claude's
 // sandbox off too (tellYolo).
 
@@ -62,7 +64,11 @@ func migrateAccess(logf func(string, ...any)) {
 		}, true)
 		return
 	}
-	logf("access migration: config.toml moved to the access rules, the old file kept as %s", backup)
+	moved := "tm moved config.toml to the access rules"
+	if !m.Access {
+		moved = "tm wrote out tm 0.38's guidance names in config.toml as guides, each a title and its text to read and edit in the Access tab"
+	}
+	logf("access migration: %s, the old file kept as %s", moved, backup)
 	noteAccess(func(slug string) (string, bool) {
 		var parts []string
 		ask := false
@@ -87,7 +93,10 @@ func migrateAccess(logf func(string, ...any)) {
 		if slices.Contains(m.Yolo, slug) {
 			parts = append(parts, slug+" has yolo on: its threads run with no sandbox, so its rules weren't compared.")
 		}
-		summary := "tm moved config.toml to the access rules (the old file: " + backup + "); " + same + " " + strings.Join(parts, " ") + " " + accessMeanings
+		summary := moved + " (the old file: " + backup + "); " + same + " " + strings.Join(parts, " ")
+		if m.Access {
+			summary += " " + accessMeanings
+		}
 		return summary, ask
 	}, false)
 }

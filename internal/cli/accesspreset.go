@@ -135,11 +135,13 @@ func (e *Env) presetAdd(name string, pos []string, all bool) error {
 	if err != nil {
 		return srvFail(cmd, err)
 	}
-	add := p.Missing(cfg.ThreadSandbox(slug).Has)
+	ts := cfg.ThreadSandbox(slug)
+	add := p.Missing(ts.Has)
 	var words []string
 	if len(add) > 0 {
 		err := config.EditSandbox(table, func(t *config.SandboxTable) error {
-			for _, r := range add {
+			// A guide's text worded from the rules threads then have.
+			for _, r := range config.WordRules(add, ts) {
 				t.AddRule(r)
 			}
 			return nil
