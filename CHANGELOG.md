@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.38.0](https://github.com/theclifmeister/terminatr/compare/v0.37.0...v0.38.0) (2026-10-19)
+
+
+### Features
+
+* **access:** Codex threads get a limited network and no escalation with escapes off; your own Claude excluded commands count as escapes ([#654](https://github.com/theclifmeister/terminatr/issues/654)) ([bf985a7](https://github.com/theclifmeister/terminatr/commit/bf985a7f325e281fc397fe7813a9fb270e0f21c3))
+* **access:** excluded commands ask first or run without asking; write folders ([#655](https://github.com/theclifmeister/terminatr/issues/655)) ([9f803e0](https://github.com/theclifmeister/terminatr/commit/9f803e092d43c3223c014c7b3745dc5318b64c6d))
+* **access:** host, local-port and guidance rules; presets add their rules; drop and per-entry refusal ([#653](https://github.com/theclifmeister/terminatr/issues/653)) ([6a3114b](https://github.com/theclifmeister/terminatr/commit/6a3114b3a53af55be662d67f89e329019d8b1a9f))
+* **access:** move config.toml to the access rules at the first server start; tm access add|rm|drop|undrop|set ([#658](https://github.com/theclifmeister/terminatr/issues/658)) ([74f8c70](https://github.com/theclifmeister/terminatr/commit/74f8c70341ab96825f5cb830a070b197a4f3f619))
+* **access:** one Access tab per project and for all projects ([#651](https://github.com/theclifmeister/terminatr/issues/651)) ([260c628](https://github.com/theclifmeister/terminatr/commit/260c6285de728a5588469b59e6026558857dfd07))
+* **access:** see a thread's effective access (tm access show/explain, Effective access view) ([#650](https://github.com/theclifmeister/terminatr/issues/650)) ([7ee7639](https://github.com/theclifmeister/terminatr/commit/7ee763985814b7adb4dc0dee1e735d0e47bf6811))
+* **access:** socket rules and approved commands; a Codex thread's excluded commands become approved commands ([#659](https://github.com/theclifmeister/terminatr/issues/659)) ([5a3573d](https://github.com/theclifmeister/terminatr/commit/5a3573df407442205f8ee376c0ba44b00bde087d))
+* **access:** yolo turns the sandbox off; the guard floor protects settings and the project folder; escape prompts go to the user ([#652](https://github.com/theclifmeister/terminatr/issues/652)) ([6ceac62](https://github.com/theclifmeister/terminatr/commit/6ceac62e0413bc82226d740690783670d280fe48))
+* **doctor:** readable output (blank line between groups, uppercase headings, aligned columns) ([#645](https://github.com/theclifmeister/terminatr/issues/645)) ([619364d](https://github.com/theclifmeister/terminatr/commit/619364dc0f7d083706c6d03be360daf885a2dc4c))
+* **mods:** install from public URLs only ([#647](https://github.com/theclifmeister/terminatr/issues/647)) ([726f35e](https://github.com/theclifmeister/terminatr/commit/726f35e1a055c325f84689136e7ab6673501d098))
+* **mods:** show where an installed mod came from (Mods tab, tm mod show) ([#644](https://github.com/theclifmeister/terminatr/issues/644)) ([985c3a6](https://github.com/theclifmeister/terminatr/commit/985c3a68573e9e71a9985c3fc859dbc76f4635ba))
+* **sandbox:** give each thread its own temp folder, kept from other sessions' ([#657](https://github.com/theclifmeister/terminatr/issues/657)) ([bdacb09](https://github.com/theclifmeister/terminatr/commit/bdacb09e1826a4a5cfbf605ecb055a381e3349b1))
+* **sandbox:** take a thread's git dirs from its record ([#649](https://github.com/theclifmeister/terminatr/issues/649)) ([60e7dfa](https://github.com/theclifmeister/terminatr/commit/60e7dfa9dfbbb2e6846558cdb5736a3ffa41b01e))
+
+
+### Bug Fixes
+
+* **report:** accept attachments from a Claude thread's temp folders and its own scratchpad ([#648](https://github.com/theclifmeister/terminatr/issues/648)) ([2c060b0](https://github.com/theclifmeister/terminatr/commit/2c060b0c909ff5c7764c882bda49a9722a17ef14))
+
 ## [0.37.0](https://github.com/theclifmeister/terminatr/compare/v0.36.0...v0.37.0) (2026-10-18)
 
 
