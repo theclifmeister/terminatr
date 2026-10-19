@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
@@ -54,8 +56,8 @@ type Opts struct {
 	OK []int
 	// Tree pins the run to a worktree Pin checked: git runs in it with
 	// its git dirs given, never looked up from the folder. A Tree run
-	// reads: a linked worktree's run gets a git dir of tm's own
-	// (privateGitDir), which it drops after.
+	// reads: a linked worktree's run gets a git dir of tm's own in its
+	// state dir (privateGitDir), which it drops after.
 	Tree *Tree
 	// Untrusted is a run that must look its repository up from a folder
 	// an agent writes (to find out what it is): git starts no program on
@@ -327,19 +329,58 @@ func Pin(ctx context.Context, repo, dir string) (*Tree, error) {
 	return &Tree{Dir: top, GitDir: own, CommonDir: common}, nil
 }
 
+// RunsDir is the folder in tm's state dir home that the private git
+// dirs of pinned runs are made in (privateGitDir). Threads get a deny
+// rule on it, as on the rest of tm's state.
+func RunsDir(home string) string { return filepath.Join(home, "state", "git") }
+
+// maxSharedIndex caps the shared index files a run links.
+const maxSharedIndex = 8
+
 // privateGitDir is the git dir a run in linked worktree t gets: a
-// folder in tm's temp folder with the worktree's HEAD, a commondir
-// naming t.CommonDir, and links to its shared index files
-// (core.splitIndex). The run names the worktree's index itself
-// (GIT_INDEX_FILE). Nothing else in the worktree's own git dir is read:
-// not its config.worktree (with extensions.worktreeConfig on), nor its
-// commondir, which git's ref store follows even with GIT_COMMON_DIR set.
+// folder in RunsDir with the worktree's HEAD, a commondir naming
+// t.CommonDir, and links to its shared index files (core.splitIndex).
+// The run names the worktree's index itself (GIT_INDEX_FILE). Nothing
+// else in the worktree's own git dir is read: not its config.worktree
+// (with extensions.worktreeConfig on), nor its commondir, which git's
+// ref store follows even with GIT_COMMON_DIR set. The index and shared
+// index files must be regular files.
 func privateGitDir(t *Tree) (string, error) {
 	head, err := readHead(filepath.Join(t.GitDir, "HEAD"))
 	if err != nil {
 		return "", err
 	}
-	p, err := os.MkdirTemp("", "tm-git-")
+	if fi, err := os.Lstat(filepath.Join(t.GitDir, "index")); err == nil && !fi.Mode().IsRegular() {
+		return "", fmt.Errorf("%s: index is not a file", t.GitDir)
+	} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return "", err
+	}
+	es, err := os.ReadDir(t.GitDir)
+	if err != nil {
+		return "", err
+	}
+	var shared []string
+	for _, e := range es {
+		if !strings.HasPrefix(e.Name(), "sharedindex.") {
+			continue
+		}
+		if !e.Type().IsRegular() {
+			return "", fmt.Errorf("%s: %s is not a file", t.GitDir, e.Name())
+		}
+		shared = append(shared, e.Name())
+	}
+	if len(shared) > maxSharedIndex {
+		return "", fmt.Errorf("%s: over %d shared index files", t.GitDir, maxSharedIndex)
+	}
+	h, err := home.Dir()
+	if err != nil {
+		return "", err
+	}
+	root := RunsDir(h)
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		return "", err
+	}
+	p, err := os.MkdirTemp(root, "run-")
 	if err != nil {
 		return "", err
 	}
@@ -347,15 +388,14 @@ func privateGitDir(t *Tree) (string, error) {
 	if err == nil {
 		err = os.WriteFile(filepath.Join(p, "commondir"), []byte(t.CommonDir+"\n"), 0o600)
 	}
+	for _, n := range shared {
+		if err == nil {
+			err = os.Symlink(filepath.Join(t.GitDir, n), filepath.Join(p, n))
+		}
+	}
 	if err != nil {
 		os.RemoveAll(p)
 		return "", err
-	}
-	es, _ := os.ReadDir(t.GitDir)
-	for _, e := range es {
-		if strings.HasPrefix(e.Name(), "sharedindex.") {
-			os.Symlink(filepath.Join(t.GitDir, e.Name()), filepath.Join(p, e.Name()))
-		}
 	}
 	return p, nil
 }

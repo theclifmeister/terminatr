@@ -173,9 +173,14 @@ func Dirty(repo, dir string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	out, err := gitx.Run(ctx, "", gitx.Opts{Tree: t}, "status", "--porcelain")
+	out, err := gitx.Run(ctx, "", gitx.Opts{Tree: t}, statusArgs...)
 	return out != "", err
 }
+
+// statusArgs is the check for changes of Dirty and Unsaved: every
+// untracked file, and submodules' changes whatever .gitmodules says
+// (its ignore setting is the worktree's to write).
+var statusArgs = []string{"status", "--porcelain", "--ignore-submodules=none", "--untracked-files=all"}
 
 // removeWorktree is git worktree remove of dir. Its own check for
 // changes runs git status in dir: it is given the repo's git dir, not
@@ -348,7 +353,7 @@ func Unsaved(repo, dir, pushed string) (string, error) {
 	git := func(args ...string) (string, error) {
 		return gitx.Run(ctx, "", gitx.Opts{Tree: t}, args...)
 	}
-	out, err := git("status", "--porcelain")
+	out, err := git(statusArgs...)
 	if err != nil {
 		return "", err
 	}
