@@ -305,3 +305,43 @@ func TestRemoveRedirectedCommonDir(t *testing.T) {
 		t.Fatal("the planted monitor ran")
 	}
 }
+
+// TestRemoveWorktreeConfig: with extensions.worktreeConfig on, a clean
+// filter set in the worktree's own config.worktree never runs as it is
+// checked for changes and removed; a dirty one is still kept.
+func TestRemoveWorktreeConfig(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell command filter")
+	}
+	repo, run := gittest.Repo(t)
+	run("config", "extensions.worktreeConfig", "true")
+	dir := filepath.Join(t.TempDir(), "wt")
+	if _, err := Create(repo, dir, "tm/x", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	d, err := GitDirs(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(t.TempDir(), "ran")
+	attrs := filepath.Join(t.TempDir(), "attributes")
+	os.WriteFile(attrs, []byte("* filter=x\n"), 0o644)
+	cfg := "[core]\n\tattributesFile = " + attrs + "\n[filter \"x\"]\n\tclean = \"touch " + marker + "; cat\"\n"
+	os.WriteFile(filepath.Join(d.GitDir, "config.worktree"), []byte(cfg), 0o644)
+	// Rewritten in place at the same size: git hashes it to tell.
+	os.WriteFile(filepath.Join(dir, "a"), []byte("a"), 0o644)
+	os.WriteFile(filepath.Join(dir, "f"), []byte("x"), 0o644)
+	if err := Remove(repo, dir); !errors.Is(err, ErrDirty) {
+		t.Fatalf("dirty: %v", err)
+	}
+	os.Remove(filepath.Join(dir, "f"))
+	if err := Remove(repo, dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("kept: %v", err)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("the planted filter ran")
+	}
+}

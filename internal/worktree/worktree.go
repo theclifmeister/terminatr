@@ -139,8 +139,28 @@ func Remove(repo, dir string) error {
 	case dirty:
 		return ErrDirty
 	}
-	_, err := removeWorktree(repo, dir)
+	var flags []string
+	if worktreeConfig(repo) {
+		// Git's own check for changes would read dir's config.worktree:
+		// Dirty's pinned one stands for it.
+		flags = append(flags, "--force")
+	}
+	_, err := removeWorktree(repo, dir, flags...)
 	return err
+}
+
+// worktreeConfig reports whether repo's git reads each worktree's own
+// config.worktree (extensions.worktreeConfig); true when its config
+// can't be read.
+func worktreeConfig(repo string) bool {
+	ctx := context.Background()
+	common, err := gitx.CommonDir(ctx, repo)
+	if err != nil {
+		return true
+	}
+	out, err := gitx.Run(ctx, common, gitx.Opts{OK: []int{1}},
+		"config", "--file", filepath.Join(common, "config"), "--type=bool", "--get", "extensions.worktreeConfig")
+	return err != nil || out == "true"
 }
 
 // Dirty reports whether repo's worktree dir has uncommitted changes.
