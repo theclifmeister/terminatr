@@ -44,21 +44,20 @@ func sandboxRow(t *testing.T, slug, label string) setting {
 	return setting{}
 }
 
-// TestSandboxView: a project follows all projects' excluded commands
-// until it adds one, which starts its own list from theirs (it
-// replaces them, as in tm 0.37, until the migration); adding one asks
-// first, saying it runs outside the sandbox; a match-all entry is
-// refused; x removes the project's own, f follows all projects again,
-// and on a project that follows them d drops one and u takes it back.
+// TestSandboxView: a project's excluded commands add to all projects';
+// adding one asks first, saying it runs outside the sandbox; a
+// match-all entry is refused, and so is one all projects give already;
+// x removes the project's own, d drops one of all projects' and u takes
+// it back.
 func TestSandboxView(t *testing.T) {
 	src, m := sandboxData(t)
 	row := sandboxRow(t, "alpha", "Excluded commands")
-	if v, from := row.value(m), row.from(m); v != "1" || from != config.AllProjectsName {
-		t.Errorf("value %q from %q", v, from)
+	if v := row.value(m); v != "1" || row.unset != nil {
+		t.Errorf("value %q, unset %v", v, row.unset != nil)
 	}
 	drain(t, m, row.change(m))
 	out := screen(m)
-	for _, want := range []string{"outside the sandbox", "full file and network access", "docker compose *", "all projects", "which alpha follows", "d drop for alpha"} {
+	for _, want := range []string{"outside the sandbox", "full file and network access", "docker compose *", "all projects", "add up", "d drop for alpha"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}
@@ -97,30 +96,17 @@ func TestSandboxView(t *testing.T) {
 		t.Fatalf("no warning before adding: %T", m.top())
 	}
 	drain(t, m, keyPress(m, "y"))
-	// alpha's own list starts from all projects'.
 	if got := given(); !slices.Equal(got, []string{"docker compose *", "npx playwright *"}) {
 		t.Errorf("given %q", got)
 	}
-	if v, from := row.value(m), row.from(m); v != "2 (1 of all projects replaced)" || from != "" {
-		t.Errorf("value %q from %q", v, from)
-	}
-	if out := screen(m); !strings.Contains(out, "alpha's own list replaces all projects'") || !strings.Contains(out, "all projects · replaced") {
-		t.Errorf("own list:\n%s", out)
+	if v := row.value(m); v != "2 (1 alpha)" {
+		t.Errorf("value %q", v)
 	}
 	v := m.top().(*sandboxView)
-	v.sel = 0
-	keyPress(m, "d")
-	if !strings.Contains(m.msg, "f follows theirs again") {
-		t.Errorf("d on a replaced entry: %q", m.msg)
-	}
 	v.sel = 1
 	drain(t, m, keyPress(m, "x"))
-	if got := given(); !slices.Equal(got, []string{"npx playwright *"}) {
+	if got := given(); !slices.Equal(got, []string{"docker compose *"}) {
 		t.Errorf("after x: %q", got)
-	}
-	drain(t, m, keyPress(m, "f"))
-	if got := given(); !slices.Equal(got, []string{"docker compose *"}) || row.from(m) != config.AllProjectsName {
-		t.Errorf("after f: %q", got)
 	}
 	v.sel = 0
 	drain(t, m, keyPress(m, "d"))
@@ -131,13 +117,13 @@ func TestSandboxView(t *testing.T) {
 		t.Errorf("dropped entry not shown:\n%s", out)
 	}
 	drain(t, m, keyPress(m, "u"))
-	want := []string{"projects.alpha excluded_commands + npx playwright *", "projects.alpha excluded_commands - docker compose *",
-		"projects.alpha excluded_commands follows all projects", "projects.alpha drop + docker compose *", "projects.alpha drop - docker compose *"}
+	want := []string{"projects.alpha excluded_commands + npx playwright *", "projects.alpha excluded_commands - npx playwright *",
+		"projects.alpha drop + docker compose *", "projects.alpha drop - docker compose *"}
 	if !slices.Equal(src.sandbox, want) {
 		t.Errorf("saved %q", src.sandbox)
 	}
 	c, _ := config.Load()
-	if got := c.SandboxOf("alpha"); len(got.Lists) != 0 || len(got.Replaces) != 0 {
+	if got := c.SandboxOf("alpha"); len(got.Lists) != 0 {
 		t.Errorf("left set: %+v", got)
 	}
 }

@@ -96,6 +96,10 @@ func presetRuleKind(r config.PresetRule) string {
 		return "local-ports"
 	case config.SandboxExcluded:
 		return "excluded"
+	case config.SandboxSockets:
+		return "socket"
+	case config.SandboxApproved:
+		return "approved"
 	}
 	return r.Key
 }

@@ -17,6 +17,10 @@ const accessUsage = `usage: tm access show [<project>] [--thread <id>] [--json]
        tm access explain [<project>] [--thread <id>] [--json] -- <command line>
        tm access preset list [--json]
        tm access preset show <name> [--json]
+       tm access add <kind> <value> [<project> | --all] [--without-asking]
+       tm access rm <kind> <value> [<project> | --all]
+       tm access drop|undrop <value> [<project>]
+       tm access set local-ports|escapes|yolo on|off [<project> | --all] [--yes]
        tm access preset add <name> [<project> | --all]
 
 show lists a thread's access as rules: where each acts, the rule, and
@@ -29,6 +33,19 @@ show only its own access (its --thread is the default).
 explain says whether a thread of the project runs the command inside or
 outside the sandbox, whether it asks first, and the guard's verdict.
 
+add and rm change a sandbox list of the project's table (the one here
+when none is named) or, with --all, all projects': kinds write (a write
+folder), host, guide, socket (a unix socket sandboxed commands may
+connect to), excluded (an excluded command, asking first;
+--without-asking runs it without asking), approved (a command a thread
+may ask tm to run outside its sandbox: tm run) and allow (a permission
+rule for a tool that neither runs commands nor writes files). A project's
+lists add to all projects'; drop names one of all projects' entries its
+threads don't take, undrop takes it back. set turns local ports,
+sandbox escapes or yolo on or off; yolo on asks first (--yes without a
+terminal), as it turns the sandbox off. Each is journaled, and threads
+get it from their next start or restart. These are the human's.
+
 A preset is a named group of rules tm ships. preset show lists the rules
 it adds; preset add adds those the project's threads (or, with --all,
 every project's) don't have yet to its table in config.toml, as plain
@@ -39,7 +56,8 @@ func init() {
 	commands["access"] = accessCmd
 }
 
-// accessCmd implements `tm access …` (T574 §5), read-only.
+// accessCmd implements `tm access …` (T574 §5): show and explain read,
+// the others write config.toml (accessedit.go, accesspreset.go).
 func accessCmd(e *Env, args []string) error {
 	if len(args) == 0 {
 		return srvUsage("access", accessUsage)
@@ -51,6 +69,12 @@ func accessCmd(e *Env, args []string) error {
 		return accessExplain(e, args[1:])
 	case "preset":
 		return accessPreset(e, args[1:])
+	case "add", "rm":
+		return accessAdd(e, args[0], args[1:])
+	case "drop", "undrop":
+		return accessDrop(e, args[0], args[1:])
+	case "set":
+		return accessSet(e, args[1:])
 	}
 	return srvUsage("access", accessUsage)
 }
