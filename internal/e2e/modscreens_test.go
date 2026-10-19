@@ -153,6 +153,9 @@ input = { file_path = "auth/session.go" }
 	w.Key(Enter)
 	w.WaitFor("Edit(auth/session.go)", wait)
 	w.WaitFor("LAST REPORT", wait)
+	// report-glance's section draws after the core panel (and the
+	// sidebar's footer re-lays out with it): wait for its last line.
+	w.WaitFor("no ## Check", wait)
 	// The LAST REPORT header's rule fills the panel's width after the
 	// duration, so its dash count follows the duration's width: pin it.
 	w.Golden("session-sidebar.txt",
