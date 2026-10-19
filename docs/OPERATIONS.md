@@ -548,7 +548,7 @@ Both terminals then show the other server's name and id and the same six digits,
 
 A relay without a domain pairs the same way, with its whole address: `tm peer pair --relay wss://203.0.113.5#sha256=…` (see [Without a domain](#without-a-domain-an-ip-address)). When a relay moves or gets a new key, `tm peer relay mini wss://…` (or `e` in the Peers tab) gives a paired server the new one, on each side; nothing else changes.
 
-`tm peer list` shows this server's id and each paired server with its link; `tm peer remove mini` drops one at once (remove this server on the other side too). The console has the same list in its settings (`,`, then `4 Peers`): each server's name, id, link and relay; `x` removes the selected one after asking, and `n` and `j` pair as above. `tm peer rotate` gives this server a new key, for a key you think was copied: every paired server then refuses it until you pair again with each (`tm peer pair --as mini` here, `tm peer join` there).
+`tm peer list` shows this server's id and each paired server with its link; `tm peer remove mini` drops one at once (remove this server on the other side too). The console has the same list in its settings (`,`, then `5 peers`): each server's name, id, link and relay; `x` removes the selected one after asking, and `n` and `j` pair as above. `tm peer rotate` gives this server a new key, for a key you think was copied: every paired server then refuses it until you pair again with each (`tm peer pair --as mini` here, `tm peer join` there).
 
 ### Sharing a project
 

@@ -260,7 +260,7 @@ func TestAccessTab(t *testing.T) {
 		keyPress(m, "down")
 		out += screen(m)
 	}
-	for _, want := range []string{"3 Access", "Escapes", "Yolo mode", "Network hosts", "Guard mode", "Secret environment", "A project's lists add to these", "alpha sets its own", "p add a preset"} {
+	for _, want := range []string{"3 access", "Escapes", "Yolo mode", "Network hosts", "Guard mode", "Secret environment", "A project's lists add to these", "alpha sets its own", "p add a preset"} {
 		if !strings.Contains(out, want) {
 			t.Errorf(", Access tab lacks %q:\n%s", want, out)
 		}
