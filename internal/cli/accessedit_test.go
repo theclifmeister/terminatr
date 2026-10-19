@@ -37,6 +37,7 @@ func TestAccessWriters(t *testing.T) {
 	writes := [][]string{
 		{"add", "host", "registry.npmjs.org", "--all"},
 		{"rm", "host", "registry.npmjs.org", "demo"},
+		{"edit", "host", "registry.npmjs.org", "x.dev", "--all"},
 		{"drop", "registry.npmjs.org", "demo"},
 		{"undrop", "registry.npmjs.org", "demo"},
 		{"set", "local-ports", "on", "demo"},
@@ -133,6 +134,81 @@ func TestAccessWriters(t *testing.T) {
 	lines, _, _ := p.JournalTail(20)
 	j := strings.Join(lines, "\n")
 	for _, want := range []string{"settings.sandbox demo hosts + registry.npmjs.org (all projects)", "excluded_commands + npx playwright * (ask = false)", "drop + registry.npmjs.org", "drop - registry.npmjs.org", "settings.yolo demo yolo = true", "settings.sandbox_escapes demo sandbox_escapes = false"} {
+		if !strings.Contains(j, want) {
+			t.Errorf("journal lacks %q:\n%s", want, j)
+		}
+	}
+}
+
+// TestAccessEdit: tm access edit changes an entry in place, its ask
+// kept unless a flag says, checked as add checks a new one; all
+// projects' entry takes a project's drop of it along; a project can't
+// edit all projects' entry, nor make its own one all projects give.
+func TestAccessEdit(t *testing.T) {
+	h := newHarness(t)
+	h.ok(human, "project", "new", "demo")
+	run := func(args ...string) (int, string, string) {
+		var out, errb bytes.Buffer
+		e := &Env{
+			Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errb,
+			Getenv: func(string) string { return "" }, Cwd: h.cwd, Caller: human,
+			Identify: func() (caller.Caller, bool) { return human, true },
+		}
+		code, _ := e.Run(append([]string{"access"}, args...))
+		return code, out.String(), errb.String()
+	}
+	ok := func(args ...string) string {
+		t.Helper()
+		code, out, stderr := run(args...)
+		if code != ExitOK {
+			t.Fatalf("%v: exit %d, %q", args, code, stderr)
+		}
+		return out
+	}
+	fail := func(want string, args ...string) {
+		t.Helper()
+		if code, _, stderr := run(args...); code == ExitOK || !strings.Contains(stderr, want) {
+			t.Errorf("%v: exit %d, %q", args, code, stderr)
+		}
+	}
+	ok("add", "excluded", "docker compose *", "--all", "--without-asking")
+	ok("add", "host", "a.dev", "--all")
+	ok("add", "excluded", "make e2e", "demo")
+	ok("drop", "docker compose *", "demo")
+	out := ok("edit", "excluded", "docker compose *", "docker compose up *", "--all")
+	for _, want := range []string{"changed for all projects: excluded command docker compose * → docker compose up *", "demo drops docker compose up * now"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q:\n%s", want, out)
+		}
+	}
+	ok("edit", "excluded", "make e2e", "make e2e *", "demo", "--without-asking")
+	fail("nothing to change", "edit", "excluded", "make e2e *", "make e2e *", "demo", "--without-asking")
+	fail("every command", "edit", "excluded", "make e2e *", "*", "demo")
+	fail("all projects'", "edit", "host", "a.dev", "b.dev", "demo")
+	fail("isn't in", "edit", "host", "x.dev", "b.dev", "demo")
+	ok("add", "host", "web.dev", "demo")
+	fail("all projects give a.dev already", "edit", "host", "web.dev", "a.dev", "demo")
+	fail("for tm access edit excluded", "edit", "host", "web.dev", "w.dev", "demo", "--asks-first")
+	ok("add", "guide", "Old", "--text", "Text.", "demo")
+	ok("edit", "guide", "Old", "New", "demo", "--text", "New text.")
+	c, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := c.ThreadSandbox("demo")
+	if got := ts.Given(config.SandboxExcluded); !slices.Equal(got, []string{"make e2e *"}) || !slices.Equal(ts.WithoutAsking(), []string{"make e2e *"}) {
+		t.Errorf("demo excluded %q, without asking %q", got, ts.WithoutAsking())
+	}
+	if !slices.Equal(ts.Drops, []string{"docker compose up *"}) || !slices.Equal(ts.Guides(), []config.Guide{{Title: "New", Body: "New text."}}) {
+		t.Errorf("demo drops %q, guides %q", ts.Drops, ts.Guides())
+	}
+	if got := c.ThreadSandbox("").WithoutAsking(); !slices.Equal(got, []string{"docker compose up *"}) {
+		t.Errorf("all projects' without asking %q", got)
+	}
+	p, _ := project.Open("demo")
+	lines, _, _ := p.JournalTail(20)
+	j := strings.Join(lines, "\n")
+	for _, want := range []string{"excluded_commands ~ docker compose * → docker compose up * (all projects)", "drop ~ docker compose * → docker compose up *", "excluded_commands ~ make e2e → make e2e * (ask = false)"} {
 		if !strings.Contains(j, want) {
 			t.Errorf("journal lacks %q:\n%s", want, j)
 		}

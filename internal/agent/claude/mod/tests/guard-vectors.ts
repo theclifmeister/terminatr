@@ -645,6 +645,7 @@ export default {
  {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "env -u TERMINATR_SESSION tm access rm host x.dev demo"}, "rule": "tm-files", "summary": "tm access rm", "floor": true},
  {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "tm access drop docker demo"}, "rule": "tm-files", "summary": "tm access drop", "floor": true},
  {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "tm access undrop docker demo"}, "rule": "tm-files", "summary": "tm access undrop", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "tm access edit host a.dev b.dev demo"}, "rule": "tm-files", "summary": "tm access edit", "floor": true},
  {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "\"$TERMINATR_BIN\" access set yolo on --all --yes"}, "rule": "tm-files", "summary": "tm access set", "floor": true},
  {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "tm access preset add browser-downloads demo"}, "rule": "tm-files", "summary": "tm access preset add", "floor": true},
  {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "tm access show --json"}, "rule": null},

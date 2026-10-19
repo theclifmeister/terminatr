@@ -9,7 +9,7 @@ import (
 )
 
 // The writers of tm access (T574 §5): add and rm an entry of a sandbox
-// list, drop and undrop one of all projects' for a project, set local
+// list, edit one in place (T619), drop and undrop one of all projects' for a project, set local
 // ports, escapes or yolo. The human's: an agent gets human-only, told by
 // the server from the process tree (access is a checked command), and
 // with no server to tell, the write is refused, as tm access preset add.
@@ -205,6 +205,123 @@ func accessAdd(e *Env, verb string, args []string) error {
 		detail += " (ask = false)"
 	}
 	e.accessJournal("settings.sandbox", slug, detail)
+	e.accessNext(slug)
+	return nil
+}
+
+// accessEdit implements tm access edit <kind> <old> <new> [<project> |
+// --all] (T619): one entry changed in place, its options with it, in one
+// write; all projects' entry takes the projects' drops of it along.
+func accessEdit(e *Env, args []string) error {
+	const cmd = "access edit"
+	if err := e.accessHuman(cmd); err != nil {
+		return err
+	}
+	f := newFlags()
+	all, noAsk, asks := f.Bool("all"), f.Bool("without-asking"), f.Bool("asks-first")
+	text, file := f.String("text"), f.String("file")
+	pos, err := f.Parse(args)
+	if err != nil {
+		return srvFail(cmd, err)
+	}
+	if len(pos) < 3 {
+		return srvUsage(cmd, accessUsage)
+	}
+	kind, old, value := pos[0], pos[1], pos[2]
+	key, ok := accessKinds[kind]
+	if !ok {
+		return srvUsage(cmd, "kinds: write, host, guide, socket, excluded, approved, allow")
+	}
+	ed := config.SandboxEdit{Key: key, Old: old, New: value}
+	switch {
+	case (*noAsk || *asks) && key != config.SandboxExcluded:
+		return srvUsage(cmd, "--without-asking and --asks-first are for tm access edit excluded")
+	case *noAsk && *asks:
+		return srvUsage(cmd, "--without-asking or --asks-first, not both")
+	case *noAsk || *asks:
+		ed.Ask = asks
+	}
+	switch {
+	case f.anySet("text", "file") && key != config.SandboxGuides:
+		return srvUsage(cmd, "--text and --file are for tm access edit guide")
+	case f.IsSet("text") && f.IsSet("file"):
+		return srvUsage(cmd, "--text or --file, not both")
+	case f.IsSet("text"):
+		ed.Body = text
+	case f.IsSet("file"):
+		body, err := e.readArg(*file)
+		if err != nil {
+			return srvFail(cmd, err)
+		}
+		ed.Body = &body
+	}
+	table, slug, who, err := e.accessScope(cmd, pos[3:], *all)
+	if err != nil {
+		return err
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return srvFail(cmd, err)
+	}
+	var was *config.SandboxRule
+	theirs := false
+	for _, r := range cfg.ThreadSandbox(slug).Rules {
+		switch {
+		case r.Key != key || r.Value != old:
+		case r.Own || slug == "":
+			was = &r
+		default:
+			theirs = true
+		}
+	}
+	switch {
+	case was == nil && theirs:
+		return srvFail(cmd, &project.Error{Code: "refused", Msg: fmt.Sprintf("%s is all projects': change it with --all, or drop it for %s", old, slug)})
+	case was == nil:
+		return srvFail(cmd, &project.Error{Code: "refused", Msg: fmt.Sprintf("%s isn't in the %s of %s", old, kind+" rules", who)})
+	case !ed.Changed(*was):
+		return srvFail(cmd, &project.Error{Code: "refused", Msg: "nothing to change: " + old + " is so already"})
+	case value != old:
+		if err := config.CheckNewSandboxEntry(key, value); err != nil {
+			return srvFail(cmd, &project.Error{Code: "refused", Msg: err.Error()})
+		}
+	}
+	if ed.Body != nil {
+		if err := config.CheckGuideBody(config.GuideBody(*ed.Body)); err != nil {
+			return srvFail(cmd, &project.Error{Code: "refused", Msg: err.Error()})
+		}
+	}
+	moved, err := config.EditSandboxRule(table, ed)
+	if err != nil {
+		return srvFail(cmd, accessErr(err))
+	}
+	word := config.KindName(key) + " " + old
+	if value != old {
+		word += " → " + value
+	}
+	detail := key + " ~ " + old
+	if value != old {
+		detail += " → " + value
+	}
+	if ed.Ask != nil {
+		word += map[bool]string{true: ", asks first", false: ", without asking"}[*ed.Ask]
+		detail += fmt.Sprintf(" (ask = %v)", *ed.Ask)
+	}
+	if ed.Body != nil {
+		word += ", its text changed"
+	}
+	fmt.Fprintf(e.Stdout, "changed for %s: %s\n", who, word)
+	if w := config.SandboxWarning(key, value); w != "" && value != old {
+		fmt.Fprintf(e.Stdout, "note: %s %s\n", value, w)
+	}
+	if key == config.SandboxExcluded && value != old {
+		fmt.Fprintln(e.Stdout, "note: it runs outside the sandbox, with your full file and network access (tm's socket included)")
+	}
+	e.accessJournal("settings.sandbox", slug, detail)
+	for _, s := range moved {
+		fmt.Fprintf(e.Stdout, "%s drops %s now, as it dropped %s\n", s, value, old)
+		e.accessJournal("settings.sandbox", s, "drop ~ "+old+" → "+value+" (all projects' rule changed)")
+	}
 	e.accessNext(slug)
 	return nil
 }

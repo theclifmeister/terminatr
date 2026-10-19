@@ -118,7 +118,7 @@ thread, launched with (rules, sources, what a restart would change), and
 `tm access explain [--thread <id>] -- <command>` says whether a command
 runs inside or outside the sandbox, asks first, and what the guard says:
 use them to debug a thread's refusal. Your own project only. Changing
-access (`add`, `rm`, `drop`, `undrop`, `set`, `preset add`) is the
+access (`add`, `rm`, `edit`, `drop`, `undrop`, `set`, `preset add`) is the
 user's.
 
 ## Threads

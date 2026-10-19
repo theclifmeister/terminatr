@@ -20,6 +20,7 @@ const accessUsage = `usage: tm access show [<project>] [--thread <id>] [--guides
        tm access add <kind> <value> [<project> | --all] [--without-asking]
        tm access add guide <title> --text <text> | --file <file> [<project> | --all] [--replace]
        tm access rm <kind> <value> [<project> | --all]
+       tm access edit <kind> <old value> <new value> [<project> | --all] [--without-asking | --asks-first] [--text <text> | --file <file>]
        tm access drop|undrop <value> [<project>]
        tm access set local-ports|escapes|yolo on|off [<project> | --all] [--yes]
        tm access preset add <name> [<project> | --all]
@@ -44,7 +45,12 @@ unix socket sandboxed commands may
 connect to), excluded (an excluded command, asking first;
 --without-asking runs it without asking), approved (a command a thread
 may ask tm to run outside its sandbox: tm run) and allow (a permission
-rule for a tool that neither runs commands nor writes files). A project's
+rule for a tool that neither runs commands nor writes files). edit
+changes an entry where it is, checked as add checks a new one: its
+value (the same value to change only its options), an excluded
+command's --without-asking or --asks-first (else it keeps its own), a
+guide's title and, with --text or --file, its text. Editing all
+projects' entry carries each project's drop of it along. A project's
 lists add to all projects'; drop names one of all projects' entries its
 threads don't take, undrop takes it back. set turns local ports,
 sandbox escapes or yolo on or off; yolo on asks first (--yes without a
@@ -76,6 +82,8 @@ func accessCmd(e *Env, args []string) error {
 		return accessPreset(e, args[1:])
 	case "add", "rm":
 		return accessAdd(e, args[0], args[1:])
+	case "edit":
+		return accessEdit(e, args[1:])
 	case "drop", "undrop":
 		return accessDrop(e, args[0], args[1:])
 	case "set":

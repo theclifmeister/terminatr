@@ -24,7 +24,9 @@ import (
 // skips it. A guide is a title and a text (texteditor.go edits it).
 // Every list adds down the layers (config.MergeSandbox): a
 // project's view lists all projects' entries too, x drops one for the
-// project and takes the drop back. Writes are the human's only.
+// project and takes the drop back. enter or e changes an entry of the
+// view's own table in place (T619): its value, an excluded command's
+// ask, a guide's title and text. Writes are the human's only.
 
 // sandboxOutside is what an excluded command opens, said wherever one is
 // added or listed.
@@ -49,7 +51,7 @@ const sandboxHost = "Every command a thread runs inside its sandbox may then rea
 const sandboxGuide = "Prefer rules inside the sandbox (p adds a preset's): the thread's commands stay in it, opened only as far as the tool needs. Excluded commands (Outside the sandbox) run outside it: a last resort. " + sandboxBoth
 
 // sandboxAdds says how a project's lists combine with all projects'.
-const sandboxAdds = "A project's entries add to all projects'; on a project, x removes its own, drops one of all projects' or takes the drop back."
+const sandboxAdds = "A project's entries add to all projects'. In the list, enter or e changes an entry in place and x removes it; on a project, all projects' entries change in the , popup, and x drops one or takes the drop back."
 
 // sandboxLists are each list's row label, help, view text, example and
 // what messages call its entries.
@@ -303,9 +305,9 @@ func warnLines(text string, w int) []string {
 }
 
 // sandboxView lists one sandbox list as the rows' threads get it, all
-// projects' entries on a project's too (T574 §4.2): a adds an entry, x
-// removes one the table sets, on a project drops one of all
-// projects' or takes the drop back.
+// projects' entries on a project's too (T574 §4.2): a adds an entry,
+// enter or e changes one the table sets, x removes it, on a project
+// drops one of all projects' or takes the drop back.
 type sandboxView struct {
 	sr   safetyRows
 	list string // a config.SandboxKeys key
@@ -358,9 +360,15 @@ func (v *sandboxView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		}
 		v.add(m)
 		return nil
-	case "enter":
-		if v.list == config.SandboxGuides && v.sel < len(es) && !e.stray {
+	case "enter", "e":
+		switch {
+		case v.sel >= len(es):
+		case v.list == config.SandboxGuides && k.String() == "enter" && !e.stray:
 			v.openGuide(m, e)
+		case v.list == config.SandboxGuides:
+			v.editGuide(m, e)
+		default:
+			v.edit(m, e)
 		}
 		return nil
 	case "x", "delete", "backspace":
@@ -512,6 +520,10 @@ func (v *sandboxView) render(m *dash) string {
 		lines = append(lines, "", th().Faint.Render("none: a adds one"))
 	}
 	keys := "a add · ↑ ↓ move · esc back"
+	edit := "enter edit · "
+	if v.list == config.SandboxGuides {
+		edit = "e edit title · "
+	}
 	if v.sel < len(es) {
 		switch e := es[v.sel]; {
 		case e.Dropped:
@@ -519,7 +531,7 @@ func (v *sandboxView) render(m *dash) string {
 		case !e.Own:
 			keys = "a add · x drop for " + v.sr.slug + " · ↑ ↓ move · esc back"
 		default:
-			keys = "a add · x remove · ↑ ↓ move · esc back"
+			keys = edit + "a add · x remove · ↑ ↓ move · esc back"
 		}
 	}
 	switch v.list {
@@ -656,4 +668,186 @@ func (v *sandboxView) covered(m *dash, e string) string {
 		}
 	}
 	return ""
+}
+
+// uneditable is why entry e can't be changed from the view, "" when it
+// can: the view's table must set it.
+func (v *sandboxView) uneditable(e sandboxEntry) string {
+	switch {
+	case e.stray:
+		return "a drop that matches none of all projects' rules: x removes it"
+	case e.Dropped:
+		return e.Value + " is all projects', dropped " + v.sr.forWho + ": x takes it back"
+	case !e.Own:
+		return e.Value + " is all projects': change it in the , popup's Access tab"
+	case v.list == config.SandboxGuides && e.Body == "":
+		return "tm 0.38's guidance " + e.Value + ": the server writes it out as its text when it starts"
+	}
+	return ""
+}
+
+// editRefused is why entry e can't become val, "" when it can: checked
+// as add checks a new entry.
+func (v *sandboxView) editRefused(m *dash, e sandboxEntry, val string) string {
+	if val == e.Value {
+		return ""
+	}
+	for _, r := range v.entries(m) {
+		switch {
+		case r.Value != val || r.stray:
+		case r.Own:
+			return "not changed: " + val + " is listed already"
+		case r.Dropped:
+			return "not changed: " + val + " is all projects', dropped " + v.sr.forWho + ": x takes it back"
+		default:
+			return "not changed: all projects give " + val + " already"
+		}
+	}
+	if err := config.CheckNewSandboxEntry(v.list, val); err != nil {
+		return "not changed: " + err.Error()
+	}
+	return ""
+}
+
+// edit opens entry e for editing: its value, then an excluded command's
+// choice to ask first; saved as one change.
+func (v *sandboxView) edit(m *dash, e sandboxEntry) {
+	if why := v.uneditable(e); why != "" {
+		m.msg = why
+		return
+	}
+	l := sandboxLists[v.list]
+	m.push(&inputView{title: "Edit " + e.Value + " " + v.sr.forWho, label: l.label + ", e.g. " + l.example + ":", text: e.Value, cancel: "unchanged", max: 300,
+		submit: func(val string) tea.Cmd {
+			if why := v.editRefused(m, e, val); why != "" {
+				m.msg = why
+				return nil
+			}
+			ed := config.SandboxEdit{Key: v.list, Old: e.Value, New: val}
+			if v.list != config.SandboxExcluded {
+				return v.saveEdit(m, e, ed)
+			}
+			pick := func(ask bool) menuItem {
+				label := "asks first"
+				if !ask {
+					label = "runs without asking"
+				}
+				return menuItem{label: label, run: func(m *dash) tea.Cmd {
+					ed.Ask = &ask
+					return v.saveEdit(m, e, ed)
+				}}
+			}
+			sel := 0
+			if e.NoAsk {
+				sel = 1
+			}
+			m.push(&menuView{title: val + " " + v.sr.forWho, items: []menuItem{pick(true), pick(false)}, sel: sel, centred: true})
+			return nil
+		}})
+}
+
+// editGuide opens guide e for editing: its title, then its text; saved
+// as one change.
+func (v *sandboxView) editGuide(m *dash, e sandboxEntry) {
+	if why := v.uneditable(e); why != "" {
+		m.msg = why
+		return
+	}
+	title := "Edit the guide " + e.Value + " " + v.sr.forWho
+	m.push(&inputView{title: title, label: "Its title, one line (the brief's heading):", text: e.Value, cancel: "unchanged", max: 120,
+		submit: func(t string) tea.Cmd {
+			if why := v.editRefused(m, e, t); why != "" {
+				m.msg = why
+				return nil
+			}
+			m.editText(title, "Its text, as the thread's brief gets it under ## "+t+":", e.Body, config.MaxGuideBody, func(body string) tea.Cmd {
+				body = config.GuideBody(body)
+				if err := config.CheckGuideBody(body); err != nil {
+					m.msg = "not saved: " + err.Error()
+					return nil
+				}
+				return v.saveEdit(m, e, config.SandboxEdit{Key: v.list, Old: e.Value, New: t, Body: &body})
+			})
+			return nil
+		}})
+}
+
+// saveEdit writes edit ed of entry e, putting what a new value opens to
+// the human first, as add does.
+func (v *sandboxView) saveEdit(m *dash, e sandboxEntry, ed config.SandboxEdit) tea.Cmd {
+	if !ed.Changed(e.SandboxRule) {
+		m.msg = "unchanged"
+		return nil
+	}
+	l := sandboxLists[v.list]
+	what := v.list + " ~ " + ed.Old
+	msg := e.Value + " changed in the " + l.word + " " + v.sr.forWho + ": threads get it from their next start"
+	if ed.New != ed.Old {
+		what += " → " + ed.New
+		msg = e.Value + " changed to " + ed.New + " in the " + l.word + " " + v.sr.forWho + ": threads get it from their next start"
+	}
+	if ed.Ask != nil {
+		what += fmt.Sprintf(" (ask = %v)", *ed.Ask)
+	}
+	q := ""
+	if ed.New != ed.Old {
+		switch v.list {
+		case config.SandboxExcluded:
+			q = sandboxOutside
+		case config.SandboxHosts:
+			q = sandboxHost
+		}
+		if w := config.SandboxWarning(v.list, ed.New); w != "" {
+			q += " " + ed.New + ": " + w + "."
+		}
+	}
+	if ed.Ask != nil && !*ed.Ask && !e.NoAsk {
+		q += " " + sandboxBoth
+	}
+	if ed.New != ed.Old || ed.Ask != nil && *ed.Ask {
+		if c := v.covered(m, ed.New); c != "" {
+			q += " " + c + "."
+		}
+	}
+	save := func() tea.Cmd { return v.sr.editRule(m, ed, what, msg) }
+	if q == "" {
+		return save()
+	}
+	change := "Change " + e.Value + " to " + ed.New
+	if ed.New == ed.Old {
+		change = "Change " + e.Value
+	}
+	m.confirm("Edit "+e.Value+" "+v.sr.forWho, change+" "+v.sr.forWho+"? "+strings.TrimSpace(q), save)
+	return nil
+}
+
+// editRule changes one entry of the rows' table by ed, shows it at once
+// (all projects' taking the projects' drops of it along), and writes
+// it, journaling what.
+func (sr safetyRows) editRule(m *dash, ed config.SandboxEdit, what, msg string) tea.Cmd {
+	if m.data.Sandbox == nil {
+		m.data.Sandbox = map[string]config.SandboxTable{}
+	}
+	t := m.data.Sandbox[sr.slug].Clone()
+	if err := ed.Apply(&t); err != nil {
+		m.msg = "not changed: " + err.Error()
+		return nil
+	}
+	m.data.Sandbox[sr.slug] = t
+	moved := false
+	for slug, own := range m.data.Sandbox {
+		if o := own.Clone(); sr.all && slug != "" && ed.MoveDrop(&o, t) {
+			m.data.Sandbox[slug], moved = o, true
+		}
+	}
+	if moved {
+		msg = strings.TrimSuffix(msg, ": threads get it from their next start") + "; the projects that dropped " + ed.Old + " drop " + ed.New + ": threads get it from their next start"
+	}
+	s, table := m.src, sr.table
+	return m.act(func() actionMsg {
+		if err := s.EditSandboxRule(table, what, ed); err != nil {
+			return actionMsg{err: settingsErr(err)}
+		}
+		return actionMsg{msg: msg}
+	})
 }
