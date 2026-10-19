@@ -165,6 +165,17 @@ func openProgram(cmd string) string {
 	return ""
 }
 
+// openWarning is what a command pattern that leaves its program open
+// (*e*, python* -c x) lets through, or "": a wide pattern is the
+// human's to set (T619), said where it is added.
+func openWarning(cmd string) string {
+	words := strings.Fields(cmd)
+	if len(words) > 0 && strings.Contains(words[0], "*") {
+		return "leaves the program open (" + words[0] + " matches many programs): it lets through any program whose name fits"
+	}
+	return ""
+}
+
 // codeWarning is why command pattern cmd, open at its first *, lets any
 // program or code through, or "": a program that runs others with its
 // arguments open (bash *, /bin/sh *, env sh *), or with the code it runs
@@ -247,8 +258,6 @@ func CheckExcludedCommand(e string) error {
 		return fmt.Errorf("%q matches every command: that is no sandbox at all", e)
 	case strings.HasPrefix(l, "bash(") || strings.HasPrefix(l, "powershell("):
 		return fmt.Errorf("%q is a permission rule: an excluded command is the command itself, e.g. npx playwright *", e)
-	case openProgram(e) != "":
-		return errors.New(openProgram(e))
 	}
 	if len([]rune(e)) < 2 {
 		return fmt.Errorf("%q is too short for a command: it would match programs by accident", e)
@@ -421,6 +430,9 @@ func SandboxProblems(key string, list []string) []string {
 func SandboxWarning(key, e string) string {
 	switch key {
 	case SandboxExcluded:
+		if w := openWarning(e); w != "" {
+			return w
+		}
 		return codeWarning(e)
 	case SandboxHosts:
 		return hostWarning(e)

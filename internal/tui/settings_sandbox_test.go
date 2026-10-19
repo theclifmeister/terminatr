@@ -697,3 +697,30 @@ guides = [{ title = "Old", body = "Old text." }]
 		t.Errorf("saved %q", src.sandbox)
 	}
 }
+
+// TestSandboxWideApproved: a wide approved command is the human's to
+// set (T619): added after its warning, which says what it leaves open;
+// editing one into a wide pattern says it too.
+func TestSandboxWideApproved(t *testing.T) {
+	_, m := sandboxData(t)
+	drain(t, m, sandboxRow(t, "alpha", "Approved commands").change(m))
+	keyPress(m, "a")
+	m.top().(*inputView).text = "prlctl *"
+	drain(t, m, keyPress(m, "enter"))
+	cv, ok := m.top().(*confirmView)
+	if !ok || !strings.Contains(cv.question, "every argument of prlctl") {
+		t.Fatalf("no warning before adding: %T", m.top())
+	}
+	drain(t, m, keyPress(m, "y"))
+	keyPress(m, "enter")
+	m.top().(*inputView).text = "sh -c *"
+	drain(t, m, keyPress(m, "enter"))
+	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "runs the code that follows it") {
+		t.Fatalf("no warning before the change: %T", m.top())
+	}
+	drain(t, m, keyPress(m, "y"))
+	c, _ := config.Load()
+	if got := c.ThreadSandbox("alpha").Given(config.SandboxApproved); !slices.Equal(got, []string{"sh -c *"}) {
+		t.Errorf("approved %q", got)
+	}
+}

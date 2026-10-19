@@ -79,7 +79,13 @@ func TestAccessWriters(t *testing.T) {
 	fail("matches every command", "add", "excluded", "*", "demo")
 	fail("kinds", "add", "nonsense", "x", "demo")
 	ok("add", "approved", "make e2e", "demo")
-	fail("every argument", "add", "approved", "make *", "demo")
+	// A wide pattern is the human's to set (T619): added, with a note.
+	if out := ok("add", "approved", "prlctl *", "demo"); !strings.Contains(out, "note: prlctl * ") || !strings.Contains(out, "every argument of prlctl") {
+		t.Errorf("add approved prlctl *: %q", out)
+	}
+	ok("rm", "approved", "prlctl *", "demo")
+	fail("tm itself", "add", "approved", "env tm *", "demo")
+	fail("without a shell", "add", "approved", "sh -c 'make test'", "demo")
 	ok("add", "socket", "~/pg.sock", "demo")
 	fail("pattern", "add", "socket", "~/run/*.sock", "demo")
 	// A guide: its title, its text from --text or --file; --replace

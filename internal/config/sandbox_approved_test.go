@@ -41,7 +41,8 @@ func TestCheckSocket(t *testing.T) {
 	}
 }
 
-// TestApprovedCommands: the form, the refusals of open programs, and
+// TestApprovedCommands: the form, wide patterns taken with a warning, tm
+// itself refused, and
 // word-for-word matching with a last * taking more.
 func TestApprovedCommands(t *testing.T) {
 	for _, e := range []string{"make test", "make e2e", "npm run e2e *", "docker compose up *", "go test ./...", "./scripts/check.sh"} {
@@ -49,22 +50,36 @@ func TestApprovedCommands(t *testing.T) {
 			t.Errorf("%q refused: %v", e, err)
 		}
 	}
+	// A wide pattern is the human's to set (T619): taken, with its
+	// warning.
+	for e, warn := range map[string]string{
+		"make *":       "make runs other programs",
+		"go *":         "every argument of go",
+		"prlctl *":     "every argument of prlctl",
+		"sh -c *":      "runs the code",
+		"python3 -c *": "runs the code",
+		"npx *":        "runs other programs",
+		"npm run *":    "runs the code",
+		"env sh *":     "runs other programs",
+		"make test *":  "any argument",
+		"make test":    "any code as you",
+	} {
+		if err := CheckApprovedCommand(e); err != nil {
+			t.Errorf("%q refused: %v", e, err)
+		}
+		if w := SandboxWarning(SandboxApproved, e); !strings.Contains(w, warn) {
+			t.Errorf("%q warns %q, want %q", e, w, warn)
+		}
+	}
 	for e, why := range map[string]string{
-		"make *":            "every argument",
-		"go *":              "every argument",
-		"gh *":              "every argument",
-		"make test *":       "",
-		"sh -c *":           "runs the code",
-		"python3 -c *":      "runs the code",
-		"npx *":             "every argument",
-		"npm run *":         "runs the code",
-		"env sh *":          "runs other programs",
 		"make test*":        "pattern inside",
 		"npm run 'e2e'":     "quote",
 		"make $T":           "$",
 		"make test | tee x": "|",
 		"make  test":        "one space",
 		"tm report":         "tm itself",
+		"env tm *":          "tm itself",
+		"sudo -n tm report": "tm itself",
 		"*":                 "names no program",
 		"":                  "empty",
 	} {
@@ -111,7 +126,7 @@ func TestSocketsAndApprovedLists(t *testing.T) {
 	write(t, `
 [defaults.sandbox]
 sockets = ["~/pg.sock"]
-approved_commands = ["make test", "make *"]
+approved_commands = ["make test", "make $T"]
 
 [projects.web.sandbox]
 sockets = ["/var/run/docker.sock"]
@@ -129,11 +144,11 @@ drop = ["make test"]
 	if got := ts.Given(SandboxApproved); !slices.Equal(got, []string{"make e2e"}) {
 		t.Errorf("approved %q", got)
 	}
-	if i := slices.IndexFunc(ts.Rules, func(r SandboxRule) bool { return r.Value == "make *" }); i < 0 || ts.Rules[i].Refused == "" {
-		t.Errorf("make * not refused: %+v", ts.Rules)
+	if i := slices.IndexFunc(ts.Rules, func(r SandboxRule) bool { return r.Value == "make $T" }); i < 0 || ts.Rules[i].Refused == "" {
+		t.Errorf("make $T not refused: %+v", ts.Rules)
 	}
-	if err := EditSandbox("projects.web", func(t *SandboxTable) error { t.Add(SandboxApproved, "bash *"); return nil }); err == nil {
-		t.Error("bash * added")
+	if err := EditSandbox("projects.web", func(t *SandboxTable) error { t.Add(SandboxApproved, "tm *"); return nil }); err == nil {
+		t.Error("tm * added")
 	}
 	if err := EditSandbox("projects.web", func(t *SandboxTable) error { t.Add(SandboxSockets, "~/redis.sock"); return nil }); err != nil {
 		t.Fatal(err)
