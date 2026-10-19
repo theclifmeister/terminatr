@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -80,6 +81,26 @@ func TestAccessWriters(t *testing.T) {
 	fail("every argument", "add", "approved", "make *", "demo")
 	ok("add", "socket", "~/pg.sock", "demo")
 	fail("pattern", "add", "socket", "~/run/*.sock", "demo")
+	// A guide: its title, its text from --text or --file; --replace
+	// changes it; drop and rm name it by its title.
+	ok("add", "guide", "Test data", "--text", "Run make fixtures.\n", "--all")
+	fail("listed already", "add", "guide", "Test data", "--text", "x", "--all")
+	fail("--text <text> | --file", "add", "guide", "Style", "demo")
+	fail("for tm access add guide", "add", "host", "x.dev", "--text", "x", "demo")
+	fail("needs a text", "add", "guide", "Style", "--text", " ", "demo")
+	fail("control or invisible", "add", "guide", "Style", "--text", "a\x1bb", "demo")
+	body := filepath.Join(t.TempDir(), "style.md")
+	os.WriteFile(body, []byte("Short lines.\n\tTabs kept.\n"), 0o600)
+	ok("add", "guide", "Style", "--file", body, "demo")
+	ok("add", "guide", "Test data", "--text", "Run make fixtures first.", "--all", "--replace")
+	ok("drop", "Test data", "demo")
+	if c, _ := config.Load(); !slices.Equal(c.ThreadSandbox("demo").Guides(), []config.Guide{{Title: "Style", Body: "Short lines.\n\tTabs kept."}}) ||
+		!slices.Equal(c.ThreadSandbox("other").Guides(), []config.Guide{{Title: "Test data", Body: "Run make fixtures first."}}) {
+		t.Errorf("guides: %q, %q", c.ThreadSandbox("demo").Guides(), c.ThreadSandbox("other").Guides())
+	}
+	ok("undrop", "Test data", "demo")
+	ok("rm", "guide", "Style", "demo")
+	ok("rm", "guide", "Test data", "--all")
 	ok("drop", "registry.npmjs.org", "demo")
 	fail("no rule", "drop", "nothing.dev", "demo")
 	c, err := config.Load()

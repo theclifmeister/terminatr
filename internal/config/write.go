@@ -312,6 +312,13 @@ func Edit(data []byte, table, key string, value any) ([]byte, error) {
 		}
 		return res, nil
 	}
+	if want, ok := value.([]Guide); ok {
+		var got guideList
+		if err := got.UnmarshalTOML(v); err != nil || !slices.Equal(got, guideList(want)) {
+			return nil, ErrForm
+		}
+		return res, nil
+	}
 	if want, ok := value.(EnvSource); ok {
 		if m, _ := v.(map[string]any); len(m) != 1 || m["from"] != any(want.From) {
 			return nil, ErrForm
@@ -465,6 +472,24 @@ func tomlValue(v any) (string, error) {
 			}
 		}
 		return "[" + strings.Join(parts, ", ") + "]", nil
+	case []Guide:
+		// An entry a line, its body a multi-line string; a name of tm
+		// 0.38 as it was, and names only on one line.
+		if !slices.ContainsFunc(v, func(g Guide) bool { return g.Body != "" }) {
+			return tomlValue(guideList(v).titles())
+		}
+		var b strings.Builder
+		b.WriteString("[\n")
+		for _, g := range v {
+			t, _ := tomlValue(g.Title)
+			if g.Body == "" {
+				b.WriteString("  " + t + ",\n")
+				continue
+			}
+			b.WriteString("  { title = " + t + ", body = " + multiline(g.Body) + " },\n")
+		}
+		b.WriteString("]")
+		return b.String(), nil
 	case EnvSource:
 		from, _ := tomlValue(v.From)
 		return "{ from = " + from + " }", nil
@@ -508,6 +533,31 @@ func tomlValue(v any) (string, error) {
 		return b.String(), nil
 	}
 	return "", fmt.Errorf("can't write a %T setting", v)
+}
+
+// multiline is s as a TOML multi-line basic string, its lines as they
+// are, and a newline after them: a backslash, a quote that would close
+// it and a control character but tab and newline escaped.
+func multiline(s string) string {
+	var b strings.Builder
+	b.WriteString(`"""` + "\n")
+	for i, r := range s {
+		switch {
+		case r == '\\':
+			b.WriteString(`\\`)
+		case r == '"' && i+1 < len(s) && s[i+1] == '"':
+			b.WriteString(`\"`)
+		case r == '\n' || r == '\t':
+			b.WriteRune(r)
+		case r < 0x20 || r == 0x7f:
+			fmt.Fprintf(&b, `\u%04X`, r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	// Closed on a line of its own; the reader takes that newline off.
+	b.WriteString("\n" + `"""`)
+	return b.String()
 }
 
 // statements splits data into its lines, each with its line end, but

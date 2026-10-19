@@ -24,15 +24,15 @@ import (
 // settings must equal. Each list's entries given where it applies,
 // local ports when on; a note per kind that doesn't apply, and per
 // entry refused.
-func wantSandbox(l launchConfig, slug, goos string) (lists agent.SandboxLists, guides, skipped []string) {
+func wantSandbox(l launchConfig, slug, goos string) (lists agent.SandboxLists, guides []config.Guide, skipped []string) {
 	if l.err != nil {
 		return lists, nil, []string{fmt.Sprintf("project %s: sandbox rules left out, the thread starts without them (fix config.toml: tm settings, Access tab): %v", slug, l.err)}
 	}
 	t := l.cfg.ThreadSandbox(slug)
 	kind := map[string]string{config.SandboxHosts: "host", config.SandboxGuides: "guide", config.SandboxExcluded: "excluded", config.SandboxAllow: "allow"}
-	words := map[string]string{config.SandboxHosts: "hosts", config.SandboxGuides: "guidance texts", config.SandboxExcluded: "excluded commands", config.SandboxAllow: "allow rules"}
+	words := map[string]string{config.SandboxHosts: "hosts", config.SandboxGuides: "guides", config.SandboxExcluded: "excluded commands", config.SandboxAllow: "allow rules"}
 	said := map[string]bool{}
-	var noAsk []string
+	var noAsk, names []string
 	skip := func(key, what string) bool {
 		if config.SandboxApplies(key, goos) {
 			return false
@@ -51,8 +51,10 @@ func wantSandbox(l launchConfig, slug, goos string) (lists agent.SandboxLists, g
 		case skip(r.Key, words[r.Key]):
 		case r.Key == config.SandboxHosts:
 			lists.Domains = append(lists.Domains, r.Value)
+		case r.Key == config.SandboxGuides && r.Body == "":
+			names = append(names, r.Value)
 		case r.Key == config.SandboxGuides:
-			guides = append(guides, r.Value)
+			guides = append(guides, config.Guide{Title: r.Value, Body: r.Body})
 		case r.Key == config.SandboxExcluded:
 			lists.Excluded = append(lists.Excluded, r.Value)
 			if r.NoAsk {
@@ -72,7 +74,7 @@ func wantSandbox(l launchConfig, slug, goos string) (lists agent.SandboxLists, g
 	if t.LocalPortsSet && !skip(config.SandboxLocalPorts, "local ports") {
 		lists.LocalBinding = t.LocalPorts
 	}
-	return lists, guides, skipped
+	return lists, append(config.LegacyGuides(names, lists.Domains, lists.LocalBinding), guides...), skipped
 }
 
 // accessConfigs are the config.toml files of TestAccessLaunchEqual:
@@ -212,8 +214,9 @@ func TestAccessLaunchEqual(t *testing.T) {
 							t.Errorf("%s: access\n got %+v\nwant %+v", name, got, want)
 						}
 						var lists agent.SandboxLists
-						var presets, skipped []string
-						wl, wp, ws := agent.SandboxLists{}, []string(nil), []string(nil)
+						var presets []config.Guide
+						var skipped []string
+						wl, wp, ws := agent.SandboxLists{}, []config.Guide(nil), []string(nil)
 						if role == proto.RoleThread {
 							lists, presets, skipped = launchSandbox(set)
 							wl, wp, ws = wantSandbox(lc, slug, goos)

@@ -25,10 +25,23 @@ import (
 // local ports when it sets them. The old preset switches it still has
 // read as the rules they unfold into. NoAsk are the table's excluded
 // commands that run without asking (ask = false); the others ask first.
+// Guides are the bodies of its guides by title (a name of tm 0.38 has
+// none).
 type SandboxTable struct {
 	Lists      map[string][]string
 	LocalPorts *bool
 	NoAsk      []string
+	Guides     map[string]string
+}
+
+// SetGuide puts guide g in the table: last in its guides when new, else
+// its body changed where it is.
+func (t *SandboxTable) SetGuide(g Guide) {
+	t.Add(SandboxGuides, g.Title)
+	if t.Guides == nil {
+		t.Guides = map[string]string{}
+	}
+	t.Guides[g.Title] = g.Body
 }
 
 // SetAsk makes the table's excluded command v ask first, or run without
@@ -58,6 +71,9 @@ func (t *SandboxTable) Remove(key, v string) {
 	if key == SandboxExcluded {
 		t.SetAsk(v, true)
 	}
+	if key == SandboxGuides && t.Guides != nil {
+		delete(t.Guides, v)
+	}
 	l := slices.DeleteFunc(slices.Clone(t.Lists[key]), func(e string) bool { return e == v })
 	if len(l) == 0 {
 		delete(t.Lists, key)
@@ -66,14 +82,18 @@ func (t *SandboxTable) Remove(key, v string) {
 	t.Lists[key] = l
 }
 
-// AddRule adds preset rule r: an entry, or local ports on.
+// AddRule adds preset rule r: an entry (a guide with its body), or
+// local ports on.
 func (t *SandboxTable) AddRule(r PresetRule) {
-	if r.Key == SandboxLocalPorts {
+	switch r.Key {
+	case SandboxLocalPorts:
 		on := true
 		t.LocalPorts = &on
-		return
+	case SandboxGuides:
+		t.SetGuide(Guide{r.Value, r.Body})
+	default:
+		t.Add(r.Key, r.Value)
 	}
-	t.Add(r.Key, r.Value)
 }
 
 // Clone is a copy of t to change.
@@ -87,6 +107,9 @@ func (t SandboxTable) Clone() SandboxTable {
 		out.LocalPorts = &on
 	}
 	out.NoAsk = slices.Clone(t.NoAsk)
+	if t.Guides != nil {
+		out.Guides = maps.Clone(t.Guides)
+	}
 	return out
 }
 
@@ -111,6 +134,9 @@ func (r *rawSandbox) table(project bool) SandboxTable {
 	if r.ExcludedCommands != nil {
 		t.NoAsk = r.ExcludedCommands.withoutAsking()
 	}
+	if r.Guides != nil {
+		t.Guides = r.Guides.bodies()
+	}
 	for _, s := range oldSwitches {
 		on := r.oldSwitch(s.key)
 		if on == nil || (!*on && !project) {
@@ -118,6 +144,10 @@ func (r *rawSandbox) table(project bool) SandboxTable {
 		}
 		p, _ := PresetNamed(s.preset)
 		for _, rule := range p.Rules {
+			if rule.Key == SandboxGuides {
+				// tm 0.37's switch gave tm 0.38's guide name.
+				rule.Value = legacySwitchGuides[s.preset]
+			}
 			switch {
 			case rule.Key == SandboxLocalPorts:
 				if t.LocalPorts == nil {
@@ -153,6 +183,8 @@ type SandboxRule struct {
 	// table's ask = false or an allow rule of a file written before that
 	// covers it; the others ask first.
 	NoAsk bool
+	// Body is a guide's text, "" for a name of tm 0.38.
+	Body string
 }
 
 // Given reports whether threads get the rule.
@@ -193,6 +225,24 @@ func (t ThreadSandbox) WithoutAsking() []string {
 	return out
 }
 
+// Guides are the guides threads get, in the order their brief has them:
+// the names of tm 0.38 first, worded as it did from the hosts and local
+// ports they get (LegacyGuides), then each guide.
+func (t ThreadSandbox) Guides() []Guide {
+	var names []string
+	var out []Guide
+	for _, r := range t.Rules {
+		switch {
+		case r.Key != SandboxGuides || !r.Given():
+		case r.Body == "":
+			names = append(names, r.Value)
+		default:
+			out = append(out, Guide{r.Value, r.Body})
+		}
+	}
+	return append(LegacyGuides(names, t.Given(SandboxHosts), t.LocalPorts), out...)
+}
+
 // Has reports whether threads get preset rule r already.
 func (t ThreadSandbox) Has(r PresetRule) bool {
 	if r.Key == SandboxLocalPorts {
@@ -225,23 +275,29 @@ func MergeSandbox(all, own SandboxTable) ThreadSandbox {
 	var out ThreadSandbox
 	drops := own.Lists[SandboxDrop]
 	out.Drops = slices.Clone(drops)
-	refused := func(key, v string) string {
-		if err := checkSandboxEntry(key, v); err != nil {
+	refused := func(key, v, body string) string {
+		err := checkSandboxEntry(key, v)
+		if key == SandboxGuides {
+			err = CheckGuide(Guide{v, body})
+		}
+		if err != nil {
 			return err.Error()
 		}
 		return ""
 	}
 	for _, k := range SandboxKeys {
 		for _, v := range all.Lists[k] {
-			out.Rules = append(out.Rules, SandboxRule{Key: k, Value: v, Dropped: slices.Contains(drops, v), Refused: refused(k, v),
-				NoAsk: k == SandboxExcluded && slices.Contains(all.NoAsk, v)})
+			body := all.Guides[v]
+			out.Rules = append(out.Rules, SandboxRule{Key: k, Value: v, Dropped: slices.Contains(drops, v), Refused: refused(k, v, body),
+				NoAsk: k == SandboxExcluded && slices.Contains(all.NoAsk, v), Body: body})
 		}
 		for _, v := range own.Lists[k] {
 			if slices.Contains(all.Lists[k], v) && !slices.Contains(drops, v) {
 				continue // all projects give it already
 			}
-			out.Rules = append(out.Rules, SandboxRule{Key: k, Value: v, Own: true, Refused: refused(k, v),
-				NoAsk: k == SandboxExcluded && slices.Contains(own.NoAsk, v)})
+			body := own.Guides[v]
+			out.Rules = append(out.Rules, SandboxRule{Key: k, Value: v, Own: true, Refused: refused(k, v, body),
+				NoAsk: k == SandboxExcluded && slices.Contains(own.NoAsk, v), Body: body})
 		}
 	}
 	// An allow rule of a file written before that covers an excluded
@@ -361,14 +417,32 @@ func writeSandbox(data []byte, table string, r *rawSandbox, before, next Sandbox
 			if slices.Contains(l[:i], e) {
 				return nil, fmt.Errorf("%q is listed twice", e)
 			}
-			if before.Has(k, e) {
+			if before.Has(k, e) && (k != SandboxGuides || before.Guides[e] == next.Guides[e]) {
 				continue // the file had it: refused where used, removable here
 			}
 			if err := check(k, e); err != nil {
 				return nil, err
 			}
+			if k == SandboxGuides {
+				if err := CheckGuide(Guide{e, next.Guides[e]}); err != nil {
+					return nil, err
+				}
+			}
 		}
 		old := r.list(k)
+		if k == SandboxGuides && len(l) > 0 {
+			// Each entry with its body.
+			var was guideList
+			if r != nil && r.Guides != nil {
+				was = *r.Guides
+			}
+			if now := guidesOf(l, next.Guides); old == nil || !slices.Equal(was, guideList(now)) {
+				if data, err = Edit(data, t, k, now); err != nil {
+					return nil, err
+				}
+			}
+			continue
+		}
 		if k == SandboxExcluded && len(l) > 0 {
 			// Its entries keep whether they ask first.
 			var was []ExcludedCommand

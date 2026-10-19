@@ -21,7 +21,7 @@ import (
 // preset's rules (settings_presets.go). It shows only what applies on
 // the platform the server is on, where threads run
 // (config.SandboxSettings); config.toml keeps the rest, and a launch
-// skips it. Every list adds down the layers (config.MergeSandbox): a
+// skips it. A guide is a title and a text (texteditor.go edits it). Every list adds down the layers (config.MergeSandbox): a
 // project's view lists all projects' entries too, d drops one for the
 // project and u takes it back. Writes are the human's only.
 
@@ -58,9 +58,9 @@ var sandboxLists = map[string]struct{ label, help, about, example, word string }
 		"Sandboxed commands may reach these hosts. " + sandboxHost,
 		"registry.npmjs.org", "hosts"},
 	config.SandboxGuides: {"Guidance for threads",
-		"Texts tm adds after a thread's brief, worded from its other rules (which download hosts and local ports are open). They open nothing. " + sandboxAdds,
-		"Texts tm adds after a thread's brief. They open nothing.",
-		config.GuideBrowserTesting, "guidance texts"},
+		"Texts tm adds after a thread's brief, each a title and a text you write (the browser presets add theirs, written out to edit). Plain text: they open nothing, and apply on every platform. " + sandboxAdds,
+		"Texts tm adds after a thread's brief, each under its title. They open nothing.",
+		"Test data", "guides"},
 	config.SandboxExcluded: {"Excluded commands",
 		"A last resort: commands a thread's Bash runs outside its sandbox, for a tool nothing inside the sandbox gets working (full Chrome, headed Playwright). " + sandboxOutside + " " + sandboxAsk + " Claude's Bash rule syntax: a trailing * takes any arguments. " + sandboxAdds,
 		sandboxOutside + " " + sandboxAsk + " " + sandboxBoth,
@@ -140,7 +140,7 @@ func accessHead(m *dash, w int) []string {
 	goos := m.serverOS()
 	where := "Shown: what applies on " + config.OSName(goos) + ", where this server's threads run."
 	if !slices.ContainsFunc(config.Presets, func(p config.Preset) bool { return slices.Contains(p.OS, goos) }) {
-		where += " Hosts, local ports, guidance and the presets don't apply there"
+		where += " Hosts, local ports and the presets don't apply there"
 		if goos == config.OSLinux {
 			where += ": Playwright's Chromium should need none in Linux's sandbox"
 		}
@@ -351,7 +351,16 @@ func (v *sandboxView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		v.sel = moveSel(v.sel, scrollKeys[k.String()], len(es))
 		return nil
 	case "a", "+":
+		if v.list == config.SandboxGuides {
+			v.addGuide(m)
+			return nil
+		}
 		v.add(m)
+		return nil
+	case "enter":
+		if v.list == config.SandboxGuides && v.sel < len(es) && !e.stray {
+			v.openGuide(m, e)
+		}
 		return nil
 	case "x", "delete", "backspace":
 		switch {
@@ -399,13 +408,6 @@ func (v *sandboxView) add(m *dash) {
 	l := sandboxLists[v.list]
 	title := l.label + " " + v.sr.forWho
 	label := "e.g. " + l.example + ":"
-	if v.list == config.SandboxGuides {
-		var names []string
-		for _, g := range config.Guides {
-			names = append(names, g.Name)
-		}
-		label = "one of " + strings.Join(names, ", ") + ":"
-	}
 	m.promptNo(title, label, "", 300, func(e string) tea.Cmd {
 		for _, r := range v.entries(m) {
 			switch {
@@ -520,7 +522,12 @@ func (v *sandboxView) render(m *dash) string {
 				lines = append(lines, "  "+th().Faint.Render("asks first"))
 			}
 		}
-		for _, warn := range []string{v.about(e.Value), config.SandboxWarning(v.list, e.Value), v.covered(m, e.Value)} {
+		if about := v.about(e); about != "" {
+			for _, l := range faintLines(about, w-2) {
+				lines = append(lines, "  "+l)
+			}
+		}
+		for _, warn := range []string{config.SandboxWarning(v.list, e.Value), v.covered(m, e.Value)} {
 			if warn == "" {
 				continue
 			}
@@ -538,8 +545,11 @@ func (v *sandboxView) render(m *dash) string {
 	default:
 		keys = "a add · x remove · d drop for " + v.sr.slug + " · u take it back · esc back"
 	}
-	if v.list == config.SandboxExcluded {
+	switch v.list {
+	case config.SandboxExcluded:
 		keys = "w ask first or not · " + keys
+	case config.SandboxGuides:
+		keys = "enter show, edit · " + keys
 	}
 	return m.popup(box{title: l.label + " " + v.sr.forWho, body: lines, sel: sel, keys: keys})
 }
@@ -574,16 +584,89 @@ func (v *sandboxView) toggleAsk(m *dash, e sandboxEntry, ok bool) tea.Cmd {
 	return nil
 }
 
-// about is what a guidance text tells threads, for its line in the
-// guidance view; "" for another list's entry.
-func (v *sandboxView) about(e string) string {
-	if v.list != config.SandboxGuides {
+// about is the start of a guide's text, for its line in the guidance
+// view; "" for another list's entry.
+func (v *sandboxView) about(e sandboxEntry) string {
+	if v.list != config.SandboxGuides || e.stray {
 		return ""
 	}
-	if g, ok := config.GuideNamed(e); ok {
-		return g.About
+	if e.Body == "" {
+		return "tm 0.38's guidance " + e.Value + ", worded at each launch: the server writes it out as its text when it starts"
+	}
+	first, _, _ := strings.Cut(strings.TrimSpace(e.Body), "\n")
+	return textsafe.Line(first, 100)
+}
+
+// guideRefused is why a new guide can't take title, "" when it can: the
+// list has one of that title, or the title fails its check.
+func (v *sandboxView) guideRefused(m *dash, title string) string {
+	for _, r := range v.entries(m) {
+		switch {
+		case r.Value != title || r.stray:
+		case r.Own:
+			return "not added: a guide " + title + " is listed already: enter on it edits its text"
+		case r.Dropped:
+			return "not added: " + title + " is all projects', dropped " + v.sr.forWho + ": u takes it back, or name yours otherwise"
+		default:
+			return "not added: all projects give a guide " + title + " already: name yours otherwise"
+		}
+	}
+	if err := config.CheckGuideTitle(title); err != nil {
+		return "not added: " + err.Error()
 	}
 	return ""
+}
+
+// addGuide asks for a guide's title, then its text, and adds it to the
+// view's table.
+func (v *sandboxView) addGuide(m *dash) {
+	title := "Add a guide " + v.sr.forWho
+	m.promptNo(title, "Its title, one line (the brief's heading), e.g. "+sandboxLists[v.list].example+":", "", 120, func(t string) tea.Cmd {
+		if why := v.guideRefused(m, t); why != "" {
+			m.msg = why
+			return nil
+		}
+		m.editText(title+": "+t, "Its text, as the thread's brief gets it under ## "+t+":", "", config.MaxGuideBody, func(body string) tea.Cmd {
+			return v.saveGuide(m, config.Guide{Title: t, Body: body}, true)
+		})
+		return nil
+	})
+}
+
+// saveGuide writes guide g to the view's table: added, or its text
+// changed.
+func (v *sandboxView) saveGuide(m *dash, g config.Guide, added bool) tea.Cmd {
+	g.Body = config.GuideBody(g.Body)
+	if err := config.CheckGuideBody(g.Body); err != nil {
+		m.msg = "not saved: " + err.Error()
+		return nil
+	}
+	what, msg := v.list+" ~ "+g.Title, "the guide "+g.Title+" changed "+v.sr.forWho+": threads get it from their next start"
+	if added {
+		v.sel = len(v.entries(m))
+		what, msg = v.list+" + "+g.Title, "the guide "+g.Title+" added "+v.sr.forWho+": threads get it from their next start"
+	}
+	return v.sr.editSandbox(m, what, msg, func(t *config.SandboxTable) { t.SetGuide(g) })
+}
+
+// openGuide shows guide e's text: to edit when the view's table has it,
+// else to read (all projects' on a project, a name of tm 0.38, a
+// dropped one).
+func (v *sandboxView) openGuide(m *dash, e sandboxEntry) {
+	switch {
+	case e.Body == "":
+		m.push(&textView{title: e.Value, note: v.about(e)})
+	case !e.Own:
+		m.push(&textView{title: e.Value + " · " + config.AllProjectsName, body: e.Body, note: "all projects' guide: change it in the , popup's Access tab"})
+	default:
+		m.editText(e.Value+" "+v.sr.forWho, "Its text, as the thread's brief gets it under ## "+e.Value+":", e.Body, config.MaxGuideBody, func(body string) tea.Cmd {
+			if config.GuideBody(body) == e.Body {
+				m.msg = "unchanged"
+				return nil
+			}
+			return v.saveGuide(m, config.Guide{Title: e.Value, Body: body}, false)
+		})
+	}
 }
 
 // covered says which entries of the other list pair with entry e of the
