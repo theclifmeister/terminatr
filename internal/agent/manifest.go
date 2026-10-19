@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -919,6 +920,18 @@ var funcs = template.FuncMap{
 		}
 		return out
 	},
+	// siblingRules formats deny rules for the siblings of each folder
+	// in dirs (Access.NoWriteSiblings) as name patterns (siblingGlobs),
+	// e.g. siblingRules "Edit(/%s)" .Access.NoWriteSiblings.
+	"siblingRules": func(format string, dirs []string) []string {
+		var out []string
+		for _, d := range dirs {
+			for _, g := range siblingGlobs(d) {
+				out = append(out, fmt.Sprintf(format, g))
+			}
+		}
+		return out
+	},
 	// file is a file's text, e.g. the brief for an agent that takes it
 	// as a value rather than a path: toml (file .BriefPath).
 	"file": readText,
@@ -993,6 +1006,55 @@ func escapeGlob(p string) string {
 		}
 		b.WriteRune(r)
 	}
+	return b.String()
+}
+
+// nameChars are the characters siblingGlobs tells names apart by:
+// those of tm's worktree names (t-0001-title) and most of git's.
+const nameChars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+
+// siblingGlobs are glob patterns for every folder beside d but d,
+// those made later too. A glob has no "but": a name is matched where it
+// first differs from d's, by each prefix of d's name followed by any
+// other of nameChars, and by d's name followed by more; each shorter
+// prefix is a pattern by itself. A name that first differs from d's by
+// a character outside nameChars isn't matched. None on Windows, where
+// Claude reads no brackets in a path, nor when d's path holds a
+// character a glob would read.
+func siblingGlobs(d string) []string {
+	parent, name := filepath.Dir(d), filepath.Base(d)
+	if runtime.GOOS == "windows" || strings.ContainsAny(d, `*?[]{}!\`) || name == "" || parent == d {
+		return nil
+	}
+	out := make([]string, 0, 2*len(name)+1)
+	for i := 0; i < len(name); i++ {
+		out = append(out, parent+"/"+name[:i]+charClass(name[i])+"*")
+		if i > 0 {
+			out = append(out, parent+"/"+name[:i])
+		}
+	}
+	return append(out, parent+"/"+name+charClass(0)+"*")
+}
+
+// charClass is a bracket expression of nameChars but c, in ranges.
+func charClass(c byte) string {
+	var b strings.Builder
+	b.WriteByte('[')
+	cs := strings.ReplaceAll(nameChars, string(rune(c)), "")
+	for i := 0; i < len(cs); {
+		j := i
+		for j+1 < len(cs) && cs[j+1] == cs[j]+1 {
+			j++
+		}
+		switch {
+		case j-i >= 2:
+			b.WriteString(cs[i:i+1] + "-" + cs[j:j+1])
+		default:
+			b.WriteString(cs[i : j+1])
+		}
+		i = j + 1
+	}
+	b.WriteByte(']')
 	return b.String()
 }
 

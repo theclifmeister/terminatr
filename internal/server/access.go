@@ -167,6 +167,7 @@ func (s *Server) fileRules(in accessInput, a agent.Access, lc launchConfig) []pr
 	}{
 		{proto.AccessRead, a.Read}, {proto.AccessWrite, a.Write}, {proto.AccessWriteFile, a.WriteFiles},
 		{proto.AccessNoWrite, a.NoWrite}, {proto.AccessNoWriteFile, a.NoWriteFiles},
+		{proto.AccessNoSiblings, a.NoWriteSiblings},
 	} {
 		for _, p := range l.paths {
 			rule(proto.AccessInside, l.kind)(p)
@@ -569,6 +570,8 @@ func launchAccess(set proto.AccessSet) agent.Access {
 			a.NoWrite = append(a.NoWrite, r.Value)
 		case proto.AccessNoWriteFile:
 			a.NoWriteFiles = append(a.NoWriteFiles, r.Value)
+		case proto.AccessNoSiblings:
+			a.NoWriteSiblings = append(a.NoWriteSiblings, r.Value)
 		case proto.AccessNoRead:
 			a.NoRead = append(a.NoRead, r.Value)
 		case proto.AccessTemp:

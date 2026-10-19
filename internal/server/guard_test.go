@@ -592,10 +592,14 @@ func TestAccessThreadGitDirs(t *testing.T) {
 	if runs := gitx.RunsDir(realPath(s.opts.Paths.Home)); !slices.Contains(a.NoWrite, runs) {
 		t.Errorf("worktree: tm's git runs folder %s not in no-write %q", runs, a.NoWrite)
 	}
-	for _, n := range []string{"hooks", "info", "modules", "worktrees/other"} {
+	for _, n := range []string{"hooks", "info", "modules", "worktrees/other", "rebase-merge", "rebase-apply", "sequencer"} {
 		if !slices.Contains(a.NoWrite, filepath.Join(common, n)) {
 			t.Errorf("worktree: %s not in no-write %q", n, a.NoWrite)
 		}
+	}
+	// Worktrees added later: the siblings of its own git dir.
+	if want := in("worktrees/wt"); !slices.Equal(a.NoWriteSiblings, want) {
+		t.Errorf("worktree: no-write siblings %q, want %q", a.NoWriteSiblings, want)
 	}
 	for _, n := range []string{"config", "config.lock", "config.worktree", "commondir"} {
 		if !slices.Contains(a.NoWriteFiles, filepath.Join(common, n)) {
@@ -629,8 +633,18 @@ func TestAccessThreadGitDirs(t *testing.T) {
 			t.Errorf("main checkout: %s not in no-write files %q", n, m.NoWriteFiles)
 		}
 	}
-	if !slices.Contains(m.NoWrite, filepath.Join(common, "modules")) {
-		t.Errorf("main checkout: modules not in no-write %q", m.NoWrite)
+	for _, n := range []string{"modules", "worktrees"} {
+		if !slices.Contains(m.NoWrite, filepath.Join(common, n)) {
+			t.Errorf("main checkout: %s not in no-write %q", n, m.NoWrite)
+		}
+	}
+	for _, n := range []string{"rebase-merge", "sequencer"} {
+		if slices.Contains(m.NoWrite, filepath.Join(common, n)) {
+			t.Errorf("main checkout: its own %s in no-write %q", n, m.NoWrite)
+		}
+	}
+	if len(m.NoWriteSiblings) != 0 {
+		t.Errorf("main checkout: no-write siblings %q", m.NoWriteSiblings)
 	}
 	for _, n := range []string{"HEAD", "index"} {
 		if slices.Contains(m.NoWriteFiles, filepath.Join(common, n)) {

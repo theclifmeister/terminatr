@@ -215,6 +215,7 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 			a.Write, a.WriteFiles = g.Write, g.WriteFiles
 			a.NoWrite = append(a.NoWrite, g.NoWrite...)
 			a.NoWriteFiles = append(a.NoWriteFiles, g.NoWriteFiles...)
+			a.NoWriteSiblings = g.NoWriteSiblings
 		}
 		return a, nil
 	}
@@ -232,9 +233,13 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 // own git dir's config.worktree and commondir) and the other worktrees'
 // git dirs are never written: the human's git and the server use them
 // outside any sandbox. Nor, from a linked worktree, the main checkout's
-// HEAD and index. They are named NoWrite so
-// that a broader grant (the main checkout as cwd, a user's own rule)
-// doesn't open them either. A worktree added later is in no grant.
+// HEAD and index, nor its rebase and sequencer state, whose todo lists
+// run commands when the human's git goes on with them. They are named
+// NoWrite so that a broader grant (the main checkout as cwd, a user's
+// own rule, Claude's of the whole common dir from a linked worktree)
+// doesn't open them either. The worktrees' git dirs added after the
+// launch are closed too: by the worktrees folder from the main
+// checkout, by own's siblings (NoWriteSiblings) from a linked worktree.
 func threadGitAccess(common, own string) agent.Access {
 	dirs, files := gitConfig(common)
 	a := agent.Access{
@@ -244,15 +249,24 @@ func threadGitAccess(common, own string) agent.Access {
 		NoWriteFiles: append(files, filepath.Join(common, "config.lock")),
 	}
 	wts := filepath.Join(common, "worktrees")
-	if own != common {
-		// Its own git dir is written, but for the files that would make
-		// git read configuration or another common dir from it.
-		a.Write = append(a.Write, own)
-		a.NoWriteFiles = append(a.NoWriteFiles, ownConfig(own)...)
-		// The main checkout's HEAD and index are the human's, not a
-		// linked worktree's git.
-		a.NoWriteFiles = append(a.NoWriteFiles, filepath.Join(common, "HEAD"), filepath.Join(common, "index"))
+	if own == common {
+		// The main checkout: no worktree's git dir is its own.
+		a.NoWrite = append(a.NoWrite, wts)
+		return a
 	}
+	// Its own git dir is written, but for the files that would make git
+	// read configuration or another common dir from it.
+	a.Write = append(a.Write, own)
+	a.NoWriteFiles = append(a.NoWriteFiles, ownConfig(own)...)
+	// The main checkout's HEAD, index and rebase and sequencer state are
+	// the human's, not a linked worktree's git.
+	a.NoWriteFiles = append(a.NoWriteFiles, filepath.Join(common, "HEAD"), filepath.Join(common, "index"))
+	for _, n := range []string{"rebase-merge", "rebase-apply", "sequencer"} {
+		a.NoWrite = append(a.NoWrite, filepath.Join(common, n))
+	}
+	a.NoWriteSiblings = []string{own}
+	// The other worktrees' git dirs there now by name too, whatever
+	// their names.
 	if es, err := os.ReadDir(wts); err == nil {
 		for _, e := range es {
 			if p := filepath.Join(wts, e.Name()); e.IsDir() && p != own {
