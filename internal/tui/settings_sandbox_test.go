@@ -585,3 +585,147 @@ func TestSandboxBadEntryFlagged(t *testing.T) {
 		t.Errorf("good entry flagged:\n%s", out)
 	}
 }
+
+// TestSandboxEdit: enter on an entry of the view's own table opens it
+// for editing, an excluded command's ask after its value; the change
+// is saved as one, asking first as add does, and all projects' entry
+// takes a project's drop of it along. The checks of add refuse a new
+// value the same way; all projects' entries aren't changed from a
+// project's view; e on a guide changes its title and text.
+func TestSandboxEdit(t *testing.T) {
+	src, m := sandboxData(t)
+	os.WriteFile(filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml"), []byte(`sandbox_lists = "add"
+
+[defaults.sandbox]
+excluded_commands = ["docker compose *"]
+hosts = ["a.dev"]
+
+[projects.alpha.sandbox]
+drop = ["docker compose *"]
+hosts = ["web.dev"]
+guides = [{ title = "Old", body = "Old text." }]
+`), 0o600)
+	c, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.data.Sandbox = map[string]config.SandboxTable{"": c.SandboxOf(""), "alpha": c.SandboxOf("alpha")}
+	input := func(want, text string) {
+		t.Helper()
+		in, ok := m.top().(*inputView)
+		if !ok || in.text != want {
+			t.Fatalf("no input of %q: %T", want, m.top())
+		}
+		in.text = text
+		drain(t, m, keyPress(m, "enter"))
+	}
+	drain(t, m, sandboxRow(t, "", "Excluded commands").change(m))
+	if out := screen(m); !strings.Contains(out, "enter edit") {
+		t.Errorf("keys:\n%s", out)
+	}
+	keyPress(m, "enter")
+	input("docker compose *", "docker compose up *")
+	if _, ok := m.top().(*menuView); !ok {
+		t.Fatalf("no ask choice: %T", m.top())
+	}
+	keyPress(m, "down")
+	drain(t, m, keyPress(m, "enter"))
+	cv, ok := m.top().(*confirmView)
+	if !ok || !strings.Contains(cv.question, "Change docker compose * to docker compose up * for all projects?") || !strings.Contains(cv.question, "outside the sandbox") || !strings.Contains(cv.question, "without asking") {
+		t.Fatalf("no question before the change: %T", m.top())
+	}
+	drain(t, m, keyPress(m, "y"))
+	if !strings.Contains(m.msg, "the projects that dropped docker compose * drop docker compose up *") {
+		t.Errorf("msg %q", m.msg)
+	}
+	c, _ = config.Load()
+	if got := c.ThreadSandbox("").WithoutAsking(); !slices.Equal(got, []string{"docker compose up *"}) || !slices.Equal(c.SandboxOf("alpha").Lists[config.SandboxDrop], []string{"docker compose up *"}) {
+		t.Errorf("all projects' %q, alpha drops %q", got, c.SandboxOf("alpha").Lists[config.SandboxDrop])
+	}
+	if !slices.Equal(m.data.Sandbox["alpha"].Lists[config.SandboxDrop], []string{"docker compose up *"}) {
+		t.Errorf("shown: alpha drops %q", m.data.Sandbox["alpha"].Lists[config.SandboxDrop])
+	}
+	keyPress(m, "esc")
+	// A project's view: all projects' entry, dropped, is not its to edit.
+	drain(t, m, sandboxRow(t, "alpha", "Excluded commands").change(m))
+	keyPress(m, "e")
+	if _, ok := m.top().(*sandboxView); !ok || !strings.Contains(m.msg, "x takes it back") {
+		t.Errorf("dropped entry: %T %q", m.top(), m.msg)
+	}
+	keyPress(m, "esc")
+	drain(t, m, sandboxRow(t, "alpha", "Network hosts").change(m))
+	keyPress(m, "enter")
+	if !strings.Contains(m.msg, "change it in the , popup") {
+		t.Errorf("all projects' entry: %q", m.msg)
+	}
+	m.top().(*sandboxView).sel = 1
+	keyPress(m, "enter")
+	input("web.dev", "a.dev")
+	if !strings.Contains(m.msg, "not changed: all projects give a.dev already") {
+		t.Errorf("msg %q", m.msg)
+	}
+	keyPress(m, "e")
+	input("web.dev", "https://x.dev")
+	if !strings.Contains(m.msg, "not changed") || !strings.Contains(m.msg, "isn't a host name") {
+		t.Errorf("msg %q", m.msg)
+	}
+	keyPress(m, "e")
+	input("web.dev", "web2.dev")
+	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "Every command a thread runs") {
+		t.Fatalf("no question before the change: %T", m.top())
+	}
+	drain(t, m, keyPress(m, "y"))
+	keyPress(m, "esc")
+	// e on a guide: its title, then its text.
+	drain(t, m, sandboxRow(t, "alpha", "Guidance for threads").change(m))
+	if out := screen(m); !strings.Contains(out, "e edit title") {
+		t.Errorf("keys:\n%s", out)
+	}
+	keyPress(m, "e")
+	input("Old", "New")
+	ed, ok := m.top().(*textEditor)
+	if !ok || string(ed.text) != "Old text." {
+		t.Fatalf("no editor of the text: %T", m.top())
+	}
+	drain(t, m, m.key(tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl}))
+	c, _ = config.Load()
+	if got := c.ThreadSandbox("alpha"); !slices.Equal(got.Given(config.SandboxHosts), []string{"a.dev", "web2.dev"}) || !slices.Equal(got.Guides(), []config.Guide{{Title: "New", Body: "Old text."}}) {
+		t.Errorf("alpha hosts %q, guides %q", got.Given(config.SandboxHosts), got.Guides())
+	}
+	want := []string{"defaults excluded_commands ~ docker compose * → docker compose up * (ask = false)", "projects.alpha hosts ~ web.dev → web2.dev", "projects.alpha guides ~ Old → New"}
+	if !slices.Equal(src.sandbox, want) {
+		t.Errorf("saved %q", src.sandbox)
+	}
+}
+
+// TestSandboxWideApproved: a wide approved command is the human's to
+// set (T619): added after its warning, which says what it leaves open;
+// editing one into a wide pattern says it too, and the list carries no
+// warning line under it.
+func TestSandboxWideApproved(t *testing.T) {
+	_, m := sandboxData(t)
+	drain(t, m, sandboxRow(t, "alpha", "Approved commands").change(m))
+	keyPress(m, "a")
+	m.top().(*inputView).text = "prlctl *"
+	drain(t, m, keyPress(m, "enter"))
+	cv, ok := m.top().(*confirmView)
+	if !ok || !strings.Contains(cv.question, "every argument of prlctl") {
+		t.Fatalf("no warning before adding: %T", m.top())
+	}
+	drain(t, m, keyPress(m, "y"))
+	keyPress(m, "enter")
+	m.top().(*inputView).text = "sh -c *"
+	drain(t, m, keyPress(m, "enter"))
+	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "runs the code that follows it") {
+		t.Fatalf("no warning before the change: %T", m.top())
+	}
+	drain(t, m, keyPress(m, "y"))
+	// The warning is the question's only: no line under the entry.
+	if out := screen(m); !strings.Contains(out, "sh -c *") || strings.Contains(out, "runs the code") || strings.Contains(out, "every argument") {
+		t.Errorf("list:\n%s", out)
+	}
+	c, _ := config.Load()
+	if got := c.ThreadSandbox("alpha").Given(config.SandboxApproved); !slices.Equal(got, []string{"sh -c *"}) {
+		t.Errorf("approved %q", got)
+	}
+}

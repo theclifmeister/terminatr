@@ -326,6 +326,11 @@ type SettingsSource interface {
 	// journals what (e.g. "hosts + registry.npmjs.org"). Refused when tm
 	// runs inside an agent.
 	EditSandbox(table, what string, fn func(*config.SandboxTable) error) error
+	// EditSandboxRule changes one entry of table's sandbox table in
+	// place, as config.EditSandboxRule does (all projects' taking the
+	// projects' drops of it along), and journals what. Refused when tm
+	// runs inside an agent.
+	EditSandboxRule(table, what string, e config.SandboxEdit) error
 	// AccessShow is the effective access of thread id of project slug
 	// (id "" for a new thread of it), read-only (access.show).
 	AccessShow(slug, id string) (proto.AccessShowResult, error)

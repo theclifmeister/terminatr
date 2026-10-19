@@ -392,6 +392,11 @@ func (f *fakeSource) EditSandbox(table, what string, fn func(*config.SandboxTabl
 	f.sandbox = append(f.sandbox, table+" "+what)
 	return config.EditSandbox(table, fn)
 }
+func (f *fakeSource) EditSandboxRule(table, what string, e config.SandboxEdit) error {
+	f.sandbox = append(f.sandbox, table+" "+what)
+	_, err := config.EditSandboxRule(table, e)
+	return err
+}
 func (f *fakeSource) AccessShow(slug, id string) (proto.AccessShowResult, error) {
 	f.accessShown = append(f.accessShown, slug+" "+id)
 	res := f.access

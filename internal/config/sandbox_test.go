@@ -208,13 +208,20 @@ func TestCheckSandboxEntries(t *testing.T) {
 		}
 	}
 	for _, e := range []string{"*", "**", " * ", "npx * ", "a; b", "a && b", "a > f", "$(x)", "`x`", "${X} x", "echo $X", "make a$X", "x ok $1", "x $@", "x $*", "x $$", "x $?", "x $# y", "ok $ $_a", "x a$-", "?", "x", "Bash(npx *)", "PowerShell(x)",
-		// T560's security review: a program left open, a rule in another case.
-		"*e*", "*-*", "* --version", "python* -c x", "bash(npx *)", "POWERSHELL(x)",
+		// T560's security review: a rule in another case.
+		"bash(npx *)", "POWERSHELL(x)",
 		// #655's review: a parenthesis would split the Bash(...) rule tm
 		// writes for one that runs without asking.
 		"npx playwright *) Bash(*", "make (x)", "x )"} {
 		if err := CheckExcludedCommand(e); err == nil {
 			t.Errorf("excluded %q passed", e)
+		}
+	}
+	// A program left open is the human's to set (T619): taken, with its
+	// warning.
+	for _, e := range []string{"*e*", "*-*", "* --version", "python* -c x"} {
+		if err := CheckExcludedCommand(e); err != nil || !strings.Contains(SandboxWarning(SandboxExcluded, e), "leaves the program open") {
+			t.Errorf("excluded %q: %v, warning %q", e, err, SandboxWarning(SandboxExcluded, e))
 		}
 	}
 	for _, e := range []string{"WebFetch(domain:playwright.dev)", "mcp__browser__open", "mcp__browser", "WebSearch", "Read(~/Library/Caches/ms-playwright/**)"} {

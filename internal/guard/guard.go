@@ -1579,7 +1579,7 @@ var (
 var (
 	tmAgentMod      = setOf("list show validate new test logs examples host")
 	tmProjectWrites = setOf("new remote activate deactivate pause resume archive unarchive delete rename mv link open")
-	tmAccessWrites  = setOf("add rm drop undrop set")
+	tmAccessWrites  = setOf("add rm edit drop undrop set")
 )
 
 // tmWritesSettings is which of those tm with args (after its name) is

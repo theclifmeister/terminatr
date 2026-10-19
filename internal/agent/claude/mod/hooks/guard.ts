@@ -652,7 +652,7 @@ const REMOVERS = new Set('rm rmdir mv rsync'.split(' '))
 // so the floor refuses them.
 const TM_AGENT_MOD = new Set('list show validate new test logs examples host'.split(' '))
 const TM_PROJECT_WRITES = new Set('new remote activate deactivate pause resume archive unarchive delete rename mv link open'.split(' '))
-const TM_ACCESS_WRITES = new Set('add rm drop undrop set'.split(' '))
+const TM_ACCESS_WRITES = new Set('add rm edit drop undrop set'.split(' '))
 
 // tmWritesSettings is which of those tm with args (after its name) is
 // ("tm mod enable", "tm (the dashboard)"), or ''.

@@ -99,6 +99,28 @@ func (s *ServerSource) EditSandbox(table, what string, fn func(*config.SandboxTa
 	return nil
 }
 
+func (s *ServerSource) EditSandboxRule(table, what string, e config.SandboxEdit) error {
+	defer s.touch()
+	if s.Caller.IsAgent() {
+		return errHumanOnly
+	}
+	moved, err := config.EditSandboxRule(table, e)
+	if err != nil {
+		return err
+	}
+	if table == config.DefaultsTable {
+		journalAll(s.Caller, "sandbox", what, "all projects")
+	} else if p, err := project.Open(strings.TrimPrefix(table, "projects.")); err == nil {
+		p.Journal(s.Caller, "settings.sandbox", p.Slug, what)
+	}
+	for _, slug := range moved {
+		if p, err := project.Open(slug); err == nil {
+			p.Journal(s.Caller, "settings.sandbox", slug, "drop ~ "+e.Old+" → "+e.New+" (all projects' rule changed)")
+		}
+	}
+	return nil
+}
+
 func (s *ServerSource) TestSecretEnv(slug, name string) (string, error) {
 	if s.Caller.IsAgent() {
 		return "", errHumanOnly

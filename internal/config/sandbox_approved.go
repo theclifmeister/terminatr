@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -19,7 +20,8 @@ import (
 // tm runs the words as they are, without a shell: no pipe, redirect,
 // substitution, variable or quote means anything, so the list may hold
 // none. A pattern that leaves open which program or code runs (sh *,
-// python3 -c *, npx *, make *) would be no limit at all: refused.
+// python3 -c *, npx *, make *) is the human's to set (T619): tm says
+// what it lets through where it is added, and takes it.
 //
 // A Codex thread has no excluded commands of its own (T574 §4.6, case
 // 3): each excluded command whose words fit this form is an approved
@@ -79,8 +81,9 @@ func approvedForm(e string) string {
 }
 
 // CheckApprovedCommand checks one approved command: its form
-// (approvedForm), and never a pattern that leaves open which program or
-// code runs.
+// (approvedForm), and never tm itself, which would run as you outside
+// the sandbox. A wide pattern passes, with its warning
+// (approvedWarning).
 func CheckApprovedCommand(e string) error {
 	if err := checkSandboxText(e); err != nil {
 		return err
@@ -88,17 +91,19 @@ func CheckApprovedCommand(e string) error {
 	if why := approvedForm(e); why != "" {
 		return errors.New(why)
 	}
-	words, more := ApprovedWords(e)
-	if program(words[0]) == "tm" {
-		return fmt.Errorf("%q is tm itself: a thread runs tm in its sandbox already", e)
-	}
-	if more && len(words) == 1 {
-		return fmt.Errorf("%q leaves every argument of %s open, which is everything it can do: name its subcommand, target or script too (make test, npm run e2e *)", e, words[0])
-	}
-	if more {
-		if why := codeWarning(e); why != "" {
-			return fmt.Errorf("%q: %s; name the script or target instead (npm run e2e, make test)", e, why)
+	// tm itself, also behind a wrapper (env tm, sudo tm).
+	words, _ := ApprovedWords(e)
+	for wrapped := false; len(words) > 0; words = words[1:] {
+		switch w := words[0]; {
+		case program(w) == "tm":
+			return fmt.Errorf("%q is tm itself: a thread runs tm in its sandbox already", e)
+		case slices.Contains(wrappers, program(w)):
+			wrapped = true
+			continue
+		case wrapped && (strings.HasPrefix(w, "-") || strings.Contains(w, "=") || strings.Trim(w, "0123456789.smhd") == ""):
+			continue
 		}
+		break
 	}
 	return nil
 }
@@ -118,7 +123,14 @@ func ApprovedOf(e string) (string, string) {
 // the files most commands read.
 func approvedWarning(e string) string {
 	w := "tm runs it outside the sandbox, as you, in the thread's worktree, without asking: the thread writes the files it reads (a Makefile, package.json, the tests), so it can make it run any code as you"
-	if _, more := ApprovedWords(e); more {
+	words, more := ApprovedWords(e)
+	switch why := codeWarning(e); {
+	case more && why != "":
+		w += "; " + why
+	case more && len(words) == 1:
+		w += "; it leaves every argument of " + words[0] + " open, which is everything it can do"
+	}
+	if more {
 		w += "; its last * passes any argument the program takes, its options too (git log --output writes any file, go test -exec runs any program, docker compose run mounts any folder)"
 	}
 	return w
