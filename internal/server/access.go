@@ -167,11 +167,20 @@ func (s *Server) fileRules(in accessInput, a agent.Access, lc launchConfig) []pr
 	}{
 		{proto.AccessRead, a.Read}, {proto.AccessWrite, a.Write}, {proto.AccessWriteFile, a.WriteFiles},
 		{proto.AccessNoWrite, a.NoWrite}, {proto.AccessNoWriteFile, a.NoWriteFiles},
-		{proto.AccessNoSiblings, a.NoWriteSiblings},
 	} {
 		for _, p := range l.paths {
 			rule(proto.AccessInside, l.kind)(p)
 		}
+	}
+	// Claude's alone (its sandbox writes the whole common dir), as name
+	// patterns, which it reads in no Windows path.
+	for _, p := range a.NoWriteSiblings {
+		r := proto.AccessRule{Where: proto.AccessInside, Kind: proto.AccessNoSiblings, Value: p, Source: proto.AccessFromTM,
+			Note: "the other worktrees' git dirs, those added later too", Agents: []string{"claude"}}
+		if in.goos == config.OSWindows {
+			r.Note += "; not written on Windows, where Claude reads no name patterns in a path"
+		}
+		out = append(out, r)
 	}
 	for _, c := range a.Commands {
 		out = append(out, proto.AccessRule{Where: proto.AccessPrompts, Kind: proto.AccessCommand, Value: c, Source: settingSource(lc, in.slug, "coordinator_merges"), Note: "coordinator_merges"})

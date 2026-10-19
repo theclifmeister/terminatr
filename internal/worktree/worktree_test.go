@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/gittest"
@@ -411,5 +412,30 @@ func TestCreateStartsNothing(t *testing.T) {
 	}
 	if _, err := os.Stat(marker); err == nil {
 		t.Fatal("a hook ran")
+	}
+}
+
+// TestCreateUndone: a worktree that can't be checked out is removed
+// again, with its new branch, and none is left looking emptied.
+func TestCreateUndone(t *testing.T) {
+	repo, run := gittest.Repo(t)
+	// A file the checkout can't write: a folder of its name in the way
+	// is no use (worktree add wants an empty folder), so the blob is
+	// taken away instead.
+	blob := run("rev-parse", "HEAD:a")
+	os.Remove(filepath.Join(repo, ".git", "objects", blob[:2], blob[2:]))
+	dir := filepath.Join(t.TempDir(), "wt")
+	if _, err := Create(repo, dir, "tm/x", "HEAD"); err == nil {
+		t.Fatal("created without its files")
+	}
+	if BranchExists(repo, "tm/x") {
+		t.Error("branch left")
+	}
+	parent, _ := filepath.EvalSymlinks(filepath.Dir(dir))
+	if out := run("worktree", "list", "--porcelain"); strings.Contains(out, filepath.Join(parent, "wt")) {
+		t.Errorf("worktree left: %s", out)
+	}
+	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("folder left: %v", err)
 	}
 }

@@ -1023,7 +1023,7 @@ const nameChars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvw
 // for a Windows path (its backslashes), where Claude reads no brackets.
 func siblingGlobs(d string) []string {
 	parent, name := filepath.Dir(d), filepath.Base(d)
-	if strings.ContainsAny(parent+name, `*?[]{}!\`) || name == "" || parent == d {
+	if !GlobSafe(d) || strings.Contains(d, `\`) || name == "" || parent == d {
 		return nil
 	}
 	out := make([]string, 0, 2*len(name)+1)
@@ -1035,6 +1035,11 @@ func siblingGlobs(d string) []string {
 	}
 	return append(out, parent+"/"+name+charClass(0)+"*")
 }
+
+// GlobSafe reports whether path p holds no character a permission
+// rule's glob reads, so that a pattern built on it (siblingGlobs) names
+// it as it is: Claude's sandbox takes no escapes there.
+func GlobSafe(p string) bool { return !strings.ContainsAny(p, "*?[]{}!") }
 
 // charClass is a bracket expression of nameChars but c, in ranges.
 // Claude's sandbox on macOS matches paths without regard to case, so a

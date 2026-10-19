@@ -233,14 +233,20 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 // own git dir's config.worktree and commondir) and the other worktrees'
 // git dirs are never written: the human's git and the server use them
 // outside any sandbox. Nor, from a linked worktree, the main checkout's
-// HEAD and index, nor its rebase and sequencer state, whose todo lists
-// run commands when the human's git goes on with them. They are named
+// own state (mainState). They are named
 // NoWrite so that a broader grant (the main checkout as cwd, a user's
 // own rule, Claude's of the whole common dir from a linked worktree)
 // doesn't open them either. The worktrees' git dirs added after the
 // launch are closed too: by the worktrees folder from the main
 // checkout, by own's siblings (NoWriteSiblings) from a linked worktree.
+//
+// A linked worktree whose git dirs a sibling pattern can't name
+// (agent.GlobSafe) gets the whole common dir closed instead: the thread
+// then can't commit.
 func threadGitAccess(common, own string) agent.Access {
+	if own != common && (!agent.GlobSafe(common) || !agent.GlobSafe(own)) {
+		return agent.Access{NoWrite: []string{common}}
+	}
 	dirs, files := gitConfig(common)
 	a := agent.Access{
 		Write:        []string{filepath.Join(common, "objects"), filepath.Join(common, "refs"), filepath.Join(common, "logs")},
@@ -258,12 +264,14 @@ func threadGitAccess(common, own string) agent.Access {
 	// read configuration or another common dir from it.
 	a.Write = append(a.Write, own)
 	a.NoWriteFiles = append(a.NoWriteFiles, ownConfig(own)...)
-	// The main checkout's HEAD, index and rebase and sequencer state are
-	// the human's, not a linked worktree's git.
-	a.NoWriteFiles = append(a.NoWriteFiles, filepath.Join(common, "HEAD"), filepath.Join(common, "index"))
-	for _, n := range []string{"rebase-merge", "rebase-apply", "sequencer"} {
-		a.NoWrite = append(a.NoWrite, filepath.Join(common, n))
-	}
+	// Nor what names its worktree back to tm (Pin) or keeps it from
+	// pruning.
+	a.NoWriteFiles = append(a.NoWriteFiles, filepath.Join(own, "gitdir"), filepath.Join(own, "locked"))
+	// The main checkout's own state is the human's, not a linked
+	// worktree's git.
+	sd, sf := mainState(common)
+	a.NoWrite = append(a.NoWrite, sd...)
+	a.NoWriteFiles = append(a.NoWriteFiles, sf...)
 	a.NoWriteSiblings = []string{own}
 	// The other worktrees' git dirs there now by name too, whatever
 	// their names.
@@ -297,6 +305,20 @@ func gitConfig(common string) (dirs, files []string) {
 	}
 	return ds,
 		append([]string{filepath.Join(common, "config")}, ownConfig(common)...)
+}
+
+// mainState is the main checkout's own state in git dir common, which
+// a linked worktree's git never writes: its HEAD, index, their locks and
+// what a merge leaves, and its rebase and sequencer state, whose todo
+// lists run commands when the human's git goes on with them.
+func mainState(common string) (dirs, files []string) {
+	for _, n := range []string{"rebase-merge", "rebase-apply", "sequencer"} {
+		dirs = append(dirs, filepath.Join(common, n))
+	}
+	for _, n := range []string{"HEAD", "HEAD.lock", "index", "index.lock", "ORIG_HEAD", "MERGE_HEAD", "AUTO_MERGE"} {
+		files = append(files, filepath.Join(common, n))
+	}
+	return dirs, files
 }
 
 // mergeCommands are the commands the opt-in coordinator_merges setting
@@ -682,6 +704,11 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 	// Its access as rules (access.go), which the launch's settings come
 	// from and the thread's launch record keeps.
 	tree := threadTree(r)
+	if rec := threadRecord(r); tree == nil && rec != nil {
+		// Its git dirs would get no rules, while its agent's sandbox
+		// may still open the git dir its .git names.
+		return nil, proto.Errorf(proto.ErrRefused, "thread %s: %s is not a checkout of %s by the repository's records, so it isn't started (git worktree repair, or tm thread resolve)", r.Thread, rec.Worktree, rec.Repo)
+	}
 	acc, err := s.resolveAccess(accessInput{role: r.Role, slug: r.Project, cwd: r.Cwd, tree: tree, agent: r.Agent, goos: caps.OS,
 		thread: r.Thread, yolo: r.Yolo, noEscapes: r.NoSandboxEscapes}, lc)
 	if err != nil {

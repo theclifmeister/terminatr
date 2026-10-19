@@ -606,12 +606,12 @@ func TestAccessThreadGitDirs(t *testing.T) {
 			t.Errorf("worktree: %s not in no-write files %q", n, a.NoWriteFiles)
 		}
 	}
-	for _, n := range []string{"config.worktree", "commondir"} {
+	for _, n := range []string{"config.worktree", "commondir", "gitdir", "locked"} {
 		if !slices.Contains(a.NoWriteFiles, filepath.Join(common, "worktrees", "wt", n)) {
 			t.Errorf("worktree: its own %s not in no-write files %q", n, a.NoWriteFiles)
 		}
 	}
-	for _, n := range []string{"HEAD", "index"} {
+	for _, n := range []string{"HEAD", "HEAD.lock", "index", "index.lock", "ORIG_HEAD", "MERGE_HEAD", "AUTO_MERGE"} {
 		if !slices.Contains(a.NoWriteFiles, filepath.Join(common, n)) {
 			t.Errorf("worktree: the main checkout's %s not in no-write files %q", n, a.NoWriteFiles)
 		}
@@ -664,7 +664,7 @@ func TestAccessThreadGitDirs(t *testing.T) {
 	}
 	// The guard keeps a thread's commands off them too.
 	g := s.guardRulesFor(wtRec)
-	for _, n := range []string{"hooks", "info", "modules", "config", "commondir", "worktrees/wt/config.worktree", "worktrees/wt/commondir", "worktrees/other/config.worktree"} {
+	for _, n := range []string{"hooks", "info", "modules", "config", "commondir", "worktrees/wt/config.worktree", "worktrees/wt/commondir", "worktrees/other/config.worktree", "rebase-merge", "sequencer", "HEAD"} {
 		if !slices.Contains(g.GitConfig, filepath.Join(common, n)) {
 			t.Errorf("guard: %s not in %q", n, g.GitConfig)
 		}
@@ -1112,5 +1112,61 @@ func TestGuardOwnExcludedLive(t *testing.T) {
 	write(filepath.Join(home, ".claude", "settings.json"), `{"sandbox":{"excludedCommands":["curl"]}}`)
 	if d := curl(); d == nil || d.Rule != guard.RuleEscape {
 		t.Errorf("after the user's settings: %+v", d)
+	}
+}
+
+// TestThreadGitAccessGlobPath: a linked worktree whose git dirs no name
+// pattern can name gets its whole common dir closed; a main checkout
+// there keeps its grant, whose rules are escaped.
+func TestThreadGitAccessGlobPath(t *testing.T) {
+	common := filepath.Join(t.TempDir(), "[x]", ".git")
+	a := threadGitAccess(common, filepath.Join(common, "worktrees", "a"))
+	if !slices.Equal(a.NoWrite, []string{common}) || len(a.Write)+len(a.WriteFiles)+len(a.NoWriteSiblings) != 0 {
+		t.Errorf("linked: %+v", a)
+	}
+	if m := threadGitAccess(common, common); !slices.Contains(m.Write, filepath.Join(common, "objects")) {
+		t.Errorf("main checkout: %+v", m)
+	}
+}
+
+// TestLaunchRefusesUnpinned: a thread whose recorded worktree isn't a
+// checkout of its recorded repo by the repo's records isn't started,
+// rather than started with no rules on its git dirs.
+func TestLaunchRefusesUnpinned(t *testing.T) {
+	testPaths(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CODEX_HOME", t.TempDir())
+	p := newWatchProject(t)
+	root := realPath(t.TempDir())
+	repo, wt := filepath.Join(root, "repo"), filepath.Join(root, "wt")
+	for _, args := range [][]string{
+		{"init", "-q", repo},
+		{"-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "c"},
+		{"-C", repo, "worktree", "add", "-q", "-b", "x", wt},
+	} {
+		if b, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, b)
+		}
+	}
+	rec, err := thread.Create(p, thread.Record{Title: "x", Agent: "claude", Repo: repo, Worktree: wt, State: "running"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg, err := agent.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}, Bin: "/nonexistent/tm", Env: []string{"PATH=/usr/bin:/bin"}},
+		log: log.New(os.Stderr, "", 0), noMods: true, agents: reg, records: map[string]SessionRecord{}}
+	sr := SessionRecord{ID: "s-1", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: rec.ID, Cwd: wt}
+	pl, perr := s.prepareLaunch(agentLaunch{rec: sr, kick: "Start."}, launchView{agents: reg})
+	if perr != nil {
+		t.Fatalf("a checkout: %v", perr)
+	}
+	pl.abandon()
+	// Its git dir no longer names it back.
+	os.WriteFile(filepath.Join(repo, ".git", "worktrees", "wt", "gitdir"), []byte("/elsewhere/.git\n"), 0o644)
+	if _, perr := s.prepareLaunch(agentLaunch{rec: sr, kick: "Start."}, launchView{agents: reg}); perr == nil || perr.Code != proto.ErrRefused {
+		t.Fatalf("unpinned: %v", perr)
 	}
 }

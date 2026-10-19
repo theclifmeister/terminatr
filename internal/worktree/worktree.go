@@ -96,6 +96,11 @@ func Create(repo, dir, branch, base string) (string, error) {
 		return "", err
 	}
 	if err := addWorktree(repo, dir, "-b", branch, "--", dir, base); err != nil {
+		// The branch is new (-b refuses one that exists), and nothing
+		// but this worktree was on it.
+		if BranchExists(repo, branch) {
+			git(repo, "branch", "-D", "--", branch)
+		}
 		return "", err
 	}
 	return base, nil
@@ -107,7 +112,9 @@ func Create(repo, dir, branch, base string) (string, error) {
 // runs there (and its checkout) would follow a commondir put there to
 // another repository's configuration. So git adds the worktree with no
 // checkout and starts no hook or monitor; the checkout reads only the
-// git dirs tm recorded.
+// git dirs tm recorded. A worktree added but not checked out is
+// removed again: left, it would look like one whose files were all
+// deleted.
 func addWorktree(repo, dir string, args ...string) error {
 	ctx := context.Background()
 	if _, err := gitx.Run(ctx, repo, gitx.Opts{Timeout: gitTimeout, Untrusted: true},
@@ -115,10 +122,15 @@ func addWorktree(repo, dir string, args ...string) error {
 		return err
 	}
 	t, err := gitx.Pin(ctx, repo, dir)
-	if err != nil {
-		return err
+	if err == nil {
+		_, err = gitx.Run(ctx, "", gitx.Opts{Timeout: gitTimeout, Tree: t}, "read-tree", "--reset", "-u", "HEAD")
 	}
-	_, err = gitx.Run(ctx, "", gitx.Opts{Timeout: gitTimeout, Tree: t}, "read-tree", "--reset", "-u", "HEAD")
+	if err != nil {
+		if _, rerr := removeWorktree(repo, dir, "--force"); rerr != nil {
+			os.RemoveAll(dir)
+			git(repo, "worktree", "prune")
+		}
+	}
 	return err
 }
 

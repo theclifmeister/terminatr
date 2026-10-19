@@ -82,8 +82,9 @@ func threadTree(r SessionRecord) *gitx.Tree {
 // threadGitConfig are the paths of thread session r's repository whose
 // writes the guard refuses: what git runs or reads as configuration in
 // the git dir of the record's repo (gitConfig), and in each worktree's
-// git dir there (ownConfig). The worktree isn't asked, so a thread that
-// changes its .git mid-session keeps them all.
+// git dir there (ownConfig), and from a linked worktree the main
+// checkout's own state (mainState). The worktree isn't asked, so a
+// thread that changes its .git mid-session keeps them all.
 func threadGitConfig(r SessionRecord) []string {
 	rec := threadRecord(r)
 	if rec == nil {
@@ -102,6 +103,10 @@ func threadGitConfig(r SessionRecord) []string {
 	}
 	dirs, files := gitConfig(common)
 	out := append(dirs, files...)
+	if !rec.Checkout {
+		sd, sf := mainState(common)
+		out = append(append(out, sd...), sf...)
+	}
 	wts := filepath.Join(common, "worktrees")
 	if es, err := os.ReadDir(wts); err == nil {
 		for _, e := range es {
