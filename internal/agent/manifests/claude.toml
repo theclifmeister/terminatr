@@ -125,6 +125,11 @@ template = '''
 # commits go to the parts of the main repo's git dir they need), and
 # Edit(...) deny rules close it, within a broader grant too (the main
 # repo's git hooks, config and info, the other worktrees' git dirs).
+# Claude's sandbox writes the whole main git dir from a linked worktree,
+# so the git dirs of worktrees added after the launch are closed by name
+# patterns (.Access.NoWriteSiblings, siblingRules): each pattern matches
+# the folder itself and all below it, so it can't be made, written or
+# moved into place.
 # Never put statusLine here: --settings would replace the user's own.
 # Outside safe mode Claude draws with tm's own theme in its config dir
 # ([theme] below, docs/SPEC.md §8.6), which the server rewrites on every
@@ -161,7 +166,7 @@ template = '''
   {{- end}}
   "permissions": {
     "allow": {{json (concat (rules "Read(/%s/**)" .Access.Read) (rules "Edit(/%s/**)" .Access.Write) (rules "Edit(/%s)" .Access.WriteFiles) (rules "Bash(%s:*)" .Access.Commands) .Sandbox.Allow)}},
-    "deny": {{json (concat (rules "Edit(/%s/**)" .Access.NoWrite) (rules "Edit(/%s)" .Access.NoWriteFiles) (rules "Read(/%s/**)" .Access.Closed) (rules "Edit(/%s/**)" .Access.Closed))}}
+    "deny": {{json (concat (rules "Edit(/%s/**)" .Access.NoWrite) (rules "Edit(/%s)" .Access.NoWriteFiles) (siblingRules "Edit(/%s)" .Access.NoWriteSiblings) (rules "Read(/%s/**)" .Access.Closed) (rules "Edit(/%s/**)" .Access.Closed))}}
   },
   "sandbox": {
     {{- if and (eq .Role "thread") .Yolo}}

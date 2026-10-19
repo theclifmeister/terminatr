@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"unicode"
 
 	"github.com/BurntSushi/toml"
 
@@ -919,6 +920,18 @@ var funcs = template.FuncMap{
 		}
 		return out
 	},
+	// siblingRules formats deny rules for the siblings of each folder
+	// in dirs (Access.NoWriteSiblings) as name patterns (siblingGlobs),
+	// e.g. siblingRules "Edit(/%s)" .Access.NoWriteSiblings.
+	"siblingRules": func(format string, dirs []string) []string {
+		var out []string
+		for _, d := range dirs {
+			for _, g := range siblingGlobs(d) {
+				out = append(out, fmt.Sprintf(format, g))
+			}
+		}
+		return out
+	},
 	// file is a file's text, e.g. the brief for an agent that takes it
 	// as a value rather than a path: toml (file .BriefPath).
 	"file": readText,
@@ -993,6 +1006,67 @@ func escapeGlob(p string) string {
 		}
 		b.WriteRune(r)
 	}
+	return b.String()
+}
+
+// nameChars are the characters siblingGlobs tells names apart by:
+// those of tm's worktree names (t-0001-title) and most of git's.
+const nameChars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+
+// siblingGlobs are glob patterns for every folder beside d but d,
+// those made later too. A glob has no "but": a name is matched where it
+// first differs from d's, by each prefix of d's name followed by any
+// other of nameChars, and by d's name followed by more; each shorter
+// prefix is a pattern by itself. A name that first differs from d's by
+// a character outside nameChars, or only by a letter's case, isn't
+// matched. None when d's path holds a character a glob would read, nor
+// for a Windows path (its backslashes), where Claude reads no brackets.
+func siblingGlobs(d string) []string {
+	parent, name := filepath.Dir(d), filepath.Base(d)
+	if !GlobSafe(d) || strings.Contains(d, `\`) || name == "" || parent == d {
+		return nil
+	}
+	out := make([]string, 0, 2*len(name)+1)
+	for i := 0; i < len(name); i++ {
+		out = append(out, parent+"/"+name[:i]+charClass(name[i])+"*")
+		if i > 0 {
+			out = append(out, parent+"/"+name[:i])
+		}
+	}
+	return append(out, parent+"/"+name+charClass(0)+"*")
+}
+
+// GlobSafe reports whether path p holds no character a permission
+// rule's glob reads, so that a pattern built on it (siblingGlobs) names
+// it as it is: Claude's sandbox takes no escapes there.
+func GlobSafe(p string) bool { return !strings.ContainsAny(p, "*?[]{}!") }
+
+// charClass is a bracket expression of nameChars but c, in ranges.
+// Claude's sandbox on macOS matches paths without regard to case, so a
+// letter c is left out in both cases.
+func charClass(c byte) string {
+	var b strings.Builder
+	b.WriteByte('[')
+	cs := strings.Map(func(r rune) rune {
+		if c != 0 && unicode.ToLower(r) == unicode.ToLower(rune(c)) {
+			return -1
+		}
+		return r
+	}, nameChars)
+	for i := 0; i < len(cs); {
+		j := i
+		for j+1 < len(cs) && cs[j+1] == cs[j]+1 {
+			j++
+		}
+		switch {
+		case j-i >= 2:
+			b.WriteString(cs[i:i+1] + "-" + cs[j:j+1])
+		default:
+			b.WriteString(cs[i : j+1])
+		}
+		i = j + 1
+	}
+	b.WriteByte(']')
 	return b.String()
 }
 

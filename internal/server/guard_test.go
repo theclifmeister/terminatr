@@ -592,22 +592,26 @@ func TestAccessThreadGitDirs(t *testing.T) {
 	if runs := gitx.RunsDir(realPath(s.opts.Paths.Home)); !slices.Contains(a.NoWrite, runs) {
 		t.Errorf("worktree: tm's git runs folder %s not in no-write %q", runs, a.NoWrite)
 	}
-	for _, n := range []string{"hooks", "info", "modules", "worktrees/other"} {
+	for _, n := range []string{"hooks", "info", "modules", "remotes", "branches", "worktrees/other", "rebase-merge", "rebase-apply", "sequencer"} {
 		if !slices.Contains(a.NoWrite, filepath.Join(common, n)) {
 			t.Errorf("worktree: %s not in no-write %q", n, a.NoWrite)
 		}
+	}
+	// Worktrees added later: the siblings of its own git dir.
+	if want := in("worktrees/wt"); !slices.Equal(a.NoWriteSiblings, want) {
+		t.Errorf("worktree: no-write siblings %q, want %q", a.NoWriteSiblings, want)
 	}
 	for _, n := range []string{"config", "config.lock", "config.worktree", "commondir"} {
 		if !slices.Contains(a.NoWriteFiles, filepath.Join(common, n)) {
 			t.Errorf("worktree: %s not in no-write files %q", n, a.NoWriteFiles)
 		}
 	}
-	for _, n := range []string{"config.worktree", "commondir"} {
+	for _, n := range []string{"config.worktree", "commondir", "gitdir", "locked"} {
 		if !slices.Contains(a.NoWriteFiles, filepath.Join(common, "worktrees", "wt", n)) {
 			t.Errorf("worktree: its own %s not in no-write files %q", n, a.NoWriteFiles)
 		}
 	}
-	for _, n := range []string{"HEAD", "index"} {
+	for _, n := range []string{"HEAD", "HEAD.lock", "index", "index.lock", "ORIG_HEAD", "MERGE_HEAD", "AUTO_MERGE", "CHERRY_PICK_HEAD", "REVERT_HEAD", "MERGE_MSG", "SQUASH_MSG"} {
 		if !slices.Contains(a.NoWriteFiles, filepath.Join(common, n)) {
 			t.Errorf("worktree: the main checkout's %s not in no-write files %q", n, a.NoWriteFiles)
 		}
@@ -629,8 +633,18 @@ func TestAccessThreadGitDirs(t *testing.T) {
 			t.Errorf("main checkout: %s not in no-write files %q", n, m.NoWriteFiles)
 		}
 	}
-	if !slices.Contains(m.NoWrite, filepath.Join(common, "modules")) {
-		t.Errorf("main checkout: modules not in no-write %q", m.NoWrite)
+	for _, n := range []string{"modules", "worktrees"} {
+		if !slices.Contains(m.NoWrite, filepath.Join(common, n)) {
+			t.Errorf("main checkout: %s not in no-write %q", n, m.NoWrite)
+		}
+	}
+	for _, n := range []string{"rebase-merge", "sequencer"} {
+		if slices.Contains(m.NoWrite, filepath.Join(common, n)) {
+			t.Errorf("main checkout: its own %s in no-write %q", n, m.NoWrite)
+		}
+	}
+	if len(m.NoWriteSiblings) != 0 {
+		t.Errorf("main checkout: no-write siblings %q", m.NoWriteSiblings)
 	}
 	for _, n := range []string{"HEAD", "index"} {
 		if slices.Contains(m.NoWriteFiles, filepath.Join(common, n)) {
@@ -650,7 +664,7 @@ func TestAccessThreadGitDirs(t *testing.T) {
 	}
 	// The guard keeps a thread's commands off them too.
 	g := s.guardRulesFor(wtRec)
-	for _, n := range []string{"hooks", "info", "modules", "config", "commondir", "worktrees/wt/config.worktree", "worktrees/wt/commondir", "worktrees/other/config.worktree"} {
+	for _, n := range []string{"hooks", "info", "modules", "config", "commondir", "worktrees/wt/config.worktree", "worktrees/wt/commondir", "worktrees/other/config.worktree", "rebase-merge", "sequencer", "HEAD"} {
 		if !slices.Contains(g.GitConfig, filepath.Join(common, n)) {
 			t.Errorf("guard: %s not in %q", n, g.GitConfig)
 		}
@@ -1098,5 +1112,98 @@ func TestGuardOwnExcludedLive(t *testing.T) {
 	write(filepath.Join(home, ".claude", "settings.json"), `{"sandbox":{"excludedCommands":["curl"]}}`)
 	if d := curl(); d == nil || d.Rule != guard.RuleEscape {
 		t.Errorf("after the user's settings: %+v", d)
+	}
+}
+
+// TestThreadRefused: a thread session isn't started where its git dirs
+// would get no rules: a folder with a .git whose record can't be read or
+// names no repo, git dirs Claude's rules can't name. One with no .git
+// and no repo or record, or with a checkout tm can name, starts.
+func TestThreadRefused(t *testing.T) {
+	testPaths(t)
+	p := newWatchProject(t)
+	plain, gitted := t.TempDir(), t.TempDir()
+	os.WriteFile(filepath.Join(gitted, ".git"), []byte("gitdir: ./fake\n"), 0o644)
+	session := func(r thread.Record, cwd string) SessionRecord {
+		t.Helper()
+		rec, err := thread.Create(p, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return SessionRecord{ID: "s-1", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: rec.ID, Cwd: cwd}
+	}
+	ok := session(thread.Record{Title: "plain", Worktree: plain}, plain)
+	if why := threadRefused(ok, nil, "claude", "darwin"); why != "" {
+		t.Errorf("no repo, no .git: %s", why)
+	}
+	if why := threadRefused(session(thread.Record{Title: "g", Worktree: gitted}, gitted), nil, "claude", "darwin"); why == "" {
+		t.Error("no repo, a .git: started")
+	}
+	gone := ok
+	gone.Thread = "t-0999"
+	if why := threadRefused(gone, nil, "claude", "darwin"); why != "" {
+		t.Errorf("no record, no .git: %s", why)
+	}
+	gone.Cwd = gitted
+	if why := threadRefused(gone, nil, "claude", "darwin"); why == "" {
+		t.Error("no record, a .git: started")
+	}
+	if why := threadRefused(session(thread.Record{Title: "r", Repo: plain, Worktree: plain}, plain), nil, "claude", "darwin"); why == "" {
+		t.Error("a repo, no checkout: started")
+	}
+	common := filepath.Join(t.TempDir(), "[x]", ".git")
+	tree := &gitx.Tree{Dir: plain, GitDir: filepath.Join(common, "worktrees", "a"), CommonDir: common}
+	r := session(thread.Record{Title: "b", Repo: plain, Worktree: plain}, plain)
+	if why := threadRefused(r, tree, "claude", "darwin"); why == "" {
+		t.Error("glob path, Claude: started")
+	}
+	if why := threadRefused(r, tree, "codex", "darwin"); why != "" {
+		t.Errorf("glob path, Codex: %s", why)
+	}
+	tree = &gitx.Tree{Dir: plain, GitDir: `/r/a\b/.git`, CommonDir: `/r/a\b/.git`}
+	if why := threadRefused(r, tree, "claude", "darwin"); why == "" {
+		t.Error("backslash path, Claude: started")
+	}
+}
+
+// TestLaunchRefusesUnpinned: a thread whose recorded worktree isn't a
+// checkout of its recorded repo by the repo's records isn't started,
+// rather than started with no rules on its git dirs.
+func TestLaunchRefusesUnpinned(t *testing.T) {
+	testPaths(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CODEX_HOME", t.TempDir())
+	p := newWatchProject(t)
+	root := realPath(t.TempDir())
+	repo, wt := filepath.Join(root, "repo"), filepath.Join(root, "wt")
+	for _, args := range [][]string{
+		{"init", "-q", repo},
+		{"-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "c"},
+		{"-C", repo, "worktree", "add", "-q", "-b", "x", wt},
+	} {
+		if b, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, b)
+		}
+	}
+	rec, err := thread.Create(p, thread.Record{Title: "x", Agent: "claude", Repo: repo, Worktree: wt, State: "running"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg, err := agent.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}, Bin: "/nonexistent/tm", Env: []string{"PATH=/usr/bin:/bin"}},
+		log: log.New(os.Stderr, "", 0), noMods: true, agents: reg, records: map[string]SessionRecord{}}
+	sr := SessionRecord{ID: "s-1", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: rec.ID, Cwd: wt}
+	pl, perr := s.prepareLaunch(agentLaunch{rec: sr, kick: "Start."}, launchView{agents: reg})
+	if perr != nil {
+		t.Fatalf("a checkout: %v", perr)
+	}
+	pl.abandon()
+	// Its git dir no longer names it back.
+	os.WriteFile(filepath.Join(repo, ".git", "worktrees", "wt", "gitdir"), []byte("/elsewhere/.git\n"), 0o644)
+	if _, perr := s.prepareLaunch(agentLaunch{rec: sr, kick: "Start."}, launchView{agents: reg}); perr == nil || perr.Code != proto.ErrRefused {
+		t.Fatalf("unpinned: %v", perr)
 	}
 }

@@ -107,6 +107,13 @@ type Access struct {
 	// NoWriteFiles are single files that must never be written, e.g.
 	// config.toml, which holds the human's safety settings.
 	NoWriteFiles []string
+	// NoWriteSiblings are folders whose sibling folders are never
+	// written, those made after the launch too: a linked worktree's own
+	// git dir, whose siblings are the other worktrees' git dirs. An
+	// agent whose sandbox writes the whole common git dir (Claude's)
+	// closes them by name patterns; one that writes git dirs only where
+	// a rule names them (Codex's) has nothing to close.
+	NoWriteSiblings []string
 	// NoRead are folders never read nor written by a sandboxed command:
 	// other sessions' temp folders (T587); nor by a file tool, but for
 	// the one that holds OwnTemp (Closed).

@@ -1,6 +1,11 @@
 package agent
 
-import "testing"
+import (
+	"regexp"
+	"runtime"
+	"strings"
+	"testing"
+)
 
 func TestHookexecFunc(t *testing.T) {
 	f := funcs["hookexec"].(func(string, ...string) (string, error))
@@ -37,6 +42,59 @@ func TestEscapeGlob(t *testing.T) {
 		if got := escapeGlob(in); got != want {
 			t.Errorf("escapeGlob(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// TestSiblingGlobs: the patterns for a folder's siblings match every
+// sibling name made of nameChars, and never the folder itself nor what
+// is in it.
+func TestSiblingGlobs(t *testing.T) {
+	if got := siblingGlobs(`C:\r\.git\worktrees\t-0005-x`); got != nil {
+		t.Errorf("a Windows path: %q", got)
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX paths")
+	}
+	own := "/r/.git/worktrees/t-0005-x"
+	globs := siblingGlobs(own)
+	if len(globs) != 2*len("t-0005-x") {
+		t.Errorf("%d patterns: %q", len(globs), globs)
+	}
+	// As Claude's sandbox reads them (2.1.303, macOS): regexp
+	// characters but brackets quoted, * any run of characters but /, a
+	// pattern covers what is below what it matches, and case doesn't
+	// count.
+	quote := strings.NewReplacer(".", `\.`, "^", `\^`, "$", `\$`, "+", `\+`, "{", `\{`, "}", `\}`,
+		"(", `\(`, ")", `\)`, "|", `\|`, `\`, `\\`, "*", "[^/]*", "?", "[^/]")
+	match := func(p string) bool {
+		for _, g := range globs {
+			if regexp.MustCompile("(?i)^" + quote.Replace(g) + "(/.*)?$").MatchString(p) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, n := range []string{"t-0006-y", "t-0005-y", "t-0005-x1", "t-0005", "t-0005-", "t", "t-00051-x", "feature", "a_b", "-x", "u-0005-x", "t-0005-y2"} {
+		if !match("/r/.git/worktrees/" + n) {
+			t.Errorf("sibling %s not matched", n)
+		}
+		if !match("/r/.git/worktrees/" + n + "/config.worktree") {
+			t.Errorf("sibling %s's config.worktree not matched", n)
+		}
+	}
+	for _, p := range []string{own, own + "/HEAD", own + "/index", "/r/.git/worktrees/T-0005-X/index", "/r/.git/worktrees", "/r/.git/config", "/r/.git/worktrees2/a"} {
+		if match(p) {
+			t.Errorf("%s matched", p)
+		}
+	}
+	if got := siblingGlobs("/r/[x]/.git/worktrees/a"); got != nil {
+		t.Errorf("glob characters in the path: %q", got)
+	}
+	if got := charClass('t'); got != "[-0-9A-SU-Z_a-su-z]" {
+		t.Errorf("charClass(t) = %s", got)
+	}
+	if got := charClass('-'); got != "[0-9A-Z_a-z]" {
+		t.Errorf("charClass(-) = %s", got)
 	}
 }
 
