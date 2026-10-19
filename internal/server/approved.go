@@ -76,14 +76,30 @@ func (s *Server) runClosed() (dirs, files []string) {
 	return dirs, files
 }
 
+// runUnconfined are the setuid programs an approved command's run may
+// start outside its profile (T618). A process in a seatbelt sandbox
+// can't exec a setuid program at all (EPERM, nothing in the sandbox
+// log), and some tools need one: prlctl's wrapper looks for Parallels'
+// dispatcher with ps. These only read the process table and print, so
+// they reach none of tm's files while unconfined. No other setuid
+// program is here: crontab, at and batch schedule jobs that later run
+// outside the profile, sudo, su and login change user.
+var runUnconfined = []string{"/bin/ps", "/usr/bin/top"}
+
 // runProfile is the seatbelt profile of an approved command's run:
 // everything allowed, but no read, write or connect in dirs (network*
 // on a folder refuses connecting to a unix socket below it, through a
-// link too) and no read or write of files.
+// link too) and no read or write of files; runUnconfined start outside
+// it.
 func runProfile(dirs, files []string) string {
 	q := strings.NewReplacer(`\`, `\\`, `"`, `\"`)
 	var b strings.Builder
 	b.WriteString("(version 1)\n(allow default)\n")
+	b.WriteString("(allow process-exec (with no-sandbox)")
+	for _, p := range runUnconfined {
+		fmt.Fprintf(&b, " (literal \"%s\")", p)
+	}
+	b.WriteString(")\n")
 	for _, d := range dirs {
 		fmt.Fprintf(&b, "(deny network* (subpath \"%s\"))\n(deny file-read* file-write* (subpath \"%s\"))\n", q.Replace(d), q.Replace(d))
 	}
