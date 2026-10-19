@@ -74,19 +74,23 @@ func readLaunchRecord(p *project.Project, id string) (proto.AccessSet, bool) {
 }
 
 // mayShowAccess refuses an agent asking for any access but its own
-// thread's, and says whether the caller is the human, who may see every
-// project's and thread's: on the human socket, and not placed by the pid
-// walk in an agent's session (an unsandboxed command reaches that
-// socket too), as gateHuman (mayCall).
+// thread's (a coordinator: its own project's, any thread's), and says
+// whether the caller is the human, who may see every project's and
+// thread's: on the human socket, and not placed by the pid walk in an
+// agent's session (an unsandboxed command reaches that socket too), as
+// gateHuman (mayCall). Only the human sees the agent's own files.
 func mayShowAccess(c callCtx, slug, id string) (human bool, perr *proto.Error) {
 	who := c.who()
 	if c.human && !who.IsAgent() {
 		return true, nil
 	}
+	if who.Kind == caller.Coordinator && slug != "" && who.Project == slug {
+		return false, nil
+	}
 	if who.Kind == caller.Thread && id != "" && who.Project == slug && who.Thread == id {
 		return false, nil
 	}
-	return false, proto.Errorf(proto.ErrRefused, "an agent may see only its own thread's access (tm access show --thread <your thread>)")
+	return false, proto.Errorf(proto.ErrRefused, "a thread may see only its own access (tm access show --thread <your thread>), a coordinator its own project's")
 }
 
 // accessShow is access.show: a project's thread to come, or a thread.
@@ -232,9 +236,26 @@ func (s *Server) agentFileRules(name, home, cwd string) []proto.AccessRule {
 	return agentRules(a, home, cwd)
 }
 
+// mayExplainAccess is access.explain's gate: the human (as mayShowAccess
+// says), or the coordinator of the project asked about. A thread's is
+// the human's.
+func mayExplainAccess(c callCtx, slug string) (human bool, perr *proto.Error) {
+	who := c.who()
+	if c.human && !who.IsAgent() {
+		return true, nil
+	}
+	if who.Kind == caller.Coordinator && slug != "" && who.Project == slug {
+		return false, nil
+	}
+	return false, proto.Errorf(proto.ErrRefused, "access.explain is the human's, or the project's coordinator's")
+}
+
 // accessExplain is access.explain: what a thread of the project (the
 // thread named, else one to come) does with a command line.
-func (s *Server) accessExplain(p proto.AccessExplainParams) (any, *proto.Error) {
+func (s *Server) accessExplain(p proto.AccessExplainParams, c callCtx) (any, *proto.Error) {
+	if _, perr := mayExplainAccess(c, p.Project); perr != nil {
+		return nil, perr
+	}
 	cmd := strings.TrimSpace(p.Command)
 	if cmd == "" {
 		return nil, proto.Errorf(proto.ErrBadParams, "no command to explain")
