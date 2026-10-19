@@ -382,7 +382,7 @@ func TestCreateStartsNothing(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell hooks")
 	}
-	repo, run := gittest.Repo(t)
+	repo, _ := gittest.Repo(t)
 	marker := filepath.Join(t.TempDir(), "ran")
 	for _, h := range []string{"post-checkout", "reference-transaction"} {
 		os.WriteFile(filepath.Join(repo, ".git", "hooks", h), []byte("#!/bin/sh\ntouch "+marker+"\n"), 0o755)
@@ -412,5 +412,4 @@ func TestCreateStartsNothing(t *testing.T) {
 	if _, err := os.Stat(marker); err == nil {
 		t.Fatal("a hook ran")
 	}
-	_ = run
 }
