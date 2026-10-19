@@ -239,14 +239,7 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 // doesn't open them either. The worktrees' git dirs added after the
 // launch are closed too: by the worktrees folder from the main
 // checkout, by own's siblings (NoWriteSiblings) from a linked worktree.
-//
-// A linked worktree whose git dirs a sibling pattern can't name
-// (agent.GlobSafe) gets the whole common dir closed instead: the thread
-// then can't commit.
 func threadGitAccess(common, own string) agent.Access {
-	if own != common && (!agent.GlobSafe(common) || !agent.GlobSafe(own)) {
-		return agent.Access{NoWrite: []string{common}}
-	}
 	dirs, files := gitConfig(common)
 	a := agent.Access{
 		Write:        []string{filepath.Join(common, "objects"), filepath.Join(common, "refs"), filepath.Join(common, "logs")},
@@ -309,13 +302,14 @@ func gitConfig(common string) (dirs, files []string) {
 
 // mainState is the main checkout's own state in git dir common, which
 // a linked worktree's git never writes: its HEAD, index, their locks and
-// what a merge leaves, and its rebase and sequencer state, whose todo
+// what a merge, cherry-pick or revert leaves, and its rebase and sequencer state, whose todo
 // lists run commands when the human's git goes on with them.
 func mainState(common string) (dirs, files []string) {
 	for _, n := range []string{"rebase-merge", "rebase-apply", "sequencer"} {
 		dirs = append(dirs, filepath.Join(common, n))
 	}
-	for _, n := range []string{"HEAD", "HEAD.lock", "index", "index.lock", "ORIG_HEAD", "MERGE_HEAD", "AUTO_MERGE"} {
+	for _, n := range []string{"HEAD", "HEAD.lock", "index", "index.lock", "ORIG_HEAD", "MERGE_HEAD", "AUTO_MERGE",
+		"CHERRY_PICK_HEAD", "REVERT_HEAD", "MERGE_MSG", "SQUASH_MSG"} {
 		files = append(files, filepath.Join(common, n))
 	}
 	return dirs, files
@@ -704,10 +698,8 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 	// Its access as rules (access.go), which the launch's settings come
 	// from and the thread's launch record keeps.
 	tree := threadTree(r)
-	if rec := threadRecord(r); tree == nil && rec != nil {
-		// Its git dirs would get no rules, while its agent's sandbox
-		// may still open the git dir its .git names.
-		return nil, proto.Errorf(proto.ErrRefused, "thread %s: %s is not a checkout of %s by the repository's records, so it isn't started (git worktree repair, or tm thread resolve)", r.Thread, rec.Worktree, rec.Repo)
+	if why := threadRefused(r, tree, a.Name(), caps.OS); why != "" {
+		return nil, proto.Errorf(proto.ErrRefused, "thread %s isn't started: %s", r.Thread, why)
 	}
 	acc, err := s.resolveAccess(accessInput{role: r.Role, slug: r.Project, cwd: r.Cwd, tree: tree, agent: r.Agent, goos: caps.OS,
 		thread: r.Thread, yolo: r.Yolo, noEscapes: r.NoSandboxEscapes}, lc)

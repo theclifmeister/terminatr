@@ -439,3 +439,20 @@ func TestCreateUndone(t *testing.T) {
 		t.Errorf("folder left: %v", err)
 	}
 }
+
+// TestCreateKeepsBranch: a thread's branch name that is already taken
+// fails the create and leaves that branch as it was.
+func TestCreateKeepsBranch(t *testing.T) {
+	repo, run := gittest.Repo(t)
+	run("branch", "tm/x")
+	run("checkout", "-q", "tm/x")
+	run("commit", "-q", "--allow-empty", "-m", "mine")
+	tip := run("rev-parse", "tm/x")
+	run("checkout", "-q", "-")
+	if _, err := Create(repo, filepath.Join(t.TempDir(), "wt"), "tm/x", "HEAD"); err == nil {
+		t.Fatal("created on a taken branch")
+	}
+	if !BranchExists(repo, "tm/x") || run("rev-parse", "tm/x") != tip {
+		t.Fatal("the existing branch was changed")
+	}
+}

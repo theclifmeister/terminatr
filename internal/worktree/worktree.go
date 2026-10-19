@@ -95,10 +95,11 @@ func Create(repo, dir, branch, base string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return "", err
 	}
+	existed := BranchExists(repo, branch)
 	if err := addWorktree(repo, dir, "-b", branch, "--", dir, base); err != nil {
-		// The branch is new (-b refuses one that exists), and nothing
-		// but this worktree was on it.
-		if BranchExists(repo, branch) {
+		// A branch made for this worktree goes with it: nothing else
+		// was on it. One there before (which -b refuses) is kept.
+		if !existed && BranchExists(repo, branch) {
 			git(repo, "branch", "-D", "--", branch)
 		}
 		return "", err
@@ -127,11 +128,32 @@ func addWorktree(repo, dir string, args ...string) error {
 	}
 	if err != nil {
 		if _, rerr := removeWorktree(repo, dir, "--force"); rerr != nil {
-			os.RemoveAll(dir)
-			git(repo, "worktree", "prune")
+			dropWorktree(repo, dir)
 		}
 	}
 	return err
+}
+
+// dropWorktree removes dir, a worktree just added, and the git dir git
+// made for it in repo's worktrees folder, by hand, when git worktree
+// remove can't: the other worktrees' entries are left alone, as git
+// worktree prune would drop those whose folders are missing too.
+func dropWorktree(repo, dir string) {
+	common, err := gitx.CommonDir(context.Background(), repo)
+	if err != nil {
+		return
+	}
+	b, err := os.ReadFile(filepath.Join(dir, ".git"))
+	own, ok := strings.CutPrefix(strings.TrimSpace(string(b)), "gitdir: ")
+	if err == nil && ok && own != "" {
+		if !filepath.IsAbs(own) {
+			own = filepath.Join(dir, own)
+		}
+		if parent, err := filepath.EvalSymlinks(filepath.Dir(own)); err == nil && parent == filepath.Join(common, "worktrees") {
+			os.RemoveAll(filepath.Join(parent, filepath.Base(own)))
+		}
+	}
+	os.RemoveAll(dir)
 }
 
 // Restore re-adds a worktree removed by hand, on its existing branch.

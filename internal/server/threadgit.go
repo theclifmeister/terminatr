@@ -2,10 +2,14 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -30,6 +34,46 @@ func threadRecord(r SessionRecord) *thread.Record {
 		return nil
 	}
 	return rec
+}
+
+// threadRefused says why thread session r, in checkout tree (threadTree)
+// with agent agentName on platform goos, isn't started; "" when it is.
+// Each case would leave its git dirs without rules while its agent's
+// sandbox may still open the git dir its folder's .git names: a folder
+// with a .git whose record can't be read or names no repo (older
+// ones), a folder that isn't the recorded repo's checkout, and, for
+// Claude, git dirs whose paths its rules can't name (no escape in its
+// sandbox's patterns). A session with no record (tm session start
+// --role thread) and no .git starts as before.
+func threadRefused(r SessionRecord, tree *gitx.Tree, agentName, goos string) string {
+	if r.Role != proto.RoleThread {
+		return ""
+	}
+	var rec *thread.Record
+	p, err := project.Open(r.Project)
+	if err == nil {
+		rec, err = thread.Load(p, r.Thread)
+	}
+	if err != nil || rec.Repo == "" {
+		if _, lerr := os.Lstat(filepath.Join(r.Cwd, ".git")); lerr != nil {
+			return ""
+		}
+		if err != nil {
+			return fmt.Sprintf("%s holds a .git but its record can't be read (%v)", r.Cwd, err)
+		}
+		return fmt.Sprintf("%s holds a .git but its record names no repository (start it anew)", r.Cwd)
+	}
+	if tree == nil {
+		return fmt.Sprintf("%s is not a checkout of %s by the repository's records (git worktree repair, or tm thread resolve)", rec.Worktree, rec.Repo)
+	}
+	if agentName == "claude" {
+		for _, d := range []string{tree.CommonDir, tree.GitDir} {
+			if !agent.GlobSafe(d) || goos != config.OSWindows && strings.Contains(d, `\`) {
+				return fmt.Sprintf("Claude's sandbox rules can't name %s (a glob character in the path)", d)
+			}
+		}
+	}
+	return ""
 }
 
 // mainGitDir is a main checkout's git dir, <repo>/.git by its recorded

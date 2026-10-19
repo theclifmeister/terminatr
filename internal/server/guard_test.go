@@ -611,7 +611,7 @@ func TestAccessThreadGitDirs(t *testing.T) {
 			t.Errorf("worktree: its own %s not in no-write files %q", n, a.NoWriteFiles)
 		}
 	}
-	for _, n := range []string{"HEAD", "HEAD.lock", "index", "index.lock", "ORIG_HEAD", "MERGE_HEAD", "AUTO_MERGE"} {
+	for _, n := range []string{"HEAD", "HEAD.lock", "index", "index.lock", "ORIG_HEAD", "MERGE_HEAD", "AUTO_MERGE", "CHERRY_PICK_HEAD", "REVERT_HEAD", "MERGE_MSG", "SQUASH_MSG"} {
 		if !slices.Contains(a.NoWriteFiles, filepath.Join(common, n)) {
 			t.Errorf("worktree: the main checkout's %s not in no-write files %q", n, a.NoWriteFiles)
 		}
@@ -1115,17 +1115,54 @@ func TestGuardOwnExcludedLive(t *testing.T) {
 	}
 }
 
-// TestThreadGitAccessGlobPath: a linked worktree whose git dirs no name
-// pattern can name gets its whole common dir closed; a main checkout
-// there keeps its grant, whose rules are escaped.
-func TestThreadGitAccessGlobPath(t *testing.T) {
-	common := filepath.Join(t.TempDir(), "[x]", ".git")
-	a := threadGitAccess(common, filepath.Join(common, "worktrees", "a"))
-	if !slices.Equal(a.NoWrite, []string{common}) || len(a.Write)+len(a.WriteFiles)+len(a.NoWriteSiblings) != 0 {
-		t.Errorf("linked: %+v", a)
+// TestThreadRefused: a thread session isn't started where its git dirs
+// would get no rules: a folder with a .git whose record can't be read or
+// names no repo, git dirs Claude's rules can't name. One with no .git
+// and no repo or record, or with a checkout tm can name, starts.
+func TestThreadRefused(t *testing.T) {
+	testPaths(t)
+	p := newWatchProject(t)
+	plain, gitted := t.TempDir(), t.TempDir()
+	os.WriteFile(filepath.Join(gitted, ".git"), []byte("gitdir: ./fake\n"), 0o644)
+	session := func(r thread.Record, cwd string) SessionRecord {
+		t.Helper()
+		rec, err := thread.Create(p, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return SessionRecord{ID: "s-1", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: rec.ID, Cwd: cwd}
 	}
-	if m := threadGitAccess(common, common); !slices.Contains(m.Write, filepath.Join(common, "objects")) {
-		t.Errorf("main checkout: %+v", m)
+	ok := session(thread.Record{Title: "plain", Worktree: plain}, plain)
+	if why := threadRefused(ok, nil, "claude", "darwin"); why != "" {
+		t.Errorf("no repo, no .git: %s", why)
+	}
+	if why := threadRefused(session(thread.Record{Title: "g", Worktree: gitted}, gitted), nil, "claude", "darwin"); why == "" {
+		t.Error("no repo, a .git: started")
+	}
+	gone := ok
+	gone.Thread = "t-0999"
+	if why := threadRefused(gone, nil, "claude", "darwin"); why != "" {
+		t.Errorf("no record, no .git: %s", why)
+	}
+	gone.Cwd = gitted
+	if why := threadRefused(gone, nil, "claude", "darwin"); why == "" {
+		t.Error("no record, a .git: started")
+	}
+	if why := threadRefused(session(thread.Record{Title: "r", Repo: plain, Worktree: plain}, plain), nil, "claude", "darwin"); why == "" {
+		t.Error("a repo, no checkout: started")
+	}
+	common := filepath.Join(t.TempDir(), "[x]", ".git")
+	tree := &gitx.Tree{Dir: plain, GitDir: filepath.Join(common, "worktrees", "a"), CommonDir: common}
+	r := session(thread.Record{Title: "b", Repo: plain, Worktree: plain}, plain)
+	if why := threadRefused(r, tree, "claude", "darwin"); why == "" {
+		t.Error("glob path, Claude: started")
+	}
+	if why := threadRefused(r, tree, "codex", "darwin"); why != "" {
+		t.Errorf("glob path, Codex: %s", why)
+	}
+	tree = &gitx.Tree{Dir: plain, GitDir: `/r/a\b/.git`, CommonDir: `/r/a\b/.git`}
+	if why := threadRefused(r, tree, "claude", "darwin"); why == "" {
+		t.Error("backslash path, Claude: started")
 	}
 }
 
