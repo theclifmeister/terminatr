@@ -25,7 +25,7 @@ func TestMigrateAccess(t *testing.T) {
 	cfg := filepath.Join(home, "config.toml")
 	old := `[defaults.sandbox]
 excluded_commands = ["docker compose *"]
-allow = ["Bash(git status)"]
+allow = ["Bash(git status)", "Edit(~/src/fixtures/**)"]
 browser_testing = true
 
 [projects.web.sandbox]
@@ -47,7 +47,8 @@ excluded_commands = []
 	if len(items) != 1 || items[0].Kind != KindAccessMigration || !items[0].NeedsUser {
 		t.Fatalf("inbox: %+v", items)
 	}
-	for _, want := range []string{"added drop docker compose *", "Bash(git status)", "browser_testing", "yolo now turns the sandbox off", "escape prompts go only to you"} {
+	for _, want := range []string{"added drop docker compose *", "Bash(git status)", "browser_testing", "yolo now turns the sandbox off", "escape prompts go only to you",
+		"Check write folder ~/src/fixtures (all projects)", "Codex threads can write there too", "tm access rm write ~/src/fixtures --all"} {
 		if !strings.Contains(items[0].Summary, want) {
 			t.Errorf("note lacks %q: %s", want, items[0].Summary)
 		}
@@ -75,5 +76,33 @@ excluded_commands = []
 	items, _ = web.Inbox()
 	if len(items) != 1 || !strings.Contains(items[0].Summary, "read as it was") || !items[0].NeedsUser {
 		t.Errorf("inbox: %+v", items)
+	}
+
+}
+
+// TestTellYolo: a project with yolo on is told once, needing the user,
+// that yolo turns Claude's sandbox off too, whatever the migration did;
+// the others aren't, and a later start says nothing.
+func TestTellYolo(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("TERMINATR_HOME", home)
+	y, _ := project.New(project.Options{Slug: "y"})
+	n, _ := project.New(project.Options{Slug: "n"})
+	os.WriteFile(filepath.Join(home, "config.toml"), []byte("sandbox_lists = \"add\"\n[projects.y]\nyolo = true\n"), 0o600)
+	logf := func(string, ...any) {}
+	migrateAccess(logf)
+	tellYolo(logf)
+	tellYolo(logf)
+	items, _ := y.Inbox()
+	if len(items) != 1 || !items[0].NeedsUser || !strings.Contains(items[0].Summary, "sandbox off for Claude threads") {
+		t.Errorf("y: %+v", items)
+	}
+	if items, _ := n.Inbox(); len(items) != 0 {
+		t.Errorf("n: %+v", items)
+	}
+	y.DoneItem(items[0].ID)
+	tellYolo(logf)
+	if items, _ := y.Inbox(); len(items) != 0 {
+		t.Errorf("told again: %+v", items)
 	}
 }

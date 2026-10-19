@@ -342,6 +342,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	// And config.toml's sandbox rules move to the access rules, once.
 	migrateAccess(logger.Printf)
+	tellYolo(logger.Printf)
 	toResume, lost := s.loadPrevious()
 	if err := s.saveLocked(""); err != nil {
 		logger.Printf("sessions.json: %v", err)

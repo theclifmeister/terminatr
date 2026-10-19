@@ -353,6 +353,11 @@ type Migration struct {
 	// else the project's slug. Kept are the rules left as they were, for
 	// the human to decide, by table too.
 	Changes, Kept map[string][]string
+	// Widened are the write folders a file allow rule or a worktree-only
+	// allowance became, by table: they reach further than it did (the
+	// thread's sandboxed commands and Codex threads write there too),
+	// which the check can't see, so the human is asked about each.
+	Widened map[string][]string
 	// Yolo are the projects with yolo on, whose rules aren't compared:
 	// their threads don't use them.
 	Yolo []string
@@ -406,7 +411,7 @@ func Migrate(data []byte) (*Migration, error) {
 	if err != nil {
 		return nil, err
 	}
-	m := &Migration{Data: data, Changes: map[string][]string{}, Kept: map[string][]string{}}
+	m := &Migration{Data: data, Changes: map[string][]string{}, Kept: map[string][]string{}, Widened: map[string][]string{}}
 	out := data
 	slugs := slices.Sorted(maps.Keys(raw.Projects))
 	var allNext SandboxTable
@@ -497,6 +502,7 @@ func (m *Migration) moveRules(slug string, t SandboxTable, guard []GuardAllow, e
 			}
 			next.Remove(SandboxAllow, a)
 			next.Add(SandboxWrite, f)
+			m.widen(slug, f)
 			m.Changes[slug] = append(m.Changes[slug], "allow rule "+a+" is now write folder "+f+", which Codex threads, sandboxed commands and the guard take too")
 		}
 	}
@@ -506,6 +512,7 @@ func (m *Migration) moveRules(slug string, t SandboxTable, guard []GuardAllow, e
 		switch {
 		case ok:
 			next.Add(SandboxWrite, f)
+			m.widen(slug, f)
 			m.Changes[slug] = append(m.Changes[slug], "guard allowance worktree-only "+a.Path+" is now write folder "+f+", which sandboxed commands and Codex threads take too")
 			continue
 		case a.Rule == "worktree-only" && a.Path != "":
@@ -514,6 +521,13 @@ func (m *Migration) moveRules(slug string, t SandboxTable, guard []GuardAllow, e
 		keep = append(keep, a)
 	}
 	return next, keep
+}
+
+// widen adds write folder f to table slug's Widened.
+func (m *Migration) widen(slug, f string) {
+	if !slices.Contains(m.Widened[slug], f) {
+		m.Widened[slug] = append(m.Widened[slug], f)
+	}
 }
 
 // describe adds to Changes what writing table slug (r as the file has
@@ -591,6 +605,14 @@ func compareMigrated(old *Config, out []byte, slugs []string, yolo *[]string) st
 		before, after := modelOf(old.ThreadSandbox(slug), guard0), modelOf(nu.ThreadSandbox(slug), s1.GuardAllow)
 		if !before.same(after) {
 			return name + ": its threads would get other rules (" + modelDiff(before, after) + ")"
+		}
+		// A Bash rule covering an excluded command counts as its no-ask
+		// in both; the new file may have fewer of them (moved), never one
+		// the old didn't.
+		for _, a := range slices.Sorted(maps.Keys(after.Covering)) {
+			if !before.Covering[a] {
+				return name + ": its threads would get the allow rule " + a + ", which they didn't"
+			}
 		}
 	}
 	return ""

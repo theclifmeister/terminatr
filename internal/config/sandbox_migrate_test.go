@@ -320,6 +320,9 @@ func TestMigrateRefuses(t *testing.T) {
 	if why := compareMigrated(oldCfg, withMarker([]byte("[defaults.sandbox]\nexcluded_commands = [\"make e2e\", \"rm *\"]\n")), []string{"p"}, &yolo); !strings.Contains(why, "rm *") {
 		t.Errorf("differs: %q", why)
 	}
+	if why := compareMigrated(oldCfg, withMarker([]byte("[defaults.sandbox]\nexcluded_commands = [\"make e2e\"]\nallow = [\"Bash(make e2e)\"]\n")), nil, &yolo); !strings.Contains(why, "Bash(make e2e)") {
+		t.Errorf("a new covering rule: %q", why)
+	}
 	if why := compareMigrated(oldCfg, withMarker([]byte("[defaults]\nyolo = true\n")), nil, &yolo); !strings.Contains(why, "settings would change") {
 		t.Errorf("differs: %q", why)
 	}
@@ -368,5 +371,25 @@ func TestMigrateFileBackup(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(backup); string(b) != old {
 		t.Errorf("backup %q", b)
+	}
+}
+
+// TestMigrateWidened: each write folder a file rule or a worktree-only
+// allowance became is in Widened, by its table; a write folder the file
+// had already isn't.
+func TestMigrateWidened(t *testing.T) {
+	t.Setenv("PATH", "/usr/bin:/bin")
+	m, err := Migrate([]byte(`[defaults.sandbox]
+allow = ["Edit(~/src/fixtures/**)", "Edit(~/.ssh/**)"]
+write = ["~/src/had"]
+
+[projects.p]
+guard_allow = [{ rule = "worktree-only", path = "~/src/p-fixtures/*" }]
+`))
+	if err != nil || m == nil || m.Differs != "" {
+		t.Fatalf("%+v %v", m, err)
+	}
+	if !slices.Equal(m.Widened[""], []string{"~/src/fixtures"}) || !slices.Equal(m.Widened["p"], []string{"~/src/p-fixtures"}) {
+		t.Errorf("widened %q", m.Widened)
 	}
 }

@@ -1,11 +1,14 @@
 package server
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/version"
@@ -17,7 +20,12 @@ import (
 // each project: a journal line and an inbox note listing each change,
 // what it left for the human, and the two meanings that change. When
 // the before/after check refuses, the file stays as it is, read as it
-// was, and each project's inbox says why, once for each reason.
+// was, and each project's inbox says why, once for each reason. Each
+// write folder a file allow rule or a worktree-only allowance became
+// reaches further than it did, which the check can't see: the note
+// names it and needs the user. Whatever the migration does, every
+// project with yolo on is told once that yolo now turns Claude's
+// sandbox off too (tellYolo).
 
 // KindAccessMigration is the inbox item of the access migration.
 const KindAccessMigration = "access-migration"
@@ -69,12 +77,60 @@ func migrateAccess(logf func(string, ...any)) {
 		}
 		add(config.AllProjectsName, m.Changes[""], m.Kept[""])
 		add(slug, m.Changes[slug], m.Kept[slug])
+		same := "threads get the same rules."
+		for _, w := range []struct{ table, who, undo string }{{"", config.AllProjectsName, "--all"}, {slug, slug, slug}} {
+			for _, f := range m.Widened[w.table] {
+				parts = append(parts, "Check write folder "+f+" ("+w.who+"): it was a file allow rule or a guard allowance, which let only Claude's file tools write there; now the thread's sandboxed commands (Bash) and Codex threads can write there too. tm access rm write "+f+" "+w.undo+" undoes it.")
+				ask, same = true, "threads get the same rules, but for the write folders named below."
+			}
+		}
 		if slices.Contains(m.Yolo, slug) {
 			parts = append(parts, slug+" has yolo on: its threads run with no sandbox, so its rules weren't compared.")
 		}
-		summary := "tm moved config.toml to the access rules (the old file: " + backup + "); threads get the same rules. " + strings.Join(parts, " ") + " " + accessMeanings
+		summary := "tm moved config.toml to the access rules (the old file: " + backup + "); " + same + " " + strings.Join(parts, " ") + " " + accessMeanings
 		return summary, ask
 	}, false)
+}
+
+// yoloNote is what tellYolo tells a project with yolo on.
+const yoloNote = "Yolo now turns the sandbox off for Claude threads too, as it already did for Codex threads: threads of this project run with no sandbox and no permission prompts, and can read and write anything you can and reach tm's socket; the guard keeps only its floor. tm access set yolo off <project> turns it off."
+
+// tellYolo tells each project with yolo on, once for this tm home (a
+// mark in state/), that yolo now turns Claude's sandbox off too.
+func tellYolo(logf func(string, ...any)) {
+	d, err := home.Dir()
+	if err != nil {
+		return
+	}
+	mark := filepath.Join(d, "state", "yolo-meaning-told")
+	if _, err := os.Stat(mark); err == nil {
+		return
+	}
+	c, err := config.Load()
+	if c == nil {
+		logf("yolo note: %v; told at a later start", err)
+		return
+	}
+	list, _ := project.List()
+	for _, sum := range list {
+		if s, err := c.Safety(sum.Slug); err != nil || !s.Yolo {
+			continue
+		}
+		p, err := project.Open(sum.Slug)
+		if err != nil {
+			continue
+		}
+		items, _ := p.Inbox()
+		if slices.ContainsFunc(items, func(it project.Item) bool { return it.Kind == KindAccessMigration && it.Summary == yoloNote }) {
+			continue
+		}
+		p.Journal(caller.Caller{Kind: caller.Ticker}, "settings.migrate", sum.Slug, "told: yolo turns the sandbox off for Claude threads too")
+		p.AddItem(KindAccessMigration, "yolo", yoloNote, true)
+	}
+	os.MkdirAll(filepath.Dir(mark), 0o700)
+	if err := os.WriteFile(mark, []byte("yolo's meaning told\n"), 0o600); err != nil {
+		logf("yolo note: %v", err)
+	}
 }
 
 // noteAccess journals the migration in each project and leaves it an
