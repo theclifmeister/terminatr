@@ -13,7 +13,9 @@ import (
 // TestAccessCommands: a thread's launch keeps its access in its folder;
 // tm access show lists it with each rule's source and marks what a
 // config.toml change would bring at a restart; tm access explain says
-// what a thread does with a command (T574 phase 1).
+// what a thread does with a command (T574 phase 1). The Bash allow rule
+// covering the excluded command is no rule of its own: it makes that one
+// run without asking (#655), so the change is one rule out, one in.
 func TestAccessCommands(t *testing.T) {
 	env, projDir, _ := threadEnv(t)
 	writeConfig(t, env, "[projects.demo.sandbox]\nexcluded_commands = [\"npx playwright *\"]\nallow = [\"Bash(npx playwright *)\"]\n")
@@ -43,7 +45,7 @@ func TestAccessCommands(t *testing.T) {
 
 	writeConfig(t, env, "[projects.demo.sandbox]\nexcluded_commands = [\"make bench\"]\n")
 	out := env.MustCLI("access", "show", "demo", "--thread", "t-0001")
-	for _, want := range []string{"Effective access · demo · t-0001 (claude", "RESTART TO APPLY: removed since launch", "RESTART TO APPLY: added since launch",
+	for _, want := range []string{"Effective access · demo · t-0001 (claude", "without asking", "RESTART TO APPLY: removed since launch", "RESTART TO APPLY: added since launch",
 		"2 changes since launch: tm thread restart t-0001 applies them", "worktree"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("show lacks %q:\n%s", want, out)
