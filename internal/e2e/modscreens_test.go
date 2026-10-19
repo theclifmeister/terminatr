@@ -153,5 +153,12 @@ input = { file_path = "auth/session.go" }
 	w.Key(Enter)
 	w.WaitFor("Edit(auth/session.go)", wait)
 	w.WaitFor("LAST REPORT", wait)
-	w.Golden("session-sidebar.txt", Mask{Name: "worktree", Re: regexp.MustCompile(`worktree  \S+`)})
+	// report-glance's section draws after the core panel (and the
+	// sidebar's footer re-lays out with it): wait for its last line.
+	w.WaitFor("no ## Check", wait)
+	// The LAST REPORT header's rule fills the panel's width after the
+	// duration, so its dash count follows the duration's width: pin it.
+	w.Golden("session-sidebar.txt",
+		Mask{Name: "worktree", Re: regexp.MustCompile(`worktree  \S+`)},
+		Mask{Name: "report rule", Re: regexp.MustCompile(`(LAST REPORT <duration> ago )─+`), Repl: "${1}──────────────────"})
 }
