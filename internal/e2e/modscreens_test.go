@@ -97,13 +97,13 @@ cmd = 'printf "PR: https://github.com/o/r/pull/7\n\n## Report\nFixed the login r
 
 	// The Mods tab: the user's mods, then the built-in ones.
 	w.Type(",")
-	w.WaitFor("1 General", wait)
+	w.WaitFor("1 general", wait)
 	w.Type("4")
 	w.WaitFor("Tasks tab", wait)
 	w.WaitFor("● Standup", wait)
 	w.Golden("mods-settings.txt", append(popupMasks, cutDuration)...)
 	w.Key(keyEsc)
-	w.WaitUntil("settings closed", wait, func(sc string) bool { return !strings.Contains(sc, "1 General") })
+	w.WaitUntil("settings closed", wait, func(sc string) bool { return !strings.Contains(sc, "1 general") })
 
 	// The Memory tab, the built-in memory-tab mod, reading MEMORY.md.
 	w.Type("a")

@@ -9,7 +9,7 @@ import (
 
 // The Access tab (T574 §4.1, §4.5): everything that decides what a
 // project's threads may do, in one place, in a project's popup (5
-// access) and, for all projects, in the , popup (3 Access). Prompts and
+// access) and, for all projects, in the , popup (3 access). Prompts and
 // escapes first, then the sandbox's presets and lists
 // (settings_sandbox.go), the guard (settings_guard.go), the secret
 // environment (settings_secretenv.go) and tm's own rules, read-only.

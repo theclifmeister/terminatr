@@ -1,7 +1,7 @@
  PROJECTS                      2   │ tm dashboard                                     ● server ok · 6 sessions
  ■ alpha              2         ⚑  │ NEEDS YOU 2 ─────────────────────────────────────────────────────────────
  └─ coordin╭─ Settings ───────────────────────────────────────────────────────────────────────────╮
-    ├─ t-00│  1 General   2 All projects   3 Access   4 Mods   5 Peers   6 Logs                   │
+    ├─ t-00│  1 general   2 all projects   3 access   4 mods   5 peers   6 logs                   │
     └─ t-00│ About: tm dev · server unknown · update check off                                    │deactivate
  ■ beta    │                                                                                      │
  └─ coordin│ {id} (required, as t-0042), {task} (as T42, or empty) and {title}; for example       │

@@ -215,7 +215,7 @@ func TestPeersTab(t *testing.T) {
 	}
 	out := screen(m)
 	for _, want := range []string{
-		"5 Peers",
+		"5 peers",
 		"SHARED PROJECTS",
 		"[ ] terminatr",
 		"[ ] web",

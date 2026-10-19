@@ -928,7 +928,7 @@ func TestAllProjectsSettings(t *testing.T) {
 	src, m := popupData(t)
 	keyPress(m, ",")
 	keyPress(m, "2")
-	if out := screen(m); !strings.Contains(out, "2 All projects") || !strings.Contains(out, "Parallel threads") {
+	if out := screen(m); !strings.Contains(out, "2 all projects") || !strings.Contains(out, "Parallel threads") {
 		t.Fatalf("all projects tab:\n%s", out)
 	}
 	// Pausing, archiving and deleting are each project's own.

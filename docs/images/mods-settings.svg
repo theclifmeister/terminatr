@@ -50,9 +50,9 @@
 <text x="142.0" y="129.2" fill="#c8d0f0" textLength="67.2" lengthAdjust="spacingAndGlyphs">Settings</text>
 <text x="217.6" y="129.2" fill="#4e5578" textLength="705.6" lengthAdjust="spacingAndGlyphs">───────────────────────────────────────────────────────────────────────────────────╮</text>
 <text x="116.8" y="146.2" fill="#4e5578">│</text>
-<text x="142.0" y="146.2" fill="#c8d0f0" textLength="75.6" lengthAdjust="spacingAndGlyphs">1 General</text>
-<text x="242.8" y="146.2" fill="#c8d0f0" textLength="117.6" lengthAdjust="spacingAndGlyphs">2 All projects</text>
-<text x="385.6" y="146.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">3 Mods</text>
+<text x="142.0" y="146.2" fill="#c8d0f0" textLength="75.6" lengthAdjust="spacingAndGlyphs">1 general</text>
+<text x="242.8" y="146.2" fill="#c8d0f0" textLength="117.6" lengthAdjust="spacingAndGlyphs">2 all projects</text>
+<text x="385.6" y="146.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">3 mods</text>
 <text x="914.8" y="146.2" fill="#4e5578">│</text>
 <text x="116.8" y="163.2" fill="#4e5578">│</text>
 <text x="133.6" y="163.2" fill="#c8d0f0" textLength="369.6" lengthAdjust="spacingAndGlyphs">About: tm dev · server dev · update check on</text>
