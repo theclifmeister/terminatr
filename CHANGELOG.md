@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.41.0](https://github.com/theclifmeister/terminatr/compare/v0.40.0...v0.41.0) (2026-10-19)
+
+
+### Features
+
+* **tui:** save and clear a coordinator with prefix+C instead of c ([#681](https://github.com/theclifmeister/terminatr/issues/681)) ([b368e35](https://github.com/theclifmeister/terminatr/commit/b368e35ecfee1d1e05fd4417a8bbb3091dd8c028))
+
 ## [0.40.0](https://github.com/theclifmeister/terminatr/compare/v0.39.0...v0.40.0) (2026-10-19)
 
 
