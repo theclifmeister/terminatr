@@ -139,8 +139,28 @@ func Remove(repo, dir string) error {
 	case dirty:
 		return ErrDirty
 	}
-	_, err := removeWorktree(repo, dir)
+	var flags []string
+	if worktreeConfig(repo) {
+		// Git's own check for changes would read dir's config.worktree:
+		// Dirty's pinned one stands for it.
+		flags = append(flags, "--force")
+	}
+	_, err := removeWorktree(repo, dir, flags...)
 	return err
+}
+
+// worktreeConfig reports whether repo's git reads each worktree's own
+// config.worktree (extensions.worktreeConfig); true when its config
+// can't be read.
+func worktreeConfig(repo string) bool {
+	ctx := context.Background()
+	common, err := gitx.CommonDir(ctx, repo)
+	if err != nil {
+		return true
+	}
+	out, err := gitx.Run(ctx, common, gitx.Opts{OK: []int{1}},
+		"config", "--file", filepath.Join(common, "config"), "--type=bool", "--get", "extensions.worktreeConfig")
+	return err != nil || out == "true"
 }
 
 // Dirty reports whether repo's worktree dir has uncommitted changes.
@@ -153,9 +173,14 @@ func Dirty(repo, dir string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	out, err := gitx.Run(ctx, "", gitx.Opts{Tree: t}, "status", "--porcelain")
+	out, err := gitx.Run(ctx, "", gitx.Opts{Tree: t}, statusArgs...)
 	return out != "", err
 }
+
+// statusArgs is the check for changes of Dirty and Unsaved: every
+// untracked file, and submodules' changes whatever .gitmodules says
+// (its ignore setting is the worktree's to write).
+var statusArgs = []string{"status", "--porcelain", "--ignore-submodules=none", "--untracked-files=all"}
 
 // removeWorktree is git worktree remove of dir. Its own check for
 // changes runs git status in dir: it is given the repo's git dir, not
@@ -328,7 +353,7 @@ func Unsaved(repo, dir, pushed string) (string, error) {
 	git := func(args ...string) (string, error) {
 		return gitx.Run(ctx, "", gitx.Opts{Tree: t}, args...)
 	}
-	out, err := git("status", "--porcelain")
+	out, err := git(statusArgs...)
 	if err != nil {
 		return "", err
 	}
