@@ -915,3 +915,14 @@ func TestSidebarProjectsHeader(t *testing.T) {
 		t.Errorf("goNeeds: current %q selected %+v", m.current, r)
 	}
 }
+
+func TestDetailsHereDropsTitle(t *testing.T) {
+	r := treeRow{kind: treeThread, thread: "t-0001", name: "T7", title: "Some long title", state: "working", pct: 10}
+	if l1, _ := r.details(); !strings.Contains(l1, "Some long title") {
+		t.Errorf("row elsewhere: first line %q lacks its title", l1)
+	}
+	r.here = true
+	if l1, l2 := r.details(); l1 != "working · 10%" || l2 != "" {
+		t.Errorf("row on screen: lines %q, %q; want the state alone", l1, l2)
+	}
+}
