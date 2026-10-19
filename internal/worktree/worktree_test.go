@@ -374,3 +374,43 @@ func TestRemoveWorktreeConfig(t *testing.T) {
 		t.Fatal("the planted filter ran")
 	}
 }
+
+// TestCreateStartsNothing: adding a worktree checks it out but runs
+// none of the repo's hooks (worktree add's own gits run in a git dir a
+// running thread may write).
+func TestCreateStartsNothing(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell hooks")
+	}
+	repo, run := gittest.Repo(t)
+	marker := filepath.Join(t.TempDir(), "ran")
+	for _, h := range []string{"post-checkout", "reference-transaction"} {
+		os.WriteFile(filepath.Join(repo, ".git", "hooks", h), []byte("#!/bin/sh\ntouch "+marker+"\n"), 0o755)
+	}
+	dir := filepath.Join(t.TempDir(), "wt")
+	if _, err := Create(repo, dir, "tm/x", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, "a")); err != nil || string(b) != "a" {
+		t.Fatalf("not checked out: %q %v", b, err)
+	}
+	if dirty, err := Dirty(repo, dir); err != nil || dirty {
+		t.Fatalf("dirty after create: %v %v", dirty, err)
+	}
+	if got := gittest.Run(t, dir, "symbolic-ref", "HEAD"); got != "refs/heads/tm/x" {
+		t.Fatalf("HEAD %q", got)
+	}
+	if err := Remove(repo, dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := Restore(repo, dir, "tm/x"); err != nil {
+		t.Fatal(err)
+	}
+	if dirty, err := Dirty(repo, dir); err != nil || dirty {
+		t.Fatalf("dirty after restore: %v %v", dirty, err)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("a hook ran")
+	}
+	_ = run
+}

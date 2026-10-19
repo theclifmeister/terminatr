@@ -95,10 +95,31 @@ func Create(repo, dir, branch, base string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return "", err
 	}
-	if _, err := git(repo, "worktree", "add", "--quiet", "-b", branch, "--", dir, base); err != nil {
+	if err := addWorktree(repo, dir, "-b", branch, "--", dir, base); err != nil {
 		return "", err
 	}
 	return base, nil
+}
+
+// addWorktree is git worktree add args, with the checkout of dir as a
+// run gitx.Pin checked. The git dir git makes for dir is in the common
+// dir, which a running thread's sandbox may write: the gits worktree add
+// runs there (and its checkout) would follow a commondir put there to
+// another repository's configuration. So git adds the worktree with no
+// checkout and starts no hook or monitor; the checkout reads only the
+// git dirs tm recorded.
+func addWorktree(repo, dir string, args ...string) error {
+	ctx := context.Background()
+	if _, err := gitx.Run(ctx, repo, gitx.Opts{Timeout: gitTimeout, Untrusted: true},
+		append([]string{"worktree", "add", "--quiet", "--no-checkout"}, args...)...); err != nil {
+		return err
+	}
+	t, err := gitx.Pin(ctx, repo, dir)
+	if err != nil {
+		return err
+	}
+	_, err = gitx.Run(ctx, "", gitx.Opts{Timeout: gitTimeout, Tree: t}, "read-tree", "--reset", "-u", "HEAD")
+	return err
 }
 
 // Restore re-adds a worktree removed by hand, on its existing branch.
@@ -110,8 +131,7 @@ func Restore(repo, dir, branch string) error {
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return err
 	}
-	_, err := git(repo, "worktree", "add", "--quiet", "--", dir, branch)
-	return err
+	return addWorktree(repo, dir, "--", dir, branch)
 }
 
 // ErrDirty means a worktree has changes and was kept.

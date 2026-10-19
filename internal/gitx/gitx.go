@@ -56,8 +56,9 @@ type Opts struct {
 	OK []int
 	// Tree pins the run to a worktree Pin checked: git runs in it with
 	// its git dirs given, never looked up from the folder. A Tree run
-	// reads: a linked worktree's run gets a git dir of tm's own in its
-	// state dir (privateGitDir), which it drops after.
+	// writes no more than the index and the work tree: a linked
+	// worktree's run gets a git dir of tm's own in its state dir
+	// (privateGitDir), which it drops after.
 	Tree *Tree
 	// Untrusted is a run that must look its repository up from a folder
 	// an agent writes (to find out what it is): git starts no program on
