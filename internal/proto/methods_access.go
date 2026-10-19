@@ -49,7 +49,7 @@ const (
 	AccessPreset       = "preset"        // a sandbox preset's switch (launch records of tm 0.37's previews only)
 	AccessLocalPorts   = "local-ports"   // sandboxed commands may listen on and reach localhost
 	AccessHost         = "host"          // a host sandboxed commands may reach
-	AccessGuide        = "guide"         // guidance in the brief
+	AccessGuide        = "guide"         // a guide in the brief: value its title, body its text ("" for a name of tm 0.38)
 	AccessExcluded     = "excluded"      // a command run outside the sandbox; note AccessAsksFirst or AccessWithoutAsking
 	AccessWriteFolder  = "write-folder"  // a write folder (config write): value its absolute path, note as written
 	AccessUnixSocket   = "unix-socket"   // a project's socket (config sockets): value its absolute path, note as written
@@ -110,6 +110,8 @@ type AccessRule struct {
 	// Note says more: what a path is, where a host comes from, an
 	// allowance's rule.
 	Note string `json:"note,omitempty"`
+	// Body is a guide's text (AccessGuide).
+	Body string `json:"body,omitempty"`
 	// OS are the platforms it applies on (runtime.GOOS names), Agents the
 	// agents that get it; none: all.
 	OS     []string `json:"os,omitempty"`
@@ -135,7 +137,7 @@ type AccessRule struct {
 // read and whichever table set it.
 func (r AccessRule) Same(o AccessRule) bool {
 	// An excluded command's note is its choice to ask first.
-	return r.Where == o.Where && r.Kind == o.Kind && r.Value == o.Value && r.Skipped == o.Skipped &&
+	return r.Where == o.Where && r.Kind == o.Kind && r.Value == o.Value && r.Body == o.Body && r.Skipped == o.Skipped &&
 		r.Dropped == o.Dropped && r.Refused == o.Refused && (r.Kind != AccessExcluded && r.Kind != AccessApproved || r.Note == o.Note)
 }
 

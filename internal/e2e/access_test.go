@@ -82,7 +82,7 @@ func TestAccessPreset(t *testing.T) {
 	}
 	env.MustCLI("server", "start")
 	out := env.MustCLI("access", "preset", "add", "browser-downloads", "demo")
-	for _, want := range []string{"already there for demo: host registry.npmjs.org", "added to demo: host cdn.playwright.dev", "added to demo: guide browser-downloads", "threads of demo get them from their next start"} {
+	for _, want := range []string{"already there for demo: host registry.npmjs.org", "added to demo: host cdn.playwright.dev", "added to demo: guide Sandbox: browser downloads", "threads of demo get them from their next start"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("add lacks %q:\n%s", want, out)
 		}

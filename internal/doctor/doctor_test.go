@@ -596,7 +596,12 @@ func TestSettingsOldAccess(t *testing.T) {
 			t.Errorf("lacks %q: %s", want, cs[0].Detail)
 		}
 	}
+	// tm 0.38's guide name is one too, until it is written out.
 	os.WriteFile(filepath.Join(d.Paths.Home, "config.toml"), []byte("sandbox_lists = \"add\"\n[defaults.sandbox]\nguides = [\"browser-testing\"]\n"), 0o600)
+	if cs := Settings(d); len(cs) != 1 || !strings.Contains(cs[0].Detail, "guide name browser-testing") {
+		t.Errorf("guide name: %+v", cs)
+	}
+	os.WriteFile(filepath.Join(d.Paths.Home, "config.toml"), []byte("sandbox_lists = \"add\"\n[defaults.sandbox]\nguides = [{ title = \"Test data\", body = \"Run make fixtures.\" }]\n"), 0o600)
 	if cs := Settings(d); len(cs) != 0 {
 		t.Errorf("moved: %+v", cs)
 	}

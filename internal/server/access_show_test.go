@@ -62,7 +62,7 @@ drop = ["make e2e"]
 		{proto.AccessAllow, "Bash(npx playwright *)", "demo", ""},
 		{proto.AccessLocalPorts, "on", "demo", "doesn't apply on Linux"},
 		{proto.AccessHost, "registry.npmjs.org", proto.AccessFromAll, "doesn't apply on Linux"},
-		{proto.AccessGuide, "browser-downloads", proto.AccessFromAll, "doesn't apply on Linux"},
+		{proto.AccessGuide, "browser-downloads", proto.AccessFromAll, ""}, // plain text: every platform
 		{proto.AccessEscapes, "off", proto.AccessFromAll, ""},
 		{proto.AccessYolo, "off", proto.AccessFromDefault, ""},
 		{proto.AccessGuardMode, "learn", "demo", ""},

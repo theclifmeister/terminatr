@@ -138,6 +138,7 @@ func (v *presetAdd) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			m.msg = "nothing to add: " + v.p.Title + "'s rules are there already, or left out"
 			return nil
 		}
+		add = config.WordRules(add, v.sr.merged(m))
 		words := make([]string, len(add))
 		for i, r := range add {
 			words[i] = presetRuleWords(r)
@@ -159,7 +160,7 @@ func (v *presetAdd) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 
 // presetKindWords name a preset rule's kind in its line.
 var presetKindWords = map[string]string{
-	config.SandboxHosts: "host", config.SandboxGuides: "guidance", config.SandboxLocalPorts: "local ports",
+	config.SandboxHosts: "host", config.SandboxGuides: "guide", config.SandboxLocalPorts: "local ports",
 	config.SandboxExcluded: "excluded", config.SandboxAllow: "allow",
 }
 
@@ -192,11 +193,10 @@ func (v *presetAdd) render(m *dash) string {
 		} else {
 			lines = append(lines, th().Head.Render(text))
 		}
-		if r.Key == config.SandboxGuides {
-			if g, ok := config.GuideNamed(r.Value); ok {
-				for _, l := range faintLines(g.About, w-4) {
-					lines = append(lines, "    "+l)
-				}
+		if about := config.PresetGuides[r.Value]; r.Key == config.SandboxGuides && about != "" {
+			about = "Its text, " + about + ", is written out from the rules threads have once it is added: enter on it in Guidance for threads shows and edits it."
+			for _, l := range faintLines(about, w-4) {
+				lines = append(lines, "    "+l)
 			}
 		}
 	}

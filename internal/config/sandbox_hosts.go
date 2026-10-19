@@ -8,9 +8,8 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
-// Host and guidance rules of a sandbox table (T574 §3.1): hosts a
-// thread's sandboxed commands may reach (Claude's allowedDomains), and
-// the guidance texts tm adds after its brief, by name.
+// Host rules of a sandbox table (T574 §3.1): hosts a thread's sandboxed
+// commands may reach (Claude's allowedDomains).
 
 // maxHost is the longest host name DNS has.
 const maxHost = 253
@@ -96,50 +95,4 @@ func hostWarning(h string) string {
 		return h + " is " + whose + ": a thread's commands can download from, or send your files to, any of them"
 	}
 	return ""
-}
-
-// Names of the guidance texts tm ships.
-const (
-	GuideBrowserTesting   = "browser-testing"
-	GuideBrowserDownloads = "browser-downloads"
-)
-
-// A Guide is a guidance text tm adds after a thread's brief, named by a
-// guides rule. Its text is the server's, worded from the thread's other
-// rules (downloads open or not, local ports open or not).
-type Guide struct {
-	Name, Title, About string
-}
-
-// Guides are the guidance texts tm ships, in the order a brief gets
-// them.
-var Guides = []Guide{
-	{GuideBrowserTesting, "browser testing",
-		"how to run Playwright and other Chromium tools inside macOS's sandbox: the headless shell in one process, and a ready Playwright test setup; it says whether downloads and local ports are open"},
-	{GuideBrowserDownloads, "browser downloads",
-		"how to install npm packages and Playwright's browser inside the sandbox: the npm cache and browsers path of the thread's own, and curl when Playwright's downloader is cut off"},
-}
-
-// GuideNamed is the guide called name.
-func GuideNamed(name string) (Guide, bool) {
-	i := slices.IndexFunc(Guides, func(g Guide) bool { return g.Name == name })
-	if i < 0 {
-		return Guide{}, false
-	}
-	return Guides[i], true
-}
-
-// CheckGuide checks one guidance rule: the name of a text tm ships.
-func CheckGuide(name string) error {
-	if err := checkSandboxText(name); err != nil {
-		return err
-	}
-	if _, ok := GuideNamed(name); !ok {
-		names := make([]string, len(Guides))
-		for i, g := range Guides {
-			names[i] = g.Name
-		}
-		return fmt.Errorf("%q isn't a guidance text tm has: %s", name, strings.Join(names, ", "))
-	}
-	return nil
 }

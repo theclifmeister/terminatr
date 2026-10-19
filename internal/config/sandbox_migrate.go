@@ -364,6 +364,27 @@ type Migration struct {
 	// Differs is why the migration is refused: the project whose threads
 	// would get other rules, and how. "" when it holds.
 	Differs string
+	// Access: the file moved to the access rules (Migrate); Guides: its
+	// guide names were written out (MigrateGuides).
+	Access, Guides bool
+}
+
+// join is m, which moved the file to the access rules, followed by g,
+// which wrote out its guides; either may be nil.
+func join(m, g *Migration) *Migration {
+	switch {
+	case m == nil:
+		return g
+	case g == nil:
+		return m
+	}
+	for _, x := range []struct{ to, from map[string][]string }{{m.Changes, g.Changes}, {m.Kept, g.Kept}, {m.Widened, g.Widened}} {
+		for k, v := range x.from {
+			x.to[k] = append(x.to[k], v...)
+		}
+	}
+	m.Data, m.Differs, m.Guides = g.Data, g.Differs, true
+	return m
 }
 
 // orEmpty is l, or an empty list for nil.
@@ -415,7 +436,7 @@ func Migrate(data []byte) (*Migration, error) {
 	if err != nil {
 		return nil, err
 	}
-	m := &Migration{Data: data, Changes: map[string][]string{}, Kept: map[string][]string{}, Widened: map[string][]string{}}
+	m := &Migration{Data: data, Changes: map[string][]string{}, Kept: map[string][]string{}, Widened: map[string][]string{}, Access: true}
 	out := data
 	slugs := slices.Sorted(maps.Keys(raw.Projects))
 	var allNext SandboxTable
@@ -654,7 +675,7 @@ func modelDiff(before, after accessModel) string {
 // OldAccess lists, for tm doctor, what of the file still has a form of
 // tm 0.37: its sandbox lists waiting for the migration, the old preset
 // switches, allow rules that run commands or write files, worktree-only
-// path allowances.
+// path allowances; and tm 0.38's guide names.
 func (c *Config) OldAccess() []string {
 	if c == nil {
 		return nil
@@ -683,6 +704,13 @@ func (c *Config) OldAccess() []string {
 				}
 			}
 		}
+		if t.Sandbox != nil && t.Sandbox.Guides != nil {
+			for _, g := range *t.Sandbox.Guides {
+				if g.Body == "" {
+					out = append(out, where+": guide name "+g.Title+" of tm 0.38 (the server writes it out as its text when it starts)")
+				}
+			}
+		}
 		if t.GuardAllow != nil {
 			for _, a := range *t.GuardAllow {
 				if a.Rule == "worktree-only" && a.Path != "" {
@@ -694,18 +722,30 @@ func (c *Config) OldAccess() []string {
 	return out
 }
 
-// MigrateFile migrates config.toml in place, under its lock (Migrate):
-// first a copy of it beside it, config.toml.bak-<release> (another
-// name when that is taken), named in the result. Nothing is written
-// when there is nothing to move or the check refuses (Differs).
+// MigrateFile migrates config.toml in place, under its lock: Migrate,
+// then MigrateGuides of what it gives; first a copy of it beside it,
+// config.toml.bak-<release> (another name when that is taken), named in
+// the result. Nothing is written when there is nothing to move or a
+// check refuses (Differs).
 func MigrateFile(release string) (m *Migration, backup string, err error) {
 	path, err := Path()
 	if err != nil {
 		return nil, "", err
 	}
 	err = edit(func(data []byte) ([]byte, error) {
-		if m, err = Migrate(data); err != nil || m == nil || m.Differs != "" {
+		if m, err = Migrate(data); err != nil || m != nil && m.Differs != "" {
 			return data, err
+		}
+		next := data
+		if m != nil {
+			next = m.Data
+		}
+		g, err := MigrateGuides(next)
+		if err != nil {
+			return data, err
+		}
+		if m = join(m, g); m == nil || m.Differs != "" {
+			return data, nil
 		}
 		backup = path + ".bak-" + release
 		// A new file, never one there (or a link planted there).

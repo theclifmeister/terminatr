@@ -129,8 +129,10 @@ func TestSandboxView(t *testing.T) {
 }
 
 // TestHostsAndGuidance: a host asks first, saying every command may
-// reach it, and warns of a shared host; a guidance text names those tm
-// has; its view lists them without a line under each.
+// reach it, and warns of a shared host; a guide is a title, then its
+// text in the editor, listed by its title alone (no line under it),
+// enter editing it; a title the list has is refused, and leaving a changed
+// text asks first.
 func TestHostsAndGuidance(t *testing.T) {
 	src, m := sandboxData(t)
 	drain(t, m, sandboxRow(t, "", "Network hosts").change(m))
@@ -149,21 +151,49 @@ func TestHostsAndGuidance(t *testing.T) {
 	drain(t, m, keyPress(m, "y"))
 	keyPress(m, "esc")
 	drain(t, m, sandboxRow(t, "alpha", "Guidance for threads").change(m))
+	ctrlS := tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl}
 	keyPress(m, "a")
-	if out := screen(m); !strings.Contains(out, "browser-testing, browser-downloads") {
-		t.Errorf("guidance prompt:\n%s", out)
-	}
-	m.top().(*inputView).text = "browser-testing"
+	m.top().(*inputView).text = "Test data"
 	drain(t, m, keyPress(m, "enter"))
-	if out := screen(m); !strings.Contains(out, "browser-testing") || strings.Contains(out, "headless shell") {
+	if _, ok := m.top().(*textEditor); !ok {
+		t.Fatalf("no editor after the title: %T", m.top())
+	}
+	m.Update(tea.PasteMsg{Content: "Run make fixtures.\r\n\x1b[2JNever edit testdata/.\n\n"})
+	drain(t, m, m.key(ctrlS))
+	if out := screen(m); !strings.Contains(out, "Test data") || strings.Contains(out, "Run make fixtures.") || !strings.Contains(out, "enter show, edit") {
 		t.Errorf("guidance view:\n%s", out)
 	}
-	want := []string{"defaults hosts + storage.googleapis.com", "projects.alpha guides + browser-testing"}
+	c, _ := config.Load()
+	if got := c.ThreadSandbox("alpha").Guides(); !slices.Equal(got, []config.Guide{{Title: "Test data", Body: "Run make fixtures.\n[2JNever edit testdata/."}}) {
+		t.Errorf("alpha: %q", got)
+	}
+	keyPress(m, "a")
+	m.top().(*inputView).text = "Test data"
+	drain(t, m, keyPress(m, "enter"))
+	if !strings.Contains(m.msg, "listed already") {
+		t.Errorf("same title: %q", m.msg)
+	}
+	// enter edits it; esc after a change asks first.
+	keyPress(m, "enter")
+	ed, ok := m.top().(*textEditor)
+	if !ok || string(ed.text) != "Run make fixtures.\n[2JNever edit testdata/." {
+		t.Fatalf("enter: %T", m.top())
+	}
+	keyPress(m, "up")
+	keyPress(m, "ctrl+a")
+	keyPress(m, "#")
+	keyPress(m, "esc")
+	if _, ok := m.top().(*confirmView); !ok {
+		t.Fatalf("esc after a change: %T", m.top())
+	}
+	keyPress(m, "n")
+	drain(t, m, m.key(ctrlS))
+	want := []string{"defaults hosts + storage.googleapis.com", "projects.alpha guides + Test data", "projects.alpha guides ~ Test data"}
 	if !slices.Equal(src.sandbox, want) {
 		t.Errorf("saved %q", src.sandbox)
 	}
-	c, _ := config.Load()
-	if got := c.ThreadSandbox("alpha"); !slices.Equal(got.Given(config.SandboxHosts), []string{"storage.googleapis.com"}) || !slices.Equal(got.Given(config.SandboxGuides), []string{"browser-testing"}) {
+	c, _ = config.Load()
+	if got := c.ThreadSandbox("alpha"); !slices.Equal(got.Given(config.SandboxHosts), []string{"storage.googleapis.com"}) || got.Guides()[0].Body != "#Run make fixtures.\n[2JNever edit testdata/." {
 		t.Errorf("alpha: %+v", got)
 	}
 }
@@ -295,15 +325,15 @@ func TestAccessBuiltIn(t *testing.T) {
 }
 
 // TestSandboxTabOS: the tab shows what applies on the server's platform:
-// no hosts, local ports or guidance on Linux or Windows, the lists on
-// all three.
+// no hosts or local ports on Linux or Windows, guidance and the lists
+// on all three.
 func TestSandboxTabOS(t *testing.T) {
 	for _, goos := range []string{config.OSLinux, config.OSWindows} {
 		var labels []string
 		for _, r := range sandboxSettings("alpha", goos) {
 			labels = append(labels, r.label)
 		}
-		if !slices.Equal(labels, []string{"Write folders", "Excluded commands", "Approved commands", "Allow rules"}) {
+		if !slices.Equal(labels, []string{"Guidance for threads", "Write folders", "Excluded commands", "Approved commands", "Allow rules"}) {
 			t.Errorf("%s: %q", goos, labels)
 		}
 		_, m := sandboxData(t)
@@ -395,7 +425,7 @@ func TestPresetAdd(t *testing.T) {
 	keyPress(m, "down")
 	keyPress(m, "enter")
 	out = screen(m)
-	for _, want := range []string{"Add Browser downloads (npm, Playwright) for alpha", "[x] host", "registry.npmjs.org", "storage.googleapis.com", "[x] guidance", "browser-downloads",
+	for _, want := range []string{"Add Browser downloads (npm, Playwright) for alpha", "[x] host", "registry.npmjs.org", "storage.googleapis.com", "[x] guide", "Sandbox: browser downloads",
 		"Already there: nothing", "enter add 5 rules", "A add to all projects instead"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
@@ -420,7 +450,9 @@ func TestPresetAdd(t *testing.T) {
 	}
 	c, _ := config.Load()
 	got := c.SandboxOf("alpha")
-	if !slices.Equal(got.Lists[config.SandboxHosts], config.BrowserDomains[:3]) || !slices.Equal(got.Lists[config.SandboxGuides], []string{"browser-downloads"}) {
+	// Its guide is worded from the hosts added with it.
+	if !slices.Equal(got.Lists[config.SandboxHosts], config.BrowserDomains[:3]) || !slices.Equal(got.Lists[config.SandboxGuides], []string{config.GuideBrowserDownloads}) ||
+		!strings.Contains(got.Guides[config.GuideBrowserDownloads], "not\nstorage.googleapis.com") {
 		t.Errorf("alpha: %+v", got)
 	}
 	// Again: only the left-out host is offered; A adds it to all projects.
@@ -438,7 +470,7 @@ func TestPresetAdd(t *testing.T) {
 	keyPress(m, "A")
 	drain(t, m, keyPress(m, "enter"))
 	if want := []string{
-		"projects.alpha preset browser-downloads: host registry.npmjs.org, host cdn.playwright.dev, host playwright.download.prss.microsoft.com, guidance browser-downloads",
+		"projects.alpha preset browser-downloads: host registry.npmjs.org, host cdn.playwright.dev, host playwright.download.prss.microsoft.com, guide Sandbox: browser downloads",
 		"projects.alpha preset browser-downloads: host storage.googleapis.com"}; !slices.Equal(src.sandbox, want) {
 		t.Errorf("saved %q", src.sandbox)
 	}

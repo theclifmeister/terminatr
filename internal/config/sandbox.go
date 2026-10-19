@@ -12,11 +12,11 @@ import (
 
 // The sandbox rules of threads (docs/SPEC.md §5.2, T574 §3): what a
 // thread's sandboxed commands may reach (hosts, local_ports), the
-// guidance its brief gets (guides), the folders besides its worktree it
-// writes in (write, sandbox_write.go), the unix sockets its commands
-// connect to (sockets, sandbox_sockets.go), the commands its Bash runs
-// outside its sandbox, each asking first or running without asking
-// (sandbox_excluded.go), the commands tm runs outside the sandbox when
+// guidance its brief gets (guides, sandbox_guides.go), the folders
+// besides its worktree it writes in (write, sandbox_write.go), the unix
+// sockets its commands connect to (sockets, sandbox_sockets.go), the
+// commands its Bash runs outside its sandbox, each asking first or
+// running without asking (sandbox_excluded.go), the commands tm runs outside the sandbox when
 // it asks (approved_commands, sandbox_approved.go), and the permission
 // rules its agent gets on top of tm's for tools that neither run
 // commands nor write files. [defaults.sandbox] gives every
@@ -32,6 +32,9 @@ import (
 //	approved_commands = ["make e2e", "npm run e2e *"]
 //	allow = ["WebFetch(domain:playwright.dev)"]
 //	drop = ["docker compose *"]
+//	guides = [{ title = "Test data", body = """
+//	The fixtures in testdata/ are generated: run make fixtures.
+//	""" }]
 //
 // tm writes them into a thread's launch settings at each start and
 // resume (Claude's sandbox.network, excludedCommands and
@@ -69,7 +72,7 @@ var SandboxKeys = []string{SandboxHosts, SandboxGuides, SandboxWrite, SandboxSoc
 // (sandbox_presets.go).
 type rawSandbox struct {
 	Hosts            *[]string     `toml:"hosts"`
-	Guides           *[]string     `toml:"guides"`
+	Guides           *guideList    `toml:"guides"`
 	Write            *[]string     `toml:"write"`
 	Sockets          *[]string     `toml:"sockets"`
 	Approved         *[]string     `toml:"approved_commands"`
@@ -91,7 +94,11 @@ func (r *rawSandbox) list(key string) *[]string {
 	case SandboxHosts:
 		return r.Hosts
 	case SandboxGuides:
-		return r.Guides
+		if r.Guides == nil {
+			return nil
+		}
+		l := r.Guides.titles()
+		return &l
 	case SandboxWrite:
 		return r.Write
 	case SandboxSockets:
@@ -351,7 +358,7 @@ func checkSandboxEntry(key, e string) error {
 	case SandboxHosts:
 		return CheckHost(e)
 	case SandboxGuides:
-		return CheckGuide(e)
+		return CheckGuideTitle(e)
 	case SandboxWrite:
 		return CheckWriteFolder(e)
 	case SandboxSockets:
