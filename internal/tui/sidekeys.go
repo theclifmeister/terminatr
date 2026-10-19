@@ -24,8 +24,7 @@ const (
 	sideHelp   // the help, as prefix+?
 	sideFoldAll
 	sideUnfoldAll
-	sidePin       // on a project, pin it to the top or unpin it
-	sideSaveClear // on a coordinator, save and clear its conversation
+	sidePin // on a project, pin it to the top or unpin it
 )
 
 // sideAction is a sidebar key: its keys, what it does, its help line and
@@ -51,7 +50,6 @@ var sideActions = []sideAction{
 	{id: "side.fold-all", keys: []string{"z"}, op: sideFoldAll, label: "z Z", help: "z folds every project, the inactive divider and the mods' sections, Z unfolds them all"},
 	{id: "side.unfold-all", keys: []string{"Z"}, op: sideUnfoldAll},
 	{id: "side.pin", keys: []string{"p"}, op: sidePin, label: "p", help: "on a project: pin it to the top of the active projects, or unpin it (its order only)"},
-	{id: "side.save-clear", keys: []string{"c"}, op: sideSaveClear, label: "c", help: "on a running coordinator: save and clear its conversation, as auto_clear does (tm clear): it is asked to save what it learned, then cleared at its next idle moment"},
 	{id: "side.first", keys: []string{"home"}, op: sideFirst, label: "home end", help: "the first / last row"},
 	{id: "side.last", keys: []string{"end"}, op: sideLast},
 	{id: "side.page-up", keys: []string{"pgup"}, op: sidePageUp, label: "pgup pgdown", help: "a page up / down"},
@@ -93,8 +91,6 @@ type sideStep struct {
 	// pin is the project to pin (pinOn) or unpin.
 	pin   string
 	pinOn bool
-	// saveClear is the project whose coordinator to save and clear.
-	saveClear string
 	// sections are the band's sections to fold (foldOn) or unfold, by
 	// id (view.sections); open the one whose view enter opens.
 	sections []string
@@ -237,11 +233,6 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 			return sideStep{msg: "p on a project pins it to the top"}
 		}
 		return sideStep{pin: r.slug, pinOn: !r.pinned}
-	case sideSaveClear:
-		if r.kind != treeCoordinator || r.state == "" || r.dormant {
-			return sideStep{msg: "c on a running coordinator saves and clears it"}
-		}
-		return sideStep{saveClear: r.slug}
 	case sideFoldAll, sideUnfoldAll:
 		// The sections too: view.tree, then view.sections.
 		st := sideStep{refold: foldAll(all, op == sideFoldAll), sections: sectionIDs(all), foldOn: op == sideFoldAll,
@@ -283,8 +274,6 @@ func headStep(all []treeRow, w, op int) sideStep {
 		return sideStep{msg: "space on a project activates or deactivates it"}
 	case sidePin:
 		return sideStep{msg: "p on a project pins it to the top"}
-	case sideSaveClear:
-		return sideStep{msg: "c on a running coordinator saves and clears it"}
 	case sideFoldAll, sideUnfoldAll:
 		return sideStep{refold: foldAll(all, op == sideFoldAll), sections: sectionIDs(all), foldOn: op == sideFoldAll,
 			everySection: op == sideUnfoldAll}

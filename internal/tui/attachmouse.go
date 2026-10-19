@@ -293,6 +293,8 @@ func (c *client) sessionItems() []aitem {
 			continue
 		case key == "R" && (c.focus == nil || c.focus.info.Server == ""):
 			continue
+		case key == "C" && (c.focus == nil || c.focus.info.Project == "" || c.focus.info.Server != ""):
+			continue
 		case key == "d" && c.bare:
 			label = "leave"
 		}

@@ -207,9 +207,6 @@ func (c *client) sideDo(st sideStep) {
 	if st.pin != "" {
 		c.setPinned(st.pin, st.pinOn)
 	}
-	if st.saveClear != "" {
-		c.saveClear(st.saveClear)
-	}
 	c.poke()
 }
 

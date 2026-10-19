@@ -66,7 +66,7 @@ func TestCoordLines(t *testing.T) {
 	}
 	text := strings.Join(plain, "\n")
 	order := []string{
-		"demo", "3 need you · 2 in inbox · 3 threads", "context 84k / 200k · 42%", "c or click: save and clear",
+		"demo", "3 need you · 2 in inbox · 3 threads", "context 84k / 200k · 42%", "prefix+C or click: save and clear",
 		"NEEDS YOU", "s-9 ▲ prompts held 1 queued prompt", "tm agent explain s-9", "T63 ◆ in review Dashboard pane", "#121 open, checks passed",
 		"asked the coordinator: accept", "T64 ▲ asks you Mod tools", "“Which key?”",
 		"INBOX", "idle ×3 T64 idle Mod tools", "checks failed T65 checks failed Feed",

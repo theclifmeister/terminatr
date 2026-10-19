@@ -338,7 +338,7 @@ func contextWords(c *proto.WatchContext, readOnly bool) (text string, look lipgl
 		look = th().Faint
 	}
 	if c.Hint {
-		hint = barKey("panel.save-clear", "c") + " or click: save and clear (it saves what it learned first)"
+		hint = "prefix+C or click: save and clear (it saves what it learned first)"
 		if readOnly {
 			hint = "past the context hint: save and clear it there"
 		}

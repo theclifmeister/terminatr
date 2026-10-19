@@ -285,6 +285,8 @@ func planKeymap(km map[string][]string, prefix string) (keyTable, keyTable, keyT
 // has it) to keys on their own.
 func checkBinding(row *bindable, id string, keys []string, prefix string) error {
 	switch {
+	case id == "side.save-clear" || id == "panel.save-clear":
+		return fmt.Errorf("%s: can't be rebound (save and clear is prefix+C now)", id)
 	case !actionID.MatchString(id) || row == nil:
 		return fmt.Errorf("%s: no such action", id)
 	case row.fixed:
@@ -420,6 +422,8 @@ var coreActions = []struct {
 	{"view", bindable{id: "memory.rm", keys: []string{"d"}, fixed: true, help: "delete the memory note (the Memory tab; asks first)"}},
 	{"session", bindable{id: "session.dashboard", keys: []string{"prefix+d"}, fixed: true, help: "back to the dashboard"}},
 	{"session", bindable{id: "session.remote", keys: []string{"prefix+r"}, fixed: true, help: "remote control of a coordinator on or off (asks first)"}},
+	{"sidebar", bindable{id: "side.save-clear", keys: []string{"prefix+C"}, fixed: true, help: "save and clear the coordinator of the project (a running coordinator's row, past [ui] context_hint offers it; the session's, or on the dashboard the selected project's): it is asked to save what it learned, then cleared at its next idle moment (tm clear; no question). Was the plain c; kept as the id of prefix+C"}},
+	{"panel", bindable{id: "panel.save-clear", keys: []string{"prefix+C"}, fixed: true, help: ""}},
 	{"session", bindable{id: "prefix.send", keys: []string{"prefix+prefix"}, fixed: true, help: "send the prefix key to the program"}},
 }
 

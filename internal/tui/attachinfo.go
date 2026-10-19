@@ -199,7 +199,7 @@ func (c *client) infoToggle() {
 func (c *client) infoKeyboard(k uv.Key) {
 	c.flash = ""
 	ip := c.info
-	task, answer, clear := false, false, false
+	task, answer := false, false
 	var do *sideStep
 	name := keyName(k)
 	op, ok := panelOp(name)
@@ -207,15 +207,8 @@ func (c *client) infoKeyboard(k uv.Key) {
 	case ip.data != nil && ip.data.remote != nil && (name == "a" || ok && op == panelEnter && ip.sel == ""):
 		// The task and the questions are the paired server's.
 		c.flash = ip.data.remote.alias + "'s: view-only here"
-	case ip.data != nil && ip.data.remote != nil && ok && op == panelSaveClear:
-		c.flash = ip.data.remote.alias + "'s: view-only here"
 	case name == "a":
 		answer = true
-	case ok && op == panelSaveClear:
-		clear = ip.data != nil && ip.data.watch != nil
-		if !clear {
-			c.flash = barKey("panel.save-clear", "c") + " beside a coordinator saves and clears it"
-		}
 	case name == "tab":
 		c.kb = areaMain
 		c.infoLayout()
@@ -263,9 +256,6 @@ func (c *client) infoKeyboard(k uv.Key) {
 	}
 	if answer {
 		c.infoQuestions()
-	}
-	if clear {
-		c.saveClear(ip.data.slug)
 	}
 }
 
@@ -365,6 +355,27 @@ func (c *client) saveClear(slug string) {
 		c.mu.Unlock()
 		c.poke()
 	}
+}
+
+// saveClearFocus is prefix+C: the focused session's project's
+// coordinator saves what it learned and is cleared, with no question.
+func (c *client) saveClearFocus() {
+	if !c.lock() {
+		return
+	}
+	var slug string
+	if c.focus != nil && c.focus.info.Server == "" {
+		slug = c.focus.info.Project
+	}
+	if slug == "" {
+		c.flash = "prefix+C saves and clears a project's coordinator; this session has none here"
+		c.status()
+		c.mu.Unlock()
+		c.poke()
+		return
+	}
+	c.mu.Unlock()
+	c.saveClear(slug)
 }
 
 // saveClearWords says what came of a save and clear of slug's
