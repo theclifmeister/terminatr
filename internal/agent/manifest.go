@@ -1019,9 +1019,8 @@ const nameChars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvw
 // other of nameChars, and by d's name followed by more; each shorter
 // prefix is a pattern by itself. A name that first differs from d's by
 // a character outside nameChars, or only by a letter's case, isn't
-// matched. None when d's path holds
-// a character a glob would read, nor for a Windows path (its
-// backslashes), where Claude reads no brackets.
+// matched. None when d's path holds a character a glob would read, nor
+// for a Windows path (its backslashes), where Claude reads no brackets.
 func siblingGlobs(d string) []string {
 	parent, name := filepath.Dir(d), filepath.Base(d)
 	if strings.ContainsAny(parent+name, `*?[]{}!\`) || name == "" || parent == d {
