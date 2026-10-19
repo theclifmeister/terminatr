@@ -700,7 +700,8 @@ guides = [{ title = "Old", body = "Old text." }]
 
 // TestSandboxWideApproved: a wide approved command is the human's to
 // set (T619): added after its warning, which says what it leaves open;
-// editing one into a wide pattern says it too.
+// editing one into a wide pattern says it too, and the list carries no
+// warning line under it.
 func TestSandboxWideApproved(t *testing.T) {
 	_, m := sandboxData(t)
 	drain(t, m, sandboxRow(t, "alpha", "Approved commands").change(m))
@@ -719,6 +720,10 @@ func TestSandboxWideApproved(t *testing.T) {
 		t.Fatalf("no warning before the change: %T", m.top())
 	}
 	drain(t, m, keyPress(m, "y"))
+	// The warning is the question's only: no line under the entry.
+	if out := screen(m); !strings.Contains(out, "sh -c *") || strings.Contains(out, "runs the code") || strings.Contains(out, "every argument") {
+		t.Errorf("list:\n%s", out)
+	}
 	c, _ := config.Load()
 	if got := c.ThreadSandbox("alpha").Given(config.SandboxApproved); !slices.Equal(got, []string{"sh -c *"}) {
 		t.Errorf("approved %q", got)

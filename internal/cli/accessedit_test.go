@@ -80,8 +80,10 @@ func TestAccessWriters(t *testing.T) {
 	fail("kinds", "add", "nonsense", "x", "demo")
 	ok("add", "approved", "make e2e", "demo")
 	// A wide pattern is the human's to set (T619): added, with a note.
-	if out := ok("add", "approved", "prlctl *", "demo"); !strings.Contains(out, "note: prlctl * ") || !strings.Contains(out, "every argument of prlctl") {
-		t.Errorf("add approved prlctl *: %q", out)
+	// The note goes to stderr: the list itself carries no warning lines.
+	if code, out, stderr := run(human, true, "add", "approved", "prlctl *", "demo"); code != ExitOK || strings.Contains(out, "note:") ||
+		!strings.Contains(stderr, "note: prlctl * ") || !strings.Contains(stderr, "every argument of prlctl") {
+		t.Errorf("add approved prlctl *: exit %d, out %q, stderr %q", code, out, stderr)
 	}
 	ok("rm", "approved", "prlctl *", "demo")
 	fail("tm itself", "add", "approved", "env tm *", "demo")
@@ -195,6 +197,10 @@ func TestAccessEdit(t *testing.T) {
 	ok("add", "host", "web.dev", "demo")
 	fail("all projects give a.dev already", "edit", "host", "web.dev", "a.dev", "demo")
 	fail("for tm access edit excluded", "edit", "host", "web.dev", "w.dev", "demo", "--asks-first")
+	ok("add", "approved", "make test", "demo")
+	if code, out, stderr := run("edit", "approved", "make test", "make *", "demo"); code != ExitOK || strings.Contains(out, "note:") || !strings.Contains(stderr, "make runs other programs") {
+		t.Errorf("edit into make *: exit %d, out %q, stderr %q", code, out, stderr)
+	}
 	ok("add", "guide", "Old", "--text", "Text.", "demo")
 	ok("edit", "guide", "Old", "New", "demo", "--text", "New text.")
 	c, err := config.Load()

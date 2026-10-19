@@ -195,10 +195,10 @@ func accessAdd(e *Env, verb string, args []string) error {
 	} else {
 		fmt.Fprintf(e.Stdout, "added to %s: %s\n", who, word)
 		if w := config.SandboxWarning(key, value); w != "" {
-			fmt.Fprintf(e.Stdout, "note: %s %s\n", value, w)
+			fmt.Fprintf(e.Stderr, "note: %s %s\n", value, w)
 		}
 		if key == config.SandboxExcluded {
-			fmt.Fprintln(e.Stdout, "note: it runs outside the sandbox, with your full file and network access (tm's socket included)")
+			fmt.Fprintln(e.Stderr, "note: it runs outside the sandbox, with your full file and network access (tm's socket included)")
 		}
 	}
 	if *noAsk {
@@ -312,10 +312,10 @@ func accessEdit(e *Env, args []string) error {
 	}
 	fmt.Fprintf(e.Stdout, "changed for %s: %s\n", who, word)
 	if w := config.SandboxWarning(key, value); w != "" && value != old {
-		fmt.Fprintf(e.Stdout, "note: %s %s\n", value, w)
+		fmt.Fprintf(e.Stderr, "note: %s %s\n", value, w)
 	}
 	if key == config.SandboxExcluded && value != old {
-		fmt.Fprintln(e.Stdout, "note: it runs outside the sandbox, with your full file and network access (tm's socket included)")
+		fmt.Fprintln(e.Stderr, "note: it runs outside the sandbox, with your full file and network access (tm's socket included)")
 	}
 	e.accessJournal("settings.sandbox", slug, detail)
 	for _, s := range moved {
