@@ -153,5 +153,9 @@ input = { file_path = "auth/session.go" }
 	w.Key(Enter)
 	w.WaitFor("Edit(auth/session.go)", wait)
 	w.WaitFor("LAST REPORT", wait)
-	w.Golden("session-sidebar.txt", Mask{Name: "worktree", Re: regexp.MustCompile(`worktree  \S+`)})
+	// The LAST REPORT header's rule fills the panel's width after the
+	// duration, so its dash count follows the duration's width: pin it.
+	w.Golden("session-sidebar.txt",
+		Mask{Name: "worktree", Re: regexp.MustCompile(`worktree  \S+`)},
+		Mask{Name: "report rule", Re: regexp.MustCompile(`(LAST REPORT <duration> ago )─+`), Repl: "${1}──────────────────"})
 }
