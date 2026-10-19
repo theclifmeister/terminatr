@@ -162,7 +162,7 @@ func modState(t *testing.T, src *fakeSource, id string) mod.Mod {
 func TestModsTabList(t *testing.T) {
 	_, m := modsDash(t)
 	out := screen(m)
-	for _, want := range []string{"4 Mods", "○ Nord", "theme", "0.4.0", "off", "Review age", "code · column · rules", "0.3.1", "▲ Future", "incompatible: future needs mod API 1.99", "e examples", "p permissions"} {
+	for _, want := range []string{"4 mods", "○ Nord", "theme", "0.4.0", "off", "Review age", "code · column · rules", "0.3.1", "▲ Future", "incompatible: future needs mod API 1.99", "e examples", "p permissions"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("Mods tab lacks %q:\n%s", want, out)
 		}

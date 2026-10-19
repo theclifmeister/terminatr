@@ -271,7 +271,7 @@ type settingsView struct {
 }
 
 // settingsTabs are the , popup's tabs.
-var settingsTabs = [6]string{"General", "All projects", "Access", "Mods", "Peers", "Logs"}
+var settingsTabs = [6]string{"general", "all projects", "access", "mods", "peers", "logs"}
 
 // The Access, Mods, Peers and Logs tabs' indexes.
 const (

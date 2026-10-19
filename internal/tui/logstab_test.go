@@ -77,7 +77,7 @@ func logsData(t *testing.T) (*fakeSource, *dash, string) {
 func TestLogsTab(t *testing.T) {
 	src, m, server := logsData(t)
 	out := screen(m)
-	for _, want := range []string{"6 Logs", " Server ", " Console ", " mod linear ", "server.log", "following", "s-4999: claude working", "more ↑"} {
+	for _, want := range []string{"6 logs", " Server ", " Console ", " mod linear ", "server.log", "following", "s-4999: claude working", "more ↑"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}
