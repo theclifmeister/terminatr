@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -1018,12 +1017,12 @@ const nameChars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvw
 // first differs from d's, by each prefix of d's name followed by any
 // other of nameChars, and by d's name followed by more; each shorter
 // prefix is a pattern by itself. A name that first differs from d's by
-// a character outside nameChars isn't matched. None on Windows, where
-// Claude reads no brackets in a path, nor when d's path holds a
-// character a glob would read.
+// a character outside nameChars isn't matched. None when d's path holds
+// a character a glob would read, nor for a Windows path (its
+// backslashes), where Claude reads no brackets.
 func siblingGlobs(d string) []string {
 	parent, name := filepath.Dir(d), filepath.Base(d)
-	if runtime.GOOS == "windows" || strings.ContainsAny(d, `*?[]{}!\`) || name == "" || parent == d {
+	if strings.ContainsAny(parent+name, `*?[]{}!\`) || name == "" || parent == d {
 		return nil
 	}
 	out := make([]string, 0, 2*len(name)+1)

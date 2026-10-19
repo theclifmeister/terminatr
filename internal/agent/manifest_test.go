@@ -49,11 +49,11 @@ func TestEscapeGlob(t *testing.T) {
 // sibling name made of nameChars, and never the folder itself nor what
 // is in it.
 func TestSiblingGlobs(t *testing.T) {
+	if got := siblingGlobs(`C:\r\.git\worktrees\t-0005-x`); got != nil {
+		t.Errorf("a Windows path: %q", got)
+	}
 	if runtime.GOOS == "windows" {
-		if got := siblingGlobs("/r/.git/worktrees/t-0005-x"); got != nil {
-			t.Fatalf("windows: %q", got)
-		}
-		return
+		t.Skip("POSIX paths")
 	}
 	own := "/r/.git/worktrees/t-0005-x"
 	globs := siblingGlobs(own)
