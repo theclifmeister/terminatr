@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"unicode"
 
 	"github.com/BurntSushi/toml"
 
@@ -1017,7 +1018,8 @@ const nameChars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvw
 // first differs from d's, by each prefix of d's name followed by any
 // other of nameChars, and by d's name followed by more; each shorter
 // prefix is a pattern by itself. A name that first differs from d's by
-// a character outside nameChars isn't matched. None when d's path holds
+// a character outside nameChars, or only by a letter's case, isn't
+// matched. None when d's path holds
 // a character a glob would read, nor for a Windows path (its
 // backslashes), where Claude reads no brackets.
 func siblingGlobs(d string) []string {
@@ -1036,10 +1038,17 @@ func siblingGlobs(d string) []string {
 }
 
 // charClass is a bracket expression of nameChars but c, in ranges.
+// Claude's sandbox on macOS matches paths without regard to case, so a
+// letter c is left out in both cases.
 func charClass(c byte) string {
 	var b strings.Builder
 	b.WriteByte('[')
-	cs := strings.ReplaceAll(nameChars, string(rune(c)), "")
+	cs := strings.Map(func(r rune) rune {
+		if c != 0 && unicode.ToLower(r) == unicode.ToLower(rune(c)) {
+			return -1
+		}
+		return r
+	}, nameChars)
 	for i := 0; i < len(cs); {
 		j := i
 		for j+1 < len(cs) && cs[j+1] == cs[j]+1 {
