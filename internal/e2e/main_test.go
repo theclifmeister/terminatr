@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/theclifmeister/terminatr/internal/home/hometest"
 )
 
 // TestMain cleans up after the whole run: it first clears what an earlier
@@ -19,6 +21,11 @@ import (
 // is never lost in a long log.
 func TestMain(m *testing.M) {
 	flag.Parse()
+	restore, err := hometest.OutOfThreadTemps()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	sweepStale()
 	// go test -timeout panics without running any cleanup: shortly
 	// before, kill what the run started, so its servers don't outlive it.
@@ -39,6 +46,7 @@ func TestMain(m *testing.M) {
 	if !finish(true) && code == 0 {
 		code = 1
 	}
+	restore()
 	os.Exit(code)
 }
 

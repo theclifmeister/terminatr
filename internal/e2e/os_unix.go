@@ -6,14 +6,16 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 )
 
 // exe is the file name of a program called name.
 func exe(name string) string { return name }
 
-// runDirBase holds the run dirs: macOS temp dirs are too long for a
-// socket path; /tmp is short.
-const runDirBase = "/tmp"
+// runDirBase holds the run dirs: the temp folder when it is short enough
+// for a socket path (macOS's per-user one isn't), else /tmp.
+func runDirBase() string { return ipc.ShortTemp() }
 
 // goldenOS names the testdata/golden subdirectory of golden screens for
 // this OS only: none, the shared ones are Unix's.

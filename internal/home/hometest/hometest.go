@@ -10,14 +10,23 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
+	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 )
 
 // Run is for a package's TestMain: with TERMINATR_HOME unset, or set to
 // the user's real ~/.terminatr (as every tm session's children inherit
 // it, T472), it points it at a fresh temp dir for the whole run, then
 // calls run (m.Run, or whatever wraps it) and removes the dir. Tests
-// that care still set their own with t.Setenv.
+// that care still set their own with t.Setenv. It first moves the temp
+// folder out of the threads' (OutOfThreadTemps).
 func Run(run func() int) int {
+	restore, err := OutOfThreadTemps()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer restore()
 	if d := os.Getenv(home.Env); d != "" && !home.IsReal(d) {
 		return run()
 	}
@@ -30,6 +39,38 @@ func Run(run func() int) int {
 	os.Setenv(home.Env, dir)
 	defer os.Unsetenv(home.Env)
 	return run()
+}
+
+// OutOfThreadTemps points TMPDIR at a fresh folder in ipc.ShortDir when
+// it is in the threads' temp folders (home.ThreadTempRoot): a test suite
+// a thread runs as an approved command gets its own temp folder there
+// (T597), and tm keeps every thread out of that root but for its own
+// folder, so homes and worktrees made with t.TempDir would be other
+// threads' to the guard and the sandbox rules. restore removes the
+// folder and puts TMPDIR back.
+func OutOfThreadTemps() (restore func(), err error) {
+	tmp := os.TempDir()
+	if real, err := filepath.EvalSymlinks(tmp); err == nil {
+		tmp = real
+	}
+	if _, in := fsx.Within(home.ThreadTempRoot(), tmp); !in {
+		return func() {}, nil
+	}
+	dir, err := os.MkdirTemp(ipc.ShortDir(), "tmtest-")
+	if err != nil {
+		return nil, err
+	}
+	// By its real path (/private/tmp on macOS), as tm names the folders
+	// in it.
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = real
+	}
+	old := os.Getenv("TMPDIR")
+	os.Setenv("TMPDIR", dir)
+	return func() {
+		os.Setenv("TMPDIR", old)
+		os.RemoveAll(dir)
+	}, nil
 }
 
 // CleanThreadTemps removes, when t ends, the own temp folders

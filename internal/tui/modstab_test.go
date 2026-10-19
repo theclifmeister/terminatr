@@ -525,7 +525,9 @@ func TestModsUpdate(t *testing.T) {
 	st.Close()
 	src := &fakeSource{data: testData()}
 	src.loadMods()
-	m := newDash(DashOptions{Source: src, Width: 160, Height: 50, State: DashState{Current: "beta"}})
+	// Wide enough that the detail's line keeps "Updated <time>" whole
+	// whatever the temp folder's length.
+	m := newDash(DashOptions{Source: src, Width: 220, Height: 50, State: DashState{Current: "beta"}})
 	m.setData(src.data)
 	press(m, ",", "4", "enter")
 	modAct(t, m, src, "y")

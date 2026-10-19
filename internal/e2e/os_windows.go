@@ -13,7 +13,7 @@ func exe(name string) string { return name + ".exe" }
 
 // runDirBase holds the run dirs; %TEMP% is short enough for a socket
 // path.
-var runDirBase = os.TempDir()
+func runDirBase() string { return os.TempDir() }
 
 // goldenOS names the testdata/golden subdirectory of golden screens for
 // this OS only (WaitGolden).
