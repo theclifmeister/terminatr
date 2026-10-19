@@ -20,7 +20,7 @@ import (
 // nothing (fails closed) and gives one note saying why, for the log and
 // the launch's warnings. It is launchSandbox of the rules (access.go).
 func (l launchConfig) sandbox(slug, goos string) (lists agent.SandboxLists, guides, skipped []string) {
-	rules, why := sandboxRules(l, slug, goos, "")
+	rules, why := sandboxRules(l, slug, goos, tmDirs{})
 	return launchSandbox(proto.AccessSet{Rules: rules, SandboxError: why})
 }
 
@@ -173,14 +173,41 @@ func wrapText(text string, w int) string {
 	return b.String()
 }
 
-// guideBrief is the brief a thread with guidance texts gets: brief (its
-// brief.md, "" for none) with the texts after it, each worded from the
-// thread's other rules in lists (which download hosts it reaches,
-// whether local ports are open), written in its runtime dir rt at every
-// launch, so a resume sees today's rules; brief itself without any.
+// approvedGuide is the section of the brief of a thread with approved
+// commands (approved.go); %s lists them.
+const approvedGuide = `## Approved commands: tm runs them outside your sandbox
+
+The human approved these commands for this project's threads. Your sandbox
+can't run them (they need what it closes), so ask tm to run one for you,
+outside the sandbox, in your worktree, with its output streamed back:
+
+    tm run -- <command> [args…]      (tm run --list lists them)
+
+%s
+A command matches word for word; a last * takes any further arguments. tm
+runs the words as they are, without a shell: no pipes, redirects or
+variables. Each run is journaled. Run nothing else outside the sandbox this
+way: only the human adds a command to this list.
+`
+
+// approvedText is the list of approvedGuide.
+func approvedText(cmds []string) string {
+	var b strings.Builder
+	for _, c := range cmds {
+		b.WriteString("- " + c + "\n")
+	}
+	return b.String()
+}
+
+// guideBrief is the brief a thread with guidance texts or approved
+// commands gets: brief (its brief.md, "" for none) with the texts after
+// it, each worded from the thread's other rules in lists (which download
+// hosts it reaches, whether local ports are open), written in its
+// runtime dir rt at every launch, so a resume sees today's rules; brief
+// itself without any.
 func guideBrief(rt, brief string, guides []string, lists agent.SandboxLists) (string, error) {
 	browser, dl := slices.Contains(guides, config.GuideBrowserTesting), slices.Contains(guides, config.GuideBrowserDownloads)
-	if !browser && !dl {
+	if !browser && !dl && len(lists.Approved) == 0 {
 		return brief, nil
 	}
 	var text []byte
@@ -203,9 +230,18 @@ func guideBrief(rt, brief string, guides []string, lists agent.SandboxLists) (st
 	if lists.LocalBinding {
 		ports = browserPortsOpen
 	}
-	guide := fmt.Sprintf(browserGuide, downloads, ports)
-	if !browser {
+	var guide string
+	switch {
+	case browser:
+		guide = fmt.Sprintf(browserGuide, downloads, ports)
+	case dl:
 		guide = "## Sandbox: browser downloads\n\n" + downloads
+	}
+	if len(lists.Approved) > 0 {
+		if guide != "" {
+			guide += "\n"
+		}
+		guide += fmt.Sprintf(approvedGuide, approvedText(lists.Approved))
 	}
 	path := filepath.Join(rt, "brief.md")
 	if err := os.WriteFile(path, append(text, guide...), 0o600); err != nil {

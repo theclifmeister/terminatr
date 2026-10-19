@@ -198,6 +198,21 @@ excluded_commands = ["build.dev"]
 [projects.p.sandbox]
 excluded_commands = []
 `, changes: []string{`hosts = ["build.dev"]`, `drop = ["build.dev"]`}},
+		// tm 0.37 had no sockets or approved commands: written by hand
+		// beside its keys, they pass through as they are, and a drop the
+		// migration writes for an excluded command keeps an approved
+		// command of the same words.
+		"sockets and approved commands": {file: `
+[defaults.sandbox]
+sockets = ["~/pg.sock"]
+approved_commands = ["make e2e", "make test"]
+excluded_commands = ["make e2e"]
+
+[projects.p.sandbox]
+excluded_commands = []
+sockets = ["/var/run/docker.sock"]
+approved_commands = ["make bench"]
+`, changes: []string{`drop = ["make e2e"]`, `sockets = ["/var/run/docker.sock"]`, `"make bench"`, `sockets = ["~/pg.sock"]`}},
 		"refused entries": {file: `
 [defaults.sandbox]
 excluded_commands = ["*", "make e2e"]

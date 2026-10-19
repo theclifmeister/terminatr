@@ -58,7 +58,7 @@ func (s *Server) resolveAccess(in accessInput, lc launchConfig) (proto.AccessSet
 	}
 	from := len(set.Rules)
 	if in.role == proto.RoleThread {
-		rules, why := sandboxRules(lc, in.slug, in.goos, s.opts.Paths.Home)
+		rules, why := sandboxRules(lc, in.slug, in.goos, s.tmDirs())
 		add(rules...)
 		set.SandboxError = why
 		if in.agent == "codex" && in.tree != nil {
@@ -86,7 +86,7 @@ func (s *Server) resolveAccess(in accessInput, lc launchConfig) (proto.AccessSet
 		// Yolo is no sandbox (T574 case 4): what opens or leaves it isn't
 		// used, and shows so.
 		for i := from; i < len(set.Rules); i++ {
-			if r := &set.Rules[i]; r.Kind != proto.AccessYolo && r.Kind != proto.AccessAllow && r.Skipped == "" {
+			if r := &set.Rules[i]; r.Kind != proto.AccessYolo && r.Kind != proto.AccessAllow && r.Kind != proto.AccessApproved && r.Skipped == "" {
 				r.Skipped = proto.AccessYoloNoSandbox
 			}
 		}
@@ -300,10 +300,13 @@ func (s *Server) pathNotes(slug, repo, common string) func(string) string {
 // projects' first, those the project drops or that fail their check
 // marked and left out, a rule that doesn't apply there marked skipped;
 // local ports when a table sets them. An excluded command notes whether
-// it asks first; a write folder is its absolute path, refused where no
-// write folder may be (writeFolderRefused: tmHome is tm's folder). A
-// config.toml that doesn't load gives no rules and why.
-func sandboxRules(lc launchConfig, slug, goos, tmHome string) ([]proto.AccessRule, string) {
+// it asks first, and is also an approved command for Codex threads
+// where its words fit one (T574 case 3); a write folder is its absolute
+// path, refused where no write folder may be (writeFolderRefused), a
+// socket too (socketRefused; tm's folders are tm's). A config.toml that
+// doesn't load gives no rules and why.
+func sandboxRules(lc launchConfig, slug, goos string, tm tmDirs) ([]proto.AccessRule, string) {
+	tmHome := tm.home
 	if lc.err != nil {
 		return nil, fmt.Sprintf("project %s: sandbox rules left out, the thread starts without them (fix config.toml: tm settings, Access tab): %v", slug, lc.err)
 	}
@@ -325,7 +328,9 @@ func sandboxRules(lc launchConfig, slug, goos, tmHome string) ([]proto.AccessRul
 		config.SandboxHosts:    {proto.AccessInside, proto.AccessHost},
 		config.SandboxGuides:   {proto.AccessBrief, proto.AccessGuide},
 		config.SandboxWrite:    {proto.AccessInside, proto.AccessWriteFolder},
+		config.SandboxSockets:  {proto.AccessInside, proto.AccessUnixSocket},
 		config.SandboxExcluded: {proto.AccessOutside, proto.AccessExcluded},
+		config.SandboxApproved: {proto.AccessOutside, proto.AccessApproved},
 		config.SandboxAllow:    {proto.AccessPrompts, proto.AccessAllow},
 	}
 	var out []proto.AccessRule
@@ -356,8 +361,25 @@ func sandboxRules(lc launchConfig, slug, goos, tmHome string) ([]proto.AccessRul
 			if why := writeFolderRefused(slug, rule.Value, tmHome); why != "" && rule.Refused == "" {
 				rule.Refused = why
 			}
+		case config.SandboxSockets:
+			if rule.Note == "" {
+				rule.Note = r.Value
+			}
+			rule.Value = writeFolder(r.Value)
+			if why := socketRefused(rule.Value, tm, threadWritable(t)); why != "" && rule.Refused == "" {
+				rule.Refused = why
+			}
+		case config.SandboxApproved:
+			// Read at each run (approvedFor), so live.
+			rule.Live = true
 		}
 		out = append(out, rule)
+		if r.Key == config.SandboxExcluded {
+			// A Codex thread's excluded command is an approved command
+			// (T574 case 3): tm runs it when the thread asks, asking you
+			// first as Claude's guard would.
+			out = append(out, codexApproved(rule))
+		}
 	}
 	if t.LocalPortsSet {
 		src := proto.AccessFromAll
@@ -584,14 +606,16 @@ func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, guides, skipp
 	said := map[string]bool{}
 	var noAsk []string
 	for _, r := range set.Rules {
-		if r.Where == proto.AccessAgent || r.Dropped {
+		if r.Where == proto.AccessAgent || r.Dropped || !forAgent(r, set.Agent) {
 			continue
 		}
 		if r.Refused != "" {
 			skipped = append(skipped, fmt.Sprintf("sandbox %s %q refused, the thread starts without it: %s", r.Kind, r.Value, r.Refused))
 			continue
 		}
-		if r.Skipped == proto.AccessYoloNoSandbox {
+		if r.Skipped == proto.AccessYoloNoSandbox || r.Skipped != "" && r.Kind == proto.AccessApproved {
+			// An excluded command that isn't one for Codex: its own rule
+			// is what the log says.
 			continue
 		}
 		if r.Skipped != "" {
@@ -618,6 +642,16 @@ func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, guides, skipp
 			}
 		case proto.AccessLocalPorts:
 			lists.LocalBinding = r.Value == "on"
+		case proto.AccessUnixSocket:
+			// By the path written and where it leads: the sandboxes match
+			// the kernel's path.
+			for _, p := range withReal([]string{r.Value}) {
+				if !slices.Contains(lists.Sockets, p) {
+					lists.Sockets = append(lists.Sockets, p)
+				}
+			}
+		case proto.AccessApproved:
+			lists.Approved = append(lists.Approved, approvedLine(r))
 		}
 	}
 	// One rule, one choice (T574 case 1): tm writes the allow rule of an
@@ -635,6 +669,7 @@ func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, guides, skipp
 var sandboxKindWords = map[string]string{
 	proto.AccessExcluded: "excluded commands", proto.AccessAllow: "allow rules", proto.AccessHost: "hosts",
 	proto.AccessGuide: "guidance texts", proto.AccessLocalPorts: "local ports", proto.AccessWriteFolder: "write folders",
+	proto.AccessUnixSocket: "sockets", proto.AccessApproved: "approved commands",
 }
 
 // launchFlags are the yolo and escapes the launch gives the agent.

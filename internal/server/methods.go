@@ -145,7 +145,10 @@ func init() {
 		proto.MethodToolRun: {call: typed(func(s *Server, p proto.ToolRunParams, c callCtx) (any, *proto.Error) {
 			return s.toolRunRPC(p, c.who())
 		})},
-		proto.MethodToolList: {call: func(s *Server, _ proto.Request, c callCtx) (any, *proto.Error) { return s.toolListRPC(c.who()) }},
+		// command.run checks its caller itself (runRecord): a thread, by
+		// the pid walk.
+		proto.MethodCommandRun: {gate: gateAgentOrHuman, stream: (*Server).serveCommandRun},
+		proto.MethodToolList:   {call: func(s *Server, _ proto.Request, c callCtx) (any, *proto.Error) { return s.toolListRPC(c.who()) }},
 		proto.MethodViewDigest: {gate: gateNotAgent, call: typed(func(s *Server, p proto.ViewDigestParams, _ callCtx) (any, *proto.Error) {
 			n := s.views.askDigest(p.PID)
 			if n == 0 {

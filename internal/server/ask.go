@@ -75,12 +75,18 @@ func (a *asks) drop(id string, o *openAsk) {
 // binding), question i must still ask it, unanswered, and ans must be
 // one of its options' labels: a menu replaced since the human confirmed
 // gets no answer meant for another.
-func (a *asks) answer(id string, i int, ans, question string) (proto.SessionAnswerResult, *proto.Error) {
+// Only the human (byHuman) answers a question only the user answers
+// (Question.Escape), checked under the lock: another question can't
+// take its place between the check and the answer.
+func (a *asks) answer(id string, i int, ans, question string, byHuman bool) (proto.SessionAnswerResult, *proto.Error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	o := a.open[id]
 	if o == nil {
 		return proto.SessionAnswerResult{}, proto.Errorf(proto.ErrNoQuestion, "session %s has no open question", id)
+	}
+	if o.q.Escape && !byHuman {
+		return proto.SessionAnswerResult{}, proto.Errorf(proto.ErrRefused, "session %s asks to run a command outside its sandbox: only the user answers that question", id)
 	}
 	if i < 0 || i >= len(o.q.Questions) {
 		return proto.SessionAnswerResult{}, proto.Errorf(proto.ErrBadParams, "the open question has %d question(s), not %d", len(o.q.Questions), i+1)
@@ -158,7 +164,7 @@ func (s *Server) serveAsk(c net.Conn, br *bufio.Reader, req proto.Request) {
 		return
 	}
 	q := p.Question
-	q.Since = time.Now().UTC()
+	q.Since, q.Escape = time.Now().UTC(), false
 	for i := range q.Questions {
 		q.Questions[i].Answered, q.Questions[i].Answer = false, ""
 	}

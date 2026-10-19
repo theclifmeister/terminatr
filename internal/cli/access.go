@@ -35,9 +35,11 @@ outside the sandbox, whether it asks first, and the guard's verdict.
 
 add and rm change a sandbox list of the project's table (the one here
 when none is named) or, with --all, all projects': kinds write (a write
-folder), host, guide, excluded (an excluded command, asking first;
---without-asking runs it without asking) and allow (a permission rule
-for a tool that neither runs commands nor writes files). A project's
+folder), host, guide, socket (a unix socket sandboxed commands may
+connect to), excluded (an excluded command, asking first;
+--without-asking runs it without asking), approved (a command a thread
+may ask tm to run outside its sandbox: tm run) and allow (a permission
+rule for a tool that neither runs commands nor writes files). A project's
 lists add to all projects'; drop names one of all projects' entries its
 threads don't take, undrop takes it back. set turns local ports,
 sandbox escapes or yolo on or off; yolo on asks first (--yes without a
@@ -241,6 +243,9 @@ func printAccessExplain(e *Env, res proto.AccessExplainResult) {
 	fmt.Fprintf(tw, "  prompt\t%s\t%s\t%s\n", res.Prompt, oneLineText(res.PromptWhy), from(res.PromptFrom))
 	fmt.Fprintf(tw, "  guard\t%s\t%s\t\n", res.Guard, oneLineText(res.GuardWhy))
 	tw.Flush()
+	if res.Approved != "" {
+		fmt.Fprintf(e.Stdout, "  %s\n", oneLineText(res.Approved))
+	}
 	if res.Agents != "" {
 		fmt.Fprintf(e.Stdout, "  %s\n", oneLineText(res.Agents))
 	}

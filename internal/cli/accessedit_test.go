@@ -75,7 +75,11 @@ func TestAccessWriters(t *testing.T) {
 	fail("all projects give registry.npmjs.org already", "add", "host", "registry.npmjs.org", "demo")
 	fail("runs commands", "add", "allow", "Bash(make *)", "demo")
 	fail("matches every command", "add", "excluded", "*", "demo")
-	fail("kinds", "add", "socket", "x", "demo")
+	fail("kinds", "add", "nonsense", "x", "demo")
+	ok("add", "approved", "make e2e", "demo")
+	fail("every argument", "add", "approved", "make *", "demo")
+	ok("add", "socket", "~/pg.sock", "demo")
+	fail("pattern", "add", "socket", "~/run/*.sock", "demo")
 	ok("drop", "registry.npmjs.org", "demo")
 	fail("no rule", "drop", "nothing.dev", "demo")
 	c, err := config.Load()
@@ -87,6 +91,10 @@ func TestAccessWriters(t *testing.T) {
 		t.Errorf("demo gets %+v", ts)
 	}
 	ok("undrop", "registry.npmjs.org", "demo")
+	if got := ts.Given(config.SandboxApproved); strings.Join(got, ",") != "make e2e" || strings.Join(ts.Given(config.SandboxSockets), ",") != "~/pg.sock" {
+		t.Errorf("approved %q, sockets %q", got, ts.Given(config.SandboxSockets))
+	}
+	ok("rm", "approved", "make e2e", "demo")
 	ok("rm", "excluded", "npx playwright *", "demo")
 	fail("isn't in", "rm", "excluded", "npx playwright *", "demo")
 	ok("set", "local-ports", "on", "demo")

@@ -303,7 +303,7 @@ func TestSandboxTabOS(t *testing.T) {
 		for _, r := range sandboxSettings("alpha", goos) {
 			labels = append(labels, r.label)
 		}
-		if !slices.Equal(labels, []string{"Write folders", "Excluded commands", "Allow rules"}) {
+		if !slices.Equal(labels, []string{"Write folders", "Excluded commands", "Approved commands", "Allow rules"}) {
 			t.Errorf("%s: %q", goos, labels)
 		}
 		_, m := sandboxData(t)
@@ -317,8 +317,8 @@ func TestSandboxTabOS(t *testing.T) {
 	for _, r := range rows {
 		labels = append(labels, r.label)
 	}
-	if !slices.Equal(labels, []string{"Network hosts", "Local ports", "Guidance for threads", "Write folders", "Excluded commands", "Allow rules"}) ||
-		rows[0].section != "Inside the sandbox" || rows[4].section != "Outside the sandbox" || rows[5].section != "Permission rules" {
+	if !slices.Equal(labels, []string{"Network hosts", "Local ports", "Guidance for threads", "Write folders", "Sockets", "Excluded commands", "Approved commands", "Allow rules"}) ||
+		rows[0].section != "Inside the sandbox" || rows[5].section != "Outside the sandbox" || rows[6].section != "" || rows[7].section != "Permission rules" {
 		t.Errorf("macOS rows: %q", labels)
 	}
 }

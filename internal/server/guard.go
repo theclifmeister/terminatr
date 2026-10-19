@@ -204,7 +204,7 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 			dirs = append(dirs, d) // its own temp folder (T587)
 		}
 		dirs = append(dirs, agent.GuardWritable(reg, r.Agent, home, os.Getenv)...)
-		dirs = append(dirs, writeFolders(lc, r.Project, s.opts.Paths.Home)...)
+		dirs = append(dirs, writeFolders(lc, r.Project, s.tmDirs())...)
 		g.Writable = withReal(dirs)
 		g.GitConfig = withReal(threadGitConfig(r))
 	}
@@ -250,7 +250,7 @@ func (s *Server) askFirst(r SessionRecord, lc launchConfig) []string {
 			}
 		}
 	}
-	rules, _ := sandboxRules(lc, r.Project, caps.OS, s.opts.Paths.Home)
+	rules, _ := sandboxRules(lc, r.Project, caps.OS, s.tmDirs())
 	add(rules)
 	if p, err := project.Open(r.Project); err == nil && thread.ValidID(r.Thread) {
 		if set, ok := readLaunchRecord(p, r.Thread); ok {
@@ -263,8 +263,8 @@ func (s *Server) askFirst(r SessionRecord, lc launchConfig) []string {
 // writeFolders are project slug's write folders the guard lets file
 // tools write in (config write, live): absolute, without those the
 // launch leaves out.
-func writeFolders(lc launchConfig, slug, tmHome string) []string {
-	rules, _ := sandboxRules(lc, slug, caps.OS, tmHome)
+func writeFolders(lc launchConfig, slug string, tm tmDirs) []string {
+	rules, _ := sandboxRules(lc, slug, caps.OS, tm)
 	var out []string
 	for _, r := range rules {
 		if r.Kind == proto.AccessWriteFolder && r.Given() {

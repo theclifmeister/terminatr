@@ -20,6 +20,7 @@ import (
 var accessKinds = map[string]string{
 	"write": config.SandboxWrite, "host": config.SandboxHosts, "guide": config.SandboxGuides,
 	"excluded": config.SandboxExcluded, "allow": config.SandboxAllow,
+	"socket": config.SandboxSockets, "approved": config.SandboxApproved,
 }
 
 // accessSettings are the settings set takes, by their config.toml key.
@@ -112,7 +113,7 @@ func accessAdd(e *Env, verb string, args []string) error {
 	kind, value := pos[0], pos[1]
 	key, ok := accessKinds[kind]
 	if !ok {
-		return srvUsage(cmd, "kinds: write, host, guide, excluded, allow")
+		return srvUsage(cmd, "kinds: write, host, guide, socket, excluded, approved, allow")
 	}
 	if *noAsk && (verb != "add" || key != config.SandboxExcluded) {
 		return srvUsage(cmd, "--without-asking is for tm access add excluded")

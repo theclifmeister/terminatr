@@ -44,6 +44,11 @@ func (s *Server) callerOf(pid int) caller.Caller {
 	for id, sess := range s.sessions {
 		byPID[sess.PID()] = recordOf(id)
 	}
+	// An approved command tm runs for a thread is the thread's, though
+	// the server started it.
+	for pid, r := range s.runs {
+		byPID[pid] = r
+	}
 	// Where the system tracks a session's processes (a Windows job), that
 	// settles it: a parent chain can break where a process (MSYS's exec,
 	// say) ends before its child.

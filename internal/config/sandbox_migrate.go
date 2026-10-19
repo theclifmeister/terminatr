@@ -383,6 +383,10 @@ func KindName(key string) string {
 		return "guide"
 	case SandboxWrite:
 		return "write folder"
+	case SandboxSockets:
+		return "socket"
+	case SandboxApproved:
+		return "approved command"
 	case SandboxExcluded:
 		return "excluded command"
 	case SandboxAllow:

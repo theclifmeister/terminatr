@@ -143,6 +143,12 @@ const (
 //     only its macOS sandbox reads (Linux doesn't pass it, Windows has
 //     no setting for localhost), and Codex's
 //     permissions.<profile>.network.allow_local_binding (macOS policy).
+//   - sockets are Claude's sandbox.network.allowUnixSockets and a Codex
+//     thread's network unix_sockets, which name sockets on macOS only
+//     (Claude's Linux sandbox opens every socket or none; Codex's Linux
+//     one none while its proxy limits the network).
+//   - approved commands aren't the agent's: tm runs them, on every
+//     platform, for both agents.
 //   - hosts are Claude's allowedDomains and a Codex thread's limited
 //     network's domains. tm gave them only on macOS (browser downloads'), so
 //     they stay macOS only: a narrower thread elsewhere, never a wider
@@ -160,6 +166,8 @@ var SandboxSettings = map[string]SandboxSetting{
 	SandboxExcluded:   {OS: []string{OSMac, OSLinux, OSWindows}},
 	SandboxAllow:      {OS: []string{OSMac, OSLinux, OSWindows}},
 	SandboxWrite:      {OS: []string{OSMac, OSLinux, OSWindows}, Codex: true},
+	SandboxSockets:    {OS: []string{OSMac}, Codex: true},
+	SandboxApproved:   {OS: []string{OSMac, OSLinux, OSWindows}, Codex: true},
 	SandboxHosts:      {OS: []string{OSMac}, Codex: true},
 	SandboxGuides:     {OS: []string{OSMac}, Codex: true},
 	SandboxLocalPorts: {OS: []string{OSMac}, Codex: true},

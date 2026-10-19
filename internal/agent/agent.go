@@ -142,7 +142,11 @@ func (a Access) Closed() []string {
 // lets its sandboxed commands listen on and reach localhost (a dev
 // server; Claude's allowLocalBinding, Codex's allow_local_binding), and
 // Domains are hosts they may reach (Claude's allowedDomains, Codex's
-// limited network's domains). The server fills in only what
+// limited network's domains), and Sockets are unix sockets besides
+// tm's they may connect to (Claude's allowUnixSockets, Codex's
+// unix_sockets). Approved are the commands tm runs outside the sandbox
+// when the thread asks (tm run), which no agent setting holds: its
+// brief lists them. The server fills in only what
 // applies on its platform. An agent with nothing to map the lists to
 // says so in its launch's Warnings.
 type SandboxLists struct {
@@ -150,11 +154,13 @@ type SandboxLists struct {
 	Allow        []string
 	LocalBinding bool
 	Domains      []string
+	Sockets      []string
+	Approved     []string
 }
 
 // Empty reports whether the lists open nothing.
 func (s SandboxLists) Empty() bool {
-	return len(s.Excluded)+len(s.Allow)+len(s.Domains) == 0 && !s.LocalBinding
+	return len(s.Excluded)+len(s.Allow)+len(s.Domains)+len(s.Sockets)+len(s.Approved) == 0 && !s.LocalBinding
 }
 
 // Lists reports whether it has excluded commands or allow rules.

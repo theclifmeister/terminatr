@@ -52,6 +52,8 @@ const (
 	AccessGuide        = "guide"         // guidance in the brief
 	AccessExcluded     = "excluded"      // a command run outside the sandbox; note AccessAsksFirst or AccessWithoutAsking
 	AccessWriteFolder  = "write-folder"  // a write folder (config write): value its absolute path, note as written
+	AccessUnixSocket   = "unix-socket"   // a project's socket (config sockets): value its absolute path, note as written
+	AccessApproved     = "approved"      // a command tm runs outside the sandbox when the thread asks (tm run); live
 	AccessAllow        = "allow"         // a permission rule on top of tm's
 	AccessDeny         = "deny"          // a permission rule refusing (agent files)
 	AccessEscapes      = "escapes"       // sandbox_escapes: on or off
@@ -134,7 +136,7 @@ type AccessRule struct {
 func (r AccessRule) Same(o AccessRule) bool {
 	// An excluded command's note is its choice to ask first.
 	return r.Where == o.Where && r.Kind == o.Kind && r.Value == o.Value && r.Skipped == o.Skipped &&
-		r.Dropped == o.Dropped && r.Refused == o.Refused && (r.Kind != AccessExcluded || r.Note == o.Note)
+		r.Dropped == o.Dropped && r.Refused == o.Refused && (r.Kind != AccessExcluded && r.Kind != AccessApproved || r.Note == o.Note)
 }
 
 // Given reports whether a launch gives the rule: not one left out
@@ -208,6 +210,9 @@ type AccessExplainResult struct {
 	// Agents says which agents' threads the answer is not for, e.g. an
 	// excluded command Codex threads aren't given.
 	Agents string `json:"agents,omitempty"`
+	// Approved says which approved command tm run would run it as,
+	// outside the sandbox, and for which threads; "" for none.
+	Approved string `json:"approved,omitempty"`
 }
 
 // The notes on an excluded command of the agent's own settings files

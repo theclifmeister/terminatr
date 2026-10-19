@@ -117,8 +117,11 @@ func (a *Agent) Launch(spec agent.LaunchSpec) (agent.Launch, error) {
 // outside its sandbox, or for an approval rule. Its exec-policy rules
 // (prefix_rule, decision "allow") live in files under CODEX_HOME, which
 // tm never writes, and its permission profile has no per-command
-// carve-out, so the lists don't reach Codex threads.
-const sandboxListsGap = "the project's sandbox lists (excluded commands, allow rules) don't apply to Codex: it has no per-session setting for them"
+// carve-out, so the lists don't reach Codex as settings. An excluded
+// command reaches a Codex thread as an approved command instead (T574
+// case 3): tm runs it outside the sandbox when the thread asks (tm
+// run), and the thread's brief lists them.
+const sandboxListsGap = "the project's excluded commands reach Codex only as approved commands (tm run, listed in the thread's brief) and its allow rules not at all: Codex has no per-session setting for them"
 
 // socketAccess adds, on Windows, write access to the folder of tm's
 // socket. Codex's Windows sandbox (a restricted token) lets a command
