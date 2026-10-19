@@ -148,6 +148,11 @@ func (r treeRow) details() (string, string) {
 			bits = append(bits, "CI "+w)
 		}
 	}
+	if r.here {
+		// The session on screen: its footer breadcrumb has the full
+		// title already, so the state takes the first line.
+		return strings.Join(bits, " · "), ""
+	}
 	return l1, strings.Join(bits, " · ")
 }
 
