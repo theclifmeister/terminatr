@@ -23,6 +23,23 @@ import (
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
 
+// sessionGoneWait bounds how long resolve waits for a stopped session
+// to leave the server's list.
+const sessionGoneWait = 10 * time.Second
+
+// sessionGone reports whether r's session left the server's list within
+// wait.
+func (e *Env) sessionGone(r *thread.Record, wait time.Duration) bool {
+	for end := time.Now().Add(wait); ; time.Sleep(100 * time.Millisecond) {
+		if _, live := e.sessionOf(r); !live {
+			return true
+		}
+		if time.Now().After(end) {
+			return false
+		}
+	}
+}
+
 func (e *Env) threadResolve(p *project.Project, id string, discard bool) error {
 	r, err := thread.Load(p, id)
 	if err != nil {
@@ -40,6 +57,11 @@ func (e *Env) threadResolve(p *project.Project, id string, discard bool) error {
 	if _, live := e.sessionOf(r); live {
 		if err := e.call(proto.MethodSessionStop, proto.SessionIDParams{ID: r.Session}, nil); err != nil {
 			return err
+		}
+		// Its worktree is checked for changes and removed only once
+		// nothing of it runs there.
+		if !e.sessionGone(r, sessionGoneWait) {
+			return fmt.Errorf("%s: its session %s is still running; nothing changed", id, r.Session)
 		}
 	}
 	var did []string

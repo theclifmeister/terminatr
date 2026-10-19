@@ -47,8 +47,8 @@ func sandboxRow(t *testing.T, slug, label string) setting {
 // TestSandboxView: a project's excluded commands add to all projects';
 // adding one asks first, saying it runs outside the sandbox; a
 // match-all entry is refused, and so is one all projects give already;
-// x removes the project's own, d drops one of all projects' and u takes
-// it back.
+// x removes the project's own, drops one of all projects' and takes the
+// drop back.
 func TestSandboxView(t *testing.T) {
 	src, m := sandboxData(t)
 	row := sandboxRow(t, "alpha", "Excluded commands")
@@ -57,7 +57,7 @@ func TestSandboxView(t *testing.T) {
 	}
 	drain(t, m, row.change(m))
 	out := screen(m)
-	for _, want := range []string{"outside the sandbox", "full file and network access", "docker compose *", "all projects", "add up", "d drop for alpha"} {
+	for _, want := range []string{"outside the sandbox", "full file and network access", "docker compose *", "all projects", "add up", "x drop for alpha"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}
@@ -109,14 +109,14 @@ func TestSandboxView(t *testing.T) {
 		t.Errorf("after x: %q", got)
 	}
 	v.sel = 0
-	drain(t, m, keyPress(m, "d"))
+	drain(t, m, keyPress(m, "x"))
 	if got := given(); len(got) != 0 {
 		t.Errorf("after the drop: %q", got)
 	}
 	if out := screen(m); !strings.Contains(out, "─ docker compose *") || !strings.Contains(out, "all projects · dropped") {
 		t.Errorf("dropped entry not shown:\n%s", out)
 	}
-	drain(t, m, keyPress(m, "u"))
+	drain(t, m, keyPress(m, "x"))
 	want := []string{"projects.alpha excluded_commands + npx playwright *", "projects.alpha excluded_commands - npx playwright *",
 		"projects.alpha drop + docker compose *", "projects.alpha drop - docker compose *"}
 	if !slices.Equal(src.sandbox, want) {
@@ -130,8 +130,8 @@ func TestSandboxView(t *testing.T) {
 
 // TestHostsAndGuidance: a host asks first, saying every command may
 // reach it, and warns of a shared host; a guide is a title, then its
-// text in the editor, listed by its title with its first line, enter
-// editing it; a title the list has is refused, and leaving a changed
+// text in the editor, listed by its title alone (no line under it),
+// enter editing it; a title the list has is refused, and leaving a changed
 // text asks first.
 func TestHostsAndGuidance(t *testing.T) {
 	src, m := sandboxData(t)
@@ -160,7 +160,7 @@ func TestHostsAndGuidance(t *testing.T) {
 	}
 	m.Update(tea.PasteMsg{Content: "Run make fixtures.\r\n\x1b[2JNever edit testdata/.\n\n"})
 	drain(t, m, m.key(ctrlS))
-	if out := screen(m); !strings.Contains(out, "Test data") || !strings.Contains(out, "Run make fixtures.") || !strings.Contains(out, "enter show, edit") {
+	if out := screen(m); !strings.Contains(out, "Test data") || strings.Contains(out, "Run make fixtures.") || !strings.Contains(out, "enter show, edit") {
 		t.Errorf("guidance view:\n%s", out)
 	}
 	c, _ := config.Load()
@@ -486,19 +486,18 @@ func TestPresetAdd(t *testing.T) {
 }
 
 // TestSandboxCoveredNote: an excluded command an allow rule of a file
-// written before covers says it runs outside the sandbox without asking,
-// in both lists' views; a new Bash or Edit rule isn't added (T574 case
-// 1).
+// written before covers has no warning line in either list's view; a new
+// Bash or Edit rule isn't added (T574 case 1).
 func TestSandboxCoveredNote(t *testing.T) {
 	_, m := sandboxData(t)
 	m.data.Sandbox[""].Lists[config.SandboxAllow] = []string{"Bash(docker compose:*)"}
 	drain(t, m, sandboxRow(t, "", "Excluded commands").change(m))
-	if out := screen(m); !strings.Contains(out, "Bash(docker compose:*) covers it") {
+	if out := screen(m); strings.Contains(out, "covers it") {
 		t.Errorf("excluded view:\n%s", out)
 	}
 	keyPress(m, "esc")
 	drain(t, m, sandboxRow(t, "", "Allow rules").change(m))
-	if out := screen(m); !strings.Contains(out, "covers the excluded docker compose *") {
+	if out := screen(m); strings.Contains(out, "covers the excluded") {
 		t.Errorf("allow view:\n%s", out)
 	}
 	for _, rule := range []string{"Bash(docker *)", "Edit(/tmp/pw/**)"} {

@@ -111,6 +111,16 @@ waits for the user's OK unless they turned ask off, it reaches the other
 server when the link is up (`tm link log` shows queued, sent, read), no
 files cross, and that server's user decides whether its side accepts.
 
+## Access
+
+`tm access show [--thread <id>]` lists what a new thread, or that
+thread, launched with (rules, sources, what a restart would change), and
+`tm access explain [--thread <id>] -- <command>` says whether a command
+runs inside or outside the sandbox, asks first, and what the guard says:
+use them to debug a thread's refusal. Your own project only. Changing
+access (`add`, `rm`, `drop`, `undrop`, `set`, `preset add`) is the
+user's.
+
 ## Threads
 
 - Propose threads (what it will do, which task) and wait for the user's

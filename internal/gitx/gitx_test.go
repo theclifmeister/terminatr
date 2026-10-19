@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -265,6 +266,114 @@ func TestPinnedRunStartsNothing(t *testing.T) {
 			t.Fatal("the planted monitor ran")
 		}
 	})
+
+	t.Run("worktree config filter", func(t *testing.T) {
+		repo, wt := worktreeOf(t)
+		gittest.Run(t, repo, "config", "extensions.worktreeConfig", "true")
+		tr, err := Pin(bg, repo, wt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		attrs := filepath.Join(t.TempDir(), "attributes")
+		os.WriteFile(attrs, []byte("* filter=x\n"), 0o644)
+		cfg := "[core]\n\tattributesFile = " + attrs + "\n[filter \"x\"]\n\tclean = \"" + monitor + "; cat\"\n\tzzz = planted\n"
+		os.WriteFile(filepath.Join(tr.GitDir, "config.worktree"), []byte(cfg), 0o644)
+		// The same size: git hashes it, through the filter, to tell.
+		os.WriteFile(filepath.Join(wt, "a"), []byte("b"), 0o644)
+		if plainStatus(wt); !ran() {
+			t.Skip("this git runs no clean filter for status")
+		}
+		if out, err := Run(bg, "", Opts{Tree: tr}, "status", "--porcelain"); err != nil || !strings.Contains(out, "a") {
+			t.Fatalf("status %q %v", out, err)
+		}
+		if ran() {
+			t.Fatal("the planted filter ran")
+		}
+		if v, err := Run(bg, "", Opts{Tree: tr}, "config", "filter.x.zzz"); err == nil {
+			t.Fatalf("the run read config.worktree: %q", v)
+		}
+	})
+}
+
+// TestPinnedRunGitDir: a linked worktree's pinned run takes refs from
+// the repository's common dir, whatever its own git dir's commondir
+// names, and its HEAD and index from its own git dir; the git dir tm
+// makes for the run is gone after it.
+func TestPinnedRunGitDir(t *testing.T) {
+	repo, wt := worktreeOf(t)
+	tr, err := Pin(bg, repo, wt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := gittest.Run(t, wt, "rev-parse", "HEAD")
+	empty := filepath.Join(t.TempDir(), "empty.git")
+	gittest.Run(t, repo, "init", "-q", "--bare", empty)
+	os.WriteFile(filepath.Join(tr.GitDir, "commondir"), []byte(empty+"\n"), 0o644)
+	if got, err := Run(bg, "", Opts{Tree: tr}, "rev-parse", "HEAD"); err != nil || got != want {
+		t.Fatalf("HEAD %q %v, want %s", got, err, want)
+	}
+	if b, err := Run(bg, "", Opts{Tree: tr}, "for-each-ref", "--format=%(refname)", "refs/heads/tm/x"); err != nil || b != "refs/heads/tm/x" {
+		t.Fatalf("branch %q %v", b, err)
+	}
+
+	git := func(args ...string) {
+		gittest.Run(t, wt, append([]string{"--git-dir", tr.GitDir, "--work-tree", wt}, args...)...)
+	}
+	os.WriteFile(filepath.Join(wt, "b"), []byte("b"), 0o644)
+	git("add", "b")
+	if out, err := Run(bg, "", Opts{Tree: tr}, "status", "--porcelain"); err != nil || out != "A  b" {
+		t.Fatalf("status %q %v", out, err)
+	}
+	git("update-index", "--split-index")
+	if out, err := Run(bg, "", Opts{Tree: tr}, "status", "--porcelain"); err != nil || out != "A  b" {
+		t.Fatalf("split index: status %q %v", out, err)
+	}
+
+	// Made in tm's state dir, never the temp folder, and gone after.
+	h := t.TempDir()
+	t.Setenv("TERMINATR_HOME", h)
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	if _, err := Run(bg, "", Opts{Tree: tr}, "status", "--porcelain"); err != nil {
+		t.Fatal(err)
+	}
+	if es, err := os.ReadDir(RunsDir(h)); err != nil || len(es) != 0 {
+		t.Errorf("runs dir: %v %v", es, err)
+	}
+	if es, _ := os.ReadDir(tmp); len(es) != 0 {
+		t.Errorf("in the temp folder: %v", es)
+	}
+
+	// Shared index files: regular files only, and a few.
+	sh, _ := filepath.Glob(filepath.Join(tr.GitDir, "sharedindex.*"))
+	if len(sh) == 0 {
+		t.Fatal("no shared index file")
+	}
+	extra := filepath.Join(tr.GitDir, "sharedindex.0000")
+	os.Symlink(sh[0], extra)
+	if _, err := Run(bg, "", Opts{Tree: tr}, "status"); err == nil {
+		t.Error("a linked shared index file was taken")
+	}
+	os.Remove(extra)
+	for i := range maxSharedIndex {
+		os.WriteFile(filepath.Join(tr.GitDir, "sharedindex.extra"+strconv.Itoa(i)), nil, 0o644)
+	}
+	if _, err := Run(bg, "", Opts{Tree: tr}, "status"); err == nil {
+		t.Errorf("over %d shared index files were taken", maxSharedIndex)
+	}
+
+	// The index must be a file.
+	index := filepath.Join(tr.GitDir, "index")
+	os.Rename(index, index+".real")
+	os.Symlink(index+".real", index)
+	if _, err := Run(bg, "", Opts{Tree: tr}, "status"); err == nil {
+		t.Error("a linked index was taken")
+	}
+
+	os.WriteFile(filepath.Join(tr.GitDir, "HEAD"), []byte("ref: refs/heads/tm/x\nmore\n"), 0o644)
+	if _, err := Run(bg, "", Opts{Tree: tr}, "status"); err == nil {
+		t.Error("a HEAD of two lines was taken")
+	}
 }
 
 func same(t *testing.T, a, b string) bool {

@@ -21,9 +21,10 @@ import (
 // preset's rules (settings_presets.go). It shows only what applies on
 // the platform the server is on, where threads run
 // (config.SandboxSettings); config.toml keeps the rest, and a launch
-// skips it. A guide is a title and a text (texteditor.go edits it). Every list adds down the layers (config.MergeSandbox): a
-// project's view lists all projects' entries too, d drops one for the
-// project and u takes it back. Writes are the human's only.
+// skips it. A guide is a title and a text (texteditor.go edits it).
+// Every list adds down the layers (config.MergeSandbox): a
+// project's view lists all projects' entries too, x drops one for the
+// project and takes the drop back. Writes are the human's only.
 
 // sandboxOutside is what an excluded command opens, said wherever one is
 // added or listed.
@@ -48,7 +49,7 @@ const sandboxHost = "Every command a thread runs inside its sandbox may then rea
 const sandboxGuide = "Prefer rules inside the sandbox (p adds a preset's): the thread's commands stay in it, opened only as far as the tool needs. Excluded commands (Outside the sandbox) run outside it: a last resort. " + sandboxBoth
 
 // sandboxAdds says how a project's lists combine with all projects'.
-const sandboxAdds = "A project's entries add to all projects'; on a project, d drops one of all projects' and u takes it back."
+const sandboxAdds = "A project's entries add to all projects'; on a project, x removes its own, drops one of all projects' or takes the drop back."
 
 // sandboxLists are each list's row label, help, view text, example and
 // what messages call its entries.
@@ -303,8 +304,8 @@ func warnLines(text string, w int) []string {
 
 // sandboxView lists one sandbox list as the rows' threads get it, all
 // projects' entries on a project's too (T574 §4.2): a adds an entry, x
-// removes one the table sets; on a project, d drops one of all
-// projects' and u takes it back.
+// removes one the table sets, on a project drops one of all
+// projects' or takes the drop back.
 type sandboxView struct {
 	sr   safetyRows
 	list string // a config.SandboxKeys key
@@ -365,10 +366,15 @@ func (v *sandboxView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "x", "delete", "backspace":
 		switch {
 		case v.sel >= len(es):
-		case e.stray:
-			m.msg = e.Value + " is a drop: u takes it back"
+		case e.Dropped:
+			msg := v.sr.slug + " takes " + e.Value + " back from all projects: threads get it from their next start"
+			if e.stray {
+				msg = "the drop of " + e.Value + " removed " + v.sr.forWho
+			}
+			return v.sr.editSandbox(m, "drop - "+e.Value, msg, func(t *config.SandboxTable) { t.Remove(config.SandboxDrop, e.Value) })
 		case !e.Own:
-			m.msg = e.Value + " is all projects': d drops it for " + v.sr.slug
+			return v.sr.editSandbox(m, "drop + "+e.Value, e.Value+" dropped "+v.sr.forWho+": its threads don't get it from their next start",
+				func(t *config.SandboxTable) { t.Add(config.SandboxDrop, e.Value) })
 		default:
 			v.sel = max(min(v.sel, len(es)-2), 0)
 			return v.sr.editSandbox(m, v.list+" - "+e.Value, e.Value+" removed from the "+word+" "+v.sr.forWho+": threads started from now on don't get it",
@@ -377,27 +383,6 @@ func (v *sandboxView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case "w":
 		return v.toggleAsk(m, e, v.sel < len(es))
-	case "d":
-		switch {
-		case v.sr.all || v.sel >= len(es):
-		case e.Own:
-			m.msg = e.Value + " is " + v.sr.slug + "'s own: x removes it"
-		case e.Dropped:
-			m.msg = e.Value + " is dropped already: u takes it back"
-		default:
-			return v.sr.editSandbox(m, "drop + "+e.Value, e.Value+" dropped "+v.sr.forWho+": its threads don't get it from their next start",
-				func(t *config.SandboxTable) { t.Add(config.SandboxDrop, e.Value) })
-		}
-		return nil
-	case "u":
-		if v.sr.all || v.sel >= len(es) || !e.Dropped {
-			return nil
-		}
-		msg := v.sr.slug + " takes " + e.Value + " back from all projects: threads get it from their next start"
-		if e.stray {
-			msg = "the drop of " + e.Value + " removed " + v.sr.forWho
-		}
-		return v.sr.editSandbox(m, "drop - "+e.Value, msg, func(t *config.SandboxTable) { t.Remove(config.SandboxDrop, e.Value) })
 	}
 	return nil
 }
@@ -416,7 +401,7 @@ func (v *sandboxView) add(m *dash) {
 				m.msg = "not added: " + e + " is listed already"
 				return nil
 			case r.Dropped:
-				m.msg = "not added: " + e + " is all projects', dropped " + v.sr.forWho + ": u takes it back"
+				m.msg = "not added: " + e + " is all projects', dropped " + v.sr.forWho + ": x takes it back"
 				return nil
 			default:
 				m.msg = "not added: all projects give " + e + " already"
@@ -522,28 +507,20 @@ func (v *sandboxView) render(m *dash) string {
 				lines = append(lines, "  "+th().Faint.Render("asks first"))
 			}
 		}
-		if about := v.about(e); about != "" {
-			for _, l := range faintLines(about, w-2) {
-				lines = append(lines, "  "+l)
-			}
-		}
-		for _, warn := range []string{config.SandboxWarning(v.list, e.Value), v.covered(m, e.Value)} {
-			if warn == "" {
-				continue
-			}
-			for _, l := range warnLines(warn, w-2) {
-				lines = append(lines, "  "+l)
-			}
-		}
 	}
 	if len(es) == 0 {
 		lines = append(lines, "", th().Faint.Render("none: a adds one"))
 	}
-	keys := "a add · x remove · ↑ ↓ move · esc back"
-	switch {
-	case v.sr.all:
-	default:
-		keys = "a add · x remove · d drop for " + v.sr.slug + " · u take it back · esc back"
+	keys := "a add · ↑ ↓ move · esc back"
+	if v.sel < len(es) {
+		switch e := es[v.sel]; {
+		case e.Dropped:
+			keys = "a add · x take it back · ↑ ↓ move · esc back"
+		case !e.Own:
+			keys = "a add · x drop for " + v.sr.slug + " · ↑ ↓ move · esc back"
+		default:
+			keys = "a add · x remove · ↑ ↓ move · esc back"
+		}
 	}
 	switch v.list {
 	case config.SandboxExcluded:
@@ -584,19 +561,6 @@ func (v *sandboxView) toggleAsk(m *dash, e sandboxEntry, ok bool) tea.Cmd {
 	return nil
 }
 
-// about is the start of a guide's text, for its line in the guidance
-// view; "" for another list's entry.
-func (v *sandboxView) about(e sandboxEntry) string {
-	if v.list != config.SandboxGuides || e.stray {
-		return ""
-	}
-	if e.Body == "" {
-		return "tm 0.38's guidance " + e.Value + ", worded at each launch: the server writes it out as its text when it starts"
-	}
-	first, _, _ := strings.Cut(strings.TrimSpace(e.Body), "\n")
-	return textsafe.Line(first, 100)
-}
-
 // guideRefused is why a new guide can't take title, "" when it can: the
 // list has one of that title, or the title fails its check.
 func (v *sandboxView) guideRefused(m *dash, title string) string {
@@ -606,7 +570,7 @@ func (v *sandboxView) guideRefused(m *dash, title string) string {
 		case r.Own:
 			return "not added: a guide " + title + " is listed already: enter on it edits its text"
 		case r.Dropped:
-			return "not added: " + title + " is all projects', dropped " + v.sr.forWho + ": u takes it back, or name yours otherwise"
+			return "not added: " + title + " is all projects', dropped " + v.sr.forWho + ": x takes it back, or name yours otherwise"
 		default:
 			return "not added: all projects give a guide " + title + " already: name yours otherwise"
 		}
@@ -655,7 +619,7 @@ func (v *sandboxView) saveGuide(m *dash, g config.Guide, added bool) tea.Cmd {
 func (v *sandboxView) openGuide(m *dash, e sandboxEntry) {
 	switch {
 	case e.Body == "":
-		m.push(&textView{title: e.Value, note: v.about(e)})
+		m.push(&textView{title: e.Value, note: "tm 0.38's guidance " + e.Value + ", worded at each launch: the server writes it out as its text when it starts"})
 	case !e.Own:
 		m.push(&textView{title: e.Value + " · " + config.AllProjectsName, body: e.Body, note: "all projects' guide: change it in the , popup's Access tab"})
 	default:
