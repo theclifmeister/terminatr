@@ -161,10 +161,15 @@ func init() {
 		proto.MethodSessionAnswer: {call: typed(func(s *Server, p proto.SessionAnswerParams, c callCtx) (any, *proto.Error) {
 			return s.answer(p, c)
 		})},
-		// access.show has its own gate (mayShowAccess): the human, or a
-		// thread for its own access.
+		// access.show has its own gate (mayShowAccess): the human, a
+		// thread for its own access, or the project's coordinator.
 		proto.MethodAccessShow: {call: typed(func(s *Server, p proto.AccessShowParams, c callCtx) (any, *proto.Error) {
 			return s.accessShow(p, c)
+		})},
+		// access.explain has its own gate too (mayExplainAccess): the
+		// human, or the project's coordinator.
+		proto.MethodAccessExplain: {call: typed(func(s *Server, p proto.AccessExplainParams, c callCtx) (any, *proto.Error) {
+			return s.accessExplain(p, c)
 		})},
 		proto.MethodModActionCheck: {gate: gateHuman, call: typed(func(s *Server, p proto.ModActionParams, c callCtx) (any, *proto.Error) {
 			return s.modActionCheck(p, c.peerPID, c.who())
@@ -205,9 +210,6 @@ func init() {
 		})},
 		proto.MethodSessionPrompt: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionPromptParams, _ callCtx) (any, *proto.Error) {
 			return s.prompt(p)
-		})},
-		proto.MethodAccessExplain: {gate: gateHuman, call: typed(func(s *Server, p proto.AccessExplainParams, _ callCtx) (any, *proto.Error) {
-			return s.accessExplain(p)
 		})},
 		proto.MethodSecretTest: {gate: gateHuman, call: typed(func(s *Server, p proto.SecretTestParams, _ callCtx) (any, *proto.Error) {
 			return s.secretTest(p)

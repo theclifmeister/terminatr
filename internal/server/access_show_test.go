@@ -186,13 +186,29 @@ excluded_commands = ["make bench"]
 	if own, perr := show(escaped, "t-0001"); perr != nil || findRule(own.Rules, proto.AccessAllow, "Bash(git log:*)") != nil {
 		t.Errorf("an escaped thread's own: %v, agent files shown %v", perr, perr == nil)
 	}
-	coord := callCtx{human: true, who: func() caller.Caller { return caller.Caller{Kind: caller.Coordinator, Project: "demo"} }}
-	if _, perr := show(coord, "t-0001"); perr == nil {
-		t.Error("the coordinator on the human socket saw a thread's")
+	// The project's coordinator sees its thread-to-come and its threads'
+	// launch records (on either socket), never the agent's own files;
+	// another project's coordinator sees nothing.
+	for _, onHuman := range []bool{false, true} {
+		coord := callCtx{human: onHuman, who: func() caller.Caller { return caller.Caller{Kind: caller.Coordinator, Project: "demo"} }}
+		for _, id := range []string{"", "t-0001"} {
+			res, perr := show(coord, id)
+			if perr != nil {
+				t.Errorf("coordinator (human socket %v) refused thread %q: %v", onHuman, id, perr)
+			} else if findRule(res.Rules, proto.AccessAllow, "Bash(git log:*)") != nil {
+				t.Errorf("coordinator was shown the agent's own files (thread %q)", id)
+			}
+		}
+		foreign := callCtx{human: onHuman, who: func() caller.Caller { return caller.Caller{Kind: caller.Coordinator, Project: "other"} }}
+		for _, id := range []string{"", "t-0001"} {
+			if _, perr := show(foreign, id); perr == nil {
+				t.Errorf("another project's coordinator (human socket %v) saw thread %q", onHuman, id)
+			}
+		}
 	}
-	other := callCtx{who: func() caller.Caller { return caller.Caller{Kind: caller.Coordinator, Project: "demo"} }}
-	if _, perr := show(other, "t-0001"); perr == nil {
-		t.Error("the coordinator saw a thread's")
+	unplaced := callCtx{who: func() caller.Caller { return caller.Caller{Kind: caller.Coordinator} }}
+	if _, perr := show(unplaced, ""); perr == nil {
+		t.Error("a coordinator of no project saw the project's")
 	}
 
 	res, perr = show(human, "")
@@ -220,7 +236,7 @@ allow = ["Bash(npx playwright *)"]
 	s := &Server{opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}}, agents: reg, log: log.New(os.Stderr, "", 0)}
 	explain := func(cmd string) proto.AccessExplainResult {
 		t.Helper()
-		res, perr := s.accessExplain(proto.AccessExplainParams{Project: "demo", Command: cmd})
+		res, perr := s.accessExplain(proto.AccessExplainParams{Project: "demo", Command: cmd}, callCtx{human: true, who: func() caller.Caller { return caller.Caller{Kind: caller.Human} }})
 		if perr != nil {
 			t.Fatal(perr)
 		}
@@ -353,5 +369,32 @@ func TestOwnEscapes(t *testing.T) {
 	}
 	if got := ownEscapes(files(), set("on", "on")); got[0].Skipped != proto.AccessYoloNoSandbox || got[0].Note != "" {
 		t.Errorf("yolo: %+v", got[0])
+	}
+}
+
+// TestAccessExplainGate: the human and the project's coordinator explain;
+// another project's coordinator, a thread, a mod and an escaped agent
+// don't.
+func TestAccessExplainGate(t *testing.T) {
+	cases := []struct {
+		name  string
+		human bool
+		who   caller.Caller
+		ok    bool
+	}{
+		{"human", true, caller.Caller{Kind: caller.Human}, true},
+		{"coordinator", false, caller.Caller{Kind: caller.Coordinator, Project: "demo"}, true},
+		{"coordinator, human socket", true, caller.Caller{Kind: caller.Coordinator, Project: "demo"}, true},
+		{"other project's coordinator", false, caller.Caller{Kind: caller.Coordinator, Project: "other"}, false},
+		{"coordinator of no project", false, caller.Caller{Kind: caller.Coordinator}, false},
+		{"thread", false, caller.Caller{Kind: caller.Thread, Project: "demo", Thread: "t-0001"}, false},
+		{"thread, human socket", true, caller.Caller{Kind: caller.Thread, Project: "demo", Thread: "t-0001"}, false},
+		{"mod", false, caller.Caller{Kind: caller.Mod, Project: "demo"}, false},
+	}
+	for _, c := range cases {
+		who := c.who
+		if _, perr := mayExplainAccess(callCtx{human: c.human, who: func() caller.Caller { return who }}, "demo"); (perr == nil) != c.ok {
+			t.Errorf("%s: %v, want ok %v", c.name, perr, c.ok)
+		}
 	}
 }
