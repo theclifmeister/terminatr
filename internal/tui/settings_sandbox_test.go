@@ -47,8 +47,8 @@ func sandboxRow(t *testing.T, slug, label string) setting {
 // TestSandboxView: a project's excluded commands add to all projects';
 // adding one asks first, saying it runs outside the sandbox; a
 // match-all entry is refused, and so is one all projects give already;
-// x removes the project's own, d drops one of all projects' and takes
-// the drop back.
+// x removes the project's own, d drops one of all projects' and u takes
+// it back.
 func TestSandboxView(t *testing.T) {
 	src, m := sandboxData(t)
 	row := sandboxRow(t, "alpha", "Excluded commands")
@@ -116,7 +116,7 @@ func TestSandboxView(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "─ docker compose *") || !strings.Contains(out, "all projects · dropped") {
 		t.Errorf("dropped entry not shown:\n%s", out)
 	}
-	drain(t, m, keyPress(m, "d"))
+	drain(t, m, keyPress(m, "u"))
 	want := []string{"projects.alpha excluded_commands + npx playwright *", "projects.alpha excluded_commands - npx playwright *",
 		"projects.alpha drop + docker compose *", "projects.alpha drop - docker compose *"}
 	if !slices.Equal(src.sandbox, want) {

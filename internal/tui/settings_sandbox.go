@@ -23,7 +23,7 @@ import (
 // (config.SandboxSettings); config.toml keeps the rest, and a launch
 // skips it. Every list adds down the layers (config.MergeSandbox): a
 // project's view lists all projects' entries too, d drops one for the
-// project (and takes the drop back). Writes are the human's only.
+// project and u takes it back. Writes are the human's only.
 
 // sandboxOutside is what an excluded command opens, said wherever one is
 // added or listed.
@@ -357,7 +357,7 @@ func (v *sandboxView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		switch {
 		case v.sel >= len(es):
 		case e.stray || e.Dropped:
-			m.msg = e.Value + " is a drop: d takes it back"
+			m.msg = e.Value + " is a drop: u takes it back"
 		case !e.Own:
 			m.msg = e.Value + " is all projects': d drops it for " + v.sr.slug
 		default:
@@ -374,14 +374,21 @@ func (v *sandboxView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		case e.Own && !e.stray:
 			m.msg = e.Value + " is " + v.sr.slug + "'s own: x removes it"
 		case e.Dropped:
+			m.msg = e.Value + " is dropped already: u takes it back"
+		default:
+			return v.sr.editSandbox(m, "drop + "+e.Value, e.Value+" dropped "+v.sr.forWho+": its threads don't get it from their next start",
+				func(t *config.SandboxTable) { t.Add(config.SandboxDrop, e.Value) })
+		}
+		return nil
+	case "u":
+		switch {
+		case v.sr.all || v.sel >= len(es) || !e.Dropped:
+		default:
 			msg := v.sr.slug + " takes " + e.Value + " back from all projects: threads get it from their next start"
 			if e.stray {
 				msg = "the drop of " + e.Value + " removed " + v.sr.forWho
 			}
 			return v.sr.editSandbox(m, "drop - "+e.Value, msg, func(t *config.SandboxTable) { t.Remove(config.SandboxDrop, e.Value) })
-		default:
-			return v.sr.editSandbox(m, "drop + "+e.Value, e.Value+" dropped "+v.sr.forWho+": its threads don't get it from their next start",
-				func(t *config.SandboxTable) { t.Add(config.SandboxDrop, e.Value) })
 		}
 		return nil
 	}
@@ -409,7 +416,7 @@ func (v *sandboxView) add(m *dash) {
 				m.msg = "not added: " + e + " is listed already"
 				return nil
 			case r.Dropped:
-				m.msg = "not added: " + e + " is all projects', dropped " + v.sr.forWho + ": d takes it back"
+				m.msg = "not added: " + e + " is all projects', dropped " + v.sr.forWho + ": u takes it back"
 				return nil
 			default:
 				m.msg = "not added: all projects give " + e + " already"
@@ -525,7 +532,7 @@ func (v *sandboxView) render(m *dash) string {
 		case e.Own && !e.stray:
 			keys = "a add · x remove · ↑ ↓ move · esc back"
 		case e.Dropped:
-			keys = "a add · d take back · ↑ ↓ move · esc back"
+			keys = "a add · u take it back · ↑ ↓ move · esc back"
 		case !v.sr.all:
 			keys = "a add · d drop for " + v.sr.slug + " · ↑ ↓ move · esc back"
 		}
