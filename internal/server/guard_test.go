@@ -17,6 +17,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -587,6 +588,9 @@ func TestAccessThreadGitDirs(t *testing.T) {
 	}
 	if want := in("packed-refs", "packed-refs.lock"); !slices.Equal(a.WriteFiles, want) {
 		t.Errorf("worktree: write files %q, want %q", a.WriteFiles, want)
+	}
+	if runs := gitx.RunsDir(realPath(s.opts.Paths.Home)); !slices.Contains(a.NoWrite, runs) {
+		t.Errorf("worktree: tm's git runs folder %s not in no-write %q", runs, a.NoWrite)
 	}
 	for _, n := range []string{"hooks", "info", "modules", "worktrees/other"} {
 		if !slices.Contains(a.NoWrite, filepath.Join(common, n)) {

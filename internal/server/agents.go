@@ -201,7 +201,13 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 		a.Commands = coordinatorCommands(lc.safety(slug))
 		return a, nil
 	case proto.RoleThread:
-		a := agent.Access{Read: []string{dir}, NoWrite: []string{dir}, NoWriteFiles: []string{cfg}}
+		// The folder of tm's pinned git runs' git dirs (gitx.RunsDir),
+		// made first for the sandbox to have a real path to close.
+		runs := gitx.RunsDir(realPath(s.opts.Paths.Home))
+		if err := os.MkdirAll(runs, 0o700); err != nil {
+			return agent.Access{}, err
+		}
+		a := agent.Access{Read: []string{dir}, NoWrite: []string{dir, runs}, NoWriteFiles: []string{cfg}}
 		// No tree: a thread to come (access.show), whose git dirs aren't
 		// known yet, or one whose folder isn't its recorded checkout.
 		if tree != nil {

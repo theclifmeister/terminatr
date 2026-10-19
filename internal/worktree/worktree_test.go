@@ -306,7 +306,36 @@ func TestRemoveRedirectedCommonDir(t *testing.T) {
 	}
 }
 
-// TestRemoveWorktreeConfig: with extensions.worktreeConfig on, a clean
+// TestDirtySubmodule: a submodule's changes count, whatever the
+// worktree's .gitmodules says to ignore.
+func TestDirtySubmodule(t *testing.T) {
+	sub, _ := gittest.Repo(t)
+	repo, _ := gittest.Repo(t)
+	dir := filepath.Join(t.TempDir(), "wt")
+	if _, err := Create(repo, dir, "tm/x", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	run := gittest.In(t, dir)
+	run("-c", "protocol.file.allow=always", "submodule", "add", "-q", sub, "sub")
+	run("config", "--file", ".gitmodules", "submodule.sub.ignore", "all")
+	run("add", ".gitmodules")
+	run("commit", "-q", "-m", "sub")
+	if dirty, err := Dirty(repo, dir); err != nil || dirty {
+		t.Fatalf("clean: %v %v", dirty, err)
+	}
+	os.WriteFile(filepath.Join(dir, "sub", "a"), []byte("changed"), 0o644)
+	if out := run("status", "--porcelain"); out != "" {
+		t.Logf("plain status sees it anyway: %q", out)
+	}
+	if dirty, err := Dirty(repo, dir); err != nil || !dirty {
+		t.Fatalf("dirty submodule: %v %v", dirty, err)
+	}
+	if err := Remove(repo, dir); !errors.Is(err, ErrDirty) {
+		t.Fatalf("remove: %v", err)
+	}
+}
+
+// TestRemoveWorktreeConfig:with extensions.worktreeConfig on, a clean
 // filter set in the worktree's own config.worktree never runs as it is
 // checked for changes and removed; a dirty one is still kept.
 func TestRemoveWorktreeConfig(t *testing.T) {

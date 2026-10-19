@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -328,11 +329,45 @@ func TestPinnedRunGitDir(t *testing.T) {
 		t.Fatalf("split index: status %q %v", out, err)
 	}
 
+	// Made in tm's state dir, never the temp folder, and gone after.
+	h := t.TempDir()
+	t.Setenv("TERMINATR_HOME", h)
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
-	Run(bg, "", Opts{Tree: tr}, "status", "--porcelain")
+	if _, err := Run(bg, "", Opts{Tree: tr}, "status", "--porcelain"); err != nil {
+		t.Fatal(err)
+	}
+	if es, err := os.ReadDir(RunsDir(h)); err != nil || len(es) != 0 {
+		t.Errorf("runs dir: %v %v", es, err)
+	}
 	if es, _ := os.ReadDir(tmp); len(es) != 0 {
-		t.Errorf("left behind: %v", es)
+		t.Errorf("in the temp folder: %v", es)
+	}
+
+	// Shared index files: regular files only, and a few.
+	sh, _ := filepath.Glob(filepath.Join(tr.GitDir, "sharedindex.*"))
+	if len(sh) == 0 {
+		t.Fatal("no shared index file")
+	}
+	extra := filepath.Join(tr.GitDir, "sharedindex.0000")
+	os.Symlink(sh[0], extra)
+	if _, err := Run(bg, "", Opts{Tree: tr}, "status"); err == nil {
+		t.Error("a linked shared index file was taken")
+	}
+	os.Remove(extra)
+	for i := range maxSharedIndex {
+		os.WriteFile(filepath.Join(tr.GitDir, "sharedindex.extra"+strconv.Itoa(i)), nil, 0o644)
+	}
+	if _, err := Run(bg, "", Opts{Tree: tr}, "status"); err == nil {
+		t.Errorf("over %d shared index files were taken", maxSharedIndex)
+	}
+
+	// The index must be a file.
+	index := filepath.Join(tr.GitDir, "index")
+	os.Rename(index, index+".real")
+	os.Symlink(index+".real", index)
+	if _, err := Run(bg, "", Opts{Tree: tr}, "status"); err == nil {
+		t.Error("a linked index was taken")
 	}
 
 	os.WriteFile(filepath.Join(tr.GitDir, "HEAD"), []byte("ref: refs/heads/tm/x\nmore\n"), 0o644)
