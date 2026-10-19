@@ -13,7 +13,7 @@ import (
 // dashboard, over any popup and with the sidebar holding the keyboard.
 // It never reaches a popup as a plain key: a command that opens or goes
 // somewhere closes the popups first. Its keys are those of a session
-// (prefixStep): d, q, r, the dashboard keys (prefixCommands), the
+// (prefixStep): d, q, r, R, C, the dashboard keys (prefixCommands), the
 // sidebar's and the info panel's (paneCommands), the prefix itself and
 // the mods' command keys (modcommands.go), which the core's come before.
 
@@ -54,6 +54,7 @@ var prefixCmds = []prefixCmd{
 	{";", "back to the last place", cmdPane},
 	{"r", "remote control on / off…", cmdCore},
 	{"R", "repaint from its server", cmdCore},
+	{"C", "save and clear the coordinator", cmdCore},
 	{"prefix", "send the prefix key", cmdCore},
 }
 
@@ -73,7 +74,7 @@ func prefixCmdKeys(kinds ...int) map[string]bool {
 func prefixHint() string {
 	return "prefix ▸ d dashboard · q quit · " + boundKeys("a", "i", "t", ",", "?", "n") + " popups · p " + boundKeys("]", "[") +
 		" projects · " + boundKeys("{", "}", "b") + " sidebar · " + boundKey("|") + " details · tab area · " + boundKey(";") +
-		" last place · r remote · " + boundKey("R") + " repaint · esc cancel"
+		" last place · r remote · " + boundKey("R") + " repaint · C save+clear · esc cancel"
 }
 
 // prefixCommand runs the key typed after the prefix: a bound key runs as
@@ -110,6 +111,19 @@ func (m *dash) prefixCommand(key string) tea.Cmd {
 	case key == "R":
 		m.stack = nil
 		return m.listKey(key)
+	case key == "C" && m.over != nil:
+		// The session's project's coordinator: back to the session,
+		// which runs it.
+		m.stack, m.result.Command = nil, key
+		return nil
+	case key == "C":
+		// The selected (or current) project's coordinator, no question.
+		m.stack = nil
+		slug := m.needProject()
+		if slug == "" {
+			return nil
+		}
+		return m.saveClear(slug)
 	case paneCommands[key] && key != "tab":
 		// The sidebar's width and slim strip; the popup stays.
 		return m.listKey(key)

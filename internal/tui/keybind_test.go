@@ -28,13 +28,13 @@ var wantIDs = []string{
 	"project.next", "project.prev", "list.narrower", "list.wider", "sidebar.narrower", "sidebar.wider",
 	"sidebar.slim", "details.toggle", "settings.open", "pane.repaint", "help.open", "console.quit",
 	"side.up", "side.down", "side.enter", "side.unfold", "side.fold", "side.back", "side.activate",
-	"side.fold-all", "side.unfold-all", "side.pin", "side.save-clear", "side.first", "side.last", "side.page-up", "side.page-down",
+	"side.fold-all", "side.unfold-all", "side.pin", "side.first", "side.last", "side.page-up", "side.page-down",
 	"side.nth", "side.needs-next", "side.needs-prev", "side.filter", "side.help",
 	"panel.up", "panel.down", "panel.page-up", "panel.page-down", "panel.first", "panel.last",
-	"panel.section-next", "panel.section-prev", "panel.unfold", "panel.fold", "panel.enter", "panel.save-clear", "panel.back",
+	"panel.section-next", "panel.section-prev", "panel.unfold", "panel.fold", "panel.enter", "panel.back",
 	"popup.close", "repo.add", "repo.remove", "task.new", "task.show", "task.delegate", "task.accept", "task.send-back",
 	"task.coordinator", "tasks.done", "library.read", "library.delete", "library.delete-thread",
-	"session.attach", "session.clear", "question.answer", "memory.edit", "memory.new", "memory.rm", "session.dashboard", "session.remote", "prefix.send",
+	"session.attach", "session.clear", "question.answer", "memory.edit", "memory.new", "memory.rm", "session.dashboard", "session.remote", "side.save-clear", "panel.save-clear", "prefix.send",
 }
 
 // TestActionIDs: every action has one stable id, unique and well formed,

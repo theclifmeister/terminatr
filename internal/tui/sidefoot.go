@@ -217,7 +217,7 @@ func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 	case r.kind == treeCoordinator, r.session != "":
 		keys = []string{enter + " attach", left + " project"}
 		if r.kind == treeCoordinator && r.ctxHint {
-			keys = append(keys, barKey("side.save-clear", "c")+" save and clear")
+			keys = append(keys, "prefix+C save and clear")
 		}
 		if r.hint {
 			keys = append(keys, barKey("side.needs-next", "w")+" next "+ic().hint)

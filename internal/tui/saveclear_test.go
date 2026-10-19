@@ -7,14 +7,16 @@ import (
 	"testing"
 	"time"
 
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
-// TestSideSaveClear: c on a running coordinator's row saves and clears
-// it (coordinator.clear), and the footer says so; past the context hint
-// the row's key bar offers it; elsewhere c says what it is for.
+// TestSideSaveClear: past the context hint a running coordinator's row
+// offers prefix+C in its key bar; plain c on the row does nothing, and
+// prefix+C on the dashboard saves and clears the selected project's
+// coordinator with no question.
 func TestSideSaveClear(t *testing.T) {
 	m, src, _ := foldDash(t)
 	src.data.ContextHint = 40
@@ -26,21 +28,19 @@ func TestSideSaveClear(t *testing.T) {
 		r := m.tree()[i]
 		return ansi.Strip(sideKeyBar(&r, true, false, 200))
 	}
-	if foot := bar(); !strings.Contains(foot, "c save and clear") {
+	if foot := bar(); !strings.Contains(foot, "prefix+C save and clear") {
 		t.Errorf("footer past the hint: %q", foot)
 	}
 	drain(t, m, keyPress(m, "c"))
-	if !slices.Equal(src.saveCleared, []string{"alpha"}) || !strings.Contains(m.msg, "asked alpha's coordinator to save what it learned") {
-		t.Fatalf("c: cleared %v msg %q", src.saveCleared, m.msg)
+	if len(src.saveCleared) != 0 {
+		t.Fatalf("plain c cleared %v", src.saveCleared)
 	}
-	m.sideSel = "p:alpha"
-	drain(t, m, keyPress(m, "c"))
-	if len(src.saveCleared) != 1 || !strings.Contains(m.msg, "c on a running coordinator") {
-		t.Fatalf("c on a project: cleared %v msg %q", src.saveCleared, m.msg)
+	drain(t, m, m.prefixCommand("C"))
+	if !slices.Equal(src.saveCleared, []string{"alpha"}) || !strings.Contains(m.msg, "asked alpha's coordinator to save what it learned") {
+		t.Fatalf("prefix+C: cleared %v msg %q", src.saveCleared, m.msg)
 	}
 	src.data.Sessions[0].Context = 20_000
 	m.setData(src.data)
-	m.sideSel = "c:alpha"
 	if foot := bar(); strings.Contains(foot, "save and clear") {
 		t.Errorf("footer below the hint: %q", foot)
 	}
@@ -54,7 +54,7 @@ func TestCoordSaveClear(t *testing.T) {
 	lines, hits := coordLines(w, 60, time.Now())
 	found := false
 	for i, l := range lines {
-		if strings.Contains(ansi.Strip(l), "c or click: save and clear") {
+		if strings.Contains(ansi.Strip(l), "prefix+C or click: save and clear") {
 			found = hits[i].kind == hitSaveClear
 		}
 	}
@@ -79,14 +79,17 @@ func TestCoordSaveClear(t *testing.T) {
 	}
 }
 
-// TestPanelSaveClearKey: c is the panel's save-clear key, rebindable,
-// and the details panel leaves it to the list.
-func TestPanelSaveClearKey(t *testing.T) {
-	if op, ok := panelOp("c"); !ok || op != panelSaveClear {
-		t.Fatalf("c: op %d ok %v", op, ok)
+// TestSaveClearNotPlainC: plain c is neither the sidebar's nor the
+// info panel's key any more, and prefix+C is a locked prefix command.
+func TestSaveClearNotPlainC(t *testing.T) {
+	if op, ok := panelOp("c"); ok {
+		t.Errorf("panel c: op %d", op)
 	}
-	if op, ok := sideOp("c"); !ok || op != sideSaveClear {
-		t.Fatalf("sidebar c: op %d ok %v", op, ok)
+	if op, ok := sideOp("c"); ok {
+		t.Errorf("sidebar c: op %d", op)
+	}
+	if !prefixStep(chord{}, true, uv.Key{Code: 'C', Text: "C"}, false).saveClear {
+		t.Error("prefix+C isn't save and clear")
 	}
 	m, _, _ := foldDash(t)
 	if _, ok := m.detailsKey("c"); ok {

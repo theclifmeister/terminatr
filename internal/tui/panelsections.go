@@ -468,7 +468,6 @@ const (
 	panelFold
 	panelEnter
 	panelBack
-	panelSaveClear
 )
 
 // panelAction is a panel key: its id, its default keys, what it does and
@@ -493,7 +492,6 @@ var panelActions = []panelAction{
 	{id: "panel.unfold", keys: []string{"right"}, op: panelUnfold, label: "→ ←", help: "on a selected header: unfold / fold the section, in every console of the view"},
 	{id: "panel.fold", keys: []string{"left"}, op: panelFold},
 	{id: "panel.enter", keys: []string{"enter"}, op: panelEnter, label: "enter", help: "on a selected header: open the view its mod names, else fold or unfold it; with none selected, as before (the thread's task; on the dashboard, the list's enter)"},
-	{id: "panel.save-clear", keys: []string{"c"}, op: panelSaveClear, label: "c", help: "beside a coordinator: save and clear its conversation, as auto_clear does (tm clear): it is asked to save what it learned, then cleared at its next idle moment"},
 	{id: "panel.back", keys: []string{"esc"}, op: panelBack, label: "esc", help: "drop the selected header, then give the keyboard back", fixed: true},
 }
 

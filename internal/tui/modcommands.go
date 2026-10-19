@@ -42,7 +42,7 @@ func runningCommands(list []mod.ModCommand, noMods bool) []mod.ModCommand {
 // key k on the dashboard and after the prefix, "" when no core key is k:
 // a command may have it then.
 func coreKey(k, prefix string) string {
-	if slices.Contains(lockedKeys, k) || k == prefix || k == "N" {
+	if slices.Contains(lockedKeys, k) || k == prefix || k == "N" || k == "C" {
 		return "locked"
 	}
 	if prefixCommands[k] || paneCommands[k] {

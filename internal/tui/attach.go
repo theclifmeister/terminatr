@@ -287,6 +287,8 @@ func Attach(opts Options) (res Result, err error) {
 		go c.askRemote()
 	case "R":
 		go c.repaint()
+	case "C":
+		go c.saveClearFocus()
 	case "tab", "|":
 		go c.paneCommand(opts.Command)
 	case "":
@@ -1360,6 +1362,8 @@ func (c *client) run(do prefixDo) {
 		c.askRemote()
 	case do.repaint:
 		c.repaint()
+	case do.saveClear:
+		c.saveClearFocus()
 	}
 }
 
@@ -1399,6 +1403,9 @@ type prefixDo struct {
 	remote bool
 	// repaint asks a paired server's pane for a fresh repaint (prefix+R).
 	repaint bool
+	// saveClear saves and clears the focused session's project's
+	// coordinator (prefix+C).
+	saveClear bool
 	// command: a mod's command has the key (attachcommands.go).
 	command bool
 }
@@ -1446,6 +1453,8 @@ func prefixStep(prefix chord, pending bool, k uv.Key, dashboard bool) prefixDo {
 		return prefixDo{remote: true}
 	case name == "R":
 		return prefixDo{repaint: true}
+	case name == "C":
+		return prefixDo{saveClear: true}
 	case popupCommands[name] && dashboard:
 		return prefixDo{popup: name}
 	case prefixCommands[name] && dashboard:
