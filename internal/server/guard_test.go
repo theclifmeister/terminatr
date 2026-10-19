@@ -17,6 +17,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -588,6 +589,9 @@ func TestAccessThreadGitDirs(t *testing.T) {
 	if want := in("packed-refs", "packed-refs.lock"); !slices.Equal(a.WriteFiles, want) {
 		t.Errorf("worktree: write files %q, want %q", a.WriteFiles, want)
 	}
+	if runs := gitx.RunsDir(realPath(s.opts.Paths.Home)); !slices.Contains(a.NoWrite, runs) {
+		t.Errorf("worktree: tm's git runs folder %s not in no-write %q", runs, a.NoWrite)
+	}
 	for _, n := range []string{"hooks", "info", "modules", "worktrees/other"} {
 		if !slices.Contains(a.NoWrite, filepath.Join(common, n)) {
 			t.Errorf("worktree: %s not in no-write %q", n, a.NoWrite)
@@ -601,6 +605,11 @@ func TestAccessThreadGitDirs(t *testing.T) {
 	for _, n := range []string{"config.worktree", "commondir"} {
 		if !slices.Contains(a.NoWriteFiles, filepath.Join(common, "worktrees", "wt", n)) {
 			t.Errorf("worktree: its own %s not in no-write files %q", n, a.NoWriteFiles)
+		}
+	}
+	for _, n := range []string{"HEAD", "index"} {
+		if !slices.Contains(a.NoWriteFiles, filepath.Join(common, n)) {
+			t.Errorf("worktree: the main checkout's %s not in no-write files %q", n, a.NoWriteFiles)
 		}
 	}
 	if slices.Contains(a.NoWrite, filepath.Join(common, "worktrees", "wt")) {
@@ -622,6 +631,11 @@ func TestAccessThreadGitDirs(t *testing.T) {
 	}
 	if !slices.Contains(m.NoWrite, filepath.Join(common, "modules")) {
 		t.Errorf("main checkout: modules not in no-write %q", m.NoWrite)
+	}
+	for _, n := range []string{"HEAD", "index"} {
+		if slices.Contains(m.NoWriteFiles, filepath.Join(common, n)) {
+			t.Errorf("main checkout: its own %s in no-write files %q", n, m.NoWriteFiles)
+		}
 	}
 	// Nothing written is the git dir or holds what git runs or reads
 	// as configuration.
