@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -16,19 +17,21 @@ import (
 
 const taskUsage = `usage: tm task <command> [--project <slug>] [--json]
 
-  add "title" [--notes "…" | --notes-file F] [--step "…"]... [--status S] [--owner O]
+  add "title" [--notes "…" | --notes-file F] [--step "…"]... [--status S] [--owner O] [--repo R]
       [--template NAME]         a mod's task template: its title around "title", its notes, its steps first
-  add --json < plan.json        bulk: [{"title","notes","steps":[…],"status","owner"}]
+      --repo R                  the repo its thread works in: a project repo's name or path, or none
+                                (a folder without git); needed to delegate in a project with several repos
+  add --json < plan.json        bulk: [{"title","notes","steps":[…],"status","owner","repo"}]
   list [--status a,b] [--needs-you] [--archived]
   show T12
   status T12 <open|ready|started|blocked|review|done> [--note "…"]
   status T12 done --approved-by-user
                                 the coordinator, once the user accepted the work
-  edit T12 [--title "…"] [--notes "…" | --notes-file F] [--owner O]
+  edit T12 [--title "…"] [--notes "…" | --notes-file F] [--owner O] [--repo R]
   steps T12 add "text" | check N | uncheck N | rename N "text" | remove N
   archive T12 | unarchive T12
-  delegate T12 [--agent A] [--model M] [--repo PATH] [--base B] [--approved-by-user] [--over-cap]
-                                = tm thread start --task T12
+  delegate T12 [--agent A] [--model M] [--repo R] [--base B] [--approved-by-user] [--over-cap]
+                                = tm thread start --task T12; --repo overrides the task's repo
 
 Exit codes: 0 done or already true, 1 refused, 2 usage, 3 I/O.`
 
@@ -45,7 +48,7 @@ func runTask(e *Env, args []string) error {
 	case "add":
 		notes, notesFile := f.String("notes"), f.String("notes-file")
 		steps, status, owner := f.List("step"), f.String("status"), f.String("owner")
-		template := f.String("template")
+		template, repo := f.String("template"), f.String("repo")
 		run = func(p *project.Project, s *tasks.Store, pos []string) error {
 			var tpl *mod.Template
 			if *template != "" {
@@ -58,7 +61,7 @@ func runTask(e *Env, args []string) error {
 				}
 				tpl = &t
 			}
-			return taskAdd(e, s, pos, *asJSON, f, *notes, *notesFile, *steps, *status, *owner, tpl)
+			return taskAdd(e, p, s, pos, *asJSON, f, *notes, *notesFile, *steps, *status, *owner, *repo, tpl)
 		}
 	case "list", "ls":
 		status, needsYou, archived := f.String("status"), f.Bool("needs-you"), f.Bool("archived")
@@ -113,15 +116,16 @@ func runTask(e *Env, args []string) error {
 		}
 	case "edit":
 		title, notes, notesFile, owner := f.String("title"), f.String("notes"), f.String("notes-file"), f.String("owner")
+		repo := f.String("repo")
 		run = func(p *project.Project, s *tasks.Store, pos []string) error {
-			id, err := oneRef(pos, 1, "edit T12 [--title …] [--notes … | --notes-file F] [--owner O]")
+			id, err := oneRef(pos, 1, "edit T12 [--title …] [--notes … | --notes-file F] [--owner O] [--repo R]")
 			if err != nil {
 				return err
 			}
-			if !f.anySet("title", "notes", "notes-file", "owner") {
-				return usagef("nothing to edit: pass --title, --notes, --notes-file or --owner")
+			if !f.anySet("title", "notes", "notes-file", "owner", "repo") {
+				return usagef("nothing to edit: pass --title, --notes, --notes-file, --owner or --repo")
 			}
-			var tp, np, op *string
+			var tp, np, op, rp *string
 			if f.IsSet("title") {
 				tp = title
 			}
@@ -131,7 +135,11 @@ func runTask(e *Env, args []string) error {
 			if f.IsSet("owner") {
 				op = owner
 			}
-			res, err := s.Edit(e.Caller, id, tp, np, op)
+			if f.IsSet("repo") {
+				r := e.taskRepo(p, *repo)
+				rp = &r
+			}
+			res, err := s.Edit(e.Caller, id, tp, np, op, rp)
 			return e.done(res, err, *asJSON, "edited")
 		}
 	case "steps", "step":
@@ -154,7 +162,7 @@ func runTask(e *Env, args []string) error {
 	case "delegate":
 		opts := startFlags(f)
 		run = func(p *project.Project, s *tasks.Store, pos []string) error {
-			id, err := oneRef(pos, 1, "delegate T12 [--agent A] [--model M] [--repo PATH] [--base B] [--approved-by-user] [--over-cap]")
+			id, err := oneRef(pos, 1, "delegate T12 [--agent A] [--model M] [--repo R] [--base B] [--approved-by-user] [--over-cap]")
 			if err != nil {
 				return err
 			}
@@ -206,6 +214,23 @@ func (e *Env) notesArg(f *flagSet, notes, notesFile *string) (*string, error) {
 	return nil, nil
 }
 
+// taskRepo is a task's repo as given, a path among them made absolute
+// and spelt as the project lists the repo, so the task names it as tm
+// context does; the store checks it (tasks.FindRepo).
+func (e *Env) taskRepo(p *project.Project, v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" || v == tasks.NoRepo || !strings.ContainsAny(v, `/\`) && !strings.HasPrefix(v, ".") {
+		return v
+	}
+	abs := e.abs(v)
+	for _, r := range p.Repos {
+		if filepath.Clean(r) == filepath.Clean(abs) || realPath(r) == realPath(abs) {
+			return r
+		}
+	}
+	return abs
+}
+
 // done prints the outcome of a single-task change.
 func (e *Env) done(res tasks.Result, err error, asJSON bool, what string) error {
 	if err != nil {
@@ -241,23 +266,23 @@ func findTemplate(slug, ref string) (mod.Template, error) {
 // taskAdd adds the tasks: one from the title and flags, laid on tpl when
 // given (its title around the title; the notes flag's, else its notes;
 // its steps, then the step flags'), or a JSON plan's.
-func taskAdd(e *Env, s *tasks.Store, pos []string, asJSON bool, f *flagSet, notes, notesFile string, steps []string, status, owner string, tpl *mod.Template) error {
+func taskAdd(e *Env, p *project.Project, s *tasks.Store, pos []string, asJSON bool, f *flagSet, notes, notesFile string, steps []string, status, owner, repo string, tpl *mod.Template) error {
 	var items []tasks.NewTask
 	switch {
 	case len(pos) == 0 && asJSON:
-		if f.anySet("notes", "notes-file", "step", "status", "owner") {
+		if f.anySet("notes", "notes-file", "step", "status", "owner", "repo") {
 			return usagef("a JSON plan on stdin carries its own fields; drop the other flags")
 		}
 		dec := json.NewDecoder(e.Stdin)
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&items); err != nil {
-			return usagef("plan on stdin: %v (want [{\"title\",\"notes\",\"steps\",\"status\",\"owner\"}])", err)
+			return usagef("plan on stdin: %v (want [{\"title\",\"notes\",\"steps\",\"status\",\"owner\",\"repo\"}])", err)
 		}
 		if len(items) == 0 {
 			return usagef("the plan is empty")
 		}
 	case len(pos) == 1:
-		it := tasks.NewTask{Title: pos[0], Steps: steps, Status: status, Owner: owner}
+		it := tasks.NewTask{Title: pos[0], Steps: steps, Status: status, Owner: owner, Repo: repo}
 		if tpl != nil {
 			title, tnotes, tsteps := tpl.Apply(pos[0])
 			it.Title, it.Notes, it.Steps = title, tnotes, append(tsteps, steps...)
@@ -272,6 +297,9 @@ func taskAdd(e *Env, s *tasks.Store, pos []string, asJSON bool, f *flagSet, note
 		items = []tasks.NewTask{it}
 	default:
 		return usagef("usage: tm task add \"title\" [flags] | tm task add --json < plan.json")
+	}
+	for i := range items {
+		items[i].Repo = e.taskRepo(p, items[i].Repo)
 	}
 	results, err := s.Add(e.Caller, items)
 	if err != nil {

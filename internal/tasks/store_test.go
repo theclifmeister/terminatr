@@ -208,20 +208,20 @@ func TestEdit(t *testing.T) {
 	s, _ := newStore(t)
 	mustAdd(t, s, coord, NewTask{Title: "A", Notes: "n"})
 	title, notes, empty := "B", "new notes", ""
-	if res, err := s.Edit(coord, 1, &title, &notes, nil); err != nil || !res.Changed {
+	if res, err := s.Edit(coord, 1, &title, &notes, nil, nil); err != nil || !res.Changed {
 		t.Fatal(err)
 	}
-	if res, _ := s.Edit(coord, 1, &title, &notes, nil); res.Changed {
+	if res, _ := s.Edit(coord, 1, &title, &notes, nil, nil); res.Changed {
 		t.Fatal("edit not idempotent")
 	}
-	if _, err := s.Edit(coord, 1, nil, &empty, nil); err != nil {
+	if _, err := s.Edit(coord, 1, nil, &empty, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	bad := "## Done"
-	if _, err := s.Edit(coord, 1, nil, &bad, nil); code(err) != "invalid-notes" {
+	if _, err := s.Edit(coord, 1, nil, &bad, nil, nil); code(err) != "invalid-notes" {
 		t.Fatalf("bad notes: %v", err)
 	}
-	if _, err := s.Edit(thread, 1, &title, nil, nil); code(err) != "coordinator-only" {
+	if _, err := s.Edit(thread, 1, &title, nil, nil, nil); code(err) != "coordinator-only" {
 		t.Fatalf("thread edit: %v", err)
 	}
 	tk, _ := s.Get(1)

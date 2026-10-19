@@ -75,21 +75,9 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	if o.title == "" {
 		return usagef("a thread needs a title, or --task T12")
 	}
-	repo := o.repo
-	if repo != "" {
-		repo = e.abs(repo)
-		// An agent names only the project's repos, which the user adds:
-		// any other path would give a thread a worktree of whatever
-		// repository the agent names. Asked first, so the refusal says
-		// nothing about the path.
-		if e.Caller.IsAgent() && !listedRepo(p, repo) {
-			return &tasks.Error{Code: "unlisted-repo", Msg: fmt.Sprintf("--repo %s is not one of the project's repos (tm context lists them); only the user adds one", repo)}
-		}
-		if fi, err := os.Stat(repo); err != nil || !fi.IsDir() {
-			return usagef("--repo %s is not a directory", repo)
-		}
-	} else if len(p.Repos) > 0 {
-		repo = p.Repos[0]
+	repo, err := e.threadRepo(p, o.repo, task)
+	if err != nil {
+		return err
 	}
 	if o.base != "" && repo == "" {
 		return usagef("--base needs a repo")
@@ -333,6 +321,55 @@ func memoryDetail(m thread.Memory) string {
 		d += " (" + strings.Join(paths, ", ") + ")"
 	}
 	return fmt.Sprintf("%s, %d standing", d, standing)
+}
+
+// threadRepo is the repo a new thread works in, "" for a plain folder
+// (docs/SPEC.md §9): --repo (flag), else its task's repo, either a
+// project repo by name or path or tasks.NoRepo; with neither, the
+// project's one repo, or none when it has none. A project with several
+// repos and no choice is refused, pick-repo: tm never guesses which.
+func (e *Env) threadRepo(p *project.Project, flag string, task *tasks.Task) (string, error) {
+	switch {
+	case flag != "":
+		if repo, err := tasks.FindRepo(p.Repos, flag); err == nil {
+			return repo, nil
+		} else if !strings.ContainsAny(flag, `/\`) && !strings.HasPrefix(flag, ".") {
+			return "", err // a name, not a path
+		}
+		repo := e.abs(flag)
+		// An agent names only the project's repos, which the user adds:
+		// any other path would give a thread a worktree of whatever
+		// repository the agent names. Asked first, so the refusal says
+		// nothing about the path.
+		if e.Caller.IsAgent() && !listedRepo(p, repo) {
+			return "", &tasks.Error{Code: "unlisted-repo", Msg: fmt.Sprintf("--repo %s is not one of the project's repos (tm context lists them); only the user adds one", repo)}
+		}
+		if fi, err := os.Stat(repo); err != nil || !fi.IsDir() {
+			return "", usagef("--repo %s is not a directory", repo)
+		}
+		return repo, nil
+	case task != nil && task.Repo != "":
+		repo, err := tasks.FindRepo(p.Repos, task.Repo)
+		if err != nil {
+			var te *tasks.Error
+			if errors.As(err, &te) {
+				te.Msg = task.Ref() + "'s repo: " + te.Msg + "; change it with tm task edit " + task.Ref() + " --repo, or pass --repo"
+			}
+			return "", err
+		}
+		return repo, nil
+	}
+	switch len(p.Repos) {
+	case 0:
+		return "", nil
+	case 1:
+		return p.Repos[0], nil
+	}
+	set := "set the task's with tm task edit T12 --repo NAME, or pass --repo NAME"
+	if task != nil {
+		set = fmt.Sprintf("set %s's with tm task edit %s --repo NAME, or pass --repo NAME", task.Ref(), task.Ref())
+	}
+	return "", &tasks.Error{Code: "pick-repo", Msg: fmt.Sprintf("the project has %d repos and nothing says which this thread works in: %s (or none, for a folder without git). Its repos: %s", len(p.Repos), set, tasks.RepoList(p.Repos))}
 }
 
 // listedRepo reports whether dir is one of p's repos, either spelling

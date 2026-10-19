@@ -228,7 +228,7 @@ func (p *Project) Path(elem ...string) string {
 // Tasks returns the task store for this project, journaling into it and
 // raising confirmations in its inbox.
 func (p *Project) Tasks() *tasks.Store {
-	return &tasks.Store{Dir: p.Dir, Slug: p.Slug, Now: func() time.Time { return now() }, Events: events{p}}
+	return &tasks.Store{Dir: p.Dir, Slug: p.Slug, Now: func() time.Time { return now() }, Events: events{p}, Repos: p.Repos}
 }
 
 // Options for New.

@@ -114,11 +114,24 @@ func (e *Env) threadResolve(p *project.Project, id string, discard bool) error {
 		}
 	case r.Adopted:
 		did = append(did, "kept folder "+r.Worktree+" (adopted)")
+	case discard:
+		// discardable checked that it is tm's own folder.
+		if err := os.RemoveAll(r.Worktree); err != nil {
+			did = append(did, "kept folder "+r.Worktree+" ("+textsafe.Line(err.Error(), 120)+")")
+		} else {
+			did = append(did, "removed folder "+r.Worktree+" (discarded)")
+		}
 	default:
+		// A plain folder holds what was not handed in (thread.Leftovers):
+		// only an empty one goes.
 		if err := os.Remove(r.Worktree); err == nil || errors.Is(err, os.ErrNotExist) {
 			did = append(did, "removed folder "+r.Worktree)
 		} else {
-			did = append(did, "kept folder "+r.Worktree+" (not empty)")
+			why := "not empty"
+			if left, err := thread.Leftovers(r.Worktree); err == nil && left != "" {
+				why = left
+			}
+			did = append(did, "kept folder "+r.Worktree+" ("+why+"; tm thread resolve "+id+" --discard removes it)")
 		}
 	}
 	// Its own temp folder (T587): scratchpads and task output, nothing
@@ -216,6 +229,10 @@ func branchCleanup(p *project.Project, r *thread.Record, discard bool) (did, del
 // leftover says whether a resolved thread still has a worktree or branch
 // of tm's own for resolve --discard to clean up.
 func leftover(r *thread.Record) bool {
+	if r.Plain() {
+		_, err := os.Stat(r.Worktree)
+		return err == nil
+	}
 	if r.Checkout || r.Adopted || r.Repo == "" {
 		return false
 	}
@@ -226,7 +243,8 @@ func leftover(r *thread.Record) bool {
 }
 
 // discardable says whether resolve --discard may throw the thread's
-// worktree and branch away: only a worktree of tm's own, whose branch
+// worktree and branch away: a plain folder tm made for it (no repo), or
+// only a worktree of tm's own, whose branch
 // holds no commit that is on no remote (in a repo without remotes, not
 // merged into another branch). Uncommitted changes are what it discards.
 func discardable(p *project.Project, r *thread.Record) error {
@@ -236,6 +254,12 @@ func discardable(p *project.Project, r *thread.Record) error {
 	switch {
 	case r.Checkout || r.Adopted:
 		return refuse("thread %s is adopted: its checkout is the user's, not tm's to remove", r.ID)
+	case r.Plain():
+		// A plain folder has no branch: discarding throws its files away.
+		if err := thread.OwnFolder(p.Slug, r); err != nil {
+			return refuse("%s; nothing discarded", err)
+		}
+		return nil
 	case r.Repo == "":
 		return refuse("thread %s has no worktree to discard; resolve it", r.ID)
 	case !followRepo(p, r):

@@ -445,9 +445,8 @@ func (e *Env) previewMemory(p *project.Project, of string, asJSON bool) error {
 			r = rec
 		} else {
 			r = &thread.Record{Title: t.Title, Task: t.Ref()}
-			if len(p.Repos) > 0 {
-				r.Repo = p.Repos[0]
-			}
+			// The repo it would start in; none when that isn't settled.
+			r.Repo, _ = e.threadRepo(p, "", t)
 		}
 	}
 	mem := thread.BriefMemory(p, r)

@@ -857,6 +857,23 @@ func TestUnsavedAdoptedCheckout(t *testing.T) {
 	}
 }
 
+// TestUnsavedPlainFolder: a thread without a repo holds auto-close while
+// its folder has files nobody handed in; an empty one, or an adopted
+// folder (the user's, kept), doesn't.
+func TestUnsavedPlainFolder(t *testing.T) {
+	dir := t.TempDir()
+	if why, err := unsaved(&thread.Record{Worktree: dir}, ""); err != nil || why != "" {
+		t.Fatalf("empty: %q, %v", why, err)
+	}
+	os.WriteFile(filepath.Join(dir, "notes.md"), []byte("x"), 0o644)
+	if why, err := unsaved(&thread.Record{Worktree: dir}, ""); err != nil || why != "1 file not handed in" {
+		t.Fatalf("a file left: %q, %v", why, err)
+	}
+	if why, err := unsaved(&thread.Record{Worktree: dir, Adopted: true}, ""); err != nil || why != "" {
+		t.Fatalf("adopted: %q, %v", why, err)
+	}
+}
+
 // TestPRFollowUpWaitsForSession: checks that fail, and changes asked
 // for, while the thread has no live session yet (a slow start) are
 // followed up once on a later poll that finds it, and not again.

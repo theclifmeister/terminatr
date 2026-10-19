@@ -36,6 +36,7 @@ type Store struct {
 	Slug   string           // the project's slug, for the caller check
 	Now    func() time.Time // nil means time.Now
 	Events Events           // nil means no journal
+	Repos  []string         // the project's repos, which a task's repo names (checkRepo)
 }
 
 // TasksPath is <project>/TASKS.md.
@@ -191,6 +192,7 @@ type NewTask struct {
 	Steps  []string `json:"steps,omitempty"`
 	Status string   `json:"status,omitempty"`
 	Owner  string   `json:"owner,omitempty"`
+	Repo   string   `json:"repo,omitempty"`
 }
 
 // AddResult reports one NewTask: created, existing or failed.
@@ -279,7 +281,11 @@ func (s *Store) addOne(c caller.Caller, b *Board, it NewTask) (AddResult, *Task)
 	if err != nil {
 		return fail(err)
 	}
-	t := &Task{ID: b.NextID, Title: title, Status: status, Notes: notes, Owner: owner, Created: s.today(), Updated: s.today()}
+	repo, err := s.checkRepo(it.Repo)
+	if err != nil {
+		return fail(err)
+	}
+	t := &Task{ID: b.NextID, Title: title, Status: status, Notes: notes, Owner: owner, Repo: repo, Created: s.today(), Updated: s.today()}
 	for _, st := range it.Steps {
 		text, err := checkStep(st)
 		if err != nil {
@@ -381,9 +387,9 @@ func (s *Store) refuseDone(c caller.Caller, id int) (Result, error) {
 	return Result{}, refuse("human-only", fmt.Sprintf("only the user accepts work: once they tell you %s is done, run tm task status %s done --approved-by-user", t.Ref(), t.Ref()))
 }
 
-// Edit changes title, notes or owner; nil fields are left alone.
-func (s *Store) Edit(c caller.Caller, id int, title, notes, owner *string) (Result, error) {
-	var t2, n2, o2 string
+// Edit changes title, notes, owner or repo; nil fields are left alone.
+func (s *Store) Edit(c caller.Caller, id int, title, notes, owner, repo *string) (Result, error) {
+	var t2, n2, o2, r2 string
 	var err error
 	if title != nil {
 		if t2, err = checkTitle(*title); err != nil {
@@ -402,6 +408,11 @@ func (s *Store) Edit(c caller.Caller, id int, title, notes, owner *string) (Resu
 			return Result{}, err
 		}
 	}
+	if repo != nil {
+		if r2, err = s.checkRepo(*repo); err != nil {
+			return Result{}, err
+		}
+	}
 	res, err := s.edit(c, id, opWrite, func(t *Task) (bool, error) {
 		changed := false
 		if title != nil && t.Title != t2 {
@@ -412,6 +423,9 @@ func (s *Store) Edit(c caller.Caller, id int, title, notes, owner *string) (Resu
 		}
 		if owner != nil && t.Owner != o2 {
 			t.Owner, changed = o2, true
+		}
+		if repo != nil && t.Repo != r2 {
+			t.Repo, changed = r2, true
 		}
 		return changed, nil
 	})

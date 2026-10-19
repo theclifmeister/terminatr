@@ -327,9 +327,13 @@ func (t *Ticker) host(p *project.Project, repo string) codehost.Host {
 }
 
 // unsaved checks a thread's worktree; a thread without a repo has only
-// a folder, which resolve keeps unless it is empty (an adopted one
-// always), and resolve keeps an adopted thread's checkout.
+// a folder, which holds what wasn't handed in until it is empty
+// (thread.Leftovers), and resolve keeps an adopted thread's folder or
+// checkout.
 func unsaved(r *thread.Record, pushed string) (string, error) {
+	if r.Plain() {
+		return thread.Leftovers(r.Worktree)
+	}
 	// An adopted thread's own checkout stays where it is: closing it
 	// loses nothing there.
 	if r.Repo == "" || r.Checkout {
@@ -766,7 +770,11 @@ func (t *Ticker) autoClose(p *project.Project, r *thread.Record, m *threadMemo, 
 	if why != "" {
 		if m.Held != why {
 			m.Held = why
-			t.item(p, KindCloseHeld, r.ID, fmt.Sprintf("%s finished but was not auto-closed: %s in its worktree; have it commit and push, or resolve it yourself (tm thread resolve %s keeps the worktree)", r.ID, why, r.ID), false)
+			msg := fmt.Sprintf("%s finished but was not auto-closed: %s in its worktree; have it commit and push, or resolve it yourself (tm thread resolve %s keeps the worktree)", r.ID, why, r.ID)
+			if r.Plain() {
+				msg = fmt.Sprintf("%s finished but was not auto-closed: %s in its folder (no git); have it attach what it made to a report (tm report --attach) and empty the folder, or resolve it yourself (tm thread resolve %s keeps the folder; --discard, on the user's word, removes it)", r.ID, why, r.ID)
+			}
+			t.item(p, KindCloseHeld, r.ID, msg, false)
 		}
 		return
 	}

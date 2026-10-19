@@ -27,6 +27,10 @@
   clean and the branch has no commits, so `tm thread resolve` (and
   auto-close) can remove both. Files left uncommitted in the worktree
   keep it and its branch.
+- A thread without a repo works in a plain folder: no git, no branch,
+  no PR. Everything you make goes in with `tm report --attach FILE`;
+  leave the folder empty, since tm keeps it, and auto-close waits,
+  while files are left in it.
 - You can't change the task's status, notes or other tasks: the
   coordinator moves it after reading your report.
 - When something you need is missing (a decision, access, a file,

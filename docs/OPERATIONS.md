@@ -95,6 +95,8 @@ tm skill coordinator                 # the coordinator's standing rules, version
 
 `tm task help` lists every task command. Exit codes: 0 done or already true, 1 refused (with a stable code such as `human-only`), 2 usage error, 3 I/O error.
 
+**Which repository a thread works in.** Each thread works in one of the project's repositories. With one, it is that one. With several, the task says which: `tm task add "Fix the form" --repo web` (the repository's folder name, or its path), or later `tm task edit T1 --repo web`; `tm task show` and `tm context` show it, and the coordinator's `--repo` on `tm task delegate` overrides it. A task that names none in a project with several repositories isn't guessed at: delegating it is refused (`pick-repo`, listing the repositories), and the coordinator asks you which; `D` on the dashboard says so before it asks. For work that makes no pull request (research, notes, a review), `--repo none` gives the thread a plain folder without git, also in a project with repositories; a project without repositories always does. Such a thread hands in what it makes as report attachments (the project popup's Library). Its folder is removed when the thread closes only if it is empty: auto-close waits while files are left in it and tells the coordinator, and `tm thread resolve <id>` keeps it, saying how many files are in it; only `tm thread resolve <id> --discard`, on your word, throws them away. Work over several repositories is one task per repository.
+
 ## Where state lives
 
 Everything is under `~/.terminatr`, or `$TERMINATR_HOME` when that is set. Nothing terminatr-owned is written into your repositories or thread worktrees.
