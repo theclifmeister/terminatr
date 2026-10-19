@@ -54,9 +54,12 @@ func Leftovers(dir string) (string, error) {
 }
 
 // OwnFolder refuses a plain folder that isn't where tm makes r's
-// (WorktreeDir: ~/.terminatr/worktrees/<slug>/<id>…), so removing it
-// can only remove a folder tm made: the record names the path.
-func OwnFolder(slug string, r *Record) error {
+// (WorktreeDir: ~/.terminatr/worktrees/<slug>/<id>…, r.ID being the id
+// Load found it under), one holding a .git entry (a git worktree or
+// checkout, whatever the record says of its repo), or one another of
+// recs names, so removing it can only remove a plain folder tm made for
+// r: the record names the path.
+func OwnFolder(slug string, r *Record, recs []*Record) error {
 	root, err := home.WorktreesDir()
 	if err != nil {
 		return err
@@ -68,6 +71,14 @@ func OwnFolder(slug string, r *Record) error {
 	}
 	if fi, err := os.Lstat(dir); err == nil && !fi.IsDir() {
 		return fmt.Errorf("%s is not a folder", r.Worktree)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
+		return fmt.Errorf("%s holds a .git: it is a git checkout, not a plain folder", r.Worktree)
+	}
+	for _, o := range recs {
+		if o.ID != r.ID && o.Worktree != "" && filepath.Clean(o.Worktree) == dir {
+			return fmt.Errorf("%s is also %s's folder", r.Worktree, o.ID)
+		}
 	}
 	return nil
 }

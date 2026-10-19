@@ -131,6 +131,15 @@ func Load(p *project.Project, id string) (*Record, error) {
 	if err := r.check(); err != nil {
 		return nil, fmt.Errorf("%s: %w", recordPath(p, id), err)
 	}
+	// A record is the thread whose folder holds it: what is checked
+	// against its id (OwnFolder) must be that thread's. One without an
+	// id takes its folder's.
+	switch {
+	case r.ID == "":
+		r.ID = id
+	case r.ID != id:
+		return nil, fmt.Errorf("%s: id %q is not %s", recordPath(p, id), r.ID, id)
+	}
 	return &r, nil
 }
 

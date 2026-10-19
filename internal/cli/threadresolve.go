@@ -256,7 +256,11 @@ func discardable(p *project.Project, r *thread.Record) error {
 		return refuse("thread %s is adopted: its checkout is the user's, not tm's to remove", r.ID)
 	case r.Plain():
 		// A plain folder has no branch: discarding throws its files away.
-		if err := thread.OwnFolder(p.Slug, r); err != nil {
+		recs, err := thread.List(p)
+		if err != nil {
+			return refuse("can't read the project's threads (%s); nothing discarded", textsafe.Line(err.Error(), 120))
+		}
+		if err := thread.OwnFolder(p.Slug, r, recs); err != nil {
 			return refuse("%s; nothing discarded", err)
 		}
 		return nil

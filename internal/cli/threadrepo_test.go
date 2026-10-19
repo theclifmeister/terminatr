@@ -180,3 +180,38 @@ func TestResolvePlainFolder(t *testing.T) {
 		t.Fatal("a refused discard removed a file")
 	}
 }
+
+// TestDiscardEditedRecord: an edited thread.toml never gets resolve
+// --discard to remove a git worktree as a plain folder: not with its
+// repo cleared (the .git stays), nor with its id changed to another
+// thread's (Load refuses it).
+func TestDiscardEditedRecord(t *testing.T) {
+	h := newHarness(t)
+	h.ok(human, "project", "new", "demo")
+	_, rec := threadWithWorktree(t, h, "demo")
+	os.WriteFile(filepath.Join(rec.Worktree, "work.md"), []byte("work"), 0o644)
+	p, _ := project.Open("demo")
+	path := thread.Path(p, rec.ID, "thread.toml")
+	orig, _ := os.ReadFile(path)
+	edit := func(from, to string) {
+		t.Helper()
+		b, _ := os.ReadFile(path)
+		if !strings.Contains(string(b), from) {
+			t.Fatalf("thread.toml lacks %q:\n%s", from, b)
+		}
+		os.WriteFile(path, []byte(strings.Replace(string(b), from, to, 1)), 0o644)
+	}
+
+	edit(`repo = "`+rec.Repo+`"`, ``)
+	h.expect(1, "holds a .git", coord, "thread", "resolve", rec.ID, "--discard", "--project", "demo")
+
+	os.WriteFile(path, orig, 0o644)
+	other, _ := thread.Create(p, thread.Record{Title: "Other", Agent: "claude", State: thread.Stopped})
+	edit(`id = "`+rec.ID+`"`, `id = "`+other.ID+`"`)
+	if code, _, _ := h.run(coord, "", "thread", "resolve", rec.ID, "--discard", "--project", "demo"); code == 0 {
+		t.Fatal("resolve took a record with another thread's id")
+	}
+	if _, err := os.Stat(filepath.Join(rec.Worktree, "work.md")); err != nil {
+		t.Fatalf("the worktree lost its work: %v", err)
+	}
+}

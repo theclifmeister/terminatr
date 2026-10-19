@@ -30,6 +30,24 @@ func TestLeftovers(t *testing.T) {
 	}
 }
 
+// TestLoadChecksID: a record whose id isn't the one it is loaded under
+// (an edited thread.toml) is refused, so nothing checked against its id
+// trusts it.
+func TestLoadChecksID(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	p, err := project.New(project.Options{Slug: "demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, _ := Create(p, Record{Title: "Notes"})
+	path := Path(p, r.ID, "thread.toml")
+	b, _ := os.ReadFile(path)
+	os.WriteFile(path, []byte(strings.Replace(string(b), `id = "t-0001"`, `id = "t-0002"`, 1)), 0o644)
+	if _, err := Load(p, r.ID); err == nil || !strings.Contains(err.Error(), `id "t-0002" is not t-0001`) {
+		t.Fatalf("Load = %v", err)
+	}
+}
+
 // TestPlainBrief: a thread without a repo is told it has no git, no
 // branch and no PR, and how its output is kept; one with a repo isn't.
 func TestPlainBrief(t *testing.T) {
@@ -40,11 +58,22 @@ func TestPlainBrief(t *testing.T) {
 	}
 	wt, _ := WorktreeDir("demo", "t-0001", "Notes")
 	plain, _ := Create(p, Record{Title: "Notes", Worktree: wt})
-	if err := OwnFolder("demo", plain); err != nil {
+	if err := OwnFolder("demo", plain, nil); err != nil {
 		t.Fatalf("its own folder: %v", err)
 	}
-	if err := OwnFolder("demo", &Record{ID: "t-0002", Worktree: wt}); err == nil {
+	if err := OwnFolder("demo", &Record{ID: "t-0002", Worktree: wt}, nil); err == nil {
 		t.Fatal("another thread's folder passed")
+	}
+	// A .git in it makes it a checkout, whatever the record says.
+	os.MkdirAll(wt, 0o755)
+	os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: /src/web/.git/worktrees/x\n"), 0o644)
+	if err := OwnFolder("demo", plain, nil); err == nil || !strings.Contains(err.Error(), ".git") {
+		t.Fatalf("a folder with a .git: %v", err)
+	}
+	os.Remove(filepath.Join(wt, ".git"))
+	// Another record naming it: not this thread's alone.
+	if err := OwnFolder("demo", plain, []*Record{plain, {ID: "t-0009", Worktree: wt}}); err == nil || !strings.Contains(err.Error(), "t-0009") {
+		t.Fatalf("a folder another record names: %v", err)
 	}
 	brief, _, err := WriteBrief(p, plain, false)
 	if err != nil {
