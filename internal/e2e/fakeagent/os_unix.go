@@ -2,9 +2,11 @@
 
 package main
 
-// sockDir holds the messaging sockets: macOS temp dirs are too long for
-// a socket path.
-const sockDir = "/tmp"
+import "github.com/theclifmeister/terminatr/internal/plat/ipc"
+
+// sockDir holds the messaging sockets: the temp folder when it is short
+// enough for a socket path (macOS's per-user one isn't), else /tmp.
+var sockDir = ipc.ShortTemp()
 
 // shell is the shell that runs hook commands and the Bash tool's.
 func shell() string { return "/bin/sh" }

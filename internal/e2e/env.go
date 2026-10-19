@@ -188,7 +188,7 @@ func New(t testing.TB) *Env {
 		t.Skip("end-to-end scenario: run with make e2e or make e2e-smoke (E2E=1)")
 	}
 	dir := build(t)
-	runDir, err := os.MkdirTemp(runDirBase, "tme2e")
+	runDir, err := os.MkdirTemp(runDirBase(), "tme2e")
 	if err != nil {
 		t.Fatal(err)
 	}

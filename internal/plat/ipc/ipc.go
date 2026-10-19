@@ -11,6 +11,7 @@ package ipc
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 )
 
@@ -35,6 +36,23 @@ const HumanName = "human"
 // budget.
 func Fits(dir, name string) bool {
 	return len(filepath.Join(dir, name)) <= MaxPath
+}
+
+// maxTempBase is the longest temp folder ShortTemp takes: it leaves
+// room under MaxPath for a test's own folder and a run directory's
+// sockets below it.
+const maxTempBase = 40
+
+// ShortTemp is a folder for tests and their fixtures to make socket
+// folders in: the temp folder ($TMPDIR, a thread's own temp folder in
+// tm) when it is short enough, else ShortDir (macOS's per-user temp
+// folder is too long). Never for a run directory the server and its
+// clients must agree on: their temp folders may differ.
+func ShortTemp() string {
+	if d := filepath.Clean(os.TempDir()); len(d) <= maxTempBase {
+		return d
+	}
+	return ShortDir()
 }
 
 // ServerAddr is the server's socket: override when set, else tm.sock in

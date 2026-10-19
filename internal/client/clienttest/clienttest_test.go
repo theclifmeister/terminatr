@@ -9,12 +9,13 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/plat/flock"
+	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // shortDir is a folder for sockets, whose paths must stay short.
 func shortDir(t *testing.T) string {
-	dir, err := os.MkdirTemp("/tmp", "tmct-")
+	dir, err := os.MkdirTemp(ipc.ShortTemp(), "tmct-")
 	if err != nil {
 		t.Fatal(err)
 	}

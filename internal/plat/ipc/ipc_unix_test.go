@@ -16,7 +16,7 @@ var errNoSocket, errRefused error = syscall.ENOENT, syscall.ECONNREFUSED
 // sockDir is a directory short enough for sockets (t.TempDir is too long
 // on macOS).
 func sockDir(t *testing.T) string {
-	dir, err := os.MkdirTemp(ShortDir(), "tmipc")
+	dir, err := os.MkdirTemp(ShortTemp(), "tmipc")
 	if err != nil {
 		t.Fatal(err)
 	}

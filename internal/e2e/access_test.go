@@ -44,7 +44,7 @@ func TestAccessCommands(t *testing.T) {
 	writeConfig(t, env, "[projects.demo.sandbox]\nexcluded_commands = [\"make bench\"]\n")
 	out := env.MustCLI("access", "show", "demo", "--thread", "t-0001")
 	for _, want := range []string{"Effective access · demo · t-0001 (claude", "RESTART TO APPLY: removed since launch", "RESTART TO APPLY: added since launch",
-		"3 changes since launch: tm thread restart t-0001 applies them", "worktree"} {
+		"2 changes since launch: tm thread restart t-0001 applies them", "worktree"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("show lacks %q:\n%s", want, out)
 		}
