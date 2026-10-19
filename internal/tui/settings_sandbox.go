@@ -22,8 +22,8 @@ import (
 // the platform the server is on, where threads run
 // (config.SandboxSettings); config.toml keeps the rest, and a launch
 // skips it. Every list adds down the layers (config.MergeSandbox): a
-// project's view lists all projects' entries too, d drops one for the
-// project and u takes it back. Writes are the human's only.
+// project's view lists all projects' entries too, x drops one for the
+// project and takes the drop back. Writes are the human's only.
 
 // sandboxOutside is what an excluded command opens, said wherever one is
 // added or listed.
@@ -48,7 +48,7 @@ const sandboxHost = "Every command a thread runs inside its sandbox may then rea
 const sandboxGuide = "Prefer rules inside the sandbox (p adds a preset's): the thread's commands stay in it, opened only as far as the tool needs. Excluded commands (Outside the sandbox) run outside it: a last resort. " + sandboxBoth
 
 // sandboxAdds says how a project's lists combine with all projects'.
-const sandboxAdds = "A project's entries add to all projects'; on a project, d drops one of all projects' or takes the drop back."
+const sandboxAdds = "A project's entries add to all projects'; on a project, x removes its own, drops one of all projects' or takes the drop back."
 
 // sandboxLists are each list's row label, help, view text, example and
 // what messages call its entries.
@@ -303,7 +303,7 @@ func warnLines(text string, w int) []string {
 
 // sandboxView lists one sandbox list as the rows' threads get it, all
 // projects' entries on a project's too (T574 §4.2): a adds an entry, x
-// removes one the table sets; on a project, d drops one of all
+// removes one the table sets, on a project drops one of all
 // projects' or takes the drop back.
 type sandboxView struct {
 	sr   safetyRows
@@ -356,10 +356,15 @@ func (v *sandboxView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "x", "delete", "backspace":
 		switch {
 		case v.sel >= len(es):
-		case e.stray || e.Dropped:
-			m.msg = e.Value + " is a drop: u takes it back"
+		case e.Dropped:
+			msg := v.sr.slug + " takes " + e.Value + " back from all projects: threads get it from their next start"
+			if e.stray {
+				msg = "the drop of " + e.Value + " removed " + v.sr.forWho
+			}
+			return v.sr.editSandbox(m, "drop - "+e.Value, msg, func(t *config.SandboxTable) { t.Remove(config.SandboxDrop, e.Value) })
 		case !e.Own:
-			m.msg = e.Value + " is all projects': d drops it for " + v.sr.slug
+			return v.sr.editSandbox(m, "drop + "+e.Value, e.Value+" dropped "+v.sr.forWho+": its threads don't get it from their next start",
+				func(t *config.SandboxTable) { t.Add(config.SandboxDrop, e.Value) })
 		default:
 			v.sel = max(min(v.sel, len(es)-2), 0)
 			return v.sr.editSandbox(m, v.list+" - "+e.Value, e.Value+" removed from the "+word+" "+v.sr.forWho+": threads started from now on don't get it",
@@ -368,29 +373,6 @@ func (v *sandboxView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case "w":
 		return v.toggleAsk(m, e, v.sel < len(es))
-	case "d":
-		switch {
-		case v.sr.all || v.sel >= len(es):
-		case e.Own && !e.stray:
-			m.msg = e.Value + " is " + v.sr.slug + "'s own: x removes it"
-		case e.Dropped:
-			m.msg = e.Value + " is dropped already: u takes it back"
-		default:
-			return v.sr.editSandbox(m, "drop + "+e.Value, e.Value+" dropped "+v.sr.forWho+": its threads don't get it from their next start",
-				func(t *config.SandboxTable) { t.Add(config.SandboxDrop, e.Value) })
-		}
-		return nil
-	case "u":
-		switch {
-		case v.sr.all || v.sel >= len(es) || !e.Dropped:
-		default:
-			msg := v.sr.slug + " takes " + e.Value + " back from all projects: threads get it from their next start"
-			if e.stray {
-				msg = "the drop of " + e.Value + " removed " + v.sr.forWho
-			}
-			return v.sr.editSandbox(m, "drop - "+e.Value, msg, func(t *config.SandboxTable) { t.Remove(config.SandboxDrop, e.Value) })
-		}
-		return nil
 	}
 	return nil
 }
@@ -416,7 +398,7 @@ func (v *sandboxView) add(m *dash) {
 				m.msg = "not added: " + e + " is listed already"
 				return nil
 			case r.Dropped:
-				m.msg = "not added: " + e + " is all projects', dropped " + v.sr.forWho + ": u takes it back"
+				m.msg = "not added: " + e + " is all projects', dropped " + v.sr.forWho + ": x takes it back"
 				return nil
 			default:
 				m.msg = "not added: all projects give " + e + " already"
@@ -529,12 +511,12 @@ func (v *sandboxView) render(m *dash) string {
 	keys := "a add · ↑ ↓ move · esc back"
 	if v.sel < len(es) {
 		switch e := es[v.sel]; {
-		case e.Own && !e.stray:
-			keys = "a add · x remove · ↑ ↓ move · esc back"
 		case e.Dropped:
-			keys = "a add · u take it back · ↑ ↓ move · esc back"
-		case !v.sr.all:
-			keys = "a add · d drop for " + v.sr.slug + " · ↑ ↓ move · esc back"
+			keys = "a add · x take it back · ↑ ↓ move · esc back"
+		case !e.Own:
+			keys = "a add · x drop for " + v.sr.slug + " · ↑ ↓ move · esc back"
+		default:
+			keys = "a add · x remove · ↑ ↓ move · esc back"
 		}
 	}
 	if v.list == config.SandboxExcluded {
