@@ -16,6 +16,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
+	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
 )
@@ -320,5 +321,75 @@ func TestCommandRunHangUp(t *testing.T) {
 	}
 	if len(s.runs) != 0 {
 		t.Errorf("runs left: %v", s.runs)
+	}
+}
+
+// TestCommandRunConfined: on macOS an approved command's run, and what
+// it starts, can't connect to tm's sockets (the human socket among
+// them) nor read config.toml; the rest of the disk is open.
+func TestCommandRunConfined(t *testing.T) {
+	if caps.OS != config.OSMac {
+		t.Skip("macOS's seatbelt")
+	}
+	p := testPaths(t)
+	newWatchProject(t)
+	// Its own socket, outside tm's folders, is the control: nc connects.
+	other := filepath.Join(ipctest.ShortTempDir(t, "tmo"), "o.sock")
+	for _, path := range []string{p.HumanSocket(), other} {
+		l, err := net.Listen("unix", path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer l.Close()
+		go func() {
+			for {
+				c, err := l.Accept()
+				if err != nil {
+					return
+				}
+				c.Close()
+			}
+		}()
+	}
+	wt := t.TempDir()
+	open := filepath.Join(wt, "open.txt")
+	os.WriteFile(open, []byte("x"), 0o600)
+	os.WriteFile(filepath.Join(wt, "probe.sh"), []byte(`#!/bin/sh
+( nc -U "$2" </dev/null >/dev/null 2>&1 && echo human=connected || echo human=refused ) &
+wait
+nc -U "$5" </dev/null >/dev/null 2>&1 && echo other=connected || echo other=refused
+cat "$3" >/dev/null 2>&1 && echo config=read || echo config=refused
+cat "$4" >/dev/null 2>&1 && echo open=read || echo open=refused
+`), 0o755)
+	writeConfig(t, "[projects.demo.sandbox]\napproved_commands = [\"./probe.sh go *\"]\n")
+	s := &Server{opts: Options{Paths: p, Bin: "/nonexistent/tm", Env: []string{"PATH=/usr/bin:/bin"}},
+		log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}, sessions: map[string]*session.Session{}}
+	s.records["s-1"], s.sessions["s-1"] = SessionRecord{ID: "s-1", Role: proto.RoleThread, Agent: "claude", Project: "demo", Thread: "t-0001", Cwd: wt}, nil
+	thr := caller.Caller{Kind: caller.Thread, Project: "demo", Thread: "t-0001", Session: "s-1"}
+	perr, out, ev := runStream(t, s, thr, proto.CommandRunParams{Argv: []string{"./probe.sh", "go", p.HumanSocket(), filepath.Join(p.Home, "config.toml"), open, other}})
+	if perr != nil {
+		t.Fatal(perr)
+	}
+	if ev.Code != 0 || !strings.Contains(out, "human=refused") || !strings.Contains(out, "config=refused") || !strings.Contains(out, "open=read") || !strings.Contains(out, "other=connected") {
+		t.Errorf("code %d, out:\n%s", ev.Code, out)
+	}
+}
+
+// TestSocketInWritable: a socket in a folder threads write is refused:
+// the threads' temp folders at the check, a write folder at launch.
+func TestSocketInWritable(t *testing.T) {
+	p := testPaths(t)
+	if err := config.CheckSocket(filepath.Join(threadTempRoot(), "x", "s.sock")); err == nil {
+		t.Error("a socket in the threads' temp folders passed the check")
+	}
+	fixtures := filepath.Join(t.TempDir(), "a", "fixtures")
+	os.MkdirAll(fixtures, 0o700)
+	sock := filepath.Join(fixtures, "s.sock")
+	writeConfig(t, "[projects.demo.sandbox]\nwrite = ["+tomlQuote(fixtures)+"]\nsockets = ["+tomlQuote(sock)+"]\n")
+	s := &Server{opts: Options{Paths: p}}
+	rules, _ := sandboxRules(loadLaunchConfig(), "demo", config.OSMac, s.tmDirs())
+	i := slices.IndexFunc(rules, func(r proto.AccessRule) bool { return r.Kind == proto.AccessUnixSocket })
+	if i < 0 || !strings.Contains(rules[i].Refused, "which threads write") {
+		t.Errorf("socket in a write folder: %+v", rules)
 	}
 }

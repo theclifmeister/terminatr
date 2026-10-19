@@ -3,8 +3,11 @@ package config
 import (
 	"fmt"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/theclifmeister/terminatr/internal/home"
 )
 
 // Socket rules (T306, T574 phase 4): a unix socket besides tm's that a
@@ -14,9 +17,11 @@ import (
 // both macOS only (Claude's Linux sandbox opens every socket or none,
 // Codex's names none: on Linux a Codex thread's network is open
 // anyway). A socket is one file, written whole: no pattern, no folder
-// (a folder would open every socket below it). The launch also refuses
-// one in or holding tm's run folder or tm's folder, and one whose link
-// leads there: never the human socket, never another session's.
+// (a folder would open every socket below it), nor one in tm's folder or
+// the threads' temp folders. The launch also refuses one in or holding
+// tm's run folder or tm's folder, one in a folder a thread writes (it
+// could swap a link in), and one whose link leads there: never the
+// human socket, never another session's.
 
 // CheckSocket checks one socket: absolute or from ~/, clean, without
 // wildcards or variables, a file at least one folder below the root.
@@ -47,7 +52,15 @@ func CheckSocket(e string) error {
 	}
 	for _, x := range parts {
 		if fold(x) == fold(".terminatr") {
-			return fmt.Errorf("%q is in tm's folder, whose sockets are tm's own: never a socket rule", e)
+			return fmt.Errorf("%q is in tm's folder (its sockets, the threads' worktrees): never a socket rule", e)
+		}
+	}
+	// The threads' temp folders are theirs to write: a thread could put
+	// a link to another socket there later.
+	root := home.ThreadTempRoot()
+	for _, r := range []string{root, strings.Replace(root, "/private/tmp/", "/tmp/", 1)} {
+		if inFolder(p, filepath.ToSlash(r)) {
+			return fmt.Errorf("%q is in the threads' temp folders, which they write: never a socket rule", e)
 		}
 	}
 	return nil

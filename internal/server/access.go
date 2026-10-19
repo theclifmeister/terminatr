@@ -368,7 +368,7 @@ func sandboxRules(lc launchConfig, slug, goos string, tm tmDirs) ([]proto.Access
 				rule.Note = r.Value
 			}
 			rule.Value = writeFolder(r.Value)
-			if why := socketRefused(rule.Value, tm); why != "" && rule.Refused == "" {
+			if why := socketRefused(rule.Value, tm, threadWritable(t)); why != "" && rule.Refused == "" {
 				rule.Refused = why
 			}
 		case config.SandboxApproved:

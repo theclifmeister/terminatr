@@ -3,19 +3,32 @@ package server
 // Approved commands and sockets (T306, T574 phase 4, docs/SPEC.md
 // §5.2). A socket rule opens one unix socket to a thread's sandboxed
 // commands; the launch refuses one in or holding tm's folder or its run
-// folder (the human socket, every session's runtime folder), or one that
-// is a folder. An approved command is one tm runs outside the sandbox
-// when its thread asks (tm run -- make test, command.run): only one the
-// project's list names (or, for a Codex thread, one of its excluded
-// commands, T574 case 3), its words as they are with no shell, in the
-// thread's worktree, with tm's environment and the thread's TERMINATR_*
+// folder (the human socket, every session's runtime folder), one in a
+// folder the thread writes (its worktree, its temp folder, its write
+// folders: it could put a link there later), or one that is a folder.
+// An approved command is one tm runs outside the thread's sandbox when
+// it asks (tm run -- make test, command.run): only one the project's
+// list names (or, for a Codex thread, one of its excluded commands,
+// T574 case 3), its words as they are with no shell, in the thread's
+// worktree, with tm's environment and the thread's TERMINATR_*
 // variables (nothing the thread sets), judged by the thread's guard as
 // its own Bash call would be, journaled when it starts and ends. Its
-// output streams back; when the thread's call ends (the client hangs
-// up) or the server stops, its process group is killed, and so is what
-// is left of it when it exits. While it runs, the pid walk places what
-// it starts in the thread (Server.runs), so its tm calls are the
-// thread's, never the human's.
+// output streams back; when the thread's call ends, its session ends or
+// the server stops, its process group is killed, and so is what is left
+// of it when it exits.
+//
+// It runs as the user, and the thread writes the files it reads (a
+// Makefile target), so it runs what the thread wants. While it runs, the
+// pid walk places what it starts in the thread (Server.runs), but only
+// what stays in its process tree: a process it detaches (setsid, a
+// double fork) is reparented, outlives the kill, and the pid walk then
+// takes it for the human, human-only methods included. So on macOS the
+// run is confined (runProfile): everything allowed but tm's run folder,
+// its sockets' folder (the human socket among them), its keys and
+// guard log, and config.toml, which it neither reads, writes nor
+// connects to; what it starts, detached or not, inherits that. On Linux
+// and Windows it isn't confined: there a detached process reaches the
+// human socket as the human, as an excluded command's can.
 
 import (
 	"bufio"
@@ -45,6 +58,41 @@ import (
 // folder, with the sockets' folder where TERMINATR_SOCKET puts them.
 type tmDirs struct{ home, run, sockets string }
 
+// sandboxExec applies a seatbelt profile on macOS.
+const sandboxExec = "/usr/bin/sandbox-exec"
+
+// runClosed are what an approved command's run never reaches (macOS,
+// runProfile): the folders of tm's own files (the guard's floor: its
+// run folder, keys and guard log) and the sockets' folder, and the
+// file config.toml.
+func (s *Server) runClosed() (dirs, files []string) {
+	dirs = s.guardOwn()
+	if s.opts.Paths.Socket != "" {
+		dirs = append(dirs, withReal([]string{filepath.Dir(s.opts.Paths.Socket)})...)
+	}
+	if s.opts.Paths.Home != "" {
+		files = withReal([]string{filepath.Join(s.opts.Paths.Home, "config.toml")})
+	}
+	return dirs, files
+}
+
+// runProfile is the seatbelt profile of an approved command's run:
+// everything allowed, but no read, write or connect in dirs (network*
+// on a folder refuses connecting to a unix socket below it, through a
+// link too) and no read or write of files.
+func runProfile(dirs, files []string) string {
+	q := strings.NewReplacer(`\`, `\\`, `"`, `\"`)
+	var b strings.Builder
+	b.WriteString("(version 1)\n(allow default)\n")
+	for _, d := range dirs {
+		fmt.Fprintf(&b, "(deny network* (subpath \"%s\"))\n(deny file-read* file-write* (subpath \"%s\"))\n", q.Replace(d), q.Replace(d))
+	}
+	for _, f := range files {
+		fmt.Fprintf(&b, "(deny file-read* file-write* (literal \"%s\"))\n", q.Replace(f))
+	}
+	return b.String()
+}
+
 // tmDirs is this server's tm folders.
 func (s *Server) tmDirs() tmDirs {
 	t := tmDirs{home: s.opts.Paths.Home, run: s.opts.Paths.RunDir}
@@ -69,8 +117,10 @@ func (t tmDirs) list() []string {
 // can't place (no home folder), one in or holding tm's folders (the
 // human socket and the sessions' sockets are there), by its path or
 // where its links lead, one that leads where no socket rule may be, and
-// a folder, which would open every socket below it.
-func socketRefused(p string, tm tmDirs) string {
+// a folder, which would open every socket below it, and one in writable
+// (the threads' temp folders, the project's write folders), where a
+// thread could swap a link in after the launch.
+func socketRefused(p string, tm tmDirs, writable []string) string {
 	if !filepath.IsAbs(p) {
 		return "refused: no home folder to place it in"
 	}
@@ -87,10 +137,28 @@ func socketRefused(p string, tm tmDirs) string {
 			}
 		}
 	}
+	for _, w := range withReal(writable) {
+		for _, q := range []string{p, real} {
+			if inside(q, w) {
+				return "refused: it is in " + w + ", which threads write: a thread could put a link to another socket there"
+			}
+		}
+	}
 	if fi, err := os.Stat(real); err == nil && fi.IsDir() {
 		return "refused: it is a folder, which would open every socket below it: name the socket itself"
 	}
 	return ""
+}
+
+// threadWritable are the folders besides tm's a project's threads
+// write in, whatever its worktree (tm's folder holds those): the
+// threads' temp folders and the write folders of t.
+func threadWritable(t config.ThreadSandbox) []string {
+	out := []string{threadTempRoot()}
+	for _, w := range t.Given(config.SandboxWrite) {
+		out = append(out, writeFolder(w))
+	}
+	return out
 }
 
 // codexApproved is excluded command rule x as an approved command for
@@ -407,6 +475,12 @@ func (s *Server) commandRun(c net.Conn, br *bufio.Reader, req proto.Request, who
 	defer cancel()
 	x := exec.CommandContext(ctx, path, p.Argv[1:]...)
 	x.Args[0] = p.Argv[0]
+	if caps.OS == config.OSMac {
+		// Confined away from tm's own files (runProfile), the human
+		// socket above all; a sandbox-exec that can't apply it (a server
+		// itself in a sandbox) fails the run rather than run it open.
+		x = exec.CommandContext(ctx, sandboxExec, append([]string{"-p", runProfile(s.runClosed()), path}, p.Argv[1:]...)...)
+	}
 	x.Dir, x.Env = r.Cwd, env
 	proc.Group(x)
 	// Once it exits, what it left running doesn't hold its output open.
