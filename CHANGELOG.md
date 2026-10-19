@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.39.0](https://github.com/theclifmeister/terminatr/compare/v0.38.0...v0.39.0) (2026-10-19)
+
+
+### Features
+
+* **access:** drop per-entry warning lines; x removes, drops or takes back ([#668](https://github.com/theclifmeister/terminatr/issues/668)) ([a43993c](https://github.com/theclifmeister/terminatr/commit/a43993c5cb0e667bbf7a656e84a665990ca187bb))
+* **access:** guidance for threads is freeform, title and text ([#671](https://github.com/theclifmeister/terminatr/issues/671)) ([e093c6a](https://github.com/theclifmeister/terminatr/commit/e093c6aac0704920e43df146edddce9f4db229e6))
+* **access:** the project's coordinator may read tm access show and explain ([#665](https://github.com/theclifmeister/terminatr/issues/665)) ([613a479](https://github.com/theclifmeister/terminatr/commit/613a479616b5c140b02e0d9208bf0213f560b390))
+* **sidebar:** drop the repeated title from the footer for the session on screen ([#670](https://github.com/theclifmeister/terminatr/issues/670)) ([c2bda05](https://github.com/theclifmeister/terminatr/commit/c2bda057915db267014eedcc248d0959690b9396))
+* **tui:** lowercase the settings popup's tab titles ([#669](https://github.com/theclifmeister/terminatr/issues/669)) ([91d6c39](https://github.com/theclifmeister/terminatr/commit/91d6c39c985bac9ac9174e9aba82b773767dab9f))
+
+
+### Bug Fixes
+
+* **git:** give pinned worktree runs a git dir of tm's own ([#667](https://github.com/theclifmeister/terminatr/issues/667)) ([ea08217](https://github.com/theclifmeister/terminatr/commit/ea082170feecb679144bced0d34047dbb0408be4))
+
 ## [0.38.0](https://github.com/theclifmeister/terminatr/compare/v0.37.0...v0.38.0) (2026-10-19)
 
 
