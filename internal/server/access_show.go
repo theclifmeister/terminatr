@@ -323,6 +323,9 @@ func explainCommand(set proto.AccessSet, cmd string) proto.AccessExplainResult {
 		}
 	} else {
 		res.SandboxWhy = "no excluded command takes it"
+		if e := bareExcluded(set, cmd); e != "" {
+			res.SandboxWhy += fmt.Sprintf("; excluded command %q takes %s", e, proto.ExcludedOnlyItself(e))
+		}
 		if noEscapes {
 			res.SandboxWhy += "; escapes are off, so it can't leave the sandbox"
 		}
@@ -362,6 +365,19 @@ func explainCommand(set proto.AccessSet, cmd string) proto.AccessExplainResult {
 		}
 	}
 	return res
+}
+
+// bareExcluded is the excluded command of set, with no *, that cmd runs
+// with arguments added (docker for docker ps), or "": it takes cmd only
+// once it ends in " *", which explain says.
+func bareExcluded(set proto.AccessSet, cmd string) string {
+	for _, r := range set.Rules {
+		if r.Kind == proto.AccessExcluded && launched(r) && proto.ExcludedOnlyItself(r.Value) != "" &&
+			config.ExcludedMatch(r.Value+" *", cmd) {
+			return r.Value
+		}
+	}
+	return ""
 }
 
 // explainApproved is the approved command of set that tm run runs cmd

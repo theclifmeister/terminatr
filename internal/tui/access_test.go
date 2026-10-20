@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -24,6 +26,7 @@ func TestAccessView(t *testing.T) {
 			{Where: proto.AccessInside, Kind: proto.AccessHost, Value: "registry.npmjs.org", Source: proto.AccessFromAll, Change: proto.AccessAdded},
 			{Where: proto.AccessGuard, Kind: proto.AccessGuardMode, Value: "learn", Source: "alpha", Live: true},
 			{Where: proto.AccessAgent, Kind: proto.AccessAllow, Value: "Bash(git log:*)", Source: ".claude/settings.local.json"},
+			{Where: proto.AccessOutside, Kind: proto.AccessExcluded, Value: "docker", Source: proto.AccessFromAll},
 		}}}
 	m.sel = "th:alpha:t-0002"
 	drain(t, m, keyPress(m, "e"))
@@ -37,6 +40,9 @@ func TestAccessView(t *testing.T) {
 		if !strings.Contains(sc, want) {
 			t.Errorf("view lacks %q:\n%s", want, sc)
 		}
+	}
+	if !strings.Contains(sc, "only docker itself, with no arguments: docker * takes it with them") {
+		t.Errorf("no remark on a bare excluded command:\n%s", sc)
 	}
 	if strings.Contains(sc, "config.toml") {
 		t.Errorf("the view names the settings file:\n%s", sc)
@@ -52,5 +58,26 @@ func TestAccessView(t *testing.T) {
 	}
 	if sc := whole(m); !strings.Contains(sc, "Effective access · alpha · a new thread (Linux)") || !strings.Contains(sc, "What a new thread of alpha gets") {
 		t.Errorf("project view:\n%s", sc)
+	}
+}
+
+// TestAccessViewEscapes: an agent's own file can hold anything, so no
+// escape of a rule reaches the screen, by its value or a remark quoting
+// one, and tm advises nothing on the user's own excluded commands.
+func TestAccessViewEscapes(t *testing.T) {
+	_, m := popupData(t)
+	osc := "\x1b]52;c;aGk=\a"
+	v := &accessView{res: proto.AccessShowResult{AccessSet: proto.AccessSet{Agent: "claude", OS: "darwin", Rules: []proto.AccessRule{
+		{Where: proto.AccessAgent, Kind: proto.AccessExcluded, Value: "make" + osc + "\nfake", Source: ".claude/settings.local.json", Note: proto.AccessOwnEscape},
+		{Where: proto.AccessOutside, Kind: proto.AccessExcluded, Value: "x *", Source: "alpha", Refused: "bad " + osc + "\nspoof"},
+	}}}}
+	raw := v.render(m)
+	if !slices.ContainsFunc(strings.Split(ansi.Strip(raw), "\n"), func(l string) bool {
+		return strings.Contains(l, "REFUSED: bad") && strings.Contains(l, "spoof")
+	}) {
+		t.Fatalf("the refused remark isn't one line:\n%s", ansi.Strip(raw))
+	}
+	if strings.Contains(raw, "\x1b]") || strings.Contains(raw, "\a") || strings.Contains(raw, "only make") {
+		t.Errorf("an escape or a remark on the user's own rule reached the screen:\n%q", raw)
 	}
 }
