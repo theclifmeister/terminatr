@@ -87,6 +87,8 @@ func TestThreadMerge(t *testing.T) {
 	}
 	refuse("no-pr", func(f *fakeHost) { f.err = codehost.ErrNoPR })
 	refuse("no-pr", func(f *fakeHost) { f.err = codehost.ErrNoRef })
+	// T629: the refusal names the host and the branch it asked.
+	refuse("has none from its branch "+rec.Branch, func(f *fakeHost) { f.err = codehost.ErrNoPR })
 	refuse("pr-closed", func(f *fakeHost) { f.pr.State = "CLOSED" })
 	refuse("not-green", func(f *fakeHost) { f.pr.Checks, f.pr.Failed = "fail", 2 })
 	refuse("not-green", func(f *fakeHost) { f.pr.Checks = "pending" })
@@ -108,6 +110,28 @@ func TestThreadMerge(t *testing.T) {
 	refuse("not-thread-pr", func(f *fakeHost) { f.pr.Branch = "" })
 	refuse("not-thread-pr", func(f *fakeHost) { f.pr.URL = "https://github.com/other/shop/pull/7" })
 	refuse("not-thread-pr", func(f *fakeHost) { f.pr.URL = "" })
+
+	// T629: a repo tm finds no code host for (its origin unreadable,
+	// missing or of no known host) asks no host, so it is not "no PR".
+	pickHost = func(string, codehost.Config) codehost.Host { return codehost.NoHost{} }
+	h.expect(1, "no-code-host", coord, args()...)
+	// Azure DevOps answering no PR for the branch names the repo asked.
+	var asked []string
+	pickHost = func(string, codehost.Config) codehost.Host {
+		return codehost.Azure{
+			Target: codehost.Target{Kind: codehost.AzureKind, OrgURL: "https://dev.azure.com/acme", Project: "Shop", Repo: "web"},
+			Getenv: func(string) string { return "" },
+			Run: func(_ string, a ...string) ([]byte, error) {
+				asked = append(asked, strings.Join(a, " "))
+				return []byte(`{"count":0,"value":[]}`), nil
+			},
+		}
+	}
+	h.expect(1, "no-pr: thread "+rec.ID+" has no pull request yet: Azure DevOps (https://dev.azure.com/acme/Shop/_git/web) has none from its branch "+rec.Branch, coord, args()...)
+	if len(asked) != 1 || !strings.Contains(asked[0], "searchCriteria.sourceRefName=refs%2Fheads%2F"+strings.ReplaceAll(rec.Branch, "/", "%2F")+"&") {
+		t.Fatalf("asked %q", asked)
+	}
+	pickHost = func(string, codehost.Config) codehost.Host { return fh }
 
 	*fh = fakeHost{pr: codehost.PR{Number: 7, URL: pr7URL, State: "MERGED", Branch: rec.Branch}}
 	if out := h.ok(coord, args()...); !strings.Contains(out, "already merged") || len(fh.merged) != 0 {

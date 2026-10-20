@@ -54,10 +54,17 @@ func (e *Env) threadMerge(p *project.Project, id string) error {
 	// The PR is found by the thread's own branch; the report's PR line
 	// only has to agree with it.
 	host := pickHost(r.Repo, p.CodeHost())
+	if host.Kind() == codehost.NoKind {
+		// No host was asked: "no PR" would be a guess.
+		return mergeRefusal("no-code-host", "tm can't tell where the PRs of thread %s's repo %s live: its origin remote is missing, git can't read it, or it is no GitHub or Azure DevOps URL (git config --get remote.origin.url); the user checks it, or sets code_host in PROJECT.md",
+			id, textsafe.Line(r.Repo, 200))
+	}
 	pr, err := host.PR(r.Repo, codehost.Ref{Branch: r.Branch})
 	switch {
-	case errors.Is(err, codehost.ErrNoPR), errors.Is(err, codehost.ErrNoRef):
-		return mergeRefusal("no-pr", "thread %s has no pull request yet (its branch has none)", id)
+	case errors.Is(err, codehost.ErrNoRef):
+		return mergeRefusal("no-pr", "thread %s has no branch to look its pull request up by", id)
+	case errors.Is(err, codehost.ErrNoPR):
+		return mergeRefusal("no-pr", "thread %s has no pull request yet: %s has none from its branch %s", id, hostWhere(host), r.Branch)
 	case err != nil:
 		return err
 	}
@@ -138,6 +145,21 @@ func samePR(host codehost.Host, reportPR string, pr codehost.PR) bool {
 		return false
 	}
 	return host.Kind() != codehost.GitHubKind || strings.EqualFold(reportPR, pr.URL)
+}
+
+// hostWhere names the host a PR was asked of, and for Azure DevOps the
+// repo, which comes from the origin remote, not from the thread.
+func hostWhere(host codehost.Host) string {
+	switch host.Kind() {
+	case codehost.GitHubKind:
+		return "GitHub"
+	case codehost.AzureKind:
+		if a, ok := host.(codehost.Azure); ok && a.Target.OrgURL != "" {
+			return textsafe.Line("Azure DevOps ("+a.Target.OrgURL+"/"+a.Target.Project+"/_git/"+a.Target.Repo+")", 300)
+		}
+		return "Azure DevOps"
+	}
+	return "its code host"
 }
 
 func baseOr(b string) string {
