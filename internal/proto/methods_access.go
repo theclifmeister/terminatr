@@ -226,6 +226,17 @@ const (
 	AccessOwnEscapeOff = "tm treats it as an escape: refused, escapes are off"
 )
 
+// ExcludedOnlyItself is what excluded command e, which has no *, leaves
+// in the sandbox, or "": Claude matches it as a Bash rule (T632), so
+// "docker" takes only docker run bare, never docker ps; "docker *"
+// takes its arguments too. tm doesn't widen it: that is the human's.
+func ExcludedOnlyItself(e string) string {
+	if e == "" || strings.Contains(e, "*") {
+		return ""
+	}
+	return "only " + e + " itself, with no arguments: " + e + " * takes it with them"
+}
+
 // Remarks are what the views say beside a rule: a change since launch,
 // why it is left out, the only agents that get it, a guard rule's
 // liveness.
@@ -252,6 +263,11 @@ func (r AccessRule) Remarks() []string {
 		out = append(out, "the agent's own file, shown only")
 	} else if len(r.Agents) > 0 {
 		out = append(out, strings.Join(r.Agents, ", ")+" threads only")
+	}
+	if r.Kind == AccessExcluded {
+		if n := ExcludedOnlyItself(r.Value); n != "" {
+			out = append(out, n)
+		}
 	}
 	return out
 }

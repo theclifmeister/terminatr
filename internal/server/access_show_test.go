@@ -278,6 +278,67 @@ excluded_commands = ["make e2e", { command = "pnpm test *", ask = false }]
 	}
 }
 
+// TestAccessExplainBareExcluded (T632): all projects' excluded commands
+// without a * take only the bare command, as Claude matches them, so
+// explain keeps docker ps inside for a thread and a thread to come
+// alike, saying why, and show says it beside the rule; with " *" it
+// runs outside.
+func TestAccessExplainBareExcluded(t *testing.T) {
+	testPaths(t)
+	t.Setenv("HOME", t.TempDir())
+	p := newWatchProject(t)
+	if r, err := thread.Create(p, thread.Record{Title: "x", Agent: "claude", Worktree: t.TempDir(), State: "running"}); err != nil || r.ID != "t-0001" {
+		t.Fatal(r, err)
+	}
+	writeConfig(t, `[defaults.sandbox]
+excluded_commands = ["docker", "git push"]
+`)
+	reg, err := agent.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}}, agents: reg, log: log.New(os.Stderr, "", 0)}
+	human := callCtx{human: true, who: func() caller.Caller { return caller.Caller{Kind: caller.Human} }}
+	explain := func(thread, cmd string) proto.AccessExplainResult {
+		t.Helper()
+		res, perr := s.accessExplain(proto.AccessExplainParams{Project: "demo", Thread: thread, Command: cmd}, human)
+		if perr != nil {
+			t.Fatal(perr)
+		}
+		return res.(proto.AccessExplainResult)
+	}
+	for _, thread := range []string{"", "t-0001"} {
+		if r := explain(thread, "docker"); r.Sandbox != proto.AccessOutside || r.SandboxFrom != proto.AccessFromAll || r.Prompt != proto.PromptAsks {
+			t.Errorf("%q bare docker: %+v", thread, r)
+		}
+		if r := explain(thread, "docker ps"); r.Sandbox != proto.AccessInside || !strings.Contains(r.SandboxWhy, `excluded command "docker" takes only docker itself`) {
+			t.Errorf("%q docker ps: %+v", thread, r)
+		}
+		if r := explain(thread, "git push --dry-run origin HEAD"); r.Sandbox != proto.AccessInside || !strings.Contains(r.SandboxWhy, "git push * takes it") {
+			t.Errorf("%q git push: %+v", thread, r)
+		}
+		if r := explain(thread, "docker ps | head"); r.Sandbox != proto.AccessInside || strings.Contains(r.SandboxWhy, "takes only") {
+			t.Errorf("%q compound: %+v", thread, r)
+		}
+	}
+	res, perr := s.accessShow(proto.AccessShowParams{Project: "demo"}, human)
+	if perr != nil {
+		t.Fatal(perr)
+	}
+	if r := findRule(res.(proto.AccessShowResult).Rules, proto.AccessExcluded, "docker"); r == nil || !slices.ContainsFunc(r.Remarks(), func(m string) bool { return strings.HasPrefix(m, "only docker itself") }) {
+		t.Errorf("show: %+v", r)
+	}
+	writeConfig(t, `[defaults.sandbox]
+excluded_commands = ["docker *", "git push *"]
+`)
+	if r := explain("t-0001", "docker ps"); r.Sandbox != proto.AccessOutside || r.Prompt != proto.PromptAsks {
+		t.Errorf("docker *: %+v", r)
+	}
+	if r := explain("t-0001", "git push --dry-run origin HEAD"); r.Sandbox != proto.AccessOutside {
+		t.Errorf("git push *: %+v", r)
+	}
+}
+
 // TestAccessGitDirRule: a thread in a repo's worktree shows its git-dir
 // grant as one tm rule naming the repo, each path it opens noting it;
 // a thread outside a repo has none, and a project's thread to come a
@@ -361,7 +422,7 @@ func TestOwnEscapes(t *testing.T) {
 	if got[0].Note != proto.AccessOwnEscape || got[1].Note != "tm excludes it too" || got[2].Note != "" {
 		t.Errorf("escapes on: %+v", got)
 	}
-	if rm := got[0].Remarks(); len(rm) != 1 || !strings.Contains(rm[0], "its guard judges") {
+	if rm := got[0].Remarks(); len(rm) != 2 || !strings.Contains(rm[0], "its guard judges") || !strings.Contains(rm[1], "docker * takes it") {
 		t.Errorf("remarks %q", rm)
 	}
 	if got := ownEscapes(files(), set("off", "off")); got[0].Note != proto.AccessOwnEscapeOff {
