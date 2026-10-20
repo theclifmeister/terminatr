@@ -151,12 +151,27 @@ async function start($: Engine, on: On, rules: Rules | null, env: Record<string,
     return { value: { code: 0, signal: null } }
   })
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
-  on('tool.call', { tool: 'Bash' }, async () => ({ result: { stdout: 'ran', stderr: '', interrupted: false } }))
+  // stateDown: writes of the turn fail.
+  let stateDown = false
+  let stateFailed = 0
+  on('state.set', async (_$, e, next) => {
+    if (stateDown && e.key === 'turn') {
+      stateFailed++
+      throw new Error('state is down')
+    }
+    return next(e)
+  })
+  let runs = 0
+  on('tool.call', { tool: 'Bash' }, async () => {
+    runs++
+    return { result: { stdout: 'ran', stderr: '', interrupted: false } }
+  })
   on('tool.check', async () => ({ decision: 'allow' as const }))
   await $.session.start({ cwd: WT, surface: 'terminal', isInteractive: true })
   await clock.settle()
   return {
-    clock, denied, resolved, fetches: () => fetches, escapes: () => escapes,
+    clock, denied, resolved, fetches: () => fetches, escapes: () => escapes, runs: () => runs,
+    setStateDown: (down: boolean) => { stateDown = down }, stateFailed: () => stateFailed,
     setEscapeStatus: (n: number) => { escapeStatus = n },
     setRules: (r: Rules | null) => { current = r },
     hang: (h: boolean) => { hangRules = h },
@@ -310,6 +325,21 @@ test('a call that asks to leave the sandbox is asked, and the server told first;
   await clock.advance(1_001)
   expect((await $.tool.check({ tool: 'Bash', input })).decision).toBe('allow')
   expect((await $.tool.check({ tool: 'Write', input: { file_path: '/h/.terminatr/config.toml' } })).decision).toBe('deny')
+})
+
+test('a state write that fails after the call ran neither changes its result nor runs it again', async ($, on) => {
+  const { escapes, runs, setStateDown, stateFailed } = await start($, on, { ...thread, askEscapes: true })
+  setStateDown(true)
+  const r = await $.tool.call({ tool: 'Bash', command: 'ls', dangerouslyDisableSandbox: true })
+  expect(stateFailed()).toBe(1)
+  expect((r as { deny?: string }).deny).toBeUndefined()
+  expect((r as { result: { stdout: string } }).result.stdout).toBe('ran')
+  expect(runs()).toBe(1)
+  // Marked before it ran, unmarked once after: never run unmarked.
+  expect(escapes().map(e => !!e.done)).toEqual([false, true])
+  const plain = await $.tool.call({ tool: 'Bash', command: 'ls' })
+  expect((plain as { result: { stdout: string } }).result.stdout).toBe('ran')
+  expect(runs()).toBe(2)
 })
 
 test('a write through a link out of the worktree is refused where it lands, and reported as given', async ($, on) => {

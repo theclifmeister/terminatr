@@ -76,12 +76,20 @@ export function guard(on: On) {
     // PostToolUseFailure and PermissionDenied do in register.ts: another
     // mod seated before this one can skip those but not tool.call
     // (docs/SPEC.md §7.8). Where they ran it changes nothing; where
-    // they didn't, the next report or beat sends the state.
+    // they didn't, the next report or beat sends the state. Best effort:
+    // a state write that fails must not take the place of what the tool
+    // did. The key is the tool and loop: PermissionRequest carries no
+    // tool_use_id, so a parallel call of the same tool may close
+    // another's prompt early, as the classic hooks always could.
     const run = async () => {
       try {
         return await next(e)
       } finally {
-        await update($, turn, t => step(t, { kind: 'unwait', key: waitKey(e.tool, e.agentId) }))
+        try {
+          await update($, turn, t => step(t, { kind: 'unwait', key: waitKey(e.tool, e.agentId) }))
+        } catch {
+          // The prompt stays open until the turn ends.
+        }
       }
     }
     if (d?.ask && (d.rule === RULE_ESCAPE || d.rule === RULE_EXCLUDED)) {
@@ -96,6 +104,11 @@ export function guard(on: On) {
     if (!d || d.ask) return run()
     void reportDenial($, e.tool, d)
     return { deny: d.message }
+    // Once the hook called next, the handler's next is a replay (the
+    // engine's Caught): it answers what that call settled to and runs
+    // nothing beneath again, so the tool never runs twice, nor an escape
+    // without its mark. A throw here instead would be a failed hook,
+    // which the engine may answer by running core in its place.
   }).catch(($, e, next) =>
     next.called ? next(e) : { deny: 'terminatr guard: the check of this call failed, so it was refused. Try again; if it keeps failing, say so.' },
   )

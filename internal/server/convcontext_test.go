@@ -10,6 +10,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/session"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
 
@@ -200,7 +201,7 @@ func TestContextSkipShown(t *testing.T) {
 	s.modHeard("s-2")
 	start("s-2")
 	items, _ := p.Inbox()
-	if len(items) != 1 || items[0].Kind != "hooks-skipped" || items[0].Subject != "t-1" || !strings.Contains(items[0].Summary, "terminatr hooks skipped by another mod") {
+	if len(items) != 1 || items[0].Kind != "hooks-skipped" || items[0].Subject != "t-1" || !strings.Contains(items[0].Summary, "t-1 reported that terminatr's hooks were skipped by another mod") {
 		t.Fatalf("inbox: %+v", items)
 	}
 	s.mu.Lock()
@@ -248,5 +249,80 @@ func TestContextSlowRender(t *testing.T) {
 	}
 	if s.blockContext("s-1") {
 		t.Fatal("the block is added after a hook gave it")
+	}
+}
+
+// TestContextSkipCleared: a session flagged as skipped loses the flag
+// once a later conversation of it is marked by the mod again.
+func TestContextSkipCleared(t *testing.T) {
+	s := convServer()
+	sess := &session.Session{}
+	s.sessions = map[string]*session.Session{"s-1": sess}
+	s.modHeard("s-1")
+	started(t, s, "startup")
+	if got := sess.HooksSkipped(); got != skippedBy {
+		t.Fatalf("after a skip: %q", got)
+	}
+	s.endConv("s-1")
+	s.markedStart("s-1")
+	if got := started(t, s, "clear"); got != modContextLine {
+		t.Fatalf("marked clear: %q", got)
+	}
+	if got := sess.HooksSkipped(); got != "" {
+		t.Fatalf("after a marked start: %q", got)
+	}
+	// Skipped again: flagged again.
+	s.endConv("s-1")
+	started(t, s, "clear")
+	if got := sess.HooksSkipped(); got != skippedBy {
+		t.Fatalf("after a second skip: %q", got)
+	}
+}
+
+// TestContextAfterExit: a hook racing the session's exit leaves no
+// conversation state behind.
+func TestContextAfterExit(t *testing.T) {
+	s := convServer()
+	s.markedStart("s-1")
+	s.mu.Lock()
+	delete(s.records, "s-1")
+	delete(s.convs, "s-1")
+	s.mu.Unlock()
+	s.markedStart("s-1")
+	s.modHeard("s-1")
+	s.blockContext("s-1")
+	s.endConv("s-1")
+	started(t, s, "startup")
+	prompted(t, s, true)
+	s.mu.Lock()
+	n := len(s.convs)
+	s.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("%d conversation entries after the exit", n)
+	}
+}
+
+// TestContextBlockDuringRender: a block served while a command hook
+// rendered the context keeps the conversation's record as the block's.
+func TestContextBlockDuringRender(t *testing.T) {
+	s := convServer()
+	full, _ := s.contextOf("s-1")()
+	during := func() ([]byte, error) {
+		if !s.blockContext("s-1") {
+			t.Error("the block was refused while the hook rendered")
+		}
+		return full, nil
+	}
+	if b, _ := s.promptContext("s-1", during); !bytes.HasSuffix(b, full) {
+		t.Fatalf("prompt: %.80q", b)
+	}
+	s.mu.Lock()
+	via := s.convs["s-1"].via
+	s.mu.Unlock()
+	if via != viaBlock {
+		t.Fatalf("via %q, want the block's", via)
+	}
+	if !s.blockContext("s-1") {
+		t.Fatal("the block is refused after it was served")
 	}
 }

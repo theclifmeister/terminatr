@@ -66,7 +66,13 @@ type convState struct {
 }
 
 // convLocked is session id's conversation state; s.mu held.
+//
+// A session that is gone (sessionExited deleted its record) gets a state
+// of its own that nothing keeps: a hook racing the exit leaves no entry.
 func (s *Server) convLocked(id string) *convState {
+	if _, ok := s.records[id]; !ok {
+		return &convState{}
+	}
 	if s.convs == nil {
 		s.convs = map[string]*convState{}
 	}
@@ -161,13 +167,22 @@ func (s *Server) startContext(id string, payload map[string]any, full func() ([]
 	c := s.convLocked(id)
 	marked, via := c.marked, c.via
 	c.marked = false
+	cleared := marked && c.skipped
 	if marked {
 		c.started = true
 		if resume && via == viaNone {
 			c.via = viaKept
 		}
+		// The mod's hooks run again (the other mod is gone, or the
+		// skip was reported falsely): the session's flag goes.
+		c.skipped, c.recorded = false, false
 	}
+	sess := s.sessions[id]
 	s.mu.Unlock()
+	if cleared && sess != nil {
+		sess.SetHooksSkipped("")
+		s.log.Printf("session %s: the mod's hooks run again", id)
+	}
 	at := time.Now()
 	b, err := full()
 	if err != nil || len(b) == 0 {
@@ -230,7 +245,11 @@ func (s *Server) gaveContext(id string, at time.Time) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.convLocked(id).via = viaHook
+	// A block served while it rendered stands: it is re-read after
+	// compaction, the hook's copy isn't (both reached the model once).
+	if c := s.convLocked(id); c.via == viaNone {
+		c.via = viaHook
+	}
 }
 
 // fallbackContext is context b as a command hook gives it, headed by
@@ -286,9 +305,11 @@ func (s *Server) hooksSkipped(id string) {
 	if err := p.Journal(who, "hooks.skipped", ref, "terminatr hooks skipped by "+skippedBy); err != nil {
 		s.log.Printf("session %s: journal: %v", id, err)
 	}
-	summary := fmt.Sprintf("%s: terminatr hooks skipped by %s (likely a plugin the organization manages, seated before user plugins). "+
-		"tm gives the role's rules and state through its command hooks instead, so nothing is lost; "+
-		"other Claude sessions on this machine are likely the same. tm doctor lists them.", ref, skippedBy)
+	// What the session's own hooks said, which its agent could also have
+	// sent itself: a report, not proof of another mod.
+	summary := fmt.Sprintf("%s reported that terminatr's hooks were skipped by %s: its SessionStart came without the mod's mark. "+
+		"Usually a plugin the organization manages, seated before user plugins (Claude Code's cc-plugin-sec-default on Team and Enterprise machines); "+
+		"tm then gives the role's rules and state through its command hooks instead. tm doctor lists the sessions that report it.", ref, skippedBy)
 	if _, err := p.AddItem("hooks-skipped", ref, strings.TrimSpace(summary), false); err != nil {
 		s.log.Printf("session %s: inbox: %v", id, err)
 	}
