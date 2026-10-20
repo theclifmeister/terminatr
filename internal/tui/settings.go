@@ -57,6 +57,10 @@ type setting struct {
 type settingsList struct {
 	rows []setting
 	sel  int
+	// build, when set, makes the rows anew from what the console has
+	// now (the Access tab's, which show only what the protection level
+	// uses); sync calls it, keeping the selection on the same row.
+	build func(m *dash) []setting
 	// lw is the widest label's width, measured on lwRows rows
 	// (labelWidth).
 	lw     int
@@ -76,7 +80,26 @@ func (l *settingsList) labelWidth() int {
 	return l.lw
 }
 
+// sync makes the rows anew with build, if the list has one: the
+// selection stays on the row of the same label, or the nearest.
+func (l *settingsList) sync(m *dash) {
+	if l.build == nil {
+		return
+	}
+	label := ""
+	if l.sel < len(l.rows) {
+		label = l.rows[l.sel].label
+	}
+	l.rows, l.lwRows = l.build(m), -1
+	if i := slices.IndexFunc(l.rows, func(r setting) bool { return r.label == label }); i >= 0 {
+		l.sel = i
+	} else {
+		l.sel = max(0, min(l.sel, len(l.rows)-1))
+	}
+}
+
 func (l *settingsList) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
+	l.sync(m)
 	var run func(m *dash) tea.Cmd
 	if l.sel < len(l.rows) {
 		r := l.rows[l.sel]
@@ -133,6 +156,7 @@ func (m *dash) runQueued() tea.Cmd {
 // line (its help or note), so the whole setting scrolls into view, hits what a click on each line picks: a setting's own line is its
 // index, which changes it; its help is helpHit more, which selects it.
 func (l *settingsList) lines(m *dash, w int) (out []string, sel int, hits []int) {
+	l.sync(m)
 	sel = -1
 	defer func() {
 		for len(hits) < len(out) {
@@ -191,6 +215,7 @@ const adjustButtons = "  −  +"
 // own line changes it, as enter does, and on a number's − or + (col is
 // the column in the line) as - or + do (docs/SPEC.md §4).
 func (l *settingsList) click(m *dash, item, col int) tea.Cmd {
+	l.sync(m)
 	if item >= helpHit {
 		l.sel = moveSel(item-helpHit, 0, len(l.rows))
 		return nil
@@ -288,7 +313,7 @@ func (m *dash) openSettings() {
 	if safeMode() {
 		rows = append([]setting{safeModeRow()}, rows...)
 	}
-	sv := &settingsView{tabs: [3]settingsList{{rows: rows}, {rows: allProjectsSettings()}, {rows: accessSettings("", m.serverOS())}}}
+	sv := &settingsView{tabs: [3]settingsList{{rows: rows}, {rows: allProjectsSettings()}, accessList("", m.serverOS())}}
 	m.push(sv)
 }
 
@@ -538,7 +563,7 @@ func (sv *settingsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	if sv.tab == tabMods || sv.tab == tabPeers || sv.tab == tabLogs {
 		return nil
 	}
-	if sv.tab == tabAllAccess && s == "p" {
+	if sv.tab == tabAllAccess && s == "p" && sandboxShown(m, "") {
 		return m.openPresets("")
 	}
 	if sv.tab == tabAllAccess && s == "R" {
@@ -557,7 +582,7 @@ func (sv *settingsView) tabLines(m *dash, i, w int) ([]string, int, []int) {
 	case tabPeers:
 		return sv.peers.lines(m, w)
 	case tabAllAccess:
-		head := append(accessHead(m, w), "")
+		head := append(accessHead(m, "", w), "")
 		lines, sel, hits := sv.tabs[i].lines(m, w)
 		if sel >= 0 {
 			sel += len(head)
@@ -589,7 +614,10 @@ func (sv *settingsView) render(m *dash) string {
 		keys = peersKeys
 	case tabAllAccess:
 		lines = append(lines, faintLines("Every project's threads get these, a new one's too. A project's lists add to these, and it may drop one of them, in its popup's Access tab (a on the dashboard, prefix+a in a session); its own switches replace these, x there makes it follow these again.", w)...)
-		keys = "enter change · p add a preset · R reset · ↑ ↓ move · ← → tabs · esc close"
+		keys = "enter change · R reset · ↑ ↓ move · ← → tabs · esc close"
+		if sandboxShown(m, "") {
+			keys = "enter change · p add a preset · R reset · ↑ ↓ move · ← → tabs · esc close"
+		}
 	default:
 		lines = append(lines, faintLines("Every project follows these, a new one too, unless it sets its own in its popup (a on the dashboard, prefix+a in a session); x there makes it follow these again.", w)...)
 		keys = "enter change · + - number · ↑ ↓ move · ← → tabs · esc close"

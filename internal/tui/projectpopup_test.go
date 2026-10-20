@@ -1720,3 +1720,48 @@ func TestAccessReset(t *testing.T) {
 		t.Fatal("all projects' protection not back to open")
 	}
 }
+
+// TestAccessTabByLevel: the Access tab shows only what the protection
+// level uses: at open protection, prompts, secrets and tm's rules; the
+// guard's rows from guarded; the sandbox's, and p for presets, from
+// sandboxed. Raising it shows them at once.
+func TestAccessTabByLevel(t *testing.T) {
+	src, m := popupData(t)
+	m.Update(tea.WindowSizeMsg{Width: 160, Height: 120})
+	keyPress(m, "a")
+	keyPress(m, "5")
+	pv := m.top().(*projectView)
+	labels := func() []string {
+		pv.access.sync(m)
+		var out []string
+		for _, r := range pv.access.rows {
+			out = append(out, r.label)
+		}
+		return out
+	}
+	if got := labels(); !slices.Equal(got, []string{"Protection", "Yolo mode", "Coordinator approves", "Secret environment", "tm's rules"}) {
+		t.Errorf("open: %q", got)
+	}
+	out := screen(m)
+	if !strings.Contains(out, "Protection is open") || strings.Contains(out, "Prefer rules inside the sandbox") || strings.Contains(out, "p add a preset") {
+		t.Errorf("open screen:\n%s", out)
+	}
+	keyPress(m, "p")
+	if _, ok := m.top().(*presetsView); ok {
+		t.Error("p opened the presets at open")
+	}
+	act(t, m, src, "enter") // guarded
+	if got := labels(); !slices.Contains(got, "Guard mode") || slices.Contains(got, "Excluded commands") {
+		t.Errorf("guarded: %q", got)
+	}
+	if pv.access.rows[pv.access.sel].label != "Protection" {
+		t.Errorf("the selection left Protection: %q", pv.access.rows[pv.access.sel].label)
+	}
+	act(t, m, src, "enter") // sandboxed
+	if got := labels(); !slices.Contains(got, "Guard mode") || !slices.Contains(got, "Excluded commands") {
+		t.Errorf("sandboxed: %q", got)
+	}
+	if out := screen(m); !strings.Contains(out, "p add a preset") {
+		t.Errorf("sandboxed footer:\n%s", out)
+	}
+}

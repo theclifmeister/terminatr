@@ -90,7 +90,7 @@ func (m *dash) projectPopup(string) tea.Cmd {
 // made: the Access tab's for the platform the server is on.
 func (m *dash) newProjectView(slug string) *projectView {
 	return &projectView{slug: slug, settings: settingsList{rows: m.projectRows(slug)},
-		access: settingsList{rows: accessSettings(slug, m.serverOS())}}
+		access: accessList(slug, m.serverOS())}
 }
 
 // list is the open tab's settings list, nil for a tab without one.
@@ -195,7 +195,7 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	if pv.tab == tabAccess && s == "e" {
 		return m.showAccess(pv.slug, "")
 	}
-	if pv.tab == tabAccess && s == "p" {
+	if pv.tab == tabAccess && s == "p" && sandboxShown(m, pv.slug) {
 		return m.openPresets(pv.slug)
 	}
 	if pv.tab == tabAccess && s == "R" {
@@ -388,7 +388,7 @@ func (pv *projectView) box(m *dash) box {
 		l := pv.list()
 		body, sel, hits = l.lines(m, w)
 		if pv.tab == tabAccess {
-			head := append(accessHead(m, w), "")
+			head := append(accessHead(m, pv.slug, w), "")
 			body = append(head, body...)
 			if sel >= 0 {
 				sel += len(head)
@@ -398,7 +398,7 @@ func (pv *projectView) box(m *dash) box {
 				hits[i] = noHit
 			}
 		}
-		keys = listKeys(m, l, pv.tab == tabAccess)
+		keys = listKeys(m, l, pv.tab == tabAccess, pv.slug)
 	case tabKeys:
 		// The same list as the help.
 		body = keyLines(w, m.commandHelp())
@@ -431,8 +431,8 @@ func (pv *projectView) box(m *dash) box {
 // listKeys are the Settings or Access tab's (access) keys for its
 // selected row: + and - on a number, x on a setting the project sets
 // itself (it follows all projects again), and on the Access tab p for
-// a preset and e for the effective access.
-func listKeys(m *dash, l *settingsList, access bool) string {
+// a preset (from protection sandboxed) and e for the effective access.
+func listKeys(m *dash, l *settingsList, access bool, slug string) string {
 	keys := []string{"enter change"}
 	if l.sel < len(l.rows) {
 		r := l.rows[l.sel]
@@ -447,7 +447,10 @@ func listKeys(m *dash, l *settingsList, access bool) string {
 		}
 	}
 	if access {
-		keys = append(keys, "p add a preset", "e effective access", "R reset")
+		if sandboxShown(m, slug) {
+			keys = append(keys, "p add a preset")
+		}
+		keys = append(keys, "e effective access", "R reset")
 	}
 	return strings.Join(append(keys, "← → tabs", "esc close"), " · ")
 }

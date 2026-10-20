@@ -20,18 +20,59 @@ import (
 // project's tab opens its effective access (access.go).
 
 // accessSettings are the Access tab's rows for slug ("" for all
-// projects) on platform goos.
+// projects) on platform goos, all of them, whatever the level.
 func accessSettings(slug, goos string) []setting {
+	return accessRows(slug, goos, config.ProtectStrict)
+}
+
+// accessList is the Access tab's list for slug on goos: its rows made
+// anew from the level the console has, so raising or lowering
+// protection shows or hides what it uses (accessRows).
+func accessList(slug, goos string) settingsList {
+	l := settingsList{build: func(m *dash) []setting {
+		return accessRows(slug, goos, newSafetyRows(slug).safety(m).Protection)
+	}}
+	l.rows = accessSettings(slug, goos)
+	return l
+}
+
+// accessRows are the Access tab's rows at protection level: protection
+// and prompts, the secret environment and tm's rules always; the
+// guard's rows from guarded, the sandbox's from sandboxed. What a level
+// doesn't use isn't shown: raising it brings the rows back, with what
+// they held.
+func accessRows(slug, goos, level string) []setting {
 	sr := newSafetyRows(slug)
+	at := config.Safety{Protection: level}
 	prompts := sr.scope([]setting{sr.protectionRow(), sr.yoloRow(), sr.toggle("coordinator_approves")})
 	prompts[0].section = "Protection and prompts"
-	guard := sr.scope(sr.guardRows())
-	guard[0].section = "Guard"
+	rows := prompts
+	if at.AtLeast(config.ProtectSandboxed) {
+		rows = append(rows, sandboxSettings(slug, goos)...)
+	}
+	if at.AtLeast(config.ProtectGuarded) {
+		guard := sr.scope(sr.guardRows())
+		guard[0].section = "Guard"
+		rows = append(rows, guard...)
+	}
 	env := sr.secretEnvRow()
 	env.section = "Secrets"
-	rows := append(prompts, sandboxSettings(slug, goos)...)
-	rows = append(rows, guard...)
 	return append(rows, env, sr.builtInRow())
+}
+
+// sandboxShown reports whether slug's ("" all projects') Access tab
+// shows the sandbox's rows: at protection sandboxed and up.
+func sandboxShown(m *dash, slug string) bool {
+	return newSafetyRows(slug).safety(m).AtLeast(config.ProtectSandboxed)
+}
+
+// protectionGuide heads the Access tab below sandboxed, in place of the
+// sandbox's guidance: what the level gives, and what raising it adds.
+func protectionGuide(level string) string {
+	if level == config.ProtectGuarded {
+		return "Protection is guarded: agents keep their own permission prompts and the guard refuses what breaks its rules (Guard, below). Raise protection to sandboxed to run Claude threads' commands in a sandbox; its rules show here then."
+	}
+	return "Protection is open: agents run as they do on their own, with their own permission prompts. Raise protection to guarded for the guard's rules, or sandboxed for the thread sandbox; their settings show here then."
 }
 
 // protectionWords name protection's levels, each what it adds.

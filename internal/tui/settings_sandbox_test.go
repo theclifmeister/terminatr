@@ -19,7 +19,12 @@ import (
 func sandboxData(t *testing.T) (*fakeSource, *dash) {
 	t.Helper()
 	src, m := popupData(t)
-	os.WriteFile(filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml"), []byte(`[defaults.sandbox]
+	// At protection sandboxed, where the Access tab shows the sandbox's
+	// rows.
+	os.WriteFile(filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml"), []byte(`[defaults]
+protection = "sandboxed"
+
+[defaults.sandbox]
 excluded_commands = ["docker compose *"]
 `), 0o600)
 	c, err := config.Load()
@@ -27,6 +32,12 @@ excluded_commands = ["docker compose *"]
 		t.Fatal(err)
 	}
 	m.data.Sandbox = map[string]config.SandboxTable{"": c.SandboxOf(""), "alpha": c.SandboxOf("alpha")}
+	all, _ := c.AllProjects()
+	m.data.Defaults = &all
+	for i := range m.data.Projects {
+		s, _ := c.Safety(m.data.Projects[i].Slug)
+		m.data.Projects[i].Safety = &s
+	}
 	m.data.Server.OS = config.OSMac
 	return src, m
 }
@@ -247,7 +258,7 @@ func TestAccessTab(t *testing.T) {
 		out += screen(m)
 	}
 	for _, want := range []string{"5 access", "Prefer rules inside the sandbox", "a last resort", "what applies on macOS",
-		"Protection and prompts", "Protection", "open: the agent's own prompts", "Yolo mode", "Coordinator approves",
+		"Protection and prompts", "Protection", "sandboxed: + the thread sandbox", "Yolo mode", "Coordinator approves",
 		"Inside the sandbox", "Network hosts", "Local ports", "Guidance for threads",
 		"Outside the sandbox", "Excluded commands", "Permission rules", "Allow rules",
 		"Guard", "Guard mode", "Guard rules", "Guard allowances", "Guard refusals", "Secrets", "Secret environment",
@@ -273,12 +284,12 @@ func TestAccessTab(t *testing.T) {
 	// sets its own (x follows all projects again).
 	drain(t, m, keyPress(m, "enter"))
 	cfg, _ := config.Load()
-	if s, _ := cfg.Safety("alpha"); s.Protection != config.ProtectGuarded {
-		t.Errorf("alpha's protection %q, want guarded", s.Protection)
+	if s, _ := cfg.Safety("alpha"); s.Protection != config.ProtectStrict {
+		t.Errorf("alpha's protection %q, want strict", s.Protection)
 	}
 	// The row's label may scroll above the popup's top (its help is long):
 	// its value, and the footer offering x.
-	if out := screen(m); pv.access.rows[0].label != "Protection" || pv.access.rows[0].value(m) != "guarded: + the guard's rules" || !strings.Contains(out, "x follow all projects") {
+	if out := screen(m); pv.access.rows[0].label != "Protection" || pv.access.rows[0].value(m) != "strict: sandbox, no escapes" || !strings.Contains(out, "x follow all projects") {
 		t.Errorf("after enter on Protection:\n%s", out)
 	}
 	// The , popup's third tab is all projects', its workflow rows left
@@ -338,7 +349,7 @@ func TestSandboxTabOS(t *testing.T) {
 		}
 		_, m := sandboxData(t)
 		m.data.Server.OS = goos
-		if out := strings.Join(accessHead(m, 200), " "); !strings.Contains(out, "don't apply there") || !strings.Contains(out, config.OSName(goos)) {
+		if out := strings.Join(accessHead(m, "alpha", 200), " "); !strings.Contains(out, "don't apply there") || !strings.Contains(out, config.OSName(goos)) {
 			t.Errorf("%s head: %s", goos, out)
 		}
 	}

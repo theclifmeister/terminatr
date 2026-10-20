@@ -247,6 +247,8 @@ Without the CLI and a login (or a PAT for Azure DevOps), that host's PRs are not
 
 Everything that decides what a project's threads may do is on one tab: **Access**, in the project's popup (`a`, then `5`) and, for all projects, in the settings (`,`, then `3`). A project's row says `· all projects` while it follows all projects' value; changing it there makes it the project's own, and `x` on it follows all projects again (the footer offers `x` only on such a row). All projects' rows name the projects that set their own. The Settings and All projects tabs keep the workflow settings (starting threads, caps, pull requests, models, branch names, history). The tab's sections:
 
+The tab shows only what your protection level uses: at open, the Protection and prompts section, Secrets and Built in; from guarded, the Guard section too; from sandboxed, the sandbox's sections and presets. Raising the level shows them at once, with whatever they held before.
+
 - **Protection and prompts**: Protection (below), Yolo mode (turning it on asks first) and Coordinator approves.
 - **Inside the sandbox** (network hosts, local ports, guidance for threads, write folders, sockets), **Outside the sandbox** (excluded commands, approved commands) and **Permission rules** (allow rules): the sandbox's rules, below. `p` adds a preset's rules.
 - **Guard**: the guard's rows, and **Secrets**: the secret environment ([The guard](#the-guard)).

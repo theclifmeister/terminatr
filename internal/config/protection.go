@@ -44,18 +44,18 @@ func ProtectPinned(escapes bool) string {
 	return ProtectStrict
 }
 
-// atLeast reports whether s's level is level or above it.
-func (s Safety) atLeast(level string) bool {
+// AtLeast reports whether s's level is level or above it.
+func (s Safety) AtLeast(level string) bool {
 	return slices.Index(ProtectLevels, s.Protection) >= slices.Index(ProtectLevels, level)
 }
 
 // GuardRulesOn reports whether the guard's rules apply (guarded and up,
 // with the guard on); below, it keeps its floor only.
-func (s Safety) GuardRulesOn() bool { return s.Guard && s.atLeast(ProtectGuarded) }
+func (s Safety) GuardRulesOn() bool { return s.Guard && s.AtLeast(ProtectGuarded) }
 
 // ThreadSandbox reports whether threads run in their sandbox
 // (sandboxed and up).
-func (s Safety) ThreadSandbox() bool { return s.atLeast(ProtectSandboxed) }
+func (s Safety) ThreadSandbox() bool { return s.AtLeast(ProtectSandboxed) }
 
 // SandboxEscapes reports whether a sandboxed thread may ask to run a
 // command outside its sandbox (sandboxed, not strict).
