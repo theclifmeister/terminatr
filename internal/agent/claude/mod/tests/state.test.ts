@@ -12,6 +12,8 @@ type Report = { state: string; reason?: string; event: string }
 // the menu is open), a permission request's hooks.
 type Beneath = {
   ask?: () => Promise<void>
+  // run: a Bash call, its permission prompt and the tool (tool.call's core).
+  run?: () => Promise<void>
   decide?: (tool: string) => { decision?: { behavior: 'allow' } }
   // wedged: the server takes a minute to answer each report.
   wedged?: boolean
@@ -48,6 +50,10 @@ async function start($: Engine, on: On, env: Record<string, string> = { TERMINAT
   on('tool.call', { tool: 'AskUserQuestion' }, async () => {
     await beneath.ask?.()
     return { result: { answers: {} } }
+  })
+  on('tool.call', { tool: 'Bash' }, async () => {
+    await beneath.run?.()
+    return { result: { stdout: '', stderr: '', interrupted: false } } as never
   })
   on('classic.PermissionRequest', async (_$, e) => beneath.decide?.(e.tool_name) ?? {})
   on('classic.PostToolUse', async () => ({}))
@@ -108,6 +114,26 @@ test('a prompt a hook beneath decided opens no dialog; a denial closes one', asy
   await $.classic.PermissionDenied({ tool_name: 'WebFetch', tool_input: {}, tool_use_id: 'u3', reason: 'no' })
   await clock.settle()
   expect(states(reports)).toEqual(['idle', 'working', 'blocked/permission', 'working'])
+})
+
+test("with the classic hooks skipped by another mod, the call's end closes its dialog", async ($, on) => {
+  let during = ''
+  const { clock, reports } = await start($, on, undefined, {
+    run: async () => {
+      // The prompt opens inside the call; no classic.PostToolUse comes.
+      await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'make' } })
+      await clock.settle()
+      during = states(reports).at(-1) ?? ''
+    },
+  })
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await $.tool.call({ tool: 'Bash', command: 'make' } as never)
+  await clock.settle()
+  expect(during).toBe('blocked/permission')
+  // The next beat sends it.
+  await clock.advance(10_000)
+  expect(reports.map(r => `${r.event}:${r.reason ? `${r.state}/${r.reason}` : r.state}`)).toEqual([
+    'session.start:idle', 'turn.start:working', 'PermissionRequest:blocked/permission', 'beat:working'])
 })
 
 test("a subagent's run doesn't end the turn; /clear starts idle; exit is reported", async ($, on) => {

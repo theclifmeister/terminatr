@@ -31,11 +31,16 @@
 // where each path it writes leads through links and junctions. A write
 // the server can't place in time is refused, never judged as written.
 
+import { atom, update } from 'claude-code'
 import type { EngineInterface, On } from 'claude-code'
 
 import { judge, off, RULE_ESCAPE, RULE_EXCLUDED, rulesOf, writeTargets } from './guard'
 import type { Denial, Rules } from './guard'
 import { failed, FETCH_MS, postInit, refused, socketURL, timedOut, within } from './socket'
+import { initialTurn, step, waitKey } from './turn'
+
+// turn is register.ts's turn in $.state, whose prompt a call's end closes.
+const turn = atom({ plugin: 'terminatr', key: 'turn' } as const, initialTurn)
 
 // RULES_TTL_MS is how long fetched rules hold; FETCH_MS bounds a fetch.
 const RULES_TTL_MS = 1_000
@@ -66,16 +71,29 @@ export function guard(on: On) {
     const r = await placed($, await rulesNow($), e.tool, input)
     if (!r) return { deny: UNPLACED }
     const d = judge(r, e.tool, input)
+    // The call's end closes its permission prompt (tool.call's next runs
+    // the prompt and the tool), as classic.PostToolUse,
+    // PostToolUseFailure and PermissionDenied do in register.ts: another
+    // mod seated before this one can skip those but not tool.call
+    // (docs/SPEC.md §7.8). Where they ran it changes nothing; where
+    // they didn't, the next report or beat sends the state.
+    const run = async () => {
+      try {
+        return await next(e)
+      } finally {
+        await update($, turn, t => step(t, { kind: 'unwait', key: waitKey(e.tool, e.agentId) }))
+      }
+    }
     if (d?.ask && (d.rule === RULE_ESCAPE || d.rule === RULE_EXCLUDED)) {
       const id = `esc-${await $.clock.now()}-${++escapes}`
       if (!(await reportEscape($, id, false))) return { deny: UNMARKED }
       try {
-        return await next(e)
+        return await run()
       } finally {
         await reportEscape($, id, true)
       }
     }
-    if (!d || d.ask) return next(e)
+    if (!d || d.ask) return run()
     void reportDenial($, e.tool, d)
     return { deny: d.message }
   }).catch(($, e, next) =>

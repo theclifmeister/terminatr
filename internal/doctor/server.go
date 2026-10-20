@@ -210,7 +210,7 @@ func skippedChecks(sessions []proto.SessionInfo) []Check {
 		}
 		out = append(out, Check{Group: "server", Name: "agent mod", Status: Warn,
 			Detail: fmt.Sprintf("%s: terminatr hooks skipped by %s; tm gives the role's context through its command hooks instead. "+
-				"An organization's managed Claude Code plugin seated before user plugins does this; only its administrator can change it", sessionWho(s), s.HooksSkipped)})
+				"Claude Code's built-in cc-plugin-sec-default does this on managed and Team or Enterprise machines; only the organization's administrator can change it (managed prependPlugins without sec-default@builtin)", sessionWho(s), s.HooksSkipped)})
 	}
 	return out
 }

@@ -700,9 +700,9 @@ Termilator was called Termalator up to v0.1.0 (`brew install termalator`, state 
 
 ## When another mod skips terminatr's hooks
 
-On a machine with managed Claude Code settings, or with a Team or Enterprise account, Claude Code may run a security plugin of the organization's before your own plugins, and that plugin can skip the hooks of every plugin you installed, terminatr's mod among them. Claude Code says so only in its debug log ("bypassed by …").
+On a machine with managed Claude Code settings, or with a Team or Enterprise account, Claude Code runs its built-in security plugin (`cc-plugin-sec-default@builtin`) before your own plugins, and it skips some hooks of every plugin you installed, terminatr's mod among them.
 
-terminatr notices and gives the coordinator and threads their rules and state through its own hooks instead, which Claude always runs. Nothing is lost and you need do nothing. You see it as "terminatr hooks skipped by another mod" on the session's row in the console and in `tm doctor`, and the coordinator gets one inbox item about it. The other parts of terminatr's mod that hook the same events may not run there either. Only your organization's administrator can change the plugin order (the managed `prependPlugins` setting).
+terminatr notices and gives the coordinator and threads their rules and state through its own hooks instead, which Claude always runs. Nothing is lost and you need do nothing. You see it as "terminatr hooks skipped by another mod" on the session's row in the console and in `tm doctor`, and the coordinator gets one inbox item about it. The session's state stays right too, with one exception: a `/compact` you type between turns shows the session idle, not working, while it runs. Only your organization's administrator can change this, with the managed `prependPlugins` setting: once it is set, the built-in plugin runs only if the list names it (`sec-default@builtin`), so a list that leaves it out turns it off.
 
 ## Keeping agent sessions lean
 

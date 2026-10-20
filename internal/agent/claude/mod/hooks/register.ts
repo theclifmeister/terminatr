@@ -116,7 +116,8 @@ const CONTEXT_WAIT_MS = 2_000
 const MARK_WAIT_MS = 1_000
 
 export const register: Register = on => {
-  // The standing rules, checked on each tool call (hooks/guarded.ts).
+  // The standing rules, checked on each tool call (hooks/guarded.ts),
+  // whose hook also closes a call's permission prompt when it ends.
   guard(on)
 
   on('session.start', async ($, e, next) => {
