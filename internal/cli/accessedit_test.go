@@ -181,7 +181,10 @@ func TestAccessEdit(t *testing.T) {
 	}
 	ok("add", "excluded", "docker compose *", "--all", "--without-asking")
 	ok("add", "host", "a.dev", "--all")
-	ok("add", "excluded", "make e2e", "demo")
+	// An entry without * takes the bare command only (T632): said.
+	if code, _, stderr := run("add", "excluded", "make e2e", "demo"); code != ExitOK || !strings.Contains(stderr, "make e2e takes only make e2e itself, with no arguments: make e2e * takes it with them") {
+		t.Errorf("bare excluded command: %q", stderr)
+	}
 	ok("drop", "docker compose *", "demo")
 	out := ok("edit", "excluded", "docker compose *", "docker compose up *", "--all")
 	for _, want := range []string{"changed for all projects: excluded command docker compose * → docker compose up *", "demo drops docker compose up * now"} {

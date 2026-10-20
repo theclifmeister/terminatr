@@ -6,6 +6,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // The writers of tm access (T574 §5): add and rm an entry of a sandbox
@@ -199,6 +200,9 @@ func accessAdd(e *Env, verb string, args []string) error {
 		}
 		if key == config.SandboxExcluded {
 			fmt.Fprintln(e.Stderr, "note: it runs outside the sandbox, with your full file and network access (tm's socket included)")
+			if n := proto.ExcludedOnlyItself(value); n != "" {
+				fmt.Fprintf(e.Stderr, "note: %s takes %s\n", value, n)
+			}
 		}
 	}
 	if *noAsk {
@@ -316,6 +320,9 @@ func accessEdit(e *Env, args []string) error {
 	}
 	if key == config.SandboxExcluded && value != old {
 		fmt.Fprintln(e.Stderr, "note: it runs outside the sandbox, with your full file and network access (tm's socket included)")
+		if n := proto.ExcludedOnlyItself(value); n != "" {
+			fmt.Fprintf(e.Stderr, "note: %s takes %s\n", value, n)
+		}
 	}
 	e.accessJournal("settings.sandbox", slug, detail)
 	for _, s := range moved {

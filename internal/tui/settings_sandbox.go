@@ -9,6 +9,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
@@ -434,6 +435,9 @@ func (v *sandboxView) add(m *dash) {
 		}
 		if w := config.SandboxWarning(v.list, e); w != "" {
 			q += " " + e + ": " + w + "."
+		}
+		if n := proto.ExcludedOnlyItself(e); n != "" && v.list == config.SandboxExcluded {
+			q += " It takes " + n + "."
 		}
 		if c := v.covered(m, e); c != "" {
 			q += " " + c + "."
