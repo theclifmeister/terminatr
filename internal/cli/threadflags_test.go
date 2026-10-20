@@ -93,7 +93,7 @@ func TestThreadSubcommandFlags(t *testing.T) {
 	isUsage(t, err, "--choice takes a number 1-9")
 
 	resolve := func(f *flagSet) func([]string) (resolveOpts, error) { return resolveFlags(f, "resolve") }
-	if o, err := parseWith(t, resolve, "t-0001", "--discard"); err != nil || o != (resolveOpts{"t-0001", true}) {
+	if o, err := parseWith(t, resolve, "t-0001", "--discard"); err != nil || o != (resolveOpts{"t-0001", true, false}) {
 		t.Errorf("resolve --discard: %+v, %v", o, err)
 	}
 	// Only resolve takes --discard.

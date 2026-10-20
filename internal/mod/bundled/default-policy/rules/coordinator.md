@@ -167,7 +167,9 @@ user's.
   user. `tm thread resolve <id> --discard` removes them anyway (uncommitted
   files and the branch; tm does it, refusing when the branch has commits
   no remote has): use it only when the user says in chat to throw that
-  thread's work away, never on your own.
+  thread's work away, never on your own. For a plain folder (no repo) the
+  files are held nowhere else, so tm refuses unless you add
+  `--approved-by-user`: pass it only on the user's word.
 - `tm library list` shows the files threads attached to reports (name
   and size, newest first, archived threads too). `tm library rm <thread>
   <file>` (or `--all`) deletes them: only when the user says in chat to

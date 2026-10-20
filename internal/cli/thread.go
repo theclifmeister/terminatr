@@ -50,7 +50,9 @@ const threadUsage = `usage: tm thread <command> [--project <slug>] [--json]
   stop <id> | restart <id>
   merge <id>                     merge the thread's PR (merge = coordinator): checks green on
                                  its head, mergeable, by merge_method; else a refusal says why
-  resolve <id> [--discard]       --discard also removes a worktree with uncommitted changes
+  resolve <id> [--discard [--approved-by-user]]
+                                 --discard also removes a worktree with uncommitted changes;
+                                 a plain folder's files need --approved-by-user (the user's word)
                                  and its branch; refused when the branch has unsaved commits
 
 Exit codes: 0 done or already true, 1 refused, 2 usage, 3 I/O.`
@@ -143,7 +145,7 @@ func runThread(e *Env, args []string) error {
 			case "restart":
 				return e.threadRestart(p, o.id)
 			}
-			return e.threadResolve(p, o.id, o.discard)
+			return e.threadResolve(p, o.id, o.discard, o.approved)
 		})
 	default:
 		return usagef("unknown subcommand %q\n%s", sub, threadUsage)
@@ -337,20 +339,21 @@ func answerFlags(f *flagSet) func(pos []string) (answerArgs, error) {
 }
 
 type resolveOpts struct {
-	id      string
-	discard bool
+	id       string
+	discard  bool
+	approved bool
 }
 
 // resolveFlags is for ack, stop, restart and resolve; only resolve takes
 // --discard.
 func resolveFlags(f *flagSet, sub string) func(pos []string) (resolveOpts, error) {
-	discard := new(bool)
+	discard, approved := new(bool), new(bool)
 	if sub == "resolve" {
-		discard = f.Bool("discard")
+		discard, approved = f.Bool("discard"), f.Bool("approved-by-user")
 	}
 	return func(pos []string) (resolveOpts, error) {
 		id, err := idFlags(sub + " <id>")(pos)
-		return resolveOpts{id: id, discard: *discard}, err
+		return resolveOpts{id: id, discard: *discard, approved: *approved}, err
 	}
 }
 

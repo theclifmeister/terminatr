@@ -48,6 +48,25 @@ func TestLoadChecksID(t *testing.T) {
 	}
 }
 
+// TestListSkipsMismatchedID: one record whose id isn't its folder's is
+// skipped, so the others still list.
+func TestListSkipsMismatchedID(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	p, err := project.New(project.Options{Slug: "demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := Create(p, Record{Title: "A"})
+	b, _ := Create(p, Record{Title: "B"})
+	path := Path(p, a.ID, "thread.toml")
+	data, _ := os.ReadFile(path)
+	os.WriteFile(path, []byte(strings.Replace(string(data), `id = "`+a.ID+`"`, `id = "t-0099"`, 1)), 0o644)
+	recs, err := List(p)
+	if err != nil || len(recs) != 1 || recs[0].ID != b.ID {
+		t.Fatalf("List = %v, %v", recs, err)
+	}
+}
+
 // TestPlainBrief: a thread without a repo is told it has no git, no
 // branch and no PR, and how its output is kept; one with a repo isn't.
 func TestPlainBrief(t *testing.T) {

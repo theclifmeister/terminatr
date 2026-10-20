@@ -40,7 +40,7 @@ func (e *Env) sessionGone(r *thread.Record, wait time.Duration) bool {
 	}
 }
 
-func (e *Env) threadResolve(p *project.Project, id string, discard bool) error {
+func (e *Env) threadResolve(p *project.Project, id string, discard, approved bool) error {
 	r, err := thread.Load(p, id)
 	if err != nil {
 		return err
@@ -50,7 +50,7 @@ func (e *Env) threadResolve(p *project.Project, id string, discard bool) error {
 		return nil
 	}
 	if discard {
-		if err := discardable(p, r); err != nil {
+		if err := discardable(p, r, approved); err != nil {
 			return err
 		}
 	}
@@ -247,7 +247,7 @@ func leftover(r *thread.Record) bool {
 // only a worktree of tm's own, whose branch
 // holds no commit that is on no remote (in a repo without remotes, not
 // merged into another branch). Uncommitted changes are what it discards.
-func discardable(p *project.Project, r *thread.Record) error {
+func discardable(p *project.Project, r *thread.Record, approved bool) error {
 	refuse := func(format string, a ...any) error {
 		return &tasks.Error{Code: "discard-refused", Msg: fmt.Sprintf(format, a...)}
 	}
@@ -255,7 +255,11 @@ func discardable(p *project.Project, r *thread.Record) error {
 	case r.Checkout || r.Adopted:
 		return refuse("thread %s is adopted: its checkout is the user's, not tm's to remove", r.ID)
 	case r.Plain():
-		// A plain folder has no branch: discarding throws its files away.
+		// A plain folder has no branch and no remote: discarding throws
+		// away files nothing else holds, so it takes the user's word.
+		if !approved {
+			return refuse("thread %s has a plain folder: --discard throws away files nothing else holds; only on the user's word in chat, add --approved-by-user; nothing discarded", r.ID)
+		}
 		recs, err := thread.List(p)
 		if err != nil {
 			return refuse("can't read the project's threads (%s); nothing discarded", textsafe.Line(err.Error(), 120))
