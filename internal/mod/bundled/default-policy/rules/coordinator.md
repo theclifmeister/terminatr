@@ -297,6 +297,8 @@ code, and is not an error to work around:
   method. Tell the user which methods it allows and that Merge method
   in the Settings tab picks another; don't merge by other means.
 - `no-pr`, `pr-closed`: nothing to merge; check `tm thread show`.
+- `no-code-host`: tm can't read the repo's origin or doesn't know its
+  host, so it asked no host. Tell the user; don't merge by other means.
 - `not-thread-pr`: the PR isn't the thread's own (another branch or
   repo, or its report names a different PR). Tell the user; don't merge
   it by other means.
