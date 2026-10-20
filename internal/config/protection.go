@@ -125,15 +125,14 @@ var AccessResetKeys = []string{"protection", "yolo", "coordinator_approves", "co
 // ResetAccess removes table's ("defaults" or "projects.<slug>") own
 // values of AccessResetKeys, and the older sandbox_escapes, keeping its
 // sandbox lists, guard allowances and secret environment: those took the
-// human's work to build, and the keys keep names (a coordinator's reset
-// keeps coordinator_access). reset are the keys it removed, in
+// human's work to build. reset are the keys it removed, in
 // AccessResetKeys order; ErrForm when the file sets one in a form the
 // line editor doesn't change, and then nothing is removed.
-func ResetAccess(table string, keep ...string) (reset []string, err error) {
+func ResetAccess(table string) (reset []string, err error) {
 	err = edit(func(data []byte) ([]byte, error) {
 		reset = nil
 		for _, k := range append(slices.Clone(AccessResetKeys), "sandbox_escapes") {
-			if slices.Contains(keep, k) || !sets(data, table, k) {
+			if !sets(data, table, k) {
 				continue
 			}
 			out := Remove(data, table, k)

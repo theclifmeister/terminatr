@@ -123,10 +123,11 @@ type Rules struct {
 	// so a call Unsandboxed takes is refused.
 	NoEscapes bool `json:"noEscapes,omitempty"`
 	// AccessWrites: the project lets its coordinator change its access
-	// (coordinator_access), so the floor lets the coordinator's tm access
-	// writes through (accessOpen): tm checks them in the server. Never
-	// one for all projects (--all), nor setting yolo or that switch,
-	// which stay the human's.
+	// rules (coordinator_access), so the floor lets the coordinator's tm
+	// access writes of rules through (accessOpen): tm checks them in the
+	// server. Never one for all projects (--all), a reset or a switch
+	// but local ports (protection, escapes, yolo, coordinator), which
+	// stay the human's.
 	AccessWrites bool `json:"accessWrites,omitempty"`
 	// Learn is guard_mode "learn": a refusal tells the model the user
 	// reviews it.
@@ -1622,8 +1623,9 @@ func tmWritesSettings(args []string) string {
 }
 
 // accessOpen reports whether tm with args (after its name) is a tm
-// access write a coordinator with AccessWrites may run: never for all
-// projects, never setting yolo or coordinator (the human's switches).
+// access write a coordinator with AccessWrites may run: a rule's (add,
+// rm, edit, drop, undrop, preset add, set local-ports), never for all
+// projects, never a reset or another switch (the human's).
 func accessOpen(args []string) bool {
 	var pos []string
 	for _, a := range args {
@@ -1634,10 +1636,10 @@ func accessOpen(args []string) bool {
 			pos = append(pos, a)
 		}
 	}
-	if len(pos) < 2 || pos[0] != "access" {
+	if len(pos) < 2 || pos[0] != "access" || pos[1] == "reset" {
 		return false
 	}
-	return !(pos[1] == "set" && len(pos) > 2 && (pos[2] == "yolo" || pos[2] == "coordinator"))
+	return pos[1] != "set" || len(pos) > 2 && pos[2] == "local-ports"
 }
 
 // nowhere is the folder a command line's relative paths are from, as

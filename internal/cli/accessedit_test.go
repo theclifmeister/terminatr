@@ -244,9 +244,9 @@ func TestAccessEdit(t *testing.T) {
 }
 
 // TestAccessCoordinator: with coordinator_access on, the project's
-// coordinator changes its own project's access, journaled as its own;
-// never all projects', another project's, yolo on or the switch, and its
-// reset keeps the switch. A thread stays refused.
+// coordinator changes its own project's rules, journaled as its own;
+// never all projects', another project's, a reset or a switch but local
+// ports (protection, escapes, yolo, the switch). A thread stays refused.
 func TestAccessCoordinator(t *testing.T) {
 	h := newHarness(t)
 	h.ok(human, "project", "new", "demo")
@@ -271,8 +271,7 @@ func TestAccessCoordinator(t *testing.T) {
 	}
 	for _, args := range [][]string{
 		{"add", "host", "registry.npmjs.org", "demo"},
-		{"set", "protection", "sandboxed", "demo"},
-		{"set", "yolo", "off", "demo"},
+		{"set", "local-ports", "on", "demo"},
 		{"preset", "add", "local-dev-servers", "demo"},
 	} {
 		if code, _, stderr := run(coord, args...); code != ExitOK {
@@ -286,19 +285,20 @@ func TestAccessCoordinator(t *testing.T) {
 		{coord, []string{"add", "host", "x.dev", "--all"}},
 		{coord, []string{"add", "host", "x.dev", "other"}},
 		{coord, []string{"set", "yolo", "on", "demo", "--yes"}},
+		{coord, []string{"set", "yolo", "off", "demo"}},
+		{coord, []string{"set", "protection", "open", "demo", "--yes"}},
+		{coord, []string{"set", "escapes", "off", "demo"}},
 		{coord, []string{"set", "coordinator", "off", "demo"}},
+		{coord, []string{"reset", "demo", "--yes"}},
 		{thr, []string{"add", "host", "x.dev", "demo"}},
 	} {
 		if code, _, stderr := run(c.who, c.args...); code == ExitOK || !strings.Contains(stderr, "human-only") {
 			t.Errorf("%v %v: exit %d, %q", c.who.Kind, c.args, code, stderr)
 		}
 	}
-	if code, out, stderr := run(coord, "reset", "demo", "--yes"); code != ExitOK || !strings.Contains(out, "protection") {
-		t.Errorf("coordinator reset: %q %q", out, stderr)
-	}
 	c, _ := config.Load()
 	s, _ := c.Safety("demo")
-	if !s.CoordinatorAccess || s.Protection != config.ProtectOpen || len(c.ThreadSandbox("demo").Given(config.SandboxHosts)) != 1 || len(c.ThreadSandbox("other").Given(config.SandboxHosts)) != 0 {
+	if !s.CoordinatorAccess || s.Protection != config.ProtectOpen || !c.ThreadSandbox("demo").LocalPorts || len(c.ThreadSandbox("demo").Given(config.SandboxHosts)) != 1 || len(c.ThreadSandbox("other").Given(config.SandboxHosts)) != 0 {
 		t.Errorf("demo after the coordinator: %+v", s)
 	}
 	if s, _ := c.Safety("other"); s.CoordinatorAccess {
@@ -306,7 +306,7 @@ func TestAccessCoordinator(t *testing.T) {
 	}
 	// In the server (cli.run, where a coordinator's tm access write goes):
 	// the coordinator's runs, a thread's isn't a project command.
-	if res := RunInServer(proto.CLIRunParams{Args: []string{"access", "set", "protection", "guarded", "demo"}, Cwd: h.cwd}, coord); res.Code != ExitOK {
+	if res := RunInServer(proto.CLIRunParams{Args: []string{"access", "add", "write", "~/src/fixtures/data", "demo"}, Cwd: h.cwd}, coord); res.Code != ExitOK {
 		t.Errorf("in the server: %q", res.Stderr)
 	}
 	if res := RunInServer(proto.CLIRunParams{Args: []string{"access", "add", "host", "y.dev", "demo"}, Cwd: h.cwd}, thr); res.Code == ExitOK || !strings.Contains(res.Stderr, "not a project command") {

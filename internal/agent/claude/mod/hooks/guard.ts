@@ -99,10 +99,10 @@ export type Rules = {
   // The thread's escapes are off (sandbox_escapes = false), so a call
   // unsandboxed takes is refused.
   noEscapes?: boolean
-  // The project lets its coordinator change its access
-  // (coordinator_access): the floor lets its tm access writes through
-  // (accessOpen), which tm checks in the server; never one for all
-  // projects (--all), nor setting yolo or that switch.
+  // The project lets its coordinator change its access rules
+  // (coordinator_access): the floor lets its tm access writes of rules
+  // through (accessOpen), which tm checks in the server; never one for
+  // all projects (--all), a reset or a switch but local ports.
   accessWrites?: boolean
   // guard_mode "learn": a refusal tells the model the user reviews it.
   learn?: boolean
@@ -677,13 +677,14 @@ function tmWritesSettings(args: string[]): string {
 }
 
 // accessOpen is whether tm with args (after its name) is a tm access
-// write a coordinator with accessWrites may run: never for all
-// projects, never setting yolo or coordinator (the human's switches).
+// write a coordinator with accessWrites may run: a rule's (add, rm,
+// edit, drop, undrop, preset add, set local-ports), never for all
+// projects, never a reset or another switch (the human's).
 function accessOpen(args: string[]): boolean {
   if (args.some(a => a === '--all' || a.startsWith('--all='))) return false
   const pos = args.filter(a => !a.startsWith('-'))
-  if (pos.length < 2 || pos[0] !== 'access') return false
-  return !(pos[1] === 'set' && pos.length > 2 && (pos[2] === 'yolo' || pos[2] === 'coordinator'))
+  if (pos.length < 2 || pos[0] !== 'access' || pos[1] === 'reset') return false
+  return pos[1] !== 'set' || (pos.length > 2 && pos[2] === 'local-ports')
 }
 
 // cdTo is where cmd (cd, pushd, popd) with args leaves a line whose

@@ -101,8 +101,8 @@ func TestProtectionOpen(t *testing.T) {
 		t.Error("no access writes with coordinator_access")
 	} else if d := g.Judge("Bash", map[string]any{"command": "tm access add host x.dev " + p.Slug}); d != nil {
 		t.Errorf("coordinator's access write refused: %+v", d)
-	} else if d := g.Judge("Bash", map[string]any{"command": "tm access set yolo on " + p.Slug}); d == nil || !d.Floor {
-		t.Errorf("coordinator's yolo on passes: %+v", d)
+	} else if d := g.Judge("Bash", map[string]any{"command": "tm access set protection open " + p.Slug}); d == nil || !d.Floor {
+		t.Errorf("coordinator's protection change passes: %+v", d)
 	}
 	if g := s.guardRulesFor(thread); g.AccessWrites {
 		t.Error("a thread gets access writes")

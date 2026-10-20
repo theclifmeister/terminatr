@@ -107,14 +107,14 @@ func (sr safetyRows) protectionRow() setting {
 }
 
 func (sr safetyRows) coordinatorAccessRow() setting {
-	return setting{label: "Coordinator sets access", help: "Let the project's coordinator change its access with tm access: protection, the sandbox lists, presets and reset, for its own project only. It can never change all projects', turn yolo mode on or change this switch. Each change is journaled. Turning it on asks first.",
+	return setting{label: "Coordinator sets access", help: "Let the project's coordinator change its rules with tm access: the sandbox lists, presets and local ports, for its own project only. The protection level stays yours: it can never change it, escapes or yolo mode, reset the access, change all projects' or this switch. Each change is journaled. Turning it on asks first.",
 		keys: []string{"coordinator_access"}, word: onOffWord("coordinator_access"),
 		value: func(m *dash) string { return onOff(sr.on(m, "coordinator_access")) },
 		change: func(m *dash) tea.Cmd {
 			if sr.on(m, "coordinator_access") {
 				return sr.set(m, "coordinator_access", false, "the coordinator no longer sets access "+sr.forWho)
 			}
-			m.confirm("Let the coordinator set access", "Let the coordinator change access "+sr.forWho+"? It can then lower protection, open the sandbox and add commands that run outside it, for its own project; never yolo mode, all projects' or this switch.", func() tea.Cmd {
+			m.confirm("Let the coordinator set access", "Let the coordinator change the rules "+sr.forWho+"? Within the protection level you set, it can then open the sandbox to hosts, folders and local ports, and add commands that run outside it; never the level, escapes, yolo mode, all projects' or this switch.", func() tea.Cmd {
 				return sr.set(m, "coordinator_access", true, "the coordinator sets access "+sr.forWho)
 			})
 			return nil

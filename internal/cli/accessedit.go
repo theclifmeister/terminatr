@@ -472,11 +472,11 @@ func accessSet(e *Env, args []string) error {
 	if err := e.accessFor(cmd, slug); err != nil {
 		return err
 	}
-	if e.Caller.Kind == caller.Coordinator && (key == "coordinator_access" || key == "yolo" && on) {
-		return srvFail(cmd, &project.Error{Code: "human-only", Msg: "turning yolo on and letting a coordinator set access are the user's alone"})
+	if e.Caller.Kind == caller.Coordinator && key != config.SandboxLocalPorts {
+		return srvFail(cmd, &project.Error{Code: "human-only", Msg: "protection, escapes, yolo and letting a coordinator set access are the user's alone: change the project's rules within its level (tm access add, rm, edit, drop, undrop, preset add, set local-ports)"})
 	}
 	if key == "coordinator_access" && on {
-		if err := e.confirm(*yes, cmd, "Let "+who+"'s coordinator change its access? It can then lower protection, open the sandbox and add commands that run outside it, for its own project; never yolo, all projects' or this switch."); err != nil {
+		if err := e.confirm(*yes, cmd, "Let "+who+"'s coordinator change its rules? Within the protection level you set, it can then open the sandbox to hosts, folders and local ports, and add commands that run outside it; never the level, escapes, yolo, a reset, all projects' or this switch."); err != nil {
 			return err
 		}
 	}
@@ -562,11 +562,13 @@ func accessReset(e *Env, args []string) error {
 	if err != nil {
 		return srvFail(cmd, err)
 	}
+	if e.Caller.Kind == caller.Coordinator {
+		// A reset changes the project's switches, its protection among
+		// them: the user's alone.
+		return srvFail(cmd, &project.Error{Code: "human-only", Msg: "resetting access changes the project's protection: the user's alone"})
+	}
 	table, slug, who, err := e.accessScope(cmd, pos, *all)
 	if err != nil {
-		return err
-	}
-	if err := e.accessFor(cmd, slug); err != nil {
 		return err
 	}
 	to := "all projects'"
@@ -576,11 +578,7 @@ func accessReset(e *Env, args []string) error {
 	if err := e.confirm(*yes, cmd, "Reset the access switches of "+who+" to "+to+"? Protection, yolo, coordinator approves, the guard, its mode and its rules turned off go back; the sandbox lists, guard allowances and secret environment stay."); err != nil {
 		return err
 	}
-	var keep []string
-	if e.Caller.Kind == caller.Coordinator {
-		keep = []string{"coordinator_access"} // the user's switch
-	}
-	reset, err := config.ResetAccess(table, keep...)
+	reset, err := config.ResetAccess(table)
 	if err != nil {
 		return srvFail(cmd, accessErr(err))
 	}

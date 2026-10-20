@@ -67,8 +67,9 @@ projects', or with --all all projects' back to tm's defaults (protection
 open); the sandbox lists, guard allowances and secret environment stay.
 It asks first. Each is journaled, and threads get it from their next
 start or restart. These are the human's; set coordinator on (asking
-first) lets the project's coordinator run them for its own project too,
-never with --all, set yolo on or set coordinator.
+first) lets the project's coordinator change its own project's rules
+too (add, rm, edit, drop, undrop, preset add, set local-ports), never
+the protection level, escapes, yolo, a reset, --all or set coordinator.
 
 A preset is a named group of rules tm ships. preset show lists the rules
 it adds; preset add adds those the project's threads (or, with --all,
