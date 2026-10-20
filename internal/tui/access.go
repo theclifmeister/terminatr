@@ -155,7 +155,9 @@ func (v *accessView) render(m *dash) string {
 			if strings.HasPrefix(rm, "RESTART TO APPLY") {
 				style = th().Warn
 			}
-			for _, l := range wrapLines(rm, w-whereW-1) {
+			// A remark may quote a rule's value, which an agent's own
+			// file or a thread's worktree can hold.
+			for _, l := range wrapLines(textsafe.Clean(rm, false), w-whereW-1) {
 				lines = append(lines, strings.Repeat(" ", whereW+1)+style.Render(l))
 			}
 		}

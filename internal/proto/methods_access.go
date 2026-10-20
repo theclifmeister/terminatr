@@ -264,7 +264,9 @@ func (r AccessRule) Remarks() []string {
 	} else if len(r.Agents) > 0 {
 		out = append(out, strings.Join(r.Agents, ", ")+" threads only")
 	}
-	if r.Kind == AccessExcluded {
+	if r.Kind == AccessExcluded && r.Where != AccessAgent {
+		// tm's rules only: an agent's own file is the user's, read
+		// unchecked, and not tm's to advise on.
 		if n := ExcludedOnlyItself(r.Value); n != "" {
 			out = append(out, n)
 		}

@@ -422,7 +422,7 @@ func TestOwnEscapes(t *testing.T) {
 	if got[0].Note != proto.AccessOwnEscape || got[1].Note != "tm excludes it too" || got[2].Note != "" {
 		t.Errorf("escapes on: %+v", got)
 	}
-	if rm := got[0].Remarks(); len(rm) != 2 || !strings.Contains(rm[0], "its guard judges") || !strings.Contains(rm[1], "docker * takes it") {
+	if rm := got[0].Remarks(); len(rm) != 1 || !strings.Contains(rm[0], "its guard judges") {
 		t.Errorf("remarks %q", rm)
 	}
 	if got := ownEscapes(files(), set("off", "off")); got[0].Note != proto.AccessOwnEscapeOff {
