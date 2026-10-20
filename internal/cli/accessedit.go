@@ -499,6 +499,45 @@ func (e *Env) accessProtection(cmd, slug, who, level string, yes bool) error {
 	return nil
 }
 
+// accessReset implements tm access reset [<project> | --all]: the
+// project's Access switches follow all projects again, all projects'
+// tm's defaults (config.ResetAccess); it asks first.
+func accessReset(e *Env, args []string) error {
+	const cmd = "access reset"
+	if err := e.accessHuman(cmd); err != nil {
+		return err
+	}
+	f := newFlags()
+	all, yes := f.Bool("all"), f.Bool("yes")
+	pos, err := f.Parse(args)
+	if err != nil {
+		return srvFail(cmd, err)
+	}
+	table, slug, who, err := e.accessScope(cmd, pos, *all)
+	if err != nil {
+		return err
+	}
+	to := "all projects'"
+	if slug == "" {
+		to = "tm's defaults (protection open)"
+	}
+	if err := e.confirm(*yes, cmd, "Reset the access switches of "+who+" to "+to+"? Protection, yolo, coordinator approves, the guard, its mode and its rules turned off go back; the sandbox lists, guard allowances and secret environment stay."); err != nil {
+		return err
+	}
+	reset, err := config.ResetAccess(table)
+	if err != nil {
+		return srvFail(cmd, accessErr(err))
+	}
+	if len(reset) == 0 {
+		fmt.Fprintf(e.Stdout, "%s sets none of its own: nothing to reset\n", who)
+		return nil
+	}
+	fmt.Fprintf(e.Stdout, "reset for %s: %s, now %s\n", who, strings.Join(reset, ", "), to)
+	e.accessJournal("settings.reset", slug, strings.Join(reset, ", "))
+	e.accessNext(slug)
+	return nil
+}
+
 // accessErr is a write's error as the CLI reports it: the file's own
 // form refusal as it is, a check's as refused.
 func accessErr(err error) error {

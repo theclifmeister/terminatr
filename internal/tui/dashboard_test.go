@@ -380,6 +380,10 @@ func (f *fakeSource) GuardDecide(e guardlog.Entry, how, session string) (string,
 	f.decided = append(f.decided, e.ID+" "+how+" "+session)
 	return "decided " + how, nil
 }
+func (f *fakeSource) ResetAccess(table string) ([]string, error) {
+	f.settings = append(f.settings, table+" reset")
+	return config.ResetAccess(table)
+}
 func (f *fakeSource) SetSecretEnv(table, name string, src *config.EnvSource) error {
 	if src == nil {
 		f.secrets = append(f.secrets, table+" "+name+" removed")

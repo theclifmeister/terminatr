@@ -116,3 +116,44 @@ func migrateProtection(data []byte, existing bool) ([]byte, string, error) {
 	}
 	return out, pinned, nil
 }
+
+// AccessResetKeys are the Access tab's switches a reset puts back to
+// what the table follows (ResetAccess): a project's to all projects',
+// all projects' to tm's defaults (protection open).
+var AccessResetKeys = []string{"protection", "yolo", "coordinator_approves", "guard", "guard_mode", "guard_off"}
+
+// ResetAccess removes table's ("defaults" or "projects.<slug>") own
+// values of AccessResetKeys, and the older sandbox_escapes, keeping its
+// sandbox lists, guard allowances and secret environment: those took the
+// human's work to build. reset are the keys it removed, in
+// AccessResetKeys order; ErrForm when the file sets one in a form the
+// line editor doesn't change, and then nothing is removed.
+func ResetAccess(table string) (reset []string, err error) {
+	err = edit(func(data []byte) ([]byte, error) {
+		reset = nil
+		for _, k := range append(slices.Clone(AccessResetKeys), "sandbox_escapes") {
+			if !sets(data, table, k) {
+				continue
+			}
+			out := Remove(data, table, k)
+			if bytes.Equal(out, data) {
+				return nil, ErrForm
+			}
+			data = out
+			if k == "sandbox_escapes" {
+				k = "protection"
+			}
+			if !slices.Contains(reset, k) {
+				reset = append(reset, k)
+			}
+		}
+		return data, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	slices.SortFunc(reset, func(a, b string) int {
+		return slices.Index(AccessResetKeys, a) - slices.Index(AccessResetKeys, b)
+	})
+	return reset, nil
+}

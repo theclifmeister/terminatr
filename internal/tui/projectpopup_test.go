@@ -1672,3 +1672,51 @@ func TestProjectShareRow(t *testing.T) {
 		t.Fatal("enter left it shared")
 	}
 }
+
+// TestAccessReset: R on a project's Access tab asks, then puts its
+// switches back to all projects', keeping its lists; R on the , popup's
+// Access tab puts all projects' back to tm's defaults.
+func TestAccessReset(t *testing.T) {
+	src, m := popupData(t)
+	if err := config.SetProject("alpha", "protection", config.ProtectStrict); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SetProject("alpha", "yolo", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SetDefaults("protection", config.ProtectGuarded); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.EditSandbox("projects.alpha", func(st *config.SandboxTable) error {
+		st.Add(config.SandboxHosts, "registry.npmjs.org")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	keyPress(m, "a")
+	keyPress(m, "5")
+	if !strings.Contains(screen(m), "R reset") {
+		t.Errorf("the Access tab's footer lacks R reset:\n%s", screen(m))
+	}
+	act(t, m, src, "R")
+	if _, ok := m.top().(*confirmView); !ok {
+		t.Fatalf("reset didn't ask: %T", m.top())
+	}
+	act(t, m, src, "n")
+	if cfg, _ := config.Load(); !must(cfg.Safety("alpha")).Yolo {
+		t.Fatal("n reset it")
+	}
+	act(t, m, src, "R")
+	act(t, m, src, "y")
+	cfg, _ := config.Load()
+	if s := must(cfg.Safety("alpha")); s.Yolo || s.Protection != config.ProtectGuarded || len(cfg.ThreadSandbox("alpha").Given(config.SandboxHosts)) != 1 {
+		t.Fatalf("after reset %+v", s)
+	}
+	keyPress(m, "esc")
+	press(m, ",", "3")
+	act(t, m, src, "R")
+	act(t, m, src, "y")
+	if cfg, _ := config.Load(); must(cfg.AllProjects()).Protection != config.ProtectOpen {
+		t.Fatal("all projects' protection not back to open")
+	}
+}

@@ -80,3 +80,29 @@ func (sr safetyRows) builtInRow() setting {
 	row.change = func(m *dash) tea.Cmd { return m.showAccessFrom(sr.slug, proto.AccessFromTM) }
 	return row
 }
+
+// resetAccess asks, then puts the Access switches of slug ("" all
+// projects) back to what they follow: a project's to all projects', all
+// projects' to tm's defaults (R on an Access tab). The lists, the
+// guard's allowances and the secret environment stay.
+func (m *dash) resetAccess(slug string) tea.Cmd {
+	sr := newSafetyRows(slug)
+	to := "all projects'"
+	if sr.all {
+		to = "tm's defaults (protection open)"
+	}
+	src := m.src
+	m.confirm("Reset access", "Reset the access switches "+sr.forWho+" to "+to+"? Protection, yolo mode, coordinator approves, the guard, its mode and its rules turned off go back; the sandbox lists, guard allowances and secret environment stay.", func() tea.Cmd {
+		return m.act(func() actionMsg {
+			reset, err := src.ResetAccess(sr.table)
+			switch {
+			case err != nil:
+				return actionMsg{err: settingsErr(err)}
+			case len(reset) == 0:
+				return actionMsg{msg: "nothing to reset " + sr.forWho + ": it follows " + to + " already"}
+			}
+			return actionMsg{msg: "access reset " + sr.forWho + " to " + to + ", for threads started from now on"}
+		})
+	})
+	return nil
+}

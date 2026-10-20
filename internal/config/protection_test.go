@@ -83,3 +83,47 @@ func TestMigrateProtection(t *testing.T) {
 		}
 	}
 }
+
+func TestResetAccess(t *testing.T) {
+	write(t, `[defaults]
+protection = "sandboxed"
+merge_method = "squash"
+
+[projects.demo]
+yolo = true
+guard_mode = "learn"
+guard_allow = [{ rule = "push-default", command = "git push origin main" }]
+sandbox_escapes = false
+parallel_threads = 3
+
+[projects.demo.sandbox]
+hosts = ["registry.npmjs.org"]
+`)
+	reset, err := ResetAccess("projects.demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(reset, " ") != "protection yolo guard_mode" {
+		t.Errorf("reset %q", reset)
+	}
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, _ := c.Safety("demo")
+	// It follows all projects' sandboxed again; the rest is kept.
+	if s.Protection != ProtectSandboxed || s.Yolo || s.GuardMode != GuardEnforce || len(s.GuardAllow) != 1 || s.ParallelThreads != 3 ||
+		len(c.ThreadSandbox("demo").Given(SandboxHosts)) != 1 {
+		t.Errorf("demo after reset %+v", s)
+	}
+	if reset, _ = ResetAccess("defaults"); strings.Join(reset, " ") != "protection" {
+		t.Errorf("defaults reset %q", reset)
+	}
+	c, _ = Load()
+	if s, _ := c.AllProjects(); s.Protection != ProtectOpen || s.MergeMethod != MethodSquash {
+		t.Errorf("all projects after reset %+v", s)
+	}
+	if reset, err = ResetAccess("defaults"); err != nil || len(reset) != 0 {
+		t.Errorf("a second reset: %q %v", reset, err)
+	}
+}

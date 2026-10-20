@@ -138,10 +138,22 @@ func TestAccessWriters(t *testing.T) {
 	if ts := c.ThreadSandbox("demo"); !ts.LocalPorts || len(ts.Given(config.SandboxHosts)) != 1 || len(ts.Given(config.SandboxExcluded)) != 0 || !s.Yolo || s.Protection != config.ProtectStrict {
 		t.Errorf("demo: %+v %+v", ts, s)
 	}
+	// Reset: demo's switches follow all projects again, its lists stay.
+	fail("confirm with --yes", "reset", "demo")
+	if out := ok("reset", "demo", "--yes"); !strings.Contains(out, "reset for demo: yolo") {
+		t.Errorf("reset: %q", out)
+	}
+	c, _ = config.Load()
+	if s, _ := c.Safety("demo"); s.Yolo || s.Protection != config.ProtectStrict || !c.ThreadSandbox("demo").LocalPorts {
+		t.Errorf("demo after reset: %+v", s)
+	}
+	if out := ok("reset", "demo", "--yes"); !strings.Contains(out, "nothing to reset") {
+		t.Errorf("a second reset: %q", out)
+	}
 	p, _ := project.Open("demo")
-	lines, _, _ := p.JournalTail(20)
+	lines, _, _ := p.JournalTail(40)
 	j := strings.Join(lines, "\n")
-	for _, want := range []string{"settings.sandbox demo hosts + registry.npmjs.org (all projects)", "excluded_commands + npx playwright * (ask = false)", "drop + registry.npmjs.org", "drop - registry.npmjs.org", "settings.yolo demo yolo = true", "settings.protection demo protection = strict (all projects)"} {
+	for _, want := range []string{"settings.sandbox demo hosts + registry.npmjs.org (all projects)", "excluded_commands + npx playwright * (ask = false)", "drop + registry.npmjs.org", "drop - registry.npmjs.org", "settings.yolo demo yolo = true", "settings.protection demo protection = strict (all projects)", "settings.reset demo yolo"} {
 		if !strings.Contains(j, want) {
 			t.Errorf("journal lacks %q:\n%s", want, j)
 		}

@@ -24,6 +24,7 @@ const accessUsage = `usage: tm access show [<project>] [--thread <id>] [--guides
        tm access drop|undrop <value> [<project>]
        tm access set local-ports|escapes|yolo on|off [<project> | --all] [--yes]
        tm access set protection open|guarded|sandboxed|strict [<project> | --all] [--yes]
+       tm access reset [<project> | --all] [--yes]
        tm access preset add <name> [<project> | --all]
 
 show lists a thread's access as rules: where each acts, the rule, and
@@ -59,7 +60,11 @@ agent's own prompts, no thread sandbox, the guard's floor only),
 guarded (the guard's rules), sandboxed (the thread sandbox, escapes ask
 you) or strict (no escapes); open asks first. set turns local ports or
 yolo on or off, and escapes off (strict) or on (sandboxed); yolo on asks
-first (--yes without a terminal), as it turns the sandbox off. Each is journaled, and threads
+first (--yes without a terminal), as it turns the sandbox off. reset puts
+the project's switches (protection, yolo, coordinator approves, the
+guard, its mode and its rules turned off) back to all projects', or with
+--all all projects' back to tm's defaults (protection open); the sandbox
+lists, guard allowances and secret environment stay. It asks first. Each is journaled, and threads
 get it from their next start or restart. These are the human's.
 
 A preset is a named group of rules tm ships. preset show lists the rules
@@ -93,6 +98,8 @@ func accessCmd(e *Env, args []string) error {
 		return accessDrop(e, args[0], args[1:])
 	case "set":
 		return accessSet(e, args[1:])
+	case "reset":
+		return accessReset(e, args[1:])
 	}
 	return srvUsage("access", accessUsage)
 }
