@@ -199,8 +199,16 @@ func (s *Session) SetRemoteControl(on bool) { s.remote.Store(on) }
 func (s *Session) SetRemoteHeld(held bool) { s.held.Store(held) }
 
 // SetHooksSkipped records that another of the agent's mods skipped
-// terminatr's own hooks, by (SessionInfo.HooksSkipped).
+// terminatr's own hooks, by (SessionInfo.HooksSkipped); "" clears it.
 func (s *Session) SetHooksSkipped(by string) { s.skipped.Store(&by) }
+
+// HooksSkipped is who SetHooksSkipped last named; "" for none.
+func (s *Session) HooksSkipped() string {
+	if by := s.skipped.Load(); by != nil {
+		return *by
+	}
+	return ""
+}
 
 // ModelState is the model a session's agent runs, and one waiting for
 // its next start (SessionInfo.Model, ModelNext, ModelPending).
@@ -268,9 +276,7 @@ func (s *Session) Info() proto.SessionInfo {
 	if m := s.model.Load(); m != nil {
 		info.Model, info.ModelNext, info.ModelPending = m.Model, m.Next, m.Pending
 	}
-	if by := s.skipped.Load(); by != nil {
-		info.HooksSkipped = *by
-	}
+	info.HooksSkipped = s.HooksSkipped()
 	if s.term != nil {
 		info.Title = s.term.Title()
 	}
