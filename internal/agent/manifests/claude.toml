@@ -446,8 +446,10 @@ event = "UserPromptSubmit"
 state = "working"
 # With the mod: the context, when another mod skipped the mod's own
 # context hooks and the SessionStart hook didn't give it. Otherwise
-# nothing.
-respond = '''{{with .Context}}{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":{{json .}}}}{{end}}'''
+# nothing. tm hook waits as for SessionStart: a coordinator's context
+# can take longer than 500 ms to render.
+timeout = "context"
+respond ='''{{with .Context}}{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":{{json .}}}}{{end}}'''
 
 [[hooks]]
 event = "PreToolUse"

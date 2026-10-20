@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -210,5 +211,42 @@ func TestContextSkipShown(t *testing.T) {
 	}
 	if n := strings.Count(logged.String(), "hook didn't run"); n != 2 {
 		t.Fatalf("logged %d skips:\n%s", n, logged.String())
+	}
+}
+
+// TestContextSlowRender: a context that renders past what tm hook waits
+// reached nobody, so it isn't counted as given: the block is still
+// served, and without one the next prompt's hook gives it again.
+func TestContextSlowRender(t *testing.T) {
+	defer func(d time.Duration) { hookDelivered = d }(hookDelivered)
+	hookDelivered = 10 * time.Millisecond
+	s := convServer()
+	full, _ := s.contextOf("s-1")()
+	slow := func() ([]byte, error) {
+		time.Sleep(30 * time.Millisecond)
+		return full, nil
+	}
+	start := map[string]any{"hook_event_name": "SessionStart", "source": "startup"}
+	if b, _ := s.startContext("s-1", start, slow); !bytes.HasSuffix(b, full) {
+		t.Fatalf("slow SessionStart: %.80q", b)
+	}
+	if !s.blockContext("s-1") {
+		t.Fatal("a late SessionStart refused the block")
+	}
+	// No block after all: the first prompt gives it (no SessionStart was
+	// counted), a slow one again at the next prompt, and a quick one is
+	// the last.
+	s.endConv("s-1")
+	if b, _ := s.promptContext("s-1", slow); !bytes.HasSuffix(b, full) {
+		t.Fatalf("slow prompt: %.80q", b)
+	}
+	if b, _ := s.promptContext("s-1", s.contextOf("s-1")); !bytes.HasSuffix(b, full) {
+		t.Fatalf("prompt after a slow one: %.80q", b)
+	}
+	if b, _ := s.promptContext("s-1", s.contextOf("s-1")); len(b) != 0 {
+		t.Fatalf("prompt after a quick one: %.80q", b)
+	}
+	if s.blockContext("s-1") {
+		t.Fatal("the block is added after a hook gave it")
 	}
 }

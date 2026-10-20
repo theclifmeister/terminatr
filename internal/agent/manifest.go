@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"time"
 	"unicode"
 
 	"github.com/BurntSushi/toml"
@@ -417,6 +418,11 @@ const (
 	HookTimeoutResponse = "response"
 	HookTimeoutContext  = "context"
 )
+
+// HookContextWait is how long tm hook waits, in all, for the response to
+// an event whose entry has timeout = "context": the server counts a
+// context as given only when it answered well within it.
+const HookContextWait = 3 * time.Second
 
 // RendersAccess reports whether the manifest turns the access policy
 // (LaunchSpec.Access) into the harness's own settings. `tm agent list`

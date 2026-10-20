@@ -736,7 +736,8 @@ func TestHookWireFormat(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, h := range m.Hooks {
-			if want := map[bool]string{true: HookTimeoutContext}[h.Event == "SessionStart"]; h.Timeout != want {
+			context := h.Event == "SessionStart" || name == "claude" && h.Event == "UserPromptSubmit"
+			if want := map[bool]string{true: HookTimeoutContext}[context]; h.Timeout != want {
 				t.Errorf("%s %s: timeout %q, want %q", name, h.Event, h.Timeout, want)
 			}
 		}

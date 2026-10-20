@@ -21,7 +21,9 @@ package server
 import (
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -39,6 +41,11 @@ const (
 // skippedBy is who skipped the mod's hooks: Claude doesn't tell the mod
 // it skipped, so not who.
 const skippedBy = "another mod"
+
+// hookDelivered is how long a command hook's context may take to render
+// and still count as given: tm hook waits agent.HookContextWait in all,
+// part of it spent before the server sees the event and after it answers.
+var hookDelivered = agent.HookContextWait - 500*time.Millisecond
 
 // hookContextLimit is the most additionalContext Claude keeps in the
 // conversation (2.1.304: 10,000 characters); past it the text goes to a
@@ -161,6 +168,7 @@ func (s *Server) startContext(id string, payload map[string]any, full func() ([]
 		}
 	}
 	s.mu.Unlock()
+	at := time.Now()
 	b, err := full()
 	if err != nil || len(b) == 0 {
 		return b, err
@@ -174,9 +182,7 @@ func (s *Server) startContext(id string, payload map[string]any, full func() ([]
 	case marked, via == viaBlock && !resume:
 		return []byte(modContextLine), nil
 	}
-	s.mu.Lock()
-	s.convLocked(id).via = viaHook
-	s.mu.Unlock()
+	s.gaveContext(id, at)
 	s.sawSkip(id, "classic.SessionStart")
 	return s.fallbackContext(id, b), nil
 }
@@ -199,17 +205,32 @@ func (s *Server) promptContext(id string, full func() ([]byte, error)) ([]byte, 
 	}
 	skipped := c.started
 	s.mu.Unlock()
+	at := time.Now()
 	b, err := full()
 	if err != nil || len(b) == 0 {
 		return b, err
 	}
-	s.mu.Lock()
-	s.convLocked(id).via = viaHook
-	s.mu.Unlock()
+	s.gaveContext(id, at)
 	if skipped {
 		s.sawSkip(id, "prompt.context")
 	}
 	return s.fallbackContext(id, b), nil
+}
+
+// gaveContext records that a command hook gave session id's
+// conversation its context, rendered from at on: only when the answer
+// went out within hookDelivered, as tm hook gives up at
+// agent.HookContextWait and the agent then gets nothing. A later one is
+// not counted, so the block may still be served and the next prompt's
+// hook gives it again.
+func (s *Server) gaveContext(id string, at time.Time) {
+	if took := time.Since(at); took > hookDelivered {
+		s.log.Printf("session %s: the context took %v to render, past what tm hook waits; not counted as given", id, took.Round(time.Millisecond))
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.convLocked(id).via = viaHook
 }
 
 // fallbackContext is context b as a command hook gives it, headed by
