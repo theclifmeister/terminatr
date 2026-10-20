@@ -135,13 +135,13 @@ func TestAccessWriters(t *testing.T) {
 	}
 	c, _ = config.Load()
 	s, _ := c.Safety("demo")
-	if ts := c.ThreadSandbox("demo"); !ts.LocalPorts || len(ts.Given(config.SandboxHosts)) != 1 || len(ts.Given(config.SandboxExcluded)) != 0 || !s.Yolo || s.SandboxEscapes {
+	if ts := c.ThreadSandbox("demo"); !ts.LocalPorts || len(ts.Given(config.SandboxHosts)) != 1 || len(ts.Given(config.SandboxExcluded)) != 0 || !s.Yolo || s.Protection != config.ProtectStrict {
 		t.Errorf("demo: %+v %+v", ts, s)
 	}
 	p, _ := project.Open("demo")
 	lines, _, _ := p.JournalTail(20)
 	j := strings.Join(lines, "\n")
-	for _, want := range []string{"settings.sandbox demo hosts + registry.npmjs.org (all projects)", "excluded_commands + npx playwright * (ask = false)", "drop + registry.npmjs.org", "drop - registry.npmjs.org", "settings.yolo demo yolo = true", "settings.sandbox_escapes demo sandbox_escapes = false"} {
+	for _, want := range []string{"settings.sandbox demo hosts + registry.npmjs.org (all projects)", "excluded_commands + npx playwright * (ask = false)", "drop + registry.npmjs.org", "drop - registry.npmjs.org", "settings.yolo demo yolo = true", "settings.protection demo protection = strict (all projects)"} {
 		if !strings.Contains(j, want) {
 			t.Errorf("journal lacks %q:\n%s", want, j)
 		}

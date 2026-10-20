@@ -9,6 +9,7 @@ package server
 // them in threads/<id>/access.json.
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"os"
@@ -27,8 +28,9 @@ import (
 )
 
 // accessInput is what a session's rules are worked out for: its role,
-// project and folder, its agent, the platform, and the yolo and escapes
-// of its record (tm thread start reads them from config.toml).
+// project and folder, its agent, the platform, and the yolo, protection,
+// sandbox and escapes of its record (tm thread start reads them from
+// config.toml).
 type accessInput struct {
 	role, slug, cwd, agent, goos string
 	// thread is a thread's id, which names its own temp folder; "" for
@@ -36,8 +38,11 @@ type accessInput struct {
 	thread string
 	// tree is a thread's checkout by its record (threadTree), whose git
 	// dirs it is granted; nil for none.
-	tree            *gitx.Tree
-	yolo, noEscapes bool
+	tree                       *gitx.Tree
+	yolo, noSandbox, noEscapes bool
+	// protection is the project's level ("" outside a project, or a
+	// record of tm 0.42 or older: sandboxed).
+	protection string
 }
 
 // resolveAccess is the rules of a session of in, with config.toml as lc.
@@ -80,18 +85,47 @@ func (s *Server) resolveAccess(in accessInput, lc launchConfig) (proto.AccessSet
 			add(proto.AccessRule{Where: proto.AccessInside, Kind: proto.AccessNetwork, Value: value, Source: proto.AccessFromTM, Note: why, Agents: []string{"codex"}})
 		}
 	}
-	add(onOff(proto.AccessPrompts, proto.AccessYolo, in.yolo, settingSource(lc, in.slug, "yolo"), false),
-		onOff(proto.AccessOutside, proto.AccessEscapes, !in.noEscapes, settingSource(lc, in.slug, "sandbox_escapes"), false))
-	if in.yolo && in.role == proto.RoleThread {
-		// Yolo is no sandbox (T574 case 4): what opens or leaves it isn't
-		// used, and shows so.
+	// A thread's level is the one it launched with (a record without one
+	// ran sandboxed); a coordinator's sandbox doesn't depend on it, so its
+	// rule says the project's now.
+	level := in.protection
+	if level == "" && in.role != proto.RoleThread {
+		level = lc.safety(in.slug).Protection
+	}
+	level = cmp.Or(level, config.ProtectSandboxed)
+	add(proto.AccessRule{Where: proto.AccessGuard, Kind: proto.AccessProtection, Value: level, Source: settingSource(lc, in.slug, "protection")})
+	add(onOff(proto.AccessPrompts, proto.AccessYolo, in.yolo, settingSource(lc, in.slug, "yolo"), false))
+	if in.role == proto.RoleThread {
+		add(onOff(proto.AccessInside, proto.AccessSandbox, !in.noSandbox, settingSource(lc, in.slug, "protection"), false))
+	}
+	add(onOff(proto.AccessOutside, proto.AccessEscapes, !in.noEscapes, settingSource(lc, in.slug, "protection"), false))
+	if in.role == proto.RoleThread && (in.yolo || in.noSandbox) {
+		// Yolo is no sandbox (T574 case 4), and so is protection below
+		// sandboxed: what opens or leaves it isn't used, and shows so.
+		why := proto.AccessNoSandbox
+		if in.yolo {
+			why = proto.AccessYoloNoSandbox
+		}
 		for i := from; i < len(set.Rules); i++ {
-			if r := &set.Rules[i]; r.Kind != proto.AccessYolo && r.Kind != proto.AccessAllow && r.Kind != proto.AccessApproved && r.Skipped == "" {
-				r.Skipped = proto.AccessYoloNoSandbox
+			r := &set.Rules[i]
+			switch r.Kind {
+			case proto.AccessYolo, proto.AccessProtection, proto.AccessAllow, proto.AccessApproved:
+				continue
+			case proto.AccessSandbox:
+				if !in.yolo {
+					continue
+				}
+			}
+			if r.Skipped == "" {
+				r.Skipped = why
 			}
 		}
 	}
-	set.Rules = append(set.Rules, guardRules(lc, in.slug, in.role, in.yolo)...)
+	// The guard reads protection live, as it does its own settings.
+	live := lc.safety(in.slug)
+	live.Guard = true
+	floorOnly := in.yolo || !live.GuardRulesOn()
+	set.Rules = append(set.Rules, guardRules(lc, in.slug, in.role, in.yolo, floorOnly)...)
 	if in.role == proto.RoleThread {
 		add(secretRules(lc, in.slug)...)
 	}
@@ -468,16 +502,20 @@ func inside(p, root string) bool {
 
 // guardRules are the guard's settings for a session of role in project
 // slug, read live: on or off, its mode, the rules off, the allowances
-// and the floor. Under yolo the guard keeps its floor only, so the
-// others show as not used. A config.toml that doesn't load leaves the
-// defaults (guard on), as the guard does.
-func guardRules(lc launchConfig, slug, role string, yolo bool) []proto.AccessRule {
+// and the floor. Under yolo, and below protection guarded (floorOnly),
+// the guard keeps its floor only, so the others show as not used. A
+// config.toml that doesn't load leaves the defaults (guard on), as the
+// guard does.
+func guardRules(lc launchConfig, slug, role string, yolo, floorOnly bool) []proto.AccessRule {
 	set := lc.safety(slug)
 	src := func(key string) string { return settingSource(lc, slug, key) }
 	on := onOff(proto.AccessGuard, proto.AccessGuardOn, set.Guard, src("guard"), true)
 	skip := ""
-	if yolo && set.Guard {
+	switch {
+	case yolo && set.Guard:
 		on.Note, skip = proto.AccessYoloFloor, proto.AccessYoloFloor
+	case floorOnly && set.Guard:
+		on.Note, skip = proto.AccessProtectFloor, proto.AccessProtectFloor
 	}
 	out := []proto.AccessRule{on}
 	if !set.Guard {
@@ -625,7 +663,7 @@ func launchSandbox(set proto.AccessSet) (lists agent.SandboxLists, guides []conf
 			skipped = append(skipped, fmt.Sprintf("sandbox %s %q refused, the thread starts without it: %s", r.Kind, r.Value, r.Refused))
 			continue
 		}
-		if r.Skipped == proto.AccessYoloNoSandbox || r.Skipped != "" && r.Kind == proto.AccessApproved {
+		if r.Skipped == proto.AccessYoloNoSandbox || r.Skipped == proto.AccessNoSandbox || r.Skipped != "" && r.Kind == proto.AccessApproved {
 			// An excluded command that isn't one for Codex: its own rule
 			// is what the log says.
 			continue
@@ -689,15 +727,18 @@ var sandboxKindWords = map[string]string{
 	proto.AccessUnixSocket: "sockets", proto.AccessApproved: "approved commands",
 }
 
-// launchFlags are the yolo and escapes the launch gives the agent.
-func launchFlags(set proto.AccessSet) (yolo, noEscapes bool) {
+// launchFlags are the yolo, sandbox and escapes the launch gives the
+// agent.
+func launchFlags(set proto.AccessSet) (yolo, noSandbox, noEscapes bool) {
 	for _, r := range set.Rules {
 		switch r.Kind {
 		case proto.AccessYolo:
 			yolo = r.Value == "on"
+		case proto.AccessSandbox:
+			noSandbox = r.Value == "off"
 		case proto.AccessEscapes:
 			noEscapes = r.Value == "off"
 		}
 	}
-	return yolo, noEscapes
+	return yolo, noSandbox, noEscapes
 }

@@ -113,8 +113,7 @@ func (s *Server) accessShow(p proto.AccessShowParams, c callCtx) (any, *proto.Er
 	}
 	if p.Thread == "" {
 		name := s.threadAgentOf(safety)
-		set, err := s.resolveAccess(accessInput{role: proto.RoleThread, slug: p.Project, agent: name, goos: caps.OS,
-			yolo: safety.Yolo, noEscapes: !safety.SandboxEscapes}, lc)
+		set, err := s.resolveAccess(withProtection(accessInput{role: proto.RoleThread, slug: p.Project, agent: name, goos: caps.OS}, safety), lc)
 		if err != nil {
 			return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 		}
@@ -126,9 +125,9 @@ func (s *Server) accessShow(p proto.AccessShowParams, c callCtx) (any, *proto.Er
 		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 	}
 	// What a restart would launch it with: tm thread restart reads yolo
-	// and escapes from config.toml again.
-	now, err := s.resolveAccess(accessInput{role: proto.RoleThread, slug: p.Project, cwd: rec.Worktree, tree: recordTree(p.Project, rec), agent: rec.Agent, goos: caps.OS,
-		thread: rec.ID, yolo: safety.Yolo, noEscapes: !safety.SandboxEscapes}, lc)
+	// and protection from config.toml again.
+	now, err := s.resolveAccess(withProtection(accessInput{role: proto.RoleThread, slug: p.Project, cwd: rec.Worktree, tree: recordTree(p.Project, rec), agent: rec.Agent, goos: caps.OS,
+		thread: rec.ID}, safety), lc)
 	if err != nil {
 		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 	}
@@ -198,10 +197,11 @@ func (s *Server) threadAgentOf(safety config.Safety) string {
 // ownEscapes is files, an agent's own rules, with how tm treats their
 // excluded commands said (T574 case 7): the guard takes a command one
 // runs outside the sandbox, which none of tm's does, for an escape,
-// asked of the user, or refused with escapes off; under yolo there is
-// no sandbox to leave. set is the thread's rules now.
+// asked of the user, or refused with escapes off; under yolo, or below
+// protection sandboxed, there is no sandbox to leave. set is the
+// thread's rules now.
 func ownEscapes(files []proto.AccessRule, set proto.AccessSet) []proto.AccessRule {
-	yolo, noEscapes := launchFlags(set)
+	yolo, noSandbox, noEscapes := launchFlags(set)
 	for i := range files {
 		r := &files[i]
 		if r.Kind != proto.AccessExcluded {
@@ -210,6 +210,8 @@ func ownEscapes(files []proto.AccessRule, set proto.AccessSet) []proto.AccessRul
 		switch {
 		case yolo:
 			r.Skipped = proto.AccessYoloNoSandbox
+		case noSandbox:
+			r.Skipped = proto.AccessNoSandbox
 		case slices.ContainsFunc(set.Rules, func(t proto.AccessRule) bool {
 			return t.Kind == proto.AccessExcluded && t.Where != proto.AccessAgent && launched(t) && t.Value == r.Value
 		}):
@@ -266,8 +268,7 @@ func (s *Server) accessExplain(p proto.AccessExplainParams, c callCtx) (any, *pr
 	}
 	lc := loadLaunchConfig()
 	safety := lc.safety(p.Project)
-	in := accessInput{role: proto.RoleThread, slug: p.Project, agent: s.threadAgentOf(safety), goos: caps.OS,
-		yolo: safety.Yolo, noEscapes: !safety.SandboxEscapes}
+	in := accessInput{role: proto.RoleThread, slug: p.Project, agent: s.threadAgentOf(safety), goos: caps.OS}
 	// The guard judges a command by the folder it runs in: the thread's
 	// worktree, else the project's first repo.
 	cwd := proj.Dir
@@ -285,13 +286,14 @@ func (s *Server) accessExplain(p proto.AccessExplainParams, c callCtx) (any, *pr
 		// No agent chosen yet: the guard judges by the first one's tools.
 		in.agent = reg.Names()[0]
 	}
+	in = withProtection(in, safety)
 	set, err := s.resolveAccess(in, lc)
 	if err != nil {
 		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 	}
 	res := explainCommand(set, cmd)
 	g := s.guardRulesFor(SessionRecord{Role: proto.RoleThread, Project: p.Project, Thread: p.Thread, Cwd: cwd, Agent: in.agent,
-		Yolo: in.yolo, NoSandboxEscapes: in.noEscapes})
+		Yolo: in.yolo, NoSandbox: in.noSandbox, NoSandboxEscapes: in.noEscapes, Protection: in.protection})
 	res.Guard, res.GuardWhy = guardVerdict(g, cmd)
 	return res, nil
 }
@@ -301,7 +303,7 @@ func (s *Server) accessExplain(p proto.AccessExplainParams, c callCtx) (any, *pr
 // gets the list), asking first or without asking as that command says.
 func explainCommand(set proto.AccessSet, cmd string) proto.AccessExplainResult {
 	res := proto.AccessExplainResult{Command: cmd, Sandbox: proto.AccessInside, Prompt: proto.PromptByAgent}
-	yolo, noEscapes := launchFlags(set)
+	yolo, noSandbox, noEscapes := launchFlags(set)
 	var allow []string
 	for _, r := range set.Rules {
 		if r.Kind == proto.AccessAllow && launched(r) {
@@ -326,7 +328,7 @@ func explainCommand(set proto.AccessSet, cmd string) proto.AccessExplainResult {
 		if e := bareExcluded(set, cmd); e != "" {
 			res.SandboxWhy += fmt.Sprintf("; excluded command %q takes %s", e, proto.ExcludedOnlyItself(e))
 		}
-		if noEscapes {
+		if noEscapes && !noSandbox {
 			res.SandboxWhy += "; escapes are off, so it can't leave the sandbox"
 		}
 	}
@@ -349,6 +351,16 @@ func explainCommand(set proto.AccessSet, cmd string) proto.AccessExplainResult {
 		res.PromptWhy = "no tm rule covers it: the agent's mode and own rules decide"
 	}
 	res.Approved = explainApproved(set, cmd)
+	if noSandbox && !yolo && set.Role == proto.RoleThread {
+		// The agent's own prompts, no sandbox (protection below
+		// sandboxed).
+		res.Sandbox, res.SandboxWhy, res.Agents = proto.AccessOutside, proto.AccessNoSandbox, ""
+		for _, r := range set.Rules {
+			if r.Kind == proto.AccessProtection {
+				res.SandboxFrom = r.Source
+			}
+		}
+	}
 	if yolo {
 		// No sandbox and no prompts (T574 case 4).
 		res.Prompt, res.PromptWhy, res.PromptFrom = proto.PromptNone, "yolo is on: no permission prompts", ""
@@ -432,4 +444,13 @@ func guardVerdict(g guard.Rules, cmd string) (string, string) {
 		return "refused", d.Rule + " (floor: no allowance lifts it): " + d.Summary
 	}
 	return "refused", d.Rule + ": " + d.Summary
+}
+
+// withProtection is in with the yolo, protection, sandbox and escapes a
+// thread of in's agent would start with now, by safety (config.toml),
+// as tm thread start reads them.
+func withProtection(in accessInput, safety config.Safety) accessInput {
+	in.yolo, in.protection = safety.Yolo, safety.Protection
+	in.noSandbox, in.noEscapes = protectFlags(safety.Protection, in.agent)
+	return in
 }

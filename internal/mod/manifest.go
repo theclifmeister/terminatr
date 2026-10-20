@@ -143,7 +143,7 @@ var DefaultKeys = []string{"auto_close", "auto_close_days", "pr_followup", "pr_p
 // rule): only a human call changes them, so a manifest that names one
 // as a key anywhere (a setting's name included) but a tool's input
 // schema is invalid. A mod may tighten, never loosen.
-var SafetyKeys = []string{"yolo", "guard", "guard_off", "guard_mode", "guard_allow", "merge", "merge_method", "coordinator_merges", "complete_tasks", "start_threads", "models", "parallel_threads", "global_parallel_threads", "coordinator_approves", "branch_name"}
+var SafetyKeys = []string{"yolo", "protection", "sandbox_escapes", "guard", "guard_off", "guard_mode", "guard_allow", "merge", "merge_method", "coordinator_merges", "complete_tasks", "start_threads", "models", "parallel_threads", "global_parallel_threads", "coordinator_approves", "branch_name"}
 
 // Column is a column a code mod publishes cells into, named
 // <mod id>.<column id> in layouts.

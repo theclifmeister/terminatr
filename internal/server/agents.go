@@ -704,12 +704,12 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		return nil, proto.Errorf(proto.ErrRefused, "thread %s isn't started: %s", r.Thread, why)
 	}
 	acc, err := s.resolveAccess(accessInput{role: r.Role, slug: r.Project, cwd: r.Cwd, tree: tree, agent: r.Agent, goos: caps.OS,
-		thread: r.Thread, yolo: r.Yolo, noEscapes: r.NoSandboxEscapes}, lc)
+		thread: r.Thread, yolo: r.Yolo, noSandbox: r.NoSandbox, noEscapes: r.NoSandboxEscapes, protection: r.Protection}, lc)
 	if err != nil {
 		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 	}
 	acc.Thread, acc.Session = r.Thread, r.ID
-	yolo, noEscapes := launchFlags(acc)
+	yolo, noSandbox, noEscapes := launchFlags(acc)
 	if r.Role == proto.RoleCoordinator {
 		if p, err := project.Open(r.Project); err == nil {
 			if err := p.RefreshRoleFile(); err != nil {
@@ -754,7 +754,7 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 	spec := agent.LaunchSpec{
 		Role: agent.Role(r.Role), SessionID: r.ID, AgentSID: r.AgentSessionID,
 		Cwd: r.Cwd, RepoRoot: repo.RepoRoot, GitDir: repo.GitDir, RuntimeDir: p.rt, BriefPath: r.Brief, Kickoff: l.kick, Resume: l.resume,
-		Yolo: yolo, NoSandboxEscapes: noEscapes, Model: r.Model, TMBin: s.opts.Bin, Socket: s.opts.Paths.Socket, Access: launchAccess(acc),
+		Yolo: yolo, NoSandbox: noSandbox, NoSandboxEscapes: noEscapes, Model: r.Model, TMBin: s.opts.Bin, Socket: s.opts.Paths.Socket, Access: launchAccess(acc),
 		RemoteControl: r.RemoteControl, RemoteName: remoteName(r),
 		Mods: p.modSock != "", PaneScheme: v.paneScheme,
 	}

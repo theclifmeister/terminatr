@@ -140,12 +140,12 @@ template = '''
 # the server can't write that theme (.LiveTheme false), a pane palette
 # (.PaneScheme, §5.3) still gets Claude's ANSI theme, which the palette
 # colours: its own themes are truecolor, which panes pass through.
-# With sandbox_escapes off, a thread's Bash can't leave the sandbox
+# At protection strict (no escapes), a thread's Bash can't leave the sandbox
 # (allowUnsandboxedCommands): a command run outside it would reach the
 # human socket (§3.2), whoever approved it.
 # A thread's sandbox lists (.Sandbox, the human's [projects.<slug>.sandbox])
 # add its excludedCommands, which run outside the sandbox even with
-# sandbox_escapes off, and allow rules after tm's: Claude merges lists
+# escapes off, and allow rules after tm's: Claude merges lists
 # across settings files, and its deny rules (tm's) win over any allow.
 # Its presets' local binding (macOS only, which the server checks) is
 # allowLocalBinding: sandboxed commands may listen on and reach localhost;
@@ -156,7 +156,9 @@ template = '''
 # sandbox is off (enabled false, which a --settings file sets over the
 # project's and the user's own true: T577) beside yolo_args, so its
 # lists aren't written; the Edit deny rules above still are, and the
-# guard keeps its floor.
+# guard keeps its floor. Protection below sandboxed (.NoSandbox) turns
+# the sandbox off the same way but keeps Claude's own prompts: the
+# agent as it runs on its own.
 [[launch.files]]
 path = "claude-settings.json"
 template = '''
@@ -171,7 +173,7 @@ template = '''
     "deny": {{json (concat (rules "Edit(/%s/**)" .Access.NoWrite) (rules "Edit(/%s)" .Access.NoWriteFiles) (siblingRules "Edit(/%s)" .Access.NoWriteSiblings) (rules "Read(/%s/**)" .Access.Closed) (rules "Edit(/%s/**)" .Access.Closed))}}
   },
   "sandbox": {
-    {{- if and (eq .Role "thread") .Yolo}}
+    {{- if and (eq .Role "thread") (or .Yolo .NoSandbox)}}
     "enabled": false,
     {{- else if eq .Role "thread"}}
     "enabled": true,
@@ -185,9 +187,9 @@ template = '''
     "filesystem": {"denyRead": {{json .Access.NoRead}}{{if .Access.OwnTemp}}, "allowRead": [{{json .Access.OwnTemp}}]{{end}}},
     {{- end}}
     {{- end}}
-    "network": {"allowUnixSockets": [{{json .Socket}}{{if and (eq .Role "thread") (not .Yolo)}}{{range .Sandbox.Sockets}}, {{json .}}{{end}}{{end}}]
-      {{- if and (eq .Role "thread") (not .Yolo) .Sandbox.LocalBinding}}, "allowLocalBinding": true{{end}}
-      {{- if and (eq .Role "thread") (not .Yolo) .Sandbox.Domains}}, "allowedDomains": {{json .Sandbox.Domains}}{{end}}}
+    "network": {"allowUnixSockets": [{{json .Socket}}{{if and (eq .Role "thread") (not .Yolo) (not .NoSandbox)}}{{range .Sandbox.Sockets}}, {{json .}}{{end}}{{end}}]
+      {{- if and (eq .Role "thread") (not .Yolo) (not .NoSandbox) .Sandbox.LocalBinding}}, "allowLocalBinding": true{{end}}
+      {{- if and (eq .Role "thread") (not .Yolo) (not .NoSandbox) .Sandbox.Domains}}, "allowedDomains": {{json .Sandbox.Domains}}{{end}}}
   }
 }
 '''

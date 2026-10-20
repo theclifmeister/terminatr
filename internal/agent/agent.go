@@ -49,8 +49,12 @@ type LaunchSpec struct {
 	Kickoff   string // the first user prompt, e.g. "Read your brief and do what it says."
 	Resume    bool   // resume AgentSID instead of starting fresh; AgentSID must be set
 	Yolo      bool   // skip the agent's own permission prompts (project setting)
+	// NoSandbox runs a thread's agent without its sandbox but with its
+	// own prompts (protection below sandboxed, docs/SPEC.md §5.2); agents
+	// that can't (Codex) never get it.
+	NoSandbox bool
 	// NoSandboxEscapes keeps every command of a thread's agent in its
-	// sandbox, approved or not (sandbox_escapes = false, docs/SPEC.md §5.2).
+	// sandbox, approved or not (protection strict, docs/SPEC.md §5.2).
 	NoSandboxEscapes bool
 	// Sandbox are a thread's sandbox lists (config sandbox, docs/SPEC.md
 	// §5.2): the human's, read by the server at each launch; a manifest

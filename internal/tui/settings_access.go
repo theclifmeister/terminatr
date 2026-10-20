@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"cmp"
+	"slices"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/theclifmeister/terminatr/internal/config"
@@ -9,8 +12,8 @@ import (
 
 // The Access tab (T574 §4.1, §4.5): everything that decides what a
 // project's threads may do, in one place, in a project's popup (5
-// access) and, for all projects, in the , popup (3 access). Prompts and
-// escapes first, then the sandbox's presets and lists
+// access) and, for all projects, in the , popup (3 access). Protection,
+// prompts and escapes first, then the sandbox's presets and lists
 // (settings_sandbox.go), the guard (settings_guard.go), the secret
 // environment (settings_secretenv.go) and tm's own rules, read-only.
 // The Settings and All projects tabs keep the workflow rows. e on a
@@ -20,8 +23,8 @@ import (
 // projects) on platform goos.
 func accessSettings(slug, goos string) []setting {
 	sr := newSafetyRows(slug)
-	prompts := sr.scope([]setting{sr.escapesRow(), sr.yoloRow(), sr.toggle("coordinator_approves")})
-	prompts[0].section = "Prompts and escapes"
+	prompts := sr.scope([]setting{sr.protectionRow(), sr.yoloRow(), sr.toggle("coordinator_approves")})
+	prompts[0].section = "Protection and prompts"
 	guard := sr.scope(sr.guardRows())
 	guard[0].section = "Guard"
 	env := sr.secretEnvRow()
@@ -31,22 +34,34 @@ func accessSettings(slug, goos string) []setting {
 	return append(rows, env, sr.builtInRow())
 }
 
-// escapesWords name sandbox_escapes' values.
-func escapesWords(s config.Safety) string {
-	if s.SandboxEscapes {
-		return "ask you"
-	}
-	return "never"
+// protectionWords name protection's levels, each what it adds.
+var protectionWords = map[string]string{
+	config.ProtectOpen:      "open: the agent's own prompts",
+	config.ProtectGuarded:   "guarded: + the guard's rules",
+	config.ProtectSandboxed: "sandboxed: + the thread sandbox",
+	config.ProtectStrict:    "strict: sandbox, no escapes",
 }
 
-func (sr safetyRows) escapesRow() setting {
-	return setting{label: "Escapes", help: "Whether a thread's agent may ask to run a command outside its sandbox when the sandbox stops it: on, you approve each one, never the coordinator or auto mode; never, what can't run in the sandbox doesn't run. Claude threads; a Codex thread's requests come to you too. Threads get a change from their next start or tm thread restart.",
-		keys: []string{"sandbox_escapes"}, word: escapesWords,
-		value: func(m *dash) string { return escapesWords(sr.safety(m)) },
+// protectionWord is s's protection in words.
+func protectionWord(s config.Safety) string {
+	return cmp.Or(protectionWords[s.Protection], s.Protection)
+}
+
+func (sr safetyRows) protectionRow() setting {
+	return setting{label: "Protection", help: "How much of tm's security agents run under, each level adding to the one before. Open: each agent as it runs on its own, with its own permission prompts; no thread sandbox. Guarded: the guard's rules too (Guard rules below). Sandboxed: Claude threads run in their sandbox, with the lists below, and may ask you to run a command outside it. Strict: no such escapes; what can't run in the sandbox doesn't run. At every level threads never write the project folder, no agent changes your settings or reads tm's files, and Codex threads keep Codex's own sandbox. Enter picks the next level; going back to open asks first. Threads get a change from their next start or tm thread restart; the guard at once.",
+		keys: []string{"protection"}, word: protectionWord,
+		value: func(m *dash) string { return protectionWord(sr.safety(m)) },
 		change: func(m *dash) tea.Cmd {
-			s := sr.safety(m)
-			s.SandboxEscapes = !s.SandboxEscapes
-			return sr.set(m, "sandbox_escapes", s.SandboxEscapes, "escapes "+sr.forWho+": "+escapesWords(s)+", for threads started from now on")
+			ls := config.ProtectLevels
+			next := ls[(slices.Index(ls, sr.safety(m).Protection)+1)%len(ls)]
+			msg := "protection " + sr.forWho + ": " + next + ", for threads started from now on"
+			if next != config.ProtectOpen {
+				return sr.set(m, "protection", next, msg)
+			}
+			m.confirm("Open protection", "Set protection "+sr.forWho+" to open? Threads started from now on run without their sandbox, with the agent's own permission prompts, and the guard keeps only its floor.", func() tea.Cmd {
+				return sr.set(m, "protection", next, msg)
+			})
+			return nil
 		}}
 }
 

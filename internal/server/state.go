@@ -57,6 +57,12 @@ type SessionRecord struct {
 	// NoSandboxEscapes: the agent can't run a command outside its
 	// sandbox, across resumes too.
 	NoSandboxEscapes bool `json:"no_sandbox_escapes,omitempty"`
+	// NoSandbox: a thread's agent runs without its sandbox (protection
+	// below sandboxed), across resumes too. Protection is the level it
+	// started at; "" for a record of tm 0.42 or older, which ran
+	// sandboxed.
+	NoSandbox  bool   `json:"no_sandbox,omitempty"`
+	Protection string `json:"protection,omitempty"`
 	// RemoteControl: the agent runs with remote control on, so a resume
 	// keeps it on.
 	RemoteControl bool `json:"remote_control,omitempty"`

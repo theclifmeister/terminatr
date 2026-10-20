@@ -247,7 +247,7 @@ func TestAccessTab(t *testing.T) {
 		out += screen(m)
 	}
 	for _, want := range []string{"5 access", "Prefer rules inside the sandbox", "a last resort", "what applies on macOS",
-		"Prompts and escapes", "Escapes", "ask you", "Yolo mode", "Coordinator approves",
+		"Protection and prompts", "Protection", "open: the agent's own prompts", "Yolo mode", "Coordinator approves",
 		"Inside the sandbox", "Network hosts", "Local ports", "Guidance for threads",
 		"Outside the sandbox", "Excluded commands", "Permission rules", "Allow rules",
 		"Guard", "Guard mode", "Guard rules", "Guard allowances", "Guard refusals", "Secrets", "Secret environment",
@@ -263,23 +263,23 @@ func TestAccessTab(t *testing.T) {
 		keyPress(m, "up")
 	}
 	for _, r := range projectSettings("alpha") {
-		for _, moved := range []string{"Escapes", "Yolo mode", "Coordinator approves", "Guard", "Guard mode", "Secret environment", "Excluded commands", "Allow rules"} {
+		for _, moved := range []string{"Protection", "Yolo mode", "Coordinator approves", "Guard", "Guard mode", "Secret environment", "Excluded commands", "Allow rules"} {
 			if r.label == moved {
 				t.Errorf("Settings still has %q", r.label)
 			}
 		}
 	}
-	// Escapes: enter turns them off for the project, which then sets its
-	// own (x follows all projects again).
+	// Protection: enter raises it a level for the project, which then
+	// sets its own (x follows all projects again).
 	drain(t, m, keyPress(m, "enter"))
 	cfg, _ := config.Load()
-	if s, _ := cfg.Safety("alpha"); s.SandboxEscapes {
-		t.Error("escapes still on for alpha")
+	if s, _ := cfg.Safety("alpha"); s.Protection != config.ProtectGuarded {
+		t.Errorf("alpha's protection %q, want guarded", s.Protection)
 	}
 	// The row's label may scroll above the popup's top (its help is long):
 	// its value, and the footer offering x.
-	if out := screen(m); pv.access.rows[0].label != "Escapes" || pv.access.rows[0].value(m) != "never" || !strings.Contains(out, "x follow all projects") {
-		t.Errorf("after enter on Escapes:\n%s", out)
+	if out := screen(m); pv.access.rows[0].label != "Protection" || pv.access.rows[0].value(m) != "guarded: + the guard's rules" || !strings.Contains(out, "x follow all projects") {
+		t.Errorf("after enter on Protection:\n%s", out)
 	}
 	// The , popup's third tab is all projects', its workflow rows left
 	// on All projects.
@@ -290,7 +290,7 @@ func TestAccessTab(t *testing.T) {
 		keyPress(m, "down")
 		out += screen(m)
 	}
-	for _, want := range []string{"3 access", "Escapes", "Yolo mode", "Network hosts", "Guard mode", "Secret environment", "A project's lists add to these", "alpha sets its own", "p add a preset"} {
+	for _, want := range []string{"3 access", "Protection", "Yolo mode", "Network hosts", "Guard mode", "Secret environment", "A project's lists add to these", "alpha sets its own", "p add a preset"} {
 		if !strings.Contains(out, want) {
 			t.Errorf(", Access tab lacks %q:\n%s", want, out)
 		}

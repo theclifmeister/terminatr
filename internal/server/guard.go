@@ -125,7 +125,9 @@ func (s *Server) guardOwn() []string {
 // guardRulesFor is session record r's rules. Only a project's agents are
 // guarded; a coordinator neither merges under a thread's rule nor keeps
 // to a worktree. Under yolo the guard keeps its floor only (T574 case 4):
-// no rule, allowance or mod rule, nothing asked.
+// no rule, allowance or mod rule, nothing asked. So it does below
+// protection guarded, read live; a thread without its sandbox has no
+// escapes or excluded commands to ask about.
 func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 	if r.Project == "" || (r.Role != proto.RoleThread && r.Role != proto.RoleCoordinator) {
 		return GuardRules{}
@@ -134,10 +136,11 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 	set := lc.safety(r.Project)
 	// A thread's escapes, which its sandbox lets it ask for, are the
 	// user's to answer, the guard on or off (T574 case 6).
-	askEscapes := r.Role == proto.RoleThread && !r.Yolo && !r.NoSandboxEscapes
+	sandboxed := r.Role == proto.RoleThread && !r.Yolo && !r.NoSandbox
+	askEscapes := sandboxed && !r.NoSandboxEscapes
 	// So are its excluded commands that ask first (T574 case 1).
 	var askFirst []string
-	if r.Role == proto.RoleThread && !r.Yolo {
+	if sandboxed {
 		askFirst = s.askFirst(r, lc)
 	}
 	if !set.Guard {
@@ -173,11 +176,12 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 	if s.opts.Paths.Home != "" {
 		g.Worktrees = realPath(filepath.Join(s.opts.Paths.Home, "worktrees"))
 	}
-	if r.Yolo {
+	floorOnly := r.Yolo || !set.GuardRulesOn()
+	if floorOnly {
 		g.Learn, g.Allow = false, nil
 	}
 	for _, id := range config.GuardRules {
-		if r.Yolo {
+		if floorOnly {
 			break
 		}
 		if slices.Contains(set.GuardOff, id) {
@@ -209,7 +213,7 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		g.GitConfig = withReal(threadGitConfig(r))
 	}
 	g.Tools = agent.GuardTools(reg, r.Agent)
-	if r.Role == proto.RoleThread && !r.Yolo {
+	if sandboxed {
 		g.Unsandboxed, g.TMExcluded = ownExcluded(reg, r, home, lc)
 		g.NoEscapes = r.NoSandboxEscapes
 	}
@@ -228,7 +232,7 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		}
 	}
 	g.Secrets = withReal(agent.Secrets(reg, home, os.Getenv))
-	if !r.Yolo {
+	if !floorOnly {
 		g.Mods = s.guardMods(r, home)
 	}
 	return g

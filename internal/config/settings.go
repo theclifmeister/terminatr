@@ -166,7 +166,13 @@ var settingRows = []settingRow{
 	def("coordinator_merges", "coordinator merges", everywhere, func(r *rawSafety) *bool { return r.CoordMerges }, func(s *Safety) *bool { return &s.CoordinatorMerges }, nil),
 	def("merge_method", "merge method", everywhere, func(r *rawSafety) *string { return r.MergeMethod }, func(s *Safety) *string { return &s.MergeMethod }, oneOf(MergeMethods...)),
 	def("fast_forward_checkout", "fast-forward checkout", everywhere, func(r *rawSafety) *bool { return r.FastForward }, func(s *Safety) *bool { return &s.FastForwardCheckout }, nil),
-	def("sandbox_escapes", "sandbox escapes", everywhere, func(r *rawSafety) *bool { return r.SandboxEsc }, func(s *Safety) *bool { return &s.SandboxEscapes }, nil),
+	protection(def("protection", "protection", everywhere, func(r *rawSafety) *string {
+		if r.Protection == nil && r.SandboxEsc != nil && !*r.SandboxEsc {
+			strict := ProtectStrict
+			return &strict
+		}
+		return r.Protection
+	}, func(s *Safety) *string { return &s.Protection }, oneOf(ProtectLevels...))),
 	def("thread_agent", "the agent", everywhere, func(r *rawSafety) *string { return r.ThreadAgent }, func(s *Safety) *string { return &s.ThreadAgent }, CheckAgent),
 	def("coordinator_agent", "the agent", everywhere, func(r *rawSafety) *string { return r.CoordAgent }, func(s *Safety) *string { return &s.CoordinatorAgent }, CheckAgent),
 	def("models", "models", everywhere, func(r *rawSafety) *[]string { return r.Models }, func(s *Safety) *[]string { return &s.Models }, CheckModels),
@@ -192,6 +198,13 @@ var settingRows = []settingRow{
 // auto_resolve too.
 func autoClose(s settingRow) settingRow {
 	s.isSet = func(r *rawSafety) bool { return r.AutoClose != nil || r.AutoResolve != nil }
+	return s
+}
+
+// protection is protection's row: a table sets it with the older
+// sandbox_escapes = false too.
+func protection(s settingRow) settingRow {
+	s.isSet = func(r *rawSafety) bool { return r.Protection != nil || r.SandboxEsc != nil && !*r.SandboxEsc }
 	return s
 }
 

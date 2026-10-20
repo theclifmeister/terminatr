@@ -30,7 +30,7 @@ import (
 type setting struct {
 	label, help string
 	// section, when set, heads the row and those after it (the Access
-	// tab's Prompts and escapes, Guard, …).
+	// tab's Protection and prompts, Guard, …).
 	section string
 	value   func(m *dash) string
 	// change runs on enter or space; nil shows the value only.

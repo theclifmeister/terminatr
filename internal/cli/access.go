@@ -23,6 +23,7 @@ const accessUsage = `usage: tm access show [<project>] [--thread <id>] [--guides
        tm access edit <kind> <old value> <new value> [<project> | --all] [--without-asking | --asks-first] [--text <text> | --file <file>]
        tm access drop|undrop <value> [<project>]
        tm access set local-ports|escapes|yolo on|off [<project> | --all] [--yes]
+       tm access set protection open|guarded|sandboxed|strict [<project> | --all] [--yes]
        tm access preset add <name> [<project> | --all]
 
 show lists a thread's access as rules: where each acts, the rule, and
@@ -52,9 +53,13 @@ command's --without-asking or --asks-first (else it keeps its own), a
 guide's title and, with --text or --file, its text. Editing all
 projects' entry carries each project's drop of it along. A project's
 lists add to all projects'; drop names one of all projects' entries its
-threads don't take, undrop takes it back. set turns local ports,
-sandbox escapes or yolo on or off; yolo on asks first (--yes without a
-terminal), as it turns the sandbox off. Each is journaled, and threads
+threads don't take, undrop takes it back. set protection picks the
+level agents run under, each adding to the one before: open (the
+agent's own prompts, no thread sandbox, the guard's floor only),
+guarded (the guard's rules), sandboxed (the thread sandbox, escapes ask
+you) or strict (no escapes); open asks first. set turns local ports or
+yolo on or off, and escapes off (strict) or on (sandboxed); yolo on asks
+first (--yes without a terminal), as it turns the sandbox off. Each is journaled, and threads
 get it from their next start or restart. These are the human's.
 
 A preset is a named group of rules tm ships. preset show lists the rules
