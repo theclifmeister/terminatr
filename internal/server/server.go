@@ -210,6 +210,11 @@ type Server struct {
 	modelsMu     sync.Mutex
 	modelsBusy   map[string]bool
 	modelUnknown map[string]string // session -> why its models were unknown when last logged, under mu
+	// convs are the mod sessions' conversations, for their context, and
+	// skipTold the projects told their sessions' mod hooks were skipped,
+	// both under mu (convcontext.go).
+	convs    map[string]*convState
+	skipTold map[string]bool
 	// modelsCtx ends the agents' models probes when the server stops.
 	modelsCtx  context.Context
 	modelsStop context.CancelFunc
@@ -1100,6 +1105,7 @@ func (s *Server) sessionExited(sess *session.Session) {
 	delete(s.records, sess.ID())
 	delete(s.launched, sess.ID())
 	delete(s.refusedSeen, sess.ID())
+	delete(s.convs, sess.ID())
 	if err := s.saveLocked(""); err != nil {
 		s.log.Printf("sessions.json: %v", err)
 	}

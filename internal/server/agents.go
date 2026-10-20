@@ -401,9 +401,11 @@ func (s *Server) contextOf(id string) func() ([]byte, error) {
 // twice.
 const modContextLine = "terminatr: your role's rules and your task's state are in this conversation's `terminatr` context block."
 
-// hookContextOf is what the session's SessionStart hook prints, given
-// the hook's payload: the full context, or with the mod only a line
-// saying where it is (none for a session outside a project).
+// hookContextOf is what the session's SessionStart and UserPromptSubmit
+// hooks print, given the hook's payload: without the mod, the full
+// context at SessionStart; with it, a line saying where the context is,
+// or the context itself when the mod's hooks were skipped
+// (convcontext.go). None for a session outside a project.
 //
 // A resume keeps the conversation's context block as the transcript
 // recorded it: Claude computes it once per conversation, and only /clear
@@ -414,16 +416,16 @@ const modContextLine = "terminatr: your role's rules and your task's state are i
 func (s *Server) hookContextOf(id string, mod bool) func(payload map[string]any) ([]byte, error) {
 	full := s.contextOf(id)
 	return func(payload map[string]any) ([]byte, error) {
-		b, err := full()
-		if err != nil || len(b) == 0 || !mod {
-			return b, err
+		prompt := payload["hook_event_name"] == "UserPromptSubmit"
+		switch {
+		case !mod && prompt:
+			return nil, nil
+		case !mod:
+			return full()
+		case prompt:
+			return s.promptContext(id, full)
 		}
-		if src, _ := payload["source"].(string); src == "resume" {
-			if old, stale := s.staleContext(id); stale {
-				return append([]byte(replacedContext(old)), b...), nil
-			}
-		}
-		return []byte(modContextLine), nil
+		return s.startContext(id, payload, full)
 	}
 }
 
@@ -875,6 +877,7 @@ func (s *Server) commitLaunchLocked(p *preparedLaunch) (*session.Session, *proto
 		Agent: &session.AgentConfig{
 			Agent: a, AgentSID: p.agentSID, Kickoff: p.kickoff, Home: p.home,
 			Context:    s.hookContextOf(r.ID, mod),
+			OnHook:     s.convHook,
 			Guard:      s.hookGuardOf(r.ID, mod),
 			OnChange:   s.agentChanged,
 			OnUsage:    s.tailUsage,
@@ -898,6 +901,7 @@ func (s *Server) commitLaunchLocked(p *preparedLaunch) (*session.Session, *proto
 	}
 	s.sessions[r.ID] = sess
 	s.records[r.ID] = r
+	s.newConvLocked(r.ID)
 	if s.launched == nil {
 		s.launched = map[string]string{}
 	}

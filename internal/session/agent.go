@@ -39,6 +39,10 @@ type AgentConfig struct {
 	// Context renders the role's context for hook responses (§7.8), given
 	// the hook's payload (a SessionStart's source).
 	Context func(payload map[string]any) ([]byte, error)
+	// OnHook is called with each hook event, before the agent reads it
+	// and before the response is rendered (the server's record of
+	// which conversation the hooks are in).
+	OnHook func(s *Session, event string, payload map[string]any)
 	// Guard judges a tool call a hook reports against the session's
 	// guard rules, for hook responses (agent.HookEnv.Guard).
 	Guard func(tool string, input map[string]any) *guard.Denial
@@ -472,6 +476,9 @@ func (s *Session) Hook(event string, payload map[string]any) (agent.HookResult, 
 		return agent.HookResult{}, nil
 	}
 	s.checkHook(rt, event, payload)
+	if rt.cfg.OnHook != nil {
+		rt.cfg.OnHook(s, event, payload)
+	}
 	env := agent.HookEnv{}
 	callID, _ := payload["tool_use_id"].(string)
 	if g := rt.cfg.Guard; g != nil {

@@ -185,6 +185,11 @@ type SessionInfo struct {
 	Model        string `json:"model,omitempty"`
 	ModelNext    string `json:"model_next,omitempty"`
 	ModelPending bool   `json:"model_pending,omitempty"`
+	// HooksSkipped says another of the agent's mods skipped terminatr's
+	// context hooks, and who: the mod's name, or "another mod" when it
+	// can't be told. tm's command hooks give the context instead
+	// (docs/SPEC.md §7.8).
+	HooksSkipped string `json:"hooks_skipped,omitempty"`
 	// Question is the question menu open in the agent, as its mod sent it
 	// (session.ask); nil without one, or without a mod.
 	Question *Question `json:"question,omitempty"`

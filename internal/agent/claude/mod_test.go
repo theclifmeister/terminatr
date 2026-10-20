@@ -43,15 +43,17 @@ func TestLaunchMods(t *testing.T) {
 			t.Fatalf("mods %v: plugin %v", mods, plugin)
 		}
 		// With the mod, only what it doesn't report stays a command
-		// hook, the todo tools alone on PostToolUse.
+		// hook, the todo tools alone on PostToolUse, and the context's
+		// fallback when another mod skips the mod's (UserPromptSubmit,
+		// PreCompact).
 		want := 13
 		if mods {
-			want = 5
+			want = 7
 		}
 		if len(hooks.Hooks) != want {
 			t.Fatalf("mods %v: %d command hooks, want %d", mods, len(hooks.Hooks), want)
 		}
-		for _, ev := range []string{"SessionStart", "PostToolUse", "SubagentStart", "SubagentStop", "SessionEnd"} {
+		for _, ev := range []string{"SessionStart", "UserPromptSubmit", "PreCompact", "PostToolUse", "SubagentStart", "SubagentStop", "SessionEnd"} {
 			if hooks.Hooks[ev] == nil {
 				t.Fatalf("mods %v: no %s hook", mods, ev)
 			}

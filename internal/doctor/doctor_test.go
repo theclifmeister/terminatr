@@ -677,6 +677,17 @@ func TestQueueChecks(t *testing.T) {
 	}
 }
 
+func TestSkippedChecks(t *testing.T) {
+	sessions := []proto.SessionInfo{
+		{ID: "s-3", Role: proto.RoleThread, Project: "todo", Thread: "t-0001", HooksSkipped: "another mod"},
+		{ID: "s-4", Role: proto.RoleThread, Project: "todo", Thread: "t-0002"},
+	}
+	got := skippedChecks(sessions)
+	if len(got) != 1 || got[0].Status != Warn || !strings.Contains(got[0].Detail, "s-3 (todo thread t-0001): terminatr hooks skipped by another mod") {
+		t.Fatalf("checks %+v", got)
+	}
+}
+
 func TestPlugins(t *testing.T) {
 	d := testDeps(t)
 	d.LookPath = func(n string) (string, error) { return "/bin/" + n, nil }

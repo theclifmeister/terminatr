@@ -28,7 +28,11 @@
 // After /clear and compaction it gives the thread or coordinator its
 // context back (hooks/context.ts): fetched fresh from GET /v1/context
 // when Claude reads the conversation's context blocks. The SessionStart
-// command hook brings only a short line then, not a copy.
+// command hook brings only a short line then, not a copy: its
+// classic.SessionStart hook tells the server it ran (POST
+// /v1/context/started) before the command hooks, which run beneath it.
+// Another mod seated before it can skip both hooks; the command hooks
+// then give the context themselves, and the server answers 204 here.
 //
 // In a thread session it gives the model the thread's tools,
 // mcp__terminatr__report, __status, __steps and __done, served over the
@@ -107,6 +111,10 @@ const LOOP_STALL_MS = 60_000
 // CONTEXT_WAIT_MS bounds the fetch of the role's context.
 const CONTEXT_WAIT_MS = 2_000
 
+// MARK_WAIT_MS bounds the SessionStart mark: past it the command hook
+// gives the whole context, and the block is not added.
+const MARK_WAIT_MS = 1_000
+
 export const register: Register = on => {
   // The standing rules, checked on each tool call (hooks/guarded.ts).
   guard(on)
@@ -127,8 +135,10 @@ export const register: Register = on => {
   })
 
   // The role's context is our context block (below); after /clear and
-  // compaction Claude is told to read the blocks again.
+  // compaction Claude is told to read the blocks again. The mark goes
+  // first: the SessionStart command hook runs beneath, in next.
   on('classic.SessionStart', async ($, e, next) => {
+    await markStart($)
     const r = await next(e)
     if (e.source === 'clear' || e.source === 'compact') $.ui.invalidate('prompt.context')
     return r
@@ -552,6 +562,21 @@ async function ack($: EngineInterface, id: string, a: Ack): Promise<boolean> {
 async function modLog($: EngineInterface, text: string) {
   $.ui.log(`terminatr: ${text}`, { to: 'debug' })
   await post($, socket, '/v1/log', 'log', JSON.stringify({ text }))
+}
+
+// markStart tells the server the mod's classic.SessionStart ran, so the
+// command hook beneath says only where the context is; a failure is
+// logged, and the command hook then gives the context itself.
+async function markStart($: EngineInterface) {
+  const sock = socket || ((await $.env.get('TERMINATR_MOD_SOCKET')) ?? '')
+  if (!sock) return
+  try {
+    const r = await within($.http.fetch(socketURL('/v1/context/started'), postInit(sock)), $.clock.sleep(MARK_WAIT_MS))
+    if (!r) debug($, timedOut('context mark'))
+    else if (!r.ok) debug($, refused('context mark', r.status, r.text))
+  } catch (err) {
+    debug($, failed('context mark', err))
+  }
 }
 
 // fetchContext is the role's context from the server: "" for a session
