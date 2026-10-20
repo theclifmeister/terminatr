@@ -22,7 +22,7 @@ const accessUsage = `usage: tm access show [<project>] [--thread <id>] [--guides
        tm access rm <kind> <value> [<project> | --all]
        tm access edit <kind> <old value> <new value> [<project> | --all] [--without-asking | --asks-first] [--text <text> | --file <file>]
        tm access drop|undrop <value> [<project>]
-       tm access set local-ports|escapes|yolo on|off [<project> | --all] [--yes]
+       tm access set local-ports|escapes|yolo|coordinator on|off [<project> | --all] [--yes]
        tm access set protection open|guarded|sandboxed|strict [<project> | --all] [--yes]
        tm access reset [<project> | --all] [--yes]
        tm access preset add <name> [<project> | --all]
@@ -61,11 +61,14 @@ guarded (the guard's rules), sandboxed (the thread sandbox, escapes ask
 you) or strict (no escapes); open asks first. set turns local ports or
 yolo on or off, and escapes off (strict) or on (sandboxed); yolo on asks
 first (--yes without a terminal), as it turns the sandbox off. reset puts
-the project's switches (protection, yolo, coordinator approves, the
-guard, its mode and its rules turned off) back to all projects', or with
---all all projects' back to tm's defaults (protection open); the sandbox
-lists, guard allowances and secret environment stay. It asks first. Each is journaled, and threads
-get it from their next start or restart. These are the human's.
+the project's switches (protection, yolo, coordinator approves and sets
+access, the guard, its mode and its rules turned off) back to all
+projects', or with --all all projects' back to tm's defaults (protection
+open); the sandbox lists, guard allowances and secret environment stay.
+It asks first. Each is journaled, and threads get it from their next
+start or restart. These are the human's; set coordinator on (asking
+first) lets the project's coordinator run them for its own project too,
+never with --all, set yolo on or set coordinator.
 
 A preset is a named group of rules tm ships. preset show lists the rules
 it adds; preset add adds those the project's threads (or, with --all,

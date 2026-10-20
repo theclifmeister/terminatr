@@ -120,19 +120,20 @@ func migrateProtection(data []byte, existing bool) ([]byte, string, error) {
 // AccessResetKeys are the Access tab's switches a reset puts back to
 // what the table follows (ResetAccess): a project's to all projects',
 // all projects' to tm's defaults (protection open).
-var AccessResetKeys = []string{"protection", "yolo", "coordinator_approves", "guard", "guard_mode", "guard_off"}
+var AccessResetKeys = []string{"protection", "yolo", "coordinator_approves", "coordinator_access", "guard", "guard_mode", "guard_off"}
 
 // ResetAccess removes table's ("defaults" or "projects.<slug>") own
 // values of AccessResetKeys, and the older sandbox_escapes, keeping its
 // sandbox lists, guard allowances and secret environment: those took the
-// human's work to build. reset are the keys it removed, in
+// human's work to build, and the keys keep names (a coordinator's reset
+// keeps coordinator_access). reset are the keys it removed, in
 // AccessResetKeys order; ErrForm when the file sets one in a form the
 // line editor doesn't change, and then nothing is removed.
-func ResetAccess(table string) (reset []string, err error) {
+func ResetAccess(table string, keep ...string) (reset []string, err error) {
 	err = edit(func(data []byte) ([]byte, error) {
 		reset = nil
 		for _, k := range append(slices.Clone(AccessResetKeys), "sandbox_escapes") {
-			if !sets(data, table, k) {
+			if slices.Contains(keep, k) || !sets(data, table, k) {
 				continue
 			}
 			out := Remove(data, table, k)

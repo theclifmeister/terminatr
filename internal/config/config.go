@@ -159,6 +159,10 @@ type Safety struct {
 	// ask to leave it. The guard's floor and tm's deny rules hold at
 	// every level.
 	Protection string `json:"protection"`
+	// CoordinatorAccess lets the project's coordinator change its access
+	// rules with tm access (its own project's only: never all projects',
+	// never yolo on, never this switch). Off until the human turns it on.
+	CoordinatorAccess bool `json:"coordinator_access"`
 	// ThreadAgent is the agent tm thread start runs without --agent, and
 	// CoordinatorAgent the one a new coordinator runs (§8, §11.2): names
 	// from the agent registry (tm agent list). "" when no table sets
@@ -262,6 +266,7 @@ type rawSafety struct {
 	FastForward   *bool   `toml:"fast_forward_checkout"`
 	MergeMethod   *string `toml:"merge_method"`
 	Protection    *string `toml:"protection"`
+	CoordAccess   *bool   `toml:"coordinator_access"`
 	// SandboxEsc is protection's older form: false is ProtectStrict, read
 	// where a table doesn't set protection; true says nothing. The
 	// migration moves it (MigrateProtection).

@@ -249,12 +249,14 @@ Everything that decides what a project's threads may do is on one tab: **Access*
 
 The tab shows only what your protection level uses: at open, the Protection and prompts section, Secrets and Built in; from guarded, the Guard section too; from sandboxed, the sandbox's sections and presets. Raising the level shows them at once, with whatever they held before.
 
-- **Protection and prompts**: Protection (below), Yolo mode (turning it on asks first) and Coordinator approves.
+- **Protection and prompts**: Protection (below), Yolo mode (turning it on asks first), Coordinator approves and Coordinator sets access (below).
 - **Inside the sandbox** (network hosts, local ports, guidance for threads, write folders, sockets), **Outside the sandbox** (excluded commands, approved commands) and **Permission rules** (allow rules): the sandbox's rules, below. `p` adds a preset's rules.
 - **Guard**: the guard's rows, and **Secrets**: the secret environment ([The guard](#the-guard)).
 - **Built in**: tm's own rules, which no setting changes (its worktree to write, the project folder to read only, `config.toml` never written, the repository's git objects and refs, tm's socket, the guard's floor); on a project `enter` lists them.
 
 `e` on a project's Access tab opens its effective access: every rule a new thread gets, with where it comes from (below). Protection, yolo and the sandbox rows reach a thread at its next start or `tm thread restart`; the guard's rows at once.
+
+**Coordinator sets access** lets a project's coordinator drive its access for you: when a thread needs a host, a write folder, a command outside the sandbox or a different protection level, the coordinator changes it with `tm access` instead of asking you to. It is off by default; turning it on asks first (or `tm access set coordinator on <project> --yes`). It covers only that project: the coordinator can never change all projects' settings, turn yolo mode on or change this switch, and its reset keeps the switch. Each change is in the project's journal under the coordinator's name, and its rules tell it to open no more than a task needs and tell you what it changed.
 
 **Protection** is how much of tm's security your agents run under. You start with none of it in the way and add layers when you want them; each level adds to the one before:
 

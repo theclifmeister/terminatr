@@ -19,7 +19,7 @@ func TestSafetyRowKeys(t *testing.T) {
 		"Auto-clear coordinator": {"auto_clear"}, "Coordinator may merge": {"coordinator_merges"}, "Merge method": {"merge_method"}, "Keep my checkout current": {"fast_forward_checkout"},
 		"Thread agent": {"thread_agent"}, "Coordinator agent": {"coordinator_agent"}, "Thread models": {"models"},
 		"Coordinator model": {"coordinator_model"}, "Branch names": {"branch_name"}, "Keep history": config.ArchiveKeys,
-		"Guard": {"guard"}, "Guard mode": {"guard_mode"}, "Guard rules": {"guard_off"}, "Protection": {"protection"},
+		"Guard": {"guard"}, "Guard mode": {"guard_mode"}, "Guard rules": {"guard_off"}, "Protection": {"protection"}, "Coordinator sets access": {"coordinator_access"},
 	}
 	for _, slug := range []string{"demo", ""} {
 		rows := append(safetySettings(slug), accessSettings(slug, config.OSMac)...)

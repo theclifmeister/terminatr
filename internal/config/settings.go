@@ -173,6 +173,7 @@ var settingRows = []settingRow{
 		}
 		return r.Protection
 	}, func(s *Safety) *string { return &s.Protection }, oneOf(ProtectLevels...))),
+	def("coordinator_access", "coordinator access", everywhere, func(r *rawSafety) *bool { return r.CoordAccess }, func(s *Safety) *bool { return &s.CoordinatorAccess }, nil),
 	def("thread_agent", "the agent", everywhere, func(r *rawSafety) *string { return r.ThreadAgent }, func(s *Safety) *string { return &s.ThreadAgent }, CheckAgent),
 	def("coordinator_agent", "the agent", everywhere, func(r *rawSafety) *string { return r.CoordAgent }, func(s *Safety) *string { return &s.CoordinatorAgent }, CheckAgent),
 	def("models", "models", everywhere, func(r *rawSafety) *[]string { return r.Models }, func(s *Safety) *[]string { return &s.Models }, CheckModels),

@@ -49,7 +49,7 @@ func TestProtectionOpen(t *testing.T) {
 	if d := g.Judge("Write", map[string]any{"file_path": filepath.Join(p.Dir, "CONTEXT.md")}); d == nil || !d.Floor {
 		t.Errorf("open: a write to the project folder passes: %+v", d)
 	}
-	coord := SessionRecord{ID: "s-1", Role: proto.RoleCoordinator, Project: p.Slug, Cwd: p.Dir}
+	coord := SessionRecord{ID: "s-1", Role: proto.RoleCoordinator, Agent: "claude", Project: p.Slug, Cwd: p.Dir}
 	if g := s.guardRulesFor(coord); g.Rules != nil || !slices.Contains(g.NoWrite, cfg) {
 		t.Fatalf("open coordinator's guard %+v", g)
 	}
@@ -87,6 +87,25 @@ func TestProtectionOpen(t *testing.T) {
 	}
 	if res := explainCommand(set, "docker ps"); res.Sandbox != proto.AccessOutside || res.SandboxWhy != proto.AccessNoSandbox || res.Prompt == proto.PromptNone {
 		t.Errorf("explain at open: %+v", res)
+	}
+
+	// The coordinator's tm access writes pass the floor only while the
+	// project lets it change its access.
+	if g := s.guardRulesFor(coord); g.AccessWrites {
+		t.Error("access writes without coordinator_access")
+	} else if d := g.Judge("Bash", map[string]any{"command": "tm access add host x.dev " + p.Slug}); d == nil || !d.Floor {
+		t.Errorf("coordinator's access write passes without coordinator_access: %+v", d)
+	}
+	writeConfig(t, "[projects."+p.Slug+"]\ncoordinator_access = true\n")
+	if g := s.guardRulesFor(coord); !g.AccessWrites {
+		t.Error("no access writes with coordinator_access")
+	} else if d := g.Judge("Bash", map[string]any{"command": "tm access add host x.dev " + p.Slug}); d != nil {
+		t.Errorf("coordinator's access write refused: %+v", d)
+	} else if d := g.Judge("Bash", map[string]any{"command": "tm access set yolo on " + p.Slug}); d == nil || !d.Floor {
+		t.Errorf("coordinator's yolo on passes: %+v", d)
+	}
+	if g := s.guardRulesFor(thread); g.AccessWrites {
+		t.Error("a thread gets access writes")
 	}
 
 	// Guarded: the guard's rules, still no sandbox.

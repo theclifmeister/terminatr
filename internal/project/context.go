@@ -117,8 +117,8 @@ func (p *Project) Context(seen Ticked, threads func(prs map[string]string) (Sect
 	if closeRule == config.CloseDays {
 		closeRule = fmt.Sprintf("%d days after done or merged", safety.AutoCloseDays)
 	}
-	head = append(head, fmt.Sprintf("Safety: start_threads=%s · yolo=%t · coordinator_approves=%t · parallel_threads=%s · auto_close=%s · complete_tasks=%s (config.toml; the human's)",
-		safety.StartThreads, safety.Yolo, safety.CoordinatorApproves, fmt.Sprint(safety.ParallelThreads)+globalCap(safety.GlobalParallelThreads, seen.Working), closeRule, safety.CompleteTasks))
+	head = append(head, fmt.Sprintf("Safety: start_threads=%s · protection=%s · yolo=%t · coordinator_approves=%t · coordinator_access=%t · parallel_threads=%s · auto_close=%s · complete_tasks=%s (config.toml; the human's)",
+		safety.StartThreads, safety.Protection, safety.Yolo, safety.CoordinatorApproves, safety.CoordinatorAccess, fmt.Sprint(safety.ParallelThreads)+globalCap(safety.GlobalParallelThreads, seen.Working), closeRule, safety.CompleteTasks))
 	if safety.Paused {
 		head = append(head, "Paused by the user: no nudges, no PR follow-up, and tm thread start refuses (project-paused) until they resume it")
 	}

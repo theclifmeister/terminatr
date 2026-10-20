@@ -6,6 +6,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
 )
@@ -22,7 +23,7 @@ func accessPreset(e *Env, args []string) error {
 	if len(args) == 0 {
 		return srvUsage(cmd, accessUsage)
 	}
-	if e.Caller.IsAgent() {
+	if e.Caller.IsAgent() && (e.Caller.Kind != caller.Coordinator || args[0] != "add") {
 		return srvFail(cmd, &project.Error{Code: "human-only", Msg: "presets are the user's: they add them in the Access tab (p) or with tm access preset add"})
 	}
 	if args[0] == "add" && e.Identify != nil && !e.Identified {
@@ -130,6 +131,9 @@ func (e *Env) presetAdd(name string, pos []string, all bool) error {
 			return srvFail(cmd, err)
 		}
 		table, who = "projects."+slug, slug
+	}
+	if err := e.accessFor(cmd, slug); err != nil {
+		return err
 	}
 	cfg, err := config.Load()
 	if err != nil {

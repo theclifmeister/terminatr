@@ -172,6 +172,9 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		g.Floor = append(g.Floor, "merge")
 	}
 	g.NoWrite = s.guardNoWrite(r)
+	// The project lets its coordinator change its access: the floor lets
+	// its tm access writes through, which tm checks in the server.
+	g.AccessWrites = r.Role == proto.RoleCoordinator && set.CoordinatorAccess
 	g.AskEscapes, g.AskFirst = askEscapes, askFirst
 	if s.opts.Paths.Home != "" {
 		g.Worktrees = realPath(filepath.Join(s.opts.Paths.Home, "worktrees"))

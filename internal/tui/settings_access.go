@@ -44,7 +44,7 @@ func accessList(slug, goos string) settingsList {
 func accessRows(slug, goos, level string) []setting {
 	sr := newSafetyRows(slug)
 	at := config.Safety{Protection: level}
-	prompts := sr.scope([]setting{sr.protectionRow(), sr.yoloRow(), sr.toggle("coordinator_approves")})
+	prompts := sr.scope([]setting{sr.protectionRow(), sr.yoloRow(), sr.toggle("coordinator_approves"), sr.coordinatorAccessRow()})
 	prompts[0].section = "Protection and prompts"
 	rows := prompts
 	if at.AtLeast(config.ProtectSandboxed) {
@@ -106,6 +106,21 @@ func (sr safetyRows) protectionRow() setting {
 		}}
 }
 
+func (sr safetyRows) coordinatorAccessRow() setting {
+	return setting{label: "Coordinator sets access", help: "Let the project's coordinator change its access with tm access: protection, the sandbox lists, presets and reset, for its own project only. It can never change all projects', turn yolo mode on or change this switch. Each change is journaled. Turning it on asks first.",
+		keys: []string{"coordinator_access"}, word: onOffWord("coordinator_access"),
+		value: func(m *dash) string { return onOff(sr.on(m, "coordinator_access")) },
+		change: func(m *dash) tea.Cmd {
+			if sr.on(m, "coordinator_access") {
+				return sr.set(m, "coordinator_access", false, "the coordinator no longer sets access "+sr.forWho)
+			}
+			m.confirm("Let the coordinator set access", "Let the coordinator change access "+sr.forWho+"? It can then lower protection, open the sandbox and add commands that run outside it, for its own project; never yolo mode, all projects' or this switch.", func() tea.Cmd {
+				return sr.set(m, "coordinator_access", true, "the coordinator sets access "+sr.forWho)
+			})
+			return nil
+		}}
+}
+
 // builtInHelp says what tm gives every thread, whatever the settings.
 const builtInHelp = "What tm gives every thread, whatever the rows above say: its worktree to write, the project folder to read but never write, config.toml never written, the repository's git objects and refs writable (never its hooks or config), tm's socket (never yours), and the guard's floor (tm's files, printing a secret variable, force-pushing to a protected branch, a thread merging)."
 
@@ -133,7 +148,7 @@ func (m *dash) resetAccess(slug string) tea.Cmd {
 		to = "tm's defaults (protection open)"
 	}
 	src := m.src
-	m.confirm("Reset access", "Reset the access switches "+sr.forWho+" to "+to+"? Protection, yolo mode, coordinator approves, the guard, its mode and its rules turned off go back; the sandbox lists, guard allowances and secret environment stay.", func() tea.Cmd {
+	m.confirm("Reset access", "Reset the access switches "+sr.forWho+" to "+to+"? Protection, yolo mode, coordinator approves, coordinator sets access, the guard, its mode and its rules turned off go back; the sandbox lists, guard allowances and secret environment stay.", func() tea.Cmd {
 		return m.act(func() actionMsg {
 			reset, err := src.ResetAccess(sr.table)
 			switch {

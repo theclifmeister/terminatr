@@ -99,6 +99,11 @@ export type Rules = {
   // The thread's escapes are off (sandbox_escapes = false), so a call
   // unsandboxed takes is refused.
   noEscapes?: boolean
+  // The project lets its coordinator change its access
+  // (coordinator_access): the floor lets its tm access writes through
+  // (accessOpen), which tm checks in the server; never one for all
+  // projects (--all), nor setting yolo or that switch.
+  accessWrites?: boolean
   // guard_mode "learn": a refusal tells the model the user reviews it.
   learn?: boolean
   // The rules whose floor holds though the human turned the rule off
@@ -652,7 +657,7 @@ const REMOVERS = new Set('rm rmdir mv rsync'.split(' '))
 // so the floor refuses them.
 const TM_AGENT_MOD = new Set('list show validate new test logs examples host'.split(' '))
 const TM_PROJECT_WRITES = new Set('new remote activate deactivate pause resume archive unarchive delete rename mv link open'.split(' '))
-const TM_ACCESS_WRITES = new Set('add rm edit drop undrop set'.split(' '))
+const TM_ACCESS_WRITES = new Set('add rm edit drop undrop set reset'.split(' '))
 
 // tmWritesSettings is which of those tm with args (after its name) is
 // ("tm mod enable", "tm (the dashboard)"), or ''.
@@ -669,6 +674,16 @@ function tmWritesSettings(args: string[]): string {
   if (args[i] === 'access' && TM_ACCESS_WRITES.has(pos[0])) return `tm access ${pos[0]}`
   if (args[i] === 'access' && pos[0] === 'preset' && pos[1] === 'add') return 'tm access preset add'
   return ''
+}
+
+// accessOpen is whether tm with args (after its name) is a tm access
+// write a coordinator with accessWrites may run: never for all
+// projects, never setting yolo or coordinator (the human's switches).
+function accessOpen(args: string[]): boolean {
+  if (args.some(a => a === '--all' || a.startsWith('--all='))) return false
+  const pos = args.filter(a => !a.startsWith('-'))
+  if (pos.length < 2 || pos[0] !== 'access') return false
+  return !(pos[1] === 'set' && pos.length > 2 && (pos[2] === 'yolo' || pos[2] === 'coordinator'))
 }
 
 // cdTo is where cmd (cd, pushd, popd) with args leaves a line whose
@@ -880,7 +895,7 @@ function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): D
   if (cmd === '>') return null
   if (cmd === 'tm' || cmd.includes('TERMINATR_BIN')) {
     const what = tmWritesSettings(args)
-    if (what) return floor(deny(r, 'tm-files', what))
+    if (what && !(r.accessWrites && accessOpen(args))) return floor(deny(r, 'tm-files', what))
   }
   let all = WRITERS.get(cmd)
   if (IN_PLACE.has(cmd)) all = args.some(a => isLong(a, '--in-place') || (/^-[a-zA-Z0-9]+$/.test(a) && a.includes('i')) || a.startsWith('-i')) ? true : undefined

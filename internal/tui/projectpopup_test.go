@@ -1739,7 +1739,7 @@ func TestAccessTabByLevel(t *testing.T) {
 		}
 		return out
 	}
-	if got := labels(); !slices.Equal(got, []string{"Protection", "Yolo mode", "Coordinator approves", "Secret environment", "tm's rules"}) {
+	if got := labels(); !slices.Equal(got, []string{"Protection", "Yolo mode", "Coordinator approves", "Coordinator sets access", "Secret environment", "tm's rules"}) {
 		t.Errorf("open: %q", got)
 	}
 	out := screen(m)

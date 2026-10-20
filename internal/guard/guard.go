@@ -122,6 +122,12 @@ type Rules struct {
 	// NoEscapes: the thread's escapes are off (sandbox_escapes = false),
 	// so a call Unsandboxed takes is refused.
 	NoEscapes bool `json:"noEscapes,omitempty"`
+	// AccessWrites: the project lets its coordinator change its access
+	// (coordinator_access), so the floor lets the coordinator's tm access
+	// writes through (accessOpen): tm checks them in the server. Never
+	// one for all projects (--all), nor setting yolo or that switch,
+	// which stay the human's.
+	AccessWrites bool `json:"accessWrites,omitempty"`
 	// Learn is guard_mode "learn": a refusal tells the model the user
 	// reviews it.
 	Learn bool `json:"learn,omitempty"`
@@ -1579,7 +1585,7 @@ var (
 var (
 	tmAgentMod      = setOf("list show validate new test logs examples host")
 	tmProjectWrites = setOf("new remote activate deactivate pause resume archive unarchive delete rename mv link open")
-	tmAccessWrites  = setOf("add rm edit drop undrop set")
+	tmAccessWrites  = setOf("add rm edit drop undrop set reset")
 )
 
 // tmWritesSettings is which of those tm with args (after its name) is
@@ -1613,6 +1619,25 @@ func tmWritesSettings(args []string) string {
 		return "tm access preset add"
 	}
 	return ""
+}
+
+// accessOpen reports whether tm with args (after its name) is a tm
+// access write a coordinator with AccessWrites may run: never for all
+// projects, never setting yolo or coordinator (the human's switches).
+func accessOpen(args []string) bool {
+	var pos []string
+	for _, a := range args {
+		if a == "--all" || strings.HasPrefix(a, "--all=") {
+			return false
+		}
+		if !strings.HasPrefix(a, "-") {
+			pos = append(pos, a)
+		}
+	}
+	if len(pos) < 2 || pos[0] != "access" {
+		return false
+	}
+	return !(pos[1] == "set" && len(pos) > 2 && (pos[2] == "yolo" || pos[2] == "coordinator"))
 }
 
 // nowhere is the folder a command line's relative paths are from, as
@@ -1902,7 +1927,7 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 		return nil
 	}
 	if cmd == "tm" || strings.Contains(cmd, "TERMINATR_BIN") {
-		if what := tmWritesSettings(args); what != "" {
+		if what := tmWritesSettings(args); what != "" && !(r.AccessWrites && accessOpen(args)) {
 			return floor(r.deny(RuleTMFiles, what, ""))
 		}
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // TestAccessWriters: tm access add, rm, drop, undrop and set are the
@@ -239,5 +240,86 @@ func TestAccessEdit(t *testing.T) {
 		if !strings.Contains(j, want) {
 			t.Errorf("journal lacks %q:\n%s", want, j)
 		}
+	}
+}
+
+// TestAccessCoordinator: with coordinator_access on, the project's
+// coordinator changes its own project's access, journaled as its own;
+// never all projects', another project's, yolo on or the switch, and its
+// reset keeps the switch. A thread stays refused.
+func TestAccessCoordinator(t *testing.T) {
+	h := newHarness(t)
+	h.ok(human, "project", "new", "demo")
+	h.ok(human, "project", "new", "other")
+	run := func(who caller.Caller, args ...string) (int, string, string) {
+		var out, errb bytes.Buffer
+		e := &Env{
+			Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errb,
+			Getenv: func(string) string { return "" }, Cwd: h.cwd, Caller: human,
+			Identify: func() (caller.Caller, bool) { return who, true },
+		}
+		code, _ := e.Run(append([]string{"access"}, args...))
+		return code, out.String(), errb.String()
+	}
+	coord := caller.Caller{Kind: caller.Coordinator, Project: "demo"}
+	thr := caller.Caller{Kind: caller.Thread, Project: "demo", Thread: "t-0001"}
+	if code, _, stderr := run(human, "set", "coordinator", "on", "demo"); code == ExitOK || !strings.Contains(stderr, "--yes") {
+		t.Fatalf("coordinator on without --yes: %d %q", code, stderr)
+	}
+	if code, _, stderr := run(human, "set", "coordinator", "on", "demo", "--yes"); code != ExitOK {
+		t.Fatalf("coordinator on: %q", stderr)
+	}
+	for _, args := range [][]string{
+		{"add", "host", "registry.npmjs.org", "demo"},
+		{"set", "protection", "sandboxed", "demo"},
+		{"set", "yolo", "off", "demo"},
+		{"preset", "add", "local-dev-servers", "demo"},
+	} {
+		if code, _, stderr := run(coord, args...); code != ExitOK {
+			t.Errorf("coordinator %v: %q", args, stderr)
+		}
+	}
+	for _, c := range []struct {
+		who  caller.Caller
+		args []string
+	}{
+		{coord, []string{"add", "host", "x.dev", "--all"}},
+		{coord, []string{"add", "host", "x.dev", "other"}},
+		{coord, []string{"set", "yolo", "on", "demo", "--yes"}},
+		{coord, []string{"set", "coordinator", "off", "demo"}},
+		{thr, []string{"add", "host", "x.dev", "demo"}},
+	} {
+		if code, _, stderr := run(c.who, c.args...); code == ExitOK || !strings.Contains(stderr, "human-only") {
+			t.Errorf("%v %v: exit %d, %q", c.who.Kind, c.args, code, stderr)
+		}
+	}
+	if code, out, stderr := run(coord, "reset", "demo", "--yes"); code != ExitOK || !strings.Contains(out, "protection") {
+		t.Errorf("coordinator reset: %q %q", out, stderr)
+	}
+	c, _ := config.Load()
+	s, _ := c.Safety("demo")
+	if !s.CoordinatorAccess || s.Protection != config.ProtectOpen || len(c.ThreadSandbox("demo").Given(config.SandboxHosts)) != 1 || len(c.ThreadSandbox("other").Given(config.SandboxHosts)) != 0 {
+		t.Errorf("demo after the coordinator: %+v", s)
+	}
+	if s, _ := c.Safety("other"); s.CoordinatorAccess {
+		t.Error("other got coordinator access")
+	}
+	// In the server (cli.run, where a coordinator's tm access write goes):
+	// the coordinator's runs, a thread's isn't a project command.
+	if res := RunInServer(proto.CLIRunParams{Args: []string{"access", "set", "protection", "guarded", "demo"}, Cwd: h.cwd}, coord); res.Code != ExitOK {
+		t.Errorf("in the server: %q", res.Stderr)
+	}
+	if res := RunInServer(proto.CLIRunParams{Args: []string{"access", "add", "host", "y.dev", "demo"}, Cwd: h.cwd}, thr); res.Code == ExitOK || !strings.Contains(res.Stderr, "not a project command") {
+		t.Errorf("a thread's in the server: %q", res.Stderr)
+	}
+	if !forwardedAccess([]string{"access", "reset", "demo"}, func(k string) string { return map[string]string{caller.EnvRole: "coordinator"}[k] }) ||
+		forwardedAccess([]string{"access", "show"}, func(k string) string { return map[string]string{caller.EnvRole: "coordinator"}[k] }) ||
+		forwardedAccess([]string{"access", "reset", "demo"}, func(string) string { return "" }) {
+		t.Error("forwardedAccess")
+	}
+	p, _ := project.Open("demo")
+	lines, _, _ := p.JournalTail(20)
+	if j := strings.Join(lines, "\n"); !strings.Contains(j, "coordinator settings.sandbox demo hosts + registry.npmjs.org") {
+		t.Errorf("journal:\n%s", j)
 	}
 }
