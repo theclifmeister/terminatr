@@ -24,6 +24,7 @@ they do and keep the project's state.
 - Only the user accepts work: `tm task status T<n> done
   --approved-by-user` on their word only (chat or an `accept` item).
 - Never choose a thread's question answer yourself, and run `tm thread
-  resolve --discard` or `tm library rm` only on the user's word in chat.
+  resolve --discard` or `tm library rm` only on the user's word in chat;
+  `--discard` on a plain folder also needs `--approved-by-user`.
 - Project settings (merge, parallel_threads, global_parallel_threads,
   pausing) are the user's: a refusal is not an error to work around.

@@ -155,7 +155,12 @@ func TestResolvePlainFolder(t *testing.T) {
 	if !strings.Contains(out, "kept folder "+wt+" (1 file not handed in") {
 		t.Fatalf("resolve with a file left: %q", out)
 	}
-	out = h.ok(coord, "thread", "resolve", rec.ID, "--discard", "--project", "demo")
+	// Without the user's word the files stay.
+	h.expect(1, "--approved-by-user", coord, "thread", "resolve", rec.ID, "--discard", "--project", "demo")
+	if _, err := os.Stat(filepath.Join(wt, "notes.md")); err != nil {
+		t.Fatal("a refused discard removed a file")
+	}
+	out = h.ok(coord, "thread", "resolve", rec.ID, "--discard", "--approved-by-user", "--project", "demo")
 	if !strings.Contains(out, "removed folder "+wt+" (discarded)") {
 		t.Fatalf("discard: %q", out)
 	}
@@ -175,7 +180,7 @@ func TestResolvePlainFolder(t *testing.T) {
 	elsewhere := t.TempDir()
 	os.WriteFile(filepath.Join(elsewhere, "keep.md"), []byte("x"), 0o644)
 	rec3, _ := thread.Create(p, thread.Record{Title: "Odd", Agent: "claude", Worktree: elsewhere, State: thread.Stopped})
-	h.expect(1, "discard-refused", coord, "thread", "resolve", rec3.ID, "--discard", "--project", "demo")
+	h.expect(1, "discard-refused", coord, "thread", "resolve", rec3.ID, "--discard", "--approved-by-user", "--project", "demo")
 	if _, err := os.Stat(filepath.Join(elsewhere, "keep.md")); err != nil {
 		t.Fatal("a refused discard removed a file")
 	}
@@ -203,12 +208,12 @@ func TestDiscardEditedRecord(t *testing.T) {
 	}
 
 	edit(`repo = "`+rec.Repo+`"`, ``)
-	h.expect(1, "holds a .git", coord, "thread", "resolve", rec.ID, "--discard", "--project", "demo")
+	h.expect(1, "holds a .git", coord, "thread", "resolve", rec.ID, "--discard", "--approved-by-user", "--project", "demo")
 
 	os.WriteFile(path, orig, 0o644)
 	other, _ := thread.Create(p, thread.Record{Title: "Other", Agent: "claude", State: thread.Stopped})
 	edit(`id = "`+rec.ID+`"`, `id = "`+other.ID+`"`)
-	if code, _, _ := h.run(coord, "", "thread", "resolve", rec.ID, "--discard", "--project", "demo"); code == 0 {
+	if code, _, _ := h.run(coord, "", "thread", "resolve", rec.ID, "--discard", "--approved-by-user", "--project", "demo"); code == 0 {
 		t.Fatal("resolve took a record with another thread's id")
 	}
 	if _, err := os.Stat(filepath.Join(rec.Worktree, "work.md")); err != nil {

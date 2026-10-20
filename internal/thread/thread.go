@@ -138,9 +138,17 @@ func Load(p *project.Project, id string) (*Record, error) {
 	case r.ID == "":
 		r.ID = id
 	case r.ID != id:
-		return nil, fmt.Errorf("%s: id %q is not %s", recordPath(p, id), r.ID, id)
+		return nil, &IDMismatch{Path: recordPath(p, id), Got: r.ID, Want: id}
 	}
 	return &r, nil
+}
+
+// IDMismatch is a record whose id is not its folder's. List skips it
+// (with a warning) rather than failing the whole project.
+type IDMismatch struct{ Path, Got, Want string }
+
+func (e *IDMismatch) Error() string {
+	return fmt.Sprintf("%s: id %q is not %s", e.Path, e.Got, e.Want)
 }
 
 // check refuses a record whose places and names tm couldn't have
@@ -195,6 +203,13 @@ func List(p *project.Project) ([]*Record, error) {
 			var te *Error
 			if errors.As(err, &te) {
 				continue // a folder without a record yet
+			}
+			var mm *IDMismatch
+			if errors.As(err, &mm) {
+				// One forged or misfiled record must not take the
+				// project's list, context and auto-close down.
+				fmt.Fprintf(os.Stderr, "tm: warning: skipping thread record: %v\n", mm)
+				continue
 			}
 			return nil, err
 		}
