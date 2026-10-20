@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.42.0](https://github.com/theclifmeister/terminatr/compare/v0.41.0...v0.42.0) (2026-10-20)
+
+
+### Features
+
+* **threads:** pick a repo per task, refuse to guess with several, allow none ([#683](https://github.com/theclifmeister/terminatr/issues/683)) ([8d23a76](https://github.com/theclifmeister/terminatr/commit/8d23a76654d18d60e6b56769533b1dbf7237cd8e))
+* **threads:** plain-folder discard needs --approved-by-user; List skips a mismatched record ([#690](https://github.com/theclifmeister/terminatr/issues/690)) ([32f6916](https://github.com/theclifmeister/terminatr/commit/32f691615514753ca42ef7fd227f31f17df1c22c))
+
+
+### Bug Fixes
+
+* **access:** say an excluded command without * takes only the bare command ([#688](https://github.com/theclifmeister/terminatr/issues/688)) ([95a273d](https://github.com/theclifmeister/terminatr/commit/95a273d9fdd984970871a8c8233304d384653b20))
+* **claude:** give the context through command hooks when another mod skips the mod's ([#689](https://github.com/theclifmeister/terminatr/issues/689)) ([8f3464f](https://github.com/theclifmeister/terminatr/commit/8f3464f8e55d273e713c223bfd6c4224b9f5cd5e))
+* **claude:** hooks-skipped follow-ups and a best-effort prompt close in the guard ([#691](https://github.com/theclifmeister/terminatr/issues/691)) ([e0ddbbb](https://github.com/theclifmeister/terminatr/commit/e0ddbbbe1f83ca40238ef89085ecf598386b71cf))
+* **threads:** tm thread merge tells no code host from no PR, and names what it asked ([#686](https://github.com/theclifmeister/terminatr/issues/686)) ([c49737c](https://github.com/theclifmeister/terminatr/commit/c49737ceb5f66d132cbfcf3f90af03e721ca5719))
+
 ## [0.41.0](https://github.com/theclifmeister/terminatr/compare/v0.40.0...v0.41.0) (2026-10-19)
 
 
