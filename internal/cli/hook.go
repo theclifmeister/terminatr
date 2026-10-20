@@ -30,7 +30,7 @@ var (
 	// "context" (SessionStart): its response is the session's brief and
 	// context, and a loaded machine after /clear can miss 500 ms, which
 	// would leave the session without them.
-	hookContext = 3 * time.Second
+	hookContext = agent.HookContextWait
 	// hookTries and hookRetry: a "context" event (SessionStart) the server
 	// didn't take (no connection, closed, refused) is sent again, within
 	// hookContext: lost, it would leave the session without its context,

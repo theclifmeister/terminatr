@@ -230,6 +230,7 @@ func (s *Server) modHandler(id string) http.Handler {
 			http.Error(w, "session "+id+" is gone", http.StatusGone)
 			return
 		}
+		s.modHeard(id)
 		if err := sess.ModState(rep.State, rep.Reason, rep.Event); err != nil {
 			code := http.StatusInternalServerError
 			if errors.Is(err, session.ErrNoAgent) {
@@ -345,7 +346,8 @@ func (s *Server) modHandler(id string) http.Handler {
 	})
 	// The role's context, fresh (§7.8): the mod adds it to the
 	// conversation's context, re-read after /clear and compaction. 204
-	// for a session outside a project.
+	// for a session outside a project, and for a conversation a command
+	// hook gave it to (convcontext.go).
 	mux.HandleFunc("GET /v1/context", func(w http.ResponseWriter, r *http.Request) {
 		if s.modSession(w, id) == nil {
 			return
@@ -355,13 +357,22 @@ func (s *Server) modHandler(id string) http.Handler {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if len(b) == 0 {
+		if len(b) == 0 || !s.blockContext(id) {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		s.servedContext(id)
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Write(b)
+	})
+	// The mod's classic.SessionStart ran: the SessionStart command hook,
+	// which runs after it, then only says where the context is.
+	mux.HandleFunc("POST /v1/context/started", func(w http.ResponseWriter, r *http.Request) {
+		if s.modSession(w, id) == nil {
+			return
+		}
+		s.markedStart(id)
+		w.WriteHeader(http.StatusNoContent)
 	})
 	// The guard's rules and refusals (guard.go).
 	s.guardRoutes(mux, id)

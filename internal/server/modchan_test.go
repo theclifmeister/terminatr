@@ -348,6 +348,7 @@ func TestHookContextWithMod(t *testing.T) {
 	if err != nil || !strings.HasPrefix(string(full), "tm skill thread v") || len(full) < 1000 {
 		t.Fatalf("without the mod: %v %.60q (%d bytes)", err, full, len(full))
 	}
+	s.markedStart("s-1") // the mod's classic.SessionStart ran
 	short, err := s.hookContextOf("s-1", true)(startup)
 	if err != nil || string(short) != modContextLine {
 		t.Fatalf("with the mod: %v %q", err, short)
@@ -376,6 +377,7 @@ func TestHookContextResumed(t *testing.T) {
 	}
 	hook := func(src string) string {
 		t.Helper()
+		s.markedStart("s-1") // the mod's classic.SessionStart ran
 		b, err := s.hookContextOf("s-1", true)(map[string]any{"source": src})
 		if err != nil {
 			t.Fatal(err)
