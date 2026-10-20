@@ -245,7 +245,11 @@ func (s *Server) gaveContext(id string, at time.Time) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.convLocked(id).via = viaHook
+	// A block served while it rendered stands: it is re-read after
+	// compaction, the hook's copy isn't (both reached the model once).
+	if c := s.convLocked(id); c.via == viaNone {
+		c.via = viaHook
+	}
 }
 
 // fallbackContext is context b as a command hook gives it, headed by

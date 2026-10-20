@@ -301,3 +301,28 @@ func TestContextAfterExit(t *testing.T) {
 		t.Fatalf("%d conversation entries after the exit", n)
 	}
 }
+
+// TestContextBlockDuringRender: a block served while a command hook
+// rendered the context keeps the conversation's record as the block's.
+func TestContextBlockDuringRender(t *testing.T) {
+	s := convServer()
+	full, _ := s.contextOf("s-1")()
+	during := func() ([]byte, error) {
+		if !s.blockContext("s-1") {
+			t.Error("the block was refused while the hook rendered")
+		}
+		return full, nil
+	}
+	if b, _ := s.promptContext("s-1", during); !bytes.HasSuffix(b, full) {
+		t.Fatalf("prompt: %.80q", b)
+	}
+	s.mu.Lock()
+	via := s.convs["s-1"].via
+	s.mu.Unlock()
+	if via != viaBlock {
+		t.Fatalf("via %q, want the block's", via)
+	}
+	if !s.blockContext("s-1") {
+		t.Fatal("the block is refused after it was served")
+	}
+}
