@@ -1184,11 +1184,27 @@ func (s *Server) promptWith(p proto.SessionPromptParams, o session.PromptOptions
 	if errors.Is(err, session.ErrNoAgent) {
 		return nil, proto.Errorf(proto.ErrRefused, "session %s runs no agent; use tm session keys", p.ID)
 	}
+	var ni *session.NotInterruptedError
+	if errors.As(err, &ni) {
+		return nil, proto.Errorf(proto.ErrRefused, "session %s: %v%s", p.ID, err, notInterruptedHint[ni.Why])
+	}
 	if err != nil {
 		return nil, sessionError(p.ID, err)
 	}
 	s.watch.wake()
-	return proto.SessionPromptResult{Via: via, Why: why}, nil
+	res := proto.SessionPromptResult{Via: via, Why: why}
+	switch why {
+	case session.HeldBox, session.HeldDialog, session.HeldEscape:
+		res.Running = via == "queued"
+	}
+	return res, nil
+}
+
+// notInterruptedHint says what to do about a refused --interrupt.
+var notInterruptedHint = map[string]string{
+	session.HeldBox:    "; the prompt box holds a draft tm didn't type, kept: the user sends or clears it, or prompt without --interrupt to queue",
+	session.HeldDialog: "; answer the dialog first (tm thread approve)",
+	session.HeldEscape: "; a command asks to run outside the sandbox, which only the user answers",
 }
 
 // maxWait bounds session.wait.

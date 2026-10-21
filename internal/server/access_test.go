@@ -78,7 +78,7 @@ func wantSandbox(l launchConfig, slug, goos string) (lists agent.SandboxLists, g
 }
 
 // accessConfigs are the config.toml files of TestAccessLaunchEqual:
-// every way the sandbox rules (tm 0.37's preset switches too), drops,
+// every way the sandbox rules (tm 0.37's switches too), drops,
 // refused entries, yolo, escapes and the coordinator's merge rule
 // combine.
 var accessConfigs = []string{
@@ -215,11 +215,11 @@ func TestAccessLaunchEqual(t *testing.T) {
 							t.Errorf("%s: access\n got %+v\nwant %+v", name, got, want)
 						}
 						var lists agent.SandboxLists
-						var presets []config.Guide
+						var guides []config.Guide
 						var skipped []string
 						wl, wp, ws := agent.SandboxLists{}, []config.Guide(nil), []string(nil)
 						if role == proto.RoleThread {
-							lists, presets, skipped = launchSandbox(set)
+							lists, guides, skipped = launchSandbox(set)
 							wl, wp, ws = wantSandbox(lc, slug, goos)
 							if flags[0] || flags[2] {
 								// Yolo has no sandbox (T574 case 4), nor has
@@ -230,8 +230,8 @@ func TestAccessLaunchEqual(t *testing.T) {
 						} else if !launchSandboxEmpty(set) {
 							t.Errorf("%s: sandbox rules for a %s", name, role)
 						}
-						if !reflect.DeepEqual(lists, wl) || !slices.Equal(presets, wp) || !slices.Equal(skipped, ws) {
-							t.Errorf("%s: sandbox\n got %+v %q %q\nwant %+v %q %q", name, lists, presets, skipped, wl, wp, ws)
+						if !reflect.DeepEqual(lists, wl) || !slices.Equal(guides, wp) || !slices.Equal(skipped, ws) {
+							t.Errorf("%s: sandbox\n got %+v %q %q\nwant %+v %q %q", name, lists, guides, skipped, wl, wp, ws)
 						}
 						wantNoSandbox := flags[2] && role == proto.RoleThread
 						if y, ns, n := launchFlags(set); y != flags[0] || n != flags[1] || ns != wantNoSandbox {
@@ -314,8 +314,8 @@ write = ["~/src/fixtures"]
 			t.Errorf("no %s rule", k)
 		}
 	}
-	lists, presets, skipped := launchSandbox(set)
-	if !reflect.DeepEqual(lists, agent.SandboxLists{Allow: []string{"WebFetch(domain:playwright.dev)"}}) || presets != nil || skipped != nil {
-		t.Errorf("yolo launch: %+v %q %q", lists, presets, skipped)
+	lists, guides, skipped := launchSandbox(set)
+	if !reflect.DeepEqual(lists, agent.SandboxLists{Allow: []string{"WebFetch(domain:playwright.dev)"}}) || guides != nil || skipped != nil {
+		t.Errorf("yolo launch: %+v %q %q", lists, guides, skipped)
 	}
 }

@@ -81,7 +81,7 @@ args = [
   # Windows the Go agent turns the network off instead of limiting it:
   # Codex's proxy needs its elevated sandbox there (probe.go).
   # A thread's network goes through the proxy too (T574 case 5): tm's
-  # socket and its host rules (.Sandbox.Domains: its presets' hosts and
+  # socket and its host rules (.Sandbox.Domains: its host rules and
   # its repo's git remote hosts) as the proxy's domains, a map of host to
   # "allow", wildcards as Codex takes them (*.example.com); no domains,
   # no host. Its mode is "full": "limited" also lets only GET, HEAD and

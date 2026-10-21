@@ -18,8 +18,8 @@ import (
 // popup and, for all projects, in the , popup. Inside the sandbox: the
 // hosts its commands may reach, local ports, and the guidance its brief
 // gets; then the commands a thread runs outside its sandbox (Outside the
-// sandbox), and the permission rules it gets on top of tm's. P adds a
-// preset's rules (settings_presets.go). It shows only what applies on
+// sandbox), and the permission rules it gets on top of tm's. It shows
+// only what applies on
 // the platform the server is on, where threads run
 // (config.SandboxSettings); config.toml keeps the rest, and a launch
 // skips it. A guide is a title and a text (texteditor.go edits it).
@@ -49,7 +49,7 @@ const sandboxLocal = "A thread can then connect to every service listening on a 
 const sandboxHost = "Every command a thread runs inside its sandbox may then reach it, not only the tool you add it for."
 
 // sandboxGuide heads the Access tab.
-const sandboxGuide = "Prefer rules inside the sandbox (p adds a preset's): the thread's commands stay in it, opened only as far as the tool needs. Excluded commands (Outside the sandbox) run outside it: a last resort. " + sandboxBoth
+const sandboxGuide = "Prefer rules inside the sandbox: the thread's commands stay in it, opened only as far as the tool needs. Excluded commands (Outside the sandbox) run outside it: a last resort. " + sandboxBoth
 
 // sandboxAdds says how a project's lists combine with all projects'.
 const sandboxAdds = "A project's entries add to all projects'. In the list, enter or e changes an entry in place and X removes it; on a project, all projects' entries change in the , popup, and X drops one or takes the drop back."
@@ -62,7 +62,7 @@ var sandboxLists = map[string]struct{ label, help, about, example, word string }
 		"Sandboxed commands may reach these hosts. " + sandboxHost,
 		"registry.npmjs.org", "hosts"},
 	config.SandboxGuides: {"Guidance for threads",
-		"Texts tm adds after a thread's brief, each a title and a text you write (the browser presets add theirs, written out to edit). Plain text: they open nothing, and apply on every platform. " + sandboxAdds,
+		"Texts tm adds after a thread's brief, each a title and a text you write. Plain text: they open nothing, and apply on every platform. " + sandboxAdds,
 		"Texts tm adds after a thread's brief, each under its title. They open nothing.",
 		"Test data", "guides"},
 	config.SandboxExcluded: {"Excluded commands",
@@ -146,8 +146,8 @@ func accessHead(m *dash, slug string, w int) []string {
 	}
 	goos := m.serverOS()
 	where := "Shown: what applies on " + config.OSName(goos) + ", where this server's threads run."
-	if !slices.ContainsFunc(config.Presets, func(p config.Preset) bool { return slices.Contains(p.OS, goos) }) {
-		where += " Hosts, local ports and the presets don't apply there"
+	if !config.SandboxApplies(config.SandboxHosts, goos) {
+		where += " Hosts and local ports don't apply there"
 		if goos == config.OSLinux {
 			where += ": Playwright's Chromium should need none in Linux's sandbox"
 		}

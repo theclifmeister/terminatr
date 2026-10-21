@@ -27,7 +27,7 @@ func findRule(rules []proto.AccessRule, kind, value string) *proto.AccessRule {
 }
 
 // TestAccessRuleSources: each rule says where it comes from: tm, all
-// projects, the project, tm's default; tm 0.37's preset switch lists
+// projects, the project, tm's default; tm 0.37's switch lists
 // the rules it unfolds into; a drop marks all projects' rule dropped;
 // what doesn't apply on the platform is marked skipped, not left out.
 func TestAccessRuleSources(t *testing.T) {

@@ -100,7 +100,8 @@ func (h tickerHost) Clear(id string, still func() bool) error {
 }
 
 // AskSave pastes the ticker's save-lessons line (ticker.SaveText) into
-// session id ahead of its auto-clear, as Clear pastes the clear: never
+// session id ahead of its auto-clear, or its upkeep line
+// (ticker.UpkeepText) after it, as Clear pastes the clear: never
 // for an agent without a clear prompt, which is never cleared.
 func (h tickerHost) AskSave(id, text string, still func() bool) error {
 	h.s.mu.Lock()

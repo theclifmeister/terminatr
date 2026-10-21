@@ -1725,8 +1725,7 @@ func TestAccessReset(t *testing.T) {
 
 // TestAccessTabByLevel: the Access tab shows only what the protection
 // level uses: at open protection, prompts, secrets and tm's rules; the
-// guard's rows from guarded; the sandbox's, and p for presets, from
-// sandboxed. Raising it shows them at once.
+// guard's rows from guarded; the sandbox's from sandboxed. Raising it shows them at once.
 func TestAccessTabByLevel(t *testing.T) {
 	src, m := popupData(t)
 	m.Update(tea.WindowSizeMsg{Width: 160, Height: 120})
@@ -1745,12 +1744,8 @@ func TestAccessTabByLevel(t *testing.T) {
 		t.Errorf("open: %q", got)
 	}
 	out := screen(m)
-	if !strings.Contains(out, "Protection is open") || strings.Contains(out, "Prefer rules inside the sandbox") || strings.Contains(out, "p add a preset") {
+	if !strings.Contains(out, "Protection is open") || strings.Contains(out, "Prefer rules inside the sandbox") {
 		t.Errorf("open screen:\n%s", out)
-	}
-	keyPress(m, "p")
-	if _, ok := m.top().(*presetsView); ok {
-		t.Error("p opened the presets at open")
 	}
 	act(t, m, src, "enter") // guarded
 	if got := labels(); !slices.Contains(got, "Guard mode") || slices.Contains(got, "Excluded commands") {
@@ -1763,7 +1758,7 @@ func TestAccessTabByLevel(t *testing.T) {
 	if got := labels(); !slices.Contains(got, "Guard mode") || !slices.Contains(got, "Excluded commands") {
 		t.Errorf("sandboxed: %q", got)
 	}
-	if out := screen(m); !strings.Contains(out, "p add a preset") {
-		t.Errorf("sandboxed footer:\n%s", out)
+	if out := screen(m); !strings.Contains(out, "Prefer rules inside the sandbox") || strings.Contains(out, "preset") {
+		t.Errorf("sandboxed screen:\n%s", out)
 	}
 }

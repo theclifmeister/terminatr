@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
@@ -319,5 +320,143 @@ func TestRequestClearDropped(t *testing.T) {
 	clearNow(r)
 	if len(r.host.asked) != 0 || len(r.host.cleared) != 0 {
 		t.Fatalf("asked or cleared after a failed ask: %v %v", r.host.asked, r.host.cleared)
+	}
+}
+
+// upkeepRig is a clearRig whose coordinator was just cleared, with
+// CONTEXT.md over its budget; the clear took (context unknown) unless
+// took is false.
+func upkeepRig(t *testing.T, took bool) *rig {
+	t.Helper()
+	r := clearRig(t, true, "")
+	if err := os.WriteFile(r.p.Path("CONTEXT.md"), []byte(strings.Repeat("x", project.BudgetContext+512)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.sweep(0)
+	clearNow(r)
+	if len(r.host.cleared) != 1 || len(r.host.asked) != 1 {
+		t.Fatalf("not cleared: %v %v", r.host.cleared, r.host.asked)
+	}
+	if took {
+		r.host.sessions[0].Context = 0
+	}
+	return r
+}
+
+// After a clear, once the fresh conversation rested the grace, the
+// coordinator is asked once to consolidate the files over their budgets,
+// journaled; never before the clear.
+func TestUpkeepAfterClear(t *testing.T) {
+	r := upkeepRig(t, true)
+	if strings.Contains(r.host.asked[0], "Upkeep") {
+		t.Fatalf("upkeep asked before the clear: %q", r.host.asked[0])
+	}
+	r.sweep(DefaultClearGrace - time.Second)
+	if len(r.host.asked) != 1 {
+		t.Fatalf("upkeep within the grace: %v", r.host.asked)
+	}
+	r.sweep(time.Second)
+	over, _ := r.p.Oversized()
+	want := "s-1 " + UpkeepText(over)
+	if len(r.host.asked) != 2 || r.host.asked[1] != want {
+		t.Fatalf("asked %v, want %q last", r.host.asked, want)
+	}
+	for _, w := range []string{"[tm] Upkeep after the clear: CONTEXT.md is 6.5 KB (~1.7k tokens), over its 6 KB budget (~1.5k tokens). Consolidate them:",
+		"Check version-specific facts (agent versions, flakes) against today's versions and main", "as candidates for a code task", "don't move text into code",
+		"Drop notes that work around tm's own behaviour every user would hit", "not the project's own setup", "a task for a fix in tm"} {
+		if !strings.Contains(want, w) {
+			t.Fatalf("upkeep text %q lacks %q", want, w)
+		}
+	}
+	if !r.host.still() {
+		t.Fatal("upkeep dropped with the coordinator idle")
+	}
+	if j := r.journal(); !strings.Contains(j, " ticker coordinator.upkeep demo s-1 after its clear: asked to consolidate CONTEXT.md") {
+		t.Fatalf("journal %q", j)
+	}
+	for range 3 {
+		r.sweep(DefaultClearGrace)
+	}
+	if len(r.host.asked) != 2 {
+		t.Fatalf("upkeep asked again: %v", r.host.asked)
+	}
+}
+
+// The upkeep waits for the coordinator to rest, and only follows a clear
+// that took; nothing over budget, a pause, a relaunch or ClearEvery going
+// by drops it.
+func TestUpkeepAfterClearHeld(t *testing.T) {
+	t.Run("busy", func(t *testing.T) {
+		r := upkeepRig(t, true)
+		r.host.set("s-1", "working", "")
+		r.sweep(DefaultClearGrace)
+		if len(r.host.asked) != 1 {
+			t.Fatalf("upkeep while working: %v", r.host.asked)
+		}
+		r.host.set("s-1", "idle", "")
+		r.sweep(time.Second)
+		if len(r.host.asked) != 2 {
+			t.Fatalf("no upkeep once idle: %v", r.host.asked)
+		}
+	})
+	t.Run("clear not taken", func(t *testing.T) {
+		r := upkeepRig(t, false)
+		r.sweep(DefaultClearGrace)
+		if len(r.host.asked) != 1 {
+			t.Fatalf("upkeep into the old conversation: %v", r.host.asked)
+		}
+	})
+	drops := []struct {
+		name string
+		set  func(r *rig)
+	}{
+		{"within budget", func(r *rig) { os.WriteFile(r.p.Path("CONTEXT.md"), []byte("small\n"), 0o644) }},
+		{"paused", func(r *rig) {
+			cfg := filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml")
+			os.WriteFile(cfg, []byte("[projects.demo]\npaused = true\nauto_clear = true\n"), 0o600)
+		}},
+		{"relaunched", func(r *rig) { r.host.sessions[0].PID = 101 }},
+		{"ClearEvery", func(r *rig) {
+			r.host.set("s-1", "working", "")
+			r.sweep(DefaultClearEvery)
+			r.host.set("s-1", "idle", "")
+		}},
+	}
+	for _, c := range drops {
+		t.Run(c.name, func(t *testing.T) {
+			r := upkeepRig(t, true)
+			c.set(r)
+			r.sweep(DefaultClearGrace)
+			if strings.Contains(r.host.asked[len(r.host.asked)-1], "Upkeep") {
+				t.Fatalf("upkeep asked: %v", r.host.asked)
+			}
+			// Once dropped, it stays dropped.
+			os.WriteFile(filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml"), []byte("[projects.demo]\nauto_clear = false\n"), 0o600)
+			os.WriteFile(r.p.Path("CONTEXT.md"), []byte(strings.Repeat("x", project.BudgetContext+512)), 0o644)
+			r.sweep(time.Second)
+			for _, a := range r.host.asked {
+				if strings.Contains(a, "Upkeep") {
+					t.Fatalf("upkeep asked later: %v", r.host.asked)
+				}
+			}
+		})
+	}
+}
+
+// The user's save and clear is followed by the upkeep too, auto_clear
+// off.
+func TestUpkeepAfterRequestedClear(t *testing.T) {
+	r := clearRig(t, false, "")
+	os.WriteFile(r.p.Path("CONTEXT.md"), []byte(strings.Repeat("x", project.BudgetContext+512)), 0o644)
+	r.tk.RequestClear("demo", r.host.sessions[0])
+	r.sweep(0)
+	r.sweep(DefaultClearGrace)
+	if len(r.host.cleared) != 1 {
+		t.Fatalf("not cleared: %v", r.host.cleared)
+	}
+	r.host.sessions[0].Context = 0
+	r.sweep(DefaultClearGrace)
+	if len(r.host.asked) != 2 || !strings.Contains(r.host.asked[1], "[tm] Upkeep after the clear") {
+		t.Fatalf("asked %v", r.host.asked)
 	}
 }

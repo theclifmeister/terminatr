@@ -149,7 +149,7 @@ func (a Access) Closed() []string {
 // SandboxLists are the commands a thread's agent runs outside its
 // sandbox (Excluded, in Claude's Bash rule syntax: "npx playwright *")
 // and the permission rules it gets on top of tm's (Allow: "Bash(npx
-// playwright *)"), and what its presets open inside it: LocalBinding
+// playwright *)"), and what its rules open inside it: LocalBinding
 // lets its sandboxed commands listen on and reach localhost (a dev
 // server; Claude's allowLocalBinding, Codex's allow_local_binding), and
 // Domains are hosts they may reach (Claude's allowedDomains, Codex's

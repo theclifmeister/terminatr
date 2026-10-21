@@ -8,6 +8,7 @@ package session
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
@@ -29,13 +30,27 @@ const (
 // tests.
 var interruptDelay = time.Second
 
-// PromptNow delivers text ahead of the queue. While the agent works and
-// its prompt box is empty with no dialog on screen, the text is pasted
-// into the running turn (ViaSteered), or, with interrupt, the turn is
-// stopped for it the way the agent's manifest says ([inject] interrupt,
-// interrupt_paste; ViaInterrupted). An agent without an interrupt key gets
-// the prompt steered, and why says so. Otherwise (idle, blocked, a draft
-// in the box, a dialog) it goes as Prompt sends it, and why says why.
+// NotInterruptedError says PromptNow with interrupt left the running turn
+// alone, and neither sent nor queued the prompt. Why is HeldBox (a draft
+// tm didn't type), HeldDialog or HeldEscape, or that the agent was
+// started by hand.
+type NotInterruptedError struct{ Why string }
+
+func (e *NotInterruptedError) Error() string {
+	return "the running turn was not interrupted (" + e.Why + "): nothing was sent or queued"
+}
+
+// PromptNow delivers text ahead of the queue. While the agent works with
+// no dialog on screen and nothing in its prompt box but the steers tm
+// pasted itself, the text is pasted into the running turn (ViaSteered),
+// or, with interrupt, the turn is stopped for it the way the agent's
+// manifest says ([inject] interrupt, interrupt_paste; ViaInterrupted).
+// Text already steered into this turn isn't pasted again. An agent
+// without an interrupt key gets the prompt steered, and why says so. An
+// idle agent gets it as Prompt sends it, and why says so. Otherwise (a
+// draft in the box, a dialog, an agent started by hand) a steer goes as
+// Prompt sends it, and why says why, while an interrupt is refused
+// (NotInterruptedError): the turn runs on, and nothing is queued.
 // A queued prompt with the same text that no mod took yet is dropped, so
 // a prompt sent again with --now doesn't run twice.
 func (s *Session) PromptNow(text string, interrupt bool) (via, why string, err error) {
@@ -49,10 +64,14 @@ func (s *Session) PromptNow(text string, interrupt bool) (via, why string, err e
 		return "", "", ErrExited
 	case rt.a.Injector() == agent.InjectNone:
 		return "", "", fmt.Errorf("agent %s takes no prompts", rt.a.Name())
-	case rt.observed:
+	case rt.observed && interrupt && st != agent.StateIdle:
 		// No launch of ours: its keys aren't known.
+		return "", "", &NotInterruptedError{Why: "the agent was started by hand"}
+	case rt.observed:
 		via, err = s.Prompt(text)
 		return via, "the agent was started by hand", err
+	case interrupt && st == agent.StateBlocked:
+		return "", "", &NotInterruptedError{Why: HeldDialog}
 	case st != agent.StateWorking:
 		via, err = s.Prompt(text)
 		return via, "the agent is " + string(st), err
@@ -65,11 +84,14 @@ func (s *Session) PromptNow(text string, interrupt bool) (via, why string, err e
 		why = HeldEscape
 	case rt.blocker:
 		why = HeldDialog
-	case rt.man != nil && rt.man.Inject.EmptyRule != "" && !rt.emptyBox:
-		why = HeldBox
+	case rt.man != nil && rt.man.Inject.EmptyRule != "" && !rt.emptyBox && len(rt.steers) == 0:
+		why = HeldBox // a draft: kept, never typed over
 	}
 	if why != "" {
 		rt.mu.Unlock()
+		if interrupt {
+			return "", "", &NotInterruptedError{Why: why}
+		}
 		via, err = s.Prompt(text)
 		return via, why, err
 	}
@@ -83,29 +105,54 @@ func (s *Session) PromptNow(text string, interrupt bool) (via, why string, err e
 		rt.heldSince, rt.heldWhy = time.Time{}, "" // the head may have changed
 	}
 	rt.prompts = kept
-	rt.emptyBox = false // until the screen says so again
+	steered := slices.Contains(rt.steers, text)
 	key, after := "", false
 	if interrupt && rt.man != nil {
 		key, after = rt.man.Inject.Interrupt, rt.man.Inject.InterruptPaste != agent.InterruptPasteBefore
 	}
-	if key != "" && after {
+	switch {
+	case key != "" && after:
+		// The turn's unread steers are left unanswered.
+		rt.steers, rt.steerShown = nil, false
 		rt.promptSeq++
 		id := fmt.Sprintf("%s-%d", rt.promptGen, rt.promptSeq)
 		rt.prompts = append([]queuedPrompt{{id: id, text: text, at: time.Now(), paste: true}}, rt.prompts...)
+	case !steered:
+		rt.steers = append(rt.steers, text)
+		rt.emptyBox = false // until the screen says so again
 	}
 	rt.mu.Unlock()
 	switch {
+	case key == "" && steered:
+		why = "already steered into this turn"
+		if interrupt {
+			why += "; the agent has no interrupt key"
+		}
+		return ViaSteered, why, nil
 	case key == "":
 		s.paste(text, "")
 		if interrupt {
 			return ViaSteered, "the agent has no interrupt key", nil
 		}
 		return ViaSteered, "", nil
-	case after:
-		s.Input([]byte(key))
+	case after, steered:
+		// Claude sends what it queued, the steer among it, once stopped.
+		s.input([]byte(key))
 	default:
 		s.paste(text, key)
 	}
 	s.cfg.Logf("session %s: interrupted the agent's turn for a prompt", s.cfg.ID)
 	return ViaInterrupted, "", nil
+}
+
+// forgetSteers: keys were typed into the prompt box, so what it holds
+// may be a draft.
+func (s *Session) forgetSteers() {
+	rt := s.agentRT()
+	if rt == nil {
+		return
+	}
+	rt.mu.Lock()
+	rt.steers, rt.steerShown = nil, false
+	rt.mu.Unlock()
 }
