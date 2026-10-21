@@ -108,26 +108,29 @@
 <text x="1024.0" y="384.2" fill="#4e5578">│</text>
 <text x="310.0" y="401.2" fill="#4e5578">│</text>
 <text x="1024.0" y="401.2" fill="#4e5578">│</text>
+<text x="1040.8" y="401.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">▾ LAST REPORT</text>
+<text x="1158.4" y="401.2" fill="#4e5578" textLength="184.8" lengthAdjust="spacingAndGlyphs">──────────────────────</text>
 <text x="310.0" y="418.2" fill="#4e5578">│</text>
 <text x="1024.0" y="418.2" fill="#4e5578">│</text>
+<text x="1057.6" y="418.2" fill="#c8d0f0" textLength="67.2" lengthAdjust="spacingAndGlyphs">report 1</text>
+<text x="1141.6" y="418.2" fill="#c8d0f0" textLength="210.0" lengthAdjust="spacingAndGlyphs">Fixed the login redirect.</text>
 <text x="310.0" y="435.2" fill="#4e5578">│</text>
 <text x="1024.0" y="435.2" fill="#4e5578">│</text>
+<text x="1057.6" y="435.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">next</text>
+<text x="1108.0" y="435.2" fill="#c8d0f0" textLength="100.8" lengthAdjust="spacingAndGlyphs">Merge the PR</text>
 <text x="310.0" y="452.2" fill="#4e5578">│</text>
 <text x="1024.0" y="452.2" fill="#4e5578">│</text>
+<text x="1057.6" y="452.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">no ## Check</text>
 <text x="24.4" y="469.2" fill="#4e5578" textLength="277.2" lengthAdjust="spacingAndGlyphs">─────────────────────────────────</text>
 <text x="310.0" y="469.2" fill="#4e5578">│</text>
 <text x="1024.0" y="469.2" fill="#4e5578">│</text>
-<text x="24.4" y="486.2" fill="#7dcfff" font-weight="700" textLength="16.8" lengthAdjust="spacingAndGlyphs">T1</text>
-<text x="49.6" y="486.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">Fix the login (</text>
-<text x="175.6" y="486.2" fill="#7dcfff" font-weight="700" textLength="50.4" lengthAdjust="spacingAndGlyphs">t-0001</text>
-<text x="226.0" y="486.2" fill="#c8d0f0">)</text>
+<text x="24.4" y="486.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">idle ·</text>
+<text x="83.2" y="486.2" fill="#7dcfff" textLength="25.2" lengthAdjust="spacingAndGlyphs">50%</text>
+<text x="116.8" y="486.2" fill="#c8d0f0">·</text>
+<text x="133.6" y="486.2" fill="#7aa2f7" textLength="42.0" lengthAdjust="spacingAndGlyphs">PR #7</text>
+<text x="184.0" y="486.2" fill="#c8d0f0" textLength="100.8" lengthAdjust="spacingAndGlyphs">· CI running</text>
 <text x="310.0" y="486.2" fill="#4e5578">│</text>
 <text x="1024.0" y="486.2" fill="#4e5578">│</text>
-<text x="24.4" y="503.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">idle ·</text>
-<text x="83.2" y="503.2" fill="#7dcfff" textLength="25.2" lengthAdjust="spacingAndGlyphs">50%</text>
-<text x="116.8" y="503.2" fill="#c8d0f0">·</text>
-<text x="133.6" y="503.2" fill="#7aa2f7" textLength="42.0" lengthAdjust="spacingAndGlyphs">PR #7</text>
-<text x="184.0" y="503.2" fill="#c8d0f0" textLength="100.8" lengthAdjust="spacingAndGlyphs">· CI running</text>
 <text x="310.0" y="503.2" fill="#4e5578">│</text>
 <text x="1024.0" y="503.2" fill="#4e5578">│</text>
 <text x="24.4" y="520.2" fill="#7aa2f7" textLength="84.0" lengthAdjust="spacingAndGlyphs">prefix+tab</text>

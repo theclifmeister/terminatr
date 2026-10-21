@@ -54,7 +54,7 @@
     <div class="typed" aria-hidden="true"><span class="ps">$</span> <span class="cmd" data-type="tm"></span><span class="caret"></span></div>
     <div class="scroll" tabindex="0" role="region" aria-label="The tm dashboard: a project's coordinator and a thread, with the thread's details on the right">
 <!-- screen:split --><pre class="screen" style="--cols:176" data-golden="dashboard-split.txt"> <span class="head">PROJECTS</span>                      1   <span class="dim">│</span> <span class="title">tm dashboard</span>                                                                                                        <span class="ok">● server ok</span> · 1 session
- <span class="accent">■</span> demo             1              <span class="dim">│</span> demo <span class="dim">─────────────────────────────────────────────────────</span> ● active — space to deactivate <span class="dim">│</span> <span class="task">T1</span> Fix the login
+ <span class="accent">■</span> demo             1              <span class="dim">│</span> demo <span class="dim">─────────────────────────────────────────────────────────</span> ● active — S to deactivate <span class="dim">│</span> <span class="task">T1</span> Fix the login
  <span class="dim">└─</span> coordinator         ·          <span class="dim">│</span>  coordinator                         —           not running; <span class="key">enter</span> starts it  <span class="warn">1 inbox</span>    <span class="dim">│</span> <span class="idle">○ idle</span>
     <span class="dim">└─</span> <span class="task">T1</span> Fix t…  <span class="accent">50%</span>   ○          <span class="dim">│</span>  <span class="task">T1</span> Fix the login                    <span class="idle">○ idle</span>      <span class="warn">report new</span>  <span class="accent">50%</span> 1/2 <span class="warn">▸</span> Fix  4m  <span class="link">PR #7</span>  t-…<span class="dim">│</span> <span class="dim">──────────────────────────────────────────────</span>
                                    <span class="dim">│</span>  tasks: 0 need you · 1 in motion · 0 on deck                                              <span class="dim">│</span> project   demo
@@ -81,7 +81,7 @@
                                    <span class="dim">│</span>                                                                                           <span class="dim">│</span>
  <span class="dim">─────────────────────────────────</span> <span class="dim">│</span>                                                                                           <span class="dim">│</span>
  demo · active                     <span class="dim">│────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
- 1 thread · coordinator not runni… <span class="dim">│</span> <span class="key">≡ menu</span> · <span class="key">enter</span> attach · space deactivate · a project · t tasks · i inbox · , settings · ? help · <span class="key">prefix+q</span> quit
+ 1 thread · coordinator not runni… <span class="dim">│</span> <span class="key">≡ menu</span> · <span class="key">enter</span> attach · S deactivate · A project · T tasks · I inbox · , settings · ? help · <span class="key">prefix+q</span> quit
  tab sidebar · ? help              <span class="dim">│</span></pre><!-- /screen:split -->
     </div>
     <figcaption>The dashboard: projects on the left, each with its coordinator and threads, the selected thread's task, steps and PR on the right. A real capture from tm's end-to-end tests.</figcaption>
@@ -148,10 +148,10 @@
     <div class="scroll" tabindex="0">
 <!-- screen:needs --><pre class="screen" style="--cols:105" data-golden="dashboard-needs-you.txt"> <span class="head">PROJECTS</span>                      1   <span class="dim">│</span> <span class="title">tm dashboard</span>                            <span class="ok">● server ok</span> · 1 session
  <span class="accent">■</span> demo             0           <span class="bad">⚑</span>  <span class="dim">│</span> <span class="head">NEEDS YOU</span> 1 <span class="dim">───────────────────────────────────────────────────</span>
- <span class="dim">└─</span> coordinator         ·          <span class="dim">│</span>  demo          <span class="task">T1</span> Write the README   <span class="warn">◆ review</span>    <span class="dim">▱▱▱▱▱</span>  0/2
-                                   <span class="dim">│</span> demo <span class="dim">──────────────────────────</span> ● active — space to deactivate
+ <span class="dim">└─</span> coordinator         ·          <span class="dim">│</span>  <span class="task">T1</span> Write the README     <span class="warn">◆ review</span>    <span class="dim">▱▱▱▱▱</span>  0/2
+                                   <span class="dim">│</span> demo <span class="dim">──────────────────────────────</span> ● active — S to deactivate
                                    <span class="dim">│</span>  coordinator             —           not running; <span class="key">enter</span> starts…
-                                   <span class="dim">│</span>  tasks: 1 needs you (t lists them) · 1 in motion · 0 on deck
+                                   <span class="dim">│</span>  tasks: 1 needs you (T lists them) · 1 in motion · 0 on deck
                                    <span class="dim">│</span> <span class="head">OTHER SESSIONS</span> 1 <span class="dim">──────────────────────────────────────────────</span>
                                    <span class="dim">│</span>  s-3                 /bin/sh               <span class="ok">▷ running</span>   4m          /
                                    <span class="dim">│</span>
@@ -168,7 +168,7 @@
                                    <span class="dim">│</span>
  <span class="dim">─────────────────────────────────</span> <span class="dim">│</span>
  demo · active                     <span class="dim">│────────────────────────────────────────────────────────────────</span>
- 0 threads · coordinator not runn… <span class="dim">│</span> <span class="key">≡ menu</span> · <span class="key">enter</span> open · space deactivate · a project · t tasks ·…
+ 0 threads · coordinator not runn… <span class="dim">│</span> <span class="key">≡ menu</span> · <span class="key">enter</span> open · S deactivate · A project · T tasks · I i…
  tab sidebar · ? help              <span class="dim">│</span></pre><!-- /screen:needs -->
     </div>
     <figcaption>A task waits for your review, so it sits on top under NEEDS YOU, and the sidebar flags its project.</figcaption>
@@ -177,7 +177,7 @@
     <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>tm · dashboard</span></div>
     <div class="scroll" tabindex="0">
 <!-- screen:thread --><pre class="screen" style="--cols:151" data-golden="dashboard-thread.txt"> <span class="head">PROJECTS</span>                      1   <span class="dim">│</span> <span class="title">tm dashboard</span>                                                                          <span class="ok">● server ok</span> · 1 session
- <span class="accent">■</span> demo             1              <span class="dim">│</span> demo <span class="dim">────────────────────────────────────────────────────────────────────────</span> ● active — space to deactivate
+ <span class="accent">■</span> demo             1              <span class="dim">│</span> demo <span class="dim">────────────────────────────────────────────────────────────────────────────</span> ● active — S to deactivate
  <span class="dim">└─</span> coordinator         ·          <span class="dim">│</span>  coordinator                               —           not running; <span class="key">enter</span> starts it  <span class="warn">1 inbox</span>
     <span class="dim">└─</span> <span class="task">T1</span> Fix t…  <span class="accent">50%</span>   ○          <span class="dim">│</span>  <span class="task">T1</span> Fix the login                          <span class="idle">○ idle</span>      <span class="warn">report new</span>  <span class="accent">▰▰▰</span><span class="dim">▱▱</span>  <span class="accent">50%</span> 1/2 <span class="warn">▸</span> Fix  4m          <span class="link">PR #7</span>  <span class="task">t-0001</span>
                                    <span class="dim">│</span>        steps 1/2
@@ -204,7 +204,7 @@
                                    <span class="dim">│</span>
  <span class="dim">─────────────────────────────────</span> <span class="dim">│</span>
  demo · active                     <span class="dim">│──────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
- 1 thread · coordinator not runni… <span class="dim">│</span> <span class="key">≡ menu</span> · <span class="key">enter</span> attach · space deactivate · a project · t tasks · i inbox · , settings · ? help · <span class="key">prefix+q</span> qu…
+ 1 thread · coordinator not runni… <span class="dim">│</span> <span class="key">≡ menu</span> · <span class="key">enter</span> attach · S deactivate · A project · T tasks · I inbox · , settings · ? help · <span class="key">prefix+q</span> quit
  tab sidebar · ? help              <span class="dim">│</span></pre><!-- /screen:thread -->
     </div>
     <figcaption>A thread on its task: state, progress, the step it is on, its pull request and a fresh report for the coordinator.</figcaption>
@@ -232,13 +232,13 @@
                                    <span class="dim">│</span>                                                                                    <span class="dim">│</span> …/worktrees/demo/t-0001-fix-the-login
                                    <span class="dim">│</span>                                                                                    <span class="dim">│</span> active    4m ago
                                    <span class="dim">│</span>                                                                                    <span class="dim">│</span>
-                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span>
-                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span>
-                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span>
-                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span>
+                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span> ▾ LAST REPORT <span class="dim">──────────────────────</span>
+                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span>   report 1  Fixed the login redirect.
+                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span>   next  Merge the PR
+                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span>   no ## Check
  <span class="dim">─────────────────────────────────</span> <span class="dim">│</span>                                                                                    <span class="dim">│</span>
- <span class="task">T1</span> Fix the login (<span class="task">t-0001</span>)         <span class="dim">│</span>                                                                                    <span class="dim">│</span>
  idle · <span class="accent">50%</span> · <span class="link">PR #7</span> · CI running   <span class="dim">│</span>                                                                                    <span class="dim">│</span>
+                                   <span class="dim">│</span>                                                                                    <span class="dim">│</span>
  <span class="key">prefix+tab</span> sidebar                <span class="dim">│</span>                                                                                    <span class="dim">│</span>
 <span class="dim">────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
  ○ demo › <span class="task">T1</span> Fix the login  <span class="accent">50%</span> <span class="accent">▰▰▰</span><span class="dim">▱▱</span> 1/2 <span class="warn">▸</span> Fix it                                                                  <span class="key">prefix+?</span> help · <span class="key">prefix+d</span> dashboard · <span class="key">≡ menu</span></pre><!-- /screen:session -->
@@ -249,11 +249,11 @@
     <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>tm · project popup</span></div>
     <div class="scroll" tabindex="0">
 <!-- screen:tasks --><pre class="screen" style="--cols:120" data-golden="popup-tasks.txt"> <span class="head">PROJECTS</span>                      1   <span class="dim">│</span> <span class="title">tm dashboard</span>                                               <span class="ok">● server ok</span> · 0 sessions
- <span class="accent">■</span> demo             0              <span class="dim">│</span> demo <span class="dim">──────────────────────────────────────────────</span> ● active — space to deactivate
+ <span class="accent">■</span> demo             0              <span class="dim">│</span> demo <span class="dim">──────────────────────────────────────────────────</span> ● active — S to deactivate
  <span class="dim">└─</span> coordinator         ·          <span class="dim">│</span>  coordinator                      —           not running; <span class="key">enter</span> starts it
                                    <span class="dim">│</span>  tasks: 0 need you · 1 in motion · 1 on deck
             <span class="dim">╭─</span> demo <span class="dim">───────────────────────────────────────────────────────────────────────────────────────╮────────────</span>
-            <span class="dim">│</span>  1 overview   <span class="warn">2 inbox</span>   3 tasks   4 settings   5 keys   6 memory   7 library                 <span class="dim">│</span>
+            <span class="dim">│</span> 1 overview <span class="warn">2 inbox</span> 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages          <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span> <span class="head">IN MOTION</span> <span class="dim">──────────────────────────────────────────────────────────────────────────────────</span> <span class="dim">│</span>
             <span class="dim">│</span> <span class="task">T1</span>  Write the README  <span class="ok">● started</span>  1/2                                                         <span class="dim">│</span>
@@ -295,10 +295,10 @@
     <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>tm · project popup</span></div>
     <div class="scroll" tabindex="0">
 <!-- screen:inbox --><pre class="screen" style="--cols:146" data-golden="dashboard-inbox.txt"> <span class="head">PROJECTS</span>                      1   <span class="dim">│</span> <span class="title">tm dashboard</span>                                                                          <span class="ok">● server ok</span> · 1 session
- <span class="accent">■</span> demo             1              <span class="dim">│</span> demo <span class="dim">────────────────────────────────────────────────────────────────────────</span> ● active — space to deactivate
+ <span class="accent">■</span> demo             1              <span class="dim">│</span> demo <span class="dim">────────────────────────────────────────────────────────────────────────────</span> ● active — S to deactivate
  <span class="dim">└─</span> coordinator         ·          <span class="dim">│</span>  coordinator                               —           not running; <span class="key">enter</span> starts it  <span class="warn">1 inbox</span>
     <span class="dim">└─</span> <span class="task">T1</span> Fix t<span class="dim">╭─</span> demo <span class="dim">───────────────────────────────────────────────────────────────────────────────────────────────────────────╮</span>
-               <span class="dim">│</span>  1 overview   <span class="warn">2 inbox</span> 1   3 tasks   4 settings   5 keys   6 memory   7 library                                   <span class="dim">│</span>
+               <span class="dim">│</span>  1 overview   <span class="warn">2 inbox</span> 1   3 tasks   4 settings   5 access   6 keys   7 memory   8 library   9 messages           <span class="dim">│</span>
                <span class="dim">│</span>                                                                                                                  <span class="dim">│</span>
                <span class="dim">│</span> report          4m    <span class="task">T1</span> handed in report 1 Fix the login                                                        <span class="dim">│</span>
                <span class="dim">│</span>                                                                                                                  <span class="dim">│</span>
@@ -331,11 +331,11 @@
     <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>tm · project popup</span></div>
     <div class="scroll" tabindex="0">
 <!-- screen:overview --><pre class="screen" style="--cols:120" data-golden="popup-overview.txt"> <span class="head">PROJECTS</span>                      1   <span class="dim">│</span> <span class="title">tm dashboard</span>                                               <span class="ok">● server ok</span> · 0 sessions
- <span class="accent">■</span> demo             0              <span class="dim">│</span> demo <span class="dim">──────────────────────────────────────────────</span> ● active — space to deactivate
+ <span class="accent">■</span> demo             0              <span class="dim">│</span> demo <span class="dim">──────────────────────────────────────────────────</span> ● active — S to deactivate
  <span class="dim">└─</span> coordinator         ·          <span class="dim">│</span>  coordinator                      —           not running; <span class="key">enter</span> starts it
                                    <span class="dim">│</span>  tasks: 0 need you · 1 in motion · 1 on deck
             <span class="dim">╭─</span> demo <span class="dim">───────────────────────────────────────────────────────────────────────────────────────╮────────────</span>
-            <span class="dim">│</span>  1 overview   <span class="warn">2 inbox</span>   3 tasks   4 settings   5 keys   6 memory   7 library                 <span class="dim">│</span>
+            <span class="dim">│</span> 1 overview <span class="warn">2 inbox</span> 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages          <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span> Project       demo                                                                           <span class="dim">│</span>
             <span class="dim">│</span> Goal          none set; ask the coordinator to set one                                       <span class="dim">│</span>
@@ -364,7 +364,7 @@
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
-            <span class="dim">│</span> + add repository · x remove it · <span class="key">← →</span> tabs · <span class="key">esc</span> close                                        <span class="dim">│</span>
+            <span class="dim">│</span> + add repository · X remove it · <span class="key">← →</span> tabs · <span class="key">esc</span> close                                        <span class="dim">│</span>
             <span class="dim">╰──────────────────────────────────────────────────────────────────────────────────────────────╯</span>
  <span class="dim">─────────────────────────────────</span> <span class="dim">│</span>
  demo · active                     <span class="dim">│────────────────────────────────────────────────────────────────────────────────────</span>
@@ -484,8 +484,8 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
     <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>tm · dashboard</span></div>
     <div class="scroll" tabindex="0">
 <!-- screen:mods-dashboard --><pre class="screen" style="--cols:180" data-golden="mods-dashboard.txt"> <span class="head">PROJECTS</span>                      1   <span class="dim">│</span> <span class="title">tm dashboard</span>                                                                                                           <span class="ok">● server ok</span> · 2 sessions
- <span class="accent">■</span> demo        2                   <span class="dim">│</span> demo <span class="dim">────────────────────────────────────────────────────────</span> ● active — space to deactivate <span class="dim">│</span> <span class="task">T1</span> Fix the login
- <span class="dim">└─</span> coordi…             ·          <span class="dim">│</span>  coordinator                           —           not running; <span class="key">enter</span> starts it  <span class="warn">3 inbox</span>     <span class="dim">│</span> <span class="idle">○ idle</span>
+ <span class="accent">■</span> demo        2                   <span class="dim">│</span> demo <span class="dim">────────────────────────────────────────────────────────────</span> ● active — S to deactivate <span class="dim">│</span> <span class="task">T1</span> Fix the login
+ <span class="dim">└─</span> coordi…             ·          <span class="dim">│</span>  coordinator                           —           not running; <span class="key">enter</span> starts it  <span class="warn">2 inbox</span>     <span class="dim">│</span> <span class="idle">○ idle</span>
     <span class="dim">├─</span> <span class="task">T1</span>    <span class="accent">50%</span> <span class="idle">☐</span>      ○          <span class="dim">│</span>  <span class="task">T1</span> Fix the login                  <span class="idle">○ idle</span>             <span class="warn">report new</span>  <span class="accent">50%</span> 1/2 <span class="warn">▸</span> Fix it  4m  PR #…<span class="dim">│</span> <span class="dim">───────────────────────────────────────────────</span>
     <span class="dim">└─</span> <span class="task">T2</span>        <span class="idle">☐</span> <span class="accent">4%</span>   ○          <span class="dim">│</span>  <span class="task">T2</span> Write the docs                 <span class="idle">○ idle</span>      <span class="accent">4%</span>     4m  <span class="task">t-0002</span>                             <span class="dim">│</span> project   demo
                                    <span class="dim">│</span>  tasks: 0 need you · 2 in motion · 0 on deck                                                 <span class="dim">│</span> thread    <span class="task">t-0001</span>
@@ -502,14 +502,14 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
                                    <span class="dim">│</span>   Write the docs   25.0k  <span class="accent">$0.00</span>                                                              <span class="dim">│</span>
                                    <span class="dim">│</span>                                                                                              <span class="dim">│</span> <span class="key">enter</span> attach
                                    <span class="dim">│</span>                                                                                              <span class="dim">│</span>
-                                   <span class="dim">│</span>                                                                                              <span class="dim">│</span> Last report <span class="dim">───────────────────────────────────</span>
-                                   <span class="dim">│</span>                                                                                              <span class="dim">│</span> report 1  Fixed the login redirect.
-                                   <span class="dim">│</span>                                                                                              <span class="dim">│</span> next  Merge the PR
-                                   <span class="dim">│</span>                                                                                              <span class="dim">│</span> no ## Check
+                                   <span class="dim">│</span>                                                                                              <span class="dim">│</span> ▾ LAST REPORT <span class="dim">────────────────────────────────</span>
+                                   <span class="dim">│</span>                                                                                              <span class="dim">│</span>   report 1  Fixed the login redirect.
+                                   <span class="dim">│</span>                                                                                              <span class="dim">│</span>   next  Merge the PR
+                                   <span class="dim">│</span>                                                                                              <span class="dim">│</span>   no ## Check
                                    <span class="dim">│</span>                                                                                              <span class="dim">│</span>
  <span class="dim">─────────────────────────────────</span> <span class="dim">│</span>                                                                                              <span class="dim">│</span>
  demo · active                     <span class="dim">│────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
- 2 threads · coordinator not runn… <span class="dim">│</span> <span class="key">≡ menu</span> · <span class="key">enter</span> attach · space deactivate · a project · t tasks · i inbox · , settings · ? help · <span class="key">prefix+q</span> quit
+ 2 threads · coordinator not runn… <span class="dim">│</span> <span class="key">≡ menu</span> · <span class="key">enter</span> attach · S deactivate · A project · T tasks · I inbox · , settings · ? help · <span class="key">prefix+q</span> quit
  tab sidebar · ? help              <span class="dim">│</span></pre><!-- /screen:mods-dashboard -->
     </div>
     <figcaption>Three example mods on the dashboard: Context gauge's <em>Ctx</em> column and card, Cost card's tokens per thread (this one runs Codex on a plan, so no dollar cost), and Report glance's section under the selected thread. The sidebar's PR/CI column (☐ checks running) is built in.</figcaption>
@@ -542,37 +542,37 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
     <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>tm · dashboard</span></div>
     <div class="scroll" tabindex="0">
 <!-- screen:mods-menu --><pre class="screen" style="--cols:120" data-golden="mods-menu.txt"> <span class="head">PROJECTS</span>                      1   <span class="dim">│</span> <span class="title">tm dashboard</span>                                               <span class="ok">● server ok</span> · 2 sessions
- <span class="accent">■</span> demo        2                   <span class="dim">│</span> demo <span class="dim">──────────────────────────────────────────────</span> ● active — space to deactivate
+ <span class="accent">■</span> demo        2                   <span class="dim">│</span> demo <span class="dim">──────────────────────────────────────────────────</span> ● active — S to deactivate
  <span class="dim">└─</span> coordi…             ·          <span class="dim">│</span>  coordinator                      —           not running; <span class="key">enter</span> starts it  <span class="warn">3 inbox</span>
     <span class="dim">├─</span> <span class="task">T1</span>    <span class="accent">50%</span> <span class="idle">☐</span>      ○          <span class="dim">│</span>  <span class="task">T1</span> Fix the login              <span class="idle">○ idle</span>             <span class="warn">report new</span>  <span class="accent">50%</span> 1/2 <span class="warn">▸</span> Fix it  4m…
     <span class="dim">└─</span> <span class="task">T2</span>        <span class="idle">☐</span> <span class="accent">4%</span>   ○          <span class="dim">│</span>        steps 1/2
                                    <span class="dim">│</span>          <span class="ok">✓</span> 1 Reproduce the bug
                                    <span class="dim">│</span>          ○ 2 Fix it
                                    <span class="dim">│</span>        <span class="warn">report new</span> · for the coordinator
-                                   <span class="dim">│</span>  <span class="task">T2</span> Write the docs             <span class="idle">○ idle</span>      <span class="accent">4%</span>     4m          <span class="task">t-0002</span>
-                                   <span class="dim">│</span>  tasks: 0 need you · 2 in motion · 0 on deck
-                                   <span class="dim">│</span> <span class="dim">╭─</span> terminatr dev <span class="dim">─────────────────────────────╮────────────────────────────────────</span>
+                                   <span class="dim">│</span> <span class="dim">╭─</span> terminatr dev <span class="dim">─────────────────────────────╮</span>   4m          <span class="task">t-0002</span>
                                    <span class="dim">│</span> <span class="dim">│</span> back to the last place                    ; <span class="dim">│</span>
-                                   <span class="dim">│</span> <span class="dim">│</span> open the selected row                 <span class="key">enter</span> <span class="dim">│───────────────────────────────────</span>
-                                   <span class="dim">│</span> <span class="dim">│</span> adopt as a thread                         T <span class="dim">│</span>
-                                   <span class="dim">│</span> <span class="dim">│</span> activate / deactivate the project     space <span class="dim">│</span>t's state is in its files, so
-                                   <span class="dim">│</span> <span class="dim">│</span> fold / unfold the mod card                z <span class="dim">│</span>
-                                   <span class="dim">│</span> <span class="dim">│</span> new project                               n <span class="dim">│───────────────────────────────────</span>
-                                   <span class="dim">│</span> <span class="dim">│</span> project popup                             a <span class="dim">│</span>
-                                   <span class="dim">│</span> <span class="dim">│</span> tasks                                     t <span class="dim">│</span>
-                                   <span class="dim">│</span> <span class="dim">│</span> inbox                                     i <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> open the selected row                 <span class="key">enter</span> <span class="dim">│────────────────────────────────────</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> adopt as a thread                         O <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> activate / deactivate the project         S <span class="dim">│───────────────────────────────────</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> fold / unfold the mod card                Z <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> new project                               + <span class="dim">│</span>t's state is in its files, so
+                                   <span class="dim">│</span> <span class="dim">│</span> project popup                             A <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> tasks                                     T <span class="dim">│───────────────────────────────────</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> inbox                                     I <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> effective access                          E <span class="dim">│</span>
                                    <span class="dim">│</span> <span class="dim">│</span> next project                              ] <span class="dim">│</span>
                                    <span class="dim">│</span> <span class="dim">│</span> previous project                          [ <span class="dim">│</span>
-                                   <span class="dim">│</span> <span class="dim">│</span> narrower list                             &lt; <span class="dim">│</span>
-                                   <span class="dim">│</span> <span class="dim">│</span> wider list                                &gt; <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> smaller list                              &lt; <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> larger list                               &gt; <span class="dim">│</span>
                                    <span class="dim">│</span> <span class="dim">│</span> narrower sidebar                          { <span class="dim">│</span>
                                    <span class="dim">│</span> <span class="dim">│</span> wider sidebar                             } <span class="dim">│</span>
-                                   <span class="dim">│</span> <span class="dim">│</span> slim sidebar on / off                     b <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> sidebar: slim / hide / full               B <span class="dim">│</span>
                                    <span class="dim">│</span> <span class="dim">│</span> details panel on / off                    | <span class="dim">│</span>
                                    <span class="dim">│</span> <span class="dim">│</span> settings                                  , <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> notifications from mods                   M <span class="dim">│</span>
                                    <span class="dim">│</span> <span class="dim">│</span> help: keys and mouse                      ? <span class="dim">│</span>
                                    <span class="dim">│</span> <span class="dim">│</span> quit                               <span class="key">prefix+q</span> <span class="dim">│</span>
-                                   <span class="dim">│</span> <span class="dim">│</span> Standup · standup                         S <span class="dim">│</span>
+                                   <span class="dim">│</span> <span class="dim">│</span> Standup · standup                         U <span class="dim">│</span>
                                    <span class="dim">│</span> <span class="dim">│</span>                                             <span class="dim">│</span>
                                    <span class="dim">│</span> <span class="dim">│</span> <span class="key">enter</span> pick · <span class="key">esc</span> close                      <span class="dim">│</span>
  <span class="dim">─────────────────────────────────</span> <span class="dim">│</span> <span class="dim">╰─────────────────────────────────────────────╯</span>
@@ -586,11 +586,11 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
     <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>tm · settings</span></div>
     <div class="scroll" tabindex="0">
 <!-- screen:mods-settings --><pre class="screen" style="--cols:120" data-golden="mods-settings.txt"> <span class="head">PROJECTS</span>                      1   <span class="dim">│</span> <span class="title">tm dashboard</span>                                               <span class="ok">● server ok</span> · 2 sessions
- <span class="accent">■</span> demo        2                   <span class="dim">│</span> demo <span class="dim">──────────────────────────────────────────────</span> ● active — space to deactivate
+ <span class="accent">■</span> demo        2                   <span class="dim">│</span> demo <span class="dim">──────────────────────────────────────────────────</span> ● active — S to deactivate
  <span class="dim">└─</span> coordi…             ·          <span class="dim">│</span>  coordinator                      —           not running; <span class="key">enter</span> starts it  <span class="warn">3 inbox</span>
     <span class="dim">├─</span> <span class="task">T1</span>    <span class="accent">50%</span> <span class="idle">☐</span>      ○          <span class="dim">│</span>  <span class="task">T1</span> Fix the login              <span class="idle">○ idle</span>             <span class="warn">report new</span>  <span class="accent">50%</span> 1/2 <span class="warn">▸</span> Fix it  4m…
     <span class="dim">└─</span> <span class="task">T2</span>   <span class="dim">╭─</span> Settings <span class="dim">───────────────────────────────────────────────────────────────────────────────────╮</span>
-            <span class="dim">│</span>  1 general   2 all projects   3 mods                                                         <span class="dim">│</span>
+            <span class="dim">│</span>  1 general   2 all projects   3 access   4 mods   5 peers   6 logs                           <span class="dim">│</span>
             <span class="dim">│</span> About: tm dev · server dev · update check on                                                 <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span> <span class="ok">● </span>Context gauge      code · column · view      1.0.0  reads your projects · draws its own p… <span class="dim">│</span>
@@ -599,7 +599,7 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
             <span class="dim">│</span> <span class="ok">● </span>Standup            code · view · commands    1.0.0  reads your projects · draws its own p… <span class="dim">│</span>
             <span class="dim">│</span> <span class="ok">● </span>ASCII icons        icons · built in          1.0.0  built in · safe                        <span class="dim">│───────────</span>
             <span class="dim">│</span> <span class="ok">● </span>Default keymap     keymap · built in         1.0.0  built in · safe                        <span class="dim">│</span>
-            <span class="dim">│</span> <span class="ok">● </span>Default layout     layout · built in         1.0.0  built in · safe                        <span class="dim">│</span>s, so
+            <span class="dim">│</span> <span class="ok">● </span>Default layout     layout · built in         1.1.0  built in · safe                        <span class="dim">│</span>s, so
             <span class="dim">│</span> <span class="ok">● </span>Default policy     rules · built in          1.0.0  built in · safe                        <span class="dim">│</span>
             <span class="dim">│</span> <span class="ok">● </span>Default templates  templates · built in      1.0.0  built in · safe                        <span class="dim">│───────────</span>
             <span class="dim">│</span> <span class="ok">● </span>Default theme      theme · built in          1.0.0  built in · safe                        <span class="dim">│</span>
@@ -607,15 +607,15 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
             <span class="dim">│</span> <span class="ok">● </span>Nerd Font icons    icons · built in          1.0.0  built in · safe                        <span class="dim">│</span>
             <span class="dim">│</span> <span class="ok">● </span>PR/CI column       code · column · built in  1.0.0  built in · reads your projects         <span class="dim">│</span>
             <span class="dim">│</span> <span class="ok">● </span>Tasks tab          code · view · built in    1.0.0  built in · reads your projects · draw… <span class="dim">│</span>
+            <span class="dim">│</span> <span class="ok">● </span>Ticker             code · view · built in    1.0.0  built in · reads your projects · draw… <span class="dim">│</span>
             <span class="dim">│</span> <span class="ok">● </span>Unicode icons      icons · built in          1.0.0  built in · safe                        <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span> Context gauge: How full each session's context window is, by its row; a card lists the ones  <span class="dim">│</span>
             <span class="dim">│</span> past the warning, where C clears one (tm asks first) and <span class="key">enter</span> attaches to it. For Claude    <span class="dim">│</span>
             <span class="dim">│</span> sessions it needs the Agent mod on (early access, off by default: Settings, Agent mod, or    <span class="dim">│</span>
-            <span class="dim">│</span> [agent_mod] enabled = true), which reports their context and use. By terminatr.              <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
-            <span class="dim">│</span> <span class="key">enter</span> on/off · i install · p permissions · s settings · d defaults · l log · r restart       <span class="dim">│</span>
-            <span class="dim">│</span> u update · x remove · e examples · <span class="key">← →</span> tabs · <span class="key">esc</span> close                                      <span class="dim">│</span>
+            <span class="dim">│</span> <span class="key">enter</span> on/off · I install · p permissions · s settings · d defaults · l log · R restart       <span class="dim">│</span>
+            <span class="dim">│</span> U update · X remove · E examples · <span class="key">← →</span> tabs · <span class="key">esc</span> close                                      <span class="dim">│</span>
             <span class="dim">╰─────────────────────────────────────────────────────────────────────────────────────</span> more ↓ <span class="dim">─╯</span>
  <span class="dim">─────────────────────────────────</span> <span class="dim">│</span>
  demo · active                     <span class="dim">│────────────────────────────────────────────────────────────────────────────────────</span>
@@ -628,15 +628,15 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
     <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>tm · project</span></div>
     <div class="scroll" tabindex="0">
 <!-- screen:mods-memory --><pre class="screen" style="--cols:120" data-golden="mods-memory.txt"> <span class="head">PROJECTS</span>                      1   <span class="dim">│</span> <span class="title">tm dashboard</span>                                               <span class="ok">● server ok</span> · 2 sessions
- <span class="accent">■</span> demo        2                   <span class="dim">│</span> demo <span class="dim">──────────────────────────────────────────────</span> ● active — space to deactivate
+ <span class="accent">■</span> demo        2                   <span class="dim">│</span> demo <span class="dim">──────────────────────────────────────────────────</span> ● active — S to deactivate
  <span class="dim">└─</span> coordi…             ·          <span class="dim">│</span>  coordinator                      —           not running; <span class="key">enter</span> starts it  <span class="warn">3 inbox</span>
     <span class="dim">├─</span> <span class="task">T1</span>    <span class="accent">50%</span> <span class="idle">☐</span>      ○          <span class="dim">│</span>  <span class="task">T1</span> Fix the login              <span class="idle">○ idle</span>             <span class="warn">report new</span>  <span class="accent">50%</span> 1/2 <span class="warn">▸</span> Fix it  4m…
     <span class="dim">└─</span> <span class="task">T2</span>   <span class="dim">╭─</span> demo <span class="dim">───────────────────────────────────────────────────────────────────────────────────────╮</span>
-            <span class="dim">│</span>  1 overview   <span class="warn">2 inbox</span> 3   3 tasks   4 settings   5 keys   6 memory   7 library               <span class="dim">│</span>
+            <span class="dim">│</span> 1 overview <span class="warn">2 inbox</span> 3 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages        <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span> Memory  MEMORY.md                                                                            <span class="dim">│</span>
-            <span class="dim">│</span> - Tests before push: run make test before every push                                         <span class="dim">│</span>
             <span class="dim">│</span> - Login flow: the redirect lives in auth/session.go                                          <span class="dim">│</span>
+            <span class="dim">│</span> - Tests before push: run make test before every push                                         <span class="dim">│</span>
             <span class="dim">│</span> <span class="key">enter</span> files · n next · p previous                                                            <span class="dim">│────────────</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│───────────</span>
