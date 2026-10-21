@@ -1023,9 +1023,10 @@ function topLevel(line: string): LinePart[] | null {
 // command that writes the paths it is given naming one (cp's and the
 // like's target; a folder holding one, for a remover). With r.cwd ''
 // (a cd the line made that it can't follow) a relative path could be
-// anywhere, so it is refused; one that starts with a variable or a
-// substitution ($TMPDIR/x, "$F") is where its value says, which the
-// guard can't place with a cd or without one.
+// anywhere, so it is refused, and so is one that starts with a variable
+// but $TMPDIR/x and a bare $NAME/x the line doesn't set (placedVar),
+// which are where their value says, which the guard can't place with a
+// cd or without one.
 function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): Denial | null {
   if (!r.noWrite?.length) return null
   const roots = r.noWrite
@@ -1034,19 +1035,35 @@ function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): D
     if (w === '' || w.startsWith('&') || /^[<>]\(/.test(w)) return null
     // A path from a folder the line has been in is judged from each
     // folder that may be: $PWD from the line's, $OLDPWD from those
-    // before it (olds), $PWD changed by an operator from none.
+    // before it (olds), the folder stack's bottom from the line's while
+    // it pushes none, and from none another index or $PWD changed by an
+    // operator. zsh has no $DIRSTACK: there it is empty.
     const at = folderStart(w)
     if (at) {
-      const dirs = at.kind === 'cur' ? [r.cwd ?? ''] : at.kind === 'old' ? (r.olds ?? ['']) : ['']
+      const pushes = /(^|[\s;&|(){}!`])(pushd|popd)([\s;&|)`]|$)/m.test(r.line ?? '')
+      let kind = at.kind
+      if (kind === 'bottom') kind = pushes ? 'unknown' : 'cur'
+      if (kind === 'bottomStack') kind = pushes ? 'unknown' : 'stack'
+      if (kind === 'stack') {
+        const dd = refuse(w.slice(at.len), parents)
+        if (dd) return dd
+      }
+      const dirs = kind === 'cur' || kind === 'stack' ? [r.cwd ?? ''] : kind === 'old' ? (r.olds ?? ['']) : ['']
       for (const d of dirs) {
-        if (d === '') return floor(at.kind === 'cur' ? lostCd(r, `${cmd} of ${safe(w)} after a cd`) : unplaced(r, `${cmd} of ${safe(w)}`))
+        if (d === '') return floor(kind === 'cur' || kind === 'stack' ? lostCd(r, `${cmd} of ${safe(w)} after a cd`) : unplaced(r, `${cmd} of ${safe(w)}`))
         const dd = refuse(d + w.slice(at.len), parents)
         if (dd) return dd
       }
       return null
     }
+    // A variable that isn't set is empty: $NOPE/x is /x.
+    const bare = BARE_VAR.exec(w)
+    if (bare && w[bare[0].length] === '/') {
+      const dd = refuse(w.slice(bare[0].length), parents)
+      if (dd) return dd
+    }
     if (r.lineCd && lineFolder(w, r.line ?? '')) return floor(unplaced(r, `${cmd} of ${safe(w)} after a cd`))
-    if (r.cwd === '' && !slash(w).startsWith('/') && !w.startsWith('~') && !bareVar(w, r.line ?? '') && !DRIVE.test(slash(w))) {
+    if (r.cwd === '' && !slash(w).startsWith('/') && !w.startsWith('~') && !placedVar(w, r.line ?? '') && !DRIVE.test(slash(w))) {
       return floor(lostCd(r, `${cmd} of ${safe(w)} after a cd`))
     }
     const p = abs(r, w)
@@ -1112,26 +1129,36 @@ function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): D
   return null
 }
 
-// The forms a path may start with that are the line's folder (cur):
-// $PWD, ${PWD} and the expansions that keep its value (${PWD:-x}), pwd
-// substituted, ~+, $DIRSTACK and ${DIRSTACK[0]}; a folder it was in
-// before (old): $OLDPWD and the like, ~-, a ~N or ${DIRSTACK[N]} of the
-// folder stack, dirs substituted; and $PWD, $OLDPWD or $DIRSTACK changed
-// by an operator (changed: ${PWD%/*}, ${PWD/a/b}), which may be anything.
-const CUR_FOLDER = /^(?:\$PWD\b|\$\{PWD(?::?[-=?][^}]*)?\}|\$\(\s*pwd(?:\s+-[LP]+)*\s*\)|`\s*pwd(?:\s+-[LP]+)*\s*`|~\+(?=\/|$)|\$DIRSTACK\b|\$\{DIRSTACK(?:\[0\])?\})/
-const OLD_FOLDER = /^(?:\$OLDPWD\b|\$\{OLDPWD(?::?[-=?][^}]*)?\}|~(?:-[0-9]*|\+?[0-9]+)(?=\/|$)|\$\{DIRSTACK\[[^\]]*\]\}|\$\(\s*dirs\b[^)]*\)|`\s*dirs\b[^`]*`)/
-const CHANGED_FOLDER = /^\$\{[#!]?(?:PWD|OLDPWD|DIRSTACK)\b[^}]*\}/
+// The forms a path may start with that name a folder the line has been
+// in, by kind: cur, the line's folder ($PWD, ${PWD} and the expansions
+// that keep its value, ${PWD:-x}, pwd substituted, ~+, ~0, ~+0); stack,
+// the folder stack's index 0, the line's folder in bash and empty in zsh
+// ($DIRSTACK, ${DIRSTACK[0]}); bottom and bottomStack, the stack's
+// bottom entry (~-0, ${DIRSTACK[-1]}); old, the folder before (~-,
+// $OLDPWD and the like); unknown, any other index (~1, ~-2,
+// ${DIRSTACK[1]}), a listing (${DIRSTACK[@]}, dirs substituted), or
+// $PWD, $OLDPWD or $DIRSTACK changed by an operator (${PWD%/*}).
+const FOLDER_FORMS: readonly [string, RegExp][] = [
+  ['cur', /^(?:\$PWD\b|\$\{PWD(?::?[-=?][^}]*)?\}|\$\(\s*pwd(?:\s+-[LP]+)*\s*\)|`\s*pwd(?:\s+-[LP]+)*\s*`|~(?:\+0?|0)(?=\/|$))/],
+  ['stack', /^(?:\$DIRSTACK\b|\$\{DIRSTACK(?:\[0\])?\})/],
+  ['bottom', /^~-0(?=\/|$)/],
+  ['bottomStack', /^\$\{DIRSTACK\[-1\]\}/],
+  ['old', /^(?:\$OLDPWD\b|\$\{OLDPWD(?::?[-=?][^}]*)?\}|~-(?=\/|$))/],
+  ['unknown', /^(?:~[+-]?[0-9]+(?=\/|$)|\$\{[#!]?(?:PWD|OLDPWD|DIRSTACK)\b[^}]*\}|\$\(\s*dirs\b[^)]*\)|`\s*dirs\b[^`]*`)/],
+]
 
 // folderStart: path w starts with a form of a folder the line has been
-// in: which kind, and how long the form is.
-function folderStart(w: string): { kind: 'cur' | 'old' | 'changed'; len: number } | null {
-  let m = CUR_FOLDER.exec(w)
-  if (m) return { kind: 'cur', len: m[0].length }
-  m = OLD_FOLDER.exec(w)
-  if (m) return { kind: 'old', len: m[0].length }
-  m = CHANGED_FOLDER.exec(w)
-  return m ? { kind: 'changed', len: m[0].length } : null
+// in (FOLDER_FORMS): which kind, and how long the form is.
+function folderStart(w: string): { kind: string; len: number } | null {
+  for (const [kind, re] of FOLDER_FORMS) {
+    const m = re.exec(w)
+    if (m) return { kind, len: m[0].length }
+  }
+  return null
 }
+
+// BARE_VAR is a bare $NAME or ${NAME} a path starts with.
+const BARE_VAR = /^\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))/
 
 // lineFolder: path w starts with a folder that a cd on line can change
 // and folderStart doesn't place: $_ (the last word of the command
@@ -1153,13 +1180,16 @@ function assigns(line: string, name: string): boolean {
   return new RegExp(`(^|[\\s;&|(){}!\`"'])${name}(\\[|:?=|\\+=|[\\s;&|)\`"']|$)`, 'm').test(line)
 }
 
-// bareVar: path w starts with a bare $NAME or ${NAME}, no operator in it
-// (${D:-.} may be a relative folder), that the line doesn't set
-// (assigns): where its value says, which a cd doesn't move.
-function bareVar(w: string, line: string): boolean {
-  const m = /^\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))/.exec(w)
-  const name = m ? (m[1] ?? m[2]) : ''
-  return name !== '' && name !== '_' && !assigns(line, name)
+// placedVar: path w starts with a variable whose value a cd doesn't
+// move, then a /: $TMPDIR, ${TMPDIR} or ${TMPDIR:-/abs}, or another bare
+// $NAME or ${NAME}, that the line doesn't set (assigns). Any other
+// expansion (${D:-.}, ${D#/}, ${!D}) may be a relative folder, and a
+// variable glued to text ($x.ext) another name.
+function placedVar(w: string, line: string): boolean {
+  const m = /^\$(?:\{([A-Za-z_][A-Za-z0-9_]*)(:-\/[^$`{}'"\\]*)?\}|([A-Za-z_][A-Za-z0-9_]*))\//.exec(w)
+  if (!m) return false
+  const name = m[1] ?? m[3]
+  return (!m[2] || name === 'TMPDIR') && name !== '_' && !assigns(line, name)
 }
 
 function judgeGit(r: Rules, has: (id: string) => boolean, args: string[]): Denial | null {
@@ -1615,7 +1645,7 @@ export function commands(line: string, arith = false, script?: (p: string) => bo
   }
   // text is literal text of the word.
   const text = (t: string) => {
-    if (!hasLit && word !== '' && (t.startsWith('/') || CUR_FOLDER.test(word) || OLD_FOLDER.test(word))) lit = word
+    if (!hasLit && word !== '' && (t.startsWith('/') || folderStart(word))) lit = word
     word += t
     lit += t
     inWord = true
@@ -1900,11 +1930,27 @@ function clean(p: string): string {
 // a regular file inside the thread's worktree once its links are
 // followed (resolve, files: what the server answered).
 function worktreeScript(r: Rules, p: string): boolean {
-  if (!r.wt || !r.resolve || !r.files || !scriptFile(p)) return false
+  if (!r.wt || !r.resolve || !r.files || !scriptFile(p) || writesScript(r.line ?? '', p)) return false
   if (r.cwd === '' && !slash(p).startsWith('/') && !p.startsWith('~')) return false
   const j = joined(r, p)
   const at = abs(r, r.resolve(j))
   return !/^\/(dev|proc)(\/|$)/.test(at) && under(r, at, r.wt) && r.files(j)
+}
+
+// SCRIPT_WRITERS are the commands that may write, link or move a file
+// they name: the floor's writers, and those that fetch or unpack.
+const SCRIPT_WRITERS = new Set([...WRITERS.keys(), ...REMOVERS, ...IN_PLACE, 'dd', 'git', 'tar', 'unzip', 'patch', 'curl', 'wget'])
+
+// writesScript: line writes, links or moves a file named as script p
+// (its last part): one of SCRIPT_WRITERS names it, or a redirect does.
+// What the server answered about p is from before the line ran.
+function writesScript(line: string, p: string): boolean {
+  const b = base(clean(slash(p)))
+  return commands(line).some(w => {
+    const argv = strip(w)
+    const writer = argv.length > 0 && SCRIPT_WRITERS.has(base(argv[0]))
+    return w.some((a, i) => (writer || w[i - 1] === '>') && base(clean(slash(a.replace(/^of=/, '')))) === b)
+  })
 }
 
 // scriptTargets are the scripts the shell commands of the call of tool

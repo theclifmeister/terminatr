@@ -696,33 +696,41 @@ func (r Rules) deny(rule, summary, target string) *Denial {
 	return &Denial{Rule: rule, Message: "terminatr guard (" + rule + "): " + m, Summary: summary, Floor: rule == "merge"}
 }
 
-// pwdVar is $PWD (or ${PWD}) starting a path, and what follows it.
-// The forms a path may start with that are the line's folder (cur):
-// $PWD, ${PWD} and the expansions that keep its value (${PWD:-x}), pwd
-// substituted, ~+, $DIRSTACK and ${DIRSTACK[0]}; a folder it was in
-// before (old): $OLDPWD and the like, ~-, a ~N or ${DIRSTACK[N]} of the
-// folder stack, dirs substituted; and $PWD, $OLDPWD or $DIRSTACK changed
-// by an operator (changed: ${PWD%/*}, ${PWD/a/b}), which may be
-// anything. A tilde form ends at a / or the path's end.
-var (
-	curFolder     = regexp.MustCompile("^(?:\\$PWD\\b|\\$\\{PWD(?::?[-=?][^}]*)?\\}|\\$\\(\\s*pwd(?:\\s+-[LP]+)*\\s*\\)|`\\s*pwd(?:\\s+-[LP]+)*\\s*`|~\\+(?:/|$)|\\$DIRSTACK\\b|\\$\\{DIRSTACK(?:\\[0\\])?\\})")
-	oldFolder     = regexp.MustCompile("^(?:\\$OLDPWD\\b|\\$\\{OLDPWD(?::?[-=?][^}]*)?\\}|~(?:-[0-9]*|\\+?[0-9]+)(?:/|$)|\\$\\{DIRSTACK\\[[^\\]]*\\]\\}|\\$\\(\\s*dirs\\b[^)]*\\)|`\\s*dirs\\b[^`]*`)")
-	changedFolder = regexp.MustCompile(`^\$\{[#!]?(?:PWD|OLDPWD|DIRSTACK)\b[^}]*\}`)
-)
+// folderForms are the forms a path may start with that name a folder
+// the line has been in, by kind: cur, the line's folder ($PWD, ${PWD}
+// and the expansions that keep its value, ${PWD:-x}, pwd substituted,
+// ~+, ~0, ~+0); stack, the folder stack's index 0, the line's folder in
+// bash and empty in zsh ($DIRSTACK, ${DIRSTACK[0]}); bottom and
+// bottomStack, the stack's bottom entry (~-0, ${DIRSTACK[-1]}); old, the
+// folder before (~-, $OLDPWD and the like); unknown, any other index
+// (~1, ~-2, ${DIRSTACK[1]}), a listing (${DIRSTACK[@]}, dirs
+// substituted), or $PWD, $OLDPWD or $DIRSTACK changed by an operator
+// (${PWD%/*}). A tilde form ends at a / or the path's end.
+var folderForms = []struct {
+	kind string
+	re   *regexp.Regexp
+}{
+	{"cur", regexp.MustCompile("^(?:\\$PWD\\b|\\$\\{PWD(?::?[-=?][^}]*)?\\}|\\$\\(\\s*pwd(?:\\s+-[LP]+)*\\s*\\)|`\\s*pwd(?:\\s+-[LP]+)*\\s*`|~(?:\\+0?|0)(?:/|$))")},
+	{"stack", regexp.MustCompile(`^(?:\$DIRSTACK\b|\$\{DIRSTACK(?:\[0\])?\})`)},
+	{"bottom", regexp.MustCompile(`^~-0(?:/|$)`)},
+	{"bottomStack", regexp.MustCompile(`^\$\{DIRSTACK\[-1\]\}`)},
+	{"old", regexp.MustCompile(`^(?:\$OLDPWD\b|\$\{OLDPWD(?::?[-=?][^}]*)?\}|~-(?:/|$))`)},
+	{"unknown", regexp.MustCompile("^(?:~[+-]?[0-9]+(?:/|$)|\\$\\{[#!]?(?:PWD|OLDPWD|DIRSTACK)\\b[^}]*\\}|\\$\\(\\s*dirs\\b[^)]*\\)|`\\s*dirs\\b[^`]*`)")},
+}
 
 // folderStart: path w starts with a form of a folder the line has been
-// in: which kind ("" none), and how long the form is.
+// in (folderForms): which kind ("" none), and how long the form is.
 func folderStart(w string) (string, int) {
-	for _, f := range []struct {
-		kind string
-		re   *regexp.Regexp
-	}{{"cur", curFolder}, {"old", oldFolder}, {"changed", changedFolder}} {
+	for _, f := range folderForms {
 		if m := f.re.FindString(w); m != "" {
 			return f.kind, len(strings.TrimSuffix(m, "/"))
 		}
 	}
 	return "", 0
 }
+
+// pushes is a pushd or popd word on a line.
+var pushes = regexp.MustCompile("(?m)(^|[\\s;&|(){}!`])(pushd|popd)([\\s;&|)`]|$)")
 
 // dotted is a path from . or .. (./x, ../x), which CDPATH doesn't look up.
 var dotted = regexp.MustCompile(`^\.{0,2}(/|$)`)
@@ -759,16 +767,22 @@ func assigns(line, name string) bool {
 // bareParam is a bare $NAME or ${NAME} a path starts with.
 var bareParam = regexp.MustCompile(`^\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))`)
 
-// bareVar: path w starts with a bare $NAME or ${NAME}, no operator in it
-// (${D:-.} may be a relative folder), that the line doesn't set
-// (assigns): where its value says, which a cd doesn't move.
-func bareVar(w, line string) bool {
-	m := bareParam.FindStringSubmatch(w)
+// placedParam is a variable a path may start with that placedVar may
+// let through: $NAME, ${NAME} or ${NAME:-/abs}, then a /.
+var placedParam = regexp.MustCompile(`^\$(?:\{([A-Za-z_][A-Za-z0-9_]*)(:-/[^$` + "`" + `{}'"\\]*)?\}|([A-Za-z_][A-Za-z0-9_]*))/`)
+
+// placedVar: path w starts with a variable whose value a cd doesn't
+// move, then a /: $TMPDIR, ${TMPDIR} or ${TMPDIR:-/abs}, or another bare
+// $NAME or ${NAME}, that the line doesn't set (assigns). Any other
+// expansion (${D:-.}, ${D#/}, ${!D}) may be a relative folder, and a
+// variable glued to text ($x.ext) another name.
+func placedVar(w, line string) bool {
+	m := placedParam.FindStringSubmatch(w)
 	if m == nil {
 		return false
 	}
-	name := m[1] + m[2]
-	return name != "_" && !assigns(line, name)
+	name := m[1] + m[3]
+	return (m[2] == "" || name == "TMPDIR") && name != "_" && !assigns(line, name)
 }
 
 // unplaced is the tm-files refusal of a path from a folder the guard
@@ -2218,9 +2232,22 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 		// folder that may be: $PWD from the line's, $OLDPWD from those
 		// before it (olds), $PWD changed by an operator from none.
 		if kind, n := folderStart(w); kind != "" {
+			switch {
+			case kind == "bottom" && pushes.MatchString(r.line), kind == "bottomStack" && pushes.MatchString(r.line):
+				kind = "unknown"
+			case kind == "bottom":
+				kind = "cur"
+			case kind == "bottomStack":
+				kind = "stack"
+			}
+			if kind == "stack" {
+				if dd := refuse(w[n:], parents); dd != nil {
+					return dd
+				}
+			}
 			dirs := []string{""}
 			switch kind {
-			case "cur":
+			case "cur", "stack":
 				dirs = []string{r.Cwd}
 			case "old":
 				dirs = r.olds
@@ -2230,7 +2257,7 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 			}
 			for _, d := range dirs {
 				if d == "" {
-					if kind == "cur" {
+					if kind == "cur" || kind == "stack" {
 						return floor(r.lostCd(cmd + " of " + safe(w) + " after a cd"))
 					}
 					return floor(r.unplaced(cmd + " of " + safe(w)))
@@ -2241,10 +2268,16 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 			}
 			return nil
 		}
+		// A variable that isn't set is empty: $NOPE/x is /x.
+		if m := bareParam.FindString(w); m != "" && strings.HasPrefix(w[len(m):], "/") {
+			if dd := refuse(w[len(m):], parents); dd != nil {
+				return dd
+			}
+		}
 		if r.lineCd && lineFolder(w, r.line) {
 			return floor(r.unplaced(cmd + " of " + safe(w) + " after a cd"))
 		}
-		if r.Cwd == "" && !strings.HasPrefix(slash(w), "/") && !strings.HasPrefix(w, "~") && !bareVar(w, r.line) && !drive.MatchString(slash(w)) {
+		if r.Cwd == "" && !strings.HasPrefix(slash(w), "/") && !strings.HasPrefix(w, "~") && !placedVar(w, r.line) && !drive.MatchString(slash(w)) {
 			return floor(r.lostCd(cmd + " of " + safe(w) + " after a cd"))
 		}
 		p := r.abs(w)
@@ -2404,7 +2437,7 @@ func readCommands(line string, arith bool, script func(string) bool) [][]string 
 	}
 	// text is literal text of the word.
 	text := func(t string) {
-		if !hasLit && word.Len() > 0 && (strings.HasPrefix(t, "/") || curFolder.MatchString(word.String()) || oldFolder.MatchString(word.String())) {
+		if kind, _ := folderStart(word.String()); !hasLit && word.Len() > 0 && (strings.HasPrefix(t, "/") || kind != "") {
 			lit.WriteString(word.String())
 		}
 		word.WriteString(t)
@@ -2766,7 +2799,7 @@ func scriptFile(a string) bool {
 // runs p, a regular file inside the thread's worktree once its links
 // are followed (Resolve, File).
 func (r Rules) worktreeScript(p string) bool {
-	if r.wt == "" || r.Resolve == nil || r.File == nil || !scriptFile(p) {
+	if r.wt == "" || r.Resolve == nil || r.File == nil || !scriptFile(p) || writesScript(r.line, p) {
 		return false
 	}
 	if r.Cwd == "" && !strings.HasPrefix(slash(p), "/") && !strings.HasPrefix(p, "~") {
@@ -2775,6 +2808,35 @@ func (r Rules) worktreeScript(p string) bool {
 	j := r.joined(p)
 	at := r.abs(r.Resolve(j))
 	return !devOrProc.MatchString(at) && r.under(at, r.wt) && r.File(j)
+}
+
+// scriptWriters are the commands that may write, link or move a file
+// they name: the floor's writers, and those that fetch or unpack.
+var scriptWriters = func() map[string]bool {
+	m := setOf("dd git tar unzip patch curl wget")
+	for _, set := range []map[string]bool{writers, removers, inPlace} {
+		for c := range set {
+			m[c] = true
+		}
+	}
+	return m
+}()
+
+// writesScript: line writes, links or moves a file named as script p
+// (its last part): one of scriptWriters names it, or a redirect does.
+// What File answered about p is from before the line ran.
+func writesScript(line, p string) bool {
+	b := base(path.Clean(slash(p)))
+	return slices.ContainsFunc(Commands(line), func(w []string) bool {
+		argv := strip(w)
+		writer := len(argv) > 0 && scriptWriters[base(argv[0])]
+		for i, a := range w {
+			if (writer || i > 0 && w[i-1] == ">") && base(path.Clean(slash(strings.TrimPrefix(a, "of=")))) == b {
+				return true
+			}
+		}
+		return false
+	})
 }
 
 // docWord is a heredoc's word as bash reads it from s[j]: the word that
