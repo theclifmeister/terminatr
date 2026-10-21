@@ -75,6 +75,7 @@ func TestNoAccessPreset(t *testing.T) {
 			t.Errorf("%v: %+v", args, r)
 		}
 	}
+	env.MustCLI("server", "start")
 	if out := env.MustCLI("access", "show", "demo"); !strings.Contains(out, "local-ports on") || !strings.Contains(out, "host cdn.playwright.dev") || strings.Contains(out, "preset") {
 		t.Errorf("show:\n%s", out)
 	}
