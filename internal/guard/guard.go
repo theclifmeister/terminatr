@@ -98,6 +98,10 @@ type Rules struct {
 	// commands by the paths they redirect into or give a command that
 	// writes (cp, mv, tee, rm and the like: judgeNoWrite).
 	NoWrite []string `json:"noWrite,omitempty"`
+	// NoWriteNames are NoWrite's patterns: absolute paths whose last part
+	// is a glob (~/.zcompdump*, zsh's completion dumps, whose names carry
+	// the host), matched when a call is judged (namedFloor).
+	NoWriteNames []string `json:"noWriteNames,omitempty"`
 	// AskEscapes: a shell call that asks to run outside the sandbox (its
 	// tool's Escape field true) is put to the user (rule "escape"), even
 	// where the agent's own rules would let it run: tm answers that
@@ -164,8 +168,9 @@ type Rules struct {
 	// from a folder the line can change (lineFolder) is not placed.
 	line   string
 	lineCd bool
-	// physical: the line may make its cds physical (physicalCd).
-	physical bool
+	// physical: the line may make its cds physical; defines: it may
+	// define an alias or a function (lineFlags).
+	physical, defines bool
 	// olds are the folders the line was in before its folder now
 	// ($OLDPWD, ~-; "" one it can't tell), as judgeLine follows its cds.
 	olds []string
@@ -359,7 +364,7 @@ func (p *parse) verdict(d *Denial) *Denial {
 }
 
 func (r Rules) judge(tool string, input map[string]any) *Denial {
-	if !r.On || len(r.Rules) == 0 && len(r.Mods) == 0 && len(r.Own) == 0 && len(r.OtherTemps) == 0 && len(r.SecretEnv) == 0 && len(r.Floor) == 0 && len(r.NoWrite) == 0 && !r.AskEscapes && len(r.Unsandboxed) == 0 && len(r.AskFirst) == 0 {
+	if !r.On || len(r.Rules) == 0 && len(r.Mods) == 0 && len(r.Own) == 0 && len(r.OtherTemps) == 0 && len(r.SecretEnv) == 0 && len(r.Floor) == 0 && len(r.NoWrite) == 0 && len(r.NoWriteNames) == 0 && !r.AskEscapes && len(r.Unsandboxed) == 0 && len(r.AskFirst) == 0 {
 		return nil
 	}
 	t, ok := r.Tools[tool]
@@ -749,7 +754,7 @@ func (r Rules) judgeWrite(tool, shown, p string) *Denial {
 	if r.otherTemp(p) {
 		return floor(r.deny(RuleTempFolders, tool+" of "+safe(shown), ""))
 	}
-	if r.covers(r.NoWrite, p) {
+	if r.covers(r.NoWrite, p) || r.namedFloor(p, false) {
 		return floor(r.deny(RuleTMFiles, tool+" of "+safe(shown), ""))
 	}
 	if r.has("worktree-only") && !r.writable(p) {
@@ -1078,7 +1083,9 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	}
 	r.line += command
 	r.lineCd = r.lineCd || r.hasCd(command)
-	r.physical = r.physical || r.setsPhysical(command)
+	physical, defines := r.lineFlags(command)
+	r.physical = r.physical || physical
+	r.defines = r.defines || defines
 	parts, ok := r.topLevel(command)
 	if !ok {
 		// A line it can't split: one part, with any cd in it leaving its
@@ -1275,14 +1282,10 @@ var plainNames = func() map[string]bool {
 	return m
 }()
 
-// plainCommand: name is one of plainNames that the line doesn't make a
-// function or an alias.
+// plainCommand: name is one of plainNames, on a line that defines no
+// alias or function at all (lineFlags), which could make it a cd.
 func (r Rules) plainCommand(name string) bool {
-	if !plainNames[name] {
-		return false
-	}
-	q := regexp.QuoteMeta(name)
-	return !regexp.MustCompile(`(?m)(?:^|[\s;&|(){}])(?:function\s+` + q + `(?:[\s(]|$)|` + q + `\s*\(\s*\)|alias\b[^;&|\n]*[\s'"]` + q + `=)`).MatchString(r.line)
+	return plainNames[name] && !r.defines
 }
 
 // trapFunc is the head of a zsh trap function's definition: TRAPINT() or
@@ -2323,28 +2326,94 @@ func (n nowhere) cd(r Rules, cmd string, args []string) nowhere {
 	return nowhere{dir: dir}
 }
 
-// physicalSetters are the commands whose words physicalCd reads.
+// physicalSetters are the commands whose words may make cds physical:
+// set, setopt, unsetopt, shopt and the shells.
 var physicalSetters = func() map[string]bool {
-	m := setOf("set setopt")
+	m := setOf("set setopt unsetopt shopt")
 	for c := range shells {
 		m[c] = true
 	}
 	return m
 }()
 
-// setsPhysical: one of line's commands may make its cds physical: set,
-// setopt or a shell whose words physicalCd matches (quoted text given to
-// another command, git commit -m physical, doesn't).
-func (r Rules) setsPhysical(line string) bool {
-	if !physicalCd.MatchString(line) {
-		return false
-	}
+// physicalOpts are the options that make cds physical, as optName gives
+// them: bash's physical, zsh's chase_links and chase_dots.
+var physicalOpts = setOf("physical chaselinks chasedots")
+
+// optName is a shell option's name as zsh compares them: case, _ and -
+// aside, without a no that turns it off (nochaselinks), so either way
+// counts.
+func optName(o string) string {
+	o = strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(o))
+	return strings.TrimPrefix(o, "no")
+}
+
+// definers are the commands that may define an alias or a function, or
+// run code that may: on a line with one, no command is plain.
+var definers = setOf("alias unalias function functions unfunction autoload enable disable eval source .")
+
+// defineWord is a word that defines one in an assignment: zsh's
+// functions[x]=, aliases[x]= and the like, bash's BASH_ALIASES and an
+// exported function.
+var defineWord = regexp.MustCompile(`^(?:dis_)?(?:functions|aliases|galiases|saliases)(?:\[|\+?=)|^BASH_ALIASES\b|^BASH_FUNC_`)
+
+// funcParens is the () of a function's definition (f() { … }, zsh's
+// anonymous () { … }), which leaves no word of its own.
+var funcParens = regexp.MustCompile(`\(\s*\)`)
+
+// lineFlags reads line's commands, their words dequoted and their names
+// by base name (/bin/bash), for what the guard can't follow:
+//
+// physical, one may make its cds physical: set, setopt, unsetopt, shopt
+// or a shell given -P (zsh's -w, set -w), an option physicalOpts names
+// (set -o physical, shopt -so physical, setopt CHASE_LINKS, unsetopt
+// nochaselinks), or physicalCd's words; a zsh options[…]= assignment;
+// a SHELLOPTS= or BASHOPTS= one, alone or through env. Either way it
+// counts, so a line turning it off does too.
+//
+// defines, one may define an alias or a function, in any form: alias,
+// unalias, function, functions (-c), autoload and the like (definers,
+// behind any quoting or through builtin or command), a functions[…]=
+// assignment (defineWord), a command named by an expansion, or a () in
+// the line (f() { … }), however quoted.
+func (r Rules) lineFlags(line string) (physical, defines bool) {
+	defines = funcParens.MatchString(line)
 	for _, words := range r.cmds(line) {
-		if argv := strip(words); len(argv) > 0 && physicalSetters[base(argv[0])] && physicalCd.MatchString(strings.Join(argv, " ")) {
-			return true
+		for _, w := range words {
+			if strings.HasPrefix(w, "SHELLOPTS=") || strings.HasPrefix(w, "BASHOPTS=") || strings.HasPrefix(w, "options[") {
+				physical = true
+			}
+			if defineWord.MatchString(w) {
+				defines = true
+			}
+		}
+		argv := strip(words)
+		if len(argv) == 0 {
+			continue
+		}
+		name := base(argv[0])
+		if definers[name] || strings.ContainsAny(argv[0], "$`") {
+			defines = true
+		}
+		if !physicalSetters[name] {
+			continue
+		}
+		if physicalCd.MatchString(strings.Join(argv, " ")) {
+			physical = true
+		}
+		for _, a := range argv[1:] {
+			if len(a) > 1 && (a[0] == '-' || a[0] == '+') && a[1] != '-' {
+				if strings.ContainsRune(a, 'P') || (name == "set" || shells[name]) && strings.ContainsRune(a, 'w') {
+					physical = true
+				}
+				continue
+			}
+			if physicalOpts[optName(a)] {
+				physical = true
+			}
 		}
 	}
-	return false
+	return physical, defines
 }
 
 // physicalCd is a line that may make its cds physical: bash's set -P or
@@ -2676,7 +2745,7 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 // substitution ($TMPDIR/x, "$F") is where its value says, which the
 // guard can't place with a cd or without one.
 func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
-	if len(r.NoWrite) == 0 {
+	if len(r.NoWrite) == 0 && len(r.NoWriteNames) == 0 {
 		return nil
 	}
 	var refuse func(w string, parents bool) *Denial
@@ -2756,7 +2825,7 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 		if fixed == "" {
 			fixed = "/"
 		}
-		if r.covers(r.NoWrite, p) || parents && slices.ContainsFunc(r.NoWrite, func(n string) bool { return r.under(n, fixed) || r.globReaches(p, n) }) {
+		if r.covers(r.NoWrite, p) || r.namedFloor(p, parents) || parents && slices.ContainsFunc(r.NoWrite, func(n string) bool { return r.under(n, fixed) || r.globReaches(p, n) }) {
 			return floor(r.deny(RuleTMFiles, cmd+" of "+safe(p), ""))
 		}
 		return nil
@@ -3883,6 +3952,34 @@ func (r Rules) covers(roots []string, p string) bool {
 	root := fixed == "/" || driveRoot.MatchString(fixed)
 	return slices.ContainsFunc(roots, func(s string) bool {
 		return r.under(fixed, s) || (fixed != p && r.under(s, fixed) && !root && r.fold(fixed) != r.fold(r.Home))
+	})
+}
+
+// namedFloor: p (absolute; it may be a glob) may name a file one of
+// NoWriteNames matches: in its folder, its name matches the pattern, or
+// as a glob, its text before the wildcard and the pattern's meet
+// (rm ~/.zcomp*, rm ~/.*). With parents (a remover), a folder holding
+// the pattern's folder counts too.
+func (r Rules) namedFloor(p string, parents bool) bool {
+	fp := r.fold(p)
+	return slices.ContainsFunc(r.NoWriteNames, func(n string) bool {
+		fn := r.fold(n)
+		dir, pat := path.Dir(fn), path.Base(fn)
+		if parents {
+			fixed := strings.TrimSuffix(wildcard.ReplaceAllString(fp, ""), "/")
+			if under(dir, fp) || fixed != fp && (fixed == "" || under(dir, fixed)) {
+				return true
+			}
+		}
+		if path.Dir(fp) != dir {
+			return false
+		}
+		name := path.Base(fp)
+		if ok, err := path.Match(pat, name); ok || err != nil {
+			return true
+		}
+		lit, plit := wildcard.ReplaceAllString(name, ""), wildcard.ReplaceAllString(pat, "")
+		return lit != name && (strings.HasPrefix(lit, plit) || strings.HasPrefix(plit, lit))
 	})
 }
 

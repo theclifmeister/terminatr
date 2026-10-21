@@ -166,6 +166,9 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		g.Floor = append(g.Floor, "merge")
 	}
 	g.NoWrite = s.guardNoWrite(r)
+	if home != "" {
+		g.NoWriteNames = withParentReal(agent.ShellPatterns(home, os.Getenv))
+	}
 	// The project lets its coordinator change its access: the floor lets
 	// its tm access writes through, which tm checks in the server.
 	g.AccessWrites = r.Role == proto.RoleCoordinator && set.CoordinatorAccess
