@@ -168,9 +168,9 @@ type Rules struct {
 	// from a folder the line can change (lineFolder) is not placed.
 	line   string
 	lineCd bool
-	// physical: the line may make its cds physical; defines: it may
-	// define an alias or a function (lineFlags).
-	physical, defines bool
+	// physical: the line may make its cds physical; cdpath: it may set
+	// CDPATH or zsh's cdpath (lineFlags).
+	physical, cdpath bool
 	// olds are the folders the line was in before its folder now
 	// ($OLDPWD, ~-; "" one it can't tell), as judgeLine follows its cds.
 	olds []string
@@ -1068,9 +1068,9 @@ func (r Rules) worktreeOf() string {
 // in (it may fail, or not run); in ( ), a pipeline or the background it
 // moves nothing, and anywhere else ({ }, if, a substitution) it leaves
 // them unknown. A part that runs shell code the line doesn't show
-// (eval, source, ., a trap whose action may move them, also through
-// command or builtin) may move them at any point after, so the rest of
-// the line keeps unknown among them.
+// (eval, trap, a zsh trap function, source, ., also through command or
+// builtin) may move them at any point after, so the rest of the line
+// keeps unknown among them.
 //
 // A trap's action (judgeCommands keeps it in ps.traps, as set here or in
 // a line this one reads: eval, bash -c) may run at any point from the
@@ -1083,9 +1083,9 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	}
 	r.line += command
 	r.lineCd = r.lineCd || r.hasCd(command)
-	physical, defines := r.lineFlags(command)
+	physical, cdpath := r.lineFlags(command)
 	r.physical = r.physical || physical
-	r.defines = r.defines || defines
+	r.cdpath = r.cdpath || cdpath
 	parts, ok := r.topLevel(command)
 	if !ok {
 		// A line it can't split: one part, with any cd in it leaving its
@@ -1142,7 +1142,7 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 			if r.ps != nil && !slices.Contains(r.ps.traps[from:], body) {
 				r.ps.traps = append(r.ps.traps, body)
 			}
-			hidden = hidden || r.movesFolder(body)
+			hidden = true
 		}
 		if trapped() {
 			trapDirs = withDirs(trapDirs, cur...)
@@ -1224,11 +1224,12 @@ func listSep(parts []linePart, i int) string {
 
 // hiddenCode are the builtins that run shell code the line doesn't show
 // in the shell itself, where a cd in it moves the line's folder.
-var hiddenCode = setOf("eval source .")
+var hiddenCode = setOf("eval trap source .")
 
 // runsHidden: one of text's commands is one of those, maybe through
-// command or builtin, or a trap whose action may move the line's folder
-// (movesFolder, or an action the guard can't read).
+// command or builtin. A trap's action, read as commands (judgeLine), may
+// still call what the guard can't see: a function or an alias the line
+// defines in a way it can't follow, which may be a cd.
 func (r Rules) runsHidden(text string) bool {
 	for _, words := range r.cmds(text) {
 		argv := strip(words)
@@ -1241,51 +1242,8 @@ func (r Rules) runsHidden(text string) bool {
 		if hiddenCode[argv[0]] {
 			return true
 		}
-		if argv[0] == "trap" {
-			a, ok := r.trapAction(argv[1:])
-			if !ok || a != "" && r.movesFolder(a) {
-				return true
-			}
-		}
 	}
 	return false
-}
-
-// movesFolder: a trap's action may move the line's folder: a cd in it,
-// hidden code, or a command the guard can't show to be a plain one
-// (plainCommand), which a function or an alias may make a cd.
-func (r Rules) movesFolder(a string) bool {
-	if r.hasCd(a) || r.nested().runsHidden(a) {
-		return true
-	}
-	for _, words := range r.cmds(a) {
-		if argv := strip(words); len(argv) > 0 && !r.plainCommand(argv[0]) {
-			return true
-		}
-	}
-	return false
-}
-
-// plainNames are the commands the guard knows that don't run shell code
-// in the line's shell: its readers, printers and writers, and a few
-// more.
-var plainNames = func() map[string]bool {
-	m := setOf("git gh az tm true false : kill wait sleep exit return date ls find wc logger")
-	for _, set := range []map[string]bool{writers, removers, inPlace, readers, printers, httpClients} {
-		for c := range set {
-			m[c] = true
-		}
-	}
-	for c := range hiddenCode {
-		delete(m, c)
-	}
-	return m
-}()
-
-// plainCommand: name is one of plainNames, on a line that defines no
-// alias or function at all (lineFlags), which could make it a cd.
-func (r Rules) plainCommand(name string) bool {
-	return plainNames[name] && !r.defines
 }
 
 // trapFunc is the head of a zsh trap function's definition: TRAPINT() or
@@ -2276,7 +2234,7 @@ type nowhere struct{ dir string }
 // cd is where cmd (cd, pushd, popd) with args leaves the line: a
 // folder it names plainly, home for none, else unknown: a pattern or
 // braces (cd ~/.term*) may name another folder, and so may a relative
-// one CDPATH looks up, when the line sets it. Its redirections (pushd x
+// one CDPATH looks up, when the line names it (lineFlags). Its redirections (pushd x
 // >/dev/null) are no folder. A physical cd (cd -P, or one the line may
 // have made physical: physicalCd) leaves the folder with its links
 // followed (Resolve), so its .. is the real parent; where the guard
@@ -2305,7 +2263,7 @@ func (n nowhere) cd(r Rules, cmd string, args []string) nowhere {
 	if a == "-" || strings.ContainsAny(a, "$`*?[{") || strings.HasPrefix(a, "~") && !strings.HasPrefix(a, "~/") && a != "~" {
 		return nowhere{}
 	}
-	if !dotted.MatchString(slash(a)) && !strings.HasPrefix(a, "~") && !drive.MatchString(slash(a)) && strings.Contains(r.line, "CDPATH") {
+	if !dotted.MatchString(slash(a)) && !strings.HasPrefix(a, "~") && !drive.MatchString(slash(a)) && r.cdpath {
 		return nowhere{}
 	}
 	if n.dir == "" && !strings.HasPrefix(a, "/") && !strings.HasPrefix(a, "~") && !drive.MatchString(slash(a)) {
@@ -2348,18 +2306,13 @@ func optName(o string) string {
 	return strings.TrimPrefix(o, "no")
 }
 
-// definers are the commands that may define an alias or a function, or
-// run code that may: on a line with one, no command is plain.
-var definers = setOf("alias unalias function functions unfunction autoload enable disable eval source .")
+// cdPath names CDPATH or zsh's cdpath, any case.
+var cdPath = regexp.MustCompile(`(?i)cd_?path`)
 
-// defineWord is a word that defines one in an assignment: zsh's
-// functions[x]=, aliases[x]= and the like, bash's BASH_ALIASES and an
-// exported function.
-var defineWord = regexp.MustCompile(`^(?:dis_)?(?:functions|aliases|galiases|saliases)(?:\[|\+?=)|^BASH_ALIASES\b|^BASH_FUNC_`)
-
-// funcParens is the () of a function's definition (f() { … }, zsh's
-// anonymous () { … }), which leaves no word of its own.
-var funcParens = regexp.MustCompile(`\(\s*\)`)
+// optionsWord is a word that assigns zsh's options (options[x]=,
+// options=, options+=) or names it to a command that may (typeset
+// options, read options, printf -v options).
+var optionsWord = regexp.MustCompile(`^options(?:\[|\+?=|$)`)
 
 // lineFlags reads line's commands, their words dequoted and their names
 // by base name (/bin/bash), for what the guard can't follow:
@@ -2367,24 +2320,24 @@ var funcParens = regexp.MustCompile(`\(\s*\)`)
 // physical, one may make its cds physical: set, setopt, unsetopt, shopt
 // or a shell given -P (zsh's -w, set -w), an option physicalOpts names
 // (set -o physical, shopt -so physical, setopt CHASE_LINKS, unsetopt
-// nochaselinks), or physicalCd's words; a zsh options[…]= assignment;
-// a SHELLOPTS= or BASHOPTS= one, alone or through env. Either way it
-// counts, so a line turning it off does too.
+// nochaselinks), an option argument with an expansion in it (setopt
+// $o), or physicalCd's words; emulate; any assignment to zsh's options
+// (optionsWord); a SHELLOPTS= or BASHOPTS= one, alone or through env; a
+// command named by an expansion. Either way it counts, so a line
+// turning it off does too.
 //
-// defines, one may define an alias or a function, in any form: alias,
-// unalias, function, functions (-c), autoload and the like (definers,
-// behind any quoting or through builtin or command), a functions[…]=
-// assignment (defineWord), a command named by an expansion, or a () in
-// the line (f() { … }), however quoted.
-func (r Rules) lineFlags(line string) (physical, defines bool) {
-	defines = funcParens.MatchString(line)
+// cdpath, it names CDPATH or zsh's cdpath in any form (an assignment,
+// typeset, +=, an indirect name n=CDPATH, any case), in its text or its
+// words dequoted (C\DPATH): then a relative cd may land elsewhere.
+func (r Rules) lineFlags(line string) (physical, cdpath bool) {
+	cdpath = cdPath.MatchString(line)
 	for _, words := range r.cmds(line) {
 		for _, w := range words {
-			if strings.HasPrefix(w, "SHELLOPTS=") || strings.HasPrefix(w, "BASHOPTS=") || strings.HasPrefix(w, "options[") {
+			if strings.HasPrefix(w, "SHELLOPTS=") || strings.HasPrefix(w, "BASHOPTS=") || optionsWord.MatchString(w) {
 				physical = true
 			}
-			if defineWord.MatchString(w) {
-				defines = true
+			if cdPath.MatchString(w) {
+				cdpath = true
 			}
 		}
 		argv := strip(words)
@@ -2392,8 +2345,8 @@ func (r Rules) lineFlags(line string) (physical, defines bool) {
 			continue
 		}
 		name := base(argv[0])
-		if definers[name] || strings.ContainsAny(argv[0], "$`") {
-			defines = true
+		if name == "emulate" || strings.ContainsAny(argv[0], "$`") {
+			physical = true
 		}
 		if !physicalSetters[name] {
 			continue
@@ -2402,6 +2355,10 @@ func (r Rules) lineFlags(line string) (physical, defines bool) {
 			physical = true
 		}
 		for _, a := range argv[1:] {
+			if strings.ContainsAny(a, "$`") {
+				physical = true
+				continue
+			}
 			if len(a) > 1 && (a[0] == '-' || a[0] == '+') && a[1] != '-' {
 				if strings.ContainsRune(a, 'P') || (name == "set" || shells[name]) && strings.ContainsRune(a, 'w') {
 					physical = true
@@ -2413,7 +2370,7 @@ func (r Rules) lineFlags(line string) (physical, defines bool) {
 			}
 		}
 	}
-	return physical, defines
+	return physical, cdpath
 }
 
 // physicalCd is a line that may make its cds physical: bash's set -P or
