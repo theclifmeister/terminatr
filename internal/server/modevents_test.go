@@ -188,7 +188,7 @@ func TestSessionUsage(t *testing.T) {
 		{proto.SessionInfo{ID: "s-9", Project: "demo", Thread: rec.ID, Role: proto.RoleThread}, 0, 0},
 		{proto.SessionInfo{ID: "s-3", Project: "demo", Role: proto.RoleCoordinator}, 0, 0},
 	} {
-		if tokens, cost := sessionUsage(c.info); tokens != c.tokens || cost != c.cost {
+		if tokens, cost, _ := sessionUsage(c.info); tokens != c.tokens || cost != c.cost {
 			t.Errorf("%+v: %d tokens, $%v; want %d, $%v", c.info, tokens, cost, c.tokens, c.cost)
 		}
 	}

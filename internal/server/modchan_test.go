@@ -428,7 +428,7 @@ func TestAgentUsage(t *testing.T) {
 	s.agentUsage("s-1", agent.Usage{Input: 1080, CacheRead: 11776, Output: 302, Context: 12856, ContextWindow: 258400, Key: "25402"})
 	s.agentUsage("s-1", agent.Usage{Turns: 1})
 	got, _ := thread.Load(p, r.ID)
-	if want := (thread.Usage{Turns: 1, Input: 1080, CacheRead: 11776, Output: 302}); got.Usage != want {
+	if want := (thread.Usage{Turns: 1, Input: 1080, CacheRead: 11776, Output: 302, Uncosted: 13158}); got.Usage != want {
 		t.Fatalf("usage %+v, want %+v", got.Usage, want)
 	}
 	if v, ok := s.ctxOf.Load("s-1"); !ok || v.(ctxUse) != (ctxUse{12856, 258400}) {

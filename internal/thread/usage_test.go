@@ -57,3 +57,20 @@ func TestUsagePlan(t *testing.T) {
 		t.Errorf("Detail = %q", got)
 	}
 }
+
+func TestUsageNoCost(t *testing.T) {
+	none := Usage{Turns: 1, Input: 1000, Uncosted: 1000}
+	if got := none.String(); got != "1.0k tokens, no cost" {
+		t.Fatalf("no cost: %q", got)
+	}
+	mixed := none.Add(Usage{Input: 1000, CostUSD: 0.5})
+	if got := mixed.String(); got != "2.0k tokens, $0.50 partial" {
+		t.Fatalf("mixed: %q", got)
+	}
+	if !mixed.CostKnown() || none.CostKnown() {
+		t.Fatalf("CostKnown: %v %v", mixed.CostKnown(), none.CostKnown())
+	}
+	if got := (Usage{Input: 1000}).String(); got != "1.0k tokens, $0.00" {
+		t.Fatalf("real zero: %q", got)
+	}
+}

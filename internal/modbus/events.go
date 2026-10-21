@@ -185,6 +185,9 @@ type Session struct {
 	// only, none for a session that is no thread's.
 	Tokens  int64   `json:"tokens,omitempty"`
 	CostUSD float64 `json:"cost_usd,omitempty"`
+	// Uncosted is how many of Tokens had no cost source (Claude without
+	// its mod), so CostUSD leaves them out.
+	Uncosted int64 `json:"uncosted,omitempty"`
 }
 
 // Question is session.question (mod API 1.3): the first unanswered
