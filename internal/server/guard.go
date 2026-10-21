@@ -392,6 +392,13 @@ func withReal(paths []string) []string {
 	return out
 }
 
+// regularFile: p (absolute, not cleaned) lands on a regular file, its
+// links followed (realTarget).
+func regularFile(p string) bool {
+	fi, err := os.Stat(realTarget(p))
+	return err == nil && fi.Mode().IsRegular()
+}
+
 // realTarget is where a write to p (absolute, not cleaned) lands: p with
 // the symlinks and junctions of its longest existing prefix followed, a
 // .. after one leaving the link's target as the file system does; what
@@ -451,10 +458,13 @@ type GuardEscape struct {
 }
 
 // GuardResolve is POST /v1/resolve's body and answer: the paths a file
-// tool writes, absolute but not cleaned, and where each lands
-// (realTarget), in the same order.
+// tool writes or a shell given a heredoc runs as its script, absolute
+// but not cleaned, and where each lands (realTarget), in the same
+// order; in the answer, Files says whether each lands on a regular file
+// (regularFile).
 type GuardResolve struct {
 	Paths []string `json:"paths"`
+	Files []bool   `json:"files,omitempty"`
 }
 
 // maxResolve bounds how many paths one POST /v1/resolve may ask about.
@@ -475,12 +485,13 @@ func (s *Server) guardRoutes(mux *http.ServeMux, id string) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		out := GuardResolve{Paths: make([]string, len(q.Paths))}
+		out := GuardResolve{Paths: make([]string, len(q.Paths)), Files: make([]bool, len(q.Paths))}
 		for i, p := range q.Paths {
 			// Only an absolute path is followed; the mod sends no other.
 			out.Paths[i] = p
 			if filepath.IsAbs(filepath.FromSlash(p)) {
 				out.Paths[i] = realTarget(p)
+				out.Files[i] = regularFile(p)
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -575,7 +586,7 @@ func (s *Server) hookGuardOf(id string, mod bool) func(string, map[string]any) *
 			return nil
 		}
 		rules := s.hookRules(rec)
-		rules.Resolve = realTarget
+		rules.Resolve, rules.File = realTarget, regularFile
 		d := rules.Judge(tool, input)
 		if d != nil && !d.Ask {
 			s.guardDenied(rec, GuardDenial{Rule: d.Rule, Tool: tool, Summary: d.Summary, Subject: d.Subject, Floor: d.Floor})

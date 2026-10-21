@@ -420,8 +420,9 @@ func TestRealTarget(t *testing.T) {
 }
 
 // TestModResolve: the mod's POST /v1/resolve answers where each write
-// lands, through a link out of the worktree, in order; a relative path
-// comes back as sent, and too many paths are refused.
+// lands, through a link out of the worktree, in order, and whether it
+// is a regular file; a relative path comes back as sent, and too many
+// paths are refused.
 func TestModResolve(t *testing.T) {
 	rt := ipctest.ShortTempDir(t, "tmresolve")
 	rt, _ = filepath.EvalSymlinks(rt)
@@ -434,6 +435,9 @@ func TestModResolve(t *testing.T) {
 	if err := os.Symlink(out, filepath.Join(wt, "link")); err != nil {
 		t.Skip(err)
 	}
+	if err := os.WriteFile(filepath.Join(out, "run.sh"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
 	s.mu.Lock()
 	s.inSession = testInSession
@@ -445,7 +449,7 @@ func TestModResolve(t *testing.T) {
 	t.Cleanup(s.closeMods)
 	c := modClient(sock)
 
-	q, _ := json.Marshal(GuardResolve{Paths: []string{wt + "/link/x", wt + "/new/y", "rel/z"}})
+	q, _ := json.Marshal(GuardResolve{Paths: []string{wt + "/link/x", wt + "/new/y", "rel/z", wt + "/link/run.sh", wt + "/link"}})
 	resp, err := c.Post("http://terminatr/v1/resolve", "application/json", bytes.NewReader(q))
 	if err != nil {
 		t.Fatal(err)
@@ -453,9 +457,12 @@ func TestModResolve(t *testing.T) {
 	var got GuardResolve
 	err = json.NewDecoder(resp.Body).Decode(&got)
 	resp.Body.Close()
-	want := []string{filepath.Join(out, "x"), filepath.Join(wt, "new", "y"), "rel/z"}
+	want := []string{filepath.Join(out, "x"), filepath.Join(wt, "new", "y"), "rel/z", filepath.Join(out, "run.sh"), out}
 	if err != nil || !slices.Equal(got.Paths, want) {
 		t.Errorf("got %q, %v; want %q", got.Paths, err, want)
+	}
+	if files := []bool{false, false, false, true, false}; !slices.Equal(got.Files, files) {
+		t.Errorf("files %v, want %v", got.Files, files)
 	}
 	q, _ = json.Marshal(GuardResolve{Paths: make([]string, maxResolve+1)})
 	if code := postMod(t, c, "/v1/resolve", string(q)); code != http.StatusBadRequest {
