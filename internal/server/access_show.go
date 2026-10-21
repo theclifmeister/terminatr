@@ -156,7 +156,7 @@ func markChanges(launched, now []proto.AccessRule) ([]proto.AccessRule, int) {
 	n := 0
 	for _, r := range launched {
 		if r.Live || r.Kind == proto.AccessPreset {
-			continue // a preset switch: its rules are listed on their own
+			continue // tm 0.37's switch: its rules are listed on their own
 		}
 		if !slices.ContainsFunc(now, r.Same) {
 			r.Change = proto.AccessRemoved

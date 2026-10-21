@@ -19,7 +19,7 @@ import (
 // writes the file it gives (server/accessmigrate.go keeps a backup and
 // tells the human). It turns
 //
-//   - the old preset switches into their rules (a project's false into
+//   - the old switches into their rules (a project's false into
 //     drops of them, local ports off);
 //   - a project's excluded_commands or allow list, which replaced all
 //     projects' (an empty one too), into its entries plus drops of those
@@ -673,7 +673,7 @@ func modelDiff(before, after accessModel) string {
 }
 
 // OldAccess lists, for tm doctor, what of the file still has a form of
-// tm 0.37: its sandbox lists waiting for the migration, the old preset
+// tm 0.37: its sandbox lists waiting for the migration, the old
 // switches, allow rules that run commands or write files, worktree-only
 // path allowances; and tm 0.38's guide names.
 func (c *Config) OldAccess() []string {
@@ -694,7 +694,7 @@ func (c *Config) OldAccess() []string {
 		}
 		for _, k := range OldSwitchKeys() {
 			if t.Sandbox.oldSwitch(k) != nil {
-				out = append(out, where+": the old preset switch "+k+" (read as its rules; adding the preset, or any sandbox change, writes them)")
+				out = append(out, where+": the old switch "+k+" (read as its rules; any sandbox change writes them)")
 			}
 		}
 		if l := t.Sandbox.list(SandboxAllow); l != nil {

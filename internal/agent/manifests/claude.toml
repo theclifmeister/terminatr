@@ -147,9 +147,9 @@ template = '''
 # add its excludedCommands, which run outside the sandbox even with
 # escapes off, and allow rules after tm's: Claude merges lists
 # across settings files, and its deny rules (tm's) win over any allow.
-# Its presets' local binding (macOS only, which the server checks) is
+# Its local ports (macOS only, which the server checks) are
 # allowLocalBinding: sandboxed commands may listen on and reach localhost;
-# their domains (browser testing's download hosts) are allowedDomains,
+# their domains (its host rules) are allowedDomains,
 # which sandboxed commands reach without a prompt (Claude merges the
 # list with the user's own).
 # Yolo (T574 case 4) means no sandbox and no prompts: a yolo thread's

@@ -49,7 +49,7 @@ const NoteTemplate = `+++
 # not): matching ignores them anyway.
 # Never store what the code, git or docs already say.
 # Never note a workaround for tm's own behaviour that every user would
-# hit (a guard false positive, a preset that doesn't work): report it,
+# hit (a guard false positive, a sandbox rule that doesn't work): report it,
 # for a fix in tm. Workarounds for the project's own setup (toolchain,
 # tests, VMs, cloud CLIs) may stay.
 title    = "One line: what was decided"

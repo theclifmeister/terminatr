@@ -280,8 +280,8 @@ func settingsErr(err error) error {
 
 // settingsView is the , popup: the settings of every project, in six
 // tabs: General, All projects (the project settings every project
-// follows unless it sets its own), Sandbox (all projects' presets and
-// sandbox lists, settings_sandbox.go), Mods (modstab.go), Peers, the
+// follows unless it sets its own), Sandbox (all projects' sandbox
+// lists, settings_sandbox.go), Mods (modstab.go), Peers, the
 // paired servers (peerstab.go), and Logs, the server host's logs
 // (logstab.go).
 type settingsView struct {
@@ -563,9 +563,6 @@ func (sv *settingsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	if sv.tab == tabMods || sv.tab == tabPeers || sv.tab == tabLogs {
 		return nil
 	}
-	if sv.tab == tabAllAccess && s == "p" && sandboxShown(m, "") {
-		return m.openPresets("")
-	}
 	if sv.tab == tabAllAccess && s == "R" {
 		return m.resetAccess("")
 	}
@@ -615,9 +612,6 @@ func (sv *settingsView) render(m *dash) string {
 	case tabAllAccess:
 		lines = append(lines, faintLines("Every project's threads get these, a new one's too. A project's lists add to these, and it may drop one of them, in its popup's Access tab (a on the dashboard, prefix+a in a session); its own switches replace these, x there makes it follow these again.", w)...)
 		keys = "enter change · R reset · ↑ ↓ move · ← → tabs · esc close"
-		if sandboxShown(m, "") {
-			keys = "enter change · p add a preset · R reset · ↑ ↓ move · ← → tabs · esc close"
-		}
 	default:
 		lines = append(lines, faintLines("Every project follows these, a new one too, unless it sets its own in its popup (a on the dashboard, prefix+a in a session); x there makes it follow these again.", w)...)
 		keys = "enter change · + - number · ↑ ↓ move · ← → tabs · esc close"

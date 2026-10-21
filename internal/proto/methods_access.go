@@ -47,7 +47,7 @@ const (
 	AccessTemp         = "temp"          // the thread's own temp folder, its TMPDIR
 	AccessSocket       = "socket"        // tm's socket, reachable from the sandbox
 	AccessCommand      = "command"       // a command prefix run without a prompt (the coordinator's merge)
-	AccessPreset       = "preset"        // a sandbox preset's switch (launch records of tm 0.37's previews only)
+	AccessPreset       = "preset"        // tm 0.37's sandbox switch (old launch records only; nothing new has it)
 	AccessLocalPorts   = "local-ports"   // sandboxed commands may listen on and reach localhost
 	AccessHost         = "host"          // a host sandboxed commands may reach
 	AccessGuide        = "guide"         // a guide in the brief: value its title, body its text ("" for a name of tm 0.38)

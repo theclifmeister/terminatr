@@ -188,7 +188,7 @@ func TestCheckHostsAndGuides(t *testing.T) {
 		t.Error("host warnings")
 	}
 	for _, g := range []Guide{{"browser-testing", ""}, {"browser-downloads", ""}, {"Test data", "Run make fixtures.\n\n\tNever edit testdata/."},
-		BrowserTestingGuide(true), BrowserDownloadsGuide(BrowserDomains)} {
+		LegacyGuides([]string{legacyBrowserTesting}, BrowserDomains, true)[0]} {
 		if err := CheckGuide(g); err != nil {
 			t.Errorf("%q: %v", g.Title, err)
 		}
@@ -424,7 +424,7 @@ func TestSandboxCovered(t *testing.T) {
 	}
 }
 
-// TestOldSwitches: tm 0.37's preset switches read as the rules they
+// TestOldSwitches: tm 0.37's switches read as the rules they
 // unfold into, a project's off as drops of them; a write of the table
 // replaces them with those rules.
 func TestOldSwitches(t *testing.T) {
@@ -477,26 +477,21 @@ local_dev_servers = false
 	}
 }
 
-// TestPresets: each preset's rules pass their checks; Missing leaves out
-// what threads have.
-func TestPresets(t *testing.T) {
-	for _, p := range Presets {
-		if len(p.Rules) == 0 || len(p.OS) == 0 || p.Title == "" || p.About == "" {
-			t.Errorf("%s: incomplete", p.Name)
+// TestOldSwitchRules: the rules each old switch unfolds into pass their
+// checks.
+func TestOldSwitchRules(t *testing.T) {
+	for _, s := range oldSwitches {
+		if len(s.rules) == 0 {
+			t.Errorf("%s: no rules", s.key)
 		}
-		for _, r := range p.Rules {
-			if r.Key == SandboxLocalPorts {
+		for _, r := range s.rules {
+			if r.key == SandboxLocalPorts || r.key == SandboxGuides && slices.Contains(legacyGuideNames, r.value) {
 				continue
 			}
-			if err := checkSandboxEntry(r.Key, r.Value); err != nil {
-				t.Errorf("%s: %v", p.Name, err)
+			if err := checkSandboxEntry(r.key, r.value); err != nil {
+				t.Errorf("%s: %v", s.key, err)
 			}
 		}
-	}
-	p, _ := PresetNamed(PresetBrowserDownloads)
-	have := ThreadSandbox{Rules: []SandboxRule{{Key: SandboxHosts, Value: "registry.npmjs.org"}, {Key: SandboxHosts, Value: "cdn.playwright.dev", Dropped: true}}}
-	if got := p.Missing(have.Has); len(got) != len(p.Rules)-1 || got[0].Value != "cdn.playwright.dev" {
-		t.Errorf("missing: %v", got)
 	}
 }
 
