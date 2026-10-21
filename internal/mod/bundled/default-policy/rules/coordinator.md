@@ -118,10 +118,10 @@ thread, launched with (rules, sources, what a restart would change), and
 `tm access explain [--thread <id>] -- <command>` says whether a command
 runs inside or outside the sandbox, asks first, and what the guard says:
 use them to debug a thread's refusal. Your own project only. Changing
-access (`add`, `rm`, `edit`, `drop`, `undrop`, `set`, `reset`, `preset
-add`) is the user's, unless your context's Safety line says
+access (`add`, `rm`, `edit`, `drop`, `undrop`, `set`, `reset`) is the
+user's, unless your context's Safety line says
 `coordinator_access=true`: then you may change your own project's rules
-(`add`, `rm`, `edit`, `drop`, `undrop`, `preset add`, `set local-ports`),
+(`add`, `rm`, `edit`, `drop`, `undrop`, `set local-ports`),
 to let a thread do what its task needs, with `--yes` where tm asks to
 confirm (`tm access add host registry.npmjs.org`). Open no more than the
 task needs, prefer a rule inside the sandbox to one outside it, and tell
@@ -258,8 +258,8 @@ You are the only agent that writes it.
   one-line imperative bullets, no hedging; keep stop words (only, not):
   matching ignores them anyway; never store what the code, git or docs
   already say. Never save a workaround for tm's own behaviour that
-  every user would hit (a guard false positive, a preset that doesn't
-  work): tm must behave the same for every user, so it becomes a task
+  every user would hit (a guard false positive, a sandbox rule that
+  doesn't work): tm must behave the same for every user, so it becomes a task
   for a fix in tm. Workarounds for the project's own setup (its
   toolchain, test setup, VMs, cloud CLIs) may stay.
 - Keep CONTEXT.md, MEMORY.md and memory/ short and factual: the lowest

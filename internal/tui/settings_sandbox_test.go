@@ -238,7 +238,7 @@ func TestSandboxAllowAll(t *testing.T) {
 }
 
 // TestAccessTab: the project popup's Access tab, after Settings: the
-// guidance, prompts and escapes, the presets, the lists, the guard, the
+// guidance, prompts and escapes, the lists, the guard, the
 // secret environment and tm's own rules, each under its section, and
 // none of them under Settings any more; the footer names x on a row the
 // project sets and e for the effective access.
@@ -262,7 +262,7 @@ func TestAccessTab(t *testing.T) {
 		"Inside the sandbox", "Network hosts", "Local ports", "Guidance for threads",
 		"Outside the sandbox", "Excluded commands", "Permission rules", "Allow rules",
 		"Guard", "Guard mode", "Guard rules", "Guard allowances", "Guard refusals", "Secrets", "Secret environment",
-		"Built in", "tm's rules", "p add a preset", "e effective access", "← → tabs"} {
+		"Built in", "tm's rules", "e effective access", "← → tabs"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("Access tab lacks %q:\n%s", want, out)
 		}
@@ -301,7 +301,7 @@ func TestAccessTab(t *testing.T) {
 		keyPress(m, "down")
 		out += screen(m)
 	}
-	for _, want := range []string{"3 access", "Protection", "Yolo mode", "Network hosts", "Guard mode", "Secret environment", "A project's lists add to these", "alpha sets its own", "p add a preset"} {
+	for _, want := range []string{"3 access", "Protection", "Yolo mode", "Network hosts", "Guard mode", "Secret environment", "A project's lists add to these", "alpha sets its own", "R reset"} {
 		if !strings.Contains(out, want) {
 			t.Errorf(", Access tab lacks %q:\n%s", want, out)
 		}
@@ -414,85 +414,22 @@ func TestLocalPortsRow(t *testing.T) {
 	}
 }
 
-// TestPresetAdd: p on a project's Access tab lists the presets; enter
-// shows the rules one adds, space leaves one out, enter adds the rest
-// as plain rules; adding it again offers only what is missing, and A
-// adds to all projects instead.
-func TestPresetAdd(t *testing.T) {
+// TestNoPresets: tm has no presets (T642): p on a project's Access tab
+// opens nothing and the tab names none.
+func TestNoPresets(t *testing.T) {
 	src, m := sandboxData(t)
 	m.Update(tea.WindowSizeMsg{Width: 160, Height: 80})
 	feed(m, keyPress(m, "a"))
 	keyPress(m, "5")
 	keyPress(m, "p")
-	if _, ok := m.top().(*presetsView); !ok {
+	if _, ok := m.top().(*projectView); !ok {
 		t.Fatalf("p: %T", m.top())
 	}
-	out := screen(m)
-	for _, p := range config.Presets {
-		if !strings.Contains(out, p.Title) {
-			t.Errorf("lacks %q:\n%s", p.Title, out)
-		}
+	if out := screen(m); strings.Contains(strings.ToLower(out), "preset") {
+		t.Errorf("names a preset:\n%s", out)
 	}
-	keyPress(m, "down")
-	keyPress(m, "enter")
-	out = screen(m)
-	for _, want := range []string{"Add Browser downloads (npm, Playwright) for alpha", "[x] host", "registry.npmjs.org", "storage.googleapis.com", "[x] guide", "Sandbox: browser downloads",
-		"Already there: nothing", "enter add 5 rules", "A add to all projects instead"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("lacks %q:\n%s", want, out)
-		}
-	}
-	for _, risk := range []string{"bucket", "every command"} {
-		if strings.Contains(out, risk) {
-			t.Errorf("a risk remark (%q):\n%s", risk, out)
-		}
-	}
-	// Leave storage.googleapis.com out.
-	for range 3 {
-		keyPress(m, "down")
-	}
-	keyPress(m, "space")
-	if out := screen(m); !strings.Contains(out, "[ ] host") || !strings.Contains(out, "enter add 4 rules") {
-		t.Errorf("after space:\n%s", out)
-	}
-	drain(t, m, keyPress(m, "enter"))
-	if _, ok := m.top().(*projectView); !ok {
-		t.Fatalf("after adding: %T", m.top())
-	}
-	c, _ := config.Load()
-	got := c.SandboxOf("alpha")
-	// Its guide is worded from the hosts added with it.
-	if !slices.Equal(got.Lists[config.SandboxHosts], config.BrowserDomains[:3]) || !slices.Equal(got.Lists[config.SandboxGuides], []string{config.GuideBrowserDownloads}) ||
-		!strings.Contains(got.Guides[config.GuideBrowserDownloads], "not\nstorage.googleapis.com") {
-		t.Errorf("alpha: %+v", got)
-	}
-	// Again: only the left-out host is offered; A adds it to all projects.
-	keyPress(m, "p")
-	keyPress(m, "down")
-	keyPress(m, "enter")
-	out = screen(m)
-	if !strings.Contains(out, "enter add 1 rule") || !strings.Contains(out, "Already there: host registry.npmjs.org") {
-		t.Errorf("again:\n%s", out)
-	}
-	keyPress(m, "A")
-	if out := screen(m); !strings.Contains(out, "for all projects") || !strings.Contains(out, "enter add 5 rules") || !strings.Contains(out, "A add to alpha instead") {
-		t.Errorf("after A:\n%s", out)
-	}
-	keyPress(m, "A")
-	drain(t, m, keyPress(m, "enter"))
-	if want := []string{
-		"projects.alpha preset browser-downloads: host registry.npmjs.org, host cdn.playwright.dev, host playwright.download.prss.microsoft.com, guide Sandbox: browser downloads",
-		"projects.alpha preset browser-downloads: host storage.googleapis.com"}; !slices.Equal(src.sandbox, want) {
+	if len(src.sandbox) != 0 {
 		t.Errorf("saved %q", src.sandbox)
-	}
-	// Local dev servers adds local ports, as a plain setting.
-	keyPress(m, "p")
-	keyPress(m, "down")
-	keyPress(m, "down")
-	keyPress(m, "enter")
-	drain(t, m, keyPress(m, "enter"))
-	if c, _ := config.Load(); !c.ThreadSandbox("alpha").LocalPortsOwn || !c.ThreadSandbox("alpha").LocalPorts {
-		t.Errorf("local ports: %+v", c.ThreadSandbox("alpha"))
 	}
 }
 

@@ -15,7 +15,7 @@ import (
 // list, edit one in place (T619), drop and undrop one of all projects' for a project, set local
 // ports, protection, escapes or yolo. The human's: an agent gets human-only, told by
 // the server from the process tree (access is a checked command), and
-// with no server to tell, the write is refused, as tm access preset add.
+// with no server to tell, the write is refused.
 // Each write is journaled in the projects it reaches; threads get it
 // from their next start or restart.
 
@@ -473,7 +473,7 @@ func accessSet(e *Env, args []string) error {
 		return err
 	}
 	if e.Caller.Kind == caller.Coordinator && key != config.SandboxLocalPorts {
-		return srvFail(cmd, &project.Error{Code: "human-only", Msg: "protection, escapes, yolo and letting a coordinator set access are the user's alone: change the project's rules within its level (tm access add, rm, edit, drop, undrop, preset add, set local-ports)"})
+		return srvFail(cmd, &project.Error{Code: "human-only", Msg: "protection, escapes, yolo and letting a coordinator set access are the user's alone: change the project's rules within its level (tm access add, rm, edit, drop, undrop, set local-ports)"})
 	}
 	if key == "coordinator_access" && on {
 		if err := e.confirm(*yes, cmd, "Let "+who+"'s coordinator change its rules? Within the protection level you set, it can then open the sandbox to hosts, folders and local ports, and add commands that run outside it; never the level, escapes, yolo, a reset, all projects' or this switch."); err != nil {

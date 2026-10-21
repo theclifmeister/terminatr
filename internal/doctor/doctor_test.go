@@ -581,7 +581,7 @@ func TestUpkeep(t *testing.T) {
 	}
 }
 
-// TestSettingsOldAccess: an old preset switch, a file allow rule and a
+// TestSettingsOldAccess: an old switch, a file allow rule and a
 // project list still replacing all projects' are one warning naming
 // each; none once the file is moved.
 func TestSettingsOldAccess(t *testing.T) {

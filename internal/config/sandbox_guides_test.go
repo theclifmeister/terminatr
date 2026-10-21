@@ -79,30 +79,28 @@ func TestGuidesWritten(t *testing.T) {
 	}
 }
 
-// TestPresetGuides: a preset's guide is worded from the rules threads
-// have once it is added: local ports, the download hosts.
-func TestPresetGuides(t *testing.T) {
-	p, _ := PresetNamed(PresetBrowserTesting)
-	r := WordRules(p.Rules, ThreadSandbox{})
-	if len(r) != 1 || !strings.Contains(r[0].Body, "--single-process") || !strings.Contains(r[0].Body, "hasn't opened local ports") || strings.Contains(r[0].Body, "Downloads:") {
-		t.Errorf("testing: %q", r)
+// TestLegacyGuideTexts: the texts tm 0.38's names are worded into pass
+// a guide's checks, worded for local ports and the download hosts.
+func TestLegacyGuideTexts(t *testing.T) {
+	g := LegacyGuides([]string{legacyBrowserTesting}, nil, false)
+	if len(g) != 1 || !strings.Contains(g[0].Body, "--single-process") || !strings.Contains(g[0].Body, "hasn't opened local ports") {
+		t.Errorf("testing: %q", g)
 	}
-	if r = WordRules(p.Rules, ThreadSandbox{LocalPorts: true}); !strings.Contains(r[0].Body, "The\nhuman also opened local ports") {
-		t.Errorf("testing, ports open: %q", r[0].Body)
+	if g = LegacyGuides([]string{legacyBrowserTesting}, nil, true); !strings.Contains(g[0].Body, "The\nhuman also opened local ports") {
+		t.Errorf("testing, ports open: %q", g[0].Body)
 	}
-	p, _ = PresetNamed(PresetBrowserDownloads)
-	r = WordRules(p.Rules, ThreadSandbox{})
-	if b := r[len(r)-1].Body; !strings.Contains(b, "the human opened registry.npmjs.org") || strings.Contains(b, ", not ") {
-		t.Errorf("downloads: %q", b)
+	if g = LegacyGuides([]string{legacyBrowserDownloads}, BrowserDomains, false); !strings.Contains(g[0].Body, "the human opened registry.npmjs.org") || strings.Contains(g[0].Body, ", not ") {
+		t.Errorf("downloads: %q", g[0].Body)
 	}
 	// Left out, a host is named closed.
-	r = WordRules(p.Rules[1:], ThreadSandbox{})
-	if b := r[len(r)-1].Body; !strings.Contains(b, "not registry.npmjs.org") {
-		t.Errorf("downloads without the registry: %q", b)
+	if g = LegacyGuides([]string{legacyBrowserDownloads}, BrowserDomains[1:], false); !strings.Contains(g[0].Body, "not registry.npmjs.org") {
+		t.Errorf("downloads without the registry: %q", g[0].Body)
 	}
-	for _, g := range []Guide{BrowserTestingGuide(false), BrowserDownloadsGuide(nil)} {
-		if err := CheckGuide(g); err != nil || strings.Contains(g.Body, "%!") || len(g.Body) > MaxGuideBody {
-			t.Errorf("%s: %v", g.Title, err)
+	for _, names := range [][]string{{legacyBrowserTesting}, {legacyBrowserDownloads}} {
+		for _, g := range LegacyGuides(names, nil, true) {
+			if err := CheckGuide(g); err != nil || strings.Contains(g.Body, "%!") || len(g.Body) > MaxGuideBody {
+				t.Errorf("%s: %v", g.Title, err)
+			}
 		}
 	}
 }

@@ -1,8 +1,8 @@
 package server
 
 // A session's access as one list of rules (T574 §3.1, phase 1): the
-// file access of its role (accessFor), a thread's sandbox lists and
-// presets (config sandbox), yolo and escapes, the guard and the secret
+// file access of its role (accessFor), a thread's sandbox lists
+// (config sandbox), yolo and escapes, the guard and the secret
 // environment, each rule with its source. A launch takes its settings
 // from these rules (launchAccess, launchSandbox), so what the effective
 // access view lists is what the agent got; each thread's launch keeps

@@ -259,7 +259,7 @@ func shootSize(t *testing.T, env *Env, dir string, sz shotSize) {
 		{"inbox", "The coordinator handles these"},
 		{"tasks", "enter show"},
 		{"settings", "Start threads"},
-		{"sandbox", "Prefer a preset"},
+		{"sandbox", "Prefer rules inside the sandbox"},
 		{"keys", "On the dashboard"},
 		{"memory", ""},
 	} {
@@ -355,7 +355,7 @@ func shootSize(t *testing.T, env *Env, dir string, sz shotSize) {
 	w.Key(emu.Key{Special: emu.KeyPageDown})
 	s.shot("settings-all-projects-end", "Guard rules")
 	w.Key(emu.Key{Special: emu.KeyRight})
-	s.shot("settings-sandbox", "Prefer a preset")
+	s.shot("settings-sandbox", "Prefer rules inside the sandbox")
 	s.esc()
 
 	s.home()

@@ -67,9 +67,9 @@ const (
 var SandboxKeys = []string{SandboxHosts, SandboxGuides, SandboxWrite, SandboxSockets, SandboxExcluded, SandboxApproved, SandboxAllow}
 
 // rawSandbox is a [projects.<slug>.sandbox] or [defaults.sandbox] table:
-// the lists, local ports, a project's drops, and the preset switches of
+// the lists, local ports, a project's drops, and the switches of
 // tm 0.37 and before, read as the rules they unfold into
-// (sandbox_presets.go).
+// (sandbox_switches.go).
 type rawSandbox struct {
 	Hosts            *[]string     `toml:"hosts"`
 	Guides           *guideList    `toml:"guides"`

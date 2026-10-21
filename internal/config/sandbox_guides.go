@@ -21,9 +21,7 @@ import (
 //
 // tm writes them inline (guides = [{ title = …, body = """…""" }]); a
 // project's guides add to all projects', and its drop takes one of
-// theirs out by its title. The browser presets add theirs as text
-// worded when they are added, from the rules threads have then, to edit
-// like any other afterwards.
+// theirs out by its title.
 //
 // tm 0.38 named two texts tm kept itself (guides = ["browser-testing"]),
 // worded at each launch. Such a name is still read, worded so, until
@@ -193,17 +191,11 @@ func GuideText(guides []Guide) string {
 	return b.String()
 }
 
-// Titles of the guides the browser presets add.
+// Titles of the browser guides tm 0.38 gave and its presets added.
 const (
 	GuideBrowserTesting   = "Sandbox: browser testing"
 	GuideBrowserDownloads = "Sandbox: browser downloads"
 )
-
-// PresetGuides say what each preset's guide tells threads, by title.
-var PresetGuides = map[string]string{
-	GuideBrowserTesting:   "how to run Playwright and other Chromium tools inside macOS's sandbox: the headless shell in one process, and a ready Playwright test setup; it says whether local ports are open",
-	GuideBrowserDownloads: "how to install npm packages and Playwright's browser inside the sandbox: the npm cache and browsers path of the thread's own, curl when Playwright's downloader is cut off, and which download hosts are open",
-}
 
 // The names of tm 0.38's guidance texts.
 const (
@@ -230,18 +222,6 @@ func LegacyGuides(names, hosts []string, localPorts bool) []Guide {
 		return []Guide{{GuideBrowserDownloads, strings.TrimRight(downloadsText(hosts), "\n")}}
 	}
 	return nil
-}
-
-// BrowserTestingGuide is the browser testing preset's guide, worded for
-// threads whose local ports are open or not.
-func BrowserTestingGuide(localPorts bool) Guide {
-	return Guide{GuideBrowserTesting, fmt.Sprintf(browserGuide, "", portsText(localPorts)) + browserGuideEnd}
-}
-
-// BrowserDownloadsGuide is the browser downloads preset's guide, worded
-// for threads that reach hosts.
-func BrowserDownloadsGuide(hosts []string) Guide {
-	return Guide{GuideBrowserDownloads, strings.TrimRight(downloadsText(hosts), "\n")}
 }
 
 // browserGuide is the browser-testing guidance (macOS: T561's and

@@ -13,7 +13,7 @@ import (
 // The Access tab (T574 §4.1, §4.5): everything that decides what a
 // project's threads may do, in one place, in a project's popup (5
 // access) and, for all projects, in the , popup (3 access). Protection,
-// prompts and escapes first, then the sandbox's presets and lists
+// prompts and escapes first, then the sandbox's lists
 // (settings_sandbox.go), the guard (settings_guard.go), the secret
 // environment (settings_secretenv.go) and tm's own rules, read-only.
 // The Settings and All projects tabs keep the workflow rows. e on a
@@ -107,7 +107,7 @@ func (sr safetyRows) protectionRow() setting {
 }
 
 func (sr safetyRows) coordinatorAccessRow() setting {
-	return setting{label: "Coordinator sets access", help: "Let the project's coordinator change its rules with tm access: the sandbox lists, presets and local ports, for its own project only. The protection level stays yours: it can never change it, escapes or yolo mode, reset the access, change all projects' or this switch. Each change is journaled. Turning it on asks first.",
+	return setting{label: "Coordinator sets access", help: "Let the project's coordinator change its rules with tm access: the sandbox lists and local ports, for its own project only. The protection level stays yours: it can never change it, escapes or yolo mode, reset the access, change all projects' or this switch. Each change is journaled. Turning it on asks first.",
 		keys: []string{"coordinator_access"}, word: onOffWord("coordinator_access"),
 		value: func(m *dash) string { return onOff(sr.on(m, "coordinator_access")) },
 		change: func(m *dash) tea.Cmd {

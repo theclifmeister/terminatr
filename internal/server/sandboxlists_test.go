@@ -128,7 +128,7 @@ func TestGuideBrief(t *testing.T) {
 	if got, err := guideBrief(rt, brief, nil, none); err != nil || got != brief {
 		t.Errorf("no guides: %q, %v", got, err)
 	}
-	guides := []config.Guide{{Title: "Test data", Body: "Run make fixtures.\n\n\tNever edit testdata/."}, config.BrowserTestingGuide(false)}
+	guides := []config.Guide{{Title: "Test data", Body: "Run make fixtures.\n\n\tNever edit testdata/."}, config.LegacyGuides([]string{"browser-testing"}, nil, false)[0]}
 	got, err := guideBrief(rt, brief, guides, agent.SandboxLists{Approved: []string{"make e2e"}})
 	b, _ := os.ReadFile(got)
 	want := "# Thread t-0001\n\n## Test data\n\nRun make fixtures.\n\n\tNever edit testdata/.\n\n## Sandbox: browser testing\n\n"

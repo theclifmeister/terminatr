@@ -22,7 +22,7 @@ import (
 
 // SandboxTable is one sandbox table's rules: its lists by key, only
 // those with entries (a project's drops under SandboxDrop), and its
-// local ports when it sets them. The old preset switches it still has
+// local ports when it sets them. The old switches it still has
 // read as the rules they unfold into. NoAsk are the table's excluded
 // commands that run without asking (ask = false); the others ask first.
 // Guides are the bodies of its guides by title (a name of tm 0.38 has
@@ -82,20 +82,6 @@ func (t *SandboxTable) Remove(key, v string) {
 	t.Lists[key] = l
 }
 
-// AddRule adds preset rule r: an entry (a guide with its body), or
-// local ports on.
-func (t *SandboxTable) AddRule(r PresetRule) {
-	switch r.Key {
-	case SandboxLocalPorts:
-		on := true
-		t.LocalPorts = &on
-	case SandboxGuides:
-		t.SetGuide(Guide{r.Value, r.Body})
-	default:
-		t.Add(r.Key, r.Value)
-	}
-}
-
 // Clone is a copy of t to change.
 func (t SandboxTable) Clone() SandboxTable {
 	out := SandboxTable{Lists: map[string][]string{}}
@@ -113,8 +99,8 @@ func (t SandboxTable) Clone() SandboxTable {
 	return out
 }
 
-// table is r's rules, its old switches unfolded: on, a preset's rules;
-// a project's off, drops of them (local ports off).
+// table is r's rules, its old switches unfolded: on, their rules; a
+// project's off, drops of them (local ports off).
 func (r *rawSandbox) table(project bool) SandboxTable {
 	t := SandboxTable{Lists: map[string][]string{}}
 	if r == nil {
@@ -142,31 +128,26 @@ func (r *rawSandbox) table(project bool) SandboxTable {
 		if on == nil || (!*on && !project) {
 			continue
 		}
-		p, _ := PresetNamed(s.preset)
-		for _, rule := range p.Rules {
-			if rule.Key == SandboxGuides {
-				// tm 0.37's switch gave tm 0.38's guide name.
-				rule.Value = legacySwitchGuides[s.preset]
-			}
+		for _, rule := range s.rules {
 			switch {
-			case rule.Key == SandboxLocalPorts:
+			case rule.key == SandboxLocalPorts:
 				if t.LocalPorts == nil {
 					v := *on
 					t.LocalPorts = &v
 				}
 			case *on:
-				t.Add(rule.Key, rule.Value)
+				t.Add(rule.key, rule.value)
 			default:
-				t.Add(SandboxDrop, rule.Value)
+				t.Add(SandboxDrop, rule.value)
 			}
 		}
 	}
 	return t
 }
 
-// hasOldSwitch reports whether r sets an old preset switch.
+// hasOldSwitch reports whether r sets an old switch.
 func (r *rawSandbox) hasOldSwitch() bool {
-	return slices.ContainsFunc(oldSwitches, func(s struct{ key, preset string }) bool { return r.oldSwitch(s.key) != nil })
+	return slices.ContainsFunc(OldSwitchKeys(), func(k string) bool { return r.oldSwitch(k) != nil })
 }
 
 // SandboxRule is one entry a project's threads get from the sandbox
@@ -241,14 +222,6 @@ func (t ThreadSandbox) Guides() []Guide {
 		}
 	}
 	return append(LegacyGuides(names, t.Given(SandboxHosts), t.LocalPorts), out...)
-}
-
-// Has reports whether threads get preset rule r already.
-func (t ThreadSandbox) Has(r PresetRule) bool {
-	if r.Key == SandboxLocalPorts {
-		return t.LocalPorts
-	}
-	return slices.Contains(t.Given(r.Key), r.Value)
 }
 
 // Empty reports whether it opens nothing.
@@ -370,7 +343,7 @@ func sandboxTableOf(table string) (string, bool, error) {
 // EditSandbox changes table's sandbox table (DefaultsTable or
 // "projects.<slug>") in one write: fn changes its rules as config.toml
 // has them now, and they are written back, each entry fn added checked
-// as Load's users check it, none twice. The old preset switches go in
+// as Load's users check it, none twice. The old switches go in
 // the same write, their rules written as plain ones, and the file gets
 // AccessMarker. ErrForm when the file sets a key in a form the line
 // editor doesn't change; ErrLegacy when it still waits for its

@@ -650,7 +650,7 @@ const REMOVERS = new Set('rm rmdir mv rsync'.split(' '))
 
 // TM_AGENT_MOD are the tm mod subcommands an agent may run; the others,
 // tm project's TM_PROJECT_WRITES (and repo add), tm access's
-// TM_ACCESS_WRITES (and preset add) and the dashboard write
+// TM_ACCESS_WRITES and the dashboard write
 // tm's settings in the tm process itself, the human's alone: an agent
 // past its sandbox (yolo) that runs one with its session's variables
 // unset and out of its session's process tree would pass for the human,
@@ -672,13 +672,12 @@ function tmWritesSettings(args: string[]): string {
   if ((args[i] === 'mod' && !TM_AGENT_MOD.has(pos[0])) || (args[i] === 'project' && TM_PROJECT_WRITES.has(pos[0]))) return `tm ${args[i]} ${safe(pos[0])}`
   if (args[i] === 'project' && (pos[0] === 'repo' || pos[0] === 'repos') && pos[1] === 'add') return 'tm project repo add'
   if (args[i] === 'access' && TM_ACCESS_WRITES.has(pos[0])) return `tm access ${pos[0]}`
-  if (args[i] === 'access' && pos[0] === 'preset' && pos[1] === 'add') return 'tm access preset add'
   return ''
 }
 
 // accessOpen is whether tm with args (after its name) is a tm access
 // write a coordinator with accessWrites may run: a rule's (add, rm,
-// edit, drop, undrop, preset add, set local-ports), never for all
+// edit, drop, undrop, set local-ports), never for all
 // projects, never a reset or another switch (the human's).
 function accessOpen(args: string[]): boolean {
   if (args.some(a => a === '--all' || a.startsWith('--all='))) return false
