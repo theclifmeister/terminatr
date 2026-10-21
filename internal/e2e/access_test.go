@@ -15,10 +15,12 @@ import (
 // config.toml change would bring at a restart; tm access explain says
 // what a thread does with a command (T574 phase 1). The Bash allow rule
 // covering the excluded command is no rule of its own: it makes that one
-// run without asking (#655), so the change is one rule out, one in.
+// run without asking (#655), so the change is one rule out, one in. Both configs keep protection
+// sandboxed, as the home's pin did at launch: replacing config.toml drops
+// the pin, and the open default would add six more changes.
 func TestAccessCommands(t *testing.T) {
 	env, projDir, _ := threadEnv(t)
-	writeConfig(t, env, "[projects.demo.sandbox]\nexcluded_commands = [\"npx playwright *\"]\nallow = [\"Bash(npx playwright *)\"]\n")
+	writeConfig(t, env, "[defaults]\nprotection = \"sandboxed\"\n\n[projects.demo.sandbox]\nexcluded_commands = [\"npx playwright *\"]\nallow = [\"Bash(npx playwright *)\"]\n")
 	env.MustCLI("thread", "start", "Fix the login", "--project", "demo")
 	th := threadSession(t, env, "demo", "t-0001")
 	env.WaitState(th, "idle", agentWait)
@@ -43,7 +45,7 @@ func TestAccessCommands(t *testing.T) {
 		t.Errorf("no excluded command from demo in %+v", res.Rules)
 	}
 
-	writeConfig(t, env, "[projects.demo.sandbox]\nexcluded_commands = [\"make bench\"]\n")
+	writeConfig(t, env, "[defaults]\nprotection = \"sandboxed\"\n\n[projects.demo.sandbox]\nexcluded_commands = [\"make bench\"]\n")
 	out := env.MustCLI("access", "show", "demo", "--thread", "t-0001")
 	for _, want := range []string{"Effective access · demo · t-0001 (claude", "without asking", "RESTART TO APPLY: removed since launch", "RESTART TO APPLY: added since launch",
 		"2 changes since launch: tm thread restart t-0001 applies them", "worktree"} {
