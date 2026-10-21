@@ -1452,3 +1452,44 @@ func TestGuardIgnoresNoFields(t *testing.T) {
 		}
 	}
 }
+
+// TestGuardLocatedCwd: a call that leaves an optional location out
+// (Claude's Grep path) is judged at the agent's own folder, the hook
+// payload's cwd, which [hook] keep keeps; without an absolute cwd it
+// goes to the guard as it came (the guard takes the session's folder),
+// and a location given is never changed.
+func TestGuardLocatedCwd(t *testing.T) {
+	a := claude(t)
+	if !slices.Contains(ManifestOf(a).Hook.Keep, ManifestOf(a).Hook.CwdField()) {
+		t.Fatal("claude.toml's [hook] keep drops cwd")
+	}
+	var got map[string]any
+	env := HookEnv{Guard: func(_ string, input map[string]any) *guard.Denial { got = input; return nil }}
+	for _, c := range []struct {
+		cwd   any
+		input map[string]any
+		want  any
+	}{
+		{"/home/u/agentdir", map[string]any{"pattern": "x"}, "/home/u/agentdir"},
+		{"/home/u/agentdir", map[string]any{"pattern": "x", "path": "/elsewhere"}, "/elsewhere"},
+		{"relative", map[string]any{"pattern": "x"}, nil},
+		{nil, map[string]any{"pattern": "x"}, nil},
+	} {
+		got = nil
+		p := map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Grep", "tool_input": c.input}
+		if c.cwd != nil {
+			p["cwd"] = c.cwd
+		}
+		if _, _, err := a.Hook(HookEvent{Event: "PreToolUse", Payload: p}, env); err != nil {
+			t.Fatal(err)
+		}
+		if got["path"] != c.want {
+			t.Errorf("cwd %v, input %v: judged %v, want path %v", c.cwd, c.input, got, c.want)
+		}
+		if c.want != "/elsewhere" {
+			if _, ok := c.input["path"]; ok {
+				t.Errorf("the call's own input was changed: %v", c.input)
+			}
+		}
+	}
+}

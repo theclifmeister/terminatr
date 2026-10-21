@@ -87,7 +87,14 @@ type HookTrim struct {
 	// [[hooks]] event matches. Empty: hook_event_name (docs/SPEC.md §8.2,
 	// the canonical hook wire format).
 	Event string `toml:"event_field"`
+	// Cwd names the payload field holding the agent's own folder (keep
+	// it), the location a tool call that leaves an optional one out
+	// means ([guard.tools] optional). Empty: cwd.
+	Cwd string `toml:"cwd_field"`
 }
+
+// CwdField is the payload field holding the agent's own folder.
+func (h HookTrim) CwdField() string { return cmp.Or(h.Cwd, "cwd") }
 
 // EventField is the payload field naming the hook event.
 func (h HookTrim) EventField() string { return cmp.Or(h.Event, "hook_event_name") }

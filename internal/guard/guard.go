@@ -356,19 +356,31 @@ func (r Rules) judge(tool string, input map[string]any) *Denial {
 	if !ok {
 		return nil
 	}
-	var values, missing []string
+	var values, missing, malformed []string
 	for _, f := range t.Fields {
-		switch s, _ := input[f].(string); {
-		case s != "":
+		v, has := input[f]
+		switch s, ok := v.(string); {
+		case ok && s != "":
 			values = append(values, s)
+		case has && !ok:
+			// There, but not the text a location or command is: the
+			// guard can't tell what it names.
+			malformed = append(malformed, f)
 		case slices.Contains(t.Optional, f):
-			// A location left out: the session's own folder.
+			// A location left out: the session's own folder (the agent's
+			// own, when its hook gave it, is filled in before: agent).
 			if r.Cwd != "" {
 				values = append(values, r.Cwd)
 			}
 		default:
 			missing = append(missing, f)
 		}
+	}
+	if len(malformed) > 0 {
+		d := Unchecked()
+		d.Summary = "a " + tool + " call with a malformed " + strings.Join(malformed, " or ")
+		d.Message = "terminatr guard: this call's " + strings.Join(malformed, ", ") + " is not text the guard can read, so it is refused."
+		return d
 	}
 	if len(missing) > 0 {
 		// A field the tool always carries is missing (its input trimmed
@@ -1040,9 +1052,14 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 			// cd DIR || exit: the line goes on only where the cd went, so
 			// the folders it left merge into those (a script that walks
 			// its subfolders in turn stays in one). So does a cd .. that
-			// always runs: it fails only where the parent is gone.
-			exits := pt.after == "||" && i+1 < len(parts) && exitsLine(parts[i+1].text) && listEnd(parts[i+1].after)
-			up := cmd == "cd" && len(args) == 1 && (args[0] == ".." || args[0] == "../") && listEnd(pt.before) && pt.after != "||"
+			// always runs: it fails only where the parent is gone. Neither
+			// in a list run in the background, which moves no folder of
+			// the line's own shell, and the exit only when it is the
+			// builtin (exitsLine: never return, which doesn't end a -c
+			// line or an eval at their top level).
+			fg := listSep(parts, i) != "&"
+			exits := fg && pt.after == "||" && i+1 < len(parts) && exitsLine(parts[i+1].text) && listEnd(parts[i+1].after) && !exitRedefined(r.line)
+			up := fg && cmd == "cd" && len(args) == 1 && (args[0] == ".." || args[0] == "../") && listEnd(pt.before) && pt.after != "||"
 			if sure || exits || up {
 				olds = slices.Clone(cur)
 			} else {
@@ -1075,12 +1092,31 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	return nil
 }
 
-// exitLine is a part that ends the script: exit or return, with a status
-// or none.
-var exitLine = regexp.MustCompile(`^(exit|return)(\s+[$?A-Za-z0-9_{}]+)?\s*$`)
+// exitLine is a part that ends the script: exit, with a status or none.
+var exitLine = regexp.MustCompile(`^exit(\s+[$?A-Za-z0-9_{}]+)?\s*$`)
 
 // exitsLine reports whether part only ends the script.
 func exitsLine(part string) bool { return exitLine.MatchString(strings.TrimSpace(part)) }
+
+// exitChanged: a line that may make exit something other than the
+// builtin: a function of that name (exit() …, function exit), enable
+// (enable -n exit turns the builtin off), an alias with aliases on.
+var exitChanged = regexp.MustCompile(`(^|[^A-Za-z0-9_])(exit\s*\(\s*\)|function\s+exit([^A-Za-z0-9_]|$)|enable([^A-Za-z0-9_]|$)|alias\s+exit=|expand_aliases)`)
+
+// exitRedefined reports whether line, the whole line as the guard reads
+// it, may make exit no builtin: then an exit is no sure end of it.
+func exitRedefined(line string) bool { return exitChanged.MatchString(line) }
+
+// listSep is the separator that ends the and-or list part i is in: ";",
+// "&" (run in the background), or "" at the line's end.
+func listSep(parts []linePart, i int) string {
+	for ; i < len(parts); i++ {
+		if listEnd(parts[i].after) {
+			return parts[i].after
+		}
+	}
+	return ""
+}
 
 // hiddenCode are the builtins that run shell code the line doesn't show
 // in the shell itself, where a cd in it moves the line's folder.

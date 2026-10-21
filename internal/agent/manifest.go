@@ -901,7 +901,7 @@ func (a *manifestAgent) Hook(ev HookEvent, env HookEnv) ([]Signal, HookResult, e
 		// command that didn't run) leaves it to the next.
 		answered := false
 		if h.Respond != "" && len(res.Stdout) == 0 {
-			out, ran, err := renderRespond(h.Respond, h.Command, ev, env, a.m.Hook)
+			out, ran, err := renderRespond(h.Respond, h.Command, ev, env, a.m.Hook, a.m.Guard.Tools)
 			if err != nil {
 				return sigs, res, err
 			}
@@ -1317,8 +1317,8 @@ func render(tmpl string, data any) (string, error) {
 // methods so the (possibly expensive) context is rendered, and the call
 // judged, only if the template uses them. ran says the entry's command
 // ran and said what came of it.
-func renderRespond(tmpl, command string, ev HookEvent, env HookEnv, hook HookTrim) (out []byte, ran bool, err error) {
-	d := &respondData{ev: ev, env: env, hook: hook, command: command}
+func renderRespond(tmpl, command string, ev HookEvent, env HookEnv, hook HookTrim, tools map[string]guard.Tool) (out []byte, ran bool, err error) {
+	d := &respondData{ev: ev, env: env, hook: hook, command: command, tools: tools}
 	s, err := render(tmpl, d)
 	return []byte(s), d.result != "", err
 }
@@ -1330,6 +1330,7 @@ type respondData struct {
 	ev      HookEvent
 	env     HookEnv
 	hook    HookTrim
+	tools   map[string]guard.Tool
 	judged  bool
 	denial  *guard.Denial
 }
@@ -1371,6 +1372,28 @@ func (d *respondData) Guard() *guard.Denial {
 		d.denial = guard.Unchecked()
 		return d.denial
 	}
-	d.denial = d.env.Guard(tool, input)
+	d.denial = d.env.Guard(tool, d.located(tool, input))
 	return d.denial
+}
+
+// located is a tool call's input with each optional location it leaves
+// out ([guard.tools] optional) set to the agent's own folder, the
+// payload's cwd (an absolute path), which is where the agent looks; with
+// none, the guard takes the session's folder.
+func (d *respondData) located(tool string, input map[string]any) map[string]any {
+	cwd, _ := d.ev.Payload[d.hook.CwdField()].(string)
+	t, ok := d.tools[tool]
+	if !ok || !filepath.IsAbs(cwd) {
+		return input
+	}
+	for _, f := range t.Optional {
+		if _, has := input[f]; !has {
+			input = maps.Clone(input)
+			if input == nil {
+				input = map[string]any{}
+			}
+			input[f] = cwd
+		}
+	}
+	return input
 }
