@@ -352,7 +352,7 @@ func TestJudgeBudget(t *testing.T) {
 	for i := range 200 {
 		fmt.Fprintf(&cds, "cd -P /d%d && cd -P /d%d && ", i, i)
 	}
-	if d := judge(slow, "Bash", cds.String()+"ls"); d == nil || d.Rule != RuleUnreadable {
+	if d := judge(slow, "Bash", cds.String()+"ls"); d == nil || d.Rule != RuleUnreadable || !strings.Contains(d.Message, "file-system checks") {
 		t.Errorf("many checks: %+v", d)
 	}
 	if checks > judgeParse/fsCheck {

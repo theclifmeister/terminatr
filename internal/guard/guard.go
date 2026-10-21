@@ -348,6 +348,10 @@ func (p *parse) verdict(d *Denial) *Denial {
 	case p.late:
 		d = Unchecked()
 		d.Message = "terminatr guard: checking this call took too long, so it is refused; try a shorter or simpler command."
+	case p.over && p.checked:
+		d = unreadable()
+		d.Summary = "a command needing too many file-system checks"
+		d.Message = fmt.Sprintf("terminatr guard: this command needs more file-system checks (links followed, script files looked up) than the guard makes for one call (%d), so it is refused; split it into shorter commands.", judgeParse/fsCheck)
 	case p.over:
 		d = unreadable()
 	}
@@ -697,7 +701,7 @@ func (r Rules) resolve(p string) string {
 	if q, ok := r.ps.resolved[p]; ok {
 		return q
 	}
-	if r.ps.stop(fsCheck, r.depth) {
+	if r.ps.check(r.depth) {
 		return p
 	}
 	q := r.Resolve(p)
@@ -706,6 +710,17 @@ func (r Rules) resolve(p string) string {
 	}
 	r.ps.resolved[p] = q
 	return q
+}
+
+// check counts a file-system check at depth against p's budget and
+// reports whether the reading is over it.
+func (p *parse) check(depth int) bool {
+	was := p.over
+	if p.stop(fsCheck, depth) {
+		p.checked = p.checked || !was && !p.late
+		return true
+	}
+	return false
 }
 
 // file is r.File(p), counted against the judge's budget as resolve is;
@@ -717,7 +732,7 @@ func (r Rules) file(p string) bool {
 	if f, ok := r.ps.files[p]; ok {
 		return f
 	}
-	if r.ps.stop(fsCheck, r.depth) {
+	if r.ps.check(r.depth) {
 		return false
 	}
 	f := r.File(p)
@@ -1063,7 +1078,7 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	}
 	r.line += command
 	r.lineCd = r.lineCd || r.hasCd(command)
-	r.physical = r.physical || physicalCd.MatchString(command)
+	r.physical = r.physical || r.setsPhysical(command)
 	parts, ok := r.topLevel(command)
 	if !ok {
 		// A line it can't split: one part, with any cd in it leaving its
@@ -1113,6 +1128,14 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 			if d := rp.judgeCommands(pt.text, c); d != nil || r.spent() {
 				return d
 			}
+		}
+		// zsh's trap functions (TRAPEXIT() { … }) are traps whose action
+		// is the body.
+		for _, body := range trapFuncs(pt.text) {
+			if r.ps != nil && !slices.Contains(r.ps.traps[from:], body) {
+				r.ps.traps = append(r.ps.traps, body)
+			}
+			hidden = hidden || r.movesFolder(body)
 		}
 		if trapped() {
 			trapDirs = withDirs(trapDirs, cur...)
@@ -1198,7 +1221,7 @@ var hiddenCode = setOf("eval source .")
 
 // runsHidden: one of text's commands is one of those, maybe through
 // command or builtin, or a trap whose action may move the line's folder
-// (a cd in it, hidden code, or an action the guard can't read).
+// (movesFolder, or an action the guard can't read).
 func (r Rules) runsHidden(text string) bool {
 	for _, words := range r.cmds(text) {
 		argv := strip(words)
@@ -1213,7 +1236,7 @@ func (r Rules) runsHidden(text string) bool {
 		}
 		if argv[0] == "trap" {
 			a, ok := r.trapAction(argv[1:])
-			if !ok || a != "" && (r.hasCd(a) || r.nested().runsHidden(a)) {
+			if !ok || a != "" && r.movesFolder(a) {
 				return true
 			}
 		}
@@ -1221,9 +1244,68 @@ func (r Rules) runsHidden(text string) bool {
 	return false
 }
 
+// movesFolder: a trap's action may move the line's folder: a cd in it,
+// hidden code, or a command the guard can't show to be a plain one
+// (plainCommand), which a function or an alias may make a cd.
+func (r Rules) movesFolder(a string) bool {
+	if r.hasCd(a) || r.nested().runsHidden(a) {
+		return true
+	}
+	for _, words := range r.cmds(a) {
+		if argv := strip(words); len(argv) > 0 && !r.plainCommand(argv[0]) {
+			return true
+		}
+	}
+	return false
+}
+
+// plainNames are the commands the guard knows that don't run shell code
+// in the line's shell: its readers, printers and writers, and a few
+// more.
+var plainNames = func() map[string]bool {
+	m := setOf("git gh az tm true false : kill wait sleep exit return date ls find wc logger")
+	for _, set := range []map[string]bool{writers, removers, inPlace, readers, printers, httpClients} {
+		for c := range set {
+			m[c] = true
+		}
+	}
+	for c := range hiddenCode {
+		delete(m, c)
+	}
+	return m
+}()
+
+// plainCommand: name is one of plainNames that the line doesn't make a
+// function or an alias.
+func (r Rules) plainCommand(name string) bool {
+	if !plainNames[name] {
+		return false
+	}
+	q := regexp.QuoteMeta(name)
+	return !regexp.MustCompile(`(?m)(?:^|[\s;&|(){}])(?:function\s+` + q + `(?:[\s(]|$)|` + q + `\s*\(\s*\)|alias\b[^;&|\n]*[\s'"]` + q + `=)`).MatchString(r.line)
+}
+
+// trapFunc is the head of a zsh trap function's definition: TRAPINT() or
+// function TRAPEXIT.
+var trapFunc = regexp.MustCompile(`(?:^|[\s;&|(){}])(?:function\s+TRAP[A-Z0-9]+(?:\s*\(\s*\))?|TRAP[A-Z0-9]+\s*\(\s*\))`)
+
+// trapFuncs are the bodies of the trap functions text defines: what
+// follows each head, to the part's end.
+func trapFuncs(text string) []string {
+	var out []string
+	for _, m := range trapFunc.FindAllStringIndex(text, -1) {
+		if b := strings.TrimSpace(text[m[1]:]); b != "" {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
 // trapAction is the action trap's args set ("" for none: a listing, a
-// reset, a signal ignored); false for one the guard can't read, whose
-// commands a variable or a substitution names ("$cleanup", $(cat f)).
+// reset, a signal ignored); false for one the guard can't read: a
+// command named with a variable or a substitution anywhere in it
+// ("$cleanup", $(cat f), g${x}t), or an action word that lost an
+// unquoted substitution glued to its text ("gh pr "$(echo merge)" 1").
 // The first word after the options is the action, as bash reads it with
 // a signal after it; with none (trap 2, bash's reset) it is read too,
 // which judges no command.
@@ -1242,8 +1324,11 @@ func (r Rules) trapAction(args []string) (string, bool) {
 		return "", true
 	}
 	a := args[i]
+	if r.ps != nil && r.ps.glued[a] {
+		return a, false
+	}
 	for _, words := range r.cmds(a) {
-		if argv := strip(words); len(argv) > 0 && (strings.HasPrefix(argv[0], "$") || strings.Contains(argv[0], "`")) {
+		if argv := strip(words); len(argv) > 0 && strings.ContainsAny(argv[0], "$`") {
 			return a, false
 		}
 	}
@@ -2238,6 +2323,30 @@ func (n nowhere) cd(r Rules, cmd string, args []string) nowhere {
 	return nowhere{dir: dir}
 }
 
+// physicalSetters are the commands whose words physicalCd reads.
+var physicalSetters = func() map[string]bool {
+	m := setOf("set setopt")
+	for c := range shells {
+		m[c] = true
+	}
+	return m
+}()
+
+// setsPhysical: one of line's commands may make its cds physical: set,
+// setopt or a shell whose words physicalCd matches (quoted text given to
+// another command, git commit -m physical, doesn't).
+func (r Rules) setsPhysical(line string) bool {
+	if !physicalCd.MatchString(line) {
+		return false
+	}
+	for _, words := range r.cmds(line) {
+		if argv := strip(words); len(argv) > 0 && physicalSetters[base(argv[0])] && physicalCd.MatchString(strings.Join(argv, " ")) {
+			return true
+		}
+	}
+	return false
+}
+
 // physicalCd is a line that may make its cds physical: bash's set -P or
 // set -o physical (or a shell started with them), zsh's chase_links or
 // chase_dots.
@@ -2295,9 +2404,9 @@ func withDirs(dirs []string, more ...string) []string {
 }
 
 // cdWords are the commands that change a shell's folder.
-var cdWords = setOf("cd pushd popd")
+var cdWords = setOf("cd pushd popd chdir")
 
-// hasCd: some word of text's commands is cd, pushd or popd.
+// hasCd: some word of text's commands is cd, pushd, popd or zsh's chdir.
 func (r Rules) hasCd(text string) bool {
 	for _, words := range r.cmds(text) {
 		if slices.ContainsFunc(words, func(w string) bool { return cdWords[w] }) {
@@ -2805,6 +2914,11 @@ type parse struct {
 	// file).
 	resolved map[string]string
 	files    map[string]bool
+	// checked: the file-system checks put it past its budget.
+	checked bool
+	// glued are words that lost an unquoted substitution glued to their
+	// text (lit), as read.
+	glued map[string]bool
 }
 
 // spent reports whether the judge's reading went past its limits (or
@@ -2873,6 +2987,8 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 	// path starts with stay ($(pwd)/f is no /f).
 	var word, lit strings.Builder
 	inWord, hasLit := false, false
+	// dropped: an unquoted substitution of the word is in word, not lit.
+	dropped := false
 	// quoted: some of the word is quoted or escaped ("2">f writes 2's
 	// output to f: no descriptor).
 	quoted := false
@@ -2884,13 +3000,19 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 	fed, fedShell := false, false
 	endWord := func() {
 		if inWord && hasLit {
+			if dropped && lit.String() != word.String() {
+				if p.glued == nil {
+					p.glued = map[string]bool{}
+				}
+				p.glued[lit.String()] = true
+			}
 			words = append(words, lit.String())
 		} else if inWord {
 			words = append(words, word.String())
 		}
 		word.Reset()
 		lit.Reset()
-		inWord, hasLit, quoted = false, false, false
+		inWord, hasLit, quoted, dropped = false, false, false, false
 	}
 	// text is literal text of the word.
 	text := func(t string) {
@@ -3004,13 +3126,13 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 			end := closing(s, i+2, '(', ')')
 			inner = append(inner, p.read(string(s[i+2:end]), false, nil, depth+1)...)
 			word.WriteString(string(s[i:min(end+1, len(s))]))
-			inWord = true
+			inWord, dropped = true, true
 			i = end
 		case c == '`':
 			end := tickClose(s, i+1)
 			inner = append(inner, p.read(string(s[i+1:end]), false, nil, depth+1)...)
 			word.WriteString(string(s[i:min(end+1, len(s))]))
-			inWord = true
+			inWord, dropped = true, true
 			i = end
 		case c == '\n' && len(open) > 0:
 			// The bodies of the heredocs the line opened.
@@ -3051,7 +3173,7 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 			end := closing(s, i+2, '(', ')')
 			inner = append(inner, p.read(string(s[i+2:end]), false, nil, depth+1)...)
 			word.WriteString(string(s[i:min(end+1, len(s))]))
-			inWord = true
+			inWord, dropped = true, true
 			i = end
 		case strings.ContainsRune(";&|\n(){}", c):
 			endCommand()
