@@ -750,10 +750,25 @@ func lineFolder(w, line string) bool {
 }
 
 // assigns: line names variable name other than to expand it, as an
-// assignment (d=…, d+=…, d[0]=…) or a word (read d, for d in, export d,
-// printf -v d) does.
+// assignment (d=…, d+=…, d[0]=…), an expansion that assigns (${d:=…},
+// ${d=…}) or a word (read d, for d in, export d, printf -v d) does.
 func assigns(line, name string) bool {
-	return regexp.MustCompile("(?m)(^|[\\s;&|(){}!`\"'])" + name + "(\\[|\\+?=|[\\s;&|)`\"']|$)").MatchString(line)
+	return regexp.MustCompile("(?m)(^|[\\s;&|(){}!`\"'])" + name + "(\\[|:?=|\\+=|[\\s;&|)`\"']|$)").MatchString(line)
+}
+
+// bareParam is a bare $NAME or ${NAME} a path starts with.
+var bareParam = regexp.MustCompile(`^\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))`)
+
+// bareVar: path w starts with a bare $NAME or ${NAME}, no operator in it
+// (${D:-.} may be a relative folder), that the line doesn't set
+// (assigns): where its value says, which a cd doesn't move.
+func bareVar(w, line string) bool {
+	m := bareParam.FindStringSubmatch(w)
+	if m == nil {
+		return false
+	}
+	name := m[1] + m[2]
+	return name != "_" && !assigns(line, name)
 }
 
 // unplaced is the tm-files refusal of a path from a folder the guard
@@ -2229,7 +2244,7 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 		if r.lineCd && lineFolder(w, r.line) {
 			return floor(r.unplaced(cmd + " of " + safe(w) + " after a cd"))
 		}
-		if r.Cwd == "" && !strings.HasPrefix(slash(w), "/") && !strings.HasPrefix(w, "~") && !strings.HasPrefix(w, "$") && !drive.MatchString(slash(w)) {
+		if r.Cwd == "" && !strings.HasPrefix(slash(w), "/") && !strings.HasPrefix(w, "~") && !bareVar(w, r.line) && !drive.MatchString(slash(w)) {
 			return floor(r.lostCd(cmd + " of " + safe(w) + " after a cd"))
 		}
 		p := r.abs(w)

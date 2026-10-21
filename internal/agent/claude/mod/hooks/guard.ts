@@ -1046,7 +1046,7 @@ function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): D
       return null
     }
     if (r.lineCd && lineFolder(w, r.line ?? '')) return floor(unplaced(r, `${cmd} of ${safe(w)} after a cd`))
-    if (r.cwd === '' && !slash(w).startsWith('/') && !w.startsWith('~') && !w.startsWith('$') && !DRIVE.test(slash(w))) {
+    if (r.cwd === '' && !slash(w).startsWith('/') && !w.startsWith('~') && !bareVar(w, r.line ?? '') && !DRIVE.test(slash(w))) {
       return floor(lostCd(r, `${cmd} of ${safe(w)} after a cd`))
     }
     const p = abs(r, w)
@@ -1147,10 +1147,19 @@ function lineFolder(w: string, line: string): boolean {
 }
 
 // assigns: line names variable name other than to expand it, as an
-// assignment (d=…, d+=…, d[0]=…) or a word (read d, for d in, export d,
-// printf -v d) does.
+// assignment (d=…, d+=…, d[0]=…), an expansion that assigns (${d:=…},
+// ${d=…}) or a word (read d, for d in, export d, printf -v d) does.
 function assigns(line: string, name: string): boolean {
-  return new RegExp(`(^|[\\s;&|(){}!\`"'])${name}(\\[|\\+?=|[\\s;&|)\`"']|$)`, 'm').test(line)
+  return new RegExp(`(^|[\\s;&|(){}!\`"'])${name}(\\[|:?=|\\+=|[\\s;&|)\`"']|$)`, 'm').test(line)
+}
+
+// bareVar: path w starts with a bare $NAME or ${NAME}, no operator in it
+// (${D:-.} may be a relative folder), that the line doesn't set
+// (assigns): where its value says, which a cd doesn't move.
+function bareVar(w: string, line: string): boolean {
+  const m = /^\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))/.exec(w)
+  const name = m ? (m[1] ?? m[2]) : ''
+  return name !== '' && name !== '_' && !assigns(line, name)
 }
 
 function judgeGit(r: Rules, has: (id: string) => boolean, args: string[]): Denial | null {
