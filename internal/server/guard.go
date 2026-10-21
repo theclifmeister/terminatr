@@ -170,7 +170,7 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 	g.NoWrite = s.guardNoWrite(r)
 	g.CdPath = s.sessionCdPath(lc.cfg.SecretEnvNames(r.Project), home)
 	if home != "" {
-		g.NoWriteNames = withParentReal(agent.ShellPatterns(home, os.Getenv))
+		g.NoWriteNames = withLanding(agent.ShellPatterns(home, os.Getenv))
 	}
 	// The project lets its coordinator change its access: the floor lets
 	// its tm access writes through, which tm checks in the server.
@@ -339,15 +339,13 @@ func (s *Server) guardNoWrite(r SessionRecord) []string {
 		out = append(out, realPath(run), run)
 	}
 	if r.Cwd != "" && (r.Role == proto.RoleThread || r.Role == proto.RoleCoordinator) {
-		// Where a write lands (realTarget) and as the call may name it.
-		out = append(out, hookSettings(realPath(r.Cwd))...)
-		out = append(out, hookSettings(r.Cwd)...)
+		out = append(out, withLanding(hookSettings(r.Cwd))...)
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		s.mu.Lock()
 		reg := s.agents
 		s.mu.Unlock()
-		out = append(out, withParentReal(agent.ShellState(reg, home, os.Getenv))...)
+		out = append(out, withLanding(agent.ShellState(reg, home, os.Getenv))...)
 	}
 	dir, err := project.Dir(r.Project)
 	if err != nil {
@@ -460,20 +458,13 @@ func homeFloor(h string) []string {
 			names = append(names, e.Name())
 		}
 	}
-	// Where a write lands (realTarget: the home's real path, as a name
-	// that doesn't exist yet has none of its own) and as written.
-	var out []string
+	var paths []string
 	for _, n := range names {
-		if n == "projects" || n == "worktrees" {
-			continue
-		}
-		for _, p := range []string{filepath.Join(realPath(h), n), filepath.Join(h, n)} {
-			if !slices.Contains(out, p) {
-				out = append(out, p)
-			}
+		if n != "projects" && n != "worktrees" {
+			paths = append(paths, filepath.Join(h, n))
 		}
 	}
-	return out
+	return withLanding(paths)
 }
 
 // hookSettings are the agent settings files in a session's folder dir
@@ -514,13 +505,19 @@ func (s *Server) guardMods(r SessionRecord, home string) []guard.ModRule {
 	return out
 }
 
-// withParentReal is paths, each followed by its name under its folder's
-// real path: where a write lands when the file doesn't exist yet (and
-// so has no real path of its own) but a link leads to its folder.
-func withParentReal(paths []string) []string {
+// withLanding is paths, each as written and where a write to it lands
+// (realTarget: the real path of its nearest existing folder, the rest
+// joined on as written), without repeats. A path whose folders don't
+// exist yet has no real path of its own, but a link above them still
+// carries the write elsewhere (macOS's /var to /private/var).
+func withLanding(paths []string) []string {
 	var out []string
 	for _, p := range paths {
-		out = append(out, p, filepath.Join(realPath(filepath.Dir(p)), filepath.Base(p)))
+		for _, q := range []string{filepath.Clean(p), realTarget(p)} {
+			if !slices.Contains(out, q) {
+				out = append(out, q)
+			}
+		}
 	}
 	return out
 }
