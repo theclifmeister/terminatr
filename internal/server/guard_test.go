@@ -543,6 +543,25 @@ func TestRealTarget(t *testing.T) {
 	}
 }
 
+// TestWithLanding: a floor path under folders that don't exist yet, with
+// a link above them (macOS's /var), is held where a write to it lands
+// as well as as written (T660).
+func TestWithLanding(t *testing.T) {
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	if err := os.MkdirAll(filepath.Join(dir, "real"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "real"), filepath.Join(dir, "link")); err != nil {
+		t.Skip(err)
+	}
+	in := filepath.Join(dir, "link", ".codex", "shell_snapshots")
+	got := withLanding([]string{in, in})
+	want := []string{in, filepath.Join(dir, "real", ".codex", "shell_snapshots")}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
 func TestAccessMergeCommands(t *testing.T) {
 	testPaths(t)
 	p := newWatchProject(t)

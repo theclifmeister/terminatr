@@ -211,7 +211,7 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 		// known yet, or one whose folder isn't its recorded checkout.
 		if tree != nil {
 			// Its settings that could turn its hooks off (hookSettings).
-			a.NoWriteFiles = append(a.NoWriteFiles, hookSettings(realPath(tree.Dir))...)
+			a.NoWriteFiles = append(a.NoWriteFiles, withLanding(hookSettings(tree.Dir))...)
 			g := threadGitAccess(tree.CommonDir, tree.GitDir)
 			a.Write, a.WriteFiles = g.Write, g.WriteFiles
 			a.NoWrite = append(a.NoWrite, g.NoWrite...)

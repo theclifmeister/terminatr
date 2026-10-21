@@ -169,8 +169,9 @@ type Rules struct {
 	line   string
 	lineCd bool
 	// physical: the line may make its cds physical; cdpath: it may set
-	// CDPATH or zsh's cdpath (lineFlags).
-	physical, cdpath bool
+	// CDPATH or zsh's cdpath; pwdSet: it may set $PWD, $OLDPWD or the
+	// folder stack (lineFlags).
+	physical, cdpath, pwdSet bool
 	// olds are the folders the line was in before its folder now
 	// ($OLDPWD, ~-; "" one it can't tell), as judgeLine follows its cds.
 	olds []string
@@ -1015,7 +1016,7 @@ func (r Rules) unplaced(summary string) *Denial {
 	if r.Role == "thread" {
 		tell = "say so in your report"
 	}
-	m := "a path given to a command that writes that starts with a folder the guard can't place ($OLDPWD or ~- from before the line, $PWD changed by an operator, or after a cd $_, a substitution, a positional parameter or a variable the line sets) could be tm's settings or the project folder. Give the path from /, from a variable the line doesn't set ($TMPDIR/x), or relative after a cd to a folder written out; if none of that fits, " + tell + "."
+	m := "a path given to a command that writes that starts with a folder the guard can't place ($OLDPWD or ~- from before the line, $PWD changed by an operator, $PWD, $OLDPWD or the folder stack after the line names them other than to read them, or after a cd $_, a substitution, a positional parameter or a variable the line sets) could be tm's settings or the project folder. Give the path from /, from a variable the line doesn't set ($TMPDIR/x), or relative after a cd to a folder written out; if none of that fits, " + tell + "."
 	return &Denial{Rule: RuleTMFiles, Message: "terminatr guard (" + RuleTMFiles + "): " + m, Summary: summary}
 }
 
@@ -1026,7 +1027,7 @@ func (r Rules) lostCd(summary string) *Denial {
 	if r.Role == "thread" {
 		tell = "say so in your report"
 	}
-	m := "after a cd the guard can't follow (to a variable or a substitution, cd -, popd, or one inside an if or a loop), a relative path given to a command that writes could be tm's settings or the project folder. Give the path from / or a variable ($TMPDIR/x), cd to a folder written out and join the rest with &&, or run the cd in a call of its own; if none of that fits, " + tell + "."
+	m := "after a cd the guard can't follow (to a variable or a substitution, cd -, popd, or one inside ( ), an if or a loop), a relative path given to a command that writes could be tm's settings or the project folder. Give the path from / or a variable ($TMPDIR/x), cd to a folder written out and join the rest with &&, or run the cd in a call of its own; if none of that fits, " + tell + "."
 	return &Denial{Rule: RuleTMFiles, Message: "terminatr guard (" + RuleTMFiles + "): " + m, Summary: summary}
 }
 
@@ -1114,9 +1115,10 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, st, ts lineDi
 	}
 	r.line += command
 	r.lineCd = r.lineCd || r.hasCd(command)
-	physical, cdpath := r.lineFlags(command)
+	physical, cdpath, pwdSet := r.lineFlags(command)
 	r.physical = r.physical || physical
 	r.cdpath = r.cdpath || cdpath
+	r.pwdSet = r.pwdSet || pwdSet
 	parts, ok := r.topLevel(command)
 	if !ok {
 		// A line it can't split: one part, with any cd in it leaving its
@@ -2474,6 +2476,12 @@ func (n nowhere) cd(r Rules, cmd string, args []string) []string {
 	if n.dir == "" && !strings.HasPrefix(a, "/") && !strings.HasPrefix(a, "~") && !drive.MatchString(slash(a)) {
 		return []string{""}
 	}
+	// On a line that may set $PWD (pwdSet), a logical cd to a relative
+	// folder may be taken from it (zsh does) rather than from where the
+	// guard follows the line.
+	if r.pwdSet && mode != 'P' && !strings.HasPrefix(a, "/") && !strings.HasPrefix(a, "~") && !drive.MatchString(slash(a)) {
+		return []string{""}
+	}
 	r.Cwd = n.dir
 	dir := r.abs(a)
 	if mode == 'P' || mode == 0 && r.physical {
@@ -2693,10 +2701,19 @@ var optionsWord = regexp.MustCompile(`^options(?:\[|\+?=|$)`)
 // cdpath, it names CDPATH or zsh's cdpath in any form (an assignment,
 // typeset, +=, an indirect name n=CDPATH, any case), in its text or its
 // words dequoted (C\DPATH): then a relative cd may land elsewhere.
-func (r Rules) lineFlags(line string) (physical, cdpath bool) {
+//
+// pwdSet, it names PWD, OLDPWD, DIRSTACK or zsh's dirstack other than
+// to expand it (namesPWD), in its text or its words dequoted: then
+// $PWD, ~+, pwd, $OLDPWD, ~- and the folder stack may not be the
+// folders the line's cds leave.
+func (r Rules) lineFlags(line string) (physical, cdpath, pwdSet bool) {
 	cdpath = cdPath.MatchString(line)
+	pwdSet = namesPWD(line)
 	for _, words := range r.cmds(line) {
 		for _, w := range words {
+			if namesPWD(w) {
+				pwdSet = true
+			}
 			if strings.HasPrefix(w, "SHELLOPTS=") || strings.HasPrefix(w, "BASHOPTS=") || optionsWord.MatchString(w) {
 				physical = true
 			}
@@ -2734,7 +2751,26 @@ func (r Rules) lineFlags(line string) (physical, cdpath bool) {
 			}
 		}
 	}
-	return physical, cdpath
+	return physical, cdpath, pwdSet
+}
+
+// pwdExpanded is an expansion of PWD, OLDPWD, DIRSTACK or dirstack that
+// only reads it: $PWD, ${PWD}, ${#PWD}, ${PWD:-x}, ${PWD%/*},
+// ${DIRSTACK[1]}; not ${PWD:=x} or ${PWD=x}, which may assign it, nor
+// one whose body has a $, a backtick or a brace in it, where an
+// expansion nested in it may (${PWD:-${PWD:=x}}): those count as naming
+// it, failing safe.
+var pwdExpanded = regexp.MustCompile("\\$(?:PWD|OLDPWD|DIRSTACK|dirstack)\\b|\\$\\{[#!]?(?:PWD|OLDPWD|DIRSTACK|dirstack)(?:\\[[^]$`{}]*\\])?(?:[^:=}$`{][^}$`{]*|:[^=}$`{][^}$`{]*)?\\}")
+
+// pwdName is PWD, OLDPWD, DIRSTACK or dirstack as a name of its own.
+var pwdName = regexp.MustCompile(`(?:^|[^A-Za-z0-9_])(?:PWD|OLDPWD|DIRSTACK|dirstack)(?:[^A-Za-z0-9_]|$)`)
+
+// namesPWD: text names PWD, OLDPWD, DIRSTACK or dirstack other than to
+// expand it, in any form: an assignment (PWD=, +=, [0]=, ${PWD:=…}),
+// read, declare, typeset, local, export, unset, printf -v, for, an
+// indirect name (n=PWD, declare -n), or text that mentions it.
+func namesPWD(text string) bool {
+	return pwdName.MatchString(pwdExpanded.ReplaceAllString(text, ""))
 }
 
 // physicalCd is a line that may make its cds physical: bash's set -P or
@@ -3179,6 +3215,8 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 		// folders before.
 		if kind, n := folderStart(w); kind != "" {
 			switch {
+			case r.pwdSet:
+				kind = "unknown" // the line may have set it (namesPWD)
 			case kind == "bottom" && pushes.MatchString(r.line), kind == "bottomStack" && pushes.MatchString(r.line):
 				kind = "unknown"
 			case kind == "bottom":
