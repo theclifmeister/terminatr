@@ -31,6 +31,11 @@ var (
 	// context, and a loaded machine after /clear can miss 500 ms, which
 	// would leave the session without them.
 	hookContext = agent.HookContextWait
+	// hookCommand is the total for an entry with timeout = "command"
+	// (a coordinator's /saveclear, /answer): the server runs the command
+	// before it answers. Sent once: a command the server ran but didn't
+	// answer in time must not run again.
+	hookCommand = agent.HookContextWait
 	// hookTries and hookRetry: a "context" event (SessionStart) the server
 	// didn't take (no connection, closed, refused) is sent again, within
 	// hookContext: lost, it would leave the session without its context,
@@ -97,17 +102,25 @@ func runHook(e *Env, args []string) error {
 		}
 	}
 	event, _ := payload[hook.EventField()].(string)
-	payload = hook.Trim(payload)
-	total, tries := hookAck, 1
+	total, tries, once := hookAck, 1, false
 	for _, h := range hooks {
 		if h.Event != event || h.Respond == "" {
 			continue
 		}
 		total = max(total, hookResponse)
-		if h.Timeout == agent.HookTimeoutContext {
+		switch h.Timeout {
+		case agent.HookTimeoutContext:
 			total, tries = max(total, hookContext), hookTries
+		case agent.HookTimeoutCommand:
+			if h.Matches(event, payload) {
+				total, once = max(total, hookCommand), true
+			}
 		}
 	}
+	if once {
+		tries = 1
+	}
+	payload = hook.Trim(payload)
 	params := proto.HookEventParams{Session: session, Agent: name, Event: event,
 		Payload: payload, Token: token}
 	start := time.Now()

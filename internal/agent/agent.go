@@ -71,6 +71,10 @@ type LaunchSpec struct {
 	// its command hooks. The core sets it only when [agent_mod] enabled is on
 	// and the agent's version is at least ModsMinVersion.
 	Mods bool
+	// MCPClash says the agent's own config has an MCP server of the name
+	// tm mcp gets, or may (an MCPClasher's answer): the launch gives tm's
+	// tools no rule that runs them without a prompt, and one that asks.
+	MCPClash bool
 	// PaneScheme is "dark" or "light" when the console's theme draws the
 	// panes with its pane palette for that scheme (docs/SPEC.md §5.3),
 	// else "": an agent whose own theme is truecolor can switch to one
@@ -421,6 +425,17 @@ type Typist interface {
 // templates. An agent without it gets home's default of "".
 type ConfigDirer interface {
 	ConfigDir(home string) string
+}
+
+// MCPClasher is an Agent that gets tm mcp as an MCP server of a fixed
+// name (docs/SPEC.md §8.6, tm mcp), which a server of the user's or the
+// folder's own config may also have, or may (one it can't read): then
+// the launch makes tm's tools ask (LaunchSpec.MCPClash), and MCPClash
+// is what it tells the human, "" when none does. home is the user's
+// home directory, dir the session's folder, yolo the launch's
+// LaunchSpec.Yolo.
+type MCPClasher interface {
+	MCPClash(home, dir string, yolo bool) string
 }
 
 // Truster is an Agent that can mark a directory as trusted ahead of

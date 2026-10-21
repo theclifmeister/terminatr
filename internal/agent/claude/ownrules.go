@@ -2,13 +2,10 @@ package claude
 
 import (
 	"encoding/json"
-	"io"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
-	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 )
 
 // Claude's own settings files (T574 §3.1): Claude merges the user's
@@ -94,21 +91,8 @@ func homeName(home, path string) string {
 // the read), too large or not JSON.
 func readSettings(root, rel string) (ownSettings, bool) {
 	var s ownSettings
-	r, err := os.OpenRoot(root)
-	if err != nil {
-		return s, false
-	}
-	defer r.Close()
-	f, err := fsx.OpenInNoBlock(r, rel)
-	if err != nil {
-		return s, false
-	}
-	defer f.Close()
-	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() || fi.Size() > maxSettings {
-		return s, false
-	}
-	b, err := io.ReadAll(io.LimitReader(f, maxSettings+1))
-	if err != nil || len(b) > maxSettings {
+	b, err := readIn(root, rel, maxSettings)
+	if err != nil || b == nil {
 		return s, false
 	}
 	return s, json.Unmarshal(b, &s) == nil

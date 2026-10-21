@@ -800,6 +800,16 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 	}
 	spec.Theme = s.launchThemeOf(spec.PaneScheme, lc.cfg)
 	spec.LiveTheme = s.writeThemeFile(a, spec.Theme, v.schemeName, lc.cfg != nil && followsTerminal(lc.cfg))
+	// Without the mod, tm mcp gives the typed tools: a server of the
+	// agent's own config with its name would stand in for it.
+	if c, ok := a.(agent.MCPClasher); ok && !spec.Mods {
+		home, _ := os.UserHomeDir()
+		if w := c.MCPClash(home, r.Cwd, spec.Yolo); w != "" {
+			spec.MCPClash = true
+			p.warnings = append(p.warnings, w)
+			s.log.Printf("session %s: %s", r.ID, w)
+		}
+	}
 	launch, err := a.Launch(spec)
 	if err != nil {
 		p.abandon()
