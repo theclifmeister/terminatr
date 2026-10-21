@@ -14,7 +14,7 @@ import (
 )
 
 // The sidebar's extra keys (docs/SPEC.md §4): the filter (/), the rows
-// that need you (w W), the nth project (1-9), the ends and pages (home
+// that need you (W), the nth project (1-9), the ends and pages (home
 // end pgup pgdown), and the last place (prefix+;). The filter and the
 // last place are this console's own, not the view's: another console
 // filters its sidebar for itself. Both outlive the screen, so the
@@ -251,7 +251,7 @@ const (
 
 // sideKeysIn is what a sidebar key works on: the tree as shown (tree,
 // filtered and folded), the whole tree with every project expanded and
-// no filter (full, for w W), the sidebar's size and the keyboard's row.
+// no filter (full, for W), the sidebar's size and the keyboard's row.
 type sideKeysIn struct {
 	tree, full func() []treeRow
 	w, h       int
@@ -266,10 +266,14 @@ func sideKeyFor(in sideKeysIn, key string) (sideStep, bool) {
 	if st, ok := sideFilterKey(in, key); ok {
 		return st, true
 	}
+	typed := key
 	key = binds.side.canon(key)
 	op, ok := sideOp(key)
 	if !ok {
 		return sideStep{}, false
+	}
+	if op == sideIn && !plainKey(typed) {
+		op = sideUnfoldOnly
 	}
 	if op >= sideFirst {
 		return sideExtraStep(in, op, key), true

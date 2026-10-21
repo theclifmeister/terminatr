@@ -1,5 +1,5 @@
  PROJECTS                      1   │ tm dashboard                                               ● server ok · 2 sessions
- ■ demo        2                   │ demo ────────────────────────────────────────────── ● active — space to deactivate
+ ■ demo        2                   │ demo ────────────────────────────────────────────────── ● active — S to deactivate
  └─ coordi…             ·          │  coordinator                      —           not running; enter starts it  3 inbox
     ├─ T1    50% ☐      ○          │  T1 Fix the login              ○ idle             report new  50% 1/2 ▸ Fix it  <duration>…
     └─ T2   ╭─ demo ───────────────────────────────────────────────────────────────────────────────────────╮

@@ -3,7 +3,6 @@ package e2e
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/theclifmeister/terminatr/internal/emu"
 )
@@ -30,22 +29,27 @@ func TestSmokePrefixQuit(t *testing.T) {
 		name, keys, shows string
 	}{
 		{"the list", "", "SESSIONS"},
-		{"the project popup", "a", "1 overview"},
-		{"the keys tab", "a6", "On the dashboard"},
-		{"the inbox", "i", "The coordinator handles these"},
-		{"the tasks", "t", "3 tasks"},
+		{"the project popup", "A", "1 overview"},
+		{"the keys tab", "A6", "On the dashboard"},
+		{"the inbox", "I", "The coordinator handles these"},
+		{"the tasks", "T", "3 tasks"},
 		{"the settings", ",", "enter change"},
 		{"the help", "?", "↑ ↓ scroll · esc close"},
-		{"a prompt", "n", "New project"},
+		{"a prompt", "+", "New project"},
 		{"the sidebar", "\t", "esc back to the list"},
 	} {
 		w := env.Window(100, 30)
 		w.WaitFor("SESSIONS", wait)
 		var keys []any
-		for _, k := range c.keys {
-			if k == '\t' {
+		for i, k := range c.keys {
+			switch {
+			case k == '\t':
 				keys = append(keys, tab)
-			} else {
+			case i == 0:
+				// The coordinator's row is selected: a plain key would
+				// type through to it, so its command is prefix+key.
+				keys = append(keys, CtrlB, string(k))
+			default:
 				keys = append(keys, string(k))
 			}
 		}
@@ -54,14 +58,19 @@ func TestSmokePrefixQuit(t *testing.T) {
 		}
 		w.WaitFor(c.shows, wait)
 		if c.name == "the list" {
-			// Plain q quits nothing.
+			// Plain q quits nothing: on the coordinator's row it types
+			// through to it.
 			w.Type("q")
-			w.Quiet(300 * time.Millisecond)
+			w.WaitFor("❯ q", agentWait)
 			select {
 			case <-w.Exited():
 				t.Fatal("plain q quit the dashboard")
 			default:
 			}
+			w.Key(emu.Key{Special: emu.KeyBackspace})
+			w.WaitUntil("the prompt empty again", wait, func(sc string) bool { return !strings.Contains(sc, "❯ q") })
+			w.Detach()
+			w.WaitFor("SESSIONS", wait)
 		}
 		w.Quit()
 		w.WaitExit(wait)

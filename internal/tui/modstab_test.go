@@ -162,7 +162,7 @@ func modState(t *testing.T, src *fakeSource, id string) mod.Mod {
 func TestModsTabList(t *testing.T) {
 	_, m := modsDash(t)
 	out := screen(m)
-	for _, want := range []string{"4 mods", "○ Nord", "theme", "0.4.0", "off", "Review age", "code · column · rules", "0.3.1", "▲ Future", "incompatible: future needs mod API 1.99", "e examples", "p permissions"} {
+	for _, want := range []string{"4 mods", "○ Nord", "theme", "0.4.0", "off", "Review age", "code · column · rules", "0.3.1", "▲ Future", "incompatible: future needs mod API 1.99", "E examples", "p permissions"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("Mods tab lacks %q:\n%s", want, out)
 		}
@@ -187,7 +187,7 @@ func TestModsTabList(t *testing.T) {
 
 // TestModsConsent: enter on an off mod opens its consent, each
 // permission in plain words, its rules addendum in full and "Enable
-// <name>?"; n leaves it off, y turns it on with every permission it
+// <name>?"; N leaves it off, Y turns it on with every permission it
 // asks for, saved to the settings file; enter on an on mod turns it
 // off with no question. A mod that can't run says why.
 func TestModsConsent(t *testing.T) {
@@ -200,12 +200,12 @@ func TestModsConsent(t *testing.T) {
 			t.Errorf("consent lacks %q:\n%s", want, out)
 		}
 	}
-	modAct(t, m, src, "n")
+	modAct(t, m, src, "N")
 	if md := modState(t, src, "review-age"); md.State != mod.Disabled {
 		t.Fatalf("n turned it %s", md.State)
 	}
 	press(m, "enter")
-	modAct(t, m, src, "y")
+	modAct(t, m, src, "Y")
 	md := modState(t, src, "review-age")
 	if md.State != mod.Enabled || !slices.Equal(md.Grants, []string{mod.PermProjectRead, mod.PermNet}) {
 		t.Fatalf("after y: %s with %v", md.State, md.Grants)
@@ -230,12 +230,12 @@ func TestModsConsent(t *testing.T) {
 
 // TestModsWantsMore: a mod on with less than it asks for shows ◆ and
 // what it wants more; p takes a permission back at once and grants one
-// after y; enter on it asks for what it wants more, o turns it off.
+// after Y; enter on it asks for what it wants more, o turns it off.
 func TestModsWantsMore(t *testing.T) {
 	src, m := modsDash(t)
 	selectMod(t, m, "review-age")
 	press(m, "enter")
-	modAct(t, m, src, "y")
+	modAct(t, m, src, "Y")
 	press(m, "p")
 	if out := screen(m); !strings.Contains(out, "Review age · permissions") || !strings.Contains(out, "granted") {
 		t.Fatalf("p doesn't list its permissions:\n%s", out)
@@ -262,14 +262,14 @@ func TestModsWantsMore(t *testing.T) {
 	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "talks to api.example.com") {
 		t.Fatalf("granting asks first: %T", m.top())
 	}
-	modAct(t, m, src, "y")
+	modAct(t, m, src, "Y")
 	if md := modState(t, src, "review-age"); !md.Granted(mod.PermNet) {
 		t.Errorf("y didn't grant net: %v", md.Grants)
 	}
 }
 
 // TestModsSettingsPage: s lists the mod's own settings from its
-// manifest; + changes a number within its range, x puts it back.
+// manifest; + changes a number within its range, X puts it back.
 func TestModsSettingsPage(t *testing.T) {
 	src, m := modsDash(t)
 	selectMod(t, m, "review-age")
@@ -281,7 +281,7 @@ func TestModsSettingsPage(t *testing.T) {
 	if md := modState(t, src, "review-age"); md.Settings["warn_after_hours"] != int64(25) {
 		t.Errorf("+ set %v (%s)", md.Settings["warn_after_hours"], m.msg)
 	}
-	modAct(t, m, src, "x")
+	modAct(t, m, src, "X")
 	if md := modState(t, src, "review-age"); md.Settings["warn_after_hours"] != int64(24) {
 		t.Errorf("x left %v", md.Settings["warn_after_hours"])
 	}
@@ -294,7 +294,7 @@ func TestModsSettingsPage(t *testing.T) {
 }
 
 // TestModsTextSetting: enter on a text setting opens a line with its
-// value; enter saves what was typed or pasted, esc leaves it, x puts
+// value; enter saves what was typed or pasted, esc leaves it, X puts
 // the default back, and a value with a control character is refused.
 func TestModsTextSetting(t *testing.T) {
 	src, m := modsDash(t)
@@ -334,7 +334,7 @@ func TestModsTextSetting(t *testing.T) {
 		t.Errorf("config.toml:\n%s", data)
 	}
 
-	modAct(t, m, src, "x")
+	modAct(t, m, src, "X")
 	if md := modState(t, src, "review-age"); md.Settings["wording"] != "waiting" {
 		t.Errorf("x left %q", md.Settings["wording"])
 	}
@@ -357,12 +357,12 @@ func TestModsTextSetting(t *testing.T) {
 // TestModsFailure: a mod whose host failed shows ▲ failed with its last
 // error and its cells' fate; the footer says so once, naming where the
 // details are. A built-in mod says built in, and can't be removed or
-// updated on its own; x removes another after y.
+// updated on its own; X removes another after Y.
 func TestModsFailure(t *testing.T) {
 	src, m := modsDash(t)
 	selectMod(t, m, "review-age")
 	press(m, "enter")
-	modAct(t, m, src, "y")
+	modAct(t, m, src, "Y")
 	m.msg = ""
 	src.data.ModHosts = map[string]proto.ModHost{"review-age": {ID: "review-age", State: "failed", Err: "401 from api.example.com"}}
 	m.setData(src.data)
@@ -390,7 +390,7 @@ func TestModsFailure(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "theme · built in") {
 		t.Errorf("a built-in mod says so:\n%s", out)
 	}
-	for _, k := range []string{"x", "u"} {
+	for _, k := range []string{"X", "U"} {
 		m.msg = ""
 		press(m, k)
 		if _, ok := m.top().(*settingsView); !ok || !strings.Contains(m.msg, "built in") {
@@ -399,8 +399,8 @@ func TestModsFailure(t *testing.T) {
 	}
 
 	selectMod(t, m, "future")
-	press(m, "x")
-	modAct(t, m, src, "y")
+	press(m, "X")
+	modAct(t, m, src, "Y")
 	if slices.ContainsFunc(src.data.Mods, func(md mod.Mod) bool { return md.ID == "future" }) {
 		t.Errorf("x, y didn't remove it: %v", src.data.Mods)
 	}
@@ -409,16 +409,16 @@ func TestModsFailure(t *testing.T) {
 // TestModsHostStates: an enabled code mod is marked by its host's
 // state (mods design §8): running ● with its pid and memory in the
 // details, starting ◌, idle ● waiting for its first event, backoff ▲
-// restarting in so many seconds, failed ▲; a data mod is unchanged. r
+// restarting in so many seconds, failed ▲; a data mod is unchanged. R
 // restarts a code mod that is on, and refuses a data mod and an off one.
 func TestModsHostStates(t *testing.T) {
 	src, m := modsDash(t)
 	selectMod(t, m, "review-age")
 	press(m, "enter")
-	modAct(t, m, src, "y")
+	modAct(t, m, src, "Y")
 	selectMod(t, m, "nord")
 	press(m, "enter")
-	modAct(t, m, src, "y")
+	modAct(t, m, src, "Y")
 	host := func(h proto.ModHost) {
 		h.ID = "review-age"
 		src.data.ModHosts = map[string]proto.ModHost{"review-age": h, "nord": {ID: "nord", State: "failed", Err: "never"}}
@@ -434,8 +434,8 @@ func TestModsHostStates(t *testing.T) {
 		{"running", proto.ModHost{State: "running", PID: 4242, RSS: 42_000_000, Restarts: 1}, []string{"● Review age", "Runs as pid 4242, using 42", "restarted 1×"}},
 		{"starting", proto.ModHost{State: "starting"}, []string{"◌ Review age", "Starting: its host loads its script."}},
 		{"idle", proto.ModHost{State: "idle"}, []string{"● Review age", "waits for its first", "Waits for its first event: its host starts then."}},
-		{"backoff", proto.ModHost{State: "backoff", Next: time.Now().Add(4500 * time.Millisecond), Err: "exit status 1"}, []string{"▲ Review age", "restarting in 5s: exit status 1", "r restarts it now"}},
-		{"failed", proto.ModHost{State: "failed", Err: "crashed 3 times in 5m"}, []string{"▲ Review age", "failed: crashed 3 times in 5m", "r restarts it; l shows its log"}},
+		{"backoff", proto.ModHost{State: "backoff", Next: time.Now().Add(4500 * time.Millisecond), Err: "exit status 1"}, []string{"▲ Review age", "restarting in 5s: exit status 1", "R restarts it now"}},
+		{"failed", proto.ModHost{State: "failed", Err: "crashed 3 times in 5m"}, []string{"▲ Review age", "failed: crashed 3 times in 5m", "R restarts it; l shows its log"}},
 	} {
 		host(c.h)
 		out := screen(m)
@@ -452,29 +452,29 @@ func TestModsHostStates(t *testing.T) {
 		}
 	}
 
-	drain(t, m, keyPress(m, "r"))
+	drain(t, m, keyPress(m, "R"))
 	if !slices.Equal(src.restarted, []string{"review-age"}) || m.msg != "restarted Review age" {
 		t.Errorf("r: restarted %v, %q", src.restarted, m.msg)
 	}
 	selectMod(t, m, "nord")
 	m.msg = ""
-	drain(t, m, keyPress(m, "r"))
+	drain(t, m, keyPress(m, "R"))
 	if len(src.restarted) != 1 || !strings.Contains(m.msg, "no code to restart") {
 		t.Errorf("r on a data mod: restarted %v, %q", src.restarted, m.msg)
 	}
 	selectMod(t, m, "review-age")
 	modAct(t, m, src, "enter")
 	m.msg = ""
-	drain(t, m, keyPress(m, "r"))
+	drain(t, m, keyPress(m, "R"))
 	if len(src.restarted) != 1 || !strings.Contains(m.msg, "is off") {
 		t.Errorf("r on an off mod: restarted %v, %q", src.restarted, m.msg)
 	}
 }
 
-// TestModsExamples: e shows where the example mods are and each one's
+// TestModsExamples: E shows where the example mods are and each one's
 // install line, and installs nothing; with no mod of the user's
 // installed the tab lists the built-in ones, says how to install one
-// and points at e.
+// and points at E.
 func TestModsExamples(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
 	src := &fakeSource{data: testData()}
@@ -485,7 +485,7 @@ func TestModsExamples(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "Default theme") || !strings.Contains(out, "No mods of your own yet") || !strings.Contains(out, "lists terminatr's example mods") {
 		t.Errorf("the tab with only built-in mods:\n%s", out)
 	}
-	press(m, "e")
+	press(m, "E")
 	out := screen(m)
 	for _, want := range []string{"Example mods", mod.ExamplesURL, "git clone --depth 1 --branch " + mod.ExamplesRef + " " + mod.ExamplesRepo, "tm mod install " + mod.ExamplesURL + "/nord", "memory-tab", "tm mod install " + mod.ExamplesURL + "/standup", "copy it under another id", "Nothing here is installed"} {
 		if !strings.Contains(out, want) {
@@ -500,9 +500,9 @@ func TestModsExamples(t *testing.T) {
 	}
 }
 
-// TestModsUpdate: u on a mod installed from a folder says when it is up
+// TestModsUpdate: U on a mod installed from a folder says when it is up
 // to date; when its source asks for more, it shows what it now asks
-// for and updates on y, granting that to a mod that is on.
+// for and updates on Y, granting that to a mod that is on.
 func TestModsUpdate(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
 	srcDir := filepath.Join(t.TempDir(), "review-age")
@@ -530,24 +530,24 @@ func TestModsUpdate(t *testing.T) {
 	m := newDash(DashOptions{Source: src, Width: 220, Height: 50, State: DashState{Current: "beta"}})
 	m.setData(src.data)
 	press(m, ",", "4", "enter")
-	modAct(t, m, src, "y")
+	modAct(t, m, src, "Y")
 
 	if out := screen(m); !strings.Contains(out, "Installed from "+srcDir) || strings.Contains(out, "Updated 20") {
 		t.Errorf("the installed mod's detail lacks its source, or shows an update:\n%s", out)
 	}
-	modAct(t, m, src, "u")
+	modAct(t, m, src, "U")
 	if m.msg != "Review age is up to date" {
 		t.Errorf("u with nothing new: %q", m.msg)
 	}
 	write(strings.Replace(strings.Replace(reviewAgeMod, `"0.3.1"`, `"0.4.0"`, 1), `net          = ["api.example.com"]`, "net          = [\"api.example.com\"]\ncommands     = [\"glab\"]", 1))
-	modAct(t, m, src, "u")
+	modAct(t, m, src, "U")
 	out := screen(m)
 	for _, want := range []string{"Update Review age", "0.3.1 → 0.4.0", "It now asks for", "runs glab"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the update's question lacks %q:\n%s", want, out)
 		}
 	}
-	modAct(t, m, src, "y")
+	modAct(t, m, src, "Y")
 	md := modState(t, src, "review-age")
 	if md.Manifest.Version != "0.4.0" || !md.Granted(mod.PermCommands) || md.State != mod.Enabled {
 		t.Errorf("after y: %s %v %s (%s)", md.Manifest.Version, md.Grants, md.State, m.msg)
@@ -612,7 +612,7 @@ func TestModsDataAndBuiltin(t *testing.T) {
 	if !strings.Contains(m.msg, "can't be turned off") || modState(t, src, mod.BundledTheme).State != mod.Enabled {
 		t.Errorf("enter on default-theme: %q", m.msg)
 	}
-	press(m, "x")
+	press(m, "X")
 	if !strings.Contains(m.msg, "Default theme is built in: tm can't do without it") {
 		t.Errorf("x on default-theme: %q", m.msg)
 	}
@@ -624,7 +624,7 @@ func TestModsDataAndBuiltin(t *testing.T) {
 }
 
 // TestModsDefaults: d shows the defaults a mod suggests for all
-// projects beside what they follow now; y applies them once it's on,
+// projects beside what they follow now; Y applies them once it's on,
 // to config.toml's [defaults], leaving the one the human set there and
 // the one already at its value. Its consent lists them.
 func TestModsDefaults(t *testing.T) {
@@ -654,18 +654,18 @@ func TestModsDefaults(t *testing.T) {
 			t.Errorf("defaults lacks %q:\n%s", want, out)
 		}
 	}
-	press(m, "y")
+	press(m, "Y")
 	if cfg, _ := config.Load(); slices.Contains(cfg.OwnDefaults(), "auto_close") {
 		t.Fatal("y applied an off mod's defaults")
 	}
 	press(m, "esc")
 	modAct(t, m, src, "enter")
-	modAct(t, m, src, "y")
+	modAct(t, m, src, "Y")
 	press(m, "d")
-	if out := screen(m); !strings.Contains(out, "y apply") {
-		t.Errorf("an on mod's defaults offer y:\n%s", out)
+	if out := screen(m); !strings.Contains(out, "Y apply") {
+		t.Errorf("an on mod's defaults offer Y:\n%s", out)
 	}
-	modAct(t, m, src, "y")
+	modAct(t, m, src, "Y")
 	if !strings.Contains(m.msg, "all projects take Policy's auto_close") {
 		t.Errorf("msg %q", m.msg)
 	}

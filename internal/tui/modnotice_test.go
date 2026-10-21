@@ -80,10 +80,10 @@ func TestModNoticeButton(t *testing.T) {
 		t.Fatal("drawn twice")
 	}
 
-	keyPress(m, "N")
+	keyPress(m, "M")
 	nv, ok := m.top().(*noticesView)
 	if !ok {
-		t.Fatalf("N opened %T", m.top())
+		t.Fatalf("M opened %T", m.top())
 	}
 	now := time.Now()
 	nv.now, nv.stableAt = func() time.Time { return now }, now
@@ -133,7 +133,7 @@ func TestModNoticeAnswer(t *testing.T) {
 	b := modnotify.Button{ID: "question.answer", Label: "answer", Session: "s-9", Question: "Ship it?", Option: "Yes"}
 	base.data.ModNotices = []modnotify.Notice{{ID: "n1", Mod: "ping", Title: "t-0003 asks", Buttons: []modnotify.Button{b}}}
 	drive(m, m.setData(base.Load()))
-	keyPress(m, "N")
+	keyPress(m, "M")
 	if out := screen(m); !strings.Contains(out, `1 answer "Yes"`) {
 		t.Fatalf("view:\n%s", out)
 	}
@@ -143,7 +143,7 @@ func TestModNoticeAnswer(t *testing.T) {
 	if !ok || !strings.HasPrefix(cv.question, `Answer alpha t-0003's question "Ship it?" with "Yes"?`) || len(base.answers) != 0 {
 		t.Fatalf("button opened %T %+v, answers %v", m.top(), m.top(), base.answers)
 	}
-	drive(m, keyPress(m, "y"))
+	drive(m, keyPress(m, "Y"))
 	if len(base.answers) != 1 || base.answers[0] != "s-9 0 Ship it? → Yes" {
 		t.Fatalf("answers %v", base.answers)
 	}

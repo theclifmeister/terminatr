@@ -481,8 +481,8 @@ type panelAction struct {
 }
 
 var panelActions = []panelAction{
-	{id: "panel.up", keys: []string{"up", "k"}, op: panelUp, label: "↑ ↓ k j", help: "scroll the panel"},
-	{id: "panel.down", keys: []string{"down", "j"}, op: panelDown},
+	{id: "panel.up", keys: []string{"up"}, op: panelUp, label: "↑ ↓", help: "scroll the panel"},
+	{id: "panel.down", keys: []string{"down"}, op: panelDown},
 	{id: "panel.page-up", keys: []string{"pgup"}, op: panelPageUp, label: "pgup pgdown", help: "a page up / down"},
 	{id: "panel.page-down", keys: []string{"pgdown"}, op: panelPageDown},
 	{id: "panel.first", keys: []string{"home"}, op: panelFirst, label: "home end", help: "the top / the end of the panel"},
@@ -508,7 +508,7 @@ func panelBindables() []bindable {
 func panelOp(key string) (int, bool) {
 	key = binds.panel.canon(key)
 	for _, a := range panelActions {
-		if slices.Contains(a.keys, key) {
+		if runsAs(a.id, a.keys, key) {
 			return a.op, true
 		}
 	}

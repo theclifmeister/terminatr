@@ -204,7 +204,7 @@ func (v *linksView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch s := k.String(); s {
 	case "esc", "q":
 		m.pop()
-	case "up", "k", "down", "j":
+	case "up", "down":
 		v.sel = moveSel(v.sel, scrollKeys[s], len(items))
 	case "enter", "space", " ":
 		if v.sel >= len(items) || m.busy {
@@ -227,12 +227,12 @@ func (v *linksView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			}
 			return actionMsg{msg: slug + " and " + other + ": " + linkAllowWords(config.Link{Allow: allow})}
 		})
-	case "r":
+	case "R":
 		if v.sel >= len(items) || m.busy {
 			break
 		}
 		return v.request(m, items[v.sel])
-	case "a":
+	case "A":
 		if v.sel >= len(items) || m.busy {
 			break
 		}
@@ -258,7 +258,7 @@ func (v *linksView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 // which it then sets, asking first.
 func (v *linksView) request(m *dash, it linkItem) tea.Cmd {
 	if it.alias == "" {
-		m.msg = "a link here sets both sides at once (enter); r asks a paired server's project"
+		m.msg = "a link here sets both sides at once (enter); R asks a paired server's project"
 		return nil
 	}
 	r := v.entry(m, it.key)
@@ -339,7 +339,7 @@ func linkAllowWords(l config.Link) string {
 
 func (v *linksView) render(m *dash) string {
 	lines, sel := v.lines(m, m.inner(viewWidth))
-	return m.popup(box{title: "Linked projects · " + v.slug, body: lines, sel: sel, keys: "enter link: off › both › send › receive · a ask first · r ask a paired server to link back · ↑ ↓ move · esc back"})
+	return m.popup(box{title: "Linked projects · " + v.slug, body: lines, sel: sel, keys: "enter link: off › both › send › receive · A ask first · R ask a paired server to link back · ↑ ↓ move · esc back"})
 }
 
 // lines are the list's lines in width w, and the selected one's.
@@ -404,7 +404,7 @@ func (v *linksView) lines(m *dash, w int) ([]string, int) {
 			i++
 		}
 	}
-	lines = append(lines, "", th().Faint.Render("A link here is set on both sides at once: send here is receive there. With a paired server's project only this side is set, asking first; that server's user sets the other (tm project link there); r asks them to, and the answer shows in the other side's column. Ask first holds each message this coordinator sends on the link until you approve it in the Messages tab."))
+	lines = append(lines, "", th().Faint.Render("A link here is set on both sides at once: send here is receive there. With a paired server's project only this side is set, asking first; that server's user sets the other (tm project link there); R asks them to, and the answer shows in the other side's column. Ask first holds each message this coordinator sends on the link until you approve it in the Messages tab."))
 	return lines, sel
 }
 
@@ -500,9 +500,9 @@ func (v *convView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch s := k.String(); s {
 	case "esc", "q":
 		m.pop()
-	case "up", "k", "down", "j", "pgup", "pgdown":
+	case "up", "down", "pgup", "pgdown":
 		v.sel = moveSel(v.sel, scrollKeys[s], len(v.msgs))
-	case "A", "x":
+	case "A", "X":
 		if cur == nil || !cur.Out || cur.State != link.StateHeld {
 			m.msg = "only a message that waits for your OK can be approved or dropped"
 			return nil
@@ -518,7 +518,7 @@ func (v *convView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 		return act("resume", v.other, "", "resumed the link with "+v.other)
-	case "m":
+	case "M":
 		if !v.row(m).Send {
 			m.msg = v.slug + " can't write to " + v.other + ": " + v.row(m).Words()
 			return nil
@@ -599,13 +599,13 @@ func (v *convView) render(m *dash) string {
 	}
 	keys := []string{}
 	if v.sel < len(v.msgs) && v.msgs[v.sel].Out && v.msgs[v.sel].State == link.StateHeld {
-		keys = append(keys, "A approve", "x drop")
+		keys = append(keys, "A approve", "X drop")
 	}
 	if r.Paused {
 		keys = append(keys, "R resume")
 	}
 	if r.Send {
-		keys = append(keys, "m write")
+		keys = append(keys, "M write")
 	}
 	keys = append(keys, "↑ ↓ move", "esc back")
 	return m.popup(box{title: v.slug + " · " + v.other + " · " + head, body: lines, sel: sel, keys: strings.Join(keys, " · ")})

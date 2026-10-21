@@ -60,7 +60,7 @@ func projectActive(slug string) bool {
 }
 
 func inactiveErr(slug string) *proto.Error {
-	return proto.Errorf("project-inactive", "%s is inactive: activate it first (space on it in the sidebar, or tm project activate %s)", slug, slug)
+	return proto.Errorf("project-inactive", "%s is inactive: activate it first (S on it in the sidebar, or tm project activate %s)", slug, slug)
 }
 
 // dormantRole says whether r is a session a project's activation

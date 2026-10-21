@@ -10,12 +10,16 @@ import (
 )
 
 // The key table (docs/SPEC.md §4): prefix then a key means the same
-// everywhere, and no plain key on any screen means something else than
-// the prefix command of the same key.
+// everywhere. On the list, the sidebar and the details panel a plain key
+// that is a prefix command means what the prefix command means; prefix
+// then a lower-case twin (prefixTwins: a i t b n) is the shifted one,
+// and the plain twin does nothing there. A popup is modal: its own keys
+// (popupOwnKeys, such as the tasks' A) are its own, and any other plain
+// prefix-command key does nothing in it.
 
 // isPrefixCommand says whether key is a command after the prefix.
 func isPrefixCommand(key string) bool {
-	return key == "d" || key == "q" || key == "r" || prefixCommands[key] || paneCommands[key]
+	return key == "d" || key == "q" || key == "r" || prefixCommands[key] || paneCommands[key] || prefixTwins[key] != ""
 }
 
 // prefixKeysAll are every prefix command's key but the prefix itself.
@@ -25,6 +29,9 @@ func prefixKeysAll() []string {
 		keys = append(keys, k)
 	}
 	for k := range paneCommands {
+		keys = append(keys, k)
+	}
+	for k := range prefixTwins {
 		keys = append(keys, k)
 	}
 	slices.Sort(keys)
@@ -39,22 +46,22 @@ func prefixKeysAll() []string {
 // out; the prefix answers them no.
 var popupStates = map[string]func(m *dash){
 	"the help":           func(m *dash) { keyPress(m, "?") },
-	"the inbox":          func(m *dash) { keyPress(m, "i") },
+	"the inbox":          func(m *dash) { keyPress(m, "I") },
 	"the settings":       func(m *dash) { keyPress(m, ",") },
 	"the menu":           func(m *dash) { m.openMenu("", m.dashItems(), 0, m.bodyRows()) },
-	"overview tab":       func(m *dash) { feed(m, keyPress(m, "a")); keyPress(m, "1") },
-	"inbox tab":          func(m *dash) { feed(m, keyPress(m, "a")); keyPress(m, "2") },
-	"tasks tab, review":  func(m *dash) { feed(m, keyPress(m, "a")); keyPress(m, "3") },
-	"tasks tab, blocked": func(m *dash) { feed(m, keyPress(m, "a")); keyPress(m, "3"); keyPress(m, "down") },
-	"tasks tab, open":    func(m *dash) { feed(m, keyPress(m, "a")); keyPress(m, "3"); keyPress(m, "up"); keyPress(m, "up") },
-	"settings tab":       func(m *dash) { feed(m, keyPress(m, "a")); keyPress(m, "4") },
-	"keys tab":           func(m *dash) { feed(m, keyPress(m, "a")); keyPress(m, "6") },
-	"memory tab":         func(m *dash) { feed(m, keyPress(m, "a")); keyPress(m, "7") },
-	"t list, review":     func(m *dash) { feed(m, keyPress(m, "t")) },
-	"t list, blocked":    func(m *dash) { feed(m, keyPress(m, "t")); keyPress(m, "down") },
-	"review task, shown": func(m *dash) { feed(m, keyPress(m, "t")); keyPress(m, "enter") },
+	"overview tab":       func(m *dash) { feed(m, keyPress(m, "A")); keyPress(m, "1") },
+	"inbox tab":          func(m *dash) { feed(m, keyPress(m, "A")); keyPress(m, "2") },
+	"tasks tab, review":  func(m *dash) { feed(m, keyPress(m, "A")); keyPress(m, "3") },
+	"tasks tab, blocked": func(m *dash) { feed(m, keyPress(m, "A")); keyPress(m, "3"); keyPress(m, "down") },
+	"tasks tab, open":    func(m *dash) { feed(m, keyPress(m, "A")); keyPress(m, "3"); keyPress(m, "up"); keyPress(m, "up") },
+	"settings tab":       func(m *dash) { feed(m, keyPress(m, "A")); keyPress(m, "4") },
+	"keys tab":           func(m *dash) { feed(m, keyPress(m, "A")); keyPress(m, "6") },
+	"memory tab":         func(m *dash) { feed(m, keyPress(m, "A")); keyPress(m, "7") },
+	"t list, review":     func(m *dash) { feed(m, keyPress(m, "T")) },
+	"t list, blocked":    func(m *dash) { feed(m, keyPress(m, "T")); keyPress(m, "down") },
+	"review task, shown": func(m *dash) { feed(m, keyPress(m, "T")); keyPress(m, "enter") },
 	"blocked task, shown": func(m *dash) {
-		feed(m, keyPress(m, "t"))
+		feed(m, keyPress(m, "T"))
 		keyPress(m, "down")
 		keyPress(m, "enter")
 	},
@@ -64,8 +71,8 @@ var popupStates = map[string]func(m *dash){
 // command means the same as it, on every screen. On the list it is the
 // same dashboard key (prefix then a dashboard key runs it); in the
 // sidebar the same prefix command (? the help); and in a popup or the
-// menu such a key does nothing at all: popups close with esc only, and their own keys (the
-// tasks' D A x c) are not prefix commands.
+// menu such a key does nothing at all unless it is the popup's own
+// (popupOwnKeys: the tasks' A accepts): popups close with esc only.
 func TestNoPlainKeyIsAPrefixCommand(t *testing.T) {
 	// The list: a plain key that is a prefix command is the dashboard
 	// key prefix then that key runs.
@@ -102,7 +109,7 @@ func TestNoPlainKeyIsAPrefixCommand(t *testing.T) {
 		keyPress(plain, k)
 		prefixed.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
 		keyPress(prefixed, k)
-		if k == "q" || k == "d" || k == "r" {
+		if k == "q" || k == "d" || k == "r" || prefixTwins[k] != "" {
 			// Not dashboard keys: plain they do nothing.
 			if plain.quitting || plain.top() != nil || whole(plain) != whole(needsYou(t)) {
 				t.Errorf("plain %s on the list does something", k)
@@ -117,6 +124,9 @@ func TestNoPlainKeyIsAPrefixCommand(t *testing.T) {
 	// Every other screen: a plain prefix-command key does nothing.
 	for name, open := range popupStates {
 		for _, k := range prefixKeysAll() {
+			if slices.Contains(popupOwnKeys, k) {
+				continue
+			}
 			src, m := needsYouData(t, 86+sideDefault)
 			open(m)
 			before, stack, msg := whole(m), slices.Clone(m.stack), m.msg
@@ -140,10 +150,11 @@ func needsYou(t *testing.T) *dash {
 
 // TestPrefixNeverReachesPopup: prefix then a key over any popup is that
 // prefix command, as from the list: the popup closes first and never
-// gets the key (prefix+a on the Tasks tab opens the project popup anew
-// rather than accepting a task).
+// gets the key (prefix+A, or prefix+a, on the Tasks tab opens the
+// project popup anew rather than accepting a task).
 func TestPrefixNeverReachesPopup(t *testing.T) {
 	want := map[string]string{"a": "*tui.projectView", "i": "*tui.projectView", "t": "*tui.projectView",
+		"A": "*tui.projectView", "I": "*tui.projectView", "T": "*tui.projectView", "n": "*tui.inputView", "+": "*tui.inputView",
 		",": "*tui.settingsView", "?": "*tui.helpView", "d": "<nil>", "tab": "<nil>",
 		"r": "*tui.confirmView"}
 	states := map[string]func(m *dash){"the list": func(*dash) {}}
@@ -181,7 +192,7 @@ func TestPrefixRemote(t *testing.T) {
 	if !ok || !strings.HasPrefix(cv.question, "Turn remote control on for alpha") {
 		t.Fatalf("prefix+r: %T", m.top())
 	}
-	act(t, m, src, "y")
+	act(t, m, src, "Y")
 	if !slices.Equal(src.remote, []string{"alpha on"}) || m.msg != "remote control on for alpha" {
 		t.Fatalf("remote %v, %q", src.remote, m.msg)
 	}
@@ -201,7 +212,7 @@ func TestPrefixOverSession(t *testing.T) {
 	src := &fakeSource{data: testData()}
 	for _, k := range []string{"r", "tab"} {
 		m := newDash(DashOptions{Source: src, Width: 100, Height: 30,
-			Over: &Over{Key: "a", Project: "alpha", Session: "s-1", Screen: []string{"", "row"}}})
+			Over: &Over{Key: "A", Project: "alpha", Session: "s-1", Screen: []string{"", "row"}}})
 		m.setData(src.data)
 		if _, ok := m.top().(*projectView); !ok {
 			t.Fatalf("over: %T", m.top())
@@ -212,7 +223,7 @@ func TestPrefixOverSession(t *testing.T) {
 		}
 	}
 	m := newDash(DashOptions{Source: src, Width: 100, Height: 30,
-		Over: &Over{Key: "t", Project: "alpha", Session: "s-1", Screen: []string{"", "row"}}})
+		Over: &Over{Key: "T", Project: "alpha", Session: "s-1", Screen: []string{"", "row"}}})
 	m.setData(src.data)
 	m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
 	keyPress(m, "a")
@@ -245,7 +256,7 @@ func TestPanelKeysClash(t *testing.T) {
 	// prefix itself moves where that is: it differs from the details
 	// panel on main too, outside the panels' keys.)
 	for _, k := range prefixKeysAll() {
-		if k == "q" || k == "d" || k == "r" || k == ";" {
+		if k == "q" || k == "d" || k == "r" || k == ";" || prefixTwins[k] != "" {
 			continue
 		}
 		_, plain := needsYouData(t, 86+sideDefault)

@@ -31,8 +31,8 @@ NPM_TOKEN = { from = "keychain:npm registry" }
 }
 
 // TestSecretEnvView: a project's list has its own variables and all
-// projects', marked, by name and source; t tests the selected one in its
-// own table, x removes it there.
+// projects', marked, by name and source; T tests the selected one in its
+// own table, X removes it there.
 func TestSecretEnvView(t *testing.T) {
 	src, m := secretEnvData(t)
 	row := guardRow(t, "alpha", "Secret environment")
@@ -46,22 +46,22 @@ func TestSecretEnvView(t *testing.T) {
 	out := screen(m)
 	for _, want := range []string{"Secret environment for alpha", `from the keychain item "npm registry"`,
 		"NODE_AUTH_TOKEN · all projects", "from gh auth token", "NPM_TOKEN · all projects, replaced here", "from the server's NPM_TOKEN",
-		"a add · x remove · t test"} {
+		"A add · X remove · T test"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}
 	}
-	drain(t, m, keyPress(m, "t"))
+	drain(t, m, keyPress(m, "T"))
 	keyPress(m, "down")
-	drain(t, m, keyPress(m, "t"))
+	drain(t, m, keyPress(m, "T"))
 	if !slices.Equal(src.secretTests, []string{"alpha NPM_TOKEN", " NODE_AUTH_TOKEN"}) {
 		t.Errorf("tests %v", src.secretTests)
 	}
 	if !strings.Contains(m.msg, "NODE_AUTH_TOKEN: ok") {
 		t.Errorf("msg %q", m.msg)
 	}
-	// x on an all-projects variable removes it from all projects'.
-	drain(t, m, keyPress(m, "x"))
+	// X on an all-projects variable removes it from all projects'.
+	drain(t, m, keyPress(m, "X"))
 	if got := src.secrets[len(src.secrets)-1]; got != "defaults NODE_AUTH_TOKEN removed" {
 		t.Errorf("removed %v", src.secrets)
 	}
@@ -74,7 +74,7 @@ func TestSecretEnvView(t *testing.T) {
 	}
 }
 
-// TestSecretEnvAdd: a asks the name, refusing one tm sets, then the
+// TestSecretEnvAdd: A asks the name, refusing one tm sets, then the
 // source; keychain and env sources ask what they name; the variable is
 // written to the view's table.
 func TestSecretEnvAdd(t *testing.T) {
@@ -89,7 +89,7 @@ func TestSecretEnvAdd(t *testing.T) {
 		in.text = text
 		drain(t, m, keyPress(m, "enter"))
 	}
-	keyPress(m, "a")
+	keyPress(m, "A")
 	enter("PATH")
 	if len(src.secrets) != 0 || !strings.Contains(m.msg, "can't be a secret") {
 		t.Errorf("PATH taken: %v %q", src.secrets, m.msg)
@@ -97,7 +97,7 @@ func TestSecretEnvAdd(t *testing.T) {
 	if _, ok := m.top().(*secretEnvView); !ok {
 		t.Fatalf("not back on the list: %T", m.top())
 	}
-	keyPress(m, "a")
+	keyPress(m, "A")
 	enter("REG_TOKEN")
 	if _, ok := m.top().(*menuView); !ok {
 		t.Fatalf("no source picker: %T", m.top())
@@ -113,10 +113,10 @@ func TestSecretEnvAdd(t *testing.T) {
 		t.Errorf("msg %q", m.msg)
 	}
 	// gh auth token needs nothing more; a bad env name is refused.
-	keyPress(m, "a")
+	keyPress(m, "A")
 	enter("NODE_AUTH_TOKEN")
 	drain(t, m, keyPress(m, "enter"))
-	keyPress(m, "a")
+	keyPress(m, "A")
 	enter("OTHER")
 	keyPress(m, "down")
 	keyPress(m, "down")

@@ -100,6 +100,11 @@ type DashResult struct {
 	// Command is a prefix command for the session to run once attached
 	// again: prefix then r or tab over it, which are the session's own.
 	Command string
+	// Type are the keys typed through a coordinator's row (typethrough.go)
+	// since the first, which attached it, and TypeFor its session: the
+	// session runs them first, only when it is TypeFor's (Attach is it).
+	Type    []Key
+	TypeFor string
 }
 
 // Dashboard runs the dashboard until the user quits or picks a session.
@@ -166,6 +171,7 @@ func Dashboard(opts DashOptions) (DashResult, error) {
 	}
 	d.result.State = DashState{Selected: d.sel, Current: d.current}
 	d.result.SideFocus = d.result.Attach != "" && d.focus == areaSide
+	d.result.Type, d.result.TypeFor = d.typedFor(d.result.Attach)
 	return d.result, nil
 }
 
@@ -241,6 +247,22 @@ type dash struct {
 	done  chan struct{}
 
 	result DashResult
+	// typing: a key typed through a coordinator's row asked to attach
+	// it; typed are that key and every one since, for its pane
+	// (typethrough.go).
+	typing bool
+	typed  []Key
+	// typeFor is the coordinator's session they go to; typeSeq numbers
+	// the type-throughs, so an old one's deadline (typeTimeoutMsg) passes.
+	typeFor string
+	typeSeq int
+	// typedAt is when the last of them came; settling: the session to
+	// attach is set, and the dashboard ends once they pause (leave).
+	typedAt  time.Time
+	settling bool
+	// pressing: a button or a menu item presses a key (pressKey), which
+	// never types through.
+	pressing bool
 }
 
 func newDash(o DashOptions) *dash {
@@ -564,11 +586,12 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.leaving && msg.err == nil && msg.attach == "" {
 			// Over a session, the view shows what the popup opened.
 			m.result.Attach = "view"
-			return m, tea.Quit
+			return m, m.leave()
 		}
 		m.leaving = false
 		if msg.err != nil {
 			m.queued = nil
+			m.typing, m.typed, m.typeFor = false, nil, ""
 			m.fail(msg.err)
 			return m, m.load()
 		}
@@ -607,7 +630,7 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				})
 			}
 			m.result.Attach = msg.attach
-			return m, tea.Quit
+			return m, m.leave()
 		}
 		cmds := []tea.Cmd{m.load()}
 		if pv := m.projectPopupView(); pv != nil {
@@ -616,6 +639,13 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 	case tea.KeyPressMsg:
 		return m, m.key(msg)
+	case typeSettledMsg:
+		return m, m.settled()
+	case typeTimeoutMsg:
+		if m.typing && !m.settling && msg.seq == m.typeSeq {
+			m.endTyping("timed out: the coordinator didn't open")
+		}
+		return m, nil
 	case tea.PasteMsg:
 		// Into a prompt: a path or a URL is often pasted.
 		if p, ok := m.top().(interface{ paste(*dash, string) }); ok {
@@ -762,7 +792,7 @@ func (m *dash) setData(d Data) tea.Cmd {
 	}
 	cmds = append(cmds, noticeCmds...)
 	switch {
-	case first && m.then == "t" && m.over != nil && m.over.Task > 0:
+	case first && m.then == "T" && m.over != nil && m.over.Task > 0:
 		// The info panel's task, over its session: in the popup's
 		// Tasks tab, shown.
 		cmds = append(cmds, m.showTask(m.over.Project, m.over.Task))
@@ -889,6 +919,23 @@ func (m *dash) paneSize() (int, int) {
 // table): prefix then a key is that prefix command, the same everywhere,
 // and never reaches a popup as a plain key.
 func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
+	if m.typing {
+		switch k.String() {
+		case "ctrl+c":
+			// It cancels the typing, never typed.
+			m.endTyping("cancelled")
+			return nil
+		case m.prefix:
+			// It ends the typing and starts a command, as anywhere.
+			m.endTyping("ended by the prefix")
+			m.prefixed = true
+			return nil
+		default:
+			// On the way to the coordinator: every key is its pane's.
+			m.typed, m.typedAt = append(m.typed, Key(k)), time.Now()
+			return nil
+		}
+	}
 	if k.String() == "ctrl+c" {
 		return tea.Quit
 	}
@@ -912,6 +959,9 @@ func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 	if o := m.top(); o != nil {
 		return o.key(m, k)
 	}
+	if cmd, ok := m.typeThrough(k); ok {
+		return cmd
+	}
 	if m.area() == areaSide {
 		// The sidebar's keys go on while an action runs: its moves at
 		// once, what they start after it (sideKeyboard).
@@ -920,10 +970,6 @@ func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	if m.busy {
-		return nil
-	}
-	if k.String() == "N" && len(m.data.ModNotices) > 0 {
-		m.openNotices()
 		return nil
 	}
 	switch m.area() {
@@ -935,7 +981,7 @@ func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 	if cmd, ok := m.remoteKey(k.String()); ok {
 		return cmd
 	}
-	if c, ok := m.commandFor(k.String()); ok {
+	if c, ok := m.commandFor(k.String()); ok && plainKey(k.String()) {
 		return m.runCommand(c)
 	}
 	return m.listKey(binds.list.canon(k.String()))
@@ -1026,7 +1072,7 @@ func (m *dash) cycleProject(next bool) tea.Cmd {
 			return m.openProject(p.Slug)
 		}
 	}
-	m.msg = "no project is active; space on one in the sidebar activates it"
+	m.msg = "no project is active; " + barKey("side.activate", "S") + " on one in the sidebar activates it"
 	return nil
 }
 

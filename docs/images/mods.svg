@@ -17,8 +17,8 @@
 <text x="142.0" y="78.2" fill="#c8d0f0">2</text>
 <text x="310.0" y="78.2" fill="#4e5578">│</text>
 <text x="326.8" y="78.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">demo</text>
-<text x="368.8" y="78.2" fill="#4e5578" textLength="470.4" lengthAdjust="spacingAndGlyphs">────────────────────────────────────────────────────────</text>
-<text x="847.6" y="78.2" fill="#c8d0f0" textLength="252.0" lengthAdjust="spacingAndGlyphs">● active — space to deactivate</text>
+<text x="368.8" y="78.2" fill="#4e5578" textLength="504.0" lengthAdjust="spacingAndGlyphs">────────────────────────────────────────────────────────────</text>
+<text x="881.2" y="78.2" fill="#c8d0f0" textLength="218.4" lengthAdjust="spacingAndGlyphs">● active — S to deactivate</text>
 <text x="1108.0" y="78.2" fill="#4e5578">│</text>
 <text x="1124.8" y="78.2" fill="#7dcfff" font-weight="700" textLength="16.8" lengthAdjust="spacingAndGlyphs">T1</text>
 <text x="1150.0" y="78.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">Fix the login</text>
@@ -31,7 +31,7 @@
 <text x="755.2" y="95.2" fill="#c8d0f0" textLength="100.8" lengthAdjust="spacingAndGlyphs">not running;</text>
 <text x="864.4" y="95.2" fill="#7aa2f7" textLength="42.0" lengthAdjust="spacingAndGlyphs">enter</text>
 <text x="914.8" y="95.2" fill="#c8d0f0" textLength="75.6" lengthAdjust="spacingAndGlyphs">starts it</text>
-<text x="1007.2" y="95.2" fill="#e0af68" textLength="58.8" lengthAdjust="spacingAndGlyphs">3 inbox</text>
+<text x="1007.2" y="95.2" fill="#e0af68" textLength="58.8" lengthAdjust="spacingAndGlyphs">2 inbox</text>
 <text x="1108.0" y="95.2" fill="#4e5578">│</text>
 <text x="1124.8" y="95.2" fill="#8189ad" textLength="50.4" lengthAdjust="spacingAndGlyphs">○ idle</text>
 <text x="49.6" y="112.2" fill="#4e5578" textLength="16.8" lengthAdjust="spacingAndGlyphs">├─</text>
@@ -144,19 +144,19 @@
 <text x="1108.0" y="367.2" fill="#4e5578">│</text>
 <text x="310.0" y="384.2" fill="#4e5578">│</text>
 <text x="1108.0" y="384.2" fill="#4e5578">│</text>
-<text x="1124.8" y="384.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">Last report</text>
-<text x="1225.6" y="384.2" fill="#4e5578" textLength="294.0" lengthAdjust="spacingAndGlyphs">───────────────────────────────────</text>
+<text x="1124.8" y="384.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">▾ LAST REPORT</text>
+<text x="1242.4" y="384.2" fill="#4e5578" textLength="268.8" lengthAdjust="spacingAndGlyphs">────────────────────────────────</text>
 <text x="310.0" y="401.2" fill="#4e5578">│</text>
 <text x="1108.0" y="401.2" fill="#4e5578">│</text>
-<text x="1124.8" y="401.2" fill="#c8d0f0" textLength="67.2" lengthAdjust="spacingAndGlyphs">report 1</text>
-<text x="1208.8" y="401.2" fill="#c8d0f0" textLength="210.0" lengthAdjust="spacingAndGlyphs">Fixed the login redirect.</text>
+<text x="1141.6" y="401.2" fill="#c8d0f0" textLength="67.2" lengthAdjust="spacingAndGlyphs">report 1</text>
+<text x="1225.6" y="401.2" fill="#c8d0f0" textLength="210.0" lengthAdjust="spacingAndGlyphs">Fixed the login redirect.</text>
 <text x="310.0" y="418.2" fill="#4e5578">│</text>
 <text x="1108.0" y="418.2" fill="#4e5578">│</text>
-<text x="1124.8" y="418.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">next</text>
-<text x="1175.2" y="418.2" fill="#c8d0f0" textLength="100.8" lengthAdjust="spacingAndGlyphs">Merge the PR</text>
+<text x="1141.6" y="418.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">next</text>
+<text x="1192.0" y="418.2" fill="#c8d0f0" textLength="100.8" lengthAdjust="spacingAndGlyphs">Merge the PR</text>
 <text x="310.0" y="435.2" fill="#4e5578">│</text>
 <text x="1108.0" y="435.2" fill="#4e5578">│</text>
-<text x="1124.8" y="435.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">no ## Check</text>
+<text x="1141.6" y="435.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">no ## Check</text>
 <text x="310.0" y="452.2" fill="#4e5578">│</text>
 <text x="1108.0" y="452.2" fill="#4e5578">│</text>
 <text x="24.4" y="469.2" fill="#4e5578" textLength="277.2" lengthAdjust="spacingAndGlyphs">─────────────────────────────────</text>
@@ -169,9 +169,9 @@
 <text x="326.8" y="503.2" fill="#7aa2f7" textLength="50.4" lengthAdjust="spacingAndGlyphs">≡ menu</text>
 <text x="385.6" y="503.2" fill="#c8d0f0">·</text>
 <text x="402.4" y="503.2" fill="#7aa2f7" textLength="42.0" lengthAdjust="spacingAndGlyphs">enter</text>
-<text x="452.8" y="503.2" fill="#c8d0f0" textLength="680.4" lengthAdjust="spacingAndGlyphs">attach · space deactivate · a project · t tasks · i inbox · , settings · ? help ·</text>
-<text x="1141.6" y="503.2" fill="#7aa2f7" textLength="67.2" lengthAdjust="spacingAndGlyphs">prefix+q</text>
-<text x="1217.2" y="503.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">quit</text>
+<text x="452.8" y="503.2" fill="#c8d0f0" textLength="646.8" lengthAdjust="spacingAndGlyphs">attach · S deactivate · A project · T tasks · I inbox · , settings · ? help ·</text>
+<text x="1108.0" y="503.2" fill="#7aa2f7" textLength="67.2" lengthAdjust="spacingAndGlyphs">prefix+q</text>
+<text x="1183.6" y="503.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">quit</text>
 <text x="24.4" y="520.2" fill="#c8d0f0" textLength="168.0" lengthAdjust="spacingAndGlyphs">tab sidebar · ? help</text>
 <text x="310.0" y="520.2" fill="#4e5578">│</text>
 </svg>

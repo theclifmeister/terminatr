@@ -16,7 +16,7 @@
           │                                                                              │
           │                                                                              │
           │                                                                              │
-          │ enter show · A accept · x send back · + new task · ↑ ↓ move · / filter       │
+          │ enter show · A accept · X send back · + new task · ↑ ↓ move · / filter       │
           │ ← → tabs · esc close                                                         │
  ─────────╰──────────────────────────────────────────────────────────────────────────────╯
  demo · active                     │────────────────────────────────────────────────────────────────

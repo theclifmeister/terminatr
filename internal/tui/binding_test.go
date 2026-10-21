@@ -53,7 +53,7 @@ func TestBinding(t *testing.T) {
 	if len(src.done) != 0 || len(src.delegated) != 0 {
 		t.Fatalf("acted before the human said yes: %v %v", src.done, src.delegated)
 	}
-	drain(t, m, keyPress(m, "y"))
+	drain(t, m, keyPress(m, "Y"))
 	if len(src.delegated) != 1 || src.delegated[0] != "alpha T2" || len(src.done) != 1 || src.done[0] != "lab task.delegate alpha/T2 true" {
 		t.Fatalf("after y: %v %v", src.delegated, src.done)
 	}
@@ -61,7 +61,7 @@ func TestBinding(t *testing.T) {
 	// n: nothing runs, and the mod hears nothing.
 	drain(t, m, pressed(m, boundPress("task.delegate", alpha("T2"), true)))
 	if _, ok := m.top().(*confirmView); ok {
-		keyPress(m, "n")
+		keyPress(m, "N")
 	}
 
 	// A stale or lying row: accept on a started task, a task that
@@ -120,7 +120,7 @@ func TestBoundHints(t *testing.T) {
 	v := widget.NewView()
 	v.SetBindKeys(BindKeys)
 	v.Set(w)
-	if got := boundHints(v); got != "D delegate · enter show · space activate / deactivate" {
+	if got := boundHints(v); got != "D delegate · enter show · S activate / deactivate" {
 		t.Errorf("hints %q", got)
 	}
 }
@@ -144,12 +144,12 @@ func TestBindingClearAnswer(t *testing.T) {
 	if !ok || !strings.HasPrefix(cv.question, "Clear alpha t-0003's conversation?") || len(src.cleared) != 0 {
 		t.Fatalf("clear opened %T %+v, cleared %v", m.top(), cv, src.cleared)
 	}
-	drain(t, m, keyPress(m, "n"))
+	drain(t, m, keyPress(m, "N"))
 	if len(src.cleared) != 0 || len(src.done) != 0 {
 		t.Fatalf("n cleared: %v %v", src.cleared, src.done)
 	}
 	drain(t, m, pressed(m, boundPress("session.clear", map[string]string{"session": "s-9"}, true)))
-	drain(t, m, keyPress(m, "y"))
+	drain(t, m, keyPress(m, "Y"))
 	if len(src.cleared) != 1 || src.cleared[0] != "s-9" || len(src.done) != 1 || src.done[0] != "lab session.clear /s-9 true" {
 		t.Fatalf("after y: %v %v", src.cleared, src.done)
 	}
@@ -170,7 +170,7 @@ func TestBindingClearAnswer(t *testing.T) {
 	if len(src.answers) != 0 {
 		t.Fatalf("answered before yes: %v", src.answers)
 	}
-	drain(t, m, keyPress(m, "y"))
+	drain(t, m, keyPress(m, "Y"))
 	if len(src.answers) != 1 || src.answers[0] != "s-9 0 Which colour? → Blue" {
 		t.Fatalf("answers %v", src.answers)
 	}
@@ -195,13 +195,13 @@ func TestBindingMemory(t *testing.T) {
 	if !ok || !strings.HasPrefix(cv.question, "Delete memory/a.md of alpha?") {
 		t.Fatalf("rm opened %T %+v", m.top(), cv)
 	}
-	drain(t, m, keyPress(m, "n"))
+	drain(t, m, keyPress(m, "N"))
 	if len(src.notesRemoved) != 0 {
 		t.Fatalf("n removed: %v", src.notesRemoved)
 	}
 	src.done = nil
 	drain(t, m, pressed(m, boundPress("memory.rm", note("memory/a.md"), true)))
-	drain(t, m, keyPress(m, "y"))
+	drain(t, m, keyPress(m, "Y"))
 	if len(src.notesRemoved) != 1 || src.notesRemoved[0] != "alpha/memory/a.md" || len(src.done) != 1 || !strings.HasPrefix(src.done[0], "lab memory.rm ") || !strings.HasSuffix(src.done[0], " true") {
 		t.Fatalf("after y: %v %v", src.notesRemoved, src.done)
 	}

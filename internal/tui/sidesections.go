@@ -219,7 +219,7 @@ func bandRows(in bandIn) []treeRow {
 		case v.State == proto.ModViewFailed:
 			s.failed = true
 			s.lines = []string{th().Bad.Render(fit(ic().blocked+" mod failed: "+cmp.Or(v.Err, "its host stopped"), w)) + reset,
-				th().Faint.Render(fit("r in the Mods tab restarts it", w)) + reset}
+				th().Faint.Render(fit("R in the Mods tab restarts it", w)) + reset}
 		case t == nil:
 			// Nothing drawn yet, or null: nothing to say here. A section
 			// shows from its mod's first tree, so one the mod leaves out
@@ -955,7 +955,7 @@ func sectionDetails(s *sideSection) (string, string) {
 	case s.failed && s.log != "":
 		return l1, "mod failed · its log: " + s.log
 	case s.failed:
-		return l1, "mod failed · r in the Mods tab restarts it"
+		return l1, "mod failed · R in the Mods tab restarts it"
 	}
 	return l1, s.desc
 }

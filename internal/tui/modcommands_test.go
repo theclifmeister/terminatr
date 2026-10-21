@@ -4,12 +4,15 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // commandDash is a dashboard with three mods' commands: lab's relabel
-// on g and its sweep on j (the core's list.down), beta-only's on G, and
+// on g (prefix+g only: an unshifted letter) and its sweep on Z (the
+// core's card.fold), beta-only's on G, and
 // a second mod's g, which lost it to lab.
 func commandDash(t *testing.T) (*fakeSource, *dash) {
 	t.Helper()
@@ -17,7 +20,7 @@ func commandDash(t *testing.T) (*fakeSource, *dash) {
 	no := false
 	src.data.ModCommands = []mod.ModCommand{
 		{Mod: "lab", Name: "Labeller", Command: mod.Command{ID: "relabel", Title: "Relabel", Key: "g"}},
-		{Mod: "lab", Name: "Labeller", Command: mod.Command{ID: "sweep", Title: "Sweep", Key: "j"}},
+		{Mod: "lab", Name: "Labeller", Command: mod.Command{ID: "sweep", Title: "Sweep", Key: "Z"}},
 		{Mod: "lab", Name: "Labeller", Command: mod.Command{ID: "quiet", Title: "Quiet", Menu: &no}},
 		{Mod: "only", Name: "Only", Projects: []string{"beta"}, Command: mod.Command{ID: "go", Title: "Go beta", Key: "G"}},
 		{Mod: "late", Name: "Late", Conflict: "key conflict: g is lab:relabel's", Command: mod.Command{ID: "sync", Title: "Sync"}},
@@ -32,7 +35,16 @@ func commandDash(t *testing.T) (*fakeSource, *dash) {
 // doesn't run for the project isn't sent.
 func TestModCommandKeys(t *testing.T) {
 	src, m := commandDash(t)
+	// g, an unshifted letter, runs it only after the prefix (on a
+	// thread's row: on the coordinator's it would type through).
 	sel := m.sel
+	m.sel = "th:beta:t-0005"
+	drain(t, m, press(m, "g"))
+	if len(src.commands) != 0 {
+		t.Fatalf("plain g ran %+v", src.commands)
+	}
+	m.sel = sel
+	m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
 	drain(t, m, press(m, "g"))
 	if len(src.commands) != 1 {
 		t.Fatalf("commands %+v", src.commands)
@@ -44,19 +56,19 @@ func TestModCommandKeys(t *testing.T) {
 	if !strings.Contains(m.msg, "ran Relabel") {
 		t.Fatalf("msg %q", m.msg)
 	}
-	// j stays the core's list.down.
-	press(m, "j")
-	if len(src.commands) != 1 || m.sel == sel {
-		t.Fatalf("j ran a command (%d) or didn't move (%s)", len(src.commands), m.sel)
+	// Z stays the core's card.fold.
+	prefixed(m, "Z")
+	if len(src.commands) != 1 {
+		t.Fatalf("Z ran a command (%d)", len(src.commands))
 	}
-	press(m, "G")
+	prefixed(m, "G")
 	if len(src.commands) != 1 || !strings.Contains(m.msg, "doesn't run for alpha") {
 		t.Fatalf("a beta-only command ran in alpha: %+v, %q", src.commands, m.msg)
 	}
 	// Safe mode: no user mod's command.
 	src.data.NoMods = true
 	m.setData(src.data)
-	press(m, "g")
+	prefixed(m, "g")
 	if len(src.commands) != 1 {
 		t.Fatal("a user mod's command ran in safe mode")
 	}
@@ -78,7 +90,7 @@ func TestModCommandMenuAndHelp(t *testing.T) {
 			labels = append(labels, it.label+"="+it.key)
 		}
 	}
-	if got, want := strings.Join(labels, " | "), "Board · lab= | Relabel · lab=g | Sweep · lab= | Sync · late="; got != want {
+	if got, want := strings.Join(labels, " | "), "Board · lab= | Relabel · lab=prefix+g | Sweep · lab= | Sync · late="; got != want {
 		t.Fatalf("menu\n got %s\nwant %s", got, want)
 	}
 	for _, it := range m.dashItems() {
@@ -90,7 +102,7 @@ func TestModCommandMenuAndHelp(t *testing.T) {
 		t.Fatalf("menu entry sent %+v", src.commands)
 	}
 	help := strings.Join(keyLines(200, m.commandHelp()), "\n")
-	for _, want := range []string{"Mod commands", "Relabel · Labeller (tm mod run lab relabel)", "g prefix+g", "Sweep · Labeller (tm mod run lab sweep); its key j is taken", "in a mod's view"} {
+	for _, want := range []string{"Mod commands", "Relabel · Labeller (tm mod run lab relabel)", "prefix+g", "Sweep · Labeller (tm mod run lab sweep); its key Z is taken", "in a mod's view"} {
 		if !strings.Contains(help, want) {
 			t.Errorf("help lacks %q:\n%s", want, help)
 		}
@@ -98,7 +110,7 @@ func TestModCommandMenuAndHelp(t *testing.T) {
 	if strings.Contains(help, "Go beta") {
 		t.Errorf("help lists a command of a mod limited to another project:\n%s", help)
 	}
-	if got := strings.Join(m.keyConflicts("lab"), "; "); got != "key conflict: j is the core's list.down" {
+	if got := strings.Join(m.keyConflicts("lab"), "; "); got != "key conflict: Z is the core's card.fold" {
 		t.Errorf("lab's conflicts %q", got)
 	}
 	if got := strings.Join(m.keyConflicts("late"), "; "); got != "key conflict: g is lab:relabel's" {

@@ -24,7 +24,12 @@ const (
 	sideHelp   // the help, as prefix+?
 	sideFoldAll
 	sideUnfoldAll
-	sidePin // on a project, pin it to the top or unpin it
+	sideFoldToggle // fold all while any is open, else unfold all
+	sidePin        // on a project, pin it to the top or unpin it
+	// sideUnfoldOnly is side.unfold from an unshifted letter a keymap
+	// gave it (vim-keys' l): it unfolds, and never goes in, so typed
+	// text can't open a pane or start a coordinator.
+	sideUnfoldOnly
 )
 
 // sideAction is a sidebar key: its keys, what it does, its help line and
@@ -40,23 +45,26 @@ type sideAction struct {
 }
 
 var sideActions = []sideAction{
-	{id: "side.up", keys: []string{"up", "k"}, op: sideUp, label: "↑ ↓ k j", help: "move through the tree and the PROJECTS header; the pane shows what the cursor rests on (a project its dashboard, a coordinator or a thread its session, live; the header every project's NEEDS YOU), the keyboard stays in the sidebar, and nothing starts"},
-	{id: "side.down", keys: []string{"down", "j"}, op: sideDown},
+	{id: "side.up", keys: []string{"up"}, op: sideUp, label: "↑ ↓", help: "move through the tree and the PROJECTS header; the pane shows what the cursor rests on (a project its dashboard, a coordinator or a thread its session, live; the header every project's NEEDS YOU), the keyboard stays in the sidebar, and nothing starts"},
+	{id: "side.down", keys: []string{"down"}, op: sideDown},
 	{id: "side.enter", keys: []string{"enter"}, op: sideEnter, label: "enter", help: "into the pane: a project's dashboard or a session gets the keyboard; a coordinator not running starts, and an inactive project's starts activating the project; on the PROJECTS header, every project's NEEDS YOU, labelled; on the inactive divider it folds or unfolds; on a mod's section it opens the view the mod names, else folds or unfolds it"},
-	{id: "side.unfold", keys: []string{"right", "l"}, op: sideIn, label: "→ ←", help: "→ unfolds a folded project, the inactive divider or a mod's section, else goes into the pane as enter; ← folds an unfolded one, or from a row under a project goes up to it. Folding never activates or deactivates"},
-	{id: "side.fold", keys: []string{"left", "h"}, op: sideOut},
+	{id: "side.unfold", keys: []string{"right"}, op: sideIn, label: "→ ←", help: "→ unfolds a folded project, the inactive divider or a mod's section, else goes into the pane as enter; ← folds an unfolded one, or from a row under a project goes up to it. Folding never activates or deactivates"},
+	{id: "side.fold", keys: []string{"left"}, op: sideOut},
 	{id: "side.back", keys: []string{"esc"}, op: sideBack, label: "esc", help: "back to the list (in a session: to the pane)", fixed: true},
-	{id: "side.activate", keys: []string{"space"}, op: sideActive, label: "space", help: "on a project: activate it, or deactivate it (its coordinator and threads stop, to resume when you activate it; asks first while they run)"},
-	{id: "side.fold-all", keys: []string{"z"}, op: sideFoldAll, label: "z Z", help: "z folds every project, the inactive divider and the mods' sections, Z unfolds them all"},
-	{id: "side.unfold-all", keys: []string{"Z"}, op: sideUnfoldAll},
-	{id: "side.pin", keys: []string{"p"}, op: sidePin, label: "p", help: "on a project: pin it to the top of the active projects, or unpin it (its order only)"},
+	{id: "side.activate", keys: []string{"S"}, op: sideActive, label: "S", help: "on a project: activate it, or deactivate it (its coordinator and threads stop, to resume when you activate it; asks first while they run)"},
+	{id: "side.fold-toggle", keys: []string{"Z"}, op: sideFoldToggle, label: "Z", help: "fold every project, the inactive divider and the mods' sections while any is open, else unfold them all"},
+	// The toggle's two halves, kept bindable with no key of their own.
+	{id: "side.fold-all", op: sideFoldAll},
+	{id: "side.unfold-all", op: sideUnfoldAll},
+	{id: "side.pin", keys: []string{"P"}, op: sidePin, label: "P", help: "on a project: pin it to the top of the active projects, or unpin it (its order only)"},
 	{id: "side.first", keys: []string{"home"}, op: sideFirst, label: "home end", help: "the first / last row"},
 	{id: "side.last", keys: []string{"end"}, op: sideLast},
 	{id: "side.page-up", keys: []string{"pgup"}, op: sidePageUp, label: "pgup pgdown", help: "a page up / down"},
 	{id: "side.page-down", keys: []string{"pgdown"}, op: sidePageDown},
 	{id: "side.nth", keys: []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}, op: sideNth, label: "1-9", help: "the first to ninth project, counted down the tree", fixed: true},
-	{id: "side.needs-next", keys: []string{"w"}, op: sideNeedNext, label: "w W", help: "the next / previous row that needs you, round the ends; it unfolds what hides the row, and clears a filter that does"},
-	{id: "side.needs-prev", keys: []string{"W"}, op: sideNeedPrev},
+	{id: "side.needs-next", keys: []string{"W"}, op: sideNeedNext, label: "W", help: "the next row that needs you, round the ends; it unfolds what hides the row, and clears a filter that does"},
+	// The previous one, kept bindable with no key: W goes round the ends.
+	{id: "side.needs-prev", op: sideNeedPrev},
 	{id: "side.filter", keys: []string{"/"}, op: sideFilter, label: "/", help: "filter: type to narrow the tree to what matches (a project's name, a thread's task, title or id) and the projects over it; enter keeps the filter, esc clears it"},
 	{id: "side.help", keys: []string{"?"}, op: sideHelp, label: "?", help: "help, as prefix+?"},
 }
@@ -64,7 +72,7 @@ var sideActions = []sideAction{
 // sideOp is the sidebar operation of key; ok is false for none.
 func sideOp(key string) (op int, ok bool) {
 	for _, a := range sideActions {
-		if slices.Contains(a.keys, key) {
+		if runsAs(a.id, a.keys, key) {
 			return a.op, true
 		}
 	}
@@ -135,8 +143,32 @@ func foldProject(r treeRow, fold bool) func(*view.Tree) {
 	return func(t *view.Tree) { t.Fold(slug, fold) }
 }
 
-// foldAll is z (fold) and Z: z folds every active project and the
-// divider, and collapses the inactive projects; Z unfolds them all,
+// anyOpen says whether anything in the tree all that folds is open: a
+// project, an expanded inactive one, the divider, a paired server or a
+// mod's section. Z folds all then, else unfolds all.
+func anyOpen(all []treeRow) bool {
+	for _, r := range all {
+		switch r.kind {
+		case treeProject:
+			if r.inactive && r.expanded || !r.inactive && !r.fold {
+				return true
+			}
+		case treeDivider, treeServer, treePeerProject:
+			if !r.fold {
+				return true
+			}
+		case treeSection:
+			if !r.sec.folded {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// foldAll is Z's fold (fold) and unfold: the fold folds every active
+// project and the divider, and collapses the inactive projects; the
+// unfold opens them all,
 // the inactive projects expanded under the open divider.
 func foldAll(all []treeRow, fold bool) func(*view.Tree) {
 	var active, inactive []string
@@ -162,13 +194,25 @@ func foldAll(all []treeRow, fold bool) func(*view.Tree) {
 // sideKeyStep decides what sidebar key op does with the cursor at sel in
 // the tree all, drawn w columns wide.
 func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
+	onlyUnfold := op == sideUnfoldOnly
+	if onlyUnfold {
+		op = sideIn
+	}
 	switch op {
+	case sideFoldToggle:
+		op = sideUnfoldAll
+		if anyOpen(all) {
+			op = sideFoldAll
+		}
 	case sideBack:
 		return sideStep{back: true}
 	case sideHelp:
 		return sideStep{help: true}
 	}
 	if sel == headKey {
+		if onlyUnfold {
+			return sideStep{}
+		}
 		return headStep(all, w, op)
 	}
 	rows, i := cursorAt(all, w, sel)
@@ -190,6 +234,9 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 	}
 	if st, ok := foldStep(rows, i, op, w <= sideSlim); ok {
 		return st
+	}
+	if onlyUnfold {
+		return sideStep{}
 	}
 	moveTo := func(j int) sideStep {
 		if j < 0 || j >= len(rows) || j == i {
@@ -224,13 +271,13 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 		switch r.kind {
 		case treeProject:
 			return sideStep{toggle: r.slug, activate: r.inactive}
-		case treeDivider: // space keeps one meaning
+		case treeDivider: // S keeps one meaning
 			return sideStep{}
 		}
-		return sideStep{msg: "space on a project activates or deactivates it"}
+		return sideStep{msg: barKey("side.activate", "S") + " on a project activates or deactivates it"}
 	case sidePin:
 		if r.kind != treeProject {
-			return sideStep{msg: "p on a project pins it to the top"}
+			return sideStep{msg: barKey("side.pin", "P") + " on a project pins it to the top"}
 		}
 		return sideStep{pin: r.slug, pinOn: !r.pinned}
 	case sideFoldAll, sideUnfoldAll:
@@ -258,9 +305,9 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 
 // headStep is what sidebar key op does with the cursor on the PROJECTS
 // header: ↑ ↓ go on through the rows; enter and → show every project's
-// NEEDS YOU, the keyboard following into the list; z Z fold and unfold
-// everything, the cursor staying there; ← does nothing, and space and p
-// say what they are for.
+// NEEDS YOU, the keyboard following into the list; Z folds or unfolds
+// everything, the cursor staying there; ← does nothing, and S and P say
+// what they are for.
 func headStep(all []treeRow, w, op int) sideStep {
 	rows, _ := cursorAt(all, w, "")
 	switch op {
@@ -271,9 +318,9 @@ func headStep(all []treeRow, w, op int) sideStep {
 	case sideDown:
 		return cursorStep(rows, headKey, 1)
 	case sideActive:
-		return sideStep{msg: "space on a project activates or deactivates it"}
+		return sideStep{msg: barKey("side.activate", "S") + " on a project activates or deactivates it"}
 	case sidePin:
-		return sideStep{msg: "p on a project pins it to the top"}
+		return sideStep{msg: barKey("side.pin", "P") + " on a project pins it to the top"}
 	case sideFoldAll, sideUnfoldAll:
 		return sideStep{refold: foldAll(all, op == sideFoldAll), sections: sectionIDs(all), foldOn: op == sideFoldAll,
 			everySection: op == sideUnfoldAll}

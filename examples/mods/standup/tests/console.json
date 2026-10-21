@@ -1,5 +1,5 @@
 {
-  "name": "S on the dashboard opens the full view, which lists the project's tasks by status",
+  "name": "U on the dashboard opens the full view, which lists the project's tasks by status",
   "answers": [
     { "method": "tasks.list", "params": { "slug": "demo" },
       "result": [{ "id": "T1", "title": "Fix the login", "status": "started", "steps_done": 1, "steps_total": 3, "thread": "t-0001" },

@@ -87,7 +87,9 @@ func popupData(t *testing.T) (*fakeSource, *dash) {
 	m := newDash(DashOptions{Source: src, Width: 86 + sideDefault, Height: 40, Cwd: "/work"})
 	m.setData(src.Load())
 	tasksTabNow(m, src)
-	m.sel = "p:alpha"
+	// A thread's row of alpha: plain keys are the list's there (on its
+	// coordinator's they type through, typethrough.go).
+	m.sel = "th:alpha:t-0002"
 	return src, m
 }
 
@@ -95,7 +97,7 @@ func popupData(t *testing.T) (*fakeSource, *dash) {
 // switch with ← →, and 1-6, and esc closes it.
 func TestProjectPopup(t *testing.T) {
 	src, m := popupData(t)
-	cmd := keyPress(m, "a")
+	cmd := keyPress(m, "A")
 	pv, ok := m.top().(*projectView)
 	if !ok || pv.slug != "alpha" {
 		t.Fatalf("a opened %T", m.top())
@@ -166,7 +168,7 @@ func TestProjectPopup(t *testing.T) {
 // Access tab, asks.
 func TestProjectSettingsToggle(t *testing.T) {
 	src, m := popupData(t)
-	keyPress(m, "a")
+	keyPress(m, "A")
 	keyPress(m, "4")
 	act(t, m, src, "enter") // start threads
 	if !strings.Contains(screen(m), "automatically") {
@@ -187,12 +189,12 @@ func TestProjectSettingsToggle(t *testing.T) {
 	if _, ok := m.top().(*confirmView); !ok {
 		t.Fatalf("yolo didn't ask: %T", m.top())
 	}
-	act(t, m, src, "n")
+	act(t, m, src, "N")
 	if cfg, _ := config.Load(); must(cfg.Safety("alpha")).Yolo {
 		t.Fatal("n turned yolo on")
 	}
 	act(t, m, src, "space")
-	act(t, m, src, "y")
+	act(t, m, src, "Y")
 	if cfg, _ := config.Load(); !must(cfg.Safety("alpha")).Yolo {
 		t.Fatal("y left yolo off")
 	}
@@ -275,7 +277,7 @@ func must(s config.Safety, _ error) config.Safety { return s }
 // in the sidebar; Archive and Delete ask first, then close the popup.
 func TestProjectLifecycleRows(t *testing.T) {
 	src, m := popupData(t)
-	keyPress(m, "a")
+	keyPress(m, "A")
 	keyPress(m, "4")
 	pick := func(label string) {
 		t.Helper()
@@ -315,21 +317,21 @@ func TestProjectLifecycleRows(t *testing.T) {
 	if _, ok := m.top().(*confirmView); !ok {
 		t.Fatalf("archive didn't ask: %T", m.top())
 	}
-	act(t, m, src, "n")
+	act(t, m, src, "N")
 	if len(src.lifecycle) != 2 || m.projectPopupView() == nil {
 		t.Fatalf("n archived: %v", src.lifecycle)
 	}
 	act(t, m, src, "enter")
-	act(t, m, src, "y")
+	act(t, m, src, "Y")
 	if got := src.lifecycle[len(src.lifecycle)-1]; got != "alpha archive" || m.projectPopupView() != nil {
 		t.Fatalf("archive: %v, popup %v", src.lifecycle, m.projectPopupView())
 	}
 
-	keyPress(m, "a")
+	keyPress(m, "A")
 	keyPress(m, "4")
 	pick("Delete")
 	act(t, m, src, "enter")
-	act(t, m, src, "y")
+	act(t, m, src, "Y")
 	if got := src.lifecycle[len(src.lifecycle)-1]; got != "alpha delete" || m.projectPopupView() != nil {
 		t.Fatalf("delete: %v", src.lifecycle)
 	}
@@ -339,7 +341,7 @@ func TestProjectLifecycleRows(t *testing.T) {
 // + / -; auto-close cycles off, merged, days, and + / - set the days.
 func TestProjectSettingsNumbers(t *testing.T) {
 	src, m := popupData(t)
-	keyPress(m, "a")
+	keyPress(m, "A")
 	keyPress(m, "4")
 	for range 1 {
 		keyPress(m, "down")
@@ -392,7 +394,7 @@ func TestProjectSettingsNumbers(t *testing.T) {
 func TestProjectRepos(t *testing.T) {
 	src, m := popupData(t)
 	dir := t.TempDir()
-	keyPress(m, "a")
+	keyPress(m, "A")
 	keyPress(m, "+")
 	in, ok := m.top().(*inputView)
 	if !ok {
@@ -407,8 +409,8 @@ func TestProjectRepos(t *testing.T) {
 	if !strings.Contains(screen(m), real[:30]) {
 		t.Fatalf("added repo not shown:\n%s", screen(m))
 	}
-	keyPress(m, "x")
-	act(t, m, src, "y")
+	keyPress(m, "X")
+	act(t, m, src, "Y")
 	if len(src.repos) != 2 || src.repos[1] != "-/src/alpha" {
 		t.Fatalf("repos %v", src.repos)
 	}
@@ -419,7 +421,7 @@ func TestProjectRepos(t *testing.T) {
 // task, or one already asked, only gets a footer message.
 func TestDelegateTask(t *testing.T) {
 	src, m := popupData(t)
-	feed(m, keyPress(m, "a"))
+	feed(m, keyPress(m, "A"))
 	keyPress(m, "3")
 	// T1 is started: d says why it does nothing.
 	pressKey(t, m, "D")
@@ -432,12 +434,12 @@ func TestDelegateTask(t *testing.T) {
 	if !ok || !strings.HasPrefix(cv.question, "Delegate T2 to the coordinator?") {
 		t.Fatalf("d on T2 opened %T", m.top())
 	}
-	keyPress(m, "n")
+	keyPress(m, "N")
 	if m.msg != "T2 not delegated" || len(src.delegated) != 0 {
 		t.Fatalf("n: %q, %v", m.msg, src.delegated)
 	}
 	pressKey(t, m, "D")
-	act(t, m, src, "y")
+	act(t, m, src, "Y")
 	if len(src.delegated) != 1 || src.delegated[0] != "alpha T2" {
 		t.Fatalf("delegated %v", src.delegated)
 	}
@@ -457,7 +459,7 @@ func TestDelegateFromBoard(t *testing.T) {
 	src, m := popupData(t)
 	src.board.Tasks = append(src.board.Tasks, &tasks.Task{ID: 3, Title: "Check it", Status: tasks.Review})
 	tasksTabNow(m, src)
-	feed(m, keyPress(m, "t"))
+	feed(m, keyPress(m, "T"))
 	// Needs you first: T3 (review).
 	pressKey(t, m, "D")
 	if _, ok := m.top().(*projectView); !ok || !strings.Contains(m.msg, "T3 is in review") {
@@ -470,7 +472,7 @@ func TestDelegateFromBoard(t *testing.T) {
 		t.Fatalf("shown task lacks d:\n%s", out)
 	}
 	keyPress(m, "D")
-	act(t, m, src, "y")
+	act(t, m, src, "Y")
 	if len(src.delegated) != 1 || src.delegated[0] != "alpha T2" {
 		t.Fatalf("delegated %v", src.delegated)
 	}
@@ -490,7 +492,7 @@ func TestKeysParity(t *testing.T) {
 	keyPress(m, "?")
 	help := m.top().(*helpView).box(m).body
 	keyPress(m, "esc")
-	keyPress(m, "a")
+	keyPress(m, "A")
 	keyPress(m, "6")
 	// Both are keyLines, each wrapped to its own box's width.
 	b := m.top().(*projectView).box(m)
@@ -541,7 +543,7 @@ func TestNoFileNamesInUI(t *testing.T) {
 		keyPress(m, k)
 		snap()
 	}
-	keyPress(m, "a")
+	keyPress(m, "A")
 	for range tabCount {
 		snap()
 		keyPress(m, "right")
@@ -606,7 +608,7 @@ func TestProjectPopupFixed(t *testing.T) {
 	}
 	for _, size := range [][2]int{{110, 40}, {200, 60}, {80, 24}, {60, 16}} {
 		m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
-		feed(m, keyPress(m, "a")) // the board
+		feed(m, keyPress(m, "A")) // the board
 		pv := m.top().(*projectView)
 		var geo *boxGeo
 		for tab := range tabCount {
@@ -629,7 +631,7 @@ func TestProjectPopupFixed(t *testing.T) {
 
 	m.Update(tea.WindowSizeMsg{Width: 110, Height: 40})
 	tasksTabNow(m, src)
-	feed(m, keyPress(m, "a"))
+	feed(m, keyPress(m, "A"))
 	pv := m.top().(*projectView)
 	keyPress(m, "3")
 	for range 30 {
@@ -676,9 +678,9 @@ func needsYouData(t *testing.T, width int) (*fakeSource, *dash) {
 // popup open.
 func TestAcceptTask(t *testing.T) {
 	src, m := needsYouData(t, 86+sideDefault)
-	feed(m, keyPress(m, "a"))
+	feed(m, keyPress(m, "A"))
 	keyPress(m, "3")
-	if out := screen(m); !strings.Contains(out, "enter show · A accept · x send back · + new task") {
+	if out := screen(m); !strings.Contains(out, "enter show · A accept · X send back · + new task") {
 		t.Fatalf("review keys:\n%s", out)
 	}
 	pressKey(t, m, "A")
@@ -686,12 +688,12 @@ func TestAcceptTask(t *testing.T) {
 	if !ok || cv.question != "Accept T3? The coordinator marks T3 Check it done." {
 		t.Fatalf("a opened %T", m.top())
 	}
-	keyPress(m, "n")
+	keyPress(m, "N")
 	if m.msg != "T3 not accepted" || len(src.asked) != 0 {
 		t.Fatalf("n: %q, %v", m.msg, src.asked)
 	}
 	pressKey(t, m, "A")
-	act(t, m, src, "y")
+	act(t, m, src, "Y")
 	if len(src.asked) != 1 || src.asked[0] != "accept alpha T3" {
 		t.Fatalf("asked %v", src.asked)
 	}
@@ -699,7 +701,7 @@ func TestAcceptTask(t *testing.T) {
 	if !strings.Contains(lineWith(out, "Check it"), "asked the coordinator") || !strings.Contains(out, "told the coordinator you accept T3; it marks it done") {
 		t.Fatalf("after y:\n%s", out)
 	}
-	for _, k := range []string{"A", "x"} {
+	for _, k := range []string{"A", "X"} {
 		pressKey(t, m, k)
 		if m.top() != m.projectPopupView() || m.msg != "not available: T3 is already waiting on the coordinator" || len(src.asked) != 1 {
 			t.Fatalf("%s again: %T, %q, %v", k, m.top(), m.msg, src.asked)
@@ -714,7 +716,7 @@ func TestAcceptTask(t *testing.T) {
 	}
 	// Other tabs: a does nothing; only esc closes the popup.
 	keyPress(m, "1")
-	keyPress(m, "a")
+	keyPress(m, "A")
 	if m.projectPopupView() == nil {
 		t.Fatal("a on the overview closed the popup")
 	}
@@ -724,8 +726,8 @@ func TestAcceptTask(t *testing.T) {
 // enter sends it, esc or an empty note cancel.
 func TestSendBack(t *testing.T) {
 	src, m := needsYouData(t, 86+sideDefault)
-	feed(m, keyPress(m, "t"))
-	pressKey(t, m, "x")
+	feed(m, keyPress(m, "T"))
+	pressKey(t, m, "X")
 	if _, ok := m.top().(*inputView); !ok {
 		t.Fatalf("x opened %T", m.top())
 	}
@@ -733,12 +735,12 @@ func TestSendBack(t *testing.T) {
 	if _, ok := m.top().(*projectView); !ok || m.msg != "T3 not sent back" {
 		t.Fatalf("esc: %T, %q", m.top(), m.msg)
 	}
-	pressKey(t, m, "x")
+	pressKey(t, m, "X")
 	keyPress(m, "enter")
 	if m.msg != "T3 not sent back" || len(src.asked) != 0 {
 		t.Fatalf("empty note: %q, %v", m.msg, src.asked)
 	}
-	pressKey(t, m, "x")
+	pressKey(t, m, "X")
 	if out := screen(m); !strings.Contains(out, "Send T3 back") || !strings.Contains(out, "What should change?") || strings.Contains(out, "/200") {
 		t.Fatalf("prompt:\n%s", out)
 	}
@@ -756,7 +758,7 @@ func TestSendBack(t *testing.T) {
 	}
 	// x on a task not in review or done only says why.
 	keyPress(m, "down")
-	pressKey(t, m, "x")
+	pressKey(t, m, "X")
 	if _, ok := m.top().(*projectView); !ok || m.msg != "not available: T4 is blocked, not in review or done" {
 		t.Fatalf("x on blocked: %T, %q", m.top(), m.msg)
 	}
@@ -769,7 +771,7 @@ func TestSendBackDone(t *testing.T) {
 	src.board.Tasks = append(src.board.Tasks, &tasks.Task{ID: 5, Title: "Shipped", Status: tasks.Done, Thread: "t-0009",
 		Notes: "done (2026-10-05): merged (PR #70), by the project's setting"})
 	tasksTabNow(m, src)
-	feed(m, keyPress(m, "t"))
+	feed(m, keyPress(m, "T"))
 	feed(m, keyPress(m, "b")) // the done tasks are collapsed until b: the mod's key
 	if n := len(src.inputs); n != 1 || src.inputs[0].Key != "b" {
 		t.Fatalf("b reached the mod as %+v", src.inputs)
@@ -783,7 +785,7 @@ func TestSendBackDone(t *testing.T) {
 	for range 10 {
 		keyPress(m, "down")
 	}
-	if out := screen(m); !strings.Contains(out, "enter show · x send back · + new task") || !strings.Contains(out, "b hide done") {
+	if out := screen(m); !strings.Contains(out, "enter show · X send back · + new task") || !strings.Contains(out, "b hide done") {
 		t.Fatalf("done keys:\n%s", out)
 	}
 	pressKey(t, m, "A")
@@ -791,7 +793,7 @@ func TestSendBackDone(t *testing.T) {
 		t.Fatalf("A on done: %q", m.msg)
 	}
 	stillRows(t) // T5's row is new
-	pressKey(t, m, "x")
+	pressKey(t, m, "X")
 	if out := screen(m); !strings.Contains(out, "Send T5 back") || !strings.Contains(out, "What should change?") {
 		t.Fatalf("prompt:\n%s", out)
 	}
@@ -809,17 +811,17 @@ func TestSendBackDone(t *testing.T) {
 // enter in the Tasks tab shows it too, and esc goes back to the tab.
 func TestReviewDetail(t *testing.T) {
 	src, m := needsYouData(t, 86+sideDefault)
-	feed(m, keyPress(m, "t"))
+	feed(m, keyPress(m, "T"))
 	pressKey(t, m, "enter")
 	out := screen(m)
 	for _, want := range []string{"PR #61 merged",
-		"HOW TO CHECK", "• Run tm, press t", "• the bell shows whole", "A accept · x send back · esc back"} {
+		"HOW TO CHECK", "• Run tm, press t", "• the bell shows whole", "A accept · X send back · esc back"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("review detail lacks %q:\n%s", want, out)
 		}
 	}
 	keyPress(m, "A")
-	act(t, m, src, "y")
+	act(t, m, src, "Y")
 	if out := screen(m); !strings.Contains(out, "waiting on the coordinator to accept it") {
 		t.Fatalf("shown task after a:\n%s", out)
 	}
@@ -836,7 +838,7 @@ func TestReviewDetail(t *testing.T) {
 		t.Error("shipLine without a PR")
 	}
 
-	feed(m, keyPress(m, "a"))
+	feed(m, keyPress(m, "A"))
 	keyPress(m, "3")
 	stillRows(t) // T3's row changed with the ask
 	pressKey(t, m, "enter")
@@ -855,7 +857,7 @@ func TestReviewDetail(t *testing.T) {
 // (its latest blocked note); c opens the project's coordinator.
 func TestBlockedTask(t *testing.T) {
 	src, m := needsYouData(t, 86+sideDefault)
-	feed(m, keyPress(m, "t"))
+	feed(m, keyPress(m, "T"))
 	keyPress(m, "down")
 	if out := screen(m); !strings.Contains(out, "enter show · c coordinator · D delegate · + new task") {
 		t.Fatalf("blocked keys:\n%s", out)
@@ -882,20 +884,20 @@ func TestNeedsYouNarrow(t *testing.T) {
 	if m.sideW() != sideDefault {
 		t.Fatalf("sidebar %d", m.sideW())
 	}
-	feed(m, keyPress(m, "t"))
+	feed(m, keyPress(m, "T"))
 	// The keys are the popup's action row, inside its frame.
 	foot := func() string { return screen(m) }
-	if f := foot(); !strings.Contains(f, "enter show · A accept · x send back · + new task") {
+	if f := foot(); !strings.Contains(f, "enter show · A accept · X send back · + new task") {
 		t.Fatalf("t list keys:\n%s", f)
 	}
 	pressKey(t, m, "A")
-	act(t, m, src, "y")
+	act(t, m, src, "Y")
 	if out := screen(m); !strings.Contains(out, "asked the coordinator") {
 		t.Fatalf("t list row:\n%s", out)
 	}
 	stillRows(t) // T3's row changed
 	pressKey(t, m, "enter")
-	if f := foot(); !strings.Contains(f, "A accept · x send back · esc back") {
+	if f := foot(); !strings.Contains(f, "A accept · X send back · esc back") {
 		t.Fatalf("shown task keys:\n%s", f)
 	}
 	keyPress(m, "esc")
@@ -909,7 +911,7 @@ func TestNeedsYouNarrow(t *testing.T) {
 	}
 	keyPress(m, "esc")
 	keyPress(m, "esc")
-	feed(m, keyPress(m, "a"))
+	feed(m, keyPress(m, "A"))
 	keyPress(m, "3")
 	keyPress(m, "up") // the tab keeps its cursor: back to T3
 	if f := foot(); !strings.Contains(f, "enter show · + new task") || strings.Contains(f, "A accept") {
@@ -951,7 +953,7 @@ func TestAllProjectsSettings(t *testing.T) {
 
 	// The project's tab: the value and where it comes from.
 	keyPress(m, "esc")
-	keyPress(m, "a")
+	keyPress(m, "A")
 	keyPress(m, "4")
 	for range 1 {
 		keyPress(m, "down")
@@ -960,7 +962,7 @@ func TestAllProjectsSettings(t *testing.T) {
 		t.Fatalf("project follows all projects:\n%s", out)
 	}
 	act(t, m, src, "-")
-	if out := screen(m); !strings.Contains(out, "14 · 1 working now  −  +") || strings.Contains(lineWith(out, "Parallel threads"), "all projects") || !strings.Contains(out, "x follow all projects") {
+	if out := screen(m); !strings.Contains(out, "14 · 1 working now  −  +") || strings.Contains(lineWith(out, "Parallel threads"), "all projects") || !strings.Contains(out, "X follow all projects") {
 		t.Fatalf("project's own value:\n%s", out)
 	}
 	if cfg, _ := config.Load(); must(cfg.Safety("alpha")).ParallelThreads != 14 || must(cfg.Safety("beta")).ParallelThreads != 15 {
@@ -977,9 +979,9 @@ func TestAllProjectsSettings(t *testing.T) {
 	keyPress(m, "esc")
 
 	// x: alpha follows all projects again.
-	keyPress(m, "a")
+	keyPress(m, "A")
 	keyPress(m, "4")
-	act(t, m, src, "x")
+	act(t, m, src, "X")
 	if !strings.Contains(m.msg, "already follows all projects") {
 		t.Fatalf("x on a following setting: %q", m.msg)
 	}
@@ -992,7 +994,7 @@ func TestAllProjectsSettings(t *testing.T) {
 	if cfg, _ := config.Load(); must(cfg.Safety("alpha")).ParallelThreads != 14 {
 		t.Fatal("delete or backspace dropped alpha's own value")
 	}
-	act(t, m, src, "x")
+	act(t, m, src, "X")
 	if !strings.Contains(m.msg, "alpha follows all projects in parallel threads: 15") {
 		t.Fatalf("x message: %q", m.msg)
 	}
@@ -1016,7 +1018,7 @@ func TestAllProjectsSettings(t *testing.T) {
 	if !ok || !strings.Contains(cv.question, "alpha, beta") && !strings.Contains(cv.question, "alpha and beta") {
 		t.Fatalf("yolo for all projects didn't ask: %T %+v", m.top(), cv)
 	}
-	act(t, m, src, "y")
+	act(t, m, src, "Y")
 	if cfg, _ := config.Load(); !must(cfg.Safety("beta")).Yolo {
 		t.Fatal("yolo for all projects not saved")
 	}
@@ -1026,7 +1028,7 @@ func TestAllProjectsSettings(t *testing.T) {
 // says the mod is off. The arrows go on to the Library tab and round.
 func TestMemoryTab(t *testing.T) {
 	_, m := popupData(t)
-	feed(m, keyPress(m, "a"))
+	feed(m, keyPress(m, "A"))
 	pv := m.top().(*projectView)
 	keyPress(m, "7")
 	if pv.tab != tabMemory {
@@ -1057,7 +1059,7 @@ func TestMemoryTab(t *testing.T) {
 // add or remove a repository, and = doesn't step a number.
 func TestNoKeyAliases(t *testing.T) {
 	src, m := popupData(t)
-	feed(m, keyPress(m, "a"))
+	feed(m, keyPress(m, "A"))
 	pv := m.top().(*projectView)
 	for _, k := range []string{"l", "h", "n", "delete", "backspace"} {
 		keyPress(m, k)
@@ -1086,7 +1088,7 @@ func TestListsPage(t *testing.T) {
 		src.data.Projects[0].Items = append(src.data.Projects[0].Items, project.Item{ID: fmt.Sprint(i), Kind: "report", Subject: fmt.Sprint("t-", i), Summary: "item"})
 	}
 	m.setData(src.Load())
-	keyPress(m, "i")
+	keyPress(m, "I")
 	in := m.top().(*projectView)
 	keyPress(m, "pgdown")
 	if in.sel[tabInbox] != 10 {
@@ -1097,7 +1099,7 @@ func TestListsPage(t *testing.T) {
 		t.Errorf("inbox pgup: %d", in.sel[tabInbox])
 	}
 	keyPress(m, "esc")
-	feed(m, keyPress(m, "t"))
+	feed(m, keyPress(m, "T"))
 	m.render()
 	keyPress(m, "pgdown")
 	if c := tasksCursor(m, src); c != "T2" {
@@ -1125,7 +1127,7 @@ func TestHelpNamesPrefix(t *testing.T) {
 // wait their turn and build on the saved value; none is dropped.
 func TestSettingsKeysQueueDuringSave(t *testing.T) {
 	src, m := popupData(t)
-	keyPress(m, "a")
+	keyPress(m, "A")
 	keyPress(m, "4")
 	for range 1 {
 		keyPress(m, "down")
@@ -1171,7 +1173,7 @@ func TestSettingsKeysQueueDuringSave(t *testing.T) {
 // (T278: one + of three, under -race).
 func TestSettingsQueueOutlivesStalePoll(t *testing.T) {
 	src, m := popupData(t)
-	keyPress(m, "a")
+	keyPress(m, "A")
 	keyPress(m, "4")
 	for range 1 {
 		keyPress(m, "down")
@@ -1210,7 +1212,7 @@ func TestModelsSetting(t *testing.T) {
 	src, m := popupData(t)
 	modelstest.Answer(t, "claude", "alpha", "beta", "gamma")
 	m.Update(tea.WindowSizeMsg{Width: 160, Height: 60})
-	keyPress(m, "a")
+	keyPress(m, "A")
 	keyPress(m, "4")
 	pv := m.top().(*projectView)
 	i := slices.IndexFunc(pv.settings.rows, func(r setting) bool { return r.label == "Thread models" })
@@ -1225,8 +1227,8 @@ func TestModelsSetting(t *testing.T) {
 	if _, ok := m.top().(*modelsView); !ok {
 		t.Fatalf("enter opened %T", m.top())
 	}
-	keyPress(m, "j")
-	keyPress(m, "j")
+	keyPress(m, "down")
+	keyPress(m, "down")
 	drain(t, m, keyPress(m, "enter")) // gamma out
 	if n := len(src.settings); n != 1 || src.settings[0] != "projects.alpha.models=[alpha beta]" {
 		t.Fatalf("settings %v", src.settings)
@@ -1238,9 +1240,9 @@ func TestModelsSetting(t *testing.T) {
 	if s, _ := cfg.Safety("alpha"); !slices.Equal(s.Models, []string{"alpha", "beta"}) {
 		t.Fatalf("saved %v", s.Models)
 	}
-	keyPress(m, "k")
+	keyPress(m, "up")
 	drain(t, m, keyPress(m, "enter")) // beta out
-	keyPress(m, "k")
+	keyPress(m, "up")
 	drain(t, m, keyPress(m, "enter")) // the last one stays
 	mv := m.top().(*modelsView)
 	if mv.err == "" || !slices.Equal(mv.allow, []string{"alpha"}) {
@@ -1254,7 +1256,7 @@ func TestModelsSetting(t *testing.T) {
 func TestHistorySetting(t *testing.T) {
 	src, m := popupData(t)
 	m.Update(tea.WindowSizeMsg{Width: 160, Height: 60})
-	keyPress(m, "a")
+	keyPress(m, "A")
 	keyPress(m, "4")
 	pv := m.top().(*projectView)
 	i := slices.IndexFunc(pv.settings.rows, func(r setting) bool { return r.label == "Keep history" })
@@ -1289,7 +1291,7 @@ func TestHistorySetting(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "59 days") {
 		t.Fatalf("view after -:\n%s", out)
 	}
-	act(t, m, src, "x")
+	act(t, m, src, "X")
 	if cfg, _ := config.Load(); must(cfg.Safety("alpha")).ArchiveThreadsDays != 30 {
 		t.Fatal("x left the project's own value")
 	}
@@ -1318,7 +1320,7 @@ func TestTasksTabBacklogEnter(t *testing.T) {
 		&tasks.Task{ID: 5, Title: "Someday idea", Status: tasks.Open},
 		&tasks.Task{ID: 7, Title: "Later idea", Status: tasks.Open})
 	tasksTabNow(m, src)
-	feed(m, keyPress(m, "a"))
+	feed(m, keyPress(m, "A"))
 	pv := m.top().(*projectView)
 	keyPress(m, "right")
 	keyPress(m, "right")
@@ -1359,7 +1361,7 @@ func TestTasksTabBacklogEnter(t *testing.T) {
 // whose keys are the old task board's.
 func TestTaskKeyOpensTasksTab(t *testing.T) {
 	_, m := popupData(t)
-	feed(m, keyPress(m, "t"))
+	feed(m, keyPress(m, "T"))
 	pv, ok := m.top().(*projectView)
 	if !ok || pv.tab != tabTasks {
 		t.Fatalf("t opened %T", m.top())
@@ -1382,7 +1384,7 @@ func TestLibraryTab(t *testing.T) {
 	src.libFiles = map[string]string{
 		"t-0002/notes.md": "# Notes\n\nhello\n", "t-0001/data.json": `{"a":[1,2]}`, "t-0002/shot.png": "\x89PNG\x00\x01",
 	}
-	feed(m, keyPress(m, "a"))
+	feed(m, keyPress(m, "A"))
 	pv := m.top().(*projectView)
 	keyPress(m, "8")
 	if pv.tab != tabLibrary {
@@ -1390,7 +1392,7 @@ func TestLibraryTab(t *testing.T) {
 	}
 	out := screen(m)
 	for _, want := range []string{"8 library", "T2  Newer · t-0002 · 2026-10-08", "T1  Older · t-0001 · 2026-10-07 · archived",
-		"notes.md", "1.5 KB", "shot.png", "2.5 MB", "data.json", "7 B", "enter read · d delete"} {
+		"notes.md", "1.5 KB", "shot.png", "2.5 MB", "data.json", "7 B", "enter read · X delete"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("library tab lacks %q:\n%s", want, out)
 		}
@@ -1426,16 +1428,16 @@ func TestLibraryTab(t *testing.T) {
 	keyPress(m, "esc")
 
 	// d: asks, n keeps, y deletes.
-	keyPress(m, "d")
+	keyPress(m, "X")
 	if out := screen(m); !strings.Contains(out, "Delete data.json (7 B) of thread t-0001?") {
 		t.Fatalf("d:\n%s", out)
 	}
-	keyPress(m, "n")
+	keyPress(m, "N")
 	if len(src.libRemoved) != 0 {
 		t.Fatalf("n deleted: %v", src.libRemoved)
 	}
-	keyPress(m, "d")
-	drain(t, m, keyPress(m, "y"))
+	keyPress(m, "X")
+	drain(t, m, keyPress(m, "Y"))
 	if !slices.Equal(src.libRemoved, []string{"t-0001/data.json"}) {
 		t.Fatalf("y: %v", src.libRemoved)
 	}
@@ -1445,7 +1447,7 @@ func TestLibraryTab(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "Delete all 1 library files of thread t-0001?") {
 		t.Fatalf("D:\n%s", out)
 	}
-	drain(t, m, keyPress(m, "y"))
+	drain(t, m, keyPress(m, "Y"))
 	if !slices.Equal(src.libRemoved, []string{"t-0001/data.json", "t-0001/"}) {
 		t.Fatalf("after D: %v", src.libRemoved)
 	}
@@ -1480,7 +1482,7 @@ func TestAgentSettings(t *testing.T) {
 		}
 		return i
 	}
-	keyPress(m, "a")
+	keyPress(m, "A")
 	if out := screen(m); !strings.Contains(lineWith(out, "Coordinator"), "not chosen (claude, pi) · not running; enter on the project asks which agent") {
 		t.Fatalf("info's coordinator:\n%s", out)
 	}
@@ -1523,7 +1525,7 @@ func TestAgentSettings(t *testing.T) {
 		t.Fatalf("beta's coordinator agent %q", co)
 	}
 	keyPress(m, "esc")
-	keyPress(m, "a")
+	keyPress(m, "A")
 	if out := screen(m); !strings.Contains(lineWith(out, "Coordinator"), "pi · not running") {
 		t.Fatalf("info's coordinator after the change:\n%s", out)
 	}
@@ -1556,7 +1558,7 @@ func TestNewTaskPrompt(t *testing.T) {
 		t.Fatal(err)
 	}
 	src.templates, _ = reg.Templates("alpha")
-	feed(m, keyPress(m, "t"))
+	feed(m, keyPress(m, "T"))
 	if out := screen(m); !strings.Contains(out, "+ new task") {
 		t.Fatalf("no + in the Tasks tab's keys:\n%s", out)
 	}
@@ -1629,7 +1631,7 @@ func TestGlobalThreadsSetting(t *testing.T) {
 	}
 	s := must(cfg.Safety("alpha"))
 	m.projectData("alpha").Safety = &s
-	keyPress(m, "a")
+	keyPress(m, "A")
 	keyPress(m, "4")
 	if out := screen(m); !strings.Contains(lineWith(out, "Parallel threads"), "10 · 1 working now · 2 of 6 across projects") {
 		t.Fatalf("project's row:\n%s", out)
@@ -1640,7 +1642,7 @@ func TestGlobalThreadsSetting(t *testing.T) {
 // with paired servers; turning it on asks first, off doesn't.
 func TestProjectShareRow(t *testing.T) {
 	src, m := popupData(t)
-	keyPress(m, "a")
+	keyPress(m, "A")
 	keyPress(m, "4")
 	for range 10 {
 		keyPress(m, "pgdown")
@@ -1652,12 +1654,12 @@ func TestProjectShareRow(t *testing.T) {
 	if _, ok := m.top().(*confirmView); !ok {
 		t.Fatalf("sharing didn't ask: %T", m.top())
 	}
-	act(t, m, src, "n")
+	act(t, m, src, "N")
 	if cfg, _ := config.Load(); must(cfg.Safety("alpha")).Share {
 		t.Fatal("n shared it")
 	}
 	act(t, m, src, "enter")
-	act(t, m, src, "y")
+	act(t, m, src, "Y")
 	if cfg, _ := config.Load(); !must(cfg.Safety("alpha")).Share {
 		t.Fatal("y left it unshared")
 	}
@@ -1693,7 +1695,7 @@ func TestAccessReset(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	keyPress(m, "a")
+	keyPress(m, "A")
 	keyPress(m, "5")
 	if !strings.Contains(screen(m), "R reset") {
 		t.Errorf("the Access tab's footer lacks R reset:\n%s", screen(m))
@@ -1702,12 +1704,12 @@ func TestAccessReset(t *testing.T) {
 	if _, ok := m.top().(*confirmView); !ok {
 		t.Fatalf("reset didn't ask: %T", m.top())
 	}
-	act(t, m, src, "n")
+	act(t, m, src, "N")
 	if cfg, _ := config.Load(); !must(cfg.Safety("alpha")).Yolo {
 		t.Fatal("n reset it")
 	}
 	act(t, m, src, "R")
-	act(t, m, src, "y")
+	act(t, m, src, "Y")
 	cfg, _ := config.Load()
 	if s := must(cfg.Safety("alpha")); s.Yolo || s.Protection != config.ProtectGuarded || len(cfg.ThreadSandbox("alpha").Given(config.SandboxHosts)) != 1 {
 		t.Fatalf("after reset %+v", s)
@@ -1715,7 +1717,7 @@ func TestAccessReset(t *testing.T) {
 	keyPress(m, "esc")
 	press(m, ",", "3")
 	act(t, m, src, "R")
-	act(t, m, src, "y")
+	act(t, m, src, "Y")
 	if cfg, _ := config.Load(); must(cfg.AllProjects()).Protection != config.ProtectOpen {
 		t.Fatal("all projects' protection not back to open")
 	}
@@ -1727,7 +1729,7 @@ func TestAccessReset(t *testing.T) {
 func TestAccessTabByLevel(t *testing.T) {
 	src, m := popupData(t)
 	m.Update(tea.WindowSizeMsg{Width: 160, Height: 120})
-	keyPress(m, "a")
+	keyPress(m, "A")
 	keyPress(m, "5")
 	pv := m.top().(*projectView)
 	labels := func() []string {

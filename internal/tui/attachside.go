@@ -90,7 +90,7 @@ func (c *client) band() bandIn {
 }
 
 // sideFullTree is the attach view's whole tree, nothing folded and no
-// filter (w W). c.mu held.
+// filter (W). c.mu held.
 func (c *client) sideFullTree() []treeRow {
 	rows := buildTree(c.side.projects, c.sideSessions(), treeIn{current: c.sideCurrent(), ctxHint: c.side.ctxHint, tree: unfoldedTree(c.side.projects), cols: c.v.Columns, cells: c.cells, peers: c.side.peers})
 	if c.side.needsFirst {
@@ -141,9 +141,14 @@ func (c *client) nextArea() {
 // sideKeyboard runs a key while the sidebar has the keyboard: a sidebar
 // key (sideActions) moves its cursor, and the view previews the row it
 // rests on (previewSoon), or goes into the pane; tab moves on to the
-// next area, as prefix+tab; ? is the help, as prefix+?; any other key is
-// dropped, so nothing reaches the pane. c.mu held; released here.
+// next area, as prefix+tab; ? is the help, as prefix+?; on a running
+// coordinator's row a printable key types through to it (typethrough.go);
+// any other key is dropped, so nothing reaches the pane. c.mu held;
+// released here.
 func (c *client) sideKeyboard(k uv.Key) {
+	if c.sideTypeThrough(k) {
+		return
+	}
 	name := keyName(k)
 	in := sideKeysIn{tree: c.sideTree, full: c.sideFullTree, w: c.sideW, h: c.sideRows(), sel: c.v.SideSel}
 	if name == "tab" {

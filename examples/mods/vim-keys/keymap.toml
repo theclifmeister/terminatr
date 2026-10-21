@@ -1,16 +1,26 @@
 # Each action id to all of its keys (docs/SPEC.md §4 Action ids): the
 # list replaces the action's keys, so keep the ones you still want. An
-# action left out keeps tm's keys (default-keymap's; j, k, h and l are
-# there already). A key two actions want, or a locked one (esc, ctrl+c,
-# the prefix and its commands), is refused and that action keeps its
-# default; the console says so.
+# action left out keeps tm's keys (default-keymap's: the arrows, no
+# letters, so j, k, h and l are added here). A key two actions want, or
+# a locked one (esc, ctrl+c, the prefix and its commands), is refused
+# and that action keeps its default; the console says so.
 
-# Lists: the dashboard's task, thread and inbox lists, the popups.
+# Lists: the dashboard's task, thread and inbox lists.
+"list.up"        = ["up", "k"]
+"list.down"      = ["down", "j"]
 "list.page-up"   = ["pgup", "ctrl+u"]
 "list.page-down" = ["pgdown", "ctrl+d"]
 
 # The sidebar.
+"side.up"        = ["up", "k"]
+"side.down"      = ["down", "j"]
+"side.unfold"    = ["right", "l"]
+"side.fold"      = ["left", "h"]
 "side.first"     = ["home", "g"]
 "side.last"      = ["end", "G"]
 "side.page-up"   = ["pgup", "ctrl+u"]
 "side.page-down" = ["pgdown", "ctrl+d"]
+
+# The details and info panels.
+"panel.up"       = ["up", "k"]
+"panel.down"     = ["down", "j"]

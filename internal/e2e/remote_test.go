@@ -135,7 +135,7 @@ func TestSmokeCoordinatorRemoteControl(t *testing.T) {
 	w.WaitUntil("sidebar marker", wait, func(sc string) bool { return remoteMarked(sc, alpha) }) // the attached view's sidebar
 	w.Prefix("r")
 	w.WaitFor("Turn remote control off for "+alpha+"?", wait)
-	w.Type("y")
+	w.Type("Y")
 	w.WaitFor("Remote Control disconnected.", agentWait)
 	w.WaitUntil("marker gone", wait, func(sc string) bool {
 		return lastLine(sc, alpha+" › coordinator") && !strings.Contains(sc, "remote control on") && !strings.Contains(sc, "⌁")
@@ -194,7 +194,7 @@ func TestSmokeRemoteControlRestart(t *testing.T) {
 	w.WaitUntil("attached", agentWait, func(sc string) bool { return lastLine(sc, alpha+" › coordinator") })
 	w.Prefix("r")
 	w.WaitFor("Turn remote control on for "+alpha, wait)
-	w.Type("y")
+	w.Type("Y")
 	w.WaitFor(coord.ID+" is back", agentWait)
 	w.WaitUntil("markers", wait, func(sc string) bool {
 		return lastLine(sc, "remote control on") && remoteMarked(sc, alpha) && strings.HasPrefix(sc, " PROJECTS")

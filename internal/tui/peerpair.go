@@ -36,7 +36,7 @@ type pairStage int
 const (
 	pairDialing  pairStage = iota // reaching the relay
 	pairWaiting                   // the code works: waiting for the other side
-	pairCheck                     // the six digits: y or n
+	pairCheck                     // the six digits: Y or N
 	pairAnswered                  // waiting for the other side's answer
 	pairFailed                    // not paired: why
 )
@@ -162,8 +162,8 @@ func (pv *pairView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		if pv.stage != pairFailed {
 			m.msg = "not paired"
 		}
-	case pv.stage == pairCheck && (s == "y" || s == "n"):
-		pv.answer <- s == "y"
+	case pv.stage == pairCheck && (s == "Y" || s == "N"):
+		pv.answer <- s == "Y"
 		pv.stage = pairAnswered
 	case pv.stage == pairFailed && s == "enter":
 		m.close(pv)
@@ -233,7 +233,7 @@ func (pv *pairView) render(m *dash) string {
 		body = append(body, "", "Check: "+th().Accent.Render(pv.offer.Check), "")
 		if pv.stage == pairCheck {
 			body = append(body, wrapLines("Pair only if the other side shows the same six digits. Do they match?", w)...)
-			keys = "y they match · n they don't · esc cancel"
+			keys = "Y they match · N they don't · esc cancel"
 		} else {
 			body = append(body, wrapLines("Waiting for the other side's answer…", w)...)
 		}

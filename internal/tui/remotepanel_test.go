@@ -223,9 +223,9 @@ func TestRemotePanelKeys(t *testing.T) {
 	if h := c.infoHintNow(); h != remoteHint {
 		t.Fatalf("hint %q", h)
 	}
-	key(uv.Key{Code: 'a', Text: "a"})
+	key(uv.Key{Code: 'A', Text: "A"})
 	if c.flash != "mini's: view-only here" {
-		t.Fatalf("a: %q", c.flash)
+		t.Fatalf("A: %q", c.flash)
 	}
 	key(uv.Key{Code: uv.KeyEnter})
 	if c.flash != "mini's: view-only here" || c.kb != areaInfo {

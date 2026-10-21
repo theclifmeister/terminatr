@@ -31,10 +31,10 @@ var (
 )
 
 // TestSmokePeerPairSettings: studio pairs from the settings' Peers tab
-// (n, the relay, the code shown to pass on) while mini joins with tm
-// peer join; both see the same six digits, y pins each, and the tab
+// (N, the relay, the code shown to pass on) while mini joins with tm
+// peer join; both see the same six digits, Y pins each, and the tab
 // lists mini, linked. Then the other way: mini runs tm peer pair and studio
-// joins its code with j.
+// joins its code with J.
 func TestSmokePeerPairSettings(t *testing.T) {
 	studio, mini := New(t), New(t)
 	rs := relay.New(relay.DefaultConfig())
@@ -46,12 +46,12 @@ func TestSmokePeerPairSettings(t *testing.T) {
 	studio.FakeClaude() // no "no agent installed" alarm over the header
 
 	w := studio.Window(110, 30)
-	w.WaitFor("n new project", wait)
+	w.WaitFor("+ new project", wait)
 	w.Keys(",", "5")
-	w.WaitFor("Press n to pair", wait)
+	w.WaitFor("Press N to pair", wait)
 	w.Golden("peers-empty.txt", popupMasks...)
 
-	w.Type("n")
+	w.Type("N")
 	w.WaitFor("The relay both servers dial", wait)
 	w.Keys(relayURL, keyEnter)
 	screen := w.WaitFor("Waiting for the other server", wait)
@@ -70,7 +70,7 @@ func TestSmokePeerPairSettings(t *testing.T) {
 	w.Golden("peers-pair-check.txt", append(append([]Mask{}, popupMasks...), pairMasks...)...)
 	join.waitLine(`Do they match\? \[y/N\] $`)
 	join.answer("y")
-	w.Type("y")
+	w.Type("Y")
 	// The popup takes no alias: mini is called after its machine.
 	screen = w.WaitFor("; its link comes up in a moment", wait)
 	alias := pairedRe.FindStringSubmatch(screen)[1]
@@ -80,10 +80,10 @@ func TestSmokePeerPairSettings(t *testing.T) {
 	waitPeerState(t, studio, alias, proto.LinkUp, "")
 	w.WaitFor(" linked · ", wait)
 
-	// The other way: mini pairs, studio joins with j.
+	// The other way: mini pairs, studio joins with J.
 	pair := startPairing(t, mini, "pair", "--relay", relayURL, "--as", "studio")
 	code = pair.waitLine(`^On the other server: tm peer join (\S+)$`)[1]
-	w.Type("j")
+	w.Type("J")
 	w.WaitFor("The pairing code the other server shows", wait)
 	w.Keys(code, keyEnter)
 	checkA := pair.waitLine(`^Check: (\d{3} \d{3})$`)[1]
@@ -93,7 +93,7 @@ func TestSmokePeerPairSettings(t *testing.T) {
 	}
 	pair.waitLine(`Do they match\? \[y/N\] $`)
 	pair.answer("y")
-	w.Type("y")
+	w.Type("Y")
 	w.WaitFor("paired with "+alias+";", wait)
 	if c, out := pair.wait(); c != 0 || !strings.Contains(out, "Paired with studio") {
 		t.Fatalf("pair: exit %d\n%s", c, out)

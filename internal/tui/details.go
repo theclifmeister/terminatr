@@ -350,7 +350,7 @@ func (m *dash) projectPanel(d *panel, r row) {
 		d.wrap(th().Bad.Render("error: " + oneLine(p.Err)))
 	}
 	d.gap()
-	d.add(keysLine("enter open the coordinator · t tasks · i inbox"))
+	d.add(keysLine("enter open the coordinator · prefix+" + keyShown(boundKey("T")) + " tasks · prefix+" + keyShown(boundKey("I")) + " inbox"))
 }
 
 func sessionPanel(d *panel, s proto.SessionInfo) {

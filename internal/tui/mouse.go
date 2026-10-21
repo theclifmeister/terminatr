@@ -270,6 +270,9 @@ func (m *dash) pressKey(name string) tea.Cmd {
 		m.prefixed = true
 		return m.key(keyMsg(rest))
 	}
+	// A button presses a command, never text for a coordinator.
+	m.pressing = true
+	defer func() { m.pressing = false }()
 	return m.key(keyMsg(name))
 }
 
@@ -511,10 +514,10 @@ func (m *dash) rowItems(r row) []menuItem {
 		out = append(out, on(pressItem(word, boundKey("enter"))))
 	}
 	if r.project != "" {
-		out = append(out, on(pressItem("project popup", boundKey("a"))), on(pressItem("tasks", boundKey("t"))), on(pressItem("inbox", boundKey("i"))))
+		out = append(out, on(pressItem("project popup", boundKey("A"))), on(pressItem("tasks", boundKey("T"))), on(pressItem("inbox", boundKey("I"))))
 	}
 	if _, why := m.adoptable(r, true); why == "" {
-		out = append(out, on(pressItem("adopt as a thread", boundKey("T"))))
+		out = append(out, on(pressItem("adopt as a thread", boundKey("O"))))
 	}
 	return out
 }
@@ -599,7 +602,7 @@ func (m *dash) openMenu(title string, items []menuItem, x, y int) {
 
 func (mv *menuView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch k.String() {
-	case "up", "k", "down", "j", "pgup", "pgdown":
+	case "up", "down", "pgup", "pgdown":
 		mv.sel = moveSel(mv.sel, scrollKeys[k.String()], len(mv.items))
 	case "enter", "space":
 		return mv.pick(m, mv.sel)

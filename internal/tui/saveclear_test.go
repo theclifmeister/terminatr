@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -14,7 +15,7 @@ import (
 )
 
 // TestSideSaveClear: past the context hint a running coordinator's row
-// offers prefix+C in its key bar; plain c on the row does nothing, and
+// offers prefix+C in its key bar; plain c on the row types through, and
 // prefix+C on the dashboard saves and clears the selected project's
 // coordinator with no question.
 func TestSideSaveClear(t *testing.T) {
@@ -31,9 +32,11 @@ func TestSideSaveClear(t *testing.T) {
 	if foot := bar(); !strings.Contains(foot, "prefix+C save and clear") {
 		t.Errorf("footer past the hint: %q", foot)
 	}
-	drain(t, m, keyPress(m, "c"))
-	if len(src.saveCleared) != 0 {
-		t.Fatalf("plain c cleared %v", src.saveCleared)
+	// Plain c types through to the coordinator (typethrough.go): it
+	// clears nothing.
+	drain(t, m, keyPress(m, "c"), reflect.TypeOf(typeSettledMsg{}))
+	if len(src.saveCleared) != 0 || !m.typing {
+		t.Fatalf("plain c cleared %v, typing %v", src.saveCleared, m.typing)
 	}
 	drain(t, m, m.prefixCommand("C"))
 	if !slices.Equal(src.saveCleared, []string{"alpha"}) || !strings.Contains(m.msg, "asked alpha's coordinator to save what it learned") {

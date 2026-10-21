@@ -5,7 +5,7 @@ terminatr runs [Codex](https://developers.openai.com/codex) next to Claude Code:
 ## Set up
 
 1. Install Codex and log in with your ChatGPT account (`codex login`). Run `tm doctor` to check that tm finds it.
-2. With only Codex installed, tm uses it for coordinators and threads (`codex (auto)`). With Claude Code installed too, opening a project asks once which agent to run, for all projects. To choose per project, use the project's popup: `a` on the project, then **Settings**. **Thread agent** sets the agent for new threads, **Coordinator agent** the one for a new coordinator (a running coordinator keeps its agent until it is started anew). Both can be set for all projects too. In `config.toml` they are `thread_agent` and `coordinator_agent`.
+2. With only Codex installed, tm uses it for coordinators and threads (`codex (auto)`). With Claude Code installed too, opening a project asks once which agent to run, for all projects. To choose per project, use the project's popup: `A` on the project, then **Settings**. **Thread agent** sets the agent for new threads, **Coordinator agent** the one for a new coordinator (a running coordinator keeps its agent until it is started anew). Both can be set for all projects too. In `config.toml` they are `thread_agent` and `coordinator_agent`.
 3. For one thread, name the agent instead: `tm thread start --agent codex "title"`.
 
 ## Models

@@ -82,7 +82,7 @@ func (m *dash) buildSideTree() []treeRow {
 	return rows
 }
 
-// fullTree is the sidebar's whole tree: nothing folded, no filter (w W).
+// fullTree is the sidebar's whole tree: nothing folded, no filter (W).
 func (m *dash) fullTree() []treeRow {
 	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: m.treeCurrent(), ctxHint: m.data.ContextHint, tree: unfoldedTree(m.data.Projects), cols: m.sideCols, cells: m.data.Cells, peers: m.data.Peers})
 	if m.data.NeedsFirst {

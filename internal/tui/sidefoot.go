@@ -171,7 +171,7 @@ func counted(n int, word string) string {
 func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 	var keys []string
 	// The keys as the bar writes them, or as a keymap binds them.
-	enter, space, left := barKey("side.enter", "⏎"), barKey("side.activate", "␣"), barKey("side.fold", "←")
+	enter, space, left := barKey("side.enter", "⏎"), barKey("side.activate", "S"), barKey("side.fold", "←")
 	switch {
 	case focused && sideFilterNow().typing:
 		keys = []string{"type filter", "⏎ keep", "esc clear"}
@@ -195,12 +195,12 @@ func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 		if r.fold {
 			fold = barKey("side.unfold", "→") + " unfold"
 		}
-		act, pin := space+" deactivate", barKey("side.pin", "p")+" pin"
+		act, pin := space+" deactivate", barKey("side.pin", "P")+" pin"
 		if r.inactive {
 			act = space + " activate"
 		}
 		if r.pinned {
-			pin = barKey("side.pin", "p") + " unpin"
+			pin = barKey("side.pin", "P") + " unpin"
 		}
 		keys = []string{enter + " open"}
 		if r.fold || r.inactive {
@@ -214,13 +214,19 @@ func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 		keys = []string{enter + " start", left + " project"}
 	case r.kind == treeCoordinator && r.state == "":
 		keys = []string{enter + " start", left + " project"}
+	case r.kind == treeCoordinator && r.peer == "":
+		// Every printable key types through to it (typethrough.go).
+		keys = []string{"type to write to it", enter + " attach", left + " project"}
+		if r.ctxHint {
+			keys = append(keys, "prefix+C save and clear")
+		}
 	case r.kind == treeCoordinator, r.session != "":
 		keys = []string{enter + " attach", left + " project"}
 		if r.kind == treeCoordinator && r.ctxHint {
 			keys = append(keys, "prefix+C save and clear")
 		}
 		if r.hint {
-			keys = append(keys, barKey("side.needs-next", "w")+" next "+ic().hint)
+			keys = append(keys, barKey("side.needs-next", "W")+" next "+ic().hint)
 		}
 	default:
 		keys = []string{left + " project"}

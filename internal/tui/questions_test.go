@@ -49,13 +49,13 @@ func TestQuestionsRow(t *testing.T) {
 }
 
 // TestCoordQuestions: the coordinator's info panel leads NEEDS YOU with
-// its open questions; a click on the line, or a, has it open them.
+// its open questions; a click on the line, or A, has it open them.
 func TestCoordQuestions(t *testing.T) {
 	w := &proto.ProjectWatch{Project: "demo", Questions: 1}
 	lines, hits := coordLines(w, 50, time.Now())
 	text := ansi.Strip(strings.Join(lines, "\n"))
 	if strings.Contains(text, "Nothing waits for you.") || !strings.Contains(text, "NEEDS YOU") ||
-		!strings.Contains(text, "1 question waiting · a or click answers") || !strings.Contains(text, "1 needs you") {
+		!strings.Contains(text, "1 question waiting · A or click answers") || !strings.Contains(text, "1 needs you") {
 		t.Fatalf("panel:\n%s", text)
 	}
 	found := false

@@ -15,7 +15,7 @@ import (
 func TestDashboardOverLive(t *testing.T) {
 	src := &fakeSource{data: testData()}
 	m := newDash(DashOptions{Source: src, Width: 100, Height: 30,
-		Over: &Over{Key: "i", Project: "alpha", Session: "s-5", Screen: make([]string, 28), X: 2, Y: 0, H: 28}})
+		Over: &Over{Key: "I", Project: "alpha", Session: "s-5", Screen: make([]string, 28), X: 2, Y: 0, H: 28}})
 	m.setData(src.data)
 	mirror, err := emu.New(60, 28)
 	if err != nil {
@@ -75,11 +75,11 @@ func TestDashboardOverLive(t *testing.T) {
 func TestDashboardOverMessage(t *testing.T) {
 	src := &fakeSource{data: Data{ServerOK: true}}
 	m := newDash(DashOptions{Source: src, Width: 100, Height: 30,
-		Over: &Over{Key: "a", Session: "s-5", Screen: []string{"a shell"}}})
+		Over: &Over{Key: "A", Session: "s-5", Screen: []string{"a shell"}}})
 	m.setData(src.data)
 	m.Update(tickMsg{})
-	if m.result.Attach != "s-5" || m.result.Message != "no project; n creates one" {
-		t.Fatalf("prefix a without a project: result %+v", m.result)
+	if m.result.Attach != "s-5" || m.result.Message != "no project; + creates one" {
+		t.Fatalf("prefix+A without a project: result %+v", m.result)
 	}
 }
 

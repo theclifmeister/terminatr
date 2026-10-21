@@ -56,7 +56,7 @@ func TestDashboardPrefixQuits(t *testing.T) {
 	for name, open := range places {
 		m := newDash(DashOptions{Source: src, Width: 160, Height: 40, State: DashState{Current: "alpha"}})
 		m.setData(src.data)
-		m.sel = "p:alpha"
+		m.sel = "n:s-2" // a thread's: plain keys are the list's
 		open(m)
 		top := m.top()
 		if _, cmd := m.Update(q); quits(cmd) || m.quitting {
@@ -66,7 +66,7 @@ func TestDashboardPrefixQuits(t *testing.T) {
 		if m.top() != top {
 			m = newDash(DashOptions{Source: src, Width: 160, Height: 40, State: DashState{Current: "alpha"}})
 			m.setData(src.data)
-			m.sel = "p:alpha"
+			m.sel = "n:s-2" // a thread's: plain keys are the list's
 			open(m)
 		}
 		m.Update(prefix)
@@ -77,7 +77,7 @@ func TestDashboardPrefixQuits(t *testing.T) {
 
 	// Over a session: the console quits instead of attaching again.
 	m := newDash(DashOptions{Source: src, Width: 100, Height: 30,
-		Over: &Over{Key: "i", Project: "alpha", Session: "s-5", Screen: []string{"", "row"}}})
+		Over: &Over{Key: "I", Project: "alpha", Session: "s-5", Screen: []string{"", "row"}}})
 	m.setData(src.data)
 	m.Update(prefix)
 	if _, cmd := m.Update(q); !quits(cmd) || m.result.Attach != "" {
@@ -191,6 +191,11 @@ func TestEveryPrefixCommandListed(t *testing.T) {
 		}
 	}
 	for _, k := range cmds {
+		if prefixName(k) != k {
+			// A twin (prefix+a as prefix+A) or a second key (D as |):
+			// listed under the key it runs as.
+			continue
+		}
 		if !slices.Contains(hint, k) {
 			t.Errorf("prefix+%s isn't in the dashboard's footer after the prefix (prefixHint)", k)
 		}

@@ -14,7 +14,7 @@
            │           │                                                              │           │
            │ PAIRED SER│ On the other server: , then the Peers tab, j, and type it    │           │
            │ This serve│ in; or tm peer join CODE. Pass it on yourself (a chat, a     │ pass on,  │
-           │ and j on t│ call), never through the relay.                              │terminal); │
+           │ and J on t│ call), never through the relay.                              │terminal); │
            │ both of yo│ Waiting for the other server…                                │           │
            │ No relay y│                                                              │ain NAME;  │
            │ without on│ esc cancel                                                   │(see the   │
@@ -22,7 +22,7 @@
            │                                                                                      │
            │ Paired servers see the projects you share with them, read-only, in their sidebar;    │
            │                                                                                      │
-           │ space toggle · ← → change · n pair · j join · e relay · u update relay · x remove    │
+           │ space toggle · ← → change · N pair · J join · E relay · U update relay · X remove    │
            │ esc close                                                                            │
  ──────────╰───────────────────────────────────────────────────────────────────────────── more ↓ ─╯
                                    │──────────────────────────────────────────────────────────────────────────

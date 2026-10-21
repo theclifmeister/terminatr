@@ -47,7 +47,7 @@ func TestGuardSettingRows(t *testing.T) {
 	if _, ok := m.top().(*confirmView); !ok {
 		t.Fatalf("no question: %T", m.top())
 	}
-	drain(t, m, keyPress(m, "y"))
+	drain(t, m, keyPress(m, "Y"))
 	if !slices.Contains(src.settings, "projects.alpha.guard=false") {
 		t.Errorf("guard off: %v", src.settings)
 	}
@@ -90,7 +90,7 @@ func TestGuardSettingRows(t *testing.T) {
 }
 
 // TestGuardAllowView: a project's list has all projects' allowances too,
-// marked; x removes one from its own table, enter changes its text, and a
+// marked; X removes one from its own table, enter changes its text, and a
 // credentials allowance can't become a pattern.
 func TestGuardAllowView(t *testing.T) {
 	src, m := popupData(t)
@@ -111,13 +111,13 @@ guard_allow = [{ rule = "force-push", command = "git push -f origin tm/*" }, { r
 	}
 	drain(t, m, guardRow(t, "alpha", "Guard allowances").change(m))
 	out := screen(m)
-	for _, want := range []string{"Threads write only in their worktree · all projects", "~/src/shared/*", "git push -f origin tm/*", "enter change · x remove"} {
+	for _, want := range []string{"Threads write only in their worktree · all projects", "~/src/shared/*", "git push -f origin tm/*", "enter change · X remove"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}
 	}
 	keyPress(m, "down")
-	drain(t, m, keyPress(m, "x"))
+	drain(t, m, keyPress(m, "X"))
 	if got := src.settings[len(src.settings)-1]; got != "projects.alpha.guard_allow=[{credentials  ~/.npmrc false false}]" {
 		t.Errorf("removed own: %v", src.settings)
 	}
@@ -126,7 +126,7 @@ guard_allow = [{ rule = "force-push", command = "git push -f origin tm/*" }, { r
 	}
 	// The all-projects one is removed from all projects'.
 	keyPress(m, "up")
-	drain(t, m, keyPress(m, "x"))
+	drain(t, m, keyPress(m, "X"))
 	if got := src.settings[len(src.settings)-1]; got != "defaults.guard_allow=<nil>" {
 		t.Errorf("removed all projects': %v", src.settings)
 	}
@@ -176,9 +176,11 @@ guard_allow = [{ rule = "worktree-only", command = "cp build/* /opt/app/", exact
 	}
 }
 
-// TestGuardRefusalsView: the refusals show whole commands; a allows for
-// the project, telling the thread's running session; one the floor holds
-// is never allowed, only kept refusing.
+// TestGuardRefusalsView: the refusals show whole commands; A asks
+// whether to allow it here or for all projects (esc decides nothing), and
+// here allows it for the project, telling the thread's running session;
+// a lowercase a or x does nothing; one the floor holds is never allowed,
+// only kept refusing (K).
 func TestGuardRefusalsView(t *testing.T) {
 	src, m := popupData(t)
 	now := time.Now()
@@ -202,16 +204,35 @@ func TestGuardRefusalsView(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "second line") {
 		t.Errorf("whole command:\n%s", out)
 	}
-	drain(t, m, keyPress(m, "a"))
+	for _, k := range []string{"a", "x", "k"} {
+		drain(t, m, keyPress(m, k))
+		if _, ok := m.top().(*guardRefusalsView); !ok || len(src.decided) != 0 {
+			t.Fatalf("%s: %T, decided %v", k, m.top(), src.decided)
+		}
+	}
+	keyPress(m, "A")
+	mv, ok := m.top().(*menuView)
+	if !ok || len(mv.items) != 2 || mv.items[0].label != "allow here (alpha)" || mv.items[1].label != "allow for all projects" {
+		t.Fatalf("A: %T %+v", m.top(), mv)
+	}
+	keyPress(m, "esc")
+	if _, ok := m.top().(*guardRefusalsView); !ok || len(src.decided) != 0 {
+		t.Fatalf("esc on the choice: %T, decided %v", m.top(), src.decided)
+	}
+	keyPress(m, "A")
+	drain(t, m, keyPress(m, "enter"))
 	if !slices.Equal(src.decided, []string{"r1 here s-9"}) {
 		t.Errorf("decided %v", src.decided)
 	}
-	// The floor's: a is refused, x keeps it.
-	drain(t, m, keyPress(m, "A"))
-	if len(src.decided) != 1 || !strings.Contains(m.msg, "never allows") {
-		t.Errorf("floor allowed: %v %q", src.decided, m.msg)
+	if out := screen(m); !strings.Contains(out, "A allow… · K keep refusing") {
+		t.Errorf("keys:\n%s", out)
 	}
-	drain(t, m, keyPress(m, "x"))
+	// The floor's: A is refused, K keeps it.
+	drain(t, m, keyPress(m, "A"))
+	if _, ok := m.top().(*guardRefusalsView); !ok || len(src.decided) != 1 || !strings.Contains(m.msg, "never allows") || !strings.Contains(m.msg, "K keeps") {
+		t.Errorf("floor allowed: %T %v %q", m.top(), src.decided, m.msg)
+	}
+	drain(t, m, keyPress(m, "K"))
 	if src.decided[1] != "r2 keep s-2" {
 		t.Errorf("kept %v", src.decided)
 	}

@@ -17,7 +17,7 @@ The tag pins the example as that release made it, for that release's
 mod API (main's may already need the next one); `tm mod update` moves
 it on to the newest release tag that changed its folder, and `tm mod
 examples` prints these lines for your tm's own release. Then turn it
-on in the Mods tab (`,` then `3`), or with `tm mod enable <id>`. `e` in the Mods tab lists them too and installs the selected one with `i`, after the same consent; `tm mod examples` prints this list.
+on in the Mods tab (`,` then `3`), or with `tm mod enable <id>`. `E` in the Mods tab lists them too and installs the selected one with `I`, after the same consent; `tm mod examples` prints this list.
 
 | # | Mod | Surface | Asks for | Install |
 |---|-----|---------|----------|---------|
@@ -34,7 +34,7 @@ on in the Mods tab (`,` then `3`), or with `tm mod enable <id>`. `e` in the Mods
 | + | [tasks-tab](tasks-tab) | the popup's Tasks tab, its rows bound to tm's task actions (built in) | reads your projects, draws its own panels | copy it under another id first, see below |
 | + | [ticker](ticker) | a section in the coordinator's info panel or the sidebar, by its `place` setting (built in) | reads your projects, draws its own panels | copy it under another id first, see below |
 | + | [memory-search](memory-search) | an agent tool, `memory-search_find` | reads your projects, offers tools to agents | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.28.3/examples/mods/memory-search` |
-| + | [standup](standup) | a command: the key `S`, a ≡ menu entry and `tm mod run standup show` | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.28.3/examples/mods/standup` |
+| + | [standup](standup) | a command: the key `U`, a ≡ menu entry and `tm mod run standup show` | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.28.3/examples/mods/standup` |
 | + | [report-glance](report-glance) | panel sections: one in the details panel, on the dashboard and beside a thread's pane, one in the coordinator's info panel | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.28.3/examples/mods/report-glance` |
 | + | [gitlab](gitlab) | a code host: GitLab merge requests as tm's PRs | runs glab | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.28.3/examples/mods/gitlab` |
 | + | [zen](zen) | a layout (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.28.3/examples/mods/zen` |
@@ -97,11 +97,12 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
   only the glyphs it changes over the `unicode` base. A glyph two cells
   wide, or an emoji, makes the set refuse to load, and the console keeps
   its built-in icons and says why.
-- **vim-keys** moves actions by their stable ids. It can't take the
-  escape hatches (`esc`, `ctrl+c`, the prefix and its commands), and a
-  key two actions want is refused.
+- **vim-keys** moves actions by their stable ids: it adds `j` `k` to
+  move and `h` `l` to fold back, which tm's own keys no longer have. It
+  can't take the escape hatches (`esc`, `ctrl+c`, the prefix and its
+  commands), and a key two actions want is refused.
 - **zen**, **cockpit** and **compact** are layouts (`api = "1.5"`): each
-  states only what it changes. Zen hides the sidebar (`b` brings it
+  states only what it changes. Zen hides the sidebar (`B` brings it
   back; a `⚑ N` badge shows what needs you), turns the details panel off
   and keeps only the NEEDS YOU and project sections. Cockpit puts the
   sidebar on the right at 22 % and the panel under the list at 40 %.
@@ -159,7 +160,7 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
   ask handled shows at once. Opened to show a task picked elsewhere
   (`view.opened` names it), it lists that task's row, done tasks
   included, and tm puts the cursor on it.
-- **standup** declares a command in `[[provides.commands]]`. `S` on the
+- **standup** declares a command in `[[provides.commands]]`. `U` on the
   dashboard or its ≡ menu entry runs it with the project shown, and
   being a human input it may open the mod's full view. `tm mod run
   standup show --project <slug>` can't open a view, so the mod says the

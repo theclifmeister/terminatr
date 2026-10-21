@@ -2,6 +2,8 @@ package tui
 
 import (
 	"slices"
+	"unicode"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -42,12 +44,15 @@ func runningCommands(list []mod.ModCommand, noMods bool) []mod.ModCommand {
 // key k on the dashboard and after the prefix, "" when no core key is k:
 // a command may have it then.
 func coreKey(k, prefix string) string {
-	if slices.Contains(lockedKeys, k) || k == prefix || k == "N" || k == "C" {
+	if slices.Contains(lockedKeys, k) || k == prefix || k == "C" {
 		return "locked"
 	}
 	if prefixCommands[k] || paneCommands[k] {
 		// prefix+k is the core's, even with its action bound elsewhere.
 		return "prefix+" + k
+	}
+	if t, ok := prefixTwins[k]; ok {
+		return "prefix+" + t
 	}
 	for _, tb := range []struct {
 		t    keyTable
@@ -60,6 +65,23 @@ func coreKey(k, prefix string) string {
 		}
 	}
 	return ""
+}
+
+// plainKey says whether a command's key k runs it without the prefix on
+// the dashboard: an unshifted letter doesn't, as typed text starts with
+// one; prefix+k does.
+func plainKey(k string) bool {
+	r, n := utf8.DecodeRuneInString(k)
+	return n != len(k) || !unicode.IsLower(r)
+}
+
+// commandKeyShown is how the menu and the help write command key k:
+// prefix+k for one that only runs after the prefix (plainKey).
+func commandKeyShown(k string) string {
+	if k == "" || plainKey(k) {
+		return keyShown(k)
+	}
+	return "prefix+" + k
 }
 
 // commandKey is c's key when it has it: "" when it has none or lost it
@@ -145,7 +167,7 @@ func (m *dash) commandItems() []menuItem {
 		if !c.InMenu() || !c.Runs(slug) {
 			continue
 		}
-		out = append(out, menuItem{label: c.Title + " · " + c.Mod, key: keyShown(m.commandKey(c)),
+		out = append(out, menuItem{label: c.Title + " · " + c.Mod, key: commandKeyShown(m.commandKey(c)),
 			run: func(m *dash) tea.Cmd { return m.runCommand(c) }})
 	}
 	return out
@@ -172,7 +194,10 @@ func (m *dash) commandHelp() []keyHelp {
 		keys := "≡ menu"
 		switch k := m.commandKey(c); {
 		case k != "":
-			keys = keyShown(k) + " prefix+" + keyShown(k)
+			keys = commandKeyShown(k)
+			if plainKey(k) {
+				keys += " prefix+" + keyShown(k)
+			}
 		case c.Key != "":
 			help += "; its key " + c.Key + " is taken"
 		case !c.InMenu():

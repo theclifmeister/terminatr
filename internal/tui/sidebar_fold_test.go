@@ -95,7 +95,7 @@ func TestDividerKeys(t *testing.T) {
 			t.Fatalf("step %d (%s): open %v, cursor %q", i, s.key, open(), m.sideSel)
 		}
 	}
-	drain(t, m, keyPress(m, "space"))
+	drain(t, m, keyPress(m, "S"))
 	if open() || len(src.lifecycle) != 0 || m.msg != "" {
 		t.Fatalf("space on the divider: lifecycle %v msg %q", src.lifecycle, m.msg)
 	}
@@ -125,11 +125,11 @@ func TestDividerKeys(t *testing.T) {
 // its setting, and again unpins it.
 func TestFoldAllAndPin(t *testing.T) {
 	m, src, ui := foldDash(t)
-	m.sideSel = "c:alpha"
+	m.sideSel = "p:alpha" // on alpha's running coordinator Z would type through
 	if !slices.Contains(rowKeys(m.tree()), m.sideSel) {
 		t.Fatalf("no row %s: %v", m.sideSel, rowKeys(m.tree()))
 	}
-	drain(t, m, keyPress(m, "z"))
+	drain(t, m, keyPress(m, "Z"))
 	if got := rowKeys(m.tree()); !slices.Equal(got, []string{"p:alpha", dividerKey}) || m.sideSel != "p:alpha" {
 		t.Fatalf("z: tree %v, cursor %q", got, m.sideSel)
 	}
@@ -147,23 +147,23 @@ func TestFoldAllAndPin(t *testing.T) {
 	}
 	// z on a dormant row moves the cursor to the divider.
 	m.sideSel = "c:beta"
-	drain(t, m, keyPress(m, "z"))
+	drain(t, m, keyPress(m, "Z"))
 	if m.sideSel != dividerKey {
 		t.Fatalf("z on beta's coordinator: cursor %q", m.sideSel)
 	}
 
 	m.sideSel = "p:alpha"
-	drain(t, m, keyPress(m, "p"))
+	drain(t, m, keyPress(m, "P"))
 	if !slices.Equal(src.lifecycle, []string{"alpha pin"}) || !m.projectData("alpha").pinned() {
 		t.Fatalf("p: lifecycle %v", src.lifecycle)
 	}
-	drain(t, m, keyPress(m, "p"))
+	drain(t, m, keyPress(m, "P"))
 	if !slices.Equal(src.lifecycle, []string{"alpha pin", "alpha unpin"}) || m.projectData("alpha").pinned() {
 		t.Fatalf("p again: lifecycle %v", src.lifecycle)
 	}
 	m.sideSel = "c:beta" // alpha has no divider now: its pin reloaded its settings
-	drain(t, m, keyPress(m, "p"))
-	if len(src.lifecycle) != 2 || !strings.Contains(m.msg, "p on a project") {
+	drain(t, m, keyPress(m, "P"))
+	if len(src.lifecycle) != 2 || !strings.Contains(m.msg, "P on a project") {
 		t.Fatalf("p on a coordinator: lifecycle %v msg %q", src.lifecycle, m.msg)
 	}
 }
@@ -194,9 +194,9 @@ func TestNeedYouUnfoldsActive(t *testing.T) {
 	if slices.Contains(rowKeys(m.tree()), "t:beta/t-0005") {
 		t.Fatal("← didn't fold beta")
 	}
-	drain(t, m, keyPress(m, "w"))
+	drain(t, m, keyPress(m, "W"))
 	if got := sideCursorKey(m); got != "t:beta/t-0005" || m.folds.IsFolded("beta") {
-		t.Fatalf("w: cursor %q, folds %+v", got, m.folds)
+		t.Fatalf("W: cursor %q, folds %+v", got, m.folds)
 	}
 }
 
@@ -209,11 +209,11 @@ func TestSideKeysWhileActing(t *testing.T) {
 	m, src, _ := foldDash(t)
 	m.sideSel = dividerKey
 	drain(t, m, keyPress(m, "right")) // unfolds it
-	drain(t, m, keyPress(m, "j"))
+	drain(t, m, keyPress(m, "down"))
 	if m.sideSel != "p:beta" {
 		t.Fatalf("cursor %q under the divider", m.sideSel)
 	}
-	activate := keyPress(m, "space")
+	activate := keyPress(m, "S")
 	if !m.busy || activate == nil {
 		t.Fatal("space on beta started no activation")
 	}
@@ -222,12 +222,12 @@ func TestSideKeysWhileActing(t *testing.T) {
 	}
 	for m.sideSel != "p:alpha" {
 		before := m.sideSel
-		drain(t, m, keyPress(m, "k"))
+		drain(t, m, keyPress(m, "up"))
 		if m.sideSel == before {
 			t.Fatalf("k while activating left the cursor on %q", before)
 		}
 	}
-	drain(t, m, keyPress(m, "space"))
+	drain(t, m, keyPress(m, "S"))
 	if m.top() != nil || len(m.queued) != 1 {
 		t.Fatalf("space while activating: popup %T, queued %d", m.top(), len(m.queued))
 	}
@@ -238,7 +238,7 @@ func TestSideKeysWhileActing(t *testing.T) {
 	if _, ok := m.top().(*confirmView); !ok || !strings.Contains(whole(m), "Deactivate alpha?") {
 		t.Fatalf("after the activation: popup %T, no question about alpha:\n%s", m.top(), whole(m))
 	}
-	drain(t, m, keyPress(m, "y"))
+	drain(t, m, keyPress(m, "Y"))
 	if !slices.Equal(src.lifecycle, []string{"beta activate", "alpha deactivate"}) {
 		t.Fatalf("lifecycle after y %v", src.lifecycle)
 	}
@@ -304,7 +304,7 @@ func TestFoldSections(t *testing.T) {
 	}
 	// z sends view.tree, which the old server keeps without the folds:
 	// the console's stay, here and in ui.json.
-	done(keyPress(m, "z"))
+	done(keyPress(m, "Z"))
 	if v := vc.View(); !m.folds.IsSectionFolded("ticker.ticker") || !v.IsSectionFolded("ticker.ticker") {
 		t.Fatalf("z lost the folds: %+v", m.folds)
 	}

@@ -144,7 +144,7 @@ func (m *dash) accept(slug string, t *tasks.Task, b *binding) tea.Cmd {
 // sendBack asks for a note, then has the coordinator send slug's task t
 // back to work with it: one in review, or a done one, which it reopens.
 func (m *dash) sendBack(slug string, t *tasks.Task, b *binding) tea.Cmd {
-	if !m.canAsk(slug, t, project.KindSendBack, "x sends back tasks in review or done") {
+	if !m.canAsk(slug, t, project.KindSendBack, "X sends back tasks in review or done") {
 		return nil
 	}
 	ref := t.Ref()
@@ -154,7 +154,7 @@ func (m *dash) sendBack(slug string, t *tasks.Task, b *binding) tea.Cmd {
 	return nil
 }
 
-// taskKey runs a task key on slug's task t: D, A, x or c (none of
+// taskKey runs a task key on slug's task t: D, A, X or c (none of
 // them a prefix command, docs/SPEC.md §4).
 func (m *dash) taskKey(slug string, t *tasks.Task, key string) tea.Cmd {
 	switch key {
@@ -162,7 +162,7 @@ func (m *dash) taskKey(slug string, t *tasks.Task, key string) tea.Cmd {
 		return m.delegate(slug, t, nil)
 	case "A":
 		return m.accept(slug, t, nil)
-	case "x":
+	case "X":
 		return m.sendBack(slug, t, nil)
 	case "c":
 		return m.openProject(slug)
@@ -181,9 +181,9 @@ func taskKeys(t *tasks.Task) string {
 	}
 	switch t.Status {
 	case tasks.Review:
-		return "A accept · x send back"
+		return "A accept · X send back"
 	case tasks.Done:
-		return "x send back"
+		return "X send back"
 	case tasks.Blocked:
 		return "c coordinator · D delegate"
 	case tasks.Open, tasks.Ready:
@@ -231,12 +231,12 @@ func noteChecks(t *tasks.Task) []string {
 	return out
 }
 
-// adoptable is the session of row r that T can ask to adopt, or why
+// adoptable is the session of row r that O can ask to adopt, or why
 // not (docs/SPEC.md §4, Adopt): an agent session outside the projects,
 // with a current project to adopt it into.
 func (m *dash) adoptable(r row, ok bool) (proto.SessionInfo, string) {
 	if !ok || r.session == "" {
-		return proto.SessionInfo{}, "T adopts an agent session outside the projects as a thread; select one"
+		return proto.SessionInfo{}, keyShown(boundKey("O")) + " adopts an agent session outside the projects as a thread; select one"
 	}
 	s, found := m.session(r.session)
 	switch {
@@ -247,7 +247,7 @@ func (m *dash) adoptable(r row, ok bool) (proto.SessionInfo, string) {
 	case s.Agent == "" || s.State == "exited":
 		return s, "no agent runs in " + r.session + "; only an agent session becomes a thread"
 	case m.projectHere() == "":
-		return s, "no project to adopt " + r.session + " into; n creates one"
+		return s, "no project to adopt " + r.session + " into; " + keyShown(boundKey("+")) + " creates one"
 	}
 	return s, ""
 }
@@ -276,7 +276,7 @@ func (m *dash) adopt(string) tea.Cmd {
 	}
 	slug, src := m.projectHere(), m.src
 	if m.adoptAsked(slug, s.ID) {
-		// T again takes the go-ahead back (T335): without it the
+		// O again takes the go-ahead back (T335): without it the
 		// coordinator can't adopt the session.
 		question := "Withdraw your go-ahead to adopt " + s.ID + " as a thread of " + slug + "? The coordinator can't adopt it then."
 		m.confirmNo("Withdraw "+s.ID, question, s.ID+" still asked", func() tea.Cmd {

@@ -235,7 +235,7 @@ func TestSideProjKeys(t *testing.T) {
 		t.Fatalf("2: %q", m.sideSel)
 	}
 	m.sideSel = "s:prci.ci@beta"
-	drain(t, m, keyPress(m, "z"))
+	drain(t, m, keyPress(m, "Z"))
 	if !m.folds.IsFolded("beta") || !m.folds.IsSectionFolded("prci.ci@beta") || m.sideSel != "p:beta" {
 		t.Fatalf("z: %+v, cursor %q", m.folds, m.sideSel)
 	}

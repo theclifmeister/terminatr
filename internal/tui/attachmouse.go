@@ -14,7 +14,7 @@ import (
 // The mouse in a session (docs/SPEC.md §4). Inside a pane the program
 // gets the mouse whenever it tracks it (Claude Code does); everything
 // else is tm's: the sidebar, the status bar's buttons (the ≡ menu,
-// prefix+d dashboard, a question's y yes) and a pane
+// prefix+d dashboard, a question's Y yes) and a pane
 // whose program doesn't take the mouse, where a right-click opens the
 // menu. The ≡ menu has every prefix command
 // (sessionMenu), so none lacks a mouse path; a right-click on a sidebar
@@ -217,9 +217,9 @@ func (c *client) menuKey(k uv.Key) {
 	mn := c.menu
 	var run func()
 	switch keyName(k) {
-	case "up", "k":
+	case "up":
 		mn.sel, mn.drawn = moveSel(mn.sel, -1, len(mn.items)), false
-	case "down", "j":
+	case "down":
 		mn.sel, mn.drawn = moveSel(mn.sel, 1, len(mn.items)), false
 	case "enter", "space":
 		run = mn.items[mn.sel].run

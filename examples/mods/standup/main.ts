@@ -1,4 +1,4 @@
-// Standup: a command (mods design §2 tier 4). The human runs it with S
+// Standup: a command (mods design §2 tier 4). The human runs it with U
 // on the dashboard, from the ≡ menu or with tm mod run; the mod gets
 // command.run with the project shown. A console's command may open one
 // of the mod's views (a human input), so it opens its full view, which

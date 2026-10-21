@@ -349,9 +349,9 @@ func (lt *logsTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 			lt.cur = (lt.cur + d) % n
 			lt.open(m)
 		}
-	case "up", "k":
+	case "up":
 		lt.scroll(m, -1)
-	case "down", "j":
+	case "down":
 		lt.scroll(m, 1)
 	case "pgup":
 		lt.scroll(m, -rows)

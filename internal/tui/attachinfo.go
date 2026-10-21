@@ -139,7 +139,7 @@ func (c *client) infoHintNow() string {
 		hint = strings.Replace(hint, " · enter task", " · "+keys+enter, 1)
 	}
 	if d := c.info.data; d != nil && d.watch != nil && d.watch.Questions > 0 {
-		return strings.Replace(hint, " · esc", " · a answers questions · esc", 1)
+		return strings.Replace(hint, " · esc", " · A answers questions · esc", 1)
 	}
 	return hint
 }
@@ -192,7 +192,7 @@ func (c *client) infoToggle() {
 // infoKeyboard runs a key while the panel has the keyboard, by the
 // panel's key table (panelActions): the arrows scroll it, ] and [ select
 // a mod section's header, ← → and enter fold, unfold or open the
-// selected one; with none selected enter shows the task; a has a
+// selected one; with none selected enter shows the task; A (info.questions) has a
 // coordinator open its questions; esc drops the selection, then, as tab
 // (prefix+tab: to the next area, the pane), gives the keyboard back to
 // the pane; any other key is dropped. c.mu held; released here.
@@ -204,10 +204,10 @@ func (c *client) infoKeyboard(k uv.Key) {
 	name := keyName(k)
 	op, ok := panelOp(name)
 	switch {
-	case ip.data != nil && ip.data.remote != nil && (name == "a" || ok && op == panelEnter && ip.sel == ""):
+	case ip.data != nil && ip.data.remote != nil && (name == "A" || ok && op == panelEnter && ip.sel == ""):
 		// The task and the questions are the paired server's.
 		c.flash = ip.data.remote.alias + "'s: view-only here"
-	case name == "a":
+	case name == "A":
 		answer = true
 	case name == "tab":
 		c.kb = areaMain

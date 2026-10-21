@@ -52,7 +52,7 @@ func TestInactiveProjectCollapsed(t *testing.T) {
 	m := newDash(DashOptions{Source: src, Width: 120, Height: 30, State: DashState{Current: "alpha"}})
 	m.folds.InactiveOpen = true
 	m.setData(src.data)
-	drain(t, m, keyPress(m, "]"))
+	drain(t, m, prefixed(m, "]"))
 	if !slices.Equal(src.opened, []string{"alpha"}) {
 		t.Errorf("] opened %v; it skips the inactive beta, back to alpha", src.opened)
 	}
@@ -61,19 +61,19 @@ func TestInactiveProjectCollapsed(t *testing.T) {
 	// runs, it asks, and n keeps it.
 	keyPress(m, "tab")
 	m.sideSel = "p:beta"
-	drain(t, m, keyPress(m, "space"))
+	drain(t, m, keyPress(m, "S"))
 	m.sideSel = "p:alpha"
-	drain(t, m, keyPress(m, "space"))
+	drain(t, m, keyPress(m, "S"))
 	if len(src.lifecycle) != 1 || src.lifecycle[0] != "beta activate" {
 		t.Fatalf("lifecycle %v, want beta activated and alpha asked", src.lifecycle)
 	}
 	if !strings.Contains(whole(m), "Deactivate alpha? This stops its coordinator and t-0002") {
 		t.Fatalf("no question:\n%s", whole(m))
 	}
-	keyPress(m, "n")
+	keyPress(m, "N")
 	m.sideSel = "p:alpha"
-	drain(t, m, keyPress(m, "space"))
-	drain(t, m, keyPress(m, "y"))
+	drain(t, m, keyPress(m, "S"))
+	drain(t, m, keyPress(m, "Y"))
 	if want := []string{"beta activate", "alpha deactivate"}; !slices.Equal(src.lifecycle, want) {
 		t.Errorf("lifecycle %v, want %v", src.lifecycle, want)
 	}
@@ -155,7 +155,7 @@ func TestDashboardActiveToggle(t *testing.T) {
 	m.setData(src.data)
 	m.sel = "p:beta"
 	out := whole(m)
-	if !strings.Contains(out, " beta ─") || !strings.Contains(out, "─ ⊘ inactive — space to activate") || !strings.Contains(out, "space activate") {
+	if !strings.Contains(out, " beta ─") || !strings.Contains(out, "─ ⊘ inactive — S to activate") || !strings.Contains(out, "S activate") {
 		t.Fatalf("inactive project: header or footer missing:\n%s", out)
 	}
 	label := -1
@@ -171,18 +171,18 @@ func TestDashboardActiveToggle(t *testing.T) {
 	if !slices.Equal(src.lifecycle, []string{"beta activate"}) {
 		t.Fatalf("lifecycle %v, want beta activated", src.lifecycle)
 	}
-	if out := whole(m); !strings.Contains(out, "● active — space to deactivate") || !strings.Contains(out, "space deactivate") {
+	if out := whole(m); !strings.Contains(out, "● active — S to deactivate") || !strings.Contains(out, "S deactivate") {
 		t.Fatalf("after activating:\n%s", out)
 	}
 	m.current, m.sel = "alpha", "p:alpha"
 	m.rebuild()
 	on := config.Defaults
 	m.projectData("alpha").Safety = &on
-	drain(t, m, keyPress(m, "space"))
+	drain(t, m, prefixed(m, "S")) // a coordinator's row: S would type through
 	if len(src.lifecycle) != 1 || !strings.Contains(whole(m), "Deactivate alpha?") {
 		t.Fatalf("alpha runs sessions: want a question, lifecycle %v:\n%s", src.lifecycle, whole(m))
 	}
-	drain(t, m, keyPress(m, "y"))
+	drain(t, m, keyPress(m, "Y"))
 	if !slices.Equal(src.lifecycle, []string{"beta activate", "alpha deactivate"}) {
 		t.Errorf("lifecycle %v", src.lifecycle)
 	}

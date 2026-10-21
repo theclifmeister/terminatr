@@ -333,8 +333,8 @@ func TestPickLayout(t *testing.T) {
 	if layoutValue() != "cockpit" || m.layoutID != "cockpit" || m.sideW() != sideSlim || m.layout.Details {
 		t.Fatalf("cockpit: %s, sidebar %d, details %v", layoutValue(), m.sideW(), m.layout.Details)
 	}
-	m.sideKey("b") // hidden, then the full sidebar, at cockpit's width, kept for it
-	m.sideKey("b")
+	m.sideKey("B") // hidden, then the full sidebar, at cockpit's width, kept for it
+	m.sideKey("B")
 	if m.sideW() != 50 || LoadLayout(ui).Layouts["cockpit"].Sidebar.Mode != modeFull {
 		t.Fatalf("b under cockpit: %d %+v", m.sideW(), LoadLayout(ui))
 	}

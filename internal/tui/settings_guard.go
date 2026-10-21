@@ -157,7 +157,7 @@ func (v *guardRulesView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch k.String() {
 	case "esc", "q":
 		m.pop()
-	case "up", "k", "down", "j":
+	case "up", "down":
 		v.sel = moveSel(v.sel, scrollKeys[k.String()], len(ids))
 	case "enter", "space", " ":
 		if v.sel >= len(ids) {
@@ -207,7 +207,7 @@ func (v *guardRulesView) render(m *dash) string {
 }
 
 // guardAllowView lists the allowances: enter changes one's command or
-// file, x removes it. On a project, all projects' are listed too, marked,
+// file, X removes it. On a project, all projects' are listed too, marked,
 // and changed in all projects'.
 type guardAllowView struct {
 	sr  safetyRows
@@ -273,7 +273,7 @@ func (v *guardAllowView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "esc", "q":
 		m.pop()
 		return nil
-	case "up", "k", "down", "j":
+	case "up", "down":
 		v.sel = moveSel(v.sel, scrollKeys[k.String()], len(list))
 		return nil
 	}
@@ -287,7 +287,7 @@ func (v *guardAllowView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		where = "for all projects"
 	}
 	switch k.String() {
-	case "x", "delete", "backspace":
+	case "X", "delete", "backspace":
 		table, i := v.tableOf(m, a)
 		if i < 0 {
 			return nil
@@ -360,12 +360,13 @@ func (v *guardAllowView) render(m *dash) string {
 	if len(list) == 0 {
 		lines = append(lines, "", th().Faint.Render("none yet"))
 	}
-	return m.popup(box{title: "Guard allowances " + v.sr.forWho, body: lines, sel: sel, keys: "enter change · x remove · ↑ ↓ move · esc back"})
+	return m.popup(box{title: "Guard allowances " + v.sr.forWho, body: lines, sel: sel, keys: "enter change · X remove · ↑ ↓ move · esc back"})
 }
 
 // guardRefusalsView lists the guard's open refusals, the latest first:
-// a allows the selected one for its project, A for all projects, k keeps
-// refusing it; enter shows its whole command.
+// A asks whether to allow the selected one for its project or for all
+// projects (a menu of the two; esc there decides nothing), K keeps refusing it;
+// enter shows its whole command.
 type guardRefusalsView struct {
 	sr   safetyRows
 	list []guardlog.Entry
@@ -398,7 +399,7 @@ func (v *guardRefusalsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		}
 		m.pop()
 		return nil
-	case "up", "k", "down", "j":
+	case "up", "down":
 		v.sel, v.open = moveSel(v.sel, scrollKeys[k.String()], len(v.list)), false
 		return nil
 	}
@@ -406,25 +407,37 @@ func (v *guardRefusalsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	e := v.list[v.sel]
-	how := ""
 	switch k.String() {
 	case "enter", "space", " ":
 		v.open = !v.open
 		return nil
-	case "a":
-		how = guardAllowHere
 	case "A":
-		how = guardAllowAll
-	case "x", "K":
-		how = guardKeep
-	default:
+		if e.Floor {
+			m.msg = "the guard never allows this one: " + floorWhy(e) + "; K keeps refusing it"
+			return nil
+		}
+		here := "allow here (" + e.Project + ")"
+		if e.Project == "" {
+			here = "allow here"
+		}
+		pick := func(label, how string) menuItem {
+			return menuItem{label: label, run: func(m *dash) tea.Cmd { return v.decide(m, e, how) }}
+		}
+		m.push(&menuView{title: "Allow " + guardRuleWord(e.Rule), centred: true, items: []menuItem{
+			pick(here, guardAllowHere), pick("allow for all projects", guardAllowAll)}})
 		return nil
+	case "K":
+		return v.decide(m, e, guardKeep)
 	}
-	if how != guardKeep && e.Floor {
-		m.msg = "the guard never allows this one: " + floorWhy(e) + "; x keeps refusing it"
-		return nil
+	return nil
+}
+
+// decide settles refusal e as how says (allow here, for all projects, or
+// keep refusing): it leaves the list and the decision goes to tm.
+func (v *guardRefusalsView) decide(m *dash, e guardlog.Entry, how string) tea.Cmd {
+	if i := slices.IndexFunc(v.list, func(x guardlog.Entry) bool { return x.ID == e.ID }); i >= 0 {
+		v.list = slices.Delete(slices.Clone(v.list), i, i+1)
 	}
-	v.list = slices.Delete(slices.Clone(v.list), v.sel, v.sel+1)
 	v.sel, v.open = max(min(v.sel, len(v.list)-1), 0), false
 	src, session := m.src, sessionOf(m, e)
 	return m.act(func() actionMsg {
@@ -491,5 +504,5 @@ func (v *guardRefusalsView) render(m *dash) string {
 	if sel >= 0 {
 		sel += 2
 	}
-	return m.popup(box{title: "Guard refusals " + v.sr.forWho, body: lines, sel: sel, keys: "a allow here · A allow for all projects · x keep refusing · enter whole command · esc back"})
+	return m.popup(box{title: "Guard refusals " + v.sr.forWho, body: lines, sel: sel, keys: "A allow… · K keep refusing · enter whole command · esc back"})
 }

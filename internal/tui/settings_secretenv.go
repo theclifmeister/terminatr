@@ -76,8 +76,8 @@ type envEntry struct {
 	replaced bool
 }
 
-// secretEnvView lists the variables: a adds one (its name, then its
-// source), x removes the selected one, t tests it. On a project, all
+// secretEnvView lists the variables: A adds one (its name, then its
+// source), X removes the selected one, T tests it. On a project, all
 // projects' are listed too, marked, and removed or tested there.
 type secretEnvView struct {
 	sr  safetyRows
@@ -136,10 +136,10 @@ func (v *secretEnvView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "esc", "q":
 		m.pop()
 		return nil
-	case "up", "k", "down", "j":
+	case "up", "down":
 		v.sel = moveSel(v.sel, scrollKeys[k.String()], len(list))
 		return nil
-	case "a", "+":
+	case "A", "+":
 		v.add(m)
 		return nil
 	}
@@ -152,10 +152,10 @@ func (v *secretEnvView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		where = "for all projects"
 	}
 	switch k.String() {
-	case "x", "delete", "backspace":
+	case "X", "delete", "backspace":
 		v.sel = max(min(v.sel, len(list)-2), 0)
 		return v.save(m, e.all, e.name, nil, e.name+" removed "+where+": threads started from now on don't get it")
-	case "t", "enter", "space", " ":
+	case "T", "enter", "space", " ":
 		slug := v.sr.slug
 		if e.all {
 			slug = ""
@@ -192,7 +192,7 @@ func (v *secretEnvView) add(m *dash) {
 				return nil
 			}
 			v.sel = 0
-			return v.save(m, v.sr.all, name, &src, fmt.Sprintf("%s %s %s, from %s: threads get it from their next start (t tests it)", name, verb, v.sr.forWho, envSourceWord(src)))
+			return v.save(m, v.sr.all, name, &src, fmt.Sprintf("%s %s %s, from %s: threads get it from their next start (T tests it)", name, verb, v.sr.forWho, envSourceWord(src)))
 		}
 		ask := func(label, prefix string) func(*dash) tea.Cmd {
 			return func(m *dash) tea.Cmd {
@@ -232,9 +232,9 @@ func (v *secretEnvView) render(m *dash) string {
 		}
 	}
 	if len(list) == 0 {
-		lines = append(lines, "", th().Faint.Render("none yet: a adds one"))
+		lines = append(lines, "", th().Faint.Render("none yet: A adds one"))
 	}
-	return m.popup(box{title: "Secret environment " + v.sr.forWho, body: lines, sel: sel, keys: "a add · x remove · t test · ↑ ↓ move · esc back"})
+	return m.popup(box{title: "Secret environment " + v.sr.forWho, body: lines, sel: sel, keys: "A add · X remove · T test · ↑ ↓ move · esc back"})
 }
 
 // secretTestWord says what a test of name found: ok, or why not.

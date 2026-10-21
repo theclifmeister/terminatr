@@ -146,7 +146,7 @@ func TestEveryKeyHasMousePath(t *testing.T) {
 func TestNumberSettingButtons(t *testing.T) {
 	src, m := popupData(t)
 	m.Update(tea.WindowSizeMsg{Width: 160, Height: 60})
-	keyPress(m, "a")
+	keyPress(m, "A")
 	keyPress(m, "4")
 	pv := m.top().(*projectView)
 	n := 0
@@ -313,7 +313,7 @@ func TestDashboardMenus(t *testing.T) {
 // clicks; the wheel scrolls the keys.
 func TestPopupClicks(t *testing.T) {
 	src, m := popupData(t)
-	feed(m, keyPress(m, "a")) // the board
+	feed(m, keyPress(m, "A")) // the board
 	clickOn(t, m, "3 tasks")
 	pv := m.top().(*projectView)
 	if pv.tab != tabTasks {
@@ -415,13 +415,13 @@ func TestAttachMenu(t *testing.T) {
 		return strings.Join(out, " ")
 	}
 	got := labels(c.sessionItems())
-	if strings.Contains(got, "prefix+u") || strings.Contains(got, "prefix+r") || !strings.Contains(got, "prefix+a") {
+	if strings.Contains(got, "prefix+u") || strings.Contains(got, "prefix+r") || !strings.Contains(got, "prefix+A") {
 		t.Fatalf("a thread's menu: %s", got)
 	}
 	c.bare, c.dashboard = true, false
 	c.focus = &pane{info: proto.SessionInfo{ID: "s-1", Role: proto.RoleCoordinator}}
 	got = labels(c.sessionItems())
-	if strings.Contains(got, "prefix+u") || !strings.Contains(got, "prefix+r") || strings.Contains(got, "prefix+a") {
+	if strings.Contains(got, "prefix+u") || !strings.Contains(got, "prefix+r") || strings.Contains(got, "prefix+A") {
 		t.Fatalf("a bare coordinator's menu: %s", got)
 	}
 	picked := ""

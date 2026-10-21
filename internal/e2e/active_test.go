@@ -140,9 +140,9 @@ func TestSmokeProjectActive(t *testing.T) {
 // TestSmokeSidebarInactive: an inactive project hangs under the
 // "inactive (1)" divider, folded by default; unfolded (→ on the
 // divider), it is one row, marked ⊘, with no coordinator or thread rows;
-// space on it activates it and it expands, among the active projects;
-// space on an active project with a running thread asks first, n keeps
-// it, and y deactivates it, collapsing it under the divider.
+// S on it activates it and it expands, among the active projects;
+// S on an active project with a running thread asks first, N keeps
+// it, and Y deactivates it, collapsing it under the divider.
 func TestSmokeSidebarInactive(t *testing.T) {
 	env, projDir, _ := threadEnv(t)
 	startThread(t, env, projDir)
@@ -160,11 +160,11 @@ func TestSmokeSidebarInactive(t *testing.T) {
 	w.Type("\t")
 	w.WaitFor("esc back to the list", wait)
 	// Down past demo's coordinator and thread to the divider; → unfolds it.
-	w.Keys("j", "j", "j", keyRight)
+	w.Keys(keyDown, keyDown, keyDown, keyRight)
 	w.WaitUntil("beta collapsed", wait, func(sc string) bool {
 		return inactiveRow(sc, beta) && treeRow(sc, beta, "coordinator") < 0
 	})
-	w.Keys("j", " ")
+	w.Keys(keyDown, "S")
 	w.WaitUntil("beta expanded", agentWait, func(sc string) bool {
 		return treeRow(sc, beta, "coordinator") >= 0 && !inactiveRow(sc, beta)
 	})
@@ -173,16 +173,16 @@ func TestSmokeSidebarInactive(t *testing.T) {
 	}
 
 	// Down past beta's coordinator to demo, which runs a thread.
-	w.Keys("j", "j", " ")
+	w.Keys(keyDown, keyDown, "S")
 	w.WaitFor("Deactivate demo? This stops t-0001", wait)
-	w.Type("n")
+	w.Type("N")
 	w.WaitFor("demo stays active", wait)
 	if got := projectSessions(env, "demo"); len(got) != 1 {
-		t.Fatalf("demo runs %v after n, want its thread", got)
+		t.Fatalf("demo runs %v after N, want its thread", got)
 	}
-	w.Type(" ")
+	w.Type("S")
 	w.WaitFor("Deactivate demo?", wait)
-	w.Type("y")
+	w.Type("Y")
 	w.WaitUntil("demo collapsed", agentWait, func(sc string) bool {
 		return inactiveRow(sc, "demo") && treeRow(sc, "demo", "t-0001 ") < 0
 	})

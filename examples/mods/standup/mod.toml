@@ -1,4 +1,4 @@
-# A command (mods design §2 tier 4, §13): S on the dashboard, the ≡
+# A command (mods design §2 tier 4, §13): U on the dashboard, the ≡
 # menu's "Standup · standup" or `tm mod run standup show --project
 # <slug>` runs it. From a console it opens a full view of where the
 # project's tasks stand; from tm mod run, which can't open a view, it
@@ -7,7 +7,7 @@ id = "standup"
 name = "Standup"
 version = "1.0.0"
 api = "1.0"
-description = "S opens a full view of where the project's tasks stand: blocked, in review, started, ready."
+description = "U opens a full view of where the project's tasks stand: blocked, in review, started, ready."
 authors = ["terminatr"]
 homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/standup"
 
@@ -22,7 +22,7 @@ slot = "full"
 [[provides.commands]]
 id = "show"
 title = "Standup"
-key = "S"
+key = "U"
 
 [permissions]
 project_read = true

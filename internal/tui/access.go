@@ -79,7 +79,7 @@ func (v *accessView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch k.String() {
 	case "esc", "q":
 		m.pop()
-	case "up", "k", "down", "j", "pgup", "pgdown":
+	case "up", "down", "pgup", "pgdown":
 		v.sel = moveSel(v.sel, scrollKeys[k.String()], len(v.res.Rules))
 	}
 	return nil

@@ -29,10 +29,10 @@ func sessionKeys() []keyHelp {
 	return []keyHelp{
 		{"prefix+d", "back to the dashboard, on every console of the view (the session keeps running); on the dashboard it closes the popups"},
 		{"prefix+q", "quit this console, from anywhere: a session, the dashboard, a popup, the sidebar, tm attach (the server, the sessions and other consoles keep running)"},
-		{"prefix+" + boundKeys("a", "i", "t", ",", "?", "n"), "the project popup, settings, help or the new-project prompt, over the session or the dashboard; t and i are the project popup on its Tasks and Inbox tabs; esc closes it"},
+		{"prefix+" + boundKeys("A", "I", "T", ",", "?", "+"), "the project popup, settings, help or the new-project prompt, over the session or the dashboard; T and I are the project popup on its Tasks and Inbox tabs; esc closes it. The lower-case key works too after the prefix (prefix+a as prefix+A, prefix+n as prefix++)"},
 		{"prefix+" + boundKeys("]", "["), "the next / previous project's coordinator"},
-		{"prefix+" + boundKeys("{", "}", "b"), "narrow / widen the sidebar; b a slim strip, hidden, full again"},
-		{"prefix+" + boundKey("|"), "show or hide the panel on the right: beside a thread's pane its info panel (task, steps, state, PR, last report; drag its border to resize it), on the dashboard the details panel"},
+		{"prefix+" + boundKeys("{", "}", "B"), "narrow / widen the sidebar; B a slim strip, hidden, full again (prefix+b too)"},
+		{"prefix+" + boundKey("|"), "show or hide the panel on the right: beside a thread's pane its info panel (task, steps, state, PR, last report; drag its border to resize it), on the dashboard the details panel; prefix+D too"},
 		{"prefix+tab", "the keyboard to the next area: in a session the projects sidebar (its keys below), the info panel (↑ ↓ scroll, enter its task) and back to the pane, which gets no keys meanwhile; on the dashboard as tab"},
 		{"prefix+" + boundKey(";"), "back to the last place: the area, sidebar row and session the keyboard was in before, such as the thread you were typing in; again goes back"},
 		{"prefix+r", "turn remote control of a coordinator on or off, to continue it from another device (asks first): the session's, or on the dashboard the selected project's; ⌁ beside the coordinator's state in the sidebar while it is on. With the project's setting on, tm turns it back on when it drops, but your off holds until the coordinator is started anew"},
@@ -49,16 +49,16 @@ var popupKeys = []keyHelp{
 	{"← → 1-9", "previous / next tab, or pick one; mods' tabs come after the core's"},
 	{"↑ ↓ / tab", "on a mod's tab or card: move, filter (enter keeps it, esc drops it) and change list; the keys the mod lists go to it"},
 	{"↑ ↓ pgup pgdown", "move in the tab, or scroll it (Keys, Memory)"},
-	{"enter space + - x", "on the Settings tab: as in the settings, below"},
-	{"e", "on the Access tab: the effective access, what a new thread of the project gets, read-only"},
-	{"+ x", "on the overview: add a repository / remove the selected one (asks first)"},
+	{"enter space + - X", "on the Settings tab: as in the settings, below"},
+	{"E", "on the Access tab: the effective access, what a new thread of the project gets, read-only"},
+	{"+ X", "on the overview: add a repository / remove the selected one (asks first)"},
 	{"enter", "on a task (Tasks tab): show it, with what it is blocked on, or how to check it and whether its pull request merged"},
 	{"enter", "on a file (Library tab): read it, read-only: text as it is, JSON indented, other files by name and size"},
-	{"d D", "on a file (Library tab): delete it / all of its thread's files (asks first, journaled)"},
+	{"X D", "on a file (Library tab): delete it / all of its thread's files (asks first, journaled)"},
 	{"b", "on the Tasks tab: list the done tasks (collapsed to a line by default), or collapse them again"},
 	{"D", "on an open, ready or blocked task (Tasks tab): delegate it; the coordinator starts a thread for it (asks first)"},
 	{"A", "on a task in review (Tasks tab): accept it; the coordinator marks it done (asks first)"},
-	{"x", "on a task in review: send it back with a note on what to change; the coordinator passes it on"},
+	{"X", "on a task in review: send it back with a note on what to change; the coordinator passes it on"},
 	{"c", "on a task: open the project's coordinator, to answer what a blocked task waits on"},
 	{"esc", "close; esc is the only key that closes a popup"},
 }
@@ -70,10 +70,10 @@ var settingsKeys = []keyHelp{
 	{"enter space", "change the selected setting (yolo mode asks first); on the prefix key, the next ctrl+<key> is the new prefix"},
 	{"+ -", "on a number: one step up / down"},
 	{"← → 1 2", "the , settings: General, or All projects (the settings every project follows unless it sets its own)"},
-	{"x", "on a project's setting it sets itself (its Settings tab): follow all projects again"},
-	{"n j", "on the , settings' Peers tab: pair with another server through a relay, or join the pairing code another shows; both compare six digits (j doesn't move there: ↓ does)"},
+	{"X", "on a project's setting it sets itself (its Settings tab): follow all projects again"},
+	{"N J", "on the , settings' Peers tab: pair with another server through a relay, or join the pairing code another shows; both compare six digits"},
 	{"space ← →", "on the Peers tab: share or stop sharing the selected project (sharing asks first), or move the selected server's panes setting along off · view · write (more asks first)"},
-	{"x e u", "on the Peers tab: remove the selected server (asks first), give it another relay (the relay moved, or has a new key), or ask its relay to update itself (asks first)"},
+	{"X E U", "on the Peers tab: remove the selected server (asks first), give it another relay (the relay moved, or has a new key), or ask its relay to update itself (asks first)"},
 	{"[ ] f / v", "on the , settings' Logs tab: pick the log (the server's, the service's, the consoles', a mod's), follow it as it grows, search it (n N next match), keep the lines of a level; o opens it in $PAGER, c copies its path"},
 	{"esc", "close"},
 }
@@ -85,8 +85,8 @@ var mouseKeys = []keyHelp{
 	{"double-click", "a row opens it: a coordinator or a thread attaches, a task shows"},
 	{"right-click", "a row of the list or the sidebar: a menu of its actions (open or attach, its popup, …); in a session, the status bar or a pane that doesn't take the mouse: the session's menu"},
 	{menuButton + " menu", "every action, first in the footer; in a session, every prefix command, on the status bar"},
-	{"status bar", "prefix+? help, prefix+d dashboard, " + menuButton + " menu, y yes"},
-	{"state label", "at the right of the project's header on the dashboard (● active — space to deactivate): as space"},
+	{"status bar", "prefix+? help, prefix+d dashboard, " + menuButton + " menu, Y yes"},
+	{"state label", "at the right of the project's header on the dashboard (● active — S to deactivate): as S"},
 	{"sidebar", "a row takes the keyboard, its cursor on it, and a project shows its dashboard, its coordinator or a thread attaches; a click on the pane gives the keyboard back. Below the tree, two lines describe the highlighted row (its full title, state, PR and checks) and a key bar lists the keys that work on it"},
 	{"info panel", "beside a thread's pane: its task opens in the Tasks tab, its PR the browser; a click elsewhere gives it the keyboard"},
 	{"mod section", "in the info or details panel: a click on its fold mark folds or unfolds it; on its header or body it opens the view its mod names, else folds or unfolds it"},
@@ -110,6 +110,9 @@ func keyGroups(mods []keyHelp) []keyGroup {
 		return out
 	}
 	dash, side, panel := lines(binds.list, listBindables()), lines(binds.side, sideBindables()), lines(binds.panel, panelBindables())
+	dash = append([]keyHelp{{"type", "on a running coordinator's row: typing writes to the coordinator. The first printable key (a letter of either case, a digit, space, / and the other symbols) attaches it and lands in its prompt with every key after it; the keys below are prefix+key there. Arrows, enter, tab, esc, pgup pgdown, home end and ctrl keys keep their meaning. A thread's row takes enter first"}}, dash...)
+	side = append([]keyHelp{{"type", "on a running coordinator's row: typing writes to it, as on the list (its pane gets the keyboard and every key); the sidebar's letter keys work on the other rows"}}, side...)
+	panel = append(panel, keyHelp{"A", "the info panel beside a coordinator with questions waiting: have it open them in its question dialog (info.questions)"})
 	groups := []keyGroup{
 		{"On the dashboard", dash},
 		{"With the mouse", mouseKeys},

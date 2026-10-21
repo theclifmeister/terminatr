@@ -9,4 +9,4 @@
  ───────────────────────────────── │
  demo · inactive                   │
  previewing it starts nothing      │
- ⏎ open · ← fold · ␣ activate      │
+ ⏎ open · ← fold · S activate      │

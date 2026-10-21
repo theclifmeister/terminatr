@@ -1,35 +1,35 @@
  PROJECTS                      1   │ tm dashboard                                               ● server ok · 2 sessions
- ■ demo        2                   │ demo ────────────────────────────────────────────── ● active — space to deactivate
+ ■ demo        2                   │ demo ────────────────────────────────────────────────── ● active — S to deactivate
  └─ coordi…             ·          │  coordinator                      —           not running; enter starts it  3 inbox
     ├─ T1    50% ☐      ○          │  T1 Fix the login              ○ idle             report new  50% 1/2 ▸ Fix it  <duration>…
     └─ T2        ☐ 4%   ○          │        steps 1/2
                                    │          ✓ 1 Reproduce the bug
                                    │          ○ 2 Fix it
                                    │        report new · for the coordinator
-                                   │  T2 Write the docs             ○ idle      4%     <duration>  t-0002
-                                   │ ╭─ terminatr dev ─────────────────────────────╮
-                                   │ │ back to the last place                    ; │────────────────────────────────────
-                                   │ │ open the selected row                 enter │
-                                   │ │ adopt as a thread                         T │───────────────────────────────────
-                                   │ │ activate / deactivate the project     space │
-                                   │ │ fold / unfold the mod card                z │t's state is in its files, so
-                                   │ │ new project                               n │
-                                   │ │ project popup                             a │───────────────────────────────────
-                                   │ │ tasks                                     t │
-                                   │ │ inbox                                     i │
-                                   │ │ effective access                          e │
+                                   │ ╭─ terminatr dev ─────────────────────────────╮   <duration>  t-0002
+                                   │ │ back to the last place                    ; │
+                                   │ │ open the selected row                 enter │────────────────────────────────────
+                                   │ │ adopt as a thread                         O │
+                                   │ │ activate / deactivate the project         S │───────────────────────────────────
+                                   │ │ fold / unfold the mod card                Z │
+                                   │ │ new project                               + │t's state is in its files, so
+                                   │ │ project popup                             A │
+                                   │ │ tasks                                     T │───────────────────────────────────
+                                   │ │ inbox                                     I │
+                                   │ │ effective access                          E │
                                    │ │ next project                              ] │
                                    │ │ previous project                          [ │
                                    │ │ smaller list                              < │
                                    │ │ larger list                               > │
                                    │ │ narrower sidebar                          { │
                                    │ │ wider sidebar                             } │
-                                   │ │ sidebar: slim / hide / full               b │
+                                   │ │ sidebar: slim / hide / full               B │
                                    │ │ details panel on / off                    | │
                                    │ │ settings                                  , │
+                                   │ │ notifications from mods                   M │
                                    │ │ help: keys and mouse                      ? │
                                    │ │ quit                               prefix+q │
-                                   │ │ Standup · standup                         S │
+                                   │ │ Standup · standup                         U │
                                    │ │                                             │
                                    │ │ enter pick · esc close                      │
  ───────────────────────────────── │ ╰─────────────────────────────────────────────╯

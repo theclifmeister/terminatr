@@ -48,9 +48,9 @@ func TestDialogAnatomy(t *testing.T) {
 		{"help", "Help", "↑ ↓ scroll · esc close", func(m *dash) { keyPress(m, "?") }},
 		{"menu", "Menu", "enter pick · esc close", func(m *dash) { m.openMenu("", m.dashItems(), 2, 2) }},
 		{"settings", "Settings", "esc close", func(m *dash) { keyPress(m, ",") }},
-		{"new project", "New project", "enter ok · ctrl+u clear · esc cancel", func(m *dash) { keyPress(m, "n") }},
-		{"inbox", "alpha", "esc close", func(m *dash) { keyPress(m, "i") }},
-		{"confirm", "Sure", "y yes · n no · esc cancel", func(m *dash) { m.confirm("Sure", "Really?", func() tea.Cmd { return nil }) }},
+		{"new project", "New project", "enter ok · ctrl+u clear · esc cancel", func(m *dash) { keyPress(m, "+") }},
+		{"inbox", "alpha", "esc close", func(m *dash) { keyPress(m, "I") }},
+		{"confirm", "Sure", "Y yes · N no · esc cancel", func(m *dash) { m.confirm("Sure", "Really?", func() tea.Cmd { return nil }) }},
 	} {
 		_, m := popupData(t)
 		tc.open(m)
@@ -78,22 +78,22 @@ func TestDialogAnatomy(t *testing.T) {
 	}
 }
 
-// TestConfirmKeys (K1): a yes/no question takes y, n and esc; enter and
-// any other key do nothing.
+// TestConfirmKeys (K1): a yes/no question takes Y, N and esc; enter, a
+// lowercase y or n and any other key do nothing.
 func TestConfirmKeys(t *testing.T) {
 	_, m := popupData(t)
 	yes := 0
 	m.confirmNo("Do it", "Do it?", "not done", func() tea.Cmd { yes++; return nil })
 	cv := m.top()
-	for _, k := range []string{"enter", "space", "q", "x", "Y"} {
+	for _, k := range []string{"enter", "space", "q", "x", "y", "n"} {
 		keyPress(m, k)
 		if m.top() != cv || yes != 0 {
 			t.Fatalf("%s answered the question (yes %d, top %T)", k, yes, m.top())
 		}
 	}
-	keyPress(m, "n")
+	keyPress(m, "N")
 	if m.top() == cv || m.msg != "not done" || yes != 0 {
-		t.Fatalf("n: top %T, msg %q, yes %d", m.top(), m.msg, yes)
+		t.Fatalf("N: top %T, msg %q, yes %d", m.top(), m.msg, yes)
 	}
 	m.confirmNo("Do it", "Do it?", "not done", func() tea.Cmd { yes++; return nil })
 	keyPress(m, "esc")
@@ -101,21 +101,21 @@ func TestConfirmKeys(t *testing.T) {
 		t.Fatalf("esc: msg %q, yes %d", m.msg, yes)
 	}
 	m.confirmNo("Do it", "Do it?", "not done", func() tea.Cmd { yes++; return nil })
-	keyPress(m, "y")
+	keyPress(m, "Y")
 	if yes != 1 {
-		t.Fatalf("y: yes %d", yes)
+		t.Fatalf("Y: yes %d", yes)
 	}
 }
 
 // TestActionRowClicks: the action row's hints are buttons: a click on
-// "n no" answers no, on "y yes" yes.
+// "N no" answers no, on "Y yes" yes.
 func TestActionRowClicks(t *testing.T) {
 	_, m := popupData(t)
 	yes := 0
 	for _, tc := range []struct {
 		hint string
 		want int
-	}{{"n no", 0}, {"y yes", 1}} {
+	}{{"N no", 0}, {"Y yes", 1}} {
 		m.confirmNo("Do it", "Do it?", "not done", func() tea.Cmd { yes++; return nil })
 		clickOn(t, m, tc.hint)
 		if m.top() != nil || yes != tc.want {
@@ -128,7 +128,7 @@ func TestActionRowClicks(t *testing.T) {
 // under it still in view (dimmed), and esc goes back to it.
 func TestPopupStacks(t *testing.T) {
 	_, m := popupData(t)
-	feed(m, keyPress(m, "a"))
+	feed(m, keyPress(m, "A"))
 	keyPress(m, "3")
 	pressKey(t, m, "enter") // the task, over the Tasks tab
 	out := screen(m)
@@ -146,7 +146,7 @@ func TestPopupStacks(t *testing.T) {
 func TestMessageClears(t *testing.T) {
 	_, m := popupData(t)
 	m.confirmNo("Do it", "Do it?", "not done", func() tea.Cmd { return nil })
-	keyPress(m, "n")
+	keyPress(m, "N")
 	if m.msg != "not done" {
 		t.Fatalf("msg %q", m.msg)
 	}
@@ -157,8 +157,8 @@ func TestMessageClears(t *testing.T) {
 }
 
 // TestSessionDialog: in a session prefix+r asks in a dialog over the
-// panes, with its keys inside it, never in the status bar; n says no,
-// enter does nothing, and a click on its y yes says yes.
+// panes, with its keys inside it, never in the status bar; N says no,
+// enter and a lowercase n do nothing, and a click on its Y yes says yes.
 func TestSessionDialog(t *testing.T) {
 	pk := uv.Key{Code: '\\', Mod: uv.ModCtrl}
 	c, err := newClient(tmclient.Paths{}, log.New(io.Discard, "", 0))
@@ -177,7 +177,7 @@ func TestSessionDialog(t *testing.T) {
 		t.Fatal("prefix+r opened no dialog")
 	}
 	text := ansi.Strip(strings.Join(c.dialog.lines(), "\n"))
-	for _, want := range []string{"╭─ Remote control ─", "Turn remote control on for demo", "y yes · n no · esc cancel"} {
+	for _, want := range []string{"╭─ Remote control ─", "Turn remote control on for demo", "Y yes · N no · esc cancel"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("dialog lacks %q:\n%s", want, text)
 		}
@@ -186,7 +186,7 @@ func TestSessionDialog(t *testing.T) {
 	c.status()
 	bar := ansi.Strip(c.statusText)
 	c.mu.Unlock()
-	if strings.Contains(bar, "y yes") || strings.Contains(bar, "remote control on for") {
+	if strings.Contains(bar, "Y yes") || strings.Contains(bar, "remote control on for") {
 		t.Errorf("the status bar asks: %q", bar)
 	}
 	c.key(uv.Key{Code: uv.KeyEnter})
@@ -194,10 +194,14 @@ func TestSessionDialog(t *testing.T) {
 		t.Fatal("enter answered the question")
 	}
 	c.key(uv.Key{Code: 'n', Text: "n"})
-	if c.confirm != nil || c.dialog != nil || c.flash != "remote control unchanged" {
-		t.Fatalf("n: confirm %v, dialog %v, flash %q", c.confirm != nil, c.dialog, c.flash)
+	if c.confirm == nil {
+		t.Fatal("a lowercase n answered the question")
 	}
-	// A click on its n no answers no too.
+	c.key(uv.Key{Code: 'n', Text: "N", Mod: uv.ModShift})
+	if c.confirm != nil || c.dialog != nil || c.flash != "remote control unchanged" {
+		t.Fatalf("N: confirm %v, dialog %v, flash %q", c.confirm != nil, c.dialog, c.flash)
+	}
+	// A click on its N no answers no too.
 	c.key(pk)
 	c.key(uv.Key{Code: 'r', Text: "r"})
 	d := c.dialog
@@ -208,10 +212,10 @@ func TestSessionDialog(t *testing.T) {
 	}
 	lines := d.lines()
 	row := len(lines) - 2 // the action row
-	col := strings.Index(ansi.Strip(lines[row]), "n no")
+	col := strings.Index(ansi.Strip(lines[row]), "N no")
 	c.mouse(uv.MouseClickEvent{X: d.x + len([]rune(ansi.Strip(lines[row])[:col])), Y: d.y + row, Button: uv.MouseLeft})
 	if c.confirm != nil {
-		t.Fatal("a click on n no left the question open")
+		t.Fatal("a click on N no left the question open")
 	}
 }
 

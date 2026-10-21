@@ -141,7 +141,7 @@ failed mod (156×30, sidebar 36)
                                    │
  ▾ STANDUP ──────────────────────  │
    ▲ mod failed: exit 1            │
-   r in the Mods tab restarts it   │
+   R in the Mods tab restarts it   │
  ▾ TICKER ───────────────── beta   │
    PRs      40s ago · next 1m20s   │
    synced   1m ago                 │

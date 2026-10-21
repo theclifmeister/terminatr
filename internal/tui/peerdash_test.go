@@ -121,7 +121,7 @@ func TestRemoteDashboardStale(t *testing.T) {
 func TestRemoteDashboardKeys(t *testing.T) {
 	m, src := remoteDash(t, "@mini/acme-api")
 	m.h = 12 // so it scrolls
-	for _, k := range []string{"enter", "a", "t", "i", " ", "T", "|"} {
+	for _, k := range []string{"enter", "A", "T", "I", "S", "O", "|", "D"} {
 		drain(t, m, press(m, k))
 		if m.top() != nil || len(src.lifecycle) > 0 || len(src.opened) > 0 || len(src.adopted) > 0 {
 			t.Fatalf("%q acted: %+v %v %v", k, m.top(), src.lifecycle, src.opened)
@@ -226,28 +226,28 @@ func TestPeersTab(t *testing.T) {
 		"relay  relay.example.net",
 		"○ nas  offline 4m · relay · shares 1 project · dial: refused",
 		"relay  relay.example.net:8443",
-		"space toggle · ← → change · n pair · j join · e relay · u update relay · x remove · esc close",
+		"space toggle · ← → change · N pair · J join · E relay · U update relay · X remove · esc close",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in\n%s", want, out)
 		}
 	}
-	// x on a project's row does nothing.
-	press(m, "x")
+	// X on a project's row does nothing.
+	press(m, "X")
 	if _, ok := m.top().(*settingsView); !ok {
-		t.Fatalf("x on a project: %T", m.top())
+		t.Fatalf("X on a project: %T", m.top())
 	}
 	// Past the two projects and mini's panes and relay rows: nas's panes.
-	press(m, "down", "down", "down", "down", "x")
+	press(m, "down", "down", "down", "down", "X")
 	if _, ok := m.top().(*confirmView); !ok {
-		t.Fatalf("x: %T", m.top())
+		t.Fatalf("X: %T", m.top())
 	}
-	press(m, "n")
+	press(m, "N")
 	if len(src.unpinned) != 0 || m.msg != "nas kept" {
-		t.Fatalf("n removed %v, %q", src.unpinned, m.msg)
+		t.Fatalf("N removed %v, %q", src.unpinned, m.msg)
 	}
-	press(m, "down", "x")
-	drain(t, m, press(m, "y"))
+	press(m, "down", "X")
+	drain(t, m, press(m, "Y"))
 	if !slices.Equal(src.unpinned, []string{"nas"}) {
 		t.Fatalf("removed %v", src.unpinned)
 	}
@@ -273,7 +273,7 @@ func TestPeersTab(t *testing.T) {
 
 // TestPeersTabShare: space on a project toggles its Shared with paired
 // servers, the setting its own Settings tab shows: sharing asks first
-// (n keeps it), unsharing goes at once; a click selects a project and a
+// (N keeps it), unsharing goes at once; a click selects a project and a
 // click on the selected one toggles it.
 func TestPeersTabShare(t *testing.T) {
 	m, src := remoteDash(t, "@mini/acme-api")
@@ -284,14 +284,14 @@ func TestPeersTabShare(t *testing.T) {
 	if cv, ok := m.top().(*confirmView); !ok || cv.title != "Share terminatr" {
 		t.Fatalf("space: %T", m.top())
 	}
-	press(m, "n")
+	press(m, "N")
 	if len(src.settings) != 0 || m.msg != "not shared" {
-		t.Fatalf("n: %v %q", src.settings, m.msg)
+		t.Fatalf("N: %v %q", src.settings, m.msg)
 	}
 	press(m, "space")
-	drain(t, m, press(m, "y"))
+	drain(t, m, press(m, "Y"))
 	if !slices.Equal(src.settings, []string{"projects.terminatr.share=true"}) || !strings.Contains(screen(m), "[x] terminatr") {
-		t.Fatalf("y: %v\n%s", src.settings, screen(m))
+		t.Fatalf("Y: %v\n%s", src.settings, screen(m))
 	}
 	drain(t, m, press(m, "space"))
 	if _, ok := m.top().(*settingsView); !ok {
@@ -313,7 +313,7 @@ func TestPeersTabShare(t *testing.T) {
 
 // TestPeersTabPanes: ← → on a server's panes row move its pane switch
 // along off · view · write (docs/SPEC.md §16.12), asking before each
-// step that lets it do more; n keeps it as it was; lowering applies at
+// step that lets it do more; N keeps it as it was; lowering applies at
 // once. A click on a word sets that level.
 func TestPeersTabPanes(t *testing.T) {
 	m, src := remoteDash(t, "@mini/acme-api")
@@ -326,17 +326,17 @@ func TestPeersTabPanes(t *testing.T) {
 	if _, ok := m.top().(*confirmView); !ok {
 		t.Fatalf("→: %T", m.top())
 	}
-	press(m, "n")
+	press(m, "N")
 	if len(src.panesSet) != 0 || m.msg != "panes unchanged for mini" {
-		t.Fatalf("n: %v %q", src.panesSet, m.msg)
+		t.Fatalf("N: %v %q", src.panesSet, m.msg)
 	}
 	press(m, "right")
-	drain(t, m, press(m, "y"))
+	drain(t, m, press(m, "Y"))
 	if out := screen(m); !strings.Contains(out, "off · [view] · write") || !strings.Contains(out, "it can watch the coordinators and threads") {
 		t.Errorf("after view:\n%s", out)
 	}
 	press(m, "right")
-	drain(t, m, press(m, "y"))
+	drain(t, m, press(m, "Y"))
 	if out := screen(m); !strings.Contains(out, "off · view · [write]") || !strings.Contains(m.msg, "panes write for mini") {
 		t.Errorf("after write (%q):\n%s", m.msg, out)
 	}
@@ -402,7 +402,7 @@ func pairStep(t *testing.T, m *dash, cmd tea.Cmd) tea.Cmd {
 	return next
 }
 
-// TestPeersTabRelay: e asks for the selected server's relay, starting
+// TestPeersTabRelay: E asks for the selected server's relay, starting
 // from its own, and sets it as tm peer relay does; a pinned relay shows
 // as its host, pinned.
 func TestPeersTabRelay(t *testing.T) {
@@ -410,15 +410,15 @@ func TestPeersTabRelay(t *testing.T) {
 	src.peers = peersList()
 	press(m, ",", "5")
 	screen(m)
-	// e on a project does nothing; on mini's panes row it asks.
-	press(m, "e")
+	// E on a project does nothing; on mini's panes row it asks.
+	press(m, "E")
 	if _, ok := m.top().(*settingsView); !ok {
-		t.Fatalf("e on a project: %T", m.top())
+		t.Fatalf("E on a project: %T", m.top())
 	}
-	press(m, "down", "down", "e")
+	press(m, "down", "down", "E")
 	in, ok := m.top().(*inputView)
 	if !ok || in.text != "wss://relay.example.net" {
-		t.Fatalf("e: %T %+v", m.top(), m.top())
+		t.Fatalf("E: %T %+v", m.top(), m.top())
 	}
 	pinned := "wss://203.0.113.5#sha256=" + strings.Repeat("ab", 32)
 	in.text = pinned
@@ -451,19 +451,19 @@ func TestPeersTabRelay(t *testing.T) {
 	}
 }
 
-// TestPeersTabPair: n asks for the relay, starting from the last one
+// TestPeersTabPair: N asks for the relay, starting from the last one
 // used; the code shows once it works, then the other server and its six
-// digits, and y pins it: the list reads it, selected, and the footer
+// digits, and Y pins it: the list reads it, selected, and the footer
 // says so without the code.
 func TestPeersTabPair(t *testing.T) {
 	m, src := remoteDash(t, "@mini/acme-api")
 	src.peers = peersList()
 	press(m, ",", "5")
 	screen(m)
-	press(m, "n")
+	press(m, "N")
 	in, ok := m.top().(*inputView)
 	if !ok || in.text != "wss://relay.example.net:8443" {
-		t.Fatalf("n: %T %+v", m.top(), m.top())
+		t.Fatalf("N: %T %+v", m.top(), m.top())
 	}
 	cmd := press(m, "enter")
 	if _, ok := m.top().(*pairView); !ok {
@@ -478,12 +478,12 @@ func TestPeersTabPair(t *testing.T) {
 	}
 	cmd = pairStep(t, m, cmd)
 	out = screen(m)
-	for _, want := range []string{"The other server: studio.local", "server id 77AB-91C3 · tm 0.27.0", "Check: 381 204", "Pair only if the other side shows the same six digits.", "y they match · n they don't · esc cancel"} {
+	for _, want := range []string{"The other server: studio.local", "server id 77AB-91C3 · tm 0.27.0", "Check: 381 204", "Pair only if the other side shows the same six digits.", "Y they match · N they don't · esc cancel"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in\n%s", want, out)
 		}
 	}
-	press(m, "y")
+	press(m, "Y")
 	pairStep(t, m, cmd)
 	sv, ok := m.top().(*settingsView)
 	if !ok {
@@ -497,29 +497,29 @@ func TestPeersTabPair(t *testing.T) {
 	}
 }
 
-// TestPeersTabJoin: j takes a code, shows the six digits; n says no,
+// TestPeersTabJoin: J takes a code, shows the six digits; N says no,
 // and the popup says why with enter to try again, which asks for the
 // code again as typed.
 func TestPeersTabJoin(t *testing.T) {
 	m, src := remoteDash(t, "@mini/acme-api")
 	press(m, ",", "5")
-	if out := screen(m); !strings.Contains(out, "Press n to pair") {
+	if out := screen(m); !strings.Contains(out, "Press N to pair") {
 		t.Errorf("empty tab:\n%s", out)
 	}
-	press(m, "j")
+	press(m, "J")
 	if in, ok := m.top().(*inputView); !ok || in.text != "" {
-		t.Fatalf("j: %T", m.top())
+		t.Fatalf("J: %T", m.top())
 	}
 	press(m, "r", "/", "x")
 	cmd := pairStep(t, m, press(m, "enter"))
 	if !strings.Contains(screen(m), "Check: 381 204") {
 		t.Fatalf("join:\n%s", screen(m))
 	}
-	press(m, "n")
+	press(m, "N")
 	pairStep(t, m, cmd)
 	out := screen(m)
 	if !strings.Contains(out, "Not paired: the digits weren't confirmed here") || !strings.Contains(out, "enter try again · esc close") {
-		t.Fatalf("after n:\n%s", out)
+		t.Fatalf("after N:\n%s", out)
 	}
 	press(m, "enter")
 	if in, ok := m.top().(*inputView); !ok || in.text != "r/x" || in.title != "Join a server" {
@@ -537,7 +537,7 @@ func TestPeersTabPairErrors(t *testing.T) {
 	press(m, ",", "5")
 	screen(m)
 	src.pairErr = pairWords(&net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}, "wss://relay.example.net")
-	press(m, "n", "r", "e", "l", "a", "y")
+	press(m, "N", "r", "e", "l", "a", "y")
 	pairStep(t, m, press(m, "enter"))
 	if out := screen(m); !strings.Contains(out, "Not paired: can't reach the relay relay.example.net") {
 		t.Fatalf("unreachable:\n%s", out)
@@ -548,7 +548,7 @@ func TestPeersTabPairErrors(t *testing.T) {
 	}
 
 	src.pairErr = nil
-	press(m, "n", "r", "e", "l", "a", "y")
+	press(m, "N", "r", "e", "l", "a", "y")
 	cmd := pairStep(t, m, press(m, "enter"))
 	pv := m.top().(*pairView)
 	press(m, "esc")

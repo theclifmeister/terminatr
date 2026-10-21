@@ -119,7 +119,7 @@ func (sr safetyRows) toggle(key string) setting {
 }
 
 // scope fills in where each row's value comes from (rows with keys): on
-// a project, its own value or all projects', which x goes back to; on
+// a project, its own value or all projects', which X goes back to; on
 // all projects, the projects that set their own.
 func (sr safetyRows) scope(rows []setting) []setting {
 	slug := sr.slug
@@ -318,7 +318,7 @@ func (sr safetyRows) autoCloseRow() setting {
 }
 
 func (sr safetyRows) completeRow() setting {
-	return setting{label: "Complete tasks", help: "By you, or on your standing acceptance: a task in review is done once its pull request merges. x sends it back.",
+	return setting{label: "Complete tasks", help: "By you, or on your standing acceptance: a task in review is done once its pull request merges. X sends it back.",
 		keys: []string{"complete_tasks"}, word: func(s config.Safety) string { return completeWords(s.CompleteTasks) },
 		value: func(m *dash) string { return completeWords(sr.safety(m).CompleteTasks) },
 		change: func(m *dash) tea.Cmd {
@@ -386,7 +386,7 @@ func (sr safetyRows) modelsRow() setting {
 			m.push(&modelsView{all: names, allow: slices.Clone(sr.safety(m).Models),
 				save: func(m *dash, list []string) tea.Cmd {
 					// Every model allowed: all projects drops the line,
-					// a project keeps the explicit list (x follows all).
+					// a project keeps the explicit list (X follows all).
 					if sr.all && len(list) == len(names) && !slices.ContainsFunc(list, func(n string) bool { return !slices.Contains(names, n) }) {
 						s := sr.safety(m)
 						s.Models = nil

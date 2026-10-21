@@ -148,7 +148,7 @@ func watchPanel(pw *proto.ProjectWatch, w int, now time.Time, readOnly bool) (*p
 		g, _ := stateLook("blocked")
 		text := th().Warn.Render(g + " " + project.QuestionsWaiting(pw.Questions))
 		if !readOnly {
-			text += th().Faint.Render(" · a or click answers")
+			text += th().Faint.Render(" · A or click answers")
 		}
 		item(text, h)
 	}

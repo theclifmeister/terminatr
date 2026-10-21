@@ -1,6 +1,6 @@
 package e2e
 
-// The project popup (a, prefix+a) and the settings (docs/SPEC.md §4,
+// The project popup (A, prefix+a) and the settings (docs/SPEC.md §4,
 // §11.2).
 
 import (
@@ -75,7 +75,7 @@ func saved(w *Window, desc string, cond func(screen string) bool) string {
 	return w.WaitUntil(desc+", saved", wait, func(sc string) bool { return cond(sc) && !lastLine(sc, "working…") })
 }
 
-// TestSmokeProjectPopup: a opens the project popup; its tabs switch;
+// TestSmokeProjectPopup: A opens the project popup; its tabs switch;
 // a setting changes in place, persists and reaches the coordinator's
 // context; the Keys tab is the help's list; the Memory tab, its mod
 // off, says how to turn it on; prefix+a opens it from a
@@ -120,7 +120,7 @@ func TestSmokeProjectPopup(t *testing.T) {
 	w := env.Window(cols, 40)
 	w.WaitFor("SESSIONS", wait)
 	var screens []string
-	w.Type("a")
+	w.Type("A")
 	w.WaitFor("1 overview", wait)
 	w.WaitFor("Repositories", wait)
 	screens = append(screens, w.Screen())
@@ -136,7 +136,7 @@ func TestSmokeProjectPopup(t *testing.T) {
 	w.Golden("popup-settings.txt", popupMasks...)
 
 	// Library: the resolved thread's files by name and size, one read
-	// in the popup, the rest deleted after y.
+	// in the popup, the rest deleted after Y.
 	w.Type("8")
 	w.WaitFor("options.md", wait)
 	w.Golden("popup-library.txt", popupMasks...)
@@ -146,7 +146,7 @@ func TestSmokeProjectPopup(t *testing.T) {
 	w.WaitFor("options.md", wait)
 	w.Type("D")
 	w.WaitFor("Delete all 2 library files of thread "+done.ID, wait)
-	w.Type("y")
+	w.Type("Y")
 	w.WaitFor("no files", wait)
 	if out := env.MustCLI("library", "list", "--project", slug); out != "" {
 		t.Fatalf("library after D:\n%s", out)

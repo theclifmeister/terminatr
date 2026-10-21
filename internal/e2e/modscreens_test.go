@@ -86,7 +86,7 @@ cmd = 'printf "PR: https://github.com/o/r/pull/7\n\n## Report\nFixed the login r
 	w.Resize(120, 18)
 	w.WaitFor("OTHER SESSIONS", wait)
 	w.Quiet(400 * time.Millisecond)
-	w.Type("S")
+	w.Type("U")
 	w.WaitFor("Started (2)", agentWait)
 	w.Golden("mods-standup.txt", dashMasks...)
 	w.Key(keyEsc)
@@ -106,7 +106,7 @@ cmd = 'printf "PR: https://github.com/o/r/pull/7\n\n## Report\nFixed the login r
 	w.WaitUntil("settings closed", wait, func(sc string) bool { return !strings.Contains(sc, "1 general") })
 
 	// The Memory tab, the built-in memory-tab mod, reading MEMORY.md.
-	w.Type("a")
+	w.Type("A")
 	w.WaitFor("1 overview", wait)
 	w.Type("7")
 	w.WaitFor("Memory  MEMORY.md", agentWait)

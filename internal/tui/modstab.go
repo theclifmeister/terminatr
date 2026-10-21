@@ -24,7 +24,7 @@ import (
 // it permissions, updating and removing it are the human's calls, each
 // after the mod's consent or a question; tm refuses them inside an
 // agent. Built-in mods can be turned off, never removed or updated on
-// their own. i installs a mod, and e lists the example mods to install
+// their own. I installs a mod, and E lists the example mods to install
 // one of them (modinstall.go): each after its consent, and off.
 
 // modsTab is the Mods tab's selection; want is a mod to select once a
@@ -35,7 +35,7 @@ type modsTab struct {
 }
 
 // modsKeys are the Mods tab's action row.
-const modsKeys = "enter on/off · i install · p permissions · s settings · d defaults · l log · r restart · u update · x remove · e examples · ← → tabs · esc close"
+const modsKeys = "enter on/off · I install · p permissions · s settings · d defaults · l log · R restart · U update · X remove · E examples · ← → tabs · esc close"
 
 // selMod is the selected mod, false for none.
 func (mt *modsTab) selMod(m *dash) (mod.Mod, bool) {
@@ -176,9 +176,9 @@ func (mt *modsTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
 	}
 	mods := m.data.Mods
 	if len(mods) == 0 {
-		out = append(out, faintLines("No mods installed. i installs one from a folder or a git URL, as tm mod install does; it starts off, until you turn it on here.", w)...)
+		out = append(out, faintLines("No mods installed. I installs one from a folder or a git URL, as tm mod install does; it starts off, until you turn it on here.", w)...)
 		out = append(out, "")
-		out = append(out, faintLines("e lists terminatr's example mods, one for each place a mod can show up, to install one.", w)...)
+		out = append(out, faintLines("E lists terminatr's example mods, one for each place a mod can show up, to install one.", w)...)
 		return out, -1, nil
 	}
 	mt.find(mods)
@@ -186,7 +186,7 @@ func (mt *modsTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
 	defer func() {
 		if !slices.ContainsFunc(mods, func(md mod.Mod) bool { return !md.Builtin }) {
 			out = append(out, "")
-			out = append(out, faintLines("No mods of your own yet. i installs one from a folder or a git URL, as tm mod install does; it starts off, until you turn it on here. e lists terminatr's example mods to install one.", w)...)
+			out = append(out, faintLines("No mods of your own yet. I installs one from a folder or a git URL, as tm mod install does; it starts off, until you turn it on here. E lists terminatr's example mods to install one.", w)...)
 		}
 	}()
 	nameW, kindW, verW := 4, 4, 1
@@ -303,12 +303,12 @@ func modAbout(m *dash, md mod.Mod, w int) []string {
 		for _, l := range wrapLines("Failed: "+f, w) {
 			out = append(out, th().Bad.Render(l))
 		}
-		out = append(out, faintLines("Its columns and panels stay blank until it runs again; your threads carry on. r restarts it; l shows its log.", w)...)
+		out = append(out, faintLines("Its columns and panels stay blank until it runs again; your threads carry on. R restarts it; l shows its log.", w)...)
 	case hosted && h.State == hostBackoff:
 		for _, l := range wrapLines("Its host stopped: "+hostRestart(h)+".", w) {
 			out = append(out, th().Warn.Render(l))
 		}
-		out = append(out, faintLines("r restarts it now; l shows its log.", w)...)
+		out = append(out, faintLines("R restarts it now; l shows its log.", w)...)
 	case hosted:
 		out = append(out, faintLines(hostWords(h), w)...)
 	case md.State == mod.Invalid || md.State == mod.Incompatible:
@@ -331,16 +331,16 @@ func (mt *modsTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 		return nil, true
 	}
 	switch s {
-	case "e":
+	case "E":
 		m.push(&examplesView{})
 		return nil, true
-	case "i":
+	case "I":
 		m.installPrompt("")
 		return nil, true
 	}
 	md, ok := mt.selMod(m)
 	if !ok {
-		return nil, slices.Contains([]string{"enter", "space", " ", "p", "s", "d", "l", "r", "u", "x"}, s)
+		return nil, slices.Contains([]string{"enter", "space", " ", "p", "s", "d", "l", "R", "U", "X"}, s)
 	}
 	switch s {
 	case "enter", "space", " ":
@@ -357,11 +357,11 @@ func (mt *modsTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 		m.push(&modDefaultsView{id: md.ID})
 	case "l":
 		m.openModLog(md)
-	case "r":
+	case "R":
 		return m.modRestart(md), true
-	case "u":
+	case "U":
 		return m.modUpdate(md), true
-	case "x":
+	case "X":
 		m.modRemove(md)
 	default:
 		return nil, false
@@ -449,7 +449,7 @@ func permStyle(perm string) lipgloss.Style {
 
 // consentView is a mod's consent (mods design §9): what it is, each
 // permission it asks for in plain words and its colour, every rules
-// addendum and agent manifest in full, then "Enable <name>?". y turns it
+// addendum and agent manifest in full, then "Enable <name>?". Y turns it
 // on with every permission it asks for; a mod that wants more is asked
 // for what it wants more, and o turns it off instead.
 type consentView struct {
@@ -547,7 +547,7 @@ func (cv *consentView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	switch k.String() {
-	case "y":
+	case "Y":
 		m.pop()
 		msg := name + " on"
 		if md.State == mod.Enabled {
@@ -559,7 +559,7 @@ func (cv *consentView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			m.pop()
 			return m.modAct(md.ID, "disable", name+" off")
 		}
-	case "n", "esc":
+	case "N", "esc":
 		m.pop()
 		m.msg = "unchanged"
 	}
@@ -573,10 +573,10 @@ func (cv *consentView) render(m *dash) string {
 	if !ok || md.Manifest == nil {
 		return m.popup(box{title: "Mod", body: []string{th().Faint.Render("It is no longer installed.")}, sel: -1, keys: "esc back"})
 	}
-	keys := "y yes · n no · ↑ ↓ scroll · esc cancel"
+	keys := "Y yes · N no · ↑ ↓ scroll · esc cancel"
 	title := "Enable " + modName(md)
 	if md.State == mod.Enabled {
-		keys = "y grant · n not now · o turn it off · ↑ ↓ scroll · esc cancel"
+		keys = "Y grant · N not now · o turn it off · ↑ ↓ scroll · esc cancel"
 		title = modName(md) + " wants more"
 	}
 	return m.popup(box{title: title, body: cv.lines(m, md, m.inner(viewWidth)), sel: -1, scroll: cv.scroll, keys: keys})
@@ -584,7 +584,7 @@ func (cv *consentView) render(m *dash) string {
 
 // modDefaultsView shows the defaults a mod suggests for all projects
 // (mods design §7, Tighten only), each beside what all projects follow
-// now: y applies them, as the human's change, once the mod is on. A
+// now: Y applies them, as the human's change, once the mod is on. A
 // setting config.toml's [defaults] sets stays the human's.
 type modDefaultsView struct {
 	id     string
@@ -619,7 +619,7 @@ func (dv *modDefaultsView) lines(md mod.Mod, w int) []string {
 	case !slices.ContainsFunc(sgs, mod.Suggestion.Applies):
 		out = append(out, faintLines("Nothing to apply.", w)...)
 	default:
-		out = append(out, faintLines("y writes them to config.toml's [defaults], as your change; settings → All projects changes them back.", w)...)
+		out = append(out, faintLines("Y writes them to config.toml's [defaults], as your change; settings → All projects changes them back.", w)...)
 	}
 	return out
 }
@@ -634,7 +634,7 @@ func (dv *modDefaultsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	switch k.String() {
-	case "y":
+	case "Y":
 		if md.State != mod.Enabled {
 			m.fail(fmt.Errorf("%s is off: enter turns it on", modName(md)))
 			return nil
@@ -655,7 +655,7 @@ func (dv *modDefaultsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			}
 			return actionMsg{msg: "all projects take " + name + "'s " + strings.Join(keys, ", ")}
 		})
-	case "n", "esc", "q":
+	case "N", "esc", "q":
 		m.pop()
 	}
 	return nil
@@ -670,7 +670,7 @@ func (dv *modDefaultsView) render(m *dash) string {
 	}
 	keys := "↑ ↓ scroll · esc back"
 	if md.State == mod.Enabled {
-		keys = "y apply · " + keys
+		keys = "Y apply · " + keys
 	}
 	return m.popup(box{title: modName(md) + " · defaults", body: dv.lines(md, m.inner(viewWidth)), sel: -1, scroll: dv.scroll, keys: keys})
 }
@@ -694,7 +694,7 @@ func (v *modPermsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch s := k.String(); s {
 	case "esc", "q":
 		m.pop()
-	case "up", "k", "down", "j":
+	case "up", "down":
 		v.sel = moveSel(v.sel, scrollKeys[s], len(asked))
 	case "enter", "space", " ":
 		if v.sel >= len(asked) {
@@ -943,7 +943,7 @@ func (m *dash) modUpdate(md mod.Mod) tea.Cmd {
 
 // updateView asks before an update that asks for more permissions, or
 // changes a rules addendum or agent manifest: what changed, then
-// "Update <name>?". A mod that is on gets the new permissions with y.
+// "Update <name>?". A mod that is on gets the new permissions with Y.
 type updateView struct {
 	md     mod.Mod
 	st     *mod.Staged
@@ -966,7 +966,7 @@ func (uv *updateView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	switch k.String() {
-	case "y":
+	case "Y":
 		m.pop()
 		var grant []string
 		if uv.md.State == mod.Enabled {
@@ -980,7 +980,7 @@ func (uv *updateView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			}
 			return actionMsg{msg: "updated " + name + " to " + to}
 		})
-	case "n", "esc":
+	case "N", "esc":
 		m.pop()
 		uv.st.Close()
 		m.msg = "not updated"
@@ -991,7 +991,7 @@ func (uv *updateView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 func (uv *updateView) wheel(m *dash, d int) { uv.key(m, arrow(d)) }
 
 func (uv *updateView) render(m *dash) string {
-	return m.popup(box{title: "Update " + modName(uv.md), body: uv.lines(m.inner(viewWidth)), sel: -1, scroll: uv.scroll, keys: "y yes · n no · ↑ ↓ scroll · esc cancel"})
+	return m.popup(box{title: "Update " + modName(uv.md), body: uv.lines(m.inner(viewWidth)), sel: -1, scroll: uv.scroll, keys: "Y yes · N no · ↑ ↓ scroll · esc cancel"})
 }
 
 // noteModFailures says once, in the footer, that a mod failed since the

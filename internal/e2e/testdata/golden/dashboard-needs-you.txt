@@ -1,9 +1,9 @@
  PROJECTS                      1   │ tm dashboard                            ● server ok · 1 session
  ■ demo             0           ⚑  │ NEEDS YOU 1 ───────────────────────────────────────────────────
  └─ coordinator         ·          │  T1 Write the README     ◆ review    ▱▱▱▱▱  0/2
-                                   │ demo ────────────────────────── ● active — space to deactivate
+                                   │ demo ────────────────────────────── ● active — S to deactivate
                                    │  coordinator             —           not running; enter starts…
-                                   │  tasks: 1 needs you (t lists them) · 1 in motion · 0 on deck
+                                   │  tasks: 1 needs you (T lists them) · 1 in motion · 0 on deck
                                    │ OTHER SESSIONS 1 ──────────────────────────────────────────────
                                    │  <session>           /bin/sh               ▷ running   <duration>  /
                                    │
@@ -20,5 +20,5 @@
                                    │
  ───────────────────────────────── │
  demo · active                     │────────────────────────────────────────────────────────────────
- 0 threads · coordinator not runn… │ ≡ menu · enter open · space deactivate · a project · t tasks ·…
+ 0 threads · coordinator not runn… │ ≡ menu · enter open · S deactivate · A project · T tasks · I i…
  tab sidebar · ? help              │

@@ -197,19 +197,19 @@ func TestSidebar(t *testing.T) {
 		t.Fatalf("{ gave %+v", l)
 	}
 	// b cycles: full, slim strip, hidden, full.
-	if l, _ = l.Key("b", 120); !l.Slim || l.Hidden || l.Cols(120) != SideSlim {
+	if l, _ = l.Key("B", 120); !l.Slim || l.Hidden || l.Cols(120) != SideSlim {
 		t.Fatalf("b on full gave %+v", l)
 	}
 	if l, _ = l.Key("}", 120); l.Slim {
 		t.Fatalf("} kept the slim strip: %+v", l)
 	}
-	if l, _ = l.Key("b", 120); !l.Slim {
+	if l, _ = l.Key("B", 120); !l.Slim {
 		t.Fatalf("b on full gave %+v", l)
 	}
-	if l, _ = l.Key("b", 120); !l.Hidden || l.Cols(120) != 0 {
+	if l, _ = l.Key("B", 120); !l.Hidden || l.Cols(120) != 0 {
 		t.Fatalf("b on the slim strip gave %+v", l)
 	}
-	if l, _ = l.Key("b", 120); l.Hidden || l.Slim || l.Cols(120) != SideDefault {
+	if l, _ = l.Key("B", 120); l.Hidden || l.Slim || l.Cols(120) != SideDefault {
 		t.Fatalf("b on hidden gave %+v", l)
 	}
 	if l, _ = (Sidebar{Hidden: true}).Key("{", 120); l.Hidden || l.Cols(120) != SideDefault {
@@ -236,7 +236,7 @@ func TestSidebar(t *testing.T) {
 	if l, _ = saved.Key("{", 120); l.Width != 120-SideRoom-SideStep {
 		t.Fatalf("{ from a cut width: %+v", l)
 	}
-	if _, msg = (Sidebar{Width: 100, Hidden: true}).Key("b", SideDefault+SideRoom-1); !strings.Contains(msg, fmt.Sprint(SideDefault+SideRoom)) {
+	if _, msg = (Sidebar{Width: 100, Hidden: true}).Key("B", SideDefault+SideRoom-1); !strings.Contains(msg, fmt.Sprint(SideDefault+SideRoom)) {
 		t.Fatalf("too narrow for a wide setting: %q", msg)
 	}
 	if l = def.DragTo(3, 120); !l.Slim {

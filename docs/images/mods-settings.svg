@@ -17,8 +17,8 @@
 <text x="142.0" y="78.2" fill="#c8d0f0">2</text>
 <text x="310.0" y="78.2" fill="#4e5578">│</text>
 <text x="326.8" y="78.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">demo</text>
-<text x="368.8" y="78.2" fill="#4e5578" textLength="386.4" lengthAdjust="spacingAndGlyphs">──────────────────────────────────────────────</text>
-<text x="763.6" y="78.2" fill="#c8d0f0" textLength="252.0" lengthAdjust="spacingAndGlyphs">● active — space to deactivate</text>
+<text x="368.8" y="78.2" fill="#4e5578" textLength="420.0" lengthAdjust="spacingAndGlyphs">──────────────────────────────────────────────────</text>
+<text x="797.2" y="78.2" fill="#c8d0f0" textLength="218.4" lengthAdjust="spacingAndGlyphs">● active — S to deactivate</text>
 <text x="24.4" y="95.2" fill="#4e5578" textLength="16.8" lengthAdjust="spacingAndGlyphs">└─</text>
 <text x="49.6" y="95.2" fill="#c8d0f0" textLength="58.8" lengthAdjust="spacingAndGlyphs">coordi…</text>
 <text x="217.6" y="95.2" fill="#c8d0f0">·</text>
@@ -52,7 +52,10 @@
 <text x="116.8" y="146.2" fill="#4e5578">│</text>
 <text x="142.0" y="146.2" fill="#c8d0f0" textLength="75.6" lengthAdjust="spacingAndGlyphs">1 general</text>
 <text x="242.8" y="146.2" fill="#c8d0f0" textLength="117.6" lengthAdjust="spacingAndGlyphs">2 all projects</text>
-<text x="385.6" y="146.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">3 mods</text>
+<text x="385.6" y="146.2" fill="#c8d0f0" textLength="67.2" lengthAdjust="spacingAndGlyphs">3 access</text>
+<text x="478.0" y="146.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">4 mods</text>
+<text x="553.6" y="146.2" fill="#c8d0f0" textLength="58.8" lengthAdjust="spacingAndGlyphs">5 peers</text>
+<text x="637.6" y="146.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">6 logs</text>
 <text x="914.8" y="146.2" fill="#4e5578">│</text>
 <text x="116.8" y="163.2" fill="#4e5578">│</text>
 <text x="133.6" y="163.2" fill="#c8d0f0" textLength="369.6" lengthAdjust="spacingAndGlyphs">About: tm dev · server dev · update check on</text>
@@ -105,7 +108,7 @@
 <text x="133.6" y="299.2" fill="#9ece6a">●</text>
 <text x="150.4" y="299.2" fill="#c8d0f0" textLength="117.6" lengthAdjust="spacingAndGlyphs">Default layout</text>
 <text x="310.0" y="299.2" fill="#c8d0f0" textLength="142.8" lengthAdjust="spacingAndGlyphs">layout · built in</text>
-<text x="528.4" y="299.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
+<text x="528.4" y="299.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.1.0</text>
 <text x="587.2" y="299.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">built in · safe</text>
 <text x="914.8" y="299.2" fill="#4e5578">│</text>
 <text x="923.2" y="299.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">s, so</text>
@@ -160,35 +163,39 @@
 <text x="914.8" y="418.2" fill="#4e5578">│</text>
 <text x="116.8" y="435.2" fill="#4e5578">│</text>
 <text x="133.6" y="435.2" fill="#9ece6a">●</text>
-<text x="150.4" y="435.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">Unicode icons</text>
-<text x="310.0" y="435.2" fill="#c8d0f0" textLength="134.4" lengthAdjust="spacingAndGlyphs">icons · built in</text>
+<text x="150.4" y="435.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">Ticker</text>
+<text x="310.0" y="435.2" fill="#c8d0f0" textLength="184.8" lengthAdjust="spacingAndGlyphs">code · view · built in</text>
 <text x="528.4" y="435.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
-<text x="587.2" y="435.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">built in · safe</text>
+<text x="587.2" y="435.2" fill="#c8d0f0" textLength="319.2" lengthAdjust="spacingAndGlyphs">built in · reads your projects · draw…</text>
 <text x="914.8" y="435.2" fill="#4e5578">│</text>
 <text x="116.8" y="452.2" fill="#4e5578">│</text>
+<text x="133.6" y="452.2" fill="#9ece6a">●</text>
+<text x="150.4" y="452.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">Unicode icons</text>
+<text x="310.0" y="452.2" fill="#c8d0f0" textLength="134.4" lengthAdjust="spacingAndGlyphs">icons · built in</text>
+<text x="528.4" y="452.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">1.0.0</text>
+<text x="587.2" y="452.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">built in · safe</text>
 <text x="914.8" y="452.2" fill="#4e5578">│</text>
 <text x="116.8" y="469.2" fill="#4e5578">│</text>
-<text x="133.6" y="469.2" fill="#c8d0f0" textLength="764.4" lengthAdjust="spacingAndGlyphs">Context gauge: How full each session's context window is, by its row; a card lists the ones</text>
 <text x="914.8" y="469.2" fill="#4e5578">│</text>
 <text x="116.8" y="486.2" fill="#4e5578">│</text>
-<text x="133.6" y="486.2" fill="#c8d0f0" textLength="470.4" lengthAdjust="spacingAndGlyphs">past the warning, where C clears one (tm asks first) and</text>
-<text x="612.4" y="486.2" fill="#7aa2f7" textLength="42.0" lengthAdjust="spacingAndGlyphs">enter</text>
-<text x="662.8" y="486.2" fill="#c8d0f0" textLength="218.4" lengthAdjust="spacingAndGlyphs">attaches to it. For Claude</text>
+<text x="133.6" y="486.2" fill="#c8d0f0" textLength="764.4" lengthAdjust="spacingAndGlyphs">Context gauge: How full each session's context window is, by its row; a card lists the ones</text>
 <text x="914.8" y="486.2" fill="#4e5578">│</text>
 <text x="116.8" y="503.2" fill="#4e5578">│</text>
-<text x="133.6" y="503.2" fill="#c8d0f0" textLength="747.6" lengthAdjust="spacingAndGlyphs">sessions it needs the Agent mod on (early access, off by default: Settings, Agent mod, or</text>
+<text x="133.6" y="503.2" fill="#c8d0f0" textLength="470.4" lengthAdjust="spacingAndGlyphs">past the warning, where C clears one (tm asks first) and</text>
+<text x="612.4" y="503.2" fill="#7aa2f7" textLength="42.0" lengthAdjust="spacingAndGlyphs">enter</text>
+<text x="662.8" y="503.2" fill="#c8d0f0" textLength="218.4" lengthAdjust="spacingAndGlyphs">attaches to it. For Claude</text>
 <text x="914.8" y="503.2" fill="#4e5578">│</text>
 <text x="116.8" y="520.2" fill="#4e5578">│</text>
-<text x="133.6" y="520.2" fill="#c8d0f0" textLength="663.6" lengthAdjust="spacingAndGlyphs">[agent_mod] enabled = true), which reports their context and use. By terminatr.</text>
+<text x="133.6" y="520.2" fill="#c8d0f0" textLength="747.6" lengthAdjust="spacingAndGlyphs">sessions it needs the Agent mod on (early access, off by default: Settings, Agent mod, or</text>
 <text x="914.8" y="520.2" fill="#4e5578">│</text>
 <text x="116.8" y="537.2" fill="#4e5578">│</text>
 <text x="914.8" y="537.2" fill="#4e5578">│</text>
 <text x="116.8" y="554.2" fill="#4e5578">│</text>
 <text x="133.6" y="554.2" fill="#7aa2f7" textLength="42.0" lengthAdjust="spacingAndGlyphs">enter</text>
-<text x="184.0" y="554.2" fill="#c8d0f0" textLength="672.0" lengthAdjust="spacingAndGlyphs">on/off · i install · p permissions · s settings · d defaults · l log · r restart</text>
+<text x="184.0" y="554.2" fill="#c8d0f0" textLength="672.0" lengthAdjust="spacingAndGlyphs">on/off · I install · p permissions · s settings · d defaults · l log · R restart</text>
 <text x="914.8" y="554.2" fill="#4e5578">│</text>
 <text x="116.8" y="571.2" fill="#4e5578">│</text>
-<text x="133.6" y="571.2" fill="#c8d0f0" textLength="285.6" lengthAdjust="spacingAndGlyphs">u update · x remove · e examples ·</text>
+<text x="133.6" y="571.2" fill="#c8d0f0" textLength="285.6" lengthAdjust="spacingAndGlyphs">U update · X remove · E examples ·</text>
 <text x="427.6" y="571.2" fill="#7aa2f7" textLength="25.2" lengthAdjust="spacingAndGlyphs">← →</text>
 <text x="461.2" y="571.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">tabs ·</text>
 <text x="520.0" y="571.2" fill="#7aa2f7" textLength="25.2" lengthAdjust="spacingAndGlyphs">esc</text>

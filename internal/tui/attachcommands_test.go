@@ -21,7 +21,7 @@ func sessionCmds() []mod.ModCommand {
 	no := false
 	return []mod.ModCommand{
 		{Mod: "lab", Name: "Labeller", Command: mod.Command{ID: "relabel", Title: "Relabel", Key: "g"}},
-		{Mod: "lab", Name: "Labeller", Command: mod.Command{ID: "sweep", Title: "Sweep", Key: "j"}},
+		{Mod: "lab", Name: "Labeller", Command: mod.Command{ID: "sweep", Title: "Sweep", Key: "Z"}},
 		{Mod: "lab", Name: "Labeller", Command: mod.Command{ID: "quiet", Title: "Quiet", Menu: &no}},
 		{Mod: "lab", Name: "Labeller", Command: mod.Command{ID: "pop", Title: "Pop", Key: "a"}},
 		{Mod: "only", Name: "Only", Projects: []string{"beta"}, Command: mod.Command{ID: "go", Title: "Go beta", Key: "G"}},
@@ -75,7 +75,7 @@ func TestSessionCommandKeys(t *testing.T) {
 	if w := c.waiting(); w == nil || w.mod != "lab" || w.after != 4 {
 		t.Fatalf("wait %+v", w)
 	}
-	for _, k := range []string{"j", "G"} {
+	for _, k := range []string{"Z", "G"} {
 		press(k)
 	}
 	if !strings.Contains(c.flash, "Go beta (only) doesn't run for alpha") {
@@ -86,7 +86,7 @@ func TestSessionCommandKeys(t *testing.T) {
 		t.Fatalf("sent %+v", p)
 	case <-time.After(50 * time.Millisecond):
 	}
-	for _, k := range []string{"a", "j", "{", ";", "d", "?"} {
+	for _, k := range []string{"a", "A", "n", "Z", "{", ";", "d", "?"} {
 		if commandKeyOf(mod.ModCommand{Command: mod.Command{Key: k}}, c.prefix.String()) != "" {
 			t.Errorf("a command kept the core's %s", k)
 		}
@@ -170,7 +170,7 @@ func TestDashPrefixCommand(t *testing.T) {
 	}
 	src.data.ModCommands = sessionCmds()
 	m = newDash(DashOptions{Source: src, Width: 100, Height: 30,
-		Over: &Over{Key: "a", Project: "alpha", Session: "s-1", Screen: []string{"", "row"}}})
+		Over: &Over{Key: "A", Project: "alpha", Session: "s-1", Screen: []string{"", "row"}}})
 	m.setData(src.data)
 	m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
 	if !quits(keyPress(m, "g")) || m.result.Command != "g" || m.result.Attach != "s-1" || len(src.commands) != 1 {

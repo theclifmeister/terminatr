@@ -17,7 +17,7 @@ import (
 // Mod notifications (mods design §7, notify): the server keeps what user
 // mods sent with $.ui.notify (session.list's ModNotices). The console
 // draws each as an OS notification, once over all consoles (notify.claim),
-// titled "terminatr · id", and N lists them. A button is a core
+// titled "terminatr · id", and M (notices.open) lists them. A button is a core
 // action id on a task, pressed as an action binding (pressNotice): the
 // core's reach check, precondition check on the live board and
 // confirmation come first. The mod hears of nothing, and its words never
@@ -87,9 +87,9 @@ func (m *dash) drawNotices() []tea.Cmd {
 	}
 	if len(fresh) > 0 && m.seen {
 		n := fresh[0]
-		m.msg = "mod " + n.Mod + ": " + oneLine(n.Title) + " · N to see"
+		m.msg = "mod " + n.Mod + ": " + oneLine(n.Title) + " · " + keyShown(boundKey("M")) + " to see"
 		if len(fresh) > 1 {
-			m.msg = fmt.Sprintf("%d notifications from mods · N to see", len(fresh))
+			m.msg = fmt.Sprintf("%d notifications from mods · %s to see", len(fresh), keyShown(boundKey("M")))
 		}
 	}
 	return cmds
@@ -145,11 +145,11 @@ func (nv *noticesView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch s := k.String(); s {
 	case "esc", "q":
 		m.pop()
-	case "up", "k":
+	case "up":
 		nv.sel, nv.stableAt = max(nv.sel-1, 0), nv.now()
-	case "down", "j":
+	case "down":
 		nv.sel, nv.stableAt = min(nv.sel+1, len(ns)-1), nv.now()
-	case "d":
+	case "D":
 		return m.dismissNotice(n)
 	case "1", "2", "3":
 		i := int(s[0] - '1')
@@ -221,7 +221,7 @@ func (nv *noticesView) render(m *dash) string {
 	if len(ns) == 0 {
 		body = []string{th().Faint.Render("no notifications")}
 	}
-	keys := "↑↓ select · d dismiss · esc close"
+	keys := "↑↓ select · D dismiss · esc close"
 	if len(ns) > 0 && len(ns[min(nv.sel, len(ns)-1)].Buttons) > 0 {
 		keys = "1 2 3 button (asks first) · " + keys
 	}
