@@ -1147,7 +1147,7 @@ func TestManifestGuard(t *testing.T) {
 	env["ZDOTDIR"] = "/z"
 	for _, r := range []*Registry{nil, reg} {
 		s := ShellState(r, "/h", getenv)
-		for _, want := range []string{"/h/.zshrc", "/h/.bashrc", "/h/.profile", "/z/.zshenv", "/h/.claude/shell-snapshots", "/ch/shell_snapshots"} {
+		for _, want := range []string{"/h/.zshrc", "/h/.zshrc.zwc", "/h/.bashrc", "/h/.bash_aliases", "/h/.profile", "/h/.config/zsh", "/z/.zshenv", "/z/.zshenv.zwc", "/h/.claude/shell-snapshots", "/ch/shell_snapshots"} {
 			if !slices.Contains(s, want) {
 				t.Errorf("ShellState(%v) = %q, lacks %s", r != nil, s, want)
 			}

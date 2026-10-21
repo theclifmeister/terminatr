@@ -341,7 +341,7 @@ func (s *Server) guardNoWrite(r SessionRecord) []string {
 		s.mu.Lock()
 		reg := s.agents
 		s.mu.Unlock()
-		out = append(out, agent.ShellState(reg, home, os.Getenv)...)
+		out = append(out, withParentReal(agent.ShellState(reg, home, os.Getenv))...)
 	}
 	dir, err := project.Dir(r.Project)
 	if err != nil {
@@ -419,6 +419,17 @@ func (s *Server) guardMods(r SessionRecord, home string) []guard.ModRule {
 			m.Commands = append(m.Commands, strings.Fields(c))
 		}
 		out = append(out, m)
+	}
+	return out
+}
+
+// withParentReal is paths, each followed by its name under its folder's
+// real path: where a write lands when the file doesn't exist yet (and
+// so has no real path of its own) but a link leads to its folder.
+func withParentReal(paths []string) []string {
+	var out []string
+	for _, p := range paths {
+		out = append(out, p, filepath.Join(realPath(filepath.Dir(p)), filepath.Base(p)))
 	}
 	return out
 }

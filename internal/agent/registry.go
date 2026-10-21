@@ -272,21 +272,36 @@ func GuardSecrets(reg *Registry, home string, getenv func(string) string) []stri
 }
 
 // ShellStartup are the user's shell startup files, relative to home or
-// under $ZDOTDIR: what a shell runs before a command, and what an
-// agent's snapshot of the user's shell (Claude's) is made from.
-var ShellStartup = []string{
-	".profile", ".bashrc", ".bash_profile", ".bash_login", ".bash_logout", ".bashrc.d",
-	".zshenv", ".zprofile", ".zshrc", ".zlogin", ".zlogout",
-	"$ZDOTDIR/.zshenv", "$ZDOTDIR/.zprofile", "$ZDOTDIR/.zshrc", "$ZDOTDIR/.zlogin", "$ZDOTDIR/.zlogout",
-	".kshrc", ".mkshrc", ".config/fish",
-}
+// under $ZDOTDIR or $XDG_CONFIG_HOME: what a shell runs before a
+// command, and what an agent's snapshot of the user's shell (Claude's)
+// is made from. zsh's come with their compiled .zwc twins, which it
+// loads when they are newer, and its completion dumps (.zcompdump*,
+// ShellState).
+var ShellStartup = func() []string {
+	out := []string{".profile", ".bashrc", ".bash_profile", ".bash_login", ".bash_logout", ".bash_aliases", ".bashrc.d",
+		".zshrc.d", ".config/zsh", "$XDG_CONFIG_HOME/zsh", ".kshrc", ".mkshrc", ".config/fish"}
+	for _, dir := range []string{"", "$ZDOTDIR/"} {
+		for _, n := range []string{".zshenv", ".zprofile", ".zshrc", ".zlogin", ".zlogout", ".zcompdump"} {
+			out = append(out, dir+n, dir+n+".zwc")
+		}
+	}
+	return out
+}()
 
 // ShellState is every file a session's shell may run before its
-// commands, which no session writes (the guard's floor): ShellStartup
-// and every known agent's [guard] shell_state, resolved as GuardSecrets
-// does.
+// commands, which no session writes (the guard's floor): ShellStartup,
+// the .zcompdump* files in home and $ZDOTDIR, and every known agent's
+// [guard] shell_state, resolved as GuardSecrets does.
 func ShellState(reg *Registry, home string, getenv func(string) string) []string {
 	out := GuardPaths(ShellStartup, home, getenv)
+	for _, dir := range GuardPaths([]string{".", "$ZDOTDIR"}, home, getenv) {
+		es, _ := os.ReadDir(dir)
+		for _, e := range es {
+			if p := filepath.Join(dir, e.Name()); strings.HasPrefix(e.Name(), ".zcompdump") && !slices.Contains(out, p) {
+				out = append(out, p)
+			}
+		}
+	}
 	for _, m := range knownManifests(reg) {
 		for _, p := range GuardPaths(m.Guard.ShellState, home, getenv) {
 			if !slices.Contains(out, p) {

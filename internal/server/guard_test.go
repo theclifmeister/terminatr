@@ -377,7 +377,7 @@ func TestShellStateFloor(t *testing.T) {
 	p := newWatchProject(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	for _, v := range []string{"ZDOTDIR", "CLAUDE_CONFIG_DIR", "CODEX_HOME"} {
+	for _, v := range []string{"ZDOTDIR", "XDG_CONFIG_HOME", "CLAUDE_CONFIG_DIR", "CODEX_HOME"} {
 		t.Setenv(v, "")
 	}
 	dots := filepath.Join(home, "dotfiles")
@@ -389,6 +389,16 @@ func TestShellStateFloor(t *testing.T) {
 	}
 	if err := os.Symlink(filepath.Join(dots, "zshrc"), filepath.Join(home, ".zshrc")); err != nil {
 		t.Skip(err)
+	}
+	// $ZDOTDIR a link to a folder whose files don't exist yet, and a
+	// completion dump with the host in its name.
+	zdot := filepath.Join(home, "zdot")
+	if err := os.Symlink(dots, zdot); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ZDOTDIR", zdot)
+	if err := os.WriteFile(filepath.Join(home, ".zcompdump-host-5.9"), nil, 0o644); err != nil {
+		t.Fatal(err)
 	}
 	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
 	s.records["s-1"] = SessionRecord{ID: "s-1", Role: proto.RoleCoordinator, Agent: "claude", Project: p.Slug, Cwd: p.Dir}
@@ -406,6 +416,13 @@ func TestShellStateFloor(t *testing.T) {
 			{"Write", map[string]any{"file_path": filepath.Join(home, ".bashrc")}},
 			{"Write", map[string]any{"file_path": filepath.Join(dots, "zshrc")}},
 			{"Write", map[string]any{"file_path": filepath.Join(home, ".codex", "shell_snapshots", "x.sh")}},
+			{"Write", map[string]any{"file_path": filepath.Join(home, ".zshrc.zwc")}},
+			{"Write", map[string]any{"file_path": filepath.Join(home, ".bash_aliases")}},
+			{"Write", map[string]any{"file_path": filepath.Join(home, ".config", "zsh", ".zshrc")}},
+			{"Bash", map[string]any{"command": "echo x > ~/.zshrc.d/50-cd.zsh"}},
+			{"Bash", map[string]any{"command": "touch ~/.zcompdump-host-5.9"}},
+			{"Write", map[string]any{"file_path": filepath.Join(dots, ".zshenv.zwc")}},
+			{"Write", map[string]any{"file_path": filepath.Join(zdot, ".zlogin")}},
 		} {
 			if d := judge(c.tool, c.input); d == nil || d.Rule != guard.RuleTMFiles || !d.Floor {
 				t.Errorf("%s %s %v: %+v", id, c.tool, c.input, d)
