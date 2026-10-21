@@ -109,7 +109,7 @@ func TestSmokeMouseStatusBar(t *testing.T) {
 }
 
 // TestSmokeMousePopupsAndAttach: a right-click on a project in the
-// sidebar opens its menu, which shows its dashboard; the footer's a
+// sidebar opens its menu, which shows its dashboard; the footer's A
 // project opens the popup, a click on a tab switches to it and a click on
 // a setting changes it; a click outside closes the popup. A right-click
 // on the thread's row, then attach, attaches it; a click into it reaches
@@ -128,7 +128,7 @@ func TestSmokeMousePopupsAndAttach(t *testing.T) {
 		return strings.Contains(sc, " demo ─") && !strings.Contains(sc, "show its dashboard")
 	})
 
-	w.ClickText("a project", 28)
+	w.ClickText("A project", 28)
 	w.WaitFor("1 overview", wait)
 	w.ClickText("5 access", 1)
 	// The Protection row, by its value (its label also heads its section):

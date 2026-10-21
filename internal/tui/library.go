@@ -109,7 +109,7 @@ func (pv *projectView) libraryLines(w int) ([]string, int, []int) {
 	return out, sel, hits
 }
 
-// libraryKey: enter reads the selected file, d deletes it and D its
+// libraryKey: enter reads the selected file, X deletes it and D its
 // thread's files, each after y.
 func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	f, ok := pv.selLib()
@@ -119,7 +119,7 @@ func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch k.String() {
 	case "enter":
 		return m.openLibFile(pv, f)
-	case "d":
+	case "X":
 		m.confirm("Delete a library file", "Delete "+oneLine(f.Name)+" ("+sizeWords(f.Size)+") of thread "+f.Thread+"? It can't be brought back.", func() tea.Cmd {
 			return m.libRemove(pv.slug, f.Thread, f.Name, "deleted "+oneLine(f.Name))
 		})

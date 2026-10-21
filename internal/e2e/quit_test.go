@@ -30,13 +30,13 @@ func TestSmokePrefixQuit(t *testing.T) {
 		name, keys, shows string
 	}{
 		{"the list", "", "SESSIONS"},
-		{"the project popup", "a", "1 overview"},
-		{"the keys tab", "a6", "On the dashboard"},
-		{"the inbox", "i", "The coordinator handles these"},
-		{"the tasks", "t", "3 tasks"},
+		{"the project popup", "A", "1 overview"},
+		{"the keys tab", "A6", "On the dashboard"},
+		{"the inbox", "I", "The coordinator handles these"},
+		{"the tasks", "T", "3 tasks"},
 		{"the settings", ",", "enter change"},
 		{"the help", "?", "↑ ↓ scroll · esc close"},
-		{"a prompt", "n", "New project"},
+		{"a prompt", "+", "New project"},
 		{"the sidebar", "\t", "esc back to the list"},
 	} {
 		w := env.Window(100, 30)

@@ -254,7 +254,7 @@ func TestCoordPanelMouse(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("a click on a task didn't leave for the task view")
 	}
-	if o := c.result.Over; o == nil || o.Key != "t" || o.Task != 70 || o.Project != "demo" {
+	if o := c.result.Over; o == nil || o.Key != "T" || o.Task != 70 || o.Project != "demo" {
 		t.Fatalf("task click: %+v", c.result.Over)
 	}
 }

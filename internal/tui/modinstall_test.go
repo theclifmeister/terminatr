@@ -68,10 +68,10 @@ func infraFolder(t *testing.T) string {
 	return modFolder(t, map[string]string{"mod.toml": infraGuardMod, "main.ts": "", "rules.md": "Never touch prod.\n"})
 }
 
-// installFrom presses i in the Mods tab, pastes arg into the prompt and
+// installFrom presses I in the Mods tab, pastes arg into the prompt and
 // presses enter, then runs the fetch.
 func installFrom(t testing.TB, m *dash, arg string) {
-	press(m, "i")
+	press(m, "I")
 	m.Update(tea.PasteMsg{Content: arg + "\n"})
 	drain(t, m, keyPress(m, "enter"))
 }
@@ -87,10 +87,10 @@ func staging(t *testing.T) []string {
 	return all
 }
 
-// TestModsInstall: i asks for a folder or a git URL; what it names is
+// TestModsInstall: I asks for a folder or a git URL; what it names is
 // fetched and checked, then its consent is drawn in full (permissions,
 // the rules addendum, the tool and the guard rule) with "Install
-// <name>?". y installs it off and asks whether to turn it on; y turns
+// <name>?". Y installs it off and asks whether to turn it on; Y turns
 // it on with every permission it asks for, and the tab selects it.
 func TestModsInstall(t *testing.T) {
 	src, m := modsDash(t)
@@ -105,12 +105,12 @@ func TestModsInstall(t *testing.T) {
 	out := screen(m)
 	for _, want := range []string{"Install Infra guard", "Infra guard 1.2.0 (infra-guard) by Ada", "reads your projects", "Never touch prod.", "Rules it adds for every thread",
 		"Tool it offers your threads", "Says whether production is frozen.", "Guard rule it adds", "Refuses the commands: terraform destroy",
-		"Infrastructure is the human's to change.", "Install Infra guard?", "It installs off", "y install"} {
+		"Infrastructure is the human's to change.", "Install Infra guard?", "It installs off", "Y install"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the install consent lacks %q:\n%s", want, out)
 		}
 	}
-	modAct(t, m, src, "y")
+	modAct(t, m, src, "Y")
 	md := modState(t, src, "infra-guard")
 	if md.State != mod.Disabled || len(md.Grants) != 0 {
 		t.Fatalf("y installed it %s with %v, want off with nothing granted", md.State, md.Grants)
@@ -121,7 +121,7 @@ func TestModsInstall(t *testing.T) {
 	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "Turn it on now?") {
 		t.Fatalf("after the install: %T, want the question to turn it on", m.top())
 	}
-	modAct(t, m, src, "y")
+	modAct(t, m, src, "Y")
 	md = modState(t, src, "infra-guard")
 	if md.State != mod.Enabled || !slices.Equal(md.Grants, []string{mod.PermProjectRead, mod.PermTools}) {
 		t.Fatalf("y turned it %s with %v", md.State, md.Grants)
@@ -135,12 +135,12 @@ func TestModsInstall(t *testing.T) {
 	}
 }
 
-// TestModsInstallNo: n on the consent installs nothing and removes the
-// staged copy; n on the question after the install leaves it off.
+// TestModsInstallNo: N on the consent installs nothing and removes the
+// staged copy; N on the question after the install leaves it off.
 func TestModsInstallNo(t *testing.T) {
 	src, m := modsDash(t)
 	installFrom(t, m, infraFolder(t))
-	modAct(t, m, src, "n")
+	modAct(t, m, src, "N")
 	if _, ok := m.top().(*settingsView); !ok || m.msg != "nothing installed" {
 		t.Errorf("n on the consent: %T, %q", m.top(), m.msg)
 	}
@@ -151,8 +151,8 @@ func TestModsInstallNo(t *testing.T) {
 		t.Errorf("staging left behind: %v", left)
 	}
 	installFrom(t, m, infraFolder(t))
-	modAct(t, m, src, "y")
-	modAct(t, m, src, "n")
+	modAct(t, m, src, "Y")
+	modAct(t, m, src, "N")
 	if md := modState(t, src, "infra-guard"); md.State != mod.Disabled {
 		t.Errorf("n after the install left it %s", md.State)
 	}
@@ -218,7 +218,7 @@ func TestModsInstallRefused(t *testing.T) {
 // staged copy is removed and no consent opens.
 func TestModsInstallCancel(t *testing.T) {
 	_, m := modsDash(t)
-	press(m, "i")
+	press(m, "I")
 	m.Update(tea.PasteMsg{Content: infraFolder(t)})
 	cmd := keyPress(m, "enter")
 	if out := screen(m); !strings.Contains(out, "Fetching and checking it") {
@@ -252,23 +252,23 @@ func TestModsInstallAgent(t *testing.T) {
 	}
 }
 
-// TestModsExamplesInstall: in the examples list, i installs the
+// TestModsExamplesInstall: in the examples list, I installs the
 // selected example from its tree URL at this tm's tag; a built-in one
 // says it is built in already and fetches nothing.
 func TestModsExamplesInstall(t *testing.T) {
 	src, m := modsDash(t)
-	press(m, "e")
+	press(m, "E")
 	ev := m.top().(*examplesView)
 	ev.sel = slices.IndexFunc(mod.Examples, func(e mod.Example) bool { return e.ID == "memory-tab" })
-	press(m, "i")
+	press(m, "I")
 	if len(src.fetchedMods) != 0 || !strings.Contains(m.msg, "memory-tab is built in already") {
 		t.Errorf("i on a built-in example: fetched %q, %q", src.fetchedMods, m.msg)
 	}
 	ev.sel = slices.IndexFunc(mod.Examples, func(e mod.Example) bool { return e.ID == "standup" })
-	if out := screen(m); !strings.Contains(out, "i install") {
+	if out := screen(m); !strings.Contains(out, "I install") {
 		t.Errorf("the examples' keys:\n%s", out)
 	}
-	keyPress(m, "i") // its fetch isn't run: it would clone from GitHub
+	keyPress(m, "I") // its fetch isn't run: it would clone from GitHub
 	fv, ok := m.top().(*fetchView)
 	if !ok || fv.arg != mod.ExampleSource("standup") {
 		t.Fatalf("i on standup: %T, want its fetch of %s", m.top(), mod.ExampleSource("standup"))

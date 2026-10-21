@@ -2,8 +2,8 @@ package tui
 
 import (
 	"fmt"
-	"slices"
 	"strings"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -60,8 +60,8 @@ var actions []action
 
 func init() {
 	actions = []action{
-		{id: "list.up", keys: []string{"up", "k"}, mouse: "the wheel, or a click on a row", run: func(m *dash, _ string) tea.Cmd { m.move(-1); return nil }},
-		{id: "list.down", keys: []string{"down", "j"}, mouse: "the wheel, or a click on a row", run: func(m *dash, _ string) tea.Cmd { m.move(1); return nil }},
+		{id: "list.up", keys: []string{"up"}, mouse: "the wheel, or a click on a row", run: func(m *dash, _ string) tea.Cmd { m.move(-1); return nil }},
+		{id: "list.down", keys: []string{"down"}, mouse: "the wheel, or a click on a row", run: func(m *dash, _ string) tea.Cmd { m.move(1); return nil }},
 		{id: "list.page-up", keys: []string{"pgup"}, mouse: "the wheel", run: (*dash).page},
 		{id: "list.page-down", keys: []string{"pgdown"}, mouse: "the wheel", run: (*dash).page},
 		{id: "focus.next", keys: []string{"tab"}, fixed: true, label: "tab shift+tab", help: "the keyboard to the next / previous area: the list, the details panel, the projects sidebar (its keys below); esc back to the list",
@@ -91,7 +91,7 @@ func init() {
 				return ""
 			},
 			run: (*dash).enter},
-		{id: "session.adopt", keys: []string{"T"}, label: "T", help: "on an agent session outside the projects (one you started yourself): ask the current project's coordinator to adopt it as a thread (asks first)",
+		{id: "session.adopt", keys: []string{"O"}, label: "O", help: "on an agent session outside the projects (one you started yourself): ask the current project's coordinator to adopt it as a thread (asks first)",
 			menu: "adopt as a thread",
 			foot: func(m *dash, r row, ok bool) string {
 				if _, why := m.adoptable(r, ok); why == "" {
@@ -100,7 +100,7 @@ func init() {
 				return ""
 			},
 			run: (*dash).adopt},
-		{id: "project.activate", keys: []string{"space"}, label: "space", help: "activate the project shown (named in the header of its section, its state at the right), or deactivate it: its coordinator and threads stop, to resume when you activate it; asks first while they run",
+		{id: "project.activate", keys: []string{"S"}, label: "S", help: "activate the project shown (named in the header of its section, its state at the right), or deactivate it: its coordinator and threads stop, to resume when you activate it; asks first while they run",
 			menu: "activate / deactivate the project",
 			foot: func(m *dash, _ row, _ bool) string {
 				if p := m.projectData(m.projectHere()); p != nil && p.Safety != nil {
@@ -109,7 +109,7 @@ func init() {
 				return ""
 			},
 			run: (*dash).toggleHere},
-		{id: "card.fold", keys: []string{"z"}, label: "z", help: "on a mod's card (below the sections): fold it to its header, or unfold it",
+		{id: "card.fold", keys: []string{"Z"}, label: "Z", help: "on a mod's card (below the sections): fold it to its header, or unfold it",
 			menu: "fold / unfold the mod card",
 			foot: func(m *dash, r row, ok bool) string {
 				if !ok || !r.card {
@@ -121,7 +121,7 @@ func init() {
 				return "fold"
 			},
 			run: (*dash).foldCard},
-		{id: "project.new", keys: []string{"n"}, label: "n", help: "new project", menu: "new project",
+		{id: "project.new", keys: []string{"+"}, label: "+", help: "new project (n too while there is none)", menu: "new project",
 			foot: func(m *dash, _ row, _ bool) string {
 				if len(m.data.Projects) == 0 {
 					return "new project"
@@ -129,13 +129,13 @@ func init() {
 				return ""
 			},
 			run: (*dash).newProject},
-		{id: "project.popup", keys: []string{"a"}, label: "a", help: "the project popup: overview, inbox, tasks, settings and keys", menu: "project popup",
+		{id: "project.popup", keys: []string{"A"}, label: "A", help: "the project popup: overview, inbox, tasks, settings and keys", menu: "project popup",
 			foot: withProject("project"), run: (*dash).projectPopup},
-		{id: "project.tasks", keys: []string{"t"}, label: "t", help: "the project popup on its Tasks tab; enter shows a task; D delegates, A accepts, x sends back (asking the coordinator); c opens it", menu: "tasks",
+		{id: "project.tasks", keys: []string{"T"}, label: "T", help: "the project popup on its Tasks tab; enter shows a task; D delegates, A accepts, X sends back (asking the coordinator); c opens it", menu: "tasks",
 			foot: withProject("tasks"), run: (*dash).taskTab},
-		{id: "project.inbox", keys: []string{"i"}, label: "i", help: "the Inbox tab of the project popup: what the coordinator is told about", menu: "inbox",
+		{id: "project.inbox", keys: []string{"I"}, label: "I", help: "the Inbox tab of the project popup: what the coordinator is told about", menu: "inbox",
 			foot: withProject("inbox"), run: (*dash).inbox},
-		{id: "access.show", keys: []string{"e"}, label: "e", help: "effective access: on a thread, what it launched with (RESTART TO APPLY marks what the settings changed since); elsewhere, what a new thread of the project gets: every sandbox, prompt, guard and secret rule with where it comes from, read-only (tm access show)",
+		{id: "access.show", keys: []string{"E"}, label: "E", help: "effective access: on a thread, what it launched with (RESTART TO APPLY marks what the settings changed since); elsewhere, what a new thread of the project gets: every sandbox, prompt, guard and secret rule with where it comes from, read-only (tm access show)",
 			menu: "effective access", run: (*dash).accessHere},
 		{id: "project.next", keys: []string{"]"}, label: "] [", help: "next / previous project's coordinator", menu: "next project",
 			run: func(m *dash, _ string) tea.Cmd { return m.cycleProject(true) }},
@@ -147,15 +147,24 @@ func init() {
 		{id: "sidebar.narrower", keys: []string{"{"}, label: "{ }", help: "narrow / widen the projects sidebar (or drag its border)", menu: "narrower sidebar",
 			run: (*dash).sideKey},
 		{id: "sidebar.wider", keys: []string{"}"}, menu: "wider sidebar", run: (*dash).sideKey},
-		{id: "sidebar.slim", keys: []string{"b"}, label: "b", help: "the sidebar: full, a slim strip (glyphs and short names), hidden, full again", menu: "sidebar: slim / hide / full",
+		{id: "sidebar.slim", keys: []string{"B"}, label: "B", help: "the sidebar: full, a slim strip (glyphs and short names), hidden, full again", menu: "sidebar: slim / hide / full",
 			run: (*dash).sideKey},
-		{id: "details.toggle", keys: []string{"|"}, label: "|", help: "show or hide the details panel, where the layout puts it: right of the list (dashboards 120 columns or wider) or under it", menu: "details panel on / off",
+		{id: "details.toggle", keys: []string{"|", "D"}, label: "| D", help: "show or hide the details panel, where the layout puts it: right of the list (dashboards 120 columns or wider) or under it", menu: "details panel on / off",
 			run: (*dash).toggleDetails},
-		{id: "settings.open", keys: []string{","}, label: ",", help: "settings for every project: the prefix key, the default agent, the layout (a project's own are under a)", menu: "settings",
+		{id: "settings.open", keys: []string{","}, label: ",", help: "settings for every project: the prefix key, the default agent, the layout (a project's own are under A)", menu: "settings",
 			foot: always("settings"), run: func(m *dash, _ string) tea.Cmd { m.openSettings(); return nil }},
 		{id: "pane.repaint", keys: []string{"R"}, help: "a paired server's pane: repaint from its server (prefix+R; listed with the prefix commands)", mouse: "the session's " + menuButton + " menu in a paired server's pane: repaint from its server",
 			run: func(m *dash, _ string) tea.Cmd {
 				m.msg = "prefix+" + keyShown(boundKey("R")) + " repaints a paired server's pane: open one first"
+				return nil
+			}},
+		{id: "notices.open", keys: []string{"M"}, label: "M", help: "the notifications from mods, while there are any: D dismisses one, 1 2 3 press its buttons (asks first)", menu: "notifications from mods",
+			run: func(m *dash, _ string) tea.Cmd {
+				if len(m.data.ModNotices) == 0 {
+					m.msg = "no notifications from mods"
+					return nil
+				}
+				m.openNotices()
 				return nil
 			}},
 		{id: "help.open", keys: []string{"?"}, label: "?", help: "help", menu: "help: keys and mouse",
@@ -177,9 +186,13 @@ func (m *dash) page(key string) tea.Cmd {
 // turns a typed key into one), if it has one.
 func (m *dash) listKey(key string) tea.Cmd {
 	for _, a := range actions {
-		if slices.Contains(a.keys, key) {
-			return a.run(m, a.keys[0])
+		if runsAs(a.id, a.keys, key) {
+			return a.run(m, runKey(a.id, a.keys))
 		}
+	}
+	if key == "n" && len(m.data.Projects) == 0 && !m.remoteHere() {
+		// The first run: n still makes the first project.
+		return m.newProject(key)
 	}
 	return nil
 }
@@ -192,12 +205,22 @@ func (m *dash) footKeys() string {
 	}
 	r, ok := m.selected()
 	out := []string{menuButton + " menu"}
+	_, _, through := m.typeThroughRow()
+	if through {
+		// Typing writes to the coordinator: the list's keys are the
+		// prefix's there.
+		out = append(out, typeThroughHint)
+	}
 	for _, a := range actions {
 		if a.foot == nil {
 			continue
 		}
 		if word := a.foot(m, r, ok); word != "" {
-			out = append(out, footLabel(a)+" "+word)
+			label := footLabel(a)
+			if through && utf8.RuneCountInString(label) == 1 {
+				label = "prefix+" + label
+			}
+			out = append(out, label+" "+word)
 		}
 	}
 	return strings.Join(out, " · ")
@@ -248,7 +271,7 @@ func (m *dash) newProject(string) tea.Cmd {
 func (m *dash) needProject() string {
 	slug := m.projectHere()
 	if slug == "" {
-		m.msg = "no project; n creates one"
+		m.msg = "no project; " + keyShown(boundKey("+")) + " creates one"
 	}
 	return slug
 }
@@ -314,7 +337,7 @@ func (m *dash) toggleDetails(string) tea.Cmd {
 func (m *dash) noPanel() string {
 	switch m.layout.place() {
 	case placeOff:
-		return "the details panel is off; | turns it on"
+		return "the details panel is off; " + boundKey("|") + " turns it on"
 	case placeBottom:
 		return fmt.Sprintf("the details panel shows under the list when the dashboard has %d rows or more between its header and footer; here a thread's details show under its row", bottomMin)
 	}
@@ -373,7 +396,7 @@ func activeWord(active bool) string {
 func (m *dash) toggleHere(string) tea.Cmd {
 	p := m.projectData(m.projectHere())
 	if p == nil || p.Safety == nil {
-		m.msg = "no project; n creates one"
+		m.msg = "no project; " + keyShown(boundKey("+")) + " creates one"
 		return nil
 	}
 	return m.toggleActive(p.Slug, p.inactive())

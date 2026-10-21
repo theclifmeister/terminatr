@@ -87,7 +87,7 @@ func TestSmokeSidebarKeys(t *testing.T) {
 	w.WaitUntil("attached", wait, func(sc string) bool { return lastLine(sc, "prefix+d dashboard") && strings.Contains(sc, "$") })
 	w.Prefix("\t")
 	w.WaitUntil("sidebar focused", wait, func(sc string) bool { return lastLine(sc, "preview") })
-	w.Type("echoLEAK") // no space: on a project row it activates or deactivates it
+	w.Type("echoLEAK") // no S, P, W or Z: those act on a sidebar row
 	w.Paste("echo PASTED")
 	w.Key(keyEsc)
 	w.WaitUntil("pane focused", wait, func(sc string) bool { return !lastLine(sc, "preview") })

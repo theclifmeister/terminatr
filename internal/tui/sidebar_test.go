@@ -88,20 +88,20 @@ func TestDashboardSidebar(t *testing.T) {
 	if m.sideW() != 30 || m.w != 90 || LoadLayout(ui).Sidebar.Width != 30 {
 		t.Fatalf("drag: sidebar %d, dashboard %d, ui.json %+v", m.sideW(), m.w, LoadLayout(ui))
 	}
-	press(m, "}")
+	prefixed(m, "}") // the coordinator's row: } would type through
 	if LoadLayout(ui).Sidebar.Width != 32 {
 		t.Fatalf("}: ui.json %+v", LoadLayout(ui))
 	}
-	// b cycles: the slim strip, hidden, full.
-	press(m, "b")
+	// B cycles: the slim strip, hidden, full.
+	prefixed(m, "B")
 	if m.sideW() != sideSlim || !LoadLayout(ui).Sidebar.Slim || LoadLayout(ui).Sidebar.Hidden {
-		t.Fatalf("b: sidebar %d, ui.json %+v", m.sideW(), LoadLayout(ui))
+		t.Fatalf("B: sidebar %d, ui.json %+v", m.sideW(), LoadLayout(ui))
 	}
-	press(m, "b")
+	prefixed(m, "B")
 	if m.sideW() != 0 || !LoadLayout(ui).Sidebar.Hidden || m.w != 120 {
-		t.Fatalf("b b: sidebar %d, ui.json %+v", m.sideW(), LoadLayout(ui))
+		t.Fatalf("B B: sidebar %d, ui.json %+v", m.sideW(), LoadLayout(ui))
 	}
-	press(m, "b")
+	prefixed(m, "B")
 
 	// A narrow window: the slim strip of projects, never nothing: the
 	// state, the name, the needs-you column.
@@ -292,8 +292,8 @@ func TestDashboardSidebarKeys(t *testing.T) {
 		// the last, ↓ there back.
 		{"up", "c:alpha"}, {"up", "p:alpha"}, {"up", headKey}, {"up", "t:beta/t-0006"}, {"down", headKey}, {"down", "p:alpha"},
 		// ← on the project folds it, → unfolds it again.
-		{"left", "p:alpha"}, {"left", "p:alpha"}, {"j", "p:beta"}, {"k", "p:alpha"}, {"right", "p:alpha"},
-		{"j", "c:alpha"}, {"left", "p:alpha"}, {"j", "c:alpha"}, {"down", "p:beta"}, {"down", "c:beta"}, {"down", "t:beta/t-0005"},
+		{"left", "p:alpha"}, {"left", "p:alpha"}, {"down", "p:beta"}, {"up", "p:alpha"}, {"right", "p:alpha"},
+		{"down", "c:alpha"}, {"left", "p:alpha"}, {"down", "c:alpha"}, {"down", "p:beta"}, {"down", "c:beta"}, {"down", "t:beta/t-0005"},
 	}
 	for i, s := range steps {
 		keyPress(m, s.key)

@@ -230,13 +230,13 @@ func scrollTop(sel, room, n int) int {
 // row to select, but its state label takes a click.
 const stateKey = "state:"
 
-// stateLabel is a project header's state label: "● active — space to
-// deactivate", or "⊘ inactive — space to activate"; short leaves the
+// stateLabel is a project header's state label: "● active — S to
+// deactivate", or "⊘ inactive — S to activate" (the bound key); short leaves the
 // hint out.
 func stateLabel(active, short bool) (string, lipgloss.Style) {
-	label, st := ic().working+" active — space to deactivate", th().Good
+	label, st := ic().working+" active — "+keyShown(boundKey("S"))+" to deactivate", th().Good
 	if !active {
-		label, st = ic().inactive+" inactive — space to activate", th().Faint
+		label, st = ic().inactive+" inactive — "+keyShown(boundKey("S"))+" to activate", th().Faint
 	}
 	if short {
 		label, _, _ = strings.Cut(label, " — ")

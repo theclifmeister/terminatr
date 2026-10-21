@@ -14,7 +14,7 @@ import (
 // TestAccessView: e on a thread's row shows what it launched with, each
 // rule with its source, RESTART TO APPLY on what changed since, the
 // agent's own files' rules shown only, the settings file by that name;
-// e on the project popup's Access tab shows what a new thread gets.
+// E on the project popup's Access tab shows what a new thread gets.
 func TestAccessView(t *testing.T) {
 	src, m := popupData(t)
 	src.access = proto.AccessShowResult{Recorded: true, Changes: 2, AccessSet: proto.AccessSet{Agent: "claude", OS: "darwin",
@@ -29,7 +29,7 @@ func TestAccessView(t *testing.T) {
 			{Where: proto.AccessOutside, Kind: proto.AccessExcluded, Value: "docker", Source: proto.AccessFromAll},
 		}}}
 	m.sel = "th:alpha:t-0002"
-	drain(t, m, keyPress(m, "e"))
+	drain(t, m, keyPress(m, "E"))
 	if !slices.Equal(src.accessShown, []string{"alpha t-0002"}) {
 		t.Fatalf("asked for %q", src.accessShown)
 	}
@@ -50,9 +50,9 @@ func TestAccessView(t *testing.T) {
 	keyPress(m, "esc")
 
 	src.access = proto.AccessShowResult{AccessSet: proto.AccessSet{OS: "linux"}}
-	keyPress(m, "a")
+	keyPress(m, "A")
 	keyPress(m, "5")
-	drain(t, m, keyPress(m, "e"))
+	drain(t, m, keyPress(m, "E"))
 	if got := src.accessShown[len(src.accessShown)-1]; got != "alpha " {
 		t.Errorf("Access tab asked for %q", got)
 	}

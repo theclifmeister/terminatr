@@ -2,6 +2,7 @@ package tui
 
 import (
 	"slices"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -38,17 +39,17 @@ type prefixCmd struct {
 var prefixCmds = []prefixCmd{
 	{"d", "dashboard", cmdCore},
 	{"q", "quit this console", cmdCore},
-	{"a", "project popup", cmdPopup},
-	{"n", "new project", cmdPopup},
+	{"A", "project popup", cmdPopup},
+	{"+", "new project", cmdPopup},
 	{"]", "next project", cmdDash},
 	{"[", "previous project", cmdDash},
-	{"i", "inbox", cmdPopup},
-	{"t", "tasks", cmdPopup},
+	{"I", "inbox", cmdPopup},
+	{"T", "tasks", cmdPopup},
 	{",", "settings", cmdPopup},
 	{"?", "help: keys and mouse", cmdPopup},
 	{"{", "narrower sidebar", cmdPane},
 	{"}", "wider sidebar", cmdPane},
-	{"b", "sidebar: slim / hide / full", cmdPane},
+	{"B", "sidebar: slim / hide / full", cmdPane},
 	{"|", "info panel on / off", cmdPane},
 	{"tab", "keyboard to the sidebar", cmdPane},
 	{";", "back to the last place", cmdPane},
@@ -69,11 +70,41 @@ func prefixCmdKeys(kinds ...int) map[string]bool {
 	return out
 }
 
+// prefixTwins are the lower-case keys that run a shifted prefix command
+// as well (prefix+a as prefix+A), and n the new project (+): a shifted
+// key on the list, either case after the prefix.
+var prefixTwins = func() map[string]string {
+	out := map[string]string{"n": "+"}
+	for _, c := range prefixCmds {
+		if l := strings.ToLower(c.key); c.kind != cmdCore && len(c.key) == 1 && l != c.key {
+			out[l] = c.key
+		}
+	}
+	return out
+}()
+
+// prefixName is the command key typed after the prefix runs as: a bound
+// key its action's default (keybind.go), a twin (prefixTwins) its
+// shifted key, and another default key of a prefix command's action its
+// first (D as |, the details or info panel).
+func prefixName(key string) string {
+	c := binds.list.canon(key)
+	if t, ok := prefixTwins[key]; ok && !prefixCommands[c] && !paneCommands[c] {
+		return t
+	}
+	for _, a := range actions {
+		if len(a.keys) > 1 && slices.Contains(a.keys[1:], c) && (prefixCommands[a.keys[0]] || paneCommands[a.keys[0]]) {
+			return a.keys[0]
+		}
+	}
+	return c
+}
+
 // prefixHint is the footer while the prefix waits for its command, in
 // the bound keys (keybind.go).
 func prefixHint() string {
-	return "prefix ▸ d dashboard · q quit · " + boundKeys("a", "i", "t", ",", "?", "n") + " popups · p " + boundKeys("]", "[") +
-		" projects · " + boundKeys("{", "}", "b") + " sidebar · " + boundKey("|") + " details · tab area · " + boundKey(";") +
+	return "prefix ▸ d dashboard · q quit · " + boundKeys("A", "I", "T", ",", "?", "+") + " popups · p " + boundKeys("]", "[") +
+		" projects · " + boundKeys("{", "}", "B") + " sidebar · " + boundKey("|") + " details · tab area · " + boundKey(";") +
 		" last place · r remote · " + boundKey("R") + " repaint · C save+clear · esc cancel"
 }
 
@@ -81,7 +112,7 @@ func prefixHint() string {
 // its action's default (keybind.go), which the switch speaks.
 func (m *dash) prefixCommand(key string) tea.Cmd {
 	typed := key
-	key = binds.list.canon(key)
+	key = prefixName(key)
 	switch {
 	case key == "q":
 		m.quitting = true
@@ -139,6 +170,12 @@ func (m *dash) prefixCommand(key string) tea.Cmd {
 			back = m.toDashboard()
 		}
 		return tea.Batch(back, m.listKey(key))
+	case m.over == nil && slices.ContainsFunc(actions, func(a action) bool { return runsAs(a.id, a.keys, key) }):
+		// Any other list key, as on the list: on a coordinator's row a
+		// plain one types through (typethrough.go), so S, O, Z, E and the
+		// rest are prefix+key there.
+		m.stack = nil
+		return m.listKey(key)
 	case m.commandKeyed(typed) && m.over != nil:
 		// A mod's command over a session: the session runs it, with
 		// itself selected, and shows the view the mod opens.

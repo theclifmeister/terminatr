@@ -32,7 +32,7 @@ func linkDash(t *testing.T) (*fakeSource, *dash) {
 
 // TestLinkedProjectsSetting: the Settings row lists the links; its list
 // steps the link through off › both › send › receive, each one act that
-// sets both sides (no question), and a turns this side's ask first.
+// sets both sides (no question), and A turns this side's ask first.
 func TestLinkedProjectsSetting(t *testing.T) {
 	src, m := linkDash(t)
 	m.openTab("alpha", tabSettings, 0)
@@ -42,7 +42,7 @@ func TestLinkedProjectsSetting(t *testing.T) {
 		t.Fatalf("no Linked projects row:\n%s", out)
 	}
 	m.push(&linksView{slug: "alpha"})
-	if out := screen(m); !strings.Contains(out, "linked both ways") || !strings.Contains(out, "a ask first") {
+	if out := screen(m); !strings.Contains(out, "linked both ways") || !strings.Contains(out, "A ask first") {
 		t.Fatalf("list:\n%s", out)
 	}
 	// both → send, at once: no question.
@@ -50,14 +50,14 @@ func TestLinkedProjectsSetting(t *testing.T) {
 	if _, asked := m.top().(*confirmView); asked || len(src.links) != 1 || src.links[0] != "alpha beta send" {
 		t.Fatalf("links %v (%T)", src.links, m.top())
 	}
-	drain(t, m, press(m, "a"))
+	drain(t, m, press(m, "A"))
 	if len(src.links) != 2 || src.links[1] != "alpha beta ask true" {
 		t.Fatalf("ask %v", src.links)
 	}
-	// No link yet: enter links both ways; a says to link first.
+	// No link yet: enter links both ways; A says to link first.
 	src.data.Projects[0].Links = nil
 	m.setData(src.data)
-	press(m, "a")
+	press(m, "A")
 	if len(src.links) != 2 || !strings.Contains(m.msg, "link beta first") {
 		t.Fatalf("ask without a link: %v %q", src.links, m.msg)
 	}
@@ -92,7 +92,7 @@ func TestMessagesTab(t *testing.T) {
 		t.Fatalf("enter opened %T", m.top())
 	}
 	out = screen(m)
-	for _, want := range []string{"Hello", "Held one", "waits for your OK", "A approve", "m write"} {
+	for _, want := range []string{"Hello", "Held one", "waits for your OK", "A approve", "M write"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("conversation lacks %q:\n%s", want, out)
 		}
@@ -102,7 +102,7 @@ func TestMessagesTab(t *testing.T) {
 		t.Fatalf("acts %v", src.linkActs)
 	}
 	// On a message that isn't held, A says why.
-	press(m, "k")
+	keyPress(m, "up")
 	press(m, "A")
 	if len(src.linkActs) != 1 || !strings.Contains(m.msg, "only a message that waits") {
 		t.Fatalf("A on a sent message: %v %q", src.linkActs, m.msg)
@@ -161,7 +161,7 @@ func TestLinkedProjectsRemote(t *testing.T) {
 	}
 
 	// nas/media, unlinked: enter links this side both ways (link.Set
-	// asks first for a new remote entry); a on mini/acme-api turns its
+	// asks first for a new remote entry); A on mini/acme-api turns its
 	// ask off.
 	v.sel = 2
 	drain(t, m, press(m, "enter"))
@@ -169,18 +169,18 @@ func TestLinkedProjectsRemote(t *testing.T) {
 		t.Fatalf("link %v %q", src.links, m.msg)
 	}
 	v.sel = 1
-	drain(t, m, press(m, "a"))
+	drain(t, m, press(m, "A"))
 	if got := src.links[len(src.links)-1]; got != "alpha mini/acme-api ask false" {
 		t.Fatalf("ask %v", src.links)
 	}
 }
 
-// TestLinkRequests: r on a paired server's project asks its user to
-// link back (after a y; with no entry here it links both ways first),
+// TestLinkRequests: R on a paired server's project asks its user to
+// link back (after a Y; with no entry here it links both ways first),
 // once while one waits, and the other side's column says the request's
 // state. A request from there is a NEEDS YOU row; in the Messages tab A
-// offers the directions, the request's mirror first, and x declines
-// after a y.
+// offers the directions, the request's mirror first, and X declines
+// after a Y.
 func TestLinkRequests(t *testing.T) {
 	src, m := linkDash(t)
 	src.data.Peers = remotePeers()
@@ -199,7 +199,7 @@ func TestLinkRequests(t *testing.T) {
 
 	v := &linksView{slug: "alpha"}
 	m.push(v)
-	if out := screen(m); !strings.Contains(out, "asked, no answer yet") || !strings.Contains(out, "asks to link") || !strings.Contains(out, "r ask") {
+	if out := screen(m); !strings.Contains(out, "asked, no answer yet") || !strings.Contains(out, "asks to link") || !strings.Contains(out, "R ask") {
 		t.Fatalf("list:\n%s", out)
 	}
 	items, _ := v.items(m)
@@ -208,21 +208,21 @@ func TestLinkRequests(t *testing.T) {
 			v.sel = i
 		}
 	}
-	press(m, "r")
+	press(m, "R")
 	if len(src.linkActs) != 0 || !strings.Contains(m.msg, "asked already (R-4F2A-7)") {
-		t.Fatalf("r while one waits: %v %q", src.linkActs, m.msg)
+		t.Fatalf("R while one waits: %v %q", src.linkActs, m.msg)
 	}
 	for i, it := range items {
 		if it.key == "nas/media" {
 			v.sel = i
 		}
 	}
-	press(m, "r")
+	press(m, "R")
 	cv, ok := m.top().(*confirmView)
 	if !ok || !strings.Contains(cv.question, "both ways on this side") {
-		t.Fatalf("r without an entry: %T", m.top())
+		t.Fatalf("R without an entry: %T", m.top())
 	}
-	drain(t, m, press(m, "y"))
+	drain(t, m, press(m, "Y"))
 	if len(src.linkActs) != 1 || src.linkActs[0] != "alpha request nas/media both" {
 		t.Fatalf("request %v", src.linkActs)
 	}
@@ -242,11 +242,11 @@ func TestLinkRequests(t *testing.T) {
 	if got := src.linkActs[len(src.linkActs)-1]; got != "alpha accept R-9C1B-3 receive ask" {
 		t.Fatalf("accept %v", src.linkActs)
 	}
-	press(m, "x")
+	press(m, "X")
 	if _, ok := m.top().(*confirmView); !ok {
-		t.Fatalf("x: %T", m.top())
+		t.Fatalf("X: %T", m.top())
 	}
-	drain(t, m, press(m, "y"))
+	drain(t, m, press(m, "Y"))
 	if got := src.linkActs[len(src.linkActs)-1]; got != "alpha decline R-9C1B-3" {
 		t.Fatalf("decline %v", src.linkActs)
 	}

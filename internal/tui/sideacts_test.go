@@ -56,7 +56,7 @@ func TestSideMenuSame(t *testing.T) {
 	}
 	c := &client{dashboard: true}
 	for _, it := range c.sideItems(rows[0], Target{}) {
-		if it.label == "tasks" && it.key != "prefix+t" {
+		if it.label == "tasks" && it.key != "prefix+T" {
 			t.Errorf("a session's tasks item names %q", it.key)
 		}
 	}

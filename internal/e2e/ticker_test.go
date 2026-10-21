@@ -307,7 +307,7 @@ func TestSmokeTickerPRMergedAutoResolve(t *testing.T) {
 // TestSmokeProjectDashboard: the project view of M7. A thread with a
 // task and a report shows its progress line, PR and Next lines when
 // selected, only to read: the coordinator acks the report (tm thread
-// ack), and i shows the project's inbox. enter attaches the thread, which
+// ack), and I shows the project's inbox. enter attaches the thread, which
 // takes keys like any pane: typing claims its size, and the first input
 // tells the coordinator, once for the attach, without asking.
 func TestSmokeProjectDashboard(t *testing.T) {
@@ -344,7 +344,7 @@ cmd = 'printf "PR: https://github.com/o/r/pull/7\n\n## Report\nDone.\n\n## Next\
 	if strings.Contains(w.Screen(), "NEEDS YOU") {
 		t.Fatalf("a thread's report is in NEEDS YOU:\n%s", w.Screen())
 	}
-	w.Type("j")
+	w.Key(keyDown)
 	w.WaitFor("report new · for the coordinator", wait)
 	w.Golden("dashboard-thread.txt", dashMasks...)
 
@@ -352,7 +352,7 @@ cmd = 'printf "PR: https://github.com/o/r/pull/7\n\n## Report\nDone.\n\n## Next\
 	// A console of its own, so its selection doesn't move w's.
 	wide := env.Window(140+sideDefault, 30, "--own")
 	wide.WaitFor("report new  50% 1/2", wait)
-	wide.Type("j")
+	wide.Key(keyDown)
 	wide.WaitFor("enter attach", wait)
 	// The row is cut at the window's edge, so a wider age (10s, not 5s)
 	// moves the cut: "t-…" or "t…".
@@ -362,16 +362,16 @@ cmd = 'printf "PR: https://github.com/o/r/pull/7\n\n## Report\nDone.\n\n## Next\
 	wide.Quit()
 	wide.WaitExit(wait)
 
-	// a opens the project popup and acks nothing; the coordinator acks.
-	w.Type("a")
+	// A opens the project popup and acks nothing; the coordinator acks.
+	w.Type("A")
 	w.WaitFor("1 overview", wait)
 	if r := env.MustCLI("thread", "show", "t-0001", "--project", "demo"); !strings.Contains(r, "report: new") {
-		t.Fatalf("a acked:\n%s", r)
+		t.Fatalf("A acked:\n%s", r)
 	}
 	w.Key(keyEsc)
 	env.MustCLI("thread", "ack", "t-0001", "--project", "demo")
 	w.WaitFor("report read", wait)
-	w.Type("i")
+	w.Type("I")
 	w.WaitFor("The coordinator handles these", wait)
 	w.WaitFor("T1 handed in report 1 Fix the login", wait)
 	// The age is not deterministic, and two things follow from its width
@@ -425,7 +425,7 @@ func (e *Env) scriptsDir() string {
 	return ""
 }
 
-// TestSmokeDelegateFromList: D on a task in the t list asks first; y
+// TestSmokeDelegateFromList: D on a task in the T list asks first; Y
 // drops a delegate item, the row waits on the coordinator, the footer
 // says so, and the idle coordinator's nudge names the task as the
 // user's go-ahead. A started task isn't delegated.
@@ -439,15 +439,15 @@ func TestSmokeDelegateFromList(t *testing.T) {
 
 	w := env.Window(110, 30)
 	w.WaitFor("1 in motion · 1 on deck", wait)
-	w.Type("t")
+	w.Type("T")
 	w.WaitFor("3 tasks", wait)
 	// T2 (in motion) first: its footer offers no D, and D only says why.
 	w.WaitFor("enter show · + new task", wait)
 	w.Type("D")
 	w.WaitFor("T2 is started: a thread already works on it", wait)
-	w.Keys("j", "D")
+	w.Keys(keyDown, "D")
 	w.WaitFor("Delegate T1 to the coordinator?", wait)
-	w.Type("y")
+	w.Type("Y")
 	w.WaitFor("asked the coordinator to delegate T1", wait)
 	w.WaitFor("asked the coordinator", wait)
 	items := waitInbox(t, env, "delegate: the user asks to delegate T1")
@@ -473,9 +473,9 @@ func TestSmokeDelegateFromList(t *testing.T) {
 	w.WaitExit(wait)
 }
 
-// TestSmokeAcceptSendBack: in the t list, A on a task in review asks
-// first; y drops an accept item, the row waits on the coordinator and
-// the idle coordinator's nudge names the task as accepted. x on another
+// TestSmokeAcceptSendBack: in the T list, A on a task in review asks
+// first; Y drops an accept item, the row waits on the coordinator and
+// the idle coordinator's nudge names the task as accepted. X on another
 // asks for a note and drops a send-back item carrying it. A blocked
 // task, shown, says what it is blocked on, and c attaches the
 // coordinator. No task changes.
@@ -492,14 +492,14 @@ func TestSmokeAcceptSendBack(t *testing.T) {
 
 	w := env.Window(110, 30)
 	w.WaitFor("3 need you", wait)
-	w.Type("t")
+	w.Type("T")
 	w.WaitFor("3 tasks", wait)
-	w.WaitFor("A accept · x send back", wait)
+	w.WaitFor("A accept · X send back", wait)
 	w.Key(keyEnter)
 	w.WaitFor("• run tm and press t", wait)
 	w.Type("A")
 	w.WaitFor("Accept T1? The coordinator marks T1 Ship it done.", wait)
-	w.Type("y")
+	w.Type("Y")
 	w.WaitFor("told the coordinator you accept T1", wait)
 	w.WaitFor("waiting on the coordinator to accept it", wait)
 	waitInbox(t, env, "accept: the user accepts T1")
@@ -507,13 +507,13 @@ func TestSmokeAcceptSendBack(t *testing.T) {
 	if text := nudge.Str("text"); !strings.Contains(text, "T1 Ship it accepted by the user") {
 		t.Fatalf("nudge %q", text)
 	}
-	// Asked once: x adds nothing either.
-	w.Type("x")
+	// Asked once: X adds nothing either.
+	w.Type("X")
 	w.WaitFor("T1 is already waiting on the coordinator to accept it", wait)
 	w.Key(keyEsc)
 	w.WaitFor("asked the coordinator", wait)
 
-	w.Keys("j", "x")
+	w.Keys(keyDown, "X")
 	w.WaitFor("What should change?", wait)
 	w.Keys("the bell is cut", keyEnter)
 	w.WaitFor("sent T2 back with your note", wait)
@@ -522,7 +522,7 @@ func TestSmokeAcceptSendBack(t *testing.T) {
 		t.Fatalf("inbox:\n%s", items)
 	}
 
-	w.Type("j")
+	w.Key(keyDown)
 	w.WaitFor("enter show · c coordinator · D delegate · + new task", wait)
 	w.Key(keyEnter)
 	w.WaitFor("Blocked on: which licence, MIT or Apache?", wait)

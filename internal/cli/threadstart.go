@@ -240,7 +240,7 @@ func refusal(err error) error {
 // or a paused project (docs/SPEC.md §5.1, §11.2).
 func parkedErr(p *project.Project, safety config.Safety) error {
 	if !safety.Active {
-		return &tasks.Error{Code: "project-inactive", Msg: fmt.Sprintf("%s is inactive: no thread starts until the user activates it (tm project activate %s, or space on it in the sidebar)", p.Slug, p.Slug)}
+		return &tasks.Error{Code: "project-inactive", Msg: fmt.Sprintf("%s is inactive: no thread starts until the user activates it (tm project activate %s, or S on it in the sidebar)", p.Slug, p.Slug)}
 	}
 	if !safety.Paused {
 		return nil

@@ -34,7 +34,7 @@ func (v *agentPickView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "esc", "q":
 		m.pop()
 		m.msg = "no agent chosen: " + v.slug + " stays closed"
-	case "up", "k", "down", "j":
+	case "up", "down":
 		v.sel = moveSel(v.sel, scrollKeys[s], len(v.agents))
 	case "enter":
 		return v.pick(m, v.sel)

@@ -659,8 +659,9 @@ func TestDashboardKeys(t *testing.T) {
 	}
 
 	// The keys that acted on threads and tasks are gone: c, d, 1-9 do
-	// nothing on any row (a opens the project popup now).
-	for _, sel := range []string{"n:s-1", "th:beta:t-0005", "p:alpha"} {
+	// nothing on a thread's row (on a coordinator's they type through
+	// to it: typethrough_test.go).
+	for _, sel := range []string{"th:beta:t-0005", "th:beta:t-0006"} {
 		m.sel, m.result = sel, DashResult{}
 		for _, k := range []string{"c", "d", "1", "2"} {
 			if cmd := press(m, k); cmd != nil || m.top() != nil {
@@ -731,7 +732,7 @@ func TestDashboardThreadRow(t *testing.T) {
 			t.Errorf("thread detail offers %q:\n%s", not, out)
 		}
 	}
-	press(m, "i")
+	press(m, "I")
 	if pv, ok := m.top().(*projectView); !ok || pv.tab != tabInbox || !strings.Contains(screen(m), "t-0005 handed in report 1") {
 		t.Fatalf("inbox view:\n%s", screen(m))
 	}
@@ -793,7 +794,7 @@ func TestStatusLine(t *testing.T) {
 	}
 	// After the prefix: the commands.
 	got = ansi.Strip(statusLine(info, nil, true, 160, ""))
-	if !strings.Contains(got, `d dashboard · q quit · a project · n new · p ] [ projects · i t , ? · { } b sidebar · | info · tab sidebar keys`) || !strings.Contains(got, `prefix again sends it`) {
+	if !strings.Contains(got, `d dashboard · q quit · A project · + new · p ] [ projects · I T , ? · { } B sidebar · | info · tab sidebar keys`) || !strings.Contains(got, `prefix again sends it`) {
 		t.Fatalf("pending status line %q", got)
 	}
 }
@@ -808,7 +809,7 @@ func TestDashboardOverlays(t *testing.T) {
 
 	m.Update(boardMsg{}) // no board open: ignored
 	m.Update(boardMsg{slug: "alpha", board: &tasks.Board{}})
-	press(m, "t")
+	prefixed(m, "T") // a coordinator's row: T types through
 	pv, ok := m.top().(*projectView)
 	if !ok || pv.slug != "alpha" || pv.tab != tabTasks {
 		t.Fatalf("t: overlay %T", m.top())
@@ -834,7 +835,7 @@ func TestDashboardOverlays(t *testing.T) {
 		t.Fatalf("esc on the popup returns to the list, have %T", m.top())
 	}
 
-	press(m, "?")
+	prefixed(m, "?")
 	out := ansi.Strip(strings.Join(m.top().(*helpView).box(m).body, "\n"))
 	for _, a := range actions {
 		if a.label != "" && !strings.Contains(out, " "+a.label+" ") && !strings.HasPrefix(out, a.label+" ") && !strings.Contains(out, "\n"+a.label+" ") {
@@ -950,7 +951,7 @@ func TestDashboardPrefix(t *testing.T) {
 	if !m.prefixed || !strings.Contains(screen(m), `prefix ▸ d dashboard`) {
 		t.Fatalf("prefix not shown:\n%s", screen(m))
 	}
-	press(m, "t")
+	press(m, "t") // prefix+t is prefix+T
 	if _, ok := m.top().(*projectView); !ok || m.prefixed {
 		t.Fatalf("prefix t: overlay %T", m.top())
 	}
@@ -971,7 +972,7 @@ func TestDashboardOver(t *testing.T) {
 	src := &fakeSource{data: testData()}
 	scr := []string{"first row", "the session's second row", "its third row"}
 	m := newDash(DashOptions{Source: src, Width: 100, Height: 30, State: DashState{Current: "beta"},
-		Over: &Over{Key: "i", Project: "alpha", Session: "s-5", Title: "s-5 · beta t-0005", Screen: scr}})
+		Over: &Over{Key: "I", Project: "alpha", Session: "s-5", Title: "s-5 · beta t-0005", Screen: scr}})
 	m.setData(src.data)
 	if pv, ok := m.top().(*projectView); !ok || pv.slug != "alpha" || pv.tab != tabInbox {
 		t.Fatalf("over: overlay %T %+v", m.top(), m.top())
@@ -1014,14 +1015,14 @@ func TestDashboardFooter(t *testing.T) {
 	m := newDash(DashOptions{Source: src, Width: 100, Height: 30, State: DashState{Current: allProjects}})
 	m.setData(src.data)
 	m.sel = "n:s-1" // alpha's, in every project's NEEDS YOU
-	if got, want := m.footKeys(), "≡ menu · enter attach · a project · t tasks · i inbox · , settings · ? help · prefix+q quit"; !strings.HasPrefix(got, want) {
+	if got, want := m.footKeys(), "≡ menu · type to write to the coordinator · enter attach · prefix+A project · prefix+T tasks · prefix+I inbox · prefix+, settings · prefix+? help · prefix+q quit"; !strings.HasPrefix(got, want) {
 		t.Errorf("n:s-1: footer %q, want %q…", got, want)
 	}
 	m.showProject("beta")
 	for sel, want := range map[string]string{
-		"th:beta:t-0005": "≡ menu · enter attach · a project · t tasks · i inbox",
-		"th:beta:t-0006": "≡ menu · a project · t tasks · i inbox",
-		"p:beta":         "≡ menu · enter open · a project · t tasks",
+		"th:beta:t-0005": "≡ menu · enter attach · A project · T tasks · I inbox",
+		"th:beta:t-0006": "≡ menu · A project · T tasks · I inbox",
+		"p:beta":         "≡ menu · enter open · A project · T tasks",
 	} {
 		m.sel = sel
 		if got := m.footKeys(); !strings.HasPrefix(got, want) {
@@ -1030,7 +1031,7 @@ func TestDashboardFooter(t *testing.T) {
 	}
 	m.data.Projects = nil
 	m.setData(Data{ServerOK: true})
-	if got := m.footKeys(); !strings.HasPrefix(got, "≡ menu · n new project · , settings") {
+	if got := m.footKeys(); !strings.HasPrefix(got, "≡ menu · + new project · , settings") {
 		t.Errorf("no projects: footer %q", got)
 	}
 }
@@ -1046,7 +1047,7 @@ func TestDashboardPopups(t *testing.T) {
 	m.setData(src.data)
 	m.sel = "p:alpha"
 
-	press(m, "i")
+	prefixed(m, "I") // a coordinator's row
 	out := screen(m)
 	for _, want := range []string{"╭─ alpha ─", "2 inbox", "│ ", "t-0002 handed in report 1", "╰─", "esc close",
 		"NEEDS YOU 2"} { // the list stays in view behind the box
@@ -1061,7 +1062,7 @@ func TestDashboardPopups(t *testing.T) {
 	}
 	m.pop()
 
-	press(m, ",")
+	prefixed(m, ",")
 	out = screen(m)
 	for _, want := range []string{"Settings", "Prefix key", "ctrl+b", "Details panel", "List size", "Sidebar"} {
 		if !strings.Contains(out, want) {
@@ -1095,7 +1096,7 @@ func TestPromptWraps(t *testing.T) {
 	src := &fakeSource{data: testData()}
 	m := newDash(DashOptions{Source: src, Width: 100, Height: 30})
 	m.setData(src.data)
-	press(m, "n")
+	prefixed(m, "+")
 	m.top().(*inputView).text = long
 	if out := screen(m); !strings.Contains(out, "Its name (becomes a lower-case slug") || !strings.Contains(out, "│ /var/folders") {
 		t.Fatalf("prompt:\n%s", out)
@@ -1108,7 +1109,7 @@ func TestPromptWraps(t *testing.T) {
 // takes the width.
 func TestPopupMargins(t *testing.T) {
 	for _, w := range []int{60, 100, 140, 180} {
-		for _, key := range []string{"?", "a", ","} {
+		for _, key := range []string{"?", "A", ","} {
 			src := &fakeSource{data: testData()}
 			m := newDash(DashOptions{Source: src, Width: w + sideDefault, Height: 40, State: DashState{Current: "beta"}})
 			m.setData(src.data)
@@ -1162,7 +1163,7 @@ func TestDashboardNeedsYouTasks(t *testing.T) {
 		"  T5 Pick a licence                         ▲ blocked",
 		"  s-4 ",
 		" alpha ─",
-		"tasks: 2 need you (t lists them) · 1 in motion · 0 on deck",
+		"tasks: 2 need you (T lists them) · 1 in motion · 0 on deck",
 	} {
 		i := strings.Index(out[at:], want)
 		if i < 0 {

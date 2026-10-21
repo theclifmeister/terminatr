@@ -192,10 +192,10 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	}
 	s := k.String()
 	d := scrollKeys[s]
-	if pv.tab == tabAccess && s == "e" {
+	if pv.tab == tabAccess && s == "E" {
 		return m.showAccess(pv.slug, "")
 	}
-	if pv.tab == tabAccess && s == "p" && sandboxShown(m, pv.slug) {
+	if pv.tab == tabAccess && s == "P" && sandboxShown(m, pv.slug) {
 		return m.openPresets(pv.slug)
 	}
 	if pv.tab == tabAccess && s == "R" {
@@ -231,7 +231,7 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		switch r := ls[pv.sel[tabMessages]]; s {
 		case "enter", "space":
 			return m.openConversation(pv.slug, r.Peer)
-		case "A", "x":
+		case "A", "X":
 			return m.answerRequest(pv.slug, r, s == "A")
 		}
 	}
@@ -267,7 +267,7 @@ func (tv *taskView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch k.String() {
 	case "esc":
 		m.pop()
-	case "D", "A", "x", "c":
+	case "D", "A", "X", "c":
 		if t := tv.task(); t != nil {
 			return m.taskKey(tv.pv.slug, t, k.String())
 		}
@@ -313,7 +313,7 @@ func (pv *projectView) count(m *dash) int {
 	return 0
 }
 
-// repoKey adds (+) or removes (x) a repository.
+// repoKey adds (+) or removes (X) a repository.
 func (pv *projectView) repoKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	slug, repos := pv.slug, pv.data(m).Repos
 	switch k.String() {
@@ -322,7 +322,7 @@ func (pv *projectView) repoKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			path = absPath(path, m.cwd)
 			return m.setRepo(slug, path, true, "added "+path)
 		})
-	case "x":
+	case "X":
 		i := pv.sel[tabOverview]
 		if i >= len(repos) {
 			return nil
@@ -377,7 +377,7 @@ func (pv *projectView) box(m *dash) box {
 	switch pv.tab {
 	case tabOverview:
 		body, sel, hits = pv.overview(m, p, w)
-		keys = "+ add repository · x remove it · " + keys
+		keys = "+ add repository · X remove it · " + keys
 	case tabInbox:
 		body, sel, hits = inboxLines(p.Items, pv.sel[tabInbox], w)
 		body = append(body, "", th().Faint.Render("The coordinator handles these (tm inbox done)."))
@@ -406,7 +406,7 @@ func (pv *projectView) box(m *dash) box {
 	case tabLibrary:
 		body, sel, hits = pv.libraryLines(w)
 		if len(pv.library) > 0 {
-			keys = "enter read · d delete · D delete the thread's · " + keys
+			keys = "enter read · X delete · D delete the thread's · " + keys
 		}
 	case tabMessages:
 		body, sel, hits = messagesLines(p, pv.sel[tabMessages], w)
@@ -415,7 +415,7 @@ func (pv *projectView) box(m *dash) box {
 			keys = "enter open · " + keys
 		}
 		if pv.sel[tabMessages] < len(p.Links) && p.Links[pv.sel[tabMessages]].Asks != nil {
-			keys = "A accept the link · x decline · " + keys
+			keys = "A accept the link · X decline · " + keys
 		}
 	}
 	head := []string{pv.tabBar(m, p), ""}
@@ -429,9 +429,9 @@ func (pv *projectView) box(m *dash) box {
 }
 
 // listKeys are the Settings or Access tab's (access) keys for its
-// selected row: + and - on a number, x on a setting the project sets
-// itself (it follows all projects again), and on the Access tab p for
-// a preset (from protection sandboxed) and e for the effective access.
+// selected row: + and - on a number, X on a setting the project sets
+// itself (it follows all projects again), and on the Access tab P for
+// a preset (from protection sandboxed) and E for the effective access.
 func listKeys(m *dash, l *settingsList, access bool, slug string) string {
 	keys := []string{"enter change"}
 	if l.sel < len(l.rows) {
@@ -443,14 +443,14 @@ func listKeys(m *dash, l *settingsList, access bool, slug string) string {
 			keys = append(keys, "+ - number")
 		}
 		if r.from != nil && r.from(m) == "" {
-			keys = append(keys, "x follow all projects")
+			keys = append(keys, "X follow all projects")
 		}
 	}
 	if access {
 		if sandboxShown(m, slug) {
-			keys = append(keys, "p add a preset")
+			keys = append(keys, "P add a preset")
 		}
-		keys = append(keys, "e effective access", "R reset")
+		keys = append(keys, "E effective access", "R reset")
 	}
 	return strings.Join(append(keys, "← → tabs", "esc close"), " · ")
 }

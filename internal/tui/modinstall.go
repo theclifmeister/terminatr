@@ -13,10 +13,10 @@ import (
 )
 
 // Installing a mod from the Mods tab (mods design §9), as tm mod install
-// does: i asks for a folder or a git URL (the subfolder forms included),
-// or the examples list (e) gives the selected example's; tm fetches and
+// does: I asks for a folder or a git URL (the subfolder forms included),
+// or the examples list (E) gives the selected example's; tm fetches and
 // checks it in the background, showing how long it has taken, then draws
-// its consent in full. y installs it off, as the CLI does, then asks
+// its consent in full. Y installs it off, as the CLI does, then asks
 // whether to turn it on: two answers, as tm mod install then tm mod
 // enable are, so an install alone never runs a mod's code. Turning it on
 // grants every permission it asks for, which the consent just showed for
@@ -107,7 +107,7 @@ func (fv *fetchView) render(m *dash) string {
 }
 
 // installView is the consent of a fetched mod, as tm mod install shows
-// it: y installs it, off, then asks whether to turn it on.
+// it: Y installs it, off, then asks whether to turn it on.
 type installView struct {
 	st     *mod.Staged
 	scroll int
@@ -132,7 +132,7 @@ func (iv *installView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	switch k.String() {
-	case "y":
+	case "Y":
 		m.pop()
 		src, st, md := m.src, iv.st, iv.mod()
 		name, ver := modName(md), md.Manifest.Version
@@ -147,7 +147,7 @@ func (iv *installView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 					"installed "+name+", off: enter turns it on", func() tea.Cmd { return m.modAct(md.ID, "enable", name+" on") })
 			}}
 		})
-	case "n", "esc":
+	case "N", "esc":
 		m.pop()
 		iv.st.Close()
 		m.msg = "nothing installed"
@@ -159,7 +159,7 @@ func (iv *installView) wheel(m *dash, d int) { iv.key(m, arrow(d)) }
 
 func (iv *installView) render(m *dash) string {
 	return m.popup(box{title: "Install " + modName(iv.mod()), body: iv.lines(m.inner(viewWidth)), sel: -1, scroll: iv.scroll,
-		keys: "y install · n no · ↑ ↓ scroll · esc cancel"})
+		keys: "Y install · N no · ↑ ↓ scroll · esc cancel"})
 }
 
 // selectMod selects mod id in the Mods tab once the next poll lists it.
@@ -172,14 +172,14 @@ func (m *dash) selectMod(id string) {
 }
 
 // examplesView lists terminatr's example mods (mods design §13), each
-// with where it shows up, what it may do and its install line: i
+// with where it shows up, what it may do and its install line: I
 // installs the selected one, after its consent, as the line would. A
 // built-in one is installed already; its lines say how to copy it under
 // another id.
 type examplesView struct{ sel int }
 
 func (ev *examplesView) lines(w int) (out []string, sel int) {
-	out = wrapLines("terminatr's example mods: one small, working mod for each place a mod can show up, to see it work and to get ideas to build and share. Nothing here is installed or turned on: i installs the selected one, after its consent; it starts off.", w)
+	out = wrapLines("terminatr's example mods: one small, working mod for each place a mod can show up, to see it work and to get ideas to build and share. Nothing here is installed or turned on: I installs the selected one, after its consent; it starts off.", w)
 	out = append(out, "", th().Accent.Render(ansi.Truncate(mod.ExamplesURL, w, "…")))
 	for i, e := range mod.Examples {
 		out = append(out, "")
@@ -206,7 +206,7 @@ func (ev *examplesView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch s {
 	case "esc", "q":
 		m.pop()
-	case "i", "enter":
+	case "I", "enter":
 		e := mod.Examples[ev.sel]
 		if mod.IsBundled(e.ID) {
 			m.fail(fmt.Errorf("%s is built in already: to change it, copy it under another id, as its lines say", e.ID))
@@ -221,5 +221,5 @@ func (ev *examplesView) wheel(m *dash, d int) { ev.key(m, arrow(d)) }
 
 func (ev *examplesView) render(m *dash) string {
 	lines, sel := ev.lines(m.inner(viewWidth))
-	return m.popup(box{title: "Example mods", body: lines, sel: sel, keys: "i install · ↑ ↓ move · esc back"})
+	return m.popup(box{title: "Example mods", body: lines, sel: sel, keys: "I install · ↑ ↓ move · esc back"})
 }

@@ -80,7 +80,7 @@ func (h *helpView) wheel(m *dash, d int) { h.key(m, arrow(d)) }
 
 // scrollKeys scroll a long popup, or move a list's selection: by a line,
 // or by a page.
-var scrollKeys = map[string]int{"up": -1, "k": -1, "down": 1, "j": 1, "pgup": -10, "pgdown": 10}
+var scrollKeys = map[string]int{"up": -1, "down": 1, "pgup": -10, "pgdown": 10}
 
 func clampScroll(s, n int) int { return min(max(s, 0), max(n-1, 0)) }
 

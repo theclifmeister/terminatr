@@ -11,7 +11,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
-// Presets as "add these rules" (T574 §3.3, §4.3): p on the Access tab
+// Presets as "add these rules" (T574 §3.3, §4.3): P on the Access tab
 // lists the presets; enter on one shows the rules it adds and which
 // are there already, and enter adds them. Each added rule then stands
 // on its own: nothing ties it to the preset afterwards.
@@ -33,7 +33,7 @@ func (v *presetsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch k.String() {
 	case "esc", "q":
 		m.pop()
-	case "up", "k", "down", "j":
+	case "up", "down":
 		v.sel = moveSel(v.sel, scrollKeys[k.String()], len(config.Presets))
 	case "enter", "space":
 		m.push(newPresetAdd(m, v.sr, config.Presets[v.sel]))
@@ -111,7 +111,7 @@ func (v *presetAdd) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch k.String() {
 	case "esc", "q":
 		m.pop()
-	case "up", "k", "down", "j":
+	case "up", "down":
 		v.sel = moveSel(v.sel, scrollKeys[k.String()], len(missing))
 	case "space":
 		if v.sel < len(missing) {

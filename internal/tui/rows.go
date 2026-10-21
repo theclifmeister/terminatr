@@ -608,11 +608,11 @@ func needsBadge(n int) string {
 }
 
 // taskCounts are a project's task counts; tasks that need the user say
-// where to see them: the task list (t).
+// where to see them: the task list (T).
 func taskCounts(c map[string]int) string {
 	needs := needsYouWords(c["needs_you"])
 	if c["needs_you"] > 0 {
-		needs += " (t lists them)"
+		needs += " (" + keyShown(boundKey("T")) + " lists them)"
 	}
 	return fmt.Sprintf("%s · %d in motion · %d on deck", needs, c["in_motion"], c["on_deck"])
 }

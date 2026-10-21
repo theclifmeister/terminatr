@@ -83,9 +83,9 @@ func TestSidebarFilter(t *testing.T) {
 	if f := sideFilterNow(); f.typing || f.text != "doc" || !strings.Contains(whole(m), " /doc ") {
 		t.Fatalf("enter keeps the filter: %+v\n%s", f, whole(m))
 	}
-	keyPress(m, "j")
+	keyPress(m, "down")
 	if c := sideCursorKey(m); c != "t:beta/t-0005" {
-		t.Fatalf("j in the kept filter: %q", c)
+		t.Fatalf("down in the kept filter: %q", c)
 	}
 	keyPress(m, "esc")
 	if m.focus != areaSide || sideFilterNow().on() || len(treeKeys(m)) != 6 {
@@ -139,7 +139,7 @@ func TestSidebarFilterClick(t *testing.T) {
 }
 
 // TestSidebarJumps: home end pgup pgdown go to the ends and a page on;
-// 1-9 to the nth project; w W to the next and previous row that needs
+// 1-9 to the nth project; W to the next row that needs
 // you, round the ends.
 func TestSidebarJumps(t *testing.T) {
 	m, _ := sideDash(t)
@@ -149,7 +149,7 @@ func TestSidebarJumps(t *testing.T) {
 	}{
 		{tea.KeyEnd, "t:beta/t-0006"}, {tea.KeyHome, "p:alpha"}, {tea.KeyPgDown, "t:beta/t-0006"}, {tea.KeyPgUp, "p:alpha"},
 		{"2", "p:beta"}, {"1", "p:alpha"}, {"9", "p:alpha"},
-		{"w", "t:beta/t-0005"}, {"w", "t:beta/t-0005"}, {"W", "t:beta/t-0005"},
+		{"W", "t:beta/t-0005"}, {"W", "t:beta/t-0005"},
 	}
 	for i, s := range steps {
 		switch k := s.key.(type) {
@@ -167,24 +167,24 @@ func TestSidebarJumps(t *testing.T) {
 	if m.msg != "no project 9" {
 		t.Fatalf("9: %q", m.msg)
 	}
-	keyPress(m, "w")
+	keyPress(m, "W")
 	if m.msg != "next row that needs you" {
-		t.Fatalf("w: %q", m.msg)
+		t.Fatalf("W: %q", m.msg)
 	}
 	keyPress(m, "W")
 	if m.msg != "only this row needs you" {
 		t.Fatalf("W on the only one: %q", m.msg)
 	}
 
-	// w clears a filter that hides the row.
+	// W clears a filter that hides the row.
 	keyPress(m, "1")
 	keyPress(m, "/")
 	keyPress(m, "a")
 	keyPress(m, "l")
 	keyPress(m, "enter")
-	keyPress(m, "w")
+	keyPress(m, "W")
 	if sideFilterNow().on() || sideCursorKey(m) != "t:beta/t-0005" {
-		t.Fatalf("w past the filter: %+v %q", sideFilterNow(), sideCursorKey(m))
+		t.Fatalf("W past the filter: %+v %q", sideFilterNow(), sideCursorKey(m))
 	}
 }
 
@@ -279,9 +279,9 @@ func TestSessionLastPlace(t *testing.T) {
 	}
 	c.key(pk)
 	c.key(uv.Key{Code: uv.KeyTab})
-	c.key(uv.Key{Code: 'j', Text: "j"})
+	c.key(uv.Key{Code: uv.KeyDown})
 	if c.kb != areaSide || c.v.SideSel != "t:beta/t-0006" {
-		t.Fatalf("prefix+tab, j: focus %d sel %q", c.kb, c.v.SideSel)
+		t.Fatalf("prefix+tab, down: focus %d sel %q", c.kb, c.v.SideSel)
 	}
 	last()
 	if c.kb != areaSide || c.v.SideSel != "t:beta/t-0005" {

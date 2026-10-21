@@ -37,11 +37,29 @@ var actionID = regexp.MustCompile(`^[a-z]+(\.[a-z]+(-[a-z]+)*)+$`)
 var lockedKeys = []string{"esc", "ctrl+c", "d", "q", "r"}
 
 // popupOwnKeys are plain keys the popups, the settings and the menu use
-// for their own (popupKeys, settingsKeys). A prefix command can't take
-// one: over a popup, a plain key that is a prefix command must do
-// nothing (TestNoPlainKeyIsAPrefixCommand).
-var popupOwnKeys = []string{"1", "2", "3", "4", "5", "6", "7", "enter", "space", "+", "-", "x", "D", "A", "c",
-	"up", "down", "left", "right", "pgup", "pgdown", "home", "end", "y"}
+// for their own (popupKeys, settingsKeys), and the questions' Y and N. A
+// prefix command can't be moved onto one: over a popup, a plain key
+// that is a prefix command does nothing unless it is the popup's own
+// (A accepts a task there; TestNoPlainKeyIsAPrefixCommand).
+var popupOwnKeys = []string{"1", "2", "3", "4", "5", "6", "7", "enter", "space", "+", "-", "*", "c", "b",
+	"A", "D", "E", "H", "I", "J", "K", "M", "N", "P", "R", "T", "U", "W", "X", "Y",
+	"up", "down", "left", "right", "pgup", "pgdown", "home", "end"}
+
+// runKey is the key an action runs as: its first default, or for one
+// with no default key (an old id kept bindable, such as side.fold-all)
+// "#" and its id, which no typed key is.
+func runKey(id string, keys []string) string {
+	if len(keys) > 0 {
+		return keys[0]
+	}
+	return "#" + id
+}
+
+// runsAs says whether key, a typed key the layer turned into a run key
+// (canon), runs the action id with default keys.
+func runsAs(id string, keys []string, key string) bool {
+	return slices.Contains(keys, key) || key == "#"+id
+}
 
 // bindable is one row of a key table, as the layer sees it.
 type bindable struct {
@@ -303,6 +321,9 @@ func checkBinding(row *bindable, id string, keys []string, prefix string) error 
 			return fmt.Errorf("%s: %s is locked (esc, ctrl+c, the prefix and the prefix commands d q r can't be taken)", id, k)
 		case seen[k]:
 			return fmt.Errorf("%s: lists %s twice", id, k)
+		case prefixTwins[k] != "" && runKey(row.id, row.keys) != prefixTwins[k]:
+			// prefix+a is prefix+A: a plain a means that, or nothing.
+			return fmt.Errorf("%s: %s is locked (prefix+%s is prefix+%s)", id, k, k, prefixTwins[k])
 		}
 		seen[k] = true
 	}
@@ -357,7 +378,7 @@ func prefixClashes(list []bindable, lw map[string][]string, side []bindable, sw 
 			_, lRe := lw[r.id]
 			_, sRe := sw[s]
 			switch {
-			case lRe && slices.Contains(popupOwnKeys, k):
+			case lRe && slices.Contains(popupOwnKeys, k) && !slices.Contains(r.keys, k):
 				out = append(out, r.id)
 			case inSide && (r.id != "help.open" || s != "side.help") && (lRe || sRe):
 				if lRe {
@@ -387,7 +408,7 @@ func newKeyTable(rows []bindable, bound map[string][]string) keyTable {
 	}
 	for _, r := range rows {
 		for _, k := range bound[r.id] {
-			t.canonOf[k] = r.keys[0]
+			t.canonOf[k] = runKey(r.id, r.keys)
 		}
 	}
 	return t
@@ -403,23 +424,24 @@ var coreActions = []struct {
 }{
 	{"popup", bindable{id: "popup.close", keys: []string{"esc"}, fixed: true, help: "close the popup"}},
 	{"popup", bindable{id: "repo.add", keys: []string{"+"}, fixed: true, help: "add a repository (the overview)"}},
-	{"popup", bindable{id: "repo.remove", keys: []string{"x"}, fixed: true, help: "remove the selected repository (the overview; asks first)"}},
+	{"popup", bindable{id: "repo.remove", keys: []string{"X"}, fixed: true, help: "remove the selected repository (the overview; asks first)"}},
 	{"popup", bindable{id: "task.new", keys: []string{"+"}, fixed: true, help: "a new task (the tasks), from a task template or none"}},
 	{"popup", bindable{id: "task.show", keys: []string{"enter"}, fixed: true, help: "show the task"}},
 	{"popup", bindable{id: "task.delegate", keys: []string{"D"}, fixed: true, help: "delegate the task; the coordinator starts a thread for it (asks first)"}},
 	{"popup", bindable{id: "task.accept", keys: []string{"A"}, fixed: true, help: "accept the task in review; the coordinator marks it done (asks first)"}},
-	{"popup", bindable{id: "task.send-back", keys: []string{"x"}, fixed: true, help: "send the task in review back with a note"}},
+	{"popup", bindable{id: "task.send-back", keys: []string{"X"}, fixed: true, help: "send the task in review back with a note"}},
 	{"popup", bindable{id: "task.coordinator", keys: []string{"c"}, fixed: true, help: "open the project's coordinator about the task"}},
 	{"popup", bindable{id: "tasks.done", keys: []string{"b"}, fixed: true, help: "list the done tasks, or collapse them"}},
 	{"popup", bindable{id: "library.read", keys: []string{"enter"}, fixed: true, help: "read the library file"}},
-	{"popup", bindable{id: "library.delete", keys: []string{"d"}, fixed: true, help: "delete the library file (asks first)"}},
+	{"popup", bindable{id: "library.delete", keys: []string{"X"}, fixed: true, help: "delete the library file (asks first)"}},
 	{"popup", bindable{id: "library.delete-thread", keys: []string{"D"}, fixed: true, help: "delete all of the thread's library files (asks first)"}},
 	{"view", bindable{id: "session.attach", keys: []string{"enter"}, fixed: true, help: "attach to the session (a row of a mod's view)"}},
 	{"view", bindable{id: "session.clear", keys: []string{"C"}, fixed: true, help: "clear the session's conversation (a row of a mod's view; asks first)"}},
 	{"view", bindable{id: "question.answer", keys: []string{"a"}, fixed: true, help: "answer the session's question with the row's option (a row of a mod's view; asks first)"}},
-	{"view", bindable{id: "memory.edit", keys: []string{"e"}, fixed: true, help: "edit the memory note in your editor, back here when it exits (the Memory tab)"}},
-	{"view", bindable{id: "memory.new", keys: []string{"n"}, fixed: true, help: "a new memory note: name it, then write it in your editor (the Memory tab)"}},
-	{"view", bindable{id: "memory.rm", keys: []string{"d"}, fixed: true, help: "delete the memory note (the Memory tab; asks first)"}},
+	{"view", bindable{id: "memory.edit", keys: []string{"E"}, fixed: true, help: "edit the memory note in your editor, back here when it exits (the Memory tab)"}},
+	{"view", bindable{id: "memory.new", keys: []string{"N"}, fixed: true, help: "a new memory note: name it, then write it in your editor (the Memory tab)"}},
+	{"view", bindable{id: "memory.rm", keys: []string{"X"}, fixed: true, help: "delete the memory note (the Memory tab; asks first)"}},
+	{"panel", bindable{id: "info.questions", keys: []string{"A"}, fixed: true, help: "the info panel beside a coordinator with questions waiting: have it open them in its question dialog"}},
 	{"session", bindable{id: "session.dashboard", keys: []string{"prefix+d"}, fixed: true, help: "back to the dashboard"}},
 	{"session", bindable{id: "session.remote", keys: []string{"prefix+r"}, fixed: true, help: "remote control of a coordinator on or off (asks first)"}},
 	{"sidebar", bindable{id: "side.save-clear", keys: []string{"prefix+C"}, fixed: true, help: "save and clear the coordinator of the project (a running coordinator's row, past [ui] context_hint offers it; the session's, or on the dashboard the selected project's): it is asked to save what it learned, then cleared at its next idle moment (tm clear; no question). Was the plain c; kept as the id of prefix+C"}},

@@ -10,10 +10,10 @@ import (
 	"github.com/theclifmeister/terminatr/internal/update"
 )
 
-// The Peers tab's relay version and its u (docs/SPEC.md §16.2): each
+// The Peers tab's relay version and its U (docs/SPEC.md §16.2): each
 // link says which tm its relay runs, "update available" when the
 // latest release this server knows of (its own update check) is newer,
-// and u asks the selected server's relay to update itself, as tm peer
+// and U asks the selected server's relay to update itself, as tm peer
 // relay-update does.
 
 // relayVersionWords are "relay v0.27.0", and " · update available" after
@@ -24,7 +24,7 @@ func relayVersionWords(m *dash, e PeerEntry) string {
 	}
 	w := "relay v" + textsafe.Line(strings.TrimPrefix(e.Link.RelayVersion, "v"), 40)
 	if _, behind := relayBehind(m.data.Server, e.Link.RelayVersion); behind {
-		w += " · update available (u)"
+		w += " · update available (U)"
 	}
 	return w
 }

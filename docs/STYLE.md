@@ -133,7 +133,7 @@ The help's **Symbols** list (`symbolLines`) shows the set in use.
 │ The question or the content, wrapped and hung    │   gutter each side
 │ under itself.                                    │
 │                                                  │   a blank row
-│ y yes · n no · esc cancel                        │   the action row: the keys, as buttons
+│ Y yes · N no · esc cancel                        │   the action row: the keys, as buttons
 ╰────────────────────────────────────── more ↓ ────╯   the scroll mark in the border
 ```
 
@@ -141,8 +141,9 @@ The help's **Symbols** list (`symbolLines`) shows the set in use.
 - **D2.** Every popup and dialog ends with its action row inside the
   frame (`box.keys`, drawn by `drawBox`); each hint is a button. The
   footer under a popup shows none of them; the status bar never asks.
-- **D3.** A yes/no question takes `y`, `n` and `esc` and shows
-  `y yes · n no · esc cancel`; no other key answers it, `enter` included.
+- **D3.** A yes/no question takes `Y`, `N` and `esc` and shows
+  `Y yes · N no · esc cancel`; no other key answers it, `enter` and a
+  lower-case `y` or `n` included.
 - **D4.** A prompt shows its label above the field and a counter only
   near its limit.
 - **D5.** A message shows in the footer until the next key.

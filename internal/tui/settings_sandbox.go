@@ -18,13 +18,13 @@ import (
 // popup and, for all projects, in the , popup. Inside the sandbox: the
 // hosts its commands may reach, local ports, and the guidance its brief
 // gets; then the commands a thread runs outside its sandbox (Outside the
-// sandbox), and the permission rules it gets on top of tm's. p adds a
+// sandbox), and the permission rules it gets on top of tm's. P adds a
 // preset's rules (settings_presets.go). It shows only what applies on
 // the platform the server is on, where threads run
 // (config.SandboxSettings); config.toml keeps the rest, and a launch
 // skips it. A guide is a title and a text (texteditor.go edits it).
 // Every list adds down the layers (config.MergeSandbox): a
-// project's view lists all projects' entries too, x drops one for the
+// project's view lists all projects' entries too, X drops one for the
 // project and takes the drop back. enter or e changes an entry of the
 // view's own table in place (T619): its value, an excluded command's
 // ask, a guide's title and text. Writes are the human's only.
@@ -38,7 +38,7 @@ const sandboxOutside = "Excluded commands run outside the sandbox, with your ful
 const sandboxBoth = "An excluded command that runs without asking runs outside the sandbox with no prompt: if it can run code (a test runner runs test files the thread can write), the thread may run any code as you without asking."
 
 // sandboxAsk is what each excluded command's choice means.
-const sandboxAsk = "Each one asks first (the default: the guard puts it to you, whatever auto mode or an allow rule would let through) or runs without asking (w changes it)."
+const sandboxAsk = "Each one asks first (the default: the guard puts it to you, whatever auto mode or an allow rule would let through) or runs without asking (W changes it)."
 
 // sandboxLocal is what local ports open, put to the human before they
 // are opened.
@@ -49,10 +49,10 @@ const sandboxLocal = "A thread can then connect to every service listening on a 
 const sandboxHost = "Every command a thread runs inside its sandbox may then reach it, not only the tool you add it for."
 
 // sandboxGuide heads the Access tab.
-const sandboxGuide = "Prefer rules inside the sandbox (p adds a preset's): the thread's commands stay in it, opened only as far as the tool needs. Excluded commands (Outside the sandbox) run outside it: a last resort. " + sandboxBoth
+const sandboxGuide = "Prefer rules inside the sandbox (P adds a preset's): the thread's commands stay in it, opened only as far as the tool needs. Excluded commands (Outside the sandbox) run outside it: a last resort. " + sandboxBoth
 
 // sandboxAdds says how a project's lists combine with all projects'.
-const sandboxAdds = "A project's entries add to all projects'. In the list, enter or e changes an entry in place and x removes it; on a project, all projects' entries change in the , popup, and x drops one or takes the drop back."
+const sandboxAdds = "A project's entries add to all projects'. In the list, enter or e changes an entry in place and X removes it; on a project, all projects' entries change in the , popup, and X drops one or takes the drop back."
 
 // sandboxLists are each list's row label, help, view text, example and
 // what messages call its entries.
@@ -309,8 +309,8 @@ func warnLines(text string, w int) []string {
 }
 
 // sandboxView lists one sandbox list as the rows' threads get it, all
-// projects' entries on a project's too (T574 §4.2): a adds an entry,
-// enter or e changes one the table sets, x removes it, on a project
+// projects' entries on a project's too (T574 §4.2): A adds an entry,
+// enter or e changes one the table sets, X removes it, on a project
 // drops one of all projects' or takes the drop back.
 type sandboxView struct {
 	sr   safetyRows
@@ -354,10 +354,10 @@ func (v *sandboxView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "esc", "q":
 		m.pop()
 		return nil
-	case "up", "k", "down", "j":
+	case "up", "down":
 		v.sel = moveSel(v.sel, scrollKeys[k.String()], len(es))
 		return nil
-	case "a", "+":
+	case "A", "+":
 		if v.list == config.SandboxGuides {
 			v.addGuide(m)
 			return nil
@@ -375,7 +375,7 @@ func (v *sandboxView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			v.edit(m, e)
 		}
 		return nil
-	case "x", "delete", "backspace":
+	case "X", "delete", "backspace":
 		switch {
 		case v.sel >= len(es):
 		case e.Dropped:
@@ -393,7 +393,7 @@ func (v *sandboxView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 				func(t *config.SandboxTable) { t.Remove(v.list, e.Value) })
 		}
 		return nil
-	case "w":
+	case "W":
 		return v.toggleAsk(m, e, v.sel < len(es))
 	}
 	return nil
@@ -413,7 +413,7 @@ func (v *sandboxView) add(m *dash) {
 				m.msg = "not added: " + e + " is listed already"
 				return nil
 			case r.Dropped:
-				m.msg = "not added: " + e + " is all projects', dropped " + v.sr.forWho + ": x takes it back"
+				m.msg = "not added: " + e + " is all projects', dropped " + v.sr.forWho + ": X takes it back"
 				return nil
 			default:
 				m.msg = "not added: all projects give " + e + " already"
@@ -432,7 +432,7 @@ func (v *sandboxView) add(m *dash) {
 		q := ""
 		switch v.list {
 		case config.SandboxExcluded:
-			q = sandboxOutside + " It asks first: w on it lets it run without asking."
+			q = sandboxOutside + " It asks first: W on it lets it run without asking."
 		case config.SandboxHosts:
 			q = sandboxHost
 		}
@@ -524,9 +524,9 @@ func (v *sandboxView) render(m *dash) string {
 		}
 	}
 	if len(es) == 0 {
-		lines = append(lines, "", th().Faint.Render("none: a adds one"))
+		lines = append(lines, "", th().Faint.Render("none: A adds one"))
 	}
-	keys := "a add · ↑ ↓ move · esc back"
+	keys := "A add · ↑ ↓ move · esc back"
 	edit := "enter edit · "
 	if v.list == config.SandboxGuides {
 		edit = "e edit title · "
@@ -534,16 +534,16 @@ func (v *sandboxView) render(m *dash) string {
 	if v.sel < len(es) {
 		switch e := es[v.sel]; {
 		case e.Dropped:
-			keys = "a add · x take it back · ↑ ↓ move · esc back"
+			keys = "A add · X take it back · ↑ ↓ move · esc back"
 		case !e.Own:
-			keys = "a add · x drop for " + v.sr.slug + " · ↑ ↓ move · esc back"
+			keys = "A add · X drop for " + v.sr.slug + " · ↑ ↓ move · esc back"
 		default:
-			keys = edit + "a add · x remove · ↑ ↓ move · esc back"
+			keys = edit + "A add · X remove · ↑ ↓ move · esc back"
 		}
 	}
 	switch v.list {
 	case config.SandboxExcluded:
-		keys = "w ask first or not · " + keys
+		keys = "W ask first or not · " + keys
 	case config.SandboxGuides:
 		keys = "enter show, edit · " + keys
 	}
@@ -589,7 +589,7 @@ func (v *sandboxView) guideRefused(m *dash, title string) string {
 		case r.Own:
 			return "not added: a guide " + title + " is listed already: enter on it edits its text"
 		case r.Dropped:
-			return "not added: " + title + " is all projects', dropped " + v.sr.forWho + ": x takes it back, or name yours otherwise"
+			return "not added: " + title + " is all projects', dropped " + v.sr.forWho + ": X takes it back, or name yours otherwise"
 		default:
 			return "not added: all projects give a guide " + title + " already: name yours otherwise"
 		}
@@ -682,9 +682,9 @@ func (v *sandboxView) covered(m *dash, e string) string {
 func (v *sandboxView) uneditable(e sandboxEntry) string {
 	switch {
 	case e.stray:
-		return "a drop that matches none of all projects' rules: x removes it"
+		return "a drop that matches none of all projects' rules: X removes it"
 	case e.Dropped:
-		return e.Value + " is all projects', dropped " + v.sr.forWho + ": x takes it back"
+		return e.Value + " is all projects', dropped " + v.sr.forWho + ": X takes it back"
 	case !e.Own:
 		return e.Value + " is all projects': change it in the , popup's Access tab"
 	case v.list == config.SandboxGuides && e.Body == "":
@@ -705,7 +705,7 @@ func (v *sandboxView) editRefused(m *dash, e sandboxEntry, val string) string {
 		case r.Own:
 			return "not changed: " + val + " is listed already"
 		case r.Dropped:
-			return "not changed: " + val + " is all projects', dropped " + v.sr.forWho + ": x takes it back"
+			return "not changed: " + val + " is all projects', dropped " + v.sr.forWho + ": X takes it back"
 		default:
 			return "not changed: all projects give " + val + " already"
 		}

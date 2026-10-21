@@ -20,9 +20,16 @@ func TestPrefixCmdSets(t *testing.T) {
 		name      string
 		got, want map[string]bool
 	}{
-		{"prefixCommands", prefixCommands, set("a", "]", "[", "i", "t", ",", "?", "n")},
-		{"popupCommands", popupCommands, set("a", "i", "t", ",", "?", "n")},
-		{"paneCommands", paneCommands, set("{", "}", "b", "tab", "|", ";")},
+		{"prefixCommands", prefixCommands, set("A", "]", "[", "I", "T", ",", "?", "+")},
+		{"popupCommands", popupCommands, set("A", "I", "T", ",", "?", "+")},
+		{"paneCommands", paneCommands, set("{", "}", "B", "tab", "|", ";")},
+		{"prefixTwins", func() map[string]bool {
+			out := map[string]bool{}
+			for k, v := range prefixTwins {
+				out[k+v] = true
+			}
+			return out
+		}(), set("aA", "iI", "tT", "bB", "n+")},
 	} {
 		if !maps.Equal(c.got, c.want) {
 			t.Errorf("%s = %v, want %v", c.name, slices.Sorted(maps.Keys(c.got)), slices.Sorted(maps.Keys(c.want)))

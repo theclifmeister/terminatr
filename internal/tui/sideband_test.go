@@ -183,7 +183,7 @@ func TestSideBandKeys(t *testing.T) {
 	if !m.folds.IsSectionFolded("ticker.ticker") || len(src.inputs) != 0 || m.area() != areaSide {
 		t.Fatalf("enter on the ticker: %v %+v", m.folds.SectionsFolded, src.inputs)
 	}
-	for _, k := range []string{"space", "p"} {
+	for _, k := range []string{"S", "P"} {
 		before := whole(m)
 		drain(t, m, keyPress(m, k))
 		if whole(m) != before || len(src.lifecycle) > 0 {
@@ -198,20 +198,17 @@ func TestSideBandKeys(t *testing.T) {
 		t.Fatalf("enter on CI status sent %+v", src.inputs)
 	}
 
+	// Z toggles: with anything open it folds all, then unfolds all.
 	drain(t, m, keyPress(m, "Z"))
-	if len(m.folds.SectionsFolded) != 0 {
-		t.Fatalf("Z left %v folded", m.folds.SectionsFolded)
-	}
-	drain(t, m, keyPress(m, "z"))
 	if !m.folds.IsSectionFolded("ticker.ticker") || !m.folds.IsSectionFolded("ci.status") || !m.folds.IsFolded("beta") {
-		t.Fatalf("z folded %+v", m.folds)
+		t.Fatalf("Z folded %+v", m.folds)
 	}
 	if m.sideSel != "s:ci.status" {
-		t.Fatalf("z moved the cursor off its header: %q", m.sideSel)
+		t.Fatalf("Z moved the cursor off its header: %q", m.sideSel)
 	}
 	drain(t, m, keyPress(m, "Z"))
 	if len(m.folds.SectionsFolded) != 0 || m.folds.IsFolded("beta") {
-		t.Fatalf("Z folded %+v", m.folds)
+		t.Fatalf("Z again folded %+v", m.folds)
 	}
 }
 

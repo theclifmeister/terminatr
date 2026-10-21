@@ -110,7 +110,7 @@ func (v *catalogView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "esc", "q":
 		m.pop()
 		return nil
-	case "up", "k", "down", "j", "pgup", "pgdown":
+	case "up", "down", "pgup", "pgdown":
 		v.sel = moveSel(v.sel, scrollKeys[k.String()], len(v.items()))
 		return nil
 	}
@@ -123,14 +123,21 @@ func (v *catalogView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "R":
 		return v.refresh(m, it.cat)
 	case "r":
-		return v.run(m, func(m *dash) tea.Cmd { return v.reset(m, it.cat) })
-	case "a":
+		// A reset drops every change made here: it asks first.
+		if c.Settings.Empty() {
+			return v.reset(m, it.cat)
+		}
+		cat := it.cat
+		m.confirmNo("Reset "+c.Agent+"'s models", "Drop your changes to "+c.Agent+"'s models (added, hidden, the default) and list them as "+c.Agent+" does?", c.Agent+"'s models unchanged", func() tea.Cmd {
+			return v.run(m, func(m *dash) tea.Cmd { return v.reset(m, cat) })
+		})
+	case "A":
 		if !c.Known {
 			v.err = c.Agent + "'s models are unknown (" + c.Reason + "): nothing to add to"
 			return nil
 		}
 		v.edit(m, it.cat, "")
-	case "enter", "e":
+	case "enter", "E":
 		switch {
 		case !isModel:
 			if c.Known {
@@ -141,25 +148,25 @@ func (v *catalogView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		case x.Yours:
 			v.edit(m, it.cat, x.Name)
 		default:
-			m.msg = x.Name + " is " + c.Agent + "'s own: * makes it the default, h hides it"
+			m.msg = x.Name + " is " + c.Agent + "'s own: * makes it the default, H hides it"
 		}
 	case "*", "space", " ":
 		if isModel {
 			return v.run(m, func(m *dash) tea.Cmd { return v.setDefault(m, it.cat, x) })
 		}
-	case "h":
+	case "H":
 		if isModel {
 			return v.run(m, func(m *dash) tea.Cmd { return v.hide(m, it.cat, x) })
 		}
-	case "d", "delete":
+	case "X", "delete":
 		if isModel {
 			if !x.Yours {
-				m.msg = c.Agent + " lists " + x.Name + ": h hides it"
+				m.msg = c.Agent + " lists " + x.Name + ": H hides it"
 				return nil
 			}
 			return v.run(m, func(m *dash) tea.Cmd { return v.remove(m, it.cat, x.Name) })
 		}
-	case "u":
+	case "U":
 		if isModel && x.Refusal != nil {
 			return v.unrefuse(m, it.cat, x.Name)
 		}
@@ -243,7 +250,7 @@ func (v *catalogView) setDefault(m *dash, cat int, x models.Model) tea.Cmd {
 func (v *catalogView) hide(m *dash, cat int, x models.Model) tea.Cmd {
 	c := v.cats[cat]
 	if x.Yours {
-		m.msg = "you added " + x.Name + ": d removes it"
+		m.msg = "you added " + x.Name + ": X removes it"
 		return nil
 	}
 	s := next(c)
@@ -397,7 +404,7 @@ func (v *catalogView) render(m *dash) string {
 	if i := slices.Index(hits, v.sel); i >= 0 {
 		sel = head + i
 	}
-	keys := "* default · h hide · a add · d remove · u unrefuse · r reset · R ask again · esc back"
+	keys := "* default · H hide · A add · X remove · U unrefuse · r reset · R ask again · esc back"
 	return m.popup(box{title: "Models", body: lines, sel: sel, hits: all, keys: ansi.Truncate(keys, w, "…")})
 }
 

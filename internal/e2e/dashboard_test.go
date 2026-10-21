@@ -42,7 +42,7 @@ func newProject(env *Env, name string) (slug, dir string) {
 // TestSmokeDashboard: the dashboard's screens, empty, and with a project
 // and sessions; a task in review shows in NEEDS YOU, and enter shows it
 // in the project popup's Tasks tab, where prefix+a opens the project
-// popup anew rather than accepting (docs/SPEC.md §4, the key table); t
+// popup anew rather than accepting (docs/SPEC.md §4, the key table); T
 // shows the tasks, and D on a task in review only says why it isn't
 // delegated.
 func TestSmokeDashboard(t *testing.T) {
@@ -67,7 +67,7 @@ func TestSmokeDashboard(t *testing.T) {
 	w.Golden("dashboard-sessions.txt", dashMasks...)
 
 	env.MustCLI("task", "status", "T1", "review", "--project", slug)
-	w.WaitFor("1 needs you (t lists them)", wait)
+	w.WaitFor("1 needs you (T lists them)", wait)
 	w.WaitFor("T1 Write the README", wait)
 	if !strings.Contains(w.Screen(), "NEEDS YOU 1") {
 		t.Fatalf("a task in review is not in NEEDS YOU:\n%s", w.Screen())
@@ -76,10 +76,10 @@ func TestSmokeDashboard(t *testing.T) {
 
 	// enter on it (the row above the project's): the project popup's
 	// Tasks tab, T1 selected.
-	w.Type("k")
+	w.Key(keyUp)
 	w.WaitFor("enter show", wait)
 	w.Key(keyEnter)
-	w.WaitFor("enter show · A accept · x send back · + new task", wait)
+	w.WaitFor("enter show · A accept · X send back · + new task", wait)
 	w.Prefix("a")
 	w.WaitFor("+ add repository", wait)
 	if strings.Contains(w.Screen(), "Accept T1?") {
@@ -89,7 +89,7 @@ func TestSmokeDashboard(t *testing.T) {
 	w.WaitFor("NEEDS YOU 1", wait)
 
 	// The Tasks tab: T1 first (needs you); it only shows.
-	w.Type("t")
+	w.Type("T")
 	w.WaitFor("3 tasks", wait)
 	w.WaitFor("T1", wait)
 	w.Golden("dashboard-tasks.txt", append(dashMasks, popupEdgeCwd)...)
@@ -125,7 +125,7 @@ func TestSmokeDashboardAllProjects(t *testing.T) {
 	env.MustCLI("task", "add", "Ship it", "--project", beta)
 	env.MustCLI("task", "status", "T1", "blocked", "--project", beta)
 	w := env.Window(120, 24)
-	w.WaitFor("1 needs you (t lists them)", wait)
+	w.WaitFor("1 needs you (T lists them)", wait)
 	sc := w.WaitFor("NEEDS YOU 1", wait)
 	if strings.Contains(sc, "Write the README") == strings.Contains(sc, "Ship it") {
 		t.Fatalf("NEEDS YOU isn't one project's:\n%s", sc)

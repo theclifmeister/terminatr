@@ -44,7 +44,7 @@ func (s *ServerSource) OpenProject(slug string, cols, rows int) (string, error) 
 // InactiveError is opening an inactive project's coordinator: opening
 // never activates (docs/SPEC.md §5.1).
 func InactiveError(slug string) error {
-	return &project.Error{Code: "project-inactive", Msg: slug + " is inactive: activate it first (space on it in the sidebar, or tm project activate " + slug + ")"}
+	return &project.Error{Code: "project-inactive", Msg: slug + " is inactive: activate it first (S on it in the sidebar, or tm project activate " + slug + ")"}
 }
 
 // OpenCoordinator returns the id of the project's coordinator session,

@@ -167,7 +167,7 @@ func TestModViewFailed(t *testing.T) {
 }
 
 // TestModCard: a card below the sections, headed by its title, the
-// mod's name; z folds it, enter opens it as a popup.
+// mod's name; Z folds it, enter opens it as a popup.
 func TestModCard(t *testing.T) {
 	_, m := panelDash(t)
 	out := screen(m)
@@ -176,9 +176,9 @@ func TestModCard(t *testing.T) {
 		t.Fatalf("no card below the sections:\n%s", out)
 	}
 	m.sel = "mc:panel/cost"
-	press(m, "z")
+	press(m, "Z")
 	if out := screen(m); strings.Contains(out, "$4.20") || !strings.Contains(out, "▸ Cost") {
-		t.Errorf("z didn't fold the card:\n%s", out)
+		t.Errorf("Z didn't fold the card:\n%s", out)
 	}
 	for _, s := range m.shownViews() {
 		if s.View == "cost" {
@@ -507,14 +507,14 @@ func TestTasksTabMod(t *testing.T) {
 	if strings.Contains(out, "0 tasks") {
 		t.Errorf("the mod's tab is listed again after the core tabs:\n%s", out)
 	}
-	// j, as down, skips the head: T2 is under the cursor, T1's steps fold.
-	press(m, "j")
+	// down skips the head: T2 is under the cursor, T1's steps fold.
+	press(m, "down")
 	out = screen(m)
 	if !strings.Contains(out, "D delegate") || strings.Contains(out, "Proofread") {
 		t.Errorf("down didn't land on T2:\n%s", out)
 	}
-	// The core tab's c, A and x do nothing here: T2 binds none of them.
-	for _, k := range []string{"A", "x", "c"} {
+	// The core tab's c, A and X do nothing here: T2 binds none of them.
+	for _, k := range []string{"A", "X", "c"} {
 		drain(t, m, press(m, k))
 		if _, ok := m.top().(*projectView); !ok {
 			t.Fatalf("%s opened %T", k, m.top())

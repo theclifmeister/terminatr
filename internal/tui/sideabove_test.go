@@ -117,9 +117,9 @@ func TestSideAboveKeys(t *testing.T) {
 		t.Errorf("1 from the header above: %q", m.sideSel)
 	}
 	m.sideSel = "s:ticker.ticker"
-	keyPress(m, "w")
+	keyPress(m, "W")
 	if m.sideSel != firstNeeds(m) {
-		t.Errorf("w from the header above: %q, want %q", m.sideSel, firstNeeds(m))
+		t.Errorf("W from the header above: %q, want %q", m.sideSel, firstNeeds(m))
 	}
 	// Folding it works as below the tree.
 	m.sideSel = "s:ticker.ticker"

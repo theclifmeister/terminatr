@@ -16,7 +16,7 @@ import (
 // through an in-process relay, mini sharing api. In studio's console the
 // sidebar has mini's group; enter on api shows its read-only dashboard
 // (the breadcrumb, the link, nothing that acts on it), and the settings'
-// Peers tab lists mini with its link; x there removes it after asking,
+// Peers tab lists mini with its link; X there removes it after asking,
 // and its group leaves the sidebar.
 func TestPeerDashboard(t *testing.T) {
 	studio, mini := New(t), New(t)
@@ -55,7 +55,7 @@ func TestPeerDashboard(t *testing.T) {
 	w.Key(keyEnter)
 	w.WaitFor("tm dashboard · mini › api", wait)
 	screen := w.WaitFor("◉ mini · linked", wait)
-	for _, want := range []string{"To ask its coordinator something", "≡ menu · ↑ ↓ scroll · n new project · , settings"} {
+	for _, want := range []string{"To ask its coordinator something", "≡ menu · ↑ ↓ scroll · + new project · , settings"} {
 		if !strings.Contains(screen, want) {
 			t.Errorf("missing %q in\n%s", want, screen)
 		}
@@ -63,7 +63,7 @@ func TestPeerDashboard(t *testing.T) {
 	if strings.Contains(screen, "view-only") || strings.Contains(screen, "Read-only") {
 		t.Errorf("panes are off: the project isn't called read-only:\n%s", screen)
 	}
-	w.Type("a")
+	w.Type("A")
 	w.WaitFor("api is mini's: nothing here acts on it", wait)
 
 	w.Keys(",", "5")
@@ -73,9 +73,9 @@ func TestPeerDashboard(t *testing.T) {
 		t.Fatalf("Peers tab:\n%s", screen)
 	}
 	// studio has no project to share: the cursor starts on mini's panes.
-	w.Type("x")
+	w.Type("X")
 	w.WaitFor("Remove mini?", wait)
-	w.Type("y")
+	w.Type("Y")
 	w.WaitFor("No paired servers", wait)
 	w.Key(keyEsc)
 	w.WaitFor("mini isn't paired with this server any more", 20*time.Second)

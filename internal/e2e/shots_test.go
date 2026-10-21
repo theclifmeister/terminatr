@@ -252,7 +252,7 @@ func shootSize(t *testing.T, env *Env, dir string, sz shotSize) {
 
 	s.home()
 	// The project popup, every tab.
-	w.Type("a")
+	w.Type("A")
 	s.soft("1 overview")
 	s.shot("popup-overview")
 	for i, tab := range []struct{ name, want string }{
@@ -276,7 +276,7 @@ func shootSize(t *testing.T, env *Env, dir string, sz shotSize) {
 	w.Type("+")
 	s.shot("input-add-repo", "Add a repository")
 	s.esc()
-	w.Type("x")
+	w.Type("X")
 	s.shot("confirm-remove-repo", "Remove a repository")
 	s.esc()
 	// Settings tab: the lists behind a row (a click on a row is enter).
@@ -293,7 +293,7 @@ func shootSize(t *testing.T, env *Env, dir string, sz shotSize) {
 	}
 	// Tasks tab: T3 (blocked) first, then T4 (review), T1, T5, T2.
 	s.home()
-	w.Type("a")
+	w.Type("A")
 	s.soft("1 overview")
 	w.Type("3")
 	s.soft(tasksRow)
@@ -305,7 +305,7 @@ func shootSize(t *testing.T, env *Env, dir string, sz shotSize) {
 	w.Type("A")
 	s.shot("confirm-accept", "Accept T4?")
 	s.esc()
-	w.Type("x")
+	w.Type("X")
 	s.shot("input-send-back", "Send T4 back")
 	s.esc()
 	w.Keys(keyUp, Enter)
@@ -323,18 +323,18 @@ func shootSize(t *testing.T, env *Env, dir string, sz shotSize) {
 	s.esc()
 
 	s.home()
-	// t: the project popup on its Tasks tab; inbox, new project.
-	w.Type("t")
+	// T: the project popup on its Tasks tab; inbox, new project.
+	w.Type("T")
 	s.shot("tasks", tasksRow)
 	w.Key(Enter)
 	s.shot("tasks-detail", "esc back")
 	s.esc()
 	s.esc()
-	w.Type("i")
+	w.Type("I")
 	s.soft("The coordinator handles these")
 	s.shot("inbox")
 	s.esc()
-	w.Type("n")
+	w.Type("+")
 	s.shot("input-new-project", "New project")
 	s.esc()
 
@@ -362,8 +362,8 @@ func shootSize(t *testing.T, env *Env, dir string, sz shotSize) {
 	// Adopt an agent session of the user's own.
 	if x, y := s.at(ownAgent+" ", 1); y >= 0 {
 		w.Click(x, y)
-		s.shot("dashboard-row-own-agent", "T adopt")
-		w.Type("T")
+		s.shot("dashboard-row-own-agent", "O adopt")
+		w.Type("O")
 		s.shot("confirm-adopt", "Adopt "+ownAgent)
 		s.esc()
 	}
@@ -375,12 +375,12 @@ func shootSize(t *testing.T, env *Env, dir string, sz shotSize) {
 	s.changes("tab", func() { w.Key(emu.Key{Special: emu.KeyTab}) })
 	s.shot("focus-next2")
 	s.esc()
-	// The sidebar's width is all b changes, and a narrow window has no
+	// The sidebar's width is all B changes, and a narrow window has no
 	// room for it to: no text to wait for.
-	w.Type("b")
+	w.Type("B")
 	time.Sleep(300 * time.Millisecond)
 	s.shot("sidebar-slim")
-	w.Type("b")
+	w.Type("B")
 	time.Sleep(300 * time.Millisecond)
 
 	// Attached: the thread with its info panel, its menus.

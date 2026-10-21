@@ -18,7 +18,7 @@ Every agent runs in its own session. Open one and tm keeps the project tree on t
 
 ![A thread's session: the agent's conversation in the middle, the project sidebar on the left, and the thread's info panel on the right with its steps, PR and last report.](docs/images/session.svg)
 
-`a` opens the project popup: its overview, inbox, tasks, settings, keys, memory, library and messages (what its coordinator and linked projects' coordinators wrote each other, `tm link`). The Tasks tab shows the board by state, with the selected task's steps; `+` adds a task, from a template if you like.
+`A` opens the project popup: its overview, inbox, tasks, settings, keys, memory, library and messages (what its coordinator and linked projects' coordinators wrote each other, `tm link`). The Tasks tab shows the board by state, with the selected task's steps; `+` adds a task, from a template if you like.
 
 ![The project popup's Tasks tab: the board grouped by state, with a task in motion showing its steps and one on deck.](docs/images/tasks.svg)
 
@@ -34,7 +34,7 @@ Some of tm is mods already: the Tasks tab, the sidebar's PR/CI column, the Memor
 
 ![Settings, Mods tab: the installed example mods, then the built-in ones, each with what it provides and the permissions it runs with.](docs/images/mods-settings.svg)
 
-To try one, install it from [the examples](examples/mods) with one line and turn it on in the Mods tab: `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.41.0/examples/mods/standup`. `tm mod install` takes a folder, a git URL, a repository's subfolder (`<git-url>//<folder>@<tag>`) or a GitHub folder's link like this one; in the Mods tab (`,` then `3`), `i` takes the same, and `e` installs an example, each after the same consent. To write your own, run `tm mod new my-mod --kind column`, `tm mod dev my-mod` (live, restarts on save), `tm mod test my-mod` and `tm mod logs my-mod`. In Claude Code sessions, memory-search, context-gauge and cost-card need the Agent mod, which is early access and off by default: turn it on in Settings (*Agent mod*) or with `[agent_mod] enabled = true` in `config.toml`.
+To try one, install it from [the examples](examples/mods) with one line and turn it on in the Mods tab: `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.41.0/examples/mods/standup`. `tm mod install` takes a folder, a git URL, a repository's subfolder (`<git-url>//<folder>@<tag>`) or a GitHub folder's link like this one; in the Mods tab (`,` then `3`), `I` takes the same, and `E` installs an example, each after the same consent. To write your own, run `tm mod new my-mod --kind column`, `tm mod dev my-mod` (live, restarts on save), `tm mod test my-mod` and `tm mod logs my-mod`. In Claude Code sessions, memory-search, context-gauge and cost-card need the Agent mod, which is early access and off by default: turn it on in Settings (*Agent mod*) or with `[agent_mod] enabled = true` in `config.toml`.
 
 ## Requirements
 
@@ -67,7 +67,7 @@ Newer Homebrew refuses formulas from a tap it doesn't trust, hence `brew trust` 
 ## First steps
 
 1. Run `tm`. It starts the background server and opens the dashboard.
-2. Press `n` to create a project, and `enter` on it to start its **coordinator**.
+2. Press `+` (or `n` while there is none) to create a project, and `enter` on it to start its **coordinator**.
 3. Tell the coordinator what you want. It plans tasks and starts threads; open one with `enter` to read along.
 4. Press Ctrl+B then `d` to return to the dashboard. Sessions keep running when you close the terminal; `tm` brings you back. `?` lists the keys.
 
@@ -84,7 +84,7 @@ curl -fsSL https://github.com/theclifmeister/terminatr/releases/latest/download/
 sudo ~/.local/bin/tm relay install --domain relay.example.net
 ```
 
-The first line puts `tm` in `~/.local/bin`, which `sudo` doesn't search, hence the full path. Homebrew on Linux works too, but is heavy for a small server. The second line installs the relay as a service, gets its certificate from Let's Encrypt and prints the address to pair with. It updates itself daily to the latest release (checksums checked, restarted only for a newer one; `--auto-update=off` to manage it yourself with `sudo tm relay update`: the relay runs its own copy in `/usr/local/bin`, which `brew upgrade` doesn't touch). Any server linked through the relay can also ask it to update now, at most once an hour (once every 10 minutes for all servers together): `u` in the Peers tab, which shows the relay's version, or `tm peer relay-update ALIAS`.
+The first line puts `tm` in `~/.local/bin`, which `sudo` doesn't search, hence the full path. Homebrew on Linux works too, but is heavy for a small server. The second line installs the relay as a service, gets its certificate from Let's Encrypt and prints the address to pair with. It updates itself daily to the latest release (checksums checked, restarted only for a newer one; `--auto-update=off` to manage it yourself with `sudo tm relay update`: the relay runs its own copy in `/usr/local/bin`, which `brew upgrade` doesn't touch). Any server linked through the relay can also ask it to update now, at most once an hour (once every 10 minutes for all servers together): `U` in the Peers tab, which shows the relay's version, or `tm peer relay-update ALIAS`.
 
 No domain? The relay can run on an IP address instead, public or private (a home network's `192.168.x.x`, a Tailscale `100.x`), with a certificate it makes itself:
 
@@ -92,9 +92,9 @@ No domain? The relay can run on an IP address instead, public or private (a home
 sudo ~/.local/bin/tm relay install --ip 203.0.113.5
 ```
 
-It prints the address to pair with, which ends in the relay key's fingerprint: `wss://203.0.113.5#sha256=…`. Use that whole address: the servers check the relay by that key instead of by a certificate authority, and the pairing code carries it to the other side. Both servers must reach that IP on port 443, so a private address only works where that network reaches. Back up the relay's state directory (`/var/lib/private/tm-relay`): it holds the key, and a relay set up again with a new key is refused until you give both servers its new address (`tm peer relay ALIAS ADDRESS`, or `e` in the Peers tab).
+It prints the address to pair with, which ends in the relay key's fingerprint: `wss://203.0.113.5#sha256=…`. Use that whole address: the servers check the relay by that key instead of by a certificate authority, and the pairing code carries it to the other side. Both servers must reach that IP on port 443, so a private address only works where that network reaches. Back up the relay's state directory (`/var/lib/private/tm-relay`): it holds the key, and a relay set up again with a new key is refused until you give both servers its new address (`tm peer relay ALIAS ADDRESS`, or `E` in the Peers tab).
 
-Then pair two machines: in Settings (`,`), Peers tab, press `n` on one to get a code and `j` on the other to enter it, or in a terminal run `tm peer pair --relay wss://relay.example.net` on one and `tm peer join CODE` on the other. Both show six digits to compare. Docker, a NAS and other setups: [Running a relay in docs/OPERATIONS.md](docs/OPERATIONS.md#running-a-relay).
+Then pair two machines: in Settings (`,`), Peers tab, press `N` on one to get a code and `J` on the other to enter it, or in a terminal run `tm peer pair --relay wss://relay.example.net` on one and `tm peer join CODE` on the other. Both show six digits to compare. Docker, a NAS and other setups: [Running a relay in docs/OPERATIONS.md](docs/OPERATIONS.md#running-a-relay).
 
 ## Learn more
 

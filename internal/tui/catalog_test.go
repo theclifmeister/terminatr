@@ -64,7 +64,7 @@ func TestCatalogPage(t *testing.T) {
 
 	// Add one the agent doesn't list; one it offers, or not one word,
 	// is refused.
-	keyPress(m, "a")
+	keyPress(m, "A")
 	drain(t, m, typeLine(m, "mine-1"))
 	if got := saved(t); !slices.Equal(got.Add, []string{"mine-1"}) {
 		t.Fatalf("after add: %+v", got)
@@ -72,12 +72,12 @@ func TestCatalogPage(t *testing.T) {
 	if !strings.Contains(screen(m), "yours, claude doesn't list it") {
 		t.Fatalf("page after add:\n%s", screen(m))
 	}
-	keyPress(m, "a")
+	keyPress(m, "A")
 	typeLine(m, "alpha")
 	if !strings.Contains(v.err, "already offers alpha") {
 		t.Fatalf("duplicate: %q", v.err)
 	}
-	keyPress(m, "a")
+	keyPress(m, "A")
 	typeLine(m, "two words")
 	if v.err == "" || m.top() != overlay(v) {
 		t.Fatalf("two words: %q %T", v.err, m.top())
@@ -94,13 +94,13 @@ func TestCatalogPage(t *testing.T) {
 		t.Fatalf("after default off: %+v", got)
 	}
 
-	// Hide beta; d on it only says h hides it.
+	// Hide beta; X on it only says H hides it.
 	v.sel = 2
-	keyPress(m, "d")
-	if !strings.Contains(m.msg, "h hides it") {
-		t.Fatalf("d on a listed model: %q", m.msg)
+	keyPress(m, "X")
+	if !strings.Contains(m.msg, "H hides it") {
+		t.Fatalf("X on a listed model: %q", m.msg)
 	}
-	drain(t, m, keyPress(m, "h"))
+	drain(t, m, keyPress(m, "H"))
 	if got := saved(t); !slices.Equal(got.Hide, []string{"beta"}) {
 		t.Fatalf("after hide: %+v", got)
 	}
@@ -109,12 +109,12 @@ func TestCatalogPage(t *testing.T) {
 	}
 	// Remove mine-1, the one added.
 	v.sel = slices.IndexFunc(v.items(), func(it catalogItem) bool { x, ok := v.model(it); return ok && x.Name == "mine-1" })
-	drain(t, m, keyPress(m, "d"))
+	drain(t, m, keyPress(m, "X"))
 	if got := saved(t); len(got.Add) != 0 {
 		t.Fatalf("after remove: %+v", got)
 	}
 
-	// A refused model shows why; u offers it again.
+	// A refused model shows why; U offers it again.
 	if err := models.MarkRefused("claude", "alpha", "no access"); err != nil {
 		t.Fatal(err)
 	}
@@ -123,17 +123,27 @@ func TestCatalogPage(t *testing.T) {
 		t.Fatalf("refused:\n%s", screen(m))
 	}
 	v.sel = slices.IndexFunc(v.items(), func(it catalogItem) bool { x, ok := v.model(it); return ok && x.Name == "alpha" })
-	drain(t, m, keyPress(m, "u"))
+	drain(t, m, keyPress(m, "U"))
 	if c, _ := models.Load("claude"); len(c.Refused) != 0 {
 		t.Fatalf("still refused: %+v", c.Refused)
 	}
 
-	// R asks again; r goes back to what the agent lists.
+	// R asks again; r goes back to what the agent lists, after Y (N
+	// keeps it).
 	drain(t, m, keyPress(m, "R"))
 	if !slices.Contains(src.settings, "refresh claude") {
 		t.Fatalf("no refresh: %v", src.settings)
 	}
-	drain(t, m, keyPress(m, "r"))
+	keyPress(m, "r")
+	if _, ok := m.top().(*confirmView); !ok {
+		t.Fatalf("r opened %T, not a question", m.top())
+	}
+	keyPress(m, "N")
+	if got := saved(t); got.Empty() {
+		t.Fatalf("N reset anyway: %+v", got)
+	}
+	keyPress(m, "r")
+	drain(t, m, keyPress(m, "Y"))
 	if got := saved(t); !got.Empty() {
 		t.Fatalf("after reset: %+v", got)
 	}
@@ -150,7 +160,7 @@ func TestCatalogPage(t *testing.T) {
 		t.Fatalf("logged out:\n%s", out)
 	}
 	v.sel = 0
-	keyPress(m, "a")
+	keyPress(m, "A")
 	if !strings.Contains(v.err, "unknown") {
 		t.Fatalf("add while unknown: %q", v.err)
 	}
@@ -171,7 +181,7 @@ func TestModelsSettingStale(t *testing.T) {
 	src.settings = append(src.settings, "defaults.models") // Load reads the file
 	m.setData(src.Load())
 	m.Update(tea.WindowSizeMsg{Width: 160, Height: 60})
-	press(m, ",")
+	prefixed(m, ",")
 	keyPress(m, "2")
 	sv := m.top().(*settingsView)
 	i := slices.IndexFunc(sv.tabs[1].rows, func(r setting) bool { return r.label == "Thread models" })

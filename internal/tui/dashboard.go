@@ -100,6 +100,9 @@ type DashResult struct {
 	// Command is a prefix command for the session to run once attached
 	// again: prefix then r or tab over it, which are the session's own.
 	Command string
+	// Type are the keys typed through a coordinator's row (typethrough.go)
+	// since the first, which attached it: the session runs them first.
+	Type []Key
 }
 
 // Dashboard runs the dashboard until the user quits or picks a session.
@@ -166,6 +169,9 @@ func Dashboard(opts DashOptions) (DashResult, error) {
 	}
 	d.result.State = DashState{Selected: d.sel, Current: d.current}
 	d.result.SideFocus = d.result.Attach != "" && d.focus == areaSide
+	if d.result.Attach != "" {
+		d.result.Type = d.typed
+	}
 	return d.result, nil
 }
 
@@ -241,6 +247,14 @@ type dash struct {
 	done  chan struct{}
 
 	result DashResult
+	// typing: a key typed through a coordinator's row asked to attach
+	// it; typed are that key and every one since, for its pane
+	// (typethrough.go).
+	typing bool
+	typed  []Key
+	// pressing: a button or a menu item presses a key (pressKey), which
+	// never types through.
+	pressing bool
 }
 
 func newDash(o DashOptions) *dash {
@@ -569,6 +583,7 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.leaving = false
 		if msg.err != nil {
 			m.queued = nil
+			m.typing, m.typed = false, nil
 			m.fail(msg.err)
 			return m, m.load()
 		}
@@ -889,6 +904,11 @@ func (m *dash) paneSize() (int, int) {
 // table): prefix then a key is that prefix command, the same everywhere,
 // and never reaches a popup as a plain key.
 func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
+	if m.typing {
+		// On the way to the coordinator: every key is its pane's.
+		m.typed = append(m.typed, Key(k))
+		return nil
+	}
 	if k.String() == "ctrl+c" {
 		return tea.Quit
 	}
@@ -912,6 +932,9 @@ func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 	if o := m.top(); o != nil {
 		return o.key(m, k)
 	}
+	if cmd, ok := m.typeThrough(k); ok {
+		return cmd
+	}
 	if m.area() == areaSide {
 		// The sidebar's keys go on while an action runs: its moves at
 		// once, what they start after it (sideKeyboard).
@@ -920,10 +943,6 @@ func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	if m.busy {
-		return nil
-	}
-	if k.String() == "N" && len(m.data.ModNotices) > 0 {
-		m.openNotices()
 		return nil
 	}
 	switch m.area() {
@@ -935,7 +954,7 @@ func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 	if cmd, ok := m.remoteKey(k.String()); ok {
 		return cmd
 	}
-	if c, ok := m.commandFor(k.String()); ok {
+	if c, ok := m.commandFor(k.String()); ok && plainKey(k.String()) {
 		return m.runCommand(c)
 	}
 	return m.listKey(binds.list.canon(k.String()))
@@ -1026,7 +1045,7 @@ func (m *dash) cycleProject(next bool) tea.Cmd {
 			return m.openProject(p.Slug)
 		}
 	}
-	m.msg = "no project is active; space on one in the sidebar activates it"
+	m.msg = "no project is active; " + barKey("side.activate", "S") + " on one in the sidebar activates it"
 	return nil
 }
 

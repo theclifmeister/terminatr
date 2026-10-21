@@ -7,15 +7,15 @@
  └─ coordin│ {id} (required, as t-0042), {task} (as T42, or empty) and {title}; for example       │
     ├─ T4 W│ feature/{task}-{title} or users/me/{id}. Existing threads keep their branches. Enter │
     └─ t-00│ edits it; an empty one is the default.                                               │
-           │ next branch, e.g. tm/demo/t-0042-fix-login                                           │───────────
-           │                                                                                      │
-           │ Keep history                 30 days                                                 │s  /y
-           │ How long done tasks, resolved threads, handled inbox items and journal lines stay    │
+           │ next branch, e.g. tm/demo/t-0042-fix-login                                           │
+           │                                                                                      │───────────
+           │ Keep history                 30 days                                                 │
+           │ How long done tasks, resolved threads, handled inbox items and journal lines stay    │s  /y
            │ before they move to compressed archives beside them; nothing is deleted, and a       │
            │ thread with unsaved work stays. Enter lists them.                                    │
            │                                                                                      │
-           │ Every project follows these, a new one too, unless it sets its own in its popup (a   │
-           │ on the dashboard, prefix+a in a session); x there makes it follow these again.       │
+           │ Every project follows these, a new one too, unless it sets its own in its popup (A   │
+           │ on the dashboard, prefix+A in a session); X there makes it follow these again.       │
            │                                                                                      │
            │ enter change · + - number · ↑ ↓ move · ← → tabs · esc close                          │
  ──────────╰───────────────────────────────────────────────────────────────────────────── more ↑ ─╯

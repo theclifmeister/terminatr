@@ -116,17 +116,17 @@ func sideMenuItems(r treeRow, popups bool) []sideMenuItem {
 			label, key := foldLabel(r)
 			fold(label, key, foldProject(r, !r.fold))
 		}
-		popup("project popup", "a")
-		popup("tasks", "t")
-		popup("inbox", "i")
-		add(sideMenuItem{label: activeLabel(r), key: "space", act: menuActive})
-		add(sideMenuItem{label: pinLabel(r), key: "p", act: menuPin})
+		popup("project popup", "A")
+		popup("tasks", "T")
+		popup("inbox", "I")
+		add(sideMenuItem{label: activeLabel(r), key: "S", act: menuActive})
+		add(sideMenuItem{label: pinLabel(r), key: "P", act: menuPin})
 	case treeDivider:
 		label, key := foldLabel(r)
 		fold(label, key, foldDivider(r))
 	case treeCoordinator:
 		add(sideMenuItem{label: coordLabel(r), enter: true, act: menuOpen})
-		popup("project popup", "a")
+		popup("project popup", "A")
 	case treePeerProject:
 		// A paired server's: its read-only dashboard, and its fold.
 		add(sideMenuItem{label: "show its dashboard", enter: true, act: menuOpen})

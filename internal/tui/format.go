@@ -237,8 +237,8 @@ const pendingHead = " prefix ▸ "
 // pendingList are the prefix commands, as the status bar lists them
 // after the prefix, in the bound keys (keybind.go).
 func pendingList() string {
-	return "d dashboard · q quit · " + boundKey("a") + " project · " + boundKey("n") + " new · p " + boundKeys("]", "[") +
-		" projects · " + boundKeys("i", "t", ",", "?") + " · " + boundKeys("{", "}", "b") + " sidebar · " + boundKey("|") +
+	return "d dashboard · q quit · " + boundKey("A") + " project · " + boundKey("+") + " new · p " + boundKeys("]", "[") +
+		" projects · " + boundKeys("I", "T", ",", "?") + " · " + boundKeys("{", "}", "B") + " sidebar · " + boundKey("|") +
 		" info · tab sidebar keys · " + boundKey(";") + " last place · r remote control · " + boundKey("R") + " repaint · C save+clear"
 }
 

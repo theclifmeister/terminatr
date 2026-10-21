@@ -26,16 +26,19 @@ var wantIDs = []string{
 	"list.up", "list.down", "list.page-up", "list.page-down", "focus.next", "focus.prev", "place.last", "row.open",
 	"session.adopt", "project.activate", "card.fold", "project.new", "project.popup", "project.tasks", "project.inbox", "access.show",
 	"project.next", "project.prev", "list.narrower", "list.wider", "sidebar.narrower", "sidebar.wider",
-	"sidebar.slim", "details.toggle", "settings.open", "pane.repaint", "help.open", "console.quit",
+	"sidebar.slim", "details.toggle", "settings.open", "pane.repaint", "notices.open", "help.open", "console.quit",
 	"side.up", "side.down", "side.enter", "side.unfold", "side.fold", "side.back", "side.activate",
-	"side.fold-all", "side.unfold-all", "side.pin", "side.first", "side.last", "side.page-up", "side.page-down",
+	"side.fold-toggle", "side.fold-all", "side.unfold-all", "side.pin", "side.first", "side.last", "side.page-up", "side.page-down",
 	"side.nth", "side.needs-next", "side.needs-prev", "side.filter", "side.help",
 	"panel.up", "panel.down", "panel.page-up", "panel.page-down", "panel.first", "panel.last",
 	"panel.section-next", "panel.section-prev", "panel.unfold", "panel.fold", "panel.enter", "panel.back",
 	"popup.close", "repo.add", "repo.remove", "task.new", "task.show", "task.delegate", "task.accept", "task.send-back",
 	"task.coordinator", "tasks.done", "library.read", "library.delete", "library.delete-thread",
-	"session.attach", "session.clear", "question.answer", "memory.edit", "memory.new", "memory.rm", "session.dashboard", "session.remote", "side.save-clear", "panel.save-clear", "prefix.send",
+	"session.attach", "session.clear", "question.answer", "memory.edit", "memory.new", "memory.rm", "info.questions", "session.dashboard", "session.remote", "side.save-clear", "panel.save-clear", "prefix.send",
 }
+
+// keyless are the old ids kept bindable with no default key.
+var keyless = []string{"side.fold-all", "side.unfold-all", "side.needs-prev"}
 
 // TestActionIDs: every action has one stable id, unique and well formed,
 // and the list is the one above. The escape hatches are fixed.
@@ -49,7 +52,7 @@ func TestActionIDs(t *testing.T) {
 			t.Errorf("id %q twice", a.ID)
 		}
 		ids = append(ids, a.ID)
-		if len(a.Keys) == 0 {
+		if len(a.Keys) == 0 && !slices.Contains(keyless, a.ID) {
 			t.Errorf("%s has no key", a.ID)
 		}
 	}
@@ -88,14 +91,15 @@ func TestKeymapRefuses(t *testing.T) {
 		{"popup", map[string][]string{"task.delegate": {"G"}}, "task.delegate: no such action"},
 		{"unknown", map[string][]string{"nope.nothing": {"G"}}, "nope.nothing: no such action"},
 		{"no key", map[string][]string{"session.adopt": {}}, "session.adopt: needs a key"},
-		{"clash", map[string][]string{"session.adopt": {"n"}}, "session.adopt: its key is taken by project.new"},
-		{"clash in the sidebar", map[string][]string{"side.pin": {"z"}}, "side.pin: its key is taken by side.fold-all"},
+		{"clash", map[string][]string{"session.adopt": {"+"}}, "session.adopt: its key is taken by project.new"},
+		{"a prefix twin", map[string][]string{"side.pin": {"a"}}, "side.pin: a is locked (prefix+a is prefix+A)"},
+		{"clash in the sidebar", map[string][]string{"side.pin": {"Z"}}, "side.pin: its key is taken by side.fold-toggle"},
 		{"a fixed key", map[string][]string{"side.pin": {"5"}}, "side.pin: its key is taken by side.nth"},
-		{"popup key", map[string][]string{"project.next": {"x"}}, "project.next: a prefix command's key"},
-		{"sidebar key", map[string][]string{"project.next": {"Z"}}, "project.next: a prefix command's key"},
+		{"popup key", map[string][]string{"project.next": {"X"}}, "project.next: a prefix command's key"},
+		{"sidebar key", map[string][]string{"project.next": {"P"}}, "project.next: a prefix command's key"},
 		{"sidebar takes a prefix command", map[string][]string{"side.pin": {"]"}}, "side.pin: a prefix command's key"},
-		{"a panel takes a prefix command", map[string][]string{"panel.fold": {"i"}}, "panel.fold: a prefix command's key can't mean something else in a panel"},
-		{"a panel takes another prefix command", map[string][]string{"panel.section-next": {"t"}}, "panel.section-next: a prefix command's key"},
+		{"a panel takes a prefix command", map[string][]string{"panel.fold": {"I"}}, "panel.fold: a prefix command's key can't mean something else in a panel"},
+		{"a panel takes another prefix command", map[string][]string{"panel.section-next": {"T"}}, "panel.section-next: a prefix command's key"},
 		{"clash in a panel", map[string][]string{"panel.fold": {"right"}}, "panel.fold: its key is taken by panel.unfold"},
 		{"a panel's esc", map[string][]string{"panel.back": {"q"}}, "panel.back: can't be rebound"},
 	} {
@@ -104,7 +108,7 @@ func TestKeymapRefuses(t *testing.T) {
 			for k, v := range c.km {
 				km[k] = v
 			}
-			km["sidebar.slim"] = []string{"B"} // a good one beside it applies
+			km["sidebar.slim"] = []string{"F"} // a good one beside it applies
 			err := keymap(t, km)
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("err %v, want %q", err, c.want)
@@ -114,7 +118,7 @@ func TestKeymapRefuses(t *testing.T) {
 					t.Errorf("%s was rebound anyway", id)
 				}
 			}
-			if !slices.Equal(binds.list.keys("sidebar.slim", nil), []string{"B"}) {
+			if !slices.Equal(binds.list.keys("sidebar.slim", nil), []string{"F"}) {
 				t.Errorf("the good binding didn't apply")
 			}
 		})
@@ -134,7 +138,7 @@ func TestKeymapRefuses(t *testing.T) {
 // and the hints show the new key.
 func TestKeymapRemaps(t *testing.T) {
 	if err := keymap(t, map[string][]string{
-		"details.toggle": {"Y"}, "session.adopt": {"o"}, "side.pin": {"P"}, "side.fold": {"left"}, "help.open": {"?", "H"},
+		"details.toggle": {"V"}, "session.adopt": {"o"}, "side.pin": {"p"}, "side.fold": {"left"}, "help.open": {"?", "L"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -144,61 +148,61 @@ func TestKeymapRemaps(t *testing.T) {
 	if m.layout.Details != before {
 		t.Fatal("| still toggles the details panel")
 	}
-	keyPress(m, "Y")
+	keyPress(m, "V")
 	if m.layout.Details == before {
-		t.Fatal("Y doesn't toggle the details panel")
+		t.Fatal("V doesn't toggle the details panel")
 	}
 	m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
-	keyPress(m, "Y")
+	keyPress(m, "V")
 	if m.layout.Details != before {
-		t.Fatal("prefix+Y doesn't toggle the details panel")
+		t.Fatal("prefix+V doesn't toggle the details panel")
 	}
 	m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
-	keyPress(m, "H")
+	keyPress(m, "L")
 	if _, ok := m.top().(*helpView); !ok {
-		t.Fatalf("prefix+H didn't open the help: %T", m.top())
+		t.Fatalf("prefix+L didn't open the help: %T", m.top())
 	}
 	help := ansi.Strip(strings.Join(m.top().(*helpView).box(m).body, "\n"))
-	for _, want := range []string{"Y ", "? H ", "prefix+a i t , ? n", "prefix+Y ", "P ", "→ l ← "} {
+	for _, want := range []string{"V ", "? L ", "prefix+A I T , ? +", "prefix+V ", "p ", "→ ← "} {
 		if !strings.Contains(help, "\n"+want) {
 			t.Errorf("the help lacks a line starting %q:\n%s", want, help)
 		}
 	}
-	if strings.Contains(help, "\n| ") || strings.Contains(help, "\np ") {
-		t.Errorf("the help still lists | or p:\n%s", help)
+	if strings.Contains(help, "\n| ") || strings.Contains(help, "\nP ") {
+		t.Errorf("the help still lists | or P:\n%s", help)
 	}
 	keyPress(m, "esc")
 
 	// The menus press the new keys, and say them.
 	items := m.dashItems()
-	if i := slices.IndexFunc(items, func(it menuItem) bool { return it.label == "details panel on / off" }); i < 0 || items[i].key != "Y" {
+	if i := slices.IndexFunc(items, func(it menuItem) bool { return it.label == "details panel on / off" }); i < 0 || items[i].key != "V" {
 		t.Errorf("the ≡ menu's details item: %+v", items)
 	}
-	if !strings.Contains(prefixHint(), " Y details") || !strings.Contains(pendingList(), " Y info") {
-		t.Errorf("the prefix hints don't say Y: %q, %q", prefixHint(), pendingList())
+	if !strings.Contains(prefixHint(), " V details") || !strings.Contains(pendingList(), " V info") {
+		t.Errorf("the prefix hints don't say V: %q, %q", prefixHint(), pendingList())
 	}
-	if c := (&client{dashboard: true}); !slices.ContainsFunc(c.sessionItems(), func(it aitem) bool { return it.key == "prefix+Y" }) {
-		t.Errorf("the session's ≡ menu lacks prefix+Y")
+	if c := (&client{dashboard: true}); !slices.ContainsFunc(c.sessionItems(), func(it aitem) bool { return it.key == "prefix+V" }) {
+		t.Errorf("the session's ≡ menu lacks prefix+V")
 	}
 
-	// In a session, prefix+Y is the info panel's pane command, | nothing.
+	// In a session, prefix+V is the info panel's pane command, | nothing.
 	prefix, _ := parseChord(DefaultPrefixKey)
-	if do := prefixStep(prefix, true, uv.Key{Code: 'Y', Text: "Y"}, true); do.pane != "|" {
-		t.Errorf("prefix+Y in a session: %+v", do)
+	if do := prefixStep(prefix, true, uv.Key{Code: 'V', Text: "V"}, true); do.pane != "|" {
+		t.Errorf("prefix+V in a session: %+v", do)
 	}
 	if do := prefixStep(prefix, true, uv.Key{Code: '|', Text: "|"}, true); do != (prefixDo{}) {
 		t.Errorf("prefix+| in a session still does %+v", do)
 	}
 
-	// The sidebar: P pins, p does nothing; its key bar says P.
-	if op, ok := sideOp(binds.side.canon("P")); !ok || op != sidePin {
-		t.Errorf("P in the sidebar is op %d", op)
+	// The sidebar: p pins, P does nothing; its key bar says p.
+	if op, ok := sideOp(binds.side.canon("p")); !ok || op != sidePin {
+		t.Errorf("p in the sidebar is op %d", op)
 	}
-	if _, ok := sideOp(binds.side.canon("p")); ok {
-		t.Errorf("p still works in the sidebar")
+	if _, ok := sideOp(binds.side.canon("P")); ok {
+		t.Errorf("P still works in the sidebar")
 	}
-	if bar := ansi.Strip(sideKeyBar(&treeRow{kind: treeProject}, true, false, 200)); !strings.Contains(bar, "P pin") {
-		t.Errorf("the key bar doesn't say P: %q", bar)
+	if bar := ansi.Strip(sideKeyBar(&treeRow{kind: treeProject}, true, false, 200)); !strings.Contains(bar, "p pin") {
+		t.Errorf("the key bar doesn't say p: %q", bar)
 	}
 }
 

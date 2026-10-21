@@ -43,7 +43,7 @@ type setting struct {
 	// from follows the value, faint: where it comes from ("all
 	// projects" on a project's setting it doesn't set itself).
 	from func(m *dash) string
-	// unset runs on x: a project's own value goes,
+	// unset runs on X: a project's own value goes,
 	// so it follows all projects again.
 	unset func(m *dash) tea.Cmd
 	// keys are the settings-file keys a project's row follows all
@@ -113,16 +113,16 @@ func (l *settingsList) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 				d := map[bool]int{true: -1, false: 1}[k.String() == "-"]
 				run = func(m *dash) tea.Cmd { return r.adjust(m, d) }
 			}
-		case "x":
+		case "X":
 			if r.unset != nil {
 				run = r.unset
 			}
 		}
 	}
 	switch k.String() {
-	case "up", "k", "down", "j", "pgup", "pgdown":
+	case "up", "down", "pgup", "pgdown":
 		l.sel = moveSel(l.sel, scrollKeys[k.String()], len(l.rows))
-	case "enter", "space", " ", "+", "-", "x":
+	case "enter", "space", " ", "+", "-", "X":
 		if run == nil {
 			break
 		}
@@ -375,7 +375,7 @@ func globalSettings(note string) []setting {
 			}},
 		{label: "Sidebar", help: "The projects sidebar: full, the slim strip or hidden (⚑ N in the header counts what needs you; b on the dashboard). Every console of this view follows.",
 			value:  func(m *dash) string { return m.layout.mode() },
-			change: func(m *dash) tea.Cmd { return m.sideKey("b") }},
+			change: func(m *dash) tea.Cmd { return m.sideKey("B") }},
 		{label: "Theme", help: "The colours of every part of tm: follow terminal, the built-in one, which uses your terminal's own theme (Ghostty's, say) in tm and in the panes, Claude's too, or a theme from a mod that is on, which may differ light and dark. Each console follows its terminal's light or dark scheme.",
 			value: func(m *dash) string { return themeLabel(themeSetting()) },
 			change: func(m *dash) tea.Cmd {
@@ -563,7 +563,7 @@ func (sv *settingsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	if sv.tab == tabMods || sv.tab == tabPeers || sv.tab == tabLogs {
 		return nil
 	}
-	if sv.tab == tabAllAccess && s == "p" && sandboxShown(m, "") {
+	if sv.tab == tabAllAccess && s == "P" && sandboxShown(m, "") {
 		return m.openPresets("")
 	}
 	if sv.tab == tabAllAccess && s == "R" {
@@ -605,21 +605,21 @@ func (sv *settingsView) render(m *dash) string {
 	keys := "enter change · ↑ ↓ move · ← → tabs · esc close"
 	switch sv.tab {
 	case 0:
-		lines = append(lines, faintLines("A project's own settings (starting threads, remote control, …) and access (yolo mode, the guard, …) are in its popup: a on the dashboard, prefix+a in a session.", w)...)
+		lines = append(lines, faintLines("A project's own settings (starting threads, remote control, …) and access (yolo mode, the guard, …) are in its popup: A on the dashboard, prefix+A in a session.", w)...)
 	case tabMods:
-		lines = append(lines, faintLines("Mods extend terminatr: themes, keys, columns, panels. They never change the safety settings, and no agent can install or turn one on. i installs one, e lists the examples.", w)...)
+		lines = append(lines, faintLines("Mods extend terminatr: themes, keys, columns, panels. They never change the safety settings, and no agent can install or turn one on. I installs one, E lists the examples.", w)...)
 		keys = modsKeys
 	case tabPeers:
 		lines = append(lines, faintLines("Paired servers see the projects you share with them, read-only, in their sidebar; you see theirs in yours. No agent can pair, share or remove a server.", w)...)
 		keys = peersKeys
 	case tabAllAccess:
-		lines = append(lines, faintLines("Every project's threads get these, a new one's too. A project's lists add to these, and it may drop one of them, in its popup's Access tab (a on the dashboard, prefix+a in a session); its own switches replace these, x there makes it follow these again.", w)...)
+		lines = append(lines, faintLines("Every project's threads get these, a new one's too. A project's lists add to these, and it may drop one of them, in its popup's Access tab (A on the dashboard, prefix+A in a session); its own switches replace these, X there makes it follow these again.", w)...)
 		keys = "enter change · R reset · ↑ ↓ move · ← → tabs · esc close"
 		if sandboxShown(m, "") {
-			keys = "enter change · p add a preset · R reset · ↑ ↓ move · ← → tabs · esc close"
+			keys = "enter change · P add a preset · R reset · ↑ ↓ move · ← → tabs · esc close"
 		}
 	default:
-		lines = append(lines, faintLines("Every project follows these, a new one too, unless it sets its own in its popup (a on the dashboard, prefix+a in a session); x there makes it follow these again.", w)...)
+		lines = append(lines, faintLines("Every project follows these, a new one too, unless it sets its own in its popup (A on the dashboard, prefix+A in a session); X there makes it follow these again.", w)...)
 		keys = "enter change · + - number · ↑ ↓ move · ← → tabs · esc close"
 	}
 	about := aboutLines(m, w)
@@ -762,33 +762,34 @@ func (cv *captureView) render(m *dash) string {
 	return m.popup(box{title: "Prefix key", body: lines, sel: -1, keys: "esc cancel", dialog: true})
 }
 
-// confirmView asks a yes/no question: y runs yes, n or esc says no, and
-// no other key does anything (enter included: it is no answer).
+// confirmView asks a yes/no question: Y runs yes, N or esc says no, and
+// no other key does anything (enter and a lowercase y or n included: they
+// are no answer, so stray typing can't say yes).
 type confirmView struct {
 	title, question string
 	yes             func() tea.Cmd
-	// no is the footer message on n or esc.
+	// no is the footer message on N or esc.
 	no string
 }
 
 // confirmKeys are a yes/no question's action row, the same everywhere.
-const confirmKeys = "y yes · n no · esc cancel"
+const confirmKeys = "Y yes · N no · esc cancel"
 
 func (m *dash) confirm(title, question string, yes func() tea.Cmd) {
 	m.confirmNo(title, question, "unchanged", yes)
 }
 
-// confirmNo is confirm, saying no in the footer on n or esc.
+// confirmNo is confirm, saying no in the footer on N or esc.
 func (m *dash) confirmNo(title, question, no string, yes func() tea.Cmd) {
 	m.push(&confirmView{title: title, question: question, yes: yes, no: no})
 }
 
 func (cv *confirmView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch k.String() {
-	case "y":
+	case "Y":
 		m.pop()
 		return cv.yes()
-	case "n", "esc":
+	case "N", "esc":
 		m.pop()
 		m.msg = cv.no
 	}
@@ -1020,7 +1021,7 @@ func (v *modelsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch k.String() {
 	case "esc", "q":
 		m.pop()
-	case "up", "k", "down", "j":
+	case "up", "down":
 		v.sel = moveSel(v.sel, scrollKeys[k.String()], len(rows))
 	case "enter", "space", " ":
 		if v.sel >= len(rows) {
@@ -1095,7 +1096,7 @@ func historyWords(s config.Safety) string {
 }
 
 // historyView lists the retention ages: enter steps one, + and - change
-// it by a day, x makes a project's follow all projects again.
+// it by a day, X makes a project's follow all projects again.
 type historyView struct {
 	title string
 	list  settingsList
@@ -1113,7 +1114,7 @@ func (v *historyView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 
 func (v *historyView) render(m *dash) string {
 	lines, sel, hits := v.list.lines(m, m.inner(viewWidth))
-	keys := "enter step · + - a day · x follow all projects · ↑ ↓ move · esc back"
+	keys := "enter step · + - a day · X follow all projects · ↑ ↓ move · esc back"
 	if v.all {
 		keys = "enter step · + - a day · ↑ ↓ move · esc back"
 	}

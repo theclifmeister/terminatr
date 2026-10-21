@@ -263,10 +263,6 @@ func (m *dash) panelKeyPress(v proto.ModView, project, k string) (bool, tea.Cmd)
 		return false, nil
 	}
 	used, ev := host.Key(k)
-	if alt, ok := map[string]string{"j": "down", "k": "up"}[k]; !used && ok && !host.Editing() {
-		// j and k move, as in the core's lists, unless the mod took them.
-		used, ev = host.Key(alt)
-	}
 	if a := host.Unbound(k); !used && a != nil {
 		return true, m.whyNot(*a)
 	}

@@ -16,28 +16,28 @@ func TestPeersTabRelayUpdate(t *testing.T) {
 	m.data.Server = ServerInfo{Version: "v0.27.0", Latest: "v0.28.0"}
 	press(m, ",", "5")
 	out := screen(m)
-	if !strings.Contains(out, "relay  relay.example.net · v0.27.0 · update available (u)") {
+	if !strings.Contains(out, "relay  relay.example.net · v0.27.0 · update available (U)") {
 		t.Fatalf("no relay version in\n%s", out)
 	}
-	if !strings.Contains(out, "u update relay") {
-		t.Errorf("no u in the keys:\n%s", out)
+	if !strings.Contains(out, "U update relay") {
+		t.Errorf("no U in the keys:\n%s", out)
 	}
-	// u on a project does nothing; on mini's panes row it asks.
-	press(m, "u")
+	// U on a project does nothing; on mini's panes row it asks.
+	press(m, "U")
 	if _, ok := m.top().(*settingsView); !ok {
-		t.Fatalf("u on a project: %T", m.top())
+		t.Fatalf("U on a project: %T", m.top())
 	}
-	press(m, "down", "down", "u")
+	press(m, "down", "down", "U")
 	cv, ok := m.top().(*confirmView)
 	if !ok || !strings.Contains(cv.question, "runs tm v0.27.0; v0.28.0 is out") {
-		t.Fatalf("u: %T %+v", m.top(), cv)
+		t.Fatalf("U: %T %+v", m.top(), cv)
 	}
-	press(m, "n")
+	press(m, "N")
 	if len(src.relayUpdates) != 0 {
-		t.Fatalf("n asked: %v", src.relayUpdates)
+		t.Fatalf("N asked: %v", src.relayUpdates)
 	}
-	press(m, "u")
-	drain(t, m, press(m, "y"))
+	press(m, "U")
+	drain(t, m, press(m, "Y"))
 	if !slices.Equal(src.relayUpdates, []string{"mini"}) || m.msg != "the relay updates" {
 		t.Fatalf("asked %v, %q", src.relayUpdates, m.msg)
 	}

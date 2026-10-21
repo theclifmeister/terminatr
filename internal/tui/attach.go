@@ -85,6 +85,10 @@ const (
 	leaveScreen = "\x1b[?25h\x1b[?1049l"
 )
 
+// Key is a key from the outer terminal, as the dashboard hands typed
+// keys on to the attach (DashResult.Type).
+type Key = uv.Key
+
 // Options configure Attach.
 type Options struct {
 	Paths tmclient.Paths
@@ -110,6 +114,10 @@ type Options struct {
 	// typed after the prefix over a popup on this session, which closed
 	// it (DashResult.Command).
 	Command string
+	// Type are keys typed through a coordinator's row on the dashboard
+	// (DashResult.Type): they run first, as typed here, before any key
+	// the terminal sends, so none is lost or reordered.
+	Type []Key
 	// Handover: the dashboard handed this console over with the
 	// alternate screen on, showing its last frame (DashOptions.Handover):
 	// the attach draws its first frame over it rather than switch
@@ -203,6 +211,7 @@ func Attach(opts Options) (res Result, err error) {
 	c.prefix, c.takeover, c.told = prefix, opts.Takeover, map[string]bool{}
 	c.bare, c.dashboard = v.Bare, !v.Bare
 	c.flash = opts.Flash
+	c.typeAhead = opts.Type
 	so := opts.Sidebar
 	if so == nil {
 		so = &SidebarOptions{}
@@ -325,6 +334,17 @@ type pane struct {
 // client is the attached window: its panes and everything they share.
 type client struct {
 	paths tmclient.Paths
+	// typeAhead are the keys typed through a coordinator's row on the
+	// dashboard (Options.Type), run before the terminal's (replay).
+	typeAhead []Key
+	// typeFor is the coordinator a key typed on its sidebar row is going
+	// to, typeKeys that key and those since, held until its pane has the
+	// focus, typeBy when they are dropped instead (typethrough.go). keyQueue
+	// is inputLoop's queue, which typedReady joins. Guarded by mu.
+	typeFor  string
+	typeKeys []Key
+	typeBy   time.Time
+	keyQueue chan uv.Event
 	// cells are the mods' cells and status segments from the last poll
 	// (pollState). Guarded by mu.
 	cells *modCells
@@ -962,6 +982,7 @@ func (c *client) relayout() {
 	c.paneRows = max(c.rows-c.geo.Status, 1)
 	own := view.Rect{X: c.paneX(), Y: 0, W: c.paneCols, H: c.paneRows}
 	c.focus = c.panes[c.v.Focus]
+	c.typedFocus()
 	vis := c.visible()
 	// The pane draws alone, unless it shares the window with the sidebar,
 	// the info panel or the status bar (which has a rule above it).
@@ -1149,6 +1170,34 @@ func (c *client) events(ctx context.Context, evs <-chan term.Event, digests <-ch
 // cancels the terminal read and waits until it returned: a read left
 // blocked after a detach would take the next input meant for the
 // dashboard, which reads the terminal next, and lose that key or click.
+// replayWait is how long replay waits for the focused pane to show.
+const replayWait = 5 * time.Second
+
+// replay runs the keys typed through a coordinator's row (typeAhead) as
+// typed here, once the view's focused pane shows: they reach its
+// program in order, before any key the terminal sends after them.
+func (c *client) replay(ctx context.Context) {
+	keys := c.typeAhead
+	c.typeAhead = nil
+	if len(keys) == 0 {
+		return
+	}
+	for deadline := time.Now().Add(replayWait); ctx.Err() == nil; time.Sleep(10 * time.Millisecond) {
+		c.mu.Lock()
+		ready := c.focus != nil
+		c.mu.Unlock()
+		if ready || time.Now().After(deadline) {
+			break
+		}
+	}
+	for _, k := range keys {
+		if ctx.Err() != nil {
+			return
+		}
+		c.key(k)
+	}
+}
+
 func (c *client) inputLoop(ctx context.Context, in *os.File) (stop func()) {
 	var r io.Reader = in
 	cr, err := uv.NewCancelReader(in)
@@ -1158,6 +1207,9 @@ func (c *client) inputLoop(ctx context.Context, in *os.File) (stop func()) {
 		c.log.Printf("input: no cancelable reader: %v", err)
 	}
 	events := make(chan uv.Event, 64)
+	c.mu.Lock()
+	c.keyQueue = events
+	c.mu.Unlock()
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1166,6 +1218,9 @@ func (c *client) inputLoop(ctx context.Context, in *os.File) (stop func()) {
 		c.finish(Result{Reason: "detached (terminal closed: " + errString(err) + ")", Detached: true, Quit: true})
 	}()
 	go func() {
+		// The keys typed through a coordinator's row go first; the
+		// terminal's wait in events meanwhile.
+		c.replay(ctx)
 		// Past ctx it keeps draining until the reader is done: its last
 		// sends block on a full channel, and with them the reader.
 		for {
@@ -1198,6 +1253,8 @@ func (c *client) handle(ev uv.Event) {
 	switch e := ev.(type) {
 	case uv.KeyPressEvent:
 		c.key(uv.Key(e))
+	case typedReady:
+		c.flushTyped()
 	case uv.MouseClickEvent, uv.MouseReleaseEvent, uv.MouseMotionEvent, uv.MouseWheelEvent:
 		c.mouse(ev)
 	case uv.FocusEvent:
@@ -1281,6 +1338,9 @@ func (c *client) background(dark bool) {
 // key handles a key from the outer terminal: the prefix and the command
 // after it (docs/SPEC.md §4), or a key for the focused program.
 func (c *client) key(k uv.Key) {
+	if c.holdTyped(k) {
+		return
+	}
 	if !c.lock() {
 		return
 	}
@@ -1297,11 +1357,12 @@ func (c *client) key(k uv.Key) {
 		return
 	}
 	if answer := c.confirm; answer != nil {
-		// y says yes, n or esc no; no other key answers.
+		// Y says yes, N or esc no; no other key answers (a lowercase y
+		// or n included: stray typing can't say yes).
 		switch keyName(k) {
-		case "y":
+		case "Y":
 			answer(true)
-		case "n", "esc":
+		case "N", "esc":
 			answer(false)
 		default:
 			c.mu.Unlock()
@@ -1437,8 +1498,8 @@ func keyName(k uv.Key) string {
 func prefixStep(prefix chord, pending bool, k uv.Key, dashboard bool) prefixDo {
 	name := keyName(k)
 	if pending && !prefix.match(k) {
-		// A bound key runs as its action's default (keybind.go).
-		name = binds.list.canon(name)
+		// A bound key runs as its action's default (keybind.go), a twin as its shifted key (prefixTwins).
+		name = prefixName(name)
 	}
 	switch {
 	case !pending && prefix.match(k):
@@ -1529,7 +1590,7 @@ func (c *client) popupOver(project, key string) { c.popupOverTask(project, key, 
 
 // popupTask leaves the attach for the task view on task id of project,
 // over this pane (a click on the info panel's task).
-func (c *client) popupTask(project string, id int) { c.popupOverTask(project, "t", id) }
+func (c *client) popupTask(project string, id int) { c.popupOverTask(project, "T", id) }
 
 // popupOverTask is popupOver, the task view showing task id when it is
 // not 0.
@@ -1580,7 +1641,7 @@ func (c *client) paneLines(o *Over) []string {
 // or slim, its keyboard.
 func (c *client) paneCommand(cmd string) {
 	switch cmd {
-	case "{", "}", "b":
+	case "{", "}", "B":
 		c.sideKey(cmd)
 	case "tab":
 		c.nextArea()
@@ -1903,9 +1964,9 @@ func (c *client) mouse(ev uv.Event) {
 			w, h = d.size()
 		}
 		switch {
-		case key == "y":
+		case key == "Y":
 			c.confirm(true)
-		case key == "n", key == "esc", d == nil, m.X < d.x || m.X >= d.x+w || m.Y < d.y || m.Y >= d.y+h:
+		case key == "N", key == "esc", d == nil, m.X < d.x || m.X >= d.x+w || m.Y < d.y || m.Y >= d.y+h:
 			c.confirm(false)
 		default:
 			c.mu.Unlock()
