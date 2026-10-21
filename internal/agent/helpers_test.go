@@ -186,7 +186,7 @@ func TestTailUsageTable(t *testing.T) {
 		CacheCreation: "u.cw", CostUSD: "cost", Model: "model"}
 	var obj map[string]any
 	json.Unmarshal([]byte(`{"type":"usage","u":{"in":5,"out":-3,"cw":"7"},"cost":0.25,"model":"m-1"}`), &obj)
-	if got := u.read(obj); got == nil || *got != (Usage{Turns: 1, Input: 5, CostUSD: 0.25, Model: "m-1"}) {
+	if got := u.read(obj); got == nil || *got != (Usage{Turns: 1, Input: 5, CostUSD: 0.25, HasCost: true, Model: "m-1"}) {
 		t.Errorf("usage line: %+v", got)
 	}
 	json.Unmarshal([]byte(`{"type":"other","u":{"in":5}}`), &obj)

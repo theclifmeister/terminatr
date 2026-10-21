@@ -5,7 +5,7 @@
     └─ T2        ☐ 4%   ○          │  T2 Write the docs                 ○ idle      4%     <duration>  t-0002                             │ project   demo
                                    │  tasks: 0 need you · 2 in motion · 0 on deck                                                 │ thread    t-0001
                                    │ OTHER SESSIONS ──────────────────────────────────────────────────────────────────────────────│ session   <session>
-                                   │  none outside the projects (2 in them)                                                       │ usage     22.6k tokens, $0.00
+                                   │  none outside the projects (2 in them)                                                       │ usage     22.6k tokens, no cost
                                    │ ▾ Context nearly full · Context gauge ────────────────────────────────────────────────────── │ progress  ▰▰▰▱▱ 50% 1/2
                                    │   No session is past 80% of its context.                                                     │ now       ▸ Fix it
                                    │   Clear starts a fresh conversation: the project's state is in its files, so nothing is lost.│ updated   <duration> ago
@@ -13,9 +13,9 @@
                                    │   today   $0.00  25.0k tokens                                                                │ report    1, new · for the coordinator
                                    │   7 days  $0.00                                                                              │
                                    │   ▁▁▁▁▁▁▁                                                                                    │ steps 1/2
-                                   │   Thread          Tokens   Cost                                                              │   ✓ 1 Reproduce the bug
-                                   │   Write the docs   25.0k  $0.00                                                              │   ○ 2 Fix it
-                                   │   Fix the login    22.6k  $0.00                                                              │
+                                   │   Thread          Tokens     Cost                                                            │   ✓ 1 Reproduce the bug
+                                   │   Write the docs   25.0k    $0.00                                                            │   ○ 2 Fix it
+                                   │   Fix the login    22.6k  no cost                                                            │
                                    │                                                                                              │ enter attach
                                    │                                                                                              │
                                    │                                                                                              │ ▾ LAST REPORT ────────────────────────────────

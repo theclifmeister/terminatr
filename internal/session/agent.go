@@ -849,9 +849,9 @@ func (rt *agentRT) readTail() ([]agent.Usage, []string) {
 }
 
 // mergeUsage is one tick's reports as one, so the thread's record is
-// written once: the counts summed, the context, its window and model as
-// the latest report that gives a context says, the plan as the latest
-// that gives one.
+// written once: the counts summed (a cost, when any of them has one),
+// the context, its window and model as the latest report that gives a
+// context says, the plan as the latest that gives one.
 func mergeUsage(used []agent.Usage) agent.Usage {
 	var m agent.Usage
 	for _, u := range used {
@@ -861,6 +861,7 @@ func mergeUsage(used []agent.Usage) agent.Usage {
 		m.CacheRead += u.CacheRead
 		m.CacheCreation += u.CacheCreation
 		m.CostUSD += u.CostUSD
+		m.HasCost = m.HasCost || u.HasCost
 		if u.HasPlan {
 			m.PlanPct, m.HasPlan = u.PlanPct, true
 		}

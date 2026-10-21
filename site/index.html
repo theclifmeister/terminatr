@@ -60,7 +60,7 @@
                                    <span class="dim">│</span>  tasks: 0 need you · 1 in motion · 0 on deck                                              <span class="dim">│</span> project   demo
                                    <span class="dim">│</span> <span class="head">OTHER SESSIONS</span> <span class="dim">───────────────────────────────────────────────────────────────────────────│</span> thread    <span class="task">t-0001</span>
                                    <span class="dim">│</span>  none outside the projects (1 in them)                                                    <span class="dim">│</span> session   s-3
-                                   <span class="dim">│</span>                                                                                           <span class="dim">│</span> usage     22.6k tokens, <span class="accent">$0.00</span>
+                                   <span class="dim">│</span>                                                                                           <span class="dim">│</span> usage     22.6k tokens, no cost
                                    <span class="dim">│</span>                                                                                           <span class="dim">│</span> progress  <span class="accent">▰▰▰</span><span class="dim">▱▱</span> <span class="accent">50%</span> 1/2
                                    <span class="dim">│</span>                                                                                           <span class="dim">│</span> now       <span class="warn">▸</span> Fix
                                    <span class="dim">│</span>                                                                                           <span class="dim">│</span> updated   4m ago
@@ -222,7 +222,7 @@
                                    <span class="dim">│</span>⏺ Edit(auth/session.go)                                                             <span class="dim">│</span>
                                    <span class="dim">│</span>  ⎿  Done                                                                           <span class="dim">│</span> <span class="head">THREAD</span> <span class="dim">──────────────────────────────</span>
                                    <span class="dim">│────────────────────────────────────────────────────────────────────────────────────│</span> thread    <span class="task">t-0001</span> <span class="idle">○ idle</span>
-                                   <span class="dim">│</span>❯                                                                                   <span class="dim">│</span> usage     68.7k tokens, <span class="accent">$0.00</span>
+                                   <span class="dim">│</span>❯                                                                                   <span class="dim">│</span> usage     68.7k tokens, no cost
                                    <span class="dim">│────────────────────────────────────────────────────────────────────────────────────│</span> now       <span class="warn">▸</span> Fix it
                                    <span class="dim">│</span>  ? for shortcuts                                                                   <span class="dim">│</span> PR        #7 open, checks pending
                                    <span class="dim">│</span>                                                                                    <span class="dim">│</span>
@@ -443,7 +443,7 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
 <span class="dim">│</span>
 <span class="dim">│</span> <span class="head">THREAD</span> <span class="dim">──────────────────────────────</span>
 <span class="dim">│</span> thread    <span class="task">t-0001</span> <span class="idle">○ idle</span>
-<span class="dim">│</span> usage     22.6k tokens, <span class="accent">$0.00</span>
+<span class="dim">│</span> usage     22.6k tokens, no cost
 <span class="dim">│</span> now       <span class="warn">▸</span> Fix it
 <span class="dim">│</span>
 <span class="dim">│</span> branch    tm/demo/t-0001-fix-the-login
@@ -490,7 +490,7 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
     <span class="dim">└─</span> <span class="task">T2</span>        <span class="idle">☐</span> <span class="accent">4%</span>   ○          <span class="dim">│</span>  <span class="task">T2</span> Write the docs                 <span class="idle">○ idle</span>      <span class="accent">4%</span>     4m  <span class="task">t-0002</span>                             <span class="dim">│</span> project   demo
                                    <span class="dim">│</span>  tasks: 0 need you · 2 in motion · 0 on deck                                                 <span class="dim">│</span> thread    <span class="task">t-0001</span>
                                    <span class="dim">│</span> <span class="head">OTHER SESSIONS</span> <span class="dim">──────────────────────────────────────────────────────────────────────────────│</span> session   s-3
-                                   <span class="dim">│</span>  none outside the projects (2 in them)                                                       <span class="dim">│</span> usage     22.6k tokens, <span class="accent">$0.00</span>
+                                   <span class="dim">│</span>  none outside the projects (2 in them)                                                       <span class="dim">│</span> usage     22.6k tokens, no cost
                                    <span class="dim">│</span> ▾ Context nearly full · Context gauge <span class="dim">──────────────────────────────────────────────────────</span> <span class="dim">│</span> progress  <span class="accent">▰▰▰</span><span class="dim">▱▱</span> <span class="accent">50%</span> 1/2
                                    <span class="dim">│</span>   No session is past <span class="accent">80%</span> of its context.                                                     <span class="dim">│</span> now       <span class="warn">▸</span> Fix it
                                    <span class="dim">│</span>   Clear starts a fresh conversation: the project's state is in its files, so nothing is lost.<span class="dim">│</span> updated   4m ago
@@ -498,9 +498,9 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
                                    <span class="dim">│</span>   today   <span class="accent">$0.00</span>  25.0k tokens                                                                <span class="dim">│</span> report    1, new · for the coordinator
                                    <span class="dim">│</span>   7 days  <span class="accent">$0.00</span>                                                                              <span class="dim">│</span>
                                    <span class="dim">│</span>   <span class="accent">▁▁▁▁▁▁▁</span>                                                                                    <span class="dim">│</span> steps 1/2
-                                   <span class="dim">│</span>   Thread          Tokens   Cost                                                              <span class="dim">│</span>   <span class="ok">✓</span> 1 Reproduce the bug
-                                   <span class="dim">│</span>   Write the docs   25.0k  <span class="accent">$0.00</span>                                                              <span class="dim">│</span>   ○ 2 Fix it
-                                   <span class="dim">│</span>   Fix the login    22.6k  <span class="accent">$0.00</span>                                                              <span class="dim">│</span>
+                                   <span class="dim">│</span>   Thread          Tokens     Cost                                                            <span class="dim">│</span>   <span class="ok">✓</span> 1 Reproduce the bug
+                                   <span class="dim">│</span>   Write the docs   25.0k    <span class="accent">$0.00</span>                                                            <span class="dim">│</span>   ○ 2 Fix it
+                                   <span class="dim">│</span>   Fix the login    22.6k  no cost                                                            <span class="dim">│</span>
                                    <span class="dim">│</span>                                                                                              <span class="dim">│</span> <span class="key">enter</span> attach
                                    <span class="dim">│</span>                                                                                              <span class="dim">│</span>
                                    <span class="dim">│</span>                                                                                              <span class="dim">│</span> ▾ LAST REPORT <span class="dim">────────────────────────────────</span>
@@ -750,7 +750,7 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
     <div class="os">
       <h3>Try one</h3>
       <div class="cmdline"><code>git clone https://github.com/theclifmeister/terminatr</code><button class="copy" type="button" aria-label="Copy the clone command">copy</button></div>
-      <div class="cmdline"><code>tm mod install https://github.com/theclifmeister/terminatr/tree/v0.43.0/examples/mods/standup</code><button class="copy" type="button" aria-label="Copy the mod install command">copy</button></div>
+      <div class="cmdline"><code>tm mod install https://github.com/theclifmeister/terminatr/tree/v0.44.0/examples/mods/standup</code><button class="copy" type="button" aria-label="Copy the mod install command">copy</button></div>
       <p class="note">Then turn it on in the Mods tab (<kbd>,</kbd> then <kbd>3</kbd>) or with <code>tm mod enable standup</code>. Or skip the shell: in the Mods tab, <kbd>e</kbd> lists the examples and <kbd>i</kbd> installs the selected one. <code>tm mod install</code> also takes a folder, a git URL or a repository's subfolder (<code>&lt;git-url&gt;//&lt;folder&gt;@&lt;tag&gt;</code>). The <a href="https://github.com/theclifmeister/terminatr/tree/main/examples/mods">examples</a> have one of each kind.</p>
     </div>
     <div class="os">

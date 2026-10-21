@@ -67,6 +67,10 @@ turn = { type = "task_complete" }
 			t.Errorf("usage[%d] %+v, want %+v", i, got[i], want[i])
 		}
 	}
+	// A cost reported by any of them stays reported in the merge.
+	if m := mergeUsage([]agent.Usage{{Input: 1}, {Input: 2, CostUSD: 0.5, HasCost: true}}); !m.HasCost || m.CostUSD != 0.5 || m.Input != 3 {
+		t.Errorf("merged cost: %+v", m)
+	}
 	// A tick hands them on as one report: one write of the record.
 	if m, w := mergeUsage(got), (agent.Usage{Turns: 1, Input: 110, CacheRead: 290, Context: 300, ContextWindow: 1000, Key: "400"}); m != w {
 		t.Errorf("merged %+v, want %+v", m, w)

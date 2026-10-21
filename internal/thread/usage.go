@@ -19,12 +19,17 @@ type Usage struct {
 	// has no dollar cost, so none is shown.
 	PlanPct float64 `toml:"plan_pct,omitempty" json:"plan_pct,omitempty"`
 	HasPlan bool    `toml:"has_plan,omitempty" json:"has_plan,omitempty"`
+	// Uncosted is the tokens that came with no cost source (Claude
+	// without its mod: the transcript has tokens, no dollars). CostUSD
+	// counts only the rest, so the total is partial when some are left.
+	Uncosted int64 `toml:"uncosted,omitempty" json:"uncosted,omitempty"`
 }
 
 // Add is u and o summed.
 func (u Usage) Add(o Usage) Usage {
 	r := Usage{u.Turns + o.Turns, u.Input + o.Input, u.Output + o.Output,
-		u.CacheRead + o.CacheRead, u.CacheCreation + o.CacheCreation, u.CostUSD + o.CostUSD, u.PlanPct, u.HasPlan}
+		u.CacheRead + o.CacheRead, u.CacheCreation + o.CacheCreation, u.CostUSD + o.CostUSD, u.PlanPct, u.HasPlan,
+		u.Uncosted + o.Uncosted}
 	if o.HasPlan {
 		r.PlanPct, r.HasPlan = o.PlanPct, true
 	}
@@ -32,16 +37,27 @@ func (u Usage) Add(o Usage) Usage {
 }
 
 // money is the cost part of the short form: "$3.41", or the plan limit
-// ("plan 12%") for an agent that reports one instead of a cost.
+// ("plan 12%") for an agent that reports one instead of a cost; "no
+// cost" when no token had a cost source, and "$3.41 partial" when only
+// some had.
 func (u Usage) money() string {
 	if u.HasPlan {
 		return fmt.Sprintf("plan %.0f%%", u.PlanPct)
+	}
+	if u.Uncosted > 0 {
+		if u.Uncosted >= u.Tokens() {
+			return "no cost"
+		}
+		return fmt.Sprintf("$%.2f partial", u.CostUSD)
 	}
 	return fmt.Sprintf("$%.2f", u.CostUSD)
 }
 
 // Tokens is every token counted: read from the cache or not.
 func (u Usage) Tokens() int64 { return u.Input + u.Output + u.CacheRead + u.CacheCreation }
+
+// CostKnown reports whether any of the tokens had a cost source.
+func (u Usage) CostKnown() bool { return u.Uncosted < u.Tokens() || u.CostUSD > 0 }
 
 // Zero reports whether nothing was used.
 func (u Usage) Zero() bool { return u == Usage{} }
