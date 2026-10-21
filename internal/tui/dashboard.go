@@ -101,8 +101,10 @@ type DashResult struct {
 	// again: prefix then r or tab over it, which are the session's own.
 	Command string
 	// Type are the keys typed through a coordinator's row (typethrough.go)
-	// since the first, which attached it: the session runs them first.
-	Type []Key
+	// since the first, which attached it, and TypeFor its session: the
+	// session runs them first, only when it is TypeFor's (Attach is it).
+	Type    []Key
+	TypeFor string
 }
 
 // Dashboard runs the dashboard until the user quits or picks a session.
@@ -169,9 +171,7 @@ func Dashboard(opts DashOptions) (DashResult, error) {
 	}
 	d.result.State = DashState{Selected: d.sel, Current: d.current}
 	d.result.SideFocus = d.result.Attach != "" && d.focus == areaSide
-	if d.result.Attach != "" {
-		d.result.Type = d.typed
-	}
+	d.result.Type, d.result.TypeFor = d.typedFor(d.result.Attach)
 	return d.result, nil
 }
 
@@ -252,6 +252,10 @@ type dash struct {
 	// (typethrough.go).
 	typing bool
 	typed  []Key
+	// typeFor is the coordinator's session they go to; typeSeq numbers
+	// the type-throughs, so an old one's deadline (typeTimeoutMsg) passes.
+	typeFor string
+	typeSeq int
 	// typedAt is when the last of them came; settling: the session to
 	// attach is set, and the dashboard ends once they pause (leave).
 	typedAt  time.Time
@@ -587,7 +591,7 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.leaving = false
 		if msg.err != nil {
 			m.queued = nil
-			m.typing, m.typed = false, nil
+			m.typing, m.typed, m.typeFor = false, nil, ""
 			m.fail(msg.err)
 			return m, m.load()
 		}
@@ -637,6 +641,11 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.key(msg)
 	case typeSettledMsg:
 		return m, m.settled()
+	case typeTimeoutMsg:
+		if m.typing && !m.settling && msg.seq == m.typeSeq {
+			m.endTyping("timed out: the coordinator didn't open")
+		}
+		return m, nil
 	case tea.PasteMsg:
 		// Into a prompt: a path or a URL is often pasted.
 		if p, ok := m.top().(interface{ paste(*dash, string) }); ok {
@@ -911,9 +920,21 @@ func (m *dash) paneSize() (int, int) {
 // and never reaches a popup as a plain key.
 func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 	if m.typing {
-		// On the way to the coordinator: every key is its pane's.
-		m.typed, m.typedAt = append(m.typed, Key(k)), time.Now()
-		return nil
+		switch k.String() {
+		case "ctrl+c":
+			// It cancels the typing, never typed.
+			m.endTyping("cancelled")
+			return nil
+		case m.prefix:
+			// It ends the typing and starts a command, as anywhere.
+			m.endTyping("ended by the prefix")
+			m.prefixed = true
+			return nil
+		default:
+			// On the way to the coordinator: every key is its pane's.
+			m.typed, m.typedAt = append(m.typed, Key(k)), time.Now()
+			return nil
+		}
 	}
 	if k.String() == "ctrl+c" {
 		return tea.Quit

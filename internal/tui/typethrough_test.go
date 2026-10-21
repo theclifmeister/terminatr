@@ -15,6 +15,11 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
+func init() {
+	// The deadline's tick is drained in tests: a short one.
+	typeDeadline = 20 * time.Millisecond
+}
+
 // prefixed presses the prefix, then key: the list's command on a
 // coordinator's row, where a plain printable key types through.
 func prefixed(m *dash, key string) tea.Cmd {
@@ -172,10 +177,114 @@ func received(t *testing.T, in <-chan string, n int) string {
 func TestTypeThroughReplay(t *testing.T) {
 	c, p := selClient(t, "")
 	in := pipedInput(t, p)
-	c.typeAhead = []Key{{Code: 'H', Text: "H"}, {Code: 'i', Text: "i"}, {Code: ' ', Text: " "}, {Code: '/', Text: "/"}}
+	c.typeAhead, c.typeAheadFor = []Key{{Code: 'H', Text: "H"}, {Code: 'i', Text: "i"}, {Code: ' ', Text: " "}, {Code: '/', Text: "/"}}, "s-1"
 	c.replay(t.Context())
 	if got := received(t, in, 4); got != "Hi /" || c.typeAhead != nil {
 		t.Fatalf("replayed %q", got)
+	}
+}
+
+// TestTypeThroughReplayOtherPane: keys typed to one coordinator never
+// reach another pane the shared view focused meanwhile (another console
+// attached a thread, say): they are dropped, and the status bar says so.
+func TestTypeThroughReplayOtherPane(t *testing.T) {
+	c, p := selClient(t, "") // s-1 focused
+	in := pipedInput(t, p)
+	c.typeAhead, c.typeAheadFor = []Key{{Code: 'h', Text: "h"}, {Code: tea.KeyEnter}}, "s-7"
+	c.replay(t.Context())
+	select {
+	case got := <-in:
+		t.Fatalf("the other pane got %q", got)
+	case <-time.After(200 * time.Millisecond):
+	}
+	if !strings.Contains(c.flash, "what you typed was dropped") || c.typeAhead != nil {
+		t.Fatalf("flash %q", c.flash)
+	}
+}
+
+// TestTypeThroughOtherFocus: the dashboard hands the keys over only when
+// the session it attaches is the coordinator they were typed to; when
+// the view shows another, it drops them, and the session says so.
+func TestTypeThroughOtherFocus(t *testing.T) {
+	src := &fakeSource{data: testData()}
+	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 30, State: DashState{Current: "alpha"}})
+	m.setData(src.data)
+	m.sel = "p:alpha"
+	keyPress(m, "h")
+	keyPress(m, "enter")
+	if keys, to := m.typedFor("s-1"); typedText(keys) != "h⏎" || to != "s-1" {
+		t.Fatalf("for s-1: %q to %q", typedText(keys), to)
+	}
+	if keys, to := m.typedFor("s-2"); keys != nil || to != "" || !strings.Contains(m.result.Message, "was dropped") {
+		t.Fatalf("for s-2: %q to %q, message %q", typedText(keys), to, m.result.Message)
+	}
+}
+
+// TestTypeThroughCancel: while keys are typed through, ctrl+c cancels
+// the typing and the prefix ends it, both dropping the keys and saying
+// so; the prefix then starts its command. Past the deadline with no
+// attach the keys are dropped too, and the list takes keys again.
+func TestTypeThroughCancel(t *testing.T) {
+	newM := func() *dash {
+		src := &fakeSource{data: testData()}
+		m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 30, State: DashState{Current: "alpha"}})
+		m.setData(src.data)
+		m.sel = "p:alpha"
+		keyPress(m, "h")
+		keyPress(m, "i")
+		return m
+	}
+	m := newM()
+	if _, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}); quits(cmd) || m.typing || m.typed != nil ||
+		m.msg != "typing to the coordinator cancelled: 2 keys dropped" {
+		t.Fatalf("ctrl+c: typing %v typed %q msg %q", m.typing, typedText(m.typed), m.msg)
+	}
+
+	m = newM()
+	m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
+	if m.typing || !m.prefixed || !strings.Contains(m.msg, "ended by the prefix: 2 keys dropped") {
+		t.Fatalf("prefix: typing %v prefixed %v msg %q", m.typing, m.prefixed, m.msg)
+	}
+	keyPress(m, "a")
+	if _, ok := m.top().(*projectView); !ok {
+		t.Fatalf("prefix+a after it: %T", m.top())
+	}
+
+	m = newM()
+	m.busy = false                               // the attach answered; no view version came
+	m.Update(typeTimeoutMsg{seq: m.typeSeq - 1}) // an older one's
+	if !m.typing {
+		t.Fatal("an old deadline ended the typing")
+	}
+	m.Update(typeTimeoutMsg{seq: m.typeSeq})
+	if m.typing || !strings.Contains(m.msg, "timed out") {
+		t.Fatalf("deadline: typing %v msg %q", m.typing, m.msg)
+	}
+	keyPress(m, "down")
+	if m.sel == "p:alpha" {
+		t.Fatal("the list takes no keys after the deadline")
+	}
+}
+
+// TestTypeThroughAttachCancel: in a session, ctrl+c cancels the keys
+// the sidebar holds for a coordinator and the prefix ends them, both
+// dropping them; the prefix then arms.
+func TestTypeThroughAttachCancel(t *testing.T) {
+	c, _ := selClient(t, "")
+	c.prefix, _ = parseChord(DefaultPrefixKey)
+	hold := func() {
+		c.mu.Lock()
+		c.typeFor, c.typeKeys, c.typeBy = "s-9", []Key{{Code: 'G', Text: "G"}}, time.Now().Add(time.Minute)
+		c.mu.Unlock()
+	}
+	hold()
+	if !c.holdTyped(Key{Code: 'c', Mod: uv.ModCtrl}) || c.typeFor != "" || !strings.Contains(c.flash, "cancelled: 1 key dropped") {
+		t.Fatalf("ctrl+c: for %q flash %q", c.typeFor, c.flash)
+	}
+	hold()
+	c.key(Key{Code: 'b', Mod: uv.ModCtrl})
+	if c.typeFor != "" || !c.pending {
+		t.Fatalf("prefix: for %q pending %v", c.typeFor, c.pending)
 	}
 }
 

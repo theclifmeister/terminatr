@@ -116,8 +116,10 @@ type Options struct {
 	Command string
 	// Type are keys typed through a coordinator's row on the dashboard
 	// (DashResult.Type): they run first, as typed here, before any key
-	// the terminal sends, so none is lost or reordered.
-	Type []Key
+	// the terminal sends, so none is lost or reordered; TypeFor is the
+	// coordinator's session they were typed to, the only pane they reach.
+	Type    []Key
+	TypeFor string
 	// Handover: the dashboard handed this console over with the
 	// alternate screen on, showing its last frame (DashOptions.Handover):
 	// the attach draws its first frame over it rather than switch
@@ -211,7 +213,7 @@ func Attach(opts Options) (res Result, err error) {
 	c.prefix, c.takeover, c.told = prefix, opts.Takeover, map[string]bool{}
 	c.bare, c.dashboard = v.Bare, !v.Bare
 	c.flash = opts.Flash
-	c.typeAhead = opts.Type
+	c.typeAhead, c.typeAheadFor = opts.Type, opts.TypeFor
 	so := opts.Sidebar
 	if so == nil {
 		so = &SidebarOptions{}
@@ -336,7 +338,8 @@ type client struct {
 	paths tmclient.Paths
 	// typeAhead are the keys typed through a coordinator's row on the
 	// dashboard (Options.Type), run before the terminal's (replay).
-	typeAhead []Key
+	typeAhead    []Key
+	typeAheadFor string
 	// typeFor is the coordinator a key typed on its sidebar row is going
 	// to, typeKeys that key and those since, held until its pane has the
 	// focus, typeBy when they are dropped instead (typethrough.go). keyQueue
@@ -1175,20 +1178,37 @@ const replayWait = 5 * time.Second
 
 // replay runs the keys typed through a coordinator's row (typeAhead) as
 // typed here, once the view's focused pane shows: they reach its
-// program in order, before any key the terminal sends after them.
+// program in order, before any key the terminal sends after them. They
+// go only to the coordinator they were typed to (typeAheadFor): with
+// another pane focused (another console attached one in the shared
+// view), or none within replayWait, they are dropped, and the status
+// bar says so.
 func (c *client) replay(ctx context.Context) {
-	keys := c.typeAhead
-	c.typeAhead = nil
+	keys, want := c.typeAhead, c.typeAheadFor
+	c.typeAhead, c.typeAheadFor = nil, ""
 	if len(keys) == 0 {
 		return
 	}
+	got := ""
 	for deadline := time.Now().Add(replayWait); ctx.Err() == nil; time.Sleep(10 * time.Millisecond) {
 		c.mu.Lock()
-		ready := c.focus != nil
+		if c.focus != nil {
+			got = c.focus.info.ID
+		}
 		c.mu.Unlock()
-		if ready || time.Now().After(deadline) {
+		if got != "" || time.Now().After(deadline) {
 			break
 		}
+	}
+	if want == "" || got != want {
+		if !c.lock() {
+			return
+		}
+		c.flash = "the coordinator's pane didn't show: what you typed was dropped"
+		c.status()
+		c.mu.Unlock()
+		c.poke()
+		return
 	}
 	for _, k := range keys {
 		if ctx.Err() != nil {

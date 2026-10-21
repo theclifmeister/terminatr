@@ -69,10 +69,11 @@ func TestActionIDs(t *testing.T) {
 	}
 }
 
-// TestKeymapRefuses: a keymap can't take an escape hatch, rebind a fixed
-// action, name an unknown one, put two actions on a key, or give a
-// prefix command a key that means something else in a popup or the
-// sidebar. What it can't apply is named; the rest applies.
+// TestKeymapRefuses: a keymap can't take an escape hatch, give an
+// unshifted letter to an action that does more than move, scroll or
+// fold, rebind a fixed action, name an unknown one, put two actions on a
+// key, or give a prefix command a key that means something else in a
+// popup or the sidebar. What it can't apply is named; the rest applies.
 func TestKeymapRefuses(t *testing.T) {
 	for _, c := range []struct {
 		name string
@@ -93,6 +94,8 @@ func TestKeymapRefuses(t *testing.T) {
 		{"no key", map[string][]string{"session.adopt": {}}, "session.adopt: needs a key"},
 		{"clash", map[string][]string{"session.adopt": {"+"}}, "session.adopt: its key is taken by project.new"},
 		{"a prefix twin", map[string][]string{"side.pin": {"a"}}, "side.pin: a is locked (prefix+a is prefix+A)"},
+		{"an unshifted letter", map[string][]string{"project.next": {"j"}}, "project.next: j is an unshifted letter"},
+		{"an unshifted letter in the sidebar", map[string][]string{"side.activate": {"s"}}, "side.activate: s is an unshifted letter"},
 		{"clash in the sidebar", map[string][]string{"side.pin": {"Z"}}, "side.pin: its key is taken by side.fold-toggle"},
 		{"a fixed key", map[string][]string{"side.pin": {"5"}}, "side.pin: its key is taken by side.nth"},
 		{"popup key", map[string][]string{"project.next": {"X"}}, "project.next: a prefix command's key"},
@@ -138,7 +141,7 @@ func TestKeymapRefuses(t *testing.T) {
 // and the hints show the new key.
 func TestKeymapRemaps(t *testing.T) {
 	if err := keymap(t, map[string][]string{
-		"details.toggle": {"V"}, "session.adopt": {"o"}, "side.pin": {"p"}, "side.fold": {"left"}, "help.open": {"?", "L"},
+		"details.toggle": {"V"}, "session.adopt": {"G"}, "side.pin": {"F"}, "side.fold": {"left"}, "help.open": {"?", "L"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +166,7 @@ func TestKeymapRemaps(t *testing.T) {
 		t.Fatalf("prefix+L didn't open the help: %T", m.top())
 	}
 	help := ansi.Strip(strings.Join(m.top().(*helpView).box(m).body, "\n"))
-	for _, want := range []string{"V ", "? L ", "prefix+A I T , ? +", "prefix+V ", "p ", "→ ← "} {
+	for _, want := range []string{"V ", "? L ", "prefix+A I T , ? +", "prefix+V ", "F ", "→ ← "} {
 		if !strings.Contains(help, "\n"+want) {
 			t.Errorf("the help lacks a line starting %q:\n%s", want, help)
 		}
@@ -194,15 +197,15 @@ func TestKeymapRemaps(t *testing.T) {
 		t.Errorf("prefix+| in a session still does %+v", do)
 	}
 
-	// The sidebar: p pins, P does nothing; its key bar says p.
-	if op, ok := sideOp(binds.side.canon("p")); !ok || op != sidePin {
-		t.Errorf("p in the sidebar is op %d", op)
+	// The sidebar: F pins, P does nothing; its key bar says F.
+	if op, ok := sideOp(binds.side.canon("F")); !ok || op != sidePin {
+		t.Errorf("F in the sidebar is op %d", op)
 	}
 	if _, ok := sideOp(binds.side.canon("P")); ok {
 		t.Errorf("P still works in the sidebar")
 	}
-	if bar := ansi.Strip(sideKeyBar(&treeRow{kind: treeProject}, true, false, 200)); !strings.Contains(bar, "p pin") {
-		t.Errorf("the key bar doesn't say p: %q", bar)
+	if bar := ansi.Strip(sideKeyBar(&treeRow{kind: treeProject}, true, false, 200)); !strings.Contains(bar, "F pin") {
+		t.Errorf("the key bar doesn't say F: %q", bar)
 	}
 }
 

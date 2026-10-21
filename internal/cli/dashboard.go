@@ -120,6 +120,7 @@ func (e *Env) fullConsole(own bool, goTo *tui.Target) error {
 	flash := modsNote   // the popup's last message, for the session's status bar
 	command := ""       // a prefix command typed over the popup, for the session
 	var typed []tui.Key // keys typed through a coordinator's row, for its pane
+	typedFor := ""      // that coordinator's session
 	sideFocus := false  // the sidebar has the keyboard, across screens
 	// handover: the screen is up, the last screen's frame showing, for the
 	// next to draw over (T372); the first starts it.
@@ -128,7 +129,7 @@ func (e *Env) fullConsole(own bool, goTo *tui.Target) error {
 		var over *tui.Over
 		if attach {
 			ares, err := e.attach(p, vc, tui.Options{Sidebar: &tui.SidebarOptions{UIFile: uiFile, Focus: sideFocus},
-				Flash: flash, Command: command, Type: typed, Handover: handover, Back: true}, args)
+				Flash: flash, Command: command, Type: typed, TypeFor: typedFor, Handover: handover, Back: true}, args)
 			if err != nil {
 				return err
 			}
@@ -159,7 +160,8 @@ func (e *Env) fullConsole(own bool, goTo *tui.Target) error {
 			return nil
 		}
 		handover = true
-		attach, st, flash, command, sideFocus, typed = true, tui.DashState{}, res.Message, res.Command, res.SideFocus, res.Type
+		attach, st, flash, command, sideFocus = true, tui.DashState{}, res.Message, res.Command, res.SideFocus
+		typed, typedFor = res.Type, res.TypeFor
 	}
 }
 

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -28,9 +29,12 @@ func (m *dash) typeThrough(k tea.KeyPressMsg) (tea.Cmd, bool) {
 	if !ok {
 		return nil, false
 	}
-	m.typing, m.typed, m.typedAt = true, []Key{Key(k)}, time.Now()
+	m.typing, m.typed, m.typedAt, m.typeFor = true, []Key{Key(k)}, time.Now(), id
+	m.typeSeq++
+	seq := m.typeSeq
 	m.focus = areaMain // the keyboard goes into the pane
-	return m.act(func() actionMsg { return actionMsg{attach: id, current: slug} }), true
+	return tea.Batch(m.act(func() actionMsg { return actionMsg{attach: id, current: slug} }),
+		tea.Tick(typeDeadline, func(time.Time) tea.Msg { return typeTimeoutMsg{seq} })), true
 }
 
 // typeThroughRow is the running coordinator's session (and its project)
@@ -65,6 +69,41 @@ func (m *dash) typeThroughRow() (id, slug string, ok bool) {
 // never with ctrl, alt or the like (those keep their meaning).
 func printable(k tea.KeyPressMsg) bool {
 	return k.Text != "" && k.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModMeta|tea.ModSuper|tea.ModHyper) == 0
+}
+
+// typeTimeoutMsg is the deadline of type-through seq: past typeDeadline
+// with the dashboard still here (no view version showed the session) the
+// keys are dropped, and the dashboard takes keys again.
+type typeTimeoutMsg struct{ seq int }
+
+// typeDeadline is how long a type-through waits for its attach, as the
+// session's sidebar does (replayWait); tests shorten it.
+var typeDeadline = replayWait
+
+// endTyping stops typing through, dropping the keys typed so far, and
+// says why in the footer.
+func (m *dash) endTyping(why string) {
+	if n := len(m.typed); n > 0 {
+		m.msg = fmt.Sprintf("typing to the coordinator %s: %d %s dropped", why, n, "key"+plural(n != 1, "s"))
+	}
+	m.typing, m.typed, m.typeFor = false, nil, ""
+}
+
+// typedFor are the keys typed through and their session, for the
+// result: only when the session attached is the coordinator they were
+// typed to, else none, with a note for the session's status bar (the
+// shared view showed another, which another console attached).
+func (m *dash) typedFor(attach string) ([]Key, string) {
+	switch {
+	case len(m.typed) == 0 || m.typeFor == "":
+		return nil, ""
+	case attach == m.typeFor:
+		return m.typed, m.typeFor
+	}
+	if attach != "" && m.result.Message == "" {
+		m.result.Message = "the view showed another session: what you typed to the coordinator was dropped"
+	}
+	return nil, ""
 }
 
 // typeSettle is how long the keys typed through must have paused before
@@ -140,17 +179,34 @@ func printableKey(k Key) bool {
 }
 
 // holdTyped keeps k for the coordinator keys are typed through to, while
-// its pane hasn't the focus yet; true when it kept it.
+// its pane hasn't the focus yet; true when it kept it (or used it). ctrl+c
+// cancels the typing and the prefix ends it, both dropping the held keys;
+// the prefix then starts its command as anywhere.
 func (c *client) holdTyped(k Key) bool {
 	if !c.lock() {
 		return true
 	}
-	defer c.mu.Unlock()
 	if c.typeFor == "" {
+		c.mu.Unlock()
 		return false
 	}
-	c.typeKeys = append(c.typeKeys, k)
-	return true
+	cancel, prefix := k.Mod == uv.ModCtrl && k.Code == 'c', c.prefix.match(k)
+	if !cancel && !prefix {
+		c.typeKeys = append(c.typeKeys, k)
+		c.mu.Unlock()
+		return true
+	}
+	why := "cancelled"
+	if prefix {
+		why = "ended by the prefix"
+	}
+	n := len(c.typeKeys)
+	c.typeFor, c.typeKeys = "", nil
+	c.flash = fmt.Sprintf("typing to the coordinator %s: %d key%s dropped", why, n, plural(n != 1, "s"))
+	c.status()
+	c.mu.Unlock()
+	c.poke()
+	return cancel
 }
 
 // typedFocus queues the held keys' run once the focus is on their

@@ -45,6 +45,17 @@ var popupOwnKeys = []string{"1", "2", "3", "4", "5", "6", "7", "enter", "space",
 	"A", "D", "E", "H", "I", "J", "K", "M", "N", "P", "R", "T", "U", "W", "X", "Y",
 	"up", "down", "left", "right", "pgup", "pgdown", "home", "end"}
 
+// moveIDs are the actions that only move, scroll or fold: the only ones
+// a keymap may give an unshifted letter (vim-keys' j k h l g), as no
+// typed text they catch starts or changes anything.
+var moveIDs = map[string]bool{
+	"list.up": true, "list.down": true, "list.page-up": true, "list.page-down": true,
+	"side.up": true, "side.down": true, "side.unfold": true, "side.fold": true,
+	"side.first": true, "side.last": true, "side.page-up": true, "side.page-down": true,
+	"panel.up": true, "panel.down": true, "panel.page-up": true, "panel.page-down": true,
+	"panel.first": true, "panel.last": true, "panel.unfold": true, "panel.fold": true,
+}
+
 // runKey is the key an action runs as: its first default, or for one
 // with no default key (an old id kept bindable, such as side.fold-all)
 // "#" and its id, which no typed key is.
@@ -324,6 +335,10 @@ func checkBinding(row *bindable, id string, keys []string, prefix string) error 
 		case prefixTwins[k] != "" && runKey(row.id, row.keys) != prefixTwins[k]:
 			// prefix+a is prefix+A: a plain a means that, or nothing.
 			return fmt.Errorf("%s: %s is locked (prefix+%s is prefix+%s)", id, k, k, prefixTwins[k])
+		case !plainKey(k) && !moveIDs[id]:
+			// Typed text starts with one: a plain lower-case letter only
+			// moves, scrolls or folds (docs/SPEC.md §4, the key table).
+			return fmt.Errorf("%s: %s is an unshifted letter, which only moving, scrolling and folding take: use a capital or a symbol", id, k)
 		}
 		seen[k] = true
 	}
