@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.45.0](https://github.com/theclifmeister/terminatr/compare/v0.44.0...v0.45.0) (2026-10-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **agent:** Claude panes lose the status band, the status-line entry and the CI toast. Coordinators lose the /tm pane. Claude sessions show tokens with `no cost`. `tm thread answer --option` and `tm session ask` are gone. `[agent_mod]` settings do nothing.
+
+### Features
+
+* **agent:** Claude without the agent mod: usage, typed tools, /saveclear and /answer ([#709](https://github.com/theclifmeister/terminatr/issues/709)) ([ba7f057](https://github.com/theclifmeister/terminatr/commit/ba7f057d53f5ba8b7ad9beef0eb89278253bd2a1))
+* **agent:** remove the Claude agent mod ([#713](https://github.com/theclifmeister/terminatr/issues/713)) ([fc674b5](https://github.com/theclifmeister/terminatr/commit/fc674b5e74c1c0d9714d9fbc0d6de890523f740d))
+* **usage:** show 'no cost' instead of $0.00 for tokens with no cost source ([#712](https://github.com/theclifmeister/terminatr/issues/712)) ([c523d33](https://github.com/theclifmeister/terminatr/commit/c523d33c038b7fa45370fdeb8a5d0cc7fdd35a26))
+
+
+### Bug Fixes
+
+* **agent:** harden Claude without the agent mod ([#711](https://github.com/theclifmeister/terminatr/issues/711)) ([b03f1c2](https://github.com/theclifmeister/terminatr/commit/b03f1c2b22aeee4d74530a67d5aed4667978a118))
+* **agent:** read Claude's prompt box as empty mid-turn, so --now steers ([#714](https://github.com/theclifmeister/terminatr/issues/714)) ([b98b828](https://github.com/theclifmeister/terminatr/commit/b98b8289596003a8b97e4ff899a2bf1be054840a))
+* **guard:** follow a cd inside ( ), { } and substitutions; cd +N/-N; .. after a link ([#717](https://github.com/theclifmeister/terminatr/issues/717)) ([0c02a1f](https://github.com/theclifmeister/terminatr/commit/0c02a1f9b30c1c13ec365f5afef7b6b8d62823c6))
+* **guard:** follow folders through loose brackets, funsubs, last pipes, loops and braces ([#719](https://github.com/theclifmeister/terminatr/issues/719)) ([4304385](https://github.com/theclifmeister/terminatr/commit/4304385e3fe9722d092c5a758747cd88520ca825))
+* **guard:** hold floor paths where a write lands under folders not made yet ([#718](https://github.com/theclifmeister/terminatr/issues/718)) ([1f7a01b](https://github.com/theclifmeister/terminatr/commit/1f7a01b49ddff9129c5e46fdef58ac31456a4787))
+* **guard:** judge function bodies where they're called, and copies into a protected file's folder ([#720](https://github.com/theclifmeister/terminatr/issues/720)) ([e1baf05](https://github.com/theclifmeister/terminatr/commit/e1baf0550b787048fd62693f9c7df333920b1418))
+* **guard:** read trap actions, follow physical cd, keep shell state on the floor ([#716](https://github.com/theclifmeister/terminatr/issues/716)) ([a046b32](https://github.com/theclifmeister/terminatr/commit/a046b32f8e0bc974ddbf8a485784ae2b8c00aa58))
+* **server:** journal a run's end before its exit event ([#707](https://github.com/theclifmeister/terminatr/issues/707)) ([cb621d6](https://github.com/theclifmeister/terminatr/commit/cb621d6a7068f8cc82ae9997fce72d55fce59ca8))
+
 ## [0.44.0](https://github.com/theclifmeister/terminatr/compare/v0.43.0...v0.44.0) (2026-10-21)
 
 
