@@ -47,7 +47,8 @@ var popupOwnKeys = []string{"1", "2", "3", "4", "5", "6", "7", "enter", "space",
 
 // moveIDs are the actions that only move, scroll or fold: the only ones
 // a keymap may give an unshifted letter (vim-keys' j k h l g), as no
-// typed text they catch starts or changes anything.
+// typed text they catch starts or changes anything: side.unfold from a
+// letter only unfolds (sideUnfoldOnly), never goes in as → does.
 var moveIDs = map[string]bool{
 	"list.up": true, "list.down": true, "list.page-up": true, "list.page-down": true,
 	"side.up": true, "side.down": true, "side.unfold": true, "side.fold": true,

@@ -266,10 +266,14 @@ func sideKeyFor(in sideKeysIn, key string) (sideStep, bool) {
 	if st, ok := sideFilterKey(in, key); ok {
 		return st, true
 	}
+	typed := key
 	key = binds.side.canon(key)
 	op, ok := sideOp(key)
 	if !ok {
 		return sideStep{}, false
+	}
+	if op == sideIn && !plainKey(typed) {
+		op = sideUnfoldOnly
 	}
 	if op >= sideFirst {
 		return sideExtraStep(in, op, key), true

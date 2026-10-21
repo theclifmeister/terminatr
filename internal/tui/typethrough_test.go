@@ -318,3 +318,68 @@ func TestTypeThroughAttachSidebar(t *testing.T) {
 		t.Fatalf("got %q, keyboard %d", got, c.kb)
 	}
 }
+
+// TestTypeThroughReplayFocusMoves: replay checks the focus before every
+// key; when the shared view moves it off the coordinator midway, the
+// rest are dropped, never sent to the pane that has it now.
+func TestTypeThroughReplayFocusMoves(t *testing.T) {
+	c, p := selClient(t, "") // s-1 focused
+	in := pipedInput(t, p)
+	n := 0
+	beforeReplayKey = func(c *client) {
+		if n++; n == 2 { // after the first key, another session takes the focus
+			c.mu.Lock()
+			c.focus = &pane{info: proto.SessionInfo{ID: "s-8"}}
+			c.mu.Unlock()
+		}
+	}
+	t.Cleanup(func() { beforeReplayKey = func(*client) {} })
+	c.typeAhead, c.typeAheadFor = []Key{{Code: 'h', Text: "h"}, {Code: 'i', Text: "i"}, {Code: tea.KeyEnter}}, "s-1"
+	c.replay(t.Context())
+	if got := received(t, in, 1); got != "h" {
+		t.Fatalf("got %q", got)
+	}
+	select {
+	case got := <-in:
+		t.Fatalf("after the focus moved, the pane got %q", got)
+	case <-time.After(200 * time.Millisecond):
+	}
+	if !strings.Contains(c.flash, "what you typed was dropped") {
+		t.Fatalf("flash %q", c.flash)
+	}
+	c.mu.Lock()
+	c.focus = p // selClient's cleanup frees its pane
+	c.mu.Unlock()
+}
+
+// TestUnfoldLetterOnlyUnfolds: a keymap's unshifted letter on
+// side.unfold (vim-keys' l) unfolds a folded row and does nothing more:
+// on a coordinator's row, which → opens, it neither opens a pane nor
+// starts the coordinator, as typed text must not; → still does.
+func TestUnfoldLetterOnlyUnfolds(t *testing.T) {
+	if err := keymap(t, map[string][]string{"side.unfold": {"right", "l"}}); err != nil {
+		t.Fatal(err)
+	}
+	m, _, _ := foldDash(t)
+	for _, sel := range []string{"c:alpha", headKey} {
+		m.sideSel = sel
+		if st, ok := sideKeyFor(m.sideKeysIn(), "l"); !ok || st.target != nil || st.into || st.toggle != "" {
+			t.Fatalf("l on %s: %+v", sel, st)
+		}
+	}
+	m.sideSel = "c:alpha"
+	if st, _ := sideKeyFor(m.sideKeysIn(), "right"); st.target == nil {
+		t.Fatalf("→ on the coordinator: %+v", st)
+	}
+	// On a folded project l unfolds it.
+	m.sideSel = "p:alpha"
+	keyPress(m, "left")
+	if st, _ := sideKeyFor(m.sideKeysIn(), "l"); st.refold == nil {
+		t.Fatalf("l on folded alpha: %+v", st)
+	}
+	// The divider, folded: l unfolds it too.
+	m.sideSel = dividerKey
+	if st, _ := sideKeyFor(m.sideKeysIn(), "l"); st.refold == nil {
+		t.Fatalf("l on the folded divider: %+v", st)
+	}
+}

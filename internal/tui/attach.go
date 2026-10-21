@@ -1200,7 +1200,7 @@ func (c *client) replay(ctx context.Context) {
 			break
 		}
 	}
-	if want == "" || got != want {
+	drop := func() {
 		if !c.lock() {
 			return
 		}
@@ -1208,15 +1208,32 @@ func (c *client) replay(ctx context.Context) {
 		c.status()
 		c.mu.Unlock()
 		c.poke()
+	}
+	if want == "" || got != want {
+		drop()
 		return
 	}
 	for _, k := range keys {
 		if ctx.Err() != nil {
 			return
 		}
+		// Each key only while the coordinator's pane still has the
+		// focus: the shared view may move it meanwhile.
+		beforeReplayKey(c)
+		c.mu.Lock()
+		still := c.focus != nil && c.focus.info.ID == want
+		c.mu.Unlock()
+		if !still {
+			drop()
+			return
+		}
 		c.key(k)
 	}
 }
+
+// beforeReplayKey runs before replay checks the focus for each key; tests
+// move the focus there.
+var beforeReplayKey = func(*client) {}
 
 func (c *client) inputLoop(ctx context.Context, in *os.File) (stop func()) {
 	var r io.Reader = in

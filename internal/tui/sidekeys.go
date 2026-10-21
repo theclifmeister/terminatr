@@ -26,6 +26,10 @@ const (
 	sideUnfoldAll
 	sideFoldToggle // fold all while any is open, else unfold all
 	sidePin        // on a project, pin it to the top or unpin it
+	// sideUnfoldOnly is side.unfold from an unshifted letter a keymap
+	// gave it (vim-keys' l): it unfolds, and never goes in, so typed
+	// text can't open a pane or start a coordinator.
+	sideUnfoldOnly
 )
 
 // sideAction is a sidebar key: its keys, what it does, its help line and
@@ -190,6 +194,10 @@ func foldAll(all []treeRow, fold bool) func(*view.Tree) {
 // sideKeyStep decides what sidebar key op does with the cursor at sel in
 // the tree all, drawn w columns wide.
 func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
+	onlyUnfold := op == sideUnfoldOnly
+	if onlyUnfold {
+		op = sideIn
+	}
 	switch op {
 	case sideFoldToggle:
 		op = sideUnfoldAll
@@ -202,6 +210,9 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 		return sideStep{help: true}
 	}
 	if sel == headKey {
+		if onlyUnfold {
+			return sideStep{}
+		}
 		return headStep(all, w, op)
 	}
 	rows, i := cursorAt(all, w, sel)
@@ -223,6 +234,9 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 	}
 	if st, ok := foldStep(rows, i, op, w <= sideSlim); ok {
 		return st
+	}
+	if onlyUnfold {
+		return sideStep{}
 	}
 	moveTo := func(j int) sideStep {
 		if j < 0 || j >= len(rows) || j == i {
