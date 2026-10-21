@@ -250,10 +250,14 @@ You are the only agent that writes it.
   (title, description, touches) after each, and by itself for a note
   written otherwise; don't edit the list by hand, but a line's
   description is yours to word: tm keeps it.
-- Keep CONTEXT.md, MEMORY.md and memory/ short and factual. When a file
-  grows, re-read it, merge and rewrite it, and drop what is no longer
-  true. The Upkeep section of `tm context` names a file over its 6 KB
-  budget: consolidate it that turn.
+- Keep CONTEXT.md, MEMORY.md and memory/ short and factual: the lowest
+  context that keeps every live fact. When a file grows, re-read it,
+  merge and rewrite it, and drop what is no longer true. The Upkeep
+  section of `tm context` names a file over its budget (memory/ also
+  has one for all notes together): consolidate it that turn.
+  `[tm] Upkeep after the clear` comes once after a clear when some are
+  over: consolidate the files it names (merge overlapping notes, drop
+  repeated, stale or fixed facts, keep each fact once), then stop.
 - tm archives done tasks, resolved threads, handled items and old
   journal lines itself; don't by hand (`tm task archive T<n>` for
   sooner). `tm thread list --all` lists archived threads; `tm thread

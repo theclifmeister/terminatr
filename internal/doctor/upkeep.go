@@ -36,7 +36,8 @@ func Upkeep(d Deps) []Check {
 	}
 	if len(out) == 0 && len(list) > 0 {
 		out = append(out, Check{Group: "upkeep", Name: "context files", Status: OK,
-			Detail: fmt.Sprintf("within budget (CONTEXT.md %d KB, MEMORY.md and each memory file %d KB)", project.BudgetContext>>10, project.BudgetMemory>>10)})
+			Detail: fmt.Sprintf("within budget (CONTEXT.md %d KB, MEMORY.md %d KB, each memory note %d KB, memory/ %d KB in all)",
+				project.BudgetContext>>10, project.BudgetIndex>>10, project.BudgetNote>>10, project.BudgetNotes>>10)})
 	}
 	return out
 }

@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -25,21 +26,30 @@ import (
 // CONTEXT.md and the memory index are printed by every `tm context`, and
 // memory files are read into threads' work, so each has a size budget;
 // `tm context` and `tm doctor` say when one is over it, and the
-// coordinator's skill says to consolidate it.
+// coordinator's skill says to consolidate it. The notes have a budget
+// together too: many small notes cost as much as a few large ones.
 const (
-	BudgetContext = 6 << 10 // CONTEXT.md
-	BudgetMemory  = 6 << 10 // MEMORY.md, and each file under memory/
+	BudgetContext = 6 << 10  // CONTEXT.md
+	BudgetIndex   = 4 << 10  // MEMORY.md
+	BudgetNote    = 6 << 10  // each file under memory/
+	BudgetNotes   = 40 << 10 // all files under memory/ together
 )
 
 // Oversize is a context file over its budget.
 type Oversize struct {
-	File   string // relative to the project folder, e.g. "memory/decisions.md"
+	// File is relative to the project folder, e.g. "memory/decisions.md";
+	// "memory/" is all the notes together.
+	File   string
 	Size   int64
 	Budget int64
 }
 
 func (o Oversize) String() string {
-	return fmt.Sprintf("%s is %s, over its %s budget: consolidate it", o.File, kb(o.Size), kb(o.Budget))
+	all := ""
+	if strings.HasSuffix(o.File, "/") {
+		all = " in all"
+	}
+	return fmt.Sprintf("%s is %s%s, over its %s budget: consolidate it", o.File, kb(o.Size), all, kb(o.Budget))
 }
 
 func kb(n int64) string {
@@ -50,26 +60,26 @@ func kb(n int64) string {
 }
 
 // Oversized lists the context files over their budgets, in a stable
-// order: CONTEXT.md, MEMORY.md, then memory/ by path.
+// order: CONTEXT.md, MEMORY.md, memory/ in all, then each note by path.
 func (p *Project) Oversized() ([]Oversize, error) {
 	var out []Oversize
-	check := func(rel string, budget int64) error {
+	check := func(rel string, budget int64) (int64, error) {
 		fi, err := os.Stat(p.Path(rel))
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil
+			return 0, nil
 		}
-		if err != nil {
-			return err
+		if err != nil || !fi.Mode().IsRegular() {
+			return 0, err
 		}
-		if fi.Mode().IsRegular() && fi.Size() > budget {
+		if fi.Size() > budget {
 			out = append(out, Oversize{File: rel, Size: fi.Size(), Budget: budget})
 		}
-		return nil
+		return fi.Size(), nil
 	}
-	if err := check("CONTEXT.md", BudgetContext); err != nil {
+	if _, err := check("CONTEXT.md", BudgetContext); err != nil {
 		return nil, err
 	}
-	if err := check("MEMORY.md", BudgetMemory); err != nil {
+	if _, err := check("MEMORY.md", BudgetIndex); err != nil {
 		return nil, err
 	}
 	var files []string
@@ -90,10 +100,17 @@ func (p *Project) Oversized() ([]Oversize, error) {
 		return nil, err
 	}
 	sort.Strings(files)
+	at := len(out)
+	var total int64
 	for _, f := range files {
-		if err := check(f, BudgetMemory); err != nil {
+		n, err := check(f, BudgetNote)
+		if err != nil {
 			return nil, err
 		}
+		total += n
+	}
+	if total > BudgetNotes {
+		out = slices.Insert(out, at, Oversize{File: "memory/", Size: total, Budget: BudgetNotes})
 	}
 	return out, nil
 }
