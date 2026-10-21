@@ -327,7 +327,7 @@ func (s *Server) guardNoWrite(r SessionRecord) []string {
 		out = append(out, homeFloor(h)...)
 	}
 	if run := s.opts.Paths.RunDir; run != "" {
-		out = append(out, run)
+		out = append(out, realPath(run), run)
 	}
 	if r.Cwd != "" && (r.Role == proto.RoleThread || r.Role == proto.RoleCoordinator) {
 		// Where a write lands (realTarget) and as the call may name it.
@@ -360,12 +360,18 @@ func homeFloor(h string) []string {
 			names = append(names, e.Name())
 		}
 	}
+	// Where a write lands (realTarget: the home's real path, as a name
+	// that doesn't exist yet has none of its own) and as written.
 	var out []string
 	for _, n := range names {
-		if n == "projects" || n == "worktrees" || slices.Contains(out, filepath.Join(h, n)) {
+		if n == "projects" || n == "worktrees" {
 			continue
 		}
-		out = append(out, filepath.Join(h, n))
+		for _, p := range []string{filepath.Join(realPath(h), n), filepath.Join(h, n)} {
+			if !slices.Contains(out, p) {
+				out = append(out, p)
+			}
+		}
 	}
 	return out
 }

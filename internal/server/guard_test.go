@@ -1205,11 +1205,18 @@ func TestDroppedGuardEvent(t *testing.T) {
 // TestHomeFloor: tm's home is the floor's for every role, but for the
 // worktrees (a thread's own) and the projects (the coordinator's folder,
 // which its own rules hold): a session doesn't write tm's agents, mods,
-// state or run folder.
+// state or run folder, whether they exist yet or not, named through the
+// home's link or where it leads (macOS's /var is /private/var).
 func TestHomeFloor(t *testing.T) {
 	paths := testPaths(t)
+	real := paths.Home
+	home := filepath.Join(t.TempDir(), "home")
+	if err := os.Symlink(real, home); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TERMINATR_HOME", home)
+	paths.Home = home
 	p := newWatchProject(t)
-	home := paths.Home
 	wt := filepath.Join(home, "worktrees", p.Slug, "t-0001-x")
 	os.MkdirAll(wt, 0o700)
 	s := &Server{log: log.New(io.Discard, "", 0), opts: Options{Paths: paths}, records: map[string]SessionRecord{
@@ -1223,6 +1230,8 @@ func TestHomeFloor(t *testing.T) {
 			filepath.Join(home, "agents", "claude.toml"),
 			filepath.Join(home, "mods", "x", "mod.toml"),
 			filepath.Join(home, "state", "sessions.json"),
+			filepath.Join(real, "agents", "codex.toml"),
+			filepath.Join(realPath(real), "mods", "y", "mod.toml"),
 			filepath.Join(paths.RunDir, "x"),
 		} {
 			if d := judge("Write", map[string]any{"file_path": f}); d == nil || d.Rule != guard.RuleTMFiles || !d.Floor {

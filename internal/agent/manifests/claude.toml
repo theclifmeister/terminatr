@@ -305,8 +305,9 @@ Write = { kind = "write", fields = ["file_path"] }
 MultiEdit = { kind = "write", fields = ["file_path"] }
 NotebookEdit = { kind = "write", fields = ["notebook_path"] }
 Read = { kind = "read", fields = ["file_path"] }
-Grep = { kind = "read", fields = ["path"] }
-Glob = { kind = "glob", fields = ["pattern", "path"] }
+# Grep's and Glob's path may be left out: the session's folder (optional).
+Grep = { kind = "read", fields = ["path"], optional = ["path"] }
+Glob = { kind = "glob", fields = ["pattern", "path"], optional = ["path"] }
 
 # Remote Control (2.1.289): the Claude apps list the session under its
 # name. /remote-control <name> turns it on in a running session. A resumed

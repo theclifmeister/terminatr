@@ -353,6 +353,40 @@ func TestJudgeBudget(t *testing.T) {
 	}
 }
 
+// TestCdWalk: a script that walks subfolders in turn (cd X || exit 1;
+// …; cd ..) stays in one folder, however many blocks: cd X || exit
+// leaves the line only where the cd went, and a cd .. that always runs
+// merges the folders back. It is judged as usual, not refused for its
+// folders, and a write the floor holds is still found from where the cd
+// went.
+func TestCdWalk(t *testing.T) {
+	wt := "/h/.terminatr/worktrees/demo/t-0001-fix"
+	r := Rules{On: true, Role: "thread", Rules: []string{"merge", "worktree-only"}, Home: "/h", Cwd: wt, Writable: []string{wt},
+		NoWrite: []string{"/h/.terminatr/projects/demo"},
+		Tools:   map[string]Tool{"Bash": {Kind: KindShell, Fields: []string{"command"}}}}
+	judge := func(c string) *Denial { return r.Judge("Bash", map[string]any{"command": c}) }
+	var walk, line, and strings.Builder
+	for _, d := range []string{"api", "cli", "web", "worker", "infra", "docs", "tools", "lib"} {
+		fmt.Fprintf(&walk, "cd %s || exit 1\ngo test ./...\ncd ..\n", d)
+		fmt.Fprintf(&line, "cd %s || exit 1; go test ./...; cd ..; ", d)
+		fmt.Fprintf(&and, "cd %s && go test ./... ; cd .. ; ", d)
+	}
+	for name, c := range map[string]string{"|| exit": walk.String(), "one line": line.String(), "&&": and.String()} {
+		if d := judge(c); d != nil {
+			t.Errorf("%s walk: %+v", name, d)
+		}
+		if d := judge(c + "gh pr merge 1"); d == nil || d.Rule != "merge" {
+			t.Errorf("%s walk, then a merge: %+v", name, d)
+		}
+	}
+	if d := judge(walk.String() + "cd ../../../projects/demo || exit $?\nrm TASKS.md"); d == nil || d.Rule != RuleTMFiles {
+		t.Errorf("into the project folder: %+v", d)
+	}
+	if d := judge("cd sub || exit 1; rm ../../../../projects/demo/TASKS.md"); d == nil || d.Rule != RuleTMFiles {
+		t.Errorf("from the folder the cd went to: %+v", d)
+	}
+}
+
 func FuzzJudge(f *testing.F) {
 	f.Add("git push -f origin 'x' && echo \"$(gh pr merge 1)\" `x` \\")
 	f.Add("rm -rf ~/.terminatr/worktrees/../x; cat <~/.ssh/k")

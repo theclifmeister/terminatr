@@ -216,6 +216,11 @@ type Tool struct {
 	// Escape is a shell tool's input field that, true, asks to run the
 	// call outside the sandbox (Claude's dangerouslyDisableSandbox).
 	Escape string `json:"escape,omitempty" toml:"escape"`
+	// Optional are the Fields the tool may leave out, each a location
+	// that then means the session's folder (Grep's and Glob's path):
+	// the call is judged with that. A call without one of the others,
+	// which the tool always carries, is refused.
+	Optional []string `json:"optional,omitempty" toml:"optional"`
 }
 
 // RuleTMFiles is the rule of the floor's refusal to write tm's settings
@@ -351,18 +356,27 @@ func (r Rules) judge(tool string, input map[string]any) *Denial {
 	if !ok {
 		return nil
 	}
-	var values []string
+	var values, missing []string
 	for _, f := range t.Fields {
-		if s, _ := input[f].(string); s != "" {
+		switch s, _ := input[f].(string); {
+		case s != "":
 			values = append(values, s)
+		case slices.Contains(t.Optional, f):
+			// A location left out: the session's own folder.
+			if r.Cwd != "" {
+				values = append(values, r.Cwd)
+			}
+		default:
+			missing = append(missing, f)
 		}
 	}
-	if len(values) == 0 {
-		// Nothing to judge it by (its input trimmed away, or not the
-		// shape the tool's kind reads): refused, never let through.
+	if len(missing) > 0 {
+		// A field the tool always carries is missing (its input trimmed
+		// away, or not the tool's shape): nothing to judge it by, so
+		// refused, never let through.
 		d := Unchecked()
-		d.Summary = "a " + tool + " call without " + strings.Join(t.Fields, " or ")
-		d.Message = "terminatr guard: this call's input has none of the fields the guard reads (" + strings.Join(t.Fields, ", ") + "), so it is refused."
+		d.Summary = "a " + tool + " call without " + strings.Join(missing, " or ")
+		d.Message = "terminatr guard: this call's input lacks " + strings.Join(missing, ", ") + ", which the guard reads, so it is refused."
 		return d
 	}
 	switch t.Kind {
@@ -990,7 +1004,7 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	if olds == nil {
 		olds = []string{""}
 	}
-	for _, pt := range parts {
+	for i, pt := range parts {
 		// The folders a part may run in count against the budget, and
 		// a line that may be in more than maxFolders is past it.
 		if r.ps != nil && (len(cur)+len(list)+len(olds) > maxFolders || r.ps.stop(len(cur)*len(pt.text), r.depth)) {
@@ -1023,12 +1037,20 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 			}
 			// The cd leaves $OLDPWD the folder it left, if it runs.
 			sure := pt.after == "&&" && pt.before != "||"
-			if sure {
+			// cd DIR || exit: the line goes on only where the cd went, so
+			// the folders it left merge into those (a script that walks
+			// its subfolders in turn stays in one). So does a cd .. that
+			// always runs: it fails only where the parent is gone.
+			exits := pt.after == "||" && i+1 < len(parts) && exitsLine(parts[i+1].text) && listEnd(parts[i+1].after)
+			up := cmd == "cd" && len(args) == 1 && (args[0] == ".." || args[0] == "../") && listEnd(pt.before) && pt.after != "||"
+			if sure || exits || up {
 				olds = slices.Clone(cur)
 			} else {
 				olds = withDirs(olds, cur...)
 			}
 			switch {
+			case exits || up:
+				cur, list = to, to
 			case sure:
 				cur = to
 			case pt.after == "||":
@@ -1052,6 +1074,13 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	}
 	return nil
 }
+
+// exitLine is a part that ends the script: exit or return, with a status
+// or none.
+var exitLine = regexp.MustCompile(`^(exit|return)(\s+[$?A-Za-z0-9_{}]+)?\s*$`)
+
+// exitsLine reports whether part only ends the script.
+func exitsLine(part string) bool { return exitLine.MatchString(strings.TrimSpace(part)) }
 
 // hiddenCode are the builtins that run shell code the line doesn't show
 // in the shell itself, where a cd in it moves the line's folder.
