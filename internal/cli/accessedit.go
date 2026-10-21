@@ -2,8 +2,10 @@ package cli
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -11,7 +13,7 @@ import (
 
 // The writers of tm access (T574 §5): add and rm an entry of a sandbox
 // list, edit one in place (T619), drop and undrop one of all projects' for a project, set local
-// ports, escapes or yolo. The human's: an agent gets human-only, told by
+// ports, protection, escapes or yolo. The human's: an agent gets human-only, told by
 // the server from the process tree (access is a checked command), and
 // with no server to tell, the write is refused, as tm access preset add.
 // Each write is journaled in the projects it reaches; threads get it
@@ -25,19 +27,50 @@ var accessKinds = map[string]string{
 }
 
 // accessSettings are the settings set takes, by their config.toml key.
-var accessSettings = map[string]string{"local-ports": config.SandboxLocalPorts, "escapes": "sandbox_escapes", "yolo": "yolo"}
+var accessSettings = map[string]string{"local-ports": config.SandboxLocalPorts, "escapes": "protection", "protection": "protection", "yolo": "yolo", "coordinator": "coordinator_access"}
+
+// openWarning is what protection open lowers, put to the human first.
+const openWarning = "Threads started from now on run without their sandbox, with the agent's own permission prompts, and the guard keeps only its floor: threads never write the project folder, no agent writes config.toml or reads tm's own files."
 
 // yoloWarning is what yolo opens, put to the human before it is on.
 const yoloWarning = "Threads run with no sandbox and no permission prompts. Their commands can read and write anything you can, reach any host, and reach tm's own socket, so they can act as you in tm. The guard still refuses touching tm's own files, changing config.toml or the project folder, printing a secret variable, force-pushing to a protected branch and a thread merging; nothing else is checked."
 
-// accessHuman refuses cmd to an agent, and to anyone when no server
-// can tell who runs it.
+// accessHuman refuses cmd to an agent but a coordinator, whose rights
+// accessFor checks once it knows the project, and to anyone when no
+// server can tell who runs it.
 func (e *Env) accessHuman(cmd string) error {
-	if e.Caller.IsAgent() {
+	if e.Caller.IsAgent() && e.Caller.Kind != caller.Coordinator {
 		return srvFail(cmd, &project.Error{Code: "human-only", Msg: "access rules are the user's: they change them in the Access tab or with tm access"})
 	}
 	if e.Identify != nil && !e.Identified {
 		return srvFail(cmd, &project.Error{Code: "server-down", Msg: "tm server isn't running: it tells who runs tm access " + strings.TrimPrefix(cmd, "access ") + "; start it (tm server start), or use the Access tab"})
+	}
+	return nil
+}
+
+// accessFor checks that the caller may change project slug's access
+// ("" all projects'): the human always; a coordinator only its own
+// project's, and only while the project lets it (coordinator_access, the
+// human's switch, which it never changes).
+func (e *Env) accessFor(cmd, slug string) error {
+	if e.Caller.Kind != caller.Coordinator {
+		return nil
+	}
+	refuse := func(msg string) error {
+		return srvFail(cmd, &project.Error{Code: "human-only", Msg: msg})
+	}
+	switch {
+	case slug == "":
+		return refuse("all projects' access is the user's: change only your own project's")
+	case slug != e.Caller.Project:
+		return refuse("a coordinator changes only its own project's access, not " + slug + "'s")
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return srvFail(cmd, err)
+	}
+	if s, err := cfg.Safety(slug); err != nil || !s.CoordinatorAccess {
+		return refuse("access rules are the user's: they can let you change this project's (Access tab, Coordinator sets access), or change them themselves")
 	}
 	return nil
 }
@@ -140,6 +173,9 @@ func accessAdd(e *Env, verb string, args []string) error {
 	}
 	table, slug, who, err := e.accessScope(cmd, pos[2:], *all)
 	if err != nil {
+		return err
+	}
+	if err := e.accessFor(cmd, slug); err != nil {
 		return err
 	}
 	if verb == "add" {
@@ -263,6 +299,9 @@ func accessEdit(e *Env, args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := e.accessFor(cmd, slug); err != nil {
+		return err
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		return srvFail(cmd, err)
@@ -351,6 +390,9 @@ func accessDrop(e *Env, verb string, args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := e.accessFor(cmd, slug); err != nil {
+		return err
+	}
 	if verb == "drop" {
 		cfg, err := config.Load()
 		if err != nil {
@@ -393,7 +435,9 @@ func accessDrop(e *Env, verb string, args []string) error {
 }
 
 // accessSet implements tm access set local-ports|escapes|yolo on|off
-// [<project> | --all]; yolo on asks first.
+// and protection <level> [<project> | --all]; yolo on and protection
+// open ask first. Escapes are protection's now: off is strict, on is
+// sandboxed.
 func accessSet(e *Env, args []string) error {
 	const cmd = "access set"
 	if err := e.accessHuman(cmd); err != nil {
@@ -408,14 +452,40 @@ func accessSet(e *Env, args []string) error {
 	if len(pos) < 2 {
 		return srvUsage(cmd, accessUsage)
 	}
+	const usage = "tm access set local-ports|escapes|yolo|coordinator on|off [<project> | --all]\n       tm access set protection open|guarded|sandboxed|strict [<project> | --all]"
 	key, ok := accessSettings[pos[0]]
-	if !ok || pos[1] != "on" && pos[1] != "off" {
-		return srvUsage(cmd, "tm access set local-ports|escapes|yolo on|off [<project> | --all]")
+	switch {
+	case !ok:
+		return srvUsage(cmd, usage)
+	case pos[0] == "protection":
+		if !slices.Contains(config.ProtectLevels, pos[1]) {
+			return srvUsage(cmd, usage)
+		}
+	case pos[1] != "on" && pos[1] != "off":
+		return srvUsage(cmd, usage)
 	}
 	on := pos[1] == "on"
 	table, slug, who, err := e.accessScope(cmd, pos[2:], *all)
 	if err != nil {
 		return err
+	}
+	if err := e.accessFor(cmd, slug); err != nil {
+		return err
+	}
+	if e.Caller.Kind == caller.Coordinator && key != config.SandboxLocalPorts {
+		return srvFail(cmd, &project.Error{Code: "human-only", Msg: "protection, escapes, yolo and letting a coordinator set access are the user's alone: change the project's rules within its level (tm access add, rm, edit, drop, undrop, preset add, set local-ports)"})
+	}
+	if key == "coordinator_access" && on {
+		if err := e.confirm(*yes, cmd, "Let "+who+"'s coordinator change its rules? Within the protection level you set, it can then open the sandbox to hosts, folders and local ports, and add commands that run outside it; never the level, escapes, yolo, a reset, all projects' or this switch."); err != nil {
+			return err
+		}
+	}
+	if key == "protection" {
+		level := pos[1]
+		if pos[0] == "escapes" {
+			level = map[bool]string{true: config.ProtectSandboxed, false: config.ProtectStrict}[on]
+		}
+		return e.accessProtection(cmd, slug, who, level, *yes)
 	}
 	if key == "yolo" && on {
 		if err := e.confirm(*yes, cmd, "Turn yolo on for "+who+"? "+yoloWarning); err != nil {
@@ -451,6 +521,73 @@ func accessSet(e *Env, args []string) error {
 		action = "settings." + key
 	}
 	e.accessJournal(action, slug, fmt.Sprintf("%s = %v", key, on))
+	e.accessNext(slug)
+	return nil
+}
+
+// accessProtection sets protection to level for slug ("" all
+// projects), who in words; open asks first.
+func (e *Env) accessProtection(cmd, slug, who, level string, yes bool) error {
+	if level == config.ProtectOpen {
+		if err := e.confirm(yes, cmd, "Set protection to open for "+who+"? "+openWarning); err != nil {
+			return err
+		}
+	}
+	var err error
+	if slug == "" {
+		err = config.SetDefaults("protection", level)
+	} else {
+		err = config.SetProject(slug, "protection", level)
+	}
+	if err != nil {
+		return srvFail(cmd, accessErr(err))
+	}
+	fmt.Fprintf(e.Stdout, "protection %s for %s\n", level, who)
+	e.accessJournal("settings.protection", slug, "protection = "+level)
+	e.accessNext(slug)
+	return nil
+}
+
+// accessReset implements tm access reset [<project> | --all]: the
+// project's Access switches follow all projects again, all projects'
+// tm's defaults (config.ResetAccess); it asks first.
+func accessReset(e *Env, args []string) error {
+	const cmd = "access reset"
+	if err := e.accessHuman(cmd); err != nil {
+		return err
+	}
+	f := newFlags()
+	all, yes := f.Bool("all"), f.Bool("yes")
+	pos, err := f.Parse(args)
+	if err != nil {
+		return srvFail(cmd, err)
+	}
+	if e.Caller.Kind == caller.Coordinator {
+		// A reset changes the project's switches, its protection among
+		// them: the user's alone.
+		return srvFail(cmd, &project.Error{Code: "human-only", Msg: "resetting access changes the project's protection: the user's alone"})
+	}
+	table, slug, who, err := e.accessScope(cmd, pos, *all)
+	if err != nil {
+		return err
+	}
+	to := "all projects'"
+	if slug == "" {
+		to = "tm's defaults (protection open)"
+	}
+	if err := e.confirm(*yes, cmd, "Reset the access switches of "+who+" to "+to+"? Protection, yolo, coordinator approves, the guard, its mode and its rules turned off go back; the sandbox lists, guard allowances and secret environment stay."); err != nil {
+		return err
+	}
+	reset, err := config.ResetAccess(table)
+	if err != nil {
+		return srvFail(cmd, accessErr(err))
+	}
+	if len(reset) == 0 {
+		fmt.Fprintf(e.Stdout, "%s sets none of its own: nothing to reset\n", who)
+		return nil
+	}
+	fmt.Fprintf(e.Stdout, "reset for %s: %s, now %s\n", who, strings.Join(reset, ", "), to)
+	e.accessJournal("settings.reset", slug, strings.Join(reset, ", "))
 	e.accessNext(slug)
 	return nil
 }

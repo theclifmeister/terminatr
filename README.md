@@ -71,6 +71,8 @@ Newer Homebrew refuses formulas from a tap it doesn't trust, hence `brew trust` 
 3. Tell the coordinator what you want. It plans tasks and starts threads; open one with `enter` to read along.
 4. Press Ctrl+B then `d` to return to the dashboard. Sessions keep running when you close the terminal; `tm` brings you back. `?` lists the keys.
 
+**Security, when you want it.** Agents start the way they run on their own: Claude Code and Codex with their own permission prompts, nothing extra from tm in the way. tm only keeps threads out of the project folder (the coordinator's) and keeps every agent away from your settings and tm's own files. When you want more, raise **Protection** in Settings (`,` then `3`, or a project's Access tab): *guarded* adds the guard's rules (threads write only their worktree, no force-push or pushing to the default branch), *sandboxed* runs Claude threads' commands in a sandbox, and *strict* keeps them there. See [Access in docs/OPERATIONS.md](docs/OPERATIONS.md#access-what-threads-may-do).
+
 ## Connect your servers
 
 Run tm on more than one machine (a laptop and a server, say) and pair them: each one's dashboard then shows the projects the other shares, and you can open their panes. The two meet through a relay you run yourself, which both dial out to, so neither needs an open port. The relay sees which servers are paired, their IP addresses, and when and how much they talk, never what they say to each other. A relay that is broken into can cut or slow your links, but can't read or change them.

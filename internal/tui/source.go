@@ -287,6 +287,10 @@ type SettingsSource interface {
 	// a project's own value, so it follows all projects again. It is
 	// refused when tm runs inside an agent.
 	SetSetting(table, key string, value any) error
+	// ResetAccess puts table's Access switches back to what it follows
+	// (config.ResetAccess), on the human's keypress; reset are the keys
+	// it removed. Refused inside an agent.
+	ResetAccess(table string) (reset []string, err error)
 	// SetRepo adds or removes one of a project's repositories.
 	SetRepo(slug, path string, add bool) error
 	// ApplyModDefaults applies the defaults an enabled mod suggests for

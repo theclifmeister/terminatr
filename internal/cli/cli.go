@@ -63,7 +63,7 @@ func OSEnv() *Env {
 // that a sandboxed thread can't. Without a server it runs here.
 func Run(args []string) (code int, handled bool) {
 	e := OSEnv()
-	if len(args) > 0 && forwarded[args[0]] && e.Getenv(caller.EnvSession) != "" {
+	if len(args) > 0 && (forwarded[args[0]] || forwardedAccess(args, e.Getenv)) && e.Getenv(caller.EnvSession) != "" {
 		if code, ok := e.forward(args); ok {
 			return code, true
 		}

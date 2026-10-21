@@ -206,6 +206,27 @@ func TestClaudeLaunch(t *testing.T) {
 		!reflect.DeepEqual(s.Permissions.Deny, settings.Permissions.Deny) {
 		t.Fatalf("yolo thread settings: %+v", s)
 	}
+	// Protection below sandboxed: the sandbox off as under yolo, but
+	// Claude's own prompts kept.
+	open := listed
+	open.NoSandbox = true
+	if l, err = a.Launch(open); err != nil {
+		t.Fatal(err)
+	}
+	if contains(l.Argv, "--dangerously-skip-permissions") {
+		t.Fatalf("no-sandbox argv %q skips the prompts", l.Argv)
+	}
+	raw.Sandbox = nil
+	if err := json.Unmarshal(l.Files["claude-settings.json"], &raw); err != nil {
+		t.Fatal(err)
+	}
+	if string(raw.Sandbox["enabled"]) != "false" {
+		t.Fatalf("no-sandbox sandbox.enabled = %s, want false\n%s", raw.Sandbox["enabled"], l.Files["claude-settings.json"])
+	}
+	if s := parseSettings(t, l.Files["claude-settings.json"]); s.Sandbox.ExcludedCommands != nil || s.Sandbox.Network.AllowedDomains != nil ||
+		!reflect.DeepEqual(s.Permissions.Deny, settings.Permissions.Deny) {
+		t.Fatalf("no-sandbox thread settings: %+v", s)
+	}
 	if settings.StatusLine != nil {
 		t.Fatal("settings must never set statusLine; it would replace the user's")
 	}

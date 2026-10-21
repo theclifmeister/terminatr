@@ -131,11 +131,14 @@ func TestSmokeMousePopupsAndAttach(t *testing.T) {
 	w.ClickText("a project", 28)
 	w.WaitFor("1 overview", wait)
 	w.ClickText("5 access", 1)
-	w.WaitFor("ask you", wait)
-	_, y := w.TextAt("Escapes ", 1)
+	// The Protection row, by its value (its label also heads its section):
+	// sandboxed, as the pin keeps a home that had a project before.
+	// It is the first row, so already selected: one click changes it (a
+	// second would go on to open, which asks first).
+	w.WaitFor("sandboxed: + the thread sandbox", wait)
+	_, y := w.TextAt("sandboxed: + the thread sandbox", 1)
 	before := strings.Split(w.Screen(), "\n")[y]
-	w.ClickText("Escapes ", 1) // selects it
-	w.ClickText("Escapes ", 1) // changes it
+	w.ClickText("sandboxed: + the thread sandbox", 1)
 	saved(w, "the setting changed", func(sc string) bool { return strings.Split(sc, "\n")[y] != before })
 	w.Click(40, 1) // above the popup, which takes the dashboard's width
 	w.WaitUntil("the popup closed", wait, func(sc string) bool { return !strings.Contains(sc, "1 overview") })

@@ -186,14 +186,15 @@ func TestAccessLaunchEqual(t *testing.T) {
 		for _, goos := range []string{config.OSMac, config.OSLinux, config.OSWindows} {
 			for _, role := range []string{proto.RoleThread, proto.RoleCoordinator, proto.RoleShell} {
 				for _, cwd := range []string{wt, repo, plain} {
-					for _, flags := range [][2]bool{{false, false}, {true, false}, {false, true}, {true, true}} {
+					// yolo, no escapes, no sandbox (protection below sandboxed)
+					for _, flags := range [][3]bool{{false, false, false}, {true, false, false}, {false, true, false}, {true, true, false}, {false, false, true}, {false, true, true}} {
 						name := strings.Join([]string{"config", string(rune('0' + i)), goos, role, filepath.Base(cwd)}, "/")
 						slug := "demo"
 						if role == proto.RoleShell {
 							slug = ""
 						}
 						tree := pinTree(repo, cwd)
-						set, err := s.resolveAccess(accessInput{role: role, slug: slug, cwd: cwd, tree: tree, agent: "claude", goos: goos, yolo: flags[0], noEscapes: flags[1]}, lc)
+						set, err := s.resolveAccess(accessInput{role: role, slug: slug, cwd: cwd, tree: tree, agent: "claude", goos: goos, yolo: flags[0], noEscapes: flags[1], noSandbox: flags[2]}, lc)
 						if err != nil {
 							t.Fatalf("%s: %v", name, err)
 						}
@@ -220,9 +221,10 @@ func TestAccessLaunchEqual(t *testing.T) {
 						if role == proto.RoleThread {
 							lists, presets, skipped = launchSandbox(set)
 							wl, wp, ws = wantSandbox(lc, slug, goos)
-							if flags[0] {
-								// Yolo has no sandbox (T574 case 4): of the
-								// lists only the allow rules are given.
+							if flags[0] || flags[2] {
+								// Yolo has no sandbox (T574 case 4), nor has
+								// protection below sandboxed: of the lists
+								// only the allow rules are given.
 								wl, wp = agent.SandboxLists{Allow: wl.Allow}, nil
 							}
 						} else if !launchSandboxEmpty(set) {
@@ -231,17 +233,18 @@ func TestAccessLaunchEqual(t *testing.T) {
 						if !reflect.DeepEqual(lists, wl) || !slices.Equal(presets, wp) || !slices.Equal(skipped, ws) {
 							t.Errorf("%s: sandbox\n got %+v %q %q\nwant %+v %q %q", name, lists, presets, skipped, wl, wp, ws)
 						}
-						if y, n := launchFlags(set); y != flags[0] || n != flags[1] {
-							t.Errorf("%s: yolo %v, no escapes %v; want %v", name, y, n, flags)
+						wantNoSandbox := flags[2] && role == proto.RoleThread
+						if y, ns, n := launchFlags(set); y != flags[0] || n != flags[1] || ns != wantNoSandbox {
+							t.Errorf("%s: yolo %v, no sandbox %v, no escapes %v; want %v", name, y, ns, n, flags)
 						}
 						for _, an := range reg.Names() {
 							a, _ := reg.Get(an)
 							spec := agent.LaunchSpec{Role: agent.Role(role), SessionID: "s-1", AgentSID: "00000000-0000-4000-8000-000000000000",
 								Cwd: cwd, RuntimeDir: filepath.Join(root, "rt"), Kickoff: "Start.", TMBin: "/usr/local/bin/tm", Socket: s.opts.Paths.Socket}
 							old, now := spec, spec
-							old.Access, old.Sandbox, old.Yolo, old.NoSandboxEscapes = want, wl, flags[0], flags[1]
+							old.Access, old.Sandbox, old.Yolo, old.NoSandboxEscapes, old.NoSandbox = want, wl, flags[0], flags[1], wantNoSandbox
 							now.Access, now.Sandbox = got, lists
-							now.Yolo, now.NoSandboxEscapes = launchFlags(set)
+							now.Yolo, now.NoSandbox, now.NoSandboxEscapes = launchFlags(set)
 							lo, err1 := a.Launch(old)
 							ln, err2 := a.Launch(now)
 							if (err1 == nil) != (err2 == nil) || !reflect.DeepEqual(lo.Argv, ln.Argv) || !reflect.DeepEqual(lo.Files, ln.Files) || !slices.Equal(lo.Warnings, ln.Warnings) {
@@ -291,7 +294,7 @@ write = ["~/src/fixtures"]
 		seen[r.Kind] = true
 		want := ""
 		switch r.Kind {
-		case proto.AccessExcluded, proto.AccessHost, proto.AccessLocalPorts, proto.AccessGuide, proto.AccessWriteFolder, proto.AccessEscapes:
+		case proto.AccessExcluded, proto.AccessHost, proto.AccessLocalPorts, proto.AccessGuide, proto.AccessWriteFolder, proto.AccessEscapes, proto.AccessSandbox:
 			want = proto.AccessYoloNoSandbox
 		case proto.AccessGuardMode, proto.AccessGuardRuleOff:
 			want = proto.AccessYoloFloor

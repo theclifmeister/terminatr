@@ -57,7 +57,9 @@ const (
 	AccessApproved     = "approved"      // a command tm runs outside the sandbox when the thread asks (tm run); live
 	AccessAllow        = "allow"         // a permission rule on top of tm's
 	AccessDeny         = "deny"          // a permission rule refusing (agent files)
-	AccessEscapes      = "escapes"       // sandbox_escapes: on or off
+	AccessEscapes      = "escapes"       // a sandboxed thread may ask to leave it: on or off (protection)
+	AccessProtection   = "protection"    // the protection level: open, guarded, sandboxed or strict
+	AccessSandbox      = "sandbox"       // a thread's sandbox: on or off (protection)
 	AccessYolo         = "yolo"          // on or off
 	AccessApproves     = "coordinator-approves"
 	AccessGuardOn      = "guard"       // on or off
@@ -81,6 +83,14 @@ const (
 const (
 	AccessYoloNoSandbox = "yolo is on: the sandbox is off"
 	AccessYoloFloor     = "floor only: yolo is on"
+)
+
+// Why a rule isn't used below a protection level (AccessRule.Skipped):
+// below sandboxed a Claude thread's sandbox is off, below guarded the
+// guard keeps its floor only.
+const (
+	AccessNoSandbox    = "protection is below sandboxed: the sandbox is off"
+	AccessProtectFloor = "floor only: protection is below guarded"
 )
 
 // An excluded command's note: whether it asks first (the guard asks)

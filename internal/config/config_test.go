@@ -54,10 +54,10 @@ sandbox_escapes = false
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s, _ := c.Safety("demo"); !reflect.DeepEqual(s, Safety{StartThreads: "auto", Yolo: true, CoordinatorApproves: true, ParallelThreads: 10, AutoClose: "merged", AutoCloseDays: 7, PRFollowup: true, PRPollSeconds: 120, CompleteTasks: "merged", FastForwardCheckout: true, SandboxEscapes: true, Merge: "coordinator", MergeMethod: "merge", BranchName: DefaultBranchName, Guard: true, GuardMode: GuardEnforce, Active: true, ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30}) {
+	if s, _ := c.Safety("demo"); !reflect.DeepEqual(s, Safety{StartThreads: "auto", Yolo: true, CoordinatorApproves: true, ParallelThreads: 10, AutoClose: "merged", AutoCloseDays: 7, PRFollowup: true, PRPollSeconds: 120, CompleteTasks: "merged", FastForwardCheckout: true, Protection: ProtectOpen, Merge: "coordinator", MergeMethod: "merge", BranchName: DefaultBranchName, Guard: true, GuardMode: GuardEnforce, Active: true, ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30}) {
 		t.Fatalf("demo %+v", s)
 	}
-	if s, _ := c.Safety("other"); !reflect.DeepEqual(s, Safety{StartThreads: "propose", ParallelThreads: 10, AutoClose: "off", AutoCloseDays: 7, PRPollSeconds: 120, CompleteTasks: "user", CoordinatorRemoteControl: true, AutoClear: true, CoordinatorMerges: true, Merge: "coordinator", MergeMethod: "squash", BranchName: DefaultBranchName, Guard: true, GuardMode: GuardEnforce, Active: true, ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30}) {
+	if s, _ := c.Safety("other"); !reflect.DeepEqual(s, Safety{StartThreads: "propose", ParallelThreads: 10, AutoClose: "off", AutoCloseDays: 7, PRPollSeconds: 120, CompleteTasks: "user", CoordinatorRemoteControl: true, AutoClear: true, CoordinatorMerges: true, Protection: ProtectStrict, Merge: "coordinator", MergeMethod: "squash", BranchName: DefaultBranchName, Guard: true, GuardMode: GuardEnforce, Active: true, ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30}) {
 		t.Fatalf("other %+v", s)
 	}
 }
@@ -189,7 +189,7 @@ auto_resolve = true
 	if err != nil {
 		t.Fatal(err)
 	}
-	all := Safety{StartThreads: "auto", CoordinatorApproves: true, ParallelThreads: 4, AutoClose: "off", AutoCloseDays: 7, PRFollowup: true, PRPollSeconds: 120, CompleteTasks: "merged", FastForwardCheckout: true, Merge: "coordinator", MergeMethod: "merge", BranchName: DefaultBranchName, Guard: true, GuardMode: GuardEnforce, Active: true,
+	all := Safety{StartThreads: "auto", CoordinatorApproves: true, ParallelThreads: 4, AutoClose: "off", AutoCloseDays: 7, PRFollowup: true, PRPollSeconds: 120, CompleteTasks: "merged", FastForwardCheckout: true, Protection: ProtectStrict, Merge: "coordinator", MergeMethod: "merge", BranchName: DefaultBranchName, Guard: true, GuardMode: GuardEnforce, Active: true,
 		ArchiveTasksDays: 30, ArchiveThreadsDays: 14, ArchiveInboxDays: 30, ArchiveJournalDays: 30}
 	if s, _ := c.AllProjects(); !reflect.DeepEqual(s, all) {
 		t.Fatalf("all projects %+v", s)
@@ -198,7 +198,9 @@ auto_resolve = true
 		t.Fatalf("a new project %+v, want all projects", s)
 	}
 	want := all
-	want.ParallelThreads, want.CompleteTasks, want.ArchiveJournalDays, want.SandboxEscapes = 2, "user", 90, true
+	// The older sandbox_escapes = true says nothing: demo follows all
+	// projects' strict.
+	want.ParallelThreads, want.CompleteTasks, want.ArchiveJournalDays = 2, "user", 90
 	if s, _ := c.Safety("demo"); !reflect.DeepEqual(s, want) {
 		t.Fatalf("demo %+v", s)
 	}
@@ -206,7 +208,7 @@ auto_resolve = true
 	if s, _ := c.Safety("old"); s.AutoClose != CloseMerged || s.ParallelThreads != 4 {
 		t.Fatalf("old %+v", s)
 	}
-	if got := strings.Join(c.Own("demo"), " "); got != "parallel_threads complete_tasks sandbox_escapes archive_journal_days" {
+	if got := strings.Join(c.Own("demo"), " "); got != "parallel_threads complete_tasks archive_journal_days" {
 		t.Fatalf("Own(demo) = %q", got)
 	}
 	if got := strings.Join(c.Own("old"), " "); got != "auto_close" {

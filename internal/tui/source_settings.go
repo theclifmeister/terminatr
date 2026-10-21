@@ -59,6 +59,29 @@ func (s *ServerSource) SetSetting(table, key string, value any) error {
 	return nil
 }
 
+func (s *ServerSource) ResetAccess(table string) ([]string, error) {
+	defer s.touch()
+	if s.Caller.IsAgent() {
+		return nil, errHumanOnly
+	}
+	reset, err := config.ResetAccess(table)
+	if err != nil || len(reset) == 0 {
+		return reset, err
+	}
+	detail := strings.Join(reset, ", ")
+	if table == config.DefaultsTable {
+		list, _ := project.List()
+		for _, sum := range list {
+			if p, err := project.Open(sum.Slug); err == nil {
+				p.Journal(s.Caller, "settings.reset", sum.Slug, detail+" (all projects)")
+			}
+		}
+	} else if p, err := project.Open(strings.TrimPrefix(table, "projects.")); err == nil {
+		p.Journal(s.Caller, "settings.reset", p.Slug, detail)
+	}
+	return reset, nil
+}
+
 func (s *ServerSource) SetSecretEnv(table, name string, src *config.EnvSource) error {
 	defer s.touch()
 	if s.Caller.IsAgent() {

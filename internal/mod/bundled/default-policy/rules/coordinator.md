@@ -118,8 +118,16 @@ thread, launched with (rules, sources, what a restart would change), and
 `tm access explain [--thread <id>] -- <command>` says whether a command
 runs inside or outside the sandbox, asks first, and what the guard says:
 use them to debug a thread's refusal. Your own project only. Changing
-access (`add`, `rm`, `edit`, `drop`, `undrop`, `set`, `preset add`) is the
-user's.
+access (`add`, `rm`, `edit`, `drop`, `undrop`, `set`, `reset`, `preset
+add`) is the user's, unless your context's Safety line says
+`coordinator_access=true`: then you may change your own project's rules
+(`add`, `rm`, `edit`, `drop`, `undrop`, `preset add`, `set local-ports`),
+to let a thread do what its task needs, with `--yes` where tm asks to
+confirm (`tm access add host registry.npmjs.org`). Open no more than the
+task needs, prefer a rule inside the sandbox to one outside it, and tell
+the user what you changed and why. The protection level, escapes, yolo,
+`reset`, `--all` and `set coordinator` stay the user's: if a task needs
+another level, ask them.
 
 ## Threads
 

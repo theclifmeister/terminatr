@@ -17,6 +17,26 @@ var forwarded = map[string]bool{
 	"thread": true, "report": true, "status": true, "done": true,
 }
 
+// accessWrites are the tm access subcommands that write config.toml.
+var accessWrites = map[string]bool{"add": true, "rm": true, "edit": true, "drop": true, "undrop": true, "set": true, "reset": true}
+
+// forwardedAccess reports whether args are a tm access write a
+// coordinator runs through the server (coordinator_access): the server
+// writes config.toml, which a coordinator's sandbox (Codex's) keeps
+// read-only, with the caller it tells from the process tree; accessFor
+// checks it there.
+func forwardedAccess(args []string, getenv func(string) string) bool {
+	return getenv(caller.EnvRole) == string(caller.Coordinator) && accessWrite(args)
+}
+
+// accessWrite reports whether args are a tm access write.
+func accessWrite(args []string) bool {
+	if len(args) < 2 || args[0] != "access" {
+		return false
+	}
+	return accessWrites[args[1]] || args[1] == "preset" && len(args) > 2 && args[2] == "add"
+}
+
 // needsStdin reports whether a command reads stdin, so the client sends
 // it along. Anything else gets none: an agent's tool shell may hold
 // stdin open without writing to it.
@@ -97,7 +117,7 @@ func RunInServer(p proto.CLIRunParams, c caller.Caller) proto.CLIRunResult {
 		},
 	}
 	res := proto.CLIRunResult{}
-	if !forwarded[p.Args[0]] {
+	if !forwarded[p.Args[0]] && !(c.Kind == caller.Coordinator && accessWrite(p.Args)) {
 		res.Code = e.report("tm", usagef("%s is not a project command", p.Args[0]))
 	} else {
 		res.Code, _ = e.Run(p.Args)

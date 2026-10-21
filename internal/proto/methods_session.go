@@ -259,6 +259,11 @@ type SessionStartParams struct {
 	// NoSandboxEscapes starts a thread whose agent can't run a command
 	// outside its sandbox (sandbox_escapes = false, docs/SPEC.md §5.2).
 	NoSandboxEscapes bool `json:"no_sandbox_escapes,omitempty"`
+	// Protection is the project's protection level a thread starts at
+	// (docs/SPEC.md §5.2): below sandboxed a Claude thread runs without
+	// its sandbox, and strict has no escapes (NoSandboxEscapes too). ""
+	// from an older caller: sandboxed, escapes as NoSandboxEscapes says.
+	Protection string `json:"protection,omitempty"`
 	// RemoteControl starts a coordinator reachable from another device,
 	// named after its project; the agent's manifest must support it.
 	RemoteControl bool `json:"remote_control,omitempty"`

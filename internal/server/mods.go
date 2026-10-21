@@ -30,14 +30,17 @@ func loadLaunchConfig() launchConfig {
 }
 
 // safety is project slug's resolved settings; a config.toml that doesn't
-// load leaves the defaults, so the guard stays on.
+// load leaves the defaults at protection sandboxed, so the guard keeps
+// its rules: a broken file never opens anything.
 func (l launchConfig) safety(slug string) config.Safety {
+	closed := config.Defaults
+	closed.Protection = config.ProtectSandboxed
 	if l.err != nil {
-		return config.Defaults
+		return closed
 	}
 	s, err := l.cfg.Safety(slug)
 	if err != nil {
-		return config.Defaults
+		return closed
 	}
 	return s
 }

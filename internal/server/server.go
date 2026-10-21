@@ -350,6 +350,8 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	// And config.toml's sandbox rules move to the access rules, once.
 	migrateAccess(logger.Printf)
+	// And an install from before protection keeps what it ran with.
+	pinProtection(logger.Printf)
 	tellYolo(logger.Printf)
 	toResume, lost := s.loadPrevious()
 	if err := s.saveLocked(""); err != nil {
@@ -1005,6 +1007,14 @@ func (s *Server) startSession(p proto.SessionStartParams) (any, *proto.Error) {
 	if p.Agent != "" {
 		rec.Agent, rec.AgentSessionID, rec.Brief, rec.Model, rec.Yolo = p.Agent, newUUID(), p.Brief, p.Model, p.Yolo
 		rec.Kickoff, rec.RemoteControl, rec.NoSandboxEscapes = p.Kickoff, p.RemoteControl, p.NoSandboxEscapes
+		if role == proto.RoleThread && p.Protection != "" {
+			if !knownProtection(p.Protection) {
+				s.mu.Unlock()
+				return nil, proto.Errorf(proto.ErrBadParams, "unknown protection %q", p.Protection)
+			}
+			rec.Protection = p.Protection
+			rec.NoSandbox, rec.NoSandboxEscapes = protectFlags(p.Protection, p.Agent)
+		}
 		if p.RemoteControl && role != proto.RoleCoordinator {
 			s.mu.Unlock()
 			return nil, proto.Errorf(proto.ErrRefused, "remote control is for coordinators; threads are reached through theirs")

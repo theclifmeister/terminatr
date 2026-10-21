@@ -295,7 +295,7 @@ func TestSkillAndOpen(t *testing.T) {
 func TestSafetySettingsInContext(t *testing.T) {
 	h := newHarness(t)
 	h.ok(human, "project", "new", "demo")
-	if out := h.ok(human, "context", "--project", "demo"); !strings.Contains(out, "Safety: start_threads=propose · yolo=false · coordinator_approves=true") {
+	if out := h.ok(human, "context", "--project", "demo"); !strings.Contains(out, "Safety: start_threads=propose · protection=open · yolo=false · coordinator_approves=true · coordinator_access=false") {
 		t.Fatalf("defaults:\n%s", out)
 	}
 	cfg := filepath.Join(h.root, "config.toml")

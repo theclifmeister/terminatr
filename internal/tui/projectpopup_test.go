@@ -1672,3 +1672,96 @@ func TestProjectShareRow(t *testing.T) {
 		t.Fatal("enter left it shared")
 	}
 }
+
+// TestAccessReset: R on a project's Access tab asks, then puts its
+// switches back to all projects', keeping its lists; R on the , popup's
+// Access tab puts all projects' back to tm's defaults.
+func TestAccessReset(t *testing.T) {
+	src, m := popupData(t)
+	if err := config.SetProject("alpha", "protection", config.ProtectStrict); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SetProject("alpha", "yolo", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SetDefaults("protection", config.ProtectGuarded); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.EditSandbox("projects.alpha", func(st *config.SandboxTable) error {
+		st.Add(config.SandboxHosts, "registry.npmjs.org")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	keyPress(m, "a")
+	keyPress(m, "5")
+	if !strings.Contains(screen(m), "R reset") {
+		t.Errorf("the Access tab's footer lacks R reset:\n%s", screen(m))
+	}
+	act(t, m, src, "R")
+	if _, ok := m.top().(*confirmView); !ok {
+		t.Fatalf("reset didn't ask: %T", m.top())
+	}
+	act(t, m, src, "n")
+	if cfg, _ := config.Load(); !must(cfg.Safety("alpha")).Yolo {
+		t.Fatal("n reset it")
+	}
+	act(t, m, src, "R")
+	act(t, m, src, "y")
+	cfg, _ := config.Load()
+	if s := must(cfg.Safety("alpha")); s.Yolo || s.Protection != config.ProtectGuarded || len(cfg.ThreadSandbox("alpha").Given(config.SandboxHosts)) != 1 {
+		t.Fatalf("after reset %+v", s)
+	}
+	keyPress(m, "esc")
+	press(m, ",", "3")
+	act(t, m, src, "R")
+	act(t, m, src, "y")
+	if cfg, _ := config.Load(); must(cfg.AllProjects()).Protection != config.ProtectOpen {
+		t.Fatal("all projects' protection not back to open")
+	}
+}
+
+// TestAccessTabByLevel: the Access tab shows only what the protection
+// level uses: at open protection, prompts, secrets and tm's rules; the
+// guard's rows from guarded; the sandbox's, and p for presets, from
+// sandboxed. Raising it shows them at once.
+func TestAccessTabByLevel(t *testing.T) {
+	src, m := popupData(t)
+	m.Update(tea.WindowSizeMsg{Width: 160, Height: 120})
+	keyPress(m, "a")
+	keyPress(m, "5")
+	pv := m.top().(*projectView)
+	labels := func() []string {
+		pv.access.sync(m)
+		var out []string
+		for _, r := range pv.access.rows {
+			out = append(out, r.label)
+		}
+		return out
+	}
+	if got := labels(); !slices.Equal(got, []string{"Protection", "Yolo mode", "Coordinator approves", "Coordinator sets access", "Secret environment", "tm's rules"}) {
+		t.Errorf("open: %q", got)
+	}
+	out := screen(m)
+	if !strings.Contains(out, "Protection is open") || strings.Contains(out, "Prefer rules inside the sandbox") || strings.Contains(out, "p add a preset") {
+		t.Errorf("open screen:\n%s", out)
+	}
+	keyPress(m, "p")
+	if _, ok := m.top().(*presetsView); ok {
+		t.Error("p opened the presets at open")
+	}
+	act(t, m, src, "enter") // guarded
+	if got := labels(); !slices.Contains(got, "Guard mode") || slices.Contains(got, "Excluded commands") {
+		t.Errorf("guarded: %q", got)
+	}
+	if pv.access.rows[pv.access.sel].label != "Protection" {
+		t.Errorf("the selection left Protection: %q", pv.access.rows[pv.access.sel].label)
+	}
+	act(t, m, src, "enter") // sandboxed
+	if got := labels(); !slices.Contains(got, "Guard mode") || !slices.Contains(got, "Excluded commands") {
+		t.Errorf("sandboxed: %q", got)
+	}
+	if out := screen(m); !strings.Contains(out, "p add a preset") {
+		t.Errorf("sandboxed footer:\n%s", out)
+	}
+}

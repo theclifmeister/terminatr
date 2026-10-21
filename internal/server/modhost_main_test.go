@@ -8,6 +8,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/modapi"
 	"github.com/theclifmeister/terminatr/internal/modhost"
 	"github.com/theclifmeister/terminatr/internal/modproto"
@@ -28,6 +29,10 @@ func TestMain(m *testing.M) {
 	if len(os.Args) == 5 && os.Args[1] == "mod-probe" {
 		os.Exit(modProbe(os.Args[2], os.Args[3], os.Args[4]))
 	}
+	// The guard's and the sandbox's tests are of their layers: they run
+	// at protection sandboxed, a new install's open aside, unless their
+	// config.toml says otherwise (protection_test.go tests open).
+	config.Defaults.Protection = config.ProtectSandboxed
 	os.Exit(hometest.Run(func() int { return servicetest.Run(m) }))
 }
 

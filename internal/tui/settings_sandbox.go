@@ -140,7 +140,10 @@ func sandboxSettings(slug, goos string) []setting {
 // accessHead are the Access tab's lines above its rows: the guidance,
 // and the platform it shows (with why nothing inside the sandbox shows,
 // when nothing does).
-func accessHead(m *dash, w int) []string {
+func accessHead(m *dash, slug string, w int) []string {
+	if !sandboxShown(m, slug) {
+		return faintLines(protectionGuide(newSafetyRows(slug).safety(m).Protection), w)
+	}
 	goos := m.serverOS()
 	where := "Shown: what applies on " + config.OSName(goos) + ", where this server's threads run."
 	if !slices.ContainsFunc(config.Presets, func(p config.Preset) bool { return slices.Contains(p.OS, goos) }) {
