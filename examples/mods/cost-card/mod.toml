@@ -5,7 +5,7 @@ id = "cost-card"
 name = "Cost card"
 version = "1.0.0"
 api = "1.0"
-description = "Tokens and estimated cost per thread on the dashboard, today's and the last 7 days', with a sparkline. For Claude sessions it needs the Agent mod on (early access, off by default: Settings, Agent mod, or [agent_mod] enabled = true), which reports their context and use."
+description = "Tokens and estimated cost per thread on the dashboard, today's and the last 7 days', with a sparkline. A Claude session's cost needs the Agent mod on (early access, off by default: Settings, Agent mod, or [agent_mod] enabled = true): without it its tokens show, its cost doesn't."
 authors = ["terminatr"]
 homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/cost-card"
 

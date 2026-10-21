@@ -128,7 +128,8 @@ func TestSmokeCoordinatorRemoteControl(t *testing.T) {
 	}
 	env.WaitState(coord, "idle", agentWait)
 
-	w := env.Window(120, 30)
+	// Wide enough for the status bar's context use and its marker.
+	w := env.Window(136, 30)
 	w.WaitUntil("sidebar marker", wait, func(sc string) bool { return remoteMarked(sc, alpha) }) // the dashboard's sidebar
 	clickCoordinator(t, w, alpha)
 	w.WaitUntil("status bar marker", agentWait, func(sc string) bool { return lastLine(sc, "remote control on") })

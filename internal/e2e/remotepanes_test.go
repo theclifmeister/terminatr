@@ -123,6 +123,7 @@ func TestSmokeRemotePanes(t *testing.T) {
 	// thread.
 	wide := studio.Attach(160, 40, remote)
 	wide.WaitFor("THREAD", wait)
+	wide.WaitFor("/ 1.0M", agentWait) // the thread's context use, from its transcript, through the mirror
 	WaitGolden(t, wait, func() string { return infoPanelScreen(wide) }, "remote-info-panel.txt", remotePanelMasks...)
 	wide.CloseWindow()
 

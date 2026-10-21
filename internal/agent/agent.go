@@ -307,6 +307,10 @@ type HookEnv struct {
 	// (docs/SPEC.md §8.6, Guard) and records a refusal: the refusal, or
 	// nil.
 	Guard func(tool string, input map[string]any) *guard.Denial
+	// Command runs a session command the event stands for
+	// (HookMap.Command) and returns what came of it, for the user; ""
+	// when it didn't run.
+	Command func(name string) string
 }
 
 // Injector says how follow-up prompts reach a running session.

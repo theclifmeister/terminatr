@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -297,6 +298,16 @@ type TailUsage struct {
 	// InputIncludesCache says input counts the cache reads too (OpenAI's
 	// convention); they are taken out, so input is the uncached part.
 	InputIncludesCache bool `toml:"input_includes_cache"`
+	// ContextFromCounts makes the context the request's whole input:
+	// input, cache_read and cache_creation summed (Anthropic's
+	// convention, where input is the uncached part), in place of a
+	// Context path.
+	ContextFromCounts bool `toml:"context_from_counts"`
+	// ContextWindows are model windows by a glob of the model's id
+	// (path.Match), for an agent whose lines don't give the window: the
+	// longest matching pattern wins. A model none matches is left to the
+	// server's guess from its id (docs/SPEC.md §8.6, Context).
+	ContextWindows map[string]int64 `toml:"context_windows"`
 	// Key is a path whose value tells one report from a repeat of it
 	// (e.g. a running total): a line with the previous counted line's
 	// key is not counted again.
@@ -315,6 +326,14 @@ func (u *TailUsage) validate() error {
 	}
 	if u.InputIncludesCache && (u.Input == "" || u.CacheRead == "") {
 		return errors.New("input_includes_cache needs input and cache_read")
+	}
+	if u.ContextFromCounts && (u.Context != "" || u.Input == "") {
+		return errors.New("context_from_counts needs input and no context path")
+	}
+	for p, w := range u.ContextWindows {
+		if _, err := path.Match(p, ""); err != nil || w <= 0 {
+			return fmt.Errorf("context_windows: bad entry %q = %d", p, w)
+		}
 	}
 	return nil
 }
@@ -432,8 +451,14 @@ func (u *TailUsage) read(obj map[string]any) *Usage {
 	if u.InputIncludesCache {
 		r.Input = max(0, r.Input-r.CacheRead)
 	}
+	if u.ContextFromCounts {
+		r.Context = r.Input + r.CacheRead + r.CacheCreation
+	}
 	if u.Model != "" {
 		r.Model, _ = lookupString(obj, u.Model)
+	}
+	if r.ContextWindow == 0 {
+		r.ContextWindow = u.window(r.Model)
 	}
 	if u.Key != "" {
 		r.Key, _ = lookupString(obj, u.Key)
@@ -442,6 +467,18 @@ func (u *TailUsage) read(obj map[string]any) *Usage {
 		r.Turns = 1
 	}
 	return &r
+}
+
+// window is model's window from ContextWindows, 0 when no pattern
+// matches it.
+func (u *TailUsage) window(model string) int64 {
+	best, w := -1, int64(0)
+	for p, n := range u.ContextWindows {
+		if ok, _ := path.Match(p, model); ok && model != "" && len(p) > best {
+			best, w = len(p), n
+		}
+	}
+	return w
 }
 
 // textOf returns the text at path: a string, or the first text block of a

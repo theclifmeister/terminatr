@@ -52,6 +52,13 @@ type AgentConfig struct {
 	// OnUsage is called (without locks held) with what the agent used,
 	// as its JSONL file reports it ([jsonl_tail.usage]).
 	OnUsage func(*Session, agent.Usage)
+	// OnContextClear is called when a hook event clears the
+	// conversation's context use ([[hooks]] clears_context): after
+	// /clear or a compaction.
+	OnContextClear func(*Session)
+	// Command runs a session command a hook event stands for
+	// (agent.HookEnv.Command): what came of it, "" when it didn't run.
+	Command func(s *Session, name string) string
 	// OnRefused is called (without locks held) with the agent's message
 	// when its JSONL file says the session's model was refused
 	// ([[jsonl_tail.refused]]).
@@ -486,6 +493,9 @@ func (s *Session) Hook(event string, payload map[string]any) (agent.HookResult, 
 	if rt.cfg.OnHook != nil {
 		rt.cfg.OnHook(s, event, payload)
 	}
+	if rt.cfg.OnContextClear != nil && agent.ClearsContext(rt.a, event, payload) {
+		rt.cfg.OnContextClear(s)
+	}
 	env := agent.HookEnv{}
 	callID, _ := payload["tool_use_id"].(string)
 	if g := rt.cfg.Guard; g != nil {
@@ -504,6 +514,9 @@ func (s *Session) Hook(event string, payload map[string]any) (agent.HookResult, 
 	}
 	if c := rt.cfg.Context; c != nil {
 		env.Context = func() ([]byte, error) { return c(payload) }
+	}
+	if c := rt.cfg.Command; c != nil {
+		env.Command = func(name string) string { return c(s, name) }
 	}
 	sigs, res, err := rt.a.Hook(ev, env)
 	rt.tr.Hook(ev, sigs)

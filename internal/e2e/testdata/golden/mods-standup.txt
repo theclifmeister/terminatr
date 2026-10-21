@@ -1,7 +1,7 @@
  PROJECTS                      1   │ tm dashboard · Standup                                     ● server ok · 2 sessions
  ■ demo        2                   │ NEEDS YOU 0 ───────────────────────────────────────────────────────────────────────
  └─ coordi…             ·          │  demo  2 started
-    ├─ T1    50% ☐      ○          │  Started (2)
+    ├─ T1    50% ☐ 2%   ○          │  Started (2)
     └─ T2        ☐ 4%   ○          │  T1 Fix the login  1/2  t-0001
                                    │  T2 Write the docs  t-0002
                                    │

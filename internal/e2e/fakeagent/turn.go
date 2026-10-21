@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -212,7 +213,12 @@ func (a *app) runTurn(j job) {
 		err = a.codexBegin(ctx)
 	}
 	if err == nil {
-		_, err = a.fireHook(ctx, "UserPromptSubmit", map[string]any{"prompt": j.text})
+		var outs []string
+		outs, err = a.fireHook(ctx, "UserPromptSubmit", map[string]any{"prompt": j.text})
+		if reason, ok := blockedBy(outs); ok && err == nil && a.cx == nil {
+			a.finishBlocked(j, reason)
+			return
+		}
 	}
 	if err == nil {
 		err = a.runPrompt(ctx, j)
@@ -222,6 +228,30 @@ func (a *app) runTurn(j job) {
 		return
 	}
 	a.finishTurn()
+}
+
+// blockedBy is the reason of a UserPromptSubmit hook's block
+// ({"decision":"block","reason":…}), when one blocked the prompt.
+func blockedBy(outs []string) (string, bool) {
+	for _, o := range outs {
+		var r struct{ Decision, Reason string }
+		if json.Unmarshal([]byte(o), &r) == nil && r.Decision == "block" {
+			return r.Reason, true
+		}
+	}
+	return "", false
+}
+
+// finishBlocked ends a prompt a hook blocked, as Claude 2.1.306 does: the
+// model never sees it, the reason shows, no Stop, idle again.
+func (a *app) finishBlocked(j job, reason string) {
+	a.mu.Lock()
+	a.running, a.cancel, a.spinning, a.inTool = nil, nil, false, false
+	a.conv = append(a.conv, &convLine{prefix: "  ⎿  ", text: "UserPromptSubmit operation blocked by hook: " + reason})
+	a.syncSessionLocked()
+	a.mu.Unlock()
+	a.log("blocked", map[string]any{"prompt": j.text, "reason": reason})
+	a.requestRedraw()
 }
 
 // finishTurn ends a turn normally: turn_duration, status, Stop.

@@ -63,6 +63,7 @@ var steps = map[string]bool{
 	"suggestion": true, "hook": true, "status": true, "await_key": true,
 	"cancel_silently": true, "clear": true, "compact": true, "run": true,
 	"write": true, "stop": true, "exit": true, "crash": true, "transcript": true,
+	"mcp": true,
 }
 
 // errNoScript means no script has that name.
@@ -155,13 +156,23 @@ func (a *app) say(prefix, text string) {
 	a.requestRedraw()
 }
 
-// assistant records finished assistant text.
+// assistant records finished assistant text, with the request's usage
+// as Claude 2.1.306 writes it: the context grows with the conversation
+// (cache reads 20000 + 1000 per line on screen) and /clear empties it.
 func (a *app) assistant(text string) {
 	a.mu.Lock()
 	a.lastText = text
+	n := len(a.conv)
+	model := a.opts.model
+	if model == "" {
+		model = "claude-opus-5-5"
+	}
 	a.mu.Unlock()
-	a.transcriptAppend(map[string]any{"type": "assistant", "message": map[string]any{
+	a.transcriptAppend(map[string]any{"type": "assistant", "requestId": randID("req_", 24), "message": map[string]any{
+		"id": randID("msg_", 24), "model": model,
 		"role": "assistant", "content": []any{map[string]any{"type": "text", "text": text}},
+		"usage": map[string]any{"input_tokens": 2, "cache_read_input_tokens": 20000 + 1000*n,
+			"cache_creation_input_tokens": 500, "output_tokens": 50},
 	}})
 }
 
@@ -385,6 +396,8 @@ func (a *app) runStep(ctx context.Context, st step, next *step) error {
 		a.doCompact(ctx)
 	case "run":
 		return a.runCmd(ctx, st)
+	case "mcp":
+		a.mcpStep(ctx, st)
 	case "write":
 		return a.writeStep(ctx, st)
 	case "stop":
