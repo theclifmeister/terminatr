@@ -149,6 +149,11 @@ type Rules struct {
 	// Learn is guard_mode "learn": a refusal tells the model the user
 	// reviews it.
 	Learn bool `json:"learn,omitempty"`
+	// CdPath: the session's shell may have CDPATH or zsh's cdpath set
+	// before the line (the user's environment or startup files, the
+	// agent's env file or shell snapshot), so a relative cd may land
+	// elsewhere (nowhere.cd) as after a line that sets it.
+	CdPath bool `json:"cdPath,omitempty"`
 	// Floor are the rules whose floor holds though the human turned the
 	// rule off (guard_off): force-push (to a protected branch, --all,
 	// --mirror) always, merge for a thread while the coordinator merges.
@@ -1053,7 +1058,7 @@ func (r Rules) JudgeCommand(line string) *Denial {
 func (r Rules) judgeBash(command string) *Denial {
 	r.wt = r.worktreeOf()
 	if r.ps != nil {
-		r.ps.traps = nil
+		r.ps.traps, r.ps.defs, r.ps.moving, r.ps.links = nil, nil, false, nil
 	}
 	return r.judgeLine(command, []string{r.Cwd})
 }
@@ -1091,14 +1096,19 @@ func (r Rules) worktreeOf() string {
 // A part that runs shell code the
 // line doesn't show (eval, trap, a zsh trap function, source, ., also
 // through command or builtin) may move them at any point after, so the
-// rest of the line keeps unknown among them.
+// rest of the line keeps unknown among them; so may a definition the
+// guard can't follow (hidesDefs), and a call of a function or an alias
+// the line defines while one of them may move them. A loop's parts may
+// run again: a cd in it leaves them unknown from its start (loops).
 //
 // A trap's action (judgeCommands keeps it in ps.traps, as set here or in
 // a line this one reads: eval, bash -c) may run at any point from the
 // trap on (a signal) and at the end (EXIT), so it is judged as eval's
 // arguments are, from each folder the line itself may be in from the
 // trap on and those it may end in: the trap leaves the folder unknown
-// for the line's later commands, not for its action (lineDirs).
+// for the line's later commands, not for its action (lineDirs). A
+// function's body, an alias's value, runs where the line calls it: it
+// is kept and judged as a trap's action is (definitions).
 func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	d, _, _ := r.walkLine(command, cwds)
 	return d
@@ -1150,7 +1160,8 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, st, ts lineDi
 	}
 	r.sub, r.trapCwds = false, nil
 	trapped := func() bool { return r.ps != nil && len(r.ps.traps) > from }
-	loops := r.loopCds(parts)
+	ends := r.loopEnds(parts)
+	loops := r.loopCds(parts, ends)
 	var trapDirs []string
 	seen, moves := from, false
 	for i, pt := range parts {
@@ -1170,9 +1181,25 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, st, ts lineDi
 		}
 		st.begin(r, pt)
 		ts.begin(r, pt)
+		// A loop's parts may run again after the ones that follow them:
+		// the links it makes lead the writes before them.
+		if e, ok := ends[i]; ok {
+			span := loopSpan(parts, i, e)
+			for _, c := range st.cur {
+				rc := r
+				rc.Cwd = c
+				for _, words := range r.cmds(span) {
+					r.keepLinks(rc.linksOf(strip(words)))
+				}
+			}
+		}
 		rp := r
 		rp.olds = st.olds
 		rp.trapFrom = from
+		made := 0
+		if r.ps != nil {
+			made = len(r.ps.links)
+		}
 		var subs, funs []string
 		if len(st.cur) == 0 {
 			subs, funs = r.subsOf(pt.text)
@@ -1188,7 +1215,11 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, st, ts lineDi
 		}
 		// Its group's own commands, from the part's folders on, and
 		// those of each substitution it runs in a subshell (the group's
-		// own walk reads those in it), which moves nothing after.
+		// own walk reads those in it), which moves nothing after. Read
+		// again, they make their links in their own order.
+		if r.ps != nil && (pt.group != nil || len(subs) > 0 || len(funs) > 0) {
+			r.ps.links = r.ps.links[:made]
+		}
 		var gst, gts *lineDirs
 		if g := pt.group; g != nil {
 			subs, funs = r.subsOf(g.lead + " " + g.tail)
@@ -1232,22 +1263,40 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, st, ts lineDi
 			}
 		}
 		// zsh's trap functions (TRAPEXIT() { … }) are traps whose action
-		// is the body.
+		// is the body. Any function's body, and an alias's value, run
+		// where the line calls them, which the guard doesn't follow:
+		// they are judged as a trap's action is, from each folder the
+		// line may be in from the definition on, and a call of one when
+		// one may move the folder leaves it unknown, as eval does.
 		funcs := trapFuncs(pt.text)
-		for _, body := range funcs {
+		names, bodies := r.definitions(pt.text)
+		for _, body := range append(funcs, bodies...) {
 			if r.ps != nil && !slices.Contains(r.ps.traps[from:], body) {
 				r.ps.traps = append(r.ps.traps, body)
 			}
 		}
+		if r.ps != nil {
+			for _, n := range names {
+				if r.ps.defs == nil {
+					r.ps.defs = map[string]bool{}
+				}
+				r.ps.defs[n] = true
+			}
+			for _, b := range bodies {
+				rb := r.nested()
+				r.ps.moving = r.ps.moving || rb.hasCd(b) || rb.runsCode(b) || rb.runsTrap(b) || rb.hidesDefs(b) || rb.callsDef(b)
+			}
+		}
+		hidden := r.hidesDefs(pt.text) || r.ps != nil && r.ps.moving && r.callsDef(pt.text)
 		if trapped() {
 			trapDirs = withDirs(trapDirs, ts.cur...)
 			for _, a := range r.ps.traps[seen:] {
-				moves = moves || r.hasCd(a) || r.nested().runsCode(a) || r.nested().runsTrap(a)
+				moves = moves || r.hasCd(a) || r.nested().runsCode(a) || r.nested().runsTrap(a) || r.ps.moving && r.nested().callsDef(a)
 			}
 			seen = len(r.ps.traps)
 		}
-		st.end(r, parts, i, gst, len(funcs) > 0 || r.runsCode(pt.text) || r.runsTrap(pt.text))
-		ts.end(r, parts, i, gts, moves || r.runsCode(pt.text))
+		st.end(r, parts, i, gst, hidden || len(funcs) > 0 || r.runsCode(pt.text) || r.runsTrap(pt.text))
+		ts.end(r, parts, i, gts, hidden || moves || r.runsCode(pt.text))
 	}
 	if !trapped() {
 		return nil, st, ts
@@ -1282,9 +1331,14 @@ func (d *lineDirs) begin(r Rules, pt linePart) {
 	// A heredoc's body read as commands (topLevel and Commands may
 	// tell a << apart differently: $[1<<2]) may hold a cd anywhere.
 	if pt.doc && r.hasCd(pt.text) {
-		d.olds = withDirs(withDirs(d.olds, d.cur...), "")
-		d.cur = withDirs(d.cur, "")
+		d.lose()
 	}
+}
+
+// lose adds the unknown folder to d's.
+func (d *lineDirs) lose() {
+	d.olds = withDirs(withDirs(d.olds, d.cur...), "")
+	d.cur = withDirs(d.cur, "")
 }
 
 // end moves d past part i of parts, its cd followed; g, where the
@@ -1299,8 +1353,7 @@ func (d *lineDirs) end(r Rules, parts []linePart, i int, g *lineDirs, hidden boo
 		d.olds, d.cur = g.olds, g.cur
 		d.hidden = d.hidden || g.hidden
 		if r.hasCd(gr.tail) {
-			d.olds = withDirs(withDirs(d.olds, d.cur...), "")
-			d.cur = withDirs(d.cur, "")
+			d.lose()
 		}
 	} else if cmd, args, plain := r.plainCd(pt.text); plain && !inPipe {
 		var to []string
@@ -1339,8 +1392,7 @@ func (d *lineDirs) end(r Rules, parts []linePart, i int, g *lineDirs, hidden boo
 	} else if (!inPipe || lastPipe(pt)) && (pt.group == nil || pt.group.brace) && r.hasCd(pt.text) || !inPipe && pt.group != nil && pt.group.lead != "" && r.hasCd(pt.text) {
 		// zsh, and bash with lastpipe, run a pipeline's last element in
 		// the line's own shell.
-		d.olds = withDirs(withDirs(d.olds, d.cur...), "")
-		d.cur = withDirs(d.cur, "")
+		d.lose()
 	}
 	d.hidden = d.hidden || hidden
 	if d.hidden {
@@ -1374,19 +1426,15 @@ var (
 	loopLead = setOf("! time -p if then elif else do")
 )
 
-// loopCds are the parts that open a loop (for, while, until, select,
-// zsh's repeat, to its done) whose parts hold a cd or code the guard
-// can't see (runsCode): each pass after the first starts where the last
-// one left the folder, so the loop is judged from an unknown folder too.
-// zsh's short forms (for x (a b) { … }) are one part, with a bracket the
-// guard doesn't follow (loose): no done closes them. A loop the guard
-// finds no done for is judged from an unknown folder too.
-func (r Rules) loopCds(parts []linePart) map[int]bool {
-	moves := make([]bool, len(parts))
-	out := map[int]bool{}
+// loopEnds are, for each part of parts that opens a loop (for, while,
+// until, select, zsh's repeat), the part its done is in, or -1 when the
+// guard finds none (done > log 2>&1 read elsewhere). zsh's short forms
+// (for x (a b) { … }) are one part, with a bracket the guard doesn't
+// follow (loose): no done closes them.
+func (r Rules) loopEnds(parts []linePart) map[int]int {
+	out := map[int]int{}
 	var open []int
 	for i, pt := range parts {
-		moves[i] = r.hasCd(pt.text) || r.runsCode(pt.text)
 		w := strings.Fields(pt.text)
 		k := 0
 		for k < len(w)-1 && loopLead[w[k]] {
@@ -1399,17 +1447,48 @@ func (r Rules) loopCds(parts []linePart) map[int]bool {
 		case w[0] == "done" && len(open) > 0:
 			o := open[len(open)-1]
 			open = open[:len(open)-1]
-			if slices.Contains(moves[o:i+1], true) {
+			out[o] = i
+		}
+	}
+	for _, o := range open {
+		out[o] = -1
+	}
+	return out
+}
+
+// loopCds are the parts that open a loop (loopEnds) whose parts hold a
+// cd or code the guard can't see (runsCode): each pass after the first
+// starts where the last one left the folder, so the loop is judged from
+// an unknown folder too. A loop the guard finds no done for is judged
+// from an unknown folder too.
+func (r Rules) loopCds(parts []linePart, ends map[int]int) map[int]bool {
+	out := map[int]bool{}
+	for o, e := range ends {
+		if e < 0 {
+			out[o] = true
+			continue
+		}
+		for _, pt := range parts[o : e+1] {
+			if r.hasCd(pt.text) || r.runsCode(pt.text) {
 				out[o] = true
+				break
 			}
 		}
 	}
-	// One whose done the guard doesn't find (done > log 2>&1 read
-	// elsewhere): the rest of the line is unknown from its opener.
-	for _, o := range open {
-		out[o] = true
-	}
 	return out
+}
+
+// loopSpan is the text of the parts of the loop part o opens (loopEnds),
+// to its done or the line's end.
+func loopSpan(parts []linePart, o, e int) string {
+	if e < 0 {
+		e = len(parts) - 1
+	}
+	var b strings.Builder
+	for _, pt := range parts[o : e+1] {
+		b.WriteString(pt.text + "\n")
+	}
+	return b.String()
 }
 
 // hiddenCode are the builtins that run shell code the line doesn't show
@@ -1461,6 +1540,176 @@ func trapFuncs(text string) []string {
 		}
 	}
 	return out
+}
+
+// funcName is what a function's name may be: any word but the shell's
+// operators, quotes, expansions and =.
+const funcName = "[^\\s;&|(){}<>'\"$`=\\\\]+"
+
+// funcHead is the head of a function's definition, any name: f(),
+// function f or function f().
+var funcHead = regexp.MustCompile(`(?:^|[\s;&|(){}])(?:function\s+(` + funcName + `)(?:\s*\(\s*\))?|(` + funcName + `)\s*\(\s*\))`)
+
+// tableName is zsh's functions or aliases table, alone or with a
+// subscript, as an assignment or a command that assigns names is given
+// it (functions[f]=…, typeset functions, read -A aliases).
+var tableName = regexp.MustCompile(`^(?:dis_)?(?:functions|g?aliases|saliases)(?:_source)?(?:\[|$)`)
+
+// tableRef names one of those tables in an expansion
+// (${functions[f]::=…}, ${aliases[x]=…}).
+var tableRef = regexp.MustCompile(`\b(?:dis_)?(?:functions|g?aliases|saliases)(?:_source)?\b`)
+
+// tableAssign: word w assigns one of those tables (functions[f]=…,
+// aliases+=…), with key its subscript and val its value.
+func tableAssign(w string) (key, val string, ok bool) {
+	loc := assignment.FindStringIndex(w)
+	if loc == nil {
+		return "", "", false
+	}
+	n := strings.TrimSuffix(strings.TrimSuffix(w[:loc[1]], "="), "+")
+	if !tableName.MatchString(n) {
+		return "", "", false
+	}
+	if i := strings.IndexByte(n, '['); i >= 0 {
+		key = strings.TrimSuffix(n[i+1:], "]")
+	}
+	return key, w[loc[1]:], true
+}
+
+// assignsExp: text has a parameter expansion (paramEnd, nested ones
+// too) that assigns one of those tables, or a variable whose name it
+// computes: zsh's (P) flag, ${…::=…} (whose name may be one), bash's
+// ${!n=…}; or one the guard can't read.
+func assignsExp(text string) bool {
+	if strings.Contains(text, "::=") {
+		return true
+	}
+	s := []rune(text)
+	for i := 0; i+1 < len(s); i++ {
+		if s[i] != '$' || s[i+1] != '{' {
+			continue
+		}
+		end, ok := paramEnd(s, i)
+		if !ok {
+			return true
+		}
+		body := string(s[i+2 : min(end, len(s))])
+		switch {
+		case strings.HasPrefix(body, "(") && strings.ContainsRune(body[:max(strings.IndexByte(body, ')'), 0)], 'P'),
+			strings.HasPrefix(body, "(") && !strings.Contains(body, ")"),
+			strings.HasPrefix(body, "!") && strings.Contains(body, "="),
+			tableRef.MatchString(body) && strings.Contains(body, "="):
+			return true
+		}
+	}
+	return false
+}
+
+// nameTakers are the commands whose arguments name the variables they
+// assign.
+var nameTakers = setOf("read typeset declare export local readonly integer float mapfile readarray vared getopts")
+
+// definitions are the names and bodies of the functions part defines
+// (what follows each head, to the part's end), and of its aliases and
+// assignments to zsh's functions and aliases tables (their values).
+func (r Rules) definitions(part string) (names, bodies []string) {
+	for _, m := range funcHead.FindAllStringSubmatchIndex(part, -1) {
+		if m[2] >= 0 {
+			names = append(names, part[m[2]:m[3]])
+		} else {
+			names = append(names, part[m[4]:m[5]])
+		}
+		if b := strings.TrimSpace(part[m[1]:]); b != "" {
+			bodies = append(bodies, b)
+		}
+	}
+	for _, words := range r.cmds(part) {
+		for _, w := range words {
+			if key, val, ok := tableAssign(w); ok {
+				names = append(names, key)
+				bodies = append(bodies, val)
+			}
+		}
+		if argv := strip(words); len(argv) > 0 && base(argv[0]) == "alias" {
+			for _, a := range argv[1:] {
+				if n, v, ok := strings.Cut(a, "="); ok && !strings.HasPrefix(a, "-") {
+					names = append(names, n)
+					bodies = append(bodies, v)
+				}
+			}
+		}
+	}
+	return names, bodies
+}
+
+// callsDef: one of text's commands is a function or an alias the lines
+// read define.
+func (r Rules) callsDef(text string) bool {
+	return r.ps != nil && len(r.ps.defs) > 0 && r.runs(text, r.ps.defs)
+}
+
+// hidesDefs: text may define a function or an alias where the guard
+// can't follow it, or whose calls it can't tell: alias (zsh's global
+// ones expand anywhere in a line), autoload, enable, functions given
+// arguments (zsh's functions -c copies one), an assignment to zsh's
+// functions or aliases tables, direct (functions[TRAPDEBUG]=…, typeset
+// aliases, ${functions[f]::=…}) or by a name given indirectly
+// (indirect), which may be one of them. Any of those may be a cd the
+// line runs later, or a trap's action calls.
+func (r Rules) hidesDefs(text string) bool {
+	if assignsExp(text) {
+		return true
+	}
+	for _, words := range r.cmds(text) {
+		if slices.ContainsFunc(words, func(w string) bool { _, _, ok := tableAssign(w); return ok }) {
+			return true
+		}
+		argv := strip(words)
+		if len(argv) == 0 {
+			continue
+		}
+		switch name := base(argv[0]); {
+		case name == "alias" && slices.ContainsFunc(argv[1:], func(a string) bool { return strings.Contains(a, "=") }),
+			name == "autoload", name == "enable", name == "functions" && len(argv) > 1,
+			nameTakers[name] && slices.ContainsFunc(argv[1:], tableName.MatchString):
+			return true
+		}
+		if indirect(argv) {
+			return true
+		}
+	}
+	return false
+}
+
+// indirect: command argv assigns a variable whose name it computes: a
+// name argument of nameTakers' (the part before an =) or printf's and
+// print's -v with an expansion in it. That name may be CDPATH or
+// cdpath, zsh's options, functions or aliases, or anything else.
+func indirect(argv []string) bool {
+	if len(argv) == 0 {
+		return false
+	}
+	name := base(argv[0])
+	for i := 1; i < len(argv); i++ {
+		a := argv[i]
+		switch {
+		case nameTakers[name]:
+			if n, _, _ := strings.Cut(a, "="); strings.ContainsAny(n, "$`") {
+				return true
+			}
+		case (name == "printf" || name == "print") && len(a) > 1 && a[0] == '-' && a[1] != '-':
+			if k := strings.IndexByte(a, 'v'); k > 0 {
+				n := a[k+1:]
+				if n == "" && i+1 < len(argv) {
+					n = argv[i+1]
+				}
+				if strings.ContainsAny(n, "$`") {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // trapAction is the action trap's args set ("" for none: a listing, a
@@ -1557,9 +1806,23 @@ func (r Rules) judgeWords(read [][]string, cwd string) *Denial {
 		if d := r.judgeGitConfig(cmd, words); d != nil {
 			return d
 		}
-		if d := fl.judgeNoWrite(cmd, args, words); d != nil {
-			return d
+		// The links a command makes lead the line's writes after it
+		// (a loop's, those before it too: walkLine), not its own (ln -s
+		// ~/x l: l/x is no write).
+		own := fl.linksOf(argv)
+		var links []madeLink
+		if r.ps != nil && len(own) > 0 {
+			links = r.ps.links
+			r.ps.links = slices.DeleteFunc(slices.Clone(links), func(l madeLink) bool { return slices.Contains(own, l) })
 		}
+		dw := fl.judgeNoWrite(cmd, args, words)
+		if links != nil {
+			r.ps.links = links
+		}
+		if dw != nil {
+			return dw
+		}
+		r.keepLinks(own)
 		var d *Denial
 		switch {
 		case cmd == "git":
@@ -2448,9 +2711,10 @@ type nowhere struct{ dir string }
 // folder it names plainly, home for none, else unknown: an entry of the
 // folder stack (+N, -N) may be any folder, a pattern or braces (cd
 // ~/.term*) may name another, and so may a relative one CDPATH looks
-// up, when the line names it (lineFlags). Its redirections (pushd x
-// >/dev/null) are no folder. A physical cd (cd -P, or one the line may
-// have made physical: physicalCd) leaves the folder with its links
+// up, when the line names it (lineFlags) or the session may have it set
+// (CdPath). Its redirections (pushd x >/dev/null) are no folder. A
+// physical cd (cd -P, or one the line may have made physical:
+// physicalCd) leaves the folder with its links
 // followed (Resolve), so its .. is the real parent; where the guard
 // can't follow them, or can't tell a logical cd from a physical one
 // that lands elsewhere, the folder is unknown. A logical cd whose folder
@@ -2482,7 +2746,7 @@ func (n nowhere) cd(r Rules, cmd string, args []string) []string {
 	if a == "-" || strings.ContainsAny(a, "$`*?[{") || strings.HasPrefix(a, "~") && !strings.HasPrefix(a, "~/") && a != "~" {
 		return []string{""}
 	}
-	if !dotted.MatchString(slash(a)) && !strings.HasPrefix(a, "~") && !drive.MatchString(slash(a)) && r.cdpath {
+	if !dotted.MatchString(slash(a)) && !strings.HasPrefix(a, "~") && !drive.MatchString(slash(a)) && (r.cdpath || r.CdPath) {
 		return []string{""}
 	}
 	if n.dir == "" && !strings.HasPrefix(a, "/") && !strings.HasPrefix(a, "~") && !drive.MatchString(slash(a)) {
@@ -2773,10 +3037,20 @@ var optionsWord = regexp.MustCompile(`^options(?:\[|\+?=|$)`)
 // to expand it (namesPWD), in its text or its words dequoted: then
 // $PWD, ~+, pwd, $OLDPWD, ~- and the folder stack may not be the
 // folders the line's cds leave.
+//
+// Physical and cdpath both, a name it assigns indirectly (indirect: read
+// $n, typeset "$n=x", printf -v "$n"; zsh's (P) flag, ${…::=…}), which
+// may be CDPATH or zsh's options.
 func (r Rules) lineFlags(line string) (physical, cdpath, pwdSet bool) {
 	cdpath = cdPath.MatchString(line)
 	pwdSet = namesPWD(line)
+	if assignsExp(line) {
+		physical, cdpath = true, true
+	}
 	for _, words := range r.cmds(line) {
+		if indirect(strip(words)) {
+			physical, cdpath = true, true
+		}
 		for _, w := range words {
 			if namesPWD(w) {
 				pwdSet = true
@@ -3345,16 +3619,25 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 		// link, ../x is beside the link's target): such a path is judged
 		// where Resolve says it lands too, and without Resolve, after a
 		// cd, it is unknown. A pattern that may match .. (.*) counts as
-		// one.
+		// one. A path without one may go through a link an earlier call
+		// made (into the project folder, tm's home): it is judged where
+		// Resolve says it lands too, whatever its text. And it may go
+		// through one the line makes, which isn't there yet (linksOf).
 		lands := []string{r.abs(w)}
-		if pw := dotsParent(w); parent.MatchString(slash(pw)) {
+		pw := dotsParent(w)
+		dots := parent.MatchString(slash(pw))
+		if dots {
 			lands = withDirs(lands, r.abs(pw))
-			switch {
-			case r.Resolve != nil:
-				lands = withDirs(lands, r.abs(r.resolve(r.joined(pw))))
-			case r.lineCd:
-				return floor(r.lostCd(cmd + " of " + safe(w) + " after a cd"))
-			}
+		}
+		switch {
+		case r.Resolve != nil:
+			lands = withDirs(lands, r.abs(r.resolve(r.joined(pw))))
+		case dots && r.lineCd:
+			return floor(r.lostCd(cmd + " of " + safe(w) + " after a cd"))
+		}
+		lands, ok := r.throughLinks(lands)
+		if !ok {
+			return floor(r.unplaced(cmd + " of " + safe(w) + " through a link"))
 		}
 		for _, p := range lands {
 			fixed := strings.TrimSuffix(wildcard.ReplaceAllString(p, ""), "/")
@@ -3428,8 +3711,10 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 	recursive := removers[cmd] || slices.ContainsFunc(args, func(a string) bool {
 		return isLong(a, "--recursive") || isLong(a, "--archive") || shortFlags.MatchString(a) && strings.ContainsAny(a[1:], "rRa")
 	})
-	// The paths given, and the targets given with -t.
+	// The paths given, and the targets given with -t (cp -vt d, -td); -T
+	// says the target is no folder; install -d makes every path given.
 	var paths, targets []string
+	noTarget := false
 	args = unredirected(args)
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -3439,8 +3724,44 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 			targets = append(targets, args[i])
 		case strings.HasPrefix(a, "--target-directory="):
 			targets = append(targets, strings.TrimPrefix(a, "--target-directory="))
+		case isLong(a, "--no-target-directory"):
+			noTarget = true
+		case cmd == "install" && isLong(a, "--directory"):
+			all = true
+		case intoCmds[cmd] && shortFlags.MatchString(a):
+			if cmd == "install" && strings.Contains(a, "d") {
+				all = true
+			}
+			noTarget = noTarget || strings.Contains(a, "T")
+			if k := strings.IndexByte(a, 't'); k > 0 {
+				if t := a[k+1:]; t != "" {
+					targets = append(targets, t)
+				} else if i+1 < len(args) {
+					i++
+					targets = append(targets, args[i])
+				}
+			}
 		case !strings.HasPrefix(a, "-"):
 			paths = append(paths, a)
+		}
+	}
+	// cp, install and ln into a folder write each source's name in it:
+	// unless -T says otherwise, a target may be one (ln with one path
+	// links into the line's folder).
+	var into []string
+	if intoCmds[cmd] && !all && !noTarget {
+		dirs, srcs := targets, paths
+		switch {
+		case len(dirs) > 0:
+		case len(paths) == 1 && cmd == "ln":
+			dirs = []string{"."}
+		case len(paths) > 0:
+			dirs, srcs = paths[len(paths)-1:], paths[:len(paths)-1]
+		}
+		for _, t := range dirs {
+			for _, s := range srcs {
+				into = append(into, intoFolder(t, s))
+			}
 		}
 	}
 	switch {
@@ -3451,12 +3772,197 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 	case len(paths) > 0:
 		paths = paths[len(paths)-1:]
 	}
-	for _, p := range paths {
+	for _, p := range append(paths, into...) {
 		if d := refuse(p, recursive); d != nil {
 			return d
 		}
 	}
 	return nil
+}
+
+// madeLink is a link a line makes (linksOf), which isn't there yet
+// for Resolve to follow: its name, absolute, or as written when it is
+// relative to a folder the guard can't tell (rel), or any path at all
+// (any: an expansion or a pattern gives it); and where it leads, as
+// written ("" for one the guard can't read), from the link's folder
+// (sym) or absolute.
+type madeLink struct {
+	name, to  string
+	rel, any  bool
+	sym, lost bool
+}
+
+// linksOf are the links command argv makes (ln, cp -s, cp -l): each
+// source linked at the target, or into it (intoFolder), from the
+// line's folder (r.Cwd, "" unknown). judgeCommands keeps them in the
+// judge's reading (ps.links) for the line's writes.
+func (r Rules) linksOf(argv []string) []madeLink {
+	if len(argv) == 0 {
+		return nil
+	}
+	cmd, args := base(argv[0]), unredirected(argv[1:])
+	sym := false
+	switch cmd {
+	case "ln":
+		sym = slices.ContainsFunc(args, func(a string) bool {
+			return isLong(a, "--symbolic") || shortFlags.MatchString(a) && strings.Contains(a, "s")
+		})
+	case "cp":
+		sym = slices.ContainsFunc(args, func(a string) bool {
+			return isLong(a, "--symbolic-link") || shortFlags.MatchString(a) && strings.Contains(a, "s")
+		})
+		if !sym && !slices.ContainsFunc(args, func(a string) bool {
+			return isLong(a, "--link") || shortFlags.MatchString(a) && strings.Contains(a, "l")
+		}) {
+			return nil
+		}
+	default:
+		return nil
+	}
+	var paths, targets []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case (a == "-t" || a == "--target-directory") && i+1 < len(args):
+			i++
+			targets = append(targets, args[i])
+		case strings.HasPrefix(a, "--target-directory="):
+			targets = append(targets, strings.TrimPrefix(a, "--target-directory="))
+		case shortFlags.MatchString(a) && strings.IndexByte(a, 't') > 0:
+			if t := a[strings.IndexByte(a, 't')+1:]; t != "" {
+				targets = append(targets, t)
+			} else if i+1 < len(args) {
+				i++
+				targets = append(targets, args[i])
+			}
+		case !strings.HasPrefix(a, "-"):
+			paths = append(paths, a)
+		}
+	}
+	// Each source's links: at the target and in it, either may be.
+	type made struct{ name, to string }
+	var out []made
+	switch {
+	case len(targets) > 0:
+		for _, t := range targets {
+			for _, s := range paths {
+				out = append(out, made{intoFolder(t, s), s})
+			}
+		}
+	case len(paths) == 1:
+		out = append(out, made{intoFolder(".", paths[0]), paths[0]})
+	case len(paths) > 1:
+		t := paths[len(paths)-1]
+		for _, s := range paths[:len(paths)-1] {
+			out = append(out, made{intoFolder(t, s), s}, made{t, s})
+		}
+	}
+	var links []madeLink
+	for _, m := range out {
+		if m.name == "" {
+			continue
+		}
+		l := madeLink{name: m.name, to: m.to, sym: sym}
+		switch {
+		case strings.ContainsAny(m.name, "$`*?["):
+			l.any = true
+		case strings.HasPrefix(slash(m.name), "/") || strings.HasPrefix(m.name, "~") || drive.MatchString(slash(m.name)):
+			l.name = r.abs(m.name)
+		case r.Cwd == "":
+			l.rel = true
+		default:
+			l.name = r.abs(m.name)
+		}
+		// A hard link's source is from the line's folder; a symbolic
+		// one's relative target from the link's, where it is found.
+		absTo := strings.HasPrefix(slash(m.to), "/") || strings.HasPrefix(m.to, "~") || drive.MatchString(slash(m.to))
+		switch {
+		case strings.ContainsAny(m.to, "$`"):
+			l.lost = true
+		case absTo:
+			l.to, l.sym = r.abs(m.to), false
+		case !sym && r.Cwd == "":
+			l.lost = true
+		case !sym:
+			l.to = r.abs(m.to)
+		}
+		links = append(links, l)
+	}
+	return links
+}
+
+// keepLinks keeps links in the judge's reading (ps.links), for the
+// line's writes after them.
+func (r Rules) keepLinks(links []madeLink) {
+	if r.ps == nil {
+		return
+	}
+	for _, l := range links {
+		if !slices.Contains(r.ps.links, l) {
+			r.ps.links = append(r.ps.links, l)
+		}
+	}
+}
+
+// throughLinks are lands (absolute, clean) with where each may lead
+// through the links the line makes (linksOf), those links' own
+// followed in turn; false for a path through one whose target the
+// guard can't read, or one that leads to more than maxLinkLands.
+func (r Rules) throughLinks(lands []string) ([]string, bool) {
+	if r.ps == nil || len(r.ps.links) == 0 {
+		return lands, true
+	}
+	for i := 0; i < len(lands); i++ {
+		if len(lands) > maxLinkLands {
+			return lands, false
+		}
+		p := lands[i]
+		parts := strings.Split(strings.Trim(slash(p), "/"), "/")
+		for k := 1; k <= len(parts); k++ {
+			prefix, rest := "/"+strings.Join(parts[:k], "/"), strings.Join(parts[k:], "/")
+			for _, l := range r.ps.links {
+				switch {
+				case l.any:
+				case l.rel:
+					np := strings.Split(strings.Trim(slash(l.name), "/"), "/")
+					if len(np) > k || !slices.Equal(parts[k-len(np):k], np) {
+						continue
+					}
+				case r.fold(l.name) != r.fold(prefix):
+					continue
+				}
+				if l.lost {
+					return lands, false
+				}
+				to := l.to
+				if l.sym {
+					to = r.abs(path.Dir(prefix) + "/" + to)
+				}
+				lands = withDirs(lands, r.abs(to+"/"+rest))
+			}
+		}
+	}
+	return lands, true
+}
+
+// maxLinkLands bounds the paths throughLinks follows one write to.
+const maxLinkLands = 64
+
+// intoCmds are the writers that copy or link what they are given into
+// a folder, under each one's own name.
+var intoCmds = setOf("cp install ln")
+
+// intoFolder is where cmd puts source s in folder t: t/name, its name
+// any (*) when an expansion gives it; "" for none (., .., /).
+func intoFolder(t, s string) string {
+	b := base(strings.TrimRight(slash(s), "/"))
+	switch {
+	case b == "" || b == "." || b == "..":
+		return ""
+	case strings.ContainsAny(b, "$`"):
+		b = "*"
+	}
+	return strings.TrimRight(t, "/") + "/" + b
 }
 
 // heredoc is a here-document a command line opens (<<WORD, <<-WORD):
@@ -3513,9 +4019,15 @@ type parse struct {
 	deadline time.Time
 	over     bool
 	late     bool // over by the deadline
-	// traps are the actions of the traps the lines read set, in order
-	// (judgeLine).
+	// traps are the actions of the traps the lines read set, in order,
+	// and the bodies of the functions they define (judgeLine).
 	traps []string
+	// defs are the names of the functions and aliases the lines read
+	// define; moving, whether one of them may move the folder.
+	defs   map[string]bool
+	moving bool
+	// links are the links the lines read make (linksOf).
+	links []madeLink
 	// resolved and files are what the file system answered (resolve,
 	// file).
 	resolved map[string]string
@@ -3900,7 +4412,7 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 		case c == '&' && redir == i-1 && i+1 < len(s) && strings.ContainsRune("0123456789-", s[i+1]):
 			// A redirect to or from a descriptor (2>&1, <&0, >&-): its word.
 			text(string(c))
-		case c == '|' && redir == i-1 && s[i-1] == '>':
+		case c == '|' && i > 0 && redir == i-1 && s[i-1] == '>':
 			// >|, a redirect that overwrites under noclobber: its word
 			// follows.
 		case (c == '<' || c == '>') && i+1 < len(s) && s[i+1] == '(' && !arith:
@@ -3926,7 +4438,7 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 			fallthrough
 		case strings.ContainsRune(";&|\n(){}", c):
 			endCommand()
-			if c == '|' && (i+1 >= len(s) || s[i+1] != '|') && s[i-1] != '|' {
+			if c == '|' && (i+1 >= len(s) || s[i+1] != '|') && (i == 0 || s[i-1] != '|') {
 				fed = true
 			}
 		case c == '<' && !arith && i+1 < len(s) && s[i+1] == '<' && (i+2 >= len(s) || s[i+2] != '<') && (i == 0 || s[i-1] != '<'):
