@@ -171,7 +171,8 @@ tm didn't take /answer. Run `tm ask open` in the shell and say in one line what 
 # the folder itself and all below it, so it can't be made, written or
 # moved into place.
 # Without the mod, mcp__terminatr lets tm mcp's tools run without a
-# prompt, as the mod's own do.
+# prompt, as the mod's own do; not when Claude's own config has a
+# server "terminatr" (.MCPClash), whose tools the rule would let run.
 # Never put statusLine here: --settings would replace the user's own.
 # Outside safe mode Claude draws with tm's own theme in its config dir
 # ([theme] below, docs/SPEC.md §8.6), which the server rewrites on every
@@ -209,7 +210,7 @@ template = '''
   "theme": {{json (printf "%s-ansi" .PaneScheme)}},
   {{- end}}
   "permissions": {
-    "allow": {{json (concat (list (not .Mods) "mcp__terminatr") (rules "Read(/%s/**)" .Access.Read) (rules "Edit(/%s/**)" .Access.Write) (rules "Edit(/%s)" .Access.WriteFiles) (rules "Bash(%s:*)" .Access.Commands) .Sandbox.Allow)}},
+    "allow": {{json (concat (list (and (not .Mods) (not .MCPClash)) "mcp__terminatr") (rules "Read(/%s/**)" .Access.Read) (rules "Edit(/%s/**)" .Access.Write) (rules "Edit(/%s)" .Access.WriteFiles) (rules "Bash(%s:*)" .Access.Commands) .Sandbox.Allow)}},
     "deny": {{json (concat (rules "Edit(/%s/**)" .Access.NoWrite) (rules "Edit(/%s)" .Access.NoWriteFiles) (siblingRules "Edit(/%s)" .Access.NoWriteSiblings) (rules "Read(/%s/**)" .Access.Closed) (rules "Edit(/%s/**)" .Access.Closed))}}
   },
   "sandbox": {
@@ -450,8 +451,12 @@ version_field = "version"
 fields = { messaging_socket = "messagingSocketPath", remote_control = "bridgeSessionId" }
 
 # Cross-check when the status file is missing or untrusted.
+# Only Claude's own transcript of this session is followed: under its
+# projects folder, named for the session id the event gave.
 [jsonl_tail]
 path_field = "transcript_path"
+root = "{{.ConfigDir}}/projects"
+name = "{{.AgentSID}}.jsonl"
 
 # Usage without the mod (T646, checked on 2.1.306 transcripts): each
 # model request is one or more assistant lines, one per content block,
@@ -459,11 +464,14 @@ path_field = "transcript_path"
 # repeat. input_tokens is the uncached part; the context is the whole
 # input, cache reads and writes included, as the mod's
 # $.session.usage().context reads it. The transcript gives no window
-# and no cost: the windows are the models' own (the API's Models table,
-# 2026-10), and a model none names is left to the server's guess from
-# its id; the cost stays the mod's (Claude's own ledger). One turn per
-# turn_duration, which ends every finished turn. A subagent writes its
-# own transcript, which isn't read.
+# and no cost: context_windows lists only models whose window is fixed,
+# 1M as their default and only one (the API's Models table, 2026-10),
+# by exact id. Any other is left to the server's guess, 200K unless the
+# id or the context says more (the 4.x models' 1M depends on the plan
+# and on [1m], which the transcript doesn't show), so the % errs high
+# and auto_clear and the hint come on time. The cost stays the mod's
+# (Claude's own ledger). One turn per turn_duration, which ends every
+# finished turn. A subagent writes its own transcript, which isn't read.
 [jsonl_tail.usage]
 match = { type = "assistant" }
 input = "message.usage.input_tokens"
@@ -476,15 +484,15 @@ key = "message.id"
 turn = { type = "system", subtype = "turn_duration" }
 
 [jsonl_tail.usage.context_windows]
-"claude-fable-*" = 1_000_000
-"claude-mythos-*" = 1_000_000
-"claude-opus-5*" = 1_000_000
-"claude-opus-4-6*" = 1_000_000
-"claude-opus-4-7*" = 1_000_000
-"claude-opus-4-8*" = 1_000_000
-"claude-sonnet-5*" = 1_000_000
-"claude-sonnet-4-6*" = 1_000_000
-"claude-haiku-5*" = 1_000_000
+"claude-fable-5" = 1_000_000
+"claude-fable-5-1" = 1_000_000
+"claude-mythos-5" = 1_000_000
+"claude-mythos-5-1" = 1_000_000
+"claude-opus-5" = 1_000_000
+"claude-opus-5-5" = 1_000_000
+"claude-sonnet-5" = 1_000_000
+"claude-sonnet-5-5" = 1_000_000
+"claude-haiku-5-5" = 1_000_000
 
 [[jsonl_tail.rules]]
 match = { type = "user" }
@@ -531,12 +539,16 @@ respond ='''{{with .Context}}{"hookSpecificOutput":{"hookEventName":"UserPromptS
 # prompt is blocked with what came of it, which Claude shows the user
 # (checked on 2.1.306: the hook gets the command as typed, before it
 # expands). The turn never starts: idle again. With the mod, or in
-# another session, .Command is "" and the prompt goes on.
+# another session, .Command is "" and the prompt goes on: the entry
+# sets no state, and the session is working as for any prompt. tm hook
+# waits 3 s for the answer and sends the prompt once (timeout), so a
+# command the server ran late never runs twice.
 [[hooks]]
 event = "UserPromptSubmit"
 match = { prompt = "/saveclear" }
 command = "saveclear"
 state = "idle"
+timeout = "command"
 respond = '''{{with .Command}}{"decision":"block","reason":{{json .}}}{{end}}'''
 
 [[hooks]]
@@ -544,6 +556,7 @@ event = "UserPromptSubmit"
 match = { prompt = "/terminatr:saveclear" }
 command = "saveclear"
 state = "idle"
+timeout = "command"
 respond = '''{{with .Command}}{"decision":"block","reason":{{json .}}}{{end}}'''
 
 [[hooks]]
@@ -551,6 +564,7 @@ event = "UserPromptSubmit"
 match = { prompt = "/answer" }
 command = "answer"
 state = "idle"
+timeout = "command"
 respond = '''{{with .Command}}{"decision":"block","reason":{{json .}}}{{end}}'''
 
 [[hooks]]
@@ -558,6 +572,7 @@ event = "UserPromptSubmit"
 match = { prompt = "/terminatr:answer" }
 command = "answer"
 state = "idle"
+timeout = "command"
 respond = '''{{with .Command}}{"decision":"block","reason":{{json .}}}{{end}}'''
 
 [[hooks]]

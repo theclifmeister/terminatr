@@ -67,6 +67,10 @@ turn = { type = "task_complete" }
 			t.Errorf("usage[%d] %+v, want %+v", i, got[i], want[i])
 		}
 	}
+	// A tick hands them on as one report: one write of the record.
+	if m, w := mergeUsage(got), (agent.Usage{Turns: 1, Input: 110, CacheRead: 290, Context: 300, ContextWindow: 1000, Key: "400"}); m != w {
+		t.Errorf("merged %+v, want %+v", m, w)
+	}
 	// The partial line, whole now; then a repeat of it across reads.
 	appendLines(`00,"cached":0},"window":1000,"total":1100}` + "\n")
 	if got, _ := rt.readTail(); len(got) != 1 || got[0].Input != 700 {

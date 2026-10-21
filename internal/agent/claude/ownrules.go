@@ -94,22 +94,28 @@ func homeName(home, path string) string {
 // the read), too large or not JSON.
 func readSettings(root, rel string) (ownSettings, bool) {
 	var s ownSettings
+	return s, readJSON(root, rel, maxSettings, &s)
+}
+
+// readJSON decodes JSON file rel under root into v, false as for
+// readSettings, with max bytes at most.
+func readJSON(root, rel string, max int64, v any) bool {
 	r, err := os.OpenRoot(root)
 	if err != nil {
-		return s, false
+		return false
 	}
 	defer r.Close()
 	f, err := fsx.OpenInNoBlock(r, rel)
 	if err != nil {
-		return s, false
+		return false
 	}
 	defer f.Close()
-	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() || fi.Size() > maxSettings {
-		return s, false
+	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() || fi.Size() > max {
+		return false
 	}
-	b, err := io.ReadAll(io.LimitReader(f, maxSettings+1))
-	if err != nil || len(b) > maxSettings {
-		return s, false
+	b, err := io.ReadAll(io.LimitReader(f, max+1))
+	if err != nil || int64(len(b)) > max {
+		return false
 	}
-	return s, json.Unmarshal(b, &s) == nil
+	return json.Unmarshal(b, v) == nil
 }

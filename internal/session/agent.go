@@ -521,7 +521,7 @@ func (s *Session) Hook(event string, payload map[string]any) (agent.HookResult, 
 	sigs, res, err := rt.a.Hook(ev, env)
 	rt.tr.Hook(ev, sigs)
 	if t := rt.src.JSONLTail; t != nil {
-		if p, ok := payload[t.PathField].(string); ok && p != "" && filepath.IsAbs(p) {
+		if p, ok := payload[t.PathField].(string); ok && p != "" && t.Accepts(p, rt.vars()) {
 			rt.setTail(p)
 		}
 	}
@@ -740,8 +740,9 @@ func (rt *agentRT) readTail() ([]agent.Usage, []string) {
 	if p == "" {
 		return nil, nil
 	}
-	// Nothing appended: one stat, no open (this runs every tick).
-	if fi, err := os.Stat(p); err == nil && fi.Size() == off {
+	// Nothing appended: one stat, no open (this runs every tick). Only a
+	// regular file, not a link to one: a FIFO would block the open.
+	if fi, err := os.Lstat(p); err != nil || !fi.Mode().IsRegular() || fi.Size() == off {
 		return nil, nil
 	}
 	f, err := os.Open(p)
@@ -813,6 +814,32 @@ func (rt *agentRT) readTail() ([]agent.Usage, []string) {
 	}
 	rt.mu.Unlock()
 	return used, refused
+}
+
+// mergeUsage is one tick's reports as one, so the thread's record is
+// written once: the counts summed, the context, its window and model as
+// the latest report that gives a context says, the plan as the latest
+// that gives one.
+func mergeUsage(used []agent.Usage) agent.Usage {
+	var m agent.Usage
+	for _, u := range used {
+		m.Turns += u.Turns
+		m.Input += u.Input
+		m.Output += u.Output
+		m.CacheRead += u.CacheRead
+		m.CacheCreation += u.CacheCreation
+		m.CostUSD += u.CostUSD
+		if u.HasPlan {
+			m.PlanPct, m.HasPlan = u.PlanPct, true
+		}
+		if u.Context > 0 {
+			m.Context, m.ContextWindow, m.Model = u.Context, u.ContextWindow, u.Model
+		}
+		if u.Key != "" {
+			m.Key = u.Key
+		}
+	}
+	return m
 }
 
 // setTailOff moves the tailer on in p, unless the agent named another
@@ -964,10 +991,8 @@ func (s *Session) runAgent(rt *agentRT) {
 				s.drift(rt, "status-file", err.Error())
 			}
 			used, refused := rt.readTail()
-			for _, u := range used {
-				if rt.cfg.OnUsage != nil {
-					rt.cfg.OnUsage(s, u)
-				}
+			if len(used) > 0 && rt.cfg.OnUsage != nil {
+				rt.cfg.OnUsage(s, mergeUsage(used))
 			}
 			for _, msg := range refused {
 				if rt.cfg.OnRefused != nil {
