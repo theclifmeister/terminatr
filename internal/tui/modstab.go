@@ -512,9 +512,6 @@ func consentLines(md mod.Mod, question string, w int) []string {
 			out = append(out, ansi.Truncate(l, w, "…"))
 		}
 	}
-	if man.Permissions.Tools {
-		out = append(out, faintLines(mod.ToolsAgentModNote+".", w)...)
-	}
 	if d := man.DefaultWords(); len(d) > 0 {
 		out = append(out, "")
 		out = append(out, wrapLines("It suggests defaults for all projects. Nothing changes until you apply them (d in the Mods tab, once it's on), and a setting your config.toml sets stays yours:", w)...)

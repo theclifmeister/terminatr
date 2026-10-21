@@ -630,9 +630,6 @@ func (e *Env) modEnable(id, slug string, yes bool) error {
 	}
 	if m, ok := r.Get(id); ok {
 		fmt.Fprintf(e.Stdout, "%s enabled: %s\n", id, m.Status())
-		if c, _ := config.Load(); m.Manifest != nil && m.Manifest.Permissions.Tools && (c == nil || !c.AgentMod) {
-			fmt.Fprintf(e.Stdout, "The Agent mod is off: %s.\n", mod.ToolsAgentModNote)
-		}
 	}
 	return nil
 }

@@ -1,20 +1,16 @@
 package server
 
-// The mod's guard (docs/SPEC.md §8.6, Guard): the standing rules as
-// checks on each tool call. The server decides which rules a session's
-// mod enforces, from the human's settings (config.toml: guard,
-// guard_off, merge) and the session's role, adds the rules the user's
-// enabled mods add (they only refuse: mods design §7, Tighten only), and
-// serves them on the mod socket as GET /v1/rules; the mod matches each call itself
-// (hooks/guard.ts), asking POST /v1/resolve where a file tool's writes
-// land (realTarget: the mod has no file system), and reports a refusal
-// with POST /v1/denied, which the server journals (and puts in the project's inbox only when a session is refused repeatedly).
+// The guard (docs/SPEC.md §8.6, Guard): the standing rules as checks on
+// each tool call. The server decides which rules a session's guard
+// enforces, from the human's settings (config.toml: guard, guard_off,
+// merge) and the session's role, adds the rules the user's enabled mods
+// add (they only refuse: mods design §7, Tighten only), and judges each
+// call the session's PreToolUse hook reports (hookGuardOf). A refusal is
+// journaled (and put in the project's inbox only when a session is
+// refused repeatedly).
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -38,22 +34,20 @@ import (
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
 
-// GuardRules is the body of GET /v1/rules: what the session's mod
-// refuses, and what the server judges a hook's tool call by
+// GuardRules is what the server judges a hook's tool call by
 // (guard.Rules.Judge). Off, nothing is refused and the agent's own
-// permission rules decide alone, as without the mod.
+// permission rules decide alone.
 type GuardRules = guard.Rules
 
-// GuardDenial is the body of POST /v1/denied: the refusal's rule, the
-// tool, the short summary the journal keeps, and for the guard's log
+// GuardDenial is a refusal: its rule, the tool, the short summary the journal keeps, and for the guard's log
 // (guardlog, the human's) the whole command line or file an allowance
 // would name and whether one can (Floor: never).
 type GuardDenial struct {
-	Rule    string `json:"rule"`
-	Tool    string `json:"tool"`
-	Summary string `json:"summary,omitempty"`
-	Subject string `json:"subject,omitempty"`
-	Floor   bool   `json:"floor,omitempty"`
+	Rule    string
+	Tool    string
+	Summary string
+	Subject string
+	Floor   bool
 }
 
 // A refusal is journaled and shown on the thread's info panel, not put
@@ -450,134 +444,12 @@ func realTarget(p string) string {
 	return cur
 }
 
-// GuardEscape is POST /v1/escape's body: the call that asks to leave
-// the sandbox, by the mod's id for it, and whether it has ended.
-type GuardEscape struct {
-	ID   string `json:"id"`
-	Done bool   `json:"done,omitempty"`
-}
-
-// GuardResolve is POST /v1/resolve's body and answer: the paths a file
-// tool writes or a shell given a heredoc runs as its script, absolute
-// but not cleaned, and where each lands (realTarget), in the same
-// order; in the answer, Files says whether each lands on a regular file
-// (regularFile).
-type GuardResolve struct {
-	Paths []string `json:"paths"`
-	Files []bool   `json:"files,omitempty"`
-}
-
-// maxResolve bounds how many paths one POST /v1/resolve may ask about.
-const maxResolve = 256
-
-// guardRoutes adds the guard's routes to session id's mod handler.
-func (s *Server) guardRoutes(mux *http.ServeMux, id string) {
-	mux.HandleFunc("POST /v1/resolve", func(w http.ResponseWriter, r *http.Request) {
-		var q GuardResolve
-		b, err := io.ReadAll(io.LimitReader(r.Body, 64<<10))
-		if err == nil {
-			err = json.Unmarshal(b, &q)
-		}
-		if err == nil && len(q.Paths) > maxResolve {
-			err = fmt.Errorf("more than %d paths", maxResolve)
-		}
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		out := GuardResolve{Paths: make([]string, len(q.Paths)), Files: make([]bool, len(q.Paths))}
-		for i, p := range q.Paths {
-			// Only an absolute path is followed; the mod sends no other.
-			out.Paths[i] = p
-			if filepath.IsAbs(filepath.FromSlash(p)) {
-				out.Paths[i] = realTarget(p)
-				out.Files[i] = regularFile(p)
-			}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(out)
-	})
-	mux.HandleFunc("GET /v1/rules", func(w http.ResponseWriter, r *http.Request) {
-		s.mu.Lock()
-		rec, ok := s.records[id]
-		s.mu.Unlock()
-		if !ok {
-			http.Error(w, "session "+id+" is gone", http.StatusGone)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(s.hookRules(rec))
-	})
-	// The guard asked about a call that leaves the sandbox: the prompt it
-	// brings is the user's (T574 case 6), which tm thread approve and the
-	// ticker read from the session's state (AgentState.Escape).
-	// Its body names the call (the mod's own id) and, once the call has
-	// ended, says done.
-	mux.HandleFunc("POST /v1/escape", func(w http.ResponseWriter, r *http.Request) {
-		var e GuardEscape
-		b, err := io.ReadAll(io.LimitReader(r.Body, maxModReport))
-		if err == nil {
-			err = json.Unmarshal(b, &e)
-		}
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		s.mu.Lock()
-		sess := s.sessions[id]
-		s.mu.Unlock()
-		if sess == nil {
-			http.Error(w, "session "+id+" is gone", http.StatusGone)
-			return
-		}
-		if e.Done {
-			sess.EndEscape(e.ID)
-		} else {
-			sess.MarkEscape(e.ID)
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-	mux.HandleFunc("POST /v1/denied", func(w http.ResponseWriter, r *http.Request) {
-		var d GuardDenial
-		b, err := io.ReadAll(io.LimitReader(r.Body, maxModReport))
-		if err == nil {
-			err = json.Unmarshal(b, &d)
-		}
-		mods := strings.HasPrefix(d.Rule, "mod:")
-		if err == nil && !mods && !slices.Contains(config.GuardRules, d.Rule) && d.Rule != guard.RuleTMFiles {
-			err = fmt.Errorf("unknown rule %q", d.Rule)
-		}
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		s.mu.Lock()
-		rec, ok := s.records[id]
-		s.mu.Unlock()
-		if !ok {
-			http.Error(w, "session "+id+" is gone", http.StatusGone)
-			return
-		}
-		// A mod's rule is one the session has.
-		if mods && !slices.ContainsFunc(s.guardMods(rec, ""), func(m guard.ModRule) bool { return m.Name() == d.Rule }) {
-			http.Error(w, fmt.Sprintf("unknown rule %q", d.Rule), http.StatusBadRequest)
-			return
-		}
-		s.guardDenied(rec, d)
-		w.WriteHeader(http.StatusNoContent)
-	})
-}
-
 // hookGuardOf judges the tool calls session id's hooks report against
-// its rules (agent.HookEnv.Guard: agents without a mod, which answer
-// PreToolUse with the refusal, or an ask) and records a refusal as POST
-// /v1/denied does; an ask is not recorded. A file tool's write is judged
-// where it lands, through the links on its path (realTarget). With a
-// mod, the mod judges: nil.
-func (s *Server) hookGuardOf(id string, mod bool) func(string, map[string]any) *guard.Denial {
-	if mod {
-		return nil
-	}
+// its rules (agent.HookEnv.Guard: the agent answers PreToolUse with the
+// refusal, or an ask) and records a refusal; an ask is not recorded. A
+// file tool's write is judged where it lands, through the links on its
+// path (realTarget).
+func (s *Server) hookGuardOf(id string) func(string, map[string]any) *guard.Denial {
 	return func(tool string, input map[string]any) *guard.Denial {
 		s.mu.Lock()
 		rec, ok := s.records[id]
@@ -623,8 +495,7 @@ type hookRulesEntry struct {
 	stamp string
 }
 
-// hookRules is session r's rules, for its hooks and its mod (GET
-// /v1/rules): worked out again when what they are made of changed (the
+// hookRules is session r's rules, for its hooks: worked out again when what they are made of changed (the
 // human's settings, the project, a mod enabled, disabled, updated or
 // removed: guardStamp), so a guard mod tightens or loosens running
 // sessions at once (T301 B4), and at least once per hookRulesFor for

@@ -6,56 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
-// TestEscapeMod: a call the mod says leaves the sandbox (MarkEscape)
-// makes a permission prompt open while it is the user's (Info.Escape),
-// until that call ends (EndEscape); another call's prompt ending doesn't
-// end it (parallel calls), and the turn's end ends every mark.
-func TestEscapeMod(t *testing.T) {
-	noGrace(t)
-	s := startMod(t, "", true, make(chan PromptResolution, 1))
-	state := func(st agent.State, reason string) {
-		t.Helper()
-		if err := s.ModState(st, reason, "test"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	state(agent.StateWorking, "")
-	s.MarkEscape("e1")
-	if s.Info().Escape {
-		t.Fatal("escape while working: no prompt yet")
-	}
-	state(agent.StateBlocked, "permission")
-	if !s.Info().Escape {
-		t.Fatal("the escape's prompt is not marked")
-	}
-	// A parallel call's prompt was open first and is answered: the
-	// escape's prompt shows next, still marked.
-	state(agent.StateWorking, "")
-	state(agent.StateBlocked, "permission")
-	if !s.Info().Escape {
-		t.Fatal("another prompt's end took the escape's mark")
-	}
-	s.EndEscape("e1")
-	if s.Info().Escape {
-		t.Fatal("the escape's call ended, its mark didn't")
-	}
-	state(agent.StateWorking, "")
-	s.MarkEscape("e2")
-	state(agent.StateIdle, "")
-	state(agent.StateWorking, "")
-	state(agent.StateBlocked, "permission")
-	if s.Info().Escape {
-		t.Fatal("a mark outlived its turn")
-	}
-}
-
-// TestEscapeHook: without the mod, the guard's "escape" ask on a
+// TestEscapeHook: the guard's "escape" ask on a
 // PreToolUse hook marks that call (tool_use_id) until its PostToolUse
 // or PermissionDenied; another ask doesn't mark, and another call's end
 // doesn't unmark. An agent whose every prompt is an escape

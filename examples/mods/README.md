@@ -41,15 +41,11 @@ on in the Mods tab (`,` then `3`), or with `tm mod enable <id>`. `E` in the Mods
 | + | [cockpit](cockpit) | a layout (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.28.3/examples/mods/cockpit` |
 | + | [compact](compact) | a layout (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.28.3/examples/mods/compact` |
 
-**Claude's cost needs the Agent mod.** `memory-search`'s tool reaches a
-Claude session through tm's Agent mod or, with it off, through `tm mcp`;
-the context and tokens that `context-gauge` and `cost-card` read from
-`session.state` come from the mod or from Claude's own transcript. Only
-the dollar cost is the mod's (Claude's own ledger; the transcript has
-none): with the Agent mod off, `cost-card` shows a Claude thread's tokens
-and no cost. The mod is early access and off by default: turn it on in
-Settings (`,`, *Agent mod*) or with `[agent_mod] enabled = true` in
-`config.toml`; it applies to sessions started after.
+**Claude sessions show tokens, not cost.** `memory-search`'s tool
+reaches a Claude session through `tm mcp`; the context and tokens that
+`context-gauge` and `cost-card` read from `session.state` come from
+Claude's own transcript, which has no dollar cost: `cost-card` shows a
+Claude thread's tokens and no cost.
 
 `pr-ci-column`, `memory-tab`, `tasks-tab` and `ticker` already ship inside tm,
 and `tm mod install` refuses a built-in mod's id. To change one, copy it, give the

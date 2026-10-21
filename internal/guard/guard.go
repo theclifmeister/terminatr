@@ -1,11 +1,8 @@
 // Package guard is the guard's matcher (docs/SPEC.md §8.6, Guard): the
-// standing rules as checks on each tool call. It is the Go port of the
-// Claude mod's hooks/guard.ts, for agents without a mod: the server
-// judges each call a PreToolUse hook reports and the agent's manifest
-// answers with the refusal (.Guard in a respond template). The two
-// matchers pass the same test vectors
-// (internal/agent/claude/mod/tests/guard-vectors.ts): change them
-// together.
+// standing rules as checks on each tool call: the server judges each
+// call a PreToolUse hook reports and the agent's manifest answers with
+// the refusal (.Guard in a respond template). Its test vectors are
+// testdata/vectors.json.
 //
 // It refuses, or for a PowerShell command it can't read, asks: a call no
 // rule matches goes on to the agent's own permission check. Bash
@@ -31,7 +28,7 @@ import (
 
 // Rules are what a session's guard refuses, as the server works them out
 // from the human's settings and the session's role. Off, nothing is
-// refused. It is also the body of GET /v1/rules on the mod socket.
+// refused.
 type Rules struct {
 	On   bool   `json:"on"`
 	Role string `json:"role,omitempty"`
@@ -3395,7 +3392,7 @@ func safe(s string) string {
 		ok := c < 128 && (c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune("._/~@+:-", c))
 		w := 1
 		if c > 0xFFFF {
-			w = 2 // two UTF-16 units, as guard.ts counts them
+			w = 2 // two UTF-16 units, as the journal has always counted them
 		}
 		for range w {
 			if n == 100 {

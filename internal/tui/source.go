@@ -54,10 +54,6 @@ type Data struct {
 	// Sandbox are the sandbox tables: all projects' under "", each
 	// project's own under its slug (config.SandboxOf).
 	Sandbox map[string]config.SandboxTable
-	// AgentMod, AgentModBand and AgentModPane are the settings popup's Agent mod, Agent mod
-	// band and Agent mod pane (docs/SPEC.md §8.6); the band is on unless set
-	// off, the pane off unless set on.
-	AgentMod, AgentModBand, AgentModPane bool
 	// ContextHint is [ui] context_hint: the percent of its context window
 	// from which a save and clear of a coordinator is offered; 0 for never.
 	ContextHint int
@@ -227,9 +223,6 @@ type PollSource interface {
 	Templates(slug string) []mod.Template
 	// Agents lists the installed agents: the ones tm can run.
 	Agents() []string
-	// ModsNote names the agents the Agent mod setting is for and the version
-	// each needs ("Claude Code 2.1.289").
-	ModsNote() string
 	// Catalogs are the installed agents' models: what each agent said,
 	// with the user's settings and the learnt refusals over it
 	// (docs/SPEC.md §8.2, §11.2), for the General Models page and the
@@ -645,7 +638,7 @@ func (s *ServerSource) touch() {
 }
 
 func (s *ServerSource) Load() Data {
-	d := Data{AgentModBand: true, UpdateCheck: true, ContextHint: config.DefaultContextHint}
+	d := Data{UpdateCheck: true, ContextHint: config.DefaultContextHint}
 	var res proto.SessionListResult
 	if err := s.call(proto.MethodSessionList, nil, &res); err != nil {
 		d.Err = err.Error()
@@ -676,7 +669,7 @@ func (s *ServerSource) Load() Data {
 		}
 	}
 	if cfg != nil {
-		d.AgentMod, d.AgentModBand, d.AgentModPane, d.ContextHint, d.UpdateCheck = cfg.AgentMod, cfg.AgentModBand, cfg.AgentModPane, cfg.ContextHint, cfg.UpdateCheck
+		d.ContextHint, d.UpdateCheck = cfg.ContextHint, cfg.UpdateCheck
 		d.NeedsFirst = cfg.NeedsFirst
 		if all, err := cfg.AllProjects(); err == nil {
 			d.Defaults = &all
@@ -786,11 +779,6 @@ var errHumanOnly = errors.New("human-only: settings are changed by the human")
 func (s *ServerSource) Agents() []string {
 	reg, _ := agent.Load(s.Paths.AgentsDir())
 	return models.Installed(reg, nil)
-}
-
-func (s *ServerSource) ModsNote() string {
-	reg, _ := agent.Load(s.Paths.AgentsDir())
-	return agent.ModNote(reg)
 }
 
 // inactive says whether the user deactivated the project (§5.1).

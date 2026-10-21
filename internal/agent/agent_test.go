@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"maps"
@@ -69,7 +68,7 @@ func TestClaudeLaunch(t *testing.T) {
 	if !reflect.DeepEqual(l.Argv, want) {
 		t.Fatalf("argv\n got %q\nwant %q", l.Argv, want)
 	}
-	// Without the mod, tm mcp is the typed tools' server (§8.6, tm mcp).
+	// tm mcp is the typed tools' server (§8.6, tm mcp).
 	var mcp struct {
 		MCPServers map[string]struct {
 			Type, Command string
@@ -493,7 +492,7 @@ func TestClaudeContextResponse(t *testing.T) {
 	}
 }
 
-// TestClaudeGuardResponse: without the mod, PreToolUse answers the
+// TestClaudeGuardResponse: PreToolUse answers the
 // guard's refusal as a deny, judged once; an allowed call gets no output.
 func TestClaudeGuardResponse(t *testing.T) {
 	a := claude(t)
@@ -1168,22 +1167,16 @@ func TestManifestGuardTools(t *testing.T) {
 }
 
 // TestGuardToolVectors: the built-in manifests' [guard.tools] are the
-// shared guard vectors' (claude/mod/tests/guard-vectors.ts), which both
-// matchers pass.
+// guard's test vectors' (internal/guard/testdata/vectors.json).
 func TestGuardToolVectors(t *testing.T) {
-	b, err := os.ReadFile("claude/mod/tests/guard-vectors.ts")
+	b, err := os.ReadFile("../guard/testdata/vectors.json")
 	if err != nil {
 		t.Fatal(err)
-	}
-	const mark = "\nexport default "
-	i := bytes.Index(b, []byte(mark))
-	if i < 0 {
-		t.Fatalf("guard-vectors.ts: no %q", mark)
 	}
 	var v struct {
 		Tools map[string]guard.Tool `json:"tools"`
 	}
-	if err := json.Unmarshal(b[i+len(mark):], &v); err != nil {
+	if err := json.Unmarshal(b, &v); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"claude", "codex"} {

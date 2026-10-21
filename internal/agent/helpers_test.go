@@ -227,8 +227,8 @@ var claudeLines = []string{
 }
 
 // TestTailUsageClaude: Claude's manifest reads usage from its
-// transcript without the mod: the four counts, the context as the whole
-// input (cache reads and writes too, as $.session.usage().context), the
+// transcript: the four counts, the context as the whole
+// input (cache reads and writes too), the
 // model's window from context_windows, the message id that tells a
 // repeat, and a turn from turn_duration.
 func TestTailUsageClaude(t *testing.T) {

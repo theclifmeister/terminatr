@@ -21,17 +21,15 @@ func TestMenuAnswer(t *testing.T) {
 		want string // the answer, or the error's code
 	}{
 		{"by number", single, answerArgs{choices: []int{2}}, "Blue"},
-		{"by label, any case", single, answerArgs{options: []string{" blue "}}, "Blue"},
 		{"own words", single, answerArgs{text: "teal", withText: true}, "teal"},
 		{"own words by number", single, answerArgs{choices: []int{3}, text: "teal", withText: true}, "teal"},
 		{"own words missing", single, answerArgs{choices: []int{3}}, "needs-text"},
 		{"empty text", single, answerArgs{withText: true}, "usage"},
 		{"no such number", single, answerArgs{choices: []int{4}}, "no-option"},
-		{"no such label", single, answerArgs{options: []string{"Green"}}, "no-option"},
 		{"two on a single-select", single, answerArgs{choices: []int{1, 2}}, "single-select"},
 		{"option and words on a single-select", single, answerArgs{choices: []int{1}, text: "x", withText: true}, "not-text-option"},
 		{"multi by numbers", multi, answerArgs{choices: []int{1, 3}}, "Apple, Plum"},
-		{"multi by both, once each", multi, answerArgs{choices: []int{1}, options: []string{"apple", "Pear"}}, "Apple, Pear"},
+		{"multi, each once", multi, answerArgs{choices: []int{1, 1, 2}}, "Apple, Pear"},
 		{"multi with words", multi, answerArgs{choices: []int{2}, text: "kiwi", withText: true}, "Pear, kiwi"},
 	} {
 		got, err := menuAnswer(c.it, c.a)

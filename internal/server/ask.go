@@ -1,19 +1,13 @@
 package server
 
-// Open questions (session.ask / session.answer, docs/SPEC.md §3.3, Ask):
-// a session's mod sends the question menu it sees open and waits on the
-// connection; `tm thread answer` fills in its questions one by one, and
-// the last answer goes back to the mod, which answers the menu with it.
-// The question lives as long as the mod's connection: the mod hangs up
-// when the user answers in the pane, and the question goes with it.
+// Open questions (session.answer, docs/SPEC.md §3.3, Ask): tm's own
+// question on a session (askRun); `tm thread answer` fills in its
+// questions one by one, and the last answer goes back to the asker.
 
 import (
-	"bufio"
-	"net"
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -70,7 +64,7 @@ func (a *asks) drop(id string, o *openAsk) {
 }
 
 // answer gives question i of session id's open question its answer.
-// When none is left unanswered, the answers go to the mod and the
+// When none is left unanswered, the answers go to the asker and the
 // question closes. With question set (a console's question.answer
 // binding), question i must still ask it, unanswered, and ans must be
 // one of its options' labels: a menu replaced since the human confirmed
@@ -125,65 +119,4 @@ func (a *asks) answer(id string, i int, ans, question string, byHuman bool) (pro
 		delete(a.open, id)
 	}
 	return proto.SessionAnswerResult{Remaining: left}, nil
-}
-
-// validQuestion checks what a mod sent: 1-4 questions, each with its
-// text and options with labels.
-func validQuestion(q proto.Question) *proto.Error {
-	if len(q.Questions) == 0 || len(q.Questions) > 4 {
-		return proto.Errorf(proto.ErrBadParams, "a question menu has 1-4 questions, not %d", len(q.Questions))
-	}
-	for _, it := range q.Questions {
-		if strings.TrimSpace(it.Question) == "" {
-			return proto.Errorf(proto.ErrBadParams, "a question without its text")
-		}
-		for _, o := range it.Options {
-			if strings.TrimSpace(o.Label) == "" {
-				return proto.Errorf(proto.ErrBadParams, "an option without a label")
-			}
-		}
-	}
-	return nil
-}
-
-// serveAsk answers session.ask, keeps the question open while the client
-// stays, and sends the answers (ask.answered) when they are all in, or
-// ask.closed when another ask replaced it or the session ended.
-func (s *Server) serveAsk(c net.Conn, br *bufio.Reader, req proto.Request) {
-	var p proto.SessionAskParams
-	if perr := decodeParams(req.Params, &p); perr != nil {
-		refuse(c, req, perr)
-		return
-	}
-	sess, perr := s.session(p.ID)
-	if perr == nil {
-		perr = validQuestion(p.Question)
-	}
-	if perr != nil {
-		refuse(c, req, perr)
-		return
-	}
-	q := p.Question
-	q.Since, q.Escape = time.Now().UTC(), false
-	for i := range q.Questions {
-		q.Questions[i].Answered, q.Questions[i].Answer = false, ""
-	}
-	o := s.asks.put(p.ID, q)
-	defer s.asks.drop(p.ID, o)
-	s.watch.wake()
-	s.modEv.wake()
-	defer s.watch.wake()
-	defer s.modEv.wake()
-	if !answer(c, req, struct{}{}) {
-		return
-	}
-	select {
-	case <-clientGone(br):
-	case ans := <-o.answered:
-		proto.WriteLine(c, proto.AskEvent{Event: proto.EventAskAnswered, Answers: ans})
-	case <-o.replaced:
-		proto.WriteLine(c, proto.AskEvent{Event: proto.EventAskClosed})
-	case <-sess.Done():
-		proto.WriteLine(c, proto.AskEvent{Event: proto.EventAskClosed})
-	}
 }

@@ -3,8 +3,7 @@
 // under [projects.<slug>], the all-projects ones under [defaults] that a
 // project follows for every key it doesn't set (among them the agents
 // threads and coordinators run), and the TUI's prefix key ([keys] prefix) and icon set ([ui] icons), whose
-// values the TUI checks, and whether sessions load terminatr's mod
-// ([agent_mod] enabled, docs/SPEC.md §8.6).
+// values the TUI checks.
 //
 // Changing safety settings is a human action: tm writes this file only
 // from the TUI's settings popups, on the human's keypress (write.go). It
@@ -56,7 +55,7 @@ const (
 	CompleteRemoved = "released"
 )
 
-// Values of merge: who merges a thread's pull request. The mod's guard
+// Values of merge: who merges a thread's pull request. The guard
 // (docs/SPEC.md §8.6, Guard) refuses a thread's `gh pr merge` (or the Azure DevOps equivalent) under
 // MergeCoordinator.
 const (
@@ -353,23 +352,15 @@ type Config struct {
 	// enabled mod whose theme, or sidebar layout, every console uses. ""
 	// (unset) is the built-in one.
 	Theme, Layout string
-	// Unknown are the keys under [keys], [ui], [agent_mod] (or [mods]), [mods.<id>] and [agents.<name>] that tm doesn't know
+	// Unknown are the keys under [keys], [ui], [mods], [mods.<id>] and [agents.<name>] that tm doesn't know
 	// (e.g. "ui.icon"), sorted. tm doctor reports them; unlike a
 	// project's, they don't fail Load, so a typo there never stops tm.
 	Unknown []string
-	// AgentMod is [agent_mod] enabled (older [mods] enabled): agent sessions load terminatr's mod, where
-	// the agent has one and its version is new enough. Off by default
-	// while the mods API is early access.
-	AgentMod bool
-	// AgentModBand is [agent_mod] band: with the mod loaded, it draws the band
-	// above the prompt, its status entry and the CI toast. On unless set
-	// false.
-	AgentModBand bool
-	// AgentModPane is [agent_mod] pane: with the mod loaded, a coordinator session
-	// opens its /tm dashboard pane by itself when it starts, where it
-	// would dock as a sidebar. Off unless set true (T90: the TUI's info
-	// panel shows the same beside the coordinator); /tm opens it anyway.
-	AgentModPane bool
+	// AgentMod are the keys of the Claude agent mod's settings the file
+	// still sets ([agent_mod] enabled, band, pane, or the older [mods]
+	// ones), sorted: read without failing, they no longer do anything,
+	// which tm doctor says.
+	AgentMod []string
 	// ContextHint is [ui] context_hint: the percent of its model's
 	// context window at which a save and clear of a coordinator is offered
 	// (DefaultContextHint when unset, 0 for never).
@@ -399,21 +390,6 @@ type Config struct {
 	legacy bool
 }
 
-// rawAgentMod is [agent_mod], and the older [mods] it replaced.
-type rawAgentMod struct {
-	Enabled *bool `toml:"enabled"`
-	Band    *bool `toml:"band"`
-	Pane    *bool `toml:"pane"`
-}
-
-// over returns r with each key it doesn't set taken from old.
-func (r rawAgentMod) over(old rawAgentMod) rawAgentMod {
-	r.Enabled = cmp.Or(r.Enabled, old.Enabled)
-	r.Band = cmp.Or(r.Band, old.Band)
-	r.Pane = cmp.Or(r.Pane, old.Pane)
-	return r
-}
-
 // Path returns <home>/config.toml.
 func Path() (string, error) {
 	d, err := home.Dir()
@@ -426,7 +402,7 @@ func Path() (string, error) {
 // Load reads config.toml. A missing file gives the defaults. Unknown keys
 // inside a [projects.<slug>] or the [defaults] table are errors, so a
 // typo can't silently leave a safety setting at its default; those under
-// [keys], [ui] and [agent_mod] are listed in Unknown. With such a safety error, the
+// [keys] and [ui] are listed in Unknown, and [agent_mod]'s in AgentMod. With such a safety error, the
 // Config is returned too, for its Prefix and Icons: a file that doesn't
 // parse gives none.
 func Load() (*Config, error) {
@@ -436,7 +412,7 @@ func Load() (*Config, error) {
 	}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return &Config{Path: path, AgentModBand: true, ContextHint: DefaultContextHint, UpdateCheck: true}, nil
+		return &Config{Path: path, ContextHint: DefaultContextHint, UpdateCheck: true}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
@@ -467,24 +443,23 @@ func parse(path string, data []byte) (*Config, error) {
 		Azure struct {
 			Hosts []string `toml:"hosts"`
 		} `toml:"azure"`
-		AgentMod rawAgentMod `toml:"agent_mod"`
+		// AgentMod is the removed agent mod's [agent_mod], any keys.
+		AgentMod map[string]any `toml:"agent_mod"`
 		// Mods are the user mods' [mods.<id>] tables and, under the
-		// keys enabled, band and pane, the older name of [agent_mod],
-		// read for each key [agent_mod] doesn't set.
+		// keys enabled, band and pane, the older name of [agent_mod].
 		Mods map[string]toml.Primitive `toml:"mods"`
 	}
 	md, err := toml.Decode(string(data), &raw)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	old, mods, unknownMods, err := readMods(md, raw.Mods)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+	old, mods, unknownMods := readMods(md, raw.Mods)
+	for k := range raw.AgentMod {
+		old = append(old, "agent_mod."+k)
 	}
-	am := raw.AgentMod.over(old)
+	sort.Strings(old)
 	c := &Config{AzureHosts: raw.Azure.Hosts, Mods: mods, Path: path, projects: raw.Projects, defaults: raw.Defaults, agent: raw.DefaultAgent, agents: raw.Agents,
-		Prefix: cmp.Or(raw.Keys.Prefix, raw.Keys.Detach), Icons: raw.UI.Icons, Theme: raw.UI.Theme, Layout: raw.UI.Layout, AgentMod: am.Enabled != nil && *am.Enabled,
-		AgentModBand: am.Band == nil || *am.Band, AgentModPane: am.Pane != nil && *am.Pane,
+		Prefix: cmp.Or(raw.Keys.Prefix, raw.Keys.Detach), Icons: raw.UI.Icons, Theme: raw.UI.Theme, Layout: raw.UI.Layout, AgentMod: old,
 		ContextHint: DefaultContextHint, UpdateCheck: raw.UI.UpdateCheck == nil || *raw.UI.UpdateCheck, NeedsFirst: raw.UI.NeedsFirst}
 	if h := raw.UI.ContextHint; h != nil {
 		if *h < 0 || *h > 100 {
@@ -510,7 +485,7 @@ func parse(path string, data []byte) (*Config, error) {
 			// excludedList or guideList.
 		case len(k) >= 3 && k[0] == "projects", len(k) >= 2 && k[0] == "defaults":
 			return c, fmt.Errorf("%s: unknown setting %s", path, k.String())
-		case len(k) >= 2 && (k[0] == "keys" || k[0] == "ui" || k[0] == "mods" || k[0] == "agent_mod"),
+		case len(k) >= 2 && (k[0] == "keys" || k[0] == "ui" || k[0] == "mods"),
 			len(k) >= 3 && k[0] == "agents":
 			c.Unknown = append(c.Unknown, k.String())
 		}

@@ -2,7 +2,7 @@
 
 Every surface tm draws follows this guide: the dashboard, the sidebar,
 the details panel, the info panels, the status bar, every popup and
-dialog, and the Claude mod (band, status line entry, /tm pane, toasts).
+dialog, and the mods' toasts.
 SPEC.md §4 says what each screen shows; this says how. The unit is one terminal
 cell. Colours are the terminal's 16 ANSI colours only, so tm follows the
 user's light or dark theme.

@@ -25,7 +25,7 @@
             │                                                                                              │
             │ Context gauge: How full each session's context window is, by its row; a card lists the ones  │
             │ past the warning, where C clears one (tm asks first) and enter attaches to it. Claude        │
-            │ sessions report theirs through the Agent mod or, with it off, from their transcript. By      │
+            │ sessions report theirs from their transcript. By terminatr.                                  │
             │                                                                                              │
             │ enter on/off · I install · p permissions · s settings · d defaults · l log · R restart       │
             │ U update · X remove · E examples · ← → tabs · esc close                                      │

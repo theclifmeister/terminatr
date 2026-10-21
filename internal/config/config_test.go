@@ -235,46 +235,26 @@ func TestAllProjectsReleasedRemoved(t *testing.T) {
 	}
 }
 
-// TestAgentMod: [agent_mod] enabled and pane are off unless set, band on unless
-// set false; its unknown keys are listed, not errors.
+// TestAgentMod: the removed agent mod's [agent_mod] keys, and the older
+// [mods] enabled, band and pane, are read whatever their value, never
+// an error or unknown, and listed in AgentMod; [mods.<id>] tables are
+// user mods', read into Mods, with their unknown keys listed, and a
+// stray scalar under [mods] is unknown too.
 func TestAgentMod(t *testing.T) {
 	write(t, "")
-	if c, _ := Load(); c.AgentMod || !c.AgentModBand || c.AgentModPane {
-		t.Fatalf("without a file: mods %v, band %v, pane %v", c.AgentMod, c.AgentModBand, c.AgentModPane)
+	if c, _ := Load(); len(c.AgentMod) != 0 {
+		t.Fatalf("without a file: %v", c.AgentMod)
 	}
 	write(t, "[agent_mod]\nenabled = true\nsidebar = true\n")
-	c, err := Load()
-	if err != nil {
-		t.Fatal(err)
+	if c, err := Load(); err != nil || strings.Join(c.AgentMod, ",") != "agent_mod.enabled,agent_mod.sidebar" || len(c.Unknown) != 0 {
+		t.Fatalf("agent_mod: %v, %+v", err, c)
 	}
-	if !c.AgentMod || !c.AgentModBand || c.AgentModPane || strings.Join(c.Unknown, ",") != "agent_mod.sidebar" {
-		t.Fatalf("mods %v, band %v, pane %v, unknown %v", c.AgentMod, c.AgentModBand, c.AgentModPane, c.Unknown)
-	}
-	write(t, "[agent_mod]\nenabled = true\nband = false\n")
-	if c, err := Load(); err != nil || !c.AgentMod || c.AgentModBand || c.AgentModPane || len(c.Unknown) != 0 {
-		t.Fatalf("band = false: %v, %+v", err, c)
-	}
-	write(t, "[agent_mod]\nenabled = true\npane = true\n")
-	if c, err := Load(); err != nil || !c.AgentModBand || !c.AgentModPane || len(c.Unknown) != 0 {
-		t.Fatalf("pane = true: %v, %+v", err, c)
-	}
-}
-
-// TestAgentModAlias: the older [mods] enabled, band and pane still count
-// for each key [agent_mod] doesn't set; [mods.<id>] tables are user
-// mods', read into Mods, with their unknown keys listed, and a stray
-// scalar under [mods] is unknown too.
-func TestAgentModAlias(t *testing.T) {
-	write(t, "[mods]\nenabled = true\nband = false\npane = true\n")
-	if c, err := Load(); err != nil || !c.AgentMod || c.AgentModBand || !c.AgentModPane || len(c.Unknown) != 0 {
-		t.Fatalf("alias: %v, %+v", err, c)
-	}
-	write(t, "[mods]\nenabled = true\nband = false\n[agent_mod]\nenabled = false\n")
-	if c, err := Load(); err != nil || c.AgentMod || c.AgentModBand {
-		t.Fatalf("agent_mod wins per key: %v, %+v", err, c)
+	write(t, "[mods]\nenabled = \"yes\"\nband = false\npane = true\n")
+	if c, err := Load(); err != nil || strings.Join(c.AgentMod, ",") != "mods.band,mods.enabled,mods.pane" || len(c.Unknown) != 0 {
+		t.Fatalf("[mods]: %v, %+v", err, c)
 	}
 	write(t, "[mods.nord]\nenabled = true\ntheme = \"x\"\n\n[mods]\nsidebar = 1\n")
-	if c, err := Load(); err != nil || c.AgentMod || !c.Mods["nord"].Enabled || strings.Join(c.Unknown, ",") != "mods.nord.theme,mods.sidebar" {
+	if c, err := Load(); err != nil || len(c.AgentMod) != 0 || !c.Mods["nord"].Enabled || strings.Join(c.Unknown, ",") != "mods.nord.theme,mods.sidebar" {
 		t.Fatalf("[mods.<id>]: %v, %+v", err, c)
 	}
 }
@@ -428,10 +408,6 @@ func TestModsTables(t *testing.T) {
 	write(t, "[mods.nord.settings]\ndark = true\n")
 	if c, err := Load(); err != nil || c.Mods["nord"].Settings["dark"] != true || len(c.Unknown) != 0 {
 		t.Fatalf("implied table: %v %+v %v", err, c.Mods, c.Unknown)
-	}
-	write(t, "[mods]\nenabled = \"yes\"\n")
-	if _, err := Load(); err == nil {
-		t.Fatal("a bad older [mods] enabled passed")
 	}
 }
 

@@ -997,14 +997,8 @@ var funcs = template.FuncMap{
 	// with no colour: colors "error" .Theme.Fg.bad "success" "" ->
 	// {"error":"#bf616a"}.
 	"colors": colors,
-	// list is its strings when cond holds, else none, for a grant only
-	// some launches get: list (not .Mods) "mcp__terminatr".
-	"list": func(cond bool, s ...string) []string {
-		if !cond {
-			return []string{}
-		}
-		return s
-	},
+	// list is its strings, for a grant given as is: list "mcp__terminatr".
+	"list": func(s ...string) []string { return append([]string{}, s...) },
 	// concat joins lists, for building one JSON array from several grants.
 	"concat": func(lists ...[]string) []string {
 		out := []string{}

@@ -562,6 +562,17 @@ func TestSettingsRemovedComplete(t *testing.T) {
 	}
 }
 
+// TestSettingsAgentMod: the removed agent mod's keys are read, and
+// doctor says they do nothing.
+func TestSettingsAgentMod(t *testing.T) {
+	d := testDeps(t)
+	os.WriteFile(filepath.Join(d.Paths.Home, "config.toml"), []byte("[agent_mod]\nenabled = true\n"), 0o600)
+	cs := Settings(d)
+	if len(cs) != 1 || cs[0].Status != Warn || cs[0].Detail != "agent_mod.enabled no longer does anything: the Claude agent mod was removed; delete it" {
+		t.Fatalf("%+v", cs)
+	}
+}
+
 func TestUpkeep(t *testing.T) {
 	d := testDeps(t)
 	if got := Upkeep(d); len(got) != 0 {
@@ -673,17 +684,6 @@ func TestQueueChecks(t *testing.T) {
 	}
 	got := queueChecks(sessions, now)
 	if len(got) != 1 || got[0].Status != Warn || !strings.Contains(got[0].Detail, "s-28 (terminatr coordinator): 1 queued prompt(s), held 9h0m0s: prompt box not empty") {
-		t.Fatalf("checks %+v", got)
-	}
-}
-
-func TestSkippedChecks(t *testing.T) {
-	sessions := []proto.SessionInfo{
-		{ID: "s-3", Role: proto.RoleThread, Project: "todo", Thread: "t-0001", HooksSkipped: "another mod"},
-		{ID: "s-4", Role: proto.RoleThread, Project: "todo", Thread: "t-0002"},
-	}
-	got := skippedChecks(sessions)
-	if len(got) != 1 || got[0].Status != Warn || !strings.Contains(got[0].Detail, "s-3 (todo thread t-0001): terminatr hooks skipped by another mod") {
 		t.Fatalf("checks %+v", got)
 	}
 }

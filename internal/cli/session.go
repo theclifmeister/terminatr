@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -10,7 +9,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -21,8 +19,7 @@ const sessionUsage = `usage: tm session list [--json]
        tm session read ID [--scrollback] [--json]   (the screen as plain text)
        tm session keys ID [--enter] [--] [TEXT…]   (types TEXT literally; --enter presses Enter)
        tm session prompt ID TEXT   (pasted once the agent is idle)
-       tm session wait ID [--state S[,S…]] [--timeout 30s]
-       tm session ask ID < QUESTION.json   (for mods: waits for the answers)`
+       tm session wait ID [--state S[,S…]] [--timeout 30s]`
 
 // sessionCmd implements `tm session …`: plain sessions outside projects.
 func sessionCmd(e *Env, args []string) error {
@@ -44,8 +41,6 @@ func sessionCmd(e *Env, args []string) error {
 		return sessionPrompt(e, args[1:])
 	case "wait":
 		return sessionWait(e, args[1:])
-	case "ask":
-		return sessionAsk(e, args[1:])
 	}
 	return srvUsage("session", sessionUsage)
 }
@@ -366,41 +361,6 @@ func sessionWait(e *Env, args []string) error {
 	if res.TimedOut {
 		fmt.Fprintf(e.Stderr, "tm session wait: timed out after %v\n", timeout)
 		return &exitError{ExitRefused}
-	}
-	return nil
-}
-
-// sessionAsk implements `tm session ask ID` (docs/SPEC.md §3.3, Ask), the
-// mod's side of an open question: it reads the question menu as JSON
-// (proto.Question) on stdin, keeps it open on the session until every
-// question has an answer through `tm thread answer`, and prints the
-// answers as one JSON object by question text. It exits 1 with nothing
-// printed when the question closed without answers; killing it takes the
-// question down.
-func sessionAsk(e *Env, args []string) error {
-	const usage = "usage: tm session ask ID < QUESTION.json"
-	if len(args) != 1 {
-		return srvUsage("session ask", usage)
-	}
-	var q proto.Question
-	if err := json.NewDecoder(e.Stdin).Decode(&q); err != nil {
-		return srvUsage("session ask", "the question on stdin: "+err.Error()+"\n"+usage)
-	}
-	p, err := client.ResolvePaths()
-	if err != nil {
-		return srvFail("session ask", err)
-	}
-	ans, err := client.AskSession(p, args[0], q)
-	if err != nil {
-		return srvFail("session ask", err)
-	}
-	if ans == nil {
-		fmt.Fprintln(e.Stderr, "tm session ask: the question closed unanswered")
-		return &exitError{ExitRefused}
-	}
-	b, _ := json.Marshal(ans)
-	if _, err := e.Stdout.Write(append(b, '\n')); err != nil {
-		return &exitError{ExitIO}
 	}
 	return nil
 }

@@ -515,22 +515,3 @@ func (s *WatchStream) Next() (proto.Watch, error) {
 
 // Close ends the watch.
 func (s *WatchStream) Close() error { return s.c.Close() }
-
-// AskSession opens question q on session id (session.ask) and waits
-// until it ends: the answers by question text once every question has
-// one, or nil when it closed without (replaced, or the session ended).
-// The caller ending takes the question down with its connection.
-func AskSession(p Paths, id string, q proto.Question) (map[string]string, error) {
-	c, err := OpenStream(p, proto.MethodSessionAsk, proto.SessionAskParams{ID: id, Question: q}, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer c.Close()
-	ev, err := NextEvent(c, func(ev proto.AskEvent) bool {
-		return ev.Event == proto.EventAskAnswered || ev.Event == proto.EventAskClosed
-	})
-	if err != nil || ev.Event == proto.EventAskClosed {
-		return nil, err
-	}
-	return ev.Answers, nil
-}

@@ -113,7 +113,6 @@ func TestConsentTools(t *testing.T) {
 		`  text (required): {"description":"The draft.","type":"string"}`,
 		"Tool it offers your threads and coordinators (they read its description), lint_ping, in full:",
 		"Input: none",
-		ToolsAgentModNote, // Claude reaches tools through the Agent mod (T301 L1)
 	} {
 		if !strings.Contains(c, want) {
 			t.Errorf("consent lacks %q:\n%s", want, c)

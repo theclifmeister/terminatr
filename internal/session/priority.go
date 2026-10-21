@@ -3,8 +3,8 @@ package session
 // Priority prompts (docs/SPEC.md §8.6, Priority prompts): tm thread prompt
 // --now and --interrupt, for a thread that never goes idle. Claude Code
 // (2.1.302) and Codex (0.162) both take a prompt typed mid-turn at the
-// next tool boundary, in the running turn; the queue's routes (Claude's
-// mod, `codex queue`) only run a prompt once the turn ends.
+// next tool boundary, in the running turn; the queue's routes (the paste
+// injector, `codex queue`) only run a prompt once the turn ends.
 
 import (
 	"fmt"
@@ -51,7 +51,7 @@ func (e *NotInterruptedError) Error() string {
 // draft in the box, a dialog, an agent started by hand) a steer goes as
 // Prompt sends it, and why says why, while an interrupt is refused
 // (NotInterruptedError): the turn runs on, and nothing is queued.
-// A queued prompt with the same text that no mod took yet is dropped, so
+// A queued prompt with the same text is dropped, so
 // a prompt sent again with --now doesn't run twice.
 func (s *Session) PromptNow(text string, interrupt bool) (via, why string, err error) {
 	rt := s.agentRT()
@@ -97,7 +97,7 @@ func (s *Session) PromptNow(text string, interrupt bool) (via, why string, err e
 	}
 	kept := rt.prompts[:0]
 	for _, p := range rt.prompts {
-		if p.text != text || p.taken {
+		if p.text != text {
 			kept = append(kept, p)
 		}
 	}
@@ -116,7 +116,7 @@ func (s *Session) PromptNow(text string, interrupt bool) (via, why string, err e
 		rt.steers, rt.steerShown = nil, false
 		rt.promptSeq++
 		id := fmt.Sprintf("%s-%d", rt.promptGen, rt.promptSeq)
-		rt.prompts = append([]queuedPrompt{{id: id, text: text, at: time.Now(), paste: true}}, rt.prompts...)
+		rt.prompts = append([]queuedPrompt{{id: id, text: text, at: time.Now()}}, rt.prompts...)
 	case !steered:
 		rt.steers = append(rt.steers, text)
 		rt.emptyBox = false // until the screen says so again

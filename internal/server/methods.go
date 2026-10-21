@@ -179,12 +179,10 @@ func init() {
 		})},
 
 		// Named by a session or a project: the caller's own (mayAddress).
-		// Events and questions come from inside the session they name:
-		// tm hook and the agent's mod are the agent's children.
+		// Events come from inside the session they name: tm hook is the
+		// agent's child.
 		proto.MethodHookEvent: {scope: scopeOwn, name: scoped(func(p proto.HookEventParams) string { return p.Session }),
 			call: typed(func(s *Server, p proto.HookEventParams, _ callCtx) (any, *proto.Error) { return s.hookEvent(p), nil })},
-		proto.MethodSessionAsk: {scope: scopeOwn, name: scoped(func(p proto.SessionAskParams) string { return p.ID }),
-			stream: stream((*Server).serveAsk)},
 		proto.MethodSessionRead: {scope: scopeSees, name: scoped(func(p proto.SessionReadParams) string { return p.ID }),
 			call: typed(func(s *Server, p proto.SessionReadParams, _ callCtx) (any, *proto.Error) { return s.read(p) })},
 		proto.MethodSessionWait: {scope: scopeSees, name: scoped(func(p proto.SessionWaitParams) string { return p.ID }),

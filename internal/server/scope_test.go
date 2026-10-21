@@ -16,7 +16,7 @@ import (
 )
 
 // TestMayAddress: a session-addressed call names the caller's own session
-// (hook.event, session.ask), or one it may see (session.read, .wait and
+// (hook.event), or one it may see (session.read, .wait and
 // .watch, agent.explain: a coordinator also its project's), or its own project
 // (project.watch). The human on the human socket names any; a caller the
 // pid walk finds in no session names none on the server socket.
@@ -52,9 +52,6 @@ func TestMayAddress(t *testing.T) {
 		{proto.MethodHookEvent, hook("s-2"), false, human, false},
 		{proto.MethodHookEvent, hook("s-2"), true, human, true},
 		{proto.MethodHookEvent, hook("s-1"), true, thread, false}, // an agent on the human socket
-		{proto.MethodSessionAsk, proto.SessionAskParams{ID: "s-2"}, false, thread, true},
-		{proto.MethodSessionAsk, proto.SessionAskParams{ID: "s-1"}, false, thread, false},
-		{proto.MethodSessionAsk, proto.SessionAskParams{ID: "s-2"}, false, coord, false},
 		{proto.MethodSessionRead, proto.SessionReadParams{ID: "s-2"}, false, thread, true},
 		{proto.MethodSessionRead, proto.SessionReadParams{ID: "s-4"}, false, thread, false},
 		{proto.MethodSessionRead, proto.SessionReadParams{ID: "s-3"}, false, coord, true},

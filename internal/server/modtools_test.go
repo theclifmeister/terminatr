@@ -19,8 +19,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
-// TestModTools: a thread session's mod calls its tools over its socket;
-// each runs as the session's thread, in its cwd, as the command it
+// TestModTools: a thread session's tools: each runs as the session's thread, in its cwd, as the command it
 // stands for, and what isn't a tool's input is refused before anything
 // runs.
 func TestModTools(t *testing.T) {
@@ -45,35 +44,21 @@ func TestModTools(t *testing.T) {
 		return proto.CLIRunResult{Stdout: strings.Join(p.Args, " ") + " ok\n"}
 	}
 	s.taskOf.Store("proj/t-0001", "T5")
-	s.mu.Lock()
-	s.inSession = testInSession
-	sock, err := s.listenMod("s-1", rt)
-	s.mu.Unlock()
-	if err != nil {
-		t.Fatal(err)
-	}
 	sess, err := session.Start(session.Config{
 		ID: "s-1", Role: proto.RoleThread, Argv: []string{testSh(t), "-c", "exec cat"}, Cwd: rt,
 		Env: []string{"PATH=/usr/bin:/bin"}, Cols: 80, Rows: 24, Logf: t.Logf,
-		Agent: &session.AgentConfig{Agent: agent.FromManifest(m), Home: rt, ModSocket: sock},
+		Agent: &session.AgentConfig{Agent: agent.FromManifest(m), Home: rt},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { sess.Stop(time.Second) })
-	c := modClient(sock)
 	call := func(name, body string) (int, ModToolResult) {
 		t.Helper()
-		resp, err := c.Post("http://terminatr/v1/tools/"+name, "application/json", strings.NewReader(body))
-		if err != nil {
-			t.Fatalf("POST %s: %v", name, err)
-		}
-		defer resp.Body.Close()
-		var r ModToolResult
-		if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
-			t.Fatalf("%s: %v", name, err)
-		}
-		return resp.StatusCode, r
+		s.mu.Lock()
+		rec := s.records["s-1"]
+		s.mu.Unlock()
+		return s.runTool(rec, name, []byte(body))
 	}
 	took := func() []proto.CLIRunParams {
 		mu.Lock()
@@ -83,9 +68,6 @@ func TestModTools(t *testing.T) {
 		return got
 	}
 
-	if code, _ := call("status", `{"activity":"x"}`); code != http.StatusGone {
-		t.Fatalf("no session: %d", code)
-	}
 	s.mu.Lock()
 	s.sessions["s-1"] = sess
 	s.records["s-1"] = SessionRecord{ID: "s-1", Role: proto.RoleCoordinator, Project: "proj", Cwd: rt}

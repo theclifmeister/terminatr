@@ -31,12 +31,12 @@ func TestEdit(t *testing.T) {
 			"default_agent = \"pi\"\n[keys]\n"},
 		{"other table's key untouched", "[projects.other]\nyolo = false\n[projects.demo]\n", "projects.demo", "yolo", true,
 			"[projects.other]\nyolo = false\n[projects.demo]\nyolo = true\n"},
-		{"mods table absent: appended", "default_agent = \"claude\"\n[ui]\nicons = \"ascii\"\n", "agent_mod", "enabled", true,
-			"default_agent = \"claude\"\n[ui]\nicons = \"ascii\"\n\n[agent_mod]\nenabled = true\n"},
-		{"mods band beside enabled", "[agent_mod]\nenabled = true\n\n[projects.demo]\nyolo = true\n", "agent_mod", "band", false,
-			"[agent_mod]\nenabled = true\nband = false\n\n[projects.demo]\nyolo = true\n"},
-		{"mods line edited, comment kept", "# mods\n[agent_mod]\nenabled = false # early access\nband = true\n", "agent_mod", "enabled", true,
-			"# mods\n[agent_mod]\nenabled = true # early access\nband = true\n"},
+		{"ui table absent: appended", "default_agent = \"claude\"\n[keys]\nprefix = \"ctrl+a\"\n", "ui", "needs_first", true,
+			"default_agent = \"claude\"\n[keys]\nprefix = \"ctrl+a\"\n\n[ui]\nneeds_first = true\n"},
+		{"ui key beside another", "[ui]\nneeds_first = true\n\n[projects.demo]\nyolo = true\n", "ui", "update_check", false,
+			"[ui]\nneeds_first = true\nupdate_check = false\n\n[projects.demo]\nyolo = true\n"},
+		{"ui line edited, comment kept", "# look\n[ui]\nneeds_first = false # for now\nupdate_check = true\n", "ui", "needs_first", true,
+			"# look\n[ui]\nneeds_first = true # for now\nupdate_check = true\n"},
 		{"string escaped", "", "keys", "prefix", `ctrl+"`,
 			"[keys]\nprefix = \"ctrl+\\\"\"\n"},
 	} {
@@ -63,8 +63,8 @@ func TestEditOtherForms(t *testing.T) {
 			t.Errorf("%q: err %v, want ErrForm", in, err)
 		}
 	}
-	for _, in := range []string{"agent_mod.enabled = false\n", "agent_mod = { enabled = false }\n"} {
-		if _, err := Edit([]byte(in), "agent_mod", "enabled", true); !errors.Is(err, ErrForm) {
+	for _, in := range []string{"ui.needs_first = false\n", "ui = { needs_first = false }\n"} {
+		if _, err := Edit([]byte(in), "ui", "needs_first", true); !errors.Is(err, ErrForm) {
 			t.Errorf("%q: err %v, want ErrForm", in, err)
 		}
 	}

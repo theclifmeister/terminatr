@@ -1,11 +1,8 @@
 package server
 
 import (
-	"bytes"
-	"encoding/json"
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -146,58 +143,24 @@ func writeConfig(t *testing.T, body string) {
 	}
 }
 
-// TestGuardRoutes: the mod fetches its rules over its socket, and each
-// refusal it reports is journaled, and a session refused three times in
-// ten minutes files one inbox item.
-func TestGuardRoutes(t *testing.T) {
+// TestGuardDenied: a session's rules are its role's, and each refusal
+// is journaled, and a session refused three times in ten minutes files
+// one inbox item.
+func TestGuardDenied(t *testing.T) {
 	testPaths(t)
 	p := newWatchProject(t)
-	rt := ipctest.ShortTempDir(t, "tmguard")
 	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
-	s.mu.Lock()
-	s.inSession = testInSession
-	sock, err := s.listenMod("s-2", rt)
-	s.mu.Unlock()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(s.closeMods)
-	c := modClient(sock)
-
-	resp, err := c.Get("http://terminatr/v1/rules")
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusGone {
-		t.Fatalf("no record: %d", resp.StatusCode)
-	}
-	s.mu.Lock()
-	s.records["s-2"] = SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: "t-0001", Cwd: rt}
-	s.mu.Unlock()
-	resp, err = c.Get("http://terminatr/v1/rules")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var g GuardRules
-	err = json.NewDecoder(resp.Body).Decode(&g)
-	resp.Body.Close()
-	if err != nil || !g.On || !slices.Contains(g.Rules, "merge") || g.Tools["Bash"].Kind != guard.KindShell {
-		t.Fatalf("rules %+v, %v", g, err)
-	}
-
-	if code := postMod(t, c, "/v1/denied", `{"rule":"nope","tool":"Bash"}`); code != http.StatusBadRequest {
-		t.Errorf("unknown rule: %d", code)
+	rec := SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: "t-0001", Cwd: t.TempDir()}
+	s.records["s-2"] = rec
+	if g := s.hookRules(rec); !g.On || !slices.Contains(g.Rules, "merge") || g.Tools["Bash"].Kind != guard.KindShell {
+		t.Fatalf("rules %+v", g)
 	}
 	clock := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
 	guardNow = func() time.Time { return clock }
 	t.Cleanup(func() { guardNow = time.Now })
 	deny := func(rule string) {
 		t.Helper()
-		body := `{"rule":"` + rule + `","tool":"Bash","summary":"gh pr merge\n42"}`
-		if code := postMod(t, c, "/v1/denied", body); code != http.StatusNoContent {
-			t.Fatalf("denied: %d", code)
-		}
+		s.guardDenied(rec, GuardDenial{Rule: rule, Tool: "Bash", Summary: "gh pr merge\n42"})
 	}
 	guards := func() int {
 		items, err := p.Inbox()
@@ -245,19 +208,14 @@ func TestGuardRoutes(t *testing.T) {
 	}
 }
 
-// TestHookGuard: without a mod, the server judges the tool calls a
-// session's hooks report against its rules and records each refusal as
-// POST /v1/denied does, but not an ask; with a mod there is no hook
-// guard.
+// TestHookGuard: the server judges the tool calls a session's hooks
+// report against its rules and records each refusal, but not an ask.
 func TestHookGuard(t *testing.T) {
 	testPaths(t)
 	p := newWatchProject(t)
 	wt := t.TempDir()
 	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
-	if s.hookGuardOf("s-2", true) != nil {
-		t.Fatal("a mod session got a hook guard")
-	}
-	judge := s.hookGuardOf("s-2", false)
+	judge := s.hookGuardOf("s-2")
 	if d := judge("Bash", map[string]any{"command": "gh pr merge 1"}); d != nil {
 		t.Fatalf("no record: %+v", d)
 	}
@@ -282,7 +240,7 @@ func TestHookGuard(t *testing.T) {
 	// Claude's PowerShell tool: a command the guard can't read is asked,
 	// and an ask is not journaled.
 	s.records["s-3"] = SessionRecord{ID: "s-3", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: "t-0001", Cwd: wt}
-	if d := s.hookGuardOf("s-3", false)("PowerShell", map[string]any{"command": "iex $line"}); d == nil || !d.Ask || d.Rule != "unknown" {
+	if d := s.hookGuardOf("s-3")("PowerShell", map[string]any{"command": "iex $line"}); d == nil || !d.Ask || d.Rule != "unknown" {
 		t.Errorf("PowerShell iex: %+v", d)
 	}
 	lines, _, _ := p.JournalTail(20)
@@ -342,7 +300,7 @@ func TestHookGuardFollowsLinks(t *testing.T) {
 	}
 	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
 	s.records["s-2"] = SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "codex", Project: p.Slug, Thread: "t-0001", Cwd: wt}
-	judge := s.hookGuardOf("s-2", false)
+	judge := s.hookGuardOf("s-2")
 	patch := func(path string) map[string]any {
 		return map[string]any{"command": "*** Begin Patch\n*** Add File: " + path + "\n+x\n*** End Patch"}
 	}
@@ -419,59 +377,6 @@ func TestRealTarget(t *testing.T) {
 	}
 }
 
-// TestModResolve: the mod's POST /v1/resolve answers where each write
-// lands, through a link out of the worktree, in order, and whether it
-// is a regular file; a relative path comes back as sent, and too many
-// paths are refused.
-func TestModResolve(t *testing.T) {
-	rt := ipctest.ShortTempDir(t, "tmresolve")
-	rt, _ = filepath.EvalSymlinks(rt)
-	wt, out := filepath.Join(rt, "wt"), filepath.Join(rt, "out")
-	for _, d := range []string{wt, out} {
-		if err := os.Mkdir(d, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.Symlink(out, filepath.Join(wt, "link")); err != nil {
-		t.Skip(err)
-	}
-	if err := os.WriteFile(filepath.Join(out, "run.sh"), nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
-	s.mu.Lock()
-	s.inSession = testInSession
-	sock, err := s.listenMod("s-3", rt)
-	s.mu.Unlock()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(s.closeMods)
-	c := modClient(sock)
-
-	q, _ := json.Marshal(GuardResolve{Paths: []string{wt + "/link/x", wt + "/new/y", "rel/z", wt + "/link/run.sh", wt + "/link"}})
-	resp, err := c.Post("http://terminatr/v1/resolve", "application/json", bytes.NewReader(q))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got GuardResolve
-	err = json.NewDecoder(resp.Body).Decode(&got)
-	resp.Body.Close()
-	want := []string{filepath.Join(out, "x"), filepath.Join(wt, "new", "y"), "rel/z", filepath.Join(out, "run.sh"), out}
-	if err != nil || !slices.Equal(got.Paths, want) {
-		t.Errorf("got %q, %v; want %q", got.Paths, err, want)
-	}
-	if files := []bool{false, false, false, true, false}; !slices.Equal(got.Files, files) {
-		t.Errorf("files %v, want %v", got.Files, files)
-	}
-	q, _ = json.Marshal(GuardResolve{Paths: make([]string, maxResolve+1)})
-	if code := postMod(t, c, "/v1/resolve", string(q)); code != http.StatusBadRequest {
-		t.Errorf("too many: %d", code)
-	}
-}
-
-// TestAccessMergeCommands: coordinator_merges (off by default) // coordinator tm thread merge, only while merge = coordinator, and a
-// thread never gets them.
 func TestAccessMergeCommands(t *testing.T) {
 	testPaths(t)
 	p := newWatchProject(t)
@@ -781,7 +686,7 @@ func TestGuardSecrets(t *testing.T) {
 		}
 	}
 	s.records["s-2"] = rec
-	judge := s.hookGuardOf("s-2", false)
+	judge := s.hookGuardOf("s-2")
 	// Bash takes forward slashes on Windows too (Git Bash).
 	if d := judge("Bash", map[string]any{"command": "cat " + filepath.ToSlash(filepath.Join(codexHome, "auth.json"))}); d == nil || d.Rule != "credentials" {
 		t.Errorf("cat of $CODEX_HOME/auth.json: %+v", d)
@@ -807,7 +712,7 @@ func TestGuardSecrets(t *testing.T) {
 // TestGuardModRules: an enabled mod's guard rules reach the sessions of
 // its projects and roles, labelled with the mod, even with every core
 // rule off; the guard off takes them too. A refusal under one is
-// journaled; a mod rule the session doesn't have is refused.
+// journaled.
 func TestGuardModRules(t *testing.T) {
 	testPaths(t)
 	p := newWatchProject(t)
@@ -882,33 +787,9 @@ message = "prod secrets\nstay with the human."
 	}
 
 	config("[mods.infra]\nenabled = true\n")
-	s.mu.Lock()
-	s.inSession = testInSession
-	sock, err := s.listenMod("s-2", rt)
 	s.records["s-2"] = thread
-	s.mu.Unlock()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(s.closeMods)
-	c := modClient(sock)
-	resp, err := c.Get("http://terminatr/v1/rules")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got GuardRules
-	err = json.NewDecoder(resp.Body).Decode(&got)
-	resp.Body.Close()
-	if err != nil || names(got) != "mod:infra.no-destroy" {
-		t.Fatalf("GET /v1/rules %+v, %v", got.Mods, err)
-	}
-	for _, rule := range []string{"mod:infra.no-prod", "mod:infra.nope", "mod:other.no-destroy"} {
-		if code := postMod(t, c, "/v1/denied", `{"rule":"`+rule+`","tool":"Bash"}`); code != http.StatusBadRequest {
-			t.Errorf("%s: %d", rule, code)
-		}
-	}
-	if code := postMod(t, c, "/v1/denied", `{"rule":"mod:infra.no-destroy","tool":"Bash","summary":"terraform destroy"}`); code != http.StatusNoContent {
-		t.Fatalf("denied: %d", code)
+	if d := s.hookGuardOf("s-2")("Bash", map[string]any{"command": "terraform destroy"}); d == nil || d.Rule != "mod:infra.no-destroy" {
+		t.Fatalf("terraform destroy: %+v", d)
 	}
 	lines, _, _ := p.JournalTail(5)
 	if !slices.ContainsFunc(lines, func(l string) bool {
@@ -920,7 +801,7 @@ message = "prod secrets\nstay with the human."
 
 // TestGuardModLive: a guard mod enabled, disabled, updated or removed
 // changes a running session's guard decisions at once, for its hooks
-// and for its mod's GET /v1/rules, without a restart (T301 B4).
+// and its rules, without a restart (T301 B4).
 func TestGuardModLive(t *testing.T) {
 	testPaths(t)
 	p := newWatchProject(t)
@@ -942,12 +823,12 @@ func TestGuardModLive(t *testing.T) {
 	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
 	rec := SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "codex", Project: p.Slug, Thread: "t-0001", Cwd: t.TempDir()}
 	s.records["s-2"] = rec
-	judge := s.hookGuardOf("s-2", false)
+	judge := s.hookGuardOf("s-2")
 	refused := func(cmd string) bool {
 		t.Helper()
 		hook := judge("Bash", map[string]any{"command": cmd}) != nil
-		if mod := s.hookRules(rec).Judge("Bash", map[string]any{"command": cmd}) != nil; mod != hook {
-			t.Fatalf("%s: the hooks say refused %v, the mod's rules %v", cmd, hook, mod)
+		if rules := s.hookRules(rec).Judge("Bash", map[string]any{"command": cmd}) != nil; rules != hook {
+			t.Fatalf("%s: the hooks say refused %v, the rules %v", cmd, hook, rules)
 		}
 		return hook
 	}

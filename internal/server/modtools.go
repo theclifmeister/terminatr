@@ -5,24 +5,20 @@ package server
 // for what it otherwise does through the shell (tm report, tm status,
 // tm task steps, tm done), and both threads and coordinators the tools
 // enabled user mods declare ([[provides.tools]]) for its role and
-// project. The agent mod lists them with GET /v1/tools on the session's
-// mod socket and serves each call with POST /v1/tools/{name}; tm mcp,
-// for agents without a mod, does the same over tool.list and tool.run.
-// The socket (or the caller's pid) says which session calls, so a call
-// runs as that session, with no permission rule. A thread tool's input
+// project. tm mcp lists them with tool.list and serves each call with
+// tool.run. The caller's pid says which session calls, so a call runs
+// as that session, with no permission rule. A thread tool's input
 // is checked here and turned into the command it stands for, which runs
 // in this server as `tm` would through cli.run. A mod tool's input is
 // checked against its schema and the call goes to the mod's host (the
 // supervisor starts an idle one), whose handler answers it under the
-// mod's grants. A mods-off session, and any other agent, keeps the shell
-// commands.
+// mod's grants. An agent without tm mcp keeps the shell commands.
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"maps"
 	"math"
 	"net/http"
@@ -73,8 +69,8 @@ type ModDoneTool struct {
 	Summary string `json:"summary,omitempty"`
 }
 
-// ModToolResult is what POST /v1/tools/{name} answers: the command's
-// output, for the model; with a non-2xx status, why it was refused.
+// ModToolResult is what a tool call answers: the command's output, for
+// the model; with a non-2xx status, why it was refused.
 type ModToolResult struct {
 	Text  string `json:"text,omitempty"`
 	Error string `json:"error,omitempty"`
@@ -110,8 +106,7 @@ func toolObject(props map[string]any, required ...string) map[string]any {
 	return m
 }
 
-// ThreadTools are a thread's own tools, as the agent mod registers them
-// (mod/hooks/tools.ts) and tm mcp lists them.
+// ThreadTools are a thread's own tools, as tm mcp lists them.
 var ThreadTools = []proto.ToolDef{
 	{
 		Name: "report",
@@ -207,45 +202,12 @@ func (s *Server) modToolsFor(rec SessionRecord) []modToolRef {
 	return out
 }
 
-// modToolList serves GET /v1/tools for session id.
-func (s *Server) modToolList(w http.ResponseWriter, id string) {
-	s.mu.Lock()
-	rec, ok := s.records[id]
-	_, live := s.sessions[id]
-	s.mu.Unlock()
-	if !ok || !live {
-		http.Error(w, "session "+id+" is gone", http.StatusGone)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(proto.ToolListResult{Tools: s.sessionTools(rec)})
-}
-
-// modTool serves POST /v1/tools/{name} for session id.
-func (s *Server) modTool(w http.ResponseWriter, r *http.Request, id string) {
-	b, err := io.ReadAll(io.LimitReader(r.Body, maxModTool+1))
-	if err == nil && len(b) > maxModTool {
-		err = toolErr("input is over %d bytes", maxModTool)
-	}
-	if err != nil {
-		toolReply(w, http.StatusBadRequest, ModToolResult{Error: err.Error()})
-		return
-	}
-	s.mu.Lock()
-	rec, ok := s.records[id]
-	_, live := s.sessions[id]
-	s.mu.Unlock()
-	if !ok || !live {
-		toolReply(w, http.StatusGone, ModToolResult{Error: "session " + id + " is gone"})
-		return
-	}
-	code, res := s.runTool(rec, r.PathValue("name"), b)
-	toolReply(w, code, res)
-}
-
 // runTool runs tool name with input b as session record rec, and
-// answers with the HTTP status the mod socket sends.
+// answers with an HTTP status that says how it went.
 func (s *Server) runTool(rec SessionRecord, name string, b []byte) (int, ModToolResult) {
+	if len(b) > maxModTool {
+		return http.StatusBadRequest, ModToolResult{Error: toolErr("input is over %d bytes", maxModTool).Error()}
+	}
 	if _, _, ok := mod.ParseToolName(name); ok {
 		return s.runModTool(rec, name, b)
 	}
@@ -435,12 +397,6 @@ func firstNonEmpty(a, b string) string {
 		return a
 	}
 	return b
-}
-
-func toolReply(w http.ResponseWriter, code int, r ModToolResult) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(r)
 }
 
 // toolRuns checks tool name's input and returns the commands it stands

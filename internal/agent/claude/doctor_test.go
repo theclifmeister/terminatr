@@ -39,18 +39,12 @@ func TestDoctorListFails(t *testing.T) {
 	}
 }
 
-func TestModNoteAndRoleFiles(t *testing.T) {
+func TestRoleFiles(t *testing.T) {
 	reg, err := agent.Load("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := agent.ModNote(reg); got != "Claude Code "+ModsMinVersion {
-		t.Fatalf("ModNote %q", got)
-	}
 	if got := agent.RoleFiles(reg); len(got) != 1 || got[0] != "CLAUDE.md" {
 		t.Fatalf("RoleFiles %v", got)
-	}
-	if m, ok := load(t).(agent.Modder); !ok || m.ModRequired() {
-		t.Fatal("claude's mod must be optional")
 	}
 }

@@ -224,8 +224,7 @@ type JSONLTail struct {
 	// Claude's transcript_path.
 	PathField string     `toml:"path_field"`
 	Rules     []TailRule `toml:"rules"`
-	// Usage reads what the agent used from the lines that report it,
-	// for an agent without a mod to report it (POST /v1/usage).
+	// Usage reads what the agent used from the lines that report it.
 	Usage *TailUsage `toml:"usage"`
 	// Refused are the lines that say the agent's provider refused the
 	// session's model (docs/SPEC.md §8.2, Models): tm then marks that
@@ -338,8 +337,7 @@ func (u *TailUsage) validate() error {
 	return nil
 }
 
-// Usage is what one line says the agent used: the same numbers as the
-// mod's POST /v1/usage.
+// Usage is what one line says the agent used.
 type Usage struct {
 	Turns         int
 	Input         int64

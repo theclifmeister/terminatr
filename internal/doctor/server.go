@@ -154,7 +154,6 @@ func Server(d Deps) ([]Check, Live) {
 	var list proto.SessionListResult
 	if err := c.CallWithin(callTimeout, proto.MethodSessionList, nil, &list); err == nil {
 		out = append(out, queueChecks(list.Sessions, time.Now())...)
-		out = append(out, skippedChecks(list.Sessions)...)
 		if live.Sessions = allSessions(list, st.Sessions); live.Sessions != nil {
 			out = append(out, runtimeDirs(p, live)...)
 		} else {
@@ -194,23 +193,6 @@ func queueChecks(sessions []proto.SessionInfo, now time.Time) []Check {
 		out = append(out, Check{Group: "server", Name: "prompt queue", Status: Warn,
 			Detail: fmt.Sprintf("%s: %d queued prompt(s), %s; nothing is pasted until it clears, and a coordinator gets no nudges meanwhile. "+
 				"Once it has been held for its bound the server drops it, or writes a tm prompt to the agent's socket, unconfirmed (journaled); tm agent explain %s shows the queue", sessionWho(s), s.Queued, n, s.ID)})
-	}
-	return out
-}
-
-// skippedChecks warns about agent sessions whose terminatr hooks another
-// of the agent's mods skipped: tm's command hooks give the role's
-// context instead, but the agent's other terminatr hooks on those events
-// don't run either (docs/SPEC.md §7.8).
-func skippedChecks(sessions []proto.SessionInfo) []Check {
-	var out []Check
-	for _, s := range sessions {
-		if s.HooksSkipped == "" {
-			continue
-		}
-		out = append(out, Check{Group: "server", Name: "agent mod", Status: Warn,
-			Detail: fmt.Sprintf("%s: terminatr hooks skipped by %s; tm gives the role's context through its command hooks instead. "+
-				"Claude Code's built-in cc-plugin-sec-default does this on managed and Team or Enterprise machines; only the organization's administrator can change it (managed prependPlugins without sec-default@builtin)", sessionWho(s), s.HooksSkipped)})
 	}
 	return out
 }

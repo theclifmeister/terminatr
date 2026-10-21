@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -110,10 +109,6 @@ type Server struct {
 	latest    atomic.Pointer[latestRelease]
 	checkedAt atomic.Int64 // unix time update.CachedLatest was last consulted
 
-	// inSession, when set, says whether pid is a process of session id
-	// for the mod sockets (modPeerIn), instead of callerOf (tests).
-	inSession func(id string, pid int) bool
-
 	mu       sync.Mutex
 	sessions map[string]*session.Session
 	records  map[string]SessionRecord
@@ -192,15 +187,13 @@ type Server struct {
 	notices *modnotify.Hub
 	// toasts are the mods' toasts (modtoast.go).
 	toasts modToasts
-	// versions caches agent versions for the mod guard (mods.go); nil
+	// versions caches agent versions (launchconfig.go); nil
 	// is the process's cache (agent.Version). Tests set their own.
 	versions *agent.Versions
 	// asks are the sessions' open questions (ask.go).
 	asks asks
 	// guard is the guard's memory of the sessions (guard.go).
 	guard guardState
-	// mods are the sessions' mod listeners by session id (modchan.go).
-	mods map[string]*http.Server
 	// launched is the model each agent session was launched with ("" its
 	// agent's own default), and refusedSeen the sessions whose refusal
 	// was learnt, both under mu; modelsBusy are the agents being asked
@@ -210,11 +203,6 @@ type Server struct {
 	modelsMu     sync.Mutex
 	modelsBusy   map[string]bool
 	modelUnknown map[string]string // session -> why its models were unknown when last logged, under mu
-	// convs are the mod sessions' conversations, for their context, and
-	// skipTold the projects told their sessions' mod hooks were skipped,
-	// both under mu (convcontext.go).
-	convs    map[string]*convState
-	skipTold map[string]bool
 	// modelsCtx ends the agents' models probes when the server stops.
 	modelsCtx  context.Context
 	modelsStop context.CancelFunc
@@ -596,7 +584,6 @@ func (s *Server) shutdown() {
 		s.modelsStop()
 	}
 	s.modelsWG.Wait()
-	s.closeMods()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1093,7 +1080,6 @@ func (s *Server) sessionExited(sess *session.Session) {
 	delete(s.blocked, sess.ID())
 	delete(s.adoptAsks, sess.ID())
 	s.guard.forget(sess.ID())
-	s.closeModLocked(sess.ID())
 	if s.tick != nil {
 		s.tick.Kick()
 	}
@@ -1115,7 +1101,6 @@ func (s *Server) sessionExited(sess *session.Session) {
 	delete(s.records, sess.ID())
 	delete(s.launched, sess.ID())
 	delete(s.refusedSeen, sess.ID())
-	delete(s.convs, sess.ID())
 	if err := s.saveLocked(""); err != nil {
 		s.log.Printf("sessions.json: %v", err)
 	}

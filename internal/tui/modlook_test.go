@@ -307,7 +307,7 @@ func TestSafeModeLook(t *testing.T) {
 	if n := lookNews(err); n != safeLookNote || lookNews(err) != "" {
 		t.Fatalf("note %q", n)
 	}
-	if rows := globalSettings(""); !safeMode() || safeModeRow().value(nil) == "" || len(rows) == 0 {
+	if rows := globalSettings(); !safeMode() || safeModeRow().value(nil) == "" || len(rows) == 0 {
 		t.Fatal("no safe mode row")
 	}
 	t.Setenv(mod.EnvNoMods, "")

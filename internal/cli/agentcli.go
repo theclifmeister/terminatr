@@ -282,20 +282,6 @@ func printExplain(e *Env, r server.ExplainResult) {
 	}
 	fmt.Fprintln(w, "sources, highest rank first:")
 	src("exit", r.Exit, "")
-	if m := r.Mod; m != nil {
-		var v *agent.SourceView
-		note := "  (not heard from: the other sources decide)"
-		if !m.Seen.IsZero() {
-			v = &m.SourceView
-			note = "  (" + m.Event + "; heard " + ago(m.Seen)
-			if m.Live {
-				note += ": decides)"
-			} else {
-				note += ": heartbeat lost, the other sources decide)"
-			}
-		}
-		src("mod", v, note)
-	}
 	note := ""
 	if r.StatusErr != "" {
 		note = "  (not used: " + r.StatusErr + ")"

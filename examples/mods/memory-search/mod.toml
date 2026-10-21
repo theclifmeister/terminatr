@@ -1,6 +1,6 @@
 # An agent tool (mods design §2, tier 5), with the eight examples of
 # terminatr's examples/mods (§13). Agents get it as memory-search_find,
-# through the agent mod or tm mcp, in sessions of the projects the mod
+# through tm mcp, in sessions of the projects the mod
 # runs for. Install it by path from a checkout:
 #   tm mod install terminatr/examples/mods/memory-search
 # tm memory find is the core command for this job, ranked by title,

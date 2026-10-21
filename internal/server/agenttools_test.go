@@ -102,23 +102,16 @@ func TestModAgentTools(t *testing.T) {
 		t.Fatalf("def %+v", d)
 	}
 
-	// Over the mod socket of a live thread session.
+	// A live thread session's calls.
 	b, _ := agent.Builtin("claude")
 	m, err := agent.ParseManifest(b)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s.mu.Lock()
-	s.inSession = testInSession
-	sock, err := s.listenMod("s-1", rt)
-	s.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
 	sess, err := session.Start(session.Config{
 		ID: "s-1", Role: proto.RoleThread, Argv: []string{testSh(t), "-c", "exec cat"}, Cwd: rt,
 		Env: []string{"PATH=/usr/bin:/bin"}, Cols: 80, Rows: 24, Logf: t.Logf,
-		Agent: &session.AgentConfig{Agent: agent.FromManifest(m), Home: rt, ModSocket: sock},
+		Agent: &session.AgentConfig{Agent: agent.FromManifest(m), Home: rt},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -127,30 +120,12 @@ func TestModAgentTools(t *testing.T) {
 	s.mu.Lock()
 	s.sessions["s-1"], s.records["s-1"] = sess, thr
 	s.mu.Unlock()
-	c := modClient(sock)
-	c.Timeout = 30 * time.Second
-
-	resp, err := c.Get("http://terminatr/v1/tools")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var list proto.ToolListResult
-	json.NewDecoder(resp.Body).Decode(&list)
-	resp.Body.Close()
-	if got := toolNames(list.Tools); got != "report,status,steps,done,lint_lint_report,lint_ping" {
-		t.Fatalf("GET /v1/tools: %s", got)
-	}
-
 	call := func(name, body string) (int, ModToolResult) {
 		t.Helper()
-		resp, err := c.Post("http://terminatr/v1/tools/"+name, "application/json", strings.NewReader(body))
-		if err != nil {
-			t.Fatalf("POST %s: %v", name, err)
-		}
-		defer resp.Body.Close()
-		var r ModToolResult
-		json.NewDecoder(resp.Body).Decode(&r)
-		return resp.StatusCode, r
+		s.mu.Lock()
+		rec := s.records["s-1"]
+		s.mu.Unlock()
+		return s.runTool(rec, name, []byte(body))
 	}
 	if code, r := call("lint_lint_report", `{"text":"hello","max":3}`); code != http.StatusOK || r.Text != "5 chars from thread t-0001 of proj" {
 		t.Fatalf("lint_report: %d %+v", code, r)
@@ -188,7 +163,7 @@ func TestModAgentTools(t *testing.T) {
 	}
 
 	// The human revokes the tools grant: the tools go from the list, and
-	// a call is refused, over the socket and over tool.run alike.
+	// a call is refused.
 	write("config.toml", "[mods.lint]\nenabled = true\ngrants = []\nprojects = [\"proj\"]\n[mods.pr-ci-column]\nenabled = false\n[mods.memory-tab]\nenabled = false\n[mods.tasks-tab]\nenabled = false\n[mods.ticker]\nenabled = false\n")
 	s.modBr.mu.Lock()
 	s.modBr.reg = nil // what modRegistryAge does within a second

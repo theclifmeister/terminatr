@@ -1,7 +1,6 @@
 package guard
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -12,7 +11,39 @@ import (
 	"testing"
 )
 
-// vectors are the shared test vectors, which hooks/guard.ts passes too.
+// vectors are the guard's test vectors (testdata/vectors.json): what
+// each call breaks (rule, null for none) and the summary journaled; and
+// the sentence each rule gives each role. The tools (each one's kind and
+// input fields, as a manifest's [guard.tools] gives them) go with every
+// rule set: Claude's and Codex's, which their manifests must match
+// (internal/agent TestGuardToolVectors), and a lowercase vocabulary like
+// pi's and opencode's. A case the guard asks about rather than refuses (a
+// PowerShell command it can't read) has rule "unknown" and "ask": true.
+// The thread-mods and mods-only sets carry rules a mod adds (mods design
+// §7, Tighten only): the core's and the mod's, and the mod's alone. The
+// yolo-thread set is a yolo thread's guard: the floor only, with tm's
+// settings and the project folder no tool writes (noWrite); the
+// floor-coordinator set the coordinator's, whose project folder it writes
+// but for tm's parts of it; thread-escapes asks about a call that asks to
+// leave the sandbox (askEscapes), rule "escape"; thread-ask-first asks
+// about a command of an excluded command that asks first (askFirst), rule
+// "excluded", and thread-ask-first-only has nothing else; thread-own and
+// thread-own-off carry excluded commands of the user's own Claude
+// settings (unsandboxed): a call one takes and tm's (tmExcluded) don't is
+// an escape, asked, or with escapes off (noEscapes) refused. The
+// thread-allow, thread-learn and floor-only sets carry the human's
+// allowances (a refusal under an allowance's rule of the command line or
+// file it matches is lifted; an "exact" one's * matches only a *), tm's
+// own files and the secret variables: a case with "floor" is a refusal no
+// allowance lifts; the rules-off sets have the force-push and merge rules
+// off (guard_off) and their floor still refusing; "subject" (the command
+// line or file an allowance names) and "message", when a case gives them,
+// are the refusal's. A case with links judges file writes where they
+// land: each link (an absolute path) leads to its target, and a write
+// under a link to the same place under the target (Resolve, faked). A
+// case with files has those paths (absolute, clean, where they land)
+// regular files, the rest not: a shell given input runs a script of the
+// worktree only where one is (File, faked). One case a line.
 type vectors struct {
 	Tools map[string]Tool  `json:"tools"`
 	Rules map[string]Rules `json:"rules"`
@@ -37,25 +68,19 @@ type vectors struct {
 	Messages map[string]map[string]string `json:"messages"`
 }
 
-// loadVectors reads guard-vectors.ts: a TS module whose default export
-// is JSON.
+// loadVectors reads testdata/vectors.json.
 func loadVectors(t *testing.T) vectors {
 	t.Helper()
-	b, err := os.ReadFile("../agent/claude/mod/tests/guard-vectors.ts")
+	b, err := os.ReadFile("testdata/vectors.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	const mark = "\nexport default "
-	i := bytes.Index(b, []byte(mark))
-	if i < 0 {
-		t.Fatalf("guard-vectors.ts: no %q", mark)
-	}
 	var v vectors
-	if err := json.Unmarshal(b[i+len(mark):], &v); err != nil {
-		t.Fatalf("guard-vectors.ts: %v", err)
+	if err := json.Unmarshal(b, &v); err != nil {
+		t.Fatalf("vectors.json: %v", err)
 	}
 	if len(v.Cases) < 100 {
-		t.Fatalf("guard-vectors.ts: only %d cases", len(v.Cases))
+		t.Fatalf("vectors.json: only %d cases", len(v.Cases))
 	}
 	// The tools go with every rule set.
 	for name, r := range v.Rules {
@@ -78,8 +103,8 @@ func linksTo(links map[string]string) func(string) string {
 	}
 }
 
-// TestVectors: the Go port refuses (or asks about) what guard.ts does,
-// with the same rule, summary and sentence.
+// TestVectors: the guard refuses (or asks about) each case's call with
+// its rule, summary and sentence.
 func TestVectors(t *testing.T) {
 	v := loadVectors(t)
 	for _, c := range v.Cases {

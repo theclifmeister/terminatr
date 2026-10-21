@@ -229,15 +229,13 @@ func sessionQuestions(sessions []proto.SessionInfo) []modbus.Question {
 }
 
 // questionNoText is a thread's needs_you when its session is blocked on
-// a question whose text tm doesn't have (no Agent mod to report the
-// menu).
+// a question menu of the agent's, whose text tm doesn't have.
 const questionNoText = "a question in its session"
 
 // sessionNeedsYou is what a thread's session waits on the human for: its
 // open menu's question, or questionNoText when it is blocked on a
-// question all the same. The menu's text comes from the Agent mod; the
-// hooks say a question blocks the session without it, and that needs
-// the human just as much (T301 L2).
+// question all the same: the hooks say a question blocks the session,
+// and that needs the human just as much (T301 L2).
 func sessionNeedsYou(info proto.SessionInfo) string {
 	if q := openQuestion(info.Question); q != "" {
 		return q

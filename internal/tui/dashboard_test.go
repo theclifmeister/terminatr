@@ -157,7 +157,6 @@ func (f *fakeSource) Load() Data {
 			}
 			all, _ := cfg.AllProjects()
 			f.data.Defaults = &all
-			f.data.AgentMod, f.data.AgentModBand = cfg.AgentMod, cfg.AgentModBand
 		}
 	}
 	return f.data
@@ -300,7 +299,6 @@ func (f *fakeSource) Agents() []string {
 	}
 	return f.agents
 }
-func (f *fakeSource) ModsNote() string                       { return "Claude Code 2.1.289" }
 func (f *fakeSource) NewProject(name string) (string, error) { return name, nil }
 func (f *fakeSource) OpenProject(slug string, c, r int) (string, error) {
 	f.opened = append(f.opened, slug)
