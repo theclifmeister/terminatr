@@ -166,6 +166,9 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		g.Floor = append(g.Floor, "merge")
 	}
 	g.NoWrite = s.guardNoWrite(r)
+	if home != "" {
+		g.NoWriteNames = withParentReal(agent.ShellPatterns(home, os.Getenv))
+	}
 	// The project lets its coordinator change its access: the floor lets
 	// its tm access writes through, which tm checks in the server.
 	g.AccessWrites = r.Role == proto.RoleCoordinator && set.CoordinatorAccess
@@ -317,7 +320,10 @@ func ownExcluded(reg *agent.Registry, r SessionRecord, home string, lc launchCon
 // whatever the rules (the guard's floor, T574 §3.1): tm's home but for
 // the projects and worktrees (homeFloor: its settings, agents, mods,
 // state, logs) and its run folder, the settings in the session's folder that could turn
-// its hooks off (hookSettings), and a thread's project folder, or the
+// its hooks off (hookSettings), what a shell runs before each command
+// (the user's shell startup files and the agents' shell snapshots,
+// agent.ShellState: a cd or exit defined there is one the guard can't
+// see), and a thread's project folder, or the
 // parts of it only tm writes for the coordinator, whose folder it is. The sandbox and the
 // agent's deny rules hold them too, where there are those (not under
 // yolo).
@@ -333,6 +339,12 @@ func (s *Server) guardNoWrite(r SessionRecord) []string {
 		// Where a write lands (realTarget) and as the call may name it.
 		out = append(out, hookSettings(realPath(r.Cwd))...)
 		out = append(out, hookSettings(r.Cwd)...)
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		s.mu.Lock()
+		reg := s.agents
+		s.mu.Unlock()
+		out = append(out, withParentReal(agent.ShellState(reg, home, os.Getenv))...)
 	}
 	dir, err := project.Dir(r.Project)
 	if err != nil {
@@ -410,6 +422,17 @@ func (s *Server) guardMods(r SessionRecord, home string) []guard.ModRule {
 			m.Commands = append(m.Commands, strings.Fields(c))
 		}
 		out = append(out, m)
+	}
+	return out
+}
+
+// withParentReal is paths, each followed by its name under its folder's
+// real path: where a write lands when the file doesn't exist yet (and
+// so has no real path of its own) but a link leads to its folder.
+func withParentReal(paths []string) []string {
+	var out []string
+	for _, p := range paths {
+		out = append(out, p, filepath.Join(realPath(filepath.Dir(p)), filepath.Base(p)))
 	}
 	return out
 }

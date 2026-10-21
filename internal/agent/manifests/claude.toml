@@ -281,6 +281,9 @@ template = '''
 [guard]
 secrets = [".claude/.credentials.json", "$CLAUDE_CONFIG_DIR/.credentials.json"]
 writable = [".claude/plans", ".claude/projects", "$CLAUDE_CONFIG_DIR/plans", "$CLAUDE_CONFIG_DIR/projects"]
+# Its Bash tool sources the session's snapshot of the user's shell before
+# each command: no session writes them (the guard's floor).
+shell_state = [".claude/shell-snapshots", "$CLAUDE_CONFIG_DIR/shell-snapshots"]
 # The sandbox's TMPDIR: $CLAUDE_CODE_TMPDIR/claude-<uid>, else /tmp/claude-<uid>
 # (a thread's: in its own temp folder, [launch.env]).
 temp = ["$CLAUDE_CODE_TMPDIR/claude-{uid}", "/tmp/claude-{uid}"]

@@ -307,8 +307,9 @@ func TestLimits(t *testing.T) {
 
 // TestJudgeBudget: one judge reads with one budget. Re-reads count:
 // eval and sh -c nested past maxNesting, and a line whose parts are
-// judged from many folders over, stop and refuse (unreadable) rather
-// than run on; a judge past its Deadline stops and refuses (unchecked).
+// judged from many folders over, or one that needs many file-system
+// checks, stop and refuse (unreadable) rather than run on; a judge past
+// its Deadline stops and refuses (unchecked).
 func TestJudgeBudget(t *testing.T) {
 	r := Rules{On: true, Role: "thread", Rules: []string{"merge"}, Home: "/h", Cwd: "/w", Writable: []string{"/w"},
 		Tools: map[string]Tool{"Bash": {Kind: KindShell, Fields: []string{"command"}}, "PowerShell": {Kind: KindShell, Syntax: SyntaxPowerShell, Fields: []string{"command"}}}}
@@ -340,6 +341,26 @@ func TestJudgeBudget(t *testing.T) {
 	}
 	if took := time.Since(start); took > 5*time.Second {
 		t.Errorf("many folders took %v", took)
+	}
+	// Each file-system check counts: a line that needs more than the
+	// budget holds is refused before it makes them all, and a path is
+	// checked once.
+	checks := 0
+	slow := r
+	slow.Resolve = func(p string) string { checks++; return p }
+	var cds strings.Builder
+	for i := range 200 {
+		fmt.Fprintf(&cds, "cd -P /d%d && cd -P /d%d && ", i, i)
+	}
+	if d := judge(slow, "Bash", cds.String()+"ls"); d == nil || d.Rule != RuleUnreadable || !strings.Contains(d.Message, "file-system checks") {
+		t.Errorf("many checks: %+v", d)
+	}
+	if checks > judgeParse/fsCheck {
+		t.Errorf("made %d checks", checks)
+	}
+	checks = 0
+	if d := judge(slow, "Bash", "cd -P /d && cd -P /d && cd -P /d && ls"); d != nil || checks != 1 {
+		t.Errorf("one path: %+v, %d checks", d, checks)
 	}
 	late := r
 	late.Deadline = time.Now().Add(-time.Second)

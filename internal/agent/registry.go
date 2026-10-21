@@ -271,6 +271,47 @@ func GuardSecrets(reg *Registry, home string, getenv func(string) string) []stri
 	return out
 }
 
+// ShellStartup are the user's shell startup files, relative to home or
+// under $ZDOTDIR or $XDG_CONFIG_HOME: what a shell runs before a
+// command, and what an agent's snapshot of the user's shell (Claude's)
+// is made from. zsh's come with their compiled .zwc twins, which it
+// loads when they are newer; its completion dumps are ShellPatterns.
+var ShellStartup = func() []string {
+	out := []string{".profile", ".bashrc", ".bash_profile", ".bash_login", ".bash_logout", ".bash_aliases", ".bashrc.d",
+		".zshrc.d", ".config/zsh", "$XDG_CONFIG_HOME/zsh", ".kshrc", ".mkshrc", ".config/fish"}
+	for _, dir := range []string{"", "$ZDOTDIR/"} {
+		for _, n := range []string{".zshenv", ".zprofile", ".zshrc", ".zlogin", ".zlogout"} {
+			out = append(out, dir+n, dir+n+".zwc")
+		}
+	}
+	return out
+}()
+
+// ShellPatterns are what a shell runs before a command that has no one
+// name: zsh's completion dumps, whose names carry the host and version
+// (.zcompdump-host-5.9, and their .zwc twins), in home and $ZDOTDIR,
+// resolved as GuardPaths does; the guard matches them when it judges a
+// call (guard.Rules.NoWriteNames).
+func ShellPatterns(home string, getenv func(string) string) []string {
+	return GuardPaths([]string{".zcompdump*", "$ZDOTDIR/.zcompdump*"}, home, getenv)
+}
+
+// ShellState is every file a session's shell may run before its
+// commands, which no session writes (the guard's floor): ShellStartup
+// and every known agent's [guard] shell_state, resolved as GuardSecrets
+// does.
+func ShellState(reg *Registry, home string, getenv func(string) string) []string {
+	out := GuardPaths(ShellStartup, home, getenv)
+	for _, m := range knownManifests(reg) {
+		for _, p := range GuardPaths(m.Guard.ShellState, home, getenv) {
+			if !slices.Contains(out, p) {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
+}
+
 // SharedTemps is the temp folders that every known agent's sessions of
 // the user share ([guard] temp_scratch: Claude Code's /tmp/claude-<uid>,
 // with its sessions' scratchpads and task output), resolved as

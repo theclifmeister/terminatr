@@ -1105,6 +1105,8 @@ func TestManifestGuard(t *testing.T) {
 	}{
 		{`secrets = [".a/key", "~/.a/token", "$A_HOME/key"]`, true},
 		{`writable = [".a/plans"]`, true},
+		{`shell_state = [".a/snapshots", "$A_HOME/snapshots"]`, true},
+		{`shell_state = ["/etc/profile"]`, false},
 		{`secrets = ["/etc/a/key"]`, false},
 		{`secrets = ["../x"]`, false},
 		{`writable = ["$A_HOME/../x"]`, false},
@@ -1141,6 +1143,18 @@ func TestManifestGuard(t *testing.T) {
 				t.Errorf("GuardSecrets(%v) = %q, lacks %s", r != nil, s, want)
 			}
 		}
+	}
+	env["ZDOTDIR"] = "/z"
+	for _, r := range []*Registry{nil, reg} {
+		s := ShellState(r, "/h", getenv)
+		for _, want := range []string{"/h/.zshrc", "/h/.zshrc.zwc", "/h/.bashrc", "/h/.bash_aliases", "/h/.profile", "/h/.config/zsh", "/z/.zshenv", "/z/.zshenv.zwc", "/h/.claude/shell-snapshots", "/ch/shell_snapshots"} {
+			if !slices.Contains(s, want) {
+				t.Errorf("ShellState(%v) = %q, lacks %s", r != nil, s, want)
+			}
+		}
+	}
+	if got := ShellPatterns("/h", getenv); !slices.Equal(got, []string{"/h/.zcompdump*", "/z/.zcompdump*"}) {
+		t.Errorf("ShellPatterns = %q", got)
 	}
 	if got := GuardWritable(nil, "claude", "/h", getenv); !slices.Equal(got, []string{"/h/.claude/plans", "/h/.claude/projects"}) {
 		t.Errorf("built-in claude writable = %q", got)

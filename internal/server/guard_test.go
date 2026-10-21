@@ -379,6 +379,75 @@ func TestHookSettingsFloor(t *testing.T) {
 	}
 }
 
+// TestShellStateFloor: what a shell runs before each command, the user's
+// shell startup files and the agents' shell snapshots, is the floor's
+// for every role: no file tool or shell command writes it, named as the
+// call gives it or where its link leads, so no session redefines cd or
+// exit for the calls after.
+func TestShellStateFloor(t *testing.T) {
+	testPaths(t)
+	p := newWatchProject(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, v := range []string{"ZDOTDIR", "XDG_CONFIG_HOME", "CLAUDE_CONFIG_DIR", "CODEX_HOME"} {
+		t.Setenv(v, "")
+	}
+	dots := filepath.Join(home, "dotfiles")
+	if err := os.MkdirAll(dots, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dots, "zshrc"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dots, "zshrc"), filepath.Join(home, ".zshrc")); err != nil {
+		t.Skip(err)
+	}
+	// $ZDOTDIR a link to a folder whose files don't exist yet, and a
+	// completion dump with the host in its name.
+	zdot := filepath.Join(home, "zdot")
+	if err := os.Symlink(dots, zdot); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ZDOTDIR", zdot)
+	if err := os.WriteFile(filepath.Join(home, ".zcompdump-host-5.9"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
+	s.records["s-1"] = SessionRecord{ID: "s-1", Role: proto.RoleCoordinator, Agent: "claude", Project: p.Slug, Cwd: p.Dir}
+	s.records["s-2"] = SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: "t-0001", Cwd: t.TempDir()}
+	writeConfig(t, "[projects."+p.Slug+"]\nguard_off = [\"worktree-only\"]\n")
+	for _, id := range []string{"s-1", "s-2"} {
+		judge := s.hookGuardOf(id)
+		for _, c := range []struct {
+			tool  string
+			input map[string]any
+		}{
+			{"Bash", map[string]any{"command": `echo 'cd() { :; }' >> ~/.zshrc`}},
+			{"Bash", map[string]any{"command": "echo 'exit() { :; }' > ~/.claude/shell-snapshots/snapshot-zsh-1.sh"}},
+			{"Bash", map[string]any{"command": "rm -rf ~/.claude/shell-snapshots"}},
+			{"Write", map[string]any{"file_path": filepath.Join(home, ".bashrc")}},
+			{"Write", map[string]any{"file_path": filepath.Join(dots, "zshrc")}},
+			{"Write", map[string]any{"file_path": filepath.Join(home, ".codex", "shell_snapshots", "x.sh")}},
+			{"Write", map[string]any{"file_path": filepath.Join(home, ".zshrc.zwc")}},
+			{"Write", map[string]any{"file_path": filepath.Join(home, ".bash_aliases")}},
+			{"Write", map[string]any{"file_path": filepath.Join(home, ".config", "zsh", ".zshrc")}},
+			{"Bash", map[string]any{"command": "echo x > ~/.zshrc.d/50-cd.zsh"}},
+			{"Bash", map[string]any{"command": "touch ~/.zcompdump-host-5.9"}},
+			{"Bash", map[string]any{"command": "echo 'cd() { :; }' > ~/.zcompdump-other-5.9.zwc"}},
+			{"Write", map[string]any{"file_path": filepath.Join(zdot, ".zcompdump")}},
+			{"Write", map[string]any{"file_path": filepath.Join(dots, ".zshenv.zwc")}},
+			{"Write", map[string]any{"file_path": filepath.Join(zdot, ".zlogin")}},
+		} {
+			if d := judge(c.tool, c.input); d == nil || d.Rule != guard.RuleTMFiles || !d.Floor {
+				t.Errorf("%s %s %v: %+v", id, c.tool, c.input, d)
+			}
+		}
+		if d := judge("Bash", map[string]any{"command": "cat ~/.zshrc > /dev/null"}); d != nil {
+			t.Errorf("%s reading .zshrc: %+v", id, d)
+		}
+	}
+}
+
 // TestHookGuardFollowsLinks: a write through a link in the worktree is
 // judged where it lands; one that stays in the worktree is not refused.
 func TestHookGuardFollowsLinks(t *testing.T) {

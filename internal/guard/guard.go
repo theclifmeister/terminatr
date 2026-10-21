@@ -91,12 +91,17 @@ type Rules struct {
 	// environment, whichever rules are on (the floor).
 	SecretEnv []string `json:"secretEnv,omitempty"`
 	// NoWrite are the files and folders no tool writes, whichever rules
-	// are on (the floor): tm's settings (config.toml), and a thread's
-	// project folder or the parts of it only tm writes for the
-	// coordinator. File tools are judged by where they write, shell
+	// are on (the floor): tm's settings (config.toml), what a shell runs
+	// before each command (the user's startup files, the agents' shell
+	// snapshots), and a thread's project folder or the parts of it only
+	// tm writes for the coordinator. File tools are judged by where they write, shell
 	// commands by the paths they redirect into or give a command that
 	// writes (cp, mv, tee, rm and the like: judgeNoWrite).
 	NoWrite []string `json:"noWrite,omitempty"`
+	// NoWriteNames are NoWrite's patterns: absolute paths whose last part
+	// is a glob (~/.zcompdump*, zsh's completion dumps, whose names carry
+	// the host), matched when a call is judged (namedFloor).
+	NoWriteNames []string `json:"noWriteNames,omitempty"`
 	// AskEscapes: a shell call that asks to run outside the sandbox (its
 	// tool's Escape field true) is put to the user (rule "escape"), even
 	// where the agent's own rules would let it run: tm answers that
@@ -163,11 +168,17 @@ type Rules struct {
 	// from a folder the line can change (lineFolder) is not placed.
 	line   string
 	lineCd bool
+	// physical: the line may make its cds physical; cdpath: it may set
+	// CDPATH or zsh's cdpath (lineFlags).
+	physical, cdpath bool
 	// olds are the folders the line was in before its folder now
 	// ($OLDPWD, ~-; "" one it can't tell), as judgeLine follows its cds.
 	olds []string
 	// wt is the thread's worktree, as judgeBash takes it (worktreeOf).
 	wt string
+	// trapFrom is where the trap actions the line being read sets start
+	// in ps.traps (judgeLine).
+	trapFrom int
 }
 
 // ModRule is a guard rule a mod adds (mods design §7, Tighten only): the
@@ -342,6 +353,10 @@ func (p *parse) verdict(d *Denial) *Denial {
 	case p.late:
 		d = Unchecked()
 		d.Message = "terminatr guard: checking this call took too long, so it is refused; try a shorter or simpler command."
+	case p.over && p.checked:
+		d = unreadable()
+		d.Summary = "a command needing too many file-system checks"
+		d.Message = fmt.Sprintf("terminatr guard: this command needs more file-system checks (links followed, script files looked up) than the guard makes for one call (%d), so it is refused; split it into shorter commands.", judgeParse/fsCheck)
 	case p.over:
 		d = unreadable()
 	}
@@ -349,7 +364,7 @@ func (p *parse) verdict(d *Denial) *Denial {
 }
 
 func (r Rules) judge(tool string, input map[string]any) *Denial {
-	if !r.On || len(r.Rules) == 0 && len(r.Mods) == 0 && len(r.Own) == 0 && len(r.OtherTemps) == 0 && len(r.SecretEnv) == 0 && len(r.Floor) == 0 && len(r.NoWrite) == 0 && !r.AskEscapes && len(r.Unsandboxed) == 0 && len(r.AskFirst) == 0 {
+	if !r.On || len(r.Rules) == 0 && len(r.Mods) == 0 && len(r.Own) == 0 && len(r.OtherTemps) == 0 && len(r.SecretEnv) == 0 && len(r.Floor) == 0 && len(r.NoWrite) == 0 && len(r.NoWriteNames) == 0 && !r.AskEscapes && len(r.Unsandboxed) == 0 && len(r.AskFirst) == 0 {
 		return nil
 	}
 	t, ok := r.Tools[tool]
@@ -672,7 +687,65 @@ func (r Rules) target(p string) string {
 	if r.Resolve == nil {
 		return r.abs(p)
 	}
-	return r.abs(r.Resolve(r.joined(p)))
+	return r.abs(r.resolve(r.joined(p)))
+}
+
+// fsCheck is what one file-system check (Resolve, File) counts against
+// a judge's budget, as bytes read: a line that needs more than
+// judgeParse/fsCheck of them is refused as unreadable at once, rather
+// than run out the deadline on a slow file system. A judge checks each
+// path once.
+const fsCheck = judgeParse / 64
+
+// resolve is r.Resolve(p), counted against the judge's budget; past it,
+// p as it is (Judge refuses the call).
+func (r Rules) resolve(p string) string {
+	if r.ps == nil {
+		return r.Resolve(p)
+	}
+	if q, ok := r.ps.resolved[p]; ok {
+		return q
+	}
+	if r.ps.check(r.depth) {
+		return p
+	}
+	q := r.Resolve(p)
+	if r.ps.resolved == nil {
+		r.ps.resolved = map[string]string{}
+	}
+	r.ps.resolved[p] = q
+	return q
+}
+
+// check counts a file-system check at depth against p's budget and
+// reports whether the reading is over it.
+func (p *parse) check(depth int) bool {
+	was := p.over
+	if p.stop(fsCheck, depth) {
+		p.checked = p.checked || !was && !p.late
+		return true
+	}
+	return false
+}
+
+// file is r.File(p), counted against the judge's budget as resolve is;
+// past it, false.
+func (r Rules) file(p string) bool {
+	if r.ps == nil {
+		return r.File(p)
+	}
+	if f, ok := r.ps.files[p]; ok {
+		return f
+	}
+	if r.ps.check(r.depth) {
+		return false
+	}
+	f := r.File(p)
+	if r.ps.files == nil {
+		r.ps.files = map[string]bool{}
+	}
+	r.ps.files[p] = f
+	return f
 }
 
 // judgeWrite judges a file tool writing p (absolute, where the write
@@ -681,7 +754,7 @@ func (r Rules) judgeWrite(tool, shown, p string) *Denial {
 	if r.otherTemp(p) {
 		return floor(r.deny(RuleTempFolders, tool+" of "+safe(shown), ""))
 	}
-	if r.covers(r.NoWrite, p) {
+	if r.covers(r.NoWrite, p) || r.namedFloor(p, false) {
 		return floor(r.deny(RuleTMFiles, tool+" of "+safe(shown), ""))
 	}
 	if r.has("worktree-only") && !r.writable(p) {
@@ -788,9 +861,9 @@ func (r Rules) deny(rule, summary, target string) *Denial {
 		m = `merging is the coordinator's job in this project (merge = "coordinator"). Leave the PR open with CI green and say so in your report.`
 	case RuleTMFiles:
 		if r.Role == "thread" {
-			m = "a thread doesn't write tm's own files (config.toml, agents/, mods/, state/ and the rest of tm's home but its worktrees), the project folder or the worktree's .claude/settings.json and settings.local.json (they could turn tm's hooks off). Write elsewhere in your worktree, or say so in your report."
+			m = "a thread doesn't write tm's own files (config.toml, agents/, mods/, state/ and the rest of tm's home but its worktrees), the project folder, the worktree's .claude/settings.json and settings.local.json (they could turn tm's hooks off) or the shell's startup files and snapshots (.bashrc, .zshrc and the like: they run before each command). Write elsewhere in your worktree, or say so in your report."
 		} else {
-			m = "tm's own files (config.toml, agents/, mods/, state/ and the rest of tm's home but the projects and worktrees), the parts of the project folder tm keeps (threads/, inbox/, tasks/, journal/, TASKS.md and the like) and the folder's .claude/settings.json and settings.local.json (they could turn tm's hooks off) are written by tm or the user only: use tm's commands, or ask the user."
+			m = "tm's own files (config.toml, agents/, mods/, state/ and the rest of tm's home but the projects and worktrees), the parts of the project folder tm keeps (threads/, inbox/, tasks/, journal/, TASKS.md and the like) the folder's .claude/settings.json and settings.local.json (they could turn tm's hooks off) and the shell's startup files and snapshots (.bashrc, .zshrc and the like: they run before each command) are written by tm or the user only: use tm's commands, or ask the user."
 		}
 	case RuleTempFolders:
 		m = "other threads' temp folders are not read or written here. Keep your files in your own temp folder ($TMPDIR) or your worktree, or " + tell + "."
@@ -968,6 +1041,9 @@ func (r Rules) JudgeCommand(line string) *Denial {
 // judgeBash checks each simple command of a Bash command line.
 func (r Rules) judgeBash(command string) *Denial {
 	r.wt = r.worktreeOf()
+	if r.ps != nil {
+		r.ps.traps = nil
+	}
 	return r.judgeLine(command, []string{r.Cwd})
 }
 
@@ -992,14 +1068,25 @@ func (r Rules) worktreeOf() string {
 // in (it may fail, or not run); in ( ), a pipeline or the background it
 // moves nothing, and anywhere else ({ }, if, a substitution) it leaves
 // them unknown. A part that runs shell code the line doesn't show
-// (eval, trap, source, ., also through command or builtin) may move them
-// at any point after, so the rest of the line keeps unknown among them.
+// (eval, trap, a zsh trap function, source, ., also through command or
+// builtin) may move them at any point after, so the rest of the line
+// keeps unknown among them.
+//
+// A trap's action (judgeCommands keeps it in ps.traps, as set here or in
+// a line this one reads: eval, bash -c) may run at any point from the
+// trap on (a signal) and at the end (EXIT), so it is judged as eval's
+// arguments are, from each folder the line itself may be in from the
+// trap on and those it may end in: the trap leaves the folder unknown
+// for the line's later commands, not for its action (lineDirs).
 func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	if r.line != "" {
 		r.line += "\n"
 	}
 	r.line += command
 	r.lineCd = r.lineCd || r.hasCd(command)
+	physical, cdpath := r.lineFlags(command)
+	r.physical = r.physical || physical
+	r.cdpath = r.cdpath || cdpath
 	parts, ok := r.topLevel(command)
 	if !ok {
 		// A line it can't split: one part, with any cd in it leaving its
@@ -1009,88 +1096,152 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 			cwds = withDirs(cwds, "")
 		}
 	}
-	cur, list := cwds, cwds
-	hidden := false
 	// The folders $OLDPWD may hold: before the line, one it can't tell.
 	olds := r.olds
 	if olds == nil {
 		olds = []string{""}
 	}
+	// st are the folders the line's commands may be in; ts those its
+	// trap actions may run in: a trap leaves st unknown for the line's
+	// later commands, but not ts, unless an action may move the folder
+	// itself (a cd or hidden code in it).
+	st := lineDirs{cur: cwds, list: cwds, olds: olds}
+	ts := st
+	// The trap actions set from here, and the folders the line may be
+	// in from the first on.
+	from := 0
+	if r.ps != nil {
+		from = len(r.ps.traps)
+	}
+	trapped := func() bool { return r.ps != nil && len(r.ps.traps) > from }
+	var trapDirs []string
+	seen, moves := from, false
 	for i, pt := range parts {
 		// The folders a part may run in count against the budget, and
 		// a line that may be in more than maxFolders is past it.
-		if r.ps != nil && (len(cur)+len(list)+len(olds) > maxFolders || r.ps.stop(len(cur)*len(pt.text), r.depth)) {
+		if r.ps != nil && (len(st.cur)+len(st.list)+len(st.olds)+len(ts.cur) > maxFolders || r.ps.stop(len(st.cur)*len(pt.text), r.depth)) {
 			r.ps.over = true
 		}
 		if r.spent() {
 			return nil // Judge refuses the call: no part is let through unread
 		}
-		if listEnd(pt.before) {
-			list = cur
-		}
-		// A heredoc's body read as commands (topLevel and Commands may
-		// tell a << apart differently: $[1<<2]) may hold a cd anywhere.
-		if pt.doc && r.hasCd(pt.text) {
-			olds = withDirs(withDirs(olds, cur...), "")
-			cur = withDirs(cur, "")
-		}
+		st.begin(r, pt)
+		ts.begin(r, pt)
 		rp := r
-		rp.olds = olds
-		for _, c := range cur {
+		rp.olds = st.olds
+		rp.trapFrom = from
+		for _, c := range st.cur {
 			if d := rp.judgeCommands(pt.text, c); d != nil || r.spent() {
 				return d
 			}
 		}
-		inPipe := pt.before == "|" || pt.after == "|" || pt.after == "&"
-		if cmd, args, plain := r.plainCd(pt.text); plain && !inPipe {
-			var to []string
-			for _, c := range cur {
-				to = withDirs(to, nowhere{dir: c}.cd(r, cmd, args).dir)
+		// zsh's trap functions (TRAPEXIT() { … }) are traps whose action
+		// is the body.
+		funcs := trapFuncs(pt.text)
+		for _, body := range funcs {
+			if r.ps != nil && !slices.Contains(r.ps.traps[from:], body) {
+				r.ps.traps = append(r.ps.traps, body)
 			}
-			// The cd leaves $OLDPWD the folder it left, if it runs.
-			sure := pt.after == "&&" && pt.before != "||"
-			// A cd .. that always runs (the first command of its list,
-			// none after it on ||) fails only where the parent is gone:
-			// the folders the line may be in merge into their parents, so
-			// a script that walks its subfolders in turn (cd X || exit 1;
-			// …; cd ..) doesn't gather a folder for each. Not in a list
-			// run in the background, which moves no folder of the line's
-			// own shell. A cd X || exit merges nothing: an earlier member
-			// of its list may have ended it, and the shell may have made
-			// exit something else where the guard can't see (Claude's
-			// Bash sources a snapshot of the user's shell first).
-			up := cmd == "cd" && len(args) == 1 && (args[0] == ".." || args[0] == "../") &&
-				listEnd(pt.before) && pt.after != "||" && listSep(parts, i) != "&"
-			if sure || up {
-				olds = slices.Clone(cur)
-			} else {
-				olds = withDirs(olds, cur...)
-			}
-			switch {
-			case up:
-				cur, list = to, to
-			case sure:
-				cur = to
-			case pt.after == "||":
-				list = withDirs(list, to...)
-			default:
-				cur = withDirs(cur, to...)
-			}
-		} else if !inPipe && !strings.HasPrefix(pt.text, "(") && r.hasCd(pt.text) {
-			olds = withDirs(withDirs(olds, cur...), "")
-			cur = withDirs(cur, "")
 		}
-		hidden = hidden || r.runsHidden(pt.text)
-		if hidden {
-			olds = withDirs(olds, "")
-			cur = withDirs(cur, "")
+		if trapped() {
+			trapDirs = withDirs(trapDirs, ts.cur...)
+			for _, a := range r.ps.traps[seen:] {
+				moves = moves || r.hasCd(a) || r.nested().runsCode(a) || r.nested().runsTrap(a)
+			}
+			seen = len(r.ps.traps)
 		}
-		list = withDirs(list, cur...)
-		if listEnd(pt.after) {
-			cur = list
+		st.end(r, parts, i, len(funcs) > 0 || r.runsCode(pt.text) || r.runsTrap(pt.text))
+		ts.end(r, parts, i, moves || r.runsCode(pt.text))
+	}
+	if !trapped() {
+		return nil
+	}
+	// The actions read here may set traps of their own, which their own
+	// reading judges.
+	rt := r.nested()
+	rt.olds = withDirs(ts.olds, "")
+	for _, a := range slices.Clone(r.ps.traps[from:]) {
+		if d := rt.judgeLine(a, withDirs(trapDirs, ts.cur...)); d != nil || r.spent() {
+			return d
 		}
 	}
 	return nil
+}
+
+// lineDirs are the folders a line may be in as judgeLine follows it:
+// cur, where its next part runs; list, where its and-or list may have
+// left it; olds, what $OLDPWD may hold; hidden, whether a part ran code
+// that may have moved it where the guard can't see.
+type lineDirs struct {
+	cur, list, olds []string
+	hidden          bool
+}
+
+// begin moves d to the start of part pt.
+func (d *lineDirs) begin(r Rules, pt linePart) {
+	if listEnd(pt.before) {
+		d.list = d.cur
+	}
+	// A heredoc's body read as commands (topLevel and Commands may
+	// tell a << apart differently: $[1<<2]) may hold a cd anywhere.
+	if pt.doc && r.hasCd(pt.text) {
+		d.olds = withDirs(withDirs(d.olds, d.cur...), "")
+		d.cur = withDirs(d.cur, "")
+	}
+}
+
+// end moves d past part i of parts, its cd followed; hidden: the part
+// ran code that may move the folder where the guard can't see.
+func (d *lineDirs) end(r Rules, parts []linePart, i int, hidden bool) {
+	pt := parts[i]
+	inPipe := pt.before == "|" || pt.after == "|" || pt.after == "&"
+	if cmd, args, plain := r.plainCd(pt.text); plain && !inPipe {
+		var to []string
+		for _, c := range d.cur {
+			to = withDirs(to, nowhere{dir: c}.cd(r, cmd, args).dir)
+		}
+		// The cd leaves $OLDPWD the folder it left, if it runs.
+		sure := pt.after == "&&" && pt.before != "||"
+		// A cd .. that always runs (the first command of its list,
+		// none after it on ||) fails only where the parent is gone:
+		// the folders the line may be in merge into their parents, so
+		// a script that walks its subfolders in turn (cd X || exit 1;
+		// …; cd ..) doesn't gather a folder for each. Not in a list
+		// run in the background, which moves no folder of the line's
+		// own shell. A cd X || exit merges nothing: an earlier member
+		// of its list may have ended it, and the shell may have made
+		// exit something else where the guard can't see (Claude's
+		// Bash sources a snapshot of the user's shell first).
+		up := cmd == "cd" && len(args) == 1 && (args[0] == ".." || args[0] == "../") &&
+			listEnd(pt.before) && pt.after != "||" && listSep(parts, i) != "&"
+		if sure || up {
+			d.olds = slices.Clone(d.cur)
+		} else {
+			d.olds = withDirs(d.olds, d.cur...)
+		}
+		switch {
+		case up:
+			d.cur, d.list = to, to
+		case sure:
+			d.cur = to
+		case pt.after == "||":
+			d.list = withDirs(d.list, to...)
+		default:
+			d.cur = withDirs(d.cur, to...)
+		}
+	} else if !inPipe && !strings.HasPrefix(pt.text, "(") && r.hasCd(pt.text) {
+		d.olds = withDirs(withDirs(d.olds, d.cur...), "")
+		d.cur = withDirs(d.cur, "")
+	}
+	d.hidden = d.hidden || hidden
+	if d.hidden {
+		d.olds = withDirs(d.olds, "")
+		d.cur = withDirs(d.cur, "")
+	}
+	d.list = withDirs(d.list, d.cur...)
+	if listEnd(pt.after) {
+		d.cur = d.list
+	}
 }
 
 // listSep is the separator that ends the and-or list part i is in: ";",
@@ -1106,21 +1257,88 @@ func listSep(parts []linePart, i int) string {
 
 // hiddenCode are the builtins that run shell code the line doesn't show
 // in the shell itself, where a cd in it moves the line's folder.
-var hiddenCode = setOf("eval trap source .")
+var hiddenCode = setOf("eval source .")
 
-// runsHidden: one of text's commands is one of those, maybe through
+// runsCode: one of text's commands is one of those, maybe through
 // command or builtin.
-func (r Rules) runsHidden(text string) bool {
+func (r Rules) runsCode(text string) bool { return r.runs(text, hiddenCode) }
+
+// runsTrap: one of text's commands is trap. Its action, read as commands
+// (judgeLine), may still call what the guard can't see from the line's
+// later commands: a function or an alias the line defines in a way it
+// can't follow, which may be a cd.
+func (r Rules) runsTrap(text string) bool { return r.runs(text, setOf("trap")) }
+
+// runs: one of text's commands is one of names, maybe through command or
+// builtin.
+func (r Rules) runs(text string, names map[string]bool) bool {
 	for _, words := range r.cmds(text) {
 		argv := strip(words)
 		for len(argv) > 1 && (argv[0] == "command" || argv[0] == "builtin") {
 			argv = argv[1:]
 		}
-		if len(argv) > 0 && hiddenCode[argv[0]] {
+		if len(argv) > 0 && names[argv[0]] {
 			return true
 		}
 	}
 	return false
+}
+
+// trapFunc is the head of a zsh trap function's definition: TRAPINT() or
+// function TRAPEXIT.
+var trapFunc = regexp.MustCompile(`(?:^|[\s;&|(){}])(?:function\s+TRAP[A-Z0-9]+(?:\s*\(\s*\))?|TRAP[A-Z0-9]+\s*\(\s*\))`)
+
+// trapFuncs are the bodies of the trap functions text defines: what
+// follows each head, to the part's end.
+func trapFuncs(text string) []string {
+	var out []string
+	for _, m := range trapFunc.FindAllStringIndex(text, -1) {
+		if b := strings.TrimSpace(text[m[1]:]); b != "" {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+// trapAction is the action trap's args set ("" for none: a listing, a
+// reset, a signal ignored); false for one the guard can't read: a
+// command named with a variable or a substitution anywhere in it
+// ("$cleanup", $(cat f), g${x}t), or an action word that lost an
+// unquoted substitution glued to its text ("gh pr "$(echo merge)" 1").
+// The first word after the options is the action, as bash reads it with
+// a signal after it; with none (trap 2, bash's reset) it is read too,
+// which judges no command.
+func (r Rules) trapAction(args []string) (string, bool) {
+	i := 0
+	for ; i < len(args) && strings.HasPrefix(args[i], "-") && args[i] != "-"; i++ {
+		if args[i] == "--" {
+			i++
+			break
+		}
+		if strings.ContainsAny(args[i], "lp") {
+			return "", true // trap -l, trap -p: a listing
+		}
+	}
+	if i >= len(args) || args[i] == "-" {
+		return "", true
+	}
+	a := args[i]
+	if r.ps != nil && r.ps.glued[a] {
+		return a, false
+	}
+	for _, words := range r.cmds(a) {
+		if argv := strip(words); len(argv) > 0 && strings.ContainsAny(argv[0], "$`") {
+			return a, false
+		}
+	}
+	return a, true
+}
+
+// unreadableTrap is the refusal of a trap whose action the guard can't
+// read (trapAction).
+func unreadableTrap() *Denial {
+	return &Denial{Rule: RuleUnreadable, Floor: true, Summary: "a trap action the guard can't read",
+		Message: "terminatr guard: this trap's action runs a command a variable or a substitution names, which the guard can't read, so it is refused; write the action's commands out in the trap."}
 }
 
 // judgeCommands judges each simple command of part, a part of a line
@@ -1185,6 +1403,13 @@ func (r Rules) judgeCommands(part, cwd string) *Denial {
 			}
 		case cmd == "eval":
 			d = r.nested().judgeLine(strings.Join(args, " "), []string{cwd})
+		case cmd == "trap":
+			// Its action runs later: judgeLine judges it where it may.
+			if a, ok := r.trapAction(args); !ok {
+				d = unreadableTrap()
+			} else if a != "" && r.ps != nil && !slices.Contains(r.ps.traps[r.trapFrom:], a) {
+				r.ps.traps = append(r.ps.traps, a)
+			}
 		case cmd == "pwsh" || cmd == "powershell":
 			d = r.judgePwsh(args)
 		case cmd == "rm" && r.has("delete-branch") && slices.ContainsFunc(args, func(a string) bool { return rmRecursive.MatchString(a) || isLong(a, "--recursive") }):
@@ -2047,13 +2272,20 @@ type nowhere struct{ dir string }
 // cd is where cmd (cd, pushd, popd) with args leaves the line: a
 // folder it names plainly, home for none, else unknown: a pattern or
 // braces (cd ~/.term*) may name another folder, and so may a relative
-// one CDPATH looks up, when the line sets it. Its redirections (pushd x
-// >/dev/null) are no folder.
+// one CDPATH looks up, when the line names it (lineFlags). Its redirections (pushd x
+// >/dev/null) are no folder. A physical cd (cd -P, or one the line may
+// have made physical: physicalCd) leaves the folder with its links
+// followed (Resolve), so its .. is the real parent; where the guard
+// can't follow them, or can't tell a logical cd from a physical one
+// that lands elsewhere, the folder is unknown.
 func (n nowhere) cd(r Rules, cmd string, args []string) nowhere {
 	var to []string
+	mode := byte(0)
 	for _, a := range unredirected(args) {
 		if !strings.HasPrefix(a, "-") || a == "-" {
 			to = append(to, a)
+		} else if i := strings.LastIndexAny(a, "LP"); i > 0 && !strings.HasPrefix(a, "--") {
+			mode = a[i]
 		}
 	}
 	switch {
@@ -2069,15 +2301,120 @@ func (n nowhere) cd(r Rules, cmd string, args []string) nowhere {
 	if a == "-" || strings.ContainsAny(a, "$`*?[{") || strings.HasPrefix(a, "~") && !strings.HasPrefix(a, "~/") && a != "~" {
 		return nowhere{}
 	}
-	if !dotted.MatchString(slash(a)) && !strings.HasPrefix(a, "~") && !drive.MatchString(slash(a)) && strings.Contains(r.line, "CDPATH") {
+	if !dotted.MatchString(slash(a)) && !strings.HasPrefix(a, "~") && !drive.MatchString(slash(a)) && r.cdpath {
 		return nowhere{}
 	}
 	if n.dir == "" && !strings.HasPrefix(a, "/") && !strings.HasPrefix(a, "~") && !drive.MatchString(slash(a)) {
 		return nowhere{}
 	}
 	r.Cwd = n.dir
-	return nowhere{dir: r.abs(a)}
+	dir := r.abs(a)
+	if mode == 'P' || mode == 0 && r.physical {
+		if r.Resolve == nil {
+			return nowhere{}
+		}
+		real := r.abs(r.resolve(r.joined(a)))
+		if mode == 0 && real != dir {
+			return nowhere{}
+		}
+		dir = real
+	}
+	return nowhere{dir: dir}
 }
+
+// physicalSetters are the commands whose words may make cds physical:
+// set, setopt, unsetopt, shopt and the shells.
+var physicalSetters = func() map[string]bool {
+	m := setOf("set setopt unsetopt shopt")
+	for c := range shells {
+		m[c] = true
+	}
+	return m
+}()
+
+// physicalOpts are the options that make cds physical, as optName gives
+// them: bash's physical, zsh's chase_links and chase_dots.
+var physicalOpts = setOf("physical chaselinks chasedots")
+
+// optName is a shell option's name as zsh compares them: case, _ and -
+// aside, without a no that turns it off (nochaselinks), so either way
+// counts.
+func optName(o string) string {
+	o = strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(o))
+	return strings.TrimPrefix(o, "no")
+}
+
+// cdPath names CDPATH or zsh's cdpath, any case.
+var cdPath = regexp.MustCompile(`(?i)cd_?path`)
+
+// optionsWord is a word that assigns zsh's options (options[x]=,
+// options=, options+=) or names it to a command that may (typeset
+// options, read options, printf -v options).
+var optionsWord = regexp.MustCompile(`^options(?:\[|\+?=|$)`)
+
+// lineFlags reads line's commands, their words dequoted and their names
+// by base name (/bin/bash), for what the guard can't follow:
+//
+// physical, one may make its cds physical: set, setopt, unsetopt, shopt
+// or a shell given -P (zsh's -w, set -w), an option physicalOpts names
+// (set -o physical, shopt -so physical, setopt CHASE_LINKS, unsetopt
+// nochaselinks), an option argument with an expansion in it (setopt
+// $o), or physicalCd's words; emulate; any assignment to zsh's options
+// (optionsWord); a SHELLOPTS= or BASHOPTS= one, alone or through env; a
+// command named by an expansion. Either way it counts, so a line
+// turning it off does too.
+//
+// cdpath, it names CDPATH or zsh's cdpath in any form (an assignment,
+// typeset, +=, an indirect name n=CDPATH, any case), in its text or its
+// words dequoted (C\DPATH): then a relative cd may land elsewhere.
+func (r Rules) lineFlags(line string) (physical, cdpath bool) {
+	cdpath = cdPath.MatchString(line)
+	for _, words := range r.cmds(line) {
+		for _, w := range words {
+			if strings.HasPrefix(w, "SHELLOPTS=") || strings.HasPrefix(w, "BASHOPTS=") || optionsWord.MatchString(w) {
+				physical = true
+			}
+			if cdPath.MatchString(w) {
+				cdpath = true
+			}
+		}
+		argv := strip(words)
+		if len(argv) == 0 {
+			continue
+		}
+		name := base(argv[0])
+		if name == "emulate" || strings.ContainsAny(argv[0], "$`") {
+			physical = true
+		}
+		if !physicalSetters[name] {
+			continue
+		}
+		if physicalCd.MatchString(strings.Join(argv, " ")) {
+			physical = true
+		}
+		for _, a := range argv[1:] {
+			if strings.ContainsAny(a, "$`") {
+				physical = true
+				continue
+			}
+			if len(a) > 1 && (a[0] == '-' || a[0] == '+') && a[1] != '-' {
+				if strings.ContainsRune(a, 'P') || (name == "set" || shells[name]) && strings.ContainsRune(a, 'w') {
+					physical = true
+				}
+				continue
+			}
+			if physicalOpts[optName(a)] {
+				physical = true
+			}
+		}
+	}
+	return physical, cdpath
+}
+
+// physicalCd is a line that may make its cds physical: bash's set -P or
+// set -o physical (or a shell started with them), zsh's chase_links or
+// chase_dots.
+var physicalCd = regexp.MustCompile(`\bphysical\b|(?i:chase_?(?:links|dots))|(?:^|[\s;&|(){}])(?:set|bash|sh|zsh|ksh|dash)(?:\s+[-+]\S*)*\s+-[A-Za-z]*P`)
 
 // globReaches: glob p (a wildcard in it) could name a folder that holds
 // root, or root itself: its part before the first wildcard, back to the
@@ -2131,9 +2468,9 @@ func withDirs(dirs []string, more ...string) []string {
 }
 
 // cdWords are the commands that change a shell's folder.
-var cdWords = setOf("cd pushd popd")
+var cdWords = setOf("cd pushd popd chdir")
 
-// hasCd: some word of text's commands is cd, pushd or popd.
+// hasCd: some word of text's commands is cd, pushd, popd or zsh's chdir.
 func (r Rules) hasCd(text string) bool {
 	for _, words := range r.cmds(text) {
 		if slices.ContainsFunc(words, func(w string) bool { return cdWords[w] }) {
@@ -2403,7 +2740,7 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 // substitution ($TMPDIR/x, "$F") is where its value says, which the
 // guard can't place with a cd or without one.
 func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
-	if len(r.NoWrite) == 0 {
+	if len(r.NoWrite) == 0 && len(r.NoWriteNames) == 0 {
 		return nil
 	}
 	var refuse func(w string, parents bool) *Denial
@@ -2483,7 +2820,7 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 		if fixed == "" {
 			fixed = "/"
 		}
-		if r.covers(r.NoWrite, p) || parents && slices.ContainsFunc(r.NoWrite, func(n string) bool { return r.under(n, fixed) || r.globReaches(p, n) }) {
+		if r.covers(r.NoWrite, p) || r.namedFloor(p, parents) || parents && slices.ContainsFunc(r.NoWrite, func(n string) bool { return r.under(n, fixed) || r.globReaches(p, n) }) {
 			return floor(r.deny(RuleTMFiles, cmd+" of "+safe(p), ""))
 		}
 		return nil
@@ -2634,6 +2971,18 @@ type parse struct {
 	deadline time.Time
 	over     bool
 	late     bool // over by the deadline
+	// traps are the actions of the traps the lines read set, in order
+	// (judgeLine).
+	traps []string
+	// resolved and files are what the file system answered (resolve,
+	// file).
+	resolved map[string]string
+	files    map[string]bool
+	// checked: the file-system checks put it past its budget.
+	checked bool
+	// glued are words that lost an unquoted substitution glued to their
+	// text (lit), as read.
+	glued map[string]bool
 }
 
 // spent reports whether the judge's reading went past its limits (or
@@ -2702,6 +3051,8 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 	// path starts with stay ($(pwd)/f is no /f).
 	var word, lit strings.Builder
 	inWord, hasLit := false, false
+	// dropped: an unquoted substitution of the word is in word, not lit.
+	dropped := false
 	// quoted: some of the word is quoted or escaped ("2">f writes 2's
 	// output to f: no descriptor).
 	quoted := false
@@ -2713,13 +3064,19 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 	fed, fedShell := false, false
 	endWord := func() {
 		if inWord && hasLit {
+			if dropped && lit.String() != word.String() {
+				if p.glued == nil {
+					p.glued = map[string]bool{}
+				}
+				p.glued[lit.String()] = true
+			}
 			words = append(words, lit.String())
 		} else if inWord {
 			words = append(words, word.String())
 		}
 		word.Reset()
 		lit.Reset()
-		inWord, hasLit, quoted = false, false, false
+		inWord, hasLit, quoted, dropped = false, false, false, false
 	}
 	// text is literal text of the word.
 	text := func(t string) {
@@ -2833,13 +3190,13 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 			end := closing(s, i+2, '(', ')')
 			inner = append(inner, p.read(string(s[i+2:end]), false, nil, depth+1)...)
 			word.WriteString(string(s[i:min(end+1, len(s))]))
-			inWord = true
+			inWord, dropped = true, true
 			i = end
 		case c == '`':
 			end := tickClose(s, i+1)
 			inner = append(inner, p.read(string(s[i+1:end]), false, nil, depth+1)...)
 			word.WriteString(string(s[i:min(end+1, len(s))]))
-			inWord = true
+			inWord, dropped = true, true
 			i = end
 		case c == '\n' && len(open) > 0:
 			// The bodies of the heredocs the line opened.
@@ -2880,7 +3237,7 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 			end := closing(s, i+2, '(', ')')
 			inner = append(inner, p.read(string(s[i+2:end]), false, nil, depth+1)...)
 			word.WriteString(string(s[i:min(end+1, len(s))]))
-			inWord = true
+			inWord, dropped = true, true
 			i = end
 		case strings.ContainsRune(";&|\n(){}", c):
 			endCommand()
@@ -3092,8 +3449,8 @@ func (r Rules) worktreeScript(p string) bool {
 		return false
 	}
 	j := r.joined(p)
-	at := r.abs(r.Resolve(j))
-	return !devOrProc.MatchString(at) && r.under(at, r.wt) && r.File(j)
+	at := r.abs(r.resolve(j))
+	return !devOrProc.MatchString(at) && r.under(at, r.wt) && r.file(j)
 }
 
 // scriptWriters are the commands that may write, link or move a file
@@ -3590,6 +3947,34 @@ func (r Rules) covers(roots []string, p string) bool {
 	root := fixed == "/" || driveRoot.MatchString(fixed)
 	return slices.ContainsFunc(roots, func(s string) bool {
 		return r.under(fixed, s) || (fixed != p && r.under(s, fixed) && !root && r.fold(fixed) != r.fold(r.Home))
+	})
+}
+
+// namedFloor: p (absolute; it may be a glob) may name a file one of
+// NoWriteNames matches: in its folder, its name matches the pattern, or
+// as a glob, its text before the wildcard and the pattern's meet
+// (rm ~/.zcomp*, rm ~/.*). With parents (a remover), a folder holding
+// the pattern's folder counts too.
+func (r Rules) namedFloor(p string, parents bool) bool {
+	fp := r.fold(p)
+	return slices.ContainsFunc(r.NoWriteNames, func(n string) bool {
+		fn := r.fold(n)
+		dir, pat := path.Dir(fn), path.Base(fn)
+		if parents {
+			fixed := strings.TrimSuffix(wildcard.ReplaceAllString(fp, ""), "/")
+			if under(dir, fp) || fixed != fp && (fixed == "" || under(dir, fixed)) {
+				return true
+			}
+		}
+		if path.Dir(fp) != dir {
+			return false
+		}
+		name := path.Base(fp)
+		if ok, err := path.Match(pat, name); ok || err != nil {
+			return true
+		}
+		lit, plit := wildcard.ReplaceAllString(name, ""), wildcard.ReplaceAllString(pat, "")
+		return lit != name && (strings.HasPrefix(lit, plit) || strings.HasPrefix(plit, lit))
 	})
 }
 
