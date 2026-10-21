@@ -15,8 +15,6 @@ import (
 
 const accessUsage = `usage: tm access show [<project>] [--thread <id>] [--guides] [--json]
        tm access explain [<project>] [--thread <id>] [--json] -- <command line>
-       tm access preset list [--json]
-       tm access preset show <name> [--json]
        tm access add <kind> <value> [<project> | --all] [--without-asking]
        tm access add guide <title> --text <text> | --file <file> [<project> | --all] [--replace]
        tm access rm <kind> <value> [<project> | --all]
@@ -25,7 +23,6 @@ const accessUsage = `usage: tm access show [<project>] [--thread <id>] [--guides
        tm access set local-ports|escapes|yolo|coordinator on|off [<project> | --all] [--yes]
        tm access set protection open|guarded|sandboxed|strict [<project> | --all] [--yes]
        tm access reset [<project> | --all] [--yes]
-       tm access preset add <name> [<project> | --all]
 
 show lists a thread's access as rules: where each acts, the rule, and
 where it comes from (tm, all projects, the project, tm's default, or the
@@ -68,21 +65,15 @@ open); the sandbox lists, guard allowances and secret environment stay.
 It asks first. Each is journaled, and threads get it from their next
 start or restart. These are the human's; set coordinator on (asking
 first) lets the project's coordinator change its own project's rules
-too (add, rm, edit, drop, undrop, preset add, set local-ports), never
-the protection level, escapes, yolo, a reset, --all or set coordinator.
-
-A preset is a named group of rules tm ships. preset show lists the rules
-it adds; preset add adds those the project's threads (or, with --all,
-every project's) don't have yet to its table in config.toml, as plain
-rules: each then stands on its own, to change or remove in the Access
-tab. Presets are the human's.`
+too (add, rm, edit, drop, undrop, set local-ports), never the
+protection level, escapes, yolo, a reset, --all or set coordinator.`
 
 func init() {
 	commands["access"] = accessCmd
 }
 
 // accessCmd implements `tm access …` (T574 §5): show and explain read,
-// the others write config.toml (accessedit.go, accesspreset.go).
+// the others write config.toml (accessedit.go).
 func accessCmd(e *Env, args []string) error {
 	if len(args) == 0 {
 		return srvUsage("access", accessUsage)
@@ -92,8 +83,6 @@ func accessCmd(e *Env, args []string) error {
 		return accessShow(e, args[1:])
 	case "explain":
 		return accessExplain(e, args[1:])
-	case "preset":
-		return accessPreset(e, args[1:])
 	case "add", "rm":
 		return accessAdd(e, args[0], args[1:])
 	case "edit":

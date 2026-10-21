@@ -1,11 +1,15 @@
 package session
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
@@ -145,5 +149,200 @@ func TestPromptInterruptNoKey(t *testing.T) {
 	via, why, err := s.PromptNow("no-key", true)
 	if err != nil || via != ViaSteered || why != "the agent has no interrupt key" {
 		t.Fatalf("PromptNow: %q %q %v", via, why, err)
+	}
+}
+
+// startSteerBox runs a program that draws Claude's prompt box holding the
+// last line it was sent, the way Claude shows a steer until it reads it
+// (an empty paste empties the box: the agent read it), and logs the keys
+// it gets to a file it returns.
+func startSteerBox(t *testing.T, a agent.Agent) (*Session, string) {
+	t.Helper()
+	log := filepath.Join(t.TempDir(), "keys")
+	script := `stty -echo -icanon min 1
+draw() { printf '\033[2J\033[H\n\342\224\200\342\224\200\342\224\200\n\342\235\257\302\240%s\n\342\224\200\342\224\200\342\224\200\n' "$1"; }
+draw ''
+tee "$KEYS" | while IFS= read -r l; do draw "$l"; done`
+	s, err := Start(Config{
+		ID: "s-test", Role: proto.RoleCoordinator, Project: "p",
+		Argv: []string{"/bin/sh", "-c", script},
+		Cwd:  t.TempDir(),
+		Env:  []string{"PATH=/usr/bin:/bin", "TERM=xterm-256color", "LANG=C.UTF-8", "KEYS=" + log},
+		Cols: 80, Rows: 24,
+		Logf:  t.Logf,
+		Agent: &AgentConfig{Agent: a, Home: t.TempDir(), PromptHold: time.Hour},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Stop(time.Second) })
+	if _, err := s.Hook("SessionStart", map[string]any{"source": "startup"}); err != nil {
+		t.Fatal(err)
+	}
+	testwait.Eventually(t, "the prompt box", func() bool { return strings.Contains(screen(t, s), "❯") })
+	return s, log
+}
+
+// shown waits for the box to show text and the screen rules to have read
+// it as not empty.
+func shown(t *testing.T, s *Session, text string) {
+	t.Helper()
+	testwait.Eventually(t, text+" in the box", func() bool {
+		if !strings.Contains(screen(t, s), "❯ "+text) {
+			return false
+		}
+		rt := s.agentRT()
+		rt.mu.Lock()
+		defer rt.mu.Unlock()
+		return !rt.emptyBox
+	})
+}
+
+// escs counts the Esc keys in keys, beside paste markers.
+func escs(keys string) int {
+	return strings.Count(keys, "\x1b") - strings.Count(keys, "\x1b[")
+}
+
+func keysGot(t *testing.T, path string) string {
+	t.Helper()
+	b, _ := os.ReadFile(path)
+	return string(b)
+}
+
+// TestPromptNowOwnSteerNoDraft reproduces T641 (1): a steer tm pasted
+// sits in Claude's box until the agent reads it; a later --now isn't
+// held behind it as a draft, the same text isn't pasted twice, and
+// nothing is queued.
+func TestPromptNowOwnSteerNoDraft(t *testing.T) {
+	s, keys := startSteerBox(t, claudeLike(t))
+	working(t, s, true)
+	if via, why, err := s.PromptNow("first", false); err != nil || via != ViaSteered || why != "" {
+		t.Fatalf("first: %q %q %v", via, why, err)
+	}
+	shown(t, s, "first")
+	if via, why, err := s.PromptNow("second", false); err != nil || via != ViaSteered || why != "" {
+		t.Fatalf("second: %q %q %v", via, why, err)
+	}
+	shown(t, s, "second")
+	if via, why, err := s.PromptNow("second", false); err != nil || via != ViaSteered || why != "already steered into this turn" {
+		t.Fatalf("second again: %q %q %v", via, why, err)
+	}
+	if st, _ := s.AgentState(); st.Queued != 0 {
+		t.Fatalf("queued behind tm's own steer: %+v", st)
+	}
+	never(t, 200*time.Millisecond, "pasted twice", func() bool { return strings.Count(keysGot(t, keys), "second") > 1 })
+
+	// The agent reads them: the box empties, and they are forgotten, so
+	// the same text steers again.
+	s.paste("", "")
+	testwait.Eventually(t, "the steers forgotten", func() bool {
+		rt := s.agentRT()
+		rt.mu.Lock()
+		defer rt.mu.Unlock()
+		return len(rt.steers) == 0
+	})
+	if via, why, err := s.PromptNow("second", false); err != nil || via != ViaSteered || why != "" {
+		t.Fatalf("second, read: %q %q %v", via, why, err)
+	}
+	testwait.Eventually(t, "pasted again", func() bool { return strings.Count(keysGot(t, keys), "second") == 2 })
+}
+
+// TestPromptNowDraftAfterSteer: T641 (3): keys typed into the box after
+// tm's steer make it a draft again: kept, and the prompt queued.
+func TestPromptNowDraftAfterSteer(t *testing.T) {
+	s, keys := startSteerBox(t, claudeLike(t))
+	working(t, s, true)
+	if _, _, err := s.PromptNow("first", false); err != nil {
+		t.Fatal(err)
+	}
+	shown(t, s, "first")
+	if err := s.Input([]byte("mine\r")); err != nil {
+		t.Fatal(err)
+	}
+	shown(t, s, "mine")
+	via, why, err := s.PromptNow("later", false)
+	if err != nil || via != "queued" || why != HeldBox {
+		t.Fatalf("PromptNow: %q %q %v", via, why, err)
+	}
+	never(t, 200*time.Millisecond, "pasted over a draft", func() bool { return strings.Contains(keysGot(t, keys), "later") })
+}
+
+// TestPromptInterruptOwnSteer: T641 (2): --interrupt stops the turn past
+// tm's own steer. Claude sends what it queued once stopped: the new text
+// is pasted before Esc, and text already steered gets Esc alone.
+func TestPromptInterruptOwnSteer(t *testing.T) {
+	defer func(d time.Duration) { interruptDelay = d }(interruptDelay)
+	interruptDelay = 50 * time.Millisecond
+	s, keys := startSteerBox(t, claudeLike(t))
+	working(t, s, true)
+	if _, _, err := s.PromptNow("first", false); err != nil {
+		t.Fatal(err)
+	}
+	shown(t, s, "first")
+	if via, why, err := s.PromptNow("stop-now", true); err != nil || via != ViaInterrupted || why != "" {
+		t.Fatalf("PromptNow: %q %q %v", via, why, err)
+	}
+	testwait.Eventually(t, "the paste, then Esc", func() bool {
+		k := keysGot(t, keys)
+		i := strings.Index(k, "stop-now")
+		return i >= 0 && escs(k[i:]) == 1
+	})
+	if via, _, err := s.PromptNow("stop-now", true); err != nil || via != ViaInterrupted {
+		t.Fatalf("again: %q %v", via, err)
+	}
+	testwait.Eventually(t, "Esc alone", func() bool { return escs(keysGot(t, keys)) == 2 })
+	never(t, 200*time.Millisecond, "pasted twice", func() bool { return strings.Count(keysGot(t, keys), "stop-now") > 1 })
+	if st, _ := s.AgentState(); st.Queued != 0 {
+		t.Fatalf("queued: %+v", st)
+	}
+}
+
+// TestPromptInterruptDraftRefused: T641 (2, 3): with a draft tm didn't
+// type, --interrupt is refused, saying why; nothing is pasted or queued.
+func TestPromptInterruptDraftRefused(t *testing.T) {
+	resolved := make(chan PromptResolution, 1)
+	s := startBox(t, claudeLike(t), "draft", time.Hour, resolved)
+	working(t, s, false)
+	testwait.Eventually(t, "the screen read", func() bool {
+		rt := s.agentRT()
+		rt.mu.Lock()
+		defer rt.mu.Unlock()
+		return !rt.emptyBox
+	})
+	via, _, err := s.PromptNow("stop-it", true)
+	var ni *NotInterruptedError
+	if !errors.As(err, &ni) || ni.Why != HeldBox || via != "" {
+		t.Fatalf("PromptNow: %q %v", via, err)
+	}
+	if st, _ := s.AgentState(); st.Queued != 0 {
+		t.Fatalf("queued: %+v", st)
+	}
+	never(t, 200*time.Millisecond, "typed into the pane", func() bool {
+		sc := screen(t, s)
+		return strings.Contains(sc, "stop-it") || strings.Contains(sc, "^[")
+	})
+}
+
+// TestPromptInterruptAfterOwnSteer: Codex's way past a steer tm pasted
+// (Codex shows it in its history, the box empty, but a box that shows it
+// is no draft either): Esc, and the prompt heads the queue.
+func TestPromptInterruptAfterOwnSteer(t *testing.T) {
+	a := claudeLike(t)
+	a.m.Inject.InterruptPaste = agent.InterruptPasteAfter
+	s, keys := startSteerBox(t, a)
+	working(t, s, true)
+	if via, _, err := s.PromptNow("first", false); err != nil || via != ViaSteered {
+		t.Fatalf("first: %q %v", via, err)
+	}
+	shown(t, s, "first")
+	if via, why, err := s.PromptNow("after-stop", true); err != nil || via != ViaInterrupted || why != "" {
+		t.Fatalf("PromptNow: %q %q %v", via, why, err)
+	}
+	testwait.Eventually(t, "Esc", func() bool { return escs(keysGot(t, keys)) == 1 })
+	if strings.Contains(keysGot(t, keys), "after-stop") {
+		t.Fatal("pasted before the turn stopped")
+	}
+	if st, _ := s.AgentState(); st.Queued != 1 {
+		t.Fatalf("queued: %+v", st)
 	}
 }

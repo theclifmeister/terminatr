@@ -511,17 +511,39 @@ func TestUpkeep(t *testing.T) {
 	}
 	os.WriteFile(p.Path("CONTEXT.md"), []byte(strings.Repeat("x", BudgetContext+512)), 0o644)
 	os.MkdirAll(p.Path("memory", "old"), 0o755)
-	os.WriteFile(p.Path("memory", "old", "decisions.md"), []byte(strings.Repeat("y", BudgetMemory+1024)), 0o644)
+	os.WriteFile(p.Path("memory", "old", "decisions.md"), []byte(strings.Repeat("y", BudgetNote+1024)), 0o644)
 	os.WriteFile(p.Path("memory", "small.md"), []byte("ok\n"), 0o644)
 	ctx := render()
-	for _, w := range []string{"## Upkeep", "CONTEXT.md is 6.5 KB, over its 6 KB budget: consolidate it",
-		"memory/old/decisions.md is 7 KB, over its 6 KB budget"} {
+	for _, w := range []string{"## Upkeep", "CONTEXT.md is 6.5 KB (~1.7k tokens), over its 6 KB budget (~1.5k tokens): consolidate it",
+		"memory/old/decisions.md is 7 KB (~1.8k tokens), over its 6 KB budget (~1.5k tokens)"} {
 		if !strings.Contains(ctx, w) {
 			t.Errorf("context lacks %q:\n%s", w, ctx)
 		}
 	}
-	if strings.Contains(ctx, "small.md is") {
+	if strings.Contains(ctx, "small.md is") || strings.Contains(ctx, "memory/ is") {
 		t.Error("a file within budget named")
+	}
+	// MEMORY.md has its own, smaller budget; the notes one together.
+	os.WriteFile(p.Path("MEMORY.md"), []byte(strings.Repeat("z", BudgetIndex+1024)), 0o644)
+	for i := range 6 {
+		os.WriteFile(p.Path("memory", fmt.Sprintf("n%d.md", i)), []byte(strings.Repeat("n", BudgetNote)), 0o644)
+	}
+	over, err := p.Oversized()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var files []string
+	for _, o := range over {
+		files = append(files, o.File)
+	}
+	if want := []string{"CONTEXT.md", "MEMORY.md", "memory/", "memory/old/decisions.md"}; !slices.Equal(files, want) {
+		t.Fatalf("oversized %v, want %v", files, want)
+	}
+	if got, want := over[2].String(), "memory/ is 43.0 KB in all (~11.0k tokens), over its 40 KB budget (~10.2k tokens): consolidate it"; got != want {
+		t.Errorf("total: %q, want %q", got, want)
+	}
+	if ctx := render(); !strings.Contains(ctx, "MEMORY.md is ") || !strings.Contains(ctx, "over its 4 KB budget") {
+		t.Errorf("context lacks MEMORY.md over its budget:\n%s", ctx)
 	}
 
 	s := p.Tasks()

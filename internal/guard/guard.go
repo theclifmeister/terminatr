@@ -1706,7 +1706,7 @@ func inPlaceFiles(cmd string, args []string) []string {
 
 // tmAgentMod are the tm mod subcommands an agent may run; the others,
 // tm project's tmProjectWrites (and repo add), tm access's
-// tmAccessWrites (and preset add) and the dashboard write
+// tmAccessWrites and the dashboard write
 // tm's settings in the tm process itself, the human's alone: an agent
 // past its sandbox (yolo) that runs one with its session's variables
 // unset and out of its session's process tree would pass for the human
@@ -1744,15 +1744,13 @@ func tmWritesSettings(args []string) string {
 		return "tm project repo add"
 	case args[i] == "access" && tmAccessWrites[pos[0]]:
 		return "tm access " + pos[0]
-	case args[i] == "access" && pos[0] == "preset" && len(pos) > 1 && pos[1] == "add":
-		return "tm access preset add"
 	}
 	return ""
 }
 
 // accessOpen reports whether tm with args (after its name) is a tm
 // access write a coordinator with AccessWrites may run: a rule's (add,
-// rm, edit, drop, undrop, preset add, set local-ports), never for all
+// rm, edit, drop, undrop, set local-ports), never for all
 // projects, never a reset or another switch (the human's).
 func accessOpen(args []string) bool {
 	var pos []string

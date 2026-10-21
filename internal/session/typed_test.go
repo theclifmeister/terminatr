@@ -44,3 +44,17 @@ func TestTypedLine(t *testing.T) {
 		}
 	}
 }
+
+// TestTypesKeys: keys that edit the box count; mouse and focus reports
+// and terminal replies don't (they would forget tm's steers, T641).
+func TestTypesKeys(t *testing.T) {
+	for in, want := range map[string]bool{
+		"a": true, "\r": true, "\x7f": true, "\x1b": true, "\x1b[A": true,
+		"\x1b[200~x\x1b[201~": true, "\xc3": true,
+		"\x1b[I": false, "\x1b[O": false, "\x1b[<0;10;5M": false, "\x1b[?62c": false, "": false,
+	} {
+		if got := typesKeys([]byte(in)); got != want {
+			t.Errorf("typesKeys(%q) = %v, want %v", in, got, want)
+		}
+	}
+}

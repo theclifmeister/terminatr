@@ -272,7 +272,6 @@ func TestAccessCoordinator(t *testing.T) {
 	for _, args := range [][]string{
 		{"add", "host", "registry.npmjs.org", "demo"},
 		{"set", "local-ports", "on", "demo"},
-		{"preset", "add", "local-dev-servers", "demo"},
 	} {
 		if code, _, stderr := run(coord, args...); code != ExitOK {
 			t.Errorf("coordinator %v: %q", args, stderr)

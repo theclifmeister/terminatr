@@ -25,6 +25,18 @@
   var MAX_BLOCKS = 250;
   var MAX_TREE = 8e5;
   var TEMPLATE = `+++
+# Rules, not stories: no how-we-found-out.
+# No task ids, dates or (user, date) provenance in the text, except on
+# a user decision someone may question.
+# Each fact once, in the note whose touches fit; others link [[note]].
+# Point to a repo file instead of copying its steps.
+# Terse one-line imperative bullets, no hedging. Keep stop words (only,
+# not): matching ignores them anyway.
+# Never store what the code, git or docs already say.
+# Never note a workaround for tm's own behaviour that every user would
+# hit (a guard false positive, a sandbox rule that doesn't work): report it,
+# for a fix in tm. Workarounds for the project's own setup (toolchain,
+# tests, VMs, cloud CLIs) may stay.
 title    = "One line: what was decided"
 touches  = ["path/in/repo.go", "repo:<name>"]
 standing = false

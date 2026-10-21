@@ -1,0 +1,137 @@
+package config
+
+import (
+	"slices"
+)
+
+// tm 0.37 and before had a switch per group of rules in a sandbox
+// table (browser_testing, browser_downloads, local_dev_servers), the
+// presets of later releases, which tm no longer has. The switches are
+// still read, as the rules they unfold into (a project's false as drops
+// of them), and the writers replace them with those rules when they
+// write the table. Rules a preset added are plain rules: nothing names
+// a preset any more.
+
+// BrowserDomains are the hosts the browser_downloads switch opened, so
+// npm i playwright and npx playwright install work inside the sandbox:
+// the npm registry (packages and their tarballs), Playwright's browser
+// download mirrors (PLAYWRIGHT_CDN_MIRRORS in playwright-core 1.61 to
+// 1.64; playwright.azureedge.net is no longer one), and
+// storage.googleapis.com, where cdn.playwright.dev redirects the Chrome
+// for Testing builds (the headless shell among them). The browser
+// guides say which of them a thread reaches.
+var BrowserDomains = []string{"registry.npmjs.org", "cdn.playwright.dev", "playwright.download.prss.microsoft.com", "storage.googleapis.com"}
+
+// A switchRule is one rule an old switch unfolds into: a sandbox list's
+// key and an entry of it, or SandboxLocalPorts.
+type switchRule struct{ key, value string }
+
+// oldSwitches are the switches of tm 0.37 and before, with the rules
+// each turned on (a guide by tm 0.38's name, which LegacyGuides words).
+var oldSwitches = []struct {
+	key   string
+	rules []switchRule
+}{
+	{"browser_testing", []switchRule{{SandboxGuides, legacyBrowserTesting}}},
+	{"browser_downloads", append(hostRules(BrowserDomains), switchRule{SandboxGuides, legacyBrowserDownloads})},
+	{"local_dev_servers", []switchRule{{SandboxLocalPorts, "on"}}},
+}
+
+// hostRules are a host rule for each host.
+func hostRules(hosts []string) []switchRule {
+	out := make([]switchRule, len(hosts))
+	for i, h := range hosts {
+		out[i] = switchRule{SandboxHosts, h}
+	}
+	return out
+}
+
+// OldSwitchKeys are the keys of oldSwitches.
+func OldSwitchKeys() []string {
+	out := make([]string, len(oldSwitches))
+	for i, s := range oldSwitches {
+		out[i] = s.key
+	}
+	return out
+}
+
+// oldSwitch is the table's old switch of key, nil when it doesn't set
+// it.
+func (r *rawSandbox) oldSwitch(key string) *bool {
+	if r == nil {
+		return nil
+	}
+	switch key {
+	case "browser_testing":
+		return r.BrowserTesting
+	case "browser_downloads":
+		return r.BrowserDownloads
+	case "local_dev_servers":
+		return r.LocalDevServers
+	}
+	return nil
+}
+
+// The platforms a sandbox setting applies on, as runtime.GOOS names them.
+const (
+	OSMac     = "darwin"
+	OSLinux   = "linux"
+	OSWindows = "windows"
+)
+
+// SandboxSetting is where one key of a sandbox table applies: the
+// platforms whose agent sandbox has what it maps to, and whether Codex
+// threads get it (else only Claude's do). From the T561 findings
+// (Claude Code 2.1.302 and Codex 0.162.0 binaries):
+//   - excluded commands and allow rules are Claude settings on every
+//     platform; Codex has no per-session form of either.
+//   - local ports are Claude's sandbox.network.allowLocalBinding, which
+//     only its macOS sandbox reads (Linux doesn't pass it, Windows has
+//     no setting for localhost), and Codex's
+//     permissions.<profile>.network.allow_local_binding (macOS policy).
+//   - sockets are Claude's sandbox.network.allowUnixSockets and a Codex
+//     thread's network unix_sockets, which name sockets on macOS only
+//     (Claude's Linux sandbox opens every socket or none; Codex's Linux
+//     one none while its proxy limits the network).
+//   - approved commands aren't the agent's: tm runs them, on every
+//     platform, for both agents.
+//   - hosts are Claude's allowedDomains and a Codex thread's limited
+//     network's domains. tm gave them only on macOS (browser downloads'), so
+//     they stay macOS only: a narrower thread elsewhere, never a wider
+//     one, until another platform's are checked.
+//   - guides are plain text the brief gets, on every platform, for both
+//     agents.
+type SandboxSetting struct {
+	OS    []string
+	Codex bool
+}
+
+// SandboxSettings are every sandbox key's platforms.
+var SandboxSettings = map[string]SandboxSetting{
+	SandboxExcluded:   {OS: []string{OSMac, OSLinux, OSWindows}},
+	SandboxAllow:      {OS: []string{OSMac, OSLinux, OSWindows}},
+	SandboxWrite:      {OS: []string{OSMac, OSLinux, OSWindows}, Codex: true},
+	SandboxSockets:    {OS: []string{OSMac}, Codex: true},
+	SandboxApproved:   {OS: []string{OSMac, OSLinux, OSWindows}, Codex: true},
+	SandboxHosts:      {OS: []string{OSMac}, Codex: true},
+	SandboxGuides:     {OS: []string{OSMac, OSLinux, OSWindows}, Codex: true},
+	SandboxLocalPorts: {OS: []string{OSMac}, Codex: true},
+}
+
+// SandboxApplies reports whether sandbox key applies on platform goos.
+func SandboxApplies(key, goos string) bool {
+	return slices.Contains(SandboxSettings[key].OS, goos)
+}
+
+// OSName is a platform as the UI and the log say it.
+func OSName(goos string) string {
+	switch goos {
+	case OSMac:
+		return "macOS"
+	case OSLinux:
+		return "Linux"
+	case OSWindows:
+		return "Windows"
+	}
+	return goos
+}

@@ -574,14 +574,14 @@ func TestUpkeep(t *testing.T) {
 	if got := Upkeep(d); len(got) != 1 || got[0].Status != OK {
 		t.Fatalf("within budget: %+v", got)
 	}
-	os.WriteFile(p.Path("memory", "big.md"), make([]byte, project.BudgetMemory+1), 0o644)
+	os.WriteFile(p.Path("memory", "big.md"), make([]byte, project.BudgetNote+1), 0o644)
 	got := Upkeep(d)
-	if len(got) != 1 || got[0].Status != Warn || got[0].Name != "demo" || !strings.Contains(got[0].Detail, "memory/big.md is 6.0 KB, over its 6 KB budget") || got[0].Fix != nil {
+	if len(got) != 1 || got[0].Status != Warn || got[0].Name != "demo" || !strings.Contains(got[0].Detail, "memory/big.md is 6.0 KB (~1.5k tokens), over its 6 KB budget (~1.5k tokens)") || got[0].Fix != nil {
 		t.Fatalf("over budget: %+v", got)
 	}
 }
 
-// TestSettingsOldAccess: an old preset switch, a file allow rule and a
+// TestSettingsOldAccess: an old switch, a file allow rule and a
 // project list still replacing all projects' are one warning naming
 // each; none once the file is moved.
 func TestSettingsOldAccess(t *testing.T) {

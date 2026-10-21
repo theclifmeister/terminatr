@@ -34,7 +34,7 @@ func accessWrite(args []string) bool {
 	if len(args) < 2 || args[0] != "access" {
 		return false
 	}
-	return accessWrites[args[1]] || args[1] == "preset" && len(args) > 2 && args[2] == "add"
+	return accessWrites[args[1]]
 }
 
 // needsStdin reports whether a command reads stdin, so the client sends
