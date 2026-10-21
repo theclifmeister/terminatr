@@ -514,8 +514,8 @@ func TestUpkeep(t *testing.T) {
 	os.WriteFile(p.Path("memory", "old", "decisions.md"), []byte(strings.Repeat("y", BudgetNote+1024)), 0o644)
 	os.WriteFile(p.Path("memory", "small.md"), []byte("ok\n"), 0o644)
 	ctx := render()
-	for _, w := range []string{"## Upkeep", "CONTEXT.md is 6.5 KB, over its 6 KB budget: consolidate it",
-		"memory/old/decisions.md is 7 KB, over its 6 KB budget"} {
+	for _, w := range []string{"## Upkeep", "CONTEXT.md is 6.5 KB (~1.7k tokens), over its 6 KB budget (~1.5k tokens): consolidate it",
+		"memory/old/decisions.md is 7 KB (~1.8k tokens), over its 6 KB budget (~1.5k tokens)"} {
 		if !strings.Contains(ctx, w) {
 			t.Errorf("context lacks %q:\n%s", w, ctx)
 		}
@@ -539,7 +539,7 @@ func TestUpkeep(t *testing.T) {
 	if want := []string{"CONTEXT.md", "MEMORY.md", "memory/", "memory/old/decisions.md"}; !slices.Equal(files, want) {
 		t.Fatalf("oversized %v, want %v", files, want)
 	}
-	if got, want := over[2].String(), "memory/ is 43.0 KB in all, over its 40 KB budget: consolidate it"; got != want {
+	if got, want := over[2].String(), "memory/ is 43.0 KB in all (~11.0k tokens), over its 40 KB budget (~10.2k tokens): consolidate it"; got != want {
 		t.Errorf("total: %q, want %q", got, want)
 	}
 	if ctx := render(); !strings.Contains(ctx, "MEMORY.md is ") || !strings.Contains(ctx, "over its 4 KB budget") {

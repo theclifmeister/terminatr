@@ -47,6 +47,16 @@ func TestNoteSection(t *testing.T) {
 	if !tmpl.Front || tmpl.Section(SectionDecided) == "" || tmpl.Section(SectionRuledOut) == "" || tmpl.Section(SectionWatchOut) == "" {
 		t.Errorf("NoteTemplate doesn't parse as the schema: %+v", tmpl)
 	}
+	// Its comments are the guide to writing a note, kept out of its text.
+	for _, w := range []string{"# Rules, not stories", "except on\n# a user decision someone may question", "others link [[note]]", "instead of copying its steps",
+		"no hedging", "Keep stop words", "Never store what the code, git or docs already say"} {
+		if !strings.Contains(NoteTemplate, w) {
+			t.Errorf("NoteTemplate's guide lacks %q", w)
+		}
+	}
+	if strings.Contains(tmpl.Body, "Rules, not stories") {
+		t.Error("the guide is in the note's text")
+	}
 }
 
 func TestTerms(t *testing.T) {

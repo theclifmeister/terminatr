@@ -49,7 +49,16 @@ func (o Oversize) String() string {
 	if strings.HasSuffix(o.File, "/") {
 		all = " in all"
 	}
-	return fmt.Sprintf("%s is %s%s, over its %s budget: consolidate it", o.File, kb(o.Size), all, kb(o.Budget))
+	return fmt.Sprintf("%s is %s%s (%s), over its %s budget (%s): consolidate it", o.File, kb(o.Size), all, tokens(o.Size), kb(o.Budget), tokens(o.Budget))
+}
+
+// tokens is an estimate of the tokens n bytes of text cost an agent:
+// about four bytes each.
+func tokens(n int64) string {
+	if t := n / 4; t < 1000 {
+		return fmt.Sprintf("~%d tokens", t)
+	}
+	return fmt.Sprintf("~%.1fk tokens", float64(n)/4000)
 }
 
 func kb(n int64) string {
