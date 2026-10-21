@@ -384,10 +384,15 @@ const (
 // "queued" (pasted once the agent is idle with an empty prompt box), and
 // for a Mode, "steered" (pasted into the running turn) or "interrupted"
 // (the turn stopped for it). Why says why a Mode's prompt went another
-// way (the agent idle, a draft in its prompt box, no interrupt key).
+// way (the agent idle, a draft in its prompt box, no interrupt key). A
+// PromptInterrupt that can't stop the turn (a draft, a dialog) is
+// refused (ErrRefused): nothing is sent or queued.
 type SessionPromptResult struct {
 	Via string `json:"via"`
 	Why string `json:"why,omitempty"`
+	// Running: a Mode's prompt was queued while the agent's turn runs
+	// on; it goes once the turn ends.
+	Running bool `json:"running,omitempty"`
 }
 
 // SessionWaitParams are the params of session.wait: block until the

@@ -325,8 +325,21 @@ func (s *Session) Read(scrollback bool) (proto.SessionReadResult, error) {
 	return proto.SessionReadResult{Text: text, Cols: s.cols, Rows: s.rows}, err
 }
 
-// Input queues bytes for the PTY as if typed. It never blocks.
+// Input queues bytes for the PTY as if typed. It never blocks. Keys
+// that edit the prompt box (not mouse or focus reports) make what is in
+// it no longer tm's own steer (PromptNow).
 func (s *Session) Input(p []byte) error {
+	if err := s.input(p); err != nil {
+		return err
+	}
+	if typesKeys(p) {
+		s.forgetSteers()
+	}
+	return nil
+}
+
+// input is Input for tm's own pastes and keys.
+func (s *Session) input(p []byte) error {
 	if !s.in.push(p, false) {
 		return ErrExited
 	}
