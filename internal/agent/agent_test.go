@@ -62,11 +62,25 @@ func TestClaudeLaunch(t *testing.T) {
 	want := []string{"claude",
 		"--plugin-dir", "/run/s1/claude-plugin",
 		"--settings", "/run/s1/claude-settings.json",
+		"--mcp-config", "/run/s1/claude-mcp.json",
 		"--session-id", "uuid-1",
 		"--append-system-prompt-file", "/h/.terminatr/projects/p/threads/t-0001/brief.md",
 		"--", "Run tm skill thread."}
 	if !reflect.DeepEqual(l.Argv, want) {
 		t.Fatalf("argv\n got %q\nwant %q", l.Argv, want)
+	}
+	// Without the mod, tm mcp is the typed tools' server (§8.6, tm mcp).
+	var mcp struct {
+		MCPServers map[string]struct {
+			Type, Command string
+			Args          []string
+		} `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(l.Files["claude-mcp.json"], &mcp); err != nil {
+		t.Fatalf("claude-mcp.json is not JSON: %v\n%s", err, l.Files["claude-mcp.json"])
+	}
+	if s := mcp.MCPServers["terminatr"]; len(mcp.MCPServers) != 1 || s.Type != "stdio" || s.Command != "/bin/tm" || !slices.Equal(s.Args, []string{"mcp"}) {
+		t.Fatalf("claude-mcp.json = %+v", mcp)
 	}
 	if !l.Kickoff {
 		t.Fatal("Kickoff unset with the kickoff in argv")
@@ -114,7 +128,7 @@ func TestClaudeLaunch(t *testing.T) {
 	}
 
 	settings := parseSettings(t, l.Files["claude-settings.json"])
-	if want := []string{"Read(//h/.terminatr/projects/p/**)"}; !reflect.DeepEqual(settings.Permissions.Allow, want) {
+	if want := []string{"mcp__terminatr", "Read(//h/.terminatr/projects/p/**)"}; !reflect.DeepEqual(settings.Permissions.Allow, want) {
 		t.Fatalf("allow = %q, want %q", settings.Permissions.Allow, want)
 	}
 	if want := []string{"Edit(//h/.terminatr/projects/p/**)"}; !reflect.DeepEqual(settings.Permissions.Deny, want) {
@@ -131,7 +145,7 @@ func TestClaudeLaunch(t *testing.T) {
 		t.Fatal(err)
 	} else {
 		s := parseSettings(t, l.Files["claude-settings.json"])
-		if want := []string{"Read(//h/.terminatr/projects/p/**)", "Edit(//r/.git/objects/**)", "Edit(//r/.git/worktrees/w/**)", "Edit(//r/.git/packed-refs)"}; !reflect.DeepEqual(s.Permissions.Allow, want) {
+		if want := []string{"mcp__terminatr", "Read(//h/.terminatr/projects/p/**)", "Edit(//r/.git/objects/**)", "Edit(//r/.git/worktrees/w/**)", "Edit(//r/.git/packed-refs)"}; !reflect.DeepEqual(s.Permissions.Allow, want) {
 			t.Fatalf("git: allow = %q, want %q", s.Permissions.Allow, want)
 		}
 		if want := []string{"Edit(//h/.terminatr/projects/p/**)", "Edit(//r/.git/hooks/**)", "Edit(//r/.git/config)"}; !reflect.DeepEqual(s.Permissions.Deny, want) {
@@ -174,7 +188,7 @@ func TestClaudeLaunch(t *testing.T) {
 		t.Fatal(err)
 	}
 	if s := parseSettings(t, l.Files["claude-settings.json"]); !reflect.DeepEqual(s.Sandbox.ExcludedCommands, []string{"npx playwright *"}) ||
-		!reflect.DeepEqual(s.Permissions.Allow, []string{"Read(//h/.terminatr/projects/p/**)", "Bash(npx playwright *)"}) ||
+		!reflect.DeepEqual(s.Permissions.Allow, []string{"mcp__terminatr", "Read(//h/.terminatr/projects/p/**)", "Bash(npx playwright *)"}) ||
 		s.Sandbox.AllowUnsandboxedCommands == nil || *s.Sandbox.AllowUnsandboxedCommands || !s.Sandbox.Network.AllowLocalBinding ||
 		!reflect.DeepEqual(s.Sandbox.Network.AllowedDomains, []string{"registry.npmjs.org"}) ||
 		!reflect.DeepEqual(s.Sandbox.Network.AllowUnixSockets, settings.Sandbox.Network.AllowUnixSockets) {
@@ -325,7 +339,7 @@ func TestClaudeLaunch(t *testing.T) {
 	}
 	settings = parseSettings(t, l.Files["claude-settings.json"])
 	if settings.Sandbox.Enabled || settings.Sandbox.AllowUnsandboxedCommands != nil || settings.Sandbox.ExcludedCommands != nil || settings.Sandbox.Network.AllowLocalBinding || settings.Sandbox.Network.AllowedDomains != nil || len(settings.Permissions.Deny) != 0 ||
-		!reflect.DeepEqual(settings.Permissions.Allow, []string{"Read(//h/.terminatr/worktrees/p/**)"}) {
+		!reflect.DeepEqual(settings.Permissions.Allow, []string{"mcp__terminatr", "Read(//h/.terminatr/worktrees/p/**)"}) {
 		t.Fatalf("coordinator must not get the thread sandbox or deny rules: %+v", settings)
 	}
 
@@ -334,7 +348,7 @@ func TestClaudeLaunch(t *testing.T) {
 		t.Fatal(err)
 	}
 	settings = parseSettings(t, l.Files["claude-settings.json"])
-	if want := []string{"Read(//h/.terminatr/worktrees/p/**)", "Bash(gh pr merge:*)", "Bash(az repos pr update:*)"}; !reflect.DeepEqual(settings.Permissions.Allow, want) {
+	if want := []string{"mcp__terminatr", "Read(//h/.terminatr/worktrees/p/**)", "Bash(gh pr merge:*)", "Bash(az repos pr update:*)"}; !reflect.DeepEqual(settings.Permissions.Allow, want) {
 		t.Fatalf("allow = %q, want %q", settings.Permissions.Allow, want)
 	}
 
@@ -346,6 +360,7 @@ func TestClaudeLaunch(t *testing.T) {
 	want = []string{"claude",
 		"--plugin-dir", "/run/s1/claude-plugin",
 		"--settings", "/run/s1/claude-settings.json",
+		"--mcp-config", "/run/s1/claude-mcp.json",
 		"--append-system-prompt-file", "/h/.terminatr/projects/p/threads/t-0001/brief.md",
 		"--resume", "uuid-1", "--dangerously-skip-permissions"}
 	if !reflect.DeepEqual(l.Argv, want) {
@@ -757,6 +772,9 @@ func TestHookWireFormat(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, h := range m.Hooks {
+			if h.Respond == "" || h.Command != "" {
+				continue // tm hook waits only on the entries that answer; a command answers at once
+			}
 			context := h.Event == "SessionStart" || name == "claude" && h.Event == "UserPromptSubmit"
 			if want := map[bool]string{true: HookTimeoutContext}[context]; h.Timeout != want {
 				t.Errorf("%s %s: timeout %q, want %q", name, h.Event, h.Timeout, want)
@@ -1301,6 +1319,85 @@ func TestManifestInterrupt(t *testing.T) {
 		}
 		if m.Inject.Interrupt != "\x1b" || m.Inject.InterruptPaste != paste {
 			t.Errorf("%s: interrupt %q, paste %q", name, m.Inject.Interrupt, m.Inject.InterruptPaste)
+		}
+	}
+}
+
+// TestClearsContext: /clear and a compaction forget the context use,
+// for Claude (SessionEnd clear, SessionStart compact) and Codex
+// (SessionStart clear and compact); other ends and starts don't.
+func TestClearsContext(t *testing.T) {
+	for _, c := range []struct {
+		agent, event, field, value string
+		want                       bool
+	}{
+		{"claude", "SessionEnd", "reason", "clear", true},
+		{"claude", "SessionEnd", "reason", "logout", false},
+		{"claude", "SessionStart", "source", "compact", true},
+		{"claude", "SessionStart", "source", "startup", false},
+		{"claude", "SessionStart", "source", "resume", false},
+		{"codex", "SessionStart", "source", "clear", true},
+		{"codex", "SessionStart", "source", "compact", true},
+		{"codex", "SessionStart", "source", "startup", false},
+	} {
+		data, _ := builtin.ReadFile("manifests/" + c.agent + ".toml")
+		m, err := ParseManifest(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := ClearsContext(FromManifest(m), c.event, map[string]any{c.field: c.value}); got != c.want {
+			t.Errorf("%s %s %s=%s: %v, want %v", c.agent, c.event, c.field, c.value, got, c.want)
+		}
+	}
+}
+
+// TestHookCommand: a UserPromptSubmit with /saveclear or /answer runs
+// the session command and blocks the prompt with what came of it, the
+// session idle again; when the command didn't run, the prompt goes on
+// with no answer.
+func TestHookCommand(t *testing.T) {
+	a := claude(t)
+	for _, prompt := range []string{"/saveclear", "/terminatr:saveclear", "/answer", "/terminatr:answer"} {
+		var ran []string
+		env := HookEnv{Command: func(name string) string { ran = append(ran, name); return "Asked: " + name }}
+		sigs, res, err := a.Hook(HookEvent{Event: "UserPromptSubmit", Payload: map[string]any{"prompt": prompt}}, env)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := strings.TrimPrefix(strings.TrimPrefix(prompt, "/"), "terminatr:")
+		var out struct{ Decision, Reason string }
+		if json.Unmarshal(res.Stdout, &out) != nil || out.Decision != "block" || out.Reason != "Asked: "+want || !slices.Equal(ran, []string{want}) {
+			t.Errorf("%s: %s, ran %v", prompt, res.Stdout, ran)
+		}
+		if len(sigs) == 0 || sigs[len(sigs)-1].State != StateIdle {
+			t.Errorf("%s: signals %+v, want idle last", prompt, sigs)
+		}
+		_, res, _ = a.Hook(HookEvent{Event: "UserPromptSubmit", Payload: map[string]any{"prompt": prompt}},
+			HookEnv{Command: func(string) string { return "" }})
+		if len(res.Stdout) != 0 {
+			t.Errorf("%s not run: %s", prompt, res.Stdout)
+		}
+	}
+	var ran bool
+	_, res, _ := a.Hook(HookEvent{Event: "UserPromptSubmit", Payload: map[string]any{"prompt": "/saveclear now"}},
+		HookEnv{Command: func(string) string { ran = true; return "x" }})
+	if ran || len(res.Stdout) != 0 {
+		t.Errorf("another prompt ran the command: %s", res.Stdout)
+	}
+}
+
+// TestHookCommandValidated: a [[hooks]] command is saveclear or answer,
+// with a respond to say what came of it.
+func TestHookCommandValidated(t *testing.T) {
+	const base = "manifest_version = 1\nname = \"a\"\n[launch]\ncommand = \"a\"\n[[hooks]]\nevent = \"E\"\n"
+	for in, ok := range map[string]bool{
+		"command = \"saveclear\"\nrespond = \"{{.Command}}\"\n": true,
+		"command = \"answer\"\nrespond = \"{{.Command}}\"\n":    true,
+		"command = \"saveclear\"\n":                             false,
+		"command = \"rm\"\nrespond = \"{{.Command}}\"\n":        false,
+	} {
+		if _, err := ParseManifest([]byte(base + in)); (err == nil) != ok {
+			t.Errorf("%q: err %v, want ok %v", in, err, ok)
 		}
 	}
 }

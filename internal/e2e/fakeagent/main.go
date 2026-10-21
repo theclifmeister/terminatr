@@ -197,6 +197,7 @@ func (a *app) logStart() {
 		"yolo":       a.opts.yolo,
 		"brief_path": a.opts.briefPath,
 		"brief_size": -1,
+		"mcp_config": a.opts.mcpConfigs,
 	}
 	if a.opts.resume != nil {
 		f["resume"] = *a.opts.resume

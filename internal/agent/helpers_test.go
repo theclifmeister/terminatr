@@ -211,3 +211,82 @@ func TestTailUsageTable(t *testing.T) {
 		}
 	}
 }
+
+// Lines in the shape of a Claude Code 2.1.306 transcript, trimmed and
+// numbers made up: a turn of two requests, the first written as two
+// lines (one per content block) with the same message id and usage,
+// then the turn's end; and a request of a model no window names.
+var claudeLines = []string{
+	`{"type":"user","message":{"role":"user","content":"Fix the bug."},"sessionId":"s1"}`,
+	`{"type":"assistant","requestId":"req_1","message":{"id":"msg_1","model":"claude-opus-5-5","content":[{"type":"thinking","thinking":""}],"stop_reason":"tool_use","usage":{"input_tokens":2,"cache_creation_input_tokens":17073,"cache_read_input_tokens":27423,"output_tokens":201}},"sessionId":"s1"}`,
+	`{"type":"assistant","requestId":"req_1","message":{"id":"msg_1","model":"claude-opus-5-5","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{}}],"stop_reason":"tool_use","usage":{"input_tokens":2,"cache_creation_input_tokens":17073,"cache_read_input_tokens":27423,"output_tokens":201}},"sessionId":"s1"}`,
+	`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]},"sessionId":"s1"}`,
+	`{"type":"assistant","requestId":"req_2","message":{"id":"msg_2","model":"claude-opus-5-5","content":[{"type":"text","text":"Done."}],"stop_reason":"end_turn","usage":{"input_tokens":3,"cache_creation_input_tokens":800,"cache_read_input_tokens":44496,"output_tokens":40}},"sessionId":"s1"}`,
+	`{"type":"system","subtype":"turn_duration","durationMs":5123,"sessionId":"s1"}`,
+	`{"type":"assistant","requestId":"req_3","message":{"id":"msg_3","model":"claude-haiku-4-5","content":[{"type":"text","text":"Hi."}],"stop_reason":"end_turn","usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":5000,"output_tokens":4}},"sessionId":"s1"}`,
+}
+
+// TestTailUsageClaude: Claude's manifest reads usage from its
+// transcript without the mod: the four counts, the context as the whole
+// input (cache reads and writes too, as $.session.usage().context), the
+// model's window from context_windows, the message id that tells a
+// repeat, and a turn from turn_duration.
+func TestTailUsageClaude(t *testing.T) {
+	tail := claude(t).Sources().JSONLTail
+	if tail == nil || tail.Usage == nil {
+		t.Fatal("claude.toml has no [jsonl_tail.usage]")
+	}
+	first := &Usage{Input: 2, CacheCreation: 17073, CacheRead: 27423, Output: 201, Context: 2 + 17073 + 27423,
+		ContextWindow: 1_000_000, Model: "claude-opus-5-5", Key: "msg_1"}
+	want := []*Usage{
+		nil,
+		first,
+		first, // the same request's next block: the tailer drops it by Key
+		nil,
+		{Input: 3, CacheCreation: 800, CacheRead: 44496, Output: 40, Context: 3 + 800 + 44496,
+			ContextWindow: 1_000_000, Model: "claude-opus-5-5", Key: "msg_2"},
+		{Turns: 1},
+		{Input: 10, CacheRead: 5000, Output: 4, Context: 5010, Model: "claude-haiku-4-5", Key: "msg_3"},
+	}
+	for i, line := range claudeLines {
+		l := tail.Parse([]byte(line))
+		if (l.Usage == nil) != (want[i] == nil) || (l.Usage != nil && *l.Usage != *want[i]) {
+			t.Errorf("line %d: usage %+v, want %+v", i, l.Usage, want[i])
+		}
+	}
+}
+
+// TestTailUsageContextOptions: context_from_counts sums the counts in
+// place of a context path; context_windows' longest matching pattern
+// wins; both are validated.
+func TestTailUsageContextOptions(t *testing.T) {
+	u := &TailUsage{Match: map[string]string{"type": "u"}, Input: "in", CacheRead: "cr", ContextFromCounts: true,
+		Model: "m", ContextWindows: map[string]int64{"a-*": 100, "a-long-*": 900}}
+	line := func(s string) (obj map[string]any) {
+		json.Unmarshal([]byte(s), &obj)
+		return obj
+	}
+	if got := u.read(line(`{"type":"u","in":4,"cr":6,"m":"a-long-1"}`)); got == nil || got.Context != 10 || got.ContextWindow != 900 {
+		t.Errorf("usage: %+v", got)
+	}
+	if got := u.read(line(`{"type":"u","in":4,"m":"a-1"}`)); got == nil || got.Context != 4 || got.ContextWindow != 100 {
+		t.Errorf("usage: %+v", got)
+	}
+	if got := u.read(line(`{"type":"u","in":4,"m":"b"}`)); got == nil || got.ContextWindow != 0 {
+		t.Errorf("a model no pattern names: %+v", got)
+	}
+
+	const base = "manifest_version = 1\nname = \"a\"\n[launch]\ncommand = \"a\"\n[jsonl_tail]\npath_field = \"p\"\n[jsonl_tail.usage]\nmatch = { t = \"u\" }\n"
+	for table, ok := range map[string]bool{
+		"input = \"i\"\ncontext_from_counts = true\n":                      true,
+		"output = \"o\"\ncontext_from_counts = true\n":                     false, // no input
+		"input = \"i\"\ncontext = \"c\"\ncontext_from_counts = true\n":     false, // both
+		"input = \"i\"\n[jsonl_tail.usage.context_windows]\n\"m-*\" = 5\n": true,
+		"input = \"i\"\n[jsonl_tail.usage.context_windows]\n\"m-*\" = 0\n": false,
+		"input = \"i\"\n[jsonl_tail.usage.context_windows]\n\"m-[\" = 5\n": false,
+	} {
+		if _, err := ParseManifest([]byte(base + table)); (err == nil) != ok {
+			t.Errorf("%q: err = %v, want ok %v", table, err, ok)
+		}
+	}
+}

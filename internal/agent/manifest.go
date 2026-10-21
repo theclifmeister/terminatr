@@ -402,6 +402,17 @@ type HookMap struct {
 	// ended), keyed by the payload field CounterKey.
 	Counter    string `toml:"counter"`
 	CounterKey string `toml:"counter_key"`
+	// ClearsContext says the event leaves the conversation's context
+	// empty or rewritten (/clear, a compaction): the server forgets the
+	// session's context use until the next request reports it
+	// (docs/SPEC.md §8.6, Context), as the mod's POST /v1/context/clear.
+	ClearsContext bool `toml:"clears_context"`
+	// Command names the session command the event stands for, when the
+	// user typed it: a slash command the agent offers without a mod of
+	// its own (CommandSaveClear, CommandAnswer). The server runs it and
+	// Respond's .Command is what came of it, "" when it didn't run (the
+	// mod runs it instead, or the session can't).
+	Command string `toml:"command"`
 	// Respond is a template printed back to the harness. It sees .Event,
 	// .Payload, .Context (rendered only when the template uses it) and
 	// .Guard (the guard's refusal of the payload's tool call, or nil;
@@ -412,6 +423,30 @@ type HookMap struct {
 	// carries the session's context). See HookTimeout.
 	Timeout string `toml:"timeout"`
 }
+
+// ClearsContext reports whether agent a's manifest says the hook event
+// (event, payload) clears the conversation's context use.
+func ClearsContext(a Agent, event string, payload map[string]any) bool {
+	m := ManifestOf(a)
+	if m == nil {
+		return false
+	}
+	for _, h := range m.Hooks {
+		if h.ClearsContext && h.Event == event && matches(h.Match, payload) {
+			return true
+		}
+	}
+	return false
+}
+
+// Session commands a [[hooks]] entry may stand for (HookMap.Command):
+// a coordinator's save and clear (tm clear) and the opening of its
+// questions to the user (tm ask open), as the Claude mod's /saveclear
+// and /answer (docs/SPEC.md §8.6, Mods).
+const (
+	CommandSaveClear = "saveclear"
+	CommandAnswer    = "answer"
+)
 
 // Hook timeouts a [[hooks]] entry may ask for.
 const (
@@ -551,6 +586,9 @@ func (m *Manifest) validate() error {
 		}
 		if !valid[h.State] {
 			errs = append(errs, fmt.Errorf("hooks[%d]: unknown state %q", i, h.State))
+		}
+		if h.Command != "" && (h.Command != CommandSaveClear && h.Command != CommandAnswer || h.Respond == "") {
+			errs = append(errs, fmt.Errorf("hooks[%d]: command %q is not saveclear|answer, with a respond", i, h.Command))
 		}
 		if h.Counter != "" && (len(h.Counter) < 2 || (h.Counter[0] != '+' && h.Counter[0] != '-') || h.CounterKey == "") {
 			errs = append(errs, fmt.Errorf("hooks[%d]: counter must be +name or -name, with counter_key", i))
@@ -847,8 +885,11 @@ func (a *manifestAgent) Hook(ev HookEvent, env HookEnv) ([]Signal, HookResult, e
 			sig.State, sig.Reason, sig.Transient = h.State, h.Reason, h.Transient
 			sigs = append(sigs, sig)
 		}
-		if h.Respond != "" && res.Stdout == nil {
-			out, err := renderRespond(h.Respond, ev, env, a.m.Hook)
+		// The first entry whose response says something answers; one
+		// that renders nothing (a guard that let the call through, a
+		// command that didn't run) leaves it to the next.
+		if h.Respond != "" && len(res.Stdout) == 0 {
+			out, err := renderRespond(h.Respond, h.Command, ev, env, a.m.Hook)
 			if err != nil {
 				return sigs, res, err
 			}
@@ -956,6 +997,14 @@ var funcs = template.FuncMap{
 	// with no colour: colors "error" .Theme.Fg.bad "success" "" ->
 	// {"error":"#bf616a"}.
 	"colors": colors,
+	// list is its strings when cond holds, else none, for a grant only
+	// some launches get: list (not .Mods) "mcp__terminatr".
+	"list": func(cond bool, s ...string) []string {
+		if !cond {
+			return []string{}
+		}
+		return s
+	},
 	// concat joins lists, for building one JSON array from several grants.
 	"concat": func(lists ...[]string) []string {
 		out := []string{}
@@ -1208,17 +1257,31 @@ func render(tmpl string, data any) (string, error) {
 // renderRespond renders a hook response. .Context and .Guard are
 // methods so the (possibly expensive) context is rendered, and the call
 // judged, only if the template uses them.
-func renderRespond(tmpl string, ev HookEvent, env HookEnv, hook HookTrim) ([]byte, error) {
-	s, err := render(tmpl, &respondData{ev: ev, env: env, hook: hook})
+func renderRespond(tmpl, command string, ev HookEvent, env HookEnv, hook HookTrim) ([]byte, error) {
+	s, err := render(tmpl, &respondData{ev: ev, env: env, hook: hook, command: command})
 	return []byte(s), err
 }
 
 type respondData struct {
-	ev     HookEvent
-	env    HookEnv
-	hook   HookTrim
-	judged bool
-	denial *guard.Denial
+	command string
+	ran     bool
+	result  string
+	ev      HookEvent
+	env     HookEnv
+	hook    HookTrim
+	judged  bool
+	denial  *guard.Denial
+}
+
+// Command runs the entry's session command (HookMap.Command) once and
+// is what came of it, "" when it didn't run.
+func (d *respondData) Command() string {
+	if d.ran || d.command == "" || d.env.Command == nil {
+		return d.result
+	}
+	d.ran = true
+	d.result = d.env.Command(d.command)
+	return d.result
 }
 
 func (d *respondData) Event() string           { return d.ev.Event }

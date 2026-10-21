@@ -12,7 +12,8 @@ type options struct {
 	briefPath  string
 	yolo       bool
 	model      string
-	remote     *string // nil unless --remote-control was given
+	mcpConfigs []string // --mcp-config files
+	remote     *string  // nil unless --remote-control was given
 	prompt     string
 }
 
@@ -26,6 +27,7 @@ var valueFlags = map[string]bool{
 	"--append-system-prompt-file": true,
 	"--model":                     true,
 	"--remote-control":            true,
+	"--mcp-config":                true,
 }
 
 // parseArgs reads argv (without the program name). Unknown flags are
@@ -83,6 +85,10 @@ func parseArgs(args []string) options {
 			o.yolo = true
 		case "--model":
 			o.model = value
+		case "--mcp-config":
+			if value != "" {
+				o.mcpConfigs = append(o.mcpConfigs, value)
+			}
 		case "--remote-control":
 			v := value
 			o.remote = &v

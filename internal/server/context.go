@@ -88,6 +88,16 @@ func crossedContext(was any, had bool, now ctxUse) bool {
 // /v1/usage, for an agent without a mod.
 func (s *Server) tailUsage(sess *session.Session, u agent.Usage) { s.agentUsage(sess.ID(), u) }
 
+// tailUsageOf is a launched session's tailUsage: none with the mod,
+// which reports the same turns itself (POST /v1/usage), so they would
+// count twice.
+func (s *Server) tailUsageOf(mod bool) func(*session.Session, agent.Usage) {
+	if mod {
+		return nil
+	}
+	return s.tailUsage
+}
+
 func (s *Server) agentUsage(id string, u agent.Usage) {
 	s.setContext(id, u.Model, u.Context, u.ContextWindow)
 	s.addUsage(id, thread.Usage{Turns: u.Turns, Input: u.Input, Output: u.Output,

@@ -1,0 +1,12 @@
+# T646: a typed tool through the --mcp-config server (tm mcp, without
+# the mod): the thread's status.
+
+[[step]]
+do = "mcp"
+tool = "status"
+input = { activity = "via tm mcp" }
+
+[[step]]
+do = "stream"
+ms = 100
+text = "status set"

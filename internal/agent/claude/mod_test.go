@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -66,6 +67,19 @@ func TestLaunchMods(t *testing.T) {
 		}
 		if m := post[0].Matcher; (m == "TaskCreate|TaskUpdate|TodoWrite") != mods {
 			t.Fatalf("mods %v: PostToolUse matcher %q", mods, m)
+		}
+		// The typed tools come from one place: the mod's
+		// $.tool.register, or else tm mcp as the MCP server terminatr
+		// (with its allow rule), never both under the same names.
+		mcp := slices.Contains(l.Argv, "--mcp-config")
+		var settings struct {
+			Permissions struct{ Allow []string } `json:"permissions"`
+		}
+		if err := json.Unmarshal(l.Files["claude-settings.json"], &settings); err != nil {
+			t.Fatalf("mods %v: settings: %v", mods, err)
+		}
+		if allowed := slices.Contains(settings.Permissions.Allow, "mcp__terminatr"); mcp == mods || allowed != mcp {
+			t.Fatalf("mods %v: --mcp-config %v, mcp__terminatr allowed %v: argv %q", mods, mcp, allowed, l.Argv)
 		}
 		_, reg := l.Files["claude-plugin/hooks/register.ts"]
 		_, types := l.Files["claude-plugin/types/index.d.ts"]
@@ -134,6 +148,39 @@ func TestModPlugin(t *testing.T) {
 		t.Logf("claude %s:\n%s", strings.Join(args, " "), out)
 		if err != nil {
 			t.Fatalf("claude %s: %v", strings.Join(args, " "), err)
+		}
+	}
+}
+
+// TestSlashCommandsWithoutMod: a coordinator's /saveclear and /answer
+// are plain plugin commands without the mod and the mod's own with it,
+// never both; other roles get neither.
+func TestSlashCommandsWithoutMod(t *testing.T) {
+	a := load(t)
+	for _, c := range []struct {
+		role agent.Role
+		mods bool
+		want bool
+	}{
+		{"coordinator", false, true},
+		{"coordinator", true, false},
+		{agent.RoleThread, false, false},
+		{agent.RoleThread, true, false},
+	} {
+		spec := modSpec(t.TempDir(), c.mods)
+		spec.Role = c.role
+		l, err := a.Launch(spec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"saveclear", "answer"} {
+			b, ok := l.Files["claude-plugin/commands/"+name+".md"]
+			if ok != c.want {
+				t.Errorf("%s mods %v: commands/%s.md written %v", c.role, c.mods, name, ok)
+			}
+			if ok && (!strings.HasPrefix(string(b), "---\ndescription: ") || !strings.Contains(string(b), "tm ")) {
+				t.Errorf("commands/%s.md:\n%s", name, b)
+			}
 		}
 	}
 }

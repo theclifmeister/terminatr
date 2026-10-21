@@ -30,6 +30,7 @@
 <text x="74.8" y="112.2" fill="#7dcfff" font-weight="700" textLength="16.8" lengthAdjust="spacingAndGlyphs">T1</text>
 <text x="125.2" y="112.2" fill="#7dcfff" textLength="25.2" lengthAdjust="spacingAndGlyphs">50%</text>
 <text x="158.8" y="112.2" fill="#8189ad">☐</text>
+<text x="175.6" y="112.2" fill="#7dcfff" textLength="16.8" lengthAdjust="spacingAndGlyphs">2%</text>
 <text x="217.6" y="112.2" fill="#c8d0f0">○</text>
 <text x="310.0" y="112.2" fill="#4e5578">│</text>
 <text x="318.4" y="112.2" fill="#c8d0f0" textLength="285.6" lengthAdjust="spacingAndGlyphs">⏺ Reproducing the login bug first.</text>
@@ -75,55 +76,58 @@
 <text x="310.0" y="231.2" fill="#4e5578">│</text>
 <text x="318.4" y="231.2" fill="#c8d0f0">❯</text>
 <text x="1024.0" y="231.2" fill="#4e5578">│</text>
-<text x="1040.8" y="231.2" fill="#c8d0f0" textLength="25.2" lengthAdjust="spacingAndGlyphs">now</text>
-<text x="1124.8" y="231.2" fill="#e0af68">▸</text>
-<text x="1141.6" y="231.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">Fix it</text>
+<text x="1040.8" y="231.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">usage</text>
+<text x="1124.8" y="231.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">68.7k tokens,</text>
+<text x="1242.4" y="231.2" fill="#7dcfff" textLength="42.0" lengthAdjust="spacingAndGlyphs">$0.00</text>
 <text x="310.0" y="248.2" fill="#4e5578" textLength="722.4" lengthAdjust="spacingAndGlyphs">│────────────────────────────────────────────────────────────────────────────────────│</text>
-<text x="1040.8" y="248.2" fill="#c8d0f0" textLength="16.8" lengthAdjust="spacingAndGlyphs">PR</text>
-<text x="1124.8" y="248.2" fill="#c8d0f0" textLength="193.2" lengthAdjust="spacingAndGlyphs">#7 open, checks pending</text>
+<text x="1040.8" y="248.2" fill="#c8d0f0" textLength="25.2" lengthAdjust="spacingAndGlyphs">now</text>
+<text x="1124.8" y="248.2" fill="#e0af68">▸</text>
+<text x="1141.6" y="248.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">Fix it</text>
 <text x="310.0" y="265.2" fill="#4e5578">│</text>
 <text x="335.2" y="265.2" fill="#c8d0f0" textLength="126.0" lengthAdjust="spacingAndGlyphs">? for shortcuts</text>
 <text x="1024.0" y="265.2" fill="#4e5578">│</text>
+<text x="1040.8" y="265.2" fill="#c8d0f0" textLength="16.8" lengthAdjust="spacingAndGlyphs">PR</text>
+<text x="1124.8" y="265.2" fill="#c8d0f0" textLength="193.2" lengthAdjust="spacingAndGlyphs">#7 open, checks pending</text>
 <text x="310.0" y="282.2" fill="#4e5578">│</text>
 <text x="1024.0" y="282.2" fill="#4e5578">│</text>
-<text x="1040.8" y="282.2" fill="#c8d0f0" textLength="151.2" lengthAdjust="spacingAndGlyphs">LAST REPORT 4m ago</text>
-<text x="1200.4" y="282.2" fill="#4e5578" textLength="151.2" lengthAdjust="spacingAndGlyphs">──────────────────</text>
 <text x="310.0" y="299.2" fill="#4e5578">│</text>
 <text x="1024.0" y="299.2" fill="#4e5578">│</text>
-<text x="1040.8" y="299.2" fill="#c8d0f0" textLength="210.0" lengthAdjust="spacingAndGlyphs">Fixed the login redirect.</text>
+<text x="1040.8" y="299.2" fill="#c8d0f0" textLength="151.2" lengthAdjust="spacingAndGlyphs">LAST REPORT 4m ago</text>
+<text x="1200.4" y="299.2" fill="#4e5578" textLength="151.2" lengthAdjust="spacingAndGlyphs">──────────────────</text>
 <text x="310.0" y="316.2" fill="#4e5578">│</text>
 <text x="1024.0" y="316.2" fill="#4e5578">│</text>
+<text x="1040.8" y="316.2" fill="#c8d0f0" textLength="210.0" lengthAdjust="spacingAndGlyphs">Fixed the login redirect.</text>
 <text x="310.0" y="333.2" fill="#4e5578">│</text>
 <text x="1024.0" y="333.2" fill="#4e5578">│</text>
-<text x="1040.8" y="333.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">branch</text>
-<text x="1124.8" y="333.2" fill="#c8d0f0" textLength="235.2" lengthAdjust="spacingAndGlyphs">tm/demo/t-0001-fix-the-login</text>
 <text x="310.0" y="350.2" fill="#4e5578">│</text>
 <text x="1024.0" y="350.2" fill="#4e5578">│</text>
-<text x="1040.8" y="350.2" fill="#c8d0f0" textLength="310.8" lengthAdjust="spacingAndGlyphs">…/worktrees/demo/t-0001-fix-the-login</text>
+<text x="1040.8" y="350.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">branch</text>
+<text x="1124.8" y="350.2" fill="#c8d0f0" textLength="235.2" lengthAdjust="spacingAndGlyphs">tm/demo/t-0001-fix-the-login</text>
 <text x="310.0" y="367.2" fill="#4e5578">│</text>
 <text x="1024.0" y="367.2" fill="#4e5578">│</text>
-<text x="1040.8" y="367.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">active</text>
-<text x="1124.8" y="367.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">4m ago</text>
+<text x="1040.8" y="367.2" fill="#c8d0f0" textLength="310.8" lengthAdjust="spacingAndGlyphs">…/worktrees/demo/t-0001-fix-the-login</text>
 <text x="310.0" y="384.2" fill="#4e5578">│</text>
 <text x="1024.0" y="384.2" fill="#4e5578">│</text>
+<text x="1040.8" y="384.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">active</text>
+<text x="1124.8" y="384.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">4m ago</text>
 <text x="310.0" y="401.2" fill="#4e5578">│</text>
 <text x="1024.0" y="401.2" fill="#4e5578">│</text>
-<text x="1040.8" y="401.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">▾ LAST REPORT</text>
-<text x="1158.4" y="401.2" fill="#4e5578" textLength="184.8" lengthAdjust="spacingAndGlyphs">──────────────────────</text>
 <text x="310.0" y="418.2" fill="#4e5578">│</text>
 <text x="1024.0" y="418.2" fill="#4e5578">│</text>
-<text x="1057.6" y="418.2" fill="#c8d0f0" textLength="67.2" lengthAdjust="spacingAndGlyphs">report 1</text>
-<text x="1141.6" y="418.2" fill="#c8d0f0" textLength="210.0" lengthAdjust="spacingAndGlyphs">Fixed the login redirect.</text>
+<text x="1040.8" y="418.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">▾ LAST REPORT</text>
+<text x="1158.4" y="418.2" fill="#4e5578" textLength="184.8" lengthAdjust="spacingAndGlyphs">──────────────────────</text>
 <text x="310.0" y="435.2" fill="#4e5578">│</text>
 <text x="1024.0" y="435.2" fill="#4e5578">│</text>
-<text x="1057.6" y="435.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">next</text>
-<text x="1108.0" y="435.2" fill="#c8d0f0" textLength="100.8" lengthAdjust="spacingAndGlyphs">Merge the PR</text>
+<text x="1057.6" y="435.2" fill="#c8d0f0" textLength="67.2" lengthAdjust="spacingAndGlyphs">report 1</text>
+<text x="1141.6" y="435.2" fill="#c8d0f0" textLength="210.0" lengthAdjust="spacingAndGlyphs">Fixed the login redirect.</text>
 <text x="310.0" y="452.2" fill="#4e5578">│</text>
 <text x="1024.0" y="452.2" fill="#4e5578">│</text>
-<text x="1057.6" y="452.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">no ## Check</text>
+<text x="1057.6" y="452.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">next</text>
+<text x="1108.0" y="452.2" fill="#c8d0f0" textLength="100.8" lengthAdjust="spacingAndGlyphs">Merge the PR</text>
 <text x="24.4" y="469.2" fill="#4e5578" textLength="277.2" lengthAdjust="spacingAndGlyphs">─────────────────────────────────</text>
 <text x="310.0" y="469.2" fill="#4e5578">│</text>
 <text x="1024.0" y="469.2" fill="#4e5578">│</text>
+<text x="1057.6" y="469.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">no ## Check</text>
 <text x="24.4" y="486.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">idle ·</text>
 <text x="83.2" y="486.2" fill="#7dcfff" textLength="25.2" lengthAdjust="spacingAndGlyphs">50%</text>
 <text x="116.8" y="486.2" fill="#c8d0f0">·</text>

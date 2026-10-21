@@ -281,6 +281,18 @@ state = "idle"
 timeout = "context"
 respond = '''{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":{{json .Context}}}}'''
 
+# The context use is forgotten on a new thread after /clear and after
+# /compact, until the next token_count reports it.
+[[hooks]]
+event = "SessionStart"
+match = { source = "clear" }
+clears_context = true
+
+[[hooks]]
+event = "SessionStart"
+match = { source = "compact" }
+clears_context = true
+
 [[hooks]]
 event = "UserPromptSubmit"
 state = "working"

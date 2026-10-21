@@ -70,48 +70,51 @@
 <text x="1183.6" y="163.2" fill="#c8d0f0" textLength="25.2" lengthAdjust="spacingAndGlyphs">s-3</text>
 <text x="310.0" y="180.2" fill="#4e5578">│</text>
 <text x="1082.8" y="180.2" fill="#4e5578">│</text>
-<text x="1099.6" y="180.2" fill="#c8d0f0" textLength="67.2" lengthAdjust="spacingAndGlyphs">progress</text>
-<text x="1183.6" y="180.2" fill="#7dcfff" textLength="25.2" lengthAdjust="spacingAndGlyphs">▰▰▰</text>
-<text x="1208.8" y="180.2" fill="#4e5578" textLength="16.8" lengthAdjust="spacingAndGlyphs">▱▱</text>
-<text x="1234.0" y="180.2" fill="#7dcfff" textLength="25.2" lengthAdjust="spacingAndGlyphs">50%</text>
-<text x="1267.6" y="180.2" fill="#c8d0f0" textLength="25.2" lengthAdjust="spacingAndGlyphs">1/2</text>
+<text x="1099.6" y="180.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">usage</text>
+<text x="1183.6" y="180.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">22.6k tokens,</text>
+<text x="1301.2" y="180.2" fill="#7dcfff" textLength="42.0" lengthAdjust="spacingAndGlyphs">$0.00</text>
 <text x="310.0" y="197.2" fill="#4e5578">│</text>
 <text x="1082.8" y="197.2" fill="#4e5578">│</text>
-<text x="1099.6" y="197.2" fill="#c8d0f0" textLength="25.2" lengthAdjust="spacingAndGlyphs">now</text>
-<text x="1183.6" y="197.2" fill="#e0af68">▸</text>
-<text x="1200.4" y="197.2" fill="#c8d0f0" textLength="25.2" lengthAdjust="spacingAndGlyphs">Fix</text>
+<text x="1099.6" y="197.2" fill="#c8d0f0" textLength="67.2" lengthAdjust="spacingAndGlyphs">progress</text>
+<text x="1183.6" y="197.2" fill="#7dcfff" textLength="25.2" lengthAdjust="spacingAndGlyphs">▰▰▰</text>
+<text x="1208.8" y="197.2" fill="#4e5578" textLength="16.8" lengthAdjust="spacingAndGlyphs">▱▱</text>
+<text x="1234.0" y="197.2" fill="#7dcfff" textLength="25.2" lengthAdjust="spacingAndGlyphs">50%</text>
+<text x="1267.6" y="197.2" fill="#c8d0f0" textLength="25.2" lengthAdjust="spacingAndGlyphs">1/2</text>
 <text x="310.0" y="214.2" fill="#4e5578">│</text>
 <text x="1082.8" y="214.2" fill="#4e5578">│</text>
-<text x="1099.6" y="214.2" fill="#c8d0f0" textLength="58.8" lengthAdjust="spacingAndGlyphs">updated</text>
-<text x="1183.6" y="214.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">4m ago</text>
+<text x="1099.6" y="214.2" fill="#c8d0f0" textLength="25.2" lengthAdjust="spacingAndGlyphs">now</text>
+<text x="1183.6" y="214.2" fill="#e0af68">▸</text>
+<text x="1200.4" y="214.2" fill="#c8d0f0" textLength="25.2" lengthAdjust="spacingAndGlyphs">Fix</text>
 <text x="310.0" y="231.2" fill="#4e5578">│</text>
 <text x="1082.8" y="231.2" fill="#4e5578">│</text>
-<text x="1099.6" y="231.2" fill="#c8d0f0" textLength="16.8" lengthAdjust="spacingAndGlyphs">PR</text>
-<text x="1183.6" y="231.2" fill="#7aa2f7" textLength="243.6" lengthAdjust="spacingAndGlyphs">https://github.com/o/r/pull/7</text>
+<text x="1099.6" y="231.2" fill="#c8d0f0" textLength="58.8" lengthAdjust="spacingAndGlyphs">updated</text>
+<text x="1183.6" y="231.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">4m ago</text>
 <text x="310.0" y="248.2" fill="#4e5578">│</text>
 <text x="1082.8" y="248.2" fill="#4e5578">│</text>
-<text x="1099.6" y="248.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">report</text>
-<text x="1183.6" y="248.2" fill="#c8d0f0" textLength="235.2" lengthAdjust="spacingAndGlyphs">1, new · for the coordinator</text>
+<text x="1099.6" y="248.2" fill="#c8d0f0" textLength="16.8" lengthAdjust="spacingAndGlyphs">PR</text>
+<text x="1183.6" y="248.2" fill="#7aa2f7" textLength="243.6" lengthAdjust="spacingAndGlyphs">https://github.com/o/r/pull/7</text>
 <text x="310.0" y="265.2" fill="#4e5578">│</text>
 <text x="1082.8" y="265.2" fill="#4e5578">│</text>
+<text x="1099.6" y="265.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">report</text>
+<text x="1183.6" y="265.2" fill="#c8d0f0" textLength="235.2" lengthAdjust="spacingAndGlyphs">1, new · for the coordinator</text>
 <text x="310.0" y="282.2" fill="#4e5578">│</text>
 <text x="1082.8" y="282.2" fill="#4e5578">│</text>
-<text x="1099.6" y="282.2" fill="#c8d0f0" textLength="75.6" lengthAdjust="spacingAndGlyphs">steps 1/2</text>
 <text x="310.0" y="299.2" fill="#4e5578">│</text>
 <text x="1082.8" y="299.2" fill="#4e5578">│</text>
-<text x="1116.4" y="299.2" fill="#9ece6a">✓</text>
-<text x="1133.2" y="299.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">1 Reproduce</text>
+<text x="1099.6" y="299.2" fill="#c8d0f0" textLength="75.6" lengthAdjust="spacingAndGlyphs">steps 1/2</text>
 <text x="310.0" y="316.2" fill="#4e5578">│</text>
 <text x="1082.8" y="316.2" fill="#4e5578">│</text>
-<text x="1116.4" y="316.2" fill="#c8d0f0" textLength="58.8" lengthAdjust="spacingAndGlyphs">○ 2 Fix</text>
+<text x="1116.4" y="316.2" fill="#9ece6a">✓</text>
+<text x="1133.2" y="316.2" fill="#c8d0f0" textLength="92.4" lengthAdjust="spacingAndGlyphs">1 Reproduce</text>
 <text x="310.0" y="333.2" fill="#4e5578">│</text>
 <text x="1082.8" y="333.2" fill="#4e5578">│</text>
+<text x="1116.4" y="333.2" fill="#c8d0f0" textLength="58.8" lengthAdjust="spacingAndGlyphs">○ 2 Fix</text>
 <text x="310.0" y="350.2" fill="#4e5578">│</text>
 <text x="1082.8" y="350.2" fill="#4e5578">│</text>
-<text x="1099.6" y="350.2" fill="#7aa2f7" textLength="42.0" lengthAdjust="spacingAndGlyphs">enter</text>
-<text x="1150.0" y="350.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">attach</text>
 <text x="310.0" y="367.2" fill="#4e5578">│</text>
 <text x="1082.8" y="367.2" fill="#4e5578">│</text>
+<text x="1099.6" y="367.2" fill="#7aa2f7" textLength="42.0" lengthAdjust="spacingAndGlyphs">enter</text>
+<text x="1150.0" y="367.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">attach</text>
 <text x="310.0" y="384.2" fill="#4e5578">│</text>
 <text x="1082.8" y="384.2" fill="#4e5578">│</text>
 <text x="310.0" y="401.2" fill="#4e5578">│</text>

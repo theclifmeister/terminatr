@@ -6,7 +6,7 @@ id = "context-gauge"
 name = "Context gauge"
 version = "1.0.0"
 api = "1.3"
-description = "How full each session's context window is, by its row; a card lists the ones past the warning, where C clears one (tm asks first) and enter attaches to it. For Claude sessions it needs the Agent mod on (early access, off by default: Settings, Agent mod, or [agent_mod] enabled = true), which reports their context and use."
+description = "How full each session's context window is, by its row; a card lists the ones past the warning, where C clears one (tm asks first) and enter attaches to it. Claude sessions report theirs through the Agent mod or, with it off, from their transcript."
 authors = ["terminatr"]
 homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/context-gauge"
 

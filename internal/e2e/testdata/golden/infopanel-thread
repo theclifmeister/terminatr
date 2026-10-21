@@ -9,12 +9,12 @@
 │
 │ THREAD ──────────────────────────────
 │ thread    t-0001 ○ idle
+│ usage     22.6k tokens, $0.00
 │ now       ▸ Fix it
 │
 │ branch    tm/demo/t-0001-fix-the-login
 │ <worktree>
 │ active    <duration> ago
-│
 │
 │
 │
