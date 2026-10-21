@@ -1379,7 +1379,8 @@ var (
 // can't see (runsCode): each pass after the first starts where the last
 // one left the folder, so the loop is judged from an unknown folder too.
 // zsh's short forms (for x (a b) { … }) are one part, with a bracket the
-// guard doesn't follow (loose): no done closes them.
+// guard doesn't follow (loose): no done closes them. A loop the guard
+// finds no done for is judged from an unknown folder too.
 func (r Rules) loopCds(parts []linePart) map[int]bool {
 	moves := make([]bool, len(parts))
 	out := map[int]bool{}
@@ -1403,12 +1404,23 @@ func (r Rules) loopCds(parts []linePart) map[int]bool {
 			}
 		}
 	}
+	// One whose done the guard doesn't find (done > log 2>&1 read
+	// elsewhere): the rest of the line is unknown from its opener.
+	for _, o := range open {
+		out[o] = true
+	}
 	return out
 }
 
 // hiddenCode are the builtins that run shell code the line doesn't show
 // in the shell itself, where a cd in it moves the line's folder.
-var hiddenCode = setOf("eval source .")
+var hiddenCode = setOf("eval source . " + braceCode)
+
+// braceCode is the command Commands adds after one whose name has braces
+// that may give cd or one of hiddenCode ({c,x}d, {eval,x}), or braces it
+// can't expand ({'c'd,x}): code the guard can't see, so the folder is
+// unknown from there on (runsCode).
+const braceCode = "\x00{}"
 
 // runsCode: one of text's commands is one of those, maybe through
 // command or builtin.
@@ -2567,6 +2579,51 @@ func braceEnd(s []rune, i int) int {
 	return -1
 }
 
+// hiddenBrace: the { at s[i] opens a brace expansion braceEnd leaves
+// alone, one with a quote, an escape or an expansion in it ({'c'd,x},
+// {$c,x}), which the shell still expands: a comma or a .. at its top
+// level before its close, and no unquoted blank or operator.
+func hiddenBrace(s []rune, i int) bool {
+	depth, split := 0, false
+	for j := i; j < len(s); j++ {
+		switch c := s[j]; {
+		case strings.ContainsRune(" \t\n;&|<>()", c):
+			return false
+		case c == '\'':
+			q := slices.Index(s[j+1:], '\'')
+			if q < 0 {
+				return false
+			}
+			j += 1 + q
+		case c == '"':
+			for j++; j < len(s) && s[j] != '"'; j++ {
+				e, ok := wordSkip(s, j)
+				if !ok {
+					return false
+				}
+				j = e
+			}
+		case c == '$' && j+1 < len(s) && s[j+1] == '\'':
+			j = ansiEnd(s, j+2)
+		case c == '{':
+			depth++
+		case c == '}':
+			if depth--; depth == 0 {
+				return split
+			}
+		case depth == 1 && (c == ',' || c == '.' && j+1 < len(s) && s[j+1] == '.'):
+			split = true
+		default:
+			e, ok := wordSkip(s, j)
+			if !ok {
+				return false
+			}
+			j = e
+		}
+	}
+	return false
+}
+
 // braceSplit is w's first brace expansion (braceAlts): the text before
 // it, its words and the text after it; false for none.
 func braceSplit(w string) (pre string, alts []string, post string, ok bool) {
@@ -2641,16 +2698,15 @@ func braceRange(m []string) []string {
 	return out
 }
 
-// dotsParent is path w with each part a pattern that may match ..
-// (.*, .?, ..*: bash's globs match a leading dot only when it is
-// written) made .., which the link check counts.
+// dotsParent is path w with each part a pattern that starts with a dot
+// (.*, .?, .[.], ..*: bash's globs match a leading dot only when it is
+// written) made .., which the link check counts: any may match .. in
+// some shell (extglob, zsh's qualifiers).
 func dotsParent(w string) string {
 	parts := strings.Split(w, "/")
 	for i, p := range parts {
 		if strings.HasPrefix(p, ".") && strings.ContainsAny(p, "*?[") {
-			if ok, _ := path.Match(p, ".."); ok {
-				parts[i] = ".."
-			}
+			parts[i] = ".."
 		}
 	}
 	return strings.Join(parts, "/")
@@ -2999,9 +3055,9 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 				b.WriteRune('(')
 				stack = append(stack, '(')
 			case funStart(s, i):
-				j := closing(s, i+2, '{', '}')
-				if j == len(s) {
-					return nil, false
+				j, ok := funEnd(s, i)
+				if !ok {
+					return nil, false // read whole: Commands refuses it
 				}
 				b.WriteString(string(s[i+1 : j+1]))
 				i = j
@@ -3061,7 +3117,11 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 			}
 			if funStart(s, i) {
 				// bash 5.3's ${ cmd; }: to its close, a word of the part.
-				j = closing(s, i+2, '{', '}')
+				end, ok := funEnd(s, i)
+				if !ok {
+					return nil, false // read whole: Commands refuses it
+				}
+				j = end
 			}
 			if j == len(s) {
 				return nil, false
@@ -3608,6 +3668,9 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 			if alts == nil || p.stop(len(w)*len(alts), depth) {
 				p.over = true
 			}
+			if len(strip(words)) == 0 && slices.ContainsFunc(alts, func(a string) bool { return cdWords[a] || hiddenCode[a] }) {
+				inner = append(inner, []string{braceCode})
+			}
 			words = append(words, alts...)
 		default:
 			words = append(words, w)
@@ -3685,7 +3748,11 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 					q.WriteString(string(s[j:min(end+1, len(s))]))
 					j = end + 1
 				case funStart(s, j):
-					end := closing(s, j+2, '{', '}')
+					end, ok := funEnd(s, j)
+					if !ok {
+						p.over = true
+						return nil
+					}
 					out = append(out, p.fun(funBody(s, j, end), depth)...)
 					q.WriteString(string(s[j:min(end+1, len(s))]))
 					j = end + 1
@@ -3720,8 +3787,14 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 			i = end
 		case funStart(s, i):
 			// bash 5.3's ${ cmd; } and ${| cmd; }: commands run in the
-			// line's own shell, a part of the word (fun).
-			end := closing(s, i+2, '{', '}')
+			// line's own shell, a part of the word (fun). One whose end
+			// the guard can't tell for sure (funEnd) makes the line
+			// unreadable.
+			end, ok := funEnd(s, i)
+			if !ok {
+				p.over = true
+				return nil
+			}
 			inner = append(inner, p.fun(funBody(s, i, end), depth)...)
 			word.WriteString(string(s[i:min(end+1, len(s))]))
 			inWord, dropped = true, true
@@ -3730,7 +3803,11 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 			// A parameter expansion, ${NAME} or ${NAME:-word}, is part of
 			// the word. A $( ), a backtick or a ${ cmd; } in it still runs.
 			end := closing(s, i+2, '{', '}')
-			subs, funs := substitutions(string(s[i+2 : end]))
+			subs, funs, ok := substitutions(string(s[i+2 : end]))
+			if !ok {
+				p.over = true
+				return nil
+			}
 			for _, in := range subs {
 				out = append(out, p.sub(in, depth)...)
 			}
@@ -3800,6 +3877,11 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 			text(string(s[i : end+1]))
 			braced = true
 			i = end
+		case c == '{' && len(strip(words)) == 0 && hiddenBrace(s, i):
+			// A command's name with braces the guard can't expand: they
+			// may give any command (braceCode). Read on as before.
+			inner = append(inner, []string{braceCode})
+			fallthrough
 		case strings.ContainsRune(";&|\n(){}", c):
 			endCommand()
 			if c == '|' && (i+1 >= len(s) || s[i+1] != '|') && s[i-1] != '|' {
@@ -3849,7 +3931,11 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 		for _, h := range docs {
 			if !h.quoted {
 				// The line's own shell expands it first.
-				subs, funs := substitutions(h.body)
+				subs, funs, ok := substitutions(h.body)
+				if !ok {
+					p.over = true
+					return nil
+				}
 				for _, in := range subs {
 					out = append(out, p.sub(in, depth)...)
 				}
@@ -4163,8 +4249,9 @@ func docWord(s []rune, j int) heredocWord {
 }
 
 // substitutions are the insides of the $( ) and backticks in s, which run
-// where s is expanded, and of its ${ cmd; } (funs).
-func substitutions(text string) (subs, funs []string) {
+// where s is expanded, and of its ${ cmd; } (funs); false for a ${ cmd; }
+// whose end the guard can't tell (funEnd).
+func substitutions(text string) (subs, funs []string, ok bool) {
 	s := []rune(text)
 	for i := 0; i < len(s); i++ {
 		switch {
@@ -4179,18 +4266,143 @@ func substitutions(text string) (subs, funs []string) {
 			subs = append(subs, string(s[i+1:end]))
 			i = end
 		case funStart(s, i):
-			end := closing(s, i+2, '{', '}')
+			end, ok := funEnd(s, i)
+			if !ok {
+				return nil, nil, false
+			}
 			funs = append(funs, funBody(s, i, end))
 			i = end
 		}
 	}
-	return subs, funs
+	return subs, funs, true
 }
 
 // funStart: s[i] starts bash 5.3's ${ cmd; } or ${| cmd; }: a ${ then a
 // blank or a |.
 func funStart(s []rune, i int) bool {
 	return i+2 < len(s) && s[i] == '$' && s[i+1] == '{' && strings.ContainsRune(" \t\n|", s[i+2])
+}
+
+// funLead are the words after which the next word is still in command
+// position (funEnd).
+var funLead = setOf("! time -p if then elif else while until do")
+
+// funEnd is the index of the } that ends the ${ cmd; } or ${| cmd; } at
+// s[i], its body read as bash reads commands: past quotes, escapes,
+// substitutions, parameter expansions, subshells and { } groups, the
+// close a } in command position (at the body's start, after ;, &, |, a
+// newline or a word of funLead). false where
+// the guard can't tell the end for sure: none, a comment, a heredoc, or
+// a } anywhere else (${ echo }, a}b, {a,b}).
+func funEnd(s []rune, i int) (int, bool) {
+	cmd := true // the next word is in command position
+	groups, parens := 0, 0
+	sep := func(k int) bool { return k >= len(s) || strings.ContainsRune(" \t\n;&|()<>", s[k]) }
+	j := i + 2
+	if j < len(s) && s[j] == '|' {
+		j++
+	}
+	for ; j < len(s); j++ {
+		c := s[j]
+		switch {
+		case c == ' ' || c == '\t':
+		case c == '\n' || c == ';' || c == '&' || c == '|':
+			cmd = true
+		case c == '#':
+			return 0, false
+		case c == '<' && j+1 < len(s) && s[j+1] == '<':
+			return 0, false
+		case c == '<' || c == '>':
+		case c == '(':
+			parens++
+			cmd = true
+		case c == ')':
+			if parens == 0 {
+				return 0, false
+			}
+			parens--
+			cmd = false
+		case c == '}':
+			switch {
+			case !cmd || parens > 0:
+				return 0, false
+			case groups > 0:
+				groups--
+				cmd = false
+			default:
+				return j, true
+			}
+		case c == '{' && cmd && j+1 < len(s) && strings.ContainsRune(" \t\n", s[j+1]):
+			groups++
+		default:
+			// A word, to its end.
+			k := j
+			for ; k < len(s) && !sep(k); k++ {
+				switch {
+				case s[k] == '\\':
+					k++
+				case s[k] == '\'':
+					q := slices.Index(s[k+1:], '\'')
+					if q < 0 {
+						return 0, false
+					}
+					k += 1 + q
+				case s[k] == '$' && k+1 < len(s) && s[k+1] == '\'':
+					if k = ansiEnd(s, k+2); k >= len(s) {
+						return 0, false
+					}
+				case s[k] == '"':
+					for k++; k < len(s) && s[k] != '"'; k++ {
+						e, ok := wordSkip(s, k)
+						if !ok {
+							return 0, false
+						}
+						k = e
+					}
+					if k >= len(s) {
+						return 0, false
+					}
+				case s[k] == '}':
+					return 0, false
+				default:
+					e, ok := wordSkip(s, k)
+					if !ok {
+						return 0, false
+					}
+					k = e
+				}
+			}
+			cmd = funLead[string(s[j:k])]
+			j = k - 1
+		}
+	}
+	return 0, false
+}
+
+// wordSkip is the index of the last rune of what starts at s[k] in a
+// word that funEnd reads past: an escape, a $( ), a backtick, a ${ cmd; }
+// or a ${…}; k itself for any other rune; false for one left open.
+func wordSkip(s []rune, k int) (int, bool) {
+	var e int
+	switch {
+	case s[k] == '\\':
+		e = k + 1
+	case s[k] == '$' && k+1 < len(s) && s[k+1] == '(':
+		e = closing(s, k+2, '(', ')')
+	case s[k] == '`':
+		e = tickClose(s, k+1)
+	case funStart(s, k):
+		end, ok := funEnd(s, k)
+		if !ok {
+			return 0, false
+		}
+		e = end
+	case s[k] == '$' && k+1 < len(s) && s[k+1] == '{':
+		e = closing(s, k+2, '{', '}')
+	default:
+		return k, true
+	}
+	return e, e < len(s)
 }
 
 // funBody is the commands of the ${ cmd; } at s[i] whose } is at end.
