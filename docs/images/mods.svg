@@ -83,8 +83,7 @@
 <text x="335.2" y="180.2" fill="#c8d0f0" textLength="310.8" lengthAdjust="spacingAndGlyphs">none outside the projects (2 in them)</text>
 <text x="1108.0" y="180.2" fill="#4e5578">│</text>
 <text x="1124.8" y="180.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">usage</text>
-<text x="1208.8" y="180.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">22.6k tokens,</text>
-<text x="1326.4" y="180.2" fill="#7dcfff" textLength="58.8" lengthAdjust="spacingAndGlyphs">no cost</text>
+<text x="1208.8" y="180.2" fill="#c8d0f0" textLength="176.4" lengthAdjust="spacingAndGlyphs">22.6k tokens, no cost</text>
 <text x="310.0" y="197.2" fill="#4e5578">│</text>
 <text x="326.8" y="197.2" fill="#c8d0f0" textLength="310.8" lengthAdjust="spacingAndGlyphs">▾ Context nearly full · Context gauge</text>
 <text x="646.0" y="197.2" fill="#4e5578" textLength="453.6" lengthAdjust="spacingAndGlyphs">──────────────────────────────────────────────────────</text>
@@ -131,20 +130,20 @@
 <text x="310.0" y="316.2" fill="#4e5578">│</text>
 <text x="343.6" y="316.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">Thread</text>
 <text x="478.0" y="316.2" fill="#c8d0f0" textLength="50.4" lengthAdjust="spacingAndGlyphs">Tokens</text>
-<text x="553.6" y="316.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">Cost</text>
+<text x="570.4" y="316.2" fill="#c8d0f0" textLength="33.6" lengthAdjust="spacingAndGlyphs">Cost</text>
 <text x="1108.0" y="316.2" fill="#4e5578">│</text>
 <text x="1141.6" y="316.2" fill="#9ece6a">✓</text>
 <text x="1158.4" y="316.2" fill="#c8d0f0" textLength="159.6" lengthAdjust="spacingAndGlyphs">1 Reproduce the bug</text>
 <text x="310.0" y="333.2" fill="#4e5578">│</text>
 <text x="343.6" y="333.2" fill="#c8d0f0" textLength="117.6" lengthAdjust="spacingAndGlyphs">Write the docs</text>
 <text x="486.4" y="333.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">25.0k</text>
-<text x="545.2" y="333.2" fill="#7dcfff" textLength="42.0" lengthAdjust="spacingAndGlyphs">$0.00</text>
+<text x="562.0" y="333.2" fill="#7dcfff" textLength="42.0" lengthAdjust="spacingAndGlyphs">$0.00</text>
 <text x="1108.0" y="333.2" fill="#4e5578">│</text>
 <text x="1141.6" y="333.2" fill="#c8d0f0" textLength="84.0" lengthAdjust="spacingAndGlyphs">○ 2 Fix it</text>
 <text x="310.0" y="350.2" fill="#4e5578">│</text>
 <text x="343.6" y="350.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">Fix the login</text>
 <text x="486.4" y="350.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">22.6k</text>
-<text x="545.2" y="350.2" fill="#7dcfff" textLength="42.0" lengthAdjust="spacingAndGlyphs">$0.00</text>
+<text x="545.2" y="350.2" fill="#c8d0f0" textLength="58.8" lengthAdjust="spacingAndGlyphs">no cost</text>
 <text x="1108.0" y="350.2" fill="#4e5578">│</text>
 <text x="310.0" y="367.2" fill="#4e5578">│</text>
 <text x="1108.0" y="367.2" fill="#4e5578">│</text>

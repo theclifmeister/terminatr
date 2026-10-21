@@ -71,8 +71,7 @@
 <text x="310.0" y="180.2" fill="#4e5578">│</text>
 <text x="1082.8" y="180.2" fill="#4e5578">│</text>
 <text x="1099.6" y="180.2" fill="#c8d0f0" textLength="42.0" lengthAdjust="spacingAndGlyphs">usage</text>
-<text x="1183.6" y="180.2" fill="#c8d0f0" textLength="109.2" lengthAdjust="spacingAndGlyphs">22.6k tokens,</text>
-<text x="1301.2" y="180.2" fill="#7dcfff" textLength="58.8" lengthAdjust="spacingAndGlyphs">no cost</text>
+<text x="1183.6" y="180.2" fill="#c8d0f0" textLength="176.4" lengthAdjust="spacingAndGlyphs">22.6k tokens, no cost</text>
 <text x="310.0" y="197.2" fill="#4e5578">│</text>
 <text x="1082.8" y="197.2" fill="#4e5578">│</text>
 <text x="1099.6" y="197.2" fill="#c8d0f0" textLength="67.2" lengthAdjust="spacingAndGlyphs">progress</text>
